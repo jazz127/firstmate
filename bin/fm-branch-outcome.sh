@@ -263,7 +263,7 @@ rebuild_outcome_indexes() {
   rm -f -- "$OUTCOME_INDEX_READY" || return 1
   [ -s "$STORE" ] || { publish_outcome_index_ready 0; return; }
   rows=$(jq -r -s '
-    map(select(.task != "fleet"))
+    map(select(.task != "fleet" and .silent != true))
     | group_by(.task)
     | map(.[-1])[]
     | [.task, (.seq | tostring), (.epoch | tostring),

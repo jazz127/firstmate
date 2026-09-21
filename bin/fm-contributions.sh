@@ -54,6 +54,24 @@
 # FM_CONTRIBUTIONS_READY_LABEL selects the equivalent triage label, default
 # ready-for-pr. Labels are matched case-insensitively and exactly.
 #
+# Automated reviewers are matched on user.login (case-insensitive) from
+# FM_CONTRIBUTIONS_AUTOMATED_REVIEWERS, a comma-separated list; when unset,
+# config/contributions-automated-reviewers (commas or newlines) is read; when
+# both are unset the defaults are copilot-pull-request-reviewer[bot] and
+# greptile-apps[bot]. A set-but-empty variable, or an empty file, disables the
+# set. Their non-empty reviews, inline comments and comments (and any
+# CHANGES_REQUESTED review) persist as pending events marked automated:true,
+# regardless of author_association, and classify as fleet triage work. They
+# change no verdict bucket, grant no merge authority and cause no forge write.
+#
+# The contribution author's own comments stay excluded unless the body starts
+# (after leading whitespace, case-insensitively) with the author marker:
+# FM_CONTRIBUTIONS_AUTHOR_MARKER, else the first line of
+# config/contributions-author-marker, else the default @firstmate. A
+# set-but-empty variable or empty file disables the marker. A marked author
+# comment persists as a pending event marked directive:true and classifies as
+# fleet triage; it never grants merge authority.
+#
 # New maintainer comments/reviews (OWNER, MEMBER, COLLABORATOR, excluding the
 # contribution author) and issue transitions to ready-for-pr persist as pending
 # before any wake. poll appends ordinary durable check wakes through fm-wake-lib
@@ -91,6 +109,24 @@ BUDGET=${FM_CONTRIBUTIONS_BUDGET:-20}
 case "$MAX_AGE" in ''|*[!0-9]*) fail 'invalid freshness bound' ;; esac
 case "$BUDGET" in ''|*[!0-9]*) fail 'invalid poll budget' ;; esac
 [ "$BUDGET" -ge 1 ] && [ "$BUDGET" -le 25 ] || fail 'poll budget must be 1..25 seconds'
+CONFIG="${FM_CONFIG_OVERRIDE:-$FM_HOME/config}"
+if [ -n "${FM_CONTRIBUTIONS_AUTOMATED_REVIEWERS+x}" ]; then
+  REVIEWER_SPEC=$FM_CONTRIBUTIONS_AUTOMATED_REVIEWERS
+elif [ -f "$CONFIG/contributions-automated-reviewers" ] && [ ! -L "$CONFIG/contributions-automated-reviewers" ]; then
+  REVIEWER_SPEC=$(cat "$CONFIG/contributions-automated-reviewers")
+else
+  REVIEWER_SPEC='copilot-pull-request-reviewer[bot],greptile-apps[bot]'
+fi
+AUTOMATED_REVIEWERS=$(printf '%s' "$REVIEWER_SPEC" | tr ',\n' '\n\n' \
+  | jq -R 'gsub("^\\s+|\\s+$";"") | select(length > 0) | ascii_downcase' | jq -sc .) \
+  || fail 'invalid automated reviewer list'
+if [ -n "${FM_CONTRIBUTIONS_AUTHOR_MARKER+x}" ]; then
+  AUTHOR_MARKER=$FM_CONTRIBUTIONS_AUTHOR_MARKER
+elif [ -f "$CONFIG/contributions-author-marker" ] && [ ! -L "$CONFIG/contributions-author-marker" ]; then
+  AUTHOR_MARKER=$(head -n 1 "$CONFIG/contributions-author-marker")
+else
+  AUTHOR_MARKER='@firstmate'
+fi
 TMP=$(mktemp -d "${TMPDIR:-/tmp}/fm-contributions.XXXXXX")
 LOCK_HELD=0
 cleanup() {
@@ -239,7 +275,7 @@ observe() { # canonical GitHub URL -> normalized JSON
     [ "$head" = "$after" ] || { printf 'head changed during observation\n' > "$TMP/forge.err"; return 1; }
     jq -n --slurpfile core "$TMP/core.json" --slurpfile comments "$TMP/comments.json" \
       --slurpfile reviews "$TMP/reviews.json" --slurpfile inline "$TMP/inline.json" --slurpfile after "$TMP/after.json" --slurpfile checks "$TMP/checks.json" \
-      --slurpfile statuses "$TMP/statuses.json" --slurpfile repo "$TMP/repo.json" '
+      --slurpfile statuses "$TMP/statuses.json" --slurpfile repo "$TMP/repo.json" --argjson automated "$AUTOMATED_REVIEWERS" --arg marker "$AUTHOR_MARKER" '
       $core[0] as $c
       | ($reviews[0] | add // []) as $reviews
       | {head:$c.head.sha,state:(if $c.merged_at != null then "merged" else $c.state end),
@@ -252,10 +288,15 @@ observe() { # canonical GitHub URL -> normalized JSON
               status:(if .state == "pending" then "in_progress" else "completed" end),
               conclusion:(if .state == "pending" then null else .state end)} ]),
           events:((($comments[0] | add // [] | map(. + {_signal:"comment"})) + ($reviews | map(. + {_signal:"review"})) + ($inline[0] | add // [] | map(. + {_signal:"review-comment"})))
-            | map(select(.user.login != $c.user.login and (.author_association | IN("OWNER","MEMBER","COLLABORATOR")))
+            | map(((.user.login == $c.user.login) and ($marker | length) > 0
+                  and ((.body // "") | gsub("^\\s+";"") | ascii_downcase | startswith($marker | ascii_downcase))) as $directive
+              | select(.user.login != $c.user.login or $directive)
+              | ((.user.login | ascii_downcase) as $login | ($automated | index($login)) != null) as $bot
+              | select(if $directive then true elif $bot then ((.body // "" | gsub("^\\s+|\\s+$";"") | length) > 0 or .state == "CHANGES_REQUESTED")
+                       else (.author_association | IN("OWNER","MEMBER","COLLABORATOR")) end)
               | {token:((._signal + ":") + (.id|tostring) + ":" + (.updated_at // .submitted_at // "") + ":" + (.state // "")),
                  type:._signal,source:.html_url,head:.commit_id,
-                 author:.user.login,body:(.body // "" | .[:500])}))}' > "$TMP/observation.json" || return 1
+                 author:.user.login,body:(.body // "" | .[:500])} + (if $bot then {automated:true} else {} end) + (if $directive then {directive:true} else {} end)))}' > "$TMP/observation.json" || return 1
   else
     label=${FM_CONTRIBUTIONS_READY_LABEL:-ready-for-pr}
     FORGE_ERR="$TMP/comments.err" forge api "repos/$part/issues/$number/comments?per_page=100" --paginate --slurp > "$TMP/comments.json" &
@@ -264,13 +305,18 @@ observe() { # canonical GitHub URL -> normalized JSON
     local events_pid=$!
     wait_forges "$comments_pid" "$events_pid" || return 1
     jq -e 'type == "array" and all(.[]; type == "array")' "$TMP/comments.json" >/dev/null || return 1
-    jq -n --slurpfile timeline "$TMP/issue-events.json" --arg label "$label" --slurpfile core "$TMP/core.json" --slurpfile comments "$TMP/comments.json" '
+    jq -n --slurpfile timeline "$TMP/issue-events.json" --arg label "$label" --argjson automated "$AUTOMATED_REVIEWERS" --arg marker "$AUTHOR_MARKER" --slurpfile core "$TMP/core.json" --slurpfile comments "$TMP/comments.json" '
       $core[0] as $c | {state:$c.state,head:null,
         ready:any($c.labels[]; (.name | ascii_downcase) == ($label | ascii_downcase)),
         checks:[],reviews:[],events:($comments[0] | add // []
-          | map(select(.user.login != $c.user.login and (.author_association | IN("OWNER","MEMBER","COLLABORATOR")))
+          | map(((.user.login == $c.user.login) and ($marker | length) > 0
+                and ((.body // "") | gsub("^\\s+";"") | ascii_downcase | startswith($marker | ascii_downcase))) as $directive
+            | select(.user.login != $c.user.login or $directive)
+            | ((.user.login | ascii_downcase) as $login | ($automated | index($login)) != null) as $bot
+            | select(if $directive then true elif $bot then (.body // "" | gsub("^\\s+|\\s+$";"") | length) > 0
+                     else (.author_association | IN("OWNER","MEMBER","COLLABORATOR")) end)
             | {token:("comment:" + (.id|tostring) + ":" + (.updated_at // "")),type:"comment",source:.html_url,
-               head:null,author:.user.login,body:(.body // "" | .[:500])})
+               head:null,author:.user.login,body:(.body // "" | .[:500])} + (if $bot then {automated:true} else {} end) + (if $directive then {directive:true} else {} end))
           + [$timeline[0][] | .[] | select(.event == "labeled" and (.label.name | ascii_downcase) == ($label | ascii_downcase))
              | {token:("ready-for-pr:" + (.id | tostring)),type:"ready-for-pr",source:$c.html_url,head:null,body:"filed issue reached ready-for-pr"}])}' > "$TMP/observation.json" || return 1
   fi

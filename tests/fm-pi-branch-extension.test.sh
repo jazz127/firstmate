@@ -1595,6 +1595,41 @@ if (taskRoutineMerge.message.display !== false) throw new Error("a task-scoped r
 if (!taskRoutineMerge.message.content.startsWith("⛵ task-9: worker healthy, no action needed")) {
   throw new Error(`task-scoped routine note changed: ${taskRoutineMerge.message.content}`);
 }
+// Bookkeeping that only re-states an already-recorded pause is silent for any
+// task: stored, no rendered note, no main turn. A state change still renders,
+// and a captain outcome can never be silent.
+await heartbeatReport.execute(
+  "pause-echo",
+  { task: "task-9", verdict: "routine", summary: "echo of the pause I just recorded", silent: true },
+  undefined,
+  undefined,
+  {},
+);
+const pauseEcho = sentToMain[sentToMain.length - 1];
+if (pauseEcho.options.triggerTurn) throw new Error("a bookkeeping echo must not open a main turn");
+if (pauseEcho.message.display !== false) throw new Error("a bookkeeping echo must not render a note");
+const storedEcho = readFileSync(`${home}/state/branch-outcomes.jsonl`, "utf8")
+  .trim().split("\n").map((line) => JSON.parse(line))
+  .find((row) => row.task === "task-9" && row.summary === "echo of the pause I just recorded");
+if (!storedEcho || storedEcho.silent !== true || storedEcho.verdict !== "routine") {
+  throw new Error("the silent bookkeeping outcome was not stored durably");
+}
+await heartbeatReport.execute(
+  "pause-cleared",
+  { task: "task-9", verdict: "routine", summary: "the pause cleared and the worker resumed" },
+  undefined,
+  undefined,
+  {},
+);
+if (sentToMain[sentToMain.length - 1].message.display !== true) throw new Error("a pause state change must render");
+const silentCaptain = await heartbeatReport.execute(
+  "silent-captain",
+  { task: "task-9", verdict: "captain", summary: "needs a decision", silent: true },
+  undefined,
+  undefined,
+  {},
+);
+if (!silentCaptain.isError) throw new Error("a silent captain outcome was accepted");
 await heartbeatReport.execute(
   "heartbeat-finding",
   { task: "fleet", verdict: "captain", summary: "task-2 has been stuck for an hour" },

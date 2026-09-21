@@ -52,6 +52,7 @@ While attended, a captain-facing (verdict `captain`) branch outcome persists as 
 The branch prompt's "Verdict: routine or captain" section owns the distinction between captain-facing, unsolicited routine, and unchanged-review outcomes.
 The generated [Pi supervision protocol](supervision-protocols/pi.md) owns main's event ownership, acknowledgement duty, and conversational treatment for merged outcomes, while the persisted entry itself owns captain visibility.
 Routine outcomes stay hidden and turn-free by default, independently of Calm; [Pi supervision branch](pi-supervision-branch.md#two-stage-noise-filter) owns presentation, historical-message handling, and reload requirements.
+ A `routine` outcome may carry `silent=true` when it is pure already-recorded bookkeeping, but routine outcomes are hidden and turn-free regardless; silent rows are excluded from the task's coverage index so they cannot cover a captain-facing status event, and [Pi supervision branch](pi-supervision-branch.md#two-stage-noise-filter) owns the exact criteria and presentation behavior.
 
 ## Pi supervision branch model and effort (config/supervision-branch-model, config/supervision-branch-effort)
 

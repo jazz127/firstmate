@@ -8,6 +8,10 @@
 #     "verdict":"routine"|"captain","summary":"...","silent":true|false,
 #     "statusEndpoint":N,"statusIdent":"..."}. Legacy rows without `silent`
 #     or status provenance remain valid and are treated as visible.
+#     `silent` is legal only on a routine row (any task, or `fleet`): it marks
+#     an already-handled outcome that only re-states durably recorded
+#     bookkeeping, is delivered with no rendered note, and never updates the
+#     task's status-coverage index. A captain row can never be silent.
 #     Every read and append validates the complete log as a gap-free sequence;
 #     malformed, duplicate, or reordered rows fail closed.
 #     Existing lines are never rewritten, reordered, or deleted by any
@@ -193,7 +197,7 @@ last_seq() {
       and ((.epoch | type) == "number" and .epoch >= 0 and .epoch == (.epoch | floor))
       and ((.task | type) == "string" and (.wake | type) == "string")
       and ((.summary | type) == "string" and (.verdict == "routine" or .verdict == "captain"))
-      and (.silent != true or (.task == "fleet" and .verdict == "routine"));
+      and (.silent != true or .verdict == "routine");
     if endswith("\n") then split("\n")[:-1]
     else error("unterminated outcome store")
     end
@@ -442,8 +446,8 @@ case "$CMD" in
     [ -n "$SUMMARY" ] || usage
     case "$VERDICT" in routine|captain) ;; *) usage ;; esac
     case "$SILENT" in true|false) ;; *) usage ;; esac
-    if [ "$SILENT" = true ] && { [ "$TASK" != fleet ] || [ "$VERDICT" != routine ]; }; then
-      echo "error: silent outcomes must be routine fleet outcomes" >&2
+    if [ "$SILENT" = true ] && [ "$VERDICT" != routine ]; then
+      echo "error: silent outcomes must be routine outcomes" >&2
       exit 2
     fi
     fm_lock_acquire_wait "$LOCK"
@@ -468,7 +472,10 @@ case "$CMD" in
     # reports the teardown it just performed, and writing the index here would
     # recreate the footprint teardown removed. The outcome itself is still
     # stored and delivered; only the reader-less cache is skipped.
-    if { [ -e "$STATE/$TASK.meta" ] || [ -e "$STATE/$TASK.status" ]; } \
+    # A silent outcome never becomes a task's coverage index: it records
+    # bookkeeping only, so it must not make the lost-wake backstop treat a
+    # captain-facing status event as already covered.
+    if [ "$SILENT" != true ] && { [ -e "$STATE/$TASK.meta" ] || [ -e "$STATE/$TASK.status" ]; } \
         && ! write_outcome_index "$TASK" "$SEQ"; then
       fm_lock_release "$LOCK"
       echo "error: outcome was stored but its bounded task index could not be updated" >&2

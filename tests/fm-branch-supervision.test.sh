@@ -173,7 +173,7 @@ test_outcome_startup_replay_preserves_silence() {
 }
 
 test_silent_bookkeeping_outcomes_stay_out_of_replay_and_coverage() {
-  local home replay store out shown
+  local home replay store out shown index_seq
   home="$TMP_ROOT/store-bookkeeping-home"
   mkdir -p "$home/state"
   store="$home/state/branch-outcomes.jsonl"
@@ -190,17 +190,24 @@ test_silent_bookkeeping_outcomes_stay_out_of_replay_and_coverage() {
   append task-p captain 'PR is ready for review https://example.com/pr/1'
   append task-q routine 'merged and cleaned up'
 
+  append task-p routine 'captain-facing status was already recorded' --silent true
+  rm -f -- "$home/state/.task-p.branch-outcome-index" "$home/state/.branch-outcome-index-ready"
+  FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" processed-init >/dev/null \
+    || fail "coverage index rebuild failed"
+  index_seq=$(cut -f2 "$home/state/.task-p.branch-outcome-index")
+  [ "$index_seq" = 5 ] || fail "silent latest row replaced the latest visible coverage index: $index_seq"
+
   replay=$(FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" startup-replay) || fail "bookkeeping startup replay failed"
   assert_not_contains "$replay" "echo of the pause I just recorded" "silent pause echo was rendered"
   assert_not_contains "$replay" "scheduled recheck" "silent scheduled recheck was rendered"
   assert_not_contains "$replay" "still holds on the same terms" "silent pause re-confirmation was rendered"
   assert_contains "$replay" "pause cleared: worker relaunched" "a genuine pause state change was suppressed"
 
-  # Measure on this corpus: 3 of the 6 recorded outcomes are newly silent.
+  # Measure on this corpus: 4 of the 7 recorded outcomes are newly silent.
   out=$(jq -s '[.[] | select(.silent == true)] | length' "$store")
-  [ "$out" = 3 ] || fail "expected 3 silent bookkeeping rows in the 6-row corpus, got $out"
+  [ "$out" = 4 ] || fail "expected 4 silent bookkeeping rows in the 7-row corpus, got $out"
   shown=$(jq -s '[.[] | select(.silent != true)] | length' "$store")
-  [ "$shown" = 3 ] || fail "expected 3 rendered rows in the 6-row corpus, got $shown"
+  [ "$shown" = 3 ] || fail "expected 3 rendered rows in the 7-row corpus, got $shown"
   pass "silent bookkeeping outcomes are not replayed or indexed while state changes, captain outcomes render"
 }
 

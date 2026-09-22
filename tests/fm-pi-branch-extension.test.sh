@@ -1621,7 +1621,7 @@ await heartbeatReport.execute(
   undefined,
   {},
 );
-if (sentToMain[sentToMain.length - 1].message.display !== true) throw new Error("a pause state change must render");
+if (sentToMain[sentToMain.length - 1].message.display !== false) throw new Error("a pause state change must remain hidden");
 const silentCaptain = await heartbeatReport.execute(
   "silent-captain",
   { task: "task-9", verdict: "captain", summary: "needs a decision", silent: true },

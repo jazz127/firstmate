@@ -1188,7 +1188,6 @@ export default function (pi: ExtensionAPI) {
         }),
         wake: Type.Optional(Type.String({ description: "The wake reason line this outcome answers" })),
         silent: Type.Optional(Type.Boolean({
-          description: "True only when a fleet-wide heartbeat review found literally nothing worth reporting; omit or use false whenever any action was taken. All routine outcomes are hidden regardless",
           description: "Optional bookkeeping marker for a routine outcome that merely re-states already durable state, such as an unchanged heartbeat or pause echo; routine outcomes are hidden regardless, and omit or use false for any state change, action, failure, blocker, or result worth a note",
         })),
       }),

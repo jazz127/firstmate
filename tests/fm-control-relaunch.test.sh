@@ -25,6 +25,8 @@ set -u
 . "$ROOT/bin/fm-control-lib.sh"
 # shellcheck source=/dev/null
 . "$ROOT/bin/fm-trace-context-lib.sh"
+# shellcheck source=/dev/null
+. "$ROOT/bin/fm-pr-lib.sh"
 
 CONTROL="$ROOT/bin/fm-control.sh"
 SPAWN="$ROOT/bin/fm-spawn.sh"
@@ -227,6 +229,21 @@ EOF
   TASK_TMPS+=("/tmp/fm-$id")
 }
 
+arm_pr_fixture() {  # <case-dir> <id> <url>
+  local dir=$1 id=$2 url=$3 state="$1/home/state" data_hash template_hash data_identity check_identity
+  cp "$ROOT/bin/fm-pr-poll.sh" "$state/$id.check.sh"
+  printf 'github\n%s\ngithub.com\no/r\n1\n' "$url" > "$state/$id.pr-poll"
+  chmod 0600 "$state/$id.check.sh" "$state/$id.pr-poll"
+  data_hash=$(fm_pr_sha256 "$state/$id.pr-poll")
+  template_hash=$(fm_pr_sha256 "$ROOT/bin/fm-pr-poll.sh")
+  data_identity=$(fm_pr_file_identity "$state/$id.pr-poll")
+  check_identity=$(fm_pr_file_identity "$state/$id.check.sh")
+  printf 'fm-pr-poll-registration-v2\n%s\ngithub\n%s\ngithub.com\no/r\n1\n%s\n%s\n%s\n%s\n' \
+    "$id" "$url" "$data_hash" "$template_hash" "$data_identity" "$check_identity" \
+    > "$state/$id.pr-poll-registration"
+  chmod 0600 "$state/$id.pr-poll-registration"
+}
+
 run_control() {  # <case-dir> <args...>
   local dir=$1; shift
   # A claude spawn pre-registers workspace trust in the launching user's own
@@ -385,6 +402,24 @@ test_same_harness_relaunch_keeps_identity_and_reuses_the_endpoint() {
   assert_grep "/exit" "$dir/fake/literal" "the previous agent should have been exited"
   assert_grep "encode launch-brief" "$dir/fake/literal" "the replacement should have been launched"
   pass "fm-control relaunch: a same-harness relaunch replaces the agent in the same endpoint and worktree"
+}
+
+test_relaunch_keeps_an_armed_pr_poll_authenticated() {
+  local dir out rc url
+  dir=$(new_case pr-poll-order rl-pr)
+  url=https://github.com/o/r/pull/1
+  add_ship_task "$dir" rl-pr claude
+  printf 'pr=%s\npr_head=0123456789abcdef0123456789abcdef01234567\n' "$url" \
+    >> "$dir/home/state/rl-pr.meta"
+  arm_pr_fixture "$dir" rl-pr "$url"
+  fm_pr_poll_artifacts_content_valid "$dir/home/state" rl-pr "$ROOT/bin/fm-pr-poll.sh" \
+    || fail "the armed PR poll fixture was not authenticated before relaunch"
+
+  out=$(run_control "$dir" rl-pr relaunch --note "preserve the PR poll"); rc=$?
+  expect_code 0 "$rc" "a relaunch holding an armed PR poll should succeed"$'\n'"$out"
+  fm_pr_poll_artifacts_content_valid "$dir/home/state" rl-pr "$ROOT/bin/fm-pr-poll.sh" \
+    || fail "a relaunched task's armed PR poll was no longer authenticated"
+  pass "fm-control relaunch: an armed PR poll remains authenticated after metadata replacement"
 }
 
 test_relaunch_refuses_before_exit_when_the_composer_holds_pending_text() {
@@ -2253,6 +2288,7 @@ test_relaunch_moves_a_drifted_item_back_in_flight() {
 }
 
 test_same_harness_relaunch_keeps_identity_and_reuses_the_endpoint
+test_relaunch_keeps_an_armed_pr_poll_authenticated
 test_relaunch_refuses_before_exit_when_the_composer_holds_pending_text
 test_relaunch_refuses_before_exit_when_the_composer_state_is_unproven
 test_relaunch_from_linked_home_preserves_recorded_worktree

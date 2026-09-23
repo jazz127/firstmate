@@ -1418,6 +1418,9 @@ handle_paused_stale() {  # <window> <task> <hash>
     fi
     detail="captain-held, awaiting the captain"
     reason="captain-held ${age}s, awaiting the captain - verified hold transfer, rechecked on a long cadence not a wedge; answer the held decision or release the hold"
+  elif task_done_open_pr_wait "$task" "$last"; then
+    detail="done, awaiting pull request review or merge"
+    reason="done ${age}s, awaiting pull request review or merge - recorded pull request remains open, rechecked on a long cadence not a wedge; confirm review or merge progress"
   elif until=$(status_paused_until "$last"); then
     if [ "$now" -lt "$until" ] && [ "$age" -lt "$PAUSE_RESURFACE_SECS" ]; then
       triage_log "absorbed stale (paused until $(( until - now ))s from now, declared time not reached): $win"
@@ -1533,6 +1536,29 @@ clear_pause_tracking() {  # <window-key>
   clear_stale_hash_tracking "$key"
 }
 
+# A terminal delivery with an armed, validated merge poll is waiting on its
+# recorded pull request, even when the worker stopped after writing only done:.
+# The local records distinguish all three terminal shapes: an armed poll means
+# the PR is still open and review or merge is the declared external wait; poll
+# retirement means it merged and the existing landed-worker cleanup path owns
+# it; no recorded PR/poll leaves the existing terminal-stale semantics unchanged.
+# This reads only the task metadata and private poll artifacts. In particular it
+# never asks the forge, so it is cheap and deterministic on every stale poll.
+task_done_open_pr_wait() {  # <task> [<last-status-line>]
+  local task=$1 last=${2:-} verb
+  [ -n "$task" ] || return 1
+  [ -n "$last" ] || last=$(last_status_line "$STATE/$task.status")
+  status_line_verb "$last" verb
+  [ "$verb" = "done" ] || return 1
+  fm_pr_poll_artifacts_valid "$STATE" "$task" "$SCRIPT_DIR/fm-pr-poll.sh"
+}
+
+task_has_declared_wait() {  # <task> [<last-status-line>]
+  local task=$1 last=${2:-}
+  [ -n "$last" ] || last=$(last_status_line "$STATE/$task.status")
+  status_is_paused_or_captain_held "$last" || task_done_open_pr_wait "$task" "$last"
+}
+
 # Reconcile a declared pause or captain-held status with authoritative crew state.
 # After fm-crew-state has fallen back to stopped or unknown, paused classification is
 # recovered only for a confidently dead ordinary crew, or for a secondmate, whose
@@ -1542,7 +1568,7 @@ pause_state_class() {  # <window> <task>
   key=$(window_key "$win")
   last=$(last_status_line "$STATE/$task.status")
   recheck_file="$STATE/.paused-rechecked-$key"
-  if ! status_is_paused_or_captain_held "$last"; then
+  if ! task_has_declared_wait "$task" "$last"; then
     rm -f "$recheck_file"
     crew_absorb_class "$task"
     return
@@ -2729,7 +2755,7 @@ EOF
     [ -z "$task" ] || inbox_steer_check "$w" "$task"
     key=$(window_key "$w")
     last=$(last_status_line "$STATE/$task.status")
-    if ! status_is_paused_or_captain_held "$last" && [ -e "$STATE/.paused-$key" ]; then
+    if [ -e "$STATE/.paused-$key" ] && ! task_has_declared_wait "$task" "$last"; then
       clear_pause_tracking "$key"
     fi
     # An idle secondmate endpoint is healthy by design, so a mate is admitted to
@@ -2739,7 +2765,7 @@ EOF
     # in the backlog while the mate still says `working:` or `done:` is outside
     # this guard: reaching it would require backlog reads for windows this gate
     # deliberately skips, putting that read on the ordinary poll hot path.
-    if [ "$kind" = secondmate ] && ! status_is_paused_or_captain_held "$last"; then
+    if [ "$kind" = secondmate ] && ! task_has_declared_wait "$task" "$last"; then
       continue
     fi
     tail40=$(fm_backend_capture "$(window_backend "$w")" "$w" 40 "$(window_label "$w")" 2>/dev/null) || continue
@@ -2795,8 +2821,14 @@ EOF
           # line. On a NEW hash, give an active run/busy pane (the same
           # authoritative source fm-crew-state.sh itself already prioritizes
           # over the log) a chance to override before trusting the log.
-          if [ "$(cat "$sf" 2>/dev/null || true)" != "$h" ]; then
-            if crew_is_provably_working "$(window_to_task "$w" "$STATE")"; then
+          open_pr_class=none
+          if task_done_open_pr_wait "$task" "$last"; then
+            open_pr_class=$(pause_state_class "$w" "$task")
+          fi
+          if [ "$open_pr_class" = paused ]; then
+            handle_paused_stale "$w" "$task" "$h"
+          elif [ "$(cat "$sf" 2>/dev/null || true)" != "$h" ]; then
+            if [ "$open_pr_class" = working ] || crew_is_provably_working "$(window_to_task "$w" "$STATE")"; then
               printf '%s' "$h" > "$sf"
               date +%s > "$ssf"
               clear_write_tracking "$key"
@@ -2837,7 +2869,10 @@ EOF
           fi
           # else: already surfaced as genuinely terminal on a prior poll of
           # this same hash - nothing left to do (matches the original,
-          # unmodified terminal-status behavior).
+          # unmodified terminal-status behavior). A done task with a still-open
+          # recorded PR never reaches that inert case: open_pr_class routes it
+          # through handle_paused_stale on every poll so the bounded cadence can
+          # re-surface it.
         else
           # Non-terminal stale: a crew gone quiet without a captain-relevant status.
           # Decided once per distinct stale hash (the costly state reads run only

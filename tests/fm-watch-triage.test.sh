@@ -21,6 +21,8 @@ set -u
 . "$(dirname "${BASH_SOURCE[0]}")/wake-helpers.sh"
 # shellcheck source=/dev/null
 . "$ROOT/bin/fm-classify-lib.sh"
+# shellcheck source=bin/fm-pr-lib.sh
+. "$ROOT/bin/fm-pr-lib.sh"
 
 WATCH="$ROOT/bin/fm-watch.sh"
 DRAIN="$ROOT/bin/fm-wake-drain.sh"
@@ -172,6 +174,18 @@ record_pi_busy() {  # <state-dir> <id>
   gen=$("$ROOT/bin/fm-busy-event.sh" arm "$state" "$id")
   "$ROOT/bin/fm-busy-event.sh" apply "$state" "$id" busy --gen "$gen" \
     --source pi-ext --event agent-start
+}
+
+seed_open_pr_poll() {  # <state-dir> <id> <url>
+  local state=$1 id=$2 url=$3 provider host path number
+  fm_pr_url_parse "$url" || fail "open-PR fixture URL was invalid"
+  provider=$FM_PR_PROVIDER
+  host=$FM_PR_HOST
+  path=$FM_PR_PATH
+  number=$FM_PR_NUMBER
+  fm_pr_poll_prepare "$state" "$id" "$provider" "$url" "$host" "$path" "$number" \
+    "$ROOT/bin/fm-pr-poll.sh" || fail "could not prepare open-PR fixture"
+  fm_pr_poll_publish_prepared || fail "could not publish open-PR fixture"
 }
 
 # Stop an owned watcher. TERM must end it through its EXIT cleanup, so one still
@@ -2122,6 +2136,90 @@ test_terminal_stale_surfaced() {
   FM_STATE_OVERRIDE="$state" "$DRAIN" > "$drain_out" 2>/dev/null || fail "drain after the terminal stale failed"
   grep "$(printf '\tstale\t')" "$drain_out" | grep -F "$window" >/dev/null || fail "terminal stale was not queued"
   pass "a stale pane sitting on a terminal status is surfaced (queue + exit)"
+}
+
+# A ready delivery's armed merge poll is the durable local proof that its PR is
+# still open. It joins the declared-wait cadence without requiring a second
+# worker status line. Poll retirement removes that proof when the PR merges, so
+# the ordinary terminal surface remains the landed-worker cleanup path; a done
+# task with no PR record remains ordinary terminal work too.
+test_done_open_pr_uses_declared_wait_cadence() {
+  local dir state fakebin out capture_file window key pane_hash sig pid back wakes
+  local url='https://github.com/example/project/pull/3'
+
+  dir=$(make_case done-open-pr-wait); state="$dir/state"; fakebin="$dir/fakebin"
+  out="$dir/watch.out"; capture_file="$dir/pane.txt"; window='test:fm-delivered'
+  printf 'finished, awaiting review\n' > "$capture_file"
+  printf 'window=%s\nkind=ship\nharness=grok\nbackend=tmux\npr=%s\n' "$window" "$url" > "$state/delivered.meta"
+  printf 'done: PR %s\n' "$url" > "$state/delivered.status"
+  seed_open_pr_poll "$state" delivered "$url"
+  sig=$(seen_sig "$state/delivered.status"); printf '%s' "$sig" > "$state/.seen-delivered_status"
+  key=$(printf '%s' "$window" | tr ':/.' '___')
+  pane_hash=$(hash_text 'finished, awaiting review')
+  printf '%s' "$pane_hash" > "$state/.hash-$key"
+  printf '1\n' > "$state/.count-$key"
+
+  PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
+    FM_FAKE_TMUX_CURRENT_COMMAND=zsh FM_FAKE_CREW_STATE='state: stopped · source: pane · bare shell' \
+    FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" \
+    FM_PAUSE_RESURFACE_SECS=999 FM_POLL=1 FM_SIGNAL_GRACE=1 \
+    FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" &
+  pid=$!
+  wait_poll_cycle "$state" "$pid" \
+    || { reap "$pid"; fail "a done task with an open recorded PR surfaced before the wait cadence"; }
+  [ -e "$state/.paused-$key" ] || { reap "$pid"; fail "an open recorded PR did not establish declared-wait tracking"; }
+  [ ! -s "$state/.wake-queue" ] || { reap "$pid"; fail "an open recorded PR queued a stale wake inside the wait cadence"; }
+  [ ! -e "$state/.wedge-escalations-$key" ] \
+    || { reap "$pid"; fail "an open recorded PR entered the wedge escalation ladder"; }
+  reap "$pid"
+
+  back=$(( $(date +%s) - 1200 ))
+  set_mtime "$back" "$state/delivered.status"
+  sig=$(seen_sig "$state/delivered.status"); printf '%s' "$sig" > "$state/.seen-delivered_status"
+  : > "$out"
+  PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
+    FM_FAKE_TMUX_CURRENT_COMMAND=zsh FM_FAKE_CREW_STATE='state: stopped · source: pane · bare shell' \
+    FM_WATCH_HANDLING_SUCCESSOR=1 \
+    FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" \
+    FM_PAUSE_RESURFACE_SECS=240 FM_POLL=1 FM_SIGNAL_GRACE=1 \
+    FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" &
+  pid=$!
+  wait_for_exit "$pid" 100 || fail "an open recorded PR did not re-surface on the bounded cadence"
+  grep -F 'awaiting pull request review or merge' "$out" >/dev/null \
+    || fail "the open-PR recheck did not name review or merge: $(cat "$out")"
+  grep -F 'possible wedge' "$out" >/dev/null \
+    && fail "the open-PR recheck was mislabeled a possible wedge"
+  wakes=$(awk -F '\t' -v w="$window" '$3 == "stale" && $4 == w { n++ } END { print n + 0 }' \
+    "$state/.wake-queue" 2>/dev/null || echo 0)
+  [ "$wakes" -eq 1 ] || fail "the open-PR wait produced $wakes recheck wakes instead of one"
+  ack_stopped_cycle "$state" || fail "could not acknowledge the open-PR recheck"
+
+  # Retirement is the merged fact: removing the armed poll while retaining pr=
+  # must restore the ordinary terminal surface used for landed-worker cleanup.
+  fm_pr_poll_snapshot_capture "$state" delivered "$ROOT/bin/fm-pr-poll.sh" \
+    || fail "could not snapshot the merged-PR fixture"
+  fm_pr_poll_retirement_publish "$state" delivered "$ROOT/bin/fm-pr-poll.sh" merged \
+    || fail "could not publish the merged-PR retirement"
+  fm_pr_poll_retirement_recover_one "$state" delivered "$ROOT/bin/fm-pr-poll.sh" \
+    || fail "could not retire the merged-PR fixture"
+  rm -f "$state/.paused-$key" "$state/.paused-rechecked-$key" "$state/.paused-resurfaced-$key" \
+    "$state/.stale-$key" "$state/.stale-since-$key" "$state/.wedge-escalations-$key"
+  printf '%s' "$pane_hash" > "$state/.hash-$key"
+  printf '1\n' > "$state/.count-$key"
+  : > "$out"
+  PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
+    FM_FAKE_TMUX_CURRENT_COMMAND=zsh FM_FAKE_CREW_STATE='state: stopped · source: pane · bare shell' \
+    FM_WATCH_HANDLING_SUCCESSOR=1 \
+    FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" \
+    FM_PAUSE_RESURFACE_SECS=999 FM_POLL=1 FM_SIGNAL_GRACE=1 \
+    FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" &
+  pid=$!
+  wait_for_exit "$pid" 100 || fail "a done task whose PR poll retired did not take the landed cleanup path"
+  grep -Fx "stale: $window" "$out" >/dev/null \
+    || fail "the landed task did not retain the ordinary terminal stale surface: $(cat "$out")"
+  [ ! -e "$state/.paused-$key" ] || fail "a merged PR retained open-PR wait tracking"
+
+  pass "done tasks wait only while their recorded PR poll remains armed, then return to landed cleanup"
 }
 
 # --- stale pane, STALE terminal status overridden by an active run: absorbed ---
@@ -6189,6 +6287,7 @@ test_routine_appends_after_a_classified_event_stay_absorbed
 test_unreadable_status_reports_once_per_file_state
 test_permission_recovery_surfaces_preserved_status
 test_terminal_stale_surfaced
+test_done_open_pr_uses_declared_wait_cadence
 test_stale_terminal_status_overridden_by_active_run
 test_nonterminal_stale_provably_working_absorbed_then_escalated
 test_wedge_escalation_marks_demand_deep_inspection_after_threshold

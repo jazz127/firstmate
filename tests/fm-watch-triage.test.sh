@@ -21,6 +21,8 @@ set -u
 . "$(dirname "${BASH_SOURCE[0]}")/wake-helpers.sh"
 # shellcheck source=/dev/null
 . "$ROOT/bin/fm-classify-lib.sh"
+# shellcheck source=/dev/null
+. "$ROOT/bin/fm-pr-lib.sh"
 
 WATCH="$ROOT/bin/fm-watch.sh"
 DRAIN="$ROOT/bin/fm-wake-drain.sh"
@@ -2102,13 +2104,21 @@ test_permission_recovery_surfaces_preserved_status() {
 }
 
 test_terminal_stale_surfaced() {
-  local dir state fakebin out drain_out capture_file window key pane_hash sig pid
-  dir=$(make_case terminal-stale); state="$dir/state"; fakebin="$dir/fakebin"
+  local mode=${1:-no-pr} dir state fakebin out drain_out capture_file window key pane_hash sig pid
+  dir=$(make_case "terminal-stale-$mode"); state="$dir/state"; fakebin="$dir/fakebin"
   out="$dir/watch.out"; drain_out="$dir/drain.out"; capture_file="$dir/pane.txt"
   window="test:fm-done"
   printf 'finished, awaiting review' > "$capture_file"
   printf 'window=%s\nkind=ship\n' "$window" > "$state/done.meta"
   printf 'done: PR https://example.test/pr/3\n' > "$state/done.status"
+  if [ "$mode" = merged ]; then
+    printf 'done: PR https://github.com/o/r/pull/3\n' > "$state/done.status"
+    printf 'pr=https://github.com/o/r/pull/3\n' >> "$state/done.meta"
+    fm_pr_poll_prepare "$state" 'done' github https://github.com/o/r/pull/3 github.com o/r 3 "$ROOT/bin/fm-pr-poll.sh" \
+      || fail "could not prepare the merged PR fixture"
+    fm_pr_poll_publish_prepared || fail "could not publish the merged PR fixture"
+    rm -f "$state/done.check.sh" "$state/done.pr-poll" "$state/done.pr-poll-registration"
+  fi
   sig=$(seen_sig "$state/done.status"); printf '%s' "$sig" > "$state/.seen-done_status"
   key=$(printf '%s' "$window" | tr ':/.' '___')
   pane_hash=$(hash_text "finished, awaiting review")
@@ -2121,7 +2131,60 @@ test_terminal_stale_surfaced() {
   grep -Fx "stale: $window" "$out" >/dev/null || fail "watcher did not print the terminal stale wake"
   FM_STATE_OVERRIDE="$state" "$DRAIN" > "$drain_out" 2>/dev/null || fail "drain after the terminal stale failed"
   grep "$(printf '\tstale\t')" "$drain_out" | grep -F "$window" >/dev/null || fail "terminal stale was not queued"
-  pass "a stale pane sitting on a terminal status is surfaced (queue + exit)"
+  pass "a done stale pane with $mode takes the existing terminal path (queue + exit)"
+}
+
+test_done_open_pr_uses_declared_wait_cadence() {
+  local dir state fakebin out statusf window key pane_hash sig pid back
+  dir=$(make_case done-open-pr-wait); state="$dir/state"; fakebin="$dir/fakebin"
+  out="$dir/watch.out"; statusf="$state/done.meta"; window=test:fm-done
+  printf 'window=%s\nkind=ship\npr=https://github.com/o/r/pull/3\n' "$window" > "$statusf"
+  fm_pr_poll_prepare "$state" 'done' github https://github.com/o/r/pull/3 github.com o/r 3 "$ROOT/bin/fm-pr-poll.sh" \
+    || fail "could not prepare the open PR poll fixture"
+  fm_pr_poll_publish_prepared || fail "could not publish the open PR poll fixture"
+  statusf="$state/done.status"
+  printf 'done: PR https://github.com/o/r/pull/3\n' > "$statusf"
+  sig=$(seen_sig "$statusf"); printf '%s' "$sig" > "$state/.seen-done_status"
+  printf 'finished, awaiting review' > "$dir/pane.txt"
+  key=$(printf '%s' "$window" | tr ':/.' '___')
+  pane_hash=$(hash_text 'finished, awaiting review')
+  printf '%s' "$pane_hash" > "$state/.hash-$key"
+  printf '1\n' > "$state/.count-$key"
+  touch "$state/.last-check" "$state/.last-heartbeat"
+  PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$dir/pane.txt" \
+    FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" \
+    FM_PAUSE_RESURFACE_SECS=999 FM_POLL=1 FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" &
+  pid=$!
+  wait_poll_cycle "$state" "$pid" || { reap "$pid"; fail "fresh delivered PR surfaced instead of waiting: $(cat "$out")"; }
+  [ ! -s "$state/.wake-queue" ] || { reap "$pid"; fail "fresh delivered PR queued a stale wake"; }
+  [ -e "$state/.paused-$key" ] && [ ! -e "$state/.stale-since-$key" ] \
+    || { reap "$pid"; fail "delivered PR did not use pause bookkeeping"; }
+  reap "$pid"
+  ack_stopped_cycle "$state" || fail "could not acknowledge the fixture stop"
+
+  back=$(( $(date +%s) - 500 ))
+  set_mtime "$back" "$statusf"
+  printf '%s' "$(seen_sig "$statusf")" > "$state/.seen-done_status"
+  : > "$out"
+  PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$dir/pane.txt" \
+    FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" \
+    FM_PAUSE_RESURFACE_SECS=240 FM_POLL=1 FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" &
+  pid=$!
+  wait_for_exit "$pid" 100 || { reap "$pid"; fail "delivered PR was not rechecked on the bounded cadence"; }
+  grep -F 'pull request review and merge' "$out" >/dev/null || fail "delivered PR recheck did not name its wait"
+  grep -F 'possible wedge' "$out" >/dev/null && fail "delivered PR recheck escalated as a wedge"
+  [ -e "$state/.paused-resurfaced-$key" ] || fail "delivered PR recheck did not record its cadence"
+  ack_stopped_cycle "$state" || fail "could not acknowledge the delivered PR recheck"
+  : > "$out"
+  PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$dir/pane.txt" \
+    FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" \
+    FM_PAUSE_RESURFACE_SECS=240 FM_POLL=1 FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" &
+  pid=$!
+  wait_poll_cycle "$state" "$pid" || { reap "$pid"; fail "delivered PR rechecked again before the cadence"; }
+  [ ! -s "$out" ] && [ ! -s "$state/.wake-queue" ] \
+    || { reap "$pid"; fail "delivered PR rechecked again inside the cadence"; }
+  reap "$pid"
+  pass "done with an open recorded PR waits and rechecks on the pause cadence"
 }
 
 # --- stale pane, STALE terminal status overridden by an active run: absorbed ---
@@ -3775,13 +3838,20 @@ test_open_captain_call_bounds_stale_churn() {
   command -v tasks-axi >/dev/null 2>&1 \
     || { echo "skip: tasks-axi not found (captain-hold stale bound)"; return 0; }
   for spec in \
-    'held-delivery|done: PR https://example.invalid/pull/1 checks green' \
+    'held-delivery|done: PR https://github.com/o/r/pull/1 checks green' \
     'held-worker-line|working: still tidying the branch'
   do
     name=${spec%%|*}; line=${spec#*|}
     dir=$(make_hold_home "$name" "$line" hold) \
       || fail "[$name] could not build a captain-held backlog fixture"
     state="$dir/state"; out="$dir/watch.out"; capture="$dir/pane.txt"
+    if [ "$name" = held-delivery ]; then
+      printf 'pr=https://github.com/o/r/pull/1\n' >> "$state/held-merge.meta"
+      fm_pr_poll_prepare "$state" held-merge github https://github.com/o/r/pull/1 github.com o/r 1 "$ROOT/bin/fm-pr-poll.sh" \
+        || fail "could not prepare the captain-held PR poll fixture"
+      fm_pr_poll_publish_prepared || fail "could not publish the captain-held PR poll fixture"
+      touch "$state/.last-check"
+    fi
     throttle="$state/.paused-resurfaced-$(hold_key)"
 
     # First sight still alarms: the call bounds repetition, never the first look.
@@ -6189,6 +6259,8 @@ test_routine_appends_after_a_classified_event_stay_absorbed
 test_unreadable_status_reports_once_per_file_state
 test_permission_recovery_surfaces_preserved_status
 test_terminal_stale_surfaced
+test_terminal_stale_surfaced merged
+test_done_open_pr_uses_declared_wait_cadence
 test_stale_terminal_status_overridden_by_active_run
 test_nonterminal_stale_provably_working_absorbed_then_escalated
 test_wedge_escalation_marks_demand_deep_inspection_after_threshold

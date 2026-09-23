@@ -82,16 +82,16 @@ Keep an unsolicited routine outcome as verdict routine, including a healthy resu
 Worker turn completion, stopped previews with preserved work, and no-change updates are routine when they bring no new artifact, finding, or decision.
 An already-reported unchanged blocker is routine unless the captain explicitly requested an update; a newly actionable failure or changed blocker still goes to captain.
 Keep an unchanged fleet review silent as instructed above.
- Never replace silent routine outcomes with a shipshape reply or another follow-up turn.
+Never replace silent routine outcomes with a shipshape reply or another follow-up turn.
 
- # Silent outcomes
+# Silent outcomes
 
 Set silent true, always with verdict routine, when the outcome only re-states bookkeeping that is already durably recorded and carries no new state:
 - the echo of a pause or status record you yourself just wrote or steered;
 - a scheduled recheck of an already-registered pause whose task state has not changed;
 - a re-confirmation of a declared pause or an open captain hold that still holds on the same terms.
 Never set silent for anything that changed state (a pause that cleared, a task that changed state, an action you took), a wedge adjudication that concluded something new, a merge, a delivery, a decision, a blocker, a failure, or any captain verdict.
- When in doubt whether anything is new, leave silent false.
+When in doubt whether anything is new, leave silent false.
 When genuinely in doubt, choose captain: a spurious escalation costs a glance, a swallowed one costs trust.
 Write summaries in the captain's outcome language - the project, the fix, the PR, the worker, the blocker - never internal mechanics like wake kinds, status prefixes, worktrees, or state file names.
 

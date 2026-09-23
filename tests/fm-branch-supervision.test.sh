@@ -54,12 +54,16 @@ test_branch_prompt_is_byte_stable_and_above_cache_floor() {
     *) fail "branch prompt lost the requested-result, progress-routine, or routine-silence rules" ;;
   esac
   case "$out_a" in
-    *"All routine outcomes remain durable but invisible"*"Direct answers to explicit captain questions also use verdict captain."*"Worker turn completion, stopped previews with preserved work"*"An already-reported unchanged blocker is routine unless the captain explicitly requested an update"*"Never replace silent routine outcomes with a shipshape reply"*) ;;
-    *) fail "branch prompt lost quiet routine presentation or explicit-answer delivery" ;;
-  esac
-  case "$out_a" in
     *"# PR identity: copy or abstain"*"copied verbatim from the task's \`done [at=<epoch>]: PR <url>\` status line or its \`pr=\` metadata field"*"Never assemble an owner, repository, host, or number"*"report the identifier you do have"*) ;;
     *) fail "branch prompt lost the copy-or-abstain PR identity rule" ;;
+  esac
+  # The 2026-09-22 away window: every landed exemption worker was left sitting
+  # because the prompt granted landed-task cleanup without ever naming the
+  # moment or the command, so the stale wake ended in the recovery playbook's
+  # "nothing to recover".
+  case "$out_a" in
+    *"A worker whose pull request has landed is finished, not stuck"*"\`check: merge landed:\` wake names exactly that moment"*"\`bin/fm-teardown.sh <task>\` with no flags"*"never forced, worked around, or repaired by hand"*) ;;
+    *) fail "branch prompt lost the landed-work cleanup rule" ;;
   esac
   pass "branch prompt is byte-stable across homes, cwd, timezone, and time, above the cache floor"
 }
@@ -142,7 +146,9 @@ test_outcome_startup_replay_preserves_silence() {
   status=$?
   [ "$status" -ne 0 ] || fail "append accepted a silent captain outcome"
   assert_contains "$out" "silent outcomes must be routine outcomes" "silent captain refusal lost its diagnostic"
-  [ ! -e "$store" ] || fail "refused silent outcomes changed the durable store"
+  out=$(FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" append \
+    --task task-a --verdict routine --summary 'healthy' --silent true 2>&1)
+  [ "$?" -eq 0 ] || fail "append rejected a silent task-scoped outcome: $out"
 
   FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" append \
     --task fleet --verdict routine --summary 'fleet reviewed, nothing changed' --silent true >/dev/null \
@@ -152,19 +158,20 @@ test_outcome_startup_replay_preserves_silence() {
     || fail "visible outcome append failed"
 
   replay=$(FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" startup-replay) || fail "mixed startup replay failed"
+  assert_not_contains "$replay" "healthy" "startup replay printed a silent task outcome"
   assert_not_contains "$replay" "fleet reviewed, nothing changed" "startup replay printed a silent outcome"
   assert_contains "$replay" "worker recovered automatically" "startup replay lost a visible routine outcome"
   [ -z "$(FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" unread)" ] \
     || fail "startup replay did not mark the silent and visible rows read"
 
-  printf '%s\n' '{"seq":3,"epoch":1,"task":"task-legacy","wake":"","verdict":"routine","summary":"legacy visible outcome"}' \
+  printf '%s\n' '{"seq":4,"epoch":1,"task":"task-legacy","wake":"","verdict":"routine","summary":"legacy visible outcome"}' \
     >> "$home/state/branch-outcomes.jsonl"
   replay=$(FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" startup-replay) || fail "legacy startup replay failed"
   assert_contains "$replay" "legacy visible outcome" "startup replay hid a legacy row with no silent field"
   [ -z "$(FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" unread)" ] \
     || fail "startup replay did not mark the legacy row read"
 
-  printf '%s\n' '{"seq":4,"epoch":1,"task":"task-bad","wake":"","verdict":"captain","summary":"poisoned","silent":true}' >> "$store"
+  printf '%s\n' '{"seq":5,"epoch":1,"task":"task-bad","wake":"","verdict":"captain","summary":"poisoned","silent":true}' >> "$store"
   out=$(FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" unread 2>&1)
   status=$?
   [ "$status" -ne 0 ] || fail "unread accepted a stored silent captain outcome"
@@ -179,21 +186,18 @@ test_silent_bookkeeping_outcomes_stay_out_of_replay_and_coverage() {
   store="$home/state/branch-outcomes.jsonl"
   printf 'blocked: waiting\n' > "$home/state/task-p.status"
 
-  # Bookkeeping-only outcomes on a task: silent. Everything else: rendered.
   append() { FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" append --task "$1" --verdict "$2" --summary "$3" "${@:4}" >/dev/null || fail "append failed: $3"; }
   append task-p routine 'echo of the pause I just recorded' --silent true
   append task-p routine 'scheduled recheck of the registered pause' --silent true
   append task-p routine 'pause still holds on the same terms' --silent true
-  [ ! -e "$home/state/.task-p.branch-outcome-index" ] \
-    || fail "silent bookkeeping outcomes wrote a status-coverage index before any visible outcome"
+  [ ! -e "$home/state/.task-p.branch-outcome-index" ] || fail "silent bookkeeping outcomes wrote a status-coverage index before any visible outcome"
   append task-p routine 'pause cleared: worker relaunched on a new seat'
   append task-p captain 'PR is ready for review https://example.com/pr/1'
   append task-q routine 'merged and cleaned up'
 
   append task-p routine 'captain-facing status was already recorded' --silent true
   rm -f -- "$home/state/.task-p.branch-outcome-index" "$home/state/.branch-outcome-index-ready"
-  FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" processed-init >/dev/null \
-    || fail "coverage index rebuild failed"
+  FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" processed-init >/dev/null || fail "coverage index rebuild failed"
   index_seq=$(cut -f2 "$home/state/.task-p.branch-outcome-index")
   [ "$index_seq" = 5 ] || fail "silent latest row replaced the latest visible coverage index: $index_seq"
 
@@ -203,7 +207,6 @@ test_silent_bookkeeping_outcomes_stay_out_of_replay_and_coverage() {
   assert_not_contains "$replay" "still holds on the same terms" "silent pause re-confirmation was rendered"
   assert_contains "$replay" "pause cleared: worker relaunched" "a genuine pause state change was suppressed"
 
-  # Measure on this corpus: 4 of the 7 recorded outcomes are newly silent.
   out=$(jq -s '[.[] | select(.silent == true)] | length' "$store")
   [ "$out" = 4 ] || fail "expected 4 silent bookkeeping rows in the 7-row corpus, got $out"
   shown=$(jq -s '[.[] | select(.silent != true)] | length' "$store")
@@ -875,6 +878,256 @@ test_branch_cannot_force_teardown_or_directly_relaunch() {
   pass "the branch cannot force a teardown or bypass fm-control for a relaunch"
 }
 
+# --- away posture: main parked, standing authority relocated -----------------
+
+# The relocation is exactly bin/fm-lease-lib.sh's role-partition paragraph:
+# the branch passes the main-only partition for the PR merge and a fresh spawn
+# ONLY while a confirmed, live away-posture record exists; local-only landing
+# is never relocated; the record's spend cap binds a fresh ordinary spawn for
+# either actor; and an unconfirmed, archived, or invalid record is absence,
+# restoring the attended refusal byte for byte.
+test_away_record_relocates_main_owned_actions_to_the_branch() {
+  local home root out status refusal
+  home="$TMP_ROOT/away-home"
+  root="$TMP_ROOT/away-root"
+  mkdir -p "$home/state" "$root"
+  git init -q -b main "$root"
+  git -C "$root" commit -q --allow-empty -m init
+  ln -s "$ROOT/bin" "$root/bin"
+  refusal="error: PR merge (fm-pr-merge) refused - the supervision branch never performs this action; report the outcome and leave it to main (role partition: docs/pi-supervision-branch.md)"
+
+  # Attended: the refusal wording every caller already pins.
+  out=$(FM_HOME="$home" FM_SUPERVISION_ACTOR=branch "$ROOT/bin/fm-pr-merge.sh" task-x https://github.com/o/r/pull/1 2>&1)
+  status=$?
+  [ "$status" -eq 6 ] || fail "attended branch fm-pr-merge exited $status, not 6: $out"
+  assert_contains "$out" "$refusal" "attended refusal lost its wording"
+
+  # /afk is the go: the one entry call writes the record that relocates.
+  FM_HOME="$home" "$ROOT/bin/fm-afk-contract.sh" enter --spend 2 >/dev/null || fail "away entry failed"
+
+  # Under the record the partition passes and the merge script reaches its
+  # OWN gate (no task record here), never the partition refusal.
+  out=$(FM_HOME="$home" FM_SUPERVISION_ACTOR=branch "$ROOT/bin/fm-pr-merge.sh" task-x https://github.com/o/r/pull/1 2>&1)
+  status=$?
+  [ "$status" -ne 6 ] || fail "branch fm-pr-merge still hit the partition under the record: $out"
+  assert_contains "$out" "main is parked" "the relocation did not announce itself"
+  assert_contains "$out" "task metadata is unavailable" "the merge did not reach its own gate under the record"
+
+  # Local-only landing is never relocated: it has no record-side gate.
+  out=$(FM_HOME="$home" FM_SUPERVISION_ACTOR=branch "$ROOT/bin/fm-merge-local.sh" task-x 2>&1)
+  status=$?
+  [ "$status" -eq 6 ] || fail "branch fm-merge-local was relocated under the record (exit $status): $out"
+  assert_contains "$out" "local-only landing (fm-merge-local) refused" "merge-local refusal lost its wording under the record"
+
+  # A fresh spawn passes the partition and meets the spend cap: one ordinary
+  # task record against a cap of 2, then a second ordinary record refuses.
+  # An arbitrary id is not already-queued work, so the branch is refused at
+  # that gate rather than proceeding to ordinary validation.
+  fm_write_meta "$home/state/task-a.meta" "window=fm-task-a" "kind=ship"
+  fm_write_meta "$home/state/mate-1.meta" "window=remote:mate-1" "kind=secondmate"
+  out=$(FM_HOME="$home" FM_ROOT_OVERRIDE="$root" FM_SUPERVISION_ACTOR=branch \
+    "$ROOT/bin/fm-spawn.sh" task-new --mode no-mistakes --yolo off 2>&1)
+  status=$?
+  [ "$status" -ne 6 ] || fail "branch fm-spawn still hit the partition under the record: $out"
+  assert_contains "$out" "main is parked" "the spawn relocation did not announce itself"
+  assert_contains "$out" "queued unblocked work" "an arbitrary branch spawn was not held to queued work"
+  assert_not_contains "$out" "caps concurrent workers" "one ordinary task under a cap of 2 was refused"
+  fm_write_meta "$home/state/task-b.meta" "window=fm-task-b" "kind=ship"
+  out=$(FM_HOME="$home" FM_ROOT_OVERRIDE="$root" FM_SUPERVISION_ACTOR=branch \
+    "$ROOT/bin/fm-spawn.sh" task-new --mode no-mistakes --yolo off 2>&1)
+  status=$?
+  [ "$status" -eq 1 ] || fail "spend-cap refusal exited $status, not 1: $out"
+  assert_contains "$out" "caps concurrent workers at 2 and 2 ordinary task(s) are live" "spend-cap refusal lost its count"
+  # The cap binds main too: the posture, not the actor, is what caps spend.
+  out=$(FM_HOME="$home" FM_ROOT_OVERRIDE="$root" "$ROOT/bin/fm-spawn.sh" task-new --mode no-mistakes --yolo off 2>&1)
+  status=$?
+  [ "$status" -eq 1 ] || fail "main spawn past the cap exited $status, not 1: $out"
+  assert_contains "$out" "caps concurrent workers" "main was not held to the spend cap"
+
+  rm -f "$root/bin"
+  mkdir -p "$root/bin"
+  for f in "$ROOT/bin"/*; do
+    ln -s "$f" "$root/bin/${f##*/}"
+  done
+  rm -f "$root/bin/fm-afk-contract.sh"
+  cat > "$root/bin/fm-afk-contract.sh" <<WRAPPER
+#!/usr/bin/env bash
+set -eu
+REAL="$ROOT/bin/fm-afk-contract.sh"
+COUNT="$home/contract-call-count"
+n=0
+[ -f "\$COUNT" ] && n=\$(cat "\$COUNT")
+n=\$((n + 1))
+printf '%s\n' "\$n" > "\$COUNT"
+if [ "\$n" -eq 2 ]; then
+  "\$REAL" archive >/dev/null
+fi
+exec "\$REAL" "\$@"
+WRAPPER
+  chmod +x "$root/bin/fm-afk-contract.sh"
+  out=$(FM_HOME="$home" FM_ROOT_OVERRIDE="$root" "$root/bin/fm-spawn.sh" task-new --mode no-mistakes --yolo off 2>&1) || true
+  assert_not_contains "$out" "caps concurrent workers" "a field-read after archive refused a main spawn via the spend cap"
+  assert_not_contains "$out" "no readable spend cap" "a field-read after archive killed the spawn instead of restoring attended behavior"
+  FM_HOME="$home" "$ROOT/bin/fm-afk-contract.sh" enter --spend 2 >/dev/null || fail "away re-entry failed"
+
+  # Archive is absence: the attended refusal returns, byte for byte.
+  FM_HOME="$home" "$ROOT/bin/fm-afk-contract.sh" archive >/dev/null || fail "away archive failed"
+  out=$(FM_HOME="$home" FM_SUPERVISION_ACTOR=branch "$ROOT/bin/fm-pr-merge.sh" task-x https://github.com/o/r/pull/1 2>&1)
+  status=$?
+  [ "$status" -eq 6 ] || fail "an archived record still relocated the merge (exit $status): $out"
+  assert_contains "$out" "$refusal" "the attended refusal changed after archive"
+  assert_not_contains "$out" "main is parked" "an archived record still announced a relocation"
+  out=$(FM_HOME="$home" "$ROOT/bin/fm-spawn.sh" task-new --mode no-mistakes --yolo off 2>&1)
+  assert_not_contains "$out" "caps concurrent workers" "the spend cap outlived the record"
+  # A record that no longer validates is absence too.
+  printf 'version: 99\n' > "$home/state/.afk-contract"
+  out=$(FM_HOME="$home" FM_SUPERVISION_ACTOR=branch "$ROOT/bin/fm-pr-merge.sh" task-x https://github.com/o/r/pull/1 2>&1)
+  status=$?
+  [ "$status" -eq 6 ] || fail "an invalid record relocated the merge (exit $status): $out"
+  assert_contains "$out" "$refusal" "the attended refusal changed under an invalid record"
+  out=$(FM_HOME="$home" FM_ROOT_OVERRIDE="$root" "$ROOT/bin/fm-spawn.sh" task-new --mode no-mistakes --yolo off 2>&1)
+  assert_not_contains "$out" "caps concurrent workers" "an invalid record refused a main spawn via the spend cap"
+  assert_not_contains "$out" "no readable spend cap" "an invalid record refused a main spawn for an unreadable cap"
+  pass "the away-posture record relocates the PR merge and a spawn under the spend cap to the branch, never local landing, and only while confirmed and valid"
+}
+
+test_away_branch_spawn_requires_queued_dispatchable_work() {
+  local home root out status
+  home="$TMP_ROOT/away-queued-home"
+  root="$TMP_ROOT/away-queued-root"
+  mkdir -p "$home/state" "$home/data" "$home/config" "$root"
+  git init -q -b main "$root"
+  git -C "$root" commit -q --allow-empty -m init
+  ln -s "$ROOT/bin" "$root/bin"
+  cp "$ROOT/.tasks.toml" "$home/.tasks.toml"
+  printf 'manual\n' > "$home/config/backlog-backend"
+  cat > "$home/data/backlog.md" <<'EOF'
+## In flight
+- [ ] task-inflight - orphaned in-flight work
+
+## Queued
+- [ ] task-queued - already queued work
+
+## Done
+EOF
+  FM_HOME="$home" "$ROOT/bin/fm-afk-contract.sh" enter --spend 2 >/dev/null || fail "away entry failed"
+
+  out=$(FM_HOME="$home" FM_ROOT_OVERRIDE="$root" FM_SUPERVISION_ACTOR=branch \
+    "$ROOT/bin/fm-spawn.sh" task-arbitrary --mode no-mistakes --yolo off 2>&1)
+  status=$?
+  [ "$status" -eq 1 ] || fail "an arbitrary branch spawn exited $status, not 1: $out"
+  assert_contains "$out" "queued unblocked work" "an arbitrary id was dispatched under the record"
+
+  out=$(FM_HOME="$home" FM_ROOT_OVERRIDE="$root" FM_SUPERVISION_ACTOR=branch \
+    "$ROOT/bin/fm-spawn.sh" task-queued --mode no-mistakes --yolo off 2>&1)
+  status=$?
+  assert_not_contains "$out" "queued unblocked work" "a queued item was refused as if it were arbitrary: $out"
+  [ "$status" -ne 6 ] || fail "a queued branch spawn hit the partition: $out"
+  assert_contains "$out" "main is parked" "the queued spawn lost its relocation note"
+
+  out=$(FM_HOME="$home" FM_ROOT_OVERRIDE="$root" FM_SUPERVISION_ACTOR=branch \
+    "$ROOT/bin/fm-spawn.sh" task-inflight --mode no-mistakes --yolo off 2>&1)
+  status=$?
+  [ "$status" -eq 1 ] || fail "an in-flight branch spawn exited $status, not 1: $out"
+  assert_contains "$out" "queued unblocked work" "an in-flight row was dispatched by the away branch"
+
+  out=$(FM_HOME="$home" FM_ROOT_OVERRIDE="$root" FM_SUPERVISION_ACTOR=branch \
+    "$ROOT/bin/fm-spawn.sh" mate-new --secondmate 2>&1)
+  status=$?
+  [ "$status" -eq 6 ] || fail "a branch secondmate spawn exited $status, not 6: $out"
+  assert_contains "$out" "the supervision branch never performs this action" "a branch secondmate spawn was not refused at the partition"
+
+  rm -f "$root/bin"
+  mkdir -p "$root/bin"
+  for f in "$ROOT/bin"/*; do
+    ln -s "$f" "$root/bin/${f##*/}"
+  done
+  rm -f "$root/bin/fm-afk-contract.sh"
+  cat > "$root/bin/fm-afk-contract.sh" <<WRAPPER
+#!/usr/bin/env bash
+set -eu
+REAL="$ROOT/bin/fm-afk-contract.sh"
+COUNT="$home/contract-validate-count"
+if [ "\${1:-}" = validate ]; then
+  n=0
+  [ -f "\$COUNT" ] && n=\$(cat "\$COUNT")
+  n=\$((n + 1))
+  printf '%s\n' "\$n" > "\$COUNT"
+  if [ "\$n" -eq 2 ]; then
+    "\$REAL" archive >/dev/null
+  fi
+fi
+exec "\$REAL" "\$@"
+WRAPPER
+  chmod +x "$root/bin/fm-afk-contract.sh"
+  out=$(FM_HOME="$home" FM_ROOT_OVERRIDE="$root" FM_SUPERVISION_ACTOR=branch \
+    "$root/bin/fm-spawn.sh" task-queued --mode no-mistakes --yolo off 2>&1)
+  status=$?
+  [ "$status" -eq 6 ] || fail "an archived-after-early-guard spawn exited $status, not 6: $out"
+  assert_contains "$out" "the supervision branch never performs this action" \
+    "archiving between the early guard and the gate did not restore the attended refusal"
+
+  out=$(FM_HOME="$home" FM_ROOT_OVERRIDE="$root" \
+    "$ROOT/bin/fm-spawn.sh" task-arbitrary --mode no-mistakes --yolo off 2>&1)
+  assert_not_contains "$out" "queued unblocked work" "main's attended spawn was held to the branch queued-work gate"
+  pass "relocated branch spawn admits only already-queued dispatchable work, including on a manual-backend home"
+}
+
+test_away_spend_cap_is_rechecked_under_the_task_set_lock() {
+  local home root out i
+  home="$TMP_ROOT/away-cap-lock-home"
+  root="$TMP_ROOT/away-cap-lock-root"
+  mkdir -p "$home/state" "$home/data" "$home/config" "$root/bin"
+  git init -q -b main "$root"
+  git -C "$root" commit -q --allow-empty -m init
+  for f in "$ROOT/bin"/*; do
+    ln -s "$f" "$root/bin/${f##*/}"
+  done
+  rm -f "$root/bin/fm-afk-contract.sh"
+  cat > "$root/bin/fm-afk-contract.sh" <<WRAPPER
+#!/usr/bin/env bash
+set -eu
+REAL="$ROOT/bin/fm-afk-contract.sh"
+COUNT="$home/contract-field-count"
+if [ "\${1:-}" = field ]; then
+  n=0
+  [ -f "\$COUNT" ] && n=\$(cat "\$COUNT")
+  n=\$((n + 1))
+  printf '%s\n' "\$n" > "\$COUNT"
+  if [ "\$n" -eq 1 ]; then
+    : > "$home/early-cap-passed"
+    i=0
+    while [ ! -f "$home/competitor-published" ]; do
+      i=\$((i + 1))
+      [ "\$i" -lt 200 ] || exit 1
+      sleep 0.05
+    done
+  fi
+fi
+exec "\$REAL" "\$@"
+WRAPPER
+  chmod +x "$root/bin/fm-afk-contract.sh"
+  FM_HOME="$home" "$ROOT/bin/fm-afk-contract.sh" enter --spend 1 >/dev/null || fail "away entry failed"
+
+  FM_HOME="$home" FM_ROOT_OVERRIDE="$root" \
+    "$root/bin/fm-spawn.sh" task-q1 --mode no-mistakes --yolo off \
+    > "$home/q1.out" 2>&1 &
+  i=0
+  while [ ! -f "$home/early-cap-passed" ]; do
+    i=$((i + 1))
+    [ "$i" -lt 200 ] || fail "spawn never reached the early spend-cap check: $(cat "$home/q1.out" 2>/dev/null || true)"
+    sleep 0.05
+  done
+  fm_write_meta "$home/state/task-live.meta" "window=fm-task-live" "kind=ship"
+  : > "$home/competitor-published"
+  wait || true
+  out=$(cat "$home/q1.out" 2>/dev/null || true)
+  assert_contains "$out" "caps concurrent workers at 1 and 1 ordinary task(s) are live" \
+    "the paused spawn did not recheck the cap after the competitor published: $out"
+  [ ! -f "$home/state/task-q1.meta" ] || fail "the stale-count spawn published after a competitor landed"
+  pass "the away spend cap is rechecked under the task-set lock so concurrent spawns cannot both publish"
+}
+
 test_branch_prompt_is_byte_stable_and_above_cache_floor
 test_outcome_store_is_append_only_with_cursor_reads
 test_outcome_startup_replay_preserves_silence
@@ -896,3 +1149,6 @@ test_guard_holds_exclusivity_through_mutation
 test_claim_refuses_the_other_actors_name_loudly
 test_release_actor_drops_only_that_actors_leases
 test_branch_cannot_force_teardown_or_directly_relaunch
+test_away_record_relocates_main_owned_actions_to_the_branch
+test_away_branch_spawn_requires_queued_dispatchable_work
+test_away_spend_cap_is_rechecked_under_the_task_set_lock

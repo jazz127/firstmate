@@ -2101,7 +2101,7 @@ test_permission_recovery_surfaces_preserved_status() {
   pass "permission recovery surfaces content from the unadvanced position"
 }
 
-test_terminal_stale_surfaced() {
+test_terminal_stale_without_pr_surfaced() {
   local dir state fakebin out drain_out capture_file window key pane_hash sig pid
   dir=$(make_case terminal-stale); state="$dir/state"; fakebin="$dir/fakebin"
   out="$dir/watch.out"; drain_out="$dir/drain.out"; capture_file="$dir/pane.txt"
@@ -2122,6 +2122,100 @@ test_terminal_stale_surfaced() {
   FM_STATE_OVERRIDE="$state" "$DRAIN" > "$drain_out" 2>/dev/null || fail "drain after the terminal stale failed"
   grep "$(printf '\tstale\t')" "$drain_out" | grep -F "$window" >/dev/null || fail "terminal stale was not queued"
   pass "a stale pane sitting on a terminal status is surfaced (queue + exit)"
+}
+
+# Task PR state is deliberately fixture-local: an open wait requires the
+# metadata pr= plus the same authenticated sidecar and registration the merge
+# poll already owns. The watcher must not ask the forge while classifying stale.
+arm_test_pr_poll() {  # <state> <task> <url>
+  local state=$1 task=$2 url=$3
+  (
+    . "$ROOT/bin/fm-pr-lib.sh"
+    fm_pr_url_parse "$url" || exit 1
+    fm_pr_poll_prepare "$state" "$task" "$FM_PR_PROVIDER" "$FM_PR_URL" \
+      "$FM_PR_HOST" "$FM_PR_PATH" "$FM_PR_NUMBER" "$ROOT/bin/fm-pr-poll.sh" \
+      || exit 1
+    fm_pr_poll_publish_prepared
+  )
+}
+
+mark_test_pr_merged() {  # <state> <task> <url>
+  local state=$1 task=$2 url=$3
+  (
+    . "$ROOT/bin/fm-pr-lib.sh"
+    fm_pr_url_parse "$url" || exit 1
+    fm_pr_poll_merge_mark_notified "$state" "$task" "$FM_PR_PROVIDER" \
+      "$FM_PR_HOST" "$FM_PR_PATH" "$FM_PR_NUMBER"
+  )
+}
+
+test_done_open_pr_stale_waits_then_resurfaces_on_cadence() {
+  local dir state fakebin out capture_file window key sig back pid url
+  dir=$(make_case done-open-pr-wait); state="$dir/state"; fakebin="$dir/fakebin"
+  out="$dir/watch.out"; capture_file="$dir/pane.txt"; window="test:fm-done"
+  url=https://github.com/o/r/pull/3
+  printf 'finished, awaiting review' > "$capture_file"
+  printf 'window=%s\nkind=ship\npr=%s\n' "$window" "$url" > "$state/done.meta"
+  chmod 0600 "$state/done.meta"
+  printf 'done: PR %s\n' "$url" > "$state/done.status"
+  sig=$(seen_sig "$state/done.status"); printf '%s' "$sig" > "$state/.seen-done_status"
+  arm_test_pr_poll "$state" 'done' "$url" || fail "could not make a valid local merge-poll registration"
+  key=$(printf '%s' "$window" | tr ':/.' '___')
+  printf '%s' "$(hash_text 'finished, awaiting review')" > "$state/.hash-$key"
+  printf '1\n' > "$state/.count-$key"
+  PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
+    FM_FAKE_TMUX_CURRENT_COMMAND=zsh FM_FAKE_CREW_STATE='state: stopped · source: pane · ended' \
+    FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" \
+    FM_PAUSE_RESURFACE_SECS=240 FM_POLL=1 FM_SIGNAL_GRACE=1 \
+    FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" &
+  pid=$!
+  if ! wait_poll_cycle "$state" "$pid"; then
+    reap "$pid"; fail "done row with open PR did not stay absorbed on its first stale sight: $(cat "$out")"
+  fi
+  [ ! -s "$state/.wake-queue" ] || { reap "$pid"; fail "open-PR wait enqueued an immediate stale wake"; }
+  [ -e "$state/.paused-$key" ] || { reap "$pid"; fail "open-PR wait did not enter the shared paused cadence"; }
+  [ ! -e "$state/.stale-since-$key" ] || { reap "$pid"; fail "open-PR wait started a wedge timer"; }
+
+  back=$(( $(date +%s) - 500 ))
+  if [ "$(uname)" = Darwin ]; then touch -mt "$(date -r "$back" '+%Y%m%d%H%M.%S')" "$state/done.status"
+  else touch -m -d "@$back" "$state/done.status"; fi
+  sig=$(seen_sig "$state/done.status"); printf '%s' "$sig" > "$state/.seen-done_status"
+  wait_for_exit "$pid" 100 || { reap "$pid"; fail "open-PR wait did not re-surface after the bounded cadence"; }
+  grep -F 'awaiting pull request review and merge' "$out" >/dev/null \
+    || fail "open-PR recheck did not name review and merge: $(cat "$out")"
+  grep -F 'possible wedge' "$out" >/dev/null && fail "open-PR recheck was mislabeled a wedge"
+  pass "a done row with an armed open PR is absorbed as a declared wait and rechecked on the bounded cadence"
+}
+
+test_done_merged_pr_keeps_landed_cleanup_path() {
+  local dir state fakebin out capture_file window key sig pid url
+  dir=$(make_case done-merged-pr-path); state="$dir/state"; fakebin="$dir/fakebin"
+  out="$dir/watch.out"; capture_file="$dir/pane.txt"; window="test:fm-done"
+  url=https://github.com/o/r/pull/4
+  printf 'finished after merge' > "$capture_file"
+  printf 'window=%s\nkind=ship\npr=%s\n' "$window" "$url" > "$state/done.meta"
+  chmod 0600 "$state/done.meta"
+  printf 'done: PR %s\n' "$url" > "$state/done.status"
+  sig=$(seen_sig "$state/done.status"); printf '%s' "$sig" > "$state/.seen-done_status"
+  arm_test_pr_poll "$state" 'done' "$url" || fail "could not make a valid local merge-poll registration"
+  # A confirmed merge retires the armed poll artifacts before the landed-worker
+  # cleanup path acts. A retained pr= by itself must not invent an external wait.
+  mark_test_pr_merged "$state" 'done' "$url" || fail "could not write the merge-poll completion marker"
+  rm -f "$state/done.pr-poll" "$state/done.pr-poll-registration" "$state/done.check.sh"
+  key=$(printf '%s' "$window" | tr ':/.' '___')
+  printf '%s' "$(hash_text 'finished after merge')" > "$state/.hash-$key"
+  printf '1\n' > "$state/.count-$key"
+  PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
+    FM_FAKE_CREW_STATE='state: stopped · source: pane · ended' \
+    FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" \
+    FM_PAUSE_RESURFACE_SECS=240 FM_POLL=1 FM_SIGNAL_GRACE=1 \
+    FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" &
+  pid=$!
+  wait_for_exit "$pid" 100 || fail "merged PR did not retain the terminal landed-cleanup surface: $(cat "$out")"
+  grep -Fx "stale: $window" "$out" >/dev/null || fail "merged PR did not retain its existing terminal surface"
+  grep -F 'awaiting pull request review and merge' "$out" >/dev/null \
+    && fail "retired merged poll was misclassified as an open-PR wait"
+  pass "a done row whose merged poll was retired stays on the existing landed-worker cleanup path"
 }
 
 # --- stale pane, STALE terminal status overridden by an active run: absorbed ---
@@ -6188,7 +6282,9 @@ test_release_completion_survives_a_later_routine_append
 test_routine_appends_after_a_classified_event_stay_absorbed
 test_unreadable_status_reports_once_per_file_state
 test_permission_recovery_surfaces_preserved_status
-test_terminal_stale_surfaced
+test_terminal_stale_without_pr_surfaced
+test_done_open_pr_stale_waits_then_resurfaces_on_cadence
+test_done_merged_pr_keeps_landed_cleanup_path
 test_stale_terminal_status_overridden_by_active_run
 test_nonterminal_stale_provably_working_absorbed_then_escalated
 test_wedge_escalation_marks_demand_deep_inspection_after_threshold

@@ -1418,6 +1418,9 @@ handle_paused_stale() {  # <window> <task> <hash>
     fi
     detail="captain-held, awaiting the captain"
     reason="captain-held ${age}s, awaiting the captain - verified hold transfer, rechecked on a long cadence not a wedge; answer the held decision or release the hold"
+  elif task_done_open_pr_wait "$task"; then
+    detail="done, awaiting pull request review or merge"
+    reason="done ${age}s, awaiting pull request review and merge - rechecked on a long cadence not a wedge; confirm review or merge progress"
   elif until=$(status_paused_until "$last"); then
     if [ "$now" -lt "$until" ] && [ "$age" -lt "$PAUSE_RESURFACE_SECS" ]; then
       triage_log "absorbed stale (paused until $(( until - now ))s from now, declared time not reached): $win"
@@ -1542,7 +1545,7 @@ pause_state_class() {  # <window> <task>
   key=$(window_key "$win")
   last=$(last_status_line "$STATE/$task.status")
   recheck_file="$STATE/.paused-rechecked-$key"
-  if ! status_is_paused_or_captain_held "$last"; then
+  if ! status_is_paused_or_captain_held "$last" && ! task_done_open_pr_wait "$task"; then
     rm -f "$recheck_file"
     crew_absorb_class "$task"
     return
@@ -1626,6 +1629,24 @@ task_captain_call_open() {  # <task>
   CAPTAIN_CALL_IDENTITY=$(FM_HOME="$FM_HOME" "$SCRIPT_DIR/fm-captain-hold.sh" \
     open "$task" --identity 2>/dev/null) || return 1
   return 0
+}
+
+# An open PR wait uses the existing declared-wait cadence only for terminal
+# `done:` rows with an armed local merge-poll registration and no matching
+# merge-notified marker. A confirmed merged PR stays on the landed-worker
+# cleanup path; no PR, invalid/unarmed poll state, and other terminal verbs keep
+# current behavior. Captain-held work and active validation keep priority.
+task_done_open_pr_wait() {  # <task>
+  local task=$1 last meta
+  [ -n "$task" ] || return 1
+  last=$(last_status_line "$STATE/$task.status")
+  [ "$(status_line_verb "$last")" = 'done' ] || return 1
+  task_captain_call_open "$task" && return 1
+  meta="$STATE/$task.meta"
+  fm_pr_metadata_identity_parse "$meta" || return 1
+  fm_pr_poll_merge_already_notified "$STATE" "$task" \
+    "$FM_PR_META_PROVIDER" "$FM_PR_META_HOST" "$FM_PR_META_PATH" "$FM_PR_META_NUMBER" && return 1
+  fm_pr_poll_artifacts_valid "$STATE" "$task" "$SCRIPT_DIR/fm-pr-poll.sh"
 }
 
 # The identity a re-surface throttle is bound to: the task's whole status-log
@@ -2729,7 +2750,8 @@ EOF
     [ -z "$task" ] || inbox_steer_check "$w" "$task"
     key=$(window_key "$w")
     last=$(last_status_line "$STATE/$task.status")
-    if ! status_is_paused_or_captain_held "$last" && [ -e "$STATE/.paused-$key" ]; then
+    if [ -e "$STATE/.paused-$key" ] && ! status_is_paused_or_captain_held "$last" \
+      && ! task_done_open_pr_wait "$task"; then
       clear_pause_tracking "$key"
     fi
     # An idle secondmate endpoint is healthy by design, so a mate is admitted to
@@ -2795,7 +2817,9 @@ EOF
           # line. On a NEW hash, give an active run/busy pane (the same
           # authoritative source fm-crew-state.sh itself already prioritizes
           # over the log) a chance to override before trusting the log.
-          if [ "$(cat "$sf" 2>/dev/null || true)" != "$h" ]; then
+          if [ -e "$pf" ] && task_done_open_pr_wait "$task"; then
+            handle_paused_stale "$w" "$task" "$h"
+          elif [ "$(cat "$sf" 2>/dev/null || true)" != "$h" ]; then
             if crew_is_provably_working "$(window_to_task "$w" "$STATE")"; then
               printf '%s' "$h" > "$sf"
               date +%s > "$ssf"
@@ -2813,6 +2837,8 @@ EOF
               rm -f "$ssf"
               clear_write_tracking "$key"
               triage_log "absorbed stale (open captain call already surfaced for this status): $w"
+            elif task_done_open_pr_wait "$task"; then
+              handle_paused_stale "$w" "$task" "$h"
             else
               fm_wake_append stale "$w" "stale: $w" || exit 1
               stale_wait_record "$key"

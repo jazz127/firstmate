@@ -1396,6 +1396,28 @@ busy_turn_over_age() {  # <task>
 # captain themself for a verified hold. Only the captain-held verb takes the second
 # wording; a caller that reached the bounded cadence off pause tracking alone, with
 # no declaring verb left on the log, keeps the external-wait wording it always had.
+done_pr_wait_is_armed() {  # <task>
+  local task=$1 meta="$STATE/$1.meta" url data registration
+  # A terminal done: row plus the task's recorded PR and its local armed poll
+  # identity is the open-review wait. Poll retirement removes these artifacts
+  # on merge, so merged PRs keep the landed-worker cleanup path; no PR keeps
+  # the existing stale semantics.
+  fm_pr_metadata_identity_parse "$meta" || return 1
+  url=$FM_PR_META_URL
+  data="$STATE/$task.pr-poll"
+  registration="$STATE/$task.pr-poll-registration"
+  if fm_pr_poll_data_parse "$data" \
+    && [ "$FM_PR_DATA_URL" = "$url" ]; then
+    return 0
+  fi
+  if fm_pr_poll_registration_parse "$registration" \
+    && [ "$FM_PR_REG_ID" = "$task" ] \
+    && [ "$FM_PR_REG_URL" = "$url" ]; then
+    return 0
+  fi
+  return 1
+}
+
 handle_paused_stale() {  # <window> <task> <hash>
   local win=$1 task=$2 h=$3 key statusf mtime age detail reason declaration last until now min_age
   key=$(window_key "$win")
@@ -1418,6 +1440,9 @@ handle_paused_stale() {  # <window> <task> <hash>
     fi
     detail="captain-held, awaiting the captain"
     reason="captain-held ${age}s, awaiting the captain - verified hold transfer, rechecked on a long cadence not a wedge; answer the held decision or release the hold"
+  elif [[ "$last" == done:* ]] && done_pr_wait_is_armed "$task"; then
+    detail="done, awaiting pull request review or merge"
+    reason="done ${age}s, awaiting external - pull request review and merge; rechecked on a long cadence, not a wedge; confirm the wait still holds"
   elif until=$(status_paused_until "$last"); then
     if [ "$now" -lt "$until" ] && [ "$age" -lt "$PAUSE_RESURFACE_SECS" ]; then
       triage_log "absorbed stale (paused until $(( until - now ))s from now, declared time not reached): $win"
@@ -2729,7 +2754,9 @@ EOF
     [ -z "$task" ] || inbox_steer_check "$w" "$task"
     key=$(window_key "$w")
     last=$(last_status_line "$STATE/$task.status")
-    if ! status_is_paused_or_captain_held "$last" && [ -e "$STATE/.paused-$key" ]; then
+    if ! status_is_paused_or_captain_held "$last" \
+      && ! { [[ "$last" == done:* ]] && done_pr_wait_is_armed "$task"; } \
+      && [ -e "$STATE/.paused-$key" ]; then
       clear_pause_tracking "$key"
     fi
     # An idle secondmate endpoint is healthy by design, so a mate is admitted to
@@ -2781,6 +2808,17 @@ EOF
             wake "stale: $w"
           fi
         elif stale_is_terminal "$w" "$STATE"; then
+          # A recorded done: delivery with its still-armed local PR poll is an
+          # external review wait. Reuse the declared-wait absorber so it gets
+          # the same bounded recheck and never enters wedge escalation. A
+          # merged PR has retired its poll artifacts and follows landed cleanup;
+          # a done row without a PR keeps the ordinary terminal stale behavior.
+          if [[ "$last" == done:* ]] && ! status_is_captain_held "$last" \
+            && ! crew_is_provably_working "$task" \
+            && ! captain_call_stale_bound "$key" "$task" \
+            && done_pr_wait_is_armed "$task"; then
+            handle_paused_stale "$w" "$task" "$h"
+          elif [ "$(cat "$sf" 2>/dev/null || true)" != "$h" ]; then
           # The log's latest status event is captain-relevant - but that alone is not
           # proof the crew is actually done: a crew's own status log gets no
           # new entry once firstmate hands it to a no-mistakes validation
@@ -2795,7 +2833,6 @@ EOF
           # line. On a NEW hash, give an active run/busy pane (the same
           # authoritative source fm-crew-state.sh itself already prioritizes
           # over the log) a chance to override before trusting the log.
-          if [ "$(cat "$sf" 2>/dev/null || true)" != "$h" ]; then
             if crew_is_provably_working "$(window_to_task "$w" "$STATE")"; then
               printf '%s' "$h" > "$sf"
               date +%s > "$ssf"

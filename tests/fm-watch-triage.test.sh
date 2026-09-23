@@ -154,6 +154,14 @@ seen_sig() {
   esac
 }
 
+test_wake_signal_sig() {  # <state> <status-file>
+  FM_STATE_OVERRIDE="$1" bash -c '
+    # shellcheck disable=SC1090,SC1091
+    . "$1"
+    fm_wake_signal_sig "$2"
+  ' _ "$ROOT/bin/fm-wake-lib.sh" "$2"
+}
+
 # Prime <file>'s .seen-* suppressor to its CURRENT signature, so the per-poll
 # no-verb signal scan (which watches every *.turn-ended for a size:mtime change)
 # treats a just-created or just-backdated turn-ended marker as already seen.
@@ -2122,6 +2130,63 @@ test_terminal_stale_surfaced() {
   FM_STATE_OVERRIDE="$state" "$DRAIN" > "$drain_out" 2>/dev/null || fail "drain after the terminal stale failed"
   grep "$(printf '\tstale\t')" "$drain_out" | grep -F "$window" >/dev/null || fail "terminal stale was not queued"
   pass "a stale pane sitting on a terminal status is surfaced (queue + exit)"
+}
+
+test_done_open_pr_wait_uses_bounded_pause_cadence() {
+  local dir state fakebin out capture_file window key pane_hash sig pid reason back
+  dir=$(make_case done-open-pr-wait); state="$dir/state"; fakebin="$dir/fakebin"
+  out="$dir/watch.out"; capture_file="$dir/pane.txt"; window="test:fm-open-pr"
+  printf 'finished, awaiting review' > "$capture_file"
+  printf 'window=%s\nkind=ship\npr=https://github.com/example/project/pull/3\n' "$window" > "$state/done.meta"
+  printf 'github\nhttps://github.com/example/project/pull/3\ngithub.com\nexample/project\n3\n' > "$state/done.pr-poll"
+  printf 'done: PR https://github.com/example/project/pull/3\n' > "$state/done.status"
+  sig=$(seen_sig "$state/done.status"); printf '%s' "$sig" > "$state/.seen-done_status"
+  key=$(printf '%s' "$window" | tr ':/.' '___')
+  pane_hash=$(hash_text 'finished, awaiting review')
+  printf '%s' "$pane_hash" > "$state/.hash-$key"; printf '1\n' > "$state/.count-$key"
+  PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
+    FM_FAKE_TMUX_CURRENT_COMMAND=zsh FM_FAKE_CREW_STATE='state: stopped · source: pane · bare shell' \
+    FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" \
+    FM_PAUSE_RESURFACE_SECS=240 FM_POLL=1 FM_SIGNAL_GRACE=1 \
+    FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" &
+  pid=$!
+  wait_poll_cycle "$state" "$pid" || { reap "$pid"; fail "open-PR done row was not absorbed as a wait: $(cat "$out")"; }
+  [ -e "$state/.paused-$key" ] || { reap "$pid"; fail "open-PR done row did not use declared-wait tracking"; }
+  [ ! -e "$state/.stale-since-$key" ] || { reap "$pid"; fail "open-PR wait entered wedge timing"; }
+  [ ! -s "$state/.wake-queue" ] || { reap "$pid"; fail "open-PR wait resurfaced before its cadence"; }
+  back=$(( $(date +%s) - 500 ))
+  if [ "$(uname)" = Darwin ]; then touch -mt "$(date -r "$back" '+%Y%m%d%H%M.%S')" "$state/done.status"
+  else touch -m -d "@$back" "$state/done.status"; fi
+  sig=$(seen_sig "$state/done.status"); printf '%s' "$sig" > "$state/.seen-done_status"
+  printf 'declared:%s' "$(test_wake_signal_sig "$state" "$state/done.status")" > "$state/.paused-resurfaced-$key"
+  back=$(( $(date +%s) - 500 ))
+  if [ "$(uname)" = Darwin ]; then touch -mt "$(date -r "$back" '+%Y%m%d%H%M.%S')" "$state/.paused-resurfaced-$key"
+  else touch -m -d "@$back" "$state/.paused-resurfaced-$key"; fi
+  wait_for_exit "$pid" 100 || { reap "$pid"; fail "open-PR wait did not resurface at its bounded cadence"; }
+  [ -f "$state/.wake-queue" ] || fail "open-PR watcher exited without a wake queue: $(cat "$out")"
+  reason=$(awk -F '\t' '$3 == "stale" { print $5; exit }' "$state/.wake-queue")
+  [[ "$reason" == *'pull request review and merge'* ]] || fail "open-PR recheck did not name review and merge: $reason; queue=$(cat "$state/.wake-queue"); output=$(cat "$out")"
+  [[ "$reason" == *'not a wedge'* ]] || fail "open-PR recheck did not identify bounded wait: $reason"
+  pass "done rows with an armed open PR poll use the shared bounded review-wait cadence"
+}
+
+test_done_merged_pr_keeps_landed_terminal_path() {
+  local dir state fakebin out capture_file window key pane_hash sig pid
+  dir=$(make_case done-merged-pr); state="$dir/state"; fakebin="$dir/fakebin"
+  out="$dir/watch.out"; capture_file="$dir/pane.txt"; window="test:fm-merged-pr"
+  printf 'finished pane' > "$capture_file"
+  printf 'window=%s\nkind=ship\npr=https://github.com/example/project/pull/4\n' "$window" > "$state/landed.meta"
+  printf 'done: PR https://github.com/example/project/pull/4\n' > "$state/landed.status"
+  sig=$(seen_sig "$state/landed.status"); printf '%s' "$sig" > "$state/.seen-landed_status"
+  key=$(printf '%s' "$window" | tr ':/.' '___'); pane_hash=$(hash_text 'finished pane')
+  printf '%s' "$pane_hash" > "$state/.hash-$key"; printf '1\n' > "$state/.count-$key"
+  PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
+    FM_STATE_OVERRIDE="$state" FM_POLL=1 FM_SIGNAL_GRACE=1 \
+    FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" &
+  pid=$!
+  wait_for_exit "$pid" 100 || fail "merged-PR task without an armed poll did not keep terminal stale behavior"
+  grep -Fx "stale: $window" "$out" >/dev/null || fail "merged-PR task was misclassified as an open review wait"
+  pass "a PR identity without its armed poll artifacts keeps the landed terminal path"
 }
 
 # --- stale pane, STALE terminal status overridden by an active run: absorbed ---
@@ -6189,6 +6254,8 @@ test_routine_appends_after_a_classified_event_stay_absorbed
 test_unreadable_status_reports_once_per_file_state
 test_permission_recovery_surfaces_preserved_status
 test_terminal_stale_surfaced
+test_done_open_pr_wait_uses_bounded_pause_cadence
+test_done_merged_pr_keeps_landed_terminal_path
 test_stale_terminal_status_overridden_by_active_run
 test_nonterminal_stale_provably_working_absorbed_then_escalated
 test_wedge_escalation_marks_demand_deep_inspection_after_threshold

@@ -21,11 +21,22 @@ set -u
 . "$(dirname "${BASH_SOURCE[0]}")/wake-helpers.sh"
 # shellcheck source=/dev/null
 . "$ROOT/bin/fm-classify-lib.sh"
+# shellcheck source=bin/fm-pr-lib.sh
+. "$ROOT/bin/fm-pr-lib.sh"
 
 WATCH="$ROOT/bin/fm-watch.sh"
 DRAIN="$ROOT/bin/fm-wake-drain.sh"
 
 TMP_ROOT=$(fm_test_tmproot fm-watch-triage-tests)
+
+arm_local_pr_poll() {  # <state> <task> <url>
+  local state=$1 task=$2 url=$3
+  fm_pr_url_parse "$url" || return 1
+  fm_pr_poll_prepare "$state" "$task" "$FM_PR_PROVIDER" "$FM_PR_URL" \
+    "$FM_PR_HOST" "$FM_PR_PATH" "$FM_PR_NUMBER" "$ROOT/bin/fm-pr-poll.sh" \
+    || return 1
+  fm_pr_poll_publish_prepared
+}
 
 ack_stopped_cycle() {  # <state>
   local state=$1 err sequence generation
@@ -337,6 +348,87 @@ test_stale_is_terminal_classifier() {
     || fail "prose mentioning a legacy token hid a multi-line pause from the wait cadence"
   stale_is_terminal "sess:fm-missing" "$state" && fail "stale with no status classified terminal"
   pass "stale_is_terminal: terminal status surfaces, non-terminal and no-status are benign"
+}
+
+test_done_open_pr_is_a_bounded_wait() {
+  local dir state fakebin out capture statusf window task key old_hash sig back
+  dir=$(make_case done-open-pr-wait); state="$dir/state"; fakebin="$dir/fakebin"
+  out="$dir/watch.out"; capture="$dir/pane.txt"; window="test:fm-pr-wait"; task=pr-wait
+  statusf="$state/$task.status"; key=$(printf '%s' "$window" | tr ':/.' '___')
+  fm_write_meta "$state/$task.meta" "window=$window" "kind=ship" \
+    "pr=https://github.com/example/repo/pull/7"
+  printf 'done: PR https://github.com/example/repo/pull/7\n' > "$statusf"
+  arm_local_pr_poll "$state" "$task" "https://github.com/example/repo/pull/7" \
+    || fail "could not arm the local PR poll fixture"
+  prime_status_seen "$state" "$statusf"
+  printf 'idle review pane\n' > "$capture"
+  old_hash=$(hash_text 'idle review pane'); printf '%s' "$old_hash" > "$state/.hash-$key"
+  printf '1\n' > "$state/.count-$key"
+  PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture" \
+    FM_FAKE_TMUX_CURRENT_COMMAND=zsh FM_WATCH_HANDLING_SUCCESSOR=1 FM_STATE_OVERRIDE="$state" \
+    FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" FM_PAUSE_RESURFACE_SECS=999 \
+    FM_POLL=1 FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 \
+    "$WATCH" > "$out" &
+  local pid=$!
+  wait_poll_cycle "$state" "$pid" 300 || { reap "$pid"; fail "open PR wait did not stay absorbed"; }
+  [ ! -s "$out" ] || fail "fresh open PR wait surfaced unexpectedly: $(cat "$out")"
+  [ ! -s "$state/.wake-queue" ] || fail "fresh open PR wait queued a wake"
+  [ -e "$state/.paused-$key" ] || fail "open PR wait did not use the declared-wait machinery"
+  reap "$pid"
+  ack_stopped_cycle "$state" || fail "could not acknowledge the absorbed open PR wait cycle"
+  back=$(( $(date +%s) - 500 )); set_mtime "$back" "$statusf"
+  prime_status_seen "$state" "$statusf"
+  printf 'idle review pane, changed\n' > "$capture"
+  PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture" \
+    FM_FAKE_TMUX_CURRENT_COMMAND=zsh FM_STATE_OVERRIDE="$state" \
+    FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" FM_PAUSE_RESURFACE_SECS=240 \
+    FM_POLL=1 FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 \
+    "$WATCH" > "$out" &
+  pid=$!
+  wait_for_exit "$pid" 100 || { reap "$pid"; fail "aged open PR wait was not re-surfaced"; }
+  grep -F 'pull request review and merge' "$out" >/dev/null \
+    || fail "open PR recheck did not name review and merge: $(cat "$out")"
+  grep -F 'possible wedge' "$out" >/dev/null \
+    && fail "open PR wait was escalated as a possible wedge: $(cat "$out")"
+  pass "a done row with an armed open PR is absorbed and re-surfaced on the declared-wait cadence"
+}
+
+test_done_without_or_after_pr_poll_keeps_terminal_path() {
+  local mode dir state fakebin out capture window task key hash
+  for mode in no-pr merged-pr; do
+    dir=$(make_case "done-$mode"); state="$dir/state"; fakebin="$dir/fakebin"
+    out="$dir/watch.out"; capture="$dir/pane.txt"; window="test:fm-$mode"; task="fm-$mode"
+    key=$(printf '%s' "$window" | tr ':/.' '___')
+    fm_write_meta "$state/$task.meta" "window=$window" "kind=ship" \
+      "pr=https://github.com/example/repo/pull/8"
+    printf 'done: PR https://github.com/example/repo/pull/8\n' > "$state/$task.status"
+    if [ "$mode" = merged-pr ]; then
+      arm_local_pr_poll "$state" "$task" "https://github.com/example/repo/pull/8" \
+        || fail "could not arm the merged PR fixture"
+      rm -f "$state/$task.check.sh" "$state/$task.pr-poll" \
+        "$state/$task.pr-poll-registration"
+      printf 'done [key=merged-%s]: merged https://github.com/example/repo/pull/8\n' "$task" \
+        > "$state/$task.status"
+    else
+      grep -v '^pr=' "$state/$task.meta" > "$state/$task.meta.tmp"
+      mv "$state/$task.meta.tmp" "$state/$task.meta"
+    fi
+    prime_status_seen "$state" "$state/$task.status"
+    printf 'idle terminal pane\n' > "$capture"
+    hash=$(hash_text 'idle terminal pane'); printf '%s' "$hash" > "$state/.hash-$key"
+    printf '1\n' > "$state/.count-$key"
+    PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture" \
+      FM_FAKE_TMUX_CURRENT_COMMAND=zsh FM_WATCH_HANDLING_SUCCESSOR=1 FM_STATE_OVERRIDE="$state" \
+      FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" FM_POLL=1 FM_SIGNAL_GRACE=1 \
+      FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" &
+    local pid=$!
+    wait_for_exit "$pid" 100 || { reap "$pid"; fail "$mode terminal row was not surfaced"; }
+    grep -F 'possible wedge' "$out" >/dev/null \
+      && fail "$mode terminal row took the wedge path: $(cat "$out")"
+    grep -F 'pull request review and merge' "$out" >/dev/null \
+      && fail "$mode terminal row was misclassified as an open PR wait"
+  done
+  pass "done rows with no PR or a retired merged PR keep the existing terminal path"
 }
 
 test_classifier_primitives() {
@@ -6133,6 +6225,8 @@ test_status_span_respects_decision_closure
 test_status_span_closure_from_an_offset
 test_malformed_seen_signature_reads_the_whole_log
 test_stale_is_terminal_classifier
+test_done_open_pr_is_a_bounded_wait
+test_done_without_or_after_pr_poll_keeps_terminal_path
 test_classifier_primitives
 test_crew_is_provably_working_classifier
 test_status_is_paused_classifier

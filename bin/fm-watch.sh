@@ -1411,7 +1411,11 @@ handle_paused_stale() {  # <window> <task> <hash>
   last=$(last_status_line "$statusf")
   min_age=$PAUSE_RESURFACE_SECS
   declaration="declared:$(fm_wake_signal_sig "$statusf" || true)"
-  if status_is_captain_held "$last"; then
+  if task_done_open_pr_wait "$task"; then
+    detail="done, awaiting pull request review or merge"
+    reason="done ${age}s, awaiting external - pull request review and merge; rechecked on a long cadence not a wedge; confirm the pull request review and merge still hold"
+    declaration="declared:pr-review:$(fm_wake_signal_sig "$statusf" || true)"
+  elif status_is_captain_held "$last"; then
     if afk_record_present; then
       triage_log "absorbed stale (captain-held, never rechecked while the away-posture record exists): $win"
       return 0
@@ -1542,6 +1546,16 @@ pause_state_class() {  # <window> <task>
   key=$(window_key "$win")
   last=$(last_status_line "$STATE/$task.status")
   recheck_file="$STATE/.paused-rechecked-$key"
+  # A terminal done row with a valid local PR-poll pair is an implicit declared
+  # wait: the open pull request is waiting on review or merge. A merged poll has
+  # already taken the landed-worker cleanup path and removes that pair, while a
+  # done row without a poll remains on the existing terminal path. This is the
+  # only local proof used here - no forge or credential call belongs on a stale
+  # poll.
+  if task_done_open_pr_wait "$task"; then
+    printf 'paused'
+    return
+  fi
   if ! status_is_paused_or_captain_held "$last"; then
     rm -f "$recheck_file"
     crew_absorb_class "$task"
@@ -1591,6 +1605,24 @@ pause_state_class() {  # <window> <task>
     *) rm -f "$recheck_file" ;;
   esac
   printf '%s' "$class"
+}
+
+# 0 when a terminal done row names a pull request whose strictly authenticated
+# local merge-poll artifacts are still armed. The three terminal shapes remain
+# distinct: an open poll means review or merge is pending, a merged poll has
+# been retired by the existing landed-worker cleanup, and no recorded pull
+# request keeps the unchanged terminal semantics. This runs only on stale
+# classification and reads durable state; it never asks the forge.
+task_done_open_pr_wait() {  # <task>
+  local task=$1 last meta
+  [ -n "$task" ] || return 1
+  meta="$STATE/$task.meta"
+  last=$(last_status_line "$STATE/$task.status")
+  [ "$(status_line_verb "$last")" = "done" ] || return 1
+  [ -e "$STATE/$task.pr-poll" ] || [ -e "$STATE/$task.pr-poll-registration" ] || return 1
+  [ ! -e "$STATE/$task.pr-poll-retirement" ] || return 1
+  fm_pr_metadata_identity_parse "$meta" || return 1
+  fm_pr_poll_artifacts_valid "$STATE" "$task" "$SCRIPT_DIR/fm-pr-poll.sh"
 }
 
 # The two records of one ordinary crew wait, and why its stale alarm reads both.
@@ -2780,6 +2812,11 @@ EOF
             printf '%s' "$h" > "$sf"
             wake "stale: $w"
           fi
+        elif task_done_open_pr_wait "$task"; then
+          # A delivered open pull request is an implicit external wait. Reuse
+          # the declared-wait absorber so it is bounded and re-surfaced without
+          # adding a second suppression layer to the terminal path.
+          handle_paused_stale "$w" "$task" "$h"
         elif stale_is_terminal "$w" "$STATE"; then
           # The log's latest status event is captain-relevant - but that alone is not
           # proof the crew is actually done: a crew's own status log gets no

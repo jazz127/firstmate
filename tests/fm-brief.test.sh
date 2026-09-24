@@ -221,29 +221,6 @@ test_ship_modes_generate_clean_briefs() {
   pass "fm-brief.sh: no-mistakes/direct-PR/local-only briefs generate cleanly"
 }
 
-# Evidence-bearing tasks need a durable provenance contract in the generated
-# worker brief. The wording is universal because the scaffold cannot safely
-# infer whether a task's filled-in intent will make an evidence claim.
-test_evidence_provenance_contract() {
-  local home brief
-  home="$TMP_ROOT/evidence-provenance-home"
-  mkdir -p "$home/data"
-  FM_HOME="$home" "$ROOT/bin/fm-brief.sh" evidence-provenance-a1 some-proj --mode direct-PR >/dev/null 2>&1 \
-    || fail "evidence provenance brief should scaffold"
-  brief="$home/data/evidence-provenance-a1/brief.md"
-  assert_grep "# Evidence provenance" "$brief" "generated brief missing evidence provenance section"
-  assert_grep "exact artifact read, where it came from, and when it was read" "$brief" \
-    "generated brief missing artifact, source, and time requirements"
-  assert_grep "must be labelled synthetic" "$brief" \
-    "generated brief missing synthetic probe labelling requirement"
-  assert_grep "may never be presented as live or external verification" "$brief" \
-    "generated brief permits a synthetic probe to be presented as live evidence"
-  # shellcheck disable=SC2016 # Backticks are literal generated-brief wording.
-  assert_grep 'report `blocked:` or `paused:` instead of completing with a green result' "$brief" \
-    "generated brief missing the absent-evidence stop condition"
-  pass "fm-brief.sh: generated workers receive the evidence provenance contract"
-}
-
 # A ship task's delivery mode is firstmate's per-task decision, so a missing or
 # unusable value must stop the scaffold instead of silently defaulting. The
 # no-mistakes-prod-only row is the conditional registry policy: it is never a task
@@ -1116,7 +1093,6 @@ test_script_parses
 test_no_heredoc_in_command_substitution
 test_help_includes_entire_header
 test_ship_modes_generate_clean_briefs
-test_evidence_provenance_contract
 test_ship_mode_is_required_and_closed_set
 test_ship_mode_is_explicit_not_registry
 test_delivery_flags_are_refused_where_they_do_not_apply

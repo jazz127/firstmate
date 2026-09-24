@@ -25,6 +25,8 @@ set -u
 . "$ROOT/bin/fm-control-lib.sh"
 # shellcheck source=/dev/null
 . "$ROOT/bin/fm-trace-context-lib.sh"
+# shellcheck source=/dev/null
+. "$ROOT/bin/fm-pr-lib.sh"
 
 CONTROL="$ROOT/bin/fm-control.sh"
 SPAWN="$ROOT/bin/fm-spawn.sh"
@@ -227,6 +229,21 @@ EOF
   TASK_TMPS+=("/tmp/fm-$id")
 }
 
+arm_pr_fixture() {  # <case-dir> <id> <url>
+  local dir=$1 id=$2 url=$3 state="$1/home/state" data_hash template_hash data_identity check_identity
+  cp "$ROOT/bin/fm-pr-poll.sh" "$state/$id.check.sh"
+  printf 'github\n%s\ngithub.com\no/r\n1\n' "$url" > "$state/$id.pr-poll"
+  chmod 0600 "$state/$id.check.sh" "$state/$id.pr-poll"
+  data_hash=$(fm_pr_sha256 "$state/$id.pr-poll")
+  template_hash=$(fm_pr_sha256 "$ROOT/bin/fm-pr-poll.sh")
+  data_identity=$(fm_pr_file_identity "$state/$id.pr-poll")
+  check_identity=$(fm_pr_file_identity "$state/$id.check.sh")
+  printf 'fm-pr-poll-registration-v2\n%s\ngithub\n%s\ngithub.com\no/r\n1\n%s\n%s\n%s\n%s\n' \
+    "$id" "$url" "$data_hash" "$template_hash" "$data_identity" "$check_identity" \
+    > "$state/$id.pr-poll-registration"
+  chmod 0600 "$state/$id.pr-poll-registration"
+}
+
 run_control() {  # <case-dir> <args...>
   local dir=$1; shift
   # A claude spawn pre-registers workspace trust in the launching user's own
@@ -385,6 +402,24 @@ test_same_harness_relaunch_keeps_identity_and_reuses_the_endpoint() {
   assert_grep "/exit" "$dir/fake/literal" "the previous agent should have been exited"
   assert_grep "encode launch-brief" "$dir/fake/literal" "the replacement should have been launched"
   pass "fm-control relaunch: a same-harness relaunch replaces the agent in the same endpoint and worktree"
+}
+
+test_relaunch_keeps_an_armed_pr_poll_authenticated() {
+  local dir out rc url
+  dir=$(new_case pr-poll-order rl-pr)
+  url=https://github.com/o/r/pull/1
+  add_ship_task "$dir" rl-pr claude
+  printf 'pr=%s\npr_head=0123456789abcdef0123456789abcdef01234567\n' "$url" \
+    >> "$dir/home/state/rl-pr.meta"
+  arm_pr_fixture "$dir" rl-pr "$url"
+  fm_pr_poll_artifacts_content_valid "$dir/home/state" rl-pr "$ROOT/bin/fm-pr-poll.sh" \
+    || fail "the armed PR poll fixture was not authenticated before relaunch"
+
+  out=$(run_control "$dir" rl-pr relaunch --note "preserve the PR poll"); rc=$?
+  expect_code 0 "$rc" "a relaunch holding an armed PR poll should succeed"$'\n'"$out"
+  fm_pr_poll_artifacts_content_valid "$dir/home/state" rl-pr "$ROOT/bin/fm-pr-poll.sh" \
+    || fail "a relaunched task's armed PR poll was no longer authenticated"
+  pass "fm-control relaunch: an armed PR poll remains authenticated after metadata replacement"
 }
 
 test_relaunch_refuses_before_exit_when_the_composer_holds_pending_text() {
@@ -757,6 +792,58 @@ test_native_ultra_relaunch_preserves_profile_and_rejects_before_stop() {
   assert_contains "$(cat "$dir/fake/literal")" "--codex-effort 'ultra'" "relaunch lost native flag"
   assert_not_contains "$(cat "$dir/fake/literal")" "--thinking 'ultra'" "relaunch used an invalid Pi level"
   pass "native Ultra relaunch preserves its profile and rejects an unsupported model before stopping"
+}
+
+# A fake claude that answers `claude auth status` the way the real runner
+# does: signed in only when the selected config root holds a stored login.
+make_claude_auth_stub() {  # <case-dir>
+  cat > "$1/fakebin/claude" <<'SH'
+#!/usr/bin/env bash
+[ "${1:-}" = auth ] && [ "${2:-}" = status ] || exit 0
+[ -f "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/.credentials.json" ]
+SH
+  chmod +x "$1/fakebin/claude"
+}
+
+test_signed_out_worker_account_pin_refuses_before_stop() {
+  local dir out rc id=rl-acct-out
+  dir=$(new_case acct-out "$id")
+  add_ship_task "$dir" "$id" claude
+  make_claude_auth_stub "$dir"
+  mkdir -p "$dir/home/config" "$dir/work"
+  printf '%s\n' "$dir/work" > "$dir/home/config/claude-account"
+  cp "$dir/home/state/$id.meta" "$dir/meta-before"
+  out=$(run_control "$dir" "$id" relaunch --note "account signed out"); rc=$?
+  expect_code 1 "$rc" "a relaunch under a signed-out account pin must refuse"
+  assert_contains "$out" "config/claude-account pins Claude workers to $dir/work, which is not signed in" \
+    "the refusal should name the pin and the signed-out root"
+  [ "$(cat "$dir/fake/command")" = claude ] || fail "a signed-out pin must refuse before the running agent stops"
+  [ ! -s "$dir/fake/literal" ] || fail "a signed-out pin must refuse before any lifecycle input is sent"
+  cmp -s "$dir/meta-before" "$dir/home/state/$id.meta" || fail "a refused relaunch must leave the task record untouched"
+  pass "fm-control relaunch: a signed-out worker account pin refuses before the old agent stops"
+}
+
+test_worker_account_pin_follows_the_relaunch() {
+  local dir out rc id=rl-acct
+  dir=$(new_case acct "$id")
+  add_ship_task "$dir" "$id" claude
+  make_claude_auth_stub "$dir"
+  mkdir -p "$dir/home/config" "$dir/work"
+  : > "$dir/work/.credentials.json"
+  printf '%s\n' "$dir/work" > "$dir/home/config/claude-account"
+  out=$(run_control "$dir" "$id" relaunch --note "pinned account"); rc=$?
+  expect_code 0 "$rc" "a relaunch under a signed-in account pin should succeed"$'\n'"$out"
+  [ "$(meta_field "$dir" "$id" account)" = "$dir/work" ] || fail "the relaunched record should carry the pinned account"
+  assert_contains "$(cat "$dir/fake/literal")" "CLAUDE_CONFIG_DIR='$dir/work'" \
+    "the replacement should launch under the pinned root"
+  rm "$dir/home/config/claude-account"
+  : > "$dir/fake/literal"
+  out=$(run_control "$dir" "$id" relaunch --note "pin removed"); rc=$?
+  expect_code 0 "$rc" "a relaunch after the pin is removed should succeed"$'\n'"$out"
+  assert_no_grep "account=" "$dir/home/state/$id.meta" "a relaunch without a pin must drop the previous account from the record"
+  assert_not_contains "$(cat "$dir/fake/literal")" "CLAUDE_CONFIG_DIR=" \
+    "an unpinned replacement must launch exactly as before"
+  pass "fm-control relaunch: the replacement follows the home's current worker account pin"
 }
 
 test_explicit_model_wins_over_the_recorded_one() {
@@ -2253,6 +2340,7 @@ test_relaunch_moves_a_drifted_item_back_in_flight() {
 }
 
 test_same_harness_relaunch_keeps_identity_and_reuses_the_endpoint
+test_relaunch_keeps_an_armed_pr_poll_authenticated
 test_relaunch_refuses_before_exit_when_the_composer_holds_pending_text
 test_relaunch_refuses_before_exit_when_the_composer_state_is_unproven
 test_relaunch_from_linked_home_preserves_recorded_worktree
@@ -2267,6 +2355,8 @@ test_harness_switch_resolves_a_prefixed_recorded_harness
 test_prefixed_recorded_harness_requires_explicit_replacement
 test_same_harness_relaunch_keeps_the_profile_axes
 test_native_ultra_relaunch_preserves_profile_and_rejects_before_stop
+test_signed_out_worker_account_pin_refuses_before_stop
+test_worker_account_pin_follows_the_relaunch
 test_explicit_model_wins_over_the_recorded_one
 test_relaunch_onto_an_unverified_harness_is_refused
 test_prior_harness_turnend_registry_entry_is_cleared

@@ -181,16 +181,15 @@
 #   missing spawn_gen, that leftover would otherwise deadlock: automatic
 #   teardown refuses for want of spawn_gen, and --legacy-record then refuses
 #   for want of a window. When backlog incarnation validation applies, such a
-#   leftover (no window, no spawn_gen or only a retained legacy stamp, no
-#   backend other than tmux, no Orca terminal= or other backend's <backend>_*
-#   endpoint identity, and every other identity field passing the shared
-#   endpoint validator as if it named the task's own window) is accepted as a
-#   missing-endpoint legacy record with or without --legacy-record; the shared
-#   endpoint validator is skipped so it cannot be read as the current window,
-#   kill is skipped, and a still-present worktree still faces the ordinary
-#   landed-work checks. Every other windowless record, including one with a
-#   spawn_gen, a non-tmux backend, or an ambiguous field, still faces the
-#   validator and refuses.
+#   leftover (no window, no spawn_gen or only a retained legacy stamp, a
+#   known backend, no Orca terminal= or any backend's <backend>_* endpoint
+#   identity, and unambiguous task/project/worktree identity fields) is
+#   accepted as a missing-endpoint legacy record with or without
+#   --legacy-record; the shared endpoint validator is skipped so it cannot be
+#   read as a live window, kill is skipped, and a still-present worktree still
+#   faces the ordinary landed-work checks. Every other windowless record,
+#   including one with a spawn_gen, an endpoint identity, or an ambiguous
+#   identity field, still refuses.
 #
 # Transient / stale worktree git lock recovery (teardown-lock-race): a crew process
 # killed mid-git-operation can leave a .git/worktrees/<wt>/index.lock (or, for a
@@ -462,28 +461,39 @@ TEARDOWN_WINDOWLESS=0
 TEARDOWN_WINDOWLESS_SHAPE=0
 TEARDOWN_WINDOW_COUNT=$(LC_ALL=C grep -c '^window=' "$META" 2>/dev/null || true)
 TEARDOWN_BACKEND_COUNT=$(LC_ALL=C grep -c '^backend=' "$META" 2>/dev/null || true)
-case "$TEARDOWN_WINDOW_COUNT:$(fm_meta_get "$META" window)" in
-  0:|1:)
-    case "$TEARDOWN_BACKEND_COUNT:$(fm_meta_get "$META" backend)" in
-      0:|1:tmux)
-        TEARDOWN_FOREIGN_ENDPOINT_KEYS='^terminal='
-        for TEARDOWN_FOREIGN_BACKEND in $FM_BACKEND_KNOWN; do
-          [ "$TEARDOWN_FOREIGN_BACKEND" = tmux ] \
-            || TEARDOWN_FOREIGN_ENDPOINT_KEYS="$TEARDOWN_FOREIGN_ENDPOINT_KEYS|^${TEARDOWN_FOREIGN_BACKEND}_"
-        done
-        if ! LC_ALL=C grep -Eq "$TEARDOWN_FOREIGN_ENDPOINT_KEYS" "$META" 2>/dev/null; then
-          TEARDOWN_SHAPE_META=$(umask 077; mktemp "${TMPDIR:-/tmp}/fm-teardown-shape.XXXXXX") || exit 1
-          { LC_ALL=C grep -v '^window=' "$META" || true; printf 'window=leftover:fm-%s\n' "$ID"; } \
-            > "$TEARDOWN_SHAPE_META"
-          if fm_backend_validate_task_endpoint "$TEARDOWN_SHAPE_META" "$ID" 2>/dev/null; then
-            TEARDOWN_WINDOWLESS_SHAPE=1
-          fi
-          rm -f "$TEARDOWN_SHAPE_META"
-        fi
-        ;;
-    esac
-    ;;
-esac
+if [ "$TEARDOWN_WINDOW_COUNT" = 0 ] \
+   && [ -z "$(fm_meta_get "$META" window)" ] \
+   && { [ "$TEARDOWN_BACKEND_COUNT" = 0 ] \
+        || { [ "$TEARDOWN_BACKEND_COUNT" = 1 ] \
+             && fm_backend_is_known "$(fm_meta_get "$META" backend)"; }; }; then
+  TEARDOWN_FOREIGN_ENDPOINT_KEYS='^terminal='
+  for TEARDOWN_FOREIGN_BACKEND in $FM_BACKEND_KNOWN; do
+    TEARDOWN_FOREIGN_ENDPOINT_KEYS="$TEARDOWN_FOREIGN_ENDPOINT_KEYS|^${TEARDOWN_FOREIGN_BACKEND}_"
+  done
+  TEARDOWN_IDENTITY_FIELDS_VALID=1
+  for TEARDOWN_IDENTITY_KEY in project worktree endpoint_task_id; do
+    TEARDOWN_IDENTITY_COUNT=$(LC_ALL=C grep -c "^${TEARDOWN_IDENTITY_KEY}=" "$META" 2>/dev/null || true)
+    if [ "$TEARDOWN_IDENTITY_COUNT" -gt 1 ] \
+       || { [ "$TEARDOWN_IDENTITY_KEY" != endpoint_task_id ] \
+            && [ "$TEARDOWN_IDENTITY_COUNT" != 1 ]; }; then
+      TEARDOWN_IDENTITY_FIELDS_VALID=0
+    elif [ "$TEARDOWN_IDENTITY_COUNT" = 1 ] \
+         && [ -z "$(fm_meta_get "$META" "$TEARDOWN_IDENTITY_KEY")" ]; then
+      TEARDOWN_IDENTITY_FIELDS_VALID=0
+    fi
+  done
+  case "$(fm_meta_get "$META" project)$(fm_meta_get "$META" worktree)" in
+    *$'\n'*|*$'\r'*|*$'\t'*) TEARDOWN_IDENTITY_FIELDS_VALID=0 ;;
+  esac
+  TEARDOWN_BINDING=$(fm_meta_get "$META" endpoint_task_id)
+  if [ -n "$TEARDOWN_BINDING" ] && [ "$TEARDOWN_BINDING" != "$ID" ]; then
+    TEARDOWN_IDENTITY_FIELDS_VALID=0
+  fi
+  if ! LC_ALL=C grep -Eq "$TEARDOWN_FOREIGN_ENDPOINT_KEYS" "$META" 2>/dev/null \
+     && [ "$TEARDOWN_IDENTITY_FIELDS_VALID" = 1 ]; then
+    TEARDOWN_WINDOWLESS_SHAPE=1
+  fi
+fi
 if [ "$TEARDOWN_CLEANUP_RECOVERY" != orca ]; then
   if fm_backlog_transition_applies "$CONFIG" "$DATA" "$TEARDOWN_META_KIND"; then
     TEARDOWN_BACKLOG_APPLIES=1

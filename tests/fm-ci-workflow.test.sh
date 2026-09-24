@@ -272,7 +272,8 @@ checkout = steps.find { |step| step["uses"] == "actions/checkout@v6" }
 raise "house workflow must fetch history for base comparison" unless checkout&.dig("with", "fetch-depth") == 0
 commands = steps.map { |step| step["run"].to_s }.join("\n")
 [
-  "bin/fm-lint.sh",
+  "bin/fm-lint.sh bin/fm-dod-lib.sh tests/fm-ci-workflow.test.sh",
+  "bin/fm-lint-workflows.sh",
   "tests/fm-ci-workflow.test.sh",
   "tests/fm-task-delivery.test.sh",
   "tests/fm-dod-lib.test.sh",

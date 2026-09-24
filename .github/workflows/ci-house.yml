@@ -30,8 +30,15 @@ jobs:
           set -eu
           bin/fm-install-actionlint.sh "$RUNNER_TEMP/bin"
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
-      - name: Lint the canonical code and workflow set
-        run: bin/fm-lint.sh
+      - name: Lint the changed shell and workflow files
+        run: >-
+          bin/fm-lint.sh
+          bin/fm-dod-lib.sh
+          tests/fm-ci-workflow.test.sh
+          tests/fm-task-delivery.test.sh
+          tests/fm-dod-lib.test.sh
+      - name: Lint the workflow set
+        run: bin/fm-lint-workflows.sh
       - name: Run house workflow and delivery regressions
         run: >-
           bin/fm-test-run.sh

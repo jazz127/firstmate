@@ -15,12 +15,9 @@
 # Mark the pull request ready for review, then arm again; a lane that keeps a
 # draft on purpose declares a wait instead of reporting done. An unreadable
 # draft state does not refuse, matching how the head read below is optional.
-# `--validate-published` reads and validates a PR body without requiring or
-# changing a task record; use it before reporting an unowned PR to the captain.
 # bin/fm-pr-merge.sh records through this script with FM_PR_CHECK_MERGE=1 and
 # skips this refusal, because its own merge-time draft refusal is authoritative.
 # Usage: fm-pr-check.sh <task-id> <pr-url>
-#        fm-pr-check.sh --validate-published <pr-url> <worktree> [task-temp]
 set -eu
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -36,19 +33,6 @@ STATE="${FM_STATE_OVERRIDE:-$FM_HOME/state}"
 . "$SCRIPT_DIR/fm-parent-channel-lib.sh"
 # shellcheck source=bin/fm-dod-lib.sh
 . "$SCRIPT_DIR/fm-dod-lib.sh"
-
-if [ "${1:-}" = --validate-published ]; then
-  if [ "$#" -lt 3 ] || [ "$#" -gt 4 ] || ! fm_pr_url_parse "$2"; then
-    echo "error: invalid published intent validation request" >&2
-    exit 2
-  fi
-  PR_BODY=$(fm_pr_read_published_body "$FM_PR_URL") || exit 1
-  if ! fm_dod_validate_published_intent "$PR_BODY" "$3" "${4:-}"; then
-    echo "error: published intent failed evidence validation" >&2
-    exit 1
-  fi
-  exit 0
-fi
 
 if [ "$#" -ne 2 ]; then
   echo "error: invalid PR check request" >&2

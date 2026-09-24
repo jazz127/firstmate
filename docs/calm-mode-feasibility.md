@@ -151,6 +151,7 @@ The current exact marker and the narrow bare-U+2063 `Supervisor escalate (` comp
 ## Calm working presentation
 
 Calm replaces Pi's stock working row with a small animated boat while Calm is on and one logical agent run is active.
+On Pi, the same widget appends the deterministic Captain Chart terminal projection below the boat when the viewport is at least 40 columns wide; the chart is generated from the bearings JSON projection and project registry by `bin/fm-captain-chart.py`, while the boat's scheduler and sprite remain independent.
 This path uses only public extension API and patches nothing: `ExtensionUIContext.setWorkingVisible(false)` hides the stock row, and `setWidget()` installs a temporary component factory above the editor.
 Pi's documented custom working-indicator frames are static and width-blind, so they cannot own responsive geometry; a widget component receives `render(width)` and can.
 

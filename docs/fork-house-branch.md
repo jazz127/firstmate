@@ -31,6 +31,11 @@ A contributed house feature is a house feature the captain chose to submit and t
 
 ## Contributing a house feature upstream
 
+Firstmate house-feature tasks should be spawned from the fork-origin run clone at `/Users/jarad/fm-fork-runs/firstmate`, whose `origin` is `jazz127/firstmate` and whose checked-out default branch is `house`.
+That clone has upstream as a second remote for refreshing from upstream `main`, and its pipeline runs open pull requests against the fork's `house`.
+The primary home's checkout keeps `origin` at upstream and serves upstream candidates, whose pipeline runs open pull requests against upstream.
+Before the fork-origin run clone existed, Firstmate house features shipped without the pipeline because an upstream-origin run could not target the fork-only `house` branch.
+
 Before directing any lane to change a pull request branch, read that pull request's current head ref and head commit from the forge, and check its head repository before choosing a remote.
 The branch name in fleet records, a previous fork copy, or an older note is not authority; if it differs from the forge, correct the assignment before work starts.
 Check the pipeline's own status and the lanes already assigned to that branch before steering another lane.

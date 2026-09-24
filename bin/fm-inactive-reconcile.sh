@@ -517,8 +517,11 @@ reconcile_direct_child_locked() { # <id> <meta> <secondmate-id-or-empty> <timeou
     case "$?" in
       2) return 0 ;;
       0)
-        [ "$(meta_field "$meta" mode)" = no-mistakes ] \
-          && [ "$(status_line_verb "$last")" = 'done' ] \
+        case "$(meta_field "$meta" mode)" in
+          no-mistakes|'') ;;
+          *) return 0 ;;
+        esac
+        [ "$(status_line_verb "$last")" = 'done' ] \
           && ! fm_dod_note_reports_ci_ready "$(status_line_note "$last")" \
           && ! fm_dod_note_reports_published_change "$(status_line_note "$last")" \
           || return 0
@@ -529,12 +532,13 @@ reconcile_direct_child_locked() { # <id> <meta> <secondmate-id-or-empty> <timeou
     "$CREW_STATE_BIN" "$id" 2>/dev/null) || state_rc=$?
   [ "$state_rc" -ne 124 ] || return 3
   last=$(last_status_line "$status")
-  if [ "$(meta_field "$meta" mode)" = no-mistakes ] \
-    && [ "$(meta_field "$meta" kind)" = ship ] \
-    && [ "$(status_line_verb "$last")" = 'done' ] \
-    && ! fm_dod_note_reports_ci_ready "$(status_line_note "$last")" \
-    && ! fm_dod_note_reports_published_change "$(status_line_note "$last")"; then
-    case "$state_line" in
+  case "$(meta_field "$meta" mode)" in
+    no-mistakes|'')
+      if [ "$(meta_field "$meta" kind)" = ship ] \
+        && [ "$(status_line_verb "$last")" = 'done' ] \
+        && ! fm_dod_note_reports_ci_ready "$(status_line_note "$last")" \
+        && ! fm_dod_note_reports_published_change "$(status_line_note "$last")"; then
+        case "$state_line" in
       'state: done · source: status-log'*)
         worktree=$(meta_field "$meta" worktree)
         if [ -d "$worktree" ] \
@@ -554,8 +558,10 @@ reconcile_direct_child_locked() { # <id> <meta> <secondmate-id-or-empty> <timeou
           fi
         fi
         ;;
-    esac
-  fi
+        esac
+      fi
+      ;;
+  esac
   if [ -n "$self" ]; then
     child_terminal_ledger_line "$status" >/dev/null
     case "$?" in 0|2) return 0 ;; esac

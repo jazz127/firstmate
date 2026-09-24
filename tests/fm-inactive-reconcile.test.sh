@@ -178,6 +178,7 @@ test_validation_handoff_backstop() {
   local seq generation err
   make_world validation-handoff
   write_child "$MAIN" child 'done: implementation committed'
+  sed -i.bak '/^mode=/d' "$MAIN/state/child.meta"; rm -f "$MAIN/state/child.meta.bak"
   git -C "$MAIN/projects/child" checkout -q -b fm/child
   : > "$MAIN/state/.wake-queue"
   set_mtime "$(date +%s)" "$MAIN/state/child.meta"

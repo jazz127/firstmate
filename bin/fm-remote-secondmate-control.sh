@@ -330,9 +330,16 @@ cmd_observe() {
 # read-only fetch of that one commit, which never advances that copy's HEAD), then
 # the home's own origin for that one commit. No pack transport beyond those two.
 import_home_commit() { # <home> <commit>
-  local home=$1 commit=$2
+  local home=$1 commit=$2 runtime remote
   if git -C "$home" cat-file -e "$commit^{commit}" 2>/dev/null; then return 0; fi
   if git -C "$home" fetch --quiet --no-tags -- "$FM_ROOT" "$commit" 2>/dev/null \
+    && git -C "$home" cat-file -e "$commit^{commit}" 2>/dev/null; then
+    return 0
+  fi
+  runtime=$(firstmate_runtime_branch "$home" 2>/dev/null || true)
+  remote=$(git -C "$home" config --get "branch.$runtime.remote" 2>/dev/null || true)
+  if [ -n "$remote" ] && git -C "$home" remote get-url "$remote" >/dev/null 2>&1 \
+    && git -C "$home" fetch --quiet --no-tags -- "$remote" "$commit" 2>/dev/null \
     && git -C "$home" cat-file -e "$commit^{commit}" 2>/dev/null; then
     return 0
   fi

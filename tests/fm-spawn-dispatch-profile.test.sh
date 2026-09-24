@@ -438,6 +438,44 @@ test_codex_threads_model_and_max_effort() {
   pass "codex Luna receives --model and model_reasoning_effort max profile flags"
 }
 
+test_codex_luna_seat_is_explicit_and_default_is_unchanged() {
+  local rec id out status launch
+  id=profile-codex-luna-seat-z4
+  rec=$(make_spawn_case profile-codex-luna-seat codex "$id")
+  read_case_record "$rec"
+
+  out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" \
+    "$id" "$PROJ_DIR" --harness codex --model gpt-5.6-luna --effort medium --seat luna)
+  status=$?
+  expect_code 0 "$status" "Codex Luna seat dispatch should succeed"
+  launch=$(cat "$LAUNCH_LOG")
+  assert_contains "$launch" "CODEX_HOME=/Users/jarad/.codex-luna codex --model 'gpt-5.6-luna'" \
+    "Luna seat launch did not pin CODEX_HOME and selected model"
+  cat > "$FAKEBIN_DIR/codex" <<'SH'
+#!/usr/bin/env bash
+printf 'CODEX_HOME=%s\n' "${CODEX_HOME-}" > "$FM_TEST_CODEX_EXEC_LOG"
+printf '%s\n' "$@" >> "$FM_TEST_CODEX_EXEC_LOG"
+SH
+  chmod +x "$FAKEBIN_DIR/codex"
+  FM_TEST_CODEX_EXEC_LOG="$TMP_ROOT/luna-codex-exec.log" PATH="$FAKEBIN_DIR:$PATH" bash -c "$launch"
+  assert_contains "$(cat "$TMP_ROOT/luna-codex-exec.log")" 'CODEX_HOME=/Users/jarad/.codex-luna' \
+    "executed Codex worker did not inherit the Luna CODEX_HOME"
+  assert_contains "$(cat "$TMP_ROOT/luna-codex-exec.log")" 'gpt-5.6-luna' \
+    "executed Codex worker did not receive the dispatch model"
+
+  id=profile-codex-default-seat-z5
+  rec=$(make_spawn_case profile-codex-default-seat codex "$id")
+  read_case_record "$rec"
+  out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" \
+    "$id" "$PROJ_DIR" --harness codex --model gpt-5.6-luna --effort medium)
+  status=$?
+  expect_code 0 "$status" "default Codex seat should preserve ordinary launch"
+  launch=$(cat "$LAUNCH_LOG")
+  assert_not_contains "$launch" "CODEX_HOME=/Users/jarad/.codex-luna" \
+    "default Codex launch unexpectedly selected Luna seat"
+  pass "dispatch can pin the Luna Codex seat while the default remains ambient"
+}
+
 test_codex_omits_max_effort_for_unsupported_model() {
   local rec id out status launch
   id=profile-codex-max-unsupported-z4b
@@ -1496,6 +1534,7 @@ test_active_dispatch_profile_allows_raw_launch_command
 test_claude_threads_model_and_effort
 test_codex_threads_model_and_effort
 test_codex_threads_model_and_max_effort
+test_codex_luna_seat_is_explicit_and_default_is_unchanged
 test_codex_omits_max_effort_for_unsupported_model
 test_codex_crewmate_launch_disables_the_hook_layer
 test_codex_secondmate_launch_keeps_the_hook_layer

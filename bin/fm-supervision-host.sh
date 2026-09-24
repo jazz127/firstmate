@@ -502,7 +502,7 @@ write_engine_record() {  # <turns> <conversation-cost>
 # advances the host's grant and turn state.
 handle_away() {  # <reason-lines>
   local reason=$1 first scope status corrupted rows row_tasks tasks unscoped rc turn readback
-  local receipts usage result errors unacked missing_rows
+  local receipts usage result errors unacked missing_rows ack_generation ack_through ack_rc
   LAST_TURN=
   first=$(printf '%s\n' "$reason" | head -n 1)
   set --
@@ -600,11 +600,6 @@ handle_away() {  # <reason-lines>
   ENGINE_SUBSHELL=
   ENGINE_RUNNING=0
   release_branch_leases
-  # shellcheck disable=SC2086 # rows is a space-separated list of sequence numbers.
-  unacked=$(fm_wake_rows_queued $rows) || unacked=$rows
-  unacked=$(printf '%s\n' "$unacked" | awk 'NF { printf "%s%s", sep, $1; sep = " " }')
-  "$SCRIPT_DIR/fm-wake-grant.sh" release "$GEN" >/dev/null 2>&1 || true
-  rm -f "$TURN_FILE"
   receipts=$(awk -F '\t' -v turn="$turn" '$1 == turn { n++ } END { print n + 0 }' "$RECEIPTS" 2>/dev/null)
   missing_rows=$(awk -F '\t' -v turn="$turn" -v rows="$rows" '
     BEGIN { count = split(rows, expected, " ") }
@@ -620,7 +615,28 @@ handle_away() {  # <reason-lines>
   ' "$RECEIPTS" 2>/dev/null)
   usage=$(fm_supervision_engine_result "$FM_SUPERVISION_ENGINE" "$result" "${ENGINE_COST:-0}" 2>/dev/null || true)
   [ "$result" = /dev/null ] || rm -f "$result"
-  if [ "$rc" -eq 0 ] && [ "${receipts:-0}" -gt 0 ] && [ -z "$missing_rows" ] && [ -z "$unacked" ] \
+  ack_rc=1
+  if [ "$rc" -eq 0 ] && [ "${receipts:-0}" -gt 0 ] && [ -z "$missing_rows" ] \
+    && [ -n "$usage" ] && [ "${usage#error=0}" != "$usage" ]; then
+    fm_recovery_marker_snapshot "$STATE/.watcher-down" >/dev/null 2>&1 || true
+    case "${FM_RECOVERY_MARKER_TOKEN:-}" in
+      pending:*|announced:*) ack_generation=${FM_RECOVERY_MARKER_TOKEN##*:} ;;
+      *) ack_generation= ;;
+    esac
+    ack_through=$(printf '%s\n' "$rows" | awk '{ for (i = 1; i <= NF; i++) if ($i > max) max=$i } END { print max + 0 }')
+    if [ -n "$ack_generation" ]; then
+      FM_SUPERVISION_ACTOR=branch FM_STATE_OVERRIDE="$STATE" \
+        "$SCRIPT_DIR/fm-wake-drain.sh" --ack-through "$ack_through" --recovery-generation "$ack_generation" \
+        >/dev/null 2>&1
+      ack_rc=$?
+    fi
+  fi
+  # shellcheck disable=SC2086 # rows is a space-separated list of sequence numbers.
+  unacked=$(fm_wake_rows_queued $rows) || unacked=$rows
+  unacked=$(printf '%s\n' "$unacked" | awk 'NF { printf "%s%s", sep, $1; sep = " " }')
+  "$SCRIPT_DIR/fm-wake-grant.sh" release "$GEN" >/dev/null 2>&1 || true
+  rm -f "$TURN_FILE"
+  if [ "$rc" -eq 0 ] && [ "${receipts:-0}" -gt 0 ] && [ -z "$missing_rows" ] && [ "$ack_rc" -eq 0 ] && [ -z "$unacked" ] \
     && [ -n "$usage" ] && [ "${usage#error=0}" != "$usage" ]; then
     write_engine_record $((ENGINE_TURNS + 1)) "$(printf '%s\n' "$usage" | sed -n 's/.* conversation_cost=\([^ ]*\).*/\1/p')" \
       || rm -f "$ENGINE_RECORD"

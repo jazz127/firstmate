@@ -625,6 +625,10 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 
 if [ -n "$ACK_THROUGH" ]; then
+  if [ "$ACTOR" = branch ] && [ "${FM_BRANCH_EVENT_RECEIPTS:-0}" = 1 ]; then
+    echo "wake drain: the supervision host acknowledges branch rows after validating every event receipt" >&2
+    exit 3
+  fi
   fm_lock_acquire_wait "$FM_WAKE_QUEUE_LOCK"
 elif fm_lock_acquire_wait_bounded "$FM_WAKE_QUEUE_LOCK" "$PRESENTATION_LOCK_TIMEOUT"; then
   :
@@ -861,8 +865,10 @@ case "$RECOVERY_MARKER_TOKEN" in
 esac
 fm_lock_release "$FM_WAKE_QUEUE_LOCK"
 DRAIN_LOCK_HELD=false
-printf 'WAKE_ACK_REQUIRED: after handling completes run bin/fm-wake-drain.sh --ack-through %s --recovery-generation %s\n' \
-  "$ACK_THROUGH" "${RECOVERY_MARKER_TOKEN##*:}" >&2
+if [ "$ACTOR" != branch ] || [ "${FM_BRANCH_EVENT_RECEIPTS:-0}" != 1 ]; then
+  printf 'WAKE_ACK_REQUIRED: after handling completes run bin/fm-wake-drain.sh --ack-through %s --recovery-generation %s\n' \
+    "$ACK_THROUGH" "${RECOVERY_MARKER_TOKEN##*:}" >&2
+fi
 
 (print_status_presentation "$RAW_ROWS") || true
 assert_watcher_liveness

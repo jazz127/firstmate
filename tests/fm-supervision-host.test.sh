@@ -32,12 +32,11 @@ FAKE_CLAUDE="$FAKEBIN/claude"
 
 # The stub engine. It records its environment and arguments, then acts like a
 # branch turn through the real scripts according to $FM_HOME/stub-mode:
-#   handle      drain, claim the task's lease, report, acknowledge, release
+#   handle      drain, claim the task's lease, report, release
 #   hold-lease  the same, but leave the lease held (the host must release it)
 #   return      handle, but the captain returns (the record is archived) before
 #               the turn ends
 #   return-fail the same, then exit nonzero without a result
-#   noack       the same as handle, but skip the acknowledgement
 #   chain       handle, then append a status line, so the next close is already
 #               waiting when the turn ends
 #   emptyresult the same as handle, but print {} as its result
@@ -67,7 +66,7 @@ task=$(sed -n 's/^tasks=//p' "$STATE/.supervision-host-turn" | awk '{ print $1 }
 [ -n "$task" ] || task=fleet
 rows=$(sed -n 's/^rows=//p' "$STATE/.supervision-host-turn")
 case "$mode" in
-  handle|hold-lease|return|return-fail|noack|chain|emptyresult|partial-report)
+  handle|hold-lease|return|return-fail|chain|emptyresult|partial-report)
     "$FM_REPO/bin/fm-lease.sh" claim "$task" >> "$FM_HOME/engine-lease.log" 2>&1
     for row in $rows; do
       "$FM_REPO/bin/fm-branch-report.sh" --row "$row" --task "$task" --verdict routine --summary "stub handled $task" \
@@ -75,7 +74,7 @@ case "$mode" in
       [ "$mode" != partial-report ] || break
     done
     # shellcheck disable=SC2086 # the printed acknowledgement arguments
-    [ -z "$ack" ] || [ "$mode" = noack ] || "$FM_REPO/bin/fm-wake-drain.sh" $ack >> "$FM_HOME/engine-ack.log" 2>&1
+    [ -z "$ack" ] || "$FM_REPO/bin/fm-wake-drain.sh" $ack >> "$FM_HOME/engine-ack.log" 2>&1
     [ "$mode" = hold-lease ] || "$FM_REPO/bin/fm-lease.sh" release "$task" >> "$FM_HOME/engine-lease.log" 2>&1
     case "$mode" in
       return|return-fail) "$FM_REPO/bin/fm-afk-contract.sh" archive >> "$FM_HOME/engine-return.log" 2>&1 ;;
@@ -363,8 +362,10 @@ test_away_turn_requires_an_outcome_for_every_scoped_task() {
   assert_no_grep '"task":"beta"' "$state/branch-outcomes.jsonl" "fixture: the engine unexpectedly reported the second task"
   assert_re '^supervision-host: .*recorded no outcome for wake row\(s\) 2; this wake is yours$' "$home/host.out" \
     "the handback must identify the scoped event with no outcome"
-  assert_re $'\tfailed\tturn=.*\treports=1\tmissing=2\tunacked=none\t' "$state/.supervision-host.log" \
-    "the ledger must reject a turn that acknowledged every row but reported only one event"
+  assert_re $'\tfailed\tturn=.*\treports=1\tmissing=2\tunacked=1 2\t' "$state/.supervision-host.log" \
+    "the ledger must reject a partial turn before acknowledging either event"
+  assert_grep 'demo.status' "$state/.wake-queue" "the reported event was consumed before the turn passed receipt validation"
+  assert_grep 'beta.status' "$state/.wake-queue" "the unreported event was consumed before handback"
   assert_no_re $'\thandled\tturn=' "$state/.supervision-host.log" \
     "a partially reported multi-task wake must never count as handled"
   pass "host: every scoped event in a coalesced wake requires an outcome"
@@ -386,8 +387,10 @@ test_away_turn_requires_an_outcome_for_every_same_task_event() {
   assert_grep 'signal: second demo event' "$home/engine-drain.1" "the drain hid the second same-task event"
   assert_re '^supervision-host: .*recorded no outcome for wake row\(s\) 2; this wake is yours$' "$home/host.out" \
     "the handback must identify the unreported same-task event"
-  assert_re $'\tfailed\tturn=.*\treports=1\tmissing=2\tunacked=none\t' "$state/.supervision-host.log" \
-    "the ledger must reject one report for two acknowledged same-task events"
+  assert_re $'\tfailed\tturn=.*\treports=1\tmissing=2\tunacked=1 2\t' "$state/.supervision-host.log" \
+    "the ledger must reject one report before acknowledging either same-task event"
+  [ "$(grep -c 'demo.status' "$state/.wake-queue")" -eq 2 ] \
+    || fail "a partial same-task turn consumed an event before receipt validation"
   assert_no_re $'\thandled\tturn=' "$state/.supervision-host.log" \
     "a partially reported same-task wake must never count as handled"
   pass "host: every same-task event in a coalesced wake requires an outcome"
@@ -434,26 +437,6 @@ test_return_during_an_engine_turn_hands_its_outcomes_to_main() {
   assert_no_grep 'demo.status' "$home/state/.wake-queue" "the handled wake must stay acknowledged"
   watcher_live "$home" && fail "the host left its successor cycle running when it handed the outcome to main"
   pass "host: a captain return during an engine turn hands that turn's outcomes to main"
-}
-
-test_report_without_acknowledgement_hands_the_wake_to_main() {
-  local home
-  home=$(make_home away-noack away)
-  echo noack > "$home/stub-mode"
-  start_host "$home"
-  wait_until 150 watcher_live "$home" || fail "noack: the host never started a watcher cycle"
-  append_status "$home" 'reported, never acknowledged'
-  wait_until 250 host_exited "$home" || fail "noack: the host counted an unacknowledged wake handled: $(cat "$home/state/.supervision-host.log")"
-  expect_code 0 "$(cat "$home/host.rc")" "a handed-back wake must exit 0 for the owner to deliver"
-  assert_grep '"task":"demo"' "$home/state/branch-outcomes.jsonl" "fixture: the stub did not report"
-  assert_re '^signal: .*demo.status' "$home/host.out" "the handed-back close must carry the reason line"
-  assert_re '^supervision-host: .*the engine turn left its granted wake rows [0-9]+( [0-9]+)* unacknowledged; this wake is yours$' "$home/host.out" \
-    "the handback must name the rows the turn left unacknowledged"
-  assert_grep 'demo.status' "$home/state/.wake-queue" "the unacknowledged wake must stay durable for main"
-  assert_re '	failed	turn=.*	unacked=[0-9]' "$home/state/.supervision-host.log" "the ledger must record the turn as failed"
-  assert_absent "$home/state/.supervision-host-engine" "a turn that did not handle its wake must not keep its conversation"
-  watcher_live "$home" && fail "the host left its successor cycle running when it handed the wake to main"
-  pass "host: a turn that reports but leaves its granted rows queued hands the wake to main"
 }
 
 test_return_during_a_failed_turn_still_hands_its_outcomes_to_main() {
@@ -701,7 +684,6 @@ test_away_turn_requires_an_outcome_for_every_scoped_task
 test_away_turn_requires_an_outcome_for_every_same_task_event
 test_away_turn_without_a_report_hands_the_wake_to_main
 test_return_during_an_engine_turn_hands_its_outcomes_to_main
-test_report_without_acknowledgement_hands_the_wake_to_main
 test_return_during_a_failed_turn_still_hands_its_outcomes_to_main
 test_incomplete_engine_result_hands_the_wake_to_main
 test_engine_turn_is_bounded_and_its_descendants_reaped

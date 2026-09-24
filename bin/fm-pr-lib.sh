@@ -1091,6 +1091,53 @@ fm_pr_gerrit_read_description() {  # <host> <number>
     end' 2>/dev/null
 }
 
+fm_pr_read_published_body() {  # <canonical-pr-url>
+  local url=$1 body json
+  fm_pr_url_parse "$url" || return 1
+  url=$FM_PR_URL
+  case "$FM_PR_PROVIDER" in
+    github)
+      command -v gh >/dev/null 2>&1 || {
+        printf '%s\n' 'error: cannot validate the published intent because gh is unavailable' >&2
+        return 1
+      }
+      body=$(gh pr view "$url" --json body --jq .body 2>/dev/null) || {
+        printf '%s\n' 'error: cannot read the published PR body for evidence validation' >&2
+        return 1
+      }
+      ;;
+    gitlab)
+      if ! command -v glab >/dev/null 2>&1 || ! command -v jq >/dev/null 2>&1; then
+        printf '%s\n' 'error: cannot validate the published intent because glab and jq are unavailable' >&2
+        return 1
+      fi
+      json=$(GITLAB_HOST="$FM_PR_HOST" glab mr view "$FM_PR_NUMBER" \
+        -R "https://$FM_PR_HOST/$FM_PR_PATH" -F json 2>/dev/null) || {
+        printf '%s\n' 'error: cannot read the published merge-request body for evidence validation' >&2
+        return 1
+      }
+      body=$(printf '%s\n' "$json" | jq -er '
+        if type == "object" and (.description | type) == "string" then .description
+        else error("no merge-request description")
+        end' 2>/dev/null) || {
+        printf '%s\n' 'error: cannot parse the published merge-request body for evidence validation' >&2
+        return 1
+      }
+      ;;
+    gerrit)
+      body=$(fm_pr_gerrit_read_description "$FM_PR_HOST" "$FM_PR_NUMBER") || {
+        printf '%s\n' 'error: cannot read the published Gerrit description for evidence validation' >&2
+        return 1
+      }
+      ;;
+    *)
+      printf '%s\n' 'error: unsupported forge for published intent validation' >&2
+      return 1
+      ;;
+  esac
+  printf '%s' "$body"
+}
+
 # The status of one Gerrit change. The status is the only field read: a merged
 # change and an approved-but-unsubmitted one report the same submit,
 # submittable, and blocked_on values, so only the status separates them.

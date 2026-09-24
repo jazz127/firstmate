@@ -150,6 +150,11 @@ case "${1:-} ${2:-}" in
     ;;
   "pr view")
     case " $* " in
+      *" --json body --jq .body "*)
+        [ "${FM_TEST_GH_BODY_FAIL:-0}" = 0 ] || exit 1
+        printf '%s' "${FM_TEST_GH_BODY:-}"
+        exit 0
+        ;;
       *statusCheckRollup*)
         printf '%s\n' "{\"state\":\"OPEN\",\"isDraft\":false,\"mergeable\":\"MERGEABLE\",\"mergeStateStatus\":\"CLEAN\",\"headRefOid\":\"${FM_TEST_GH_HEAD:-0123456789abcdef0123456789abcdef01234567}\",\"baseRefName\":\"main\",\"statusCheckRollup\":[{\"__typename\":\"CheckRun\",\"name\":\"ci\",\"status\":\"COMPLETED\",\"conclusion\":\"SUCCESS\"}]}"
         exit 0
@@ -210,6 +215,21 @@ SH
   cat > "$fakebin/glab" <<'SH'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$FM_TEST_GLAB_LOG"
+case " $* " in
+  *" -F json "*)
+    [ "${FM_TEST_GLAB_BODY_FAIL:-0}" = 0 ] || exit 1
+    count=0
+    [ ! -f "$FM_TEST_GLAB_LOG.json-count" ] || count=$(cat "$FM_TEST_GLAB_LOG.json-count")
+    count=$((count + 1))
+    printf '%s\n' "$count" > "$FM_TEST_GLAB_LOG.json-count"
+    if [ "${FM_TEST_GLAB_BAD_STATE_AFTER_BODY:-0}" = 1 ] && [ "$count" -gt 1 ]; then
+      printf 'title:\tfixture merge request\nstate:\topened\nauthor:\tsomeone\n'
+      exit 0
+    fi
+    printf '%s\n' "${FM_TEST_GLAB_BODY_JSON:-{\"description\":\"\",\"state\":\"opened\",\"sha\":\"0123456789abcdef0123456789abcdef01234567\",\"detailed_merge_status\":\"mergeable\",\"has_conflicts\":false,\"blocking_discussions_resolved\":true,\"head_pipeline\":{\"sha\":\"0123456789abcdef0123456789abcdef01234567\",\"status\":\"success\"}}}"
+    exit 0
+    ;;
+esac
 [ "${FM_TEST_GLAB_FAIL:-0}" = 0 ] || exit 1
 [ "${FM_TEST_GLAB_SLEEP:-0}" = 0 ] || sleep "$FM_TEST_GLAB_SLEEP"
 printf 'title:\tfixture merge request\nstate:\t%s\nauthor:\tsomeone\n' "${FM_TEST_GLAB_STATE:-opened}"
@@ -303,6 +323,17 @@ run_check_entry() {
     FM_TEST_GERRIT_AXI_LOG="$dir/gerrit-axi.log" \
     PATH="$dir/fakebin:$BASE_PATH" \
     "$PR_CHECK" "$@"
+}
+
+run_validate_entry() {
+  local dir=$1
+  shift
+  FM_ROOT_OVERRIDE="$dir/root" FM_HOME="$dir/home" \
+    FM_TEST_GUARD_LOG="$dir/guard.log" FM_TEST_GH_LOG="$dir/gh.log" \
+    FM_TEST_GH_AXI_LOG="$dir/gh-axi.log" FM_TEST_GLAB_LOG="$dir/glab.log" \
+    FM_TEST_GERRIT_AXI_LOG="$dir/gerrit-axi.log" \
+    PATH="$dir/fakebin:$BASE_PATH" \
+    "$PR_CHECK" --validate-published "$@"
 }
 
 run_merge_entry() {
@@ -530,6 +561,71 @@ EOF
   fm_pr_task_id_valid "$id" || fail "operational validator rejected a path-safe legacy task ID"
   ! fm_task_id_creation_valid "$id" || fail "creation validator accepted an overlong task ID"
   pass "raw-byte parser accepts canonical URLs and rejects the complete adversarial matrix"
+}
+
+test_unowned_pr_published_body_validation() {
+  local dir state artifact url body out rc
+  dir=$(make_case unowned-published-body)
+  state="$dir/home/state"
+  url=https://github.com/example/project/pull/73
+  mkdir -p "$dir/task-temp"
+  artifact="$dir/wt/evidence.md"
+  printf '%s\n' 'synthetic local fixture output' > "$artifact"
+  body='Three of four scenarios were driven live against the product; the run used synthetic local fixtures.'
+
+  set +e
+  out=$(FM_TEST_GH_BODY="$body" run_validate_entry "$dir" "$url" "$dir/wt" "$dir/task-temp" 2>&1)
+  rc=$?
+  set -e
+  [ "$rc" -ne 0 ] || fail "an unowned published body claiming live product runs with synthetic fixtures was accepted"
+  assert_contains "$out" "missing evidence-artifact" "the live claim with synthetic fixtures was not refused for missing provenance"
+
+  printf '%s\n' 'live scenario output captured from the product' > "$artifact"
+  body=$(cat <<EOF
+Three of four scenarios were driven live against the product.
+evidence-artifact: $artifact
+evidence-command: ./run-product-scenarios --live
+evidence-captured: 2026-09-25T10:00:00+10:00
+EOF
+)
+  FM_TEST_GH_BODY="$body" run_validate_entry "$dir" "$url" "$dir/wt" "$dir/task-temp" \
+    || fail "an unowned published claim with artifact, command, and capture time was refused"
+  [ -z "$(find "$state" -mindepth 1 -print -quit)" ] \
+    || fail "read-only validation of an unowned PR wrote task state"
+
+  set +e
+  out=$(FM_TEST_GH_BODY_FAIL=1 run_validate_entry "$dir" "$url" "$dir/wt" "$dir/task-temp" 2>&1)
+  rc=$?
+  set -e
+  [ "$rc" -ne 0 ] || fail "an unreadable published body was accepted"
+  assert_contains "$out" "cannot read the published PR body" "unreadable body refusal did not identify the failed read"
+
+  ln -sf "$REAL_JQ" "$dir/fakebin/jq"
+  set +e
+  out=$(FM_TEST_GLAB_BODY_JSON='not-json' run_validate_entry "$dir" \
+    https://gitlab.example/group/project/-/merge_requests/17 "$dir/wt" "$dir/task-temp" 2>&1)
+  rc=$?
+  set -e
+  [ "$rc" -ne 0 ] || fail "an unparseable published body was accepted"
+  assert_contains "$out" "cannot parse the published merge-request body" "unparseable body refusal did not identify the parse failure"
+
+  FM_TEST_GERRIT_COMMIT_MESSAGE=$(printf '%s' "$body" | "$REAL_JQ" -Rs .) run_validate_entry "$dir" \
+    https://gerrit.example/c/group/project/+/73 "$dir/wt" "$dir/task-temp" \
+    || fail "Gerrit published description was not checked through the unowned entry point"
+
+  write_task_meta "$dir" task-direct
+  sed -i.bak 's/^mode=no-mistakes$/mode=direct-PR/' "$state/task-direct.meta" \
+    && rm -f "$state/task-direct.meta.bak"
+  body='Three of four scenarios were driven live against the product; the run used synthetic local fixtures.'
+  set +e
+  out=$(FM_TEST_GH_BODY="$body" run_check_entry "$dir" task-direct "$url" 2>&1)
+  rc=$?
+  set -e
+  [ "$rc" -ne 0 ] || fail "a task-owned direct-PR report bypassed published body validation"
+  assert_contains "$out" "published intent failed evidence validation" "direct-PR report refusal did not name published evidence validation"
+  grep -q '^pr=' "$state/task-direct.meta" && fail "a refused direct-PR body was recorded"
+  [ ! -e "$state/task-direct.check.sh" ] || fail "a refused direct-PR body armed a merge poll"
+  pass "published PR bodies are checked for owned and unowned reports across supported forges"
 }
 
 test_invalid_entrypoints_have_zero_side_effects() {
@@ -2023,21 +2119,20 @@ EOF
   [ ! -e "$state/task-b.check.sh" ] || fail "refused GitLab arming left a poll armed"
 
   # The merge path addresses the forge the URL names, and never the other one.
-  # This fixture's glab answers with the field output the poll reads, so the
-  # merge's JSON read cannot be parsed, which must refuse rather than merge on a
-  # state it could not read.
+  # The first JSON read supplies the published body; the next returns the
+  # field output the merge path cannot parse as state, which must refuse.
   write_task_meta "$dir" task-c
   : > "$dir/glab.log"
   # The merge path needs jq before it reads anything, so this case supplies it
   # and the refusal below is the unreadable state rather than a missing tool.
   ln -sf "$REAL_JQ" "$dir/fakebin/jq"
   set +e
-  run_merge_entry "$dir" task-c "$url" >/dev/null 2> "$dir/merge-c.err"
+  FM_TEST_GLAB_BAD_STATE_AFTER_BODY=1 run_merge_entry "$dir" task-c "$url" >/dev/null 2> "$dir/merge-c.err"
   rc=$?
   set -e
   [ "$rc" -ne 0 ] || fail "merge wrapper merged a GitLab merge request it could not read"
   grep -qF 'could not read the GitLab merge request state before merging' "$dir/merge-c.err" \
-    || fail "merge wrapper refused for some reason other than the state it could not read"
+    || fail "merge wrapper refused for some reason other than the state it could not read: $(cat "$dir/merge-c.err")"
   [ ! -s "$dir/gh-axi.log" ] || fail "merge wrapper reached the GitHub CLI for a GitLab URL"
   grep -qF "mr view 7 -R https://gitlab.example/group/subgroup/project" "$dir/glab.log" \
     || fail "merge wrapper did not read the merge request through glab at its own instance"
@@ -3388,6 +3483,7 @@ SH
 }
 
 test_parser_matrix
+test_unowned_pr_published_body_validation
 test_gitlab_merge_watch
 test_gerrit_merge_watch
 test_gerrit_arming_records_no_patch_set_revision

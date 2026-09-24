@@ -15,9 +15,12 @@
 # Mark the pull request ready for review, then arm again; a lane that keeps a
 # draft on purpose declares a wait instead of reporting done. An unreadable
 # draft state does not refuse, matching how the head read below is optional.
+# `--validate-published` reads and validates a PR body without requiring or
+# changing a task record; use it before reporting an unowned PR to the captain.
 # bin/fm-pr-merge.sh records through this script with FM_PR_CHECK_MERGE=1 and
 # skips this refusal, because its own merge-time draft refusal is authoritative.
 # Usage: fm-pr-check.sh <task-id> <pr-url>
+#        fm-pr-check.sh --validate-published <pr-url> <worktree> [task-temp]
 set -eu
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -33,6 +36,19 @@ STATE="${FM_STATE_OVERRIDE:-$FM_HOME/state}"
 . "$SCRIPT_DIR/fm-parent-channel-lib.sh"
 # shellcheck source=bin/fm-dod-lib.sh
 . "$SCRIPT_DIR/fm-dod-lib.sh"
+
+if [ "${1:-}" = --validate-published ]; then
+  if [ "$#" -lt 3 ] || [ "$#" -gt 4 ] || ! fm_pr_url_parse "$2"; then
+    echo "error: invalid published intent validation request" >&2
+    exit 2
+  fi
+  PR_BODY=$(fm_pr_read_published_body "$FM_PR_URL") || exit 1
+  if ! fm_dod_validate_published_intent "$PR_BODY" "$3" "${4:-}"; then
+    echo "error: published intent failed evidence validation" >&2
+    exit 1
+  fi
+  exit 0
+fi
 
 if [ "$#" -ne 2 ]; then
   echo "error: invalid PR check request" >&2
@@ -125,42 +141,11 @@ fi
 KIND=$(grep '^kind=' "$META" | tail -1 | cut -d= -f2- || true)
 MODE=$(grep '^mode=' "$META" | tail -1 | cut -d= -f2- || true)
 PROJECT=$(grep '^project=' "$META" | tail -1 | cut -d= -f2- || true)
-if [ "$MODE" = no-mistakes ]; then
-  PR_BODY=
-  case "$PROVIDER" in
-    github)
-      command -v gh >/dev/null 2>&1 || { echo "error: cannot validate the published intent because gh is unavailable" >&2; exit 1; }
-      PR_BODY=$(gh pr view "$URL" --json body --jq .body 2>/dev/null) || {
-        echo "error: cannot read the published PR body for evidence validation" >&2
-        exit 1
-      }
-      ;;
-    gitlab)
-      if ! command -v glab >/dev/null 2>&1 || ! command -v jq >/dev/null 2>&1; then
-        echo "error: cannot validate the published intent because glab and jq are unavailable" >&2
-        exit 1
-      fi
-      GITLAB_BODY_JSON=$(GITLAB_HOST="$HOST" glab mr view "$NUMBER" -R "https://$HOST/$PROJECT_PATH" -F json 2>/dev/null) || {
-        echo "error: cannot read the published merge-request body for evidence validation" >&2
-        exit 1
-      }
-      PR_BODY=$(printf '%s\n' "$GITLAB_BODY_JSON" | jq -r '.description // empty') || {
-        echo "error: cannot parse the published merge-request body for evidence validation" >&2
-        exit 1
-      }
-      ;;
-    gerrit)
-      PR_BODY=$(fm_pr_gerrit_read_description "$HOST" "$NUMBER") || {
-        echo "error: cannot read the published Gerrit description for evidence validation" >&2
-        exit 1
-      }
-      ;;
-  esac
-  TASK_TMP=$(grep '^tasktmp=' "$META" | tail -1 | cut -d= -f2- || true)
-  if ! fm_dod_validate_published_intent "$PR_BODY" "$WT" "$TASK_TMP"; then
-    echo "error: published intent failed evidence validation" >&2
-    exit 1
-  fi
+TASK_TMP=$(grep '^tasktmp=' "$META" | tail -1 | cut -d= -f2- || true)
+PR_BODY=$(fm_pr_read_published_body "$URL") || exit 1
+if ! fm_dod_validate_published_intent "$PR_BODY" "$WT" "$TASK_TMP"; then
+  echo "error: published intent failed evidence validation" >&2
+  exit 1
 fi
 # The gate is asked about the ready report this task's worker was told to give;
 # on a Gerrit change both publishing modes report the same published line.

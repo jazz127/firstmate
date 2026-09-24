@@ -321,6 +321,10 @@ fm_dod_validate_intent_evidence() {  # <intent> <worktree> <task-temp> [prefligh
         claim=1
         break 2
       fi
+      if printf '%s\n' "$candidate" | grep -Eiq '((zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)[[:space:]]+of[[:space:]]+(zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)[^.!?]*(live|verified|real-account|real account|independent|independently|external|externally confirmed))|((live|verified|real-account|real account|independent|independently|external|externally confirmed)[^.!?]*(zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)[[:space:]]+of[[:space:]]+(zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve))'; then
+        claim=1
+        break 2
+      fi
     done
     previous_previous_line=$previous_line
     previous_line=$line

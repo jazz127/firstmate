@@ -403,6 +403,9 @@ That blocked reading is the gate working, not a stuck worker, so steer the worke
 A direct-PR worker pushes that commit to its PR branch, and a local-only worker commits it on its `fm/<id>` branch.
 A no-mistakes worker re-validates it with /no-mistakes so the pipeline stays the one publisher; it never pushes from its copy.
 In no-mistakes mode the earlier `done [at=<epoch>]: {summary}` is the pipeline handoff and is not gated.
+Before reporting any pull request to the captain, validate its published body from the forge with `bin/fm-pr-check.sh`; task-owned PR registration performs this check automatically, and a PR with no owning task record uses `bin/fm-pr-check.sh --validate-published <PR url> <worktree> [task-temp]`.
+Refuse to relay the PR when its body cannot be read or parsed, or when an evidence claim lacks the artifact, command, and capture time required by `bin/fm-dod-lib.sh`.
+This check validates published text at the reporting boundary; it does not police what a generator writes before publication.
 Tell the captain the PR's full `https://...` URL copied from the worker's ready line, the resolved checks-green crew-state line, or the task's `pr=` metadata, a concise outcome summary, and the no-mistakes risk level when applicable.
 A captain instruction to merge is explicit authority; `yolo` is the only standing routine merge authority.
 For any custom `state/<id>.check.sh` you write yourself, keep it an ordinary single-link mode-`0700` file, print one line only when firstmate should wake, print nothing otherwise, finish before `FM_CHECK_TIMEOUT`, then bind its current bytes with `bin/fm-check-register.sh <id>` before the watcher may execute it.

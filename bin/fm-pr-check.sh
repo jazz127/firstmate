@@ -147,7 +147,8 @@ if [ "$MODE" = no-mistakes ]; then
       ;;
     gerrit) PR_BODY= ;;
   esac
-  if ! fm_dod_validate_published_intent "$PR_BODY" "$FM_HOME" "$WT" "${TMPDIR:-/tmp}"; then
+  TASK_TMP=$(grep '^tasktmp=' "$META" | tail -1 | cut -d= -f2- || true)
+  if ! fm_dod_validate_published_intent "$PR_BODY" "$WT" "$TASK_TMP"; then
     echo "error: published intent failed evidence validation" >&2
     exit 1
   fi

@@ -210,7 +210,7 @@ if [ -z "$(printf '%s' "$INTENT_BODY" | tr -d '[:space:]')" ]; then
   echo "error: $SCOUT_BRIEF has no provenance-marked Captain's intent; add the captain's actual words before promotion" >&2
   exit 1
 fi
-if [ "$MODE" = no-mistakes ] && ! fm_dod_validate_intent_evidence "$INTENT_BODY" "$FM_HOME" "$(grep '^worktree=' "$STATE/$ID.meta" | tail -1 | cut -d= -f2-)" "${TMPDIR:-/tmp}"; then
+if [ "$MODE" = no-mistakes ] && ! fm_dod_validate_intent_evidence "$INTENT_BODY" "$(grep '^worktree=' "$STATE/$ID.meta" | tail -1 | cut -d= -f2-)" "$(grep '^tasktmp=' "$STATE/$ID.meta" | tail -1 | cut -d= -f2-)"; then
   echo "error: $SCOUT_BRIEF contains an evidence claim that cannot be published" >&2
   exit 1
 fi

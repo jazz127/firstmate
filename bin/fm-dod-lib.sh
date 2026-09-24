@@ -291,12 +291,11 @@ $1
 EOF
 }
 
-fm_dod_validate_intent_evidence() {  # <intent> <supervising-home> <worktree> <task-temp> [preflight|publish]
-  local intent=$1 home=$2 worktree=$3 task_temp=$4 phase=${5:-preflight}
+fm_dod_validate_intent_evidence() {  # <intent> <worktree> <task-temp> [preflight|publish]
+  local intent=$1 worktree=$2 task_temp=$3 phase=${4:-preflight}
   local line artifact command captured claim=0 normalized_artifact normalized_root resolved_artifact flat_intent
   flat_intent=$(printf '%s\n' "$intent" | tr '\n' ' ')
-  if printf '%s\n' "$flat_intent" | grep -Eiq '(live|verified|real-account|independent|external|externally confirmed)' \
-    && printf '%s\n' "$flat_intent" | grep -Eiq '(scenario|validation|test|result|evidence|account|confirmation|[0-9]+[[:space:]]+of[[:space:]]+[0-9]+)'; then
+  if printf '%s\n' "$flat_intent" | grep -Eiq '([0-9]+[[:space:]]*(of|/)[[:space:]]*[0-9]+)|((live|verified|real-account|independent|external|externally confirmed)[^.!?]*(scenario|evidence|verification|confirmation|result|account))|((scenario|evidence|verification|confirmation|result|account)[^.!?]*(live|verified|real-account|independent|external|externally confirmed))'; then
     claim=1
   fi
   [ "$claim" -eq 1 ] || return 0
@@ -326,7 +325,7 @@ EOF
     *) printf '%s\n' "evidence claim refused: artifact path must be absolute: $artifact" >&2; return 1 ;;
   esac
   normalized_artifact=$(fm_dod_path_normalize "$artifact") || return 1
-  for normalized_root in "$home" "$worktree" "$task_temp"; do
+  for normalized_root in "$worktree" "$task_temp"; do
     [ -n "$normalized_root" ] || continue
     case "$normalized_root" in /*) ;; *) continue ;; esac
     normalized_root=$(fm_dod_path_normalize "$normalized_root") || return 1
@@ -336,7 +335,7 @@ EOF
     normalized_root=
   done
   if [ -z "$normalized_root" ]; then
-    printf '%s\n' "evidence claim refused: artifact is outside the supervising home, worker worktree, or task temp directory: $artifact" >&2
+    printf '%s\n' "evidence claim refused: artifact is outside the worker worktree or task temp directory: $artifact" >&2
     return 1
   fi
   if [ "$phase" = publish ]; then
@@ -349,7 +348,7 @@ EOF
       return 1
     }
     normalized_artifact=$(fm_dod_path_normalize "$resolved_artifact") || return 1
-    for normalized_root in "$home" "$worktree" "$task_temp"; do
+    for normalized_root in "$worktree" "$task_temp"; do
       [ -n "$normalized_root" ] || continue
       [ -d "$normalized_root" ] || continue
       normalized_root=$(cd -P "$normalized_root" 2>/dev/null && pwd -P) || continue
@@ -366,8 +365,8 @@ EOF
   return 0
 }
 
-fm_dod_validate_published_intent() {  # <intent> <supervising-home> <worktree> <task-temp>
-  fm_dod_validate_intent_evidence "$1" "$2" "$3" "$4" publish
+fm_dod_validate_published_intent() {  # <intent> <worktree> <task-temp>
+  fm_dod_validate_intent_evidence "$1" "$2" "$3" publish
 }
 
 # Accept the current two-subsection contract only when both bodies have content;

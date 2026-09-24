@@ -293,7 +293,7 @@ EOF
 
 fm_dod_validate_intent_evidence() {  # <intent> <worktree> <task-temp> [preflight|publish]
   local intent=$1 worktree=$2 task_temp=$3 phase=${4:-preflight}
-  local line previous_line previous_previous_line candidate detector_input artifact command captured claim=0 normalized_artifact normalized_root resolved_artifact link_target symlink_hops
+  local line previous_line='' previous_previous_line='' candidate detector_input artifact command captured claim=0 normalized_artifact normalized_root resolved_artifact link_target symlink_hops
   local timestamp_date timestamp_clock timestamp_year timestamp_month timestamp_day timestamp_hour timestamp_minute timestamp_second timestamp_zone timestamp_offset_hour timestamp_offset_minute days_in_month
   local artifact_count=0 command_count=0 captured_count=0
   detector_input=$(printf '%s\n' "$intent" | tr '.!?;' '\n' | sed -E 's/,[[:space:]]+(but|however|yet)[[:space:]]+/\n/g')

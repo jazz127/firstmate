@@ -128,6 +128,19 @@ EOF
     || fail "request prose containing an evidence claim was refused"
   fm_dod_validate_intent_evidence 'For example, external validation passed' "$root/worktree" "$root/tmp" \
     || fail "example prose with a lead-in was refused"
+  fm_dod_validate_intent_evidence 'Can you verify external validation passed?' "$root/worktree" "$root/tmp" \
+    || fail "question prose containing an evidence claim was refused"
+  fm_dod_validate_intent_evidence 'external validation did not pass' "$root/worktree" "$root/tmp" \
+    || fail "negative result prose was refused"
+  intent=$(cat <<'EOF'
+Please verify external validation passed
+external validation passed
+EOF
+)
+  out=$(fm_dod_validate_intent_evidence "$intent" "$root/worktree" "$root/tmp" 2>&1)
+  rc=$?
+  [ "$rc" -ne 0 ] || fail "real assertion after a request was erased"
+  assert_contains "$out" "missing evidence-artifact" "assertion after request refusal was unclear"
   fm_dod_validate_intent_evidence '2 of 3 requested endpoints' "$root/worktree" "$root/tmp" \
     || fail "ordinary ratio prose was refused"
   for claim in \

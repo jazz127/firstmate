@@ -293,20 +293,29 @@ EOF
 
 fm_dod_validate_intent_evidence() {  # <intent> <worktree> <task-temp> [preflight|publish]
   local intent=$1 worktree=$2 task_temp=$3 phase=${4:-preflight}
-  local line artifact command captured claim=0 normalized_artifact normalized_root resolved_artifact flat_intent claim_intent
+  local line previous_line candidate artifact command captured claim=0 normalized_artifact normalized_root resolved_artifact
   local artifact_count=0 command_count=0 captured_count=0
-  flat_intent=$(printf '%s\n' "$intent" | tr '\n' ' ')
-  claim_intent=$(printf '%s\n' "$flat_intent" | tr '[:upper:]' '[:lower:]')
-  claim_intent=$(printf '%s\n' "$claim_intent" | sed -E \
-    -e 's/(^|[.!?][[:space:]]*)(do not|never|avoid|must not|should not)[^.!?]*/\1/g' \
-    -e 's/(^|[.!?][[:space:]]*)((for[[:space:]]+)?example|examples|e\.g\.|quote|quoted)[[:space:]]*[:,]?[[:space:]]*[^.!?]*/\1/g' \
-    -e 's/(^|[.!?][[:space:]]*)(please[[:space:]]+(verify|check|validate|test))[^.!?]*/\1/g' \
-    -e 's/(^|[.!?][[:space:]]*)(investigate|run|check|verify|validate|test|collect|report|describe|document|ensure|add|include|show)[^.!?]*/\1/g' \
-    -e 's/"[^"]*"//g' \
-    -e "s/'[^']*'//g")
-  if printf '%s\n' "$claim_intent" | grep -Eiq '([0-9]+[[:space:]]+of[[:space:]]+[0-9]+[[:space:]]*/[[:space:]]*[0-9]+[[:space:]]+of[[:space:]]+[0-9]+)|(([0-9]+[[:space:]]*(of|/)[[:space:]]*[0-9]+)[^.!?]*(live|verified|real-account|independent|external|externally confirmed))|((live|verified|real-account|independent|external|externally confirmed)[^.!?]*([0-9]+[[:space:]]*(of|/)[[:space:]]*[0-9]+))|((live|verified|real-account|independent|external|externally confirmed)[^.!?]*(evidence|verification|confirmation)[[:space:]]*:)|((live|verified|real-account|independent|external|externally confirmed)[^.!?]*(test|tests|scenario|scenarios|validation|evidence|verification|confirmation)[^.!?]*(was|were|is|are|shows?|reported|demonstrated|driven|completed|passed|failed|confirmed|verified))|((evidence|verification|confirmation)[^.!?]*(live|verified|real-account|independent|external|externally confirmed)[^.!?]*(was|were|is|are|shows?|reported|demonstrated|driven|completed|passed|failed|confirmed|verified))'; then
-    claim=1
-  fi
+  while IFS= read -r line; do
+    for candidate in "$line" "$previous_line $line"; do
+      candidate=$(printf '%s\n' "$candidate" | tr '[:upper:]' '[:lower:]' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+      case "$candidate" in
+        please\ *|can\ you\ *|could\ you\ *|would\ you\ *|for\ example*|example:*|e.g.*|quote:*|quoted:*|do\ not\ *|don't\ *|never\ *|avoid\ *|must\ not\ *|should\ not\ *|investigate\ *|run\ *|check\ *|verify\ *|validate\ *|test\ *|collect\ *|report\ *|describe\ *|document\ *|ensure\ *|add\ *|include\ *|show\ *) continue ;;
+      esac
+      case "$candidate" in
+        *did\ not\ *|*did\ not\.*) continue ;;
+      esac
+      case "$candidate" in
+        *\"*|*\'*) continue ;;
+      esac
+      if printf '%s\n' "$candidate" | grep -Eiq '([0-9]+[[:space:]]+of[[:space:]]+[0-9]+[[:space:]]*/[[:space:]]*[0-9]+[[:space:]]+of[[:space:]]+[0-9]+)|(([0-9]+[[:space:]]*(of|/)[[:space:]]*[0-9]+)[^.!?]*(live|verified|real-account|independent|external|externally confirmed))|((live|verified|real-account|independent|external|externally confirmed)[^.!?]*([0-9]+[[:space:]]*(of|/)[[:space:]]*[0-9]+))|((live|verified|real-account|independent|external|externally confirmed)[^.!?]*(evidence|verification|confirmation)[[:space:]]*:)|((live|verified|real-account|independent|external|externally confirmed)[^.!?]*(test|tests|scenario|scenarios|validation|evidence|verification|confirmation)[^.!?]*(was|were|is|are|shows?|reported|demonstrated|driven|completed|passed|failed|confirmed|verified))|((evidence|verification|confirmation)[^.!?]*(live|verified|real-account|independent|external|externally confirmed)[^.!?]*(was|were|is|are|shows?|reported|demonstrated|driven|completed|passed|failed|confirmed|verified))'; then
+        claim=1
+        break 2
+      fi
+    done
+    previous_line=$line
+  done <<EOF
+$intent
+EOF
   [ "$claim" -eq 1 ] || return 0
   while IFS= read -r line; do
     case "$line" in

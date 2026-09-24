@@ -86,6 +86,7 @@ export interface UnreadWakeScope {
    * `eligible` is false.
    */
   eligibleSeqs: string[];
+  taskByEligibleSeq: Record<string, string>;
   /**
    * The exact task ids the eligible signal/stale rows name (a signal row by
    * its status-log key, a stale row through the task metadata recording that
@@ -136,6 +137,7 @@ const EMPTY_SCOPE: UnreadWakeScope = {
   eligible: false,
   projects: [],
   eligibleSeqs: [],
+  taskByEligibleSeq: {},
   eligibleTasks: [],
   corrupted: false,
   needsDecisionKeys: [],
@@ -148,6 +150,7 @@ const UNSAFE_SCOPE: UnreadWakeScope = {
   eligible: false,
   projects: [],
   eligibleSeqs: [],
+  taskByEligibleSeq: {},
   eligibleTasks: [],
   corrupted: true,
   needsDecisionKeys: [],
@@ -302,6 +305,7 @@ export function scopeForUnreadWake(state: string, heartbeat: boolean, afk = fals
   }
 
   const eligibleSeqs: string[] = [];
+  const taskByEligibleSeq: Record<string, string> = {};
   const eligibleTasks = new Set<string>();
   const needsDecisionKeys: string[] = [];
   const checkSeqs: string[] = [];
@@ -324,6 +328,7 @@ export function scopeForUnreadWake(state: string, heartbeat: boolean, afk = fals
       // no main drain will ever take it, so any wake claims it.
       if (heartbeat || afk) {
         eligibleSeqs.push(seq);
+        taskByEligibleSeq[seq] = "fleet";
         heartbeatSeqs.push(seq);
       }
       continue;
@@ -335,6 +340,7 @@ export function scopeForUnreadWake(state: string, heartbeat: boolean, afk = fals
       // is the only actor, so the row is claimed unscoped.
       if (afk) {
         eligibleSeqs.push(seq);
+        taskByEligibleSeq[seq] = "fleet";
         checkSeqs.push(seq);
       }
       continue;
@@ -406,6 +412,7 @@ export function scopeForUnreadWake(state: string, heartbeat: boolean, afk = fals
     projects.add(project);
     eligibleTasks.add(task);
     eligibleSeqs.push(seq);
+    taskByEligibleSeq[seq] = task;
   }
   const eligible = eligibleSeqs.length > 0;
   // Reached only after every row passed classification without a veto. A scan
@@ -420,6 +427,7 @@ export function scopeForUnreadWake(state: string, heartbeat: boolean, afk = fals
     eligible,
     projects: [...projects],
     eligibleSeqs,
+    taskByEligibleSeq,
     eligibleTasks: [...eligibleTasks],
     corrupted: false,
     needsDecisionKeys,

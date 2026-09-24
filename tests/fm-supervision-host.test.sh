@@ -65,11 +65,15 @@ printf '%s\n' "$drain" > "$FM_HOME/engine-drain.$n"
 ack=$(printf '%s\n' "$drain" | sed -n 's/^WAKE_ACK_REQUIRED: after handling completes run bin\/fm-wake-drain.sh //p' | tail -1)
 task=$(sed -n 's/^tasks=//p' "$STATE/.supervision-host-turn" | awk '{ print $1 }')
 [ -n "$task" ] || task=fleet
+rows=$(sed -n 's/^rows=//p' "$STATE/.supervision-host-turn")
 case "$mode" in
-  handle|hold-lease|return|return-fail|noack|chain|emptyresult)
+  handle|hold-lease|return|return-fail|noack|chain|emptyresult|partial-report)
     "$FM_REPO/bin/fm-lease.sh" claim "$task" >> "$FM_HOME/engine-lease.log" 2>&1
-    "$FM_REPO/bin/fm-branch-report.sh" --task "$task" --verdict routine --summary "stub handled $task" \
-      >> "$FM_HOME/engine-report.log" 2>&1
+    for row in $rows; do
+      "$FM_REPO/bin/fm-branch-report.sh" --row "$row" --task "$task" --verdict routine --summary "stub handled $task" \
+        >> "$FM_HOME/engine-report.log" 2>&1
+      [ "$mode" != partial-report ] || break
+    done
     # shellcheck disable=SC2086 # the printed acknowledgement arguments
     [ -z "$ack" ] || [ "$mode" = noack ] || "$FM_REPO/bin/fm-wake-drain.sh" $ack >> "$FM_HOME/engine-ack.log" 2>&1
     [ "$mode" = hold-lease ] || "$FM_REPO/bin/fm-lease.sh" release "$task" >> "$FM_HOME/engine-lease.log" 2>&1
@@ -193,42 +197,42 @@ test_report_surface_enforces_actor_turn_and_scope() {
   home="$TMP_ROOT/report"
   state="$home/state"
   mkdir -p "$state"
-  printf 'turn=t1\nrows=4\ntasks=alpha\nunscoped=0\nwake=signal: alpha.status\n' > "$state/.supervision-host-turn"
+  printf 'turn=t1\nrows=4 5\nrow_tasks=4=alpha 5=alpha\ntasks=alpha\nunscoped=0\nwake=signal: alpha.status\n' > "$state/.supervision-host-turn"
 
-  out=$(FM_HOME="$home" "$REPORT" --task alpha --verdict routine --summary ok 2>&1); rc=$?
+  out=$(FM_HOME="$home" "$REPORT" --row 4 --task alpha --verdict routine --summary ok 2>&1); rc=$?
   expect_code 3 "$rc" "a report outside the branch actor must be refused"
   assert_contains "$out" "only the supervision branch reports outcomes" "actor refusal must say why"
 
-  out=$(FM_HOME="$home" FM_SUPERVISION_ACTOR=branch FM_BRANCH_REPORT_TURN=t0 "$REPORT" --task alpha --verdict routine --summary ok 2>&1); rc=$?
+  out=$(FM_HOME="$home" FM_SUPERVISION_ACTOR=branch FM_BRANCH_REPORT_TURN=t0 "$REPORT" --row 4 --task alpha --verdict routine --summary ok 2>&1); rc=$?
   expect_code 3 "$rc" "a report for an ended turn must be refused"
 
-  out=$(FM_HOME="$home" FM_SUPERVISION_ACTOR=branch FM_BRANCH_REPORT_TURN=t1 "$REPORT" --task beta --verdict captain --summary 'from memory' 2>&1); rc=$?
+  out=$(FM_HOME="$home" FM_SUPERVISION_ACTOR=branch FM_BRANCH_REPORT_TURN=t1 "$REPORT" --row 4 --task beta --verdict captain --summary 'from memory' 2>&1); rc=$?
   expect_code 3 "$rc" "a report for a task the wake did not name must be refused"
   assert_contains "$out" "names alpha, not beta" "scope refusal must name the wake's task"
-  out=$(FM_HOME="$home" FM_SUPERVISION_ACTOR=branch FM_BRANCH_REPORT_TURN=t1 "$REPORT" --task fleet --verdict routine --summary quiet 2>&1); rc=$?
+  out=$(FM_HOME="$home" FM_SUPERVISION_ACTOR=branch FM_BRANCH_REPORT_TURN=t1 "$REPORT" --row 4 --task fleet --verdict routine --summary quiet 2>&1); rc=$?
   expect_code 3 "$rc" "a fleet report on a task-scoped wake must be refused"
   [ ! -e "$state/branch-outcomes.jsonl" ] || fail "a refused report touched the outcome store"
 
-  out=$(FM_HOME="$home" FM_SUPERVISION_ACTOR=branch FM_BRANCH_REPORT_TURN=t1 "$REPORT" --task alpha --verdict routine --summary quiet --silent true 2>&1); rc=$?
+  out=$(FM_HOME="$home" FM_SUPERVISION_ACTOR=branch FM_BRANCH_REPORT_TURN=t1 "$REPORT" --row 4 --task alpha --verdict routine --summary quiet --silent true 2>&1); rc=$?
   expect_code 0 "$rc" "an in-scope routine task report may be silent"
   assert_contains "$out" "recorded seq 1 [routine]" "the silent task report must name its store sequence"
   jq -e 'select(.task == "alpha" and .verdict == "routine" and .silent == true)' "$state/branch-outcomes.jsonl" >/dev/null \
     || fail "the outcome store did not preserve the silent task report"
 
-  out=$(FM_HOME="$home" FM_SUPERVISION_ACTOR=branch FM_BRANCH_REPORT_TURN=t1 "$REPORT" --task alpha --verdict captain --summary 'must be visible' --silent true 2>&1); rc=$?
+  out=$(FM_HOME="$home" FM_SUPERVISION_ACTOR=branch FM_BRANCH_REPORT_TURN=t1 "$REPORT" --row 5 --task alpha --verdict captain --summary 'must be visible' --silent true 2>&1); rc=$?
   expect_code 2 "$rc" "a captain outcome must not be silent"
   assert_contains "$out" "--silent true is only for a routine outcome" "the silent captain refusal must say why"
 
-  out=$(FM_HOME="$home" FM_SUPERVISION_ACTOR=branch FM_BRANCH_REPORT_TURN=t1 "$REPORT" --task alpha --verdict captain --summary 'PR ready' 2>&1); rc=$?
+  out=$(FM_HOME="$home" FM_SUPERVISION_ACTOR=branch FM_BRANCH_REPORT_TURN=t1 "$REPORT" --row 5 --task alpha --verdict captain --summary 'PR ready' 2>&1); rc=$?
   expect_code 0 "$rc" "an in-scope report must be recorded"
   assert_contains "$out" "recorded seq 2 [captain]" "the report must name its store sequence"
   assert_grep '"task":"alpha"' "$state/branch-outcomes.jsonl" "the outcome store did not receive the report"
   assert_grep '"wake":"signal: alpha.status"' "$state/branch-outcomes.jsonl" "the report did not default its wake to the turn's wake"
-  [ "$(cat "$state/.supervision-host-receipts")" = "$(printf 't1\t1\troutine\talpha\nt1\t2\tcaptain\talpha')" ] \
+  [ "$(cat "$state/.supervision-host-receipts")" = "$(printf 't1\t1\troutine\talpha\t4\nt1\t2\tcaptain\talpha\t5')" ] \
     || fail "the host receipt was not written: $(cat "$state/.supervision-host-receipts")"
 
-  printf 'turn=t2\nrows=5\ntasks=\nunscoped=1\nwake=heartbeat\n' > "$state/.supervision-host-turn"
-  out=$(FM_HOME="$home" FM_SUPERVISION_ACTOR=branch FM_BRANCH_REPORT_TURN=t2 "$REPORT" --task fleet --verdict routine --summary quiet --silent true 2>&1); rc=$?
+  printf 'turn=t2\nrows=6\nrow_tasks=6=fleet\ntasks=\nunscoped=1\nwake=heartbeat\n' > "$state/.supervision-host-turn"
+  out=$(FM_HOME="$home" FM_SUPERVISION_ACTOR=branch FM_BRANCH_REPORT_TURN=t2 "$REPORT" --row 6 --task fleet --verdict routine --summary quiet --silent true 2>&1); rc=$?
   expect_code 0 "$rc" "an unscoped heartbeat turn must accept a silent fleet report"
   pass "report surface: only the branch actor's current turn may report, and only on the tasks its wake names"
 }
@@ -247,11 +251,13 @@ test_dispatch_entry_scopes_rows_and_renders_the_away_tail() {
   out=$(FM_HOME="$home" node "$DISPATCH" scope)
   assert_contains "$out" "status=safe" "an attended scan with a resolvable row must be safe"
   assert_contains "$out" "rows=1" "an attended scan must leave the check row to main"
+  assert_contains "$out" "row_tasks=1=demo" "the task-local event must retain its row identity"
   assert_contains "$out" "tasks=demo" "the signal row must resolve to its task"
   assert_contains "$out" "unscoped=0" "a task-local claim must be scoped"
 
   out=$(FM_HOME="$home" node "$DISPATCH" scope --afk)
   assert_contains "$out" "rows=1 2" "an away scan must claim the check row too"
+  assert_contains "$out" "row_tasks=1=demo 2=fleet" "each away event must retain its row and task identity"
   assert_contains "$out" "unscoped=1" "a claimed check row names no task, so the claim is unscoped"
 
   printf 'Away posture (recorded):\n  your words (verbatim):\n    merge nothing\n' > "$home/readback"
@@ -283,7 +289,7 @@ test_attended_close_passes_straight_to_main() {
 }
 
 test_away_wake_is_handled_on_the_engine_and_never_reaches_main() {
-  local home lock_pid session first second pid watcher
+  local home lock_pid session first second pid watcher first_outcomes
   home=$(make_home away-handled away)
   echo hold-lease > "$home/stub-mode"
   start_host "$home"
@@ -304,6 +310,7 @@ test_away_wake_is_handled_on_the_engine_and_never_reaches_main() {
   assert_re '^POSTURE: AWAY\.' "$first" "the wake must carry the away tail"
   assert_grep '"task":"demo"' "$home/state/branch-outcomes.jsonl" "the engine's report did not reach the outcome store"
   assert_no_grep 'demo.status' "$home/state/.wake-queue" "the engine's acknowledgement did not consume the wake"
+  first_outcomes=$(grep -c '"task":"demo"' "$home/state/branch-outcomes.jsonl")
   if FM_HOME="$home" "$LEASE" check demo >/dev/null 2>&1; then
     fail "the host did not release the lease the engine left held: $(FM_HOME="$home" "$LEASE" check demo)"
   fi
@@ -318,7 +325,7 @@ test_away_wake_is_handled_on_the_engine_and_never_reaches_main() {
   second="$home/engine-call.2"
   assert_re '^arg=--resume$' "$second" "a later turn must resume the conversation"
   assert_re "^arg=$session\$" "$second" "a later turn must resume the same conversation"
-  [ "$(grep -c '"task":"demo"' "$home/state/branch-outcomes.jsonl")" -eq 2 ] || fail "the second outcome was not recorded"
+  [ "$(grep -c '"task":"demo"' "$home/state/branch-outcomes.jsonl")" -gt "$first_outcomes" ] || fail "the second outcome was not recorded"
   assert_re '	handled	turn=[^	]*\.2	.* cost=0\.25 conversation_cost=0\.5 ' "$home/state/.supervision-host.log" \
     "a resumed turn must log its own cost, not the conversation's running total"
 
@@ -336,21 +343,47 @@ test_away_turn_requires_an_outcome_for_every_scoped_task() {
   local home state
   home=$(make_home away-partial-report away)
   state="$home/state"
+  : > "$state/.wake-queue"
+  printf '0\n' > "$state/.wake-queue.seq"
   printf 'project=beta\nwindow=fm-beta\nharness=claude\n' > "$state/beta.meta"
   append_wake "$state" signal demo.status "signal: $state/demo.status"
   append_wake "$state" signal beta.status "signal: $state/beta.status"
+  echo partial-report > "$home/stub-mode"
   start_host "$home"
   wait_until 250 host_exited "$home" || fail "partial report: the host accepted a turn that reported only one of two tasks"
   expect_code 0 "$(cat "$home/host.rc")" "a partially reported wake must return to main"
   assert_grep '"task":"demo"' "$state/branch-outcomes.jsonl" "fixture: the engine did not report the first task"
   assert_no_grep '"task":"beta"' "$state/branch-outcomes.jsonl" "fixture: the engine unexpectedly reported the second task"
-  assert_re '^supervision-host: .*recorded no outcome for task\(s\) beta; this wake is yours$' "$home/host.out" \
-    "the handback must identify the scoped task with no outcome"
-  assert_re $'\tfailed\tturn=.*\treports=1\tmissing=beta\tunacked=none\t' "$state/.supervision-host.log" \
-    "the ledger must reject a turn that acknowledged every row but reported only one task"
+  assert_re '^supervision-host: .*recorded no outcome for wake row\(s\) 2; this wake is yours$' "$home/host.out" \
+    "the handback must identify the scoped event with no outcome"
+  assert_re $'\tfailed\tturn=.*\treports=1\tmissing=2\tunacked=none\t' "$state/.supervision-host.log" \
+    "the ledger must reject a turn that acknowledged every row but reported only one event"
   assert_no_re $'\thandled\tturn=' "$state/.supervision-host.log" \
     "a partially reported multi-task wake must never count as handled"
-  pass "host: every scoped task in a coalesced wake requires an outcome"
+  pass "host: every scoped event in a coalesced wake requires an outcome"
+}
+
+test_away_turn_requires_an_outcome_for_every_same_task_event() {
+  local home state
+  home=$(make_home away-same-task-partial away)
+  state="$home/state"
+  : > "$state/.wake-queue"
+  printf '0\n' > "$state/.wake-queue.seq"
+  append_wake "$state" signal demo.status "signal: first demo event"
+  append_wake "$state" signal demo.status "signal: second demo event"
+  echo partial-report > "$home/stub-mode"
+  start_host "$home"
+  wait_until 250 host_exited "$home" || fail "same-task partial report: the host accepted one outcome for two events"
+  expect_code 0 "$(cat "$home/host.rc")" "a partially reported same-task wake must return to main"
+  assert_grep 'signal: first demo event' "$home/engine-drain.1" "the drain hid the first same-task event"
+  assert_grep 'signal: second demo event' "$home/engine-drain.1" "the drain hid the second same-task event"
+  assert_re '^supervision-host: .*recorded no outcome for wake row\(s\) 2; this wake is yours$' "$home/host.out" \
+    "the handback must identify the unreported same-task event"
+  assert_re $'\tfailed\tturn=.*\treports=1\tmissing=2\tunacked=none\t' "$state/.supervision-host.log" \
+    "the ledger must reject one report for two acknowledged same-task events"
+  assert_no_re $'\thandled\tturn=' "$state/.supervision-host.log" \
+    "a partially reported same-task wake must never count as handled"
+  pass "host: every same-task event in a coalesced wake requires an outcome"
 }
 
 test_away_turn_without_a_report_hands_the_wake_to_main() {
@@ -658,6 +691,7 @@ test_dispatch_entry_scopes_rows_and_renders_the_away_tail
 test_attended_close_passes_straight_to_main
 test_away_wake_is_handled_on_the_engine_and_never_reaches_main
 test_away_turn_requires_an_outcome_for_every_scoped_task
+test_away_turn_requires_an_outcome_for_every_same_task_event
 test_away_turn_without_a_report_hands_the_wake_to_main
 test_return_during_an_engine_turn_hands_its_outcomes_to_main
 test_report_without_acknowledgement_hands_the_wake_to_main

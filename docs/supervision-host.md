@@ -25,7 +25,7 @@ Attended supervision on the host, other primary harnesses, `/quiet` on the host,
 - Row eligibility: `bin/fm-branch-dispatch.mjs` is the command entry to `.pi/extensions/lib/fm-branch-dispatch.ts`, so the host and the Pi extension compute branch-claimable rows and their task scope from one owner; it also renders the wake message with the same away-posture tail.
 - The grant and the drain: `bin/fm-wake-grant.sh` publishes the branch's rows bound to the host's own process, and [watcher-continuity.md](watcher-continuity.md#per-actor-acknowledgement) owns the per-actor drain and acknowledgement the engine runs.
 - The prompt: `bin/fm-branch-prompt.sh` emits the same byte-stable prompt the Pi branch runs; each wake names its host's report surface.
-- The report surface: `bin/fm-branch-report.sh` is the command twin of the Pi branch's `fm_branch_report` tool, with the same task scoping, and it appends to the outcome store (`bin/fm-branch-outcome.sh`) plus a per-turn receipt the host requires.
+- The report surface: `bin/fm-branch-report.sh` is the command twin of the Pi branch's `fm_branch_report` tool, with the same task scoping, and it appends to the outcome store (`bin/fm-branch-outcome.sh`) plus a per-turn, wake-row-bound receipt the host requires.
 - Leases and authority: `bin/fm-lease-lib.sh` owns the per-task leases, the main-owned role partition, and the away relocation; the host's engine runs with `FM_SUPERVISION_ACTOR=branch`, the session-lock holder as `FM_LEASE_HOLDER_PID`, and the primary's harness pin, so every guarded script treats it exactly as it treats the Pi branch.
 - The main side: [supervision-protocols/supervision-host.md](supervision-protocols/supervision-host.md) is what main reads at session start on an opted-in Claude home.
 
@@ -34,7 +34,7 @@ Attended supervision on the host, other primary harnesses, `/quiet` on the host,
 On each actionable close under the away record, the host first starts and verifies the successor watcher cycle and confirms the handling handoff, so the fleet stays supervised while the engine works.
 It then computes the branch-claimable rows, publishes the grant, and runs one bounded engine turn with the branch prompt and the wake message carrying the record's read-back.
 The engine drains, handles, reports through `bin/fm-branch-report.sh`, and acknowledges, exactly as the Pi branch does.
-The host counts the wake handled only when the turn exited cleanly, recorded at least one report, and left none of its granted rows in the wake queue; it releases the branch's leases and grant either way and parks on the successor only for a handled wake.
+The host counts the wake handled only when the turn exited cleanly, recorded one report for every granted wake row, and left none of those rows in the wake queue; it releases the branch's leases and grant either way and parks on the successor only for a handled wake.
 A handled wake never reaches main, whether its outcome was routine or captain: captain outcomes wait in the outcome store, and the return brief (`bin/fm-afk-return.sh`) presents them.
 The one exception is a captain who returns while a turn is still running: the return brief was rendered before that turn's outcomes existed, so the host hands the close to main with those outcomes for main to relay, whether or not the turn handled its wake.
 
@@ -42,7 +42,7 @@ The one exception is a captain who returns while a turn is still running: the re
 
 Every path that cannot finish an away wake on the engine hands that wake to main, with one `supervision-host: <why>` line after the close.
 Before handing it back, the host stops its successor cycle, so main's next turn end starts from the same state as without the host and the wake stays durable in the queue.
-That covers an unverified successor, a refused handoff, an unreadable queue, rows main already claimed, a missing engine or node, a turn that timed out or failed, a turn that recorded no report, and a turn that reported but left any of its granted rows unacknowledged.
+That covers an unverified successor, a refused handoff, an unreadable queue, rows main already claimed, a missing engine or node, a turn that timed out or failed, a turn that omitted any granted row's report, and a turn that reported but left any of its granted rows unacknowledged.
 The last names those rows, which stay durable in the queue for main's drain.
 A turn that fails also starts the next wake on a fresh engine conversation.
 When the captain returned during a failed turn that recorded outcomes, the handback carries those outcomes too, for main to relay.

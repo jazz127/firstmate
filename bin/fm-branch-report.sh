@@ -15,7 +15,7 @@
 # the host's turn record; this script only compares against it.
 #
 # Usage:
-#   fm-branch-report.sh --task <id|fleet> --verdict routine|captain \
+#   fm-branch-report.sh --row <wake-sequence> --task <id|fleet> --verdict routine|captain \
 #       --summary <text> [--silent true|false] [--wake <text>]
 #
 # The verdict criteria are owned by bin/fm-branch-prompt.sh ("Verdict: routine
@@ -47,9 +47,10 @@ refuse() {
   exit 3
 }
 
-TASK='' VERDICT='' SUMMARY='' SILENT=false WAKE='' WAKE_SET=0
+ROW='' TASK='' VERDICT='' SUMMARY='' SILENT=false WAKE='' WAKE_SET=0
 while [ "$#" -gt 0 ]; do
   case "$1" in
+    --row) ROW=${2:-}; shift 2 || usage ;;
     --task) TASK=${2:-}; shift 2 || usage ;;
     --verdict) VERDICT=${2:-}; shift 2 || usage ;;
     --summary) SUMMARY=${2:-}; shift 2 || usage ;;
@@ -64,10 +65,11 @@ TASK=$(printf '%s' "$TASK" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
 SUMMARY=$(printf '%s' "$SUMMARY" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
 case "$VERDICT" in routine|captain) ;; *) VERDICT= ;; esac
 case "$SILENT" in true|false) ;; *) usage ;; esac
-if [ -z "$TASK" ] || [ -z "$SUMMARY" ] || [ -z "$VERDICT" ]; then
-  echo "invalid report: --task, --verdict (routine|captain), and --summary are required" >&2
+if [ -z "$TASK" ] || [ -z "$SUMMARY" ] || [ -z "$VERDICT" ] || [ -z "$ROW" ]; then
+  echo "invalid report: --row, --task, --verdict (routine|captain), and --summary are required" >&2
   exit 2
 fi
+case "$ROW" in *[!0-9]*) echo "invalid report: --row must be a wake sequence" >&2; exit 2 ;; esac
 if [ "$SILENT" = true ] && [ "$VERDICT" != routine ]; then
   echo "invalid report: --silent true is only for a routine outcome" >&2
   exit 2
@@ -89,14 +91,20 @@ turn_field() {  # <name>
 [ "$(turn_field turn)" = "$TURN" ] \
   || refuse "the wake this shell was handling is over; report only while handling a wake"
 
+TURN_ROWS=$(turn_field rows)
+case " $TURN_ROWS " in
+  *" $ROW "*) ;;
+  *) refuse "wake row $ROW is not part of the current turn (rows ${TURN_ROWS:-none})" ;;
+esac
+
+ROW_TASK=$(printf '%s\n' "$(turn_field row_tasks)" | awk -v row="$ROW" '
+  { for (i = 1; i <= NF; i++) if ($i ~ ("^" row "=")) { sub(/^[^=]*=/, "", $i); print $i; exit } }
+')
+[ -n "$ROW_TASK" ] || refuse "wake row $ROW has no task binding in the current turn"
+
 if [ "$(turn_field unscoped)" != 1 ]; then
-  TASKS=$(turn_field tasks)
-  case " $TASKS " in
-    *" $TASK "*) ;;
-    *)
-      refuse "the wake being handled (row $(turn_field rows)) names ${TASKS:-no task}, not $TASK; report only that task, never fleet or a task from memory"
-      ;;
-  esac
+  [ "$TASK" = "$ROW_TASK" ] \
+    || refuse "wake row $ROW names $ROW_TASK, not $TASK; report only that event's task, never fleet or a task from memory"
 fi
 
 [ "$WAKE_SET" -eq 1 ] || WAKE=$(turn_field wake)
@@ -107,7 +115,7 @@ if ! SEQ=$("$SCRIPT_DIR/fm-branch-outcome.sh" "$@"); then
   echo "outcome store append failed (nothing recorded)" >&2
   exit 1
 fi
-printf '%s\t%s\t%s\t%s\n' "$TURN" "$SEQ" "$VERDICT" "$TASK" >> "$RECEIPTS" || {
+printf '%s\t%s\t%s\t%s\t%s\n' "$TURN" "$SEQ" "$VERDICT" "$TASK" "$ROW" >> "$RECEIPTS" || {
   echo "recorded seq $SEQ, but the host receipt could not be written; the host will hand this wake to MAIN" >&2
   exit 1
 }

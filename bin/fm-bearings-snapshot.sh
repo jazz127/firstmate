@@ -294,7 +294,23 @@ EOF
     # and an E2BIG there would drop the repo's PR rows into the warning count.
     tasks_file=$(mktemp "${TMPDIR:-/tmp}/fm-bearings-tasks.XXXXXX") \
       || { echo "fm-bearings-snapshot: cannot create a temporary tasks file" >&2; exit 1; }
+    task_repos_file=$(mktemp "${TMPDIR:-/tmp}/fm-bearings-task-repos.XXXXXX") \
+      || { rm -f "$tasks_file"; echo "fm-bearings-snapshot: cannot create a temporary task-repository file" >&2; exit 1; }
     printf '%s' "$SNAP" | jq '.tasks // []' > "$tasks_file"
+    while IFS= read -r task; do
+      task_id=$(printf '%s' "$task" | jq -r '.id')
+      task_repo=$(repo_slug "$(printf '%s' "$task" | jq -r '.pr.url // empty')")
+      if [ -z "$task_repo" ]; then
+        task_worktree=$(printf '%s' "$task" | jq -r '.paths.worktree.path // empty')
+        if [ -n "$task_worktree" ] && [ -d "$task_worktree" ]; then
+          task_origin=$(git -C "$task_worktree" remote get-url origin 2>/dev/null) || task_origin=''
+          task_repo=$(repo_slug "$task_origin")
+        fi
+      fi
+      [ -z "$task_repo" ] || jq -n --arg id "$task_id" --arg repo "$task_repo" '{id:$id,repo:$repo}' >> "$task_repos_file"
+    done <<EOF
+$(printf '%s' "$SNAP" | jq -c '.tasks[] | select(.kind != "secondmate")')
+EOF
     for repo in $repos; do
       if [ "$ALL_PR_REPOS" != 1 ] && [ "$nrepos" -ge "$FM_BEARINGS_PR_REPOS" ]; then break; fi
       nrepos=$((nrepos + 1))
@@ -302,14 +318,16 @@ EOF
         --json number,title,url,headRefName,reviewDecision,mergeable,statusCheckRollup 2>/dev/null) \
         || { nwarn=$((nwarn + 1)); continue; }
       [ -n "$out" ] || out='[]'
-      repo_result=$(printf '%s' "$out" | jq --arg repo "$repo" --argjson limit "$FM_BEARINGS_PR_LIMIT" --slurpfile tasks "$tasks_file" '
+      repo_result=$(printf '%s' "$out" | jq --arg repo "$repo" --argjson limit "$FM_BEARINGS_PR_LIMIT" --slurpfile tasks "$tasks_file" --slurpfile task_repos "$task_repos_file" '
         ($tasks[0] // []) as $all_tasks
-        | def github_repo($url):
-            try ($url | capture("github\\.com[:/](?<repo>[^/]+/[^/]+)").repo | sub("\\.git$"; "")) catch null;
+        | def task_repo($task):
+            [ $task_repos[] | select(.id == $task.id) | .repo ]
+            | if length == 1 then .[0] else null end;
           def task_for_branch($ref):
             [ $all_tasks[]
+              | . as $task
               | select((.branch // ("fm/" + .id)) == $ref)
-              | select(github_repo(.pr.url // "") == $repo)
+              | select(task_repo($task) == $repo)
               | .id
             ] as $matches
             | if ($matches | length) == 1 then $matches[0] else "-" end;
@@ -334,7 +352,7 @@ EOF
       npr=$((npr + cnt))
       rows=$(jq -n --argjson a "$rows" --argjson b "$repo_rows" '$a + $b')
     done
-    rm -f "$tasks_file"
+    rm -f "$tasks_file" "$task_repos_file"
     PR_REPOS_SHOWN=$nrepos
     PR_ROWS_CAPPED=$ncapped
     PR_ROWS_MIN_TOTAL=$((npr + ncapped))

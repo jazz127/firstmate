@@ -29,6 +29,20 @@ That branch gives the feature a stable name, keeps it findable, and makes it str
 Task branches are working branches and may be deleted once their feature is captured on its durable branch.
 A contributed house feature is a house feature the captain chose to submit and that has landed in upstream `main`.
 
+## House board
+
+Run `bin/fm-house-board.sh build` from the Firstmate home to regenerate the read-only house board in one command.
+Set `FM_HOME` when the operating home differs from the code checkout, for example `FM_HOME=/Users/jarad/firstmate bin/fm-house-board.sh build`.
+The command reads `data/house-line.md` in that home and current GitHub facts through `gh-axi`, writes `.lavish/house-board.json` and `.lavish/house-board.html`, and opens the page with Lavish.
+It does not label, push, comment, submit, or register an answer source.
+The page filters immediately by project, label, state, landing or offering posture, historical status, register mismatch, age, and name or description text; it sorts by project, age, or state.
+The counts update with the visible features.
+Each project card compares the current fork `house` tip with upstream `main`, reports the ahead and behind counts, and flags a fork `main` tip that differs from upstream.
+Each feature row shows its durable branch, commits, current house membership, label, pull request states, and age.
+House membership comes from live commit ancestry or a fork pull request merge commit still reachable from today's `house` tip, never from the register's merged heading alone.
+Rows marked `register only` or `fork only` expose a disagreement between the two sources for reconciliation.
+The board is a snapshot until the next build; filters do not make network requests.
+
 ## Contributing a house feature upstream
 
 Keep the feature branch current by merging upstream `main` into it; never rebase it.

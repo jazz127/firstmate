@@ -438,6 +438,7 @@ When the captain's intent refers to a report, decision, or PR ("do items 1, 2, 3
 This replaces the no-mistakes skill's advice to enrich \`--intent\` with decisions and tradeoffs; that advice does not apply to Firstmate-dispatched work.
 Any claim in \`--intent\` of live, verified, external, independently confirmed, or real-account evidence must name the artifact read, the exact command that produced it, and when it was captured; publication refuses such a claim if any of those are missing or the artifact cannot be read.
 Keep each cited artifact at a path the supervising home can open, inside this worker's worktree or its task temp directory.
+This boundary proves that the claim is checkable, not that it is true; Firstmate must read the artifact before relaying its evidence label.
 Evidence-shaped claims are the only prose checked here: a vocabulary word must occur with a result, measurement, scenario, validation, test, account, confirmation, or evidence term. Ordinary prose that merely mentions one vocabulary word is not blocked. For a checked claim, add one line each for \`evidence-artifact: /absolute/path\`, \`evidence-command: exact command\`, and \`evidence-captured: timestamp\`.
 Do not hand-edit, commit, or fix findings yourself while a run is active - the pipeline applies every fix.
 

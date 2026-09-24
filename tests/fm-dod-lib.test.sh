@@ -37,7 +37,7 @@ test_evidence_claim_requires_provenance() {
   root="$TMP_ROOT/evidence-claim"
   artifact="$root/worktree/evidence.txt"
   mkdir -p "$root/home" "$root/worktree" "$root/tmp"
-  printf '%s\n' captured > "$artifact"
+  printf '%s\n' synthetic/offline > "$artifact"
   intent='2 of 3 scenarios driven live'
   set +e
   out=$(fm_dod_validate_intent_evidence "$intent" "$root/worktree" "$root/tmp" 2>&1)
@@ -68,7 +68,7 @@ test_evidence_claim_accepts_readable_provenance() {
   root="$TMP_ROOT/evidence-claim-valid"
   artifact="$root/worktree/evidence.txt"
   mkdir -p "$root/home" "$root/worktree" "$root/tmp"
-  printf '%s\n' captured > "$artifact"
+  printf '%s\n' synthetic/offline > "$artifact"
   intent=$(cat <<EOF
 2 of 3 scenarios driven live
 evidence-artifact: $artifact
@@ -86,7 +86,7 @@ EOF
   rc=$?
   [ "$rc" -ne 0 ] || fail "publication accepted a missing evidence artifact"
   assert_contains "$out" "missing or unreadable" "missing artifact publication refusal was unclear"
-  printf '%s\n' captured > "$artifact"
+  printf '%s\n' synthetic/offline > "$artifact"
   fm_dod_validate_published_intent "$intent" "$root/worktree" "$root/tmp" \
     || fail "publication refused a readable evidence artifact"
   mkdir -p "$root/outside"

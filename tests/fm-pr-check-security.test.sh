@@ -228,9 +228,10 @@ if [ -n "${FM_TEST_GERRIT_RAW:-}" ]; then
   exit 0
 fi
 change=${FM_TEST_GERRIT_CHANGE:-${2:-0}}
-printf '{"ok":true,"op":"show","count":1,"missing":[],"changes":[{"change":%s,"subject":%s,"project":"p","status":"%s","wip":false,"submit":"%s","submittable":%s,"blocked_on":"%s","patch_set":1,"revision":"%s","url":"%s"}]}\n' \
+printf '{"ok":true,"op":"show","count":1,"missing":[],"changes":[{"change":%s,"subject":%s,"commit_message":%s,"project":"p","status":"%s","wip":false,"submit":"%s","submittable":%s,"blocked_on":"%s","patch_set":1,"revision":"%s","url":"%s"}]}\n' \
   "$change" \
   "${FM_TEST_GERRIT_SUBJECT:-\"fixture change\"}" \
+  "${FM_TEST_GERRIT_COMMIT_MESSAGE:-\"fixture commit message\"}" \
   "${FM_TEST_GERRIT_STATUS:-NEW}" \
   "${FM_TEST_GERRIT_SUBMIT:-NOT_READY}" \
   "${FM_TEST_GERRIT_SUBMITTABLE:-false}" \
@@ -1580,6 +1581,12 @@ group/apps/console
   out=$(FM_TEST_GERRIT_STATUS=MERGED \
     FM_TEST_GERRIT_URL=https://alias.example/c/group/apps/console/+/4201 run_poll "$dir")
   [ "$out" = merged ] || fail "Gerrit poll stayed silent for a merged change behind an alias host"
+
+  out=$(PATH="$dir/fakebin:$BASE_PATH" \
+    FM_TEST_GERRIT_SUBJECT='"subject must not be used as the body"' \
+    FM_TEST_GERRIT_COMMIT_MESSAGE='"commit message body"' \
+    fm_pr_gerrit_read_description gerrit.example 4201)
+  [ "$out" = 'commit message body' ] || fail "Gerrit description reader did not use commit_message"
 
   # A free-text subject carrying the merged spelling and the field separators
   # cannot forge a status, because the status is read from the structured

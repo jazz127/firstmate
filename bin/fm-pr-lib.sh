@@ -1084,7 +1084,8 @@ fm_pr_gerrit_read_description() {  # <host> <number>
   local record=$1 number=$2
   record=$(fm_pr_gerrit_read_change "$record" "$number") || return 1
   printf '%s' "$record" | jq -r '
-    if (.description | type) == "string" then .description
+    if (.commit_message | type) == "string" then .commit_message
+    elif (.description | type) == "string" then .description
     elif (.message | type) == "string" then .message
     else error("no change description")
     end' 2>/dev/null

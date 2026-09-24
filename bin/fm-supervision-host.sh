@@ -604,9 +604,21 @@ handle_away() {  # <reason-lines>
   "$SCRIPT_DIR/fm-wake-grant.sh" release "$GEN" >/dev/null 2>&1 || true
   rm -f "$TURN_FILE"
   receipts=$(awk -F '\t' -v turn="$turn" '$1 == turn { n++ } END { print n + 0 }' "$RECEIPTS" 2>/dev/null)
+  missing_reports=$(awk -F '\t' -v turn="$turn" -v tasks="$tasks" '
+    BEGIN { count = split(tasks, expected, " ") }
+    $1 == turn { reported[$4] = 1 }
+    END {
+      for (i = 1; i <= count; i++) {
+        if (expected[i] != "" && !reported[expected[i]]) {
+          printf "%s%s", separator, expected[i]
+          separator = " "
+        }
+      }
+    }
+  ' "$RECEIPTS" 2>/dev/null)
   usage=$(fm_supervision_engine_result "$FM_SUPERVISION_ENGINE" "$result" "${ENGINE_COST:-0}" 2>/dev/null || true)
   [ "$result" = /dev/null ] || rm -f "$result"
-  if [ "$rc" -eq 0 ] && [ "${receipts:-0}" -gt 0 ] && [ -z "$unacked" ] \
+  if [ "$rc" -eq 0 ] && [ "${receipts:-0}" -gt 0 ] && [ -z "$missing_reports" ] && [ -z "$unacked" ] \
     && [ -n "$usage" ] && [ "${usage#error=0}" != "$usage" ]; then
     write_engine_record $((ENGINE_TURNS + 1)) "$(printf '%s\n' "$usage" | sed -n 's/.* conversation_cost=\([^ ]*\).*/\1/p')" \
       || rm -f "$ENGINE_RECORD"
@@ -617,7 +629,7 @@ handle_away() {  # <reason-lines>
   # A turn that did not handle its wake starts the next one on a new
   # conversation, so whatever went wrong in this one is not carried forward.
   rm -f "$ENGINE_RECORD"
-  log_line "failed	turn=$turn	rc=$rc	reports=${receipts:-0}	unacked=${unacked:-none}	${usage:-no-result}	$(head -c 300 "$errors" 2>/dev/null | tr '\t\n' '  ')	$first"
+  log_line "failed	turn=$turn	rc=$rc	reports=${receipts:-0}	missing=${missing_reports:-none}	unacked=${unacked:-none}	${usage:-no-result}	$(head -c 300 "$errors" 2>/dev/null | tr '\t\n' '  ')	$first"
   [ "$errors" = /dev/null ] || rm -f "$errors"
   if fm_timed_out "$rc"; then
     HANDLE_WHY="the engine turn hit its ${TURN_TIMEOUT}s bound"
@@ -629,6 +641,8 @@ handle_away() {  # <reason-lines>
     HANDLE_WHY="the engine turn ended with an error or an incomplete result"
   elif [ "${receipts:-0}" -eq 0 ]; then
     HANDLE_WHY="the engine turn recorded no outcome for its wake"
+  elif [ -n "$missing_reports" ]; then
+    HANDLE_WHY="the engine turn recorded no outcome for task(s) $missing_reports"
   else
     HANDLE_WHY="the engine turn left its granted wake rows $unacked unacknowledged"
   fi

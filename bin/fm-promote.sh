@@ -22,10 +22,8 @@
 # contract is decided: --mode, --yolo, and the ship branch resolved from
 # --branch-prefix are written into the meta alongside the kind= flip. Firstmate resolves all three at promotion time, having just
 # read the scout's report (AGENTS.md section 7); data/projects.md holds the
-# captain's standing posture as context, and this script never looks that posture
-# up. The registry IS read for one thing only: the project's forge binding, which
-# is a project fact rather than a per-task decision, so promotion takes it from
-# there instead of asking firstmate to remember it.
+# captain's standing posture as context. The registry is read for the project's
+# forge binding and to announce a ship-branch naming deviation.
 # no-mistakes-prod-only is a registry policy rather than a task mode and is refused.
 # There is no --forge flag here: the binding comes from the registry, and for a
 # task record naming no project it is none. bin/fm-brief.sh takes --forge instead
@@ -192,6 +190,10 @@ if [ -n "$PROMOTE_PROJECT" ]; then
   fi
   FORGE=${PROMOTE_STANDING_FORGE:-none}
   refuse_impossible_forge_posture || exit 1
+  PROMOTE_STANDING_BRANCH=$("$FM_ROOT/bin/fm-project-mode.sh" --branch-prefix "$PROMOTE_PROJECT_NAME" 2>/dev/null) || PROMOTE_STANDING_BRANCH=
+  if [ "$BRANCH" != "$PROMOTE_STANDING_BRANCH$ID" ]; then
+    echo "notice: $ID ships branch=$BRANCH while $PROMOTE_PROJECT_NAME registers the ship-branch prefix '$PROMOTE_STANDING_BRANCH' (branch $PROMOTE_STANDING_BRANCH$ID) - this naming deviates from the captain's standing project preference; proceed only on a current explicit captain instruction or an intake judgment you can state" >&2
+  fi
 fi
 # An unbound project keeps the exact wording it always had.
 PROMOTE_FORGE_WORDS=

@@ -424,6 +424,30 @@ test_promotion_persists_the_selected_ship_branch() {
   pass "fm-promote: a selected branch prefix reaches both worker instructions and durable task state"
 }
 
+test_promotion_notices_a_ship_branch_against_the_registry_prefix() {
+  local home id meta out
+  home="$TMP_ROOT/promote-prefix-deviation/home"
+  id=promote-prefix-e2
+  meta="$home/state/$id.meta"
+  mkdir -p "$home/state" "$home/data" "$home/projects/proj"
+  printf '%s\n' '- proj [local-only branch=fix/] - fixture (added 2026-01-01)' > "$home/data/projects.md"
+  printf 'window=fm-%s\nkind=scout\nworktree=/tmp/wt\nproject=%s\n' "$id" "$home/projects/proj" > "$meta"
+  FM_HOME="$home" "$BRIEF" "$id" proj --scout >/dev/null 2>&1 \
+    || fail "promotion deviation scout brief should scaffold"
+  fill_brief_subsections "$home/data/$id/brief.md" \
+    "Promote the naming-deviation fixture." "Keep the selected task branch."
+  out=$(FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" "$PROMOTE" "$id" \
+    --mode local-only --yolo off 2>&1) \
+    || fail "promotion with the legacy branch should succeed with a notice"
+  assert_contains "$out" "ships branch=fm/$id while proj registers the ship-branch prefix 'fix/'" \
+    "promotion did not announce its branch-prefix deviation"
+  assert_contains "$out" "naming deviates from the captain's standing project preference" \
+    "promotion did not explain the naming deviation"
+  assert_not_contains "$out" "will read as firstmate-authored" \
+    "promotion made an unsupported authorship claim"
+  pass "fm-promote: a ship branch that deviates from the registered prefix is announced"
+}
+
 # The promotion instructions embed the branch in the `git checkout -b` command
 # the worker executes, so a ref-format-valid metacharacter prefix must stay
 # literal there, exactly as it does in a generated ship brief.
@@ -1333,6 +1357,17 @@ EOF
     "the refusal did not name both sides of the drift"
   assert_absent "$home/state/branch-agree-a1.meta" "the refused spawn still recorded a task"
 
+  FM_HOME="$home" "$BRIEF" branch-agree-shadow proj --mode no-mistakes --branch-prefix contrib/ >/dev/null \
+    || fail "a contrib/-prefixed brief should scaffold"
+  fill_brief_subsections "$home/data/branch-agree-shadow/brief.md" \
+    $'Preserve this literal example:\nShip branch: fix/branch-agree-shadow' "Ship the selected contrib branch."
+  out=$(run_spawn "$home" "$fakebin" branch-agree-shadow "$proj" claude --mode no-mistakes --yolo off --branch-prefix fix/)
+  status=$?
+  [ "$status" -ne 0 ] || fail "a Captain's-intent branch marker shadowed the generated delivery contract"
+  assert_contains "$out" "the brief says branch=contrib/branch-agree-shadow but this spawn selected branch=fix/branch-agree-shadow" \
+    "the spawn did not read the branch from the generated delivery contract"
+  assert_absent "$home/state/branch-agree-shadow.meta" "the shadowed branch mismatch still recorded a task"
+
   write_brief "$home" branch-agree-a2 no-mistakes
   out=$(run_spawn "$home" "$fakebin" branch-agree-a2 "$proj" claude --mode no-mistakes --yolo off --branch-prefix contrib/)
   status=$?
@@ -1376,12 +1411,10 @@ EOF
   pass "fm-spawn: the brief must carry the spawn's selected ship branch, and the selection is validated before anything is created"
 }
 
-# The registered ship-branch prefix exists so a third-party project's branches and
-# PRs do not read as firstmate-authored, but a spawn that deviates from it breaks
-# no contract: the brief-vs-spawn agreement above already guarantees the worker's
-# instructions match the branch this spawn selected. So the deviation is announced
-# and the spawn proceeds, while matching the registry (or its fm/ default) stays
-# quiet.
+# A spawn that deviates from the registered ship-branch prefix breaks no contract:
+# the brief-vs-spawn agreement above already guarantees the worker's instructions
+# match the branch this spawn selected. The deviation is announced and the spawn
+# proceeds, while matching the registry (or its fm/ default) stays quiet.
 test_spawn_notices_a_ship_branch_against_the_registry_prefix() {
   local rec home proj fakebin out
   rec=$(make_home prefix-deviation "- proj [no-mistakes branch=fix/] - fixture (added 2026-01-01)")
@@ -1393,8 +1426,10 @@ EOF
   out=$(run_spawn "$home" "$fakebin" prefix-dev-a1 "$proj" claude --mode no-mistakes --yolo off)
   assert_contains "$out" "ships branch=fm/prefix-dev-a1 while proj registers the ship-branch prefix 'fix/'" \
     "no deviation notice for shipping the legacy prefix past a registered override"
-  assert_contains "$out" "will read as firstmate-authored" \
-    "the deviation notice did not name the cost of the drift"
+  assert_contains "$out" "naming deviates from the captain's standing project preference" \
+    "the deviation notice did not explain the naming drift"
+  assert_not_contains "$out" "will read as firstmate-authored" \
+    "the deviation notice made an unsupported authorship claim"
 
   FM_HOME="$home" "$BRIEF" prefix-dev-a2 proj --mode no-mistakes --branch-prefix fix/ >/dev/null \
     || fail "a fix/-prefixed brief should scaffold"
@@ -1402,6 +1437,15 @@ EOF
   out=$(run_spawn "$home" "$fakebin" prefix-dev-a2 "$proj" claude --mode no-mistakes --yolo off --branch-prefix fix/)
   assert_not_contains "$out" "registers the ship-branch prefix" \
     "a spawn matching the registered prefix was announced as a deviation"
+
+  FM_HOME="$home" "$BRIEF" prefix-dev-a3 proj --mode no-mistakes --branch-prefix contrib/ >/dev/null \
+    || fail "a contrib/-prefixed brief should scaffold"
+  fill_brief_subsections "$home/data/prefix-dev-a3/brief.md" "Run the review loop." "Ship it."
+  out=$(run_spawn "$home" "$fakebin" prefix-dev-a3 "$proj" claude --mode no-mistakes --yolo off --branch-prefix contrib/)
+  assert_contains "$out" "ships branch=contrib/prefix-dev-a3 while proj registers the ship-branch prefix 'fix/'" \
+    "no deviation notice for selecting one non-fm prefix over another"
+  assert_not_contains "$out" "will read as firstmate-authored" \
+    "a non-fm branch was incorrectly described as firstmate-authored"
 
   pass "fm-spawn: a ship branch that deviates from the registered prefix is announced, never blocked"
 }
@@ -1598,6 +1642,7 @@ test_promote_requires_and_records_the_delivery_contract
 test_promote_refuses_a_symlinked_task_record
 test_promotion_delivers_the_real_definition_of_done
 test_promotion_persists_the_selected_ship_branch
+test_promotion_notices_a_ship_branch_against_the_registry_prefix
 test_promotion_branch_command_is_shell_safe
 test_local_merge_uses_the_recorded_ship_branch
 test_project_mode_maps_the_conditional_policy

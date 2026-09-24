@@ -2931,10 +2931,10 @@ if [ "$KIND" = ship ]; then
   fi
   [ -n "$STANDING_FORGE" ] || STANDING_FORGE=none
   STANDING_MODE=$("$FM_ROOT/bin/fm-project-mode.sh" --raw "$PROJ_NAME" 2>/dev/null | cut -d' ' -f1) || STANDING_MODE=
-  BRIEF_MODE=$(sed -n 's/^Delivery contract: mode=\([^ ]*\).*$/\1/p' "$BRIEF" | head -n 1)
-  BRIEF_FORGE=$(sed -n 's/^Delivery contract: mode=[^ ]*.*[[:space:]]forge=\([^ ]*\).*$/\1/p' "$BRIEF" | head -n 1)
+  BRIEF_MODE=$(fm_brief_delivery_field "$BRIEF" mode)
+  BRIEF_FORGE=$(fm_brief_delivery_field "$BRIEF" forge)
   [ -n "$BRIEF_FORGE" ] || BRIEF_FORGE=none
-  BRIEF_BRANCH=$(sed -n 's/^Ship branch: //p' "$BRIEF" | head -n 1)
+  BRIEF_BRANCH=$(fm_brief_delivery_field "$BRIEF" branch)
   if [ -n "$BRIEF_BRANCH" ]; then
     [ "$BRIEF_BRANCH" = "$BRANCH" ] || {
       echo "error: branch mismatch for $ID: the brief says branch=$BRIEF_BRANCH but this spawn selected branch=$BRANCH" >&2
@@ -2989,14 +2989,12 @@ if [ "$KIND" = ship ]; then
     [ "$(delivery_rigor_rank "$MODE")" -lt "$(delivery_rigor_rank "$STANDING_MODE")" ]; then
     echo "notice: $ID ships mode=$MODE while the standing posture for $PROJ_NAME is $STANDING_MODE - less rigor than the captain's standing posture; proceed only on a current explicit captain instruction or an intake judgment you can state" >&2
   fi
-  # The registered ship-branch prefix (bin/fm-project-mode.sh) is the captain's
-  # answer to "should this project's branches read as firstmate-authored", so a
-  # spawn that ships the legacy fm/ prefix past a registered override is
-  # announced, not refused: the brief-vs-spawn agreement above already
-  # guarantees the worker's instructions match the branch this spawn selected.
+  # A spawn that differs from the registered ship-branch prefix is announced,
+  # not refused: the brief-vs-spawn agreement above already guarantees the
+  # worker's instructions match the branch this spawn selected.
   STANDING_BRANCH=$("$FM_ROOT/bin/fm-project-mode.sh" --branch-prefix "$PROJ_NAME" 2>/dev/null) || STANDING_BRANCH=
   if [ "$BRANCH" != "$STANDING_BRANCH$ID" ]; then
-    echo "notice: $ID ships branch=$BRANCH while $PROJ_NAME registers the ship-branch prefix '$STANDING_BRANCH' (branch $STANDING_BRANCH$ID) - the task's branch and PR will read as firstmate-authored; proceed only on a current explicit captain instruction or an intake judgment you can state" >&2
+    echo "notice: $ID ships branch=$BRANCH while $PROJ_NAME registers the ship-branch prefix '$STANDING_BRANCH' (branch $STANDING_BRANCH$ID) - this naming deviates from the captain's standing project preference; proceed only on a current explicit captain instruction or an intake judgment you can state" >&2
   fi
 fi
 

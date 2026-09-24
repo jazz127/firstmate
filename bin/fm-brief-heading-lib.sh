@@ -93,3 +93,45 @@ fm_brief_task_heading_present() {  # <file> <heading>
   printf '%s\n' "$task" | fm_brief_heading_parse - "$2" present >/dev/null
 }
 
+fm_brief_delivery_field() {  # <file> <mode|forge|branch>
+  local file=$1 field=$2
+  [ -f "$file" ] || return 0
+  awk -v field="$field" '
+    $0 == "# Definition of done" {
+      section = 1
+      next
+    }
+    section == 1 && /^Delivery contract: mode=[^ ]+/ {
+      line = $0
+      mode = line
+      sub(/^Delivery contract: mode=/, "", mode)
+      sub(/ .*/, "", mode)
+      forge = ""
+      if (line ~ /(^|[[:space:]])forge=[^ ]+/) {
+        forge = line
+        sub(/^.*[[:space:]]forge=/, "", forge)
+        sub(/ .*/, "", forge)
+      }
+      branch = ""
+      section = 2
+      next
+    }
+    section == 1 {
+      section = 0
+      next
+    }
+    section == 2 {
+      if (/^Ship branch: /) {
+        branch = $0
+        sub(/^Ship branch: /, "", branch)
+      }
+      section = 0
+    }
+    END {
+      if (field == "mode") print mode
+      else if (field == "forge") print forge
+      else if (field == "branch") print branch
+      else exit 2
+    }
+  ' "$file"
+}

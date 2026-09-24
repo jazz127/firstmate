@@ -332,6 +332,27 @@ test_away_wake_is_handled_on_the_engine_and_never_reaches_main() {
   pass "host: an away wake is handled on the engine through the branch contract and never reaches main"
 }
 
+test_away_turn_requires_an_outcome_for_every_scoped_task() {
+  local home state
+  home=$(make_home away-partial-report away)
+  state="$home/state"
+  printf 'project=beta\nwindow=fm-beta\nharness=claude\n' > "$state/beta.meta"
+  append_wake "$state" signal demo.status "signal: $state/demo.status"
+  append_wake "$state" signal beta.status "signal: $state/beta.status"
+  start_host "$home"
+  wait_until 250 host_exited "$home" || fail "partial report: the host accepted a turn that reported only one of two tasks"
+  expect_code 0 "$(cat "$home/host.rc")" "a partially reported wake must return to main"
+  assert_grep '"task":"demo"' "$state/branch-outcomes.jsonl" "fixture: the engine did not report the first task"
+  assert_no_grep '"task":"beta"' "$state/branch-outcomes.jsonl" "fixture: the engine unexpectedly reported the second task"
+  assert_re '^supervision-host: .*recorded no outcome for task\(s\) beta; this wake is yours$' "$home/host.out" \
+    "the handback must identify the scoped task with no outcome"
+  assert_re $'\tfailed\tturn=.*\treports=1\tmissing=beta\tunacked=none\t' "$state/.supervision-host.log" \
+    "the ledger must reject a turn that acknowledged every row but reported only one task"
+  assert_no_re $'\thandled\tturn=' "$state/.supervision-host.log" \
+    "a partially reported multi-task wake must never count as handled"
+  pass "host: every scoped task in a coalesced wake requires an outcome"
+}
+
 test_away_turn_without_a_report_hands_the_wake_to_main() {
   local home token
   home=$(make_home away-noreport away)
@@ -636,6 +657,7 @@ test_report_surface_enforces_actor_turn_and_scope
 test_dispatch_entry_scopes_rows_and_renders_the_away_tail
 test_attended_close_passes_straight_to_main
 test_away_wake_is_handled_on_the_engine_and_never_reaches_main
+test_away_turn_requires_an_outcome_for_every_scoped_task
 test_away_turn_without_a_report_hands_the_wake_to_main
 test_return_during_an_engine_turn_hands_its_outcomes_to_main
 test_report_without_acknowledgement_hands_the_wake_to_main

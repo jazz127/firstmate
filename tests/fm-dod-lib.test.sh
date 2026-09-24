@@ -37,7 +37,7 @@ test_evidence_claim_requires_provenance() {
   root="$TMP_ROOT/evidence-claim"
   artifact="$root/worktree/evidence.txt"
   mkdir -p "$root/home" "$root/worktree" "$root/tmp"
-  printf '%s\n' synthetic/offline > "$artifact"
+  printf '%s\n' captured output > "$artifact"
   intent='2 of 3 scenarios driven live'
   set +e
   out=$(fm_dod_validate_intent_evidence "$intent" "$root/worktree" "$root/tmp" 2>&1)
@@ -55,6 +55,11 @@ test_evidence_claim_requires_provenance() {
   rc=$?
   [ "$rc" -ne 0 ] || fail "line-split evidence claim without provenance was accepted"
   assert_contains "$out" "missing evidence-command" "line-split claim refusal was unclear"
+  intent=$(printf '2 of 3\nscenarios\ndriven live\nevidence-artifact: %s\n' "$artifact")
+  out=$(fm_dod_validate_intent_evidence "$intent" "$root/worktree" "$root/tmp" 2>&1)
+  rc=$?
+  [ "$rc" -ne 0 ] || fail "three-line evidence claim without provenance was accepted"
+  assert_contains "$out" "missing evidence-command" "three-line claim refusal was unclear"
   intent=$(printf '2 of 3 scenarios driven live\nevidence-artifact: %s\nevidence-command:   \nevidence-captured:   \n' "$artifact")
   out=$(fm_dod_validate_intent_evidence "$intent" "$root/worktree" "$root/tmp" 2>&1)
   rc=$?
@@ -68,7 +73,7 @@ test_evidence_claim_accepts_readable_provenance() {
   root="$TMP_ROOT/evidence-claim-valid"
   artifact="$root/worktree/evidence.txt"
   mkdir -p "$root/home" "$root/worktree" "$root/tmp"
-  printf '%s\n' synthetic/offline > "$artifact"
+  printf '%s\n' captured output > "$artifact"
   intent=$(cat <<EOF
 2 of 3 scenarios driven live
 evidence-artifact: $artifact
@@ -149,6 +154,8 @@ EOF
     || fail "short negative result prose was refused"
   fm_dod_validate_intent_evidence 'external validation was not confirmed' "$root/worktree" "$root/tmp" \
     || fail "auxiliary negative result prose was refused"
+  fm_dod_validate_intent_evidence "external validation wasn't confirmed" "$root/worktree" "$root/tmp" \
+    || fail "contracted negative result prose was refused"
   intent='offline validation did not pass, but external validation passed'
   out=$(fm_dod_validate_intent_evidence "$intent" "$root/worktree" "$root/tmp" 2>&1)
   rc=$?
@@ -163,6 +170,11 @@ EOF
   rc=$?
   [ "$rc" -ne 0 ] || fail "real assertion after a request was erased"
   assert_contains "$out" "missing evidence-artifact" "assertion after request refusal was unclear"
+  intent='Please verify external validation passed; external validation passed'
+  out=$(fm_dod_validate_intent_evidence "$intent" "$root/worktree" "$root/tmp" 2>&1)
+  rc=$?
+  [ "$rc" -ne 0 ] || fail "affirmative assertion after a request clause was erased"
+  assert_contains "$out" "missing evidence-artifact" "assertion after request clause refusal was unclear"
   fm_dod_validate_intent_evidence '2 of 3 requested endpoints' "$root/worktree" "$root/tmp" \
     || fail "ordinary ratio prose was refused"
   for claim in \
@@ -199,6 +211,11 @@ EOF
   rc=$?
   [ "$rc" -ne 0 ] || fail "invalid evidence-captured timestamp was accepted"
   assert_contains "$out" "invalid evidence-captured timestamp" "invalid timestamp refusal was unclear"
+  intent=${intent/tomorrow/2026-99-99T99:99:99+99:99}
+  out=$(fm_dod_validate_intent_evidence "$intent" "$root/worktree" "$root/tmp" 2>&1)
+  rc=$?
+  [ "$rc" -ne 0 ] || fail "impossible evidence-captured timestamp was accepted"
+  assert_contains "$out" "invalid evidence-captured timestamp" "impossible timestamp refusal was unclear"
   intent=$(cat <<EOF
 external validation passed
 evidence-artifact: $root/worktree/evidence.txt

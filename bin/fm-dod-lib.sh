@@ -293,29 +293,35 @@ EOF
 
 fm_dod_validate_intent_evidence() {  # <intent> <worktree> <task-temp> [preflight|publish]
   local intent=$1 worktree=$2 task_temp=$3 phase=${4:-preflight}
-  local line previous_line candidate artifact command captured claim=0 normalized_artifact normalized_root resolved_artifact link_target symlink_hops
+  local line previous_line previous_previous_line candidate detector_input artifact command captured claim=0 normalized_artifact normalized_root resolved_artifact link_target symlink_hops
+  local timestamp_date timestamp_clock timestamp_year timestamp_month timestamp_day timestamp_hour timestamp_minute timestamp_second timestamp_zone timestamp_offset_hour timestamp_offset_minute days_in_month
   local artifact_count=0 command_count=0 captured_count=0
+  detector_input=$(printf '%s\n' "$intent" | tr '.!?;' '\n' | sed -E 's/,[[:space:]]+(but|however|yet)[[:space:]]+/\n/g')
   while IFS= read -r line; do
-    for candidate in "$line" "$previous_line $line"; do
+    for candidate in "$line" "$previous_line $line" "$previous_previous_line $previous_line $line"; do
       candidate=$(printf '%s\n' "$candidate" | tr '[:upper:]' '[:lower:]' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
       case "$candidate" in
         please\ *|can\ you\ *|could\ you\ *|would\ you\ *|for\ example*|example:*|e.g.*|quote:*|quoted:*|do\ not\ *|don\'t\ *|never\ *|avoid\ *|must\ not\ *|should\ not\ *|investigate\ *|run\ *|check\ *|verify\ *|validate\ *|test\ *|collect\ *|report\ *|describe\ *|document\ *|ensure\ *|add\ *|include\ *|show\ *) continue ;;
       esac
-      if printf '%s\n' "$candidate" | grep -Eiq '(^|[[:space:]])(did|does|do|was|were|is|are|has|have|had)?[[:space:]]*not[[:space:]]+'; then
-        candidate=$(printf '%s\n' "$candidate" | sed -E 's/^[^.!?,;]*((did|does|do|was|were|is|are|has|have|had)[[:space:]]+)?not[[:space:]]+[^.!?,;]*[,.!?;][[:space:]]*//')
-        printf '%s\n' "$candidate" | grep -Eiq '(^|[[:space:]])(did|does|do|was|were|is|are|has|have|had)?[[:space:]]*not[[:space:]]+' && continue
+      if printf '%s\n' "$candidate" | grep -Eiq "(^|[[:space:]])(did|does|do|was|were|is|are|has|have|had)?[[:space:]]*not[[:space:]]+|(^|[[:space:]])(didn.t|doesn.t|don.t|wasn.t|weren.t|isn.t|aren.t|hasn.t|haven.t|hadn.t|couldn.t|wouldn.t|shouldn.t|mustn.t|can.t)[[:space:]]+"; then
+        continue
       fi
       case "$candidate" in
         *\"*) continue ;;
       esac
+      if printf '%s\n' "$candidate" | grep -Eiq '((test|tests|check|checks|run|runs|probe|probes|scenario|scenarios|outcome|outcomes|result|results|measurement|measurements|account|accounts|validation|evidence|verification|confirmation)[^.!?]*(live|verified|real-account|real account|independent|independently|external|externally confirmed)[^.!?]*(was|were|is|are|shows?|reported|demonstrated|driven|completed|succeeded|successful|successfully|passed|failed|confirmed|verified))'; then
+        claim=1
+        break 2
+      fi
       if printf '%s\n' "$candidate" | grep -Eiq '([0-9]+[[:space:]]+of[[:space:]]+[0-9]+[[:space:]]*/[[:space:]]*[0-9]+[[:space:]]+of[[:space:]]+[0-9]+)|(([0-9]+[[:space:]]*(of|/)[[:space:]]*[0-9]+)[^.!?]*(live|verified|real-account|real account|independent|independently|external|externally confirmed))|((live|verified|real-account|real account|independent|independently|external|externally confirmed)[^.!?]*([0-9]+[[:space:]]*(of|/)[[:space:]]*[0-9]+))|((live|verified|real-account|real account|independent|independently|external|externally confirmed)[^.!?]*(evidence|verification|confirmation)[[:space:]]*:)|((live|verified|real-account|real account|independent|independently|external|externally confirmed)[^.!?]*(test|tests|check|checks|run|runs|probe|probes|scenario|scenarios|outcome|outcomes|result|results|measurement|measurements|account|accounts|validation|evidence|verification|confirmation)[^.!?]*(was|were|is|are|shows?|reported|demonstrated|driven|completed|succeeded|successful|successfully|passed|failed|confirmed|verified))|((test|tests|check|checks|run|runs|probe|probes|scenario|scenarios|outcome|outcomes|result|results|measurement|measurements|account|accounts|validation|evidence|verification|confirmation)[^.!?]*(live|verified|real-account|real account|independent|independently|external|externally confirmed)[^.!?]*(was|were|is|are|shows?|reported|demonstrated|driven|completed|succeeded|successful|successfully|passed|failed|confirmed|verified))|((evidence|verification|confirmation)[^.!?]*(live|verified|real-account|real account|independent|independently|external|externally confirmed)[^.!?]*(was|were|is|are|shows?|reported|demonstrated|driven|completed|succeeded|successful|successfully|passed|failed|confirmed|verified))'; then
         claim=1
         break 2
       fi
     done
+    previous_previous_line=$previous_line
     previous_line=$line
   done <<EOF
-$intent
+$detector_input
 EOF
   [ "$claim" -eq 1 ] || return 0
   while IFS= read -r line; do
@@ -349,6 +355,52 @@ EOF
     return 1
   fi
   if ! printf '%s\n' "$captured" | grep -Eq '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(Z|[+-][0-9]{2}:[0-9]{2})$'; then
+    printf '%s\n' "evidence claim refused: invalid evidence-captured timestamp: $captured" >&2
+    return 1
+  fi
+  timestamp_date=${captured%%T*}
+  timestamp_clock=${captured#*T}
+  IFS=- read -r timestamp_year timestamp_month timestamp_day <<EOF
+$timestamp_date
+EOF
+  if [[ "$timestamp_clock" == *Z ]]; then
+    timestamp_zone=Z
+    timestamp_clock=${timestamp_clock%Z}
+  else
+    timestamp_zone=${timestamp_clock: -6}
+    timestamp_clock=${timestamp_clock:0:${#timestamp_clock}-6}
+  fi
+  IFS=: read -r timestamp_hour timestamp_minute timestamp_second <<EOF
+$timestamp_clock
+EOF
+  if [ "$timestamp_zone" = Z ]; then
+    timestamp_offset_hour=0
+    timestamp_offset_minute=0
+  else
+    timestamp_offset_hour=${timestamp_zone:1:2}
+    timestamp_offset_minute=${timestamp_zone:4:2}
+  fi
+  timestamp_year=$((10#$timestamp_year))
+  timestamp_month=$((10#$timestamp_month))
+  timestamp_day=$((10#$timestamp_day))
+  timestamp_hour=$((10#$timestamp_hour))
+  timestamp_minute=$((10#$timestamp_minute))
+  timestamp_second=$((10#$timestamp_second))
+  timestamp_offset_hour=$((10#$timestamp_offset_hour))
+  timestamp_offset_minute=$((10#$timestamp_offset_minute))
+  case "$timestamp_month" in
+    1|3|5|7|8|10|12) days_in_month=31 ;;
+    4|6|9|11) days_in_month=30 ;;
+    2)
+      if { [ $((timestamp_year % 4)) -eq 0 ] && [ $((timestamp_year % 100)) -ne 0 ]; } || [ $((timestamp_year % 400)) -eq 0 ]; then
+        days_in_month=29
+      else
+        days_in_month=28
+      fi
+      ;;
+    *) days_in_month=0 ;;
+  esac
+  if [ "$days_in_month" -eq 0 ] || [ "$timestamp_day" -lt 1 ] || [ "$timestamp_day" -gt "$days_in_month" ] || [ "$timestamp_hour" -gt 23 ] || [ "$timestamp_minute" -gt 59 ] || [ "$timestamp_second" -gt 59 ] || [ "$timestamp_offset_hour" -gt 14 ] || [ "$timestamp_offset_minute" -gt 59 ] || { [ "$timestamp_offset_hour" -eq 14 ] && [ "$timestamp_offset_minute" -ne 0 ]; }; then
     printf '%s\n' "evidence claim refused: invalid evidence-captured timestamp: $captured" >&2
     return 1
   fi

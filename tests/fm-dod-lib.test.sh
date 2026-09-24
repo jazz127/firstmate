@@ -145,6 +145,11 @@ EOF
     || fail "question prose containing an evidence claim was refused"
   fm_dod_validate_intent_evidence 'external validation did not pass' "$root/worktree" "$root/tmp" \
     || fail "negative result prose was refused"
+  intent='offline validation did not pass, but external validation passed'
+  out=$(fm_dod_validate_intent_evidence "$intent" "$root/worktree" "$root/tmp" 2>&1)
+  rc=$?
+  [ "$rc" -ne 0 ] || fail "later affirmative assertion after a negation was erased"
+  assert_contains "$out" "missing evidence-artifact" "later assertion after negation refusal was unclear"
   intent=$(cat <<'EOF'
 Please verify external validation passed
 external validation passed

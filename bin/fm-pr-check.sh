@@ -136,12 +136,16 @@ if [ "$MODE" = no-mistakes ]; then
       }
       ;;
     gitlab)
-      command -v glab >/dev/null 2>&1 && command -v jq >/dev/null 2>&1 || {
-        echo "error: cannot validate the published intent because glab and jq are unavailable" >&2
+    command -v glab >/dev/null 2>&1 && command -v jq >/dev/null 2>&1 || {
+      echo "error: cannot validate the published intent because glab and jq are unavailable" >&2
+      exit 1
+    }
+      GITLAB_BODY_JSON=$(GITLAB_HOST="$HOST" glab mr view "$NUMBER" -R "https://$HOST/$PROJECT_PATH" -F json 2>/dev/null) || {
+        echo "error: cannot read the published merge-request body for evidence validation" >&2
         exit 1
       }
-      PR_BODY=$(GITLAB_HOST="$HOST" glab mr view "$NUMBER" -R "https://$HOST/$PROJECT_PATH" -F json 2>/dev/null | jq -r '.description // empty') || {
-        echo "error: cannot read the published merge-request body for evidence validation" >&2
+      PR_BODY=$(printf '%s\n' "$GITLAB_BODY_JSON" | jq -r '.description // empty') || {
+        echo "error: cannot parse the published merge-request body for evidence validation" >&2
         exit 1
       }
       ;;

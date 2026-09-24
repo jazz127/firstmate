@@ -299,13 +299,14 @@ fm_dod_validate_intent_evidence() {  # <intent> <worktree> <task-temp> [prefligh
     for candidate in "$line" "$previous_line $line"; do
       candidate=$(printf '%s\n' "$candidate" | tr '[:upper:]' '[:lower:]' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
       case "$candidate" in
-        please\ *|can\ you\ *|could\ you\ *|would\ you\ *|for\ example*|example:*|e.g.*|quote:*|quoted:*|do\ not\ *|don't\ *|never\ *|avoid\ *|must\ not\ *|should\ not\ *|investigate\ *|run\ *|check\ *|verify\ *|validate\ *|test\ *|collect\ *|report\ *|describe\ *|document\ *|ensure\ *|add\ *|include\ *|show\ *) continue ;;
+        please\ *|can\ you\ *|could\ you\ *|would\ you\ *|for\ example*|example:*|e.g.*|quote:*|quoted:*|do\ not\ *|don\'t\ *|never\ *|avoid\ *|must\ not\ *|should\ not\ *|investigate\ *|run\ *|check\ *|verify\ *|validate\ *|test\ *|collect\ *|report\ *|describe\ *|document\ *|ensure\ *|add\ *|include\ *|show\ *) continue ;;
       esac
+      if printf '%s\n' "$candidate" | grep -Eiq 'did[[:space:]]+not'; then
+        candidate=$(printf '%s\n' "$candidate" | sed -E 's/^[^.!?,]*did not[^.!?,]*[,.!?][[:space:]]*//')
+        printf '%s\n' "$candidate" | grep -Eiq 'did[[:space:]]+not' && continue
+      fi
       case "$candidate" in
-        *did\ not\ *|*did\ not\.*) continue ;;
-      esac
-      case "$candidate" in
-        *\"*|*\'*) continue ;;
+        *\"*) continue ;;
       esac
       if printf '%s\n' "$candidate" | grep -Eiq '([0-9]+[[:space:]]+of[[:space:]]+[0-9]+[[:space:]]*/[[:space:]]*[0-9]+[[:space:]]+of[[:space:]]+[0-9]+)|(([0-9]+[[:space:]]*(of|/)[[:space:]]*[0-9]+)[^.!?]*(live|verified|real-account|independent|external|externally confirmed))|((live|verified|real-account|independent|external|externally confirmed)[^.!?]*([0-9]+[[:space:]]*(of|/)[[:space:]]*[0-9]+))|((live|verified|real-account|independent|external|externally confirmed)[^.!?]*(evidence|verification|confirmation)[[:space:]]*:)|((live|verified|real-account|independent|external|externally confirmed)[^.!?]*(test|tests|scenario|scenarios|validation|evidence|verification|confirmation)[^.!?]*(was|were|is|are|shows?|reported|demonstrated|driven|completed|passed|failed|confirmed|verified))|((evidence|verification|confirmation)[^.!?]*(live|verified|real-account|independent|external|externally confirmed)[^.!?]*(was|were|is|are|shows?|reported|demonstrated|driven|completed|passed|failed|confirmed|verified))'; then
         claim=1

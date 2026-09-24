@@ -68,7 +68,7 @@ test_evidence_claim_requires_provenance() {
   pass "evidence claims require artifact provenance"
 }
 
-test_evidence_claim_accepts_readable_provenance() {
+test_evidence_claim_enforces_mechanical_provenance() {
   local root artifact intent out rc
   root="$TMP_ROOT/evidence-claim-valid"
   artifact="$root/worktree/evidence.txt"
@@ -82,7 +82,7 @@ evidence-captured: 2026-09-25T10:00:00+10:00
 EOF
 )
   fm_dod_validate_intent_evidence "$intent" "$root/worktree" "$root/tmp" \
-    || fail "readable evidence provenance was refused"
+    || fail "mechanically valid evidence provenance was refused"
   rm -f "$artifact"
   fm_dod_validate_intent_evidence "$intent" "$root/worktree" "$root/tmp" \
     || fail "valid evidence provenance was rejected before its artifact existed"
@@ -93,7 +93,7 @@ EOF
   assert_contains "$out" "missing or unreadable" "missing artifact publication refusal was unclear"
   printf '%s\n' captured output > "$artifact"
   fm_dod_validate_published_intent "$intent" "$root/worktree" "$root/tmp" \
-    || fail "publication refused a readable evidence artifact"
+    || fail "publication refused a mechanically valid evidence artifact"
   mkdir -p "$root/outside"
   printf '%s\n' captured > "$root/outside/evidence.txt"
   intent=${intent/$artifact/$root\/worktree\/..\/outside\/evidence.txt}
@@ -515,7 +515,7 @@ test_non_done_lines_are_not_gated() {
 
 test_scout_done_is_not_gated
 test_evidence_claim_requires_provenance
-test_evidence_claim_accepts_readable_provenance
+test_evidence_claim_enforces_mechanical_provenance
 test_unpushed_ship_done_is_refused
 test_no_mistakes_prevalidation_done_is_not_gated
 test_remote_containing_named_head_is_accepted

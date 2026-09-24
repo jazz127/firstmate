@@ -6,6 +6,8 @@ The [`updatefirstmate` skill](../.agents/skills/updatefirstmate/SKILL.md) owns t
 ## Branch layout
 
 Keep the fork's `main` as a straight mirror of upstream `main`.
+Keep the fork's `main` identical to upstream `main`, with no house changes or other fork-owned commits on the mirror.
+The fork's GitHub default branch is `house`, so new pull requests default to the fleet integration line rather than the upstream mirror.
 The `house` branch is the line the fleet runs, with local operator changes layered on top.
 Configure the primary checkout's local `house` branch to track `jazz127/house`, and set `firstmate.runtimeBranch=house` in that repository's Git config.
 The setting selects the primary runtime branch; its branch tracking configuration supplies the update remote and merge ref.

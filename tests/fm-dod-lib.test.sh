@@ -145,6 +145,10 @@ EOF
     || fail "question prose containing an evidence claim was refused"
   fm_dod_validate_intent_evidence 'external validation did not pass' "$root/worktree" "$root/tmp" \
     || fail "negative result prose was refused"
+  fm_dod_validate_intent_evidence 'not externally confirmed' "$root/worktree" "$root/tmp" \
+    || fail "short negative result prose was refused"
+  fm_dod_validate_intent_evidence 'external validation was not confirmed' "$root/worktree" "$root/tmp" \
+    || fail "auxiliary negative result prose was refused"
   intent='offline validation did not pass, but external validation passed'
   out=$(fm_dod_validate_intent_evidence "$intent" "$root/worktree" "$root/tmp" 2>&1)
   rc=$?
@@ -165,7 +169,10 @@ EOF
     'external validation passed' \
     'live test passed' \
     'independent scenario completed' \
-    'live scenarios driven'; do
+    'live scenarios driven' \
+    'live check passed' \
+    'external run succeeded' \
+    'independent probe completed successfully'; do
     out=$(fm_dod_validate_intent_evidence "$claim" "$root/worktree" "$root/tmp" 2>&1)
     rc=$?
     [ "$rc" -ne 0 ] || fail "affirmative evidence claim was accepted without provenance: $claim"

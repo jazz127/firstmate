@@ -172,7 +172,11 @@ EOF
     'live scenarios driven' \
     'live check passed' \
     'external run succeeded' \
-    'independent probe completed successfully'; do
+    'independent probe completed successfully' \
+    'real account test passed' \
+    'external result passed' \
+    'live measurement completed' \
+    'independent account confirmed'; do
     out=$(fm_dod_validate_intent_evidence "$claim" "$root/worktree" "$root/tmp" 2>&1)
     rc=$?
     [ "$rc" -ne 0 ] || fail "affirmative evidence claim was accepted without provenance: $claim"

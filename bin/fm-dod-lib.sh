@@ -251,13 +251,16 @@ EOF
 fm_nm_driving_block() {  # <forge>
   local pr_return_line='' pr_reattach_clause=';'
   if [ "$1" != gerrit ]; then
-    pr_return_line="Only a drive call's return reports the green PR: \`no-mistakes axi status\` shows progress but never reports \`checks-passed\` while the ci step is still monitoring the PR for merge, so never wait on a status poll for the next gate or outcome.
+    pr_return_line="For a base with CI, only a drive call's return reports the green PR: \`no-mistakes axi status\` shows progress but never reports \`checks-passed\` while the ci step is still monitoring the PR for merge, so never wait on a status poll for the next gate or outcome.
 "
-    pr_reattach_clause="; once checks are green it returns \`checks-passed\` immediately, and"
+    pr_reattach_clause="; for a base with CI, once checks are green it returns \`checks-passed\` immediately, and"
   fi
   cat <<EOF
 You drive no-mistakes by responding to its gates, not by implementing fixes.
 Follow the guidance no-mistakes itself provides for the mechanics: it loads when you invoke /no-mistakes, and \`no-mistakes axi run --help\` plus the \`help\` lines in each \`axi\` response are authoritative and version-matched to the installed binary.
+When a run targets a base with no configured check workflows, first verify that the base really has no checks, then start a new run with \`--skip ci\` so its CI monitor cannot wait forever.
+The fork's \`house\` base has a real check workflow; do not skip CI there or on any other base with checks.
+Reattach without flags as usual.
 When starting no-mistakes, pass \`--intent\` as only this brief's \`## Captain's intent\` subsection body, not its heading, plus any later words the captain actually said.
 Preserve the actual words without adding speaker labels or direct address; the subsection heading supplies provenance outside the pipeline input.
 For a legacy brief with no such subsection, include only words on lines marked \`[captain] \`, excluding that metadata prefix; never copy its mixed \`# Task\` wholesale.
@@ -401,9 +404,11 @@ EOF
       fm_nm_driving_block "$forge"
       cat <<EOF
 
-After /no-mistakes reports CI green (the CI-ready return point - do not wait for it to keep monitoring in the background until merge), read the PR back from the forge and confirm it is not a draft (\`gh pr view <url> --json isDraft\` must print false); if it is a draft, mark it ready with \`gh-axi pr ready\`.
+For a base with checks, including \`house\`, after /no-mistakes reports CI green (the CI-ready return point - do not wait for it to keep monitoring in the background until merge), read the PR back from the forge and confirm it is not a draft (\`gh pr view <url> --json isDraft\` must print false); if it is a draft, mark it ready with \`gh-axi pr ready\`.
 A draft cannot be merged, so a done report on one leaves the merge unasked.
-Then append \`done [at=<epoch>]: PR {url} checks green\` and stop. You are finished.
+For a base with checks, append \`done [at=<epoch>]: PR {url} checks green\` and stop.
+For a base verified to have no check workflows where this run used \`--skip ci\`, wait for the pipeline's passed-with-skips outcome, confirm the PR is not a draft, and append \`done [at=<epoch>]: PR {url} ready for review (CI skipped: base has no configured check workflows)\` without claiming checks are green.
+You are finished.
 That CI-ready \`done:\` is accepted only when this copy's HEAD - your latest commit - is one the /no-mistakes run pushed, so commit nothing after the run; the check tests that commit, not merely that a branch moved.
 If you deliberately keep the PR a draft, append \`paused [at=<epoch>]: {why the draft is held}\` instead of done.
 EOF
@@ -425,12 +430,13 @@ fm_dod_ref_contains() {  # <repo> <ref-namespace> <sha>
   [ -n "$hit" ]
 }
 
-# 0 when a done: note reports the no-mistakes CI-ready PR (`PR <url> checks
-# green`, with any surrounding text). bin/fm-crew-state.sh takes its CI-ready
-# path on this same test, so every CI-ready line it acts on is gated.
+# 0 when a done: note reports a no-mistakes-ready PR (`PR <url> checks green`
+# or the explicit no-configured-checks form, with any surrounding text).
+# bin/fm-crew-state.sh takes its ready-PR path on this same test, so every
+# ready-PR line it acts on is gated.
 fm_dod_note_reports_ci_ready() {  # <note>
   case "$1" in
-    *PR*"checks green"*|*"checks green"*PR*) return 0 ;;
+    *PR*"checks green"*|*"checks green"*PR*|*PR*"ready for review (CI skipped: base has no configured check workflows)"*) return 0 ;;
   esac
   return 1
 }

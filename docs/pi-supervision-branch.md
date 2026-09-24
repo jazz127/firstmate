@@ -125,8 +125,11 @@ The first two presentations of a given sequence set open a turn of their own; af
 Routine outcomes never enter this path and stay turn-free.
 A home upgraded with outcomes already delivered treats those rows as processed once, at the first reconciliation that finds no processed marker, so its history is not re-presented.
 The generated [Pi supervision protocol](supervision-protocols/pi.md) owns event ownership for merged outcomes and main's acknowledgement duty, while deterministic entry delivery owns captain visibility.
-A no-change heartbeat outcome explicitly reported with `task=fleet` and `silent=true` is also delivered silently with no rendered note, while every other `routine` outcome stays rendered with its sailboat prefix.
-The branch prompt's "Verdict: routine or captain" section owns the verdict criteria, including how requested work's finished results and its mere progress updates are classified; unsolicited routine outcomes remain routine sailboat notes, unchanged fleet reviews remain silent, and doubt escalates.
+A `routine` outcome is stored as already handled and delivered with no rendered note and no wake of main, whether or not it carries `silent=true`.
+Silent is legal only on a routine outcome and never on a captain outcome, and it covers exactly two classes: a no-change heartbeat review (`task=fleet`), and an outcome that only re-states bookkeeping already durably recorded - the echo of a pause the branch just wrote, a scheduled recheck of an already-registered pause whose state has not changed, or a re-confirmation of a declared pause or open hold that still holds.
+Anything that changes state (a pause that clears, a task that changes state), a wedge adjudication that concludes something new, and every captain-facing outcome, decision, blocker, failure, merge, or delivery stays rendered exactly as before; the branch prompt's "Silent outcomes" section owns those criteria and doubt keeps the note.
+A silent task-scoped row never updates that task's status-coverage index, so it cannot make the lost-wake backstop treat a captain-facing status event as covered.
+The branch prompt's "Verdict: routine or captain" section owns the verdict criteria, including how requested work's finished results and its mere progress updates are classified; unsolicited routine outcomes remain routine, unchanged fleet reviews may be marked silent, and doubt escalates.
 Its "PR identity: copy or abstain" section owns where a PR URL in a summary or tool argument may come from: the task's ready status or `pr=` metadata, verbatim, or else only the identifier the branch actually has.
 Main can read the durable outcome store on demand through its `fm_branch_outcomes` tool.
 
@@ -140,7 +143,7 @@ Those rows are main-owned while attended: they are excluded from what the branch
 Deferring the fleet review to main merely because some unrelated merge poll or Relay mention happened to be sitting unread put a routine review in the captain's chat for a reason that had nothing to do with the fleet, and that coupling is gone.
 What all-or-nothing still guarantees is unchanged: the branch takes every branch-ownable unread row or none of them, and an unresolvable task-local row, an unknown row kind, or an unreadable queue still defers the whole review to main.
 The branch runs its normal operating procedure for the wake (`bin/fm-branch-prompt.sh` "Handling a wake") and performs the deeper fleet review that main previously performed.
-A review that found literally nothing worth reporting uses verdict `routine`, `task=fleet`, and `silent=true` so it has no rendered note, while a fleet-wide routine action omits `silent` and keeps its rendered sailboat note.
+A review that found literally nothing worth reporting uses verdict `routine`, `task=fleet`, and `silent=true`; fleet-wide routine actions omit `silent` but remain hidden like every other routine outcome.
 Only a captain-worthy finding reports verdict `captain` and appends a visible captain outcome entry.
 Every other fleet-wide or unresolvable wake - including watcher-failure alarms, which are never offered to the branch - keeps today's wake-to-main path in both postures.
 

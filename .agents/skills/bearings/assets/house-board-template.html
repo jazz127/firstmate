@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>House lines - Firstmate</title>
+<style>
+@import url("https://fonts.googleapis.com/css2?family=Chango&family=Jost:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap");
+:root {
+  --rust: #c0452a; --navy: #1a2238; --gold: #e0a52e; --sea: #2f6b4f;
+  --paper: #f6ecd3; --warm: #fbf4e2; --white: #fffdf7; --line: #ddc89c;
+  --ink: #241c14; --muted: #6f5e46; --ocean: #3c7ea6;
+  --sans: "Jost", ui-sans-serif, system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, monospace;
+  --display: "Chango", "Cooper Black", Georgia, serif;
+}
+* { box-sizing: border-box; }
+body { margin: 0; color: var(--ink); background: var(--paper); font: 16px/1.45 var(--sans); }
+button, input, select { font: inherit; }
+a { color: #246083; text-decoration-thickness: 1px; text-underline-offset: 2px; }
+a:hover { color: var(--rust); }
+.nav { background: var(--warm); border-bottom: 1px solid var(--line); }
+.wrap { width: min(1440px, calc(100% - 40px)); margin: auto; }
+.nav .wrap { height: 64px; display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+.brand { font: 24px var(--display); letter-spacing: -0.04em; }
+.brand b { display: inline-grid; place-items: center; width: 36px; height: 36px; margin-right: 8px; border: 2px solid var(--ink); border-radius: 50%; background: var(--rust); color: white; box-shadow: 3px 3px 0 var(--ink); font: 20px var(--sans); }
+.stamp { color: var(--muted); font: 12px var(--mono); }
+main { padding: 34px 0 70px; }
+.eyebrow { font-size: 12px; color: var(--rust); text-transform: uppercase; letter-spacing: .16em; font-weight: 800; }
+h1 { font: clamp(32px, 4.5vw, 54px)/1.05 var(--display); margin: 8px 0 14px; }
+h2 { font: 22px var(--display); margin: 0 0 15px; }
+.intro { max-width: 830px; color: var(--muted); margin-bottom: 24px; }
+.line-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin-bottom: 28px; }
+.line { border: 2px solid var(--ink); border-radius: 12px; background: var(--white); box-shadow: 4px 4px 0 var(--ink); padding: 18px; }
+.line h3 { font-size: 20px; margin: 0 0 4px; }
+.line .pair { font: 12px var(--mono); color: var(--muted); overflow-wrap: anywhere; }
+.line dl { display: grid; grid-template-columns: auto 1fr; gap: 7px 14px; margin: 18px 0 0; }
+.line dt { color: var(--muted); }
+.line dd { margin: 0; font: 13px var(--mono); overflow-wrap: anywhere; }
+.line .drift { color: #a93a1f; font-weight: 700; }
+.line .equal { color: var(--sea); font-weight: 700; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-bottom: 26px; }
+.stat { background: var(--warm); border: 1px solid var(--line); padding: 13px 16px; border-radius: 10px; }
+.stat strong { display: block; font: 24px var(--mono); }
+.stat span { font: 11px var(--mono); color: var(--muted); text-transform: uppercase; }
+.controls { display: grid; grid-template-columns: minmax(200px,2fr) repeat(5,minmax(125px,1fr)); gap: 10px; background: var(--white); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+.control { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.control label { color: var(--muted); font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.control input, .control select { width: 100%; min-width: 0; height: 39px; padding: 7px 10px; background: var(--warm); border: 1px solid var(--line); border-radius: 7px; color: var(--ink); }
+:is(input, select):focus-visible { outline: 3px solid var(--gold); outline-offset: 1px; }
+.results { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 10px; }
+.results p { color: var(--muted); font: 12px var(--mono); margin: 0; }
+.table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--white); }
+table { border-collapse: collapse; width: 100%; min-width: 1100px; table-layout: fixed; }
+th { background: var(--navy); color: var(--white); text-align: left; font: 11px var(--mono); text-transform: uppercase; letter-spacing: .07em; padding: 13px 14px; }
+td { padding: 15px 14px; border-top: 1px solid #e7d6ae; vertical-align: top; font-size: 14px; }
+th:nth-child(1) { width: 28%; }
+th:nth-child(2) { width: 20%; }
+th:nth-child(3) { width: 11%; }
+th:nth-child(4) { width: 8%; }
+th:nth-child(5) { width: 15%; }
+th:nth-child(6) { width: 12%; }
+th:nth-child(7) { width: 6%; }
+td:nth-child(3) a { white-space: nowrap; }
+tbody tr:hover { background: var(--warm); }
+.feature { font-weight: 800; line-height: 1.2; }
+.desc { color: var(--muted); font-size: 12px; line-height: 1.3; margin-top: 5px; max-width: 330px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.mono { font: 12px var(--mono); overflow-wrap: anywhere; }
+.small { color: var(--muted); font-size: 12px; }
+.pill { display: inline-block; background: var(--warm); border: 1px solid var(--line); border-radius: 5px; padding: 3px 6px; font: 11px var(--mono); white-space: nowrap; }
+.pill.warn { background: #f8ecc9; border-color: #e0a52e; }
+.pill.alert { background: #fbece3; border-color: var(--rust); }
+.pill.good { background: #e9f2ec; border-color: var(--sea); }
+.links { display: flex; flex-direction: column; gap: 4px; }
+.empty { padding: 30px; color: var(--muted); text-align: center; }
+.foot { margin-top: 15px; color: var(--muted); font-size: 12px; }
+@media (max-width: 1100px) { .controls { grid-template-columns: repeat(3, minmax(150px,1fr)); } }
+@media (max-width: 650px) { .wrap { width: min(100% - 24px, 1440px); } .controls { grid-template-columns: 1fr 1fr; } .control:first-child { grid-column: 1 / -1; } .nav .stamp { display: none; } }
+</style>
+</head>
+<body>
+<nav class="nav"><div class="wrap"><div class="brand"><b>H</b>Firstmate <span style="color:var(--rust)">house</span></div><div id="stamp" class="stamp"></div></div></nav>
+<main class="wrap">
+  <div class="eyebrow">The lines we run</div>
+  <h1>House features</h1>
+  <p class="intro">Live fork and upstream reads, joined to the private house register. Branch presence and current house membership are checked against GitHub when this page is rebuilt. Filters work in this page without another request.</p>
+  <section aria-label="Project lines"><div id="lines" class="line-grid"></div></section>
+  <section aria-label="Filtered counts" id="stats" class="stats"></section>
+  <section class="controls" aria-label="Feature filters">
+    <div class="control"><label for="search">Search name or description</label><input id="search" type="search" placeholder="Find a house feature" /></div>
+    <div class="control"><label for="project">Project</label><select id="project"><option value="">All projects</option></select></div>
+    <div class="control"><label for="label">Label</label><select id="label"><option value="">All labels</option></select></div>
+    <div class="control"><label for="state">State</label><select id="state"><option value="">All states</option></select></div>
+    <div class="control"><label for="posture">Posture</label><select id="posture"><option value="">Any posture</option><option value="landed">Landed</option><option value="offered">Offered</option><option value="historical">Historical</option><option value="mismatch">Register mismatch</option></select></div>
+    <div class="control"><label for="age">Age</label><select id="age"><option value="">Any age</option><option value="7">7+ days</option><option value="30">30+ days</option><option value="90">90+ days</option></select></div>
+    <div class="control"><label for="sort">Sort</label><select id="sort"><option value="project">Project</option><option value="age">Age, oldest first</option><option value="state">State</option></select></div>
+  </section>
+  <div class="results"><h2>Feature ledger</h2><p id="result-count"></p></div>
+  <div class="table-wrap"><table><thead><tr><th>Feature</th><th>Project / branch</th><th>Commits</th><th>On house</th><th>Label / state</th><th>Pull requests</th><th>Age</th></tr></thead><tbody id="features"></tbody></table><div id="empty" class="empty" hidden>No features match these filters.</div></div>
+  <p class="foot">Age begins at the fork PR creation when available, otherwise the upstream PR creation or branch tip date. Regenerate to refresh GitHub facts.</p>
+</main>
+<script id="house-data" type="application/json">
+__FM_HOUSE_BOARD_DATA__
+</script>
+<script>
+(function () {
+  "use strict";
+  const payload = JSON.parse(document.getElementById("house-data").textContent);
+  const byId = id => document.getElementById(id);
+  if (payload.schema !== "fm-house-board.v1" || !Array.isArray(payload.features) || !Array.isArray(payload.projects)) {
+    byId("empty").hidden = false;
+    byId("empty").textContent = "This board could not load. Rebuild it from the register.";
+    return;
+  }
+  const node = (tag, className, value) => {
+    const element = document.createElement(tag);
+    if (className) element.className = className;
+    if (value != null) element.textContent = String(value);
+    return element;
+  };
+  const append = (parent, ...children) => { children.forEach(child => parent.appendChild(child)); return parent; };
+  const link = (url, value) => {
+    if (!url || !/^https:\/\/github\.com\//.test(url)) return node("span", "small", value);
+    const element = node("a", "", value);
+    element.href = url;
+    element.target = "_blank";
+    element.rel = "noopener noreferrer";
+    return element;
+  };
+  const short = sha => sha ? sha.slice(0, 8) : "-";
+  byId("stamp").textContent = payload.schema + " · " + payload.generated;
+  payload.projects.forEach(project => {
+    const card = node("article", "line");
+    append(card, node("h3", "", project.name), node("div", "pair", project.fork + " ↔ " + project.upstream));
+    const facts = node("dl");
+    const fact = (name, value, css) => append(facts, node("dt", "", name), node("dd", css || "", value));
+    fact("House tip", short(project.house_tip));
+    fact("Ahead of upstream", project.ahead + " commits" + (project.behind ? ", " + project.behind + " behind" : ""));
+    fact("Upstream main", short(project.upstream_tip));
+    fact("Fork main mirror", project.mirror_equal ? "Equal · " + short(project.fork_main_tip) : "Drifted · " + short(project.fork_main_tip), project.mirror_equal ? "equal" : "drift");
+    card.appendChild(facts);
+    card.dataset.project = project.name;
+    byId("lines").appendChild(card);
+  });
+  const options = (id, values) => [...new Set(values)].sort().forEach(value => {
+    const option = node("option", "", value);
+    option.value = value;
+    byId(id).appendChild(option);
+  });
+  options("project", payload.projects.map(row => row.name));
+  options("label", payload.features.map(row => row.label));
+  options("state", payload.features.map(row => row.state));
+  const filterIds = ["search", "project", "label", "state", "posture", "age", "sort"];
+  function selected(rows, filters) {
+    const query = filters.search.trim().toLocaleLowerCase();
+    const found = rows.filter(row => {
+      if (filters.project && row.project !== filters.project) return false;
+      if (filters.label && row.label !== filters.label) return false;
+      if (filters.state && row.state !== filters.state) return false;
+      if (filters.posture === "landed" && !row.landed) return false;
+      if (filters.posture === "offered" && row.state !== "offered") return false;
+      if (filters.posture === "historical" && row.state !== "historical") return false;
+      if (filters.posture === "mismatch" && row.presence === "both") return false;
+      if (filters.age && (row.age_days == null || row.age_days < Number(filters.age))) return false;
+      if (query && !(row.name + " " + row.description).toLocaleLowerCase().includes(query)) return false;
+      return true;
+    });
+    found.sort((a, b) => {
+      if (filters.sort === "age") return (b.age_days ?? -1) - (a.age_days ?? -1) || a.name.localeCompare(b.name);
+      if (filters.sort === "state") return a.state.localeCompare(b.state) || a.project.localeCompare(b.project) || a.name.localeCompare(b.name);
+      return a.project.localeCompare(b.project) || a.name.localeCompare(b.name);
+    });
+    return found;
+  }
+  function metric(label, value) { return append(node("div", "stat"), node("strong", "", value), node("span", "", label)); }
+  function render() {
+    const filters = Object.fromEntries(filterIds.map(id => [id, byId(id).value]));
+    const rows = selected(payload.features, filters);
+    byId("stats").replaceChildren(
+      metric("Showing", rows.length + " / " + payload.features.length),
+      metric("On house", rows.filter(row => row.landed).length),
+      metric("Offered", rows.filter(row => row.state === "offered").length),
+      metric("Historical", rows.filter(row => row.state === "historical").length),
+      metric("Register mismatches", rows.filter(row => row.presence !== "both").length)
+    );
+    byId("result-count").textContent = rows.length + " matching features";
+    [...byId("lines").children].forEach(card => { card.hidden = !!filters.project && card.dataset.project !== filters.project; });
+    const body = byId("features");
+    body.replaceChildren();
+    rows.forEach(row => {
+      const tr = node("tr");
+      const name = node("td");
+      append(name, node("div", "feature", row.name), node("div", "desc", row.description));
+      const branch = node("td");
+      append(branch, node("div", "", row.project), link(row.branch_url, row.branch), node("div", "small", row.presence === "both" ? "Register + fork" : row.presence));
+      const commits = node("td", "mono");
+      const fork = payload.projects.find(project => project.name === row.project)?.fork;
+      row.commits.forEach(sha => {
+        const item = node("div");
+        item.appendChild(link(fork ? "https://github.com/" + fork + "/commit/" + sha : null, short(sha)));
+        commits.appendChild(item);
+      });
+      if (!row.commits.length) commits.textContent = "Unknown";
+      const landed = node("td");
+      append(landed, node("span", "pill " + (row.landed ? "good" : "warn"), row.landed ? "Yes" : "No"));
+      const label = node("td");
+      append(label, node("span", "pill " + (row.presence === "both" ? "" : "alert"), row.label), node("div", "small", row.state + " · " + row.label_source));
+      const prs = node("td", "links");
+      if (row.fork_pr) append(prs, link(row.fork_pr.html_url, "Fork · " + (row.fork_pr.merged_at ? "merged" : row.fork_pr.state)));
+      if (row.upstream_pr) append(prs, link(row.upstream_pr.html_url, "Upstream · " + (row.upstream_pr.merged_at ? "merged" : row.upstream_pr.state)));
+      if (!row.fork_pr && !row.upstream_pr) prs.textContent = "-";
+      const age = node("td", "mono", row.age_days == null ? "Unknown" : row.age_days + "d");
+      append(tr, name, branch, commits, landed, label, prs, age);
+      body.appendChild(tr);
+    });
+    byId("empty").hidden = rows.length !== 0;
+  }
+  filterIds.forEach(id => byId(id).addEventListener(id === "search" ? "input" : "change", render));
+  render();
+})();
+</script>
+</body>
+</html>

@@ -1411,7 +1411,10 @@ handle_paused_stale() {  # <window> <task> <hash>
   last=$(last_status_line "$statusf")
   min_age=$PAUSE_RESURFACE_SECS
   declaration="declared:$(fm_wake_signal_sig "$statusf" || true)"
-  if status_is_captain_held "$last"; then
+  if done_open_pr_wait "$task" "$last"; then
+    detail="done, awaiting pull request review and merge"
+    reason="paused ${age}s, awaiting external - pull request review and merge, rechecked on a long cadence not a wedge; confirm the pull request is still open"
+  elif status_is_captain_held "$last"; then
     if afk_record_present; then
       triage_log "absorbed stale (captain-held, never rechecked while the away-posture record exists): $win"
       return 0
@@ -1542,6 +1545,11 @@ pause_state_class() {  # <window> <task>
   key=$(window_key "$win")
   last=$(last_status_line "$STATE/$task.status")
   recheck_file="$STATE/.paused-rechecked-$key"
+  if done_open_pr_wait "$task" "$last"; then
+    class=$(crew_absorb_class "$task")
+    if [ "$class" = working ]; then printf 'working'; else printf 'paused'; fi
+    return
+  fi
   if ! status_is_paused_or_captain_held "$last"; then
     rm -f "$recheck_file"
     crew_absorb_class "$task"
@@ -1591,6 +1599,27 @@ pause_state_class() {  # <window> <task>
     *) rm -f "$recheck_file" ;;
   esac
   printf '%s' "$class"
+}
+
+# A done row has three PR shapes: an armed, locally recorded open PR waits on
+# review and merge; a merged PR loses its poll registration and takes the existing
+# landed-worker cleanup path; a row with no PR keeps its existing stale verdict.
+# The merge poll owns this local fact; no forge lookup belongs on the stale path.
+done_open_pr_wait() {  # <task> <last-status-line>
+  local task=$1 last=$2 meta data registration check
+  case "$last" in done:*) ;; *) return 1 ;; esac
+  fm_pr_task_id_valid "$task" || return 1
+  meta="$STATE/$task.meta"
+  data="$STATE/$task.pr-poll"
+  registration="$STATE/$task.pr-poll-registration"
+  check="$STATE/$task.check.sh"
+  [ ! -e "$STATE/$task.pr-poll-retirement" ] || return 1
+  [ -f "$check" ] && [ ! -L "$check" ] || return 1
+  fm_pr_metadata_identity_parse "$meta" || return 1
+  fm_pr_poll_data_parse "$data" || return 1
+  [ "$FM_PR_DATA_URL" = "$FM_PR_META_URL" ] || return 1
+  fm_pr_poll_registration_parse "$registration" || return 1
+  [ "$FM_PR_REG_ID" = "$task" ] && [ "$FM_PR_REG_URL" = "$FM_PR_META_URL" ]
 }
 
 # The two records of one ordinary crew wait, and why its stale alarm reads both.
@@ -2729,7 +2758,8 @@ EOF
     [ -z "$task" ] || inbox_steer_check "$w" "$task"
     key=$(window_key "$w")
     last=$(last_status_line "$STATE/$task.status")
-    if ! status_is_paused_or_captain_held "$last" && [ -e "$STATE/.paused-$key" ]; then
+    if ! status_is_paused_or_captain_held "$last" && ! done_open_pr_wait "$task" "$last" \
+      && [ -e "$STATE/.paused-$key" ]; then
       clear_pause_tracking "$key"
     fi
     # An idle secondmate endpoint is healthy by design, so a mate is admitted to
@@ -2780,6 +2810,18 @@ EOF
             printf '%s' "$h" > "$sf"
             wake "stale: $w"
           fi
+        elif done_open_pr_wait "$task" "$last" && ! task_captain_call_open "$task"; then
+          case "$(pause_state_class "$w" "$task")" in
+            working) if [ "$(cat "$sf" 2>/dev/null || true)" != "$h" ] || [ -e "$pf" ]; then
+                       clear_pause_tracking "$key"
+                       printf '%s' "$h" > "$sf"
+                       date +%s > "$ssf"
+                       triage_log "absorbed stale (provably working, overriding delivered PR status): $w"
+                     else
+                       wedge_timer_check "$w" "$ssf" "stale (overridden delivered PR status)" "$ewf" "$task" "$h"
+                     fi ;;
+            paused)  handle_paused_stale "$w" "$task" "$h" ;;
+          esac
         elif stale_is_terminal "$w" "$STATE"; then
           # The log's latest status event is captain-relevant - but that alone is not
           # proof the crew is actually done: a crew's own status log gets no
@@ -2871,7 +2913,8 @@ EOF
             esac
           else
             task=$(window_to_task "$w" "$STATE")
-            if [ -e "$pf" ] || status_is_paused_or_captain_held "$(last_status_line "$STATE/$task.status")"; then
+            if [ -e "$pf" ] || status_is_paused_or_captain_held "$(last_status_line "$STATE/$task.status")" \
+              || done_open_pr_wait "$task" "$last"; then
               case "$(pause_state_class "$w" "$task")" in
                 paused)  handle_paused_stale "$w" "$task" "$h" ;;
                 working) clear_pause_state "$key"
@@ -2901,7 +2944,8 @@ EOF
         # is cleared - but not in the same poll the declared-pause cadence just
         # recorded it, or the re-surface throttle it depends on would be erased and
         # the pause would re-surface every poll instead of once per long cadence.
-        if [ "$paused_bound" -ne 0 ] && [ -e "$pf" ] && { [ "$n" -ge 2 ] || ! status_is_paused_or_captain_held "$(last_status_line "$STATE/$(window_to_task "$w" "$STATE").status")"; }; then
+        if [ "$paused_bound" -ne 0 ] && [ -e "$pf" ] && { [ "$n" -ge 2 ] \
+          || { ! status_is_paused_or_captain_held "$last" && ! done_open_pr_wait "$task" "$last"; }; }; then
           clear_pause_tracking "$key"
         fi
       fi
@@ -2916,7 +2960,7 @@ EOF
         clear_write_tracking "$key"
       fi
       task=$(window_to_task "$w" "$STATE")
-      if ! afk_present && status_is_paused_or_captain_held "$(last_status_line "$STATE/$task.status")" && [ "$busy_now" -ne 0 ]; then
+      if ! afk_present && status_is_paused_or_captain_held "$last" && [ "$busy_now" -ne 0 ]; then
         case "$(pause_state_class "$w" "$task")" in
           paused) handle_paused_stale "$w" "$task" "$h" ;;
           # Inconclusive, but the declared wait itself still stands, so only the

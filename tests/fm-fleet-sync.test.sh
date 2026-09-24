@@ -96,6 +96,11 @@ run_sync() {
   FM_HOME="$home" FM_ROOT_OVERRIDE="$ROOT" "$ROOT/bin/fm-fleet-sync.sh" "$@" 2>/dev/null
 }
 
+run_sync_firstmate_home() {
+  local home=$1 repo=$2
+  FM_HOME="$home" FM_ROOT_OVERRIDE="$repo" "$ROOT/bin/fm-fleet-sync.sh" "$repo" 2>/dev/null
+}
+
 # build_enclosing_home <name>: an FM_HOME that is itself nested inside another git
 # repository - firstmate's own layout, where projects/ sits inside the firstmate
 # checkout. The enclosing repo is a clean clone of a bare origin that is one commit
@@ -332,6 +337,32 @@ test_non_default_branch_is_stuck_untouched() {
   pass "non-default named branch is reported STUCK and left untouched"
 }
 
+test_firstmate_runtime_branch_and_tracking_remote_sync() {
+  local home clone out
+  home=$(new_home)
+  clone=$(build_pair "$home" runtime-home)
+  git -C "$clone" checkout -q -b house
+  git -C "$clone" remote add fork "file://$home/remotes/runtime-home.git"
+  git -C "$clone" push -q -u fork house
+  git -C "$clone" config firstmate.runtimeBranch house
+  git -C "$clone" config branch.house.remote fork
+  git -C "$clone" config branch.house.merge refs/heads/house
+  # Preserve origin/HEAD -> main to reproduce the former wrong branch choice.
+  git -C "$clone" symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main
+  git -C "$home/work-runtime-home" remote add fork "file://$home/remotes/runtime-home.git"
+  git -C "$home/work-runtime-home" checkout -q -b house
+  commit_file "$home/work-runtime-home" runtime.txt v1 'advance fork house'
+  git -C "$home/work-runtime-home" push -q fork house
+
+  out=$(run_sync_firstmate_home "$home" "$clone")
+
+  assert_contains "$out" "runtime-home: synced" "Firstmate home follows configured runtime branch"
+  assert_not_contains "$out" "STUCK: on branch house" "runtime branch is not misclassified as a feature branch"
+  [ "$(git -C "$clone" rev-parse house)" = "$(git -C "$clone" rev-parse refs/remotes/fork/house)" ] \
+    || fail "Firstmate home did not fetch and fast-forward from its configured fork tracking remote"
+  pass "Firstmate home uses runtime branch and configured fork tracking remote"
+}
+
 test_diverged_is_stuck_untouched() {
   local home clone out before
   home=$(new_home)
@@ -354,6 +385,10 @@ test_on_default_clean_behind_fast_forwards() {
   local home clone out
   home=$(new_home)
   clone=$(build_pair "$home" zeta)
+  # Project clones keep resolving their upstream mirror through origin/HEAD,
+  # even if their local config happens to carry Firstmate runtime metadata.
+  git -C "$clone" branch house
+  git -C "$clone" config firstmate.runtimeBranch house
   advance_origin "$home" zeta C1
 
   out=$(run_sync "$home" "$clone")
@@ -720,6 +755,7 @@ test_detached_unique_commit_is_stuck_untouched
 test_detached_clean_ancestor_with_diverged_local_default_is_stuck_untouched
 test_dirty_is_stuck_untouched
 test_non_default_branch_is_stuck_untouched
+test_firstmate_runtime_branch_and_tracking_remote_sync
 test_diverged_is_stuck_untouched
 test_on_default_clean_behind_fast_forwards
 test_already_current_unchanged

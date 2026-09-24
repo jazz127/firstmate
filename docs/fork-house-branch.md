@@ -12,6 +12,12 @@ The `house` branch is the line the fleet runs, with local operator changes layer
 Configure the primary checkout's local `house` branch to track `jazz127/house`, and set `firstmate.runtimeBranch=house` in that repository's Git config.
 The setting selects the primary runtime branch; its branch tracking configuration supplies the update remote and merge ref.
 
+## Watching the quota-axi house line
+
+The quota-axi view shows the clone's current `jazz127/house` commit and subject, the `quota-axi` executable on `PATH`, and a live read-only quota-axi report with every labelled account row.
+Run `bin/fm-quota-tab.sh once` to print one frame, or `bin/fm-quota-tab.sh` (the default `loop` mode) in a terminal tab to keep the fleet's house line and provider headroom in view.
+The loop refreshes every 300 seconds by default; `FM_QUOTA_TAB_INTERVAL` changes that interval.
+
 Bring upstream changes to the fleet by merging upstream `main` into `house`.
 Do not rebase `house` onto upstream: preserving merge history keeps the house integration visible, leaves upstream-bound commits extractable, and preserves the head identity used by gate attestations.
 

@@ -20,20 +20,26 @@ git -C "$CLONE" fetch --quiet jazz127 HEAD:refs/remotes/jazz127/house
 
 cat > "$FAKEBIN/quota-axi" <<'EOF'
 #!/usr/bin/env bash
-printf 'codex-home: 72%% remaining\ncodex-work: 41%% remaining\n'
+printf '%s\n' "$*" > "$QUOTA_ARGS"
+printf 'Codex home card: $72 credit\nCodex Luna card: weekly headroom 41%%\n'
 EOF
 chmod +x "$FAKEBIN/quota-axi"
 
 OUTPUT=$(PATH="$FAKEBIN:$PATH" FM_QUOTA_CLONE="$CLONE" FM_QUOTA_TAB_INTERVAL=17 \
+  QUOTA_ARGS="$TMP_ROOT/quota-args" \
   TERM=dumb "$ROOT/bin/fm-quota-tab.sh" once 2>&1) \
   || fail "one-frame render failed: $OUTPUT"
 assert_contains "$OUTPUT" 'quota-axi view of the fleet house line' 'heading is missing'
+assert_equals '--tui --once' "$(cat "$TMP_ROOT/quota-args")" 'TUI was not requested for one frame'
 assert_contains "$OUTPUT" 'House tip: ' 'house tip is missing'
 assert_contains "$OUTPUT" 'Quota house line' 'house subject is missing'
 assert_contains "$OUTPUT" "quota-axi executable: $FAKEBIN/quota-axi" 'executable path is missing'
-assert_contains "$OUTPUT" 'codex-home: 72% remaining' 'first Codex account row is missing'
-assert_contains "$OUTPUT" 'codex-work: 41% remaining' 'second Codex account row is missing'
+assert_contains "$OUTPUT" "Codex home card: \$72 credit" 'first Codex seat card is missing'
+assert_contains "$OUTPUT" 'Codex Luna card: weekly headroom 41%' 'second Codex seat card is missing'
 assert_contains "$OUTPUT" 'interval: 17 seconds' 'refresh interval is missing'
+report_line=$(printf '%s\n' "$OUTPUT" | rg -n 'Codex home card' | cut -d: -f1)
+house_line=$(printf '%s\n' "$OUTPUT" | rg -n 'House tip:' | cut -d: -f1)
+[ "$report_line" -lt "$house_line" ] || fail 'house block appeared before the TUI report'
 pass 'one frame shows the house commit, executable, account rows, and interval'
 
 cat > "$FAKEBIN/git" <<'EOF'
@@ -44,7 +50,7 @@ esac
 exec /usr/bin/git "$@"
 EOF
 chmod +x "$FAKEBIN/git"
-OUTPUT=$(PATH="$FAKEBIN:$PATH" FM_QUOTA_CLONE="$CLONE" TERM=dumb \
+OUTPUT=$(PATH="$FAKEBIN:$PATH" FM_QUOTA_CLONE="$CLONE" QUOTA_ARGS="$TMP_ROOT/quota-args" TERM=dumb \
   "$ROOT/bin/fm-quota-tab.sh" once 2>&1) \
   || fail "frame aborted after fetch failure: $OUTPUT"
 assert_contains "$OUTPUT" 'Quota house line' 'fetch failure hid the existing house tip'

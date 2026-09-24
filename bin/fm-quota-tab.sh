@@ -36,6 +36,12 @@ frame() {
   local executable short subject
   clear 2>/dev/null || true
   printf '%s\n\n' 'quota-axi view of the fleet house line'
+  if command -v quota-axi >/dev/null 2>&1; then
+    quota-axi --tui --once 2>&1 || true
+  else
+    printf '%s\n' 'quota-axi is not installed.'
+  fi
+  printf '\nFleet house line:\n'
   if [ ! -d "$quota_clone/.git" ] && [ ! -f "$quota_clone/.git" ]; then
     printf 'House tip: quota-axi clone is absent (%s)\n' "$quota_clone"
   else
@@ -46,13 +52,7 @@ frame() {
   fi
 
   executable=$(command -v quota-axi 2>/dev/null) || executable='unavailable'
-  printf 'quota-axi executable: %s\n\n' "$executable"
-  printf '%s\n' 'quota-axi account headroom:'
-  if command -v quota-axi >/dev/null 2>&1; then
-    quota-axi 2>&1 || true
-  else
-    printf '%s\n' 'quota-axi is not installed.'
-  fi
+  printf 'quota-axi executable: %s\n' "$executable"
   printf '\nRefreshed: %s | interval: %s seconds | refreshes while running\n' \
     "$(date '+%Y-%m-%d %H:%M:%S %Z')" "$interval"
 }

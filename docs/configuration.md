@@ -17,6 +17,9 @@ Untracked files and directories whose names begin with `scratchpad` are also git
 
 `bin/fm-spawn.sh` owns the base task-metadata fields it emits, while the runtime-backend section below owns backend-specific fields and selector interpretation.
 `bin/fm-contributions.sh` owns durable published-contribution records under each task, observation bounds, equivalent triage-label configuration, and the authenticated contribution check.
+Automated reviewers (default `copilot-pull-request-reviewer[bot]` and `greptile-apps[bot]`) are set with `FM_CONTRIBUTIONS_AUTOMATED_REVIEWERS` or `config/contributions-automated-reviewers`, a comma or newline list of logins, where a set-but-empty value disables them.
+The contribution author's own comments become events only when they start with the marker set by `FM_CONTRIBUTIONS_AUTHOR_MARKER` or the first line of `config/contributions-author-marker`, default `@firstmate`, where a set-but-empty value disables the marker.
+Both surface as ordinary contribution wakes for triage and never grant merge authority.
 The producing PR and Relay helpers own the fields they append, [`bin/fm-classify-lib.sh`](../bin/fm-classify-lib.sh) owns status-event vocabulary, optional emission-time syntax, and legacy unknown-time handling, and `bin/fm-crew-state.sh` owns current-state reconciliation.
 The [`bin/fm-fleet-snapshot.sh` header](../bin/fm-fleet-snapshot.sh) owns the snapshot's event-time and age fields, including secondmate parent-event projections.
 Wake, watcher, away-mode, and Relay-specific state mechanics remain with their named scripts and reference sections rather than being duplicated into one exhaustive state tree here.

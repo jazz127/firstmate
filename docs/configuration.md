@@ -639,6 +639,7 @@ Skipped items, such as a destination checkout that does not yet gitignore the it
 When `firstmate.runtimeBranch` is unset, it preserves the historical origin/HEAD selection and local main/master fallback.
 When set, the value must be a valid Git branch name that exists locally; invalid values and missing local branches fail closed without falling back.
 `bin/fm-update.sh` follows that branch's `branch.<name>.remote` and `branch.<name>.merge` settings, then pins the resulting commit for all secondmate updates.
+Fresh ship and scout spawns use the same tracking source when refreshing a pooled task worktree, so an upstream `origin` does not need to carry the fork-only runtime branch.
 Project clones keep their own upstream-default resolution in `bin/fm-fleet-sync.sh`; this setting applies to the Firstmate runtime repository only.
 
 ## Watched tool updates (config/watched-tools.json)

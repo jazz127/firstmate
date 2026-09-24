@@ -1,0 +1,18 @@
+Live validation evidence for automatic validation handoff
+
+Scenario 1: generated ship brief
+Command: FM_HOME=<isolated temp home> bin/fm-brief.sh live-handoff demo --mode no-mistakes
+Observed generated Definition of done:
+  Your implementation is ready for validation only when committed on your branch.
+  When it is committed, append `done [at=<epoch>]: {summary}` to the status file as the pipeline handoff, then start /no-mistakes on that committed head immediately without waiting for firstmate.
+  That first `done:` is the pipeline handoff, and the pipeline owns the push; it is not a request to push from this copy.
+
+Scenario 2 and 3: inactive reconciliation and legacy empty-mode backstop
+Command: bin/fm-test-run.sh tests/fm-inactive-reconcile.test.sh
+Observed product output:
+  actionable: validation handoff overdue: child=child committed_head=<clean committed SHA> no attributable no-mistakes run after 60s inactivity
+  ok - committed head without validation resurfaces after the bound; healthy and acknowledged heads stay silent
+  actionable: validation handoff overdue: child=child committed_head=<clean committed SHA> no attributable no-mistakes run after 60s inactivity
+  ok - a secondmate's ledger delivery does not suppress its overdue handoff
+
+The focused behavior test constructs a real git project record, removes mode= for the legacy case, invokes bin/fm-inactive-reconcile.sh, observes no alert for a fresh handoff or healthy working validation, observes one overdue wake after the bound, drains and acknowledges it, and verifies rescanning produces no duplicate.

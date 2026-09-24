@@ -192,7 +192,9 @@ EOF
     'The scenarios were independently confirmed' \
     'real result passed' \
     'validation was verified' \
-    'results were live'; do
+    'results were live' \
+    'external scenarios were validated' \
+    'independently validated results'; do
     out=$(fm_dod_validate_intent_evidence "$claim" "$root/worktree" "$root/tmp" 2>&1)
     rc=$?
     [ "$rc" -ne 0 ] || fail "affirmative evidence claim was accepted without provenance: $claim"

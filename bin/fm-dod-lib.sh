@@ -308,7 +308,7 @@ fm_dod_validate_intent_evidence() {  # <intent> <worktree> <task-temp> [prefligh
       case "$candidate" in
         *\"*) continue ;;
       esac
-      if printf '%s\n' "$candidate" | grep -Eiq '([0-9]+[[:space:]]+of[[:space:]]+[0-9]+[[:space:]]*/[[:space:]]*[0-9]+[[:space:]]+of[[:space:]]+[0-9]+)|(([0-9]+[[:space:]]*(of|/)[[:space:]]*[0-9]+)[^.!?]*(live|verified|real-account|real account|independent|external|externally confirmed))|((live|verified|real-account|real account|independent|external|externally confirmed)[^.!?]*([0-9]+[[:space:]]*(of|/)[[:space:]]*[0-9]+))|((live|verified|real-account|real account|independent|external|externally confirmed)[^.!?]*(evidence|verification|confirmation)[[:space:]]*:)|((live|verified|real-account|real account|independent|external|externally confirmed)[^.!?]*(test|tests|check|checks|run|runs|probe|probes|scenario|scenarios|outcome|outcomes|result|results|measurement|measurements|account|accounts|validation|evidence|verification|confirmation)[^.!?]*(was|were|is|are|shows?|reported|demonstrated|driven|completed|succeeded|successful|successfully|passed|failed|confirmed|verified))|((evidence|verification|confirmation)[^.!?]*(live|verified|real-account|real account|independent|external|externally confirmed)[^.!?]*(was|were|is|are|shows?|reported|demonstrated|driven|completed|succeeded|successful|successfully|passed|failed|confirmed|verified))'; then
+      if printf '%s\n' "$candidate" | grep -Eiq '([0-9]+[[:space:]]+of[[:space:]]+[0-9]+[[:space:]]*/[[:space:]]*[0-9]+[[:space:]]+of[[:space:]]+[0-9]+)|(([0-9]+[[:space:]]*(of|/)[[:space:]]*[0-9]+)[^.!?]*(live|verified|real-account|real account|independent|independently|external|externally confirmed))|((live|verified|real-account|real account|independent|independently|external|externally confirmed)[^.!?]*([0-9]+[[:space:]]*(of|/)[[:space:]]*[0-9]+))|((live|verified|real-account|real account|independent|independently|external|externally confirmed)[^.!?]*(evidence|verification|confirmation)[[:space:]]*:)|((live|verified|real-account|real account|independent|independently|external|externally confirmed)[^.!?]*(test|tests|check|checks|run|runs|probe|probes|scenario|scenarios|outcome|outcomes|result|results|measurement|measurements|account|accounts|validation|evidence|verification|confirmation)[^.!?]*(was|were|is|are|shows?|reported|demonstrated|driven|completed|succeeded|successful|successfully|passed|failed|confirmed|verified))|((test|tests|check|checks|run|runs|probe|probes|scenario|scenarios|outcome|outcomes|result|results|measurement|measurements|account|accounts|validation|evidence|verification|confirmation)[^.!?]*(live|verified|real-account|real account|independent|independently|external|externally confirmed)[^.!?]*(was|were|is|are|shows?|reported|demonstrated|driven|completed|succeeded|successful|successfully|passed|failed|confirmed|verified))|((evidence|verification|confirmation)[^.!?]*(live|verified|real-account|real account|independent|independently|external|externally confirmed)[^.!?]*(was|were|is|are|shows?|reported|demonstrated|driven|completed|succeeded|successful|successfully|passed|failed|confirmed|verified))'; then
         claim=1
         break 2
       fi
@@ -346,6 +346,10 @@ EOF
   fi
   if [ -z "${captured:-}" ]; then
     printf '%s\n' 'evidence claim refused: missing evidence-captured: capture time' >&2
+    return 1
+  fi
+  if ! printf '%s\n' "$captured" | grep -Eq '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(Z|[+-][0-9]{2}:[0-9]{2})$'; then
+    printf '%s\n' "evidence claim refused: invalid evidence-captured timestamp: $captured" >&2
     return 1
   fi
   case "$artifact" in

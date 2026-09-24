@@ -176,7 +176,8 @@ EOF
     'real account test passed' \
     'external result passed' \
     'live measurement completed' \
-    'independent account confirmed'; do
+    'independent account confirmed' \
+    'The scenarios were independently confirmed'; do
     out=$(fm_dod_validate_intent_evidence "$claim" "$root/worktree" "$root/tmp" 2>&1)
     rc=$?
     [ "$rc" -ne 0 ] || fail "affirmative evidence claim was accepted without provenance: $claim"
@@ -187,6 +188,17 @@ EOF
   rc=$?
   [ "$rc" -ne 0 ] || fail "compact multi-ratio evidence label was accepted without provenance"
   assert_contains "$out" "missing evidence-artifact" "compact multi-ratio refusal was unclear"
+  intent=$(cat <<EOF
+external validation passed
+evidence-artifact: $root/worktree/evidence.txt
+evidence-command: ./run-scenarios
+evidence-captured: tomorrow
+EOF
+)
+  out=$(fm_dod_validate_intent_evidence "$intent" "$root/worktree" "$root/tmp" 2>&1)
+  rc=$?
+  [ "$rc" -ne 0 ] || fail "invalid evidence-captured timestamp was accepted"
+  assert_contains "$out" "invalid evidence-captured timestamp" "invalid timestamp refusal was unclear"
   intent=$(cat <<EOF
 external validation passed
 evidence-artifact: $root/worktree/evidence.txt

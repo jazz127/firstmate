@@ -61,6 +61,21 @@ ROWS
   pass "fm_primary_tangle_branch: feature branch alarms; default/detached/non-git stay silent"
 }
 
+test_configured_runtime_branch() {
+  local repo out
+  repo=$(make_repo "$TMP_ROOT/house-repo")
+  git -C "$repo" checkout -q -b house
+  git -C "$repo" config firstmate.runtimeBranch house
+  out=$(fm_primary_tangle_branch "$repo" || true)
+  [ -z "$out" ] || fail "configured house branch was classified as tangled: $out"
+  git -C "$repo" checkout -q main
+  out=$(fm_primary_tangle_branch "$repo" || true)
+  [ "$out" = main ] || fail "main should be tangled when house is configured; got '$out'"
+  git -C "$repo" config firstmate.runtimeBranch missing-house
+  firstmate_runtime_branch "$repo" >/dev/null 2>&1 && fail "missing configured branch unexpectedly resolved"
+  pass "configured runtime branch controls tangle detection and missing configured branches fail closed"
+}
+
 # --- GUARD 2a: fm-guard banner ----------------------------------------------
 
 run_guard() {
@@ -288,6 +303,7 @@ test_spawn_tmux_window_construction() {
 }
 
 test_lib_classification
+test_configured_runtime_branch
 test_guard_banner
 test_bootstrap_line
 test_brief_assertion_precedes_branch

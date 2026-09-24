@@ -82,6 +82,8 @@ Coordinate any workflow rollback with its required-check names so a retired chec
 
 ## Development
 
+For the fork `main`/`house` operating pattern and upstream contribution boundary, see [Fork house branch](docs/fork-house-branch.md).
+
 Tracked changes to firstmate itself - `AGENTS.md`, `README.md`, `CONTRIBUTING.md`, `.tasks.toml`, `.github/workflows/`, `bin/`, `.agents/skills/`, and `skills/` - ship through the `no-mistakes` pipeline on a feature branch and require an explicit merge approval.
 Before making any such change, load the agent-only `firstmate-coding-guidelines` skill (`.agents/skills/firstmate-coding-guidelines/SKILL.md`).
 It has the knowledge-placement rules that keep `AGENTS.md` from regrowing after each diet pass.

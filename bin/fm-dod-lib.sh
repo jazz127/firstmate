@@ -299,9 +299,11 @@ fm_dod_validate_intent_evidence() {  # <intent> <worktree> <task-temp> [prefligh
   claim_intent=$(printf '%s\n' "$flat_intent" | tr '[:upper:]' '[:lower:]')
   claim_intent=$(printf '%s\n' "$claim_intent" | sed -E \
     -e 's/(^|[.!?][[:space:]]*)(do not|never|avoid|must not|should not)[^.!?]*/\1/g' \
-    -e 's/(^|[.!?][[:space:]]*)(example|examples|e\.g\.|quote|quoted)[[:space:]]*:[^.!?]*/\1/g' \
+    -e 's/(^|[.!?][[:space:]]*)((for[[:space:]]+)?example|examples|e\.g\.|quote|quoted)[[:space:]]*[:,]?[[:space:]]*[^.!?]*/\1/g' \
+    -e 's/(^|[.!?][[:space:]]*)(please[[:space:]]+(verify|check|validate|test))[^.!?]*/\1/g' \
     -e 's/(^|[.!?][[:space:]]*)(investigate|run|check|verify|validate|test|collect|report|describe|document|ensure|add|include|show)[^.!?]*/\1/g' \
-    -e 's/"[^"]*"//g')
+    -e 's/"[^"]*"//g' \
+    -e "s/'[^']*'//g")
   if printf '%s\n' "$claim_intent" | grep -Eiq '([0-9]+[[:space:]]+of[[:space:]]+[0-9]+[[:space:]]*/[[:space:]]*[0-9]+[[:space:]]+of[[:space:]]+[0-9]+)|(([0-9]+[[:space:]]*(of|/)[[:space:]]*[0-9]+)[^.!?]*(live|verified|real-account|independent|external|externally confirmed))|((live|verified|real-account|independent|external|externally confirmed)[^.!?]*([0-9]+[[:space:]]*(of|/)[[:space:]]*[0-9]+))|((live|verified|real-account|independent|external|externally confirmed)[^.!?]*(evidence|verification|confirmation)[[:space:]]*:)|((live|verified|real-account|independent|external|externally confirmed)[^.!?]*(test|tests|scenario|scenarios|validation|evidence|verification|confirmation)[^.!?]*(was|were|is|are|shows?|reported|demonstrated|driven|completed|passed|failed|confirmed|verified))|((evidence|verification|confirmation)[^.!?]*(live|verified|real-account|independent|external|externally confirmed)[^.!?]*(was|were|is|are|shows?|reported|demonstrated|driven|completed|passed|failed|confirmed|verified))'; then
     claim=1
   fi

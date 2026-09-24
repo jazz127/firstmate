@@ -124,6 +124,10 @@ EOF
     || fail "negated affirmative claim was refused"
   fm_dod_validate_intent_evidence 'Example: external validation passed' "$root/worktree" "$root/tmp" \
     || fail "example prose containing an evidence claim was refused"
+  fm_dod_validate_intent_evidence 'Please verify external validation passed' "$root/worktree" "$root/tmp" \
+    || fail "request prose containing an evidence claim was refused"
+  fm_dod_validate_intent_evidence 'For example, external validation passed' "$root/worktree" "$root/tmp" \
+    || fail "example prose with a lead-in was refused"
   fm_dod_validate_intent_evidence '2 of 3 requested endpoints' "$root/worktree" "$root/tmp" \
     || fail "ordinary ratio prose was refused"
   for claim in \

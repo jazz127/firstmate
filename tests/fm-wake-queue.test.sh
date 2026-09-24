@@ -1608,17 +1608,22 @@ test_actor_filter_precedes_same_key_deduplication() {
   state="$dir/state"
 
   append_wake "$state" signal "task-a.status" "signal: branch version" || fail "branch row append failed"
+  append_wake "$state" signal "task-a.status" "signal: newer branch version" || fail "second branch row append failed"
   FM_STATE_OVERRIDE="$state" "$GRANT" activate "$$" actor-dedup || fail "branch owner activation failed"
-  FM_STATE_OVERRIDE="$state" "$GRANT" publish actor-dedup 1 || fail "branch grant publication failed"
+  FM_STATE_OVERRIDE="$state" "$GRANT" publish actor-dedup 1 2 || fail "branch grant publication failed"
   append_wake "$state" signal "task-a.status" "signal: main version" || fail "main row append failed"
 
   FM_STATE_OVERRIDE="$state" "$DRAIN" > "$dir/main.out" 2> "$dir/main.err" || fail "main drain failed"
-  [ "$(awk -F '\t' '$3 == "signal" { print $2 }' "$dir/main.out")" = 2 ] \
+  [ "$(awk -F '\t' '$3 == "signal" { print $2 }' "$dir/main.out")" = 3 ] \
     || fail "main did not present its same-key claimed row"
   FM_STATE_OVERRIDE="$state" FM_SUPERVISION_ACTOR=branch "$DRAIN" > "$dir/branch.out" 2> "$dir/branch.err" \
     || fail "branch drain failed"
-  [ "$(awk -F '\t' '$3 == "signal" { print $2 }' "$dir/branch.out")" = 1 ] \
-    || fail "global deduplication hid the branch's older same-key row"
+  [ "$(awk -F '\t' '$3 == "signal" { print $2 }' "$dir/branch.out")" = 2 ] \
+    || fail "Pi branch drain did not deduplicate its own granted rows"
+  FM_STATE_OVERRIDE="$state" FM_SUPERVISION_ACTOR=branch FM_BRANCH_EVENT_RECEIPTS=1 \
+    "$DRAIN" > "$dir/host.out" 2> "$dir/host.err" || fail "host branch drain failed"
+  [ "$(awk -F '\t' '$3 == "signal" { print $2 }' "$dir/host.out")" = "$(printf '1\n2')" ] \
+    || fail "host branch drain did not preserve every granted event"
 
   main_sequence=$(sed -n 's/^WAKE_ACK_REQUIRED:.*--ack-through \([0-9][0-9]*\) --recovery-generation [A-Za-z0-9._-][A-Za-z0-9._-]*$/\1/p' "$dir/main.err")
   main_generation=$(sed -n 's/^WAKE_ACK_REQUIRED:.*--ack-through [0-9][0-9]* --recovery-generation \([A-Za-z0-9._-][A-Za-z0-9._-]*\)$/\1/p' "$dir/main.err")

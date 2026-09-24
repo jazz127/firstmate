@@ -828,7 +828,7 @@ fm_recovery_marker_begin_handling "$RECOVERY_MARKER" || {
 RECOVERY_MARKER_TOKEN=$FM_RECOVERY_MARKER_TOKEN
 
 DRAIN_VIEW_TMP=$(mktemp "$STATE/.wake-queue.actor-view.XXXXXX") || exit 1
-if [ "$ACTOR" = branch ] && [ "${FM_BRANCH_EVENT_RECEIPTS:-0}" = 1 ]; then
+if [ "$ACTOR" = branch ]; then
   ACTOR_ROWS_FILE=$ELIGIBLE_ROWS_FILE
 else
   ACTOR_ROWS_FILE=$MAIN_ROWS_FILE
@@ -837,7 +837,7 @@ awk -F '\t' -v seqs="$ACTOR_ROWS_FILE" '
   BEGIN { while ((getline line < seqs) > 0) keep[line]=1 }
   NF >= 5 && ($2 in keep)
 ' "$FM_WAKE_QUEUE" > "$DRAIN_VIEW_TMP" || exit 1
-if [ "$ACTOR" = branch ]; then
+if [ "$ACTOR" = branch ] && [ "${FM_BRANCH_EVENT_RECEIPTS:-0}" = 1 ]; then
   RAW_ROWS=$(cat "$DRAIN_VIEW_TMP") || exit "$?"
 else
   RAW_ROWS=$(fm_wake_print_deduped "$DRAIN_VIEW_TMP") || exit "$?"

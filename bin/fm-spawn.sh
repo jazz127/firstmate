@@ -2835,6 +2835,10 @@ if [ "$KIND" = ship ] || [ "$KIND" = scout ]; then
         exit 1
       fi
     fi
+    if ! fm_dod_validate_intent_evidence "$CAPTAIN_INTENT" "$PROJ_ABS" "/tmp/fm-$ID"; then
+      echo "error: $BRIEF contains an evidence claim that cannot be published" >&2
+      exit 1
+    fi
   fi
   # Use the existing launch-brief overlay for every worker kind, including
   # pre-scope briefs and relaunches. Charters never enter this worker path.

@@ -32,6 +32,221 @@ test_scout_done_is_not_gated() {
   pass "scout done: is not gated"
 }
 
+test_evidence_claim_requires_provenance() {
+  local root intent out rc artifact
+  root="$TMP_ROOT/evidence-claim"
+  artifact="$root/worktree/evidence.txt"
+  mkdir -p "$root/home" "$root/worktree" "$root/tmp"
+  printf '%s\n' captured output > "$artifact"
+  intent='2 of 3 scenarios driven live'
+  set +e
+  out=$(fm_dod_validate_intent_evidence "$intent" "$root/worktree" "$root/tmp" 2>&1)
+  rc=$?
+  [ "$rc" -ne 0 ] || fail "evidence claim without provenance was accepted"
+  assert_contains "$out" "missing evidence-artifact" "missing artifact refusal was unclear"
+  intent=$(printf '2 of 3 scenarios driven live\nevidence-artifact: %s\n' "$artifact")
+  set +e
+  out=$(fm_dod_validate_intent_evidence "$intent" "$root/worktree" "$root/tmp" 2>&1)
+  rc=$?
+  [ "$rc" -ne 0 ] || fail "evidence claim without command and time was accepted"
+  assert_contains "$out" "missing evidence-command" "missing command refusal was unclear"
+  intent=$(printf '2 of 3 scenarios\ndriven live\nevidence-artifact: %s\n' "$artifact")
+  out=$(fm_dod_validate_intent_evidence "$intent" "$root/worktree" "$root/tmp" 2>&1)
+  rc=$?
+  [ "$rc" -ne 0 ] || fail "line-split evidence claim without provenance was accepted"
+  assert_contains "$out" "missing evidence-command" "line-split claim refusal was unclear"
+  intent=$(printf '2 of 3\nscenarios\ndriven live\nevidence-artifact: %s\n' "$artifact")
+  out=$(fm_dod_validate_intent_evidence "$intent" "$root/worktree" "$root/tmp" 2>&1)
+  rc=$?
+  [ "$rc" -ne 0 ] || fail "three-line evidence claim without provenance was accepted"
+  assert_contains "$out" "missing evidence-command" "three-line claim refusal was unclear"
+  intent=$(printf '2 of 3 scenarios driven live\nevidence-artifact: %s\nevidence-command:   \nevidence-captured:   \n' "$artifact")
+  out=$(fm_dod_validate_intent_evidence "$intent" "$root/worktree" "$root/tmp" 2>&1)
+  rc=$?
+  [ "$rc" -ne 0 ] || fail "whitespace-only evidence metadata was accepted"
+  assert_contains "$out" "missing evidence-command" "whitespace-only command refusal was unclear"
+  pass "evidence claims require artifact provenance"
+}
+
+test_evidence_claim_enforces_mechanical_provenance() {
+  local root artifact intent out rc
+  root="$TMP_ROOT/evidence-claim-valid"
+  artifact="$root/worktree/evidence.txt"
+  mkdir -p "$root/home" "$root/worktree" "$root/tmp"
+  printf '%s\n' captured output > "$artifact"
+  intent=$(cat <<EOF
+2 of 3 scenarios driven live
+evidence-artifact: $artifact
+evidence-command: ./run-scenarios --live
+evidence-captured: 2026-09-25T10:00:00+10:00
+EOF
+)
+  fm_dod_validate_intent_evidence "$intent" "$root/worktree" "$root/tmp" \
+    || fail "mechanically valid evidence provenance was refused"
+  rm -f "$artifact"
+  fm_dod_validate_intent_evidence "$intent" "$root/worktree" "$root/tmp" \
+    || fail "valid evidence provenance was rejected before its artifact existed"
+  set +e
+  out=$(fm_dod_validate_published_intent "$intent" "$root/worktree" "$root/tmp" 2>&1)
+  rc=$?
+  [ "$rc" -ne 0 ] || fail "publication accepted a missing evidence artifact"
+  assert_contains "$out" "missing or unreadable" "missing artifact publication refusal was unclear"
+  printf '%s\n' captured output > "$artifact"
+  fm_dod_validate_published_intent "$intent" "$root/worktree" "$root/tmp" \
+    || fail "publication refused a mechanically valid evidence artifact"
+  mkdir -p "$root/outside"
+  printf '%s\n' captured > "$root/outside/evidence.txt"
+  intent=${intent/$artifact/$root\/worktree\/..\/outside\/evidence.txt}
+  set +e
+  out=$(fm_dod_validate_published_intent "$intent" "$root/worktree" "$root/tmp" 2>&1)
+  rc=$?
+  [ "$rc" -ne 0 ] || fail "publication accepted an artifact escaping the worktree"
+  assert_contains "$out" "outside the" "path traversal refusal was unclear"
+  mkdir -p "$root/tmp-other"
+  printf '%s\n' captured > "$root/tmp-other/evidence.txt"
+  intent=$(cat <<EOF
+2 of 3 scenarios driven live
+evidence-artifact: $root/tmp-other/evidence.txt
+evidence-command: ./run-scenarios --live
+evidence-captured: 2026-09-25T10:00:00+10:00
+EOF
+)
+  out=$(fm_dod_validate_published_intent "$intent" "$root/worktree" "$root/tmp" 2>&1)
+  rc=$?
+  [ "$rc" -ne 0 ] || fail "publication accepted an artifact from another task temp root"
+  assert_contains "$out" "outside the" "task temp root refusal was unclear"
+  printf '%s\n' outside > "$root/outside/secret.txt"
+  ln -s "$root/outside/secret.txt" "$root/worktree/linked-evidence.txt"
+  intent=$(cat <<EOF
+2 of 3 scenarios driven live
+evidence-artifact: $root/worktree/linked-evidence.txt
+evidence-command: ./run-scenarios --live
+evidence-captured: 2026-09-25T10:00:00+10:00
+EOF
+)
+  out=$(fm_dod_validate_published_intent "$intent" "$root/worktree" "$root/tmp" 2>&1)
+  rc=$?
+  [ "$rc" -ne 0 ] || fail "publication accepted an artifact symlink escaping the worktree"
+  assert_contains "$out" "outside the allowed roots" "escaping symlink refusal was unclear"
+  fm_dod_validate_intent_evidence 'Improve live reload wording' "$root/worktree" "$root/tmp" \
+    || fail "ordinary prose containing live was refused"
+  fm_dod_validate_intent_evidence 'Improve live reload test wording' "$root/worktree" "$root/tmp" \
+    || fail "ordinary prose containing live and test was refused"
+  fm_dod_validate_intent_evidence 'Improve live reload test result wording' "$root/worktree" "$root/tmp" \
+    || fail "ordinary prose containing live and result was refused"
+  fm_dod_validate_intent_evidence 'Investigate external test evidence' "$root/worktree" "$root/tmp" \
+    || fail "request prose containing evidence was refused"
+  fm_dod_validate_intent_evidence 'Do not claim live validation' "$root/worktree" "$root/tmp" \
+    || fail "negated prose containing evidence vocabulary was refused"
+  fm_dod_validate_intent_evidence 'Do not claim live test passed' "$root/worktree" "$root/tmp" \
+    || fail "negated affirmative claim was refused"
+  fm_dod_validate_intent_evidence 'Example: external validation passed' "$root/worktree" "$root/tmp" \
+    || fail "example prose containing an evidence claim was refused"
+  fm_dod_validate_intent_evidence 'Please verify external validation passed' "$root/worktree" "$root/tmp" \
+    || fail "request prose containing an evidence claim was refused"
+  fm_dod_validate_intent_evidence 'For example, external validation passed' "$root/worktree" "$root/tmp" \
+    || fail "example prose with a lead-in was refused"
+  fm_dod_validate_intent_evidence 'Can you verify external validation passed?' "$root/worktree" "$root/tmp" \
+    || fail "question prose containing an evidence claim was refused"
+  fm_dod_validate_intent_evidence 'external validation did not pass' "$root/worktree" "$root/tmp" \
+    || fail "negative result prose was refused"
+  fm_dod_validate_intent_evidence 'not externally confirmed' "$root/worktree" "$root/tmp" \
+    || fail "short negative result prose was refused"
+  fm_dod_validate_intent_evidence 'external validation was not confirmed' "$root/worktree" "$root/tmp" \
+    || fail "auxiliary negative result prose was refused"
+  fm_dod_validate_intent_evidence "external validation wasn't confirmed" "$root/worktree" "$root/tmp" \
+    || fail "contracted negative result prose was refused"
+  intent='offline validation did not pass, but external validation passed'
+  out=$(fm_dod_validate_intent_evidence "$intent" "$root/worktree" "$root/tmp" 2>&1)
+  rc=$?
+  [ "$rc" -ne 0 ] || fail "later affirmative assertion after a negation was erased"
+  assert_contains "$out" "missing evidence-artifact" "later assertion after negation refusal was unclear"
+  intent=$(cat <<'EOF'
+Please verify external validation passed
+external validation passed
+EOF
+)
+  out=$(fm_dod_validate_intent_evidence "$intent" "$root/worktree" "$root/tmp" 2>&1)
+  rc=$?
+  [ "$rc" -ne 0 ] || fail "real assertion after a request was erased"
+  assert_contains "$out" "missing evidence-artifact" "assertion after request refusal was unclear"
+  intent='Please verify external validation passed; external validation passed'
+  out=$(fm_dod_validate_intent_evidence "$intent" "$root/worktree" "$root/tmp" 2>&1)
+  rc=$?
+  [ "$rc" -ne 0 ] || fail "affirmative assertion after a request clause was erased"
+  assert_contains "$out" "missing evidence-artifact" "assertion after request clause refusal was unclear"
+  fm_dod_validate_intent_evidence '2 of 3 requested endpoints' "$root/worktree" "$root/tmp" \
+    || fail "ordinary ratio prose was refused"
+  for claim in \
+    'external validation passed' \
+    'live test passed' \
+    'independent scenario completed' \
+    'live scenarios driven' \
+    'live check passed' \
+    'external run succeeded' \
+    'independent probe completed successfully' \
+    'real account test passed' \
+    'external result passed' \
+    'live measurement completed' \
+    'independent account confirmed' \
+    'The scenarios were independently confirmed' \
+    'real result passed' \
+    'validation was verified' \
+    'results were live' \
+    'external scenarios were validated' \
+    'independently validated results'; do
+    out=$(fm_dod_validate_intent_evidence "$claim" "$root/worktree" "$root/tmp" 2>&1)
+    rc=$?
+    [ "$rc" -ne 0 ] || fail "affirmative evidence claim was accepted without provenance: $claim"
+    assert_contains "$out" "missing evidence-artifact" "affirmative claim refusal was unclear: $claim"
+  done
+  intent='0 of 5 / 2 of 3'
+  out=$(fm_dod_validate_intent_evidence "$intent" "$root/worktree" "$root/tmp" 2>&1)
+  rc=$?
+  [ "$rc" -ne 0 ] || fail "compact multi-ratio evidence label was accepted without provenance"
+  assert_contains "$out" "missing evidence-artifact" "compact multi-ratio refusal was unclear"
+  intent=$(cat <<EOF
+external validation passed
+evidence-artifact: $root/worktree/evidence.txt
+evidence-command: ./run-scenarios
+evidence-captured: tomorrow
+EOF
+)
+  out=$(fm_dod_validate_intent_evidence "$intent" "$root/worktree" "$root/tmp" 2>&1)
+  rc=$?
+  [ "$rc" -ne 0 ] || fail "invalid evidence-captured timestamp was accepted"
+  assert_contains "$out" "invalid evidence-captured timestamp" "invalid timestamp refusal was unclear"
+  intent=${intent/tomorrow/2026-99-99T99:99:99+99:99}
+  out=$(fm_dod_validate_intent_evidence "$intent" "$root/worktree" "$root/tmp" 2>&1)
+  rc=$?
+  [ "$rc" -ne 0 ] || fail "impossible evidence-captured timestamp was accepted"
+  assert_contains "$out" "invalid evidence-captured timestamp" "impossible timestamp refusal was unclear"
+  intent=$(cat <<EOF
+external validation passed
+evidence-artifact: $root/worktree/evidence.txt
+evidence-artifact: $root/worktree/evidence.txt
+evidence-command: ./run-scenarios
+evidence-captured: 2026-09-25T10:00:00+10:00
+EOF
+)
+  out=$(fm_dod_validate_intent_evidence "$intent" "$root/worktree" "$root/tmp" 2>&1)
+  rc=$?
+  [ "$rc" -ne 0 ] || fail "duplicate evidence metadata was accepted"
+  assert_contains "$out" "duplicate evidence-artifact" "duplicate artifact metadata refusal was unclear"
+  intent=$(cat <<EOF
+2 of 3 scenarios driven live
+evidence-artifact: $root/worktree
+evidence-command: ./run-scenarios --live
+evidence-captured: 2026-09-25T10:00:00+10:00
+EOF
+)
+  out=$(fm_dod_validate_published_intent "$intent" "$root/worktree" "$root/tmp" 2>&1)
+  rc=$?
+  [ "$rc" -ne 0 ] || fail "directory evidence artifact was accepted"
+  assert_contains "$out" "missing or unreadable" "directory artifact refusal was unclear"
+  pass "evidence claims accept readable provenance and spare ordinary prose"
+}
+
 test_unpushed_ship_done_is_refused() {
   local repo wt sha reason rc
   repo="$TMP_ROOT/unpushed-repo"
@@ -305,6 +520,8 @@ test_non_done_lines_are_not_gated() {
 }
 
 test_scout_done_is_not_gated
+test_evidence_claim_requires_provenance
+test_evidence_claim_enforces_mechanical_provenance
 test_unpushed_ship_done_is_refused
 test_no_mistakes_prevalidation_done_is_not_gated
 test_remote_containing_named_head_is_accepted

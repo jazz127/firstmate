@@ -457,6 +457,7 @@ IFS= read -r -d '' EVIDENCE_SECTION <<'EOF' || true
 # Evidence provenance
 When a task requires live, verified, external, or independently confirmed evidence, every such claim must name the exact artifact read, where it came from, and when it was read.
 A synthetic or local probe of our own code, including a self-authored scenario, must be labelled synthetic and may never be presented as live or external verification.
+The words live, verified, real, or independent must never describe results produced by our own code, a fixture, a synthetic scenario, an offline replay, or a closed proxy; call that work synthetic/offline built-CLI validation and state any real-account limitation beside it.
 If the required external artifact cannot be obtained, stop and report `blocked:` or `paused:` instead of completing with a green result.
 EOF
 EVIDENCE_SECTION=${EVIDENCE_SECTION%$'\n'}

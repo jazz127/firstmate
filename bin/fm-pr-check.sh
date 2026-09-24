@@ -125,6 +125,43 @@ fi
 KIND=$(grep '^kind=' "$META" | tail -1 | cut -d= -f2- || true)
 MODE=$(grep '^mode=' "$META" | tail -1 | cut -d= -f2- || true)
 PROJECT=$(grep '^project=' "$META" | tail -1 | cut -d= -f2- || true)
+if [ "$MODE" = no-mistakes ]; then
+  PR_BODY=
+  case "$PROVIDER" in
+    github)
+      command -v gh >/dev/null 2>&1 || { echo "error: cannot validate the published intent because gh is unavailable" >&2; exit 1; }
+      PR_BODY=$(gh pr view "$URL" --json body --jq .body 2>/dev/null) || {
+        echo "error: cannot read the published PR body for evidence validation" >&2
+        exit 1
+      }
+      ;;
+    gitlab)
+      if ! command -v glab >/dev/null 2>&1 || ! command -v jq >/dev/null 2>&1; then
+        echo "error: cannot validate the published intent because glab and jq are unavailable" >&2
+        exit 1
+      fi
+      GITLAB_BODY_JSON=$(GITLAB_HOST="$HOST" glab mr view "$NUMBER" -R "https://$HOST/$PROJECT_PATH" -F json 2>/dev/null) || {
+        echo "error: cannot read the published merge-request body for evidence validation" >&2
+        exit 1
+      }
+      PR_BODY=$(printf '%s\n' "$GITLAB_BODY_JSON" | jq -r '.description // empty') || {
+        echo "error: cannot parse the published merge-request body for evidence validation" >&2
+        exit 1
+      }
+      ;;
+    gerrit)
+      PR_BODY=$(fm_pr_gerrit_read_description "$HOST" "$NUMBER") || {
+        echo "error: cannot read the published Gerrit description for evidence validation" >&2
+        exit 1
+      }
+      ;;
+  esac
+  TASK_TMP=$(grep '^tasktmp=' "$META" | tail -1 | cut -d= -f2- || true)
+  if ! fm_dod_validate_published_intent "$PR_BODY" "$WT" "$TASK_TMP"; then
+    echo "error: published intent failed evidence validation" >&2
+    exit 1
+  fi
+fi
 # The gate is asked about the ready report this task's worker was told to give;
 # on a Gerrit change both publishing modes report the same published line.
 case "$PROVIDER:$MODE" in

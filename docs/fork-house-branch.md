@@ -15,11 +15,33 @@ The setting selects the primary runtime branch; its branch tracking configuratio
 Bring upstream changes to the fleet by merging upstream `main` into `house`.
 Do not rebase `house` onto upstream: preserving merge history keeps the house integration visible, leaves upstream-bound commits extractable, and preserves the head identity used by gate attestations.
 
-## Contributing a change upstream
+## House features
 
-Prepare an upstream contribution on a separate branch created from a fresh upstream `main`.
-Cherry-pick only the intended commits from `house`, validate the exact final head, and obtain explicit approval before opening an upstream pull request or making any upstream comment or other contact.
-The fork workflow does not authorize upstream contact.
+A house feature is anything we build for ourselves on our own line, whether the captain asked for it or firstmate found it.
+Every house feature has a durable `housefeature/<name>` branch cut from the fork's `main`.
+That branch gives the feature a stable name, keeps it findable, and makes it straightforward to offer without relying on a disposable task branch.
+Task branches are working branches and may be deleted once their feature is captured on its durable branch.
+A contributed house feature is a house feature the captain chose to submit and that has landed in upstream `main`.
+
+## Contributing a house feature upstream
+
+Keep the feature branch current by merging upstream `main` into it; never rebase it.
+Validate the exact final head that will be offered.
+Open an upstream pull request only when the captain asks for that house feature by name.
+Only the captain contacts upstream, including opening or commenting on an upstream pull request.
+
+On the fork's pull requests, use these labels to record a house feature's progression: `upstream-candidate`, `upstream-offered`, `contributed-house-feature`, `house-only`, and `historical`.
+The private house-feature register maintained with the operator's fleet records is the current source of truth for the features and their disposition.
+
+## Rebuilding the house line
+
+The `house` branch consists of upstream `main` plus the house-feature merges we chose to include.
+To rebuild it, record its exact previous tip, reset `house` to `main`, and merge back only the wanted `housefeature/` branches.
+Push the rebuilt branch with `--force-with-lease` against that exact previous tip.
+A dropped feature remains recoverable while its durable branch or commits still exist.
+
+Nothing polls house-feature branches, and no recurring check watches upstream.
+A house feature may remain historical indefinitely without becoming debt.
 
 ## Inspecting the private delta
 

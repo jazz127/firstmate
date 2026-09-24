@@ -1,0 +1,10 @@
+THE CAPTAIN CHART
+~ mainland: Capital city ~
+  [dock] Review Quay
+/\ island: alpha /\  -> Capital city
+  ◿│◣ Running task [under sail]
+  ╲▁▁▁╱ cargo: PR https://github.com/example/repo/pull/7
+/\ island: beta /\  -> Review Quay
+  o Idle task [moored]
+        cargo: nothing
+~~~~~~~~~~~~~~~~~~~~~~~~

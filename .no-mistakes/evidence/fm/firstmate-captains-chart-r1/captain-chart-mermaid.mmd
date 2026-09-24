@@ -1,0 +1,21 @@
+flowchart LR
+  subgraph mainland["Mainland: home"]
+    capital["Capital city"]
+    d0["Satellite coastal city: Review Quay"]
+    harbor["Uncharted berth: project unassigned or unregistered"]
+  end
+  subgraph p0["Island: alpha"]
+    s0["Ship: Running task<br/>under sail<br/>Cargo: PR https://github.com/example/repo/pull/7"]
+  end
+  subgraph p1["Island: beta"]
+    s1["Ship: Idle task<br/>moored<br/>Cargo: nothing"]
+  end
+  s0 -->|to Capital city| capital
+  s1 -->|to Review Quay| d0
+  subgraph legend["Legend"]
+    key["working/running: under sail<br/>idle/parked/queued/done: moored<br/>paused/unknown: anchored<br/>blocked: in dry dock<br/>failed: sunk"]
+  end
+  classDef sailing fill:#d5f5e3,stroke:#1e8449
+  classDef resting fill:#edf2f7,stroke:#718096
+  class s0 sailing
+  class s1 resting

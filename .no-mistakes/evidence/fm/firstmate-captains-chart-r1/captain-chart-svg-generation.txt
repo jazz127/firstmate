@@ -1,0 +1,3 @@
+Generating single mermaid chart
+/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/tmp.YEdhtXPYns/home/data/captain-chart.mmd
+/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/tmp.YEdhtXPYns/home/data/captain-chart.svg

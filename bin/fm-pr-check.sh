@@ -136,10 +136,10 @@ if [ "$MODE" = no-mistakes ]; then
       }
       ;;
     gitlab)
-    command -v glab >/dev/null 2>&1 && command -v jq >/dev/null 2>&1 || {
-      echo "error: cannot validate the published intent because glab and jq are unavailable" >&2
-      exit 1
-    }
+      if ! command -v glab >/dev/null 2>&1 || ! command -v jq >/dev/null 2>&1; then
+        echo "error: cannot validate the published intent because glab and jq are unavailable" >&2
+        exit 1
+      fi
       GITLAB_BODY_JSON=$(GITLAB_HOST="$HOST" glab mr view "$NUMBER" -R "https://$HOST/$PROJECT_PATH" -F json 2>/dev/null) || {
         echo "error: cannot read the published merge-request body for evidence validation" >&2
         exit 1

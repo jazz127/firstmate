@@ -293,7 +293,7 @@ EOF
 
 fm_dod_validate_intent_evidence() {  # <intent> <worktree> <task-temp> [preflight|publish]
   local intent=$1 worktree=$2 task_temp=$3 phase=${4:-preflight}
-  local line previous_line candidate artifact command captured claim=0 normalized_artifact normalized_root resolved_artifact
+  local line previous_line candidate artifact command captured claim=0 normalized_artifact normalized_root resolved_artifact link_target symlink_hops
   local artifact_count=0 command_count=0 captured_count=0
   while IFS= read -r line; do
     for candidate in "$line" "$previous_line $line"; do
@@ -370,10 +370,31 @@ EOF
       printf '%s\n' "evidence claim refused: artifact is missing or unreadable: $artifact" >&2
       return 1
     fi
-    resolved_artifact=$(cd -P "$(dirname -- "$artifact")" 2>/dev/null && printf '%s/%s' "$(pwd -P)" "$(basename -- "$artifact")") || {
+    resolved_artifact=$artifact
+    symlink_hops=0
+    while [ -L "$resolved_artifact" ]; do
+      symlink_hops=$((symlink_hops + 1))
+      if [ "$symlink_hops" -gt 40 ]; then
+        printf '%s\n' "evidence claim refused: artifact symlink chain is too deep: $artifact" >&2
+        return 1
+      fi
+      link_target=$(readlink "$resolved_artifact") || {
+        printf '%s\n' "evidence claim refused: artifact is missing or unreadable: $artifact" >&2
+        return 1
+      }
+      case "$link_target" in
+        /*) resolved_artifact=$link_target ;;
+        *) resolved_artifact=$(dirname -- "$resolved_artifact")/$link_target ;;
+      esac
+    done
+    resolved_artifact=$(cd -P "$(dirname -- "$resolved_artifact")" 2>/dev/null && printf '%s/%s' "$(pwd -P)" "$(basename -- "$resolved_artifact")") || {
       printf '%s\n' "evidence claim refused: artifact is missing or unreadable: $artifact" >&2
       return 1
     }
+    if [ ! -f "$resolved_artifact" ] || [ ! -r "$resolved_artifact" ]; then
+      printf '%s\n' "evidence claim refused: artifact is missing or unreadable: $artifact" >&2
+      return 1
+    fi
     normalized_artifact=$(fm_dod_path_normalize "$resolved_artifact") || return 1
     for normalized_root in "$worktree" "$task_temp"; do
       [ -n "$normalized_root" ] || continue

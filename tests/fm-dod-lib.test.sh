@@ -110,6 +110,19 @@ EOF
   rc=$?
   [ "$rc" -ne 0 ] || fail "publication accepted an artifact from another task temp root"
   assert_contains "$out" "outside the" "task temp root refusal was unclear"
+  printf '%s\n' outside > "$root/outside/secret.txt"
+  ln -s "$root/outside/secret.txt" "$root/worktree/linked-evidence.txt"
+  intent=$(cat <<EOF
+2 of 3 scenarios driven live
+evidence-artifact: $root/worktree/linked-evidence.txt
+evidence-command: ./run-scenarios --live
+evidence-captured: 2026-09-25T10:00:00+10:00
+EOF
+)
+  out=$(fm_dod_validate_published_intent "$intent" "$root/worktree" "$root/tmp" 2>&1)
+  rc=$?
+  [ "$rc" -ne 0 ] || fail "publication accepted an artifact symlink escaping the worktree"
+  assert_contains "$out" "outside the allowed roots" "escaping symlink refusal was unclear"
   fm_dod_validate_intent_evidence 'Improve live reload wording' "$root/worktree" "$root/tmp" \
     || fail "ordinary prose containing live was refused"
   fm_dod_validate_intent_evidence 'Improve live reload test wording' "$root/worktree" "$root/tmp" \

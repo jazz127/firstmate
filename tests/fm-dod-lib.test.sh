@@ -91,7 +91,7 @@ EOF
   rc=$?
   [ "$rc" -ne 0 ] || fail "publication accepted a missing evidence artifact"
   assert_contains "$out" "missing or unreadable" "missing artifact publication refusal was unclear"
-  printf '%s\n' synthetic/offline > "$artifact"
+  printf '%s\n' captured output > "$artifact"
   fm_dod_validate_published_intent "$intent" "$root/worktree" "$root/tmp" \
     || fail "publication refused a readable evidence artifact"
   mkdir -p "$root/outside"

@@ -240,6 +240,13 @@ test_report_surface_enforces_actor_turn_and_scope() {
   assert_contains "$out" "names beta, not alpha" "the mixed-turn refusal must preserve the task row's binding"
   out=$(FM_HOME="$home" FM_SUPERVISION_ACTOR=branch FM_BRANCH_REPORT_TURN=t3 "$REPORT" --row 7 --task alpha --verdict routine --summary reviewed 2>&1); rc=$?
   expect_code 0 "$rc" "the unscoped row in a mixed turn must still accept a task report"
+  out=$(FM_HOME="$home" FM_SUPERVISION_ACTOR=branch FM_BRANCH_REPORT_TURN=t3 "$REPORT" --row 7 --task alpha --verdict captain --summary conflicting 2>&1); rc=$?
+  expect_code 3 "$rc" "a second outcome for the same turn and wake row must be refused"
+  assert_contains "$out" "wake row 7 already has an outcome for turn t3" "the duplicate refusal must identify its row and turn"
+  [ "$(wc -l < "$state/branch-outcomes.jsonl" | tr -d ' ')" -eq 4 ] \
+    || fail "a duplicate row report appended a second durable outcome"
+  [ "$(awk -F '\t' '$1 == "t3" && $5 == 7 { n++ } END { print n + 0 }' "$state/.supervision-host-receipts")" -eq 1 ] \
+    || fail "a duplicate row report appended a second receipt"
   pass "report surface: only the branch actor's current turn may report, and only on the tasks its wake names"
 }
 

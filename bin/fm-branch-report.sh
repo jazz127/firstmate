@@ -36,6 +36,10 @@ FM_HOME="${FM_HOME:-${FM_ROOT_OVERRIDE:-$FM_ROOT}}"
 STATE="${FM_STATE_OVERRIDE:-$FM_HOME/state}"
 TURN_FILE="$STATE/.supervision-host-turn"
 RECEIPTS="$STATE/.supervision-host-receipts"
+RECEIPT_LOCK="$STATE/.supervision-host-receipts.lock"
+
+# shellcheck source=bin/fm-wake-lib.sh
+. "$SCRIPT_DIR/fm-wake-lib.sh"
 
 usage() {
   sed -n '/^# Usage:/,/^# --wake/p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//' >&2
@@ -109,14 +113,29 @@ fi
 
 [ "$WAKE_SET" -eq 1 ] || WAKE=$(turn_field wake)
 
+fm_lock_acquire_wait "$RECEIPT_LOCK" || {
+  echo "receipt lock could not be acquired (nothing recorded)" >&2
+  exit 1
+}
+if awk -F '\t' -v turn="$TURN" -v row="$ROW" '
+  $1 == turn && $5 == row { found = 1 }
+  END { exit(found ? 0 : 1) }
+' "$RECEIPTS" 2>/dev/null; then
+  fm_lock_release "$RECEIPT_LOCK"
+  refuse "wake row $ROW already has an outcome for turn $TURN"
+fi
+
 set -- append --task "$TASK" --verdict "$VERDICT" --summary "$SUMMARY" --silent "$SILENT"
 [ -z "$WAKE" ] || set -- "$@" --wake "$WAKE"
 if ! SEQ=$("$SCRIPT_DIR/fm-branch-outcome.sh" "$@"); then
+  fm_lock_release "$RECEIPT_LOCK"
   echo "outcome store append failed (nothing recorded)" >&2
   exit 1
 fi
 printf '%s\t%s\t%s\t%s\t%s\n' "$TURN" "$SEQ" "$VERDICT" "$TASK" "$ROW" >> "$RECEIPTS" || {
+  fm_lock_release "$RECEIPT_LOCK"
   echo "recorded seq $SEQ, but the host receipt could not be written; the host will hand this wake to MAIN" >&2
   exit 1
 }
+fm_lock_release "$RECEIPT_LOCK"
 printf 'recorded seq %s [%s]; it waits in the outcome store for MAIN\n' "$SEQ" "$VERDICT"

@@ -12,7 +12,9 @@
 # ... - needs attention" warning rather than a quiet drift. Nothing is ever forced,
 # stashed, or discarded.
 # Still skips (benignly) local-only/no-origin projects, missing remotes/branches,
-# and fetch failures.
+# and fetch failures. A project whose registry entry bin/fm-project-mode.sh
+# refuses is skipped too, naming that command so its refusal is readable, rather
+# than synced under a guessed posture.
 # A candidate under projects/ must be the root of its own work tree: git discovery
 # walks up, so a plain nested directory would otherwise resolve to the enclosing
 # repository (the firstmate checkout) and be synced under that directory's label.
@@ -38,6 +40,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FM_ROOT="${FM_ROOT_OVERRIDE:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 FM_HOME="${FM_HOME:-${FM_ROOT_OVERRIDE:-$FM_ROOT}}"
 PROJECTS="${FM_PROJECTS_OVERRIDE:-$FM_HOME/projects}"
+# shellcheck source=bin/fm-runtime-branch-lib.sh
+. "$SCRIPT_DIR/fm-runtime-branch-lib.sh"
 # shellcheck source=bin/fm-lock-lib.sh
 . "$SCRIPT_DIR/fm-lock-lib.sh"
 # Inert unless FM_TIMING_LOG names a file; only the deferred network stage sets it.
@@ -117,6 +121,10 @@ resolve_project_arg() {
 
 default_branch() {
   local ref branch
+  if [ "$PROJ_IS_FIRSTMATE_HOME" = yes ]; then
+    firstmate_runtime_branch "$PROJ"
+    return
+  fi
   ref=$(git -C "$PROJ" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || true)
   if [ -n "$ref" ]; then
     echo "${ref#origin/}"
@@ -168,8 +176,13 @@ packed_refs_lock_path() {
 # successful recovery also prints one "$label: recovered: ..." summary to stdout so
 # a session-start refresh (which discards fleet-sync stderr) still surfaces it.
 fetch_with_packed_refs_lock_guard() {
-  local rc attempt=0 lock lock_desc
-  FETCH_OUTPUT=$(git -C "$PROJ" fetch origin --prune --quiet 2>&1); rc=$?
+  local rc attempt=0 lock lock_desc remote=${1:-origin} refspec=${2:-} prune=${3:-yes}
+  local -a fetch_args
+  fetch_args=("$remote")
+  [ "$prune" != yes ] || fetch_args+=(--prune)
+  [ -z "$refspec" ] || fetch_args+=("$refspec")
+  fetch_args+=(--quiet)
+  FETCH_OUTPUT=$(git -C "$PROJ" fetch "${fetch_args[@]}" 2>&1); rc=$?
   [ "$rc" -eq 0 ] && return 0
   is_packed_refs_lock_error "$FETCH_OUTPUT" || return "$rc"
 
@@ -203,7 +216,7 @@ fetch_with_packed_refs_lock_guard() {
         return "$rc"
       fi
       echo "$label: removed provably-stale packed-refs lock $lock (age >= ${FLEET_SYNC_PACKED_REFS_LOCK_AGE_SECS}s, no live holder) and retrying fetch" >&2
-      FETCH_OUTPUT=$(git -C "$PROJ" fetch origin --prune --quiet 2>&1); rc=$?
+      FETCH_OUTPUT=$(git -C "$PROJ" fetch "${fetch_args[@]}" 2>&1); rc=$?
       if [ "$rc" -eq 0 ]; then
         echo "$label: fetch succeeded after stale packed-refs lock cleanup" >&2
         echo "$label: recovered: removed a stale packed-refs lock (no live holder)"
@@ -300,6 +313,7 @@ report_stuck() {
 sync_project() {
   PROJ=$1
   label=$(project_label)
+  PROJ_IS_FIRSTMATE_HOME=no
 
   if [ ! -d "$PROJ" ]; then
     echo "$label: skipped: not a directory"
@@ -324,18 +338,34 @@ sync_project() {
     echo "$label: skipped: not a clone root (git would act on $proj_top)"
     return 0
   fi
-  mode_line=$("$FM_ROOT/bin/fm-project-mode.sh" "$label" 2>/dev/null || echo "no-mistakes off")
-  mode=${mode_line%% *}
-  if [ "$mode" = "local-only" ]; then
+  fm_root_abs=$(cd "$FM_ROOT" && pwd -P)
+  [ "$proj_abs" != "$fm_root_abs" ] || PROJ_IS_FIRSTMATE_HOME=yes
+  if [ "$PROJ_IS_FIRSTMATE_HOME" != yes ] && ! mode_line=$("$FM_ROOT/bin/fm-project-mode.sh" "$label" 2>/dev/null); then
+    echo "$label: skipped: registry entry does not resolve to a delivery posture (run bin/fm-project-mode.sh $label for the refusal)"
+    return 0
+  fi
+  mode=${mode_line:-no-mistakes}
+  mode=${mode%% *}
+  if [ "$PROJ_IS_FIRSTMATE_HOME" != yes ] && [ "$mode" = "local-only" ]; then
     echo "$label: skipped: local-only project"
     return 0
   fi
-  if ! git -C "$PROJ" remote get-url origin >/dev/null 2>&1; then
+  runtime_remote=origin runtime_refspec='' runtime_prune=yes
+  if [ "$PROJ_IS_FIRSTMATE_HOME" = yes ] && firstmate_runtime_branch_is_configured "$PROJ"; then
+    if ! firstmate_runtime_tracking_source "$PROJ" "$(firstmate_runtime_branch "$PROJ")"; then
+      echo "$label: skipped: invalid tracking source for runtime branch"
+      return 0
+    fi
+    runtime_remote=$FIRSTMATE_RUNTIME_REMOTE
+    runtime_refspec=$FIRSTMATE_RUNTIME_FETCH_REFSPEC
+    runtime_prune=no
+  fi
+  if ! git -C "$PROJ" remote get-url "$runtime_remote" >/dev/null 2>&1; then
     echo "$label: skipped: no origin remote"
     return 0
   fi
 
-  if ! fetch_with_packed_refs_lock_guard; then
+  if ! fetch_with_packed_refs_lock_guard "$runtime_remote" "$runtime_refspec" "$runtime_prune"; then
     reason="fetch failed"
     if [ -n "$FETCH_OUTPUT" ]; then
       reason="$reason: $(first_line "$FETCH_OUTPUT")"
@@ -351,6 +381,9 @@ sync_project() {
     return 0
   }
   BASE="origin/$DEFAULT"
+  if [ "$PROJ_IS_FIRSTMATE_HOME" = yes ] && [ -n "$runtime_refspec" ]; then
+    BASE=$FIRSTMATE_RUNTIME_TRACKING_REF
+  fi
   if ! git -C "$PROJ" rev-parse --verify --quiet "$BASE^{commit}" >/dev/null; then
     echo "$label: skipped: $BASE does not exist"
     return 0

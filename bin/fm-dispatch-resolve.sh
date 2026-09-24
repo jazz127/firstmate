@@ -20,8 +20,12 @@
 #   fixed generic none option. Jev returns the matched rule, a probability per
 #   option, and a confidence. Everything after that is jq: the confidence
 #   floor, the rule's declared `approval` and `floor`, each profile's declared
-#   `provider` and `floor`, the quota rows from ONE quota-axi --json snapshot,
-#   and the spendPriority argmax over the eligible candidates. The model never
+#   `provider` and `floor`, the quota rows from ONE quota-axi --json snapshot
+#   (schema 5 or 6; each candidate binds to one row through quota_row in
+#   bin/fm-quota-axi-lib.sh, so a Pi lane such as openai-codex-work/...
+#   reads its own account's row and an expanded provider with no row for the
+#   candidate is unmeasured, never blocked), and the spendPriority argmax over
+#   the eligible candidates. The model never
 #   sees quota, catalogs, approvals, `why`, or `use`. With no rules, it returns
 #   a non-clear result so firstmate keeps using the existing intake.
 #   docs/configuration.md "Crew dispatch profiles" owns the declared fields and
@@ -33,7 +37,7 @@
 #     model/latency_ms/tokens, rule (when excerpt) and confidence, probabilities
 #     reason: <why the status is not clear>
 #     candidate: <harness>:<model> provider=.. scope=.. remaining=..% spendPriority=.. runway=.. -> eligible | eligible, unranked: <reason> | not eligible: <reason>
-#     profile: --harness <h> [--model <m>] [--effort <e>]     (status clear only)
+#     profile: --harness <h> [--model <m>] [--effort <e>] [--seat luna] (status clear only)
 #   clear     -> pass the profile line to fm-spawn.sh unless you state a reason to override
 #   ambiguous -> confidence below the floor; decide as today from the probabilities
 #   escalate  -> the rule requires captain approval, no candidate is rankable, or a genuine tie
@@ -149,10 +153,11 @@ rules_err=$(jq -r --argjson verified_harnesses "$VERIFIED_HARNESSES" --arg provi
     or (($p.harness | type) != "string") or (($p.harness | length) == 0)
     or ($p | has("model") and ((.model | type) != "string" or (.model | length) == 0))
     or ($p | has("effort") and ((.effort | type) != "string" or (.effort | length) == 0))
+    or ($p | has("seat") and (.seat != "luna" or .harness != "codex"))
     or ($p | has("provider") and (provider_id(.provider) | not))
     or ($p | has("floor") and floor_bad(.floor; false));
   def duplicate_profiles($items):
-    ($items | map([.harness, (.model // null), (.effort // null)] | @json)) as $keys
+    ($items | map([.harness, (.model // null), (.effort // null), (.seat // null)] | @json)) as $keys
     | ($keys | length) != ($keys | unique | length);
   if type != "object" then "top-level value must be an object"
   elif has("rules") and (.rules | type) != "array" then "rules must be an array"
@@ -164,12 +169,12 @@ rules_err=$(jq -r --argjson verified_harnesses "$VERIFIED_HARNESSES" --arg provi
   elif any((.rules // [])[]; has("select") and .select != "quota-balanced") then
     "unknown select: " + ([.rules[] | select(has("select") and .select != "quota-balanced") | .select] | unique | join(", "))
   elif any((.rules // [])[]; has("floor") and floor_bad(.floor; true)) then "rule floor needs scope, min_percent 0..100, and provider matching ^[a-z0-9]+(-[a-z0-9]+)*\\z"
-  elif any((.rules // [])[] | profiles(.use)[]; profile_bad(.)) then "each use profile needs harness; model, effort, and floor must be well formed, and provider must match ^[a-z0-9]+(-[a-z0-9]+)*\\z when present"
+  elif any((.rules // [])[] | profiles(.use)[]; profile_bad(.)) then "each use profile needs harness; model, effort, seat, and floor must be well formed, and provider must match ^[a-z0-9]+(-[a-z0-9]+)*\\z when present"
   elif any((.rules // [])[]; duplicate_profiles(profiles(.use))) then "each rule use must not contain duplicate harness, model, and effort profiles"
   elif any((.rules // [])[] | profiles(.use)[]; (verified(.harness) | not)) then "each use profile must name a verified harness"
   elif any((.rules // [])[] | profiles(.use)[]; (effort_ok(.harness; .model; .effort) | not)) then "each use profile effort must be supported by its harness and model"
   elif has("default") and (profiles(.default) | length) == 0 then "default must be a profile object or non-empty profile array"
-  elif has("default") and any(profiles(.default)[]; profile_bad(.)) then "each default profile needs harness; model, effort, and floor must be well formed, and provider must match ^[a-z0-9]+(-[a-z0-9]+)*\\z when present"
+  elif has("default") and any(profiles(.default)[]; profile_bad(.)) then "each default profile needs harness; model, effort, seat, and floor must be well formed, and provider must match ^[a-z0-9]+(-[a-z0-9]+)*\\z when present"
   elif has("default") and duplicate_profiles(profiles(.default)) then "default must not contain duplicate harness, model, and effort profiles"
   elif has("default") and any(profiles(.default)[]; (verified(.harness) | not)) then "each default profile must name a verified harness"
   elif has("default") and any(profiles(.default)[]; (effort_ok(.harness; .model; .effort) | not)) then "each default profile effort must be supported by its harness and model"
@@ -266,25 +271,26 @@ fm_quota_json_valid < "$QUOTA" || emit_error "quota-axi --json returned an inval
 
 # ---- resolution: declared gates + quota evidence + argmax, all in jq ------------
 RESULT=$(jq -n --arg floor "$CONFIDENCE_FLOOR" --argjson lat "$LAT_MS" --arg none_criterion "$DEFAULT_WHEN" --argjson pmap "$PMAP" \
-  --slurpfile resp "$RESP_FILE" --slurpfile rules "$RULES" --slurpfile quota "$QUOTA" '
+  --slurpfile resp "$RESP_FILE" --slurpfile rules "$RULES" --slurpfile quota "$QUOTA" "$FM_QUOTA_ROW_JQ"'
   ($resp[0]) as $r | ($rules[0]) as $cfg | ($quota[0]) as $q | ($r.answers.rule) as $a |
   def profiles($v): if ($v | type) == "array" then $v elif ($v | type) == "object" then [$v] else [] end;
-  def prov($p): ([$q.providers[] | select(.provider == $p)] | first) // null;
-  def rows($p): (prov($p) | .quotaSemantics.effectiveAvailability // []);
+  def prov($p; $lane): quota_row($q; $p; $lane);
+  def rows($p; $lane): (prov($p; $lane) | .quotaSemantics.effectiveAvailability // []);
   def bare($m): ($m | split("/") | last);
   def provider_of($c): ($c.provider // $pmap[$c.harness] // null);
-  def measured($p):
-    (prov($p) != null and (["known", "partial"] | index(prov($p).quotaSemantics.status)) != null);
-  def applicable($p; $m):
+  def lane_of($c): quota_lane($c.harness; $c.model);
+  def measured($p; $lane):
+    (prov($p; $lane) != null and (["known", "partial"] | index(prov($p; $lane).quotaSemantics.status)) != null);
+  def applicable($p; $lane; $m):
     (bare($m)) as $bare |
-    [rows($p)[] | select(
+    [rows($p; $lane)[] | select(
       .scope == "all_models" or .scope == "all_products" or
       ($m != "" and (.scope == ("model:" + $bare) or .scope == ("product:" + $bare)))
     )];
-  def floor_state($f; $p):
+  def floor_state($f; $p; $lane):
     if $f == null then "none"
-    elif prov($p) == null or (measured($p) | not) then "unknown"
-    else [rows($p)[] | select(.scope == $f.scope)] as $matches
+    elif prov($p; $lane) == null or (measured($p; $lane) | not) then "unknown"
+    else [rows($p; $lane)[] | select(.scope == $f.scope)] as $matches
       | if ($matches | length) == 0 or any($matches[]; .status != "known") then "unknown"
         elif any($matches[]; .effectivePercentRemaining < $f.min_percent) then "below"
         else "ok"
@@ -293,13 +299,17 @@ RESULT=$(jq -n --arg floor "$CONFIDENCE_FLOOR" --argjson lat "$LAT_MS" --arg non
   def evidence($rows):
     $rows | map({scope, status, pct: (.effectivePercentRemaining // null), runway: (.runway.status // null), spendPriority: (.selection.spendPriority // null)});
   def evaluate($c):
-    (provider_of($c)) as $p |
+    (provider_of($c)) as $p | (lane_of($c)) as $lane |
     if $p == null then {profile: $c, eligible: false, reason: "no provider family for harness \($c.harness); declare provider on the profile"}
-    elif prov($p) == null then {profile: $c, provider: $p, eligible: true, unranked: true, reason: "provider \($p) not in the quota snapshot"}
+    elif prov($p; $lane) == null then
+      {profile: $c, provider: $p, eligible: true, unranked: true,
+       reason: (if any($q.providers[]; .provider == $p)
+                then "provider \($p) has no quota row for account \(if $lane == "" then "default" else $lane end)"
+                else "provider \($p) not in the quota snapshot" end)}
     else
-      (applicable($p; ($c.model // ""))) as $rows |
+      (applicable($p; $lane; ($c.model // ""))) as $rows |
       (evidence($rows)) as $bounds |
-      (floor_state($c.floor; $p)) as $profile_floor_state |
+      (floor_state($c.floor; $p; $lane)) as $profile_floor_state |
       if any($rows[]; (.runway.status // "") == "exhausted_now") then
         ($rows | map(select((.runway.status // "") == "exhausted_now")) | first) as $bad |
         {profile: $c, provider: $p, bounds: $bounds, scope: $bad.scope, pct: ($bad.effectivePercentRemaining // null), runway: $bad.runway.status, eligible: false, reason: "runway exhausted_now at \($bad.scope)"}
@@ -307,18 +317,18 @@ RESULT=$(jq -n --arg floor "$CONFIDENCE_FLOOR" --argjson lat "$LAT_MS" --arg non
         ($rows | map(select(.status == "known" and (.effectivePercentRemaining | type) == "number" and .effectivePercentRemaining <= 0)) | first) as $bad |
         {profile: $c, provider: $p, bounds: $bounds, scope: $bad.scope, pct: $bad.effectivePercentRemaining, runway: $bad.runway.status, eligible: false, reason: "0% remaining at \($bad.scope)"}
       elif $profile_floor_state == "below" then
-        ([rows($p)[] | select(
+        ([rows($p; $lane)[] | select(
           .scope == $c.floor.scope and
           .effectivePercentRemaining < $c.floor.min_percent
         )] | first) as $floor_row |
         {profile: $c, provider: $p, bounds: $bounds, scope: ($floor_row.scope // $c.floor.scope), pct: ($floor_row.effectivePercentRemaining // null), runway: ($floor_row.runway.status // null), eligible: false, reason: "profile floor \($c.floor.scope) below \($c.floor.min_percent)%"}
-      elif (measured($p) | not) then
+      elif (measured($p; $lane) | not) then
         ($rows | first) as $row |
-        {profile: $c, provider: $p, bounds: $bounds, scope: ($row.scope // null), pct: ($row.effectivePercentRemaining // null), runway: ($row.runway.status // null), eligible: true, unranked: true, unknown: true, reason: "provider \($p) unmeasured (\(prov($p).quotaSemantics.status))"}
+        {profile: $c, provider: $p, bounds: $bounds, scope: ($row.scope // null), pct: ($row.effectivePercentRemaining // null), runway: ($row.runway.status // null), eligible: true, unranked: true, unknown: true, reason: "provider \($p) unmeasured (\(prov($p; $lane).quotaSemantics.status))"}
       elif ($rows | length) == 0 then
         {profile: $c, provider: $p, bounds: $bounds, eligible: true, unranked: true, unknown: true, reason: "no applicable quota row for provider \($p)"}
       elif $profile_floor_state == "unknown" then
-        ([rows($p)[] | select(.scope == $c.floor.scope)] | first) as $floor_row |
+        ([rows($p; $lane)[] | select(.scope == $c.floor.scope)] | first) as $floor_row |
         {profile: $c, provider: $p, bounds: $bounds, scope: $c.floor.scope, pct: ($floor_row.effectivePercentRemaining // null), runway: ($floor_row.runway.status // null), eligible: true, unranked: true, unknown: true, reason: "profile floor \($c.floor.scope) is unverifiable: not rankable"}
       elif any($rows[]; .status != "known") then
         ($rows | map(select(.status != "known")) | first) as $bad |
@@ -339,7 +349,7 @@ RESULT=$(jq -n --arg floor "$CONFIDENCE_FLOOR" --argjson lat "$LAT_MS" --arg non
   (if $choice == "default" then null
    elif $rule_number != null and $rule_number <= (($cfg.rules // []) | length) then $cfg.rules[$rule_number - 1]
    else null end) as $rule |
-  (if $rule == null then "none" else floor_state($rule.floor; $rule.floor.provider) end) as $rule_floor_state |
+  (if $rule == null then "none" else floor_state($rule.floor; $rule.floor.provider; "") end) as $rule_floor_state |
   (if $choice != "default" and $rule == null then []
    elif $rule == null then profiles($cfg.default // null)
    else profiles($rule.use)
@@ -399,6 +409,7 @@ TEXT=$(jq -r '
       + "  -> " + (if .unranked then "eligible, unranked: \(.reason | flat): disclosed uncertainty" elif .eligible then "eligible" else "not eligible: \(.reason | flat)" end)),
   (if .chosen then "  profile: --harness \(.chosen.profile.harness | shell_arg)"
       + (if .chosen.profile.model then " --model \(.chosen.profile.model | shell_arg)" else "" end)
-      + (if .chosen.profile.effort then " --effort \(.chosen.profile.effort | shell_arg)" else "" end) else empty end)' <<<"$RESULT") || emit_error "output rendering failed"
+      + (if .chosen.profile.effort then " --effort \(.chosen.profile.effort | shell_arg)" else "" end)
+      + (if .chosen.profile.seat then " --seat \(.chosen.profile.seat | shell_arg)" else "" end) else empty end)' <<<"$RESULT") || emit_error "output rendering failed"
 printf '%s\n' "$TEXT"
 exit 0

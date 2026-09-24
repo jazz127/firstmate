@@ -41,6 +41,9 @@ SUB_HOME_MARKER="${SUB_HOME_MARKER:-.fm-secondmate-home}"
 # shellcheck source=bin/fm-secondmate-registry-lib.sh
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/fm-secondmate-registry-lib.sh"
 
+# shellcheck source=bin/fm-runtime-branch-lib.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/fm-runtime-branch-lib.sh"
+
 # --- helpers ---------------------------------------------------------------
 
 first_line() {
@@ -48,19 +51,7 @@ first_line() {
 }
 
 default_branch() {
-  local dir=$1 ref branch
-  ref=$(git -C "$dir" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || true)
-  if [ -n "$ref" ]; then
-    echo "${ref#origin/}"
-    return 0
-  fi
-  for branch in main master; do
-    if git -C "$dir" show-ref --verify --quiet "refs/heads/$branch"; then
-      echo "$branch"
-      return 0
-    fi
-  done
-  return 1
+  firstmate_runtime_branch "$1"
 }
 
 # Resolve the PRIMARY checkout's current default-branch commit - the local-HEAD
@@ -204,22 +195,28 @@ validate_secondmate_home() {
 }
 
 # A single fetch refreshes every worktree that shares an object store, so fetch
-# each distinct git-common-dir at most once. Used ONLY by the origin base mode;
-# the local-HEAD sync never fetches.
+# each distinct git-common-dir and remote at most once. Local-commit sync never
+# fetches.
 FETCHED=""
 fetch_once() {
-  local dir=$1 common
+  local dir=$1 remote=${2:-origin} common key refspec=${3:-}
   common=$(git -C "$dir" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)
+  key="$common|$remote"
   if [ -n "$common" ]; then
     case " $FETCHED " in
-      *" $common "*) return 0 ;;
+      *" $key "*) return 0 ;;
     esac
   fi
-  if git -C "$dir" fetch origin --prune --quiet 2>/dev/null; then
-    [ -n "$common" ] && FETCHED="$FETCHED $common"
+  if [ -n "$refspec" ]; then
+    git -C "$dir" fetch "$remote" --prune --quiet "$refspec" 2>/dev/null || return 1
+  elif ! git -C "$dir" fetch "$remote" --prune --quiet 2>/dev/null; then
+    return 1
+  fi
+  if [ -n "$common" ]; then
+    [ -n "$common" ] && FETCHED="$FETCHED $key"
     return 0
   fi
-  return 1
+  return 0
 }
 
 # Which watched instruction paths changed between HEAD and BASE (comma list).
@@ -352,8 +349,9 @@ live_secondmate_meta_records() {
 #   FF_INSTR  = comma list of changed instruction paths (only when updated)
 #
 # base_mode selects where the fast-forward base comes from:
-#   origin       - fetch origin and advance to origin/<default> (the /updatefirstmate
-#                  path); requires an origin remote and network reachability.
+#   origin       - legacy explicit origin fetch to origin/<runtime branch>.
+#   tracking     - fetch branch.<runtime>.remote and advance to its configured
+#                  branch.<runtime>.merge target (the /updatefirstmate path).
 #   <commit-ish> - advance to that LOCAL commit with NO fetch and no origin
 #                  dependency (the local-HEAD secondmate sync). The commit must
 #                  already exist in the target's object store, which it always does
@@ -387,16 +385,31 @@ ff_target() {
   }
 
   # Resolve the fast-forward base from base_mode (see header).
-  if [ "$base_mode" = origin ]; then
-    if ! git -C "$dir" remote get-url origin >/dev/null 2>&1; then
+  if [ "$base_mode" = origin ] || [ "$base_mode" = tracking ]; then
+    local remote=origin merge_ref
+    local fetch_refspec=
+    if [ "$base_mode" = tracking ] && firstmate_runtime_branch_is_configured "$dir"; then
+      if ! firstmate_runtime_tracking_source "$dir" "$default"; then
+        echo "$label: skipped: invalid tracking source for runtime branch $default"
+        return 0
+      fi
+      remote=$FIRSTMATE_RUNTIME_REMOTE
+      merge_ref=$FIRSTMATE_RUNTIME_MERGE_REF
+      fetch_refspec=$FIRSTMATE_RUNTIME_FETCH_REFSPEC
+    fi
+    if [ "$base_mode" = origin ] && ! git -C "$dir" remote get-url origin >/dev/null 2>&1; then
       echo "$label: skipped: no origin remote"
       return 0
     fi
-    if ! fetch_once "$dir"; then
+    if ! fetch_once "$dir" "$remote" "$fetch_refspec"; then
       echo "$label: skipped: fetch failed"
       return 0
     fi
-    base="origin/$default"
+    if [ -n "$fetch_refspec" ]; then
+      base=$FIRSTMATE_RUNTIME_TRACKING_REF
+    else
+      base="origin/$default"
+    fi
   else
     base="$base_mode"
   fi

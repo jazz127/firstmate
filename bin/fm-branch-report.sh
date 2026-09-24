@@ -102,7 +102,7 @@ ROW_TASK=$(printf '%s\n' "$(turn_field row_tasks)" | awk -v row="$ROW" '
 ')
 [ -n "$ROW_TASK" ] || refuse "wake row $ROW has no task binding in the current turn"
 
-if [ "$(turn_field unscoped)" != 1 ]; then
+if [ "$ROW_TASK" != fleet ]; then
   [ "$TASK" = "$ROW_TASK" ] \
     || refuse "wake row $ROW names $ROW_TASK, not $TASK; report only that event's task, never fleet or a task from memory"
 fi

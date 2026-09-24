@@ -234,6 +234,13 @@ test_report_surface_enforces_actor_turn_and_scope() {
   printf 'turn=t2\nrows=6\nrow_tasks=6=fleet\ntasks=\nunscoped=1\nwake=heartbeat\n' > "$state/.supervision-host-turn"
   out=$(FM_HOME="$home" FM_SUPERVISION_ACTOR=branch FM_BRANCH_REPORT_TURN=t2 "$REPORT" --row 6 --task fleet --verdict routine --summary quiet --silent true 2>&1); rc=$?
   expect_code 0 "$rc" "an unscoped heartbeat turn must accept a silent fleet report"
+
+  printf 'turn=t3\nrows=7 8\nrow_tasks=7=fleet 8=beta\ntasks=beta\nunscoped=1\nwake=check and signal\n' > "$state/.supervision-host-turn"
+  out=$(FM_HOME="$home" FM_SUPERVISION_ACTOR=branch FM_BRANCH_REPORT_TURN=t3 "$REPORT" --row 8 --task alpha --verdict routine --summary wrong 2>&1); rc=$?
+  expect_code 3 "$rc" "an unscoped row in a mixed turn must not weaken a task-bound row"
+  assert_contains "$out" "names beta, not alpha" "the mixed-turn refusal must preserve the task row's binding"
+  out=$(FM_HOME="$home" FM_SUPERVISION_ACTOR=branch FM_BRANCH_REPORT_TURN=t3 "$REPORT" --row 7 --task alpha --verdict routine --summary reviewed 2>&1); rc=$?
+  expect_code 0 "$rc" "the unscoped row in a mixed turn must still accept a task report"
   pass "report surface: only the branch actor's current turn may report, and only on the tasks its wake names"
 }
 

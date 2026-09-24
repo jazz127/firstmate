@@ -304,9 +304,15 @@ EOF
       [ -n "$out" ] || out='[]'
       repo_result=$(printf '%s' "$out" | jq --arg repo "$repo" --argjson limit "$FM_BEARINGS_PR_LIMIT" --slurpfile tasks "$tasks_file" '
         ($tasks[0] // []) as $all_tasks
-        | def task_for_branch($ref):
-            ( [ $all_tasks[] | select((.branch // ("fm/" + .id)) == $ref) | .id ] | .[0] )
-            // (if ($ref | startswith("fm/")) then ($ref | ltrimstr("fm/")) else "-" end);
+        | def github_repo($url):
+            try ($url | capture("github\\.com[:/](?<repo>[^/]+/[^/]+)").repo | sub("\\.git$"; "")) catch null;
+          def task_for_branch($ref):
+            [ $all_tasks[]
+              | select((.branch // ("fm/" + .id)) == $ref)
+              | select(github_repo(.pr.url // "") == $repo)
+              | .id
+            ] as $matches
+            | if ($matches | length) == 1 then $matches[0] else "-" end;
         [ .[] | {
           num:(.number|tostring),
           repo:$repo,

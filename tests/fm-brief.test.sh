@@ -440,7 +440,7 @@ test_no_mistakes_dod_green_detection() {
   FM_HOME="$home" "$ROOT/bin/fm-brief.sh" "$id" some-proj --mode no-mistakes >/dev/null 2>&1
   brief="$home/data/$id/brief.md"
   assert_present "$brief" "brief was not scaffolded"
-  assert_grep "Only a drive call's return reports the green PR" "$brief" \
+  assert_grep "For a base with CI, only a drive call's return reports the green PR" "$brief" \
     "no-mistakes DOD must make the drive call's return the green signal"
   assert_grep "never reports \`checks-passed\` while the ci step is still monitoring the PR for merge" "$brief" \
     "no-mistakes DOD must say axi status cannot show a green PR in merge monitoring"

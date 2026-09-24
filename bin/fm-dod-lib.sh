@@ -293,22 +293,18 @@ EOF
 
 fm_dod_validate_intent_evidence() {  # <intent> <supervising-home> <worktree> <task-temp> [preflight|publish]
   local intent=$1 home=$2 worktree=$3 task_temp=$4 phase=${5:-preflight}
-  local line artifact command captured claim=0 normalized_artifact normalized_root resolved_artifact
-  while IFS= read -r line; do
-    if printf '%s\n' "$line" | grep -Eiq '(live|verified|real-account|independent|external|externally confirmed)' \
-      && printf '%s\n' "$line" | grep -Eiq '(scenario|validation|test|result|evidence|account|confirmation|[0-9]+[[:space:]]+of[[:space:]]+[0-9]+)'; then
-      claim=1
-      break
-    fi
-  done <<EOF
-$intent
-EOF
+  local line artifact command captured claim=0 normalized_artifact normalized_root resolved_artifact flat_intent
+  flat_intent=$(printf '%s\n' "$intent" | tr '\n' ' ')
+  if printf '%s\n' "$flat_intent" | grep -Eiq '(live|verified|real-account|independent|external|externally confirmed)' \
+    && printf '%s\n' "$flat_intent" | grep -Eiq '(scenario|validation|test|result|evidence|account|confirmation|[0-9]+[[:space:]]+of[[:space:]]+[0-9]+)'; then
+    claim=1
+  fi
   [ "$claim" -eq 1 ] || return 0
   while IFS= read -r line; do
     case "$line" in
-      evidence-artifact:*) artifact=${line#evidence-artifact:}; artifact=${artifact#"${artifact%%[![:space:]]*}"} ;;
-      evidence-command:*) command=${line#evidence-command:}; command=${command#"${command%%[![:space:]]*}"} ;;
-      evidence-captured:*) captured=${line#evidence-captured:}; captured=${captured#"${captured%%[![:space:]]*}"} ;;
+      evidence-artifact:*) artifact=$(printf '%s' "${line#evidence-artifact:}" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//') ;;
+      evidence-command:*) command=$(printf '%s' "${line#evidence-command:}" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//') ;;
+      evidence-captured:*) captured=$(printf '%s' "${line#evidence-captured:}" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//') ;;
     esac
   done <<EOF
 $intent

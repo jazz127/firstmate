@@ -50,6 +50,16 @@ test_evidence_claim_requires_provenance() {
   rc=$?
   [ "$rc" -ne 0 ] || fail "evidence claim without command and time was accepted"
   assert_contains "$out" "missing evidence-command" "missing command refusal was unclear"
+  intent=$(printf '2 of 3 scenarios\ndriven live\nevidence-artifact: %s\n' "$artifact")
+  out=$(fm_dod_validate_intent_evidence "$intent" "$root/home" "$root/worktree" "$root/tmp" 2>&1)
+  rc=$?
+  [ "$rc" -ne 0 ] || fail "line-split evidence claim without provenance was accepted"
+  assert_contains "$out" "missing evidence-command" "line-split claim refusal was unclear"
+  intent=$(printf '2 of 3 scenarios driven live\nevidence-artifact: %s\nevidence-command:   \nevidence-captured:   \n' "$artifact")
+  out=$(fm_dod_validate_intent_evidence "$intent" "$root/home" "$root/worktree" "$root/tmp" 2>&1)
+  rc=$?
+  [ "$rc" -ne 0 ] || fail "whitespace-only evidence metadata was accepted"
+  assert_contains "$out" "missing evidence-command" "whitespace-only command refusal was unclear"
   pass "evidence claims require artifact provenance"
 }
 

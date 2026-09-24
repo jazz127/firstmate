@@ -42,6 +42,18 @@ STATE_NAMES = {
     "done": "moored",
     "unknown": "anchored",
 }
+SHIP_PRESENTATION = {
+    "working": {"sail": True, "glyph": "◿│◣", "hull": "╲▁▁▁╱"},
+    "running": {"sail": True, "glyph": "◿│◣", "hull": "╲▁▁▁╱"},
+    "idle": {"sail": False, "glyph": "o", "hull": "     "},
+    "parked": {"sail": False, "glyph": "o", "hull": "     "},
+    "queued": {"sail": False, "glyph": "o", "hull": "     "},
+    "paused": {"sail": False, "glyph": "o", "hull": "     "},
+    "blocked": {"sail": False, "glyph": "o", "hull": "     "},
+    "failed": {"sail": False, "glyph": "o", "hull": "     "},
+    "done": {"sail": False, "glyph": "o", "hull": "     "},
+    "unknown": {"sail": False, "glyph": "o", "hull": "     "},
+}
 
 
 def label(value, limit=90):
@@ -96,6 +108,7 @@ def fleet_model(snapshot, projects):
 
     for ship in ships.values():
         ship["nautical"] = STATE_NAMES.get(ship["state"], "anchored")
+        ship["presentation"] = SHIP_PRESENTATION[ship["state"]]
         ship["cargo"] = ("PR " + prs[ship["id"]] if ship["id"] in prs else
                          "Report " + reports[ship["id"]] if ship["id"] in reports else
                          "nothing")
@@ -131,7 +144,7 @@ def render_mermaid(model):
                      f'{label(ship["nautical"])}<br/>Cargo: {label(ship["cargo"], 105)}"]')
         destination = dock_ids[dock] if dock else "capital"
         edges.append(f'  {sid} -->|to {label(dock or "Capital city", 45)}| {destination}')
-        classes.append(f'  class {sid} {"sailing" if ship["nautical"] == "under sail" else "resting"}')
+        classes.append(f'  class {sid} {"sailing" if ship["presentation"]["sail"] else "resting"}')
 
     for pindex, (name, dock) in enumerate(projects.items()):
         lines.append(f'  subgraph p{pindex}["Island: {label(name)}"]')
@@ -168,17 +181,19 @@ def render_ascii(model):
         if not group:
             lines.append("    no charted ships")
         for ship in group:
-            glyph = "◿│◣" if ship["nautical"] == "under sail" else "o"
-            hull = "╲▁▁▁╱" if ship["nautical"] == "under sail" else "     "
+            presentation = ship["presentation"]
+            glyph = presentation["glyph"]
+            hull = presentation["hull"]
             lines.append(f"  {glyph} {ship['name']} [{ship['nautical']}]")
             lines.append(f"  {hull} cargo: {ship['cargo']}")
     unknown = [ship for ship in model["ships"] if ship["repo"] not in model["projects"]]
     if unknown:
         lines.append("~ uncharted berth: project unassigned or unregistered ~")
         for ship in unknown:
-            glyph = "◿│◣" if ship["nautical"] == "under sail" else "o"
+            presentation = ship["presentation"]
+            glyph = presentation["glyph"]
             lines.append(f"  {glyph} {ship['name']} [{ship['nautical']}] -> Capital city")
-            hull = "╲▁▁▁╱" if ship["nautical"] == "under sail" else "     "
+            hull = presentation["hull"]
             lines.append(f"  {hull} cargo: {ship['cargo']}")
     lines.append("~" * 24)
     def fit_cells(line):

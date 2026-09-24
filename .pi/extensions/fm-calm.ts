@@ -141,11 +141,18 @@ export default function (pi: ExtensionAPI) {
   const loadFleetMap = (): void => {
     const generation = ++fleetMapGeneration;
     const generator = resolve(root, "bin/fm-captain-chart.py");
-    if (!existsSync(generator)) return;
-    if (fleetMapRows.length === 0) fleetMapRows = ["Loading fleet map..."];
+    fleetMapRows = ["Loading fleet map..."];
+    if (!existsSync(generator)) {
+      fleetMapRows = ["Fleet map unavailable; the boat remains active"];
+      return;
+    }
     // The chart generator is the sole fleet reader and mapping owner. Keep its
     // snapshot work off Pi's render path; the existing boat animates meanwhile.
-    execFile("python3", [generator, "--ascii"], { timeout: 45000, maxBuffer: 1024 * 1024 },
+    execFile("python3", [generator, "--ascii"], {
+      env: { ...process.env, FM_HOME: fmHome },
+      timeout: 45000,
+      maxBuffer: 1024 * 1024,
+    },
       (error, stdout) => {
         if (generation !== fleetMapGeneration) return;
         if (error) {

@@ -3152,7 +3152,7 @@ check(typeof widget.dispose === "function", "working widget has no dispose()");
 // A focusable widget could steal input or swallow Escape; this one takes no keys.
 check(widget.handleInput === undefined, "working widget accepts keyboard input");
 check(widget.wantsKeyRelease === undefined, "working widget asked for key release events");
-check(widget.render(60).length === 2, "installed working widget did not render the two-row sprite");
+check(widget.render(60).length >= 2, "installed working widget did not render the two-row sprite");
 check(
   widget.render(60).every((line) => visibleWidth(line) <= 60),
   "installed working widget rendered a line wider than its viewport",

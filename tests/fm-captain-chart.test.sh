@@ -62,6 +62,21 @@ grep -F 'o Paused task [anchored]' "$tmp/one.txt" >/dev/null || fail "ASCII map 
 grep -F -- '-> Review Quay' "$tmp/one.txt" >/dev/null || fail "ASCII map omitted satellite dock"
 pass "ASCII map shares fleet mapping and is deterministic"
 
+for state in 's1|Running task|under sail|sailing|◿│◣|╲▁▁▁╱' \
+  's0|Idle task|moored|resting|o|     ' \
+  's4|Paused task|anchored|resting|o|     ' \
+  's3|Failed task|sunk|resting|o|     ' \
+  's2|Blocked task|in dry dock|resting|o|     '; do
+  IFS='|' read -r ship_id name nautical class glyph hull <<EOF
+$state
+EOF
+  grep -F "$name<br/>$nautical" "$tmp/one.mmd" >/dev/null || fail "Mermaid lost $name state"
+  grep -F "class $ship_id $class" "$tmp/one.mmd" >/dev/null || fail "Mermaid lost $name sail class"
+  grep -F "$glyph $name [$nautical]" "$tmp/one.txt" >/dev/null || fail "ASCII lost $name sprite"
+  grep -F "$hull cargo:" "$tmp/one.txt" >/dev/null || fail "ASCII lost $name hull"
+done
+pass "Mermaid and ASCII consume the same ship presentation states"
+
 if command -v mmdc >/dev/null 2>&1; then
   python3 "$chart" --snapshot-file "$tmp/snapshot.json" --registry-file "$tmp/projects.md" --output "$tmp/chart.mmd" >/dev/null
   [ -s "$tmp/chart.svg" ] || fail "mmdc did not render non-empty SVG"

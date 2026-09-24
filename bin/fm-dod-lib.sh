@@ -309,6 +309,10 @@ fm_dod_validate_intent_evidence() {  # <intent> <worktree> <task-temp> [prefligh
       case "$candidate" in
         *\"*) continue ;;
       esac
+      if printf '%s\n' "$candidate" | grep -Eiq '((live|verified|real|real-account|real account|independent|independently|external|externally confirmed)[^.!?]*(test|tests|check|checks|run|runs|probe|probes|scenario|scenarios|outcome|outcomes|result|results|measurement|measurements|account|accounts|validation|evidence|verification|confirmation)[^.!?]*(was|were|is|are|shows?|reported|demonstrated|driven|completed|succeeded|successful|successfully|passed|failed|confirmed|verified))|((test|tests|check|checks|run|runs|probe|probes|scenario|scenarios|outcome|outcomes|result|results|measurement|measurements|account|accounts|validation|evidence|verification|confirmation)[^.!?]*(was|were|is|are)[[:space:]]+(live|verified|real|real-account|real account|independent|independently|external|externally confirmed))'; then
+        claim=1
+        break 2
+      fi
       if printf '%s\n' "$candidate" | grep -Eiq '((test|tests|check|checks|run|runs|probe|probes|scenario|scenarios|outcome|outcomes|result|results|measurement|measurements|account|accounts|validation|evidence|verification|confirmation)[^.!?]*(live|verified|real-account|real account|independent|independently|external|externally confirmed)[^.!?]*(was|were|is|are|shows?|reported|demonstrated|driven|completed|succeeded|successful|successfully|passed|failed|confirmed|verified))'; then
         claim=1
         break 2

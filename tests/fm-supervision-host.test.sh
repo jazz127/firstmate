@@ -210,14 +210,21 @@ test_report_surface_enforces_actor_turn_and_scope() {
   [ ! -e "$state/branch-outcomes.jsonl" ] || fail "a refused report touched the outcome store"
 
   out=$(FM_HOME="$home" FM_SUPERVISION_ACTOR=branch FM_BRANCH_REPORT_TURN=t1 "$REPORT" --task alpha --verdict routine --summary quiet --silent true 2>&1); rc=$?
-  expect_code 2 "$rc" "--silent true on a task outcome is a usage error"
+  expect_code 0 "$rc" "an in-scope routine task report may be silent"
+  assert_contains "$out" "recorded seq 1 [routine]" "the silent task report must name its store sequence"
+  jq -e 'select(.task == "alpha" and .verdict == "routine" and .silent == true)' "$state/branch-outcomes.jsonl" >/dev/null \
+    || fail "the outcome store did not preserve the silent task report"
+
+  out=$(FM_HOME="$home" FM_SUPERVISION_ACTOR=branch FM_BRANCH_REPORT_TURN=t1 "$REPORT" --task alpha --verdict captain --summary 'must be visible' --silent true 2>&1); rc=$?
+  expect_code 2 "$rc" "a captain outcome must not be silent"
+  assert_contains "$out" "--silent true is only for a routine outcome" "the silent captain refusal must say why"
 
   out=$(FM_HOME="$home" FM_SUPERVISION_ACTOR=branch FM_BRANCH_REPORT_TURN=t1 "$REPORT" --task alpha --verdict captain --summary 'PR ready' 2>&1); rc=$?
   expect_code 0 "$rc" "an in-scope report must be recorded"
-  assert_contains "$out" "recorded seq 1 [captain]" "the report must name its store sequence"
+  assert_contains "$out" "recorded seq 2 [captain]" "the report must name its store sequence"
   assert_grep '"task":"alpha"' "$state/branch-outcomes.jsonl" "the outcome store did not receive the report"
   assert_grep '"wake":"signal: alpha.status"' "$state/branch-outcomes.jsonl" "the report did not default its wake to the turn's wake"
-  [ "$(cat "$state/.supervision-host-receipts")" = "$(printf 't1\t1\tcaptain\talpha')" ] \
+  [ "$(cat "$state/.supervision-host-receipts")" = "$(printf 't1\t1\troutine\talpha\nt1\t2\tcaptain\talpha')" ] \
     || fail "the host receipt was not written: $(cat "$state/.supervision-host-receipts")"
 
   printf 'turn=t2\nrows=5\ntasks=\nunscoped=1\nwake=heartbeat\n' > "$state/.supervision-host-turn"

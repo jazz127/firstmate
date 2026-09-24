@@ -1070,6 +1070,10 @@ test_forge_gerrit_changes_what_no_mistakes_means() {
   brief="$home/data/forge-dod-g1/brief.md"
   grep -qx "Delivery contract: mode=no-mistakes forge=gerrit shape=squash" "$brief" \
     || fail "the brief did not record the machine-readable forge in its delivery contract"
+  assert_grep "then start /no-mistakes on that committed head immediately without waiting for firstmate" "$brief" \
+    "the gerrit worker was not told to start validation from its committed head"
+  assert_no_grep "Firstmate will then instruct you to run /no-mistakes" "$brief" \
+    "the gerrit worker was told to wait for a validation steer"
 
   # shellcheck disable=SC2016 # Backticks are literal generated Markdown.
   assert_grep 'Pass `--skip push,pr,ci` on every `no-mistakes axi run` for this task' "$brief" \

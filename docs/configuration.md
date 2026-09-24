@@ -633,6 +633,14 @@ The locked bootstrap inheritance pass uses the same placement-specific behavior;
 That live discovery starts from `state/*.meta` records with `kind=secondmate`; `data/secondmates.md` only backfills `home=` for older or incomplete meta records.
 Skipped items, such as a destination checkout that does not yet gitignore the item, are visible warnings but not hard failures.
 
+## Firstmate runtime branch (git config firstmate.runtimeBranch)
+
+`bin/fm-ff-lib.sh` and `bin/fm-tangle-lib.sh` share the runtime-branch resolver.
+When `firstmate.runtimeBranch` is unset, it preserves the historical origin/HEAD selection and local main/master fallback.
+When set, the value must be a valid Git branch name that exists locally; invalid values and missing local branches fail closed without falling back.
+`bin/fm-update.sh` follows that branch's `branch.<name>.remote` and `branch.<name>.merge` settings, then pins the resulting commit for all secondmate updates.
+Project clones keep their own upstream-default resolution in `bin/fm-fleet-sync.sh`; this setting applies to the Firstmate runtime repository only.
+
 ## Watched tool updates (config/watched-tools.json)
 
 `config/watched-tools.json` is an optional local, gitignored list of the tools this home depends on.

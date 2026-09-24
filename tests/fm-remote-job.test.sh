@@ -258,6 +258,43 @@ fm_remote_job_reap "$ACCOUNT_HOME" "$JOB_ID" || fail "the active readiness job c
 pass "active jobs keep the worker ready for concurrent requests"
 
 OLD_WORKER_PID=$(cat "$STATE_ROOT/worker.pid")
+OLD_WORKER_PGID=$(fm_remote_job_process_pgid "$OLD_WORKER_PID") \
+  || fail "the stale-heartbeat fixture could not resolve the worker process group"
+kill -STOP "$OLD_WORKER_PID"
+printf '%s\nstale incarnation\n' "$OLD_WORKER_PID" > "$STATE_ROOT/worker.ready"
+if fm_remote_job_probe "$ACCOUNT_HOME"; then
+  cat "$STATE_ROOT/worker.ready" "$STATE_ROOT/worker.lock/pid" "$STATE_ROOT/worker.lock/start" >&2
+  ps -p "$OLD_WORKER_PID" -o pid=,lstart=,command= >&2 || true
+  fail "a fresh heartbeat from a stale worker incarnation reported ready"
+fi
+if [ "$(uname -s)" = Linux ]; then
+  fm_remote_job_ensure_worker "$REMOTE_ROOT" "$ACCOUNT_HOME" \
+    || fail "$FM_REMOTE_JOB_ERROR"
+  NEW_WORKER_PID=$(cat "$STATE_ROOT/worker.pid")
+  [ "$NEW_WORKER_PID" != "$OLD_WORKER_PID" ] \
+    || fail "ensure retained a worker with a stale-incarnation heartbeat"
+  wait "$OLD_WORKER_PGID" 2>/dev/null || true
+  ! kill -0 -- "-$OLD_WORKER_PGID" 2>/dev/null \
+    || fail "ensure left the stale worker supervisor tree running"
+  NEW_WORKER_PGID=$(fm_remote_job_process_pgid "$NEW_WORKER_PID") \
+    || fail "the replacement worker process group could not be resolved"
+  NEW_WORKER_COUNT=$(ps -eo pgid=,command= | awk -v group="$NEW_WORKER_PGID" \
+    -v worker="$REMOTE_ROOT/bin/fm-remote-job-worker.sh" \
+    '$1 == group && index($0, worker) { count++ } END { print count+0 }')
+  [ "$NEW_WORKER_COUNT" -eq 2 ] \
+    || fail "the replacement worker tree contains $NEW_WORKER_COUNT worker processes instead of one supervisor and one serving worker"
+else
+  kill -CONT "$OLD_WORKER_PID"
+  for _ in $(seq 1 40); do
+    fm_remote_job_probe "$ACCOUNT_HOME" && break
+    sleep 0.05
+  done
+  fm_remote_job_probe "$ACCOUNT_HOME" \
+    || fail "the resumed worker did not replace its stale heartbeat"
+fi
+pass "a stale worker heartbeat is rejected and readiness recovers to the current incarnation"
+
+OLD_WORKER_PID=$(cat "$STATE_ROOT/worker.pid")
 printf '\n' >> "$REMOTE_ROOT/bin/fm-remote-job-worker.sh"
 fm_remote_job_ensure_worker "$REMOTE_ROOT" "$ACCOUNT_HOME" \
   || fail "$FM_REMOTE_JOB_ERROR"

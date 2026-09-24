@@ -1031,7 +1031,6 @@ fm_remote_job_worker_owned_alive() {
   case "$pid" in ''|*[!0-9]*) return 1 ;; esac
   identity_file=$(fm_remote_job_worker_identity_path)
   fm_remote_job_regular_bounded "$identity_file" 256 || return 1
-  fm_remote_job_probe "$account_home" || return 1
   if fm_remote_job_lock_owner_matches_process "$account_home"; then
     [ "$pid" = "$FM_REMOTE_JOB_OWNER_PID" ] || return 1
     return 0
@@ -1085,13 +1084,31 @@ fm_remote_job_worker_alive() { # <account-home>
 }
 
 fm_remote_job_probe() { # <account-home>; a fresh worker heartbeat or active job proves readiness
-  local account_home=$1 ready lock mtime now
+  local account_home=$1 ready lock mtime now pid ready_pid ready_start actual_start extra
   [ "${FM_REMOTE_JOB_ACTIVE:-}" = 1 ] && return 0
   fm_remote_job_prepare_state "$account_home" || return 1
   lock=$(fm_remote_job_worker_lock_path)
   [ ! -e "$lock/quarantine" ] && [ ! -L "$lock/quarantine" ] || return 1
   ready=$(fm_remote_job_worker_ready_path)
   [ -f "$ready" ] && [ ! -L "$ready" ] || return 1
+  fm_remote_job_regular_bounded "$ready" 512 || return 1
+  IFS= read -r ready_pid < "$ready" || return 1
+  IFS= read -r ready_start < <(tail -n +2 "$ready") || return 1
+  if IFS= read -r extra < <(tail -n +3 "$ready"); then
+    : "$extra"
+    return 1
+  fi
+  case "$ready_pid" in ''|*[!0-9]*) return 1 ;; esac
+  [ "$ready_pid" -gt 1 ] || return 1
+  [ -n "$ready_start" ] || return 1
+  pid=$(fm_remote_job_read_single_line "$(fm_remote_job_worker_pid_path)" 64) || return 1
+  [ "$ready_pid" = "$pid" ] || return 1
+  fm_remote_job_lock_owner_matches_process "$account_home" || return 1
+  [ "$ready_pid" = "$FM_REMOTE_JOB_OWNER_PID" ] || return 1
+  lock=$(fm_remote_job_worker_lock_path)
+  actual_start=$(fm_remote_job_read_single_line "$lock/start" 256) || return 1
+  [ "$ready_start" = "$actual_start" ] || return 1
+  [ "$(fm_remote_job_process_start "$ready_pid" 2>/dev/null || true)" = "$ready_start" ] || return 1
   mtime=$(fm_remote_job_path_mtime "$ready" 2>/dev/null || true)
   case "$mtime" in ''|*[!0-9]*) return 1 ;; esac
   now=$(date +%s)
@@ -1155,10 +1172,12 @@ fm_remote_job_start_linux_worker() { # <remote-root> <account-home>
   }
   fm_remote_job_prepare_state "$account_home" || return 1
   if fm_remote_job_worker_owned_alive "$root" "$account_home"; then
-    if fm_remote_job_worker_identity_matches "$root" "$account_home"; then return 0; fi
+    if fm_remote_job_worker_identity_matches "$root" "$account_home" &&
+      fm_remote_job_probe "$account_home"; then return 0; fi
     # The owner pid is the serving child; its restart supervisor sits above it
     # and would immediately replace a lone process kill, so stop the whole
-    # worker tree through its isolated group.
+    # worker tree when either its code or its incarnation-bound heartbeat is
+    # stale.
     pid=$FM_REMOTE_JOB_OWNER_PID
     fm_remote_job_stop_worker_tree "$pid" || {
       FM_REMOTE_JOB_ERROR="stale remote job worker did not stop safely"

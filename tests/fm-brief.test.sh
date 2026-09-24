@@ -238,6 +238,10 @@ test_evidence_provenance_contract() {
     "generated brief missing synthetic probe labelling requirement"
   assert_grep "may never be presented as live or external verification" "$brief" \
     "generated brief permits a synthetic probe to be presented as live evidence"
+  assert_grep "The words live, verified, real, or independent must never describe results produced by our own code, a fixture, a synthetic scenario, an offline replay, or a closed proxy" "$brief" \
+    "generated brief permits misleading labels for synthetic or offline results"
+  assert_grep "call that work synthetic/offline built-CLI validation and state any real-account limitation beside it" "$brief" \
+    "generated brief does not name the synthetic/offline label and real-account limitation"
   # shellcheck disable=SC2016 # Backticks are literal generated-brief wording.
   assert_grep 'report `blocked:` or `paused:` instead of completing with a green result' "$brief" \
     "generated brief missing the absent-evidence stop condition"

@@ -117,7 +117,7 @@ elif [ -f "$CONFIG/contributions-automated-reviewers" ] && [ ! -L "$CONFIG/contr
 else
   REVIEWER_SPEC='copilot-pull-request-reviewer[bot],greptile-apps[bot]'
 fi
-AUTOMATED_REVIEWERS=$(printf '%s' "$REVIEWER_SPEC" | tr ',\n' '\n\n' \
+AUTOMATED_REVIEWERS=$(printf '%s' "$REVIEWER_SPEC" | tr ',' '\n' \
   | jq -R 'gsub("^\\s+|\\s+$";"") | select(length > 0) | ascii_downcase' | jq -sc .) \
   || fail 'invalid automated reviewer list'
 if [ -n "${FM_CONTRIBUTIONS_AUTHOR_MARKER+x}" ]; then

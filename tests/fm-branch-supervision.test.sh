@@ -146,7 +146,10 @@ test_outcome_startup_replay_preserves_silence() {
   status=$?
   [ "$status" -ne 0 ] || fail "append accepted a silent captain outcome"
   assert_contains "$out" "silent outcomes must be routine outcomes" "silent captain refusal lost its diagnostic"
-  [ ! -e "$store" ] || fail "refused silent outcomes changed the durable store"
+  if ! out=$(FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" append \
+    --task task-a --verdict routine --summary 'healthy' --silent true 2>&1); then
+    fail "append rejected a silent task-scoped outcome: $out"
+  fi
 
   FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" append \
     --task fleet --verdict routine --summary 'fleet reviewed, nothing changed' --silent true >/dev/null \
@@ -156,19 +159,20 @@ test_outcome_startup_replay_preserves_silence() {
     || fail "visible outcome append failed"
 
   replay=$(FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" startup-replay) || fail "mixed startup replay failed"
+  assert_not_contains "$replay" "healthy" "startup replay printed a silent task outcome"
   assert_not_contains "$replay" "fleet reviewed, nothing changed" "startup replay printed a silent outcome"
   assert_contains "$replay" "worker recovered automatically" "startup replay lost a visible routine outcome"
   [ -z "$(FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" unread)" ] \
     || fail "startup replay did not mark the silent and visible rows read"
 
-  printf '%s\n' '{"seq":3,"epoch":1,"task":"task-legacy","wake":"","verdict":"routine","summary":"legacy visible outcome"}' \
+  printf '%s\n' '{"seq":4,"epoch":1,"task":"task-legacy","wake":"","verdict":"routine","summary":"legacy visible outcome"}' \
     >> "$home/state/branch-outcomes.jsonl"
   replay=$(FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" startup-replay) || fail "legacy startup replay failed"
   assert_contains "$replay" "legacy visible outcome" "startup replay hid a legacy row with no silent field"
   [ -z "$(FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" unread)" ] \
     || fail "startup replay did not mark the legacy row read"
 
-  printf '%s\n' '{"seq":4,"epoch":1,"task":"task-bad","wake":"","verdict":"captain","summary":"poisoned","silent":true}' >> "$store"
+  printf '%s\n' '{"seq":5,"epoch":1,"task":"task-bad","wake":"","verdict":"captain","summary":"poisoned","silent":true}' >> "$store"
   out=$(FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" unread 2>&1)
   status=$?
   [ "$status" -ne 0 ] || fail "unread accepted a stored silent captain outcome"
@@ -183,21 +187,18 @@ test_silent_bookkeeping_outcomes_stay_out_of_replay_and_coverage() {
   store="$home/state/branch-outcomes.jsonl"
   printf 'blocked: waiting\n' > "$home/state/task-p.status"
 
-  # Bookkeeping-only outcomes on a task: silent. Everything else: rendered.
   append() { FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" append --task "$1" --verdict "$2" --summary "$3" "${@:4}" >/dev/null || fail "append failed: $3"; }
   append task-p routine 'echo of the pause I just recorded' --silent true
   append task-p routine 'scheduled recheck of the registered pause' --silent true
   append task-p routine 'pause still holds on the same terms' --silent true
-  [ ! -e "$home/state/.task-p.branch-outcome-index" ] \
-    || fail "silent bookkeeping outcomes wrote a status-coverage index before any visible outcome"
+  [ ! -e "$home/state/.task-p.branch-outcome-index" ] || fail "silent bookkeeping outcomes wrote a status-coverage index before any visible outcome"
   append task-p routine 'pause cleared: worker relaunched on a new seat'
   append task-p captain 'PR is ready for review https://example.com/pr/1'
   append task-q routine 'merged and cleaned up'
 
   append task-p routine 'captain-facing status was already recorded' --silent true
   rm -f -- "$home/state/.task-p.branch-outcome-index" "$home/state/.branch-outcome-index-ready"
-  FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" processed-init >/dev/null \
-    || fail "coverage index rebuild failed"
+  FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" processed-init >/dev/null || fail "coverage index rebuild failed"
   index_seq=$(cut -f2 "$home/state/.task-p.branch-outcome-index")
   [ "$index_seq" = 5 ] || fail "silent latest row replaced the latest visible coverage index: $index_seq"
 
@@ -207,7 +208,6 @@ test_silent_bookkeeping_outcomes_stay_out_of_replay_and_coverage() {
   assert_not_contains "$replay" "still holds on the same terms" "silent pause re-confirmation was rendered"
   assert_contains "$replay" "pause cleared: worker relaunched" "a genuine pause state change was suppressed"
 
-  # Measure on this corpus: 4 of the 7 recorded outcomes are newly silent.
   out=$(jq -s '[.[] | select(.silent == true)] | length' "$store")
   [ "$out" = 4 ] || fail "expected 4 silent bookkeeping rows in the 7-row corpus, got $out"
   shown=$(jq -s '[.[] | select(.silent != true)] | length' "$store")

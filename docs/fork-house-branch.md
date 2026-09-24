@@ -31,8 +31,19 @@ A contributed house feature is a house feature the captain chose to submit and t
 
 ## Contributing a house feature upstream
 
-Keep the feature branch current by merging upstream `main` into it; never rebase it.
-Validate the exact final head that will be offered.
+Before directing any lane to change a pull request branch, read that pull request's current head ref and head commit from the forge, and check its head repository before choosing a remote.
+The branch name in fleet records, a previous fork copy, or an older note is not authority; if it differs from the forge, correct the assignment before work starts.
+Check the pipeline's own status and the lanes already assigned to that branch before steering another lane.
+An existing pipeline run or lane keeps ownership until it is explicitly handed over through the supported pipeline flow; never edit ownership records or hand-edit the branch to escape a blocked state.
+
+An upstream contribution branch must remain a clean diff from upstream `main`.
+Never merge `house` or another fork-only line into a branch that backs an upstream pull request, even to fix conflicts on a fork pull request.
+The fork and upstream pull requests can share one head branch while targeting different bases, so a merge from `house` into that shared head would carry fork-only commits into the upstream contribution.
+Keep our delivery on its durable `housefeature/<name>` branch and its own fork pull request, with the upstream contribution reviewed against upstream `main`.
+
+Refresh a contribution branch only by merging upstream `main` into it, including when conflicts or CI prompt a refresh; never rebase it.
+Rebasing rewrites the attested head, which upstream's gate rejects.
+Validate the exact final head that will be offered with one pipeline run to renew a stale attestation, and never hand-edit the attestation.
 Open an upstream pull request only when the captain asks for that house feature by name.
 Only the captain contacts upstream, including opening or commenting on an upstream pull request.
 

@@ -265,7 +265,7 @@ decode() { printf '%s' "$1" | base64 --decode 2>/dev/null || printf '%s' "$1" | 
 rargs=()
 while IFS= read -r -d '' a; do rargs+=("$a"); done < <(decode "$argv_b64")
 case "${rargs[1]:-}" in
-  update) printf 'synced: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n' ;;
+  sync) printf 'synced: %s\n' "${rargs[3]:-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}" ;;
   state) printf 'alive\n' ;;
   *) exit 91 ;;
 esac
@@ -327,7 +327,7 @@ test_diverged_secondmate_skipped() {
 
   out=$(run_update "$w")
 
-  assert_contains "$out" "secondmate sm1: skipped: diverged from origin/main" "diverged home skipped"
+  assert_contains "$out" "secondmate sm1: skipped: diverged from " "diverged home skipped"
   assert_contains "$out" "reconciliation required (record:" "diverged skip is actionable"
   assert_not_contains "$out" "fm-sm1" "diverged secondmate is not nudged"
   [ "$(git -C "$w/sm1" rev-parse HEAD)" = "$before" ] \
@@ -360,7 +360,7 @@ test_squash_merged_divergence_reconciles() {
   bump_origin "$w" readme
   out=$(run_update "$w")
   marker="$w/home/state/.secondmate-update-reconcile/sm1.pending"
-  assert_contains "$out" "secondmate sm1: skipped: diverged from origin/main" \
+  assert_contains "$out" "secondmate sm1: skipped: diverged from " \
     "unique local work was not initially protected"
   assert_present "$marker" "initial divergence did not leave its durable record"
 
@@ -468,6 +468,7 @@ test_registry_backstop_dedup_and_self_exclusion() {
 test_firstmate_wrong_branch_skipped() {
   local w out before
   w=$(new_world t9)
+  add_sm "$w" sm1
   bump_origin "$w" instr
   # Simulate firstmate mid-shipping its own change: not on the default branch.
   git -C "$w/main" checkout -q -b feature/wip
@@ -479,6 +480,9 @@ test_firstmate_wrong_branch_skipped() {
   assert_contains "$out" "reread-firstmate: no" "no reread when firstmate was skipped"
   [ "$(git -C "$w/main" rev-parse HEAD)" = "$before" ] \
     || fail "skipped firstmate HEAD moved"
+  [ "$(git -C "$w/sm1" rev-parse HEAD)" = "$before" ] \
+    || fail "secondmate advanced after the primary update was skipped"
+  assert_not_contains "$out" "secondmate sm1: updated" "a skipped primary must stop propagation"
   pass "T9 firstmate off its default branch is skipped, not forced"
 }
 
@@ -496,6 +500,44 @@ test_firstmate_detached_head_skipped() {
   [ "$(git -C "$w/main" rev-parse HEAD)" = "$before" ] \
     || fail "detached firstmate HEAD moved"
   pass "T10 firstmate detached HEAD is skipped"
+}
+
+test_house_tracks_fork_only_target_and_pins_secondmate() {
+  local w fork before out target
+  w=$(new_world house)
+  fork="$w/fork.git"
+  git init -q --bare "$fork"
+  add_sm "$w" sm1
+  git -C "$w/main" remote add jazz127 "$fork"
+  git -C "$w/main" checkout -q -b house
+  git -C "$w/main" push -q jazz127 HEAD:refs/heads/house
+  git -C "$w/main" config firstmate.runtimeBranch house
+  git -C "$w/main" config branch.house.remote jazz127
+  git -C "$w/main" config branch.house.merge refs/heads/house
+  git -C "$w/seed" checkout -q -b house
+  printf 'fork-only\n' >> "$w/seed/README.md"
+  git -C "$w/seed" commit -qam fork-only
+  git -C "$w/seed" push -q "$fork" HEAD:refs/heads/house
+  before=$(git -C "$w/main" rev-parse HEAD)
+  out=$(run_update "$w")
+  assert_contains "$out" "firstmate: updated " "runtime branch follows its configured fork remote"
+  target=$(git -C "$fork" rev-parse house)
+  [ "$(git -C "$w/main" rev-parse HEAD)" = "$target" ] || fail "primary did not advance to fork-only house SHA"
+  [ "$(git -C "$w/sm1" rev-parse HEAD)" = "$target" ] || fail "secondmate did not receive the primary's pinned SHA"
+  [ "$(git -C "$w/origin.git" rev-parse main)" = "$before" ] || fail "upstream main moved during fork-only update"
+  pass "configured house follows fork-only target and hands the resulting SHA to secondmates"
+}
+
+test_missing_runtime_branch_fails_closed() {
+  local w out before
+  w=$(new_world missing-house)
+  git -C "$w/main" config firstmate.runtimeBranch house
+  before=$(git -C "$w/main" rev-parse HEAD)
+  out=$(run_update "$w")
+  assert_contains "$out" "firstmate: skipped: cannot determine default branch" "missing configured branch refuses update"
+  assert_contains "$out" "restart-secondmates: none" "skipped primary stops propagation"
+  [ "$(git -C "$w/main" rev-parse HEAD)" = "$before" ] || fail "missing branch moved primary"
+  pass "missing configured runtime branch fails closed and stops secondmate propagation"
 }
 
 test_unsafe_secondmate_home_skipped_before_git_update() {
@@ -570,6 +612,8 @@ test_already_current_unprovable_mate_is_nudged
 test_registry_backstop_dedup_and_self_exclusion
 test_firstmate_wrong_branch_skipped
 test_firstmate_detached_head_skipped
+test_house_tracks_fork_only_target_and_pins_secondmate
+test_missing_runtime_branch_fails_closed
 test_unsafe_secondmate_home_skipped_before_git_update
 test_primary_update_rebinds_local_watch
 

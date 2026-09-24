@@ -88,7 +88,7 @@ fi
 # --- main firstmate repo ---------------------------------------------------
 
 reread_firstmate="no"
-ff_target "$FM_ROOT" "firstmate" origin no no
+ff_target "$FM_ROOT" "firstmate" tracking no no
 if [ "$FF_STATUS" = "updated" ]; then
   if [ -n "$FF_INSTR" ]; then
     reread_firstmate="yes"
@@ -103,6 +103,16 @@ if [ "$FF_STATUS" = "updated" ]; then
   # this test suite uses to point fm-update.sh at a fixture checkout).
   FM_HOME="$FM_HOME" FM_ROOT_OVERRIDE="$FM_ROOT" "$SCRIPT_DIR/fm-procevent-when.sh" rebind-all || true
 fi
+
+# Pin every local and remote secondmate leg to the exact primary result. A
+# skipped primary halts propagation, so mates cannot independently move ahead.
+if [ "$FF_STATUS" = skipped ]; then
+  echo "reread-firstmate: no"
+  echo "restart-secondmates: none"
+  echo "nudge-secondmates: none"
+  exit 0
+fi
+runtime_commit=$(git -C "$FM_ROOT" rev-parse --verify 'HEAD^{commit}')
 
 # --- secondmates -----------------------------------------------------------
 # Every live secondmate this pass leaves on origin's tip is restarted, whether it
@@ -173,7 +183,7 @@ fm_ff_after_secondmate_settled() {  # <id> <home> <window> <status> <instr>
 
 # Live direct reports first: state/<id>.meta with kind=secondmate carries the
 # authoritative home= path.
-sweep_live_secondmate_metas "$STATE" origin yes
+sweep_live_secondmate_metas "$STATE" "$runtime_commit" yes
 
 # Registry backstop: a secondmate registered in data/secondmates.md but without
 # a live meta (e.g. between restarts) is still its persistent on-disk home.
@@ -190,7 +200,7 @@ if [ -f "$SECONDMATES_MD" ]; then
     id=$SECONDMATE_REGISTRY_ID
     home=$SECONDMATE_REGISTRY_HOME
     if [ "$SECONDMATE_REGISTRY_REMOTE" -eq 1 ]; then
-      if remote_out=$("$SCRIPT_DIR/fm-on.sh" "$id" fm-remote-secondmate-control.sh update "$id" < /dev/null 2>&1); then
+      if remote_out=$("$SCRIPT_DIR/fm-on.sh" "$id" fm-remote-secondmate-control.sh sync "$id" "$runtime_commit" < /dev/null 2>&1); then
         remote_result=$(printf '%s\n' "$remote_out" | tail -1)
         case "$remote_result" in
           synced:*)
@@ -230,7 +240,7 @@ if [ -f "$SECONDMATES_MD" ]; then
         echo "remote secondmate $id: skipped on $SECONDMATE_REGISTRY_HOST: ${remote_out%%$'\n'*}" >&2
       fi
     else
-      process_secondmate "$id" "$home" "" origin yes
+      process_secondmate "$id" "$home" "" "$runtime_commit" yes
     fi
   done < "$SECONDMATES_MD"
 fi

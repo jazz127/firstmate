@@ -207,12 +207,41 @@ test_non_main_default_branch_refreshes_before_branching() {
 
   out=$(run_spawn "$id" --mode no-mistakes --yolo off)
   status=$?
-  expect_code 0 "$status" "spawn should refresh a stale pooled worktree on a non-main default branch"
+  expect_code 0 "$status" "spawn should refresh a stale pooled worktree on a non-main default branch"$'\n'"$out"
   current=$(git -C "$POOL_DIR" rev-parse "origin/$DEFAULT_BRANCH")
   branch_head=$(git -C "$POOL_DIR" rev-parse HEAD)
   [ "$branch_head" = "$current" ] || fail "spawn did not refresh to current origin/$DEFAULT_BRANCH"
   [ "$branch_head" != "$INITIAL_SHA" ] || fail "fixture did not prove origin/$DEFAULT_BRANCH advanced past the pool base"
   pass "a stale pooled worktree resolves and refreshes a non-main default branch"
+}
+
+test_configured_runtime_branch_refreshes_from_tracking_remote() {
+  local rec id out status fork publisher target branch_head
+  id='pool-house-tracking-r1'
+  rec=$(make_case house-tracking "$id")
+  read_case_record "$rec"
+  fork="$CASE_DIR/fork.git"
+  publisher="$CASE_DIR/fork-publisher"
+  git clone --quiet --bare "file://$CASE_DIR/origin.git" "$fork"
+  git -C "$PROJECT_DIR" remote add jazz127 "file://$fork"
+  git -C "$PROJECT_DIR" branch house "$INITIAL_SHA"
+  git -C "$PROJECT_DIR" config firstmate.runtimeBranch house
+  git -C "$PROJECT_DIR" config branch.house.remote jazz127
+  git -C "$PROJECT_DIR" config branch.house.merge refs/heads/house
+  git clone --quiet "file://$fork" "$publisher"
+  git -C "$publisher" checkout --quiet -b house
+  printf 'fork runtime update\n' > "$publisher/house-only.txt"
+  git -C "$publisher" add house-only.txt
+  git -C "$publisher" -c user.name='Firstmate Tests' -c user.email='tests@example.invalid' commit -qm advance-house
+  git -C "$publisher" push --quiet origin house
+  target=$(git -C "$publisher" rev-parse HEAD)
+
+  out=$(run_spawn "$id" --mode no-mistakes --yolo off)
+  status=$?
+  expect_code 0 "$status" "spawn should refresh a configured house worktree from its tracking remote"$'\n'"$out"
+  branch_head=$(git -C "$POOL_DIR" rev-parse HEAD)
+  [ "$branch_head" = "$target" ] || fail "spawn started from $branch_head instead of tracked house commit $target"
+  pass "configured runtime branch refreshes from its tracking remote when origin lacks that branch"
 }
 
 make_originless_case() {  # <name> <id>
@@ -748,6 +777,7 @@ test_pool_slot_claim_follows_the_spawn_outcome
 test_linked_spawning_home_rejects_primary_before_refresh
 test_stale_pool_base_refreshes_before_branching
 test_non_main_default_branch_refreshes_before_branching
+test_configured_runtime_branch_refreshes_from_tracking_remote
 test_direct_pr_and_scout_refresh_before_launch
 test_dirty_pool_refuses_without_discarding_work
 test_unresolved_remote_default_refuses_pool

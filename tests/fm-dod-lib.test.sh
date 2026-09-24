@@ -120,6 +120,10 @@ EOF
     || fail "request prose containing evidence was refused"
   fm_dod_validate_intent_evidence 'Do not claim live validation' "$root/worktree" "$root/tmp" \
     || fail "negated prose containing evidence vocabulary was refused"
+  fm_dod_validate_intent_evidence 'Do not claim live test passed' "$root/worktree" "$root/tmp" \
+    || fail "negated affirmative claim was refused"
+  fm_dod_validate_intent_evidence 'Example: external validation passed' "$root/worktree" "$root/tmp" \
+    || fail "example prose containing an evidence claim was refused"
   fm_dod_validate_intent_evidence '2 of 3 requested endpoints' "$root/worktree" "$root/tmp" \
     || fail "ordinary ratio prose was refused"
   for claim in \
@@ -137,6 +141,18 @@ EOF
   rc=$?
   [ "$rc" -ne 0 ] || fail "compact multi-ratio evidence label was accepted without provenance"
   assert_contains "$out" "missing evidence-artifact" "compact multi-ratio refusal was unclear"
+  intent=$(cat <<EOF
+external validation passed
+evidence-artifact: $root/worktree/evidence.txt
+evidence-artifact: $root/worktree/evidence.txt
+evidence-command: ./run-scenarios
+evidence-captured: 2026-09-25T10:00:00+10:00
+EOF
+)
+  out=$(fm_dod_validate_intent_evidence "$intent" "$root/worktree" "$root/tmp" 2>&1)
+  rc=$?
+  [ "$rc" -ne 0 ] || fail "duplicate evidence metadata was accepted"
+  assert_contains "$out" "duplicate evidence-artifact" "duplicate artifact metadata refusal was unclear"
   intent=$(cat <<EOF
 2 of 3 scenarios driven live
 evidence-artifact: $root/worktree

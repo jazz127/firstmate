@@ -293,17 +293,33 @@ EOF
 
 fm_dod_validate_intent_evidence() {  # <intent> <worktree> <task-temp> [preflight|publish]
   local intent=$1 worktree=$2 task_temp=$3 phase=${4:-preflight}
-  local line artifact command captured claim=0 normalized_artifact normalized_root resolved_artifact flat_intent
+  local line artifact command captured claim=0 normalized_artifact normalized_root resolved_artifact flat_intent claim_intent
+  local artifact_count=0 command_count=0 captured_count=0
   flat_intent=$(printf '%s\n' "$intent" | tr '\n' ' ')
-  if printf '%s\n' "$flat_intent" | grep -Eiq '([0-9]+[[:space:]]+of[[:space:]]+[0-9]+[[:space:]]*/[[:space:]]*[0-9]+[[:space:]]+of[[:space:]]+[0-9]+)|(([0-9]+[[:space:]]*(of|/)[[:space:]]*[0-9]+)[^.!?]*(live|verified|real-account|independent|external|externally confirmed))|((live|verified|real-account|independent|external|externally confirmed)[^.!?]*([0-9]+[[:space:]]*(of|/)[[:space:]]*[0-9]+))|((live|verified|real-account|independent|external|externally confirmed)[^.!?]*(evidence|verification|confirmation)[[:space:]]*:)|((live|verified|real-account|independent|external|externally confirmed)[^.!?]*(test|tests|scenario|scenarios|validation|evidence|verification|confirmation)[^.!?]*(was|were|is|are|shows?|reported|demonstrated|driven|completed|passed|failed|confirmed|verified))|((evidence|verification|confirmation)[^.!?]*(live|verified|real-account|independent|external|externally confirmed)[^.!?]*(was|were|is|are|shows?|reported|demonstrated|driven|completed|passed|failed|confirmed|verified))'; then
+  claim_intent=$(printf '%s\n' "$flat_intent" | tr '[:upper:]' '[:lower:]')
+  claim_intent=$(printf '%s\n' "$claim_intent" | sed -E \
+    -e 's/(^|[.!?][[:space:]]*)(do not|never|avoid|must not|should not)[^.!?]*/\1/g' \
+    -e 's/(^|[.!?][[:space:]]*)(example|examples|e\.g\.|quote|quoted)[[:space:]]*:[^.!?]*/\1/g' \
+    -e 's/(^|[.!?][[:space:]]*)(investigate|run|check|verify|validate|test|collect|report|describe|document|ensure|add|include|show)[^.!?]*/\1/g' \
+    -e 's/"[^"]*"//g')
+  if printf '%s\n' "$claim_intent" | grep -Eiq '([0-9]+[[:space:]]+of[[:space:]]+[0-9]+[[:space:]]*/[[:space:]]*[0-9]+[[:space:]]+of[[:space:]]+[0-9]+)|(([0-9]+[[:space:]]*(of|/)[[:space:]]*[0-9]+)[^.!?]*(live|verified|real-account|independent|external|externally confirmed))|((live|verified|real-account|independent|external|externally confirmed)[^.!?]*([0-9]+[[:space:]]*(of|/)[[:space:]]*[0-9]+))|((live|verified|real-account|independent|external|externally confirmed)[^.!?]*(evidence|verification|confirmation)[[:space:]]*:)|((live|verified|real-account|independent|external|externally confirmed)[^.!?]*(test|tests|scenario|scenarios|validation|evidence|verification|confirmation)[^.!?]*(was|were|is|are|shows?|reported|demonstrated|driven|completed|passed|failed|confirmed|verified))|((evidence|verification|confirmation)[^.!?]*(live|verified|real-account|independent|external|externally confirmed)[^.!?]*(was|were|is|are|shows?|reported|demonstrated|driven|completed|passed|failed|confirmed|verified))'; then
     claim=1
   fi
   [ "$claim" -eq 1 ] || return 0
   while IFS= read -r line; do
     case "$line" in
-      evidence-artifact:*) artifact=$(printf '%s' "${line#evidence-artifact:}" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//') ;;
-      evidence-command:*) command=$(printf '%s' "${line#evidence-command:}" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//') ;;
-      evidence-captured:*) captured=$(printf '%s' "${line#evidence-captured:}" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//') ;;
+      evidence-artifact:*)
+        artifact_count=$((artifact_count + 1))
+        [ "$artifact_count" -eq 1 ] || { printf '%s\n' 'evidence claim refused: duplicate evidence-artifact metadata' >&2; return 1; }
+        artifact=$(printf '%s' "${line#evidence-artifact:}" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//') ;;
+      evidence-command:*)
+        command_count=$((command_count + 1))
+        [ "$command_count" -eq 1 ] || { printf '%s\n' 'evidence claim refused: duplicate evidence-command metadata' >&2; return 1; }
+        command=$(printf '%s' "${line#evidence-command:}" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//') ;;
+      evidence-captured:*)
+        captured_count=$((captured_count + 1))
+        [ "$captured_count" -eq 1 ] || { printf '%s\n' 'evidence claim refused: duplicate evidence-captured metadata' >&2; return 1; }
+        captured=$(printf '%s' "${line#evidence-captured:}" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//') ;;
     esac
   done <<EOF
 $intent

@@ -309,6 +309,10 @@ fm_dod_validate_intent_evidence() {  # <intent> <worktree> <task-temp> [prefligh
       case "$candidate" in
         *\"*) continue ;;
       esac
+      if printf '%s\n' "$candidate" | grep -Eiq '((test|tests|check|checks|run|runs|probe|probes|scenario|scenarios|outcome|outcomes|result|results|measurement|measurements|account|accounts|validation|evidence|verification|confirmation)[^.!?]*[[:space:]]ran[[:space:]]+[^.!?]*(live|verified|real-account|real account|independent|independently|external|externally confirmed))|((live|verified|real-account|real account|independent|independently|external|externally confirmed)[^.!?]*(test|tests|check|checks|run|runs|probe|probes|scenario|scenarios|outcome|outcomes|result|results|measurement|measurements|account|accounts|validation|evidence|verification|confirmation)[^.!?]*[[:space:]]ran[[:space:]])'; then
+        claim=1
+        break 2
+      fi
       if printf '%s\n' "$candidate" | grep -Eiq '((live|verified|real|real-account|real account|independent|independently|external|externally confirmed)[^.!?]*(test|tests|check|checks|run|runs|probe|probes|scenario|scenarios|outcome|outcomes|result|results|measurement|measurements|account|accounts|validation|evidence|verification|confirmation)[^.!?]*(was|were|is|are|shows?|reported|demonstrated|driven|completed|succeeded|successful|successfully|passed|failed|confirmed|verified|validated))|((live|verified|real|real-account|real account|independent|independently|external|externally confirmed)[^.!?]*(completed|succeeded|successful|successfully|passed|failed|confirmed|verified|validated)[^.!?]*(test|tests|check|checks|run|runs|probe|probes|scenario|scenarios|outcome|outcomes|result|results|measurement|measurements|account|accounts|validation|evidence|verification|confirmation))|((test|tests|check|checks|run|runs|probe|probes|scenario|scenarios|outcome|outcomes|result|results|measurement|measurements|account|accounts|validation|evidence|verification|confirmation)[^.!?]*(was|were|is|are)[^.!?]*(live|verified|real|real-account|real account|independent|independently|external|externally confirmed))'; then
         claim=1
         break 2

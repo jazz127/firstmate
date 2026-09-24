@@ -263,12 +263,13 @@ test_ci_ready_variants_are_gated() {
     'done: PR https://github.com/o/r/pull/5 checks green, risk low' \
     'done: PR https://github.com/o/r/pull/5 - checks green' \
     'done: PR https://github.com/o/r/pull/5 checks green.' \
-    'done: PR https://github.com/o/r/pull/5 (checks green)'; do
+    'done: PR https://github.com/o/r/pull/5 (checks green)' \
+    'done: PR https://github.com/o/r/pull/5 ready for review (CI skipped: house base has no check workflows)'; do
     rc=0
     accept_done ship no-mistakes "$wt" "$repo" "$line" >/dev/null || rc=$?
     [ "$rc" -eq 1 ] || fail "no-mistakes CI-ready variant skipped the gate: $line"
   done
-  pass "no-mistakes CI-ready done: with extra text is gated"
+  pass "no-mistakes ready-PR done: with extra text or an explicit CI skip is gated"
 }
 
 test_keyed_and_spaced_done_lines_are_gated() {

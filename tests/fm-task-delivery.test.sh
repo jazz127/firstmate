@@ -1114,6 +1114,13 @@ test_forge_gerrit_changes_what_no_mistakes_means() {
   FM_HOME="$home" "$BRIEF" forge-dod-n1 other-project --mode no-mistakes >/dev/null \
     || fail "a default-forge no-mistakes brief should scaffold"
   plain="$home/data/forge-dod-n1/brief.md"
+  assert_grep 'When this run targets the fork' "$plain" \
+    "a no-mistakes worker was not told when the house-base skip applies"
+  # shellcheck disable=SC2016 # Backticks are literal generated Markdown.
+  assert_grep 'start a new run with `--skip ci`' "$plain" \
+    "a no-mistakes worker was not told to skip the unavailable house-base CI monitor"
+  assert_grep 'ready for review (CI skipped: house base has no check workflows)' "$plain" \
+    "the house-base worker was not given an honest ready report"
   awk '/^You drive no-mistakes by responding to its gates/ { emit = 1 }
        emit { print }
        emit && /hard rule violation\.$/ { exit }' "$brief" > "$TMP_ROOT/forge-dod/gerrit-middle"
@@ -1129,7 +1136,7 @@ test_forge_gerrit_changes_what_no_mistakes_means() {
     "the gerrit worker was told to wait for a checks-passed return its skipped ci step never gives"
   # shellcheck disable=SC2016 # Backticks are literal generated Markdown.
   grep -v "reports the green PR" "$TMP_ROOT/forge-dod/plain-middle" \
-    | sed 's/; once checks are green it returns `checks-passed` immediately, and if it refuses/; if it refuses/' \
+    | sed 's/; for a base with CI, once checks are green it returns `checks-passed` immediately, and if it refuses/; if it refuses/' \
     > "$TMP_ROOT/forge-dod/plain-middle-no-pr"
   cmp -s "$TMP_ROOT/forge-dod/gerrit-middle" "$TMP_ROOT/forge-dod/plain-middle-no-pr" \
     || fail "the forge changed the forge-independent half of the pipeline contract"

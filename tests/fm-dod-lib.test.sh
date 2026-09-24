@@ -122,6 +122,16 @@ EOF
     || fail "negated prose containing evidence vocabulary was refused"
   fm_dod_validate_intent_evidence '2 of 3 requested endpoints' "$root/worktree" "$root/tmp" \
     || fail "ordinary ratio prose was refused"
+  for claim in \
+    'external validation passed' \
+    'live test passed' \
+    'independent scenario completed' \
+    'live scenarios driven'; do
+    out=$(fm_dod_validate_intent_evidence "$claim" "$root/worktree" "$root/tmp" 2>&1)
+    rc=$?
+    [ "$rc" -ne 0 ] || fail "affirmative evidence claim was accepted without provenance: $claim"
+    assert_contains "$out" "missing evidence-artifact" "affirmative claim refusal was unclear: $claim"
+  done
   intent='0 of 5 / 2 of 3'
   out=$(fm_dod_validate_intent_evidence "$intent" "$root/worktree" "$root/tmp" 2>&1)
   rc=$?

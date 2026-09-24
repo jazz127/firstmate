@@ -100,6 +100,8 @@ CREW_STATE_BIN="${FM_INACTIVE_CREW_STATE_BIN:-$SCRIPT_DIR/fm-crew-state.sh}"
 . "$SCRIPT_DIR/fm-classify-lib.sh"
 # shellcheck source=bin/fm-parent-channel-lib.sh
 . "$SCRIPT_DIR/fm-parent-channel-lib.sh"
+# shellcheck source=bin/fm-pr-lib.sh
+. "$SCRIPT_DIR/fm-pr-lib.sh"
 # shellcheck source=bin/fm-timeout-lib.sh
 . "$SCRIPT_DIR/fm-timeout-lib.sh"
 # shellcheck source=bin/fm-dod-lib.sh
@@ -338,14 +340,24 @@ pr_for_task() { # <meta> [preferred-line]
   clean_field "$value"
 }
 
+published_pr_validation_failed() { # <pr> <meta>
+  local pr=$1 meta=$2 body
+  fm_pr_url_parse "$pr" || return 0
+  body=$(fm_pr_read_published_body "$FM_PR_URL" 2>/dev/null) || return 1
+  fm_dod_validate_published_intent "$body" "$(meta_field "$meta" worktree)" "$(meta_field "$meta" tasktmp)"
+}
+
 home_secondmate_id() {
   fm_parent_channel_home_id "$FM_HOME"
 }
 
 report_to_parent() { # <task> <state> <outcome-key> <fingerprint> <pr>
-  local task=$1 state=$2 outcome_key=$3 fingerprint=$4 pr=$5 line
+  local task=$1 state=$2 outcome_key=$3 fingerprint=$4 pr=$5 line validation=ok meta
+  meta="$STATE/$task.meta"
+  if [ -n "$pr" ] && ! published_pr_validation_failed "$pr" "$meta"; then validation=failed; fi
   line="$state [key=$outcome_key]: inactive terminal child=$task fingerprint=$fingerprint"
   [ -z "$pr" ] || line="$line pr=$pr"
+  [ "$validation" = ok ] || line="$line evidence-validation=failed"
   fm_parent_channel_report "$FM_HOME" "$STATE" "$line"
 }
 
@@ -411,7 +423,7 @@ claim_inactive_report_for_ledger() { # <task> <incarnation> <state> <ledger-fing
 # delivered, or nothing is owed, and 1 when it is owed but the parent channel
 # could not be written (the notice is queued once per record).
 report_child_ledger_locked() { # <id> <meta>
-  local id=$1 meta=$2 status last previous state note pr mode yolo data incarnation fingerprint predecessor_head outcome_key line
+  local id=$1 meta=$2 status last previous state note pr mode yolo data incarnation fingerprint predecessor_head outcome_key line validation=ok body
   status="$STATE/$id.status"
   last=$(child_terminal_ledger_line "$status") || return 0
   state=$(status_line_verb "$last")
@@ -444,6 +456,8 @@ report_child_ledger_locked() { # <id> <meta>
   data="${FM_DATA_OVERRIDE:-$FM_HOME/data}"
   line="$state [key=$outcome_key]: child $id $state: $note"
   [ -z "$pr" ] || line="$line pr=$pr"
+  if [ -n "$pr" ] && ! published_pr_validation_failed "$pr" "$meta"; then validation=failed; fi
+  [ "$validation" = ok ] || line="$line evidence-validation=failed"
   [ -z "$mode" ] || line="$line mode=$mode"
   [ -z "$yolo" ] || line="$line yolo=$yolo"
   if [ -f "$data/$id/report.md" ] && [ ! -L "$data/$id/report.md" ]; then
@@ -543,6 +557,9 @@ reconcile_direct_child_locked() { # <id> <meta> <secondmate-id-or-empty> <timeou
   fi
   record_phase_set "$RECORD_PENDING" presentation || return 1
   payload="inactive terminal outcome awaiting captain presentation: child=$id state=$state"
+  if [ -n "$pr" ] && ! published_pr_validation_failed "$pr" "$meta"; then
+    payload="$payload evidence-validation=failed"
+  fi
   [ -z "$pr" ] || payload="$payload pr=$pr"
   queue_presentation "$RECORD_PENDING" "$fingerprint" "$payload" || true
 }

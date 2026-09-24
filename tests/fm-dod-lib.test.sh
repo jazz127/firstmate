@@ -186,6 +186,7 @@ EOF
     'external run succeeded' \
     'independent probe completed successfully' \
     'real account test passed' \
+    'The scenarios were run against a real account' \
     'external result passed' \
     'live measurement completed' \
     'independent account confirmed' \

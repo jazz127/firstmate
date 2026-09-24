@@ -531,6 +531,25 @@ test_pending_ledger_done_is_delivered_after_worktree_removal() {
   pass "a pending ship done: is delivered by report after teardown removed the worktree"
 }
 
+test_parent_report_surfaces_published_evidence_failure() {
+  local key
+  make_world published-evidence-failure; bind_secondmate local
+  cat > "$WORLD/fakebin/gh" <<'SH'
+#!/usr/bin/env bash
+printf '%s\n' 'The scenarios were run against a real account.'
+SH
+  chmod +x "$WORLD/fakebin/gh"
+  write_child "$MATE" child 'done: PR https://github.com/owner/repo/pull/1 checks green'
+  sed -i.bak 's#https://example.test/owner/repo/pull/1#https://github.com/owner/repo/pull/1#g' "$MATE/state/child.meta"
+  rm -f "$MATE/state/child.meta.bak"
+  run_report "$MATE" child || fail "report refused a terminal outcome after evidence validation failed"
+  key=$(reported_outcome_key "$MATE" child done) || fail "evidence-validation report receipt was not recorded"
+  sed -E 's/ \[at=[0-9]+\]//' "$MAIN/state/mate.status" | grep -Fq \
+    "done [key=$key]: child child done: PR https://github.com/owner/repo/pull/1 checks green pr=https://github.com/owner/repo/pull/1 evidence-validation=failed mode=no-mistakes yolo=off" \
+    || fail "published evidence failure was not surfaced beside the reported outcome"
+  pass "parent PR reports retain outcomes and surface evidence validation failures"
+}
+
 # `report <child>` is the teardown-side delivery: it delivers or says nothing
 # is owed with 0, and returns non-zero only when the channel cannot be written.
 test_report_subcommand_delivers_and_refuses() {
@@ -981,6 +1000,7 @@ test_secondmate_partial_ledger_line_waits_for_newline
 test_secondmate_remote_route_ledger_delivery
 test_report_subcommand_delivers_and_refuses
 test_pending_ledger_done_is_delivered_after_worktree_removal
+test_parent_report_surfaces_published_evidence_failure
 test_report_avoids_scan_meta_lock_inversion
 test_local_secondmate_rejects_relative_parent_home
 test_invalid_secondmate_marker_blocks_routing

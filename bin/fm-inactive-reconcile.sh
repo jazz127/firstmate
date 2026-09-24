@@ -539,25 +539,25 @@ reconcile_direct_child_locked() { # <id> <meta> <secondmate-id-or-empty> <timeou
         && ! fm_dod_note_reports_ci_ready "$(status_line_note "$last")" \
         && ! fm_dod_note_reports_published_change "$(status_line_note "$last")"; then
         case "$state_line" in
-      'state: done · source: status-log'*)
-        worktree=$(meta_field "$meta" worktree)
-        if [ -d "$worktree" ] \
-          && clean=$(git -C "$worktree" status --porcelain 2>/dev/null) \
-          && [ -z "$clean" ] \
-          && [ "$(git -C "$worktree" symbolic-ref --quiet --short HEAD 2>/dev/null)" = "fm/$id" ]; then
-          head=$(git -C "$worktree" rev-parse --verify HEAD 2>/dev/null || true)
-          if [ -n "$head" ]; then
-            incarnation=$(meta_incarnation "$meta")
-            fingerprint=$(sha256_text "validation-handoff|$incarnation|$id|$head")
-            outcome_key="validation-handoff-$id"
-            ensure_record "$fingerprint" "$id" "$incarnation" 'done' "$outcome_key" validation-handoff presentation '' "$head" || return 1
-            [ -n "$RECORD_PENDING" ] || return 0
-            payload="validation handoff overdue: child=$id committed_head=$head no attributable no-mistakes run after ${FM_INACTIVE_RECONCILE_SECS}s inactivity"
-            queue_presentation "$RECORD_PENDING" "$fingerprint" "$payload" || true
-            return 0
-          fi
-        fi
-        ;;
+          'state: done · source: status-log'*)
+            worktree=$(meta_field "$meta" worktree)
+            if [ -d "$worktree" ] \
+              && clean=$(git -C "$worktree" status --porcelain 2>/dev/null) \
+              && [ -z "$clean" ] \
+              && [ "$(git -C "$worktree" symbolic-ref --quiet --short HEAD 2>/dev/null)" = "fm/$id" ]; then
+              head=$(git -C "$worktree" rev-parse --verify HEAD 2>/dev/null || true)
+              if [ -n "$head" ]; then
+                incarnation=$(meta_incarnation "$meta")
+                fingerprint=$(sha256_text "validation-handoff|$incarnation|$id|$head")
+                outcome_key="validation-handoff-$id"
+                ensure_record "$fingerprint" "$id" "$incarnation" 'done' "$outcome_key" validation-handoff presentation '' "$head" || return 1
+                [ -n "$RECORD_PENDING" ] || return 0
+                payload="validation handoff overdue: child=$id committed_head=$head no attributable no-mistakes run after ${FM_INACTIVE_RECONCILE_SECS}s inactivity"
+                queue_presentation "$RECORD_PENDING" "$fingerprint" "$payload" || true
+                return 0
+              fi
+            fi
+            ;;
         esac
       fi
       ;;

@@ -1,4 +1,4 @@
-# shellcheck shell=bash
+# shellcheck shell=bash disable=SC2034
 # Shared runtime branch and tracking-source resolution for Firstmate consumers.
 # firstmate_runtime_branch <repo>: configured firstmate.runtimeBranch, or the
 # historical origin/HEAD then local main/master fallback when unset.

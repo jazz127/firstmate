@@ -275,6 +275,47 @@ EOF
   printf '%s\n' "$1"
 }
 
+fm_dod_validate_intent_evidence() {  # <intent> <supervising-home> <worktree> <task-temp>
+  local intent=$1 home=$2 worktree=$3 task_temp=$4 line artifact command captured claim=0
+  if printf '%s\n' "$intent" | grep -Eiq '(live|verified|real-account|independent|externally confirmed)' \
+    && printf '%s\n' "$intent" | grep -Eiq '(scenario|validation|test|result|evidence|account|confirmation|[0-9]+[[:space:]]+of[[:space:]]+[0-9]+)'; then
+    claim=1
+  fi
+  [ "$claim" -eq 1 ] || return 0
+  while IFS= read -r line; do
+    case "$line" in
+      evidence-artifact:*) artifact=${line#evidence-artifact:}; artifact=${artifact#"${artifact%%[![:space:]]*}"} ;;
+      evidence-command:*) command=${line#evidence-command:}; command=${command#"${command%%[![:space:]]*}"} ;;
+      evidence-captured:*) captured=${line#evidence-captured:}; captured=${captured#"${captured%%[![:space:]]*}"} ;;
+    esac
+  done <<EOF
+$intent
+EOF
+  if [ -z "${artifact:-}" ]; then
+    printf '%s\n' 'evidence claim refused: missing evidence-artifact: path' >&2
+    return 1
+  fi
+  if [ -z "${command:-}" ]; then
+    printf '%s\n' 'evidence claim refused: missing evidence-command: exact command' >&2
+    return 1
+  fi
+  if [ -z "${captured:-}" ]; then
+    printf '%s\n' 'evidence claim refused: missing evidence-captured: capture time' >&2
+    return 1
+  fi
+  case "$artifact" in
+    "$worktree"/*) [ -n "$worktree" ] ;;
+    "$home"/*) [ -n "$home" ] ;;
+    "$task_temp"/*) [ -n "$task_temp" ] ;;
+    *) printf '%s\n' "evidence claim refused: artifact is outside the supervising home, worker worktree, or task temp directory: $artifact" >&2; return 1 ;;
+  esac
+  if [ ! -r "$artifact" ]; then
+    printf '%s\n' "evidence claim refused: artifact is missing or unreadable: $artifact" >&2
+    return 1
+  fi
+  return 0
+}
+
 # Accept the current two-subsection contract only when both bodies have content;
 # briefs predating that contract remain valid when their # Task body has content.
 fm_brief_task_content_valid() {  # <file>
@@ -344,6 +385,7 @@ When the captain's intent refers to a report, decision, or PR ("do items 1, 2, 3
 This replaces the no-mistakes skill's advice to enrich \`--intent\` with decisions and tradeoffs; that advice does not apply to Firstmate-dispatched work.
 Any claim in \`--intent\` of live, verified, external, independently confirmed, or real-account evidence must name the artifact read, the exact command that produced it, and when it was captured; do not publish such a claim if any of those are missing.
 Keep each cited artifact at a path the supervising home can open, inside this worker's worktree or its task temp directory.
+Evidence-shaped claims are the only prose checked here: a vocabulary word must occur with a result, measurement, scenario, validation, test, account, confirmation, or evidence term. Ordinary prose that merely mentions one vocabulary word is not blocked. For a checked claim, add one line each for \`evidence-artifact: /absolute/path\`, \`evidence-command: exact command\`, and \`evidence-captured: timestamp\`.
 Do not hand-edit, commit, or fix findings yourself while a run is active - the pipeline applies every fix.
 
 One drive call blocks until the next gate or outcome, which routinely outlives what your harness lets a single command run: Claude Code kills a command at ten minutes maximum, while one fix round is capped around thirty minutes and up to three rounds chain.

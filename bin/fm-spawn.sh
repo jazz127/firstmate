@@ -2827,13 +2827,17 @@ if [ "$KIND" = ship ] || [ "$KIND" = scout ]; then
   if [ "$KIND" = ship ] && [ "$MODE" = no-mistakes ]; then
     if fm_brief_task_heading_present "$BRIEF" "## Captain's intent"; then
       CAPTAIN_INTENT=$(fm_brief_task_heading_body "$BRIEF" "## Captain's intent")
-    else
-      LEGACY_TASK_BODY=$(fm_brief_heading_body "$BRIEF" "# Task")
-      CAPTAIN_INTENT=$(fm_brief_marked_captain_words "$LEGACY_TASK_BODY")
+      else
+        LEGACY_TASK_BODY=$(fm_brief_heading_body "$BRIEF" "# Task")
+        CAPTAIN_INTENT=$(fm_brief_marked_captain_words "$LEGACY_TASK_BODY")
       if [ -z "$(printf '%s' "$CAPTAIN_INTENT" | tr -d '[:space:]')" ]; then
         echo "error: legacy mixed # Task brief has no provenance-marked captain words for no-mistakes --intent; add [captain] lines or migrate to ## Captain's intent and ## Firstmate spec" >&2
         exit 1
       fi
+    fi
+    if ! fm_dod_validate_intent_evidence "$CAPTAIN_INTENT" "$FM_HOME" "$PROJ_ABS" "${TMPDIR:-/tmp}"; then
+      echo "error: $BRIEF contains an evidence claim that cannot be published" >&2
+      exit 1
     fi
   fi
   # Use the existing launch-brief overlay for every worker kind, including

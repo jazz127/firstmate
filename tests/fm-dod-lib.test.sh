@@ -32,15 +32,47 @@ test_scout_done_is_not_gated() {
   pass "scout done: is not gated"
 }
 
-test_no_mistakes_contract_requires_checkable_evidence_claims() {
-  local block
-  block=$(fm_dod_block no-mistakes evidence-test)
-  # shellcheck disable=SC2016 # Backticks are literal generated-contract wording.
-  assert_contains "$block" 'Any claim in `--intent` of live, verified, external, independently confirmed, or real-account evidence must name the artifact read, the exact command that produced it, and when it was captured' \
-    "no-mistakes contract did not require artifact, command, and capture time"
-  assert_contains "$block" "inside this worker's worktree or its task temp directory" \
-    "no-mistakes contract did not keep cited artifacts readable by the supervising home"
-  pass "no-mistakes contract requires checkable evidence claims"
+test_evidence_claim_requires_provenance() {
+  local root intent out rc artifact
+  root="$TMP_ROOT/evidence-claim"
+  artifact="$root/worktree/evidence.txt"
+  mkdir -p "$root/home" "$root/worktree" "$root/tmp"
+  printf '%s\n' captured > "$artifact"
+  intent='2 of 3 scenarios driven live'
+  set +e
+  out=$(fm_dod_validate_intent_evidence "$intent" "$root/home" "$root/worktree" "$root/tmp" 2>&1)
+  rc=$?
+  set -e
+  [ "$rc" -ne 0 ] || fail "evidence claim without provenance was accepted"
+  assert_contains "$out" "missing evidence-artifact" "missing artifact refusal was unclear"
+  intent=$'2 of 3 scenarios driven live\nevidence-artifact: '
+  set +e
+  out=$(fm_dod_validate_intent_evidence "$intent" "$root/home" "$root/worktree" "$root/tmp" 2>&1)
+  rc=$?
+  set -e
+  [ "$rc" -ne 0 ] || fail "evidence claim without command and time was accepted"
+  assert_contains "$out" "missing evidence-command" "missing command refusal was unclear"
+  pass "evidence claims require artifact provenance"
+}
+
+test_evidence_claim_accepts_readable_provenance() {
+  local root artifact intent
+  root="$TMP_ROOT/evidence-claim-valid"
+  artifact="$root/worktree/evidence.txt"
+  mkdir -p "$root/home" "$root/worktree" "$root/tmp"
+  printf '%s\n' captured > "$artifact"
+  intent=$(cat <<EOF
+2 of 3 scenarios driven live
+evidence-artifact: $artifact
+evidence-command: ./run-scenarios --live
+evidence-captured: 2026-09-25T10:00:00+10:00
+EOF
+)
+  fm_dod_validate_intent_evidence "$intent" "$root/home" "$root/worktree" "$root/tmp" \
+    || fail "readable evidence provenance was refused"
+  fm_dod_validate_intent_evidence 'Improve live reload wording' "$root/home" "$root/worktree" "$root/tmp" \
+    || fail "ordinary prose containing live was refused"
+  pass "evidence claims accept readable provenance and spare ordinary prose"
 }
 
 test_unpushed_ship_done_is_refused() {
@@ -315,7 +347,8 @@ test_non_done_lines_are_not_gated() {
 }
 
 test_scout_done_is_not_gated
-test_no_mistakes_contract_requires_checkable_evidence_claims
+test_evidence_claim_requires_provenance
+test_evidence_claim_accepts_readable_provenance
 test_unpushed_ship_done_is_refused
 test_no_mistakes_prevalidation_done_is_not_gated
 test_remote_containing_named_head_is_accepted

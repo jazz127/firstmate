@@ -40,7 +40,21 @@ assert_contains "$OUTPUT" 'interval: 17 seconds' 'refresh interval is missing'
 report_line=$(printf '%s\n' "$OUTPUT" | rg -n 'Codex home card' | cut -d: -f1)
 house_line=$(printf '%s\n' "$OUTPUT" | rg -n 'House tip:' | cut -d: -f1)
 [ "$report_line" -lt "$house_line" ] || fail 'house block appeared before the TUI report'
+executable_line=$(printf '%s\n' "$OUTPUT" | rg -n 'quota-axi executable:' | cut -d: -f1)
+refreshed_line=$(printf '%s\n' "$OUTPUT" | rg -n 'Refreshed:' | cut -d: -f1)
+[ "$house_line" -gt "$executable_line" ] && [ "$house_line" -gt "$refreshed_line" ] \
+  || fail 'fleet block did not render after the executable and refresh details'
 pass 'one frame shows the house commit, executable, account rows, and interval'
+
+HOME_ROOT="$TMP_ROOT/home"
+mkdir -p "$HOME_ROOT/projects"
+ln -s "$CLONE" "$HOME_ROOT/projects/quota-axi"
+OUTPUT=$(PATH="$FAKEBIN:$PATH" FM_ROOT_OVERRIDE="$HOME_ROOT" FM_QUOTA_TAB_INTERVAL=17 \
+  QUOTA_ARGS="$TMP_ROOT/quota-args" TERM=dumb env -u FM_HOME \
+  "$ROOT/bin/fm-quota-tab.sh" once 2>&1) \
+  || fail "frame failed when FM_HOME was unset: $OUTPUT"
+assert_contains "$OUTPUT" 'Quota house line' 'unset FM_HOME did not resolve the clone under the running home'
+pass 'unset FM_HOME resolves quota-axi under the running Firstmate home'
 
 cat > "$FAKEBIN/git" <<'EOF'
 #!/usr/bin/env bash

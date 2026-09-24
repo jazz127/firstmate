@@ -19,7 +19,9 @@
 // getAllTools() is reliable. docs/calm-mode-feasibility.md owns the Pi-source evidence
 // and docs/calm.md owns the user-facing behavior and non-retroactive first-toggle bound.
 import { randomUUID } from "node:crypto";
+import { execFile } from "node:child_process";
 import {
+  existsSync,
   mkdirSync,
   readFileSync,
   realpathSync,
@@ -134,6 +136,26 @@ export default function (pi: ExtensionAPI) {
   // this state; the next working period resumes it. session_start resets it so a fresh
   // Pi session starts at the normal initial position. Never module-global.
   const workingShipAnimation = createCalmWorkingShipAnimation();
+  let fleetMapRows: string[] = [];
+  let fleetMapGeneration = 0;
+  const loadFleetMap = (): void => {
+    const generation = ++fleetMapGeneration;
+    const generator = resolve(root, "bin/fm-captain-chart.py");
+    if (!existsSync(generator)) return;
+    if (fleetMapRows.length === 0) fleetMapRows = ["Loading fleet map..."];
+    // The chart generator is the sole fleet reader and mapping owner. Keep its
+    // snapshot work off Pi's render path; the existing boat animates meanwhile.
+    execFile("python3", [generator, "--ascii"], { timeout: 45000, maxBuffer: 1024 * 1024 },
+      (error, stdout) => {
+        if (generation !== fleetMapGeneration) return;
+        if (error) {
+          console.error(`Firstmate Calm: fleet map unavailable. ${error.message}`);
+          fleetMapRows = ["Fleet map unavailable; the boat remains active"];
+          return;
+        }
+        fleetMapRows = stdout.trimEnd().split("\n");
+      });
+  };
 
   // Single owner of Calm's working-row presentation choice. The widget is only created
   // or removed on a real transition, so repeated starts cannot duplicate its timer.
@@ -144,10 +166,12 @@ export default function (pi: ExtensionAPI) {
     const showShip = agentRunActive && calmPresentationIsActive();
     if (showShip !== workingShipShown) {
       workingShipShown = showShip;
+      if (showShip) loadFleetMap();
+      else ++fleetMapGeneration;
       ui.setWidget(
         CALM_WORKING_SHIP_WIDGET_KEY,
         showShip
-          ? (tui) => createCalmWorkingShipWidget(tui, workingShipAnimation)
+          ? (tui) => createCalmWorkingShipWidget(tui, workingShipAnimation, () => fleetMapRows)
           : undefined,
       );
       ui.setWorkingVisible(!showShip);
@@ -419,6 +443,8 @@ export default function (pi: ExtensionAPI) {
     workingShipShown = false;
     // A genuine new session lifetime starts the boat at the normal initial position.
     workingShipAnimation.reset();
+    fleetMapRows = [];
+    ++fleetMapGeneration;
     applyWorkingPresentation(ctx.ui, true);
     ctx.ui.setHiddenThinkingLabel(calmPresentationIsActive() ? "" : undefined);
     ctx.ui.setStatus("firstmate-calm", undefined);

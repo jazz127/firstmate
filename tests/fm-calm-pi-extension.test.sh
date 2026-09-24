@@ -2462,6 +2462,30 @@ const check = (condition, message) => {
 };
 const sailOf = (frame) => strip(frame[0]).includes(SAIL) ? SAIL : "none";
 
+// The fleet map occupies rows after the existing boat, and narrow terminals keep
+// the proven two-row sprite alone. Rendering or resizing it never ticks the boat.
+{
+  const animation = createCalmWorkingShipAnimation();
+  const widget = createCalmWorkingShipWidget(
+    { requestRender() {} }, animation,
+    () => ["island: alpha -> Capital city", "◿│◣ Running task [under sail]", "long ".repeat(20)],
+  );
+  const before = [animation.position(), animation.direction(), animation.waterPhase()];
+  for (const width of [40, 60, 80]) {
+    const frame = widget.render(width);
+    check(frame.length === 5, `width ${width} lost fleet-map rows`);
+    check(sailOf(frame) === SAIL, `width ${width} lost the original boat`);
+    check(frame[2].includes("island: alpha"), `width ${width} lost the island`);
+    check(frame[3].includes("under sail"), `width ${width} lost the sailing ship`);
+    check(frame.every((line) => visibleWidth(line) <= width), `width ${width} wrapped map rows`);
+  }
+  check(widget.render(20).length === 2, "narrow width did not retain boat-only fallback");
+  check(JSON.stringify(before) === JSON.stringify([
+    animation.position(), animation.direction(), animation.waterPhase(),
+  ]), "map render changed boat motion or water phase");
+  widget.dispose();
+}
+
 // --- Calm cadence: the boat is materially slower than the water ------------------
 {
   // The pre-revision boat moved one column every 140ms. The revised boat must be

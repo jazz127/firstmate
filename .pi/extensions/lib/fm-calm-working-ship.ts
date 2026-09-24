@@ -22,7 +22,7 @@
 // module recomputes its track from that width on every frame instead of caching a
 // terminal size that a resize would invalidate. A resize while the boat is hidden is
 // applied on the first resumed frame through the same clamp path.
-import type { Component, TUI } from "@earendil-works/pi-tui";
+import { truncateToWidth, type Component, type TUI } from "@earendil-works/pi-tui";
 import {
   CALM_WORKING_SHIP_TICK_MS,
   CALM_WORKING_SHIP_TICKS_PER_MOVE,
@@ -84,6 +84,7 @@ export function createCalmWorkingShipAnimation(): CalmWorkingShipAnimation {
 export function createCalmWorkingShipWidget(
   tui: TUI,
   animation: CalmWorkingShipAnimation = createCalmWorkingShipAnimation(),
+  fleetMap: () => string[] = () => [],
 ): Component & { dispose(): void } {
   let disposed = false;
   const timer = setInterval(() => {
@@ -95,7 +96,12 @@ export function createCalmWorkingShipWidget(
   timer.unref?.();
 
   return {
-    render: (width) => (disposed ? [] : animation.render(width)),
+    render: (width) => {
+      if (disposed) return [];
+      const boat = animation.render(width);
+      if (width < 40) return boat;
+      return boat.concat(fleetMap().map((line) => truncateToWidth(line, width)));
+    },
     // Every frame is rebuilt from fixed standard ANSI codes, so there is no cache.
     invalidate: () => {},
     dispose: () => {

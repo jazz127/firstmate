@@ -41,6 +41,9 @@ SUB_HOME_MARKER="${SUB_HOME_MARKER:-.fm-secondmate-home}"
 # shellcheck source=bin/fm-secondmate-registry-lib.sh
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/fm-secondmate-registry-lib.sh"
 
+# shellcheck source=bin/fm-runtime-branch-lib.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/fm-runtime-branch-lib.sh"
+
 # --- helpers ---------------------------------------------------------------
 
 first_line() {
@@ -48,19 +51,7 @@ first_line() {
 }
 
 default_branch() {
-  local dir=$1 ref branch
-  ref=$(git -C "$dir" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || true)
-  if [ -n "$ref" ]; then
-    echo "${ref#origin/}"
-    return 0
-  fi
-  for branch in main master; do
-    if git -C "$dir" show-ref --verify --quiet "refs/heads/$branch"; then
-      echo "$branch"
-      return 0
-    fi
-  done
-  return 1
+  firstmate_runtime_branch "$1"
 }
 
 # Resolve the PRIMARY checkout's current default-branch commit - the local-HEAD
@@ -208,15 +199,16 @@ validate_secondmate_home() {
 # the local-HEAD sync never fetches.
 FETCHED=""
 fetch_once() {
-  local dir=$1 common
+  local dir=$1 remote=${2:-origin} common key
   common=$(git -C "$dir" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)
+  key="$common|$remote"
   if [ -n "$common" ]; then
     case " $FETCHED " in
-      *" $common "*) return 0 ;;
+      *" $key "*) return 0 ;;
     esac
   fi
-  if git -C "$dir" fetch origin --prune --quiet 2>/dev/null; then
-    [ -n "$common" ] && FETCHED="$FETCHED $common"
+  if git -C "$dir" fetch "$remote" --prune --quiet 2>/dev/null; then
+    [ -n "$common" ] && FETCHED="$FETCHED $key"
     return 0
   fi
   return 1
@@ -352,8 +344,9 @@ live_secondmate_meta_records() {
 #   FF_INSTR  = comma list of changed instruction paths (only when updated)
 #
 # base_mode selects where the fast-forward base comes from:
-#   origin       - fetch origin and advance to origin/<default> (the /updatefirstmate
-#                  path); requires an origin remote and network reachability.
+#   origin       - legacy explicit origin fetch to origin/<runtime branch>.
+#   tracking     - fetch branch.<runtime>.remote and advance to its configured
+#                  branch.<runtime>.merge target (the /updatefirstmate path).
 #   <commit-ish> - advance to that LOCAL commit with NO fetch and no origin
 #                  dependency (the local-HEAD secondmate sync). The commit must
 #                  already exist in the target's object store, which it always does
@@ -387,16 +380,31 @@ ff_target() {
   }
 
   # Resolve the fast-forward base from base_mode (see header).
-  if [ "$base_mode" = origin ]; then
-    if ! git -C "$dir" remote get-url origin >/dev/null 2>&1; then
+  if [ "$base_mode" = origin ] || [ "$base_mode" = tracking ]; then
+    local remote=origin merge_ref
+    if [ "$base_mode" = tracking ]; then
+      remote=$(git -C "$dir" config --get "branch.$default.remote" 2>/dev/null || true)
+      merge_ref=$(git -C "$dir" config --get "branch.$default.merge" 2>/dev/null || true)
+      case "$remote" in ''|*[!A-Za-z0-9._/-]*) echo "$label: skipped: invalid tracking remote for $default"; return 0 ;; esac
+      case "$merge_ref" in refs/heads/*) ;; *) echo "$label: skipped: invalid tracking merge ref for $default"; return 0 ;; esac
+      if ! git -C "$dir" remote get-url "$remote" >/dev/null 2>&1; then
+        echo "$label: skipped: no tracking remote $remote"
+        return 0
+      fi
+    fi
+    if [ "$base_mode" = origin ] && ! git -C "$dir" remote get-url origin >/dev/null 2>&1; then
       echo "$label: skipped: no origin remote"
       return 0
     fi
-    if ! fetch_once "$dir"; then
+    if ! fetch_once "$dir" "$remote"; then
       echo "$label: skipped: fetch failed"
       return 0
     fi
-    base="origin/$default"
+    if [ "$base_mode" = tracking ]; then
+      base="refs/remotes/$remote/${merge_ref#refs/heads/}"
+    else
+      base="origin/$default"
+    fi
   else
     base="$base_mode"
   fi

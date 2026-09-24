@@ -195,11 +195,11 @@ validate_secondmate_home() {
 }
 
 # A single fetch refreshes every worktree that shares an object store, so fetch
-# each distinct git-common-dir at most once. Used ONLY by the origin base mode;
-# the local-HEAD sync never fetches.
+# each distinct git-common-dir and remote at most once. Local-commit sync never
+# fetches.
 FETCHED=""
 fetch_once() {
-  local dir=$1 remote=${2:-origin} common key
+  local dir=$1 remote=${2:-origin} common key refspec=${3:-}
   common=$(git -C "$dir" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)
   key="$common|$remote"
   if [ -n "$common" ]; then
@@ -207,11 +207,16 @@ fetch_once() {
       *" $key "*) return 0 ;;
     esac
   fi
-  if git -C "$dir" fetch "$remote" --prune --quiet 2>/dev/null; then
+  if [ -n "$refspec" ]; then
+    git -C "$dir" fetch "$remote" --prune --quiet "$refspec" 2>/dev/null || return 1
+  elif ! git -C "$dir" fetch "$remote" --prune --quiet 2>/dev/null; then
+    return 1
+  fi
+  if [ -n "$common" ]; then
     [ -n "$common" ] && FETCHED="$FETCHED $key"
     return 0
   fi
-  return 1
+  return 0
 }
 
 # Which watched instruction paths changed between HEAD and BASE (comma list).
@@ -382,26 +387,26 @@ ff_target() {
   # Resolve the fast-forward base from base_mode (see header).
   if [ "$base_mode" = origin ] || [ "$base_mode" = tracking ]; then
     local remote=origin merge_ref
-    if [ "$base_mode" = tracking ]; then
-      remote=$(git -C "$dir" config --get "branch.$default.remote" 2>/dev/null || true)
-      merge_ref=$(git -C "$dir" config --get "branch.$default.merge" 2>/dev/null || true)
-      case "$remote" in ''|*[!A-Za-z0-9._/-]*) echo "$label: skipped: invalid tracking remote for $default"; return 0 ;; esac
-      case "$merge_ref" in refs/heads/*) ;; *) echo "$label: skipped: invalid tracking merge ref for $default"; return 0 ;; esac
-      if ! git -C "$dir" remote get-url "$remote" >/dev/null 2>&1; then
-        echo "$label: skipped: no tracking remote $remote"
+    local fetch_refspec=
+    if [ "$base_mode" = tracking ] && firstmate_runtime_branch_is_configured "$dir"; then
+      if ! firstmate_runtime_tracking_source "$dir" "$default"; then
+        echo "$label: skipped: invalid tracking source for runtime branch $default"
         return 0
       fi
+      remote=$FIRSTMATE_RUNTIME_REMOTE
+      merge_ref=$FIRSTMATE_RUNTIME_MERGE_REF
+      fetch_refspec=$FIRSTMATE_RUNTIME_FETCH_REFSPEC
     fi
     if [ "$base_mode" = origin ] && ! git -C "$dir" remote get-url origin >/dev/null 2>&1; then
       echo "$label: skipped: no origin remote"
       return 0
     fi
-    if ! fetch_once "$dir" "$remote"; then
+    if ! fetch_once "$dir" "$remote" "$fetch_refspec"; then
       echo "$label: skipped: fetch failed"
       return 0
     fi
-    if [ "$base_mode" = tracking ]; then
-      base="refs/remotes/$remote/${merge_ref#refs/heads/}"
+    if [ -n "$fetch_refspec" ]; then
+      base=$FIRSTMATE_RUNTIME_TRACKING_REF
     else
       base="origin/$default"
     fi

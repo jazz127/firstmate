@@ -18,6 +18,7 @@ set -u
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 CI_WORKFLOW="$ROOT/.github/workflows/ci.yml"
+HOUSE_WORKFLOW="$ROOT/.github/workflows/ci-house.yml"
 
 assert_present "$CI_WORKFLOW" ".github/workflows/ci.yml is missing"
 command -v ruby >/dev/null 2>&1 \
@@ -249,6 +250,45 @@ RUBY
   pass "CI matrices cover every executable serial lane and canonical lint root exactly once"
 }
 
+test_house_workflow_adds_a_focused_check_set() {
+  ruby -ryaml - "$HOUSE_WORKFLOW" "$CI_WORKFLOW" "$ROOT/.github/workflows/no-mistakes-required.yml" <<'RUBY' || fail "house workflow contract"
+def events(path)
+  document = YAML.load_file(path)
+  document.fetch("on") { document.fetch(true) }
+end
+
+house_path, main_path, required_path = ARGV
+house = YAML.load_file(house_path)
+pull_request = events(house_path).fetch("pull_request")
+raise "house workflow must target only house PRs" unless pull_request.fetch("branches") == ["house"]
+raise "house workflow must not add push runs" unless events(house_path).keys == ["pull_request"]
+jobs = house.fetch("jobs")
+raise "house workflow must have one job" unless jobs.keys == ["house"]
+job = jobs.fetch("house")
+raise "house check must use the standard Linux runner" unless job.fetch("runs-on") == "ubuntu-latest"
+raise "house check must use the normal 30-minute tripwire" unless job.fetch("timeout-minutes") == 30
+steps = job.fetch("steps")
+checkout = steps.find { |step| step["uses"] == "actions/checkout@v6" }
+raise "house workflow must fetch history for base comparison" unless checkout&.dig("with", "fetch-depth") == 0
+commands = steps.map { |step| step["run"].to_s }.join("\n")
+[
+  "bin/fm-lint.sh",
+  "tests/fm-ci-workflow.test.sh",
+  "tests/fm-task-delivery.test.sh",
+  "tests/fm-dod-lib.test.sh",
+  "bin/fm-test-run.sh --check-coverage",
+].each do |required|
+  raise "house check omits #{required}" unless commands.include?(required)
+end
+main = YAML.load_file(main_path)
+raise "main CI PR base changed" unless events(main_path).fetch("pull_request").fetch("branches") == ["main"]
+raise "main CI push base changed" unless events(main_path).fetch("push").fetch("branches") == ["main"]
+required = events(required_path).fetch("pull_request").fetch("branches")
+raise "attestation workflow base changed" unless required == ["main"]
+RUBY
+  pass "house gets focused checks while main CI and attestation triggers stay unchanged"
+}
+
 test_ci_matrices_match_executable_partitions
 test_pr_pushes_supersede_within_one_pr
 test_separate_prs_do_not_cancel_each_other
@@ -258,3 +298,4 @@ test_every_job_belongs_to_exactly_one_timeout_tier
 test_fast_tier_shares_one_short_tripwire
 test_normal_tier_shares_one_budget
 test_heavy_tier_keeps_a_step_tripwire_under_a_job_backstop
+test_house_workflow_adds_a_focused_check_set

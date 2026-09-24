@@ -1,0 +1,42 @@
+name: House CI
+
+on:
+  pull_request:
+    branches: [house]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: house-ci-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  house:
+    name: House checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Install pinned ShellCheck
+        run: |
+          set -eu
+          bin/fm-install-shellcheck.sh "$RUNNER_TEMP/bin"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      - name: Install pinned actionlint
+        run: |
+          set -eu
+          bin/fm-install-actionlint.sh "$RUNNER_TEMP/bin"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      - name: Lint the canonical code and workflow set
+        run: bin/fm-lint.sh
+      - name: Run house workflow and delivery regressions
+        run: >-
+          bin/fm-test-run.sh
+          tests/fm-ci-workflow.test.sh
+          tests/fm-task-delivery.test.sh
+          tests/fm-dod-lib.test.sh
+      - name: Verify test inventory coverage
+        run: bin/fm-test-run.sh --check-coverage

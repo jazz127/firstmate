@@ -275,12 +275,34 @@ EOF
   printf '%s\n' "$1"
 }
 
-fm_dod_validate_intent_evidence() {  # <intent> <supervising-home> <worktree> <task-temp>
-  local intent=$1 home=$2 worktree=$3 task_temp=$4 line artifact command captured claim=0
-  if printf '%s\n' "$intent" | grep -Eiq '(live|verified|real-account|independent|externally confirmed)' \
-    && printf '%s\n' "$intent" | grep -Eiq '(scenario|validation|test|result|evidence|account|confirmation|[0-9]+[[:space:]]+of[[:space:]]+[0-9]+)'; then
-    claim=1
-  fi
+fm_dod_path_normalize() {  # <absolute-path>
+  awk -F/ '
+    BEGIN { result = "" }
+    {
+      for (i = 1; i <= NF; i++) {
+        if ($i == "" || $i == ".") continue
+        if ($i == "..") { sub("/[^/]*$", "", result); continue }
+        result = result "/" $i
+      }
+    }
+    END { if (result == "") result = "/"; print result }
+  ' <<EOF
+$1
+EOF
+}
+
+fm_dod_validate_intent_evidence() {  # <intent> <supervising-home> <worktree> <task-temp> [preflight|publish]
+  local intent=$1 home=$2 worktree=$3 task_temp=$4 phase=${5:-preflight}
+  local line artifact command captured claim=0 normalized_artifact normalized_root resolved_artifact
+  while IFS= read -r line; do
+    if printf '%s\n' "$line" | grep -Eiq '(live|verified|real-account|independent|external|externally confirmed)' \
+      && printf '%s\n' "$line" | grep -Eiq '(scenario|validation|test|result|evidence|account|confirmation|[0-9]+[[:space:]]+of[[:space:]]+[0-9]+)'; then
+      claim=1
+      break
+    fi
+  done <<EOF
+$intent
+EOF
   [ "$claim" -eq 1 ] || return 0
   while IFS= read -r line; do
     case "$line" in
@@ -304,16 +326,52 @@ EOF
     return 1
   fi
   case "$artifact" in
-    "$worktree"/*) [ -n "$worktree" ] ;;
-    "$home"/*) [ -n "$home" ] ;;
-    "$task_temp"/*) [ -n "$task_temp" ] ;;
-    *) printf '%s\n' "evidence claim refused: artifact is outside the supervising home, worker worktree, or task temp directory: $artifact" >&2; return 1 ;;
+    /*) ;;
+    *) printf '%s\n' "evidence claim refused: artifact path must be absolute: $artifact" >&2; return 1 ;;
   esac
-  if [ ! -r "$artifact" ]; then
-    printf '%s\n' "evidence claim refused: artifact is missing or unreadable: $artifact" >&2
+  normalized_artifact=$(fm_dod_path_normalize "$artifact") || return 1
+  for normalized_root in "$home" "$worktree" "$task_temp"; do
+    [ -n "$normalized_root" ] || continue
+    case "$normalized_root" in /*) ;; *) continue ;; esac
+    normalized_root=$(fm_dod_path_normalize "$normalized_root") || return 1
+    case "$normalized_artifact" in
+      "$normalized_root"|"$normalized_root"/*) break ;;
+    esac
+    normalized_root=
+  done
+  if [ -z "$normalized_root" ]; then
+    printf '%s\n' "evidence claim refused: artifact is outside the supervising home, worker worktree, or task temp directory: $artifact" >&2
     return 1
   fi
+  if [ "$phase" = publish ]; then
+    if [ ! -r "$artifact" ]; then
+      printf '%s\n' "evidence claim refused: artifact is missing or unreadable: $artifact" >&2
+      return 1
+    fi
+    resolved_artifact=$(cd -P "$(dirname -- "$artifact")" 2>/dev/null && printf '%s/%s' "$(pwd -P)" "$(basename -- "$artifact")") || {
+      printf '%s\n' "evidence claim refused: artifact is missing or unreadable: $artifact" >&2
+      return 1
+    }
+    normalized_artifact=$(fm_dod_path_normalize "$resolved_artifact") || return 1
+    for normalized_root in "$home" "$worktree" "$task_temp"; do
+      [ -n "$normalized_root" ] || continue
+      [ -d "$normalized_root" ] || continue
+      normalized_root=$(cd -P "$normalized_root" 2>/dev/null && pwd -P) || continue
+      case "$normalized_artifact" in
+        "$normalized_root"|"$normalized_root"/*) break ;;
+      esac
+      normalized_root=
+    done
+    [ -n "$normalized_root" ] || {
+      printf '%s\n' "evidence claim refused: resolved artifact is outside the allowed roots: $artifact" >&2
+      return 1
+    }
+  fi
   return 0
+}
+
+fm_dod_validate_published_intent() {  # <intent> <supervising-home> <worktree> <task-temp>
+  fm_dod_validate_intent_evidence "$1" "$2" "$3" "$4" publish
 }
 
 # Accept the current two-subsection contract only when both bodies have content;
@@ -383,7 +441,7 @@ Do not include \`## Firstmate spec\`, later Firstmate build constraints, or your
 The \`--intent\` string you pass must be self-sufficient: that string plus the codebase must let a reader reconstruct roughly the same specification, without depending on a separate report, a PR, or context that lives only in this conversation.
 When the captain's intent refers to a report, decision, or PR ("do items 1, 2, 3, and 7 of the report"), write the substance of the referenced items into \`--intent\` in the captain's terms, not only the pointer; that substance is the captain's ask by reference, while Firstmate's build instructions and your own decisions still stay out.
 This replaces the no-mistakes skill's advice to enrich \`--intent\` with decisions and tradeoffs; that advice does not apply to Firstmate-dispatched work.
-Any claim in \`--intent\` of live, verified, external, independently confirmed, or real-account evidence must name the artifact read, the exact command that produced it, and when it was captured; do not publish such a claim if any of those are missing.
+Any claim in \`--intent\` of live, verified, external, independently confirmed, or real-account evidence must name the artifact read, the exact command that produced it, and when it was captured; publication refuses such a claim if any of those are missing or the artifact cannot be read.
 Keep each cited artifact at a path the supervising home can open, inside this worker's worktree or its task temp directory.
 Evidence-shaped claims are the only prose checked here: a vocabulary word must occur with a result, measurement, scenario, validation, test, account, confirmation, or evidence term. Ordinary prose that merely mentions one vocabulary word is not blocked. For a checked claim, add one line each for \`evidence-artifact: /absolute/path\`, \`evidence-command: exact command\`, and \`evidence-captured: timestamp\`.
 Do not hand-edit, commit, or fix findings yourself while a run is active - the pipeline applies every fix.

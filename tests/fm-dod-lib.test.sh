@@ -42,21 +42,19 @@ test_evidence_claim_requires_provenance() {
   set +e
   out=$(fm_dod_validate_intent_evidence "$intent" "$root/home" "$root/worktree" "$root/tmp" 2>&1)
   rc=$?
-  set -e
   [ "$rc" -ne 0 ] || fail "evidence claim without provenance was accepted"
   assert_contains "$out" "missing evidence-artifact" "missing artifact refusal was unclear"
-  intent=$'2 of 3 scenarios driven live\nevidence-artifact: '
+  intent=$(printf '2 of 3 scenarios driven live\nevidence-artifact: %s\n' "$artifact")
   set +e
   out=$(fm_dod_validate_intent_evidence "$intent" "$root/home" "$root/worktree" "$root/tmp" 2>&1)
   rc=$?
-  set -e
   [ "$rc" -ne 0 ] || fail "evidence claim without command and time was accepted"
   assert_contains "$out" "missing evidence-command" "missing command refusal was unclear"
   pass "evidence claims require artifact provenance"
 }
 
 test_evidence_claim_accepts_readable_provenance() {
-  local root artifact intent
+  local root artifact intent out rc
   root="$TMP_ROOT/evidence-claim-valid"
   artifact="$root/worktree/evidence.txt"
   mkdir -p "$root/home" "$root/worktree" "$root/tmp"
@@ -70,6 +68,25 @@ EOF
 )
   fm_dod_validate_intent_evidence "$intent" "$root/home" "$root/worktree" "$root/tmp" \
     || fail "readable evidence provenance was refused"
+  rm -f "$artifact"
+  fm_dod_validate_intent_evidence "$intent" "$root/home" "$root/worktree" "$root/tmp" \
+    || fail "valid evidence provenance was rejected before its artifact existed"
+  set +e
+  out=$(fm_dod_validate_published_intent "$intent" "$root/home" "$root/worktree" "$root/tmp" 2>&1)
+  rc=$?
+  [ "$rc" -ne 0 ] || fail "publication accepted a missing evidence artifact"
+  assert_contains "$out" "missing or unreadable" "missing artifact publication refusal was unclear"
+  printf '%s\n' captured > "$artifact"
+  fm_dod_validate_published_intent "$intent" "$root/home" "$root/worktree" "$root/tmp" \
+    || fail "publication refused a readable evidence artifact"
+  mkdir -p "$root/outside"
+  printf '%s\n' captured > "$root/outside/evidence.txt"
+  intent=${intent/$artifact/$root\/worktree\/..\/outside\/evidence.txt}
+  set +e
+  out=$(fm_dod_validate_published_intent "$intent" "$root/home" "$root/worktree" "$root/tmp" 2>&1)
+  rc=$?
+  [ "$rc" -ne 0 ] || fail "publication accepted an artifact escaping the worktree"
+  assert_contains "$out" "outside the" "path traversal refusal was unclear"
   fm_dod_validate_intent_evidence 'Improve live reload wording' "$root/home" "$root/worktree" "$root/tmp" \
     || fail "ordinary prose containing live was refused"
   pass "evidence claims accept readable provenance and spare ordinary prose"

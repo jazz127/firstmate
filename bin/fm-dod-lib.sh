@@ -410,10 +410,9 @@ Delivery contract: mode=no-mistakes forge=gerrit shape=squash
 This project's review server is Gerrit: it has no pull requests and no forge CI the pipeline can watch, so **no-mistakes runs here as a review pass that ends at a ready branch**, and you then publish that branch as one change.
 Pass \`--skip push,pr,ci\` on every \`no-mistakes axi run\` for this task, and skip nothing else: \`review\`, \`test\`, \`document\`, and \`lint\` are the whole point of the run.
 Those three are the only steps that reach a forge, and skipping them is a supported outcome, not a degraded one.
-The task is complete only when committed on your branch.
-When you believe it is complete, append \`done [at=<epoch>]: {summary}\` to the status file and stop.
-Firstmate will then instruct you to run /no-mistakes to validate.
-That first \`done:\` is the handoff that starts the pipeline; it is not a request to publish.
+Your implementation is ready for validation only when committed on your branch.
+When it is committed, append \`done [at=<epoch>]: {summary}\` to the status file as the pipeline handoff, then start /no-mistakes on that committed head immediately without waiting for firstmate.
+That first \`done:\` is the pipeline handoff; it is not a request to publish.
 
 EOF
       fm_nm_driving_block "$forge"
@@ -465,10 +464,9 @@ EOF
       cat <<EOF
 # Definition of done
 Delivery contract: mode=no-mistakes
-The task is complete only when committed on your branch.
-When you believe it is complete, append \`done [at=<epoch>]: {summary}\` to the status file and stop.
-Firstmate will then instruct you to run /no-mistakes to validate and ship a PR.
-That first \`done:\` is the handoff that starts the pipeline, which owns the push; it is not a request to push from this copy.
+Your implementation is ready for validation only when committed on your branch.
+When it is committed, append \`done [at=<epoch>]: {summary}\` to the status file as the pipeline handoff, then start /no-mistakes on that committed head immediately without waiting for firstmate.
+That first \`done:\` is the pipeline handoff, and the pipeline owns the push; it is not a request to push from this copy.
 
 EOF
       fm_nm_driving_block "$forge"

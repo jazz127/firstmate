@@ -83,6 +83,12 @@
 #
 # The scan reads only durable local state and fm-crew-state.sh; it never invokes
 # gh, gh-axi, curl, fm-pr-check.sh, fm-pr-poll.sh, or a state *.check.sh.
+# A no-mistakes ship whose pre-validation done line still names a clean,
+# committed task branch and whose current state falls back to that status line
+# has no attributable run for that head. After the same 15-minute inactivity
+# bound, the scan queues one validation-handoff check for that incarnation and
+# head. The terminal-outcome receipt makes the alert durable and prevents a
+# second alert for an unchanged head after acknowledgement.
 set -u
 export LC_ALL=C
 
@@ -494,7 +500,7 @@ report_child() { # <id>
 }
 
 reconcile_direct_child_locked() { # <id> <meta> <secondmate-id-or-empty> <timeout>
-  local id=$1 meta=$2 self=${3:-} timeout=$4 status turn last age state_line state pr incarnation fingerprint outcome_key payload kind state_rc=0
+  local id=$1 meta=$2 self=${3:-} timeout=$4 status turn last age state_line state pr incarnation fingerprint outcome_key payload kind state_rc=0 worktree head clean
   [ -f "$meta" ] && [ ! -L "$meta" ] || return 0
   kind=$(meta_field "$meta" kind)
   [ "$kind" = secondmate ] && return 0
@@ -502,17 +508,60 @@ reconcile_direct_child_locked() { # <id> <meta> <secondmate-id-or-empty> <timeou
   turn="$STATE/$id.turn-ended"
   last=$(last_status_line "$status")
   status_line_verb "$last" | grep -Fx captain-held >/dev/null 2>&1 && return 0
-  # A ledger that states its own outcome is the ledger-first path's to deliver.
-  if [ -n "$self" ]; then
-    child_terminal_ledger_line "$status" >/dev/null
-    case "$?" in 0|2) return 0 ;; esac
-  fi
   age=$(last_activity_age "$meta" "$status" "$turn")
   [ "$age" -ge "$FM_INACTIVE_RECONCILE_SECS" ] || return 0
+  # A secondmate already delivered a terminal ledger line to its parent, but
+  # still owes its own validation-handoff backstop for a stopped child.
+  if [ -n "$self" ]; then
+    child_terminal_ledger_line "$status" >/dev/null
+    case "$?" in
+      2) return 0 ;;
+      0)
+        case "$(meta_field "$meta" mode)" in
+          no-mistakes|'') ;;
+          *) return 0 ;;
+        esac
+        [ "$(status_line_verb "$last")" = 'done' ] \
+          && ! fm_dod_note_reports_ci_ready "$(status_line_note "$last")" \
+          && ! fm_dod_note_reports_published_change "$(status_line_note "$last")" \
+          || return 0
+        ;;
+    esac
+  fi
   state_line=$(fm_run_timed "$timeout" env FM_HOME="$FM_HOME" FM_STATE_OVERRIDE="$STATE" FM_CREW_STATE_NO_FORGE=1 \
     "$CREW_STATE_BIN" "$id" 2>/dev/null) || state_rc=$?
   [ "$state_rc" -ne 124 ] || return 3
   last=$(last_status_line "$status")
+  case "$(meta_field "$meta" mode)" in
+    no-mistakes|'')
+      if [ "$(meta_field "$meta" kind)" = ship ] \
+        && [ "$(status_line_verb "$last")" = 'done' ] \
+        && ! fm_dod_note_reports_ci_ready "$(status_line_note "$last")" \
+        && ! fm_dod_note_reports_published_change "$(status_line_note "$last")"; then
+        case "$state_line" in
+          'state: done · source: status-log'*)
+            worktree=$(meta_field "$meta" worktree)
+            if [ -d "$worktree" ] \
+              && clean=$(git -C "$worktree" status --porcelain 2>/dev/null) \
+              && [ -z "$clean" ] \
+              && [ "$(git -C "$worktree" symbolic-ref --quiet --short HEAD 2>/dev/null)" = "fm/$id" ]; then
+              head=$(git -C "$worktree" rev-parse --verify HEAD 2>/dev/null || true)
+              if [ -n "$head" ]; then
+                incarnation=$(meta_incarnation "$meta")
+                fingerprint=$(sha256_text "validation-handoff|$incarnation|$id|$head")
+                outcome_key="validation-handoff-$id"
+                ensure_record "$fingerprint" "$id" "$incarnation" 'done' "$outcome_key" validation-handoff presentation '' "$head" || return 1
+                [ -n "$RECORD_PENDING" ] || return 0
+                payload="validation handoff overdue: child=$id committed_head=$head no attributable no-mistakes run after ${FM_INACTIVE_RECONCILE_SECS}s inactivity"
+                queue_presentation "$RECORD_PENDING" "$fingerprint" "$payload" || true
+                return 0
+              fi
+            fi
+            ;;
+        esac
+      fi
+      ;;
+  esac
   if [ -n "$self" ]; then
     child_terminal_ledger_line "$status" >/dev/null
     case "$?" in 0|2) return 0 ;; esac

@@ -33,7 +33,7 @@ make_tools() { # <world>
   mkdir -p "$fake"
   cat > "$fake/fm-crew-state.sh" <<'SH'
 #!/usr/bin/env bash
-printf 'state: %s · source: fake\n' "${FM_FAKE_CREW_STATE:-unknown}"
+printf 'state: %s · source: %s\n' "${FM_FAKE_CREW_STATE:-unknown}" "${FM_FAKE_CREW_SOURCE:-fake}"
 SH
   cat > "$fake/tmux" <<'SH'
 #!/usr/bin/env bash
@@ -169,6 +169,62 @@ test_main_direct_terminal_presentation_receipt() {
   FM_HOME="$MAIN" FM_STATE_OVERRIDE="$MAIN/state" "$DRAIN" --ack-through "$seq" --recovery-generation "$generation"
   [ "$(outcome_count "$MAIN" presented)" = 1 ] || fail "acknowledged presentation did not receive its own receipt"
   pass "main direct terminal presentation has a durable receipt"
+}
+
+# A committed implementation that still has no attributable validation run
+# must reappear after the inactivity bound, even after its initial done signal
+# was handled. A running validation and a young handoff remain silent.
+test_validation_handoff_backstop() {
+  local seq generation err
+  make_world validation-handoff
+  write_child "$MAIN" child 'done: implementation committed'
+  sed -i.bak '/^mode=/d' "$MAIN/state/child.meta"; rm -f "$MAIN/state/child.meta.bak"
+  git -C "$MAIN/projects/child" checkout -q -b fm/child
+  : > "$MAIN/state/.wake-queue"
+  set_mtime "$(date +%s)" "$MAIN/state/child.meta"
+  FM_FAKE_CREW_STATE='done' FM_FAKE_CREW_SOURCE=status-log run_reconcile "$MAIN" --startup
+  [ "$(wake_count "$MAIN" 'inactive-outcome:')" = 0 ] \
+    || fail "a fresh handoff triggered the inactivity backstop"
+
+  age "$MAIN/state/child.meta" "$MAIN/state/child.status" "$MAIN/state/child.turn-ended"
+  FM_FAKE_CREW_STATE=working FM_FAKE_CREW_SOURCE=run-step run_reconcile "$MAIN" --startup
+  [ "$(wake_count "$MAIN" 'inactive-outcome:')" = 0 ] \
+    || fail "a healthy validation run triggered the handoff backstop"
+
+  FM_FAKE_CREW_STATE='done' FM_FAKE_CREW_SOURCE=status-log run_reconcile "$MAIN" --startup
+  [ "$(wake_count "$MAIN" 'inactive-outcome:')" = 1 ] \
+    || fail "an overdue committed head did not get one durable backstop wake"
+  grep -Fq 'validation handoff overdue: child=child committed_head=' "$MAIN/state/.wake-queue" \
+    || fail "the overdue wake did not identify the missing validation handoff"
+  [ "$(outcome_count "$MAIN" pending)" = 1 ] \
+    || fail "the overdue handoff had no pending acknowledgement receipt"
+
+  err="$WORLD/drain.err"
+  FM_HOME="$MAIN" FM_STATE_OVERRIDE="$MAIN/state" "$DRAIN" >/dev/null 2> "$err"
+  seq=$(sed -n 's/^WAKE_ACK_REQUIRED:.*--ack-through \([0-9][0-9]*\) --recovery-generation .*/\1/p' "$err")
+  generation=$(sed -n 's/^WAKE_ACK_REQUIRED:.*--recovery-generation \([A-Za-z0-9._-][A-Za-z0-9._-]*\)$/\1/p' "$err")
+  [ -n "$seq" ] && [ -n "$generation" ] || fail "handoff wake lacked an acknowledgement"
+  FM_HOME="$MAIN" FM_STATE_OVERRIDE="$MAIN/state" "$DRAIN" --ack-through "$seq" --recovery-generation "$generation"
+  FM_FAKE_CREW_STATE='done' FM_FAKE_CREW_SOURCE=status-log run_reconcile "$MAIN" --startup
+  [ "$(outcome_count "$MAIN" presented)" = 1 ] \
+    || fail "an acknowledged handoff generated another receipt"
+  [ "$(wake_count "$MAIN" 'inactive-outcome:')" = 0 ] \
+    || fail "an acknowledged handoff generated another wake"
+  pass "committed head without validation resurfaces after the bound; healthy and acknowledged heads stay silent"
+}
+
+test_secondmate_validation_handoff_backstop() {
+  make_world mate-validation-handoff
+  bind_secondmate local
+  write_child "$MATE" child 'done: implementation committed'
+  git -C "$MATE/projects/child" checkout -q -b fm/child
+  : > "$MATE/state/.wake-queue"
+  FM_FAKE_CREW_STATE='done' FM_FAKE_CREW_SOURCE=status-log run_reconcile "$MATE" --startup
+  [ "$(wake_count "$MATE" 'inactive-outcome:')" = 1 ] \
+    || fail "a secondmate's already-delivered pre-validation done hid its overdue handoff"
+  grep -Fq 'validation handoff overdue: child=child committed_head=' "$MATE/state/.wake-queue" \
+    || fail "the secondmate handoff alert lacked the committed head"
+  pass "a secondmate's ledger delivery does not suppress the validation backstop"
 }
 
 # An unpushed CI-ready ship done: is not a parent-facing ready signal. The
@@ -965,6 +1021,8 @@ SH
 }
 
 test_main_direct_terminal_presentation_receipt
+test_validation_handoff_backstop
+test_secondmate_validation_handoff_backstop
 test_unpushed_ci_ready_done_is_not_published
 test_delivered_ledger_done_skips_git_gate
 test_local_secondmate_delivers_terminal_ledger_line

@@ -543,7 +543,7 @@ SH
   sed -i.bak 's#https://example.test/owner/repo/pull/1#https://github.com/owner/repo/pull/1#g' "$MATE/state/child.meta"
   rm -f "$MATE/state/child.meta.bak"
   run_report "$MATE" child || fail "report refused a terminal outcome after evidence validation failed"
-  key=$(reported_outcome_key "$MATE" child done) || fail "evidence-validation report receipt was not recorded"
+  key=$(reported_outcome_key "$MATE" child "done") || fail "evidence-validation report receipt was not recorded"
   sed -E 's/ \[at=[0-9]+\]//' "$MAIN/state/mate.status" | grep -Fq \
     "done [key=$key]: child child done: PR https://github.com/owner/repo/pull/1 checks green pr=https://github.com/owner/repo/pull/1 evidence-validation=failed mode=no-mistakes yolo=off" \
     || fail "published evidence failure was not surfaced beside the reported outcome"

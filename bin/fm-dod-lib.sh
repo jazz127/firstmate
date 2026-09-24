@@ -295,7 +295,7 @@ fm_dod_validate_intent_evidence() {  # <intent> <worktree> <task-temp> [prefligh
   local intent=$1 worktree=$2 task_temp=$3 phase=${4:-preflight}
   local line artifact command captured claim=0 normalized_artifact normalized_root resolved_artifact flat_intent
   flat_intent=$(printf '%s\n' "$intent" | tr '\n' ' ')
-  if printf '%s\n' "$flat_intent" | grep -Eiq '([0-9]+[[:space:]]*(of|/)[[:space:]]*[0-9]+)|((live|verified|real-account|independent|external|externally confirmed)[^.!?]*(scenario|evidence|verification|confirmation|result|account))|((scenario|evidence|verification|confirmation|result|account)[^.!?]*(live|verified|real-account|independent|external|externally confirmed))'; then
+  if printf '%s\n' "$flat_intent" | grep -Eiq '(([0-9]+[[:space:]]*(of|/)[[:space:]]*[0-9]+)[^.!?]*(live|verified|real-account|independent|external|externally confirmed))|((live|verified|real-account|independent|external|externally confirmed)[^.!?]*([0-9]+[[:space:]]*(of|/)[[:space:]]*[0-9]+))|((live|verified|real-account|independent|external|externally confirmed)[^.!?]*(scenario|evidence|verification|confirmation|result|account))|((scenario|evidence|verification|confirmation|result|account)[^.!?]*(live|verified|real-account|independent|external|externally confirmed))'; then
     claim=1
   fi
   [ "$claim" -eq 1 ] || return 0

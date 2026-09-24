@@ -114,6 +114,8 @@ EOF
     || fail "ordinary prose containing live was refused"
   fm_dod_validate_intent_evidence 'Improve live reload test wording' "$root/worktree" "$root/tmp" \
     || fail "ordinary prose containing live and test was refused"
+  fm_dod_validate_intent_evidence '2 of 3 requested endpoints' "$root/worktree" "$root/tmp" \
+    || fail "ordinary ratio prose was refused"
   pass "evidence claims accept readable provenance and spare ordinary prose"
 }
 

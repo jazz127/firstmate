@@ -145,7 +145,12 @@ if [ "$MODE" = no-mistakes ]; then
         exit 1
       }
       ;;
-    gerrit) PR_BODY= ;;
+    gerrit)
+      PR_BODY=$(fm_pr_gerrit_read_description "$HOST" "$NUMBER") || {
+        echo "error: cannot read the published Gerrit description for evidence validation" >&2
+        exit 1
+      }
+      ;;
   esac
   TASK_TMP=$(grep '^tasktmp=' "$META" | tail -1 | cut -d= -f2- || true)
   if ! fm_dod_validate_published_intent "$PR_BODY" "$WT" "$TASK_TMP"; then

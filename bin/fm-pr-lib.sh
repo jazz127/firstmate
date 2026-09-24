@@ -1080,6 +1080,16 @@ fm_pr_gerrit_read_change() {  # <host> <number>
     end' 2>/dev/null
 }
 
+fm_pr_gerrit_read_description() {  # <host> <number>
+  local record=$1 number=$2
+  record=$(fm_pr_gerrit_read_change "$record" "$number") || return 1
+  printf '%s' "$record" | jq -r '
+    if (.description | type) == "string" then .description
+    elif (.message | type) == "string" then .message
+    else error("no change description")
+    end' 2>/dev/null
+}
+
 # The status of one Gerrit change. The status is the only field read: a merged
 # change and an approved-but-unsubmitted one report the same submit,
 # submittable, and blocked_on values, so only the status separates them.

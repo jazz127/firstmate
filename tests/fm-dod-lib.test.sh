@@ -116,6 +116,22 @@ EOF
     || fail "ordinary prose containing live and test was refused"
   fm_dod_validate_intent_evidence '2 of 3 requested endpoints' "$root/worktree" "$root/tmp" \
     || fail "ordinary ratio prose was refused"
+  intent='0 of 5 / 2 of 3'
+  out=$(fm_dod_validate_intent_evidence "$intent" "$root/worktree" "$root/tmp" 2>&1)
+  rc=$?
+  [ "$rc" -ne 0 ] || fail "compact multi-ratio evidence label was accepted without provenance"
+  assert_contains "$out" "missing evidence-artifact" "compact multi-ratio refusal was unclear"
+  intent=$(cat <<EOF
+2 of 3 scenarios driven live
+evidence-artifact: $root/worktree
+evidence-command: ./run-scenarios --live
+evidence-captured: 2026-09-25T10:00:00+10:00
+EOF
+)
+  out=$(fm_dod_validate_published_intent "$intent" "$root/worktree" "$root/tmp" 2>&1)
+  rc=$?
+  [ "$rc" -ne 0 ] || fail "directory evidence artifact was accepted"
+  assert_contains "$out" "missing or unreadable" "directory artifact refusal was unclear"
   pass "evidence claims accept readable provenance and spare ordinary prose"
 }
 

@@ -14,9 +14,10 @@ The setting selects the primary runtime branch; its branch tracking configuratio
 
 ## Watching the quota-axi house line
 
-The quota-axi view uses quota-axi's read-only TUI report as its body, with the fleet's `jazz127/house` commit and subject, the `quota-axi` executable on `PATH`, and the refresh time and interval in a closing block.
+The quota-axi view uses quota-axi's read-only TUI report as its body, followed by the `quota-axi` executable on `PATH` and the refresh time and interval, with the fleet's `jazz127/house` commit and subject in the final block.
 Run `bin/fm-quota-tab.sh once` to print one frame, or `bin/fm-quota-tab.sh` (the default `loop` mode) in a terminal tab to keep the fleet's house line and provider headroom in view.
 The loop refreshes every 300 seconds by default; `FM_QUOTA_TAB_INTERVAL` changes that interval.
+The quota-axi clone is read from `$FM_HOME/projects/quota-axi`, defaulting to the active Firstmate checkout's `projects/quota-axi` when `FM_HOME` is unset, or to `$FM_ROOT_OVERRIDE/projects/quota-axi` when that root override is set; `FM_QUOTA_CLONE` overrides this location.
 
 Bring upstream changes to the fleet by merging upstream `main` into `house`.
 Do not rebase `house` onto upstream: preserving merge history keeps the house integration visible, leaves upstream-bound commits extractable, and preserves the head identity used by gate attestations.

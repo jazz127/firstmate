@@ -1176,7 +1176,7 @@ fm_remote_job_reload_launchagent() { # <account-home> <uid>
 }
 
 fm_remote_job_start_linux_worker_locked() { # <remote-root> <account-home>
-  local root=$1 account_home=$2 worker pid keep_pid='' keep_pgid=''
+  local root=$1 account_home=$2 worker pid keep_pid=''
   worker="$root/bin/fm-remote-job-worker.sh"
   [ -f "$worker" ] && [ ! -L "$worker" ] && [ -x "$worker" ] || {
     FM_REMOTE_JOB_ERROR="remote job worker is not a genuine executable in the configured code root"
@@ -1187,16 +1187,9 @@ fm_remote_job_start_linux_worker_locked() { # <remote-root> <account-home>
     if fm_remote_job_worker_identity_matches "$root" "$account_home" &&
       fm_remote_job_probe "$account_home"; then
       keep_pid=$FM_REMOTE_JOB_OWNER_PID
-      keep_pgid=$(fm_remote_job_process_pgid "$keep_pid") || {
-        FM_REMOTE_JOB_ERROR="cannot identify the current remote job worker process group"
-        return 1
-      }
     else
-      # The owner pid is the serving child; its restart supervisor sits above it
-      # and would immediately replace a lone process kill, so stop the whole
-      # worker tree through its isolated group.
       pid=$FM_REMOTE_JOB_OWNER_PID
-      fm_remote_job_stop_worker_tree "$pid" || {
+      fm_remote_job_stop_worker_tree "$pid" process-only || {
         FM_REMOTE_JOB_ERROR="stale remote job worker did not stop safely"
         return 1
       }
@@ -1204,7 +1197,7 @@ fm_remote_job_start_linux_worker_locked() { # <remote-root> <account-home>
       FM_REMOTE_JOB_REPAIRED=1
     fi
   fi
-  fm_remote_job_linux_reap_worker_groups "$root" "$keep_pid" "$keep_pgid" || {
+  fm_remote_job_linux_reap_worker_processes "$root" "$keep_pid" || {
     FM_REMOTE_JOB_ERROR="stale or duplicate remote job workers did not stop safely"
     return 1
   }
@@ -1237,55 +1230,44 @@ fm_remote_job_linux_worker_processes() { # <remote-root>
   if [ -x /bin/ps ]; then ps_bin=/bin/ps; elif [ -x /usr/bin/ps ]; then ps_bin=/usr/bin/ps; else return 1; fi
   while read -r pid pgid command; do
     case "$pgid" in ''|*[!0-9]*|0|1) continue ;; esac
-    case "$command" in *"$worker"|*"$worker --serve") printf '%s %s\n' "$pid" "$pgid" ;; esac
+    case "$command" in *"$worker"|*"$worker --serve"|*"$worker --lane"*) printf '%s %s\n' "$pid" "$pgid" ;; esac
   done < <("$ps_bin" -eo pid=,pgid=,args= 2>/dev/null)
 }
 
-fm_remote_job_linux_worker_group_is_singleton() { # <remote-root> <pgid>
-  local root=$1 target_pgid=$2 worker ps_bin pid pgid command supervisors=0
-  worker="$root/bin/fm-remote-job-worker.sh"
-  if [ -x /bin/ps ]; then ps_bin=/bin/ps; elif [ -x /usr/bin/ps ]; then ps_bin=/usr/bin/ps; else return 1; fi
-  while read -r pid pgid command; do
-    [ "$pgid" = "$target_pgid" ] || continue
-    case "$command" in
-      *"$worker --serve"|*"$worker --lane" ) continue ;;
-      *"$worker") supervisors=$((supervisors + 1)) ;;
-    esac
-  done < <("$ps_bin" -eo pid=,pgid=,args= 2>/dev/null)
-  [ "$supervisors" -eq 1 ]
+fm_remote_job_process_descends_from() { # <pid> <ancestor>
+  local pid=$1 ancestor=$2 parent i=0
+  while [ "$i" -lt 64 ]; do
+    [ "$pid" = "$ancestor" ] && return 0
+    parent=$(fm_remote_job_process_parent "$pid" 2>/dev/null || true)
+    [ -n "$parent" ] && [ "$parent" != "$pid" ] || return 1
+    pid=$parent
+    i=$((i + 1))
+  done
+  return 1
 }
 
-fm_remote_job_linux_reap_worker_groups() { # <remote-root> <keep-pid> <keep-pgid>
-  local root=$1 keep_pid=$2 keep_pgid=$3 keep_isolated= keep_members= processes pid pgid parent parent_command
-  if [ -n "$keep_pid" ] && [ -n "$keep_pgid" ] &&
-    fm_remote_job_linux_worker_group_is_singleton "$root" "$keep_pgid"; then
-    keep_isolated=$keep_pgid
-  fi
+fm_remote_job_linux_reap_worker_processes() { # <remote-root> <keep-pid>
+  local root=$1 keep_pid=$2 keep_root= processes pid pgid parent parent_command
   if [ -n "$keep_pid" ]; then
-    keep_members=" $keep_pid "
     parent=$(fm_remote_job_process_parent "$keep_pid" 2>/dev/null || true)
     parent_command=$(fm_remote_job_process_command "$parent" 2>/dev/null || true)
-    case "$parent_command" in *"$root/bin/fm-remote-job-worker.sh") keep_members="$keep_members$parent " ;; esac
+    case "$parent_command" in *"$root/bin/fm-remote-job-worker.sh") keep_root=$parent ;; *) keep_root=$keep_pid ;; esac
   fi
   processes=$(fm_remote_job_linux_worker_processes "$root") || return 1
   while read -r pid pgid; do
     [ -n "$pid" ] || continue
-    case "$keep_members" in *" $pid "*) continue ;; esac
-    kill -0 "$pid" 2>/dev/null || continue
-    if [ -n "$keep_isolated" ] && [ "$pgid" = "$keep_isolated" ]; then
+    if [ -n "$keep_root" ] && fm_remote_job_process_descends_from "$pid" "$keep_root"; then
       continue
     fi
-    if [ -n "$keep_pgid" ] && [ "$pgid" = "$keep_pgid" ] && [ -z "$keep_isolated" ]; then
-      fm_remote_job_stop_worker_tree "$pid" process-only || return 1
-    else
-      fm_remote_job_stop_worker_tree "$pid" || return 1
-    fi
+    kill -0 "$pid" 2>/dev/null || continue
+    fm_remote_job_stop_worker_tree "$pid" process-only || return 1
   done <<< "$processes"
   processes=$(fm_remote_job_linux_worker_processes "$root") || return 1
   while read -r pid pgid; do
     [ -n "$pid" ] || continue
-    case "$keep_members" in *" $pid "*) continue ;; esac
-    [ -n "$keep_isolated" ] && [ "$pgid" = "$keep_isolated" ] && continue
+    if [ -n "$keep_root" ] && fm_remote_job_process_descends_from "$pid" "$keep_root"; then
+      continue
+    fi
     return 1
   done <<< "$processes"
 }

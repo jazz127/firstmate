@@ -27,6 +27,9 @@ from urllib.parse import parse_qs, urlparse
 args = sys.argv[1:]
 with open(os.environ["FAKE_LOG"], "a", encoding="utf-8") as log:
     log.write(" ".join(args[:2]) + "\n")
+if os.environ.get("FAKE_TRUNCATE_UNBOUNDED") and "--jq" in args and args[args.index("--jq") + 1] == "(.)|@base64":
+    print("api_response:\n  truncated: true")
+    sys.exit(0)
 if args[:2] == ["pr", "create"]:
     body = pathlib.Path(args[args.index("--body-file") + 1]).read_text()
     pathlib.Path(os.environ["FAKE_PUBLISHED_BODY"]).write_text(body)
@@ -75,6 +78,7 @@ chmod +x "$TMP_ROOT/fakebin/gh-axi"
 export PATH="$TMP_ROOT/fakebin:$PATH"
 export FAKE_LOG="$TMP_ROOT/forge.log"
 export FAKE_PUBLISHED_BODY="$TMP_ROOT/published.md"
+export FAKE_TRUNCATE_UNBOUNDED=1
 tool="$ROOT/bin/fm-upstream-prior-art.py"
 cd "$TMP_ROOT/repo" || exit 1
 

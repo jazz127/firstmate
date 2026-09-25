@@ -37,6 +37,9 @@ REPO = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 SHA = re.compile(r"^[a-f0-9]{40,64}$")
 WORD = re.compile(r"[A-Za-z][A-Za-z0-9_]{3,}")
 STOP = {"about", "after", "again", "also", "before", "change", "changes", "could", "from", "have", "into", "issue", "more", "pull", "request", "should", "that", "their", "there", "these", "this", "when", "with", "would"}
+PR_SELECTOR = "[.[] | {number, html_url, user: {login: .user.login}, title, body, state, closed_at, merged_at, updated_at}]"
+ISSUE_SELECTOR = "[.[] | {number, html_url, user: {login: .user.login}, title, body, state}]"
+SEARCH_SELECTOR = "{total_count, incomplete_results, items: [.items[] | {number, html_url, user: {login: .user.login}, title, body, state}]}"
 
 
 def fail(message):
@@ -84,7 +87,7 @@ def pages(path, *, stop_at=None, selector="."):
 def search_pages(search):
     rows = []
     for page in range(1, 11):
-        result = api(f"search/issues?q={quote(search)}&per_page=100&page={page}")
+        result = api(f"search/issues?q={quote(search)}&per_page=100&page={page}", SEARCH_SELECTOR)
         if not isinstance(result, dict) or not isinstance(result.get("items"), list):
             fail("GitHub search response was incomplete")
         if result.get("incomplete_results") or not isinstance(result.get("total_count"), int):
@@ -216,10 +219,10 @@ def scan(args):
             fail("GitHub returned an incomplete candidate")
         found.setdefault(candidate["url"], candidate)
 
-    for row in pages(f"repos/{repo}/pulls?state=open"):
+    for row in pages(f"repos/{repo}/pulls?state=open", selector=PR_SELECTOR):
         add(row, "pr")
         open_pr_urls.add(row["html_url"])
-    closed = pages(f"repos/{repo}/pulls?state=closed&sort=updated&direction=desc",
+    closed = pages(f"repos/{repo}/pulls?state=closed&sort=updated&direction=desc", selector=PR_SELECTOR,
                    stop_at=lambda row: (row.get("updated_at") or "") < cutoff.isoformat().replace("+00:00", "Z"))
     for row in closed:
         try:
@@ -228,7 +231,7 @@ def scan(args):
             fail("closed PR has invalid closed_at")
         if row.get("merged_at") is None and closed_at >= cutoff:
             add(row, "pr")
-    for row in pages(f"repos/{repo}/issues?state=open"):
+    for row in pages(f"repos/{repo}/issues?state=open", selector=ISSUE_SELECTOR):
         if "pull_request" not in row:
             add(row, "issue")
 

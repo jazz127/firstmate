@@ -1430,7 +1430,7 @@ fm_remote_job_process_tree_pids() { # <pid> [start] [command]
 }
 
 fm_remote_job_linux_reap_worker_processes() { # <remote-root> <keep-pid>
-  local root=$1 keep_pid=$2 keep_root= keep_root_start= keep_root_command= processes pid start command parent parent_start parent_command keep_start keep_command
+  local root=$1 keep_pid=$2 keep_root='' keep_root_start='' keep_root_command='' processes pid start command parent parent_start parent_command keep_start keep_command
   if [ -n "$keep_pid" ]; then
     keep_start=$(fm_remote_job_process_start "$keep_pid" 2>/dev/null || true)
     keep_command=$(fm_remote_job_process_command "$keep_pid" 2>/dev/null || true)

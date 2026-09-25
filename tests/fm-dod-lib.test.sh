@@ -21,36 +21,33 @@ write_merge_marker() {  # <state> <id> <provider> <host> <path> <number>
   chmod 600 "$1/$2.pr-poll-merge-notified"
 }
 
-test_direct_pr_upstream_publication_is_guarded() {
-  local contract
-  contract=$(fm_dod_block direct-PR upstream-gate fix/upstream-gate)
-  assert_contains "$contract" "fm-upstream-prior-art.py scan" \
-    "direct-PR contract omitted the upstream prior-art scan"
-  assert_contains "$contract" "fm-upstream-prior-art.py decide" \
-    "direct-PR contract omitted the candidate decision step"
-  assert_contains "$contract" "fm-upstream-prior-art.py publish" \
-    "direct-PR contract omitted the guarded publisher"
-  assert_contains "$contract" "repository the fleet owns" \
-    "direct-PR contract did not preserve the owned-repository path"
-  pass "direct-PR upstream publication uses the prior-art gate"
+test_external_pr_receipt_boundary() {
+  local repo wt state reason
+  repo="$TMP_ROOT/upstream-receipt-repo"
+  wt="$TMP_ROOT/upstream-receipt-wt"
+  state="$TMP_ROOT/upstream-receipt-state"
+  mkdir -p "$state"
+  fm_git_worktree "$repo" "$wt" fm/receipt
+  git -C "$wt" remote set-url origin https://github.com/fork/demo.git
+  reason=$(accept_done ship direct-PR "$wt" "$repo" \
+    'done: PR https://github.com/upstream/demo/pull/1' "$state" receipt-id '') \
+    && fail 'direct upstream PR passed without a receipt'
+  assert_contains "$reason" 'upstream prior-art receipt refused' \
+    'direct upstream refusal did not name the receipt boundary'
+  reason=$(accept_done ship no-mistakes "$wt" "$repo" \
+    'done: PR https://github.com/upstream/demo/pull/1 checks green' "$state" receipt-id '') \
+    && fail 'no-mistakes upstream PR passed without a receipt'
+  assert_contains "$reason" 'upstream prior-art receipt refused' \
+    'no-mistakes upstream refusal did not name the receipt boundary'
+  git -C "$wt" remote set-url origin https://github.com/owner/demo.git
+  git -C "$wt" update-ref refs/remotes/origin/fm/receipt "$(git -C "$wt" rev-parse HEAD)"
+  accept_done ship direct-PR "$wt" "$repo" \
+    'done: PR https://github.com/owner/demo/pull/1' "$state" receipt-id '' \
+    || fail 'owned PR was affected by the upstream receipt boundary'
+  pass 'external PR ready signals require receipts while owned PRs remain unaffected'
 }
 
-test_no_mistakes_upstream_start_is_guarded() {
-  local contract
-  contract=$(fm_dod_block no-mistakes upstream-gate fix/upstream-gate)
-  assert_contains "$contract" "fm-upstream-prior-art.py scan" \
-    "no-mistakes contract omitted the upstream prior-art scan"
-  assert_contains "$contract" "fm-upstream-prior-art.py decide" \
-    "no-mistakes contract omitted the candidate decision step"
-  assert_contains "$contract" "fm-upstream-prior-art.py check" \
-    "no-mistakes contract omitted the pre-run receipt check"
-  assert_contains "$contract" "do not start the run if it refuses" \
-    "no-mistakes contract allowed a failed upstream preflight"
-  pass "no-mistakes upstream publication requires prior-art preflight"
-}
-
-test_direct_pr_upstream_publication_is_guarded
-test_no_mistakes_upstream_start_is_guarded
+test_external_pr_receipt_boundary
 
 test_scout_done_is_not_gated() {
   local repo wt

@@ -318,6 +318,56 @@ def checked(args):
     return record
 
 
+def verify_receipt(args):
+    record = read_json(args.record)
+    if record.get("schema") != SCHEMA:
+        fail("unrecognized prior-art record schema")
+    context = record.get("context")
+    if not isinstance(context, dict) or context.get("kind") != "pr":
+        fail("prior-art receipt has no PR context")
+    if context.get("repo") != args.repo:
+        fail("prior-art receipt targets a different repository")
+    if not SHA.fullmatch(args.head):
+        fail("published head is not a full commit SHA")
+    if context.get("head") != args.head or git("rev-parse", "HEAD") != args.head:
+        fail("prior-art receipt is stale: published head changed")
+    base = context.get("base")
+    if not isinstance(base, str) or not base:
+        fail("prior-art receipt has no PR base")
+    diff = git("diff", "--no-ext-diff", "--find-renames", f"{base}...HEAD", "--")
+    if hashlib.sha256(diff.encode()).hexdigest() != context.get("diff_sha256"):
+        fail("prior-art receipt is stale: branch diff changed")
+    try:
+        captured = dt.datetime.fromisoformat(record["captured_at"])
+    except (KeyError, ValueError, TypeError):
+        fail("prior-art record has no valid capture time")
+    age = (dt.datetime.now(dt.timezone.utc) - captured).total_seconds()
+    if age < 0 or age > FRESH_SECONDS:
+        fail("prior-art record is stale: scan is older than one hour")
+    verdict = record.get("verdict")
+    candidates = record.get("candidates")
+    if verdict not in ("none-found", "distinct", "overlaps") or not isinstance(candidates, list):
+        fail("prior-art verdict is missing or malformed")
+    if verdict == "none-found" and candidates:
+        fail("none-found record has candidates")
+    if verdict != "none-found":
+        if not candidates or any(
+            not isinstance(candidate, dict)
+            or candidate.get("verdict") not in ("distinct", "overlaps")
+            or not isinstance(candidate.get("reason"), str)
+            or not candidate["reason"].strip()
+            for candidate in candidates
+        ):
+            fail("prior-art candidate decisions are incomplete")
+        if (verdict == "overlaps") != any(candidate["verdict"] == "overlaps" for candidate in candidates):
+            fail("prior-art candidate verdicts conflict")
+    if verdict == "overlaps" and not isinstance(record.get("captain_decision"), str):
+        fail("prior-art overlaps require a recorded captain decision")
+    if verdict == "overlaps" and not record["captain_decision"].strip():
+        fail("prior-art overlaps require a recorded captain decision")
+    print("prior-art receipt ok")
+
+
 def section(record):
     lines = ["## Prior art checked", "", f"Checked {record['captured_at']} in https://github.com/{record['context']['repo']}."]
     if not record["candidates"]:
@@ -367,6 +417,10 @@ def main():
     sub = commands.add_parser("decide")
     sub.add_argument("--record", required=True)
     sub.add_argument("--decisions-file", required=True)
+    sub = commands.add_parser("verify")
+    sub.add_argument("--record", required=True)
+    sub.add_argument("--repo", required=True)
+    sub.add_argument("--head", required=True)
     args = parser.parse_args()
     try:
         if args.command == "scan":
@@ -376,6 +430,8 @@ def main():
         elif args.command == "check":
             checked(args)
             print("prior-art check ok")
+        elif args.command == "verify":
+            verify_receipt(args)
         else:
             publish(args)
     except (ValueError, OSError) as error:

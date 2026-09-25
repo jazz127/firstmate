@@ -133,6 +133,8 @@ JSON
 "$tool" decide --record "$TMP_ROOT/prior-art.json" --decisions-file "$TMP_ROOT/decisions.json" > "$TMP_ROOT/out" || fail 'distinct decision failed'
 "$tool" check "${common[@]}" > "$TMP_ROOT/out" || fail 'fresh distinct record refused'
 "$tool" publish "${common[@]}" --body-file "$TMP_ROOT/body.md" --head owner:fix > "$TMP_ROOT/out" || fail 'guarded publication failed'
+"$tool" verify --record "$TMP_ROOT/prior-art.json" --repo owner/demo \
+  --head "$(git rev-parse HEAD)" > "$TMP_ROOT/out" || fail 'valid receipt verification failed'
 rg -q '^## Prior art checked$' "$FAKE_PUBLISHED_BODY" || fail 'published body missed prior-art section'
 rg -q 'https://github.com/owner/demo/pull/7 by @author7' "$FAKE_PUBLISHED_BODY" || fail 'published body missed author credit'
 pass 'fresh distinct receipt permits publication and adds author credit'

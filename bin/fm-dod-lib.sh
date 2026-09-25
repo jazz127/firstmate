@@ -914,6 +914,39 @@ fm_dod_meta_value() {  # <meta> <key>
   grep "^$2=" "$1" 2>/dev/null | tail -1 | cut -d= -f2-
 }
 
+fm_dod_upstream_receipt_check() {  # <worktree> <url> <meta>
+  local wt=$1 url=$2 meta=$3 origin target record tasktmp head script_dir origin_path
+  fm_pr_url_parse "$url" || return 0
+  [ "$FM_PR_PROVIDER" = github ] || return 0
+  [ -d "$wt" ] || { printf '%s\n' 'upstream prior-art receipt refused: worktree is unavailable'; return 1; }
+  origin=$(git -C "$wt" remote get-url origin 2>/dev/null || true)
+  case "$origin" in
+    https://github.com/*) origin_path=${origin#https://github.com/} ;;
+    ssh://git@github.com/*) origin_path=${origin#ssh://git@github.com/} ;;
+    git@github.com:*) origin_path=${origin#git@github.com:} ;;
+    *) origin_path= ;;
+  esac
+  origin_path=${origin_path%.git}
+  target=$(printf '%s' "$FM_PR_PATH" | tr '[:upper:]' '[:lower:]')
+  origin_path=$(printf '%s' "$origin_path" | tr '[:upper:]' '[:lower:]')
+  [ -n "$origin_path" ] || return 0
+  [ "$origin_path" = "$target" ] && return 0
+  [ -f "$meta" ] || { printf '%s\n' 'upstream prior-art receipt refused: task metadata is unavailable'; return 1; }
+  tasktmp=$(fm_dod_meta_value "$meta" tasktmp)
+  record="$tasktmp/prior-art.json"
+  [ -f "$record" ] || { printf '%s\n' "upstream prior-art receipt refused: missing $record"; return 1; }
+  head=$(git -C "$wt" rev-parse --verify HEAD 2>/dev/null) || {
+    printf '%s\n' 'upstream prior-art receipt refused: worktree head is unavailable'
+    return 1
+  }
+  script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd) || return 1
+  if ! (cd "$wt" && python3 "$script_dir/fm-upstream-prior-art.py" verify \
+      --record "$record" --repo "$FM_PR_PATH" --head "$head"); then
+    printf '%s\n' 'upstream prior-art receipt refused: receipt does not match the published work'
+    return 1
+  fi
+}
+
 # 0 when the forge's head for a PR is the head the done names. In no-mistakes
 # mode the pipeline pushes it, possibly with commits the worker clone never
 # fetched. A direct-PR worker pushes from its own copy, so its named head stays
@@ -1034,6 +1067,10 @@ fm_dod_named_head_reachable_outside_worktree() {  # <worktree> <project> <mode> 
 fm_dod_accept_ship_done() {  # <kind> <mode> <worktree> <project> <line> [<state> <id> <meta>]
   local kind=$1 mode=$2 wt=$3 project=$4 line=$5 state=${6:-} id=${7:-} meta=${8:-} url sha gerrit
   fm_dod_should_gate_ship_done "$kind" "$mode" "$line" || return 0
+  url=$(fm_dod_pr_url_from_done_note "$(status_line_note "$line")") || url=
+  if [ -n "$url" ] && ! fm_dod_upstream_receipt_check "$wt" "$url" "$meta"; then
+    return 1
+  fi
   if url=$(fm_dod_pr_url_from_done_note "$(status_line_note "$line")") \
     && fm_dod_recorded_pr_on_forge "$state" "$id" "$meta" "$mode" "$url"; then
     return 0

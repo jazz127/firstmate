@@ -72,6 +72,8 @@ Use that command's `publish` operation for upstream creation so its receipt chec
 It refuses missing receipts, a changed branch head or diff, a changed title or summary, scans over one hour old, and unresolved overlaps.
 The command's `check` operation is the reusable gate for a Bosun workflow; it does not depend on Bosun's code.
 An automatic PR creation path that bypasses this gate must not be used for an upstream target.
+Firstmate's owned PR-registration and ready-signal boundaries also refuse an upstream GitHub PR without a current receipt matching its repository, head, and diff.
+Those boundaries cannot prevent a worker or an external pipeline from creating an unregistered PR directly, but they prevent that PR from being reported ready or merged through the fleet.
 The command header owns its invocation and receipt format.
 
 On the fork's pull requests, use these labels to record a house feature's progression: `upstream-candidate`, `upstream-offered`, `contributed-house-feature`, `house-only`, and `historical`.

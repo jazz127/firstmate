@@ -151,15 +151,16 @@ if [ "$(uname -s 2>/dev/null || true)" = Linux ] &&
   python3 -c 'import os; raise SystemExit(0 if hasattr(os, "pidfd_open") else 1)' 2>/dev/null; then
 PIDFD_RACE_BIN="$TMP_ROOT/pidfd-race-bin"
 mkdir -p "$PIDFD_RACE_BIN"
-cat > "$PIDFD_RACE_BIN/ps" <<'SH'
+PIDFD_RACE_PYTHON3=$(command -v python3)
+cat > "$PIDFD_RACE_BIN/python3" <<SH
 #!/bin/sh
-if [ "${1:-}" = -p ] && [ "${2:-}" = "$FM_PIDFD_RACE_PID" ] && [ ! -e "$FM_PIDFD_RACE_KILLED" ]; then
-  : > "$FM_PIDFD_RACE_KILLED"
-  kill -KILL "$FM_PIDFD_RACE_PID" 2>/dev/null || true
+if [ ! -e "\$FM_PIDFD_RACE_KILLED" ]; then
+  : > "\$FM_PIDFD_RACE_KILLED"
+  kill -KILL "\$FM_PIDFD_RACE_PID" 2>/dev/null || true
 fi
-exec /bin/ps "$@"
+exec "$PIDFD_RACE_PYTHON3" "\$@"
 SH
-chmod +x "$PIDFD_RACE_BIN/ps"
+chmod +x "$PIDFD_RACE_BIN/python3"
 sleep 30 & PIDFD_RACE_PID=$!
 PIDFD_RACE_START=$(fm_remote_job_process_start "$PIDFD_RACE_PID")
 PIDFD_RACE_COMMAND=$(fm_remote_job_process_command "$PIDFD_RACE_PID")
@@ -167,6 +168,7 @@ FM_PIDFD_RACE_PID="$PIDFD_RACE_PID" FM_PIDFD_RACE_KILLED="$TMP_ROOT/pidfd-race-k
   PATH="$PIDFD_RACE_BIN:$PATH" \
   fm_remote_job_signal_identity "$PIDFD_RACE_PID" TERM "$PIDFD_RACE_START" "$PIDFD_RACE_COMMAND" \
   || fail "a worker disappearing during pidfd identity verification was reported as a reaping failure"
+[ -f "$TMP_ROOT/pidfd-race-killed" ] || fail "the pidfd disappearance fixture did not fire"
 wait "$PIDFD_RACE_PID" 2>/dev/null || true
 pass "pidfd identity verification treats a disappeared worker as a successful no-op"
 

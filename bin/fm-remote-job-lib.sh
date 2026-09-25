@@ -984,27 +984,27 @@ fm_remote_job_worker_command_matches() { # <worker> <command>
 # survivor. Returns non-zero when any verified worker-tree member is still alive
 # afterwards.
 fm_remote_job_stop_worker_tree() { # <pid> [start] [command]
-  local pid=$1 expected_start=${2:-} expected_command=${3:-} members member member_start member_command i=0 alive pass=0
+  local pid=$1 expected_start=${2:-} expected_command=${3:-} members member member_start member_command i=0 alive deadline
   case "$pid" in ''|*[!0-9]*) return 1 ;; esac
   [ "$pid" -gt 1 ] || return 1
   if [ -n "$expected_start" ] || [ -n "$expected_command" ]; then
     [ -n "$expected_start" ] && [ -n "$expected_command" ] || return 1
-    fm_remote_job_process_identity_matches "$pid" "$expected_start" "$expected_command" || return 1
+  else
+    expected_start=$(fm_remote_job_process_start "$pid" 2>/dev/null || true)
+    expected_command=$(fm_remote_job_process_command "$pid" 2>/dev/null || true)
+    [ -n "$expected_start" ] && [ -n "$expected_command" ] || return 0
   fi
-  while [ "$pass" -lt 3 ]; do
-    members=$(fm_remote_job_process_tree_pids "$pid" 2>/dev/null || true)
+  fm_remote_job_process_identity_matches "$pid" "$expected_start" "$expected_command" || return 0
+  deadline=$((SECONDS + 30))
+  while :; do
+    members=$(fm_remote_job_process_tree_pids "$pid" 2>/dev/null) || return 1
     if [ -z "$members" ]; then
-      member_start=$(fm_remote_job_process_start "$pid" 2>/dev/null || true)
-      member_command=$(fm_remote_job_process_command "$pid" 2>/dev/null || true)
-      [ -n "$member_start" ] && [ -n "$member_command" ] || return 0
-      fm_remote_job_process_identity_matches "$pid" "$member_start" "$member_command" || return 0
-      members=$(printf '%s\t%s\t%s\n' "$pid" "$member_start" "$member_command")
+      fm_remote_job_process_identity_matches "$pid" "$expected_start" "$expected_command" || return 0
+      members=$(printf '%s\t%s\t%s\n' "$pid" "$expected_start" "$expected_command")
     fi
     while IFS=$(printf '\t') read -r member member_start member_command; do
       fm_remote_job_process_identity_matches "$member" "$member_start" "$member_command" || continue
-      if [ "$pass" -eq 0 ]; then kill -TERM "$member" 2>/dev/null || true
-      else kill -KILL "$member" 2>/dev/null || true
-      fi
+      kill -TERM "$member" 2>/dev/null || true
     done <<< "$members"
     i=0
     while [ "$i" -lt 50 ]; do
@@ -1020,11 +1020,19 @@ fm_remote_job_stop_worker_tree() { # <pid> [start] [command]
       i=$((i + 1))
       sleep 0.1
     done
-    members=$(fm_remote_job_process_tree_pids "$pid" 2>/dev/null || true)
-    [ -z "$members" ] && return 0
-    pass=$((pass + 1))
+    members=$(fm_remote_job_process_tree_pids "$pid" 2>/dev/null) || return 1
+    if [ -z "$members" ]; then
+      fm_remote_job_process_identity_matches "$pid" "$expected_start" "$expected_command" || return 0
+      kill -KILL "$pid" 2>/dev/null || true
+    else
+      while IFS=$(printf '\t') read -r member member_start member_command; do
+        fm_remote_job_process_identity_matches "$member" "$member_start" "$member_command" || continue
+        kill -KILL "$member" 2>/dev/null || true
+      done <<< "$members"
+    fi
+    [ "$SECONDS" -lt "$deadline" ] || return 1
+    sleep 0.1
   done
-  return 1
 }
 
 fm_remote_job_read_single_line() {
@@ -1207,7 +1215,7 @@ fm_remote_job_reload_launchagent() { # <account-home> <uid>
 }
 
 fm_remote_job_start_linux_worker_locked() { # <remote-root> <account-home>
-  local root=$1 account_home=$2 worker pid keep_pid=''
+  local root=$1 account_home=$2 worker pid keep_pid='' stale_start stale_command
   worker="$root/bin/fm-remote-job-worker.sh"
   [ -f "$worker" ] && [ ! -L "$worker" ] && [ -x "$worker" ] || {
     FM_REMOTE_JOB_ERROR="remote job worker is not a genuine executable in the configured code root"
@@ -1220,7 +1228,13 @@ fm_remote_job_start_linux_worker_locked() { # <remote-root> <account-home>
       keep_pid=$FM_REMOTE_JOB_OWNER_PID
     else
       pid=$FM_REMOTE_JOB_OWNER_PID
-      fm_remote_job_stop_worker_tree "$pid" || {
+      stale_start=$(fm_remote_job_process_start "$pid" 2>/dev/null || true)
+      stale_command=$(fm_remote_job_process_command "$pid" 2>/dev/null || true)
+      [ -n "$stale_start" ] && [ -n "$stale_command" ] || {
+        FM_REMOTE_JOB_ERROR="stale remote job worker identity could not be verified"
+        return 1
+      }
+      fm_remote_job_stop_worker_tree "$pid" "$stale_start" "$stale_command" || {
         FM_REMOTE_JOB_ERROR="stale remote job worker did not stop safely"
         return 1
       }

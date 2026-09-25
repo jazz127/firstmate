@@ -89,7 +89,7 @@ reap_is_self_or_ancestor() { # <pid>
 }
 
 reap_orphans() {
-  local uid scan pid command live root own_pgid pgid
+  local uid scan pid command live root own_pgid pgid start
   uid=$(id -u 2>/dev/null || true)
   case "$uid" in ''|*[!0-9]*) reap_die "cannot resolve the current uid" ;; esac
   scan=$(ps -u "$uid" -o pid=,command= 2>/dev/null) ||
@@ -117,7 +117,9 @@ reap_orphans() {
       printf 'would reap abandoned remote job worker %s (pruned code root %s)\n' "$pid" "$root"
       continue
     fi
-    if fm_remote_job_stop_worker_tree "$pid"; then
+    start=$(fm_remote_job_process_start "$pid" 2>/dev/null || true)
+    [ -n "$start" ] || continue
+    if fm_remote_job_stop_worker_tree "$pid" "$start" "$live"; then
       printf 'reaped abandoned remote job worker %s (pruned code root %s)\n' "$pid" "$root"
     else
       printf 'warning: abandoned remote job worker %s survived reaping (pruned code root %s)\n' "$pid" "$root" >&2

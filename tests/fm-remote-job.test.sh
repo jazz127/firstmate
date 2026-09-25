@@ -154,18 +154,35 @@ mkdir -p "$PIDFD_RACE_BIN"
 PIDFD_RACE_PYTHON3=$(command -v python3)
 cat > "$PIDFD_RACE_BIN/python3" <<SH
 #!/bin/sh
-if [ ! -e "\$FM_PIDFD_RACE_KILLED" ]; then
-  : > "\$FM_PIDFD_RACE_KILLED"
-  kill -KILL "\$FM_PIDFD_RACE_PID" 2>/dev/null || true
-fi
 exec "$PIDFD_RACE_PYTHON3" "\$@"
 SH
+cat > "$PIDFD_RACE_BIN/subprocess.py" <<'PY'
+import importlib.util
+import os
+import signal
+import sysconfig
+
+real_path = sysconfig.get_path("stdlib") + "/subprocess.py"
+spec = importlib.util.spec_from_file_location("_real_subprocess", real_path)
+real = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(real)
+globals().update(vars(real))
+real_run = real.run
+
+def run(*args, **kwargs):
+    result = real_run(*args, **kwargs)
+    if os.environ.get("FM_PIDFD_RACE_KILLED"):
+        with open(os.environ["FM_PIDFD_RACE_KILLED"], "w", encoding="utf-8"):
+            pass
+        os.kill(int(os.environ["FM_PIDFD_RACE_PID"]), signal.SIGKILL)
+    return result
+PY
 chmod +x "$PIDFD_RACE_BIN/python3"
 sleep 30 & PIDFD_RACE_PID=$!
 PIDFD_RACE_START=$(fm_remote_job_process_start "$PIDFD_RACE_PID")
 PIDFD_RACE_COMMAND=$(fm_remote_job_process_command "$PIDFD_RACE_PID")
 FM_PIDFD_RACE_PID="$PIDFD_RACE_PID" FM_PIDFD_RACE_KILLED="$TMP_ROOT/pidfd-race-killed" \
-  PATH="$PIDFD_RACE_BIN:$PATH" \
+  PYTHONPATH="$PIDFD_RACE_BIN" PATH="$PIDFD_RACE_BIN:$PATH" \
   fm_remote_job_signal_identity "$PIDFD_RACE_PID" TERM "$PIDFD_RACE_START" "$PIDFD_RACE_COMMAND" \
   || fail "a worker disappearing during pidfd identity verification was reported as a reaping failure"
 [ -f "$TMP_ROOT/pidfd-race-killed" ] || fail "the pidfd disappearance fixture did not fire"

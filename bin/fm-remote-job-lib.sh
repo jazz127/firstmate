@@ -1059,7 +1059,7 @@ fm_remote_job_worker_command_matches() { # <worker> <command>
 # survivor. Returns non-zero when any verified worker-tree member is still alive
 # afterwards.
 fm_remote_job_stop_worker_tree() { # <pid> [start] [command]
-  local pid=$1 expected_start=${2:-} expected_command=${3:-} members rescanned= survivors member member_start member_command state i=0 alive deadline signal=TERM signal_failed=0 root_live descendant_tree
+  local pid=$1 expected_start=${2:-} expected_command=${3:-} members rescanned= survivors previous_members member member_start member_command state i=0 alive deadline signal=TERM signal_failed=0 root_live descendant_tree
   case "$pid" in ''|*[!0-9]*) return 1 ;; esac
   [ "$pid" -gt 1 ] || return 1
   if [ -n "$expected_start" ] || [ -n "$expected_command" ]; then
@@ -1134,19 +1134,27 @@ fm_remote_job_stop_worker_tree() { # <pid> [start] [command]
       fi
     done <<< "$members"
     if [ "$root_live" -eq 0 ] && [ -n "$survivors" ]; then
-      rescanned=$survivors
-      while IFS=$(printf '\t') read -r member member_start member_command; do
-        descendant_tree=$(fm_remote_job_process_tree_pids "$member" "$member_start" "$member_command" 2>/dev/null) || return 1
-        [ -n "$descendant_tree" ] && rescanned="$rescanned${rescanned:+$'\n'}$descendant_tree"
-      done <<< "$survivors"
-      members=$rescanned
-      survivors=
-      while IFS=$(printf '\t') read -r member member_start member_command; do
-        if kill -0 "$member" 2>/dev/null &&
-          fm_remote_job_process_identity_matches "$member" "$member_start" "$member_command"; then
-          survivors="$survivors${survivors:+$'\n'}$(printf '%s\t%s\t%s' "$member" "$member_start" "$member_command")"
-        fi
-      done <<< "$members"
+      members=$(printf '%s\n' "$members" | LC_ALL=C sort -u) || return 1
+      while :; do
+        [ "$SECONDS" -lt "$deadline" ] || return 1
+        previous_members=$members
+        rescanned=$members
+        while IFS=$(printf '\t') read -r member member_start member_command; do
+          fm_remote_job_process_identity_matches "$member" "$member_start" "$member_command" || continue
+          descendant_tree=$(fm_remote_job_process_tree_pids "$member" "$member_start" "$member_command" 2>/dev/null) || return 1
+          [ -n "$descendant_tree" ] && rescanned="$rescanned${rescanned:+$'\n'}$descendant_tree"
+        done <<< "$survivors"
+        members=$(printf '%s\n' "$rescanned" | LC_ALL=C sort -u) || return 1
+        survivors=
+        while IFS=$(printf '\t') read -r member member_start member_command; do
+          if kill -0 "$member" 2>/dev/null &&
+            fm_remote_job_process_identity_matches "$member" "$member_start" "$member_command"; then
+            survivors="$survivors${survivors:+$'\n'}$(printf '%s\t%s\t%s' "$member" "$member_start" "$member_command")"
+          fi
+        done <<< "$members"
+        [ -z "$survivors" ] && break
+        [ "$members" = "$previous_members" ] && break
+      done
     fi
     if [ -z "$survivors" ]; then
       return 0

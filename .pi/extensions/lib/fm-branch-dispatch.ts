@@ -86,6 +86,7 @@ export interface UnreadWakeScope {
    * `eligible` is false.
    */
   eligibleSeqs: string[];
+  /** Task bound to each eligible row; unscoped check and heartbeat rows name fleet. */
   taskByEligibleSeq: Record<string, string>;
   /**
    * The exact task ids the eligible signal/stale rows name (a signal row by

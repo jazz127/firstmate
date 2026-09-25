@@ -333,7 +333,8 @@ def path_allowed(path, allowed):
     return any(path == item or item.endswith("/") and path.startswith(item) for item in allowed)
 
 
-def validate_extraction(worktree, upstream_base, pr_head, source_commits, allowed, deviations):
+def validate_extraction(worktree, upstream_base, pr_head, source_commits, actual_commits,
+                        allowed, deviations):
     deviation_paths = [item["path"] for item in deviations]
     extraction_paths = allowed + deviation_paths
     scratch = Path(tempfile.mkdtemp(prefix="fm-bosun-extraction-"))
@@ -347,6 +348,7 @@ def validate_extraction(worktree, upstream_base, pr_head, source_commits, allowe
                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         if checkout.returncode:
             fail("upstream extraction base is unavailable")
+        expected_trees = []
         for commit in source_commits:
             cherry_pick = subprocess.run(
                 ["git", "-C", str(scratch_repo), "-c", "user.name=Bosun", "-c",
@@ -356,6 +358,23 @@ def validate_extraction(worktree, upstream_base, pr_head, source_commits, allowe
                 subprocess.run(["git", "-C", str(scratch_repo), "cherry-pick", "--abort"],
                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 fail("ordered source commits conflict with upstream; extraction needs a declared rewrite")
+            expected_trees.append(git_output(scratch_repo, "rev-parse", "HEAD^{tree}"))
+        if len(actual_commits) > 1:
+            if len(actual_commits) != len(expected_trees):
+                fail(f"upstream PR has unrelated commit history: {', '.join(actual_commits)}")
+            for index, commit in enumerate(actual_commits):
+                actual_tree = git_output(scratch_repo, "rev-parse", f"{commit}^{{tree}}")
+                if actual_tree is None or expected_trees[index] is None:
+                    fail(f"upstream PR commit {commit} cannot be compared with ordered progression")
+                changed_progression = git_output(
+                    scratch_repo, "diff", "--name-only", expected_trees[index], actual_tree)
+                if changed_progression is None:
+                    fail(f"upstream PR commit {commit} cannot be compared with ordered progression")
+                offending = [path for path in changed_progression.splitlines()
+                             if path and not path_allowed(path, deviation_paths)]
+                if offending:
+                    fail(f"upstream PR commit {commit} is not derived from ordered progression: "
+                         f"{', '.join(offending)}")
         changed = git_output(scratch_repo, "diff", "--name-only", "HEAD", pr_head)
         if changed is None:
             fail("could not compare extracted content with upstream PR")
@@ -727,9 +746,10 @@ def cmd_registration_check_locked(args):
             offending = ([] if paths is None else
                          [path for path in paths.splitlines() if path and not path_allowed(path, extraction_paths)])
             if paths is None or offending:
-                fail(f"upstream PR commit changes unauthorized paths: {', '.join(offending) or '<unreadable>'}")
+                fail(f"upstream PR commit {commit} changes unauthorized paths: "
+                     f"{', '.join(offending) or '<unreadable>'}")
         validate_extraction(worktree, args.upstream_base, args.pr_head, source_commits,
-                            allowed, deviations)
+                            actual_commits, allowed, deviations)
     changed = args.changed_path
     if not changed:
         fail("upstream change has no validated changed paths")

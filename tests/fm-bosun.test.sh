@@ -459,6 +459,26 @@ test_registration_uses_ordered_content() {
     fail 'unrelated content on an allowed path was accepted'
   fi
   assert_grep 'unrelated.txt' "$dir/out" 'unrelated content refusal was unclear'
+  git -C "$project" reset -q --hard "$base"
+  printf 'safe\n' > "$project/feature.txt"
+  git -C "$project" add feature.txt
+  git -C "$project" commit -qm 'Extract first ordered change'
+  printf 'transient\n' > "$project/transient.txt"
+  git -C "$project" add transient.txt
+  git -C "$project" commit -qm 'Add and remove unrelated history'
+  transient=$(git -C "$project" rev-parse HEAD)
+  printf 'safe\nextra\n' > "$project/feature.txt"
+  rm "$project/transient.txt"
+  git -C "$project" add -A
+  git -C "$project" commit -qm 'Complete ordered change'
+  head=$(git -C "$project" rev-parse HEAD)
+  if call "$dir" registration-check --task maneuver --url "$url" --forge github --head captain/sample \
+    --base kunchenguid/sample --branch main --head-branch contribution/maneuver --pr-head "$head" \
+    --validation-head "$head" --validation-mode no-mistakes --worktree "$project" \
+    --upstream-base "$base" --changed-path feature.txt --check-only >"$dir/out" 2>&1; then
+    fail 'add-revert history was accepted'
+  fi
+  assert_grep "$transient" "$dir/out" 'add-revert history refusal was unclear'
   pass 'registration accepts redaction and squash but rejects unrelated content'
 }
 

@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# shellcheck source=bin/fm-scratch-lib.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/fm-scratch-lib.sh"
 # Shared PR/MR record reads, validation, and atomic artifact helpers for merge
 # polling on the supported forges. Callers must validate task IDs and raw PR/MR
 # URLs before constructing task paths or performing any side effect.
@@ -95,6 +97,22 @@ FM_PR_RETIRE_RECEIPT_IDENTITY=
 FM_PR_RECORD_STATE=
 FM_PR_RECORD_MERGED=
 FM_PR_POLL_RETIREMENT_REJECTED=
+
+fm_pr_refuse_published_scratch() {  # <canonical-pr-url>
+  local url=$1 files
+  fm_pr_url_parse "$url" || return 1
+  case "$FM_PR_PROVIDER" in
+    github)
+      command -v gh >/dev/null 2>&1 || return 1
+      files=$(gh api "repos/$FM_PR_PATH/pulls/$FM_PR_NUMBER/files?per_page=100" --paginate --jq '.[].filename' 2>/dev/null) || {
+        printf '%s\n' "error: cannot inspect the published file list for $url" >&2
+        return 1
+      }
+      printf '%s\n' "$files" | fm_scratch_check_lines
+      ;;
+    *) return 0 ;;
+  esac
+}
 
 fm_task_id_path_safe() {
   local id=${1-}

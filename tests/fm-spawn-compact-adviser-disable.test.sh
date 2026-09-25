@@ -375,6 +375,34 @@ SH
   pass "a compound raw launch-command still starts its agent with the compact-adviser switch on"
 }
 
+test_spawn_installs_scratch_push_guard() {
+  local rec task_tmp hook base head out status
+  rec=$(make_case scratch-push-guard codex scratch-push-guard-a1)
+  read_case "$rec"
+  out=$(run_case_spawn scratch-push-guard-a1 "$PROJ_DIR" --mode no-mistakes --yolo off)
+  status=$?
+  expect_code 0 "$status" "scratch push guard spawn should succeed: $out"
+  task_tmp=$(grep '^tasktmp=' "$HOME_DIR/state/scratch-push-guard-a1.meta" | cut -d= -f2-)
+  hook="$task_tmp/scratch-hooks/pre-push"
+  [ -x "$hook" ] || fail "spawn did not install the scratch pre-push hook"
+  mkdir -p "$WT_DIR/.codex-live-check/cache/node/corepack/v1/pnpm/11.1.1"
+  printf '%s\n' bundle > "$WT_DIR/.codex-live-check/cache/node/corepack/v1/pnpm/11.1.1/package.json"
+  git -C "$WT_DIR" config user.name fixture
+  git -C "$WT_DIR" config user.email fixture@example.invalid
+  git -C "$WT_DIR" add -f .codex-live-check
+  git -C "$WT_DIR" commit -qm 'pipeline scratch bundle'
+  head=$(git -C "$WT_DIR" rev-parse HEAD)
+  base=$(git -C "$WT_DIR" rev-parse HEAD^)
+  set +e
+  out=$(cd "$WT_DIR" && printf 'refs/heads/task\t%s\trefs/heads/task\t%s\n' "$head" "$base" | "$hook" 2>&1)
+  status=$?
+  set -e
+  [ "$status" -eq 1 ] || fail "scratch pre-push hook accepted a vendored bundle: $out"
+  printf '%s\n' "$out" | grep -Fq 'package.json' \
+    || fail "scratch pre-push refusal did not name the vendored bundle"
+  pass "spawn installs a pre-push guard for committed scratch bundles"
+}
+
 test_ship_allowlist_absent
 test_ship_allowlist_enabled
 test_tool_caches_stay_outside_worktree
@@ -382,3 +410,4 @@ test_launch_command_carries_the_switch_without_the_pane_export
 test_secondmate_launch
 test_relaunch_rebuilds_the_switch
 test_raw_compound_launch_command_carries_the_switch
+test_spawn_installs_scratch_push_guard

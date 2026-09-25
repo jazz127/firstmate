@@ -185,6 +185,10 @@ case " $* " in
     printf '%s\n' '[[]]'
     ;;
   *" api repos/"*"/pulls/"*)
+    if [ -n "${FM_TEST_GH_FILES:-}" ]; then
+      printf '%s\n' "$FM_TEST_GH_FILES"
+      exit 0
+    fi
     printf '%s\n' "{\"state\":\"open\",\"user\":{\"login\":\"author\"},\"head\":{\"sha\":\"${FM_TEST_GH_HEAD:-0123456789abcdef0123456789abcdef01234567}\"},\"draft\":false,\"mergeable\":true,\"merged_at\":null}"
     ;;
   *" api repos/"*)
@@ -711,6 +715,19 @@ test_direct_pr_unpushed_commit_refuses_registration() {
     || fail "direct-PR refusal did not name the unpushed commit: $(cat "$dir/stderr")"
   [ ! -e "$dir/home/state/task-a.check.sh" ] || fail "direct-PR unpushed commit still armed a poll"
   pass "fm-pr-check refuses a direct-PR registration while a later commit is only in the copy"
+}
+
+test_published_scratch_refuses_registration() {
+  local dir
+  dir=$(make_case published-scratch-refused)
+  write_task_meta "$dir"
+  FM_TEST_GH_FILES='.codex-live-check/cache/node/corepack/v1/pnpm/11.1.1/package.json' \
+    run_check_entry "$dir" task-a https://github.com/o/r/pull/4 \
+    > "$dir/stdout" 2> "$dir/stderr" && fail "published scratch path was registered"
+  grep -Fq 'scratch path would be published' "$dir/stderr" \
+    || fail "published scratch refusal did not name the publication boundary"
+  [ ! -e "$dir/home/state/task-a.check.sh" ] || fail "published scratch path armed a poll"
+  pass "fm-pr-check refuses a published pipeline scratch path"
 }
 
 test_published_attestation_matches_current_head() {
@@ -3481,6 +3498,7 @@ test_invalid_entrypoints_have_zero_side_effects
 test_draft_pull_request_is_not_armed
 test_unpushed_named_head_refuses_registration
 test_direct_pr_unpushed_commit_refuses_registration
+test_published_scratch_refuses_registration
 test_valid_recording_and_merge_derivation
 test_rejected_metacharacter_bytes_are_inert
 test_static_poll_contract

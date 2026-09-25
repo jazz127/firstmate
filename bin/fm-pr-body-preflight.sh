@@ -27,31 +27,9 @@ if [ "${1:-}" = --scratch ]; then
     printf 'error: scratch preflight requires the worktree root: %s\n' "$worktree" >&2
     exit 1
   }
-  base=
-  for ref in refs/remotes/origin/house refs/remotes/origin/HEAD refs/heads/house refs/heads/main refs/heads/master; do
-    if git -C "$worktree" rev-parse --verify "$ref" >/dev/null 2>&1; then
-      base=$(git -C "$worktree" merge-base HEAD "$ref") || exit 1
-      break
-    fi
-  done
-  [ -n "$base" ] || {
-    printf 'error: scratch preflight cannot determine the branch base\n' >&2
-    exit 1
-  }
-  check_paths() {
-    while IFS= read -r -d '' path; do
-      case "/$path/" in
-        */.codex-live-check/*|*/.corepack/*|*/.pnpm-store/*|*/.npm/*)
-          printf 'error: scratch path in worker worktree: %s\n' "$path" >&2
-          return 1
-          ;;
-      esac
-    done
-  }
-  # Ignored untracked files cannot be published; force-added files appear in
-  # the index or branch diff checked here.
-  if ! git -C "$worktree" diff --cached --name-only --no-renames --diff-filter=ACMRTUXB -z | check_paths ||
-    ! git -C "$worktree" diff "$base..HEAD" --name-only --no-renames --diff-filter=ACMRTUXB -z | check_paths; then
+  # shellcheck source=bin/fm-scratch-lib.sh
+  . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/fm-scratch-lib.sh"
+  if ! fm_scratch_refuse_worktree "$worktree"; then
     exit 1
   fi
   printf '%s\n' 'scratch preflight ok'

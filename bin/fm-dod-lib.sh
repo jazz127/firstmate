@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# shellcheck source=bin/fm-scratch-lib.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/fm-scratch-lib.sh"
+
 # Single owner of a ship task's mode-specific "Definition of done" block and of
 # the named-head reachability gate that accepts a ship `done:` claim.
 # Sourced by bin/fm-brief.sh, which renders it into a generated ship brief, and by
@@ -409,6 +412,7 @@ EOF
 fm_dod_validate_published_intent() {  # <intent> <worktree> <task-temp> [current-head] [pr-url]
   local body=$1 current_head=${4:-} url=${5:-} line payload attested_head count=0
   fm_dod_validate_intent_evidence "$body" "$2" "$3" publish || return 1
+  [ -z "$url" ] || fm_pr_refuse_published_scratch "$url" || return 1
   while IFS= read -r line || [ -n "$line" ]; do
     case "$line" in
       *'<!-- no-mistakes-pipeline-attestation:v1'*)
@@ -892,6 +896,9 @@ fm_dod_named_head_reachable_outside_worktree() {  # <worktree> <project> <mode> 
 fm_dod_accept_ship_done() {  # <kind> <mode> <worktree> <project> <line> [<state> <id> <meta>]
   local kind=$1 mode=$2 wt=$3 project=$4 line=$5 state=${6:-} id=${7:-} meta=${8:-} url sha gerrit
   fm_dod_should_gate_ship_done "$kind" "$mode" "$line" || return 0
+  if [ -n "$wt" ] && ! fm_scratch_refuse_worktree "$wt"; then
+    return 1
+  fi
   if url=$(fm_dod_pr_url_from_done_note "$(status_line_note "$line")") \
     && fm_dod_recorded_pr_on_forge "$state" "$id" "$meta" "$mode" "$url"; then
     return 0

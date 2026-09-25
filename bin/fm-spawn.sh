@@ -4215,6 +4215,21 @@ if ! (umask 077 && mkdir "$TASK_TMP") 2>/dev/null; then
 fi
 mkdir -p "$TASK_TMP/gotmp" "$TASK_TMP/cache/corepack" "$TASK_TMP/cache/pnpm" \
   "$TASK_TMP/cache/npm" "$TASK_TMP/cache/xdg"
+SCRATCH_HOOK_DIR="$TASK_TMP/scratch-hooks"
+mkdir -p "$SCRATCH_HOOK_DIR"
+cat >"$SCRATCH_HOOK_DIR/pre-push" <<EOF
+#!/usr/bin/env bash
+set -uo pipefail
+. $(shell_quote "$SCRIPT_DIR/fm-scratch-lib.sh")
+while read -r local_ref local_oid remote_ref remote_oid; do
+  [ -n "\${local_oid:-}" ] || continue
+  case "\$local_oid" in
+    0000000000000000000000000000000000000000) continue ;;
+  esac
+  fm_scratch_refuse_range "\$(git rev-parse --show-toplevel)" "\$remote_oid" "\$local_oid" push || exit 1
+done
+EOF
+chmod 700 "$SCRATCH_HOOK_DIR/pre-push"
 
 # Per-harness turn-end hook where enabled: a file that touches
 # state/<id>.turn-ended when the agent finishes a turn. Worktree-resident hooks
@@ -4943,6 +4958,7 @@ if [ "$LAVISH_AXI_HOST_CONFIG_PRESENT" = 1 ]; then
   LAUNCH="export LAVISH_AXI_HOST=$(shell_quote "$LAVISH_AXI_HOST"); $LAUNCH"
 fi
 LAUNCH="export COMPACT_ADVISER_DISABLE=1; $LAUNCH"
+LAUNCH="GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=$(shell_quote "$SCRATCH_HOOK_DIR") $LAUNCH"
 if [ -z "$SPAWN_TRACEPARENT" ] && [ "$RELAUNCH" -eq 1 ]; then
   LAUNCH="unset TRACEPARENT; $LAUNCH"
 fi
@@ -4981,6 +4997,9 @@ spawn_send_text_line "$T" "export PNPM_HOME=$TASK_TMP/cache/pnpm"
 spawn_send_text_line "$T" "export npm_config_store_dir=$TASK_TMP/cache/pnpm/store"
 spawn_send_text_line "$T" "export npm_config_cache=$TASK_TMP/cache/npm"
 spawn_send_text_line "$T" "export XDG_CACHE_HOME=$TASK_TMP/cache/xdg"
+spawn_send_text_line "$T" "export GIT_CONFIG_COUNT=1"
+spawn_send_text_line "$T" "export GIT_CONFIG_KEY_0=core.hooksPath"
+spawn_send_text_line "$T" "export GIT_CONFIG_VALUE_0=$(shell_quote "$SCRATCH_HOOK_DIR")"
 # Export the compact-adviser kill switch into the pane shell through the same
 # pre-launch channel, so later commands in that shell inherit it too. The launch
 # command independently establishes the value for the agent process itself.
@@ -5023,7 +5042,7 @@ if [ "$LAUNCH_ENV_ENABLED" = 1 ]; then
     npm_config_cache XDG_CACHE_HOME TMUX TMUX_PANE HERDR_ENV HERDR_SESSION HERDR_SOCKET_PATH \
     HERDR_PANE_ID CMUX_WORKSPACE_ID CMUX_SURFACE_ID CMUX_TAB_ID CMUX_PANEL_ID \
     CMUX_SOCKET_PATH ZELLIJ ZELLIJ_SESSION_NAME ZELLIJ_PANE_ID FM_ZELLIJ_SESSION \
-    FM_TASK_ID COMPACT_ADVISER_DISABLE LAVISH_AXI_HOST \
+    FM_TASK_ID COMPACT_ADVISER_DISABLE LAVISH_AXI_HOST GIT_CONFIG_COUNT GIT_CONFIG_KEY_0 GIT_CONFIG_VALUE_0 \
     $LAUNCH_ENV_NAMES; do
     # Only validated names enter shell syntax. Values expand once, quoted, in
     # the pane shell and never become source text or spawn-process snapshots.

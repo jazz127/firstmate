@@ -114,6 +114,7 @@ fi
 # bin/fm-pr-merge.sh reads a GitLab head live at merge time for the same reason,
 # and treats a recorded value that disagrees as stale rather than authoritative.
 WT=$(grep '^worktree=' "$META" | tail -1 | cut -d= -f2- || true)
+PR_BODY=$(fm_pr_read_published_body "$URL") || exit 1
 PR_HEAD=
 if [ "$PROVIDER" = github ] && [ -n "$WT" ] && [ -d "$WT" ] && command -v gh >/dev/null 2>&1; then
   if REMOTE_HEAD=$(cd "$WT" && gh pr view "$URL" --json headRefOid -q .headRefOid 2>/dev/null) \
@@ -126,9 +127,8 @@ KIND=$(grep '^kind=' "$META" | tail -1 | cut -d= -f2- || true)
 MODE=$(grep '^mode=' "$META" | tail -1 | cut -d= -f2- || true)
 PROJECT=$(grep '^project=' "$META" | tail -1 | cut -d= -f2- || true)
 TASK_TMP=$(grep '^tasktmp=' "$META" | tail -1 | cut -d= -f2- || true)
-PR_BODY=$(fm_pr_read_published_body "$URL") || exit 1
-if ! fm_dod_validate_published_intent "$PR_BODY" "$WT" "$TASK_TMP"; then
-  echo "error: published intent failed evidence validation" >&2
+if ! fm_dod_validate_published_intent "$PR_BODY" "$WT" "$TASK_TMP" "$PR_HEAD" "$URL"; then
+  echo "error: published intent validation failed" >&2
   exit 1
 fi
 # The gate is asked about the ready report this task's worker was told to give;

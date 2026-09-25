@@ -25,6 +25,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 from urllib.parse import quote
 
@@ -33,18 +34,21 @@ FRESH_SECONDS = 3600
 CLOSED_DAYS = 30
 MAX_PAGES = 100
 PAGE_SIZE = 100
+READ_ATTEMPTS = 5
+RATE_WAIT_MAX = 120
 REPO = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 SHA = re.compile(r"^[a-f0-9]{40,64}$")
 WORD = re.compile(r"[A-Za-z][A-Za-z0-9_]{3,}")
 STOP = {"about", "after", "again", "also", "before", "change", "changes", "could", "from", "have", "into", "issue", "more", "pull", "request", "should", "that", "their", "there", "these", "this", "when", "with", "would"}
-# Bodies are reduced to an excerpt plus issue references so every row stays
-# well under gh-axi's output limit.
-BODY = ('((.body // "")[0:200] + "\\n" + ([(.body // "") | scan("(?i)https://github\\\\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/issues/[0-9]+|[A-Za-z0-9]?#[0-9]+")]'
-        ' | unique | .[0:10] | join(" ")))')
-PR_FIELDS = f"{{number, html_url, user: {{login: .user.login}}, title, body: {BODY}, state, closed_at, merged_at, updated_at}}"
-ISSUE_FIELDS = f"{{number, html_url, user: {{login: .user.login}}, title, body: {BODY}, state, pull_request: (.pull_request != null)}}"
+# Rows are kept compact so busy repositories need few gh-axi calls: bodies are
+# reduced to their issue references and URLs are rebuilt from numbers.
+BODY = ('([(.body // "") | scan("(?i)https://github\\\\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/issues/[0-9]+|[A-Za-z0-9]?#[0-9]+")]'
+        ' | unique | .[0:10] | join(" "))')
+ROW = f"number, author: .user.login, title, body: {BODY}, state"
+PR_FIELDS = f"{{{ROW}}}"
+CLOSED_FIELDS = f"{{{ROW}, closed_at, merged: (.merged_at != null), updated_at}}"
+ISSUE_FIELDS = f"{{{ROW}, pull_request: (.pull_request != null)}}"
 FILES_FIELDS = "{filename}"
-SEARCH_FIELDS = f"{{number, html_url, user: {{login: .user.login}}, title, body: {BODY}, state}}"
 
 
 def fail(message):
@@ -52,10 +56,28 @@ def fail(message):
 
 
 def run(command, *, input_text=None):
-    result = subprocess.run(command, input=input_text, text=True, capture_output=True, check=False)
-    if result.returncode:
-        fail(f"command failed ({' '.join(command[:2])}): {result.stderr.strip() or result.stdout.strip()}")
-    return result.stdout
+    for _ in range(READ_ATTEMPTS):
+        result = subprocess.run(command, input=input_text, text=True, capture_output=True, check=False)
+        if not result.returncode:
+            return result.stdout
+        if command[0] != "gh-axi" or "RATE_LIMITED" not in result.stdout + result.stderr:
+            break
+        time.sleep(rate_limit_wait())
+    fail(f"command failed ({' '.join(command[:2])}): {result.stderr.strip() or result.stdout.strip()}")
+
+
+def rate_limit_wait():
+    # Search allows 30 calls a minute; wait out a short window, but refuse
+    # rather than stall for the hourly core window.
+    limits = api("rate_limit", "{search: .resources.search, core: .resources.core}")
+    try:
+        resets = [int(limit["reset"]) for limit in limits.values() if int(limit["remaining"]) == 0]
+    except (AttributeError, KeyError, TypeError, ValueError):
+        fail("GitHub rate limit status was malformed")
+    wait = max(resets, default=time.time() + 60) - time.time() + 1
+    if wait > RATE_WAIT_MAX:
+        fail(f"GitHub API rate limit resets in {int(wait)} seconds; retry the scan later")
+    return max(wait, 1)
 
 
 def git(*args):
@@ -78,26 +100,32 @@ def api(path, selector=".", *, split=False):
 
 def rows(path, fields, *, base=".", key=".number", head=""):
     # gh-axi truncates large output, so read one GitHub page in adaptive slices
-    # and refuse if the page changes between slices.
-    meta = api(path, f"{{{head}ids: [{base}[] | {key}]}}")
-    if not isinstance(meta, dict) or not isinstance(meta.get("ids"), list):
-        fail(f"GitHub list was not an array: {path}")
-    total = len(meta["ids"])
-    out, start, size = [], 0, total
-    while start < total:
-        size = min(size, total - start)
-        part = api(path, f"{{ids: [{base}[] | {key}], rows: [{base}[{start}:{start + size}][] | {fields}]}}", split=True)
-        if part is None:
-            if size == 1:
-                fail(f"GitHub row is too large to read: {path}")
-            size //= 2
-            continue
-        if not isinstance(part, dict) or part.get("ids") != meta["ids"] or not isinstance(part.get("rows"), list) or len(part["rows"]) != size:
-            fail(f"GitHub list changed or was malformed while reading: {path}")
-        out.extend(part["rows"])
-        start += size
-        size *= 2
-    return meta, out
+    # and re-read the page when triage changes it between slices.
+    size = None
+    for _ in range(READ_ATTEMPTS):
+        meta, out = None, []
+        while meta is None or len(out) < len(meta["ids"]):
+            start = len(out)
+            stop = "" if size is None else start + size
+            part = api(path, f"{{{head}ids: [{base}[] | {key}], rows: [{base}[{start}:{stop}][] | {fields}]}}", split=True)
+            if part is None:
+                if size == 1:
+                    fail(f"GitHub row is too large to read: {path}")
+                size = max(1, (size or PAGE_SIZE) // 2)
+                continue
+            if not isinstance(part, dict) or not isinstance(part.get("ids"), list) or not isinstance(part.get("rows"), list):
+                fail(f"GitHub list was malformed: {path}")
+            if meta is None:
+                meta = part
+            elif part["ids"] != meta["ids"]:
+                break
+            if len(part["rows"]) != len(meta["ids"][start:stop or None]):
+                fail(f"GitHub list was malformed: {path}")
+            out.extend(part["rows"])
+        else:
+            del meta["rows"]
+            return meta, out
+    fail(f"GitHub list kept changing while reading: {path}")
 
 
 def pages(path, fields, *, stop_at=None, key=".number"):
@@ -116,7 +144,7 @@ def pages(path, fields, *, stop_at=None, key=".number"):
 def search_pages(search):
     found = []
     for page in range(1, 11):
-        result, items = rows(f"search/issues?q={quote(search)}&per_page=100&page={page}", SEARCH_FIELDS,
+        result, items = rows(f"search/issues?q={quote(search)}&per_page=100&page={page}", ISSUE_FIELDS,
                              base=".items", head="total_count, incomplete_results, ")
         if result.get("incomplete_results") or not isinstance(result.get("total_count"), int):
             fail(f"GitHub search was incomplete: {search}")
@@ -222,9 +250,10 @@ def issue_numbers(text, repo):
     return set(urls) | set(re.findall(r"(?<![A-Za-z0-9])#(\d+)\b", text))
 
 
-def normalized(row, kind):
-    return {"url": row.get("html_url", ""), "author": (row.get("user") or {}).get("login", ""),
-            "state": row.get("state", ""), "title": row.get("title", ""),
+def normalized(row, kind, repo):
+    url = f"https://github.com/{repo}/{'pull' if kind == 'pr' else 'issues'}/{row.get('number')}"
+    return {"url": url, "author": row.get("author") or "",
+            "state": row.get("state", ""), "title": row.get("title") or "",
             "body": row.get("body") or "", "number": row.get("number"), "kind": kind,
             "reasons": [], "files": []}
 
@@ -240,57 +269,54 @@ def scan(args):
     open_pr_urls = set()
 
     def add(row, kind):
-        candidate = normalized(row, kind)
-        if not candidate["url"].startswith(f"https://github.com/{repo}/"):
-            fail("GitHub returned a candidate outside the requested repository")
-        if not candidate["author"] or not candidate["number"]:
+        candidate = normalized(row, kind, repo)
+        if not candidate["author"] or not isinstance(candidate["number"], int) or candidate["number"] < 1:
             fail("GitHub returned an incomplete candidate")
-        found.setdefault(candidate["url"], candidate)
+        return found.setdefault(candidate["url"], candidate)
 
     for row in pages(f"repos/{repo}/pulls?state=open", PR_FIELDS):
-        add(row, "pr")
-        open_pr_urls.add(row["html_url"])
-    closed = pages(f"repos/{repo}/pulls?state=closed&sort=updated&direction=desc", PR_FIELDS,
+        open_pr_urls.add(add(row, "pr")["url"])
+    closed = pages(f"repos/{repo}/pulls?state=closed&sort=updated&direction=desc", CLOSED_FIELDS,
                    stop_at=lambda row: (row.get("updated_at") or "") < cutoff.isoformat().replace("+00:00", "Z"))
     for row in closed:
         try:
             closed_at = dt.datetime.fromisoformat((row.get("closed_at") or "").replace("Z", "+00:00"))
         except ValueError:
             fail("closed PR has invalid closed_at")
-        if row.get("merged_at") is None and closed_at >= cutoff:
+        if row.get("merged") is False and closed_at >= cutoff:
             add(row, "pr")
     for row in pages(f"repos/{repo}/issues?state=open", ISSUE_FIELDS):
         if row.get("pull_request") is False:
             add(row, "issue")
 
+    # One search per query covers PRs and issues within the search rate limit.
     for query in queries:
-        for kind, qualifier in (("pr", "is:pr"), ("issue", "is:issue")):
-            search = f"repo:{repo} {qualifier} is:open {query}"
-            for row in search_pages(search):
-                if row.get("state") != "open":
-                    continue
-                add(row, kind)
-                reason = f"keyword search: {query}"
-                candidate = found[row["html_url"]]
-                if reason not in candidate["reasons"]:
-                    candidate["reasons"].append(reason)
+        for row in search_pages(f"repo:{repo} is:open {query}"):
+            if row.get("state") != "open":
+                continue
+            candidate = add(row, "pr" if row.get("pull_request") else "issue")
+            reason = f"keyword search: {query}"
+            if reason not in candidate["reasons"]:
+                candidate["reasons"].append(reason)
 
     linked = issue_numbers(ctx["title"] + "\n" + ctx["summary"] + "\n" + diff, repo)
     own_words = set(w.lower() for w in WORD.findall(ctx["title"] + " " + ctx["summary"]) if w.lower() not in STOP)
     selected = []
     for candidate in found.values():
-        if candidate["kind"] == "pr":
-            candidate["files"] = [item.get("filename", "") for item in pages(
-                f"repos/{repo}/pulls/{candidate['number']}/files", FILES_FIELDS, key="null")]
-            shared = sorted(set(ctx["files"]) & set(candidate["files"]))
-            if shared:
-                candidate["reasons"].append("shared files: " + ", ".join(shared))
         overlap = sorted(linked & issue_numbers(candidate["title"] + "\n" + candidate["body"], repo))
         if overlap:
             candidate["reasons"].append("linked issues: " + ", ".join("#" + n for n in overlap))
         shared_words = sorted(own_words & {w.lower() for w in WORD.findall(candidate["title"] + " " + candidate["body"]) if w.lower() not in STOP})
         if len(shared_words) >= 2:
             candidate["reasons"].append("shared keywords: " + ", ".join(shared_words[:8]))
+        # Changed files are fetched only for already matched PRs; busy
+        # repositories have too many open PRs to read every file list.
+        if candidate["kind"] == "pr" and candidate["reasons"]:
+            candidate["files"] = [item.get("filename", "") for item in pages(
+                f"repos/{repo}/pulls/{candidate['number']}/files", FILES_FIELDS, key="null")]
+            shared = sorted(set(ctx["files"]) & set(candidate["files"]))
+            if shared:
+                candidate["reasons"].append("shared files: " + ", ".join(shared))
         if candidate["reasons"]:
             selected.append({key: candidate[key] for key in ("url", "author", "state", "title", "kind", "reasons")}
                        | {"verdict": "unreviewed", "reason": ""})

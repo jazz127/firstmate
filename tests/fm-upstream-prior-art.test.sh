@@ -27,6 +27,20 @@ from urllib.parse import parse_qs, urlparse
 args = sys.argv[1:]
 with open(os.environ["FAKE_LOG"], "a", encoding="utf-8") as log:
     log.write(" ".join(args[:2]) + "\n")
+def count(name):
+    # Per-scenario call counters let the fake mutate the forge between calls.
+    path = pathlib.Path(os.environ["FAKE_LOG"] + "." + name)
+    n = int(path.read_text()) + 1 if path.exists() else 1
+    path.write_text(str(n))
+    return n
+if args[:2] == ["api", "rate_limit"]:
+    import time
+    data = {"resources": {"search": {"remaining": 0, "reset": int(time.time())}, "core": {"remaining": 4000, "reset": int(time.time()) + 3600}}}
+    print("api_response:\n  body: " + subprocess.run(["jq", "-r", args[args.index("--jq") + 1]], input=json.dumps(data), capture_output=True, text=True).stdout.strip() + "\n  truncated: false")
+    sys.exit(0)
+if os.environ.get("FAKE_RATE_LIMIT") and args[1].startswith("search/") and count("ratelimit") == 1:
+    print("error: GitHub API rate limit exceeded\ncode: RATE_LIMITED")
+    sys.exit(1)
 if os.environ.get("FAKE_TRUNCATE_UNBOUNDED") and "--jq" in args and args[args.index("--jq") + 1] == "(.)|tojson|@base64":
     print("api_response:\n  truncated: true")
     sys.exit(0)
@@ -53,7 +67,10 @@ issue = {"number": 4, "html_url": "https://github.com/owner/demo/issues/4",
 if parsed.path == "/repos/owner/demo/pulls":
     if params["state"][0] == "open":
         data = [pr(7, "Fix paused worker marked stale", "open")] + [
-            pr(n, f"Unrelated open change {n}", "open") for n in range(100, 125)] if page == 1 else []
+            pr(n, f"Unrelated open change {n}", "open") for n in range(100, 160)] if page == 1 else []
+        # Maintainer triage closes a PR while the page is being read.
+        if os.environ.get("FAKE_CHURN") and page == 1 and count("churn") > 1:
+            data = [row for row in data if row["number"] != 100]
     else:
         data = [pr(8, "Stale worker detection fix", "closed"),
                 pr(9, "Stale worker merge", "closed", "2026-09-20T00:00:00Z")] if page == 1 else []
@@ -69,9 +86,9 @@ elif parsed.path.startswith("/repos/owner/demo/pulls/") and parsed.path.endswith
 elif parsed.path == "/repos/owner/demo/git/ref/heads/fix":
     data = {"object": {"sha": os.environ.get("FAKE_REMOTE_HEAD", "")}}
 elif parsed.path == "/search/issues":
-    hit = os.environ.get("FAKE_SEARCH_HIT") and "pauseWorker" in params.get("q", [""])[0] and "is:pr" in params.get("q", [""])[0]
+    hit = os.environ.get("FAKE_SEARCH_HIT") and "pauseWorker" in params.get("q", [""])[0]
     data = {"total_count": 1 if hit else 0, "incomplete_results": bool(os.environ.get("FAKE_INCOMPLETE")),
-            "items": [pr(11, "Alternative idle classification", "open")] if hit else []}
+            "items": [dict(pr(11, "Alternative idle classification", "open"), pull_request={"url": "x"})] if hit else []}
 else:
     print("unexpected API path " + path, file=sys.stderr)
     sys.exit(2)
@@ -119,6 +136,17 @@ assert 'keyword search: pauseWorker' in c['https://github.com/owner/demo/pull/11
 PY
 pass 'changed-symbol search finds a PR with no shared file or title words'
 
+: > "$FAKE_LOG"
+FAKE_CHURN=1 FAKE_RATE_LIMIT=1 "$tool" scan "${common[@]}" > "$TMP_ROOT/out" 2>&1 || { cat "$TMP_ROOT/out"; fail 'scan failed under list churn and a search rate limit'; }
+python3 - "$TMP_ROOT/prior-art.json" "$FAKE_LOG" <<'PY' || fail 'churned scan record is wrong'
+import json, sys
+r=json.load(open(sys.argv[1])); log=open(sys.argv[2]).read().splitlines()
+assert r['open_prs']=={'listed': 60, 'matched': 1}, r['open_prs']
+assert not any('/pulls/1' in line and '/files' in line for line in log), 'fetched files for unmatched PRs'
+assert sum(line.startswith('api search/') for line in log) == len(r['queries']) + 1, 'search was not one call per query plus one rate-limit retry'
+PY
+pass 'scan tolerates PRs closing mid-read, waits out search rate limits, and fetches files only for matched PRs'
+
 "$tool" scan "${common[@]}" > "$TMP_ROOT/out" || fail 'scan failed'
 python3 - "$TMP_ROOT/prior-art.json" <<'PY' || fail 'scan record is incomplete'
 import json, sys
@@ -132,7 +160,7 @@ assert any('linked issues: #4' in why for why in c['https://github.com/owner/dem
 assert any('shared keywords' in why for why in c['https://github.com/owner/demo/pull/8']['reasons'])
 assert any('shared keywords' in why for why in c['https://github.com/owner/demo/issues/4']['reasons'])
 assert len(r['queries'])>=3
-assert r['open_prs']=={'listed': 26, 'matched': 1}
+assert r['open_prs']=={'listed': 61, 'matched': 1}
 assert 'https://github.com/owner/demo/pull/12' not in c
 PY
 pass 'scan records open PRs and issues plus recent closed unmerged PRs with match reasons'

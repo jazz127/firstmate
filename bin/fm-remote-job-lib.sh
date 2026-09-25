@@ -1084,11 +1084,16 @@ fm_remote_job_worker_alive() { # <account-home>
 }
 
 fm_remote_job_probe() { # <account-home>; a fresh worker heartbeat or active job proves readiness
-  local account_home=$1 ready lock mtime now pid ready_pid ready_start actual_start extra
+  local account_home=$1 ready lock mtime now pid ready_pid ready_start actual_start extra job
   [ "${FM_REMOTE_JOB_ACTIVE:-}" = 1 ] && return 0
   fm_remote_job_prepare_state "$account_home" || return 1
   lock=$(fm_remote_job_worker_lock_path)
   [ ! -e "$lock/quarantine" ] && [ ! -L "$lock/quarantine" ] || return 1
+  fm_remote_job_lock_owner_matches_process "$account_home" || return 1
+  for job in "$FM_REMOTE_JOB_JOBS"/job-*; do
+    [ -d "$job" ] && [ ! -L "$job" ] || continue
+    [ "$(fm_remote_job_read_state "$job" 2>/dev/null || true)" = running ] && return 0
+  done
   ready=$(fm_remote_job_worker_ready_path)
   [ -f "$ready" ] && [ ! -L "$ready" ] || return 1
   fm_remote_job_regular_bounded "$ready" 512 || return 1
@@ -1103,7 +1108,6 @@ fm_remote_job_probe() { # <account-home>; a fresh worker heartbeat or active job
   [ -n "$ready_start" ] || return 1
   pid=$(fm_remote_job_read_single_line "$(fm_remote_job_worker_pid_path)" 64) || return 1
   [ "$ready_pid" = "$pid" ] || return 1
-  fm_remote_job_lock_owner_matches_process "$account_home" || return 1
   [ "$ready_pid" = "$FM_REMOTE_JOB_OWNER_PID" ] || return 1
   actual_start=$(fm_remote_job_read_single_line "$lock/start" 256) || return 1
   [ "$ready_start" = "$actual_start" ] || return 1
@@ -1191,7 +1195,7 @@ fm_remote_job_start_linux_worker_locked() { # <remote-root> <account-home>
       FM_REMOTE_JOB_REPAIRED=1
     fi
   fi
-  fm_remote_job_linux_reap_worker_groups "$root" "$keep_pgid" || {
+  fm_remote_job_linux_reap_worker_groups "$root" "$keep_pid" "$keep_pgid" || {
     FM_REMOTE_JOB_ERROR="stale or duplicate remote job workers did not stop safely"
     return 1
   }
@@ -1218,30 +1222,39 @@ fm_remote_job_start_linux_worker_locked() { # <remote-root> <account-home>
   }
 }
 
-fm_remote_job_linux_worker_group_ids() { # <remote-root>
+fm_remote_job_linux_worker_processes() { # <remote-root>
   local root=$1 worker ps_bin pid pgid command
   worker="$root/bin/fm-remote-job-worker.sh"
   if [ -x /bin/ps ]; then ps_bin=/bin/ps; elif [ -x /usr/bin/ps ]; then ps_bin=/usr/bin/ps; else return 1; fi
   while read -r pid pgid command; do
     case "$pgid" in ''|*[!0-9]*|0|1) continue ;; esac
-    case "$command" in *"$worker"|*"$worker --serve") printf '%s\n' "$pgid" ;; esac
+    case "$command" in *"$worker"|*"$worker --serve") printf '%s %s\n' "$pid" "$pgid" ;; esac
   done < <("$ps_bin" -eo pid=,pgid=,args= 2>/dev/null)
 }
 
-fm_remote_job_linux_reap_worker_groups() { # <remote-root> <keep-pgid>
-  local root=$1 keep_pgid=$2 groups pgid leader_command
-  groups=$(fm_remote_job_linux_worker_group_ids "$root" | sort -u) || return 1
-  for pgid in $groups; do
-    [ -n "$keep_pgid" ] && [ "$pgid" = "$keep_pgid" ] && continue
-    leader_command=$(fm_remote_job_process_command "$pgid" 2>/dev/null || true)
-    case "$leader_command" in *"$root/bin/fm-remote-job-worker.sh"|*"$root/bin/fm-remote-job-worker.sh --serve") ;; *) continue ;; esac
-    fm_remote_job_stop_worker_tree "$pgid" || return 1
-  done
-  groups=$(fm_remote_job_linux_worker_group_ids "$root" | sort -u) || return 1
-  for pgid in $groups; do
-    [ -n "$keep_pgid" ] && [ "$pgid" = "$keep_pgid" ] && continue
+fm_remote_job_linux_reap_worker_groups() { # <remote-root> <keep-pid> <keep-pgid>
+  local root=$1 keep_pid=$2 keep_pgid=$3 keep_isolated= processes pid pgid
+  if [ -n "$keep_pid" ] && [ -n "$keep_pgid" ] &&
+    [ "$(fm_remote_job_worker_process_group "$keep_pid" 2>/dev/null || true)" = "$keep_pgid" ]; then
+    keep_isolated=$keep_pgid
+  fi
+  processes=$(fm_remote_job_linux_worker_processes "$root") || return 1
+  while read -r pid pgid; do
+    [ -n "$pid" ] || continue
+    [ "$pid" = "$keep_pid" ] && continue
+    kill -0 "$pid" 2>/dev/null || continue
+    if [ -n "$keep_isolated" ] && [ "$pgid" = "$keep_isolated" ]; then
+      continue
+    fi
+    fm_remote_job_stop_worker_tree "$pid" || return 1
+  done <<< "$processes"
+  processes=$(fm_remote_job_linux_worker_processes "$root") || return 1
+  while read -r pid pgid; do
+    [ -n "$pid" ] || continue
+    [ "$pid" = "$keep_pid" ] && continue
+    [ -n "$keep_isolated" ] && [ "$pgid" = "$keep_isolated" ] && continue
     return 1
-  done
+  done <<< "$processes"
 }
 
 fm_remote_job_linux_start_guard_acquire() { # <account-home>

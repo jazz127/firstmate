@@ -64,7 +64,7 @@ Refresh a contribution branch only by merging upstream `main` into it, including
 Rebasing rewrites the attested head, which upstream's gate rejects.
 Validate the exact final head that will be offered with one pipeline run to renew a stale attestation, and never hand-edit the attestation.
 Open an upstream pull request only when the captain asks for that house feature by name.
-Only the captain contacts upstream, including opening or commenting on an upstream pull request.
+The matching Bosun may open and maintain that one pull request under the captain's explicit order, following [`bosun.md`](bosun.md); otherwise upstream contact remains the captain's act.
 
 On the fork's pull requests, use these labels to record a house feature's progression: `upstream-candidate`, `upstream-offered`, `contributed-house-feature`, `house-only`, and `historical`.
 The private house-feature register maintained with the operator's fleet records is the current source of truth for the features and their disposition.

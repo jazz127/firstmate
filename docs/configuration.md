@@ -17,6 +17,7 @@ Untracked files and directories whose names begin with `scratchpad` are also git
 
 `bin/fm-spawn.sh` owns the base task-metadata fields it emits, while the runtime-backend section below owns backend-specific fields and selector interpretation.
 `bin/fm-contributions.sh` owns durable published-contribution records under each task, observation bounds, equivalent triage-label configuration, and the authenticated contribution check.
+The Bosun route file and contribution workflow are described below and in [`bosun.md`](bosun.md).
 Automated reviewers (default `copilot-pull-request-reviewer[bot]` and `greptile-apps[bot]`) are set with `FM_CONTRIBUTIONS_AUTOMATED_REVIEWERS` or `config/contributions-automated-reviewers`, a comma or newline list of logins, where a set-but-empty value disables them.
 The contribution author's own comments become events only when they start with the marker set by `FM_CONTRIBUTIONS_AUTHOR_MARKER` or the first line of `config/contributions-author-marker`, default `@firstmate`, where a set-but-empty value disables the marker.
 Both surface as ordinary contribution wakes for triage and never grant merge authority.
@@ -29,6 +30,18 @@ Wake, watcher, away-mode, and Relay-specific state mechanics remain with their n
 `docs/sessionstart-nudge.md` owns the native session-open adapter tiers that run or nudge the digest command, and the source routing between them.
 `AGENTS.md` retains the run-once and read-once operator rules, lock-refusal safety, installation consent, and direct-report recovery boundaries because those facts apply at every session start.
 Ordinary dead-direct-report recovery is owned by `stuck-crewmate-recovery`, while persistent-secondmate recovery is owned by `secondmate-provisioning`.
+
+## Bosun routes (config/bosun-routes.json)
+
+Each home that resolves a Bosun route reads its own gitignored `config/bosun-routes.json`.
+The file has schema `fm-bosun-routes.v1` and a `routes` array whose rows name `bosun` plus any nonempty combination of `forge`, `owner`, and either `repository` or `repository_pattern`.
+The repository pattern uses shell-style `*` and `?` matching against the repository name only.
+The [Bosun-Kun example](examples/bosun-routes.json) matches every `github` repository owned by `kunchenguid`.
+Routing first prefers exact repository, then repository pattern, then owner, then forge; within a level, a named owner beats an omitted owner and a named forge beats an omitted forge.
+An equal-rank tie refuses even when both entries name the same Bosun.
+No match refuses and asks whether to create a Bosun, never falling back to a sole configured Bosun.
+The matched id must have the existing `data/secondmates.md` entry and a Bosun role record.
+Run `bin/fm-bosun.py route --forge <forge> --owner <owner> --repository <repo>` to resolve without contacting a forge.
 
 ## Calm preference (config/calm)
 

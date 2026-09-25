@@ -50,6 +50,12 @@ HOST=$FM_PR_HOST
 PROJECT_PATH=$FM_PR_PATH
 NUMBER=$FM_PR_NUMBER
 
+# A Bosun home registers only a PR backed by its one named captain order.
+# Ordinary firstmate and secondmate homes have no Bosun role marker.
+if [ -f "$FM_HOME/data/bosun-role.json" ] || [ -L "$FM_HOME/data/bosun-role.json" ]; then
+  python3 "$SCRIPT_DIR/fm-bosun.py" registration-check --task "$ID" --url "$URL" || exit 1
+fi
+
 # Task-derived paths are constructed only after the canonical ID validation.
 META="$STATE/$ID.meta"
 if [ ! -f "$META" ] || [ -L "$META" ] || [ "$(fm_pr_file_link_count "$META")" != 1 ]; then

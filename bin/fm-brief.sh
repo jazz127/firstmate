@@ -596,6 +596,18 @@ case "$MODE" in
 esac
 RULE1=$(fm_ship_rule_one "$MODE" "$ID" "$BRANCH" "$FORGE") || exit 1
 DOD=$(fm_dod_block "$MODE" "$ID" "$BRANCH" "$FORGE") || exit 1
+BOSUN_SECTION=
+BOSUN_RULE2='2. Stay inside this worktree; modify nothing outside it.'
+if [ "$MODE" != local-only ] && { [ -f "$DATA/bosun-role.json" ] || [ -L "$DATA/bosun-role.json" ]; }; then
+  BOSUN_GUARD_CMD="FM_HOME=$(shell_quote "$FM_HOME") python3 $(shell_quote "$FM_ROOT/bin/fm-bosun.py") guard --task $(shell_quote "$ID") --repo ."
+  BOSUN_PUBLISHED_CMD="FM_HOME=$(shell_quote "$FM_HOME") python3 $(shell_quote "$FM_ROOT/bin/fm-bosun.py") published --task $(shell_quote "$ID") --repo . --url '<PR URL>' --validation '<validation evidence>'"
+  BOSUN_RULE2="2. Stay inside this worktree except for the one task-owned Bosun contribution record written through \`fm-bosun.py published\`; modify nothing else outside it."
+  BOSUN_SECTION="# Bosun publication authorization
+Before invoking no-mistakes or any forge publication command, run \`$BOSUN_GUARD_CMD\` in the contribution worktree.
+If it refuses, stop and report the reason to the secondmate; never publish around the guard.
+After the PR opens and validation returns, run \`$BOSUN_PUBLISHED_CMD\` with the forge's exact PR URL and the validation artifact path before reporting done.
+That command writes only this task's Bosun record in the secondmate home; the ordinary PR registration then verifies it."
+fi
 
 cat > "$BRIEF" <<EOF
 You are a crewmate: an autonomous worker agent managed by firstmate. Work on your own; do not wait for a human.
@@ -617,7 +629,7 @@ If the top-level path is the primary checkout or not the worktree you were launc
 
 # Rules
 $RULE1
-2. Stay inside this worktree; modify nothing outside it.
+$BOSUN_RULE2
 3. Use gh-axi for GitHub operations and chrome-devtools-axi for browser operations.
 4. Report status by appending one line:
    \`$STATUS_APPEND\`
@@ -663,6 +675,8 @@ Run \`$FM_ROOT/bin/fm-ensure-agents-md.sh .\` in the worktree only when this tas
 For anything the codebase already shows, prefer a pointer to the authoritative file, command, or doc over copying the detail.
 If you touch a project \`AGENTS.md\`, follow \`$FM_ROOT/bin/fm-ensure-agents-md.sh\`'s self-governance contract in the same pass.
 Keep it proportionate: skip \`AGENTS.md\` edits for trivial tasks that produced no durable project knowledge.
+
+$BOSUN_SECTION
 
 $DOD
 EOF

@@ -125,6 +125,10 @@
       "audience": "agent-runtime"
     },
     {
+      "path": ".agents/skills/bosun/SKILL.md",
+      "audience": "agent-runtime"
+    },
+    {
       "path": ".agents/skills/bootstrap-diagnostics/SKILL.md",
       "audience": "agent-runtime"
     },
@@ -301,6 +305,10 @@
       "audience": "maintainer-architecture"
     },
     {
+      "path": "docs/bosun.md",
+      "audience": "operator-current"
+    },
+    {
       "path": "docs/calm-mode-feasibility.md",
       "audience": "maintainer-verification"
     },
@@ -335,6 +343,10 @@
     {
       "path": "docs/extension-bindings.md",
       "audience": "maintainer-architecture"
+    },
+    {
+      "path": "docs/examples/bosun-routes.json",
+      "audience": "operator-example"
     },
     {
       "path": "docs/examples/crew-dispatch.json",

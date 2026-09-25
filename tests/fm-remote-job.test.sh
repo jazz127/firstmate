@@ -189,12 +189,52 @@ pass "operator PATH orders discovered tool installs deterministically"
 HOME="$ACCOUNT_HOME" PATH="$RUNTIME_BIN:/usr/bin:/bin:/usr/sbin:/sbin" FM_FAKE_PERL_LOG="$FAKE_PERL_LOG" \
   FM_ROOT_OVERRIDE="$REMOTE_ROOT" FM_REMOTE_JOB_STATE_ROOT="$STATE_ROOT" \
   FM_REMOTE_JOB_PLATFORM_OVERRIDE=Linux FM_REMOTE_JOB_TIMEOUT=5 \
-  "$REMOTE_ROOT/bin/fm-remote-job-worker.sh" > "$TMP_ROOT/worker.out" 2> "$TMP_ROOT/worker.err" &
+  fm_remote_job_ensure_worker "$REMOTE_ROOT" "$ACCOUNT_HOME" || fail "$FM_REMOTE_JOB_ERROR"
+assert_present "$STATE_ROOT/worker.ready" "the worker did not publish its readiness heartbeat"
+fm_remote_job_lock_owner_matches_process "$ACCOUNT_HOME" \
+  || fail "the live worker's lock owner identity did not match its process"
+LIVE_WORKER_PID=$(cat "$STATE_ROOT/worker.pid")
+kill -STOP "$LIVE_WORKER_PID"
+printf '999999\nstale incarnation\n' > "$STATE_ROOT/worker.ready"
+touch -t 200001010000 "$STATE_ROOT/worker.ready"
+if fm_remote_job_probe "$ACCOUNT_HOME"; then STALE_PROBE_REJECTED=0; else STALE_PROBE_REJECTED=1; fi
+if fm_remote_job_worker_owned_alive "$REMOTE_ROOT" "$ACCOUNT_HOME"; then STALE_OWNER_RECOGNIZED=1; else STALE_OWNER_RECOGNIZED=0; fi
+kill -CONT "$LIVE_WORKER_PID"
+[ "$STALE_PROBE_REJECTED" -eq 1 ] || fail "a stale heartbeat still passed the readiness probe"
+[ "$STALE_OWNER_RECOGNIZED" -eq 1 ] || fail "a stale heartbeat made the running worker look unowned"
 for _ in $(seq 1 100); do
-  [ -f "$STATE_ROOT/worker.ready" ] && break
+  fm_remote_job_probe "$ACCOUNT_HOME" && break
   sleep 0.05
 done
-assert_present "$STATE_ROOT/worker.ready" "the worker did not publish its readiness heartbeat"
+fm_remote_job_probe "$ACCOUNT_HOME" \
+  || fail "the live worker did not replace its stale heartbeat with its current incarnation"
+
+worker_group_count() {
+  ps -eo pgid=,args= | awk -v worker="$REMOTE_ROOT/bin/fm-remote-job-worker.sh" \
+    '$2 == "/bin/bash" && $3 == worker { groups[$1] = 1 } END { print length(groups) + 0 }'
+}
+
+WORKER_GROUPS_BEFORE=$(worker_group_count)
+[ "$WORKER_GROUPS_BEFORE" -eq 1 ] || fail "the initial worker did not occupy exactly one process group"
+ENSURE_PIDS=()
+for _ in $(seq 1 8); do
+    HOME="$ACCOUNT_HOME" FM_ROOT_OVERRIDE="$REMOTE_ROOT" FM_REMOTE_JOB_STATE_ROOT="$STATE_ROOT" \
+    FM_REMOTE_JOB_PLATFORM_OVERRIDE=Linux bash -c '
+      . "$1"
+      fm_remote_job_ensure_worker "$2" "$3" || {
+        printf "ensure failed: %s\n" "$FM_REMOTE_JOB_ERROR" >&2
+        exit 1
+      }
+    ' _ "$ROOT/bin/fm-remote-job-lib.sh" "$REMOTE_ROOT" "$ACCOUNT_HOME" &
+  ENSURE_PIDS+=("$!")
+done
+for ensure_pid in "${ENSURE_PIDS[@]}"; do
+  wait "$ensure_pid" || fail "a concurrent worker ensure call failed"
+done
+WORKER_GROUPS_AFTER=$(worker_group_count)
+[ "$WORKER_GROUPS_AFTER" -eq 1 ] \
+  || fail "concurrent ensure calls left $WORKER_GROUPS_AFTER worker process groups"
+pass "concurrent remote entrypoints converge on one Linux worker process group"
 
 file_mode() {
   if [ "$(uname)" = Darwin ]; then

@@ -1,0 +1,4 @@
+# first turn: handled	turn=host-77566-1790364738.1	rc=0	reports=2
+# outcome: {"seq":1,"epoch":1790364755,"task":"demo","wake":"signal: /private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-supervision-host-live.5yFNg6/fm/state/demo.status","verdict":"routine","summary":"The demo worker reports its cleanup finished with nothing else needed; it has no PR and its worktree is already gone. Automatic teardown was refused because the backlog data directory can't be resolved, so I left it untouched (nothing merged or dispatched, per your away instructions).","silent":false,"statusEndpoint":72,"statusIdent":"strong:16777234:873152276:1790364739.752314985"}
+# second turn: handled	turn=host-77566-1790364738.2	rc=0	reports=2
+ok - supervision host live (2.1.282 (Claude Code)): a real engine handles and resumes away wakes under the branch contract without waking main

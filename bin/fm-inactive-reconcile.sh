@@ -349,6 +349,7 @@ pr_for_task() { # <meta> [preferred-line]
 published_pr_validation_failed() { # <pr> <meta>
   local pr=$1 meta=$2 body
   fm_pr_url_parse "$pr" || return 0
+  # shellcheck disable=SC2016 # Positional parameters expand in the nested shell.
   body=$(fm_run_timed "$FM_INACTIVE_RECONCILE_BUDGET_SECS" env \
     FM_HOME="$FM_HOME" FM_STATE_OVERRIDE="$STATE" \
     bash -c '

@@ -55,6 +55,7 @@ prepare_project() {
     git -C "$project" add README.md
     git -C "$project" commit -qm fixture
     git -C "$project" remote add fork https://github.com/captain/sample.git
+    git -C "$project" remote add upstream https://github.com/kunchenguid/sample.git
   fi
   base=$(git -C "$project" rev-parse --abbrev-ref HEAD)
   if ! git -C "$project" show-ref --verify --quiet "refs/heads/housefeature/$maneuver"; then
@@ -218,7 +219,9 @@ count_file="$FM_HOME/state/spawn-count"
 count=0
 [ -f "$count_file" ] && count=$(cat "$count_file")
 printf '%s\n' $((count + 1)) > "$count_file"
-printf '%s\n' "worktree=$FM_HOME/projects/sample/retry-worktree" "mode=no-mistakes" "yolo=off" > "$FM_HOME/state/$1.meta"
+mkdir -p "$FM_HOME/projects/sample/retry-worktree"
+git -C "$FM_HOME/projects/sample/retry-worktree" init -q
+printf '%s\n' "endpoint_task_id=$1" "worktree=$FM_HOME/projects/sample/retry-worktree" "project=$FM_HOME/projects/sample" "kind=ship" "mode=no-mistakes" "yolo=off" > "$FM_HOME/state/$1.meta"
 if [ ! -e "$FM_HOME/state/spawn-failed" ]; then
   : > "$FM_HOME/state/spawn-failed"
   exit 1

@@ -5,6 +5,7 @@ import argparse
 import datetime as dt
 import fcntl
 import fnmatch
+from contextlib import contextmanager
 import json
 import os
 from pathlib import Path
@@ -161,6 +162,16 @@ def fork_source_ref(project_dir, fork_owner, fork_repository, source_branch):
     fail(f"configured fork remote is unavailable: {fork_owner}/{fork_repository}")
 
 
+def upstream_remote(project_dir, owner, repository):
+    expected = (owner.lower(), repository.lower())
+    remotes = git_output(project_dir, "remote")
+    for remote in (remotes or "").splitlines():
+        urls = git_output(project_dir, "config", "--get-all", f"remote.{remote}.url") or ""
+        if any(remote_identity(url) == expected for url in urls.splitlines()):
+            return remote
+    fail(f"upstream project clone targets another repository: {owner}/{repository}")
+
+
 def target(forge, owner, repo):
     for value in (forge, owner, repo):
         safe_name(value)
@@ -301,6 +312,7 @@ def cmd_order(args):
     project_dir = safe_path(home() / "projects" / want["repository"])
     if not project_dir.is_dir() or project_dir.is_symlink():
         fail(f"upstream project clone is unavailable: {project_dir}")
+    upstream_remote(project_dir, want["owner"], want["repository"])
     source_ref = fork_source_ref(project_dir, fork_owner, fork_repository, args.source)
     if len(set(args.commit)) != len(args.commit):
         fail("source commit selection contains duplicates")
@@ -348,7 +360,7 @@ def project_mode(project):
     return mode, yolo
 
 
-def existing_task(task):
+def existing_task(task, project_dir):
     path = safe_path(home() / "state" / f"{safe_name(task)}.meta")
     if path.is_symlink() or not path.is_file():
         return None
@@ -361,11 +373,42 @@ def existing_task(task):
     except OSError as exc:
         fail(f"could not read existing task record: {exc}")
     if not fields.get("worktree"):
-        return None
+        fail("existing task record has no worktree")
+    if fields.get("endpoint_task_id") != task or fields.get("kind") != "ship":
+        fail("existing task record does not match the Bosun ship")
+    if fields.get("project") != str(project_dir):
+        fail("existing task record targets another project")
+    worktree = Path(fields["worktree"])
+    if worktree.is_symlink() or not worktree.is_dir():
+        fail("existing Bosun worktree is unavailable")
+    root = git_output(worktree, "rev-parse", "--show-toplevel")
+    if not root or Path(root).resolve() == Path(project_dir).resolve():
+        fail("existing Bosun worktree is not isolated")
     return fields
 
 
+@contextmanager
+def contribution_lock(task):
+    path = contribution_path(task)
+    lock_path = safe_path(path.with_name(path.name + ".lock"))
+    if lock_path.is_symlink() or lock_path.parent.is_symlink():
+        fail(f"unsafe contribution lock: {lock_path}")
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(lock_path, os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    try:
+        with os.fdopen(fd, "r+") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            yield
+    except OSError as exc:
+        fail(f"could not lock contribution record: {exc}")
+
+
 def cmd_intake(args):
+    with contribution_lock(args.task):
+        return cmd_intake_locked(args)
+
+
+def cmd_intake_locked(args):
     record = contribution(args.task)
     if record.get("state") != "ordered":
         fail("captain order has already been assigned or published")
@@ -380,7 +423,8 @@ def cmd_intake(args):
     project_dir = safe_path(home() / "projects" / project)
     if not project_dir.is_dir() or project_dir.is_symlink():
         fail(f"upstream project clone is unavailable: {project_dir}")
-    adopted = existing_task(assignment_task)
+    upstream_remote(project_dir, record["target"]["owner"], record["target"]["repository"])
+    adopted = existing_task(assignment_task, project_dir)
     if adopted:
         record["task_brief"] = str(safe_path(home() / "data" / args.task / "brief.md"))
         record["task_worktree"] = adopted["worktree"]
@@ -496,18 +540,8 @@ def cmd_conventions(args):
 
 
 def cmd_registration_check(args):
-    path = contribution_path(args.task)
-    lock_path = safe_path(path.with_name(path.name + ".lock"))
-    if lock_path.is_symlink() or lock_path.parent.is_symlink():
-        fail(f"unsafe registration lock: {lock_path}")
-    lock_path.parent.mkdir(parents=True, exist_ok=True)
-    fd = os.open(lock_path, os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
-    try:
-        with os.fdopen(fd, "r+") as lock:
-            fcntl.flock(lock, fcntl.LOCK_EX)
-            return cmd_registration_check_locked(args)
-    except OSError as exc:
-        fail(f"could not lock contribution record: {exc}")
+    with contribution_lock(args.task):
+        return cmd_registration_check_locked(args)
 
 
 def cmd_registration_check_locked(args):
@@ -541,6 +575,13 @@ def cmd_registration_check_locked(args):
         fail(f"validation evidence is stale: expected {args.pr_head}, got {args.validation_head}")
     if not args.validation_mode:
         fail("no-mistakes validation evidence is missing")
+    if args.worktree:
+        worktree = safe_path(args.worktree)
+        if worktree.is_symlink() or not worktree.is_dir():
+            fail("Bosun contribution worktree is unavailable")
+        actual = git_output(worktree, "log", "--reverse", "--format=%H", f"{args.upstream_base}..HEAD")
+        if actual is None or actual.splitlines() != record.get("source_commits"):
+            fail("upstream PR commits differ from the ordered source commits")
     allowed = record.get("allowed_paths")
     if not isinstance(allowed, list) or not allowed:
         fail("captain order has no allowed paths")
@@ -599,7 +640,7 @@ def main():
         p.add_argument("--" + name, required=True)
     p.add_argument("--evidence"); p.add_argument("--showed"); p.add_argument("--read-at"); p.add_argument("--confirmed", action="store_true"); p.set_defaults(func=cmd_convention)
     p = sub.add_parser("conventions"); add_target(p); p.add_argument("--bosun", required=True); p.add_argument("--policy", required=True); p.add_argument("--decisions"); p.set_defaults(func=cmd_conventions)
-    p = sub.add_parser("registration-check"); p.add_argument("--task", required=True); p.add_argument("--url", required=True); p.add_argument("--forge", required=True); p.add_argument("--head", required=True); p.add_argument("--base", required=True); p.add_argument("--branch", required=True); p.add_argument("--pr-head", required=True); p.add_argument("--validation-head", required=True); p.add_argument("--validation-mode", required=True); p.add_argument("--upstream-base", required=True); p.add_argument("--changed-path", action="append", default=[]); p.add_argument("--check-only", action="store_true"); p.set_defaults(func=cmd_registration_check)
+    p = sub.add_parser("registration-check"); p.add_argument("--task", required=True); p.add_argument("--url", required=True); p.add_argument("--forge", required=True); p.add_argument("--head", required=True); p.add_argument("--base", required=True); p.add_argument("--branch", required=True); p.add_argument("--pr-head", required=True); p.add_argument("--validation-head", required=True); p.add_argument("--validation-mode", required=True); p.add_argument("--upstream-base", required=True); p.add_argument("--worktree"); p.add_argument("--changed-path", action="append", default=[]); p.add_argument("--check-only", action="store_true"); p.set_defaults(func=cmd_registration_check)
     p = sub.add_parser("merged"); p.add_argument("--task", required=True); p.add_argument("--url", required=True); p.set_defaults(func=cmd_merged)
     args = parser.parse_args()
     try:

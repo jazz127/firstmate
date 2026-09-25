@@ -189,7 +189,7 @@ EOF
     local -a registration_args
     registration_args=(registration-check --task "$ID" --url "$URL" --forge "$PROVIDER"
       --head "$BOSUN_HEAD" --base "$BOSUN_BASE_REPOSITORY" --branch "$BOSUN_BRANCH"
-      --pr-head "$PR_HEAD" --validation-head "$PR_HEAD" --validation-mode "${MODE:-direct-PR}"
+      --pr-head "$PR_HEAD" --validation-head "$PR_HEAD" --validation-mode "${MODE:-direct-PR}" --worktree "$WT"
       --upstream-base "$BOSUN_UPSTREAM_BASE" "${BOSUN_PATH_ARGS[@]}")
     [ "$check_only" = 1 ] && registration_args+=(--check-only)
     python3 "$SCRIPT_DIR/fm-bosun.py" "${registration_args[@]}"

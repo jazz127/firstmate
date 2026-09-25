@@ -1,0 +1,8 @@
+product=bin/fm-brief.sh
+scenario=feature brief with existing CLAUDE.md symlink
+scaffold=scaffolded: /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/tmp.0JttMcaVGI/home/data/feature-boundary/brief.md (ship, mode=local-only; replace {TASK} and {FIRSTMATE_SPEC})
+claude_mode=755
+claude_is_symlink=true
+claude_target=AGENTS.md
+brief_contract=existing AGENTS.md or CLAUDE.md alone is not a reason to run helper
+result=pass

@@ -961,7 +961,7 @@ EOF
     else
       printf 'Use this project coding standard.\n' > "$proj/AGENTS.md"
     fi
-    printf '@AGENTS.md\n' > "$proj/CLAUDE.md"
+    ln -sfn AGENTS.md "$proj/CLAUDE.md"
     cp "$proj/AGENTS.md" "$proj/agents-before"
     for kind in no-mistakes direct-PR local-only scout; do
       id="roles-$project_kind-$kind"
@@ -985,7 +985,8 @@ EOF
         fail "$project_kind $kind revoked the brief's own role for a task that is not Firstmate"
       assert_no_grep '# Current worker role contract' "$home/data/$id/brief.md" "spawn rewrote the source brief"
       cmp -s "$proj/agents-before" "$proj/AGENTS.md" || fail "spawn changed project AGENTS.md"
-      [ "$(cat "$proj/CLAUDE.md")" = '@AGENTS.md' ] || fail "spawn changed the project import"
+      [ -L "$proj/CLAUDE.md" ] || fail "spawn converted the project's CLAUDE.md symlink"
+      [ "$(readlink "$proj/CLAUDE.md")" = AGENTS.md ] || fail "spawn changed the project import"
     done
   done
   role_line=$(grep -n 'A ship or scout worker launched by Firstmate into a worktree of this repository' "$ROOT/AGENTS.md" | cut -d: -f1)

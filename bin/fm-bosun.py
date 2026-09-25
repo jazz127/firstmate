@@ -126,6 +126,18 @@ def git_success(project_dir, *args):
                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0
 
 
+def git_patch_id(project_dir, commit):
+    show = subprocess.run(["git", "-C", str(project_dir), "show", "--format=", "--binary", commit],
+                          stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if show.returncode:
+        return None
+    result = subprocess.run(["git", "patch-id", "--stable"], input=show.stdout,
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if result.returncode:
+        return None
+    return result.stdout.decode().split()[0] if result.stdout.split() else None
+
+
 def remote_identity(url):
     if url.startswith("git@"):
         host, _separator, path = url[4:].partition(":")
@@ -579,9 +591,16 @@ def cmd_registration_check_locked(args):
         worktree = safe_path(args.worktree)
         if worktree.is_symlink() or not worktree.is_dir():
             fail("Bosun contribution worktree is unavailable")
+        if (git_output(worktree, "rev-parse", "HEAD") or "").lower() != args.pr_head.lower():
+            fail("upstream PR head differs from the contribution worktree")
         actual = git_output(worktree, "log", "--reverse", "--format=%H", f"{args.upstream_base}..HEAD")
-        if actual is None or actual.splitlines() != record.get("source_commits"):
+        source_commits = record.get("source_commits")
+        if actual is None or not isinstance(source_commits, list):
             fail("upstream PR commits differ from the ordered source commits")
+        actual_patches = [git_patch_id(worktree, commit) for commit in actual.splitlines()]
+        source_patches = [git_patch_id(worktree, commit) for commit in source_commits]
+        if not actual_patches or actual_patches != source_patches or any(item is None for item in actual_patches):
+            fail("upstream PR patches differ from the ordered source commits")
     allowed = record.get("allowed_paths")
     if not isinstance(allowed, list) or not allowed:
         fail("captain order has no allowed paths")

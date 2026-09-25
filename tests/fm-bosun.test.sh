@@ -17,10 +17,26 @@ new_home() {
 routes_fixture() {
   cat > "$1/config/bosun-routes.json" <<'EOF'
 {"schema":"fm-bosun-routes.v1","routes":[
-  {"bosun":"bosun-kun","forge":"github","owner":"kunchenguid","repository_pattern":"*"},
-  {"bosun":"bosun-kun","forge":"github","owner":"kunchenguid","repository":"special"}
+  {"bosun":"bosun-kun","forge":"github","owner":"kunchenguid","repository_pattern":"*","fork_owner":"captain","fork_repository":"sample","upstream_default_branch":"main"},
+  {"bosun":"bosun-kun","forge":"github","owner":"kunchenguid","repository":"special","fork_owner":"captain","fork_repository":"special","upstream_default_branch":"main"}
 ]}
 EOF
+}
+
+fake_github() {
+  mkdir -p "$1/fakebin"
+  cat > "$1/fakebin/gh" <<'EOF'
+#!/usr/bin/env bash
+set -eu
+[ "${1:-}" = pr ] && [ "${2:-}" = view ] || exit 1
+case "${FM_FAKE_GH_CASE:-accepted}" in
+accepted) printf '%s\n' '{"headRepositoryOwner":{"login":"captain"},"headRepository":{"name":"sample"},"baseRepository":{"nameWithOwner":"kunchenguid/sample"},"baseRefName":"main"}' ;;
+unrelated) printf '%s\n' '{"headRepositoryOwner":{"login":"other"},"headRepository":{"name":"sample"},"baseRepository":{"nameWithOwner":"kunchenguid/sample"},"baseRefName":"main"}' ;;
+wrong-base) printf '%s\n' '{"headRepositoryOwner":{"login":"captain"},"headRepository":{"name":"sample"},"baseRepository":{"nameWithOwner":"other/sample"},"baseRefName":"main"}' ;;
+unreadable) exit 1 ;;
+esac
+EOF
+  chmod +x "$1/fakebin/gh"
 }
 
 test_routing() {
@@ -121,6 +137,7 @@ test_contribution() {
   local dir selected branch url merge_home
   dir=$(new_home contribution)
   setup_bosun "$dir"
+  fake_github "$dir"
   FM_HOME="$dir" FM_ROOT_OVERRIDE="$ROOT" "$ROOT/bin/fm-brief.sh" guard-brief sample --mode no-mistakes \
     >/dev/null || fail 'Bosun ship brief did not scaffold'
   assert_grep 'Bosun publication authorization' "$dir/data/guard-brief/brief.md" \
@@ -152,8 +169,24 @@ test_contribution() {
     || fail 'fork-only history crossed extraction'
   call "$dir" guard --task maneuver --forge github --owner kunchenguid \
     --repository sample --repo "$dir/extracted" >/dev/null || fail 'clean contribution refused'
-  call "$dir" published --task maneuver --repo "$dir/extracted" --url "$url" \
+  PATH="$dir/fakebin:$PATH" call "$dir" published --task maneuver --repo "$dir/extracted" --url "$url" \
     --validation 'offline fixture validation artifact' >/dev/null || fail 'publication record refused'
+  for forge_case in unrelated wrong-base unreadable; do
+    cp "$dir/data/maneuver/bosun-contribution.json" "$dir/data/maneuver/saved.json"
+    python3 - "$dir/data/maneuver/bosun-contribution.json" <<'PY'
+import json, sys
+p = sys.argv[1]
+data = json.load(open(p))
+data['state'] = 'extracted'
+json.dump(data, open(p, 'w'))
+PY
+    export FM_FAKE_GH_CASE="$forge_case"
+    if PATH="$dir/fakebin:$PATH" call "$dir" published --task maneuver --repo "$dir/extracted" --url "$url" --validation artifact > "$dir/out" 2>&1; then
+      fail "$forge_case forge response was accepted"
+    fi
+    unset FM_FAKE_GH_CASE
+    mv "$dir/data/maneuver/saved.json" "$dir/data/maneuver/bosun-contribution.json"
+  done
   call "$dir" registration-check --task maneuver --url "$url" \
     || fail 'matching Bosun PR registration was refused'
   if call "$dir" registration-check --task maneuver \

@@ -87,12 +87,17 @@ def routes():
 
 
 def resolve(want):
+    return resolve_route(want)["bosun"]
+
+
+def resolve_route(want):
     matches = []
     for row in routes():
         if not isinstance(row, dict) or not isinstance(row.get("bosun"), str):
             fail("invalid Bosun route")
         bosun = safe_name(row["bosun"])
-        fields = (row.get("forge"), row.get("owner"), row.get("repository"), row.get("repository_pattern"))
+        fields = (row.get("forge"), row.get("owner"), row.get("repository"), row.get("repository_pattern"),
+                  row.get("fork_owner"), row.get("fork_repository"), row.get("upstream_default_branch"))
         if not any(fields):
             fail("unscoped Bosun route")
         if row.get("repository") and row.get("repository_pattern"):
@@ -111,11 +116,11 @@ def resolve(want):
         # A constrained forge refines every other level. Equal scores refuse.
         score = (3 if row.get("repository") else 2 if row.get("repository_pattern") else 1 if row.get("owner") else 0,
                  bool(row.get("owner")), bool(row.get("forge")))
-        matches.append((score, bosun))
+        matches.append((score, row))
     if not matches:
         fail("no Bosun matches; ask whether to create one")
     best = max(score for score, _ in matches)
-    winners = [bosun for score, bosun in matches if score == best]
+    winners = [row for score, row in matches if score == best]
     if len(winners) != 1:
         fail("ambiguous Bosun route; needs-decision")
     return winners[0]
@@ -180,13 +185,22 @@ def cmd_configure_home(args):
 
 def cmd_order(args):
     want = target(args.forge, args.owner, args.repository)
-    if resolve(want) != args.bosun:
+    route = resolve_route(want)
+    if route["bosun"] != args.bosun:
         fail("target routes to a different Bosun")
     role(args.bosun)
     if not args.captain_words.strip() or not args.path or not args.commit:
         fail("explicit captain words, scoped paths, and source commits are required")
     if args.source != f"housefeature/{safe_name(args.maneuver)}":
         fail("source must be the named durable housefeature branch")
+    fork_owner = args.fork_owner or route.get("fork_owner")
+    fork_repository = args.fork_repository or route.get("fork_repository")
+    default_branch = args.default_branch or route.get("upstream_default_branch")
+    if not fork_owner or not fork_repository or not default_branch:
+        fail("explicit fork identity and upstream default branch are required")
+    safe_name(fork_owner)
+    safe_name(fork_repository)
+    safe_name(default_branch)
     for path in args.path:
         if path.startswith("/") or path.startswith("../") or "/../" in path or path.startswith("."):
             fail(f"unsafe or private path: {path}")
@@ -195,6 +209,8 @@ def cmd_order(args):
         fail("contribution order already exists")
     write_json(path, {"schema": "fm-bosun-contribution.v1", "task": args.task,
                       "maneuver": args.maneuver, "bosun": args.bosun, "target": want,
+                      "fork": {"owner": fork_owner.lower(), "repository": fork_repository.lower()},
+                      "upstream_default_branch": default_branch,
                       "captain_order": {"words": args.captain_words, "recorded_at": now()},
                       "source_branch": args.source, "source_commits": args.commit,
                       "allowed_paths": args.path, "contribution_branch": args.branch,
@@ -345,10 +361,54 @@ def cmd_published(args):
         fail("this forge has no Bosun PR URL verifier")
     if not args.url.startswith(expected) or not args.url[len(expected):].isdigit():
         fail("upstream PR URL differs from captain order")
+    actual = forge_pull_request(want["forge"], args.url)
+    expected_head = f"{record['fork']['owner']}/{record['fork']['repository']}"
+    expected_base = f"{want['owner']}/{want['repository']}"
+    if actual["head"] != expected_head:
+        fail(f"upstream PR head differs: expected {expected_head}, got {actual['head']}")
+    if actual["base"] != expected_base:
+        fail(f"upstream PR base differs: expected {expected_base}, got {actual['base']}")
+    if actual["branch"] != record["upstream_default_branch"]:
+        fail(f"upstream PR base branch differs: expected {record['upstream_default_branch']}, got {actual['branch']}")
     record["validation_evidence"] = args.validation
     record["upstream_pr"] = args.url
     record["state"] = "published"
     write_json(contribution_path(args.task), record)
+
+
+def forge_pull_request(forge, url):
+    if forge == "github":
+        command = ["gh", "pr", "view", url, "--json",
+                   "headRepositoryOwner,headRepository,baseRepository,baseRefName"]
+    elif forge == "gitlab":
+        command = ["glab", "mr", "view", url, "-F", "json"]
+    else:
+        fail("this forge has no Bosun PR reader")
+    try:
+        result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
+        if result.returncode:
+            raise ValueError(result.stderr.decode(errors="replace").strip() or "command failed")
+        data = json.loads(result.stdout)
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        fail(f"forge PR response unreadable: {exc}")
+    if forge == "github":
+        owner = data.get("headRepositoryOwner")
+        owner = owner.get("login") if isinstance(owner, dict) else owner
+        repository = data.get("headRepository")
+        repository = repository.get("name") if isinstance(repository, dict) else repository
+        base = data.get("baseRepository")
+        base = base.get("nameWithOwner") if isinstance(base, dict) else base
+        branch = data.get("baseRefName")
+        head = f"{owner}/{repository}" if owner and repository else ""
+    else:
+        source = data.get("source_project") or {}
+        target_project = data.get("target_project") or {}
+        head = source.get("path_with_namespace", "")
+        base = target_project.get("path_with_namespace", "")
+        branch = data.get("target_branch", "")
+    if not all(isinstance(value, str) and value for value in (head, base, branch)):
+        fail("forge PR response unreadable: missing head or base fields")
+    return {"head": head.lower(), "base": base.lower(), "branch": branch}
 
 
 def cmd_review(args):
@@ -406,6 +466,7 @@ def main():
         p.add_argument("--" + name, required=True)
     p.add_argument("--path", action="append", default=[])
     p.add_argument("--commit", action="append", default=[])
+    p.add_argument("--fork-owner"); p.add_argument("--fork-repository"); p.add_argument("--default-branch")
     p.set_defaults(func=cmd_order)
     p = sub.add_parser("convention"); add_target(p)
     for name in ("bosun", "scope", "key", "value"):

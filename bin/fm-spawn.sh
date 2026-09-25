@@ -4980,7 +4980,6 @@ if [ "$LAVISH_AXI_HOST_CONFIG_PRESENT" = 1 ]; then
   LAUNCH="export LAVISH_AXI_HOST=$(shell_quote "$LAVISH_AXI_HOST"); $LAUNCH"
 fi
 LAUNCH="export COMPACT_ADVISER_DISABLE=1; $LAUNCH"
-LAUNCH="GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=$(shell_quote "$SCRATCH_HOOK_DIR") $LAUNCH"
 if [ -z "$SPAWN_TRACEPARENT" ] && [ "$RELAUNCH" -eq 1 ]; then
   LAUNCH="unset TRACEPARENT; $LAUNCH"
 fi
@@ -5019,6 +5018,10 @@ spawn_send_text_line "$T" "export PNPM_HOME=$TASK_TMP/cache/pnpm"
 spawn_send_text_line "$T" "export npm_config_store_dir=$TASK_TMP/cache/pnpm/store"
 spawn_send_text_line "$T" "export npm_config_cache=$TASK_TMP/cache/npm"
 spawn_send_text_line "$T" "export XDG_CACHE_HOME=$TASK_TMP/cache/xdg"
+# Route the task worktree's hooks through the scratch pre-push guard. These are
+# pane exports rather than a launch-command prefix: an assignment prefixed to the
+# launch's leading `export` statement would bind only to that builtin and never
+# reach the agent. The cleared-environment floor below forwards them.
 spawn_send_text_line "$T" "export GIT_CONFIG_COUNT=1"
 spawn_send_text_line "$T" "export GIT_CONFIG_KEY_0=core.hooksPath"
 spawn_send_text_line "$T" "export GIT_CONFIG_VALUE_0=$(shell_quote "$SCRATCH_HOOK_DIR")"

@@ -131,6 +131,32 @@ fm_remote_job_signal_identity "$SIGNAL_RACE_PID" TERM "$SIGNAL_RACE_START" "$SIG
   || fail "a disappeared fallback signal target was reported as a reaping failure"
 pass "disappeared worker targets are successful signal no-ops"
 
+if [ "$(uname -s 2>/dev/null || true)" = Linux ] &&
+  python3 -c 'import os; raise SystemExit(0 if hasattr(os, "pidfd_open") else 1)' 2>/dev/null; then
+PIDFD_RACE_BIN="$TMP_ROOT/pidfd-race-bin"
+mkdir -p "$PIDFD_RACE_BIN"
+cat > "$PIDFD_RACE_BIN/ps" <<'SH'
+#!/bin/sh
+if [ "${1:-}" = -p ] && [ "${2:-}" = "$FM_PIDFD_RACE_PID" ] && [ ! -e "$FM_PIDFD_RACE_KILLED" ]; then
+  : > "$FM_PIDFD_RACE_KILLED"
+  kill -KILL "$FM_PIDFD_RACE_PID" 2>/dev/null || true
+fi
+exec /bin/ps "$@"
+SH
+chmod +x "$PIDFD_RACE_BIN/ps"
+sleep 30 & PIDFD_RACE_PID=$!
+PIDFD_RACE_START=$(fm_remote_job_process_start "$PIDFD_RACE_PID")
+PIDFD_RACE_COMMAND=$(fm_remote_job_process_command "$PIDFD_RACE_PID")
+FM_PIDFD_RACE_PID="$PIDFD_RACE_PID" FM_PIDFD_RACE_KILLED="$TMP_ROOT/pidfd-race-killed" \
+  PATH="$PIDFD_RACE_BIN:$PATH" \
+  fm_remote_job_signal_identity "$PIDFD_RACE_PID" TERM "$PIDFD_RACE_START" "$PIDFD_RACE_COMMAND" \
+  || fail "a worker disappearing during pidfd identity verification was reported as a reaping failure"
+wait "$PIDFD_RACE_PID" 2>/dev/null || true
+pass "pidfd identity verification treats a disappeared worker as a successful no-op"
+else
+pass "pidfd identity verification regression requires Linux pidfd support"
+fi
+
 fm_remote_job_prepare_state "$ACCOUNT_HOME" || fail "$FM_REMOTE_JOB_ERROR"
 mkdir "$STATE_ROOT/worker.starting"
 (exit 0) & STALE_GUARD_PID=$!

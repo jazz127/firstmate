@@ -955,9 +955,12 @@ except OSError as exc:
         raise SystemExit(2)
     raise
 try:
-    result = subprocess.run(
-        ["ps", "-p", str(pid), "-o", "lstart=", "-o", "command="],
-        check=True, capture_output=True, text=True)
+    try:
+        result = subprocess.run(
+            ["ps", "-p", str(pid), "-o", "lstart=", "-o", "command="],
+            check=True, capture_output=True, text=True)
+    except subprocess.CalledProcessError:
+        raise SystemExit(0)
     line = result.stdout.rstrip("\n")
     start = " ".join(line[:24].split())
     command = line[24:].strip()

@@ -991,21 +991,10 @@ PY
       return 0
       ;;
     *)
-      if ! fm_remote_job_process_identity_matches "$pid" "$expected_start" "$expected_command"; then
-        state=$(fm_remote_job_process_state "$pid" 2>/dev/null || true)
-        case "$state" in Z*) return 0 ;; esac
-        kill -0 "$pid" 2>/dev/null && return 1
-        return 0
-      fi
-      if ! kill -"$signal" "$pid" 2>/dev/null; then
-        fm_remote_job_process_identity_matches "$pid" "$expected_start" "$expected_command" && return 1
-        kill -0 "$pid" 2>/dev/null && return 1
-        return 0
-      fi
-      if ! fm_remote_job_process_identity_matches "$pid" "$expected_start" "$expected_command"; then
-        kill -0 "$pid" 2>/dev/null && return 1
-        return 0
-      fi
+      state=$(fm_remote_job_process_state "$pid" 2>/dev/null || true)
+      case "$state" in Z*) return 0 ;; esac
+      kill -0 "$pid" 2>/dev/null && return 1
+      return 0
       ;;
   esac
 }

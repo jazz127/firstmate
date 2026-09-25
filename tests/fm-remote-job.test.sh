@@ -131,6 +131,22 @@ fm_remote_job_signal_identity "$SIGNAL_RACE_PID" TERM "$SIGNAL_RACE_START" "$SIG
   || fail "a disappeared fallback signal target was reported as a reaping failure"
 pass "disappeared worker targets are successful signal no-ops"
 
+if [ "$(uname -s 2>/dev/null || true)" != Linux ]; then
+  sleep 30 & NONLINUX_REFUSAL_PID=$!
+  NONLINUX_REFUSAL_START=$(fm_remote_job_process_start "$NONLINUX_REFUSAL_PID")
+  NONLINUX_REFUSAL_COMMAND=$(fm_remote_job_process_command "$NONLINUX_REFUSAL_PID")
+  if fm_remote_job_signal_identity \
+    "$NONLINUX_REFUSAL_PID" TERM "$NONLINUX_REFUSAL_START" "$NONLINUX_REFUSAL_COMMAND"; then
+    kill -KILL "$NONLINUX_REFUSAL_PID" 2>/dev/null || true
+    wait "$NONLINUX_REFUSAL_PID" 2>/dev/null || true
+    fail "non-Linux signaling did not refuse an unbound live target"
+  fi
+  kill -0 "$NONLINUX_REFUSAL_PID" 2>/dev/null || fail "non-Linux refusal killed the live target"
+  kill -KILL "$NONLINUX_REFUSAL_PID" 2>/dev/null || true
+  wait "$NONLINUX_REFUSAL_PID" 2>/dev/null || true
+  pass "non-Linux signaling refuses unbound live targets"
+fi
+
 if [ "$(uname -s 2>/dev/null || true)" = Linux ] &&
   python3 -c 'import os; raise SystemExit(0 if hasattr(os, "pidfd_open") else 1)' 2>/dev/null; then
 PIDFD_RACE_BIN="$TMP_ROOT/pidfd-race-bin"

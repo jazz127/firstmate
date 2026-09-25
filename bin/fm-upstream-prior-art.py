@@ -125,6 +125,18 @@ def read_json(path):
         fail(f"record is unreadable: {error}")
 
 
+def candidate_records(record):
+    if not isinstance(record, dict):
+        fail("prior-art record is malformed")
+    candidates = record.get("candidates")
+    if not isinstance(candidates, list) or any(
+        not isinstance(candidate, dict) or not isinstance(candidate.get("url"), str) or not candidate["url"]
+        for candidate in candidates
+    ):
+        fail("prior-art candidates are missing or malformed")
+    return candidates
+
+
 def context(args):
     if not REPO.fullmatch(args.repo):
         fail("repo must be OWNER/REPO")
@@ -259,19 +271,24 @@ def scan(args):
 
 def decide(args):
     record = read_json(args.record)
-    if record.get("schema") != SCHEMA:
+    if not isinstance(record, dict) or record.get("schema") != SCHEMA:
         fail("unrecognized prior-art record schema")
     decision = read_json(args.decisions_file)
+    if not isinstance(decision, dict):
+        fail("decisions file is malformed")
     verdict = decision.get("verdict")
     if verdict not in ("none-found", "distinct", "overlaps"):
         fail("verdict must be none-found, distinct, or overlaps")
-    candidates = record.get("candidates", [])
+    candidates = candidate_records(record)
     if verdict == "none-found" and candidates:
         fail("none-found is invalid when the scan found candidates")
     if verdict != "none-found" and not candidates:
         fail("a candidate verdict requires candidates")
     items = decision.get("items", [])
-    if not isinstance(items, list) or {item.get("url") for item in items} != {item["url"] for item in candidates} or len(items) != len(candidates):
+    if not isinstance(items, list) or any(
+        not isinstance(item, dict) or not isinstance(item.get("url"), str) or not item["url"]
+        for item in items
+    ) or {item["url"] for item in items} != {item["url"] for item in candidates} or len(items) != len(candidates):
         fail("decisions must cover every candidate URL exactly once")
     by_url = {item["url"]: item for item in items}
     for candidate in candidates:
@@ -295,7 +312,7 @@ def decide(args):
 
 def checked(args):
     record = read_json(args.record)
-    if record.get("schema") != SCHEMA:
+    if not isinstance(record, dict) or record.get("schema") != SCHEMA:
         fail("unrecognized prior-art record schema")
     if record.get("context") != context(args):
         fail("prior-art record is stale: target, text, branch head, base, or diff changed")
@@ -307,7 +324,7 @@ def checked(args):
     if age < 0 or age > FRESH_SECONDS:
         fail("prior-art record is stale: scan is older than one hour")
     verdict = record.get("verdict")
-    candidates = record.get("candidates", [])
+    candidates = candidate_records(record)
     if verdict == "none-found" and candidates:
         fail("none-found record has candidates")
     if verdict not in ("none-found", "distinct", "overlaps"):
@@ -324,7 +341,7 @@ def checked(args):
 
 def verify_receipt(args):
     record = read_json(args.record)
-    if record.get("schema") != SCHEMA:
+    if not isinstance(record, dict) or record.get("schema") != SCHEMA:
         fail("unrecognized prior-art record schema")
     context = record.get("context")
     if not isinstance(context, dict) or context.get("kind") != "pr":
@@ -350,7 +367,7 @@ def verify_receipt(args):
     if age < 0 or age > FRESH_SECONDS:
         fail("prior-art record is stale: scan is older than one hour")
     verdict = record.get("verdict")
-    candidates = record.get("candidates")
+    candidates = candidate_records(record)
     if verdict not in ("none-found", "distinct", "overlaps") or not isinstance(candidates, list):
         fail("prior-art verdict is missing or malformed")
     if verdict == "none-found" and candidates:
@@ -386,6 +403,15 @@ def section(record):
 
 def publish(args):
     record = checked(args)
+    owner, branch = args.head.split(":", 1) if args.head and ":" in args.head else ("", "")
+    if not owner or not REPO.fullmatch(f"{owner}/{args.repo.split('/', 1)[1]}") or not branch:
+        fail("PR publication needs --head OWNER:BRANCH")
+    remote_head = api(
+        f"repos/{owner}/{args.repo.split('/', 1)[1]}/git/ref/heads/{quote(branch, safe='/')}" ,
+        selector=".object.sha",
+    )
+    if not isinstance(remote_head, str) or remote_head != record["context"]["head"]:
+        fail("prior-art receipt is stale: remote branch head changed")
     body = Path(args.body_file).read_text(encoding="utf-8")
     if "## Prior art checked" in body:
         fail("body already contains a Prior art checked section")
@@ -396,8 +422,6 @@ def publish(args):
             output.write(complete)
         command = ["gh-axi", "pr", "create", "-R", args.repo,
                    "--title", args.title, "--body-file", body_path]
-        if not args.head:
-            fail("PR publication needs --head OWNER:BRANCH")
         command += ["--base", args.base, "--head", args.head]
         print(run(command).strip())
     finally:

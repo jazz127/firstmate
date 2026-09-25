@@ -60,6 +60,8 @@ elif parsed.path == "/repos/owner/demo/pulls/8/files":
     data = [{"filename": "other.py"}]
 elif parsed.path == "/repos/owner/demo/pulls/11/files":
     data = [{"filename": "unrelated.py"}]
+elif parsed.path == "/repos/owner/demo/git/ref/heads/fix":
+    data = os.environ.get("FAKE_REMOTE_HEAD", "")
 elif parsed.path == "/search/issues":
     hit = os.environ.get("FAKE_SEARCH_HIT") and "pauseWorker" in params.get("q", [""])[0] and "is:pr" in params.get("q", [""])[0]
     data = {"total_count": 1 if hit else 0, "incomplete_results": bool(os.environ.get("FAKE_INCOMPLETE")),
@@ -118,6 +120,28 @@ assert r['open_prs']=={'listed': 1, 'matched': 1}
 PY
 pass 'scan records open PRs and issues plus recent closed unmerged PRs with match reasons'
 
+printf '{"verdict":"distinct","items":[null]}\n' > "$TMP_ROOT/decisions.json"
+if "$tool" decide --record "$TMP_ROOT/prior-art.json" --decisions-file "$TMP_ROOT/decisions.json" > "$TMP_ROOT/out" 2>&1; then
+  fail 'malformed decision item was accepted'
+fi
+! rg -q 'Traceback' "$TMP_ROOT/out" || fail 'malformed decision item crashed'
+printf '{"verdict":"distinct","items":{}}\n' > "$TMP_ROOT/decisions.json"
+if "$tool" decide --record "$TMP_ROOT/prior-art.json" --decisions-file "$TMP_ROOT/decisions.json" > "$TMP_ROOT/out" 2>&1; then
+  fail 'non-list decisions were accepted'
+fi
+! rg -q 'Traceback' "$TMP_ROOT/out" || fail 'non-list decisions crashed'
+cp "$TMP_ROOT/prior-art.json" "$TMP_ROOT/prior-art-good.json"
+python3 - "$TMP_ROOT/prior-art.json" <<'PY'
+import json, sys
+p=sys.argv[1]; r=json.load(open(p)); r['candidates']=[None]; open(p,'w').write(json.dumps(r))
+PY
+if "$tool" decide --record "$TMP_ROOT/prior-art.json" --decisions-file "$TMP_ROOT/decisions.json" > "$TMP_ROOT/out" 2>&1; then
+  fail 'malformed candidate record was accepted'
+fi
+! rg -q 'Traceback' "$TMP_ROOT/out" || fail 'malformed candidate record crashed'
+mv "$TMP_ROOT/prior-art-good.json" "$TMP_ROOT/prior-art.json"
+pass 'malformed decisions and candidate records fail cleanly'
+
 if "$tool" check "${common[@]}" > "$TMP_ROOT/out" 2>&1; then fail 'pending verdict passed'; fi
 cat > "$TMP_ROOT/decisions.json" <<'JSON'
 {"verdict":"none-found","items":[]}
@@ -133,8 +157,16 @@ cat > "$TMP_ROOT/decisions.json" <<'JSON'
 JSON
 "$tool" decide --record "$TMP_ROOT/prior-art.json" --decisions-file "$TMP_ROOT/decisions.json" > "$TMP_ROOT/out" || fail 'distinct decision failed'
 "$tool" check "${common[@]}" > "$TMP_ROOT/out" || fail 'fresh distinct record refused'
+export PUBLISHED_HEAD=$(git rev-parse HEAD)
+export FAKE_REMOTE_HEAD=$PUBLISHED_HEAD
+cp "$TMP_ROOT/prior-art.json" "$TMP_ROOT/published-record.json"
 "$tool" publish "${common[@]}" --body-file "$TMP_ROOT/body.md" --head owner:fix > "$TMP_ROOT/out" || fail 'guarded publication failed'
-"$tool" verify --record "$TMP_ROOT/prior-art.json" --repo owner/demo \
+export FAKE_REMOTE_HEAD=0000000000000000000000000000000000000000
+if "$tool" publish "${common[@]}" --body-file "$TMP_ROOT/body.md" --head owner:fix > "$TMP_ROOT/out" 2>&1; then
+  fail 'stale remote branch was published'
+fi
+export FAKE_REMOTE_HEAD=$(git rev-parse HEAD)
+"$tool" verify --record "$TMP_ROOT/published-record.json" --repo owner/demo \
   --head "$(git rev-parse HEAD)" > "$TMP_ROOT/out" || fail 'valid receipt verification failed'
 git remote add origin https://github.com/fork/demo.git
 printf 'refs/heads/fix %s refs/heads/main %s\n' "$(git rev-parse HEAD)" 0 \
@@ -144,6 +176,12 @@ if printf 'refs/heads/fix %s refs/heads/main %s\n' "$(git rev-parse HEAD)" 0 \
   | "$ROOT/bin/fm-upstream-push-guard.sh" "$ROOT" "$TMP_ROOT/missing.json" origin \
       https://github.com/upstream/demo.git; then
   fail 'external push without receipt was allowed'
+fi
+git remote set-url origin https://token@github.com/fork/demo.git
+if printf 'refs/heads/fix %s refs/heads/main %s\n' "$(git rev-parse HEAD)" 0 \
+  | "$ROOT/bin/fm-upstream-push-guard.sh" "$ROOT" "$TMP_ROOT/missing.json" origin \
+      https://github.com/upstream/demo.git; then
+  fail 'credentialed external push without receipt was allowed'
 fi
 printf 'refs/heads/fix %s refs/heads/main %s\n' "$(git rev-parse HEAD)" 0 \
   | "$ROOT/bin/fm-upstream-push-guard.sh" "$ROOT" "$TMP_ROOT/prior-art.json" origin \
@@ -183,5 +221,8 @@ git add worker.py
 git commit -qm followup
 if "$tool" check "${common[@]}" > "$TMP_ROOT/out" 2>&1; then fail 'changed branch head passed old record'; fi
 pass 'branch head movement stales the prior-art receipt'
+"$tool" verify --record "$TMP_ROOT/published-record.json" --repo owner/demo \
+  --head "$PUBLISHED_HEAD" --published > "$TMP_ROOT/out" || fail 'published head verification refused the recorded head'
+pass 'published head verification does not read back the worker checkout'
 
 printf 'all fm-upstream-prior-art tests passed\n'

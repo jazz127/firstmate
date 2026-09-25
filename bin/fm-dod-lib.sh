@@ -921,7 +921,7 @@ fm_dod_upstream_receipt_check() {  # <worktree> <url> <meta> [<published-head>]
   [ -d "$wt" ] || { printf '%s\n' 'upstream prior-art receipt refused: worktree is unavailable'; return 1; }
   origin=$(git -C "$wt" remote get-url origin 2>/dev/null || true)
   case "$origin" in
-    https://github.com/*)
+    https://*)
       origin_path=${origin#https://}
       origin_path=${origin_path#*@}
       case "$origin_path" in

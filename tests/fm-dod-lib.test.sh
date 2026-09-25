@@ -39,6 +39,12 @@ test_external_pr_receipt_boundary() {
     && fail 'no-mistakes upstream PR passed without a receipt'
   assert_contains "$reason" 'upstream prior-art receipt refused' \
     'no-mistakes upstream refusal did not name the receipt boundary'
+  git -C "$wt" remote set-url origin https://token@github.com/fork/demo.git
+  reason=$(accept_done ship direct-PR "$wt" "$repo" \
+    'done: PR https://github.com/upstream/demo/pull/1' "$state" receipt-id '') \
+    && fail 'credentialed external PR passed without a receipt'
+  assert_contains "$reason" 'upstream prior-art receipt refused' \
+    'credentialed-origin refusal did not name the receipt boundary'
   git -C "$wt" remote set-url origin https://github.com/owner/demo.git
   git -C "$wt" update-ref refs/remotes/origin/fm/receipt "$(git -C "$wt" rev-parse HEAD)"
   accept_done ship direct-PR "$wt" "$repo" \

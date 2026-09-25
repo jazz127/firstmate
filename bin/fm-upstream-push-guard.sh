@@ -8,7 +8,7 @@ REMOTE_URL=${4:?missing push URL}
 github_repo() {
   local url=$1 rest path
   case "$url" in
-    https://github.com/*)
+    https://*)
       rest=${url#https://}
       rest=${rest#*@}
       case "$rest" in

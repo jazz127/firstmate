@@ -1033,7 +1033,7 @@ fm_remote_job_stop_worker_tree() { # <pid> [start] [command]
     while IFS=$(printf '\t') read -r member member_start member_command; do
       if kill -0 "$member" 2>/dev/null &&
         fm_remote_job_process_identity_matches "$member" "$member_start" "$member_command"; then
-        survivors="$survivors${survivors:+$'\n'}$member\t$member_start\t$member_command"
+        survivors="$survivors${survivors:+$'\n'}$(printf '%s\t%s\t%s' "$member" "$member_start" "$member_command")"
       fi
     done <<< "$members"
     if [ -z "$survivors" ]; then

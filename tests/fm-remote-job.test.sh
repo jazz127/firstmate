@@ -193,19 +193,19 @@ FALLBACK_RECHECK_COMMAND=$(fm_remote_job_process_command "$FALLBACK_RECHECK_PID"
 FALLBACK_RECHECK_CALLS=0
 fm_remote_job_process_identity_matches() {
   FALLBACK_RECHECK_CALLS=$((FALLBACK_RECHECK_CALLS + 1))
-  [ "$FALLBACK_RECHECK_CALLS" -eq 1 ]
+  return 0
 }
 if PATH="$FALLBACK_RECHECK_BIN:/usr/bin:/bin" \
   fm_remote_job_signal_identity "$FALLBACK_RECHECK_PID" TERM \
   "$FALLBACK_RECHECK_START" "$FALLBACK_RECHECK_COMMAND"; then
   kill -KILL "$FALLBACK_RECHECK_PID" 2>/dev/null || true
   wait "$FALLBACK_RECHECK_PID" 2>/dev/null || true
-  fail "fallback signaling ignored the immediate identity recheck"
+  fail "Linux fallback signaling did not refuse an unbound live target"
 fi
-kill -0 "$FALLBACK_RECHECK_PID" 2>/dev/null || fail "fallback recheck killed the live target"
+kill -0 "$FALLBACK_RECHECK_PID" 2>/dev/null || fail "Linux fallback signaling killed the live target"
 kill -KILL "$FALLBACK_RECHECK_PID" 2>/dev/null || true
 wait "$FALLBACK_RECHECK_PID" 2>/dev/null || true
-pass "fallback signaling refuses a target that changes identity"
+pass "Linux fallback signaling refuses an unbound live target"
 . "$ROOT/bin/fm-remote-job-lib.sh"
 else
 pass "pidfd identity verification regression requires Linux pidfd support"

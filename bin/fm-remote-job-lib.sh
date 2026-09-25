@@ -998,10 +998,6 @@ fm_remote_job_stop_worker_tree() { # <pid> [start] [command]
   while [ "$i" -lt 50 ]; do
     alive=0
     while IFS=$(printf '\t') read -r member member_start member_command; do
-      current_start=$(fm_remote_job_process_start "$member" 2>/dev/null || true)
-      current_command=$(fm_remote_job_process_command "$member" 2>/dev/null || true)
-      [ -n "$member_start" ] && [ "$current_start" = "$member_start" ] &&
-        [ "$current_command" = "$member_command" ] || continue
       if kill -0 "$member" 2>/dev/null; then alive=1; break; fi
     done <<< "$members"
     [ "$alive" -eq 0 ] && return 0
@@ -1019,10 +1015,6 @@ fm_remote_job_stop_worker_tree() { # <pid> [start] [command]
   while [ "$i" -lt 50 ]; do
     alive=0
     while IFS=$(printf '\t') read -r member member_start member_command; do
-      current_start=$(fm_remote_job_process_start "$member" 2>/dev/null || true)
-      current_command=$(fm_remote_job_process_command "$member" 2>/dev/null || true)
-      [ -n "$member_start" ] && [ "$current_start" = "$member_start" ] &&
-        [ "$current_command" = "$member_command" ] || continue
       if kill -0 "$member" 2>/dev/null; then alive=1; break; fi
     done <<< "$members"
     [ "$alive" -eq 0 ] && return 0
@@ -1030,10 +1022,6 @@ fm_remote_job_stop_worker_tree() { # <pid> [start] [command]
     sleep 0.1
   done
   while IFS=$(printf '\t') read -r member member_start member_command; do
-    current_start=$(fm_remote_job_process_start "$member" 2>/dev/null || true)
-    current_command=$(fm_remote_job_process_command "$member" 2>/dev/null || true)
-    [ -n "$member_start" ] && [ "$current_start" = "$member_start" ] &&
-      [ "$current_command" = "$member_command" ] || continue
     kill -0 "$member" 2>/dev/null && return 1
   done <<< "$members"
   return 0
@@ -1335,9 +1323,20 @@ fm_remote_job_linux_reap_worker_processes() { # <remote-root> <keep-pid>
     kill -0 "$pid" 2>/dev/null || continue
     fm_remote_job_stop_worker_tree "$pid" "$start" "$command" || return 1
   done <<< "$processes"
+  if [ -n "$keep_root" ]; then
+    if [ "$keep_root" = "$keep_pid" ]; then
+      [ "$(fm_remote_job_process_start "$keep_root" 2>/dev/null || true)" = "$keep_start" ] || return 1
+      [ "$(fm_remote_job_process_command "$keep_root" 2>/dev/null || true)" = "$keep_command" ] || return 1
+    else
+      [ "$(fm_remote_job_process_start "$keep_root" 2>/dev/null || true)" = "$parent_start" ] || return 1
+      [ "$(fm_remote_job_process_command "$keep_root" 2>/dev/null || true)" = "$parent_command" ] || return 1
+    fi
+  fi
   processes=$(fm_remote_job_linux_worker_processes "$root") || return 1
   while IFS=$(printf '\t') read -r pid pgid start command; do
     [ -n "$pid" ] || continue
+    [ "$(fm_remote_job_process_start "$pid" 2>/dev/null || true)" = "$start" ] || continue
+    [ "$(fm_remote_job_process_command "$pid" 2>/dev/null || true)" = "$command" ] || continue
     if [ -n "$keep_root" ] && fm_remote_job_process_descends_from "$pid" "$keep_root"; then
       continue
     fi

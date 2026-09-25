@@ -105,6 +105,7 @@ EOF
     fail 'intake left brief placeholders unresolved'
   fi
   assert_grep 'Fetch the latest upstream default branch' "$dir/data/maneuver/brief.md" 'intake omitted clean upstream extraction'
+  assert_grep '0123456789012345678901234567890123456789' "$dir/data/maneuver/brief.md" 'intake omitted ordered source commit'
   assert_grep 'needs-decision' "$dir/data/maneuver/brief.md" 'intake omitted review escalation'
   assert_grep 'spawned maneuver worktree=' "$dir/intake.out" 'intake did not return spawned task'
   pass 'ordered maneuvers delegate exactly once through brief and spawn'

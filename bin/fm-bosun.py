@@ -299,12 +299,15 @@ def cmd_intake(args):
     except OSError as exc:
         fail(f"could not read contribution brief: {exc}")
     paths = "\n".join(f"- `{item}`" for item in record["allowed_paths"])
+    commits = "\n".join(f"- `{item}`" for item in record["source_commits"])
     task = (f"Contribute the named Captain's Maneuver `{record['maneuver']}` to "
             f"`{record['target']['owner']}/{record['target']['repository']}`.\n\n"
             "Read the target repository's current instructions and contribution policy, "
             "then inspect accepted pull requests and review history when conventions are unclear.\n"
             "Fetch the latest upstream default branch into this isolated worktree and cut the "
-            "smallest coherent contribution from the ordered housefeature branch.\n"
+            "smallest coherent contribution from the ordered housefeature branch. Apply only "
+            "these recorded source commits, in order; the order never authorizes the rest of "
+            f"the branch:\n{commits}\n"
             f"Use only these ordered paths:\n{paths}\n"
             "Remove house-only configuration, private context, secrets, unrelated history, and "
             "fork-specific assumptions. Preserve attribution and make a clean commit series, "

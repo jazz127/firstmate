@@ -184,6 +184,20 @@ def upstream_remote(project_dir, owner, repository):
     fail(f"upstream project clone targets another repository: {owner}/{repository}")
 
 
+def fetched_upstream_ref(project_dir, owner, repository, branch):
+    remote = upstream_remote(project_dir, owner, repository)
+    result = subprocess.run(
+        ["git", "-C", str(project_dir), "fetch", "--no-tags", remote,
+         f"+refs/heads/{branch}:refs/remotes/{remote}/{branch}"],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    if result.returncode:
+        fail(f"could not fetch upstream branch: {owner}/{repository}/{branch}")
+    ref = f"refs/remotes/{remote}/{branch}"
+    if not git_output(project_dir, "rev-parse", "--verify", ref):
+        fail(f"upstream branch is unavailable: {owner}/{repository}/{branch}")
+    return ref
+
+
 def target(forge, owner, repo):
     for value in (forge, owner, repo):
         safe_name(value)
@@ -372,7 +386,7 @@ def project_mode(project):
     return mode, yolo
 
 
-def existing_task(task, project_dir):
+def existing_task(task, project_dir, bosun, target_info):
     path = safe_path(home() / "state" / f"{safe_name(task)}.meta")
     if path.is_symlink() or not path.is_file():
         return None
@@ -390,6 +404,13 @@ def existing_task(task, project_dir):
         fail("existing task record does not match the Bosun ship")
     if fields.get("project") != str(project_dir):
         fail("existing task record targets another project")
+    brief = safe_path(home() / "data" / task / "brief.md")
+    if brief.is_symlink() or not brief.is_file():
+        fail("existing task record has no Bosun brief")
+    body = brief.read_text()
+    if (f"Bosun `{bosun}`" not in body
+            or f"`{target_info['owner']}/{target_info['repository']}`" not in body):
+        fail("existing task record is not this Bosun assignment")
     worktree = Path(fields["worktree"])
     if worktree.is_symlink() or not worktree.is_dir():
         fail("existing Bosun worktree is unavailable")
@@ -436,7 +457,7 @@ def cmd_intake_locked(args):
     if not project_dir.is_dir() or project_dir.is_symlink():
         fail(f"upstream project clone is unavailable: {project_dir}")
     upstream_remote(project_dir, record["target"]["owner"], record["target"]["repository"])
-    adopted = existing_task(assignment_task, project_dir)
+    adopted = existing_task(assignment_task, project_dir, record["bosun"], record["target"])
     if adopted:
         record["task_brief"] = str(safe_path(home() / "data" / args.task / "brief.md"))
         record["task_worktree"] = adopted["worktree"]
@@ -640,6 +661,13 @@ def cmd_merged(args):
     write_json(path, record)
 
 
+def cmd_upstream_ref(args):
+    project_dir = safe_path(args.worktree)
+    if not project_dir.is_dir() or project_dir.is_symlink():
+        fail(f"upstream project clone is unavailable: {project_dir}")
+    print(fetched_upstream_ref(project_dir, args.owner, args.repository, args.branch))
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -661,6 +689,7 @@ def main():
     p = sub.add_parser("conventions"); add_target(p); p.add_argument("--bosun", required=True); p.add_argument("--policy", required=True); p.add_argument("--decisions"); p.set_defaults(func=cmd_conventions)
     p = sub.add_parser("registration-check"); p.add_argument("--task", required=True); p.add_argument("--url", required=True); p.add_argument("--forge", required=True); p.add_argument("--head", required=True); p.add_argument("--base", required=True); p.add_argument("--branch", required=True); p.add_argument("--pr-head", required=True); p.add_argument("--validation-head", required=True); p.add_argument("--validation-mode", required=True); p.add_argument("--upstream-base", required=True); p.add_argument("--worktree"); p.add_argument("--changed-path", action="append", default=[]); p.add_argument("--check-only", action="store_true"); p.set_defaults(func=cmd_registration_check)
     p = sub.add_parser("merged"); p.add_argument("--task", required=True); p.add_argument("--url", required=True); p.set_defaults(func=cmd_merged)
+    p = sub.add_parser("upstream-ref"); p.add_argument("--worktree", required=True); p.add_argument("--owner", required=True); p.add_argument("--repository", required=True); p.add_argument("--branch", required=True); p.set_defaults(func=cmd_upstream_ref)
     args = parser.parse_args()
     try:
         args.func(args)

@@ -169,7 +169,14 @@ fi
 if [ "$IS_BOSUN" = 1 ]; then
   [ -n "$PR_HEAD" ] || { echo "error: Bosun registration requires the exact forge PR head" >&2; exit 1; }
   [ -n "$WT" ] && [ -d "$WT" ] || { echo "error: Bosun upstream worktree is unavailable" >&2; exit 1; }
-  BOSUN_BASE_REF="origin/$BOSUN_BRANCH"
+  BOSUN_UPSTREAM_OWNER=${BOSUN_BASE_REPOSITORY%%/*}
+  BOSUN_UPSTREAM_REPOSITORY=${BOSUN_BASE_REPOSITORY#*/}
+  BOSUN_BASE_REF=$(python3 "$SCRIPT_DIR/fm-bosun.py" upstream-ref --worktree "$WT" \
+    --owner "$BOSUN_UPSTREAM_OWNER" --repository "$BOSUN_UPSTREAM_REPOSITORY" \
+    --branch "$BOSUN_BRANCH") || {
+    echo "error: Bosun upstream default branch is unavailable" >&2
+    exit 1
+  }
   BOSUN_UPSTREAM_BASE=$(git -C "$WT" merge-base HEAD "$BOSUN_BASE_REF" 2>/dev/null) || {
     echo "error: Bosun upstream default branch is unavailable" >&2
     exit 1
@@ -278,7 +285,14 @@ if [ "$IS_BOSUN" = 1 ]; then
     echo "error: Bosun PR forge response was incomplete" >&2
     exit 1
   }
-  BOSUN_BASE_REF="origin/$BOSUN_BRANCH"
+  BOSUN_UPSTREAM_OWNER=${BOSUN_BASE_REPOSITORY%%/*}
+  BOSUN_UPSTREAM_REPOSITORY=${BOSUN_BASE_REPOSITORY#*/}
+  BOSUN_BASE_REF=$(python3 "$SCRIPT_DIR/fm-bosun.py" upstream-ref --worktree "$WT" \
+    --owner "$BOSUN_UPSTREAM_OWNER" --repository "$BOSUN_UPSTREAM_REPOSITORY" \
+    --branch "$BOSUN_BRANCH") || {
+    echo "error: Bosun upstream default branch is unavailable" >&2
+    exit 1
+  }
   BOSUN_UPSTREAM_BASE=$(git -C "$WT" merge-base HEAD "$BOSUN_BASE_REF" 2>/dev/null) || {
     echo "error: Bosun upstream default branch is unavailable" >&2
     exit 1

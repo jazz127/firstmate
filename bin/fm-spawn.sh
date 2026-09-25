@@ -713,7 +713,7 @@ for a in "$@"; do
     ;;
   --seat) want_value=seat ;;
   --seat=*) SEAT=${a#--seat=}; SEAT_SET=1 ;;
-  --seat-home) want_value=seat-home ;;
+  --seat-home) want_value="seat-home" ;;
   --seat-home=*) SEAT_HOME_ARG=${a#--seat-home=} ;;
   --backend) want_value=backend ;;
   --backend=*)

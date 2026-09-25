@@ -191,6 +191,7 @@ def scan(args):
     diff = git("diff", "--no-ext-diff", f"{ctx['base']}...HEAD", "--")
     queries = terms(ctx, diff)
     found = {}
+    open_pr_urls = set()
 
     def add(row, kind):
         candidate = normalized(row, kind)
@@ -202,6 +203,7 @@ def scan(args):
 
     for row in pages(f"repos/{repo}/pulls?state=open"):
         add(row, "pr")
+        open_pr_urls.add(row["html_url"])
     closed = pages(f"repos/{repo}/pulls?state=closed&sort=updated&direction=desc",
                    stop_at=lambda row: (row.get("updated_at") or "") < cutoff.isoformat().replace("+00:00", "Z"))
     for row in closed:
@@ -247,8 +249,10 @@ def scan(args):
             selected.append({key: candidate[key] for key in ("url", "author", "state", "title", "kind", "reasons")}
                        | {"verdict": "unreviewed", "reason": ""})
     selected.sort(key=lambda row: row["url"])
+    open_prs_matched = sum(1 for row in selected if row["kind"] == "pr" and row["url"] in open_pr_urls)
     record = {"schema": SCHEMA, "captured_at": now.isoformat(), "closed_window_days": CLOSED_DAYS,
-              "context": ctx, "queries": queries, "candidates": selected, "verdict": "pending", "captain_decision": ""}
+              "context": ctx, "queries": queries, "open_prs": {"listed": len(open_pr_urls), "matched": open_prs_matched},
+              "candidates": selected, "verdict": "pending", "captain_decision": ""}
     atomic_json(args.record, record)
     print(f"prior-art scan recorded {len(selected)} candidates: {args.record}")
 

@@ -114,6 +114,7 @@ assert any('linked issues: #4' in why for why in c['https://github.com/owner/dem
 assert any('shared keywords' in why for why in c['https://github.com/owner/demo/pull/8']['reasons'])
 assert any('shared keywords' in why for why in c['https://github.com/owner/demo/issues/4']['reasons'])
 assert len(r['queries'])>=3
+assert r['open_prs']=={'listed': 1, 'matched': 1}
 PY
 pass 'scan records open PRs and issues plus recent closed unmerged PRs with match reasons'
 

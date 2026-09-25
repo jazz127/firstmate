@@ -67,6 +67,7 @@ Open an upstream pull request only when the captain asks for that house feature 
 Only the captain contacts upstream, including opening or commenting on an upstream pull request.
 Before opening an upstream pull request in a repository the fleet does not own, run the prior-art scan in `bin/fm-upstream-prior-art.py`, review every candidate, and record an explicit verdict.
 The scan searches open pull requests and issues and recent closed unmerged pull requests using changed files, linked issues, and keywords from the title, summary, and changed symbols.
+A duplicate with different wording or files can evade those keyword, changed-file, and linked-issue matches.
 A `none-found` verdict requires no candidates; a `distinct` verdict requires a one-line reason for each candidate; an `overlaps` verdict requires the captain's recorded decision before publication.
 Use that command's `publish` operation for upstream creation so its receipt check is immediately before the forge write and the generated pull request body credits overlapping authors in a `Prior art checked` section.
 It refuses missing receipts, a changed branch head or diff, a changed title or summary, scans over one hour old, and unresolved overlaps.
@@ -74,6 +75,7 @@ The command's `check` operation is the reusable gate for a Bosun workflow; it do
 An automatic PR creation path that bypasses this gate must not be used for an upstream target.
 The task worktree's pre-push hook refuses a push to a different GitHub repository without a fresh receipt matching the repository, pushed head, and diff.
 The no-mistakes pipeline pushes from a separate checkout that is not covered by that hook, so its registration and ready-signal receipt checks remain post-publication backstops.
+Direct PR creation after a fork push can also bypass the worker pre-push hook, leaving those same registration and ready-signal checks as post-publication backstops.
 An upstream repository is contacted only on the captain's explicit order, which is the primary control for that accepted containment.
 The command header owns its invocation and receipt format.
 

@@ -35,7 +35,22 @@ test_direct_pr_upstream_publication_is_guarded() {
   pass "direct-PR upstream publication uses the prior-art gate"
 }
 
+test_no_mistakes_upstream_start_is_guarded() {
+  local contract
+  contract=$(fm_dod_block no-mistakes upstream-gate fix/upstream-gate)
+  assert_contains "$contract" "fm-upstream-prior-art.py scan" \
+    "no-mistakes contract omitted the upstream prior-art scan"
+  assert_contains "$contract" "fm-upstream-prior-art.py decide" \
+    "no-mistakes contract omitted the candidate decision step"
+  assert_contains "$contract" "fm-upstream-prior-art.py check" \
+    "no-mistakes contract omitted the pre-run receipt check"
+  assert_contains "$contract" "do not start the run if it refuses" \
+    "no-mistakes contract allowed a failed upstream preflight"
+  pass "no-mistakes upstream publication requires prior-art preflight"
+}
+
 test_direct_pr_upstream_publication_is_guarded
+test_no_mistakes_upstream_start_is_guarded
 
 test_scout_done_is_not_gated() {
   local repo wt

@@ -721,6 +721,18 @@ For a repository the fleet owns, the ordinary \`gh-axi\` direct-PR path remains 
 EOF
 }
 
+fm_upstream_pr_preflight_block() {  # <task-id>
+  local script_dir
+  script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd) || return 1
+  cat <<EOF
+Before starting /no-mistakes for an upstream repository the fleet does not own, complete the prior-art gate. For a repository the fleet owns, skip this upstream-only preflight.
+1. Run \`$script_dir/fm-upstream-prior-art.py scan --repo <OWNER/REPO> --kind pr --title <TITLE> --summary-file <SUMMARY_FILE> --record <RECORD> --base <BASE>\`.
+2. Review every candidate, record one distinct/overlaps verdict and reason per candidate, and run \`$script_dir/fm-upstream-prior-art.py decide --record <RECORD> --decisions-file <DECISIONS_FILE>\`.
+3. Immediately before starting /no-mistakes, run \`$script_dir/fm-upstream-prior-art.py check --repo <OWNER/REPO> --kind pr --title <TITLE> --summary-file <SUMMARY_FILE> --record <RECORD> --base <BASE>\`; do not start the run if it refuses.
+The later upstream PR publication must use the same current receipt at its forge-write boundary; an automatic PR creation path that cannot perform that check must not be used.
+EOF
+}
+
 fm_dod_block() {  # <mode> <task-id> [branch] [<forge>]
   local mode=$1 id=$2 forge=${4:-none}
   local branch=${3:-fm/$id}
@@ -819,6 +831,7 @@ EOF
       fm_nm_driving_block "$forge"
       fm_pr_body_preflight_block "$id"
       fm_nm_published_body_check_block "$id"
+      fm_upstream_pr_preflight_block "$id"
       cat <<EOF
 
 For a base with checks, including \`house\`, after /no-mistakes reports CI green (the CI-ready return point - do not wait for it to keep monitoring in the background until merge), read the PR back from the forge and confirm it is not a draft (\`gh pr view <url> --json isDraft\` must print false); if it is a draft, mark it ready with \`gh-axi pr ready\`.

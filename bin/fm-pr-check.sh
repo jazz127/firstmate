@@ -53,7 +53,23 @@ NUMBER=$FM_PR_NUMBER
 # A Bosun home registers only a PR backed by its one named captain order.
 # Ordinary firstmate and secondmate homes have no Bosun role marker.
 if [ -f "$FM_HOME/data/bosun-role.json" ] || [ -L "$FM_HOME/data/bosun-role.json" ]; then
-  python3 "$SCRIPT_DIR/fm-bosun.py" registration-check --task "$ID" --url "$URL" || exit 1
+  if [ "$PROVIDER" != github ] || ! command -v gh >/dev/null 2>&1 || ! command -v jq >/dev/null 2>&1; then
+    echo "error: Bosun PR registration requires the supported GitHub forge read path" >&2
+    exit 1
+  fi
+  BOSUN_PR_JSON=$(gh pr view "$URL" --json headRepositoryOwner,headRepository,baseRepository,baseRefName 2>/dev/null) || {
+    echo "error: Bosun PR forge response was unreadable" >&2
+    exit 1
+  }
+  BOSUN_HEAD=$(printf '%s' "$BOSUN_PR_JSON" | jq -er '(.headRepositoryOwner.login // "") + "/" + (.headRepository.name // "")') || exit 1
+  BOSUN_BASE=$(printf '%s' "$BOSUN_PR_JSON" | jq -er '.baseRepository.nameWithOwner // ""') || exit 1
+  BOSUN_BRANCH=$(printf '%s' "$BOSUN_PR_JSON" | jq -er '.baseRefName // ""') || exit 1
+  [ "$BOSUN_HEAD" != / ] && [ "$BOSUN_BASE" != "" ] && [ "$BOSUN_BRANCH" != "" ] || {
+    echo "error: Bosun PR forge response was incomplete" >&2
+    exit 1
+  }
+  python3 "$SCRIPT_DIR/fm-bosun.py" registration-check --task "$ID" --url "$URL" \
+    --forge "$PROVIDER" --head "$BOSUN_HEAD" --base "$BOSUN_BASE" --branch "$BOSUN_BRANCH" || exit 1
 fi
 
 # Task-derived paths are constructed only after the canonical ID validation.

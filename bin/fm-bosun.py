@@ -1,12 +1,5 @@
 #!/usr/bin/env python3
-"""Bosun routing, scoped evidence, and maneuver contribution records.
-
-Usage: fm-bosun.py route|configure-home|order|convention|conventions|extract|guard|published|review|merged ...
-All state is private to FM_HOME. Extract fetches the named upstream Git remote;
-no command calls a forge API or pushes.
-The publishing worker must run guard immediately before its existing delivery
-path; fm-pr-check.sh also refuses registration without a matching order.
-"""
+"""Bosun routing, scoped memory, and contribution authorization records."""
 
 import argparse
 import datetime as dt
@@ -19,7 +12,7 @@ import subprocess
 import sys
 import tempfile
 
-SUPPORTED_FORGES = {"github": "github.com"}
+SUPPORTED_FORGES = {"github"}
 
 
 class Refusal(Exception):
@@ -89,7 +82,7 @@ def write_json(path, value):
 
 
 def safe_name(value):
-    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", value) or value in (".", ".."):
+    if not isinstance(value, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", value) or value in (".", ".."):
         fail(f"invalid name: {value}")
     return value
 
@@ -99,7 +92,7 @@ def target(forge, owner, repo):
         safe_name(value)
     forge = forge.lower()
     if forge not in SUPPORTED_FORGES:
-        fail(f"unsupported Bosun forge '{forge}'; supported: {', '.join(SUPPORTED_FORGES)}")
+        fail(f"unsupported Bosun forge '{forge}'; supported: {', '.join(sorted(SUPPORTED_FORGES))}")
     return {"forge": forge, "owner": owner.lower(), "repository": repo.lower()}
 
 
@@ -109,13 +102,9 @@ def routes():
         fail("invalid Bosun route schema")
     for row in data["routes"]:
         forge = row.get("forge") if isinstance(row, dict) else None
-        if forge and forge.lower() not in SUPPORTED_FORGES:
-            fail(f"unsupported Bosun forge '{forge.lower()}'; supported: {', '.join(SUPPORTED_FORGES)}")
+        if forge and (not isinstance(forge, str) or forge.lower() not in SUPPORTED_FORGES):
+            fail(f"unsupported Bosun forge '{forge}'; supported: {', '.join(sorted(SUPPORTED_FORGES))}")
     return data["routes"]
-
-
-def resolve(want):
-    return resolve_route(want)["bosun"]
 
 
 def resolve_route(want):
@@ -124,13 +113,13 @@ def resolve_route(want):
         if not isinstance(row, dict) or not isinstance(row.get("bosun"), str):
             fail("invalid Bosun route")
         bosun = safe_name(row["bosun"])
-        fields = (row.get("forge"), row.get("owner"), row.get("repository"), row.get("repository_pattern"),
-                  row.get("fork_owner"), row.get("fork_repository"), row.get("upstream_default_branch"))
-        if not any(fields):
+        match_fields = (row.get("forge"), row.get("owner"), row.get("repository"), row.get("repository_pattern"))
+        metadata = (row.get("fork_owner"), row.get("fork_repository"), row.get("upstream_default_branch"))
+        if not any(match_fields):
             fail("unscoped Bosun route")
         if row.get("repository") and row.get("repository_pattern"):
             fail("route cannot combine repository and repository_pattern")
-        if any(v is not None and (not isinstance(v, str) or not v) for v in fields):
+        if any(v is not None and (not isinstance(v, str) or not v) for v in match_fields + metadata):
             fail("invalid Bosun route field")
         if row.get("forge") and row["forge"].lower() != want["forge"]:
             continue
@@ -140,8 +129,6 @@ def resolve_route(want):
             continue
         if row.get("repository_pattern") and not fnmatch.fnmatchcase(want["repository"], row["repository_pattern"].lower()):
             continue
-        # Exact repository beats pattern, which beats owner, which beats forge.
-        # A constrained forge refines every other level. Equal scores refuse.
         score = (3 if row.get("repository") else 2 if row.get("repository_pattern") else 1 if row.get("owner") else 0,
                  bool(row.get("owner")), bool(row.get("forge")))
         matches.append((score, row))
@@ -152,6 +139,10 @@ def resolve_route(want):
     if len(winners) != 1:
         fail("ambiguous Bosun route; needs-decision")
     return winners[0]
+
+
+def resolve(want):
+    return resolve_route(want)["bosun"]
 
 
 def registered(bosun):
@@ -192,8 +183,7 @@ def contribution(task):
 
 
 def cmd_route(args):
-    want = target(args.forge, args.owner, args.repository)
-    bosun = resolve(want)
+    bosun = resolve(target(args.forge, args.owner, args.repository))
     role(bosun)
     print(bosun)
 
@@ -207,8 +197,7 @@ def cmd_configure_home(args):
     else:
         registered(args.bosun)
         path = home() / "data/bosuns" / f"{args.bosun}.json"
-    write_json(path,
-               {"schema": "fm-bosun-role.v1", "id": args.bosun, "kind": "bosun"})
+    write_json(path, {"schema": "fm-bosun-role.v1", "id": args.bosun, "kind": "bosun"})
 
 
 def cmd_order(args):
@@ -250,9 +239,7 @@ def cmd_order(args):
 def memory_path(bosun, scope, want):
     role(bosun)
     root = home() / "data/bosun-memory" / bosun
-    if scope == "shared":
-        return root / "profile.json"
-    return root / "repos" / want["forge"] / want["owner"] / f"{want['repository']}.json"
+    return root / ("profile.json" if scope == "shared" else f"repos/{want['forge']}/{want['owner']}/{want['repository']}.json")
 
 
 def cmd_convention(args):
@@ -263,9 +250,8 @@ def cmd_convention(args):
         fail("invalid Bosun memory")
     if args.confirmed and (not args.evidence or not args.showed or not args.read_at):
         fail("confirmed convention requires evidence source, finding, and read time")
-    record["conventions"].append({"key": args.key, "value": args.value,
-                                  "confirmed": args.confirmed, "source": args.evidence,
-                                  "showed": args.showed, "read_at": args.read_at})
+    record["conventions"].append({"key": args.key, "value": args.value, "confirmed": args.confirmed,
+                                  "source": args.evidence, "showed": args.showed, "read_at": args.read_at})
     write_json(path, record)
 
 
@@ -273,8 +259,7 @@ def cmd_conventions(args):
     want = target(args.forge, args.owner, args.repository)
     result = {}
     for scope in ("shared", "repository"):
-        path = memory_path(args.bosun, scope, want)
-        data = read_json(path, {"schema": "fm-bosun-memory.v1", "conventions": []})
+        data = read_json(memory_path(args.bosun, scope, want), {"schema": "fm-bosun-memory.v1", "conventions": []})
         if data.get("schema") != "fm-bosun-memory.v1":
             fail("invalid Bosun memory")
         for item in data.get("conventions", []):
@@ -293,162 +278,31 @@ def cmd_conventions(args):
     print(json.dumps(result, sort_keys=True))
 
 
-def git(repo, *arguments, input_bytes=None):
-    result = subprocess.run(["git", "-C", str(repo), *arguments], input=input_bytes,
-                            stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    if result.returncode:
-        fail(f"git {' '.join(arguments)}: {result.stderr.decode(errors='replace').strip()}")
-    return result.stdout
-
-
-def remote_identity(repo, remote):
-    raw = git(repo, "config", "--get", f"remote.{remote}.url").decode().strip()
-    match = re.fullmatch(r"(?:https?://|ssh://git@|git@)([^/:]+)[:/]([^/]+)/([^/]+?)(?:\.git)?/?", raw)
-    if not match:
-        fail(f"upstream remote URL is not a forge repository: {raw}")
-    return f"{match.group(1).lower()}/{match.group(2).lower()}/{match.group(3).lower()}"
-
-
-def cmd_extract(args):
+def cmd_registration_check(args):
+    marker = safe_path(home() / ".fm-secondmate-home")
+    if not marker.exists():
+        return
+    bosun = marker.read_text().strip()
+    role_file = safe_path(home() / "data/bosun-role.json")
+    if not role_file.exists():
+        return
+    role(bosun)
     record = contribution(args.task)
-    repo = Path(args.repo).resolve()
-    dest = Path(args.worktree).resolve()
-    if record["state"] != "ordered":
-        fail("extraction requires an ordered maneuver")
-    existing = dest.exists()
-    if existing:
-        top = Path(git(dest, "rev-parse", "--show-toplevel").decode().strip()).resolve()
-        primary = Path(git(dest, "worktree", "list", "--porcelain").decode().splitlines()[0][9:]).resolve()
-        if top != dest or dest == primary or git(dest, "status", "--porcelain").strip():
-            fail("existing destination must be a clean isolated worktree")
-    ordered_branch = record.get("upstream_default_branch")
-    if not ordered_branch or args.default_branch != ordered_branch:
-        fail(f"upstream default branch differs: expected {ordered_branch or 'ordered branch'}, got {args.default_branch}")
-    expected_remote = f"{SUPPORTED_FORGES[record['target']['forge']]}/{record['target']['owner']}/{record['target']['repository']}"
-    actual_remote = remote_identity(repo, args.upstream_remote)
-    if actual_remote != expected_remote:
-        fail(f"upstream remote differs: expected {expected_remote}, got {actual_remote}")
-    git(repo, "fetch", args.upstream_remote, ordered_branch)
-    upstream = f"{args.upstream_remote}/{ordered_branch}"
-    base = git(repo, "rev-parse", upstream).decode().strip()
-    git(repo, "show-ref", "--verify", f"refs/heads/{record['source_branch']}")
-    commits = record["source_commits"]
-    for commit in commits:
-        resolved = git(repo, "rev-parse", f"{commit}^{{commit}}").decode().strip()
-        if resolved != commit:
-            fail("source commits must use exact full object IDs")
-        git(repo, "merge-base", "--is-ancestor", commit, record["source_branch"])
-        if len(git(repo, "rev-list", "--parents", "-n", "1", commit).split()) != 2:
-            fail("merge commits cannot be extracted")
-    if existing:
-        git(dest, "switch", "--detach", base)
-    else:
-        git(repo, "worktree", "add", "--detach", str(dest), base)
-    git(dest, "switch", "-c", record["contribution_branch"])
-    for commit in commits:
-        patch = git(repo, "diff", "--binary", f"{commit}^", commit, "--", *record["allowed_paths"])
-        if not patch:
-            fail(f"selected commit has no scoped change: {commit}")
-        git(dest, "apply", "--index", "-", input_bytes=patch)
-        author = git(repo, "show", "-s", "--format=%an <%ae>", commit).decode().strip()
-        message = git(repo, "show", "-s", "--format=%B", commit).decode()
-        git(dest, "-c", "user.name=Bosun", "-c", "user.email=bosun@localhost",
-            "commit", "--author", author, "-m", message)
-    record["upstream_base"] = base
-    record["state"] = "extracted"
-    write_json(contribution_path(args.task), record)
-    print(dest)
-
-
-def cmd_guard(args):
-    record = contribution(args.task)
-    want = target(args.forge or record["target"]["forge"],
-                  args.owner or record["target"]["owner"],
-                  args.repository or record["target"]["repository"])
-    if record["target"] != want or record["bosun"] != resolve(want):
-        fail("publication target differs from captain order or route")
-    role(record["bosun"])
-    if record["state"] not in ("extracted", "published"):
-        fail("maneuver has not been cleanly extracted")
-    repo = Path(args.repo).resolve()
-    branch = git(repo, "branch", "--show-current").decode().strip()
-    if branch != record["contribution_branch"]:
-        fail("contribution branch differs from captain order")
-    if git(repo, "status", "--porcelain").strip():
-        fail("contribution worktree is dirty")
-    base = record["upstream_base"]
-    git(repo, "merge-base", "--is-ancestor", base, "HEAD")
-    paths = git(repo, "diff", "--name-only", base, "HEAD").decode().splitlines()
-    if not paths or any(path not in record["allowed_paths"] for path in paths):
-        fail("contribution contains files outside the ordered maneuver")
-    for path in paths:
-        if any(part.startswith(".") or part in ("config", "data", "state", "projects", "secrets")
-               for part in Path(path).parts):
-            fail(f"house-only or private path in contribution: {path}")
-    print("authorized: " + record["maneuver"])
-
-
-def cmd_published(args):
-    record = contribution(args.task)
-    if record["state"] != "extracted" or not args.validation.strip():
-        fail("extracted maneuver and validation evidence required")
-    evidence = Path(args.validation).expanduser()
-    if evidence.is_symlink() or not evidence.is_file() or not os.access(evidence, os.R_OK):
-        fail("validation evidence must be a readable regular file")
-    cmd_guard(args)
-    want = record["target"]
-    expected = f"https://{SUPPORTED_FORGES[want['forge']]}/{want['owner']}/{want['repository']}/pull/"
-    if not args.url.startswith(expected) or not args.url[len(expected):].isdigit():
+    if record["bosun"] != bosun or record["target"]["forge"] != args.forge:
+        fail("Bosun PR registration requires a matching captain order")
+    expected_url = f"https://github.com/{record['target']['owner']}/{record['target']['repository']}/pull/"
+    if not args.url.startswith(expected_url) or not args.url[len(expected_url):].isdigit():
         fail("upstream PR URL differs from captain order")
-    actual = forge_pull_request(want["forge"], args.url)
     expected_head = f"{record['fork']['owner']}/{record['fork']['repository']}"
-    expected_base = f"{want['owner']}/{want['repository']}"
-    if actual["head"] != expected_head:
-        fail(f"upstream PR head differs: expected {expected_head}, got {actual['head']}")
-    if actual["base"] != expected_base:
-        fail(f"upstream PR base differs: expected {expected_base}, got {actual['base']}")
-    if actual["branch"] != record["upstream_default_branch"]:
-        fail(f"upstream PR base branch differs: expected {record['upstream_default_branch']}, got {actual['branch']}")
-    record["validation_evidence"] = str(evidence.resolve())
+    expected_base = f"{record['target']['owner']}/{record['target']['repository']}"
+    if args.head.lower() != expected_head:
+        fail(f"upstream PR head differs: expected {expected_head}, got {args.head}")
+    if args.base.lower() != expected_base:
+        fail(f"upstream PR base differs: expected {expected_base}, got {args.base}")
+    if args.branch != record["upstream_default_branch"]:
+        fail(f"upstream PR base branch differs: expected {record['upstream_default_branch']}, got {args.branch}")
     record["upstream_pr"] = args.url
     record["state"] = "published"
-    write_json(contribution_path(args.task), record)
-
-
-def forge_pull_request(forge, url):
-    if forge != "github":
-        fail(f"unsupported Bosun forge '{forge}'; supported: {', '.join(SUPPORTED_FORGES)}")
-    command = ["gh", "pr", "view", url, "--json",
-               "headRepositoryOwner,headRepository,baseRepository,baseRefName"]
-    try:
-        result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
-        if result.returncode:
-            raise ValueError(result.stderr.decode(errors="replace").strip() or "command failed")
-        data = json.loads(result.stdout)
-    except (OSError, ValueError, json.JSONDecodeError) as exc:
-        fail(f"forge PR response unreadable: {exc}")
-    if forge == "github":
-        owner = data.get("headRepositoryOwner")
-        owner = owner.get("login") if isinstance(owner, dict) else owner
-        repository = data.get("headRepository")
-        repository = repository.get("name") if isinstance(repository, dict) else repository
-        base = data.get("baseRepository")
-        base = base.get("nameWithOwner") if isinstance(base, dict) else base
-        branch = data.get("baseRefName")
-        head = f"{owner}/{repository}" if owner and repository else ""
-    if not all(isinstance(value, str) and value for value in (head, base, branch)):
-        fail("forge PR response unreadable: missing head or base fields")
-    return {"head": head.lower(), "base": base.lower(), "branch": branch}
-
-
-def cmd_review(args):
-    record = contribution(args.task)
-    if record["state"] != "published" or not args.source or not args.summary:
-        fail("published contribution and review evidence required")
-    if args.kind in ("scope-change", "ambiguous", "policy-conflict", "consequential"):
-        fail(f"needs-decision: {args.kind}; route through the secondmate parent channel")
-    record["review_events"].append({"source": args.source, "summary": args.summary,
-                                    "at": now(), "kind": "routine"})
     write_json(contribution_path(args.task), record)
 
 
@@ -457,8 +311,8 @@ def cmd_merged(args):
     if not path.exists():
         return
     record = contribution(args.task)
-    if record["upstream_pr"] != args.url or record["state"] not in ("published", "admirals-maneuver"):
-        fail("merge URL does not match published maneuver")
+    if record.get("upstream_pr") != args.url or record.get("state") not in ("published", "admirals-maneuver"):
+        fail("merge URL does not match authorized maneuver")
     if record["state"] == "admirals-maneuver":
         return
     record["state"] = "admirals-maneuver"
@@ -466,64 +320,26 @@ def cmd_merged(args):
     write_json(path, record)
 
 
-def cmd_registration_check(args):
-    marker = safe_path(home() / ".fm-secondmate-home")
-    if not marker.exists():
-        return
-    bosun = marker.read_text().strip()
-    role_file = home() / "data/bosun-role.json"
-    if not role_file.exists():
-        return
-    role(bosun)
-    record = contribution(args.task)
-    if record["bosun"] != bosun or record["state"] != "published" or record["upstream_pr"] != args.url:
-        fail("Bosun PR registration requires a matching published captain order")
-    if not record["validation_evidence"]:
-        fail("Bosun PR registration requires validation evidence")
-
-
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
-    target_options = (("--forge", True), ("--owner", True), ("--repository", True))
     def add_target(p, required=True):
-        for option, _ in target_options:
+        for option in ("--forge", "--owner", "--repository"):
             p.add_argument(option, required=required)
     p = sub.add_parser("route"); add_target(p); p.set_defaults(func=cmd_route)
     p = sub.add_parser("configure-home"); p.add_argument("--bosun", required=True); p.set_defaults(func=cmd_configure_home)
     p = sub.add_parser("order"); add_target(p)
     for name in ("task", "bosun", "maneuver", "source", "branch", "captain-words"):
         p.add_argument("--" + name, required=True)
-    p.add_argument("--path", action="append", default=[])
-    p.add_argument("--commit", action="append", default=[])
-    p.add_argument("--fork-owner"); p.add_argument("--fork-repository"); p.add_argument("--default-branch")
-    p.set_defaults(func=cmd_order)
+    p.add_argument("--path", action="append", default=[]); p.add_argument("--commit", action="append", default=[])
+    p.add_argument("--fork-owner"); p.add_argument("--fork-repository"); p.add_argument("--default-branch"); p.set_defaults(func=cmd_order)
     p = sub.add_parser("convention"); add_target(p)
     for name in ("bosun", "scope", "key", "value"):
         p.add_argument("--" + name, required=True)
-    p.add_argument("--evidence"); p.add_argument("--showed"); p.add_argument("--read-at")
-    p.add_argument("--confirmed", action="store_true"); p.set_defaults(func=cmd_convention)
-    p = sub.add_parser("conventions"); add_target(p)
-    p.add_argument("--bosun", required=True); p.add_argument("--policy", required=True)
-    p.add_argument("--decisions"); p.set_defaults(func=cmd_conventions)
-    p = sub.add_parser("extract")
-    for name in ("task", "repo", "worktree", "upstream-remote", "default-branch"):
-        p.add_argument("--" + name, required=True)
-    p.set_defaults(func=cmd_extract)
-    for command, func in (("guard", cmd_guard), ("published", cmd_published)):
-        p = sub.add_parser(command); add_target(p, required=False)
-        p.add_argument("--task", required=True); p.add_argument("--repo", required=True)
-        if command == "published":
-            p.add_argument("--url", required=True); p.add_argument("--validation", required=True)
-        p.set_defaults(func=func)
-    p = sub.add_parser("review"); p.add_argument("--task", required=True)
-    p.add_argument("--kind", choices=("routine", "scope-change", "ambiguous", "policy-conflict", "consequential"), required=True)
-    p.add_argument("--source", required=True); p.add_argument("--summary", required=True)
-    p.set_defaults(func=cmd_review)
-    p = sub.add_parser("merged"); p.add_argument("--task", required=True); p.add_argument("--url", required=True)
-    p.set_defaults(func=cmd_merged)
-    p = sub.add_parser("registration-check"); p.add_argument("--task", required=True)
-    p.add_argument("--url", required=True); p.set_defaults(func=cmd_registration_check)
+    p.add_argument("--evidence"); p.add_argument("--showed"); p.add_argument("--read-at"); p.add_argument("--confirmed", action="store_true"); p.set_defaults(func=cmd_convention)
+    p = sub.add_parser("conventions"); add_target(p); p.add_argument("--bosun", required=True); p.add_argument("--policy", required=True); p.add_argument("--decisions"); p.set_defaults(func=cmd_conventions)
+    p = sub.add_parser("registration-check"); p.add_argument("--task", required=True); p.add_argument("--url", required=True); p.add_argument("--forge", required=True); p.add_argument("--head", required=True); p.add_argument("--base", required=True); p.add_argument("--branch", required=True); p.set_defaults(func=cmd_registration_check)
+    p = sub.add_parser("merged"); p.add_argument("--task", required=True); p.add_argument("--url", required=True); p.set_defaults(func=cmd_merged)
     args = parser.parse_args()
     try:
         args.func(args)

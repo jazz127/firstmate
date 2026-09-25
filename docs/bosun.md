@@ -14,7 +14,7 @@ The usual secondmate spawn, watcher, contribution observer, PR poll, forge, and 
 ## Provision a Bosun
 
 Load `secondmate-provisioning` and scaffold a normal persistent secondmate charter with `bin/fm-brief.sh <id> --secondmate <project>...`.
-Put the maintainer responsibility in `FM_SECONDMATE_SCOPE` and the following Bosun-specific rules in `FM_SECONDMATE_CHARTER`, along with the maintainer name: never select work, never widen a named maneuver, never contact unrelated upstream projects, read current repository instructions and contribution policy, use the parent channel for the four decisions above, and run `fm-bosun.py guard` before any publication path.
+Put the maintainer responsibility in `FM_SECONDMATE_SCOPE` and the following Bosun-specific rules in `FM_SECONDMATE_CHARTER`, along with the maintainer name: never select work, never widen a named maneuver, never contact unrelated upstream projects, read current repository instructions and contribution policy, and use the parent channel for the four decisions above.
 Seed with `bin/fm-home-seed.sh <id> <home|-> <project>...` and launch through the ordinary secondmate path.
 In the primary home, add an explicit route to gitignored `config/bosun-routes.json`, then run `FM_HOME=<primary-home> bin/fm-bosun.py configure-home --bosun <id>`.
 Copy that route file into the Bosun home and run `FM_HOME=<bosun-home> bin/fm-bosun.py configure-home --bosun <id>` there.
@@ -48,16 +48,12 @@ The source files themselves remain the authority; that JSON is a local interpret
 
 ## Extract and publish
 
-The `extract` command fetches the upstream default branch and either creates a new isolated worktree there or resets an existing clean isolated task worktree to that tip.
-It applies only the ordered source commits and allowed paths from `housefeature/<name>`, keeping each selected commit's message and author.
+Using the existing contribution and worktree machinery, start from the latest upstream default branch in a clean isolated worktree and apply only the ordered source commits and allowed paths from `housefeature/<name>`, keeping each selected commit's message and author.
 Review the resulting diff and commit series for house-only configuration, private context, secrets, unrelated history, and fork assumptions; a path allowlist cannot decide whether public-looking text is private.
 Do not merge or rebase `house` into the contribution.
 Run the repository's expected validation, using no-mistakes where configured.
-Immediately before invoking that existing publication path, run `fm-bosun.py guard` from the Bosun home with the ordered task, target, and contribution worktree.
-The guard refuses a missing order, changed target or route, wrong branch, dirty worktree, changes outside the ordered paths, and known private directories.
-It cannot decide semantic scope within an allowed path, so the Bosun must still review that diff against the captain's order.
-The existing publication path opens the PR from the captain's fork to upstream; `fm-bosun.py published` records its exact URL and validation evidence after the same guard passes.
-`fm-pr-check.sh` refuses to register a Bosun PR that lacks this matching published record, and the existing poll and contribution observer then track it.
-Use `fm-bosun.py review` to record routine review evidence; its other review kinds refuse with `needs-decision` for the parent channel.
+The existing publication path opens the PR from the captain's fork to upstream.
+`fm-pr-check.sh` reads the PR through its existing forge path and refuses registration unless the ordered Bosun, fork, upstream repository, and default branch match.
+The existing PR poll and contribution observer track checks and review feedback; route scope changes, ambiguous maintainer requests, policy conflicts, and consequential decisions through the parent channel.
 When the existing merge outcome reports that exact PR merged, it changes the record to `admirals-maneuver`.
 A closed PR without a merge outcome leaves the maneuver unlanded.

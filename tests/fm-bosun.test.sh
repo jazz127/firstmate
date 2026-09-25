@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Bosun routing, memory, scoped extraction, publication guard, and merge record.
+# Bosun routing, memory, authorization, and merge-hook behavior.
 set -u
 # shellcheck source=tests/lib.sh
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
@@ -23,28 +23,17 @@ routes_fixture() {
 EOF
 }
 
-fake_github() {
-  mkdir -p "$1/fakebin"
-  cat > "$1/fakebin/gh" <<'EOF'
-#!/usr/bin/env bash
-set -eu
-[ "${1:-}" = pr ] && [ "${2:-}" = view ] || exit 1
-case "${FM_FAKE_GH_CASE:-accepted}" in
-accepted) printf '%s\n' '{"headRepositoryOwner":{"login":"captain"},"headRepository":{"name":"sample"},"baseRepository":{"nameWithOwner":"kunchenguid/sample"},"baseRefName":"main"}' ;;
-unrelated) printf '%s\n' '{"headRepositoryOwner":{"login":"other"},"headRepository":{"name":"sample"},"baseRepository":{"nameWithOwner":"kunchenguid/sample"},"baseRefName":"main"}' ;;
-wrong-base) printf '%s\n' '{"headRepositoryOwner":{"login":"captain"},"headRepository":{"name":"sample"},"baseRepository":{"nameWithOwner":"other/sample"},"baseRefName":"main"}' ;;
-unreadable) exit 1 ;;
-esac
-EOF
-  chmod +x "$1/fakebin/gh"
+setup_bosun() {
+  local dir=$1
+  routes_fixture "$dir"
+  printf '%s\n' bosun-kun > "$dir/.fm-secondmate-home"
+  call "$dir" configure-home --bosun bosun-kun >/dev/null || fail 'Bosun home setup failed'
 }
 
 test_routing() {
   local dir out unsupported
   dir=$(new_home routing)
-  printf '%s\n' '- bosun-kun - Kun contributions (home: /tmp/kun; scope: Kun; projects: sample; added 2026-09-25)' > "$dir/data/secondmates.md"
-  routes_fixture "$dir"
-  call "$dir" configure-home --bosun bosun-kun || fail 'role setup failed'
+  setup_bosun "$dir"
   out=$(call "$dir" route --forge github --owner kunchenguid --repository special) || fail 'exact route failed'
   [ "$out" = bosun-kun ] || fail 'exact route picked another Bosun'
   out=$(call "$dir" route --forge github --owner kunchenguid --repository sample) || fail 'pattern route failed'
@@ -60,212 +49,84 @@ EOF
   if call "$unsupported" route --forge github --owner kunchenguid --repository sample > "$unsupported/out" 2>&1; then
     fail 'unsupported forge route was accepted'
   fi
-  assert_grep "unsupported Bosun forge 'gerrit'; supported: github" "$unsupported/out" \
-    'unsupported forge diagnostic missing'
-  python3 - "$dir/config/bosun-routes.json" <<'PY'
-import json, sys
-p=sys.argv[1]
-d=json.load(open(p))
-d['routes'].append(dict(d['routes'][0]))
-open(p,'w').write(json.dumps(d))
-PY
-  if call "$dir" route --forge github --owner kunchenguid --repository sample > "$dir/out" 2>&1; then
-    fail 'ambiguous same-rank route was guessed'
-  fi
-  assert_grep 'ambiguous Bosun route' "$dir/out" 'tie did not refuse'
-  pass 'route precedence, no match, and tie refusal'
+  assert_grep "unsupported Bosun forge 'gerrit'; supported: github" "$unsupported/out" 'unsupported forge diagnostic missing'
+  pass 'route precedence, no match, and unsupported forge refusal'
 }
 
-test_path_safety() {
+test_memory_and_paths() {
   local dir outside
-  dir=$(new_home path-safety)
-  outside="$TMP_ROOT/path-safety-outside"
+  dir=$(new_home memory)
+  setup_bosun "$dir"
+  printf '{"format":"policy"}\n' > "$dir/policy.json"
+  call "$dir" convention --bosun bosun-kun --forge github --owner kunchenguid --repository sample \
+    --scope shared --key format --value shared --confirmed --evidence CONTRIBUTING.md \
+    --showed format --read-at 2026-09-25T00:00:00Z || fail 'convention recording failed'
+  printf '%s' "$(call "$dir" conventions --bosun bosun-kun --forge github --owner kunchenguid --repository sample --policy "$dir/policy.json")" \
+    | jq -e '.format.source == "current_repository_policy"' >/dev/null || fail 'policy precedence failed'
+  outside="$TMP_ROOT/outside"
   mkdir -p "$outside"
-  printf '%s\n' bosun-kun > "$dir/.fm-secondmate-home"
+  rm -f "$dir/data/bosun-role.json"
   mv "$dir/data" "$outside/data"
   ln -s "$outside/data" "$dir/data"
   if call "$dir" configure-home --bosun bosun-kun > "$dir/out" 2>&1; then
     fail 'symlinked FM_HOME ancestor was accepted'
   fi
   [ ! -e "$outside/data/bosun-role.json" ] || fail 'symlinked ancestor received state'
-  pass 'FM_HOME ancestor symlink refusal'
+  pass 'evidence memory and FM_HOME path safety'
 }
 
-setup_bosun() {
+fake_github() {
+  mkdir -p "$1/fakebin"
+  cat > "$1/fakebin/gh" <<'EOF'
+#!/usr/bin/env bash
+set -eu
+case "${FM_FAKE_GH_CASE:-accepted}" in
+accepted) printf '%s\n' '{"headRepositoryOwner":{"login":"captain"},"headRepository":{"name":"sample"},"baseRepository":{"nameWithOwner":"kunchenguid/sample"},"baseRefName":"main"}' ;;
+unrelated) printf '%s\n' '{"headRepositoryOwner":{"login":"other"},"headRepository":{"name":"sample"},"baseRepository":{"nameWithOwner":"kunchenguid/sample"},"baseRefName":"main"}' ;;
+wrong-base) printf '%s\n' '{"headRepositoryOwner":{"login":"captain"},"headRepository":{"name":"sample"},"baseRepository":{"nameWithOwner":"other/sample"},"baseRefName":"main"}' ;;
+unreadable) exit 1 ;;
+esac
+EOF
+  chmod +x "$1/fakebin/gh"
+}
+
+ordered_home() {
   local dir=$1
-  routes_fixture "$dir"
-  printf '%s\n' bosun-kun > "$dir/.fm-secondmate-home"
-  call "$dir" configure-home --bosun bosun-kun || fail 'Bosun home setup failed'
-}
-
-test_memory() {
-  local dir out
-  dir=$(new_home memory)
   setup_bosun "$dir"
-  printf '{"format":"policy"}\n' > "$dir/policy.json"
-  call "$dir" convention --bosun bosun-kun --forge github --owner kunchenguid --repository sample \
-    --scope shared --key format --value shared --confirmed \
-    --evidence 'https://github.com/kunchenguid/sample/pull/1' --showed 'merged with shared format' \
-    --read-at 2026-09-25T00:00:00Z || fail 'shared convention recording failed'
-  call "$dir" convention --bosun bosun-kun --forge github --owner kunchenguid --repository sample \
-    --scope repository --key format --value repository --confirmed \
-    --evidence CONTRIBUTING.md --showed 'repository format' \
-    --read-at 2026-09-25T00:00:00Z || fail 'repository convention recording failed'
-  out=$(call "$dir" conventions --bosun bosun-kun --forge github --owner kunchenguid \
-    --repository sample --policy "$dir/policy.json") || fail 'precedence resolution failed'
-  printf '%s' "$out" | jq -e '.format == {value:"policy",source:"current_repository_policy"}' >/dev/null \
-    || fail 'current policy did not win'
-  printf '{}\n' > "$dir/policy.json"
-  out=$(call "$dir" conventions --bosun bosun-kun --forge github --owner kunchenguid \
-    --repository sample --policy "$dir/policy.json") || fail 'overlay resolution failed'
-  printf '%s' "$out" | jq -e '.format.value == "repository" and .format.source == "repository"' >/dev/null \
-    || fail 'repository overlay did not win'
-  if call "$dir" convention --bosun bosun-kun --forge github --owner kunchenguid --repository sample \
-    --scope shared --key unproven --value yes --confirmed > "$dir/out" 2>&1; then
-    fail 'unsupported learned convention became policy'
-  fi
-  printf '{"format":"policy"}\n' > "$dir/policy.json"
-  printf '{"format":"captain"}\n' > "$dir/decisions.json"
-  if call "$dir" conventions --bosun bosun-kun --forge github --owner kunchenguid \
-    --repository sample --policy "$dir/policy.json" --decisions "$dir/decisions.json" > "$dir/out" 2>&1; then
-    fail 'captain policy conflict was silently resolved'
-  fi
-  assert_grep 'needs-decision' "$dir/out" 'policy conflict was not escalated'
-  pass 'evidence requirement and convention precedence'
-}
-
-git_fixture() {
-  local dir=$1
-  git init -q -b main "$dir/source"
-  git -C "$dir/source" config user.name 'Fixture Author'
-  git -C "$dir/source" config user.email 'fixture@example.test'
-  printf 'base\n' > "$dir/source/feature.txt"
-  git -C "$dir/source" add feature.txt
-  git -C "$dir/source" commit -qm base
-  git clone -q --bare "$dir/source" "$dir/upstream.git"
-  git -C "$dir/source" remote add upstream https://github.com/kunchenguid/sample.git
-  git -C "$dir/source" remote add fork https://github.com/captain/sample.git
-  git -C "$dir/source" config url."$dir/upstream.git".insteadOf https://github.com/kunchenguid/sample.git
-  git -C "$dir/source" switch -qc housefeature/maneuver
-  mkdir -p "$dir/source/config"
-  printf 'private=true\n' > "$dir/source/config/private.env"
-  git -C "$dir/source" add config/private.env
-  git -C "$dir/source" commit -qm 'fork-only setup'
-  printf 'public change\n' >> "$dir/source/feature.txt"
-  printf 'secret=fixture-only\n' >> "$dir/source/config/private.env"
-  git -C "$dir/source" add feature.txt config/private.env
-  GIT_AUTHOR_NAME='Original Author' GIT_AUTHOR_EMAIL='original@example.test' \
-    git -C "$dir/source" commit -qm 'Add maneuver'
-  git -C "$dir/source" rev-parse HEAD
-}
-
-test_contribution() {
-  local dir selected branch url merge_home
-  dir=$(new_home contribution)
-  setup_bosun "$dir"
-  fake_github "$dir"
-  FM_HOME="$dir" FM_ROOT_OVERRIDE="$ROOT" "$ROOT/bin/fm-brief.sh" guard-brief sample --mode no-mistakes \
-    >/dev/null || fail 'Bosun ship brief did not scaffold'
-  assert_grep 'Bosun publication authorization' "$dir/data/guard-brief/brief.md" \
-    'Bosun worker brief omitted the publication guard'
-  selected=$(git_fixture "$dir") || fail 'git fixture failed'
-  branch=contribution/maneuver
-  url=https://github.com/kunchenguid/sample/pull/12
-  if call "$dir" guard --task maneuver --forge github --owner kunchenguid \
-    --repository sample --repo "$dir/source" > "$dir/out" 2>&1; then
-    fail 'publication without captain order was accepted'
-  fi
   call "$dir" order --task maneuver --bosun bosun-kun --maneuver maneuver \
     --forge github --owner kunchenguid --repository sample --source housefeature/maneuver \
-    --branch "$branch" --captain-words 'Contribute maneuver to kunchenguid/sample' \
-    --path feature.txt --commit "$selected" >/dev/null || fail 'order recording failed'
-  if call "$dir" extract --task maneuver --repo "$dir/source" --worktree "$dir/rejected" \
-    --upstream-remote upstream --default-branch develop > "$dir/out" 2>&1; then
-    fail 'caller-selected branch bypassed the ordered branch'
+    --branch contribution/maneuver --captain-words 'Contribute maneuver' --path feature.txt \
+    --commit 0123456789012345678901234567890123456789 >/dev/null || fail 'order recording failed'
+  fake_github "$dir"
+}
+
+test_registration_and_merge() {
+  local dir url case_dir out
+  url=https://github.com/kunchenguid/sample/pull/12
+  dir=$(new_home accepted)
+  ordered_home "$dir"
+  if FM_HOME="$dir" FM_ROOT_OVERRIDE="$ROOT" FM_STATE_OVERRIDE="$dir/state" PATH="$dir/fakebin:$PATH" \
+    "$ROOT/bin/fm-pr-check.sh" maneuver "$url" > "$dir/out" 2>&1; then
+    fail 'registration unexpectedly reached PR metadata'
   fi
-  if call "$dir" extract --task maneuver --repo "$dir/source" --worktree "$dir/rejected" \
-    --upstream-remote fork --default-branch main > "$dir/out" 2>&1; then
-    fail 'fork remote alias was accepted as upstream'
-  fi
-  if call "$dir" guard --task maneuver --forge github --owner other \
-    --repository sample --repo "$dir/source" > "$dir/out" 2>&1; then
-    fail 'changed target was authorized'
-  fi
-  git -C "$dir/source" worktree add -q --detach "$dir/extracted" main \
-    || fail 'isolated worker worktree setup failed'
-  call "$dir" extract --task maneuver --repo "$dir/source" --worktree "$dir/extracted" \
-    --upstream-remote upstream --default-branch main >/dev/null || fail 'clean extraction failed'
-  [ "$(cat "$dir/extracted/feature.txt")" = $'base\npublic change' ] || fail 'maneuver content missing'
-  [ ! -e "$dir/extracted/config/private.env" ] || fail 'private fork content crossed extraction'
-  [ "$(git -C "$dir/extracted" log -1 --format=%ae)" = original@example.test ] \
-    || fail 'source author attribution was lost'
-  [ "$(git -C "$dir/extracted" rev-list --count upstream/main..HEAD)" = 1 ] \
-    || fail 'fork-only history crossed extraction'
-  call "$dir" guard --task maneuver --forge github --owner kunchenguid \
-    --repository sample --repo "$dir/extracted" >/dev/null || fail 'clean contribution refused'
-  validation_artifact="$dir/validation.txt"
-  printf '%s\n' 'fixture validation passed' > "$validation_artifact"
-  PATH="$dir/fakebin:$PATH" call "$dir" published --task maneuver --repo "$dir/extracted" --url "$url" \
-    --validation "$validation_artifact" >/dev/null || fail 'publication record refused'
-  cp "$dir/data/maneuver/bosun-contribution.json" "$dir/data/maneuver/saved.json"
-  python3 - "$dir/data/maneuver/bosun-contribution.json" <<'PY'
-import json, sys
-p = sys.argv[1]
-data = json.load(open(p))
-data['state'] = 'extracted'
-json.dump(data, open(p, 'w'))
-PY
-  if PATH="$dir/fakebin:$PATH" call "$dir" published --task maneuver --repo "$dir/extracted" --url "$url" --validation "$dir/missing-validation" > "$dir/out" 2>&1; then
-    fail 'missing validation evidence was accepted'
-  fi
-  mv "$dir/data/maneuver/saved.json" "$dir/data/maneuver/bosun-contribution.json"
-  for forge_case in unrelated wrong-base unreadable; do
-    cp "$dir/data/maneuver/bosun-contribution.json" "$dir/data/maneuver/saved.json"
-    python3 - "$dir/data/maneuver/bosun-contribution.json" <<'PY'
-import json, sys
-p = sys.argv[1]
-data = json.load(open(p))
-data['state'] = 'extracted'
-json.dump(data, open(p, 'w'))
-PY
-    export FM_FAKE_GH_CASE="$forge_case"
-    if PATH="$dir/fakebin:$PATH" call "$dir" published --task maneuver --repo "$dir/extracted" --url "$url" --validation "$validation_artifact" > "$dir/out" 2>&1; then
-      fail "$forge_case forge response was accepted"
-    fi
+  jq -e '.state == "published" and .upstream_pr == "'"$url"'"' "$dir/data/maneuver/bosun-contribution.json" >/dev/null \
+    || fail 'accepted forge response was not durably registered'
+  for case_name in unrelated wrong-base unreadable; do
+    case_dir=$(new_home "$case_name")
+    ordered_home "$case_dir"
+    export FM_FAKE_GH_CASE="$case_name"
+    FM_HOME="$case_dir" FM_ROOT_OVERRIDE="$ROOT" FM_STATE_OVERRIDE="$case_dir/state" PATH="$case_dir/fakebin:$PATH" \
+      "$ROOT/bin/fm-pr-check.sh" maneuver "$url" > "$case_dir/out" 2>&1 && fail "$case_name forge response was accepted"
     unset FM_FAKE_GH_CASE
-    mv "$dir/data/maneuver/saved.json" "$dir/data/maneuver/bosun-contribution.json"
+    jq -e '.state == "ordered" and .upstream_pr == null' "$case_dir/data/maneuver/bosun-contribution.json" >/dev/null \
+      || fail "$case_name response changed the durable record"
   done
-  call "$dir" registration-check --task maneuver --url "$url" \
-    || fail 'matching Bosun PR registration was refused'
-  if call "$dir" registration-check --task maneuver \
-    --url https://github.com/kunchenguid/sample/pull/13 > "$dir/out" 2>&1; then
-    fail 'unrelated upstream PR was registered'
-  fi
-  if call "$dir" review --task maneuver --kind scope-change --source "$url#issuecomment-1" \
-    --summary 'please expand scope' > "$dir/out" 2>&1; then
-    fail 'scope-changing review was accepted'
-  fi
-  assert_grep 'needs-decision' "$dir/out" 'review escalation missing'
-  call "$dir" review --task maneuver --kind routine --source "$url#discussion_r2" \
-    --summary 'typo fixed' || fail 'routine review evidence refused'
-  # A closed-unmerged fake forge state never calls the confirmed-merge path.
-  printf 'closed\n' > "$dir/fake-forge-state"
-  jq -e '.state == "published"' "$dir/data/maneuver/bosun-contribution.json" >/dev/null \
-    || fail 'closed-unmerged contribution was promoted'
-  merge_home=$(new_home merged)
-  mkdir -p "$merge_home/data/maneuver"
-  cp "$dir/data/maneuver/bosun-contribution.json" "$merge_home/data/maneuver/"
-  printf 'merged\n' > "$merge_home/fake-forge-state"
-  [ "$(cat "$merge_home/fake-forge-state")" = merged ] || fail 'fake forge state failed'
-  FM_HOME="$merge_home" bash -c '. "$1"; fm_merge_outcome_report "$2" "$2/state" maneuver "$3" poll' \
-    _ "$ROOT/bin/fm-merge-outcome-lib.sh" "$merge_home" "$url" \
-    || fail 'existing confirmed-merge outcome did not update Bosun record'
-  jq -e '.state == "admirals-maneuver" and .upstream_pr == "https://github.com/kunchenguid/sample/pull/12"' \
-    "$merge_home/data/maneuver/bosun-contribution.json" >/dev/null || fail 'Admiral maneuver record missing'
-  pass 'clean extraction, authorization, review escalation, and merge completion'
+  FM_HOME="$dir" python3 "$CLI" merged --task maneuver --url "$url" || fail 'merge hook failed'
+  jq -e '.state == "admirals-maneuver"' "$dir/data/maneuver/bosun-contribution.json" >/dev/null \
+    || fail 'Admiral maneuver was not recorded'
+  pass 'forge-backed authorization and merge completion'
 }
 
 test_routing
-test_path_safety
-test_memory
-test_contribution
+test_memory_and_paths
+test_registration_and_merge

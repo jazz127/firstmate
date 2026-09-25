@@ -599,14 +599,10 @@ DOD=$(fm_dod_block "$MODE" "$ID" "$BRANCH" "$FORGE") || exit 1
 BOSUN_SECTION=
 BOSUN_RULE2='2. Stay inside this worktree; modify nothing outside it.'
 if [ "$MODE" != local-only ] && { [ -f "$DATA/bosun-role.json" ] || [ -L "$DATA/bosun-role.json" ]; }; then
-  BOSUN_GUARD_CMD="FM_HOME=$(shell_quote "$FM_HOME") python3 $(shell_quote "$FM_ROOT/bin/fm-bosun.py") guard --task $(shell_quote "$ID") --repo ."
-  BOSUN_PUBLISHED_CMD="FM_HOME=$(shell_quote "$FM_HOME") python3 $(shell_quote "$FM_ROOT/bin/fm-bosun.py") published --task $(shell_quote "$ID") --repo . --url '<PR URL>' --validation '<validation evidence>'"
-  BOSUN_RULE2="2. Stay inside this worktree except for the one task-owned Bosun contribution record written through \`fm-bosun.py published\`; modify nothing else outside it."
+  BOSUN_RULE2="2. Stay inside this worktree; modify nothing outside it."
   BOSUN_SECTION="# Bosun publication authorization
-Before invoking no-mistakes or any forge publication command, run \`$BOSUN_GUARD_CMD\` in the contribution worktree.
-If it refuses, stop and report the reason to the secondmate; never publish around the guard.
-After the PR opens and validation returns, run \`$BOSUN_PUBLISHED_CMD\` with the forge's exact PR URL and the validation artifact path before reporting done.
-That command writes only this task's Bosun record in the secondmate home; the ordinary PR registration then verifies it."
+Keep the named Captain's Maneuver within its ordered paths and run the repository's existing validation and publication machinery.
+The existing PR registration path reads the forge record and verifies the configured Bosun fork, upstream repository, and default branch before recording the PR."
 fi
 
 cat > "$BRIEF" <<EOF

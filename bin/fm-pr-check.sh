@@ -59,14 +59,15 @@ if [ -f "$FM_HOME/data/bosun-role.json" ] || [ -L "$FM_HOME/data/bosun-role.json
     echo "error: Bosun PR registration requires the supported GitHub forge read path" >&2
     exit 1
   fi
-  BOSUN_PR_JSON=$(gh pr view "$URL" --json headRepositoryOwner,headRepository,baseRepository,baseRefName 2>/dev/null) || {
+  BOSUN_PR_JSON=$(gh pr view "$URL" --json headRepositoryOwner,headRepository,baseRepository,baseRefName,headRefName 2>/dev/null) || {
     echo "error: Bosun PR forge response was unreadable" >&2
     exit 1
   }
   BOSUN_HEAD=$(printf '%s' "$BOSUN_PR_JSON" | jq -er '(.headRepositoryOwner.login // "") + "/" + (.headRepository.name // "")') || exit 1
   BOSUN_BASE_REPOSITORY=$(printf '%s' "$BOSUN_PR_JSON" | jq -er '.baseRepository.nameWithOwner // ""') || exit 1
   BOSUN_BRANCH=$(printf '%s' "$BOSUN_PR_JSON" | jq -er '.baseRefName // ""') || exit 1
-  [ "$BOSUN_HEAD" != / ] && [ "$BOSUN_BASE_REPOSITORY" != "" ] && [ "$BOSUN_BRANCH" != "" ] || {
+  BOSUN_HEAD_BRANCH=$(printf '%s' "$BOSUN_PR_JSON" | jq -er '.headRefName // ""') || exit 1
+  [ "$BOSUN_HEAD" != / ] && [ "$BOSUN_BASE_REPOSITORY" != "" ] && [ "$BOSUN_BRANCH" != "" ] && [ "$BOSUN_HEAD_BRANCH" != "" ] || {
     echo "error: Bosun PR forge response was incomplete" >&2
     exit 1
   }
@@ -197,7 +198,7 @@ EOF
     local check_only=$1
     local -a registration_args
     registration_args=(registration-check --task "$ID" --url "$URL" --forge "$PROVIDER"
-      --head "$BOSUN_HEAD" --base "$BOSUN_BASE_REPOSITORY" --branch "$BOSUN_BRANCH"
+      --head "$BOSUN_HEAD" --base "$BOSUN_BASE_REPOSITORY" --branch "$BOSUN_BRANCH" --head-branch "$BOSUN_HEAD_BRANCH"
       --pr-head "$PR_HEAD" --validation-head "$PR_HEAD" --validation-mode "${MODE:-direct-PR}" --worktree "$WT"
       --upstream-base "$BOSUN_UPSTREAM_BASE" "${BOSUN_PATH_ARGS[@]}")
     [ "$check_only" = 1 ] && registration_args+=(--check-only)
@@ -275,15 +276,16 @@ else
   exit 1
 fi
 if [ "$IS_BOSUN" = 1 ]; then
-  BOSUN_PR_JSON=$(gh pr view "$URL" --json headRepositoryOwner,headRepository,baseRepository,baseRefName,headRefOid 2>/dev/null) || {
+  BOSUN_PR_JSON=$(gh pr view "$URL" --json headRepositoryOwner,headRepository,baseRepository,baseRefName,headRefName,headRefOid 2>/dev/null) || {
     echo "error: Bosun PR forge response was unreadable" >&2
     exit 1
   }
   BOSUN_HEAD=$(printf '%s' "$BOSUN_PR_JSON" | jq -er '(.headRepositoryOwner.login // "") + "/" + (.headRepository.name // "")') || exit 1
   BOSUN_BASE_REPOSITORY=$(printf '%s' "$BOSUN_PR_JSON" | jq -er '.baseRepository.nameWithOwner // ""') || exit 1
   BOSUN_BRANCH=$(printf '%s' "$BOSUN_PR_JSON" | jq -er '.baseRefName // ""') || exit 1
+  BOSUN_HEAD_BRANCH=$(printf '%s' "$BOSUN_PR_JSON" | jq -er '.headRefName // ""') || exit 1
   PR_HEAD=$(printf '%s' "$BOSUN_PR_JSON" | jq -er '.headRefOid // ""') || exit 1
-  [ "$BOSUN_HEAD" != / ] && [ "$BOSUN_BASE_REPOSITORY" != "" ] && [ "$BOSUN_BRANCH" != "" ] && fm_pr_head_valid "$PR_HEAD" || {
+  [ "$BOSUN_HEAD" != / ] && [ "$BOSUN_BASE_REPOSITORY" != "" ] && [ "$BOSUN_BRANCH" != "" ] && [ "$BOSUN_HEAD_BRANCH" != "" ] && fm_pr_head_valid "$PR_HEAD" || {
     echo "error: Bosun PR forge response was incomplete" >&2
     exit 1
   }

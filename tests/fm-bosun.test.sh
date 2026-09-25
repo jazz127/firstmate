@@ -242,9 +242,9 @@ fake_github() {
 #!/usr/bin/env bash
 set -eu
 case "${FM_FAKE_GH_CASE:-accepted}" in
-accepted) printf '%s\n' '{"headRepositoryOwner":{"login":"captain"},"headRepository":{"name":"sample"},"baseRepository":{"nameWithOwner":"kunchenguid/sample"},"baseRefName":"main","headRefOid":"0123456789012345678901234567890123456789"}' ;;
-unrelated) printf '%s\n' '{"headRepositoryOwner":{"login":"other"},"headRepository":{"name":"sample"},"baseRepository":{"nameWithOwner":"kunchenguid/sample"},"baseRefName":"main","headRefOid":"0123456789012345678901234567890123456789"}' ;;
-wrong-base) printf '%s\n' '{"headRepositoryOwner":{"login":"captain"},"headRepository":{"name":"sample"},"baseRepository":{"nameWithOwner":"other/sample"},"baseRefName":"main","headRefOid":"0123456789012345678901234567890123456789"}' ;;
+accepted) printf '%s\n' '{"headRepositoryOwner":{"login":"captain"},"headRepository":{"name":"sample"},"baseRepository":{"nameWithOwner":"kunchenguid/sample"},"baseRefName":"main","headRefName":"contribution/maneuver","headRefOid":"0123456789012345678901234567890123456789"}' ;;
+unrelated) printf '%s\n' '{"headRepositoryOwner":{"login":"other"},"headRepository":{"name":"sample"},"baseRepository":{"nameWithOwner":"kunchenguid/sample"},"baseRefName":"main","headRefName":"contribution/maneuver","headRefOid":"0123456789012345678901234567890123456789"}' ;;
+wrong-base) printf '%s\n' '{"headRepositoryOwner":{"login":"captain"},"headRepository":{"name":"sample"},"baseRepository":{"nameWithOwner":"other/sample"},"baseRefName":"main","headRefName":"contribution/maneuver","headRefOid":"0123456789012345678901234567890123456789"}' ;;
 unreadable) exit 1 ;;
 esac
 EOF
@@ -334,7 +334,7 @@ test_registration_and_merge() {
   branch=$(printf '%s' "$response" | jq -r '.baseRefName')
   pr_head=$(printf '%s' "$response" | jq -r '.headRefOid')
   call "$dir" registration-check --task maneuver --url "$url" --forge github --head "$head" \
-    --base "$base" --branch "$branch" --pr-head "$pr_head" --validation-head "$pr_head" --validation-mode no-mistakes \
+    --base "$base" --branch "$branch" --head-branch contribution/maneuver --pr-head "$pr_head" --validation-head "$pr_head" --validation-mode no-mistakes \
     --upstream-base upstream-sha --changed-path feature.txt || fail 'accepted registration failed'
   jq -e '.state == "published" and .upstream_pr == "'"$url"'" and .validation_evidence.pr_head == "'"$pr_head"'" and .upstream_changed_paths == ["feature.txt"]' "$dir/data/maneuver/bosun-contribution.json" >/dev/null \
     || fail 'accepted forge response was not durably registered'
@@ -348,7 +348,7 @@ test_registration_and_merge() {
       branch=$(printf '%s' "$response" | jq -r '.baseRefName')
       pr_head=$(printf '%s' "$response" | jq -r '.headRefOid')
       call "$case_dir" registration-check --task maneuver --url "$url" --forge github --head "$head" \
-        --base "$base" --branch "$branch" --pr-head "$pr_head" --validation-head "$pr_head" --validation-mode no-mistakes \
+        --base "$base" --branch "$branch" --head-branch contribution/maneuver --pr-head "$pr_head" --validation-head "$pr_head" --validation-mode no-mistakes \
         --upstream-base upstream-sha --changed-path feature.txt >"$case_dir/out" 2>&1 && fail "$case_name forge response was accepted"
     fi
     unset FM_FAKE_GH_CASE
@@ -358,21 +358,21 @@ test_registration_and_merge() {
   dir=$(new_home missing-validation)
   ordered_home "$dir"
   if call "$dir" registration-check --task maneuver --url "$url" --forge github --head captain/sample \
-    --base kunchenguid/sample --branch main --pr-head "$pr_head" --validation-head "$pr_head" --validation-mode '' \
+    --base kunchenguid/sample --branch main --head-branch contribution/maneuver --pr-head "$pr_head" --validation-head "$pr_head" --validation-mode '' \
     --upstream-base upstream-sha --changed-path feature.txt >"$dir/out" 2>&1; then
     fail 'missing validation evidence was accepted'
   fi
   dir=$(new_home stale-validation)
   ordered_home "$dir"
   if call "$dir" registration-check --task maneuver --url "$url" --forge github --head captain/sample \
-    --base kunchenguid/sample --branch main --pr-head "$pr_head" --validation-head stale --validation-mode no-mistakes \
+    --base kunchenguid/sample --branch main --head-branch contribution/maneuver --pr-head "$pr_head" --validation-head stale --validation-mode no-mistakes \
     --upstream-base upstream-sha --changed-path feature.txt >"$dir/out" 2>&1; then
     fail 'stale validation head was accepted'
   fi
   dir=$(new_home out-of-scope)
   ordered_home "$dir"
   if call "$dir" registration-check --task maneuver --url "$url" --forge github --head captain/sample \
-    --base kunchenguid/sample --branch main --pr-head "$pr_head" --validation-head "$pr_head" --validation-mode no-mistakes \
+    --base kunchenguid/sample --branch main --head-branch contribution/maneuver --pr-head "$pr_head" --validation-head "$pr_head" --validation-mode no-mistakes \
     --upstream-base upstream-sha --changed-path secret.txt >"$dir/out" 2>&1; then
     fail 'out-of-scope path was accepted'
   fi
@@ -388,7 +388,7 @@ test_registration_requires_role() {
   ordered_home "$dir"
   rm "$dir/data/bosun-role.json"
   if call "$dir" registration-check --task maneuver --url https://github.com/kunchenguid/sample/pull/12 \
-    --forge github --head captain/sample --base kunchenguid/sample --branch main \
+    --forge github --head captain/sample --base kunchenguid/sample --branch main --head-branch contribution/maneuver \
     --pr-head 0123456789012345678901234567890123456789 \
     --validation-head 0123456789012345678901234567890123456789 --validation-mode no-mistakes \
     --upstream-base upstream-sha --changed-path feature.txt >"$dir/out" 2>&1; then

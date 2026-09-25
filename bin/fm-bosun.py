@@ -126,18 +126,6 @@ def git_success(project_dir, *args):
                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0
 
 
-def git_patch_id(project_dir, commit):
-    show = subprocess.run(["git", "-C", str(project_dir), "show", "--format=", "--binary", commit],
-                          stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    if show.returncode:
-        return None
-    result = subprocess.run(["git", "patch-id", "--stable"], input=show.stdout,
-                            stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    if result.returncode:
-        return None
-    return result.stdout.decode().split()[0] if result.stdout.split() else None
-
-
 def remote_identity(url):
     if url.startswith("git@"):
         host, _separator, path = url[4:].partition(":")
@@ -606,12 +594,17 @@ def cmd_registration_check_locked(args):
         fail(f"upstream PR base differs: expected {expected_base}, got {args.base}")
     if args.branch != record["upstream_default_branch"]:
         fail(f"upstream PR base branch differs: expected {record['upstream_default_branch']}, got {args.branch}")
+    if args.head_branch != record.get("contribution_branch"):
+        fail(f"upstream PR head branch differs: expected {record.get('contribution_branch')}, got {args.head_branch}")
     if not re.fullmatch(r"[0-9a-fA-F]{40}", args.pr_head):
         fail("upstream PR head commit is missing or invalid")
     if args.validation_head.lower() != args.pr_head.lower():
         fail(f"validation evidence is stale: expected {args.pr_head}, got {args.validation_head}")
     if not args.validation_mode:
         fail("no-mistakes validation evidence is missing")
+    allowed = record.get("allowed_paths")
+    if not isinstance(allowed, list) or not allowed:
+        fail("captain order has no allowed paths")
     if args.worktree:
         worktree = safe_path(args.worktree)
         if worktree.is_symlink() or not worktree.is_dir():
@@ -622,17 +615,15 @@ def cmd_registration_check_locked(args):
         source_commits = record.get("source_commits")
         if actual is None or not isinstance(source_commits, list):
             fail("upstream PR commits differ from the ordered source commits")
-        actual_patches = [git_patch_id(worktree, commit) for commit in actual.splitlines()]
-        source_patches = [git_patch_id(worktree, commit) for commit in source_commits]
-        if not actual_patches or actual_patches != source_patches or any(item is None for item in actual_patches):
+        actual_commits = actual.splitlines()
+        if not actual_commits:
             fail("upstream PR patches differ from the ordered source commits")
-        for commit in source_commits:
+        for commit in actual_commits:
             paths = git_output(worktree, "diff-tree", "--root", "--no-commit-id", "--name-only", "-r", commit)
-            if paths is None or any(path not in record["allowed_paths"] for path in paths.splitlines() if path):
-                fail("ordered source commit changes an unauthorized path")
-    allowed = record.get("allowed_paths")
-    if not isinstance(allowed, list) or not allowed:
-        fail("captain order has no allowed paths")
+            if paths is None or any(
+                    not any(path == item or item.endswith("/") and path.startswith(item) for item in allowed)
+                    for path in paths.splitlines() if path):
+                fail("upstream PR commit changes an unauthorized path")
     changed = args.changed_path
     if not changed:
         fail("upstream change has no validated changed paths")
@@ -695,7 +686,7 @@ def main():
         p.add_argument("--" + name, required=True)
     p.add_argument("--evidence"); p.add_argument("--showed"); p.add_argument("--read-at"); p.add_argument("--confirmed", action="store_true"); p.set_defaults(func=cmd_convention)
     p = sub.add_parser("conventions"); add_target(p); p.add_argument("--bosun", required=True); p.add_argument("--policy", required=True); p.add_argument("--decisions"); p.set_defaults(func=cmd_conventions)
-    p = sub.add_parser("registration-check"); p.add_argument("--task", required=True); p.add_argument("--url", required=True); p.add_argument("--forge", required=True); p.add_argument("--head", required=True); p.add_argument("--base", required=True); p.add_argument("--branch", required=True); p.add_argument("--pr-head", required=True); p.add_argument("--validation-head", required=True); p.add_argument("--validation-mode", required=True); p.add_argument("--upstream-base", required=True); p.add_argument("--worktree"); p.add_argument("--changed-path", action="append", default=[]); p.add_argument("--check-only", action="store_true"); p.set_defaults(func=cmd_registration_check)
+    p = sub.add_parser("registration-check"); p.add_argument("--task", required=True); p.add_argument("--url", required=True); p.add_argument("--forge", required=True); p.add_argument("--head", required=True); p.add_argument("--base", required=True); p.add_argument("--branch", required=True); p.add_argument("--head-branch", required=True); p.add_argument("--pr-head", required=True); p.add_argument("--validation-head", required=True); p.add_argument("--validation-mode", required=True); p.add_argument("--upstream-base", required=True); p.add_argument("--worktree"); p.add_argument("--changed-path", action="append", default=[]); p.add_argument("--check-only", action="store_true"); p.set_defaults(func=cmd_registration_check)
     p = sub.add_parser("merged"); p.add_argument("--task", required=True); p.add_argument("--url", required=True); p.set_defaults(func=cmd_merged)
     p = sub.add_parser("upstream-ref"); p.add_argument("--worktree", required=True); p.add_argument("--owner", required=True); p.add_argument("--repository", required=True); p.add_argument("--branch", required=True); p.set_defaults(func=cmd_upstream_ref)
     args = parser.parse_args()

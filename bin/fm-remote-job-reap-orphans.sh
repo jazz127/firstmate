@@ -24,9 +24,9 @@
 #
 # Only this user's processes are inspected, and this process, its own process
 # group, and any ancestor are never signalled. Each candidate is stopped through
-# the shared fm_remote_job_stop_worker_tree, so the whole worker tree goes at
-# once (TERM first, KILL only for a survivor) and a group whose leader is not
-# itself a worker is stopped as a single process instead.
+# the shared fm_remote_job_stop_worker_tree, which revalidates each recorded
+# PID/start/command identity and tracks verified descendants independently when
+# the worker root exits (TERM first, KILL only for survivors).
 #
 # Prints one line per reaped or surviving candidate and nothing when there is
 # nothing to do. Exits 0 unless the process scan itself could not run, so a

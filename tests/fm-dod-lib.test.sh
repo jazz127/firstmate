@@ -249,6 +249,34 @@ EOF
   pass "evidence claims accept readable provenance and spare ordinary prose"
 }
 
+test_scenario_consistency_is_publication_only() {
+  local root artifact intent out rc
+  root="$TMP_ROOT/scenario-publication-only"
+  artifact="$root/worktree/evidence.txt"
+  mkdir -p "$root/worktree" "$root/tmp"
+  printf '%s\n' captured > "$artifact"
+  intent=$(cat <<EOF
+| Scenario | Result | Live | Evidence |
+| --- | --- | --- | --- |
+| Account A | pass | yes | captured |
+| Account B | pass | fixture-based | local fixture |
+
+0 of 2 scenarios driven live against the product.
+evidence-artifact: $artifact
+evidence-command: cat $artifact
+evidence-captured: 2026-09-25T10:00:00+10:00
+EOF
+)
+  fm_dod_validate_intent_evidence "$intent" "$root/worktree" "$root/tmp" \
+    || fail "brief intent quoting a contradictory PR body was refused"
+  out=$(fm_dod_validate_published_intent "$intent" "$root/worktree" "$root/tmp" 2>&1)
+  rc=$?
+  [ "$rc" -eq 1 ] || fail "contradictory PR body was accepted at publication"
+  assert_contains "$out" "contradictory driven-scenario results" \
+    "publication refusal did not identify the contradiction"
+  pass "scenario consistency is enforced only for PR-body publication"
+}
+
 test_unpushed_ship_done_is_refused() {
   local repo wt sha reason rc
   repo="$TMP_ROOT/unpushed-repo"
@@ -524,6 +552,7 @@ test_non_done_lines_are_not_gated() {
 test_scout_done_is_not_gated
 test_evidence_claim_requires_provenance
 test_evidence_claim_enforces_mechanical_provenance
+test_scenario_consistency_is_publication_only
 test_unpushed_ship_done_is_refused
 test_no_mistakes_prevalidation_done_is_not_gated
 test_remote_containing_named_head_is_accepted

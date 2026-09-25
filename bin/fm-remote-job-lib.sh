@@ -984,7 +984,7 @@ fm_remote_job_worker_command_matches() { # <worker> <command>
 # survivor. Returns non-zero when any verified worker-tree member is still alive
 # afterwards.
 fm_remote_job_stop_worker_tree() { # <pid> [start] [command]
-  local pid=$1 expected_start=${2:-} expected_command=${3:-} members rescanned survivors member member_start member_command i=0 alive deadline signal=TERM
+  local pid=$1 expected_start=${2:-} expected_command=${3:-} members rescanned survivors member member_start member_command state i=0 alive deadline signal=TERM
   case "$pid" in ''|*[!0-9]*) return 1 ;; esac
   [ "$pid" -gt 1 ] || return 1
   if [ -n "$expected_start" ] || [ -n "$expected_command" ]; then
@@ -995,6 +995,8 @@ fm_remote_job_stop_worker_tree() { # <pid> [start] [command]
     [ -n "$expected_start" ] && [ -n "$expected_command" ] || return 1
   fi
   if ! fm_remote_job_process_identity_matches "$pid" "$expected_start" "$expected_command"; then
+    state=$(fm_remote_job_process_state "$pid" 2>/dev/null || true)
+    case "$state" in Z*) return 0 ;; esac
     kill -0 "$pid" 2>/dev/null && return 1
     return 0
   fi
@@ -1003,6 +1005,8 @@ fm_remote_job_stop_worker_tree() { # <pid> [start] [command]
     members=$(fm_remote_job_process_tree_pids "$pid" 2>/dev/null) || return 1
     if [ -z "$members" ]; then
       if ! fm_remote_job_process_identity_matches "$pid" "$expected_start" "$expected_command"; then
+        state=$(fm_remote_job_process_state "$pid" 2>/dev/null || true)
+        case "$state" in Z*) return 0 ;; esac
         kill -0 "$pid" 2>/dev/null && return 1
         return 0
       fi
@@ -1326,10 +1330,14 @@ fm_remote_job_process_tree_pids() { # <pid>
   while read -r pid ppid state; do
     case "$pid" in ''|*[!0-9]*) continue ;; esac
     [ "$pid" = "$root" ] || continue
-    case "$state" in Z*) return 0 ;; esac
-    start=$(fm_remote_job_process_start "$pid" 2>/dev/null || true)
-    command=$(fm_remote_job_process_command "$pid" 2>/dev/null || true)
-    [ -n "$start" ] && [ -n "$command" ] && printf '%s\t%s\t%s\n' "$pid" "$start" "$command"
+    case "$state" in
+      Z*) ;;
+      *)
+        start=$(fm_remote_job_process_start "$pid" 2>/dev/null || true)
+        command=$(fm_remote_job_process_command "$pid" 2>/dev/null || true)
+        [ -n "$start" ] && [ -n "$command" ] && printf '%s\t%s\t%s\n' "$pid" "$start" "$command"
+        ;;
+    esac
     break
   done <<< "$processes"
   while [ -n "$frontier" ]; do

@@ -1,0 +1,7 @@
+capture=2026-09-25T01:03:46Z
+isolated_home=/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3B0WNXVW0M6J1RQV75WFEAG/.test-live-inactive-35146/mate
+url=https://github.com/jazz127/firstmate/pull/25
+scan_rc=0
+parent-channel:
+outcome-records:
+zsh:5: no matches found: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3B0WNXVW0M6J1RQV75WFEAG/.test-live-inactive-35146/mate/state/terminal-outcomes/*

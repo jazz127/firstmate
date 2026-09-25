@@ -1,0 +1,54 @@
+capture=2026-09-25T01:11:35Z
+url=https://github.com/jazz127/firstmate/pull/28
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  repair missing watcher supervision with a foreground checkpoint: bin/fm-watch-checkpoint.sh --seconds 180.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+fm-contributions: data directory unavailable
+contributions: observation not armed; coverage is unconfirmed
+armed: state/live-watch.check.sh
+registration_rc=0
+isolated_state:
+--- live-watch.check.sh
+#!/usr/bin/env bash
+# Static watcher program for a validated pull request, merge request, or Gerrit
+# change poll sidecar.
+# It emits exactly one merged line for a merged change and stays silent
+# otherwise, including on every error, so a failed lookup can never be read as
+# a merge. The provider-tagged identity is data in the sidecar and is never
+# interpolated into this source: these bytes are identical for every task.
+# Each provider is read through its own standard CLI, gh for GitHub, glab for
+# GitLab, and gerrit-axi for Gerrit, so an upstream checkout needs no extra
+# tooling to follow the first two. The Gerrit branch additionally needs jq,
+# which bin/fm-pr-check.sh refuses to arm a Gerrit watch without.
+set -u
+--- live-watch.meta
+kind=ship
+mode=no-mistakes
+project=/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3B0WNXVW0M6J1RQV75WFEAG
+worktree=/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3B0WNXVW0M6J1RQV75WFEAG
+tasktmp=/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3B0WNXVW0M6J1RQV75WFEAG/.test-live-pr-check-34636
+spawn_gen=live-watch-gen
+pr=https://github.com/jazz127/firstmate/pull/28
+pr_head=7200673a2640c78b44e5d29ef1ac1d22759b0f8e
+--- live-watch.pr-poll
+github
+https://github.com/jazz127/firstmate/pull/28
+github.com
+jazz127/firstmate
+28
+--- live-watch.pr-poll-registration
+fm-pr-poll-registration-v2
+live-watch
+github
+https://github.com/jazz127/firstmate/pull/28
+github.com
+jazz127/firstmate
+28
+abc5d12eb12c9bc4ad18f13c8f8778e503d7eaf46891dcfa00052dec69a1e5aa
+0d9ebce47103772895f489ac9a31eeb817de0ccaa771a2c2db5dd1518d9db3cd
+16777234:867434536
+16777234:867434537

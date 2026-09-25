@@ -1,0 +1,4 @@
+evidence claim refused: missing evidence-artifact: path
+bad_rc=1
+good_rc=0
+artifact=/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3B0WNXVW0M6J1RQV75WFEAG/AGENTS.md

@@ -1,0 +1,19 @@
+capture=2026-09-25T01:12:02Z
+url=https://github.com/jazz127/firstmate/pull/25
+evidence claim refused: missing evidence-artifact: path
+report_rc=0
+parent-channel:
+failed [key=child-outcome-taskless-upstream-failed-88b8e1b9] [at=1790298723]: child taskless-upstream failed: existing upstream contribution report retained pr=https://github.com/jazz127/firstmate/pull/25 evidence-validation=failed mode=no-mistakes
+outcome-records:
+--- /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3B0WNXVW0M6J1RQV75WFEAG/.test-live-inactive-report-59741/mate/state/terminal-outcomes/88b8e1b940ce0307d9b3b2771d434aea.reported
+schema=fm-terminal-outcome.v1
+fingerprint=88b8e1b940ce0307d9b3b2771d434aea
+task_id=taskless-upstream
+incarnation=report-gen
+state=failed
+outcome_key=child-outcome-taskless-upstream-failed-88b8e1b9
+origin=direct
+phase=upstream
+pr=https://github.com/jazz127/firstmate/pull/25
+created_epoch=1790298722
+notice_emitted=0

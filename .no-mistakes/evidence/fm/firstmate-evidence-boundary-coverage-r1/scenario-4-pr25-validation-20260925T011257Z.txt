@@ -1,0 +1,5 @@
+capture=2026-09-25T01:12:58Z
+url=https://github.com/jazz127/firstmate/pull/25
+forge_state=MERGED
+evidence claim refused: missing evidence-artifact: path
+validator_rc=1

@@ -1,0 +1,14 @@
+capture=2026-09-25T01:04:19Z
+meta:
+kind=ship
+mode=no-mistakes
+pr=https://github.com/jazz127/firstmate/pull/25
+spawn_gen=live-gen
+worktree=/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3B0WNXVW0M6J1RQV75WFEAG
+project=/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3B0WNXVW0M6J1RQV75WFEAG
+status:
+done: PR https://github.com/jazz127/firstmate/pull/25 published for review
+files-before:
+scan_rc=0
+files-after:
+parent-channel:

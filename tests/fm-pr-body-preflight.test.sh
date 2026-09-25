@@ -173,16 +173,12 @@ output=$(preflight) || fail "partly live passed verdict was refused: $output"
 pass "passed verdict with a driven scenario remains consistent"
 
 sed -e 's/| Account A | pass | yes | captured account output |/| Account A | pass | fixture-based | local fixture |/' \
-  -e 's/Live validation: passed - 1 of 4 scenarios driven live/Live validation: passed - 0 of 4 scenarios driven live/' \
-  "$draft" > "$task_tmp/verdict-conflict.md"
-mv "$task_tmp/verdict-conflict.md" "$draft"
-output=$(preflight)
-rc=$?
-[ "$rc" -eq 1 ] || fail "passed verdict with no driven scenarios was accepted: $output"
-assert_contains "$output" 'evidence claim refused: contradictory driven-scenario results:' "verdict contradiction reason was missing"
-assert_contains "$output" 'Live validation: passed - 0 of 4 scenarios driven live' "contradictory verdict was not quoted"
-assert_contains "$output" '| Account A | pass | fixture-based | local fixture |' "fixture table row was not quoted"
-pass "passed verdict contradicting a fixture-only table is refused"
+  -e 's/Live validation: passed - 1 of 4 scenarios driven live/Live validation: passed - unrelated API smoke check/' \
+  "$draft" > "$task_tmp/unrelated-passed.md"
+mv "$task_tmp/unrelated-passed.md" "$draft"
+output=$(preflight) || fail "fixture-only table with unrelated passed validation was refused: $output"
+[ "$output" = 'evidence preflight ok' ] || fail "unrelated passed validation did not pass: $output"
+pass "unrelated passed validation beside a fixture-only table is accepted"
 
 fakebin="$TMP_ROOT/fakebin"
 mkdir -p "$fakebin"

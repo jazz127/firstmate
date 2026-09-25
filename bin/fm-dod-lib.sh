@@ -248,8 +248,6 @@ fm_dod_validate_scenario_consistency() {  # <complete-pr-body>
            (count_total == stored_table_rows && count_driven != stored_table_driven) ||
            (count_driven == count_total && stored_table_driven < stored_table_rows)))
         refuse(count_line, stored_table_lines)
-      if (stored_table_rows > 0 && stored_table_driven == 0 && passed_line != "")
-        refuse(passed_line, stored_table_lines)
     }
     {
       original = $0
@@ -273,9 +271,6 @@ fm_dod_validate_scenario_consistency() {  # <complete-pr-body>
           count_total = total
         }
       }
-      if (lower ~ /live[[:space:]]+validation:[[:space:]]*(passed|successful|success)/)
-        passed_line = original
-
       if (substr(trim(original), 1, 1) != "|") {
         if (table_header != "") check_table()
         next

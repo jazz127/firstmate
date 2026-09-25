@@ -973,7 +973,8 @@ PY
         [ "$status" -ne 2 ] && return "$status"
       fi
       fm_remote_job_process_identity_matches "$pid" "$expected_start" "$expected_command" || return 1
-      kill -"$signal" "$pid" 2>/dev/null
+      kill -"$signal" "$pid" 2>/dev/null || return 1
+      fm_remote_job_process_identity_matches "$pid" "$expected_start" "$expected_command" || return 0
       ;;
     *)
       fm_remote_job_process_identity_matches "$pid" "$expected_start" "$expected_command" || return 1
@@ -1072,6 +1073,12 @@ fm_remote_job_stop_worker_tree() { # <pid> [start] [command]
       members=$(printf '%s\t%s\t%s\n' "$pid" "$expected_start" "$expected_command")
     fi
     while IFS=$(printf '\t') read -r member member_start member_command; do
+      [ "$member" = "$pid" ] && continue
+      fm_remote_job_process_identity_matches "$member" "$member_start" "$member_command" || continue
+      fm_remote_job_signal_identity "$member" "$signal" "$member_start" "$member_command" || signal_failed=1
+    done <<< "$members"
+    while IFS=$(printf '\t') read -r member member_start member_command; do
+      [ "$member" != "$pid" ] && continue
       fm_remote_job_process_identity_matches "$member" "$member_start" "$member_command" || continue
       fm_remote_job_signal_identity "$member" "$signal" "$member_start" "$member_command" || signal_failed=1
     done <<< "$members"

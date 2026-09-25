@@ -137,6 +137,38 @@ def git_output(project_dir, *args):
     return result.stdout.strip()
 
 
+def forge_pr_identity(url):
+    result = subprocess.run(
+        ["gh", "pr", "view", url, "--json",
+         "headRepositoryOwner,headRepository,baseRepository,baseRefName,headRefName,headRefOid"],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    if result.returncode:
+        fail("upstream PR forge response was unreadable during final registration")
+    try:
+        data = json.loads(result.stdout)
+        identity = {
+            "head": f"{data['headRepositoryOwner']['login']}/{data['headRepository']['name']}",
+            "base": data["baseRepository"]["nameWithOwner"],
+            "branch": data["baseRefName"],
+            "head_branch": data["headRefName"],
+            "pr_head": data["headRefOid"],
+        }
+    except (KeyError, TypeError, ValueError):
+        fail("upstream PR forge response was incomplete during final registration")
+    if (not all(isinstance(value, str) and value for value in identity.values())
+            or not re.fullmatch(r"[0-9a-fA-F]{40}", identity["pr_head"])):
+        fail("upstream PR forge response was incomplete during final registration")
+    return identity
+
+
+def forge_pr_changed_paths(url):
+    result = subprocess.run(["gh", "pr", "diff", url, "--name-only"],
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    if result.returncode:
+        fail("upstream PR changed paths were unreadable during final registration")
+    return [path for path in result.stdout.splitlines() if path]
+
+
 def git_success(project_dir, *args):
     return subprocess.run(["git", "-C", str(project_dir), *args],
                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0
@@ -710,8 +742,23 @@ def cmd_registration_check_locked(args):
             offending.append(path)
     if offending:
         fail(f"out-of-scope upstream paths: {', '.join(offending)}")
+    if args.forge_verify:
+        if not args.worktree:
+            fail("final forge verification requires a contribution worktree")
+        fresh = forge_pr_identity(args.url)
+        if (fresh["head"].lower() != args.head.lower()
+                or fresh["base"].lower() != args.base.lower()
+                or fresh["branch"] != args.branch
+                or fresh["head_branch"] != args.head_branch
+                or fresh["pr_head"].lower() != args.pr_head.lower()):
+            fail("upstream PR changed during validation; refusing registration")
+        fresh_paths = forge_pr_changed_paths(args.url)
+        if sorted(fresh_paths) != sorted(changed):
+            fail("upstream PR changed paths differ during validation; refusing registration")
     record["upstream_pr"] = args.url
-    record["validation_evidence"] = {"pr_head": args.validation_head.lower(), "mode": args.validation_mode,
+    record["validation_evidence"] = {"pr_head": (fresh["pr_head"].lower() if args.forge_verify
+                                                   else args.validation_head.lower()),
+                                      "mode": args.validation_mode,
                                       "validated_at": now()}
     record["upstream_changed_paths"] = changed
     record["upstream_base"] = args.upstream_base
@@ -761,7 +808,7 @@ def main():
         p.add_argument("--" + name, required=True)
     p.add_argument("--evidence"); p.add_argument("--showed"); p.add_argument("--read-at"); p.add_argument("--confirmed", action="store_true"); p.set_defaults(func=cmd_convention)
     p = sub.add_parser("conventions"); add_target(p); p.add_argument("--bosun", required=True); p.add_argument("--policy", required=True); p.add_argument("--decisions"); p.set_defaults(func=cmd_conventions)
-    p = sub.add_parser("registration-check"); p.add_argument("--task", required=True); p.add_argument("--url", required=True); p.add_argument("--forge", required=True); p.add_argument("--head", required=True); p.add_argument("--base", required=True); p.add_argument("--branch", required=True); p.add_argument("--head-branch", required=True); p.add_argument("--pr-head", required=True); p.add_argument("--validation-head", required=True); p.add_argument("--validation-mode", required=True); p.add_argument("--upstream-base", required=True); p.add_argument("--worktree"); p.add_argument("--changed-path", action="append", default=[]); p.add_argument("--check-only", action="store_true"); p.set_defaults(func=cmd_registration_check)
+    p = sub.add_parser("registration-check"); p.add_argument("--task", required=True); p.add_argument("--url", required=True); p.add_argument("--forge", required=True); p.add_argument("--head", required=True); p.add_argument("--base", required=True); p.add_argument("--branch", required=True); p.add_argument("--head-branch", required=True); p.add_argument("--pr-head", required=True); p.add_argument("--validation-head", required=True); p.add_argument("--validation-mode", required=True); p.add_argument("--upstream-base", required=True); p.add_argument("--worktree"); p.add_argument("--changed-path", action="append", default=[]); p.add_argument("--check-only", action="store_true"); p.add_argument("--forge-verify", action="store_true"); p.set_defaults(func=cmd_registration_check)
     p = sub.add_parser("merged"); p.add_argument("--task", required=True); p.add_argument("--url", required=True); p.set_defaults(func=cmd_merged)
     p = sub.add_parser("upstream-ref"); p.add_argument("--worktree", required=True); p.add_argument("--owner", required=True); p.add_argument("--repository", required=True); p.add_argument("--branch", required=True); p.set_defaults(func=cmd_upstream_ref)
     args = parser.parse_args()

@@ -202,6 +202,7 @@ EOF
       --pr-head "$PR_HEAD" --validation-head "$PR_HEAD" --validation-mode "${MODE:-direct-PR}" --worktree "$WT"
       --upstream-base "$BOSUN_UPSTREAM_BASE" "${BOSUN_PATH_ARGS[@]}")
     [ "$check_only" = 1 ] && registration_args+=(--check-only)
+    [ "$check_only" = 0 ] && registration_args+=(--forge-verify)
     python3 "$SCRIPT_DIR/fm-bosun.py" "${registration_args[@]}"
   }
   bosun_registration_check 1 || exit 1
@@ -235,21 +236,6 @@ if [ "$IS_BOSUN" = 1 ]; then
   done <<EOF
 $BOSUN_CHANGED_PATHS
 EOF
-  BOSUN_FINAL_PR_JSON=$(gh pr view "$URL" --json headRepositoryOwner,headRepository,baseRepository,baseRefName,headRefName,headRefOid 2>/dev/null) || {
-    echo "error: Bosun PR forge response was unreadable during final registration" >&2
-    exit 1
-  }
-  BOSUN_FINAL_HEAD=$(printf '%s' "$BOSUN_FINAL_PR_JSON" | jq -er '(.headRepositoryOwner.login // "") + "/" + (.headRepository.name // "")') || exit 1
-  BOSUN_FINAL_BASE=$(printf '%s' "$BOSUN_FINAL_PR_JSON" | jq -er '.baseRepository.nameWithOwner // ""') || exit 1
-  BOSUN_FINAL_BRANCH=$(printf '%s' "$BOSUN_FINAL_PR_JSON" | jq -er '.baseRefName // ""') || exit 1
-  BOSUN_FINAL_HEAD_BRANCH=$(printf '%s' "$BOSUN_FINAL_PR_JSON" | jq -er '.headRefName // ""') || exit 1
-  BOSUN_FINAL_PR_HEAD=$(printf '%s' "$BOSUN_FINAL_PR_JSON" | jq -er '.headRefOid // ""') || exit 1
-  if ! { [ "$BOSUN_FINAL_HEAD" = "$BOSUN_HEAD" ] && [ "$BOSUN_FINAL_BASE" = "$BOSUN_BASE_REPOSITORY" ] \
-    && [ "$BOSUN_FINAL_BRANCH" = "$BOSUN_BRANCH" ] && [ "$BOSUN_FINAL_HEAD_BRANCH" = "$BOSUN_HEAD_BRANCH" ] \
-    && [ "$BOSUN_FINAL_PR_HEAD" = "$PR_HEAD" ] && fm_pr_head_valid "$BOSUN_FINAL_PR_HEAD"; }; then
-    echo "error: Bosun PR changed during validation; refusing registration" >&2
-    exit 1
-  fi
   bosun_registration_check 0 || exit 1
 fi
 

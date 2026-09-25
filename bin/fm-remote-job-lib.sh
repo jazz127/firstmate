@@ -914,10 +914,11 @@ fm_remote_job_process_start() {
 }
 
 fm_remote_job_process_identity_matches() { # <pid> <start> <command>
-  local pid=$1 expected_start=$2 expected_command=$3 ps_bin value weekday month day clock year command start
+  local pid=$1 expected_start=$2 expected_command=$3 ps_bin value state weekday month day clock year command start
   if [ -x /bin/ps ]; then ps_bin=/bin/ps; elif [ -x /usr/bin/ps ]; then ps_bin=/usr/bin/ps; else return 1; fi
-  value=$("$ps_bin" -p "$pid" -o lstart= -o command= 2>/dev/null) || return 1
-  IFS=' ' read -r weekday month day clock year command <<< "$value"
+  value=$("$ps_bin" -p "$pid" -o stat= -o lstart= -o command= 2>/dev/null) || return 1
+  IFS=' ' read -r state weekday month day clock year command <<< "$value"
+  case "$state" in Z*) return 1 ;; esac
   [ -n "$command" ] || return 1
   start=$(printf '%s\n' "$weekday $month $day $clock $year" | LC_ALL=C awk '{$1=$1; print}') || return 1
   [ "$start" = "$expected_start" ] && [ "$command" = "$expected_command" ]
@@ -983,7 +984,7 @@ fm_remote_job_worker_command_matches() { # <worker> <command>
 # survivor. Returns non-zero when any verified worker-tree member is still alive
 # afterwards.
 fm_remote_job_stop_worker_tree() { # <pid> [start] [command]
-  local pid=$1 expected_start=${2:-} expected_command=${3:-} members member member_start member_command current_start current_command i=0 alive
+  local pid=$1 expected_start=${2:-} expected_command=${3:-} members member member_start member_command i=0 alive
   case "$pid" in ''|*[!0-9]*) return 1 ;; esac
   [ "$pid" -gt 1 ] || return 1
   if [ -n "$expected_start" ] || [ -n "$expected_command" ]; then
@@ -998,10 +999,7 @@ fm_remote_job_stop_worker_tree() { # <pid> [start] [command]
     members=$(printf '%s\t%s\t%s\n' "$pid" "$member_start" "$member_command")
   fi
   while IFS=$(printf '\t') read -r member member_start member_command; do
-    current_start=$(fm_remote_job_process_start "$member" 2>/dev/null || true)
-    current_command=$(fm_remote_job_process_command "$member" 2>/dev/null || true)
-    [ -n "$member_start" ] && [ "$current_start" = "$member_start" ] &&
-      [ "$current_command" = "$member_command" ] || continue
+    fm_remote_job_process_identity_matches "$member" "$member_start" "$member_command" || continue
     kill -TERM "$member" 2>/dev/null || true
   done <<< "$members"
   while [ "$i" -lt 50 ]; do
@@ -1018,10 +1016,7 @@ fm_remote_job_stop_worker_tree() { # <pid> [start] [command]
     sleep 0.1
   done
   while IFS=$(printf '\t') read -r member member_start member_command; do
-    current_start=$(fm_remote_job_process_start "$member" 2>/dev/null || true)
-    current_command=$(fm_remote_job_process_command "$member" 2>/dev/null || true)
-    [ -n "$member_start" ] && [ "$current_start" = "$member_start" ] &&
-      [ "$current_command" = "$member_command" ] || continue
+    fm_remote_job_process_identity_matches "$member" "$member_start" "$member_command" || continue
     kill -KILL "$member" 2>/dev/null || true
   done <<< "$members"
   i=0
@@ -1311,7 +1306,7 @@ fm_remote_job_process_tree_pids() { # <pid>
 }
 
 fm_remote_job_linux_reap_worker_processes() { # <remote-root> <keep-pid>
-  local root=$1 keep_pid=$2 keep_root= processes pid start command parent parent_start parent_command keep_start keep_command
+  local root=$1 keep_pid=$2 keep_root= keep_root_start= keep_root_command= processes pid start command parent parent_start parent_command keep_start keep_command
   if [ -n "$keep_pid" ]; then
     keep_start=$(fm_remote_job_process_start "$keep_pid" 2>/dev/null || true)
     keep_command=$(fm_remote_job_process_command "$keep_pid" 2>/dev/null || true)
@@ -1326,8 +1321,12 @@ fm_remote_job_linux_reap_worker_processes() { # <remote-root> <keep-pid>
       [ "$(fm_remote_job_process_command "$parent" 2>/dev/null || true)" = "$parent_command" ] &&
       fm_remote_job_worker_command_matches "$root/bin/fm-remote-job-worker.sh" "$parent_command"; then
       keep_root=$parent
+      keep_root_start=$parent_start
+      keep_root_command=$parent_command
     else
       keep_root=$keep_pid
+      keep_root_start=$keep_start
+      keep_root_command=$keep_command
     fi
   fi
   processes=$(fm_remote_job_linux_worker_processes "$root") || return 1
@@ -1335,6 +1334,10 @@ fm_remote_job_linux_reap_worker_processes() { # <remote-root> <keep-pid>
     [ -n "$pid" ] || continue
     [ "$(fm_remote_job_process_start "$pid" 2>/dev/null || true)" = "$start" ] || continue
     [ "$(fm_remote_job_process_command "$pid" 2>/dev/null || true)" = "$command" ] || continue
+    if [ -n "$keep_root" ] &&
+      ! fm_remote_job_process_identity_matches "$keep_root" "$keep_root_start" "$keep_root_command"; then
+      return 1
+    fi
     if [ -n "$keep_root" ] && fm_remote_job_process_descends_from "$pid" "$keep_root"; then
       continue
     fi
@@ -1342,19 +1345,17 @@ fm_remote_job_linux_reap_worker_processes() { # <remote-root> <keep-pid>
     fm_remote_job_stop_worker_tree "$pid" "$start" "$command" || return 1
   done <<< "$processes"
   if [ -n "$keep_root" ]; then
-    if [ "$keep_root" = "$keep_pid" ]; then
-      [ "$(fm_remote_job_process_start "$keep_root" 2>/dev/null || true)" = "$keep_start" ] || return 1
-      [ "$(fm_remote_job_process_command "$keep_root" 2>/dev/null || true)" = "$keep_command" ] || return 1
-    else
-      [ "$(fm_remote_job_process_start "$keep_root" 2>/dev/null || true)" = "$parent_start" ] || return 1
-      [ "$(fm_remote_job_process_command "$keep_root" 2>/dev/null || true)" = "$parent_command" ] || return 1
-    fi
+    fm_remote_job_process_identity_matches "$keep_root" "$keep_root_start" "$keep_root_command" || return 1
   fi
   processes=$(fm_remote_job_linux_worker_processes "$root") || return 1
   while IFS=$(printf '\t') read -r pid start command; do
     [ -n "$pid" ] || continue
     [ "$(fm_remote_job_process_start "$pid" 2>/dev/null || true)" = "$start" ] || continue
     [ "$(fm_remote_job_process_command "$pid" 2>/dev/null || true)" = "$command" ] || continue
+    if [ -n "$keep_root" ] &&
+      ! fm_remote_job_process_identity_matches "$keep_root" "$keep_root_start" "$keep_root_command"; then
+      return 1
+    fi
     if [ -n "$keep_root" ] && fm_remote_job_process_descends_from "$pid" "$keep_root"; then
       continue
     fi

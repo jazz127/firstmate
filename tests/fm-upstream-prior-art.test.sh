@@ -43,7 +43,8 @@ params = parse_qs(parsed.query)
 page = int(params.get("page", ["1"])[0])
 pr = lambda n, title, state, merged=None: {
     "number": n, "html_url": f"https://github.com/owner/demo/pull/{n}",
-    "user": {"login": f"author{n}"}, "title": title, "body": "Fixes #4" if n == 7 else "",
+    "user": {"login": f"author{n}"}, "title": title,
+    "body": "x" * 5000 + "\nFixes #4" if n == 7 else "y" * 3000,
     "state": state, "merged_at": merged,
     "closed_at": "2026-09-20T00:00:00Z", "updated_at": "2026-09-20T00:00:00Z"}
 issue = {"number": 4, "html_url": "https://github.com/owner/demo/issues/4",
@@ -51,7 +52,8 @@ issue = {"number": 4, "html_url": "https://github.com/owner/demo/issues/4",
          "body": "The paused worker is stale", "state": "open"}
 if parsed.path == "/repos/owner/demo/pulls":
     if params["state"][0] == "open":
-        data = [pr(7, "Fix paused worker marked stale", "open")] if page == 1 else []
+        data = [pr(7, "Fix paused worker marked stale", "open")] + [
+            pr(n, f"Unrelated open change {n}", "open") for n in range(100, 125)] if page == 1 else []
     else:
         data = [pr(8, "Stale worker detection fix", "closed"),
                 pr(9, "Stale worker merge", "closed", "2026-09-20T00:00:00Z")] if page == 1 else []
@@ -62,8 +64,8 @@ elif parsed.path == "/repos/owner/demo/pulls/7/files":
     data = [{"filename": "worker.py"}]
 elif parsed.path == "/repos/owner/demo/pulls/8/files":
     data = [{"filename": "other.py"}]
-elif parsed.path == "/repos/owner/demo/pulls/11/files":
-    data = [{"filename": "unrelated.py"}]
+elif parsed.path.startswith("/repos/owner/demo/pulls/") and parsed.path.endswith("/files"):
+    data = [{"filename": f"unrelated/{parsed.path.split('/')[-2]}/{i:03d}.py"} for i in range(60)]
 elif parsed.path == "/repos/owner/demo/git/ref/heads/fix":
     data = {"object": {"sha": os.environ.get("FAKE_REMOTE_HEAD", "")}}
 elif parsed.path == "/search/issues":
@@ -78,6 +80,10 @@ selected = subprocess.run(["jq", "-r", args[args.index("--jq") + 1]], input=json
 if selected.returncode:
     print(selected.stderr, file=sys.stderr)
     sys.exit(3)
+# gh-axi truncates output beyond about 2,900 characters.
+if len(selected.stdout.strip()) > 2900:
+    print("api_response:\n  body: " + selected.stdout.strip()[:2900] + "...\n  truncated: true")
+    sys.exit(0)
 print("api_response:\n  body: " + selected.stdout.strip() + "\n  truncated: false")
 PY
 chmod +x "$TMP_ROOT/fakebin/gh-axi"
@@ -126,11 +132,12 @@ assert any('linked issues: #4' in why for why in c['https://github.com/owner/dem
 assert any('shared keywords' in why for why in c['https://github.com/owner/demo/pull/8']['reasons'])
 assert any('shared keywords' in why for why in c['https://github.com/owner/demo/issues/4']['reasons'])
 assert len(r['queries'])>=3
-assert r['open_prs']=={'listed': 1, 'matched': 1}
+assert r['open_prs']=={'listed': 26, 'matched': 1}
 assert 'https://github.com/owner/demo/pull/12' not in c
 PY
 pass 'scan records open PRs and issues plus recent closed unmerged PRs with match reasons'
 pass 'real selectors pass through jq and PRs listed only by the issues endpoint are not recorded as issues'
+pass 'scan reads long bodies and many PRs and files within the gh-axi output limit'
 
 printf '{"verdict":"distinct","items":[null]}\n' > "$TMP_ROOT/decisions.json"
 if "$tool" decide --record "$TMP_ROOT/prior-art.json" --decisions-file "$TMP_ROOT/decisions.json" > "$TMP_ROOT/out" 2>&1; then

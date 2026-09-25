@@ -37,10 +37,14 @@ REPO = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 SHA = re.compile(r"^[a-f0-9]{40,64}$")
 WORD = re.compile(r"[A-Za-z][A-Za-z0-9_]{3,}")
 STOP = {"about", "after", "again", "also", "before", "change", "changes", "could", "from", "have", "into", "issue", "more", "pull", "request", "should", "that", "their", "there", "these", "this", "when", "with", "would"}
-PR_SELECTOR = "[.[] | {number, html_url, user: {login: .user.login}, title, body, state, closed_at, merged_at, updated_at}]"
-ISSUE_SELECTOR = "[.[] | {number, html_url, user: {login: .user.login}, title, body, state, pull_request: (.pull_request != null)}]"
-FILES_SELECTOR = "[.[] | {filename}]"
-SEARCH_SELECTOR = "{total_count, incomplete_results, items: [.items[] | {number, html_url, user: {login: .user.login}, title, body, state}]}"
+# Bodies are reduced to an excerpt plus issue references so every row stays
+# well under gh-axi's output limit.
+BODY = ('((.body // "")[0:200] + "\\n" + ([(.body // "") | scan("(?i)https://github\\\\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/issues/[0-9]+|[A-Za-z0-9]?#[0-9]+")]'
+        ' | unique | .[0:10] | join(" ")))')
+PR_FIELDS = f"{{number, html_url, user: {{login: .user.login}}, title, body: {BODY}, state, closed_at, merged_at, updated_at}}"
+ISSUE_FIELDS = f"{{number, html_url, user: {{login: .user.login}}, title, body: {BODY}, state, pull_request: (.pull_request != null)}}"
+FILES_FIELDS = "{filename}"
+SEARCH_FIELDS = f"{{number, html_url, user: {{login: .user.login}}, title, body: {BODY}, state}}"
 
 
 def fail(message):
@@ -58,9 +62,11 @@ def git(*args):
     return run(["git", *args]).strip()
 
 
-def api(path, selector="."):
+def api(path, selector=".", *, split=False):
     # gh-axi's bounded envelope needs a selector to return unambiguous JSON.
     output = run(["gh-axi", "api", path, "--jq", f"({selector})|tojson|@base64"])
+    if split and re.search(r"^  truncated: true$", output, re.M):
+        return None
     match = re.search(r"^  body: ([A-Za-z0-9+/=]+)$", output, re.M)
     if not match or not re.search(r"^  truncated: false$", output, re.M):
         fail(f"unreadable or truncated GitHub response: {path}")
@@ -70,33 +76,54 @@ def api(path, selector="."):
         fail(f"invalid GitHub JSON for {path}: {error}")
 
 
-def pages(path, *, stop_at=None, selector="."):
-    rows = []
+def rows(path, fields, *, base=".", key=".number", head=""):
+    # gh-axi truncates large output, so read one GitHub page in adaptive slices
+    # and refuse if the page changes between slices.
+    meta = api(path, f"{{{head}ids: [{base}[] | {key}]}}")
+    if not isinstance(meta, dict) or not isinstance(meta.get("ids"), list):
+        fail(f"GitHub list was not an array: {path}")
+    total = len(meta["ids"])
+    out, start, size = [], 0, total
+    while start < total:
+        size = min(size, total - start)
+        part = api(path, f"{{ids: [{base}[] | {key}], rows: [{base}[{start}:{start + size}][] | {fields}]}}", split=True)
+        if part is None:
+            if size == 1:
+                fail(f"GitHub row is too large to read: {path}")
+            size //= 2
+            continue
+        if not isinstance(part, dict) or part.get("ids") != meta["ids"] or not isinstance(part.get("rows"), list) or len(part["rows"]) != size:
+            fail(f"GitHub list changed or was malformed while reading: {path}")
+        out.extend(part["rows"])
+        start += size
+        size *= 2
+    return meta, out
+
+
+def pages(path, fields, *, stop_at=None, key=".number"):
+    found = []
     for page in range(1, MAX_PAGES + 1):
         sep = "&" if "?" in path else "?"
-        part = api(f"{path}{sep}per_page={PAGE_SIZE}&page={page}", selector)
-        if not isinstance(part, list):
-            fail(f"GitHub list was not an array: {path}")
-        rows.extend(part)
+        _, part = rows(f"{path}{sep}per_page={PAGE_SIZE}&page={page}", fields, key=key)
+        found.extend(part)
         if stop_at and any(stop_at(row) for row in part):
-            return rows
+            return found
         if len(part) < PAGE_SIZE:
-            return rows
+            return found
     fail(f"GitHub pagination cap reached: {path}")
 
 
 def search_pages(search):
-    rows = []
+    found = []
     for page in range(1, 11):
-        result = api(f"search/issues?q={quote(search)}&per_page=100&page={page}", SEARCH_SELECTOR)
-        if not isinstance(result, dict) or not isinstance(result.get("items"), list):
-            fail("GitHub search response was incomplete")
+        result, items = rows(f"search/issues?q={quote(search)}&per_page=100&page={page}", SEARCH_FIELDS,
+                             base=".items", head="total_count, incomplete_results, ")
         if result.get("incomplete_results") or not isinstance(result.get("total_count"), int):
             fail(f"GitHub search was incomplete: {search}")
-        rows.extend(result["items"])
-        if len(rows) >= result["total_count"]:
-            return rows
-        if len(result["items"]) < 100:
+        found.extend(items)
+        if len(found) >= result["total_count"]:
+            return found
+        if len(items) < 100:
             fail(f"GitHub search result count was inconsistent: {search}")
     fail(f"GitHub search exceeded the 1,000-result limit: {search}")
 
@@ -220,10 +247,10 @@ def scan(args):
             fail("GitHub returned an incomplete candidate")
         found.setdefault(candidate["url"], candidate)
 
-    for row in pages(f"repos/{repo}/pulls?state=open", selector=PR_SELECTOR):
+    for row in pages(f"repos/{repo}/pulls?state=open", PR_FIELDS):
         add(row, "pr")
         open_pr_urls.add(row["html_url"])
-    closed = pages(f"repos/{repo}/pulls?state=closed&sort=updated&direction=desc", selector=PR_SELECTOR,
+    closed = pages(f"repos/{repo}/pulls?state=closed&sort=updated&direction=desc", PR_FIELDS,
                    stop_at=lambda row: (row.get("updated_at") or "") < cutoff.isoformat().replace("+00:00", "Z"))
     for row in closed:
         try:
@@ -232,7 +259,7 @@ def scan(args):
             fail("closed PR has invalid closed_at")
         if row.get("merged_at") is None and closed_at >= cutoff:
             add(row, "pr")
-    for row in pages(f"repos/{repo}/issues?state=open", selector=ISSUE_SELECTOR):
+    for row in pages(f"repos/{repo}/issues?state=open", ISSUE_FIELDS):
         if row.get("pull_request") is False:
             add(row, "issue")
 
@@ -254,7 +281,7 @@ def scan(args):
     for candidate in found.values():
         if candidate["kind"] == "pr":
             candidate["files"] = [item.get("filename", "") for item in pages(
-                f"repos/{repo}/pulls/{candidate['number']}/files", selector=FILES_SELECTOR)]
+                f"repos/{repo}/pulls/{candidate['number']}/files", FILES_FIELDS, key="null")]
             shared = sorted(set(ctx["files"]) & set(candidate["files"]))
             if shared:
                 candidate["reasons"].append("shared files: " + ", ".join(shared))

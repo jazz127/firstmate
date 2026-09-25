@@ -4221,37 +4221,6 @@ if ! (umask 077 && mkdir "$TASK_TMP") 2>/dev/null; then
 fi
 mkdir -p "$TASK_TMP/gotmp" "$TASK_TMP/cache/corepack" "$TASK_TMP/cache/pnpm" \
   "$TASK_TMP/cache/npm" "$TASK_TMP/cache/xdg"
-SCRATCH_HOOK_DIR="$TASK_TMP/scratch-hooks"
-mkdir -p "$SCRATCH_HOOK_DIR"
-PRIOR_HOOKS_DIR=$(git -C "$WT" rev-parse --git-path hooks 2>/dev/null || true)
-if [ -n "$PRIOR_HOOKS_DIR" ]; then
-  case "$PRIOR_HOOKS_DIR" in
-    /*) ;;
-    *) PRIOR_HOOKS_DIR="$WT/$PRIOR_HOOKS_DIR" ;;
-  esac
-  PRIOR_PRE_PUSH="$PRIOR_HOOKS_DIR/pre-push"
-else
-  PRIOR_PRE_PUSH=
-fi
-cat >"$SCRATCH_HOOK_DIR/pre-push" <<EOF
-#!/usr/bin/env bash
-set -uo pipefail
-. $(shell_quote "$SCRIPT_DIR/fm-scratch-lib.sh")
-HOOK_STDIN=\$(mktemp $(shell_quote "$SCRATCH_HOOK_DIR")/pre-push-stdin.XXXXXX) || exit 1
-trap 'rm -f -- "\$HOOK_STDIN"' EXIT
-cat >"\$HOOK_STDIN" || exit 1
-while read -r local_ref local_oid remote_ref remote_oid; do
-  [ -n "\${local_oid:-}" ] || continue
-  case "\$local_oid" in
-    0000000000000000000000000000000000000000) continue ;;
-  esac
-  fm_scratch_refuse_range "\$(git rev-parse --show-toplevel)" "\$remote_oid" "\$local_oid" push || exit 1
-done <"\$HOOK_STDIN"
-if [ -n $(shell_quote "$PRIOR_PRE_PUSH") ] && [ -x $(shell_quote "$PRIOR_PRE_PUSH") ]; then
-  $(shell_quote "$PRIOR_PRE_PUSH") "\$@" <"\$HOOK_STDIN"
-fi
-EOF
-chmod 700 "$SCRATCH_HOOK_DIR/pre-push"
 
 # Per-harness turn-end hook where enabled: a file that touches
 # state/<id>.turn-ended when the agent finishes a turn. Worktree-resident hooks
@@ -5018,13 +4987,6 @@ spawn_send_text_line "$T" "export PNPM_HOME=$TASK_TMP/cache/pnpm"
 spawn_send_text_line "$T" "export npm_config_store_dir=$TASK_TMP/cache/pnpm/store"
 spawn_send_text_line "$T" "export npm_config_cache=$TASK_TMP/cache/npm"
 spawn_send_text_line "$T" "export XDG_CACHE_HOME=$TASK_TMP/cache/xdg"
-# Route the task worktree's hooks through the scratch pre-push guard. These are
-# pane exports rather than a launch-command prefix: an assignment prefixed to the
-# launch's leading `export` statement would bind only to that builtin and never
-# reach the agent. The cleared-environment floor below forwards them.
-spawn_send_text_line "$T" "export GIT_CONFIG_COUNT=1"
-spawn_send_text_line "$T" "export GIT_CONFIG_KEY_0=core.hooksPath"
-spawn_send_text_line "$T" "export GIT_CONFIG_VALUE_0=$(shell_quote "$SCRATCH_HOOK_DIR")"
 # Export the compact-adviser kill switch into the pane shell through the same
 # pre-launch channel, so later commands in that shell inherit it too. The launch
 # command independently establishes the value for the agent process itself.
@@ -5067,7 +5029,7 @@ if [ "$LAUNCH_ENV_ENABLED" = 1 ]; then
     npm_config_cache XDG_CACHE_HOME TMUX TMUX_PANE HERDR_ENV HERDR_SESSION HERDR_SOCKET_PATH \
     HERDR_PANE_ID CMUX_WORKSPACE_ID CMUX_SURFACE_ID CMUX_TAB_ID CMUX_PANEL_ID \
     CMUX_SOCKET_PATH ZELLIJ ZELLIJ_SESSION_NAME ZELLIJ_PANE_ID FM_ZELLIJ_SESSION \
-    FM_TASK_ID COMPACT_ADVISER_DISABLE LAVISH_AXI_HOST GIT_CONFIG_COUNT GIT_CONFIG_KEY_0 GIT_CONFIG_VALUE_0 \
+    FM_TASK_ID COMPACT_ADVISER_DISABLE LAVISH_AXI_HOST \
     $LAUNCH_ENV_NAMES; do
     # Only validated names enter shell syntax. Values expand once, quoted, in
     # the pane shell and never become source text or spawn-process snapshots.

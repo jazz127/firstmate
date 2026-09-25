@@ -259,7 +259,7 @@ pass "corrected published-body readback passes the same validator"
 
 scratch_repo="$TMP_ROOT/scratch-repo"
 mkdir -p "$scratch_repo"
-git -C "$scratch_repo" init -q || fail "could not create the synthetic scratch checkout"
+git -C "$scratch_repo" init -q -b main || fail "could not create the synthetic scratch checkout"
 git -C "$scratch_repo" config user.name Fixture
 git -C "$scratch_repo" config user.email fixture@example.test
 printf '%s\n' 'product' > "$scratch_repo/product.txt"

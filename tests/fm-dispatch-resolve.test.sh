@@ -907,18 +907,22 @@ assert_contains "$out" 'Usage:' "--help prints usage"
 pass "configuration errors exit 2 before any network call"
 
 # --- Codex seat profile field -------------------------------------------------
+SEAT_HOME="$TMP_ROOT/seat-home"
+mkdir -p "$SEAT_HOME"
+jq -n --arg home "$SEAT_HOME" '{version:1,id:"fixture-dock",seats:{luna:{harness:"codex",credential_home:$home}}}' \
+  > "$HOME_DIR/config/dock.json"
 reset_log
 printf '%s\n' '{"rules":[{"when":"Luna seat tasks","use":[{"harness":"codex","model":"gpt-5.6-luna","effort":"medium"},{"harness":"codex","model":"gpt-5.6-luna","effort":"medium","seat":"luna"}]}],"default":{"harness":"codex","model":"gpt-5.6-sol"}}' > "$RULES"
 cat > "$RESPONSE" <<'JSON'
 {"model":"jev-1.13.0","answers":{"rule":{"type":"choice","choice":"rule_1","confidence":0.98,"probabilities":{"rule_1":0.98,"default":0.02}}},"usage":{"input_tokens":100,"output_tokens":40}}
 JSON
 SEAT_QUOTA="$TMP_ROOT/schema6-seat.json"
-jq '.providers |= map(
+jq --arg seat_home "$SEAT_HOME" '.providers |= map(
   if .provider == "codex" and .accountKey == "codex-home" then
     .account.credentialHome = "~/.codex/auth.json" |
     .quotaSemantics.effectiveAvailability |= map(.effectivePercentRemaining = 0 | .runway.status = "exhausted_now")
   elif .provider == "codex" and .accountKey == "default" then
-    .accountKey = "codex-luna" | .account.credentialHome = "~/.codex-luna/auth.json" |
+    .accountKey = "codex-luna" | .account.credentialHome = $seat_home + "/auth.json" |
     .quotaSemantics.effectiveAvailability |= map(.effectivePercentRemaining = 11 |
       .runway.status = "projected_exhaustion" | .selection.spendPriority = -5.6819)
   else . end)' "$SCHEMA6_NATIVE" > "$SEAT_QUOTA"
@@ -929,6 +933,33 @@ assert_contains "$out" 'candidate: codex:gpt-5.6-luna  provider=codex  scope=all
   "the Luna candidate reads its own account despite an exhausted ambient account"
 assert_contains "$out" "profile: --harness 'codex' --model 'gpt-5.6-luna' --effort 'medium' --seat 'luna'" \
   "the selected Codex seat is emitted as a concrete spawn flag"
+SEAT_SCHEMA5="$TMP_ROOT/schema5-seat.json"
+jq '.schemaVersion = 5 | .providers |= map(select(.provider != "codex" or .accountKey == "codex-luna") | del(.accountKey))' \
+  "$SEAT_QUOTA" > "$SEAT_SCHEMA5"
+cp "$RULES" "$TMP_ROOT/seat-two-profiles.json"
+printf '%s\n' '{"rules":[{"when":"Luna seat tasks","use":{"harness":"codex","model":"gpt-5.6-luna","effort":"medium","seat":"luna"}}]}' > "$RULES"
+TYPESAFE_API_KEY=$KEY QUOTA_AXI_FIXTURE="$SEAT_SCHEMA5" run code out err "$BRIEF"
+assert_contains "$out" "profile: --harness 'codex' --model 'gpt-5.6-luna' --effort 'medium' --seat 'luna'" \
+  "schema 5 must join a seated Codex profile by its credential home"
+SEAT_TILDE="$TMP_ROOT/schema6-seat-tilde.json"
+jq '.providers |= map(if .provider == "codex" and .accountKey == "codex-luna" then
+  .account.credentialHome = "~/seat-home/auth.json" else . end)' "$SEAT_QUOTA" > "$SEAT_TILDE"
+cat > "$FAKEBIN/python3" <<SH
+#!/usr/bin/env bash
+printf '%s\n' '$TMP_ROOT'
+SH
+chmod +x "$FAKEBIN/python3"
+TYPESAFE_API_KEY=$KEY QUOTA_AXI_FIXTURE="$SEAT_TILDE" run code out err "$BRIEF"
+assert_contains "$out" "profile: --harness 'codex' --model 'gpt-5.6-luna' --effort 'medium' --seat 'luna'" \
+  "tilde quota path should expand against the snapshot host's OS home"
+cat > "$FAKEBIN/python3" <<SH
+#!/usr/bin/env bash
+printf '%s\n' '$TMP_ROOT/other-home'
+SH
+TYPESAFE_API_KEY=$KEY QUOTA_AXI_FIXTURE="$SEAT_TILDE" run code out err "$BRIEF"
+assert_contains "$out" 'no quota row for account luna' "tilde path must not expand against another user's home"
+rm "$FAKEBIN/python3"
+cp "$TMP_ROOT/seat-two-profiles.json" "$RULES"
 SEAT_AS_HOME="$TMP_ROOT/schema6-seat-as-home.json"
 jq '.providers |= map(
   if .provider == "codex" and .accountKey == "codex-home" then
@@ -947,6 +978,21 @@ TYPESAFE_API_KEY=$KEY QUOTA_AXI_FIXTURE="$TMP_ROOT/schema6-no-seat-row.json" run
 assert_contains "$out" 'candidate: codex:gpt-5.6-luna  provider=codex  -> eligible, unranked: provider codex has no quota row for account luna: disclosed uncertainty' \
   "a missing Luna account is not scored against the ambient Codex account"
 assert_contains "$out" '  status: escalate' "the absent Luna account cannot select a worker"
+
+SEAT_DUPLICATE="$TMP_ROOT/schema6-seat-duplicate.json"
+jq '.providers += [.providers[] | select(.provider == "codex" and .accountKey == "codex-luna") | .accountKey = "duplicate-seat"]' \
+  "$SEAT_QUOTA" > "$SEAT_DUPLICATE"
+TYPESAFE_API_KEY=$KEY QUOTA_AXI_FIXTURE="$SEAT_DUPLICATE" run code out err "$BRIEF"
+assert_contains "$out" '  status: escalate' "duplicate credential-home rows must be unmeasured"
+assert_contains "$out" 'no quota row for account luna' "duplicate rows must not borrow a default account"
+
+printf '%s\n' '{"version":1,"id":"bad dock","seats":{}}' > "$HOME_DIR/config/dock.json"
+reset_log
+TYPESAFE_API_KEY=$KEY QUOTA_AXI_FIXTURE="$SEAT_QUOTA" run code out err "$BRIEF"
+expect_code 2 "$code" "malformed dock must refuse typed resolution"
+assert_contains "$err" 'dock record' "typed refusal should name the dock"
+assert_absent "$LOG/argv" "malformed dock must refuse before the API call"
+rm "$HOME_DIR/config/dock.json"
 
 printf '%s\n' '{"rules":[{"when":"Luna seat tasks","use":{"harness":"codex","model":"gpt-5.6-luna","seat":"other"}}]}' > "$RULES"
 reset_log

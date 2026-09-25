@@ -35,8 +35,9 @@ SH
 make_spawn_fakebin() {
   local dir=$1 fakebin
   fakebin=$(fm_test_make_spawn_fakebin "$dir")
-  cat > "$fakebin/timeout" <<'SH'
+cat > "$fakebin/timeout" <<'SH'
 #!/usr/bin/env bash
+[ "${1:-}" != -k ] || shift 2
 shift
 exec "$@"
 SH
@@ -439,29 +440,46 @@ test_codex_threads_model_and_max_effort() {
 }
 
 test_codex_luna_seat_is_explicit_and_default_is_unchanged() {
-  local rec id out status launch
+  local rec id out status launch seat_home
   id=profile-codex-luna-seat-z4
   rec=$(make_spawn_case profile-codex-luna-seat codex "$id")
   read_case_record "$rec"
+  seat_home="$CASE_DIR/credential home"
+  mkdir -p "$seat_home"
+  printf '{}\n' > "$seat_home/auth.json"
+  jq -n --arg home "$seat_home" '{version:1,id:"test-dock",seats:{luna:{harness:"codex",credential_home:$home}}}' \
+    > "$HOME_DIR/config/dock.json"
+  cat > "$FAKEBIN_DIR/codex" <<'SH'
+#!/usr/bin/env bash
+if [ "${1:-}" = login ] && [ "${2:-}" = status ]; then
+  [ -f "$CODEX_HOME/auth.json" ] || { echo 'Not logged in' >&2; exit 1; }
+  echo 'Logged in using ChatGPT' >&2
+  exit 0
+fi
+printf 'CODEX_HOME=%s\nOPENAI_API_KEY=%s\nCODEX_API_KEY=%s\n' \
+  "${CODEX_HOME-}" "${OPENAI_API_KEY-unset}" "${CODEX_API_KEY-unset}" > "$FM_TEST_CODEX_EXEC_LOG"
+printf '%s\n' "$@" >> "$FM_TEST_CODEX_EXEC_LOG"
+SH
+  chmod +x "$FAKEBIN_DIR/codex"
 
   out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" \
     "$id" "$PROJ_DIR" --harness codex --model gpt-5.6-luna --effort medium --seat luna)
   status=$?
-  expect_code 0 "$status" "Codex Luna seat dispatch should succeed"
+  expect_code 0 "$status" "Codex Luna seat dispatch should succeed: $out"
   launch=$(cat "$LAUNCH_LOG")
-  assert_contains "$launch" "CODEX_HOME=/Users/jarad/.codex-luna codex --model 'gpt-5.6-luna'" \
+  assert_contains "$launch" "CODEX_HOME='$seat_home'" \
     "Luna seat launch did not pin CODEX_HOME and selected model"
-  cat > "$FAKEBIN_DIR/codex" <<'SH'
-#!/usr/bin/env bash
-printf 'CODEX_HOME=%s\n' "${CODEX_HOME-}" > "$FM_TEST_CODEX_EXEC_LOG"
-printf '%s\n' "$@" >> "$FM_TEST_CODEX_EXEC_LOG"
-SH
-  chmod +x "$FAKEBIN_DIR/codex"
-  FM_TEST_CODEX_EXEC_LOG="$TMP_ROOT/luna-codex-exec.log" PATH="$FAKEBIN_DIR:$PATH" bash -c "$launch"
-  assert_contains "$(cat "$TMP_ROOT/luna-codex-exec.log")" 'CODEX_HOME=/Users/jarad/.codex-luna' \
+  FM_TEST_CODEX_EXEC_LOG="$TMP_ROOT/luna-codex-exec.log" OPENAI_API_KEY=ambient-main-key CODEX_API_KEY=ambient-other-key PATH="$FAKEBIN_DIR:$PATH" bash -c "$launch"
+  assert_contains "$(cat "$TMP_ROOT/luna-codex-exec.log")" "CODEX_HOME=$seat_home" \
     "executed Codex worker did not inherit the Luna CODEX_HOME"
+  assert_contains "$(cat "$TMP_ROOT/luna-codex-exec.log")" 'OPENAI_API_KEY=unset' \
+    "executed Codex worker retained ambient OpenAI authentication"
+  assert_contains "$(cat "$TMP_ROOT/luna-codex-exec.log")" 'CODEX_API_KEY=unset' \
+    "executed Codex worker retained ambient Codex authentication"
   assert_contains "$(cat "$TMP_ROOT/luna-codex-exec.log")" 'gpt-5.6-luna' \
     "executed Codex worker did not receive the dispatch model"
+  assert_grep "dock=test-dock" "$HOME_DIR/state/$id.meta" "seat provenance lacks dock id"
+  assert_grep "seat_home=$seat_home" "$HOME_DIR/state/$id.meta" "seat provenance lacks credential home"
 
   id=profile-codex-default-seat-z5
   rec=$(make_spawn_case profile-codex-default-seat codex "$id")
@@ -471,9 +489,181 @@ SH
   status=$?
   expect_code 0 "$status" "default Codex seat should preserve ordinary launch"
   launch=$(cat "$LAUNCH_LOG")
-  assert_not_contains "$launch" "CODEX_HOME=/Users/jarad/.codex-luna" \
+  assert_not_contains "$launch" "CODEX_HOME='$seat_home'" \
     "default Codex launch unexpectedly selected Luna seat"
   pass "dispatch can pin the Luna Codex seat while the default remains ambient"
+}
+
+test_codex_seat_refuses_before_task_creation() {
+  local rec id out status seat_home
+  id=profile-codex-seat-refuse-z4a
+  rec=$(make_spawn_case profile-codex-seat-refuse codex "$id")
+  read_case_record "$rec"
+  seat_home="$CASE_DIR/seat"
+  mkdir -p "$seat_home"
+  jq -n --arg home "$seat_home" '{version:1,id:"refusal-dock",seats:{luna:{harness:"codex",credential_home:$home}}}' \
+    > "$HOME_DIR/config/dock.json"
+  cat > "$FAKEBIN_DIR/codex" <<'SH'
+#!/usr/bin/env bash
+case "${1:-} ${2:-}" in
+  'login status')
+    case "$(cat "$CODEX_HOME/verdict" 2>/dev/null)" in
+      signed-out) echo 'Not logged in' >&2; exit 1 ;;
+      unknown) echo 'different output' >&2; exit 0 ;;
+      timeout) exit 124 ;;
+      *) echo 'Logged in using ChatGPT' >&2; exit 0 ;;
+    esac ;;
+esac
+exit 0
+SH
+  chmod +x "$FAKEBIN_DIR/codex"
+  out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR" --seat luna)
+  status=$?
+  expect_code 1 "$status" "missing auth file must refuse"
+  assert_contains "$out" 'no ordinary readable file-backed sign-in' "missing sign-in should be actionable"
+  assert_absent "$HOME_DIR/state/$id.meta" "missing sign-in must not create a task record"
+  [ ! -s "$LAUNCH_LOG" ] || fail "missing sign-in launched an agent"
+  printf '{}\n' > "$seat_home/auth.json"
+  for verdict in signed-out unknown timeout; do
+    printf '%s\n' "$verdict" > "$seat_home/verdict"
+    out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR" --seat luna)
+    status=$?
+    expect_code 1 "$status" "$verdict native status must refuse"
+    assert_absent "$HOME_DIR/state/$id.meta" "$verdict status must not create a task record"
+    [ ! -s "$LAUNCH_LOG" ] || fail "$verdict status launched an agent"
+  done
+  printf 'keyring\n' > "$seat_home/verdict"
+  printf 'cli_auth_credentials_store = "keyring"\n' > "$seat_home/config.toml"
+  out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR" --seat luna)
+  status=$?
+  expect_code 1 "$status" "unproven keyring mode must refuse"
+  assert_contains "$out" 'unsupported storage mode' "storage-mode refusal should be distinct"
+  rm "$seat_home/config.toml"
+  out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR" \
+    --harness 'CODEX_HOME=/somewhere codex' --seat luna)
+  status=$?
+  expect_code 1 "$status" "seated raw command must refuse"
+  assert_contains "$out" 'canonical --harness codex' "raw refusal should name the safe command"
+  assert_absent "$HOME_DIR/state/$id.meta" "raw refusal must not create a task record"
+  pass "missing, signed-out, indeterminate, unsupported store, and raw seated launches refuse before provisioning"
+}
+
+test_codex_seat_overrides_allowlisted_ambient_credentials() {
+  local rec id out status seat_home launch
+  id=profile-codex-seat-allowlist-z4aa
+  rec=$(make_spawn_case profile-codex-seat-allowlist codex "$id")
+  read_case_record "$rec"
+  seat_home="$CASE_DIR/selected seat"
+  mkdir -p "$seat_home"
+  printf '{}\n' > "$seat_home/auth.json"
+  jq -n --arg home "$seat_home" '{version:1,id:"allowlist-dock",seats:{luna:{harness:"codex",credential_home:$home}}}' \
+    > "$HOME_DIR/config/dock.json"
+  printf '%s\n' CODEX_HOME OPENAI_API_KEY CODEX_API_KEY FM_TEST_CODEX_EXEC_LOG \
+    > "$HOME_DIR/config/launch-env-allowlist"
+  cat > "$FAKEBIN_DIR/codex" <<'SH'
+#!/usr/bin/env bash
+if [ "${1:-}" = login ] && [ "${2:-}" = status ]; then
+  echo 'Logged in using ChatGPT' >&2
+  exit 0
+fi
+printf 'home=%s\nopenai=%s\ncodex=%s\n' \
+  "${CODEX_HOME-}" "${OPENAI_API_KEY-unset}" "${CODEX_API_KEY-unset}" > "$FM_TEST_CODEX_EXEC_LOG"
+SH
+  chmod +x "$FAKEBIN_DIR/codex"
+  out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR" --seat luna)
+  status=$?
+  expect_code 0 "$status" "seated launch with allowlist should succeed: $out"
+  launch=$(cat "$LAUNCH_LOG")
+  CODEX_HOME=/ambient/main OPENAI_API_KEY=ambient-main CODEX_API_KEY=ambient-other \
+    FM_TEST_CODEX_EXEC_LOG="$CASE_DIR/exec.log" PATH="$FAKEBIN_DIR:$PATH" bash -c "$launch"
+  assert_grep "home=$seat_home" "$CASE_DIR/exec.log" "allowlist overrode the seat home"
+  assert_grep 'openai=unset' "$CASE_DIR/exec.log" "allowlist forwarded an ambient OpenAI key"
+  assert_grep 'codex=unset' "$CASE_DIR/exec.log" "allowlist forwarded an ambient Codex key"
+  pass "seated launch enforces its home after launch-environment grants"
+}
+
+test_remote_secondmate_seat_refuses_before_transport() {
+  local rec id out status
+  id=profile-remote-seat-refuse-z4b
+  rec=$(make_spawn_case profile-remote-seat-refuse codex "$id")
+  read_case_record "$rec"
+  printf -- '- %s - Remote fixture (host: fixture-host; root: %s; home: %s; scope: fixture; projects: ; added 2026-09-26)\n' \
+    "$id" "$ROOT" "$CASE_DIR/remote-home" > "$HOME_DIR/data/secondmates.md"
+  out=$(run_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" --secondmate --seat luna)
+  status=$?
+  expect_code 1 "$status" "seated remote secondmate must refuse"
+  assert_contains "$out" 'does not transport a logical seat' "remote refusal should name missing support"
+  assert_absent "$HOME_DIR/state/$id.meta" "remote refusal must not publish metadata"
+  [ ! -s "$LAUNCH_LOG" ] || fail "remote refusal sent a launch command"
+  pass "seated remote secondmate refuses before transport or endpoint creation"
+}
+
+test_local_secondmate_recovery_keeps_seat() {
+  local rec id sm out status seat_home
+  id=profile-local-seat-recovery-z4c
+  rec=$(make_spawn_case profile-local-seat-recovery codex "$id")
+  read_case_record "$rec"
+  sm="$CASE_DIR/secondmate-home"
+  make_seeded_secondmate_home "$sm" "$id"
+  seat_home="$CASE_DIR/seat"
+  mkdir -p "$seat_home"
+  printf '{}\n' > "$seat_home/auth.json"
+  jq -n --arg home "$seat_home" '{version:1,id:"local-dock",seats:{luna:{harness:"codex",credential_home:$home}}}' \
+    > "$HOME_DIR/config/dock.json"
+  cat > "$FAKEBIN_DIR/codex" <<'SH'
+#!/usr/bin/env bash
+if [ "${1:-}" = login ] && [ "${2:-}" = status ]; then
+  echo 'Logged in using ChatGPT' >&2
+fi
+exit 0
+SH
+  chmod +x "$FAKEBIN_DIR/codex"
+  out=$(run_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$sm" --secondmate --seat luna)
+  status=$?
+  expect_code 0 "$status" "seated local secondmate should launch: $out"
+  assert_grep 'seat=luna' "$HOME_DIR/state/$id.meta" "initial local secondmate seat was lost"
+  : > "$LAUNCH_LOG"
+  out=$(run_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$sm" --secondmate)
+  status=$?
+  expect_code 0 "$status" "local secondmate recovery should preserve seat: $out"
+  assert_grep 'seat=luna' "$HOME_DIR/state/$id.meta" "local secondmate recovery dropped the seat"
+  assert_contains "$(cat "$LAUNCH_LOG")" "CODEX_HOME='$seat_home'" "recovered secondmate lost seat home"
+  pass "local secondmate recovery restores its recorded logical seat"
+}
+
+test_seat_reaches_scout_and_batch() {
+  local rec scout batch_a batch_b out status seat_home
+  scout=profile-seat-scout-z4d
+  batch_a=profile-seat-batch-a-z4e
+  batch_b=profile-seat-batch-b-z4f
+  rec=$(make_spawn_case profile-seat-multi codex "$scout" "$batch_a" "$batch_b")
+  read_case_record "$rec"
+  seat_home="$CASE_DIR/seat"
+  mkdir -p "$seat_home"
+  printf '{}\n' > "$seat_home/auth.json"
+  jq -n --arg home "$seat_home" '{version:1,id:"multi-dock",seats:{luna:{harness:"codex",credential_home:$home}}}' \
+    > "$HOME_DIR/config/dock.json"
+  cat > "$FAKEBIN_DIR/codex" <<'SH'
+#!/usr/bin/env bash
+if [ "${1:-}" = login ] && [ "${2:-}" = status ]; then
+  echo 'Logged in using ChatGPT' >&2
+fi
+exit 0
+SH
+  chmod +x "$FAKEBIN_DIR/codex"
+  out=$(run_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$scout" "$PROJ_DIR" --scout --harness codex --seat luna)
+  status=$?
+  expect_code 0 "$status" "seated scout should launch: $out"
+  assert_grep 'seat=luna' "$HOME_DIR/state/$scout.meta" "scout dropped seat"
+  out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" \
+    "$batch_a=$PROJ_DIR" "$batch_b=$PROJ_DIR" --harness codex --seat luna)
+  status=$?
+  expect_code 0 "$status" "seated batch should launch: $out"
+  for id in "$batch_a" "$batch_b"; do
+    assert_grep 'seat=luna' "$HOME_DIR/state/$id.meta" "batch task $id dropped seat"
+    assert_grep "seat_home=$seat_home" "$HOME_DIR/state/$id.meta" "batch task $id lost dock binding"
+  done
+  pass "scout and batch entry points preserve the dock-bound seat"
 }
 
 test_codex_omits_max_effort_for_unsupported_model() {
@@ -1535,6 +1725,11 @@ test_claude_threads_model_and_effort
 test_codex_threads_model_and_effort
 test_codex_threads_model_and_max_effort
 test_codex_luna_seat_is_explicit_and_default_is_unchanged
+test_codex_seat_refuses_before_task_creation
+test_codex_seat_overrides_allowlisted_ambient_credentials
+test_remote_secondmate_seat_refuses_before_transport
+test_local_secondmate_recovery_keeps_seat
+test_seat_reaches_scout_and_batch
 test_codex_omits_max_effort_for_unsupported_model
 test_codex_crewmate_launch_disables_the_hook_layer
 test_codex_secondmate_launch_keeps_the_hook_layer

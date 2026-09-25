@@ -71,6 +71,8 @@ CONFIG="${FM_CONFIG_OVERRIDE:-$FM_HOME/config}"
 
 # shellcheck source=bin/fm-quota-axi-lib.sh
 . "$SCRIPT_DIR/fm-quota-axi-lib.sh"
+# shellcheck source=bin/fm-dock-lib.sh
+. "$SCRIPT_DIR/fm-dock-lib.sh"
 # shellcheck source=bin/fm-control-lib.sh
 . "$SCRIPT_DIR/fm-control-lib.sh"
 # shellcheck source=bin/fm-env-lib.sh
@@ -196,6 +198,19 @@ rules_err=$(jq -r --argjson verified_harnesses "$VERIFIED_HARNESSES" --arg provi
 ' "$RULES" 2>/dev/null) || die "malformed rules file: $RULES_PATH (not JSON)"
 [ -z "$rules_err" ] || die "malformed rules file: $RULES_PATH - $rules_err"
 
+# A declared seat is a configuration obligation even when another profile
+# might win. Resolve it before the network request or quota ranking so a
+# broken dock cannot be selected around.
+SEAT_HOME=
+if jq -e '[((.rules // [])[] | (.use | if type == "array" then .[] else . end)),
+           (.default // empty | if type == "array" then .[] else . end)] |
+          any(.[]; .seat == "luna")' "$RULES" >/dev/null; then
+  seat_binding=$(fm_dock_resolve "$CONFIG" luna codex) || exit 2
+  IFS=$'\t' read -r _ _ SEAT_HOME _ <<< "$seat_binding"
+  FM_QUOTA_OS_HOME=$(python3 -c 'import os,pwd; print(pwd.getpwuid(os.geteuid()).pw_dir)') || die "cannot resolve OS user home for quota matching"
+  export FM_QUOTA_OS_HOME
+fi
+
 missing_provider=$(jq -r '
   def profiles($v): if ($v | type) == "array" then $v elif ($v | type) == "object" then [$v] else [] end;
   ((.rules // [])[] | profiles(.use)[] | select(has("provider") | not) | "use\t\(.harness)"),
@@ -310,6 +325,7 @@ fm_quota_json_valid < "$QUOTA" || emit_error "quota-axi --json returned an inval
 
 # ---- resolution: declared gates + quota evidence + argmax, all in jq ------------
 RESULT=$(jq -n --arg floor "$CONFIDENCE_FLOOR" --argjson lat "$LAT_MS" --arg none_criterion "$DEFAULT_WHEN" --argjson pmap "$PMAP" \
+  --arg seat_home "$SEAT_HOME" \
   --slurpfile resp "$RESP_FILE" --slurpfile rules "$RULES" --slurpfile quota "$QUOTA" "$FM_QUOTA_ROW_JQ"'
   ($resp[0]) as $r | ($rules[0]) as $cfg | ($quota[0]) as $q | ($r.answers.rule) as $a |
   def profiles($v): if ($v | type) == "array" then $v elif ($v | type) == "object" then [$v] else [] end;
@@ -317,7 +333,7 @@ RESULT=$(jq -n --arg floor "$CONFIDENCE_FLOOR" --argjson lat "$LAT_MS" --arg non
   def rows($p; $lane): (prov($p; $lane) | .quotaSemantics.effectiveAvailability // []);
   def bare($m): ($m | split("/") | last);
   def provider_of($c): ($c.provider // $pmap[$c.harness] // null);
-  def lane_of($c): if $c.seat == "luna" then "luna" else quota_lane($c.harness; $c.model) end;
+  def lane_of($c): if $c.seat == "luna" then "seat:" + $seat_home else quota_lane($c.harness; $c.model) end;
   def measured($p; $lane):
     (prov($p; $lane) != null and (["known", "partial"] | index(prov($p; $lane).quotaSemantics.status)) != null);
   def applicable($p; $lane; $m):
@@ -343,7 +359,7 @@ RESULT=$(jq -n --arg floor "$CONFIDENCE_FLOOR" --argjson lat "$LAT_MS" --arg non
     elif prov($p; $lane) == null then
       {profile: $c, provider: $p, eligible: true, unranked: true,
        reason: (if any($q.providers[]; .provider == $p)
-                then "provider \($p) has no quota row for account \(if $lane == "" then "default" else $lane end)"
+                then "provider \($p) has no quota row for account \(if $lane == "" then "default" elif ($lane | startswith("seat:")) then "luna" else $lane end)"
                 else "provider \($p) not in the quota snapshot" end)}
     else
       (applicable($p; $lane; ($c.model // ""))) as $rows |

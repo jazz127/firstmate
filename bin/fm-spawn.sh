@@ -81,8 +81,8 @@
 #   from that harness's launch rather than guessed. Ultra is the explicit
 #   exception: bin/fm-harness.sh validate-native-effort owns its model scope;
 #   supported Pi launches receive --codex-effort ultra, never --thinking ultra.
-#   --seat luna is an optional Codex-only dispatch axis that pins the worker
-#   CODEX_HOME to /Users/jarad/.codex-luna; omission preserves ambient behavior.
+#   --seat luna selects this home's dock-local Codex credential binding;
+#   omission preserves ambient behavior.
 #   --backend <name> is the explicit runtime session-provider backend for this
 #   exact task only (docs/configuration.md "Runtime backend" owns when that flag
 #   is authorized). Without it, the script resolves FM_BACKEND, then
@@ -598,6 +598,8 @@ fm_backlog_directory_present "$STATE" "state directory" || {
 . "$SCRIPT_DIR/fm-timeout-lib.sh"
 # shellcheck source=bin/fm-worker-account-lib.sh
 . "$SCRIPT_DIR/fm-worker-account-lib.sh"
+# shellcheck source=bin/fm-dock-lib.sh
+. "$SCRIPT_DIR/fm-dock-lib.sh"
 # Fail closed before any fleet mutation: a no-mistakes gate agent must never spawn
 # a direct report (see bin/fm-gate-refuse-lib.sh).
 fm_refuse_if_gate_agent
@@ -898,6 +900,12 @@ spawn_remote_secondmate() {
     fm_lock_release "$registry_lock" || true
     fm_lock_release "$SPAWN_TASK_LOCK" || true
     return 3
+  fi
+  if [ -n "$SEAT" ] || [ -n "$(fm_meta_get "$STATE/$id.meta" seat 2>/dev/null || true)" ]; then
+    fm_lock_release "$registry_lock" || true
+    fm_lock_release "$SPAWN_TASK_LOCK" || true
+    echo "error: seated remote secondmate $id cannot launch: this release does not transport a logical seat to the remote dock; launch refused, no ambient account selected" >&2
+    return 1
   fi
   host=$(secondmate_registry_field "$DATA/secondmates.md" "$id" host)
   root=$(secondmate_registry_field "$DATA/secondmates.md" "$id" root)
@@ -1595,6 +1603,10 @@ if [ "$RELAUNCH" -eq 0 ]; then
   spawn_require_relocated_queued_work
 fi
 if [ "$KIND" = secondmate ]; then
+  if [ "$SEAT_SET" -eq 0 ] && [ -f "$STATE/$ID.meta" ] && [ ! -L "$STATE/$ID.meta" ]; then
+    SEAT=$(fm_meta_get "$STATE/$ID.meta" seat)
+    [ -z "$SEAT" ] || SEAT_SET=1
+  fi
   if spawn_remote_secondmate "$ID"; then
     exit 0
   else
@@ -1981,9 +1993,9 @@ launch_template() {
   # secondmate launch deliberately keeps hooks on.
   codex)
     if [ "$kind" = secondmate ]; then
-      printf '%s' 'codex __MODELFLAG____EFFORTFLAG__--dangerously-bypass-approvals-and-sandbox "$(__OPINPUT__ encode launch-brief < __BRIEF__)"'
+      printf '%s' '__CODEXBIN__ __SEATAUTHFLAG____MODELFLAG____EFFORTFLAG__--dangerously-bypass-approvals-and-sandbox "$(__OPINPUT__ encode launch-brief < __BRIEF__)"'
     else
-      printf '%s' 'codex __MODELFLAG____EFFORTFLAG__--dangerously-bypass-approvals-and-sandbox --disable hooks -c "notify=[\"bash\",\"-c\",\"touch __TURNEND__\"]" "$(__OPINPUT__ encode launch-brief < __BRIEF__)"'
+      printf '%s' '__CODEXBIN__ __SEATAUTHFLAG____MODELFLAG____EFFORTFLAG__--dangerously-bypass-approvals-and-sandbox --disable hooks -c "notify=[\"bash\",\"-c\",\"touch __TURNEND__\"]" "$(__OPINPUT__ encode launch-brief < __BRIEF__)"'
     fi
     ;;
   opencode) printf '%s' 'OPENCODE_CONFIG_CONTENT='\''{"permission":{"*":"allow"}}'\'' opencode __MODELFLAG__--prompt "$(__OPINPUT__ encode launch-brief < __BRIEF__)"' ;;
@@ -2212,6 +2224,24 @@ esac
 if [ "$SEAT_SET" -eq 1 ] && [ "$HARNESS" != codex ]; then
   echo "error: --seat luna requires the codex harness" >&2
   exit 1
+fi
+SEAT_BINDING=''
+SEAT_DOCK=''
+SEAT_HOME=''
+SEAT_SOURCE=''
+SEAT_CODEX_BIN=''
+if [ -n "$SEAT" ]; then
+  [ "$RAW_LAUNCH" = 0 ] || {
+    echo "error: a seated Codex launch requires the canonical --harness codex command; raw commands can override its account; launch refused, no ambient account selected" >&2
+    exit 1
+  }
+  SEAT_BINDING=$(fm_dock_resolve "$CONFIG" "$SEAT" "$HARNESS") || exit 1
+  IFS=$'\t' read -r _ SEAT_DOCK SEAT_HOME SEAT_SOURCE <<< "$SEAT_BINDING"
+  SEAT_CODEX_BIN=$(command -v codex) || {
+    echo "error: Codex authentication could not be established for seat $SEAT (CLI unavailable); launch refused, no ambient account selected" >&2
+    exit 1
+  }
+  fm_worker_account_codex_check "$SEAT_HOME" "$SEAT_CODEX_BIN" || exit 1
 fi
 
 # muse, gemini, agy, and devin are verified as CREWMATE/SCOUT adapters only. A secondmate is
@@ -4684,7 +4714,7 @@ SPAWN_META_PATH=$SPAWN_META_TMP
 preserve_relaunch_meta() {
   awk -F= '
     BEGIN {
-      split("window endpoint_task_id worktree project harness kind mode yolo branch tasktmp model effort seat account account_provider busy_gen spawn_gen traceparent backend herdr_session herdr_workspace_id herdr_tab_id herdr_pane_id zellij_session zellij_tab_id zellij_pane_id orca_worktree_id terminal cmux_workspace_id cmux_surface_id home projects control_relaunch_tx", keys, " ")
+      split("window endpoint_task_id worktree project harness kind mode yolo branch tasktmp model effort seat dock seat_home seat_source account account_provider busy_gen spawn_gen traceparent backend herdr_session herdr_workspace_id herdr_tab_id herdr_pane_id zellij_session zellij_tab_id zellij_pane_id orca_worktree_id terminal cmux_workspace_id cmux_surface_id home projects control_relaunch_tx", keys, " ")
       for (i in keys) owned[keys[i]] = 1
     }
     !($1 in owned)
@@ -4704,6 +4734,9 @@ preserve_relaunch_meta() {
   echo "model=${MODEL:-default}"
   echo "effort=${EFFORT:-default}"
   [ -z "$SEAT" ] || echo "seat=$SEAT"
+  [ -z "$SEAT_DOCK" ] || echo "dock=$SEAT_DOCK"
+  [ -z "$SEAT_HOME" ] || echo "seat_home=$SEAT_HOME"
+  [ -z "$SEAT_SOURCE" ] || echo "seat_source=$SEAT_SOURCE"
   # The worker account pin, only when this home declares one, so an unpinned
   # task record stays byte-identical.
   [ -z "$WORKER_ACCOUNT" ] || echo "account=$WORKER_ACCOUNT_DECLARED"
@@ -4844,12 +4877,21 @@ sq_ompcfg=$(shell_quote "${OMP_WORKER_CFG:-$FM_ROOT/.omp/fm-worker-overlay.yml}"
 sq_opinput=$(shell_quote "$FM_ROOT/bin/fm-operational-input.sh")
 sq_worktree=$(shell_quote "$WT")
 MODELFLAG=$(model_flag_for_harness "$HARNESS" "$MODEL")
-[ "$SEAT" != luna ] || LAUNCH="CODEX_HOME=/Users/jarad/.codex-luna $LAUNCH"
+SEATAUTHFLAG=
+if [ -n "$SEAT" ]; then
+  SEATAUTHFLAG="-c $(shell_quote 'cli_auth_credentials_store="file"') -c $(shell_quote 'model_provider="openai"') "
+fi
 # A pinned Pi launch confines Pi's model lookup to the declared provider.
 [ -z "$WORKER_ACCOUNT_PROVIDER" ] || MODELFLAG="--provider $(shell_quote "$WORKER_ACCOUNT_PROVIDER") $MODELFLAG"
 EFFORTFLAG=$(effort_flag_for_harness "$HARNESS" "$EFFORT" "$MODEL") || exit 1
 LAUNCH=${LAUNCH//__MODELFLAG__/$MODELFLAG}
 LAUNCH=${LAUNCH//__EFFORTFLAG__/$EFFORTFLAG}
+LAUNCH=${LAUNCH//__SEATAUTHFLAG__/$SEATAUTHFLAG}
+if [ -n "$SEAT_CODEX_BIN" ]; then
+  LAUNCH=${LAUNCH//__CODEXBIN__/$(shell_quote "$SEAT_CODEX_BIN")}
+else
+  LAUNCH=${LAUNCH//__CODEXBIN__/codex}
+fi
 LAUNCH=${LAUNCH//__CLAUDEPERMFLAG__/$CLAUDE_PERM_FLAG}
 if [ "$HARNESS" = rovo ]; then
   ROVOCONFIGOVERRIDE=$(rovo_config_override_flag "$EFFORT" "$DATA" "$STATE" "$ID") || {
@@ -4944,6 +4986,9 @@ fi
 # LAUNCH_ENV_PREFIX construction below sets it again at the `env -i` boundary,
 # so under an enabled allowlist the switch is established before the wrapping
 # `/bin/sh` starts rather than only inside the command that shell runs.
+if [ -n "$SEAT" ]; then
+  LAUNCH="$(fm_worker_account_codex_shed) CODEX_HOME=$(shell_quote "$SEAT_HOME") $LAUNCH"
+fi
 if [ "$LAVISH_AXI_HOST_CONFIG_PRESENT" = 1 ]; then
   LAUNCH="export LAVISH_AXI_HOST=$(shell_quote "$LAVISH_AXI_HOST"); $LAUNCH"
 fi

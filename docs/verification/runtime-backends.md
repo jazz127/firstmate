@@ -1481,6 +1481,27 @@ FM_SEND_MARKER_HERDR_E2E=1 \
   tests/fm-send-secondmate-marker-herdr-e2e.test.sh
 ```
 
+### Pi composer exit boundary
+
+Measured on 2026-09-25 with pi 0.87.1 and herdr 0.9.1 on macOS arm64, in an isolated `fm-lab-` session made and removed by `bin/fm-herdr-lab.sh`, on a 120 by 40 pane.
+Pi ran `openai-codex/gpt-5.6-terra` so its footer rendered cost-first, and no prompt was submitted.
+`bin/fm-control.sh <task> exit` ran against a disposable task record whose endpoint was the lab pane, and each verdict came from the adapter itself:
+
+```sh
+bin/fm-herdr-lab.sh run "$LAB" pane run w1:p1 'pi --model openai-codex/gpt-5.6-terra'
+( . bin/backends/herdr.sh; fm_backend_herdr_composer_state "$LAB:w1:p1" )
+FM_HOME="$DISPOSABLE_HOME" bin/fm-control.sh t1 exit
+```
+
+| Pane state | Composer verdict | `exit` result |
+| --- | --- | --- |
+| Idle: rule, reverse-video cursor cell, rule, pwd row, then `$0.000 (sub) 0.0%/272k (auto)` | `empty` | typed `/quit` once and Pi stopped to its shell |
+| `lab draft keep me` typed without Enter | `pending`, extracted as `lab draft keep me` | refused with no lifecycle text; the draft, identity, and scroll offset were unchanged |
+| The draft cleared with `ctrl+u` | `empty` | not run in that state |
+
+The same idle capture read `unknown` on the classifier before the cost-first footer rule, which is the refusal this boundary fixes.
+Stock pi 0.87.1 drew neither a first-row `>` prompt nor the compact rounded-header layout in this run, so those two shapes rest on the portable fixtures in `tests/fm-composer-lib.test.sh` and `tests/fm-backend-herdr.test.sh`, and the compact layout stays behind `FM_BACKEND_HERDR_PI_COMPACT=1`.
+
 ### Native blocked event
 
 The protocol-16 event path was measured on 2026-07-11 with Herdr 0.7.3 and Python 3.13:

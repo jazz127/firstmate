@@ -499,6 +499,25 @@ test_registration_uses_ordered_content() {
     --validation-head "$head" --validation-mode no-mistakes --worktree "$project" \
     --upstream-base "$base" --changed-path feature.txt --check-only \
     || fail "declared rewrite on allowed path was rejected ($rewrite_head)"
+  git -C "$project" checkout -qb merge-side "$base"
+  printf 'public\n' > "$project/feature.txt"
+  git -C "$project" add feature.txt
+  git -C "$project" commit -qm 'Merge side change'
+  git -C "$project" checkout -qb contribution/merge "$base"
+  git -C "$project" merge --no-ff -qm 'Merge unrelated side history' merge-side
+  head=$(git -C "$project" rev-parse HEAD)
+  call "$dir" order --task merge --bosun bosun-kun --maneuver maneuver \
+    --forge github --owner kunchenguid --repository sample --source housefeature/maneuver \
+    --branch contribution/merge --captain-words 'Contribute merge' --path feature.txt \
+    --deviation 'feature.txt=replace house-only form' --deviation 'secret.txt=strip private house context' \
+    --commit "$first" --commit "$second" >/dev/null || fail 'merge order was rejected'
+  if call "$dir" registration-check --task merge --url "$url" --forge github --head captain/sample \
+    --base kunchenguid/sample --branch main --head-branch contribution/merge --pr-head "$head" \
+    --validation-head "$head" --validation-mode no-mistakes --worktree "$project" \
+    --upstream-base "$base" --changed-path feature.txt --check-only >"$dir/out" 2>&1; then
+    fail 'merge history was accepted'
+  fi
+  assert_grep "$head" "$dir/out" 'merge history refusal was unclear'
   pass 'registration accepts redaction and squash but rejects unrelated content'
 }
 

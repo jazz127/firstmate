@@ -746,6 +746,9 @@ def cmd_registration_check_locked(args):
             if paths is None or offending:
                 fail(f"ordered source commit changes unauthorized paths: {', '.join(offending) or '<unreadable>'}")
         for commit in actual_commits:
+            parents = git_output(worktree, "rev-list", "--parents", "-n", "1", commit)
+            if parents is None or len(parents.split()) != 2:
+                fail(f"upstream PR commit {commit} is a merge commit; unrelated history is not allowed")
             paths = git_output(worktree, "diff-tree", "--root", "--no-commit-id", "--name-only", "-r", commit)
             offending = ([] if paths is None else
                          [path for path in paths.splitlines() if path and not path_allowed(path, extraction_paths)])

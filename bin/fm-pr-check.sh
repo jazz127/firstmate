@@ -52,7 +52,9 @@ NUMBER=$FM_PR_NUMBER
 
 # A Bosun home registers only a PR backed by its one named captain order.
 # Ordinary firstmate and secondmate homes have no Bosun role marker.
+IS_BOSUN=0
 if [ -f "$FM_HOME/data/bosun-role.json" ] || [ -L "$FM_HOME/data/bosun-role.json" ]; then
+  IS_BOSUN=1
   if [ "$PROVIDER" != github ] || ! command -v gh >/dev/null 2>&1 || ! command -v jq >/dev/null 2>&1; then
     echo "error: Bosun PR registration requires the supported GitHub forge read path" >&2
     exit 1
@@ -62,14 +64,12 @@ if [ -f "$FM_HOME/data/bosun-role.json" ] || [ -L "$FM_HOME/data/bosun-role.json
     exit 1
   }
   BOSUN_HEAD=$(printf '%s' "$BOSUN_PR_JSON" | jq -er '(.headRepositoryOwner.login // "") + "/" + (.headRepository.name // "")') || exit 1
-  BOSUN_BASE=$(printf '%s' "$BOSUN_PR_JSON" | jq -er '.baseRepository.nameWithOwner // ""') || exit 1
+  BOSUN_BASE_REPOSITORY=$(printf '%s' "$BOSUN_PR_JSON" | jq -er '.baseRepository.nameWithOwner // ""') || exit 1
   BOSUN_BRANCH=$(printf '%s' "$BOSUN_PR_JSON" | jq -er '.baseRefName // ""') || exit 1
-  [ "$BOSUN_HEAD" != / ] && [ "$BOSUN_BASE" != "" ] && [ "$BOSUN_BRANCH" != "" ] || {
+  [ "$BOSUN_HEAD" != / ] && [ "$BOSUN_BASE_REPOSITORY" != "" ] && [ "$BOSUN_BRANCH" != "" ] || {
     echo "error: Bosun PR forge response was incomplete" >&2
     exit 1
   }
-  python3 "$SCRIPT_DIR/fm-bosun.py" registration-check --task "$ID" --url "$URL" \
-    --forge "$PROVIDER" --head "$BOSUN_HEAD" --base "$BOSUN_BASE" --branch "$BOSUN_BRANCH" || exit 1
 fi
 
 # Task-derived paths are constructed only after the canonical ID validation.
@@ -164,6 +164,30 @@ if { [ -z "$PR_HEAD" ] || ! fm_dod_forge_head_is_named_head "$MODE"; } \
   && ! GATE_REASON=$(fm_dod_accept_ship_done "${KIND:-ship}" "$MODE" "$WT" "$PROJECT" "$DONE_LINE" "$STATE" "$ID" "$META"); then
   echo "error: $GATE_REASON" >&2
   exit 1
+fi
+
+if [ "$IS_BOSUN" = 1 ]; then
+  [ -n "$PR_HEAD" ] || { echo "error: Bosun registration requires the exact forge PR head" >&2; exit 1; }
+  [ -n "$WT" ] && [ -d "$WT" ] || { echo "error: Bosun upstream worktree is unavailable" >&2; exit 1; }
+  BOSUN_BASE_REF="origin/$BOSUN_BRANCH"
+  BOSUN_UPSTREAM_BASE=$(git -C "$WT" merge-base HEAD "$BOSUN_BASE_REF" 2>/dev/null) || {
+    echo "error: Bosun upstream default branch is unavailable" >&2
+    exit 1
+  }
+  BOSUN_CHANGED_PATHS=$(git -C "$WT" diff --name-only "$BOSUN_UPSTREAM_BASE" HEAD) || {
+    echo "error: Bosun upstream change could not be inspected" >&2
+    exit 1
+  }
+  BOSUN_PATH_ARGS=()
+  while IFS= read -r BOSUN_PATH; do
+    [ -n "$BOSUN_PATH" ] && BOSUN_PATH_ARGS+=(--changed-path "$BOSUN_PATH")
+  done <<EOF
+$BOSUN_CHANGED_PATHS
+EOF
+  python3 "$SCRIPT_DIR/fm-bosun.py" registration-check --task "$ID" --url "$URL" \
+    --forge "$PROVIDER" --head "$BOSUN_HEAD" --base "$BOSUN_BASE_REPOSITORY" \
+    --branch "$BOSUN_BRANCH" --pr-head "$PR_HEAD" --validation-head "$PR_HEAD" --validation-mode "${MODE:-direct-PR}" \
+    --upstream-base "$BOSUN_UPSTREAM_BASE" "${BOSUN_PATH_ARGS[@]}" || exit 1
 fi
 
 META_TMP=

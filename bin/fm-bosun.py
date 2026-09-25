@@ -210,8 +210,14 @@ def cmd_order(args):
         fail("explicit captain words, scoped paths, and source commits are required")
     if args.source != f"housefeature/{safe_name(args.maneuver)}":
         fail("source must be the named durable housefeature branch")
-    fork_owner = args.fork_owner or route.get("fork_owner")
-    fork_repository = args.fork_repository or route.get("fork_repository")
+    configured_owner = route.get("fork_owner")
+    configured_repository = route.get("fork_repository")
+    if configured_owner and args.fork_owner and args.fork_owner.lower() != configured_owner.lower():
+        fail(f"fork owner differs from route: expected {configured_owner}, got {args.fork_owner}")
+    if configured_repository and args.fork_repository and args.fork_repository.lower() != configured_repository.lower():
+        fail(f"fork repository differs from route: expected {configured_repository}, got {args.fork_repository}")
+    fork_owner = configured_owner or args.fork_owner
+    fork_repository = configured_repository or args.fork_repository
     default_branch = args.default_branch or route.get("upstream_default_branch")
     if not fork_owner or not fork_repository or not default_branch:
         fail("explicit fork identity and upstream default branch are required")
@@ -290,6 +296,8 @@ def cmd_registration_check(args):
     record = contribution(args.task)
     if record["bosun"] != bosun or record["target"]["forge"] != args.forge:
         fail("Bosun PR registration requires a matching captain order")
+    if record.get("state") != "ordered" or record.get("upstream_pr"):
+        fail("captain order already has a registered upstream PR")
     expected_url = f"https://github.com/{record['target']['owner']}/{record['target']['repository']}/pull/"
     if not args.url.startswith(expected_url) or not args.url[len(expected_url):].isdigit():
         fail("upstream PR URL differs from captain order")
@@ -301,7 +309,32 @@ def cmd_registration_check(args):
         fail(f"upstream PR base differs: expected {expected_base}, got {args.base}")
     if args.branch != record["upstream_default_branch"]:
         fail(f"upstream PR base branch differs: expected {record['upstream_default_branch']}, got {args.branch}")
+    if not re.fullmatch(r"[0-9a-fA-F]{40}", args.pr_head):
+        fail("upstream PR head commit is missing or invalid")
+    if args.validation_head.lower() != args.pr_head.lower():
+        fail(f"validation evidence is stale: expected {args.pr_head}, got {args.validation_head}")
+    if not args.validation_mode:
+        fail("no-mistakes validation evidence is missing")
+    allowed = record.get("allowed_paths")
+    if not isinstance(allowed, list) or not allowed:
+        fail("captain order has no allowed paths")
+    changed = args.changed_path
+    if not changed:
+        fail("upstream change has no validated changed paths")
+    offending = []
+    for path in changed:
+        if not path or path.startswith("/") or path.startswith("../") or "/../" in path:
+            offending.append(path or "<empty>")
+            continue
+        if not any(path == item or item.endswith("/") and path.startswith(item) for item in allowed):
+            offending.append(path)
+    if offending:
+        fail(f"out-of-scope upstream paths: {', '.join(offending)}")
     record["upstream_pr"] = args.url
+    record["validation_evidence"] = {"pr_head": args.validation_head.lower(), "mode": args.validation_mode,
+                                      "validated_at": now()}
+    record["upstream_changed_paths"] = changed
+    record["upstream_base"] = args.upstream_base
     record["state"] = "published"
     write_json(contribution_path(args.task), record)
 
@@ -338,7 +371,7 @@ def main():
         p.add_argument("--" + name, required=True)
     p.add_argument("--evidence"); p.add_argument("--showed"); p.add_argument("--read-at"); p.add_argument("--confirmed", action="store_true"); p.set_defaults(func=cmd_convention)
     p = sub.add_parser("conventions"); add_target(p); p.add_argument("--bosun", required=True); p.add_argument("--policy", required=True); p.add_argument("--decisions"); p.set_defaults(func=cmd_conventions)
-    p = sub.add_parser("registration-check"); p.add_argument("--task", required=True); p.add_argument("--url", required=True); p.add_argument("--forge", required=True); p.add_argument("--head", required=True); p.add_argument("--base", required=True); p.add_argument("--branch", required=True); p.set_defaults(func=cmd_registration_check)
+    p = sub.add_parser("registration-check"); p.add_argument("--task", required=True); p.add_argument("--url", required=True); p.add_argument("--forge", required=True); p.add_argument("--head", required=True); p.add_argument("--base", required=True); p.add_argument("--branch", required=True); p.add_argument("--pr-head", required=True); p.add_argument("--validation-head", required=True); p.add_argument("--validation-mode", required=True); p.add_argument("--upstream-base", required=True); p.add_argument("--changed-path", action="append", default=[]); p.set_defaults(func=cmd_registration_check)
     p = sub.add_parser("merged"); p.add_argument("--task", required=True); p.add_argument("--url", required=True); p.set_defaults(func=cmd_merged)
     args = parser.parse_args()
     try:

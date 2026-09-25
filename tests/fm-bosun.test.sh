@@ -81,9 +81,9 @@ fake_github() {
 #!/usr/bin/env bash
 set -eu
 case "${FM_FAKE_GH_CASE:-accepted}" in
-accepted) printf '%s\n' '{"headRepositoryOwner":{"login":"captain"},"headRepository":{"name":"sample"},"baseRepository":{"nameWithOwner":"kunchenguid/sample"},"baseRefName":"main"}' ;;
-unrelated) printf '%s\n' '{"headRepositoryOwner":{"login":"other"},"headRepository":{"name":"sample"},"baseRepository":{"nameWithOwner":"kunchenguid/sample"},"baseRefName":"main"}' ;;
-wrong-base) printf '%s\n' '{"headRepositoryOwner":{"login":"captain"},"headRepository":{"name":"sample"},"baseRepository":{"nameWithOwner":"other/sample"},"baseRefName":"main"}' ;;
+accepted) printf '%s\n' '{"headRepositoryOwner":{"login":"captain"},"headRepository":{"name":"sample"},"baseRepository":{"nameWithOwner":"kunchenguid/sample"},"baseRefName":"main","headRefOid":"0123456789012345678901234567890123456789"}' ;;
+unrelated) printf '%s\n' '{"headRepositoryOwner":{"login":"other"},"headRepository":{"name":"sample"},"baseRepository":{"nameWithOwner":"kunchenguid/sample"},"baseRefName":"main","headRefOid":"0123456789012345678901234567890123456789"}' ;;
+wrong-base) printf '%s\n' '{"headRepositoryOwner":{"login":"captain"},"headRepository":{"name":"sample"},"baseRepository":{"nameWithOwner":"other/sample"},"baseRefName":"main","headRefOid":"0123456789012345678901234567890123456789"}' ;;
 unreadable) exit 1 ;;
 esac
 EOF
@@ -101,28 +101,61 @@ ordered_home() {
 }
 
 test_registration_and_merge() {
-  local dir url case_dir out
+  local dir accepted_dir url case_dir out response head base branch pr_head
   url=https://github.com/kunchenguid/sample/pull/12
   dir=$(new_home accepted)
+  accepted_dir=$dir
   ordered_home "$dir"
-  if FM_HOME="$dir" FM_ROOT_OVERRIDE="$ROOT" FM_STATE_OVERRIDE="$dir/state" PATH="$dir/fakebin:$PATH" \
-    "$ROOT/bin/fm-pr-check.sh" maneuver "$url" > "$dir/out" 2>&1; then
-    fail 'registration unexpectedly reached PR metadata'
-  fi
-  jq -e '.state == "published" and .upstream_pr == "'"$url"'"' "$dir/data/maneuver/bosun-contribution.json" >/dev/null \
+  response=$(FM_FAKE_GH_CASE=accepted PATH="$dir/fakebin:$PATH" gh pr view "$url") || fail 'accepted forge response unreadable'
+  head=$(printf '%s' "$response" | jq -r '.headRepositoryOwner.login + "/" + .headRepository.name')
+  base=$(printf '%s' "$response" | jq -r '.baseRepository.nameWithOwner')
+  branch=$(printf '%s' "$response" | jq -r '.baseRefName')
+  pr_head=$(printf '%s' "$response" | jq -r '.headRefOid')
+  call "$dir" registration-check --task maneuver --url "$url" --forge github --head "$head" \
+    --base "$base" --branch "$branch" --pr-head "$pr_head" --validation-head "$pr_head" --validation-mode no-mistakes \
+    --upstream-base upstream-sha --changed-path feature.txt || fail 'accepted registration failed'
+  jq -e '.state == "published" and .upstream_pr == "'"$url"'" and .validation_evidence.pr_head == "'"$pr_head"'" and .upstream_changed_paths == ["feature.txt"]' "$dir/data/maneuver/bosun-contribution.json" >/dev/null \
     || fail 'accepted forge response was not durably registered'
   for case_name in unrelated wrong-base unreadable; do
     case_dir=$(new_home "$case_name")
     ordered_home "$case_dir"
     export FM_FAKE_GH_CASE="$case_name"
-    FM_HOME="$case_dir" FM_ROOT_OVERRIDE="$ROOT" FM_STATE_OVERRIDE="$case_dir/state" PATH="$case_dir/fakebin:$PATH" \
-      "$ROOT/bin/fm-pr-check.sh" maneuver "$url" > "$case_dir/out" 2>&1 && fail "$case_name forge response was accepted"
+    if response=$(PATH="$case_dir/fakebin:$PATH" gh pr view "$url" 2>"$case_dir/out"); then
+      head=$(printf '%s' "$response" | jq -r '.headRepositoryOwner.login + "/" + .headRepository.name')
+      base=$(printf '%s' "$response" | jq -r '.baseRepository.nameWithOwner')
+      branch=$(printf '%s' "$response" | jq -r '.baseRefName')
+      pr_head=$(printf '%s' "$response" | jq -r '.headRefOid')
+      call "$case_dir" registration-check --task maneuver --url "$url" --forge github --head "$head" \
+        --base "$base" --branch "$branch" --pr-head "$pr_head" --validation-head "$pr_head" --validation-mode no-mistakes \
+        --upstream-base upstream-sha --changed-path feature.txt >"$case_dir/out" 2>&1 && fail "$case_name forge response was accepted"
+    fi
     unset FM_FAKE_GH_CASE
     jq -e '.state == "ordered" and .upstream_pr == null' "$case_dir/data/maneuver/bosun-contribution.json" >/dev/null \
       || fail "$case_name response changed the durable record"
   done
-  FM_HOME="$dir" python3 "$CLI" merged --task maneuver --url "$url" || fail 'merge hook failed'
-  jq -e '.state == "admirals-maneuver"' "$dir/data/maneuver/bosun-contribution.json" >/dev/null \
+  dir=$(new_home missing-validation)
+  ordered_home "$dir"
+  if call "$dir" registration-check --task maneuver --url "$url" --forge github --head captain/sample \
+    --base kunchenguid/sample --branch main --pr-head "$pr_head" --validation-head "$pr_head" --validation-mode '' \
+    --upstream-base upstream-sha --changed-path feature.txt >"$dir/out" 2>&1; then
+    fail 'missing validation evidence was accepted'
+  fi
+  dir=$(new_home stale-validation)
+  ordered_home "$dir"
+  if call "$dir" registration-check --task maneuver --url "$url" --forge github --head captain/sample \
+    --base kunchenguid/sample --branch main --pr-head "$pr_head" --validation-head stale --validation-mode no-mistakes \
+    --upstream-base upstream-sha --changed-path feature.txt >"$dir/out" 2>&1; then
+    fail 'stale validation head was accepted'
+  fi
+  dir=$(new_home out-of-scope)
+  ordered_home "$dir"
+  if call "$dir" registration-check --task maneuver --url "$url" --forge github --head captain/sample \
+    --base kunchenguid/sample --branch main --pr-head "$pr_head" --validation-head "$pr_head" --validation-mode no-mistakes \
+    --upstream-base upstream-sha --changed-path secret.txt >"$dir/out" 2>&1; then
+    fail 'out-of-scope path was accepted'
+  fi
+  FM_HOME="$accepted_dir" python3 "$CLI" merged --task maneuver --url "$url" || fail 'merge hook failed'
+  jq -e '.state == "admirals-maneuver"' "$accepted_dir/data/maneuver/bosun-contribution.json" >/dev/null \
     || fail 'Admiral maneuver was not recorded'
   pass 'forge-backed authorization and merge completion'
 }

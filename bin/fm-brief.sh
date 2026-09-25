@@ -597,9 +597,7 @@ esac
 RULE1=$(fm_ship_rule_one "$MODE" "$ID" "$BRANCH" "$FORGE") || exit 1
 DOD=$(fm_dod_block "$MODE" "$ID" "$BRANCH" "$FORGE") || exit 1
 BOSUN_SECTION=
-BOSUN_RULE2='2. Stay inside this worktree; modify nothing outside it.'
 if [ "$MODE" != local-only ] && { [ -f "$DATA/bosun-role.json" ] || [ -L "$DATA/bosun-role.json" ]; }; then
-  BOSUN_RULE2="2. Stay inside this worktree; modify nothing outside it."
   BOSUN_SECTION="# Bosun publication authorization
 Keep the named Captain's Maneuver within its ordered paths and run the repository's existing validation and publication machinery.
 The existing PR registration path reads the forge record and verifies the configured Bosun fork, upstream repository, and default branch before recording the PR."
@@ -625,7 +623,7 @@ If the top-level path is the primary checkout or not the worktree you were launc
 
 # Rules
 $RULE1
-$BOSUN_RULE2
+2. Stay inside this worktree; modify nothing outside it.
 3. Use gh-axi for GitHub operations and chrome-devtools-axi for browser operations.
 4. Report status by appending one line:
    \`$STATUS_APPEND\`

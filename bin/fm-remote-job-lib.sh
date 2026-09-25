@@ -1082,7 +1082,8 @@ fm_remote_job_stop_worker_tree() { # <pid> [start] [command]
   fi
   deadline=$((SECONDS + 30))
   while :; do
-    members=$(fm_remote_job_process_tree_pids "$pid" "$expected_start" "$expected_command" 2>/dev/null) || return 1
+    rescanned=$(fm_remote_job_process_tree_pids "$pid" "$expected_start" "$expected_command" 2>/dev/null) || return 1
+    [ -n "$rescanned" ] && members=$rescanned
     if [ -z "$members" ]; then
       if ! fm_remote_job_process_identity_matches "$pid" "$expected_start" "$expected_command"; then
         state=$(fm_remote_job_process_state "$pid" 2>/dev/null || true)

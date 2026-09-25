@@ -12,6 +12,8 @@ Usage: fm-upstream-prior-art.py scan --repo OWNER/REPO
 The record is a local JSON receipt, not a forge write. The decisions file is
 JSON with verdict (none-found, distinct, overlaps), items keyed by candidate
 URL with verdict and one-line reason, and captain_decision when overlaps.
+A scan that hits its request or time budget writes an incomplete record,
+exits nonzero, and cannot be decided or published.
 Only publish calls gh-axi pr create; all other operations are read-only on GitHub.
 """
 
@@ -32,10 +34,16 @@ from urllib.parse import quote
 SCHEMA = "fm-upstream-prior-art.v1"
 FRESH_SECONDS = 3600
 CLOSED_DAYS = 30
-MAX_PAGES = 100
+MAX_FILE_PAGES = 30
 PAGE_SIZE = 100
 READ_ATTEMPTS = 5
 RATE_WAIT_MAX = 120
+# A scan reads only the most relevant search hits per query and stops at a
+# fixed request and time budget, well inside the freshness window.
+MAX_QUERIES = 8
+SEARCH_HITS = 10
+SCAN_REQUESTS = 250
+SCAN_SECONDS = 600
 REPO = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 SHA = re.compile(r"^[a-f0-9]{40,64}$")
 WORD = re.compile(r"[A-Za-z][A-Za-z0-9_]{3,}")
@@ -45,18 +53,34 @@ STOP = {"about", "after", "again", "also", "before", "change", "changes", "could
 BODY = ('([(.body // "") | scan("(?i)https://github\\\\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/issues/[0-9]+|[A-Za-z0-9]?#[0-9]+")]'
         ' | unique | .[0:10] | join(" "))')
 ROW = f"number, author: .user.login, title, body: {BODY}, state"
-PR_FIELDS = f"{{{ROW}}}"
-CLOSED_FIELDS = f"{{{ROW}, closed_at, merged: (.merged_at != null), updated_at}}"
 ISSUE_FIELDS = f"{{{ROW}, pull_request: (.pull_request != null)}}"
-FILES_FIELDS = "{filename}"
 
 
 def fail(message):
     raise ValueError(message)
 
 
+class BudgetSpent(Exception):
+    """A scan bound was reached; the scan is recorded as incomplete."""
+
+
+BUDGET = {}
+
+
+def spend():
+    if not BUDGET:
+        return
+    if BUDGET["requests"] >= SCAN_REQUESTS:
+        raise BudgetSpent(f"request budget of {SCAN_REQUESTS} GitHub calls reached")
+    if time.monotonic() >= BUDGET["deadline"]:
+        raise BudgetSpent(f"time budget of {SCAN_SECONDS} seconds reached")
+    BUDGET["requests"] += 1
+
+
 def run(command, *, input_text=None):
     for _ in range(READ_ATTEMPTS):
+        if command[0] == "gh-axi":
+            spend()
         result = subprocess.run(command, input=input_text, text=True, capture_output=True, check=False)
         if not result.returncode:
             return result.stdout
@@ -75,8 +99,10 @@ def rate_limit_wait():
     except (AttributeError, KeyError, TypeError, ValueError):
         fail("GitHub rate limit status was malformed")
     wait = max(resets, default=time.time() + 60) - time.time() + 1
-    if wait > RATE_WAIT_MAX:
-        fail(f"GitHub API rate limit resets in {int(wait)} seconds; retry the scan later")
+    if wait > RATE_WAIT_MAX or (BUDGET and time.monotonic() + wait >= BUDGET["deadline"]):
+        if not BUDGET:
+            fail(f"GitHub API rate limit resets in {int(wait)} seconds; retry later")
+        raise BudgetSpent(f"GitHub API rate limit resets in {int(wait)} seconds")
     return max(wait, 1)
 
 
@@ -128,32 +154,28 @@ def rows(path, fields, *, base=".", key=".number", head=""):
     fail(f"GitHub list kept changing while reading: {path}")
 
 
-def pages(path, fields, *, stop_at=None, key=".number"):
-    found = []
-    for page in range(1, MAX_PAGES + 1):
-        sep = "&" if "?" in path else "?"
-        _, part = rows(f"{path}{sep}per_page={PAGE_SIZE}&page={page}", fields, key=key)
-        found.extend(part)
-        if stop_at and any(stop_at(row) for row in part):
-            return found
-        if len(part) < PAGE_SIZE:
-            return found
-    fail(f"GitHub pagination cap reached: {path}")
+def shared_files(repo, number, files):
+    # The selector returns only paths this branch also changes, so each page
+    # of a PR's file list is one small gh-axi call.
+    shared = []
+    for page in range(1, MAX_FILE_PAGES + 1):
+        part = api(f"repos/{repo}/pulls/{number}/files?per_page={PAGE_SIZE}&page={page}",
+                   f"[.[].filename] as $all | {{count: ($all | length), shared: ($all - ($all - {json.dumps(files)}))}}")
+        if not isinstance(part, dict) or not isinstance(part.get("count"), int) or not isinstance(part.get("shared"), list):
+            fail(f"GitHub file list was malformed: pull {number}")
+        shared.extend(part["shared"])
+        if part["count"] < PAGE_SIZE:
+            return sorted(set(shared))
+    return sorted(set(shared))
 
 
-def search_pages(search):
-    found = []
-    for page in range(1, 11):
-        result, items = rows(f"search/issues?q={quote(search)}&per_page=100&page={page}", ISSUE_FIELDS,
-                             base=".items", head="total_count, incomplete_results, ")
-        if result.get("incomplete_results") or not isinstance(result.get("total_count"), int):
-            fail(f"GitHub search was incomplete: {search}")
-        found.extend(items)
-        if len(found) >= result["total_count"]:
-            return found
-        if len(items) < 100:
-            fail(f"GitHub search result count was inconsistent: {search}")
-    fail(f"GitHub search exceeded the 1,000-result limit: {search}")
+def search(query):
+    # Only the first, most relevant page is read; its total is recorded.
+    result, items = rows(f"search/issues?q={quote(query)}&per_page={SEARCH_HITS}", ISSUE_FIELDS,
+                         base=".items", head="total_count, incomplete_results, ")
+    if result.get("incomplete_results") or not isinstance(result.get("total_count"), int):
+        fail(f"GitHub search was incomplete: {query}")
+    return result["total_count"], items
 
 
 def atomic_json(path, value):
@@ -255,84 +277,93 @@ def normalized(row, kind, repo):
     return {"url": url, "author": row.get("author") or "",
             "state": row.get("state", ""), "title": row.get("title") or "",
             "body": row.get("body") or "", "number": row.get("number"), "kind": kind,
-            "reasons": [], "files": []}
+            "reasons": []}
 
 
 def scan(args):
     ctx = context(args)
     now = dt.datetime.now(dt.timezone.utc)
-    cutoff = now - dt.timedelta(days=CLOSED_DAYS)
+    since = (now - dt.timedelta(days=CLOSED_DAYS)).date().isoformat()
     repo = ctx["repo"]
     diff = git("diff", "--no-ext-diff", f"{ctx['base']}...HEAD", "--")
-    queries = terms(ctx, diff)
+    linked = issue_numbers(ctx["title"] + "\n" + ctx["summary"] + "\n" + diff, repo)
+    queries = list(dict.fromkeys([f"#{n}" for n in sorted(linked, key=int)] + terms(ctx, diff)))[:MAX_QUERIES]
+    scopes = {"open": "is:open", "closed-unmerged": f"is:pr is:closed is:unmerged closed:>{since}"}
     found = {}
-    open_pr_urls = set()
+    covered = []
+    open_prs = None
+    stopped = ""
 
-    def add(row, kind):
+    def add(row):
+        kind = "pr" if row.get("pull_request") else "issue"
         candidate = normalized(row, kind, repo)
         if not candidate["author"] or not isinstance(candidate["number"], int) or candidate["number"] < 1:
             fail("GitHub returned an incomplete candidate")
         return found.setdefault(candidate["url"], candidate)
 
-    for row in pages(f"repos/{repo}/pulls?state=open", PR_FIELDS):
-        open_pr_urls.add(add(row, "pr")["url"])
-    closed = pages(f"repos/{repo}/pulls?state=closed&sort=updated&direction=desc", CLOSED_FIELDS,
-                   stop_at=lambda row: (row.get("updated_at") or "") < cutoff.isoformat().replace("+00:00", "Z"))
-    for row in closed:
-        try:
-            closed_at = dt.datetime.fromisoformat((row.get("closed_at") or "").replace("Z", "+00:00"))
-        except ValueError:
-            fail("closed PR has invalid closed_at")
-        if row.get("merged") is False and closed_at >= cutoff:
-            add(row, "pr")
-    for row in pages(f"repos/{repo}/issues?state=open", ISSUE_FIELDS):
-        if row.get("pull_request") is False:
-            add(row, "issue")
+    BUDGET.update(requests=0, deadline=time.monotonic() + SCAN_SECONDS)
+    try:
+        open_prs, _ = search(f"repo:{repo} is:pr is:open")
+        for query in queries:
+            for scope, qualifier in scopes.items():
+                total, hits = search(f"repo:{repo} {qualifier} {query}")
+                covered.append({"query": query, "scope": scope, "total": total, "read": len(hits)})
+                for row in hits:
+                    candidate = add(row)
+                    reason = f"search ({scope}): {query}"
+                    if reason not in candidate["reasons"]:
+                        candidate["reasons"].append(reason)
 
-    # One search per query covers PRs and issues within the search rate limit.
-    for query in queries:
-        for row in search_pages(f"repo:{repo} is:open {query}"):
-            if row.get("state") != "open":
-                continue
-            candidate = add(row, "pr" if row.get("pull_request") else "issue")
-            reason = f"keyword search: {query}"
-            if reason not in candidate["reasons"]:
-                candidate["reasons"].append(reason)
-
-    linked = issue_numbers(ctx["title"] + "\n" + ctx["summary"] + "\n" + diff, repo)
-    own_words = set(w.lower() for w in WORD.findall(ctx["title"] + " " + ctx["summary"]) if w.lower() not in STOP)
-    selected = []
-    for candidate in found.values():
-        overlap = sorted(linked & issue_numbers(candidate["title"] + "\n" + candidate["body"], repo))
-        if overlap:
-            candidate["reasons"].append("linked issues: " + ", ".join("#" + n for n in overlap))
-        shared_words = sorted(own_words & {w.lower() for w in WORD.findall(candidate["title"] + " " + candidate["body"]) if w.lower() not in STOP})
-        if len(shared_words) >= 2:
-            candidate["reasons"].append("shared keywords: " + ", ".join(shared_words[:8]))
-        # Changed files are fetched only for already matched PRs; busy
-        # repositories have too many open PRs to read every file list.
-        if candidate["kind"] == "pr" and candidate["reasons"]:
-            candidate["files"] = [item.get("filename", "") for item in pages(
-                f"repos/{repo}/pulls/{candidate['number']}/files", FILES_FIELDS, key="null")]
-            shared = sorted(set(ctx["files"]) & set(candidate["files"]))
-            if shared:
-                candidate["reasons"].append("shared files: " + ", ".join(shared))
-        if candidate["reasons"]:
-            selected.append({key: candidate[key] for key in ("url", "author", "state", "title", "kind", "reasons")}
-                       | {"verdict": "unreviewed", "reason": ""})
-    selected.sort(key=lambda row: row["url"])
-    open_prs_matched = sum(1 for row in selected if row["kind"] == "pr" and row["url"] in open_pr_urls)
+        own_words = set(w.lower() for w in WORD.findall(ctx["title"] + " " + ctx["summary"]) if w.lower() not in STOP)
+        for candidate in found.values():
+            overlap = sorted(linked & issue_numbers(candidate["title"] + "\n" + candidate["body"], repo), key=int)
+            if overlap:
+                candidate["reasons"].append("linked issues: " + ", ".join("#" + n for n in overlap))
+            shared_words = sorted(own_words & {w.lower() for w in WORD.findall(candidate["title"] + " " + candidate["body"]) if w.lower() not in STOP})
+            if len(shared_words) >= 2:
+                candidate["reasons"].append("shared keywords: " + ", ".join(shared_words[:8]))
+            # Path overlap is checked only on PRs the searches returned.
+            if candidate["kind"] == "pr":
+                try:
+                    shared = shared_files(repo, candidate["number"], ctx["files"])
+                except ValueError as error:
+                    # GitHub refuses file lists for closed PRs whose diff is gone.
+                    if "VALIDATION_ERROR" not in str(error):
+                        raise
+                    candidate["reasons"].append("changed files unavailable")
+                    shared = []
+                if shared:
+                    candidate["reasons"].append("shared files: " + ", ".join(shared))
+    except BudgetSpent as error:
+        stopped = str(error)
+    finally:
+        requests = BUDGET["requests"]
+        BUDGET.clear()
+    selected = sorted(({key: candidate[key] for key in ("url", "author", "state", "title", "kind", "reasons")}
+                       | {"verdict": "unreviewed", "reason": ""} for candidate in found.values()),
+                      key=lambda row: row["url"])
+    open_prs_matched = sum(1 for row in selected if row["kind"] == "pr" and row["state"] == "open")
     record = {"schema": SCHEMA, "captured_at": now.isoformat(), "closed_window_days": CLOSED_DAYS,
-              "context": ctx, "queries": queries, "open_prs": {"listed": len(open_pr_urls), "matched": open_prs_matched},
-              "candidates": selected, "verdict": "pending", "captain_decision": ""}
+              "context": ctx, "queries": queries, "open_prs": {"listed": open_prs, "matched": open_prs_matched},
+              "complete": not stopped,
+              "coverage": {"searches": covered, "requests": requests, "stopped": stopped},
+              "candidates": selected, "verdict": "incomplete" if stopped else "pending", "captain_decision": ""}
     atomic_json(args.record, record)
+    if stopped:
+        fail(f"prior-art scan incomplete ({stopped}); recorded what was covered, publication stays refused: {args.record}")
     print(f"prior-art scan recorded {len(selected)} candidates: {args.record}")
+
+
+def complete(record):
+    if record.get("complete") is not True:
+        fail("prior-art scan was incomplete; rerun the scan")
 
 
 def decide(args):
     record = read_json(args.record)
     if not isinstance(record, dict) or record.get("schema") != SCHEMA:
         fail("unrecognized prior-art record schema")
+    complete(record)
     decision = read_json(args.decisions_file)
     if not isinstance(decision, dict):
         fail("decisions file is malformed")
@@ -374,6 +405,7 @@ def checked(args):
     record = read_json(args.record)
     if not isinstance(record, dict) or record.get("schema") != SCHEMA:
         fail("unrecognized prior-art record schema")
+    complete(record)
     if record.get("context") != context(args):
         fail("prior-art record is stale: target, text, branch head, base, or diff changed")
     try:
@@ -406,6 +438,7 @@ def verify_receipt(args):
     record = read_json(args.record)
     if not isinstance(record, dict) or record.get("schema") != SCHEMA:
         fail("unrecognized prior-art record schema")
+    complete(record)
     context = record.get("context")
     if not isinstance(context, dict) or context.get("kind") != "pr":
         fail("prior-art receipt has no PR context")
@@ -457,7 +490,7 @@ def verify_receipt(args):
 def section(record):
     lines = ["## Prior art checked", "", f"Checked {record['captured_at']} in https://github.com/{record['context']['repo']}."]
     if not record["candidates"]:
-        lines.append("No matching open pull requests or issues, or recent unmerged pull requests, were found.")
+        lines.append("No matching open pull requests or issues, or recent closed unmerged pull requests, were found by search.")
     for item in record["candidates"]:
         lines.append(f"- {item['url']} by @{item['author']} ({item['state']} {item['kind']}): {item['verdict']} - {item['reason']}")
     if record["verdict"] == "overlaps":

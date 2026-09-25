@@ -66,7 +66,8 @@ Validate the exact final head that will be offered with one pipeline run to rene
 Open an upstream pull request only when the captain asks for that house feature by name.
 Only the captain contacts upstream, including opening or commenting on an upstream pull request.
 Before opening an upstream pull request in a repository the fleet does not own, run the prior-art scan in `bin/fm-upstream-prior-art.py`, review every candidate, and record an explicit verdict.
-The scan searches open pull requests and issues and recent closed unmerged pull requests using changed files, linked issues, and keywords from the title, summary, and changed symbols.
+The scan uses forge search for open pull requests and issues and recent closed unmerged pull requests, driven by linked issues and keywords from the title, summary, and changed symbols, and checks changed-file overlap only on the returned candidates.
+It reads the most relevant hits for each query within a fixed request and time budget; a scan that reaches either bound is recorded as incomplete and cannot be decided or published.
 A duplicate with different wording or files can evade those keyword, changed-file, and linked-issue matches.
 A `none-found` verdict requires no candidates; a `distinct` verdict requires a one-line reason for each candidate; an `overlaps` verdict requires the captain's recorded decision before publication.
 Use that command's `publish` operation for upstream creation so its receipt check is immediately before the forge write and the generated pull request body credits overlapping authors in a `Prior art checked` section.

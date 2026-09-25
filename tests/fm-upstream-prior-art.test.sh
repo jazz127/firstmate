@@ -35,10 +35,10 @@ def count(name):
     return n
 if args[:2] == ["api", "rate_limit"]:
     import time
-    data = {"resources": {"search": {"remaining": 0, "reset": int(time.time())}, "core": {"remaining": 4000, "reset": int(time.time()) + 3600}}}
+    data = {"resources": {"search": {"remaining": 0, "reset": int(time.time()) + int(os.environ.get("FAKE_RESET_IN", "0"))}, "core": {"remaining": 4000, "reset": int(time.time()) + 3600}}}
     print("api_response:\n  body: " + subprocess.run(["jq", "-r", args[args.index("--jq") + 1]], input=json.dumps(data), capture_output=True, text=True).stdout.strip() + "\n  truncated: false")
     sys.exit(0)
-if os.environ.get("FAKE_RATE_LIMIT") and args[1].startswith("search/") and count("ratelimit") == 1:
+if os.environ.get("FAKE_RATE_LIMIT") and args[1].startswith("search/") and (count("ratelimit") == 1 or os.environ.get("FAKE_RESET_IN")):
     print("error: GitHub API rate limit exceeded\ncode: RATE_LIMITED")
     sys.exit(1)
 if os.environ.get("FAKE_TRUNCATE_UNBOUNDED") and "--jq" in args and args[args.index("--jq") + 1] == "(.)|tojson|@base64":
@@ -64,31 +64,42 @@ pr = lambda n, title, state, merged=None: {
 issue = {"number": 4, "html_url": "https://github.com/owner/demo/issues/4",
          "user": {"login": "reporter"}, "title": "Stale worker detected incorrectly",
          "body": "The paused worker is stale", "state": "open"}
-if parsed.path == "/repos/owner/demo/pulls":
-    if params["state"][0] == "open":
-        data = [pr(7, "Fix paused worker marked stale", "open")] + [
-            pr(n, f"Unrelated open change {n}", "open") for n in range(100, 160)] if page == 1 else []
-        # Maintainer triage closes a PR while the page is being read.
-        if os.environ.get("FAKE_CHURN") and page == 1 and count("churn") > 1:
-            data = [row for row in data if row["number"] != 100]
-    else:
-        data = [pr(8, "Stale worker detection fix", "closed"),
-                pr(9, "Stale worker merge", "closed", "2026-09-20T00:00:00Z")] if page == 1 else []
-elif parsed.path == "/repos/owner/demo/issues":
-    late_pr = dict(pr(12, "Late paused worker stale fix", "open"), pull_request={"url": "https://api.github.com/repos/owner/demo/pulls/12"})
-    data = [issue, late_pr] if page == 1 else []
-elif parsed.path == "/repos/owner/demo/pulls/7/files":
+if parsed.path == "/repos/owner/demo/pulls" or parsed.path == "/repos/owner/demo/issues":
+    print("scan paginated a full listing: " + path, file=sys.stderr)
+    sys.exit(2)
+if parsed.path == "/repos/owner/demo/pulls/7/files":
     data = [{"filename": "worker.py"}]
 elif parsed.path == "/repos/owner/demo/pulls/8/files":
-    data = [{"filename": "other.py"}]
+    # GitHub refuses the file list of a closed PR whose diff is gone.
+    print("error: Validation error\ncode: VALIDATION_ERROR", file=sys.stderr)
+    sys.exit(1)
 elif parsed.path.startswith("/repos/owner/demo/pulls/") and parsed.path.endswith("/files"):
-    data = [{"filename": f"unrelated/{parsed.path.split('/')[-2]}/{i:03d}.py"} for i in range(60)]
+    data = [{"filename": f"unrelated/{parsed.path.split('/')[-2]}/{i:03d}.py"} for i in range(100 if os.environ.get("FAKE_FLOOD") else 60)]
 elif parsed.path == "/repos/owner/demo/git/ref/heads/fix":
     data = {"object": {"sha": os.environ.get("FAKE_REMOTE_HEAD", "")}}
 elif parsed.path == "/search/issues":
-    hit = os.environ.get("FAKE_SEARCH_HIT") and "pauseWorker" in params.get("q", [""])[0]
-    data = {"total_count": 1 if hit else 0, "incomplete_results": bool(os.environ.get("FAKE_INCOMPLETE")),
-            "items": [dict(pr(11, "Alternative idle classification", "open"), pull_request={"url": "x"})] if hit else []}
+    q = params.get("q", [""])[0]
+    hits = []
+    if q == "repo:owner/demo is:pr is:open":
+        total = 1368
+    elif os.environ.get("FAKE_FLOOD"):
+        base = 1000 + 10 * count("flood")
+        hits = [dict(pr(n, f"Flood change {n}", "open"), pull_request={"url": "x"}) for n in range(base, base + 10)]
+        total = 500
+    else:
+        closed = "is:closed is:unmerged closed:>" in q
+        if any(word in q.lower() for word in ("stale", "worker")):
+            hits = [dict(pr(8, "Stale worker detection fix", "closed"), pull_request={"url": "x"})] if closed else [
+                dict(pr(7, "Fix paused worker marked stale", "open"), pull_request={"url": "x"}), issue]
+        if os.environ.get("FAKE_SEARCH_HIT") and "pauseWorker" in q and not closed:
+            hits.append(dict(pr(11, "Alternative idle classification", "open"), pull_request={"url": "x"}))
+        if os.environ.get("FAKE_CHURN") and q.endswith(" stale") and not closed:
+            # Maintainer triage closes a PR while the result page is being read.
+            hits += [dict(pr(n, f"Unrelated open change {n} " + "z" * 150, "open"), pull_request={"url": "x"}) for n in range(100, 110)]
+            if count("churn") > 1:
+                hits = [row for row in hits if row["number"] != 100]
+        total = len(hits)
+    data = {"total_count": total, "incomplete_results": bool(os.environ.get("FAKE_INCOMPLETE")), "items": hits}
 else:
     print("unexpected API path " + path, file=sys.stderr)
     sys.exit(2)
@@ -132,20 +143,60 @@ import json,sys
 r=json.load(open(sys.argv[1]))
 c={x['url']:x for x in r['candidates']}
 assert 'https://github.com/owner/demo/pull/11' in c
-assert 'keyword search: pauseWorker' in c['https://github.com/owner/demo/pull/11']['reasons']
+assert 'search (open): pauseWorker' in c['https://github.com/owner/demo/pull/11']['reasons']
 PY
 pass 'changed-symbol search finds a PR with no shared file or title words'
 
 : > "$FAKE_LOG"
-FAKE_CHURN=1 FAKE_RATE_LIMIT=1 "$tool" scan "${common[@]}" > "$TMP_ROOT/out" 2>&1 || { cat "$TMP_ROOT/out"; fail 'scan failed under list churn and a search rate limit'; }
+FAKE_CHURN=1 FAKE_RATE_LIMIT=1 "$tool" scan "${common[@]}" > "$TMP_ROOT/out" 2>&1 || { cat "$TMP_ROOT/out"; fail 'scan failed under result churn and a search rate limit'; }
 python3 - "$TMP_ROOT/prior-art.json" "$FAKE_LOG" <<'PY' || fail 'churned scan record is wrong'
 import json, sys
 r=json.load(open(sys.argv[1])); log=open(sys.argv[2]).read().splitlines()
-assert r['open_prs']=={'listed': 60, 'matched': 1}, r['open_prs']
-assert not any('/pulls/1' in line and '/files' in line for line in log), 'fetched files for unmatched PRs'
-assert sum(line.startswith('api search/') for line in log) == len(r['queries']) + 1, 'search was not one call per query plus one rate-limit retry'
+c={x['url'] for x in r['candidates']}
+assert r['complete'] is True and r['verdict']=='pending', r['coverage']
+assert 'https://github.com/owner/demo/pull/100' not in c and 'https://github.com/owner/demo/pull/101' in c
+assert 'api rate_limit' in log, 'search rate limit was not waited out'
+assert not any('demo/pulls?' in line or 'demo/issues?' in line for line in log), 'scan paginated a full listing'
 PY
-pass 'scan tolerates PRs closing mid-read, waits out search rate limits, and fetches files only for matched PRs'
+pass 'scan tolerates PRs closing mid-read and waits out search rate limits'
+
+if FAKE_FLOOD=1 "$tool" scan "${common[@]}" > "$TMP_ROOT/out" 2>&1; then
+  fail 'scan past its request budget reported success'
+fi
+rg -q 'incomplete' "$TMP_ROOT/out" || fail 'budget refusal did not say the scan was incomplete'
+python3 - "$TMP_ROOT/prior-art.json" "$FAKE_LOG" <<'PY' || fail 'budgeted scan record is wrong'
+import json, sys
+r=json.load(open(sys.argv[1]))
+assert r['complete'] is False and r['verdict']=='incomplete', r['verdict']
+assert r['coverage']['requests']==250 and 'request budget' in r['coverage']['stopped'], r['coverage']
+assert r['coverage']['searches'] and r['candidates'], 'incomplete record lost what was covered'
+PY
+printf '{"verdict":"none-found","items":[]}\n' > "$TMP_ROOT/decisions.json"
+if "$tool" decide --record "$TMP_ROOT/prior-art.json" --decisions-file "$TMP_ROOT/decisions.json" > "$TMP_ROOT/out" 2>&1; then
+  fail 'incomplete scan accepted a verdict'
+fi
+if "$tool" verify --record "$TMP_ROOT/prior-art.json" --repo owner/demo --head "$(git rev-parse HEAD)" > "$TMP_ROOT/out" 2>&1; then
+  fail 'incomplete scan verified as a receipt'
+fi
+pass 'scan stops at its request budget and records an incomplete, unpublishable receipt'
+
+if FAKE_RATE_LIMIT=1 FAKE_RESET_IN=3600 "$tool" scan "${common[@]}" > "$TMP_ROOT/out" 2>&1; then
+  fail 'scan blocked by a long rate limit reported success'
+fi
+python3 - "$TMP_ROOT/prior-art.json" <<'PY' || fail 'rate-limited scan record is wrong'
+import json, sys
+r=json.load(open(sys.argv[1]))
+assert r['complete'] is False and 'rate limit' in r['coverage']['stopped'], r['coverage']
+assert r['candidates']==[] and r['open_prs']['listed'] is None
+PY
+python3 - "$TMP_ROOT/prior-art.json" <<'PY'
+import json, sys
+p=sys.argv[1]; r=json.load(open(p)); r['verdict']='none-found'; open(p,'w').write(json.dumps(r))
+PY
+if "$tool" check "${common[@]}" > "$TMP_ROOT/out" 2>&1; then
+  fail 'incomplete scan with an edited none-found verdict passed check'
+fi
+pass 'a truncated scan is never usable as none-found'
 
 "$tool" scan "${common[@]}" > "$TMP_ROOT/out" || fail 'scan failed'
 python3 - "$TMP_ROOT/prior-art.json" <<'PY' || fail 'scan record is incomplete'
@@ -158,14 +209,17 @@ assert c['https://github.com/owner/demo/pull/7']['author']=='author7'
 assert any('shared files: worker.py' in why for why in c['https://github.com/owner/demo/pull/7']['reasons'])
 assert any('linked issues: #4' in why for why in c['https://github.com/owner/demo/pull/7']['reasons'])
 assert any('shared keywords' in why for why in c['https://github.com/owner/demo/pull/8']['reasons'])
+assert 'changed files unavailable' in c['https://github.com/owner/demo/pull/8']['reasons']
 assert any('shared keywords' in why for why in c['https://github.com/owner/demo/issues/4']['reasons'])
 assert len(r['queries'])>=3
-assert r['open_prs']=={'listed': 61, 'matched': 1}
-assert 'https://github.com/owner/demo/pull/12' not in c
+assert r['open_prs']=={'listed': 1368, 'matched': 1}
+assert c['https://github.com/owner/demo/pull/7']['kind']=='pr' and c['https://github.com/owner/demo/issues/4']['kind']=='issue'
+assert r['complete'] is True and r['coverage']['requests'] <= 250
+assert {s['scope'] for s in r['coverage']['searches']}=={'open','closed-unmerged'}
 PY
-pass 'scan records open PRs and issues plus recent closed unmerged PRs with match reasons'
-pass 'real selectors pass through jq and PRs listed only by the issues endpoint are not recorded as issues'
-pass 'scan reads long bodies and many PRs and files within the gh-axi output limit'
+pass 'search-driven scan records open PRs and issues plus recent closed unmerged PRs with match reasons'
+pass 'real selectors pass through jq and search PR rows are recorded as PRs'
+pass 'scan reads long bodies and file lists within the gh-axi output limit'
 
 printf '{"verdict":"distinct","items":[null]}\n' > "$TMP_ROOT/decisions.json"
 if "$tool" decide --record "$TMP_ROOT/prior-art.json" --decisions-file "$TMP_ROOT/decisions.json" > "$TMP_ROOT/out" 2>&1; then

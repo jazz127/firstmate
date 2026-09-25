@@ -969,7 +969,7 @@ try:
     if start != expected_start or command != expected_command:
         raise SystemExit(1)
     try:
-        os.pidfd_send_signal(fd, sig)
+        signal.pidfd_send_signal(fd, sig)
     except AttributeError:
         raise SystemExit(2)
     except OSError as exc:

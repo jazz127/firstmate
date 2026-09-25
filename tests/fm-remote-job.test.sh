@@ -167,14 +167,17 @@ cat > "$PIDFD_NO_PS_BIN/uname" <<SH
 exec "$UNAME_BIN" "\$@"
 SH
 chmod +x "$PIDFD_NO_PS_BIN/python3" "$PIDFD_NO_PS_BIN/uname"
-sleep 30 & PIDFD_NO_PS_PID=$!
+PIDFD_NO_PS_MARKER="$TMP_ROOT/pidfd-no-ps-marker" \
+  sh -c 'trap '\''touch "$PIDFD_NO_PS_MARKER"; exit 0'\'' TERM; sleep 30' & PIDFD_NO_PS_PID=$!
 PIDFD_NO_PS_START=$(fm_remote_job_process_start "$PIDFD_NO_PS_PID")
 PIDFD_NO_PS_COMMAND=$(fm_remote_job_process_command "$PIDFD_NO_PS_PID")
-PATH="$PIDFD_NO_PS_BIN" fm_remote_job_signal_identity \
+PIDFD_NO_PS_MARKER="$PIDFD_NO_PS_MARKER" PATH="$PIDFD_NO_PS_BIN" \
+  fm_remote_job_signal_identity \
   "$PIDFD_NO_PS_PID" TERM "$PIDFD_NO_PS_START" "$PIDFD_NO_PS_COMMAND" \
   || fail "pidfd signaling failed when ps was absent from PATH"
-wait "$PIDFD_NO_PS_PID" 2>/dev/null || true
-pass "pidfd signaling resolves ps independently of PATH"
+wait "$PIDFD_NO_PS_PID" 2>/dev/null || fail "pidfd TERM did not reach the intended process"
+[ -f "$PIDFD_NO_PS_MARKER" ] || fail "pidfd TERM did not trigger the intended process handler"
+pass "pidfd signaling reaches the intended process without PATH ps"
 
 FALLBACK_RECHECK_BIN="$TMP_ROOT/fallback-recheck-bin"
 mkdir -p "$FALLBACK_RECHECK_BIN"

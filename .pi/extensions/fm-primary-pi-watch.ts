@@ -650,6 +650,40 @@ export default function (pi: ExtensionAPI) {
     return confirmHandlingDelivery(snapshot());
   }
 
+  async function recoverRejectedHandlingDelivery(
+    owner: SessionGeneration,
+    recovery: { generation: string; watcherPid: string },
+  ): Promise<{ ok: boolean; detail: string }> {
+    let confirmed = confirmHandlingDeliveryWithRetry(owner, recovery);
+    for (let attempt = 0; !confirmed.ok && attempt < retryLimit; attempt += 1) {
+      // A ready successor can lose its watcher lock before the confirmation
+      // subprocess checks it. Retire that arm before restoring another one so
+      // the original actionable close remains pending and only one successor
+      // can own the watcher at a time.
+      const predecessor = owner.child;
+      if (!(await retireArm(predecessor))) {
+        return {
+          ok: false,
+          detail: `${confirmed.detail}\nwatcher: FAILED - rejected handling successor did not retire within ${armRetireTimeoutMs}ms`,
+        };
+      }
+      if (!generationIsLive(owner)) return confirmed;
+      const restoration = await restoreAfterActionableClose(owner, String(predecessor?.pid ?? recovery.watcherPid));
+      if (restoration.failure) {
+        return { ok: false, detail: `${confirmed.detail}\n${restoration.failure}` };
+      }
+      if (!restoration.recovery) {
+        return {
+          ok: false,
+          detail: `${confirmed.detail}\nwatcher: FAILED - replacement successor has no recovery generation to confirm`,
+        };
+      }
+      recovery = restoration.recovery;
+      confirmed = confirmHandlingDeliveryWithRetry(owner, recovery);
+    }
+    return confirmed;
+  }
+
   function offerWakeToBranch(message: string): Promise<void> | null {
     const heartbeat = /^heartbeat($|:)/.test(message);
     // A check-kind close (merge-confirmation polls, Relay mentions,
@@ -705,12 +739,9 @@ export default function (pi: ExtensionAPI) {
   ): Promise<boolean> {
     if (!generationIsLive(owner)) return false;
     if (recovery) {
-      const confirmed = confirmHandlingDeliveryWithRetry(owner, recovery);
+      const confirmed = await recoverRejectedHandlingDelivery(owner, recovery);
+      if (!generationIsLive(owner)) return false;
       if (!confirmed.ok) {
-        const watcherPid = recovery.watcherPid;
-        if (!pidAlive(watcherPid)) {
-          await retireArm(owner.child);
-        }
         return await sendWake(owner, `${message}\n\n${confirmed.detail}`, pending);
       }
     }

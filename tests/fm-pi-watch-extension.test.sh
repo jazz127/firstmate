@@ -1614,7 +1614,7 @@ trap 'exit 0' TERM INT
 while [ ! -e "$FM_STOP_FILE" ]; do sleep 0.02; done
 SH
   chmod +x "$repo/bin/fm-watch-arm.sh"
-  out=$(PLUGIN="$plugin" FM_HOME="$home" FM_ROOT_OVERRIDE="$repo" FM_ARM_LOG="$log" FM_STOP_FILE="$stop" node --input-type=module 2>&1 <<'EOF'
+  out=$(PLUGIN="$plugin" FM_HOME="$home" FM_ROOT_OVERRIDE="$repo" FM_ARM_LOG="$log" FM_STOP_FILE="$stop" FM_WATCH_REARM_RETRY_LIMIT=2 node --input-type=module 2>&1 <<'EOF'
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
@@ -1650,14 +1650,103 @@ const rows = existsSync(process.env.FM_ARM_LOG)
 if (rows.filter((row) => row.startsWith("refused ")).length < 1) {
   throw new Error(`handling-delivered was never attempted: ${rows.join(" | ")}`);
 }
+if (rows.filter((row) => row.startsWith("arm=")).length !== 4 ||
+    rows.filter((row) => row.startsWith("refused ")).length !== 6) {
+  throw new Error(`permanent rejection did not exhaust the bounded retries: ${rows.join(" | ")}`);
+}
 writeFileSync(process.env.FM_STOP_FILE, "stop\n");
 process.exit(0);
 EOF
 )
   status=$?
-  expect_code 0 "$status" "Pi must surface a refused handling handshake as one typed failure"
+  expect_code 0 "$status" "Pi must surface a refused handling handshake as one typed failure: $out"
   [ -z "$out" ] || fail "Pi handling-delivery failure test printed output: $out"
   pass "Pi refused handling handshake is classified and not swallowed"
+}
+
+test_pi_rejected_handling_confirmation_restores_in_place() {
+  local repo home plugin log stop out status
+  repo="$TMP_ROOT/pi-handling-recover-root"
+  home="$TMP_ROOT/pi-handling-recover-home"
+  log="$TMP_ROOT/pi-handling-recover.log"
+  stop="$TMP_ROOT/pi-handling-recover.stop"
+  mkdir -p "$repo/bin" "$home/state" "$home/config"
+  install_pi_watch_extension_fixture "$repo"
+  plugin="$repo/.pi/extensions/fm-primary-pi-watch.ts"
+  printf '123\t1\tsignal\tfixture\tsignal: synthetic durable wake\n' > "$home/state/.wake-queue"
+  cat > "$repo/bin/fm-watch-arm.sh" <<'SH'
+#!/usr/bin/env bash
+if [ "${1:-}" = --handling-delivered ]; then
+  if [ "$(cat "$FM_HOME/state/fixture-watch-pid")" = "$4" ]; then
+    printf 'confirmed watcher=%s\n' "$4" >> "${FM_ARM_LOG:?}"
+    exit 0
+  fi
+  printf 'rejected watcher=%s\n' "$4" >> "${FM_ARM_LOG:?}"
+  exit 1
+fi
+printf 'arm=%s predecessor=%s\n' "$$" "${FM_WATCH_PREDECESSOR_ARM_PID:-none}" >> "${FM_ARM_LOG:?}"
+count=$(grep -c '^arm=' "$FM_ARM_LOG")
+if [ "$count" -eq 1 ]; then
+  printf 'watcher: started pid=%s (beacon fresh)\n' "$$"
+  printf 'signal: synthetic durable wake\n'
+  exit 0
+fi
+if [ "$count" -eq 2 ]; then
+  printf '999999\n' > "$FM_HOME/state/fixture-watch-pid"
+else
+  printf '%s\n' "$$" > "$FM_HOME/state/fixture-watch-pid"
+fi
+printf 'watcher: started pid=%s (beacon fresh) recovery-generation=fixture-generation\n' "$$"
+trap 'printf "retired=%s\n" "$count" >> "$FM_ARM_LOG"; exit 0' TERM INT
+while [ ! -e "$FM_STOP_FILE" ]; do sleep 0.02; done
+SH
+  chmod +x "$repo/bin/fm-watch-arm.sh"
+  out=$(PLUGIN="$plugin" FM_HOME="$home" FM_ROOT_OVERRIDE="$repo" FM_ARM_LOG="$log" FM_STOP_FILE="$stop" FM_WATCH_REARM_RETRY_BASE_MS=5 FM_WATCH_REARM_RETRY_MAX_MS=10 FM_WATCH_REARM_RETRY_LIMIT=2 node --input-type=module 2>&1 <<'EOF'
+import { readFileSync, writeFileSync } from "node:fs";
+import { pathToFileURL } from "node:url";
+
+let tool = null;
+const prompts = [];
+const pi = {
+  on() {},
+  registerCommand() {},
+  registerTool(candidate) {
+    if (candidate.name === "fm_watch_arm_pi") tool = candidate;
+  },
+  sendUserMessage: async (message) => { prompts.push(message); },
+};
+writeFileSync(`${process.env.FM_HOME}/state/.lock`, `${process.pid}\n`);
+const mod = await import(pathToFileURL(process.env.PLUGIN).href);
+mod.default(pi);
+await tool.execute("tool-call-handling-recover", {}, undefined, undefined, {});
+for (let i = 0; i < 250 && prompts.length === 0; i += 1) {
+  await new Promise((resolve) => setTimeout(resolve, 20));
+}
+const rows = readFileSync(process.env.FM_ARM_LOG, "utf8").trim().split("\n");
+if (rows.filter((row) => row.startsWith("arm=")).length !== 3) {
+  throw new Error(`rejected confirmation did not restore the successor in place: ${rows.join(" | ")}`);
+}
+if (rows.filter((row) => row.startsWith("rejected ")).length !== 2 ||
+    rows.filter((row) => row.startsWith("confirmed ")).length !== 1 ||
+    !rows.includes("retired=2")) {
+  throw new Error(`confirmation did not reject, retire, and recover: ${rows.join(" | ")}`);
+}
+if (prompts.length !== 1 || !prompts[0].includes("signal: synthetic durable wake") ||
+    prompts[0].includes("watcher: FAILED")) {
+  throw new Error(`original wake was lost, duplicated, or misreported: ${prompts.join(" | ")}`);
+}
+if (readFileSync(`${process.env.FM_HOME}/state/.wake-queue`, "utf8") !==
+    "123\t1\tsignal\tfixture\tsignal: synthetic durable wake\n") {
+  throw new Error("the durable wake row changed before acknowledgement");
+}
+writeFileSync(process.env.FM_STOP_FILE, "stop\n");
+process.exit(0);
+EOF
+)
+  status=$?
+  expect_code 0 "$status" "Pi must recover a rejected handling confirmation in place: $out"
+  [ -z "$out" ] || fail "Pi handling-recovery test printed output: $out"
+  pass "Pi rejected handling confirmation restores a successor without losing the durable wake"
 }
 
 test_pi_hung_successor_falls_back_to_typed_wake() {
@@ -4332,6 +4421,7 @@ test_pi_heartbeat_restoration_failure_stays_on_main
 test_pi_watcher_failure_never_offered_to_branch
 test_pi_away_record_collapses_eligibility_and_keeps_vetoes_on_main
 test_pi_handling_delivery_failure_is_typed_once
+test_pi_rejected_handling_confirmation_restores_in_place
 test_pi_hung_successor_falls_back_to_typed_wake
 test_pi_unretired_successor_falls_back_without_retry
 test_pi_late_unretired_close_resumes_supervision

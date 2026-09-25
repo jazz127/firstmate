@@ -191,6 +191,22 @@ pass "table and incompatible total-only mismatch is refused"
 sed 's/1 of 5 scenarios driven live/1 of 4 scenarios driven live/' "$draft" > "$task_tmp/corrected-total-only.md"
 mv "$task_tmp/corrected-total-only.md" "$draft"
 
+sed -e 's/| Account A | pass | yes | captured account output |/| Account A | pass | fixture-based | local fixture |/' \
+  -e 's/1 of 4 scenarios driven live/0 of 5 scenarios driven live/' \
+  "$draft" > "$task_tmp/fixture-total-mismatch.md"
+mv "$task_tmp/fixture-total-mismatch.md" "$draft"
+output=$(preflight)
+rc=$?
+[ "$rc" -eq 1 ] || fail "fixture table and incompatible total were accepted: $output"
+assert_contains "$output" 'evidence claim refused: contradictory driven-scenario results:' "fixture total mismatch reason was missing"
+assert_contains "$output" '0 of 5 scenarios driven live against the product.' "fixture total mismatch was not quoted"
+pass "fully classified fixture table rejects an incompatible total"
+
+sed -e 's/| Account A | pass | fixture-based | local fixture |/| Account A | pass | yes | captured account output |/' \
+  -e 's/0 of 5 scenarios driven live/1 of 4 scenarios driven live/' \
+  "$draft" > "$task_tmp/corrected-fixture-total.md"
+mv "$task_tmp/corrected-fixture-total.md" "$draft"
+
 sed 's/1 of 4 scenarios driven live/Live validation: passed - 1 of 4 scenarios driven live/' "$draft" > "$task_tmp/verdict.md"
 mv "$task_tmp/verdict.md" "$draft"
 output=$(preflight) || fail "partly live passed verdict was refused: $output"

@@ -19,6 +19,8 @@ import subprocess
 import sys
 import tempfile
 
+SUPPORTED_FORGES = {"github": "github.com"}
+
 
 class Refusal(Exception):
     pass
@@ -95,13 +97,20 @@ def safe_name(value):
 def target(forge, owner, repo):
     for value in (forge, owner, repo):
         safe_name(value)
-    return {"forge": forge.lower(), "owner": owner.lower(), "repository": repo.lower()}
+    forge = forge.lower()
+    if forge not in SUPPORTED_FORGES:
+        fail(f"unsupported Bosun forge '{forge}'; supported: {', '.join(SUPPORTED_FORGES)}")
+    return {"forge": forge, "owner": owner.lower(), "repository": repo.lower()}
 
 
 def routes():
     data = read_json(home() / "config/bosun-routes.json", {"schema": "fm-bosun-routes.v1", "routes": []})
     if data.get("schema") != "fm-bosun-routes.v1" or not isinstance(data.get("routes"), list):
         fail("invalid Bosun route schema")
+    for row in data["routes"]:
+        forge = row.get("forge") if isinstance(row, dict) else None
+        if forge and forge.lower() not in SUPPORTED_FORGES:
+            fail(f"unsupported Bosun forge '{forge.lower()}'; supported: {', '.join(SUPPORTED_FORGES)}")
     return data["routes"]
 
 
@@ -315,7 +324,7 @@ def cmd_extract(args):
     ordered_branch = record.get("upstream_default_branch")
     if not ordered_branch or args.default_branch != ordered_branch:
         fail(f"upstream default branch differs: expected {ordered_branch or 'ordered branch'}, got {args.default_branch}")
-    expected_remote = f"{'github.com' if record['target']['forge'] == 'github' else 'gitlab.com'}/{record['target']['owner']}/{record['target']['repository']}"
+    expected_remote = f"{SUPPORTED_FORGES[record['target']['forge']]}/{record['target']['owner']}/{record['target']['repository']}"
     actual_remote = remote_identity(repo, args.upstream_remote)
     if actual_remote != expected_remote:
         fail(f"upstream remote differs: expected {expected_remote}, got {actual_remote}")
@@ -388,12 +397,7 @@ def cmd_published(args):
         fail("validation evidence must be a readable regular file")
     cmd_guard(args)
     want = record["target"]
-    if want["forge"] == "github":
-        expected = f"https://github.com/{want['owner']}/{want['repository']}/pull/"
-    elif want["forge"] == "gitlab":
-        expected = f"https://gitlab.com/{want['owner']}/{want['repository']}/-/merge_requests/"
-    else:
-        fail("this forge has no Bosun PR URL verifier")
+    expected = f"https://{SUPPORTED_FORGES[want['forge']]}/{want['owner']}/{want['repository']}/pull/"
     if not args.url.startswith(expected) or not args.url[len(expected):].isdigit():
         fail("upstream PR URL differs from captain order")
     actual = forge_pull_request(want["forge"], args.url)
@@ -412,13 +416,10 @@ def cmd_published(args):
 
 
 def forge_pull_request(forge, url):
-    if forge == "github":
-        command = ["gh", "pr", "view", url, "--json",
-                   "headRepositoryOwner,headRepository,baseRepository,baseRefName"]
-    elif forge == "gitlab":
-        command = ["glab", "mr", "view", url, "-F", "json"]
-    else:
-        fail("this forge has no Bosun PR reader")
+    if forge != "github":
+        fail(f"unsupported Bosun forge '{forge}'; supported: {', '.join(SUPPORTED_FORGES)}")
+    command = ["gh", "pr", "view", url, "--json",
+               "headRepositoryOwner,headRepository,baseRepository,baseRefName"]
     try:
         result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
         if result.returncode:
@@ -435,12 +436,6 @@ def forge_pull_request(forge, url):
         base = base.get("nameWithOwner") if isinstance(base, dict) else base
         branch = data.get("baseRefName")
         head = f"{owner}/{repository}" if owner and repository else ""
-    else:
-        source = data.get("source_project") or {}
-        target_project = data.get("target_project") or {}
-        head = source.get("path_with_namespace", "")
-        base = target_project.get("path_with_namespace", "")
-        branch = data.get("target_branch", "")
     if not all(isinstance(value, str) and value for value in (head, base, branch)):
         fail("forge PR response unreadable: missing head or base fields")
     return {"head": head.lower(), "base": base.lower(), "branch": branch}

@@ -40,7 +40,7 @@ EOF
 }
 
 test_routing() {
-  local dir out
+  local dir out unsupported
   dir=$(new_home routing)
   printf '%s\n' '- bosun-kun - Kun contributions (home: /tmp/kun; scope: Kun; projects: sample; added 2026-09-25)' > "$dir/data/secondmates.md"
   routes_fixture "$dir"
@@ -53,6 +53,15 @@ test_routing() {
     fail 'unmatched route silently selected a Bosun'
   fi
   assert_grep 'ask whether to create one' "$dir/out" 'no match did not request Bosun creation'
+  unsupported=$(new_home unsupported-forge)
+  cat > "$unsupported/config/bosun-routes.json" <<'EOF'
+{"schema":"fm-bosun-routes.v1","routes":[{"bosun":"bosun-kun","forge":"gerrit","owner":"kunchenguid"}]}
+EOF
+  if call "$unsupported" route --forge github --owner kunchenguid --repository sample > "$unsupported/out" 2>&1; then
+    fail 'unsupported forge route was accepted'
+  fi
+  assert_grep "unsupported Bosun forge 'gerrit'; supported: github" "$unsupported/out" \
+    'unsupported forge diagnostic missing'
   python3 - "$dir/config/bosun-routes.json" <<'PY'
 import json, sys
 p=sys.argv[1]
@@ -220,7 +229,7 @@ data['state'] = 'extracted'
 json.dump(data, open(p, 'w'))
 PY
     export FM_FAKE_GH_CASE="$forge_case"
-    if PATH="$dir/fakebin:$PATH" call "$dir" published --task maneuver --repo "$dir/extracted" --url "$url" --validation artifact > "$dir/out" 2>&1; then
+    if PATH="$dir/fakebin:$PATH" call "$dir" published --task maneuver --repo "$dir/extracted" --url "$url" --validation "$validation_artifact" > "$dir/out" 2>&1; then
       fail "$forge_case forge response was accepted"
     fi
     unset FM_FAKE_GH_CASE

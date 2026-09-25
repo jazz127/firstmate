@@ -125,6 +125,12 @@ fi
 KIND=$(grep '^kind=' "$META" | tail -1 | cut -d= -f2- || true)
 MODE=$(grep '^mode=' "$META" | tail -1 | cut -d= -f2- || true)
 PROJECT=$(grep '^project=' "$META" | tail -1 | cut -d= -f2- || true)
+TASK_TMP=$(grep '^tasktmp=' "$META" | tail -1 | cut -d= -f2- || true)
+PR_BODY=$(fm_pr_read_published_body "$URL") || exit 1
+if ! fm_dod_validate_published_intent "$PR_BODY" "$WT" "$TASK_TMP"; then
+  echo "error: published intent failed evidence validation" >&2
+  exit 1
+fi
 # The gate is asked about the ready report this task's worker was told to give;
 # on a Gerrit change both publishing modes report the same published line.
 case "$PROVIDER:$MODE" in

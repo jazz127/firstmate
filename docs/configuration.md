@@ -543,7 +543,8 @@ Both `use` and the optional top-level `default` accept either one profile object
 The single-object form stays fully backward-compatible, and every profile needs `harness`.
 Profile `model` and `effort` fields and rule `why` are optional.
 Profile `seat` is optional and currently accepts only `"luna"` with `"harness": "codex"`; it pins that worker's `CODEX_HOME` to `/Users/jarad/.codex-luna`.
-Omitting `seat` preserves the ambient Codex home.
+Quota resolution matches a Luna profile to that credential home's Codex account, even when `codex-home` in the quota snapshot names a different ambient account; without a matching account row, the candidate stays unranked instead of borrowing another account's quota.
+Omitting `seat` preserves the ambient Codex home and its existing quota-row matching.
 Rule `approval`, `min_confidence`, and `floor`, and profile `provider` and `floor` are optional declarations that only [typed dispatch resolution](#typed-dispatch-resolution-env-typesafe_api_key) applies in code; without that opt-in they are inert, and firstmate's own intake reads them as ordinary hints.
 The resolver supplies the fixed neutral Choice option `No listed rule applies to this task.` for work that matches no listed rule.
 `approval` accepts only `"captain"` and means a task the rule matches is never dispatched from the tool's answer alone.

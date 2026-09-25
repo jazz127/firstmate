@@ -52,8 +52,11 @@ firstmate_runtime_tracking_source() {
   case "$merge_ref" in refs/heads/*) merge_branch=${merge_ref#refs/heads/} ;; *) return 1 ;; esac
   git check-ref-format --branch "$merge_branch" >/dev/null 2>&1 || return 1
   git -C "$dir" remote get-url "$remote" >/dev/null 2>&1 || return 1
+  # shellcheck disable=SC2034
   FIRSTMATE_RUNTIME_REMOTE=$remote
+  # shellcheck disable=SC2034
   FIRSTMATE_RUNTIME_MERGE_REF=$merge_ref
   FIRSTMATE_RUNTIME_TRACKING_REF="refs/remotes/$remote/$merge_branch"
+  # shellcheck disable=SC2034
   FIRSTMATE_RUNTIME_FETCH_REFSPEC="+$merge_ref:$FIRSTMATE_RUNTIME_TRACKING_REF"
 }

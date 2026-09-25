@@ -908,12 +908,63 @@ pass "configuration errors exit 2 before any network call"
 
 # --- Codex seat profile field -------------------------------------------------
 reset_log
-printf '%s\n' '{"rules":[{"when":"Luna seat tasks","use":{"harness":"codex","model":"gpt-5.6-luna","effort":"medium","seat":"luna"}}],"default":{"harness":"codex","model":"gpt-5.6-sol"}}' > "$RULES"
+printf '%s\n' '{"rules":[{"when":"Luna seat tasks","use":[{"harness":"codex","model":"gpt-5.6-luna","effort":"medium"},{"harness":"codex","model":"gpt-5.6-luna","effort":"medium","seat":"luna"}]}],"default":{"harness":"codex","model":"gpt-5.6-sol"}}' > "$RULES"
 cat > "$RESPONSE" <<'JSON'
 {"model":"jev-1.13.0","answers":{"rule":{"type":"choice","choice":"rule_1","confidence":0.98,"probabilities":{"rule_1":0.98,"default":0.02}}},"usage":{"input_tokens":100,"output_tokens":40}}
 JSON
-TYPESAFE_API_KEY=$KEY run code out err "$BRIEF"
+SEAT_QUOTA="$TMP_ROOT/schema6-seat.json"
+jq '.providers |= map(
+  if .provider == "codex" and .accountKey == "codex-home" then
+    .account.credentialHome = "~/.codex/auth.json" |
+    .quotaSemantics.effectiveAvailability |= map(.effectivePercentRemaining = 0 | .runway.status = "exhausted_now")
+  elif .provider == "codex" and .accountKey == "default" then
+    .accountKey = "codex-luna" | .account.credentialHome = "~/.codex-luna/auth.json" |
+    .quotaSemantics.effectiveAvailability |= map(.effectivePercentRemaining = 11 |
+      .runway.status = "projected_exhaustion" | .selection.spendPriority = -5.6819)
+  else . end)' "$SCHEMA6_NATIVE" > "$SEAT_QUOTA"
+TYPESAFE_API_KEY=$KEY QUOTA_AXI_FIXTURE="$SEAT_QUOTA" run code out err "$BRIEF"
+assert_contains "$out" 'candidate: codex:gpt-5.6-luna  provider=codex  scope=all_models  remaining=0%  spendPriority=-  runway=exhausted_now  -> not eligible: runway exhausted_now at all_models' \
+  "the seatless candidate keeps the ambient Codex account"
+assert_contains "$out" 'candidate: codex:gpt-5.6-luna  provider=codex  scope=all_models  remaining=11%  spendPriority=-5.6819  runway=projected_exhaustion  -> eligible' \
+  "the Luna candidate reads its own account despite an exhausted ambient account"
 assert_contains "$out" "profile: --harness 'codex' --model 'gpt-5.6-luna' --effort 'medium' --seat 'luna'" \
   "the selected Codex seat is emitted as a concrete spawn flag"
-pass "Codex Luna seat profiles resolve to the one-step spawn flag"
+SEAT_AS_HOME="$TMP_ROOT/schema6-seat-as-home.json"
+jq '.providers |= map(
+  if .provider == "codex" and .accountKey == "codex-home" then
+    .accountKey = "codex-default"
+  elif .provider == "codex" and .accountKey == "codex-luna" then
+    .accountKey = "codex-home"
+  else . end)' "$SEAT_QUOTA" > "$SEAT_AS_HOME"
+printf '%s\n' '{"rules":[{"when":"Luna seat tasks","use":{"harness":"codex","model":"gpt-5.6-luna","effort":"medium","seat":"luna"}}]}' > "$RULES"
+TYPESAFE_API_KEY=$KEY QUOTA_AXI_FIXTURE="$SEAT_AS_HOME" run code out err "$BRIEF"
+assert_contains "$out" "profile: --harness 'codex' --model 'gpt-5.6-luna' --effort 'medium' --seat 'luna'" \
+  "the Luna candidate still finds its account when it is the ambient codex-home row"
+
+printf '%s\n' '{"rules":[{"when":"Luna seat tasks","use":{"harness":"codex","model":"gpt-5.6-luna","seat":"luna"}}]}' > "$RULES"
+jq '.providers |= map(select(.accountKey != "codex-luna"))' "$SEAT_QUOTA" > "$TMP_ROOT/schema6-no-seat-row.json"
+TYPESAFE_API_KEY=$KEY QUOTA_AXI_FIXTURE="$TMP_ROOT/schema6-no-seat-row.json" run code out err "$BRIEF"
+assert_contains "$out" 'candidate: codex:gpt-5.6-luna  provider=codex  -> eligible, unranked: provider codex has no quota row for account luna: disclosed uncertainty' \
+  "a missing Luna account is not scored against the ambient Codex account"
+assert_contains "$out" '  status: escalate' "the absent Luna account cannot select a worker"
+
+printf '%s\n' '{"rules":[{"when":"Luna seat tasks","use":{"harness":"codex","model":"gpt-5.6-luna","seat":"other"}}]}' > "$RULES"
+reset_log
+TYPESAFE_API_KEY=$KEY QUOTA_AXI_FIXTURE="$SEAT_QUOTA" run code out err "$BRIEF"
+expect_code 2 "$code" "unknown seat is a configuration error"
+assert_contains "$err" 'unsupported use profile seat (only luna on codex): other' "resolver names the unsupported seat"
+assert_absent "$LOG/argv" "unknown seat is refused before the API call"
+
+printf '%s\n' '{"rules":[{"when":"Luna seat tasks","use":{"harness":"codex"}}],"default":{"harness":"codex","seat":"other"}}' > "$RULES"
+TYPESAFE_API_KEY=$KEY QUOTA_AXI_FIXTURE="$SEAT_QUOTA" run code out err "$BRIEF"
+expect_code 2 "$code" "unknown default seat is a configuration error"
+assert_contains "$err" 'unsupported default profile seat (only luna on codex): other' "resolver names the unsupported default seat"
+
+printf '%s\n' '{"rules":[{"when":"Luna seat tasks","use":{"harness":"codex","model":"gpt-5.6-sol"}}]}' > "$RULES"
+TYPESAFE_API_KEY=$KEY QUOTA_AXI_FIXTURE="$SCHEMA6_NATIVE" run code out err "$BRIEF"
+assert_contains "$out" 'candidate: codex:gpt-5.6-sol  provider=codex  scope=all_models  remaining=80%  spendPriority=0.8  runway=through_reset  -> eligible' \
+  "a profile with no seat still reads the ambient codex-home row"
+assert_contains "$out" "profile: --harness 'codex' --model 'gpt-5.6-sol'" "seatless profile still resolves"
+assert_not_contains "$out" '--seat' "seatless profile emits no seat flag"
+pass "Codex seat quota follows its credential home; unsupported and absent seats retain their contracts"
 printf '# all fm-dispatch-resolve tests passed\n'

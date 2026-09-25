@@ -2,6 +2,7 @@
 # Exercise the public one-frame renderer with an isolated local house ref.
 set -u
 
+# shellcheck source=tests/lib.sh disable=SC1091
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 TMP_ROOT=$(fm_test_tmproot fm-quota-tab)

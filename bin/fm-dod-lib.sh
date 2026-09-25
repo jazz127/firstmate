@@ -199,6 +199,217 @@ EOF
   printf '%s\n' "$1"
 }
 
+fm_dod_path_normalize() {  # <absolute-path>
+  awk -F/ '
+    BEGIN { result = "" }
+    {
+      for (i = 1; i <= NF; i++) {
+        if ($i == "" || $i == ".") continue
+        if ($i == "..") { sub("/[^/]*$", "", result); continue }
+        result = result "/" $i
+      }
+    }
+    END { if (result == "") result = "/"; print result }
+  ' <<EOF
+$1
+EOF
+}
+
+fm_dod_validate_intent_evidence() {  # <intent> <worktree> <task-temp> [preflight|publish]
+  local intent=$1 worktree=$2 task_temp=$3 phase=${4:-preflight}
+  local line previous_line='' previous_previous_line='' candidate detector_input artifact command captured claim=0 normalized_artifact normalized_root resolved_artifact link_target symlink_hops
+  local timestamp_date timestamp_clock timestamp_year timestamp_month timestamp_day timestamp_hour timestamp_minute timestamp_second timestamp_zone timestamp_offset_hour timestamp_offset_minute days_in_month
+  local artifact_count=0 command_count=0 captured_count=0
+  detector_input=$(printf '%s\n' "$intent" | tr '.!?;' '\n' | sed -E 's/,[[:space:]]+(but|however|yet)[[:space:]]+/\n/g')
+  while IFS= read -r line; do
+    for candidate in "$line" "$previous_line $line" "$previous_previous_line $previous_line $line"; do
+      candidate=$(printf '%s\n' "$candidate" | tr '[:upper:]' '[:lower:]' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+      case "$candidate" in
+        please\ *|can\ you\ *|could\ you\ *|would\ you\ *|for\ example*|example:*|e.g.*|quote:*|quoted:*|do\ not\ *|don\'t\ *|never\ *|avoid\ *|must\ not\ *|should\ not\ *|investigate\ *|run\ *|check\ *|verify\ *|validate\ *|test\ *|collect\ *|report\ *|describe\ *|document\ *|ensure\ *|add\ *|include\ *|show\ *) continue ;;
+      esac
+      if printf '%s\n' "$candidate" | grep -Eiq "(^|[[:space:]])(did|does|do|was|were|is|are|has|have|had)?[[:space:]]*not[[:space:]]+|(^|[[:space:]])(didn.t|doesn.t|don.t|wasn.t|weren.t|isn.t|aren.t|hasn.t|haven.t|hadn.t|couldn.t|wouldn.t|shouldn.t|mustn.t|can.t)[[:space:]]+"; then
+        continue
+      fi
+      case "$candidate" in
+        *\"*) continue ;;
+      esac
+      if printf '%s\n' "$candidate" | grep -Eiq '((test|tests|check|checks|run|runs|probe|probes|scenario|scenarios|outcome|outcomes|result|results|measurement|measurements|account|accounts|validation|evidence|verification|confirmation)[^.!?]*[[:space:]]ran[[:space:]]+[^.!?]*(live|verified|real-account|real account|independent|independently|external|externally confirmed))|((live|verified|real-account|real account|independent|independently|external|externally confirmed)[^.!?]*(test|tests|check|checks|run|runs|probe|probes|scenario|scenarios|outcome|outcomes|result|results|measurement|measurements|account|accounts|validation|evidence|verification|confirmation)[^.!?]*[[:space:]]ran[[:space:]])'; then
+        claim=1
+        break 2
+      fi
+      if printf '%s\n' "$candidate" | grep -Eiq '((live|verified|real|real-account|real account|independent|independently|external|externally confirmed)[^.!?]*(test|tests|check|checks|run|runs|probe|probes|scenario|scenarios|outcome|outcomes|result|results|measurement|measurements|account|accounts|validation|evidence|verification|confirmation)[^.!?]*(was|were|is|are|shows?|reported|demonstrated|driven|completed|succeeded|successful|successfully|passed|failed|confirmed|verified|validated))|((live|verified|real|real-account|real account|independent|independently|external|externally confirmed)[^.!?]*(completed|succeeded|successful|successfully|passed|failed|confirmed|verified|validated)[^.!?]*(test|tests|check|checks|run|runs|probe|probes|scenario|scenarios|outcome|outcomes|result|results|measurement|measurements|account|accounts|validation|evidence|verification|confirmation))|((test|tests|check|checks|run|runs|probe|probes|scenario|scenarios|outcome|outcomes|result|results|measurement|measurements|account|accounts|validation|evidence|verification|confirmation)[^.!?]*(was|were|is|are)[^.!?]*(live|verified|real|real-account|real account|independent|independently|external|externally confirmed))'; then
+        claim=1
+        break 2
+      fi
+      if printf '%s\n' "$candidate" | grep -Eiq '((test|tests|check|checks|run|runs|probe|probes|scenario|scenarios|outcome|outcomes|result|results|measurement|measurements|account|accounts|validation|evidence|verification|confirmation)[^.!?]*(live|verified|real-account|real account|independent|independently|external|externally confirmed)[^.!?]*(was|were|is|are|shows?|reported|demonstrated|driven|completed|succeeded|successful|successfully|passed|failed|confirmed|verified))'; then
+        claim=1
+        break 2
+      fi
+      if printf '%s\n' "$candidate" | grep -Eiq '([0-9]+[[:space:]]+of[[:space:]]+[0-9]+[[:space:]]*/[[:space:]]*[0-9]+[[:space:]]+of[[:space:]]+[0-9]+)|(([0-9]+[[:space:]]*(of|/)[[:space:]]*[0-9]+)[^.!?]*(live|verified|real-account|real account|independent|independently|external|externally confirmed))|((live|verified|real-account|real account|independent|independently|external|externally confirmed)[^.!?]*([0-9]+[[:space:]]*(of|/)[[:space:]]*[0-9]+))|((live|verified|real-account|real account|independent|independently|external|externally confirmed)[^.!?]*(evidence|verification|confirmation)[[:space:]]*:)|((live|verified|real-account|real account|independent|independently|external|externally confirmed)[^.!?]*(test|tests|check|checks|run|runs|probe|probes|scenario|scenarios|outcome|outcomes|result|results|measurement|measurements|account|accounts|validation|evidence|verification|confirmation)[^.!?]*(was|were|is|are|shows?|reported|demonstrated|driven|completed|succeeded|successful|successfully|passed|failed|confirmed|verified|validated))|((test|tests|check|checks|run|runs|probe|probes|scenario|scenarios|outcome|outcomes|result|results|measurement|measurements|account|accounts|validation|evidence|verification|confirmation)[^.!?]*(live|verified|real-account|real account|independent|independently|external|externally confirmed)[^.!?]*(was|were|is|are|shows?|reported|demonstrated|driven|completed|succeeded|successful|successfully|passed|failed|confirmed|verified|validated))|((evidence|verification|confirmation)[^.!?]*(live|verified|real-account|real account|independent|independently|external|externally confirmed)[^.!?]*(was|were|is|are|shows?|reported|demonstrated|driven|completed|succeeded|successful|successfully|passed|failed|confirmed|verified|validated))'; then
+        claim=1
+        break 2
+      fi
+      if printf '%s\n' "$candidate" | grep -Eiq '((zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)[[:space:]]+of[[:space:]]+(zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)[^.!?]*(live|verified|real-account|real account|independent|independently|external|externally confirmed))|((live|verified|real-account|real account|independent|independently|external|externally confirmed)[^.!?]*(zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)[[:space:]]+of[[:space:]]+(zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve))'; then
+        claim=1
+        break 2
+      fi
+    done
+    previous_previous_line=$previous_line
+    previous_line=$line
+  done <<EOF
+$detector_input
+EOF
+  [ "$claim" -eq 1 ] || return 0
+  while IFS= read -r line; do
+    case "$line" in
+      evidence-artifact:*)
+        artifact_count=$((artifact_count + 1))
+        [ "$artifact_count" -eq 1 ] || { printf '%s\n' 'evidence claim refused: duplicate evidence-artifact metadata' >&2; return 1; }
+        artifact=$(printf '%s' "${line#evidence-artifact:}" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//') ;;
+      evidence-command:*)
+        command_count=$((command_count + 1))
+        [ "$command_count" -eq 1 ] || { printf '%s\n' 'evidence claim refused: duplicate evidence-command metadata' >&2; return 1; }
+        command=$(printf '%s' "${line#evidence-command:}" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//') ;;
+      evidence-captured:*)
+        captured_count=$((captured_count + 1))
+        [ "$captured_count" -eq 1 ] || { printf '%s\n' 'evidence claim refused: duplicate evidence-captured metadata' >&2; return 1; }
+        captured=$(printf '%s' "${line#evidence-captured:}" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//') ;;
+    esac
+  done <<EOF
+$intent
+EOF
+  if [ -z "${artifact:-}" ]; then
+    printf '%s\n' 'evidence claim refused: missing evidence-artifact: path' >&2
+    return 1
+  fi
+  if [ -z "${command:-}" ]; then
+    printf '%s\n' 'evidence claim refused: missing evidence-command: exact command' >&2
+    return 1
+  fi
+  if [ -z "${captured:-}" ]; then
+    printf '%s\n' 'evidence claim refused: missing evidence-captured: capture time' >&2
+    return 1
+  fi
+  if ! printf '%s\n' "$captured" | grep -Eq '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(Z|[+-][0-9]{2}:[0-9]{2})$'; then
+    printf '%s\n' "evidence claim refused: invalid evidence-captured timestamp: $captured" >&2
+    return 1
+  fi
+  timestamp_date=${captured%%T*}
+  timestamp_clock=${captured#*T}
+  IFS=- read -r timestamp_year timestamp_month timestamp_day <<EOF
+$timestamp_date
+EOF
+  if [[ "$timestamp_clock" == *Z ]]; then
+    timestamp_zone=Z
+    timestamp_clock=${timestamp_clock%Z}
+  else
+    timestamp_zone=${timestamp_clock: -6}
+    timestamp_clock=${timestamp_clock:0:${#timestamp_clock}-6}
+  fi
+  IFS=: read -r timestamp_hour timestamp_minute timestamp_second <<EOF
+$timestamp_clock
+EOF
+  if [ "$timestamp_zone" = Z ]; then
+    timestamp_offset_hour=0
+    timestamp_offset_minute=0
+  else
+    timestamp_offset_hour=${timestamp_zone:1:2}
+    timestamp_offset_minute=${timestamp_zone:4:2}
+  fi
+  timestamp_year=$((10#$timestamp_year))
+  timestamp_month=$((10#$timestamp_month))
+  timestamp_day=$((10#$timestamp_day))
+  timestamp_hour=$((10#$timestamp_hour))
+  timestamp_minute=$((10#$timestamp_minute))
+  timestamp_second=$((10#$timestamp_second))
+  timestamp_offset_hour=$((10#$timestamp_offset_hour))
+  timestamp_offset_minute=$((10#$timestamp_offset_minute))
+  case "$timestamp_month" in
+    1|3|5|7|8|10|12) days_in_month=31 ;;
+    4|6|9|11) days_in_month=30 ;;
+    2)
+      if { [ $((timestamp_year % 4)) -eq 0 ] && [ $((timestamp_year % 100)) -ne 0 ]; } || [ $((timestamp_year % 400)) -eq 0 ]; then
+        days_in_month=29
+      else
+        days_in_month=28
+      fi
+      ;;
+    *) days_in_month=0 ;;
+  esac
+  if [ "$days_in_month" -eq 0 ] || [ "$timestamp_day" -lt 1 ] || [ "$timestamp_day" -gt "$days_in_month" ] || [ "$timestamp_hour" -gt 23 ] || [ "$timestamp_minute" -gt 59 ] || [ "$timestamp_second" -gt 59 ] || [ "$timestamp_offset_hour" -gt 14 ] || [ "$timestamp_offset_minute" -gt 59 ] || { [ "$timestamp_offset_hour" -eq 14 ] && [ "$timestamp_offset_minute" -ne 0 ]; }; then
+    printf '%s\n' "evidence claim refused: invalid evidence-captured timestamp: $captured" >&2
+    return 1
+  fi
+  case "$artifact" in
+    /*) ;;
+    *) printf '%s\n' "evidence claim refused: artifact path must be absolute: $artifact" >&2; return 1 ;;
+  esac
+  normalized_artifact=$(fm_dod_path_normalize "$artifact") || return 1
+  for normalized_root in "$worktree" "$task_temp"; do
+    [ -n "$normalized_root" ] || continue
+    case "$normalized_root" in /*) ;; *) continue ;; esac
+    normalized_root=$(fm_dod_path_normalize "$normalized_root") || return 1
+    case "$normalized_artifact" in
+      "$normalized_root"|"$normalized_root"/*) break ;;
+    esac
+    normalized_root=
+  done
+  if [ -z "$normalized_root" ]; then
+    printf '%s\n' "evidence claim refused: artifact is outside the worker worktree or task temp directory: $artifact" >&2
+    return 1
+  fi
+  if [ "$phase" = publish ]; then
+    if [ ! -f "$artifact" ] || [ ! -r "$artifact" ]; then
+      printf '%s\n' "evidence claim refused: artifact is missing or unreadable: $artifact" >&2
+      return 1
+    fi
+    resolved_artifact=$artifact
+    symlink_hops=0
+    while [ -L "$resolved_artifact" ]; do
+      symlink_hops=$((symlink_hops + 1))
+      if [ "$symlink_hops" -gt 40 ]; then
+        printf '%s\n' "evidence claim refused: artifact symlink chain is too deep: $artifact" >&2
+        return 1
+      fi
+      link_target=$(readlink "$resolved_artifact") || {
+        printf '%s\n' "evidence claim refused: artifact is missing or unreadable: $artifact" >&2
+        return 1
+      }
+      case "$link_target" in
+        /*) resolved_artifact=$link_target ;;
+        *) resolved_artifact=$(dirname -- "$resolved_artifact")/$link_target ;;
+      esac
+    done
+    resolved_artifact=$(cd -P "$(dirname -- "$resolved_artifact")" 2>/dev/null && printf '%s/%s' "$(pwd -P)" "$(basename -- "$resolved_artifact")") || {
+      printf '%s\n' "evidence claim refused: artifact is missing or unreadable: $artifact" >&2
+      return 1
+    }
+    if [ ! -f "$resolved_artifact" ] || [ ! -r "$resolved_artifact" ]; then
+      printf '%s\n' "evidence claim refused: artifact is missing or unreadable: $artifact" >&2
+      return 1
+    fi
+    normalized_artifact=$(fm_dod_path_normalize "$resolved_artifact") || return 1
+    for normalized_root in "$worktree" "$task_temp"; do
+      [ -n "$normalized_root" ] || continue
+      [ -d "$normalized_root" ] || continue
+      normalized_root=$(cd -P "$normalized_root" 2>/dev/null && pwd -P) || continue
+      case "$normalized_artifact" in
+        "$normalized_root"|"$normalized_root"/*) break ;;
+      esac
+      normalized_root=
+    done
+    [ -n "$normalized_root" ] || {
+      printf '%s\n' "evidence claim refused: resolved artifact is outside the allowed roots: $artifact" >&2
+      return 1
+    }
+  fi
+  return 0
+}
+
+fm_dod_validate_published_intent() {  # <intent> <worktree> <task-temp>
+  fm_dod_validate_intent_evidence "$1" "$2" "$3" publish
+}
+
 # Accept the current two-subsection contract only when both bodies have content;
 # briefs predating that contract remain valid when their # Task body has content.
 fm_brief_task_content_valid() {  # <file>
@@ -269,6 +480,10 @@ Do not include \`## Firstmate spec\`, later Firstmate build constraints, or your
 The \`--intent\` string you pass must be self-sufficient: that string plus the codebase must let a reader reconstruct roughly the same specification, without depending on a separate report, a PR, or context that lives only in this conversation.
 When the captain's intent refers to a report, decision, or PR ("do items 1, 2, 3, and 7 of the report"), write the substance of the referenced items into \`--intent\` in the captain's terms, not only the pointer; that substance is the captain's ask by reference, while Firstmate's build instructions and your own decisions still stay out.
 This replaces the no-mistakes skill's advice to enrich \`--intent\` with decisions and tradeoffs; that advice does not apply to Firstmate-dispatched work.
+Any claim in \`--intent\` of live, verified, external, independently confirmed, or real-account evidence must name the artifact read, the exact command that produced it, and when it was captured; publication refuses such a claim if any of those are missing or the artifact cannot be read.
+Keep each cited artifact at a path the supervising home can open, inside this worker's worktree or its task temp directory.
+This boundary proves that the claim is checkable, not that it is true; Firstmate must read the artifact before relaying its evidence label.
+Evidence-shaped claims are the only prose checked here: a vocabulary word must occur with a result, measurement, scenario, validation, test, account, confirmation, or evidence term. Ordinary prose that merely mentions one vocabulary word is not blocked. For a checked claim, add one line each for \`evidence-artifact: /absolute/path\`, \`evidence-command: exact command\`, and \`evidence-captured: timestamp\`.
 Do not hand-edit, commit, or fix findings yourself while a run is active - the pipeline applies every fix.
 
 One drive call blocks until the next gate or outcome, which routinely outlives what your harness lets a single command run: Claude Code kills a command at ten minutes maximum, while one fix round is capped around thirty minutes and up to three rounds chain.

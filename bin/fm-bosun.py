@@ -11,6 +11,7 @@ import re
 import subprocess
 import sys
 import tempfile
+from urllib.parse import urlparse
 
 SUPPORTED_FORGES = {"github"}
 
@@ -108,6 +109,49 @@ def safe_relative_path(value):
             or value.startswith("../") or "/../" in value or value.endswith("/..")):
         fail(f"unsafe or private path: {value}")
     return value
+
+
+def git_output(project_dir, *args):
+    result = subprocess.run(["git", "-C", str(project_dir), *args],
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    if result.returncode:
+        return None
+    return result.stdout.strip()
+
+
+def git_success(project_dir, *args):
+    return subprocess.run(["git", "-C", str(project_dir), *args],
+                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0
+
+
+def remote_identity(url):
+    if url.startswith("git@"):
+        host, _separator, path = url[4:].partition(":")
+    else:
+        parsed = urlparse(url)
+        host, path = parsed.hostname, parsed.path
+    if not host or host.lower() != "github.com":
+        return None
+    parts = path.rstrip("/").removesuffix(".git").strip("/").split("/")
+    if len(parts) != 2:
+        return None
+    return tuple(item.lower() for item in parts)
+
+
+def fork_source_ref(project_dir, fork_owner, fork_repository, source_branch):
+    expected = (fork_owner.lower(), fork_repository.lower())
+    remotes = git_output(project_dir, "remote")
+    if not remotes:
+        fail(f"configured fork remote is unavailable: {fork_owner}/{fork_repository}")
+    for remote in remotes.splitlines():
+        urls = git_output(project_dir, "remote", "get-url", "--all", remote) or ""
+        if not any(remote_identity(url) == expected for url in urls.splitlines()):
+            continue
+        ref = f"refs/remotes/{remote}/{source_branch}"
+        if git_output(project_dir, "rev-parse", "--verify", ref):
+            return ref
+        fail(f"configured fork branch is unavailable: {fork_owner}/{fork_repository}/{source_branch}")
+    fail(f"configured fork remote is unavailable: {fork_owner}/{fork_repository}")
 
 
 def target(forge, owner, repo):
@@ -250,15 +294,14 @@ def cmd_order(args):
     project_dir = safe_path(home() / "projects" / want["repository"])
     if not project_dir.is_dir() or project_dir.is_symlink():
         fail(f"upstream project clone is unavailable: {project_dir}")
+    source_ref = fork_source_ref(project_dir, fork_owner, fork_repository, args.source)
     if len(set(args.commit)) != len(args.commit):
         fail("source commit selection contains duplicates")
     for commit in args.commit:
         if not re.fullmatch(r"[0-9a-fA-F]{40}", commit):
             fail(f"invalid source commit: {commit}")
-        result = subprocess.run(["git", "-C", str(project_dir), "cat-file", "-e", f"{commit}^{{commit}}"],
-                                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        if result.returncode:
-            fail(f"source commit is not present in upstream project: {commit}")
+        if not git_success(project_dir, "merge-base", "--is-ancestor", commit, source_ref):
+            fail(f"source commit is not reachable from configured fork branch {args.source}: {commit}")
     for path in args.path:
         safe_relative_path(path)
     path = contribution_path(args.task)

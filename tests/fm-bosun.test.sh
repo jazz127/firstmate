@@ -31,7 +31,7 @@ setup_bosun() {
 }
 
 prepare_project() {
-  local dir=$1 project="$1/projects/sample"
+  local dir=$1 maneuver=${2:-maneuver} project="$1/projects/sample" base source
   mkdir -p "$project"
   if [ ! -e "$project/.git" ]; then
     git -C "$project" init -q
@@ -40,6 +40,17 @@ prepare_project() {
     printf '%s\n' fixture > "$project/README.md"
     git -C "$project" add README.md
     git -C "$project" commit -qm fixture
+    git -C "$project" remote add fork https://github.com/captain/sample.git
+  fi
+  base=$(git -C "$project" rev-parse --abbrev-ref HEAD)
+  if ! git -C "$project" show-ref --verify --quiet "refs/heads/housefeature/$maneuver"; then
+    git -C "$project" checkout -qb "housefeature/$maneuver" "$base"
+    printf '%s\n' "$maneuver" > "$project/$maneuver.txt"
+    git -C "$project" add "$maneuver.txt"
+    git -C "$project" commit -qm "$maneuver"
+    source=$(git -C "$project" rev-parse HEAD)
+    git -C "$project" update-ref "refs/remotes/fork/housefeature/$maneuver" "$source"
+    git -C "$project" checkout -q "$base"
   fi
 }
 
@@ -92,8 +103,8 @@ test_order_accepts_dotfiles() {
   local dir commit
   dir=$(new_home dotfiles)
   setup_bosun "$dir"
-  prepare_project "$dir"
-  commit=$(git -C "$dir/projects/sample" rev-parse HEAD)
+  prepare_project "$dir" dotfiles
+  commit=$(git -C "$dir/projects/sample" rev-parse refs/remotes/fork/housefeature/dotfiles)
   call "$dir" order --task dotfiles --bosun bosun-kun --maneuver dotfiles \
     --forge github --owner kunchenguid --repository sample --source housefeature/dotfiles \
     --branch contribution/dotfiles --captain-words 'Contribute dotfiles' \
@@ -108,8 +119,8 @@ test_order_rejects_invalid_commit_selection() {
   local dir commit
   dir=$(new_home invalid-commits)
   setup_bosun "$dir"
-  prepare_project "$dir"
-  commit=$(git -C "$dir/projects/sample" rev-parse HEAD)
+  prepare_project "$dir" invalid
+  commit=$(git -C "$dir/projects/sample" rev-parse refs/remotes/fork/housefeature/invalid)
   if call "$dir" order --task invalid --bosun bosun-kun --maneuver invalid \
     --forge github --owner kunchenguid --repository sample --source housefeature/invalid \
     --branch contribution/invalid --captain-words 'Contribute invalid' --path feature.txt \
@@ -131,7 +142,7 @@ test_intake_delegates_to_ship_lifecycle() {
   setup_bosun "$dir"
   prepare_project "$dir"
   ordered_home "$dir"
-  commit=$(git -C "$dir/projects/sample" rev-parse HEAD)
+  commit=$(git -C "$dir/projects/sample" rev-parse refs/remotes/fork/housefeature/maneuver)
   fake_root="$dir/fake-root"
   mkdir -p "$fake_root/bin"
   cat > "$fake_root/bin/fm-project-mode.sh" <<'EOF'
@@ -181,12 +192,36 @@ ordered_home() {
   local dir=$1 commit
   setup_bosun "$dir"
   prepare_project "$dir"
-  commit=$(git -C "$dir/projects/sample" rev-parse HEAD)
+  commit=$(git -C "$dir/projects/sample" rev-parse refs/remotes/fork/housefeature/maneuver)
   call "$dir" order --task maneuver --bosun bosun-kun --maneuver maneuver \
     --forge github --owner kunchenguid --repository sample --source housefeature/maneuver \
     --branch contribution/maneuver --captain-words 'Contribute maneuver' --path feature.txt \
     --commit "$commit" >/dev/null || fail 'order recording failed'
   fake_github "$dir"
+}
+
+test_fork_source_validation() {
+  local dir commit tree off
+  dir=$(new_home fork-source)
+  setup_bosun "$dir"
+  prepare_project "$dir" fork-only
+  commit=$(git -C "$dir/projects/sample" rev-parse refs/remotes/fork/housefeature/fork-only)
+  call "$dir" order --task fork-only --bosun bosun-kun --maneuver fork-only \
+    --forge github --owner kunchenguid --repository sample --source housefeature/fork-only \
+    --branch contribution/fork-only --captain-words 'Contribute fork-only' --path feature.txt \
+    --commit "$commit" >/dev/null || fail 'fork-only source commit was rejected'
+  tree=$(git -C "$dir/projects/sample" rev-parse HEAD^{tree})
+  off=$(printf '%s\n' unrelated | git -C "$dir/projects/sample" commit-tree "$tree")
+  dir=$(new_home fork-off-branch)
+  setup_bosun "$dir"
+  prepare_project "$dir" fork-off-branch
+  if call "$dir" order --task fork-off-branch --bosun bosun-kun --maneuver fork-off-branch \
+    --forge github --owner kunchenguid --repository sample --source housefeature/fork-off-branch \
+    --branch contribution/fork-off-branch --captain-words 'Contribute off branch' --path feature.txt \
+    --commit "$off" >"$dir/out" 2>&1; then
+    fail 'off-branch source commit was accepted'
+  fi
+  pass 'source commits are validated against the configured fork branch'
 }
 
 test_registration_and_merge() {
@@ -268,6 +303,7 @@ test_routing
 test_memory_and_paths
 test_order_accepts_dotfiles
 test_order_rejects_invalid_commit_selection
+test_fork_source_validation
 test_intake_delegates_to_ship_lifecycle
 test_registration_and_merge
 test_registration_requires_role

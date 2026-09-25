@@ -175,6 +175,38 @@ PATH="$PIDFD_NO_PS_BIN" fm_remote_job_signal_identity \
   || fail "pidfd signaling failed when ps was absent from PATH"
 wait "$PIDFD_NO_PS_PID" 2>/dev/null || true
 pass "pidfd signaling resolves ps independently of PATH"
+
+FALLBACK_RECHECK_BIN="$TMP_ROOT/fallback-recheck-bin"
+mkdir -p "$FALLBACK_RECHECK_BIN"
+cat > "$FALLBACK_RECHECK_BIN/python3" <<'SH'
+#!/bin/sh
+exit 2
+SH
+cat > "$FALLBACK_RECHECK_BIN/uname" <<SH
+#!/bin/sh
+exec "$UNAME_BIN" "\$@"
+SH
+chmod +x "$FALLBACK_RECHECK_BIN/python3" "$FALLBACK_RECHECK_BIN/uname"
+sleep 30 & FALLBACK_RECHECK_PID=$!
+FALLBACK_RECHECK_START=$(fm_remote_job_process_start "$FALLBACK_RECHECK_PID")
+FALLBACK_RECHECK_COMMAND=$(fm_remote_job_process_command "$FALLBACK_RECHECK_PID")
+FALLBACK_RECHECK_CALLS=0
+fm_remote_job_process_identity_matches() {
+  FALLBACK_RECHECK_CALLS=$((FALLBACK_RECHECK_CALLS + 1))
+  [ "$FALLBACK_RECHECK_CALLS" -eq 1 ]
+}
+if PATH="$FALLBACK_RECHECK_BIN:/usr/bin:/bin" \
+  fm_remote_job_signal_identity "$FALLBACK_RECHECK_PID" TERM \
+  "$FALLBACK_RECHECK_START" "$FALLBACK_RECHECK_COMMAND"; then
+  kill -KILL "$FALLBACK_RECHECK_PID" 2>/dev/null || true
+  wait "$FALLBACK_RECHECK_PID" 2>/dev/null || true
+  fail "fallback signaling ignored the immediate identity recheck"
+fi
+kill -0 "$FALLBACK_RECHECK_PID" 2>/dev/null || fail "fallback recheck killed the live target"
+kill -KILL "$FALLBACK_RECHECK_PID" 2>/dev/null || true
+wait "$FALLBACK_RECHECK_PID" 2>/dev/null || true
+pass "fallback signaling refuses a target that changes identity"
+. "$ROOT/bin/fm-remote-job-lib.sh"
 else
 pass "pidfd identity verification regression requires Linux pidfd support"
 fi

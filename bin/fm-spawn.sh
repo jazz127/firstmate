@@ -4217,17 +4217,33 @@ mkdir -p "$TASK_TMP/gotmp" "$TASK_TMP/cache/corepack" "$TASK_TMP/cache/pnpm" \
   "$TASK_TMP/cache/npm" "$TASK_TMP/cache/xdg"
 SCRATCH_HOOK_DIR="$TASK_TMP/scratch-hooks"
 mkdir -p "$SCRATCH_HOOK_DIR"
+PRIOR_HOOKS_DIR=$(git -C "$WT" rev-parse --git-path hooks 2>/dev/null || true)
+if [ -n "$PRIOR_HOOKS_DIR" ]; then
+  case "$PRIOR_HOOKS_DIR" in
+    /*) ;;
+    *) PRIOR_HOOKS_DIR="$WT/$PRIOR_HOOKS_DIR" ;;
+  esac
+  PRIOR_PRE_PUSH="$PRIOR_HOOKS_DIR/pre-push"
+else
+  PRIOR_PRE_PUSH=
+fi
 cat >"$SCRATCH_HOOK_DIR/pre-push" <<EOF
 #!/usr/bin/env bash
 set -uo pipefail
 . $(shell_quote "$SCRIPT_DIR/fm-scratch-lib.sh")
+HOOK_STDIN=\$(mktemp $(shell_quote "$SCRATCH_HOOK_DIR")/pre-push-stdin.XXXXXX) || exit 1
+trap 'rm -f -- "\$HOOK_STDIN"' EXIT
+cat >"\$HOOK_STDIN" || exit 1
 while read -r local_ref local_oid remote_ref remote_oid; do
   [ -n "\${local_oid:-}" ] || continue
   case "\$local_oid" in
     0000000000000000000000000000000000000000) continue ;;
   esac
   fm_scratch_refuse_range "\$(git rev-parse --show-toplevel)" "\$remote_oid" "\$local_oid" push || exit 1
-done
+done <"\$HOOK_STDIN"
+if [ -n $(shell_quote "$PRIOR_PRE_PUSH") ] && [ -x $(shell_quote "$PRIOR_PRE_PUSH") ]; then
+  $(shell_quote "$PRIOR_PRE_PUSH") "\$@" <"\$HOOK_STDIN"
+fi
 EOF
 chmod 700 "$SCRATCH_HOOK_DIR/pre-push"
 

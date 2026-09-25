@@ -403,6 +403,47 @@ test_spawn_installs_scratch_push_guard() {
   pass "spawn installs a pre-push guard for committed scratch bundles"
 }
 
+test_spawn_chains_existing_pre_push_hook() {
+  local rec task_tmp hooks_dir prior_hook marker input base head out status
+  rec=$(make_case chained-pre-push codex chained-pre-push-a1)
+  read_case "$rec"
+  hooks_dir="$CASE_DIR/project-hooks"
+  mkdir -p "$hooks_dir"
+  prior_hook="$hooks_dir/pre-push"
+  marker="$CASE_DIR/project-hook-ran"
+  input="$CASE_DIR/project-hook-input"
+  git -C "$WT_DIR" config core.hooksPath "$hooks_dir"
+  cat > "$prior_hook" <<SH
+#!/bin/sh
+cat > "$input"
+: > "$marker"
+exit 17
+SH
+  chmod +x "$prior_hook"
+  out=$(run_case_spawn chained-pre-push-a1 "$PROJ_DIR" --mode no-mistakes --yolo off)
+  status=$?
+  expect_code 0 "$status" "chained pre-push spawn should succeed: $out"
+  printf '%s\n' product > "$WT_DIR/product.txt"
+  git -C "$WT_DIR" config user.name fixture
+  git -C "$WT_DIR" config user.email fixture@example.invalid
+  git -C "$WT_DIR" add product.txt
+  git -C "$WT_DIR" commit -qm 'ordinary product change'
+  head=$(git -C "$WT_DIR" rev-parse HEAD)
+  base=$(git -C "$WT_DIR" rev-parse HEAD^)
+  task_tmp=$(grep '^tasktmp=' "$HOME_DIR/state/chained-pre-push-a1.meta" | cut -d= -f2-)
+  prior_hook="$task_tmp/scratch-hooks/pre-push"
+  [ -x "$prior_hook" ] || fail "spawn did not install the chained scratch pre-push hook"
+  set +e
+  out=$(cd "$WT_DIR" && printf 'refs/heads/task\t%s\trefs/heads/task\t%s\n' "$head" "$base" | "$prior_hook" origin file://remote 2>&1)
+  status=$?
+  set -e
+  [ "$status" -eq 17 ] || fail "existing pre-push hook status was not preserved: $out"
+  [ -f "$marker" ] || fail "existing project pre-push hook did not run"
+  printf 'refs/heads/task\t%s\trefs/heads/task\t%s\n' "$head" "$base" | cmp -s - "$input" \
+    || fail "existing project pre-push hook did not receive the original stdin"
+  pass "spawn chains an existing project pre-push hook"
+}
+
 test_ship_allowlist_absent
 test_ship_allowlist_enabled
 test_tool_caches_stay_outside_worktree
@@ -411,3 +452,4 @@ test_secondmate_launch
 test_relaunch_rebuilds_the_switch
 test_raw_compound_launch_command_carries_the_switch
 test_spawn_installs_scratch_push_guard
+test_spawn_chains_existing_pre_push_hook

@@ -38,6 +38,7 @@ The file has schema `fm-bosun-routes.v1` and a `routes` array whose rows name `b
 The repository pattern uses shell-style `*` and `?` matching against the repository name only.
 The [Bosun-Kun example](examples/bosun-routes.json) matches every `github` repository owned by `kunchenguid`.
 When a route names a fork owner without `fork_repository`, the fork repository defaults to the target repository name; set `fork_repository` on an exact-repository route when the fork was renamed.
+Optional `fork_owner`, `fork_repository`, and `upstream_default_branch` fields provide the Captain's fork identity and upstream base branch used when recording an order.
 Routing first prefers exact repository, then repository pattern, then owner, then forge; within a level, a named owner beats an omitted owner and a named forge beats an omitted forge.
 An equal-rank tie refuses even when both entries name the same Bosun.
 No match refuses and asks whether to create a Bosun, never falling back to a sole configured Bosun.

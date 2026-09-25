@@ -55,6 +55,7 @@ Using the existing contribution and worktree machinery, start from the latest up
 Before registration, a scratch extraction cherry-picks the ordered commits onto that upstream base and requires the PR tree to match exactly except for declared deviation paths.
 Review the resulting diff and commit series for house-only configuration, private context, secrets, unrelated history, and fork assumptions; a path allowlist cannot decide whether public-looking text is private.
 Registration permits clean rewrites and squashed commits only when their tree matches that exact extraction or a declared deviation.
+Registration rejects merge commits and unrelated intermediate history.
 If adapting the maneuver to current upstream needs new content, obtain a new captain decision and order before publication.
 Do not merge or rebase `house` into the contribution.
 Run the repository's expected validation, using no-mistakes where configured.

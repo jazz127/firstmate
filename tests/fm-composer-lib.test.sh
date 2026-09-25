@@ -670,6 +670,30 @@ test_matrix_pi_dollar_status_footer_is_empty() {
   pass "matrix: a dollar-first pi status footer reads empty; dead shells still refuse"
 }
 
+test_zero_height_separator_pair_proves_nothing() {
+  # A pi pair that encloses NO row cannot hold an input row, yet every content
+  # check over an empty range trivially succeeded, so an idle pi identity read
+  # it `empty` and authorized injection into a region with nowhere to type.
+  # Any two adjacent rules - a status bar's divider, a transcript rule meeting
+  # a footer rule - forge one. Case adapted from kunchenguid/firstmate#2612.
+  local adjacent real pi_idle
+  pi_idle=$(printf 'pi\tidle')
+  adjacent=$'transcript\n────────────────────────\n────────────────────────\n footer'
+  assert_screen "adjacent rules are a divider, not a composer" unknown \
+    "$CAPS_STYLED" "$adjacent" '' "$pi_idle"
+  assert_screen "adjacent rules on tmux" unknown "$CAPS_TMUX" "$adjacent" 2 "$pi_idle"
+  adjacent=$'────────────────────────\n────────────────────────'
+  assert_screen "a bare adjacent pair is not a composer" unknown \
+    "$CAPS_STYLED" "$adjacent" '' "$pi_idle"
+  # NON-VACUOUSNESS: the SAME pair with one row between the rules is pi's real
+  # composer and still reads empty, so the refusal above is about the missing
+  # row and not about the fixture drifting out of the pi shape.
+  real=$'transcript\n────────────────────────\n\n────────────────────────\n footer'
+  assert_screen "one enclosed row is still pi's composer" empty \
+    "$CAPS_STYLED" "$real" '' "$pi_idle"
+  pass "strict posture: a zero-height separator pair is never positive container proof"
+}
+
 test_matrix_opencode_leftbar_signals() {
   # Real idle opencode: `┃`-prefixed rows holding an "Ask anything" hint,
   # blanks, and a Build-mode footer. Two independent idle signals: the shared
@@ -980,6 +1004,7 @@ test_matrix_omp_status_row_bounds_bare_composer
 test_matrix_codex_idle_starfield_furniture
 test_matrix_pi_separated_needs_identity
 test_matrix_pi_dollar_status_footer_is_empty
+test_zero_height_separator_pair_proves_nothing
 test_matrix_opencode_leftbar_signals
 test_matrix_grok_titled_bottom_border
 test_matrix_kimi_bordered_shell_glyph_box

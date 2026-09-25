@@ -72,7 +72,8 @@
 #                identity reporting an idle/done pi (herdr `agent
 #                get`; the tmux foreground-process probe), because a blank
 #                region between two transcript rules is otherwise exactly the
-#                strict rule's unidentifiable blank row.
+#                strict rule's unidentifiable blank row. The pair must ENCLOSE
+#                at least one row: two adjacent rules are a divider.
 #                A separated pair that closes over a bare AGENT-GLYPH row is a
 #                different, self-proving thing: real claude 2.x draws exactly
 #                that (`─` rule, `❯`+NBSP, `─` rule), so the glyph inside the
@@ -849,7 +850,11 @@ _fm_composer_scan_screen() {  # <plain-screen> <cursor-or-empty> [extract-wrap]
         FM_COMPOSER_SCAN_PI_PAIR_FOUND=1
         FM_COMPOSER_SCAN_PI_OPEN=$pi_open
         FM_COMPOSER_SCAN_PI_CLOSE=$row
-        if [ "$pi_lines" -le "$pi_max" ]; then
+        # A pair must ENCLOSE at least one row to hold an input row at all:
+        # two adjacent rules are a divider, not a composer, and a zero-height
+        # region trivially satisfies every content check, which read `empty`
+        # and authorized injection into a region with nowhere to type.
+        if [ "$pi_lines" -ge 1 ] && [ "$pi_lines" -le "$pi_max" ]; then
           FM_COMPOSER_SCAN_PI_PAIR_VALID=1
         else
           FM_COMPOSER_SCAN_PI_PAIR_VALID=0

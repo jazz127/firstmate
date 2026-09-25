@@ -936,6 +936,41 @@ test_ship_and_scout_teach_validation_round_pause() {
   pass "fm-brief.sh: ship and scout scaffolds teach validation-round pauses"
 }
 
+# A worker parking on a job it launched itself must declare the wait first, name
+# how long it expects, check again once that time passes, and publish `working:`
+# on resumption, so a healthy build behind an idle pane is not read as a wedge
+# and a dead job is noticed. Asserted through the generated ship, scout and
+# charter output. Adapted from https://github.com/kunchenguid/firstmate/pull/4081.
+test_pause_covers_own_background_jobs_in_every_scaffold() {
+  local home kind id brief
+  home="$TMP_ROOT/pause-own-jobs-home"
+  mkdir -p "$home/data"
+  for kind in ship scout secondmate; do
+    id="brief-pause-own-$kind"
+    case "$kind" in
+      ship) FM_HOME="$home" "$ROOT/bin/fm-brief.sh" "$id" firstmate --mode no-mistakes >/dev/null 2>&1 ;;
+      scout) FM_HOME="$home" "$ROOT/bin/fm-brief.sh" "$id" firstmate --scout >/dev/null 2>&1 ;;
+      secondmate) FM_HOME="$home" "$ROOT/bin/fm-brief.sh" "$id" --secondmate --no-projects >/dev/null 2>&1 ;;
+    esac
+    brief="$home/data/$id/brief.md"
+    assert_grep 'long job' "$brief" \
+      "$kind brief does not extend the pause verb to the worker's own long jobs"
+    assert_grep 'known external wait you expect to clear on its own' "$brief" \
+      "$kind brief dropped the external-wait case"
+    # shellcheck disable=SC2016 # Literal backticks must remain unexpanded.
+    assert_grep '`paused:` line first, naming the job and how long' "$brief" \
+      "$kind brief does not order a bounded pause line before parking"
+    # shellcheck disable=SC2016 # Literal backticks must remain unexpanded.
+    assert_grep '`working:` when you resume' "$brief" \
+      "$kind brief does not tell the worker to resume with working:"
+  done
+  brief="$home/data/brief-pause-own-ship/brief.md"
+  # shellcheck disable=SC2016 # Literal backticks must remain unexpanded.
+  assert_grep 'unless a `paused:` line declares the wait' "$brief" \
+    "ship brief's nonterminal working: rule still forbids parking behind a declared pause"
+  pass "fm-brief.sh: every scaffold lets a declared, bounded pause cover the worker's own long jobs"
+}
+
 test_scout_and_secondmate_load_decision_hold_policy() {
   local home scout charter
   home="$TMP_ROOT/decision-policy-home"
@@ -1340,6 +1375,7 @@ test_secondmate_marked_request_reporting_contract
 test_secondmate_directory_paths_are_absolute_and_output_is_stable
 test_pause_verb_override_renders_all_brief_scaffolds
 test_ship_and_scout_teach_validation_round_pause
+test_pause_covers_own_background_jobs_in_every_scaffold
 test_scout_and_secondmate_load_decision_hold_policy
 test_scout_and_secondmate_scaffold
 test_scout_lavish_line_follows_presentation_floor

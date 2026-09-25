@@ -423,6 +423,10 @@ test_pr_body_preflight_is_rendered() {
       "$mode brief did not explain the single-block rule"
     assert_grep "N of M scenarios driven live" "$brief" \
       "$mode brief did not flag the generated scenario label"
+    assert_grep "keep your own honest results as the single statement" "$brief" \
+      "$mode brief did not explain how to repair a contradictory appendix"
+    assert_grep "never weaken a claim to pass" "$brief" \
+      "$mode brief did not protect the honest result"
     assert_grep "a Markdown bullet such as \`- evidence-artifact: ...\` is not recognised" "$brief" \
       "$mode brief did not warn that bullet-prefixed metadata is ignored"
     if [ "$mode" = no-mistakes ]; then

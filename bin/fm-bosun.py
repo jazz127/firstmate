@@ -2,6 +2,7 @@
 """Bosun routing, scoped memory, and contribution authorization records."""
 
 import argparse
+from collections import Counter
 import datetime as dt
 import fcntl
 import fnmatch
@@ -126,17 +127,27 @@ def git_success(project_dir, *args):
                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0
 
 
-def git_patch_id_range(project_dir, base, head, paths):
+def git_changed_lines(project_dir, base, head, path):
     result = subprocess.run(
-        ["git", "-C", str(project_dir), "diff", "--binary", base, head, "--", *paths],
+        ["git", "-C", str(project_dir), "diff", "--no-ext-diff", "--no-color",
+         "--no-renames", "--unified=0", base, head, "--", f":(literal){path}"],
         stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     if result.returncode:
         return None
-    patch = subprocess.run(["git", "patch-id", "--stable"], input=result.stdout,
-                           stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    if patch.returncode:
+    if b"GIT binary patch" in result.stdout or b"Binary files " in result.stdout:
         return None
-    return patch.stdout.decode().split()[0] if patch.stdout.split() else None
+    added, removed = Counter(), Counter()
+    in_hunk = False
+    for line in result.stdout.splitlines(keepends=True):
+        if line.startswith(b"diff --git "):
+            in_hunk = False
+        elif line.startswith(b"@@ "):
+            in_hunk = True
+        elif in_hunk and line.startswith(b"+"):
+            added[line[1:]] += 1
+        elif in_hunk and line.startswith(b"-"):
+            removed[line[1:]] += 1
+    return added, removed
 
 
 def remote_identity(url):
@@ -644,12 +655,23 @@ def cmd_registration_check_locked(args):
                     not any(path == item or item.endswith("/") and path.startswith(item) for item in allowed)
                     for path in paths.splitlines() if path):
                 fail("upstream PR commit changes an unauthorized path")
-        source_base = git_output(worktree, "rev-parse", f"{source_commits[0]}^")
-        source_head = source_commits[-1]
-        source_patch = git_patch_id_range(worktree, source_base, source_head, allowed) if source_base else None
-        actual_patch = git_patch_id_range(worktree, args.upstream_base, "HEAD", allowed)
-        if not source_patch or source_patch != actual_patch:
-            fail("upstream PR content differs from the ordered source commits")
+        for path in args.changed_path:
+            source_added, source_removed = Counter(), Counter()
+            for commit in source_commits:
+                parent = git_output(worktree, "rev-parse", f"{commit}^")
+                source_delta = git_changed_lines(worktree, parent, commit, path) if parent else None
+                if source_delta is None:
+                    fail("ordered source content cannot be inspected")
+                source_added.update(source_delta[0])
+                source_removed.update(source_delta[1])
+            for line in source_added.keys() & source_removed.keys():
+                cancelled = min(source_added[line], source_removed[line])
+                source_added[line] -= cancelled
+                source_removed[line] -= cancelled
+            actual_delta = git_changed_lines(worktree, args.upstream_base, "HEAD", path)
+            if (actual_delta is None or not any(actual_delta)
+                    or actual_delta[0] - source_added or actual_delta[1] - source_removed):
+                fail(f"upstream PR content is not derived from ordered source commits: {path}")
     changed = args.changed_path
     if not changed:
         fail("upstream change has no validated changed paths")

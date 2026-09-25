@@ -114,6 +114,16 @@ test_memory_and_paths() {
   pass 'evidence memory and FM_HOME path safety'
 }
 
+test_bosun_id_path_refusal() {
+  local dir
+  dir=$(new_home unsafe-bosun-id)
+  if call "$dir" configure-home --bosun ../../escape >"$dir/out" 2>&1; then
+    fail 'traversal Bosun id was accepted'
+  fi
+  [ ! -e "$dir/escape.json" ] || fail 'traversal Bosun id wrote outside the role directory'
+  pass 'Bosun id cannot escape its private role directory'
+}
+
 test_order_accepts_dotfiles() {
   local dir commit
   dir=$(new_home dotfiles)
@@ -396,8 +406,60 @@ test_registration_requires_role() {
   pass 'registration requires a valid Bosun role record'
 }
 
+test_registration_uses_ordered_content() {
+  local dir project base_branch base first second head url
+  dir=$(new_home content-derivation)
+  setup_bosun "$dir"
+  prepare_project "$dir"
+  project="$dir/projects/sample"
+  base_branch=$(git -C "$project" branch --show-current)
+  base=$(git -C "$project" rev-parse HEAD)
+  git -C "$project" checkout -q housefeature/maneuver
+  git -C "$project" reset -q --hard "$base"
+  printf 'safe\nsecret\n' > "$project/feature.txt"
+  git -C "$project" add feature.txt
+  git -C "$project" commit -qm 'Add maneuver content'
+  first=$(git -C "$project" rev-parse HEAD)
+  printf 'safe\nsecret\nextra\n' > "$project/feature.txt"
+  git -C "$project" add feature.txt
+  git -C "$project" commit -qm 'Complete maneuver content'
+  second=$(git -C "$project" rev-parse HEAD)
+  git -C "$project" -c "url.file://$FORK_BARE.insteadOf=https://github.com/captain/sample.git" \
+    push -q --force fork HEAD:refs/heads/housefeature/maneuver
+  git -C "$project" checkout -q "$base_branch"
+  call "$dir" order --task maneuver --bosun bosun-kun --maneuver maneuver \
+    --forge github --owner kunchenguid --repository sample --source housefeature/maneuver \
+    --branch contribution/maneuver --captain-words 'Contribute maneuver' --path feature.txt \
+    --commit "$first" --commit "$second" >/dev/null || fail 'two-commit order was rejected'
+  git -C "$project" checkout -qb contribution/maneuver "$base"
+  printf 'safe\nextra\n' > "$project/feature.txt"
+  git -C "$project" add feature.txt
+  git -C "$project" commit -qm 'Extract safe maneuver content'
+  head=$(git -C "$project" rev-parse HEAD)
+  url=https://github.com/kunchenguid/sample/pull/12
+  call "$dir" registration-check --task maneuver --url "$url" --forge github --head captain/sample \
+    --base kunchenguid/sample --branch main --head-branch contribution/maneuver --pr-head "$head" \
+    --validation-head "$head" --validation-mode no-mistakes --worktree "$project" \
+    --upstream-base "$base" --changed-path feature.txt --check-only \
+    || fail 'safe, squashed extraction was rejected'
+  git -C "$project" reset -q --hard "$base"
+  printf 'safe\nextra\nunrelated\n' > "$project/feature.txt"
+  git -C "$project" add feature.txt
+  git -C "$project" commit -qm 'Add unrelated content'
+  head=$(git -C "$project" rev-parse HEAD)
+  if call "$dir" registration-check --task maneuver --url "$url" --forge github --head captain/sample \
+    --base kunchenguid/sample --branch main --head-branch contribution/maneuver --pr-head "$head" \
+    --validation-head "$head" --validation-mode no-mistakes --worktree "$project" \
+    --upstream-base "$base" --changed-path feature.txt --check-only >"$dir/out" 2>&1; then
+    fail 'unrelated content on an allowed path was accepted'
+  fi
+  assert_grep 'not derived from ordered source commits' "$dir/out" 'unrelated content refusal was unclear'
+  pass 'registration accepts redaction and squash but rejects unrelated content'
+}
+
 test_routing
 test_memory_and_paths
+test_bosun_id_path_refusal
 test_order_accepts_dotfiles
 test_order_rejects_invalid_commit_selection
 test_fork_source_validation
@@ -406,3 +468,4 @@ test_intake_delegates_to_ship_lifecycle
 test_intake_retries_existing_task
 test_registration_and_merge
 test_registration_requires_role
+test_registration_uses_ordered_content

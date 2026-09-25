@@ -52,6 +52,8 @@ The source files themselves remain the authority; that JSON is a local interpret
 
 Using the existing contribution and worktree machinery, start from the latest upstream default branch in a clean isolated worktree and apply only the ordered source commits and allowed paths from `housefeature/<name>`, keeping each selected commit's message and author.
 Review the resulting diff and commit series for house-only configuration, private context, secrets, unrelated history, and fork assumptions; a path allowlist cannot decide whether public-looking text is private.
+Registration permits omitted source lines and squashed commits, but refuses changed lines that do not come from the ordered source commits for the same path.
+If adapting the maneuver to current upstream needs new content, obtain a new captain decision and order before publication.
 Do not merge or rebase `house` into the contribution.
 Run the repository's expected validation, using no-mistakes where configured.
 The existing publication path opens the PR from the captain's fork to upstream.

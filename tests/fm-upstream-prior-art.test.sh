@@ -27,10 +27,10 @@ from urllib.parse import parse_qs, urlparse
 args = sys.argv[1:]
 with open(os.environ["FAKE_LOG"], "a", encoding="utf-8") as log:
     log.write(" ".join(args[:2]) + "\n")
-if args[:2] == ["pr", "create"] or args[:2] == ["issue", "create"]:
+if args[:2] == ["pr", "create"]:
     body = pathlib.Path(args[args.index("--body-file") + 1]).read_text()
     pathlib.Path(os.environ["FAKE_PUBLISHED_BODY"]).write_text(body)
-    print("https://github.com/owner/demo/" + ("pull" if args[0] == "pr" else "issues") + "/50")
+    print("https://github.com/owner/demo/pull/50")
     sys.exit(0)
 if args[0] != "api" or "--jq" not in args:
     sys.exit(2)
@@ -76,7 +76,7 @@ export FAKE_PUBLISHED_BODY="$TMP_ROOT/published.md"
 tool="$ROOT/bin/fm-upstream-prior-art.py"
 cd "$TMP_ROOT/repo" || exit 1
 
-common=(--repo owner/demo --kind pr --title 'Fix stale worker detection' --summary-file "$TMP_ROOT/summary.txt" --record "$TMP_ROOT/prior-art.json" --base base)
+common=(--repo owner/demo --title 'Fix stale worker detection' --summary-file "$TMP_ROOT/summary.txt" --record "$TMP_ROOT/prior-art.json" --base base)
 if "$tool" publish "${common[@]}" --body-file "$TMP_ROOT/body.md" --head owner:fix > "$TMP_ROOT/out" 2>&1; then
   fail 'publication succeeded without a record'
 fi
@@ -182,18 +182,5 @@ git add worker.py
 git commit -qm followup
 if "$tool" check "${common[@]}" > "$TMP_ROOT/out" 2>&1; then fail 'changed branch head passed old record'; fi
 pass 'branch head movement stales the prior-art receipt'
-
-printf 'Describe a unique widget behavior.\n' > "$TMP_ROOT/issue-summary.txt"
-issue=(--repo owner/demo --kind issue --title 'Document unique widget behavior' --summary-file "$TMP_ROOT/issue-summary.txt" --record "$TMP_ROOT/issue-prior-art.json")
-"$tool" scan "${issue[@]}" > "$TMP_ROOT/out" || fail 'issue scan failed'
-python3 - "$TMP_ROOT/issue-prior-art.json" <<'PY' || fail 'unrelated issue scan found candidates'
-import json,sys
-r=json.load(open(sys.argv[1])); assert r['candidates']==[] and r['verdict']=='pending'
-PY
-printf '{"verdict":"none-found","items":[]}\n' > "$TMP_ROOT/issue-decisions.json"
-"$tool" decide --record "$TMP_ROOT/issue-prior-art.json" --decisions-file "$TMP_ROOT/issue-decisions.json" > "$TMP_ROOT/out" || fail 'none-found issue decision failed'
-"$tool" publish "${issue[@]}" --body-file "$TMP_ROOT/body.md" > "$TMP_ROOT/out" || fail 'guarded issue publication failed'
-rg -q 'No matching open pull requests or issues' "$FAKE_PUBLISHED_BODY" || fail 'issue body missed prior-art result'
-pass 'issue publication uses the same receipt gate and supports none-found'
 
 printf 'all fm-upstream-prior-art tests passed\n'

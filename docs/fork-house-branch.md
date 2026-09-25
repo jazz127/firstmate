@@ -65,7 +65,7 @@ Rebasing rewrites the attested head, which upstream's gate rejects.
 Validate the exact final head that will be offered with one pipeline run to renew a stale attestation, and never hand-edit the attestation.
 Open an upstream pull request only when the captain asks for that house feature by name.
 Only the captain contacts upstream, including opening or commenting on an upstream pull request.
-Before opening any pull request or filing any issue in a repository the fleet does not own, run the prior-art scan in `bin/fm-upstream-prior-art.py`, review every candidate, and record an explicit verdict.
+Before opening an upstream pull request in a repository the fleet does not own, run the prior-art scan in `bin/fm-upstream-prior-art.py`, review every candidate, and record an explicit verdict.
 The scan searches open pull requests and issues and recent closed unmerged pull requests using changed files, linked issues, and keywords from the title, summary, and changed symbols.
 A `none-found` verdict requires no candidates; a `distinct` verdict requires a one-line reason for each candidate; an `overlaps` verdict requires the captain's recorded decision before publication.
 Use that command's `publish` operation for upstream creation so its receipt check is immediately before the forge write and the generated pull request body credits overlapping authors in a `Prior art checked` section.
@@ -73,7 +73,8 @@ It refuses missing receipts, a changed branch head or diff, a changed title or s
 The command's `check` operation is the reusable gate for a Bosun workflow; it does not depend on Bosun's code.
 An automatic PR creation path that bypasses this gate must not be used for an upstream target.
 The task worktree's pre-push hook refuses a push to a different GitHub repository without a fresh receipt matching the repository, pushed head, and diff.
-Firstmate's PR-registration and ready-signal boundaries repeat that receipt check as backstops, so a direct forge call or external pipeline cannot be reported ready or merged through the fleet without it.
+The no-mistakes pipeline pushes from a separate checkout that is not covered by that hook, so its registration and ready-signal receipt checks remain post-publication backstops.
+An upstream repository is contacted only on the captain's explicit order, which is the primary control for that accepted containment.
 The command header owns its invocation and receipt format.
 
 On the fork's pull requests, use these labels to record a house feature's progression: `upstream-candidate`, `upstream-offered`, `contributed-house-feature`, `house-only`, and `historical`.

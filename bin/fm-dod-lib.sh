@@ -712,11 +712,11 @@ fm_upstream_pr_publish_block() {  # <task-id>
   script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd) || return 1
   cat <<EOF
 For an upstream repository the fleet does not own, do not run \
-\`gh-axi pr create\` or \`gh-axi issue create\` directly. Use the guarded publisher:
+\`gh-axi pr create\` directly. Use the guarded publisher:
 1. Set the target repository, title, one-line summary file, prior-art record, target base, proposed body file, and pushed head (\`OWNER:BRANCH\`).
-2. Run \`$script_dir/fm-upstream-prior-art.py scan --repo <OWNER/REPO> --kind pr --title <TITLE> --summary-file <SUMMARY_FILE> --record <RECORD> --base <BASE>\`.
+2. Run \`$script_dir/fm-upstream-prior-art.py scan --repo <OWNER/REPO> --title <TITLE> --summary-file <SUMMARY_FILE> --record <RECORD> --base <BASE>\`.
 3. Review every recorded candidate, write one distinct/overlaps verdict and reason per candidate to a decisions JSON file, then run \`$script_dir/fm-upstream-prior-art.py decide --record <RECORD> --decisions-file <DECISIONS_FILE>\`.
-4. Run \`$script_dir/fm-upstream-prior-art.py publish --repo <OWNER/REPO> --kind pr --title <TITLE> --summary-file <SUMMARY_FILE> --record <RECORD> --base <BASE> --body-file <BODY_FILE> --head <OWNER:BRANCH>\`; it refuses a missing, stale, incomplete, or unresolved receipt immediately before the forge write.
+4. Run \`$script_dir/fm-upstream-prior-art.py publish --repo <OWNER/REPO> --title <TITLE> --summary-file <SUMMARY_FILE> --record <RECORD> --base <BASE> --body-file <BODY_FILE> --head <OWNER:BRANCH>\`; it refuses a missing, stale, incomplete, or unresolved receipt immediately before the forge write.
 For a repository the fleet owns, the ordinary \`gh-axi\` direct-PR path remains unchanged.
 EOF
 }
@@ -726,9 +726,9 @@ fm_upstream_pr_preflight_block() {  # <task-id>
   script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd) || return 1
   cat <<EOF
 Before starting /no-mistakes for an upstream repository the fleet does not own, complete the prior-art gate. For a repository the fleet owns, skip this upstream-only preflight.
-1. Run \`$script_dir/fm-upstream-prior-art.py scan --repo <OWNER/REPO> --kind pr --title <TITLE> --summary-file <SUMMARY_FILE> --record <RECORD> --base <BASE>\`.
+1. Run \`$script_dir/fm-upstream-prior-art.py scan --repo <OWNER/REPO> --title <TITLE> --summary-file <SUMMARY_FILE> --record <RECORD> --base <BASE>\`.
 2. Review every candidate, record one distinct/overlaps verdict and reason per candidate, and run \`$script_dir/fm-upstream-prior-art.py decide --record <RECORD> --decisions-file <DECISIONS_FILE>\`.
-3. Immediately before starting /no-mistakes, run \`$script_dir/fm-upstream-prior-art.py check --repo <OWNER/REPO> --kind pr --title <TITLE> --summary-file <SUMMARY_FILE> --record <RECORD> --base <BASE>\`; do not start the run if it refuses.
+3. Immediately before starting /no-mistakes, run \`$script_dir/fm-upstream-prior-art.py check --repo <OWNER/REPO> --title <TITLE> --summary-file <SUMMARY_FILE> --record <RECORD> --base <BASE>\`; do not start the run if it refuses.
 The later upstream PR publication must use the same current receipt at its forge-write boundary; an automatic PR creation path that cannot perform that check must not be used.
 EOF
 }

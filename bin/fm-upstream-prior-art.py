@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
-"""Find prior upstream work and gate publication of a PR or issue.
+"""Find prior upstream work and gate publication of a PR.
 
-Usage: fm-upstream-prior-art.py scan --repo OWNER/REPO --kind pr|issue
-         --title TEXT --summary-file FILE --record FILE [--base REF]
+Usage: fm-upstream-prior-art.py scan --repo OWNER/REPO
+         --title TEXT --summary-file FILE --record FILE --base REF
        fm-upstream-prior-art.py decide --record FILE --decisions-file FILE
        fm-upstream-prior-art.py check --record FILE --repo OWNER/REPO
-         --kind pr|issue --title TEXT --summary-file FILE [--base REF]
+         --title TEXT --summary-file FILE --base REF
        fm-upstream-prior-art.py publish [check options] --body-file FILE
          [--head OWNER:BRANCH]
 
 The record is a local JSON receipt, not a forge write. The decisions file is
 JSON with verdict (none-found, distinct, overlaps), items keyed by candidate
 URL with verdict and one-line reason, and captain_decision when overlaps.
-Only publish calls gh-axi create; all other operations are read-only on GitHub.
+Only publish calls gh-axi pr create; all other operations are read-only on GitHub.
 """
 
 import argparse
@@ -136,14 +136,14 @@ def context(args):
     if not SHA.fullmatch(head):
         fail("Git HEAD is not a full commit SHA")
     base = args.base or ""
-    if args.kind == "pr" and not base:
+    if not base:
         fail("a PR scan needs --base to inspect its branch diff")
-    diff = git("diff", "--no-ext-diff", "--find-renames", f"{base}...HEAD", "--") if base else ""
-    files = git("diff", "--no-ext-diff", "--name-only", f"{base}...HEAD", "--").splitlines() if base else []
-    if args.kind == "pr" and not files:
+    diff = git("diff", "--no-ext-diff", "--find-renames", f"{base}...HEAD", "--")
+    files = git("diff", "--no-ext-diff", "--name-only", f"{base}...HEAD", "--").splitlines()
+    if not files:
         fail("the PR branch diff has no changed files")
     digest = hashlib.sha256(diff.encode()).hexdigest()
-    return {"repo": args.repo, "kind": args.kind, "title": title, "summary": summary,
+    return {"repo": args.repo, "kind": "pr", "title": title, "summary": summary,
             "head": head, "base": base, "diff_sha256": digest, "files": files}
 
 
@@ -188,7 +188,7 @@ def scan(args):
     now = dt.datetime.now(dt.timezone.utc)
     cutoff = now - dt.timedelta(days=CLOSED_DAYS)
     repo = ctx["repo"]
-    diff = git("diff", "--no-ext-diff", f"{ctx['base']}...HEAD", "--") if ctx["base"] else ""
+    diff = git("diff", "--no-ext-diff", f"{ctx['base']}...HEAD", "--")
     queries = terms(ctx, diff)
     found = {}
 
@@ -390,12 +390,11 @@ def publish(args):
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as output:
             output.write(complete)
-        command = ["gh-axi", "pr" if args.kind == "pr" else "issue", "create", "-R", args.repo,
+        command = ["gh-axi", "pr", "create", "-R", args.repo,
                    "--title", args.title, "--body-file", body_path]
-        if args.kind == "pr":
-            if not args.head:
-                fail("PR publication needs --head OWNER:BRANCH")
-            command += ["--base", args.base, "--head", args.head]
+        if not args.head:
+            fail("PR publication needs --head OWNER:BRANCH")
+        command += ["--base", args.base, "--head", args.head]
         print(run(command).strip())
     finally:
         os.unlink(body_path)
@@ -407,11 +406,10 @@ def main():
     for name in ("scan", "check", "publish"):
         sub = commands.add_parser(name)
         sub.add_argument("--repo", required=True)
-        sub.add_argument("--kind", choices=("pr", "issue"), required=True)
         sub.add_argument("--title", required=True)
         sub.add_argument("--summary-file", required=True)
         sub.add_argument("--record", required=True)
-        sub.add_argument("--base")
+        sub.add_argument("--base", required=True)
         if name == "publish":
             sub.add_argument("--body-file", required=True)
             sub.add_argument("--head")

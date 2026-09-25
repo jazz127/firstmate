@@ -951,136 +951,77 @@ fm_remote_job_root_is_live() { # <remote-root>
   [ -f "$root/bin/fm-remote-job-worker.sh" ] && [ ! -L "$root/bin/fm-remote-job-worker.sh" ]
 }
 
-fm_remote_job_worker_command_matches() { # [<worker>] <command>
+fm_remote_job_worker_command_matches() { # <worker> <command>
   local worker=$1 command=$2
-  if [ -n "$worker" ]; then
-    case "$command" in
-      "$worker"|bash\ "$worker"|sh\ "$worker"|*/bash\ "$worker"|*/sh\ "$worker"|"$worker --serve"|bash\ "$worker --serve"|sh\ "$worker --serve"|*/bash\ "$worker --serve"|*/sh\ "$worker --serve"|"$worker --lane "*|bash\ "$worker --lane "*|sh\ "$worker --lane "*|*/bash\ "$worker --lane "*|*/sh\ "$worker --lane "*) return 0 ;;
-    esac
-  else
-    case "$command" in
-      bash\ */fm-remote-job-worker.sh|sh\ */fm-remote-job-worker.sh|*/bash\ */fm-remote-job-worker.sh|*/sh\ */fm-remote-job-worker.sh|bash\ */fm-remote-job-worker.sh\ --serve|sh\ */fm-remote-job-worker.sh\ --serve|*/bash\ */fm-remote-job-worker.sh\ --serve|*/sh\ */fm-remote-job-worker.sh\ --serve|bash\ */fm-remote-job-worker.sh\ --lane\ *|sh\ */fm-remote-job-worker.sh\ --lane\ *|*/bash\ */fm-remote-job-worker.sh\ --lane\ *|*/sh\ */fm-remote-job-worker.sh\ --lane\ *) return 0 ;;
-    esac
-  fi
+  case "$command" in
+    "$worker"|bash\ "$worker"|sh\ "$worker"|*/bash\ "$worker"|*/sh\ "$worker"|"$worker --serve"|bash\ "$worker --serve"|sh\ "$worker --serve"|*/bash\ "$worker --serve"|*/sh\ "$worker --serve"|"$worker --lane "*|bash\ "$worker --lane "*|sh\ "$worker --lane "*|*/bash\ "$worker --lane "*|*/sh\ "$worker --lane "*) return 0 ;;
+  esac
   return 1
 }
 
-# The isolated process group that owns <pid>'s whole worker tree, echoed only
-# when signalling it is provably safe: the group is not this shell's own, not a
-# reserved id, and its leader is itself a remote job worker. A worker started
-# without group isolation (an older build, or launchd's own session) therefore
-# never yields a group, and callers fall back to signalling the single process.
-fm_remote_job_worker_process_group() { # <pid>
-  local pid=$1 pgid own_pgid leader_command
-  pgid=$(fm_remote_job_process_pgid "$pid") || return 1
-  case "$pgid" in 0|1) return 1 ;; esac
-  own_pgid=$(fm_remote_job_process_pgid "$$") || return 1
-  [ "$pgid" != "$own_pgid" ] || return 1
-  leader_command=$(fm_remote_job_process_command "$pgid" 2>/dev/null || true)
-  fm_remote_job_worker_command_matches '' "$leader_command" || return 1
-  printf '%s\n' "$pgid"
-}
-
 # Stop a worker and every descendant it leaked, TERM first and KILL only for a
-# survivor. Signals the isolated worker group when one is provable and the lone
-# process otherwise. Returns non-zero when any verified worker-group member is
-# still alive afterwards.
+# survivor. Returns non-zero when any verified worker-tree member is still alive
+# afterwards.
 fm_remote_job_stop_worker_tree() { # <pid> [process-only]
-  local pid=$1 mode=${2:-} pgid members member member_start member_command current_start current_command i=0 alive
+  local pid=$1 members member member_start member_command current_start current_command i=0 alive
   case "$pid" in ''|*[!0-9]*) return 1 ;; esac
   [ "$pid" -gt 1 ] || return 1
-  if [ "$mode" = process-only ]; then
-    members=$(fm_remote_job_process_tree_pids "$pid" 2>/dev/null || true)
-    if [ -z "$members" ]; then
-      member_start=$(fm_remote_job_process_start "$pid" 2>/dev/null || true)
-      member_command=$(fm_remote_job_process_command "$pid" 2>/dev/null || true)
-      [ -n "$member_start" ] && [ -n "$member_command" ] || return 1
-      members=$(printf '%s\t%s\t%s\n' "$pid" "$member_start" "$member_command")
-    fi
-    while IFS=$(printf '\t') read -r member member_start member_command; do
-      current_start=$(fm_remote_job_process_start "$member" 2>/dev/null || true)
-      current_command=$(fm_remote_job_process_command "$member" 2>/dev/null || true)
-      [ -n "$member_start" ] && [ "$current_start" = "$member_start" ] &&
-        [ "$current_command" = "$member_command" ] || continue
-      kill -TERM "$member" 2>/dev/null || true
-    done <<< "$members"
-    while [ "$i" -lt 50 ]; do
-      alive=0
-      while IFS=$(printf '\t') read -r member member_start member_command; do
-        current_start=$(fm_remote_job_process_start "$member" 2>/dev/null || true)
-        current_command=$(fm_remote_job_process_command "$member" 2>/dev/null || true)
-        [ -n "$member_start" ] && [ "$current_start" = "$member_start" ] &&
-          [ "$current_command" = "$member_command" ] || continue
-        if kill -0 "$member" 2>/dev/null; then alive=1; break; fi
-      done <<< "$members"
-      [ "$alive" -eq 0 ] && return 0
-      i=$((i + 1))
-      sleep 0.1
-    done
-    while IFS=$(printf '\t') read -r member member_start member_command; do
-      current_start=$(fm_remote_job_process_start "$member" 2>/dev/null || true)
-      current_command=$(fm_remote_job_process_command "$member" 2>/dev/null || true)
-      [ -n "$member_start" ] && [ "$current_start" = "$member_start" ] &&
-        [ "$current_command" = "$member_command" ] || continue
-      kill -KILL "$member" 2>/dev/null || true
-    done <<< "$members"
-    i=0
-    while [ "$i" -lt 50 ]; do
-      alive=0
-      while IFS=$(printf '\t') read -r member member_start member_command; do
-        current_start=$(fm_remote_job_process_start "$member" 2>/dev/null || true)
-        current_command=$(fm_remote_job_process_command "$member" 2>/dev/null || true)
-        [ -n "$member_start" ] && [ "$current_start" = "$member_start" ] &&
-          [ "$current_command" = "$member_command" ] || continue
-        if kill -0 "$member" 2>/dev/null; then alive=1; break; fi
-      done <<< "$members"
-      [ "$alive" -eq 0 ] && return 0
-      i=$((i + 1))
-      sleep 0.1
-    done
-    while IFS=$(printf '\t') read -r member member_start member_command; do
-      current_start=$(fm_remote_job_process_start "$member" 2>/dev/null || true)
-      current_command=$(fm_remote_job_process_command "$member" 2>/dev/null || true)
-      [ -n "$member_start" ] && [ "$current_start" = "$member_start" ] &&
-        [ "$current_command" = "$member_command" ] || continue
-      kill -0 "$member" 2>/dev/null && return 1
-    done <<< "$members"
-    return 0
+  members=$(fm_remote_job_process_tree_pids "$pid" 2>/dev/null || true)
+  if [ -z "$members" ]; then
+    member_start=$(fm_remote_job_process_start "$pid" 2>/dev/null || true)
+    member_command=$(fm_remote_job_process_command "$pid" 2>/dev/null || true)
+    [ -n "$member_start" ] && [ -n "$member_command" ] || return 1
+    members=$(printf '%s\t%s\t%s\n' "$pid" "$member_start" "$member_command")
   fi
-  local identity_start identity_command
-  identity_start=$(fm_remote_job_process_start "$pid" 2>/dev/null || true)
-  identity_command=$(fm_remote_job_process_command "$pid" 2>/dev/null || true)
-  [ -n "$identity_start" ] && [ -n "$identity_command" ] || return 1
-  [ "$(fm_remote_job_process_start "$pid" 2>/dev/null || true)" = "$identity_start" ] || return 1
-  [ "$(fm_remote_job_process_command "$pid" 2>/dev/null || true)" = "$identity_command" ] || return 1
-  pgid=$(fm_remote_job_worker_process_group "$pid" 2>/dev/null || true)
-  [ "$(fm_remote_job_process_start "$pid" 2>/dev/null || true)" = "$identity_start" ] || return 1
-  [ "$(fm_remote_job_process_command "$pid" 2>/dev/null || true)" = "$identity_command" ] || return 1
-  if [ -n "$pgid" ]; then kill -TERM -- "-$pgid" 2>/dev/null || true; else kill -TERM "$pid" 2>/dev/null || true; fi
-  while { [ -n "$pgid" ] && kill -0 -- "-$pgid" 2>/dev/null || [ -z "$pgid" ] && kill -0 "$pid" 2>/dev/null; } \
-    && [ "$i" -lt 50 ]; do
+  while IFS=$(printf '\t') read -r member member_start member_command; do
+    current_start=$(fm_remote_job_process_start "$member" 2>/dev/null || true)
+    current_command=$(fm_remote_job_process_command "$member" 2>/dev/null || true)
+    [ -n "$member_start" ] && [ "$current_start" = "$member_start" ] &&
+      [ "$current_command" = "$member_command" ] || continue
+    kill -TERM "$member" 2>/dev/null || true
+  done <<< "$members"
+  while [ "$i" -lt 50 ]; do
+    alive=0
+    while IFS=$(printf '\t') read -r member member_start member_command; do
+      current_start=$(fm_remote_job_process_start "$member" 2>/dev/null || true)
+      current_command=$(fm_remote_job_process_command "$member" 2>/dev/null || true)
+      [ -n "$member_start" ] && [ "$current_start" = "$member_start" ] &&
+        [ "$current_command" = "$member_command" ] || continue
+      if kill -0 "$member" 2>/dev/null; then alive=1; break; fi
+    done <<< "$members"
+    [ "$alive" -eq 0 ] && return 0
     i=$((i + 1))
     sleep 0.1
   done
-  if [ -n "$pgid" ]; then
-    kill -0 -- "-$pgid" 2>/dev/null || return 0
-  else
-    kill -0 "$pid" 2>/dev/null || return 0
-  fi
-  [ "$(fm_remote_job_process_start "$pid" 2>/dev/null || true)" = "$identity_start" ] || return 0
-  [ "$(fm_remote_job_process_command "$pid" 2>/dev/null || true)" = "$identity_command" ] || return 0
-  if [ -n "$pgid" ]; then kill -KILL -- "-$pgid" 2>/dev/null || true; else kill -KILL "$pid" 2>/dev/null || true; fi
+  while IFS=$(printf '\t') read -r member member_start member_command; do
+    current_start=$(fm_remote_job_process_start "$member" 2>/dev/null || true)
+    current_command=$(fm_remote_job_process_command "$member" 2>/dev/null || true)
+    [ -n "$member_start" ] && [ "$current_start" = "$member_start" ] &&
+      [ "$current_command" = "$member_command" ] || continue
+    kill -KILL "$member" 2>/dev/null || true
+  done <<< "$members"
   i=0
-  while { [ -n "$pgid" ] && kill -0 -- "-$pgid" 2>/dev/null || [ -z "$pgid" ] && kill -0 "$pid" 2>/dev/null; } \
-    && [ "$i" -lt 50 ]; do
+  while [ "$i" -lt 50 ]; do
+    alive=0
+    while IFS=$(printf '\t') read -r member member_start member_command; do
+      current_start=$(fm_remote_job_process_start "$member" 2>/dev/null || true)
+      current_command=$(fm_remote_job_process_command "$member" 2>/dev/null || true)
+      [ -n "$member_start" ] && [ "$current_start" = "$member_start" ] &&
+        [ "$current_command" = "$member_command" ] || continue
+      if kill -0 "$member" 2>/dev/null; then alive=1; break; fi
+    done <<< "$members"
+    [ "$alive" -eq 0 ] && return 0
     i=$((i + 1))
     sleep 0.1
   done
-  if [ -n "$pgid" ]; then
-    ! kill -0 -- "-$pgid" 2>/dev/null
-  else
-    ! kill -0 "$pid" 2>/dev/null
-  fi
+  while IFS=$(printf '\t') read -r member member_start member_command; do
+    current_start=$(fm_remote_job_process_start "$member" 2>/dev/null || true)
+    current_command=$(fm_remote_job_process_command "$member" 2>/dev/null || true)
+    [ -n "$member_start" ] && [ "$current_start" = "$member_start" ] &&
+      [ "$current_command" = "$member_command" ] || continue
+    kill -0 "$member" 2>/dev/null && return 1
+  done <<< "$members"
+  return 0
 }
 
 fm_remote_job_read_single_line() {

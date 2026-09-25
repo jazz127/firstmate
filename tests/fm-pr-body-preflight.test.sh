@@ -179,6 +179,18 @@ pass "table and incompatible driven-scenario total is refused"
 sed 's/3 of 5 scenarios driven live/1 of 4 scenarios driven live/' "$draft" > "$task_tmp/corrected-total.md"
 mv "$task_tmp/corrected-total.md" "$draft"
 
+sed 's/1 of 4 scenarios driven live/1 of 5 scenarios driven live/' "$draft" > "$task_tmp/total-only-mismatch.md"
+mv "$task_tmp/total-only-mismatch.md" "$draft"
+output=$(preflight)
+rc=$?
+[ "$rc" -eq 1 ] || fail "table and incompatible total-only mismatch were accepted: $output"
+assert_contains "$output" 'evidence claim refused: contradictory driven-scenario results:' "total-only mismatch reason was missing"
+assert_contains "$output" '1 of 5 scenarios driven live against the product.' "total-only mismatch was not quoted"
+pass "table and incompatible total-only mismatch is refused"
+
+sed 's/1 of 5 scenarios driven live/1 of 4 scenarios driven live/' "$draft" > "$task_tmp/corrected-total-only.md"
+mv "$task_tmp/corrected-total-only.md" "$draft"
+
 sed 's/1 of 4 scenarios driven live/Live validation: passed - 1 of 4 scenarios driven live/' "$draft" > "$task_tmp/verdict.md"
 mv "$task_tmp/verdict.md" "$draft"
 output=$(preflight) || fail "partly live passed verdict was refused: $output"

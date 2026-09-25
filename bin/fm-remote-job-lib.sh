@@ -931,6 +931,15 @@ fm_remote_job_process_pgid() { # <pid>
   printf '%s\n' "$value"
 }
 
+fm_remote_job_process_parent() { # <pid>
+  local pid=$1 ps_bin value
+  if [ -x /bin/ps ]; then ps_bin=/bin/ps; elif [ -x /usr/bin/ps ]; then ps_bin=/usr/bin/ps; else return 1; fi
+  value=$("$ps_bin" -p "$pid" -o ppid= 2>/dev/null) || return 1
+  value=$(printf '%s' "$value" | tr -d '[:space:]')
+  case "$value" in ''|*[!0-9]*) return 1 ;; esac
+  printf '%s\n' "$value"
+}
+
 # The code root a worker serves is still a genuine Firstmate checkout. A worker
 # whose root fails this can never claim, validate, or execute another job, so
 # the same predicate decides both self-termination and orphan reaping.
@@ -1232,16 +1241,36 @@ fm_remote_job_linux_worker_processes() { # <remote-root>
   done < <("$ps_bin" -eo pid=,pgid=,args= 2>/dev/null)
 }
 
+fm_remote_job_linux_worker_group_is_singleton() { # <remote-root> <pgid>
+  local root=$1 target_pgid=$2 worker ps_bin pid pgid command supervisors=0
+  worker="$root/bin/fm-remote-job-worker.sh"
+  if [ -x /bin/ps ]; then ps_bin=/bin/ps; elif [ -x /usr/bin/ps ]; then ps_bin=/usr/bin/ps; else return 1; fi
+  while read -r pid pgid command; do
+    [ "$pgid" = "$target_pgid" ] || continue
+    case "$command" in
+      *"$worker --serve"|*"$worker --lane" ) continue ;;
+      *"$worker") supervisors=$((supervisors + 1)) ;;
+    esac
+  done < <("$ps_bin" -eo pid=,pgid=,args= 2>/dev/null)
+  [ "$supervisors" -eq 1 ]
+}
+
 fm_remote_job_linux_reap_worker_groups() { # <remote-root> <keep-pid> <keep-pgid>
-  local root=$1 keep_pid=$2 keep_pgid=$3 keep_isolated= processes pid pgid
+  local root=$1 keep_pid=$2 keep_pgid=$3 keep_isolated= keep_members= processes pid pgid parent parent_command
   if [ -n "$keep_pid" ] && [ -n "$keep_pgid" ] &&
-    [ "$(fm_remote_job_worker_process_group "$keep_pid" 2>/dev/null || true)" = "$keep_pgid" ]; then
+    fm_remote_job_linux_worker_group_is_singleton "$root" "$keep_pgid"; then
     keep_isolated=$keep_pgid
+  fi
+  if [ -n "$keep_pid" ]; then
+    keep_members=" $keep_pid "
+    parent=$(fm_remote_job_process_parent "$keep_pid" 2>/dev/null || true)
+    parent_command=$(fm_remote_job_process_command "$parent" 2>/dev/null || true)
+    case "$parent_command" in *"$root/bin/fm-remote-job-worker.sh") keep_members="$keep_members$parent " ;; esac
   fi
   processes=$(fm_remote_job_linux_worker_processes "$root") || return 1
   while read -r pid pgid; do
     [ -n "$pid" ] || continue
-    [ "$pid" = "$keep_pid" ] && continue
+    case "$keep_members" in *" $pid "*) continue ;; esac
     kill -0 "$pid" 2>/dev/null || continue
     if [ -n "$keep_isolated" ] && [ "$pgid" = "$keep_isolated" ]; then
       continue
@@ -1251,7 +1280,7 @@ fm_remote_job_linux_reap_worker_groups() { # <remote-root> <keep-pid> <keep-pgid
   processes=$(fm_remote_job_linux_worker_processes "$root") || return 1
   while read -r pid pgid; do
     [ -n "$pid" ] || continue
-    [ "$pid" = "$keep_pid" ] && continue
+    case "$keep_members" in *" $pid "*) continue ;; esac
     [ -n "$keep_isolated" ] && [ "$pgid" = "$keep_isolated" ] && continue
     return 1
   done <<< "$processes"

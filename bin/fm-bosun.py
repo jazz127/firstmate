@@ -348,14 +348,49 @@ def project_mode(project):
     return mode, yolo
 
 
+def existing_task(task):
+    path = safe_path(home() / "state" / f"{safe_name(task)}.meta")
+    if path.is_symlink() or not path.is_file():
+        return None
+    fields = {}
+    try:
+        for line in path.read_text().splitlines():
+            key, separator, value = line.partition("=")
+            if separator:
+                fields[key] = value
+    except OSError as exc:
+        fail(f"could not read existing task record: {exc}")
+    if not fields.get("worktree"):
+        return None
+    return fields
+
+
 def cmd_intake(args):
     record = contribution(args.task)
     if record.get("state") != "ordered":
         fail("captain order has already been assigned or published")
+    assignment_task = record.get("assignment_task")
+    if assignment_task is None:
+        assignment_task = args.task
+        record["assignment_task"] = assignment_task
+        write_json(contribution_path(args.task), record)
+    if assignment_task != args.task:
+        fail("contribution assignment identity differs from order")
     project = safe_name(record["target"]["repository"])
     project_dir = safe_path(home() / "projects" / project)
     if not project_dir.is_dir() or project_dir.is_symlink():
         fail(f"upstream project clone is unavailable: {project_dir}")
+    adopted = existing_task(assignment_task)
+    if adopted:
+        record["task_brief"] = str(safe_path(home() / "data" / args.task / "brief.md"))
+        record["task_worktree"] = adopted["worktree"]
+        record["task_mode"] = adopted.get("mode", record.get("task_mode", "no-mistakes"))
+        record["task_yolo"] = adopted.get("yolo", record.get("task_yolo", "off"))
+        record["assigned_at"] = record.get("assigned_at", now())
+        record["state"] = "assigned"
+        write_json(contribution_path(args.task), record)
+        print(f"adopted {assignment_task} worktree={adopted['worktree']}")
+        return
     mode, yolo = project_mode(project)
     root = Path(os.environ.get("FM_ROOT_OVERRIDE", Path(__file__).resolve().parent.parent))
     brief_cmd = [str(root / "bin/fm-brief.sh"), args.task, project, "--mode", mode]

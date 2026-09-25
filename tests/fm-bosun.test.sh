@@ -196,6 +196,49 @@ EOF
   pass 'ordered maneuvers delegate exactly once through brief and spawn'
 }
 
+test_intake_retries_existing_task() {
+  local dir fake_root
+  dir=$(new_home intake-retry)
+  ordered_home "$dir"
+  fake_root="$dir/fake-root"
+  mkdir -p "$fake_root/bin"
+  cat > "$fake_root/bin/fm-project-mode.sh" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' 'no-mistakes off'
+EOF
+  cat > "$fake_root/bin/fm-brief.sh" <<'EOF'
+#!/usr/bin/env bash
+mkdir -p "$FM_HOME/data/$1"
+printf '%s\n' '{TASK}' '{FIRSTMATE_SPEC}' > "$FM_HOME/data/$1/brief.md"
+EOF
+  cat > "$fake_root/bin/fm-spawn.sh" <<'EOF'
+#!/usr/bin/env bash
+set -eu
+count_file="$FM_HOME/state/spawn-count"
+count=0
+[ -f "$count_file" ] && count=$(cat "$count_file")
+printf '%s\n' $((count + 1)) > "$count_file"
+printf '%s\n' "worktree=$FM_HOME/projects/sample/retry-worktree" "mode=no-mistakes" "yolo=off" > "$FM_HOME/state/$1.meta"
+if [ ! -e "$FM_HOME/state/spawn-failed" ]; then
+  : > "$FM_HOME/state/spawn-failed"
+  exit 1
+fi
+printf '%s\n' "spawned $1 worktree=$FM_HOME/projects/sample/retry-worktree"
+EOF
+  chmod +x "$fake_root/bin"/*.sh
+  if FM_HOME="$dir" FM_ROOT_OVERRIDE="$fake_root" python3 "$CLI" intake --task maneuver >"$dir/first.out" 2>&1; then
+    fail 'simulated post-spawn failure unexpectedly succeeded'
+  fi
+  jq -e '.state == "ordered" and .assignment_task == "maneuver"' \
+    "$dir/data/maneuver/bosun-contribution.json" >/dev/null || fail 'assignment identity was not persisted'
+  FM_HOME="$dir" FM_ROOT_OVERRIDE="$fake_root" python3 "$CLI" intake --task maneuver >"$dir/retry.out" \
+    || fail 'retry did not adopt the existing task'
+  [ "$(cat "$dir/state/spawn-count")" = 1 ] || fail 'retry spawned a second task'
+  jq -e '.state == "assigned" and (.task_worktree | endswith("retry-worktree"))' \
+    "$dir/data/maneuver/bosun-contribution.json" >/dev/null || fail 'retry did not persist adopted task'
+  pass 'intake retries adopt the deterministic existing task'
+}
+
 fake_github() {
   mkdir -p "$1/fakebin"
   cat > "$1/fakebin/gh" <<'EOF'
@@ -364,5 +407,6 @@ test_order_rejects_invalid_commit_selection
 test_fork_source_validation
 test_fork_source_freshness
 test_intake_delegates_to_ship_lifecycle
+test_intake_retries_existing_task
 test_registration_and_merge
 test_registration_requires_role

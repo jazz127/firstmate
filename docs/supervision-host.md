@@ -82,6 +82,7 @@ The other owners read the file at every arm.
 
 `bin/fm-branch-report.sh` appends to the outcome store (`bin/fm-branch-outcome.sh`) plus a per-turn receipt the host requires.
 Each command report names its claimed queue sequence with `--row`, and the receipt binds that row to the report's outcome sequence.
+The report surface holds the receipt lock across the duplicate check, outcome append, and receipt write so concurrent reports cannot claim the same row.
 The host requires a report for every claimed row before it counts the turn handled.
 A row recorded after the captain returned is also queued for main as a durable check wake.
 

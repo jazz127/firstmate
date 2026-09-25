@@ -169,6 +169,12 @@ SH
     expected=$(printf '%s\n' "$task_tmp/gotmp" "$TMP_ROOT/user corepack" "$TMP_ROOT/user npm")
     assert_equals "$expected" "$seen" \
       "cache launch with allowlist=$setting overrode cache homes the pane already set"
+    seen=$(emitted_launch_env "$FAKEBIN_DIR" "$LAUNCH_LOG" "$PANE_LOG" \
+      NPM_CONFIG_CACHE="$TMP_ROOT/user upper npm") \
+      || fail "cache launch with allowlist=$setting and an uppercase npm cache did not execute"
+    expected=$(printf '%s\n' "$task_tmp/gotmp" "$task_tmp/cache/corepack" "$TMP_ROOT/user upper npm")
+    assert_equals "$expected" "$seen" \
+      "cache launch with allowlist=$setting overrode the NPM_CONFIG_CACHE the pane already set"
   done
   pass "worker launch defaults Corepack and npm caches outside the worktree and keeps preset ones"
 }

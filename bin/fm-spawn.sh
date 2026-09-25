@@ -4983,7 +4983,7 @@ spawn_record_traceparent() {
 # teardown removes it; cache homes the pane already sets are kept.
 spawn_send_text_line "$T" "export GOTMPDIR=$TASK_TMP/gotmp"
 spawn_send_text_line "$T" "export COREPACK_HOME=\"\${COREPACK_HOME:-$TASK_TMP/cache/corepack}\""
-spawn_send_text_line "$T" "export npm_config_cache=\"\${npm_config_cache:-$TASK_TMP/cache/npm}\""
+spawn_send_text_line "$T" "export npm_config_cache=\"\${npm_config_cache:-\${NPM_CONFIG_CACHE:-$TASK_TMP/cache/npm}}\""
 # Export the compact-adviser kill switch into the pane shell through the same
 # pre-launch channel, so later commands in that shell inherit it too. The launch
 # command independently establishes the value for the agent process itself.

@@ -21,6 +21,22 @@ write_merge_marker() {  # <state> <id> <provider> <host> <path> <number>
   chmod 600 "$1/$2.pr-poll-merge-notified"
 }
 
+test_direct_pr_upstream_publication_is_guarded() {
+  local contract
+  contract=$(fm_dod_block direct-PR upstream-gate fix/upstream-gate)
+  assert_contains "$contract" "fm-upstream-prior-art.py scan" \
+    "direct-PR contract omitted the upstream prior-art scan"
+  assert_contains "$contract" "fm-upstream-prior-art.py decide" \
+    "direct-PR contract omitted the candidate decision step"
+  assert_contains "$contract" "fm-upstream-prior-art.py publish" \
+    "direct-PR contract omitted the guarded publisher"
+  assert_contains "$contract" "repository the fleet owns" \
+    "direct-PR contract did not preserve the owned-repository path"
+  pass "direct-PR upstream publication uses the prior-art gate"
+}
+
+test_direct_pr_upstream_publication_is_guarded
+
 test_scout_done_is_not_gated() {
   local repo wt
   repo="$TMP_ROOT/scout-repo"

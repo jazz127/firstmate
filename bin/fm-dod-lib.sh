@@ -707,6 +707,20 @@ The pipeline has no pre-publication body hook here; this readback check is requi
 EOF
 }
 
+fm_upstream_pr_publish_block() {  # <task-id>
+  local script_dir
+  script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd) || return 1
+  cat <<EOF
+For an upstream repository the fleet does not own, do not run \
+\`gh-axi pr create\` or \`gh-axi issue create\` directly. Use the guarded publisher:
+1. Set the target repository, title, one-line summary file, prior-art record, target base, proposed body file, and pushed head (\`OWNER:BRANCH\`).
+2. Run \`$script_dir/fm-upstream-prior-art.py scan --repo <OWNER/REPO> --kind pr --title <TITLE> --summary-file <SUMMARY_FILE> --record <RECORD> --base <BASE>\`.
+3. Review every recorded candidate, write one distinct/overlaps verdict and reason per candidate to a decisions JSON file, then run \`$script_dir/fm-upstream-prior-art.py decide --record <RECORD> --decisions-file <DECISIONS_FILE>\`.
+4. Run \`$script_dir/fm-upstream-prior-art.py publish --repo <OWNER/REPO> --kind pr --title <TITLE> --summary-file <SUMMARY_FILE> --record <RECORD> --base <BASE> --body-file <BODY_FILE> --head <OWNER:BRANCH>\`; it refuses a missing, stale, incomplete, or unresolved receipt immediately before the forge write.
+For a repository the fleet owns, the ordinary \`gh-axi\` direct-PR path remains unchanged.
+EOF
+}
+
 fm_dod_block() {  # <mode> <task-id> [branch] [<forge>]
   local mode=$1 id=$2 forge=${4:-none}
   local branch=${3:-fm/$id}
@@ -765,9 +779,10 @@ Delivery contract: mode=direct-PR
 Ship branch: $branch
 This task ships **direct-PR**: you raise the PR yourself, without the no-mistakes pipeline.
 The task is complete only when committed on your branch.
-When it is implemented and committed, push your branch and open a PR with \`gh-axi\` that is ready for review, not a draft.
+When it is implemented and committed, push your branch and open a PR through the applicable publication path below; it must be ready for review, not a draft.
 EOF
       fm_pr_body_preflight_block "$id"
+      fm_upstream_pr_publish_block "$id"
       cat <<EOF
 Before you report done, read the PR back from the forge and confirm it is not a draft (\`gh pr view <url> --json isDraft\` must print false); if it is a draft, mark it ready with \`gh-axi pr ready\`.
 A draft cannot be merged, so a done report on one leaves the merge unasked.

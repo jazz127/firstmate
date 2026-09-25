@@ -977,7 +977,8 @@ PY
       ;;
     *)
       fm_remote_job_process_identity_matches "$pid" "$expected_start" "$expected_command" || return 1
-      kill -"$signal" "$pid" 2>/dev/null
+      kill -"$signal" "$pid" 2>/dev/null || return 1
+      fm_remote_job_process_identity_matches "$pid" "$expected_start" "$expected_command" || return 0
       ;;
   esac
 }
@@ -1350,16 +1351,18 @@ fm_remote_job_start_linux_worker_locked() { # <remote-root> <account-home>
 }
 
 fm_remote_job_linux_worker_processes() { # <remote-root>
-  local root=$1 worker ps_bin pid pgid state weekday month day clock year command start
+  local root=$1 worker ps_bin uid pid pgid state weekday month day clock year command start
   worker="$root/bin/fm-remote-job-worker.sh"
   if [ -x /bin/ps ]; then ps_bin=/bin/ps; elif [ -x /usr/bin/ps ]; then ps_bin=/usr/bin/ps; else return 1; fi
+  uid=$(id -u 2>/dev/null) || return 1
+  case "$uid" in ''|*[!0-9]*) return 1 ;; esac
   while read -r pid pgid state weekday month day clock year command; do
     case "$pgid" in ''|*[!0-9]*|0|1) continue ;; esac
     case "$state" in Z*) continue ;; esac
     fm_remote_job_worker_command_matches "$worker" "$command" || continue
     start="$weekday $month $day $clock $year"
     [ -n "$start" ] && printf '%s\t%s\t%s\n' "$pid" "$start" "$command"
-  done < <("$ps_bin" -eo pid=,pgid=,stat=,lstart=,command= 2>/dev/null)
+  done < <("$ps_bin" -u "$uid" -o pid=,pgid=,stat=,lstart=,command= 2>/dev/null)
   return 0
 }
 
@@ -1383,9 +1386,11 @@ fm_remote_job_process_descends_from_identity() { # <pid> <ancestor> <start> <com
 }
 
 fm_remote_job_process_tree_pids() { # <pid> [start] [command]
-  local root=$1 expected_start=${2:-} expected_command=${3:-} ps_bin pid ppid state weekday month day clock year start command processes frontier next root_valid=0
+  local root=$1 expected_start=${2:-} expected_command=${3:-} ps_bin uid pid ppid state weekday month day clock year start command processes frontier next root_valid=0
   if [ -x /bin/ps ]; then ps_bin=/bin/ps; elif [ -x /usr/bin/ps ]; then ps_bin=/usr/bin/ps; else return 1; fi
-  processes=$("$ps_bin" -eo pid=,ppid=,stat=,lstart=,command= 2>/dev/null) || return 1
+  uid=$(id -u 2>/dev/null) || return 1
+  case "$uid" in ''|*[!0-9]*) return 1 ;; esac
+  processes=$("$ps_bin" -u "$uid" -o pid=,ppid=,stat=,lstart=,command= 2>/dev/null) || return 1
   frontier=$root
   while read -r pid ppid state weekday month day clock year command; do
     case "$pid" in ''|*[!0-9]*) continue ;; esac

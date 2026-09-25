@@ -27,7 +27,9 @@ FM_QUOTA_PROVIDER_ID_RE='^[a-z0-9]+(-[a-z0-9]+)*\z'
 #                                  is identified by the contract.
 #   quota_row($snapshot; $provider; $lane)
 #                                  the one provider row the candidate binds to,
-#                                  or null; schema 5 ignores $lane.
+#                                  or null; schema 5 ignores $lane except for
+#                                  the explicit Luna seat, which must match its
+#                                  credential home in either schema.
 # shellcheck disable=SC2016,SC2034  # jq program text, not shell expansion; read by the sourcing consumers
 FM_QUOTA_ROW_JQ='
   def quota_lane($harness; $model):
@@ -37,7 +39,12 @@ FM_QUOTA_ROW_JQ='
     else "" end;
   def quota_row($snapshot; $provider; $lane):
     ([$snapshot.providers[]? | select(.provider == $provider)]) as $rows |
-    if $snapshot.schemaVersion == 6 then
+    if $provider == "codex" and $lane == "luna" then
+      ([$rows[] | select((.account.credentialHome // "") as $home |
+        $home == "~/.codex-luna/auth.json" or
+        $home == "/Users/jarad/.codex-luna/auth.json")] |
+        if length == 1 then .[0] else null end)
+    elif $snapshot.schemaVersion == 6 then
       (([$rows[] | select(.accountKey == $lane)] | first) //
        ([$rows[] | select(.accountKey == "default")] | first) // null)
     else ($rows | first) // null

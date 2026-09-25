@@ -333,6 +333,13 @@ def path_allowed(path, allowed):
     return any(path == item or item.endswith("/") and path.startswith(item) for item in allowed)
 
 
+def unauthorized_tree_paths(project_dir, base, head, rewrite_paths):
+    changed = git_output(project_dir, "diff", "--name-only", base, head)
+    if changed is None:
+        return None
+    return [path for path in changed.splitlines() if path and not path_allowed(path, rewrite_paths)]
+
+
 def validate_extraction(worktree, upstream_base, pr_head, source_commits, actual_commits,
                         allowed, deviations):
     deviation_paths = [item["path"] for item in deviations]
@@ -366,19 +373,16 @@ def validate_extraction(worktree, upstream_base, pr_head, source_commits, actual
                 actual_tree = git_output(scratch_repo, "rev-parse", f"{commit}^{{tree}}")
                 if actual_tree is None or expected_trees[index] is None:
                     fail(f"upstream PR commit {commit} cannot be compared with ordered progression")
-                changed_progression = git_output(
-                    scratch_repo, "diff", "--name-only", expected_trees[index], actual_tree)
-                if changed_progression is None:
+                offending = unauthorized_tree_paths(
+                    scratch_repo, expected_trees[index], actual_tree, deviation_paths)
+                if offending is None:
                     fail(f"upstream PR commit {commit} cannot be compared with ordered progression")
-                offending = [path for path in changed_progression.splitlines()
-                             if path and not path_allowed(path, deviation_paths)]
                 if offending:
                     fail(f"upstream PR commit {commit} is not derived from ordered progression: "
                          f"{', '.join(offending)}")
-        changed = git_output(scratch_repo, "diff", "--name-only", "HEAD", pr_head)
-        if changed is None:
+        offending = unauthorized_tree_paths(scratch_repo, "HEAD", pr_head, deviation_paths)
+        if offending is None:
             fail("could not compare extracted content with upstream PR")
-        offending = [path for path in changed.splitlines() if path and not path_allowed(path, deviation_paths)]
         if offending:
             fail(f"upstream PR differs from ordered extraction: {', '.join(offending)}")
     finally:

@@ -479,6 +479,26 @@ test_registration_uses_ordered_content() {
     fail 'add-revert history was accepted'
   fi
   assert_grep "$transient" "$dir/out" 'add-revert history refusal was unclear'
+  git -C "$project" reset -q --hard "$base"
+  printf 'house\n' > "$project/feature.txt"
+  git -C "$project" add feature.txt
+  git -C "$project" commit -qm 'Add house form'
+  rewrite_head=$(git -C "$project" rev-parse HEAD)
+  printf 'public\n' > "$project/feature.txt"
+  git -C "$project" add feature.txt
+  git -C "$project" commit -qm 'Rewrite allowed path'
+  head=$(git -C "$project" rev-parse HEAD)
+  call "$dir" order --task rewrite --bosun bosun-kun --maneuver maneuver \
+    --forge github --owner kunchenguid --repository sample --source housefeature/maneuver \
+    --branch contribution/maneuver --captain-words 'Contribute rewrite' --path feature.txt \
+    --deviation 'feature.txt=replace house-only form' --deviation 'secret.txt=strip private house context' \
+    --commit "$first" --commit "$second" \
+    >/dev/null || fail 'declared rewrite order was rejected'
+  call "$dir" registration-check --task rewrite --url "$url" --forge github --head captain/sample \
+    --base kunchenguid/sample --branch main --head-branch contribution/maneuver --pr-head "$head" \
+    --validation-head "$head" --validation-mode no-mistakes --worktree "$project" \
+    --upstream-base "$base" --changed-path feature.txt --check-only \
+    || fail "declared rewrite on allowed path was rejected ($rewrite_head)"
   pass 'registration accepts redaction and squash but rejects unrelated content'
 }
 

@@ -3926,6 +3926,27 @@ test_composer_state_pi_dollar_status_footer_is_empty() {
   pass "fm_backend_herdr_composer_state: a dollar-first Pi status footer reads empty, not a dead shell"
 }
 
+test_composer_state_pi_captured_cost_footer_is_scoped() {
+  # The pi 0.87.1 footer as captured through herdr 0.9.1: the pwd row sits
+  # between the closing rule and the cost-first stats row. That row is
+  # furniture only as pi's complete stats tuple; a truncated tuple stays a
+  # dead-shell row and the pane defers.
+  local dir log resp fb out case_id stats want
+  for case_id in captured truncated; do
+    dir="$TMP_ROOT/composer-pi-captured-footer-$case_id"; mkdir -p "$dir/responses"; log="$dir/log"; resp="$dir/responses"; : > "$log"
+    stats=$'$0.000 (sub) 0.0%/272k (auto)            (openai-codex) gpt-5.6-terra \xe2\x80\xa2 high'
+    want=empty
+    [ "$case_id" = captured ] || { stats=$'$0.000'; want=unknown; }
+    printf '%s\n' $'transcript\n\x1b[0m\x1b[38;2;178;148;187m─────────────────────────────────────────────────────\x1b[0m\r\n\x1b[0m\x1b[7m \x1b[0m     \r\n\x1b[0m\x1b[38;2;178;148;187m─────────────────────────────────────────────────────\x1b[0m\r\n\x1b[0m\x1b[38;2;102;102;102m/private/tmp/lab/cwd\x1b[0m\r\n\x1b[0m\x1b[38;2;102;102;102m'"$stats"$'\x1b[0m' > "$resp/1.out"
+    printf '{"result":{"agent":{"agent":"pi","agent_status":"idle"}}}\n' > "$resp/2.out"
+    fb=$(make_herdr_fakebin "$dir")
+    out=$( PATH="$fb:$PATH" FM_HERDR_LOG="$log" FM_HERDR_RESPONSES="$resp" \
+      bash -c '. "$0/bin/backends/herdr.sh"; fm_backend_herdr_composer_state lab:w1:p2' "$ROOT" )
+    [ "$out" = "$want" ] || fail "the $case_id pi cost footer should read $want, got '$out'"
+  done
+  pass "fm_backend_herdr_composer_state: pi's captured cost footer is furniture; a truncated tuple defers"
+}
+
 # A pi worker parked on an interactive prompt (permission dialog, question
 # menu, trust dialog) reports agent_status=blocked: it is waiting on a human
 # keystroke. The menu is drawn ABOVE the separator pair, so the composer region
@@ -5768,6 +5789,7 @@ test_composer_state_unknown_when_no_composer_row_found
 test_composer_state_pi_parked_prompt_is_not_empty
 test_composer_state_pi_separator_idle_is_empty
 test_composer_state_pi_dollar_status_footer_is_empty
+test_composer_state_pi_captured_cost_footer_is_scoped
 test_composer_state_pi_separator_real_text_is_pending
 test_composer_state_pi_incomplete_separator_below_stale_generic_is_unknown
 test_composer_state_pi_separator_requires_safe_native_identity

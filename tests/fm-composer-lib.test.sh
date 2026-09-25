@@ -670,6 +670,72 @@ test_matrix_pi_dollar_status_footer_is_empty() {
   pass "matrix: a dollar-first pi status footer reads empty; dead shells still refuse"
 }
 
+test_matrix_pi_dollar_status_footer_is_scoped() {
+  # Beyond kunchenguid/firstmate#5683's furniture rule (diagnosis in #5666):
+  # Pi's cost-first status row is furniture only as the complete tuple Pi
+  # renders, only in the footer run directly below the selected pi pair's
+  # closing rule, and only when that pair is what the verdict rests on.
+  # Everywhere else a `$` row stays dead-shell evidence.
+  local rule pair status pi_idle pi_blocked pi_working none out screen tuple
+  rule='────────────────────────'
+  pair=$'transcript\n'"$rule"$'\n\n'"$rule"
+  status=$'$0.000 (sub) 5.4%/272k (auto)'
+  pi_idle=$(printf 'pi\tidle'); pi_blocked=$(printf 'pi\tblocked')
+  pi_working=$(printf 'pi\tworking'); none=$(printf 'zsh\t')
+  # Pi 0.87.1 through herdr 0.9.1 draws the pwd row between the rule and the
+  # stats row; the row shapes below are that capture with the width trimmed.
+  screen="$pair"$'\n/private/tmp/lab/cwd\n$0.000 (sub) 0.0%/272k (auto)                  (openai-codex) gpt-5.6-terra • high'
+  assert_screen "captured pi 0.87.1 footer below a blank pair" empty "$CAPS_STYLED" "$screen" '' "$pi_idle"
+  assert_screen "counters-first footer on the same pair" empty "$CAPS_STYLED" \
+    "$pair"$'\n↑0 ↓0 $0.000 (sub) 5.4%/272k (auto)' '' "$pi_idle"
+  for tuple in $'$0.012 5.4%/272k' $'$1.250 (sub) ?/1.0M (auto)' $'$0.000 (sub) 12.5%/8k'; do
+    assert_screen "complete tuple '$tuple' is footer furniture" empty "$CAPS_STYLED" \
+      "$pair"$'\n'"$tuple" '' "$pi_idle"
+  done
+  # Truncated or malformed tuples are not pi's footer.
+  for tuple in $'$0' $'$0.000' $'$0.5 (sub) 5.4%/272k' $'$0.000 (sub)' $'$0.000 (sub) 5.4/272k' $'$0.000 (sub) 5.4%/272x' $'$0.000 (paid) 5.4%/272k'; do
+    assert_screen "malformed tuple '$tuple' stays shell evidence" unknown "$CAPS_STYLED" \
+      "$pair"$'\n'"$tuple" '' "$pi_idle"
+  done
+  # A real shell row after a recognised footer still vetoes.
+  assert_screen "shell row after the footer still refuses" unknown "$CAPS_STYLED" \
+    "$pair"$'\n'"$status"$'\n$ ls' '' "$pi_idle"
+  assert_screen "bare dollar after the footer still refuses" unknown "$CAPS_STYLED" \
+    "$pair"$'\n'"$status"$'\n$' '' "$pi_idle"
+  # A second status row is not pi's single footer row.
+  assert_screen "a repeated status row refuses" unknown "$CAPS_STYLED" \
+    "$pair"$'\n'"$status"$'\n'"$status" '' "$pi_idle"
+  # Not in the footer position: separated from the rule by a blank row, or
+  # below a shell row.
+  assert_screen "a status row after a blank gap refuses" unknown "$CAPS_STYLED" \
+    "$pair"$'\n\n'"$status" '' "$pi_idle"
+  assert_screen "a status row below a shell row refuses" unknown "$CAPS_STYLED" \
+    "$pair"$'\n$ ls\n'"$status" '' "$pi_idle"
+  # The identity gate is unchanged by the footer: only pi idle/done is empty.
+  screen="$pair"$'\n'"$status"
+  assert_screen "blocked pi with a footer defers" unknown "$CAPS_STYLED" "$screen" '' "$pi_blocked"
+  assert_screen "working pi with a footer defers" unknown "$CAPS_STYLED" "$screen" '' "$pi_working"
+  assert_screen "absent identity with a footer defers" unknown "$CAPS_STYLED" "$screen" '' probe-absent
+  assert_screen "foreign identity with a footer defers" unknown "$CAPS_STYLED" "$screen" '' "$none"
+  [ "$(fm_composer_classify_screen "$CAPS_STYLED" "$screen")" = need-identity ] \
+    || fail "a footer below a blank pair must still request the lazy identity probe"
+  # A real draft above the footer stays a draft, and extraction ignores the
+  # footer row entirely.
+  screen=$'transcript\n'"$rule"$'\n> fix the flaky test\n'"$rule"$'\n'"$status"
+  assert_screen "a draft above the footer stays pending" pending "$CAPS_STYLED" "$screen" '' "$pi_idle"
+  out=$(fm_composer_extract_selected_content "$CAPS_STYLED" "$screen")
+  [ "$out" = 'fix the flaky test' ] || fail "a draft above the footer should extract alone, got '$out'"
+  # Incomplete pair: a lone rule with a footer below is no composer.
+  assert_screen "a footer below a lone rule refuses" unknown "$CAPS_STYLED" \
+    $'transcript\n'"$rule"$'\n'"$status" '' "$pi_idle"
+  # Below any other harness's composer the same row is dead-shell evidence.
+  out=$(fm_composer_classify_screen "$CAPS_STYLED" $'❯\n\n'"$status")
+  [ "$out" = unknown ] || fail "a status row below a bare agent composer must refuse, got '$out'"
+  out=$(fm_composer_classify_screen "$CAPS_STYLED" "$rule"$'\n❯'"$NBSP"$'\n'"$rule"$'\n'"$status" '' probe-absent)
+  [ "$out" = unknown ] || fail "a status row below a claude separator composer must refuse, got '$out'"
+  pass "matrix: pi's cost-first footer is furniture only as a complete tuple in its footer position under an idle pi"
+}
+
 test_matrix_pi_prompt_glyph_row_is_empty() {
   # Some pi editors draw their OWN prompt glyph `>` plus the reverse-video
   # cursor cell on the pair's first row, and pi's `↳ <last submitted prompt>`
@@ -1117,6 +1183,7 @@ test_matrix_omp_status_row_bounds_bare_composer
 test_matrix_codex_idle_starfield_furniture
 test_matrix_pi_separated_needs_identity
 test_matrix_pi_dollar_status_footer_is_empty
+test_matrix_pi_dollar_status_footer_is_scoped
 test_zero_height_separator_pair_proves_nothing
 test_matrix_pi_prompt_glyph_row_is_empty
 test_matrix_pi_prompt_row_is_pi_only_furniture

@@ -628,6 +628,7 @@ A blocked Pi is parked on an interactive prompt, so its blank composer region is
 That state defers instead of proving emptiness.
 A working Pi, pending middle row, missing identity, incomplete separator pair, a pair enclosing no row, or an over-tall candidate remains unknown or pending.
 A lone `>` at the start of the pair's first row is the Pi editor's own prompt, not input; text beside it, a `>` on a later row, and any other glyph remain input.
+Pi's cost-first stats row (`$0.000 (sub) 0.0%/272k (auto)`) is footer furniture only as Pi's complete stats tuple, first in the row run directly below the pair, and only when the pair itself proves the verdict; a truncated tuple, a repeat, or any other `$` row still refuses.
 Identity stays a lazy second read, consulted only when a separator pair could change the verdict.
 
 ### Placeholder and ghost text

@@ -196,7 +196,80 @@ fi
 exit 0
 SH
   chmod +x "$fb/sleep"
+  # A Herdr pane running Pi, for the cursorless composer proof exit relies on.
+  # The screen comes from herdr-screen and the native identity from
+  # herdr-mode; the missing and contradictory identity modes answer the first
+  # two `agent get` calls (liveness) truthfully and only then misreport, so the
+  # composer's own identity probe is what sees them. Adapted from the fake in
+  # kunchenguid/firstmate#5473.
+  cat > "$fb/herdr" <<'SH'
+#!/usr/bin/env bash
+set -u
+D=$FM_FAKE_DIR
+case "${1:-} ${2:-}" in
+  "status --json")
+    printf '%s\n' '{"client":{"version":"0.9.0","protocol":22},"server":{"running":true}}'
+    ;;
+  "pane get")
+    printf '%s\n' '{"result":{"pane":{"pane_id":"w1:p2","workspace_id":"ws1","tab_id":"tab1"}}}'
+    ;;
+  "pane process-info")
+    printf '{"result":{"type":"pane_process_info","process_info":{"pane_id":"w1:p2","shell_pid":%s,"foreground_processes":[{"pid":%s,"name":"node","argv":["pi"]}]}}}\n' "$$" "$$"
+    ;;
+  "agent get")
+    if [ -e "$D/herdr-stopped" ]; then
+      printf '%s\n' '{"error":{"code":"agent_not_found"}}'
+    else
+      count=$(( $(cat "$D/herdr-agent-count" 2>/dev/null || echo 0) + 1 ))
+      printf '%s' "$count" > "$D/herdr-agent-count"
+      mode=$(cat "$D/herdr-mode" 2>/dev/null || echo idle)
+      if [ "$mode" = missing-identity ] && [ "$count" -ge 3 ]; then
+        printf '%s\n' '{"error":{"code":"agent_not_found"}}'
+      elif [ "$mode" = contradictory-identity ] && [ "$count" -ge 3 ]; then
+        printf '%s\n' '{"result":{"agent":{"agent":"shell","agent_status":"idle"}}}'
+      else
+        case "$mode" in working|blocked) status=$mode ;; *) status=idle ;; esac
+        printf '{"result":{"agent":{"agent":"pi","agent_status":"%s"}}}\n' "$status"
+      fi
+    fi
+    ;;
+  "pane read") cat "$D/herdr-screen" ;;
+  "pane send-text")
+    printf '%s\n' "${4:-}" >> "$D/literal"
+    [ "${4:-}" != /quit ] || : > "$D/herdr-stopped"
+    ;;
+  "pane send-keys") printf '%s\n' "${4:-}" >> "$D/keys" ;;
+  *) printf '%s\n' '{}' ;;
+esac
+SH
+  chmod +x "$fb/herdr"
   printf '%s\n' "$fb"
+}
+
+# add_herdr_pi_task <case-dir> <id>: a Pi task recorded on the fake Herdr pane.
+add_herdr_pi_task() {
+  add_task "$1" "$2" pi ship herdr "lab:w1:p2"
+  {
+    echo 'herdr_session=lab'
+    echo 'herdr_workspace_id=ws1'
+    echo 'herdr_tab_id=tab1'
+    echo 'herdr_pane_id=w1:p2'
+  } >> "$1/home/state/$2.meta"
+}
+
+# expect_pi_exit <case-dir> <allow|refuse> <label>: run exit and require exactly
+# one /quit when allowed and no lifecycle text at all when refused.
+expect_pi_exit() {
+  local dir=$1 want=$2 label=$3 out rc
+  out=$(run_control "$dir" t1 exit); rc=$?
+  if [ "$want" = allow ]; then
+    expect_code 0 "$rc" "$label should exit"$'\n'"$out"
+    [ "$(literals "$dir")" = /quit ] \
+      || fail "$label should type exactly /quit, got: $(literals "$dir")"
+  else
+    expect_code 1 "$rc" "$label must refuse"$'\n'"$out"
+    [ ! -s "$dir/fake/literal" ] || fail "$label typed lifecycle text: $(literals "$dir")"
+  fi
 }
 
 # new_case <name> -> echoes a case dir holding home/, fake/, and fakebin.
@@ -286,6 +359,38 @@ test_exit_types_each_harness_verified_command() {
     assert_contains "$out" "stopped t1 harness=$harness" "exit should report the stop for $harness"
   done
   pass "fm-control exit: every verified harness gets its own verified exit command"
+}
+
+test_pi_exit_herdr_cost_footer_boundary() {
+  # Pi's cost-first status row below an idle two-rule composer (issue
+  # kunchenguid/firstmate#5666, furniture rule from #5683) permits exactly one
+  # /quit; every unproven variant types nothing.
+  local dir case_id rule screen mode want
+  rule=$'\033[38;2;178;148;187m────────────────────────────────────────\033[0m'
+  for case_id in idle idle-subscription-free draft malformed shell-after dollar-shell \
+      working blocked missing-identity contradictory-identity; do
+    dir=$(new_case "pi-herdr-footer-$case_id")
+    add_herdr_pi_task "$dir" t1
+    screen="transcript"$'\n'"$rule"$'\n\033[0m\033[7m \033[0m\n'"$rule"$'\n\033[38;2;102;102;102m/private/tmp/lab/cwd\033[0m\n'
+    mode=idle
+    want=refuse
+    case "$case_id" in
+      idle) screen+=$'\033[38;2;102;102;102m$0.000 (sub) 0.0%/272k (auto)            (openai-codex) gpt-5.6-terra • high\033[0m\n'; want=allow ;;
+      idle-subscription-free) screen+=$'\033[38;2;102;102;102m$0.012 5.4%/272k (auto)\033[0m\n'; want=allow ;;
+      draft)
+        screen="transcript"$'\n'"$rule"$'\nkeep this draft\n'"$rule"$'\n$0.000 (sub) 5.4%/272k (auto)\n'
+        ;;
+      malformed) screen+=$'$0.000 (sub)\n' ;;
+      shell-after) screen+=$'$0.000 (sub) 5.4%/272k (auto)\n$ ls\n' ;;
+      dollar-shell) screen+=$'$ 0.000 (sub) 5.4%/272k (auto)\n' ;;
+      working|blocked|missing-identity|contradictory-identity)
+        screen+=$'$0.000 (sub) 5.4%/272k (auto)\n'; mode=$case_id ;;
+    esac
+    printf '%s' "$screen" > "$dir/fake/herdr-screen"
+    printf '%s' "$mode" > "$dir/fake/herdr-mode"
+    expect_pi_exit "$dir" "$want" "Pi exit with a '$case_id' cost footer"
+  done
+  pass "fm-control Pi exit: a cost-first footer permits one /quit only under a proven idle Pi composer"
 }
 
 test_interrupt_sends_each_harness_verified_key() {
@@ -1032,6 +1137,7 @@ test_fm_send_still_marks_the_same_secondmate_task() {
 }
 
 test_exit_types_each_harness_verified_command
+test_pi_exit_herdr_cost_footer_boundary
 test_interrupt_sends_each_harness_verified_key
 test_devin_interrupt_invalidates_busy
 test_devin_idle_interrupt_sends_one_press

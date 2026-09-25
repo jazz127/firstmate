@@ -260,8 +260,10 @@ test_ship_mode_is_explicit_not_registry() {
   brief="$home/data/brief-explicit-a5/brief.md"
   grep -qx "Delivery contract: mode=no-mistakes" "$brief" \
     || fail "registered direct-PR posture overrode the explicit --mode"
-  assert_grep "Firstmate will then instruct you to run /no-mistakes" "$brief" \
-    "explicit no-mistakes brief did not render the pipeline definition of done"
+  assert_grep "then start /no-mistakes on that committed head immediately without waiting for firstmate" "$brief" \
+    "explicit no-mistakes brief did not assign the validation handoff to the worker"
+  assert_no_grep "Firstmate will then instruct you to run /no-mistakes" "$brief" \
+    "explicit no-mistakes brief still told the worker to wait for a validation steer"
 
   # An unregistered project is not a blocker either, because nothing is looked up.
   FM_HOME="$home" "$ROOT/bin/fm-brief.sh" brief-explicit-a6 never-registered --mode local-only >/dev/null 2>&1 \
@@ -417,7 +419,7 @@ test_no_mistakes_dod_green_detection() {
   FM_HOME="$home" "$ROOT/bin/fm-brief.sh" "$id" some-proj --mode no-mistakes >/dev/null 2>&1
   brief="$home/data/$id/brief.md"
   assert_present "$brief" "brief was not scaffolded"
-  assert_grep "Only a drive call's return reports the green PR" "$brief" \
+  assert_grep "only a drive call's return reports the green PR" "$brief" \
     "no-mistakes DOD must make the drive call's return the green signal"
   assert_grep "never reports \`checks-passed\` while the ci step is still monitoring the PR for merge" "$brief" \
     "no-mistakes DOD must say axi status cannot show a green PR in merge monitoring"

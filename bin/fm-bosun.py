@@ -2,7 +2,6 @@
 """Bosun routing, scoped memory, and contribution authorization records."""
 
 import argparse
-from collections import Counter
 import datetime as dt
 import fcntl
 import fnmatch
@@ -11,6 +10,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -114,6 +114,21 @@ def safe_relative_path(value):
     return value
 
 
+def parse_deviations(values):
+    result = []
+    for value in values:
+        path, separator, reason = value.partition("=")
+        if not separator or not reason.strip():
+            fail(f"invalid extraction deviation: {value}")
+        safe_relative_path(path)
+        if "\n" in reason or "\r" in reason:
+            fail(f"invalid extraction deviation: {value}")
+        result.append({"path": path, "reason": reason})
+    if len({item["path"] for item in result}) != len(result):
+        fail("duplicate extraction deviation path")
+    return result
+
+
 def git_output(project_dir, *args):
     result = subprocess.run(["git", "-C", str(project_dir), *args],
                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
@@ -125,29 +140,6 @@ def git_output(project_dir, *args):
 def git_success(project_dir, *args):
     return subprocess.run(["git", "-C", str(project_dir), *args],
                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0
-
-
-def git_changed_lines(project_dir, base, head, path):
-    result = subprocess.run(
-        ["git", "-C", str(project_dir), "diff", "--no-ext-diff", "--no-color",
-         "--no-renames", "--unified=0", base, head, "--", f":(literal){path}"],
-        stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    if result.returncode:
-        return None
-    if b"GIT binary patch" in result.stdout or b"Binary files " in result.stdout:
-        return None
-    added, removed = Counter(), Counter()
-    in_hunk = False
-    for line in result.stdout.splitlines(keepends=True):
-        if line.startswith(b"diff --git "):
-            in_hunk = False
-        elif line.startswith(b"@@ "):
-            in_hunk = True
-        elif in_hunk and line.startswith(b"+"):
-            added[line[1:]] += 1
-        elif in_hunk and line.startswith(b"-"):
-            removed[line[1:]] += 1
-    return added, removed
 
 
 def remote_identity(url):
@@ -305,6 +297,43 @@ def contribution(task):
     return record
 
 
+def path_allowed(path, allowed):
+    return any(path == item or item.endswith("/") and path.startswith(item) for item in allowed)
+
+
+def validate_extraction(worktree, upstream_base, pr_head, source_commits, allowed, deviations):
+    deviation_paths = [item["path"] for item in deviations]
+    extraction_paths = allowed + deviation_paths
+    scratch = Path(tempfile.mkdtemp(prefix="fm-bosun-extraction-"))
+    try:
+        clone = subprocess.run(["git", "clone", "--quiet", str(worktree), str(scratch / "repo")],
+                               stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        if clone.returncode:
+            fail("could not create extraction worktree")
+        scratch_repo = scratch / "repo"
+        checkout = subprocess.run(["git", "-C", str(scratch_repo), "checkout", "--quiet", "--detach", upstream_base],
+                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        if checkout.returncode:
+            fail("upstream extraction base is unavailable")
+        for commit in source_commits:
+            cherry_pick = subprocess.run(
+                ["git", "-C", str(scratch_repo), "-c", "user.name=Bosun", "-c",
+                 "user.email=bosun@localhost", "cherry-pick", commit],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            if cherry_pick.returncode:
+                subprocess.run(["git", "-C", str(scratch_repo), "cherry-pick", "--abort"],
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                fail("ordered source commits conflict with upstream; extraction needs a declared rewrite")
+        changed = git_output(scratch_repo, "diff", "--name-only", "HEAD", pr_head)
+        if changed is None:
+            fail("could not compare extracted content with upstream PR")
+        offending = [path for path in changed.splitlines() if path and not path_allowed(path, deviation_paths)]
+        if offending:
+            fail(f"upstream PR differs from ordered extraction: {', '.join(offending)}")
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
+
+
 def cmd_route(args):
     bosun = resolve(target(args.forge, args.owner, args.repository))
     role(bosun)
@@ -335,13 +364,13 @@ def cmd_order(args):
     if args.source != f"housefeature/{safe_name(args.maneuver)}":
         fail("source must be the named durable housefeature branch")
     configured_owner = route.get("fork_owner")
-    configured_repository = route.get("fork_repository")
+    configured_repository = route.get("fork_repository") or args.fork_repository or want["repository"]
     if configured_owner and args.fork_owner and args.fork_owner.lower() != configured_owner.lower():
         fail(f"fork owner differs from route: expected {configured_owner}, got {args.fork_owner}")
     if configured_repository and args.fork_repository and args.fork_repository.lower() != configured_repository.lower():
         fail(f"fork repository differs from route: expected {configured_repository}, got {args.fork_repository}")
     fork_owner = configured_owner or args.fork_owner
-    fork_repository = configured_repository or args.fork_repository
+    fork_repository = configured_repository
     default_branch = args.default_branch or route.get("upstream_default_branch")
     if not fork_owner or not fork_repository or not default_branch:
         fail("explicit fork identity and upstream default branch are required")
@@ -376,7 +405,8 @@ def cmd_order(args):
                           "upstream_default_branch": default_branch,
                           "captain_order": {"words": args.captain_words, "recorded_at": now()},
                           "source_branch": args.source, "source_commits": args.commit,
-                          "allowed_paths": args.path, "contribution_branch": args.branch,
+                          "allowed_paths": args.path, "deviations": parse_deviations(args.deviation),
+                          "contribution_branch": args.branch,
                           "validation_evidence": None, "upstream_pr": None,
                           "state": "ordered", "review_events": []})
     print(path)
@@ -498,6 +528,8 @@ def cmd_intake_locked(args):
         fail(f"could not read contribution brief: {exc}")
     paths = "\n".join(f"- `{item}`" for item in record["allowed_paths"])
     commits = "\n".join(f"- `{item}`" for item in record["source_commits"])
+    deviations = "\n".join(f"- `{item['path']}`: {item['reason']}" for item in record.get("deviations", []))
+    deviation_note = f"\nDeclared extraction deviations:\n{deviations}\n" if deviations else ""
     task = (f"Contribute the named Captain's Maneuver `{record['maneuver']}` to "
             f"`{record['target']['owner']}/{record['target']['repository']}`.\n\n"
             "Read the target repository's current instructions and contribution policy, "
@@ -507,6 +539,7 @@ def cmd_intake_locked(args):
             "these recorded source commits, in order; the order never authorizes the rest of "
             f"the branch:\n{commits}\n"
             f"Use only these ordered paths:\n{paths}\n"
+            f"{deviation_note}"
             "Remove house-only configuration, private context, secrets, unrelated history, and "
             "fork-specific assumptions. Preserve attribution and make a clean commit series, "
             "title, and description. Run the target repository's expected validation, using "
@@ -628,8 +661,16 @@ def cmd_registration_check_locked(args):
     if not args.validation_mode:
         fail("no-mistakes validation evidence is missing")
     allowed = record.get("allowed_paths")
+    deviations = record.get("deviations", [])
     if not isinstance(allowed, list) or not allowed:
         fail("captain order has no allowed paths")
+    if (not isinstance(deviations, list)
+            or any(not isinstance(item, dict) or set(item) != {"path", "reason"}
+                   or not isinstance(item["path"], str) or not isinstance(item["reason"], str)
+                   for item in deviations)):
+        fail("captain order has invalid extraction deviations")
+    deviation_paths = [item["path"] for item in deviations]
+    extraction_paths = allowed + deviation_paths
     if args.worktree:
         worktree = safe_path(args.worktree)
         if worktree.is_symlink() or not worktree.is_dir():
@@ -645,33 +686,18 @@ def cmd_registration_check_locked(args):
             fail("upstream PR patches differ from the ordered source commits")
         for commit in source_commits:
             paths = git_output(worktree, "diff-tree", "--root", "--no-commit-id", "--name-only", "-r", commit)
-            if paths is None or any(
-                    not any(path == item or item.endswith("/") and path.startswith(item) for item in allowed)
-                    for path in paths.splitlines() if path):
-                fail("ordered source commit changes an unauthorized path")
+            offending = ([] if paths is None else
+                         [path for path in paths.splitlines() if path and not path_allowed(path, extraction_paths)])
+            if paths is None or offending:
+                fail(f"ordered source commit changes unauthorized paths: {', '.join(offending) or '<unreadable>'}")
         for commit in actual_commits:
             paths = git_output(worktree, "diff-tree", "--root", "--no-commit-id", "--name-only", "-r", commit)
-            if paths is None or any(
-                    not any(path == item or item.endswith("/") and path.startswith(item) for item in allowed)
-                    for path in paths.splitlines() if path):
-                fail("upstream PR commit changes an unauthorized path")
-        for path in args.changed_path:
-            source_added, source_removed = Counter(), Counter()
-            for commit in source_commits:
-                parent = git_output(worktree, "rev-parse", f"{commit}^")
-                source_delta = git_changed_lines(worktree, parent, commit, path) if parent else None
-                if source_delta is None:
-                    fail("ordered source content cannot be inspected")
-                source_added.update(source_delta[0])
-                source_removed.update(source_delta[1])
-            for line in source_added.keys() & source_removed.keys():
-                cancelled = min(source_added[line], source_removed[line])
-                source_added[line] -= cancelled
-                source_removed[line] -= cancelled
-            actual_delta = git_changed_lines(worktree, args.upstream_base, "HEAD", path)
-            if (actual_delta is None or not any(actual_delta)
-                    or actual_delta[0] - source_added or actual_delta[1] - source_removed):
-                fail(f"upstream PR content is not derived from ordered source commits: {path}")
+            offending = ([] if paths is None else
+                         [path for path in paths.splitlines() if path and not path_allowed(path, extraction_paths)])
+            if paths is None or offending:
+                fail(f"upstream PR commit changes unauthorized paths: {', '.join(offending) or '<unreadable>'}")
+        validate_extraction(worktree, args.upstream_base, args.pr_head, source_commits,
+                            allowed, deviations)
     changed = args.changed_path
     if not changed:
         fail("upstream change has no validated changed paths")
@@ -680,7 +706,7 @@ def cmd_registration_check_locked(args):
         if not path or path.startswith("/") or path in (".", "..") or path.startswith("../") or "/../" in path or path.endswith("/.."):
             offending.append(path or "<empty>")
             continue
-        if not any(path == item or item.endswith("/") and path.startswith(item) for item in allowed):
+        if not path_allowed(path, allowed):
             offending.append(path)
     if offending:
         fail(f"out-of-scope upstream paths: {', '.join(offending)}")
@@ -727,6 +753,7 @@ def main():
     for name in ("task", "bosun", "maneuver", "source", "branch", "captain-words"):
         p.add_argument("--" + name, required=True)
     p.add_argument("--path", action="append", default=[]); p.add_argument("--commit", action="append", default=[])
+    p.add_argument("--deviation", action="append", default=[])
     p.add_argument("--fork-owner"); p.add_argument("--fork-repository"); p.add_argument("--default-branch"); p.set_defaults(func=cmd_order)
     p = sub.add_parser("intake"); p.add_argument("--task", required=True); p.set_defaults(func=cmd_intake)
     p = sub.add_parser("convention"); add_target(p)

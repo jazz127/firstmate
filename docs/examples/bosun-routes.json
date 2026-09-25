@@ -7,7 +7,6 @@
       "owner": "kunchenguid",
       "repository_pattern": "*",
       "fork_owner": "captain",
-      "fork_repository": "sample",
       "upstream_default_branch": "main"
     }
   ]

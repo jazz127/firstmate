@@ -416,11 +416,12 @@ test_registration_uses_ordered_content() {
   base=$(git -C "$project" rev-parse HEAD)
   git -C "$project" checkout -q housefeature/maneuver
   git -C "$project" reset -q --hard "$base"
-  printf 'safe\nsecret\n' > "$project/feature.txt"
-  git -C "$project" add feature.txt
+  printf 'safe\n' > "$project/feature.txt"
+  printf 'secret\n' > "$project/secret.txt"
+  git -C "$project" add feature.txt secret.txt
   git -C "$project" commit -qm 'Add maneuver content'
   first=$(git -C "$project" rev-parse HEAD)
-  printf 'safe\nsecret\nextra\n' > "$project/feature.txt"
+  printf 'safe\nextra\n' > "$project/feature.txt"
   git -C "$project" add feature.txt
   git -C "$project" commit -qm 'Complete maneuver content'
   second=$(git -C "$project" rev-parse HEAD)
@@ -430,7 +431,10 @@ test_registration_uses_ordered_content() {
   call "$dir" order --task maneuver --bosun bosun-kun --maneuver maneuver \
     --forge github --owner kunchenguid --repository sample --source housefeature/maneuver \
     --branch contribution/maneuver --captain-words 'Contribute maneuver' --path feature.txt \
-    --commit "$first" --commit "$second" >/dev/null || fail 'two-commit order was rejected'
+    --deviation 'secret.txt=strip private house context' --commit "$first" --commit "$second" \
+    >/dev/null || fail 'two-commit order was rejected'
+  jq -e '.deviations == [{"path":"secret.txt","reason":"strip private house context"}]' \
+    "$dir/data/maneuver/bosun-contribution.json" >/dev/null || fail 'deviation was not recorded'
   git -C "$project" checkout -qb contribution/maneuver "$base"
   printf 'safe\nextra\n' > "$project/feature.txt"
   git -C "$project" add feature.txt
@@ -443,8 +447,9 @@ test_registration_uses_ordered_content() {
     --upstream-base "$base" --changed-path feature.txt --check-only \
     || fail 'safe, squashed extraction was rejected'
   git -C "$project" reset -q --hard "$base"
-  printf 'safe\nextra\nunrelated\n' > "$project/feature.txt"
-  git -C "$project" add feature.txt
+  printf 'safe\nextra\n' > "$project/feature.txt"
+  printf 'unrelated\n' > "$project/unrelated.txt"
+  git -C "$project" add feature.txt unrelated.txt
   git -C "$project" commit -qm 'Add unrelated content'
   head=$(git -C "$project" rev-parse HEAD)
   if call "$dir" registration-check --task maneuver --url "$url" --forge github --head captain/sample \
@@ -453,7 +458,7 @@ test_registration_uses_ordered_content() {
     --upstream-base "$base" --changed-path feature.txt --check-only >"$dir/out" 2>&1; then
     fail 'unrelated content on an allowed path was accepted'
   fi
-  assert_grep 'not derived from ordered source commits' "$dir/out" 'unrelated content refusal was unclear'
+  assert_grep 'unrelated.txt' "$dir/out" 'unrelated content refusal was unclear'
   pass 'registration accepts redaction and squash but rejects unrelated content'
 }
 

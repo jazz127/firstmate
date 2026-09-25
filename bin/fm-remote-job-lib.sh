@@ -984,7 +984,7 @@ fm_remote_job_worker_command_matches() { # <worker> <command>
 # survivor. Returns non-zero when any verified worker-tree member is still alive
 # afterwards.
 fm_remote_job_stop_worker_tree() { # <pid> [start] [command]
-  local pid=$1 expected_start=${2:-} expected_command=${3:-} members member member_start member_command i=0 alive deadline
+  local pid=$1 expected_start=${2:-} expected_command=${3:-} members rescanned survivors member member_start member_command i=0 alive deadline signal=TERM
   case "$pid" in ''|*[!0-9]*) return 1 ;; esac
   [ "$pid" -gt 1 ] || return 1
   if [ -n "$expected_start" ] || [ -n "$expected_command" ]; then
@@ -1004,7 +1004,7 @@ fm_remote_job_stop_worker_tree() { # <pid> [start] [command]
     fi
     while IFS=$(printf '\t') read -r member member_start member_command; do
       fm_remote_job_process_identity_matches "$member" "$member_start" "$member_command" || continue
-      kill -TERM "$member" 2>/dev/null || true
+      kill -"$signal" "$member" 2>/dev/null || true
     done <<< "$members"
     i=0
     while [ "$i" -lt 50 ]; do
@@ -1020,16 +1020,27 @@ fm_remote_job_stop_worker_tree() { # <pid> [start] [command]
       i=$((i + 1))
       sleep 0.1
     done
-    members=$(fm_remote_job_process_tree_pids "$pid" 2>/dev/null) || return 1
-    if [ -z "$members" ]; then
-      fm_remote_job_process_identity_matches "$pid" "$expected_start" "$expected_command" || return 0
-      kill -KILL "$pid" 2>/dev/null || true
-    else
-      while IFS=$(printf '\t') read -r member member_start member_command; do
-        fm_remote_job_process_identity_matches "$member" "$member_start" "$member_command" || continue
-        kill -KILL "$member" 2>/dev/null || true
-      done <<< "$members"
+    survivors=
+    if fm_remote_job_process_identity_matches "$pid" "$expected_start" "$expected_command"; then
+      rescanned=$(fm_remote_job_process_tree_pids "$pid" 2>/dev/null) || return 1
+      if [ -n "$rescanned" ]; then
+        members=$rescanned
+        signal=KILL
+        [ "$SECONDS" -lt "$deadline" ] || return 1
+        continue
+      fi
     fi
+    while IFS=$(printf '\t') read -r member member_start member_command; do
+      if kill -0 "$member" 2>/dev/null &&
+        fm_remote_job_process_identity_matches "$member" "$member_start" "$member_command"; then
+        survivors="$survivors${survivors:+$'\n'}$member\t$member_start\t$member_command"
+      fi
+    done <<< "$members"
+    if [ -z "$survivors" ]; then
+      return 0
+    fi
+    members=$survivors
+    signal=KILL
     [ "$SECONDS" -lt "$deadline" ] || return 1
     sleep 0.1
   done

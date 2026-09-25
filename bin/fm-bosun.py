@@ -36,7 +36,25 @@ def home():
     return Path(os.environ.get("FM_HOME", Path(__file__).resolve().parent.parent))
 
 
+def safe_path(path):
+    path = Path(path).absolute()
+    root = home().absolute()
+    try:
+        relative = path.relative_to(root)
+    except ValueError:
+        return path
+    current = root
+    if current.is_symlink():
+        fail(f"unsafe symlink: {current}")
+    for part in relative.parts:
+        current /= part
+        if current.is_symlink():
+            fail(f"unsafe symlink: {current}")
+    return path
+
+
 def read_json(path, default=None):
+    path = safe_path(path)
     if path.is_symlink():
         fail(f"unsafe symlink: {path}")
     if not path.exists():
@@ -52,6 +70,7 @@ def read_json(path, default=None):
 
 
 def write_json(path, value):
+    path = safe_path(path)
     if path.is_symlink() or path.parent.is_symlink():
         fail(f"unsafe destination: {path}")
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -127,7 +146,7 @@ def resolve_route(want):
 
 
 def registered(bosun):
-    registry = home() / "data/secondmates.md"
+    registry = safe_path(home() / "data/secondmates.md")
     if registry.is_symlink() or not registry.is_file():
         fail("secondmate registry unavailable")
     parser = Path(__file__).resolve().parent / "fm-secondmate-registry-lib.sh"
@@ -139,7 +158,7 @@ def registered(bosun):
 
 
 def role(bosun):
-    marker = home() / ".fm-secondmate-home"
+    marker = safe_path(home() / ".fm-secondmate-home")
     if marker.exists() and marker.is_file() and not marker.is_symlink():
         if marker.read_text().strip() != bosun:
             fail("Bosun identity differs from this secondmate home")
@@ -171,7 +190,7 @@ def cmd_route(args):
 
 
 def cmd_configure_home(args):
-    marker = home() / ".fm-secondmate-home"
+    marker = safe_path(home() / ".fm-secondmate-home")
     if marker.exists() and marker.is_file() and not marker.is_symlink():
         if marker.read_text().strip() != args.bosun:
             fail("Bosun identity differs from this secondmate home")
@@ -453,7 +472,7 @@ def cmd_merged(args):
 
 
 def cmd_registration_check(args):
-    marker = home() / ".fm-secondmate-home"
+    marker = safe_path(home() / ".fm-secondmate-home")
     if not marker.exists():
         return
     bosun = marker.read_text().strip()

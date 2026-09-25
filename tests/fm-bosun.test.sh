@@ -67,6 +67,21 @@ PY
   pass 'route precedence, no match, and tie refusal'
 }
 
+test_path_safety() {
+  local dir outside
+  dir=$(new_home path-safety)
+  outside="$TMP_ROOT/path-safety-outside"
+  mkdir -p "$outside"
+  printf '%s\n' bosun-kun > "$dir/.fm-secondmate-home"
+  mv "$dir/data" "$outside/data"
+  ln -s "$outside/data" "$dir/data"
+  if call "$dir" configure-home --bosun bosun-kun > "$dir/out" 2>&1; then
+    fail 'symlinked FM_HOME ancestor was accepted'
+  fi
+  [ ! -e "$outside/data/bosun-role.json" ] || fail 'symlinked ancestor received state'
+  pass 'FM_HOME ancestor symlink refusal'
+}
+
 setup_bosun() {
   local dir=$1
   routes_fixture "$dir"
@@ -242,5 +257,6 @@ PY
 }
 
 test_routing
+test_path_safety
 test_memory
 test_contribution

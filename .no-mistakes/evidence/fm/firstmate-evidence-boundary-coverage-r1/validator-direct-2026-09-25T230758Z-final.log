@@ -1,0 +1,8 @@
+capture_utc=2026-09-24T23:07:58Z
+command=source bin/fm-dod-lib.sh; fm_dod_validate_published_intent
+
+[unsupported-live-claim]
+exit=0
+
+[valid-provenance-claim]
+exit=0

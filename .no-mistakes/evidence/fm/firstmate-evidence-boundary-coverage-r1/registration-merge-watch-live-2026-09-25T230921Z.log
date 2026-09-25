@@ -1,0 +1,41 @@
+capture_utc=2026-09-24T230921Z
+command=FM_ROOT_OVERRIDE=/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3AQ5RRP7N29H9HEAR8HHG2J FM_HOME=/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3AQ5RRP7N29H9HEAR8HHG2J/.live-prcheck.W8i8Wu FM_STATE_OVERRIDE=/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3AQ5RRP7N29H9HEAR8HHG2J/.live-prcheck.W8i8Wu/state bin/fm-pr-check.sh task28 https://github.com/jazz127/firstmate/pull/28
+
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  repair missing watcher supervision with a foreground checkpoint: bin/fm-watch-checkpoint.sh --seconds 180.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+armed: state/task28.check.sh
+
+registered_poll_data=
+github
+https://github.com/jazz127/firstmate/pull/28
+github.com
+jazz127/firstmate
+28
+
+registered_poll_check=
+#!/usr/bin/env bash
+# Static watcher program for a validated pull request, merge request, or Gerrit
+# change poll sidecar.
+# It emits exactly one merged line for a merged change and stays silent
+# otherwise, including on every error, so a failed lookup can never be read as
+# a merge. The provider-tagged identity is data in the sidecar and is never
+# interpolated into this source: these bytes are identical for every task.
+# Each provider is read through its own standard CLI, gh for GitHub, glab for
+# GitLab, and gerrit-axi for Gerrit, so an upstream checkout needs no extra
+# tooling to follow the first two. The Gerrit branch additionally needs jq,
+# which bin/fm-pr-check.sh refuses to arm a Gerrit watch without.
+set -u
+
+external_watch_state=
+/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3AQ5RRP7N29H9HEAR8HHG2J/.live-prcheck.W8i8Wu/state/.guard-watcher-stale-banner
+/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3AQ5RRP7N29H9HEAR8HHG2J/.live-prcheck.W8i8Wu/state/contributions.check-trust
+/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3AQ5RRP7N29H9HEAR8HHG2J/.live-prcheck.W8i8Wu/state/contributions.check.sh
+/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3AQ5RRP7N29H9HEAR8HHG2J/.live-prcheck.W8i8Wu/state/task28.check.sh
+/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3AQ5RRP7N29H9HEAR8HHG2J/.live-prcheck.W8i8Wu/state/task28.meta
+/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3AQ5RRP7N29H9HEAR8HHG2J/.live-prcheck.W8i8Wu/state/task28.pr-poll
+/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3AQ5RRP7N29H9HEAR8HHG2J/.live-prcheck.W8i8Wu/state/task28.pr-poll-registration

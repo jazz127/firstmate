@@ -1,0 +1,10 @@
+capture_utc=2026-09-24T23:10:14Z
+command=source bin/fm-pr-lib.sh; fm_pr_read_published_body https://github.com/jazz127/firstmate/pull/25; fm_dod_validate_published_intent
+provider=github
+pr=https://github.com/jazz127/firstmate/pull/25
+body_artifact=/Users/jarad/.no-mistakes/evidence/01M3AQ5RRP7N29H9HEAR8HHG2J/github-pr25-published-body-2026-09-25T231014Z.md
+
+readback_bytes=61160
+evidence claim refused: missing evidence-artifact: path
+validator_exit=1
+body_sha256=70f8672df604266ac56075555f694891e963f425aa62175c809e2903256619af

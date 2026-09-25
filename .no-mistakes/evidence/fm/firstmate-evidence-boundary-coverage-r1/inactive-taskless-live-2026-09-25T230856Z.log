@@ -1,0 +1,20 @@
+capture_utc=2026-09-24T23:08:56Z
+command=FM_HOME=/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3AQ5RRP7N29H9HEAR8HHG2J/.live-inactive.T2lPpd/mate FM_STATE_OVERRIDE=/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3AQ5RRP7N29H9HEAR8HHG2J/.live-inactive.T2lPpd/mate/state bin/fm-inactive-reconcile.sh report task25
+
+evidence claim refused: missing evidence-artifact: path
+
+parent_status=
+failed [key=child-outcome-task25-failed-4d61ddac] [at=1790291337]: child task25 failed: PR https://github.com/jazz127/firstmate/pull/25 checks green pr=https://github.com/jazz127/firstmate/pull/25 evidence-validation=failed mode=no-mistakes yolo=off
+
+terminal_receipts=
+schema=fm-terminal-outcome.v1
+fingerprint=4d61ddacabadcc4880b56d8a627918a5
+task_id=task25
+incarnation=live25
+state=failed
+outcome_key=child-outcome-task25-failed-4d61ddac
+origin=direct
+phase=upstream
+pr=https://github.com/jazz127/firstmate/pull/25
+created_epoch=1790291336
+notice_emitted=0

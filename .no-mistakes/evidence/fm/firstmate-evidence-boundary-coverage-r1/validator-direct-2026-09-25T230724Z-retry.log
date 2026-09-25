@@ -1,0 +1,9 @@
+capture_utc=2026-09-24T23:07:24Z
+command=source bin/fm-dod-lib.sh; fm_dod_validate_published_intent
+
+[unsupported-live-claim]
+evidence claim refused: missing evidence-artifact: path
+exit=1
+
+[valid-provenance-claim]
+evidence claim refused: missing evidence-artifact: path

@@ -1,0 +1,7 @@
+capture_utc=2026-09-24T23:08:11Z
+[unsupported-live-claim]
+evidence claim refused: missing evidence-artifact: path
+exit=1
+
+[valid-provenance-claim]
+exit=0

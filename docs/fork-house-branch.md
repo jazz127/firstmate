@@ -27,7 +27,7 @@ A house feature is anything we build for ourselves on our own line, whether the 
 Every house feature has a durable `housefeature/<name>` branch cut from the fork's `main`.
 That branch gives the feature a stable name, keeps it findable, and makes it straightforward to offer without relying on a disposable task branch.
 Task branches are working branches and may be deleted once their feature is captured on its durable branch.
-A contributed house feature is a house feature the captain chose to submit and that has landed in upstream `main`.
+The Bosun guide defines when a Captain's Maneuver becomes an Admiral's Maneuver.
 
 ## House board
 

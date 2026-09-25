@@ -1,7 +1,7 @@
 ---
 name: bosun
 description: >-
-  Route a captain-ordered house feature to a matching Bosun and supervise its upstream contribution.
+  Route a captain-ordered Captain's Maneuver to a matching Bosun and supervise its upstream contribution.
   Use before routing a named Captain's Maneuver upstream, recording a Bosun order, or handling that contribution's review or merge outcome.
 user-invocable: false
 metadata:

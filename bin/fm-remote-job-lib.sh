@@ -951,6 +951,20 @@ fm_remote_job_root_is_live() { # <remote-root>
   [ -f "$root/bin/fm-remote-job-worker.sh" ] && [ ! -L "$root/bin/fm-remote-job-worker.sh" ]
 }
 
+fm_remote_job_worker_command_matches() { # [<worker>] <command>
+  local worker=$1 command=$2
+  if [ -n "$worker" ]; then
+    case "$command" in
+      "$worker"|*/bash\ "$worker"|*/sh\ "$worker"|"$worker --serve"|*/bash\ "$worker --serve"|*/sh\ "$worker --serve"|"$worker --lane "*|*/bash\ "$worker --lane "*|*/sh\ "$worker --lane "*) return 0 ;;
+    esac
+  else
+    case "$command" in
+      */bash\ */fm-remote-job-worker.sh|*/sh\ */fm-remote-job-worker.sh|*/bash\ */fm-remote-job-worker.sh\ --serve|*/sh\ */fm-remote-job-worker.sh\ --serve|*/bash\ */fm-remote-job-worker.sh\ --lane\ *|*/sh\ */fm-remote-job-worker.sh\ --lane\ *) return 0 ;;
+    esac
+  fi
+  return 1
+}
+
 # The isolated process group that owns <pid>'s whole worker tree, echoed only
 # when signalling it is provably safe: the group is not this shell's own, not a
 # reserved id, and its leader is itself a remote job worker. A worker started
@@ -963,7 +977,7 @@ fm_remote_job_worker_process_group() { # <pid>
   own_pgid=$(fm_remote_job_process_pgid "$$") || return 1
   [ "$pgid" != "$own_pgid" ] || return 1
   leader_command=$(fm_remote_job_process_command "$pgid" 2>/dev/null || true)
-  case "$leader_command" in *fm-remote-job-worker.sh*) ;; *) return 1 ;; esac
+  fm_remote_job_worker_command_matches '' "$leader_command" || return 1
   printf '%s\n' "$pgid"
 }
 
@@ -1075,7 +1089,7 @@ fm_remote_job_worker_owned_alive() {
   fi
   if [ -x /bin/ps ]; then ps_bin=/bin/ps; elif [ -x /usr/bin/ps ]; then ps_bin=/usr/bin/ps; else return 1; fi
   command=$("$ps_bin" -p "$pid" -o command= 2>/dev/null) || return 1
-  case "$command" in *"$root/bin/fm-remote-job-worker.sh"*) ;; *) return 1 ;; esac
+  fm_remote_job_worker_command_matches "$root/bin/fm-remote-job-worker.sh" "$command" || return 1
   fm_remote_job_process_start "$pid" >/dev/null || return 1
   FM_REMOTE_JOB_OWNER_PID=$pid
 }
@@ -1257,7 +1271,7 @@ fm_remote_job_linux_worker_processes() { # <remote-root>
   if [ -x /bin/ps ]; then ps_bin=/bin/ps; elif [ -x /usr/bin/ps ]; then ps_bin=/usr/bin/ps; else return 1; fi
   while read -r pid pgid command; do
     case "$pgid" in ''|*[!0-9]*|0|1) continue ;; esac
-    case "$command" in *"$worker"|*"$worker --serve"|*"$worker --lane"*) printf '%s %s\n' "$pid" "$pgid" ;; esac
+    fm_remote_job_worker_command_matches "$worker" "$command" && printf '%s %s\n' "$pid" "$pgid"
   done < <("$ps_bin" -eo pid=,pgid=,args= 2>/dev/null)
 }
 
@@ -1287,7 +1301,11 @@ fm_remote_job_linux_reap_worker_processes() { # <remote-root> <keep-pid>
   if [ -n "$keep_pid" ]; then
     parent=$(fm_remote_job_process_parent "$keep_pid" 2>/dev/null || true)
     parent_command=$(fm_remote_job_process_command "$parent" 2>/dev/null || true)
-    case "$parent_command" in *"$root/bin/fm-remote-job-worker.sh") keep_root=$parent ;; *) keep_root=$keep_pid ;; esac
+    if fm_remote_job_worker_command_matches "$root/bin/fm-remote-job-worker.sh" "$parent_command"; then
+      keep_root=$parent
+    else
+      keep_root=$keep_pid
+    fi
   fi
   processes=$(fm_remote_job_linux_worker_processes "$root") || return 1
   while read -r pid pgid; do

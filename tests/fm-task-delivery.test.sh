@@ -1416,10 +1416,12 @@ EOF
   pass "fm-spawn: the brief must carry the spawn's selected ship branch, and the selection is validated before anything is created"
 }
 
-# A spawn that deviates from the registered ship-branch prefix breaks no contract:
-# the brief-vs-spawn agreement above already guarantees the worker's instructions
-# match the branch this spawn selected. The deviation is announced and the spawn
-# proceeds, while matching the registry (or its fm/ default) stays quiet.
+# The registered ship-branch prefix exists so a third-party project's branches and
+# PRs do not read as firstmate-authored, but a spawn that deviates from it breaks
+# no contract: the brief-vs-spawn agreement above already guarantees the worker's
+# instructions match the branch this spawn selected. So the deviation is announced
+# and the spawn proceeds, while matching the registry (or its fm/ default) stays
+# quiet.
 test_spawn_notices_a_ship_branch_against_the_registry_prefix() {
   local rec home proj fakebin out
   rec=$(make_home prefix-deviation "- proj [no-mistakes branch=fix/] - fixture (added 2026-01-01)")
@@ -1431,10 +1433,8 @@ EOF
   out=$(run_spawn "$home" "$fakebin" prefix-dev-a1 "$proj" claude --mode no-mistakes --yolo off)
   assert_contains "$out" "ships branch=fm/prefix-dev-a1 while proj registers the ship-branch prefix 'fix/'" \
     "no deviation notice for shipping the legacy prefix past a registered override"
-  assert_contains "$out" "naming deviates from the captain's standing project preference" \
-    "the deviation notice did not explain the naming drift"
-  assert_not_contains "$out" "will read as firstmate-authored" \
-    "the deviation notice made an unsupported authorship claim"
+  assert_contains "$out" "will read as firstmate-authored" \
+    "the deviation notice did not name the cost of the drift"
 
   FM_HOME="$home" "$BRIEF" prefix-dev-a2 proj --mode no-mistakes --branch-prefix fix/ >/dev/null \
     || fail "a fix/-prefixed brief should scaffold"

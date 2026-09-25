@@ -81,10 +81,12 @@ worker_account_home() {
 }
 
 worker_write_heartbeat() {
-  local ready tmp
+  local ready tmp pid start
   ready=$(fm_remote_job_worker_ready_path)
+  pid=${BASHPID:-$$}
+  start=$(fm_remote_job_process_start "$pid") || return 1
   tmp=$(umask 077; mktemp "$FM_REMOTE_JOB_STATE/.ready.XXXXXX") || return 1
-  printf '%s\n' "${BASHPID:-$$}" > "$tmp" || { rm -f -- "$tmp"; return 1; }
+  printf '%s\n%s\n' "$pid" "$start" > "$tmp" || { rm -f -- "$tmp"; return 1; }
   chmod 600 "$tmp" || { rm -f -- "$tmp"; return 1; }
   mv -f -- "$tmp" "$ready"
 }

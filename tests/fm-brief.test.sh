@@ -494,8 +494,15 @@ test_ship_project_memory_wording() {
   FM_HOME="$home" "$ROOT/bin/fm-brief.sh" "$id" some-proj --mode no-mistakes >/dev/null 2>&1
   brief="$home/data/$id/brief.md"
   assert_present "$brief" "brief was not scaffolded"
-  assert_grep "Record only project knowledge useful to almost every future session." "$brief" \
+  assert_grep "If this task produced durable project-intrinsic knowledge useful to almost every future session, record it in \`AGENTS.md\`" "$brief" \
     "project-memory contract lost the durable-knowledge bar"
+  assert_grep "only when this task creates or updates \`AGENTS.md\`" "$brief" \
+    "feature work must not invoke the helper for existing agent instructions alone"
+  assert_grep "existing \`AGENTS.md\` or \`CLAUDE.md\` alone is not a reason to run it" "$brief" \
+    "existing instructions must not trigger a pointer conversion"
+  # shellcheck disable=SC2016 # Backticks are literal brief output.
+  assert_no_grep 'If `AGENTS.md` or `CLAUDE.md` already exists' "$brief" \
+    "brief still directs every feature worker with an existing CLAUDE.md to run the helper"
   assert_grep "prefer a pointer to the authoritative file, command, or doc over copying the detail" "$brief" \
     "project-memory contract lost pointer-over-copy guidance"
   assert_grep "follow \`$ROOT/bin/fm-ensure-agents-md.sh\`'s self-governance contract" "$brief" \

@@ -21,6 +21,8 @@ set -u
 . "$(dirname "${BASH_SOURCE[0]}")/wake-helpers.sh"
 # shellcheck source=/dev/null
 . "$ROOT/bin/fm-classify-lib.sh"
+# shellcheck source=/dev/null
+. "$ROOT/bin/fm-pr-lib.sh"
 
 WATCH="$ROOT/bin/fm-watch.sh"
 DRAIN="$ROOT/bin/fm-wake-drain.sh"
@@ -3148,6 +3150,178 @@ test_declared_wait_recheck_is_shared_with_the_wedge_route() {
   grep -F 'declared wait' "$state/.wake-queue" >/dev/null \
     || fail "the wedge-route recheck did not name the declared wait: $(cat "$state/.wake-queue")"
   pass "a declared wait's idle and wedge routes share one recheck per cadence window"
+}
+
+# A delivered-PR wait fixture: task `done` in window test:fm-done, its last status
+# line <status-line>, and - unless <poll> is `nopoll` - a merge poll armed for
+# https://github.com/o/r/pull/3 through the same private publication fm-pr-check.sh
+# performs, so the watcher's authentication reads real registration artifacts.
+done_pr_fixture() {  # <name> <status-line> [poll|nopoll]
+  local dir state
+  dir=$(make_case "$1"); state="$dir/state"
+  printf 'window=test:fm-done\nkind=ship\npr=https://github.com/o/r/pull/3\n' > "$state/done.meta"
+  if [ "${3:-poll}" = poll ]; then
+    fm_pr_poll_prepare "$state" "done" github https://github.com/o/r/pull/3 github.com o/r 3 "$ROOT/bin/fm-pr-poll.sh" \
+      && fm_pr_poll_publish_prepared || return 1
+  fi
+  printf '%s\n' "$2" > "$state/done.status"
+  printf '%s' "$(seen_sig "$state/done.status")" > "$state/.seen-done_status"
+  printf 'finished, awaiting review' > "$dir/pane.txt"
+  printf '%s' "$(hash_text 'finished, awaiting review')" > "$state/.hash-test_fm-done"
+  printf '1\n' > "$state/.count-test_fm-done"
+  touch "$state/.last-check" "$state/.last-heartbeat"
+  printf '%s\n' "$dir"
+}
+
+# One watcher round over a done_pr_fixture. <mode> exit|absorb as parked_watch_round.
+done_pr_round() {  # <dir> <exit|absorb> [crew-state] [pause-resurface-secs]
+  local dir=$1 mode=$2 crew=${3:-'state: unknown · source: none · no current-state source available'}
+  local resurface=${4:-999} pid cycles=0
+  PATH="$dir/fakebin:$PATH" FM_FAKE_TMUX_WINDOW=test:fm-done FM_FAKE_TMUX_CAPTURE="$dir/pane.txt" \
+    FM_STATE_OVERRIDE="$dir/state" FM_CREW_STATE_BIN="$dir/fakebin/fm-crew-state.sh" \
+    FM_FAKE_CREW_STATE="$crew" FM_WATCH_HANDLING_SUCCESSOR=1 \
+    FM_PAUSE_RESURFACE_SECS="$resurface" FM_POLL=1 FM_SIGNAL_GRACE=1 \
+    FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" >> "$dir/watch.out" 2>&1 &
+  pid=$!
+  if [ "$mode" = exit ]; then
+    wait_for_exit "$pid" 100 || { reap "$pid"; return 1; }
+    return 0
+  fi
+  while [ "$cycles" -lt 3 ]; do
+    wait_poll_cycle "$dir/state" "$pid" 300 || { reap "$pid"; return 1; }
+    cycles=$((cycles + 1))
+  done
+  reap "$pid"
+  return 0
+}
+
+# A delivered worker whose done line names a pull request with an authenticated
+# armed merge poll waits on review and merge: its first sight is absorbed, it is
+# rechecked once on the pause cadence with wording that names the pull request,
+# and it is not rechecked again inside the cadence.
+# Ported from the house delivered-wait feature (commit
+# 20da21b26df3a0a2faa742152421b5c3ef4ae5c4), now authenticated with
+# fm_pr_poll_artifacts_valid as in https://github.com/kunchenguid/firstmate/pull/3128.
+test_done_open_pr_uses_declared_wait_cadence() {
+  local dir state
+  dir=$(done_pr_fixture done-open-pr-wait 'done: PR https://github.com/o/r/pull/3') \
+    || fail "could not prepare the open PR poll fixture"
+  state="$dir/state"
+  done_pr_round "$dir" absorb || fail "fresh delivered PR surfaced instead of waiting: $(cat "$dir/watch.out")"
+  [ ! -s "$state/.wake-queue" ] || fail "fresh delivered PR queued a stale wake"
+  [ -e "$state/.paused-test_fm-done" ] && [ ! -e "$state/.stale-since-test_fm-done" ] \
+    || fail "delivered PR did not use pause bookkeeping"
+
+  set_mtime "$(( $(date +%s) - 500 ))" "$state/done.status"
+  printf '%s' "$(seen_sig "$state/done.status")" > "$state/.seen-done_status"
+  : > "$dir/watch.out"
+  done_pr_round "$dir" exit '' 240 || fail "delivered PR was not rechecked on the bounded cadence"
+  grep -F 'pull request review and merge' "$state/.wake-queue" >/dev/null \
+    || fail "delivered PR recheck did not name its wait: $(cat "$state/.wake-queue")"
+  grep -F 'possible wedge' "$state/.wake-queue" >/dev/null && fail "delivered PR recheck escalated as a wedge"
+  [ -e "$state/.paused-resurfaced-test_fm-done" ] || fail "delivered PR recheck did not record its cadence"
+  ack_stopped_cycle "$state" || fail "could not acknowledge the delivered PR recheck"
+  printf 'finished, awaiting review (redrawn)' > "$dir/pane.txt"
+  done_pr_round "$dir" absorb '' 240 || fail "delivered PR rechecked again before the cadence"
+  [ ! -s "$state/.wake-queue" ] || fail "delivered PR rechecked again inside the cadence"
+  pass "done with an authenticated open PR poll waits and rechecks on the pause cadence"
+}
+
+# The delivered wait is admitted only on authenticated local evidence. No poll, a
+# replaced check, a done line naming a different or no pull request, and a
+# failure line each keep the unchanged terminal surface; a newer
+# authoritative working run outranks the delivery and takes the wedge timer; and
+# losing the poll removes the exemption on an unchanged pane at once.
+# Negative and lapse cases adapted from https://github.com/kunchenguid/firstmate/pull/3128.
+test_delivered_pr_wait_requires_an_authenticated_poll() {
+  local spec name line mutate dir state
+  for spec in \
+    'no-poll|done: PR https://github.com/o/r/pull/3|nopoll' \
+    'forged-check|done: PR https://github.com/o/r/pull/3|forge' \
+    'other-pr|done: PR https://github.com/o/r/pull/31|none' \
+    'unnamed-pr|done: implementation complete|none' \
+    'failed|failed: PR https://github.com/o/r/pull/3 checks red|none'
+  do
+    name=${spec%%|*}; spec=${spec#*|}; line=${spec%%|*}; mutate=${spec#*|}
+    if [ "$mutate" = nopoll ]; then
+      dir=$(done_pr_fixture "delivered-$name" "$line" nopoll) || fail "[$name] fixture failed"
+    else
+      dir=$(done_pr_fixture "delivered-$name" "$line") || fail "[$name] fixture failed"
+    fi
+    state="$dir/state"
+    [ "$mutate" != forge ] || printf '\n# replaced\n' >> "$state/done.check.sh"
+    done_pr_round "$dir" exit || fail "[$name] an unauthenticated delivery was quietly absorbed: $(cat "$dir/watch.out")"
+    [ "$(awk -F '\t' '$3 == "stale" && $4 == "test:fm-done" && $5 == "stale: test:fm-done" { n++ } END { print n + 0 }' \
+      "$state/.wake-queue" 2>/dev/null || echo 0)" -eq 1 ] \
+      || fail "[$name] the unauthenticated delivery did not keep the bare terminal surface: $(cat "$state/.wake-queue")"
+  done
+
+  dir=$(done_pr_fixture delivered-working-run 'done: PR https://github.com/o/r/pull/3') || fail "fixture failed"
+  state="$dir/state"
+  done_pr_round "$dir" absorb 'state: working · source: run-step · validating (running)' \
+    || fail "a newer working run on a delivered task surfaced instead of timing a wedge"
+  [ -s "$state/.stale-since-test_fm-done" ] || fail "a newer working run did not start the wedge timer"
+  [ ! -e "$state/.paused-test_fm-done" ] || fail "a newer working run kept the delivered wait's pause mode"
+
+  dir=$(done_pr_fixture delivered-lapse 'done: PR https://github.com/o/r/pull/3') || fail "fixture failed"
+  state="$dir/state"
+  done_pr_round "$dir" absorb || fail "the armed delivery surfaced on first sight"
+  rm -f "$state/done.check.sh" "$state/done.pr-poll" "$state/done.pr-poll-registration"
+  done_pr_round "$dir" exit || fail "losing the merge poll left an unchanged pane quietly absorbed"
+  grep -F 'stale: test:fm-done' "$state/.wake-queue" >/dev/null \
+    || fail "the lapsed delivery did not surface: $(cat "$state/.wake-queue")"
+  [ ! -e "$state/.paused-resurfaced-test_fm-done" ] && [ ! -e "$state/.paused-since-test_fm-done" ] \
+    || fail "the lapsed delivery kept its declaration record"
+  pass "a delivered wait needs an authenticated poll for its own pull request, yields to a working run, and lapses with the poll"
+}
+
+# A task the captain already holds and whose last line is a declared `paused:`
+# wait: the open backlog hold outranks the external-wait wording and bounds the
+# pane through the captain-call identity. Its first look still reaches the
+# captain, churn inside the window is absorbed, and the window's end re-surfaces
+# it once. Adapted from https://github.com/kunchenguid/firstmate/pull/5571.
+test_open_captain_call_bounds_a_paused_last_line() {
+  local dir state out capture throttle wakes round
+  command -v tasks-axi >/dev/null 2>&1 \
+    || { echo "skip: tasks-axi not found (held paused-line bound)"; return 0; }
+  dir=$(make_hold_home held-paused \
+    'paused: awaiting the captain on https://example.invalid/pull/1' hold) \
+    || fail "could not build a held paused-line fixture"
+  state="$dir/state"; out="$dir/watch.out"; capture="$dir/pane.txt"
+  throttle="$state/.paused-resurfaced-$(hold_key)"
+
+  hold_watch_surface "$dir" "$out" "$capture" 'idle, elapsed 1s' \
+    || fail "first sight of held paused work did not surface"
+  wakes=$(hold_stale_wakes "$state")
+  [ "$wakes" -eq 1 ] || fail "first sight of held paused work produced $wakes wakes instead of one"
+  grep -F 'awaiting the captain - open captain call' "$state/.wake-queue" >/dev/null \
+    || fail "the held recheck did not name the captain: $(cat "$state/.wake-queue")"
+  ack_stopped_cycle "$state" || fail "could not acknowledge the first surface"
+
+  round=1
+  while [ "$round" -le 3 ]; do
+    printf 'idle, tick %s\n' "$round" > "$capture"
+    hold_watch_launch "$dir" "$out" "$capture"
+    if ! wait_poll_cycle "$state" "$HOLD_WATCH_PID" 300 || ! wait_poll_cycle "$state" "$HOLD_WATCH_PID" 300 \
+      || ! wait_poll_cycle "$state" "$HOLD_WATCH_PID" 300; then
+      reap "$HOLD_WATCH_PID"
+      fail "held paused churn round $round surfaced instead of absorbing"
+    fi
+    reap "$HOLD_WATCH_PID"
+    wakes=$(hold_stale_wakes "$state")
+    [ "$wakes" -eq 0 ] \
+      || fail "pane churn re-alarmed held paused work $wakes time(s) inside the re-surface window"
+    round=$((round + 1))
+  done
+
+  [ -e "$throttle" ] || fail "the absorbed churn recorded no re-surface cadence to elapse"
+  set_mtime "$(( $(date +%s) - 5000 ))" "$throttle"
+  hold_watch_surface "$dir" "$out" "$capture" 'idle, elapsed 9s' \
+    || fail "held paused work did not re-surface once its re-surface window elapsed"
+  wakes=$(hold_stale_wakes "$state")
+  [ "$wakes" -eq 1 ] \
+    || fail "elapsed re-surface window produced $wakes wakes instead of one"
+  pass "an open captain call bounds a paused: last line through the captain-call re-surface throttle"
 }
 
 test_live_paused_until_controls_recheck_time() {
@@ -6743,6 +6917,9 @@ test_absorbed_wait_cadence_survives_a_status_write_that_keeps_the_wait
 test_identical_wait_declared_again_between_polls_is_a_new_episode
 test_declared_wait_age_uses_the_declaration_stamp
 test_declared_wait_recheck_is_shared_with_the_wedge_route
+test_done_open_pr_uses_declared_wait_cadence
+test_delivered_pr_wait_requires_an_authenticated_poll
+test_open_captain_call_bounds_a_paused_last_line
 test_live_paused_until_controls_recheck_time
 test_wedge_threshold_defers_to_a_declared_wait_under_a_working_verdict
 test_wedge_threshold_keeps_a_wait_past_a_default_key_answer

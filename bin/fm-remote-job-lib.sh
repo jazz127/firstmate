@@ -972,10 +972,37 @@ fm_remote_job_worker_process_group() { # <pid>
 # process otherwise. Returns non-zero when any verified worker-group member is
 # still alive afterwards.
 fm_remote_job_stop_worker_tree() { # <pid> [process-only]
-  local pid=$1 mode=${2:-} pgid i=0
+  local pid=$1 mode=${2:-} pgid members member i=0 alive
   case "$pid" in ''|*[!0-9]*) return 1 ;; esac
   [ "$pid" -gt 1 ] || return 1
-  if [ "$mode" = process-only ]; then pgid=; else pgid=$(fm_remote_job_worker_process_group "$pid" 2>/dev/null || true); fi
+  if [ "$mode" = process-only ]; then
+    members=$(fm_remote_job_process_tree_pids "$pid" 2>/dev/null || true)
+    [ -n "$members" ] || members=$pid
+    for member in $members; do kill -TERM "$member" 2>/dev/null || true; done
+    while [ "$i" -lt 50 ]; do
+      alive=0
+      for member in $members; do
+        if kill -0 "$member" 2>/dev/null; then alive=1; break; fi
+      done
+      [ "$alive" -eq 0 ] && return 0
+      i=$((i + 1))
+      sleep 0.1
+    done
+    for member in $members; do kill -KILL "$member" 2>/dev/null || true; done
+    i=0
+    while [ "$i" -lt 50 ]; do
+      alive=0
+      for member in $members; do
+        if kill -0 "$member" 2>/dev/null; then alive=1; break; fi
+      done
+      [ "$alive" -eq 0 ] && return 0
+      i=$((i + 1))
+      sleep 0.1
+    done
+    for member in $members; do kill -0 "$member" 2>/dev/null && return 1; done
+    return 0
+  fi
+  pgid=$(fm_remote_job_worker_process_group "$pid" 2>/dev/null || true)
   if [ -n "$pgid" ]; then kill -TERM -- "-$pgid" 2>/dev/null || true; else kill -TERM "$pid" 2>/dev/null || true; fi
   while { [ -n "$pgid" ] && kill -0 -- "-$pgid" 2>/dev/null || [ -z "$pgid" ] && kill -0 "$pid" 2>/dev/null; } \
     && [ "$i" -lt 50 ]; do
@@ -1244,6 +1271,15 @@ fm_remote_job_process_descends_from() { # <pid> <ancestor>
     i=$((i + 1))
   done
   return 1
+}
+
+fm_remote_job_process_tree_pids() { # <pid>
+  local root=$1 ps_bin pid ppid
+  if [ -x /bin/ps ]; then ps_bin=/bin/ps; elif [ -x /usr/bin/ps ]; then ps_bin=/usr/bin/ps; else return 1; fi
+  while read -r pid ppid; do
+    case "$pid" in ''|*[!0-9]*) continue ;; esac
+    fm_remote_job_process_descends_from "$pid" "$root" && printf '%s\n' "$pid"
+  done < <("$ps_bin" -eo pid=,ppid= 2>/dev/null)
 }
 
 fm_remote_job_linux_reap_worker_processes() { # <remote-root> <keep-pid>

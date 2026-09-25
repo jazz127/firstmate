@@ -301,6 +301,7 @@ def cmd_route(args):
 
 
 def cmd_configure_home(args):
+    safe_name(args.bosun)
     marker = safe_path(home() / ".fm-secondmate-home")
     if marker.exists() and marker.is_file() and not marker.is_symlink():
         if marker.read_text().strip() != args.bosun:

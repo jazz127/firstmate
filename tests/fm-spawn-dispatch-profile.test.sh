@@ -55,6 +55,47 @@ SH
   printf '%s\n' "$fakebin"
 }
 
+make_spawn_herdr_fakebin() {
+  local fakebin=$1
+  cat > "$fakebin/herdr" <<'SH'
+#!/usr/bin/env bash
+set -u
+case "${1:-} ${2:-}" in
+  "status --json")
+    printf '%s\n' '{"client":{"version":"0.7.1","protocol":14},"server":{"running":true}}'
+    ;;
+  "workspace list")
+    printf '%s\n' '{"result":{"workspaces":[{"workspace_id":"w-seat","label":"firstmate"}]}}'
+    ;;
+  "tab list")
+    printf '%s\n' '{"result":{"tabs":[]}}'
+    ;;
+  "tab create")
+    printf '%s\n' '{"result":{"tab":{"tab_id":"w-seat:t-seat"},"root_pane":{"pane_id":"w-seat:p-seat"}}}'
+    ;;
+  "pane get")
+    printf '%s\n' '{"result":{"pane":{"pane_id":"w-seat:p-seat","foreground_cwd":"'"${FM_FAKE_PANE_PATH:?}"'"}}}'
+    ;;
+  "pane send-text")
+    payload=${4:-}
+    case "$payload" in
+      ". '"*"'")
+        launch_file=${payload#". '"}
+        launch_file=${launch_file%"'"}
+        cat "$launch_file" >> "${FM_HERDR_LAUNCH_LOG:?}"
+        ;;
+      *) printf '%s\n' "$payload" >> "${FM_HERDR_LAUNCH_LOG:?}" ;;
+    esac
+    ;;
+  *)
+    :
+    ;;
+esac
+exit 0
+SH
+  chmod +x "$fakebin/herdr"
+}
+
 make_spawn_case() {
   local name=$1 harness=$2 case_dir home proj wt fakebin launchlog id
   shift 2
@@ -506,6 +547,37 @@ SH
   assert_not_contains "$launch" "CODEX_HOME='$seat_home'" \
     "default Codex launch unexpectedly selected Luna seat"
   pass "dispatch can pin the Luna Codex seat while the default remains ambient"
+}
+
+test_codex_luna_seat_reaches_herdr_backend() {
+  local rec id out status seat_home launch_log
+  id=profile-codex-luna-herdr-z4
+  rec=$(make_spawn_case profile-codex-luna-herdr codex "$id")
+  read_case_record "$rec"
+  seat_home="$CASE_DIR/herdr seat"
+  launch_log="$CASE_DIR/herdr-launch.log"
+  mkdir -p "$seat_home"
+  printf '{}\n' > "$seat_home/auth.json"
+  jq -n --arg home "$seat_home" '{version:1,id:"herdr-dock",seats:{luna:{harness:"codex",credential_home:$home}}}' \
+    > "$HOME_DIR/config/dock.json"
+  make_spawn_herdr_fakebin "$FAKEBIN_DIR"
+  cat > "$FAKEBIN_DIR/codex" <<'SH'
+#!/usr/bin/env bash
+if [ "${1:-}" = login ] && [ "${2:-}" = status ]; then
+  printf '%s\n' 'Logged in using ChatGPT' >&2
+fi
+SH
+  chmod +x "$FAKEBIN_DIR/codex"
+
+  out=$(FM_HERDR_LAUNCH_LOG="$launch_log" run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" \
+    "$id" "$PROJ_DIR" --backend herdr --harness codex --seat luna)
+  status=$?
+  expect_code 0 "$status" "Herdr-backed Codex Luna spawn should succeed: $out"
+  assert_contains "$(cat "$launch_log")" "CODEX_HOME='$seat_home'" \
+    "Herdr command did not carry the dock-bound CODEX_HOME"
+  assert_contains "$(cat "$launch_log")" "env -u OPENAI_API_KEY -u CODEX_API_KEY" \
+    "Herdr command did not shed ambient seat credentials"
+  pass "Herdr-backed seated Codex launch carries home and credential guards"
 }
 
 test_codex_seat_refuses_before_task_creation() {
@@ -1739,6 +1811,7 @@ test_claude_threads_model_and_effort
 test_codex_threads_model_and_effort
 test_codex_threads_model_and_max_effort
 test_codex_luna_seat_is_explicit_and_default_is_unchanged
+test_codex_luna_seat_reaches_herdr_backend
 test_codex_seat_refuses_before_task_creation
 test_codex_seat_overrides_allowlisted_ambient_credentials
 test_remote_secondmate_seat_refuses_before_transport

@@ -6,7 +6,17 @@ set -u
 TMP_ROOT=$(fm_test_tmproot fm-bosun)
 CLI="$ROOT/bin/fm-bosun.py"
 
-call() { FM_HOME="$1" python3 "$CLI" "${@:2}"; }
+call() {
+  local dir=$1
+  if [ -n "${FORK_BARE:-}" ]; then
+    GIT_CONFIG_COUNT=1 \
+    GIT_CONFIG_KEY_0="url.file://$FORK_BARE.insteadOf" \
+    GIT_CONFIG_VALUE_0=https://github.com/captain/sample.git \
+    FM_HOME="$dir" python3 "$CLI" "${@:2}"
+  else
+    FM_HOME="$dir" python3 "$CLI" "${@:2}"
+  fi
+}
 
 new_home() {
   local dir="$TMP_ROOT/$1"
@@ -32,7 +42,11 @@ setup_bosun() {
 
 prepare_project() {
   local dir=$1 maneuver=${2:-maneuver} project="$1/projects/sample" base source
+  export FORK_BARE="$dir/fork.git"
   mkdir -p "$project"
+  if [ ! -e "$FORK_BARE" ]; then
+    git init --bare -q "$FORK_BARE"
+  fi
   if [ ! -e "$project/.git" ]; then
     git -C "$project" init -q
     git -C "$project" config user.email test@example.com
@@ -49,7 +63,8 @@ prepare_project() {
     git -C "$project" add "$maneuver.txt"
     git -C "$project" commit -qm "$maneuver"
     source=$(git -C "$project" rev-parse HEAD)
-    git -C "$project" update-ref "refs/remotes/fork/housefeature/$maneuver" "$source"
+    git -C "$project" -c "url.file://$FORK_BARE.insteadOf=https://github.com/captain/sample.git" \
+      push -q fork "HEAD:refs/heads/housefeature/$maneuver"
     git -C "$project" checkout -q "$base"
   fi
 }
@@ -104,7 +119,7 @@ test_order_accepts_dotfiles() {
   dir=$(new_home dotfiles)
   setup_bosun "$dir"
   prepare_project "$dir" dotfiles
-  commit=$(git -C "$dir/projects/sample" rev-parse refs/remotes/fork/housefeature/dotfiles)
+  commit=$(git --git-dir "$FORK_BARE" rev-parse refs/heads/housefeature/dotfiles)
   call "$dir" order --task dotfiles --bosun bosun-kun --maneuver dotfiles \
     --forge github --owner kunchenguid --repository sample --source housefeature/dotfiles \
     --branch contribution/dotfiles --captain-words 'Contribute dotfiles' \
@@ -120,7 +135,7 @@ test_order_rejects_invalid_commit_selection() {
   dir=$(new_home invalid-commits)
   setup_bosun "$dir"
   prepare_project "$dir" invalid
-  commit=$(git -C "$dir/projects/sample" rev-parse refs/remotes/fork/housefeature/invalid)
+  commit=$(git --git-dir "$FORK_BARE" rev-parse refs/heads/housefeature/invalid)
   if call "$dir" order --task invalid --bosun bosun-kun --maneuver invalid \
     --forge github --owner kunchenguid --repository sample --source housefeature/invalid \
     --branch contribution/invalid --captain-words 'Contribute invalid' --path feature.txt \
@@ -142,7 +157,7 @@ test_intake_delegates_to_ship_lifecycle() {
   setup_bosun "$dir"
   prepare_project "$dir"
   ordered_home "$dir"
-  commit=$(git -C "$dir/projects/sample" rev-parse refs/remotes/fork/housefeature/maneuver)
+  commit=$(git --git-dir "$FORK_BARE" rev-parse refs/heads/housefeature/maneuver)
   fake_root="$dir/fake-root"
   mkdir -p "$fake_root/bin"
   cat > "$fake_root/bin/fm-project-mode.sh" <<'EOF'
@@ -192,7 +207,7 @@ ordered_home() {
   local dir=$1 commit
   setup_bosun "$dir"
   prepare_project "$dir"
-  commit=$(git -C "$dir/projects/sample" rev-parse refs/remotes/fork/housefeature/maneuver)
+  commit=$(git --git-dir "$FORK_BARE" rev-parse refs/heads/housefeature/maneuver)
   call "$dir" order --task maneuver --bosun bosun-kun --maneuver maneuver \
     --forge github --owner kunchenguid --repository sample --source housefeature/maneuver \
     --branch contribution/maneuver --captain-words 'Contribute maneuver' --path feature.txt \
@@ -205,7 +220,7 @@ test_fork_source_validation() {
   dir=$(new_home fork-source)
   setup_bosun "$dir"
   prepare_project "$dir" fork-only
-  commit=$(git -C "$dir/projects/sample" rev-parse refs/remotes/fork/housefeature/fork-only)
+  commit=$(git --git-dir "$FORK_BARE" rev-parse refs/heads/housefeature/fork-only)
   call "$dir" order --task fork-only --bosun bosun-kun --maneuver fork-only \
     --forge github --owner kunchenguid --repository sample --source housefeature/fork-only \
     --branch contribution/fork-only --captain-words 'Contribute fork-only' --path feature.txt \
@@ -222,6 +237,41 @@ test_fork_source_validation() {
     fail 'off-branch source commit was accepted'
   fi
   pass 'source commits are validated against the configured fork branch'
+}
+
+test_fork_source_freshness() {
+  local dir a b tree
+  dir=$(new_home fork-freshness)
+  setup_bosun "$dir"
+  prepare_project "$dir" fresh
+  a=$(git --git-dir "$FORK_BARE" rev-parse refs/heads/housefeature/fresh)
+  tree=$(git -C "$dir/projects/sample" rev-parse HEAD^{tree})
+  b=$(printf '%s\n' replacement | git -C "$dir/projects/sample" commit-tree "$tree")
+  git -C "$dir/projects/sample" -c "url.file://$FORK_BARE.insteadOf=https://github.com/captain/sample.git" \
+    push -q --force fork "$b:refs/heads/housefeature/fresh"
+  if call "$dir" order --task stale --bosun bosun-kun --maneuver fresh \
+    --forge github --owner kunchenguid --repository sample --source housefeature/fresh \
+    --branch contribution/stale --captain-words 'Contribute stale' --path feature.txt \
+    --commit "$a" >"$dir/out" 2>&1; then
+    fail 'stale fork source commit was accepted'
+  fi
+  call "$dir" order --task fresh --bosun bosun-kun --maneuver fresh \
+    --forge github --owner kunchenguid --repository sample --source housefeature/fresh \
+    --branch contribution/fresh --captain-words 'Contribute fresh' --path feature.txt \
+    --commit "$b" >/dev/null || fail 'fresh fork source commit was rejected'
+
+  dir=$(new_home unreachable-fork)
+  setup_bosun "$dir"
+  prepare_project "$dir" unreachable
+  a=$(git --git-dir "$FORK_BARE" rev-parse refs/heads/housefeature/unreachable)
+  rm -rf "$FORK_BARE"
+  if call "$dir" order --task unreachable --bosun bosun-kun --maneuver unreachable \
+    --forge github --owner kunchenguid --repository sample --source housefeature/unreachable \
+    --branch contribution/unreachable --captain-words 'Contribute unreachable' --path feature.txt \
+    --commit "$a" >"$dir/out" 2>&1; then
+    fail 'unreachable fork remote was accepted'
+  fi
+  pass 'fork source validation refreshes and fails closed'
 }
 
 test_registration_and_merge() {
@@ -304,6 +354,7 @@ test_memory_and_paths
 test_order_accepts_dotfiles
 test_order_rejects_invalid_commit_selection
 test_fork_source_validation
+test_fork_source_freshness
 test_intake_delegates_to_ship_lifecycle
 test_registration_and_merge
 test_registration_requires_role

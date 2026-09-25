@@ -144,9 +144,15 @@ def fork_source_ref(project_dir, fork_owner, fork_repository, source_branch):
     if not remotes:
         fail(f"configured fork remote is unavailable: {fork_owner}/{fork_repository}")
     for remote in remotes.splitlines():
-        urls = git_output(project_dir, "remote", "get-url", "--all", remote) or ""
+        urls = git_output(project_dir, "config", "--get-all", f"remote.{remote}.url") or ""
         if not any(remote_identity(url) == expected for url in urls.splitlines()):
             continue
+        result = subprocess.run(
+            ["git", "-C", str(project_dir), "fetch", "--no-tags", remote,
+             f"+refs/heads/{source_branch}:refs/remotes/{remote}/{source_branch}"],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        if result.returncode:
+            fail(f"could not fetch configured fork branch: {fork_owner}/{fork_repository}/{source_branch}")
         ref = f"refs/remotes/{remote}/{source_branch}"
         if git_output(project_dir, "rev-parse", "--verify", ref):
             return ref

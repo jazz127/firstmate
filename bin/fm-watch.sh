@@ -1565,6 +1565,7 @@ handle_paused_stale() {  # <window> <task> <hash>
   now=$(date +%s)
   age=$(( now - mtime ))
   last=$(status_declared_wait_line "$statusf")
+  [ -n "$last" ] || last=$(last_status_line "$statusf")
   min_age=$PAUSE_RESURFACE_SECS
   declaration="declared:$(fm_wake_signal_sig "$statusf" || true)"
   if done_open_pr_wait "$task" "$last"; then
@@ -1700,6 +1701,7 @@ pause_state_class() {  # <window> <task>
   local win=$1 task=$2 key last recheck_file class agent_alive kind
   key=$(window_key "$win")
   last=$(status_declared_wait_line "$STATE/$task.status")
+  [ -n "$last" ] || last=$(last_status_line "$STATE/$task.status")
   recheck_file="$STATE/.paused-rechecked-$key"
   if done_open_pr_wait "$task" "$last"; then
     class=$(crew_absorb_class "$task")

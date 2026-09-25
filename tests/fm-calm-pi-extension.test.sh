@@ -3918,7 +3918,7 @@ SH
   then
     fail "render_export_dom accepted a Chrome that never finished the DOM"
   fi
-  [ "$(wc -l <"$dir/attempts-hang")" -eq 3 ] \
+  [ "$(wc -l <"$TMP_ROOT/chrome-render-report.txt")" -eq 3 ] \
     || fail "render_export_dom did not exhaust its bounded retries on a Chrome that never finished"
   report=$(cat "$dir/report-hang")
   assert_contains "$report" "timed_out=yes" \

@@ -360,7 +360,7 @@ published_pr_validation_failed() { # <pr> <meta>
       body=$(fm_pr_read_published_body "$pr") || exit 1
       fm_dod_validate_published_intent "$body" "$wt" "$task_tmp" "" "$pr"
     ' _ "$SCRIPT_DIR" "$FM_PR_URL" "$(meta_field "$meta" worktree)" \
-    "$(meta_field "$meta" tasktmp)" >/dev/null 2>&1
+    "$(meta_field "$meta" tasktmp)" 2>&1 >/dev/null
 }
 
 home_secondmate_id() {
@@ -368,12 +368,19 @@ home_secondmate_id() {
 }
 
 report_to_parent() { # <task> <state> <outcome-key> <fingerprint> <pr>
-  local task=$1 state=$2 outcome_key=$3 fingerprint=$4 pr=$5 line validation=ok meta
+  local task=$1 state=$2 outcome_key=$3 fingerprint=$4 pr=$5 line validation=ok meta diagnostic
   meta="$STATE/$task.meta"
-  if [ -n "$pr" ] && ! published_pr_validation_failed "$pr" "$meta"; then validation=failed; fi
+  if [ -n "$pr" ]; then
+    if ! diagnostic=$(published_pr_validation_failed "$pr" "$meta"); then
+      validation=failed
+    fi
+  fi
   line="$state [key=$outcome_key]: inactive terminal child=$task fingerprint=$fingerprint"
   [ -z "$pr" ] || line="$line pr=$pr"
-  [ "$validation" = ok ] || line="$line evidence-validation=failed"
+  if [ "$validation" != ok ]; then
+    line="$line evidence-validation=failed"
+    [ -z "$diagnostic" ] || line="$line $diagnostic"
+  fi
   fm_parent_channel_report "$FM_HOME" "$STATE" "$line"
 }
 
@@ -439,7 +446,7 @@ claim_inactive_report_for_ledger() { # <task> <incarnation> <state> <ledger-fing
 # delivered, or nothing is owed, and 1 when it is owed but the parent channel
 # could not be written (the notice is queued once per record).
 report_child_ledger_locked() { # <id> <meta>
-  local id=$1 meta=$2 status last previous state note pr mode yolo data incarnation fingerprint predecessor_head outcome_key line validation=ok body
+  local id=$1 meta=$2 status last previous state note pr mode yolo data incarnation fingerprint predecessor_head outcome_key line validation=ok body diagnostic
   status="$STATE/$id.status"
   last=$(child_terminal_ledger_line "$status") || return 0
   state=$(status_line_verb "$last")
@@ -472,8 +479,15 @@ report_child_ledger_locked() { # <id> <meta>
   data="${FM_DATA_OVERRIDE:-$FM_HOME/data}"
   line="$state [key=$outcome_key]: child $id $state: $note"
   [ -z "$pr" ] || line="$line pr=$pr"
-  if [ -n "$pr" ] && ! published_pr_validation_failed "$pr" "$meta"; then validation=failed; fi
-  [ "$validation" = ok ] || line="$line evidence-validation=failed"
+  if [ -n "$pr" ]; then
+    if ! diagnostic=$(published_pr_validation_failed "$pr" "$meta"); then
+      validation=failed
+    fi
+  fi
+  if [ "$validation" != ok ]; then
+    line="$line evidence-validation=failed"
+    [ -z "$diagnostic" ] || line="$line $diagnostic"
+  fi
   [ -z "$mode" ] || line="$line mode=$mode"
   [ -z "$yolo" ] || line="$line yolo=$yolo"
   if [ -f "$data/$id/report.md" ] && [ ! -L "$data/$id/report.md" ]; then
@@ -524,7 +538,7 @@ report_child() { # <id>
 }
 
 reconcile_direct_child_locked() { # <id> <meta> <secondmate-id-or-empty> <timeout>
-  local id=$1 meta=$2 self=${3:-} timeout=$4 status turn last age state_line state pr incarnation fingerprint outcome_key payload kind state_rc=0 worktree head clean
+  local id=$1 meta=$2 self=${3:-} timeout=$4 status turn last age state_line state pr incarnation fingerprint outcome_key payload kind state_rc=0 worktree head clean diagnostic
   [ -f "$meta" ] && [ ! -L "$meta" ] || return 0
   kind=$(meta_field "$meta" kind)
   [ "$kind" = secondmate ] && return 0
@@ -616,8 +630,11 @@ reconcile_direct_child_locked() { # <id> <meta> <secondmate-id-or-empty> <timeou
   fi
   record_phase_set "$RECORD_PENDING" presentation || return 1
   payload="inactive terminal outcome awaiting captain presentation: child=$id state=$state"
-  if [ -n "$pr" ] && ! published_pr_validation_failed "$pr" "$meta"; then
-    payload="$payload evidence-validation=failed"
+  if [ -n "$pr" ]; then
+    if ! diagnostic=$(published_pr_validation_failed "$pr" "$meta"); then
+      payload="$payload evidence-validation=failed"
+      [ -z "$diagnostic" ] || payload="$payload $diagnostic"
+    fi
   fi
   [ -z "$pr" ] || payload="$payload pr=$pr"
   queue_presentation "$RECORD_PENDING" "$fingerprint" "$payload" || true

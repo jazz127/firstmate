@@ -81,6 +81,22 @@ def write_json(path, value):
             os.unlink(name)
 
 
+def write_text(path, value):
+    path = safe_path(path)
+    if path.is_symlink() or path.parent.is_symlink():
+        fail(f"unsafe destination: {path}")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    try:
+        with os.fdopen(fd, "w") as output:
+            output.write(value)
+        os.chmod(name, 0o600)
+        os.replace(name, path)
+    finally:
+        if os.path.exists(name):
+            os.unlink(name)
+
+
 def safe_name(value):
     if not isinstance(value, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", value) or value in (".", ".."):
         fail(f"invalid name: {value}")
@@ -242,6 +258,89 @@ def cmd_order(args):
     print(path)
 
 
+def project_mode(project):
+    root = Path(os.environ.get("FM_ROOT_OVERRIDE", Path(__file__).resolve().parent.parent))
+    result = subprocess.run([str(root / "bin/fm-project-mode.sh"), "--raw", project],
+                            cwd=home(), env=os.environ.copy(), text=True,
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if result.returncode:
+        fail(result.stderr.strip() or f"could not resolve delivery posture for {project}")
+    fields = result.stdout.strip().split()
+    if len(fields) != 2:
+        fail(f"invalid delivery posture for {project}")
+    mode, yolo = fields
+    if mode == "no-mistakes-prod-only":
+        mode = "no-mistakes"
+    if mode not in ("no-mistakes", "direct-PR") or yolo not in ("on", "off"):
+        fail(f"Bosun contribution requires a PR-capable delivery posture for {project}")
+    return mode, yolo
+
+
+def cmd_intake(args):
+    record = contribution(args.task)
+    if record.get("state") != "ordered":
+        fail("captain order has already been assigned or published")
+    project = safe_name(record["target"]["repository"])
+    project_dir = safe_path(home() / "projects" / project)
+    if not project_dir.is_dir() or project_dir.is_symlink():
+        fail(f"upstream project clone is unavailable: {project_dir}")
+    mode, yolo = project_mode(project)
+    root = Path(os.environ.get("FM_ROOT_OVERRIDE", Path(__file__).resolve().parent.parent))
+    brief_cmd = [str(root / "bin/fm-brief.sh"), args.task, project, "--mode", mode]
+    environment = os.environ.copy()
+    environment["FM_HOME"] = str(home())
+    result = subprocess.run(brief_cmd, cwd=home(), env=environment, text=True,
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if result.returncode:
+        fail(result.stderr.strip() or "could not scaffold Bosun contribution brief")
+    brief = safe_path(home() / "data" / args.task / "brief.md")
+    try:
+        body = brief.read_text()
+    except OSError as exc:
+        fail(f"could not read contribution brief: {exc}")
+    paths = "\n".join(f"- `{item}`" for item in record["allowed_paths"])
+    task = (f"Contribute the named Captain's Maneuver `{record['maneuver']}` to "
+            f"`{record['target']['owner']}/{record['target']['repository']}`.\n\n"
+            "Read the target repository's current instructions and contribution policy, "
+            "then inspect accepted pull requests and review history when conventions are unclear.\n"
+            "Fetch the latest upstream default branch into this isolated worktree and cut the "
+            "smallest coherent contribution from the ordered housefeature branch.\n"
+            f"Use only these ordered paths:\n{paths}\n"
+            "Remove house-only configuration, private context, secrets, unrelated history, and "
+            "fork-specific assumptions. Preserve attribution and make a clean commit series, "
+            "title, and description. Run the target repository's expected validation, using "
+            "no-mistakes where configured.\n"
+            "Open the PR only from the configured Captain fork to the ordered upstream target. "
+            "Shepherd checks and review through the existing contribution observer; escalate "
+            "scope changes, ambiguous maintainer requests, policy conflicts, and consequential "
+            "decisions with needs-decision through the parent channel.\n\n"
+            f"Captain's exact order: {record['captain_order']['words']}")
+    spec = (f"This task is authorized only for Bosun `{record['bosun']}`, source branch "
+            f"`{record['source_branch']}`, contribution branch `{record['contribution_branch']}`, "
+            f"Captain fork `{record['fork']['owner']}/{record['fork']['repository']}`, and "
+            f"upstream default branch `{record['upstream_default_branch']}`. Do not select other "
+            "work, widen the scope, or contact unrelated projects.")
+    if "{TASK}" not in body or "{FIRSTMATE_SPEC}" not in body:
+        fail("contribution brief placeholders are unavailable")
+    write_text(brief, body.replace("{TASK}", task).replace("{FIRSTMATE_SPEC}", spec))
+    spawn = subprocess.run([str(root / "bin/fm-spawn.sh"), args.task, str(project_dir),
+                            "--mode", mode, "--yolo", yolo], cwd=home(), env=environment,
+                           text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if spawn.returncode:
+        fail(spawn.stderr.strip() or "could not spawn Bosun contribution task")
+    match = re.search(r"(?:^| )worktree=(\S+)", spawn.stdout)
+    if not match:
+        fail("Bosun contribution task did not report an isolated worktree")
+    record["task_brief"] = str(brief)
+    record["task_worktree"] = match.group(1)
+    record["task_mode"] = mode
+    record["task_yolo"] = yolo
+    record["assigned_at"] = now()
+    record["state"] = "assigned"
+    write_json(contribution_path(args.task), record)
+    print(spawn.stdout.strip())
+
+
 def memory_path(bosun, scope, want):
     role(bosun)
     root = home() / "data/bosun-memory" / bosun
@@ -250,6 +349,8 @@ def memory_path(bosun, scope, want):
 
 def cmd_convention(args):
     want = target(args.forge, args.owner, args.repository)
+    if args.scope not in ("shared", "repository"):
+        fail(f"invalid Bosun convention scope: {args.scope}")
     path = memory_path(args.bosun, args.scope, want)
     record = read_json(path, {"schema": "fm-bosun-memory.v1", "conventions": []})
     if record.get("schema") != "fm-bosun-memory.v1" or not isinstance(record.get("conventions"), list):
@@ -296,7 +397,7 @@ def cmd_registration_check(args):
     record = contribution(args.task)
     if record["bosun"] != bosun or record["target"]["forge"] != args.forge:
         fail("Bosun PR registration requires a matching captain order")
-    if record.get("state") != "ordered" or record.get("upstream_pr"):
+    if record.get("state") not in ("ordered", "assigned") or record.get("upstream_pr"):
         fail("captain order already has a registered upstream PR")
     expected_url = f"https://github.com/{record['target']['owner']}/{record['target']['repository']}/pull/"
     if not args.url.startswith(expected_url) or not args.url[len(expected_url):].isdigit():
@@ -335,8 +436,9 @@ def cmd_registration_check(args):
                                       "validated_at": now()}
     record["upstream_changed_paths"] = changed
     record["upstream_base"] = args.upstream_base
-    record["state"] = "published"
-    write_json(contribution_path(args.task), record)
+    if not args.check_only:
+        record["state"] = "published"
+        write_json(contribution_path(args.task), record)
 
 
 def cmd_merged(args):
@@ -366,12 +468,13 @@ def main():
         p.add_argument("--" + name, required=True)
     p.add_argument("--path", action="append", default=[]); p.add_argument("--commit", action="append", default=[])
     p.add_argument("--fork-owner"); p.add_argument("--fork-repository"); p.add_argument("--default-branch"); p.set_defaults(func=cmd_order)
+    p = sub.add_parser("intake"); p.add_argument("--task", required=True); p.set_defaults(func=cmd_intake)
     p = sub.add_parser("convention"); add_target(p)
     for name in ("bosun", "scope", "key", "value"):
         p.add_argument("--" + name, required=True)
     p.add_argument("--evidence"); p.add_argument("--showed"); p.add_argument("--read-at"); p.add_argument("--confirmed", action="store_true"); p.set_defaults(func=cmd_convention)
     p = sub.add_parser("conventions"); add_target(p); p.add_argument("--bosun", required=True); p.add_argument("--policy", required=True); p.add_argument("--decisions"); p.set_defaults(func=cmd_conventions)
-    p = sub.add_parser("registration-check"); p.add_argument("--task", required=True); p.add_argument("--url", required=True); p.add_argument("--forge", required=True); p.add_argument("--head", required=True); p.add_argument("--base", required=True); p.add_argument("--branch", required=True); p.add_argument("--pr-head", required=True); p.add_argument("--validation-head", required=True); p.add_argument("--validation-mode", required=True); p.add_argument("--upstream-base", required=True); p.add_argument("--changed-path", action="append", default=[]); p.set_defaults(func=cmd_registration_check)
+    p = sub.add_parser("registration-check"); p.add_argument("--task", required=True); p.add_argument("--url", required=True); p.add_argument("--forge", required=True); p.add_argument("--head", required=True); p.add_argument("--base", required=True); p.add_argument("--branch", required=True); p.add_argument("--pr-head", required=True); p.add_argument("--validation-head", required=True); p.add_argument("--validation-mode", required=True); p.add_argument("--upstream-base", required=True); p.add_argument("--changed-path", action="append", default=[]); p.add_argument("--check-only", action="store_true"); p.set_defaults(func=cmd_registration_check)
     p = sub.add_parser("merged"); p.add_argument("--task", required=True); p.add_argument("--url", required=True); p.set_defaults(func=cmd_merged)
     args = parser.parse_args()
     try:

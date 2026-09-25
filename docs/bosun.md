@@ -34,6 +34,8 @@ Forward the captain's explicit words, named maneuver, and exact target to the ma
 The Bosun records the order with `fm-bosun.py order` in its own home, including the durable source branch, selected source commit IDs, allowed changed paths, and contribution branch.
 One `data/<task>/bosun-contribution.json` record links those fields to validation evidence and the eventual upstream PR.
 An order record is immutable; a scope or target change needs a new captain decision rather than an in-place edit.
+Run `FM_HOME=<bosun-home> bin/fm-bosun.py intake --task <task>` after recording the order to scaffold and spawn exactly one ordinary ship task through `fm-brief.sh` and `fm-spawn.sh`.
+The intake fills the task with the ordered source branch, path scope, upstream-base procedure, repository-policy reading, validation, attribution, publication, and parent-channel escalation requirements.
 
 ## Read conventions
 

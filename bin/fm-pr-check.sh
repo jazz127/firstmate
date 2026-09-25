@@ -184,10 +184,17 @@ if [ "$IS_BOSUN" = 1 ]; then
   done <<EOF
 $BOSUN_CHANGED_PATHS
 EOF
-  python3 "$SCRIPT_DIR/fm-bosun.py" registration-check --task "$ID" --url "$URL" \
-    --forge "$PROVIDER" --head "$BOSUN_HEAD" --base "$BOSUN_BASE_REPOSITORY" \
-    --branch "$BOSUN_BRANCH" --pr-head "$PR_HEAD" --validation-head "$PR_HEAD" --validation-mode "${MODE:-direct-PR}" \
-    --upstream-base "$BOSUN_UPSTREAM_BASE" "${BOSUN_PATH_ARGS[@]}" || exit 1
+  bosun_registration_check() {
+    local check_only=$1
+    local -a registration_args
+    registration_args=(registration-check --task "$ID" --url "$URL" --forge "$PROVIDER"
+      --head "$BOSUN_HEAD" --base "$BOSUN_BASE_REPOSITORY" --branch "$BOSUN_BRANCH"
+      --pr-head "$PR_HEAD" --validation-head "$PR_HEAD" --validation-mode "${MODE:-direct-PR}"
+      --upstream-base "$BOSUN_UPSTREAM_BASE" "${BOSUN_PATH_ARGS[@]}")
+    [ "$check_only" = 1 ] && registration_args+=(--check-only)
+    python3 "$SCRIPT_DIR/fm-bosun.py" "${registration_args[@]}"
+  }
+  bosun_registration_check 1 || exit 1
 fi
 
 META_TMP=
@@ -257,6 +264,9 @@ else
   PR_POLL_PUBLISH_LOCK_HELD=0
   echo "error: could not publish PR poll" >&2
   exit 1
+fi
+if [ "$IS_BOSUN" = 1 ]; then
+  bosun_registration_check 0 || exit 1
 fi
 # Opt-in fleet activity ledger (docs/fleet-ledger.md); off costs one file test.
 # The merge-time re-record is not a new review-ready PR, so it writes nothing.

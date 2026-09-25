@@ -75,6 +75,41 @@ test_memory_and_paths() {
   pass 'evidence memory and FM_HOME path safety'
 }
 
+test_intake_delegates_to_ship_lifecycle() {
+  local dir fake_root
+  dir=$(new_home intake)
+  setup_bosun "$dir"
+  mkdir -p "$dir/projects/sample"
+  ordered_home "$dir"
+  fake_root="$dir/fake-root"
+  mkdir -p "$fake_root/bin"
+  cat > "$fake_root/bin/fm-project-mode.sh" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' 'no-mistakes off'
+EOF
+  cat > "$fake_root/bin/fm-brief.sh" <<'EOF'
+#!/usr/bin/env bash
+mkdir -p "$FM_HOME/data/$1"
+printf '%s\n' '{TASK}' '{FIRSTMATE_SPEC}' > "$FM_HOME/data/$1/brief.md"
+EOF
+  cat > "$fake_root/bin/fm-spawn.sh" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "spawned $1 worktree=$FM_HOME/projects/sample/task-worktree"
+EOF
+  chmod +x "$fake_root/bin"/*.sh
+  FM_HOME="$dir" FM_ROOT_OVERRIDE="$fake_root" python3 "$CLI" intake --task maneuver > "$dir/intake.out" \
+    || fail 'intake did not delegate to ordinary ship lifecycle'
+  jq -e '.state == "assigned" and .task_mode == "no-mistakes" and .task_yolo == "off" and (.task_worktree | endswith("task-worktree"))' \
+    "$dir/data/maneuver/bosun-contribution.json" >/dev/null || { cat "$dir/data/maneuver/bosun-contribution.json" >&2; fail 'intake did not persist assigned task'; }
+  if grep -qE '\{TASK\}|\{FIRSTMATE_SPEC\}' "$dir/data/maneuver/brief.md"; then
+    fail 'intake left brief placeholders unresolved'
+  fi
+  assert_grep 'Fetch the latest upstream default branch' "$dir/data/maneuver/brief.md" 'intake omitted clean upstream extraction'
+  assert_grep 'needs-decision' "$dir/data/maneuver/brief.md" 'intake omitted review escalation'
+  assert_grep 'spawned maneuver worktree=' "$dir/intake.out" 'intake did not return spawned task'
+  pass 'ordered maneuvers delegate exactly once through brief and spawn'
+}
+
 fake_github() {
   mkdir -p "$1/fakebin"
   cat > "$1/fakebin/gh" <<'EOF'
@@ -162,4 +197,5 @@ test_registration_and_merge() {
 
 test_routing
 test_memory_and_paths
+test_intake_delegates_to_ship_lifecycle
 test_registration_and_merge

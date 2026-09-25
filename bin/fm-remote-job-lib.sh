@@ -994,12 +994,18 @@ fm_remote_job_stop_worker_tree() { # <pid> [start] [command]
     expected_command=$(fm_remote_job_process_command "$pid" 2>/dev/null || true)
     [ -n "$expected_start" ] && [ -n "$expected_command" ] || return 1
   fi
-  fm_remote_job_process_identity_matches "$pid" "$expected_start" "$expected_command" || return 1
+  if ! fm_remote_job_process_identity_matches "$pid" "$expected_start" "$expected_command"; then
+    kill -0 "$pid" 2>/dev/null && return 1
+    return 0
+  fi
   deadline=$((SECONDS + 30))
   while :; do
     members=$(fm_remote_job_process_tree_pids "$pid" 2>/dev/null) || return 1
     if [ -z "$members" ]; then
-      fm_remote_job_process_identity_matches "$pid" "$expected_start" "$expected_command" || return 1
+      if ! fm_remote_job_process_identity_matches "$pid" "$expected_start" "$expected_command"; then
+        kill -0 "$pid" 2>/dev/null && return 1
+        return 0
+      fi
       members=$(printf '%s\t%s\t%s\n' "$pid" "$expected_start" "$expected_command")
     fi
     while IFS=$(printf '\t') read -r member member_start member_command; do

@@ -19,7 +19,7 @@
 #       --summary <text> [--silent true|false] [--wake <text>]
 #
 # The verdict criteria are owned by bin/fm-branch-prompt.sh ("Verdict: routine
-# or captain"); --silent true is legal only for a routine fleet outcome.
+# or captain"); --silent true is legal only for a routine outcome.
 # --wake defaults to the wake reason the host recorded for the turn.
 #
 # Only the branch actor of a live host turn may report: FM_SUPERVISION_ACTOR
@@ -78,8 +78,8 @@ if [ -z "$TASK" ] || [ -z "$SUMMARY" ] || [ -z "$VERDICT" ] || [ -z "$ROW" ]; th
   exit 2
 fi
 case "$ROW" in *[!0-9]*) echo "invalid report: --row must be a wake sequence" >&2; exit 2 ;; esac
-if [ "$SILENT" = true ] && { [ "$TASK" != fleet ] || [ "$VERDICT" != routine ]; }; then
-  echo "invalid report: --silent true is only for a routine fleet outcome" >&2
+if [ "$SILENT" = true ] && [ "$VERDICT" != routine ]; then
+  echo "invalid report: --silent true is only for a routine outcome" >&2
   exit 2
 fi
 

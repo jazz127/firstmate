@@ -246,6 +246,7 @@ fm_dod_validate_scenario_consistency() {  # <complete-pr-body>
       if (stored_table_rows > 0 && count_line != "" &&
           (count_driven < stored_table_driven ||
            (count_total == stored_table_rows && count_driven != stored_table_driven) ||
+           (count_total != stored_table_rows && count_driven > stored_table_driven) ||
            (count_driven == count_total && stored_table_driven < stored_table_rows)))
         refuse(count_line, stored_table_lines)
     }

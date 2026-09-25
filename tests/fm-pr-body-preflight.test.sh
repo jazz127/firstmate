@@ -166,6 +166,19 @@ output=$(preflight) || fail "corrected table count was refused: $output"
 [ "$output" = 'evidence preflight ok' ] || fail "corrected table count did not pass: $output"
 pass "corrected table and count pass"
 
+sed 's/1 of 4 scenarios driven live/3 of 5 scenarios driven live/' "$draft" > "$task_tmp/total-mismatch.md"
+mv "$task_tmp/total-mismatch.md" "$draft"
+output=$(preflight)
+rc=$?
+[ "$rc" -eq 1 ] || fail "table and incompatible total were accepted: $output"
+assert_contains "$output" 'evidence claim refused: contradictory driven-scenario results:' "total mismatch reason was missing"
+assert_contains "$output" '3 of 5 scenarios driven live against the product.' "incompatible total was not quoted"
+assert_contains "$output" '| Account A | pass | yes | captured account output |' "table rows were not quoted for total mismatch"
+pass "table and incompatible driven-scenario total is refused"
+
+sed 's/3 of 5 scenarios driven live/1 of 4 scenarios driven live/' "$draft" > "$task_tmp/corrected-total.md"
+mv "$task_tmp/corrected-total.md" "$draft"
+
 sed 's/1 of 4 scenarios driven live/Live validation: passed - 1 of 4 scenarios driven live/' "$draft" > "$task_tmp/verdict.md"
 mv "$task_tmp/verdict.md" "$draft"
 output=$(preflight) || fail "partly live passed verdict was refused: $output"

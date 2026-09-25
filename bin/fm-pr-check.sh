@@ -285,10 +285,10 @@ if [ "$IS_BOSUN" = 1 ]; then
   BOSUN_BRANCH=$(printf '%s' "$BOSUN_PR_JSON" | jq -er '.baseRefName // ""') || exit 1
   BOSUN_HEAD_BRANCH=$(printf '%s' "$BOSUN_PR_JSON" | jq -er '.headRefName // ""') || exit 1
   PR_HEAD=$(printf '%s' "$BOSUN_PR_JSON" | jq -er '.headRefOid // ""') || exit 1
-  [ "$BOSUN_HEAD" != / ] && [ "$BOSUN_BASE_REPOSITORY" != "" ] && [ "$BOSUN_BRANCH" != "" ] && [ "$BOSUN_HEAD_BRANCH" != "" ] && fm_pr_head_valid "$PR_HEAD" || {
+  if ! { [ "$BOSUN_HEAD" != / ] && [ "$BOSUN_BASE_REPOSITORY" != "" ] && [ "$BOSUN_BRANCH" != "" ] && [ "$BOSUN_HEAD_BRANCH" != "" ] && fm_pr_head_valid "$PR_HEAD"; }; then
     echo "error: Bosun PR forge response was incomplete" >&2
     exit 1
-  }
+  fi
   bosun_refresh_upstream_base || {
     echo "error: Bosun upstream default branch is unavailable" >&2
     exit 1

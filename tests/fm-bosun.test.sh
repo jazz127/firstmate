@@ -41,7 +41,7 @@ setup_bosun() {
 }
 
 prepare_project() {
-  local dir=$1 maneuver=${2:-maneuver} project="$1/projects/sample" base source
+  local dir=$1 maneuver=${2:-maneuver} project="$1/projects/sample" base
   export FORK_BARE="$dir/fork.git"
   mkdir -p "$project"
   if [ ! -e "$FORK_BARE" ]; then
@@ -63,7 +63,6 @@ prepare_project() {
     printf '%s\n' "$maneuver" > "$project/$maneuver.txt"
     git -C "$project" add "$maneuver.txt"
     git -C "$project" commit -qm "$maneuver"
-    source=$(git -C "$project" rev-parse HEAD)
     git -C "$project" -c "url.file://$FORK_BARE.insteadOf=https://github.com/captain/sample.git" \
       push -q fork "HEAD:refs/heads/housefeature/$maneuver"
     git -C "$project" checkout -q "$base"
@@ -273,7 +272,7 @@ test_fork_source_validation() {
     --forge github --owner kunchenguid --repository sample --source housefeature/fork-only \
     --branch contribution/fork-only --captain-words 'Contribute fork-only' --path feature.txt \
     --commit "$commit" >/dev/null || fail 'fork-only source commit was rejected'
-  tree=$(git -C "$dir/projects/sample" rev-parse HEAD^{tree})
+  tree=$(git -C "$dir/projects/sample" rev-parse 'HEAD^{tree}')
   off=$(printf '%s\n' unrelated | git -C "$dir/projects/sample" commit-tree "$tree")
   dir=$(new_home fork-off-branch)
   setup_bosun "$dir"
@@ -293,7 +292,7 @@ test_fork_source_freshness() {
   setup_bosun "$dir"
   prepare_project "$dir" fresh
   a=$(git --git-dir "$FORK_BARE" rev-parse refs/heads/housefeature/fresh)
-  tree=$(git -C "$dir/projects/sample" rev-parse HEAD^{tree})
+  tree=$(git -C "$dir/projects/sample" rev-parse 'HEAD^{tree}')
   b=$(printf '%s\n' replacement | git -C "$dir/projects/sample" commit-tree "$tree")
   git -C "$dir/projects/sample" -c "url.file://$FORK_BARE.insteadOf=https://github.com/captain/sample.git" \
     push -q --force fork "$b:refs/heads/housefeature/fresh"

@@ -2760,11 +2760,14 @@ test_absorbed_replacement_wait_does_not_inherit_the_old_throttle() {
 # <mode> `exit` requires the watcher to surface and exit; `absorb` requires it to
 # survive whole poll cycles - enough to see the new hash, count it stable, and
 # reach the stale path. Returns 1 when the watcher does the other thing.
-parked_watch_round() {  # <state> <fakebin> <out> <capture> <window> <exit|absorb>
+# <crew-state> overrides the canned fm-crew-state.sh verdict, so a case can drive
+# the declared-wait and stopped-crew populations apart on the same runner.
+parked_watch_round() {  # <state> <fakebin> <out> <capture> <window> <exit|absorb> [crew-state]
   local state=$1 fakebin=$2 out=$3 capture=$4 window=$5 mode=$6 pid cycles=0
+  local crew_state=${7:-'state: paused · source: status-log · parked'}
   PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture" \
     FM_FAKE_TMUX_CURRENT_COMMAND=grok \
-    FM_FAKE_CREW_STATE='state: paused · source: status-log · parked' \
+    FM_FAKE_CREW_STATE="$crew_state" \
     FM_WATCH_HANDLING_SUCCESSOR=1 \
     FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" \
     FM_PAUSE_RESURFACE_SECS=999 FM_POLL=1 FM_SIGNAL_GRACE=1 \
@@ -2851,6 +2854,300 @@ test_live_declared_wait_churn_honors_the_resurface_throttle() {
     [ "$wakes" -eq 0 ] || fail "[$name] pane churn re-alarmed $wakes time(s) inside the recheck's own window"
   done
   pass "a parked live worker absorbs pane churn, rechecks once when its declaration ages past the cadence, then absorbs churn again"
+}
+
+# Stale wakes for <window> in <state>'s durable queue; a missing queue is zero.
+parked_stale_wakes() {  # <state> <window>
+  awk -F '\t' -v w="$2" '$3 == "stale" && $4 == w { n++ } END { print n + 0 }' \
+    "$1/.wake-queue" 2>/dev/null || echo 0
+}
+
+# A declared-wait fixture for the live parked-worker runner: <status-line> written
+# <status-age> seconds ago, stably stale at its first pane text.
+parked_wait_fixture() {  # <name> <status-line> <status-age-secs>
+  local dir state statusf key
+  dir=$(make_case "$1"); state="$dir/state"; statusf="$state/parked.status"
+  printf 'window=test:fm-parked\nkind=ship\nharness=grok\nbackend=tmux\n' > "$state/parked.meta"
+  printf '%s\n' "$2" > "$statusf"
+  set_mtime "$(( $(date +%s) - $3 ))" "$statusf"
+  printf '%s' "$(seen_sig "$statusf")" > "$state/.seen-parked_status"
+  key=test_fm-parked
+  printf 'parked, elapsed 1s' > "$dir/pane.txt"
+  printf '%s' "$(hash_text 'parked, elapsed 1s')" > "$state/.hash-$key"
+  printf '1\n' > "$state/.count-$key"
+  printf '%s\n' "$dir"
+}
+
+# Append <line>s to a parked fixture's status log as handled status writes, so a
+# round measures only the stale path's reading of the declared wait.
+parked_status_write() {  # <state> <line>...
+  local state=$1 line
+  shift
+  for line in "$@"; do printf '%s\n' "$line" >> "$state/parked.status"; done
+  printf '%s' "$(seen_sig "$state/parked.status")" > "$state/.seen-parked_status"
+}
+
+# --- a live worker parked on a declared wait: a busy pane must not re-arm ----
+# The 2026-09 case behind issue #3942: a worker declared a bounded external wait
+# for a multi-hour background job and ended its turn, and the watcher alarmed
+# anyway for the whole wait. What re-armed the alarm was pane BUSY state: a worker
+# parked on a declared wait still renders its harness busy signature whenever it
+# does anything at all, and the busy-path branches cleared the whole pause
+# bookkeeping on such a poll, throttle included. A provably-working verdict
+# reaches the same throttle by a narrower route: fm-crew-state.sh takes its OWN
+# capture a moment after the staleness loop read the pane idle, so a parked
+# worker caught mid-blip returns `working source: pane`. Both are facts about the
+# PANE; the throttle is scoped to the DECLARATION, which only the status line that
+# ends the wait retires. A crew that declared nothing keeps alarming.
+# Adapted from https://github.com/kunchenguid/firstmate/pull/3978: the declaration
+# is aged past the cadence so its first sight is the annotated recheck that
+# records the throttle, since a fresh declaration's first sight is now absorbed.
+test_declared_wait_survives_a_busy_pane_blip() {
+  local spec name status_line expected dir state fakebin out capture_file key throttle scope wakes
+  key=test_fm-parked
+  for spec in \
+    'paused-busy-blip|paused: waiting on the bhavcopy download to finish (pid 41221)|awaiting external' \
+    'captain-held-busy-blip|captain-held [key=route]: awaiting the captain on the routing call|awaiting the captain'
+  do
+    name=${spec%%|*}; spec=${spec#*|}
+    status_line=${spec%%|*}; expected=${spec#*|}
+    dir=$(parked_wait_fixture "$name" "$status_line" 2000); state="$dir/state"; fakebin="$dir/fakebin"
+    out="$dir/watch.out"; capture_file="$dir/pane.txt"
+    throttle="$state/.paused-resurfaced-$key"
+
+    parked_watch_round "$state" "$fakebin" "$out" "$capture_file" test:fm-parked exit \
+      || fail "[$name] an aged declared wait was not rechecked"
+    grep -F "$expected" "$state/.wake-queue" >/dev/null \
+      || fail "[$name] the recheck did not name its wait: $(cat "$state/.wake-queue")"
+    ack_stopped_cycle "$state" || fail "[$name] could not acknowledge the recheck"
+    scope=$(cat "$throttle" 2>/dev/null) || fail "[$name] the recheck recorded no re-surface throttle"
+
+    # The pane renders the harness busy signature while the SAME wait stands.
+    printf 'parked, elapsed 2s\nCtrl+c:cancel' > "$capture_file"
+    parked_watch_round "$state" "$fakebin" "$out" "$capture_file" test:fm-parked absorb \
+      || fail "[$name] watcher exited on a busy poll under a standing declared wait"
+    [ "$(cat "$throttle" 2>/dev/null)" = "$scope" ] \
+      || fail "[$name] a busy poll cleared or replaced the declared wait's re-surface throttle"
+    [ -e "$state/.paused-$key" ] || fail "[$name] a busy poll cleared the declared wait's pause flag"
+
+    printf 'parked, elapsed 3s' > "$capture_file"
+    parked_watch_round "$state" "$fakebin" "$out" "$capture_file" test:fm-parked absorb \
+      || fail "[$name] a busy poll re-armed the stale alarm for an unchanged declared wait"
+    wakes=$(parked_stale_wakes "$state" test:fm-parked)
+    [ "$wakes" -eq 0 ] || fail "[$name] a busy poll cost $wakes extra wake(s) inside the re-surface window"
+
+    set_mtime "$(( $(date +%s) - 2000 ))" "$throttle"
+    printf 'parked, elapsed 4s' > "$capture_file"
+    parked_watch_round "$state" "$fakebin" "$out" "$capture_file" test:fm-parked exit \
+      || fail "[$name] a declared wait stopped re-surfacing after a busy poll"
+    wakes=$(parked_stale_wakes "$state" test:fm-parked)
+    [ "$wakes" -eq 1 ] || fail "[$name] elapsed re-surface window produced $wakes wakes instead of one"
+    grep -F "$expected" "$state/.wake-queue" >/dev/null \
+      || fail "[$name] the elapsed recheck lost its wait annotation: $(cat "$state/.wake-queue")"
+    ack_stopped_cycle "$state" || fail "[$name] could not acknowledge the elapsed re-surface"
+  done
+
+  for spec in \
+    'paused-working-race|paused: waiting on the bhavcopy download to finish (pid 41221)' \
+    'captain-held-working-race|captain-held [key=route]: awaiting the captain on the routing call'
+  do
+    name=${spec%%|*}; status_line=${spec#*|}
+    dir=$(parked_wait_fixture "$name" "$status_line" 2000); state="$dir/state"; fakebin="$dir/fakebin"
+    out="$dir/watch.out"; capture_file="$dir/pane.txt"
+    throttle="$state/.paused-resurfaced-$key"
+    parked_watch_round "$state" "$fakebin" "$out" "$capture_file" test:fm-parked exit \
+      || fail "[$name] an aged declared wait was not rechecked"
+    ack_stopped_cycle "$state" || fail "[$name] could not acknowledge the recheck"
+    scope=$(cat "$throttle" 2>/dev/null) || fail "[$name] the recheck recorded no re-surface throttle"
+
+    # Force the next sight to re-read crew state, whose own capture lands on the
+    # blip and returns a provably-working verdict.
+    set_mtime "$(( $(date +%s) - 2000 ))" "$state/.paused-rechecked-$key"
+    printf 'parked, elapsed 2s' > "$capture_file"
+    parked_watch_round "$state" "$fakebin" "$out" "$capture_file" test:fm-parked absorb \
+      'state: working · source: pane · mid-blip' \
+      || fail "[$name] watcher exited on a racing working verdict under a standing declared wait"
+    grep -F 'provably working' "$state/.watch-triage.log" >/dev/null \
+      || fail "[$name] the racing working verdict never reached a working arm: $(cat "$state/.watch-triage.log")"
+    [ "$(cat "$throttle" 2>/dev/null)" = "$scope" ] \
+      || fail "[$name] a racing working verdict retired the declared wait's re-surface throttle"
+
+    printf 'parked, elapsed 3s' > "$capture_file"
+    parked_watch_round "$state" "$fakebin" "$out" "$capture_file" test:fm-parked absorb \
+      || fail "[$name] a racing working verdict re-armed the alarm for an unchanged declared wait"
+    wakes=$(parked_stale_wakes "$state" test:fm-parked)
+    [ "$wakes" -eq 0 ] || fail "[$name] a racing working verdict cost $wakes extra wake(s) inside the re-surface window"
+
+    set_mtime "$(( $(date +%s) - 2000 ))" "$throttle"
+    printf 'parked, elapsed 4s' > "$capture_file"
+    parked_watch_round "$state" "$fakebin" "$out" "$capture_file" test:fm-parked exit \
+      || fail "[$name] a declared wait stopped re-surfacing after a racing working verdict"
+    wakes=$(parked_stale_wakes "$state" test:fm-parked)
+    [ "$wakes" -eq 1 ] || fail "[$name] elapsed re-surface window produced $wakes wakes instead of one"
+    ack_stopped_cycle "$state" || fail "[$name] could not acknowledge the elapsed re-surface"
+  done
+
+  # The disconfirming half: a crew that declared NO wait keeps alarming on each
+  # new stale hash across the same busy poll.
+  dir=$(parked_wait_fixture undeclared-busy-blip 'working: pulling the universe file' 0)
+  state="$dir/state"; fakebin="$dir/fakebin"; out="$dir/watch.out"; capture_file="$dir/pane.txt"
+  throttle="$state/.paused-resurfaced-$key"
+  parked_watch_round "$state" "$fakebin" "$out" "$capture_file" test:fm-parked exit \
+    'state: stopped · source: pane · idle' \
+    || fail "[undeclared] a silent crew with no declared wait did not surface"
+  ack_stopped_cycle "$state" || fail "[undeclared] could not acknowledge the first surface"
+  [ ! -e "$throttle" ] || fail "[undeclared] an undeclared crew recorded a declared-wait throttle"
+  printf 'parked, elapsed 2s\nCtrl+c:cancel' > "$capture_file"
+  parked_watch_round "$state" "$fakebin" "$out" "$capture_file" test:fm-parked absorb \
+    'state: stopped · source: pane · idle' \
+    || fail "[undeclared] watcher exited on a busy poll"
+  printf 'parked, elapsed 3s' > "$capture_file"
+  parked_watch_round "$state" "$fakebin" "$out" "$capture_file" test:fm-parked exit \
+    'state: stopped · source: pane · idle' \
+    || fail "[undeclared] a silent crew stopped alarming on a new stale hash"
+  wakes=$(parked_stale_wakes "$state" test:fm-parked)
+  [ "$wakes" -eq 1 ] || fail "[undeclared] a silent crew produced $wakes wakes instead of one"
+  ack_stopped_cycle "$state" || fail "[undeclared] could not acknowledge the second surface"
+  pass "neither a busy poll nor a racing working verdict retires a standing declared wait's re-surface throttle, while an undeclared silent crew keeps alarming"
+}
+
+# A status write that does not change what is awaited must not restart the
+# declared wait's re-surface cadence or its age: a repeated identical declaration,
+# a stamped re-declaration, a continuation line, and a note: are all absorbed until
+# the cadence elapses, and the recheck then reports how long THAT wait has held.
+# A genuinely changed declaration still surfaces on first inspection with its own
+# age. Adapted from https://github.com/kunchenguid/firstmate/pull/4742 (with the
+# note: write from https://github.com/kunchenguid/firstmate/pull/4818).
+test_absorbed_wait_cadence_survives_a_status_write_that_keeps_the_wait() {
+  local spec name initial changed label dir state fakebin out capture_file key throttle
+  local wakes waited write stamped
+  key=test_fm-parked
+  for spec in \
+    'paused-unchanged-write|paused: waiting on validation run one|paused: waiting on validation run two|paused' \
+    'captain-held-unchanged-write|captain-held [key=route]: awaiting the routing call|captain-held [key=route]: awaiting the release call|captain-held'
+  do
+    name=${spec%%|*}; spec=${spec#*|}
+    initial=${spec%%|*}; spec=${spec#*|}
+    changed=${spec%%|*}; label=${spec#*|}
+    dir=$(parked_wait_fixture "$name" "$initial" 2000); state="$dir/state"; fakebin="$dir/fakebin"
+    out="$dir/watch.out"; capture_file="$dir/pane.txt"
+    throttle="$state/.paused-resurfaced-$key"
+    parked_watch_round "$state" "$fakebin" "$out" "$capture_file" test:fm-parked exit \
+      || fail "[$name] initial aged declared wait did not re-surface"
+    ack_stopped_cycle "$state" || fail "[$name] could not acknowledge the initial declared wait"
+
+    stamped="${initial%%:*} [at=$(date +%s)]:${initial#*:}"
+    for write in "$initial" "$stamped" 'continuation of the same wait, nothing changed' \
+      'note: the upstream PR merged, waiting for the tag'; do
+      parked_status_write "$state" "$write"
+      printf 'idle after write: %s' "$write" > "$capture_file"
+      parked_watch_round "$state" "$fakebin" "$out" "$capture_file" test:fm-parked absorb \
+        || fail "[$name] a status write that kept the wait woke the supervisor before the cadence: $write"
+      wakes=$(parked_stale_wakes "$state" test:fm-parked)
+      [ "$wakes" -eq 0 ] || fail "[$name] a status write that kept the wait produced $wakes wakes before the cadence: $write"
+    done
+
+    set_mtime "$(( $(date +%s) - 2000 ))" "$throttle"
+    printf 'idle once the cadence elapsed' > "$capture_file"
+    parked_watch_round "$state" "$fakebin" "$out" "$capture_file" test:fm-parked exit \
+      || fail "[$name] the unchanged wait did not re-surface once its cadence elapsed"
+    wakes=$(parked_stale_wakes "$state" test:fm-parked)
+    [ "$wakes" -eq 1 ] || fail "[$name] the elapsed cadence produced $wakes wakes instead of one"
+    waited=$(sed -n "s/.*($label \([0-9][0-9]*\)s,.*/\1/p" "$state/.wake-queue" | head -1)
+    [ -n "$waited" ] && [ "$waited" -ge 1900 ] \
+      || fail "[$name] a status write that kept the wait reset its age: $(cat "$state/.wake-queue")"
+    ack_stopped_cycle "$state" || fail "[$name] could not acknowledge the elapsed recheck"
+
+    parked_status_write "$state" "$changed"
+    printf 'idle after the changed declaration' > "$capture_file"
+    parked_watch_round "$state" "$fakebin" "$out" "$capture_file" test:fm-parked exit \
+      || fail "[$name] a changed declaration inherited the unchanged wait's throttle"
+    wakes=$(parked_stale_wakes "$state" test:fm-parked)
+    [ "$wakes" -eq 1 ] || fail "[$name] a changed declaration produced $wakes wakes instead of one"
+    waited=$(sed -n "s/.*($label \([0-9][0-9]*\)s,.*/\1/p" "$state/.wake-queue" | head -1)
+    [ -n "$waited" ] && [ "$waited" -lt 500 ] \
+      || fail "[$name] a changed declaration kept the previous wait's age: $(cat "$state/.wake-queue")"
+  done
+  pass "a status write that keeps a paused or captain-held wait keeps its cadence and age, while a changed declaration surfaces at once"
+}
+
+# Leaving a wait and declaring the identical text again is a new logical wait
+# even when both writes land between two watcher polls, so it never inherits the
+# previous wait's silence; a text-only identity could not tell them apart.
+test_identical_wait_declared_again_between_polls_is_a_new_episode() {
+  local dir state fakebin out capture_file wakes waited
+  dir=$(parked_wait_fixture redeclared-between-polls 'paused: waiting on CI' 2000)
+  state="$dir/state"; fakebin="$dir/fakebin"; out="$dir/watch.out"; capture_file="$dir/pane.txt"
+  parked_watch_round "$state" "$fakebin" "$out" "$capture_file" test:fm-parked exit \
+    || fail "the aged declared wait was not rechecked"
+  ack_stopped_cycle "$state" || fail "could not acknowledge the first recheck"
+  parked_status_write "$state" 'working: fixing the CI failure' 'paused: waiting on CI'
+  printf 'parked again' > "$capture_file"
+  parked_watch_round "$state" "$fakebin" "$out" "$capture_file" test:fm-parked exit \
+    || fail "an identical wait declared again between polls inherited the previous wait's throttle"
+  wakes=$(parked_stale_wakes "$state" test:fm-parked)
+  [ "$wakes" -eq 1 ] || fail "the re-entered wait produced $wakes wakes instead of one"
+  waited=$(sed -n 's/.*(paused \([0-9][0-9]*\)s,.*/\1/p' "$state/.wake-queue" | head -1)
+  [ -n "$waited" ] && [ "$waited" -lt 500 ] \
+    || fail "the re-entered wait kept the previous wait's age: $(cat "$state/.wake-queue")"
+  pass "an identical wait declared again after leaving it, between two polls, is a new episode"
+}
+
+# A stamped declaration is aged from its own stamp rather than the file's mtime,
+# so a later note or restart cannot make an old wait look young, and a stamp in
+# the future is clamped to zero rather than published as a negative age or used
+# to push the recheck out.
+test_declared_wait_age_uses_the_declaration_stamp() {
+  local dir state fakebin out capture_file stamp waited
+  stamp=$(( $(date +%s) - 3000 ))
+  dir=$(parked_wait_fixture stamped-age "paused [at=$stamp]: waiting on the vendor window" 0)
+  state="$dir/state"; fakebin="$dir/fakebin"; out="$dir/watch.out"; capture_file="$dir/pane.txt"
+  parked_watch_round "$state" "$fakebin" "$out" "$capture_file" test:fm-parked exit \
+    || fail "a declaration stamped past the cadence was not rechecked"
+  waited=$(sed -n 's/.*(paused \([0-9][0-9]*\)s,.*/\1/p' "$state/.wake-queue" | head -1)
+  [ -n "$waited" ] && [ "$waited" -ge 3000 ] \
+    || fail "the recheck was not aged from the declaration's stamp: $(cat "$state/.wake-queue")"
+  stamp=$(( $(date +%s) + 90000 ))
+  dir=$(parked_wait_fixture future-stamp "paused [at=$stamp]: waiting on the vendor window" 2000)
+  state="$dir/state"; fakebin="$dir/fakebin"; out="$dir/watch.out"; capture_file="$dir/pane.txt"
+  parked_watch_round "$state" "$fakebin" "$out" "$capture_file" test:fm-parked absorb \
+    || fail "a future-stamped declaration published a recheck instead of clamping its age to zero"
+  [ "$(parked_stale_wakes "$state" test:fm-parked)" -eq 0 ] \
+    || fail "a future-stamped declaration queued a wake"
+  pass "a stamped declaration is aged from its stamp, and a future stamp clamps to zero"
+}
+
+# One logical wait publishes one recheck per cadence window across routes: a
+# recheck the idle declared-wait cadence published is not repeated when the pane
+# moves to the wedge route under a working verdict, because both routes share the
+# declaration's identity and throttle.
+test_declared_wait_recheck_is_shared_with_the_wedge_route() {
+  local dir state fakebin out capture key
+  dir=$(wedge_threshold_fixture shared-throttle 'paused: waiting on the upstream release' 2000)
+  state="$dir/state"; fakebin="$dir/fakebin"; out="$dir/watch.out"; capture="$dir/pane.txt"
+  key=test_fm-wedge
+  rm -f "$state/.stale-$key"
+  wedge_threshold_round "$state" "$fakebin" "$out" "$capture" test:fm-wedge \
+    'state: paused · source: status-log · waiting' exit \
+    || fail "the idle declared-wait recheck did not fire"
+  ack_stopped_cycle "$state" || fail "could not acknowledge the idle recheck"
+  [ "$(wedge_stale_wakes "$state" test:fm-wedge)" -eq 0 ] || fail "the acknowledged recheck stayed queued"
+  wedge_threshold_round "$state" "$fakebin" "$out" "$capture" test:fm-wedge \
+    'state: working · source: run-step · validating (running)' absorb \
+    || fail "the wedge route published a second recheck inside the same window: $(cat "$out")"
+  [ "$(wedge_stale_wakes "$state" test:fm-wedge)" -eq 0 ] \
+    || fail "the wedge route queued a recheck inside the idle recheck's window: $(cat "$state/.wake-queue")"
+  grep -F 'declared wait explains the quiet' "$state/.watch-triage.log" >/dev/null \
+    || fail "the round never reached the wedge route's declared-wait deferral: $(cat "$state/.watch-triage.log")"
+  set_mtime "$(( $(date +%s) - 2000 ))" "$state/.paused-resurfaced-$key"
+  wedge_threshold_round "$state" "$fakebin" "$out" "$capture" test:fm-wedge \
+    'state: working · source: run-step · validating (running)' exit \
+    || fail "the wedge route stopped rechecking once the shared window elapsed"
+  [ "$(wedge_stale_wakes "$state" test:fm-wedge)" -eq 1 ] \
+    || fail "the elapsed shared window produced $(wedge_stale_wakes "$state" test:fm-wedge) wakes instead of one"
+  grep -F 'declared wait' "$state/.wake-queue" >/dev/null \
+    || fail "the wedge-route recheck did not name the declared wait: $(cat "$state/.wake-queue")"
+  pass "a declared wait's idle and wedge routes share one recheck per cadence window"
 }
 
 test_live_paused_until_controls_recheck_time() {
@@ -6441,6 +6738,11 @@ test_declared_pause_is_absorbed_for_every_agent_liveness_verdict
 test_exited_declared_pause_is_bounded_and_live_gate_uses_pause_cadence
 test_absorbed_replacement_wait_does_not_inherit_the_old_throttle
 test_live_declared_wait_churn_honors_the_resurface_throttle
+test_declared_wait_survives_a_busy_pane_blip
+test_absorbed_wait_cadence_survives_a_status_write_that_keeps_the_wait
+test_identical_wait_declared_again_between_polls_is_a_new_episode
+test_declared_wait_age_uses_the_declaration_stamp
+test_declared_wait_recheck_is_shared_with_the_wedge_route
 test_live_paused_until_controls_recheck_time
 test_wedge_threshold_defers_to_a_declared_wait_under_a_working_verdict
 test_wedge_threshold_keeps_a_wait_past_a_default_key_answer

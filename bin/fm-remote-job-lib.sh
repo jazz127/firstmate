@@ -945,11 +945,11 @@ try:
         ["ps", "-p", str(pid), "-o", "lstart=", "-o", "command="],
         check=True, capture_output=True, text=True)
     line = result.stdout.rstrip("\n")
-    start = line[:24].strip()
+    start = " ".join(line[:24].split())
     command = line[24:].strip()
     if start != expected_start or command != expected_command:
         raise SystemExit(1)
-    signal.pidfd_send_signal(fd, sig)
+    os.pidfd_send_signal(fd, sig)
 finally:
     os.close(fd)
 PY
@@ -1021,7 +1021,7 @@ fm_remote_job_worker_command_matches() { # <worker> <command>
 # survivor. Returns non-zero when any verified worker-tree member is still alive
 # afterwards.
 fm_remote_job_stop_worker_tree() { # <pid> [start] [command]
-  local pid=$1 expected_start=${2:-} expected_command=${3:-} members rescanned survivors member member_start member_command state i=0 alive deadline signal=TERM
+  local pid=$1 expected_start=${2:-} expected_command=${3:-} members rescanned survivors member member_start member_command state i=0 alive deadline signal=TERM signal_failed=0
   case "$pid" in ''|*[!0-9]*) return 1 ;; esac
   [ "$pid" -gt 1 ] || return 1
   if [ -n "$expected_start" ] || [ -n "$expected_command" ]; then
@@ -1051,7 +1051,7 @@ fm_remote_job_stop_worker_tree() { # <pid> [start] [command]
     fi
     while IFS=$(printf '\t') read -r member member_start member_command; do
       fm_remote_job_process_identity_matches "$member" "$member_start" "$member_command" || continue
-      fm_remote_job_signal_identity "$member" "$signal" "$member_start" "$member_command" || true
+      fm_remote_job_signal_identity "$member" "$signal" "$member_start" "$member_command" || signal_failed=1
     done <<< "$members"
     i=0
     while [ "$i" -lt 50 ]; do
@@ -1086,6 +1086,7 @@ fm_remote_job_stop_worker_tree() { # <pid> [start] [command]
     if [ -z "$survivors" ]; then
       return 0
     fi
+    [ "$signal_failed" -eq 0 ] || return 1
     members=$survivors
     signal=KILL
     [ "$SECONDS" -lt "$deadline" ] || return 1

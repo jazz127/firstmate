@@ -647,7 +647,10 @@ handle_away() {  # <reason-lines>
   if [ -n "$readback" ]; then
     FM_STATE_OVERRIDE="$STATE" "$SCRIPT_DIR/fm-afk-contract.sh" readback > "$readback" 2>/dev/null || : > "$readback"
   fi
-  if ! printf '%s\n' "$reason" \
+  if ! {
+    printf '%s\n' "$reason"
+    printf 'Branch report bindings for this wake: rows=%s row_tasks=%s\n' "$rows" "$row_tasks"
+  } \
     | node "$SCRIPT_DIR/fm-branch-dispatch.mjs" wake-prompt --report "the bin/fm-branch-report.sh command" \
       --away ${readback:+--readback-file "$readback"} > "$WAKE_FILE" 2>/dev/null; then
     [ -z "$readback" ] || rm -f "$readback"

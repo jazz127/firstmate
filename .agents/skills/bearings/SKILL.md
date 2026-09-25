@@ -202,6 +202,8 @@ A merge-ready classification grants no merge authority and the ordinary exact-PR
 
 When filing work corresponding to an upstream ticket, put its canonical issue URL on the structured backlog row and run the observer's `arm` operation.
 That explicit task link, rather than repository membership or a text similarity guess, makes a ready-for-pr transition owned planning input.
+For a landed upstream contribution whose task metadata has been removed, keep the contribution owned by backfilling its PR URL onto the closed originating backlog row with `bin/fm-tasks-axi.sh done <task-id> --pr <url>`.
+The closed row's structured link remains an owner after the task endpoint is cleaned up; do not rely on prose URLs or create a metadata-only task just to retain ownership.
 After a signal's disposition is durable as filed work, a captain hold, or a recorded no-action decision in the task, acknowledge that exact event token through `ack`.
 Do not acknowledge merely because the signal was read.
 For secondmate-owned contributions, handle and acknowledge in that home and use the existing parent channel for any captain call.

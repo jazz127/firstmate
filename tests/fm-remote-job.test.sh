@@ -147,16 +147,10 @@ if [ "$(uname -s 2>/dev/null || true)" != Linux ]; then
 pass "non-Linux signaling refuses unbound live targets"
 fi
 
-if [ "$(uname -s 2>/dev/null || true)" = Linux ] &&
-  [ "$(date +%d | sed 's/^0//')" -ge 1 ] &&
-  [ "$(date +%d | sed 's/^0//')" -le 9 ]; then
-  SINGLE_DAY_PID=$$
-  SINGLE_DAY_START=$(fm_remote_job_process_start "$SINGLE_DAY_PID")
-  SINGLE_DAY_COMMAND=$(fm_remote_job_process_command "$SINGLE_DAY_PID")
-  fm_remote_job_process_identity_matches "$SINGLE_DAY_PID" "$SINGLE_DAY_START" "$SINGLE_DAY_COMMAND" \
-    || fail "single-digit-day process identity did not normalize ps padding"
-  pass "single-digit-day process identities normalize ps padding"
-fi
+SINGLE_DAY_START=$(fm_remote_job_normalize_process_start 'Mon Sep  1 00:00:00 2025')
+[ "$SINGLE_DAY_START" = 'Mon Sep 1 00:00:00 2025' ] \
+  || fail "single-digit-day process identity did not normalize ps padding"
+pass "single-digit-day process identities normalize ps padding"
 
 if [ "$(uname -s 2>/dev/null || true)" = Linux ] &&
   python3 -c 'import os; raise SystemExit(0 if hasattr(os, "pidfd_open") else 1)' 2>/dev/null; then

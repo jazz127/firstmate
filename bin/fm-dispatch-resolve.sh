@@ -42,7 +42,7 @@
 #     fallback: <runner-up rule taken when the picked rule missed its own floor>
 #     reason: <why the status is not clear>
 #     candidate: <harness>:<model> provider=.. scope=.. remaining=..% spendPriority=.. runway=.. -> eligible | eligible, unranked: <reason> | not eligible: <reason>
-#     profile: --harness <h> [--model <m>] [--effort <e>] [--seat luna] (status clear only)
+#     profile: --harness <h> [--model <m>] [--effort <e>] [--seat luna] [--seat-home <resolved path>] (status clear only)
 #   clear     -> pass the profile line to fm-spawn.sh unless you state a reason to override
 #   ambiguous -> confidence below the floor; decide as today from the probabilities
 #   escalate  -> the rule requires captain approval, no candidate is rankable, or a genuine tie

@@ -144,7 +144,18 @@ if [ "$(uname -s 2>/dev/null || true)" != Linux ]; then
   kill -0 "$NONLINUX_REFUSAL_PID" 2>/dev/null || fail "non-Linux refusal killed the live target"
   kill -KILL "$NONLINUX_REFUSAL_PID" 2>/dev/null || true
   wait "$NONLINUX_REFUSAL_PID" 2>/dev/null || true
-  pass "non-Linux signaling refuses unbound live targets"
+pass "non-Linux signaling refuses unbound live targets"
+fi
+
+if [ "$(uname -s 2>/dev/null || true)" = Linux ] &&
+  [ "$(date +%d | sed 's/^0//')" -ge 1 ] &&
+  [ "$(date +%d | sed 's/^0//')" -le 9 ]; then
+  SINGLE_DAY_PID=$$
+  SINGLE_DAY_START=$(fm_remote_job_process_start "$SINGLE_DAY_PID")
+  SINGLE_DAY_COMMAND=$(fm_remote_job_process_command "$SINGLE_DAY_PID")
+  fm_remote_job_process_identity_matches "$SINGLE_DAY_PID" "$SINGLE_DAY_START" "$SINGLE_DAY_COMMAND" \
+    || fail "single-digit-day process identity did not normalize ps padding"
+  pass "single-digit-day process identities normalize ps padding"
 fi
 
 if [ "$(uname -s 2>/dev/null || true)" = Linux ] &&

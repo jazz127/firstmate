@@ -1411,7 +1411,7 @@ fm_remote_job_linux_worker_processes() { # <remote-root>
     case "$pgid" in ''|*[!0-9]*|0|1) continue ;; esac
     case "$state" in Z*) continue ;; esac
     fm_remote_job_worker_command_matches "$worker" "$command" || continue
-    start="$weekday $month $day $clock $year"
+    start=$(printf '%s\n' "$weekday $month $day $clock $year" | LC_ALL=C awk '{$1=$1; print}') || continue
     [ -n "$start" ] && printf '%s\t%s\t%s\n' "$pid" "$start" "$command"
   done < <("$ps_bin" -u "$uid" -o pid=,pgid=,stat=,lstart=,command= 2>/dev/null)
   return 0
@@ -1446,7 +1446,7 @@ fm_remote_job_process_tree_pids() { # <pid> [start] [command]
   while read -r pid ppid state weekday month day clock year command; do
     case "$pid" in ''|*[!0-9]*) continue ;; esac
     [ "$pid" = "$root" ] || continue
-    start="$weekday $month $day $clock $year"
+    start=$(printf '%s\n' "$weekday $month $day $clock $year" | LC_ALL=C awk '{$1=$1; print}') || continue
     if [ -n "$expected_start" ] && { [ "$start" != "$expected_start" ] || [ "$command" != "$expected_command" ]; }; then
       break
     fi
@@ -1464,7 +1464,7 @@ fm_remote_job_process_tree_pids() { # <pid> [start] [command]
       case "$pid:$ppid" in *[!0-9:]*|:) continue ;; esac
       case " $frontier " in *" $ppid "*) ;; *) continue ;; esac
       case "$state" in Z*) continue ;; esac
-      start="$weekday $month $day $clock $year"
+      start=$(printf '%s\n' "$weekday $month $day $clock $year" | LC_ALL=C awk '{$1=$1; print}') || continue
       [ -n "$start" ] && [ -n "$command" ] || continue
       printf '%s\t%s\t%s\n' "$pid" "$start" "$command"
       next="$next $pid"

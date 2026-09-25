@@ -280,6 +280,43 @@ test_issue_timeline_and_exact_ack() {
   pass 'a transient ready-for-pr label wakes and its exact acknowledgement survives replay'
 }
 
+test_closed_backlog_pr_owns_landed_contribution() {
+  local home url token
+  home=$(new_home closed-backlog-owner)
+  forge_home "$home"
+  url=https://github.com/o/r/pull/8
+  printf '# Backlog\n\n## Queued\n' > "$home/data/backlog.md"
+  rm -rf "$home/data/delivery" "$home/state/delivery.meta"
+  printf -- '- [ ] landed - Landed upstream contribution (repo: sample) (kind: ship)\n' \
+    >> "$home/data/backlog.md"
+  with_home "$home" "$ROOT/bin/fm-tasks-axi.sh" 'done' landed >/dev/null \
+    || fail 'could not close the originating backlog task'
+  with_home "$home" "$ROOT/bin/fm-tasks-axi.sh" 'done' landed --pr "$url" >/dev/null \
+    || fail 'could not backfill the contribution URL onto the closed backlog task'
+  [ ! -e "$home/state/landed.meta" ] || fail 'fixture unexpectedly retained live task metadata'
+  jq -n '[{id:44,user:{login:"maintainer"},author_association:"OWNER",
+    body:"Please clarify the contract",html_url:"https://github.com/o/r/pull/8#issuecomment-44",
+    updated_at:"2026-09-16T08:01:00Z"}]' > "$home/forge/comments.json"
+  with_home "$home" "$ROOT/bin/fm-contributions.sh" poll >/dev/null \
+    || fail 'observer did not accept the closed structured backlog link as an owner'
+  token=$(with_home "$home" "$ROOT/bin/fm-contributions.sh" pending \
+    | jq -er '.[] | select(.url == "https://github.com/o/r/pull/8") | .token') \
+    || fail 'closed backlog owner did not receive the maintainer event'
+  with_home "$home" "$ROOT/bin/fm-contributions.sh" verdict landed "$url" "$HEAD_A" \
+    "$url#issuecomment-44" maintainer 'awaiting maintainer' \
+    || fail 'closed backlog owner could not record the contribution verdict'
+  with_home "$home" "$ROOT/bin/fm-contributions.sh" ack landed "$url" "$token" \
+    || fail 'closed backlog owner could not acknowledge the contribution event'
+  with_home "$home" "$ROOT/bin/fm-contributions.sh" pending \
+    | jq -e 'length == 0' >/dev/null \
+    || fail 'acknowledged contribution event remained pending without task metadata'
+  jq -e --arg head "$HEAD_A" --arg url "$url" \
+    '.records[0].url == $url and .records[0].verdict.head == $head' \
+    "$home/data/landed/contributions.json" >/dev/null \
+    || fail 'closed backlog owner did not retain its verdict after acknowledgement'
+  pass 'closed structured backlog PR link owns verdict and acknowledgement after task metadata cleanup'
+}
+
 test_verdict_retains_judged_head() {
   local home
   home=$(new_home verdict-roundtrip)
@@ -906,7 +943,7 @@ test_author_marker_directive() {
 }
 
 failures=0
-for test_name in test_actor_coverage test_stale_verdict test_unchecked_is_not_silence test_newest_check_has_no_verdict test_comment_wake test_review_wake test_inline_wake test_ready_issue_wake test_fresh_issue_requires_maintainer test_missing_lane_remains_missing test_partial_freshness_keeps_measured_rows test_malformed_record_cannot_prove_silence test_issue_timeline_and_exact_ack test_verdict_retains_judged_head test_observed_replacement_refreshes_verdict test_unobserved_head_leaves_verdict_unknown test_away_yolo_is_fleet_work test_away_yolo_cross_home_is_fleet_work test_retired_and_unsupported_coverage test_unsupported_forge_is_not_fleet_work test_held_unsupported_forge_is_not_captain_work test_shared_contribution_signal_wakes_once test_watcher_keeps_diagnostics_separate_from_contribution_wakes test_expired_child_unsupported_forge_stays_unmeasured test_watcher_surfaces_new_contribution_once test_home_summary_coverage test_unreadable_pending_is_not_empty test_budget_refusal_between_calls test_budget_bounded_call_timeout test_genuine_failure_near_deadline_is_unavailable test_shared_url_observed_once test_terminal_contribution_settles test_late_owner_inherits_terminal_observation test_done_task_open_pr_still_observed test_reservation_defers_later_url_when_fifteen_seconds_do_not_remain test_three_second_pr_reads_complete_fresh_in_one_cycle test_unavailable_forge_records_error_and_wakes_once_per_episode test_late_owner_keeps_failure_episode_suppressed test_automated_reviewer_signal test_automated_reviewer_configuration test_author_marker_directive; do
+for test_name in test_actor_coverage test_stale_verdict test_unchecked_is_not_silence test_newest_check_has_no_verdict test_comment_wake test_review_wake test_inline_wake test_ready_issue_wake test_fresh_issue_requires_maintainer test_missing_lane_remains_missing test_partial_freshness_keeps_measured_rows test_malformed_record_cannot_prove_silence test_issue_timeline_and_exact_ack test_closed_backlog_pr_owns_landed_contribution test_verdict_retains_judged_head test_observed_replacement_refreshes_verdict test_unobserved_head_leaves_verdict_unknown test_away_yolo_is_fleet_work test_away_yolo_cross_home_is_fleet_work test_retired_and_unsupported_coverage test_unsupported_forge_is_not_fleet_work test_held_unsupported_forge_is_not_captain_work test_shared_contribution_signal_wakes_once test_watcher_keeps_diagnostics_separate_from_contribution_wakes test_expired_child_unsupported_forge_stays_unmeasured test_watcher_surfaces_new_contribution_once test_home_summary_coverage test_unreadable_pending_is_not_empty test_budget_refusal_between_calls test_budget_bounded_call_timeout test_genuine_failure_near_deadline_is_unavailable test_shared_url_observed_once test_terminal_contribution_settles test_late_owner_inherits_terminal_observation test_done_task_open_pr_still_observed test_reservation_defers_later_url_when_fifteen_seconds_do_not_remain test_three_second_pr_reads_complete_fresh_in_one_cycle test_unavailable_forge_records_error_and_wakes_once_per_episode test_late_owner_keeps_failure_episode_suppressed test_automated_reviewer_signal test_automated_reviewer_configuration test_author_marker_directive; do
   ( "$test_name" ) || failures=$((failures + 1))
 done
 [ "$failures" -eq 0 ] || fail "$failures contribution regressions"

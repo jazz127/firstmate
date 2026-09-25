@@ -126,6 +126,19 @@ def git_success(project_dir, *args):
                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0
 
 
+def git_patch_id_range(project_dir, base, head, paths):
+    result = subprocess.run(
+        ["git", "-C", str(project_dir), "diff", "--binary", base, head, "--", *paths],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if result.returncode:
+        return None
+    patch = subprocess.run(["git", "patch-id", "--stable"], input=result.stdout,
+                           stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if patch.returncode:
+        return None
+    return patch.stdout.decode().split()[0] if patch.stdout.split() else None
+
+
 def remote_identity(url):
     if url.startswith("git@"):
         host, _separator, path = url[4:].partition(":")
@@ -613,17 +626,29 @@ def cmd_registration_check_locked(args):
             fail("upstream PR head differs from the contribution worktree")
         actual = git_output(worktree, "log", "--reverse", "--format=%H", f"{args.upstream_base}..HEAD")
         source_commits = record.get("source_commits")
-        if actual is None or not isinstance(source_commits, list):
+        if actual is None or not isinstance(source_commits, list) or not source_commits:
             fail("upstream PR commits differ from the ordered source commits")
         actual_commits = actual.splitlines()
         if not actual_commits:
             fail("upstream PR patches differ from the ordered source commits")
+        for commit in source_commits:
+            paths = git_output(worktree, "diff-tree", "--root", "--no-commit-id", "--name-only", "-r", commit)
+            if paths is None or any(
+                    not any(path == item or item.endswith("/") and path.startswith(item) for item in allowed)
+                    for path in paths.splitlines() if path):
+                fail("ordered source commit changes an unauthorized path")
         for commit in actual_commits:
             paths = git_output(worktree, "diff-tree", "--root", "--no-commit-id", "--name-only", "-r", commit)
             if paths is None or any(
                     not any(path == item or item.endswith("/") and path.startswith(item) for item in allowed)
                     for path in paths.splitlines() if path):
                 fail("upstream PR commit changes an unauthorized path")
+        source_base = git_output(worktree, "rev-parse", f"{source_commits[0]}^")
+        source_head = source_commits[-1]
+        source_patch = git_patch_id_range(worktree, source_base, source_head, allowed) if source_base else None
+        actual_patch = git_patch_id_range(worktree, args.upstream_base, "HEAD", allowed)
+        if not source_patch or source_patch != actual_patch:
+            fail("upstream PR content differs from the ordered source commits")
     changed = args.changed_path
     if not changed:
         fail("upstream change has no validated changed paths")

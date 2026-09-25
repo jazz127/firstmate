@@ -4236,6 +4236,9 @@ trap 'rm -f -- "\$HOOK_STDIN"' EXIT
 cat >"\$HOOK_STDIN" || exit 1
 while read -r local_ref local_oid remote_ref remote_oid; do
   [ -n "\${local_oid:-}" ] || continue
+  case "\$remote_oid" in
+    0000000000000000000000000000000000000000) continue ;;
+  esac
   case "\$local_oid" in
     0000000000000000000000000000000000000000) continue ;;
   esac

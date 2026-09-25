@@ -17,6 +17,8 @@ No agent harness and no model runs anywhere in the fixture.
 
 The child's only action is the ordinary crewmate status append, typed into its own pane with `tmux send-keys`.
 The mate's only actions are the scripts a firstmate runs when it registers a PR and when it holds a task for the captain and records the answer.
+This fixture predates the reporting-boundary published-body validation, so its PR line verifies delivery only and is not evidence that the referenced body passed validation.
+Current reporting follows the reporting-boundary contract in [`AGENTS.md`](../../AGENTS.md).
 
 ## Transcript
 

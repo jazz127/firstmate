@@ -925,7 +925,13 @@ fm_remote_job_process_identity_matches() { # <pid> <start> <command>
 }
 
 fm_remote_job_signal_identity() { # <pid> <signal> <start> <command>
-  local pid=$1 signal=$2 expected_start=$3 expected_command=$4
+  local pid=$1 signal=$2 expected_start=$3 expected_command=$4 state
+  if ! fm_remote_job_process_identity_matches "$pid" "$expected_start" "$expected_command"; then
+    state=$(fm_remote_job_process_state "$pid" 2>/dev/null || true)
+    case "$state" in Z*) return 0 ;; esac
+    kill -0 "$pid" 2>/dev/null && return 1
+    return 0
+  fi
   case "$(uname -s 2>/dev/null || true)" in
     Linux)
       if command -v python3 >/dev/null 2>&1; then
@@ -945,13 +951,16 @@ try:
 except AttributeError:
     raise SystemExit(2)
 except OSError as exc:
-    if exc.errno in (errno.EINVAL, errno.ENOSYS):
+    if exc.errno in (errno.ESRCH, errno.EINVAL, errno.ENOSYS):
         raise SystemExit(2)
     raise
 try:
-    result = subprocess.run(
-        ["ps", "-p", str(pid), "-o", "lstart=", "-o", "command="],
-        check=True, capture_output=True, text=True)
+    try:
+        result = subprocess.run(
+            ["ps", "-p", str(pid), "-o", "lstart=", "-o", "command="],
+            check=True, capture_output=True, text=True)
+    except subprocess.CalledProcessError:
+        raise SystemExit(0)
     line = result.stdout.rstrip("\n")
     start = " ".join(line[:24].split())
     command = line[24:].strip()
@@ -962,6 +971,8 @@ try:
     except AttributeError:
         raise SystemExit(2)
     except OSError as exc:
+        if exc.errno == errno.ESRCH:
+            raise SystemExit(0)
         if exc.errno in (errno.EINVAL, errno.ENOSYS):
             raise SystemExit(2)
         raise
@@ -972,14 +983,26 @@ PY
         [ "$status" -eq 0 ] && return 0
         [ "$status" -ne 2 ] && return "$status"
       fi
-      fm_remote_job_process_identity_matches "$pid" "$expected_start" "$expected_command" || return 1
-      kill -"$signal" "$pid" 2>/dev/null || return 1
-      fm_remote_job_process_identity_matches "$pid" "$expected_start" "$expected_command" || return 0
+      if ! kill -"$signal" "$pid" 2>/dev/null; then
+        fm_remote_job_process_identity_matches "$pid" "$expected_start" "$expected_command" && return 1
+        kill -0 "$pid" 2>/dev/null && return 1
+        return 0
+      fi
+      if ! fm_remote_job_process_identity_matches "$pid" "$expected_start" "$expected_command"; then
+        kill -0 "$pid" 2>/dev/null && return 1
+        return 0
+      fi
       ;;
     *)
-      fm_remote_job_process_identity_matches "$pid" "$expected_start" "$expected_command" || return 1
-      kill -"$signal" "$pid" 2>/dev/null || return 1
-      fm_remote_job_process_identity_matches "$pid" "$expected_start" "$expected_command" || return 0
+      if ! kill -"$signal" "$pid" 2>/dev/null; then
+        fm_remote_job_process_identity_matches "$pid" "$expected_start" "$expected_command" && return 1
+        kill -0 "$pid" 2>/dev/null && return 1
+        return 0
+      fi
+      if ! fm_remote_job_process_identity_matches "$pid" "$expected_start" "$expected_command"; then
+        kill -0 "$pid" 2>/dev/null && return 1
+        return 0
+      fi
       ;;
   esac
 }
@@ -1044,7 +1067,7 @@ fm_remote_job_worker_command_matches() { # <worker> <command>
 # survivor. Returns non-zero when any verified worker-tree member is still alive
 # afterwards.
 fm_remote_job_stop_worker_tree() { # <pid> [start] [command]
-  local pid=$1 expected_start=${2:-} expected_command=${3:-} members rescanned survivors member member_start member_command state i=0 alive deadline signal=TERM signal_failed=0
+  local pid=$1 expected_start=${2:-} expected_command=${3:-} members rescanned survivors member member_start member_command state i=0 alive deadline signal=TERM signal_failed=0 root_live descendant_tree
   case "$pid" in ''|*[!0-9]*) return 1 ;; esac
   [ "$pid" -gt 1 ] || return 1
   if [ -n "$expected_start" ] || [ -n "$expected_command" ]; then
@@ -1097,7 +1120,9 @@ fm_remote_job_stop_worker_tree() { # <pid> [start] [command]
       sleep 0.1
     done
     survivors=
+    root_live=0
     if fm_remote_job_process_identity_matches "$pid" "$expected_start" "$expected_command"; then
+      root_live=1
       rescanned=$(fm_remote_job_process_tree_pids "$pid" "$expected_start" "$expected_command" 2>/dev/null) || return 1
       if [ -n "$rescanned" ]; then
         members=$rescanned
@@ -1112,6 +1137,21 @@ fm_remote_job_stop_worker_tree() { # <pid> [start] [command]
         survivors="$survivors${survivors:+$'\n'}$(printf '%s\t%s\t%s' "$member" "$member_start" "$member_command")"
       fi
     done <<< "$members"
+    if [ "$root_live" -eq 0 ] && [ -n "$survivors" ]; then
+      rescanned=$survivors
+      while IFS=$(printf '\t') read -r member member_start member_command; do
+        descendant_tree=$(fm_remote_job_process_tree_pids "$member" "$member_start" "$member_command" 2>/dev/null) || return 1
+        [ -n "$descendant_tree" ] && rescanned="$rescanned${rescanned:+$'\n'}$descendant_tree"
+      done <<< "$survivors"
+      members=$rescanned
+      survivors=
+      while IFS=$(printf '\t') read -r member member_start member_command; do
+        if kill -0 "$member" 2>/dev/null &&
+          fm_remote_job_process_identity_matches "$member" "$member_start" "$member_command"; then
+          survivors="$survivors${survivors:+$'\n'}$(printf '%s\t%s\t%s' "$member" "$member_start" "$member_command")"
+        fi
+      done <<< "$members"
+    fi
     if [ -z "$survivors" ]; then
       return 0
     fi

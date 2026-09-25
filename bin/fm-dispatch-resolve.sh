@@ -159,6 +159,8 @@ rules_err=$(jq -r --argjson verified_harnesses "$VERIFIED_HARNESSES" --arg provi
   def duplicate_profiles($items):
     ($items | map([.harness, (.model // null), (.effort // null), (.seat // null)] | @json)) as $keys
     | ($keys | length) != ($keys | unique | length);
+  def invalid_seats($items):
+    [$items[] | select(has("seat") and (.seat != "luna" or .harness != "codex")) | (.seat | tostring)] | unique;
   if type != "object" then "top-level value must be an object"
   elif has("rules") and (.rules | type) != "array" then "rules must be an array"
   elif any((.rules // [])[]; type != "object") then "each rule must be an object"
@@ -169,11 +171,15 @@ rules_err=$(jq -r --argjson verified_harnesses "$VERIFIED_HARNESSES" --arg provi
   elif any((.rules // [])[]; has("select") and .select != "quota-balanced") then
     "unknown select: " + ([.rules[] | select(has("select") and .select != "quota-balanced") | .select] | unique | join(", "))
   elif any((.rules // [])[]; has("floor") and floor_bad(.floor; true)) then "rule floor needs scope, min_percent 0..100, and provider matching ^[a-z0-9]+(-[a-z0-9]+)*\\z"
+  elif (invalid_seats([(.rules // [])[] | profiles(.use)[]]) | length) > 0 then
+    "unsupported use profile seat (only luna on codex): " + (invalid_seats([(.rules // [])[] | profiles(.use)[]]) | join(", "))
   elif any((.rules // [])[] | profiles(.use)[]; profile_bad(.)) then "each use profile needs harness; model, effort, seat, and floor must be well formed, and provider must match ^[a-z0-9]+(-[a-z0-9]+)*\\z when present"
   elif any((.rules // [])[]; duplicate_profiles(profiles(.use))) then "each rule use must not contain duplicate harness, model, and effort profiles"
   elif any((.rules // [])[] | profiles(.use)[]; (verified(.harness) | not)) then "each use profile must name a verified harness"
   elif any((.rules // [])[] | profiles(.use)[]; (effort_ok(.harness; .model; .effort) | not)) then "each use profile effort must be supported by its harness and model"
   elif has("default") and (profiles(.default) | length) == 0 then "default must be a profile object or non-empty profile array"
+  elif has("default") and (invalid_seats(profiles(.default)) | length) > 0 then
+    "unsupported default profile seat (only luna on codex): " + (invalid_seats(profiles(.default)) | join(", "))
   elif has("default") and any(profiles(.default)[]; profile_bad(.)) then "each default profile needs harness; model, effort, seat, and floor must be well formed, and provider must match ^[a-z0-9]+(-[a-z0-9]+)*\\z when present"
   elif has("default") and duplicate_profiles(profiles(.default)) then "default must not contain duplicate harness, model, and effort profiles"
   elif has("default") and any(profiles(.default)[]; (verified(.harness) | not)) then "each default profile must name a verified harness"
@@ -278,7 +284,7 @@ RESULT=$(jq -n --arg floor "$CONFIDENCE_FLOOR" --argjson lat "$LAT_MS" --arg non
   def rows($p; $lane): (prov($p; $lane) | .quotaSemantics.effectiveAvailability // []);
   def bare($m): ($m | split("/") | last);
   def provider_of($c): ($c.provider // $pmap[$c.harness] // null);
-  def lane_of($c): quota_lane($c.harness; $c.model);
+  def lane_of($c): if $c.seat == "luna" then "luna" else quota_lane($c.harness; $c.model) end;
   def measured($p; $lane):
     (prov($p; $lane) != null and (["known", "partial"] | index(prov($p; $lane).quotaSemantics.status)) != null);
   def applicable($p; $lane; $m):

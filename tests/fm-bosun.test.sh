@@ -119,7 +119,9 @@ git_fixture() {
   git -C "$dir/source" add feature.txt
   git -C "$dir/source" commit -qm base
   git clone -q --bare "$dir/source" "$dir/upstream.git"
-  git -C "$dir/source" remote add upstream "$dir/upstream.git"
+  git -C "$dir/source" remote add upstream https://github.com/kunchenguid/sample.git
+  git -C "$dir/source" remote add fork https://github.com/captain/sample.git
+  git -C "$dir/source" config url."$dir/upstream.git".insteadOf https://github.com/kunchenguid/sample.git
   git -C "$dir/source" switch -qc housefeature/maneuver
   mkdir -p "$dir/source/config"
   printf 'private=true\n' > "$dir/source/config/private.env"
@@ -153,6 +155,14 @@ test_contribution() {
     --forge github --owner kunchenguid --repository sample --source housefeature/maneuver \
     --branch "$branch" --captain-words 'Contribute maneuver to kunchenguid/sample' \
     --path feature.txt --commit "$selected" >/dev/null || fail 'order recording failed'
+  if call "$dir" extract --task maneuver --repo "$dir/source" --worktree "$dir/rejected" \
+    --upstream-remote upstream --default-branch develop > "$dir/out" 2>&1; then
+    fail 'caller-selected branch bypassed the ordered branch'
+  fi
+  if call "$dir" extract --task maneuver --repo "$dir/source" --worktree "$dir/rejected" \
+    --upstream-remote fork --default-branch main > "$dir/out" 2>&1; then
+    fail 'fork remote alias was accepted as upstream'
+  fi
   if call "$dir" guard --task maneuver --forge github --owner other \
     --repository sample --repo "$dir/source" > "$dir/out" 2>&1; then
     fail 'changed target was authorized'
@@ -169,8 +179,22 @@ test_contribution() {
     || fail 'fork-only history crossed extraction'
   call "$dir" guard --task maneuver --forge github --owner kunchenguid \
     --repository sample --repo "$dir/extracted" >/dev/null || fail 'clean contribution refused'
+  validation_artifact="$dir/validation.txt"
+  printf '%s\n' 'fixture validation passed' > "$validation_artifact"
   PATH="$dir/fakebin:$PATH" call "$dir" published --task maneuver --repo "$dir/extracted" --url "$url" \
-    --validation 'offline fixture validation artifact' >/dev/null || fail 'publication record refused'
+    --validation "$validation_artifact" >/dev/null || fail 'publication record refused'
+  cp "$dir/data/maneuver/bosun-contribution.json" "$dir/data/maneuver/saved.json"
+  python3 - "$dir/data/maneuver/bosun-contribution.json" <<'PY'
+import json, sys
+p = sys.argv[1]
+data = json.load(open(p))
+data['state'] = 'extracted'
+json.dump(data, open(p, 'w'))
+PY
+  if PATH="$dir/fakebin:$PATH" call "$dir" published --task maneuver --repo "$dir/extracted" --url "$url" --validation "$dir/missing-validation" > "$dir/out" 2>&1; then
+    fail 'missing validation evidence was accepted'
+  fi
+  mv "$dir/data/maneuver/saved.json" "$dir/data/maneuver/bosun-contribution.json"
   for forge_case in unrelated wrong-base unreadable; do
     cp "$dir/data/maneuver/bosun-contribution.json" "$dir/data/maneuver/saved.json"
     python3 - "$dir/data/maneuver/bosun-contribution.json" <<'PY'

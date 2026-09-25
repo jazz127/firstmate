@@ -273,6 +273,14 @@ def git(repo, *arguments, input_bytes=None):
     return result.stdout
 
 
+def remote_identity(repo, remote):
+    raw = git(repo, "config", "--get", f"remote.{remote}.url").decode().strip()
+    match = re.fullmatch(r"(?:https?://|ssh://git@|git@)([^/:]+)[:/]([^/]+)/([^/]+?)(?:\.git)?/?", raw)
+    if not match:
+        fail(f"upstream remote URL is not a forge repository: {raw}")
+    return f"{match.group(1).lower()}/{match.group(2).lower()}/{match.group(3).lower()}"
+
+
 def cmd_extract(args):
     record = contribution(args.task)
     repo = Path(args.repo).resolve()
@@ -285,10 +293,15 @@ def cmd_extract(args):
         primary = Path(git(dest, "worktree", "list", "--porcelain").decode().splitlines()[0][9:]).resolve()
         if top != dest or dest == primary or git(dest, "status", "--porcelain").strip():
             fail("existing destination must be a clean isolated worktree")
-    if args.upstream_remote == "origin":
-        fail("upstream remote must be explicit and distinct from the fork origin")
-    git(repo, "fetch", args.upstream_remote, args.default_branch)
-    upstream = f"{args.upstream_remote}/{args.default_branch}"
+    ordered_branch = record.get("upstream_default_branch")
+    if not ordered_branch or args.default_branch != ordered_branch:
+        fail(f"upstream default branch differs: expected {ordered_branch or 'ordered branch'}, got {args.default_branch}")
+    expected_remote = f"{'github.com' if record['target']['forge'] == 'github' else 'gitlab.com'}/{record['target']['owner']}/{record['target']['repository']}"
+    actual_remote = remote_identity(repo, args.upstream_remote)
+    if actual_remote != expected_remote:
+        fail(f"upstream remote differs: expected {expected_remote}, got {actual_remote}")
+    git(repo, "fetch", args.upstream_remote, ordered_branch)
+    upstream = f"{args.upstream_remote}/{ordered_branch}"
     base = git(repo, "rev-parse", upstream).decode().strip()
     git(repo, "show-ref", "--verify", f"refs/heads/{record['source_branch']}")
     commits = record["source_commits"]
@@ -351,6 +364,9 @@ def cmd_published(args):
     record = contribution(args.task)
     if record["state"] != "extracted" or not args.validation.strip():
         fail("extracted maneuver and validation evidence required")
+    evidence = Path(args.validation).expanduser()
+    if evidence.is_symlink() or not evidence.is_file() or not os.access(evidence, os.R_OK):
+        fail("validation evidence must be a readable regular file")
     cmd_guard(args)
     want = record["target"]
     if want["forge"] == "github":
@@ -370,7 +386,7 @@ def cmd_published(args):
         fail(f"upstream PR base differs: expected {expected_base}, got {actual['base']}")
     if actual["branch"] != record["upstream_default_branch"]:
         fail(f"upstream PR base branch differs: expected {record['upstream_default_branch']}, got {actual['branch']}")
-    record["validation_evidence"] = args.validation
+    record["validation_evidence"] = str(evidence.resolve())
     record["upstream_pr"] = args.url
     record["state"] = "published"
     write_json(contribution_path(args.task), record)

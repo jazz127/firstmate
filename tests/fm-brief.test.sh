@@ -406,6 +406,37 @@ test_no_mistakes_dod_wording() {
   pass "fm-brief.sh: no-mistakes DOD keeps its apostrophe prose and bans --yes outright"
 }
 
+test_pr_body_preflight_is_rendered() {
+  local home id mode brief
+  home="$TMP_ROOT/pr-body-preflight-home"
+  mkdir -p "$home/data"
+  for mode in no-mistakes direct-PR; do
+    id="brief-preflight-$mode"
+    FM_HOME="$home" "$ROOT/bin/fm-brief.sh" "$id" some-proj --mode "$mode" >/dev/null 2>&1 \
+      || fail "$mode brief failed to scaffold"
+    brief="$home/data/$id/brief.md"
+    assert_grep "fm-pr-body-preflight.sh <draft-body-file>" "$brief" \
+      "$mode brief did not give a pre-publication command"
+    assert_grep "\"/tmp/fm-$id\"" "$brief" \
+      "$mode brief did not bind preflight to its own task temp directory"
+    assert_grep "Use one metadata block for the whole body" "$brief" \
+      "$mode brief did not explain the single-block rule"
+    assert_grep "N of M scenarios driven live" "$brief" \
+      "$mode brief did not flag the generated scenario label"
+    assert_grep "a Markdown bullet such as \`- evidence-artifact: ...\` is not recognised" "$brief" \
+      "$mode brief did not warn that bullet-prefixed metadata is ignored"
+    if [ "$mode" = no-mistakes ]; then
+      assert_grep "fm-pr-body-preflight.sh --gh-url <PR URL>" "$brief" \
+        "no-mistakes brief did not require a published-body readback check"
+      assert_grep "correct the description only" "$brief" \
+        "no-mistakes brief did not constrain correction to the PR description"
+      assert_grep "before the CI-ready \`done:\`" "$brief" \
+        "no-mistakes brief did not gate its ready report on the readback"
+    fi
+  done
+  pass "fm-brief.sh: publishing briefs render the draft-body preflight contract"
+}
+
 # The green-PR report must not depend on a status poll: `axi status` never
 # reports `checks-passed` while the ci step monitors the PR for merge, so a
 # worker told to wait on it for the next gate or outcome never learned its PR
@@ -1259,6 +1290,7 @@ test_ship_mode_is_explicit_not_registry
 test_delivery_flags_are_refused_where_they_do_not_apply
 test_faster_paths_use_configured_authority_without_stacked_review
 test_no_mistakes_dod_wording
+test_pr_body_preflight_is_rendered
 test_no_mistakes_dod_green_detection
 test_pr_based_dod_requires_non_draft
 test_ask_user_escalation_format

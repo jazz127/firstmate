@@ -971,11 +971,11 @@ fm_remote_job_worker_process_group() { # <pid>
 # survivor. Signals the isolated worker group when one is provable and the lone
 # process otherwise. Returns non-zero when any verified worker-group member is
 # still alive afterwards.
-fm_remote_job_stop_worker_tree() { # <pid>
-  local pid=$1 pgid i=0
+fm_remote_job_stop_worker_tree() { # <pid> [process-only]
+  local pid=$1 mode=${2:-} pgid i=0
   case "$pid" in ''|*[!0-9]*) return 1 ;; esac
   [ "$pid" -gt 1 ] || return 1
-  pgid=$(fm_remote_job_worker_process_group "$pid" 2>/dev/null || true)
+  if [ "$mode" = process-only ]; then pgid=; else pgid=$(fm_remote_job_worker_process_group "$pid" 2>/dev/null || true); fi
   if [ -n "$pgid" ]; then kill -TERM -- "-$pgid" 2>/dev/null || true; else kill -TERM "$pid" 2>/dev/null || true; fi
   while { [ -n "$pgid" ] && kill -0 -- "-$pgid" 2>/dev/null || [ -z "$pgid" ] && kill -0 "$pid" 2>/dev/null; } \
     && [ "$i" -lt 50 ]; do
@@ -1275,7 +1275,11 @@ fm_remote_job_linux_reap_worker_groups() { # <remote-root> <keep-pid> <keep-pgid
     if [ -n "$keep_isolated" ] && [ "$pgid" = "$keep_isolated" ]; then
       continue
     fi
-    fm_remote_job_stop_worker_tree "$pid" || return 1
+    if [ -n "$keep_pgid" ] && [ "$pgid" = "$keep_pgid" ] && [ -z "$keep_isolated" ]; then
+      fm_remote_job_stop_worker_tree "$pid" process-only || return 1
+    else
+      fm_remote_job_stop_worker_tree "$pid" || return 1
+    fi
   done <<< "$processes"
   processes=$(fm_remote_job_linux_worker_processes "$root") || return 1
   while read -r pid pgid; do

@@ -44,6 +44,10 @@ FM_HOME="${FM_HOME:-${FM_ROOT_OVERRIDE:-$FM_ROOT}}"
 STATE="${FM_STATE_OVERRIDE:-$FM_HOME/state}"
 TURN_FILE="$STATE/.supervision-host-turn"
 RECEIPTS="$STATE/.supervision-host-receipts"
+RECEIPT_LOCK="$STATE/.supervision-host-receipts.lock"
+
+# shellcheck source=bin/fm-wake-lib.sh
+. "$SCRIPT_DIR/fm-wake-lib.sh"
 
 usage() {
   sed -n '/^# Usage:/,/^# --wake/p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//' >&2
@@ -112,10 +116,15 @@ if [ "$ROW_TASK" != fleet ]; then
   [ "$TASK" = "$ROW_TASK" ] \
     || refuse "wake row $ROW names $ROW_TASK, not $TASK; report only that event's task, never fleet or a task from memory"
 fi
+fm_lock_acquire_wait "$RECEIPT_LOCK" || {
+  echo "receipt lock could not be acquired (nothing recorded)" >&2
+  exit 1
+}
 if awk -F '\t' -v turn="$TURN" -v row="$ROW" '
   $1 == turn && $5 == row { found = 1 }
   END { exit(found ? 0 : 1) }
 ' "$RECEIPTS" 2>/dev/null; then
+  fm_lock_release "$RECEIPT_LOCK"
   refuse "wake row $ROW already has an outcome for turn $TURN"
 fi
 
@@ -124,16 +133,17 @@ fi
 set -- append --task "$TASK" --verdict "$VERDICT" --summary "$SUMMARY" --silent "$SILENT"
 [ -z "$WAKE" ] || set -- "$@" --wake "$WAKE"
 if ! SEQ=$("$SCRIPT_DIR/fm-branch-outcome.sh" "$@"); then
+  fm_lock_release "$RECEIPT_LOCK"
   echo "outcome store append failed (nothing recorded)" >&2
   exit 1
 fi
 printf '%s\t%s\t%s\t%s\t%s\n' "$TURN" "$SEQ" "$VERDICT" "$TASK" "$ROW" >> "$RECEIPTS" || {
+  fm_lock_release "$RECEIPT_LOCK"
   echo "recorded seq $SEQ, but the host receipt could not be written; the host will hand this wake to MAIN" >&2
   exit 1
 }
+fm_lock_release "$RECEIPT_LOCK"
 if [ ! -f "$STATE/.afk-contract" ]; then
-  # shellcheck source=bin/fm-wake-lib.sh
-  . "$SCRIPT_DIR/fm-wake-lib.sh"
   if ! fm_wake_append check "supervision-host-return:$SEQ" \
     "check: supervision-host outcome $SEQ for $TASK [$VERDICT] was recorded after the captain returned, so the return brief may not show it; relay it to the captain: $SUMMARY"; then
     printf 'recorded seq %s [%s], but the captain has returned and its relay to MAIN could not be queued; the host hands this turn to MAIN\n' "$SEQ" "$VERDICT" >&2

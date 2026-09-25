@@ -250,6 +250,34 @@ test_report_surface_enforces_actor_turn_and_scope() {
   pass "report surface: only the branch actor's current turn and exact wake row may report"
 }
 
+test_concurrent_reports_serialize_one_receipt_per_row() {
+  local home state first second successes refusals
+  home="$TMP_ROOT/report-lock"
+  state="$home/state"
+  mkdir -p "$state"
+  printf 'turn=t1\nrows=4\nrow_tasks=4=alpha\ntasks=alpha\nunscoped=0\nwake=signal: alpha.status\n' > "$state/.supervision-host-turn"
+  # shellcheck source=bin/fm-wake-lib.sh
+  . "$ROOT/bin/fm-wake-lib.sh"
+  fm_lock_acquire_wait "$state/.supervision-host-receipts.lock" || fail "fixture could not hold the receipt lock"
+  (FM_HOME="$home" FM_SUPERVISION_ACTOR=branch FM_BRANCH_REPORT_TURN=t1 "$REPORT" --row 4 --task alpha --verdict routine --summary first > "$home/first.out" 2>&1; echo "$?" > "$home/first.rc") &
+  first=$!
+  (FM_HOME="$home" FM_SUPERVISION_ACTOR=branch FM_BRANCH_REPORT_TURN=t1 "$REPORT" --row 4 --task alpha --verdict routine --summary second > "$home/second.out" 2>&1; echo "$?" > "$home/second.rc") &
+  second=$!
+  sleep 0.3
+  if [ -e "$home/first.rc" ] || [ -e "$home/second.rc" ]; then
+    fm_lock_release "$state/.supervision-host-receipts.lock"
+    fail "a report completed while another process held the receipt lock"
+  fi
+  fm_lock_release "$state/.supervision-host-receipts.lock"
+  wait "$first" "$second" || fail "report processes did not exit"
+  successes=$(awk '$1 == 0 { n++ } END { print n + 0 }' "$home/first.rc" "$home/second.rc")
+  refusals=$(awk '$1 == 3 { n++ } END { print n + 0 }' "$home/first.rc" "$home/second.rc")
+  [ "$successes" -eq 1 ] && [ "$refusals" -eq 1 ] || fail "concurrent reports did not yield one success and one duplicate refusal"
+  [ "$(wc -l < "$state/.supervision-host-receipts" | tr -d ' ')" -eq 1 ] || fail "concurrent reports wrote more than one receipt"
+  [ "$(wc -l < "$state/branch-outcomes.jsonl" | tr -d ' ')" -eq 1 ] || fail "concurrent reports wrote more than one outcome"
+  pass "report surface: concurrent claims on one wake row serialize through the receipt lock"
+}
+
 # The return brief is rendered after the record is archived, so a report made
 # after that may be missing from it: the report itself queues the relay for
 # main, durably, while a report made during the away window only waits for the
@@ -831,6 +859,7 @@ test_superseded_host_leaves_the_owner_untouched() {
 }
 
 test_report_surface_enforces_actor_turn_and_scope
+test_concurrent_reports_serialize_one_receipt_per_row
 test_report_after_the_return_is_queued_for_main
 test_dispatch_entry_scopes_rows_and_renders_the_away_tail
 test_attended_close_passes_straight_to_main

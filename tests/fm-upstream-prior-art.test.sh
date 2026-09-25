@@ -156,6 +156,16 @@ cat > "$TMP_ROOT/decisions.json" <<'JSON'
  {"url":"https://github.com/owner/demo/issues/4","verdict":"distinct","reason":"Tracks the report, not this implementation."}]}
 JSON
 "$tool" decide --record "$TMP_ROOT/prior-art.json" --decisions-file "$TMP_ROOT/decisions.json" > "$TMP_ROOT/out" || fail 'distinct decision failed'
+cp "$TMP_ROOT/prior-art.json" "$TMP_ROOT/prior-art-good.json"
+python3 - "$TMP_ROOT/prior-art.json" <<'PY'
+import json, sys
+p=sys.argv[1]; r=json.load(open(p)); r['captain_decision']={}; open(p,'w').write(json.dumps(r))
+PY
+if "$tool" publish "${common[@]}" --body-file "$TMP_ROOT/body.md" --head owner:fix > "$TMP_ROOT/out" 2>&1; then
+  fail 'malformed captain decision was accepted'
+fi
+! rg -q 'Traceback' "$TMP_ROOT/out" || fail 'malformed captain decision crashed'
+mv "$TMP_ROOT/prior-art-good.json" "$TMP_ROOT/prior-art.json"
 "$tool" check "${common[@]}" > "$TMP_ROOT/out" || fail 'fresh distinct record refused'
 export PUBLISHED_HEAD=$(git rev-parse HEAD)
 export FAKE_REMOTE_HEAD=$PUBLISHED_HEAD

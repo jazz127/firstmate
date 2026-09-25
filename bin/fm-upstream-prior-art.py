@@ -130,7 +130,10 @@ def candidate_records(record):
         fail("prior-art record is malformed")
     candidates = record.get("candidates")
     if not isinstance(candidates, list) or any(
-        not isinstance(candidate, dict) or not isinstance(candidate.get("url"), str) or not candidate["url"]
+        not isinstance(candidate, dict)
+        or any(not isinstance(candidate.get(key), str) or not candidate[key] for key in ("url", "author", "state", "title", "kind"))
+        or not isinstance(candidate.get("reasons"), list)
+        or any(not isinstance(reason, str) for reason in candidate["reasons"])
         for candidate in candidates
     ):
         fail("prior-art candidates are missing or malformed")
@@ -302,7 +305,7 @@ def decide(args):
     if (verdict == "overlaps") != overlaps:
         fail("overall verdict must match candidate overlap verdicts")
     captain_decision = decision.get("captain_decision", "")
-    if captain_decision and (not isinstance(captain_decision, str) or "\n" in captain_decision):
+    if not isinstance(captain_decision, str) or "\n" in captain_decision:
         fail("captain decision must be one line")
     record["verdict"] = verdict
     record["captain_decision"] = captain_decision
@@ -325,6 +328,9 @@ def checked(args):
         fail("prior-art record is stale: scan is older than one hour")
     verdict = record.get("verdict")
     candidates = candidate_records(record)
+    captain_decision = record.get("captain_decision")
+    if not isinstance(captain_decision, str):
+        fail("prior-art captain decision is malformed")
     if verdict == "none-found" and candidates:
         fail("none-found record has candidates")
     if verdict not in ("none-found", "distinct", "overlaps"):
@@ -334,7 +340,7 @@ def checked(args):
             fail("prior-art candidate decisions are incomplete")
         if (verdict == "overlaps") != any(c["verdict"] == "overlaps" for c in candidates):
             fail("prior-art candidate verdicts conflict")
-    if verdict == "overlaps" and not record.get("captain_decision", "").strip():
+    if verdict == "overlaps" and not captain_decision.strip():
         fail("prior-art overlaps require a recorded captain decision")
     return record
 
@@ -368,7 +374,10 @@ def verify_receipt(args):
         fail("prior-art record is stale: scan is older than one hour")
     verdict = record.get("verdict")
     candidates = candidate_records(record)
-    if verdict not in ("none-found", "distinct", "overlaps") or not isinstance(candidates, list):
+    captain_decision = record.get("captain_decision")
+    if not isinstance(captain_decision, str):
+        fail("prior-art captain decision is malformed")
+    if verdict not in ("none-found", "distinct", "overlaps"):
         fail("prior-art verdict is missing or malformed")
     if verdict == "none-found" and candidates:
         fail("none-found record has candidates")
@@ -383,9 +392,7 @@ def verify_receipt(args):
             fail("prior-art candidate decisions are incomplete")
         if (verdict == "overlaps") != any(candidate["verdict"] == "overlaps" for candidate in candidates):
             fail("prior-art candidate verdicts conflict")
-    if verdict == "overlaps" and not isinstance(record.get("captain_decision"), str):
-        fail("prior-art overlaps require a recorded captain decision")
-    if verdict == "overlaps" and not record["captain_decision"].strip():
+    if verdict == "overlaps" and not captain_decision.strip():
         fail("prior-art overlaps require a recorded captain decision")
     print("prior-art receipt ok")
 

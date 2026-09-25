@@ -22,12 +22,12 @@ printf 'This change fixes stale worker detection.\n' > "$TMP_ROOT/body.md"
 
 cat > "$TMP_ROOT/fakebin/gh-axi" <<'PY'
 #!/usr/bin/env python3
-import base64, json, os, pathlib, sys
+import json, os, pathlib, subprocess, sys
 from urllib.parse import parse_qs, urlparse
 args = sys.argv[1:]
 with open(os.environ["FAKE_LOG"], "a", encoding="utf-8") as log:
     log.write(" ".join(args[:2]) + "\n")
-if os.environ.get("FAKE_TRUNCATE_UNBOUNDED") and "--jq" in args and args[args.index("--jq") + 1] == "(.)|@base64":
+if os.environ.get("FAKE_TRUNCATE_UNBOUNDED") and "--jq" in args and args[args.index("--jq") + 1] == "(.)|tojson|@base64":
     print("api_response:\n  truncated: true")
     sys.exit(0)
 if args[:2] == ["pr", "create"]:
@@ -56,7 +56,8 @@ if parsed.path == "/repos/owner/demo/pulls":
         data = [pr(8, "Stale worker detection fix", "closed"),
                 pr(9, "Stale worker merge", "closed", "2026-09-20T00:00:00Z")] if page == 1 else []
 elif parsed.path == "/repos/owner/demo/issues":
-    data = [issue] if page == 1 else []
+    late_pr = dict(pr(12, "Late paused worker stale fix", "open"), pull_request={"url": "https://api.github.com/repos/owner/demo/pulls/12"})
+    data = [issue, late_pr] if page == 1 else []
 elif parsed.path == "/repos/owner/demo/pulls/7/files":
     data = [{"filename": "worker.py"}]
 elif parsed.path == "/repos/owner/demo/pulls/8/files":
@@ -64,7 +65,7 @@ elif parsed.path == "/repos/owner/demo/pulls/8/files":
 elif parsed.path == "/repos/owner/demo/pulls/11/files":
     data = [{"filename": "unrelated.py"}]
 elif parsed.path == "/repos/owner/demo/git/ref/heads/fix":
-    data = os.environ.get("FAKE_REMOTE_HEAD", "")
+    data = {"object": {"sha": os.environ.get("FAKE_REMOTE_HEAD", "")}}
 elif parsed.path == "/search/issues":
     hit = os.environ.get("FAKE_SEARCH_HIT") and "pauseWorker" in params.get("q", [""])[0] and "is:pr" in params.get("q", [""])[0]
     data = {"total_count": 1 if hit else 0, "incomplete_results": bool(os.environ.get("FAKE_INCOMPLETE")),
@@ -72,7 +73,12 @@ elif parsed.path == "/search/issues":
 else:
     print("unexpected API path " + path, file=sys.stderr)
     sys.exit(2)
-print("api_response:\n  body: " + base64.b64encode(json.dumps(data).encode()).decode() + "\n  truncated: false")
+selected = subprocess.run(["jq", "-r", args[args.index("--jq") + 1]], input=json.dumps(data),
+                          capture_output=True, text=True)
+if selected.returncode:
+    print(selected.stderr, file=sys.stderr)
+    sys.exit(3)
+print("api_response:\n  body: " + selected.stdout.strip() + "\n  truncated: false")
 PY
 chmod +x "$TMP_ROOT/fakebin/gh-axi"
 export PATH="$TMP_ROOT/fakebin:$PATH"
@@ -121,8 +127,10 @@ assert any('shared keywords' in why for why in c['https://github.com/owner/demo/
 assert any('shared keywords' in why for why in c['https://github.com/owner/demo/issues/4']['reasons'])
 assert len(r['queries'])>=3
 assert r['open_prs']=={'listed': 1, 'matched': 1}
+assert 'https://github.com/owner/demo/pull/12' not in c
 PY
 pass 'scan records open PRs and issues plus recent closed unmerged PRs with match reasons'
+pass 'real selectors pass through jq and PRs listed only by the issues endpoint are not recorded as issues'
 
 printf '{"verdict":"distinct","items":[null]}\n' > "$TMP_ROOT/decisions.json"
 if "$tool" decide --record "$TMP_ROOT/prior-art.json" --decisions-file "$TMP_ROOT/decisions.json" > "$TMP_ROOT/out" 2>&1; then

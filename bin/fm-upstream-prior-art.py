@@ -38,7 +38,8 @@ SHA = re.compile(r"^[a-f0-9]{40,64}$")
 WORD = re.compile(r"[A-Za-z][A-Za-z0-9_]{3,}")
 STOP = {"about", "after", "again", "also", "before", "change", "changes", "could", "from", "have", "into", "issue", "more", "pull", "request", "should", "that", "their", "there", "these", "this", "when", "with", "would"}
 PR_SELECTOR = "[.[] | {number, html_url, user: {login: .user.login}, title, body, state, closed_at, merged_at, updated_at}]"
-ISSUE_SELECTOR = "[.[] | {number, html_url, user: {login: .user.login}, title, body, state}]"
+ISSUE_SELECTOR = "[.[] | {number, html_url, user: {login: .user.login}, title, body, state, pull_request: (.pull_request != null)}]"
+FILES_SELECTOR = "[.[] | {filename}]"
 SEARCH_SELECTOR = "{total_count, incomplete_results, items: [.items[] | {number, html_url, user: {login: .user.login}, title, body, state}]}"
 
 
@@ -59,7 +60,7 @@ def git(*args):
 
 def api(path, selector="."):
     # gh-axi's bounded envelope needs a selector to return unambiguous JSON.
-    output = run(["gh-axi", "api", path, "--jq", f"({selector})|@base64"])
+    output = run(["gh-axi", "api", path, "--jq", f"({selector})|tojson|@base64"])
     match = re.search(r"^  body: ([A-Za-z0-9+/=]+)$", output, re.M)
     if not match or not re.search(r"^  truncated: false$", output, re.M):
         fail(f"unreadable or truncated GitHub response: {path}")
@@ -232,7 +233,7 @@ def scan(args):
         if row.get("merged_at") is None and closed_at >= cutoff:
             add(row, "pr")
     for row in pages(f"repos/{repo}/issues?state=open", selector=ISSUE_SELECTOR):
-        if "pull_request" not in row:
+        if row.get("pull_request") is False:
             add(row, "issue")
 
     for query in queries:
@@ -253,7 +254,7 @@ def scan(args):
     for candidate in found.values():
         if candidate["kind"] == "pr":
             candidate["files"] = [item.get("filename", "") for item in pages(
-                f"repos/{repo}/pulls/{candidate['number']}/files", selector="[.[]|{{filename:.filename}}]" )]
+                f"repos/{repo}/pulls/{candidate['number']}/files", selector=FILES_SELECTOR)]
             shared = sorted(set(ctx["files"]) & set(candidate["files"]))
             if shared:
                 candidate["reasons"].append("shared files: " + ", ".join(shared))

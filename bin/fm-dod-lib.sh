@@ -482,8 +482,40 @@ EOF
   return 0
 }
 
-fm_dod_validate_published_intent() {  # <intent> <worktree> <task-temp>
-  fm_dod_validate_intent_evidence "$1" "$2" "$3" publish
+fm_dod_validate_published_intent() {  # <intent> <worktree> <task-temp> [current-head] [pr-url]
+  local body=$1 current_head=${4:-} url=${5:-} line payload attested_head count=0
+  fm_dod_validate_intent_evidence "$body" "$2" "$3" publish || return 1
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in
+      *'<!-- no-mistakes-pipeline-attestation:v1'*)
+        count=$((count + 1))
+        [ "$count" -eq 1 ] || {
+          printf '%s\n' 'error: published intent has multiple pipeline attestations' >&2
+          return 1
+        }
+        payload=${line#*'<!-- no-mistakes-pipeline-attestation:v1'}
+        payload=${payload%%'-->'*}
+        attested_head=$(printf '%s\n' "$payload" | jq -er '
+          if type == "object" and (.head_sha | type) == "string" then .head_sha
+          else error("no attested head") end' 2>/dev/null) || attested_head=
+        if ! fm_pr_head_valid "$attested_head"; then
+          printf '%s\n' 'error: published pipeline attestation has no valid head_sha' >&2
+          return 1
+        fi
+        ;;
+    esac
+  done <<< "$body"
+  [ "$count" -eq 0 ] && return 0
+  if ! fm_pr_head_valid "$current_head"; then
+    current_head=$(fm_pr_read_published_head "$url") || {
+      printf '%s\n' "error: cannot read the current head of $url to check its published attestation" >&2
+      return 1
+    }
+  fi
+  if [ "$current_head" != "$attested_head" ]; then
+    printf '%s\n' "error: published attestation head mismatch: current head $current_head, attested head $attested_head; run the pipeline once against the current head to re-attest it. Hand-editing the attestation is not an option; use a merge, not a rebase." >&2
+    return 1
+  fi
 }
 
 # Accept the current two-subsection contract only when both bodies have content;

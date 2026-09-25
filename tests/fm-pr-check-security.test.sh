@@ -713,6 +713,52 @@ test_direct_pr_unpushed_commit_refuses_registration() {
   pass "fm-pr-check refuses a direct-PR registration while a later commit is only in the copy"
 }
 
+test_published_attestation_matches_current_head() {
+  local dir current attested out rc url steps
+  url=https://github.com/o/r/pull/4
+  current=0123456789abcdef0123456789abcdef01234567
+  attested=fedcba9876543210fedcba9876543210fedcba98
+  steps='[{"step":"review","status":"completed"},{"step":"test","status":"completed"},{"step":"document","status":"completed"}]'
+
+  dir=$(make_case matching-attestation)
+  write_task_meta "$dir"
+  ln -sf "$REAL_JQ" "$dir/fakebin/jq"
+  FM_TEST_GH_HEAD=$current \
+    FM_TEST_GH_BODY="<!-- no-mistakes-pipeline-attestation:v1 {\"head_sha\":\"$current\",\"steps\":$steps} -->" \
+    run_check_entry "$dir" task-a "$url" > "$dir/stdout" 2> "$dir/stderr" \
+    || fail "matching published attestation was refused: $(cat "$dir/stderr")"
+  [ -f "$dir/home/state/task-a.check.sh" ] || fail "matching attestation left no poll armed"
+
+  dir=$(make_case stale-attestation)
+  write_task_meta "$dir"
+  ln -sf "$REAL_JQ" "$dir/fakebin/jq"
+  set +e
+  out=$(FM_TEST_GH_HEAD=$current \
+    FM_TEST_GH_BODY="<!-- no-mistakes-pipeline-attestation:v1 {\"head_sha\":\"$attested\",\"steps\":$steps} -->" \
+    run_check_entry "$dir" task-a "$url" 2>&1)
+  rc=$?
+  set -e
+  [ "$rc" -ne 0 ] || fail "stale published attestation was accepted"
+  assert_contains "$out" "current head $current, attested head $attested" \
+    "stale-attestation refusal omitted one of the two heads"
+  assert_contains "$out" 'run the pipeline once against the current head to re-attest it' \
+    "stale-attestation refusal omitted the remedy"
+  assert_contains "$out" 'Hand-editing the attestation is not an option; use a merge, not a rebase.' \
+    "stale-attestation refusal omitted the merge and hand-edit guidance"
+  [ ! -e "$dir/home/state/task-a.check.sh" ] || fail "stale attestation armed a poll"
+
+  dir=$(make_case no-attestation)
+  fm_write_meta "$dir/home/state/task-a.meta" \
+    'window=firstmate:fm-task-a' 'endpoint_task_id=task-a' "worktree=$dir/wt" \
+    "project=$dir/project" 'kind=ship' 'mode=direct-PR'
+  current=$(git -C "$dir/wt" rev-parse HEAD)
+  FM_TEST_GH_HEAD=$current FM_TEST_GH_BODY='Ordinary published description.' \
+    run_check_entry "$dir" task-a "$url" > "$dir/stdout" 2> "$dir/stderr" \
+    || fail "description without attestation was refused: $(cat "$dir/stderr")"
+  [ -f "$dir/home/state/task-a.check.sh" ] || fail "description without attestation left no poll armed"
+  pass "published attestation accepts its current head, refuses a stale head, and leaves absent attestations unchanged"
+}
+
 test_valid_recording_and_merge_derivation() {
   local dir expected sidecar count rc
   dir=$(make_case valid-recording)
@@ -3411,6 +3457,7 @@ test_gitlab_merge_watch
 test_gerrit_merge_watch
 test_gerrit_arming_records_no_patch_set_revision
 test_gerrit_ready_gate_reads_the_published_tree
+test_published_attestation_matches_current_head
 test_gerrit_nm_ready_gate_requires_recovered_custody
 test_merged_poll_retires_once
 test_merged_poll_reregistration_after_notification_is_absorbed

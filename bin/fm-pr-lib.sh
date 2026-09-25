@@ -1138,6 +1138,33 @@ fm_pr_read_published_body() {  # <canonical-pr-url>
   printf '%s' "$body"
 }
 
+# Read the current revision from the same forge interfaces used for published
+# descriptions. A missing or malformed revision is never a usable head.
+fm_pr_read_published_head() {  # <canonical-pr-url>
+  local url=$1 head json
+  fm_pr_url_parse "$url" || return 1
+  url=$FM_PR_URL
+  case "$FM_PR_PROVIDER" in
+    github)
+      head=$(gh pr view "$url" --json headRefOid -q .headRefOid 2>/dev/null) || return 1
+      ;;
+    gitlab)
+      json=$(GITLAB_HOST="$FM_PR_HOST" glab mr view "$FM_PR_NUMBER" \
+        -R "https://$FM_PR_HOST/$FM_PR_PATH" -F json 2>/dev/null) || return 1
+      head=$(printf '%s\n' "$json" | jq -er '
+        if type == "object" and (.sha | type) == "string" then .sha
+        else error("no merge-request head") end' 2>/dev/null) || return 1
+      ;;
+    gerrit)
+      fm_pr_gerrit_read_revision "$FM_PR_HOST" "$FM_PR_NUMBER" || return 1
+      head=$FM_PR_RECORD_REVISION
+      ;;
+    *) return 1 ;;
+  esac
+  fm_pr_head_valid "$head" || return 1
+  printf '%s\n' "$head"
+}
+
 # The status of one Gerrit change. The status is the only field read: a merged
 # change and an approved-but-unsubmitted one report the same submit,
 # submittable, and blocked_on values, so only the status separates them.

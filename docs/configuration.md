@@ -1109,7 +1109,7 @@ On other machines, create a local record before a seated launch.
 
 A seated spawn or relaunch requires the selected directory to be readable and searchable and requires native `codex login status` to identify a stored sign-in under a cleared environment.
 This release supports Codex's file-backed CLI authentication mode for seats; a configured keyring, auto, or ephemeral mode refuses until its path selection is guarded.
-The selected home must contain an ordinary readable `auth.json` file, but Firstmate never reads its contents.
+The selected home must contain an ordinary readable `auth.json` file that `jq` parses as a JSON object carrying a non-empty `OPENAI_API_KEY` or non-empty ID, access, and refresh tokens, because the CLI's status also reports placeholder files as signed in; Firstmate checks presence only and never prints or compares credential values.
 The canonical launch forces that home and the built-in OpenAI provider while removing ambient OpenAI and Codex key and endpoint overrides; seated raw commands refuse.
 The task record saves `seat`, `dock`, `seat_home`, and `seat_source` as launch provenance, while a later attempt resolves the current dock file again.
 A failed replacement preflight leaves the old worker running.

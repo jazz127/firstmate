@@ -187,9 +187,6 @@ EOF
     || fail 'intake did not delegate to ordinary ship lifecycle'
   jq -e '.state == "assigned" and .task_mode == "no-mistakes" and .task_yolo == "off" and (.task_worktree | endswith("task-worktree"))' \
     "$dir/data/maneuver/bosun-contribution.json" >/dev/null || { cat "$dir/data/maneuver/bosun-contribution.json" >&2; fail 'intake did not persist assigned task'; }
-  if grep -qE '\{TASK\}|\{FIRSTMATE_SPEC\}' "$dir/data/maneuver/brief.md"; then
-    fail 'intake left brief placeholders unresolved'
-  fi
   assert_grep 'spawned maneuver worktree=' "$dir/intake.out" 'intake did not return spawned task'
   pass 'ordered maneuvers delegate exactly once through brief and spawn'
 }

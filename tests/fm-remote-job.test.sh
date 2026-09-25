@@ -294,6 +294,9 @@ done
   || fail "the active-job readiness fixture did not begin running"
 ACTIVE_WORKER_PID=$(cat "$STATE_ROOT/worker.pid")
 touch -t 200001010000 "$STATE_ROOT/worker.ready"
+fm_remote_job_ensure_worker "$REMOTE_ROOT" "$ACCOUNT_HOME" || fail "$FM_REMOTE_JOB_ERROR"
+[ "$(cat "$STATE_ROOT/worker.pid")" = "$ACTIVE_WORKER_PID" ] \
+  || fail "ensure replaced a healthy worker with an active stale heartbeat"
 for _ in $(seq 1 40); do
   fm_remote_job_probe "$ACCOUNT_HOME" && break
   sleep 0.05

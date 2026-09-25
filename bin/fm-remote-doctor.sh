@@ -348,15 +348,9 @@ remote_job_existing_state() {
 }
 
 remote_job_probe_ok() {
-  local ready mtime now
   [ "${FM_REMOTE_JOB_ACTIVE:-}" = 1 ] && return 0
   remote_job_existing_state || return 1
-  ready="$FM_REMOTE_JOB_STATE/worker.ready"
-  [ -f "$ready" ] && [ ! -L "$ready" ] || return 1
-  mtime=$(fm_remote_job_path_mtime "$ready" 2>/dev/null || true)
-  case "$mtime" in ''|*[!0-9]*) return 1 ;; esac
-  now=$(date +%s)
-  [ $((now - mtime)) -le 10 ]
+  fm_remote_job_probe "${HOME:-}"
 }
 
 remote_job_identity_ok() {

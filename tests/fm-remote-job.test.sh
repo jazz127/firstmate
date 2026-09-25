@@ -121,6 +121,16 @@ export FM_REMOTE_JOB_TIMEOUT=5
 # shellcheck source=bin/fm-remote-job-lib.sh
 . "$ROOT/bin/fm-remote-job-lib.sh"
 
+(
+  sleep 0.05
+) & SIGNAL_RACE_PID=$!
+SIGNAL_RACE_START=$(fm_remote_job_process_start "$SIGNAL_RACE_PID")
+SIGNAL_RACE_COMMAND=$(fm_remote_job_process_command "$SIGNAL_RACE_PID")
+wait "$SIGNAL_RACE_PID"
+fm_remote_job_signal_identity "$SIGNAL_RACE_PID" TERM "$SIGNAL_RACE_START" "$SIGNAL_RACE_COMMAND" \
+  || fail "a disappeared fallback signal target was reported as a reaping failure"
+pass "disappeared worker targets are successful signal no-ops"
+
 fm_remote_job_prepare_state "$ACCOUNT_HOME" || fail "$FM_REMOTE_JOB_ERROR"
 mkdir "$STATE_ROOT/worker.starting"
 (exit 0) & STALE_GUARD_PID=$!

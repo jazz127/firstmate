@@ -230,6 +230,40 @@ else
 pass "pidfd identity verification regression requires Linux pidfd support"
 fi
 
+if [ "$(uname -s 2>/dev/null || true)" = Linux ] &&
+  python3 -c 'import os; raise SystemExit(0 if hasattr(os, "pidfd_open") else 1)' 2>/dev/null; then
+LATE_ROOT="$TMP_ROOT/late-root.sh"
+LATE_CHILD="$TMP_ROOT/late-child.sh"
+LATE_MARKER="$TMP_ROOT/late-grandchild.pid"
+LATE_READY="$TMP_ROOT/late-child.ready"
+cat > "$LATE_ROOT" <<SH
+#!/bin/sh
+"$LATE_CHILD" "\$1" "\$2" &
+wait
+SH
+cat > "$LATE_CHILD" <<'SH'
+#!/bin/sh
+: > "$2"
+trap 'sleep 30 & printf "%s\n" "$!" > "$1"; sleep 30; exit 0' TERM
+while :; do sleep 1; done
+SH
+chmod +x "$LATE_ROOT" "$LATE_CHILD"
+"$LATE_ROOT" "$LATE_MARKER" "$LATE_READY" & LATE_ROOT_PID=$!
+for _ in $(seq 1 100); do
+  [ -f "$LATE_READY" ] && break
+  sleep 0.05
+done
+LATE_ROOT_START=$(fm_remote_job_process_start "$LATE_ROOT_PID")
+LATE_ROOT_COMMAND=$(fm_remote_job_process_command "$LATE_ROOT_PID")
+fm_remote_job_stop_worker_tree "$LATE_ROOT_PID" "$LATE_ROOT_START" "$LATE_ROOT_COMMAND" \
+  || fail "late descendant cleanup did not converge"
+wait "$LATE_ROOT_PID" 2>/dev/null || true
+LATE_GRANDCHILD_PID=$(cat "$LATE_MARKER" 2>/dev/null || true)
+[ -n "$LATE_GRANDCHILD_PID" ] || fail "late descendant fixture did not create a grandchild"
+kill -0 "$LATE_GRANDCHILD_PID" 2>/dev/null && fail "late reparented descendant survived cleanup"
+pass "late reparented descendants are included in cleanup convergence"
+fi
+
 fm_remote_job_prepare_state "$ACCOUNT_HOME" || fail "$FM_REMOTE_JOB_ERROR"
 mkdir "$STATE_ROOT/worker.starting"
 (exit 0) & STALE_GUARD_PID=$!

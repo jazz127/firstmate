@@ -1059,7 +1059,7 @@ fm_remote_job_worker_command_matches() { # <worker> <command>
 # survivor. Returns non-zero when any verified worker-tree member is still alive
 # afterwards.
 fm_remote_job_stop_worker_tree() { # <pid> [start] [command]
-  local pid=$1 expected_start=${2:-} expected_command=${3:-} members rescanned survivors member member_start member_command state i=0 alive deadline signal=TERM signal_failed=0 root_live descendant_tree
+  local pid=$1 expected_start=${2:-} expected_command=${3:-} members rescanned= survivors member member_start member_command state i=0 alive deadline signal=TERM signal_failed=0 root_live descendant_tree
   case "$pid" in ''|*[!0-9]*) return 1 ;; esac
   [ "$pid" -gt 1 ] || return 1
   if [ -n "$expected_start" ] || [ -n "$expected_command" ]; then
@@ -1112,17 +1112,21 @@ fm_remote_job_stop_worker_tree() { # <pid> [start] [command]
       sleep 0.1
     done
     survivors=
-    root_live=0
-    if fm_remote_job_process_identity_matches "$pid" "$expected_start" "$expected_command"; then
-      root_live=1
-      rescanned=$(fm_remote_job_process_tree_pids "$pid" "$expected_start" "$expected_command" 2>/dev/null) || return 1
-      if [ -n "$rescanned" ]; then
+      root_live=0
+      if fm_remote_job_process_identity_matches "$pid" "$expected_start" "$expected_command"; then
+        root_live=1
+        rescanned=$(fm_remote_job_process_tree_pids "$pid" "$expected_start" "$expected_command" 2>/dev/null) || return 1
+      if ! fm_remote_job_process_identity_matches "$pid" "$expected_start" "$expected_command"; then
+        root_live=0
+      fi
+      if [ "$root_live" -eq 1 ] && [ -n "$rescanned" ]; then
         members=$rescanned
         signal=KILL
         [ "$SECONDS" -lt "$deadline" ] || return 1
         continue
       fi
-    fi
+      [ "$root_live" -eq 0 ] && [ -n "$rescanned" ] && members=$rescanned
+      fi
     while IFS=$(printf '\t') read -r member member_start member_command; do
       if kill -0 "$member" 2>/dev/null &&
         fm_remote_job_process_identity_matches "$member" "$member_start" "$member_command"; then

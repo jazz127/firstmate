@@ -515,8 +515,8 @@ This replaces the no-mistakes skill's advice to enrich \`--intent\` with decisio
 Any claim in \`--intent\` of live, verified, external, independently confirmed, or real-account evidence must name the artifact read, the exact command that produced it, and when it was captured; publication refuses such a claim if any of those are missing or the artifact cannot be read.
 Keep each cited artifact at a path the supervising home can open, inside this worker's worktree or its task temp directory.
 This boundary proves that the claim is checkable, not that it is true; Firstmate must read the artifact before relaying its evidence label.
-Evidence-shaped claims are the only prose checked here: a vocabulary word must occur with a result, measurement, scenario, validation, test, account, confirmation, or evidence term. Ordinary prose that merely mentions one vocabulary word is not blocked. For a checked claim, add one line each for \`evidence-artifact: /absolute/path\`, \`evidence-command: exact command\`, and \`evidence-captured: timestamp\`.
-Do not hand-edit, commit, or fix findings yourself while a run is active - the pipeline applies every fix.
+Follow the brief's \`# Evidence provenance\` section for evidence claims, metadata format, and synthetic or offline labels in the PR body.
+Do not hand-edit code, commit, or fix pipeline findings yourself while a run is active - the pipeline applies those fixes; the published PR description correction below is limited to that description.
 
 One drive call blocks until the next gate or outcome, which routinely outlives what your harness lets a single command run: Claude Code kills a command at ten minutes maximum, while one fix round is capped around thirty minutes and up to three rounds chain.
 So background the drive call instead of sitting in one blocking hold your harness will kill, and read its return when it finishes.
@@ -553,6 +553,30 @@ Then append \`done [at=<epoch>]: PR {change url} published for review\` to the s
 That \`done:\` is accepted only when the change's current patch set on the server carries this copy's HEAD tree, so commit nothing after publishing; if you must change the work, commit it and publish again before reporting done.
 A \`done:\` whose URL is not the canonical \`https://<host>/c/<project>/+/<number>\` change URL is refused.
 There is no pull request, no \`gh-axi\` call, and no forge CI result to report: a human reviewer approves and submits the change on the server, and firstmate relays that outcome.
+EOF
+}
+
+fm_pr_body_preflight_block() {  # <task-id>
+  local script_dir
+  script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd) || return 1
+  cat <<EOF
+Before publishing or editing a PR body you author, save its complete proposed text in a draft file and run \
+\`$script_dir/fm-pr-body-preflight.sh <draft-body-file> "\$(pwd -P)" "/tmp/fm-$1"\`.
+The command applies the same evidence validation used when Firstmate reads the published body; fix any refusal before sending the body, and require its \`evidence preflight ok\` result.
+EOF
+}
+
+fm_nm_published_body_check_block() {  # <task-id>
+  local script_dir
+  script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd) || return 1
+  cat <<EOF
+The no-mistakes PR step generates and publishes its own body, so check its exact forge readback immediately after each publication or body update and before the CI-ready \`done:\` report:
+\`$script_dir/fm-pr-body-preflight.sh --gh-url <PR URL> "/tmp/fm-$1/pr-body-readback.md" "\$(pwd -P)" "/tmp/fm-$1"\`.
+That command uses \`gh-axi\` to read the complete published body into the task temp file and runs the same evidence validator; do not treat a passing draft-body check as proof that the published body passed.
+If it refuses, correct the description only in that file while preserving the pipeline attestation comment verbatim, preflight the corrected draft with the command above without \`--gh-url\`, then publish only the description with \`gh-axi pr edit <number> -R <owner/repo> --body-file /tmp/fm-$1/pr-body-readback.md\`.
+Read the body back with \`--gh-url\` and repeat until the published text reports \`evidence preflight ok\`.
+Do not append the CI-ready \`done:\` while the published body fails this check.
+The pipeline has no pre-publication body hook here; this readback check is required until that separate tool gains one.
 EOF
 }
 
@@ -615,6 +639,9 @@ Ship branch: $branch
 This task ships **direct-PR**: you raise the PR yourself, without the no-mistakes pipeline.
 The task is complete only when committed on your branch.
 When it is implemented and committed, push your branch and open a PR with \`gh-axi\` that is ready for review, not a draft.
+EOF
+      fm_pr_body_preflight_block "$id"
+      cat <<EOF
 Before you report done, read the PR back from the forge and confirm it is not a draft (\`gh pr view <url> --json isDraft\` must print false); if it is a draft, mark it ready with \`gh-axi pr ready\`.
 A draft cannot be merged, so a done report on one leaves the merge unasked.
 Then append \`done [at=<epoch>]: PR {url}\` to the status file and stop.
@@ -647,6 +674,8 @@ That first \`done:\` is the pipeline handoff, and the pipeline owns the push; it
 
 EOF
       fm_nm_driving_block "$forge"
+      fm_pr_body_preflight_block "$id"
+      fm_nm_published_body_check_block "$id"
       cat <<EOF
 
 For a base with checks, including \`house\`, after /no-mistakes reports CI green (the CI-ready return point - do not wait for it to keep monitoring in the background until merge), read the PR back from the forge and confirm it is not a draft (\`gh pr view <url> --json isDraft\` must print false); if it is a draft, mark it ready with \`gh-axi pr ready\`.

@@ -13,7 +13,10 @@
 # fleet snapshot's backlog/tasks pair; --all adds rows for supervisor inspection.
 # Every URL explicitly linked by a structured backlog row or a task's pr= is
 # owned. Previously observed URLs remain in data/<task>/contributions.json after
-# endpoint teardown. Repository-wide PR discovery never establishes ownership.
+# endpoint teardown. A closed backlog row can keep ownership through its
+# structured --pr link after task metadata is removed; `tasks-axi done <id>
+# --pr <url>` backfills that link on an already-closed row. Repository-wide PR
+# discovery never establishes ownership.
 # GitHub PRs and issues are supported; other forges remain visibly unmeasured.
 #
 # This script owns fm-contributions.v1: one atomic file per durable task with

@@ -73,6 +73,8 @@
 # adding speaker labels or direct address: the heading supplies provenance and
 # is not part of --intent. A legacy mixed Task instead marks each captain line
 # with `[captain] `; the selector returns its words, not that metadata prefix.
+# That selector skips fenced blocks and indented examples like the heading
+# reader, so a quoted `Captain:` sample is never authorized intent.
 # Previously stored speaker labels remain readable for compatibility only.
 # Never scrub literal examples or other content the captain actually supplied.
 # The string passed must be self-sufficient - it plus the codebase reconstructs
@@ -178,11 +180,40 @@ fm_brief_task_placeholders_present() {  # <file>
   return 1
 }
 
+# Print the words of every provenance-marked line in a legacy `# Task` body.
+# The marker is read the way bin/fm-brief-heading-lib.sh reads a heading: a
+# line inside a ``` or ~~~ fenced block, or indented four spaces or a tab as an
+# indented example, is never a marked line, so a fenced `Captain:` sample cannot
+# pass the provenance gate as the ship contract's intent (issue 3608).
 fm_brief_marked_captain_words() {  # <task-body>
   printf '%s\n' "$1" | awk '
-    match($0, /^[[:space:]]*(\[captain\]|Captain('\''s (words|ask|intent))?:)[[:space:]]*/) {
-      words = substr($0, RLENGTH + 1)
-      if (words ~ /[^[:space:]]/) print words
+    {
+      scan = $0
+      spaces = 0
+      while (spaces < 3 && substr(scan, 1, 1) == " ") {
+        scan = substr(scan, 2)
+        spaces++
+      }
+      marker = substr(scan, 1, 1)
+      marker_len = 0
+      if (marker == "`" || marker == "~") {
+        while (substr(scan, marker_len + 1, 1) == marker) marker_len++
+      }
+      if (marker_len >= 3) {
+        if (!fenced) {
+          fenced = 1
+          fence_marker = marker
+          fence_len = marker_len
+        } else if (marker == fence_marker && marker_len >= fence_len && substr(scan, marker_len + 1) ~ /^[[:space:]]*$/) {
+          fenced = 0
+        }
+        next
+      }
+      if (fenced || substr(scan, 1, 1) ~ /^[ \t]$/) next
+      if (match(scan, /^(\[captain\]|Captain('\''s (words|ask|intent))?:)[[:space:]]*/)) {
+        words = substr(scan, RLENGTH + 1)
+        if (words ~ /[^[:space:]]/) print words
+      }
     }
   '
 }
@@ -218,11 +249,106 @@ $1
 EOF
 }
 
+# Refuse conflicting live-scenario summaries before the provenance check can
+# misdiagnose a generated appendix as missing metadata. Only tables with an
+# explicit Live column and fully classified rows supply a table total.
+fm_dod_validate_scenario_consistency() {  # <complete-pr-body>
+  printf '%s\n' "$1" | awk '
+    function trim(value) {
+      sub(/^[[:space:]]+/, "", value)
+      sub(/[[:space:]]+$/, "", value)
+      return value
+    }
+    function refuse(first, second) {
+      refused = 1
+      print "evidence claim refused: contradictory driven-scenario results:" > "/dev/stderr"
+      print "  " first > "/dev/stderr"
+      print "  " second > "/dev/stderr"
+      exit 1
+    }
+    function check_table() {
+      if (table_rows > 0 && table_known == table_rows) {
+        stored_table_rows = table_rows
+        stored_table_driven = table_driven
+        stored_table_lines = table_lines
+      }
+      table_rows = table_known = table_driven = live_column = 0
+      table_header = ""
+      table_lines = ""
+    }
+    function check_stored() {
+      if (stored_table_rows > 0 && count_line != "" &&
+          (count_driven < stored_table_driven ||
+           (count_total == stored_table_rows && count_driven != stored_table_driven) ||
+           (stored_table_rows >= 2 && count_total != stored_table_rows) ||
+           (count_driven == count_total && stored_table_driven < stored_table_rows)))
+        refuse(count_line, stored_table_lines)
+    }
+    {
+      original = $0
+      lower = tolower(original)
+      # Require the count to describe scenarios driven live, not a second
+      # metric such as fixture tests passed or endpoints requested.
+      if (lower ~ /[0-9]+[[:space:]]+of[[:space:]]+[0-9]+[[:space:]]+scenarios?[^|]*driven[[:space:]]+live/ ||
+          lower ~ /[0-9]+[[:space:]]+of[[:space:]]+[0-9]+[[:space:]]+scenarios?[^|]*live[^|]*driven/) {
+        # Work from the first ratio on the line; appendix lines carry one.
+        count_text = lower
+        match(count_text, /[0-9]+[[:space:]]+of[[:space:]]+[0-9]+/)
+        ratio = substr(count_text, RSTART, RLENGTH)
+        split(ratio, parts, /[[:space:]]+of[[:space:]]+/)
+        driven = parts[1] + 0
+        total = parts[2] + 0
+        if (count_line != "" && (driven != count_driven || total != count_total))
+          refuse(count_line, original)
+        if (count_line == "") {
+          count_line = original
+          count_driven = driven
+          count_total = total
+        }
+      }
+      if (substr(trim(original), 1, 1) != "|") {
+        if (table_header != "") check_table()
+        next
+      }
+      columns = split(original, cells, /\|/)
+      if (table_header == "") {
+        live_column = 0
+        for (i = 2; i < columns; i++)
+          if (tolower(trim(cells[i])) == "live") live_column = i
+        if (live_column > 0 && tolower(original) ~ /scenario|result/) {
+          table_header = original
+          table_lines = original
+        }
+        next
+      }
+      if (lower ~ /^\|[[:space:]|:-]+\|[[:space:]|:-]*$/) next
+      if (columns <= live_column) { check_table(); next }
+      value = tolower(trim(cells[live_column]))
+      table_rows++
+      table_lines = table_lines "\n  " original
+      if (value ~ /^(yes|live|driven live|real account)$/) {
+        table_known++
+        table_driven++
+      } else if (value ~ /^(no|fixture|fixture-based|synthetic|offline|not driven)$/) {
+        table_known++
+      }
+    }
+    END {
+      if (refused) exit 1
+      if (table_header != "") check_table()
+      check_stored()
+    }
+  '
+}
+
 fm_dod_validate_intent_evidence() {  # <intent> <worktree> <task-temp> [preflight|publish]
   local intent=$1 worktree=$2 task_temp=$3 phase=${4:-preflight}
   local line previous_line='' previous_previous_line='' candidate detector_input artifact command captured claim=0 normalized_artifact normalized_root resolved_artifact link_target symlink_hops
   local timestamp_date timestamp_clock timestamp_year timestamp_month timestamp_day timestamp_hour timestamp_minute timestamp_second timestamp_zone timestamp_offset_hour timestamp_offset_minute days_in_month
   local artifact_count=0 command_count=0 captured_count=0
+  if [ "$phase" = publish ]; then
+    fm_dod_validate_scenario_consistency "$intent" || return 1
+  fi
   detector_input=$(printf '%s\n' "$intent" | tr '.!?;' '\n' | sed -E 's/,[[:space:]]+(but|however|yet)[[:space:]]+/\n/g')
   while IFS= read -r line; do
     for candidate in "$line" "$previous_line $line" "$previous_previous_line $previous_line $line"; do
@@ -567,6 +693,7 @@ fm_pr_body_preflight_block() {  # <task-id>
 Before publishing or editing a PR body you author, save its complete proposed text in a draft file and run \
 \`$script_dir/fm-pr-body-preflight.sh <draft-body-file> "\$(pwd -P)" "/tmp/fm-$1"\`.
 The command applies the same evidence validation used when Firstmate reads the published body; fix any refusal before sending the body, and require its \`evidence preflight ok\` result.
+If it reports \`contradictory driven-scenario results\`, keep your own honest results as the single statement and correct or remove the contradicting generated line before publication; never weaken a claim to pass.
 EOF
 }
 
@@ -685,9 +812,10 @@ EOF
 # Definition of done
 Delivery contract: mode=no-mistakes
 Ship branch: $branch
-Your implementation is ready for validation only when committed on your branch.
-When it is committed, append \`done [at=<epoch>]: {summary}\` to the status file as the pipeline handoff, then start /no-mistakes on that committed head immediately without waiting for firstmate.
-That first \`done:\` is the pipeline handoff, and the pipeline owns the push; it is not a request to push from this copy.
+The task is complete only when committed on your branch.
+When you believe it is complete, append \`done [at=<epoch>]: {summary}\` to the status file and stop.
+Firstmate will then instruct you to run /no-mistakes to validate and ship a PR.
+That first \`done:\` is the handoff that starts the pipeline, which owns the push; it is not a request to push from this copy.
 
 EOF
       fm_scratch_preflight_block

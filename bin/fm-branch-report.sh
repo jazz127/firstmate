@@ -28,6 +28,14 @@
 # ended, or from any other shell, is refused. Exit codes: 0 recorded, 1 the
 # store refused or failed (nothing recorded), 2 usage, 3 refused (actor, turn,
 # or scope).
+#
+# A row recorded after the captain returned (the away-posture record is gone)
+# may be missing from the return brief, so it is also queued for MAIN as a
+# durable check wake keyed supervision-host-return:<seq>, presented by the
+# drain until MAIN acknowledges it. bin/fm-afk-return.sh archives the record
+# before it reads the store and this check follows the append, so every row is
+# in the brief, queued, or both: the relay does not depend on the host
+# surviving its turn or on its owner delivering the host's own handback.
 set -u
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -100,19 +108,14 @@ case " $TURN_ROWS " in
   *" $ROW "*) ;;
   *) refuse "wake row $ROW is not part of the current turn (rows ${TURN_ROWS:-none})" ;;
 esac
-
 ROW_TASK=$(printf '%s\n' "$(turn_field row_tasks)" | awk -v row="$ROW" '
   { for (i = 1; i <= NF; i++) if ($i ~ ("^" row "=")) { sub(/^[^=]*=/, "", $i); print $i; exit } }
 ')
 [ -n "$ROW_TASK" ] || refuse "wake row $ROW has no task binding in the current turn"
-
 if [ "$ROW_TASK" != fleet ]; then
   [ "$TASK" = "$ROW_TASK" ] \
     || refuse "wake row $ROW names $ROW_TASK, not $TASK; report only that event's task, never fleet or a task from memory"
 fi
-
-[ "$WAKE_SET" -eq 1 ] || WAKE=$(turn_field wake)
-
 fm_lock_acquire_wait "$RECEIPT_LOCK" || {
   echo "receipt lock could not be acquired (nothing recorded)" >&2
   exit 1
@@ -124,6 +127,8 @@ if awk -F '\t' -v turn="$TURN" -v row="$ROW" '
   fm_lock_release "$RECEIPT_LOCK"
   refuse "wake row $ROW already has an outcome for turn $TURN"
 fi
+
+[ "$WAKE_SET" -eq 1 ] || WAKE=$(turn_field wake)
 
 set -- append --task "$TASK" --verdict "$VERDICT" --summary "$SUMMARY" --silent "$SILENT"
 [ -z "$WAKE" ] || set -- "$@" --wake "$WAKE"
@@ -138,4 +143,13 @@ printf '%s\t%s\t%s\t%s\t%s\n' "$TURN" "$SEQ" "$VERDICT" "$TASK" "$ROW" >> "$RECE
   exit 1
 }
 fm_lock_release "$RECEIPT_LOCK"
+if [ ! -f "$STATE/.afk-contract" ]; then
+  if ! fm_wake_append check "supervision-host-return:$SEQ" \
+    "check: supervision-host outcome $SEQ for $TASK [$VERDICT] was recorded after the captain returned, so the return brief may not show it; relay it to the captain: $SUMMARY"; then
+    printf 'recorded seq %s [%s], but the captain has returned and its relay to MAIN could not be queued; the host hands this turn to MAIN\n' "$SEQ" "$VERDICT" >&2
+    exit 0
+  fi
+  printf 'recorded seq %s [%s]; the captain has returned, so it is queued for MAIN to relay\n' "$SEQ" "$VERDICT"
+  exit 0
+fi
 printf 'recorded seq %s [%s]; it waits in the outcome store for MAIN\n' "$SEQ" "$VERDICT"

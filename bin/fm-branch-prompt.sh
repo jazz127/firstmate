@@ -85,7 +85,6 @@ Keep an unsolicited routine outcome as verdict routine, including a healthy resu
 Worker turn completion, stopped previews with preserved work, and no-change updates are routine when they bring no new artifact, finding, or decision.
 An already-reported unchanged blocker is routine unless the captain explicitly requested an update; a newly actionable failure or changed blocker still goes to captain.
 Keep an unchanged fleet review silent as instructed above.
- Never replace silent routine outcomes with a shipshape reply or another follow-up turn.
 Never replace silent routine outcomes with a shipshape reply or another follow-up turn.
 
 # Silent outcomes

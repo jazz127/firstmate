@@ -928,8 +928,9 @@ fm_remote_job_signal_identity() { # <pid> <signal> <start> <command>
   local pid=$1 signal=$2 expected_start=$3 expected_command=$4
   case "$(uname -s 2>/dev/null || true)" in
     Linux)
-      command -v python3 >/dev/null 2>&1 || return 1
-      python3 - "$pid" "$signal" "$expected_start" "$expected_command" <<'PY'
+      if command -v python3 >/dev/null 2>&1; then
+        python3 - "$pid" "$signal" "$expected_start" "$expected_command" <<'PY'
+import errno
 import os
 import signal
 import subprocess
@@ -939,7 +940,14 @@ pid = int(sys.argv[1])
 sig = getattr(signal, "SIG" + sys.argv[2])
 expected_start = sys.argv[3]
 expected_command = sys.argv[4]
-fd = os.pidfd_open(pid, 0)
+try:
+    fd = os.pidfd_open(pid, 0)
+except AttributeError:
+    raise SystemExit(2)
+except OSError as exc:
+    if exc.errno in (errno.EINVAL, errno.ENOSYS):
+        raise SystemExit(2)
+    raise
 try:
     result = subprocess.run(
         ["ps", "-p", str(pid), "-o", "lstart=", "-o", "command="],
@@ -949,10 +957,23 @@ try:
     command = line[24:].strip()
     if start != expected_start or command != expected_command:
         raise SystemExit(1)
-    os.pidfd_send_signal(fd, sig)
+    try:
+        os.pidfd_send_signal(fd, sig)
+    except AttributeError:
+        raise SystemExit(2)
+    except OSError as exc:
+        if exc.errno in (errno.EINVAL, errno.ENOSYS):
+            raise SystemExit(2)
+        raise
 finally:
     os.close(fd)
 PY
+        status=$?
+        [ "$status" -eq 0 ] && return 0
+        [ "$status" -ne 2 ] && return "$status"
+      fi
+      fm_remote_job_process_identity_matches "$pid" "$expected_start" "$expected_command" || return 1
+      kill -"$signal" "$pid" 2>/dev/null
       ;;
     *)
       fm_remote_job_process_identity_matches "$pid" "$expected_start" "$expected_command" || return 1

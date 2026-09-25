@@ -1,0 +1,29 @@
+--- primary lab dock.json:
+{"version":1,"id":"lab-dock","seats":{"luna":{"harness":"codex","credential_home":"/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.c0c12u/seats/apikey"}}}
+--- secondmate home config before: []
+$ fm-config-push.sh
+config-push: /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.c0c12u -> live secondmate homes
+secondmate sm-probe (/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab-sm.4ZzL2S): skipped - unsafe home: not a firstmate home (missing bin/)
+exit=0
+--- secondmate home config after: []
+crew-dispatch.json identical to primary: no
+dock.json present in secondmate home: no
+$ fm-config-push.sh
+config-push: /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.c0c12u -> live secondmate homes
+secondmate sm-probe (/private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab-sm.4ZzL2S):
+  crew-dispatch.json: pushed
+  crew-harness: unchanged
+  backlog-backend: unchanged
+  backend: unchanged
+  herdr-presentation-spaces: unchanged
+  startup-memory-budget: unchanged
+  trace-context: unchanged - session-scoped
+  launch-env-allowlist: unchanged
+  claude-permission-mode: unchanged
+  lavish-axi-host: unchanged
+  data/captain-shared.md: unchanged
+CONFIG_REREAD: secondmate sm-probe: send failed: error: no-mistakes gate agent must not drive the fleet (NO_MISTAKES_GATE set)
+exit=1
+--- secondmate home config after: [crew-dispatch.json ]
+crew-dispatch.json identical to primary: yes
+dock.json present in secondmate home: no

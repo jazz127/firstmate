@@ -1,0 +1,19 @@
+### Real codex CLI (codex-cli 0.156.1) + fm_worker_account_codex_check against synthetic (non-real) seat homes
+--- seat home: good
+codex login status: Logged in using ChatGPT
+PREFLIGHT: pass
+--- seat home: apikey
+codex login status: Logged in using an API key - sk-(masked)
+PREFLIGHT: pass
+--- seat home: empty
+codex login status: Logged in using ChatGPT
+error: Codex seat at $LAB/seats/empty has no usable sign-in in auth.json; sign in to that home, then retry; launch refused, no ambient account selected
+--- seat home: nulltok
+codex login status: Error checking login status: invalid type: null, expected a string at line 1 column 70
+error: Codex authentication could not be established for seat at $LAB/seats/nulltok (status 1); launch refused, no ambient account selected
+--- seat home: emptytok
+codex login status: Error checking login status: invalid ID token format at line 5 column 18
+error: Codex authentication could not be established for seat at $LAB/seats/emptytok (status 1); launch refused, no ambient account selected
+--- seat home: none
+codex login status: Not logged in
+error: Codex seat at $LAB/seats/none has no ordinary readable file-backed sign-in; launch refused, no ambient account selected

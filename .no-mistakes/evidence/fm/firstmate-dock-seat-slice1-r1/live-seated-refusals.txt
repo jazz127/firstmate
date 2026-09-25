@@ -1,0 +1,26 @@
+### Live seated-launch refusals in lab home (tmux fm-lab socket)
+bash-3.2$ echo '{"version":1,"id":"lab-dock","seats":{"luna":{"harness":"codex","credential_home":"$LAB/seats/empty"}}}' > $FM_HOME/config/dock.json; echo '## A. dock bound to seat whose auth.json is {}'; bin/fm-spawn.sh seat-empty $FM_HOME/projects/demo --scout --harness codex --seat luna --backend tmux; echo SPAWN_RC=$?
+## A. dock bound to seat whose auth.json is {}
+fm-gate-refuse: gate agent lifecycle permitted only against lab home $LAB
+error: Codex seat at $LAB/seats/empty has no usable sign-in in auth.json; sign in to that home, then retry; launch refused, no ambient account selected
+SPAWN_RC=1
+bash-3.2$ echo '{"version":1,"id":"lab-dock","seats":{}}' > $FM_HOME/config/dock.json; echo '## B. present dock record without the luna binding'; bin/fm-spawn.sh seat-empty $FM_HOME/projects/demo --scout --harness codex --seat luna --backend tmux; echo SPAWN_RC=$?
+## B. present dock record without the luna binding
+fm-gate-refuse: gate agent lifecycle permitted only against lab home $LAB
+error: dock record $LAB/config/dock.json is malformed, unsupported, or does not bind seat luna to codex; launch refused, no ambient account selected
+SPAWN_RC=1
+bash-3.2$ echo '{"version":1,"id":"lab-dock","seats":{"luna":{"harness":"codex","credential_home":"$LAB/seats/good"}}}' > $FM_HOME/config/dock.json; echo '## C. raw launch command with --seat'; bin/fm-spawn.sh seat-empty $FM_HOME/projects/demo --scout --harness 'codex --foo' --seat luna --backend tmux; echo SPAWN_RC=$?
+## C. raw launch command with --seat
+fm-gate-refuse: gate agent lifecycle permitted only against lab home $LAB
+error: a seated Codex launch requires the canonical --harness codex command; raw commands can override its account; launch refused, no ambient account selected
+SPAWN_RC=1
+bash-3.2$ echo '## D. dispatch measured another seat home (--seat-home mismatch)'; bin/fm-spawn.sh seat-empty $FM_HOME/projects/demo --scout --harness codex --seat luna --seat-home $LAB/seats/apikey --backend tmux; echo SPAWN_RC=$?
+## D. dispatch measured another seat home (--seat-home mismatch)
+fm-gate-refuse: gate agent lifecycle permitted only against lab home $LAB
+error: dispatch seat binding resolved to $LAB/seats/good, but the profile was measured against $LAB/seats/apikey; launch refused, no ambient account selected
+SPAWN_RC=1
+bash-3.2$ 
+
+## state/ after refusals (no seat-empty task record created):
+home-summary.json
+seat-ok.meta

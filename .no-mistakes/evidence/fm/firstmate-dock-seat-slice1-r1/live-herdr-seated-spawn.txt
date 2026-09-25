@@ -1,0 +1,39 @@
+### Live seated scout spawn on isolated Herdr lab session fm-lab-seatdock-83429-21464 (bin/fm-herdr-lab.sh provisioned)
+bash-3.2$ echo '{"version":1,"id":"lab-dock-h","seats":{"luna":{"harness":"codex","credential_home":"$LAB/seats/good"}}}' > $FM_HOME/config/dock.json; echo '## H. seated scout on Herdr lab session fm-lab-seatdock-83429-21464'; HERDR_SESSION=fm-lab-seatdock-83429-21464 bin/fm-spawn.sh seat-herdr $FM_HOME/projects/demo --scout --harness codex --seat luna --backend herdr; echo SPAWN_RC=$?; grep -E '^(backend|herdr_session|herdr_pane_id|seat|dock|seat_home|seat_source)=' $FM_HOME/state/seat-herdr.meta
+## H. seated scout on Herdr lab session fm-lab-seatdock-83429-21464
+fm-gate-refuse: gate agent lifecycle permitted only against lab home $LAB
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: 339s ago, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  watcher supervision needs Stop-owned automatic recovery; inspect the hook registration and startup status before ending the turn.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+warning: herdr presentation parent is absent or ambiguous; using the ordinary flat layout without projection
+spawned seat-herdr harness=codex kind=scout window=fm-lab-seatdock-83429-21464:w1:p2 worktree=/Users/jarad/.treehouse/demo-82ebbf/2/demo
+SPAWN_RC=0
+seat=luna
+dock=lab-dock-h
+seat_home=$LAB/seats/good
+seat_source=dock.json
+backend=herdr
+herdr_session=fm-lab-seatdock-83429-21464
+herdr_pane_id=w1:p2
+bash-3.2$ 
+
+## launch script submitted to the Herdr pane
+env -u OPENAI_API_KEY -u CODEX_API_KEY -u CODEX_ACCESS_TOKEN -u OPENAI_BASE_URL -u OPENAI_ORG_ID -u OPENAI_ORGANIZATION -u OPENAI_PROJECT -u OPENAI_PROJECT_ID CODEX_HOME='$LAB/seats/good' env -u CURSOR_AGENT -u CURSOR_INVOKED_AS -u GEMINI_CLI '/Users/jarad/.local/bin/codex' -c 'cli_auth_credentials_store="file"' -c 'model_provider="openai"'
+
+## Herdr lab pane w1:p2 (real codex-cli)
+jarad@Mac demo % . '/tmp/fm-seat-herdr+556adafb4e735c57b1f9b221f51cf83b9598ab146cec85dae63ad7297a44e3b0/launch.s17903799
+11.86802.14498.sh'
+╭──────────────────────────────────────────────╮
+│ >_ OpenAI Codex (v0.156.1)                   │
+│                                              │
+│ model:       loading   /model to change      │
+│ directory:   ~/.treehouse/demo-82ebbf/2/demo │
+│ permissions: YOLO mode                       │
+╰──────────────────────────────────────────────╯
+› Error: account/read failed during TUI bootstrap: account/read failed: workspace routing discovery unauthorized (401) (
+code -32603)
+jarad@Mac demo %

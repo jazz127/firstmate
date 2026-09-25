@@ -1,0 +1,39 @@
+### fm-dock.sh resolve against lab home $LAB
+## 1. no dock.json, this Mac (jarad, Darwin, HOME=/Users/jarad): narrow legacy default
+$ bin/fm-dock.sh resolve --seat luna --harness codex
+seat=luna
+dock=legacy-mac-jarad
+credential_home=/Users/jarad/.codex-luna
+source=legacy-mac-jarad
+exit=0
+## 2. no dock.json, HOME differs (other identity): refused
+$ env HOME=/tmp/other bin/fm-dock.sh resolve --seat luna --harness codex
+error: dock record $LAB/config/dock.json is absent; configure seat luna on this host; launch refused, no ambient account selected
+exit=1
+## 3. valid dock.json (symlinked path -> physical dir resolved)
+$ bin/fm-dock.sh resolve --seat luna --harness codex
+seat=luna
+dock=ji7-wsl
+credential_home=/private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab.8j8bB9/seats/good
+source=dock.json
+exit=0
+## 4. malformed: relative credential_home
+$ bin/fm-dock.sh resolve --seat luna --harness codex
+error: dock record $LAB/config/dock.json is malformed, unsupported, or does not bind seat luna to codex; launch refused, no ambient account selected
+exit=1
+## 5. present record without luna binding (no legacy fallback)
+$ bin/fm-dock.sh resolve --seat luna --harness codex
+error: dock record $LAB/config/dock.json is malformed, unsupported, or does not bind seat luna to codex; launch refused, no ambient account selected
+exit=1
+## 6. unparseable JSON
+$ bin/fm-dock.sh resolve --seat luna --harness codex
+error: dock record $LAB/config/dock.json is malformed, unsupported, or does not bind seat luna to codex; launch refused, no ambient account selected
+exit=1
+## 7. binding to missing directory
+$ bin/fm-dock.sh resolve --seat luna --harness codex
+error: dock ji7-wsl: seat luna (codex) resolves to $LAB/seats/missing, which is missing or unreadable; configure $LAB/config/dock.json and provision this seat on this host; launch refused, no ambient account selected
+exit=1
+## 8. seat luna on claude harness
+$ bin/fm-dock.sh resolve --seat luna --harness claude
+error: dock supports only seat luna on the codex harness; launch refused, no ambient account selected
+exit=1

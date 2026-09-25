@@ -1,0 +1,29 @@
+### Live seated scout spawn in lab home (tmux backend, fm-lab socket); ambient OPENAI_API_KEY was set in the primary pane
+$ bin/fm-spawn.sh seat-ok $FM_HOME/projects/demo --scout --harness codex --seat luna --backend tmux
+bash-3.2$ bin/fm-spawn.sh seat-ok $FM_HOME/projects/demo --scout --harness codex --seat luna --backend tmux; echo SPAWN_RC=$?
+fm-gate-refuse: gate agent lifecycle permitted only against lab home $LAB
+spawned seat-ok harness=codex kind=scout window=primary:fm-seat-ok worktree=/Users/jarad/.treehouse/demo-82ebbf/1/demo
+SPAWN_RC=0
+
+## state/seat-ok.meta (seat fields)
+harness=codex
+kind=scout
+seat=luna
+dock=lab-dock
+seat_home=$LAB/seats/good
+seat_source=dock.json
+
+## launch script submitted to the worker pane
+export COMPACT_ADVISER_DISABLE=1; env -u OPENAI_API_KEY -u CODEX_API_KEY -u CODEX_ACCESS_TOKEN -u OPENAI_BASE_URL -u OPENAI_ORG_ID -u OPENAI_ORGANIZATION -u OPENAI_PROJECT -u OPENAI_PROJECT_ID CODEX_HOME='$LAB/seats/good' env -u CURSOR_AGENT -u CURSOR_INVOKED_AS -u GEMINI_CLI '/Users/jarad/.local/bin/codex' -c 'cli_auth_credentials_store="file"' -c 'model_provider="openai"' --dangerously-bypass-approvals-and-sandbox --disable hooks -c "notify=[\"bash\",\"-c\",\"touch '$LAB/state/seat-ok.turn-ended'\"]" "$('/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3DBXWSY2BQK6GZ3S1QAAKRQ/bin/fm-operational-input.sh' encode launch-brief < '$LAB/data/seat-ok/launch-brief.md')"
+
+## worker pane (real codex-cli 0.156.1)
+jarad@Mac demo % . '/tmp/fm-seat-ok+556adafb4e735c57b1f9b221f51cf83b9598ab146cec85dae63ad7297a44e3b0/launch.s1790379576.55942.24619.sh'
+╭──────────────────────────────────────────────╮
+│ >_ OpenAI Codex (v0.156.1)                   │
+│                                              │
+│ model:       loading   /model to change      │
+│ directory:   ~/.treehouse/demo-82ebbf/1/demo │
+│ permissions: YOLO mode                       │
+╰──────────────────────────────────────────────╯
+› Error: account/read failed during TUI bootstrap: account/read failed: workspace routing discovery unauthorized (401) (code -32603)
+jarad@Mac demo %

@@ -1,0 +1,33 @@
+### Live relaunch re-resolution in lab home (fm-control.sh relaunch, tmux fm-lab socket)
+bash-3.2$ echo '{"version":1,"id":"lab-dock-2","seats":{"luna":{"harness":"codex","credential_home":"$LAB/seats/nulltok"}}}' > $FM_HOME/config/dock.json; echo '## R1. relaunch (with --note) after dock rebound to unsigned null-token seat'; bin/fm-control.sh seat-ok relaunch --note 'lab seat rebind'; echo RELAUNCH_RC=$?; grep -E '^(dock|seat_home)=' $FM_HOME/state/seat-ok.meta; ls $FM_HOME/state
+## R1. relaunch (with --note) after dock rebound to unsigned null-token seat
+fm-gate-refuse: gate agent lifecycle permitted only against lab home $LAB
+error: Codex authentication could not be established for seat at $LAB/seats/nulltok (status 1); launch refused, no ambient account selected
+RELAUNCH_RC=1
+dock=lab-dock
+seat_home=$LAB/seats/good
+home-summary.json	seat-ok.meta
+bash-3.2$ echo '{"version":1,"id":"lab-dock-2","seats":{"luna":{"harness":"codex","credential_home":"$LAB/seats/apikey"}}}' > $FM_HOME/config/dock.json; echo '## R2. relaunch after dock rebound to a different signed-in seat'; bin/fm-control.sh seat-ok relaunch --note 'lab seat rebind'; echo RELAUNCH_RC=$?; grep -E '^(seat|dock|seat_home|seat_source)=' $FM_HOME/state/seat-ok.meta
+## R2. relaunch after dock rebound to a different signed-in seat
+fm-gate-refuse: gate agent lifecycle permitted only against lab home $LAB
+fm-gate-refuse: gate agent lifecycle permitted only against lab home $LAB
+relaunched seat-ok harness=codex from=codex model=default effort=default backend=tmux endpoint=primary:fm-seat-ok worktree=/Users/jarad/.treehouse/demo-82ebbf/1/demo
+RELAUNCH_RC=0
+seat=luna
+dock=lab-dock-2
+seat_home=$LAB/seats/apikey
+seat_source=dock.json
+bash-3.2$ 
+
+## replacement launch script (newest)
+env -u OPENAI_API_KEY -u CODEX_API_KEY -u CODEX_ACCESS_TOKEN -u OPENAI_BASE_URL -u OPENAI_ORG_ID -u OPENAI_ORGANIZATION -u OPENAI_PROJECT -u OPENAI_PROJECT_ID CODEX_HOME='$LAB/seats/apikey'
+
+## replacement worker pane
+  /Users/jarad/.treehouse/demo-82ebbf/1/demo
+  Note: You’re in a subdirectory of a Git project. Trusting will apply to the repository root:
+  $LAB/projects/demo
+  Trust this folder? Codex can read, edit, and run files here, subject to your permission settings. Folder settings can run code automatically, even without a model request. Continue only if you
+  trust these files. Your trust decision will be saved.
+› 1. Trust and continue
+  2. Quit
+  enter continue · esc quit

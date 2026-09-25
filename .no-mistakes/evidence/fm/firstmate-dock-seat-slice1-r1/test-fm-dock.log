@@ -1,0 +1,6 @@
+ok - valid dock record resolves a literal credential path
+ok - symlinked credential directory resolves to one physical identity
+ok - unsupported, incomplete, and malformed records refuse without fallback
+ok - missing and unreadable homes refuse, and legacy fallback is tightly gated
+ok - inherited profiles converge while target dock bytes remain local
+# all fm-dock tests passed

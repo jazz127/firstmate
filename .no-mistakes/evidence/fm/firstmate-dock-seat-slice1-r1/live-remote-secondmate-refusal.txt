@@ -1,0 +1,8 @@
+bash-3.2$ echo '## S. seated remote secondmate request'; bin/fm-spawn.sh seat-remote-x --secondmate --harness codex --seat luna; echo SPAWN_RC=$?; ls $FM_HOME/state
+## S. seated remote secondmate request
+fm-gate-refuse: gate agent lifecycle permitted only against lab home $LAB
+error: seated remote secondmate seat-remote-x cannot launch: this release does not transport a logical seat to the remote dock; launch refused, no ambient account selected
+SPAWN_RC=1
+home-summary.json			seat-ok.control-relaunch.brief-prior	seat-ok.control-relaunch.note
+seat-ok.control-relaunch		seat-ok.control-relaunch.meta-prior	seat-ok.meta
+bash-3.2$ 

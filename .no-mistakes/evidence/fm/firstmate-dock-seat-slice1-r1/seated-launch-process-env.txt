@@ -1,0 +1,14 @@
+--- pane pid 10707, descendant codex processes and their credential-relevant env (ps eww):
+pid=56487 cmd=codex -c cli_auth_credentials_store="file" -c model_provider="openai" --dangerou
+    CODEX_HOME=/private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab.c0c12u/seats/apikey
+    OPENAI_API_KEY present: 0
+--- pane (last lines):
+  Folder access
+  /private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab.c0c12u/wt-seat-rl
+  Note: You’re in a subdirectory of a Git project. Trusting will apply to the repository root:
+  /private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab.c0c12u/projects/labproj
+  Trust this folder? Codex can read, edit, and run files here, subject to your permission settings. Folder settings can run code automatically, even without a model request. Continue only if you
+  trust these files. Your trust decision will be saved.
+› 1. Trust and continue
+  2. Quit
+  enter continue · esc quit

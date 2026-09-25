@@ -1,0 +1,50 @@
+### A. dock binds luna to a signed-out credential dir (real codex login status) -> refuse before task creation
+$ fm-spawn.sh seat-a1 /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.c0c12u/projects/labproj --mode local-only --yolo off --harness codex --seat luna
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.c0c12u
+error: Codex seat at /private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab.c0c12u/seats/signed-out has no ordinary readable file-backed sign-in; launch refused, no ambient account selected
+exit=
+state/seat-a1.meta exists? no
+
+### B. malformed dock.json -> refuse, never a seatless default-account launch
+$ fm-spawn.sh seat-a2 /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.c0c12u/projects/labproj --mode local-only --yolo off --harness codex --seat luna
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.c0c12u
+error: dock record /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.c0c12u/config/dock.json is malformed, unsupported, or does not bind seat luna to codex; launch refused, no ambient account selected
+exit=
+state/seat-a2.meta exists? no
+
+### C. seat on a non-codex harness -> refuse
+$ fm-spawn.sh seat-a3 /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.c0c12u/projects/labproj --mode local-only --yolo off --harness claude --seat luna
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.c0c12u
+error: --seat luna requires the codex harness
+exit=
+state/seat-a3.meta exists? no
+
+### D. raw launch command with a seat -> refuse (raw command could override account)
+$ fm-spawn.sh seat-a4 /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.c0c12u/projects/labproj --mode local-only --yolo off --harness CODEX_HOME=/elsewhere codex --seat luna
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.c0c12u
+error: a seated Codex launch requires the canonical --harness codex command; raw commands can override its account; launch refused, no ambient account selected
+exit=
+state/seat-a4.meta exists? no
+
+### E. dispatch measured quota against home X, dock now binds home Y -> refuse stale binding
+$ fm-spawn.sh seat-a5 /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.c0c12u/projects/labproj --mode local-only --yolo off --harness codex --seat luna --seat-home /some/other/home
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.c0c12u
+error: dispatch seat binding resolved to /private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab.c0c12u/seats/apikey, but the profile was measured against /some/other/home; launch refused, no ambient account selected
+exit=
+state/seat-a5.meta exists? no
+
+### F. absent dock.json with non-jarad HOME (JI7-like host) -> refuse
+(HOME for this run = /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.c0c12u/userhome, not /Users/jarad)
+$ fm-spawn.sh seat-a6 /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.c0c12u/projects/labproj --mode local-only --yolo off --harness codex --seat luna
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.c0c12u
+error: dock record /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.c0c12u/config/dock.json is absent; configure seat luna on this host; launch refused, no ambient account selected
+exit=
+state/seat-a6.meta exists? no
+
+seat-a1 exit=1
+seat-a2 exit=1
+seat-a3 exit=1
+seat-a4 exit=1
+seat-a5 exit=1
+seat-a6 exit=1
+firstmate:0: zsh* (1 panes) [80x24] 

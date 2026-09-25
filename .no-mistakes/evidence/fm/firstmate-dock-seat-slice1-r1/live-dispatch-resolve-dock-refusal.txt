@@ -1,0 +1,4 @@
+### fm-dispatch-resolve.sh with a Luna-seated rule and a malformed dock record (lab home)
+$ TYPESAFE_API_KEY=dummy bin/fm-dispatch-resolve.sh $LAB/data/dr-brief.md
+error: dock record $LAB/config/dock.json is malformed, unsupported, or does not bind seat luna to codex; launch refused, no ambient account selected
+exit=2

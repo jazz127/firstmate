@@ -1,0 +1,32 @@
+fm-seat-rl cmd=bash
+### dock.json binds luna to synthetic API-key home (fake key); ambient OPENAI_API_KEY=sk-ambient-should-never-be-used is set in the caller
+$ fm-control.sh seat-rl relaunch --note "re-resolve dock"
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.c0c12u
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.c0c12u
+warning: /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.c0c12u/data/seat-rl/launch-brief.md records no ship branch; defaulting to legacy branch fm/seat-rl
+warning: /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.c0c12u/data/seat-rl/launch-brief.md records no delivery contract line (scaffolded before ship briefs recorded one); launching on the explicit --mode local-only - confirm its definition of done matches
+notice: seat-rl ships mode=local-only while the standing posture for labproj is no-mistakes - less rigor than the captain's standing posture; proceed only on a current explicit captain instruction or an intake judgment you can state
+error: the replacement agent for seat-rl did not come up within 90s (endpoint reads 'dead')
+error: seat-rl was relaunched on codex but no running agent could be confirmed; its work is preserved at /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.c0c12u/wt-seat-rl
+exit=1
+--- meta seat fields:
+harness=codex
+seat=luna
+dock=lab-dock-v3
+seat_home=/private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab.c0c12u/seats/apikey
+seat_source=dock.json
+### retry with pane PATH containing codex; pane env also carries OPENAI_API_KEY=sk-ambient-in-pane-should-be-shed
+$ fm-control.sh seat-rl relaunch --note "re-resolve dock"
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.c0c12u
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.c0c12u
+warning: /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.c0c12u/data/seat-rl/launch-brief.md records no ship branch; defaulting to legacy branch fm/seat-rl
+warning: /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.c0c12u/data/seat-rl/launch-brief.md records no delivery contract line (scaffolded before ship briefs recorded one); launching on the explicit --mode local-only - confirm its definition of done matches
+notice: seat-rl ships mode=local-only while the standing posture for labproj is no-mistakes - less rigor than the captain's standing posture; proceed only on a current explicit captain instruction or an intake judgment you can state
+relaunched seat-rl harness=codex from=codex model=default effort=default backend=tmux endpoint=fmses:fm-seat-rl worktree=/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.c0c12u/wt-seat-rl
+exit=0
+--- meta seat fields:
+harness=codex
+seat=luna
+dock=lab-dock-v3
+seat_home=/private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab.c0c12u/seats/apikey
+seat_source=dock.json

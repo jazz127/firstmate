@@ -1,0 +1,84 @@
+### 1. valid dock.json binds luna -> lab credential dir
+{
+  "version": 1,
+  "id": "lab-dock",
+  "seats": {
+    "luna": {
+      "harness": "codex",
+      "credential_home": "/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.c0c12u/seats/apikey"
+    }
+  }
+}
+$ bin/fm-dock.sh resolve --seat luna --harness codex
+seat=luna
+dock=lab-dock
+credential_home=/private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab.c0c12u/seats/apikey
+source=dock.json
+exit=0
+
+### 2. symlinked credential dir resolves to physical path
+$ bin/fm-dock.sh resolve --seat luna --harness codex
+seat=luna
+dock=lab-dock
+credential_home=/private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab.c0c12u/seats/apikey
+source=dock.json
+exit=0
+
+### 3. adversarial: malformed / unsupported records refuse
+dock.json: not json
+$ bin/fm-dock.sh resolve --seat luna --harness codex
+error: dock record /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.c0c12u/config/dock.json is malformed, unsupported, or does not bind seat luna to codex; launch refused, no ambient account selected
+exit=1
+
+dock.json: {"version":2,"id":"x","seats":{}}
+$ bin/fm-dock.sh resolve --seat luna --harness codex
+error: dock record /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.c0c12u/config/dock.json is malformed, unsupported, or does not bind seat luna to codex; launch refused, no ambient account selected
+exit=1
+
+dock.json: {"version":1,"id":"x","seats":{}}
+$ bin/fm-dock.sh resolve --seat luna --harness codex
+error: dock record /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.c0c12u/config/dock.json is malformed, unsupported, or does not bind seat luna to codex; launch refused, no ambient account selected
+exit=1
+
+dock.json: {"version":1,"id":"x","seats":{"luna":{"harness":"codex","credential_home":"relative/path"}}}
+$ bin/fm-dock.sh resolve --seat luna --harness codex
+error: dock record /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.c0c12u/config/dock.json is malformed, unsupported, or does not bind seat luna to codex; launch refused, no ambient account selected
+exit=1
+
+dock.json: {"version":1,"id":"x","seats":{"luna":{"harness":"claude","credential_home":"/tmp"}}}
+$ bin/fm-dock.sh resolve --seat luna --harness codex
+error: dock record /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.c0c12u/config/dock.json is malformed, unsupported, or does not bind seat luna to codex; launch refused, no ambient account selected
+exit=1
+
+### 4. adversarial: binding to missing dir refuses
+$ bin/fm-dock.sh resolve --seat luna --harness codex
+error: dock lab-dock: seat luna (codex) resolves to /nonexistent/codex-luna, which is missing or unreadable; configure /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.c0c12u/config/dock.json and provision this seat on this host; launch refused, no ambient account selected
+exit=1
+
+### 5. adversarial: wrong seat / wrong harness refuse
+$ bin/fm-dock.sh resolve --seat other --harness codex
+error: dock supports only seat luna on the codex harness; launch refused, no ambient account selected
+exit=1
+
+$ bin/fm-dock.sh resolve --seat luna --harness claude
+error: dock supports only seat luna on the codex harness; launch refused, no ambient account selected
+exit=1
+
+### 6. absent record: legacy default only for exact jarad Mac identity
+$ bin/fm-dock.sh resolve --seat luna --harness codex
+seat=luna
+dock=legacy-mac-jarad
+credential_home=/Users/jarad/.codex-luna
+source=legacy-mac-jarad
+exit=0
+
+(same machine, different HOME -> must refuse, no legacy fallback)
+$ env HOME=/tmp/other-home bin/fm-dock.sh resolve --seat luna --harness codex
+error: dock record /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.c0c12u/config/dock.json is absent; configure seat luna on this host; launch refused, no ambient account selected
+exit=1
+
+(broken symlink dock.json is present-invalid, not absent)
+$ bin/fm-dock.sh resolve --seat luna --harness codex
+error: dock record must be an ordinary readable JSON file: /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.c0c12u/config/dock.json; launch refused, no ambient account selected
+exit=1
+

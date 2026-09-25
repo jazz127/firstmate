@@ -1,0 +1,5 @@
+$ fm-spawn.sh remote-seat-probe --secondmate --seat luna   (registry: host fm-lab-unreachable.invalid)
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.c0c12u
+error: seated remote secondmate remote-seat-probe cannot launch: this release does not transport a logical seat to the remote dock; launch refused, no ambient account selected
+exit=1
+state/remote-seat-probe.meta exists? no

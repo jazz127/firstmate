@@ -1,0 +1,18 @@
+### dock.json now re-binds luna to a SIGNED-OUT dir (was apikey when worker started)
+--- worker window before:
+fm-seat-rl pid=62402 cmd=sleep dead=0
+$ fm-control.sh seat-rl relaunch --note "dock changed"
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.c0c12u
+error: Codex seat at /private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab.c0c12u/seats/signed-out has no ordinary readable file-backed sign-in; launch refused, no ambient account selected
+exit=1
+--- worker window after:
+fm-seat-rl pid=62402 cmd=sleep dead=0
+meta unchanged: yes
+
+### adversarial 2: dock.json malformed at relaunch time
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.c0c12u
+error: dock record /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.c0c12u/config/dock.json is malformed, unsupported, or does not bind seat luna to codex; launch refused, no ambient account selected
+exit=1
+--- worker window after:
+fm-seat-rl pid=62402 cmd=sleep dead=0
+meta unchanged: yes

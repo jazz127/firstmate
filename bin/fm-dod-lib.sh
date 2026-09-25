@@ -623,7 +623,6 @@ When it is committed, append \`done [at=<epoch>]: {summary}\` to the status file
 That first \`done:\` is the pipeline handoff; it is not a request to publish.
 
 EOF
-      fm_scratch_preflight_block
       fm_nm_driving_block "$forge"
       cat <<EOF
 

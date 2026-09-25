@@ -621,6 +621,7 @@ MODEL_SET=0
 EFFORT_SET=0
 SEAT=
 SEAT_SET=0
+SEAT_HOME_ARG=
 BACKEND_SET=0
 MODE_SET=0
 YOLO_SET=0
@@ -653,6 +654,9 @@ for a in "$@"; do
     seat)
       SEAT=$a
       SEAT_SET=1
+      ;;
+    seat-home)
+      SEAT_HOME_ARG=$a
       ;;
     backend)
       BACKEND_ARG=$a
@@ -709,6 +713,8 @@ for a in "$@"; do
     ;;
   --seat) want_value=seat ;;
   --seat=*) SEAT=${a#--seat=}; SEAT_SET=1 ;;
+  --seat-home) want_value=seat-home ;;
+  --seat-home=*) SEAT_HOME_ARG=${a#--seat-home=} ;;
   --backend) want_value=backend ;;
   --backend=*)
     BACKEND_ARG=${a#--backend=}
@@ -756,6 +762,10 @@ done
 [ "$SEAT_SET" -eq 0 ] || [ -n "$SEAT" ] || {
   echo "error: --seat requires a non-empty value" >&2
   exit 1
+}
+[ -z "$SEAT_HOME_ARG" ] || {
+  [ "$SEAT_SET" -eq 1 ] || { echo "error: --seat-home requires --seat" >&2; exit 1; }
+  [ "$RELAUNCH" -eq 0 ] || { echo "error: --relaunch resolves the recorded dock binding; --seat-home cannot override it" >&2; exit 1; }
 }
 [ "$BACKEND_SET" -eq 0 ] || [ -n "$BACKEND_ARG" ] || {
   echo "error: --backend requires a non-empty value" >&2
@@ -1433,6 +1443,7 @@ if [ "${#POS[@]}" -gt 0 ] && [ "${POS[0]}" != "$idpart" ] && case "$idpart" in *
   [ -z "$MODEL" ] || shared_args+=(--model "$MODEL")
   [ -z "$EFFORT" ] || shared_args+=(--effort "$EFFORT")
   [ -z "$SEAT" ] || shared_args+=(--seat "$SEAT")
+  [ -z "$SEAT_HOME_ARG" ] || shared_args+=(--seat-home "$SEAT_HOME_ARG")
   [ -z "$BACKEND_ARG" ] || shared_args+=(--backend "$BACKEND_ARG")
   # One delivery contract applies to every pair in a batch, exactly like the shared
   # harness. Each pair still re-validates it against its own brief, so a batch
@@ -2246,6 +2257,10 @@ if [ -n "$SEAT" ]; then
     SEAT_BINDING=$(fm_dock_resolve "$CONFIG" "$SEAT" "$HARNESS") || exit 1
   fi
   IFS=$'\t' read -r _ SEAT_DOCK SEAT_HOME SEAT_SOURCE <<< "$SEAT_BINDING"
+  if [ -n "$SEAT_HOME_ARG" ] && [ "$SEAT_HOME_ARG" != "$SEAT_HOME" ]; then
+    echo "error: dispatch seat binding resolved to $SEAT_HOME, but the profile was measured against $SEAT_HOME_ARG; launch refused, no ambient account selected" >&2
+    exit 1
+  fi
   if ! { [ "$SPAWN_CONTROL_PARENT" = 1 ] && [ -n "${FM_CONTROL_RELAUNCH_SEAT_BINDING:-}" ]; }; then
     SEAT_CODEX_BIN=$(command -v codex) || {
       echo "error: Codex authentication could not be established for seat $SEAT (CLI unavailable); launch refused, no ambient account selected" >&2

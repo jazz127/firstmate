@@ -440,7 +440,7 @@ test_codex_threads_model_and_max_effort() {
 }
 
 test_codex_luna_seat_is_explicit_and_default_is_unchanged() {
-  local rec id out status launch seat_home
+  local rec id out status launch seat_home other_seat_home
   id=profile-codex-luna-seat-z4
   rec=$(make_spawn_case profile-codex-luna-seat codex "$id")
   read_case_record "$rec"
@@ -463,7 +463,7 @@ SH
   chmod +x "$FAKEBIN_DIR/codex"
 
   out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" \
-    "$id" "$PROJ_DIR" --harness codex --model gpt-5.6-luna --effort medium --seat luna)
+    "$id" "$PROJ_DIR" --harness codex --model gpt-5.6-luna --effort medium --seat luna --seat-home "$seat_home")
   status=$?
   expect_code 0 "$status" "Codex Luna seat dispatch should succeed: $out"
   launch=$(cat "$LAUNCH_LOG")
@@ -480,6 +480,20 @@ SH
     "executed Codex worker did not receive the dispatch model"
   assert_grep "dock=test-dock" "$HOME_DIR/state/$id.meta" "seat provenance lacks dock id"
   assert_grep "seat_home=$seat_home" "$HOME_DIR/state/$id.meta" "seat provenance lacks credential home"
+
+  id=profile-codex-luna-seat-binding-z4a
+  rec=$(make_spawn_case profile-codex-luna-seat-binding codex "$id")
+  read_case_record "$rec"
+  other_seat_home="$CASE_DIR/other credential home"
+  mkdir -p "$other_seat_home"
+  printf '{}\n' > "$other_seat_home/auth.json"
+  jq -n --arg home "$other_seat_home" '{version:1,id:"changed-dock",seats:{luna:{harness:"codex",credential_home:$home}}}' \
+    > "$HOME_DIR/config/dock.json"
+  out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" \
+    "$id" "$PROJ_DIR" --harness codex --model gpt-5.6-luna --effort medium --seat luna --seat-home "$seat_home")
+  status=$?
+  expect_code 1 "$status" "a changed dock must refuse a stale dispatch seat binding"
+  assert_contains "$out" "measured against $seat_home" "stale dispatch binding refusal should name both credential homes"
 
   id=profile-codex-default-seat-z5
   rec=$(make_spawn_case profile-codex-default-seat codex "$id")

@@ -933,6 +933,8 @@ assert_contains "$out" 'candidate: codex:gpt-5.6-luna  provider=codex  scope=all
   "the Luna candidate reads its own account despite an exhausted ambient account"
 assert_contains "$out" "profile: --harness 'codex' --model 'gpt-5.6-luna' --effort 'medium' --seat 'luna'" \
   "the selected Codex seat is emitted as a concrete spawn flag"
+assert_contains "$out" "--seat-home '$SEAT_HOME'" \
+  "the selected Codex seat carries its quota-bound dock path to spawn"
 SEAT_SCHEMA5="$TMP_ROOT/schema5-seat.json"
 jq '.schemaVersion = 5 | .providers |= map(select(.provider != "codex" or .accountKey == "codex-luna") | del(.accountKey))' \
   "$SEAT_QUOTA" > "$SEAT_SCHEMA5"

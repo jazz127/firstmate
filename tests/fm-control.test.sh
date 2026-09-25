@@ -393,6 +393,48 @@ test_pi_exit_herdr_cost_footer_boundary() {
   pass "fm-control Pi exit: a cost-first footer permits one /quit only under a proven idle Pi composer"
 }
 
+test_pi_exit_uses_herdr_compact_proof_boundary() {
+  # Pi's experimental compact layout on Herdr (kunchenguid/firstmate#5445;
+  # matrix adapted from #5473): with the opt-in, only a proven idle compact
+  # composer earns one /quit; without it, even that screen types nothing.
+  local dir case_id header rule screen mode history i want
+  header=$'\033[38;2;129;162;190m╭ gpt-5.6-terra · firstmate ────────────────╮\033[0m'
+  rule=$'\033[38;2;129;162;190m─────────────────────────────────────────────\033[0m'
+  for case_id in idle idle-short-history idle-long-history default-off draft whitespace boxed unstyled-row continuation working blocked missing-identity contradictory-identity truncated shell; do
+    dir=$(new_case "pi-herdr-exit-$case_id")
+    add_herdr_pi_task "$dir" t1
+    screen="$header"$'\n\033[7m \033[0m\n'"$rule"$'\n'
+    mode=idle
+    history=
+    want=refuse
+    case "$case_id" in
+      idle|default-off) [ "$case_id" = default-off ] || want=allow ;;
+      idle-short-history) history="$rule"$'\nold transcript one\nold transcript two\n'; want=allow ;;
+      idle-long-history)
+        history="$rule"$'\n'
+        for i in $(seq 1 9); do history+="old transcript $i"$'\n'; done
+        want=allow
+        ;;
+      draft) screen="$header"$'\nprivacy-safe draft\033[7m \033[0m\n'"$rule"$'\n' ;;
+      whitespace) screen="$header"$'\n  \033[7m \033[0m\n'"$rule"$'\n' ;;
+      boxed) screen="$header"$'\n│\033[7m \033[0m│\n'"$rule"$'\n' ;;
+      unstyled-row) screen="$header"$'\n \n'"$rule"$'\n' ;;
+      continuation) screen="$header"$'\n> continued input\033[7m \033[0m\n'"$rule"$'\n' ;;
+      working|blocked|missing-identity|contradictory-identity) mode=$case_id ;;
+      truncated) screen="$header"$'\n\033[7m \033[0m\n' ;;
+      shell) screen+=$'\n$ prompt after stale Pi registration\n' ;;
+    esac
+    printf '%s' "$history$screen" > "$dir/fake/herdr-screen"
+    printf '%s' "$mode" > "$dir/fake/herdr-mode"
+    if [ "$case_id" = default-off ]; then
+      FM_BACKEND_HERDR_PI_COMPACT=0 expect_pi_exit "$dir" "$want" "Pi exit on the compact '$case_id' shape"
+    else
+      FM_BACKEND_HERDR_PI_COMPACT=1 expect_pi_exit "$dir" "$want" "Pi exit on the compact '$case_id' shape"
+    fi
+  done
+  pass "fm-control Pi exit: the opted-in Herdr compact proof alone permits /quit"
+}
+
 test_interrupt_sends_each_harness_verified_key() {
   local dir out rc harness expected key repeat clear got want
   for harness in $VERIFIED_HARNESSES; do
@@ -1138,6 +1180,7 @@ test_fm_send_still_marks_the_same_secondmate_task() {
 
 test_exit_types_each_harness_verified_command
 test_pi_exit_herdr_cost_footer_boundary
+test_pi_exit_uses_herdr_compact_proof_boundary
 test_interrupt_sends_each_harness_verified_key
 test_devin_interrupt_invalidates_busy
 test_devin_idle_interrupt_sends_one_press

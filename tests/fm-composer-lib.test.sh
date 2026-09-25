@@ -849,6 +849,76 @@ test_matrix_pi_prompt_row_extraction_matches_classification() {
   pass "matrix: pi extraction and classification agree on the pair in any call order"
 }
 
+test_matrix_pi_compact_is_experimental_and_per_call() {
+  # Pi's compact layout (kunchenguid/firstmate#5445, proposal #5473): a rounded
+  # header, one unboxed input row, one lower rule. Not yet captured from a real
+  # pi build, so it is honoured only when THIS call's caps carry pi-compact=1,
+  # and classification and extraction each parse that for themselves.
+  local on off plain noid header rule idle draft pi_idle out
+  on=$'styled=1\ncursor=0\nidentity=1\npi-compact=1\nrows=20'
+  off=$CAPS_STYLED
+  plain=$'styled=0\ncursor=0\nidentity=1\npi-compact=1\nrows=20'
+  noid=$'styled=1\ncursor=0\nidentity=0\npi-compact=1\nrows=20'
+  header=$'\033[38;2;129;162;190m╭ gpt-5.6-terra · firstmate ────────────────╮\033[0m'
+  rule=$'\033[38;2;129;162;190m─────────────────────────────────────────────\033[0m'
+  idle="$header"$'\n\033[7m \033[0m\n'"$rule"
+  draft="$header"$'\nprivacy-safe draft\033[7m \033[0m\n'"$rule"
+  pi_idle=$(printf 'pi\tidle')
+  assert_screen "compact idle with the opt-in" empty "$on" "$idle" '' "$pi_idle"
+  assert_screen "compact idle with herdr row padding" empty "$on" "$header"$'\n\033[0m\033[7m \033[0m          \r\n'"$rule" '' "$pi_idle"
+  assert_screen "compact idle without the opt-in" unknown "$off" "$idle" '' "$pi_idle"
+  assert_screen "compact idle on a plain capture" unknown "$plain" "$idle" '' "$pi_idle"
+  assert_screen "compact idle without identity capability" unknown "$noid" "$idle"
+  [ "$(fm_composer_classify_screen "$on" "$idle")" = need-identity ] \
+    || fail "a compact candidate must request the lazy identity probe"
+  # An enabled call never leaks into the next disabled one, in either order.
+  out=$(fm_composer_classify_screen "$on" "$idle" '' "$pi_idle"; printf ' '; fm_composer_classify_screen "$off" "$idle" '' "$pi_idle")
+  [ "$out" = 'empty unknown' ] || fail "an enabled compact call leaked into a disabled one: '$out'"
+  # Extraction parity in any call order, with draft bytes preserved.
+  out=$(fm_composer_extract_selected_content "$on" "$draft")
+  [ "$out" = 'privacy-safe draft' ] || fail "fresh compact extraction should hold the draft, got '$out'"
+  assert_screen "compact draft" pending "$on" "$draft" '' "$pi_idle"
+  out=$(fm_composer_extract_selected_content "$on" "$draft")
+  [ "$out" = 'privacy-safe draft' ] || fail "compact extraction after classification changed to '$out'"
+  if out=$(fm_composer_extract_selected_content "$off" "$draft"); then
+    fail "a disabled call must not select the compact layout, extracted '$out'"
+  fi
+  out=$(fm_composer_extract_selected_content "$on" "$idle")
+  [ -z "$out" ] || fail "an idle compact composer should extract empty, got '$out'"
+  # Unproven variants.
+  assert_screen "compact bright draft" pending "$on" "$draft" '' "$pi_idle"
+  assert_screen "compact ghost text before the cursor cell" pending "$on" \
+    "$header"$'\n\033[2mType a message\033[0m\033[7m \033[0m\n'"$rule" '' "$pi_idle"
+  assert_screen "compact ordinary spaces without the cursor cell" unknown "$on" \
+    "$header"$'\n   \n'"$rule" '' "$pi_idle"
+  assert_screen "compact whitespace before the cursor cell" unknown "$on" \
+    "$header"$'\n  \033[7m \033[0m\n'"$rule" '' "$pi_idle"
+  assert_screen "compact boxed input row" unknown "$on" \
+    "$header"$'\n│\033[7m \033[0m│\n'"$rule" '' "$pi_idle"
+  assert_screen "compact multiline input" unknown "$on" \
+    "$header"$'\nfirst line\n\033[7m \033[0m\n'"$rule" '' "$pi_idle"
+  assert_screen "compact truncated header" unknown "$on" \
+    $'\033[38;2;129;162;190m╭ gpt-5.6-terra · firstmate ─────\033[0m\n\033[7m \033[0m\n'"$rule" '' "$pi_idle"
+  assert_screen "compact truncated rule" unknown "$on" "$header"$'\n\033[7m \033[0m\n────' '' "$pi_idle"
+  assert_screen "compact with no lower rule" unknown "$on" "$header"$'\n\033[7m \033[0m' '' "$pi_idle"
+  assert_screen "compact with a shell below" unknown "$on" "$idle"$'\n$ ls' '' "$pi_idle"
+  # A cost-first footer below the compact layout is not a combination this
+  # change claims to support, so it stays unproven.
+  assert_screen "compact with a cost footer below" unknown "$on" \
+    "$idle"$'\n$0.000 (sub) 5.4%/272k (auto)' '' "$pi_idle"
+  assert_screen "compact working pi" unknown "$on" "$idle" '' "$(printf 'pi\tworking')"
+  assert_screen "compact blocked pi" unknown "$on" "$idle" '' "$(printf 'pi\tblocked')"
+  assert_screen "compact absent identity" unknown "$on" "$idle" '' probe-absent
+  assert_screen "compact foreign identity" unknown "$on" "$idle" '' "$(printf 'shell\tidle')"
+  # Transcript separators above the compact layout do not disturb it, and a
+  # separated pair never masquerades as it.
+  assert_screen "compact below transcript separators" empty "$on" \
+    "$rule"$'\nold transcript\n'"$rule"$'\n'"$idle" '' "$pi_idle"
+  assert_screen "a two-rule pair is still the separated shape" empty "$on" \
+    "$rule"$'\n\033[7m \033[0m\n'"$rule" '' "$pi_idle"
+  pass "matrix: pi's compact layout is opt-in per call, needs its cursor cell and idle identity, and extracts in any order"
+}
+
 test_zero_height_separator_pair_proves_nothing() {
   # A pi pair that encloses NO row cannot hold an input row, yet every content
   # check over an empty range trivially succeeded, so an idle pi identity read
@@ -1185,6 +1255,7 @@ test_matrix_pi_separated_needs_identity
 test_matrix_pi_dollar_status_footer_is_empty
 test_matrix_pi_dollar_status_footer_is_scoped
 test_zero_height_separator_pair_proves_nothing
+test_matrix_pi_compact_is_experimental_and_per_call
 test_matrix_pi_prompt_glyph_row_is_empty
 test_matrix_pi_prompt_row_is_pi_only_furniture
 test_matrix_pi_prompt_row_extraction_matches_classification

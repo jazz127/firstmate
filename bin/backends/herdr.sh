@@ -3110,11 +3110,21 @@ fm_backend_herdr_composer_identity() {  # <target> -> "<agent>\t<status>"
 # only when the classifier reports the verdict depends on it (a pi separator
 # pair below every other candidate), preserving this adapter's original
 # consult-only-when-needed behavior.
+# fm_backend_herdr_pi_compact_cap: the pi-compact capability line for a STYLED
+# capture, printed only when the operator opts in with
+# FM_BACKEND_HERDR_PI_COMPACT=1. Pi's compact layout is experimental in the
+# shared classifier (bin/fm-composer-lib.sh) until a real versioned capture
+# confirms it, so the default declares nothing.
+fm_backend_herdr_pi_compact_cap() {
+  [ "${FM_BACKEND_HERDR_PI_COMPACT:-0}" = 1 ] || return 0
+  printf '\npi-compact=1'
+}
+
 fm_backend_herdr_composer_state() {  # <target> -> empty|pending|pending-unproven|unknown
   local target=$1 cap caps verdict identity
   fm_backend_herdr_parse_target "$target" || { printf 'unknown'; return 0; }
   if cap=$(fm_backend_herdr_capture_ansi "$target" "$FM_COMPOSER_CAPTURE_LINES" 2>/dev/null); then
-    caps=$(printf 'styled=1\ncursor=0\nidentity=1\nrows=%s' "$FM_COMPOSER_CAPTURE_LINES")
+    caps=$(printf 'styled=1\ncursor=0\nidentity=1%s\nrows=%s' "$(fm_backend_herdr_pi_compact_cap)" "$FM_COMPOSER_CAPTURE_LINES")
   elif cap=$(fm_backend_herdr_capture "$target" "$FM_COMPOSER_CAPTURE_LINES"); then
     caps=$(printf 'styled=0\ncursor=0\nidentity=1\nrows=%s' "$FM_COMPOSER_CAPTURE_LINES")
   else
@@ -3277,7 +3287,7 @@ fm_backend_herdr_proof_lines() {  # <text>
 fm_backend_herdr_composer_content() {  # <target> [lines]
   local target=$1 lines=${2:-$FM_COMPOSER_CAPTURE_LINES} cap caps
   if cap=$(fm_backend_herdr_capture_ansi "$target" "$lines" 2>/dev/null) && [ -n "$cap" ]; then
-    caps=$(printf 'styled=1\ncursor=0\nidentity=0\nrows=%s' "$lines")
+    caps=$(printf 'styled=1\ncursor=0\nidentity=0%s\nrows=%s' "$(fm_backend_herdr_pi_compact_cap)" "$lines")
   elif cap=$(fm_backend_herdr_capture "$target" "$lines") && [ -n "$cap" ]; then
     caps=$(printf 'styled=0\ncursor=0\nidentity=0\nrows=%s' "$lines")
   else

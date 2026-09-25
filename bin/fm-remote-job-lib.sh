@@ -913,6 +913,16 @@ fm_remote_job_process_start() {
   printf '%s\n' "$value"
 }
 
+fm_remote_job_process_state() {
+  local pid=$1 ps_bin value
+  if [ -x /bin/ps ]; then ps_bin=/bin/ps; elif [ -x /usr/bin/ps ]; then ps_bin=/usr/bin/ps; else return 1; fi
+  value=$("$ps_bin" -p "$pid" -o stat= 2>/dev/null) || return 1
+  value=$(printf '%s\n' "$value" | tr -d '[:space:]')
+  [ -n "$value" ] || return 1
+  case "$value" in *[![:alnum:]+_-]*) return 1 ;; esac
+  printf '%s\n' "$value"
+}
+
 fm_remote_job_process_command() {
   local pid=$1 ps_bin value
   if [ -x /bin/ps ]; then ps_bin=/bin/ps; elif [ -x /usr/bin/ps ]; then ps_bin=/usr/bin/ps; else return 1; fi
@@ -1054,7 +1064,7 @@ fm_remote_job_lock_owner_matches_process() {
 }
 
 fm_remote_job_worker_owned_alive() {
-  local root=$1 account_home=$2 lock pid pid_file identity_file command ps_bin
+  local root=$1 account_home=$2 lock pid pid_file identity_file command ps_bin recorded_start recorded_command actual_start actual_command
   [ "${FM_REMOTE_JOB_ACTIVE:-}" != 1 ] || return 0
   fm_remote_job_prepare_state "$account_home" || return 1
   lock=$(fm_remote_job_worker_lock_path)
@@ -1072,7 +1082,12 @@ fm_remote_job_worker_owned_alive() {
   if [ -x /bin/ps ]; then ps_bin=/bin/ps; elif [ -x /usr/bin/ps ]; then ps_bin=/usr/bin/ps; else return 1; fi
   command=$("$ps_bin" -p "$pid" -o command= 2>/dev/null) || return 1
   fm_remote_job_worker_command_matches "$root/bin/fm-remote-job-worker.sh" "$command" || return 1
-  fm_remote_job_process_start "$pid" >/dev/null || return 1
+  recorded_start=$(fm_remote_job_read_single_line "$lock/start" 256) || return 1
+  recorded_command=$(fm_remote_job_read_single_line "$lock/command" 8192) || return 1
+  actual_start=$(fm_remote_job_process_start "$pid") || return 1
+  actual_command=$(fm_remote_job_process_command "$pid") || return 1
+  [ "$recorded_start" = "$actual_start" ] || return 1
+  [ "$recorded_command" = "$actual_command" ] || return 1
   FM_REMOTE_JOB_OWNER_PID=$pid
 }
 
@@ -1313,7 +1328,7 @@ fm_remote_job_linux_reap_worker_processes() { # <remote-root> <keep-pid>
 }
 
 fm_remote_job_linux_start_guard_acquire() { # <account-home>
-  local account_home=$1 guard owner owner_pid owner_start actual_start mtime now stale attempt=0
+  local account_home=$1 guard owner owner_pid owner_start owner_state actual_start mtime now stale attempt=0
   fm_remote_job_prepare_state "$account_home" || return 1
   guard="$FM_REMOTE_JOB_STATE/worker.starting"
   [ ! -L "$guard" ] || { FM_REMOTE_JOB_ERROR="remote job start guard is a symlink"; return 1; }
@@ -1348,14 +1363,20 @@ fm_remote_job_linux_start_guard_acquire() { # <account-home>
     owner_start=$(fm_remote_job_read_single_line "$guard/start" 256 2>/dev/null || true)
     case "$owner_pid" in ''|*[!0-9]*) owner_pid= ;; esac
     if [ -n "$owner_pid" ] && [ "$owner_pid" -gt 1 ] && [ -n "$owner_start" ]; then
-      actual_start=$(fm_remote_job_process_start "$owner_pid" 2>/dev/null || true)
-      if [ -z "$actual_start" ]; then
+      owner_state=$(fm_remote_job_process_state "$owner_pid" 2>/dev/null || true)
+      case "$owner_state" in ''|Z*)
         owner_pid=
-      elif [ "$actual_start" = "$owner_start" ]; then
-        attempt=$((attempt + 1))
-        sleep 0.1
-        continue
-      fi
+        ;;
+        *)
+          actual_start=$(fm_remote_job_process_start "$owner_pid" 2>/dev/null || true)
+          if [ "$actual_start" = "$owner_start" ]; then
+            attempt=$((attempt + 1))
+            sleep 0.1
+            continue
+          fi
+          owner_pid=
+          ;;
+      esac
     fi
     if [ -z "$owner_pid" ]; then
       mtime=$(fm_remote_job_path_mtime "$guard" 2>/dev/null || true)

@@ -81,6 +81,8 @@ The other owners read the file at every arm.
 ### The report surface
 
 `bin/fm-branch-report.sh` appends to the outcome store (`bin/fm-branch-outcome.sh`) plus a per-turn receipt the host requires.
+Each command report names its claimed queue sequence with `--row`, and the receipt binds that row to the report's outcome sequence.
+The host requires a report for every claimed row before it counts the turn handled.
 A row recorded after the captain returned is also queued for main as a durable check wake.
 
 ### Leases and authority
@@ -107,7 +109,7 @@ On each actionable close under the away record, the host runs these steps:
 The host counts the wake handled only when all three hold:
 
 - The turn exited cleanly.
-- The turn recorded at least one report.
+- The turn recorded a report for every granted wake row.
 - The turn left none of its granted rows in the wake queue.
 
 ### Where a handled wake's outcome goes

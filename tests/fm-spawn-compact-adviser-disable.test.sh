@@ -73,13 +73,14 @@ SH
 #   emitted_launch_env <fakebin> <launch-log> <pane-log>
 emitted_launch_env() {
   local fakebin=$1 launchlog=$2 panelog=$3 launch preamble
+  shift 3
   launch=$(cat "$launchlog")
   # The pane exports run before the launch command in the real pane shell, so
   # replay them here in the same order: the filtered launch environment retains
   # what the pane holds, and dropping them would test a pane that never existed.
   preamble=$(grep '^export ' "$panelog")
   env -i HOME="$TMP_ROOT/pane-home" PATH="$fakebin:$PATH" TERM=xterm \
-    TMUX=synthetic-pane COMPACT_ADVISER_DISABLE="$CONTRARY" \
+    TMUX=synthetic-pane COMPACT_ADVISER_DISABLE="$CONTRARY" "$@" \
     /bin/sh -c "$preamble
 $launch"
 }
@@ -151,23 +152,25 @@ test_tool_caches_stay_outside_worktree() {
     expect_code 0 "$?" "cache launch with allowlist=$setting should succeed: $out"
     cat > "$FAKEBIN_DIR/codex" <<'SH'
 #!/bin/sh
-printf '%s\n' "$GOTMPDIR" "$COREPACK_HOME" "$PNPM_HOME" \
-  "$npm_config_store_dir" "$npm_config_cache" "$XDG_CACHE_HOME"
+printf '%s\n' "$GOTMPDIR" "$COREPACK_HOME" "$npm_config_cache"
 SH
     chmod +x "$FAKEBIN_DIR/codex"
     seen=$(emitted_launch_env "$FAKEBIN_DIR" "$LAUNCH_LOG" "$PANE_LOG") \
       || fail "cache launch with allowlist=$setting did not execute"
     task_tmp="/tmp/fm-$id"
-    expected=$(printf '%s\n' "$task_tmp/gotmp" "$task_tmp/cache/corepack" \
-      "$task_tmp/cache/pnpm" "$task_tmp/cache/pnpm/store" \
-      "$task_tmp/cache/npm" "$task_tmp/cache/xdg")
+    expected=$(printf '%s\n' "$task_tmp/gotmp" "$task_tmp/cache/corepack" "$task_tmp/cache/npm")
     assert_equals "$expected" "$seen" \
-      "cache launch with allowlist=$setting did not route every tool cache to the task temp root"
-    [ -d "$task_tmp/cache/corepack" ] && [ -d "$task_tmp/cache/pnpm" ] \
-      && [ -d "$task_tmp/cache/npm" ] && [ -d "$task_tmp/cache/xdg" ] \
+      "cache launch with allowlist=$setting did not route the Corepack and npm caches to the task temp root"
+    [ -d "$task_tmp/cache/corepack" ] && [ -d "$task_tmp/cache/npm" ] \
       || fail "cache launch with allowlist=$setting did not create the cache homes"
+    seen=$(emitted_launch_env "$FAKEBIN_DIR" "$LAUNCH_LOG" "$PANE_LOG" \
+      COREPACK_HOME="$TMP_ROOT/user corepack" npm_config_cache="$TMP_ROOT/user npm") \
+      || fail "cache launch with allowlist=$setting and preset caches did not execute"
+    expected=$(printf '%s\n' "$task_tmp/gotmp" "$TMP_ROOT/user corepack" "$TMP_ROOT/user npm")
+    assert_equals "$expected" "$seen" \
+      "cache launch with allowlist=$setting overrode cache homes the pane already set"
   done
-  pass "worker launch routes tool caches outside the worktree with either launch environment posture"
+  pass "worker launch defaults Corepack and npm caches outside the worktree and keeps preset ones"
 }
 
 # The floor must not depend on the pane export having landed: a pane whose

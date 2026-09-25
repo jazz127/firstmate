@@ -923,7 +923,7 @@ SSH_AUTH_SOCK
 ### Variables retained and where values come from
 
 Firstmate retains basic home, executable search, terminal, locale, temporary-directory, and backend routing variables, plus its explicit launch assignments, its ship and scout task marker, the compact-adviser kill switch described below, and enabled task trace.
-Worker launch assignments route Go, Corepack, pnpm, npm, and XDG cache homes into the task temp root outside the worktree; [`tests/fm-spawn-compact-adviser-disable.test.sh`](../tests/fm-spawn-compact-adviser-disable.test.sh) exercises the emitted environment with local fixtures.
+Worker launch assignments route Go temp files, and Corepack and npm cache homes the pane has not already set, into the task temp root outside the worktree; [`tests/fm-spawn-compact-adviser-disable.test.sh`](../tests/fm-spawn-compact-adviser-disable.test.sh) exercises the emitted environment with local fixtures.
 Before publication, GitHub and GitLab changed-file APIs provide the published scratch backstop; Gerrit relies on the worker scratch preflight (`fm-pr-body-preflight.sh --scratch`) and the existing ready gate.
 [`fm-spawn.sh --help`](../bin/fm-spawn.sh) owns the exact retained names, assignments, and parsing mechanics.
 

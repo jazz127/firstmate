@@ -354,17 +354,18 @@ def cmd_order(args):
     for path in args.path:
         safe_relative_path(path)
     path = contribution_path(args.task)
-    if path.exists() or path.is_symlink():
-        fail("contribution order already exists")
-    write_json(path, {"schema": "fm-bosun-contribution.v1", "task": args.task,
-                      "maneuver": args.maneuver, "bosun": args.bosun, "target": want,
-                      "fork": {"owner": fork_owner.lower(), "repository": fork_repository.lower()},
-                      "upstream_default_branch": default_branch,
-                      "captain_order": {"words": args.captain_words, "recorded_at": now()},
-                      "source_branch": args.source, "source_commits": args.commit,
-                      "allowed_paths": args.path, "contribution_branch": args.branch,
-                      "validation_evidence": None, "upstream_pr": None,
-                      "state": "ordered", "review_events": []})
+    with contribution_lock(args.task):
+        if path.exists() or path.is_symlink():
+            fail("contribution order already exists")
+        write_json(path, {"schema": "fm-bosun-contribution.v1", "task": args.task,
+                          "maneuver": args.maneuver, "bosun": args.bosun, "target": want,
+                          "fork": {"owner": fork_owner.lower(), "repository": fork_repository.lower()},
+                          "upstream_default_branch": default_branch,
+                          "captain_order": {"words": args.captain_words, "recorded_at": now()},
+                          "source_branch": args.source, "source_commits": args.commit,
+                          "allowed_paths": args.path, "contribution_branch": args.branch,
+                          "validation_evidence": None, "upstream_pr": None,
+                          "state": "ordered", "review_events": []})
     print(path)
 
 
@@ -591,8 +592,11 @@ def cmd_registration_check_locked(args):
         fail("Bosun PR registration requires a matching captain order")
     if record.get("state") not in ("ordered", "assigned") or record.get("upstream_pr"):
         fail("captain order already has a registered upstream PR")
-    expected_url = f"https://github.com/{record['target']['owner']}/{record['target']['repository']}/pull/"
-    if not args.url.startswith(expected_url) or not args.url[len(expected_url):].isdigit():
+    url_match = re.fullmatch(
+        r"https://github\.com/([^/]+)/([^/]+)/pull/([0-9]+)", args.url, re.IGNORECASE)
+    if (not url_match
+            or url_match.group(1).lower() != record["target"]["owner"].lower()
+            or url_match.group(2).lower() != record["target"]["repository"].lower()):
         fail("upstream PR URL differs from captain order")
     expected_head = f"{record['fork']['owner']}/{record['fork']['repository']}"
     expected_base = f"{record['target']['owner']}/{record['target']['repository']}"
@@ -622,6 +626,10 @@ def cmd_registration_check_locked(args):
         source_patches = [git_patch_id(worktree, commit) for commit in source_commits]
         if not actual_patches or actual_patches != source_patches or any(item is None for item in actual_patches):
             fail("upstream PR patches differ from the ordered source commits")
+        for commit in source_commits:
+            paths = git_output(worktree, "diff-tree", "--root", "--no-commit-id", "--name-only", "-r", commit)
+            if paths is None or any(path not in record["allowed_paths"] for path in paths.splitlines() if path):
+                fail("ordered source commit changes an unauthorized path")
     allowed = record.get("allowed_paths")
     if not isinstance(allowed, list) or not allowed:
         fail("captain order has no allowed paths")

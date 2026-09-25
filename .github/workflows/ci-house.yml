@@ -37,6 +37,7 @@ jobs:
           tests/fm-ci-workflow.test.sh
           tests/fm-task-delivery.test.sh
           tests/fm-dod-lib.test.sh
+          tests/fm-captain-chart.test.sh
       - name: Lint the workflow set
         run: bin/fm-lint-workflows.sh
       - name: Run house workflow and delivery regressions
@@ -45,5 +46,6 @@ jobs:
           tests/fm-ci-workflow.test.sh
           tests/fm-task-delivery.test.sh
           tests/fm-dod-lib.test.sh
+          tests/fm-captain-chart.test.sh
       - name: Verify test inventory coverage
         run: bin/fm-test-run.sh --check-coverage

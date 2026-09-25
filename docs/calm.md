@@ -9,6 +9,10 @@ It hides a block only when its raw text contains no newline and its trimmed leng
 ## Pi
 
 While Calm is active and an agent run is under way, Calm hides Pi's built-in `Working...` row and shows a small two-row animated boat in its place, and no separate Calm status row is added.
+Below that boat, the same widget shows a terminal fleet map of the current bearings projection and registered projects when the viewport is at least 40 columns wide.
+The map is loaded off the render path at the start of a working period, so the boat remains visible while the local snapshot is collected; a new working period refreshes the map.
+The map adds islands, task ships, cargo, and docks without changing the boat's cadence, frozen position, phase lock, or resize behavior.
+At narrower widths the boat alone remains visible, and a failed map load leaves the boat intact with a diagnostic.
 The water fills the usable width with low one-cell Unicode bars, all in standard ANSI blue, so the swell shows through bar height alone.
 The asymmetric three-cell `◿│◣` sail is centered over the five-cell `╲▁▁▁╱` hull, and the whole boat, both sail halves, mast, and hull, is one standard ANSI yellow, with the hull's zero-height interior keeping the swell continuous beneath the boat.
 The boat is deliberately calm: it moves one column every 880ms, while the long smooth wave advances one quarter-cell every 220ms so the surface stays alive between boat steps.

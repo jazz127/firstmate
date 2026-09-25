@@ -207,6 +207,37 @@ EOF
   bosun_registration_check 1 || exit 1
 fi
 
+if [ "$IS_BOSUN" = 1 ]; then
+  BOSUN_PR_JSON=$(gh pr view "$URL" --json headRepositoryOwner,headRepository,baseRepository,baseRefName,headRefName,headRefOid 2>/dev/null) || {
+    echo "error: Bosun PR forge response was unreadable" >&2
+    exit 1
+  }
+  BOSUN_HEAD=$(printf '%s' "$BOSUN_PR_JSON" | jq -er '(.headRepositoryOwner.login // "") + "/" + (.headRepository.name // "")') || exit 1
+  BOSUN_BASE_REPOSITORY=$(printf '%s' "$BOSUN_PR_JSON" | jq -er '.baseRepository.nameWithOwner // ""') || exit 1
+  BOSUN_BRANCH=$(printf '%s' "$BOSUN_PR_JSON" | jq -er '.baseRefName // ""') || exit 1
+  BOSUN_HEAD_BRANCH=$(printf '%s' "$BOSUN_PR_JSON" | jq -er '.headRefName // ""') || exit 1
+  PR_HEAD=$(printf '%s' "$BOSUN_PR_JSON" | jq -er '.headRefOid // ""') || exit 1
+  if ! { [ "$BOSUN_HEAD" != / ] && [ "$BOSUN_BASE_REPOSITORY" != "" ] && [ "$BOSUN_BRANCH" != "" ] && [ "$BOSUN_HEAD_BRANCH" != "" ] && fm_pr_head_valid "$PR_HEAD"; }; then
+    echo "error: Bosun PR forge response was incomplete" >&2
+    exit 1
+  fi
+  bosun_refresh_upstream_base || {
+    echo "error: Bosun upstream default branch is unavailable" >&2
+    exit 1
+  }
+  BOSUN_CHANGED_PATHS=$(git -C "$WT" diff --name-only "$BOSUN_UPSTREAM_BASE" HEAD) || {
+    echo "error: Bosun upstream change could not be inspected" >&2
+    exit 1
+  }
+  BOSUN_PATH_ARGS=()
+  while IFS= read -r BOSUN_PATH; do
+    [ -n "$BOSUN_PATH" ] && BOSUN_PATH_ARGS+=(--changed-path "$BOSUN_PATH")
+  done <<EOF
+$BOSUN_CHANGED_PATHS
+EOF
+  bosun_registration_check 0 || exit 1
+fi
+
 META_TMP=
 META_LOCK=
 META_LOCK_HELD=0
@@ -274,36 +305,6 @@ else
   PR_POLL_PUBLISH_LOCK_HELD=0
   echo "error: could not publish PR poll" >&2
   exit 1
-fi
-if [ "$IS_BOSUN" = 1 ]; then
-  BOSUN_PR_JSON=$(gh pr view "$URL" --json headRepositoryOwner,headRepository,baseRepository,baseRefName,headRefName,headRefOid 2>/dev/null) || {
-    echo "error: Bosun PR forge response was unreadable" >&2
-    exit 1
-  }
-  BOSUN_HEAD=$(printf '%s' "$BOSUN_PR_JSON" | jq -er '(.headRepositoryOwner.login // "") + "/" + (.headRepository.name // "")') || exit 1
-  BOSUN_BASE_REPOSITORY=$(printf '%s' "$BOSUN_PR_JSON" | jq -er '.baseRepository.nameWithOwner // ""') || exit 1
-  BOSUN_BRANCH=$(printf '%s' "$BOSUN_PR_JSON" | jq -er '.baseRefName // ""') || exit 1
-  BOSUN_HEAD_BRANCH=$(printf '%s' "$BOSUN_PR_JSON" | jq -er '.headRefName // ""') || exit 1
-  PR_HEAD=$(printf '%s' "$BOSUN_PR_JSON" | jq -er '.headRefOid // ""') || exit 1
-  if ! { [ "$BOSUN_HEAD" != / ] && [ "$BOSUN_BASE_REPOSITORY" != "" ] && [ "$BOSUN_BRANCH" != "" ] && [ "$BOSUN_HEAD_BRANCH" != "" ] && fm_pr_head_valid "$PR_HEAD"; }; then
-    echo "error: Bosun PR forge response was incomplete" >&2
-    exit 1
-  fi
-  bosun_refresh_upstream_base || {
-    echo "error: Bosun upstream default branch is unavailable" >&2
-    exit 1
-  }
-  BOSUN_CHANGED_PATHS=$(git -C "$WT" diff --name-only "$BOSUN_UPSTREAM_BASE" HEAD) || {
-    echo "error: Bosun upstream change could not be inspected" >&2
-    exit 1
-  }
-  BOSUN_PATH_ARGS=()
-  while IFS= read -r BOSUN_PATH; do
-    [ -n "$BOSUN_PATH" ] && BOSUN_PATH_ARGS+=(--changed-path "$BOSUN_PATH")
-  done <<EOF
-$BOSUN_CHANGED_PATHS
-EOF
-  bosun_registration_check 0 || exit 1
 fi
 # Opt-in fleet activity ledger (docs/fleet-ledger.md); off costs one file test.
 # The merge-time re-record is not a new review-ready PR, so it writes nothing.

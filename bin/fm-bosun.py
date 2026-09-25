@@ -706,7 +706,7 @@ def cmd_registration_check_locked(args):
         if not path or path.startswith("/") or path in (".", "..") or path.startswith("../") or "/../" in path or path.endswith("/.."):
             offending.append(path or "<empty>")
             continue
-        if not path_allowed(path, allowed):
+        if not path_allowed(path, extraction_paths):
             offending.append(path)
     if offending:
         fail(f"out-of-scope upstream paths: {', '.join(offending)}")

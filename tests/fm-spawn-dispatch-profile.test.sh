@@ -487,7 +487,7 @@ test_codex_luna_seat_is_explicit_and_default_is_unchanged() {
   read_case_record "$rec"
   seat_home="$CASE_DIR/credential home"
   mkdir -p "$seat_home"
-  printf '{}\n' > "$seat_home/auth.json"
+  printf '%s\n' '{"OPENAI_API_KEY":"sk-fm-synthetic"}' > "$seat_home/auth.json"
   jq -n --arg home "$seat_home" '{version:1,id:"test-dock",seats:{luna:{harness:"codex",credential_home:$home}}}' \
     > "$HOME_DIR/config/dock.json"
   cat > "$FAKEBIN_DIR/codex" <<'SH'
@@ -527,7 +527,7 @@ SH
   read_case_record "$rec"
   other_seat_home="$CASE_DIR/other credential home"
   mkdir -p "$other_seat_home"
-  printf '{}\n' > "$other_seat_home/auth.json"
+  printf '%s\n' '{"OPENAI_API_KEY":"sk-fm-synthetic"}' > "$other_seat_home/auth.json"
   jq -n --arg home "$other_seat_home" '{version:1,id:"changed-dock",seats:{luna:{harness:"codex",credential_home:$home}}}' \
     > "$HOME_DIR/config/dock.json"
   out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" \
@@ -557,7 +557,7 @@ test_codex_luna_seat_reaches_herdr_backend() {
   seat_home="$CASE_DIR/herdr seat"
   launch_log="$CASE_DIR/herdr-launch.log"
   mkdir -p "$seat_home"
-  printf '{}\n' > "$seat_home/auth.json"
+  printf '%s\n' '{"OPENAI_API_KEY":"sk-fm-synthetic"}' > "$seat_home/auth.json"
   jq -n --arg home "$seat_home" '{version:1,id:"herdr-dock",seats:{luna:{harness:"codex",credential_home:$home}}}' \
     > "$HOME_DIR/config/dock.json"
   make_spawn_herdr_fakebin "$FAKEBIN_DIR"
@@ -609,7 +609,7 @@ SH
   assert_contains "$out" 'no ordinary readable file-backed sign-in' "missing sign-in should be actionable"
   assert_absent "$HOME_DIR/state/$id.meta" "missing sign-in must not create a task record"
   [ ! -s "$LAUNCH_LOG" ] || fail "missing sign-in launched an agent"
-  printf '{}\n' > "$seat_home/auth.json"
+  printf '%s\n' '{"OPENAI_API_KEY":"sk-fm-synthetic"}' > "$seat_home/auth.json"
   for verdict in signed-out unknown timeout; do
     printf '%s\n' "$verdict" > "$seat_home/verdict"
     out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR" --seat luna)
@@ -641,7 +641,7 @@ test_codex_seat_overrides_allowlisted_ambient_credentials() {
   read_case_record "$rec"
   seat_home="$CASE_DIR/selected seat"
   mkdir -p "$seat_home"
-  printf '{}\n' > "$seat_home/auth.json"
+  printf '%s\n' '{"OPENAI_API_KEY":"sk-fm-synthetic"}' > "$seat_home/auth.json"
   jq -n --arg home "$seat_home" '{version:1,id:"allowlist-dock",seats:{luna:{harness:"codex",credential_home:$home}}}' \
     > "$HOME_DIR/config/dock.json"
   printf '%s\n' CODEX_HOME OPENAI_API_KEY CODEX_API_KEY FM_TEST_CODEX_EXEC_LOG \
@@ -693,7 +693,7 @@ test_local_secondmate_recovery_keeps_seat() {
   make_seeded_secondmate_home "$sm" "$id"
   seat_home="$CASE_DIR/seat"
   mkdir -p "$seat_home"
-  printf '{}\n' > "$seat_home/auth.json"
+  printf '%s\n' '{"OPENAI_API_KEY":"sk-fm-synthetic"}' > "$seat_home/auth.json"
   jq -n --arg home "$seat_home" '{version:1,id:"local-dock",seats:{luna:{harness:"codex",credential_home:$home}}}' \
     > "$HOME_DIR/config/dock.json"
   cat > "$FAKEBIN_DIR/codex" <<'SH'
@@ -726,7 +726,7 @@ test_seat_reaches_scout_and_batch() {
   read_case_record "$rec"
   seat_home="$CASE_DIR/seat"
   mkdir -p "$seat_home"
-  printf '{}\n' > "$seat_home/auth.json"
+  printf '%s\n' '{"OPENAI_API_KEY":"sk-fm-synthetic"}' > "$seat_home/auth.json"
   jq -n --arg home "$seat_home" '{version:1,id:"multi-dock",seats:{luna:{harness:"codex",credential_home:$home}}}' \
     > "$HOME_DIR/config/dock.json"
   cat > "$FAKEBIN_DIR/codex" <<'SH'

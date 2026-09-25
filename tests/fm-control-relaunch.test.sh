@@ -834,7 +834,7 @@ test_seated_codex_relaunch_preflights_current_dock_before_stop() {
   mkdir -p "$dir/home/config"
   seat_home="$dir/current-seat"
   mkdir -p "$seat_home"
-  printf '{}\n' > "$seat_home/auth.json"
+  printf '%s\n' '{"OPENAI_API_KEY":"sk-fm-synthetic"}' > "$seat_home/auth.json"
   jq -n --arg home "$seat_home" '{version:1,id:"control-dock",seats:{luna:{harness:"codex",credential_home:$home}}}' \
     > "$dir/home/config/dock.json"
   printf '%s\n' 'seat=luna' 'dock=old-dock' 'seat_home=/old/seat' >> "$dir/home/state/$id.meta"

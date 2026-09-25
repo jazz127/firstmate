@@ -120,7 +120,20 @@ PY
   rc=$?
   if [ "$rc" -eq 0 ]; then
     case "$out" in
-      'Logged in using ChatGPT'|'Logged in using an API key - '*) return 0 ;;
+      'Logged in using ChatGPT'|'Logged in using an API key - '*)
+        # The CLI reports `{}` or null tokens as signed in, so also require a
+        # non-empty API key or token set. Presence only; values never print.
+        if command -v jq >/dev/null 2>&1 && jq -e '
+          def present: type == "string" and length > 0;
+          type == "object" and ((.OPENAI_API_KEY | present) or
+            ((.tokens | type) == "object" and
+              ([.tokens.id_token, .tokens.access_token, .tokens.refresh_token] | all(present))))
+        ' "$root/auth.json" >/dev/null 2>&1; then
+          return 0
+        fi
+        echo "error: Codex seat at $root has no usable sign-in in auth.json; sign in to that home, then retry; launch refused, no ambient account selected" >&2
+        return 1
+        ;;
     esac
   fi
   if [ "$rc" -eq 1 ] && [ "$out" = 'Not logged in' ]; then

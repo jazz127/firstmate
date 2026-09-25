@@ -2235,13 +2235,24 @@ if [ -n "$SEAT" ]; then
     echo "error: a seated Codex launch requires the canonical --harness codex command; raw commands can override its account; launch refused, no ambient account selected" >&2
     exit 1
   }
-  SEAT_BINDING=$(fm_dock_resolve "$CONFIG" "$SEAT" "$HARNESS") || exit 1
+  if [ "$SPAWN_CONTROL_PARENT" = 1 ] && [ -n "${FM_CONTROL_RELAUNCH_SEAT_BINDING:-}" ]; then
+    SEAT_BINDING=$FM_CONTROL_RELAUNCH_SEAT_BINDING
+    IFS=$'\t' read -r binding_seat binding_dock binding_home binding_source <<< "$SEAT_BINDING"
+    [ "$binding_seat" = "$SEAT" ] && [ "$binding_dock" ] && [ "$binding_home" ] && [ "$binding_source" ] || {
+      echo "error: the control relaunch supplied an invalid frozen dock binding; launch refused, no ambient account selected" >&2
+      exit 1
+    }
+  else
+    SEAT_BINDING=$(fm_dock_resolve "$CONFIG" "$SEAT" "$HARNESS") || exit 1
+  fi
   IFS=$'\t' read -r _ SEAT_DOCK SEAT_HOME SEAT_SOURCE <<< "$SEAT_BINDING"
-  SEAT_CODEX_BIN=$(command -v codex) || {
-    echo "error: Codex authentication could not be established for seat $SEAT (CLI unavailable); launch refused, no ambient account selected" >&2
-    exit 1
-  }
-  fm_worker_account_codex_check "$SEAT_HOME" "$SEAT_CODEX_BIN" || exit 1
+  if ! { [ "$SPAWN_CONTROL_PARENT" = 1 ] && [ -n "${FM_CONTROL_RELAUNCH_SEAT_BINDING:-}" ]; }; then
+    SEAT_CODEX_BIN=$(command -v codex) || {
+      echo "error: Codex authentication could not be established for seat $SEAT (CLI unavailable); launch refused, no ambient account selected" >&2
+      exit 1
+    }
+    fm_worker_account_codex_check "$SEAT_HOME" "$SEAT_CODEX_BIN" || exit 1
+  fi
 fi
 
 # muse, gemini, agy, and devin are verified as CREWMATE/SCOUT adapters only. A secondmate is

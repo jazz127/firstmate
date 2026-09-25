@@ -842,6 +842,10 @@ test_seated_codex_relaunch_preflights_current_dock_before_stop() {
 #!/usr/bin/env bash
 if [ "${1:-}" = login ] && [ "${2:-}" = status ]; then
   [ -f "$CODEX_HOME/signed-in" ] || { echo 'Not logged in' >&2; exit 1; }
+  if [ -f "$CODEX_HOME/mutate-dock" ] && [ ! -f "$CODEX_HOME/mutated-dock" ]; then
+    : > "$CODEX_HOME/mutated-dock"
+    printf '%s\n' '{"version":2}' > "$(cat "$CODEX_HOME/dock-path")"
+  fi
   echo 'Logged in using ChatGPT' >&2
 fi
 exit 0
@@ -856,16 +860,20 @@ SH
   cmp -s "$dir/meta-before" "$dir/home/state/$id.meta" || fail "pre-stop refusal changed metadata"
 
   : > "$seat_home/signed-in"
+  printf '%s\n' "$dir/home/config/dock.json" > "$seat_home/dock-path"
   out=$(run_control "$dir" "$id" relaunch --harness claude --note "wrong harness"); rc=$?
   expect_code 1 "$rc" "incompatible harness must refuse before stop"
   assert_contains "$out" 'only seat luna on the codex harness' "harness mismatch should name seat contract"
   [ "$(cat "$dir/fake/command")" = codex ] || fail "harness mismatch stopped the old worker"
   [ ! -s "$dir/fake/literal" ] || fail "harness mismatch sent lifecycle input"
 
+  : > "$seat_home/mutate-dock"
   out=$(run_control "$dir" "$id" relaunch --note "current dock now signed in"); rc=$?
   expect_code 0 "$rc" "signed-in current dock should relaunch: $out"
   [ "$(meta_field "$dir" "$id" seat_home)" = "$seat_home" ] || fail "replacement did not re-resolve the current dock"
   [ "$(meta_field "$dir" "$id" dock)" = control-dock ] || fail "replacement retained a stale dock id"
+  jq -n --arg home "$seat_home" '{version:1,id:"control-dock",seats:{luna:{harness:"codex",credential_home:$home}}}' \
+    > "$dir/home/config/dock.json"
   pass "fm-control preflights the current seat before stop and re-resolves its path on replacement"
 }
 

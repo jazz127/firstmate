@@ -350,17 +350,19 @@ published_pr_validation_failed() { # <pr> <meta>
   local pr=$1 meta=$2
   fm_pr_url_parse "$pr" || return 0
   # shellcheck disable=SC2016 # Positional parameters expand in the nested shell.
-  fm_run_timed "$FM_INACTIVE_RECONCILE_BUDGET_SECS" env \
-    FM_HOME="$FM_HOME" FM_STATE_OVERRIDE="$STATE" \
-    bash -c '
-      set -u
-      script_dir=$1 pr=$2 wt=$3 task_tmp=$4
-      . "$script_dir/fm-pr-lib.sh"
-      . "$script_dir/fm-dod-lib.sh"
-      body=$(fm_pr_read_published_body "$pr") || exit 1
-      fm_dod_validate_published_intent "$body" "$wt" "$task_tmp" "" "$pr"
-    ' _ "$SCRIPT_DIR" "$FM_PR_URL" "$(meta_field "$meta" worktree)" \
-    "$(meta_field "$meta" tasktmp)" 2>&1 >/dev/null
+  {
+    fm_run_timed "$FM_INACTIVE_RECONCILE_BUDGET_SECS" env \
+      FM_HOME="$FM_HOME" FM_STATE_OVERRIDE="$STATE" \
+      bash -c '
+        set -u
+        script_dir=$1 pr=$2 wt=$3 task_tmp=$4
+        . "$script_dir/fm-pr-lib.sh"
+        . "$script_dir/fm-dod-lib.sh"
+        body=$(fm_pr_read_published_body "$pr") || exit 1
+        fm_dod_validate_published_intent "$body" "$wt" "$task_tmp" "" "$pr"
+      ' _ "$SCRIPT_DIR" "$FM_PR_URL" "$(meta_field "$meta" worktree)" \
+      "$(meta_field "$meta" tasktmp)" > /dev/null
+  } 2>&1
 }
 
 home_secondmate_id() {

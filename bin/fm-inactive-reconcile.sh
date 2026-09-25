@@ -349,7 +349,14 @@ pr_for_task() { # <meta> [preferred-line]
 published_pr_validation_failed() { # <pr> <meta>
   local pr=$1 meta=$2 body
   fm_pr_url_parse "$pr" || return 0
-  body=$(fm_pr_read_published_body "$FM_PR_URL" 2>/dev/null) || return 1
+  body=$(fm_run_timed "$FM_INACTIVE_RECONCILE_BUDGET_SECS" env \
+    FM_HOME="$FM_HOME" FM_STATE_OVERRIDE="$STATE" \
+    bash -c '
+      set -u
+      script_dir=$1
+      . "$script_dir/fm-pr-lib.sh"
+      fm_pr_read_published_body "$2"
+    ' _ "$SCRIPT_DIR" "$FM_PR_URL" 2>/dev/null) || return 1
   fm_dod_validate_published_intent "$body" "$(meta_field "$meta" worktree)" "$(meta_field "$meta" tasktmp)"
 }
 

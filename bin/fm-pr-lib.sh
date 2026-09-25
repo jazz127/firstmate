@@ -1116,7 +1116,7 @@ fm_pr_read_published_body() {  # <canonical-pr-url>
         printf '%s\n' 'error: cannot read the published merge-request body for evidence validation' >&2
         return 1
       }
-      body=$(printf '%s\n' "$json" | jq -er '
+      body=$(printf '%s\n' "$json" | jq -r '
         if type == "object" and (.description | type) == "string" then .description
         else error("no merge-request description")
         end' 2>/dev/null) || {

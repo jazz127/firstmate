@@ -75,6 +75,20 @@ test_memory_and_paths() {
   pass 'evidence memory and FM_HOME path safety'
 }
 
+test_order_accepts_dotfiles() {
+  local dir
+  dir=$(new_home dotfiles)
+  setup_bosun "$dir"
+  call "$dir" order --task dotfiles --bosun bosun-kun --maneuver dotfiles \
+    --forge github --owner kunchenguid --repository sample --source housefeature/dotfiles \
+    --branch contribution/dotfiles --captain-words 'Contribute dotfiles' \
+    --path .github/workflows/ci.yml --path .editorconfig \
+    --commit 0123456789012345678901234567890123456789 >/dev/null || fail 'dotfile order was rejected'
+  jq -e '.allowed_paths == [".github/workflows/ci.yml", ".editorconfig"]' \
+    "$dir/data/dotfiles/bosun-contribution.json" >/dev/null || fail 'dotfile order paths were not preserved'
+  pass 'ordered dotfiles remain valid scoped paths'
+}
+
 test_intake_delegates_to_ship_lifecycle() {
   local dir fake_root
   dir=$(new_home intake)
@@ -198,5 +212,6 @@ test_registration_and_merge() {
 
 test_routing
 test_memory_and_paths
+test_order_accepts_dotfiles
 test_intake_delegates_to_ship_lifecycle
 test_registration_and_merge

@@ -103,6 +103,13 @@ def safe_name(value):
     return value
 
 
+def safe_relative_path(value):
+    if (not isinstance(value, str) or not value or value.startswith("/") or value in (".", "..")
+            or value.startswith("../") or "/../" in value or value.endswith("/..")):
+        fail(f"unsafe or private path: {value}")
+    return value
+
+
 def target(forge, owner, repo):
     for value in (forge, owner, repo):
         safe_name(value)
@@ -241,8 +248,7 @@ def cmd_order(args):
     safe_name(fork_repository)
     safe_name(default_branch)
     for path in args.path:
-        if path.startswith("/") or path.startswith("../") or "/../" in path or path.startswith("."):
-            fail(f"unsafe or private path: {path}")
+        safe_relative_path(path)
     path = contribution_path(args.task)
     if path.exists() or path.is_symlink():
         fail("contribution order already exists")
@@ -427,7 +433,7 @@ def cmd_registration_check(args):
         fail("upstream change has no validated changed paths")
     offending = []
     for path in changed:
-        if not path or path.startswith("/") or path.startswith("../") or "/../" in path:
+        if not path or path.startswith("/") or path in (".", "..") or path.startswith("../") or "/../" in path or path.endswith("/.."):
             offending.append(path or "<empty>")
             continue
         if not any(path == item or item.endswith("/") and path.startswith(item) for item in allowed):

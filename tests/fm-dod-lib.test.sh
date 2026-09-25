@@ -294,6 +294,25 @@ test_unpushed_ship_done_is_refused() {
   pass "unpushed ship done: is refused"
 }
 
+test_committed_scratch_ship_done_names_path() {
+  local repo wt sha reason rc
+  repo="$TMP_ROOT/scratch-repo"
+  wt="$TMP_ROOT/scratch-wt"
+  fm_git_worktree "$repo" "$wt" fm/scratch
+  mkdir -p "$wt/.codex-live-check/cache/node/corepack/v1/pnpm/11.1.1"
+  printf '%s\n' bundle > "$wt/.codex-live-check/cache/node/corepack/v1/pnpm/11.1.1/package.json"
+  git -C "$wt" add -f .codex-live-check
+  git -C "$wt" commit -q -m 'pipeline scratch bundle'
+  sha=$(git -C "$wt" rev-parse HEAD)
+  git -C "$wt" update-ref refs/remotes/origin/fm/scratch "$sha"
+  reason=$(accept_done ship no-mistakes "$wt" "$repo" "done: PR https://example.test/o/r/pull/9 checks green" 2>/dev/null)
+  rc=$?
+  [ "$rc" -eq 1 ] || fail "ship done: with a committed scratch bundle was accepted (exit $rc)"
+  [ "$reason" = 'scratch path would be published: .codex-live-check/cache/node/corepack/v1/pnpm/11.1.1/package.json' ] \
+    || fail "scratch refusal did not name the path on stdout: $reason"
+  pass "ship done: with a committed scratch bundle is refused with the path as its reason"
+}
+
 test_remote_containing_named_head_is_accepted() {
   local repo wt sha
   repo="$TMP_ROOT/pushed-repo"
@@ -618,6 +637,7 @@ test_evidence_claim_requires_provenance
 test_evidence_claim_enforces_mechanical_provenance
 test_scenario_consistency_is_publication_only
 test_unpushed_ship_done_is_refused
+test_committed_scratch_ship_done_names_path
 test_no_mistakes_prevalidation_done_is_not_gated
 test_remote_containing_named_head_is_accepted
 test_moved_branch_without_named_head_is_refused

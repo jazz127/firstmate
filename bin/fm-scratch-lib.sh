@@ -30,10 +30,11 @@ fm_scratch_check_lines() {
   done
 }
 
-fm_scratch_refuse_range() {
-  local repo=$1 old=$2 new=$3 git_status check_status
+fm_scratch_refuse_diff() {
+  local repo=$1 git_status check_status
   local -a statuses
-  git -C "$repo" diff --name-only --no-renames --diff-filter=ACMRTUXB -z "$old..$new" | fm_scratch_check_paths
+  shift
+  git -C "$repo" diff --name-only --no-renames --diff-filter=ACMRTUXB -z "$@" | fm_scratch_check_paths
   statuses=("${PIPESTATUS[@]}")
   git_status=${statuses[0]:-1}
   check_status=${statuses[1]:-1}
@@ -42,10 +43,6 @@ fm_scratch_refuse_range() {
     return 1
   fi
   return 0
-}
-
-fm_scratch_refuse_index() {
-  git -C "$1" diff --cached --name-only --no-renames --diff-filter=ACMRTUXB -z | fm_scratch_check_paths
 }
 
 fm_scratch_branch_base() {
@@ -62,10 +59,10 @@ fm_scratch_branch_base() {
 
 fm_scratch_refuse_worktree() {
   local repo=$1 base
-  fm_scratch_refuse_index "$repo" || return 1
+  fm_scratch_refuse_diff "$repo" --cached || return 1
   base=$(fm_scratch_branch_base "$repo") || {
     printf '%s\n' 'error: scratch preflight cannot determine the branch base' >&2
     return 1
   }
-  fm_scratch_refuse_range "$repo" "$base" HEAD
+  fm_scratch_refuse_diff "$repo" "$base..HEAD"
 }

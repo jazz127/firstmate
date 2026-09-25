@@ -1022,11 +1022,8 @@ fm_dod_named_head_reachable_outside_worktree() {  # <worktree> <project> <mode> 
 # pr_head=, and the merge-notified marker; <meta> may be a captured copy
 # (bin/fm-fleet-snapshot.sh), so the marker is read from <state>.
 fm_dod_accept_ship_done() {  # <kind> <mode> <worktree> <project> <line> [<state> <id> <meta>]
-  local kind=$1 mode=$2 wt=$3 project=$4 line=$5 state=${6:-} id=${7:-} meta=${8:-} url sha gerrit
+  local kind=$1 mode=$2 wt=$3 project=$4 line=$5 state=${6:-} id=${7:-} meta=${8:-} url sha gerrit scratch
   fm_dod_should_gate_ship_done "$kind" "$mode" "$line" || return 0
-  if [ -n "$wt" ] && ! fm_scratch_refuse_worktree "$wt"; then
-    return 1
-  fi
   if url=$(fm_dod_pr_url_from_done_note "$(status_line_note "$line")") \
     && fm_dod_recorded_pr_on_forge "$state" "$id" "$meta" "$mode" "$url"; then
     return 0
@@ -1043,6 +1040,11 @@ fm_dod_accept_ship_done() {  # <kind> <mode> <worktree> <project> <line> [<state
     printf '%s\n' "named head could not be resolved"
     return 1
   }
+  if ! scratch=$(fm_scratch_refuse_worktree "$wt" 2>&1 >/dev/null); then
+    scratch=${scratch%%$'\n'*}
+    printf '%s\n' "${scratch#error: }"
+    return 1
+  fi
   gerrit=0
   [ -n "$url" ] && fm_pr_url_parse "$url" && [ "$FM_PR_PROVIDER" = gerrit ] && gerrit=1
   if [ "$gerrit" = 0 ] && fm_dod_note_reports_published_change "$(status_line_note "$line")"; then

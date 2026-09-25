@@ -566,6 +566,15 @@ The command applies the same evidence validation used when Firstmate reads the p
 EOF
 }
 
+fm_scratch_preflight_block() {
+  local script_dir
+  script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd) || return 1
+  cat <<EOF
+Before committing, and again immediately before handing a commit to a pipeline or publishing it, run \`$script_dir/fm-pr-body-preflight.sh --scratch "\$(pwd -P)"\`.
+It must print \`scratch preflight ok\`; a refusal names the scratch path to remove from the deliverable.
+EOF
+}
+
 fm_nm_published_body_check_block() {  # <task-id>
   local script_dir
   script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd) || return 1
@@ -595,6 +604,7 @@ Gerrit has no pull requests, so there is nothing to open; publishing creates the
 The task is complete only when committed on your branch.
 When it is implemented and committed, publish it.
 EOF
+      fm_scratch_preflight_block
       fm_gerrit_publish_block
       cat <<EOF
 Do NOT run /no-mistakes.
@@ -613,6 +623,7 @@ When it is committed, append \`done [at=<epoch>]: {summary}\` to the status file
 That first \`done:\` is the pipeline handoff; it is not a request to publish.
 
 EOF
+      fm_scratch_preflight_block
       fm_nm_driving_block "$forge"
       cat <<EOF
 
@@ -629,6 +640,7 @@ When the run's outcome is passed, passed-with-skips, or passed-with-override and
 The squashed change carries only the oldest commit's message, so the pipeline's own fix commits never reach the reviewer's description; your report is how they reach the captain.
 After publishing and immediately before your ready report, append one line \`note [at=<epoch>]: pipeline changes: {finding} - {fix it made}; {finding} - {fix it made}\` to the status file, one short clause per finding the run fixed, taken from the run's \`fixes\` table and the gate findings its drive calls returned (\`no-mistakes axi logs --step <step> --full\` has the detail); write \`note [at=<epoch>]: pipeline changes: none\` when it fixed nothing.
 EOF
+      fm_scratch_preflight_block
       fm_gerrit_publish_block
       ;;
     direct-PR:*)
@@ -640,6 +652,7 @@ This task ships **direct-PR**: you raise the PR yourself, without the no-mistake
 The task is complete only when committed on your branch.
 When it is implemented and committed, push your branch and open a PR with \`gh-axi\` that is ready for review, not a draft.
 EOF
+      fm_scratch_preflight_block
       fm_pr_body_preflight_block "$id"
       cat <<EOF
 Before you report done, read the PR back from the forge and confirm it is not a draft (\`gh pr view <url> --json isDraft\` must print false); if it is a draft, mark it ready with \`gh-axi pr ready\`.
@@ -662,6 +675,7 @@ Keep your branch a clean fast-forward onto the current default branch - if \`mai
 When it is implemented and committed, append \`done [at=<epoch>]: ready in branch $branch\` to the status file and stop.
 The configured merge authority approves the ready branch, then firstmate merges it into local \`main\` through the guarded fast-forward path.
 EOF
+      fm_scratch_preflight_block
       ;;
     no-mistakes:*)
       cat <<EOF
@@ -673,6 +687,7 @@ When it is committed, append \`done [at=<epoch>]: {summary}\` to the status file
 That first \`done:\` is the pipeline handoff, and the pipeline owns the push; it is not a request to push from this copy.
 
 EOF
+      fm_scratch_preflight_block
       fm_nm_driving_block "$forge"
       fm_pr_body_preflight_block "$id"
       fm_nm_published_body_check_block "$id"

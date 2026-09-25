@@ -140,6 +140,36 @@ test_ship_allowlist_enabled() {
   pass "ship launch under an enabled allowlist keeps the compact-adviser switch through the cleared environment"
 }
 
+test_tool_caches_stay_outside_worktree() {
+  local setting id rec out seen expected task_tmp
+  for setting in absent enabled; do
+    id="cache-$setting-a1"
+    rec=$(make_case "cache-$setting" codex "$id")
+    read_case "$rec"
+    [ "$setting" = absent ] || : > "$HOME_DIR/config/launch-env-allowlist"
+    out=$(run_case_spawn "$id" "$PROJ_DIR" --mode no-mistakes --yolo off)
+    expect_code 0 "$?" "cache launch with allowlist=$setting should succeed: $out"
+    cat > "$FAKEBIN_DIR/codex" <<'SH'
+#!/bin/sh
+printf '%s\n' "$GOTMPDIR" "$COREPACK_HOME" "$PNPM_HOME" \
+  "$npm_config_store_dir" "$npm_config_cache" "$XDG_CACHE_HOME"
+SH
+    chmod +x "$FAKEBIN_DIR/codex"
+    seen=$(emitted_launch_env "$FAKEBIN_DIR" "$LAUNCH_LOG" "$PANE_LOG") \
+      || fail "cache launch with allowlist=$setting did not execute"
+    task_tmp="/tmp/fm-$id"
+    expected=$(printf '%s\n' "$task_tmp/gotmp" "$task_tmp/cache/corepack" \
+      "$task_tmp/cache/pnpm" "$task_tmp/cache/pnpm/store" \
+      "$task_tmp/cache/npm" "$task_tmp/cache/xdg")
+    assert_equals "$expected" "$seen" \
+      "cache launch with allowlist=$setting did not route every tool cache to the task temp root"
+    [ -d "$task_tmp/cache/corepack" ] && [ -d "$task_tmp/cache/pnpm" ] \
+      && [ -d "$task_tmp/cache/npm" ] && [ -d "$task_tmp/cache/xdg" ] \
+      || fail "cache launch with allowlist=$setting did not create the cache homes"
+  done
+  pass "worker launch routes tool caches outside the worktree with either launch environment posture"
+}
+
 # The floor must not depend on the pane export having landed: a pane whose
 # export was lost still has to launch its agent with the switch on. Replaying
 # the launch alone, with a contrary ambient value, is that case.
@@ -347,6 +377,7 @@ SH
 
 test_ship_allowlist_absent
 test_ship_allowlist_enabled
+test_tool_caches_stay_outside_worktree
 test_launch_command_carries_the_switch_without_the_pane_export
 test_secondmate_launch
 test_relaunch_rebuilds_the_switch

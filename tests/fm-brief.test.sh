@@ -417,6 +417,8 @@ test_pr_body_preflight_is_rendered() {
     brief="$home/data/$id/brief.md"
     assert_grep "fm-pr-body-preflight.sh <draft-body-file>" "$brief" \
       "$mode brief did not give a pre-publication command"
+    assert_grep 'fm-pr-body-preflight.sh --scratch' "$brief" \
+      "$mode brief did not require scratch refusal before committing or publishing"
     assert_grep "\"/tmp/fm-$id\"" "$brief" \
       "$mode brief did not bind preflight to its own task temp directory"
     assert_grep "Use one metadata block for the whole body" "$brief" \

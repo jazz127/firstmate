@@ -121,6 +121,17 @@ export FM_REMOTE_JOB_TIMEOUT=5
 # shellcheck source=bin/fm-remote-job-lib.sh
 . "$ROOT/bin/fm-remote-job-lib.sh"
 
+fm_remote_job_prepare_state "$ACCOUNT_HOME" || fail "$FM_REMOTE_JOB_ERROR"
+mkdir "$STATE_ROOT/worker.starting"
+(exit 0) & STALE_GUARD_PID=$!
+wait "$STALE_GUARD_PID"
+printf '%s\n' "$STALE_GUARD_PID" > "$STATE_ROOT/worker.starting/owner"
+printf 'dead owner\n' > "$STATE_ROOT/worker.starting/start"
+touch -t 200001010000 "$STATE_ROOT/worker.starting"
+fm_remote_job_linux_start_guard_acquire "$ACCOUNT_HOME" || fail "$FM_REMOTE_JOB_ERROR"
+fm_remote_job_linux_start_guard_release || fail "the recovered start guard could not be released"
+pass "a dead Linux worker starter does not strand the start guard"
+
 LOCAL_BIN_PARENT="$ACCOUNT_HOME/.local"
 LOCAL_BIN_TARGET="$TMP_ROOT/local-bin-target"
 mkdir -p "$LOCAL_BIN_PARENT" "$LOCAL_BIN_TARGET"

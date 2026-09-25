@@ -1282,16 +1282,19 @@ fm_remote_job_linux_start_guard_acquire() { # <account-home>
     if [ -n "$owner_pid" ] && [ "$owner_pid" -gt 1 ] && [ -n "$owner_start" ]; then
       actual_start=$(fm_remote_job_process_start "$owner_pid" 2>/dev/null || true)
       if [ -z "$actual_start" ]; then
+        if kill -0 "$owner_pid" 2>/dev/null; then
+          attempt=$((attempt + 1))
+          sleep 0.1
+          continue
+        fi
+        owner_pid=
+      elif [ "$actual_start" = "$owner_start" ]; then
         attempt=$((attempt + 1))
         sleep 0.1
         continue
       fi
-      if [ "$actual_start" = "$owner_start" ]; then
-        attempt=$((attempt + 1))
-        sleep 0.1
-        continue
-      fi
-    else
+    fi
+    if [ -z "$owner_pid" ]; then
       mtime=$(fm_remote_job_path_mtime "$guard" 2>/dev/null || true)
       case "$mtime" in ''|*[!0-9]*) attempt=$((attempt + 1)); sleep 0.1; continue ;; esac
       now=$(date +%s)

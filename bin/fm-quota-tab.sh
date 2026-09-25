@@ -8,6 +8,10 @@
 # and runs quota-axi once per frame. It never writes to the quota-axi clone.
 set -u
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+FM_ROOT="${FM_ROOT_OVERRIDE:-$(cd "$SCRIPT_DIR/.." && pwd)}"
+FM_HOME="${FM_HOME:-$FM_ROOT}"
+
 usage() {
   printf 'usage: fm-quota-tab.sh [once|loop]\n' >&2
 }
@@ -30,7 +34,7 @@ case "$interval" in
     ;;
 esac
 
-quota_clone=${FM_QUOTA_CLONE:-${FM_HOME:-}/projects/quota-axi}
+quota_clone=${FM_QUOTA_CLONE:-$FM_HOME/projects/quota-axi}
 
 frame() {
   local executable short subject
@@ -41,6 +45,10 @@ frame() {
   else
     printf '%s\n' 'quota-axi is not installed.'
   fi
+  executable=$(command -v quota-axi 2>/dev/null) || executable='unavailable'
+  printf 'quota-axi executable: %s\n' "$executable"
+  printf '\nRefreshed: %s | interval: %s seconds | refreshes while running\n' \
+    "$(date '+%Y-%m-%d %H:%M:%S %Z')" "$interval"
   printf '\nFleet house line:\n'
   if [ ! -d "$quota_clone/.git" ] && [ ! -f "$quota_clone/.git" ]; then
     printf 'House tip: quota-axi clone is absent (%s)\n' "$quota_clone"
@@ -50,11 +58,6 @@ frame() {
     subject=$(git -C "$quota_clone" show -s --format=%s jazz127/house 2>/dev/null) || subject='unavailable'
     printf 'House tip: %s %s\n' "$short" "${subject%%$'\n'*}"
   fi
-
-  executable=$(command -v quota-axi 2>/dev/null) || executable='unavailable'
-  printf 'quota-axi executable: %s\n' "$executable"
-  printf '\nRefreshed: %s | interval: %s seconds | refreshes while running\n' \
-    "$(date '+%Y-%m-%d %H:%M:%S %Z')" "$interval"
 }
 
 if [ "$mode" = once ]; then

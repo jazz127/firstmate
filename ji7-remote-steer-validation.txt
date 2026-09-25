@@ -1,0 +1,16 @@
+BEGIN_UTC=2026-09-25T05:58:47Z
+COMMAND=ssh ... fm-send.sh fm-remote:w1:p2
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WORKTREE TANGLE - PRIMARY CHECKOUT IS ON A FEATURE BRANCH
+●  /home/fm-manage/firstmate is on 'house', not its default branch 'main'.
+●  A crewmate likely branched/committed in the primary instead of its own worktree.
+●  The work is SAFE on the 'house' ref.
+●  Restore the primary to 'main':
+●      git -C /home/fm-manage/firstmate checkout main
+●  then re-validate 'house' in a proper isolated worktree.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+error: explicit target 'fm-remote:w1:p2' is not a live herdr endpoint (tried meta=/home/fm-manage/fm-home-dockmaster-ji7/state/fm-remote:w1:p2.meta; metadata window/terminal lookup; backend=herdr). Use fm-<id> for a recorded task/lane, or pass a target whose backend endpoint can be verified.
+SEND_EXIT=1
+INBOX:
+STATUS_TAIL:
+END_UTC=2026-09-25T05:58:52Z

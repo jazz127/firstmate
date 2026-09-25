@@ -1,0 +1,4 @@
+BEGIN_UTC=2026-09-25T05:55:48Z
+COMMAND=ssh ... fm_remote_job_ensure_worker
+BEFORE_WORKERS=12
+BEFORE_READY=1

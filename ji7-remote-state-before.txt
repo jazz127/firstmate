@@ -1,0 +1,7 @@
+BEGIN_UTC=2026-09-25T05:55:19Z
+COMMAND=ssh ... remote git and readiness inspection
+REMOTE_HEAD=c218b1f5 fix: enforce evidence provenance in published intents (#25)
+REMOTE_STATUS:
+REMOTE_STATE:
+REMOTE_READY:
+END_UTC=2026-09-25T05:55:19Z

@@ -1,0 +1,8 @@
+BEGIN_UTC=2026-09-25T05:54:56Z
+COMMAND=bin/fm-on.sh ji7-wsl fm-remote-doctor.sh
+error: no safe secondmate registry at /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3BGZXPQCA4DN7AKB4DQ51WN/data/secondmates.md
+COMMAND=bin/fm-on.sh ji7-wsl fm-remote-doctor.sh --fix
+error: no safe secondmate registry at /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3BGZXPQCA4DN7AKB4DQ51WN/data/secondmates.md
+COMMAND=bin/fm-on.sh ji7-wsl fm-remote-doctor.sh
+error: no safe secondmate registry at /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3BGZXPQCA4DN7AKB4DQ51WN/data/secondmates.md
+END_UTC=2026-09-25T05:54:56Z

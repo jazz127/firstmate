@@ -670,6 +670,119 @@ test_matrix_pi_dollar_status_footer_is_empty() {
   pass "matrix: a dollar-first pi status footer reads empty; dead shells still refuse"
 }
 
+test_matrix_pi_prompt_glyph_row_is_empty() {
+  # Some pi editors draw their OWN prompt glyph `>` plus the reverse-video
+  # cursor cell on the pair's first row, and pi's `↳ <last submitted prompt>`
+  # echo row sits BELOW the bottom rule (contributor capture on pi 0.86.1
+  # through herdr, kunchenguid/firstmate#5040). Reading that row as a draft
+  # refused every exit and relaunch of an idle pi. Only the pair is input.
+  local rule prompt_row echo_row idle queued draft pi_idle continuation
+  rule='────────────────────────'
+  prompt_row="${ESC}[0m${ESC}[38;2;200;200;200m>${ESC}[0m ${ESC}[0m${ESC}[7m ${ESC}[0m"
+  echo_row="  ${ESC}[0m${ESC}[38;5;244m↳${ESC}[0m ${ESC}[0m${ESC}[38;5;244mFIRSTMATE_OP: v1 launch-brief: teach the worker${ESC}[0m"
+  pi_idle=$(printf 'pi\tidle')
+  idle=$(printf '%s\n' 'transcript line' "$rule" "$prompt_row" "$rule" "$echo_row")
+  assert_screen "pi prompt-glyph composer reads empty on herdr" empty "$CAPS_STYLED" "$idle" '' "$pi_idle"
+  assert_screen "pi prompt-glyph composer reads empty on tmux" empty "$CAPS_TMUX" "$idle" 2 "$pi_idle"
+  # The echo row is below the pair and pi's queue rows are above it, so a pane
+  # that has queued or submitted prompts still proves an empty composer.
+  queued=$(printf '%s\n' 'transcript line' '  Steering: second message' \
+    '  ↳ alt+up to edit all queued messages' '  ⠴ Working' \
+    "$rule" "$prompt_row" "$rule" "$echo_row")
+  assert_screen "pi queued prompts stay outside the pair on herdr" empty "$CAPS_STYLED" "$queued" '' "$pi_idle"
+  assert_screen "pi queued prompts stay outside the pair on tmux" empty "$CAPS_TMUX" "$queued" 5 "$pi_idle"
+  # Real typed input after the glyph is still pending.
+  draft=$(printf '%s\n' 'transcript line' "$rule" \
+    "${ESC}[0m${ESC}[38;2;200;200;200m>${ESC}[0m fix the flaky test" "$rule" "$echo_row")
+  assert_screen "pi prompt glyph with a real draft stays pending" pending "$CAPS_STYLED" "$draft" '' "$pi_idle"
+  assert_screen "pi prompt glyph with a real draft on tmux" pending "$CAPS_TMUX" "$draft" 2 "$pi_idle"
+  for continuation in $'  >' $'  \n  >'; do
+    draft=$(printf '%s\n' 'transcript line' "$rule" "$prompt_row" "$continuation" "$rule" "$echo_row")
+    assert_screen "pi blank first input row followed by literal > stays pending" pending "$CAPS_STYLED" "$draft" '' "$pi_idle"
+    assert_screen "pi literal > on a continuation row stays pending on tmux" pending "$CAPS_TMUX" "$draft" 3 "$pi_idle"
+  done
+  # Only an idle/done identity proves emptiness; the prompt row changes nothing
+  # about the identity gate.
+  assert_screen "working pi with a prompt-glyph composer defers" unknown \
+    "$CAPS_STYLED" "$idle" '' "$(printf 'pi\tworking')"
+  assert_screen "blocked pi with a prompt-glyph composer defers" unknown \
+    "$CAPS_STYLED" "$idle" '' "$(printf 'pi\tblocked')"
+  assert_screen "prompt-glyph composer with absent identity defers" unknown \
+    "$CAPS_STYLED" "$idle" '' probe-absent
+  assert_screen "prompt-glyph composer with a foreign identity defers" unknown \
+    "$CAPS_STYLED" "$idle" '' "$(printf 'zsh\t')"
+  assert_screen "prompt-glyph composer without identity capability" unknown \
+    "$CAPS_STYLED_NOID" "$idle"
+  pass "matrix: pi's own first-row prompt glyph is the empty composer; only the pair is input"
+}
+
+test_matrix_pi_prompt_row_is_pi_only_furniture() {
+  # Only pi's observed `>` is editor furniture. The other shell glyphs on the
+  # pair's first row are typed input, alone or beside text, so a lone `$`,
+  # `%`, or `#` still refuses and extraction keeps every byte beside them.
+  # (kunchenguid/firstmate#5556 widened the rule to all four glyphs; that
+  # widening is deliberately not taken.)
+  local pi_idle glyph screen out rule
+  pi_idle=$(printf 'pi\tidle')
+  rule='────────────────────────'
+  for glyph in '$' '%' '#'; do
+    screen=$(printf '%s\n%s\n%s' "$rule" "$glyph" "$rule")
+    assert_screen "first-row '$glyph' is typed input" pending "$CAPS_STYLED" "$screen" '' "$pi_idle"
+    out=$(fm_composer_extract_selected_content "$CAPS_STYLED" "$screen")
+    [ "$out" = "$glyph" ] || fail "first-row '$glyph' must extract as typed, got '$out'"
+    screen=$(printf '%s\n%s fix test\n%s' "$rule" "$glyph" "$rule")
+    assert_screen "first-row '$glyph fix test' is typed input" pending "$CAPS_STYLED" "$screen" '' "$pi_idle"
+    out=$(fm_composer_extract_selected_content "$CAPS_STYLED" "$screen")
+    [ "$out" = "$glyph fix test" ] || fail "text beside first-row '$glyph' must be preserved, got '$out'"
+  done
+  # A `>` without the editor's separator space is not the editor's rendering.
+  screen=$(printf '%s\n>fix\n%s' "$rule" "$rule")
+  assert_screen "first-row '>fix' is typed input" pending "$CAPS_STYLED" "$screen" '' "$pi_idle"
+  out=$(fm_composer_extract_selected_content "$CAPS_STYLED" "$screen")
+  [ "$out" = '>fix' ] || fail "first-row '>fix' must extract unchanged, got '$out'"
+  pass "matrix: only pi's '>' is first-row furniture; \$, %, and # stay typed input"
+}
+
+test_matrix_pi_prompt_row_extraction_matches_classification() {
+  # Extraction and classification read the pair through the same row rule, in
+  # any call order. Fixtures adapted from kunchenguid/firstmate#5556: pi's
+  # queued `Steering:` rows, its dequeue hint, a spinner, and a status row all
+  # render ABOVE the pair, and footer rows render below it, so none of them is
+  # ever composer content.
+  local queued typed selected pi_idle rule verdict inside
+  pi_idle=$(printf 'pi\tidle')
+  queued=$'\033[38;2;102;102;102mSteering: launch-brief/queued\033[39m\n\033[38;2;102;102;102m↳ Alt+Up to edit all queued messages\033[39m\n\n\033[38;2;138;190;183m⠏\033[39m \033[38;2;128;128;128mWorking\033[39m\n\n\033[38;2;215;135;175mDeepSeek V4.1 Flash (Cline Pass)\033[39m \033[38;5;244m·\033[39m \033[38;2;178;129;214mthink:high\033[39m \033[38;5;244m·\033[39m fm-pi-repro\n\033[38;5;244m────────────────────────\033[39m\n\033[38;2;200;200;200m>\033[39m \033[7m \033[0m\n\033[38;5;244m────────────────────────\033[39m\nFeishu: 已连接 / Connected  ·  🐙 0 · 0 · $0\n\033[38;5;244m↳ launch-brief/queued\033[39m'
+  selected=$(fm_composer_extract_selected_content "$CAPS_STYLED" "$queued")
+  [ -z "$selected" ] || fail "a fresh extraction of an idle prompt row must be empty, got '$selected'"
+  assert_screen "pi queued tail note stays outside the pair" empty "$CAPS_STYLED" "$queued" '' "$pi_idle"
+  selected=$(fm_composer_extract_selected_content "$CAPS_STYLED" "$queued")
+  [ -z "$selected" ] || fail "extraction after classification must still be empty, got '$selected'"
+  typed=${queued//$'\033[38;2;200;200;200m>\033[39m \033[7m \033[0m'/$'\033[38;2;200;200;200m> fix the flaky test\033[39m'}
+  selected=$(fm_composer_extract_selected_content "$CAPS_STYLED" "$typed")
+  [ "$selected" = 'fix the flaky test' ] || fail "a pi draft should extract exactly, got '$selected'"
+  assert_screen "pi queued tail note plus a real draft stays pending" pending "$CAPS_STYLED" "$typed" '' "$pi_idle"
+  selected=$(fm_composer_extract_selected_content "$CAPS_STYLED" "$typed")
+  [ "$selected" = 'fix the flaky test' ] || fail "extraction after classification changed the draft to '$selected'"
+  # A typed `>` renders as `> >`: the editor glyph goes, the typed one stays.
+  rule='────────────────────────'
+  typed=$(printf '%s\n> >\n%s' "$rule" "$rule")
+  selected=$(fm_composer_extract_selected_content "$CAPS_STYLED" "$typed")
+  [ "$selected" = '>' ] || fail "'> >' must extract the typed '>', got '$selected'"
+  assert_screen "pi typed prompt glyph stays a draft" pending "$CAPS_STYLED" "$typed" '' "$pi_idle"
+  # Queued-looking text INSIDE the pair is a draft, not furniture.
+  inside=$(printf '%s\n> Steering: second message\n%s' "$rule" "$rule")
+  assert_screen "queued-looking text inside the pair is a draft" pending "$CAPS_STYLED" "$inside" '' "$pi_idle"
+  selected=$(fm_composer_extract_selected_content "$CAPS_STYLED" "$inside")
+  [ "$selected" = 'Steering: second message' ] || fail "queued-looking draft must extract, got '$selected'"
+  # A later `>` row is typed continuation and survives extraction.
+  typed=$(printf '%s\n\n>\n%s' "$rule" "$rule")
+  selected=$(fm_composer_extract_selected_content "$CAPS_STYLED" "$typed")
+  [ "$selected" = '>' ] || fail "a continuation-row '>' must extract as typed, got '$selected'"
+  verdict=$(fm_composer_classify_screen "$CAPS_STYLED" "$typed" '' "$pi_idle")
+  [ "$verdict" = pending ] || fail "a continuation-row '>' must stay pending, got '$verdict'"
+  pass "matrix: pi extraction and classification agree on the pair in any call order"
+}
+
 test_zero_height_separator_pair_proves_nothing() {
   # A pi pair that encloses NO row cannot hold an input row, yet every content
   # check over an empty range trivially succeeded, so an idle pi identity read
@@ -1005,6 +1118,9 @@ test_matrix_codex_idle_starfield_furniture
 test_matrix_pi_separated_needs_identity
 test_matrix_pi_dollar_status_footer_is_empty
 test_zero_height_separator_pair_proves_nothing
+test_matrix_pi_prompt_glyph_row_is_empty
+test_matrix_pi_prompt_row_is_pi_only_furniture
+test_matrix_pi_prompt_row_extraction_matches_classification
 test_matrix_opencode_leftbar_signals
 test_matrix_grok_titled_bottom_border
 test_matrix_kimi_bordered_shell_glyph_box

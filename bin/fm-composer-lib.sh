@@ -74,6 +74,11 @@
 #                region between two transcript rules is otherwise exactly the
 #                strict rule's unidentifiable blank row. The pair must ENCLOSE
 #                at least one row: two adjacent rules are a divider.
+#                Some pi editors draw their own prompt `>` at the start of
+#                the pair's FIRST row (FM_COMPOSER_PI_PROMPT_GLYPHS); that one
+#                glyph and the space after it are editor furniture, and every
+#                other character in the pair, including a `>` on a later row,
+#                is typed input.
 #                A separated pair that closes over a bare AGENT-GLYPH row is a
 #                different, self-proving thing: real claude 2.x draws exactly
 #                that (`─` rule, `❯`+NBSP, `─` rule), so the glyph inside the
@@ -122,7 +127,9 @@
 # genuine empty agent composer ONLY inside a bordered container. On a bare row
 # it is a dead-shell prompt and classifies `unknown` (never a safe injection
 # target). A `$` followed immediately by a digit is Pi's cost footer, not this
-# prompt (`FM_COMPOSER_PI_STATUS_RE_DEFAULT`).
+# prompt (`FM_COMPOSER_PI_STATUS_RE_DEFAULT`). Pi's first-row editor `>`
+# inside a proven separated pair is the one other exception (the separated
+# shape above).
 # The AGENT glyphs `❯` (claude), `›` (codex), `⟩` (U+27E9, muse),
 # `→` (U+2192, cursor), and `❭` (U+276D, devin) are a genuine empty agent
 # composer either way.
@@ -458,6 +465,10 @@ fm_busy_lines_match() {  # [harness]
 # literal and no entry is ever exposed to pathname expansion.
 FM_COMPOSER_AGENT_PROMPT_GLYPHS=$(printf '%s\n' '❯' '›' '⟩' '→' '❭')
 FM_COMPOSER_SHELL_PROMPT_GLYPHS=$(printf '%s\n' '>' '$' '%' '#')
+# Pi's editor prompt, kept apart from the shell set so a later addition there
+# can never widen the separated shape's first-row exception. Only `>` has been
+# observed in a pi editor; `$`, `%`, and `#` stay typed input inside the pair.
+FM_COMPOSER_PI_PROMPT_GLYPHS=$(printf '%s\n' '>')
 
 # The ONE fleet-wide idle-placeholder set: composer text a harness renders in
 # an EMPTY composer that a plain capture cannot tell from typed text. Grok's
@@ -760,6 +771,35 @@ _fm_composer_pi_separator_row() {  # <trimmed-row>
     *────────*) return 0 ;;
   esac
   return 1
+}
+
+# _fm_composer_pi_input_row_var: reduce one separated-pair row to the input it
+# holds, in place through the named variable. <first> is 1 only for the pair's
+# FIRST inner row, where a pi editor may draw its prompt: exactly one leading
+# FM_COMPOSER_PI_PROMPT_GLYPHS glyph, standing alone or followed by the space
+# the editor draws after it, is removed. Everything else survives byte for
+# byte, so `> >` holds a typed `>`, `>fix` stays as typed, and a later row's
+# `>` stays input. Classification and extraction both read rows through this
+# one rule.
+_fm_composer_pi_input_row_var() {  # <varname> <first>
+  local __fmpi_name=$1 __fmpi_first=$2 __fmpi_text=${!1} __fmpi_glyph
+  fm_composer_normalize_trim_var __fmpi_text
+  if [ "$__fmpi_first" = 1 ]; then
+    while IFS= read -r __fmpi_glyph; do
+      [ -n "$__fmpi_glyph" ] || continue
+      case "$__fmpi_text" in
+        "$__fmpi_glyph") __fmpi_text=''; break ;;
+        "$__fmpi_glyph "*)
+          __fmpi_text=${__fmpi_text#"$__fmpi_glyph "}
+          fm_composer_normalize_trim_var __fmpi_text
+          break
+          ;;
+      esac
+    done <<EOF
+$FM_COMPOSER_PI_PROMPT_GLYPHS
+EOF
+  fi
+  printf -v "$__fmpi_name" '%s' "$__fmpi_text"
 }
 
 # Row-scan results are returned through FM_COMPOSER_SCAN_* globals (bash 3.2
@@ -1576,6 +1616,11 @@ EOF
           leading_blank=0
         fi
         ;;
+      pi)
+        if [ "$row" -eq "$FM_COMPOSER_SELECTED_FIRST" ]; then
+          _fm_composer_pi_input_row_var content 1
+        fi
+        ;;
       box)
         if [ "$prompt_row" -lt 0 ] \
            && fm_composer_leading_prompt_glyph_var glyph "$content"; then
@@ -1771,12 +1816,13 @@ fm_composer_queued_enter_verdict() {  # <composer-state> <busy|idle|unknown>
 }
 
 _fm_composer_classify_pi_rows() {  # <screen> <styled>
-  local screen=$1 styled=$2 row raw content
+  local screen=$1 styled=$2 row raw content first=1
   row=$((FM_COMPOSER_SCAN_PI_OPEN + 1))
   while [ "$row" -lt "$FM_COMPOSER_SCAN_PI_CLOSE" ]; do
     raw=$(_fm_composer_screen_row "$row" "$screen")
     content=$(_fm_composer_row_content "$raw" "$styled")
-    fm_composer_normalize_trim_var content
+    _fm_composer_pi_input_row_var content "$first"
+    first=0
     if [ -n "$content" ]; then
       printf 'pending'
       return 0

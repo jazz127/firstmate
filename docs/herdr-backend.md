@@ -626,7 +626,8 @@ It hands a bounded ANSI tail plus Herdr's capability facts to the fleet-wide cla
 
 A blocked Pi is parked on an interactive prompt, so its blank composer region is a menu's and not a free composer's.
 That state defers instead of proving emptiness.
-A working Pi, pending middle row, missing identity, incomplete separator pair, or over-tall candidate remains unknown or pending.
+A working Pi, pending middle row, missing identity, incomplete separator pair, a pair enclosing no row, or an over-tall candidate remains unknown or pending.
+A lone `>` at the start of the pair's first row is the Pi editor's own prompt, not input; text beside it, a `>` on a later row, and any other glyph remain input.
 Identity stays a lazy second read, consulted only when a separator pair could change the verdict.
 
 ### Placeholder and ghost text

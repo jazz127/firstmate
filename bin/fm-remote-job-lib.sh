@@ -924,6 +924,43 @@ fm_remote_job_process_identity_matches() { # <pid> <start> <command>
   [ "$start" = "$expected_start" ] && [ "$command" = "$expected_command" ]
 }
 
+fm_remote_job_signal_identity() { # <pid> <signal> <start> <command>
+  local pid=$1 signal=$2 expected_start=$3 expected_command=$4
+  case "$(uname -s 2>/dev/null || true)" in
+    Linux)
+      command -v python3 >/dev/null 2>&1 || return 1
+      python3 - "$pid" "$signal" "$expected_start" "$expected_command" <<'PY'
+import os
+import signal
+import subprocess
+import sys
+
+pid = int(sys.argv[1])
+sig = getattr(signal, "SIG" + sys.argv[2])
+expected_start = sys.argv[3]
+expected_command = sys.argv[4]
+fd = os.pidfd_open(pid, 0)
+try:
+    result = subprocess.run(
+        ["ps", "-p", str(pid), "-o", "lstart=", "-o", "command="],
+        check=True, capture_output=True, text=True)
+    line = result.stdout.rstrip("\n")
+    start = line[:24].strip()
+    command = line[24:].strip()
+    if start != expected_start or command != expected_command:
+        raise SystemExit(1)
+    signal.pidfd_send_signal(fd, sig)
+finally:
+    os.close(fd)
+PY
+      ;;
+    *)
+      fm_remote_job_process_identity_matches "$pid" "$expected_start" "$expected_command" || return 1
+      kill -"$signal" "$pid" 2>/dev/null
+      ;;
+  esac
+}
+
 fm_remote_job_process_state() {
   local pid=$1 ps_bin value
   if [ -x /bin/ps ]; then ps_bin=/bin/ps; elif [ -x /usr/bin/ps ]; then ps_bin=/usr/bin/ps; else return 1; fi
@@ -1002,7 +1039,7 @@ fm_remote_job_stop_worker_tree() { # <pid> [start] [command]
   fi
   deadline=$((SECONDS + 30))
   while :; do
-    members=$(fm_remote_job_process_tree_pids "$pid" 2>/dev/null) || return 1
+    members=$(fm_remote_job_process_tree_pids "$pid" "$expected_start" "$expected_command" 2>/dev/null) || return 1
     if [ -z "$members" ]; then
       if ! fm_remote_job_process_identity_matches "$pid" "$expected_start" "$expected_command"; then
         state=$(fm_remote_job_process_state "$pid" 2>/dev/null || true)
@@ -1014,7 +1051,7 @@ fm_remote_job_stop_worker_tree() { # <pid> [start] [command]
     fi
     while IFS=$(printf '\t') read -r member member_start member_command; do
       fm_remote_job_process_identity_matches "$member" "$member_start" "$member_command" || continue
-      kill -"$signal" "$member" 2>/dev/null || true
+      fm_remote_job_signal_identity "$member" "$signal" "$member_start" "$member_command" || true
     done <<< "$members"
     i=0
     while [ "$i" -lt 50 ]; do
@@ -1032,7 +1069,7 @@ fm_remote_job_stop_worker_tree() { # <pid> [start] [command]
     done
     survivors=
     if fm_remote_job_process_identity_matches "$pid" "$expected_start" "$expected_command"; then
-      rescanned=$(fm_remote_job_process_tree_pids "$pid" 2>/dev/null) || return 1
+      rescanned=$(fm_remote_job_process_tree_pids "$pid" "$expected_start" "$expected_command" 2>/dev/null) || return 1
       if [ -n "$rescanned" ]; then
         members=$rescanned
         signal=KILL
@@ -1291,15 +1328,16 @@ fm_remote_job_start_linux_worker_locked() { # <remote-root> <account-home>
 }
 
 fm_remote_job_linux_worker_processes() { # <remote-root>
-  local root=$1 worker ps_bin pid pgid command start
+  local root=$1 worker ps_bin pid pgid state weekday month day clock year command start
   worker="$root/bin/fm-remote-job-worker.sh"
   if [ -x /bin/ps ]; then ps_bin=/bin/ps; elif [ -x /usr/bin/ps ]; then ps_bin=/usr/bin/ps; else return 1; fi
-  while read -r pid pgid command; do
+  while read -r pid pgid state weekday month day clock year command; do
     case "$pgid" in ''|*[!0-9]*|0|1) continue ;; esac
+    case "$state" in Z*) continue ;; esac
     fm_remote_job_worker_command_matches "$worker" "$command" || continue
-    start=$(fm_remote_job_process_start "$pid" 2>/dev/null || true)
+    start="$weekday $month $day $clock $year"
     [ -n "$start" ] && printf '%s\t%s\t%s\n' "$pid" "$start" "$command"
-  done < <("$ps_bin" -eo pid=,pgid=,args= 2>/dev/null)
+  done < <("$ps_bin" -eo pid=,pgid=,stat=,lstart=,command= 2>/dev/null)
   return 0
 }
 
@@ -1322,32 +1360,33 @@ fm_remote_job_process_descends_from_identity() { # <pid> <ancestor> <start> <com
   fm_remote_job_process_identity_matches "$ancestor" "$start" "$command"
 }
 
-fm_remote_job_process_tree_pids() { # <pid>
-  local root=$1 ps_bin pid ppid state start command processes frontier next
+fm_remote_job_process_tree_pids() { # <pid> [start] [command]
+  local root=$1 expected_start=${2:-} expected_command=${3:-} ps_bin pid ppid state weekday month day clock year start command processes frontier next root_valid=0
   if [ -x /bin/ps ]; then ps_bin=/bin/ps; elif [ -x /usr/bin/ps ]; then ps_bin=/usr/bin/ps; else return 1; fi
-  processes=$("$ps_bin" -eo pid=,ppid=,stat= 2>/dev/null) || return 1
+  processes=$("$ps_bin" -eo pid=,ppid=,stat=,lstart=,command= 2>/dev/null) || return 1
   frontier=$root
-  while read -r pid ppid state; do
+  while read -r pid ppid state weekday month day clock year command; do
     case "$pid" in ''|*[!0-9]*) continue ;; esac
     [ "$pid" = "$root" ] || continue
+    start="$weekday $month $day $clock $year"
+    if [ -n "$expected_start" ] && { [ "$start" != "$expected_start" ] || [ "$command" != "$expected_command" ]; }; then
+      break
+    fi
+    root_valid=1
     case "$state" in
       Z*) ;;
-      *)
-        start=$(fm_remote_job_process_start "$pid" 2>/dev/null || true)
-        command=$(fm_remote_job_process_command "$pid" 2>/dev/null || true)
-        [ -n "$start" ] && [ -n "$command" ] && printf '%s\t%s\t%s\n' "$pid" "$start" "$command"
-        ;;
+      *) [ -n "$start" ] && [ -n "$command" ] && printf '%s\t%s\t%s\n' "$pid" "$start" "$command" ;;
     esac
     break
   done <<< "$processes"
+  [ "$root_valid" -eq 1 ] || return 0
   while [ -n "$frontier" ]; do
     next=
-    while read -r pid ppid state; do
+    while read -r pid ppid state weekday month day clock year command; do
       case "$pid:$ppid" in *[!0-9:]*|:) continue ;; esac
       case " $frontier " in *" $ppid "*) ;; *) continue ;; esac
       case "$state" in Z*) continue ;; esac
-      start=$(fm_remote_job_process_start "$pid" 2>/dev/null || true)
-      command=$(fm_remote_job_process_command "$pid" 2>/dev/null || true)
+      start="$weekday $month $day $clock $year"
       [ -n "$start" ] && [ -n "$command" ] || continue
       printf '%s\t%s\t%s\n' "$pid" "$start" "$command"
       next="$next $pid"

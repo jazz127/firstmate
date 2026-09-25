@@ -153,6 +153,28 @@ FM_PIDFD_RACE_PID="$PIDFD_RACE_PID" FM_PIDFD_RACE_KILLED="$TMP_ROOT/pidfd-race-k
   || fail "a worker disappearing during pidfd identity verification was reported as a reaping failure"
 wait "$PIDFD_RACE_PID" 2>/dev/null || true
 pass "pidfd identity verification treats a disappeared worker as a successful no-op"
+
+PIDFD_NO_PS_BIN="$TMP_ROOT/pidfd-no-ps-bin"
+mkdir -p "$PIDFD_NO_PS_BIN"
+PYTHON3_BIN=$(command -v python3)
+UNAME_BIN=$(command -v uname)
+cat > "$PIDFD_NO_PS_BIN/python3" <<SH
+#!/bin/sh
+exec "$PYTHON3_BIN" "\$@"
+SH
+cat > "$PIDFD_NO_PS_BIN/uname" <<SH
+#!/bin/sh
+exec "$UNAME_BIN" "\$@"
+SH
+chmod +x "$PIDFD_NO_PS_BIN/python3" "$PIDFD_NO_PS_BIN/uname"
+sleep 30 & PIDFD_NO_PS_PID=$!
+PIDFD_NO_PS_START=$(fm_remote_job_process_start "$PIDFD_NO_PS_PID")
+PIDFD_NO_PS_COMMAND=$(fm_remote_job_process_command "$PIDFD_NO_PS_PID")
+PATH="$PIDFD_NO_PS_BIN" fm_remote_job_signal_identity \
+  "$PIDFD_NO_PS_PID" TERM "$PIDFD_NO_PS_START" "$PIDFD_NO_PS_COMMAND" \
+  || fail "pidfd signaling failed when ps was absent from PATH"
+wait "$PIDFD_NO_PS_PID" 2>/dev/null || true
+pass "pidfd signaling resolves ps independently of PATH"
 else
 pass "pidfd identity verification regression requires Linux pidfd support"
 fi

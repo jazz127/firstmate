@@ -925,7 +925,7 @@ fm_remote_job_process_identity_matches() { # <pid> <start> <command>
 }
 
 fm_remote_job_signal_identity() { # <pid> <signal> <start> <command>
-  local pid=$1 signal=$2 expected_start=$3 expected_command=$4 state
+  local pid=$1 signal=$2 expected_start=$3 expected_command=$4 state ps_bin=
   if ! fm_remote_job_process_identity_matches "$pid" "$expected_start" "$expected_command"; then
     state=$(fm_remote_job_process_state "$pid" 2>/dev/null || true)
     case "$state" in Z*) return 0 ;; esac
@@ -934,8 +934,9 @@ fm_remote_job_signal_identity() { # <pid> <signal> <start> <command>
   fi
   case "$(uname -s 2>/dev/null || true)" in
     Linux)
-      if command -v python3 >/dev/null 2>&1; then
-        python3 - "$pid" "$signal" "$expected_start" "$expected_command" <<'PY'
+      if [ -x /bin/ps ]; then ps_bin=/bin/ps; elif [ -x /usr/bin/ps ]; then ps_bin=/usr/bin/ps; fi
+      if [ -n "$ps_bin" ] && command -v python3 >/dev/null 2>&1; then
+        python3 - "$pid" "$signal" "$expected_start" "$expected_command" "$ps_bin" <<'PY'
 import errno
 import os
 import signal
@@ -946,6 +947,7 @@ pid = int(sys.argv[1])
 sig = getattr(signal, "SIG" + sys.argv[2])
 expected_start = sys.argv[3]
 expected_command = sys.argv[4]
+ps_bin = sys.argv[5]
 try:
     fd = os.pidfd_open(pid, 0)
 except AttributeError:
@@ -957,7 +959,7 @@ except OSError as exc:
 try:
     try:
         result = subprocess.run(
-            ["ps", "-p", str(pid), "-o", "lstart=", "-o", "command="],
+            [ps_bin, "-p", str(pid), "-o", "lstart=", "-o", "command="],
             check=True, capture_output=True, text=True)
     except subprocess.CalledProcessError:
         raise SystemExit(0)

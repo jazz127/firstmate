@@ -30,6 +30,19 @@ setup_bosun() {
   call "$dir" configure-home --bosun bosun-kun >/dev/null || fail 'Bosun home setup failed'
 }
 
+prepare_project() {
+  local dir=$1 project="$1/projects/sample"
+  mkdir -p "$project"
+  if [ ! -e "$project/.git" ]; then
+    git -C "$project" init -q
+    git -C "$project" config user.email test@example.com
+    git -C "$project" config user.name test
+    printf '%s\n' fixture > "$project/README.md"
+    git -C "$project" add README.md
+    git -C "$project" commit -qm fixture
+  fi
+}
+
 test_routing() {
   local dir out unsupported
   dir=$(new_home routing)
@@ -76,25 +89,49 @@ test_memory_and_paths() {
 }
 
 test_order_accepts_dotfiles() {
-  local dir
+  local dir commit
   dir=$(new_home dotfiles)
   setup_bosun "$dir"
+  prepare_project "$dir"
+  commit=$(git -C "$dir/projects/sample" rev-parse HEAD)
   call "$dir" order --task dotfiles --bosun bosun-kun --maneuver dotfiles \
     --forge github --owner kunchenguid --repository sample --source housefeature/dotfiles \
     --branch contribution/dotfiles --captain-words 'Contribute dotfiles' \
     --path .github/workflows/ci.yml --path .editorconfig \
-    --commit 0123456789012345678901234567890123456789 >/dev/null || fail 'dotfile order was rejected'
+    --commit "$commit" >/dev/null || fail 'dotfile order was rejected'
   jq -e '.allowed_paths == [".github/workflows/ci.yml", ".editorconfig"]' \
     "$dir/data/dotfiles/bosun-contribution.json" >/dev/null || fail 'dotfile order paths were not preserved'
   pass 'ordered dotfiles remain valid scoped paths'
 }
 
+test_order_rejects_invalid_commit_selection() {
+  local dir commit
+  dir=$(new_home invalid-commits)
+  setup_bosun "$dir"
+  prepare_project "$dir"
+  commit=$(git -C "$dir/projects/sample" rev-parse HEAD)
+  if call "$dir" order --task invalid --bosun bosun-kun --maneuver invalid \
+    --forge github --owner kunchenguid --repository sample --source housefeature/invalid \
+    --branch contribution/invalid --captain-words 'Contribute invalid' --path feature.txt \
+    --commit not-a-commit >"$dir/out" 2>&1; then
+    fail 'invalid source commit was accepted'
+  fi
+  if call "$dir" order --task duplicate --bosun bosun-kun --maneuver duplicate \
+    --forge github --owner kunchenguid --repository sample --source housefeature/duplicate \
+    --branch contribution/duplicate --captain-words 'Contribute duplicate' --path feature.txt \
+    --commit "$commit" --commit "$commit" >"$dir/out" 2>&1; then
+    fail 'duplicate source commits were accepted'
+  fi
+  pass 'invalid and duplicate source commits are refused'
+}
+
 test_intake_delegates_to_ship_lifecycle() {
-  local dir fake_root
+  local dir fake_root commit
   dir=$(new_home intake)
   setup_bosun "$dir"
-  mkdir -p "$dir/projects/sample"
+  prepare_project "$dir"
   ordered_home "$dir"
+  commit=$(git -C "$dir/projects/sample" rev-parse HEAD)
   fake_root="$dir/fake-root"
   mkdir -p "$fake_root/bin"
   cat > "$fake_root/bin/fm-project-mode.sh" <<'EOF'
@@ -119,7 +156,7 @@ EOF
     fail 'intake left brief placeholders unresolved'
   fi
   assert_grep 'Fetch the latest upstream default branch' "$dir/data/maneuver/brief.md" 'intake omitted clean upstream extraction'
-  assert_grep '0123456789012345678901234567890123456789' "$dir/data/maneuver/brief.md" 'intake omitted ordered source commit'
+  assert_grep "$commit" "$dir/data/maneuver/brief.md" 'intake omitted ordered source commit'
   assert_grep 'needs-decision' "$dir/data/maneuver/brief.md" 'intake omitted review escalation'
   assert_grep 'spawned maneuver worktree=' "$dir/intake.out" 'intake did not return spawned task'
   pass 'ordered maneuvers delegate exactly once through brief and spawn'
@@ -141,12 +178,14 @@ EOF
 }
 
 ordered_home() {
-  local dir=$1
+  local dir=$1 commit
   setup_bosun "$dir"
+  prepare_project "$dir"
+  commit=$(git -C "$dir/projects/sample" rev-parse HEAD)
   call "$dir" order --task maneuver --bosun bosun-kun --maneuver maneuver \
     --forge github --owner kunchenguid --repository sample --source housefeature/maneuver \
     --branch contribution/maneuver --captain-words 'Contribute maneuver' --path feature.txt \
-    --commit 0123456789012345678901234567890123456789 >/dev/null || fail 'order recording failed'
+    --commit "$commit" >/dev/null || fail 'order recording failed'
   fake_github "$dir"
 }
 
@@ -210,8 +249,25 @@ test_registration_and_merge() {
   pass 'forge-backed authorization and merge completion'
 }
 
+test_registration_requires_role() {
+  local dir
+  dir=$(new_home missing-role)
+  ordered_home "$dir"
+  rm "$dir/data/bosun-role.json"
+  if call "$dir" registration-check --task maneuver --url https://github.com/kunchenguid/sample/pull/12 \
+    --forge github --head captain/sample --base kunchenguid/sample --branch main \
+    --pr-head 0123456789012345678901234567890123456789 \
+    --validation-head 0123456789012345678901234567890123456789 --validation-mode no-mistakes \
+    --upstream-base upstream-sha --changed-path feature.txt >"$dir/out" 2>&1; then
+    fail 'registration without a role record was accepted'
+  fi
+  pass 'registration requires a valid Bosun role record'
+}
+
 test_routing
 test_memory_and_paths
 test_order_accepts_dotfiles
+test_order_rejects_invalid_commit_selection
 test_intake_delegates_to_ship_lifecycle
 test_registration_and_merge
+test_registration_requires_role

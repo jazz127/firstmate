@@ -247,6 +247,18 @@ def cmd_order(args):
     safe_name(fork_owner)
     safe_name(fork_repository)
     safe_name(default_branch)
+    project_dir = safe_path(home() / "projects" / want["repository"])
+    if not project_dir.is_dir() or project_dir.is_symlink():
+        fail(f"upstream project clone is unavailable: {project_dir}")
+    if len(set(args.commit)) != len(args.commit):
+        fail("source commit selection contains duplicates")
+    for commit in args.commit:
+        if not re.fullmatch(r"[0-9a-fA-F]{40}", commit):
+            fail(f"invalid source commit: {commit}")
+        result = subprocess.run(["git", "-C", str(project_dir), "cat-file", "-e", f"{commit}^{{commit}}"],
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        if result.returncode:
+            fail(f"source commit is not present in upstream project: {commit}")
     for path in args.path:
         safe_relative_path(path)
     path = contribution_path(args.task)
@@ -396,12 +408,12 @@ def cmd_conventions(args):
 
 def cmd_registration_check(args):
     marker = safe_path(home() / ".fm-secondmate-home")
-    if not marker.exists():
-        return
+    if marker.is_symlink() or not marker.is_file():
+        fail("Bosun secondmate identity marker is missing or unsafe")
     bosun = marker.read_text().strip()
     role_file = safe_path(home() / "data/bosun-role.json")
-    if not role_file.exists():
-        return
+    if role_file.is_symlink() or not role_file.is_file():
+        fail("Bosun role record is missing or unsafe")
     role(bosun)
     record = contribution(args.task)
     if record["bosun"] != bosun or record["target"]["forge"] != args.forge:

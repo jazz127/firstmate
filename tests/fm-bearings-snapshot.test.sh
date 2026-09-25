@@ -12,6 +12,9 @@ set -u
 # shellcheck source=bin/fm-secondmate-registry-lib.sh
 # shellcheck disable=SC1091
 . "$ROOT/bin/fm-secondmate-registry-lib.sh"
+# shellcheck source=bin/fm-tasks-axi-lib.sh
+# shellcheck disable=SC1091
+. "$ROOT/bin/fm-tasks-axi-lib.sh"
 
 BEARINGS="$ROOT/bin/fm-bearings-snapshot.sh"
 TASKS_AXI_BIN=$(command -v tasks-axi || true)
@@ -1422,6 +1425,98 @@ test_include_prs_is_the_only_fetch_path() {
   pass "--include-prs is the only path that fetches, and it enriches correctly"
 }
 
+test_include_prs_maps_custom_branch_prefix_to_task() {
+  local home fakebin json
+  home=$(make_home custom-prefix); write_fixture "$home"
+  fm_write_meta "$home/state/ship-task.meta" \
+    "window=firstmate:fm-ship-task" \
+    "worktree=$home/projects/ship-wt" \
+    "project=firstmate" \
+    "harness=claude" \
+    "kind=ship" \
+    "mode=no-mistakes" \
+    "branch=fix/ship-task" \
+    "pr=https://github.com/kunchenguid/firstmate/pull/9"
+  fakebin=$(make_fakebin "$home"); : > "$home/net.log"
+  cat > "$fakebin/gh" <<'SH'
+#!/usr/bin/env bash
+echo "gh $*" >> "$NET_LOG"
+if [ "${FAKE_GH_FAIL:-0}" = 1 ]; then exit 1; fi
+cat <<'JSON'
+[{"number":9,"title":"Ship the thing","url":"https://github.com/kunchenguid/firstmate/pull/9","headRefName":"fix/ship-task","reviewDecision":"APPROVED","mergeable":"MERGEABLE","statusCheckRollup":[{"conclusion":"SUCCESS","status":"COMPLETED"}]}]
+JSON
+SH
+  chmod +x "$fakebin/gh"
+  json=$(run "$home" "$fakebin" --include-prs --json)
+  printf '%s' "$json" | jq -e '
+    .candidate_prs | any(.[]; .num == "9" and .task == "ship-task")
+  ' >/dev/null || fail "a PR on a custom (non-fm/) branch prefix must still map to its recorded task, not fall to '-': $json"
+  pass "--include-prs maps a custom branch-prefix PR back to its recorded task"
+}
+
+test_include_prs_uses_worktree_origin_before_pr_is_recorded() {
+  local home fakebin json
+  home=$(make_home unrecorded-pr); write_fixture "$home"
+  git -C "$home/projects/ship-wt" init -q
+  git -C "$home/projects/ship-wt" remote add origin https://github.com/kunchenguid/firstmate.git
+  fm_write_meta "$home/state/ship-task.meta" \
+    "window=firstmate:fm-ship-task" \
+    "worktree=$home/projects/ship-wt" \
+    "project=firstmate" \
+    "harness=claude" \
+    "kind=ship" \
+    "mode=no-mistakes" \
+    "branch=fix/ship-task"
+  fakebin=$(make_fakebin "$home"); : > "$home/net.log"
+  cat > "$fakebin/gh" <<'SH'
+#!/usr/bin/env bash
+echo "gh $*" >> "$NET_LOG"
+cat <<'JSON'
+[{"number":9,"title":"Ship the thing","url":"https://github.com/kunchenguid/firstmate/pull/9","headRefName":"fix/ship-task","reviewDecision":"","mergeable":"MERGEABLE","statusCheckRollup":[]}]
+JSON
+SH
+  chmod +x "$fakebin/gh"
+  json=$(run "$home" "$fakebin" --include-prs --json)
+  printf '%s' "$json" | jq -e '
+    .candidate_prs | any(.repo == "kunchenguid/firstmate" and .task == "ship-task")
+  ' >/dev/null || fail "an unrecorded PR was not matched through its task worktree origin: $json"
+  pass "--include-prs uses worktree origin before PR metadata is recorded"
+}
+
+test_include_prs_matches_branch_within_its_repository() {
+  local home fakebin json
+  home=$(make_home repo-scoped-pr); write_fixture "$home"
+  fm_write_meta "$home/state/other-task.meta" \
+    "window=firstmate:fm-other-task" \
+    "worktree=$home/projects/ship-wt" \
+    "project=other" \
+    "harness=claude" \
+    "kind=ship" \
+    "mode=no-mistakes" \
+    "branch=fm/other-task" \
+    "pr=https://github.com/acme/other/pull/4"
+  printf 'working: other task\n' > "$home/state/other-task.status"
+  fakebin=$(make_fakebin "$home"); : > "$home/net.log"
+  cat > "$fakebin/gh" <<'SH'
+#!/usr/bin/env bash
+echo "gh $*" >> "$NET_LOG"
+repo=''
+while [ "$#" -gt 0 ]; do
+  case "$1" in --repo) repo=${2:-}; shift 2 ;; *) shift ;; esac
+done
+cat <<JSON
+[{"number":9,"title":"Same branch","url":"https://github.com/${repo}/pull/9","headRefName":"fm/ship-task","reviewDecision":"","mergeable":"MERGEABLE","statusCheckRollup":[]}]
+JSON
+SH
+  chmod +x "$fakebin/gh"
+  json=$(run "$home" "$fakebin" --include-prs --json)
+  printf '%s' "$json" | jq -e '
+    (.candidate_prs | any(.repo == "kunchenguid/firstmate" and .task == "ship-task"))
+      and (.candidate_prs | any(.repo == "acme/other" and .task == "-"))
+  ' >/dev/null || fail "a same-named branch in another repository was attributed to the task: $json"
+  pass "--include-prs scopes branch-to-task matching to the task repository"
+}
+
 test_partial_github_failure_degrades() {
   local home fakebin json rc
   home=$(make_home partial); write_fixture "$home"
@@ -1627,6 +1722,10 @@ test_landed_accepts_only_kind_owned_delivery_artifacts() {
   local home fakebin json main_backlog report_path report_pr
   local keyword_report shipping_report fleet_json created_kind failures=''
   [ -n "$TASKS_AXI_BIN" ] || fail "tasks-axi is required for the landed-selector regression"
+  fm_tasks_axi_compatible || {
+    echo "skip: installed tasks-axi predates ${FM_TASKS_AXI_MIN}, so the real backlog mutations this regression needs are refused"
+    return 0
+  }
   home=$(make_home kind-owned-landed)
   write_fixture "$home"
   fakebin=$(make_fakebin "$home")
@@ -1779,6 +1878,10 @@ EOF
 test_kind_fallback_matches_tasks_axi_word_boundaries() {
   local home fakebin id title kind producer_kind fleet_json json
   [ -n "$TASKS_AXI_BIN" ] || fail "tasks-axi is required for the kind-boundary regression"
+  fm_tasks_axi_compatible || {
+    echo "skip: installed tasks-axi predates ${FM_TASKS_AXI_MIN}, so the real backlog mutations this regression needs are refused"
+    return 0
+  }
   home=$(make_home kind-word-boundaries)
   fakebin=$(make_fakebin "$home")
   : > "$home/net.log"
@@ -3363,6 +3466,9 @@ test_open_decision_surfaces_end_to_end
 test_report_pointers_surface
 test_queued_item_prose_never_hides_it
 test_include_prs_is_the_only_fetch_path
+test_include_prs_maps_custom_branch_prefix_to_task
+test_include_prs_uses_worktree_origin_before_pr_is_recorded
+test_include_prs_matches_branch_within_its_repository
 test_partial_github_failure_degrades
 test_perl_fallback_bounds_github_call
 test_section_caps_and_expansion_flags

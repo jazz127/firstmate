@@ -289,6 +289,28 @@ EOF
     for repo in $repos; do PR_REPOS_TOTAL=$((PR_REPOS_TOTAL + 1)); done
     nrepos=0; npr=0; nwarn=0; ncapped=0; rows='[]'
     pr_fetch_limit=$((FM_BEARINGS_PR_LIMIT + 1))
+    # The task side of the mapping rides a temp file, not an argv element: a
+    # fleet snapshot exceeds the ~128KB per-argument exec cap on large fleets,
+    # and an E2BIG there would drop the repo's PR rows into the warning count.
+    tasks_file=$(mktemp "${TMPDIR:-/tmp}/fm-bearings-tasks.XXXXXX") \
+      || { echo "fm-bearings-snapshot: cannot create a temporary tasks file" >&2; exit 1; }
+    task_repos_file=$(mktemp "${TMPDIR:-/tmp}/fm-bearings-task-repos.XXXXXX") \
+      || { rm -f "$tasks_file"; echo "fm-bearings-snapshot: cannot create a temporary task-repository file" >&2; exit 1; }
+    printf '%s' "$SNAP" | jq '.tasks // []' > "$tasks_file"
+    while IFS= read -r task; do
+      task_id=$(printf '%s' "$task" | jq -r '.id')
+      task_repo=$(repo_slug "$(printf '%s' "$task" | jq -r '.pr.url // empty')")
+      if [ -z "$task_repo" ]; then
+        task_worktree=$(printf '%s' "$task" | jq -r '.paths.worktree.path // empty')
+        if [ -n "$task_worktree" ] && [ -d "$task_worktree" ]; then
+          task_origin=$(git -C "$task_worktree" remote get-url origin 2>/dev/null) || task_origin=''
+          task_repo=$(repo_slug "$task_origin")
+        fi
+      fi
+      [ -z "$task_repo" ] || jq -n --arg id "$task_id" --arg repo "$task_repo" '{id:$id,repo:$repo}' >> "$task_repos_file"
+    done <<EOF
+$(printf '%s' "$SNAP" | jq -c '.tasks[] | select(.kind != "secondmate")')
+EOF
     for repo in $repos; do
       if [ "$ALL_PR_REPOS" != 1 ] && [ "$nrepos" -ge "$FM_BEARINGS_PR_REPOS" ]; then break; fi
       nrepos=$((nrepos + 1))
@@ -296,11 +318,23 @@ EOF
         --json number,title,url,headRefName,reviewDecision,mergeable,statusCheckRollup 2>/dev/null) \
         || { nwarn=$((nwarn + 1)); continue; }
       [ -n "$out" ] || out='[]'
-      repo_result=$(printf '%s' "$out" | jq --arg repo "$repo" --argjson limit "$FM_BEARINGS_PR_LIMIT" '
+      repo_result=$(printf '%s' "$out" | jq --arg repo "$repo" --argjson limit "$FM_BEARINGS_PR_LIMIT" --slurpfile tasks "$tasks_file" --slurpfile task_repos "$task_repos_file" '
+        ($tasks[0] // []) as $all_tasks
+        | def task_repo($task):
+            [ $task_repos[] | select(.id == $task.id) | .repo ]
+            | if length == 1 then .[0] else null end;
+          def task_for_branch($ref):
+            [ $all_tasks[]
+              | . as $task
+              | select((.branch // ("fm/" + .id)) == $ref)
+              | select(task_repo($task) == $repo)
+              | .id
+            ] as $matches
+            | if ($matches | length) == 1 then $matches[0] else "-" end;
         [ .[] | {
           num:(.number|tostring),
           repo:$repo,
-          task:(if (.headRefName // "" | startswith("fm/")) then (.headRefName | ltrimstr("fm/")) else "-" end),
+          task:task_for_branch(.headRefName // ""),
           url:(.url // "-"),
           review:(.reviewDecision // "none"),
           mergeable:(.mergeable // "UNKNOWN"),
@@ -318,6 +352,7 @@ EOF
       npr=$((npr + cnt))
       rows=$(jq -n --argjson a "$rows" --argjson b "$repo_rows" '$a + $b')
     done
+    rm -f "$tasks_file" "$task_repos_file"
     PR_REPOS_SHOWN=$nrepos
     PR_ROWS_CAPPED=$ncapped
     PR_ROWS_MIN_TOTAL=$((npr + ncapped))

@@ -329,14 +329,15 @@ def verify_receipt(args):
         fail("prior-art receipt targets a different repository")
     if not SHA.fullmatch(args.head):
         fail("published head is not a full commit SHA")
-    if context.get("head") != args.head or git("rev-parse", "HEAD") != args.head:
+    if context.get("head") != args.head or (not args.published and git("rev-parse", "HEAD") != args.head):
         fail("prior-art receipt is stale: published head changed")
     base = context.get("base")
     if not isinstance(base, str) or not base:
         fail("prior-art receipt has no PR base")
-    diff = git("diff", "--no-ext-diff", "--find-renames", f"{base}...HEAD", "--")
-    if hashlib.sha256(diff.encode()).hexdigest() != context.get("diff_sha256"):
-        fail("prior-art receipt is stale: branch diff changed")
+    if not args.published:
+        diff = git("diff", "--no-ext-diff", "--find-renames", f"{base}...HEAD", "--")
+        if hashlib.sha256(diff.encode()).hexdigest() != context.get("diff_sha256"):
+            fail("prior-art receipt is stale: branch diff changed")
     try:
         captured = dt.datetime.fromisoformat(record["captured_at"])
     except (KeyError, ValueError, TypeError):
@@ -421,6 +422,7 @@ def main():
     sub.add_argument("--record", required=True)
     sub.add_argument("--repo", required=True)
     sub.add_argument("--head", required=True)
+    sub.add_argument("--published", action="store_true")
     args = parser.parse_args()
     try:
         if args.command == "scan":

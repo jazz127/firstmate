@@ -914,14 +914,21 @@ fm_dod_meta_value() {  # <meta> <key>
   grep "^$2=" "$1" 2>/dev/null | tail -1 | cut -d= -f2-
 }
 
-fm_dod_upstream_receipt_check() {  # <worktree> <url> <meta>
-  local wt=$1 url=$2 meta=$3 origin target record tasktmp head script_dir origin_path
+fm_dod_upstream_receipt_check() {  # <worktree> <url> <meta> [<published-head>]
+  local wt=$1 url=$2 meta=$3 published_head=${4:-} origin target record tasktmp head script_dir origin_path
   fm_pr_url_parse "$url" || return 0
   [ "$FM_PR_PROVIDER" = github ] || return 0
   [ -d "$wt" ] || { printf '%s\n' 'upstream prior-art receipt refused: worktree is unavailable'; return 1; }
   origin=$(git -C "$wt" remote get-url origin 2>/dev/null || true)
   case "$origin" in
-    https://github.com/*) origin_path=${origin#https://github.com/} ;;
+    https://github.com/*)
+      origin_path=${origin#https://}
+      origin_path=${origin_path#*@}
+      case "$origin_path" in
+        github.com/*) origin_path=${origin_path#github.com/} ;;
+        *) origin_path= ;;
+      esac
+      ;;
     ssh://git@github.com/*) origin_path=${origin#ssh://git@github.com/} ;;
     git@github.com:*) origin_path=${origin#git@github.com:} ;;
     *) origin_path= ;;
@@ -935,13 +942,15 @@ fm_dod_upstream_receipt_check() {  # <worktree> <url> <meta>
   tasktmp=$(fm_dod_meta_value "$meta" tasktmp)
   record="$tasktmp/prior-art.json"
   [ -f "$record" ] || { printf '%s\n' "upstream prior-art receipt refused: missing $record"; return 1; }
-  head=$(git -C "$wt" rev-parse --verify HEAD 2>/dev/null) || {
+  head=${published_head:-$(git -C "$wt" rev-parse --verify HEAD 2>/dev/null)} || {
     printf '%s\n' 'upstream prior-art receipt refused: worktree head is unavailable'
     return 1
   }
   script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd) || return 1
+  verify_args=(--record "$record" --repo "$FM_PR_PATH" --head "$head")
+  [ -z "$published_head" ] || verify_args+=(--published)
   if ! (cd "$wt" && python3 "$script_dir/fm-upstream-prior-art.py" verify \
-      --record "$record" --repo "$FM_PR_PATH" --head "$head"); then
+      "${verify_args[@]}"); then
     printf '%s\n' 'upstream prior-art receipt refused: receipt does not match the published work'
     return 1
   fi
@@ -1068,7 +1077,7 @@ fm_dod_accept_ship_done() {  # <kind> <mode> <worktree> <project> <line> [<state
   local kind=$1 mode=$2 wt=$3 project=$4 line=$5 state=${6:-} id=${7:-} meta=${8:-} url sha gerrit
   fm_dod_should_gate_ship_done "$kind" "$mode" "$line" || return 0
   url=$(fm_dod_pr_url_from_done_note "$(status_line_note "$line")") || url=
-  if [ -n "$url" ] && ! fm_dod_upstream_receipt_check "$wt" "$url" "$meta"; then
+  if [ -n "$url" ] && ! fm_dod_upstream_receipt_check "$wt" "$url" "$meta" "$(fm_dod_meta_value "$meta" pr_head)"; then
     return 1
   fi
   if url=$(fm_dod_pr_url_from_done_note "$(status_line_note "$line")") \

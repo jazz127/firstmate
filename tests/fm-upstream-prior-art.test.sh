@@ -135,6 +135,19 @@ JSON
 "$tool" publish "${common[@]}" --body-file "$TMP_ROOT/body.md" --head owner:fix > "$TMP_ROOT/out" || fail 'guarded publication failed'
 "$tool" verify --record "$TMP_ROOT/prior-art.json" --repo owner/demo \
   --head "$(git rev-parse HEAD)" > "$TMP_ROOT/out" || fail 'valid receipt verification failed'
+git remote add origin https://github.com/fork/demo.git
+printf 'refs/heads/fix %s refs/heads/main %s\n' "$(git rev-parse HEAD)" 0 \
+  | "$ROOT/bin/fm-upstream-push-guard.sh" "$ROOT" "$TMP_ROOT/missing.json" origin \
+      https://github.com/fork/demo.git || fail 'owned push was blocked'
+if printf 'refs/heads/fix %s refs/heads/main %s\n' "$(git rev-parse HEAD)" 0 \
+  | "$ROOT/bin/fm-upstream-push-guard.sh" "$ROOT" "$TMP_ROOT/missing.json" origin \
+      https://github.com/upstream/demo.git; then
+  fail 'external push without receipt was allowed'
+fi
+printf 'refs/heads/fix %s refs/heads/main %s\n' "$(git rev-parse HEAD)" 0 \
+  | "$ROOT/bin/fm-upstream-push-guard.sh" "$ROOT" "$TMP_ROOT/prior-art.json" origin \
+      https://github.com/owner/demo.git || fail 'external push with receipt was blocked'
+pass 'pre-push boundary gates external targets and permits owned or checked pushes'
 rg -q '^## Prior art checked$' "$FAKE_PUBLISHED_BODY" || fail 'published body missed prior-art section'
 rg -q 'https://github.com/owner/demo/pull/7 by @author7' "$FAKE_PUBLISHED_BODY" || fail 'published body missed author credit'
 pass 'fresh distinct receipt permits publication and adds author credit'

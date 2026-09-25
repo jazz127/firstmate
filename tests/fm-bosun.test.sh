@@ -131,7 +131,7 @@ test_order_accepts_dotfiles() {
 }
 
 test_order_rejects_invalid_commit_selection() {
-  local dir commit
+  local dir commit base
   dir=$(new_home invalid-commits)
   setup_bosun "$dir"
   prepare_project "$dir" invalid
@@ -147,6 +147,14 @@ test_order_rejects_invalid_commit_selection() {
     --branch contribution/duplicate --captain-words 'Contribute duplicate' --path feature.txt \
     --commit "$commit" --commit "$commit" >"$dir/out" 2>&1; then
     fail 'duplicate source commits were accepted'
+  fi
+  base=$(git -C "$dir/projects/sample" rev-parse HEAD)
+  commit=$(git --git-dir "$FORK_BARE" rev-parse refs/heads/housefeature/invalid)
+  if call "$dir" order --task reversed --bosun bosun-kun --maneuver invalid \
+    --forge github --owner kunchenguid --repository sample --source housefeature/invalid \
+    --branch contribution/reversed --captain-words 'Contribute reversed' --path feature.txt \
+    --commit "$commit" --commit "$base" >"$dir/out" 2>&1; then
+    fail 'reverse-ordered source commits were accepted'
   fi
   pass 'invalid and duplicate source commits are refused'
 }

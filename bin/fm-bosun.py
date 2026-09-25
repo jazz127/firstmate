@@ -3,6 +3,7 @@
 
 import argparse
 import datetime as dt
+import fcntl
 import fnmatch
 import json
 import os
@@ -303,11 +304,15 @@ def cmd_order(args):
     source_ref = fork_source_ref(project_dir, fork_owner, fork_repository, args.source)
     if len(set(args.commit)) != len(args.commit):
         fail("source commit selection contains duplicates")
+    previous = None
     for commit in args.commit:
         if not re.fullmatch(r"[0-9a-fA-F]{40}", commit):
             fail(f"invalid source commit: {commit}")
         if not git_success(project_dir, "merge-base", "--is-ancestor", commit, source_ref):
             fail(f"source commit is not reachable from configured fork branch {args.source}: {commit}")
+        if previous and not git_success(project_dir, "merge-base", "--is-ancestor", previous, commit):
+            fail("source commits must be ordered oldest-to-newest")
+        previous = commit
     for path in args.path:
         safe_relative_path(path)
     path = contribution_path(args.task)
@@ -456,6 +461,21 @@ def cmd_conventions(args):
 
 
 def cmd_registration_check(args):
+    path = contribution_path(args.task)
+    lock_path = safe_path(path.with_name(path.name + ".lock"))
+    if lock_path.is_symlink() or lock_path.parent.is_symlink():
+        fail(f"unsafe registration lock: {lock_path}")
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(lock_path, os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    try:
+        with os.fdopen(fd, "r+") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            return cmd_registration_check_locked(args)
+    except OSError as exc:
+        fail(f"could not lock contribution record: {exc}")
+
+
+def cmd_registration_check_locked(args):
     marker = safe_path(home() / ".fm-secondmate-home")
     if marker.is_symlink() or not marker.is_file():
         fail("Bosun secondmate identity marker is missing or unsafe")

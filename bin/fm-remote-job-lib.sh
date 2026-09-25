@@ -71,16 +71,16 @@
 # an Aqua requirement. The launch-agent renderer and repair helpers here are
 # shared by the entrypoint and remote doctor so their ownership cannot drift.
 #
-# The Linux start path puts the worker tree in its own process group, so
-# stopping a worker signals its restart supervisor, its serving child, and any
-# job descendant together instead of leaving a supervisor to restart what was
-# just killed. fm_remote_job_stop_worker_tree owns that stop and refuses to
-# signal a group whose leader is not itself a worker, so a worker inherited
-# from an older build or from launchd's own session is still stopped safely as
-# a single process. fm_remote_job_root_is_live is the shared predicate for
-# whether a worker's code root still exists; bin/fm-remote-job-worker.sh uses
-# it to stop itself once its root is pruned, and
-# bin/fm-remote-job-reap-orphans.sh uses it to reap workers that were already
+# The Linux start path puts the worker tree in its own process group, keeping
+# the worker and its descendants separate from the launching shell.
+# fm_remote_job_stop_worker_tree owns identity-checked TERM/KILL cleanup of the
+# root and every verified descendant, including descendants that remain after
+# the root exits. Linux ensure retains one verified matching worker, converges
+# stale or duplicate workers before starting a replacement, and refuses to
+# claim readiness when safe cleanup cannot be proven. fm_remote_job_root_is_live
+# is the shared predicate for whether a worker's code root still exists;
+# bin/fm-remote-job-worker.sh uses it to stop itself once its root is pruned,
+# and bin/fm-remote-job-reap-orphans.sh uses it to reap workers already
 # orphaned that way.
 
 FM_REMOTE_JOB_LABEL=dev.firstmate.remote-job

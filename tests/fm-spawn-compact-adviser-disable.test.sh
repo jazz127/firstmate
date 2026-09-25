@@ -404,6 +404,13 @@ test_spawn_installs_scratch_push_guard() {
   out=$(cd "$WT_DIR" && printf 'refs/heads/task\t%s\trefs/heads/task\t%s\n' "$head" 0000000000000000000000000000000000000000 | "$hook" 2>&1)
   status=$?
   set -e
+  [ "$status" -eq 1 ] || fail "new remote branch accepted a vendored bundle: $out"
+  printf '%s\n' "$out" | grep -Fq 'package.json' \
+    || fail "new remote branch refusal did not name the vendored bundle"
+  set +e
+  out=$(cd "$WT_DIR" && printf 'refs/heads/task\t%s\trefs/heads/task\t%s\n' 0000000000000000000000000000000000000000 "$head" | "$hook" 2>&1)
+  status=$?
+  set -e
   [ "$status" -eq 0 ] || fail "deleting a remote branch was refused because of historical scratch: $out"
   pass "spawn installs a pre-push guard for committed scratch bundles"
 }

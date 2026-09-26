@@ -25,7 +25,7 @@ Do not rebase `house` onto upstream: preserving merge history keeps the house in
 
 A house feature is anything we build for ourselves on our own line, whether the captain asked for it or firstmate found it.
 Every house feature has a durable `housefeature/<name>` branch cut from the fork's `main`.
-The [`housefeature-cut.yml`](../.github/workflows/housefeature-cut.yml) workflow now cuts that branch automatically when a pull request merges into `house`, capturing the merged pull request head instead when the change does not apply cleanly to `main`.
+The [`housefeature-cut.yml`](../.github/workflows/housefeature-cut.yml) workflow cuts that branch automatically when a pull request merges into `house`, capturing the merged pull request head instead when the change does not apply cleanly to `main`.
 That branch gives the feature a stable name, keeps it findable, and makes it straightforward to offer without relying on a disposable task branch.
 Task branches are working branches and may be deleted once their feature is captured on its durable branch.
 A contributed house feature is a house feature the captain chose to submit and that has landed in upstream `main`.

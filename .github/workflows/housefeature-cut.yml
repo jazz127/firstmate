@@ -1,6 +1,6 @@
 name: House feature branch
 
-# Cuts a merged house pull request's durable housefeature/<name> branch.
+# Safety net for merged house pull requests from non-housefeature branches.
 # bin/fm-housefeature-cut.sh owns the naming, skip, commit-choice, and
 # create-only push rules; docs/fork-house-branch.md owns the branch layout.
 

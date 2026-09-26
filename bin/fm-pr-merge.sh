@@ -13,6 +13,9 @@
 # base branch allows: --squash wherever squash is allowed, --merge when merge is
 # the only allowed method, and a refusal naming the allowed methods otherwise or
 # when they cannot be read; github_choose_default_method below owns that read.
+# A pull request into a housefeature/* base always lands as a merge commit, so
+# the durable branch keeps main's ancestry: merge is chosen when no method is
+# named, and a caller-named squash or rebase is refused.
 # A GitHub merge is refused unless every pre-merge condition holds, each read
 # live at merge time rather than taken from recorded metadata: the pull request
 # is open, not a draft, mergeable, free of conflicts, every unwaived check
@@ -1126,9 +1129,16 @@ $rules
 RULES
 
   allowed=${allowed# }
-  case " $allowed " in
+  case "$FM_PR_GITHUB_BASE: $allowed " in
+    housefeature/*:*" merge "*) FM_PR_GITHUB_DEFAULT_METHOD=merge ;;
+    housefeature/*)
+      allowed=${allowed// /, }
+      printf 'error: refusing to merge %s: base branch %s takes merge commits only, but allows %s\n' \
+        "$URL" "$FM_PR_GITHUB_BASE" "${allowed:-no merge method}" >&2
+      return 1
+      ;;
     *" squash "*) FM_PR_GITHUB_DEFAULT_METHOD=squash ;;
-    " merge ") FM_PR_GITHUB_DEFAULT_METHOD=merge ;;
+    *": merge ") FM_PR_GITHUB_DEFAULT_METHOD=merge ;;
     *)
       allowed=${allowed// /, }
       printf 'error: refusing to merge %s: base branch %s allows %s, so no default merge method applies; %s\n' \
@@ -1415,6 +1425,15 @@ case "$PROVIDER" in
     merge_args=()
     FM_PR_GITHUB_CALLER_METHOD=$(caller_merge_method "$@")
     github_verify_mergeable || exit 1
+    case "$FM_PR_GITHUB_BASE" in
+      housefeature/*)
+        if caller_has_merge_method "$@" && ! github_caller_method_is merge; then
+          printf 'error: refusing to merge %s: pull requests into %s land as merge commits only; pass --merge or no method\n' \
+            "$URL" "$FM_PR_GITHUB_BASE" >&2
+          exit 1
+        fi
+        ;;
+    esac
     if ! caller_has_merge_method "$@"; then
       github_choose_default_method || exit 1
       merge_args=(--"$FM_PR_GITHUB_DEFAULT_METHOD")

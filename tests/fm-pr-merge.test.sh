@@ -1721,6 +1721,47 @@ test_explicit_method_wins_over_base_branch_rules() {
   pass "fm-pr-merge passes an explicit caller method through and leaves GitHub to judge it"
 }
 
+run_housefeature_method_case() {
+  local name=$1 settings=$2 case_dir
+  shift 2
+  case_dir=$(make_case "$name")
+  mkdir -p "$case_dir/wt"
+  add_gh_mocks "$case_dir" 6868686868686868686868686868686868686868
+  : > "$case_dir/gh-axi.log"
+  sed 's#"baseRefName":"main"#"baseRefName":"housefeature/alpha"#' "$case_dir/github-view.json" > "$case_dir/view.tmp"
+  mv "$case_dir/view.tmp" "$case_dir/github-view.json"
+  sed 's#^base=main$#base=housefeature/alpha#' "$case_dir/github-outcome" > "$case_dir/outcome.tmp"
+  mv "$case_dir/outcome.tmp" "$case_dir/github-outcome"
+  printf '%s\n' "$settings" > "$case_dir/github-settings"
+  set +e
+  run_pr_merge "$case_dir" task-x1 https://github.com/example/repo/pull/34 "$@" \
+    > "$case_dir/stdout" 2> "$case_dir/stderr"
+  printf '%s\n' "$?" > "$case_dir/rc"
+  set -e
+  printf '%s\n' "$case_dir"
+}
+
+test_housefeature_base_merges_with_a_merge_commit() {
+  local case_dir
+  case_dir=$(run_housefeature_method_case housefeature-default "$all_methods")
+  expect_code 0 "$(cat "$case_dir/rc")" "housefeature-default: the merge should run"
+  assert_logged_gh_merge "$case_dir" 34 example/repo --merge
+
+  case_dir=$(run_housefeature_method_case housefeature-explicit-squash "$all_methods" -- --squash)
+  expect_code 1 "$(cat "$case_dir/rc")" "housefeature-explicit-squash: a squash must refuse"
+  assert_grep 'pull requests into housefeature/alpha land as merge commits only' "$case_dir/stderr" \
+    "housefeature-explicit-squash: the refusal did not name the merge-only base"
+  assert_no_grep 'pr merge' "$case_dir/gh.log" "housefeature-explicit-squash: gh pr merge ran"
+
+  case_dir=$(run_housefeature_method_case housefeature-no-merge \
+    $'merge=false\nsquash=true\nrebase=true')
+  expect_code 1 "$(cat "$case_dir/rc")" "housefeature-no-merge: a base without merge commits must refuse"
+  assert_grep 'base branch housefeature/alpha takes merge commits only, but allows squash, rebase' \
+    "$case_dir/stderr" "housefeature-no-merge: the refusal did not name the allowed methods"
+  assert_no_grep 'pr merge' "$case_dir/gh.log" "housefeature-no-merge: gh pr merge ran"
+  pass "fm-pr-merge lands every pull request into housefeature/* as a merge commit"
+}
+
 test_parses_pr_url_for_gh_axi() {
   local case_dir
   case_dir=$(make_case url-parsing)
@@ -2411,6 +2452,7 @@ test_explicit_merge_method_not_overridden
 test_default_method_follows_the_base_branch_rules
 test_default_method_refuses_when_ambiguous_or_unreadable
 test_explicit_method_wins_over_base_branch_rules
+test_housefeature_base_merges_with_a_merge_commit
 test_method_equals_merge_method_not_overridden
 test_parses_pr_url_for_gh_axi
 test_github_still_forwards_sha_arg

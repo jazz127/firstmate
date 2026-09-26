@@ -150,25 +150,34 @@ def card_lines(card, index, total, width):
 
 def screen(card, index, total, width, height, scroll=0, message=""):
     rows, hits = card_lines(card, index, total, width) if card else ([" Nothing needs your answer now."], {})
-    visible = max(1, height - 2)
-    scroll = min(max(0, scroll), max(0, len(rows) - visible))
+    footer = "[P] Prev  [N] Next  [S] Skip  [Q] Quit"
+    if width >= width_of(footer):
+        nav_lines = [footer]
+    elif width >= width_of("[P] Prev  [N] Next"):
+        nav_lines = ["[P] Prev  [N] Next", "[S] Skip  [Q] Quit"]
+    else:
+        nav_lines = ["[P] Prev", "[N] Next", "[S] Skip", "[Q] Quit"]
+    message_lines = wrap(message, width)
+    visible = max(1, height - len(nav_lines) - len(message_lines))
+    max_scroll = max(0, len(rows) - visible)
+    scroll = min(max(0, scroll), max_scroll)
     shown = rows[scroll:scroll + visible]
     mouse = {y: hits[scroll + y] for y in range(1, len(shown) + 1) if scroll + y in hits}
-    footer = "[P] Prev  [N] Next  [S] Skip  [Q] Quit"
     nav = (("p", "prev"), ("n", "next"), ("s", "skip"), ("q", "quit"))
-    for token, action in nav:
-        pos = footer.lower().find("[" + token + "]")
-        if pos >= 0 and pos < width:
-            for x in range(pos + 1, min(pos + 4, width + 1)):
-                mouse[(len(shown) + 1, x)] = (action, 0)
+    for row, line in enumerate(nav_lines, len(shown) + 1):
+        for token, action in nav:
+            pos = line.lower().find("[" + token + "]")
+            if pos >= 0:
+                for x in range(pos + 1, min(pos + 4, width + 1)):
+                    mouse[(row, x)] = (action, 0)
     # Map the whole navigation word to its action, including on narrow screens.
     for y in range(1, len(shown) + 1):
         if y in mouse:
             for x in range(1, width + 1):
                 mouse[(y, x)] = mouse[y]
             del mouse[y]
-    displayed = shown + [footer, clean(message)]
-    return "\x1b[H\x1b[2J" + "\r\n".join(clip(line, width) for line in displayed), mouse, scroll, len(rows)
+    displayed = shown + nav_lines + message_lines
+    return "\x1b[H\x1b[2J" + "\r\n".join(clip(line, width) for line in displayed), mouse, scroll, max_scroll
 
 
 def event(fd):
@@ -207,30 +216,36 @@ def answer(card, option, generated):
     label = clean(option.get("label", value))
     selection = "freeform" if option.get("_freeform") else "option"
     if "\t" in value or "\t" in label or not value:
-        return "Invalid answer text"
+        return False, "Invalid answer text"
+    intake_issue = ""
     if card["type"] == "decision":
         if value == "reconcile":
             bound = run_command("fm-captain-hold.sh", "bind", "captain-pane")
             if bound.returncode:
-                return clean(bound.stderr or bound.stdout)
-            result = run_command("fm-captain-hold.sh", "reconcile-requests", "--source-id",
-                                 "captain-pane", "--source", "captain pane", input_text=key + "\n")
+                intake_issue = clean(bound.stderr or bound.stdout or "Reconcile binding was refused")
+            else:
+                result = run_command("fm-captain-hold.sh", "reconcile-requests", "--source-id",
+                                     "captain-pane", "--source", "captain pane", input_text=key + "\n")
         else:
             mode = card.get("close", "done")
             row = "\t".join((key, value, label, mode)) + "\n"
             result = run_command("fm-captain-hold.sh", "answers", "--any-origin",
                                  "--source", "captain pane", input_text=row)
-        if result.returncode:
-            return clean(result.stderr or result.stdout or "Answer was refused")
+        if not intake_issue and result.returncode:
+            intake_issue = clean(result.stderr or result.stdout or "Answer was refused")
     digest = hashlib.sha256((generated + "\0" + key + "\0" + selection + "\0" + value).encode()).hexdigest()[:24]
     request_id = "captain-pane-" + digest
     note = "Captain's Call pane selection: key=%s; selection=%s; value=%s; label=%s. Refresh the queue and act on the answer." % (key, selection, value, label)
+    if intake_issue:
+        note += " Keyed-answer intake refused or skipped this selection: %s. Route this answer through the owning home." % intake_issue[:500]
     if card["type"] == "merge":
         note += " Resolve the PR from task metadata and apply the bearings merge-click ruling only for the selected merge option."
     result = run_command("fm-inbox.sh", "note", "--request-id", request_id, "--", note)
     if result.returncode:
-        return clean(result.stderr or result.stdout or "Answer saved but wake failed; retry")
-    return ""
+        return False, clean(result.stderr or result.stdout or "Answer saved but wake failed; retry")
+    if intake_issue:
+        return True, "Firstmate will route this answer"
+    return True, "Answer recorded. Firstmate notified."
 
 
 def freeform(fd, saved):
@@ -289,7 +304,7 @@ def main():
             current = [c for c in cards if c["key"] not in answered | skipped]
             index = min(index, max(0, len(current) - 1))
             card = current[index] if current else None
-            frame, hits, scroll, count = screen(card, index, len(current), size.columns,
+            frame, hits, scroll, max_scroll = screen(card, index, len(current), size.columns,
                                                 size.lines, scroll, message)
             sys.stdout.write(frame)
             sys.stdout.flush()
@@ -304,7 +319,7 @@ def main():
             if kind == "click":
                 action = hits.get((value[1], value[0]))
             elif kind == "scroll":
-                scroll = min(max(0, scroll + value), max(0, count - max(1, size.lines - 2)))
+                scroll = min(max(0, scroll + value), max_scroll)
                 continue
             elif kind == "quit" or kind == "key" and value == "q":
                 break
@@ -354,8 +369,8 @@ def main():
                     if number >= len(card["options"]):
                         continue
                     option = card["options"][number]
-                message = answer(card, option, str(data.get("generated", "")))
-                if not message:
+                routed, message = answer(card, option, str(data.get("generated", "")))
+                if routed:
                     answered.add(card["key"])
                     scroll = 0
                     # Read a replacement snapshot after each answer. Keep local
@@ -365,7 +380,6 @@ def main():
                         cards = data["captains_call"]
                     except (OSError, ValueError, json.JSONDecodeError):
                         pass
-                    message = "Answer recorded. Firstmate notified."
     finally:
         sys.stdout.write("\x1b[?1000l\x1b[?1006l\x1b[?25h\x1b[?1049l")
         sys.stdout.flush()

@@ -13,6 +13,7 @@ import json
 import os
 import pathlib
 import pty
+import re
 import select
 import shutil
 import signal
@@ -30,7 +31,7 @@ fake.mkdir()
 shutil.copy2(root / "bin/fm-captain-pane.py", fake / "fm-captain-pane.py")
 for name in ("fm-captain-hold.sh", "fm-inbox.sh"):
     path = fake / name
-    path.write_text("#!/bin/sh\nprintf '%%s\\n' \"$*\" >> \"$FM_TEST_LOG/%s.args\"\ncase \"$1\" in answers|reconcile-requests) cat >> \"$FM_TEST_LOG/%s.stdin\" ;; esac\n" % (name, name))
+    path.write_text("#!/bin/sh\nprintf '%%s\\n' \"$*\" >> \"$FM_TEST_LOG/%s.args\"\ncase \"$1\" in answers|reconcile-requests) cat >> \"$FM_TEST_LOG/%s.stdin\" ;; esac\nif [ -e \"$FM_TEST_LOG/refuse-%s\" ]; then printf 'refused: this task belongs to another home and requires Firstmate to route the answer through its owner before work can continue\\n' >&2; exit 1; fi\n" % (name, name, name))
     path.chmod(0o755)
 
 payload = {
@@ -63,8 +64,11 @@ def render(width):
         assert len(line) <= width, (width, line)
     return result.stdout
 
-small, large = render(40), render(100)
+tiny, small, large = render(32), render(40), render(100)
 assert "RECOMMENDED" in small and "Project: sample/project" in small
+for frame in (tiny, small):
+    assert "[P] Prev" in frame and "[N] Next" in frame
+    assert "[S] Skip" in frame and "[Q] Quit" in frame
 assert "Choose the next deployment window" in large
 assert small.count("deployment") == 1
 
@@ -105,11 +109,38 @@ def drive(keys, width=40, resize=False, program=pane):
     assert proc.returncode == 0, proc.returncode
     return bytes(output)
 
+def assert_frames_fit(output, width):
+    plain = re.sub(rb"\x1b\[[0-9;?]*[A-Za-z]", b"", output)
+    for line in plain.splitlines():
+        assert len(line) <= width, (width, line)
+
 drive(b"1", width=100, resize=True)
 hold = (tmp / "fm-captain-hold.sh.stdin").read_text()
 assert "held-task\tyes\tStart this week\trelease" in hold, hold
 notice = (tmp / "fm-inbox.sh.args").read_text()
 assert "key=held-task; selection=option; value=yes" in notice, notice
+
+# A rejected keyed answer still reaches the durable inbox and advances.
+(tmp / "refuse-fm-captain-hold.sh").touch()
+for width in (32, 40):
+    rejected = drive(b"1", width=width)
+    assert b"Firstmate will route this answer" in rejected, rejected
+    assert b"Merge reviewed change" in rejected, rejected
+    assert_frames_fit(rejected, width)
+(tmp / "refuse-fm-captain-hold.sh").unlink()
+notice = (tmp / "fm-inbox.sh.args").read_text()
+assert "key=held-task; selection=option; value=yes" in notice, notice
+assert "Keyed-answer intake refused or skipped" in notice, notice
+assert "requires Firstmate to route" in notice, notice
+
+# A long wake error stays on the current card for retry and wraps cleanly.
+(tmp / "refuse-fm-inbox.sh").touch()
+for width in (32, 40):
+    failed = drive(b"1", width=width)
+    assert b"Firstmate to route" in failed, failed
+    assert_frames_fit(failed, width)
+(tmp / "refuse-fm-inbox.sh").unlink()
+hold = (tmp / "fm-captain-hold.sh.stdin").read_text()
 
 payload["captains_call"] = [payload["captains_call"][1]]
 queue.write_text(json.dumps(payload))

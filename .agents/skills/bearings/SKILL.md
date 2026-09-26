@@ -124,7 +124,8 @@ Never run `lavish-axi poll` for the board yourself: the armed source's supervise
 ### Handling a board wake
 
 The terminal pane wakes through an ordinary `fm-inbox.sh note` beginning `Captain's Call pane selection:`.
-Its `selection=option` or `selection=freeform` marker keeps a typed note distinct from an option click; the pane has already fed held-task answers or reconcile requests to `bin/fm-captain-hold.sh`.
+Its `selection=option` or `selection=freeform` marker keeps a typed note distinct from an option click; the pane first tries held-task answers or reconcile requests through `bin/fm-captain-hold.sh`.
+If the note says keyed-answer intake refused or skipped the selection, route that recorded answer through the owning home before refreshing the queue.
 Handle the note under the same routing below, applying the merge-click ruling only to `selection=option; value=merge`, then refresh the queue from a fresh Bearings payload.
 
 A board answer arrives as an ordinary `procevent lavish <source-id> <sequence>` check wake. Identify it by comparing the wake source id with `bin/fm-procevent-lavish.sh source-id "$(bin/fm-bearings-board.sh path)"`, regardless of which answer kinds the result contains; then load `process-event-sources` and follow its contract for the result read, adapter classification, and the handled acknowledgement.

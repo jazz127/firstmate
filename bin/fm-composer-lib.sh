@@ -40,6 +40,11 @@
 #               <caps>; nothing carries it from one call to the next. Only a
 #               styled, identity-capable capture can use it, and no adapter
 #               declares it unless its operator explicitly enables it.
+#   pi-prompt=1 the adapter opts in to pi's EXPERIMENTAL first-row editor `>`
+#               (the `separated` shape below). Parsed per call like pi-compact.
+#               Stock pi 0.87.1 draws no such glyph, so a user who types a
+#               lone `>` there must read `pending`; off by default until a
+#               versioned capture of a pi build drawing it exists.
 #   rows=<n>    the capture's bounded row count (informational).
 #
 # THE STRICT BLANK-ROW RULE (captain decision blank-row-injection-posture,
@@ -80,10 +85,10 @@
 #                strict rule's unidentifiable blank row. The pair must ENCLOSE
 #                at least one row: two adjacent rules are a divider.
 #                Some pi editors draw their own prompt `>` at the start of
-#                the pair's FIRST row (FM_COMPOSER_PI_PROMPT_GLYPHS); that one
-#                glyph and the space after it are editor furniture, and every
-#                other character in the pair, including a `>` on a later row,
-#                is typed input.
+#                the pair's FIRST row (FM_COMPOSER_PI_PROMPT_GLYPHS); only
+#                when caps carry pi-prompt=1, that one glyph and the space
+#                after it are editor furniture. Every other character in the
+#                pair, including a `>` on a later row, is typed input.
 #                A separated pair that closes over a bare AGENT-GLYPH row is a
 #                different, self-proving thing: real claude 2.x draws exactly
 #                that (`─` rule, `❯`+NBSP, `─` rule), so the glyph inside the
@@ -142,8 +147,8 @@
 # it is a dead-shell prompt and classifies `unknown` (never a safe injection
 # target). A `$` followed immediately by a digit is Pi's cost footer, not this
 # prompt (`FM_COMPOSER_PI_STATUS_RE_DEFAULT`). Pi's first-row editor `>`
-# inside a proven separated pair is the one other exception (the separated
-# shape above).
+# inside a proven separated pair, when caps carry pi-prompt=1, is the one other
+# exception (the separated shape above).
 # The AGENT glyphs `❯` (claude), `›` (codex), `⟩` (U+27E9, muse),
 # `→` (U+2192, cursor), and `❭` (U+276D, devin) are a genuine empty agent
 # composer either way.
@@ -794,16 +799,17 @@ _fm_composer_pi_separator_row() {  # <trimmed-row>
 
 # _fm_composer_pi_input_row_var: reduce one separated-pair row to the input it
 # holds, in place through the named variable. <first> is 1 only for the pair's
-# FIRST inner row, where a pi editor may draw its prompt: exactly one leading
-# FM_COMPOSER_PI_PROMPT_GLYPHS glyph, standing alone or followed by the space
-# the editor draws after it, is removed. Everything else survives byte for
+# FIRST inner row, where a pi editor may draw its prompt: when THIS call's caps
+# carry pi-prompt=1 (FM_COMPOSER_PI_PROMPT_CALL, reset by every entry point),
+# exactly one leading FM_COMPOSER_PI_PROMPT_GLYPHS glyph, standing alone or
+# followed by the space the editor draws after it, is removed. Everything else survives byte for
 # byte, so `> >` holds a typed `>`, `>fix` stays as typed, and a later row's
 # `>` stays input. Classification and extraction both read rows through this
 # one rule.
 _fm_composer_pi_input_row_var() {  # <varname> <first>
   local __fmpi_name=$1 __fmpi_first=$2 __fmpi_text=${!1} __fmpi_glyph
   fm_composer_normalize_trim_var __fmpi_text
-  if [ "$__fmpi_first" = 1 ]; then
+  if [ "$__fmpi_first" = 1 ] && [ "${FM_COMPOSER_PI_PROMPT_CALL:-0}" = 1 ]; then
     while IFS= read -r __fmpi_glyph; do
       [ -n "$__fmpi_glyph" ] || continue
       case "$__fmpi_text" in
@@ -1691,10 +1697,12 @@ fm_composer_extract_selected_content() {  # <caps> <screen>
   local caps=$1 screen=$2 styled=0 kv plain row raw content glyph joined='' footer_re prompt_row=-1
   local leading_blank=1 placeholder_position=0 prompt_is_shell=0 compact=0
   footer_re=${FM_COMPOSER_LEFTBAR_FOOTER_RE:-$FM_COMPOSER_LEFTBAR_FOOTER_RE_DEFAULT}
+  FM_COMPOSER_PI_PROMPT_CALL=0
   while IFS= read -r kv; do
     case "$kv" in
       styled=1) styled=1 ;;
       pi-compact=1) compact=1 ;;
+      pi-prompt=1) FM_COMPOSER_PI_PROMPT_CALL=1 ;;
     esac
   done <<EOF
 $caps
@@ -1779,12 +1787,14 @@ EOF
 fm_composer_classify_screen() {  # <caps> <screen> [cursor_row] [identity]
   local caps=$1 screen=$2 cy=${3:-} identity=${4:-}
   local styled=0 cursor=0 has_identity=0 compact=0 kv plain
+  FM_COMPOSER_PI_PROMPT_CALL=0
   while IFS= read -r kv; do
     case "$kv" in
       styled=1) styled=1 ;;
       cursor=1) cursor=1 ;;
       identity=1) has_identity=1 ;;
       pi-compact=1) compact=1 ;;
+      pi-prompt=1) FM_COMPOSER_PI_PROMPT_CALL=1 ;;
     esac
   done <<EOF
 $caps

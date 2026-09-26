@@ -3947,6 +3947,24 @@ test_composer_state_pi_captured_cost_footer_is_scoped() {
   pass "fm_backend_herdr_composer_state: pi's captured cost footer is furniture; a truncated tuple defers"
 }
 
+test_composer_state_pi_lone_gt_draft_needs_prompt_optin() {
+  # Stock pi 0.87.1 draws no first-row editor `>`. A lone `>` the user typed
+  # read empty, so exit typed `/quit` onto it and pi sent `>/quit` to the
+  # model. Only FM_BACKEND_HERDR_PI_PROMPT=1 treats that glyph as furniture.
+  local dir log resp fb out optin want
+  for optin in 0 1; do
+    dir="$TMP_ROOT/composer-pi-lone-gt-$optin"; mkdir -p "$dir/responses"; log="$dir/log"; resp="$dir/responses"; : > "$log"
+    printf '%s\n' $'transcript\n─────────────────────────────────────────────────────\n>\x1b[7m \x1b[0m\n─────────────────────────────────────────────────────\n$0.000 (sub) 0.0%/272k (auto)' > "$resp/1.out"
+    printf '{"result":{"agent":{"agent":"pi","agent_status":"idle"}}}\n' > "$resp/2.out"
+    fb=$(make_herdr_fakebin "$dir")
+    out=$( PATH="$fb:$PATH" FM_HERDR_LOG="$log" FM_HERDR_RESPONSES="$resp" FM_BACKEND_HERDR_PI_PROMPT="$optin" \
+      bash -c '. "$0/bin/backends/herdr.sh"; fm_backend_herdr_composer_state lab:w1:p2' "$ROOT" )
+    want=pending; [ "$optin" = 1 ] && want=empty
+    [ "$out" = "$want" ] || fail "a lone first-row '>' with FM_BACKEND_HERDR_PI_PROMPT=$optin should read $want, got '$out'"
+  done
+  pass "fm_backend_herdr_composer_state: a typed lone '>' on stock Pi is a draft unless the prompt glyph is opted in"
+}
+
 # A pi worker parked on an interactive prompt (permission dialog, question
 # menu, trust dialog) reports agent_status=blocked: it is waiting on a human
 # keystroke. The menu is drawn ABOVE the separator pair, so the composer region
@@ -5869,6 +5887,7 @@ test_composer_state_popup_placeholder_fill_is_pending
 test_composer_state_unknown_on_capture_failure
 test_composer_state_unknown_when_no_composer_row_found
 test_composer_state_pi_parked_prompt_is_not_empty
+test_composer_state_pi_lone_gt_draft_needs_prompt_optin
 test_composer_state_pi_separator_idle_is_empty
 test_composer_state_pi_dollar_status_footer_is_empty
 test_composer_state_pi_captured_cost_footer_is_scoped

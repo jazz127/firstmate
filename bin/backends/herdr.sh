@@ -3112,6 +3112,14 @@ fm_backend_herdr_pi_compact_cap() {
   printf '\npi-compact=1'
 }
 
+# fm_backend_herdr_pi_prompt_cap: the pi-prompt capability line, printed only
+# when the operator opts in with FM_BACKEND_HERDR_PI_PROMPT=1. Stock pi 0.87.1
+# draws no first-row editor `>`, so by default a lone `>` is the user's draft.
+fm_backend_herdr_pi_prompt_cap() {
+  [ "${FM_BACKEND_HERDR_PI_PROMPT:-0}" = 1 ] || return 0
+  printf '\npi-prompt=1'
+}
+
 # fm_backend_herdr_composer_state: thin adapter - capture plus capabilities
 # in, shared verdict out. The ANSI capture is preferred (styled=1 lets the
 # shared classifier strip ghost/placeholder text); when it fails on an older
@@ -3124,9 +3132,9 @@ fm_backend_herdr_composer_state() {  # <target> -> empty|pending|pending-unprove
   local target=$1 cap caps verdict identity
   fm_backend_herdr_parse_target "$target" || { printf 'unknown'; return 0; }
   if cap=$(fm_backend_herdr_capture_ansi "$target" "$FM_COMPOSER_CAPTURE_LINES" 2>/dev/null); then
-    caps=$(printf 'styled=1\ncursor=0\nidentity=1%s\nrows=%s' "$(fm_backend_herdr_pi_compact_cap)" "$FM_COMPOSER_CAPTURE_LINES")
+    caps=$(printf 'styled=1\ncursor=0\nidentity=1%s%s\nrows=%s' "$(fm_backend_herdr_pi_compact_cap)" "$(fm_backend_herdr_pi_prompt_cap)" "$FM_COMPOSER_CAPTURE_LINES")
   elif cap=$(fm_backend_herdr_capture "$target" "$FM_COMPOSER_CAPTURE_LINES"); then
-    caps=$(printf 'styled=0\ncursor=0\nidentity=1\nrows=%s' "$FM_COMPOSER_CAPTURE_LINES")
+    caps=$(printf 'styled=0\ncursor=0\nidentity=1%s\nrows=%s' "$(fm_backend_herdr_pi_prompt_cap)" "$FM_COMPOSER_CAPTURE_LINES")
   else
     printf 'unknown'
     return 0
@@ -3287,9 +3295,9 @@ fm_backend_herdr_proof_lines() {  # <text>
 fm_backend_herdr_composer_content() {  # <target> [lines]
   local target=$1 lines=${2:-$FM_COMPOSER_CAPTURE_LINES} cap caps
   if cap=$(fm_backend_herdr_capture_ansi "$target" "$lines" 2>/dev/null) && [ -n "$cap" ]; then
-    caps=$(printf 'styled=1\ncursor=0\nidentity=0%s\nrows=%s' "$(fm_backend_herdr_pi_compact_cap)" "$lines")
+    caps=$(printf 'styled=1\ncursor=0\nidentity=0%s%s\nrows=%s' "$(fm_backend_herdr_pi_compact_cap)" "$(fm_backend_herdr_pi_prompt_cap)" "$lines")
   elif cap=$(fm_backend_herdr_capture "$target" "$lines") && [ -n "$cap" ]; then
-    caps=$(printf 'styled=0\ncursor=0\nidentity=0\nrows=%s' "$lines")
+    caps=$(printf 'styled=0\ncursor=0\nidentity=0%s\nrows=%s' "$(fm_backend_herdr_pi_prompt_cap)" "$lines")
   else
     return 1
   fi

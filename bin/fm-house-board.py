@@ -242,6 +242,11 @@ def compose(projects):
                 label = "upstream-offered"
                 label_source = "live upstream PR"
             presence = "both" if entry and branch_sha else "register only" if entry else "fork only"
+            state = "historical" if label == "historical" else "contributed" if label == "contributed-house-feature" else "offered" if label == "upstream-offered" else "landed" if landed else "unlanded"
+            # House membership stops mattering once a feature went upstream,
+            # was retired, or its fork pull request closed without merging.
+            abandoned = bool(fork_pr) and fork_pr["state"] == "closed" and not fork_pr["merged_at"] and not landed
+            on_house = "n/a" if state in ("historical", "contributed") or abandoned else "yes" if landed else "no"
             age_since = (fork_pr or {}).get("created_at") or (upstream_pr or {}).get("created_at") or commit_date
             result["features"].append({
                 "project": project["name"], "name": entry["name"] if entry else slug.replace("-", " ").capitalize(),
@@ -251,7 +256,7 @@ def compose(projects):
                 "commits": distinct_commits(commits + ([branch_sha] if branch_sha else []) + ([merge_sha] if merge_landed else [])),
                 "landed": landed, "presence": presence, "label": label,
                 "label_source": label_source,
-                "state": "historical" if label == "historical" else "contributed" if label == "contributed-house-feature" else "offered" if label == "upstream-offered" else "landed" if landed else "unlanded",
+                "state": state, "on_house": on_house,
                 "fork_pr": {key: fork_pr[key] for key in ("html_url", "state", "merged_at") } if fork_pr else None,
                 "upstream_pr": {key: upstream_pr[key] for key in ("html_url", "state", "merged_at") } if upstream_pr else None,
                 "age_days": days_old(age_since, now), "age_since": age_since,

@@ -41,6 +41,7 @@ The counts update with the visible features.
 Each project card compares the current fork `house` tip with upstream `main`, reports the ahead and behind counts, and flags a fork `main` tip that differs from upstream.
 Each feature row shows its durable branch, commits, current house membership, label, pull request states, and age.
 House membership comes from live commit ancestry or a fork pull request merge commit still reachable from today's `house` tip, never from the register's merged heading alone.
+House membership reads N/A for a feature contributed upstream, a historical one, or one whose fork pull request closed without merging and never landed.
 Rows marked `register only` or `fork only` expose a disagreement between the two sources for reconciliation.
 The board is a snapshot until the next build; filters do not make network requests.
 

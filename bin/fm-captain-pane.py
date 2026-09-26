@@ -219,7 +219,7 @@ def answer(card, option, generated):
         return False, "Invalid answer text"
     intake_issue = ""
     if card["type"] == "decision":
-        if value == "reconcile":
+        if selection == "option" and value == "reconcile":
             bound = run_command("fm-captain-hold.sh", "bind", "captain-pane")
             if bound.returncode:
                 intake_issue = clean(bound.stderr or bound.stdout or "Reconcile binding was refused")

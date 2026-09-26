@@ -125,11 +125,11 @@ queue_path() { printf '%s/state/captains-call.json\n' "$FM_HOME"; }
 publish_queue() {  # <effective.json>
   local dest tmp
   dest=$(queue_path)
-  (umask 077; mkdir -p "${dest%/*}") || fail "cannot create ${dest%/*}"
-  tmp=$(umask 077; mktemp "${dest%/*}/.captains-call.XXXXXX") || fail "cannot stage the captain queue"
+  (umask 077; mkdir -p "${dest%/*}") || return 1
+  tmp=$(umask 077; mktemp "${dest%/*}/.captains-call.XXXXXX") || return 1
   if ! { jq -c . "$1" > "$tmp" && chmod 0600 "$tmp" && mv -f -- "$tmp" "$dest"; }; then
     rm -f -- "$tmp"
-    fail "cannot publish the captain queue"
+    return 1
   fi
   printf 'queue: %s\n' "$dest"
 }
@@ -397,7 +397,7 @@ command_build() {
     rm -f -- "$effective"
     fail "cannot reconcile the board payload against landed work"
   fi
-  publish_queue "$effective" >/dev/null
+  publish_queue "$effective" >/dev/null || { rm -f -- "$effective"; fail "cannot publish the captain queue"; }
   json=$(jq -c . "$effective") || { rm -f -- "$effective"; fail "cannot compact the board data"; }
   rm -f -- "$effective"
   # `<` never appears in JSON syntax outside strings, so escaping every
@@ -488,7 +488,7 @@ command_queue() {
     rm -f -- "$effective"
     fail "cannot reconcile the board payload against landed work"
   fi
-  publish_queue "$effective"
+  publish_queue "$effective" || { rm -f -- "$effective"; fail "cannot publish the captain queue"; }
   rm -f -- "$effective"
 }
 

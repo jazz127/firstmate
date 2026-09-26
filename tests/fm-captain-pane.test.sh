@@ -91,8 +91,12 @@ def drive(keys, width=40, resize=False, program=pane):
         if select.select([master], [], [], 0.1)[0]:
             resized = os.read(master, 65536)
             assert b"deployment window" in resized, resized
-    os.write(master, keys)
-    time.sleep(0.35)
+    for chunk in keys if isinstance(keys, list) else [keys]:
+        os.write(master, chunk)
+        settle = time.monotonic() + 0.35
+        while time.monotonic() < settle:
+            if select.select([master], [], [], 0.05)[0]:
+                output.extend(os.read(master, 65536))
     os.write(master, b"q")
     deadline = time.monotonic() + 4
     while proc.poll() is None and time.monotonic() < deadline:
@@ -173,6 +177,14 @@ hold_args = (tmp / "fm-captain-hold.sh.args").read_text()
 assert "bind captain-pane" in hold_args
 assert "reconcile-requests --source-id captain-pane --source captain pane" in hold_args
 assert (tmp / "fm-captain-hold.sh.stdin").read_text().endswith("held-task\n")
+payload["captains_call"][0]["allow_freeform"] = True
+queue.write_text(json.dumps(payload))
+drive([b"0", b"reconcile\r"])
+typed = (tmp / "fm-captain-hold.sh.args").read_text()[len(hold_args):]
+assert "answers --any-origin --source captain pane" in typed, typed
+assert "reconcile-requests" not in typed and "bind" not in typed, typed
+assert (tmp / "fm-captain-hold.sh.stdin").read_text().endswith("held-task\treconcile\tOwn words\tdone\n")
+assert "key=held-task; selection=freeform; value=reconcile" in (tmp / "fm-inbox.sh.args").read_text()
 hold_args = (tmp / "fm-captain-hold.sh.args").read_text()
 payload["captains_call"] = [{"key": "cred-api-token", "type": "credential", "repo": "sample/project",
                              "title": "Provide the API token", "options": [{"value": "provided", "label": "Token is in the vault"}]}]

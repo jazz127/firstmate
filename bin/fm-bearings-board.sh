@@ -9,8 +9,15 @@
 #
 # Usage:
 #   fm-bearings-board.sh build <data.json>
+#   fm-bearings-board.sh queue <data.json>
+#   fm-bearings-board.sh queue-path
 #   fm-bearings-board.sh path
 #
+# queue      Validate and normalize the same payload without opening Lavish,
+#            then atomically publish it at $FM_HOME/state/captains-call.json.
+#            The pane consumes captains_call in payload order. build also
+#            publishes this queue from its effective payload.
+# queue-path Print that stable queue path for this home.
 # build      Validate the payload, drop the Captain's Call cards whose subject
 #            already landed, give every surviving decision card the standard
 #            reconcile choice, and inject the result into a fresh copy of the
@@ -110,6 +117,22 @@ fail() {
 }
 
 board_path() { printf '%s/.lavish/bearings-board.html\n' "$FM_HOME"; }
+queue_path() { printf '%s/state/captains-call.json\n' "$FM_HOME"; }
+
+# The terminal pane reads the same effective, ordered cards as the browser.
+# Publish a complete payload atomically so a running pane never sees half a
+# refresh. The script header and validator own this state file's format.
+publish_queue() {  # <effective.json>
+  local dest tmp
+  dest=$(queue_path)
+  (umask 077; mkdir -p "${dest%/*}") || fail "cannot create ${dest%/*}"
+  tmp=$(umask 077; mktemp "${dest%/*}/.captains-call.XXXXXX") || fail "cannot stage the captain queue"
+  if ! { jq -c . "$1" > "$tmp" && chmod 0600 "$tmp" && mv -f -- "$tmp" "$dest"; }; then
+    rm -f -- "$tmp"
+    fail "cannot publish the captain queue"
+  fi
+  printf 'queue: %s\n' "$dest"
+}
 
 validate_payload() {  # <data.json>
   jq -e --arg schema "$BOARD_SCHEMA" '
@@ -374,6 +397,7 @@ command_build() {
     rm -f -- "$effective"
     fail "cannot reconcile the board payload against landed work"
   fi
+  publish_queue "$effective" >/dev/null
   json=$(jq -c . "$effective") || { rm -f -- "$effective"; fail "cannot compact the board data"; }
   rm -f -- "$effective"
   # `<` never appears in JSON syntax outside strings, so escaping every
@@ -451,8 +475,27 @@ command_build() {
   fi
 }
 
+command_queue() {
+  local data=${1-} effective
+  [ "$#" -eq 1 ] || { usage >&2; exit 2; }
+  command -v jq >/dev/null 2>&1 || fail "jq is required"
+  [ -f "$data" ] || fail "board data does not exist: $data"
+  jq empty "$data" 2>/dev/null || fail "board data is not valid JSON: $data"
+  validate_payload "$data" || fail "board data does not satisfy $BOARD_SCHEMA: $data"
+  effective=$(umask 077; mktemp "${TMPDIR:-/tmp}/fm-bearings-payload.XXXXXX") \
+    || fail "cannot stage the captain queue"
+  if ! effective_payload "$data" "$effective"; then
+    rm -f -- "$effective"
+    fail "cannot reconcile the board payload against landed work"
+  fi
+  publish_queue "$effective"
+  rm -f -- "$effective"
+}
+
 case "${1-}" in
   build) shift; command_build "$@" ;;
+  queue) shift; command_queue "$@" ;;
+  queue-path) queue_path ;;
   path) board_path ;;
   -h|--help|help) usage ;;
   *) usage >&2; exit 2 ;;

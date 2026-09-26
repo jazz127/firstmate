@@ -15,6 +15,7 @@ Herdr provides the terminal session while Treehouse continues to provide task wo
 
 | What you want to know | Start here |
 | --- | --- |
+| Answer one Captain's Call decision in a pane | [Captain's Call pane](#captains-call-pane) |
 | Install Herdr and select it | [Setup](#setup) |
 | Why a command ran on a different `herdr` client | [Client selection](#client-selection) |
 | Where task tabs appear and how to watch them | [Watching and task containers](#watching-and-task-containers) |
@@ -28,6 +29,15 @@ Herdr provides the terminal session while Treehouse continues to provide task wo
 | Where the away daemon runs and how it stops | [Away-mode supervisor support](#away-mode-supervisor-support) |
 | Stopping or deleting Herdr sessions during verification | [Destructive lab safety](#destructive-lab-safety) |
 | Known limits and the test suite | [Active limits](#active-limits) and [Regression entry points](#regression-entry-points) |
+
+## Captain's Call pane
+
+Run `FM_HOME=/path/to/firstmate-home /path/to/firstmate/bin/fm-captain-pane.py` in a Herdr shell pane, or run the same command in a plain SSH terminal.
+Run `/bearings` in Firstmate to refresh the queue at `state/captains-call.json` before opening it; `/bearings lavish` refreshes that same queue while building the browser board.
+The pane shows one card at a time in Bearings order, wraps at the current terminal width, and redraws on resize.
+Click an option or press its number; `p`, `n`, `s`, and `q` go back, go forward, skip, and quit.
+Arrow keys and mouse wheel scroll a long card.
+An answer wakes Firstmate through the durable inbox path; a merge selection waits for Firstmate's fresh PR and CI checks before any merge.
 
 ## Setup
 

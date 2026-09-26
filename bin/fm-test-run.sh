@@ -395,7 +395,7 @@ family_for_basename() {
     fm-supervision-host.test.sh|fm-host-mirror.test.sh)
       printf '%s\n' afk
       ;;
-    fm-bearings-board-render.test.sh|fm-bearings-snapshot.test.sh|fm-contributions.test.sh|\
+    fm-bearings-board-render.test.sh|fm-bearings-snapshot.test.sh|fm-captain-pane.test.sh|fm-contributions.test.sh|\
     fm-fleet-snapshot-view.test.sh|fm-home-summary-refresh.test.sh)
       printf '%s\n' snapshot-bearings
       ;;
@@ -696,6 +696,7 @@ tests/fm-backlog-read-bound.test.sh 24288
 tests/fm-bearings-board-lavish-live-e2e.test.sh 48
 tests/fm-bearings-board-render.test.sh 12591
 tests/fm-bearings-board.test.sh 36490
+tests/fm-captain-pane.test.sh 3000
 tests/fm-bearings-snapshot.test.sh 171176
 tests/fm-bootstrap-network-parallel.test.sh 9539
 tests/fm-bootstrap.test.sh 46634

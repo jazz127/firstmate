@@ -340,9 +340,9 @@ test_recorded_pr_with_missing_worktree_is_accepted() {
   state="$TMP_ROOT/missing-wt-state"
   mkdir -p "$state"
   meta="$state/missing-wt.meta"
-  printf 'kind=ship\nmode=no-mistakes\npr=https://github.com/o/r/pull/5\npr_head=0123456789abcdef0123456789abcdef01234567\n' > "$meta"
+  printf 'kind=ship\nmode=no-mistakes\npr=https://review.example.test/c/o/r/+/5\n' > "$meta"
   accept_done ship no-mistakes "$TMP_ROOT/missing-wt" "$TMP_ROOT/missing-wt-repo" \
-    "done: PR https://github.com/o/r/pull/5 checks green" "$state" missing-wt "$meta" \
+    "done: PR https://review.example.test/c/o/r/+/5 checks green" "$state" missing-wt "$meta" \
     || fail "recorded PR was refused because its worktree is missing"
   pass "a recorded PR with a missing worktree is still accepted"
 }

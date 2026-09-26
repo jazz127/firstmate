@@ -235,6 +235,48 @@ test_pane_hookspath_does_not_reroute_another_repository() {
 }
 
 
+test_pre_push_guard_runs_before_project_hooks() {
+  local repo hooks guard remote
+  repo="$TMP_ROOT/pre-push-guard"
+  make_repo "$repo"
+  remote="$TMP_ROOT/pre-push-guard-remote.git"
+  git init -q --bare "$remote"
+  git -C "$repo" remote add target "$remote"
+  mkdir -p "$repo/.husky"
+  git -C "$repo" config core.hooksPath .husky
+  write_marker_hook "$repo/.husky/pre-commit" project-pre-commit
+  cat >"$repo/.husky/pre-push" <<'SH'
+#!/usr/bin/env bash
+cat > "$PWD/project-pre-push.stdin"
+SH
+  chmod 700 "$repo/.husky/pre-push"
+  guard="$TMP_ROOT/pre-push-guard.sh"
+  cat >"$guard" <<'SH'
+#!/usr/bin/env bash
+cat > "$1/guard.stdin"
+[ ! -f "$1/refuse" ]
+SH
+  chmod 700 "$guard"
+  hooks="$TMP_ROOT/hooks-pre-push-guard"
+  "$STRIP" install "$hooks" "$repo" "$guard" "$TMP_ROOT" || fail "guarded install should succeed"
+  printf 'note\n' >>"$repo/README.md"
+  git -C "$repo" add README.md
+  with_hooks_env "$hooks" git -C "$repo" commit -q -m 'fix: guarded'
+  [ -f "$repo/project-pre-commit.ran" ] || fail "a guarded install skipped the project's pre-commit hook"
+  touch "$TMP_ROOT/refuse"
+  with_hooks_env "$hooks" git -C "$repo" push -q target HEAD:refs/heads/main 2>/dev/null \
+    && fail "a refusing pre-push guard let the push through"
+  [ -f "$repo/project-pre-push.stdin" ] && fail "the project's pre-push ran after the guard refused"
+  git --git-dir="$remote" rev-parse --verify -q refs/heads/main >/dev/null && fail "a refused push reached the remote"
+  rm -f "$TMP_ROOT/refuse"
+  with_hooks_env "$hooks" git -C "$repo" push -q target HEAD:refs/heads/main \
+    || fail "a passing pre-push guard blocked the push"
+  assert_contains "$(cat "$TMP_ROOT/guard.stdin")" "$(git -C "$repo" rev-parse HEAD)" "the guard did not read the pushed refs"
+  [ "$(cat "$repo/project-pre-push.stdin")" = "$(cat "$TMP_ROOT/guard.stdin")" ] \
+    || fail "the project's pre-push did not receive the same pushed refs as the guard"
+  pass "a pre-push guard runs first and then chains the project's own hooks with the same stdin"
+}
+
 test_strip_msgfile_alone_does_not_rewrite_author_fields() {
   local msg
   msg="$TMP_ROOT/msg.txt"
@@ -255,6 +297,7 @@ test_relative_project_hookspath_still_runs
 test_inherited_hookspath_env_does_not_decide_the_chain
 test_project_hook_generated_after_install_still_runs
 test_pane_hookspath_does_not_reroute_another_repository
+test_pre_push_guard_runs_before_project_hooks
 test_strip_msgfile_alone_does_not_rewrite_author_fields
 
 echo "# all fm-git-strip-ai-trailers tests passed"

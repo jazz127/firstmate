@@ -1,0 +1,54 @@
+
+=== before any spawn (captain decoy only) ===
+▸ alpha	 focused=true	 id=w1
+    tabs: 1,fm-captain
+
+=== after spawn alpha-one ===
+▸ alpha	 focused=true	 id=w1
+    tabs: 1,fm-captain
+▸ alpha	 focused=false	 id=w2
+    tabs: fm-alpha-one
+
+=== after spawn alpha-two ===
+▸ alpha	 focused=true	 id=w1
+    tabs: 1,fm-captain
+▸ alpha	 focused=false	 id=w2
+    tabs: fm-alpha-one,fm-alpha-two
+
+=== after spawn beta-one ===
+▸ alpha	 focused=true	 id=w1
+    tabs: 1,fm-captain
+▸ alpha	 focused=false	 id=w2
+    tabs: fm-alpha-one,fm-alpha-two
+▸ beta	 focused=false	 id=w3
+    tabs: fm-beta-one
+ok - real Herdr lab: tasks of one project share one labelled workspace, another project gets its own, and a same-labelled captain workspace keeps its focus and contents
+
+=== after teardown alpha-one ===
+▸ alpha	 focused=true	 id=w1
+    tabs: 1,fm-captain
+▸ alpha	 focused=false	 id=w2
+    tabs: fm-alpha-two
+▸ beta	 focused=false	 id=w3
+    tabs: fm-beta-one
+
+=== after teardown alpha-three (last alpha task) ===
+▸ alpha	 focused=true	 id=w1
+    tabs: 1,fm-captain
+▸ beta	 focused=false	 id=w3
+    tabs: fm-beta-one
+ok - real Herdr lab: a project space outlives every task but its last, and its removal keeps the captain's focus
+
+=== after spawn alpha-four (alpha reopened) ===
+▸ alpha	 focused=true	 id=w1
+    tabs: 1,fm-captain
+▸ beta	 focused=false	 id=w3
+    tabs: fm-beta-one
+▸ alpha	 focused=false	 id=w4
+    tabs: fm-alpha-four
+
+=== after teardown alpha-four and beta-one ===
+▸ alpha	 focused=true	 id=w1
+    tabs: 1,fm-captain
+ok - real Herdr lab: after its last task a project reopens a fresh space and every space is removed with its last task
+ok - real Herdr lab validation completed on Herdr 0.9.1 with the default-session tripwire intact

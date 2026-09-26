@@ -1,0 +1,11 @@
+
+=== default (absent config): after spawning alpha-one, alpha-two, beta-one ===
+firstmate	 id=w1
+    tabs: fm-alpha-one
+└ alpha-two · p:F7lpx2JeywzSpvT6RIZ_xw	 id=w2
+    tabs: fm-alpha-two
+└ beta-one · p:hzpe2b4p3eu2wJrVIisxxg	 id=w3
+    tabs: fm-beta-one
+
+=== default: after teardown of all ===
+ok - real Herdr lab validation completed on Herdr 0.9.1 with the default-session tripwire intact

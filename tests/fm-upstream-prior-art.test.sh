@@ -315,6 +315,24 @@ fi
   || fail 'published verification refused a receipt that was fresh when the PR was published'
 pass 'freshness is enforced before the push but not after publication'
 
+python3 - "$TMP_ROOT/prior-art.json" "$TMP_ROOT/naive-record.json" <<'PY'
+import json, sys
+r=json.load(open(sys.argv[1])); r['captured_at']=r['captured_at'][:19]; open(sys.argv[2],'w').write(json.dumps(r))
+PY
+naive=(--repo owner/demo --title 'Fix stale worker detection' --summary-file "$TMP_ROOT/summary.txt" --record "$TMP_ROOT/naive-record.json" --base base)
+naive_refused() {
+  if "$tool" "$@" > "$TMP_ROOT/out" 2>&1; then
+    fail "receipt without a capture timezone was accepted: $1"
+  fi
+  rg -q '^prior-art refused: prior-art record capture time has no timezone$' "$TMP_ROOT/out" \
+    || { cat "$TMP_ROOT/out"; fail "receipt without a capture timezone was not refused cleanly: $1"; }
+}
+naive_refused check "${naive[@]}"
+naive_refused publish "${naive[@]}" --body-file "$TMP_ROOT/body.md" --head owner:fix
+naive_refused verify --record "$TMP_ROOT/naive-record.json" --repo owner/demo --head "$PUBLISHED_HEAD"
+naive_refused verify --record "$TMP_ROOT/naive-record.json" --repo owner/demo --head "$PUBLISHED_HEAD" --published
+pass 'a receipt whose capture time has no timezone is refused cleanly'
+
 FAKE_MORE_HITS=1 "$tool" scan "${common[@]}" > "$TMP_ROOT/out" || fail 'scan with more hits than read failed'
 python3 - "$TMP_ROOT/prior-art.json" <<'PY' || fail 'search truncation was not disclosed'
 import json, sys

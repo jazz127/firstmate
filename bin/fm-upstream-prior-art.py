@@ -422,6 +422,8 @@ def decided(record, fresh):
         captured = dt.datetime.fromisoformat(record["captured_at"])
     except (KeyError, ValueError, TypeError):
         fail("prior-art record has no valid capture time")
+    if captured.tzinfo is None:
+        fail("prior-art record capture time has no timezone")
     age = (dt.datetime.now(dt.timezone.utc) - captured).total_seconds()
     if fresh and (age < 0 or age > FRESH_SECONDS):
         fail("prior-art record is stale: scan is older than one hour")

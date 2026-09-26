@@ -33,6 +33,8 @@ FAKE_CLAUDE="$FAKEBIN/claude"
 # The stub engine. It records its environment and arguments, then acts like a
 # branch turn through the real scripts according to $FM_HOME/stub-mode:
 #   handle      drain, claim the task's lease, report, acknowledge, release
+#   captain     the same as handle, but report verdict captain naming the rows
+#               the drain presented
 #   hold-lease  the same, but leave the lease held (the host must release it)
 #   return      handle, but the captain returns (the record is archived) before
 #               the turn ends
@@ -40,8 +42,9 @@ FAKE_CLAUDE="$FAKEBIN/claude"
 #   return-first the captain returns first, then handle, then block until the
 #               host is stopped (an owner killing its host at the turn's end)
 #   noack       the same as handle, but skip the acknowledgement
-#   chain       handle, then append a status line, so the next close is already
-#               waiting when the turn ends
+#   held        handle, but first block reading the $FM_HOME/stub-release FIFO
+#               until the test writes to it, so the test chooses when the turn
+#               ends
 #   emptyresult the same as handle, but print {} as its result
 #   noreport    drain and exit cleanly without a report
 #   fail        exit nonzero at once, with no result and no report (an engine
@@ -72,21 +75,27 @@ row_tasks=$(sed -n 's/^row_tasks=//p' "$STATE/.supervision-host-turn")
 [ -n "$task" ] || task=fleet
 case "$mode" in
   fail) exit 3 ;;
-  handle|hold-lease|return|return-fail|return-first|noack|chain|emptyresult)
+  handle|captain|held|hold-lease|return|return-fail|return-first|noack|emptyresult)
+    [ "$mode" != held ] || read -r _ < "$FM_HOME/stub-release"
     [ "$mode" != return-first ] || "$FM_REPO/bin/fm-afk-contract.sh" archive >> "$FM_HOME/engine-return.log" 2>&1
     "$FM_REPO/bin/fm-lease.sh" claim "$task" >> "$FM_HOME/engine-lease.log" 2>&1
     for binding in $row_tasks; do
       row=${binding%%=*}
       row_task=${binding#*=}
-      "$FM_REPO/bin/fm-branch-report.sh" --row "$row" --task "$row_task" --verdict routine --summary "stub handled $row_task" \
-        >> "$FM_HOME/engine-report.log" 2>&1
+      if [ "$mode" = captain ]; then
+        "$FM_REPO/bin/fm-branch-report.sh" --row "$row" --task "$row_task" --verdict captain \
+          --summary "stub escalated: $(printf '%s\n' "$drain" | grep -v '^WAKE_' | tr '\n' ' ' | cut -c1-400)" \
+          >> "$FM_HOME/engine-report.log" 2>&1
+      else
+        "$FM_REPO/bin/fm-branch-report.sh" --row "$row" --task "$row_task" --verdict routine --summary "stub handled $row_task" \
+          >> "$FM_HOME/engine-report.log" 2>&1
+      fi
     done
     # shellcheck disable=SC2086 # the printed acknowledgement arguments
     [ -z "$ack" ] || [ "$mode" = noack ] || "$FM_REPO/bin/fm-wake-drain.sh" $ack >> "$FM_HOME/engine-ack.log" 2>&1
     [ "$mode" = hold-lease ] || "$FM_REPO/bin/fm-lease.sh" release "$task" >> "$FM_HOME/engine-lease.log" 2>&1
     case "$mode" in
       return|return-fail) "$FM_REPO/bin/fm-afk-contract.sh" archive >> "$FM_HOME/engine-return.log" 2>&1 ;;
-      chain) printf 'working [at=%s]: chained %s\n' "$(date +%s)" "$n" >> "$STATE/demo.status" ;;
     esac
     [ "$mode" != return-fail ] || exit 3
     [ "$mode" != return-first ] || sleep "$FM_TEST_STUB_MAX_BLOCK_SECONDS"
@@ -628,54 +637,113 @@ test_park_boundary_ends_the_park_before_the_hook_timeout() {
   pass "host: the park ends itself with a boundary wake and a stopped watcher"
 }
 
+# A close that lands while a turn is running can only wait: the host ends its
+# park at the bound regardless of how many closes are queued behind it. The
+# park runs on the test clock (FM_TEST_SUPERVISION_HOST_CLOCK), which the test
+# moves to the refusal window's opening (park bound minus the turn bound and
+# grace) before it releases the held turn, so the second close can never take
+# a turn of its own on any machine speed.
 test_park_boundary_holds_under_back_to_back_closes() {
-  local home
+  # The turn bound is the one wall-clock bound left: it must cover the stub's
+  # report work after release, so the product never kills the held turn.
+  local home park=36 turn=19 grace=1
   home=$(make_home boundary-busy away)
-  echo chain > "$home/stub-mode"
-  FM_SUPERVISION_HOST_PARK_SECONDS=20 FM_SUPERVISION_HOST_TURN_TIMEOUT=3 FM_SUPERVISION_ENGINE_GRACE=1 start_host "$home"
-  wait_until 150 watcher_live "$home" || fail "boundary-busy: the host never started a watcher cycle"
+  echo held > "$home/stub-mode"
+  mkfifo "$home/stub-release"
+  echo 0 > "$home/park-clock"
+  FM_TEST_SUPERVISION_HOST_CLOCK="$home/park-clock" FM_SUPERVISION_HOST_PARK_SECONDS=$park \
+    FM_SUPERVISION_HOST_TURN_TIMEOUT=$turn FM_SUPERVISION_ENGINE_GRACE=$grace start_host "$home"
+  wait_until 150 watcher_live "$home" || fail "boundary-busy: the host never started a watcher cycle: $(cat "$home/host.out")"
   append_status "$home" 'the first of many'
+  wait_until 450 sh -c '[ -e "$1/engine-call.1" ] || [ -s "$1/host.rc" ]' _ "$home" \
+    || fail "boundary-busy: the host never started the first turn: $(cat "$home/host.out" "$home/state/.supervision-host.log" 2>/dev/null)"
+  [ -e "$home/engine-call.1" ] \
+    || fail "boundary-busy: the host exited without starting the first turn: $(cat "$home/host.out" "$home/state/.supervision-host.log" 2>/dev/null)"
+  append_status "$home" 'queued while the first close is still handled'
+  echo $((park - turn - grace)) > "$home/park-clock"
+  exec 3<> "$home/stub-release"
+  printf 'release\n' >&3
   wait_until 450 host_exited "$home" \
     || fail "the host kept handling back-to-back closes past its park boundary: $(cat "$home/state/.supervision-host.log")"
-  handled_at_least "$home" 2 || fail "fixture: closes did not arrive back to back: $(cat "$home/state/.supervision-host.log")"
+  exec 3>&-
+  ! grep -q '	failed	' "$home/state/.supervision-host.log" \
+    || fail "the held turn hit its turn bound or failed: $(cat "$home/state/.supervision-host.log")"
+  [ "$(handled_count "$home")" -eq 1 ] || fail "the held turn did not complete once released: $(cat "$home/state/.supervision-host.log")"
+  [ ! -e "$home/engine-call.2" ] || fail "a close waiting at the boundary still got an engine turn"
   assert_re '^supervision-host: cycle boundary - ' "$home/host.out" "the park boundary must reach main as a host line"
   [ "$(tail -n 1 "$home/host.out")" = "$(grep '^supervision-host: cycle boundary - ' "$home/host.out")" ] \
     || fail "a close read at the boundary must be printed ahead of the boundary line: $(cat "$home/host.out")"
+  assert_grep 'demo.status' "$home/state/.wake-queue" "a close waiting at the boundary must stay queued for main"
   watcher_live "$home" && fail "the park boundary left the watcher running"
   pass "host: waiting closes cannot carry the park past its boundary"
 }
 
+# Rendering the wake prompt runs after the successor cycle has started; the
+# shim holds the render on a FIFO, and the test moves the park's test clock to
+# the refusal window's opening before releasing it, so the close passes the
+# arrival check and the pre-turn recheck must refuse on any machine speed. The
+# snapshot proves the successor arm it started can be checked afterwards.
 test_park_boundary_rechecked_just_before_the_engine_turn() {
-  local home real_node pid
+  local home real_node pid park=14 turn=3 grace=1
   home=$(make_home boundary-late away)
   real_node=$(command -v node)
-  # Rendering the wake prompt runs after the successor cycle has started; this
-  # shim makes it spend the margin the arrival check allowed, and snapshots
-  # the host record so the successor arm it started can be checked afterwards.
+  mkfifo "$home/render-release"
+  echo 0 > "$home/park-clock"
   cat > "$home/fakebin/node" <<SH
 #!/usr/bin/env bash
 if [ "\${2:-}" = wake-prompt ]; then
   cp "\$FM_HOME/state/.supervision-host" "\$FM_HOME/host-record-at-render" 2>/dev/null
-  sleep 10
+  read -r _ < "\$FM_HOME/render-release"
 fi
 exec "$real_node" "\$@"
 SH
   chmod +x "$home/fakebin/node"
-  FM_SUPERVISION_HOST_PARK_SECONDS=14 FM_SUPERVISION_HOST_TURN_TIMEOUT=3 FM_SUPERVISION_ENGINE_GRACE=1 start_host "$home"
+  FM_TEST_SUPERVISION_HOST_CLOCK="$home/park-clock" FM_SUPERVISION_HOST_PARK_SECONDS=$park \
+    FM_SUPERVISION_HOST_TURN_TIMEOUT=$turn FM_SUPERVISION_ENGINE_GRACE=$grace start_host "$home"
   wait_until 150 watcher_live "$home" || fail "boundary-late: the host never started a watcher cycle"
   append_status "$home" 'arrives with just enough margin'
+  wait_until 300 sh -c '[ -s "$1/host-record-at-render" ] || [ -s "$1/host.rc" ]' _ "$home" \
+    || fail "boundary-late: the host neither reached the wake render nor exited: $(cat "$home/host.out" "$home/state/.supervision-host.log" 2>/dev/null)"
+  [ -s "$home/host-record-at-render" ] \
+    || fail "the close was stopped before the successor started: $(cat "$home/host.out")"
+  echo $((park - turn - grace)) > "$home/park-clock"
+  exec 3<> "$home/render-release"
+  printf 'release\n' >&3
   wait_until 300 host_exited "$home" || fail "boundary-late: the host did not end its park"
-  [ -s "$home/host-record-at-render" ] || fail "fixture: the close was stopped before the successor started: $(cat "$home/host.out")"
+  exec 3>&-
   assert_re '^signal: .*demo.status' "$home/host.out" "the close read at the boundary must reach main"
   [ "$(tail -n 1 "$home/host.out")" = "$(grep '^supervision-host: cycle boundary - ' "$home/host.out")" ] \
     || fail "the close must be printed ahead of the boundary line: $(cat "$home/host.out")"
   ! ls "$home"/engine-call.* >/dev/null 2>&1 || fail "an engine turn started that could run past the boundary"
   assert_no_re '	(handled|failed)	turn=' "$home/state/.supervision-host.log" "no engine turn may be logged"
+  assert_grep 'demo.status' "$home/state/.wake-queue" "a close refused at the boundary must stay queued for main"
   while IFS= read -r pid; do
     kill -0 "$pid" 2>/dev/null && fail "the boundary left the successor arm $pid running"
   done < <(awk -F '\t' '$1 == "arm" { print $2 }' "$home/host-record-at-render")
   watcher_live "$home" && fail "the boundary left the watcher running"
   pass "host: a close whose margin runs out while the successor starts reaches main at the boundary without a turn"
+}
+
+# A leaked test clock in a real primary's environment must stay inert: the
+# host reads it only alongside the FM_TEST_SEAM marker that test suites set.
+test_park_test_clock_requires_the_marker() {
+  local home
+  home=$(make_home clock-armed away)
+  echo 99999 > "$home/park-clock"
+  FM_TEST_SUPERVISION_HOST_CLOCK="$home/park-clock" start_host "$home"
+  wait_until 150 host_exited "$home" || fail "clock-armed: the marked test clock did not end the park"
+  assert_re '^supervision-host: cycle boundary - ' "$home/host.out" "the marked test clock must drive the boundary"
+
+  home=$(make_home clock-unmarked away)
+  echo 99999 > "$home/park-clock"
+  FM_TEST_SEAM='' FM_TEST_SUPERVISION_HOST_CLOCK="$home/park-clock" start_host "$home"
+  wait_until 150 watcher_live "$home" || fail "clock-unmarked: the host never started a watcher cycle: $(cat "$home/host.out")"
+  append_status "$home" 'handled on the wall clock'
+  wait_until 250 handled_at_least "$home" 1 \
+    || fail "a test clock without FM_TEST_SEAM changed the park: $(cat "$home/host.out" "$home/state/.supervision-host.log")"
+  [ ! -s "$home/host.rc" ] || fail "a test clock without FM_TEST_SEAM ended the park: $(cat "$home/host.out")"
+  assert_no_re 'cycle boundary' "$home/host.out" "a test clock without FM_TEST_SEAM reached the boundary"
+  pass "host: the park's test clock is inert without the test marker"
 }
 
 # A park at or beyond the hook registration is refused for the default. The
@@ -944,6 +1012,83 @@ test_latch_leaves_attended_and_unopted_homes_unchanged() {
   pass "host: the latch changes nothing for an attended close or a home without config/supervision-host"
 }
 
+# The 2026-09-25 away-window flood: a held, green PR on a finished task was
+# re-escalated on every inactive-outcome cadence, because the branch
+# acknowledgement consumed the check row but left its terminal-outcome receipt
+# pending, so each later scan re-queued the same fingerprint. Through the real
+# watcher cadence, host, report surface, and drain, that unchanged situation
+# now reaches the captain exactly once, and a new event on the same task - a
+# decision - still reaches the captain path afterwards.
+scan_marker_age() {  # <home> -> seconds since the last inactive-outcome scan
+  perl -e 'my @s = stat $ARGV[0] or exit 1; print time - $s[9]' "$1/state/.inactive-outcome-reconcile"
+}
+scan_ran() { [ "$(scan_marker_age "$1" 2>/dev/null || echo 999999)" -lt 60 ]; }
+captain_rows() {  # <home>
+  local rows
+  rows=$(grep -c '"verdict":"captain"' "$1/state/branch-outcomes.jsonl" 2>/dev/null)
+  printf '%s\n' "${rows:-0}"
+}
+captain_rows_at_least() { [ "$(captain_rows "$1")" -ge "$2" ]; }
+flood_signal() {  # <home>
+  captain_rows_at_least "$1" 2 || grep -qs '	inactive-outcome:' "$1/state/.wake-queue"
+}
+
+test_unchanged_held_outcome_reaches_the_captain_once_until_a_new_event() {
+  local home cycle old pid watcher
+  home=$(make_home away-held-once away)
+  echo captain > "$home/stub-mode"
+  mkdir -p "$home/projects/held"
+  git -C "$home/projects/held" init -q
+  git -C "$home/projects/held" -c user.name=fmtest -c user.email=fmtest@example.invalid \
+    commit -q --allow-empty -m init
+  fm_write_meta "$home/state/held.meta" \
+    'window=fm-held' "worktree=$home/projects/held" "project=$home/projects/held" \
+    'harness=claude' 'kind=ship' 'mode=no-mistakes' 'yolo=off' 'spawn_gen=g1' \
+    'pr=https://example.test/o/r/pull/153'
+  printf 'done: PR https://example.test/o/r/pull/153 open, green, mergeable\n' > "$home/state/held.status"
+  old=$(( $(date +%s) - 600 ))
+  perl -e 'my $t = shift; utime $t, $t, @ARGV or exit 1' "$old" \
+    "$home/state/held.meta" "$home/state/held.status" \
+    || fail "fixture: could not age the held task's records"
+  prime_status_seen "$home/state" "$home/state/held.status"
+
+  export FM_FAKE_CREW_STATE_held='state: done · source: fake'
+  export FM_INACTIVE_CREW_STATE_BIN="$home/fakebin/fm-crew-state.sh" FM_INACTIVE_RECONCILE_SECS=60
+  start_host "$home"
+  wait_until 250 captain_rows_at_least "$home" 1 \
+    || fail "held: the first cadence never escalated the held outcome: $(cat "$home/state/.supervision-host.log" 2>/dev/null)"
+  assert_grep 'child=held' "$home/state/branch-outcomes.jsonl" "held: the escalation did not name the held task's outcome: $(cat "$home"/engine-drain.* "$home/state/.supervision-host.log")"
+  wait_until 150 handled_at_least "$home" 1 || fail "held: the escalating turn never finished"
+  assert_no_grep '	inactive-outcome:' "$home/state/.wake-queue" "held: the branch acknowledgement left the presentation row queued"
+
+  for cycle in 1 2 3 4; do
+    old=$(( $(date +%s) - 120 ))
+    perl -e 'my $t = shift; utime $t, $t, @ARGV or exit 1' "$old" "$home/state/.inactive-outcome-reconcile" \
+      || fail "held: could not age the scan marker before cadence $cycle"
+    wait_until 150 scan_ran "$home" || fail "held: cadence $cycle never rescanned"
+    ! wait_until 30 flood_signal "$home" \
+      || fail "held: cadence $cycle re-escalated the unchanged held outcome: $(cat "$home/state/branch-outcomes.jsonl")"
+  done
+  [ "$(captain_rows "$home")" -eq 1 ] || fail "held: the unchanged situation reached the captain $(captain_rows "$home") times"
+  [ -s "$home/host.rc" ] && fail "held: the host handed a wake to main: $(cat "$home/host.out")"
+
+  printf 'needs-decision [key=merge-153]: merge PR 153 now or hold it for the return?\n' >> "$home/state/held.status"
+  wait_until 250 captain_rows_at_least "$home" 2 \
+    || fail "held: the new decision never reached the captain path: $(cat "$home/state/branch-outcomes.jsonl")"
+  [ "$(captain_rows "$home")" -eq 2 ] || fail "held: the decision escalated $(captain_rows "$home") rows, not one"
+  [ "$(FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" list --recent 1 | sed -n 's/.*"task":"\([^"]*\)".*"verdict":"\([a-z]*\)".*/\1 \2/p')" = 'held captain' ] \
+    || fail "held: the decision was not recorded as a captain outcome for the held task: $(cat "$home/state/branch-outcomes.jsonl")"
+  unset FM_FAKE_CREW_STATE_held FM_INACTIVE_CREW_STATE_BIN FM_INACTIVE_RECONCILE_SECS
+  # Stop the host and its watcher here, so no cadence scan is still writing
+  # into this home while the suite's cleanup removes it.
+  pid=$(awk -F '\t' '$1 == "host" { print $2 }' "$home/state/.supervision-host")
+  watcher=$(cat "$home/state/.watch.lock/pid")
+  kill -TERM "$pid"
+  wait_until 200 host_exited "$home" || fail "held: the host did not stop on TERM"
+  wait_until 100 sh -c '! kill -0 "$1" 2>/dev/null' _ "$watcher" || fail "held: a stopped host left its watcher running"
+  pass "host: an unchanged held outcome reaches the captain once across cadences, and a later decision on the task still does"
+}
+
 test_unverified_engine_hands_every_away_wake_to_main() {
   local home
   home=$(make_home no-engine away 'pi')
@@ -1031,9 +1176,11 @@ test_restarted_host_stops_what_a_killed_predecessor_left
 test_park_boundary_ends_the_park_before_the_hook_timeout
 test_park_boundary_holds_under_back_to_back_closes
 test_park_boundary_rechecked_just_before_the_engine_turn
+test_park_test_clock_requires_the_marker
 test_park_seconds_at_or_beyond_the_hook_registration_fall_back_to_the_default
 test_park_limit_lets_a_turn_outlive_the_boundary
 test_first_cycle_status_streams_and_owner_options_reach_it
+test_unchanged_held_outcome_reaches_the_captain_once_until_a_new_event
 test_unverified_engine_hands_every_away_wake_to_main
 test_host_outside_the_lock_owner_stands_down
 test_superseded_host_leaves_the_owner_untouched

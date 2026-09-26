@@ -286,7 +286,8 @@
 #   not copied from the invoking process or written into the launch text.
 #   Unset names stay unset and empty values stay empty.
 #   The fixed operational floor is HOME PATH USER LOGNAME SHELL TERM COLORTERM
-#   LANG LC_ALL LC_CTYPE TMPDIR TMP TEMP GOTMPDIR, plus backend identity/routing:
+#   LANG LC_ALL LC_CTYPE TMPDIR TMP TEMP GOTMPDIR COREPACK_HOME PNPM_HOME
+#   npm_config_store_dir npm_config_cache XDG_CACHE_HOME, plus backend identity/routing:
 #   TMUX TMUX_PANE HERDR_ENV HERDR_SESSION HERDR_SOCKET_PATH HERDR_PANE_ID
 #   CMUX_WORKSPACE_ID CMUX_SURFACE_ID CMUX_TAB_ID CMUX_PANEL_ID CMUX_SOCKET_PATH
 #   ZELLIJ ZELLIJ_SESSION_NAME ZELLIJ_PANE_ID FM_ZELLIJ_SESSION, plus the task
@@ -4256,11 +4257,10 @@ agy)
   ;;
 esac
 
-# Per-task temp root: /tmp/fm-<id>/ with Go's build temp nested at gotmp/. Go won't
+# Per-task temp root: /tmp/fm-<id>/ with tool caches nested beneath it. Go won't
 # create GOTMPDIR, so mkdir before it is used; fm-teardown removes the whole root.
-# Nested (not a bare /tmp/fm-<id>/gotmp) so other per-task temp can live alongside
-# later, and teardown cleans one deterministic path. GOTMPDIR (not TMPDIR) is the
-# targeted knob: TMPDIR is too broad (affects every program's temp, not just Go's).
+# Nested caches let teardown clean one deterministic path. TMPDIR remains ambient
+# because it affects every program's temporary files, not just tool caches.
 # The root is private (0700) because its path is predictable under a shared
 # /tmp: a root that already exists is reused only as a real directory owned by
 # this user and writable by nobody else, then tightened, so no other local user
@@ -4275,7 +4275,39 @@ if ! (umask 077 && mkdir "$TASK_TMP") 2>/dev/null; then
     exit 1
   fi
 fi
-mkdir -p "$TASK_TMP/gotmp"
+mkdir -p "$TASK_TMP/gotmp" "$TASK_TMP/cache/corepack" "$TASK_TMP/cache/pnpm" \
+  "$TASK_TMP/cache/npm" "$TASK_TMP/cache/xdg"
+SCRATCH_HOOK_DIR="$TASK_TMP/scratch-hooks"
+mkdir -p "$SCRATCH_HOOK_DIR"
+PRIOR_HOOKS_DIR=$(git -C "$WT" rev-parse --git-path hooks 2>/dev/null || true)
+if [ -n "$PRIOR_HOOKS_DIR" ]; then
+  case "$PRIOR_HOOKS_DIR" in
+    /*) ;;
+    *) PRIOR_HOOKS_DIR="$WT/$PRIOR_HOOKS_DIR" ;;
+  esac
+  PRIOR_PRE_PUSH="$PRIOR_HOOKS_DIR/pre-push"
+else
+  PRIOR_PRE_PUSH=
+fi
+cat >"$SCRATCH_HOOK_DIR/pre-push" <<EOF
+#!/usr/bin/env bash
+set -uo pipefail
+. $(shell_quote "$SCRIPT_DIR/fm-scratch-lib.sh")
+HOOK_STDIN=\$(mktemp $(shell_quote "$SCRATCH_HOOK_DIR")/pre-push-stdin.XXXXXX) || exit 1
+trap 'rm -f -- "\$HOOK_STDIN"' EXIT
+cat >"\$HOOK_STDIN" || exit 1
+while read -r local_ref local_oid remote_ref remote_oid; do
+  [ -n "\${local_oid:-}" ] || continue
+  case "\$local_oid" in
+    0000000000000000000000000000000000000000) continue ;;
+  esac
+  fm_scratch_refuse_range "\$(git rev-parse --show-toplevel)" "\$remote_oid" "\$local_oid" push || exit 1
+done <"\$HOOK_STDIN"
+if [ -n $(shell_quote "$PRIOR_PRE_PUSH") ] && [ -x $(shell_quote "$PRIOR_PRE_PUSH") ]; then
+  $(shell_quote "$PRIOR_PRE_PUSH") "\$@" <"\$HOOK_STDIN"
+fi
+EOF
+chmod 700 "$SCRATCH_HOOK_DIR/pre-push"
 
 # Per-harness turn-end hook where enabled: a file that touches
 # state/<id>.turn-ended when the agent finishes a turn. Worktree-resident hooks
@@ -5019,6 +5051,7 @@ if [ "$LAVISH_AXI_HOST_CONFIG_PRESENT" = 1 ]; then
   LAUNCH="export LAVISH_AXI_HOST=$(shell_quote "$LAVISH_AXI_HOST"); $LAUNCH"
 fi
 LAUNCH="export COMPACT_ADVISER_DISABLE=1; $LAUNCH"
+LAUNCH="GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=$(shell_quote "$SCRATCH_HOOK_DIR") $LAUNCH"
 if [ -z "$SPAWN_TRACEPARENT" ] && [ "$RELAUNCH" -eq 1 ]; then
   LAUNCH="unset TRACEPARENT; $LAUNCH"
 fi
@@ -5049,10 +5082,17 @@ spawn_record_traceparent() {
   return "$status"
 }
 
-# Export GOTMPDIR into the crewmate's pane shell so the agent and every child
-# process (go build, go test, ...) inherit it. Sent before the launch command so
-# the env is set when the agent starts; the brief sleep lets the export land.
+# Export tool cache homes into the crewmate's pane shell before its launch.
+# The task temp root sits outside the worktree and teardown removes it.
 spawn_send_text_line "$T" "export GOTMPDIR=$TASK_TMP/gotmp"
+spawn_send_text_line "$T" "export COREPACK_HOME=$TASK_TMP/cache/corepack"
+spawn_send_text_line "$T" "export PNPM_HOME=$TASK_TMP/cache/pnpm"
+spawn_send_text_line "$T" "export npm_config_store_dir=$TASK_TMP/cache/pnpm/store"
+spawn_send_text_line "$T" "export npm_config_cache=$TASK_TMP/cache/npm"
+spawn_send_text_line "$T" "export XDG_CACHE_HOME=$TASK_TMP/cache/xdg"
+spawn_send_text_line "$T" "export GIT_CONFIG_COUNT=1"
+spawn_send_text_line "$T" "export GIT_CONFIG_KEY_0=core.hooksPath"
+spawn_send_text_line "$T" "export GIT_CONFIG_VALUE_0=$(shell_quote "$SCRATCH_HOOK_DIR")"
 # Export the compact-adviser kill switch into the pane shell through the same
 # pre-launch channel, so later commands in that shell inherit it too. The launch
 # command independently establishes the value for the agent process itself.
@@ -5091,10 +5131,11 @@ if [ "$LAUNCH_ENV_ENABLED" = 1 ]; then
   # entry; the explicit COMPACT_ADVISER_DISABLE=1 assignment below is the
   # authoritative setter.
   for env_name in HOME PATH USER LOGNAME SHELL TERM COLORTERM LANG LC_ALL LC_CTYPE \
-    TMPDIR TMP TEMP GOTMPDIR TMUX TMUX_PANE HERDR_ENV HERDR_SESSION HERDR_SOCKET_PATH \
+    TMPDIR TMP TEMP GOTMPDIR COREPACK_HOME PNPM_HOME npm_config_store_dir \
+    npm_config_cache XDG_CACHE_HOME TMUX TMUX_PANE HERDR_ENV HERDR_SESSION HERDR_SOCKET_PATH \
     HERDR_PANE_ID CMUX_WORKSPACE_ID CMUX_SURFACE_ID CMUX_TAB_ID CMUX_PANEL_ID \
     CMUX_SOCKET_PATH ZELLIJ ZELLIJ_SESSION_NAME ZELLIJ_PANE_ID FM_ZELLIJ_SESSION \
-    FM_TASK_ID COMPACT_ADVISER_DISABLE LAVISH_AXI_HOST \
+    FM_TASK_ID COMPACT_ADVISER_DISABLE LAVISH_AXI_HOST GIT_CONFIG_COUNT GIT_CONFIG_KEY_0 GIT_CONFIG_VALUE_0 \
     $LAUNCH_ENV_NAMES; do
     # Only validated names enter shell syntax. Values expand once, quoted, in
     # the pane shell and never become source text or spawn-process snapshots.

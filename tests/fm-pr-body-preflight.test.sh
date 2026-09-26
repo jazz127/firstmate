@@ -257,4 +257,54 @@ output=$(PATH="$fakebin:$PATH" FAKE_PR_BODY="$published_fixture" "$ROOT/bin/fm-p
 [ "$output" = 'evidence preflight ok' ] || fail "corrected published body did not pass: $output"
 pass "corrected published-body readback passes the same validator"
 
+scratch_repo="$TMP_ROOT/scratch-repo"
+mkdir -p "$scratch_repo"
+git -C "$scratch_repo" init -q || fail "could not create the synthetic scratch checkout"
+git -C "$scratch_repo" config user.name Fixture
+git -C "$scratch_repo" config user.email fixture@example.test
+printf '%s\n' 'product' > "$scratch_repo/product.txt"
+git -C "$scratch_repo" add product.txt
+git -C "$scratch_repo" commit -qm 'fixture base'
+scratch_preflight() {
+  "$ROOT/bin/fm-pr-body-preflight.sh" --scratch "$scratch_repo" 2>&1
+}
+output=$(scratch_preflight) || fail "clean synthetic checkout was refused: $output"
+[ "$output" = 'scratch preflight ok' ] || fail "clean synthetic checkout did not pass: $output"
+printf '%s\n' '.codex-live-check/' > "$scratch_repo/.gitignore"
+mkdir -p "$scratch_repo/.codex-live-check/cache/node/corepack/v1/pnpm/11.1.1"
+printf '%s\n' 'bundle' > "$scratch_repo/.codex-live-check/cache/node/corepack/v1/pnpm/11.1.1/package.json"
+output=$(scratch_preflight)
+rc=$?
+[ "$rc" -eq 0 ] || fail "ignored untracked scratch changed the publication preflight: $output"
+git -C "$scratch_repo" checkout -q -b feature
+git -C "$scratch_repo" add -f .codex-live-check
+output=$(scratch_preflight)
+rc=$?
+[ "$rc" -eq 1 ] || fail "staged Corepack bundle passed the scratch preflight"
+assert_contains "$output" '.codex-live-check/cache/node/corepack/v1/pnpm/11.1.1/package.json' \
+  "staged scratch refusal did not name its path"
+git -C "$scratch_repo" commit -qm 'fixture scratch bundle'
+git -C "$scratch_repo" reset -q -- .codex-live-check
+output=$(scratch_preflight)
+rc=$?
+[ "$rc" -eq 1 ] || fail "committed Corepack bundle passed the publication preflight"
+assert_contains "$output" '.codex-live-check/cache/node/corepack/v1/pnpm/11.1.1/package.json' \
+  "committed scratch refusal did not name its path"
+git -C "$scratch_repo" reset --hard -q HEAD^ \
+  || fail "could not remove the temporary committed scratch fixture"
+rm -rf "$scratch_repo/.codex-live-check"
+mkdir -p "$scratch_repo/feature/.pnpm-store"
+printf '%s\n' 'cache' > "$scratch_repo/feature/.pnpm-store/item"
+git -C "$scratch_repo" add -f feature/.pnpm-store
+output=$(scratch_preflight)
+rc=$?
+[ "$rc" -eq 1 ] || fail "nested pnpm store passed the scratch preflight"
+assert_contains "$output" 'feature/.pnpm-store/item' \
+  "nested scratch refusal did not name its path"
+git -C "$scratch_repo" reset -q -- feature/.pnpm-store
+rm -rf "$scratch_repo/feature"
+output=$(scratch_preflight) || fail "cleaned synthetic checkout was refused: $output"
+[ "$output" = 'scratch preflight ok' ] || fail "cleaned synthetic checkout did not pass"
+pass "scratch preflight refuses staged and committed cache bundles by path"
+
 printf '%s\n' 'all fm-pr-body-preflight tests passed'

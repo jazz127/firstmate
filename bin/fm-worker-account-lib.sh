@@ -144,13 +144,10 @@ PY
   return 1
 }
 
-# fm_worker_account_codex_shed prints the enforced environment prefix.
+# fm_worker_account_codex_shed prints the enforced shell statement that unsets
+# every ambient override, so it reaches every later step of a compound launch.
 fm_worker_account_codex_shed() {
-  local var prefix=env
-  for var in $FM_WORKER_ACCOUNT_CODEX_SHED; do
-    prefix="$prefix -u $var"
-  done
-  printf '%s\n' "$prefix"
+  printf 'unset %s\n' "$FM_WORKER_ACCOUNT_CODEX_SHED"
 }
 
 # fm_worker_account_file <harness>

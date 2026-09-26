@@ -5053,6 +5053,12 @@ fi
 # inside the pane command, like COMPACT_ADVISER_DISABLE below, so it reaches
 # every step of a compound raw launch while firstmate's own git is unchanged.
 LAUNCH="export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=$(shell_quote "$GIT_HOOKS_DIR"); $LAUNCH"
+# A seated launch selects its credential home and sheds ambient overrides as
+# statements, not command-prefix assignments: a prefix binds only the first
+# simple command, which here is an earlier export, never the agent.
+if [ -n "$SEAT" ]; then
+  LAUNCH="$(fm_worker_account_codex_shed); export CODEX_HOME=$(shell_quote "$SEAT_HOME"); $LAUNCH"
+fi
 # Every agent this fleet launches - crewmate, scout, and secondmate, on a fresh
 # spawn and on a relaunch alike - runs with the compact-adviser kill switch on.
 # This is an export statement rather than a forwarded ambient name or a
@@ -5065,9 +5071,6 @@ LAUNCH="export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VAL
 # LAUNCH_ENV_PREFIX construction below sets it again at the `env -i` boundary,
 # so under an enabled allowlist the switch is established before the wrapping
 # `/bin/sh` starts rather than only inside the command that shell runs.
-if [ -n "$SEAT" ]; then
-  LAUNCH="$(fm_worker_account_codex_shed) CODEX_HOME=$(shell_quote "$SEAT_HOME") $LAUNCH"
-fi
 if [ "$LAVISH_AXI_HOST_CONFIG_PRESENT" = 1 ]; then
   LAUNCH="export LAVISH_AXI_HOST=$(shell_quote "$LAVISH_AXI_HOST"); $LAUNCH"
 fi

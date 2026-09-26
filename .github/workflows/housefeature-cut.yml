@@ -1,0 +1,41 @@
+name: House feature branch
+
+# Cuts a merged house pull request's durable housefeature/<name> branch.
+# bin/fm-housefeature-cut.sh owns the naming, skip, commit-choice, and
+# create-only push rules; docs/fork-house-branch.md owns the branch layout.
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: housefeature-cut-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  cut:
+    name: Cut housefeature branch
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: house
+          fetch-depth: 0
+      - name: Cut or report
+        env:
+          HF_MERGED: ${{ github.event.pull_request.merged }}
+          HF_BASE_REF: ${{ github.event.pull_request.base.ref }}
+          HF_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          HF_BASE_REPO: ${{ github.event.pull_request.base.repo.full_name }}
+          HF_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          HF_PR_NUMBER: ${{ github.event.pull_request.number }}
+          HF_PR_TITLE: ${{ github.event.pull_request.title }}
+          HF_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          HF_MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+          GIT_COMMITTER_NAME: github-actions[bot]
+          GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+        run: bin/fm-housefeature-cut.sh run

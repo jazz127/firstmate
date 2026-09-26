@@ -1,0 +1,50 @@
+=== PR #24  hand-captured durable branch(es) at head: housefeature/auto-validation-handoff 
+$ HF_MERGED=true HF_BASE_REF=house HF_HEAD_REF=fm/firstmate-auto-validation-handoff-r1 HF_HEAD_REPO=jazz127/firstmate HF_HEAD_SHA=4e82815597 HF_MERGE_SHA=533e710b75 bin/fm-housefeature-cut.sh run
+exit=0
+Created `housefeature/auto-validation-handoff` at 4e828155970e74aa4220e87981a23f9e47941db1 for pull request #24, captured from the merged pull request head (the change does not apply cleanly to `main`).
+RESULT: housefeature/auto-validation-handoff == merged PR head 4e82815597 (matches hand capture)
+=== PR #25  hand-captured durable branch(es) at head: housefeature/evidence-provenance-enforcement 
+$ HF_MERGED=true HF_BASE_REF=house HF_HEAD_REF=fm/firstmate-evidence-claims-enforced-r1 HF_HEAD_REPO=jazz127/firstmate HF_HEAD_SHA=4d1f662311 HF_MERGE_SHA=c218b1f5c5 bin/fm-housefeature-cut.sh run
+exit=0
+Created `housefeature/evidence-claims-enforced` at 4d1f6623115974c33b2bc9a288809dd986717c6a for pull request #25, captured from the merged pull request head (the change does not apply cleanly to `main`).
+RESULT: housefeature/evidence-claims-enforced == merged PR head 4d1f662311 (matches hand capture)
+=== PR #30  hand-captured durable branch(es) at head: housefeature/evidence-boundary-coverage 
+$ HF_MERGED=true HF_BASE_REF=house HF_HEAD_REF=fm/firstmate-evidence-boundary-coverage-r1 HF_HEAD_REPO=jazz127/firstmate HF_HEAD_SHA=a5a4ac62ab HF_MERGE_SHA=4ef90df646 bin/fm-housefeature-cut.sh run
+exit=0
+Created `housefeature/evidence-boundary-coverage` at a5a4ac62ab0242c827de50e8dc1a7523f875ac2a for pull request #30, captured from the merged pull request head (the change does not apply cleanly to `main`).
+RESULT: housefeature/evidence-boundary-coverage == merged PR head a5a4ac62ab (matches hand capture)
+=== PR #31  hand-captured durable branch(es) at head: housefeature/dispatch-profile-seat 
+$ HF_MERGED=true HF_BASE_REF=house HF_HEAD_REF=fm/firstmate-dispatch-profile-seat-r1 HF_HEAD_REPO=jazz127/firstmate HF_HEAD_SHA=600729c408 HF_MERGE_SHA=01a13eb47a bin/fm-housefeature-cut.sh run
+exit=0
+Created `housefeature/dispatch-profile-seat` at 600729c4082705bd5a82e7b1f7cc8c48e17817de for pull request #31, captured from the merged pull request head (the change does not apply cleanly to `main`).
+RESULT: housefeature/dispatch-profile-seat == merged PR head 600729c408 (matches hand capture)
+=== PR #36  hand-captured durable branch(es) at head: housefeature/claude-pointer-scope 
+$ HF_MERGED=true HF_BASE_REF=house HF_HEAD_REF=fm/firstmate-agents-md-pointer-rides-feature-prs-c1 HF_HEAD_REPO=jazz127/firstmate HF_HEAD_SHA=0f9a429faa HF_MERGE_SHA=124633fc3e bin/fm-housefeature-cut.sh run
+exit=0
+Created `housefeature/agents-md-pointer-rides-feature-prs` at 0f9a429faabe83acfad1929caa497ef80bd8997b for pull request #36, captured from the merged pull request head (the change does not apply cleanly to `main`).
+RESULT: housefeature/agents-md-pointer-rides-feature-prs == merged PR head 0f9a429faa (matches hand capture)
+=== PR #37  hand-captured durable branch(es) at head: housefeature/pr-evidence-preflight 
+$ HF_MERGED=true HF_BASE_REF=house HF_HEAD_REF=fm/firstmate-pr-evidence-format-recurring-c1 HF_HEAD_REPO=jazz127/firstmate HF_HEAD_SHA=fa186de2bf HF_MERGE_SHA=7774ba7272 bin/fm-housefeature-cut.sh run
+exit=0
+Created `housefeature/pr-evidence-format-recurring` at fa186de2bfd736124b842584df46fcfe46a7a4bd for pull request #37, captured from the merged pull request head (the change does not apply cleanly to `main`).
+RESULT: housefeature/pr-evidence-format-recurring == merged PR head fa186de2bf (matches hand capture)
+=== PR #39  hand-captured durable branch(es) at head: housefeature/contribution-ownership 
+$ HF_MERGED=true HF_BASE_REF=house HF_HEAD_REF=fm/firstmate-contribution-ownership-gap-r1 HF_HEAD_REPO=jazz127/firstmate HF_HEAD_SHA=f01b4c8eb4 HF_MERGE_SHA=7eebd75d2d bin/fm-housefeature-cut.sh run
+exit=0
+Created `housefeature/contribution-ownership-gap` at f01b4c8eb45884ece8f08215d6565ea7beddf86d for pull request #39, captured from the merged pull request head (the change does not apply cleanly to `main`).
+RESULT: housefeature/contribution-ownership-gap == merged PR head f01b4c8eb4 (matches hand capture)
+=== PR #40  hand-captured durable branch(es) at head: housefeature/evidence-contradiction 
+$ HF_MERGED=true HF_BASE_REF=house HF_HEAD_REF=fm/firstmate-evidence-contradiction-c2 HF_HEAD_REPO=jazz127/firstmate HF_HEAD_SHA=a7dbf2b074 HF_MERGE_SHA=59b1313edb bin/fm-housefeature-cut.sh run
+exit=0
+Created `housefeature/evidence-contradiction` at a7dbf2b074125792fce4499455b388ee2ff1ace4 for pull request #40, captured from the merged pull request head (the change does not apply cleanly to `main`).
+RESULT: housefeature/evidence-contradiction == merged PR head a7dbf2b074 (matches hand capture)
+=== PR #42  hand-captured durable branch(es) at head: housefeature/scratch-publish-guard 
+$ HF_MERGED=true HF_BASE_REF=house HF_HEAD_REF=fm/firstmate-livecheck-scratch-c2 HF_HEAD_REPO=jazz127/firstmate HF_HEAD_SHA=9a54e84788 HF_MERGE_SHA=c77d7c2fc5 bin/fm-housefeature-cut.sh run
+exit=0
+Created `housefeature/livecheck-scratch` at 9a54e847887fc1cd05b763ce727b478a10b26400 for pull request #42, captured from the merged pull request head (the change does not apply cleanly to `main`).
+RESULT: housefeature/livecheck-scratch == merged PR head 9a54e84788 (matches hand capture)
+=== PR #43  hand-captured durable branch(es) at head: housefeature/dock-seat-credentials 
+$ HF_MERGED=true HF_BASE_REF=house HF_HEAD_REF=fm/firstmate-dock-seat-slice1-r1 HF_HEAD_REPO=jazz127/firstmate HF_HEAD_SHA=d4b95a9201 HF_MERGE_SHA=4943fb2f40 bin/fm-housefeature-cut.sh run
+exit=0
+Created `housefeature/dock-seat-slice1` at d4b95a9201627c5251c4ee084d048fffae49a9d4 for pull request #43, captured from the merged pull request head (the change does not apply cleanly to `main`).
+RESULT: housefeature/dock-seat-slice1 == merged PR head d4b95a9201 (matches hand capture)

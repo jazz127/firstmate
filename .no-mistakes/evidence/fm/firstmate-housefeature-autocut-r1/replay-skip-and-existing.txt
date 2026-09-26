@@ -1,0 +1,31 @@
+### Skip cases (real PR payloads); housefeature ref-set digest before: 863ad55b73d5
+--- PR #45
+$ HF_MERGED=true HF_BASE_REF=house HF_HEAD_REF=fm/firstmate-house-upstream-merge-r2 HF_HEAD_REPO=jazz127/firstmate HF_HEAD_SHA=91c3e6575b HF_MERGE_SHA=2632367673 bin/fm-housefeature-cut.sh run
+exit=0
+Skipped pull request #45: fm/firstmate-house-upstream-merge-r2 brings upstream main into house; nothing pushed.
+--- PR #41
+$ HF_MERGED=true HF_BASE_REF=house HF_HEAD_REF=fm/firstmate-house-upstream-merge-r1 HF_HEAD_REPO=jazz127/firstmate HF_HEAD_SHA=cd643c5583 HF_MERGE_SHA=795c633881 bin/fm-housefeature-cut.sh run
+exit=0
+Skipped pull request #41: fm/firstmate-house-upstream-merge-r1 brings upstream main into house; nothing pushed.
+--- PR #32
+$ HF_MERGED=false HF_BASE_REF=house HF_HEAD_REF=fm/firstmate-remote-worker-duplicate-c2 HF_HEAD_REPO=jazz127/firstmate HF_HEAD_SHA=ff3a43e05c HF_MERGE_SHA=18bb1b0803 bin/fm-housefeature-cut.sh run
+exit=0
+Skipped pull request #32: pull request was closed without merging; nothing pushed.
+--- PR #28
+$ HF_MERGED=true HF_BASE_REF=fm/firstmate-house-integration-stack-r1 HF_HEAD_REF=fm/firstmate-quota-tab-stack-r1 HF_HEAD_REPO=jazz127/firstmate HF_HEAD_SHA=7200673a26 HF_MERGE_SHA=28d716e927 bin/fm-housefeature-cut.sh run
+exit=0
+Skipped pull request #28: base is fm/firstmate-house-integration-stack-r1, not house; nothing pushed.
+--- PR #7
+$ HF_MERGED=true HF_BASE_REF=main HF_HEAD_REF=fm/firstmate-done-wait-luna6-r1 HF_HEAD_REPO=jazz127/firstmate HF_HEAD_SHA=b78e66f161 HF_MERGE_SHA=99789c3130 bin/fm-housefeature-cut.sh run
+exit=0
+Skipped pull request #7: base is main, not house; nothing pushed.
+housefeature ref-set digest after: 863ad55b73d5
+
+### Existing durable branch left unchanged: re-run PR #44 and PR #24
+$ HF_MERGED=true HF_BASE_REF=house HF_HEAD_REF=fm/firstmate-upstream-prior-art-check-r1 HF_HEAD_REPO=jazz127/firstmate HF_HEAD_SHA=bb9538ed51 HF_MERGE_SHA=854257f057 bin/fm-housefeature-cut.sh run
+exit=0
+Left existing `housefeature/upstream-prior-art-check` at bb9538ed51a277d00aa2f86608cff8441c3cf2f9 unchanged for pull request #44.
+$ HF_MERGED=true HF_BASE_REF=house HF_HEAD_REF=fm/firstmate-auto-validation-handoff-r1 HF_HEAD_REPO=jazz127/firstmate HF_HEAD_SHA=4e82815597 HF_MERGE_SHA=533e710b75 bin/fm-housefeature-cut.sh run
+exit=0
+Left existing `housefeature/auto-validation-handoff` at 4e828155970e74aa4220e87981a23f9e47941db1 unchanged for pull request #24.
+upstream-prior-art-check before=bb9538ed51a277d00aa2f86608cff8441c3cf2f9 after=bb9538ed51a277d00aa2f86608cff8441c3cf2f9

@@ -1,0 +1,36 @@
+--- PR #13 (housefeature/house-guide removed from lab mirror first)
+$ HF_MERGED=true HF_BASE_REF=house HF_HEAD_REF=fm/firstmate-house-guide-r1 HF_HEAD_REPO=jazz127/firstmate HF_HEAD_SHA=2509a481b0 HF_MERGE_SHA=25762f2ad1 bin/fm-housefeature-cut.sh run
+exit=0
+Created `housefeature/house-guide` at 76f46abd36b0e68584db78338278cfc63b40a09d for pull request #13, cut from `main` (the change applies cleanly there).
+  commit 76f46abd36b0e68584db78338278cfc63b40a09d
+  parent 4299683d5b656a70ced609d7d929499ddc0d675a (lab main = 4299683d5b656a70ced609d7d929499ddc0d675a)
+  author jazz127 <jazz127@gmail.com> | committer github-actions[bot]
+  subject: docs: document fork house branch workflow (#13)
+--- PR #17 (housefeature/house-guide-default-branch removed from lab mirror first)
+$ HF_MERGED=true HF_BASE_REF=house HF_HEAD_REF=fm/firstmate-house-guide-default-branch-r1 HF_HEAD_REPO=jazz127/firstmate HF_HEAD_SHA=a134f34464 HF_MERGE_SHA=c36d97fcf3 bin/fm-housefeature-cut.sh run
+exit=0
+Created `housefeature/house-guide-default-branch` at a134f344647c86c600cf906e36c28a180d4f4d1c for pull request #17, captured from the merged pull request head (the change does not apply cleanly to `main`).
+  commit a134f344647c86c600cf906e36c28a180d4f4d1c
+  parent 9fc2ce847a4ab68b6b7897ea71081e90ef94e4b6 (lab main = 4299683d5b656a70ced609d7d929499ddc0d675a)
+  author jazz127 <jazz127@gmail.com> | committer jazz127
+  subject: docs: clarify fork house branch defaults
+--- PR #18 (housefeature/house-feature-docs removed from lab mirror first)
+$ HF_MERGED=true HF_BASE_REF=house HF_HEAD_REF=fm/firstmate-house-feature-docs-r1 HF_HEAD_REPO=jazz127/firstmate HF_HEAD_SHA=0b6cf21e7d HF_MERGE_SHA=16725b3046 bin/fm-housefeature-cut.sh run
+exit=0
+Created `housefeature/house-feature-docs` at 0b6cf21e7da3cd4512014028f4f76ef50ffd9a6e for pull request #18, captured from the merged pull request head (the change does not apply cleanly to `main`).
+  commit 0b6cf21e7da3cd4512014028f4f76ef50ffd9a6e
+  parent 20da21b26df3a0a2faa742152421b5c3ef4ae5c4 (lab main = 4299683d5b656a70ced609d7d929499ddc0d675a)
+  author jazz127 <jazz127@gmail.com> | committer jazz127
+  subject: docs: define durable house feature workflow
+--- PR #11 (housefeature/house-rollout removed from lab mirror first)
+$ HF_MERGED=true HF_BASE_REF=house HF_HEAD_REF=fm/firstmate-house-rollout-r1 HF_HEAD_REPO=jazz127/firstmate HF_HEAD_SHA=c3cb7e36d1 HF_MERGE_SHA=127cdc3cda bin/fm-housefeature-cut.sh run
+exit=0
+Created `housefeature/house-rollout` at c3cb7e36d142236c14b25e7c964a73ca7841722b for pull request #11, captured from the merged pull request head (the change does not apply cleanly to `main`).
+  commit c3cb7e36d142236c14b25e7c964a73ca7841722b
+  parent ac2ed3b2c7827b7de4771db9a43a562cf8e86803 (lab main = 4299683d5b656a70ced609d7d929499ddc0d675a)
+  author jazz127 <jazz127@gmail.com> | committer jazz127
+  subject: feat: support configured runtime branch
+main-cut patch identical to PR #13's change (hunks equal; only pre-image blob ids differ because main's file versions differ):
+ docs/documentation-audiences.json |  4 ++++
+ docs/fork-house-branch.md         | 34 ++++++++++++++++++++++++++++++++++
+ 3 files changed, 40 insertions(+)

@@ -1,0 +1,38 @@
+### Race: housefeature/dock-seat-slice1 created by a concurrent run (at the PR head's parent, so a plain push would fast-forward it) after this run's existence check
+before: 4481eed296d77cd0ae4c6501a5766d09fbc6255d
+To /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//hfcut.Bx581r/fork.git
+ ! [rejected]          d4b95a9201627c5251c4ee084d048fffae49a9d4 -> housefeature/dock-seat-slice1 (stale info)
+error: failed to push some refs to '/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//hfcut.Bx581r/fork.git'
+$ HF_MERGED=true HF_BASE_REF=house HF_HEAD_REF=fm/firstmate-dock-seat-slice1-r1 HF_HEAD_REPO=jazz127/firstmate HF_HEAD_SHA=d4b95a9201 HF_MERGE_SHA=4943fb2f40 bin/fm-housefeature-cut.sh run
+exit=1
+Push of `housefeature/dock-seat-slice1` for pull request #43 was refused; nothing created.
+after:  4481eed296d77cd0ae4c6501a5766d09fbc6255d
+
+### Failure path: head commit not available (bogus HF_HEAD_SHA) for PR #44 after removing its branch
+$ HF_MERGED=true HF_BASE_REF=house HF_HEAD_REF=fm/firstmate-upstream-prior-art-check-r1 HF_HEAD_REPO=jazz127/firstmate HF_HEAD_SHA=0123456789 HF_MERGE_SHA=854257f057 bin/fm-housefeature-cut.sh run
+fatal: Not a valid object name 0123456789abcdef0123456789abcdef01234567^{commit}
+GITHUB_STEP_SUMMARY:
+branch exists after failure? no
+
+### Failure path: fork remote unreachable
+$ HF_MERGED=true HF_BASE_REF=house HF_HEAD_REF=fm/firstmate-upstream-prior-art-check-r1 HF_HEAD_REPO=jazz127/firstmate HF_HEAD_SHA=bb9538ed51 HF_MERGE_SHA=854257f057 bin/fm-housefeature-cut.sh run
+fatal: 'nosuchremote' does not appear to be a git repository
+
+### Failure path (full output): bogus HF_HEAD_SHA
+$ HF_MERGED=true HF_BASE_REF=house HF_HEAD_REF=fm/firstmate-upstream-prior-art-check-r1 HF_HEAD_REPO=jazz127/firstmate HF_HEAD_SHA=0123456789 HF_MERGE_SHA=854257f057 bin/fm-housefeature-cut.sh run
+fatal: Not a valid object name 0123456789abcdef0123456789abcdef01234567^{commit}
+exit=1
+GITHUB_STEP_SUMMARY:
+Could not cut `housefeature/upstream-prior-art-check` for pull request #44: head 0123456789abcdef0123456789abcdef01234567 is not available; nothing pushed.
+branch exists after failure? no
+
+### Failure path (full output): unreachable remote
+$ HF_MERGED=true HF_BASE_REF=house HF_HEAD_REF=fm/firstmate-upstream-prior-art-check-r1 HF_HEAD_REPO=jazz127/firstmate HF_HEAD_SHA=bb9538ed51 HF_MERGE_SHA=854257f057 bin/fm-housefeature-cut.sh run
+fatal: 'nosuchremote' does not appear to be a git repository
+fatal: Could not read from remote repository.
+
+Please make sure you have the correct access rights
+and the repository exists.
+exit=1
+GITHUB_STEP_SUMMARY:
+Could not read `housefeature/upstream-prior-art-check` from nosuchremote for pull request #44; nothing pushed.

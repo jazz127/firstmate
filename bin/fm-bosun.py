@@ -753,6 +753,12 @@ def cmd_registration_check_locked(args):
         upstream_base = git_output(worktree, "rev-parse", "--verify", f"{args.upstream_base}^{{commit}}")
         if not upstream_base:
             fail("upstream extraction base is unavailable")
+        if record.get("state") == "published":
+            upstream_base = git_output(worktree, "merge-base", upstream_base, "HEAD")
+            if not upstream_base:
+                fail("upstream extraction base is unavailable")
+        elif not git_success(worktree, "merge-base", "--is-ancestor", upstream_base, "HEAD"):
+            fail("contribution does not start from the latest upstream default branch")
         actual = git_output(worktree, "rev-list", "--first-parent", "--reverse", f"{upstream_base}..HEAD")
         source_commits = record.get("source_commits")
         if actual is None or not isinstance(source_commits, list) or not source_commits:

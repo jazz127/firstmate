@@ -188,7 +188,6 @@ bosun_refresh_upstream_base() {
   BOSUN_BASE_REF=$(python3 "$SCRIPT_DIR/fm-bosun.py" upstream-ref --worktree "$WT" \
     --owner "$BOSUN_UPSTREAM_OWNER" --repository "$BOSUN_UPSTREAM_REPOSITORY" \
     --branch "$BOSUN_BRANCH") || return 1
-  git -C "$WT" merge-base --is-ancestor "$BOSUN_BASE_REF" HEAD || return 1
   BOSUN_UPSTREAM_BASE=$BOSUN_BASE_REF
 }
 
@@ -199,7 +198,7 @@ if [ "$IS_BOSUN" = 1 ]; then
     echo "error: Bosun upstream default branch is unavailable" >&2
     exit 1
   }
-  BOSUN_CHANGED_PATHS=$(git -C "$WT" diff --name-only "$BOSUN_UPSTREAM_BASE" HEAD) || {
+  BOSUN_CHANGED_PATHS=$(git -C "$WT" diff --name-only "$BOSUN_UPSTREAM_BASE"...HEAD) || {
     echo "error: Bosun upstream change could not be inspected" >&2
     exit 1
   }
@@ -241,7 +240,7 @@ if [ "$IS_BOSUN" = 1 ]; then
     echo "error: Bosun upstream default branch is unavailable" >&2
     exit 1
   }
-  BOSUN_CHANGED_PATHS=$(git -C "$WT" diff --name-only "$BOSUN_UPSTREAM_BASE" HEAD) || {
+  BOSUN_CHANGED_PATHS=$(git -C "$WT" diff --name-only "$BOSUN_UPSTREAM_BASE"...HEAD) || {
     echo "error: Bosun upstream change could not be inspected" >&2
     exit 1
   }

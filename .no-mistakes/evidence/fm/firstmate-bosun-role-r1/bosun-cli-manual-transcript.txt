@@ -1,0 +1,73 @@
+## routes:
+{"schema":"fm-bosun-routes.v1","routes":[
+ {"bosun":"bosun-kun","forge":"github","owner":"kunchenguid","repository_pattern":"*","fork_owner":"captain","upstream_default_branch":"main"},
+ {"bosun":"bosun-special","forge":"github","owner":"kunchenguid","repository":"special","fork_owner":"captain","upstream_default_branch":"main"},
+ {"bosun":"bosun-a","forge":"github","owner":"acme","repository_pattern":"x-*"},
+ {"bosun":"bosun-b","forge":"github","owner":"acme","repository_pattern":"x-*"}
+]}
+
+$ fm-bosun.py route --forge github --owner kunchenguid --repository no-mistakes
+fm-bosun: secondmate registry unavailable
+[exit 1]
+
+$ fm-bosun.py route --forge github --owner kunchenguid --repository special
+fm-bosun: secondmate registry unavailable
+[exit 1]
+
+$ fm-bosun.py route --forge github --owner torvalds --repository linux
+fm-bosun: no Bosun matches; ask whether to create one
+[exit 1]
+
+$ fm-bosun.py route --forge github --owner acme --repository x-tool
+fm-bosun: ambiguous Bosun route; needs-decision
+[exit 1]
+
+$ fm-bosun.py route --forge gitlab --owner kunchenguid --repository no-mistakes
+fm-bosun: unsupported Bosun forge 'gitlab'; supported: github
+[exit 1]
+
+$ fm-bosun.py configure-home --bosun bosun-kun
+[exit 0]
+
+## data/bosun-role.json:
+{
+  "id": "bosun-kun",
+  "kind": "bosun",
+  "schema": "fm-bosun-role.v1"
+}
+
+$ fm-bosun.py convention --bosun bosun-kun --forge github --owner kunchenguid --repository no-mistakes --scope shared --key commit_style --value guess: conventional
+[exit 0]
+
+## unconfirmed guess must not resolve as policy:
+$ fm-bosun.py conventions --bosun bosun-kun --forge github --owner kunchenguid --repository no-mistakes --policy /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-bosun-manual.q4flHF/policy.json
+{}
+[exit 0]
+
+$ fm-bosun.py convention --bosun bosun-kun --forge github --owner kunchenguid --repository no-mistakes --scope shared --key commit_style --value conventional --confirmed --evidence https://github.com/kunchenguid/no-mistakes/pull/1 --showed feat: prefixes --read-at 2026-09-26T00:00:00Z
+[exit 0]
+
+$ fm-bosun.py conventions --bosun bosun-kun --forge github --owner kunchenguid --repository no-mistakes --policy /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-bosun-manual.q4flHF/policy.json
+{"commit_style": {"evidence": {"confirmed": true, "key": "commit_style", "read_at": "2026-09-26T00:00:00Z", "showed": "feat: prefixes", "source": "https://github.com/kunchenguid/no-mistakes/pull/1", "value": "conventional"}, "source": "shared", "value": "conventional"}}
+[exit 0]
+
+$ fm-bosun.py convention --bosun bosun-kun --forge github --owner kunchenguid --repository no-mistakes --scope repository --key commit_style --value conventional+scope --confirmed --evidence AGENTS.md --showed scoped commits --read-at 2026-09-26T00:00:00Z
+[exit 0]
+
+$ fm-bosun.py conventions --bosun bosun-kun --forge github --owner kunchenguid --repository no-mistakes --policy /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-bosun-manual.q4flHF/policy.json
+{"commit_style": {"evidence": {"confirmed": true, "key": "commit_style", "read_at": "2026-09-26T00:00:00Z", "showed": "scoped commits", "source": "AGENTS.md", "value": "conventional+scope"}, "source": "repository", "value": "conventional+scope"}}
+[exit 0]
+
+$ fm-bosun.py conventions --bosun bosun-kun --forge github --owner kunchenguid --repository no-mistakes --policy /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-bosun-manual.q4flHF/policy.json
+{"commit_style": {"source": "current_repository_policy", "value": "from-CONTRIBUTING"}}
+[exit 0]
+
+$ fm-bosun.py conventions --bosun bosun-kun --forge github --owner kunchenguid --repository no-mistakes --policy /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-bosun-manual.q4flHF/policy.json --decisions /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-bosun-manual.q4flHF/dec.json
+fm-bosun: needs-decision: captain decision conflicts with current policy for commit_style
+[exit 1]
+
+## order naming a Bosun that does not own the route:
+$ fm-bosun.py order --task t1 --bosun bosun-other --maneuver m --forge github --owner kunchenguid --repository no-mistakes --source housefeature/m --branch contribution/m --captain-words Contribute m --path m.txt --commit deadbeef
+fm-bosun: target routes to a different Bosun
+[exit 1]
+

@@ -1,0 +1,41 @@
+## primary home, shipped example routes (docs/examples/bosun-routes.json), before any secondmate is registered:
+$ fm-bosun.py route --forge github --owner kunchenguid --repository no-mistakes
+fm-bosun: secondmate registry unavailable
+[exit 1]
+
+## registered but no role record yet:
+$ fm-bosun.py route --forge github --owner kunchenguid --repository no-mistakes
+fm-bosun: missing record: /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-bosun-primary.cm4ju6/data/bosuns/bosun-kun.json
+[exit 1]
+
+$ fm-bosun.py configure-home --bosun bosun-kun
+[exit 0]
+
+## data/bosuns/bosun-kun.json:
+{
+  "id": "bosun-kun",
+  "kind": "bosun",
+  "schema": "fm-bosun-role.v1"
+}
+
+$ fm-bosun.py route --forge github --owner kunchenguid --repository no-mistakes
+bosun-kun
+[exit 0]
+
+$ fm-bosun.py route --forge github --owner KunChenGuid --repository firstmate
+bosun-kun
+[exit 0]
+
+## adversarial: other owner must not silently fall back to Bosun-Kun
+$ fm-bosun.py route --forge github --owner jazz127 --repository firstmate
+fm-bosun: no Bosun matches; ask whether to create one
+[exit 1]
+
+$ fm-bosun.py route --forge github --owner openai --repository codex
+fm-bosun: no Bosun matches; ask whether to create one
+[exit 1]
+
+$ fm-bosun.py configure-home --bosun bosun-unregistered
+fm-bosun: Bosun bosun-unregistered is not one registered secondmate
+[exit 1]
+

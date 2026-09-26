@@ -1,0 +1,8 @@
+== jazz127/firstmate base=house
+chosen default: --merge
+== jazz127/quota-axi base=house
+chosen default: --merge
+== jazz127/firstmate base=main
+chosen default: --squash
+== kunchenguid/firstmate base=main
+chosen default: --squash

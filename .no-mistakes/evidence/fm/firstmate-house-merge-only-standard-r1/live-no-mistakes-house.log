@@ -1,0 +1,9 @@
+== jazz127/no-mistakes
+{"defaultBranchRef":{"name":"house"},"isFork":true,"mergeCommitAllowed":true,"parent":{"id":"R_kgDOR6HRkg","name":"no-mistakes","owner":{"id":"MDQ6VXNlcjMyMzMwMDY=","login":"kunchenguid"}},"rebaseMergeAllowed":true,"squashMergeAllowed":true}
+{"enforcement":"active","name":"house: merge commits only"}
+effective rules on house:
+{"allowed":["merge"],"type":"pull_request"}
+{"allowed":null,"type":"non_fast_forward"}
+{"allowed":null,"type":"deletion"}
+{"protected":true}
+jazz127/no-mistakes:house -> default method: --merge

@@ -1,0 +1,11 @@
+== doc payload (normalized)
+{"name":"house: merge commits only","enforcement":"active","target":"branch","include":["refs/heads/house"],"rules":[{"type":"pull_request","allowed":["merge"]},{"type":"non_fast_forward","allowed":null},{"type":"deletion","allowed":null}]}
+== jazz127/firstmate live ruleset 24024753
+{"name":"house: merge commits only","enforcement":"active","target":"branch","include":["refs/heads/house"],"rules":[{"type":"pull_request","allowed":["merge"]},{"type":"non_fast_forward","allowed":null},{"type":"deletion","allowed":null}]}
+MATCH
+== jazz127/quota-axi live ruleset 24024754
+{"name":"house: merge commits only","enforcement":"active","target":"branch","include":["refs/heads/house"],"rules":[{"type":"pull_request","allowed":["merge"]},{"type":"non_fast_forward","allowed":null},{"type":"deletion","allowed":null}]}
+MATCH
+== jazz127/no-mistakes live ruleset 24025775
+{"name":"house: merge commits only","enforcement":"active","target":"branch","include":["refs/heads/house"],"rules":[{"type":"pull_request","allowed":["merge"]},{"type":"non_fast_forward","allowed":null},{"type":"deletion","allowed":null}]}
+MATCH

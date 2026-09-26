@@ -1,0 +1,13 @@
+== jazz127/firstmate rulesets
+{"enforcement":"active","id":24024753,"name":"house: merge commits only"}
+{"enforcement":"active","include":["refs/heads/house"],"rules":[{"allowed_merge_methods":["merge"],"type":"pull_request"},{"allowed_merge_methods":null,"type":"non_fast_forward"},{"allowed_merge_methods":null,"type":"deletion"}]}
+== effective house rules
+["pull_request","non_fast_forward","deletion"]
+== jazz127/quota-axi rulesets
+{"enforcement":"active","id":24024754,"name":"house: merge commits only"}
+{"enforcement":"active","include":["refs/heads/house"],"rules":[{"allowed_merge_methods":["merge"],"type":"pull_request"},{"allowed_merge_methods":null,"type":"non_fast_forward"},{"allowed_merge_methods":null,"type":"deletion"}]}
+== effective house rules
+["pull_request","non_fast_forward","deletion"]
+== pull-only access raw REST vs gh repo view (kunchenguid/firstmate)
+{"allow_merge_commit":null,"allow_rebase_merge":null,"allow_squash_merge":null}
+{"mergeCommitAllowed":false,"rebaseMergeAllowed":false,"squashMergeAllowed":true}

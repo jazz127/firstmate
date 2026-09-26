@@ -1,0 +1,2 @@
+error: refusing to merge https://github.com/jazz127/no-such-repo-fm-test/pull/0: the repository merge-method settings could not be read, so no merge method was chosen; pass --squash, --merge, or --rebase after -- to choose explicitly
+rc=1 chosen=''

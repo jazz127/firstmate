@@ -1,0 +1,3 @@
+ok - fm-pr-merge picks squash where the base branch allows it and merge where merge is the only allowed method
+ok - fm-pr-merge refuses a default merge method when the allowed set is ambiguous or unreadable
+ok - fm-pr-merge passes an explicit caller method through and leaves GitHub to judge it

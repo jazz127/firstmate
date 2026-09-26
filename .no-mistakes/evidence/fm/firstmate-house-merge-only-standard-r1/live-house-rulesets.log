@@ -1,0 +1,20 @@
+== jazz127/firstmate settings
+{"mergeCommitAllowed":true,"rebaseMergeAllowed":true,"squashMergeAllowed":true}
+== jazz127/firstmate effective rules on house
+{"allowed":["merge"],"ruleset_id":24024753,"type":"pull_request"}
+{"allowed":null,"ruleset_id":24024753,"type":"non_fast_forward"}
+{"allowed":null,"ruleset_id":24024753,"type":"deletion"}
+== jazz127/firstmate rulesets
+{"enforcement":"active","name":"house: merge commits only","target":"branch"}
+== jazz127/quota-axi settings
+{"mergeCommitAllowed":true,"rebaseMergeAllowed":true,"squashMergeAllowed":true}
+== jazz127/quota-axi effective rules on house
+{"allowed":["merge"],"ruleset_id":24024754,"type":"pull_request"}
+{"allowed":null,"ruleset_id":24024754,"type":"non_fast_forward"}
+{"allowed":null,"ruleset_id":24024754,"type":"deletion"}
+== jazz127/quota-axi rulesets
+{"enforcement":"active","name":"house: merge commits only","target":"branch"}
+== jazz127 repos with a house branch
+jazz127/quota-axi
+jazz127/firstmate
+jazz127/no-mistakes

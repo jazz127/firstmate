@@ -1,0 +1,15 @@
+ok - route precedence, no match, and unsupported forge refusal
+ok - evidence memory and FM_HOME path safety
+ok - Bosun id cannot escape its private role directory
+ok - ordered dotfiles remain valid scoped paths
+ok - invalid and duplicate source commits are refused
+ok - source commits are validated against the configured fork branch
+ok - fork source validation refreshes and fails closed
+ok - ordered maneuvers delegate exactly once through brief and spawn
+ok - intake retries adopt the deterministic existing task
+ok - intake adopts only a task carrying this assignment identity
+ok - forge-backed authorization, re-registration, review escalation, and merge completion
+ok - registration requires a valid Bosun role record
+ok - registration accepts redaction, squash, and upstream refresh but rejects unrelated content
+ok - fm-pr-check.sh registers a Bosun PR and scope-checks follow-up commits
+bash tests/fm-bosun.test.sh  10.22s user 9.92s system 81% cpu 24.705 total

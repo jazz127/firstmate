@@ -1,0 +1,10 @@
+$ route --repository sample
+fm-bosun: ambiguous Bosun route; needs-decision
+[exit 1]
+$ route --repository exact
+fm-bosun: secondmate registry unavailable
+[exit 1]
+{"schema":"fm-bosun-routes.v1","routes":[
+ {"bosun":"bosun-kun","forge":"github","owner":"kunchenguid","repository_pattern":"*"},
+ {"bosun":"bosun-other","forge":"github","owner":"kunchenguid","repository_pattern":"s*"},
+ {"bosun":"bosun-exact","forge":"github","owner":"kunchenguid","repository":"exact"}]}

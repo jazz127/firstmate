@@ -1,0 +1,126 @@
+== Provision Bosun-Kun role
+$ b configure-home --bosun bosun-kun
+[exit 0]
+
+{
+  "id": "bosun-kun",
+  "kind": "bosun",
+  "schema": "fm-bosun-role.v1"
+}
+
+== Routing
+$ b route --forge github --owner kunchenguid --repository no-mistakes
+bosun-kun
+[exit 0]
+
+$ b route --forge github --owner someoneelse --repository sample
+fm-bosun: no Bosun matches; ask whether to create one
+[exit 1]
+
+== Convention precedence
+$ b convention --bosun bosun-kun --forge github --owner kunchenguid --repository sample --scope shared --key commits --value conventional --confirmed --evidence https://github.com/kunchenguid/sample/pull/1 --showed merged PR uses conventional commits --read-at 2026-09-26T00:00:00Z
+[exit 0]
+
+$ b convention --bosun bosun-kun --forge github --owner kunchenguid --repository sample --scope repository --key commits --value feat(scope): --confirmed --evidence CONTRIBUTING.md --showed scoped prefixes --read-at 2026-09-26T00:00:00Z
+[exit 0]
+
+$ b convention --bosun bosun-kun --forge github --owner kunchenguid --repository sample --scope shared --key tone --value terse --evidence guess --showed guess --read-at 2026-09-26T00:00:00Z
+[exit 0]
+
+$ b conventions --bosun bosun-kun --forge github --owner kunchenguid --repository sample --policy /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-bosun-demo.GpID4H/policy.json
+{"commits": {"evidence": {"confirmed": true, "key": "commits", "read_at": "2026-09-26T00:00:00Z", "showed": "scoped prefixes", "source": "CONTRIBUTING.md", "value": "feat(scope):"}, "source": "repository", "value": "feat(scope):"}, "format": {"source": "current_repository_policy", "value": "gofmt"}}
+[exit 0]
+
+$ b conventions --bosun bosun-kun --forge github --owner kunchenguid --repository sample --policy /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-bosun-demo.GpID4H/policy.json --decisions /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-bosun-demo.GpID4H/decisions.json
+fm-bosun: needs-decision: captain decision conflicts with current policy for format
+[exit 1]
+
+== Captain order for one named maneuver
+$ b order --task maneuver --bosun bosun-kun --maneuver maneuver --forge github --owner kunchenguid --repository sample --source housefeature/maneuver --branch contribution/maneuver --captain-words Contribute maneuver upstream --path maneuver.txt --commit f5433df8bb24b809fce3e6b0b97d3feac717312a
+/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-bosun-demo.GpID4H/data/maneuver/bosun-contribution.json
+[exit 0]
+
+-- adversarial: re-order same task with wider scope
+$ b order --task maneuver --bosun bosun-kun --maneuver maneuver --forge github --owner kunchenguid --repository sample --source housefeature/maneuver --branch contribution/maneuver --captain-words Contribute maneuver upstream --path maneuver.txt --path extra.txt --commit f5433df8bb24b809fce3e6b0b97d3feac717312a
+fm-bosun: contribution order already exists
+[exit 1]
+
+== Registration (fake forge snapshot)
+$ b registration-check --task maneuver --url https://github.com/kunchenguid/sample/pull/12 --forge github --head other/sample --base kunchenguid/sample --branch main --head-branch contribution/maneuver --pr-head 0123456789012345678901234567890123456789 --validation-head 0123456789012345678901234567890123456789 --validation-mode no-mistakes --upstream-base x --changed-path maneuver.txt
+fm-bosun: upstream PR head differs: expected captain/sample, got other/sample
+[exit 1]
+
+$ b registration-check --task maneuver --url https://github.com/kunchenguid/sample/pull/12 --forge github --head captain/sample --base kunchenguid/sample --branch main --head-branch contribution/maneuver --pr-head 0123456789012345678901234567890123456789 --validation-head 0123456789012345678901234567890123456789 --validation-mode no-mistakes --upstream-base x --changed-path secret.txt
+fm-bosun: out-of-scope upstream paths: secret.txt
+[exit 1]
+
+$ b registration-check --task maneuver --url https://github.com/kunchenguid/sample/pull/12 --forge github --head captain/sample --base kunchenguid/sample --branch main --head-branch contribution/maneuver --pr-head 0123456789012345678901234567890123456789 --validation-head 0123456789012345678901234567890123456789 --validation-mode no-mistakes --upstream-base x --changed-path maneuver.txt
+[exit 0]
+
+$ b registration-check --task maneuver --url https://github.com/kunchenguid/sample/pull/13 --forge github --head captain/sample --base kunchenguid/sample --branch main --head-branch contribution/maneuver --pr-head 0123456789012345678901234567890123456789 --validation-head 0123456789012345678901234567890123456789 --validation-mode no-mistakes --upstream-base x --changed-path maneuver.txt
+fm-bosun: captain order already has a registered upstream PR
+[exit 1]
+
+== Review escalation
+$ b escalate --task maneuver --feedback https://github.com/kunchenguid/sample/pull/12#discussion_r1 --reason scope-change --note maintainer asks to also refactor docs
+needs-decision: awaiting captain on https://github.com/kunchenguid/sample/pull/12#discussion_r1
+[exit 0]
+
+parent status channel:
+needs-decision [key=bosun-review-maneuver-1] [at=1790419217]: Bosun bosun-kun https://github.com/kunchenguid/sample/pull/12 review feedback https://github.com/kunchenguid/sample/pull/12#discussion_r1 is a scope-change: maintainer asks to also refactor docs
+
+== Merge outcome hook -> Admiral's Maneuver
+$ bash -c . "$1"; fm_merge_outcome_report "$2" "$2/state" maneuver "$3" poll _ /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3EK0C38AMX7155S0TDGZKDT/bin/fm-merge-outcome-lib.sh /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-bosun-demo.GpID4H https://github.com/kunchenguid/sample/pull/12
+[exit 0]
+
+== Durable record
+{
+  "admirals_maneuver_at": "2026-09-26T10:40:18+00:00",
+  "allowed_paths": [
+    "maneuver.txt"
+  ],
+  "bosun": "bosun-kun",
+  "captain_order": {
+    "recorded_at": "2026-09-26T10:40:17+00:00",
+    "words": "Contribute maneuver upstream"
+  },
+  "contribution_branch": "contribution/maneuver",
+  "deviations": [],
+  "fork": {
+    "owner": "captain",
+    "repository": "sample"
+  },
+  "maneuver": "maneuver",
+  "review_events": [
+    {
+      "feedback": "https://github.com/kunchenguid/sample/pull/12#discussion_r1",
+      "note": "maintainer asks to also refactor docs",
+      "reason": "scope-change",
+      "recorded_at": "2026-09-26T10:40:17+00:00",
+      "status": "needs-decision"
+    }
+  ],
+  "schema": "fm-bosun-contribution.v1",
+  "source_branch": "housefeature/maneuver",
+  "source_commits": [
+    "f5433df8bb24b809fce3e6b0b97d3feac717312a"
+  ],
+  "state": "admirals-maneuver",
+  "target": {
+    "forge": "github",
+    "owner": "kunchenguid",
+    "repository": "sample"
+  },
+  "task": "maneuver",
+  "upstream_base": "x",
+  "upstream_changed_paths": [
+    "maneuver.txt"
+  ],
+  "upstream_default_branch": "main",
+  "upstream_pr": "https://github.com/kunchenguid/sample/pull/12",
+  "validation_evidence": {
+    "mode": "no-mistakes",
+    "pr_head": "0123456789012345678901234567890123456789",
+    "validated_at": "2026-09-26T10:40:17+00:00"
+  }
+}

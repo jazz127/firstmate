@@ -37,6 +37,7 @@ calls = {
  "repos/jazz127/demo/commits/aaaaaaa1111111111111111111111111111111111": {"date":"2026-09-01T00:00:00Z"},
  "repos/jazz127/demo/commits/bbbbbbb2222222222222222222222222222222": {"date":"2026-09-10T00:00:00Z"},
  "repos/jazz127/demo/commits/ccccccc3": {"date":"2026-09-05T00:00:00Z"},
+ "repos/jazz127/demo/commits/fffffff6": {"date":"2026-09-04T00:00:00Z"},
  "repos/owner/demo/pulls/247": {"number":247,"state":"open","merged_at":None,"created_at":"2026-09-02T00:00:00Z","html_url":"https://github.com/owner/demo/pull/247","head":"housefeature/alpha"},
  "repos/owner/demo/pulls?state=all&head=jazz127%3Ahousefeature/missing&per_page=20": [],
  "repos/owner/demo/pulls?state=all&head=jazz127%3Ahousefeature/gone&per_page=20": [],
@@ -44,13 +45,15 @@ calls = {
  "repos/owner/demo/pulls?state=all&head=jazz127%3Ahousefeature/extra&per_page=20": [{"number":248,"state":"open","merged_at":None,"created_at":"2026-09-11T00:00:00Z","html_url":"https://github.com/owner/demo/pull/248","head":"housefeature/extra"}],
 }
 # The house comparison pages its commit list; FAKE_AHEAD sizes it, the last
-# commit is the register's ccccccc3, and FAKE_SHORT drops one listed commit.
+# commit is the register's ccccccc3, the contributed fffffff6 is still on house,
+# and FAKE_SHORT drops one listed commit.
 compare = re.fullmatch(r"repos/jazz127/demo/compare/mainupstream\.\.\.housetip\?per_page=(\d+)&page=(\d+)", path)
 if compare:
  ahead = int(os.environ.get("FAKE_AHEAD", "2"))
  listed = ["aaaaaaa1111111111111111111111111111111111"] + ["%040x" % i for i in range(1, ahead)]
  if ahead > 2:
   listed[-1] = "ccccccc3333333333333333333333333333333333"
+  listed[1] = "fffffff6666666666666666666666666666666666"
  if os.environ.get("FAKE_SHORT"):
   listed = listed[:-1]
  size, page = int(compare.group(1)), int(compare.group(2))
@@ -140,7 +143,7 @@ assert r['housefeature/missing']['landed'] is True, 'commit on the last page was
 assert {branch: row['on_house'] for branch, row in r.items()} == {
     'housefeature/alpha': 'yes', 'housefeature/missing': 'yes', 'housefeature/extra': 'no',
     'housefeature/gone': 'n/a', 'housefeature/shipped': 'n/a'}
-assert r['housefeature/shipped']['state'] == 'contributed'
+assert r['housefeature/shipped']['state'] == 'contributed' and r['housefeature/shipped']['landed'] is True
 PY
 node "$ROOT/tests/assets/house-board-render-harness.mjs" "$TMP_ROOT/deep/.lavish/house-board.html" \
   sort=project > "$TMP_ROOT/deep.json" || fail 'multi-page board did not render'
@@ -152,6 +155,14 @@ for name in ('Gone feature','Shipped feature'):
     assert 'N/A' in rows[name], rows[name]
 assert 'N/A' not in rows['Extra'] and 'N/A' not in rows['Alpha feature']
 assert '2On house' in p['stats'], p['stats']
+PY
+node "$ROOT/tests/assets/house-board-render-harness.mjs" "$TMP_ROOT/deep/.lavish/house-board.html" \
+  posture=landed > "$TMP_ROOT/deep-landed.json" || fail 'Landed posture did not render'
+python3 - "$TMP_ROOT/deep-landed.json" <<'PY' || fail 'Landed posture differs from On house'
+import json,sys
+p=json.load(open(sys.argv[1]))
+assert sorted(p['names']) == ['Alpha feature','Missing feature'], p['names']
+assert p['count'] == '2 matching features' and '2On house' in p['stats'], p
 PY
 
 mkdir -p "$TMP_ROOT/short/data"

@@ -157,7 +157,7 @@ __FM_HOUSE_BOARD_DATA__
       if (filters.project && row.project !== filters.project) return false;
       if (filters.label && row.label !== filters.label) return false;
       if (filters.state && row.state !== filters.state) return false;
-      if (filters.posture === "landed" && !row.landed) return false;
+      if (filters.posture === "landed" && row.on_house !== "yes") return false;
       if (filters.posture === "offered" && row.state !== "offered") return false;
       if (filters.posture === "historical" && row.state !== "historical") return false;
       if (filters.posture === "mismatch" && row.presence === "both") return false;

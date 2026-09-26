@@ -812,7 +812,7 @@ EOF
       fm_pr_body_preflight_block "$id"
       fm_upstream_pr_publish_block "$id"
       cat <<EOF
-Before you report done, read the PR back from the forge and confirm it is not a draft (\`gh pr view <url> --json isDraft\` must print false); if it is a draft, mark it ready with \`gh-axi pr ready\`.
+Before you report done, read the PR back from the forge and confirm it is not a draft (\`gh-axi pr view <number>\` must print \`draft: no\`, where <number> is the PR number from your PR URL); if it is a draft, mark it ready with \`gh-axi pr ready <number>\`.
 A draft cannot be merged, so a done report on one leaves the merge unasked.
 Then append \`done [at=<epoch>]: PR {url}\` to the status file and stop.
 That \`done:\` is accepted only when this copy's HEAD - your latest commit - is pushed to your PR branch; the check tests that commit, not merely that a branch moved.
@@ -852,7 +852,7 @@ EOF
       fm_upstream_pr_preflight_block "$id"
       cat <<EOF
 
-For a base with checks, including \`house\`, after /no-mistakes reports CI green (the CI-ready return point - do not wait for it to keep monitoring in the background until merge), read the PR back from the forge and confirm it is not a draft (\`gh pr view <url> --json isDraft\` must print false); if it is a draft, mark it ready with \`gh-axi pr ready\`.
+For a base with checks, including \`house\`, after /no-mistakes reports CI green (the CI-ready return point - do not wait for it to keep monitoring in the background until merge), read the PR back from the forge and confirm it is not a draft (\`gh-axi pr view <number>\` must print \`draft: no\`, where <number> is the PR number from your PR URL); if it is a draft, mark it ready with \`gh-axi pr ready <number>\`.
 A draft cannot be merged, so a done report on one leaves the merge unasked.
 For a base with checks, append \`done [at=<epoch>]: PR {url} checks green\` and stop.
 For a base verified to have no check workflows where this run used \`--skip ci\`, wait for the pipeline's passed-with-skips outcome, confirm the PR is not a draft, and append \`done [at=<epoch>]: PR {url} ready for review (CI skipped: base has no configured check workflows)\` without claiming checks are green.

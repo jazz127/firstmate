@@ -339,8 +339,8 @@ status_is_captain_held() {  # <status-line>
 # Both declarations can intentionally leave a crew's endpoint idle, so both
 # supervisors give them one cadence: the away-mode daemon defers the wedge and
 # ages a pause marker instead, and the watcher applies its bounded pause cadence
-# once pause_state_class has admitted the wait (fm-watch.sh owns which liveness
-# evidence each kind of crew must supply for that).
+# once pause_state_class has admitted the wait, which it does for every
+# agent-liveness verdict unless the crew is provably working.
 status_is_paused_or_captain_held() {  # <status-line>
   local line=$1
   status_is_paused "$line" || status_is_captain_held "$line"
@@ -353,9 +353,12 @@ status_is_paused_or_captain_held() {  # <status-line>
 # including the stated default key a keyless decision shares - does not end the
 # pause. Only a resolved line for the pause's own phase key (the keyed
 # activity fold's key, where a keyless line is its own phase) retracts it, as
-# does any other later event. A captain-held line counts only while it is the
-# latest event. Bounded like last_status_line: only a tail window made wholly of
-# resolved events widens the read to the whole file.
+# does any other later event. A `note:` is informational: it neither leaves a
+# declared wait nor declares one, so a note written under a standing wait is
+# read through, for a paused or a captain-held line alike. A captain-held line
+# otherwise counts only while it is the latest event apart from such notes.
+# Bounded like last_status_line: only a tail window made wholly of resolved and
+# note events widens the read to the whole file.
 status_declared_wait_line() {  # <status-file>
   local f=$1 last verb resolve legacy_re
   last=$(last_status_line "$f")
@@ -365,19 +368,20 @@ status_declared_wait_line() {  # <status-file>
   fi
   resolve=${FM_CLASSIFY_RESOLVE_VERB:-$FM_CLASSIFY_RESOLVE_VERB_DEFAULT}
   status_line_verb "$last" verb
-  [ "$verb" = "$resolve" ] || return 0
+  case "$verb" in "$resolve"|note) ;; *) return 0 ;; esac
   legacy_re="^[[:space:]]*(${FM_CAPTAIN_RE:-$FM_CLASSIFY_CAPTAIN_RE_DEFAULT})"
   tail -n "$FM_CLASSIFY_EVENT_WINDOW_LINES" "$f" 2>/dev/null \
     | _fm_status_declared_wait_scan "$resolve" "$legacy_re" \
     || _fm_status_declared_wait_scan "$resolve" "$legacy_re" < "$f" || :
 }
 
-# Walk the status lines on stdin back from the newest event past resolved lines
-# to the first other event, and print it when it is a pause none of those
-# resolved lines share a phase key with. Returns 1 when every event is a
-# resolved line, so a caller reading a bounded window knows to widen it.
+# Walk the status lines on stdin back from the newest event past resolved and
+# note lines to the first other event, and print it when it is a pause none of
+# those resolved lines share a phase key with, or a captain-held line that only
+# notes follow. Returns 1 when every event is a resolved or note line, so a
+# caller reading a bounded window knows to widen it.
 _fm_status_declared_wait_scan() {  # <resolve-verb> <legacy-captain-re>
-  local resolve=$1 legacy_re=$2 line verb key keys=$'\n' i=0
+  local resolve=$1 legacy_re=$2 line verb key keys=$'\n' i=0 resolved=0
   local -a lines=()
   while IFS= read -r line || [ -n "$line" ]; do
     lines[i]=$line
@@ -390,13 +394,19 @@ _fm_status_declared_wait_scan() {  # <resolve-verb> <legacy-captain-re>
     _fm_status_line_is_event "$line" "$legacy_re" || continue
     status_line_verb "$line" verb
     case "$verb" in
+      note) continue ;;
       "$resolve") ;;
       "${FM_CLASSIFY_PAUSED_VERB:-$FM_CLASSIFY_PAUSED_VERB_DEFAULT}") ;;
+      "${FM_CLASSIFY_CAPTAIN_HELD_VERB:-$FM_CLASSIFY_CAPTAIN_HELD_VERB_DEFAULT}")
+        [ "$resolved" -eq 0 ] && printf '%s\n' "$line"
+        return 0
+        ;;
       *) return 0 ;;
     esac
     key=$(_fm_decision_key "$line" "$_FM_CLASSIFY_KEYLESS_PHASE") || key=
     if [ "$verb" = "$resolve" ]; then
       keys="$keys$key"$'\n'
+      resolved=1
       continue
     fi
     case "$keys" in *$'\n'"$key"$'\n'*) return 0 ;; esac
@@ -404,6 +414,98 @@ _fm_status_declared_wait_scan() {  # <resolve-verb> <legacy-captain-re>
     return 0
   done
   return 1
+}
+
+# The logical episode of the declared wait status_declared_wait_line reads: the
+# uninterrupted run of that same declaration, read back from its latest copy
+# through `note:` lines, continuation prose, identical re-declarations, and
+# resolved lines for other phase keys. Identity compares the line with its
+# well-formed `[at=...]` stamp removed, so a stamped re-declaration of the same
+# wait keeps the episode. Any other event, a resolved line for the wait's own
+# phase key, or a changed reason, key, or deadline ends the run, so leaving the
+# wait and declaring the identical text again - even between two supervisor
+# polls - starts a new episode at the new line.
+# Prints "<start-offset>\t<at-epoch>\t<declaration>": the absolute byte offset
+# of the episode's first line, that line's stamp epoch or empty when it carries
+# no well-formed stamp, and the declaration exactly as status_declared_wait_line
+# returns it. Returns 1 when no declared wait stands or the log is unreadable.
+# Reads a bounded tail window and widens to the whole file only when the run
+# reaches the window's first whole line. The caller owns the file identity,
+# incarnation, and age fallback that make the offset a durable identity.
+status_declared_wait_episode() {  # <status-file>
+  local f=$1 decl semantic size start line verb key rkey untimed legacy_re n pos i first d begin stop at
+  local LC_ALL=C
+  local -a lines offsets
+  decl=$(status_declared_wait_line "$f")
+  status_is_paused_or_captain_held "$decl" || return 1
+  _fm_status_untimed "$decl" semantic
+  key=$(_fm_decision_key "$decl" "$_FM_CLASSIFY_KEYLESS_PHASE") || key=
+  legacy_re="^[[:space:]]*(${FM_CAPTAIN_RE:-$FM_CLASSIFY_CAPTAIN_RE_DEFAULT})"
+  size=$(_fm_status_file_size "$f") || return 1
+  size=${size//[[:space:]]/}
+  case "$size" in ''|*[!0-9]*) return 1 ;; esac
+  start=0
+  [ "$size" -le 16384 ] || start=$((size - 16384))
+  while :; do
+    lines=(); offsets=(); n=0; pos=$start
+    while IFS= read -r line || [ -n "$line" ]; do
+      lines[n]=$line
+      offsets[n]=$pos
+      pos=$((pos + ${#line} + 1))
+      n=$((n + 1))
+    done < <(_fm_status_read_span "$f" "$start" "$((size - start))")
+    # A window that starts mid-file begins with a partial line.
+    first=0
+    [ "$start" -eq 0 ] || first=1
+    d=-1
+    i=$((n - 1))
+    while [ "$i" -ge "$first" ]; do
+      line=${lines[i]}
+      _fm_status_untimed "$line" untimed
+      if [ "$untimed" = "$semantic" ] && _fm_status_line_is_event "$line" "$legacy_re"; then
+        d=$i
+        break
+      fi
+      i=$((i - 1))
+    done
+    if [ "$d" -lt 0 ]; then
+      [ "$start" -gt 0 ] || return 1
+      start=0
+      continue
+    fi
+    begin=$d
+    stop=0
+    i=$((d - 1))
+    while [ "$i" -ge "$first" ]; do
+      line=${lines[i]}
+      i=$((i - 1))
+      case "$line" in *[![:space:]]*) ;; *) continue ;; esac
+      _fm_status_line_is_event "$line" "$legacy_re" || continue
+      status_line_verb "$line" verb
+      case "$verb" in
+        note) continue ;;
+        "${FM_CLASSIFY_RESOLVE_VERB:-$FM_CLASSIFY_RESOLVE_VERB_DEFAULT}")
+          rkey=$(_fm_decision_key "$line" "$_FM_CLASSIFY_KEYLESS_PHASE") || rkey=
+          [ "$rkey" != "$key" ] || { stop=1; break; }
+          continue
+          ;;
+      esac
+      _fm_status_untimed "$line" untimed
+      if [ "$untimed" = "$semantic" ]; then
+        begin=$((i + 1))
+        continue
+      fi
+      stop=1
+      break
+    done
+    if [ "$stop" -eq 0 ] && [ "$start" -gt 0 ]; then
+      start=0
+      continue
+    fi
+    break
+  done
+  _fm_status_at_epoch "${lines[begin]}" at || at=
+  printf '%s\t%s\t%s\n' "${offsets[begin]}" "$at" "$decl"
 }
 
 # A condition-aware declared wait: a `paused:` line may say WHEN it expects to
@@ -2591,12 +2693,45 @@ crew_worktree_written_since() {  # <id> <state> <anchor-file>
 # Files are mapped to task ids by stripping the .status / .turn-ended suffix;
 # a no-verb wake with nothing
 # provably working must surface, so an empty/unresolvable list returns 1.
-# A kind=secondmate task's .status signal is never absorbable here regardless of
-# busy evidence: that stream is the mate's routed-reply channel, so every append
-# is parent-directed content the supervisor must read (a routed reply, a newly
-# raised decision, a mirrored remote line), and a busy mate agent makes its note
-# more current, not less deliverable. Scoped to .status files - a mate's bare
-# turn-ended ping still uses the ordinary provably-working absorb.
+# A kind=secondmate task's .status stream doubles as its routed-reply channel,
+# so the lines new since the watcher's classified position are read before any
+# busy evidence counts: a decision, blocker, terminal outcome, `note:`, any line
+# carrying a correlation marker (fm_pending_reply_corr_token, bracketed or not),
+# and any verb this library does not know is parent-directed content the
+# supervisor must read, so it surfaces regardless of how busy the mate is. Only
+# unmarked routine `working:` and `paused:` progress falls through
+# to the same provably-working absorb an ordinary crewmate gets, so a healthy
+# mate's progress no longer wakes the primary on every append while an unproven
+# mate still surfaces. The span starts at the classified position its owner
+# reports (fm_wake_signal_seen_size, bin/fm-wake-lib.sh, loaded by every watcher
+# caller); a caller without that library reads the whole log, which can only
+# surface more. An unreadable span surfaces. Scoped to .status files - a mate's
+# bare turn-ended ping always used the ordinary provably-working absorb.
+_fm_secondmate_status_new_lines_routine() {  # <status-file> <state>
+  local f=$1 state=$2 start=0 size chunk line verb
+  if command -v fm_wake_signal_seen_size >/dev/null 2>&1; then
+    start=$(fm_wake_signal_seen_size "$state" "$f")
+  fi
+  case "$start" in ''|*[!0-9]*) start=0 ;; esac
+  size=$(_fm_status_file_size "$f") || return 1
+  size=${size//[[:space:]]/}
+  case "$size" in ''|*[!0-9]*) return 1 ;; esac
+  [ "$start" -le "$size" ] || start=0
+  [ "$start" -lt "$size" ] || return 0
+  chunk=$(_fm_status_read_span "$f" "$start" "$((size - start))") || return 1
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in *[![:space:]]*) ;; *) continue ;; esac
+    case "$line" in *corr=*) return 1 ;; esac
+    status_line_verb "$line" verb
+    case "$verb" in
+      working|"${FM_CLASSIFY_PAUSED_VERB:-$FM_CLASSIFY_PAUSED_VERB_DEFAULT}") ;;
+      *) return 1 ;;
+    esac
+  done <<EOF
+$chunk
+EOF
+  return 0
+}
 signal_crew_provably_working() {  # <file> ...
   local f base dir task seen=""
   for f in "$@"; do
@@ -2612,7 +2747,7 @@ signal_crew_provably_working() {  # <file> ...
     case "$base" in
       *.status)
         if [ "$(grep '^kind=' "$dir/$task.meta" 2>/dev/null | tail -1 | cut -d= -f2-)" = secondmate ]; then
-          return 1
+          _fm_secondmate_status_new_lines_routine "$f" "$dir" || return 1
         fi
         ;;
     esac
@@ -2628,8 +2763,13 @@ signal_crew_provably_working() {  # <file> ...
 # captain-relevant; 1 otherwise, including the no-status case. A 1 only means
 # "non-terminal"; the always-on watcher then applies crew_is_provably_working,
 # while the away-mode daemon applies its persistence recheck.
+# A standing declared wait read through a later note: is not terminal either, so
+# a note that happens to mention a legacy token such as `merged` cannot take the
+# terminal path the wait would otherwise hold.
 stale_is_terminal() {  # <window> <state>
-  local win=$1 state=$2 last
-  last=$(last_status_line "$state/$(window_to_task "$win" "$state").status")
+  local win=$1 state=$2 statusf last
+  statusf="$state/$(window_to_task "$win" "$state").status"
+  status_is_paused_or_captain_held "$(status_declared_wait_line "$statusf")" && return 1
+  last=$(last_status_line "$statusf")
   [ -n "$last" ] && status_is_captain_relevant "$last"
 }

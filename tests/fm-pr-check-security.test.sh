@@ -140,6 +140,10 @@ SH
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$FM_TEST_GH_LOG"
 case "${1:-} ${2:-}" in
+  "repo view")
+    printf '%s\n' merge=true squash=true rebase=true
+    exit 0
+    ;;
   "api graphql")
     printf '%s\n' \
       "state=${FM_TEST_GH_GRAPHQL_STATE:-MERGED}" \
@@ -184,7 +188,24 @@ case " $* " in
   *" api repos/"*"/commits/"*"/statuses?per_page=100 "*)
     printf '%s\n' '[[]]'
     ;;
+  *" api --paginate repos/"*"/rules/branches/"*merge_queue*|*" api --paginate repos/"*"/rules/branches/"*pull_request*)
+    ;;
+  *" api --paginate repos/"*"/rules/branches/"*)
+    printf '%s\n' '[]'
+    ;;
+  *" api repos/"*"/branches/"*)
+    printf '%s\n' '{"name":"main","protected":false}'
+    ;;
   *" api repos/"*"/pulls/"*)
+    if [ -n "${FM_TEST_GH_FILES:-}" ]; then
+      filter=.
+      while [ "$#" -gt 0 ]; do
+        [ "$1" != --jq ] || filter=$2
+        shift
+      done
+      printf '%s\n' "$FM_TEST_GH_FILES" | jq -r "$filter"
+      exit
+    fi
     printf '%s\n' "{\"state\":\"open\",\"user\":{\"login\":\"author\"},\"head\":{\"sha\":\"${FM_TEST_GH_HEAD:-0123456789abcdef0123456789abcdef01234567}\"},\"draft\":false,\"mergeable\":true,\"merged_at\":null}"
     ;;
   *" api repos/"*)
@@ -216,6 +237,18 @@ SH
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$FM_TEST_GLAB_LOG"
 case " $* " in
+  *" --jq "*)
+    printf '%s\n' 'unknown flag: --jq' >&2
+    exit 1
+    ;;
+  *" api projects/"*)
+    if [ -n "${FM_TEST_GLAB_FILES:-}" ]; then
+      printf '%s\n' "$FM_TEST_GLAB_FILES"
+      exit 0
+    fi
+    printf '%s\n' '{"changes":[]}'
+    exit 0
+    ;;
   *" -F json "*)
     [ "${FM_TEST_GLAB_BODY_FAIL:-0}" = 0 ] || exit 1
     count=0
@@ -676,6 +709,41 @@ test_draft_pull_request_is_not_armed() {
   pass "arming refuses a draft pull request, naming it, and arms a ready or unreadable one"
 }
 
+# A secondmate is a persistent worker, not a delivery lane: it never owns a
+# pull request of its own. A URL relayed onto its status channel belongs to a
+# task in the mate's own home, which arms its own watch, so arming one here is
+# refused before anything is recorded - a poll on the mate would otherwise mark
+# the merge notified and queue the mate itself for teardown as landed work.
+test_secondmate_record_refuses_a_pr_watch() {
+  local dir rc
+  dir=$(make_case secondmate-refuses-watch)
+  fm_write_meta "$dir/home/state/domain.meta" \
+    'window=session:fm-domain' \
+    "worktree=$dir/secondmate-home" \
+    "project=$dir/project" \
+    'kind=secondmate' \
+    'mode=secondmate' \
+    'backend=tmux' \
+    "home=$dir/secondmate-home"
+  mkdir -p "$dir/secondmate-home"
+  cp "$dir/home/state/domain.meta" "$dir/meta.before"
+  set +e
+  run_check_entry "$dir" domain https://github.com/o/r/pull/9 \
+    > "$dir/stdout" 2> "$dir/stderr"; rc=$?
+  set -e
+  [ "$rc" -ne 0 ] || fail "a merge watch was armed on a secondmate record"
+  grep -qi 'secondmate' "$dir/stderr" || fail "the refusal did not name the record's kind"
+  grep -qF 'https://github.com/o/r/pull/9' "$dir/stderr" \
+    || fail "the refusal did not name the pull request it refused"
+  cmp -s "$dir/meta.before" "$dir/home/state/domain.meta" \
+    || fail "the refusal changed secondmate metadata"
+  [ ! -e "$dir/home/state/domain.check.sh" ] || fail "the refusal armed a poll on a secondmate"
+  [ ! -e "$dir/home/state/domain.pr-poll" ] || fail "the refusal wrote a poll sidecar on a secondmate"
+  [ ! -s "$dir/gh.log" ] || fail "the refusal reached the forge"
+  [ ! -s "$dir/guard.log" ] || fail "the refusal reached the guard"
+  pass "fm-pr-check refuses to record a PR or arm a merge watch on a secondmate record"
+}
+
 # With no forge-reported head (gh cannot supply one), the named head is the
 # worker copy's HEAD, and a HEAD that exists only there is refused.
 test_unpushed_named_head_refuses_registration() {
@@ -711,6 +779,52 @@ test_direct_pr_unpushed_commit_refuses_registration() {
     || fail "direct-PR refusal did not name the unpushed commit: $(cat "$dir/stderr")"
   [ ! -e "$dir/home/state/task-a.check.sh" ] || fail "direct-PR unpushed commit still armed a poll"
   pass "fm-pr-check refuses a direct-PR registration while a later commit is only in the copy"
+}
+
+test_published_scratch_refuses_registration() {
+  local dir
+  dir=$(make_case published-scratch-refused)
+  write_task_meta "$dir"
+  FM_TEST_GH_FILES='[{"filename":".codex-live-check/cache/node/corepack/v1/pnpm/11.1.1/package.json","status":"added"}]' \
+    run_check_entry "$dir" task-a https://github.com/o/r/pull/4 \
+    > "$dir/stdout" 2> "$dir/stderr" && fail "published scratch path was registered"
+  grep -Fq 'scratch path would be published' "$dir/stderr" \
+    || fail "published scratch refusal did not name the publication boundary"
+  [ ! -e "$dir/home/state/task-a.check.sh" ] || fail "published scratch path armed a poll"
+  pass "fm-pr-check refuses a published pipeline scratch path"
+}
+
+test_published_gitlab_scratch_refuses_registration() {
+  local dir
+  dir=$(make_case published-gitlab-scratch-refused)
+  write_task_meta "$dir"
+  FM_TEST_GLAB_FILES='{"changes":[{"new_path":".codex-live-check/cache/node/corepack/v1/pnpm/11.1.1/package.json","deleted_file":false}]}' \
+    run_check_entry "$dir" task-a https://gitlab.example/g/p/-/merge_requests/4 \
+    > "$dir/stdout" 2> "$dir/stderr" && fail "published GitLab scratch path was registered"
+  grep -Fq 'scratch path would be published' "$dir/stderr" \
+    || fail "published GitLab scratch refusal did not name the publication boundary"
+  [ ! -e "$dir/home/state/task-a.check.sh" ] || fail "published GitLab scratch path armed a poll"
+  pass "fm-pr-check refuses a published GitLab scratch path"
+}
+
+test_published_scratch_removal_is_registered() {
+  local dir
+  dir=$(make_case published-scratch-removal)
+  write_task_meta "$dir"
+  FM_TEST_GH_FILES='[{"filename":".codex-live-check/cache/node/corepack/v1/pnpm/11.1.1/package.json","status":"removed"},{"filename":"src/app.js","status":"modified"}]' \
+    run_check_entry "$dir" task-a https://github.com/o/r/pull/4 \
+    > "$dir/stdout" 2> "$dir/stderr" || fail "published scratch removal was refused: $(cat "$dir/stderr")"
+  pass "fm-pr-check registers a pull request that only removes scratch"
+}
+
+test_published_gitlab_scratch_removal_is_registered() {
+  local dir
+  dir=$(make_case published-gitlab-scratch-removal)
+  write_task_meta "$dir"
+  FM_TEST_GLAB_FILES='{"changes":[{"new_path":".codex-live-check/cache/node/corepack/v1/pnpm/11.1.1/package.json","deleted_file":true},{"new_path":"src/app.js","deleted_file":false}]}' \
+    run_check_entry "$dir" task-a https://gitlab.example/g/p/-/merge_requests/4 \
+    > "$dir/stdout" 2> "$dir/stderr" || fail "published GitLab scratch removal was refused: $(cat "$dir/stderr")"
+  pass "fm-pr-check registers a merge request that only removes scratch"
 }
 
 test_published_attestation_matches_current_head() {
@@ -2468,6 +2582,11 @@ test_different_merged_pr_for_same_task_is_not_absorbed() {
   pass "a different merged PR for the same task gets its own first notification"
 }
 
+# A secondmate is a persistent worker, never landed work: a merge poll armed
+# on its record (bin/fm-pr-check.sh refuses new ones) is residue carrying a
+# relayed child's pr=. When that residue reads merged the watcher retires the
+# poll silently - no merge outcome, no notified marker, no wake that could put
+# the mate itself up for teardown - and leaves every lifecycle artifact whole.
 test_persistent_secondmate_retirement_is_poll_only() {
   local dir state meta_before status_before registry_before endpoint_before rc
   dir=$(make_case merged-retirement-secondmate)
@@ -2491,19 +2610,30 @@ test_persistent_secondmate_retirement_is_poll_only() {
   registry_before=$(shasum -a 256 "$dir/home/data/secondmates.md")
   endpoint_before=$(shasum -a 256 "$dir/endpoint-sentinel")
   seed_canonical_poll "$dir" domain https://github.com/o/r/pull/2
+  add_stop_custom_check "$dir"
 
   set +e
   FM_TEST_GH_STATE=MERGED run_watcher_bounded "$dir/home" "$dir/fakebin" > "$dir/watch.out" 2> "$dir/watch.err"
   rc=$?
   set -e
   [ "$rc" -eq 0 ] || fail "persistent secondmate merged watcher failed: $(cat "$dir/watch.err")"
+  case "$(cat "$dir/watch.out")" in
+    check:*z-stop.check.sh:*stop-cycle) ;;
+    *) fail "a secondmate's merged poll woke the watcher instead of retiring silently: $(cat "$dir/watch.out")" ;;
+  esac
   assert_poll_absent "$state" domain
+  [ ! -e "$state/domain.pr-poll-merge-notified" ] \
+    || fail "a secondmate's retired poll recorded a merge notification"
+  ! grep -F 'merged-domain-' "$state/.wake-queue" >/dev/null 2>&1 \
+    || fail "a secondmate's merged poll queued a landed-work wake"
+  ! grep -F 'domain.check.sh' "$state/.wake-queue" >/dev/null 2>&1 \
+    || fail "a secondmate's merged poll queued a check wake"
   [ "$(shasum -a 256 "$state/domain.meta")" = "$meta_before" ] || fail "retirement changed secondmate metadata"
   [ "$(shasum -a 256 "$state/domain.status")" = "$status_before" ] || fail "retirement changed secondmate status"
   [ "$(shasum -a 256 "$dir/home/data/secondmates.md")" = "$registry_before" ] || fail "retirement changed secondmate registry"
   [ "$(shasum -a 256 "$dir/endpoint-sentinel")" = "$endpoint_before" ] || fail "retirement changed secondmate endpoint evidence"
   [ -d "$dir/secondmate-home" ] || fail "retirement removed the persistent secondmate home"
-  pass "merged poll retirement preserves every persistent secondmate lifecycle artifact"
+  pass "a merged poll on a persistent secondmate retires silently: no outcome, marker, or wake, and every lifecycle artifact preserved"
 }
 
 test_retirement_crash_recovery() {
@@ -3479,8 +3609,13 @@ test_retirement_queue_failure_and_receipt_tampering
 test_gitlab_merged_poll_retires
 test_invalid_entrypoints_have_zero_side_effects
 test_draft_pull_request_is_not_armed
+test_secondmate_record_refuses_a_pr_watch
 test_unpushed_named_head_refuses_registration
 test_direct_pr_unpushed_commit_refuses_registration
+test_published_scratch_refuses_registration
+test_published_gitlab_scratch_refuses_registration
+test_published_scratch_removal_is_registered
+test_published_gitlab_scratch_removal_is_registered
 test_valid_recording_and_merge_derivation
 test_rejected_metacharacter_bytes_are_inert
 test_static_poll_contract

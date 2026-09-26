@@ -277,6 +277,7 @@ commands = steps.map { |step| step["run"].to_s }.join("\n")
   "tests/fm-ci-workflow.test.sh",
   "tests/fm-task-delivery.test.sh",
   "tests/fm-dod-lib.test.sh",
+  "tests/fm-spawn-codex-seat-launch.test.sh",
   "bin/fm-test-run.sh --check-coverage",
 ].each do |required|
   raise "house check omits #{required}" unless commands.include?(required)

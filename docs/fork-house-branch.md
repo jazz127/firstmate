@@ -12,19 +12,46 @@ The `house` branch is the line the fleet runs, with local operator changes layer
 Configure the primary checkout's local `house` branch to track `jazz127/house`, and set `firstmate.runtimeBranch=house` in that repository's Git config.
 The setting selects the primary runtime branch; its branch tracking configuration supplies the update remote and merge ref.
 
+## Merging into house
+
+Every pull request into `house`, upstream syncs and house features alike, lands as a true merge commit, never a squash or a rebase.
+A merge commit keeps upstream's commits as ancestors of `house`, so later upstream syncs and house-feature merges only carry what is new.
+A squash drops that ancestry, and every branch cut from upstream then carries already-integrated upstream commits back into `house` as conflicts.
+
+Each fork with a `house` branch carries an active branch ruleset on `refs/heads/house` that enforces this: a `pull_request` rule whose `allowed_merge_methods` is `["merge"]`, plus `non_fast_forward` and `deletion` rules.
+GitHub then refuses a squash or rebase merge, a direct push, a force push, and deletion of `house`.
+Apply it to a new house fork once, replacing `<owner>/<repo>`:
+
+```sh
+gh api -X POST repos/<owner>/<repo>/rulesets --input - <<'JSON'
+{"name": "house: merge commits only", "target": "branch", "enforcement": "active",
+ "conditions": {"ref_name": {"include": ["refs/heads/house"], "exclude": []}},
+ "rules": [
+  {"type": "pull_request", "parameters": {"allowed_merge_methods": ["merge"],
+   "required_approving_review_count": 0, "dismiss_stale_reviews_on_push": false,
+   "require_code_owner_review": false, "require_last_push_approval": false,
+   "required_review_thread_resolution": false}},
+  {"type": "non_fast_forward"},
+  {"type": "deletion"}]}
+JSON
+```
+
+`bin/fm-pr-merge.sh` reads the base branch's allowed methods when no method is named, so it merges into `house` with a merge commit; its header owns that choice.
+
 ## Watching the quota-axi house line
 
 The quota-axi view uses quota-axi's read-only TUI report as its body, with the fleet's `jazz127/house` commit and subject, the `quota-axi` executable on `PATH`, and the refresh time and interval in a closing block.
 Run `bin/fm-quota-tab.sh once` to print one frame, or `bin/fm-quota-tab.sh` (the default `loop` mode) in a terminal tab to keep the fleet's house line and provider headroom in view.
 The loop refreshes every 300 seconds by default; `FM_QUOTA_TAB_INTERVAL` changes that interval.
 
-Bring upstream changes to the fleet by merging upstream `main` into `house`.
+Bring upstream changes to the fleet by merging upstream `main` into `house` through a pull request that lands as a merge commit (see [Merging into house](#merging-into-house)).
 Do not rebase `house` onto upstream: preserving merge history keeps the house integration visible, leaves upstream-bound commits extractable, and preserves the head identity used by gate attestations.
 
 ## House features
 
 A house feature is anything we build for ourselves on our own line, whether the captain asked for it or firstmate found it.
 Every house feature has a durable `housefeature/<name>` branch cut from the fork's `main`.
+The [`housefeature-cut.yml`](../.github/workflows/housefeature-cut.yml) workflow cuts that branch automatically when a pull request merges into `house`, capturing the merged pull request head instead when the change does not apply cleanly to `main`.
 That branch gives the feature a stable name, keeps it findable, and makes it straightforward to offer without relying on a disposable task branch.
 Task branches are working branches and may be deleted once their feature is captured on its durable branch.
 The Bosun guide defines when a Captain's Maneuver becomes an Admiral's Maneuver.
@@ -40,6 +67,7 @@ The counts update with the visible features.
 Each project card compares the current fork `house` tip with upstream `main`, reports the ahead and behind counts, and flags a fork `main` tip that differs from upstream.
 Each feature row shows its durable branch, commits, current house membership, label, pull request states, and age.
 House membership comes from live commit ancestry or a fork pull request merge commit still reachable from today's `house` tip, never from the register's merged heading alone.
+House membership reads N/A for a feature contributed upstream, a historical one, or one whose fork pull request closed without merging and never landed.
 Rows marked `register only` or `fork only` expose a disagreement between the two sources for reconciliation.
 The board is a snapshot until the next build; filters do not make network requests.
 
@@ -65,6 +93,22 @@ Rebasing rewrites the attested head, which upstream's gate rejects.
 Validate the exact final head that will be offered with one pipeline run to renew a stale attestation, and never hand-edit the attestation.
 Open an upstream pull request only when the captain asks for that house feature by name.
 The matching Bosun may open and maintain that one pull request under the captain's explicit order, following [`bosun.md`](bosun.md); otherwise upstream contact remains the captain's act.
+Before opening an upstream pull request in a repository the fleet does not own, run the prior-art scan in `bin/fm-upstream-prior-art.py`, review every candidate, and record an explicit verdict.
+The scan uses forge search for open pull requests and issues and recent closed unmerged pull requests, driven by linked issues and keywords from the title, summary, and changed symbols, and checks changed-file overlap only on the returned candidates.
+It reads the most relevant hits for each query within a fixed request and time budget; a scan that reaches either bound is recorded as incomplete and cannot be decided or published.
+Queries beyond the per-scan query cap and hits beyond the most relevant page are not read; the receipt discloses that truncation with read and total counts and any dropped queries, `decide` refuses a record without that disclosure, and the published `Prior art checked` section states that search coverage was bounded.
+A duplicate with different wording or files can evade those keyword, changed-file, and linked-issue matches.
+A `none-found` verdict requires no candidates; a `distinct` verdict requires a one-line reason for each candidate; an `overlaps` verdict requires the captain's recorded decision before publication.
+Use that command's `publish` operation for upstream creation so its receipt check is immediately before the forge write and the generated pull request body credits overlapping authors in a `Prior art checked` section.
+It refuses missing receipts, a changed branch head or diff, a changed title or summary, scans over one hour old, and unresolved overlaps.
+The one-hour limit applies before the push and the forge write; the post-publication registration and done checks verify the published head without it, and accept a published head equal to the scanned head or one the forge reports as strictly ahead of it, so pipeline auto-fix commits pass while a force-push or rewrite is refused.
+The command's `check` operation is the reusable gate for a Bosun workflow; it does not depend on Bosun's code.
+An automatic PR creation path that bypasses this gate must not be used for an upstream target.
+The task worktree's pre-push hook refuses a push to a different GitHub repository without a fresh receipt matching the repository, pushed head, and diff.
+The no-mistakes pipeline pushes from a separate checkout that is not covered by that hook, so its registration and ready-signal receipt checks remain post-publication backstops.
+Direct PR creation after a fork push can also bypass the worker pre-push hook, leaving those same registration and ready-signal checks as post-publication backstops.
+An upstream repository is contacted only on the captain's explicit order, which is the primary control for that accepted containment.
+The command header owns its invocation and receipt format.
 
 On the fork's pull requests, use these labels to record a house feature's progression: `upstream-candidate`, `upstream-offered`, `contributed-house-feature`, `house-only`, and `historical`.
 The private house-feature register maintained with the operator's fleet records is the current source of truth for the features and their disposition.
@@ -74,6 +118,7 @@ The private house-feature register maintained with the operator's fleet records 
 The `house` branch consists of upstream `main` plus the house-feature merges we chose to include.
 To rebuild it, record its exact previous tip, reset `house` to `main`, and merge back only the wanted `housefeature/` branches.
 Push the rebuilt branch with `--force-with-lease` against that exact previous tip.
+The house ruleset refuses that force push, so a rebuild needs the captain to disable the ruleset for the push and restore it to active immediately afterwards.
 A dropped feature remains recoverable while its durable branch or commits still exist.
 
 Nothing polls house-feature branches, and no recurring check watches upstream.

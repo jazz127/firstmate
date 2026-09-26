@@ -20,6 +20,6 @@ If the route ties, hold for a captain decision instead of guessing.
 Send the order to that registered secondmate through the ordinary parent channel and preserve the captain's exact words in its contribution record.
 The Bosun reads current repository policy, checks accepted PR and review evidence when needed, and records only evidenced conventions as confirmed.
 It extracts from the ordered `housefeature/` branch onto freshly fetched upstream, reviews the result for private or house-only material, and runs expected validation.
-It relies on the existing forge publication and registration checks, which record the PR and validation evidence after publication.
+It uses the existing prior-art receipt and guarded publication path before the ordinary registration checks record the PR and validation evidence.
 Treat a scope change, ambiguous maintainer request, policy conflict, or consequential external decision as a `needs-decision` through the normal secondmate parent channel.
 The contribution observer and existing PR poll own subsequent signals; a confirmed merge updates the maneuver record through the ordinary merge outcome path.

@@ -59,7 +59,8 @@ Registration rejects merge commits and unrelated intermediate history.
 If adapting the maneuver to current upstream needs new content, obtain a new captain decision and order before publication.
 Do not merge or rebase `house` into the contribution.
 Run the repository's expected validation, using no-mistakes where configured.
-The existing publication path opens the PR from the captain's fork to upstream.
+Before publication, run the prior-art scan and record the verdict required by [`fork-house-branch.md`](fork-house-branch.md#contributing-a-house-feature-upstream).
+Use `bin/fm-upstream-prior-art.py publish` to open the PR from the captain's fork to upstream after validation; an automatic PR creation path must not bypass its receipt gate.
 `fm-pr-check.sh` reads the PR through its existing forge path and refuses registration unless the ordered Bosun, fork, upstream repository, and default branch match.
 The existing PR poll and contribution observer track checks and review feedback; route scope changes, ambiguous maintainer requests, policy conflicts, and consequential decisions through the parent channel.
 When the existing merge outcome reports that exact PR merged, it changes the record to `admirals-maneuver`.

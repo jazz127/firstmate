@@ -159,6 +159,9 @@ CAPS_TMUX=$'styled=1\ncursor=1\nidentity=1\nrows=0'
 CAPS_STYLED=$'styled=1\ncursor=0\nidentity=1\nrows=20'      # herdr
 CAPS_STYLED_NOID=$'styled=1\ncursor=0\nidentity=0\nrows=20' # zellij
 CAPS_PLAIN=$'styled=0\ncursor=0\nidentity=0\nrows=20'       # cmux, orca
+# The same herdr/tmux caps with pi's experimental first-row `>` opted in.
+CAPS_STYLED_PIPROMPT=$'styled=1\ncursor=0\nidentity=1\npi-prompt=1\nrows=20'
+CAPS_TMUX_PIPROMPT=$'styled=1\ncursor=1\nidentity=1\npi-prompt=1\nrows=0'
 
 # assert_screen <label> <want> <caps> <screen> [cursor] [identity]: one
 # verdict, asserted under the ambient locale AND LC_ALL=C.
@@ -619,6 +622,376 @@ test_matrix_pi_separated_needs_identity() {
   pass "matrix: pi's separated composer needs identity + structure; the blank row alone never proves it"
 }
 
+test_matrix_pi_dollar_status_footer_is_empty() {
+  # Pi's status row `$0.000 (sub) 5.4%/272k (auto)` at column 0 used to read
+  # as a dead-shell prompt, so an idle separated composer classified unknown.
+  # A counters-first footer never took that path. A real `$` or `$ ls` prompt,
+  # and the same cost string typed between the separators, still refuse.
+  local dollar typed dead_shell dead_cmd spaced footer_only inside wrap dollar_status
+  local pi_idle pi_working none out
+  pi_idle=$(printf 'pi\tidle'); pi_working=$(printf 'pi\tworking'); none=$(printf 'zsh\t')
+  dollar_status=$'$0.000 (sub) 5.4%/272k (auto)'
+  dollar=$'transcript\n────────────────────────\n\n────────────────────────\n'"$dollar_status"
+
+  assert_screen "pi dollar-first status on herdr" empty "$CAPS_STYLED" "$dollar" '' "$pi_idle"
+  assert_screen "pi dollar-first status on tmux" empty "$CAPS_TMUX" "$dollar" 2 "$pi_idle"
+
+  [ "$(fm_composer_classify_screen "$CAPS_STYLED" "$dollar")" = need-identity ] \
+    || fail "a dollar-first Pi footer must still request the lazy identity probe"
+  assert_screen "dollar-first status without identity capability" unknown "$CAPS_PLAIN" "$dollar"
+  assert_screen "working pi with dollar-first status defers" unknown \
+    "$CAPS_STYLED" "$dollar" '' "$pi_working"
+  assert_screen "non-pi identity with dollar-first status defers" unknown \
+    "$CAPS_STYLED" "$dollar" '' "$none"
+
+  typed=$'────────────────────────\nfix the flaky test\n────────────────────────\n'"$dollar_status"
+  assert_screen "pi typed text above dollar-first status" pending \
+    "$CAPS_STYLED" "$typed" '' "$pi_idle"
+  inside=$'────────────────────────\n'"$dollar_status"$'\n────────────────────────'
+  assert_screen "dollar-first string typed into the pi composer" pending \
+    "$CAPS_STYLED" "$inside" '' "$pi_idle"
+
+  dead_shell=$'transcript\n────────────────────────\n\n────────────────────────\n$'
+  dead_cmd=$'transcript\n────────────────────────\n\n────────────────────────\n$ ls -la'
+  spaced=$'transcript\n────────────────────────\n\n────────────────────────\n$ 0.000 (sub)'
+  assert_screen "real dead shell below a pi pair" unknown "$CAPS_STYLED" "$dead_shell" '' "$pi_idle"
+  assert_screen "dead-shell command below a pi pair" unknown "$CAPS_STYLED" "$dead_cmd" '' "$pi_idle"
+  assert_screen "spaced dollar below a pi pair" unknown "$CAPS_STYLED" "$spaced" '' "$pi_idle"
+
+  footer_only=$'transcript\n'"$dollar_status"
+  assert_screen "dollar-first status with no pi pair" unknown \
+    "$CAPS_STYLED" "$footer_only" '' "$pi_idle"
+
+  wrap=$'❯\n$ ls -la'
+  out=$(fm_composer_classify_screen "$CAPS_STYLED" "$wrap")
+  [ "$out" = unknown ] \
+    || fail "a real dead shell below a bare glyph must still invalidate cursorless selection, got '$out'"
+  wrap=$'❯\n$ '
+  out=$(fm_composer_classify_screen "$CAPS_STYLED" "$wrap")
+  [ "$out" = unknown ] \
+    || fail "a bare dollar prompt below a glyph must still invalidate cursorless selection, got '$out'"
+  pass "matrix: a dollar-first pi status footer reads empty; dead shells still refuse"
+}
+
+test_matrix_pi_dollar_status_footer_is_scoped() {
+  # Beyond kunchenguid/firstmate#5683's furniture rule (diagnosis in #5666):
+  # Pi's cost-first status row is furniture only as the complete tuple Pi
+  # renders, only in the footer run directly below the selected pi pair's
+  # closing rule, and only when that pair is what the verdict rests on.
+  # Everywhere else a `$` row stays dead-shell evidence.
+  local rule pair status pi_idle pi_blocked pi_working none out screen tuple
+  rule='────────────────────────'
+  pair=$'transcript\n'"$rule"$'\n\n'"$rule"
+  status=$'$0.000 (sub) 5.4%/272k (auto)'
+  pi_idle=$(printf 'pi\tidle'); pi_blocked=$(printf 'pi\tblocked')
+  pi_working=$(printf 'pi\tworking'); none=$(printf 'zsh\t')
+  # Pi 0.87.1 through herdr 0.9.1 draws the pwd row between the rule and the
+  # stats row; the row shapes below are that capture with the width trimmed.
+  screen="$pair"$'\n/private/tmp/lab/cwd\n$0.000 (sub) 0.0%/272k (auto)                  (openai-codex) gpt-5.6-terra • high'
+  assert_screen "captured pi 0.87.1 footer below a blank pair" empty "$CAPS_STYLED" "$screen" '' "$pi_idle"
+  assert_screen "counters-first footer on the same pair" empty "$CAPS_STYLED" \
+    "$pair"$'\n↑0 ↓0 $0.000 (sub) 5.4%/272k (auto)' '' "$pi_idle"
+  for tuple in $'$0.012 5.4%/272k' $'$1.250 (sub) ?/1.0M (auto)' $'$0.000 (sub) 12.5%/8k'; do
+    assert_screen "complete tuple '$tuple' is footer furniture" empty "$CAPS_STYLED" \
+      "$pair"$'\n'"$tuple" '' "$pi_idle"
+  done
+  # Truncated or malformed tuples are not pi's footer.
+  for tuple in $'$0' $'$0.000' $'$0.5 (sub) 5.4%/272k' $'$0.000 (sub)' $'$0.000 (sub) 5.4/272k' $'$0.000 (sub) 5.4%/272x' $'$0.000 (paid) 5.4%/272k'; do
+    assert_screen "malformed tuple '$tuple' stays shell evidence" unknown "$CAPS_STYLED" \
+      "$pair"$'\n'"$tuple" '' "$pi_idle"
+  done
+  # A real shell row after a recognised footer still vetoes.
+  assert_screen "shell row after the footer still refuses" unknown "$CAPS_STYLED" \
+    "$pair"$'\n'"$status"$'\n$ ls' '' "$pi_idle"
+  assert_screen "bare dollar after the footer still refuses" unknown "$CAPS_STYLED" \
+    "$pair"$'\n'"$status"$'\n$' '' "$pi_idle"
+  # A second status row is not pi's single footer row.
+  assert_screen "a repeated status row refuses" unknown "$CAPS_STYLED" \
+    "$pair"$'\n'"$status"$'\n'"$status" '' "$pi_idle"
+  # Not in the footer position: separated from the rule by a blank row, or
+  # below a shell row.
+  assert_screen "a status row after a blank gap refuses" unknown "$CAPS_STYLED" \
+    "$pair"$'\n\n'"$status" '' "$pi_idle"
+  assert_screen "a status row below a shell row refuses" unknown "$CAPS_STYLED" \
+    "$pair"$'\n$ ls\n'"$status" '' "$pi_idle"
+  # The identity gate is unchanged by the footer: only pi idle/done is empty.
+  screen="$pair"$'\n'"$status"
+  assert_screen "blocked pi with a footer defers" unknown "$CAPS_STYLED" "$screen" '' "$pi_blocked"
+  assert_screen "working pi with a footer defers" unknown "$CAPS_STYLED" "$screen" '' "$pi_working"
+  assert_screen "absent identity with a footer defers" unknown "$CAPS_STYLED" "$screen" '' probe-absent
+  assert_screen "foreign identity with a footer defers" unknown "$CAPS_STYLED" "$screen" '' "$none"
+  [ "$(fm_composer_classify_screen "$CAPS_STYLED" "$screen")" = need-identity ] \
+    || fail "a footer below a blank pair must still request the lazy identity probe"
+  # A real draft above the footer stays a draft, and extraction ignores the
+  # footer row entirely.
+  screen=$'transcript\n'"$rule"$'\nfix the flaky test\n'"$rule"$'\n'"$status"
+  assert_screen "a draft above the footer stays pending" pending "$CAPS_STYLED" "$screen" '' "$pi_idle"
+  out=$(fm_composer_extract_selected_content "$CAPS_STYLED" "$screen")
+  [ "$out" = 'fix the flaky test' ] || fail "a draft above the footer should extract alone, got '$out'"
+  # Incomplete pair: a lone rule with a footer below is no composer.
+  assert_screen "a footer below a lone rule refuses" unknown "$CAPS_STYLED" \
+    $'transcript\n'"$rule"$'\n'"$status" '' "$pi_idle"
+  # Below any other harness's composer the same row is dead-shell evidence.
+  out=$(fm_composer_classify_screen "$CAPS_STYLED" $'❯\n\n'"$status")
+  [ "$out" = unknown ] || fail "a status row below a bare agent composer must refuse, got '$out'"
+  out=$(fm_composer_classify_screen "$CAPS_STYLED" "$rule"$'\n❯'"$NBSP"$'\n'"$rule"$'\n'"$status" '' probe-absent)
+  [ "$out" = unknown ] || fail "a status row below a claude separator composer must refuse, got '$out'"
+  pass "matrix: pi's cost-first footer is furniture only as a complete tuple in its footer position under an idle pi"
+}
+
+test_matrix_pi_prompt_glyph_row_is_empty() {
+  # With pi-prompt=1 opted in: some pi editors draw their OWN prompt glyph `>`
+  # plus the reverse-video cursor cell on the pair's first row, and pi's `↳ <last submitted prompt>`
+  # echo row sits BELOW the bottom rule (contributor capture on pi 0.86.1
+  # through herdr, kunchenguid/firstmate#5040). Reading that row as a draft
+  # refused every exit and relaunch of an idle pi. Only the pair is input.
+  local rule prompt_row echo_row idle queued draft pi_idle continuation
+  rule='────────────────────────'
+  prompt_row="${ESC}[0m${ESC}[38;2;200;200;200m>${ESC}[0m ${ESC}[0m${ESC}[7m ${ESC}[0m"
+  echo_row="  ${ESC}[0m${ESC}[38;5;244m↳${ESC}[0m ${ESC}[0m${ESC}[38;5;244mFIRSTMATE_OP: v1 launch-brief: teach the worker${ESC}[0m"
+  pi_idle=$(printf 'pi\tidle')
+  idle=$(printf '%s\n' 'transcript line' "$rule" "$prompt_row" "$rule" "$echo_row")
+  assert_screen "pi prompt-glyph composer reads empty on herdr" empty "$CAPS_STYLED_PIPROMPT" "$idle" '' "$pi_idle"
+  assert_screen "pi prompt-glyph composer reads empty on tmux" empty "$CAPS_TMUX_PIPROMPT" "$idle" 2 "$pi_idle"
+  # The echo row is below the pair and pi's queue rows are above it, so a pane
+  # that has queued or submitted prompts still proves an empty composer.
+  queued=$(printf '%s\n' 'transcript line' '  Steering: second message' \
+    '  ↳ alt+up to edit all queued messages' '  ⠴ Working' \
+    "$rule" "$prompt_row" "$rule" "$echo_row")
+  assert_screen "pi queued prompts stay outside the pair on herdr" empty "$CAPS_STYLED_PIPROMPT" "$queued" '' "$pi_idle"
+  assert_screen "pi queued prompts stay outside the pair on tmux" empty "$CAPS_TMUX_PIPROMPT" "$queued" 5 "$pi_idle"
+  # Real typed input after the glyph is still pending.
+  draft=$(printf '%s\n' 'transcript line' "$rule" \
+    "${ESC}[0m${ESC}[38;2;200;200;200m>${ESC}[0m fix the flaky test" "$rule" "$echo_row")
+  assert_screen "pi prompt glyph with a real draft stays pending" pending "$CAPS_STYLED_PIPROMPT" "$draft" '' "$pi_idle"
+  assert_screen "pi prompt glyph with a real draft on tmux" pending "$CAPS_TMUX_PIPROMPT" "$draft" 2 "$pi_idle"
+  for continuation in $'  >' $'  \n  >'; do
+    draft=$(printf '%s\n' 'transcript line' "$rule" "$prompt_row" "$continuation" "$rule" "$echo_row")
+    assert_screen "pi blank first input row followed by literal > stays pending" pending "$CAPS_STYLED_PIPROMPT" "$draft" '' "$pi_idle"
+    assert_screen "pi literal > on a continuation row stays pending on tmux" pending "$CAPS_TMUX_PIPROMPT" "$draft" 3 "$pi_idle"
+  done
+  # Only an idle/done identity proves emptiness; the prompt row changes nothing
+  # about the identity gate.
+  assert_screen "working pi with a prompt-glyph composer defers" unknown \
+    "$CAPS_STYLED_PIPROMPT" "$idle" '' "$(printf 'pi\tworking')"
+  assert_screen "blocked pi with a prompt-glyph composer defers" unknown \
+    "$CAPS_STYLED_PIPROMPT" "$idle" '' "$(printf 'pi\tblocked')"
+  assert_screen "prompt-glyph composer with absent identity defers" unknown \
+    "$CAPS_STYLED_PIPROMPT" "$idle" '' probe-absent
+  assert_screen "prompt-glyph composer with a foreign identity defers" unknown \
+    "$CAPS_STYLED_PIPROMPT" "$idle" '' "$(printf 'zsh\t')"
+  assert_screen "prompt-glyph composer without identity capability" unknown \
+    "$CAPS_STYLED_NOID" "$idle"
+  pass "matrix: pi's own first-row prompt glyph is the empty composer; only the pair is input"
+}
+
+test_matrix_pi_prompt_row_is_pi_only_furniture() {
+  # Only pi's observed `>` is editor furniture. The other shell glyphs on the
+  # pair's first row are typed input, alone or beside text, so a lone `$`,
+  # `%`, or `#` still refuses and extraction keeps every byte beside them.
+  # (kunchenguid/firstmate#5556 widened the rule to all four glyphs; that
+  # widening is deliberately not taken.)
+  local pi_idle glyph screen out rule
+  pi_idle=$(printf 'pi\tidle')
+  rule='────────────────────────'
+  for glyph in '$' '%' '#'; do
+    screen=$(printf '%s\n%s\n%s' "$rule" "$glyph" "$rule")
+    assert_screen "first-row '$glyph' is typed input" pending "$CAPS_STYLED_PIPROMPT" "$screen" '' "$pi_idle"
+    out=$(fm_composer_extract_selected_content "$CAPS_STYLED_PIPROMPT" "$screen")
+    [ "$out" = "$glyph" ] || fail "first-row '$glyph' must extract as typed, got '$out'"
+    screen=$(printf '%s\n%s fix test\n%s' "$rule" "$glyph" "$rule")
+    assert_screen "first-row '$glyph fix test' is typed input" pending "$CAPS_STYLED_PIPROMPT" "$screen" '' "$pi_idle"
+    out=$(fm_composer_extract_selected_content "$CAPS_STYLED_PIPROMPT" "$screen")
+    [ "$out" = "$glyph fix test" ] || fail "text beside first-row '$glyph' must be preserved, got '$out'"
+  done
+  # A `>` without the editor's separator space is not the editor's rendering.
+  screen=$(printf '%s\n>fix\n%s' "$rule" "$rule")
+  assert_screen "first-row '>fix' is typed input" pending "$CAPS_STYLED_PIPROMPT" "$screen" '' "$pi_idle"
+  out=$(fm_composer_extract_selected_content "$CAPS_STYLED_PIPROMPT" "$screen")
+  [ "$out" = '>fix' ] || fail "first-row '>fix' must extract unchanged, got '$out'"
+  pass "matrix: only pi's '>' is first-row furniture; \$, %, and # stay typed input"
+}
+
+test_matrix_pi_prompt_row_extraction_matches_classification() {
+  # Extraction and classification read the pair through the same row rule, in
+  # any call order. Fixtures adapted from kunchenguid/firstmate#5556: pi's
+  # queued `Steering:` rows, its dequeue hint, a spinner, and a status row all
+  # render ABOVE the pair, and footer rows render below it, so none of them is
+  # ever composer content.
+  local queued typed selected pi_idle rule verdict inside
+  pi_idle=$(printf 'pi\tidle')
+  queued=$'\033[38;2;102;102;102mSteering: launch-brief/queued\033[39m\n\033[38;2;102;102;102m↳ Alt+Up to edit all queued messages\033[39m\n\n\033[38;2;138;190;183m⠏\033[39m \033[38;2;128;128;128mWorking\033[39m\n\n\033[38;2;215;135;175mDeepSeek V4.1 Flash (Cline Pass)\033[39m \033[38;5;244m·\033[39m \033[38;2;178;129;214mthink:high\033[39m \033[38;5;244m·\033[39m fm-pi-repro\n\033[38;5;244m────────────────────────\033[39m\n\033[38;2;200;200;200m>\033[39m \033[7m \033[0m\n\033[38;5;244m────────────────────────\033[39m\nFeishu: 已连接 / Connected  ·  🐙 0 · 0 · $0\n\033[38;5;244m↳ launch-brief/queued\033[39m'
+  selected=$(fm_composer_extract_selected_content "$CAPS_STYLED_PIPROMPT" "$queued")
+  [ -z "$selected" ] || fail "a fresh extraction of an idle prompt row must be empty, got '$selected'"
+  assert_screen "pi queued tail note stays outside the pair" empty "$CAPS_STYLED_PIPROMPT" "$queued" '' "$pi_idle"
+  selected=$(fm_composer_extract_selected_content "$CAPS_STYLED_PIPROMPT" "$queued")
+  [ -z "$selected" ] || fail "extraction after classification must still be empty, got '$selected'"
+  typed=${queued//$'\033[38;2;200;200;200m>\033[39m \033[7m \033[0m'/$'\033[38;2;200;200;200m> fix the flaky test\033[39m'}
+  selected=$(fm_composer_extract_selected_content "$CAPS_STYLED_PIPROMPT" "$typed")
+  [ "$selected" = 'fix the flaky test' ] || fail "a pi draft should extract exactly, got '$selected'"
+  assert_screen "pi queued tail note plus a real draft stays pending" pending "$CAPS_STYLED_PIPROMPT" "$typed" '' "$pi_idle"
+  selected=$(fm_composer_extract_selected_content "$CAPS_STYLED_PIPROMPT" "$typed")
+  [ "$selected" = 'fix the flaky test' ] || fail "extraction after classification changed the draft to '$selected'"
+  # A typed `>` renders as `> >`: the editor glyph goes, the typed one stays.
+  rule='────────────────────────'
+  typed=$(printf '%s\n> >\n%s' "$rule" "$rule")
+  selected=$(fm_composer_extract_selected_content "$CAPS_STYLED_PIPROMPT" "$typed")
+  [ "$selected" = '>' ] || fail "'> >' must extract the typed '>', got '$selected'"
+  assert_screen "pi typed prompt glyph stays a draft" pending "$CAPS_STYLED_PIPROMPT" "$typed" '' "$pi_idle"
+  # Queued-looking text INSIDE the pair is a draft, not furniture.
+  inside=$(printf '%s\n> Steering: second message\n%s' "$rule" "$rule")
+  assert_screen "queued-looking text inside the pair is a draft" pending "$CAPS_STYLED_PIPROMPT" "$inside" '' "$pi_idle"
+  selected=$(fm_composer_extract_selected_content "$CAPS_STYLED_PIPROMPT" "$inside")
+  [ "$selected" = 'Steering: second message' ] || fail "queued-looking draft must extract, got '$selected'"
+  # A later `>` row is typed continuation and survives extraction.
+  typed=$(printf '%s\n\n>\n%s' "$rule" "$rule")
+  selected=$(fm_composer_extract_selected_content "$CAPS_STYLED_PIPROMPT" "$typed")
+  [ "$selected" = '>' ] || fail "a continuation-row '>' must extract as typed, got '$selected'"
+  verdict=$(fm_composer_classify_screen "$CAPS_STYLED_PIPROMPT" "$typed" '' "$pi_idle")
+  [ "$verdict" = pending ] || fail "a continuation-row '>' must stay pending, got '$verdict'"
+  pass "matrix: pi extraction and classification agree on the pair in any call order"
+}
+
+test_matrix_pi_prompt_glyph_is_off_by_default() {
+  # Stock pi 0.87.1 draws no first-row `>`, so without pi-prompt=1 a lone `>`
+  # the user typed is their draft. Reading it `empty` let exit type `/quit`
+  # onto it, and pi submitted `>/quit` to the model instead of quitting.
+  local pi_idle rule screen out caps
+  pi_idle=$(printf 'pi\tidle')
+  rule='────────────────────────'
+  screen=$(printf '%s\n>\n%s' "$rule" "$rule")
+  for caps in "$CAPS_STYLED" "$CAPS_TMUX"; do
+    assert_screen "default lone first-row '>' is a draft" pending "$caps" "$screen" 1 "$pi_idle"
+    out=$(fm_composer_extract_selected_content "$caps" "$screen")
+    [ "$out" = '>' ] || fail "default lone first-row '>' must extract as typed, got '$out'"
+    assert_screen "default lone '>' after extraction is still a draft" pending "$caps" "$screen" 1 "$pi_idle"
+  done
+  screen=$(printf '%s\n> >\n%s' "$rule" "$rule")
+  out=$(fm_composer_extract_selected_content "$CAPS_STYLED" "$screen")
+  [ "$out" = '> >' ] || fail "default '> >' must extract every typed byte, got '$out'"
+  # The opt-in is per call: an enabled call does not leak into the next one.
+  screen=$(printf '%s\n>\n%s' "$rule" "$rule")
+  assert_screen "opted-in lone '>' is the editor glyph" empty "$CAPS_STYLED_PIPROMPT" "$screen" '' "$pi_idle"
+  assert_screen "the next default call reads the draft again" pending "$CAPS_STYLED" "$screen" '' "$pi_idle"
+  fm_composer_classify_screen "$CAPS_STYLED_PIPROMPT" "$screen" '' "$pi_idle" >/dev/null
+  out=$(fm_composer_classify_screen "$CAPS_STYLED" "$screen" '' "$pi_idle")
+  [ "$out" = pending ] || fail "pi-prompt must not leak from a prior in-shell call, got '$out'"
+  fm_composer_extract_selected_content "$CAPS_STYLED_PIPROMPT" "$screen" >/dev/null
+  out=$(fm_composer_extract_selected_content "$CAPS_STYLED" "$screen")
+  [ "$out" = '>' ] || fail "pi-prompt must not leak into a later extraction, got '$out'"
+  pass "matrix: pi's first-row '>' is furniture only when this call opts in"
+}
+
+test_matrix_pi_compact_is_experimental_and_per_call() {
+  # Pi's compact layout (kunchenguid/firstmate#5445, proposal #5473): a rounded
+  # header, one unboxed input row, one lower rule. Not yet captured from a real
+  # pi build, so it is honoured only when THIS call's caps carry pi-compact=1,
+  # and classification and extraction each parse that for themselves.
+  local on off plain noid header rule idle draft ghost pi_idle out
+  on=$'styled=1\ncursor=0\nidentity=1\npi-compact=1\nrows=20'
+  off=$CAPS_STYLED
+  plain=$'styled=0\ncursor=0\nidentity=1\npi-compact=1\nrows=20'
+  noid=$'styled=1\ncursor=0\nidentity=0\npi-compact=1\nrows=20'
+  header=$'\033[38;2;129;162;190m╭ gpt-5.6-terra · firstmate ────────────────╮\033[0m'
+  rule=$'\033[38;2;129;162;190m─────────────────────────────────────────────\033[0m'
+  idle="$header"$'\n\033[7m \033[0m\n'"$rule"
+  draft="$header"$'\nprivacy-safe draft\033[7m \033[0m\n'"$rule"
+  pi_idle=$(printf 'pi\tidle')
+  assert_screen "compact idle with the opt-in" empty "$on" "$idle" '' "$pi_idle"
+  assert_screen "compact idle with herdr row padding" empty "$on" "$header"$'\n\033[0m\033[7m \033[0m          \r\n'"$rule" '' "$pi_idle"
+  assert_screen "compact idle without the opt-in" unknown "$off" "$idle" '' "$pi_idle"
+  assert_screen "compact idle on a plain capture" unknown "$plain" "$idle" '' "$pi_idle"
+  assert_screen "compact idle without identity capability" unknown "$noid" "$idle"
+  [ "$(fm_composer_classify_screen "$on" "$idle")" = need-identity ] \
+    || fail "a compact candidate must request the lazy identity probe"
+  # An enabled call never leaks into the next disabled one, in either order.
+  out=$(fm_composer_classify_screen "$on" "$idle" '' "$pi_idle"; printf ' '; fm_composer_classify_screen "$off" "$idle" '' "$pi_idle")
+  [ "$out" = 'empty unknown' ] || fail "an enabled compact call leaked into a disabled one: '$out'"
+  # Extraction parity in any call order, with draft bytes preserved.
+  out=$(fm_composer_extract_selected_content "$on" "$draft")
+  [ "$out" = 'privacy-safe draft' ] || fail "fresh compact extraction should hold the draft, got '$out'"
+  assert_screen "compact draft" pending "$on" "$draft" '' "$pi_idle"
+  out=$(fm_composer_extract_selected_content "$on" "$draft")
+  [ "$out" = 'privacy-safe draft' ] || fail "compact extraction after classification changed to '$out'"
+  if out=$(fm_composer_extract_selected_content "$off" "$draft"); then
+    fail "a disabled call must not select the compact layout, extracted '$out'"
+  fi
+  out=$(fm_composer_extract_selected_content "$on" "$idle")
+  [ -z "$out" ] || fail "an idle compact composer should extract empty, got '$out'"
+  out=$(fm_composer_extract_selected_content "$on" "$header"$'\n\033[0m\033[7m \033[0m          \r\n'"$rule")
+  [ -z "$out" ] || fail "a padded idle compact composer should extract empty, got '$out'"
+  # Ghost text before the cursor cell classifies pending, so extraction must
+  # read the same row by the same rule and return it, in either call order.
+  ghost="$header"$'\n\033[2mType a message\033[0m\033[7m \033[0m\n'"$rule"
+  out=$(fm_composer_extract_selected_content "$on" "$ghost")
+  [ "$out" = 'Type a message' ] || fail "fresh compact ghost extraction should be visible text, got '$out'"
+  assert_screen "compact ghost text classifies pending" pending "$on" "$ghost" '' "$pi_idle"
+  out=$(fm_composer_extract_selected_content "$on" "$ghost")
+  [ "$out" = 'Type a message' ] || fail "compact ghost extraction after classification changed to '$out'"
+  # Unproven variants.
+  assert_screen "compact bright draft" pending "$on" "$draft" '' "$pi_idle"
+  assert_screen "compact ghost text before the cursor cell" pending "$on" \
+    "$header"$'\n\033[2mType a message\033[0m\033[7m \033[0m\n'"$rule" '' "$pi_idle"
+  assert_screen "compact ordinary spaces without the cursor cell" unknown "$on" \
+    "$header"$'\n   \n'"$rule" '' "$pi_idle"
+  assert_screen "compact whitespace before the cursor cell" unknown "$on" \
+    "$header"$'\n  \033[7m \033[0m\n'"$rule" '' "$pi_idle"
+  assert_screen "compact multi-cell reverse-video run" unknown "$on" \
+    "$header"$'\n\033[7m    \033[0m\n'"$rule" '' "$pi_idle"
+  assert_screen "compact second reverse-video cell after the cursor" unknown "$on" \
+    "$header"$'\n\033[7m \033[0m  \033[7m \033[0m\n'"$rule" '' "$pi_idle"
+  assert_screen "compact cursor cell closed by reverse-off" empty "$on" \
+    "$header"$'\n\033[7m \033[27m   \n'"$rule" '' "$pi_idle"
+  assert_screen "compact boxed input row" unknown "$on" \
+    "$header"$'\n│\033[7m \033[0m│\n'"$rule" '' "$pi_idle"
+  assert_screen "compact multiline input" unknown "$on" \
+    "$header"$'\nfirst line\n\033[7m \033[0m\n'"$rule" '' "$pi_idle"
+  assert_screen "compact truncated header" unknown "$on" \
+    $'\033[38;2;129;162;190m╭ gpt-5.6-terra · firstmate ─────\033[0m\n\033[7m \033[0m\n'"$rule" '' "$pi_idle"
+  assert_screen "compact truncated rule" unknown "$on" "$header"$'\n\033[7m \033[0m\n────' '' "$pi_idle"
+  assert_screen "compact with no lower rule" unknown "$on" "$header"$'\n\033[7m \033[0m' '' "$pi_idle"
+  assert_screen "compact with a shell below" unknown "$on" "$idle"$'\n$ ls' '' "$pi_idle"
+  # A cost-first footer below the compact layout is not a combination this
+  # change claims to support, so it stays unproven.
+  assert_screen "compact with a cost footer below" unknown "$on" \
+    "$idle"$'\n$0.000 (sub) 5.4%/272k (auto)' '' "$pi_idle"
+  assert_screen "compact working pi" unknown "$on" "$idle" '' "$(printf 'pi\tworking')"
+  assert_screen "compact blocked pi" unknown "$on" "$idle" '' "$(printf 'pi\tblocked')"
+  assert_screen "compact absent identity" unknown "$on" "$idle" '' probe-absent
+  assert_screen "compact foreign identity" unknown "$on" "$idle" '' "$(printf 'shell\tidle')"
+  # Transcript separators above the compact layout do not disturb it, and a
+  # separated pair never masquerades as it.
+  assert_screen "compact below transcript separators" empty "$on" \
+    "$rule"$'\nold transcript\n'"$rule"$'\n'"$idle" '' "$pi_idle"
+  assert_screen "a two-rule pair is still the separated shape" empty "$on" \
+    "$rule"$'\n\033[7m \033[0m\n'"$rule" '' "$pi_idle"
+  pass "matrix: pi's compact layout is opt-in per call, needs its cursor cell and idle identity, and extracts in any order"
+}
+
+test_zero_height_separator_pair_proves_nothing() {
+  # A pi pair that encloses NO row cannot hold an input row, yet every content
+  # check over an empty range trivially succeeded, so an idle pi identity read
+  # it `empty` and authorized injection into a region with nowhere to type.
+  # Any two adjacent rules - a status bar's divider, a transcript rule meeting
+  # a footer rule - forge one. Case adapted from kunchenguid/firstmate#2612.
+  local adjacent real pi_idle
+  pi_idle=$(printf 'pi\tidle')
+  adjacent=$'transcript\n────────────────────────\n────────────────────────\n footer'
+  assert_screen "adjacent rules are a divider, not a composer" unknown \
+    "$CAPS_STYLED" "$adjacent" '' "$pi_idle"
+  assert_screen "adjacent rules on tmux" unknown "$CAPS_TMUX" "$adjacent" 2 "$pi_idle"
+  adjacent=$'────────────────────────\n────────────────────────'
+  assert_screen "a bare adjacent pair is not a composer" unknown \
+    "$CAPS_STYLED" "$adjacent" '' "$pi_idle"
+  # NON-VACUOUSNESS: the SAME pair with one row between the rules is pi's real
+  # composer and still reads empty, so the refusal above is about the missing
+  # row and not about the fixture drifting out of the pi shape.
+  real=$'transcript\n────────────────────────\n\n────────────────────────\n footer'
+  assert_screen "one enclosed row is still pi's composer" empty \
+    "$CAPS_STYLED" "$real" '' "$pi_idle"
+  pass "strict posture: a zero-height separator pair is never positive container proof"
+}
+
 test_matrix_opencode_leftbar_signals() {
   # Real idle opencode: `┃`-prefixed rows holding an "Ask anything" hint,
   # blanks, and a Build-mode footer. Two independent idle signals: the shared
@@ -928,6 +1301,14 @@ test_matrix_herdr_halfblock_rule_bounds_bare_wrap
 test_matrix_omp_status_row_bounds_bare_composer
 test_matrix_codex_idle_starfield_furniture
 test_matrix_pi_separated_needs_identity
+test_matrix_pi_dollar_status_footer_is_empty
+test_matrix_pi_dollar_status_footer_is_scoped
+test_zero_height_separator_pair_proves_nothing
+test_matrix_pi_compact_is_experimental_and_per_call
+test_matrix_pi_prompt_glyph_row_is_empty
+test_matrix_pi_prompt_row_is_pi_only_furniture
+test_matrix_pi_prompt_row_extraction_matches_classification
+test_matrix_pi_prompt_glyph_is_off_by_default
 test_matrix_opencode_leftbar_signals
 test_matrix_grok_titled_bottom_border
 test_matrix_kimi_bordered_shell_glyph_box

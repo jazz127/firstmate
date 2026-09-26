@@ -405,6 +405,10 @@
       "audience": "operator-current"
     },
     {
+      "path": "docs/pi-composer-provenance.md",
+      "audience": "maintainer-architecture"
+    },
+    {
       "path": "docs/pi-supervision-branch.md",
       "audience": "maintainer-architecture"
     },

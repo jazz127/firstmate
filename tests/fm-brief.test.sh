@@ -260,10 +260,8 @@ test_ship_mode_is_explicit_not_registry() {
   brief="$home/data/brief-explicit-a5/brief.md"
   grep -qx "Delivery contract: mode=no-mistakes" "$brief" \
     || fail "registered direct-PR posture overrode the explicit --mode"
-  assert_grep "then start /no-mistakes on that committed head immediately without waiting for firstmate" "$brief" \
-    "explicit no-mistakes brief did not assign the validation handoff to the worker"
-  assert_no_grep "Firstmate will then instruct you to run /no-mistakes" "$brief" \
-    "explicit no-mistakes brief still told the worker to wait for a validation steer"
+  assert_grep "Firstmate will then instruct you to run /no-mistakes" "$brief" \
+    "explicit no-mistakes brief did not preserve upstream's validation handoff"
 
   # An unregistered project is not a blocker either, because nothing is looked up.
   FM_HOME="$home" "$ROOT/bin/fm-brief.sh" brief-explicit-a6 never-registered --mode local-only >/dev/null 2>&1 \
@@ -342,10 +340,10 @@ test_pr_based_dod_requires_non_draft() {
       continue
     fi
     # shellcheck disable=SC2016  # single quotes are deliberate: the backticks must stay literal
-    assert_grep 'confirm it is not a draft (`gh pr view <url> --json isDraft` must print false)' "$brief" \
+    assert_grep 'confirm it is not a draft (`gh-axi pr view <number>` must print `draft: no`' "$brief" \
       "$mode: done must require reading the PR back from the forge as non-draft"
     # shellcheck disable=SC2016  # single quotes are deliberate: the backticks must stay literal
-    assert_grep 'mark it ready with `gh-axi pr ready`' "$brief" \
+    assert_grep 'mark it ready with `gh-axi pr ready <number>`' "$brief" \
       "$mode: a draft must be marked ready before done"
     assert_grep "If you deliberately keep the PR a draft, append \`paused" "$brief" \
       "$mode: a deliberate draft must declare a wait instead of done"
@@ -423,6 +421,10 @@ test_pr_body_preflight_is_rendered() {
       "$mode brief did not explain the single-block rule"
     assert_grep "N of M scenarios driven live" "$brief" \
       "$mode brief did not flag the generated scenario label"
+    assert_grep "keep your own honest results as the single statement" "$brief" \
+      "$mode brief did not explain how to repair a contradictory appendix"
+    assert_grep "never weaken a claim to pass" "$brief" \
+      "$mode brief did not protect the honest result"
     assert_grep "a Markdown bullet such as \`- evidence-artifact: ...\` is not recognised" "$brief" \
       "$mode brief did not warn that bullet-prefixed metadata is ignored"
     if [ "$mode" = no-mistakes ]; then
@@ -517,6 +519,10 @@ test_ask_user_escalation_format() {
   pass "fm-brief.sh: no-mistakes ask-user findings use one event plus a verbatim snapshot"
 }
 
+# The project-memory section bounds crewmate edits of a project's AGENTS.md or
+# CLAUDE.md to corrections of factually wrong information - including wrong
+# information the task itself introduced - and never invites additions of
+# missing knowledge, because those files tax every agent session of the project.
 test_ship_project_memory_wording() {
   local home id brief
   home="$TMP_ROOT/project-memory-home"
@@ -525,20 +531,19 @@ test_ship_project_memory_wording() {
   FM_HOME="$home" "$ROOT/bin/fm-brief.sh" "$id" some-proj --mode no-mistakes >/dev/null 2>&1
   brief="$home/data/$id/brief.md"
   assert_present "$brief" "brief was not scaffolded"
-  assert_grep "If this task produced durable project-intrinsic knowledge useful to almost every future session, record it in \`AGENTS.md\`" "$brief" \
-    "project-memory contract lost the durable-knowledge bar"
-  assert_grep "only when this task creates or updates \`AGENTS.md\`" "$brief" \
-    "feature work must not invoke the helper for existing agent instructions alone"
-  assert_grep "existing \`AGENTS.md\` or \`CLAUDE.md\` alone is not a reason to run it" "$brief" \
-    "existing instructions must not trigger a pointer conversion"
-  # shellcheck disable=SC2016 # Backticks are literal brief output.
-  assert_no_grep 'If `AGENTS.md` or `CLAUDE.md` already exists' "$brief" \
-    "brief still directs every feature worker with an existing CLAUDE.md to run the helper"
-  assert_grep "prefer a pointer to the authoritative file, command, or doc over copying the detail" "$brief" \
-    "project-memory contract lost pointer-over-copy guidance"
-  assert_grep "follow \`$ROOT/bin/fm-ensure-agents-md.sh\`'s self-governance contract" "$brief" \
-    "project-memory contract no longer defers to the ensure helper"
-  pass "fm-brief.sh: ship project-memory wording carries the AGENTS.md authoring bar"
+  assert_grep "loaded into every agent session" "$brief" \
+    "project-memory contract lost the per-session cost rationale"
+  assert_grep "only to correct information that is factually wrong" "$brief" \
+    "project-memory contract lost the corrections-only bound"
+  assert_grep "including information your own change made wrong" "$brief" \
+    "project-memory contract lost the self-inflicted correction case"
+  assert_grep "never to add knowledge because it is missing" "$brief" \
+    "project-memory contract still permits additions of missing knowledge"
+  assert_no_grep "if this task produced durable project-intrinsic knowledge" "$brief" \
+    "project-memory contract still invites additions for durable knowledge"
+  assert_grep "A correction edits only the wrong text: do not run \`$ROOT/bin/fm-ensure-agents-md.sh\`" "$brief" \
+    "project-memory contract no longer forbids the ensure helper on a correction"
+  pass "fm-brief.sh: ship project-memory wording bounds edits to corrections of wrong information"
 }
 
 test_herdr_lab_contract_is_explicit_and_complete() {
@@ -966,6 +971,41 @@ test_ship_and_scout_teach_validation_round_pause() {
   pass "fm-brief.sh: ship and scout scaffolds teach validation-round pauses"
 }
 
+# A worker parking on a job it launched itself must declare the wait first, name
+# how long it expects, check again once that time passes, and publish `working:`
+# on resumption, so a healthy build behind an idle pane is not read as a wedge
+# and a dead job is noticed. Asserted through the generated ship, scout and
+# charter output. Adapted from https://github.com/kunchenguid/firstmate/pull/4081.
+test_pause_covers_own_background_jobs_in_every_scaffold() {
+  local home kind id brief
+  home="$TMP_ROOT/pause-own-jobs-home"
+  mkdir -p "$home/data"
+  for kind in ship scout secondmate; do
+    id="brief-pause-own-$kind"
+    case "$kind" in
+      ship) FM_HOME="$home" "$ROOT/bin/fm-brief.sh" "$id" firstmate --mode no-mistakes >/dev/null 2>&1 ;;
+      scout) FM_HOME="$home" "$ROOT/bin/fm-brief.sh" "$id" firstmate --scout >/dev/null 2>&1 ;;
+      secondmate) FM_HOME="$home" "$ROOT/bin/fm-brief.sh" "$id" --secondmate --no-projects >/dev/null 2>&1 ;;
+    esac
+    brief="$home/data/$id/brief.md"
+    assert_grep 'long job' "$brief" \
+      "$kind brief does not extend the pause verb to the worker's own long jobs"
+    assert_grep 'known external wait you expect to clear on its own' "$brief" \
+      "$kind brief dropped the external-wait case"
+    # shellcheck disable=SC2016 # Literal backticks must remain unexpanded.
+    assert_grep '`paused:` line first, naming the job and how long' "$brief" \
+      "$kind brief does not order a bounded pause line before parking"
+    # shellcheck disable=SC2016 # Literal backticks must remain unexpanded.
+    assert_grep '`working:` when you resume' "$brief" \
+      "$kind brief does not tell the worker to resume with working:"
+  done
+  brief="$home/data/brief-pause-own-ship/brief.md"
+  # shellcheck disable=SC2016 # Literal backticks must remain unexpanded.
+  assert_grep 'unless a `paused:` line declares the wait' "$brief" \
+    "ship brief's nonterminal working: rule still forbids parking behind a declared pause"
+  pass "fm-brief.sh: every scaffold lets a declared, bounded pause cover the worker's own long jobs"
+}
+
 test_scout_and_secondmate_load_decision_hold_policy() {
   local home scout charter
   home="$TMP_ROOT/decision-policy-home"
@@ -1281,6 +1321,72 @@ test_branch_prefix_command_is_shell_safe() {
 }
 
 test_worker_role_scope
+
+# Rule 2 governs file edits rather than pool administration, so every crewmate
+# scaffold must prohibit the administrative act itself. The rule is emitted from
+# one shared string so the ship and scout copies cannot drift apart.
+test_crewmate_scaffolds_forbid_pool_administration() {
+  local home id brief mode ship_rule scout_rule
+  home="$TMP_ROOT/pool-admin-home"
+  mkdir -p "$home/data"
+
+  for mode in no-mistakes direct-PR local-only; do
+    id="brief-pool-$mode"
+    FM_HOME="$home" "$ROOT/bin/fm-brief.sh" "$id" alpha --mode "$mode" >/dev/null 2>&1 \
+      || fail "fm-brief.sh --mode $mode exited non-zero"
+    brief="$home/data/$id/brief.md"
+    assert_grep "worktree pool" "$brief" \
+      "$mode ship brief did not name the shared worktree pool"
+    assert_grep "create, remove, return, prune, move, or reassign" "$brief" \
+      "$mode ship brief did not state the prohibition around the act"
+    # shellcheck disable=SC2016 # Literal command text must remain unexpanded.
+    assert_grep 'git worktree add|remove|move|prune' "$brief" \
+      "$mode ship brief did not name the concrete git worktree commands"
+    assert_grep "treehouse" "$brief" \
+      "$mode ship brief did not name the treehouse mutation commands"
+    assert_grep "any other worktree provider" "$brief" \
+      "$mode ship brief pinned one provider instead of covering every provider"
+    assert_grep "sibling slot" "$brief" \
+      "$mode ship brief did not forbid writing into a sibling slot"
+    # shellcheck disable=SC2016 # Literal backticks and braces must remain unexpanded.
+    assert_grep 'blocked [at=<epoch>]: {what you need}' "$brief" \
+      "$mode ship brief gave the prohibition no exit for a genuine second-checkout need"
+  done
+
+  FM_HOME="$home" "$ROOT/bin/fm-brief.sh" brief-pool-scout alpha --scout >/dev/null 2>&1 \
+    || fail "fm-brief.sh --scout exited non-zero"
+  brief="$home/data/brief-pool-scout/brief.md"
+  assert_grep "worktree pool" "$brief" "scout brief did not name the shared worktree pool"
+  # shellcheck disable=SC2016 # Literal backticks and braces must remain unexpanded.
+  assert_grep 'blocked [at=<epoch>]: {what you need}' "$brief" "scout brief gave the prohibition no exit"
+
+  # One shared string, not two copies: the emitted rule must be byte-identical
+  # across the ship and scout scaffolds so a later edit cannot fix one and miss
+  # the other.
+  ship_rule=$(awk '/^7\. Never administer/,/^$/' "$home/data/brief-pool-no-mistakes/brief.md")
+  scout_rule=$(awk '/^7\. Never administer/,/^$/' "$brief")
+  [ -n "$ship_rule" ] || fail "ship brief emitted no shared-infrastructure rule to compare"
+  [ "$ship_rule" = "$scout_rule" ] \
+    || fail "ship and scout shared-infrastructure rules have drifted apart"
+
+  # The daemon half of the rule survived the fold.
+  assert_grep "no-mistakes" "$brief" "scout brief lost the shared no-mistakes daemon rule"
+  # shellcheck disable=SC2016 # Literal backticks and braces must remain unexpanded.
+  assert_grep 'blocked [at=<epoch>]: {the daemon error}' "$brief" \
+    "scout brief lost the daemon-error reporting instruction"
+
+  # A secondmate runs its own home and legitimately allocates and returns slots
+  # for its own crewmates, so the crewmate prohibition must NOT reach its charter.
+  FM_SECONDMATE_CHARTER='Supervise the alpha domain.' \
+    FM_HOME="$home" "$ROOT/bin/fm-brief.sh" brief-pool-mate --secondmate alpha >/dev/null 2>&1 \
+    || fail "fm-brief.sh --secondmate exited non-zero"
+  assert_no_grep "create, remove, return, prune, move, or reassign" \
+    "$home/data/brief-pool-mate/brief.md" \
+    "secondmate charter must not inherit the crewmate pool-administration prohibition"
+
+  pass "fm-brief.sh: every crewmate scaffold forbids administering the shared worktree pool"
+}
+
 test_script_parses
 test_no_heredoc_in_command_substitution
 test_help_includes_entire_header
@@ -1305,6 +1411,7 @@ test_secondmate_marked_request_reporting_contract
 test_secondmate_directory_paths_are_absolute_and_output_is_stable
 test_pause_verb_override_renders_all_brief_scaffolds
 test_ship_and_scout_teach_validation_round_pause
+test_pause_covers_own_background_jobs_in_every_scaffold
 test_scout_and_secondmate_load_decision_hold_policy
 test_scout_and_secondmate_scaffold
 test_scout_lavish_line_follows_presentation_floor
@@ -1315,3 +1422,4 @@ test_ship_branch_prefix_empty_override_yields_bare_task_id
 test_branch_prefix_is_refused_where_it_does_not_apply
 test_branch_prefix_value_is_validated
 test_branch_prefix_command_is_shell_safe
+test_crewmate_scaffolds_forbid_pool_administration

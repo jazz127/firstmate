@@ -21,6 +21,40 @@ write_merge_marker() {  # <state> <id> <provider> <host> <path> <number>
   chmod 600 "$1/$2.pr-poll-merge-notified"
 }
 
+test_external_pr_receipt_boundary() {
+  local repo wt state reason
+  repo="$TMP_ROOT/upstream-receipt-repo"
+  wt="$TMP_ROOT/upstream-receipt-wt"
+  state="$TMP_ROOT/upstream-receipt-state"
+  mkdir -p "$state"
+  fm_git_worktree "$repo" "$wt" fm/receipt
+  git -C "$wt" remote set-url origin https://github.com/fork/demo.git
+  reason=$(accept_done ship direct-PR "$wt" "$repo" \
+    'done: PR https://github.com/upstream/demo/pull/1' "$state" receipt-id '') \
+    && fail 'direct upstream PR passed without a receipt'
+  assert_contains "$reason" 'upstream prior-art receipt refused' \
+    'direct upstream refusal did not name the receipt boundary'
+  reason=$(accept_done ship no-mistakes "$wt" "$repo" \
+    'done: PR https://github.com/upstream/demo/pull/1 checks green' "$state" receipt-id '') \
+    && fail 'no-mistakes upstream PR passed without a receipt'
+  assert_contains "$reason" 'upstream prior-art receipt refused' \
+    'no-mistakes upstream refusal did not name the receipt boundary'
+  git -C "$wt" remote set-url origin https://token@github.com/fork/demo.git
+  reason=$(accept_done ship direct-PR "$wt" "$repo" \
+    'done: PR https://github.com/upstream/demo/pull/1' "$state" receipt-id '') \
+    && fail 'credentialed external PR passed without a receipt'
+  assert_contains "$reason" 'upstream prior-art receipt refused' \
+    'credentialed-origin refusal did not name the receipt boundary'
+  git -C "$wt" remote set-url origin https://github.com/owner/demo.git
+  git -C "$wt" update-ref refs/remotes/origin/fm/receipt "$(git -C "$wt" rev-parse HEAD)"
+  accept_done ship direct-PR "$wt" "$repo" \
+    'done: PR https://github.com/owner/demo/pull/1' "$state" receipt-id '' \
+    || fail 'owned PR was affected by the upstream receipt boundary'
+  pass 'external PR ready signals require receipts while owned PRs remain unaffected'
+}
+
+test_external_pr_receipt_boundary
+
 test_scout_done_is_not_gated() {
   local repo wt
   repo="$TMP_ROOT/scout-repo"
@@ -249,6 +283,34 @@ EOF
   pass "evidence claims accept readable provenance and spare ordinary prose"
 }
 
+test_scenario_consistency_is_publication_only() {
+  local root artifact intent out rc
+  root="$TMP_ROOT/scenario-publication-only"
+  artifact="$root/worktree/evidence.txt"
+  mkdir -p "$root/worktree" "$root/tmp"
+  printf '%s\n' captured > "$artifact"
+  intent=$(cat <<EOF
+| Scenario | Result | Live | Evidence |
+| --- | --- | --- | --- |
+| Account A | pass | yes | captured |
+| Account B | pass | fixture-based | local fixture |
+
+0 of 2 scenarios driven live against the product.
+evidence-artifact: $artifact
+evidence-command: cat $artifact
+evidence-captured: 2026-09-25T10:00:00+10:00
+EOF
+)
+  fm_dod_validate_intent_evidence "$intent" "$root/worktree" "$root/tmp" \
+    || fail "brief intent quoting a contradictory PR body was refused"
+  out=$(fm_dod_validate_published_intent "$intent" "$root/worktree" "$root/tmp" 2>&1)
+  rc=$?
+  [ "$rc" -eq 1 ] || fail "contradictory PR body was accepted at publication"
+  assert_contains "$out" "contradictory driven-scenario results" \
+    "publication refusal did not identify the contradiction"
+  pass "scenario consistency is enforced only for PR-body publication"
+}
+
 test_unpushed_ship_done_is_refused() {
   local repo wt sha reason rc
   repo="$TMP_ROOT/unpushed-repo"
@@ -264,6 +326,59 @@ test_unpushed_ship_done_is_refused() {
     *) fail "unpushed refusal did not name the commit: $reason" ;;
   esac
   pass "unpushed ship done: is refused"
+}
+
+test_committed_scratch_ship_done_names_path() {
+  local repo wt sha reason rc
+  repo="$TMP_ROOT/scratch-repo"
+  wt="$TMP_ROOT/scratch-wt"
+  fm_git_worktree "$repo" "$wt" fm/scratch
+  mkdir -p "$wt/.codex-live-check/cache/node/corepack/v1/pnpm/11.1.1"
+  printf '%s\n' bundle > "$wt/.codex-live-check/cache/node/corepack/v1/pnpm/11.1.1/package.json"
+  git -C "$wt" add -f .codex-live-check
+  git -C "$wt" commit -q -m 'pipeline scratch bundle'
+  sha=$(git -C "$wt" rev-parse HEAD)
+  git -C "$wt" update-ref refs/remotes/origin/fm/scratch "$sha"
+  reason=$(accept_done ship no-mistakes "$wt" "$repo" "done: PR https://example.test/o/r/pull/9 checks green" 2>/dev/null)
+  rc=$?
+  [ "$rc" -eq 1 ] || fail "ship done: with a committed scratch bundle was accepted (exit $rc)"
+  [ "$reason" = 'scratch path would be published: .codex-live-check/cache/node/corepack/v1/pnpm/11.1.1/package.json' ] \
+    || fail "scratch refusal did not name the path on stdout: $reason"
+  pass "ship done: with a committed scratch bundle is refused with the path as its reason"
+}
+
+test_recorded_gerrit_ship_done_with_scratch_is_refused() {
+  local repo wt meta state reason rc url
+  repo="$TMP_ROOT/gerrit-scratch-repo"
+  wt="$TMP_ROOT/gerrit-scratch-wt"
+  state="$TMP_ROOT/gerrit-scratch-state"
+  url=https://review.example.test/c/o/r/+/42
+  mkdir -p "$state"
+  fm_git_worktree "$repo" "$wt" fm/gerrit-scratch
+  mkdir -p "$wt/.codex-live-check/cache"
+  printf '%s\n' bundle > "$wt/.codex-live-check/cache/package.json"
+  git -C "$wt" add -f .codex-live-check
+  git -C "$wt" commit -q -m 'fix-round push with scratch'
+  meta="$state/gerrit-scratch.meta"
+  printf 'kind=ship\nmode=direct-PR\nworktree=%s\nproject=%s\npr=%s\n' "$wt" "$repo" "$url" > "$meta"
+  reason=$(accept_done ship direct-PR "$wt" "$repo" "done: PR $url published" "$state" gerrit-scratch "$meta" 2>/dev/null)
+  rc=$?
+  [ "$rc" -eq 1 ] || fail "recorded Gerrit ship done: with committed scratch was accepted (exit $rc)"
+  [ "$reason" = 'scratch path would be published: .codex-live-check/cache/package.json' ] \
+    || fail "recorded Gerrit scratch refusal did not name the path on stdout: $reason"
+  pass "a recorded Gerrit ship done: with committed scratch is refused"
+}
+
+test_recorded_pr_with_missing_worktree_is_accepted() {
+  local meta state
+  state="$TMP_ROOT/missing-wt-state"
+  mkdir -p "$state"
+  meta="$state/missing-wt.meta"
+  printf 'kind=ship\nmode=no-mistakes\npr=https://review.example.test/c/o/r/+/5\n' > "$meta"
+  accept_done ship no-mistakes "$TMP_ROOT/missing-wt" "$TMP_ROOT/missing-wt-repo" \
+    "done: PR https://review.example.test/c/o/r/+/5 checks green" "$state" missing-wt "$meta" \
+    || fail "recorded PR was refused because its worktree is missing"
+  pass "a recorded PR with a missing worktree is still accepted"
 }
 
 test_remote_containing_named_head_is_accepted() {
@@ -521,10 +636,93 @@ test_non_done_lines_are_not_gated() {
   pass "non-done lines are not gated"
 }
 
+# Issue 3608: a legacy `# Task` body's provenance marker must be read the way
+# bin/fm-brief-heading-lib.sh reads headings - outside fenced blocks and never
+# from an indented example - or a fenced `Captain:` sample becomes the ship
+# contract's intent while the real ask is dropped.
+test_fenced_and_indented_captain_lines_are_not_intent() {
+  local home id meta out status words
+  home="$TMP_ROOT/fenced-home"
+  mkdir -p "$home/state" "$home/data"
+  words=$(fm_brief_marked_captain_words 'Investigate the promotion gate.
+
+```markdown
+Captain: This fenced example must not become intent.
+[captain] Neither must this one.
+```
+
+~~~
+Captain: Nor this tilde-fenced one.
+~~~
+
+    Captain: An indented example is not the ask either.
+	[captain] Nor a tab-indented one.
+Keep this Firstmate constraint out of captain intent.')
+  assert_equals "" "$words" "fenced or indented Captain lines were extracted as authorized intent"
+
+  words=$(fm_brief_marked_captain_words '```
+Captain: fenced example
+```
+  [captain] Preserve the real ask after the fence closes.
+````
+Captain: a longer fence that a shorter closer must not end
+```
+Captain: still fenced
+````')
+  assert_equals "Preserve the real ask after the fence closes." "$words" \
+    "the marker after a closed fence, or inside a longer fence, was misread"
+
+  id=promote-fenced-captain
+  meta="$home/state/$id.meta"
+  printf 'window=fm-%s\nkind=scout\nworktree=/tmp/wt\n' "$id" > "$meta"
+  mkdir -p "$home/data/$id"
+  cat > "$home/data/$id/brief.md" <<'EOF'
+# Task
+Investigate the promotion gate.
+
+```markdown
+Captain: This fenced example must not become intent.
+```
+
+    Captain: An indented example is not the ask either.
+
+# Setup
+This is a SCOUT task: the deliverable is a written report, not a PR.
+EOF
+  out=$(FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" "$ROOT/bin/fm-promote.sh" "$id" --mode direct-PR --yolo off 2>&1)
+  status=$?
+  [ "$status" -ne 0 ] || fail "promotion whose only Captain lines are fenced or indented examples should fail"
+  assert_contains "$out" "has no provenance-marked Captain's intent" \
+    "fenced-example promotion did not refuse like an unmarked legacy brief"
+  assert_absent "$home/data/$id/ship-instructions.md" \
+    "fenced-example promotion published a fenced sample as captain intent"
+  assert_grep 'kind=scout' "$meta" "fenced-example promotion changed the task record"
+  pass "fenced and indented Captain lines are not authorized intent"
+}
+
+# The draft check the DoD hands a worker must be the gh-axi path that rule 3 of
+# every ship brief requires for GitHub operations, never raw gh (issue 5325).
+test_pr_based_dod_draft_check_uses_gh_axi() {
+  local mode out
+  for mode in direct-PR no-mistakes; do
+    out="$TMP_ROOT/dod-$mode.md"
+    fm_dod_block "$mode" dod-draft-task > "$out"
+    assert_no_grep 'gh pr view' "$out" "$mode: DoD must not document a raw gh draft check"
+    # shellcheck disable=SC2016  # single quotes are deliberate: the backticks must stay literal
+    assert_grep 'confirm it is not a draft (`gh-axi pr view <number>` must print `draft: no`' "$out" \
+      "$mode: DoD must read the draft state through gh-axi"
+  done
+  pass "PR-based DoD draft check uses gh-axi"
+}
+
 test_scout_done_is_not_gated
 test_evidence_claim_requires_provenance
 test_evidence_claim_enforces_mechanical_provenance
+test_scenario_consistency_is_publication_only
 test_unpushed_ship_done_is_refused
+test_committed_scratch_ship_done_names_path
+test_recorded_gerrit_ship_done_with_scratch_is_refused
+test_recorded_pr_with_missing_worktree_is_accepted
 test_no_mistakes_prevalidation_done_is_not_gated
 test_remote_containing_named_head_is_accepted
 test_moved_branch_without_named_head_is_refused
@@ -539,5 +737,7 @@ test_local_only_linked_branch_is_accepted
 test_local_only_detached_head_is_refused
 test_standalone_local_only_needs_project_ref
 test_non_done_lines_are_not_gated
+test_fenced_and_indented_captain_lines_are_not_intent
+test_pr_based_dod_draft_check_uses_gh_axi
 
 echo "all fm-dod-lib tests passed"

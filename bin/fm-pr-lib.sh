@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# shellcheck source=bin/fm-scratch-lib.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/fm-scratch-lib.sh"
 # Shared PR/MR record reads, validation, and atomic artifact helpers for merge
 # polling on the supported forges. Callers must validate task IDs and raw PR/MR
 # URLs before constructing task paths or performing any side effect.
@@ -95,6 +97,39 @@ FM_PR_RETIRE_RECEIPT_IDENTITY=
 FM_PR_RECORD_STATE=
 FM_PR_RECORD_MERGED=
 FM_PR_POLL_RETIREMENT_REJECTED=
+
+fm_pr_refuse_published_scratch() {  # <canonical-pr-url>
+  local url=$1 files encoded_path json
+  fm_pr_url_parse "$url" || return 1
+  case "$FM_PR_PROVIDER" in
+    github)
+      command -v gh >/dev/null 2>&1 || return 1
+      files=$(gh api "repos/$FM_PR_PATH/pulls/$FM_PR_NUMBER/files?per_page=100" --paginate --jq '.[] | select(.status != "removed") | .filename' 2>/dev/null) || {
+        printf '%s\n' "error: cannot inspect the published file list for $url" >&2
+        return 1
+      }
+      printf '%s\n' "$files" | fm_scratch_check_lines
+      ;;
+    gitlab)
+      command -v glab >/dev/null 2>&1 || return 1
+      command -v jq >/dev/null 2>&1 || return 1
+      encoded_path=$(printf '%s' "$FM_PR_PATH" | jq -sRr @uri) || return 1
+      json=$(GITLAB_HOST="$FM_PR_HOST" glab api \
+        "projects/$encoded_path/merge_requests/$FM_PR_NUMBER/changes?per_page=100" \
+        --paginate 2>/dev/null) || {
+        printf '%s\n' "error: cannot inspect the published file list for $url" >&2
+        return 1
+      }
+      files=$(printf '%s\n' "$json" | jq -r '.changes[] | select(.deleted_file | not) | .new_path' 2>/dev/null) || {
+        printf '%s\n' "error: cannot parse the published file list for $url" >&2
+        return 1
+      }
+      printf '%s\n' "$files" | fm_scratch_check_lines
+      ;;
+    gerrit) return 0 ;;
+    *) return 1 ;;
+  esac
+}
 
 fm_task_id_path_safe() {
   local id=${1-}

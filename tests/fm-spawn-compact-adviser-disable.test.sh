@@ -73,13 +73,14 @@ SH
 #   emitted_launch_env <fakebin> <launch-log> <pane-log>
 emitted_launch_env() {
   local fakebin=$1 launchlog=$2 panelog=$3 launch preamble
+  shift 3
   launch=$(cat "$launchlog")
   # The pane exports run before the launch command in the real pane shell, so
   # replay them here in the same order: the filtered launch environment retains
   # what the pane holds, and dropping them would test a pane that never existed.
   preamble=$(grep '^export ' "$panelog")
   env -i HOME="$TMP_ROOT/pane-home" PATH="$fakebin:$PATH" TERM=xterm \
-    TMUX=synthetic-pane COMPACT_ADVISER_DISABLE="$CONTRARY" \
+    TMUX=synthetic-pane COMPACT_ADVISER_DISABLE="$CONTRARY" "$@" \
     /bin/sh -c "$preamble
 $launch"
 }
@@ -140,6 +141,44 @@ test_ship_allowlist_enabled() {
   pass "ship launch under an enabled allowlist keeps the compact-adviser switch through the cleared environment"
 }
 
+test_tool_caches_stay_outside_worktree() {
+  local setting id rec out seen expected task_tmp
+  for setting in absent enabled; do
+    id="cache-$setting-a1"
+    rec=$(make_case "cache-$setting" codex "$id")
+    read_case "$rec"
+    [ "$setting" = absent ] || : > "$HOME_DIR/config/launch-env-allowlist"
+    out=$(run_case_spawn "$id" "$PROJ_DIR" --mode no-mistakes --yolo off)
+    expect_code 0 "$?" "cache launch with allowlist=$setting should succeed: $out"
+    cat > "$FAKEBIN_DIR/codex" <<'SH'
+#!/bin/sh
+printf '%s\n' "$GOTMPDIR" "$COREPACK_HOME" "$npm_config_cache"
+SH
+    chmod +x "$FAKEBIN_DIR/codex"
+    seen=$(emitted_launch_env "$FAKEBIN_DIR" "$LAUNCH_LOG" "$PANE_LOG") \
+      || fail "cache launch with allowlist=$setting did not execute"
+    task_tmp="/tmp/fm-$id"
+    expected=$(printf '%s\n' "$task_tmp/gotmp" "$task_tmp/cache/corepack" "$task_tmp/cache/npm")
+    assert_equals "$expected" "$seen" \
+      "cache launch with allowlist=$setting did not route the Corepack and npm caches to the task temp root"
+    [ -d "$task_tmp/cache/corepack" ] && [ -d "$task_tmp/cache/npm" ] \
+      || fail "cache launch with allowlist=$setting did not create the cache homes"
+    seen=$(emitted_launch_env "$FAKEBIN_DIR" "$LAUNCH_LOG" "$PANE_LOG" \
+      COREPACK_HOME="$TMP_ROOT/user corepack" npm_config_cache="$TMP_ROOT/user npm") \
+      || fail "cache launch with allowlist=$setting and preset caches did not execute"
+    expected=$(printf '%s\n' "$task_tmp/gotmp" "$TMP_ROOT/user corepack" "$TMP_ROOT/user npm")
+    assert_equals "$expected" "$seen" \
+      "cache launch with allowlist=$setting overrode cache homes the pane already set"
+    seen=$(emitted_launch_env "$FAKEBIN_DIR" "$LAUNCH_LOG" "$PANE_LOG" \
+      NPM_CONFIG_CACHE="$TMP_ROOT/user upper npm") \
+      || fail "cache launch with allowlist=$setting and an uppercase npm cache did not execute"
+    expected=$(printf '%s\n' "$task_tmp/gotmp" "$task_tmp/cache/corepack" "$TMP_ROOT/user upper npm")
+    assert_equals "$expected" "$seen" \
+      "cache launch with allowlist=$setting overrode the NPM_CONFIG_CACHE the pane already set"
+  done
+  pass "worker launch defaults Corepack and npm caches outside the worktree and keeps preset ones"
+}
+
 # The floor must not depend on the pane export having landed: a pane whose
 # export was lost still has to launch its agent with the switch on. Replaying
 # the launch alone, with a contrary ambient value, is that case.
@@ -175,6 +214,8 @@ test_secondmate_launch() {
     printf '# Firstmate\n' > "$sm/AGENTS.md"
     printf '%s\n' "sm-$setting" > "$sm/.fm-secondmate-home"
     printf 'charter for sm-%s\n' "$setting" > "$sm/data/charter.md"
+    printf '%s\n' 'projects/' 'state/' 'data/' 'config/' '.no-mistakes/' > "$sm/.gitignore"
+    git -C "$sm" init -q -b main
     out=$(run_case_spawn "sm-$setting" "$sm" --secondmate)
     status=$?
     expect_code 0 "$status" "secondmate spawn with allowlist=$setting should succeed: $out"
@@ -347,6 +388,7 @@ SH
 
 test_ship_allowlist_absent
 test_ship_allowlist_enabled
+test_tool_caches_stay_outside_worktree
 test_launch_command_carries_the_switch_without_the_pane_export
 test_secondmate_launch
 test_relaunch_rebuilds_the_switch

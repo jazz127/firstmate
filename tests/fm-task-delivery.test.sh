@@ -513,6 +513,38 @@ EOF
   pass "fm-merge-local: a registry change cannot redirect an in-flight local-only task"
 }
 
+# A registered name may contain spaces, and the lookup must match the whole
+# name rather than only its first whitespace-delimited token (issue #1977).
+# The longer "foo bar" row is listed before the "foo" row so a leading-prefix
+# match would pick the wrong row if the fix regressed.
+test_project_mode_matches_whole_multiword_names() {
+  local home out err
+  home="$TMP_ROOT/project-mode-multiword/home"
+  mkdir -p "$home/data"
+  cat > "$home/data/projects.md" <<'EOF'
+- 048. Blast- Lease summary drafter [local-only] - fixture (added 2026-01-01)
+- foo bar [local-only +yolo branch=x/] - fixture (added 2026-01-01)
+- foo [direct-PR] - fixture (added 2026-01-01)
+- controlproj [direct-PR] - fixture (added 2026-01-01)
+EOF
+  out=$(FM_HOME="$home" "$PROJECT_MODE" "048. Blast- Lease summary drafter" 2>/dev/null)
+  [ "$out" = "local-only off" ] || fail "a multi-word registered name did not resolve to its own row (got '$out')"
+  err=$(FM_HOME="$home" "$PROJECT_MODE" "048. Blast- Lease summary drafter" 2>&1 >/dev/null)
+  [ -z "$err" ] || fail "a multi-word registered name still warned as not in the registry: $err"
+
+  out=$(FM_HOME="$home" "$PROJECT_MODE" foo 2>/dev/null)
+  [ "$out" = "direct-PR off" ] || fail "a single-word name matched a longer name it prefixes (got '$out')"
+
+  out=$(FM_HOME="$home" "$PROJECT_MODE" "foo bar" 2>/dev/null)
+  [ "$out" = "local-only on" ] || fail "a longer multi-word name did not resolve to its own row (got '$out')"
+  out=$(FM_HOME="$home" "$PROJECT_MODE" --branch-prefix "foo bar" 2>/dev/null)
+  [ "$out" = "x/" ] || fail "a multi-word name's registered branch prefix did not resolve (got '$out')"
+
+  out=$(FM_HOME="$home" "$PROJECT_MODE" controlproj 2>/dev/null)
+  [ "$out" = "direct-PR off" ] || fail "a single-word control name regressed (got '$out')"
+  pass "fm-project-mode: the registry lookup matches a whole multi-word name, not just its first token"
+}
+
 # The registry parser survives for the mechanical consumers only. It accepts the
 # conditional policy, maps it to its most rigorous leg for them, and exposes the
 # raw annotation for the one caller that must tell a policy from a flat mode.
@@ -1416,10 +1448,12 @@ EOF
   pass "fm-spawn: the brief must carry the spawn's selected ship branch, and the selection is validated before anything is created"
 }
 
-# A spawn that deviates from the registered ship-branch prefix breaks no contract:
-# the brief-vs-spawn agreement above already guarantees the worker's instructions
-# match the branch this spawn selected. The deviation is announced and the spawn
-# proceeds, while matching the registry (or its fm/ default) stays quiet.
+# The registered ship-branch prefix exists so a third-party project's branches and
+# PRs do not read as firstmate-authored, but a spawn that deviates from it breaks
+# no contract: the brief-vs-spawn agreement above already guarantees the worker's
+# instructions match the branch this spawn selected. So the deviation is announced
+# and the spawn proceeds, while matching the registry (or its fm/ default) stays
+# quiet.
 test_spawn_notices_a_ship_branch_against_the_registry_prefix() {
   local rec home proj fakebin out
   rec=$(make_home prefix-deviation "- proj [no-mistakes branch=fix/] - fixture (added 2026-01-01)")
@@ -1431,10 +1465,8 @@ EOF
   out=$(run_spawn "$home" "$fakebin" prefix-dev-a1 "$proj" claude --mode no-mistakes --yolo off)
   assert_contains "$out" "ships branch=fm/prefix-dev-a1 while proj registers the ship-branch prefix 'fix/'" \
     "no deviation notice for shipping the legacy prefix past a registered override"
-  assert_contains "$out" "naming deviates from the captain's standing project preference" \
-    "the deviation notice did not explain the naming drift"
-  assert_not_contains "$out" "will read as firstmate-authored" \
-    "the deviation notice made an unsupported authorship claim"
+  assert_contains "$out" "will read as firstmate-authored" \
+    "the deviation notice did not name the cost of the drift"
 
   FM_HOME="$home" "$BRIEF" prefix-dev-a2 proj --mode no-mistakes --branch-prefix fix/ >/dev/null \
     || fail "a fix/-prefixed brief should scaffold"
@@ -1650,6 +1682,7 @@ test_promotion_persists_the_selected_ship_branch
 test_promotion_notices_a_ship_branch_against_the_registry_prefix
 test_promotion_branch_command_is_shell_safe
 test_local_merge_uses_the_recorded_ship_branch
+test_project_mode_matches_whole_multiword_names
 test_project_mode_maps_the_conditional_policy
 test_project_mode_binds_the_forge_orthogonally
 test_project_mode_refuses_only_a_malformed_forge_binding

@@ -83,7 +83,7 @@ case "${1:-}" in
           printf 'zsh' > "$D/command"
           [ -z "${FM_FAKE_EXIT_TRANSPORT_FAIL_AFTER_STOP:-}" ] || exit 1
           ;;
-        *'encode launch-brief'*)
+        *'encode launch-brief'* | *'Firstmate operational input waiting: read'*)
           cat "$D/becomes" > "$D/command"
           [ -z "${FM_FAKE_LAUNCH_TRANSPORT_FAIL_AFTER_START:-}" ] || exit 1
           ;;
@@ -402,7 +402,7 @@ test_same_harness_relaunch_keeps_identity_and_reuses_the_endpoint() {
   [ "$(journal_field "$dir" rl1 phase)" = complete ] \
     || fail "the transaction journal should end complete"
   assert_grep "/exit" "$dir/fake/literal" "the previous agent should have been exited"
-  assert_grep "encode launch-brief" "$dir/fake/literal" "the replacement should have been launched"
+  assert_grep "Firstmate operational input waiting: read" "$dir/fake/literal" "the replacement should have been launched"
   pass "fm-control relaunch: a same-harness relaunch replaces the agent in the same endpoint and worktree"
 }
 
@@ -825,6 +825,58 @@ test_signed_out_worker_account_pin_refuses_before_stop() {
   pass "fm-control relaunch: a signed-out worker account pin refuses before the old agent stops"
 }
 
+test_seated_codex_relaunch_preflights_current_dock_before_stop() {
+  local dir out rc id=rl-seat-dock seat_home
+  dir=$(new_case seat-dock "$id")
+  add_ship_task "$dir" "$id" codex
+  printf codex > "$dir/fake/command"
+  printf codex > "$dir/fake/becomes"
+  mkdir -p "$dir/home/config"
+  seat_home="$dir/current-seat"
+  mkdir -p "$seat_home"
+  printf '%s\n' '{"OPENAI_API_KEY":"sk-fm-synthetic"}' > "$seat_home/auth.json"
+  jq -n --arg home "$seat_home" '{version:1,id:"control-dock",seats:{luna:{harness:"codex",credential_home:$home}}}' \
+    > "$dir/home/config/dock.json"
+  printf '%s\n' 'seat=luna' 'dock=old-dock' 'seat_home=/old/seat' >> "$dir/home/state/$id.meta"
+  cat > "$dir/fakebin/codex" <<'SH'
+#!/usr/bin/env bash
+if [ "${1:-}" = login ] && [ "${2:-}" = status ]; then
+  [ -f "$CODEX_HOME/signed-in" ] || { echo 'Not logged in' >&2; exit 1; }
+  if [ -f "$CODEX_HOME/mutate-dock" ] && [ ! -f "$CODEX_HOME/mutated-dock" ]; then
+    : > "$CODEX_HOME/mutated-dock"
+    printf '%s\n' '{"version":2}' > "$(cat "$CODEX_HOME/dock-path")"
+  fi
+  echo 'Logged in using ChatGPT' >&2
+fi
+exit 0
+SH
+  chmod +x "$dir/fakebin/codex"
+  cp "$dir/home/state/$id.meta" "$dir/meta-before"
+  out=$(run_control "$dir" "$id" relaunch --note "current dock"); rc=$?
+  expect_code 1 "$rc" "signed-out current dock must refuse replacement"
+  assert_contains "$out" 'signed out' "control preflight should name the sign-out"
+  [ "$(cat "$dir/fake/command")" = codex ] || fail "sign-out stopped the old Codex worker"
+  [ ! -s "$dir/fake/literal" ] || fail "sign-out sent lifecycle input"
+  cmp -s "$dir/meta-before" "$dir/home/state/$id.meta" || fail "pre-stop refusal changed metadata"
+
+  : > "$seat_home/signed-in"
+  printf '%s\n' "$dir/home/config/dock.json" > "$seat_home/dock-path"
+  out=$(run_control "$dir" "$id" relaunch --harness claude --note "wrong harness"); rc=$?
+  expect_code 1 "$rc" "incompatible harness must refuse before stop"
+  assert_contains "$out" 'only seat luna on the codex harness' "harness mismatch should name seat contract"
+  [ "$(cat "$dir/fake/command")" = codex ] || fail "harness mismatch stopped the old worker"
+  [ ! -s "$dir/fake/literal" ] || fail "harness mismatch sent lifecycle input"
+
+  : > "$seat_home/mutate-dock"
+  out=$(run_control "$dir" "$id" relaunch --note "current dock now signed in"); rc=$?
+  expect_code 0 "$rc" "signed-in current dock should relaunch: $out"
+  [ "$(meta_field "$dir" "$id" seat_home)" = "$seat_home" ] || fail "replacement did not re-resolve the current dock"
+  [ "$(meta_field "$dir" "$id" dock)" = control-dock ] || fail "replacement retained a stale dock id"
+  jq -n --arg home "$seat_home" '{version:1,id:"control-dock",seats:{luna:{harness:"codex",credential_home:$home}}}' \
+    > "$dir/home/config/dock.json"
+  pass "fm-control preflights the current seat before stop and re-resolves its path on replacement"
+}
+
 test_worker_account_pin_follows_the_relaunch() {
   local dir out rc id=rl-acct
   dir=$(new_case acct "$id")
@@ -901,7 +953,7 @@ test_wiring_removal_failure_refuses_before_replacement_arm() {
   assert_contains "$out" "could not retire claude wiring" \
     "the failure should identify prior wiring cleanup"
   [ -e "$hook" ] || fail "the fixture should retain the undeletable prior hook"
-  assert_no_grep "encode launch-brief" "$dir/fake/literal" \
+  assert_no_grep "Firstmate operational input waiting: read" "$dir/fake/literal" \
     "replacement launch must not be armed after wiring cleanup fails"
   [ "$(journal_field "$dir" rl29 phase)" = failed:launching ] \
     || fail "the transaction should record the partial launch failure"
@@ -2039,7 +2091,7 @@ case "${1:-} ${2:-}" in
       ". '"*"'") staged=${payload#". '"}; staged=${staged%"'"}; [ ! -f "$staged" ] || payload=$(cat "$staged") ;;
     esac
     case "$payload" in
-      *'encode launch-brief'*) : > "$D/herdr-agent-live" ;;
+      *'encode launch-brief'* | *'Firstmate operational input waiting: read'*) : > "$D/herdr-agent-live" ;;
     esac
     exit 0 ;;
   'workspace list')
@@ -2385,6 +2437,7 @@ test_prefixed_recorded_harness_requires_explicit_replacement
 test_same_harness_relaunch_keeps_the_profile_axes
 test_native_ultra_relaunch_preserves_profile_and_rejects_before_stop
 test_signed_out_worker_account_pin_refuses_before_stop
+test_seated_codex_relaunch_preflights_current_dock_before_stop
 test_worker_account_pin_follows_the_relaunch
 test_explicit_model_wins_over_the_recorded_one
 test_relaunch_onto_an_unverified_harness_is_refused

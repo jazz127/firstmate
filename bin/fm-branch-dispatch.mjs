@@ -67,7 +67,7 @@ if (command === "scope") {
     `status=${scope.status}\n` +
       `corrupted=${scope.corrupted ? 1 : 0}\n` +
       `rows=${scope.eligibleSeqs.join(" ")}\n` +
-      `row_tasks=${scope.eligibleSeqs.map((seq) => `${seq}=${scope.taskByEligibleSeq[seq] || "fleet"}`).join(" ")}\n` +
+      `row_tasks=${scope.eligibleSeqs.map((seq) => `${seq}=${scope.taskByEligibleSeq[seq]}`).join(" ")}\n` +
       `tasks=${scope.eligibleTasks.join(" ")}\n` +
       `unscoped=${unscoped ? 1 : 0}\n`,
   );

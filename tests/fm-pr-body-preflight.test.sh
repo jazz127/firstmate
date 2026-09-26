@@ -97,6 +97,130 @@ output=$(preflight) || fail "pipeline-shaped body with one metadata block was re
 [ "$output" = 'evidence preflight ok' ] || fail "pipeline-shaped body did not report success: $output"
 pass "pipeline-shaped body can mechanically pass with one metadata block"
 
+# These fixture bodies model the split between an honest scenario table and a
+# generated appendix. The readback boundary must name the contradiction even
+# when the appendix has no provenance block of its own.
+cat > "$draft" <<EOF
+## Testing
+
+| Scenario | Result | Live | Evidence |
+| --- | --- | --- | --- |
+| Account A | pass | yes | captured account output |
+| Account B | pass | fixture-based | local fixture |
+| Account C | pass | fixture-based | local fixture |
+| Account D | pass | fixture-based | local fixture |
+
+1 of 4 scenarios driven live against the product.
+evidence-artifact: $artifact
+evidence-command: cat $artifact
+evidence-captured: 2026-09-25T00:39:26Z
+EOF
+output=$(preflight) || fail "consistent scenario body was refused: $output"
+[ "$output" = 'evidence preflight ok' ] || fail "consistent scenario body did not pass: $output"
+pass "one consistent driven-scenario statement passes"
+
+cat >> "$draft" <<'EOF'
+
+Generated appendix: 0 of 4 scenarios driven live against the product.
+EOF
+output=$(preflight)
+rc=$?
+[ "$rc" -eq 1 ] || fail "contradictory appendix was accepted: $output"
+assert_contains "$output" 'evidence claim refused: contradictory driven-scenario results:' "contradiction reason was missing"
+assert_contains "$output" '1 of 4 scenarios driven live against the product.' "honest count was not quoted"
+assert_contains "$output" 'Generated appendix: 0 of 4 scenarios driven live against the product.' "generated count was not quoted"
+pass "split appendix count is refused with both conflicting lines"
+
+sed '/^evidence-/d' "$draft" > "$task_tmp/no-metadata.md"
+mv "$task_tmp/no-metadata.md" "$draft"
+output=$(preflight)
+rc=$?
+[ "$rc" -eq 1 ] || fail "contradictory appendix without metadata was accepted: $output"
+assert_contains "$output" 'evidence claim refused: contradictory driven-scenario results:' "contradiction was hidden by missing metadata"
+pass "contradiction takes precedence over a generic missing-metadata refusal"
+
+sed '/^Generated appendix:/d' "$draft" > "$task_tmp/corrected.md"
+mv "$task_tmp/corrected.md" "$draft"
+cat >> "$draft" <<EOF
+evidence-artifact: $artifact
+evidence-command: cat $artifact
+evidence-captured: 2026-09-25T00:39:26Z
+EOF
+output=$(preflight) || fail "corrected scenario body was refused: $output"
+[ "$output" = 'evidence preflight ok' ] || fail "corrected scenario body did not pass: $output"
+pass "corrected scenario body passes"
+
+sed 's/1 of 4 scenarios driven live/0 of 4 scenarios driven live/' "$draft" > "$task_tmp/pr30.md"
+mv "$task_tmp/pr30.md" "$draft"
+output=$(preflight)
+rc=$?
+[ "$rc" -eq 1 ] || fail "table-contradicting appendix was accepted: $output"
+assert_contains "$output" 'evidence claim refused: contradictory driven-scenario results:' "table contradiction reason was missing"
+assert_contains "$output" '0 of 4 scenarios driven live against the product.' "contradicting count was not quoted"
+assert_contains "$output" '| Account A | pass | yes | captured account output |' "conflicting table row was not quoted"
+pass "table and count contradiction is refused"
+
+sed 's/0 of 4 scenarios driven live/1 of 4 scenarios driven live/' "$draft" > "$task_tmp/corrected.md"
+mv "$task_tmp/corrected.md" "$draft"
+output=$(preflight) || fail "corrected table count was refused: $output"
+[ "$output" = 'evidence preflight ok' ] || fail "corrected table count did not pass: $output"
+pass "corrected table and count pass"
+
+sed 's/1 of 4 scenarios driven live/3 of 5 scenarios driven live/' "$draft" > "$task_tmp/total-mismatch.md"
+mv "$task_tmp/total-mismatch.md" "$draft"
+output=$(preflight)
+rc=$?
+[ "$rc" -eq 1 ] || fail "table and incompatible total were accepted: $output"
+assert_contains "$output" 'evidence claim refused: contradictory driven-scenario results:' "total mismatch reason was missing"
+assert_contains "$output" '3 of 5 scenarios driven live against the product.' "incompatible total was not quoted"
+assert_contains "$output" '| Account A | pass | yes | captured account output |' "table rows were not quoted for total mismatch"
+pass "table and incompatible driven-scenario total is refused"
+
+sed 's/3 of 5 scenarios driven live/1 of 4 scenarios driven live/' "$draft" > "$task_tmp/corrected-total.md"
+mv "$task_tmp/corrected-total.md" "$draft"
+
+sed 's/1 of 4 scenarios driven live/1 of 5 scenarios driven live/' "$draft" > "$task_tmp/total-only-mismatch.md"
+mv "$task_tmp/total-only-mismatch.md" "$draft"
+output=$(preflight)
+rc=$?
+[ "$rc" -eq 1 ] || fail "table and incompatible total-only mismatch were accepted: $output"
+assert_contains "$output" 'evidence claim refused: contradictory driven-scenario results:' "total-only mismatch reason was missing"
+assert_contains "$output" '1 of 5 scenarios driven live against the product.' "total-only mismatch was not quoted"
+pass "table and incompatible total-only mismatch is refused"
+
+sed 's/1 of 5 scenarios driven live/1 of 4 scenarios driven live/' "$draft" > "$task_tmp/corrected-total-only.md"
+mv "$task_tmp/corrected-total-only.md" "$draft"
+
+sed -e 's/| Account A | pass | yes | captured account output |/| Account A | pass | fixture-based | local fixture |/' \
+  -e 's/1 of 4 scenarios driven live/0 of 5 scenarios driven live/' \
+  "$draft" > "$task_tmp/fixture-total-mismatch.md"
+mv "$task_tmp/fixture-total-mismatch.md" "$draft"
+output=$(preflight)
+rc=$?
+[ "$rc" -eq 1 ] || fail "fixture table and incompatible total were accepted: $output"
+assert_contains "$output" 'evidence claim refused: contradictory driven-scenario results:' "fixture total mismatch reason was missing"
+assert_contains "$output" '0 of 5 scenarios driven live against the product.' "fixture total mismatch was not quoted"
+pass "fully classified fixture table rejects an incompatible total"
+
+sed -e 's/| Account A | pass | fixture-based | local fixture |/| Account A | pass | yes | captured account output |/' \
+  -e 's/0 of 5 scenarios driven live/1 of 4 scenarios driven live/' \
+  "$draft" > "$task_tmp/corrected-fixture-total.md"
+mv "$task_tmp/corrected-fixture-total.md" "$draft"
+
+sed 's/1 of 4 scenarios driven live/Live validation: passed - 1 of 4 scenarios driven live/' "$draft" > "$task_tmp/verdict.md"
+mv "$task_tmp/verdict.md" "$draft"
+output=$(preflight) || fail "partly live passed verdict was refused: $output"
+[ "$output" = 'evidence preflight ok' ] || fail "partly live passed verdict did not pass: $output"
+pass "passed verdict with a driven scenario remains consistent"
+
+sed -e 's/| Account A | pass | yes | captured account output |/| Account A | pass | fixture-based | local fixture |/' \
+  -e 's/Live validation: passed - 1 of 4 scenarios driven live/Live validation: passed - unrelated API smoke check/' \
+  "$draft" > "$task_tmp/unrelated-passed.md"
+mv "$task_tmp/unrelated-passed.md" "$draft"
+output=$(preflight) || fail "fixture-only table with unrelated passed validation was refused: $output"
+[ "$output" = 'evidence preflight ok' ] || fail "unrelated passed validation did not pass: $output"
+pass "unrelated passed validation beside a fixture-only table is accepted"
+
 fakebin="$TMP_ROOT/fakebin"
 mkdir -p "$fakebin"
 cat > "$fakebin/gh-axi" <<'EOF'
@@ -132,5 +256,55 @@ output=$(PATH="$fakebin:$PATH" FAKE_PR_BODY="$published_fixture" "$ROOT/bin/fm-p
   || fail "corrected published-body readback was refused: $output"
 [ "$output" = 'evidence preflight ok' ] || fail "corrected published body did not pass: $output"
 pass "corrected published-body readback passes the same validator"
+
+scratch_repo="$TMP_ROOT/scratch-repo"
+mkdir -p "$scratch_repo"
+git -C "$scratch_repo" init -q -b main || fail "could not create the synthetic scratch checkout"
+git -C "$scratch_repo" config user.name Fixture
+git -C "$scratch_repo" config user.email fixture@example.test
+printf '%s\n' 'product' > "$scratch_repo/product.txt"
+git -C "$scratch_repo" add product.txt
+git -C "$scratch_repo" commit -qm 'fixture base'
+scratch_preflight() {
+  "$ROOT/bin/fm-pr-body-preflight.sh" --scratch "$scratch_repo" 2>&1
+}
+output=$(scratch_preflight) || fail "clean synthetic checkout was refused: $output"
+[ "$output" = 'scratch preflight ok' ] || fail "clean synthetic checkout did not pass: $output"
+printf '%s\n' '.codex-live-check/' > "$scratch_repo/.gitignore"
+mkdir -p "$scratch_repo/.codex-live-check/cache/node/corepack/v1/pnpm/11.1.1"
+printf '%s\n' 'bundle' > "$scratch_repo/.codex-live-check/cache/node/corepack/v1/pnpm/11.1.1/package.json"
+output=$(scratch_preflight)
+rc=$?
+[ "$rc" -eq 0 ] || fail "ignored untracked scratch changed the publication preflight: $output"
+git -C "$scratch_repo" checkout -q -b feature
+git -C "$scratch_repo" add -f .codex-live-check
+output=$(scratch_preflight)
+rc=$?
+[ "$rc" -eq 1 ] || fail "staged Corepack bundle passed the scratch preflight"
+assert_contains "$output" '.codex-live-check/cache/node/corepack/v1/pnpm/11.1.1/package.json' \
+  "staged scratch refusal did not name its path"
+git -C "$scratch_repo" commit -qm 'fixture scratch bundle'
+git -C "$scratch_repo" reset -q -- .codex-live-check
+output=$(scratch_preflight)
+rc=$?
+[ "$rc" -eq 1 ] || fail "committed Corepack bundle passed the publication preflight"
+assert_contains "$output" '.codex-live-check/cache/node/corepack/v1/pnpm/11.1.1/package.json' \
+  "committed scratch refusal did not name its path"
+git -C "$scratch_repo" reset --hard -q HEAD^ \
+  || fail "could not remove the temporary committed scratch fixture"
+rm -rf "$scratch_repo/.codex-live-check"
+mkdir -p "$scratch_repo/feature/.pnpm-store"
+printf '%s\n' 'cache' > "$scratch_repo/feature/.pnpm-store/item"
+git -C "$scratch_repo" add -f feature/.pnpm-store
+output=$(scratch_preflight)
+rc=$?
+[ "$rc" -eq 1 ] || fail "nested pnpm store passed the scratch preflight"
+assert_contains "$output" 'feature/.pnpm-store/item' \
+  "nested scratch refusal did not name its path"
+git -C "$scratch_repo" reset -q -- feature/.pnpm-store
+rm -rf "$scratch_repo/feature"
+output=$(scratch_preflight) || fail "cleaned synthetic checkout was refused: $output"
+[ "$output" = 'scratch preflight ok' ] || fail "cleaned synthetic checkout did not pass"
+pass "scratch preflight refuses staged and committed cache bundles by path"
 
 printf '%s\n' 'all fm-pr-body-preflight tests passed'

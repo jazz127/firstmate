@@ -37,6 +37,11 @@ jobs:
           tests/fm-ci-workflow.test.sh
           tests/fm-task-delivery.test.sh
           tests/fm-dod-lib.test.sh
+          bin/fm-housefeature-cut.sh
+          tests/fm-housefeature-cut.test.sh
+          bin/fm-spawn.sh
+          bin/fm-worker-account-lib.sh
+          tests/fm-spawn-codex-seat-launch.test.sh
       - name: Lint the workflow set
         run: bin/fm-lint-workflows.sh
       - name: Run house workflow and delivery regressions
@@ -45,5 +50,7 @@ jobs:
           tests/fm-ci-workflow.test.sh
           tests/fm-task-delivery.test.sh
           tests/fm-dod-lib.test.sh
+          tests/fm-housefeature-cut.test.sh
+          tests/fm-spawn-codex-seat-launch.test.sh
       - name: Verify test inventory coverage
         run: bin/fm-test-run.sh --check-coverage

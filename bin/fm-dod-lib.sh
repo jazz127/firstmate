@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# shellcheck source=bin/fm-scratch-lib.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/fm-scratch-lib.sh"
+
 # Single owner of a ship task's mode-specific "Definition of done" block and of
 # the named-head reachability gate that accepts a ship `done:` claim.
 # Sourced by bin/fm-brief.sh, which renders it into a generated ship brief, and by
@@ -70,6 +73,8 @@
 # adding speaker labels or direct address: the heading supplies provenance and
 # is not part of --intent. A legacy mixed Task instead marks each captain line
 # with `[captain] `; the selector returns its words, not that metadata prefix.
+# That selector skips fenced blocks and indented examples like the heading
+# reader, so a quoted `Captain:` sample is never authorized intent.
 # Previously stored speaker labels remain readable for compatibility only.
 # Never scrub literal examples or other content the captain actually supplied.
 # The string passed must be self-sufficient - it plus the codebase reconstructs
@@ -175,11 +180,40 @@ fm_brief_task_placeholders_present() {  # <file>
   return 1
 }
 
+# Print the words of every provenance-marked line in a legacy `# Task` body.
+# The marker is read the way bin/fm-brief-heading-lib.sh reads a heading: a
+# line inside a ``` or ~~~ fenced block, or indented four spaces or a tab as an
+# indented example, is never a marked line, so a fenced `Captain:` sample cannot
+# pass the provenance gate as the ship contract's intent (issue 3608).
 fm_brief_marked_captain_words() {  # <task-body>
   printf '%s\n' "$1" | awk '
-    match($0, /^[[:space:]]*(\[captain\]|Captain('\''s (words|ask|intent))?:)[[:space:]]*/) {
-      words = substr($0, RLENGTH + 1)
-      if (words ~ /[^[:space:]]/) print words
+    {
+      scan = $0
+      spaces = 0
+      while (spaces < 3 && substr(scan, 1, 1) == " ") {
+        scan = substr(scan, 2)
+        spaces++
+      }
+      marker = substr(scan, 1, 1)
+      marker_len = 0
+      if (marker == "`" || marker == "~") {
+        while (substr(scan, marker_len + 1, 1) == marker) marker_len++
+      }
+      if (marker_len >= 3) {
+        if (!fenced) {
+          fenced = 1
+          fence_marker = marker
+          fence_len = marker_len
+        } else if (marker == fence_marker && marker_len >= fence_len && substr(scan, marker_len + 1) ~ /^[[:space:]]*$/) {
+          fenced = 0
+        }
+        next
+      }
+      if (fenced || substr(scan, 1, 1) ~ /^[ \t]$/) next
+      if (match(scan, /^(\[captain\]|Captain('\''s (words|ask|intent))?:)[[:space:]]*/)) {
+        words = substr(scan, RLENGTH + 1)
+        if (words ~ /[^[:space:]]/) print words
+      }
     }
   '
 }
@@ -215,11 +249,106 @@ $1
 EOF
 }
 
+# Refuse conflicting live-scenario summaries before the provenance check can
+# misdiagnose a generated appendix as missing metadata. Only tables with an
+# explicit Live column and fully classified rows supply a table total.
+fm_dod_validate_scenario_consistency() {  # <complete-pr-body>
+  printf '%s\n' "$1" | awk '
+    function trim(value) {
+      sub(/^[[:space:]]+/, "", value)
+      sub(/[[:space:]]+$/, "", value)
+      return value
+    }
+    function refuse(first, second) {
+      refused = 1
+      print "evidence claim refused: contradictory driven-scenario results:" > "/dev/stderr"
+      print "  " first > "/dev/stderr"
+      print "  " second > "/dev/stderr"
+      exit 1
+    }
+    function check_table() {
+      if (table_rows > 0 && table_known == table_rows) {
+        stored_table_rows = table_rows
+        stored_table_driven = table_driven
+        stored_table_lines = table_lines
+      }
+      table_rows = table_known = table_driven = live_column = 0
+      table_header = ""
+      table_lines = ""
+    }
+    function check_stored() {
+      if (stored_table_rows > 0 && count_line != "" &&
+          (count_driven < stored_table_driven ||
+           (count_total == stored_table_rows && count_driven != stored_table_driven) ||
+           (stored_table_rows >= 2 && count_total != stored_table_rows) ||
+           (count_driven == count_total && stored_table_driven < stored_table_rows)))
+        refuse(count_line, stored_table_lines)
+    }
+    {
+      original = $0
+      lower = tolower(original)
+      # Require the count to describe scenarios driven live, not a second
+      # metric such as fixture tests passed or endpoints requested.
+      if (lower ~ /[0-9]+[[:space:]]+of[[:space:]]+[0-9]+[[:space:]]+scenarios?[^|]*driven[[:space:]]+live/ ||
+          lower ~ /[0-9]+[[:space:]]+of[[:space:]]+[0-9]+[[:space:]]+scenarios?[^|]*live[^|]*driven/) {
+        # Work from the first ratio on the line; appendix lines carry one.
+        count_text = lower
+        match(count_text, /[0-9]+[[:space:]]+of[[:space:]]+[0-9]+/)
+        ratio = substr(count_text, RSTART, RLENGTH)
+        split(ratio, parts, /[[:space:]]+of[[:space:]]+/)
+        driven = parts[1] + 0
+        total = parts[2] + 0
+        if (count_line != "" && (driven != count_driven || total != count_total))
+          refuse(count_line, original)
+        if (count_line == "") {
+          count_line = original
+          count_driven = driven
+          count_total = total
+        }
+      }
+      if (substr(trim(original), 1, 1) != "|") {
+        if (table_header != "") check_table()
+        next
+      }
+      columns = split(original, cells, /\|/)
+      if (table_header == "") {
+        live_column = 0
+        for (i = 2; i < columns; i++)
+          if (tolower(trim(cells[i])) == "live") live_column = i
+        if (live_column > 0 && tolower(original) ~ /scenario|result/) {
+          table_header = original
+          table_lines = original
+        }
+        next
+      }
+      if (lower ~ /^\|[[:space:]|:-]+\|[[:space:]|:-]*$/) next
+      if (columns <= live_column) { check_table(); next }
+      value = tolower(trim(cells[live_column]))
+      table_rows++
+      table_lines = table_lines "\n  " original
+      if (value ~ /^(yes|live|driven live|real account)$/) {
+        table_known++
+        table_driven++
+      } else if (value ~ /^(no|fixture|fixture-based|synthetic|offline|not driven)$/) {
+        table_known++
+      }
+    }
+    END {
+      if (refused) exit 1
+      if (table_header != "") check_table()
+      check_stored()
+    }
+  '
+}
+
 fm_dod_validate_intent_evidence() {  # <intent> <worktree> <task-temp> [preflight|publish]
   local intent=$1 worktree=$2 task_temp=$3 phase=${4:-preflight}
   local line previous_line='' previous_previous_line='' candidate detector_input artifact command captured claim=0 normalized_artifact normalized_root resolved_artifact link_target symlink_hops
   local timestamp_date timestamp_clock timestamp_year timestamp_month timestamp_day timestamp_hour timestamp_minute timestamp_second timestamp_zone timestamp_offset_hour timestamp_offset_minute days_in_month
   local artifact_count=0 command_count=0 captured_count=0
+  if [ "$phase" = publish ]; then
+    fm_dod_validate_scenario_consistency "$intent" || return 1
+  fi
   detector_input=$(printf '%s\n' "$intent" | tr '.!?;' '\n' | sed -E 's/,[[:space:]]+(but|however|yet)[[:space:]]+/\n/g')
   while IFS= read -r line; do
     for candidate in "$line" "$previous_line $line" "$previous_previous_line $previous_line $line"; do
@@ -409,6 +538,7 @@ EOF
 fm_dod_validate_published_intent() {  # <intent> <worktree> <task-temp> [current-head] [pr-url]
   local body=$1 current_head=${4:-} url=${5:-} line payload attested_head count=0
   fm_dod_validate_intent_evidence "$body" "$2" "$3" publish || return 1
+  [ -z "$url" ] || fm_pr_refuse_published_scratch "$url" || return 1
   while IFS= read -r line || [ -n "$line" ]; do
     case "$line" in
       *'<!-- no-mistakes-pipeline-attestation:v1'*)
@@ -563,6 +693,16 @@ fm_pr_body_preflight_block() {  # <task-id>
 Before publishing or editing a PR body you author, save its complete proposed text in a draft file and run \
 \`$script_dir/fm-pr-body-preflight.sh <draft-body-file> "\$(pwd -P)" "/tmp/fm-$1"\`.
 The command applies the same evidence validation used when Firstmate reads the published body; fix any refusal before sending the body, and require its \`evidence preflight ok\` result.
+If it reports \`contradictory driven-scenario results\`, keep your own honest results as the single statement and correct or remove the contradicting generated line before publication; never weaken a claim to pass.
+EOF
+}
+
+fm_scratch_preflight_block() {
+  local script_dir
+  script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd) || return 1
+  cat <<EOF
+Before committing, and again immediately before handing a commit to a pipeline or publishing it, run \`$script_dir/fm-pr-body-preflight.sh --scratch "\$(pwd -P)"\`.
+It must print \`scratch preflight ok\`; a refusal names the scratch path to remove from the deliverable.
 EOF
 }
 
@@ -577,6 +717,32 @@ If it refuses, correct the description only in that file while preserving the pi
 Read the body back with \`--gh-url\` and repeat until the published text reports \`evidence preflight ok\`.
 Do not append the CI-ready \`done:\` while the published body fails this check.
 The pipeline has no pre-publication body hook here; this readback check is required until that separate tool gains one.
+EOF
+}
+
+fm_upstream_pr_publish_block() {  # <task-id>
+  local script_dir
+  script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd) || return 1
+  cat <<EOF
+For an upstream repository the fleet does not own, do not run \
+\`gh-axi pr create\` directly. Use the guarded publisher:
+1. Set the target repository, title, one-line summary file, target base, proposed body file, and pushed head (\`OWNER:BRANCH\`).
+2. Run \`$script_dir/fm-upstream-prior-art.py scan --repo <OWNER/REPO> --title <TITLE> --summary-file <SUMMARY_FILE> --record /tmp/fm-$1/prior-art.json --base <BASE>\`.
+3. Review every recorded candidate, write one distinct/overlaps verdict and reason per candidate to a decisions JSON file, then run \`$script_dir/fm-upstream-prior-art.py decide --record /tmp/fm-$1/prior-art.json --decisions-file <DECISIONS_FILE>\`.
+4. Run \`$script_dir/fm-upstream-prior-art.py publish --repo <OWNER/REPO> --title <TITLE> --summary-file <SUMMARY_FILE> --record /tmp/fm-$1/prior-art.json --base <BASE> --body-file <BODY_FILE> --head <OWNER:BRANCH>\`; it refuses a missing, stale, incomplete, or unresolved receipt immediately before the forge write.
+For a repository the fleet owns, the ordinary \`gh-axi\` direct-PR path remains unchanged.
+EOF
+}
+
+fm_upstream_pr_preflight_block() {  # <task-id>
+  local script_dir
+  script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd) || return 1
+  cat <<EOF
+Before starting /no-mistakes for an upstream repository the fleet does not own, complete the prior-art gate. For a repository the fleet owns, skip this upstream-only preflight.
+1. Run \`$script_dir/fm-upstream-prior-art.py scan --repo <OWNER/REPO> --title <TITLE> --summary-file <SUMMARY_FILE> --record /tmp/fm-$1/prior-art.json --base <BASE>\`.
+2. Review every candidate, record one distinct/overlaps verdict and reason per candidate, and run \`$script_dir/fm-upstream-prior-art.py decide --record /tmp/fm-$1/prior-art.json --decisions-file <DECISIONS_FILE>\`.
+3. Immediately before starting /no-mistakes, run \`$script_dir/fm-upstream-prior-art.py check --repo <OWNER/REPO> --title <TITLE> --summary-file <SUMMARY_FILE> --record /tmp/fm-$1/prior-art.json --base <BASE>\`; do not start the run if it refuses.
+The later upstream PR publication must use the same current receipt at its forge-write boundary; an automatic PR creation path that cannot perform that check must not be used.
 EOF
 }
 
@@ -595,6 +761,7 @@ Gerrit has no pull requests, so there is nothing to open; publishing creates the
 The task is complete only when committed on your branch.
 When it is implemented and committed, publish it.
 EOF
+      fm_scratch_preflight_block
       fm_gerrit_publish_block
       cat <<EOF
 Do NOT run /no-mistakes.
@@ -629,6 +796,7 @@ When the run's outcome is passed, passed-with-skips, or passed-with-override and
 The squashed change carries only the oldest commit's message, so the pipeline's own fix commits never reach the reviewer's description; your report is how they reach the captain.
 After publishing and immediately before your ready report, append one line \`note [at=<epoch>]: pipeline changes: {finding} - {fix it made}; {finding} - {fix it made}\` to the status file, one short clause per finding the run fixed, taken from the run's \`fixes\` table and the gate findings its drive calls returned (\`no-mistakes axi logs --step <step> --full\` has the detail); write \`note [at=<epoch>]: pipeline changes: none\` when it fixed nothing.
 EOF
+      fm_scratch_preflight_block
       fm_gerrit_publish_block
       ;;
     direct-PR:*)
@@ -638,11 +806,13 @@ Delivery contract: mode=direct-PR
 Ship branch: $branch
 This task ships **direct-PR**: you raise the PR yourself, without the no-mistakes pipeline.
 The task is complete only when committed on your branch.
-When it is implemented and committed, push your branch and open a PR with \`gh-axi\` that is ready for review, not a draft.
+When it is implemented and committed, push your branch and open a PR through the applicable publication path below; it must be ready for review, not a draft.
 EOF
+      fm_scratch_preflight_block
       fm_pr_body_preflight_block "$id"
+      fm_upstream_pr_publish_block "$id"
       cat <<EOF
-Before you report done, read the PR back from the forge and confirm it is not a draft (\`gh pr view <url> --json isDraft\` must print false); if it is a draft, mark it ready with \`gh-axi pr ready\`.
+Before you report done, read the PR back from the forge and confirm it is not a draft (\`gh-axi pr view <number>\` must print \`draft: no\`, where <number> is the PR number from your PR URL); if it is a draft, mark it ready with \`gh-axi pr ready <number>\`.
 A draft cannot be merged, so a done report on one leaves the merge unasked.
 Then append \`done [at=<epoch>]: PR {url}\` to the status file and stop.
 That \`done:\` is accepted only when this copy's HEAD - your latest commit - is pushed to your PR branch; the check tests that commit, not merely that a branch moved.
@@ -662,23 +832,27 @@ Keep your branch a clean fast-forward onto the current default branch - if \`mai
 When it is implemented and committed, append \`done [at=<epoch>]: ready in branch $branch\` to the status file and stop.
 The configured merge authority approves the ready branch, then firstmate merges it into local \`main\` through the guarded fast-forward path.
 EOF
+      fm_scratch_preflight_block
       ;;
     no-mistakes:*)
       cat <<EOF
 # Definition of done
 Delivery contract: mode=no-mistakes
 Ship branch: $branch
-Your implementation is ready for validation only when committed on your branch.
-When it is committed, append \`done [at=<epoch>]: {summary}\` to the status file as the pipeline handoff, then start /no-mistakes on that committed head immediately without waiting for firstmate.
-That first \`done:\` is the pipeline handoff, and the pipeline owns the push; it is not a request to push from this copy.
+The task is complete only when committed on your branch.
+When you believe it is complete, append \`done [at=<epoch>]: {summary}\` to the status file and stop.
+Firstmate will then instruct you to run /no-mistakes to validate and ship a PR.
+That first \`done:\` is the handoff that starts the pipeline, which owns the push; it is not a request to push from this copy.
 
 EOF
+      fm_scratch_preflight_block
       fm_nm_driving_block "$forge"
       fm_pr_body_preflight_block "$id"
       fm_nm_published_body_check_block "$id"
+      fm_upstream_pr_preflight_block "$id"
       cat <<EOF
 
-For a base with checks, including \`house\`, after /no-mistakes reports CI green (the CI-ready return point - do not wait for it to keep monitoring in the background until merge), read the PR back from the forge and confirm it is not a draft (\`gh pr view <url> --json isDraft\` must print false); if it is a draft, mark it ready with \`gh-axi pr ready\`.
+For a base with checks, including \`house\`, after /no-mistakes reports CI green (the CI-ready return point - do not wait for it to keep monitoring in the background until merge), read the PR back from the forge and confirm it is not a draft (\`gh-axi pr view <number>\` must print \`draft: no\`, where <number> is the PR number from your PR URL); if it is a draft, mark it ready with \`gh-axi pr ready <number>\`.
 A draft cannot be merged, so a done report on one leaves the merge unasked.
 For a base with checks, append \`done [at=<epoch>]: PR {url} checks green\` and stop.
 For a base verified to have no check workflows where this run used \`--skip ci\`, wait for the pipeline's passed-with-skips outcome, confirm the PR is not a draft, and append \`done [at=<epoch>]: PR {url} ready for review (CI skipped: base has no configured check workflows)\` without claiming checks are green.
@@ -756,6 +930,48 @@ fm_dod_pr_url_from_done_note() {  # <note>
 # The last recorded <key>= value in <meta>, or empty.
 fm_dod_meta_value() {  # <meta> <key>
   grep "^$2=" "$1" 2>/dev/null | tail -1 | cut -d= -f2-
+}
+
+fm_dod_upstream_receipt_check() {  # <worktree> <url> <meta> [<published-head>]
+  local wt=$1 url=$2 meta=$3 published_head=${4:-} origin target record tasktmp head script_dir origin_path
+  fm_pr_url_parse "$url" || return 0
+  [ "$FM_PR_PROVIDER" = github ] || return 0
+  [ -d "$wt" ] || { printf '%s\n' 'upstream prior-art receipt refused: worktree is unavailable'; return 1; }
+  origin=$(git -C "$wt" remote get-url origin 2>/dev/null || true)
+  case "$origin" in
+    https://*)
+      origin_path=${origin#https://}
+      origin_path=${origin_path#*@}
+      case "$origin_path" in
+        github.com/*) origin_path=${origin_path#github.com/} ;;
+        *) origin_path= ;;
+      esac
+      ;;
+    ssh://git@github.com/*) origin_path=${origin#ssh://git@github.com/} ;;
+    git@github.com:*) origin_path=${origin#git@github.com:} ;;
+    *) origin_path= ;;
+  esac
+  origin_path=${origin_path%.git}
+  target=$(printf '%s' "$FM_PR_PATH" | tr '[:upper:]' '[:lower:]')
+  origin_path=$(printf '%s' "$origin_path" | tr '[:upper:]' '[:lower:]')
+  [ -n "$origin_path" ] || return 0
+  [ "$origin_path" = "$target" ] && return 0
+  [ -f "$meta" ] || { printf '%s\n' 'upstream prior-art receipt refused: task metadata is unavailable'; return 1; }
+  tasktmp=$(fm_dod_meta_value "$meta" tasktmp)
+  record="$tasktmp/prior-art.json"
+  [ -f "$record" ] || { printf '%s\n' "upstream prior-art receipt refused: missing $record"; return 1; }
+  head=${published_head:-$(git -C "$wt" rev-parse --verify HEAD 2>/dev/null)} || {
+    printf '%s\n' 'upstream prior-art receipt refused: worktree head is unavailable'
+    return 1
+  }
+  script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd) || return 1
+  local verify_args=(--record "$record" --repo "$FM_PR_PATH" --head "$head")
+  [ -z "$published_head" ] || verify_args+=(--published)
+  if ! (cd "$wt" && python3 "$script_dir/fm-upstream-prior-art.py" verify \
+      "${verify_args[@]}"); then
+    printf '%s\n' 'upstream prior-art receipt refused: receipt does not match the published work'
+    return 1
+  fi
 }
 
 # 0 when the forge's head for a PR is the head the done names. In no-mistakes
@@ -876,8 +1092,18 @@ fm_dod_named_head_reachable_outside_worktree() {  # <worktree> <project> <mode> 
 # pr_head=, and the merge-notified marker; <meta> may be a captured copy
 # (bin/fm-fleet-snapshot.sh), so the marker is read from <state>.
 fm_dod_accept_ship_done() {  # <kind> <mode> <worktree> <project> <line> [<state> <id> <meta>]
-  local kind=$1 mode=$2 wt=$3 project=$4 line=$5 state=${6:-} id=${7:-} meta=${8:-} url sha gerrit
+  local kind=$1 mode=$2 wt=$3 project=$4 line=$5 state=${6:-} id=${7:-} meta=${8:-} url sha gerrit scratch
   fm_dod_should_gate_ship_done "$kind" "$mode" "$line" || return 0
+  if [ -n "$wt" ] && [ -d "$wt" ] && git -C "$wt" rev-parse --git-dir >/dev/null 2>&1 \
+    && ! scratch=$(fm_scratch_refuse_worktree "$wt" 2>&1 >/dev/null); then
+    scratch=${scratch%%$'\n'*}
+    printf '%s\n' "${scratch#error: }"
+    return 1
+  fi
+  url=$(fm_dod_pr_url_from_done_note "$(status_line_note "$line")") || url=
+  if [ -n "$url" ] && ! fm_dod_upstream_receipt_check "$wt" "$url" "$meta" "$(fm_dod_meta_value "$meta" pr_head)"; then
+    return 1
+  fi
   if url=$(fm_dod_pr_url_from_done_note "$(status_line_note "$line")") \
     && fm_dod_recorded_pr_on_forge "$state" "$id" "$meta" "$mode" "$url"; then
     return 0

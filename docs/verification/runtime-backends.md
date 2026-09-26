@@ -617,6 +617,26 @@ skip-runner: pi-signed is not installed, so its pin check was not exercised
 
 The guard submits no prompt and spends no tokens, so it runs by default wherever a runner is installed; rerun it after every Claude or Pi upgrade.
 
+### Codex dock seat status
+
+On 2026-09-26 AEST, the installed `codex-cli 0.156.1` was checked with `bin/fm-test-run.sh tests/fm-dock-auth-live-e2e.test.sh` on macOS.
+The guard used a throwaway `CODEX_HOME`, wrote a synthetic API key with native `codex login --with-api-key`, and submitted no model prompt.
+Its output was:
+
+```text
+ok - codex-cli 0.156.1: native status distinguishes synthetic file stores from empty and keyring selections, and the helper rejects ambient credentials
+```
+
+At `2026-09-25T15:43:11Z`, the installed CLI's native status also returned `Logged in using ChatGPT` with exit 0 for the existing Luna home under a cleared environment:
+
+```sh
+env -i HOME=/Users/jarad PATH="$PATH" USER=jarad LOGNAME=jarad CODEX_HOME=/Users/jarad/.codex-luna codex login status -c 'cli_auth_credentials_store="file"' -c 'model_provider="openai"'
+```
+
+The same command saw `Not logged in` with exit 1 for an empty temporary home.
+That local status check did not send a model request or inspect credential contents.
+The operator contract and supported storage mode are in [`configuration.md`](../configuration.md#dock-local-seat-binding-configdockjson); rerun the guard after a Codex upgrade.
+
 ## Codex hook trust
 
 Verified 2026-09-16 on codex-cli 0.151.0, macOS arm64, in a fresh linked worktree of this repository.
@@ -1297,6 +1317,22 @@ The projected spawn in that run used the historical empty opt-in file, so a home
 One concurrent cross-home recovery case refused under contention on a loaded machine and passed on an immediate rerun; recovery-path presentation lock contention is a deliberate hard refusal rather than a flat fallback, which default-on now makes reachable from any Herdr home.
 That run measured the default-on projection on Herdr 0.8.0 only, while the focus-flash regression below was last run on 0.7.5 before the flip, so neither run covered a defective release under default-on projection; the version floor and the focus-flash suite's Part C close that gap.
 
+The per-project task space suite ran on 2026-09-26 against Herdr 0.9.1, with `config/herdr-presentation-spaces` set to `project`:
+
+```sh
+HERDR_LAB_HELPER=bin/fm-herdr-lab.sh \
+  tests/fm-backend-herdr-project-spaces-e2e.test.sh
+```
+
+Observed guarantees:
+
+```text
+ok - real Herdr lab: tasks of one project share one labelled workspace, another project gets its own, and a same-labelled captain workspace keeps its focus and contents
+ok - real Herdr lab: a project space outlives every task but its last, and its removal keeps the captain's focus
+ok - real Herdr lab: after its last task a project reopens a fresh space and every space is removed with its last task
+ok - real Herdr lab validation completed on Herdr 0.9.1 with the default-session tripwire intact
+```
+
 The restored-shell session-start cleanup ran on 2026-07-24 against Herdr 0.7.5 protocol 17:
 
 ```sh
@@ -1480,6 +1516,27 @@ The U+2063 operational and routed-request separators were exercised through a re
 FM_SEND_MARKER_HERDR_E2E=1 \
   tests/fm-send-secondmate-marker-herdr-e2e.test.sh
 ```
+
+### Pi composer exit boundary
+
+Measured on 2026-09-25 with pi 0.87.1 and herdr 0.9.1 on macOS arm64, in an isolated `fm-lab-` session made and removed by `bin/fm-herdr-lab.sh`, on a 120 by 40 pane.
+Pi ran `openai-codex/gpt-5.6-terra` so its footer rendered cost-first, and no prompt was submitted.
+`bin/fm-control.sh <task> exit` ran against a disposable task record whose endpoint was the lab pane, and each verdict came from the adapter itself:
+
+```sh
+bin/fm-herdr-lab.sh run "$LAB" pane run w1:p1 'pi --model openai-codex/gpt-5.6-terra'
+( . bin/backends/herdr.sh; fm_backend_herdr_composer_state "$LAB:w1:p1" )
+FM_HOME="$DISPOSABLE_HOME" bin/fm-control.sh t1 exit
+```
+
+| Pane state | Composer verdict | `exit` result |
+| --- | --- | --- |
+| Idle: rule, reverse-video cursor cell, rule, pwd row, then `$0.000 (sub) 0.0%/272k (auto)` | `empty` | typed `/quit` once and Pi stopped to its shell |
+| `lab draft keep me` typed without Enter | `pending`, extracted as `lab draft keep me` | refused with no lifecycle text; the draft, identity, and scroll offset were unchanged |
+| The draft cleared with `ctrl+u` | `empty` | not run in that state |
+
+The same idle capture read `unknown` on the classifier before the cost-first footer rule, which is the refusal this boundary fixes.
+Stock pi 0.87.1 drew neither a first-row `>` prompt nor the compact rounded-header layout in this run, so those two shapes rest on the portable fixtures in `tests/fm-composer-lib.test.sh` and `tests/fm-backend-herdr.test.sh`, and both stay opt-in: the first-row `>` behind `FM_BACKEND_HERDR_PI_PROMPT=1` and the compact layout behind `FM_BACKEND_HERDR_PI_COMPACT=1`.
 
 ### Native blocked event
 

@@ -19,6 +19,7 @@ Herdr provides the terminal session while Treehouse continues to provide task wo
 | Why a command ran on a different `herdr` client | [Client selection](#client-selection) |
 | Where task tabs appear and how to watch them | [Watching and task containers](#watching-and-task-containers) |
 | The one-task workspaces, their setting, and their cleanup | [Presentation spaces](#presentation-spaces) |
+| One workspace per project instead of one per task | [Project spaces](#project-spaces) |
 | Why a seeded default tab is or is not closed | [Default-tab prune safety](#default-tab-prune-safety) |
 | What task metadata records for a Herdr endpoint | [Endpoint metadata](#endpoint-metadata) |
 | How text and keys reach a worker and how delivery is confirmed | [Current transport behavior](#current-transport-behavior) and [Composer and injection safety](#composer-and-injection-safety) |
@@ -125,7 +126,7 @@ Herdr 0.7.5 exports `HERDR_ENV`, `HERDR_PANE_ID`, `HERDR_SESSION`, `HERDR_SOCKET
 A Firstmate or secondmate agent's own commands inherit them.
 Older injection shapes are unverified, so a claimed launcher pane without the injected socket identity cannot be trusted.
 
-With presentation spaces disabled, a crewmate or scout is created in the exact workspace that identity currently resolves to.
+With neither a presentation space nor a [project space](#project-spaces), a crewmate or scout is created in the exact workspace that identity currently resolves to.
 That workspace is read live from Herdr rather than from the injected snapshot, so the worker always appears beside the agent that launched it.
 Duplicate labels elsewhere in the session are irrelevant, and the globally focused workspace is never the target.
 A `--secondmate` launch is the deliberate exception: it stands up that secondmate home's own workspace instead of joining the launcher's.
@@ -178,10 +179,12 @@ The local gitignored `config/herdr-presentation-spaces` file controls the projec
 | Absent | Leaves the choice to the version floor below (the unconfigured default). |
 | `off` | Opts the home out. |
 | `on` | Forces the projection on, as a deliberate opt-in. |
+| `project` | Replaces the projection with one workspace per project, described under [Project spaces](#project-spaces). |
 | Empty | A deliberate opt-in, the same as `on`. |
 | Any other value | Warns and follows the unconfigured default rather than failing a spawn over a purely visual setting. |
 
 Values are compared with whitespace stripped and case ignored.
+The rest of this section describes the one-task projection, except [Project spaces](#project-spaces).
 
 The empty file is the historical presence-based opt-in form.
 So every home that had already enabled the projection stays enabled with no migration step.
@@ -241,6 +244,39 @@ Only an explicit primary `off` propagates the opt-out.
 
 A secondmate agent itself always stays in its ordinary parent workspace; only children launched by that home are eligible.
 An unconverged opt-out keeps the default projection in that home until convergence.
+An inherited `project` value keeps that home's children as ordinary tabs in its own workspace, as [Project spaces](#project-spaces) describes.
+
+### Project spaces
+
+The `project` value replaces the one-task projection with one workspace per project.
+Each fresh crewmate or scout of the primary home becomes an ordinary `fm-<id>` task tab in a workspace labelled `▸ <project>`, where `<project>` is the basename of the task's project directory.
+The prefix keeps that label distinct from the `firstmate` home label, even for a project named `firstmate`, and from the projection's `└ ... · p:<token>` grammar.
+
+Placement works like this:
+
+- The first task of a project creates the workspace with `--no-focus`, prunes Herdr's seeded default tab, and records the workspace's exact id in this home's `state/.herdr-project-space-<key>` record.
+- A later task of the same project reuses that workspace only when the recorded id still names exactly one workspace in the same named session, for this physical home, carrying the expected label, and holding at least one `fm-` task tab.
+- Otherwise the task gets a fresh workspace and the record is replaced.
+- A workspace is never found or adopted by its label, so a captain workspace wearing the same label is left alone.
+- The reuse decision, any create, and the record update run under the named session's presentation lock, so concurrent spawns and cleanups cannot race.
+
+Removal needs no separate path:
+
+- A project-space task tab is an ordinary endpoint with no presentation journal.
+- Its cleanup closes the exact task pane through the focus-safe plan under [Ordinary removal and cleanup locking](#ordinary-removal-and-cleanup-locking).
+- Closing a task that is not its project's last leaves the workspace in place.
+- Closing the last one empties the workspace, which Herdr removes, and the next task of that project opens a fresh workspace.
+
+Fallbacks and limits:
+
+- A missing session server, a contended session lock, or a failed workspace create warns and uses the ordinary flat layout.
+- A failure after Herdr created something stops the spawn like a failed flat create, and a just-created workspace left holding only its seeded tab is closed.
+- Only a fresh task with neither metadata nor a presentation journal is eligible, so a resumed or reclaimed task uses the ordinary flat layout.
+- The value is a deliberate choice, so it is honored at every release like `on`.
+  Below the [0.8.0 floor](#why-the-default-needs-herdr-080), removing a project's last task can briefly move focus when the focus-safe plan falls back to a plain close, before the exact-tab restore pulls it back.
+- A secondmate home keeps every child as a tab in its own `2ndmate-<id>` workspace, and a `--secondmate` launch still stands up that workspace.
+- Project spaces are not ordered beside their home workspace, and already-running workers are not moved when the value changes.
+- Recovery and list-live scan only the home workspace, so, as with projections, they do not see project-space tabs.
 
 ### Presentation journal
 
@@ -471,6 +507,7 @@ Any of these preserves the candidate and lets session startup continue with at m
 
 | Test | What it covers |
 | --- | --- |
+| `tests/fm-backend-herdr-project-spaces-e2e.test.sh` | Per-project reuse, separation across projects, removal only with the last task, a fresh space afterward, no adoption of a same-labelled captain workspace, and preserved focus through the guarded lab path. |
 | `tests/fm-backend-herdr-presentation-e2e.test.sh` | Multi-home ordering, concurrency, lock contention, legacy coexistence, focus preservation, exact same-identity restart replacement, ambiguous bindings and tokens, and exact-pane cleanup through the guarded lab path. |
 | `tests/fm-herdr-session-cleanup.test.sh` | Every discovery, ownership, topology, process, locking, revalidation, focus, retirement, and continue-on-error boundary. |
 | `tests/fm-herdr-session-cleanup-e2e.test.sh` | The restored-shell cleanup in a guarded non-default named lab. |
@@ -828,6 +865,7 @@ tests/fm-backend-herdr-respawn-idem-e2e.test.sh
 tests/fm-backend-herdr-workspace-per-home-e2e.test.sh
 tests/fm-backend-herdr-launcher-workspace-e2e.test.sh
 tests/fm-backend-herdr-presentation-e2e.test.sh
+tests/fm-backend-herdr-project-spaces-e2e.test.sh
 tests/fm-backend-herdr-agent-exit-shell-e2e.test.sh
 tests/fm-herdr-pi-stale-registration-live-e2e.test.sh
 tests/fm-backend-herdr-eventwait-smoke.test.sh

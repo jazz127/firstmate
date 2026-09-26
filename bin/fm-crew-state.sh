@@ -150,9 +150,10 @@
 #      unreachable, and an alive endpoint whose scrollback read failed is still
 #      classified by step 4. Backends with no classifier keep reading a failed
 #      capture as gone. The fallback's own comment owns the per-verdict rules.
-#      The one exception is a dead agent the opt-in ready-session timeout
-#      stopped on purpose (bin/fm-ready-timeout-lib.sh): its `done` delivery
-#      still answers, with the stop named in the detail.
+#      Steps 4 and 5 share one exception: for an agent the opt-in ready-session
+#      timeout stopped on purpose (bin/fm-ready-timeout-lib.sh), its `done`
+#      delivery still answers, with the stop named in the detail, whether its
+#      pane shell remains readable or not.
 #
 # Read-only and side-effect free. Always exits 0 on a successful read regardless
 # of state; exit 2 only on a usage error (no id).

@@ -182,7 +182,7 @@ WATCH_HOME_EXISTED=0
 # without sourcing the entire watcher graph.
 # The shared transition owner is a canonical lint root itself. Stop duplicate
 # source-graph expansion here: following its backend graph from this large
-# runtime can exceed the bounded CI lint worker while adding no uncovered file.
+# runtime needlessly spends per-root CI lint memory while adding no uncovered file.
 # shellcheck source=/dev/null
 . "$SCRIPT_DIR/fm-push-transition-lib.sh"
 # shellcheck source=bin/fm-pr-lib.sh
@@ -198,8 +198,8 @@ WATCH_HOME_EXISTED=0
 # This library is a canonical lint root in its own right, and it reaches the
 # wake queue, PR identity, and secondmate parent libraries. Keep it an analysis
 # boundary here for the same reason as the transition and inbox owners above and
-# below: following its graph from this large runtime exceeds the bounded CI lint
-# worker while adding no uncovered file.
+# below: following its graph from this large runtime needlessly spends per-root
+# CI lint memory while adding no uncovered file.
 # shellcheck source=/dev/null
 . "$SCRIPT_DIR/fm-merge-outcome-lib.sh"
 # The durable merge-authority owner is shared with bin/fm-pr-merge.sh. The
@@ -296,6 +296,15 @@ esac
 SIGNAL_GRACE=${FM_SIGNAL_GRACE:-30}   # seconds to linger after a signal so trailing
                                       # signals (a status write, then the same turn's
                                       # turn-end hook) coalesce into one wake
+CLEANUP_LOCK_BOUND=${FM_WATCHER_CLEANUP_LOCK_BOUND:-2}  # seconds EXIT cleanup may
+                                      # wait on the downtime-marker lock; a live
+                                      # foreign holder must not strand a TERM'd
+                                      # watcher inside its own trap
+case "$CLEANUP_LOCK_BOUND" in
+  ''|*[!0-9]*) CLEANUP_LOCK_BOUND=2 ;;
+  *) CLEANUP_LOCK_BOUND=$((10#$CLEANUP_LOCK_BOUND)) ;;
+esac
+[ "$CLEANUP_LOCK_BOUND" -gt 0 ] || CLEANUP_LOCK_BOUND=2
 TURNEND_CHURN_ABSORB_SECS=${FM_TURNEND_CHURN_ABSORB_SECS:-900}  # longest a task's
                                       # bare turn-ends may be deferred on pane-churn
                                       # evidence alone (signal_turnend_panes_churned)
@@ -1819,8 +1828,8 @@ declared_wait_stale_reason() {  # <kind> <age>
 # .paused-resurfaced-<key> marker. Advances the stale suppressor to <hash> and
 # flags the key paused.
 #
-# The recheck names WHICH human the declared wait is on, because that is the whole
-# point of a recheck the captain reads: an external dependency for paused:, and the
+# The recheck distinguishes the declared dependency from a captain decision:
+# the legacy external-wait wording for paused: (bin/fm-classify-lib.sh), and the
 # captain themself for a verified hold. Only the captain-held verb takes the second
 # wording; a caller that reached the bounded cadence off pause tracking alone, with
 # no declaring verb left on the log, keeps the external-wait wording it always had.
@@ -2079,15 +2088,22 @@ clear_pause_tracking() {  # <window-key>
 
 # Reconcile a declared pause, captain-held status, or authenticated delivered
 # pull request wait (delivered_pr_wait) with authoritative crew state.
-# A standing declaration is admitted for every endpoint-liveness verdict - alive,
-# ambiguous, unreadable or dead - because being alive is not a new task event and
-# the declaration is what the worker said about its own silence. Only a `working`
-# crew-state class outranks it. A cached admission is re-read
-# against crew state once per STALE_ESCALATE_SECS, so a later task-state change is
-# still noticed. A secondmate takes the same rule; its endpoint liveness is never
-# read here either.
+# A declared pause or captain-held line on an ordinary worker keeps upstream's
+# first-sight alert when its agent is not confidently dead, except a captain-held
+# wait while the away-posture record exists. A dead worker and a secondmate take
+# the bounded wait cadence immediately. A delivered PR with an
+# authenticated merge poll keeps its separate house wait cadence. A `working`
+# crew-state class outranks every wait. Cached admission is re-read against crew
+# state once per STALE_ESCALATE_SECS so later task-state changes are noticed.
+live_declared_wait_already_surfaced() {  # <window-key> <task>
+  local marker
+  declared_wait_episode "$1" "$2" || return 1
+  marker=$(cat "$STATE/.paused-resurfaced-$1" 2>/dev/null || true)
+  [ "$marker" = "$DECLARED_WAIT_SCOPE" ] || [ "$marker" = "$DECLARED_WAIT_SCOPE:due" ]
+}
+
 pause_state_class() {  # <window> <task>
-  local win=$1 task=$2 key last recheck_file class
+  local win=$1 task=$2 key last recheck_file class kind agent_alive
   key=$(window_key "$win")
   last=$(status_declared_wait_line "$STATE/$task.status")
   recheck_file="$STATE/.paused-rechecked-$key"
@@ -2096,7 +2112,24 @@ pause_state_class() {  # <window> <task>
     crew_absorb_class "$task"
     return
   fi
+  kind=$(window_kind "$win")
+  if status_is_captain_held "$last" && afk_record_present; then
+    printf 'paused'
+    return
+  fi
   if [ -e "$STATE/.paused-$key" ] && [ "$(age_of "$recheck_file")" -lt "$STALE_ESCALATE_SECS" ]; then
+    if status_is_paused_or_captain_held "$last" && [ "$kind" != secondmate ]; then
+      agent_alive=$(fm_backend_agent_alive "$(window_backend "$win")" "$win" 2>/dev/null) || agent_alive=unknown
+      if [ "$agent_alive" != dead ]; then
+        if live_declared_wait_already_surfaced "$key" "$task"; then
+          printf 'paused'
+          return
+        fi
+        rm -f "$recheck_file"
+        printf 'none'
+        return
+      fi
+    fi
     printf 'paused'
     return
   fi
@@ -2105,6 +2138,18 @@ pause_state_class() {  # <window> <task>
     rm -f "$recheck_file"
     printf 'working'
     return
+  fi
+  if status_is_paused_or_captain_held "$last" && [ "$kind" != secondmate ]; then
+    agent_alive=$(fm_backend_agent_alive "$(window_backend "$win")" "$win" 2>/dev/null) || agent_alive=unknown
+    if [ "$agent_alive" != dead ]; then
+      if live_declared_wait_already_surfaced "$key" "$task"; then
+        printf 'paused'
+        return
+      fi
+      rm -f "$recheck_file"
+      printf 'none'
+      return
+    fi
   fi
   # Recover paused classification for a declared wait that authoritative crew state
   # could not name, including a stopped or unknown crew and a mate's
@@ -2210,9 +2255,8 @@ captain_call_stale_bound() {  # <window-key> <task>
 
 # Surface a stale pane no classifier could resolve, so firstmate inspects it: it
 # may have finished through an interactive menu that wrote no status, be waiting on
-# a decision, or be wedged. A standing declared wait never reaches this path:
-# pause_state_class admits it for every liveness verdict and hands it to
-# handle_paused_stale, so only an undeclared pane arrives here.
+# a decision, or be wedged. A live or unreadable ordinary worker with a declared
+# wait reaches this path on first sight; later polls use handle_paused_stale.
 #
 # The FIRST sight still wakes, keeping the inspect-an-inconclusive-state intent,
 # and the throttle is read BEFORE anything is queued and advanced only by a wake
@@ -2225,7 +2269,7 @@ captain_call_stale_bound() {  # <window-key> <task>
 # an idle pane still churns its hash (a clock, a token counter), so without that
 # bound one hold re-alarms firstmate for its whole duration.
 surface_nonterminal_stale() {  # <window> <hash>
-  local win=$1 h=$2 key task bounded=1 throttled=1
+  local win=$1 h=$2 key task bounded=1 throttled=1 declared_scope='' until
   key=$(window_key "$win")
   task=$(window_to_task "$win" "$STATE")
   STALE_WAIT_DECLARATION=
@@ -2234,6 +2278,13 @@ surface_nonterminal_stale() {  # <window> <hash>
     throttled=0
   elif [ -n "$STALE_WAIT_DECLARATION" ]; then
     bounded=0
+  fi
+  if [ "$bounded" -ne 0 ] && status_is_paused_or_captain_held "$(status_declared_wait_line "$STATE/$task.status")" \
+    && declared_wait_episode "$key" "$task"; then
+    declared_scope=$DECLARED_WAIT_SCOPE
+    if until=$(status_paused_until "$DECLARED_WAIT_LINE") && [ "$(date +%s)" -ge "$until" ]; then
+      declared_scope="$declared_scope:due"
+    fi
   fi
   if [ "$throttled" -ne 0 ]; then
     fm_wake_append stale "$win" "stale: $win" || exit 1
@@ -2257,6 +2308,7 @@ surface_nonterminal_stale() {  # <window> <hash>
     triage_log "absorbed non-terminal stale (open captain call already re-surfaced this window): $win"
     return 0
   fi
+  [ -z "$declared_scope" ] || printf '%s' "$declared_scope" > "$STATE/.paused-resurfaced-$key"
   wake "stale: $win"
 }
 
@@ -2840,7 +2892,8 @@ watcher_cleanup() {
   fm_check_output_cleanup
   fm_custom_check_snapshot_cleanup
   if [ "$owns_lock" -eq 1 ] \
-    && ! fm_recovery_transition "$WATCHER_DOWNTIME_MARKER" "$transition" "$WATCH_LOCK" downtime; then
+    && ! fm_recovery_transition "$WATCHER_DOWNTIME_MARKER" "$transition" "$WATCH_LOCK" \
+      downtime "$CLEANUP_LOCK_BOUND"; then
     echo "watcher: recovery state could not be persisted; retaining stale lock evidence" >&2
     cleanup_status=1
   fi
@@ -3439,10 +3492,10 @@ EOF
           #   - working: an actively-running pipeline legitimately sits on a static
           #     pane (e.g. waiting on CI), so absorb and start the wedge timer so a
           #     genuinely frozen run still escalates past STALE_ESCALATE_SECS;
-          #   - paused: a declared wait pause_state_class admits for every liveness
-          #     verdict, so absorb on the long PAUSE_RESURFACE_SECS cadence instead of
-          #     wedge-escalating;
-          #   - none: no running pipeline, no exact busy verdict, no admitted declared wait.
+          #   - paused: a dead worker's or secondmate's declared wait, or an
+          #     authenticated delivered PR, takes the long PAUSE_RESURFACE_SECS cadence;
+          #   - none: no running pipeline or an ordinary declared wait whose agent
+          #     is still alive or cannot be classified confidently as dead.
           #     Surface immediately so firstmate inspects the inconclusive state
           #     (it may be done via an interactive menu that wrote no done: status,
           #     waiting on a decision, or wedged) instead of leaving the finish to

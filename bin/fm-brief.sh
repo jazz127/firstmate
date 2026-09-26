@@ -94,10 +94,10 @@
 # There is no --yolo flag here. The worker never owns merge decisions, so yolo is
 # a spawn-time and firstmate-side input only (AGENTS.md section 7).
 # Every scaffold's status protocol distinguishes the configured
-# declared-wait verb (FM_CLASSIFY_PAUSED_VERB, default "paused") from
-# "blocked:": pause for a known external wait expected to clear on its own, or
-# for a long job the worker launched itself and parks on with a stated bound;
-# blocked when firstmate must act.
+# declared-external-wait verb (FM_CLASSIFY_PAUSED_VERB, default "paused") from
+# "blocked:": pause for a known wait expected to clear on its own, including
+# the worker's own background work, pipeline or long command; blocked when
+# firstmate must act. The first-sight alert remains; repeats use the long cadence.
 # Emission-time syntax and legacy unknown-time handling are owned by
 # bin/fm-classify-lib.sh; each scaffold renders the stamp as a literal <epoch>
 # placeholder the worker replaces with a numeric Unix time as it appends, so a
@@ -149,13 +149,17 @@ esac
 # shellcheck source=bin/fm-dod-lib.sh
 . "$SCRIPT_DIR/fm-dod-lib.sh"
 PAUSED_VERB=${FM_CLASSIFY_PAUSED_VERB:-$FM_CLASSIFY_PAUSED_VERB_DEFAULT}
-CREWMATE_PAUSE_WAIT_EXAMPLES='an upstream release, a rate-limit reset, a scheduled window, or your own validation round'
-# A long job the worker launched itself is a declared wait too: an undeclared
-# idle pane reads as a possible wedge, and a wait with no stated bound hides a job
-# that died. Shared by the ship and scout status protocols.
-CREWMATE_SELF_JOB_WAIT_RULE="   The same applies to a long job you launched yourself (a build, a test suite, a long poll):
-   if you end a turn while it runs, append the \`$PAUSED_VERB:\` line first, naming the job and how long
-   you expect it to take, check on it again once that time has passed, and append \`working:\` when you resume."
+IFS= read -r -d '' CREWMATE_PAUSE_INSTRUCTIONS <<EOF || true
+   Use \`$PAUSED_VERB: {why}\` - distinct from \`blocked:\` - when deliberately waiting for work or a known external wait you expect to clear on its own, including your own validation round.
+   Before ending your turn with your own background shell or monitor still running, or before waiting on your own pipeline run or a long foreground command, append \`$PAUSED_VERB [at=<epoch>]: {job and completion condition}\` to the status file.
+   Name what you are waiting for and what will let you resume; do not repeat the declaration on every poll.
+   For a long job you launched yourself, append the \`$PAUSED_VERB:\` line first, naming the job and how long you expect it to take, check on it again once that time has passed, and append \`working:\` when you resume.
+   Do not declare active implementation or reasoning as a wait.
+   Firstmate may still raise one first-sight alert; the declared wait then uses the existing long recheck cadence instead of repeated possible-wedge alarms.
+   When you know when the wait clears, include \`until <YYYY-MM-DDTHH:MMZ>\` (UTC) for a recheck at that time.
+   Follow the resolution rule below when the wait clears, then resume the task.
+   Use \`blocked:\` when you are stuck and need help.
+EOF
 
 resolve_directory_input() {
   local name=$1 path=$2 resolved
@@ -639,13 +643,7 @@ The report is the only thing that survives, so anything worth keeping must be in
    Whenever you mention a PR anywhere - a status line, your terminal, a summary - write its full
    https:// URL exactly as the forge printed it, never a bare number such as "PR 108"; firstmate
    copies that URL from your line rather than assembling one.
-   Use \`$PAUSED_VERB: {why}\` - distinct from \`blocked:\` - ONLY when you are deliberately idling on a
-   known external wait you expect to clear on its own ($CREWMATE_PAUSE_WAIT_EXAMPLES):
-   firstmate then leaves your idle pane alone and rechecks it on a long cadence instead of
-   treating it as a possible wedge. When you know when the wait clears, say so in the line with
-   \`until <YYYY-MM-DDTHH:MMZ>\` (UTC) and firstmate rechecks at that time instead.
-$CREWMATE_SELF_JOB_WAIT_RULE
-   Use \`blocked:\` when you are stuck and need help.
+$CREWMATE_PAUSE_INSTRUCTIONS
 5. If you hit the same obstacle twice, append \`blocked [at=<epoch>]: {why}\` and stop; firstmate will help.
 6. If a decision belongs to a human (product choices, destructive actions),
    append \`needs-decision [at=<epoch>]: {summary of options}\` and stop. Firstmate will reply with the decision.
@@ -723,15 +721,9 @@ $RULE1
    Whenever you mention a PR anywhere - a status line, your terminal, a summary - write its full
    https:// URL exactly as the forge printed it, never a bare number such as "PR 108"; firstmate
    copies that URL from your line rather than assembling one.
-   A mid-task \`working:\` line (including setup complete) is nonterminal: do not end the turn
-   after it unless a \`$PAUSED_VERB:\` line declares the wait; otherwise continue the same stage until a
-   defined \`done:\` gate under Definition of done.
-   Use \`$PAUSED_VERB: {why}\` - distinct from \`blocked:\` - ONLY when you are deliberately idling on a
-   known external wait you expect to clear on its own ($CREWMATE_PAUSE_WAIT_EXAMPLES):
-   firstmate then leaves your idle pane alone and rechecks it on a long
-   cadence instead of treating it as a possible wedge.
-$CREWMATE_SELF_JOB_WAIT_RULE
-   Use \`blocked:\` when you are stuck and need help.
+   A mid-task \`working:\` line (including setup complete) is nonterminal: do not end the
+   turn after it unless a \`$PAUSED_VERB:\` line declares the wait; otherwise continue the same stage until a defined \`done:\` gate under Definition of done.
+$CREWMATE_PAUSE_INSTRUCTIONS
 5. If you hit the same obstacle twice, append \`blocked [at=<epoch>]: {why}\` and stop; firstmate will help.
 6. If a decision belongs above the implementation worker (product choices, destructive actions),
    append \`needs-decision [at=<epoch>]: {summary of options}\` and stop. Firstmate will reply with the decision.

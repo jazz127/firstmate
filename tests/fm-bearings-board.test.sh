@@ -329,6 +329,10 @@ test_build_injects_binds_then_arms() {
   # data block.
   extract_payload "$board" | jq -S . > "$home/extracted.json" \
     || fail "the built board does not carry parseable payload JSON"
+  jq -S . "$home/state/captains-call.json" > "$home/queue.json" \
+    || fail "the terminal queue does not carry parseable payload JSON"
+  diff -u "$home/extracted.json" "$home/queue.json" >/dev/null \
+    || fail "the board and terminal queue do not use the same effective cards"
   jq -S '.captains_call = [.captains_call[]
       | .options = [.options[] | select(.value != "reconcile")]]' \
     "$home/extracted.json" > "$home/stripped.json"

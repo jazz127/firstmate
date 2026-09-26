@@ -1,0 +1,20 @@
+ CAPTAIN'S CALL 1/1
+ =================================
+ Pick the staging region
+ Project: sample/project
+
+ Decide: Which region hosts
+ staging?
+
+ [1] US East RECOMMENDED
+ Tap or press 1
+
+ [2] US West
+ Tap or press 2
+
+ [3] Reconcile
+ Re-check the latest state, then
+ close this with evidence or keep
+ it open with a note
+
+[P] Prev  [N] Next  [S] Skip  [Q] Q

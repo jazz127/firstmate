@@ -1,0 +1,40 @@
+## press 1 on unheld decision
+ CAPTAIN'S CALL 1/2
+ ======================================
+ Unheld decision
+ Project: sample/other
+ [1] Yes
+ Tap or press 1
+ [2] Reconcile
+ Re-check the latest state, then close
+ this with evidence or keep it open
+ with a note
+[P] Prev  [N] Next  [S] Skip  [Q] Quit
+skipped: ghost-task (no captain-held tas
+wake lines before=       3 after=       3
+## press n (next)
+ CAPTAIN'S CALL 2/2
+ ======================================
+ Second credential
+## press p (prev)
+ CAPTAIN'S CALL 1/2
+ ======================================
+ Unheld decision
+## change queue underneath (cred-b title edited), then n and press 1
+ CAPTAIN'S CALL 1/2
+ ======================================
+ Unheld decision
+ Project: sample/other
+ [1] Yes
+ Tap or press 1
+ [2] Reconcile
+ Re-check the latest state, then close
+ this with evidence or keep it open
+ with a note
+[P] Prev  [N] Next  [S] Skip  [Q] Quit
+Queue changed; review the current card
+wake lines now=       3
+## press s (skip) then q
+ CAPTAIN'S CALL 1/1
+ ======================================
+EXIT=0

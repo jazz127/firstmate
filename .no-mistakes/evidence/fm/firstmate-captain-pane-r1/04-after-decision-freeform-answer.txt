@@ -1,0 +1,30 @@
+ CAPTAIN'S CALL 1/2
+ ======================================
+ Provide the deploy API token
+ Project: sample/project
+
+ Detail: The deploy step needs
+ DEPLOY_TOKEN.
+
+ [1] Token is in the vault
+ Tap or press 1
+
+ [2] Ask me later
+ Tap or press 2
+
+[P] Prev  [N] Next  [S] Skip  [Q] Quit
+Answer recorded. Firstmate notified.
+
+
+
+
+
+
+
+
+
+
+
+
+
+

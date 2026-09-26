@@ -1,0 +1,30 @@
+ CAPTAIN'S CALL 1/3
+ ==================================================================================================
+ Choose the rollout window for sample project
+ Project: sample/project
+
+ About: Three changes are staged and waiting on a rollout week.
+ Decide: Start the rollout this week?
+
+ [1] Start this week RECOMMENDED
+ Unblocks two queued tasks
+
+ [2] Wait until next week
+ Tap or press 2
+
+ [3] Reconcile
+ Re-check the latest state, then close this with evidence or keep it open with a note
+
+ [0] Write an answer
+
+[P] Prev  [N] Next  [S] Skip  [Q] Quit
+
+
+
+
+
+
+
+
+
+

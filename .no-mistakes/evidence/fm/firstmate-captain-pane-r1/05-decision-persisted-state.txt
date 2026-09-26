@@ -1,0 +1,21 @@
+== backlog after decision answer ==
+5:- [ ] rollout-window - Choose the rollout window for sample project (repo: sample/project) (kind: captain) (since 2026-09-27)
+6-  Resolution recorded by fm-captain-hold.
+7-  Decision digest: edf1c8819f7166791ddfabb5c2ef7fc509becf04614b6215a43ac178ad1cfcf3
+8-  Resolution mode: released
+9-
+10-  Captain decision:
+11-  Captain answered this call through captain pane.
+12:  Task: rollout-window
+13-  Answer: Start Monday after standup
+14-  Answer as shown to the captain: Own words
+15-
+16-## Done
+== inbox ==
+captains-call.json
+inbox
+
+/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.rwok6S/state/inbox:
+1790458144-l8OBLq.note
+
+1790458144	1	check	inbox:1790458144-l8OBLq	check: captain inbox note 1790458144-l8OBLq - Captain's Call pane selection: key=rollout-window; selection=freeform; value=Start Monday after stan

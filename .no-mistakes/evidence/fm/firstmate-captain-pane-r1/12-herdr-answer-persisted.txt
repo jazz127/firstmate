@@ -1,0 +1,12 @@
+17:- [x] herdr-call - Pick the staging region (repo: sample/project) (kind: captain) (done 2026-09-27) (hold: Pick a staging region) (hold-kind: captain)
+18-  Resolution recorded by fm-captain-hold.
+19-  Decision digest: 826031e17f61d849484213db573d9963c481ae4f4480a7d412fd7ec4fb6aaa26
+20-  Resolution mode: answered
+21-
+22-  Captain decision:
+23-  Captain answered this call through captain pane.
+24:  Task: herdr-call
+25-  Answer: east
+26-  Answer as shown to the captain: US East
+27-
+1790458227	4	check	inbox:1790458227-xdAfLx	check: captain inbox note 1790458227-xdAfLx - Captain's Call pane selection: key=herdr-call; selection=option; value=east; label=US East. Refresh 

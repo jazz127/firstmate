@@ -12,13 +12,39 @@ The `house` branch is the line the fleet runs, with local operator changes layer
 Configure the primary checkout's local `house` branch to track `jazz127/house`, and set `firstmate.runtimeBranch=house` in that repository's Git config.
 The setting selects the primary runtime branch; its branch tracking configuration supplies the update remote and merge ref.
 
+## Merging into house
+
+Every pull request into `house`, upstream syncs and house features alike, lands as a true merge commit, never a squash or a rebase.
+A merge commit keeps upstream's commits as ancestors of `house`, so later upstream syncs and house-feature merges only carry what is new.
+A squash drops that ancestry, and every branch cut from upstream then carries already-integrated upstream commits back into `house` as conflicts.
+
+Each fork with a `house` branch carries an active branch ruleset on `refs/heads/house` that enforces this: a `pull_request` rule whose `allowed_merge_methods` is `["merge"]`, plus `non_fast_forward` and `deletion` rules.
+GitHub then refuses a squash or rebase merge, a direct push, a force push, and deletion of `house`.
+Apply it to a new house fork once, replacing `<owner>/<repo>`:
+
+```sh
+gh api -X POST repos/<owner>/<repo>/rulesets --input - <<'JSON'
+{"name": "house: merge commits only", "target": "branch", "enforcement": "active",
+ "conditions": {"ref_name": {"include": ["refs/heads/house"], "exclude": []}},
+ "rules": [
+  {"type": "pull_request", "parameters": {"allowed_merge_methods": ["merge"],
+   "required_approving_review_count": 0, "dismiss_stale_reviews_on_push": false,
+   "require_code_owner_review": false, "require_last_push_approval": false,
+   "required_review_thread_resolution": false}},
+  {"type": "non_fast_forward"},
+  {"type": "deletion"}]}
+JSON
+```
+
+`bin/fm-pr-merge.sh` reads the base branch's allowed methods when no method is named, so it merges into `house` with a merge commit; its header owns that choice.
+
 ## Watching the quota-axi house line
 
 The quota-axi view uses quota-axi's read-only TUI report as its body, with the fleet's `jazz127/house` commit and subject, the `quota-axi` executable on `PATH`, and the refresh time and interval in a closing block.
 Run `bin/fm-quota-tab.sh once` to print one frame, or `bin/fm-quota-tab.sh` (the default `loop` mode) in a terminal tab to keep the fleet's house line and provider headroom in view.
 The loop refreshes every 300 seconds by default; `FM_QUOTA_TAB_INTERVAL` changes that interval.
 
-Bring upstream changes to the fleet by merging upstream `main` into `house`.
+Bring upstream changes to the fleet by merging upstream `main` into `house` through a pull request that lands as a merge commit (see [Merging into house](#merging-into-house)).
 Do not rebase `house` onto upstream: preserving merge history keeps the house integration visible, leaves upstream-bound commits extractable, and preserves the head identity used by gate attestations.
 
 ## House features
@@ -74,6 +100,7 @@ The private house-feature register maintained with the operator's fleet records 
 The `house` branch consists of upstream `main` plus the house-feature merges we chose to include.
 To rebuild it, record its exact previous tip, reset `house` to `main`, and merge back only the wanted `housefeature/` branches.
 Push the rebuilt branch with `--force-with-lease` against that exact previous tip.
+The house ruleset refuses that force push, so a rebuild needs the captain to disable the ruleset for the push and restore it to active immediately afterwards.
 A dropped feature remains recoverable while its durable branch or commits still exist.
 
 Nothing polls house-feature branches, and no recurring check watches upstream.

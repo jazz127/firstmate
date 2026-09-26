@@ -53,6 +53,8 @@ make_case() {
     'queued=false' \
     'base=main' > "$case_dir/github-outcome"
   : > "$case_dir/github-rules"
+  : > "$case_dir/github-pr-rules"
+  printf '%s\n' merge=true squash=true rebase=true > "$case_dir/github-settings"
   : > "$case_dir/gh.log"
   # The worktree is a git copy whose HEAD is on a remote-tracking ref, as a
   # pushed ship task's is, so fm-pr-check.sh's named-head gate accepts it when
@@ -200,6 +202,25 @@ case "${1:-} ${2:-}" in
     exit 0
     ;;
   api\ *)
+    # The merge-method read: repository settings, then pull_request rules.
+    # Each answers from its own fixture file so the merge-queue fixture above
+    # keeps driving only the queue read.
+    slug=${2#repos/}
+    if [ "$slug" != "${2:-}" ] && [ "${slug#*/}" != "$slug" ] && [ "${slug#*/*/}" = "$slug" ]; then
+      [ ! -f "${FM_TEST_GH_SETTINGS_FAIL:-}" ] || exit 1
+      cat "$FM_TEST_GH_SETTINGS"
+      exit 0
+    fi
+    case " $* " in
+      *'select(.type == "pull_request")'*)
+        if [ -f "${FM_TEST_GH_PR_RULES_FAIL_BODY:-}" ]; then
+          cat "$FM_TEST_GH_PR_RULES_FAIL_BODY" >&2
+          exit 1
+        fi
+        cat "$FM_TEST_GH_PR_RULES"
+        exit 0
+        ;;
+    esac
     if [ -f "${FM_TEST_GH_RULES_FAIL_BODY:-}" ]; then
       cat "$FM_TEST_GH_RULES_FAIL_BODY" >&2
       exit 1
@@ -396,6 +417,10 @@ run_pr_merge() {
   FM_TEST_GH_GRAPHQL_FAIL="$case_dir/github-graphql-fail" \
   FM_TEST_GH_RULES_FAIL="$case_dir/github-rules-fail" \
   FM_TEST_GH_RULES_FAIL_BODY="$case_dir/github-rules-fail-body" \
+  FM_TEST_GH_SETTINGS="$case_dir/github-settings" \
+  FM_TEST_GH_SETTINGS_FAIL="$case_dir/github-settings-fail" \
+  FM_TEST_GH_PR_RULES="$case_dir/github-pr-rules" \
+  FM_TEST_GH_PR_RULES_FAIL_BODY="$case_dir/github-pr-rules-fail-body" \
   FM_TEST_META_AT_MERGE="$case_dir/meta-at-merge" \
   FM_TEST_AWAY_RECORD_AFTER_VIEW="$case_dir/away-record-after-view" \
   FM_TEST_ROOT="$ROOT" \
@@ -1508,6 +1533,126 @@ test_method_equals_merge_method_not_overridden() {
   pass "fm-pr-merge respects --method=<value> as an explicit merge method"
 }
 
+# Run one default-method case against a base branch whose allowed methods the
+# fixtures describe. Args: case_name settings_lines pr_rules_lines [extra args]
+# where each *_lines value is newline-separated fixture text. Echoes case dir.
+run_default_method_case() {
+  local name=$1 settings=$2 rules=$3 case_dir
+  shift 3
+  case_dir=$(make_case "$name")
+  mkdir -p "$case_dir/wt"
+  add_gh_mocks "$case_dir" 6363636363636363636363636363636363636363
+  : > "$case_dir/gh-axi.log"
+  printf '%s\n' "$settings" > "$case_dir/github-settings"
+  printf '%s\n' "$rules" > "$case_dir/github-pr-rules"
+  set +e
+  run_pr_merge "$case_dir" task-x1 https://github.com/example/repo/pull/31 "$@" \
+    > "$case_dir/stdout" 2> "$case_dir/stderr"
+  printf '%s\n' "$?" > "$case_dir/rc"
+  set -e
+  printf '%s\n' "$case_dir"
+}
+
+all_methods=$'merge=true\nsquash=true\nrebase=true'
+
+test_default_method_follows_the_base_branch_rules() {
+  local case_dir
+  case_dir=$(run_default_method_case merge-only-rule "$all_methods" \
+    'allowed_merge_methods=merge')
+  expect_code 0 "$(cat "$case_dir/rc")" "merge-only-rule: the merge should run"
+  assert_logged_gh_merge "$case_dir" 31 example/repo --merge
+
+  case_dir=$(run_default_method_case merge-only-setting \
+    $'merge=true\nsquash=false\nrebase=false' '')
+  expect_code 0 "$(cat "$case_dir/rc")" "merge-only-setting: the merge should run"
+  assert_logged_gh_merge "$case_dir" 31 example/repo --merge
+
+  case_dir=$(run_default_method_case squash-still-allowed "$all_methods" \
+    'allowed_merge_methods=merge,squash')
+  expect_code 0 "$(cat "$case_dir/rc")" "squash-still-allowed: the merge should run"
+  assert_logged_gh_merge "$case_dir" 31 example/repo --squash
+
+  case_dir=$(run_default_method_case rules-intersect "$all_methods" \
+    $'allowed_merge_methods=merge,squash\nallowed_merge_methods=merge,rebase')
+  expect_code 0 "$(cat "$case_dir/rc")" "rules-intersect: the merge should run"
+  assert_logged_gh_merge "$case_dir" 31 example/repo --merge
+
+  case_dir=$(run_default_method_case plan-gated-rules \
+    $'merge=true\nsquash=false\nrebase=false' '')
+  printf '%s\n' 'gh: Upgrade to GitHub Pro or make this repository public to enable this feature. (HTTP 403)' \
+    > "$case_dir/github-pr-rules-fail-body"
+  run_pr_merge "$case_dir" task-x1 https://github.com/example/repo/pull/31 \
+    > "$case_dir/stdout" 2> "$case_dir/stderr" \
+    || fail "plan-gated-rules: a plan-gated rules read should leave the settings in charge"
+  assert_logged_gh_merge "$case_dir" 31 example/repo --merge
+  pass "fm-pr-merge picks squash where the base branch allows it and merge where merge is the only allowed method"
+}
+
+test_default_method_refuses_when_ambiguous_or_unreadable() {
+  local case_dir
+  case_dir=$(run_default_method_case ambiguous-methods "$all_methods" \
+    'allowed_merge_methods=merge,rebase')
+  expect_code 1 "$(cat "$case_dir/rc")" "ambiguous-methods: an ambiguous choice must refuse"
+  assert_grep 'base branch main allows merge, rebase, so no default merge method applies' \
+    "$case_dir/stderr" "ambiguous-methods: the refusal did not name the allowed methods"
+  assert_no_grep 'pr merge' "$case_dir/gh.log" "ambiguous-methods: gh pr merge ran"
+
+  case_dir=$(run_default_method_case rebase-only "$all_methods" \
+    'allowed_merge_methods=rebase')
+  expect_code 1 "$(cat "$case_dir/rc")" "rebase-only: rebase alone is not chosen by default"
+  assert_grep 'base branch main allows rebase' "$case_dir/stderr" \
+    "rebase-only: the refusal did not name rebase"
+  assert_no_grep 'pr merge' "$case_dir/gh.log" "rebase-only: gh pr merge ran"
+
+  case_dir=$(run_default_method_case nothing-allowed \
+    $'merge=true\nsquash=true\nrebase=false' 'allowed_merge_methods=rebase')
+  expect_code 1 "$(cat "$case_dir/rc")" "nothing-allowed: an empty set must refuse"
+  assert_grep 'base branch main allows no merge method' "$case_dir/stderr" \
+    "nothing-allowed: the refusal did not say nothing is allowed"
+
+  case_dir=$(make_case settings-unreadable)
+  mkdir -p "$case_dir/wt"
+  add_gh_mocks "$case_dir" 6464646464646464646464646464646464646464
+  : > "$case_dir/github-settings-fail"
+  if run_pr_merge "$case_dir" task-x1 https://github.com/example/repo/pull/32 \
+    > "$case_dir/stdout" 2> "$case_dir/stderr"; then
+    fail "settings-unreadable: an unreadable settings read must refuse"
+  fi
+  assert_grep 'repository merge-method settings could not be read' "$case_dir/stderr" \
+    "settings-unreadable: the refusal did not name the failed read"
+  assert_no_grep 'pr merge' "$case_dir/gh.log" "settings-unreadable: gh pr merge ran"
+
+  case_dir=$(run_default_method_case settings-missing-field \
+    $'merge=true\nsquash=null\nrebase=true' '')
+  expect_code 1 "$(cat "$case_dir/rc")" "settings-missing-field: an absent setting must refuse"
+  assert_no_grep 'pr merge' "$case_dir/gh.log" "settings-missing-field: gh pr merge ran"
+
+  case_dir=$(make_case pr-rules-unreadable)
+  mkdir -p "$case_dir/wt"
+  add_gh_mocks "$case_dir" 6565656565656565656565656565656565656565
+  printf '%s\n' 'gh: Resource not accessible by integration (HTTP 403)' \
+    > "$case_dir/github-pr-rules-fail-body"
+  if run_pr_merge "$case_dir" task-x1 https://github.com/example/repo/pull/33 \
+    > "$case_dir/stdout" 2> "$case_dir/stderr"; then
+    fail "pr-rules-unreadable: an unreadable rules read must refuse"
+  fi
+  assert_grep 'the branch rules for base branch main could not be read, so no merge method was chosen' \
+    "$case_dir/stderr" "pr-rules-unreadable: the refusal did not name the failed read"
+  assert_no_grep 'pr merge' "$case_dir/gh.log" "pr-rules-unreadable: gh pr merge ran"
+  pass "fm-pr-merge refuses a default merge method when the allowed set is ambiguous or unreadable"
+}
+
+test_explicit_method_wins_over_base_branch_rules() {
+  local case_dir
+  case_dir=$(run_default_method_case explicit-over-rules "$all_methods" \
+    'allowed_merge_methods=merge' -- --squash)
+  expect_code 0 "$(cat "$case_dir/rc")" "explicit-over-rules: the caller's method should be passed"
+  assert_logged_gh_merge "$case_dir" 31 example/repo --squash
+  assert_no_grep 'pull_request' "$case_dir/gh.log" \
+    "explicit-over-rules: an explicit method still read the allowed methods"
+  pass "fm-pr-merge passes an explicit caller method through and leaves GitHub to judge it"
+}
+
 test_parses_pr_url_for_gh_axi() {
   local case_dir
   case_dir=$(make_case url-parsing)
@@ -2195,6 +2340,9 @@ test_rejects_unsafe_url_segments_before_recording
 test_repo_override_args_refuse_before_recording
 test_bundled_repo_override_args_refuse_before_recording
 test_explicit_merge_method_not_overridden
+test_default_method_follows_the_base_branch_rules
+test_default_method_refuses_when_ambiguous_or_unreadable
+test_explicit_method_wins_over_base_branch_rules
 test_method_equals_merge_method_not_overridden
 test_parses_pr_url_for_gh_axi
 test_github_still_forwards_sha_arg

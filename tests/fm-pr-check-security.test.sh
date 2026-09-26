@@ -184,6 +184,9 @@ case " $* " in
   *" api repos/"*"/commits/"*"/statuses?per_page=100 "*)
     printf '%s\n' '[[]]'
     ;;
+  *" api repos/"*' --jq "merge=" '*)
+    printf '%s\n' merge=true squash=true rebase=true
+    ;;
   *" api repos/"*"/pulls/"*)
     if [ -n "${FM_TEST_GH_FILES:-}" ]; then
       printf '%s\n' "$FM_TEST_GH_FILES"

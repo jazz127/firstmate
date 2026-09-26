@@ -115,6 +115,7 @@ case "${1:-} ${2:-}" in
   "api graphql")
     printf '%s\n' 'state=MERGED' 'merged=true' 'queued=false' 'base=main'
     ;;
+  "api repos/"*) printf '%s\n' merge=true squash=true rebase=true ;;
 esac
 SH
   cat > "$home/fakebin/gh-axi" <<'SH'

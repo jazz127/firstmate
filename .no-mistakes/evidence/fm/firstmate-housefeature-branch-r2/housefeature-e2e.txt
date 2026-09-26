@@ -1,0 +1,85 @@
+### 1. firstmate scaffolds a main-based house-feature brief
+scaffolded: /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.movnk2/data/demo-r1/brief.md (ship, mode=no-mistakes; replace {TASK} and {FIRSTMATE_SPEC})
+33:1. First action: prepare your branch: `/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3FSJTVG6RM06G4KVBPX8K6S/bin/fm-housefeature-start.sh demo main fm/demo-r1`
+35:House feature intake: main-based. Work on `fm/demo-r1` and deliver it into `housefeature/demo`; resolve later conflicts with `house` on the `house` integration line.
+36:The setup command may create only `housefeature/demo` at an existing fork base commit; the selected delivery path owns publishing your `fm/demo-r1` work.
+96:Firstmate steers you through durable message files in '/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.movnk2/state/demo-r1.inbox'.
+107:Target the durable `housefeature/demo` branch: pass `--base-branch housefeature/demo` when starting a new `no-mistakes axi run`. Reattach without flags.
+108:Every pull request into `housefeature/demo` lands as a merge commit (`--merge`), never a squash or rebase.
+109:After your pull request into `housefeature/demo` merges, firstmate steers you, in this same session and without a new pipeline run, to open the integration pull request: `gh-axi pr create --base house --head housefeature/demo`, ready for review rather than a draft.
+110:Then append `done [at=<epoch>]: integration PR {url} open into house` and stop; this task is not torn down until that pull request is open.
+
+### 2. worker runs the brief's first action: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3FSJTVG6RM06G4KVBPX8K6S/bin/fm-housefeature-start.sh demo main fm/demo-r1
+Previous HEAD position was 139d69f house-only-commit
+Switched to a new branch 'fm/demo-r1'
+branch 'fm/demo-r1' set up to track 'origin/housefeature/demo'.
+prepared fm/demo-r1 from housefeature/demo on main
+rc=0
+remote housefeature/demo = 97202c4; fork main = 97202c4
+worker branch: fm/demo-r1 at 97202c4; house-only file present? no
+
+### 3. worker commits the first real work on fm/demo-r1 and it lands in housefeature/demo as a merge commit
+*   7c47073 Merge PR fm/demo-r1 into housefeature/demo
+|\  
+| * d022eb4 feature work
+|/  
+* 97202c4 base
+housefeature/demo contains fork main: yes
+
+### 4. integration PR housefeature/demo -> house merges; durable branch survives
+cut workflow classify for that merged PR: skip housefeature/demo is already the durable feature branch
+control (ordinary fm/other -> house): cut other
+remote heads after integration:
+  fm/demo-r1
+  house
+  housefeature/demo
+  main
+
+### 5. next round: main moves ahead; new fm/demo-r2 is cut from the durable head, no automatic main merge
+Previous HEAD position was d022eb4 feature work
+Switched to a new branch 'fm/demo-r2'
+branch 'fm/demo-r2' set up to track 'origin/housefeature/demo'.
+prepared fm/demo-r2 from housefeature/demo on main
+rc=0
+worker at durable head: yes; durable head unchanged: yes; upstream.txt auto-merged: no
+105:Target the durable `housefeature/demo` branch: pass `--base housefeature/demo` to `gh-axi pr create`.
+
+### 6. house-only feature: durable branch cut from house, label instruction
+34:House feature intake: house-only. Apply the existing `house-only` label to the integration pull request you open from `housefeature/solo` into `house`.
+Previous HEAD position was 7c47073 Merge PR fm/demo-r1 into housefeature/demo
+Switched to a new branch 'fm/solo-r1'
+branch 'fm/solo-r1' set up to track 'origin/housefeature/solo'.
+prepared fm/solo-r1 from housefeature/solo on house
+housefeature/solo == house: yes
+
+### 7. adversarial refusals
+$ fm-brief.sh bad firstmate --mode direct-PR --house-feature x
+error: --house-feature requires --branch-base main or house
+  rc=1
+$ fm-brief.sh bad firstmate --mode direct-PR --branch-base main
+error: --branch-base applies only with --house-feature
+  rc=1
+$ fm-brief.sh bad firstmate --mode direct-PR --branch-prefix housefeature/
+error: a house-feature worker uses its ordinary fm/ task branch; select the durable target with --house-feature
+  rc=1
+$ fm-brief.sh bad firstmate --mode direct-PR --house-feature a/b --branch-base main
+error: --house-feature must be a single branch-name component
+  rc=1
+$ fm-brief.sh bad firstmate --mode direct-PR --house-feature x --branch-base upstream
+error: --house-feature requires --branch-base main or house
+  rc=1
+$ fm-brief.sh bad firstmate --mode local-only --house-feature x --branch-base main
+error: --house-feature requires a GitHub PR delivery mode
+  rc=1
+$ (dirty worktree) fm-housefeature-start.sh demo main fm/dirty
+error: worktree is not clean; refusing to change branches
+  rc=1
+$ fm-housefeature-start.sh demo main housefeature/demo
+error: worker branch must differ from durable feature branch
+  rc=2
+final remote heads (nothing deleted):
+  fm/demo-r1
+  house
+  housefeature/demo
+  housefeature/solo
+  main

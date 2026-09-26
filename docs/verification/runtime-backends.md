@@ -1520,7 +1520,7 @@ FM_HOME="$DISPOSABLE_HOME" bin/fm-control.sh t1 exit
 | The draft cleared with `ctrl+u` | `empty` | not run in that state |
 
 The same idle capture read `unknown` on the classifier before the cost-first footer rule, which is the refusal this boundary fixes.
-Stock pi 0.87.1 drew neither a first-row `>` prompt nor the compact rounded-header layout in this run, so those two shapes rest on the portable fixtures in `tests/fm-composer-lib.test.sh` and `tests/fm-backend-herdr.test.sh`, and the compact layout stays behind `FM_BACKEND_HERDR_PI_COMPACT=1`.
+Stock pi 0.87.1 drew neither a first-row `>` prompt nor the compact rounded-header layout in this run, so those two shapes rest on the portable fixtures in `tests/fm-composer-lib.test.sh` and `tests/fm-backend-herdr.test.sh`, and both stay opt-in: the first-row `>` behind `FM_BACKEND_HERDR_PI_PROMPT=1` and the compact layout behind `FM_BACKEND_HERDR_PI_COMPACT=1`.
 
 ### Native blocked event
 

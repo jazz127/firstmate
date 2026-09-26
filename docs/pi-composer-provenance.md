@@ -29,7 +29,7 @@ The commits that carry an adaptation name the contributor with a `Co-authored-by
 
 The newer prompt proposal treated all four shell glyphs `>`, `$`, `%`, and `#` as first-row furniture; only Pi's `>` is supported by the recorded Pi editor observations, so the other three stay typed input.
 The compact proposal stored its enabling capability in a global that leaked between calls; classification and extraction here each parse the capability from their own call.
-The compact layout stays disabled by default until a real versioned capture of that layout confirms its shape.
+The compact layout and the first-row `>` rule both stay disabled by default until a real versioned capture of a Pi build drawing them confirms the shape.
 The zero-height proposal also suppressed separated geometry whenever identity was not Pi; that wider selection change is not taken here.
 The persist-gate proposal also introduced a context-handoff receipt and custody protocol; only its terminal-success requirement is taken here.
 

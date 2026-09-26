@@ -1325,6 +1325,11 @@ FAKE
   # shellcheck disable=SC2016 # Compare literal Markdown code spans in the generated brief.
   assert_grep 'Target the durable `housefeature/alpha` branch: pass `--base-branch housefeature/alpha`' \
     "$brief" "no-mistakes brief did not target the durable branch"
+  # shellcheck disable=SC2016 # Compare literal Markdown code spans in the generated brief.
+  assert_grep 'open the integration pull request: `gh-axi pr create --base house --head housefeature/alpha`' \
+    "$brief" "brief did not assign the integration pull request to the worker"
+  # shellcheck disable=SC2016 # Compare a literal Markdown code span in the generated brief.
+  assert_grep 'lands as a merge commit (`--merge`)' "$brief" "brief did not require a merge commit"
   # shellcheck disable=SC2016 # Extract the generated worker command, a public brief interface.
   command=$(sed -n 's/^1\. First action: prepare your branch: `\([^`]*\)`.*/\1/p' "$brief")
   [ -n "$command" ] || fail "main-based feature brief omitted its branch command"
@@ -1363,7 +1368,8 @@ FAKE
     || fail "follow-up feature start failed: $command"
   assert_equals fm/alpha-r2 "$(git -C "$work" branch --show-current)" "follow-up did not get a new task branch"
   assert_grep 'feature change' "$work/feature.txt" "follow-up lost the durable feature's prior work"
-  assert_grep 'main refresh' "$work/refresh.txt" "follow-up did not merge the fresh main"
+  [ ! -e "$work/refresh.txt" ] || fail "follow-up merged main without an explicit refresh"
+  assert_equals "$first_head" "$(git -C "$work" rev-parse HEAD)" "follow-up did not start at the durable head"
   assert_equals "$first_head" "$(git --git-dir="$fork" rev-parse refs/heads/housefeature/alpha)" \
     "follow-up preparation moved the remote durable head"
   git -C "$work" checkout -q --detach

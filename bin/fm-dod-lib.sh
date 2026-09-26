@@ -761,6 +761,10 @@ fm_dod_block() {  # <mode> <task-id> [branch] [<forge>] [<PR base>]
     else
       base_instruction="Target the durable \`$pr_base\` branch: pass \`--base $pr_base\` to \`gh-axi pr create\`."
     fi
+    base_instruction="$base_instruction
+Every pull request into \`$pr_base\` lands as a merge commit (\`--merge\`), never a squash or rebase.
+After your pull request into \`$pr_base\` merges, firstmate steers you, in this same session and without a new pipeline run, to open the integration pull request: \`gh-axi pr create --base house --head $pr_base\`, ready for review rather than a draft.
+Then append \`done [at=<epoch>]: integration PR {url} open into house\` and stop; this task is not torn down until that pull request is open."
   fi
   fm_forge_valid_for_mode "$forge" "$mode" fm_dod_block || return 1
   case "$mode:$forge" in

@@ -178,7 +178,7 @@ if [ -n "$HOUSE_FEATURE" ]; then
   PROMOTE_BRANCH_COMMAND="$PROMOTE_START_Q $PROMOTE_HOUSE_Q $BRANCH_BASE $BRANCH_Q"
   PROMOTE_BRANCH_WORDS="Return to a clean worktree, then prepare your branch"
   if [ "$BRANCH_BASE" = house ]; then
-    PROMOTE_HOUSE_NOTE="This feature is house-only; apply the existing \`house-only\` label to the later pull request from \`$PROMOTE_PR_BASE\` into \`house\`."
+    PROMOTE_HOUSE_NOTE="This feature is house-only; apply the existing \`house-only\` label to the integration pull request you open from \`$PROMOTE_PR_BASE\` into \`house\`."
   else
     PROMOTE_HOUSE_NOTE="This feature is main-based; refresh it only by merging \`main\` into a worker branch."
   fi

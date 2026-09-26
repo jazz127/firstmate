@@ -339,7 +339,7 @@ if [ -n "$HOUSE_FEATURE" ]; then
   BRANCH_SETUP="$HOUSE_START_Q $HOUSE_FEATURE_Q $BRANCH_BASE $BRANCH_Q"
   BRANCH_SETUP_VERB="prepare your branch"
   if [ "$BRANCH_BASE" = house ]; then
-    BRANCH_NOTE="House feature intake: house-only. Apply the existing \`house-only\` label to the later pull request from \`$PR_BASE\` into \`house\`."
+    BRANCH_NOTE="House feature intake: house-only. Apply the existing \`house-only\` label to the integration pull request you open from \`$PR_BASE\` into \`house\`."
   else
     BRANCH_NOTE="House feature intake: main-based. Work on \`$BRANCH\` and deliver it into \`$PR_BASE\`; resolve later conflicts with \`house\` on the \`house\` integration line."
   fi

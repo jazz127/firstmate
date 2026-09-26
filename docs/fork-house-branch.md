@@ -39,7 +39,25 @@ gh api -X POST repos/<owner>/<repo>/rulesets --input - <<'JSON'
 JSON
 ```
 
-`bin/fm-pr-merge.sh` reads the base branch's allowed methods when no method is named, so it merges into `house` with a merge commit; its header owns that choice.
+Every pull request into a durable `housefeature/<name>` branch also lands as a merge commit, so the branch keeps `main` as an ancestor and later syncs and contributions carry only the feature.
+Apply the matching ruleset on `refs/heads/housefeature/**` once per house fork; besides merge-commits-only, it refuses deletion and force pushes of every durable branch:
+
+```sh
+gh api -X POST repos/<owner>/<repo>/rulesets --input - <<'JSON'
+{"name": "housefeature: merge commits only, never delete", "target": "branch", "enforcement": "active",
+ "conditions": {"ref_name": {"include": ["refs/heads/housefeature/**"], "exclude": []}},
+ "rules": [
+  {"type": "pull_request", "parameters": {"allowed_merge_methods": ["merge"],
+   "required_approving_review_count": 0, "dismiss_stale_reviews_on_push": false,
+   "require_code_owner_review": false, "require_last_push_approval": false,
+   "required_review_thread_resolution": false}},
+  {"type": "non_fast_forward"},
+  {"type": "deletion"}]}
+JSON
+```
+
+`bin/fm-pr-merge.sh` reads the base branch's allowed methods when no method is named, so it merges into `house` with a merge commit; into a `housefeature/*` base it always passes `--merge` and refuses a caller-named squash or rebase; its header owns that choice.
+Merge a pull request into either base by hand only with `--merge`.
 
 ## Watching the quota-axi house line
 
@@ -56,17 +74,19 @@ A house feature is anything we build for ourselves on our own line, whether the 
 Choose a stable feature name at intake and scaffold each ship brief with `--house-feature <name> --branch-base main`, keeping the worker's ordinary `fm/<task>` branch prefix.
 The generated first action uses `bin/fm-housefeature-start.sh` in the fork-origin worktree: it fetches the fork's `main`, creates `housefeature/<name>` at that commit only when absent, and checks out `fm/<task>` from the durable branch.
 The GitHub create-ref call carries an existing base commit and refuses if another task has already created the durable branch; it cannot replace an existing head.
-When that branch already exists, the same command fetches it, starts a new `fm/<task>` branch from its current head, and merges the fork's `main` into the worker branch when needed.
+When that branch already exists, the same command fetches it and starts a new `fm/<task>` branch from its current head; it never merges `main`.
 Use a new round-suffixed task id such as `<name>-r2` for follow-up work and pass the same stable `<name>` to `--house-feature`; the task id and durable branch name serve different purposes.
-The worker's first pull request targets `housefeature/<name>` (`no-mistakes axi run --base-branch housefeature/<name>` or `gh-axi pr create --base housefeature/<name>`); after it merges, open a separate pull request from `housefeature/<name>` into `house`.
-For that integration pull request, pass `--base house --head housefeature/<name>` to `gh-axi pr create` from the fork checkout.
+The worker's first pull request targets `housefeature/<name>` (`no-mistakes axi run --base-branch housefeature/<name>` or `gh-axi pr create --base housefeature/<name>`) and merges with `--merge`.
+After it merges, firstmate steers the same live worker, without a new pipeline run, to open the integration pull request with `gh-axi pr create --base house --head housefeature/<name>` from the fork checkout.
+The worker reports that pull request with a `done` line, and firstmate does not tear the task down until it is open.
 The fork's House CI workflow checks pull requests into `house` and into a `housefeature/*` base that already contains that workflow, such as a house-only branch cut from `house`.
 A main-based feature cut from upstream `main` may have no workflow configured for its first pull request; verify the target branch's workflows and use the delivery pipeline's documented no-check path when none apply.
 Repeat that pair of pull requests for a later work round when the feature should enter `house` again.
-Keep a main-based feature clean for possible contribution: merge `main` into its worker branch for refreshes and never merge `house` into the durable branch or its worker branch.
+Keep a main-based feature clean for possible contribution and never merge `house` into the durable branch or its worker branch.
+Refreshing from `main` is an explicit, deliberate step: when a round needs newer upstream code, merge the fork's `main` into its worker branch with `git merge origin/main` and resolve any conflict there before delivery.
 If the pull request from `housefeature/<name>` conflicts with `house`, reconcile the conflicting house code in a separate pull request based on `house`, then merge the original feature pull request when it becomes mergeable.
-When the captain marks a feature as never to be contributed, record that choice in the intake brief and apply the existing `house-only` label to its pull request from the durable branch into `house`.
-For that exception, scaffold with `--house-feature <name> --branch-base house`; its first durable branch may depend on other house features, while later rounds still reuse that branch and refresh from `main`.
+When the captain marks a feature as never to be contributed, record that choice in the intake brief; the worker applies the existing `house-only` label to the integration pull request it opens from the durable branch into `house`.
+For that exception, scaffold with `--house-feature <name> --branch-base house`; its first durable branch may depend on other house features, while later rounds still reuse that branch and refresh from `main` only by that explicit step.
 Never delete or force-push a `housefeature/*` head after either pull request merges: the fork ruleset blocks both operations on `refs/heads/housefeature/**`, automatic branch deletion on merge is off, `fm-pr-merge.sh` refuses branch-deletion flags by default, and task teardown removes the worker worktree rather than the remote durable branch.
 The [`housefeature-cut.yml`](../.github/workflows/housefeature-cut.yml) workflow remains a safety net for merged `house` pull requests whose heads still use other branch names; it leaves an existing durable branch untouched and skips a pull request already headed by `housefeature/<name>`.
 A contributed house feature is a house feature the captain chose to submit and that has landed in upstream `main`.

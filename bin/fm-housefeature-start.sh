@@ -7,10 +7,9 @@
 # Creation uses GitHub's create-ref API, which refuses a concurrent branch
 # creation instead of moving any existing head.
 # A later run fetches the durable branch and starts a fresh worker branch from
-# its current head. Both paths merge the fork's main into the worker branch
-# when needed, so the eventual PR into housefeature/ carries only a main
-# refresh. The worker branch is never pushed here. No remote ref is deleted or
-# force-pushed.
+# its current head. Neither path merges main; a refresh from main is a separate
+# deliberate step. The worker branch is never pushed here. No remote ref is
+# deleted or force-pushed.
 set -eu
 
 [ "$#" -eq 3 ] || { echo "usage: $0 <feature-name> <main|house> <worker-branch>" >&2; exit 2; }
@@ -80,10 +79,7 @@ printf '%s\n' "$symref" | awk '$1 == "ref:" && $2 == "refs/heads/house" && $3 ==
 }
 remote_ref="refs/heads/$feature"
 tracking_ref="refs/remotes/origin/$feature"
-git fetch --quiet origin "+refs/heads/main:refs/remotes/origin/main"
-if [ "$base" = house ]; then
-  git fetch --quiet origin "+refs/heads/house:refs/remotes/origin/house"
-fi
+git fetch --quiet origin "+refs/heads/$base:refs/remotes/origin/$base"
 rc=0
 git ls-remote --exit-code --heads origin "$remote_ref" >/dev/null || rc=$?
 case "$rc" in
@@ -100,7 +96,4 @@ case "$rc" in
 esac
 git fetch --quiet origin "+$remote_ref:$tracking_ref"
 git checkout -b "$worker" "$tracking_ref" --
-if ! git merge-base --is-ancestor refs/remotes/origin/main HEAD; then
-  git merge --no-edit refs/remotes/origin/main
-fi
 printf 'prepared %s from %s on %s\n' "$worker" "$feature" "$base"

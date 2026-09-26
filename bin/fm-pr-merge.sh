@@ -1094,14 +1094,13 @@ github_choose_default_method() {
     2>"$api_err"); then
     api_err_text=$(cat "$api_err" 2>/dev/null)
     rm -f "$api_err"
-    case "$api_err_text" in
-      *"Upgrade to GitHub Pro or make this repository public"*) rules='' ;;
-      *)
-        printf 'error: refusing to merge %s: the branch rules for base branch %s could not be read, so no merge method was chosen; %s\n' \
-          "$URL" "$FM_PR_GITHUB_BASE" "$refuse_hint" >&2
-        return 1
-        ;;
-    esac
+    if github_branch_rules_unavailable_on_plan "$api_err_text"; then
+      rules=''
+    else
+      printf 'error: refusing to merge %s: the branch rules for base branch %s could not be read, so no merge method was chosen; %s\n' \
+        "$URL" "$FM_PR_GITHUB_BASE" "$refuse_hint" >&2
+      return 1
+    fi
   else
     rm -f "$api_err"
   fi

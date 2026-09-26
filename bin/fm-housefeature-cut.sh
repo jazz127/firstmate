@@ -168,6 +168,7 @@ run() {
     source="captured from the merged pull request head (the change does not apply cleanly to \`$MAIN_BRANCH\`)"
   fi
 
+  # The empty expected value makes this push create-only; it can never overwrite an existing branch.
   if ! git push --quiet --force-with-lease="refs/heads/$branch:" "$REMOTE" "$sha:refs/heads/$branch"; then
     summary "Push of \`$branch\` for pull request #$HF_PR_NUMBER was refused; nothing created."
     return 1

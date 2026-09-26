@@ -1,0 +1,28 @@
+## scan the fleet's own fork (read-only) at scanned head 2c95ca7e (base = its parent)
+prior-art scan recorded 4 candidates: /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-pa-live.L5PvhV/fork.json
+exit=0
+prior-art verdict recorded: distinct
+exit=0
+{"repo":"jazz127/firstmate","head":"2c95ca7e277b306b8f35f9ab306cb90aabb003fc"}
+## forge PR #44 head 08b76956 descends from scanned head (GitHub compare) -> accept
+prior-art receipt ok
+exit=0
+## forge head == scanned head, repo in different case -> accept
+prior-art receipt ok
+exit=0
+## forge head = house 26323676 (not a descendant of the scanned head: rewritten/other line) -> refuse
+prior-art refused: prior-art receipt is stale: published head does not descend from the scanned head
+exit=1
+## forge head = parent of the scanned head (behind) -> refuse
+prior-art refused: prior-art receipt is stale: published head does not descend from the scanned head
+exit=1
+GitHub compare statuses for reference:
+08b76956fab0789ee701c445ad6a2eb5abdb6dd7 -> api_response:
+  body: ahead
+  truncated: false
+263236767382997d00f00a33411c2fe77ab66cb1 -> api_response:
+  body: diverged
+  truncated: false
+59b1313edb66c2bfcec5c6db6b1a5ebb06da0118 -> api_response:
+  body: behind
+  truncated: false

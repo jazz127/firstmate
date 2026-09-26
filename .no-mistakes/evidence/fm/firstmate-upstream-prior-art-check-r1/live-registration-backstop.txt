@@ -1,0 +1,16 @@
+forge PR #44 head (live): 08b76956fab0789ee701c445ad6a2eb5abdb6dd7; receipt scanned head: 2c95ca7e277b306b8f35f9ab306cb90aabb003fc
+## registration/done backstop with the live forge head (descendant, pipeline added commits)
+prior-art receipt ok
+exit=0
+## same backstop, forge head replaced by a non-descendant (force-push/rewrite)
+prior-art refused: prior-art receipt is stale: published head does not descend from the scanned head
+upstream prior-art receipt refused: receipt does not match the published work
+exit=1
+## same backstop, receipt missing from the task record path
+upstream prior-art receipt refused: missing /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-pa-live.L5PvhV/task44/prior-art.json
+exit=1
+## owned repo (origin == PR repo): backstop does not apply
+exit=0
+## worker brief renders the task record path (task id demo-7)
+--record /tmp/fm-demo-7/prior-art.json
+--record /tmp/fm-demo-7/prior-art.json

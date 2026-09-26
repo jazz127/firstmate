@@ -1,0 +1,28 @@
+ok - publication refuses a missing record
+ok - incomplete search fails closed without a record
+ok - changed-symbol search finds a PR with no shared file or title words
+ok - scan tolerates PRs closing mid-read and waits out search rate limits
+ok - scan stops at its request budget and records an incomplete, unpublishable receipt
+ok - a truncated scan is never usable as none-found
+ok - search-driven scan records open PRs and issues plus recent closed unmerged PRs with match reasons
+ok - real selectors pass through jq and search PR rows are recorded as PRs
+ok - scan reads long bodies and file lists within the gh-axi output limit
+ok - malformed decisions and candidate records fail cleanly
+prior-art refused: record is missing or unsafe: /private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-upstream-prior-art.QtVn7x/missing.json
+upstream push refused: prior-art receipt does not match upstream/demo@85b062cd4c7bcae704390fee72201f12c1091d58
+prior-art refused: record is missing or unsafe: /private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-upstream-prior-art.QtVn7x/missing.json
+upstream push refused: prior-art receipt does not match upstream/demo@85b062cd4c7bcae704390fee72201f12c1091d58
+prior-art receipt ok
+ok - pre-push boundary gates external targets and permits owned or checked pushes
+ok - fresh distinct receipt permits publication and adds author credit
+ok - freshness is enforced before the push but not after publication
+ok - a receipt whose capture time has no timezone is refused cleanly
+ok - search truncation is disclosed in the receipt and required before a distinct verdict
+ok - publication refuses a scan older than the freshness window
+ok - overlap blocks publication until a captain decision is recorded
+ok - branch head movement stales the prior-art receipt
+ok - published head verification does not read back the worker checkout
+ok - published verification accepts descendant forge heads and refuses rewritten ones
+all fm-upstream-prior-art tests passed
+bash tests/fm-upstream-prior-art.test.sh  14.06s user 8.13s system 69% cpu 31.881 total
+exit 0

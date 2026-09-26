@@ -1,0 +1,34 @@
+worker HEAD=55f64ec41dc5a65785bffc08a3a195559d36e63b; pane core.hooksPath=/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-pa-live.L5PvhV/state/task.git-hooks; project core.hooksPath=.husky
+$ git commit (project pre-commit must still run)
+exit=0
+project hook log: project pre-commit ran
+
+$ real git push to a non-GitHub remote (not upstream) with NO receipt
+exit=0
+project hook log: project(husky/lfs-style) pre-push ran: remote=local refs=HEAD 55f64ec41dc5a65785bffc08a3a195559d36e63b refs/heads/fix 0000000000000000000000000000000000000000
+
+$ pre-push as git invokes it: push to owned fork git@github.com:jazz127/firstmate.git, NO receipt
+exit=0
+project hook log: project(husky/lfs-style) pre-push ran: remote=origin refs=refs/heads/fix 55f64ec41dc5a65785bffc08a3a195559d36e63b refs/heads/fix 0000000000000000000000000000000000000000
+
+$ pre-push: push to UPSTREAM https://github.com/kunchenguid/firstmate.git, NO receipt
+prior-art refused: record is missing or unsafe: /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-pa-live.L5PvhV/task-tmp/prior-art.json
+upstream push refused: prior-art receipt does not match kunchenguid/firstmate@55f64ec41dc5a65785bffc08a3a195559d36e63b
+exit=1
+project hook log: 
+
+$ pre-push: push to UPSTREAM with the live decided receipt at task record path
+prior-art receipt ok
+exit=0
+project hook log: project(husky/lfs-style) pre-push ran: remote=upstream refs=refs/heads/fix 55f64ec41dc5a65785bffc08a3a195559d36e63b refs/heads/fix 0000000000000000000000000000000000000000
+
+$ pre-push: push an UNSCANNED sha (HEAD~1) to UPSTREAM with that receipt
+prior-art refused: prior-art receipt is stale: published head changed
+upstream push refused: prior-art receipt does not match kunchenguid/firstmate@bb9538ed51a277d00aa2f86608cff8441c3cf2f9
+exit=1
+project hook log: 
+
+$ pre-push: branch deletion to UPSTREAM (zero sha) is not a publication
+exit=0
+project hook log: project(husky/lfs-style) pre-push ran: remote=upstream refs=(delete) 0000000000000000000000000000000000000000 refs/heads/fix 55f64ec41dc5a65785bffc08a3a195559d36e63b
+

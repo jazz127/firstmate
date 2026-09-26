@@ -1,0 +1,211 @@
+{
+  "candidates": [
+    {
+      "author": "jazz127",
+      "kind": "pr",
+      "reason": "reviewed live",
+      "reasons": [
+        "search (open): REPO",
+        "search (open): feat"
+      ],
+      "state": "open",
+      "title": "feat: add deterministic Captain Chart fleet maps",
+      "url": "https://github.com/jazz127/firstmate/pull/23",
+      "verdict": "distinct"
+    },
+    {
+      "author": "jazz127",
+      "kind": "pr",
+      "reason": "reviewed live",
+      "reasons": [
+        "search (closed-unmerged): FILE",
+        "search (closed-unmerged): feat",
+        "shared files: AGENTS.md, docs/fork-house-branch.md"
+      ],
+      "state": "closed",
+      "title": "[SUPERSEDED] feat: add host-backed supervision and branch dispatch",
+      "url": "https://github.com/jazz127/firstmate/pull/26",
+      "verdict": "distinct"
+    },
+    {
+      "author": "jazz127",
+      "kind": "pr",
+      "reason": "reviewed live",
+      "reasons": [
+        "search (open): #4",
+        "search (open): feat gate upstream",
+        "search (open): OWNER",
+        "search (open): FILE",
+        "search (open): feat",
+        "shared keywords: feat, upstream",
+        "shared files: AGENTS.md, docs/fork-house-branch.md"
+      ],
+      "state": "open",
+      "title": "feat: add Bosun upstream contribution workflow",
+      "url": "https://github.com/jazz127/firstmate/pull/38",
+      "verdict": "distinct"
+    },
+    {
+      "author": "jazz127",
+      "kind": "pr",
+      "reason": "reviewed live",
+      "reasons": [
+        "search (open): #4",
+        "search (open): feat gate upstream",
+        "search (open): gate upstream prior",
+        "search (open): REPO",
+        "search (open): TEXT",
+        "search (open): FILE",
+        "search (open): feat",
+        "shared keywords: check, duplicate, feat, gate, prior, upstream",
+        "shared files: AGENTS.md, bin/fm-upstream-prior-art.py, docs/fork-house-branch.md, tests/fm-upstream-prior-art.test.sh"
+      ],
+      "state": "open",
+      "title": "feat(bin): gate upstream PRs on a prior-art duplicate check",
+      "url": "https://github.com/jazz127/firstmate/pull/44",
+      "verdict": "distinct"
+    }
+  ],
+  "captain_decision": "",
+  "captured_at": "2026-09-26T00:58:44.831716+00:00",
+  "closed_window_days": 30,
+  "complete": true,
+  "context": {
+    "base": "2c95ca7e^",
+    "diff_sha256": "20eab8345751383a6c9f912fbbb171306e7f5812076251d537daf0a43c115851",
+    "files": [
+      "AGENTS.md",
+      "bin/fm-upstream-prior-art.py",
+      "docs/fork-house-branch.md",
+      "tests/fm-upstream-prior-art.test.sh"
+    ],
+    "head": "2c95ca7e277b306b8f35f9ab306cb90aabb003fc",
+    "kind": "pr",
+    "repo": "jazz127/firstmate",
+    "summary": "Gate upstream PRs on a prior-art duplicate check",
+    "title": "feat: gate upstream submissions on prior art"
+  },
+  "coverage": {
+    "dropped_queries": [
+      "gate",
+      "upstream"
+    ],
+    "requests": 21,
+    "searches": [
+      {
+        "query": "#4",
+        "read": 2,
+        "scope": "open",
+        "total": 2
+      },
+      {
+        "query": "#4",
+        "read": 0,
+        "scope": "closed-unmerged",
+        "total": 0
+      },
+      {
+        "query": "feat gate upstream",
+        "read": 2,
+        "scope": "open",
+        "total": 2
+      },
+      {
+        "query": "feat gate upstream",
+        "read": 0,
+        "scope": "closed-unmerged",
+        "total": 0
+      },
+      {
+        "query": "gate upstream prior",
+        "read": 1,
+        "scope": "open",
+        "total": 1
+      },
+      {
+        "query": "gate upstream prior",
+        "read": 0,
+        "scope": "closed-unmerged",
+        "total": 0
+      },
+      {
+        "query": "OWNER",
+        "read": 1,
+        "scope": "open",
+        "total": 1
+      },
+      {
+        "query": "OWNER",
+        "read": 0,
+        "scope": "closed-unmerged",
+        "total": 0
+      },
+      {
+        "query": "REPO",
+        "read": 2,
+        "scope": "open",
+        "total": 2
+      },
+      {
+        "query": "REPO",
+        "read": 0,
+        "scope": "closed-unmerged",
+        "total": 0
+      },
+      {
+        "query": "TEXT",
+        "read": 1,
+        "scope": "open",
+        "total": 1
+      },
+      {
+        "query": "TEXT",
+        "read": 0,
+        "scope": "closed-unmerged",
+        "total": 0
+      },
+      {
+        "query": "FILE",
+        "read": 2,
+        "scope": "open",
+        "total": 2
+      },
+      {
+        "query": "FILE",
+        "read": 1,
+        "scope": "closed-unmerged",
+        "total": 1
+      },
+      {
+        "query": "feat",
+        "read": 3,
+        "scope": "open",
+        "total": 3
+      },
+      {
+        "query": "feat",
+        "read": 1,
+        "scope": "closed-unmerged",
+        "total": 1
+      }
+    ],
+    "stopped": "",
+    "truncated": true
+  },
+  "open_prs": {
+    "listed": 3,
+    "matched": 3
+  },
+  "queries": [
+    "#4",
+    "feat gate upstream",
+    "gate upstream prior",
+    "OWNER",
+    "REPO",
+    "TEXT",
+    "FILE",
+    "feat"
+  ],
+  "schema": "fm-upstream-prior-art.v1",
+  "verdict": "distinct"
+}

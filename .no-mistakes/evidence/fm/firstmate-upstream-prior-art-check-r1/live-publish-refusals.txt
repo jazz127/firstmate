@@ -1,0 +1,9 @@
+## publish to kunchenguid/firstmate after the branch moved past the scanned head -> refused before any forge write
+prior-art refused: prior-art record is stale: target, text, branch head, base, or diff changed
+exit=1
+## publish with no receipt -> refused
+prior-art refused: record is missing or unsafe: /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-pa-live.L5PvhV/none.json
+exit=1
+## publish with an incomplete (budget-truncated) receipt -> refused
+prior-art refused: prior-art scan was incomplete; rerun the scan
+exit=1

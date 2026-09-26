@@ -1,0 +1,17 @@
+open	https://github.com/kunchenguid/firstmate/issues/2713	tiago-peixoto	Watcher: agent liveness suppresses a declared paused: wait, so healthy parked workers are surfaced and exited ones are not
+open	https://github.com/kunchenguid/firstmate/issues/3942	sunildeesu	Declared `paused:` external wait does not suppress the watcher's pane-based stale alarm
+open	https://github.com/kunchenguid/firstmate/issues/4154	josecarvallo	Watcher wedge-escalates a paused: crew forever when its run step is stalled on the same external wait
+open	https://github.com/kunchenguid/firstmate/issues/5415	gilrallo	Watcher re-surfaces a live worker's declared paused: wait as stale every few polls
+open	https://github.com/kunchenguid/firstmate/pull/2451	victorkardel	watch paused suppression
+open	https://github.com/kunchenguid/firstmate/pull/2552	pm-justinm	fix: keep paused decision keys open
+closed	https://github.com/kunchenguid/firstmate/pull/3878	wjkawecki-jt	fix: prevent stale paused-task wakes from triggering false stalls
+open	https://github.com/kunchenguid/firstmate/pull/4070	jackChallis	test: pin paused status as nonterminal
+open	https://github.com/kunchenguid/firstmate/pull/4420	VedantAnand17	feat(brief): add Lavish-loop paused rule to every scaffold brief
+open	https://github.com/kunchenguid/firstmate/pull/4430	NewAiCoder	fix(supervision): revalidate paused no-mistakes claims via registered out-of-worktree clones
+open	https://github.com/kunchenguid/firstmate/pull/4811	tiago-peixoto	fix(bin): keep a declared pause on the bounded cadence whatever the agent's liveness
+open	https://github.com/kunchenguid/firstmate/pull/4893	tiago-peixoto	fix(bin): declare captain holds on the worker status log so watchers track the pause
+open	https://github.com/kunchenguid/firstmate/pull/5084	matsui85	fix(bin): escalate overdue paused rechecks to the short stale cadence
+open	https://github.com/kunchenguid/firstmate/pull/5111	matsui85	fix(fm-watch): advance a task's own status log when a paused-until recheck fires
+open	https://github.com/kunchenguid/firstmate/pull/5286	connectwithclayton	fix(bin): keep GitHub readers paused across re-registration
+open	https://github.com/kunchenguid/firstmate/pull/5571	g-rallo	fix(bin): bound a held task's paused: last line with the captain hold
+open	https://github.com/kunchenguid/firstmate/pull/5649	Xelanor	fix(bin): annotate first stale of a live paused worker

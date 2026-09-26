@@ -1,0 +1,22 @@
+## 1. distinct without a verdict for every candidate -> refused
+prior-art refused: decisions must cover every candidate URL exactly once
+exit=1
+## 2. claim "distinct" while marking the paused-worker duplicates as overlaps -> refused
+prior-art refused: overall verdict must match candidate overlap verdicts
+exit=1
+## 3. overlaps with no captain decision -> decide records it, check refuses
+prior-art verdict recorded: overlaps
+exit=0
+prior-art refused: prior-art overlaps require a recorded captain decision
+exit=1
+## 4. overlaps with captain decision -> check passes
+prior-art verdict recorded: overlaps
+exit=0
+prior-art check ok
+exit=0
+## 5. verify at scanned head with differently-cased repo (push-guard path)
+prior-art receipt ok
+exit=0
+## 6. new commit after scan -> check refuses (stale)
+prior-art refused: prior-art record is stale: target, text, branch head, base, or diff changed
+exit=1

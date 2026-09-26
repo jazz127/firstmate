@@ -854,7 +854,7 @@ test_matrix_pi_compact_is_experimental_and_per_call() {
   # header, one unboxed input row, one lower rule. Not yet captured from a real
   # pi build, so it is honoured only when THIS call's caps carry pi-compact=1,
   # and classification and extraction each parse that for themselves.
-  local on off plain noid header rule idle draft pi_idle out
+  local on off plain noid header rule idle draft ghost pi_idle out
   on=$'styled=1\ncursor=0\nidentity=1\npi-compact=1\nrows=20'
   off=$CAPS_STYLED
   plain=$'styled=0\ncursor=0\nidentity=1\npi-compact=1\nrows=20'
@@ -885,6 +885,16 @@ test_matrix_pi_compact_is_experimental_and_per_call() {
   fi
   out=$(fm_composer_extract_selected_content "$on" "$idle")
   [ -z "$out" ] || fail "an idle compact composer should extract empty, got '$out'"
+  out=$(fm_composer_extract_selected_content "$on" "$header"$'\n\033[0m\033[7m \033[0m          \r\n'"$rule")
+  [ -z "$out" ] || fail "a padded idle compact composer should extract empty, got '$out'"
+  # Ghost text before the cursor cell classifies pending, so extraction must
+  # read the same row by the same rule and return it, in either call order.
+  ghost="$header"$'\n\033[2mType a message\033[0m\033[7m \033[0m\n'"$rule"
+  out=$(fm_composer_extract_selected_content "$on" "$ghost")
+  [ "$out" = 'Type a message' ] || fail "fresh compact ghost extraction should be visible text, got '$out'"
+  assert_screen "compact ghost text classifies pending" pending "$on" "$ghost" '' "$pi_idle"
+  out=$(fm_composer_extract_selected_content "$on" "$ghost")
+  [ "$out" = 'Type a message' ] || fail "compact ghost extraction after classification changed to '$out'"
   # Unproven variants.
   assert_screen "compact bright draft" pending "$on" "$draft" '' "$pi_idle"
   assert_screen "compact ghost text before the cursor cell" pending "$on" \

@@ -1732,6 +1732,10 @@ EOF
           _fm_composer_pi_input_row_var content 1
         fi
         ;;
+      pi-compact)
+        content=$(printf '%s\n' "$raw" | fm_composer_strip_ansi)
+        content=${content%"${content##*[![:space:]]}"}
+        ;;
       box)
         if [ "$prompt_row" -lt 0 ] \
            && fm_composer_leading_prompt_glyph_var glyph "$content"; then

@@ -254,6 +254,10 @@ case "${1:-} ${2:-}" in
         cat "$FM_TEST_GH_RUNS"
         exit $?
         ;;
+      *"/pulls/"*"/files?per_page=100 "*)
+        # Published file-list validation sees no changed scratch paths here.
+        exit 0
+        ;;
       *" repos/"*"/rules/branches/"*merge_queue*) ;;
       *'select(.type == "pull_request")'*)
         if [ -f "${FM_TEST_GH_PR_RULES_FAIL_BODY:-}" ]; then

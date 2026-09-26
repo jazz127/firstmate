@@ -1,0 +1,48 @@
+== test_declared_pause_is_absorbed_for_every_agent_liveness_verdict
+ok - a declared pause is absorbed on the bounded cadence for alive, unknown, and dead agent liveness
+rc=
+== test_exited_declared_pause_is_bounded_and_live_gate_uses_pause_cadence
+ok - exited declared-pause and captain-held panes use bounded pause cadence, and a live decision gate is absorbed on that same cadence
+rc=
+== test_declared_wait_survives_a_busy_pane_blip
+ok - neither a busy poll nor a racing working verdict retires a standing declared wait's re-surface throttle, while an undeclared silent crew keeps alarming
+rc=
+== test_absorbed_wait_cadence_survives_a_status_write_that_keeps_the_wait
+ok - a status write that keeps a paused or captain-held wait keeps its cadence and age, while a changed declaration surfaces at once
+rc=
+== test_identical_wait_declared_again_between_polls_is_a_new_episode
+ok - an identical wait declared again after leaving it, between two polls, is a new episode
+rc=
+== test_declared_wait_age_uses_the_declaration_stamp
+ok - a stamped declaration is aged from its stamp, and a future stamp clamps to zero
+rc=
+== test_declared_wait_recheck_is_shared_with_the_wedge_route
+ok - a declared wait's idle and wedge routes share one recheck per cadence window
+rc=
+== test_done_open_pr_uses_declared_wait_cadence
+ok - done with an authenticated open PR poll waits and rechecks on the pause cadence
+rc=
+== test_delivered_pr_wait_requires_an_authenticated_poll
+ok - a delivered wait needs an authenticated poll for its own pull request, yields to a working run, and lapses with the poll
+rc=
+== test_open_captain_call_bounds_a_paused_last_line
+ok - an open captain call bounds a paused: last line through the captain-call re-surface throttle
+rc=
+== test_open_captain_call_scope_is_shared_by_the_busy_and_wedge_routes
+ok - an open captain call keeps one scope and one recheck per cadence across the busy and wedge-threshold routes
+rc=
+== test_busy_declared_pause_is_rechecked_not_wedge_escalated
+ok - a busy pane under a declared pause is rechecked on the long cadence, and lifting the pause restores the wedge escalation
+rc=
+== test_captain_held_never_rechecked_while_away_record_exists
+ok - a captain-held item is never rechecked while the away-posture record exists, and the recheck returns once the record is archived
+rc=
+== test_backlog_hold_never_rechecked_while_away_record_exists
+ok - a delivery the captain already holds is never rechecked while the away-posture record exists
+rc=
+== test_nonterminal_stale_paused_absorbed_then_resurfaced
+ok - a declared pause is absorbed on first sight, then re-surfaced as a recheck past the threshold, never wedge-escalated
+rc=
+== test_live_and_unproven_endpoints_still_wedge_escalate
+ok - a live wedged agent, an unattributable one, and an unreadable endpoint escalate unchanged
+rc=

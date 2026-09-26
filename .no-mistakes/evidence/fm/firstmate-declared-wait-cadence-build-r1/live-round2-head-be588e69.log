@@ -1,0 +1,33 @@
+### HEAD be588e69: declaration stamped 60s in the future, cadence 30s (round 1 recheck came at t+91s)
+[t+5s] watcher wake: signal: /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.iHC0In/state/held.status
+[t+32s] watcher wake: stale: crew:fm-held (paused 31s, awaiting external - declared pause, rechecked on a long cadence not a wedge; confirm the wait still holds)
+[t+75s] end of run
+
+### HEAD be588e69: untyped wait, pane busy blip at t+43s (cadence 30s, stale-escalate 8s)
+[t+5s] watcher wake: signal: /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.uRW0YX/state/held.status
+[t+33s] watcher wake: stale: crew:fm-held (paused 32s, awaiting external - declared pause, rechecked on a long cadence not a wedge; confirm the wait still holds)
+[t+43s] pane blip: keystroke changed the pane
+[t+63s] watcher wake: stale: crew:fm-held (paused 62s, awaiting external - declared pause, rechecked on a long cadence not a wedge; confirm the wait still holds)
+[t+80s] end of run
+
+### HEAD be588e69: pane process named claude (agent alive)
+[t+5s] watcher wake: signal: /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.vQFMm6/state/held.status
+[t+33s] watcher wake: stale: crew:fm-held (paused 31s, awaiting external - declared pause, rechecked on a long cadence not a wedge; confirm the wait still holds)
+[t+50s] end of run
+
+### HEAD be588e69: declaration stamped 20s before start
+[t+5s] watcher wake: signal: /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.PUaEev/state/held.status
+[t+14s] watcher wake: stale: crew:fm-held (paused 34s, awaiting external - declared pause, rechecked on a long cadence not a wedge; confirm the wait still holds)
+[t+26s] end of run
+
+### HEAD be588e69: note keeps wait (t+15), working: leaves wait (t+45)
+[t+5s] watcher wake: signal: /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.HvsESJ/state/held.status
+[t+16s] status append: note: CI still queued
+[t+19s] watcher wake: signal: /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.HvsESJ/state/held.status
+[t+33s] watcher wake: stale: crew:fm-held (paused 32s, awaiting external - declared pause, rechecked on a long cadence not a wedge; confirm the wait still holds)
+[t+45s] status append: working: CI finished, one more check
+[t+48s] watcher wake: signal: /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.HvsESJ/state/held.status
+[t+52s] watcher wake: stale: crew:fm-held
+[t+64s] watcher wake: stale: crew:fm-held (idle 8s, possible wedge, escalation 1)
+[t+70s] end of run
+

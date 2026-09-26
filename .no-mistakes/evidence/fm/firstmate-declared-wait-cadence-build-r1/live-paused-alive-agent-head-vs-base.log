@@ -1,0 +1,11 @@
+### HEAD, pane process named claude (agent alive)
+pane_current_command=claude
+[t+5s] watcher wake: signal: /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.4m4ZPe/state/held.status
+[t+34s] watcher wake: stale: crew:fm-held (paused 33s, awaiting external - declared pause, rechecked on a long cadence not a wedge; confirm the wait still holds)
+[t+50s] end of run
+
+### BASE, pane process named claude (agent alive)
+pane_current_command=claude
+[t+6s] watcher wake: signal: /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.4m4ZPe/state/held.status
+[t+18s] watcher wake: stale: crew:fm-held
+[t+50s] end of run

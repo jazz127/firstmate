@@ -1,0 +1,4 @@
+### HEAD: declaration stamped 60s in the future, cadence 30s (an unstamped wait rechecks at ~t+30)
+[t+4s] watcher wake: signal: /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.4m4ZPe/state/held.status
+[t+91s] watcher wake: stale: crew:fm-held (paused 30s, awaiting external - declared pause, rechecked on a long cadence not a wedge; confirm the wait still holds)
+[t+105s] end of run

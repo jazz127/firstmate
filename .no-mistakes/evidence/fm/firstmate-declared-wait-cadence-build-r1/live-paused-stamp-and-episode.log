@@ -1,0 +1,17 @@
+### HEAD: declaration stamped 20s before start (cadence 30s)
+[t+6s] watcher wake: signal: /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.4m4ZPe/state/held.status
+[t+16s] watcher wake: stale: crew:fm-held (paused 35s, awaiting external - declared pause, rechecked on a long cadence not a wedge; confirm the wait still holds)
+[t+25s] end of run
+
+### HEAD: declaration stamped 600s in the future (must clamp to 0, not negative)
+[t+4s] watcher wake: signal: /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.4m4ZPe/state/held.status
+[t+41s] end of run
+
+### HEAD: a note keeps the wait (t+15), then leaving (working:) and re-entering the wait (t+45)
+[t+4s] watcher wake: signal: /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.4m4ZPe/state/held.status
+[t+15s] status append: note: CI still queued
+[t+19s] watcher wake: signal: /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.4m4ZPe/state/held.status
+[t+33s] watcher wake: stale: crew:fm-held (paused 32s, awaiting external - declared pause, rechecked on a long cadence not a wedge; confirm the wait still holds)
+[t+45s] status append: working: CI finished, one more check
+[t+49s] watcher wake: signal: /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.4m4ZPe/state/held.status
+[t+51s] end of run

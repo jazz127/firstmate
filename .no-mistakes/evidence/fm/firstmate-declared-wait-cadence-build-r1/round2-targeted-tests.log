@@ -1,0 +1,21 @@
+== test_open_captain_call_scope_is_shared_by_the_busy_and_wedge_routes
+ok - an open captain call keeps one scope and one recheck per cadence across the busy and wedge-threshold routes
+rc=0
+== test_declared_wait_age_uses_the_declaration_stamp
+ok - a stamped declaration is aged from its stamp, and a future stamp falls back to the first sighting
+rc=0
+== test_declared_wait_recheck_is_shared_with_the_wedge_route
+ok - a declared wait's idle and wedge routes share one recheck per cadence window
+rc=0
+== test_declared_wait_survives_a_busy_pane_blip
+ok - neither a busy poll nor a racing working verdict retires a standing declared wait's re-surface throttle, while an undeclared silent crew keeps alarming
+rc=0
+== test_declared_pause_is_absorbed_for_every_agent_liveness_verdict
+ok - a declared pause is absorbed on the bounded cadence for alive, unknown, and dead agent liveness
+rc=0
+== test_done_open_pr_uses_declared_wait_cadence
+ok - done with an authenticated open PR poll waits and rechecks on the pause cadence
+rc=0
+== test_delivered_pr_wait_requires_an_authenticated_poll
+ok - a delivered wait needs an authenticated poll for its own pull request, yields to a working run, and lapses with the poll
+rc=0

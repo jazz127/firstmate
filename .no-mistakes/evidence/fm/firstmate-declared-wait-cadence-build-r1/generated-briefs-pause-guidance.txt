@@ -1,0 +1,16 @@
+### ship brief
+24:If the required external artifact cannot be obtained, stop and report `blocked:` or `paused:` instead of completing with a green result.
+52:   after it unless a `paused:` line declares the wait; otherwise continue the same stage until a
+54:   Use `paused: {why}` - distinct from `blocked:` - ONLY when you are deliberately idling on a
+58:   The same applies to a long job you launched yourself (a build, a test suite, a long poll):
+59:   if you end a turn while it runs, append the `paused:` line first, naming the job and how long
+60:   you expect it to take, check on it again once that time has passed, and append `working:` when you resume.
+### scout brief
+24:If the required external artifact cannot be obtained, stop and report `blocked:` or `paused:` instead of completing with a green result.
+46:   Use `paused: {why}` - distinct from `blocked:` - ONLY when you are deliberately idling on a
+51:   The same applies to a long job you launched yourself (a build, a test suite, a long poll):
+52:   if you end a turn while it runs, append the `paused:` line first, naming the job and how long
+53:   you expect it to take, check on it again once that time has passed, and append `working:` when you resume.
+### sm brief
+52:Use `paused: {why}` (distinct from `blocked:`) only when your domain is deliberately idling on a known external wait you expect to clear on its own, naming when it clears with `until <YYYY-MM-DDTHH:MMZ>` (UTC) when you know; use `blocked:` when you are stuck and need firstmate to act.
+53:A long job your domain launched itself counts too: if you end a turn while it runs, append the `paused:` line first, naming the job and how long you expect it to take, and append `working:` when you resume.

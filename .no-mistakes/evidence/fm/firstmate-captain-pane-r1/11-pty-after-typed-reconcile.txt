@@ -1,0 +1,12 @@
+ CAPTAIN'S CALL 1/1
+ ==================================
+ Provide the staging API token
+ Project: sample/project
+ 
+ 
+ [1] Token is in the vault
+ Tap or press 1
+ 
+[P] Prev  [N] Next
+[S] Skip  [Q] Quit
+Firstmate will route this answer

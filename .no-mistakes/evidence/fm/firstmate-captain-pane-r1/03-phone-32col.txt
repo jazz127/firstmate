@@ -1,0 +1,24 @@
+ CAPTAIN'S CALL 1/3
+ ==============================
+ Choose the rollout window for
+ the billing migration
+ Project: sample/project
+
+ About: The migration is ready;
+ ops needs a window.
+ Decide: Start the rollout this
+ week or wait?
+
+ [1] Start this week
+ RECOMMENDED
+ Unblocks two follow-up tasks
+
+ [2] Wait until next week
+ Tap or press 2
+
+ [3] Reconcile
+ Re-check the latest state,
+ then close this with evidence
+[P] Prev  [N] Next
+[S] Skip  [Q] Quit
+

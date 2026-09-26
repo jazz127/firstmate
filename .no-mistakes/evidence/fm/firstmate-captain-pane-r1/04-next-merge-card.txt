@@ -1,0 +1,24 @@
+ CAPTAIN'S CALL 2/3
+ ==============================
+ Merge reviewed change
+ Project: sample/project
+
+ Detail: Checks were green when
+ composed.
+ Risk: low
+ PR URL:
+ https://github.com/sample/proj
+ ect/pull/42
+
+ [1] Merge now RECOMMENDED
+ Tap or press 1
+
+ [2] Keep waiting
+ Tap or press 2
+
+[P] Prev  [N] Next
+[S] Skip  [Q] Quit
+
+
+
+

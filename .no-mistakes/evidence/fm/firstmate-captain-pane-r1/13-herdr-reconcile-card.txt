@@ -1,0 +1,14 @@
+ CAPTAIN'S CALL 1/1
+ =====================================================================================================================
+ Pick the index strategy
+ Project: sample/project
+
+ Decide: Which index?
+
+ [1] B-tree
+ Tap or press 1
+
+ [2] Reconcile
+ Re-check the latest state, then close this with evidence or keep it open with a note
+
+[P] Prev  [N] Next  [S] Skip  [Q] Quit

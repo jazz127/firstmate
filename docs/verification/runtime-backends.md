@@ -1297,6 +1297,22 @@ The projected spawn in that run used the historical empty opt-in file, so a home
 One concurrent cross-home recovery case refused under contention on a loaded machine and passed on an immediate rerun; recovery-path presentation lock contention is a deliberate hard refusal rather than a flat fallback, which default-on now makes reachable from any Herdr home.
 That run measured the default-on projection on Herdr 0.8.0 only, while the focus-flash regression below was last run on 0.7.5 before the flip, so neither run covered a defective release under default-on projection; the version floor and the focus-flash suite's Part C close that gap.
 
+The per-project task space suite ran on 2026-09-26 against Herdr 0.9.1, with `config/herdr-presentation-spaces` set to `project`:
+
+```sh
+HERDR_LAB_HELPER=bin/fm-herdr-lab.sh \
+  tests/fm-backend-herdr-project-spaces-e2e.test.sh
+```
+
+Observed guarantees:
+
+```text
+ok - real Herdr lab: tasks of one project share one labelled workspace, another project gets its own, and a same-labelled captain workspace keeps its focus and contents
+ok - real Herdr lab: a project space outlives every task but its last, and its removal keeps the captain's focus
+ok - real Herdr lab: after its last task a project reopens a fresh space and every space is removed with its last task
+ok - real Herdr lab validation completed on Herdr 0.9.1 with the default-session tripwire intact
+```
+
 The restored-shell session-start cleanup ran on 2026-07-24 against Herdr 0.7.5 protocol 17:
 
 ```sh

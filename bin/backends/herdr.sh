@@ -150,13 +150,19 @@ FM_BACKEND_HERDR_SECONDMATE_MARKER=".fm-secondmate-home"
 FM_BACKEND_HERDR_PRESENTATION_JOURNAL_SUFFIX=".herdr-presentation"
 
 # The config item a home writes to opt out of, or explicitly in to, the
-# projection.
+# projection, or to choose per-project task spaces instead.
 FM_BACKEND_HERDR_PRESENTATION_CONFIG="herdr-presentation-spaces"
+# Per-project task spaces ("project") keep one placement record per project
+# under state/ as .herdr-project-space-<key>. It names the exact workspace id
+# that project's task tabs were last placed in; like the presentation journal
+# it is a placement hint only, never endpoint, ownership, or cleanup authority.
+FM_BACKEND_HERDR_PROJECT_SPACE_RECORD_PREFIX=".herdr-project-space-"
 
 # fm_backend_herdr_presentation_preference <config-dir>: the single owner of
 # config/herdr-presentation-spaces parsing. Echoes exactly one of "off", "on"
-# (a deliberate opt-in, honored even below the version floor), or "default"
-# (this home configured nothing, so the floor decides).
+# (a deliberate opt-in, honored even below the version floor), "project" (a
+# deliberate choice of per-project task spaces, also honored below the floor),
+# or "default" (this home configured nothing, so the floor decides).
 # Values are read with the whole-file whitespace-stripped convention the other
 # scalar config items already use (config/backlog-backend, config/crew-harness),
 # plus case folding. An empty file is the historical presence-based opt-in form
@@ -173,8 +179,9 @@ fm_backend_herdr_presentation_preference() {  # <config-dir>
   case "$value" in
     off) printf 'off\n' ;;
     ''|on) printf 'on\n' ;;
+    project) printf 'project\n' ;;
     *)
-      echo "warning: $file: unrecognized value \"$value\"; herdr presentation spaces fall back to the default (write \"off\" to opt out, \"on\" to force the projection on)" >&2
+      echo "warning: $file: unrecognized value \"$value\"; herdr presentation spaces fall back to the default (write \"off\" to opt out, \"on\" to force the projection on, \"project\" for one workspace per project)" >&2
       printf 'default\n'
       ;;
   esac
@@ -330,7 +337,10 @@ fm_backend_herdr_presentation_default_supported() {  # <state-dir> [<session>]
 # home that configured nothing is projected only at or above the version floor,
 # and otherwise falls back to the flat layout with one warning. Sets
 # FM_BACKEND_HERDR_PRESENTATION_PREFERENCE for the new-projection boundary to
-# distinguish an unconfigured default from an explicit opt-in.
+# distinguish an unconfigured default from an explicit opt-in, and for
+# bin/fm-spawn.sh to recognize "project", which is not the one-task projection
+# (this gate reports it disabled) but per-project task spaces
+# (fm_backend_herdr_project_space_place).
 fm_backend_herdr_presentation_enabled() {  # <config-dir> [<state-dir>]
   local config_dir=${1:-} state_dir=${2:-} preference
   preference=$(fm_backend_herdr_presentation_preference "$config_dir")
@@ -338,7 +348,7 @@ fm_backend_herdr_presentation_enabled() {  # <config-dir> [<state-dir>]
   # shellcheck disable=SC2034
   FM_BACKEND_HERDR_PRESENTATION_PREFERENCE=$preference
   case "$preference" in
-    off) return 1 ;;
+    off|project) return 1 ;;
     on) return 0 ;;
   esac
   fm_backend_herdr_presentation_default_supported "$state_dir"
@@ -2035,6 +2045,178 @@ fm_backend_herdr_container_ensure() {  # <cwd-for-a-fresh-workspace> [<launcher-
     return 1
   fi
   printf '%s:%s\t%s' "$session" "$FM_BACKEND_HERDR_WS_ID" "$FM_BACKEND_HERDR_WS_SEEDED_TAB_ID"
+}
+
+# --- per-project task spaces ---------------------------------------------------
+#
+# config/herdr-presentation-spaces = project (docs/herdr-backend.md "Project
+# spaces" owns the contract): a fresh crewmate or scout of the primary home
+# becomes an ordinary fm-<id> task tab inside one workspace per project,
+# labelled "▸ <project>". Later tasks of the same project reuse that workspace,
+# and Herdr itself removes it when its last task tab's pane closes, through the
+# same focus-safe emptying-close plan fm_backend_herdr_kill_serialized applies
+# to every task cleanup. Placement identity is the recorded workspace id, never
+# the label: the label only has to agree with the record as a second check, so
+# a captain workspace that happens to share it is never adopted. Task tabs in a
+# project space are ordinary endpoints with no presentation journal, so every
+# existing endpoint, recovery, and cleanup path treats them like flat tabs.
+
+# fm_backend_herdr_home_is_secondmate <home>: whether <home> carries a usable
+# secondmate marker, by the same rule fm_backend_herdr_workspace_label applies.
+fm_backend_herdr_home_is_secondmate() {  # <home>
+  [ "$(FM_HOME=$1 fm_backend_herdr_workspace_label)" != firstmate ]
+}
+
+# fm_backend_herdr_project_space_label <project>: the visible workspace label.
+# The prefix keeps it distinct from every home label ("firstmate" is also a
+# project name) and from the one-task projection's "└ ... · p:<token>" grammar,
+# so neither home lookup nor projection ordering or cleanup ever matches it.
+fm_backend_herdr_project_space_label() {  # <project>
+  printf '▸ %s' "$(printf '%s' "$1" | tr -d '[:cntrl:]')"
+}
+
+# fm_backend_herdr_project_space_record_path <state-dir> <project>: one record
+# per project, keyed by a filename-safe form of the name plus its checksum so
+# two names that sanitize alike still get distinct records.
+fm_backend_herdr_project_space_record_path() {  # <state-dir> <project>
+  local state=$1 project=$2 safe sum
+  safe=$(printf '%s' "$project" | tr -c 'A-Za-z0-9._-' '-')
+  sum=$(printf '%s' "$project" | cksum | cut -d' ' -f1)
+  printf '%s/%s%s-%s' "$state" "$FM_BACKEND_HERDR_PROJECT_SPACE_RECORD_PREFIX" "$safe" "$sum"
+}
+
+# fm_backend_herdr_project_space_record_workspace <record> <home> <session>
+# <project> <label>: echo the recorded workspace id only when the record is a
+# regular file whose every field matches this exact home, named session,
+# project, and label. Anything else is no record at all.
+fm_backend_herdr_project_space_record_workspace() {  # <record> <home> <session> <project> <label>
+  local record=$1 home=$2 session=$3 project=$4 label=$5 lines workspace
+  [ -f "$record" ] && [ ! -L "$record" ] || return 1
+  lines=$(wc -l < "$record" 2>/dev/null | tr -d '[:space:]')
+  [ "$lines" = 6 ] || return 1
+  [ "$(fm_backend_herdr_projection_journal_field "$record" version)" = 1 ] || return 1
+  [ "$(fm_backend_herdr_projection_journal_field "$record" home)" = "$home" ] || return 1
+  [ "$(fm_backend_herdr_projection_journal_field "$record" session)" = "$session" ] || return 1
+  [ "$(fm_backend_herdr_projection_journal_field "$record" project)" = "$project" ] || return 1
+  [ "$(fm_backend_herdr_projection_journal_field "$record" workspace_label)" = "$label" ] || return 1
+  workspace=$(fm_backend_herdr_projection_journal_field "$record" workspace_id) || return 1
+  case "$workspace" in
+    ''|*[[:space:]]*) return 1 ;;
+  esac
+  printf '%s' "$workspace"
+}
+
+# fm_backend_herdr_project_space_record_write <record> <home> <session>
+# <project> <workspace> <label>: atomically replace the record.
+fm_backend_herdr_project_space_record_write() {  # <record> <home> <session> <project> <workspace> <label>
+  local record=$1 home=$2 session=$3 project=$4 workspace=$5 label=$6 tmp
+  tmp=$(umask 077; mktemp "$(dirname "$record")/.herdr-project-space.XXXXXX" 2>/dev/null) || return 1
+  if ! {
+    printf 'version=1\n'
+    printf 'home=%s\n' "$home"
+    printf 'session=%s\n' "$session"
+    printf 'project=%s\n' "$project"
+    printf 'workspace_id=%s\n' "$workspace"
+    printf 'workspace_label=%s\n' "$label"
+  } > "$tmp"; then
+    rm -f -- "$tmp"
+    return 1
+  fi
+  mv -f -- "$tmp" "$record" || { rm -f -- "$tmp"; return 1; }
+}
+
+# fm_backend_herdr_project_space_live <session> <workspace> <label>: whether
+# the recorded workspace id is still exactly one live workspace in <session>,
+# still carries the expected label, and still holds at least one fm-<id> task
+# tab. A removed workspace, a reused id now naming something else, or a space
+# with no task left is not reusable.
+fm_backend_herdr_project_space_live() {  # <session> <workspace> <label>
+  local session=$1 workspace=$2 label=$3 list tabs
+  list=$(fm_backend_herdr_cli "$session" workspace list 2>/dev/null) || return 1
+  printf '%s' "$list" | jq -e --arg workspace "$workspace" --arg want "$label" '
+    (.result.workspaces | type) == "array"
+    and ([.result.workspaces[] | select(.workspace_id == $workspace)] | length) == 1
+    and ([.result.workspaces[] | select(.workspace_id == $workspace and .label == $want)] | length) == 1
+  ' >/dev/null 2>&1 || return 1
+  tabs=$(fm_backend_herdr_cli "$session" tab list --workspace "$workspace" 2>/dev/null) || return 1
+  printf '%s' "$tabs" | jq -e --arg workspace "$workspace" '
+    (.result.tabs | type) == "array"
+    and ([.result.tabs[] | select((.label | type) == "string" and (.label | startswith("fm-"))
+      and ((.workspace_id // $workspace) == $workspace))] | length) >= 1
+  ' >/dev/null 2>&1
+}
+
+# fm_backend_herdr_project_space_place <session> <state-dir> <home> <project>
+# <cwd> <task-label>: place one fresh task tab in <project>'s space, reusing the
+# recorded workspace when fm_backend_herdr_project_space_live accepts it and
+# otherwise creating a new one with --no-focus and recording its exact id. The
+# caller must hold the named session's presentation lock, so a concurrent
+# spawn or cleanup cannot race the reuse decision. Sets, only on a 0 return:
+#   FM_BACKEND_HERDR_PROJECT_SPACE_WORKSPACE_ID
+#   FM_BACKEND_HERDR_PROJECT_SPACE_TAB_ID
+#   FM_BACKEND_HERDR_PROJECT_SPACE_PANE_ID
+#   FM_BACKEND_HERDR_PROJECT_SPACE_CREATED  (1 when this call created the space)
+# Returns:
+#   0 - placed.
+#   2 - nothing was created; the caller uses the ordinary flat layout.
+#   1 - a Herdr mutation happened but the task tab could not be placed; the
+#       reason is on stderr and the caller stops like a failed flat create.
+# shellcheck disable=SC2034  # bin/fm-spawn.sh reads the out-parameters above
+fm_backend_herdr_project_space_place() {  # <session> <state-dir> <home> <project> <cwd> <task-label>
+  local session=$1 state=$2 home=$3 project=$4 cwd=$5 task_label=$6
+  local home_id label record workspace seeded_tab="" seeded_pane="" created=0 out focus_before ids tab pane
+  FM_BACKEND_HERDR_PROJECT_SPACE_WORKSPACE_ID=""
+  FM_BACKEND_HERDR_PROJECT_SPACE_TAB_ID=""
+  FM_BACKEND_HERDR_PROJECT_SPACE_PANE_ID=""
+  FM_BACKEND_HERDR_PROJECT_SPACE_CREATED=0
+  [ -n "$project" ] || return 2
+  home_id=$(fm_backend_herdr_projection_home_identity "$home" 2>/dev/null) || return 2
+  [ -n "$home_id" ] || return 2
+  label=$(fm_backend_herdr_project_space_label "$project")
+  record=$(fm_backend_herdr_project_space_record_path "$state" "$project")
+  workspace=$(fm_backend_herdr_project_space_record_workspace "$record" "$home_id" "$session" "$project" "$label" 2>/dev/null) || workspace=""
+  if [ -z "$workspace" ] || ! fm_backend_herdr_project_space_live "$session" "$workspace" "$label"; then
+    focus_before=$(fm_backend_herdr_projection_focus_snapshot "$session" 2>/dev/null) || focus_before=""
+    out=$(fm_backend_herdr_cli "$session" workspace create --cwd "$cwd" --label "$label" --no-focus 2>/dev/null) || {
+      [ -z "$focus_before" ] || fm_backend_herdr_projection_focus_restore "$session" "$focus_before" "project space create" || true
+      echo "warning: herdr project space for '$project' could not be created; using the ordinary flat layout" >&2
+      return 2
+    }
+    [ -z "$focus_before" ] || fm_backend_herdr_projection_focus_restore "$session" "$focus_before" "project space create" || true
+    workspace=$(printf '%s' "$out" | jq -r '.result.workspace.workspace_id // empty' 2>/dev/null)
+    seeded_tab=$(printf '%s' "$out" | jq -r '.result.tab.tab_id // empty' 2>/dev/null)
+    seeded_pane=$(printf '%s' "$out" | jq -r '.result.root_pane.pane_id // empty' 2>/dev/null)
+    if [ -z "$workspace" ] || [ -z "$seeded_tab" ] || [ -z "$seeded_pane" ]; then
+      echo "error: herdr project space create for '$project' returned incomplete ids" >&2
+      return 1
+    fi
+    created=1
+  fi
+  if ! ids=$(fm_backend_herdr_create_task "$session:$workspace" "$task_label" "$cwd" "$seeded_tab"); then
+    if [ "$created" = 1 ]; then
+      # Only the seeded default tab can be left in a space this call just
+      # created; closing it empties and removes the new workspace.
+      fm_backend_herdr_projection_close_pane_focus_preserving "$session" "$seeded_pane" || true
+    fi
+    echo "error: herdr project space for '$project' could not hold task tab '$task_label'" >&2
+    return 1
+  fi
+  read -r tab pane <<IDS
+$ids
+IDS
+  if [ -z "$tab" ] || [ -z "$pane" ]; then
+    echo "error: herdr did not return a tab/pane id for $task_label" >&2
+    return 1
+  fi
+  if [ "$created" = 1 ] &&
+    ! fm_backend_herdr_project_space_record_write "$record" "$home_id" "$session" "$project" "$workspace" "$label"; then
+    echo "warning: herdr project space for '$project' could not be recorded; its next task will open a new space" >&2
+  fi
+  FM_BACKEND_HERDR_PROJECT_SPACE_WORKSPACE_ID=$workspace
+  FM_BACKEND_HERDR_PROJECT_SPACE_TAB_ID=$tab
+  FM_BACKEND_HERDR_PROJECT_SPACE_PANE_ID=$pane
+  FM_BACKEND_HERDR_PROJECT_SPACE_CREATED=$created
+  return 0
 }
 
 # fm_backend_herdr_pane_presence_state: classify one exact pane get response

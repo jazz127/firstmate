@@ -142,5 +142,13 @@ hold_args = (tmp / "fm-captain-hold.sh.args").read_text()
 assert "bind captain-pane" in hold_args
 assert "reconcile-requests --source-id captain-pane --source captain pane" in hold_args
 assert (tmp / "fm-captain-hold.sh.stdin").read_text().endswith("held-task\n")
+hold_args = (tmp / "fm-captain-hold.sh.args").read_text()
+payload["captains_call"] = [{"key": "cred-api-token", "type": "credential", "repo": "sample/project",
+                             "title": "Provide the API token", "options": [{"value": "provided", "label": "Token is in the vault"}]}]
+queue.write_text(json.dumps(payload))
+drive(b"1")
+assert (tmp / "fm-captain-hold.sh.args").read_text() == hold_args
+notice = (tmp / "fm-inbox.sh.args").read_text()
+assert "key=cred-api-token; selection=option; value=provided" in notice, notice
 print("ok - captain pane narrow/wide layout, resize, key and mouse routing")
 PY

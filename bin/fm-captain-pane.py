@@ -8,7 +8,8 @@ The queue is $FM_HOME/state/captains-call.json, atomically published by
 fm-bearings-board.sh. Its array order is the presentation order. This program
 never interprets card text as a command. A decision selection goes to the
 fm-captain-hold.sh keyed-answer intake, then fm-inbox.sh saves a durable wake.
-A merge selection only wakes firstmate, which verifies and performs the merge.
+A merge or credential selection only saves that durable wake; firstmate
+verifies and performs the merge or collects the credential.
 """
 
 import argparse
@@ -207,7 +208,7 @@ def answer(card, option, generated):
     selection = "freeform" if option.get("_freeform") else "option"
     if "\t" in value or "\t" in label or not value:
         return "Invalid answer text"
-    if card["type"] != "merge":
+    if card["type"] == "decision":
         if value == "reconcile":
             bound = run_command("fm-captain-hold.sh", "bind", "captain-pane")
             if bound.returncode:
@@ -233,7 +234,7 @@ def answer(card, option, generated):
 
 
 def freeform(fd, saved):
-    sys.stdout.write("\x1b[?1000l\x1b[?1006l\r\nYour answer: ")
+    sys.stdout.write("\x1b[?1000l\x1b[?1006l\x1b[?25h\r\nYour answer: ")
     sys.stdout.flush()
     termios.tcsetattr(fd, termios.TCSADRAIN, saved)
     try:
@@ -241,7 +242,7 @@ def freeform(fd, saved):
     except EOFError:
         value = ""
     tty.setraw(fd)
-    sys.stdout.write("\x1b[?1000h\x1b[?1006h")
+    sys.stdout.write("\x1b[?1000h\x1b[?1006h\x1b[?25l")
     sys.stdout.flush()
     return clean(value)
 

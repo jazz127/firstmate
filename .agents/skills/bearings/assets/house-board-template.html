@@ -157,7 +157,7 @@ __FM_HOUSE_BOARD_DATA__
       if (filters.project && row.project !== filters.project) return false;
       if (filters.label && row.label !== filters.label) return false;
       if (filters.state && row.state !== filters.state) return false;
-      if (filters.posture === "landed" && !row.landed) return false;
+      if (filters.posture === "landed" && row.on_house !== "yes") return false;
       if (filters.posture === "offered" && row.state !== "offered") return false;
       if (filters.posture === "historical" && row.state !== "historical") return false;
       if (filters.posture === "mismatch" && row.presence === "both") return false;
@@ -178,7 +178,7 @@ __FM_HOUSE_BOARD_DATA__
     const rows = selected(payload.features, filters);
     byId("stats").replaceChildren(
       metric("Showing", rows.length + " / " + payload.features.length),
-      metric("On house", rows.filter(row => row.landed).length),
+      metric("On house", rows.filter(row => row.on_house === "yes").length),
       metric("Offered", rows.filter(row => row.state === "offered").length),
       metric("Historical", rows.filter(row => row.state === "historical").length),
       metric("Register mismatches", rows.filter(row => row.presence !== "both").length)
@@ -202,7 +202,7 @@ __FM_HOUSE_BOARD_DATA__
       });
       if (!row.commits.length) commits.textContent = "Unknown";
       const landed = node("td");
-      append(landed, node("span", "pill " + (row.landed ? "good" : "warn"), row.landed ? "Yes" : "No"));
+      append(landed, node("span", "pill " + ({yes: "good", no: "warn"}[row.on_house] || ""), {yes: "Yes", no: "No"}[row.on_house] || "N/A"));
       const label = node("td");
       append(label, node("span", "pill " + (row.presence === "both" ? "" : "alert"), row.label), node("div", "small", row.state + " · " + row.label_source));
       const prs = node("td", "links");

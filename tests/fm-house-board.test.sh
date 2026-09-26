@@ -127,6 +127,7 @@ assert any('Upstream · open' in row for row in p['rows'])
 PY
 
 mkdir -p "$TMP_ROOT/deep/data"
+# shellcheck disable=SC2016 # backticks are literal Markdown in the appended register rows.
 sed '/Missing feature/a\
   - Gone feature (`eeeeeee5`, PR 4, `housefeature/gone`) — Closed without merging.\
   - Shipped feature (`fffffff6`, `housefeature/shipped`) — Contributed upstream.

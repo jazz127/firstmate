@@ -8,8 +8,9 @@
 # The control plane itself is a recording stub here (FM_READY_TIMEOUT_CONTROL_BIN);
 # tests/fm-control.test.sh pins the real exit verb. Covered: the knob's parsing,
 # disabled by default, the enabled default duration, a custom duration, no stop
-# for a busy, recently active, or unacknowledged-steer worker, and no stale or
-# dead-endpoint alarm for a worker the timeout stopped.
+# for a busy, recently active, or unacknowledged-steer worker, no stop unless the
+# authoritative crew state reads done, and no stale or dead-endpoint alarm for a
+# worker the timeout stopped.
 set -u
 
 # shellcheck source=tests/wake-helpers.sh
@@ -26,6 +27,7 @@ TMP_ROOT=$(fm_test_tmproot fm-ready-timeout-tests)
 WINDOW=test:fm-rt
 KEY=test_fm-rt
 PR=https://github.com/o/r/pull/3
+DONE_CREW_STATE="state: done · source: status-log · PR $PR checks green"
 
 reap() { kill "$1" 2>/dev/null || true; wait "$1" 2>/dev/null || true; }
 
@@ -108,7 +110,7 @@ watch_rounds() {  # <dir> <command> [env...]
   env PATH="$dir/fakebin:$PATH" FM_HOME="$dir/home" FM_STATE_OVERRIDE="$dir/state" \
     FM_CONFIG_OVERRIDE="$dir/config" FM_FAKE_TMUX_WINDOW="$WINDOW" \
     FM_FAKE_TMUX_CAPTURE="$dir/pane.txt" FM_FAKE_TMUX_CURRENT_COMMAND="$comm" \
-    FM_CREW_STATE_BIN="$dir/fakebin/fm-crew-state.sh" \
+    FM_CREW_STATE_BIN="$dir/fakebin/fm-crew-state.sh" FM_FAKE_CREW_STATE="$DONE_CREW_STATE" \
     FM_READY_TIMEOUT_CONTROL_BIN="$dir/fakebin/fm-control-stub" \
     FM_RT_CONTROL_LOG="$dir/control.log" FM_WATCH_HANDLING_SUCCESSOR=1 \
     FM_POLL=1 FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 \
@@ -243,13 +245,25 @@ test_busy_or_active_worker_is_left_running() {
   watch_rounds "$dir" zsh || fail "watcher exited: $(cat "$dir/watch.out")"
   expect_no_stop "$dir" "an agent that is already gone"
 
-  dir=$(ready_fixture live-run 90000) || fail "fixture failed"
-  : > "$dir/config/ready-session-timeout"
-  watch_rounds "$dir" claude \
-    FM_FAKE_CREW_STATE='state: working · source: run-step · ci (running)' \
-    || fail "watcher exited: $(cat "$dir/watch.out")"
-  expect_no_stop "$dir" "a live no-mistakes run on the branch"
-  pass "a busy, recently active, unread-steer, agent-less, or live-run worker is never stopped"
+  pass "a busy, recently active, unread-steer, or agent-less worker is never stopped"
+}
+
+test_only_a_done_crew_state_is_stopped() {
+  local dir reading n=0
+  for reading in 'state: working · source: run-step · ci (running)' \
+    'state: parked · source: run-step · fix_review' \
+    'state: blocked · source: status-log · waiting on a rebase' \
+    'state: paused · source: status-log · waiting on the vendor' \
+    'state: failed · source: run-step · ci failed' \
+    'state: unknown · source: none · no current-state source available'; do
+    n=$((n + 1))
+    dir=$(ready_fixture "crew-state-$n" 90000) || fail "fixture failed"
+    : > "$dir/config/ready-session-timeout"
+    watch_rounds "$dir" claude FM_FAKE_CREW_STATE="$reading" \
+      || fail "watcher exited: $(cat "$dir/watch.out")"
+    expect_no_stop "$dir" "crew state '$reading'"
+  done
+  pass "a ready worker whose crew state is working, parked, blocked, paused, failed, or unknown is never stopped"
 }
 
 # After the stop the pane holds a bare shell, the exit fired a turn-end, and the
@@ -286,6 +300,7 @@ test_disabled_by_default
 test_enabled_default_duration
 test_custom_duration
 test_busy_or_active_worker_is_left_running
+test_only_a_done_crew_state_is_stopped
 test_no_alarm_after_a_timeout_stop
 
 echo "all fm-ready-timeout tests passed"

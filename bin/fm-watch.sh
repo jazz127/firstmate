@@ -1702,8 +1702,9 @@ delivered_pr_wait() {  # <task>
 # eligibility rules, and the durable record; this is only the poll-loop driver.
 # It is silent: a stop, a refusal, and a rejected config value go to the triage
 # log and never wake firstmate. The cheap reads run first, so only a worker
-# already past the timeout pays for the delivered-wait proof and a backend read,
-# and the stop itself is the control plane's verified exit.
+# already past the timeout pays for the delivered-wait proof, a backend read and
+# an authoritative crew-state read that must say exactly done, and the stop
+# itself is the control plane's verified exit.
 READY_TIMEOUT_CONTROL_BIN=${FM_READY_TIMEOUT_CONTROL_BIN:-$SCRIPT_DIR/fm-control.sh}
 READY_TIMEOUT_REJECT_LOGGED=0
 
@@ -1754,7 +1755,7 @@ ready_session_timeout_consider() {  # <task> <meta> <timeout-secs>
   [ "$agent" = alive ] || return 0
   verdict=$(fm_busy_classify_meta "$meta" "$task" "$STATE" 2>/dev/null) || return 0
   [ "${verdict%% *}" = idle ] || return 0
-  [ "$(crew_absorb_class "$task")" != working ] || return 0
+  case "$("$FM_CREW_STATE_BIN" "$task" 2>/dev/null)" in "state: done · "*) ;; *) return 0 ;; esac
   if out=$(FM_HOME="$FM_HOME" "$READY_TIMEOUT_CONTROL_BIN" "$task" exit 2>&1); then
     fm_ready_timeout_record_write "$STATE" "$task" stopped "$gen" "$pr" "$secs" "${out%%$'\n'*}" \
       || triage_log "ready-session timeout stopped $task but could not record it"

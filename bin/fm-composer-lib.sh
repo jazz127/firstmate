@@ -1941,17 +1941,26 @@ fm_composer_queued_enter_verdict() {  # <composer-state> <busy|idle|unknown>
 # text is pending; anything else (plain capture, a blank row without the
 # cursor cell, leading whitespace before it) proves nothing.
 _fm_composer_classify_pi_compact_row() {  # <screen> <styled>
-  local screen=$1 styled=$2 raw plain esc
+  local screen=$1 styled=$2 raw plain esc rest
   [ "$styled" = 1 ] || { printf 'unknown'; return 0; }
   raw=$(_fm_composer_screen_row "$((FM_COMPOSER_SCAN_PI_COMPACT_OPEN + 1))" "$screen")
   plain=$(printf '%s\n' "$raw" | fm_composer_strip_ansi)
   plain=${plain%"${plain##*[![:space:]]}"}
   esc=$(printf '\033')
   if [ -z "$plain" ]; then
-    case "$raw" in
-      "${esc}[7m "*|"${esc}[0m${esc}[7m "*) printf 'empty'; return 0 ;;
+    rest=${raw#"${esc}[0m"}
+    case "$rest" in
+      "${esc}[7m "*) rest=${rest#"${esc}[7m "} ;;
+      *) printf 'unknown'; return 0 ;;
     esac
-    printf 'unknown'
+    case "$rest" in
+      "${esc}[0m"*) rest=${rest#"${esc}[0m"} ;;
+      "${esc}[27m"*) rest=${rest#"${esc}[27m"} ;;
+    esac
+    case "$rest" in
+      *[![:space:]]*) printf 'unknown' ;;
+      *) printf 'empty' ;;
+    esac
     return 0
   fi
   case "$plain" in

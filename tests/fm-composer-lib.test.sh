@@ -903,6 +903,12 @@ test_matrix_pi_compact_is_experimental_and_per_call() {
     "$header"$'\n   \n'"$rule" '' "$pi_idle"
   assert_screen "compact whitespace before the cursor cell" unknown "$on" \
     "$header"$'\n  \033[7m \033[0m\n'"$rule" '' "$pi_idle"
+  assert_screen "compact multi-cell reverse-video run" unknown "$on" \
+    "$header"$'\n\033[7m    \033[0m\n'"$rule" '' "$pi_idle"
+  assert_screen "compact second reverse-video cell after the cursor" unknown "$on" \
+    "$header"$'\n\033[7m \033[0m  \033[7m \033[0m\n'"$rule" '' "$pi_idle"
+  assert_screen "compact cursor cell closed by reverse-off" empty "$on" \
+    "$header"$'\n\033[7m \033[27m   \n'"$rule" '' "$pi_idle"
   assert_screen "compact boxed input row" unknown "$on" \
     "$header"$'\n│\033[7m \033[0m│\n'"$rule" '' "$pi_idle"
   assert_screen "compact multiline input" unknown "$on" \

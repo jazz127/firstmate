@@ -3102,14 +3102,6 @@ fm_backend_herdr_composer_identity() {  # <target> -> "<agent>\t<status>"
   fm_backend_herdr_agent_identity_raw "$FM_BACKEND_HERDR_SESSION" "$FM_BACKEND_HERDR_PANE"
 }
 
-# fm_backend_herdr_composer_state: thin adapter - capture plus capabilities
-# in, shared verdict out. The ANSI capture is preferred (styled=1 lets the
-# shared classifier strip ghost/placeholder text); when it fails on an older
-# herdr, the plain capture degrades the descriptor to styled=0 rather than
-# letting ghost text be misread as typed input. Identity is fetched lazily,
-# only when the classifier reports the verdict depends on it (a pi separator
-# pair below every other candidate), preserving this adapter's original
-# consult-only-when-needed behavior.
 # fm_backend_herdr_pi_compact_cap: the pi-compact capability line for a STYLED
 # capture, printed only when the operator opts in with
 # FM_BACKEND_HERDR_PI_COMPACT=1. Pi's compact layout is experimental in the
@@ -3120,6 +3112,14 @@ fm_backend_herdr_pi_compact_cap() {
   printf '\npi-compact=1'
 }
 
+# fm_backend_herdr_composer_state: thin adapter - capture plus capabilities
+# in, shared verdict out. The ANSI capture is preferred (styled=1 lets the
+# shared classifier strip ghost/placeholder text); when it fails on an older
+# herdr, the plain capture degrades the descriptor to styled=0 rather than
+# letting ghost text be misread as typed input. Identity is fetched lazily,
+# only when the classifier reports the verdict depends on it (a pi separator
+# pair below every other candidate), preserving this adapter's original
+# consult-only-when-needed behavior.
 fm_backend_herdr_composer_state() {  # <target> -> empty|pending|pending-unproven|unknown
   local target=$1 cap caps verdict identity
   fm_backend_herdr_parse_target "$target" || { printf 'unknown'; return 0; }

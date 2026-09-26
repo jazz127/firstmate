@@ -329,7 +329,7 @@ write_mr_json() {
     "$state" "$detail" "$conflicts" > "$file"
   printf '"blocking_discussions_resolved":%s,"sha":"%s","head_pipeline":%s,' \
     "$discussions" "$head" "$pipeline" >> "$file"
-  printf '"merge_when_pipeline_succeeds":%s,"merge_after":%s}\n' \
+  printf '"description":"Fixture body","merge_when_pipeline_succeeds":%s,"merge_after":%s}\n' \
     "$merge_when_pipeline_succeeds" "$merge_after" >> "$file"
 }
 
@@ -1732,7 +1732,7 @@ test_gitlab_stale_recorded_head_is_reported() {
 }
 
 test_gitlab_unreadable_state_refuses() {
-  local case_dir rc name
+  local case_dir rc name expected
   for name in view-fails not-an-object split-value; do
     case_dir=$(make_gitlab_case "gitlab-unreadable-$name")
     case "$name" in
@@ -1750,7 +1750,12 @@ test_gitlab_unreadable_state_refuses() {
     set -e
 
     expect_code 1 "$rc" "gitlab-unreadable-$name: fm-pr-merge should refuse"
-    assert_grep 'could not read the GitLab merge request state before merging' \
+    case "$name" in
+      view-fails) expected='cannot read the published merge-request body' ;;
+      not-an-object) expected='cannot parse the published merge-request body' ;;
+      split-value) expected='could not read the GitLab merge request state before merging' ;;
+    esac
+    assert_grep "$expected" \
       "$case_dir/stderr" "gitlab-unreadable-$name: refusal did not name the unreadable state"
     [ -z "$(glab_merge_line "$case_dir/glab.log")" ] \
       || fail "gitlab-unreadable-$name: a merge was attempted on an unreadable state"

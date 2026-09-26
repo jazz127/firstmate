@@ -249,6 +249,34 @@ EOF
   pass "evidence claims accept readable provenance and spare ordinary prose"
 }
 
+test_scenario_consistency_is_publication_only() {
+  local root artifact intent out rc
+  root="$TMP_ROOT/scenario-publication-only"
+  artifact="$root/worktree/evidence.txt"
+  mkdir -p "$root/worktree" "$root/tmp"
+  printf '%s\n' captured > "$artifact"
+  intent=$(cat <<EOF
+| Scenario | Result | Live | Evidence |
+| --- | --- | --- | --- |
+| Account A | pass | yes | captured |
+| Account B | pass | fixture-based | local fixture |
+
+0 of 2 scenarios driven live against the product.
+evidence-artifact: $artifact
+evidence-command: cat $artifact
+evidence-captured: 2026-09-25T10:00:00+10:00
+EOF
+)
+  fm_dod_validate_intent_evidence "$intent" "$root/worktree" "$root/tmp" \
+    || fail "brief intent quoting a contradictory PR body was refused"
+  out=$(fm_dod_validate_published_intent "$intent" "$root/worktree" "$root/tmp" 2>&1)
+  rc=$?
+  [ "$rc" -eq 1 ] || fail "contradictory PR body was accepted at publication"
+  assert_contains "$out" "contradictory driven-scenario results" \
+    "publication refusal did not identify the contradiction"
+  pass "scenario consistency is enforced only for PR-body publication"
+}
+
 test_unpushed_ship_done_is_refused() {
   local repo wt sha reason rc
   repo="$TMP_ROOT/unpushed-repo"
@@ -521,9 +549,74 @@ test_non_done_lines_are_not_gated() {
   pass "non-done lines are not gated"
 }
 
+# Issue 3608: a legacy `# Task` body's provenance marker must be read the way
+# bin/fm-brief-heading-lib.sh reads headings - outside fenced blocks and never
+# from an indented example - or a fenced `Captain:` sample becomes the ship
+# contract's intent while the real ask is dropped.
+test_fenced_and_indented_captain_lines_are_not_intent() {
+  local home id meta out status words
+  home="$TMP_ROOT/fenced-home"
+  mkdir -p "$home/state" "$home/data"
+  words=$(fm_brief_marked_captain_words 'Investigate the promotion gate.
+
+```markdown
+Captain: This fenced example must not become intent.
+[captain] Neither must this one.
+```
+
+~~~
+Captain: Nor this tilde-fenced one.
+~~~
+
+    Captain: An indented example is not the ask either.
+	[captain] Nor a tab-indented one.
+Keep this Firstmate constraint out of captain intent.')
+  assert_equals "" "$words" "fenced or indented Captain lines were extracted as authorized intent"
+
+  words=$(fm_brief_marked_captain_words '```
+Captain: fenced example
+```
+  [captain] Preserve the real ask after the fence closes.
+````
+Captain: a longer fence that a shorter closer must not end
+```
+Captain: still fenced
+````')
+  assert_equals "Preserve the real ask after the fence closes." "$words" \
+    "the marker after a closed fence, or inside a longer fence, was misread"
+
+  id=promote-fenced-captain
+  meta="$home/state/$id.meta"
+  printf 'window=fm-%s\nkind=scout\nworktree=/tmp/wt\n' "$id" > "$meta"
+  mkdir -p "$home/data/$id"
+  cat > "$home/data/$id/brief.md" <<'EOF'
+# Task
+Investigate the promotion gate.
+
+```markdown
+Captain: This fenced example must not become intent.
+```
+
+    Captain: An indented example is not the ask either.
+
+# Setup
+This is a SCOUT task: the deliverable is a written report, not a PR.
+EOF
+  out=$(FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" "$ROOT/bin/fm-promote.sh" "$id" --mode direct-PR --yolo off 2>&1)
+  status=$?
+  [ "$status" -ne 0 ] || fail "promotion whose only Captain lines are fenced or indented examples should fail"
+  assert_contains "$out" "has no provenance-marked Captain's intent" \
+    "fenced-example promotion did not refuse like an unmarked legacy brief"
+  assert_absent "$home/data/$id/ship-instructions.md" \
+    "fenced-example promotion published a fenced sample as captain intent"
+  assert_grep 'kind=scout' "$meta" "fenced-example promotion changed the task record"
+  pass "fenced and indented Captain lines are not authorized intent"
+}
+
 test_scout_done_is_not_gated
 test_evidence_claim_requires_provenance
 test_evidence_claim_enforces_mechanical_provenance
+test_scenario_consistency_is_publication_only
 test_unpushed_ship_done_is_refused
 test_no_mistakes_prevalidation_done_is_not_gated
 test_remote_containing_named_head_is_accepted
@@ -539,5 +632,6 @@ test_local_only_linked_branch_is_accepted
 test_local_only_detached_head_is_refused
 test_standalone_local_only_needs_project_ref
 test_non_done_lines_are_not_gated
+test_fenced_and_indented_captain_lines_are_not_intent
 
 echo "all fm-dod-lib tests passed"

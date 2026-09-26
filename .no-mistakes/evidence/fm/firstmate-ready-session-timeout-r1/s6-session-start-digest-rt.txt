@@ -1,0 +1,17 @@
+
+Work under way (state/*.meta)
+--------------------------------------------------------------------------------
+
+--- rt ---
+window=lab:fm-rt
+project=firstmate
+kind=ship
+harness=claude
+spawn_gen=gen-1
+worktree=/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3EAEPPWTKCVNRT0XNVJEZPS
+pr=https://github.com/jazz127/firstmate/pull/99999
+pr_head=e5c1ee02171e16b5466164ab7960cb1de08ee99f
+endpoint: alive (backend=tmux window=lab:fm-rt)
+agent: stopped by the ready-session timeout while its pull request waited on a merge (record: /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.4RiunP/state/rt.ready-timeout); relaunch with bin/fm-control.sh rt relaunch when it needs more work
+status tail (last 5 line(s), each capped at 220 characters, wake-EVENT history, not current state; full log: /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.4RiunP/state/rt.status):
+done [at=1790405617]: PR https://github.com/jazz127/firstmate/pull/99999 checks green

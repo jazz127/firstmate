@@ -1,0 +1,14 @@
+# Scenario 1: timeout OFF (no config/ready-session-timeout), worker ready+idle 7300s, real fm-watch.sh for 25s
+watcher: watcher still running after 25s (killed)
+$ ls $LAB/config  (empty = no knob)
+$ tmux list-panes -t lab:fm-rt
+pane_current_command=2_1_283
+$ ls state/rt.ready-timeout
+ls: /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.4RiunP/state/rt.ready-timeout: No such file or directory
+$ cat state/.wake-queue
+$ capture-pane lab:fm-rt
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ Try "how does <filepath> work?"
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Opus 5.5 │ 01M3EAEPPWTKCVNRT0XNVJEZPS e5c1ee02(wt:01M3EAEPPWTKCVNRT0XNVJEZPS) │ in:0 out:0 /1000.0k │ effort:medium thinking │ v2.1.283
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← 2 agents

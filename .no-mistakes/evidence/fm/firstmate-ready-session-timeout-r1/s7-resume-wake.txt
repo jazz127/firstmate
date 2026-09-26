@@ -1,0 +1,34 @@
+# Scenario 7: stopped worker's authoritative state leaves done (synthetic trigger: a 'blocked' status line, pre-marked seen so no ordinary status-signal wake)
+crew-state before watcher: state: unknown · source: pane · harness state unavailable (unknown missing)
+--- round 1 ---
+watcher: watcher exited rc=0
+watcher output: stale: lab:fm-rt (the ready-session timeout had stopped rt's agent while its pull request waited on a merge, and it now needs work: state: unknown · source: pane · harness state unavailable (unknown missing); relaunch it with bin/fm-control.sh rt relaunch)
+$ cat state/.wake-queue
+1790413178	12	stale	lab:fm-rt	stale: lab:fm-rt (the ready-session timeout had stopped rt's agent while its pull request waited on a merge, and it now needs work: state: unknown · source: pane · harness state unavailable (unknown missing); relaunch it with bin/fm-control.sh rt relaunch)
+$ cat state/rt.ready-timeout
+v=1
+result=resumed
+spawn_gen=gen-1
+at=1790413178
+timeout=7200
+pr=https://github.com/jazz127/firstmate/pull/99999
+detail=resumed: state: unknown · source: pane · harness state unavailable (unknown missing)
+--- round 2 (next watcher run, same state) ---
+watcher: watcher exited rc=0
+watcher output: stale: lab:fm-rt
+$ grep -c 'ready-session timeout had stopped' state/.wake-queue
+0
+$ cat state/.wake-queue (ordinary surfacing, now allowed)
+1790413194	13	stale	lab:fm-rt	stale: lab:fm-rt
+--- round 3: same incarnation (spawn_gen=gen-1) back to done, idle, ready 7300s, live claude again; record reads resumed ---
+pane_current_command=2_1_283
+crew-state: state: done · source: status-log · PR https://github.com/jazz127/firstmate/pull/99999 checks green
+watcher: watcher still running after 45s (killed)
+watcher output: 
+$ tmux list-panes
+pane_current_command=2_1_283
+$ grep result state/rt.ready-timeout
+result=resumed
+$ grep -c 'ready-session timeout stopped' triage log
+1
+$ cat state/.wake-queue

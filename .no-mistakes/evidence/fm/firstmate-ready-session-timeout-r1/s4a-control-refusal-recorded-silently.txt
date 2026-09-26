@@ -1,0 +1,33 @@
+# Scenario 4: knob enabled (empty file = default 7200s); worker ready+idle 7300s; real fm-watch.sh + real fm-control.sh exit against a live claude pane
+--- before ---
+pane_current_command=2_1_283
+crew-state: state: done · source: status-log · PR https://github.com/jazz127/firstmate/pull/99999 checks green
+--- after 45s of watcher (watcher exited rc=0) ---
+$ tmux list-panes -t lab:fm-rt
+pane_current_command=2_1_283
+$ capture-pane lab:fm-rt
+ ▝▝   ▝▝   ~/.no-mistakes/worktrees/119cd7a6b9a4/01M3EAEPPWTKCVNRT0XNVJEZPS
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ Try "how does <filepath> work?"
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Opus 5.5 │ 01M3EAEPPWTKCVNRT0XNVJEZPS e5c1ee02(wt:01M3EAEPPWTKCVNRT0XNVJEZPS) │ in:0 out:0 /1000.0k │ effort:medium thinking │ v2.1.283
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← 2 agents
+$ cat state/rt.ready-timeout
+v=1
+result=failed
+spawn_gen=gen-1
+at=1790412860
+timeout=7200
+pr=https://github.com/jazz127/firstmate/pull/99999
+detail=REFUSED: task rt has a missing, empty, or ambiguous project identity; preserving task state.
+$ grep ready-session state/.watch-triage.log
+[2026-09-26T18:54:20+1000] ready-session timeout could not stop rt, retrying after 7200s: REFUSED: task rt has a missing, empty, or ambiguous project identity; preserving task state.
+$ ls state/rt.meta rt.pr-poll-registration rt.check.sh
+/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.4RiunP/state/rt.check.sh
+/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.4RiunP/state/rt.meta
+/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.4RiunP/state/rt.pr-poll-registration
+$ cat state/.wake-queue
+1790412891	8	signal	rt.status	signal: /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.4RiunP/state/rt.status
+1790412891	9	signal	rt.status	signal: /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.4RiunP/state/rt.status
+$ bin/fm-crew-state.sh rt
+state: done · source: status-log · PR https://github.com/jazz127/firstmate/pull/99999 checks green

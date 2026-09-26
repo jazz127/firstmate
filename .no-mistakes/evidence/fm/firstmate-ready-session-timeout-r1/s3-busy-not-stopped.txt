@@ -1,0 +1,12 @@
+# Scenario 3: knob enabled (default), ready 7300s, but busy record reads busy
+watcher: watcher still running after 25s (killed)
+$ busy classify
+v1 gen=g1790412811.61438.17684 seq=3 state=busy source=claude-hook event=prompt ts=1790412811
+
+$ tmux list-panes -t lab:fm-rt
+pane_current_command=2_1_283
+$ ls state/rt.ready-timeout
+ls: /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.4RiunP/state/rt.ready-timeout: No such file or directory
+$ cat state/.wake-queue
+activity_age=7337
+busy_verdict=busy claude-hook

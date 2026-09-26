@@ -1,0 +1,19 @@
+# Scenario 8: config/ready-session-timeout = '90m'; new incarnation spawn_gen=gen-2 (old record names gen-1 resumed); ready+idle 5500s; live claude
+--- before ---
+pane_current_command=2_1_283
+crew-state: state: done · source: status-log · PR https://github.com/jazz127/firstmate/pull/99999 checks green
+--- after watcher (watcher still running after 60s (killed)) ---
+watcher output: 
+pane_current_command=zsh
+$ cat state/rt.ready-timeout
+v=1
+result=stopped
+spawn_gen=gen-2
+at=1790413281
+timeout=5400
+pr=https://github.com/jazz127/firstmate/pull/99999
+detail=fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.4RiunP
+$ tail -1 triage
+[2026-09-26T19:01:21+1000] ready-session timeout stopped rt after 5501s ready and idle: fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.4RiunP
+$ cat state/.wake-queue
+crew-state: state: done · source: status-log · PR https://github.com/jazz127/firstmate/pull/99999 checks green · agent stopped by the ready-session timeout; relaunch to resume work

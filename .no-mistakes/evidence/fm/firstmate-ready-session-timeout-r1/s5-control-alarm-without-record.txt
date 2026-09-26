@@ -1,0 +1,8 @@
+# Scenario 5 control: identical state, but state/rt.ready-timeout names spawn_gen=gen-0 (not this incarnation)
+watcher: watcher exited rc=0
+watcher output: signal: /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.4RiunP/state/rt.turn-ended
+$ cat state/.wake-queue
+1790413123	10	signal	rt.turn-ended	signal: /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.4RiunP/state/rt.turn-ended
+1790413124	11	signal	rt.turn-ended	signal: /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.4RiunP/state/rt.turn-ended
+$ crew-state
+state: unknown · source: pane · harness state unavailable (unknown missing)

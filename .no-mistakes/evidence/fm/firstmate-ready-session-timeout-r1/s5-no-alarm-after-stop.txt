@@ -1,0 +1,14 @@
+# Scenario 5: after the stop, real fm-watch.sh runs 40s with FM_STALE_ESCALATE_SECS=1 FM_PAUSE_RESURFACE_SECS=1 and a fresh rt.turn-ended; pane holds only a shell
+watcher: watcher still running after 40s (killed)
+watcher output: 
+$ tmux list-panes
+pane_current_command=zsh
+$ cat state/.wake-queue
+$ ls state/.dead-reported-*
+ls: /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.4RiunP/state/.dead-reported-*: No such file or directory
+$ grep result state/rt.ready-timeout
+result=stopped
+$ count of stops in triage log
+1
+$ crew-state
+state: done · source: status-log · PR https://github.com/jazz127/firstmate/pull/99999 checks green · agent stopped by the ready-session timeout; relaunch to resume work

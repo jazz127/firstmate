@@ -1,0 +1,1 @@
+stale: lab:fm-rt (the ready-session timeout had stopped rt's agent while its pull request waited on a merge, and it now needs work: state: unknown · source: pane · harness state unavailable (unknown missing); relaunch it with bin/fm-control.sh rt relaunch)

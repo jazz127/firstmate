@@ -1,0 +1,9 @@
+# Scenario 2: knob enabled at default (empty config/ready-session-timeout = 7200s); worker ready+idle only 7000s
+watcher: watcher still running after 25s (killed)
+$ wc -c config/ready-session-timeout
+       0
+$ tmux list-panes -t lab:fm-rt
+pane_current_command=2_1_283
+$ ls state/rt.ready-timeout
+ls: /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.4RiunP/state/rt.ready-timeout: No such file or directory
+$ cat state/.wake-queue

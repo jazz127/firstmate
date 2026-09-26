@@ -268,7 +268,8 @@ fi
 ! rg -q 'Traceback' "$TMP_ROOT/out" || fail 'malformed captain decision crashed'
 mv "$TMP_ROOT/prior-art-good.json" "$TMP_ROOT/prior-art.json"
 "$tool" check "${common[@]}" > "$TMP_ROOT/out" || fail 'fresh distinct record refused'
-export PUBLISHED_HEAD=$(git rev-parse HEAD)
+PUBLISHED_HEAD=$(git rev-parse HEAD)
+export PUBLISHED_HEAD
 export FAKE_REMOTE_HEAD=$PUBLISHED_HEAD
 cp "$TMP_ROOT/prior-art.json" "$TMP_ROOT/published-record.json"
 "$tool" publish "${common[@]}" --body-file "$TMP_ROOT/body.md" --head owner:fix > "$TMP_ROOT/out" || fail 'guarded publication failed'
@@ -276,7 +277,8 @@ export FAKE_REMOTE_HEAD=0000000000000000000000000000000000000000
 if "$tool" publish "${common[@]}" --body-file "$TMP_ROOT/body.md" --head owner:fix > "$TMP_ROOT/out" 2>&1; then
   fail 'stale remote branch was published'
 fi
-export FAKE_REMOTE_HEAD=$(git rev-parse HEAD)
+FAKE_REMOTE_HEAD=$(git rev-parse HEAD)
+export FAKE_REMOTE_HEAD
 "$tool" verify --record "$TMP_ROOT/published-record.json" --repo owner/demo \
   --head "$(git rev-parse HEAD)" > "$TMP_ROOT/out" || fail 'valid receipt verification failed'
 git remote add origin https://github.com/fork/demo.git

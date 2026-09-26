@@ -879,11 +879,13 @@ METHODS
 }
 
 # Choose the GitHub merge method for a caller that named none. The methods the
-# base branch allows are the repository's allow_merge_commit,
-# allow_squash_merge, and allow_rebase_merge settings narrowed by every
-# effective pull_request rule's allowed_merge_methods; a rule without that
-# parameter narrows nothing, and a plan-gated 403 on the rules endpoint means
-# the repository cannot have branch rules, as in github_read_queue_method.
+# base branch allows are the repository's mergeCommitAllowed,
+# squashMergeAllowed, and rebaseMergeAllowed settings, read through gh repo
+# view because REST returns them as null to a token without admin access,
+# narrowed by every effective pull_request rule's allowed_merge_methods; a rule
+# without that parameter narrows nothing, and a plan-gated 403 on the rules
+# endpoint means the repository cannot have branch rules, as in
+# github_read_queue_method.
 # Squash stays the default wherever it is allowed, and merge is chosen when it
 # is the only allowed method. Any other set is ambiguous, and it and every
 # failed read refuse naming what is known, because guessing would either lose
@@ -895,8 +897,9 @@ github_choose_default_method() {
   local branch_path api_err api_err_text refuse_hint
   FM_PR_GITHUB_DEFAULT_METHOD=
   refuse_hint='pass --squash, --merge, or --rebase after -- to choose explicitly'
-  if ! settings=$(gh api "repos/$PR_OWNER/$PR_REPO" \
-    --jq '"merge=" + (.allow_merge_commit | tostring), "squash=" + (.allow_squash_merge | tostring), "rebase=" + (.allow_rebase_merge | tostring)' \
+  if ! settings=$(gh repo view "$PR_OWNER/$PR_REPO" \
+    --json mergeCommitAllowed,squashMergeAllowed,rebaseMergeAllowed \
+    --jq '"merge=" + (.mergeCommitAllowed | tostring), "squash=" + (.squashMergeAllowed | tostring), "rebase=" + (.rebaseMergeAllowed | tostring)' \
     2>/dev/null); then
     printf 'error: refusing to merge %s: the repository merge-method settings could not be read, so no merge method was chosen; %s\n' \
       "$URL" "$refuse_hint" >&2

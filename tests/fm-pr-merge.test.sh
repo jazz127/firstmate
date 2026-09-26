@@ -201,16 +201,19 @@ case "${1:-} ${2:-}" in
     cat "$FM_TEST_GH_OUTCOME"
     exit 0
     ;;
+  "repo view")
+    # The merge-method settings read answers from its own fixture file.
+    case " $* " in
+      *" --json mergeCommitAllowed,squashMergeAllowed,rebaseMergeAllowed "*)
+        [ ! -f "${FM_TEST_GH_SETTINGS_FAIL:-}" ] || exit 1
+        cat "$FM_TEST_GH_SETTINGS"
+        exit 0
+        ;;
+    esac
+    ;;
   api\ *)
-    # The merge-method read: repository settings, then pull_request rules.
-    # Each answers from its own fixture file so the merge-queue fixture above
-    # keeps driving only the queue read.
-    slug=${2#repos/}
-    if [ "$slug" != "${2:-}" ] && [ "${slug#*/}" != "$slug" ] && [ "${slug#*/*/}" = "$slug" ]; then
-      [ ! -f "${FM_TEST_GH_SETTINGS_FAIL:-}" ] || exit 1
-      cat "$FM_TEST_GH_SETTINGS"
-      exit 0
-    fi
+    # The merge-method rules read answers from its own fixture file so the
+    # merge-queue fixture above keeps driving only the queue read.
     case " $* " in
       *'select(.type == "pull_request")'*)
         if [ -f "${FM_TEST_GH_PR_RULES_FAIL_BODY:-}" ]; then

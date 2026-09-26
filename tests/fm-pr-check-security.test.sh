@@ -140,6 +140,10 @@ SH
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$FM_TEST_GH_LOG"
 case "${1:-} ${2:-}" in
+  "repo view")
+    printf '%s\n' merge=true squash=true rebase=true
+    exit 0
+    ;;
   "api graphql")
     printf '%s\n' \
       "state=${FM_TEST_GH_GRAPHQL_STATE:-MERGED}" \
@@ -183,9 +187,6 @@ case " $* " in
     ;;
   *" api repos/"*"/commits/"*"/statuses?per_page=100 "*)
     printf '%s\n' '[[]]'
-    ;;
-  *" api repos/"*' --jq "merge=" '*)
-    printf '%s\n' merge=true squash=true rebase=true
     ;;
   *" api repos/"*"/pulls/"*)
     if [ -n "${FM_TEST_GH_FILES:-}" ]; then

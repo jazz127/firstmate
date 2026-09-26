@@ -99,7 +99,7 @@ It reads the most relevant hits for each query within a fixed request and time b
 Queries beyond the per-scan query cap and hits beyond the most relevant page are not read; the receipt discloses that truncation with read and total counts and any dropped queries, `decide` refuses a record without that disclosure, and the published `Prior art checked` section states that search coverage was bounded.
 A duplicate with different wording or files can evade those keyword, changed-file, and linked-issue matches.
 A `none-found` verdict requires no candidates; a `distinct` verdict requires a one-line reason for each candidate; an `overlaps` verdict requires the captain's recorded decision before publication.
-Use that command's `publish` operation for upstream creation so its receipt check is immediately before the forge write and the generated pull request body credits overlapping authors in a `Prior art checked` section.
+Use that command's `publish` operation for upstream creation so its receipt check is immediately before the forge write and the generated `Prior art checked` section summarizes the search, names the closest matches, and credits authors of overlapping work.
 It refuses missing receipts, a changed branch head or diff, a changed title or summary, scans over one hour old, and unresolved overlaps.
 The one-hour limit applies before the push and the forge write; the post-publication registration and done checks verify the published head without it, and accept a published head equal to the scanned head or one the forge reports as strictly ahead of it, so pipeline auto-fix commits pass while a force-push or rewrite is refused.
 The command's `check` operation is the reusable gate for a Bosun workflow; it does not depend on Bosun's code.

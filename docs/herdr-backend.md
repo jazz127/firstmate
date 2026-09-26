@@ -126,7 +126,7 @@ Herdr 0.7.5 exports `HERDR_ENV`, `HERDR_PANE_ID`, `HERDR_SESSION`, `HERDR_SOCKET
 A Firstmate or secondmate agent's own commands inherit them.
 Older injection shapes are unverified, so a claimed launcher pane without the injected socket identity cannot be trusted.
 
-With presentation spaces disabled, a crewmate or scout is created in the exact workspace that identity currently resolves to.
+With neither a presentation space nor a [project space](#project-spaces), a crewmate or scout is created in the exact workspace that identity currently resolves to.
 That workspace is read live from Herdr rather than from the injected snapshot, so the worker always appears beside the agent that launched it.
 Duplicate labels elsewhere in the session are irrelevant, and the globally focused workspace is never the target.
 A `--secondmate` launch is the deliberate exception: it stands up that secondmate home's own workspace instead of joining the launcher's.

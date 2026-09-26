@@ -176,7 +176,9 @@ SH
 # call - mirrors an out-of-band agent registering itself) or an
 # agent_not_found error when none was preset (verified real-herdr behavior for
 # a pane with no registered agent). Every call is logged to $FM_HERDR_LOG in
-# the same unit-separated form as make_herdr_fakebin.
+# the same unit-separated form as make_herdr_fakebin. With
+# FM_FAKE_HERDR_EMPTY_REMOVES_WORKSPACE=1 a close that leaves a workspace with
+# no tab also removes that workspace, as real herdr does.
 make_herdr_statefake() {  # <dir> -> echoes fakebin dir; seeds an empty state file
   local dir=$1 fb="$1/fakebin"
   mkdir -p "$fb"
@@ -241,10 +243,14 @@ case "$cmd $sub" in
   "pane close")
     pane=${3:-}
     jq_state --arg p "$pane" '.tabs |= [.[]|select(.pane_id != $p)]' | save
+    [ "${FM_FAKE_HERDR_EMPTY_REMOVES_WORKSPACE:-0}" != 1 ] \
+      || jq_state '.tabs as $t | .workspaces |= [.[] | select(.workspace_id as $w | any($t[]; .workspace_id == $w))]' | save
     ;;
   "tab close")
     tab=${3:-}
     jq_state --arg t "$tab" '.tabs |= [.[]|select(.tab_id != $t)]' | save
+    [ "${FM_FAKE_HERDR_EMPTY_REMOVES_WORKSPACE:-0}" != 1 ] \
+      || jq_state '.tabs as $t | .workspaces |= [.[] | select(.workspace_id as $w | any($t[]; .workspace_id == $w))]' | save
     ;;
   "agent get")
     pane=${3:-}
@@ -1804,10 +1810,181 @@ test_presentation_preference_reports_three_distinct_states() {
   printf 'off\n' > "$config/herdr-presentation-spaces"
   got=$(preference "$config")
   [ "$got" = off ] || fail "an explicit off must report off, got '$got'"
+  printf '  Project \n' > "$config/herdr-presentation-spaces"
+  got=$(preference "$config")
+  [ "$got" = project ] || fail "an explicit project must report project, got '$got'"
   printf 'disabled\n' > "$config/herdr-presentation-spaces"
   got=$(preference "$config")
   [ "$got" = default ] || fail "an unrecognized value must report the default, got '$got'"
   pass "herdr presentation: config parsing separates a deliberate choice from an unconfigured default"
+}
+
+test_presentation_project_value_is_not_the_one_task_projection() {
+  local dir config fb verdict stderr
+  dir="$TMP_ROOT/presentation-project"; config="$dir/config"; mkdir -p "$config"
+  stderr="$dir/project.err"
+  printf 'project\n' > "$config/herdr-presentation-spaces"
+  fb=$(make_release_fakebin "$dir" "$AT_FLOOR_PROTOCOL" "$AT_FLOOR_VERSION")
+  verdict=$(presentation_enabled_verdict "$config" "$fb" 2>"$stderr")
+  [ "$verdict" = off ] || fail "project must not enable the one-task projection at the floor, got '$verdict'"
+  [ ! -s "$stderr" ] || fail "project is a recognized value and must not warn: $(cat "$stderr")"
+  fb=$(make_release_fakebin "$dir" "$BELOW_FLOOR_PROTOCOL" "$BELOW_FLOOR_VERSION")
+  verdict=$(presentation_enabled_verdict "$config" "$fb" 2>"$stderr")
+  [ "$verdict" = off ] || fail "project must not enable the one-task projection below the floor, got '$verdict'"
+  [ ! -s "$stderr" ] || fail "project is a deliberate choice and must not raise the floor warning: $(cat "$stderr")"
+  pass "herdr presentation: project is a recognized choice that leaves the one-task projection off at any release"
+}
+
+# --- per-project task spaces -------------------------------------------------
+
+# project_space_place <dir> <project> <task-label> [session] -> "<status> <workspace> <tab> <pane> <created>"
+# Runs fm_backend_herdr_project_space_place against the stateful fake under
+# <dir>, whose home/ and state/ are the placement home and its state dir.
+project_space_place() {  # <dir> <project> <task-label> [session]
+  local dir=$1 project=$2 task=$3 session=${4:-fmtest}
+  PATH="$dir/fakebin:$PATH" FM_HERDR_LOG="$dir/log" FM_FAKE_HERDR_STATE="$dir/state.json" \
+    FM_FAKE_HERDR_EMPTY_REMOVES_WORKSPACE=1 FM_HOME="$dir/home" \
+    bash -c '
+      . "$0/bin/backends/herdr.sh"
+      status=0
+      fm_backend_herdr_project_space_place "$1" "$2" "$3" "$4" "$5" "$6" || status=$?
+      printf "%s %s %s %s %s\n" "$status" "${FM_BACKEND_HERDR_PROJECT_SPACE_WORKSPACE_ID:--}" \
+        "${FM_BACKEND_HERDR_PROJECT_SPACE_TAB_ID:--}" "${FM_BACKEND_HERDR_PROJECT_SPACE_PANE_ID:--}" \
+        "$FM_BACKEND_HERDR_PROJECT_SPACE_CREATED"
+    ' "$ROOT" "$session" "$dir/state" "$dir/home" "$project" /tmp/proj "$task" 2>>"$dir/err"
+}
+
+project_space_kill() {  # <dir> <pane> [session]
+  local dir=$1 pane=$2 session=${3:-fmtest}
+  PATH="$dir/fakebin:$PATH" FM_HERDR_LOG="$dir/log" FM_FAKE_HERDR_STATE="$dir/state.json" \
+    FM_FAKE_HERDR_EMPTY_REMOVES_WORKSPACE=1 FM_HOME="$dir/home" \
+    bash -c '. "$0/bin/backends/herdr.sh"; fm_backend_herdr_kill_serialized "$1" "$2"' \
+    "$ROOT" "$session" "$pane" >/dev/null 2>>"$dir/err"
+}
+
+project_space_world() {  # <name> -> dir
+  local dir="$TMP_ROOT/$1"
+  mkdir -p "$dir/home" "$dir/state"
+  : > "$dir/log"
+  make_herdr_statefake "$dir" >/dev/null
+  printf '%s' "$dir"
+}
+
+workspace_label_in_fake() {  # <dir> <workspace>
+  jq -r --arg w "$2" '.workspaces[] | select(.workspace_id == $w) | .label' "$1/state.json"
+}
+
+tab_labels_in_fake() {  # <dir> <workspace>
+  jq -r --arg w "$2" '[.tabs[] | select(.workspace_id == $w) | .label] | sort | join(",")' "$1/state.json"
+}
+
+test_project_space_reuses_within_a_project_and_separates_projects() {
+  local dir a1 a2 b1 ws_a ws_b
+  dir=$(project_space_world project-space-reuse)
+  a1=$(project_space_place "$dir" alpha fm-a1)
+  read -r _ ws_a _ _ _ <<<"$a1"
+  [ "${a1%% *}" = 0 ] && [ "${a1##* }" = 1 ] || fail "the first alpha task must create its project space, got '$a1' ($(cat "$dir/err"))"
+  [ "$(workspace_label_in_fake "$dir" "$ws_a")" = "▸ alpha" ] \
+    || fail "the alpha space must be labelled with the project name, got '$(workspace_label_in_fake "$dir" "$ws_a")'"
+  [ "$(tab_labels_in_fake "$dir" "$ws_a")" = fm-a1 ] \
+    || fail "a new project space must hold only its task tab once the seeded tab is pruned, got '$(tab_labels_in_fake "$dir" "$ws_a")'"
+  a2=$(project_space_place "$dir" alpha fm-a2)
+  [ "$a2" = "0 $ws_a $(printf '%s' "$a2" | cut -d' ' -f3-4) 0" ] \
+    || fail "a second alpha task must reuse the alpha space without creating one, got '$a2'"
+  [ "$(tab_labels_in_fake "$dir" "$ws_a")" = fm-a1,fm-a2 ] \
+    || fail "the alpha space must hold both alpha task tabs, got '$(tab_labels_in_fake "$dir" "$ws_a")'"
+  b1=$(project_space_place "$dir" beta fm-b1)
+  read -r _ ws_b _ _ _ <<<"$b1"
+  [ "${b1%% *}" = 0 ] && [ "${b1##* }" = 1 ] && [ "$ws_b" != "$ws_a" ] \
+    || fail "a beta task must get its own project space, got '$b1' beside alpha '$ws_a'"
+  [ "$(workspace_label_in_fake "$dir" "$ws_b")" = "▸ beta" ] || fail "the beta space carries the wrong label"
+  [ "$(tab_labels_in_fake "$dir" "$ws_a")" = fm-a1,fm-a2 ] || fail "placing beta changed the alpha space"
+  [ "$(jq '.workspaces | length' "$dir/state.json")" = 2 ] || fail "two projects must yield exactly two workspaces"
+  [ "$(grep -c $'\x1f''workspace'$'\x1f''create'$'\x1f' "$dir/log")" = 2 ] || fail "only the first task of each project may create a workspace"
+  if grep $'\x1f''workspace'$'\x1f''create'$'\x1f' "$dir/log" | grep -v -- $'\x1f''--no-focus' >/dev/null; then
+    fail "every project space create must pass --no-focus"
+  fi
+  if grep $'\x1f''tab'$'\x1f''create'$'\x1f' "$dir/log" | grep -v -- $'\x1f''--no-focus' >/dev/null; then
+    fail "every project task tab create must pass --no-focus"
+  fi
+  pass "herdr project spaces: tasks of one project share its workspace and another project gets its own, without taking focus"
+}
+
+test_project_space_is_removed_only_after_its_last_task() {
+  local dir a1 a2 a3 a4 ws_a ws_new pane1 pane2 pane3
+  dir=$(project_space_world project-space-removal)
+  a1=$(project_space_place "$dir" alpha fm-a1); read -r _ ws_a _ pane1 _ <<<"$a1"
+  a2=$(project_space_place "$dir" alpha fm-a2); read -r _ _ _ pane2 _ <<<"$a2"
+  project_space_kill "$dir" "$pane1"
+  [ "$(workspace_label_in_fake "$dir" "$ws_a")" = "▸ alpha" ] \
+    || fail "closing one of two alpha tasks must leave the alpha space in place"
+  [ "$(tab_labels_in_fake "$dir" "$ws_a")" = fm-a2 ] || fail "closing fm-a1 must leave only fm-a2"
+  a3=$(project_space_place "$dir" alpha fm-a3); read -r _ _ _ pane3 _ <<<"$a3"
+  [ "$(printf '%s' "$a3" | cut -d' ' -f1,2,5)" = "0 $ws_a 0" ] \
+    || fail "a task placed while alpha still has a task must reuse the space, got '$a3'"
+  project_space_kill "$dir" "$pane2"
+  [ -n "$(workspace_label_in_fake "$dir" "$ws_a")" ] || fail "the alpha space vanished while fm-a3 still ran in it"
+  project_space_kill "$dir" "$pane3"
+  [ -z "$(workspace_label_in_fake "$dir" "$ws_a")" ] || fail "closing the last alpha task must remove the alpha space"
+  a4=$(project_space_place "$dir" alpha fm-a4); read -r _ ws_new _ _ _ <<<"$a4"
+  [ "${a4%% *}" = 0 ] && [ "${a4##* }" = 1 ] && [ "$ws_new" != "$ws_a" ] \
+    || fail "the next alpha task after removal must open a fresh space, got '$a4' (old '$ws_a')"
+  pass "herdr project spaces: a project's workspace outlives every task but the last, and the next task opens a fresh one"
+}
+
+test_project_space_never_adopts_by_label() {
+  local dir out captain_ws record ws1 ws2
+  dir=$(project_space_world project-space-label)
+  # A captain workspace wearing the exact project-space label, holding a
+  # task-shaped tab, is never adopted: identity is the recorded workspace id.
+  PATH="$dir/fakebin:$PATH" FM_HERDR_LOG="$dir/log" FM_FAKE_HERDR_STATE="$dir/state.json" \
+    herdr workspace create --cwd /tmp --label "▸ alpha" --no-focus >/dev/null
+  captain_ws=$(jq -r '.workspaces[0].workspace_id' "$dir/state.json")
+  PATH="$dir/fakebin:$PATH" FM_HERDR_LOG="$dir/log" FM_FAKE_HERDR_STATE="$dir/state.json" \
+    herdr tab create --workspace "$captain_ws" --cwd /tmp --label fm-captain --no-focus >/dev/null
+  out=$(project_space_place "$dir" alpha fm-a1); read -r _ ws1 _ _ _ <<<"$out"
+  [ "${out##* }" = 1 ] && [ "$ws1" != "$captain_ws" ] \
+    || fail "a same-labelled captain workspace must never be adopted, got '$out'"
+  [ "$(tab_labels_in_fake "$dir" "$captain_ws")" = "1,fm-captain" ] || fail "the captain workspace was mutated"
+  # A record bound to another named session is no record at all.
+  record=$(ls "$dir/state"/.herdr-project-space-alpha-*)
+  sed -i.bak 's/^session=.*/session=elsewhere/' "$record" && rm -f "$record.bak"
+  out=$(project_space_place "$dir" alpha fm-a2); read -r _ ws2 _ _ _ <<<"$out"
+  [ "${out##* }" = 1 ] && [ "$ws2" != "$ws1" ] && [ "$ws2" != "$captain_ws" ] \
+    || fail "a record for another session must not be reused, got '$out'"
+  grep -q "^workspace_id=$ws2\$" "$record" || fail "a fresh space must replace the stale record"
+  # A recorded id now carrying another label is not the project's space.
+  jq --arg w "$ws2" '(.workspaces[] | select(.workspace_id == $w) | .label) = "renamed"' "$dir/state.json" > "$dir/s.tmp" \
+    && mv "$dir/s.tmp" "$dir/state.json"
+  out=$(project_space_place "$dir" alpha fm-a3)
+  [ "${out##* }" = 1 ] && [ "$(printf '%s' "$out" | cut -d' ' -f2)" != "$ws2" ] \
+    || fail "a recorded workspace whose label changed must not be reused, got '$out'"
+  pass "herdr project spaces: placement follows the recorded workspace id and never adopts a workspace by its label"
+}
+
+test_project_space_label_stays_clear_of_home_and_projection_grammar() {
+  local label
+  label=$(bash -c '. "$0/bin/backends/herdr.sh"; fm_backend_herdr_project_space_label firstmate' "$ROOT")
+  [ "$label" = "▸ firstmate" ] || fail "the firstmate project space must not share the home label, got '$label'"
+  label=$(bash -c '. "$0/bin/backends/herdr.sh"; fm_backend_herdr_project_space_label "$(printf "a\tb\n")"' "$ROOT")
+  [ "$label" = "▸ ab" ] || fail "control characters must be stripped from the label, got '$label'"
+  pass "herdr project spaces: the label never collides with a home label and carries no control characters"
+}
+
+test_project_space_home_is_secondmate_follows_the_marker() {
+  local dir
+  dir="$TMP_ROOT/project-space-marker"; mkdir -p "$dir/primary" "$dir/sm" "$dir/empty"
+  printf 'sm1\n' > "$dir/sm/.fm-secondmate-home"
+  : > "$dir/empty/.fm-secondmate-home"
+  bash -c '. "$0/bin/backends/herdr.sh"; fm_backend_herdr_home_is_secondmate "$1"' "$ROOT" "$dir/sm" \
+    || fail "a marked secondmate home must be recognized"
+  if bash -c '. "$0/bin/backends/herdr.sh"; fm_backend_herdr_home_is_secondmate "$1"' "$ROOT" "$dir/primary"; then
+    fail "an unmarked home is the primary"
+  fi
+  if bash -c '. "$0/bin/backends/herdr.sh"; fm_backend_herdr_home_is_secondmate "$1"' "$ROOT" "$dir/empty"; then
+    fail "an empty marker falls back to the primary like the workspace label does"
+  fi
+  pass "herdr project spaces: only a home with a usable secondmate marker keeps its own workspace"
 }
 
 test_projection_journal_is_atomic_and_uses_128_bit_token() {
@@ -5815,6 +5992,12 @@ test_presentation_running_server_release_is_load_bearing
 test_release_floor_verdict_matches_the_measured_releases
 test_release_floor_verdict_survives_losing_either_signal
 test_presentation_preference_reports_three_distinct_states
+test_presentation_project_value_is_not_the_one_task_projection
+test_project_space_reuses_within_a_project_and_separates_projects
+test_project_space_is_removed_only_after_its_last_task
+test_project_space_never_adopts_by_label
+test_project_space_label_stays_clear_of_home_and_projection_grammar
+test_project_space_home_is_secondmate_follows_the_marker
 test_projection_journal_is_atomic_and_uses_128_bit_token
 test_projection_journal_v2_binds_and_advances_exact_endpoint
 test_projection_create_uses_exact_response_ids_and_leaves_one_task_pane

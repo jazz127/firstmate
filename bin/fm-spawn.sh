@@ -116,6 +116,10 @@
 #   selected client and running server meet the Herdr 0.8.0 floor. The local
 #   config/herdr-presentation-spaces file can say off to disable it or on to
 #   opt in below that floor; an empty file remains the historical opt-in form.
+#   The value project instead places each fresh primary-home crewmate or scout
+#   as an ordinary task tab in one workspace per project, reused through its
+#   recorded workspace id and removed by Herdr when its last task tab closes
+#   (docs/herdr-backend.md "Project spaces").
 #   A clean fresh task first writes state/<id>.herdr-presentation atomically,
 #   then creates a disposable
 #   workspace containing only the ordinary task pane. A successful clean create
@@ -3709,7 +3713,42 @@ else
         fi
       fi
     fi
-    if [ "$HERDR_PROJECTED" -ne 1 ]; then
+    # Per-project task spaces: a fresh primary-home crewmate or scout becomes
+    # an ordinary task tab in its project's own workspace, found by the exact
+    # recorded workspace id under the session lock. A secondmate home keeps
+    # every task in its own workspace, and anything short of a placement falls
+    # back to the flat layout below.
+    HERDR_PROJECT_PLACED=0
+    if [ "$HERDR_PROJECTED" -ne 1 ] && [ "$KIND" != secondmate ] &&
+      [ "${FM_BACKEND_HERDR_PRESENTATION_PREFERENCE:-}" = project ] &&
+      [ ! -e "$HERDR_PRESENTATION_JOURNAL" ] && [ ! -L "$HERDR_PRESENTATION_JOURNAL" ] &&
+      [ ! -e "$STATE/$ID.meta" ] && [ ! -L "$STATE/$ID.meta" ] &&
+      ! fm_backend_herdr_home_is_secondmate "$HERDR_LABEL_HOME"; then
+      HERDR_SES=$(fm_backend_herdr_session)
+      if ! fm_backend_herdr_server_ensure "$HERDR_SES"; then
+        echo "warning: herdr project space could not ensure its session server; using the ordinary flat layout" >&2
+      elif spawn_herdr_presentation_order_lock_acquire "$HERDR_SES"; then
+        set +e
+        FM_HOME="$HERDR_LABEL_HOME" fm_backend_herdr_project_space_place \
+          "$HERDR_SES" "$STATE" "$HERDR_LABEL_HOME" "$(basename "$PROJ_ABS")" "$PROJ_ABS" "$W"
+        HERDR_PROJECT_STATUS=$?
+        set -e
+        spawn_herdr_presentation_order_lock_release
+        case "$HERDR_PROJECT_STATUS" in
+        0)
+          HERDR_PROJECT_PLACED=1
+          HERDR_WORKSPACE_ID=$FM_BACKEND_HERDR_PROJECT_SPACE_WORKSPACE_ID
+          HERDR_TAB_ID=$FM_BACKEND_HERDR_PROJECT_SPACE_TAB_ID
+          HERDR_PANE_ID=$FM_BACKEND_HERDR_PROJECT_SPACE_PANE_ID
+          ;;
+        2) ;;
+        *) exit 1 ;;
+        esac
+      else
+        echo "warning: herdr project space session lock unavailable; using the ordinary flat layout" >&2
+      fi
+    fi
+    if [ "$HERDR_PROJECTED" -ne 1 ] && [ "$HERDR_PROJECT_PLACED" -ne 1 ]; then
       HERDR_CONTAINER_RAW=$(FM_HOME="$HERDR_LABEL_HOME" fm_backend_herdr_container_ensure "$PROJ_ABS" "$HERDR_LAUNCHER_RELATIONSHIP") || exit 1
       # fm_backend_herdr_container_ensure echoes "<session>:<workspace_id>\t<seeded_default_tab_id>"
       # (the second field empty when this call ADOPTED a pre-existing workspace

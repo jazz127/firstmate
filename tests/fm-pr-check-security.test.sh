@@ -184,6 +184,14 @@ case " $* " in
   *" api repos/"*"/commits/"*"/statuses?per_page=100 "*)
     printf '%s\n' '[[]]'
     ;;
+  *" api --paginate repos/"*"/rules/branches/"*merge_queue*)
+    ;;
+  *" api --paginate repos/"*"/rules/branches/"*)
+    printf '%s\n' '[]'
+    ;;
+  *" api repos/"*"/branches/"*)
+    printf '%s\n' '{"name":"main","protected":false}'
+    ;;
   *" api repos/"*"/pulls/"*)
     if [ -n "${FM_TEST_GH_FILES:-}" ]; then
       filter=.

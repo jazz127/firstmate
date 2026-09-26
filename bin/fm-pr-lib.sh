@@ -99,7 +99,7 @@ FM_PR_RECORD_MERGED=
 FM_PR_POLL_RETIREMENT_REJECTED=
 
 fm_pr_refuse_published_scratch() {  # <canonical-pr-url>
-  local url=$1 files encoded_path
+  local url=$1 files encoded_path json
   fm_pr_url_parse "$url" || return 1
   case "$FM_PR_PROVIDER" in
     github)
@@ -114,10 +114,14 @@ fm_pr_refuse_published_scratch() {  # <canonical-pr-url>
       command -v glab >/dev/null 2>&1 || return 1
       command -v jq >/dev/null 2>&1 || return 1
       encoded_path=$(printf '%s' "$FM_PR_PATH" | jq -sRr @uri) || return 1
-      files=$(GITLAB_HOST="$FM_PR_HOST" glab api \
+      json=$(GITLAB_HOST="$FM_PR_HOST" glab api \
         "projects/$encoded_path/merge_requests/$FM_PR_NUMBER/changes?per_page=100" \
-        --paginate --jq '.changes[]?.new_path' 2>/dev/null) || {
+        --paginate 2>/dev/null) || {
         printf '%s\n' "error: cannot inspect the published file list for $url" >&2
+        return 1
+      }
+      files=$(printf '%s\n' "$json" | jq -r '.changes[].new_path' 2>/dev/null) || {
+        printf '%s\n' "error: cannot parse the published file list for $url" >&2
         return 1
       }
       printf '%s\n' "$files" | fm_scratch_check_lines

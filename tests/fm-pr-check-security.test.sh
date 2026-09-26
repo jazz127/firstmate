@@ -220,9 +220,13 @@ SH
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$FM_TEST_GLAB_LOG"
 case " $* " in
+  *" --jq "*)
+    printf '%s\n' 'unknown flag: --jq' >&2
+    exit 1
+    ;;
   *" api projects/"*)
     if [ -n "${FM_TEST_GLAB_FILES:-}" ]; then
-      printf '%s\n' "$FM_TEST_GLAB_FILES"
+      printf '{"changes":[{"new_path":"%s"}]}\n' "$FM_TEST_GLAB_FILES"
       exit 0
     fi
     printf '%s\n' '{"changes":[]}'

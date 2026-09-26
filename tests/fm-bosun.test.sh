@@ -663,6 +663,21 @@ EOF
     "$dir/data/maneuver/bosun-contribution.json" >/dev/null || fail 'follow-up re-registration did not refresh validation evidence'
   assert_grep "pr_head=$head" "$dir/state/maneuver.meta" 'follow-up re-registration did not refresh the task head'
   [ "$head" != "$published" ] || fail 'follow-up commit did not move the head'
+  FM_HOME="$dir" FM_FAKE_HEAD="$head" PATH="$dir/fakebin:$PATH" \
+    GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0="url.file://$upstream_bare.insteadOf" \
+    GIT_CONFIG_VALUE_0=https://github.com/kunchenguid/sample.git \
+    "$ROOT/bin/fm-pr-check.sh" maneuver "$url" >"$dir/out" 2>&1 \
+    || { cat "$dir/out" >&2; fail 'fm-pr-check.sh refused a same-head recheck after a follow-up'; }
+  printf 'maneuver\nreview follow-up\nsecond follow-up\n' > "$wt/maneuver.txt"
+  git -C "$wt" commit -qam 'Address second review feedback'
+  head=$(git -C "$wt" rev-parse HEAD)
+  FM_HOME="$dir" FM_FAKE_HEAD="$head" PATH="$dir/fakebin:$PATH" \
+    GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0="url.file://$upstream_bare.insteadOf" \
+    GIT_CONFIG_VALUE_0=https://github.com/kunchenguid/sample.git \
+    "$ROOT/bin/fm-pr-check.sh" maneuver "$url" >"$dir/out" 2>&1 \
+    || { cat "$dir/out" >&2; fail 'fm-pr-check.sh refused a second in-scope follow-up'; }
+  jq -e '.published_head == "'"$published"'" and .validation_evidence.pr_head == "'"$head"'"' \
+    "$dir/data/maneuver/bosun-contribution.json" >/dev/null || fail 'second follow-up moved the published boundary'
   published=$head
   printf 'secret\n' > "$wt/secret.txt"
   git -C "$wt" add secret.txt

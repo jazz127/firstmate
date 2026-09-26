@@ -790,8 +790,7 @@ def cmd_registration_check_locked(args):
             if paths is None or offending:
                 fail(f"upstream PR commit {commit} changes unauthorized paths: "
                      f"{', '.join(offending) or '<unreadable>'}")
-        published_head = (record["validation_evidence"]["pr_head"]
-                          if record.get("state") == "published" else None)
+        published_head = record.get("published_head") if record.get("state") == "published" else None
         validate_extraction(worktree, source_commits, actual_commits, merges, deviations, published_head)
     changed = args.changed_path
     if not changed:
@@ -826,6 +825,8 @@ def cmd_registration_check_locked(args):
     record["upstream_changed_paths"] = changed
     record["upstream_base"] = upstream_base
     if not args.check_only:
+        if record.get("state") != "published":
+            record["published_head"] = record["validation_evidence"]["pr_head"]
         record["state"] = "published"
         write_json(contribution_path(args.task), record)
 

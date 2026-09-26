@@ -1,0 +1,23 @@
+treehouse get
+/Users/jarad/.zshrc:source:1: no such file or directory: /Users/jarad/.bashprofile
+jarad@Mac demo % treehouse get
+A new version of treehouse is available: v2.0.0 → v2.3.0
+Run "treehouse update" to update
+🌳 Setting up worktree...
+🌳 Entered worktree at ~/.treehouse/demo-2b9de8/2/demo. Type 'exit' to return.
+/Users/jarad/.zshrc:source:1: no such file or directory: /Users/jarad/.bashprofile
+jarad@Mac demo % export GOTMPDIR=/tmp/fm-seatprobe2/gotmp
+jarad@Mac demo % export COREPACK_HOME="${COREPACK_HOME:-/tmp/fm-seatprobe2/cache/corepack}"
+jarad@Mac demo % export npm_config_cache="${npm_config_cache:-${NPM_CONFIG_CACHE:-/tmp/fm-seatprobe2/cache/npm}}"
+jarad@Mac demo % export COMPACT_ADVISER_DISABLE=1
+jarad@Mac demo % export FM_TASK_ID=seatprobe2
+jarad@Mac demo % . '/tmp/fm-seatprobe2+9675ad7fa94649a7401b6287daa65a13a845ffee074599362e42367aa9f39dbe/launch.s1790387958.56842.11888.sh'
+  Folder access
+  /Users/jarad/.treehouse/demo-2b9de8/2/demo
+  Note: You’re in a subdirectory of a Git project. Trusting will apply to the repository root:
+  /private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab.OYNtxb/projects/demo
+  Trust this folder? Codex can read, edit, and run files here, subject to your permission settings. Folder settings can run code automatically, even without a model request. Continue only if you
+  trust these files. Your trust decision will be saved.
+› 1. Trust and continue
+  2. Quit
+  enter continue · esc quit

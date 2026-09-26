@@ -1,0 +1,18 @@
+treehouse get
+/Users/jarad/.zshrc:source:1: no such file or directory: /Users/jarad/.bashprofile
+jarad@Mac demo % treehouse get
+A new version of treehouse is available: v2.0.0 → v2.3.0
+Run "treehouse update" to update
+🌳 Setting up worktree...
+🌳 Entered worktree at ~/.treehouse/demo-2b9de8/3/demo. Type 'exit' to return.
+/Users/jarad/.zshrc:source:1: no such file or directory: /Users/jarad/.bashprofile
+jarad@Mac demo % export GOTMPDIR=/tmp/fm-seatprobe3/gotmp
+jarad@Mac demo % export COREPACK_HOME="${COREPACK_HOME:-/tmp/fm-seatprobe3/cache/corepack}"
+jarad@Mac demo % export npm_config_cache="${npm_config_cache:-${NPM_CONFIG_CACHE:-/tmp/fm-seatprobe3/cache/npm}}"
+jarad@Mac demo % export COMPACT_ADVISER_DISABLE=1
+jarad@Mac demo % export FM_TASK_ID=seatprobe3
+jarad@Mac demo % . '/tmp/fm-seatprobe3+9675ad7fa94649a7401b6287daa65a13a845ffee074599362e42367aa9f39dbe/launch.s1790387989.3726.15328.sh'
+env: export: No such file or directory
+WARNING: proceeding, even though we could not create PATH aliases: CODEX_HOME points to "/ambient/default-account", but that path does not exist
+Error finding codex home: CODEX_HOME points to "/ambient/default-account", but that path does not exist
+jarad@Mac demo %

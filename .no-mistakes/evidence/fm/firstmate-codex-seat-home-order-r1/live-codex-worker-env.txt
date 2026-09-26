@@ -1,0 +1,6 @@
+== pid 37731: bash
+== pid 42462: -zsh
+== pid 42995: /bin/zsh
+== pid 53134: /Users/jarad/.local/bin/codex -c cli_auth_credentials_store=
+CODEX_HOME=/private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab.OYNtxb/seat home
+GIT_CONFIG_VALUE_0=/private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab.OYNtxb/state/seatprobe.git-hooks

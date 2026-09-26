@@ -1,0 +1,7 @@
+# BASE commit 61fb548c scripts, same seated launch + same allowlist + same ambient
+== pid 6778: 6720 treehouse get
+CODEX_API_KEY=ambient-CODEX_API_KEY
+CODEX_HOME=/ambient/default-account
+OPENAI_API_KEY=ambient-OPENAI_API_KEY
+OPENAI_BASE_URL=https://ambient.invalid
+== pid 7037: 6778 /bin/zsh

@@ -1,0 +1,29 @@
+=== S1: recorded Gerrit PR, fix-round commit adds PR-289 corepack bundle -> ship done: must be blocked
+$ fm-crew-state.sh fm-lab-scratch
+state: blocked · source: status-log · scratch path would be published: .codex-live-check/cache/node/corepack/v1/pnpm/11.1.1/.corepack
+
+=== S2: same recorded Gerrit PR, clean branch (no scratch) -> ship done: accepted
+$ fm-crew-state.sh fm-lab-clean
+state: done · source: status-log · PR https://review.example.test/c/o/r/+/42 published
+
+=== S3: worker pre-publication preflight on the scratch worktree (before any push)
+$ fm-pr-body-preflight.sh --scratch wt-pre
+error: scratch path would be published: .codex-live-check/cache/node/corepack/v1/pnpm/11.1.1/.corepack
+error: scratch check failed
+exit=1
+$ git status after preflight (nothing pushed):
+remote refs for fm/lab-pre: 0
+--- staged-but-uncommitted scratch (adversarial: index path)
+error: scratch path would be published: .codex-live-check/cache/a.js
+error: scratch check failed
+exit=1
+--- clean worktree
+scratch preflight ok
+exit=0
+--- adversarial: scratch added then deleted on branch (net diff clean)
+scratch preflight ok
+exit=0
+
+=== S4: recorded GitHub pr_head no-mistakes, worktree torn down -> ship done: not refused by scratch check
+$ fm-crew-state.sh fm-lab-gone
+state: unknown · source: none · worktree gone (torn down?)

@@ -971,8 +971,8 @@ test_ship_and_scout_teach_validation_round_pause() {
       "$kind brief did not require declaring a background-work wait"
     assert_grep 'before waiting on your own pipeline run or a long foreground command' "$brief" \
       "$kind brief did not require declaring a pipeline or foreground wait"
-    assert_grep 'Firstmate may still raise one first-sight alert' "$brief" \
-      "$kind brief incorrectly promised to suppress the first alert"
+    assert_grep 'Firstmate then leaves your idle pane alone' "$brief" \
+      "$kind brief did not promise the declared wait is honored from first sight"
     assert_grep 'Do not declare active implementation or reasoning as a wait' "$brief" \
       "$kind brief did not limit the declaration to actual waits"
   done

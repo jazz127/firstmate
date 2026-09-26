@@ -97,7 +97,7 @@
 # declared-external-wait verb (FM_CLASSIFY_PAUSED_VERB, default "paused") from
 # "blocked:": pause for a known wait expected to clear on its own, including
 # the worker's own background work, pipeline or long command; blocked when
-# firstmate must act. The first-sight alert remains; repeats use the long cadence.
+# firstmate must act. A standing declaration is honored from first sight.
 # Emission-time syntax and legacy unknown-time handling are owned by
 # bin/fm-classify-lib.sh; each scaffold renders the stamp as a literal <epoch>
 # placeholder the worker replaces with a numeric Unix time as it appends, so a
@@ -155,7 +155,7 @@ IFS= read -r -d '' CREWMATE_PAUSE_INSTRUCTIONS <<EOF || true
    Name what you are waiting for and what will let you resume; do not repeat the declaration on every poll.
    For a long job you launched yourself, append the \`$PAUSED_VERB:\` line first, naming the job and how long you expect it to take, check on it again once that time has passed, and append \`working:\` when you resume.
    Do not declare active implementation or reasoning as a wait.
-   Firstmate may still raise one first-sight alert; the declared wait then uses the existing long recheck cadence instead of repeated possible-wedge alarms.
+   Firstmate then leaves your idle pane alone and rechecks it on a long cadence instead of treating it as a possible wedge.
    When you know when the wait clears, include \`until <YYYY-MM-DDTHH:MMZ>\` (UTC) for a recheck at that time.
    Follow the resolution rule below when the wait clears, then resume the task.
    Use \`blocked:\` when you are stuck and need help.

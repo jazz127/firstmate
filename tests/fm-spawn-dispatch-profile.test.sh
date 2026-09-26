@@ -606,7 +606,7 @@ SH
   expect_code 0 "$status" "Herdr-backed Codex Luna spawn should succeed: $out"
   assert_contains "$(cat "$launch_log")" "CODEX_HOME='$seat_home'" \
     "Herdr command did not carry the dock-bound CODEX_HOME"
-  assert_contains "$(cat "$launch_log")" "env -u OPENAI_API_KEY -u CODEX_API_KEY" \
+  assert_contains "$(cat "$launch_log")" "unset OPENAI_API_KEY CODEX_API_KEY" \
     "Herdr command did not shed ambient seat credentials"
   pass "Herdr-backed seated Codex launch carries home and credential guards"
 }

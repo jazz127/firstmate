@@ -558,6 +558,109 @@ test_declared_wait_survives_answers_past_the_event_window() {
   pass "a declared wait outlives answers for other keys beyond the event window, and its own resolved line retracts it"
 }
 
+# A note: is informational: it neither leaves a declared wait nor declares one,
+# so the supervisors' declared-wait read looks through it (and through its
+# continuation prose) for a paused or a captain-held line, while any other event
+# still ends the wait and last_status_line keeps the note as the latest event.
+# Adapted from https://github.com/kunchenguid/firstmate/pull/4818.
+test_declared_wait_reads_through_notes() {
+  local dir f i
+  dir=$(case_dir declared-wait-notes)
+  f="$dir/noted.status"
+  printf 'paused: waiting on the release\nnote: slipped a day\nThe new date is Friday.\n' > "$f"
+  [ "$(status_declared_wait_line "$f")" = 'paused: waiting on the release' ] \
+    || fail "a note: under a pause ended it: '$(status_declared_wait_line "$f")'"
+  [ "$(last_status_line "$f")" = 'note: slipped a day' ] || fail "the note: stopped being the latest event"
+  printf 'captain-held [key=r]: awaiting the call\nnote corr=0123456789abcdef [key=fyi]: context\n' > "$f"
+  [ "$(status_declared_wait_line "$f")" = 'captain-held [key=r]: awaiting the call' ] \
+    || fail "a keyed, correlated note: under a hold ended it: '$(status_declared_wait_line "$f")'"
+  printf 'captain-held [key=r]: awaiting the call\nresolved [key=other]: answered\n' > "$f"
+  [ -z "$(status_declared_wait_line "$f")" ] \
+    || fail "a captain-held line behind a resolved line still read as current"
+  printf 'paused: waiting on the release\nnote: context\nresolved [key=other]: answered\nnote: more\n' > "$f"
+  [ "$(status_declared_wait_line "$f")" = 'paused: waiting on the release' ] \
+    || fail "notes mixed with an unrelated answer ended the wait: '$(status_declared_wait_line "$f")'"
+  printf 'paused: waiting on the release\nresolved: the release shipped\nnote: follow-up\n' > "$f"
+  [ -z "$(status_declared_wait_line "$f")" ] || fail "a note: after the wait's own resolution revived it"
+  printf 'paused: waiting on the release\nnote: context\nworking: resumed\n' > "$f"
+  [ -z "$(status_declared_wait_line "$f")" ] || fail "a non-note event did not end the wait"
+  printf 'note: only notes\nnote: still only notes\n' > "$f"
+  [ -z "$(status_declared_wait_line "$f")" ] || fail "a notes-only log read as a declared wait"
+  printf 'paused: waiting past a long note tail\n' > "$f"
+  i=0
+  while [ "$i" -le "$FM_CLASSIFY_EVENT_WINDOW_LINES" ]; do
+    printf 'note: tick %s\n' "$i" >> "$f"
+    i=$((i + 1))
+  done
+  [ "$(status_declared_wait_line "$f")" = 'paused: waiting past a long note tail' ] \
+    || fail "a pause buried past the bounded window of notes was lost"
+  pass "the declared-wait read keeps a wait under note: events and continuation prose only"
+}
+
+# One field of the episode record: 1 start offset, 2 stamp epoch, 3 declaration.
+episode_field() {  # <status-file> <field>
+  local record
+  record=$(status_declared_wait_episode "$1") || return 1
+  printf '%s\n' "$record" | cut -f "$2"
+}
+
+# The logical episode of a declared wait: the run of that same declaration read
+# back through notes, continuation, identical (including restamped)
+# re-declarations and answers for other keys. Leaving the wait and declaring the
+# same text again starts a new episode at the new line even when no supervisor
+# poll saw the interlude, and a changed reason, key, or deadline is a new
+# episode too. Offsets are absolute bytes and stay correct past the bounded
+# read window.
+test_declared_wait_episode_identity() {
+  local dir f off i first stamp
+  dir=$(case_dir declared-wait-episode)
+  f="$dir/episode.status"
+  printf 'working: building\n' > "$f"
+  first=$(wc -c < "$f" | tr -d ' ')
+  printf 'paused: waiting on the release\n' >> "$f"
+  [ "$(episode_field "$f" 1)" = "$first" ] || fail "the episode did not start at the declaration: $(status_declared_wait_episode "$f")"
+  [ -z "$(episode_field "$f" 2)" ] || fail "an unstamped declaration reported a stamp"
+  [ "$(episode_field "$f" 3)" = 'paused: waiting on the release' ] || fail "the episode named the wrong declaration"
+  printf 'note: slipped\ncontinuation prose\npaused: waiting on the release\n' >> "$f"
+  stamp=$(( $(date +%s) - 30 ))
+  printf 'paused [at=%s]: waiting on the release\nresolved [key=other]: unrelated\n' "$stamp" >> "$f"
+  [ "$(episode_field "$f" 1)" = "$first" ] \
+    || fail "a note, prose, an identical or restamped re-declaration, or an unrelated answer started a new episode"
+  off=$(wc -c < "$f" | tr -d ' ')
+  printf 'working: back on it\npaused: waiting on the release\n' >> "$f"
+  off=$(( off + $(printf 'working: back on it\n' | wc -c | tr -d ' ') ))
+  [ "$(episode_field "$f" 1)" = "$off" ] \
+    || fail "leaving and re-entering the same wait between polls kept the old episode: $(status_declared_wait_episode "$f")"
+  off=$(wc -c < "$f" | tr -d ' ')
+  printf 'resolved: it shipped\npaused: waiting on the release\n' >> "$f"
+  off=$(( off + $(printf 'resolved: it shipped\n' | wc -c | tr -d ' ') ))
+  [ "$(episode_field "$f" 1)" = "$off" ] \
+    || fail "the wait's own resolution did not end the episode"
+  off=$(wc -c < "$f" | tr -d ' ')
+  printf 'paused: waiting on the release until 2031-01-01T00:00Z\n' >> "$f"
+  [ "$(episode_field "$f" 1)" = "$off" ] || fail "a changed deadline kept the old episode"
+  off=$(wc -c < "$f" | tr -d ' ')
+  stamp=$(( $(date +%s) - 90 ))
+  printf 'paused [key=legal] [at=%s]: waiting on the release until 2031-01-01T00:00Z\n' "$stamp" >> "$f"
+  [ "$(episode_field "$f" 1)" = "$off" ] || fail "a changed key kept the old episode"
+  [ "$(episode_field "$f" 2)" = "$stamp" ] || fail "the episode's first-line stamp was not reported"
+  # A long run of the same wait past the bounded window keeps its first offset.
+  off=$(wc -c < "$f" | tr -d ' ')
+  printf 'paused: a long wait\n' >> "$f"
+  i=0
+  while [ "$i" -lt 800 ]; do
+    printf 'note: still waiting on the long job, tick %s of many\n' "$i" >> "$f"
+    i=$((i + 1))
+  done
+  [ "$(episode_field "$f" 1)" = "$off" ] \
+    || fail "an episode longer than the read window lost its start: $(status_declared_wait_episode "$f" | cut -f1) != $off"
+  printf 'working: done waiting\n' >> "$f"
+  status_declared_wait_episode "$f" >/dev/null && fail "an ended wait still reported an episode"
+  pass "a declared wait's episode survives notes and re-declarations, and restarts on leaving, answering, or changing it"
+}
+
 test_keyless_wait_survives_stated_default_retraction
 test_declared_wait_survives_answers_past_the_event_window
 test_bare_prose_cannot_open_or_close_a_decision
+test_declared_wait_reads_through_notes
+test_declared_wait_episode_identity

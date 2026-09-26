@@ -794,7 +794,8 @@ handle_away() {  # <reason-lines>
     ENGINE_ERROR=1
   fi
   health_record "$ENGINE_ERROR" "${receipts:-0}"
-  if [ "$ENGINE_ERROR" -eq 0 ] && [ "${receipts:-0}" -gt 0 ] && [ -z "$missing_rows" ] && [ -z "$unacked" ]; then
+  if [ "$ENGINE_ERROR" -eq 0 ] && [ "${receipts:-0}" -gt 0 ] && [ -z "$missing_rows" ] \
+    && [ -z "$unacked" ]; then
     write_engine_record $((ENGINE_TURNS + 1)) "$(printf '%s\n' "$usage" | sed -n 's/.* conversation_cost=\([^ ]*\).*/\1/p')" \
       || rm -f "$ENGINE_RECORD"
     [ "$errors" = /dev/null ] || rm -f "$errors"

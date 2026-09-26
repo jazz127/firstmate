@@ -194,8 +194,13 @@ case " $* " in
     ;;
   *" api repos/"*"/pulls/"*)
     if [ -n "${FM_TEST_GH_FILES:-}" ]; then
-      printf '%s\n' "$FM_TEST_GH_FILES"
-      exit 0
+      filter=.
+      while [ "$#" -gt 0 ]; do
+        [ "$1" != --jq ] || filter=$2
+        shift
+      done
+      printf '%s\n' "$FM_TEST_GH_FILES" | jq -r "$filter"
+      exit
     fi
     printf '%s\n' "{\"state\":\"open\",\"user\":{\"login\":\"author\"},\"head\":{\"sha\":\"${FM_TEST_GH_HEAD:-0123456789abcdef0123456789abcdef01234567}\"},\"draft\":false,\"mergeable\":true,\"merged_at\":null}"
     ;;
@@ -228,6 +233,10 @@ SH
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$FM_TEST_GLAB_LOG"
 case " $* " in
+  *" --jq "*)
+    printf '%s\n' 'unknown flag: --jq' >&2
+    exit 1
+    ;;
   *" api projects/"*)
     if [ -n "${FM_TEST_GLAB_FILES:-}" ]; then
       printf '%s\n' "$FM_TEST_GLAB_FILES"
@@ -772,7 +781,7 @@ test_published_scratch_refuses_registration() {
   local dir
   dir=$(make_case published-scratch-refused)
   write_task_meta "$dir"
-  FM_TEST_GH_FILES='.codex-live-check/cache/node/corepack/v1/pnpm/11.1.1/package.json' \
+  FM_TEST_GH_FILES='[{"filename":".codex-live-check/cache/node/corepack/v1/pnpm/11.1.1/package.json","status":"added"}]' \
     run_check_entry "$dir" task-a https://github.com/o/r/pull/4 \
     > "$dir/stdout" 2> "$dir/stderr" && fail "published scratch path was registered"
   grep -Fq 'scratch path would be published' "$dir/stderr" \
@@ -785,13 +794,33 @@ test_published_gitlab_scratch_refuses_registration() {
   local dir
   dir=$(make_case published-gitlab-scratch-refused)
   write_task_meta "$dir"
-  FM_TEST_GLAB_FILES='.codex-live-check/cache/node/corepack/v1/pnpm/11.1.1/package.json' \
+  FM_TEST_GLAB_FILES='{"changes":[{"new_path":".codex-live-check/cache/node/corepack/v1/pnpm/11.1.1/package.json","deleted_file":false}]}' \
     run_check_entry "$dir" task-a https://gitlab.example/g/p/-/merge_requests/4 \
     > "$dir/stdout" 2> "$dir/stderr" && fail "published GitLab scratch path was registered"
   grep -Fq 'scratch path would be published' "$dir/stderr" \
     || fail "published GitLab scratch refusal did not name the publication boundary"
   [ ! -e "$dir/home/state/task-a.check.sh" ] || fail "published GitLab scratch path armed a poll"
   pass "fm-pr-check refuses a published GitLab scratch path"
+}
+
+test_published_scratch_removal_is_registered() {
+  local dir
+  dir=$(make_case published-scratch-removal)
+  write_task_meta "$dir"
+  FM_TEST_GH_FILES='[{"filename":".codex-live-check/cache/node/corepack/v1/pnpm/11.1.1/package.json","status":"removed"},{"filename":"src/app.js","status":"modified"}]' \
+    run_check_entry "$dir" task-a https://github.com/o/r/pull/4 \
+    > "$dir/stdout" 2> "$dir/stderr" || fail "published scratch removal was refused: $(cat "$dir/stderr")"
+  pass "fm-pr-check registers a pull request that only removes scratch"
+}
+
+test_published_gitlab_scratch_removal_is_registered() {
+  local dir
+  dir=$(make_case published-gitlab-scratch-removal)
+  write_task_meta "$dir"
+  FM_TEST_GLAB_FILES='{"changes":[{"new_path":".codex-live-check/cache/node/corepack/v1/pnpm/11.1.1/package.json","deleted_file":true},{"new_path":"src/app.js","deleted_file":false}]}' \
+    run_check_entry "$dir" task-a https://gitlab.example/g/p/-/merge_requests/4 \
+    > "$dir/stdout" 2> "$dir/stderr" || fail "published GitLab scratch removal was refused: $(cat "$dir/stderr")"
+  pass "fm-pr-check registers a merge request that only removes scratch"
 }
 
 test_published_attestation_matches_current_head() {
@@ -3581,6 +3610,8 @@ test_unpushed_named_head_refuses_registration
 test_direct_pr_unpushed_commit_refuses_registration
 test_published_scratch_refuses_registration
 test_published_gitlab_scratch_refuses_registration
+test_published_scratch_removal_is_registered
+test_published_gitlab_scratch_removal_is_registered
 test_valid_recording_and_merge_derivation
 test_rejected_metacharacter_bytes_are_inert
 test_static_poll_contract

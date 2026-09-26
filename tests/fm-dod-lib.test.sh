@@ -328,6 +328,59 @@ test_unpushed_ship_done_is_refused() {
   pass "unpushed ship done: is refused"
 }
 
+test_committed_scratch_ship_done_names_path() {
+  local repo wt sha reason rc
+  repo="$TMP_ROOT/scratch-repo"
+  wt="$TMP_ROOT/scratch-wt"
+  fm_git_worktree "$repo" "$wt" fm/scratch
+  mkdir -p "$wt/.codex-live-check/cache/node/corepack/v1/pnpm/11.1.1"
+  printf '%s\n' bundle > "$wt/.codex-live-check/cache/node/corepack/v1/pnpm/11.1.1/package.json"
+  git -C "$wt" add -f .codex-live-check
+  git -C "$wt" commit -q -m 'pipeline scratch bundle'
+  sha=$(git -C "$wt" rev-parse HEAD)
+  git -C "$wt" update-ref refs/remotes/origin/fm/scratch "$sha"
+  reason=$(accept_done ship no-mistakes "$wt" "$repo" "done: PR https://example.test/o/r/pull/9 checks green" 2>/dev/null)
+  rc=$?
+  [ "$rc" -eq 1 ] || fail "ship done: with a committed scratch bundle was accepted (exit $rc)"
+  [ "$reason" = 'scratch path would be published: .codex-live-check/cache/node/corepack/v1/pnpm/11.1.1/package.json' ] \
+    || fail "scratch refusal did not name the path on stdout: $reason"
+  pass "ship done: with a committed scratch bundle is refused with the path as its reason"
+}
+
+test_recorded_gerrit_ship_done_with_scratch_is_refused() {
+  local repo wt meta state reason rc url
+  repo="$TMP_ROOT/gerrit-scratch-repo"
+  wt="$TMP_ROOT/gerrit-scratch-wt"
+  state="$TMP_ROOT/gerrit-scratch-state"
+  url=https://review.example.test/c/o/r/+/42
+  mkdir -p "$state"
+  fm_git_worktree "$repo" "$wt" fm/gerrit-scratch
+  mkdir -p "$wt/.codex-live-check/cache"
+  printf '%s\n' bundle > "$wt/.codex-live-check/cache/package.json"
+  git -C "$wt" add -f .codex-live-check
+  git -C "$wt" commit -q -m 'fix-round push with scratch'
+  meta="$state/gerrit-scratch.meta"
+  printf 'kind=ship\nmode=direct-PR\nworktree=%s\nproject=%s\npr=%s\n' "$wt" "$repo" "$url" > "$meta"
+  reason=$(accept_done ship direct-PR "$wt" "$repo" "done: PR $url published" "$state" gerrit-scratch "$meta" 2>/dev/null)
+  rc=$?
+  [ "$rc" -eq 1 ] || fail "recorded Gerrit ship done: with committed scratch was accepted (exit $rc)"
+  [ "$reason" = 'scratch path would be published: .codex-live-check/cache/package.json' ] \
+    || fail "recorded Gerrit scratch refusal did not name the path on stdout: $reason"
+  pass "a recorded Gerrit ship done: with committed scratch is refused"
+}
+
+test_recorded_pr_with_missing_worktree_is_accepted() {
+  local meta state
+  state="$TMP_ROOT/missing-wt-state"
+  mkdir -p "$state"
+  meta="$state/missing-wt.meta"
+  printf 'kind=ship\nmode=no-mistakes\npr=https://review.example.test/c/o/r/+/5\n' > "$meta"
+  accept_done ship no-mistakes "$TMP_ROOT/missing-wt" "$TMP_ROOT/missing-wt-repo" \
+    "done: PR https://review.example.test/c/o/r/+/5 checks green" "$state" missing-wt "$meta" \
+    || fail "recorded PR was refused because its worktree is missing"
+  pass "a recorded PR with a missing worktree is still accepted"
+}
+
 test_remote_containing_named_head_is_accepted() {
   local repo wt sha
   repo="$TMP_ROOT/pushed-repo"
@@ -667,6 +720,9 @@ test_evidence_claim_requires_provenance
 test_evidence_claim_enforces_mechanical_provenance
 test_scenario_consistency_is_publication_only
 test_unpushed_ship_done_is_refused
+test_committed_scratch_ship_done_names_path
+test_recorded_gerrit_ship_done_with_scratch_is_refused
+test_recorded_pr_with_missing_worktree_is_accepted
 test_no_mistakes_prevalidation_done_is_not_gated
 test_remote_containing_named_head_is_accepted
 test_moved_branch_without_named_head_is_refused

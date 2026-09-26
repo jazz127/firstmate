@@ -210,7 +210,7 @@ An unbound source feeds nothing, so the path is opt-in per source.
 
 ### Channels that feed the intake
 
-Two channels feed that one intake today, and both are ordinary callers rather than special cases.
+Three channels feed that one intake today, and all are ordinary callers rather than special cases.
 
 `bin/fm-send.sh --resolve-key` is the chat channel:
 
@@ -228,6 +228,12 @@ Two channels feed that one intake today, and both are ordinary callers rather th
 `bin/fm-procevent-lavish.sh answers` is one such built-in adapter command.
 It reads only rows tagged `choice` and relays a card's declared close mode.
 It can never let freeform captain prose forge a task id or a mode.
+
+`bin/fm-captain-pane.py` is the terminal channel:
+
+- A decision option or freeform note is fed as one keyed row through `answers --any-origin`.
+- A Reconcile selection binds the `captain-pane` source and goes to `reconcile-requests` instead.
+- Merge and credential selections never reach the intake; they only wake Firstmate through the durable inbox.
 
 Trusted external process-event adapters intentionally expose no answer operation and cannot feed this authority-bearing intake; [`extension-bindings.md`](extension-bindings.md#trust-boundary) owns that boundary.
 
@@ -301,7 +307,7 @@ No path here closes a captain call without either the captain's words through `a
 
 ## Card hygiene: a landed subject is not a live call
 
-`bin/fm-bearings-board.sh build` cross-checks every `decision` card before it publishes and drops stale subjects rather than trusting the composed inventory alone.
+`bin/fm-bearings-board.sh build` and `queue` cross-check every `decision` card before they publish and drop stale subjects rather than trusting the composed inventory alone.
 
 Three checks run, all on exact identity and none on prose:
 

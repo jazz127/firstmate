@@ -15,9 +15,9 @@ ok - herdr stale registration: a registered agent with a live Pi foreground proc
 ok - herdr stale registration: only a shell-only pane demotes a registration
 ok - herdr stale registration: a transient prompt helper settles into stale-agent instead of reading live
 ok - herdr stale registration: an exhausted settle window still reads a non-shell foreground as live
-sh: line 1: 38236 Terminated: 15          '/private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-backend-herdr-tests.T9VF00/stale-reg-descendant-bin/pi' 300
+sh: line 1: 45052 Terminated: 15          '/private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-backend-herdr-tests.wZcWhb/stale-reg-descendant-bin/pi' 300
 ok - herdr stale registration: an agent process outside the foreground group still counts as alive
-sh: line 1: 43525 Terminated: 15          '/private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-backend-herdr-tests.T9VF00/stale-reg-spaced-bin/Application Support/Some Dir/pi' 300
+sh: line 1: 48612 Terminated: 15          '/private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-backend-herdr-tests.wZcWhb/stale-reg-spaced-bin/Application Support/Some Dir/pi' 300
 ok - herdr stale registration: the descendant walk reads a spaced executable path whole
 ok - herdr stale registration: an unreadable process view refuses instead of guessing either way
 ok - herdr stale registration: an empty foreground list over a real shell is not unreadable, it settles via the descendant walk
@@ -148,6 +148,7 @@ ok - fm_backend_herdr_composer_state: a slash-command popup's argument-hint plac
 ok - fm_backend_herdr_composer_state: reports unknown when the pane cannot be captured
 ok - fm_backend_herdr_composer_state: reports unknown for bare shell prompts with no composer row
 ok - fm_backend_herdr_composer_state: a blocked pi pane parked on a prompt is not an empty composer
+ok - fm_backend_herdr_composer_state: a typed lone '>' on stock Pi is a draft unless the prompt glyph is opted in
 ok - fm_backend_herdr_composer_state: a native idle Pi separator composer reads empty
 ok - fm_backend_herdr_composer_state: a dollar-first Pi status footer reads empty, not a dead shell
 ok - fm_backend_herdr_composer_state: pi's captured cost footer is furniture; a truncated tuple defers

@@ -1,0 +1,40 @@
+session=fm-lab-pirestart-32774-28550 lab=/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.ErYVFc
+initial identity: pi idle pid= composer=empty
+
+===== S1: mate replies 'blocked' -> no restart, nudge
+unreached: sm1: the request to write down its open work could not be delivered: refusing fleet lifecycle from inside a no-mistakes gate worktree (/Users/jarad/.no-mistakes/repos/119cd7a6b9a4.git); the re-read message could not be delivered either: refusing fleet lifecycle from inside a no-mistakes gate worktree (/Users/jarad/.no-mistakes/repos/119cd7a6b9a4.git)
+summary: 0 of 1 restarted, 0 nudged, 1 unreached
+restart rc=3
+[driver] no open expectation
+after: identity=pi idle pid= (before )
+
+===== S2: mate replies only 'working' (progress) -> no restart at timeout
+unreached: sm1: the request to write down its open work could not be delivered: refusing fleet lifecycle from inside a no-mistakes gate worktree (/Users/jarad/.no-mistakes/repos/119cd7a6b9a4.git); the re-read message could not be delivered either: refusing fleet lifecycle from inside a no-mistakes gate worktree (/Users/jarad/.no-mistakes/repos/119cd7a6b9a4.git)
+summary: 0 of 1 restarted, 0 nudged, 1 unreached
+restart rc=3
+[driver] no open expectation
+ls: /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.ErYVFc/state/pending-replies/*: No such file or directory
+persist expectation phase: 
+after: identity=pi idle pid= (before )
+
+===== S3: wrong-corr 'done' first, then correlated 'done' -> restart only after the correlated done
+unreached: sm1: the request to write down its open work could not be delivered: refusing fleet lifecycle from inside a no-mistakes gate worktree (/Users/jarad/.no-mistakes/repos/119cd7a6b9a4.git); the re-read message could not be delivered either: refusing fleet lifecycle from inside a no-mistakes gate worktree (/Users/jarad/.no-mistakes/repos/119cd7a6b9a4.git)
+summary: 0 of 1 restarted, 0 nudged, 1 unreached
+restart rc=3
+[driver] no open expectation
+[driver] no open expectation
+restart pass took 1s (correlated done appended at ~14s)
+after: identity=pi idle pid= (before ) composer=empty
+---- pane after S3
+|  fd installed to /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-pirst.7lbYjS/pi/bin/fd
+|  Warning: No models available. Use /login to log into a provider via OAuth or API key. See:
+|    /opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent/docs/providers.md
+|    /opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent/docs/models.md
+| ─────────────────────────────────────────────────────────────────────────────────────────────
+| ─────────────────────────────────────────────────────────────────────────────────────────────
+| /private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-pirst.7lbYjS/sm1-home (sm-sm1)
+| 0.0%/0 (auto)                                                                         unknown
+---- inputs pi received (capture ext, first incarnation)
+fm-herdr-lab: session delete failed for 'fm-lab-pirestart-32774-28550' and the lab session remains
+fm-herdr-lab: session delete failed for 'fm-lab-pirestart-32774-28550' and the lab session remains
+teardown rc=1

@@ -26,6 +26,7 @@ ok - matrix: pi's compact layout is opt-in per call, needs its cursor cell and i
 ok - matrix: pi's own first-row prompt glyph is the empty composer; only the pair is input
 ok - matrix: only pi's '>' is first-row furniture; $, %, and # stay typed input
 ok - matrix: pi extraction and classification agree on the pair in any call order
+ok - matrix: pi's first-row '>' is furniture only when this call opts in
 ok - matrix: opencode's left-bar composer reads empty everywhere and scans the full active run
 ok - matrix: grok's real oversized titled bottom is empty while typed and unproved panes stay safe
 ok - matrix: kimi's bordered shell-glyph box reads empty through the shared owner (spawn's fourth copy retired)

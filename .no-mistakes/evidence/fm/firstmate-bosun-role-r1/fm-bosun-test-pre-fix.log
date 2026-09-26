@@ -11,5 +11,6 @@ ok - intake adopts only a task carrying this assignment identity
 ok - forge-backed authorization, re-registration, review escalation, and merge completion
 ok - registration requires a valid Bosun role record
 ok - registration accepts redaction, squash, and upstream refresh but rejects unrelated content
-ok - fm-pr-check.sh registers a Bosun PR and scope-checks follow-up commits
-bash tests/fm-bosun.test.sh  14.84s user 20.50s system 30% cpu 1:54.75 total
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+fm-bosun: upstream PR has unrelated commit history: 71398bd5edb4ee583485e4e58d6e800316714f57, d16ce91c5406de919dfdde08c91f791fd4c67423
+not ok - fm-pr-check.sh refused a same-head recheck after a follow-up

@@ -1,0 +1,6 @@
+$ FM_HOME=$LAB bin/fm-bosun.py route --forge github --owner kunchenguid --repository no-mistakes
+fm-bosun: secondmate registry unavailable
+exit=1
+$ FM_HOME=$LAB bin/fm-bosun.py route --forge github --owner someoneelse --repository no-mistakes
+fm-bosun: no Bosun matches; ask whether to create one
+exit=1

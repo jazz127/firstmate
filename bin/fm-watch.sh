@@ -1563,7 +1563,8 @@ busy_turn_over_age() {  # <task>
 # first byte offset, so a recreated or rotated log, a relaunched agent, or the
 # same text declared again after leaving the wait cannot reuse an old silence.
 # Age comes from the episode's first line's `[at=...]` stamp when it carries a
-# well-formed one. A legacy unstamped declaration has no exact start, so the
+# well-formed one that is not in the future. A legacy unstamped declaration (or a
+# future-stamped one) has no trustworthy start, so the
 # first observation anchors it at the status file mtime in .paused-since-<key>
 # and later polls keep that anchor while the identity holds; a log whose mtime is
 # older than the anchor lowers it. That fallback cannot see a declaration older
@@ -1594,7 +1595,8 @@ declared_wait_episode() {  # <window-key> <task>
 
 # Age and persisted identity of one wait episode (declared_wait_episode above
 # owns the contract). <base> is the episode identity; <stamp> the episode's
-# first-line stamp epoch, or empty. The record is "<anchor>\t<size>\t<nonce>\t<base>",
+# first-line stamp epoch, or empty; a future stamp is ignored so the persisted
+# first sighting still bounds the recheck. The record is "<anchor>\t<size>\t<nonce>\t<base>",
 # with <base> last so its own bytes need no escaping. Sets WAIT_EPISODE_AGE and
 # WAIT_EPISODE_IDENTITY (<base>, suffixed with the truncation nonce when one
 # was recorded).
@@ -1631,7 +1633,7 @@ wait_episode_age() {  # <window-key> <base> <status-file> <stamp>
   fi
   case "$stamp" in
     ''|*[!0-9]*) ;;
-    *) anchor=$stamp; [ "$anchor" -le "$now" ] || anchor=$now ;;
+    *) [ "$stamp" -gt "$now" ] || anchor=$stamp ;;
   esac
   WAIT_EPISODE_AGE=$(( now - anchor ))
   [ "$WAIT_EPISODE_AGE" -ge 0 ] || WAIT_EPISODE_AGE=0

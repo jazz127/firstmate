@@ -3105,8 +3105,8 @@ test_identical_wait_declared_again_between_polls_is_a_new_episode() {
 
 # A stamped declaration is aged from its own stamp rather than the file's mtime,
 # so a later note or restart cannot make an old wait look young, and a stamp in
-# the future is clamped to zero rather than published as a negative age or used
-# to push the recheck out.
+# the future is ignored for the first-sighting anchor rather than published as a
+# negative age or used to push the recheck out.
 test_declared_wait_age_uses_the_declaration_stamp() {
   local dir state fakebin out capture_file stamp waited
   stamp=$(( $(date +%s) - 3000 ))
@@ -3120,11 +3120,12 @@ test_declared_wait_age_uses_the_declaration_stamp() {
   stamp=$(( $(date +%s) + 90000 ))
   dir=$(parked_wait_fixture future-stamp "paused [at=$stamp]: waiting on the vendor window" 2000)
   state="$dir/state"; fakebin="$dir/fakebin"; out="$dir/watch.out"; capture_file="$dir/pane.txt"
-  parked_watch_round "$state" "$fakebin" "$out" "$capture_file" test:fm-parked absorb \
-    || fail "a future-stamped declaration published a recheck instead of clamping its age to zero"
-  [ "$(parked_stale_wakes "$state" test:fm-parked)" -eq 0 ] \
-    || fail "a future-stamped declaration queued a wake"
-  pass "a stamped declaration is aged from its stamp, and a future stamp clamps to zero"
+  parked_watch_round "$state" "$fakebin" "$out" "$capture_file" test:fm-parked exit \
+    || fail "a future-stamped declaration pushed its recheck out past the cadence"
+  waited=$(sed -n 's/.*(paused \([0-9][0-9]*\)s,.*/\1/p' "$state/.wake-queue" | head -1)
+  [ -n "$waited" ] && [ "$waited" -ge 1900 ] \
+    || fail "a future-stamped declaration was not aged from its first sighting: $(cat "$state/.wake-queue")"
+  pass "a stamped declaration is aged from its stamp, and a future stamp falls back to the first sighting"
 }
 
 # One logical wait publishes one recheck per cadence window across routes: a

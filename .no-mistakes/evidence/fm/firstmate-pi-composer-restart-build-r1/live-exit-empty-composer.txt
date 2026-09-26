@@ -1,0 +1,22 @@
+### Scenario: empty Pi composer (cost-first footer) -> fm-control exit types /quit and Pi stops
+-- draft cleared with ctrl+u
+-- before:
+─────────────────────────────────────────────────────────────────────────────────────────────
+
+─────────────────────────────────────────────────────────────────────────────────────────────
+/private/tmp/fm-lab-piwd.q3b2
+$0.000 (sub) 0.0%/272k (auto)                             (openai-codex) gpt-5.6-terra • high
+-- verdict: empty
+-- pane: {"agent":"pi","agent_status":"idle"}
+-- $ FM_HOME=$LAB bin/fm-control.sh t1 exit
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.im8J73
+stopped t1 harness=pi backend=herdr endpoint=fm-lab-picomposer-58013-21140:w1:p1 worktree=/tmp/fm-lab-proj.BgmG-wt
+rc=0
+-- after:
+
+─────────────────────────────────────────────────────────────────────────────────────────────
+/private/tmp/fm-lab-piwd.q3b2
+$0.000 (sub) 0.0%/272k (auto)                             (openai-codex) gpt-5.6-terra • high
+
+jarad@Mac fm-lab-piwd.q3b2 %
+-- pane: {"agent":null,"agent_status":"unknown"}

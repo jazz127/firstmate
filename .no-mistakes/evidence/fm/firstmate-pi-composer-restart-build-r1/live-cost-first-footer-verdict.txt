@@ -1,0 +1,10 @@
+== live pane (pi 0.87.1, openai-codex/gpt-5.6-terra, cost-first footer), idle, no draft
+
+─────────────────────────────────────────────────────────────────────────────────────────────
+
+─────────────────────────────────────────────────────────────────────────────────────────────
+/private/tmp/fm-lab-piwd.q3b2
+$0.000 (sub) 0.0%/272k (auto)                             (openai-codex) gpt-5.6-terra • high
+
+== base 2632367: empty
+== target d4e1f8b: empty

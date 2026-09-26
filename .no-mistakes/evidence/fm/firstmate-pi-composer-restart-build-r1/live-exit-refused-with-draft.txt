@@ -1,0 +1,19 @@
+### Scenario: draft present -> fm-control exit must refuse and keep the draft
+-- before:
+─────────────────────────────────────────────────────────────────────────────────────────────
+lab draft keep me
+─────────────────────────────────────────────────────────────────────────────────────────────
+/private/tmp/fm-lab-piwd.q3b2
+$0.000 (sub) 0.0%/272k (auto)                             (openai-codex) gpt-5.6-terra • high
+-- pane: {"agent":"pi","agent_status":"idle","scroll":{"max_offset_from_bottom":11,"offset_from_bottom":0,"viewport_rows":39}}
+-- $ FM_HOME=$LAB bin/fm-control.sh t1 exit
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.im8J73
+error: task t1's composer visibly holds pending text; refusing to type the /quit exit command because it would concatenate onto that text. Clear or submit the pending text, then retry 'exit'
+rc=1
+-- after:
+─────────────────────────────────────────────────────────────────────────────────────────────
+lab draft keep me
+─────────────────────────────────────────────────────────────────────────────────────────────
+/private/tmp/fm-lab-piwd.q3b2
+$0.000 (sub) 0.0%/272k (auto)                             (openai-codex) gpt-5.6-terra • high
+-- pane: {"agent":"pi","agent_status":"idle","scroll":{"max_offset_from_bottom":11,"offset_from_bottom":0,"viewport_rows":39}}

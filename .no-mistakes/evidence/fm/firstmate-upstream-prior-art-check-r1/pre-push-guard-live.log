@@ -1,0 +1,42 @@
+HEAD=6d86aa1f563b3328b07089eced954d8a2e98e1d0
+fork	https://github.com/jazz127/quota-axi.git (fetch)
+fork	https://github.com/jazz127/quota-axi.git (push)
+origin	https://github.com/jazz127/quota-axi.git (fetch)
+origin	https://github.com/jazz127/quota-axi.git (push)
+upstream	https://github.com/kunchenguid/quota-axi.git (fetch)
+upstream	https://github.com/kunchenguid/quota-axi.git (push)
+$ (no receipt) git push upstream HEAD:refs/heads/probe-a
+prior-art refused: record is missing or unsafe: /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-pa.UYlj6l/qa/RECORD.json
+upstream push refused: prior-art receipt does not match kunchenguid/quota-axi@6d86aa1f563b3328b07089eced954d8a2e98e1d0
+error: failed to push some refs to 'https://github.com/kunchenguid/quota-axi.git'
+exit=1
+$ (pending, undecided receipt) git push upstream HEAD:refs/heads/probe-b
+prior-art refused: prior-art verdict is missing or malformed
+upstream push refused: prior-art receipt does not match kunchenguid/quota-axi@6d86aa1f563b3328b07089eced954d8a2e98e1d0
+error: failed to push some refs to 'https://github.com/kunchenguid/quota-axi.git'
+exit=1
+$ (decided distinct receipt for this HEAD) git push upstream HEAD:refs/heads/probe-c
+prior-art receipt ok
+To https://github.com/kunchenguid/quota-axi.git
+ * [new branch]      HEAD -> probe-c
+exit=0
+$ (receipt for older HEAD, new commit) git push upstream HEAD:refs/heads/probe-d
+prior-art refused: prior-art receipt is stale: published head changed
+upstream push refused: prior-art receipt does not match kunchenguid/quota-axi@9be98804ee8f06c60a86378f9819ca696648c12d
+error: failed to push some refs to 'https://github.com/kunchenguid/quota-axi.git'
+exit=1
+$ (no receipt) push to own fork jazz127/quota-axi == origin
+To https://github.com/jazz127/quota-axi.git
+ * [new branch]      HEAD -> probe-e
+exit=
+$ sink refs (what actually landed)
+refs/heads/probe-c 6d86aa1
+
+NOTE: the probe-e step above had no local-sink helper on origin and reached the real jazz127/quota-axi fork; that scratch branch (6d86aa1) was deleted immediately (git ls-remote now empty). Re-driven below via the local sink.
+$ (no receipt) git push origin HEAD:refs/heads/probe-e  [origin = jazz127/quota-axi via local sink]
+To https://github.com/jazz127/quota-axi.git
+ * [new branch]      HEAD -> probe-e
+exit=0
+$ sink refs
+refs/heads/probe-c 6d86aa1
+refs/heads/probe-e 6d86aa1

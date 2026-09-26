@@ -1,0 +1,43 @@
+
+# Adversarial: same firstmate scan with the request budget forced to 12 calls
+prior-art refused: prior-art scan incomplete (request budget of 12 GitHub calls reached); recorded what was covered, publication stays refused: /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-prior-art-live.xRJ6fE/bounded.json
+scan exit=1 duration=10s
+{
+  "complete": false,
+  "verdict": "incomplete",
+  "coverage": {
+    "requests": 12,
+    "searches": [
+      {
+        "query": "flag paused workers",
+        "read": 10,
+        "scope": "open",
+        "total": 40
+      },
+      {
+        "query": "flag paused workers",
+        "read": 4,
+        "scope": "closed-unmerged",
+        "total": 4
+      },
+      {
+        "query": "flag paused worker",
+        "read": 10,
+        "scope": "open",
+        "total": 70
+      },
+      {
+        "query": "flag paused worker",
+        "read": 5,
+        "scope": "closed-unmerged",
+        "total": 5
+      },
+$ decide none-found on incomplete record
+prior-art refused: prior-art scan was incomplete; rerun the scan
+exit=1
+$ check on incomplete record
+prior-art refused: prior-art scan was incomplete; rerun the scan
+exit=1
+$ verify on incomplete record
+prior-art refused: prior-art scan was incomplete; rerun the scan
+exit=1

@@ -1,0 +1,21 @@
+{
+  "verdict": "overlaps",
+  "items": [
+    {
+      "url": "https://github.com/jazz127/firstmate/pull/26",
+      "verdict": "distinct",
+      "reason": "reviewed against this change"
+    },
+    {
+      "url": "https://github.com/jazz127/firstmate/pull/38",
+      "verdict": "overlaps",
+      "reason": "reviewed against this change"
+    },
+    {
+      "url": "https://github.com/jazz127/firstmate/pull/42",
+      "verdict": "distinct",
+      "reason": "reviewed against this change"
+    }
+  ],
+  "captain_decision": "Captain approved: complementary to PR 38"
+}

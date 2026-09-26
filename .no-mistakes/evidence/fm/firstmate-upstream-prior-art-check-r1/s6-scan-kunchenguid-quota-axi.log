@@ -1,0 +1,4 @@
+prior-art refused: command failed (gh-axi api): error: GitHub API rate limit exceeded
+code: RATE_LIMITED
+help[2]: Wait until the hourly window resets (run `gh api rate_limit` to check),Use a different identity with `gh auth switch` if available
+python3 bin/fm-upstream-prior-art.py scan --repo kunchenguid/quota-axi --titl  34.43s user 12.97s system 17% cpu 4:26.64 total

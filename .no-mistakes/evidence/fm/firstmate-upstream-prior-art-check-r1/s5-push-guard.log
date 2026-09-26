@@ -1,0 +1,16 @@
+$ pre-push guard record=none.json url=https://github.com/jazz127/firstmate.git
+exit=0
+$ pre-push guard record=none.json url=https://github.com/kunchenguid/firstmate.git
+prior-art refused: record is missing or unsafe: /tmp/none.json
+upstream push refused: prior-art receipt does not match kunchenguid/firstmate@4f1aff248afed881e12e71002ae178d40bee94bf
+exit=1
+$ pre-push guard record=none.json url=https://x-access-token:abc@github.com/kunchenguid/firstmate.git
+prior-art refused: record is missing or unsafe: /tmp/none.json
+upstream push refused: prior-art receipt does not match kunchenguid/firstmate@4f1aff248afed881e12e71002ae178d40bee94bf
+exit=1
+$ pre-push guard record=s3-record.json url=git@github.com:kunchenguid/firstmate.git
+prior-art refused: prior-art receipt targets a different repository
+upstream push refused: prior-art receipt does not match kunchenguid/firstmate@4f1aff248afed881e12e71002ae178d40bee94bf
+exit=1
+$ delete-only push to upstream
+exit=0

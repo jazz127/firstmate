@@ -1,0 +1,27 @@
+$ check before decide
+prior-art refused: prior-art verdict is missing
+exit=1
+$ decide overlaps without captain decision
+prior-art verdict recorded: overlaps
+exit=0
+$ check (overlaps, no captain decision)
+prior-art refused: prior-art overlaps require a recorded captain decision
+exit=1
+$ decide with captain decision
+prior-art verdict recorded: overlaps
+exit=0
+$ check
+prior-art check ok
+exit=0
+$ decide missing one candidate
+prior-art refused: decisions must cover every candidate URL exactly once
+exit=1
+$ check with changed title (stale)
+prior-art refused: prior-art record is stale: target, text, branch head, base, or diff changed
+exit=1
+$ verify --head HEAD
+prior-art receipt ok
+exit=0
+$ verify --head HEAD~1
+prior-art refused: prior-art receipt is stale: published head changed
+exit=1

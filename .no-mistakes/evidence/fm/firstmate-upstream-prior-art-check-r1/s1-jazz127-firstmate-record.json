@@ -1,0 +1,97 @@
+{
+  "candidates": [
+    {
+      "author": "jazz127",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "keyword search: upstream"
+      ],
+      "state": "open",
+      "title": "feat: add deterministic Captain Chart fleet maps",
+      "url": "https://github.com/jazz127/firstmate/pull/23",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "jazz127",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "shared files: AGENTS.md, bin/fm-dod-lib.sh, bin/fm-spawn.sh, docs/fork-house-branch.md"
+      ],
+      "state": "closed",
+      "title": "[SUPERSEDED] feat: add host-backed supervision and branch dispatch",
+      "url": "https://github.com/jazz127/firstmate/pull/26",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "jazz127",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "keyword search: OWNER",
+        "keyword search: gate",
+        "keyword search: upstream",
+        "shared files: AGENTS.md, bin/fm-pr-check.sh, docs/fork-house-branch.md"
+      ],
+      "state": "open",
+      "title": "feat: add Bosun upstream contribution workflow",
+      "url": "https://github.com/jazz127/firstmate/pull/38",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "jazz127",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "keyword search: gate",
+        "keyword search: upstream",
+        "shared files: bin/fm-dod-lib.sh, bin/fm-spawn.sh"
+      ],
+      "state": "open",
+      "title": "chore: update pull request",
+      "url": "https://github.com/jazz127/firstmate/pull/42",
+      "verdict": "unreviewed"
+    }
+  ],
+  "captain_decision": "",
+  "captured_at": "2026-09-25T22:51:52.625301+00:00",
+  "closed_window_days": 30,
+  "context": {
+    "base": "59b1313e",
+    "diff_sha256": "d93f31a19cf3fd6561d17234363df27bd9a27700e04dc129caa1b3184c5f9409",
+    "files": [
+      "AGENTS.md",
+      "bin/fm-dod-lib.sh",
+      "bin/fm-pr-check.sh",
+      "bin/fm-spawn.sh",
+      "bin/fm-upstream-prior-art.py",
+      "bin/fm-upstream-push-guard.sh",
+      "docs/fork-house-branch.md",
+      "tests/fm-dod-lib.test.sh",
+      "tests/fm-upstream-prior-art.test.sh"
+    ],
+    "head": "4f1aff248afed881e12e71002ae178d40bee94bf",
+    "kind": "pr",
+    "repo": "jazz127/firstmate",
+    "summary": "Require a prior-art scan of upstream pull requests before submitting upstream work",
+    "title": "Gate upstream submissions on prior art"
+  },
+  "open_prs": {
+    "listed": 3,
+    "matched": 3
+  },
+  "queries": [
+    "gate upstream submissions",
+    "require prior scan",
+    "fm_upstream_pr_publish_block",
+    "script_dir",
+    "BASH_SOURCE",
+    "OWNER",
+    "gate",
+    "upstream",
+    "submissions"
+  ],
+  "schema": "fm-upstream-prior-art.v1",
+  "verdict": "pending"
+}

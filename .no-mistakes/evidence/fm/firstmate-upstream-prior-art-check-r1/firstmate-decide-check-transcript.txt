@@ -1,0 +1,40 @@
+$ python3 /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3DBN9W2HQYHSEDX8B53RG9F/bin/fm-upstream-prior-art.py check --repo kunchenguid/firstmate --title 'Do not flag paused workers as stale' --summary-file summary.txt --record /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-prior-art-live.xRJ6fE/rec.json --base base
+prior-art refused: prior-art verdict is missing
+exit=1
+
+$ python3 /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3DBN9W2HQYHSEDX8B53RG9F/bin/fm-upstream-prior-art.py decide --record /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-prior-art-live.xRJ6fE/rec.json --decisions-file none.json
+prior-art refused: none-found is invalid when the scan found candidates
+exit=1
+
+$ python3 /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3DBN9W2HQYHSEDX8B53RG9F/bin/fm-upstream-prior-art.py decide --record /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-prior-art-live.xRJ6fE/rec.json --decisions-file ov.json
+prior-art verdict recorded: overlaps
+exit=0
+
+$ python3 /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3DBN9W2HQYHSEDX8B53RG9F/bin/fm-upstream-prior-art.py check --repo kunchenguid/firstmate --title 'Do not flag paused workers as stale' --summary-file summary.txt --record /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-prior-art-live.xRJ6fE/rec.json --base base
+prior-art refused: prior-art overlaps require a recorded captain decision
+exit=1
+
+$ python3 /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3DBN9W2HQYHSEDX8B53RG9F/bin/fm-upstream-prior-art.py decide --record /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-prior-art-live.xRJ6fE/rec.json --decisions-file ov2.json
+prior-art verdict recorded: overlaps
+exit=0
+
+$ python3 /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3DBN9W2HQYHSEDX8B53RG9F/bin/fm-upstream-prior-art.py check --repo kunchenguid/firstmate --title 'Do not flag paused workers as stale' --summary-file summary.txt --record /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-prior-art-live.xRJ6fE/rec.json --base base
+prior-art check ok
+exit=0
+
+$ python3 /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3DBN9W2HQYHSEDX8B53RG9F/bin/fm-upstream-prior-art.py verify --record /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-prior-art-live.xRJ6fE/rec.json --repo kunchenguid/firstmate --head fbc07edf0b92d81ce323b7c52cf9693bf5203cae
+prior-art receipt ok
+exit=0
+
+$ python3 /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3DBN9W2HQYHSEDX8B53RG9F/bin/fm-upstream-prior-art.py verify --record /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-prior-art-live.xRJ6fE/rec.json --repo kunchenguid/quota-axi --head fbc07edf0b92d81ce323b7c52cf9693bf5203cae
+prior-art refused: prior-art receipt targets a different repository
+exit=1
+
+$ python3 /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3DBN9W2HQYHSEDX8B53RG9F/bin/fm-upstream-prior-art.py check --repo kunchenguid/firstmate --title 'Do not flag paused workers as stale' --summary-file summary.txt --record /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-prior-art-live.xRJ6fE/rec.json --base base
+prior-art refused: prior-art record is stale: target, text, branch head, base, or diff changed
+exit=1
+
+$ python3 /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3DBN9W2HQYHSEDX8B53RG9F/bin/fm-upstream-prior-art.py verify --record /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-prior-art-live.xRJ6fE/rec.json --repo kunchenguid/firstmate --head fbc07edf0b92d81ce323b7c52cf9693bf5203cae
+prior-art refused: prior-art receipt is stale: published head changed
+exit=1
+

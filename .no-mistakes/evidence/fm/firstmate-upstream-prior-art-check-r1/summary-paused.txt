@@ -1,0 +1,1 @@
+Paused worker is wrongly flagged as stale by the watchdog

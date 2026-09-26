@@ -1,0 +1,103 @@
+{
+  "candidates": [
+    {
+      "author": "jazz127",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "keyword search: upstream prior check",
+        "keyword search: check existing upstream",
+        "keyword search: upstream",
+        "keyword search: prior",
+        "keyword search: check"
+      ],
+      "state": "open",
+      "title": "feat: add deterministic Captain Chart fleet maps",
+      "url": "https://github.com/jazz127/firstmate/pull/23",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "jazz127",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "shared files: AGENTS.md, bin/fm-dod-lib.sh, bin/fm-spawn.sh, docs/fork-house-branch.md"
+      ],
+      "state": "closed",
+      "title": "[SUPERSEDED] feat: add host-backed supervision and branch dispatch",
+      "url": "https://github.com/jazz127/firstmate/pull/26",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "jazz127",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "keyword search: check existing upstream",
+        "keyword search: OWNER",
+        "keyword search: upstream",
+        "keyword search: check",
+        "shared files: AGENTS.md, bin/fm-pr-check.sh, docs/fork-house-branch.md"
+      ],
+      "state": "open",
+      "title": "feat: add Bosun upstream contribution workflow",
+      "url": "https://github.com/jazz127/firstmate/pull/38",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "jazz127",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "keyword search: check existing upstream",
+        "keyword search: upstream",
+        "keyword search: check",
+        "shared files: bin/fm-dod-lib.sh, bin/fm-spawn.sh"
+      ],
+      "state": "open",
+      "title": "chore: update pull request",
+      "url": "https://github.com/jazz127/firstmate/pull/42",
+      "verdict": "unreviewed"
+    }
+  ],
+  "captain_decision": "",
+  "captured_at": "2026-09-25T22:50:28.196941+00:00",
+  "closed_window_days": 30,
+  "context": {
+    "base": "59b1313e",
+    "diff_sha256": "6a0e31085b5a4936f91d11161c8221f724162850966c010615d08e1811e33080",
+    "files": [
+      "AGENTS.md",
+      "bin/fm-dod-lib.sh",
+      "bin/fm-pr-check.sh",
+      "bin/fm-spawn.sh",
+      "bin/fm-upstream-prior-art.py",
+      "bin/fm-upstream-push-guard.sh",
+      "docs/fork-house-branch.md",
+      "tests/fm-dod-lib.test.sh",
+      "tests/fm-upstream-prior-art.test.sh"
+    ],
+    "head": "925f182202524f25c0302809a12ee50aa162cfe6",
+    "kind": "pr",
+    "repo": "jazz127/firstmate",
+    "summary": "Check existing upstream PRs before submitting a PR",
+    "title": "Upstream prior-art check before PR submission"
+  },
+  "open_prs": {
+    "listed": 3,
+    "matched": 3
+  },
+  "queries": [
+    "upstream prior check",
+    "check existing upstream",
+    "fm_upstream_pr_publish_block",
+    "script_dir",
+    "BASH_SOURCE",
+    "OWNER",
+    "upstream",
+    "prior",
+    "check"
+  ],
+  "schema": "fm-upstream-prior-art.v1",
+  "verdict": "pending"
+}

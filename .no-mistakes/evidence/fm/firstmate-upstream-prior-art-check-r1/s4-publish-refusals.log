@@ -1,0 +1,6 @@
+$ publish without --head
+prior-art refused: PR publication needs --head OWNER:BRANCH
+exit=1
+$ publish --head jazz127:house (remote house=59b1313e, receipt head=4f1aff24)
+prior-art refused: prior-art receipt is stale: remote branch head changed
+exit=1

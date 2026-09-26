@@ -1,0 +1,543 @@
+{
+  "candidates": [
+    {
+      "author": "Thanhbinh1905",
+      "kind": "issue",
+      "reason": "",
+      "reasons": [
+        "keyword search: codex quota reset",
+        "keyword search: codex",
+        "keyword search: reset",
+        "shared keywords: codex, quota"
+      ],
+      "state": "open",
+      "title": "codex: default view reports one credential's quota on a pooled/proxied host without disclosing which account",
+      "url": "https://github.com/kunchenguid/quota-axi/issues/158",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "kynjal26",
+      "kind": "issue",
+      "reason": "",
+      "reasons": [
+        "keyword search: codex quota reset",
+        "keyword search: codex",
+        "keyword search: reset"
+      ],
+      "state": "open",
+      "title": "Feature proposal: report multiple accounts for the same provider independently",
+      "url": "https://github.com/kunchenguid/quota-axi/issues/165",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "dbordenxcures",
+      "kind": "issue",
+      "reason": "",
+      "reasons": [
+        "keyword search: codex"
+      ],
+      "state": "open",
+      "title": "quota-axi ignores HTTPS_PROXY and NODE_USE_ENV_PROXY, so every fetch fails behind a proxy-only sandbox",
+      "url": "https://github.com/kunchenguid/quota-axi/issues/176",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "mguinada",
+      "kind": "issue",
+      "reason": "",
+      "reasons": [
+        "keyword search: codex",
+        "keyword search: weekly"
+      ],
+      "state": "open",
+      "title": "Feature: account for prepaid balance/credits alongside plan windows (opencode-go, codex)",
+      "url": "https://github.com/kunchenguid/quota-axi/issues/180",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "tiago-peixoto",
+      "kind": "issue",
+      "reason": "",
+      "reasons": [
+        "keyword search: codex quota reset",
+        "keyword search: codex",
+        "keyword search: reset",
+        "shared keywords: codex, quota"
+      ],
+      "state": "open",
+      "title": "Codex: report personal and work subscriptions from sibling entries in one Pi root",
+      "url": "https://github.com/kunchenguid/quota-axi/issues/193",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "marcoscale98",
+      "kind": "issue",
+      "reason": "",
+      "reasons": [
+        "keyword search: codex"
+      ],
+      "state": "open",
+      "title": "claude provider has no pi:anthropic source reading Pi's own ~/.pi/agent/auth.json",
+      "url": "https://github.com/kunchenguid/quota-axi/issues/205",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "tiago-peixoto",
+      "kind": "issue",
+      "reason": "",
+      "reasons": [
+        "keyword search: codex quota reset",
+        "keyword search: codex",
+        "keyword search: reset"
+      ],
+      "state": "open",
+      "title": "Report each verified subscription once across native and Pi credential sources",
+      "url": "https://github.com/kunchenguid/quota-axi/issues/210",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "spscream",
+      "kind": "issue",
+      "reason": "",
+      "reasons": [
+        "keyword search: codex quota reset",
+        "keyword search: codex",
+        "keyword search: reset"
+      ],
+      "state": "open",
+      "title": "Per-account quota reads do not generalize: --profile-only covers 2 of 10 providers",
+      "url": "https://github.com/kunchenguid/quota-axi/issues/219",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "ppronobis",
+      "kind": "issue",
+      "reason": "",
+      "reasons": [
+        "keyword search: weekly",
+        "keyword search: reset",
+        "shared keywords: quota, weekly"
+      ],
+      "state": "open",
+      "title": "Grok: SuperGrok weekly limit readable by the Grok CLI, but quota-axi reports quota unavailable for the same OIDC login",
+      "url": "https://github.com/kunchenguid/quota-axi/issues/220",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "danisham-afk",
+      "kind": "issue",
+      "reason": "",
+      "reasons": [
+        "keyword search: codex weekly reset",
+        "keyword search: codex quota reset",
+        "keyword search: codex",
+        "keyword search: weekly",
+        "keyword search: reset"
+      ],
+      "state": "open",
+      "title": "agy: no pi:antigravity source reading Pi's own ~/.pi/agent/auth.json",
+      "url": "https://github.com/kunchenguid/quota-axi/issues/240",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "TreeTreeDi",
+      "kind": "issue",
+      "reason": "",
+      "reasons": [
+        "keyword search: weekly",
+        "keyword search: reset"
+      ],
+      "state": "open",
+      "title": "Cursor: all_models min over included/auto/api makes Ultra plans look exhausted when only API is spent",
+      "url": "https://github.com/kunchenguid/quota-axi/issues/246",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "DansiDanutz",
+      "kind": "issue",
+      "reason": "",
+      "reasons": [
+        "keyword search: codex"
+      ],
+      "state": "open",
+      "title": "Claude provider stays auth_required \u2014 keychain reports expired despite active Claude Code sessions (dual-account setup)",
+      "url": "https://github.com/kunchenguid/quota-axi/issues/25",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "lockhartheavyindustries",
+      "kind": "issue",
+      "reason": "",
+      "reasons": [
+        "keyword search: reset"
+      ],
+      "state": "open",
+      "title": "MiniMax: coding-plan quota is reported only as model:general, so provider-wide or model-id matching finds no row",
+      "url": "https://github.com/kunchenguid/quota-axi/issues/256",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "tiago-peixoto",
+      "kind": "issue",
+      "reason": "",
+      "reasons": [
+        "keyword search: codex"
+      ],
+      "state": "open",
+      "title": "OpenCode Go: a login held only in Pi reads as auth_required, with no pointer to the Pi opt-in",
+      "url": "https://github.com/kunchenguid/quota-axi/issues/262",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "ShayGus",
+      "kind": "issue",
+      "reason": "",
+      "reasons": [
+        "keyword search: weekly",
+        "keyword search: reset"
+      ],
+      "state": "open",
+      "title": "Muse Code provider: only known usage source is a key endpoint",
+      "url": "https://github.com/kunchenguid/quota-axi/issues/277",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "mjskinner82",
+      "kind": "issue",
+      "reason": "",
+      "reasons": [
+        "keyword search: codex quota reset",
+        "keyword search: codex",
+        "keyword search: reset"
+      ],
+      "state": "open",
+      "title": "Copilot: support the standalone Copilot CLI credential store (~/.copilot/config.json)",
+      "url": "https://github.com/kunchenguid/quota-axi/issues/55",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "0xbentang",
+      "kind": "issue",
+      "reason": "",
+      "reasons": [
+        "keyword search: codex weekly reset",
+        "keyword search: codex quota reset",
+        "keyword search: codex",
+        "keyword search: weekly",
+        "keyword search: reset"
+      ],
+      "state": "open",
+      "title": "Add Ollama Cloud quota via the official /api/usage API key",
+      "url": "https://github.com/kunchenguid/quota-axi/issues/86",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "Quipex",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "keyword search: weekly",
+        "keyword search: reset"
+      ],
+      "state": "open",
+      "title": "feat(providers): add Ollama Cloud quota reporting",
+      "url": "https://github.com/kunchenguid/quota-axi/pull/169",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "1955m",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "keyword search: codex weekly reset",
+        "keyword search: codex quota reset",
+        "keyword search: codex",
+        "keyword search: weekly",
+        "keyword search: reset"
+      ],
+      "state": "open",
+      "title": "feat(cursor): add Pi cursor credential as a third read-only source",
+      "url": "https://github.com/kunchenguid/quota-axi/pull/171",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "1955m",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "keyword search: weekly",
+        "keyword search: reset",
+        "shared keywords: quota, window"
+      ],
+      "state": "open",
+      "title": "fix(cursor): match quota window labels to the dashboard",
+      "url": "https://github.com/kunchenguid/quota-axi/pull/183",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "pm-justinm",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "keyword search: codex"
+      ],
+      "state": "open",
+      "title": "feat(providers): report each discovered Claude account as its own quota lane",
+      "url": "https://github.com/kunchenguid/quota-axi/pull/185",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "brandanmajeske",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "keyword search: codex quota reset",
+        "keyword search: codex",
+        "keyword search: reset"
+      ],
+      "state": "open",
+      "title": "feat(providers): add read-only Kiro quota reporting",
+      "url": "https://github.com/kunchenguid/quota-axi/pull/204",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "hphsu",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "keyword search: codex"
+      ],
+      "state": "open",
+      "title": "feat(zai): add ZAI_API_KEY environment credential source",
+      "url": "https://github.com/kunchenguid/quota-axi/pull/207",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "jasonlgong",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "keyword search: codex"
+      ],
+      "state": "open",
+      "title": "feat(tui): add selectable light terminal theme",
+      "url": "https://github.com/kunchenguid/quota-axi/pull/216",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "Dematom1",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "keyword search: codex"
+      ],
+      "state": "open",
+      "title": "feat(providers): add Fireworks AI quota reporting",
+      "url": "https://github.com/kunchenguid/quota-axi/pull/218",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "tiago-peixoto",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "keyword search: codex weekly reset",
+        "keyword search: codex quota reset",
+        "keyword search: codex",
+        "keyword search: weekly",
+        "keyword search: reset"
+      ],
+      "state": "open",
+      "title": "fix(providers): report each verified subscription once across credential routes",
+      "url": "https://github.com/kunchenguid/quota-axi/pull/223",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "dscott98",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "keyword search: codex weekly reset",
+        "keyword search: codex quota reset",
+        "keyword search: codex",
+        "keyword search: weekly",
+        "keyword search: reset"
+      ],
+      "state": "open",
+      "title": "feat(providers): add opt-in MiniMax and OpenRouter support",
+      "url": "https://github.com/kunchenguid/quota-axi/pull/224",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "RooseveltAdvisors",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "keyword search: reset"
+      ],
+      "state": "open",
+      "title": "feat(providers): add read-only Higgsfield CLI quota adapter",
+      "url": "https://github.com/kunchenguid/quota-axi/pull/236",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "jazz127",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "keyword search: codex"
+      ],
+      "state": "open",
+      "title": "feat(providers): show reported credit balances beside measured windows",
+      "url": "https://github.com/kunchenguid/quota-axi/pull/239",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "andrewesweet",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "keyword search: weekly",
+        "keyword search: reset"
+      ],
+      "state": "open",
+      "title": "feat(pace): publish Z.AI peak-hour cost and at-cost spend priority",
+      "url": "https://github.com/kunchenguid/quota-axi/pull/243",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "jazz127",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "keyword search: codex"
+      ],
+      "state": "open",
+      "title": "feat: support Pi Anthropic credentials and complete full reports",
+      "url": "https://github.com/kunchenguid/quota-axi/pull/247",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "tiago-peixoto",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "keyword search: weekly"
+      ],
+      "state": "open",
+      "title": "fix(providers): read Pi's opencode-go key by default for OpenCode Go",
+      "url": "https://github.com/kunchenguid/quota-axi/pull/264",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "adibirzu",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "keyword search: codex weekly reset",
+        "keyword search: codex quota reset",
+        "keyword search: codex",
+        "keyword search: weekly",
+        "keyword search: reset"
+      ],
+      "state": "open",
+      "title": "feat(providers): add Cline read-only daily-credit provider",
+      "url": "https://github.com/kunchenguid/quota-axi/pull/276",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "ShayGus",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "keyword search: codex weekly reset",
+        "keyword search: codex quota reset",
+        "keyword search: codex",
+        "keyword search: weekly",
+        "keyword search: reset"
+      ],
+      "state": "open",
+      "title": "feat(providers): add Ollama Cloud and Muse Code quota providers",
+      "url": "https://github.com/kunchenguid/quota-axi/pull/278",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "meisbokai",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "keyword search: weekly"
+      ],
+      "state": "open",
+      "title": "fix(providers): surface every DeepSeek wallet so a funded currency is never masked",
+      "url": "https://github.com/kunchenguid/quota-axi/pull/280",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "RooseveltAdvisors",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "keyword search: codex"
+      ],
+      "state": "open",
+      "title": "feat(providers): read Xiaomi MiMo keys from Pi auth.json entries",
+      "url": "https://github.com/kunchenguid/quota-axi/pull/282",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "github-actions[bot]",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "keyword search: codex"
+      ],
+      "state": "open",
+      "title": "chore(main): release quota-axi 0.1.55",
+      "url": "https://github.com/kunchenguid/quota-axi/pull/284",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "jokim1",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "keyword search: weekly",
+        "keyword search: reset"
+      ],
+      "state": "open",
+      "title": "feat(providers): add Muse subscription quota provider",
+      "url": "https://github.com/kunchenguid/quota-axi/pull/290",
+      "verdict": "unreviewed"
+    }
+  ],
+  "captain_decision": "",
+  "captured_at": "2026-09-25T23:27:37.593271+00:00",
+  "closed_window_days": 30,
+  "context": {
+    "base": "main~1",
+    "diff_sha256": "81c8da00ad2594d8954e92ffd0da9ebb15fb1930054a3b7131bead93d088f605",
+    "files": [
+      "src/codex.py"
+    ],
+    "head": "6d86aa1f563b3328b07089eced954d8a2e98e1d0",
+    "kind": "pr",
+    "repo": "kunchenguid/quota-axi",
+    "summary": "Codex quota reset window is parsed incorrectly; fix the reset time parsing for the weekly window.",
+    "title": "Fix Codex weekly reset window parsing"
+  },
+  "open_prs": {
+    "listed": 23,
+    "matched": 21
+  },
+  "queries": [
+    "codex weekly reset",
+    "codex quota reset",
+    "reset_window_parse",
+    "codex",
+    "weekly",
+    "reset"
+  ],
+  "schema": "fm-upstream-prior-art.v1",
+  "verdict": "pending"
+}

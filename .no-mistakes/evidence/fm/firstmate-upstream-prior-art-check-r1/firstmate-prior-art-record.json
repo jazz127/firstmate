@@ -1,0 +1,1021 @@
+{
+  "candidates": [
+    {
+      "author": "tiago-peixoto",
+      "kind": "issue",
+      "reason": "",
+      "reasons": [
+        "search (open): flag paused workers",
+        "search (open): flag paused worker",
+        "shared keywords: paused, watcher, workers"
+      ],
+      "state": "open",
+      "title": "Watcher: agent liveness suppresses a declared paused: wait, so healthy parked workers are surfaced and exited ones are not",
+      "url": "https://github.com/kunchenguid/firstmate/issues/2713",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "butlersrepos",
+      "kind": "issue",
+      "reason": "",
+      "reasons": [
+        "search (open): workers"
+      ],
+      "state": "open",
+      "title": "Prevent decision-log number collisions across parallel workers",
+      "url": "https://github.com/kunchenguid/firstmate/issues/3096",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "sunildeesu",
+      "kind": "issue",
+      "reason": "",
+      "reasons": [
+        "search (open): flag paused workers",
+        "search (open): flag paused worker",
+        "shared keywords: paused, stale, watcher"
+      ],
+      "state": "open",
+      "title": "Declared `paused:` external wait does not suppress the watcher's pane-based stale alarm",
+      "url": "https://github.com/kunchenguid/firstmate/issues/3942",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "josecarvallo",
+      "kind": "issue",
+      "reason": "",
+      "reasons": [
+        "search (open): flag paused worker",
+        "shared keywords: paused, watcher"
+      ],
+      "state": "open",
+      "title": "Watcher wedge-escalates a paused: crew forever when its run step is stalled on the same external wait",
+      "url": "https://github.com/kunchenguid/firstmate/issues/4154",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "tiago-peixoto",
+      "kind": "issue",
+      "reason": "",
+      "reasons": [
+        "search (open): flag paused worker"
+      ],
+      "state": "open",
+      "title": "Voice status reader still uses the last line of a multi-line status record",
+      "url": "https://github.com/kunchenguid/firstmate/issues/4756",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "tiago-peixoto",
+      "kind": "issue",
+      "reason": "",
+      "reasons": [
+        "search (open): flag paused worker"
+      ],
+      "state": "open",
+      "title": "Holding or releasing a task for the operator never reaches the worker status log",
+      "url": "https://github.com/kunchenguid/firstmate/issues/4766",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "tiago-peixoto",
+      "kind": "issue",
+      "reason": "",
+      "reasons": [
+        "search (open): flag paused worker"
+      ],
+      "state": "open",
+      "title": "The supervisor's own append to a task status file publishes a signal wake back to the supervisor",
+      "url": "https://github.com/kunchenguid/firstmate/issues/4767",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "sdivanl",
+      "kind": "issue",
+      "reason": "",
+      "reasons": [
+        "search (open): flag paused workers"
+      ],
+      "state": "open",
+      "title": "fix(watch): a deliberately stopped (parked) task keeps registering as stale",
+      "url": "https://github.com/kunchenguid/firstmate/issues/5004",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "gilrallo",
+      "kind": "issue",
+      "reason": "",
+      "reasons": [
+        "search (open): flag paused workers",
+        "search (open): flag paused worker",
+        "shared keywords: paused, stale, watcher, worker"
+      ],
+      "state": "open",
+      "title": "Watcher re-surfaces a live worker's declared paused: wait as stale every few polls",
+      "url": "https://github.com/kunchenguid/firstmate/issues/5415",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "WTF-Am-ID",
+      "kind": "issue",
+      "reason": "",
+      "reasons": [
+        "search (open): flag"
+      ],
+      "state": "open",
+      "title": "fm-control relaunch drops the flags of a raw launch named after an adapter",
+      "url": "https://github.com/kunchenguid/firstmate/issues/5681",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "victorkardel",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (open): paused",
+        "shared files: bin/fm-classify-lib.sh"
+      ],
+      "state": "open",
+      "title": "watch paused suppression",
+      "url": "https://github.com/kunchenguid/firstmate/pull/2451",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "pm-justinm",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (open): paused",
+        "shared files: bin/fm-classify-lib.sh"
+      ],
+      "state": "open",
+      "title": "fix: keep paused decision keys open",
+      "url": "https://github.com/kunchenguid/firstmate/pull/2552",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "Inthuson",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (open): flag paused workers"
+      ],
+      "state": "open",
+      "title": "fix(bin): brief workers against blocking sleeps and one-shot writes",
+      "url": "https://github.com/kunchenguid/firstmate/pull/2678",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "pramendra",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (open): flag paused workers"
+      ],
+      "state": "open",
+      "title": "fix(bin): stop no-mistakes ship briefs from invoking an unreachable skill",
+      "url": "https://github.com/kunchenguid/firstmate/pull/2828",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "RajeshRajendiran",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (closed-unmerged): flag paused worker",
+        "search (closed-unmerged): paused",
+        "shared files: bin/fm-classify-lib.sh"
+      ],
+      "state": "closed",
+      "title": "fix(watcher): defer wedge alarms when a crew's own pipeline run shows progress",
+      "url": "https://github.com/kunchenguid/firstmate/pull/3094",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "NicholasACTran",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (open): flag paused workers"
+      ],
+      "state": "open",
+      "title": "feat(bin): add structural-zero stop rule to generated task briefs",
+      "url": "https://github.com/kunchenguid/firstmate/pull/3204",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "AgardnerAU",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (open): workers"
+      ],
+      "state": "open",
+      "title": "feat(bin): represent deliberately stood-down workers",
+      "url": "https://github.com/kunchenguid/firstmate/pull/3281",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "shadohead",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (open): flag paused workers",
+        "shared files: bin/fm-classify-lib.sh"
+      ],
+      "state": "open",
+      "title": "fix(watch): stop bare stale wakes leaking past a declared wait and name the answerable decision key on every surface",
+      "url": "https://github.com/kunchenguid/firstmate/pull/3325",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "shimpa1",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (open): flag"
+      ],
+      "state": "open",
+      "title": "feat(bin): add +unsynced registry flag to skip fleet-sync entirely",
+      "url": "https://github.com/kunchenguid/firstmate/pull/3339",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "kynjal26",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (closed-unmerged): paused"
+      ],
+      "state": "closed",
+      "title": "fix: bound home-summary endpoint snapshots",
+      "url": "https://github.com/kunchenguid/firstmate/pull/3432",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "dklKevin",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (open): flag paused workers",
+        "shared files: bin/fm-classify-lib.sh"
+      ],
+      "state": "open",
+      "title": "fix(watch): skip empty rearm-resurface wakes and stop wedge-nagging a done: worker's idle pane",
+      "url": "https://github.com/kunchenguid/firstmate/pull/3547",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "jshef747",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (closed-unmerged): workers"
+      ],
+      "state": "closed",
+      "title": "feat(bin): append config/brief-addendum.md to ship and scout briefs",
+      "url": "https://github.com/kunchenguid/firstmate/pull/3609",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "krakns",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (open): flag"
+      ],
+      "state": "open",
+      "title": "fix(bin): detect away mode flagged with no live supervisor daemon",
+      "url": "https://github.com/kunchenguid/firstmate/pull/3676",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "hassanmohaideen",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (closed-unmerged): flag"
+      ],
+      "state": "closed",
+      "title": "feat(spawn): add optional advisor-model axis to crewmate dispatch",
+      "url": "https://github.com/kunchenguid/firstmate/pull/3792",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "wjkawecki-jt",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (closed-unmerged): paused",
+        "shared keywords: paused, stale"
+      ],
+      "state": "closed",
+      "title": "fix: prevent stale paused-task wakes from triggering false stalls",
+      "url": "https://github.com/kunchenguid/firstmate/pull/3878",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "tpeixinho",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (closed-unmerged): flag paused workers",
+        "search (closed-unmerged): flag paused worker",
+        "search (closed-unmerged): paused"
+      ],
+      "state": "closed",
+      "title": "fix(bin): make the PR the finish line in the no-mistakes and direct-PR definitions of done",
+      "url": "https://github.com/kunchenguid/firstmate/pull/3981",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "AgardnerAU",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (open): flag"
+      ],
+      "state": "open",
+      "title": "fix: flag unrunnable validation checks as environment faults",
+      "url": "https://github.com/kunchenguid/firstmate/pull/3989",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "pedromuller-del",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (closed-unmerged): paused",
+        "changed files unavailable"
+      ],
+      "state": "closed",
+      "title": "fix: coalesce watcher follow-ups safely",
+      "url": "https://github.com/kunchenguid/firstmate/pull/4047",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "jackChallis",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (open): paused"
+      ],
+      "state": "open",
+      "title": "test: pin paused status as nonterminal",
+      "url": "https://github.com/kunchenguid/firstmate/pull/4070",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "jericho1050",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (closed-unmerged): paused"
+      ],
+      "state": "closed",
+      "title": "feat: add pre-validation method to ship briefs",
+      "url": "https://github.com/kunchenguid/firstmate/pull/4077",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "jericho1050",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (open): workers"
+      ],
+      "state": "open",
+      "title": "feat(brief): require workers to read project instructions",
+      "url": "https://github.com/kunchenguid/firstmate/pull/4229",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "sreekarans",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (open): flag"
+      ],
+      "state": "open",
+      "title": "feat(bin): add an opt-in config/plain-style flag for plain communication style",
+      "url": "https://github.com/kunchenguid/firstmate/pull/4235",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "mahn-prog",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (closed-unmerged): flag",
+        "search (closed-unmerged): workers"
+      ],
+      "state": "closed",
+      "title": "fix: preserve sandboxing and approval requests for Codex workers",
+      "url": "https://github.com/kunchenguid/firstmate/pull/4325",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "adibirzu",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (closed-unmerged): paused",
+        "shared files: bin/fm-classify-lib.sh"
+      ],
+      "state": "closed",
+      "title": "docs(dispatch): collapse quota-array-dispatch into router-dispatch",
+      "url": "https://github.com/kunchenguid/firstmate/pull/4388",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "VedantAnand17",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (open): paused"
+      ],
+      "state": "open",
+      "title": "feat(brief): add Lavish-loop paused rule to every scaffold brief",
+      "url": "https://github.com/kunchenguid/firstmate/pull/4420",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "andy-n",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (closed-unmerged): flag"
+      ],
+      "state": "closed",
+      "title": "fix(supervision): give a Codex primary hook-owned watcher continuity",
+      "url": "https://github.com/kunchenguid/firstmate/pull/4422",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "NewAiCoder",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (open): flag paused worker",
+        "shared files: bin/fm-classify-lib.sh"
+      ],
+      "state": "open",
+      "title": "fix(supervision): revalidate paused no-mistakes claims via registered out-of-worktree clones",
+      "url": "https://github.com/kunchenguid/firstmate/pull/4430",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "ashkonmousavi",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (closed-unmerged): workers",
+        "shared files: bin/fm-classify-lib.sh"
+      ],
+      "state": "closed",
+      "title": "fix(bin): brief workers to call the advisor, stop after two review rounds, and use the right tool",
+      "url": "https://github.com/kunchenguid/firstmate/pull/4472",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "Marsjohn-11",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (open): flag"
+      ],
+      "state": "open",
+      "title": "test: assert the never-asked Claude import-consent flags survive untouched",
+      "url": "https://github.com/kunchenguid/firstmate/pull/4488",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "Nymann74",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (closed-unmerged): flag paused workers",
+        "search (closed-unmerged): flag paused worker",
+        "search (closed-unmerged): paused"
+      ],
+      "state": "closed",
+      "title": "fix(afk): coordinate watcher handoff and bound escalation retries",
+      "url": "https://github.com/kunchenguid/firstmate/pull/4585",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "boldprojekte",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (open): workers",
+        "shared files: bin/fm-classify-lib.sh"
+      ],
+      "state": "open",
+      "title": "fix(supervision): reconcile ended workers across backends",
+      "url": "https://github.com/kunchenguid/firstmate/pull/4594",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "bryceeppler",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (closed-unmerged): flag paused workers",
+        "search (closed-unmerged): flag paused worker",
+        "search (closed-unmerged): paused",
+        "shared files: bin/fm-classify-lib.sh"
+      ],
+      "state": "closed",
+      "title": "fix(bin): suppress false wedge alarms during active validation",
+      "url": "https://github.com/kunchenguid/firstmate/pull/4724",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "ayrton-saunders",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (closed-unmerged): flag"
+      ],
+      "state": "closed",
+      "title": "Support per-route remote Herdr sessions",
+      "url": "https://github.com/kunchenguid/firstmate/pull/4746",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "dar1us8",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (closed-unmerged): flag"
+      ],
+      "state": "closed",
+      "title": "fix(bin): make contribution polling opt-out durable",
+      "url": "https://github.com/kunchenguid/firstmate/pull/4748",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "tiago-peixoto",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (open): paused",
+        "shared files: bin/fm-classify-lib.sh"
+      ],
+      "state": "open",
+      "title": "fix(bin): keep a declared pause on the bounded cadence whatever the agent's liveness",
+      "url": "https://github.com/kunchenguid/firstmate/pull/4811",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "1955m",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (closed-unmerged): workers"
+      ],
+      "state": "closed",
+      "title": "feat(bin): inherit second-mate private MCP onto Pi workers",
+      "url": "https://github.com/kunchenguid/firstmate/pull/4817",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "haroarthur",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (closed-unmerged): workers"
+      ],
+      "state": "closed",
+      "title": "fix(bin): extend the delegation guard to spawned ship and scout workers",
+      "url": "https://github.com/kunchenguid/firstmate/pull/4864",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "tiago-peixoto",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (open): flag paused worker",
+        "shared keywords: captain, worker",
+        "shared files: bin/fm-classify-lib.sh"
+      ],
+      "state": "open",
+      "title": "fix(bin): declare captain holds on the worker status log so watchers track the pause",
+      "url": "https://github.com/kunchenguid/firstmate/pull/4893",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "markhomexa",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (open): workers"
+      ],
+      "state": "open",
+      "title": "fix(bin): relaunch workers resumed outside their worktree",
+      "url": "https://github.com/kunchenguid/firstmate/pull/4951",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "apsawhney-stack",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (closed-unmerged): flag paused workers",
+        "search (closed-unmerged): flag paused worker",
+        "search (closed-unmerged): paused",
+        "search (closed-unmerged): workers"
+      ],
+      "state": "closed",
+      "title": "feat: add task contract guidance for Firstmate workers",
+      "url": "https://github.com/kunchenguid/firstmate/pull/5006",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "matsui85",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (open): paused",
+        "shared keywords: paused, stale"
+      ],
+      "state": "open",
+      "title": "fix(bin): escalate overdue paused rechecks to the short stale cadence",
+      "url": "https://github.com/kunchenguid/firstmate/pull/5084",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "matsui85",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (open): paused",
+        "shared files: bin/fm-classify-lib.sh"
+      ],
+      "state": "open",
+      "title": "fix(fm-watch): advance a task's own status log when a paused-until recheck fires",
+      "url": "https://github.com/kunchenguid/firstmate/pull/5111",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "Freudator86",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (open): workers"
+      ],
+      "state": "open",
+      "title": "feat(bin): preflight Claude profile auth before launching workers",
+      "url": "https://github.com/kunchenguid/firstmate/pull/5112",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "iscooter",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (open): flag"
+      ],
+      "state": "open",
+      "title": "fix(bin): flag orphaned session-lock holders as suspect, not live",
+      "url": "https://github.com/kunchenguid/firstmate/pull/5134",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "connectwithclayton",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (open): workers"
+      ],
+      "state": "open",
+      "title": "feat(bin): add closed GitHub reads for Cursor workers",
+      "url": "https://github.com/kunchenguid/firstmate/pull/5164",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "Tom-Caz",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (closed-unmerged): workers"
+      ],
+      "state": "closed",
+      "title": "feat(bin): pass a home-local --setting-sources to Claude workers",
+      "url": "https://github.com/kunchenguid/firstmate/pull/5171",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "lugon0",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (open): workers",
+        "shared keywords: stale, workers",
+        "shared files: bin/fm-classify-lib.sh"
+      ],
+      "state": "open",
+      "title": "Fix false stale alarms for terminal workers",
+      "url": "https://github.com/kunchenguid/firstmate/pull/5214",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "jorguez96",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (closed-unmerged): flag",
+        "search (closed-unmerged): workers",
+        "shared files: bin/fm-classify-lib.sh"
+      ],
+      "state": "closed",
+      "title": "fix(spawn): launch OpenCode workers with opencode mini",
+      "url": "https://github.com/kunchenguid/firstmate/pull/5218",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "rajivhere",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (closed-unmerged): flag"
+      ],
+      "state": "closed",
+      "title": "fix(bin): refuse to launch a fresh secondmate home that has not converged",
+      "url": "https://github.com/kunchenguid/firstmate/pull/5247",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "akierat",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (closed-unmerged): flag"
+      ],
+      "state": "closed",
+      "title": "fix(bin): stop using --slurp with gh api --paginate in fm-contributions",
+      "url": "https://github.com/kunchenguid/firstmate/pull/5284",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "connectwithclayton",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (open): paused"
+      ],
+      "state": "open",
+      "title": "fix(bin): keep GitHub readers paused across re-registration",
+      "url": "https://github.com/kunchenguid/firstmate/pull/5286",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "leodiegoo",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (open): workers",
+        "shared files: bin/fm-classify-lib.sh"
+      ],
+      "state": "open",
+      "title": "feat(bin): add native Orca supervised workers and Secondmates",
+      "url": "https://github.com/kunchenguid/firstmate/pull/5348",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "doitdigital0495",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (closed-unmerged): workers",
+        "shared files: bin/fm-classify-lib.sh"
+      ],
+      "state": "closed",
+      "title": "feat(bin): pass per-task skills to lean Pi workers with fm-spawn --skill",
+      "url": "https://github.com/kunchenguid/firstmate/pull/5387",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "geme-lector",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (closed-unmerged): workers"
+      ],
+      "state": "closed",
+      "title": "Require ClickUp updates before worker completion",
+      "url": "https://github.com/kunchenguid/firstmate/pull/5393",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "zachsibert",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (closed-unmerged): flag"
+      ],
+      "state": "closed",
+      "title": "feat(bin): let a home opt its launched agents in to the compact adviser",
+      "url": "https://github.com/kunchenguid/firstmate/pull/5451",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "beyourahi",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (closed-unmerged): flag"
+      ],
+      "state": "closed",
+      "title": "feat(frontend): route installed UI skills per task",
+      "url": "https://github.com/kunchenguid/firstmate/pull/5454",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "lockhartheavyindustries",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (open): flag"
+      ],
+      "state": "open",
+      "title": "feat(bin): flag leftover state that needs cleanup on the heartbeat review",
+      "url": "https://github.com/kunchenguid/firstmate/pull/5463",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "g-rallo",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (open): paused",
+        "shared keywords: captain, paused"
+      ],
+      "state": "open",
+      "title": "fix(bin): bound a held task's paused: last line with the captain hold",
+      "url": "https://github.com/kunchenguid/firstmate/pull/5571",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "twilwa",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (open): flag"
+      ],
+      "state": "open",
+      "title": "fix(bin): refuse unknown flags and stray --key arguments in fm-send",
+      "url": "https://github.com/kunchenguid/firstmate/pull/5634",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "alexdancer",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (open): workers"
+      ],
+      "state": "open",
+      "title": "fix: wait for Herdr shell setup before launching workers",
+      "url": "https://github.com/kunchenguid/firstmate/pull/5640",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "Xelanor",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (open): flag paused workers",
+        "search (open): flag paused worker",
+        "search (open): paused",
+        "shared keywords: paused, stale, worker"
+      ],
+      "state": "open",
+      "title": "fix(bin): annotate first stale of a live paused worker",
+      "url": "https://github.com/kunchenguid/firstmate/pull/5649",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "Xelanor",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (open): flag"
+      ],
+      "state": "open",
+      "title": "fix(bin): flag queued records whose report exists or linked PR merged",
+      "url": "https://github.com/kunchenguid/firstmate/pull/5654",
+      "verdict": "unreviewed"
+    }
+  ],
+  "captain_decision": "",
+  "captured_at": "2026-09-25T23:56:48.967737+00:00",
+  "closed_window_days": 30,
+  "complete": true,
+  "context": {
+    "base": "base",
+    "diff_sha256": "7f1982c842323bcfc222f6e6281c78abf6605a4c88f22e84fbd3c4a632f6d78c",
+    "files": [
+      "bin/fm-classify-lib.sh"
+    ],
+    "head": "fbc07edf0b92d81ce323b7c52cf9693bf5203cae",
+    "kind": "pr",
+    "repo": "kunchenguid/firstmate",
+    "summary": "Do not flag a paused worker as stale. A worker paused by the captain was being reported stale by the watcher.",
+    "title": "Do not flag paused workers as stale"
+  },
+  "coverage": {
+    "requests": 84,
+    "searches": [
+      {
+        "query": "flag paused workers",
+        "read": 10,
+        "scope": "open",
+        "total": 40
+      },
+      {
+        "query": "flag paused workers",
+        "read": 4,
+        "scope": "closed-unmerged",
+        "total": 4
+      },
+      {
+        "query": "flag paused worker",
+        "read": 10,
+        "scope": "open",
+        "total": 70
+      },
+      {
+        "query": "flag paused worker",
+        "read": 5,
+        "scope": "closed-unmerged",
+        "total": 5
+      },
+      {
+        "query": "fm_classify_is_paused_worker",
+        "read": 0,
+        "scope": "open",
+        "total": 0
+      },
+      {
+        "query": "fm_classify_is_paused_worker",
+        "read": 0,
+        "scope": "closed-unmerged",
+        "total": 0
+      },
+      {
+        "query": "flag",
+        "read": 10,
+        "scope": "open",
+        "total": 684
+      },
+      {
+        "query": "flag",
+        "read": 10,
+        "scope": "closed-unmerged",
+        "total": 74
+      },
+      {
+        "query": "paused",
+        "read": 10,
+        "scope": "open",
+        "total": 191
+      },
+      {
+        "query": "paused",
+        "read": 10,
+        "scope": "closed-unmerged",
+        "total": 13
+      },
+      {
+        "query": "workers",
+        "read": 10,
+        "scope": "open",
+        "total": 390
+      },
+      {
+        "query": "workers",
+        "read": 10,
+        "scope": "closed-unmerged",
+        "total": 50
+      }
+    ],
+    "stopped": ""
+  },
+  "open_prs": {
+    "listed": 1352,
+    "matched": 35
+  },
+  "queries": [
+    "flag paused workers",
+    "flag paused worker",
+    "fm_classify_is_paused_worker",
+    "flag",
+    "paused",
+    "workers"
+  ],
+  "schema": "fm-upstream-prior-art.v1",
+  "verdict": "pending"
+}

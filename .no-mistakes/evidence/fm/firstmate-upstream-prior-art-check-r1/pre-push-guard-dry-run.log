@@ -1,0 +1,15 @@
+$ (no receipt) git push --dry-run upstream HEAD:refs/heads/fm-prior-art-probe
+remote: Permission to kunchenguid/quota-axi.git denied to jazz127.
+fatal: unable to access 'https://github.com/kunchenguid/quota-axi.git/': The requested URL returned error: 403
+exit=128
+$ (pending, undecided receipt) git push --dry-run upstream ...
+remote: Permission to kunchenguid/quota-axi.git denied to jazz127.
+fatal: unable to access 'https://github.com/kunchenguid/quota-axi.git/': The requested URL returned error: 403
+exit=128
+$ (decided distinct receipt for this HEAD) git push --dry-run upstream ...
+remote: Permission to kunchenguid/quota-axi.git denied to jazz127.
+fatal: unable to access 'https://github.com/kunchenguid/quota-axi.git/': The requested URL returned error: 403
+exit=128
+$ (credentialed https upstream URL, no receipt) git push --dry-run https://x-token@github.com/kunchenguid/quota-axi.git ...
+fatal: could not read Password for 'https://x-token@github.com': terminal prompts disabled
+exit=128

@@ -1,0 +1,18 @@
+ok - publication refuses a missing record
+ok - incomplete search fails closed without a record
+ok - changed-symbol search finds a PR with no shared file or title words
+ok - scan records open PRs and issues plus recent closed unmerged PRs with match reasons
+ok - real selectors pass through jq and PRs listed only by the issues endpoint are not recorded as issues
+ok - malformed decisions and candidate records fail cleanly
+prior-art refused: record is missing or unsafe: /private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-upstream-prior-art.zPYIVp/missing.json
+upstream push refused: prior-art receipt does not match upstream/demo@0d27b2b16e19b42aecbdaa8f68e4b9a6f49570de
+prior-art refused: record is missing or unsafe: /private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-upstream-prior-art.zPYIVp/missing.json
+upstream push refused: prior-art receipt does not match upstream/demo@0d27b2b16e19b42aecbdaa8f68e4b9a6f49570de
+prior-art receipt ok
+ok - pre-push boundary gates external targets and permits owned or checked pushes
+ok - fresh distinct receipt permits publication and adds author credit
+ok - publication refuses a scan older than the freshness window
+ok - overlap blocks publication until a captain decision is recorded
+ok - branch head movement stales the prior-art receipt
+ok - published head verification does not read back the worker checkout
+all fm-upstream-prior-art tests passed

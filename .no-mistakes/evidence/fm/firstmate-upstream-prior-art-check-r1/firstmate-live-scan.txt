@@ -1,0 +1,3 @@
+$ fm-upstream-prior-art.py scan --repo kunchenguid/firstmate --title 'Do not flag paused workers as stale' ...
+prior-art scan recorded 72 candidates: /Users/jarad/.no-mistakes/evidence/01M3DBN9W2HQYHSEDX8B53RG9F/firstmate-prior-art-record.json
+exit=0 duration=70s

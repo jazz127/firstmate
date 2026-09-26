@@ -1,0 +1,486 @@
+{
+  "candidates": [
+    {
+      "author": "Thanhbinh1905",
+      "kind": "issue",
+      "reason": "",
+      "reasons": [
+        "search (open): show kimi provider"
+      ],
+      "state": "open",
+      "title": "codex: default view reports one credential's quota on a pooled/proxied host without disclosing which account",
+      "url": "https://github.com/kunchenguid/quota-axi/issues/158",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "jokim1",
+      "kind": "issue",
+      "reason": "",
+      "reasons": [
+        "search (open): report kimi quota",
+        "search (open): kimi"
+      ],
+      "state": "open",
+      "title": "Kimi reported as auth_required on soft token expiry: refresh_token never consulted, and pi-kimi's refreshable flag is discarded",
+      "url": "https://github.com/kunchenguid/quota-axi/issues/163",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "kynjal26",
+      "kind": "issue",
+      "reason": "",
+      "reasons": [
+        "search (open): report kimi quota",
+        "search (open): report",
+        "shared keywords: provider, report"
+      ],
+      "state": "open",
+      "title": "Feature proposal: report multiple accounts for the same provider independently",
+      "url": "https://github.com/kunchenguid/quota-axi/issues/165",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "dbordenxcures",
+      "kind": "issue",
+      "reason": "",
+      "reasons": [
+        "search (open): kimi"
+      ],
+      "state": "open",
+      "title": "quota-axi ignores HTTPS_PROXY and NODE_USE_ENV_PROXY, so every fetch fails behind a proxy-only sandbox",
+      "url": "https://github.com/kunchenguid/quota-axi/issues/176",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "tiago-peixoto",
+      "kind": "issue",
+      "reason": "",
+      "reasons": [
+        "search (open): report",
+        "shared keywords: quota, report"
+      ],
+      "state": "open",
+      "title": "Codex: report personal and work subscriptions from sibling entries in one Pi root",
+      "url": "https://github.com/kunchenguid/quota-axi/issues/193",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "tiago-peixoto",
+      "kind": "issue",
+      "reason": "",
+      "reasons": [
+        "search (open): show kimi provider",
+        "search (open): report",
+        "shared keywords: quota, report"
+      ],
+      "state": "open",
+      "title": "Report each verified subscription once across native and Pi credential sources",
+      "url": "https://github.com/kunchenguid/quota-axi/issues/210",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "hphsu",
+      "kind": "issue",
+      "reason": "",
+      "reasons": [
+        "search (open): report kimi quota",
+        "search (open): kimi"
+      ],
+      "state": "open",
+      "title": "zai: a stored credential rotated in place keeps the previous account's cached quota",
+      "url": "https://github.com/kunchenguid/quota-axi/issues/213",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "spscream",
+      "kind": "issue",
+      "reason": "",
+      "reasons": [
+        "search (open): report kimi quota",
+        "search (open): kimi"
+      ],
+      "state": "open",
+      "title": "Per-account quota reads do not generalize: --profile-only covers 2 of 10 providers",
+      "url": "https://github.com/kunchenguid/quota-axi/issues/219",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "ppronobis",
+      "kind": "issue",
+      "reason": "",
+      "reasons": [
+        "search (open): quota"
+      ],
+      "state": "open",
+      "title": "Grok: SuperGrok weekly limit readable by the Grok CLI, but quota-axi reports quota unavailable for the same OIDC login",
+      "url": "https://github.com/kunchenguid/quota-axi/issues/220",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "tiago-peixoto",
+      "kind": "issue",
+      "reason": "",
+      "reasons": [
+        "search (open): show kimi provider"
+      ],
+      "state": "open",
+      "title": "OpenCode Go: a login held only in Pi reads as auth_required, with no pointer to the Pi opt-in",
+      "url": "https://github.com/kunchenguid/quota-axi/issues/262",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "0xbentang",
+      "kind": "issue",
+      "reason": "",
+      "reasons": [
+        "search (open): report kimi quota",
+        "search (open): kimi"
+      ],
+      "state": "open",
+      "title": "Add Ollama Cloud quota via the official /api/usage API key",
+      "url": "https://github.com/kunchenguid/quota-axi/issues/86",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "GRyndStone",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (closed-unmerged): report",
+        "search (closed-unmerged): quota"
+      ],
+      "state": "closed",
+      "title": "fix(providers): launch the Codex app-server with an approval policy codex accepts",
+      "url": "https://github.com/kunchenguid/quota-axi/pull/131",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "arohanuitech",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (closed-unmerged): report",
+        "search (closed-unmerged): quota"
+      ],
+      "state": "closed",
+      "title": "fix(agy): detect Antigravity IDE language-server paths with spaces",
+      "url": "https://github.com/kunchenguid/quota-axi/pull/167",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "Quipex",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (open): report kimi quota",
+        "search (open): report",
+        "search (open): kimi",
+        "search (open): quota"
+      ],
+      "state": "open",
+      "title": "feat(providers): add Ollama Cloud quota reporting",
+      "url": "https://github.com/kunchenguid/quota-axi/pull/169",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "1955m",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (open): quota"
+      ],
+      "state": "open",
+      "title": "fix(cursor): match quota window labels to the dashboard",
+      "url": "https://github.com/kunchenguid/quota-axi/pull/183",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "pm-justinm",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (open): report kimi quota",
+        "search (open): report",
+        "search (open): kimi",
+        "shared keywords: quota, report"
+      ],
+      "state": "open",
+      "title": "feat(providers): report each discovered Claude account as its own quota lane",
+      "url": "https://github.com/kunchenguid/quota-axi/pull/185",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "brandanmajeske",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (open): report kimi quota",
+        "search (open): report",
+        "search (open): quota"
+      ],
+      "state": "open",
+      "title": "feat(providers): add read-only Kiro quota reporting",
+      "url": "https://github.com/kunchenguid/quota-axi/pull/204",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "hphsu",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (open): show kimi provider",
+        "search (open): kimi"
+      ],
+      "state": "open",
+      "title": "feat(zai): add ZAI_API_KEY environment credential source",
+      "url": "https://github.com/kunchenguid/quota-axi/pull/207",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "marcospinho-guidance",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (open): show kimi provider",
+        "shared keywords: provider, quota"
+      ],
+      "state": "open",
+      "title": "feat(providers): add read-only Kiro quota provider with TUI usage detail",
+      "url": "https://github.com/kunchenguid/quota-axi/pull/208",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "Dematom1",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (open): report kimi quota",
+        "search (open): report",
+        "search (open): quota"
+      ],
+      "state": "open",
+      "title": "feat(providers): add Fireworks AI quota reporting",
+      "url": "https://github.com/kunchenguid/quota-axi/pull/218",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "tiago-peixoto",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (open): report"
+      ],
+      "state": "open",
+      "title": "fix(providers): report each verified subscription once across credential routes",
+      "url": "https://github.com/kunchenguid/quota-axi/pull/223",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "RooseveltAdvisors",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (open): quota"
+      ],
+      "state": "open",
+      "title": "feat(providers): add read-only Higgsfield CLI quota adapter",
+      "url": "https://github.com/kunchenguid/quota-axi/pull/236",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "jazz127",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (open): report"
+      ],
+      "state": "open",
+      "title": "feat(providers): show reported credit balances beside measured windows",
+      "url": "https://github.com/kunchenguid/quota-axi/pull/239",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "jazz127",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (open): report"
+      ],
+      "state": "open",
+      "title": "feat: support Pi Anthropic credentials and complete full reports",
+      "url": "https://github.com/kunchenguid/quota-axi/pull/247",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "tiago-peixoto",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (open): quota"
+      ],
+      "state": "open",
+      "title": "fix(providers): read Pi's opencode-go key by default for OpenCode Go",
+      "url": "https://github.com/kunchenguid/quota-axi/pull/264",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "adibirzu",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (open): report kimi quota",
+        "search (open): show kimi provider",
+        "search (open): kimi"
+      ],
+      "state": "open",
+      "title": "feat(providers): add Cline read-only daily-credit provider",
+      "url": "https://github.com/kunchenguid/quota-axi/pull/276",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "ShayGus",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (open): quota"
+      ],
+      "state": "open",
+      "title": "feat(providers): add Ollama Cloud and Muse Code quota providers",
+      "url": "https://github.com/kunchenguid/quota-axi/pull/278",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "RooseveltAdvisors",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (open): quota"
+      ],
+      "state": "open",
+      "title": "feat(providers): read Xiaomi MiMo keys from Pi auth.json entries",
+      "url": "https://github.com/kunchenguid/quota-axi/pull/282",
+      "verdict": "unreviewed"
+    },
+    {
+      "author": "github-actions[bot]",
+      "kind": "pr",
+      "reason": "",
+      "reasons": [
+        "search (open): kimi",
+        "search (open): quota"
+      ],
+      "state": "open",
+      "title": "chore(main): release quota-axi 0.1.55",
+      "url": "https://github.com/kunchenguid/quota-axi/pull/284",
+      "verdict": "unreviewed"
+    }
+  ],
+  "captain_decision": "",
+  "captured_at": "2026-09-25T23:58:34.541938+00:00",
+  "closed_window_days": 30,
+  "complete": true,
+  "context": {
+    "base": "base",
+    "diff_sha256": "7f1982c842323bcfc222f6e6281c78abf6605a4c88f22e84fbd3c4a632f6d78c",
+    "files": [
+      "bin/fm-classify-lib.sh"
+    ],
+    "head": "fbc07edf0b92d81ce323b7c52cf9693bf5203cae",
+    "kind": "pr",
+    "repo": "kunchenguid/quota-axi",
+    "summary": "Show the Kimi provider reset time in quota output.",
+    "title": "Report Kimi quota reset time"
+  },
+  "coverage": {
+    "requests": 32,
+    "searches": [
+      {
+        "query": "report kimi quota",
+        "read": 10,
+        "scope": "open",
+        "total": 20
+      },
+      {
+        "query": "report kimi quota",
+        "read": 0,
+        "scope": "closed-unmerged",
+        "total": 0
+      },
+      {
+        "query": "show kimi provider",
+        "read": 6,
+        "scope": "open",
+        "total": 6
+      },
+      {
+        "query": "show kimi provider",
+        "read": 0,
+        "scope": "closed-unmerged",
+        "total": 0
+      },
+      {
+        "query": "fm_classify_is_paused_worker",
+        "read": 0,
+        "scope": "open",
+        "total": 0
+      },
+      {
+        "query": "fm_classify_is_paused_worker",
+        "read": 0,
+        "scope": "closed-unmerged",
+        "total": 0
+      },
+      {
+        "query": "report",
+        "read": 10,
+        "scope": "open",
+        "total": 41
+      },
+      {
+        "query": "report",
+        "read": 2,
+        "scope": "closed-unmerged",
+        "total": 2
+      },
+      {
+        "query": "kimi",
+        "read": 10,
+        "scope": "open",
+        "total": 21
+      },
+      {
+        "query": "kimi",
+        "read": 0,
+        "scope": "closed-unmerged",
+        "total": 0
+      },
+      {
+        "query": "quota",
+        "read": 10,
+        "scope": "open",
+        "total": 42
+      },
+      {
+        "query": "quota",
+        "read": 2,
+        "scope": "closed-unmerged",
+        "total": 2
+      }
+    ],
+    "stopped": ""
+  },
+  "open_prs": {
+    "listed": 22,
+    "matched": 16
+  },
+  "queries": [
+    "report kimi quota",
+    "show kimi provider",
+    "fm_classify_is_paused_worker",
+    "report",
+    "kimi",
+    "quota"
+  ],
+  "schema": "fm-upstream-prior-art.v1",
+  "verdict": "pending"
+}

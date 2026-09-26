@@ -1,0 +1,27 @@
+$ check before decide (verdict pending)
+prior-art refused: prior-art verdict is missing
+exit=1
+$ decide none-found while candidates exist
+prior-art refused: none-found is invalid when the scan found candidates
+exit=1
+$ decide distinct covering all candidates
+prior-art verdict recorded: distinct
+exit=0
+$ check
+prior-art check ok
+exit=0
+$ verify head
+prior-art receipt ok
+exit=0
+$ verify against a different repo
+prior-art refused: prior-art receipt targets a different repository
+exit=1
+$ commit a new change, then check/verify
+prior-art refused: prior-art record is stale: target, text, branch head, base, or diff changed
+exit=1
+prior-art refused: prior-art receipt is stale: published head changed
+exit=1
+$ overlaps without captain decision
+prior-art verdict recorded: overlaps
+prior-art refused: prior-art overlaps require a recorded captain decision
+exit=1

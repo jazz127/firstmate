@@ -1,0 +1,19 @@
+$ fm-upstream-prior-art.py scan --repo kunchenguid/quota-axi --title 'Report Kimi quota reset time' ...
+prior-art scan recorded 29 candidates: /Users/jarad/.no-mistakes/evidence/01M3DBN9W2HQYHSEDX8B53RG9F/quota-axi-prior-art-record.json
+exit=0 duration=23s
+{
+  "complete": true,
+  "open_prs": {
+    "listed": 22,
+    "matched": 16
+  },
+  "requests": 32,
+  "n": 29,
+  "sample": [
+    "https://github.com/kunchenguid/quota-axi/issues/158 codex: default view reports one credential's quota on a pooled/proxied host without disclosing which account",
+    "https://github.com/kunchenguid/quota-axi/issues/163 Kimi reported as auth_required on soft token expiry: refresh_token never consulted, and pi-kimi's refreshable flag is discarded",
+    "https://github.com/kunchenguid/quota-axi/issues/165 Feature proposal: report multiple accounts for the same provider independently",
+    "https://github.com/kunchenguid/quota-axi/issues/176 quota-axi ignores HTTPS_PROXY and NODE_USE_ENV_PROXY, so every fetch fails behind a proxy-only sandbox",
+    "https://github.com/kunchenguid/quota-axi/issues/193 Codex: report personal and work subscriptions from sibling entries in one Pi root"
+  ]
+}

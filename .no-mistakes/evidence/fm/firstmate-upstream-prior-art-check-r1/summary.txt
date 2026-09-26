@@ -1,0 +1,1 @@
+Require a prior-art scan of upstream pull requests before submitting upstream work

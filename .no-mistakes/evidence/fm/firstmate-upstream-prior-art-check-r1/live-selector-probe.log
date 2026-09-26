@@ -1,0 +1,16 @@
+$ gh-axi api "repos/jazz127/firstmate/pulls?state=open&per_page=100&page=1" --jq "(<PR_SELECTOR>)|tojson|@base64"
+api_response:
+  body: W3siYm9keSI6IiMjIEludGVudFxuXG40LiBkbyBpdC5cblxuVGhlIHJlY29yZGVkIGJ1ZzogYSB0ZXN0...
+  truncated: true
+  original_length: 68380
+
+$ FILES_SELECTOR on pulls/42/files
+api_response:
+  body: W3siZmlsZW5hbWUiOiIuZ2l0aWdub3JlIn0seyJmaWxlbmFtZSI6ImJpbi9mbS1kb2QtbGliLnNoIn0s...
+  truncated: false
+[{"filename":".gitignore"},{"filename":"bin/fm-dod-lib.sh"},{"filename":"bin/fm-pr-body-preflight.sh"},{"filename":"bin/fm-pr-lib.sh"},{"filename":"bin/fm-scratch-lib.sh"},{"filename":"bin/fm-spawn.sh"},{"filename":"docs/configuration.md"},{"filename":"tests/fm-gitignore-config.test.sh"},{"filename"
+$ ISSUE_SELECTOR on issues?state=all (PR rows flagged)
+api_response:
+  body: W3sibnVtYmVyIjo0MiwicHVsbF9yZXF1ZXN0Ijp0cnVlfSx7Im51bWJlciI6NDEsInB1bGxfcmVxdWVzdCI6dHJ1ZX0seyJudW1iZXIiOjQwLCJwdWxsX3JlcXVlc3QiOnRydWV9LHsibnVtYmVyIjozOSwicHVsbF9yZXF1ZXN0Ijp0cnVlfSx7Im51bWJlciI6MzgsInB1bGxfcmVxdWVzdCI6dHJ1ZX1d
+  truncated: false
+[{"number":42,"pull_request":true},{"number":41,"pull_request":true},{"number":40,"pull_request":true},{"number":39,"pull_request":true},{"number":38,"pull_request":true}]

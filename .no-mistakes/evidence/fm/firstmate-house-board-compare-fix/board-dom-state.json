@@ -1,0 +1,77 @@
+{
+ "all": {
+  "stats": {
+   "SHOWING": "64 / 64",
+   "ON HOUSE": "46",
+   "OFFERED": "2",
+   "HISTORICAL": "0",
+   "REGISTER MISMATCHES": "14"
+  },
+  "count": 64,
+  "pills": {
+   "No": 13,
+   "Yes": 46,
+   "N/A": 5
+  },
+  "na": [
+   "Claude percent polarity",
+   "Claude soft expiry",
+   "Copilot cli signins",
+   "Grok period windows",
+   "Pi Anthropic credential support"
+  ],
+  "lines": "firstmate\njazz127/firstmate ↔ kunchenguid/firstmate\nHouse tip\nc64f8169\nAhead of upstream\n131 commits, 9 behind\nUpstream main\nea7c7f70\nFork main mirror\nEqual · ea7c7f70\nquota-axi\njazz127/quota-axi ↔ kunchenguid/quota-axi\nHouse tip\n26a8929f\nAhead of upstream\n64 commits, 3 behind\nUpstream main\n3277b9d6\nFork main mirror\nEqual · 3277b9d6\nno-mistakes\njazz127/no-mistakes ↔ kunchenguid/no-mistakes\nHouse tip\n667952ea\nAhead of upstream\n8 commits\nUpstream main\n3aafd46c\nFork main mirror\nEqual · 3aafd46c"
+ },
+ "quota": {
+  "stats": {
+   "SHOWING": "16 / 64",
+   "ON HOUSE": "11",
+   "OFFERED": "2",
+   "HISTORICAL": "0",
+   "REGISTER MISMATCHES": "0"
+  },
+  "count": 16,
+  "pills": {
+   "Yes": 11,
+   "N/A": 5
+  },
+  "na": [
+   "Claude percent polarity",
+   "Claude soft expiry",
+   "Copilot cli signins",
+   "Grok period windows",
+   "Pi Anthropic credential support"
+  ],
+  "lines": "quota-axi\njazz127/quota-axi ↔ kunchenguid/quota-axi\nHouse tip\n26a8929f\nAhead of upstream\n64 commits, 3 behind\nUpstream main\n3277b9d6\nFork main mirror\nEqual · 3277b9d6"
+ },
+ "quotaLanded": {
+  "stats": {
+   "SHOWING": "11 / 64",
+   "ON HOUSE": "11",
+   "OFFERED": "2",
+   "HISTORICAL": "0",
+   "REGISTER MISMATCHES": "0"
+  },
+  "count": 11,
+  "pills": {
+   "Yes": 11
+  },
+  "na": [],
+  "lines": "quota-axi\njazz127/quota-axi ↔ kunchenguid/quota-axi\nHouse tip\n26a8929f\nAhead of upstream\n64 commits, 3 behind\nUpstream main\n3277b9d6\nFork main mirror\nEqual · 3277b9d6"
+ },
+ "allLanded": {
+  "stats": {
+   "SHOWING": "46 / 64",
+   "ON HOUSE": "46",
+   "OFFERED": "2",
+   "HISTORICAL": "0",
+   "REGISTER MISMATCHES": "6"
+  },
+  "count": 46,
+  "pills": {
+   "Yes": 46
+  },
+  "na": [],
+  "lines": "firstmate\njazz127/firstmate ↔ kunchenguid/firstmate\nHouse tip\nc64f8169\nAhead of upstream\n131 commits, 9 behind\nUpstream main\nea7c7f70\nFork main mirror\nEqual · ea7c7f70\nquota-axi\njazz127/quota-axi ↔ kunchenguid/quota-axi\nHouse tip\n26a8929f\nAhead of upstream\n64 commits, 3 behind\nUpstream main\n3277b9d6\nFork main mirror\nEqual · 3277b9d6\nno-mistakes\njazz127/no-mistakes ↔ kunchenguid/no-mistakes\nHouse tip\n667952ea\nAhead of upstream\n8 commits\nUpstream main\n3aafd46c\nFork main mirror\nEqual · 3aafd46c"
+ }
+}

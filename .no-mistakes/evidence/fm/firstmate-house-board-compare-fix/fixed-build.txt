@@ -1,0 +1,4 @@
+board: /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-board.YIvNEy/new/.lavish/house-board.html
+payload: /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-board.YIvNEy/new/.lavish/house-board.json
+env FM_HOME=$LAB/new FM_HOUSE_BOARD_NO_SERVE=1 bin/fm-house-board.sh build  35.03s user 11.62s system 24% cpu 3:12.35 total
+fixed exit=0

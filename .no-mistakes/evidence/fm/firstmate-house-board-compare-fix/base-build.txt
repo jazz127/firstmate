@@ -1,0 +1,3 @@
+fm-house-board: GitHub response was unreadable or truncated for repos/jazz127/firstmate/compare/ea7c7f70c693010565dbb2a6ef52de1339131f96...c64f816901dba36811cffe986b2591f13b3da8b7
+env FM_HOME=$LAB/old FM_HOUSE_BOARD_NO_SERVE=1 bin/fm-house-board.sh build  0.56s user 0.19s system 24% cpu 3.072 total
+base exit=1

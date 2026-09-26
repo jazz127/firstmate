@@ -123,13 +123,35 @@ def register(path):
     return projects
 
 
+def house_comparison(fork, base, head):
+    """Counts come from one small request; the commit list is read in pages
+    because a long house line overflows one bounded gh-axi envelope."""
+    path = f"repos/{fork}/compare/{base}...{head}"
+    comparison = api(f"{path}?per_page=1&page=1", "{status,ahead_by,behind_by}")
+    commits = []
+    page_size = 30
+    for page in range(1, 1001):
+        if len(commits) >= comparison["ahead_by"]:
+            break
+        part = api(f"{path}?per_page={page_size}&page={page}", "[.commits[].sha]")
+        if not isinstance(part, list):
+            raise RuntimeError(f"GitHub commit list was not an array for {path}")
+        commits.extend(part)
+        if len(part) < page_size:
+            break
+    if len(commits) != comparison["ahead_by"]:
+        raise RuntimeError(f"GitHub listed {len(commits)} of {comparison['ahead_by']} house commits for {path}; "
+                           "refusing to render a partial board")
+    comparison["commits"] = commits
+    return comparison
+
+
 def repo_snapshot(project):
     fork, upstream = project["fork"], project["upstream"]
     fork_main = api(f"repos/{fork}/branches/main", "{sha:.commit.sha}")["sha"]
     upstream_main = api(f"repos/{upstream}/branches/main", "{sha:.commit.sha}")["sha"]
     house = api(f"repos/{fork}/branches/house", "{sha:.commit.sha}")["sha"]
-    comparison = api(f"repos/{fork}/compare/{upstream_main}...{house}",
-                     "{status,ahead_by,behind_by,commits:[.commits[].sha]}")
+    comparison = house_comparison(fork, upstream_main, house)
     branches = pages(f"repos/{fork}/branches", "[.[]|{name,sha:.commit.sha}]")
     pulls = pages(f"repos/{fork}/pulls?state=all", "[.[]|{number,title,state,merged_at,merge_commit_sha,created_at,head:.head.ref,labels:[.labels[].name],html_url}]")
     return {

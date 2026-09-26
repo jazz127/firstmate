@@ -1218,6 +1218,12 @@ fi
 # verdict reports unknown rather than trusting a possibly-stale status log as
 # the current state.
 [ -n "$BACKEND_TARGET" ] || emit unknown none "no backend target recorded"
+# An agent the ready-session timeout stopped on purpose while its pull request
+# waited on a merge keeps its delivered outcome, named as such, whether its pane
+# shell still answers or not (bin/fm-ready-timeout-lib.sh owns the record).
+if [ "$LOG_VERB" = "done" ] && fm_ready_timeout_parked "$STATE" "$ID"; then
+  emit_ship_status_done "agent stopped by the ready-session timeout; relaunch to resume work"
+fi
 if ! pane_readable "$BACKEND_TARGET"; then
   # A failed probe is not itself evidence the pane is gone: the herdr CLI can
   # error or stall under load, and tmux can fail to be executed at all (a
@@ -1256,12 +1262,6 @@ if ! pane_readable "$BACKEND_TARGET"; then
       emit unknown none "backend target gone: $BACKEND_TARGET"
       ;;
     tmux:dead|herdr:dead)
-      # An agent the ready-session timeout stopped on purpose while its pull
-      # request waited on a merge keeps its delivered outcome, named as such
-      # (bin/fm-ready-timeout-lib.sh owns the record).
-      if [ "$LOG_VERB" = "done" ] && fm_ready_timeout_parked "$STATE" "$ID"; then
-        emit_ship_status_done "agent stopped by the ready-session timeout; relaunch to resume work"
-      fi
       emit unknown none "backend target gone: $BACKEND_TARGET (agent gone, pane shell remains)"
       ;;
     tmux:*|herdr:*)

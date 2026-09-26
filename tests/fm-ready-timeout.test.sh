@@ -318,7 +318,9 @@ test_parked_run_after_stop_wakes_once() {
     || fail "the stopped record was not cleared: $(cat "$dir/state/rt.ready-timeout")"
   fm_ready_timeout_parked "$dir/state" rt && fail "the worker still reads as deliberately stopped"
   : > "$dir/state/.wake-queue"
-  watch_rounds "$dir" claude FM_FAKE_CREW_STATE="$parked" >/dev/null 2>&1 || true
+  sed -i.bak "s/^at=.*/at=$(( $(date +%s) - 90000 ))/" "$dir/state/rt.ready-timeout"
+  printf 'finished, awaiting review' > "$dir/pane.txt"
+  watch_rounds "$dir" claude >/dev/null 2>&1 || true
   if grep -F 'ready-session timeout had stopped' "$dir/state/.wake-queue" >/dev/null; then
     fail "the resume wake repeated: $(cat "$dir/state/.wake-queue")"
   fi

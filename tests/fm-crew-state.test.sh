@@ -2440,10 +2440,11 @@ test_no_run_herdr_husk_dead_still_reads_gone() {
   pass "a husk pane (agent gone) still reads gone for reclaim"
 }
 
-# A dead agent the opt-in ready-session timeout stopped on purpose, while its
-# pull request waited on a merge, keeps its delivered outcome instead of the
-# gone-class unknown, and names the stop. The same husk without a matching
-# record (another incarnation's stop) keeps the ordinary gone reading.
+# An agent the opt-in ready-session timeout stopped on purpose, while its pull
+# request waited on a merge, leaves a readable shell pane and a retired busy
+# record. It keeps its delivered outcome instead of an unknown reading, and
+# names the stop. The same pane without a matching record (another
+# incarnation's stop) keeps the ordinary unknown reading.
 test_no_run_ready_timeout_stopped_agent_keeps_its_delivery() {
   command -v jq >/dev/null 2>&1 || { pass "ready-session timeout crew-state test skipped without jq"; return; }
   reset_fakes
@@ -2455,17 +2456,21 @@ test_no_run_ready_timeout_stopped_agent_keeps_its_delivery() {
   printf 'done [at=1]: PR https://github.com/o/r/pull/9\n' > "$d/state/feat-ready-timeout.status"
   printf 'v=1\nresult=stopped\nspawn_gen=gen-2\nat=1\ntimeout=7200\npr=https://github.com/o/r/pull/9\ndetail=stopped\n' \
     > "$d/state/feat-ready-timeout.ready-timeout"
+  FM_FAKE_AXI_STATUS=""
+  FM_FAKE_RUNS_LIST=""
   FM_FAKE_TMUX_MISSING=1
-  FM_FAKE_HERDR_READ_FAIL=1
   FM_FAKE_HERDR_HUSK=1
+  FM_FAKE_HERDR_PROCESS=shell
+  [ ! -e "$d/state/feat-ready-timeout.busy-gen" ] || fail "the stopped agent's busy record was not retired"
   out=$(run_crew_state "$d" feat-ready-timeout)
   assert_contains "$out" "state: done" "a deliberately stopped ready worker keeps its delivered outcome"
   assert_contains "$out" "ready-session timeout" "the stopped agent's reading names the timeout"
-  assert_not_contains "$out" "backend target gone" "a deliberate stop is not reported as a lost endpoint"
+  assert_not_contains "$out" "state: unknown" "a deliberate stop is not reported as an unknown agent"
   printf 'v=1\nresult=stopped\nspawn_gen=gen-1\nat=1\ntimeout=7200\npr=https://github.com/o/r/pull/9\ndetail=stopped\n' \
     > "$d/state/feat-ready-timeout.ready-timeout"
   out=$(run_crew_state "$d" feat-ready-timeout)
-  assert_contains "$out" "backend target gone" "a stop recorded for an earlier incarnation does not explain this dead agent"
+  assert_contains "$out" "state: unknown" "a stop recorded for an earlier incarnation does not explain this agent-less pane"
+  assert_not_contains "$out" "ready-session timeout" "an earlier incarnation's stop is not named"
   pass "a ready-session timeout stop keeps the delivered outcome only for its own incarnation"
 }
 

@@ -631,6 +631,7 @@ A lone `>` at the start of the pair's first row is the Pi editor's own prompt, n
 Pi's cost-first stats row (`$0.000 (sub) 0.0%/272k (auto)`) is footer furniture only as Pi's complete stats tuple, first in the row run directly below the pair, and only when the pair itself proves the verdict; a truncated tuple, a repeat, or any other `$` row still refuses.
 Pi's compact layout - a rounded status header, one unboxed input row, and one lower solid rule with nothing but blank rows below - is experimental and off by default, because no real Pi build has been captured drawing it.
 Setting `FM_BACKEND_HERDR_PI_COMPACT=1` lets that layout prove an empty composer, and only when the styled input row is exactly one reverse-video blank cursor cell and native identity is an idle or done Pi.
+That compact row is never ghost-stripped: dim placeholder text on it both classifies pending and extracts as its visible plain text.
 Identity stays a lazy second read, consulted only when a separator pair or an opted-in compact layout could change the verdict.
 
 ### Placeholder and ghost text

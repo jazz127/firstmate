@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# shellcheck source=bin/fm-scratch-lib.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/fm-scratch-lib.sh"
+
 # Single owner of a ship task's mode-specific "Definition of done" block and of
 # the named-head reachability gate that accepts a ship `done:` claim.
 # Sourced by bin/fm-brief.sh, which renders it into a generated ship brief, and by
@@ -535,6 +538,7 @@ EOF
 fm_dod_validate_published_intent() {  # <intent> <worktree> <task-temp> [current-head] [pr-url]
   local body=$1 current_head=${4:-} url=${5:-} line payload attested_head count=0
   fm_dod_validate_intent_evidence "$body" "$2" "$3" publish || return 1
+  [ -z "$url" ] || fm_pr_refuse_published_scratch "$url" || return 1
   while IFS= read -r line || [ -n "$line" ]; do
     case "$line" in
       *'<!-- no-mistakes-pipeline-attestation:v1'*)
@@ -693,6 +697,15 @@ If it reports \`contradictory driven-scenario results\`, keep your own honest re
 EOF
 }
 
+fm_scratch_preflight_block() {
+  local script_dir
+  script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd) || return 1
+  cat <<EOF
+Before committing, and again immediately before handing a commit to a pipeline or publishing it, run \`$script_dir/fm-pr-body-preflight.sh --scratch "\$(pwd -P)"\`.
+It must print \`scratch preflight ok\`; a refusal names the scratch path to remove from the deliverable.
+EOF
+}
+
 fm_nm_published_body_check_block() {  # <task-id>
   local script_dir
   script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd) || return 1
@@ -748,6 +761,7 @@ Gerrit has no pull requests, so there is nothing to open; publishing creates the
 The task is complete only when committed on your branch.
 When it is implemented and committed, publish it.
 EOF
+      fm_scratch_preflight_block
       fm_gerrit_publish_block
       cat <<EOF
 Do NOT run /no-mistakes.
@@ -782,6 +796,7 @@ When the run's outcome is passed, passed-with-skips, or passed-with-override and
 The squashed change carries only the oldest commit's message, so the pipeline's own fix commits never reach the reviewer's description; your report is how they reach the captain.
 After publishing and immediately before your ready report, append one line \`note [at=<epoch>]: pipeline changes: {finding} - {fix it made}; {finding} - {fix it made}\` to the status file, one short clause per finding the run fixed, taken from the run's \`fixes\` table and the gate findings its drive calls returned (\`no-mistakes axi logs --step <step> --full\` has the detail); write \`note [at=<epoch>]: pipeline changes: none\` when it fixed nothing.
 EOF
+      fm_scratch_preflight_block
       fm_gerrit_publish_block
       ;;
     direct-PR:*)
@@ -793,6 +808,7 @@ This task ships **direct-PR**: you raise the PR yourself, without the no-mistake
 The task is complete only when committed on your branch.
 When it is implemented and committed, push your branch and open a PR through the applicable publication path below; it must be ready for review, not a draft.
 EOF
+      fm_scratch_preflight_block
       fm_pr_body_preflight_block "$id"
       fm_upstream_pr_publish_block "$id"
       cat <<EOF
@@ -816,6 +832,7 @@ Keep your branch a clean fast-forward onto the current default branch - if \`mai
 When it is implemented and committed, append \`done [at=<epoch>]: ready in branch $branch\` to the status file and stop.
 The configured merge authority approves the ready branch, then firstmate merges it into local \`main\` through the guarded fast-forward path.
 EOF
+      fm_scratch_preflight_block
       ;;
     no-mistakes:*)
       cat <<EOF
@@ -828,6 +845,7 @@ Firstmate will then instruct you to run /no-mistakes to validate and ship a PR.
 That first \`done:\` is the handoff that starts the pipeline, which owns the push; it is not a request to push from this copy.
 
 EOF
+      fm_scratch_preflight_block
       fm_nm_driving_block "$forge"
       fm_pr_body_preflight_block "$id"
       fm_nm_published_body_check_block "$id"
@@ -1076,6 +1094,9 @@ fm_dod_named_head_reachable_outside_worktree() {  # <worktree> <project> <mode> 
 fm_dod_accept_ship_done() {  # <kind> <mode> <worktree> <project> <line> [<state> <id> <meta>]
   local kind=$1 mode=$2 wt=$3 project=$4 line=$5 state=${6:-} id=${7:-} meta=${8:-} url sha gerrit
   fm_dod_should_gate_ship_done "$kind" "$mode" "$line" || return 0
+  if [ -n "$wt" ] && ! fm_scratch_refuse_worktree "$wt"; then
+    return 1
+  fi
   url=$(fm_dod_pr_url_from_done_note "$(status_line_note "$line")") || url=
   if [ -n "$url" ] && ! fm_dod_upstream_receipt_check "$wt" "$url" "$meta" "$(fm_dod_meta_value "$meta" pr_head)"; then
     return 1

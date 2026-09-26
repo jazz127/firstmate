@@ -617,6 +617,26 @@ skip-runner: pi-signed is not installed, so its pin check was not exercised
 
 The guard submits no prompt and spends no tokens, so it runs by default wherever a runner is installed; rerun it after every Claude or Pi upgrade.
 
+### Codex dock seat status
+
+On 2026-09-26 AEST, the installed `codex-cli 0.156.1` was checked with `bin/fm-test-run.sh tests/fm-dock-auth-live-e2e.test.sh` on macOS.
+The guard used a throwaway `CODEX_HOME`, wrote a synthetic API key with native `codex login --with-api-key`, and submitted no model prompt.
+Its output was:
+
+```text
+ok - codex-cli 0.156.1: native status distinguishes synthetic file stores from empty and keyring selections, and the helper rejects ambient credentials
+```
+
+At `2026-09-25T15:43:11Z`, the installed CLI's native status also returned `Logged in using ChatGPT` with exit 0 for the existing Luna home under a cleared environment:
+
+```sh
+env -i HOME=/Users/jarad PATH="$PATH" USER=jarad LOGNAME=jarad CODEX_HOME=/Users/jarad/.codex-luna codex login status -c 'cli_auth_credentials_store="file"' -c 'model_provider="openai"'
+```
+
+The same command saw `Not logged in` with exit 1 for an empty temporary home.
+That local status check did not send a model request or inspect credential contents.
+The operator contract and supported storage mode are in [`configuration.md`](../configuration.md#dock-local-seat-binding-configdockjson); rerun the guard after a Codex upgrade.
+
 ## Codex hook trust
 
 Verified 2026-09-16 on codex-cli 0.151.0, macOS arm64, in a fresh linked worktree of this repository.

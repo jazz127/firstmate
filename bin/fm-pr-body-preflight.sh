@@ -1,16 +1,40 @@
 #!/usr/bin/env bash
-# Check a complete draft PR body before publishing or editing it, or read the
-# published body back through gh-axi and check that exact text before reporting.
+# Check a worker's scratch paths before committing or publishing, a complete
+# draft PR body before publishing or editing it, or the published body readback.
 # Usage: fm-pr-body-preflight.sh <body-file> <worker-worktree> <task-temp-dir>
 #        fm-pr-body-preflight.sh --gh-url <url> <body-file> <worker-worktree> <task-temp-dir>
+#        fm-pr-body-preflight.sh --scratch <worker-worktree>
 # Uses the exact publish-phase evidence validator applied when Firstmate reads
 # a published PR body; it leaves that validator's refusal unchanged on stderr.
-set -u
+set -uo pipefail
 
 usage() {
-  printf '%s\n' 'usage: fm-pr-body-preflight.sh [--gh-url <url>] <body-file> <worker-worktree> <task-temp-dir>' >&2
+  printf '%s\n' 'usage: fm-pr-body-preflight.sh [--gh-url <url>] <body-file> <worker-worktree> <task-temp-dir> | --scratch <worker-worktree>' >&2
   exit 2
 }
+
+if [ "${1:-}" = --scratch ]; then
+  [ "$#" -eq 2 ] || usage
+  worktree=$(cd -P "$2" 2>/dev/null && pwd -P) || {
+    printf 'error: worker worktree cannot be resolved: %s\n' "$2" >&2
+    exit 1
+  }
+  git_root=$(git -C "$worktree" rev-parse --show-toplevel 2>/dev/null) || {
+    printf 'error: worker worktree is not a git checkout: %s\n' "$worktree" >&2
+    exit 1
+  }
+  [ "$git_root" = "$worktree" ] || {
+    printf 'error: scratch preflight requires the worktree root: %s\n' "$worktree" >&2
+    exit 1
+  }
+  # shellcheck source=bin/fm-scratch-lib.sh
+  . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/fm-scratch-lib.sh"
+  if ! fm_scratch_refuse_worktree "$worktree"; then
+    exit 1
+  fi
+  printf '%s\n' 'scratch preflight ok'
+  exit 0
+fi
 
 gh_url=
 if [ "${1:-}" = --gh-url ]; then

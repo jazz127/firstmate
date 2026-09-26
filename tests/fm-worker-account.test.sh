@@ -366,6 +366,7 @@ test_local_secondmate_reads_the_launching_home_pin() {
   printf '%s\n' "$CASE/work" > "$HOME_DIR/config/claude-account"
   sm="$CASE/secondmate-home"
   mkdir -p "$sm/bin" "$sm/data" "$sm/config" "$CASE/sm-own"
+  git init -q -b main "$sm"
   printf '# Firstmate\n' > "$sm/AGENTS.md"
   printf '%s\n' "$id" > "$sm/.fm-secondmate-home"
   printf 'charter for %s\n' "$id" > "$sm/data/charter.md"
@@ -383,6 +384,43 @@ test_local_secondmate_reads_the_launching_home_pin() {
   pass "a local secondmate reads the launching home's pin and its own home's file is never inherited over"
 }
 
+test_codex_seat_check_requires_a_usable_auth_file() {
+  local dir=$TMP_ROOT/codex-auth-shape fake out rc case_name
+  mkdir -p "$dir"
+  fake="$dir/codex"
+  # Like codex-cli 0.156.1, the fake reports signed in for any auth.json.
+  cat > "$fake" <<'SH'
+#!/usr/bin/env bash
+[ -f "$CODEX_HOME/auth.json" ] || { echo 'Not logged in'; exit 1; }
+echo 'Logged in using ChatGPT'
+SH
+  chmod +x "$fake"
+  for case_name in empty null-tokens empty-key; do
+    mkdir -p "$dir/$case_name"
+  done
+  printf '{}\n' > "$dir/empty/auth.json"
+  printf '%s\n' '{"OPENAI_API_KEY":null,"tokens":{"id_token":null,"access_token":null,"refresh_token":null}}' \
+    > "$dir/null-tokens/auth.json"
+  printf '%s\n' '{"OPENAI_API_KEY":"","tokens":null}' > "$dir/empty-key/auth.json"
+  for case_name in empty null-tokens empty-key; do
+    out=$( (. "$ROOT/bin/fm-worker-account-lib.sh" && fm_worker_account_codex_check "$dir/$case_name" "$fake") 2>&1); rc=$?
+    expect_code 1 "$rc" "a $case_name auth.json must fail the Codex seat check"
+    assert_contains "$out" "no usable sign-in in auth.json; sign in to that home" \
+      "a $case_name auth.json refusal should ask for sign-in"
+    assert_not_contains "$out" "sk-" "the refusal must not print credential values"
+  done
+  mkdir -p "$dir/tokens" "$dir/api-key"
+  printf '%s\n' '{"OPENAI_API_KEY":null,"tokens":{"id_token":"synthetic-id","access_token":"synthetic-access","refresh_token":"synthetic-refresh"}}' \
+    > "$dir/tokens/auth.json"
+  printf '%s\n' '{"OPENAI_API_KEY":"sk-fm-synthetic"}' > "$dir/api-key/auth.json"
+  for case_name in tokens api-key; do
+    out=$( (. "$ROOT/bin/fm-worker-account-lib.sh" && fm_worker_account_codex_check "$dir/$case_name" "$fake") 2>&1); rc=$?
+    expect_code 0 "$rc" "a structurally valid $case_name auth.json should pass the Codex seat check: $out"
+    [ -z "$out" ] || fail "a passing Codex seat check should print nothing: $out"
+  done
+  pass "the Codex seat check refuses empty and null-token auth.json and accepts a token set or API key"
+}
+
 test_absent_pin_keeps_the_launch_unchanged
 test_claude_pin_selects_the_root_and_sheds_ambient_credentials
 test_claude_pin_refuses_a_signed_out_root_despite_an_ambient_login
@@ -396,5 +434,6 @@ test_raw_claude_command_receives_the_pin
 test_raw_claude_account_override_refuses_under_a_pin
 test_raw_claude_account_override_is_kept_without_a_pin
 test_local_secondmate_reads_the_launching_home_pin
+test_codex_seat_check_requires_a_usable_auth_file
 
 echo "# all fm-worker-account tests passed"

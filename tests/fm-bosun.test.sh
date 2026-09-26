@@ -102,6 +102,20 @@ test_memory_and_paths() {
     --showed format --read-at 2026-09-25T00:00:00Z || fail 'convention recording failed'
   printf '%s' "$(call "$dir" conventions --bosun bosun-kun --forge github --owner kunchenguid --repository sample --policy "$dir/policy.json")" \
     | jq -e '.format.source == "current_repository_policy"' >/dev/null || fail 'policy precedence failed'
+  call "$dir" convention --bosun bosun-kun --forge github --owner kunchenguid --repository sample \
+    --scope shared --key commits --value shared --confirmed --evidence CONTRIBUTING.md \
+    --showed commits --read-at 2026-09-25T00:00:00Z || fail 'shared convention recording failed'
+  call "$dir" convention --bosun bosun-kun --forge github --owner kunchenguid --repository sample \
+    --scope repository --key commits --value overlay --confirmed --evidence https://github.com/kunchenguid/sample/pull/3 \
+    --showed commits --read-at 2026-09-25T00:00:00Z || fail 'repository convention recording failed'
+  printf '%s' "$(call "$dir" conventions --bosun bosun-kun --forge github --owner kunchenguid --repository sample --policy "$dir/policy.json")" \
+    | jq -e '.commits.value == "overlay" and .commits.source == "repository"' >/dev/null || fail 'repository overlay did not beat shared profile'
+  printf '{"format":"captain"}\n' > "$dir/decisions.json"
+  if call "$dir" conventions --bosun bosun-kun --forge github --owner kunchenguid --repository sample \
+    --policy "$dir/policy.json" --decisions "$dir/decisions.json" > "$dir/out" 2>&1; then
+    fail 'captain decision conflicting with current policy was applied'
+  fi
+  assert_grep 'needs-decision: captain decision conflicts with current policy for format' "$dir/out" 'policy conflict did not need a decision'
   outside="$TMP_ROOT/outside"
   mkdir -p "$outside"
   rm -f "$dir/data/bosun-role.json"
@@ -224,6 +238,7 @@ count=0
 printf '%s\n' $((count + 1)) > "$count_file"
 mkdir -p "$FM_HOME/projects/sample/retry-worktree"
 git -C "$FM_HOME/projects/sample/retry-worktree" init -q
+git -C "$FM_HOME/projects/sample/retry-worktree" remote add upstream https://github.com/kunchenguid/sample.git
 printf '%s\n' "endpoint_task_id=$1" "worktree=$FM_HOME/projects/sample/retry-worktree" "project=$FM_HOME/projects/sample" "kind=ship" "mode=no-mistakes" "yolo=off" > "$FM_HOME/state/$1.meta"
 if [ ! -e "$FM_HOME/state/spawn-failed" ]; then
   : > "$FM_HOME/state/spawn-failed"
@@ -235,7 +250,7 @@ EOF
   if FM_HOME="$dir" FM_ROOT_OVERRIDE="$fake_root" python3 "$CLI" intake --task maneuver >"$dir/first.out" 2>&1; then
     fail 'simulated post-spawn failure unexpectedly succeeded'
   fi
-  jq -e '.state == "ordered" and .assignment_task == "maneuver"' \
+  jq -e '.state == "ordered" and (.assignment_id | test("^[0-9a-f]{32}$"))' \
     "$dir/data/maneuver/bosun-contribution.json" >/dev/null || fail 'assignment identity was not persisted'
   FM_HOME="$dir" FM_ROOT_OVERRIDE="$fake_root" python3 "$CLI" intake --task maneuver >"$dir/retry.out" \
     || fail 'retry did not adopt the existing task'
@@ -243,6 +258,26 @@ EOF
   jq -e '.state == "assigned" and (.task_worktree | endswith("retry-worktree"))' \
     "$dir/data/maneuver/bosun-contribution.json" >/dev/null || fail 'retry did not persist adopted task'
   pass 'intake retries adopt the deterministic existing task'
+}
+
+test_intake_refuses_foreign_task() {
+  local dir
+  dir=$(new_home intake-foreign)
+  ordered_home "$dir"
+  mkdir -p "$dir/projects/sample/foreign-worktree" "$dir/data/maneuver"
+  git -C "$dir/projects/sample/foreign-worktree" init -q
+  git -C "$dir/projects/sample/foreign-worktree" remote add upstream https://github.com/kunchenguid/sample.git
+  printf '%s\n' "endpoint_task_id=maneuver" "worktree=$dir/projects/sample/foreign-worktree" \
+    "project=$dir/projects/sample" "kind=ship" > "$dir/state/maneuver.meta"
+  # shellcheck disable=SC2016
+  printf '%s\n' 'Bosun `bosun-kun` for `kunchenguid/sample`' > "$dir/data/maneuver/brief.md"
+  if FM_HOME="$dir" python3 "$CLI" intake --task maneuver >"$dir/out" 2>&1; then
+    fail 'stale ordinary ship record was adopted as the Bosun assignment'
+  fi
+  assert_grep 'not this Bosun assignment' "$dir/out" 'foreign task refusal was unclear'
+  jq -e '.state == "ordered"' "$dir/data/maneuver/bosun-contribution.json" >/dev/null \
+    || fail 'foreign task changed the durable record'
+  pass 'intake adopts only a task carrying this assignment identity'
 }
 
 fake_github() {
@@ -385,10 +420,50 @@ test_registration_and_merge() {
     --upstream-base upstream-sha --changed-path secret.txt >"$dir/out" 2>&1; then
     fail 'out-of-scope path was accepted'
   fi
-  FM_HOME="$accepted_dir" python3 "$CLI" merged --task maneuver --url "$url" || fail 'merge hook failed'
-  jq -e '.state == "admirals-maneuver"' "$accepted_dir/data/maneuver/bosun-contribution.json" >/dev/null \
+  dir=$accepted_dir
+  call "$dir" registration-check --task maneuver --url "$url" --forge github --head captain/sample \
+    --base kunchenguid/sample --branch main --head-branch contribution/maneuver \
+    --pr-head 9876543210987654321098765432109876543210 --validation-head 9876543210987654321098765432109876543210 \
+    --validation-mode no-mistakes --upstream-base upstream-sha --changed-path feature.txt \
+    || fail 'same PR re-registration after follow-up commits failed'
+  jq -e '.state == "published" and .validation_evidence.pr_head == "9876543210987654321098765432109876543210"' \
+    "$dir/data/maneuver/bosun-contribution.json" >/dev/null || fail 're-registration did not refresh validation evidence'
+  if call "$dir" registration-check --task maneuver --url "$url" --forge github --head captain/sample \
+    --base kunchenguid/sample --branch main --head-branch contribution/maneuver --pr-head "$pr_head" \
+    --validation-head "$pr_head" --validation-mode no-mistakes --upstream-base upstream-sha \
+    --changed-path secret.txt >"$dir/out" 2>&1; then
+    fail 'same PR follow-up with an out-of-scope path was accepted'
+  fi
+  if call "$dir" registration-check --task maneuver --url https://github.com/kunchenguid/sample/pull/13 --forge github \
+    --head captain/sample --base kunchenguid/sample --branch main --head-branch contribution/maneuver --pr-head "$pr_head" \
+    --validation-head "$pr_head" --validation-mode no-mistakes --upstream-base upstream-sha \
+    --changed-path feature.txt >"$dir/out" 2>&1; then
+    fail 'a second PR for the same order was accepted'
+  fi
+  assert_grep 'already has a registered upstream PR' "$dir/out" 'second PR refusal was unclear'
+  jq -e '.upstream_pr == "'"$url"'" and .validation_evidence.pr_head == "9876543210987654321098765432109876543210"' \
+    "$dir/data/maneuver/bosun-contribution.json" >/dev/null || fail 'refused re-registration changed the durable record'
+
+  mkdir -p "$dir/parent"
+  printf 'schema=fm-secondmate-parent.v1\nroute=local\nparent_home=%s\n' "$dir/parent" > "$dir/.fm-secondmate-parent"
+  for _ in 1 2; do
+    call "$dir" escalate --task maneuver --feedback "$url#discussion_r1" --reason scope-change \
+      --note 'maintainer asks to also change docs' >/dev/null || fail 'review escalation failed'
+  done
+  jq -e '.review_events | length == 1 and .[0].feedback == "'"$url"'#discussion_r1" and .[0].reason == "scope-change" and .[0].status == "needs-decision"' \
+    "$dir/data/maneuver/bosun-contribution.json" >/dev/null || fail 'review escalation was not durably recorded once'
+  [ "$(grep -c '^needs-decision \[key=bosun-review-maneuver-1\]' "$dir/parent/state/bosun-kun.status")" = 1 ] \
+    || fail 'review escalation did not publish exactly one needs-decision event'
+  if call "$dir" escalate --task maneuver --feedback "$url#discussion_r2" --reason other \
+    --note 'unsupported' >"$dir/out" 2>&1; then
+    fail 'unsupported review escalation reason was accepted'
+  fi
+
+  bash -c '. "$1"; fm_merge_outcome_report "$2" "$2/state" maneuver "$3" poll' \
+    _ "$ROOT/bin/fm-merge-outcome-lib.sh" "$dir" "$url" || fail 'merge outcome hook failed'
+  jq -e '.state == "admirals-maneuver"' "$dir/data/maneuver/bosun-contribution.json" >/dev/null \
     || fail 'Admiral maneuver was not recorded'
-  pass 'forge-backed authorization and merge completion'
+  pass 'forge-backed authorization, re-registration, review escalation, and merge completion'
 }
 
 test_registration_requires_role() {
@@ -518,7 +593,73 @@ test_registration_uses_ordered_content() {
     fail 'merge history was accepted'
   fi
   assert_grep "$head" "$dir/out" 'merge history refusal was unclear'
-  pass 'registration accepts redaction and squash but rejects unrelated content'
+  git -C "$project" checkout -qb upstream-next "$base"
+  printf 'upstream\n' > "$project/upstream.txt"
+  git -C "$project" add upstream.txt
+  git -C "$project" commit -qm 'Upstream moves on'
+  git -C "$project" checkout -qb contribution/refresh "$base"
+  printf 'safe\nextra\n' > "$project/feature.txt"
+  git -C "$project" add feature.txt
+  git -C "$project" commit -qm 'Extract safe maneuver content'
+  git -C "$project" merge --no-ff -qm 'Merge upstream main' upstream-next
+  head=$(git -C "$project" rev-parse HEAD)
+  call "$dir" order --task refresh --bosun bosun-kun --maneuver maneuver \
+    --forge github --owner kunchenguid --repository sample --source housefeature/maneuver \
+    --branch contribution/refresh --captain-words 'Contribute refresh' --path feature.txt \
+    --deviation 'secret.txt=strip private house context' \
+    --commit "$first" --commit "$second" >/dev/null || fail 'refresh order was rejected'
+  call "$dir" registration-check --task refresh --url "$url" --forge github --head captain/sample \
+    --base kunchenguid/sample --branch main --head-branch contribution/refresh --pr-head "$head" \
+    --validation-head "$head" --validation-mode no-mistakes --worktree "$project" \
+    --upstream-base refs/heads/upstream-next --changed-path feature.txt \
+    || fail 'merge of the fetched upstream tip was rejected'
+  jq -e '.upstream_base == "'"$(git -C "$project" rev-parse upstream-next)"'"' \
+    "$dir/data/refresh/bosun-contribution.json" >/dev/null || fail 'upstream base ref was not recorded as a commit'
+  pass 'registration accepts redaction, squash, and upstream refresh but rejects unrelated content'
+}
+
+test_pr_check_registers_bosun_pr() {
+  local dir project upstream_bare wt base commit head url
+  dir=$(new_home pr-check)
+  setup_bosun "$dir"
+  prepare_project "$dir"
+  project="$dir/projects/sample"
+  upstream_bare="$dir/upstream.git"
+  git init --bare -q "$upstream_bare"
+  base=$(git -C "$project" rev-parse HEAD)
+  git -C "$project" push -q "$upstream_bare" "$base:refs/heads/main"
+  commit=$(git --git-dir "$FORK_BARE" rev-parse refs/heads/housefeature/maneuver)
+  call "$dir" order --task maneuver --bosun bosun-kun --maneuver maneuver \
+    --forge github --owner kunchenguid --repository sample --source housefeature/maneuver \
+    --branch contribution/maneuver --captain-words 'Contribute maneuver' --path maneuver.txt \
+    --commit "$commit" >/dev/null || fail 'order recording failed'
+  wt="$dir/worktrees/maneuver"
+  git -C "$project" worktree add -q -b contribution/maneuver "$wt" "$base"
+  git -C "$wt" cherry-pick "$commit" >/dev/null
+  head=$(git -C "$wt" rev-parse HEAD)
+  printf '%s\n' "endpoint_task_id=maneuver" "worktree=$wt" "project=$project" "kind=ship" \
+    "mode=no-mistakes" "yolo=off" > "$dir/state/maneuver.meta"
+  mkdir -p "$dir/fakebin"
+  cat > "$dir/fakebin/gh" <<'EOF'
+#!/usr/bin/env bash
+case " $* " in
+  *" diff "*) printf '%s\n' maneuver.txt ;;
+  *" .headRefOid "*) printf '%s\n' "$FM_FAKE_HEAD" ;;
+  *" .body "*) printf '%s\n' 'Adds the maneuver.' ;;
+  *) printf '{"isDraft":false,"body":"Adds the maneuver.","headRepositoryOwner":{"login":"captain"},"headRepository":{"name":"sample"},"baseRepository":{"nameWithOwner":"kunchenguid/sample"},"baseRefName":"main","headRefName":"contribution/maneuver","headRefOid":"%s"}\n' "$FM_FAKE_HEAD" ;;
+esac
+EOF
+  chmod +x "$dir/fakebin/gh"
+  url=https://github.com/kunchenguid/sample/pull/12
+  FM_HOME="$dir" FM_FAKE_HEAD="$head" PATH="$dir/fakebin:$PATH" \
+    GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0="url.file://$upstream_bare.insteadOf" \
+    GIT_CONFIG_VALUE_0=https://github.com/kunchenguid/sample.git \
+    "$ROOT/bin/fm-pr-check.sh" maneuver "$url" >"$dir/out" 2>&1 \
+    || { cat "$dir/out" >&2; fail 'fm-pr-check.sh refused a valid Bosun registration'; }
+  jq -e '.state == "published" and .upstream_pr == "'"$url"'" and .upstream_base == "'"$base"'" and .validation_evidence.pr_head == "'"$head"'"' \
+    "$dir/data/maneuver/bosun-contribution.json" >/dev/null || fail 'fm-pr-check.sh did not durably register the Bosun PR'
+  assert_grep "pr_head=$head" "$dir/state/maneuver.meta" 'fm-pr-check.sh did not record the validated head'
+  pass 'fm-pr-check.sh registers a Bosun PR against the fetched upstream ref'
 }
 
 test_routing
@@ -530,6 +671,8 @@ test_fork_source_validation
 test_fork_source_freshness
 test_intake_delegates_to_ship_lifecycle
 test_intake_retries_existing_task
+test_intake_refuses_foreign_task
 test_registration_and_merge
 test_registration_requires_role
 test_registration_uses_ordered_content
+test_pr_check_registers_bosun_pr

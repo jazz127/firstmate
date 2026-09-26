@@ -10,6 +10,7 @@ import json
 import os
 from pathlib import Path
 import re
+import secrets
 import shutil
 import subprocess
 import sys
@@ -340,51 +341,53 @@ def unauthorized_tree_paths(project_dir, base, head, rewrite_paths):
     return [path for path in changed.splitlines() if path and not path_allowed(path, rewrite_paths)]
 
 
-def validate_extraction(worktree, upstream_base, pr_head, source_commits, actual_commits,
-                        allowed, deviations):
+def validate_extraction(worktree, source_commits, actual_commits, merges, deviations):
     deviation_paths = [item["path"] for item in deviations]
-    extraction_paths = allowed + deviation_paths
+    linear = [commit for commit in actual_commits if commit not in merges]
+    if len(linear) not in (1, len(source_commits)):
+        fail(f"upstream PR has unrelated commit history: {', '.join(actual_commits)}")
     scratch = Path(tempfile.mkdtemp(prefix="fm-bosun-extraction-"))
     try:
-        clone = subprocess.run(["git", "clone", "--quiet", str(worktree), str(scratch / "repo")],
+        clone = subprocess.run(["git", "clone", "--quiet", "--shared", "--no-checkout",
+                                str(worktree), str(scratch / "repo")],
                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         if clone.returncode:
             fail("could not create extraction worktree")
         scratch_repo = scratch / "repo"
-        checkout = subprocess.run(["git", "-C", str(scratch_repo), "checkout", "--quiet", "--detach", upstream_base],
+        checkout = subprocess.run(["git", "-C", str(scratch_repo), "checkout", "--quiet", "--detach",
+                                   f"{actual_commits[0]}^"],
                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         if checkout.returncode:
             fail("upstream extraction base is unavailable")
-        expected_trees = []
-        for commit in source_commits:
-            cherry_pick = subprocess.run(
-                ["git", "-C", str(scratch_repo), "-c", "user.name=Bosun", "-c",
-                 "user.email=bosun@localhost", "cherry-pick", commit],
-                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-            if cherry_pick.returncode:
-                subprocess.run(["git", "-C", str(scratch_repo), "cherry-pick", "--abort"],
-                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                fail("ordered source commits conflict with upstream; extraction needs a declared rewrite")
-            expected_trees.append(git_output(scratch_repo, "rev-parse", "HEAD^{tree}"))
-        if len(actual_commits) > 1:
-            if len(actual_commits) != len(expected_trees):
-                fail(f"upstream PR has unrelated commit history: {', '.join(actual_commits)}")
-            for index, commit in enumerate(actual_commits):
-                actual_tree = git_output(scratch_repo, "rev-parse", f"{commit}^{{tree}}")
-                if actual_tree is None or expected_trees[index] is None:
-                    fail(f"upstream PR commit {commit} cannot be compared with ordered progression")
-                offending = unauthorized_tree_paths(
-                    scratch_repo, expected_trees[index], actual_tree, deviation_paths)
-                if offending is None:
-                    fail(f"upstream PR commit {commit} cannot be compared with ordered progression")
-                if offending:
-                    fail(f"upstream PR commit {commit} is not derived from ordered progression: "
-                         f"{', '.join(offending)}")
-        offending = unauthorized_tree_paths(scratch_repo, "HEAD", pr_head, deviation_paths)
-        if offending is None:
-            fail("could not compare extracted content with upstream PR")
-        if offending:
-            fail(f"upstream PR differs from ordered extraction: {', '.join(offending)}")
+        identity = ["-c", "user.name=Bosun", "-c", "user.email=bosun@localhost"]
+        pending = list(source_commits)
+        for commit in actual_commits:
+            if commit in merges:
+                merge = subprocess.run(
+                    ["git", "-C", str(scratch_repo), *identity, "merge", "--quiet", "--no-ff",
+                     "--no-edit", *merges[commit]],
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                if merge.returncode:
+                    subprocess.run(["git", "-C", str(scratch_repo), "merge", "--abort"],
+                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    fail(f"upstream PR merge {commit} conflicts with ordered extraction")
+            else:
+                picks = pending if len(linear) == 1 else pending[:1]
+                pending = pending[len(picks):]
+                for source in picks:
+                    cherry_pick = subprocess.run(
+                        ["git", "-C", str(scratch_repo), *identity, "cherry-pick", source],
+                        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                    if cherry_pick.returncode:
+                        subprocess.run(["git", "-C", str(scratch_repo), "cherry-pick", "--abort"],
+                                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                        fail("ordered source commits conflict with upstream; extraction needs a declared rewrite")
+            offending = unauthorized_tree_paths(scratch_repo, "HEAD", commit, deviation_paths)
+            if offending is None:
+                fail(f"upstream PR commit {commit} cannot be compared with ordered progression")
+            if offending:
+                fail(f"upstream PR commit {commit} is not derived from ordered progression: "
+                     f"{', '.join(offending)}")
     finally:
         shutil.rmtree(scratch, ignore_errors=True)
 
@@ -485,7 +488,7 @@ def project_mode(project):
     return mode, yolo
 
 
-def existing_task(task, project_dir, bosun, target_info):
+def existing_task(task, project_dir, assignment_id, target_info):
     path = safe_path(home() / "state" / f"{safe_name(task)}.meta")
     if path.is_symlink() or not path.is_file():
         return None
@@ -506,9 +509,7 @@ def existing_task(task, project_dir, bosun, target_info):
     brief = safe_path(home() / "data" / task / "brief.md")
     if brief.is_symlink() or not brief.is_file():
         fail("existing task record has no Bosun brief")
-    body = brief.read_text()
-    if (f"Bosun `{bosun}`" not in body
-            or f"`{target_info['owner']}/{target_info['repository']}`" not in body):
+    if f"Bosun assignment `{assignment_id}`" not in brief.read_text():
         fail("existing task record is not this Bosun assignment")
     worktree = Path(fields["worktree"])
     if worktree.is_symlink() or not worktree.is_dir():
@@ -516,6 +517,7 @@ def existing_task(task, project_dir, bosun, target_info):
     root = git_output(worktree, "rev-parse", "--show-toplevel")
     if not root or Path(root).resolve() == Path(project_dir).resolve():
         fail("existing Bosun worktree is not isolated")
+    upstream_remote(worktree, target_info["owner"], target_info["repository"])
     return fields
 
 
@@ -544,19 +546,15 @@ def cmd_intake_locked(args):
     record = contribution(args.task)
     if record.get("state") != "ordered":
         fail("captain order has already been assigned or published")
-    assignment_task = record.get("assignment_task")
-    if assignment_task is None:
-        assignment_task = args.task
-        record["assignment_task"] = assignment_task
+    if not record.get("assignment_id"):
+        record["assignment_id"] = secrets.token_hex(16)
         write_json(contribution_path(args.task), record)
-    if assignment_task != args.task:
-        fail("contribution assignment identity differs from order")
     project = safe_name(record["target"]["repository"])
     project_dir = safe_path(home() / "projects" / project)
     if not project_dir.is_dir() or project_dir.is_symlink():
         fail(f"upstream project clone is unavailable: {project_dir}")
     upstream_remote(project_dir, record["target"]["owner"], record["target"]["repository"])
-    adopted = existing_task(assignment_task, project_dir, record["bosun"], record["target"])
+    adopted = existing_task(args.task, project_dir, record["assignment_id"], record["target"])
     if adopted:
         record["task_brief"] = str(safe_path(home() / "data" / args.task / "brief.md"))
         record["task_worktree"] = adopted["worktree"]
@@ -565,7 +563,7 @@ def cmd_intake_locked(args):
         record["assigned_at"] = record.get("assigned_at", now())
         record["state"] = "assigned"
         write_json(contribution_path(args.task), record)
-        print(f"adopted {assignment_task} worktree={adopted['worktree']}")
+        print(f"adopted {args.task} worktree={adopted['worktree']}")
         return
     mode, yolo = project_mode(project)
     root = Path(os.environ.get("FM_ROOT_OVERRIDE", Path(__file__).resolve().parent.parent))
@@ -607,7 +605,8 @@ def cmd_intake_locked(args):
             "scope changes, ambiguous maintainer requests, policy conflicts, and consequential "
             "decisions with needs-decision through the parent channel.\n\n"
             f"Captain's exact order: {record['captain_order']['words']}")
-    spec = (f"This task is authorized only for Bosun `{record['bosun']}`, source branch "
+    spec = (f"Bosun assignment `{record['assignment_id']}`.\n"
+            f"This task is authorized only for Bosun `{record['bosun']}`, source branch "
             f"`{record['source_branch']}`, contribution branch `{record['contribution_branch']}`, "
             f"Captain fork `{record['fork']['owner']}/{record['fork']['repository']}`, and "
             f"upstream default branch `{record['upstream_default_branch']}`. Do not select other "
@@ -694,7 +693,10 @@ def cmd_registration_check_locked(args):
     record = contribution(args.task)
     if record["bosun"] != bosun or record["target"]["forge"] != args.forge:
         fail("Bosun PR registration requires a matching captain order")
-    if record.get("state") not in ("ordered", "assigned") or record.get("upstream_pr"):
+    if record.get("state") == "published":
+        if record.get("upstream_pr") != args.url:
+            fail("captain order already has a registered upstream PR")
+    elif record.get("state") not in ("ordered", "assigned") or record.get("upstream_pr"):
         fail("captain order already has a registered upstream PR")
     url_match = re.fullmatch(
         r"https://github\.com/([^/]+)/([^/]+)/pull/([0-9]+)", args.url, re.IGNORECASE)
@@ -729,13 +731,17 @@ def cmd_registration_check_locked(args):
         fail("captain order has invalid extraction deviations")
     deviation_paths = [item["path"] for item in deviations]
     extraction_paths = allowed + deviation_paths
+    upstream_base = args.upstream_base
     if args.worktree:
         worktree = safe_path(args.worktree)
         if worktree.is_symlink() or not worktree.is_dir():
             fail("Bosun contribution worktree is unavailable")
         if (git_output(worktree, "rev-parse", "HEAD") or "").lower() != args.pr_head.lower():
             fail("upstream PR head differs from the contribution worktree")
-        actual = git_output(worktree, "log", "--reverse", "--format=%H", f"{args.upstream_base}..HEAD")
+        upstream_base = git_output(worktree, "rev-parse", "--verify", f"{args.upstream_base}^{{commit}}")
+        if not upstream_base:
+            fail("upstream extraction base is unavailable")
+        actual = git_output(worktree, "rev-list", "--first-parent", "--reverse", f"{upstream_base}..HEAD")
         source_commits = record.get("source_commits")
         if actual is None or not isinstance(source_commits, list) or not source_commits:
             fail("upstream PR commits differ from the ordered source commits")
@@ -748,18 +754,25 @@ def cmd_registration_check_locked(args):
                          [path for path in paths.splitlines() if path and not path_allowed(path, extraction_paths)])
             if paths is None or offending:
                 fail(f"ordered source commit changes unauthorized paths: {', '.join(offending) or '<unreadable>'}")
+        merges = {}
         for commit in actual_commits:
             parents = git_output(worktree, "rev-list", "--parents", "-n", "1", commit)
-            if parents is None or len(parents.split()) != 2:
-                fail(f"upstream PR commit {commit} is a merge commit; unrelated history is not allowed")
+            parents = [] if parents is None else parents.split()[1:]
+            if len(parents) > 1:
+                if not all(git_success(worktree, "merge-base", "--is-ancestor", parent, upstream_base)
+                           for parent in parents[1:]):
+                    fail(f"upstream PR commit {commit} is a merge commit; unrelated history is not allowed")
+                merges[commit] = parents[1:]
+                continue
+            if len(parents) != 1:
+                fail(f"upstream PR commit {commit} is a root commit; unrelated history is not allowed")
             paths = git_output(worktree, "diff-tree", "--root", "--no-commit-id", "--name-only", "-r", commit)
             offending = ([] if paths is None else
                          [path for path in paths.splitlines() if path and not path_allowed(path, extraction_paths)])
             if paths is None or offending:
                 fail(f"upstream PR commit {commit} changes unauthorized paths: "
                      f"{', '.join(offending) or '<unreadable>'}")
-        validate_extraction(worktree, args.upstream_base, args.pr_head, source_commits,
-                            actual_commits, allowed, deviations)
+        validate_extraction(worktree, source_commits, actual_commits, merges, deviations)
     changed = args.changed_path
     if not changed:
         fail("upstream change has no validated changed paths")
@@ -791,16 +804,21 @@ def cmd_registration_check_locked(args):
                                       "mode": args.validation_mode,
                                       "validated_at": now()}
     record["upstream_changed_paths"] = changed
-    record["upstream_base"] = args.upstream_base
+    record["upstream_base"] = upstream_base
     if not args.check_only:
         record["state"] = "published"
         write_json(contribution_path(args.task), record)
 
 
 def cmd_merged(args):
-    path = contribution_path(args.task)
-    if not path.exists():
+    if not contribution_path(args.task).exists():
         return
+    with contribution_lock(args.task):
+        return cmd_merged_locked(args)
+
+
+def cmd_merged_locked(args):
+    path = contribution_path(args.task)
     record = contribution(args.task)
     if record.get("upstream_pr") != args.url or record.get("state") not in ("published", "admirals-maneuver"):
         fail("merge URL does not match authorized maneuver")
@@ -809,6 +827,39 @@ def cmd_merged(args):
     record["state"] = "admirals-maneuver"
     record["admirals_maneuver_at"] = now()
     write_json(path, record)
+
+
+REVIEW_ESCALATIONS = ("scope-change", "ambiguous-request", "policy-conflict")
+
+
+def cmd_escalate(args):
+    if args.reason not in REVIEW_ESCALATIONS:
+        fail(f"invalid review escalation: {args.reason}")
+    if not args.feedback.strip() or not args.note.strip():
+        fail("review escalation requires the feedback reference and a note")
+    with contribution_lock(args.task):
+        record = contribution(args.task)
+        if record.get("state") != "published" or not record.get("upstream_pr"):
+            fail("review escalation requires a published upstream PR")
+        events = record.setdefault("review_events", [])
+        index = next((i for i, item in enumerate(events) if item.get("feedback") == args.feedback), None)
+        if index is None:
+            events.append({"feedback": args.feedback, "reason": args.reason, "note": args.note,
+                           "status": "needs-decision", "recorded_at": now()})
+            index = len(events) - 1
+            write_json(contribution_path(args.task), record)
+        event = events[index]
+    line = (f"needs-decision [key=bosun-review-{args.task}-{index + 1}]: Bosun {record['bosun']} "
+            f"{record['upstream_pr']} review feedback {event['feedback']} is a {event['reason']}: "
+            f"{event['note']}")
+    lib = Path(__file__).resolve().parent / "fm-parent-channel-lib.sh"
+    report = subprocess.run(
+        ["bash", "-c", '. "$1"; fm_parent_channel_report "$2" "$3" "$(fm_parent_channel_clean_note "$4")"',
+         "_", str(lib), str(home()), str(home() / "state"), line],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    if report.returncode:
+        fail(f"review escalation is recorded but did not reach the parent channel (rc={report.returncode})")
+    print(f"needs-decision: awaiting captain on {event['feedback']}")
 
 
 def cmd_upstream_ref(args):
@@ -839,6 +890,7 @@ def main():
     p.add_argument("--evidence"); p.add_argument("--showed"); p.add_argument("--read-at"); p.add_argument("--confirmed", action="store_true"); p.set_defaults(func=cmd_convention)
     p = sub.add_parser("conventions"); add_target(p); p.add_argument("--bosun", required=True); p.add_argument("--policy", required=True); p.add_argument("--decisions"); p.set_defaults(func=cmd_conventions)
     p = sub.add_parser("registration-check"); p.add_argument("--task", required=True); p.add_argument("--url", required=True); p.add_argument("--forge", required=True); p.add_argument("--head", required=True); p.add_argument("--base", required=True); p.add_argument("--branch", required=True); p.add_argument("--head-branch", required=True); p.add_argument("--pr-head", required=True); p.add_argument("--validation-head", required=True); p.add_argument("--validation-mode", required=True); p.add_argument("--upstream-base", required=True); p.add_argument("--worktree"); p.add_argument("--changed-path", action="append", default=[]); p.add_argument("--check-only", action="store_true"); p.add_argument("--forge-verify", action="store_true"); p.set_defaults(func=cmd_registration_check)
+    p = sub.add_parser("escalate"); p.add_argument("--task", required=True); p.add_argument("--feedback", required=True); p.add_argument("--reason", required=True); p.add_argument("--note", required=True); p.set_defaults(func=cmd_escalate)
     p = sub.add_parser("merged"); p.add_argument("--task", required=True); p.add_argument("--url", required=True); p.set_defaults(func=cmd_merged)
     p = sub.add_parser("upstream-ref"); p.add_argument("--worktree", required=True); p.add_argument("--owner", required=True); p.add_argument("--repository", required=True); p.add_argument("--branch", required=True); p.set_defaults(func=cmd_upstream_ref)
     args = parser.parse_args()

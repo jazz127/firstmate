@@ -55,13 +55,16 @@ Using the existing contribution and worktree machinery, start from the latest up
 Before registration, a scratch extraction cherry-picks the ordered commits onto that upstream base and requires the PR tree to match exactly except for declared deviation paths.
 Review the resulting diff and commit series for house-only configuration, private context, secrets, unrelated history, and fork assumptions; a path allowlist cannot decide whether public-looking text is private.
 Registration permits clean rewrites and squashed commits only when their tree matches that exact extraction or a declared deviation.
-Registration rejects merge commits and unrelated intermediate history.
+Registration rejects unrelated intermediate history and every merge commit except a refresh that merges the freshly fetched upstream default branch into the contribution, following [`fork-house-branch.md`](fork-house-branch.md); never rebase a published contribution.
 If adapting the maneuver to current upstream needs new content, obtain a new captain decision and order before publication.
 Do not merge or rebase `house` into the contribution.
 Run the repository's expected validation, using no-mistakes where configured.
 Before publication, run the prior-art scan and record the verdict required by [`fork-house-branch.md`](fork-house-branch.md#contributing-a-house-feature-upstream).
 Use `bin/fm-upstream-prior-art.py publish` to open the PR from the captain's fork to upstream after validation; an automatic PR creation path must not bypass its receipt gate.
 `fm-pr-check.sh` reads the PR through its existing forge path and refuses registration unless the ordered Bosun, fork, upstream repository, and default branch match.
+Rerunning it for the same registered PR after follow-up commits repeats every scope check on the new head and refreshes the recorded PR head and validation evidence; a different PR for the same order is refused.
 The existing PR poll and contribution observer track checks and review feedback; route scope changes, ambiguous maintainer requests, policy conflicts, and consequential decisions through the parent channel.
+For review feedback that asks for a scope change, is an ambiguous maintainer request, or conflicts with policy, run `fm-bosun.py escalate --task <task> --feedback <review-url> --reason scope-change|ambiguous-request|policy-conflict --note <summary>` in the Bosun home.
+It adds one entry to the record's `review_events` and one `needs-decision` line on the parent channel; stop acting on that feedback until the captain decides.
 When the existing merge outcome reports that exact PR merged, it changes the record to `admirals-maneuver`.
 A closed PR without a merge outcome leaves the maneuver unlanded.

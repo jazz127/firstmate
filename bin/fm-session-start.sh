@@ -344,6 +344,8 @@ PRIMARY_HARNESS=$("$SCRIPT_DIR/fm-harness.sh" 2>/dev/null || printf unknown)
 . "$SCRIPT_DIR/fm-wake-lib.sh"
 # shellcheck source=bin/fm-line-cap-lib.sh
 . "$SCRIPT_DIR/fm-line-cap-lib.sh"
+# shellcheck source=bin/fm-ready-timeout-lib.sh
+. "$SCRIPT_DIR/fm-ready-timeout-lib.sh"
 
 # One tasks-axi compatibility verdict per session start. The probe costs three
 # tasks-axi subprocesses and this digest needs the same answer twice - here for
@@ -852,6 +854,12 @@ for meta in "$STATE"/*.meta; do
     fi
   else
     printf 'endpoint: unknown (no window recorded)\n'
+  fi
+  # A deliberate stop is not a lost worker: name it so recovery relaunches on
+  # demand instead of treating the agent-less pane as stuck.
+  if fm_ready_timeout_parked "$STATE" "$id"; then
+    printf 'agent: stopped by the ready-session timeout while its pull request waited on a merge (record: %s); relaunch with bin/fm-control.sh %s relaunch when it needs more work\n' \
+      "$(fm_ready_timeout_record_path "$STATE" "$id")" "$id"
   fi
 
   status="$STATE/$id.status"

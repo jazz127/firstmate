@@ -150,6 +150,9 @@
 #      unreachable, and an alive endpoint whose scrollback read failed is still
 #      classified by step 4. Backends with no classifier keep reading a failed
 #      capture as gone. The fallback's own comment owns the per-verdict rules.
+#      The one exception is a dead agent the opt-in ready-session timeout
+#      stopped on purpose (bin/fm-ready-timeout-lib.sh): its `done` delivery
+#      still answers, with the stop named in the detail.
 #
 # Read-only and side-effect free. Always exits 0 on a successful read regardless
 # of state; exit 2 only on a usage error (no id).
@@ -176,6 +179,8 @@ STATE="${FM_STATE_OVERRIDE:-$FM_HOME/state}"
 . "$SCRIPT_DIR/fm-timeout-lib.sh"
 # shellcheck source=bin/fm-dod-lib.sh
 . "$SCRIPT_DIR/fm-dod-lib.sh"
+# shellcheck source=bin/fm-ready-timeout-lib.sh
+. "$SCRIPT_DIR/fm-ready-timeout-lib.sh"
 
 ID=${1:-}
 [ -n "$ID" ] || { echo "usage: fm-crew-state.sh <id>" >&2; exit 2; }
@@ -1251,6 +1256,12 @@ if ! pane_readable "$BACKEND_TARGET"; then
       emit unknown none "backend target gone: $BACKEND_TARGET"
       ;;
     tmux:dead|herdr:dead)
+      # An agent the ready-session timeout stopped on purpose while its pull
+      # request waited on a merge keeps its delivered outcome, named as such
+      # (bin/fm-ready-timeout-lib.sh owns the record).
+      if [ "$LOG_VERB" = "done" ] && fm_ready_timeout_parked "$STATE" "$ID"; then
+        emit_ship_status_done "agent stopped by the ready-session timeout; relaunch to resume work"
+      fi
       emit unknown none "backend target gone: $BACKEND_TARGET (agent gone, pane shell remains)"
       ;;
     tmux:*|herdr:*)

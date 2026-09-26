@@ -223,6 +223,12 @@ WATCH_HOME_EXISTED=0
 # (inbox_steer_check below).
 # shellcheck source=bin/fm-task-inbox-lib.sh
 . "$SCRIPT_DIR/fm-task-inbox-lib.sh"
+# The opt-in ready-session timeout: bin/fm-ready-timeout-lib.sh owns the knob,
+# eligibility, and durable record; this watcher supplies the poll cadence, the
+# delivered-wait proof, and the alarm suppression for a stopped worker
+# (ready_session_timeout_tick below).
+# shellcheck source=bin/fm-ready-timeout-lib.sh
+. "$SCRIPT_DIR/fm-ready-timeout-lib.sh"
 # The away-posture record (state/.afk-contract) is the posture in both the
 # attended and the afk session; bin/fm-afk-contract.sh owns its schema and this
 # watcher reads only its presence (afk_record_present below).
@@ -489,6 +495,9 @@ window_key() {  # <window>
 inbox_steer_escalate_unavailable() {  # <window> <task> <record>
   local w=$1 task=$2 rec=$3 reason
   reason="stale: $w (unread firstmate instruction: $rec is unhandled and the worker's agent has exited or its endpoint is missing, so the doorbell was not typed; recover the worker)"
+  if fm_ready_timeout_parked "$STATE" "$task"; then
+    reason="stale: $w (unread firstmate instruction: $rec is unhandled because the ready-session timeout stopped this worker's agent while its pull request waited on a merge, so the doorbell was not typed; relaunch it with bin/fm-control.sh $task relaunch)"
+  fi
   if [ ! -d "${rec%/*}" ] || [ ! -f "$rec" ]; then
     fm_task_inbox_due_action "$STATE" "$task" >/dev/null || true
     return 0
@@ -1689,6 +1698,72 @@ delivered_pr_wait() {  # <task>
   return "$rc"
 }
 
+# Opt-in ready-session timeout. bin/fm-ready-timeout-lib.sh owns the knob, the
+# eligibility rules, and the durable record; this is only the poll-loop driver.
+# It is silent: a stop, a refusal, and a rejected config value go to the triage
+# log and never wake firstmate. The cheap reads run first, so only a worker
+# already past the timeout pays for the delivered-wait proof and a backend read,
+# and the stop itself is the control plane's verified exit.
+READY_TIMEOUT_CONTROL_BIN=${FM_READY_TIMEOUT_CONTROL_BIN:-$SCRIPT_DIR/fm-control.sh}
+READY_TIMEOUT_REJECT_LOGGED=0
+
+ready_session_timeout_tick() {
+  local secs rc=0 meta
+  secs=$(fm_ready_timeout_secs "$CONFIG") || rc=$?
+  case "$rc" in
+    0) ;;
+    2)
+      if [ "$READY_TIMEOUT_REJECT_LOGGED" -eq 0 ]; then
+        READY_TIMEOUT_REJECT_LOGGED=1
+        triage_log "ready-session timeout off: $CONFIG/ready-session-timeout holds a rejected value"
+      fi
+      return 0
+      ;;
+    *) return 0 ;;
+  esac
+  for meta in "$STATE"/*.meta; do
+    [ -f "$meta" ] || continue
+    ready_session_timeout_consider "$(basename "$meta" .meta)" "$meta" "$secs"
+  done
+  return 0
+}
+
+ready_session_timeout_consider() {  # <task> <meta> <timeout-secs>
+  local task=$1 meta=$2 secs=$3 kind gen record at age pr backend target agent verdict out
+  kind=$(fm_meta_get "$meta" kind)
+  [ "${kind:-ship}" = ship ] || return 0
+  [ -z "$(fm_meta_get "$meta" remote_host)" ] || return 0
+  gen=$(fm_meta_get "$meta" spawn_gen)
+  record=$(fm_ready_timeout_record_path "$STATE" "$task")
+  if [ -f "$record" ] && [ "$(fm_ready_timeout_field "$record" spawn_gen)" = "$gen" ]; then
+    [ "$(fm_ready_timeout_field "$record" result)" != stopped ] || return 0
+    at=$(fm_ready_timeout_field "$record" at)
+    case "$at" in ''|*[!0-9]*) at=0 ;; esac
+    [ $(( $(date +%s) - at )) -ge "$secs" ] || return 0
+  fi
+  age=$(fm_ready_timeout_activity_age "$STATE" "$task") || return 0
+  [ "$age" -ge "$secs" ] || return 0
+  if fm_ready_timeout_inbox_pending "$STATE" "$task"; then return 0; fi
+  DELIVERED_WAIT_MEMO=
+  delivered_pr_wait "$task" || return 0
+  pr=$DELIVERED_WAIT_URL
+  backend=$(fm_backend_of_meta "$meta")
+  target=$(fm_backend_target_of_meta "$meta")
+  [ -n "$target" ] || return 0
+  agent=$(fm_backend_agent_state "$backend" "$target" 2>/dev/null) || return 0
+  [ "$agent" = alive ] || return 0
+  verdict=$(fm_busy_classify_meta "$meta" "$task" "$STATE" 2>/dev/null) || return 0
+  [ "${verdict%% *}" = idle ] || return 0
+  if out=$(FM_HOME="$FM_HOME" "$READY_TIMEOUT_CONTROL_BIN" "$task" exit 2>&1); then
+    fm_ready_timeout_record_write "$STATE" "$task" stopped "$gen" "$pr" "$secs" "${out%%$'\n'*}" \
+      || triage_log "ready-session timeout stopped $task but could not record it"
+    triage_log "ready-session timeout stopped $task after ${age}s ready and idle: ${out%%$'\n'*}"
+  else
+    fm_ready_timeout_record_write "$STATE" "$task" failed "$gen" "$pr" "$secs" "${out##*$'\n'}" || true
+    triage_log "ready-session timeout could not stop $task, retrying after ${secs}s: ${out##*$'\n'}"
+  fi
+}
+
 # The one owner of recheck wording for every wait handle_paused_stale re-surfaces.
 # Each wording names who owns the wait, the action that clears it, and its
 # deadline state, so a recheck can never read as a wedge or point the reader at
@@ -2198,6 +2273,16 @@ scan_signals() {
     case "$f" in
       *.status) fm_wake_signal_seen_current "$STATE" "$f" && continue ;;
       *) [ "$sig" = "$(cat "$sf" 2>/dev/null)" ] && continue ;;
+    esac
+    # The turn-end of an agent the ready-session timeout stopped on purpose is
+    # the stop itself, not a finished turn: record it as seen without a wake.
+    case "$f" in
+      *.turn-ended)
+        if fm_ready_timeout_parked "$STATE" "$(basename "$f" .turn-ended)"; then
+          printf '%s' "$sig" > "$sf"
+          continue
+        fi
+        ;;
     esac
     printf '%s\t%s\t%s\n' "$sf" "$sig" "$f"
   done
@@ -2919,6 +3004,9 @@ while :; do
     triage_log "inactive-outcome reconciliation unavailable"
   fi
 
+  # Opt-in ready-session timeout: silent, and a no-op without its config file.
+  ready_session_timeout_tick
+
   # Slow per-task checks (firstmate writes these, e.g. a merged-PR poll).
   # Time-based via .last-check mtime so the cadence survives watcher restarts.
   # Evaluated BEFORE the signal scan: wake() exits the cycle, so a check placed
@@ -3190,6 +3278,12 @@ EOF
     # Steering-inbox loss detection runs before the secondmate stale
     # exemption below, because a mate's steers land in an inbox too.
     [ -z "$task" ] || inbox_steer_check "$w" "$task"
+    # A worker the ready-session timeout stopped on purpose is not stale, and
+    # its agent-less pane is not a dead endpoint: skip it until a relaunch
+    # (a new spawn_gen) or teardown ends the stop.
+    if [ -n "$task" ] && fm_ready_timeout_parked "$STATE" "$task"; then
+      continue
+    fi
     key=$(window_key "$w")
     DELIVERED_WAIT_MEMO=
     last=$(status_declared_wait_line "$STATE/$task.status")

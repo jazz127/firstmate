@@ -2440,6 +2440,35 @@ test_no_run_herdr_husk_dead_still_reads_gone() {
   pass "a husk pane (agent gone) still reads gone for reclaim"
 }
 
+# A dead agent the opt-in ready-session timeout stopped on purpose, while its
+# pull request waited on a merge, keeps its delivered outcome instead of the
+# gone-class unknown, and names the stop. The same husk without a matching
+# record (another incarnation's stop) keeps the ordinary gone reading.
+test_no_run_ready_timeout_stopped_agent_keeps_its_delivery() {
+  command -v jq >/dev/null 2>&1 || { pass "ready-session timeout crew-state test skipped without jq"; return; }
+  reset_fakes
+  local d out; d=$(new_case ready-timeout-husk)
+  make_repo_on_branch "$d/wt" fm/feat-ready-timeout
+  make_fakebin "$d" >/dev/null
+  fm_write_meta "$d/state/feat-ready-timeout.meta" "window=default:w1:p2" "worktree=$d/wt" "kind=ship" \
+    "backend=herdr" "harness=claude" "mode=no-mistakes" "spawn_gen=gen-2"
+  printf 'done [at=1]: PR https://github.com/o/r/pull/9\n' > "$d/state/feat-ready-timeout.status"
+  printf 'v=1\nresult=stopped\nspawn_gen=gen-2\nat=1\ntimeout=7200\npr=https://github.com/o/r/pull/9\ndetail=stopped\n' \
+    > "$d/state/feat-ready-timeout.ready-timeout"
+  FM_FAKE_TMUX_MISSING=1
+  FM_FAKE_HERDR_READ_FAIL=1
+  FM_FAKE_HERDR_HUSK=1
+  out=$(run_crew_state "$d" feat-ready-timeout)
+  assert_contains "$out" "state: done" "a deliberately stopped ready worker keeps its delivered outcome"
+  assert_contains "$out" "ready-session timeout" "the stopped agent's reading names the timeout"
+  assert_not_contains "$out" "backend target gone" "a deliberate stop is not reported as a lost endpoint"
+  printf 'v=1\nresult=stopped\nspawn_gen=gen-1\nat=1\ntimeout=7200\npr=https://github.com/o/r/pull/9\ndetail=stopped\n' \
+    > "$d/state/feat-ready-timeout.ready-timeout"
+  out=$(run_crew_state "$d" feat-ready-timeout)
+  assert_contains "$out" "backend target gone" "a stop recorded for an earlier incarnation does not explain this dead agent"
+  pass "a ready-session timeout stop keeps the delivered outcome only for its own incarnation"
+}
+
 # Regression (2026-07 herdr false-surface incident, now solved semantically):
 # herdr's agent.get reports generation state ("working" only while the model is
 # actively streaming - docs/herdr-backend.md "Busy state"), not "this crew's
@@ -5419,5 +5448,6 @@ test_competing_live_runs_report_unknown_with_both_ids
 test_newer_failed_run_is_not_hidden_by_older_live_run
 test_unverifiable_run_selection_reports_unknown
 test_legacy_conflicting_run_records_report_unknown
+test_no_run_ready_timeout_stopped_agent_keeps_its_delivery
 
 echo "all fm-crew-state tests passed"

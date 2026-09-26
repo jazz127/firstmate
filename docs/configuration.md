@@ -11,7 +11,7 @@ Start with the directory layout, then use the setting reference for the behavior
 | Task windows and worker tools | [Runtime backend](#runtime-backend-configbackend--fm_backend) and [harness support](#harness-support) |
 | Worker permissions, accounts, or environment | [Claude permission mode](#claude-permission-mode-configclaude-permission-mode), [worker account pin](#worker-account-pin-configclaude-account-configpi-account), and [worker launch environment](#worker-launch-environment-configlaunch-env-allowlist) |
 | Backlog, preferences, and memory | [Backlog backend](#backlog-backend-taskstoml--configbacklog-backend), [captain preferences](#captain-preferences-datacaptainmd--datacaptain-sharedmd), and [startup memory budget](#startup-memory-budget-configstartup-memory-budget) |
-| Supervision and presentation | [Pi supervision branch](#pi-supervision-branch), [supervision host](#supervision-host-configsupervision-host), and [Calm preference](#calm-preference-configcalm) |
+| Supervision and presentation | [Pi supervision branch](#pi-supervision-branch), [supervision host](#supervision-host-configsupervision-host), [ready-session timeout](#ready-session-timeout-configready-session-timeout), and [Calm preference](#calm-preference-configcalm) |
 | Persistent secondmates | [Secondmate routes](#secondmate-routes-datasecondmatesmd) |
 | Per-run overrides and tuning | [Environment variables](#environment-variables) |
 
@@ -597,6 +597,36 @@ With the flag absent the wedge timer spends no fold or current-state read for it
 The flag is a home-local supervision-noise preference and is not inherited by secondmate homes, which supervise their own crew and own that trade separately.
 
 [`architecture.md`](architecture.md) owns the wait-evidence contract and which records may take the ladder away; `bin/fm-watch.sh`'s `wedge_wait_evidence` owns the exact derivation and its fail-closed boundaries.
+
+## Ready-session timeout (config/ready-session-timeout)
+
+The optional local, gitignored `config/ready-session-timeout` file opts this home into stopping the agent of a ship worker whose pull request has sat ready, waiting on a merge, for too long.
+With the file absent nothing changes: a ready worker keeps its agent running until the merge lands and the task is cleaned up.
+
+### Duration
+
+An empty file, or one holding only blank and `#` comment lines, sets the default of two hours.
+Otherwise its first line sets the duration: a whole number of seconds, or a whole number followed by `s`, `m`, or `h`, such as `90m` or `4h`.
+A value under 60 seconds, or one that does not parse, leaves the timeout off rather than stopping workers early, and the watcher notes the rejection in its triage log.
+
+### What is stopped and what is kept
+
+The watcher checks on its ordinary poll loop, with no separate daemon.
+It stops only a ship worker whose ready report names the pull request with merge monitoring armed by `bin/fm-pr-check.sh`, that has shown no activity for the duration, whose steering inbox holds no unacknowledged instruction, whose agent reads alive and exactly idle, and whose current state (`bin/fm-crew-state.sh`) reads exactly done.
+A busy agent, or one whose idle state cannot be proven, is left running.
+Scouts and secondmates are never stopped.
+
+The stop goes through `bin/fm-control.sh <id> exit`, so the worker's terminal, local copy, branch, and uncommitted changes survive.
+The task record, pull request, and merge monitoring are untouched, so a later merge is still reported and cleaned up normally.
+When the pull request needs more work, such as a merge conflict or a review change, `bin/fm-control.sh <id> relaunch` brings the worker back.
+The stop is silent, is recorded durably in `state/<id>.ready-timeout`, and is not repeated for the same worker incarnation.
+While that record stands and the worker's current state still reads done, the watcher raises no stale or dead-endpoint alarm for the worker, and `bin/fm-crew-state.sh` and the session-start digest name the stop instead of reporting a lost agent.
+The watcher rereads that current state on every poll for a stopped worker.
+The moment it reads anything other than done, such as a no-mistakes run parked at a gate on the worker, the watcher marks the record resumed and wakes firstmate once, naming the task and the `bin/fm-control.sh <id> relaunch` that brings it back.
+From then on the worker's ordinary stale, gate, and turn-end alarms apply again, and that incarnation is never stopped again.
+
+The file is home-local and is not inherited by secondmate homes.
+`bin/fm-ready-timeout-lib.sh` owns the exact eligibility rules and the record format.
 
 ## Gate defaults (.no-mistakes.yaml)
 
@@ -2327,6 +2357,7 @@ FM_TEARDOWN_NM_TIMEOUT=10    # seconds allowed per no-mistakes query or abort in
 FM_CREW_STATE_RUNS_LIMIT=200  # plain runs-ledger rows scanned for fallback attribution; does not change the CLI's AXI overview window (selection owner: bin/fm-nm-run-lib.sh)
 FM_TEARDOWN_NM_RUNS_LIMIT=200  # recent no-mistakes run rows scanned to prove an unresolved-head parked run belongs to teardown's task
 FM_CREW_STATE_BIN=bin/fm-crew-state.sh   # test override for the current-state reader used by watcher triage: the working/paused classification, and the wedge timer's parked-gate wait evidence
+FM_READY_TIMEOUT_CONTROL_BIN=bin/fm-control.sh   # test override for the control plane the watcher's ready-session timeout stops an agent through; only consulted when config/ready-session-timeout is present
 FM_MAIL_USER=      # mail-plane IMAP/SMTP login, from .env or environment (docs/configuration.md "Mail plane")
 FM_MAIL_PASS=      # mail-plane IMAP/SMTP password
 FM_IMAP_HOST=      # mail-plane IMAP server hostname

@@ -93,9 +93,9 @@ for a in "$@"; do
     --yolo=*) YOLO=${a#--yolo=}; YOLO_SET=1 ;;
     --branch-prefix) want_value="branch-prefix" ;;
     --branch-prefix=*) BRANCH_PREFIX=${a#--branch-prefix=} ;;
-    --house-feature) want_value=house-feature ;;
+    --house-feature) want_value="house-feature" ;;
     --house-feature=*) HOUSE_FEATURE=${a#--house-feature=}; HOUSE_FEATURE_SET=1 ;;
-    --branch-base) want_value=branch-base ;;
+    --branch-base) want_value="branch-base" ;;
     --branch-base=*) BRANCH_BASE=${a#--branch-base=}; BRANCH_BASE_SET=1 ;;
     *) POS+=("$a") ;;
   esac

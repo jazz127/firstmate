@@ -313,6 +313,40 @@ test_committed_scratch_ship_done_names_path() {
   pass "ship done: with a committed scratch bundle is refused with the path as its reason"
 }
 
+test_recorded_gerrit_ship_done_with_scratch_is_refused() {
+  local repo wt meta state reason rc url
+  repo="$TMP_ROOT/gerrit-scratch-repo"
+  wt="$TMP_ROOT/gerrit-scratch-wt"
+  state="$TMP_ROOT/gerrit-scratch-state"
+  url=https://review.example.test/c/o/r/+/42
+  mkdir -p "$state"
+  fm_git_worktree "$repo" "$wt" fm/gerrit-scratch
+  mkdir -p "$wt/.codex-live-check/cache"
+  printf '%s\n' bundle > "$wt/.codex-live-check/cache/package.json"
+  git -C "$wt" add -f .codex-live-check
+  git -C "$wt" commit -q -m 'fix-round push with scratch'
+  meta="$state/gerrit-scratch.meta"
+  printf 'kind=ship\nmode=direct-PR\nworktree=%s\nproject=%s\npr=%s\n' "$wt" "$repo" "$url" > "$meta"
+  reason=$(accept_done ship direct-PR "$wt" "$repo" "done: PR $url published" "$state" gerrit-scratch "$meta" 2>/dev/null)
+  rc=$?
+  [ "$rc" -eq 1 ] || fail "recorded Gerrit ship done: with committed scratch was accepted (exit $rc)"
+  [ "$reason" = 'scratch path would be published: .codex-live-check/cache/package.json' ] \
+    || fail "recorded Gerrit scratch refusal did not name the path on stdout: $reason"
+  pass "a recorded Gerrit ship done: with committed scratch is refused"
+}
+
+test_recorded_pr_with_missing_worktree_is_accepted() {
+  local meta state
+  state="$TMP_ROOT/missing-wt-state"
+  mkdir -p "$state"
+  meta="$state/missing-wt.meta"
+  printf 'kind=ship\nmode=no-mistakes\npr=https://github.com/o/r/pull/5\npr_head=0123456789abcdef0123456789abcdef01234567\n' > "$meta"
+  accept_done ship no-mistakes "$TMP_ROOT/missing-wt" "$TMP_ROOT/missing-wt-repo" \
+    "done: PR https://github.com/o/r/pull/5 checks green" "$state" missing-wt "$meta" \
+    || fail "recorded PR was refused because its worktree is missing"
+  pass "a recorded PR with a missing worktree is still accepted"
+}
+
 test_remote_containing_named_head_is_accepted() {
   local repo wt sha
   repo="$TMP_ROOT/pushed-repo"
@@ -638,6 +672,8 @@ test_evidence_claim_enforces_mechanical_provenance
 test_scenario_consistency_is_publication_only
 test_unpushed_ship_done_is_refused
 test_committed_scratch_ship_done_names_path
+test_recorded_gerrit_ship_done_with_scratch_is_refused
+test_recorded_pr_with_missing_worktree_is_accepted
 test_no_mistakes_prevalidation_done_is_not_gated
 test_remote_containing_named_head_is_accepted
 test_moved_branch_without_named_head_is_refused

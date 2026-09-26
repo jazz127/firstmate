@@ -720,6 +720,32 @@ The pipeline has no pre-publication body hook here; this readback check is requi
 EOF
 }
 
+fm_upstream_pr_publish_block() {  # <task-id>
+  local script_dir
+  script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd) || return 1
+  cat <<EOF
+For an upstream repository the fleet does not own, do not run \
+\`gh-axi pr create\` directly. Use the guarded publisher:
+1. Set the target repository, title, one-line summary file, target base, proposed body file, and pushed head (\`OWNER:BRANCH\`).
+2. Run \`$script_dir/fm-upstream-prior-art.py scan --repo <OWNER/REPO> --title <TITLE> --summary-file <SUMMARY_FILE> --record /tmp/fm-$1/prior-art.json --base <BASE>\`.
+3. Review every recorded candidate, write one distinct/overlaps verdict and reason per candidate to a decisions JSON file, then run \`$script_dir/fm-upstream-prior-art.py decide --record /tmp/fm-$1/prior-art.json --decisions-file <DECISIONS_FILE>\`.
+4. Run \`$script_dir/fm-upstream-prior-art.py publish --repo <OWNER/REPO> --title <TITLE> --summary-file <SUMMARY_FILE> --record /tmp/fm-$1/prior-art.json --base <BASE> --body-file <BODY_FILE> --head <OWNER:BRANCH>\`; it refuses a missing, stale, incomplete, or unresolved receipt immediately before the forge write.
+For a repository the fleet owns, the ordinary \`gh-axi\` direct-PR path remains unchanged.
+EOF
+}
+
+fm_upstream_pr_preflight_block() {  # <task-id>
+  local script_dir
+  script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd) || return 1
+  cat <<EOF
+Before starting /no-mistakes for an upstream repository the fleet does not own, complete the prior-art gate. For a repository the fleet owns, skip this upstream-only preflight.
+1. Run \`$script_dir/fm-upstream-prior-art.py scan --repo <OWNER/REPO> --title <TITLE> --summary-file <SUMMARY_FILE> --record /tmp/fm-$1/prior-art.json --base <BASE>\`.
+2. Review every candidate, record one distinct/overlaps verdict and reason per candidate, and run \`$script_dir/fm-upstream-prior-art.py decide --record /tmp/fm-$1/prior-art.json --decisions-file <DECISIONS_FILE>\`.
+3. Immediately before starting /no-mistakes, run \`$script_dir/fm-upstream-prior-art.py check --repo <OWNER/REPO> --title <TITLE> --summary-file <SUMMARY_FILE> --record /tmp/fm-$1/prior-art.json --base <BASE>\`; do not start the run if it refuses.
+The later upstream PR publication must use the same current receipt at its forge-write boundary; an automatic PR creation path that cannot perform that check must not be used.
+EOF
+}
+
 fm_dod_block() {  # <mode> <task-id> [branch] [<forge>]
   local mode=$1 id=$2 forge=${4:-none}
   local branch=${3:-fm/$id}
@@ -780,10 +806,11 @@ Delivery contract: mode=direct-PR
 Ship branch: $branch
 This task ships **direct-PR**: you raise the PR yourself, without the no-mistakes pipeline.
 The task is complete only when committed on your branch.
-When it is implemented and committed, push your branch and open a PR with \`gh-axi\` that is ready for review, not a draft.
+When it is implemented and committed, push your branch and open a PR through the applicable publication path below; it must be ready for review, not a draft.
 EOF
       fm_scratch_preflight_block
       fm_pr_body_preflight_block "$id"
+      fm_upstream_pr_publish_block "$id"
       cat <<EOF
 Before you report done, read the PR back from the forge and confirm it is not a draft (\`gh pr view <url> --json isDraft\` must print false); if it is a draft, mark it ready with \`gh-axi pr ready\`.
 A draft cannot be merged, so a done report on one leaves the merge unasked.
@@ -822,6 +849,7 @@ EOF
       fm_nm_driving_block "$forge"
       fm_pr_body_preflight_block "$id"
       fm_nm_published_body_check_block "$id"
+      fm_upstream_pr_preflight_block "$id"
       cat <<EOF
 
 For a base with checks, including \`house\`, after /no-mistakes reports CI green (the CI-ready return point - do not wait for it to keep monitoring in the background until merge), read the PR back from the forge and confirm it is not a draft (\`gh pr view <url> --json isDraft\` must print false); if it is a draft, mark it ready with \`gh-axi pr ready\`.
@@ -902,6 +930,48 @@ fm_dod_pr_url_from_done_note() {  # <note>
 # The last recorded <key>= value in <meta>, or empty.
 fm_dod_meta_value() {  # <meta> <key>
   grep "^$2=" "$1" 2>/dev/null | tail -1 | cut -d= -f2-
+}
+
+fm_dod_upstream_receipt_check() {  # <worktree> <url> <meta> [<published-head>]
+  local wt=$1 url=$2 meta=$3 published_head=${4:-} origin target record tasktmp head script_dir origin_path
+  fm_pr_url_parse "$url" || return 0
+  [ "$FM_PR_PROVIDER" = github ] || return 0
+  [ -d "$wt" ] || { printf '%s\n' 'upstream prior-art receipt refused: worktree is unavailable'; return 1; }
+  origin=$(git -C "$wt" remote get-url origin 2>/dev/null || true)
+  case "$origin" in
+    https://*)
+      origin_path=${origin#https://}
+      origin_path=${origin_path#*@}
+      case "$origin_path" in
+        github.com/*) origin_path=${origin_path#github.com/} ;;
+        *) origin_path= ;;
+      esac
+      ;;
+    ssh://git@github.com/*) origin_path=${origin#ssh://git@github.com/} ;;
+    git@github.com:*) origin_path=${origin#git@github.com:} ;;
+    *) origin_path= ;;
+  esac
+  origin_path=${origin_path%.git}
+  target=$(printf '%s' "$FM_PR_PATH" | tr '[:upper:]' '[:lower:]')
+  origin_path=$(printf '%s' "$origin_path" | tr '[:upper:]' '[:lower:]')
+  [ -n "$origin_path" ] || return 0
+  [ "$origin_path" = "$target" ] && return 0
+  [ -f "$meta" ] || { printf '%s\n' 'upstream prior-art receipt refused: task metadata is unavailable'; return 1; }
+  tasktmp=$(fm_dod_meta_value "$meta" tasktmp)
+  record="$tasktmp/prior-art.json"
+  [ -f "$record" ] || { printf '%s\n' "upstream prior-art receipt refused: missing $record"; return 1; }
+  head=${published_head:-$(git -C "$wt" rev-parse --verify HEAD 2>/dev/null)} || {
+    printf '%s\n' 'upstream prior-art receipt refused: worktree head is unavailable'
+    return 1
+  }
+  script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd) || return 1
+  local verify_args=(--record "$record" --repo "$FM_PR_PATH" --head "$head")
+  [ -z "$published_head" ] || verify_args+=(--published)
+  if ! (cd "$wt" && python3 "$script_dir/fm-upstream-prior-art.py" verify \
+      "${verify_args[@]}"); then
+    printf '%s\n' 'upstream prior-art receipt refused: receipt does not match the published work'
+    return 1
+  fi
 }
 
 # 0 when the forge's head for a PR is the head the done names. In no-mistakes
@@ -1022,9 +1092,16 @@ fm_dod_named_head_reachable_outside_worktree() {  # <worktree> <project> <mode> 
 # pr_head=, and the merge-notified marker; <meta> may be a captured copy
 # (bin/fm-fleet-snapshot.sh), so the marker is read from <state>.
 fm_dod_accept_ship_done() {  # <kind> <mode> <worktree> <project> <line> [<state> <id> <meta>]
-  local kind=$1 mode=$2 wt=$3 project=$4 line=$5 state=${6:-} id=${7:-} meta=${8:-} url sha gerrit
+  local kind=$1 mode=$2 wt=$3 project=$4 line=$5 state=${6:-} id=${7:-} meta=${8:-} url sha gerrit scratch
   fm_dod_should_gate_ship_done "$kind" "$mode" "$line" || return 0
-  if [ -n "$wt" ] && ! fm_scratch_refuse_worktree "$wt"; then
+  if [ -n "$wt" ] && [ -d "$wt" ] && git -C "$wt" rev-parse --git-dir >/dev/null 2>&1 \
+    && ! scratch=$(fm_scratch_refuse_worktree "$wt" 2>&1 >/dev/null); then
+    scratch=${scratch%%$'\n'*}
+    printf '%s\n' "${scratch#error: }"
+    return 1
+  fi
+  url=$(fm_dod_pr_url_from_done_note "$(status_line_note "$line")") || url=
+  if [ -n "$url" ] && ! fm_dod_upstream_receipt_check "$wt" "$url" "$meta" "$(fm_dod_meta_value "$meta" pr_head)"; then
     return 1
   fi
   if url=$(fm_dod_pr_url_from_done_note "$(status_line_note "$line")") \

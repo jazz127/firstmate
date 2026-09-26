@@ -286,8 +286,8 @@
 #   not copied from the invoking process or written into the launch text.
 #   Unset names stay unset and empty values stay empty.
 #   The fixed operational floor is HOME PATH USER LOGNAME SHELL TERM COLORTERM
-#   LANG LC_ALL LC_CTYPE TMPDIR TMP TEMP GOTMPDIR COREPACK_HOME PNPM_HOME
-#   npm_config_store_dir npm_config_cache XDG_CACHE_HOME, plus backend identity/routing:
+#   LANG LC_ALL LC_CTYPE TMPDIR TMP TEMP GOTMPDIR COREPACK_HOME npm_config_cache,
+#   plus backend identity/routing:
 #   TMUX TMUX_PANE HERDR_ENV HERDR_SESSION HERDR_SOCKET_PATH HERDR_PANE_ID
 #   CMUX_WORKSPACE_ID CMUX_SURFACE_ID CMUX_TAB_ID CMUX_PANEL_ID CMUX_SOCKET_PATH
 #   ZELLIJ ZELLIJ_SESSION_NAME ZELLIJ_PANE_ID FM_ZELLIJ_SESSION, plus the task
@@ -404,6 +404,18 @@
 # Claude-Session link, or generated-with line into a commit or PR body;
 # launch_template() below owns the reason it cannot come from the captain's own
 # settings.
+# Cursor and the other non-Claude runtimes have no equivalent per-launch
+# settings overlay: Cursor injects a Co-Authored-By trailer at the tooling
+# layer after the worker types a clean message, and a per-machine
+# ~/.cursor/cli-config.json attribution-off is not durable (it does not travel
+# with this repo, defaults back to on when unset, and only feeds the CLI's
+# request to the server, so it suppresses the trailer rather than preventing
+# it). Every spawn therefore installs state/<id>.git-hooks as a GIT_CONFIG
+# core.hooksPath for the pane, so git commit-msg strips known AI trailers at
+# the commit object for every launched runtime, Claude included as defense
+# in depth. bin/fm-git-strip-ai-trailers.sh owns the identities, the hook
+# install, and chaining the repository git is actually running in so a
+# project husky hook still runs. Author identity is not rewritten.
 # Publishing the record and moving this home's backlog item to In flight are one
 # step, not two: bin/fm-backlog-transition-lib.sh owns that invariant, and this
 # script performs the transition under the task's own meta lock before it reports
@@ -1205,6 +1217,9 @@ RELAUNCH_REPLACEMENT_STATE=
 RELAUNCH_REPLACEMENT_WT=
 CONFIG_INHERIT_LOCK=
 CONFIG_INHERIT_LOCK_HELD=0
+GIT_HOOKS_DIR=
+SPAWN_LAUNCH_SENT=0
+SPAWN_ENDPOINT_CLOSED=0
 
 spawn_fresh_commit_rollback() {
   if fm_backlog_atomic_transition rollback "$STATE/$ID.meta" \
@@ -1280,7 +1295,7 @@ spawn_abort_cleanup() {
   if [ "$ORCA_ABORT_CLEANUP" = 1 ]; then
     ORCA_ABORT_CLEANUP=0
     if [ -n "${ORCA_TERMINAL:-}" ]; then
-      fm_backend_kill orca "$ORCA_TERMINAL" 2>/dev/null || true
+      fm_backend_kill orca "$ORCA_TERMINAL" 2>/dev/null && SPAWN_ENDPOINT_CLOSED=1 || true
     fi
     if [ -n "${ORCA_WORKTREE_ID:-}" ]; then
       if ! fm_backend_remove_worktree orca "$ORCA_WORKTREE_ID" 2>/dev/null; then
@@ -1363,6 +1378,18 @@ spawn_abort_cleanup() {
   if [ "$CONFIG_INHERIT_LOCK_HELD" = 1 ]; then
     CONFIG_INHERIT_LOCK_HELD=0
     fm_lock_release "$CONFIG_INHERIT_LOCK" || true
+  fi
+  # The per-id spawn lock is retaken so a concurrent spawn of the same id, which
+  # reinstalls this strip dir, is never undone. A launched agent whose endpoint
+  # was not closed may still be committing, so it keeps its strip.
+  if [ "$status" -ne 0 ] && [ -n "$GIT_HOOKS_DIR" ] &&
+    { [ "$SPAWN_LAUNCH_SENT" = 0 ] || [ "$SPAWN_ENDPOINT_CLOSED" = 1 ]; } &&
+    fm_lock_try_acquire "$SPAWN_TASK_LOCK"; then
+    if [ ! -e "$STATE/$ID.meta" ] && [ ! -L "$STATE/$ID.meta" ]; then
+      chmod u+w "$GIT_HOOKS_DIR" 2>/dev/null || true
+      rm -rf "$GIT_HOOKS_DIR" 2>/dev/null || true
+    fi
+    fm_lock_release "$SPAWN_TASK_LOCK" || true
   fi
   return "$status"
 }
@@ -4026,12 +4053,12 @@ rovo_spawn_fail() { # <detail>
 # for the record's own teardown, which owns worktree deletion.
 rovo_endpoint_cleanup() {
   if [ "$BACKEND" = orca ]; then
-    fm_backend_kill orca "$T" 2>/dev/null || true
+    fm_backend_kill orca "$T" 2>/dev/null && SPAWN_ENDPOINT_CLOSED=1 || true
     return 0
   fi
   local tab_id=
   [ "$BACKEND" = zellij ] && tab_id=$ZELLIJ_TAB_ID
-  fm_backend_kill "$BACKEND" "$T" "$tab_id" "fm-$ID" 2>/dev/null || true
+  fm_backend_kill "$BACKEND" "$T" "$tab_id" "fm-$ID" 2>/dev/null && SPAWN_ENDPOINT_CLOSED=1 || true
 }
 
 # agy carries its brief on the launch command, so it needs no delivery gate,
@@ -4275,39 +4302,7 @@ if ! (umask 077 && mkdir "$TASK_TMP") 2>/dev/null; then
     exit 1
   fi
 fi
-mkdir -p "$TASK_TMP/gotmp" "$TASK_TMP/cache/corepack" "$TASK_TMP/cache/pnpm" \
-  "$TASK_TMP/cache/npm" "$TASK_TMP/cache/xdg"
-SCRATCH_HOOK_DIR="$TASK_TMP/scratch-hooks"
-mkdir -p "$SCRATCH_HOOK_DIR"
-PRIOR_HOOKS_DIR=$(git -C "$WT" rev-parse --git-path hooks 2>/dev/null || true)
-if [ -n "$PRIOR_HOOKS_DIR" ]; then
-  case "$PRIOR_HOOKS_DIR" in
-    /*) ;;
-    *) PRIOR_HOOKS_DIR="$WT/$PRIOR_HOOKS_DIR" ;;
-  esac
-  PRIOR_PRE_PUSH="$PRIOR_HOOKS_DIR/pre-push"
-else
-  PRIOR_PRE_PUSH=
-fi
-cat >"$SCRATCH_HOOK_DIR/pre-push" <<EOF
-#!/usr/bin/env bash
-set -uo pipefail
-. $(shell_quote "$SCRIPT_DIR/fm-scratch-lib.sh")
-HOOK_STDIN=\$(mktemp $(shell_quote "$SCRATCH_HOOK_DIR")/pre-push-stdin.XXXXXX) || exit 1
-trap 'rm -f -- "\$HOOK_STDIN"' EXIT
-cat >"\$HOOK_STDIN" || exit 1
-while read -r local_ref local_oid remote_ref remote_oid; do
-  [ -n "\${local_oid:-}" ] || continue
-  case "\$local_oid" in
-    0000000000000000000000000000000000000000) continue ;;
-  esac
-  fm_scratch_refuse_range "\$(git rev-parse --show-toplevel)" "\$remote_oid" "\$local_oid" push || exit 1
-done <"\$HOOK_STDIN"
-if [ -n $(shell_quote "$PRIOR_PRE_PUSH") ] && [ -x $(shell_quote "$PRIOR_PRE_PUSH") ]; then
-  $(shell_quote "$PRIOR_PRE_PUSH") "\$@" <"\$HOOK_STDIN"
-fi
-EOF
-chmod 700 "$SCRATCH_HOOK_DIR/pre-push"
+mkdir -p "$TASK_TMP/gotmp" "$TASK_TMP/cache/corepack" "$TASK_TMP/cache/npm"
 
 # Per-harness turn-end hook where enabled: a file that touches
 # state/<id>.turn-ended when the agent finishes a turn. Worktree-resident hooks
@@ -4709,6 +4704,26 @@ EOF
   esac
 fi
 
+# Per-task git hooksPath that strips AI commit trailers at the commit object.
+# Installed for every kind, including secondmate: Cursor and other non-Claude
+# runtimes inject the trailer after the typed message, so the typed message is
+# not the object. The pane receives this directory via GIT_CONFIG_* below,
+# which overrides a project's husky core.hooksPath without rewriting it; the
+# installer chains the previous hooks so they still run. Real secondmate
+# homes are firstmate clones; a launch whose worktree is not git fails closed
+# rather than shipping a runtime that cannot strip.
+# A shipping task's pre-push also runs the upstream prior-art push guard
+# before chaining to the project's own pre-push.
+GIT_HOOKS_DIR="$STATE_REAL/$ID.git-hooks"
+STRIP_INSTALL=("$FM_ROOT/bin/fm-git-strip-ai-trailers.sh" install "$GIT_HOOKS_DIR" "$WT")
+if [ "$KIND" = ship ] && [ "$MODE" != local-only ]; then
+  STRIP_INSTALL+=("$FM_ROOT/bin/fm-upstream-push-guard.sh" "$FM_ROOT" "$TASK_TMP/prior-art.json")
+fi
+"${STRIP_INSTALL[@]}" || {
+  echo "error: could not install the AI-trailer strip hooks for $ID" >&2
+  exit 1
+}
+
 # Delivery posture recorded in meta so fm-teardown's safety check and the
 # validate/merge stages can branch on it. A ship task carries the explicit
 # per-task decision validated above; a secondmate's posture is fixed; a scout
@@ -5032,6 +5047,12 @@ if [ "$KIND" = secondmate ]; then
   # injected carrier and this on/off snapshot are guaranteed to agree.
   LAUNCH="FM_ROOT_OVERRIDE= FM_STATE_OVERRIDE= FM_DATA_OVERRIDE= FM_PROJECTS_OVERRIDE= FM_CONFIG_OVERRIDE= FM_PUBLIC_FOLLOWUP_PRIMARY_HOME=$sq_primary_home FM_HOME=$sq_home FM_TRACE_CONTEXT=$SPAWN_TRACE_EFFECTIVE FM_SUPERVISION_MODEL=$supervision_model $LAUNCH"
 fi
+# Pane-scoped override: git in this worker reads our commit-msg strip without
+# rewriting the project's core.hooksPath. GIT_CONFIG_* takes precedence over
+# config files and is inherited by child git processes. An export statement
+# inside the pane command, like COMPACT_ADVISER_DISABLE below, so it reaches
+# every step of a compound raw launch while firstmate's own git is unchanged.
+LAUNCH="export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=$(shell_quote "$GIT_HOOKS_DIR"); $LAUNCH"
 # Every agent this fleet launches - crewmate, scout, and secondmate, on a fresh
 # spawn and on a relaunch alike - runs with the compact-adviser kill switch on.
 # This is an export statement rather than a forwarded ambient name or a
@@ -5051,7 +5072,6 @@ if [ "$LAVISH_AXI_HOST_CONFIG_PRESENT" = 1 ]; then
   LAUNCH="export LAVISH_AXI_HOST=$(shell_quote "$LAVISH_AXI_HOST"); $LAUNCH"
 fi
 LAUNCH="export COMPACT_ADVISER_DISABLE=1; $LAUNCH"
-LAUNCH="GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=$(shell_quote "$SCRATCH_HOOK_DIR") $LAUNCH"
 if [ -z "$SPAWN_TRACEPARENT" ] && [ "$RELAUNCH" -eq 1 ]; then
   LAUNCH="unset TRACEPARENT; $LAUNCH"
 fi
@@ -5082,17 +5102,12 @@ spawn_record_traceparent() {
   return "$status"
 }
 
-# Export tool cache homes into the crewmate's pane shell before its launch.
-# The task temp root sits outside the worktree and teardown removes it.
+# Export GOTMPDIR and default Corepack and npm cache homes into the crewmate's
+# pane shell before its launch. The task temp root sits outside the worktree and
+# teardown removes it; cache homes the pane already sets are kept.
 spawn_send_text_line "$T" "export GOTMPDIR=$TASK_TMP/gotmp"
-spawn_send_text_line "$T" "export COREPACK_HOME=$TASK_TMP/cache/corepack"
-spawn_send_text_line "$T" "export PNPM_HOME=$TASK_TMP/cache/pnpm"
-spawn_send_text_line "$T" "export npm_config_store_dir=$TASK_TMP/cache/pnpm/store"
-spawn_send_text_line "$T" "export npm_config_cache=$TASK_TMP/cache/npm"
-spawn_send_text_line "$T" "export XDG_CACHE_HOME=$TASK_TMP/cache/xdg"
-spawn_send_text_line "$T" "export GIT_CONFIG_COUNT=1"
-spawn_send_text_line "$T" "export GIT_CONFIG_KEY_0=core.hooksPath"
-spawn_send_text_line "$T" "export GIT_CONFIG_VALUE_0=$(shell_quote "$SCRATCH_HOOK_DIR")"
+spawn_send_text_line "$T" "export COREPACK_HOME=\"\${COREPACK_HOME:-$TASK_TMP/cache/corepack}\""
+spawn_send_text_line "$T" "export npm_config_cache=\"\${npm_config_cache:-\${NPM_CONFIG_CACHE:-$TASK_TMP/cache/npm}}\""
 # Export the compact-adviser kill switch into the pane shell through the same
 # pre-launch channel, so later commands in that shell inherit it too. The launch
 # command independently establishes the value for the agent process itself.
@@ -5131,11 +5146,11 @@ if [ "$LAUNCH_ENV_ENABLED" = 1 ]; then
   # entry; the explicit COMPACT_ADVISER_DISABLE=1 assignment below is the
   # authoritative setter.
   for env_name in HOME PATH USER LOGNAME SHELL TERM COLORTERM LANG LC_ALL LC_CTYPE \
-    TMPDIR TMP TEMP GOTMPDIR COREPACK_HOME PNPM_HOME npm_config_store_dir \
-    npm_config_cache XDG_CACHE_HOME TMUX TMUX_PANE HERDR_ENV HERDR_SESSION HERDR_SOCKET_PATH \
+    TMPDIR TMP TEMP GOTMPDIR COREPACK_HOME npm_config_cache TMUX TMUX_PANE \
+    HERDR_ENV HERDR_SESSION HERDR_SOCKET_PATH \
     HERDR_PANE_ID CMUX_WORKSPACE_ID CMUX_SURFACE_ID CMUX_TAB_ID CMUX_PANEL_ID \
     CMUX_SOCKET_PATH ZELLIJ ZELLIJ_SESSION_NAME ZELLIJ_PANE_ID FM_ZELLIJ_SESSION \
-    FM_TASK_ID COMPACT_ADVISER_DISABLE LAVISH_AXI_HOST GIT_CONFIG_COUNT GIT_CONFIG_KEY_0 GIT_CONFIG_VALUE_0 \
+    FM_TASK_ID COMPACT_ADVISER_DISABLE LAVISH_AXI_HOST \
     $LAUNCH_ENV_NAMES; do
     # Only validated names enter shell syntax. Values expand once, quoted, in
     # the pane shell and never become source text or spawn-process snapshots.
@@ -5207,6 +5222,7 @@ if ! (umask 077 && printf '%s\n' "$LAUNCH" >"$LAUNCH_STAGE" &&
   exit 1
 fi
 sleep 0.3
+SPAWN_LAUNCH_SENT=1
 spawn_send_literal "$T" ". $(shell_quote "$LAUNCH_FILE")"
 sleep 0.3
 if [ "${HERDR_PROJECTED:-0}" -eq 1 ]; then

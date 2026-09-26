@@ -123,6 +123,11 @@ if [ "$PROVIDER" = github ] && [ -n "$WT" ] && [ -d "$WT" ] && command -v gh >/d
   fi
 fi
 
+if ! fm_dod_upstream_receipt_check "$WT" "$URL" "$META" "$PR_HEAD"; then
+  echo "error: upstream PR registration requires a current prior-art receipt" >&2
+  exit 1
+fi
+
 KIND=$(grep '^kind=' "$META" | tail -1 | cut -d= -f2- || true)
 MODE=$(grep '^mode=' "$META" | tail -1 | cut -d= -f2- || true)
 PROJECT=$(grep '^project=' "$META" | tail -1 | cut -d= -f2- || true)

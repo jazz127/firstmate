@@ -923,9 +923,10 @@ SSH_AUTH_SOCK
 ### Variables retained and where values come from
 
 Firstmate retains basic home, executable search, terminal, locale, temporary-directory, and backend routing variables, plus its explicit launch assignments, its ship and scout task marker, the compact-adviser kill switch described below, and enabled task trace.
-Worker launch assignments route Go, Corepack, pnpm, npm, and XDG cache homes into the task temp root outside the worktree; [`tests/fm-spawn-compact-adviser-disable.test.sh`](../tests/fm-spawn-compact-adviser-disable.test.sh) exercises the emitted environment with local fixtures.
-Before publication, GitHub and GitLab changed-file APIs provide the published scratch backstop; Gerrit relies on the task worktree pre-push hook and the existing ready gate.
+Worker launch assignments route Go temp files, and Corepack and npm cache homes the pane has not already set, into the task temp root outside the worktree; [`tests/fm-spawn-compact-adviser-disable.test.sh`](../tests/fm-spawn-compact-adviser-disable.test.sh) exercises the emitted environment with local fixtures.
+Before publishing, the worker runs the scratch preflight (`fm-pr-body-preflight.sh --scratch`); when a GitHub or GitLab change is registered, its changed-file API provides the published scratch backstop, which Gerrit lacks; for every provider the ship `done:` gate also refuses scratch committed in an existing worker copy, including when the `done:` names the recorded change.
 [`fm-spawn.sh --help`](../bin/fm-spawn.sh) owns the exact retained names, assignments, and parsing mechanics.
+
 Other ambient names must be listed explicitly, including custom credential-store locations, proxy settings, and certificate overrides when required by the selected tools.
 The command shell and worker may still create their own variables.
 
@@ -967,6 +968,10 @@ This applies only to agents Firstmate launches; the captain's own primary Firstm
 [`fm-spawn.sh --help`](../bin/fm-spawn.sh) owns the delivery mechanics, with focused regression coverage in [`tests/fm-spawn-compact-adviser-disable.test.sh`](../tests/fm-spawn-compact-adviser-disable.test.sh) and [`tests/fm-spawn-compact-adviser-disable-remote.test.sh`](../tests/fm-spawn-compact-adviser-disable-remote.test.sh).
 
 Every claude launch's inline `--settings` JSON also carries `"attribution":{"commit":"","pr":"","sessionUrl":false}`, so a spawned worker never writes a Co-Authored-By trailer, Claude-Session link, or generated-with line into a commit or PR body regardless of which settings scopes end up loaded.
+Every fleet launch, Claude included, also receives a pane-scoped `GIT_CONFIG` `core.hooksPath` pointing at `state/<id>.git-hooks`, so git's `commit-msg` hook strips known AI trailers at the commit object even when a runtime injects them after the typed message.
+`bin/fm-git-strip-ai-trailers.sh` owns the identities, the install, and chaining the hooks of whichever repository git is running in, so a project hook such as husky still runs.
+That directory is read-only, so a hook manager run inside a fleet pane (lefthook's npm postinstall, `pre-commit install`) fails instead of displacing the strip; install a project's hooks from outside the pane, where the wrappers chain them.
+Per-machine Cursor `cli-config.json` attribution-off is not this contract: it does not travel with Firstmate, defaults back to on when unset, and only feeds the CLI's request to the server, so it suppresses the trailer rather than preventing it.
 
 ## Crew dispatch profiles (config/crew-dispatch.json)
 

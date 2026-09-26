@@ -73,13 +73,14 @@ SH
 #   emitted_launch_env <fakebin> <launch-log> <pane-log>
 emitted_launch_env() {
   local fakebin=$1 launchlog=$2 panelog=$3 launch preamble
+  shift 3
   launch=$(cat "$launchlog")
   # The pane exports run before the launch command in the real pane shell, so
   # replay them here in the same order: the filtered launch environment retains
   # what the pane holds, and dropping them would test a pane that never existed.
   preamble=$(grep '^export ' "$panelog")
   env -i HOME="$TMP_ROOT/pane-home" PATH="$fakebin:$PATH" TERM=xterm \
-    TMUX=synthetic-pane COMPACT_ADVISER_DISABLE="$CONTRARY" \
+    TMUX=synthetic-pane COMPACT_ADVISER_DISABLE="$CONTRARY" "$@" \
     /bin/sh -c "$preamble
 $launch"
 }
@@ -151,23 +152,31 @@ test_tool_caches_stay_outside_worktree() {
     expect_code 0 "$?" "cache launch with allowlist=$setting should succeed: $out"
     cat > "$FAKEBIN_DIR/codex" <<'SH'
 #!/bin/sh
-printf '%s\n' "$GOTMPDIR" "$COREPACK_HOME" "$PNPM_HOME" \
-  "$npm_config_store_dir" "$npm_config_cache" "$XDG_CACHE_HOME"
+printf '%s\n' "$GOTMPDIR" "$COREPACK_HOME" "$npm_config_cache"
 SH
     chmod +x "$FAKEBIN_DIR/codex"
     seen=$(emitted_launch_env "$FAKEBIN_DIR" "$LAUNCH_LOG" "$PANE_LOG") \
       || fail "cache launch with allowlist=$setting did not execute"
     task_tmp="/tmp/fm-$id"
-    expected=$(printf '%s\n' "$task_tmp/gotmp" "$task_tmp/cache/corepack" \
-      "$task_tmp/cache/pnpm" "$task_tmp/cache/pnpm/store" \
-      "$task_tmp/cache/npm" "$task_tmp/cache/xdg")
+    expected=$(printf '%s\n' "$task_tmp/gotmp" "$task_tmp/cache/corepack" "$task_tmp/cache/npm")
     assert_equals "$expected" "$seen" \
-      "cache launch with allowlist=$setting did not route every tool cache to the task temp root"
-    [ -d "$task_tmp/cache/corepack" ] && [ -d "$task_tmp/cache/pnpm" ] \
-      && [ -d "$task_tmp/cache/npm" ] && [ -d "$task_tmp/cache/xdg" ] \
+      "cache launch with allowlist=$setting did not route the Corepack and npm caches to the task temp root"
+    [ -d "$task_tmp/cache/corepack" ] && [ -d "$task_tmp/cache/npm" ] \
       || fail "cache launch with allowlist=$setting did not create the cache homes"
+    seen=$(emitted_launch_env "$FAKEBIN_DIR" "$LAUNCH_LOG" "$PANE_LOG" \
+      COREPACK_HOME="$TMP_ROOT/user corepack" npm_config_cache="$TMP_ROOT/user npm") \
+      || fail "cache launch with allowlist=$setting and preset caches did not execute"
+    expected=$(printf '%s\n' "$task_tmp/gotmp" "$TMP_ROOT/user corepack" "$TMP_ROOT/user npm")
+    assert_equals "$expected" "$seen" \
+      "cache launch with allowlist=$setting overrode cache homes the pane already set"
+    seen=$(emitted_launch_env "$FAKEBIN_DIR" "$LAUNCH_LOG" "$PANE_LOG" \
+      NPM_CONFIG_CACHE="$TMP_ROOT/user upper npm") \
+      || fail "cache launch with allowlist=$setting and an uppercase npm cache did not execute"
+    expected=$(printf '%s\n' "$task_tmp/gotmp" "$task_tmp/cache/corepack" "$TMP_ROOT/user upper npm")
+    assert_equals "$expected" "$seen" \
+      "cache launch with allowlist=$setting overrode the NPM_CONFIG_CACHE the pane already set"
   done
-  pass "worker launch routes tool caches outside the worktree with either launch environment posture"
+  pass "worker launch defaults Corepack and npm caches outside the worktree and keeps preset ones"
 }
 
 # The floor must not depend on the pane export having landed: a pane whose
@@ -205,6 +214,8 @@ test_secondmate_launch() {
     printf '# Firstmate\n' > "$sm/AGENTS.md"
     printf '%s\n' "sm-$setting" > "$sm/.fm-secondmate-home"
     printf 'charter for sm-%s\n' "$setting" > "$sm/data/charter.md"
+    printf '%s\n' 'projects/' 'state/' 'data/' 'config/' '.no-mistakes/' > "$sm/.gitignore"
+    git -C "$sm" init -q -b main
     out=$(run_case_spawn "sm-$setting" "$sm" --secondmate)
     status=$?
     expect_code 0 "$status" "secondmate spawn with allowlist=$setting should succeed: $out"
@@ -375,87 +386,6 @@ SH
   pass "a compound raw launch-command still starts its agent with the compact-adviser switch on"
 }
 
-test_spawn_installs_scratch_push_guard() {
-  local rec task_tmp hook base head out status
-  rec=$(make_case scratch-push-guard codex scratch-push-guard-a1)
-  read_case "$rec"
-  out=$(run_case_spawn scratch-push-guard-a1 "$PROJ_DIR" --mode no-mistakes --yolo off)
-  status=$?
-  expect_code 0 "$status" "scratch push guard spawn should succeed: $out"
-  task_tmp=$(grep '^tasktmp=' "$HOME_DIR/state/scratch-push-guard-a1.meta" | cut -d= -f2-)
-  hook="$task_tmp/scratch-hooks/pre-push"
-  [ -x "$hook" ] || fail "spawn did not install the scratch pre-push hook"
-  mkdir -p "$WT_DIR/.codex-live-check/cache/node/corepack/v1/pnpm/11.1.1"
-  printf '%s\n' bundle > "$WT_DIR/.codex-live-check/cache/node/corepack/v1/pnpm/11.1.1/package.json"
-  git -C "$WT_DIR" config user.name fixture
-  git -C "$WT_DIR" config user.email fixture@example.invalid
-  git -C "$WT_DIR" add -f .codex-live-check
-  git -C "$WT_DIR" commit -qm 'pipeline scratch bundle'
-  head=$(git -C "$WT_DIR" rev-parse HEAD)
-  base=$(git -C "$WT_DIR" rev-parse HEAD^)
-  set +e
-  out=$(cd "$WT_DIR" && printf 'refs/heads/task\t%s\trefs/heads/task\t%s\n' "$head" "$base" | "$hook" 2>&1)
-  status=$?
-  set -e
-  [ "$status" -eq 1 ] || fail "scratch pre-push hook accepted a vendored bundle: $out"
-  printf '%s\n' "$out" | grep -Fq 'package.json' \
-    || fail "scratch pre-push refusal did not name the vendored bundle"
-  set +e
-  out=$(cd "$WT_DIR" && printf 'refs/heads/task\t%s\trefs/heads/task\t%s\n' "$head" 0000000000000000000000000000000000000000 | "$hook" 2>&1)
-  status=$?
-  set -e
-  [ "$status" -eq 1 ] || fail "new remote branch accepted a vendored bundle: $out"
-  printf '%s\n' "$out" | grep -Fq 'package.json' \
-    || fail "new remote branch refusal did not name the vendored bundle"
-  set +e
-  out=$(cd "$WT_DIR" && printf 'refs/heads/task\t%s\trefs/heads/task\t%s\n' 0000000000000000000000000000000000000000 "$head" | "$hook" 2>&1)
-  status=$?
-  set -e
-  [ "$status" -eq 0 ] || fail "deleting a remote branch was refused because of historical scratch: $out"
-  pass "spawn installs a pre-push guard for committed scratch bundles"
-}
-
-test_spawn_chains_existing_pre_push_hook() {
-  local rec task_tmp hooks_dir prior_hook marker input base head out status
-  rec=$(make_case chained-pre-push codex chained-pre-push-a1)
-  read_case "$rec"
-  hooks_dir="$CASE_DIR/project-hooks"
-  mkdir -p "$hooks_dir"
-  prior_hook="$hooks_dir/pre-push"
-  marker="$CASE_DIR/project-hook-ran"
-  input="$CASE_DIR/project-hook-input"
-  git -C "$WT_DIR" config core.hooksPath "$hooks_dir"
-  cat > "$prior_hook" <<SH
-#!/bin/sh
-cat > "$input"
-: > "$marker"
-exit 17
-SH
-  chmod +x "$prior_hook"
-  out=$(run_case_spawn chained-pre-push-a1 "$PROJ_DIR" --mode no-mistakes --yolo off)
-  status=$?
-  expect_code 0 "$status" "chained pre-push spawn should succeed: $out"
-  printf '%s\n' product > "$WT_DIR/product.txt"
-  git -C "$WT_DIR" config user.name fixture
-  git -C "$WT_DIR" config user.email fixture@example.invalid
-  git -C "$WT_DIR" add product.txt
-  git -C "$WT_DIR" commit -qm 'ordinary product change'
-  head=$(git -C "$WT_DIR" rev-parse HEAD)
-  base=$(git -C "$WT_DIR" rev-parse HEAD^)
-  task_tmp=$(grep '^tasktmp=' "$HOME_DIR/state/chained-pre-push-a1.meta" | cut -d= -f2-)
-  prior_hook="$task_tmp/scratch-hooks/pre-push"
-  [ -x "$prior_hook" ] || fail "spawn did not install the chained scratch pre-push hook"
-  set +e
-  out=$(cd "$WT_DIR" && printf 'refs/heads/task\t%s\trefs/heads/task\t%s\n' "$head" "$base" | "$prior_hook" origin file://remote 2>&1)
-  status=$?
-  set -e
-  [ "$status" -eq 17 ] || fail "existing pre-push hook status was not preserved: $out"
-  [ -f "$marker" ] || fail "existing project pre-push hook did not run"
-  printf 'refs/heads/task\t%s\trefs/heads/task\t%s\n' "$head" "$base" | cmp -s - "$input" \
-    || fail "existing project pre-push hook did not receive the original stdin"
-  pass "spawn chains an existing project pre-push hook"
-}
-
 test_ship_allowlist_absent
 test_ship_allowlist_enabled
 test_tool_caches_stay_outside_worktree
@@ -463,5 +393,3 @@ test_launch_command_carries_the_switch_without_the_pane_export
 test_secondmate_launch
 test_relaunch_rebuilds_the_switch
 test_raw_compound_launch_command_carries_the_switch
-test_spawn_installs_scratch_push_guard
-test_spawn_chains_existing_pre_push_hook

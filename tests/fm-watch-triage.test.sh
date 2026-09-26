@@ -3155,7 +3155,7 @@ test_declared_wait_recheck_is_shared_with_the_wedge_route() {
     || fail "the wedge route stopped rechecking once the shared window elapsed"
   [ "$(wedge_stale_wakes "$state" test:fm-wedge)" -eq 1 ] \
     || fail "the elapsed shared window produced $(wedge_stale_wakes "$state" test:fm-wedge) wakes instead of one"
-  grep -F 'declared wait' "$state/.wake-queue" >/dev/null \
+  grep -F 'awaiting external - declared pause' "$state/.wake-queue" >/dev/null \
     || fail "the wedge-route recheck did not name the declared wait: $(cat "$state/.wake-queue")"
   pass "a declared wait's idle and wedge routes share one recheck per cadence window"
 }
@@ -3332,6 +3332,96 @@ test_open_captain_call_bounds_a_paused_last_line() {
   pass "an open captain call bounds a paused: last line through the captain-call re-surface throttle"
 }
 
+# The wedge-threshold route re-surfaces a declared wait through the same hold
+# precedence, scope and wording as the idle and busy routes. A `paused:` worker
+# with an open captain call is first rechecked from a busy over-age pane, which
+# records the hold's scope; the same wait then reaches the wedge threshold on an
+# idle pane under a working verdict. It must absorb inside the hold's window
+# rather than publish a second, external-wait recheck under its own scope, and
+# once the window elapses the wedge route rechecks it as the hold.
+hold_route_round() {  # <dir> <out> <capture> <exit|absorb>
+  local dir=$1 out=$2 capture=$3 mode=$4 pid cycles=0
+  PATH="$dir/fakebin:$PATH" FM_FAKE_TMUX_WINDOW=test:fm-held-merge \
+    FM_FAKE_TMUX_CAPTURE="$capture" \
+    FM_FAKE_CREW_STATE='state: working · source: run-step · ci running' \
+    FM_WATCH_HANDLING_SUCCESSOR=1 \
+    FM_HOME="$dir" FM_DATA_OVERRIDE="$dir/data" FM_CONFIG_OVERRIDE="$dir/config" \
+    FM_STATE_OVERRIDE="$dir/state" FM_CREW_STATE_BIN="$dir/fakebin/fm-crew-state.sh" \
+    FM_PAUSE_RESURFACE_SECS=999 FM_BUSY_TURN_MAX_SECS=1 FM_STALE_ESCALATE_SECS=1 \
+    FM_POLL=1 FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 \
+    "$WATCH" >> "$out" 2>&1 &
+  pid=$!
+  if [ "$mode" = exit ]; then
+    wait_for_exit "$pid" 100 || { reap "$pid"; return 1; }
+    return 0
+  fi
+  while [ "$cycles" -lt 3 ]; do
+    wait_poll_cycle "$dir/state" "$pid" 300 || { reap "$pid"; return 1; }
+    cycles=$((cycles + 1))
+  done
+  reap "$pid"
+  return 0
+}
+
+test_open_captain_call_scope_is_shared_by_the_busy_and_wedge_routes() {
+  local dir state out capture key throttle scope
+  command -v tasks-axi >/dev/null 2>&1 \
+    || { echo "skip: tasks-axi not found (held wait across busy and wedge routes)"; return 0; }
+  dir=$(make_hold_home held-busy-then-wedge 'paused: waiting on CI' hold) \
+    || fail "could not build a held paused-line fixture"
+  state="$dir/state"; out="$dir/watch.out"; capture="$dir/pane.txt"
+  key=$(hold_key); throttle="$state/.paused-resurfaced-$key"
+  printf 'window=test:fm-held-merge\nkind=ship\nharness=pi\n' > "$state/held-merge.meta"
+  touch -t 200001010000 "$state/held-merge.meta"
+  record_pi_busy "$state" held-merge
+  printf 'Working...' > "$capture"
+  printf '%s' "$(hash_text 'Working...')" > "$state/.hash-$key"
+  printf '1\n' > "$state/.count-$key"
+
+  hold_route_round "$dir" "$out" "$capture" exit \
+    || fail "a busy over-age pane with an open captain call was not rechecked: $(cat "$out")"
+  [ "$(hold_stale_wakes "$state")" -eq 1 ] \
+    || fail "the busy over-age recheck produced $(hold_stale_wakes "$state") wakes instead of one"
+  grep -F 'awaiting the captain - open captain call' "$state/.wake-queue" >/dev/null \
+    || fail "the busy over-age recheck did not name the hold: $(cat "$state/.wake-queue")"
+  scope=$(cat "$throttle" 2>/dev/null) || fail "the busy over-age recheck recorded no throttle"
+  case "$scope" in captain-hold:*) ;; *) fail "the busy over-age recheck recorded scope '$scope', not the hold's" ;; esac
+  ack_stopped_cycle "$state" || fail "could not acknowledge the busy over-age recheck"
+
+  "$ROOT/bin/fm-busy-event.sh" apply "$state" held-merge idle --current-gen \
+    --source pi-ext --event agent-end >/dev/null
+  printf 'idle at the prompt' > "$capture"
+  printf '%s' "$(hash_text 'idle at the prompt')" > "$state/.hash-$key"
+  printf '%s' "$(hash_text 'idle at the prompt')" > "$state/.stale-$key"
+  printf '1\n' > "$state/.count-$key"
+  printf '%s\n' "$(( $(date +%s) - 500 ))" > "$state/.stale-since-$key"
+  : > "$out"
+  hold_route_round "$dir" "$out" "$capture" absorb \
+    || fail "the wedge-threshold route published a second recheck inside the hold's window: $(cat "$out")"
+  [ "$(hold_stale_wakes "$state")" -eq 0 ] \
+    || fail "the wedge-threshold route queued a recheck inside the hold's window: $(cat "$state/.wake-queue")"
+  [ "$(cat "$throttle")" = "$scope" ] \
+    || fail "the wedge-threshold route replaced the hold's scope with '$(cat "$throttle")'"
+  grep -F 'declared wait explains the quiet' "$state/.watch-triage.log" >/dev/null \
+    || fail "the round never reached the wedge-threshold deferral: $(cat "$state/.watch-triage.log")"
+  [ ! -e "$state/.wedge-escalations-$key" ] \
+    || fail "the held wait counted a wedge escalation"
+
+  set_mtime "$(( $(date +%s) - 5000 ))" "$throttle"
+  printf '%s\n' "$(( $(date +%s) - 500 ))" > "$state/.stale-since-$key"
+  hold_route_round "$dir" "$out" "$capture" exit \
+    || fail "the wedge-threshold route stopped rechecking the hold once its window elapsed: $(cat "$out")"
+  [ "$(hold_stale_wakes "$state")" -eq 1 ] \
+    || fail "the elapsed hold window produced $(hold_stale_wakes "$state") wakes instead of one"
+  grep -F 'awaiting the captain - open captain call' "$state/.wake-queue" >/dev/null \
+    || fail "the wedge-threshold recheck did not name the hold: $(cat "$state/.wake-queue")"
+  grep -F 'awaiting external' "$state/.wake-queue" >/dev/null \
+    && fail "the wedge-threshold recheck hid the hold behind external-wait wording: $(cat "$state/.wake-queue")"
+  [ "$(cat "$throttle")" = "$scope" ] \
+    || fail "the wedge-threshold recheck recorded scope '$(cat "$throttle")', not the hold's"
+  pass "an open captain call keeps one scope and one recheck per cadence across the busy and wedge-threshold routes"
+}
+
 test_live_paused_until_controls_recheck_time() {
   local dir state fakebin out capture_file statusf window key sig wakes future past
   dir=$(make_case live-paused-until); state="$dir/state"; fakebin="$dir/fakebin"
@@ -3474,7 +3564,7 @@ wedge_stale_wakes() {  # <state> <window>
 # the number in it is the thing under test: it must describe the wait that is
 # actually holding the lane, not whatever unrelated record happened to be handy.
 wedge_reported_wait_secs() {  # <watch-out>
-  sed -n 's/.*waiting \([0-9][0-9]*\)s.*/\1/p' "$1" | head -1
+  sed -n -e 's/.*waiting \([0-9][0-9]*\)s.*/\1/p' -e 's/.*(paused \([0-9][0-9]*\)s,.*/\1/p' "$1" | head -1
 }
 
 test_wedge_threshold_defers_to_a_declared_wait_under_a_working_verdict() {
@@ -3510,7 +3600,7 @@ test_wedge_threshold_defers_to_a_declared_wait_under_a_working_verdict() {
   reported=$(wedge_reported_wait_secs "$out")
   [ -n "$reported" ] && [ "$reported" -ge 1900 ] \
     || fail "the declared-wait recheck reported '${reported}'s rather than the age of the declaration itself: $(cat "$out")"
-  grep -F 'declared wait' "$out" >/dev/null \
+  grep -F 'declared pause' "$out" >/dev/null \
     || fail "the declared-wait recheck did not name its evidence as declared: $(cat "$out")"
   # A `paused:` declaration names an external dependency the worker chose, so its
   # recheck asks the reader to confirm that dependency - never to answer or
@@ -6940,6 +7030,7 @@ test_declared_wait_recheck_is_shared_with_the_wedge_route
 test_done_open_pr_uses_declared_wait_cadence
 test_delivered_pr_wait_requires_an_authenticated_poll
 test_open_captain_call_bounds_a_paused_last_line
+test_open_captain_call_scope_is_shared_by_the_busy_and_wedge_routes
 test_live_paused_until_controls_recheck_time
 test_wedge_threshold_defers_to_a_declared_wait_under_a_working_verdict
 test_wedge_threshold_keeps_a_wait_past_a_default_key_answer

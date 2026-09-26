@@ -1296,18 +1296,20 @@ wedge_wait_evidence() {  # <task> -> one wait_record on stdout
 # and the next window probes the evidence again - a wait that ends is escalating
 # again within one STALE_ESCALATE_SECS, which is why the worst-case detection
 # time for a pane that stops waiting does not move.
-# Every word of the recheck that could be wrong per kind of evidence - the human
-# it names, the action it asks for, the age it publishes - is READ FROM THE
-# RECORD rather than re-derived here, so this function cannot word one kind of
-# wait as another.
-# A wait with a written record is the worker's own declaration, so it is aged and
-# throttled as that declaration's episode (declared_wait_episode) through the
-# same .paused-resurfaced-<key> throttle handle_paused_stale uses: a wait that
-# moves between the idle cadence and this wedge route publishes one recheck per
-# cadence window, not one per route. It is anchored there rather than on a
-# per-window marker for the same reason handle_paused_stale is: an idle pane
-# churns its display (a clock, a token counter), and a marker this deferral kept
-# touching would let that churn reset the cadence. A record whose episode cannot
+# For a wait with no declaration behind it, every word of the recheck that could
+# be wrong per kind of evidence - the human it names, the action it asks for, the
+# age it publishes - is READ FROM THE RECORD rather than re-derived here, so this
+# function cannot word one kind of wait as another.
+# A wait with a written record is the worker's own declaration, so it is handed
+# whole to declared_wait_resurface, the re-surface handle_paused_stale uses: the
+# same episode age and scope, the same .paused-resurfaced-<key> throttle, the
+# same open-captain-call precedence and away-posture silence, and the same
+# declared_wait_stale_reason wording, so a wait that moves between the idle
+# cadence and this wedge route publishes one recheck per cadence window, not one
+# per route. It is anchored there rather than on a per-window marker for the
+# same reason handle_paused_stale is: an idle pane churns its display (a clock,
+# a token counter), and a marker this deferral kept touching would let that
+# churn reset the cadence. A record whose episode cannot
 # be read falls back to the record file's mtime and this deferral's own
 # .waiting-resurfaced-<key> throttle. A wait with NO written record publishes no age at all: the
 # quiet window is the only clock in hand and this deferral resets it on every
@@ -1333,7 +1335,7 @@ wedge_wait_evidence() {  # <task> -> one wait_record on stdout
 # demand-inspection history it had already earned.
 wedge_defer_wait() {  # <window> <since-file> <triage-label> <idle-age> <wait-record>
   local win=$1 since_file=$2 label=$3 age=$4 record=$5
-  local kind subject whom action anchor key mtime wage min_age waited us ok throttle scope
+  local kind subject whom action anchor key mtime wage min_age waited us ok task
   us=$(printf '\037')
   IFS=$us read -r kind subject whom action anchor <<EOF
 $record
@@ -1365,38 +1367,37 @@ EOF
     triage_log "absorbed $label ($kind, never rechecked while the away-posture record exists): $win"
     return 0
   fi
-  mtime=''
-  throttle="$STATE/.waiting-resurfaced-$key"
-  scope=''
-  if [ -n "$anchor" ] && declared_wait_episode "$key" "$(window_to_task "$win" "$STATE")"; then
-    wage=$DECLARED_WAIT_AGE
-    min_age=$PAUSE_RESURFACE_SECS; waited=", waiting ${wage}s"
-    throttle="$STATE/.paused-resurfaced-$key"
-    scope=$DECLARED_WAIT_SCOPE
-  else
-    [ -n "$anchor" ] && mtime=$(stat_mtime "$anchor")
-    case "$mtime" in
-      ''|*[!0-9]*)
-        # No readable record of when the wait started - either none exists, or
-        # the status file could not be read. Age from the quiet window already in
-        # hand and publish nothing: anchoring on the current time instead would
-        # recompute the wait age as 0 at every threshold, and the bounded
-        # re-surface could then never fire at all - the one outcome this deferral
-        # must not produce.
-        wage=$age; min_age=0; waited=''
-        ;;
-      *)
-        wage=$(( $(date +%s) - mtime ))
-        [ "$wage" -ge 0 ] || wage=0
-        min_age=$PAUSE_RESURFACE_SECS; waited=", waiting ${wage}s"
-        ;;
-    esac
+  task=$(window_to_task "$win" "$STATE")
+  if [ -n "$anchor" ] && declared_wait_episode "$key" "$task"; then
+    clear_write_tracking "$key"
+    date +%s > "$since_file"
+    declared_wait_resurface "$win" "$task" "$key" "$DECLARED_WAIT_LINE" "$DECLARED_WAIT_AGE" "$DECLARED_WAIT_SCOPE" paused
+    triage_log "absorbed $label ($kind explains the quiet, idle ${age}s): $win"
+    return 0
   fi
+  mtime=''
+  [ -n "$anchor" ] && mtime=$(stat_mtime "$anchor")
+  case "$mtime" in
+    ''|*[!0-9]*)
+      # No readable record of when the wait started - either none exists, or
+      # the status file could not be read. Age from the quiet window already in
+      # hand and publish nothing: anchoring on the current time instead would
+      # recompute the wait age as 0 at every threshold, and the bounded
+      # re-surface could then never fire at all - the one outcome this deferral
+      # must not produce.
+      wage=$age; min_age=0; waited=''
+      ;;
+    *)
+      wage=$(( $(date +%s) - mtime ))
+      [ "$wage" -ge 0 ] || wage=0
+      min_age=$PAUSE_RESURFACE_SECS; waited=", waiting ${wage}s"
+      ;;
+  esac
   clear_write_tracking "$key"
   date +%s > "$since_file"
-  resurface_absorbed "$win" "$throttle" "$wage" \
+  resurface_absorbed "$win" "$STATE/.waiting-resurfaced-$key" "$wage" \
     "stale: $win (idle ${age}s${waited} - $kind, $subject, rechecked on a long cadence not a wedge; $action)" \
-    "$scope" "$min_age"
+    '' "$min_age"
   triage_log "absorbed $label ($kind explains the quiet, idle ${age}s): $win"
   return 0
 }
@@ -1723,8 +1724,7 @@ declared_wait_stale_reason() {  # <kind> <age>
 # wording; a caller that reached the bounded cadence off pause tracking alone, with
 # no declaring verb left on the log, keeps the external-wait wording it always had.
 handle_paused_stale() {  # <window> <task> <hash>
-  local win=$1 task=$2 h=$3 key statusf mtime age detail reason declaration last until now min_age
-  local throttle cached checked held='' kind wait_kind=paused done_line done_untimed
+  local win=$1 task=$2 h=$3 key statusf mtime age declaration last now wait_kind=paused done_line done_untimed
   key=$(window_key "$win")
   printf '%s' "$h" > "$STATE/.stale-$key"
   : > "$STATE/.paused-$key"
@@ -1732,7 +1732,6 @@ handle_paused_stale() {  # <window> <task> <hash>
   clear_write_tracking "$key"
   statusf="$STATE/$task.status"
   now=$(date +%s)
-  min_age=$PAUSE_RESURFACE_SECS
   if declared_wait_episode "$key" "$task"; then
     last=$DECLARED_WAIT_LINE
     age=$DECLARED_WAIT_AGE
@@ -1761,6 +1760,19 @@ handle_paused_stale() {  # <window> <task> <hash>
     [ "$age" -ge 0 ] || age=0
     declaration="declared:$(fm_wake_signal_sig "$statusf" || true)"
   fi
+  declared_wait_resurface "$win" "$task" "$key" "$last" "$age" "$declaration" "$wait_kind"
+}
+
+# Re-surface one standing wait on its bounded cadence, for every route that can
+# (handle_paused_stale and the declared-wait arm of wedge_defer_wait), so a wait
+# publishes one scope, one throttle and one wording whichever route reaches it.
+# <last> is the declaring line (empty when none is left on the log), <age> and
+# <declaration> the episode's age and scope, and <wait-kind> paused or delivered.
+declared_wait_resurface() {  # <window> <task> <window-key> <last> <age> <declaration> <wait-kind>
+  local win=$1 task=$2 key=$3 last=$4 age=$5 declaration=$6 wait_kind=$7
+  local throttle cached checked held='' kind detail reason until now min_age
+  now=$(date +%s)
+  min_age=$PAUSE_RESURFACE_SECS
   # A proven open backlog hold outranks the external-wait wording of a `paused:`
   # line or a delivery: firstmate records the hold in the BACKLOG
   # (bin/fm-captain-hold.sh) and the worker's own line stays whatever it wrote.

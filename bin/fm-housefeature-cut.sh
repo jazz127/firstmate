@@ -13,14 +13,17 @@
 # classify reads the HF_* environment below and prints either
 # "cut <name>" or "skip <reason>". It skips a pull request that was not merged,
 # whose base is not house, whose head lives in another repository, or whose
-# head ref contains upstream-merge or reconcile (upstream main brought into house).
+# head ref contains house-upstream-merge or house-reconcile (upstream main
+# brought into house).
 #
 # run classifies, then in the current clone of the fork: leaves an existing
 # housefeature/<name> untouched; otherwise commits the pull request's change
 # on top of the fork's main when it applies cleanly there, else captures the
 # merged pull request head, and pushes only refs/heads/housefeature/<name>
-# without force. Every outcome appends one line to $GITHUB_STEP_SUMMARY
-# (stdout when unset). Only a failed git operation or push exits non-zero.
+# create-only: the push expects the ref to be absent, so a branch that appeared
+# meanwhile is refused, never moved. Every outcome, including every failure,
+# appends one line to $GITHUB_STEP_SUMMARY (stdout when unset). Only a failed
+# git operation or push exits non-zero.
 #
 # Environment (the .github/workflows/housefeature-cut.yml event fields):
 #   HF_MERGED      "true" when the pull request was merged
@@ -68,7 +71,7 @@ classify() {
     printf 'skip head is from another repository (%s)\n' "${HF_HEAD_REPO:-<deleted>}"
   else
     case "${HF_HEAD_REF:-}" in
-      *upstream-merge*|*reconcile*)
+      *house-upstream-merge*|*house-reconcile*)
         printf 'skip %s brings upstream main into %s\n' "$HF_HEAD_REF" "$HOUSE_BRANCH"
         ;;
       *)
@@ -90,14 +93,19 @@ summary() {
 }
 
 need() {
-  [ -n "${!1:-}" ] || { printf 'fm-housefeature-cut.sh: %s is required\n' "$1" >&2; exit 2; }
+  [ -n "${!1:-}" ] || { summary "Could not cut \`$branch\` for pull request #${HF_PR_NUMBER:-?}: $1 is required; nothing pushed."; exit 2; }
+}
+
+abort() {
+  summary "Could not cut \`$branch\` for pull request #$HF_PR_NUMBER: $1; nothing pushed."
+  exit 1
 }
 
 # cut_from_main <fork-point>: print a commit on the fork's main carrying the
 # pull request's change, or nothing when it does not apply cleanly there.
 cut_from_main() {
   local fork_point=$1 main_sha index tree='' author_name author_email author_date
-  main_sha=$(git rev-parse --verify "refs/remotes/$REMOTE/$MAIN_BRANCH^{commit}")
+  main_sha=$(git rev-parse --verify "refs/remotes/$REMOTE/$MAIN_BRANCH^{commit}") || return 1
   git diff --quiet "$fork_point" "$HF_HEAD_SHA" && return 0
   index=$(mktemp)
   if GIT_INDEX_FILE=$index git read-tree "$main_sha" &&
@@ -146,12 +154,13 @@ run() {
     "+refs/pull/$HF_PR_NUMBER/head:refs/remotes/$REMOTE/pull/$HF_PR_NUMBER/head" 2>/dev/null \
     || git fetch --quiet --no-tags "$REMOTE" \
       "+refs/heads/$MAIN_BRANCH:refs/remotes/$REMOTE/$MAIN_BRANCH" \
-      "+refs/heads/$HOUSE_BRANCH:refs/remotes/$REMOTE/$HOUSE_BRANCH"
-  git cat-file -e "$HF_HEAD_SHA^{commit}"
-  git cat-file -e "$HF_MERGE_SHA^{commit}"
-  fork_point=$(git merge-base "$HF_MERGE_SHA^1" "$HF_HEAD_SHA")
+      "+refs/heads/$HOUSE_BRANCH:refs/remotes/$REMOTE/$HOUSE_BRANCH" \
+    || abort "fetch from $REMOTE failed"
+  git cat-file -e "$HF_HEAD_SHA^{commit}" || abort "head $HF_HEAD_SHA is not available"
+  git cat-file -e "$HF_MERGE_SHA^{commit}" || abort "merge $HF_MERGE_SHA is not available"
+  fork_point=$(git merge-base "$HF_MERGE_SHA^1" "$HF_HEAD_SHA") || abort "no fork point with $HOUSE_BRANCH"
 
-  sha=$(cut_from_main "$fork_point")
+  sha=$(cut_from_main "$fork_point") || abort "building the $MAIN_BRANCH cut failed"
   if [ -n "$sha" ]; then
     source="cut from \`$MAIN_BRANCH\` (the change applies cleanly there)"
   else
@@ -159,7 +168,7 @@ run() {
     source="captured from the merged pull request head (the change does not apply cleanly to \`$MAIN_BRANCH\`)"
   fi
 
-  if ! git push --quiet "$REMOTE" "$sha:refs/heads/$branch"; then
+  if ! git push --quiet --force-with-lease="refs/heads/$branch:" "$REMOTE" "$sha:refs/heads/$branch"; then
     summary "Push of \`$branch\` for pull request #$HF_PR_NUMBER was refused; nothing created."
     return 1
   fi

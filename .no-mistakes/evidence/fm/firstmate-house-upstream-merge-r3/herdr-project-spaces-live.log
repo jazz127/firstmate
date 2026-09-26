@@ -1,0 +1,5 @@
+ok - real Herdr lab: tasks of one project share one labelled workspace, another project gets its own, and a same-labelled captain workspace keeps its focus and contents
+ok - real Herdr lab: a project space outlives every task but its last, and its removal keeps the captain's focus
+ok - real Herdr lab: after its last task a project reopens a fresh space and every space is removed with its last task
+ok - real Herdr lab validation completed on Herdr 0.9.1 with the default-session tripwire intact
+exit=0

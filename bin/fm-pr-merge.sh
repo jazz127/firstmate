@@ -8,8 +8,11 @@
 # is refused outright: that adapter is read-only, and the refusal at the parse
 # below owns why.
 #
-# Merge method on GitHub defaults to --squash when the caller passes none of
-# --squash, --merge, --rebase, or --method after the optional -- separator.
+# When the caller passes none of --squash, --merge, --rebase, or --method after
+# the optional -- separator, the GitHub merge method is chosen from what the
+# base branch allows: --squash wherever squash is allowed, --merge when merge is
+# the only allowed method, and a refusal naming the allowed methods otherwise or
+# when they cannot be read; github_choose_default_method below owns that read.
 # A GitHub merge is refused unless every pre-merge condition holds, each read
 # live at merge time rather than taken from recorded metadata: the pull request
 # is open, not a draft, mergeable, free of conflicts, every unwaived check
@@ -1043,6 +1046,98 @@ METHODS
   fi
 }
 
+# Choose the GitHub merge method for a caller that named none. The methods the
+# base branch allows are the repository's mergeCommitAllowed,
+# squashMergeAllowed, and rebaseMergeAllowed settings, read through gh repo
+# view because REST returns them as null to a token without admin access,
+# narrowed by every effective pull_request rule's allowed_merge_methods; a rule
+# without that parameter narrows nothing, and a plan-gated 403 on the rules
+# endpoint means the repository cannot have branch rules, as in
+# github_read_queue_method.
+# Squash stays the default wherever it is allowed, and merge is chosen when it
+# is the only allowed method. Any other set is ambiguous, and it and every
+# failed read refuse naming what is known, because guessing would either lose
+# upstream ancestry on a merge-commits-only branch or hand GitHub a method it
+# refuses. GitHub remains the final judge of the method passed.
+FM_PR_GITHUB_DEFAULT_METHOD=
+github_choose_default_method() {
+  local settings rules line allowed='' rule_methods method narrowed
+  local branch_path api_err api_err_text refuse_hint
+  FM_PR_GITHUB_DEFAULT_METHOD=
+  refuse_hint='pass --squash, --merge, or --rebase after -- to choose explicitly'
+  if ! settings=$(gh repo view "$PR_OWNER/$PR_REPO" \
+    --json mergeCommitAllowed,squashMergeAllowed,rebaseMergeAllowed \
+    --jq '"merge=" + (.mergeCommitAllowed | tostring), "squash=" + (.squashMergeAllowed | tostring), "rebase=" + (.rebaseMergeAllowed | tostring)' \
+    2>/dev/null); then
+    printf 'error: refusing to merge %s: the repository merge-method settings could not be read, so no merge method was chosen; %s\n' \
+      "$URL" "$refuse_hint" >&2
+    return 1
+  fi
+  for method in merge squash rebase; do
+    line=$(printf '%s\n' "$settings" | grep -x "$method=[a-z]*" | tail -1)
+    case "$line" in
+      "$method=true") allowed="$allowed $method" ;;
+      "$method=false") ;;
+      *)
+        printf 'error: refusing to merge %s: the repository merge-method settings could not be read, so no merge method was chosen; %s\n' \
+          "$URL" "$refuse_hint" >&2
+        return 1
+        ;;
+    esac
+  done
+
+  branch_path=$(github_urlencode_path_segment "$FM_PR_GITHUB_BASE")
+  api_err=$(mktemp "${TMPDIR:-/tmp}/fm-pr-merge-method-rules.XXXXXX") || return 1
+  if ! rules=$(gh api \
+    --paginate "repos/$PR_OWNER/$PR_REPO/rules/branches/$branch_path" \
+    --jq '.[] | select(.type == "pull_request") | "allowed_merge_methods=" + ((.parameters.allowed_merge_methods // ["merge", "squash", "rebase"]) | join(","))' \
+    2>"$api_err"); then
+    api_err_text=$(cat "$api_err" 2>/dev/null)
+    rm -f "$api_err"
+    if github_branch_rules_unavailable_on_plan "$api_err_text"; then
+      rules=''
+    else
+      printf 'error: refusing to merge %s: the branch rules for base branch %s could not be read, so no merge method was chosen; %s\n' \
+        "$URL" "$FM_PR_GITHUB_BASE" "$refuse_hint" >&2
+      return 1
+    fi
+  else
+    rm -f "$api_err"
+  fi
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    case "$line" in
+      allowed_merge_methods=*) rule_methods=${line#allowed_merge_methods=} ;;
+      *)
+        printf 'error: refusing to merge %s: the branch rules for base branch %s could not be read, so no merge method was chosen; %s\n' \
+          "$URL" "$FM_PR_GITHUB_BASE" "$refuse_hint" >&2
+        return 1
+        ;;
+    esac
+    narrowed=''
+    for method in $allowed; do
+      case ",$rule_methods," in
+        *",$method,"*) narrowed="$narrowed $method" ;;
+      esac
+    done
+    allowed=$narrowed
+  done <<RULES
+$rules
+RULES
+
+  allowed=${allowed# }
+  case " $allowed " in
+    *" squash "*) FM_PR_GITHUB_DEFAULT_METHOD=squash ;;
+    " merge ") FM_PR_GITHUB_DEFAULT_METHOD=merge ;;
+    *)
+      allowed=${allowed// /, }
+      printf 'error: refusing to merge %s: base branch %s allows %s, so no default merge method applies; %s\n' \
+        "$URL" "$FM_PR_GITHUB_BASE" "${allowed:-no merge method}" "$refuse_hint" >&2
+      return 1
+      ;;
+  esac
+}
+
 record_pr_metadata() {
   if ! FM_PR_CHECK_MERGE=1 "$SCRIPT_DIR/fm-pr-check.sh" "$ID" "$URL"; then
     return 1
@@ -1318,11 +1413,12 @@ case "$PROVIDER" in
   github)
     merge_output=
     merge_args=()
-    if ! caller_has_merge_method "$@"; then
-      merge_args=(--squash)
-    fi
     FM_PR_GITHUB_CALLER_METHOD=$(caller_merge_method "$@")
     github_verify_mergeable || exit 1
+    if ! caller_has_merge_method "$@"; then
+      github_choose_default_method || exit 1
+      merge_args=(--"$FM_PR_GITHUB_DEFAULT_METHOD")
+    fi
     # The away record is locked first, so this last presence and authority read
     # and the forge command below share one live-owner critical section.
     hold_away_record_for_merge || exit 1

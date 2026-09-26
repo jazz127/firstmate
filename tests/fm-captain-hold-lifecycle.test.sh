@@ -117,11 +117,12 @@ case "${1:-} ${2:-}" in
     ;;
   "api --paginate")
     case " $* " in
-      *merge_queue*) ;;
+      *merge_queue*|*pull_request*) ;;
       *) printf '%s\n' '[]' ;;
     esac
     ;;
   "api repos/"*) printf '%s\n' '{"name":"main","protected":false}' ;;
+  "repo view") printf '%s\n' merge=true squash=true rebase=true ;;
 esac
 SH
   cat > "$home/fakebin/gh-axi" <<'SH'

@@ -341,9 +341,14 @@ def unauthorized_tree_paths(project_dir, base, head, rewrite_paths):
     return [path for path in changed.splitlines() if path and not path_allowed(path, rewrite_paths)]
 
 
-def validate_extraction(worktree, source_commits, actual_commits, merges, deviations):
+def validate_extraction(worktree, source_commits, actual_commits, merges, deviations, published_head=None):
     deviation_paths = [item["path"] for item in deviations]
-    linear = [commit for commit in actual_commits if commit not in merges]
+    published = actual_commits
+    if published_head:
+        if published_head not in actual_commits:
+            fail(f"published contribution history was rewritten: {published_head} is no longer in the PR")
+        published = actual_commits[:actual_commits.index(published_head) + 1]
+    linear = [commit for commit in published if commit not in merges]
     if len(linear) not in (1, len(source_commits)):
         fail(f"upstream PR has unrelated commit history: {', '.join(actual_commits)}")
     scratch = Path(tempfile.mkdtemp(prefix="fm-bosun-extraction-"))
@@ -371,6 +376,13 @@ def validate_extraction(worktree, source_commits, actual_commits, merges, deviat
                     subprocess.run(["git", "-C", str(scratch_repo), "merge", "--abort"],
                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                     fail(f"upstream PR merge {commit} conflicts with ordered extraction")
+            elif commit not in published:
+                follow_up = subprocess.run(
+                    ["git", "-C", str(scratch_repo), "checkout", "--quiet", "--detach", commit],
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                if follow_up.returncode:
+                    fail(f"upstream PR follow-up commit {commit} is unavailable")
+                continue
             else:
                 picks = pending if len(linear) == 1 else pending[:1]
                 pending = pending[len(picks):]
@@ -772,7 +784,9 @@ def cmd_registration_check_locked(args):
             if paths is None or offending:
                 fail(f"upstream PR commit {commit} changes unauthorized paths: "
                      f"{', '.join(offending) or '<unreadable>'}")
-        validate_extraction(worktree, source_commits, actual_commits, merges, deviations)
+        published_head = (record["validation_evidence"]["pr_head"]
+                          if record.get("state") == "published" else None)
+        validate_extraction(worktree, source_commits, actual_commits, merges, deviations, published_head)
     changed = args.changed_path
     if not changed:
         fail("upstream change has no validated changed paths")

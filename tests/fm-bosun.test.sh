@@ -421,19 +421,6 @@ test_registration_and_merge() {
     fail 'out-of-scope path was accepted'
   fi
   dir=$accepted_dir
-  call "$dir" registration-check --task maneuver --url "$url" --forge github --head captain/sample \
-    --base kunchenguid/sample --branch main --head-branch contribution/maneuver \
-    --pr-head 9876543210987654321098765432109876543210 --validation-head 9876543210987654321098765432109876543210 \
-    --validation-mode no-mistakes --upstream-base upstream-sha --changed-path feature.txt \
-    || fail 'same PR re-registration after follow-up commits failed'
-  jq -e '.state == "published" and .validation_evidence.pr_head == "9876543210987654321098765432109876543210"' \
-    "$dir/data/maneuver/bosun-contribution.json" >/dev/null || fail 're-registration did not refresh validation evidence'
-  if call "$dir" registration-check --task maneuver --url "$url" --forge github --head captain/sample \
-    --base kunchenguid/sample --branch main --head-branch contribution/maneuver --pr-head "$pr_head" \
-    --validation-head "$pr_head" --validation-mode no-mistakes --upstream-base upstream-sha \
-    --changed-path secret.txt >"$dir/out" 2>&1; then
-    fail 'same PR follow-up with an out-of-scope path was accepted'
-  fi
   if call "$dir" registration-check --task maneuver --url https://github.com/kunchenguid/sample/pull/13 --forge github \
     --head captain/sample --base kunchenguid/sample --branch main --head-branch contribution/maneuver --pr-head "$pr_head" \
     --validation-head "$pr_head" --validation-mode no-mistakes --upstream-base upstream-sha \
@@ -441,7 +428,7 @@ test_registration_and_merge() {
     fail 'a second PR for the same order was accepted'
   fi
   assert_grep 'already has a registered upstream PR' "$dir/out" 'second PR refusal was unclear'
-  jq -e '.upstream_pr == "'"$url"'" and .validation_evidence.pr_head == "9876543210987654321098765432109876543210"' \
+  jq -e '.upstream_pr == "'"$url"'" and .validation_evidence.pr_head == "'"$pr_head"'"' \
     "$dir/data/maneuver/bosun-contribution.json" >/dev/null || fail 'refused re-registration changed the durable record'
 
   mkdir -p "$dir/parent"
@@ -619,7 +606,7 @@ test_registration_uses_ordered_content() {
 }
 
 test_pr_check_registers_bosun_pr() {
-  local dir project upstream_bare wt base commit head url
+  local dir project upstream_bare wt base commit head url published
   dir=$(new_home pr-check)
   setup_bosun "$dir"
   prepare_project "$dir"
@@ -659,7 +646,34 @@ EOF
   jq -e '.state == "published" and .upstream_pr == "'"$url"'" and .upstream_base == "'"$base"'" and .validation_evidence.pr_head == "'"$head"'"' \
     "$dir/data/maneuver/bosun-contribution.json" >/dev/null || fail 'fm-pr-check.sh did not durably register the Bosun PR'
   assert_grep "pr_head=$head" "$dir/state/maneuver.meta" 'fm-pr-check.sh did not record the validated head'
-  pass 'fm-pr-check.sh registers a Bosun PR against the fetched upstream ref'
+  published=$head
+  printf 'maneuver\nreview follow-up\n' > "$wt/maneuver.txt"
+  git -C "$wt" commit -qam 'Address review feedback'
+  head=$(git -C "$wt" rev-parse HEAD)
+  FM_HOME="$dir" FM_FAKE_HEAD="$head" PATH="$dir/fakebin:$PATH" \
+    GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0="url.file://$upstream_bare.insteadOf" \
+    GIT_CONFIG_VALUE_0=https://github.com/kunchenguid/sample.git \
+    "$ROOT/bin/fm-pr-check.sh" maneuver "$url" >"$dir/out" 2>&1 \
+    || { cat "$dir/out" >&2; fail 'fm-pr-check.sh refused an in-scope follow-up on the published PR'; }
+  jq -e '.state == "published" and .validation_evidence.pr_head == "'"$head"'"' \
+    "$dir/data/maneuver/bosun-contribution.json" >/dev/null || fail 'follow-up re-registration did not refresh validation evidence'
+  assert_grep "pr_head=$head" "$dir/state/maneuver.meta" 'follow-up re-registration did not refresh the task head'
+  [ "$head" != "$published" ] || fail 'follow-up commit did not move the head'
+  published=$head
+  printf 'secret\n' > "$wt/secret.txt"
+  git -C "$wt" add secret.txt
+  git -C "$wt" commit -qm 'Add out-of-scope follow-up'
+  head=$(git -C "$wt" rev-parse HEAD)
+  if FM_HOME="$dir" FM_FAKE_HEAD="$head" PATH="$dir/fakebin:$PATH" \
+    GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0="url.file://$upstream_bare.insteadOf" \
+    GIT_CONFIG_VALUE_0=https://github.com/kunchenguid/sample.git \
+    "$ROOT/bin/fm-pr-check.sh" maneuver "$url" >"$dir/out" 2>&1; then
+    fail 'out-of-scope follow-up on the published PR was accepted'
+  fi
+  assert_grep 'secret.txt' "$dir/out" 'out-of-scope follow-up refusal was unclear'
+  jq -e '.validation_evidence.pr_head == "'"$published"'"' \
+    "$dir/data/maneuver/bosun-contribution.json" >/dev/null || fail 'refused follow-up changed the durable record'
+  pass 'fm-pr-check.sh registers a Bosun PR and scope-checks follow-up commits'
 }
 
 test_routing

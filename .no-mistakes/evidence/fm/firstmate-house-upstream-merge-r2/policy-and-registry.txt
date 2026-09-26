@@ -1,0 +1,27 @@
+## arm command policy (node bin/fm-arm-command-policy.mjs --root . --home <tmp> --command ...)
+bash -s sentinel <<< 'bin/fm-watch.sh'             -> deny	watcher-nested	a protected watcher command must not run through a wrapper, substitution, or compound command
+sh -s sentinel <<< 'bin/fm-watch.sh'               -> deny	watcher-nested	a protected watcher command must not run through a wrapper, substitution, or compound command
+bash -s -- -c harmless <<< 'bin/fm-watch.sh'       -> deny	watcher-nested	a protected watcher command must not run through a wrapper, substitution, or compound command
+bash -s bin/fm-watch.sh                            -> deny	watcher-nested	a protected watcher command must not run through a wrapper, substitution, or compound command
+bash -s sentinel <<< 'echo fm-watch.sh'            -> allow
+bash -- -s sentinel <<< 'bin/fm-watch.sh'          -> allow
+
+## project registry lookup (FM_HOME=<tmp> bin/fm-project-mode.sh <name>)
+- my app [local-only] - multi-word project (added 2026-09-26)
+- my app extra [direct-PR +yolo] - longer name sharing a prefix (added 2026-09-26)
+- my [no-mistakes branch=x/] - single word prefix (added 2026-09-26)
+- a.b [direct-PR] - dotted name (added 2026-09-26)
+'my app'       -> local-only off
+ (rc=0)
+'my app extra' -> direct-PR on
+ (rc=0)
+'my'           -> no-mistakes off
+ (rc=0)
+'a.b'          -> direct-PR off
+ (rc=0)
+'axb'          -> warn: project "axb" not in registry; defaulting to no-mistakes off
+no-mistakes off
+ (rc=0)
+'my ap'        -> warn: project "my ap" not in registry; defaulting to no-mistakes off
+no-mistakes off
+ (rc=0)

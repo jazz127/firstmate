@@ -1,0 +1,9 @@
+HUSKY-COMMIT-MSG-RAN
+--- committed message:
+feat: x
+
+Co-Authored-By: Jane Human <jane@example.com>
+
+--- hook manager write into strip dir:
+(eval):4: permission denied: /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/tmp.MLlWxQM5Y8/h/pre-commit
+refused

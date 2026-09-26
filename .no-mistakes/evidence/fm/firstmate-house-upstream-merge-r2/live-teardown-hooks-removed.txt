@@ -1,0 +1,27 @@
+The default interactive shell is now zsh.
+To update your account to use zsh, please run `chsh -s /bin/zsh`.
+For more details, please visit https://support.apple.com/kb/HT208050.
+bash-3.2$ echo FM_HOME=$FM_HOME GATE=${NO_MISTAKES_GATE-unset} TMUX=$TMUX; bin/fm-brief.sh hooklab demo --scout
+FM_HOME=/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.s4UfnF GATE=unset TMUX=/private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab.s4UfnF/tmux/tmux-501/fm-lab,33772,0
+scaffolded: /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.s4UfnF/data/hooklab/brief.md (scout; replace {TASK} and {FIRSTMATE_SPEC})
+bash-3.2$ clear; bin/fm-spawn.sh hooklab /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.s4UfnF/projects/demo --scout --backend tmux --harness 'bash --norc' 2>&1 | tail -30
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.s4UfnF
+spawned hooklab harness=bash kind=scout window=primary:fm-hooklab worktree=/Users/jarad/.treehouse/demo-290674/1/demo
+bash-3.2$ clear; bin/fm-teardown.sh hooklab --force 2>&1 | tail -15; ls -la $FM_HOME/state/ | grep -c git-hooks
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  watcher supervision needs Stop-owned automatic recovery; inspect the hook registration and startup status before ending the turn.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+teardown: reaping leaked worktree process(es) for hooklab: 72369 79899
+teardown: force-killing leaked worktree process(es) for hooklab: 72369 79899
+A new version of treehouse is available: v2.0.0 → v2.3.0
+Run "treehouse update" to update
+🌳 Worktree returned to pool.
+teardown hooklab complete (window primary:fm-hooklab, worktree /Users/jarad/.treehouse/demo-290674/1/demo)
+Backlog: hooklab just finished (this home keeps no markdown backlog at /private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab.s4UfnF/data/backlog.md). Update /private/var/folders/9h/6hvtvt257
+md69k7nq7ycyq5h0000gn/T/fm-lab.s4UfnF/data/backlog.md - move hooklab to Done, keep Done to the 10 most recent, then re-scan Queued and dispatch only work whose blockers are gone and date is due.
+0
+bash-3.2$

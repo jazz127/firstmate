@@ -1,0 +1,137 @@
+# primary pane (lab shell, FM_HOME=lab)
+
+The default interactive shell is now zsh.
+To update your account to use zsh, please run `chsh -s /bin/zsh`.
+For more details, please visit https://support.apple.com/kb/HT208050.
+bash-3.2$ echo FM_HOME=$FM_HOME GATE=${NO_MISTAKES_GATE-unset} TMUX=$TMUX; bin/fm-brief.sh hooklab demo --scout
+FM_HOME=/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.s4UfnF GATE=unset TMUX=/private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab.s4UfnF/tmux/tmux-501/fm-lab,33772,0
+scaffolded: /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.s4UfnF/data/hooklab/brief.md (scout; replace {TASK} and {FIRSTMATE_SPEC})
+bash-3.2$ clear; bin/fm-spawn.sh hooklab /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.s4UfnF/projects/demo --scout --backend tmux --harness 'bash --norc' 2>&1 | tail -30
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.s4UfnF
+spawned hooklab harness=bash kind=scout window=primary:fm-hooklab worktree=/Users/jarad/.treehouse/demo-290674/1/demo
+bash-3.2$
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# worker pane fm-hooklab
+treehouse get
+/Users/jarad/.zshrc:source:1: no such file or directory: /Users/jarad/.bashprofile
+jarad@Mac demo % treehouse get
+A new version of treehouse is available: v2.0.0 → v2.3.0
+Run "treehouse update" to update
+
+🌳 Setting up worktree...
+🌳 Entered worktree at ~/.treehouse/demo-290674/1/demo. Type 'exit' to return.
+/Users/jarad/.zshrc:source:1: no such file or directory: /Users/jarad/.bashprofile
+jarad@Mac demo % export GOTMPDIR=/tmp/fm-hooklab/gotmp
+jarad@Mac demo % export COMPACT_ADVISER_DISABLE=1
+jarad@Mac demo % export FM_TASK_ID=hooklab
+jarad@Mac demo % . '/tmp/fm-hooklab+afbfd9c15248a8a8dfac837d995b7ce0039879a5c9ddc80435324b73060e688c/launch.s1790381132.68923.17588.sh'
+
+The default interactive shell is now zsh.
+To update your account to use zsh, please run `chsh -s /bin/zsh`.
+For more details, please visit https://support.apple.com/kb/HT208050.
+bash-3.2$ clear; env | grep ^GIT_CONFIG; pwd; git config core.hooksPath; git -c user.email=w@x -c user.name=Worker commit -q --allow-empty -F - <<'EOF'
+> scout: lab commit
+>
+> Co-Authored-By: Cursor Agent <cursoragent@cursor.com>
+> Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+> Co-Authored-By: Jane Human <jane@example.com>
+> EOF
+echo ---; git log -1 --format='%an <%ae>%n%B'; git --no-pager config --show-origin --get core.hooksPath
+GIT_CONFIG_VALUE_0=/private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab.s4UfnF/state/hooklab.git-hooks
+GIT_CONFIG_KEY_0=core.hooksPath
+GIT_CONFIG_COUNT=1
+/Users/jarad/.treehouse/demo-290674/1/demo
+/private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab.s4UfnF/state/hooklab.git-hooks
+bash-3.2$ echo ---; git log -1 --format='%an <%ae>%n%B'; git --no-pager config --show-origin --get core.hooksPath
+---
+Worker <w@x>
+scout: lab commit
+
+Co-Authored-By: Jane Human <jane@example.com>
+
+command line:	/private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab.s4UfnF/state/hooklab.git-hooks
+bash-3.2$
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# state dir
+dr-x------@ 17 jarad  staff  544 Sep 26 10:05 /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.s4UfnF/state/hooklab.git-hooks

@@ -47,4 +47,4 @@ ok - bootstrap does not rewrite unauthenticated checks or emit retired migration
 ok - watcher signals promptly stop custom checks and clean private state
 ok - returned custom check descendants are drained on installed and fallback timeout paths
 ok - teardown removes safe poll artifacts and refuses directory-shaped check files without traversal
-exit=0
+rc=0

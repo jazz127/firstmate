@@ -1,0 +1,12 @@
+# Live run of github_choose_default_method (extracted verbatim from bin/fm-pr-merge.sh @ f0df1206) against the real GitHub API, read-only
+$ owner=jazz127 repo=firstmate base=house
+rc=0 chosen=merge
+$ owner=jazz127 repo=quota-axi base=house
+rc=0 chosen=merge
+$ owner=jazz127 repo=firstmate base=main
+rc=0 chosen=squash
+$ owner=kunchenguid repo=firstmate base=main
+rc=0 chosen=squash
+$ owner=jazz127 repo=no-such-repo-xyz base=house
+error: refusing to merge https://github.com/jazz127/no-such-repo-xyz/pull/0: the repository merge-method settings could not be read, so no merge method was chosen; pass --squash, --merge, or --rebase after -- to choose explicitly
+rc=1 chosen=<none>

@@ -37,4 +37,4 @@ ok - merge approval releases before zero-retention cleanup records completion
 ok - the PR merge entrypoint refuses a captain-held task before merging
 ok - the local merge entrypoint refuses a captain-held task before merging
 not ok - the PR merge refusal did not name its unreadable authority record
-exit=1
+rc=1

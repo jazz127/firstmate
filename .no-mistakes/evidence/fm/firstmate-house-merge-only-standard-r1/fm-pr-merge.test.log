@@ -13,4 +13,5 @@ ok - fm-pr-merge does not echo back queue flags the caller already used
 ok - fm-pr-merge still names retry flags when the caller used a different method
 ok - fm-pr-merge names the queue requirement even when its method is unrecognised
 not ok - github-unreadable-queue-rules: an unreadable rules response read like a queue-less base
-exit=1
+bash tests/fm-pr-merge.test.sh  14.01s user 18.48s system 71% cpu 45.205 total
+rc=1

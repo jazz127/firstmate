@@ -1,0 +1,33 @@
+== doc ruleset (normalized)
+{
+  "conditions": {
+    "ref_name": {
+      "include": [
+        "refs/heads/house"
+      ]
+    }
+  },
+  "enforcement": "active",
+  "name": "house: merge commits only",
+  "rules": [
+    {
+      "allowed_merge_methods": null,
+      "type": "deletion"
+    },
+    {
+      "allowed_merge_methods": null,
+      "type": "non_fast_forward"
+    },
+    {
+      "allowed_merge_methods": [
+        "merge"
+      ],
+      "type": "pull_request"
+    }
+  ],
+  "target": "branch"
+}
+== jazz127/firstmate live ruleset id=24024753 (normalized)
+MATCH: doc ruleset == live jazz127/firstmate ruleset
+== jazz127/quota-axi live ruleset id=24024754 (normalized)
+MATCH: doc ruleset == live jazz127/quota-axi ruleset

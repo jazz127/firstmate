@@ -1,0 +1,24 @@
+== jazz127/firstmate: settings read (exact helper command)
+merge=true
+squash=true
+rebase=true
+rc=0
+== jazz127/firstmate: pull_request rules on house (exact helper command)
+allowed_merge_methods=merge
+rc=0
+== jazz127/firstmate: all rule types on house
+["pull_request","non_fast_forward","deletion"]
+== jazz127/firstmate: pull_request rules on main (for contrast)
+rc=0
+== jazz127/quota-axi: settings read (exact helper command)
+merge=true
+squash=true
+rebase=true
+rc=0
+== jazz127/quota-axi: pull_request rules on house (exact helper command)
+allowed_merge_methods=merge
+rc=0
+== jazz127/quota-axi: all rule types on house
+["pull_request","non_fast_forward","deletion"]
+== jazz127/quota-axi: pull_request rules on main (for contrast)
+rc=0

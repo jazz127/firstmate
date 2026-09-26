@@ -287,7 +287,8 @@ def scan(args):
     repo = ctx["repo"]
     diff = git("diff", "--no-ext-diff", f"{ctx['base']}...HEAD", "--")
     linked = issue_numbers(ctx["title"] + "\n" + ctx["summary"] + "\n" + diff, repo)
-    queries = list(dict.fromkeys([f"#{n}" for n in sorted(linked, key=int)] + terms(ctx, diff)))[:MAX_QUERIES]
+    wanted = list(dict.fromkeys([f"#{n}" for n in sorted(linked, key=int)] + terms(ctx, diff)))
+    queries, dropped = wanted[:MAX_QUERIES], wanted[MAX_QUERIES:]
     scopes = {"open": "is:open", "closed-unmerged": f"is:pr is:closed is:unmerged closed:>{since}"}
     found = {}
     covered = []
@@ -346,7 +347,8 @@ def scan(args):
     record = {"schema": SCHEMA, "captured_at": now.isoformat(), "closed_window_days": CLOSED_DAYS,
               "context": ctx, "queries": queries, "open_prs": {"listed": open_prs, "matched": open_prs_matched},
               "complete": not stopped,
-              "coverage": {"searches": covered, "requests": requests, "stopped": stopped},
+              "coverage": {"searches": covered, "requests": requests, "stopped": stopped,
+                           "dropped_queries": dropped, "truncated": truncation(covered, dropped)},
               "candidates": selected, "verdict": "incomplete" if stopped else "pending", "captain_decision": ""}
     atomic_json(args.record, record)
     if stopped:
@@ -354,15 +356,29 @@ def scan(args):
     print(f"prior-art scan recorded {len(selected)} candidates: {args.record}")
 
 
+def truncation(searches, dropped):
+    return bool(dropped) or any(search["total"] > search["read"] for search in searches)
+
+
 def complete(record):
+    if not isinstance(record, dict) or record.get("schema") != SCHEMA:
+        fail("unrecognized prior-art record schema")
     if record.get("complete") is not True:
         fail("prior-art scan was incomplete; rerun the scan")
+    coverage = record.get("coverage")
+    searches = coverage.get("searches") if isinstance(coverage, dict) else None
+    dropped = coverage.get("dropped_queries") if isinstance(coverage, dict) else None
+    if not isinstance(searches, list) or any(
+        not isinstance(search, dict)
+        or any(not isinstance(search.get(key), int) or isinstance(search[key], bool) for key in ("total", "read"))
+        for search in searches
+    ) or not isinstance(dropped, list) or any(not isinstance(query, str) for query in dropped) \
+            or coverage.get("truncated") is not truncation(searches, dropped):
+        fail("prior-art record does not disclose its search truncation; rerun the scan")
 
 
 def decide(args):
     record = read_json(args.record)
-    if not isinstance(record, dict) or record.get("schema") != SCHEMA:
-        fail("unrecognized prior-art record schema")
     complete(record)
     decision = read_json(args.decisions_file)
     if not isinstance(decision, dict):
@@ -401,43 +417,48 @@ def decide(args):
     print(f"prior-art verdict recorded: {verdict}")
 
 
-def checked(args):
-    record = read_json(args.record)
-    if not isinstance(record, dict) or record.get("schema") != SCHEMA:
-        fail("unrecognized prior-art record schema")
-    complete(record)
-    if record.get("context") != context(args):
-        fail("prior-art record is stale: target, text, branch head, base, or diff changed")
+def decided(record, fresh):
     try:
         captured = dt.datetime.fromisoformat(record["captured_at"])
     except (KeyError, ValueError, TypeError):
         fail("prior-art record has no valid capture time")
     age = (dt.datetime.now(dt.timezone.utc) - captured).total_seconds()
-    if age < 0 or age > FRESH_SECONDS:
+    if fresh and (age < 0 or age > FRESH_SECONDS):
         fail("prior-art record is stale: scan is older than one hour")
     verdict = record.get("verdict")
     candidates = candidate_records(record)
     captain_decision = record.get("captain_decision")
     if not isinstance(captain_decision, str):
         fail("prior-art captain decision is malformed")
+    if verdict not in ("none-found", "distinct", "overlaps"):
+        fail("prior-art verdict is missing or malformed")
     if verdict == "none-found" and candidates:
         fail("none-found record has candidates")
-    if verdict not in ("none-found", "distinct", "overlaps"):
-        fail("prior-art verdict is missing")
     if verdict != "none-found":
-        if not candidates or any(c.get("verdict") not in ("distinct", "overlaps") or not c.get("reason") for c in candidates):
+        if not candidates or any(
+            candidate.get("verdict") not in ("distinct", "overlaps")
+            or not isinstance(candidate.get("reason"), str)
+            or not candidate["reason"].strip()
+            for candidate in candidates
+        ):
             fail("prior-art candidate decisions are incomplete")
-        if (verdict == "overlaps") != any(c["verdict"] == "overlaps" for c in candidates):
+        if (verdict == "overlaps") != any(candidate["verdict"] == "overlaps" for candidate in candidates):
             fail("prior-art candidate verdicts conflict")
     if verdict == "overlaps" and not captain_decision.strip():
         fail("prior-art overlaps require a recorded captain decision")
     return record
 
 
+def checked(args):
+    record = read_json(args.record)
+    complete(record)
+    if record.get("context") != context(args):
+        fail("prior-art record is stale: target, text, branch head, base, or diff changed")
+    return decided(record, fresh=True)
+
+
 def verify_receipt(args):
     record = read_json(args.record)
-    if not isinstance(record, dict) or record.get("schema") != SCHEMA:
-        fail("unrecognized prior-art record schema")
     complete(record)
     context = record.get("context")
     if not isinstance(context, dict) or context.get("kind") != "pr":
@@ -455,35 +476,7 @@ def verify_receipt(args):
         diff = git("diff", "--no-ext-diff", "--find-renames", f"{base}...HEAD", "--")
         if hashlib.sha256(diff.encode()).hexdigest() != context.get("diff_sha256"):
             fail("prior-art receipt is stale: branch diff changed")
-    try:
-        captured = dt.datetime.fromisoformat(record["captured_at"])
-    except (KeyError, ValueError, TypeError):
-        fail("prior-art record has no valid capture time")
-    age = (dt.datetime.now(dt.timezone.utc) - captured).total_seconds()
-    if age < 0 or age > FRESH_SECONDS:
-        fail("prior-art record is stale: scan is older than one hour")
-    verdict = record.get("verdict")
-    candidates = candidate_records(record)
-    captain_decision = record.get("captain_decision")
-    if not isinstance(captain_decision, str):
-        fail("prior-art captain decision is malformed")
-    if verdict not in ("none-found", "distinct", "overlaps"):
-        fail("prior-art verdict is missing or malformed")
-    if verdict == "none-found" and candidates:
-        fail("none-found record has candidates")
-    if verdict != "none-found":
-        if not candidates or any(
-            not isinstance(candidate, dict)
-            or candidate.get("verdict") not in ("distinct", "overlaps")
-            or not isinstance(candidate.get("reason"), str)
-            or not candidate["reason"].strip()
-            for candidate in candidates
-        ):
-            fail("prior-art candidate decisions are incomplete")
-        if (verdict == "overlaps") != any(candidate["verdict"] == "overlaps" for candidate in candidates):
-            fail("prior-art candidate verdicts conflict")
-    if verdict == "overlaps" and not captain_decision.strip():
-        fail("prior-art overlaps require a recorded captain decision")
+    decided(record, fresh=not args.published)
     print("prior-art receipt ok")
 
 
@@ -493,6 +486,9 @@ def section(record):
         lines.append("No matching open pull requests or issues, or recent closed unmerged pull requests, were found by search.")
     for item in record["candidates"]:
         lines.append(f"- {item['url']} by @{item['author']} ({item['state']} {item['kind']}): {item['verdict']} - {item['reason']}")
+    if record["coverage"]["truncated"]:
+        lines.append("Search coverage was bounded: only the most relevant hits per query were read"
+                     + (f"; skipped queries: {', '.join(record['coverage']['dropped_queries'])}." if record["coverage"]["dropped_queries"] else "."))
     if record["verdict"] == "overlaps":
         lines.append(f"Captain decision: {record['captain_decision']}")
     return "\n".join(lines) + "\n"

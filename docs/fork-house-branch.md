@@ -68,10 +68,12 @@ Only the captain contacts upstream, including opening or commenting on an upstre
 Before opening an upstream pull request in a repository the fleet does not own, run the prior-art scan in `bin/fm-upstream-prior-art.py`, review every candidate, and record an explicit verdict.
 The scan uses forge search for open pull requests and issues and recent closed unmerged pull requests, driven by linked issues and keywords from the title, summary, and changed symbols, and checks changed-file overlap only on the returned candidates.
 It reads the most relevant hits for each query within a fixed request and time budget; a scan that reaches either bound is recorded as incomplete and cannot be decided or published.
+Queries beyond the per-scan query cap and hits beyond the most relevant page are not read; the receipt discloses that truncation with read and total counts and any dropped queries, `decide` refuses a record without that disclosure, and the published `Prior art checked` section states that search coverage was bounded.
 A duplicate with different wording or files can evade those keyword, changed-file, and linked-issue matches.
 A `none-found` verdict requires no candidates; a `distinct` verdict requires a one-line reason for each candidate; an `overlaps` verdict requires the captain's recorded decision before publication.
 Use that command's `publish` operation for upstream creation so its receipt check is immediately before the forge write and the generated pull request body credits overlapping authors in a `Prior art checked` section.
 It refuses missing receipts, a changed branch head or diff, a changed title or summary, scans over one hour old, and unresolved overlaps.
+The one-hour limit applies before the push and the forge write; the post-publication registration and done checks verify the published head without it.
 The command's `check` operation is the reusable gate for a Bosun workflow; it does not depend on Bosun's code.
 An automatic PR creation path that bypasses this gate must not be used for an upstream target.
 The task worktree's pre-push hook refuses a push to a different GitHub repository without a fresh receipt matching the repository, pushed head, and diff.

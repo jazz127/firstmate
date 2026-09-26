@@ -98,7 +98,7 @@ elif parsed.path == "/search/issues":
             hits += [dict(pr(n, f"Unrelated open change {n} " + "z" * 150, "open"), pull_request={"url": "x"}) for n in range(100, 110)]
             if count("churn") > 1:
                 hits = [row for row in hits if row["number"] != 100]
-        total = len(hits)
+        total = len(hits) + (40 if os.environ.get("FAKE_MORE_HITS") and hits else 0)
     data = {"total_count": total, "incomplete_results": bool(os.environ.get("FAKE_INCOMPLETE")), "items": hits}
 else:
     print("unexpected API path " + path, file=sys.stderr)
@@ -303,6 +303,49 @@ pass 'pre-push boundary gates external targets and permits owned or checked push
 rg -q '^## Prior art checked$' "$FAKE_PUBLISHED_BODY" || fail 'published body missed prior-art section'
 rg -q 'https://github.com/owner/demo/pull/7 by @author7' "$FAKE_PUBLISHED_BODY" || fail 'published body missed author credit'
 pass 'fresh distinct receipt permits publication and adds author credit'
+
+python3 - "$TMP_ROOT/published-record.json" "$TMP_ROOT/aged-record.json" <<'PY'
+import json, sys
+r=json.load(open(sys.argv[1])); r['captured_at']='2020-01-01T00:00:00+00:00'; open(sys.argv[2],'w').write(json.dumps(r))
+PY
+if "$tool" verify --record "$TMP_ROOT/aged-record.json" --repo owner/demo --head "$PUBLISHED_HEAD" > "$TMP_ROOT/out" 2>&1; then
+  fail 'pre-push verification accepted an old scan'
+fi
+"$tool" verify --record "$TMP_ROOT/aged-record.json" --repo owner/demo --head "$PUBLISHED_HEAD" --published > "$TMP_ROOT/out" \
+  || fail 'published verification refused a receipt that was fresh when the PR was published'
+pass 'freshness is enforced before the push but not after publication'
+
+FAKE_MORE_HITS=1 "$tool" scan "${common[@]}" > "$TMP_ROOT/out" || fail 'scan with more hits than read failed'
+python3 - "$TMP_ROOT/prior-art.json" <<'PY' || fail 'search truncation was not disclosed'
+import json, sys
+r=json.load(open(sys.argv[1]))
+assert r['complete'] is True and r['coverage']['truncated'] is True, r['coverage']
+assert any(s['total'] > s['read'] for s in r['coverage']['searches'])
+assert r['coverage']['dropped_queries'] == []
+PY
+cat > "$TMP_ROOT/decisions.json" <<'JSON'
+{"verdict":"distinct","items":[
+ {"url":"https://github.com/owner/demo/pull/7","verdict":"distinct","reason":"Changes a different pause transition."},
+ {"url":"https://github.com/owner/demo/pull/8","verdict":"distinct","reason":"Addresses only CLI output."},
+ {"url":"https://github.com/owner/demo/issues/4","verdict":"distinct","reason":"Tracks the report, not this implementation."}]}
+JSON
+cp "$TMP_ROOT/prior-art.json" "$TMP_ROOT/truncated-good.json"
+for edit in "r['coverage']['truncated']=False" "del r['coverage']['truncated']" "del r['coverage']['dropped_queries']"; do
+  python3 - "$TMP_ROOT/prior-art.json" "$edit" <<'PY'
+import json, sys
+p=sys.argv[1]; r=json.load(open(p)); exec(sys.argv[2]); open(p,'w').write(json.dumps(r))
+PY
+  if "$tool" decide --record "$TMP_ROOT/prior-art.json" --decisions-file "$TMP_ROOT/decisions.json" > "$TMP_ROOT/out" 2>&1; then
+    fail "decide accepted distinct without truncation disclosure: $edit"
+  fi
+  ! rg -q 'Traceback' "$TMP_ROOT/out" || fail "missing truncation disclosure crashed: $edit"
+  cp "$TMP_ROOT/truncated-good.json" "$TMP_ROOT/prior-art.json"
+done
+"$tool" decide --record "$TMP_ROOT/prior-art.json" --decisions-file "$TMP_ROOT/decisions.json" > "$TMP_ROOT/out" \
+  || fail 'disclosed truncated scan could not be decided distinct'
+"$tool" publish "${common[@]}" --body-file "$TMP_ROOT/body.md" --head owner:fix > "$TMP_ROOT/out" || fail 'disclosed truncated receipt was refused'
+rg -q 'Search coverage was bounded' "$FAKE_PUBLISHED_BODY" || fail 'published body hid search truncation'
+pass 'search truncation is disclosed in the receipt and required before a distinct verdict'
 
 python3 - "$TMP_ROOT/prior-art.json" <<'PY'
 import json, sys

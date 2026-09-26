@@ -626,8 +626,14 @@ It hands a bounded ANSI tail plus Herdr's capability facts to the fleet-wide cla
 
 A blocked Pi is parked on an interactive prompt, so its blank composer region is a menu's and not a free composer's.
 That state defers instead of proving emptiness.
-A working Pi, pending middle row, missing identity, incomplete separator pair, or over-tall candidate remains unknown or pending.
-Identity stays a lazy second read, consulted only when a separator pair could change the verdict.
+A working Pi, pending middle row, missing identity, incomplete separator pair, a pair enclosing no row, or an over-tall candidate remains unknown or pending.
+A `>` on the pair's first row is input by default, because stock Pi 0.87.1 draws no editor prompt there, and a user's lone `>` must never have `/quit` typed onto it.
+Setting `FM_BACKEND_HERDR_PI_PROMPT=1` opts in to Pi editors that do draw one: a lone leading `>` on the first row is then the editor's own prompt, while text beside it, a `>` on a later row, and any other glyph remain input.
+Pi's cost-first stats row (`$0.000 (sub) 0.0%/272k (auto)`) is footer furniture only as Pi's complete stats tuple, first in the row run directly below the pair, and only when the pair itself proves the verdict; a truncated tuple, a repeat, or any other `$` row still refuses.
+Pi's compact layout - a rounded status header, one unboxed input row, and one lower solid rule with nothing but blank rows below - is experimental and off by default, because no real Pi build has been captured drawing it.
+Setting `FM_BACKEND_HERDR_PI_COMPACT=1` lets that layout prove an empty composer, and only when the styled input row is exactly one reverse-video blank cursor cell and native identity is an idle or done Pi.
+That compact row is never ghost-stripped: dim placeholder text on it both classifies pending and extracts as its visible plain text.
+Identity stays a lazy second read, consulted only when a separator pair or an opted-in compact layout could change the verdict.
 
 ### Placeholder and ghost text
 

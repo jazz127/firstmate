@@ -3926,6 +3926,45 @@ test_composer_state_pi_dollar_status_footer_is_empty() {
   pass "fm_backend_herdr_composer_state: a dollar-first Pi status footer reads empty, not a dead shell"
 }
 
+test_composer_state_pi_captured_cost_footer_is_scoped() {
+  # The pi 0.87.1 footer as captured through herdr 0.9.1: the pwd row sits
+  # between the closing rule and the cost-first stats row. That row is
+  # furniture only as pi's complete stats tuple; a truncated tuple stays a
+  # dead-shell row and the pane defers.
+  local dir log resp fb out case_id stats want
+  for case_id in captured truncated; do
+    dir="$TMP_ROOT/composer-pi-captured-footer-$case_id"; mkdir -p "$dir/responses"; log="$dir/log"; resp="$dir/responses"; : > "$log"
+    stats=$'$0.000 (sub) 0.0%/272k (auto)            (openai-codex) gpt-5.6-terra \xe2\x80\xa2 high'
+    want=empty
+    [ "$case_id" = captured ] || { stats=$'$0.000'; want=unknown; }
+    printf '%s\n' $'transcript\n\x1b[0m\x1b[38;2;178;148;187m─────────────────────────────────────────────────────\x1b[0m\r\n\x1b[0m\x1b[7m \x1b[0m     \r\n\x1b[0m\x1b[38;2;178;148;187m─────────────────────────────────────────────────────\x1b[0m\r\n\x1b[0m\x1b[38;2;102;102;102m/private/tmp/lab/cwd\x1b[0m\r\n\x1b[0m\x1b[38;2;102;102;102m'"$stats"$'\x1b[0m' > "$resp/1.out"
+    printf '{"result":{"agent":{"agent":"pi","agent_status":"idle"}}}\n' > "$resp/2.out"
+    fb=$(make_herdr_fakebin "$dir")
+    out=$( PATH="$fb:$PATH" FM_HERDR_LOG="$log" FM_HERDR_RESPONSES="$resp" \
+      bash -c '. "$0/bin/backends/herdr.sh"; fm_backend_herdr_composer_state lab:w1:p2' "$ROOT" )
+    [ "$out" = "$want" ] || fail "the $case_id pi cost footer should read $want, got '$out'"
+  done
+  pass "fm_backend_herdr_composer_state: pi's captured cost footer is furniture; a truncated tuple defers"
+}
+
+test_composer_state_pi_lone_gt_draft_needs_prompt_optin() {
+  # Stock pi 0.87.1 draws no first-row editor `>`. A lone `>` the user typed
+  # read empty, so exit typed `/quit` onto it and pi sent `>/quit` to the
+  # model. Only FM_BACKEND_HERDR_PI_PROMPT=1 treats that glyph as furniture.
+  local dir log resp fb out optin want
+  for optin in 0 1; do
+    dir="$TMP_ROOT/composer-pi-lone-gt-$optin"; mkdir -p "$dir/responses"; log="$dir/log"; resp="$dir/responses"; : > "$log"
+    printf '%s\n' $'transcript\n─────────────────────────────────────────────────────\n>\x1b[7m \x1b[0m\n─────────────────────────────────────────────────────\n$0.000 (sub) 0.0%/272k (auto)' > "$resp/1.out"
+    printf '{"result":{"agent":{"agent":"pi","agent_status":"idle"}}}\n' > "$resp/2.out"
+    fb=$(make_herdr_fakebin "$dir")
+    out=$( PATH="$fb:$PATH" FM_HERDR_LOG="$log" FM_HERDR_RESPONSES="$resp" FM_BACKEND_HERDR_PI_PROMPT="$optin" \
+      bash -c '. "$0/bin/backends/herdr.sh"; fm_backend_herdr_composer_state lab:w1:p2' "$ROOT" )
+    want=pending; [ "$optin" = 1 ] && want=empty
+    [ "$out" = "$want" ] || fail "a lone first-row '>' with FM_BACKEND_HERDR_PI_PROMPT=$optin should read $want, got '$out'"
+  done
+  pass "fm_backend_herdr_composer_state: a typed lone '>' on stock Pi is a draft unless the prompt glyph is opted in"
+}
+
 # A pi worker parked on an interactive prompt (permission dialog, question
 # menu, trust dialog) reports agent_status=blocked: it is waiting on a human
 # keystroke. The menu is drawn ABOVE the separator pair, so the composer region
@@ -3946,6 +3985,88 @@ test_composer_state_pi_parked_prompt_is_not_empty() {
   [ "$out" != empty ] \
     || fail "a pi pane parked on a prompt must not report an affirmatively empty composer, got '$out'"
   pass "fm_backend_herdr_composer_state: a blocked pi pane parked on a prompt is not an empty composer"
+}
+
+# Pi's compact Herdr layout (kunchenguid/firstmate#5445; cases adapted from
+# #5473): a rounded status header, one unboxed input row, and one lower rule.
+# It is experimental and honoured only with FM_BACKEND_HERDR_PI_COMPACT=1.
+PI_COMPACT_HEADER=$'\033[38;2;129;162;190m╭ gpt-5.6-terra · firstmate ────────────────╮\033[0m'
+PI_COMPACT_RULE=$'\033[38;2;129;162;190m─────────────────────────────────────────────\033[0m'
+
+pi_compact_state() {  # <case-dir> <screen> <identity-json|absent> [opt-in]
+  local dir=$1 screen=$2 identity=$3 optin=${4:-1} log resp fb
+  mkdir -p "$dir/responses"; log="$dir/log"; resp="$dir/responses"; : > "$log"
+  printf '%s' "$screen" > "$resp/1.out"
+  if [ "$identity" = absent ]; then printf '1\n' > "$resp/2.exit"; else printf '%s\n' "$identity" > "$resp/2.out"; fi
+  fb=$(make_herdr_fakebin "$dir")
+  PATH="$fb:$PATH" FM_HERDR_LOG="$log" FM_HERDR_RESPONSES="$resp" FM_BACKEND_HERDR_PI_COMPACT="$optin" \
+    bash -c '. "$0/bin/backends/herdr.sh"; fm_backend_herdr_composer_state lab:w1:p2' "$ROOT"
+}
+
+test_composer_state_pi_compact_idle_is_empty() {
+  local dir out calls case_id screen history i idle
+  idle='{"result":{"agent":{"agent":"pi","agent_status":"idle"}}}'
+  for case_id in no-history short-history long-history; do
+    dir="$TMP_ROOT/composer-pi-compact-idle-$case_id"
+    screen="$PI_COMPACT_HEADER"$'\n\x1b[7m \x1b[0m\n'"$PI_COMPACT_RULE"$'\n'
+    history=
+    case "$case_id" in
+      short-history) history="$PI_COMPACT_RULE"$'\nold transcript one\nold transcript two\n' ;;
+      long-history)
+        history="$PI_COMPACT_RULE"$'\n'
+        for i in $(seq 1 9); do history+="old transcript $i"$'\n'; done
+        ;;
+    esac
+    out=$(pi_compact_state "$dir" "$history$screen" "$idle")
+    [ "$out" = empty ] || fail "an opted-in native idle Pi compact composer with $case_id should read empty, got '$out'"
+    calls=$(grep -c $'\x1f''agent'$'\x1f''get' "$dir/log")
+    [ "$calls" -eq 1 ] || fail "Pi compact recognition with $case_id must corroborate identity exactly once, made $calls agent calls"
+  done
+  dir="$TMP_ROOT/composer-pi-compact-idle-default-off"
+  out=$(pi_compact_state "$dir" "$screen" "$idle" 0)
+  [ "$out" = unknown ] || fail "without the opt-in the compact layout must stay unknown, got '$out'"
+  pass "fm_backend_herdr_composer_state: an opted-in idle Pi compact composer reads empty; the default leaves it unknown"
+}
+
+test_composer_state_pi_compact_refuses_unproven_variants() {
+  local dir out case_id screen identity want
+  for case_id in draft whitespace boxed unstyled-row continuation working blocked absent-identity contradictory-identity truncated shell cost-footer; do
+    dir="$TMP_ROOT/composer-pi-compact-$case_id"
+    screen="$PI_COMPACT_HEADER"$'\n\033[7m \033[0m\n'"$PI_COMPACT_RULE"$'\n'
+    identity='{"result":{"agent":{"agent":"pi","agent_status":"idle"}}}'
+    want=unknown
+    case "$case_id" in
+      draft) screen="$PI_COMPACT_HEADER"$'\nprivacy-safe draft\033[7m \033[0m\n'"$PI_COMPACT_RULE"$'\n'; want=pending ;;
+      whitespace) screen="$PI_COMPACT_HEADER"$'\n  \033[7m \033[0m\n'"$PI_COMPACT_RULE"$'\n' ;;
+      boxed) screen="$PI_COMPACT_HEADER"$'\n│\033[7m \033[0m│\n'"$PI_COMPACT_RULE"$'\n' ;;
+      unstyled-row) screen="$PI_COMPACT_HEADER"$'\n \n'"$PI_COMPACT_RULE"$'\n' ;;
+      continuation) screen="$PI_COMPACT_HEADER"$'\n> continued input\033[7m \033[0m\n'"$PI_COMPACT_RULE"$'\n'; want=pending ;;
+      working) identity='{"result":{"agent":{"agent":"pi","agent_status":"working"}}}' ;;
+      blocked) identity='{"result":{"agent":{"agent":"pi","agent_status":"blocked"}}}' ;;
+      absent-identity) identity=absent ;;
+      contradictory-identity) identity='{"result":{"agent":{"agent":"shell","agent_status":"idle"}}}' ;;
+      truncated) screen="$PI_COMPACT_HEADER"$'\n\033[7m \033[0m\n' ;;
+      shell) screen+=$'\n$ prompt after stale Pi registration\n' ;;
+      cost-footer) screen+=$'$0.000 (sub) 5.4%/272k (auto)\n' ;;
+    esac
+    out=$(pi_compact_state "$dir" "$screen" "$identity")
+    [ "$out" = "$want" ] || fail "unsafe Pi compact case '$case_id' must read '$want', got '$out'"
+  done
+  pass "fm_backend_herdr_composer_state: compact Pi needs its cursor cell, idle identity, complete capture, and nothing below"
+}
+
+test_composer_state_pi_compact_plain_fallback_is_unknown() {
+  local dir log resp fb out calls
+  dir="$TMP_ROOT/composer-pi-compact-plain-fallback"; mkdir -p "$dir/responses"; log="$dir/log"; resp="$dir/responses"; : > "$log"
+  printf '1\n' > "$resp/1.exit"
+  printf '╭ gpt-5.6-terra · firstmate ────────────────╮\n \n─────────────────────────────────────────────\n' > "$resp/2.out"
+  fb=$(make_herdr_fakebin "$dir")
+  out=$( PATH="$fb:$PATH" FM_HERDR_LOG="$log" FM_HERDR_RESPONSES="$resp" FM_BACKEND_HERDR_PI_COMPACT=1 \
+    bash -c '. "$0/bin/backends/herdr.sh"; fm_backend_herdr_composer_state lab:w1:p2' "$ROOT" )
+  [ "$out" = unknown ] || fail "an unstyled Pi compact capture must remain unknown, got '$out'"
+  calls=$(grep -c $'\x1f''agent'$'\x1f''get' "$log" || true)
+  [ "$calls" -eq 0 ] || fail "an unstyled compact capture must not request identity, made $calls agent calls"
+  pass "fm_backend_herdr_composer_state: an unstyled compact capture cannot prove empty"
 }
 
 test_composer_state_pi_separator_real_text_is_pending() {
@@ -5766,8 +5887,13 @@ test_composer_state_popup_placeholder_fill_is_pending
 test_composer_state_unknown_on_capture_failure
 test_composer_state_unknown_when_no_composer_row_found
 test_composer_state_pi_parked_prompt_is_not_empty
+test_composer_state_pi_lone_gt_draft_needs_prompt_optin
 test_composer_state_pi_separator_idle_is_empty
 test_composer_state_pi_dollar_status_footer_is_empty
+test_composer_state_pi_captured_cost_footer_is_scoped
+test_composer_state_pi_compact_idle_is_empty
+test_composer_state_pi_compact_refuses_unproven_variants
+test_composer_state_pi_compact_plain_fallback_is_unknown
 test_composer_state_pi_separator_real_text_is_pending
 test_composer_state_pi_incomplete_separator_below_stale_generic_is_unknown
 test_composer_state_pi_separator_requires_safe_native_identity

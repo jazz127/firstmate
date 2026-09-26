@@ -12,4 +12,3 @@ ok - forge-backed authorization, re-registration, review escalation, and merge c
 ok - registration requires a valid Bosun role record
 ok - registration accepts redaction, squash, and upstream refresh but rejects unrelated content
 ok - fm-pr-check.sh registers a Bosun PR and scope-checks follow-up commits
-bash tests/fm-bosun.test.sh  14.84s user 20.50s system 30% cpu 1:54.75 total

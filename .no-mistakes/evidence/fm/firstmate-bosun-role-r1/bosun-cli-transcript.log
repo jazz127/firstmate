@@ -1,0 +1,48 @@
+# Bosun home (secondmate marker = bosun-kun), routes = docs/examples/bosun-routes.json
+$ configure-home --bosun bosun-kun
+[exit=0]
+{
+  "id": "bosun-kun",
+  "kind": "bosun",
+  "schema": "fm-bosun-role.v1"
+}
+
+$ configure-home --bosun bosun-other   (identity mismatch)
+fm-bosun: Bosun identity differs from this secondmate home
+[exit=1]
+$ route kunchenguid/no-mistakes
+bosun-kun
+[exit=0]
+$ route torvalds/linux  (no match)
+fm-bosun: no Bosun matches; ask whether to create one
+[exit=1]
+$ route gitlab kunchenguid/x  (unsupported forge)
+fm-bosun: unsupported Bosun forge 'gitlab'; supported: github
+[exit=1]
+$ order for unrouted target
+fm-bosun: no Bosun matches; ask whether to create one
+[exit=1]
+$ convention --confirmed without evidence
+fm-bosun: confirmed convention requires evidence source, finding, and read time
+[exit=1]
+$ convention shared confirmed with evidence
+[exit=0]
+$ convention shared merge_style (shared only)
+[exit=0]
+$ convention repository overlay
+[exit=0]
+$ unevidenced guess
+[exit=0]
+$ conventions (policy={"pr_title":"imperative"})
+Extra data: line 2 column 1 (char 537)
+$ conventions with non-conflicting captain decision
+{"commit_style": {"evidence": {"confirmed": true, "key": "commit_style", "read_at": "2026-09-26", "showed": "repo style", "source": "CONTRIBUTING.md", "value": "repo-style"}, "source": "repository", "value": "repo-style"}, "labels": {"source": "captain_decision", "value": "none"}, "merge_style": {"evidence": {"confirmed": true, "key": "merge_style", "read_at": "2026-09-26", "showed": "squash", "source": "https://github.com/kunchenguid/no-mistakes/pull/2", "value": "squash"}, "source": "shared", "value": "squash"}, "pr_title": {"source": "current_repository_policy", "value": "imperative"}}
+[exit=0]
+$ conventions with captain decision conflicting with policy
+fm-bosun: needs-decision: captain decision conflicts with current policy for pr_title
+[exit=1]
+$ escalate on missing order
+fm-bosun: missing record: $LAB/data/nope/bosun-contribution.json
+[exit=1]
+$ merged on missing order
+[exit=0]

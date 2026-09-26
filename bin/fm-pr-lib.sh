@@ -104,7 +104,7 @@ fm_pr_refuse_published_scratch() {  # <canonical-pr-url>
   case "$FM_PR_PROVIDER" in
     github)
       command -v gh >/dev/null 2>&1 || return 1
-      files=$(gh api "repos/$FM_PR_PATH/pulls/$FM_PR_NUMBER/files?per_page=100" --paginate --jq '.[].filename' 2>/dev/null) || {
+      files=$(gh api "repos/$FM_PR_PATH/pulls/$FM_PR_NUMBER/files?per_page=100" --paginate --jq '.[] | select(.status != "removed") | .filename' 2>/dev/null) || {
         printf '%s\n' "error: cannot inspect the published file list for $url" >&2
         return 1
       }
@@ -120,7 +120,7 @@ fm_pr_refuse_published_scratch() {  # <canonical-pr-url>
         printf '%s\n' "error: cannot inspect the published file list for $url" >&2
         return 1
       }
-      files=$(printf '%s\n' "$json" | jq -r '.changes[].new_path' 2>/dev/null) || {
+      files=$(printf '%s\n' "$json" | jq -r '.changes[] | select(.deleted_file | not) | .new_path' 2>/dev/null) || {
         printf '%s\n' "error: cannot parse the published file list for $url" >&2
         return 1
       }

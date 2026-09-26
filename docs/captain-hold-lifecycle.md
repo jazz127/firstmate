@@ -232,7 +232,7 @@ It can never let freeform captain prose forge a task id or a mode.
 `bin/fm-captain-pane.py` is the terminal channel:
 
 - A decision option or freeform note is fed as one keyed row through `answers --any-origin`.
-- A Reconcile selection binds the `captain-pane` source and goes to `reconcile-requests` instead.
+- A structured Reconcile option binds the `captain-pane` source and goes to `reconcile-requests` instead; typed `reconcile` text stays a freeform note.
 - Merge and credential selections never reach the intake; they only wake Firstmate through the durable inbox.
 
 Trusted external process-event adapters intentionally expose no answer operation and cannot feed this authority-bearing intake; [`extension-bindings.md`](extension-bindings.md#trust-boundary) owns that boundary.

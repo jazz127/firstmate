@@ -1,0 +1,13 @@
+{
+  "schema": "fm-bosun-routes.v1",
+  "routes": [
+    {
+      "bosun": "bosun-kun",
+      "forge": "github",
+      "owner": "kunchenguid",
+      "repository_pattern": "*",
+      "fork_owner": "captain",
+      "upstream_default_branch": "main"
+    }
+  ]
+}

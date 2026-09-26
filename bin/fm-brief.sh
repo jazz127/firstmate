@@ -626,6 +626,12 @@ case "$MODE" in
 esac
 RULE1=$(fm_ship_rule_one "$MODE" "$ID" "$BRANCH" "$FORGE") || exit 1
 DOD=$(fm_dod_block "$MODE" "$ID" "$BRANCH" "$FORGE") || exit 1
+BOSUN_SECTION=
+if [ "$MODE" != local-only ] && { [ -f "$DATA/bosun-role.json" ] || [ -L "$DATA/bosun-role.json" ]; }; then
+  BOSUN_SECTION="# Bosun publication authorization
+Keep the named Captain's Maneuver within its ordered paths and run the repository's existing validation and publication machinery.
+The existing PR registration path reads the forge record and verifies the configured Bosun fork, upstream repository, and default branch before recording the PR."
+fi
 
 cat > "$BRIEF" <<EOF
 You are a crewmate: an autonomous worker agent managed by firstmate. Work on your own; do not wait for a human.
@@ -682,6 +688,8 @@ $INBOX_SECTION
 # Project memory
 A project's \`AGENTS.md\` or \`CLAUDE.md\` is loaded into every agent session in that project, so edit it only to correct information that is factually wrong - including information your own change made wrong - and never to add knowledge because it is missing.
 A correction edits only the wrong text: do not run \`$FM_ROOT/bin/fm-ensure-agents-md.sh\`, create either file, or add sections, headings, or pointers alongside it.
+
+$BOSUN_SECTION
 
 $DOD
 EOF

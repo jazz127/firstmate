@@ -54,7 +54,7 @@ Every house feature has a durable `housefeature/<name>` branch cut from the fork
 The [`housefeature-cut.yml`](../.github/workflows/housefeature-cut.yml) workflow cuts that branch automatically when a pull request merges into `house`, capturing the merged pull request head instead when the change does not apply cleanly to `main`.
 That branch gives the feature a stable name, keeps it findable, and makes it straightforward to offer without relying on a disposable task branch.
 Task branches are working branches and may be deleted once their feature is captured on its durable branch.
-A contributed house feature is a house feature the captain chose to submit and that has landed in upstream `main`.
+The Bosun guide defines when a Captain's Maneuver becomes an Admiral's Maneuver.
 
 ## House board
 
@@ -92,7 +92,7 @@ Refresh a contribution branch only by merging upstream `main` into it, including
 Rebasing rewrites the attested head, which upstream's gate rejects.
 Validate the exact final head that will be offered with one pipeline run to renew a stale attestation, and never hand-edit the attestation.
 Open an upstream pull request only when the captain asks for that house feature by name.
-Only the captain contacts upstream, including opening or commenting on an upstream pull request.
+The matching Bosun may open and maintain that one pull request under the captain's explicit order, following [`bosun.md`](bosun.md); otherwise upstream contact remains the captain's act.
 Before opening an upstream pull request in a repository the fleet does not own, run the prior-art scan in `bin/fm-upstream-prior-art.py`, review every candidate, and record an explicit verdict.
 The scan uses forge search for open pull requests and issues and recent closed unmerged pull requests, driven by linked issues and keywords from the title, summary, and changed symbols, and checks changed-file overlap only on the returned candidates.
 It reads the most relevant hits for each query within a fixed request and time budget; a scan that reaches either bound is recorded as incomplete and cannot be decided or published.

@@ -1,0 +1,10 @@
+== BASE-854257f0
+not ok - executed Codex worker did not inherit the Luna CODEX_HOME (missing: 'CODEX_HOME=/private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-spawn-dispatch-profile.iDZYVS/profile-codex-luna-se
+== FIX-da7ba639
+ok - dispatch can pin the Luna Codex seat while the default remains ambient
+ok - Herdr-backed seated Codex launch carries home and credential guards
+ok - missing, signed-out, indeterminate, unsupported store, and raw seated launches refuse before provisioning
+ok - seated launch enforces its home after launch-environment grants
+ok - local secondmate recovery restores its recorded logical seat
+ok - scout and batch entry points preserve the dock-bound seat
+done

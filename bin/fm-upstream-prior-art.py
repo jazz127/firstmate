@@ -8,12 +8,17 @@ Usage: fm-upstream-prior-art.py scan --repo OWNER/REPO
          --title TEXT --summary-file FILE --base REF
        fm-upstream-prior-art.py publish [check options] --body-file FILE
          [--head OWNER:BRANCH]
+       fm-upstream-prior-art.py verify --record FILE --repo OWNER/REPO
+         --head SHA [--published]
 
 The record is a local JSON receipt, not a forge write. The decisions file is
 JSON with verdict (none-found, distinct, overlaps), items keyed by candidate
 URL with verdict and one-line reason, and captain_decision when overlaps.
 A scan that hits its request or time budget writes an incomplete record,
-exits nonzero, and cannot be decided or published.
+exits nonzero, and cannot be decided or published. Query and per-query hit
+caps are disclosed in coverage (truncated, read/total counts, dropped queries).
+captured_at must carry a timezone; the one-hour freshness limit applies to
+check, publish, and verify, but not to verify --published.
 Only publish calls gh-axi pr create; all other operations are read-only on GitHub.
 """
 

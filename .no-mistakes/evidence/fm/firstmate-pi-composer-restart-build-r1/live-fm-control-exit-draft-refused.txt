@@ -1,0 +1,12 @@
+### fm-control t1 exit with draft "lab draft keep me"
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.wYXjPj
+error: task t1's composer visibly holds pending text; refusing to type the /quit exit command because it would concatenate onto that text. Clear or submit the pending text, then retry 'exit'
+rc=1
+--- pane after:
+
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+lab draft keep me
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+/private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab-proj.LIll8C
+$0.000 (sub) 0.0%/272k (auto)                                                       (openai-codex) gpt-5.6-terra • high
+agent={"agent":"pi","agent_status":"idle"}

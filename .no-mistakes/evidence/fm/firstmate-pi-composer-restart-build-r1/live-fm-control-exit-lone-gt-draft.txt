@@ -1,0 +1,38 @@
+### user-typed lone ">" draft on stock pi 0.87.1 (no editor prompt glyph drawn)
+
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+>
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+/private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab-proj.LIll8C
+$0.000 (sub) 0.0%/272k (auto)                                                       (openai-codex) gpt-5.6-terra • high
+### fm-control t1 exit
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.wYXjPj
+error: exit-delivered t1 interrupt=not-needed exit-command=delivered agent-state=alive exit=unconfirmed; the agent did not stop within 30s
+rc=1
+--- pane after:
+
+ pi v0.87.1
+ escape interrupt · ctrl+c/ctrl+d clear/exit · / commands · ! bash · ctrl+o more
+ Press ctrl+o to show full startup help and loaded resources.
+
+ Pi can explain its own features and look up its docs. Ask it how to use or extend Pi.
+
+[Skills]
+  ad-hoc-profile-load, caveman, caveman-commit, caveman-compress, caveman-review, defuddle, diagnose,
+dotnet-backend-patterns, ef-core, find-skills, grill-with-docs, improve-codebase-architecture, json-canvas, kun,
+no-mistakes, obsidian-bases, obsidian-cli, obsidian-markdown, prototype, quota-axi, setup-matt-pocock-skills,
+to-issues, to-prd, triage, write-a-skill, zoom-out
+
+[Extensions]
+  compact-adviser:src, herdr-agent-state.ts
+
+
+ │ /quit
+
+
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+/private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab-proj.LIll8C
+↑3.9k ↓4 $0.008 (sub) 1.4%/272k (auto)                                              (openai-codex) gpt-5.6-terra • high
+agent={"agent":"pi","agent_session":{"agent":"pi","kind":"id","source":"herdr:pi","value":"01a0db70-ff74-767a-88e6-b419aee74ffb"},"agent_status":"idle","cwd":"/private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab-proj.LIll8C","focused":true,"foreground_cwd":"/private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab-proj.LIll8C","pane_id":"w1:p1","revision":1,"screen_detection_skipped":true,"state_change_seq":3,"tab_id":"w1:t1","terminal_id":"term_65c5931621eca1","terminal_title":"π - fm-lab-proj.LIll8C","terminal_title_stripped":"π - fm-lab-proj.LIll8C","workspace_id":"w1"}

@@ -1,0 +1,17 @@
+### idle, empty composer, probe
+state=empty
+content=[]
+### fm-control t1 exit on proven-empty composer
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.wYXjPj
+stopped t1 harness=pi backend=herdr endpoint=fm-lab-picomp-8078-18708:w1:p1 worktree=/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab-proj.LIll8C
+rc=0
+--- pane after:
+
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+/private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab-proj.LIll8C
+↑3.9k ↓4 $0.008 (sub) 1.4%/272k (auto)                                              (openai-codex) gpt-5.6-terra • high
+
+jarad@Mac fm-lab-proj.LIll8C %
+agent={"agent":null,"agent_status":null}

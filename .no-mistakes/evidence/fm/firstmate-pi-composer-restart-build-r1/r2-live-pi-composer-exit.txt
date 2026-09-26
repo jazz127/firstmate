@@ -1,0 +1,94 @@
+pi=0.87.1 herdr=herdr 0.9.1 agent={"agent":"pi","agent_status":"idle"}
+### screen with user-typed lone '>'
+to-prd, triage, write-a-skill, zoom-out
+[Extensions]
+  compact-adviser:src, herdr-agent-state.ts
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+>
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+/private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab-proj.b52j8L/wt (t1)
+0.0%/1.0M (auto)                                                                        (deepseek) deepseek-flash • high
+### probe: lone '>' draft
+FM_BACKEND_HERDR_PI_PROMPT=0 state=pending content=[>]
+FM_BACKEND_HERDR_PI_PROMPT=1 state=empty content=[]
+### fm-control t1 exit (default env, no PI_PROMPT opt-in)
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.DV5k7T
+error: task t1's composer visibly holds pending text; refusing to type the /quit exit command because it would concatenate onto that text. Clear or submit the pending text, then retry 'exit'
+rc=1
+--- pane after:
+to-prd, triage, write-a-skill, zoom-out
+[Extensions]
+  compact-adviser:src, herdr-agent-state.ts
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+>
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+/private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab-proj.b52j8L/wt (t1)
+0.0%/1.0M (auto)                                                                        (deepseek) deepseek-flash • high
+agent={"agent":"pi","agent_status":"idle"}
+### draft still intact? agent still running?
+agent={"agent":"pi","agent_status":"idle"}
+### screen with draft 'hello draft'
+to-prd, triage, write-a-skill, zoom-out
+[Extensions]
+  compact-adviser:src, herdr-agent-state.ts
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+hello draft
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+/private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab-proj.b52j8L/wt (t1)
+0.0%/1.0M (auto)                                                                        (deepseek) deepseek-flash • high
+### probe: ordinary draft
+FM_BACKEND_HERDR_PI_PROMPT=0 state=pending content=[hello draft]
+FM_BACKEND_HERDR_PI_PROMPT=1 state=pending content=[hello draft]
+### fm-control t1 exit (default env, no PI_PROMPT opt-in)
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.DV5k7T
+error: task t1's composer visibly holds pending text; refusing to type the /quit exit command because it would concatenate onto that text. Clear or submit the pending text, then retry 'exit'
+rc=1
+--- pane after:
+to-prd, triage, write-a-skill, zoom-out
+[Extensions]
+  compact-adviser:src, herdr-agent-state.ts
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+hello draft
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+/private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab-proj.b52j8L/wt (t1)
+0.0%/1.0M (auto)                                                                        (deepseek) deepseek-flash • high
+agent={"agent":"pi","agent_status":"idle"}
+### screen with draft '> >'
+to-prd, triage, write-a-skill, zoom-out
+[Extensions]
+  compact-adviser:src, herdr-agent-state.ts
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+> >
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+/private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab-proj.b52j8L/wt (t1)
+0.0%/1.0M (auto)                                                                        (deepseek) deepseek-flash • high
+### probe: '> >' draft
+FM_BACKEND_HERDR_PI_PROMPT=0 state=pending content=[> >]
+FM_BACKEND_HERDR_PI_PROMPT=1 state=pending content=[>]
+### screen with empty composer
+no-mistakes, obsidian-bases, obsidian-cli, obsidian-markdown, prototype, quota-axi, setup-matt-pocock-skills, to-issues,
+to-prd, triage, write-a-skill, zoom-out
+[Extensions]
+  compact-adviser:src, herdr-agent-state.ts
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+/private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab-proj.b52j8L/wt (t1)
+0.0%/1.0M (auto)                                                                        (deepseek) deepseek-flash • high
+### probe: empty composer
+FM_BACKEND_HERDR_PI_PROMPT=0 state=empty content=[]
+FM_BACKEND_HERDR_PI_PROMPT=1 state=empty content=[]
+### fm-control t1 exit (default env, no PI_PROMPT opt-in)
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.DV5k7T
+stopped t1 harness=pi backend=herdr endpoint=fm-lab-pir2-43311-28401:w1:p2 worktree=/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab-proj.b52j8L/wt
+rc=0
+--- pane after:
+to-prd, triage, write-a-skill, zoom-out
+[Extensions]
+  compact-adviser:src, herdr-agent-state.ts
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+/private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab-proj.b52j8L/wt (t1)
+0.0%/1.0M (auto)                                                                        (deepseek) deepseek-flash • high
+jarad@Mac wt %
+agent={"agent":null,"agent_status":"unknown"}
+teardown session=fm-lab-pir2-43311-28401 done

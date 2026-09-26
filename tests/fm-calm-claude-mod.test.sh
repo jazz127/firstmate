@@ -30,7 +30,7 @@ command -v node >/dev/null 2>&1 || { echo "skip: node not found for the Claude C
 
 run_node() {  # <script-file>
   FM_TEST_MOD="$MOD" FM_TEST_PI_SHIP="$PI_SHIP" FM_TEST_ROOT="$ROOT" \
-    FM_TEST_CORPUS="${corpus:-}" node --input-type=module <"$1"
+    FM_TEST_CORPUS="${corpus:-}" FM_TEST_DIR="${dir:-}" node --input-type=module <"$1"
 }
 
 test_plugin_shape() {
@@ -460,8 +460,8 @@ test_doorbell_parity_with_shell_owner() {
   cat >"$TMP_ROOT/doorbells.mjs" <<JS
 import { pathToFileURL } from "node:url";
 import { readFileSync, writeFileSync } from "node:fs";
-const port = await import(pathToFileURL(${MOD@Q} + "/lib/fm-operational-input.ts").href);
-const dir = ${dir@Q};
+const port = await import(pathToFileURL(process.env.FM_TEST_MOD + "/lib/fm-operational-input.ts").href);
+const dir = process.env.FM_TEST_DIR;
 const lines = [];
 for (let index = 1; index <= ${count}; index += 1) {
   const record = port.firstmateOperationalDoorbellPath(readFileSync(\`\${dir}/case-\${index}.txt\`, "utf8"));

@@ -73,7 +73,7 @@ A duplicate with different wording or files can evade those keyword, changed-fil
 A `none-found` verdict requires no candidates; a `distinct` verdict requires a one-line reason for each candidate; an `overlaps` verdict requires the captain's recorded decision before publication.
 Use that command's `publish` operation for upstream creation so its receipt check is immediately before the forge write and the generated pull request body credits overlapping authors in a `Prior art checked` section.
 It refuses missing receipts, a changed branch head or diff, a changed title or summary, scans over one hour old, and unresolved overlaps.
-The one-hour limit applies before the push and the forge write; the post-publication registration and done checks verify the published head without it.
+The one-hour limit applies before the push and the forge write; the post-publication registration and done checks verify the published head without it, and accept a published head equal to the scanned head or one the forge reports as strictly ahead of it, so pipeline auto-fix commits pass while a force-push or rewrite is refused.
 The command's `check` operation is the reusable gate for a Bosun workflow; it does not depend on Bosun's code.
 An automatic PR creation path that bypasses this gate must not be used for an upstream target.
 The task worktree's pre-push hook refuses a push to a different GitHub repository without a fresh receipt matching the repository, pushed head, and diff.

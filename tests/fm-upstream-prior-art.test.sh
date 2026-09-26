@@ -75,6 +75,10 @@ elif parsed.path == "/repos/owner/demo/pulls/8/files":
     sys.exit(1)
 elif parsed.path.startswith("/repos/owner/demo/pulls/") and parsed.path.endswith("/files"):
     data = [{"filename": f"unrelated/{parsed.path.split('/')[-2]}/{i:03d}.py"} for i in range(100 if os.environ.get("FAKE_FLOOD") else 60)]
+elif parsed.path.lower().startswith("/repos/owner/demo/compare/"):
+    old, new = parsed.path.rsplit("/", 1)[1].split("...")
+    ancestor = subprocess.run(["git", "merge-base", "--is-ancestor", old, new], capture_output=True).returncode == 0
+    data = {"status": "identical" if old == new else "ahead" if ancestor else "diverged"}
 elif parsed.path == "/repos/owner/demo/git/ref/heads/fix":
     data = {"object": {"sha": os.environ.get("FAKE_REMOTE_HEAD", "")}}
 elif parsed.path == "/search/issues":
@@ -398,5 +402,15 @@ pass 'branch head movement stales the prior-art receipt'
 "$tool" verify --record "$TMP_ROOT/published-record.json" --repo owner/demo \
   --head "$PUBLISHED_HEAD" --published > "$TMP_ROOT/out" || fail 'published head verification refused the recorded head'
 pass 'published head verification does not read back the worker checkout'
+"$tool" verify --record "$TMP_ROOT/published-record.json" --repo Owner/Demo \
+  --head "$(git rev-parse HEAD)" --published > "$TMP_ROOT/out" \
+  || fail 'published verification refused a forge head that descends from the scanned head'
+REWRITTEN_HEAD=$(git commit-tree -p "$PUBLISHED_HEAD^" -m rewritten "$(git rev-parse 'HEAD^{tree}')")
+if "$tool" verify --record "$TMP_ROOT/published-record.json" --repo owner/demo \
+  --head "$REWRITTEN_HEAD" --published > "$TMP_ROOT/out" 2>&1; then
+  fail 'published verification accepted a rewritten head that does not descend from the scanned head'
+fi
+rg -q 'does not descend from the scanned head' "$TMP_ROOT/out" || fail 'rewritten-head refusal did not name the ancestry rule'
+pass 'published verification accepts descendant forge heads and refuses rewritten ones'
 
 printf 'all fm-upstream-prior-art tests passed\n'

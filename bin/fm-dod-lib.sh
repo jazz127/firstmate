@@ -726,10 +726,10 @@ fm_upstream_pr_publish_block() {  # <task-id>
   cat <<EOF
 For an upstream repository the fleet does not own, do not run \
 \`gh-axi pr create\` directly. Use the guarded publisher:
-1. Set the target repository, title, one-line summary file, prior-art record, target base, proposed body file, and pushed head (\`OWNER:BRANCH\`).
-2. Run \`$script_dir/fm-upstream-prior-art.py scan --repo <OWNER/REPO> --title <TITLE> --summary-file <SUMMARY_FILE> --record <RECORD> --base <BASE>\`.
-3. Review every recorded candidate, write one distinct/overlaps verdict and reason per candidate to a decisions JSON file, then run \`$script_dir/fm-upstream-prior-art.py decide --record <RECORD> --decisions-file <DECISIONS_FILE>\`.
-4. Run \`$script_dir/fm-upstream-prior-art.py publish --repo <OWNER/REPO> --title <TITLE> --summary-file <SUMMARY_FILE> --record <RECORD> --base <BASE> --body-file <BODY_FILE> --head <OWNER:BRANCH>\`; it refuses a missing, stale, incomplete, or unresolved receipt immediately before the forge write.
+1. Set the target repository, title, one-line summary file, target base, proposed body file, and pushed head (\`OWNER:BRANCH\`).
+2. Run \`$script_dir/fm-upstream-prior-art.py scan --repo <OWNER/REPO> --title <TITLE> --summary-file <SUMMARY_FILE> --record /tmp/fm-$1/prior-art.json --base <BASE>\`.
+3. Review every recorded candidate, write one distinct/overlaps verdict and reason per candidate to a decisions JSON file, then run \`$script_dir/fm-upstream-prior-art.py decide --record /tmp/fm-$1/prior-art.json --decisions-file <DECISIONS_FILE>\`.
+4. Run \`$script_dir/fm-upstream-prior-art.py publish --repo <OWNER/REPO> --title <TITLE> --summary-file <SUMMARY_FILE> --record /tmp/fm-$1/prior-art.json --base <BASE> --body-file <BODY_FILE> --head <OWNER:BRANCH>\`; it refuses a missing, stale, incomplete, or unresolved receipt immediately before the forge write.
 For a repository the fleet owns, the ordinary \`gh-axi\` direct-PR path remains unchanged.
 EOF
 }
@@ -739,9 +739,9 @@ fm_upstream_pr_preflight_block() {  # <task-id>
   script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd) || return 1
   cat <<EOF
 Before starting /no-mistakes for an upstream repository the fleet does not own, complete the prior-art gate. For a repository the fleet owns, skip this upstream-only preflight.
-1. Run \`$script_dir/fm-upstream-prior-art.py scan --repo <OWNER/REPO> --title <TITLE> --summary-file <SUMMARY_FILE> --record <RECORD> --base <BASE>\`.
-2. Review every candidate, record one distinct/overlaps verdict and reason per candidate, and run \`$script_dir/fm-upstream-prior-art.py decide --record <RECORD> --decisions-file <DECISIONS_FILE>\`.
-3. Immediately before starting /no-mistakes, run \`$script_dir/fm-upstream-prior-art.py check --repo <OWNER/REPO> --title <TITLE> --summary-file <SUMMARY_FILE> --record <RECORD> --base <BASE>\`; do not start the run if it refuses.
+1. Run \`$script_dir/fm-upstream-prior-art.py scan --repo <OWNER/REPO> --title <TITLE> --summary-file <SUMMARY_FILE> --record /tmp/fm-$1/prior-art.json --base <BASE>\`.
+2. Review every candidate, record one distinct/overlaps verdict and reason per candidate, and run \`$script_dir/fm-upstream-prior-art.py decide --record /tmp/fm-$1/prior-art.json --decisions-file <DECISIONS_FILE>\`.
+3. Immediately before starting /no-mistakes, run \`$script_dir/fm-upstream-prior-art.py check --repo <OWNER/REPO> --title <TITLE> --summary-file <SUMMARY_FILE> --record /tmp/fm-$1/prior-art.json --base <BASE>\`; do not start the run if it refuses.
 The later upstream PR publication must use the same current receipt at its forge-write boundary; an automatic PR creation path that cannot perform that check must not be used.
 EOF
 }
@@ -965,7 +965,7 @@ fm_dod_upstream_receipt_check() {  # <worktree> <url> <meta> [<published-head>]
     return 1
   }
   script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd) || return 1
-  verify_args=(--record "$record" --repo "$FM_PR_PATH" --head "$head")
+  local verify_args=(--record "$record" --repo "$FM_PR_PATH" --head "$head")
   [ -z "$published_head" ] || verify_args+=(--published)
   if ! (cd "$wt" && python3 "$script_dir/fm-upstream-prior-art.py" verify \
       "${verify_args[@]}"); then

@@ -4350,17 +4350,6 @@ exclude_path() {
   mkdir -p "$(dirname "$EXCL")"
   grep -qxF "$rel" "$EXCL" 2>/dev/null || echo "$rel" >>"$EXCL"
 }
-if [ "$KIND" = ship ] && [ "$MODE" != local-only ]; then
-  PUSH_HOOK_DIR="$WT/.fm-hooks"
-  mkdir -p "$PUSH_HOOK_DIR"
-  git -C "$WT" config extensions.worktreeConfig true
-  git -C "$WT" config --worktree core.hooksPath "$PUSH_HOOK_DIR"
-  printf '%s\n' '#!/usr/bin/env bash' \
-    "exec $(printf '%q' "$FM_ROOT/bin/fm-upstream-push-guard.sh") $(printf '%q' "$FM_ROOT") $(printf '%q' "$TASK_TMP/prior-art.json") \"\$@\"" \
-    > "$PUSH_HOOK_DIR/pre-push"
-  chmod 700 "$PUSH_HOOK_DIR/pre-push"
-  exclude_path '.fm-hooks/'
-fi
 if [ "$RELAUNCH" -eq 1 ]; then
   # Retire the previous incarnation's per-task harness wiring before arming the
   # new one. Without this, a harness switch would leave the old adapter's hook
@@ -4755,8 +4744,14 @@ fi
 # installer chains the previous hooks so they still run. Real secondmate
 # homes are firstmate clones; a launch whose worktree is not git fails closed
 # rather than shipping a runtime that cannot strip.
+# A shipping task's pre-push also runs the upstream prior-art push guard
+# before chaining to the project's own pre-push.
 GIT_HOOKS_DIR="$STATE_REAL/$ID.git-hooks"
-"$FM_ROOT/bin/fm-git-strip-ai-trailers.sh" install "$GIT_HOOKS_DIR" "$WT" || {
+STRIP_INSTALL=("$FM_ROOT/bin/fm-git-strip-ai-trailers.sh" install "$GIT_HOOKS_DIR" "$WT")
+if [ "$KIND" = ship ] && [ "$MODE" != local-only ]; then
+  STRIP_INSTALL+=("$FM_ROOT/bin/fm-upstream-push-guard.sh" "$FM_ROOT" "$TASK_TMP/prior-art.json")
+fi
+"${STRIP_INSTALL[@]}" || {
   echo "error: could not install the AI-trailer strip hooks for $ID" >&2
   exit 1
 }

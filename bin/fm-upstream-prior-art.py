@@ -18,7 +18,9 @@ A scan that hits its request or time budget writes an incomplete record,
 exits nonzero, and cannot be decided or published. Query and per-query hit
 caps are disclosed in coverage (truncated, read/total counts, dropped queries).
 captured_at must carry a timezone; the one-hour freshness limit applies to
-check, publish, and verify, but not to verify --published.
+check, publish, and verify, but not to verify --published. verify --published
+accepts a forge head equal to the scanned head or one the forge compares as
+strictly ahead of it (no force-push or rewrite).
 Only publish calls gh-axi pr create; all other operations are read-only on GitHub.
 """
 
@@ -470,11 +472,17 @@ def verify_receipt(args):
     context = record.get("context")
     if not isinstance(context, dict) or context.get("kind") != "pr":
         fail("prior-art receipt has no PR context")
-    if context.get("repo") != args.repo:
+    if not isinstance(context.get("repo"), str) or context["repo"].lower() != args.repo.lower():
         fail("prior-art receipt targets a different repository")
     if not SHA.fullmatch(args.head):
         fail("published head is not a full commit SHA")
-    if context.get("head") != args.head or (not args.published and git("rev-parse", "HEAD") != args.head):
+    if args.published:
+        scanned = context.get("head")
+        if not isinstance(scanned, str) or not SHA.fullmatch(scanned) or not REPO.fullmatch(args.repo):
+            fail("prior-art receipt has no valid scanned head")
+        if scanned != args.head and api(f"repos/{args.repo}/compare/{scanned}...{args.head}", ".status") != "ahead":
+            fail("prior-art receipt is stale: published head does not descend from the scanned head")
+    elif context.get("head") != args.head or git("rev-parse", "HEAD") != args.head:
         fail("prior-art receipt is stale: published head changed")
     base = context.get("base")
     if not isinstance(base, str) or not base:

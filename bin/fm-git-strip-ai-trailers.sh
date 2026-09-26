@@ -18,6 +18,10 @@
 #       worktree's hooks. Does not touch the project's git config; the caller
 #       prefixes the pane with GIT_CONFIG_COUNT / GIT_CONFIG_KEY_0 /
 #       GIT_CONFIG_VALUE_0.
+#   fm-git-strip-ai-trailers.sh install <hooks-dir> <worktree> <guard> [<arg>...]
+#       As above, and the pre-push wrapper first runs <guard> <arg>... with
+#       git's pre-push arguments and stdin; a refusal stops the push, and a
+#       pass chains to the repository's own pre-push with the same stdin.
 #
 # WHY THIS EXISTS. Claude launches already carry attribution-off in their
 # per-launch --settings JSON. Cursor and other non-Claude runtimes inject a
@@ -58,7 +62,7 @@ usage() {
   cat >&2 <<'EOF'
 usage:
   fm-git-strip-ai-trailers.sh <msgfile>
-  fm-git-strip-ai-trailers.sh install <hooks-dir> <worktree>
+  fm-git-strip-ai-trailers.sh install <hooks-dir> <worktree> [<pre-push-guard> [<arg>...]]
 EOF
   exit 2
 }
@@ -191,8 +195,12 @@ pre-merge-commit prepare-commit-msg post-commit pre-rebase post-checkout
 post-merge pre-push post-rewrite pre-auto-gc sendemail-validate'
 
 install_hooks() {
-  local hooks_dir=$1 wt=$2 name
+  local hooks_dir=$1 wt=$2 name guard='' arg
+  shift 2
   [ -n "$hooks_dir" ] && [ -n "$wt" ] || usage
+  for arg in "$@"; do
+    guard="$guard $(quote_for_hook "$arg")"
+  done
   [ -d "$wt" ] || {
     echo "error: worktree is not a directory: $wt" >&2
     return 1
@@ -215,6 +223,19 @@ $(runtime_chain_body "$hooks_dir")
 EOF
 
   for name in $FM_GIT_CLIENT_HOOKS; do
+    if [ "$name" = pre-push ] && [ -n "$guard" ]; then
+      write_executable "$hooks_dir/$name" <<EOF
+#!/usr/bin/env bash
+set -u
+stdin=\$(mktemp "\${TMPDIR:-/tmp}/fm-pre-push.XXXXXX") || exit 1
+cat >"\$stdin" || { rm -f -- "\$stdin"; exit 1; }
+$guard "\$@" <"\$stdin" || { rm -f -- "\$stdin"; exit 1; }
+exec <"\$stdin"
+rm -f -- "\$stdin"
+$(runtime_chain_body "$hooks_dir")
+EOF
+      continue
+    fi
     write_executable "$hooks_dir/$name" <<EOF
 #!/usr/bin/env bash
 set -u
@@ -227,8 +248,9 @@ EOF
 CMD=${1:-}
 case "$CMD" in
 install)
-  [ "$#" -eq 3 ] || usage
-  install_hooks "$2" "$3"
+  [ "$#" -ge 3 ] || usage
+  shift
+  install_hooks "$@"
   ;;
 -h | --help)
   usage

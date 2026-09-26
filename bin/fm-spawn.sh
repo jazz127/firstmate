@@ -4744,8 +4744,14 @@ fi
 # installer chains the previous hooks so they still run. Real secondmate
 # homes are firstmate clones; a launch whose worktree is not git fails closed
 # rather than shipping a runtime that cannot strip.
+# A shipping task's pre-push also runs the upstream prior-art push guard
+# before chaining to the project's own pre-push.
 GIT_HOOKS_DIR="$STATE_REAL/$ID.git-hooks"
-"$FM_ROOT/bin/fm-git-strip-ai-trailers.sh" install "$GIT_HOOKS_DIR" "$WT" || {
+STRIP_INSTALL=("$FM_ROOT/bin/fm-git-strip-ai-trailers.sh" install "$GIT_HOOKS_DIR" "$WT")
+if [ "$KIND" = ship ] && [ "$MODE" != local-only ]; then
+  STRIP_INSTALL+=("$FM_ROOT/bin/fm-upstream-push-guard.sh" "$FM_ROOT" "$TASK_TMP/prior-art.json")
+fi
+"${STRIP_INSTALL[@]}" || {
   echo "error: could not install the AI-trailer strip hooks for $ID" >&2
   exit 1
 }

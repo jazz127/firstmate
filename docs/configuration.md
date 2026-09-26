@@ -611,7 +611,7 @@ A value under 60 seconds, or one that does not parse, leaves the timeout off rat
 ### What is stopped and what is kept
 
 The watcher checks on its ordinary poll loop, with no separate daemon.
-It stops only a ship worker whose ready report names the pull request with merge monitoring armed by `bin/fm-pr-check.sh`, that has shown no activity for the duration, whose steering inbox holds no unacknowledged instruction, and whose agent reads alive and exactly idle.
+It stops only a ship worker whose ready report names the pull request with merge monitoring armed by `bin/fm-pr-check.sh`, that has shown no activity for the duration, whose steering inbox holds no unacknowledged instruction, whose agent reads alive and exactly idle, and whose current state (`bin/fm-crew-state.sh`) reads exactly done.
 A busy agent, or one whose idle state cannot be proven, is left running.
 Scouts and secondmates are never stopped.
 
@@ -619,7 +619,10 @@ The stop goes through `bin/fm-control.sh <id> exit`, so the worker's terminal, l
 The task record, pull request, and merge monitoring are untouched, so a later merge is still reported and cleaned up normally.
 When the pull request needs more work, such as a merge conflict or a review change, `bin/fm-control.sh <id> relaunch` brings the worker back.
 The stop is silent, is recorded durably in `state/<id>.ready-timeout`, and is not repeated for the same worker incarnation.
-While that record stands, the watcher raises no stale or dead-endpoint alarm for the worker, and `bin/fm-crew-state.sh` and the session-start digest name the stop instead of reporting a lost agent.
+While that record stands and the worker's current state still reads done, the watcher raises no stale or dead-endpoint alarm for the worker, and `bin/fm-crew-state.sh` and the session-start digest name the stop instead of reporting a lost agent.
+The watcher rereads that current state on every poll for a stopped worker.
+The moment it reads anything other than done, such as a no-mistakes run parked at a gate on the worker, the watcher marks the record resumed and wakes firstmate once, naming the task and the `bin/fm-control.sh <id> relaunch` that brings it back.
+From then on the worker's ordinary stale, gate, and turn-end alarms apply again, and that incarnation is never stopped again.
 
 The file is home-local and is not inherited by secondmate homes.
 `bin/fm-ready-timeout-lib.sh` owns the exact eligibility rules and the record format.

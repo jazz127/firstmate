@@ -30,6 +30,8 @@
 #   - its agent reads alive on a backend with a recovery-grade classifier, and
 #     the semantic busy contract (bin/fm-busy-lib.sh) reads it exactly idle,
 #     so a busy, unknown, or unverified agent is left running;
+#   - its authoritative current state (bin/fm-crew-state.sh) reads exactly
+#     done, so a live, parked, or blocked run keeps its agent;
 #   - this incarnation has not already been stopped for the timeout.
 # The stop itself is `bin/fm-control.sh <id> exit`, which preserves the
 # endpoint, worktree, branch, and every uncommitted change. The task record,
@@ -39,7 +41,7 @@
 #
 # Record: state/<id>.ready-timeout, atomically replaced, key=value lines:
 #   v=1
-#   result=stopped|failed
+#   result=stopped|failed|resumed
 #   spawn_gen=<the task record's spawn_gen= at the attempt, possibly empty>
 #   at=<epoch of the attempt>
 #   timeout=<configured seconds>
@@ -49,7 +51,11 @@
 # as deliberately stopped (fm_ready_timeout_parked): the watcher skips its
 # pane-staleness path and its turn-end signals, so no stale or dead-endpoint
 # alarm fires for it, and bin/fm-crew-state.sh and the session-start digest
-# name the stop instead of reporting an unexplained dead agent. A relaunch
+# name the stop instead of reporting an unexplained dead agent. The watcher
+# rereads a parked worker's current state on every poll; once it reads anything
+# other than done, the watcher rewrites the record as `resumed`, which ends the
+# parked reading so ordinary alarms apply again, and wakes firstmate once to
+# relaunch the worker. A `resumed` incarnation is never stopped again. A relaunch
 # writes a new spawn_gen, which ends the parked reading on its own. A `failed`
 # record (fm-control refused, for example over pending composer text) is
 # retried once the timeout elapses again, never on every poll. Teardown removes

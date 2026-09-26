@@ -9,8 +9,9 @@
 # tests/fm-control.test.sh pins the real exit verb. Covered: the knob's parsing,
 # disabled by default, the enabled default duration, a custom duration, no stop
 # for a busy, recently active, or unacknowledged-steer worker, no stop unless the
-# authoritative crew state reads done, and no stale or dead-endpoint alarm for a
-# worker the timeout stopped.
+# authoritative crew state reads done, no stale or dead-endpoint alarm for a
+# worker the timeout stopped, and one relaunch wake once its crew state stops
+# reading done.
 set -u
 
 # shellcheck source=tests/wake-helpers.sh
@@ -28,6 +29,7 @@ WINDOW=test:fm-rt
 KEY=test_fm-rt
 PR=https://github.com/o/r/pull/3
 DONE_CREW_STATE="state: done · source: status-log · PR $PR checks green"
+STOPPED_CREW_STATE="$DONE_CREW_STATE · agent stopped by the ready-session timeout; relaunch to resume work"
 
 reap() { kill "$1" 2>/dev/null || true; wait "$1" 2>/dev/null || true; }
 
@@ -280,7 +282,7 @@ test_no_alarm_after_a_timeout_stop() {
   printf 'jr@host wt %% ' > "$dir/pane.txt"
   touch "$dir/state/rt.turn-ended"
   watch_rounds "$dir" zsh FM_PAUSE_RESURFACE_SECS=1 FM_STALE_ESCALATE_SECS=1 \
-    FM_FAKE_CREW_STATE='state: unknown · source: none · backend target gone: test:fm-rt (agent gone, pane shell remains)' \
+    FM_FAKE_CREW_STATE="$STOPPED_CREW_STATE" \
     || fail "a stopped ready worker woke the watcher: $(cat "$dir/watch.out")"
   [ ! -s "$dir/state/.wake-queue" ] || fail "a stopped ready worker queued a wake: $(cat "$dir/state/.wake-queue")"
   [ ! -e "$dir/state/.dead-reported-$KEY" ] || fail "a stopped ready worker was reported as a dead endpoint"
@@ -295,6 +297,35 @@ test_no_alarm_after_a_timeout_stop() {
   pass "a worker the timeout stopped raises no stale, turn-end, or dead-endpoint alarm"
 }
 
+# Stopped while its crew state read done, the worker's still-running
+# no-mistakes run then parks at fix_review on it: the watcher wakes firstmate
+# exactly once naming the task and the relaunch, marks the record resumed so
+# ordinary surfacing takes over, and never stops that incarnation again.
+test_parked_run_after_stop_wakes_once() {
+  local dir parked='state: parked · source: run-step · fix_review · run: run-9'
+  dir=$(ready_fixture resume 90000) || fail "fixture failed"
+  : > "$dir/config/ready-session-timeout"
+  watch_rounds "$dir" claude || fail "watcher exited: $(cat "$dir/watch.out")"
+  expect_stop "$dir" 7200 "the timeout stop"
+  printf 'jr@host wt %% ' > "$dir/pane.txt"
+  watch_rounds "$dir" zsh FM_FAKE_CREW_STATE="$parked" \
+    && fail "a stopped worker whose run parked on it never woke the watcher"
+  [ "$(grep -c . "$dir/state/.wake-queue")" -eq 1 ] \
+    || fail "expected exactly one wake, got: $(cat "$dir/state/.wake-queue")"
+  grep -F "rt's agent" "$dir/state/.wake-queue" | grep -F 'bin/fm-control.sh rt relaunch' >/dev/null \
+    || fail "the wake does not name the task and its relaunch: $(cat "$dir/state/.wake-queue")"
+  [ "$(fm_ready_timeout_field "$dir/state/rt.ready-timeout" result)" = resumed ] \
+    || fail "the stopped record was not cleared: $(cat "$dir/state/rt.ready-timeout")"
+  fm_ready_timeout_parked "$dir/state" rt && fail "the worker still reads as deliberately stopped"
+  : > "$dir/state/.wake-queue"
+  watch_rounds "$dir" claude FM_FAKE_CREW_STATE="$parked" >/dev/null 2>&1 || true
+  if grep -F 'ready-session timeout had stopped' "$dir/state/.wake-queue" >/dev/null; then
+    fail "the resume wake repeated: $(cat "$dir/state/.wake-queue")"
+  fi
+  [ "$(stop_count "$dir")" -eq 1 ] || fail "the resumed incarnation was stopped again"
+  pass "a stopped worker whose run parks on it wakes firstmate once to relaunch it and is never re-stopped"
+}
+
 test_knob_parsing
 test_disabled_by_default
 test_enabled_default_duration
@@ -302,5 +333,6 @@ test_custom_duration
 test_busy_or_active_worker_is_left_running
 test_only_a_done_crew_state_is_stopped
 test_no_alarm_after_a_timeout_stop
+test_parked_run_after_stop_wakes_once
 
 echo "all fm-ready-timeout tests passed"

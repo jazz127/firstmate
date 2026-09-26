@@ -1737,7 +1737,7 @@ ready_session_timeout_consider() {  # <task> <meta> <timeout-secs>
   gen=$(fm_meta_get "$meta" spawn_gen)
   record=$(fm_ready_timeout_record_path "$STATE" "$task")
   if [ -f "$record" ] && [ "$(fm_ready_timeout_field "$record" spawn_gen)" = "$gen" ]; then
-    [ "$(fm_ready_timeout_field "$record" result)" != stopped ] || return 0
+    [ "$(fm_ready_timeout_field "$record" result)" = failed ] || return 0
     at=$(fm_ready_timeout_field "$record" at)
     case "$at" in ''|*[!0-9]*) at=0 ;; esac
     [ $(( $(date +%s) - at )) -ge "$secs" ] || return 0
@@ -1764,6 +1764,28 @@ ready_session_timeout_consider() {  # <task> <meta> <timeout-secs>
     fm_ready_timeout_record_write "$STATE" "$task" failed "$gen" "$pr" "$secs" "${out##*$'\n'}" || true
     triage_log "ready-session timeout could not stop $task, retrying after ${secs}s: ${out##*$'\n'}"
   fi
+}
+
+# A worker the timeout stopped stays quiet only while its authoritative current
+# state still reads done. Any other reading (a run parked at a gate on the
+# worker, a live run, a block) means the pull request needs work: the record is
+# marked resumed, so ordinary surfacing takes over and this incarnation is never
+# stopped again, and firstmate is woken once to relaunch the worker.
+ready_session_timeout_recheck() {  # <window> <task>
+  local win=$1 task=$2 line reason
+  line=$("$FM_CREW_STATE_BIN" "$task" 2>/dev/null) || true
+  case "$line" in "state: done · "*) return 0 ;; esac
+  reason="stale: $win (the ready-session timeout had stopped $task's agent while its pull request waited on a merge, and it now needs work: ${line:-no crew state}; relaunch it with bin/fm-control.sh $task relaunch)"
+  fm_wake_append stale "$win" "$reason" || exit 1
+  if ! fm_ready_timeout_record_write "$STATE" "$task" resumed \
+      "$(fm_meta_get "$STATE/$task.meta" spawn_gen)" \
+      "$(fm_ready_timeout_field "$(fm_ready_timeout_record_path "$STATE" "$task")" pr)" \
+      "$(fm_ready_timeout_field "$(fm_ready_timeout_record_path "$STATE" "$task")" timeout)" \
+      "resumed: ${line:-no crew state}"; then
+    echo "error: stale wake was queued for $task but its ready-session timeout record could not be updated" >&2
+    exit 1
+  fi
+  wake "$reason"
 }
 
 # The one owner of recheck wording for every wait handle_paused_stale re-surfaces.
@@ -3281,9 +3303,11 @@ EOF
     # exemption below, because a mate's steers land in an inbox too.
     [ -z "$task" ] || inbox_steer_check "$w" "$task"
     # A worker the ready-session timeout stopped on purpose is not stale, and
-    # its agent-less pane is not a dead endpoint: skip it until a relaunch
-    # (a new spawn_gen) or teardown ends the stop.
+    # its agent-less pane is not a dead endpoint: skip it while its crew state
+    # still reads done, until a relaunch (a new spawn_gen) or teardown ends the
+    # stop.
     if [ -n "$task" ] && fm_ready_timeout_parked "$STATE" "$task"; then
+      ready_session_timeout_recheck "$w" "$task"
       continue
     fi
     key=$(window_key "$w")

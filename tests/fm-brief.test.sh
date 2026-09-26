@@ -1255,6 +1255,159 @@ test_ship_branch_prefix_empty_override_yields_bare_task_id() {
   pass "fm-brief.sh: an empty --branch-prefix override resolves to a bare <task-id> branch"
 }
 
+test_housefeature_branch_base_selects_fresh_fork_ref() {
+  local case_dir home seed fork work fakebin brief command out status first_head main_head
+  case_dir="$TMP_ROOT/housefeature-base"
+  home="$case_dir/home"
+  seed="$case_dir/seed"
+  fork="$case_dir/fork.git"
+  work="$case_dir/work"
+  fakebin="$case_dir/bin"
+  mkdir -p "$home/data" "$fakebin"
+  cat > "$fakebin/gh-axi" <<'FAKE'
+#!/usr/bin/env bash
+set -eu
+[ "${1:-}" = api ] && [ "${2:-}" = POST ] && [ "${3:-}" = '/repos/jazz127/firstmate/git/refs' ] || exit 2
+shift 3
+ref= sha=
+while [ "$#" -gt 0 ]; do
+  [ "$1" = --field ] || exit 2
+  case "$2" in
+    ref=*) ref=${2#ref=} ;;
+    sha=*) sha=${2#sha=} ;;
+    *) exit 2 ;;
+  esac
+  shift 2
+done
+[ -n "$ref" ] && [ -n "$sha" ] || exit 2
+if [ "${FM_TEST_HOUSE_RACE:-0}" = 1 ]; then
+  concurrent=$(git --git-dir="$FM_TEST_HOUSE_FORK" rev-parse refs/heads/house)
+  git --git-dir="$FM_TEST_HOUSE_FORK" update-ref "$ref" "$concurrent" 0000000000000000000000000000000000000000
+fi
+git --git-dir="$FM_TEST_HOUSE_FORK" update-ref "$ref" "$sha" 0000000000000000000000000000000000000000
+FAKE
+  chmod +x "$fakebin/gh-axi"
+  git init -q -b main "$seed"
+  printf 'base\n' > "$seed/base.txt"
+  git -C "$seed" add base.txt
+  git -C "$seed" -c user.name=Test -c user.email=test@example.invalid commit -qm base
+  git clone -q --bare "$seed" "$fork"
+  git clone -q "$fork" "$work"
+  git -C "$seed" remote add origin "$fork"
+  git -C "$seed" checkout -qb house
+  printf 'house\n' > "$seed/house.txt"
+  git -C "$seed" add house.txt
+  git -C "$seed" -c user.name=Test -c user.email=test@example.invalid commit -qm house
+  git -C "$seed" push -q origin house
+  git -C "$seed" checkout -q main
+  printf 'new main\n' > "$seed/new-main.txt"
+  git -C "$seed" add new-main.txt
+  git -C "$seed" -c user.name=Test -c user.email=test@example.invalid commit -qm new-main
+  git -C "$seed" push -q origin main
+  git -C "$work" config user.name Test
+  git -C "$work" config user.email test@example.invalid
+  git -C "$work" config remote.origin.url https://github.com/jazz127/firstmate.git
+  git -C "$work" config "url.file://$fork.insteadOf" https://github.com/jazz127/firstmate.git
+
+  out=$(cd "$work" && PATH="$fakebin:$PATH" FM_TEST_HOUSE_FORK="$fork" \
+    "$ROOT/bin/fm-housefeature-start.sh" gamma main fm/gamma-r1 2>&1); status=$?
+  [ "$status" -ne 0 ] || fail "non-house fork default unexpectedly accepted"
+  assert_contains "$out" "origin's default branch must be house" "non-house fork default refusal"
+  [ -z "$(git --git-dir="$fork" for-each-ref refs/heads/housefeature/gamma)" ] || \
+    fail "non-house fork default created a durable branch"
+  git --git-dir="$fork" symbolic-ref HEAD refs/heads/house
+
+  FM_HOME="$home" "$ROOT/bin/fm-brief.sh" alpha-r1 fork-project --mode no-mistakes \
+    --house-feature alpha --branch-base main >/dev/null \
+    || fail "could not scaffold the first main-based feature round"
+  brief="$home/data/alpha-r1/brief.md"
+  assert_grep 'House feature intake: main-based' "$brief" "main-based intake was not recorded"
+  # shellcheck disable=SC2016 # Compare literal Markdown code spans in the generated brief.
+  assert_grep 'Target the durable `housefeature/alpha` branch: pass `--base-branch housefeature/alpha`' \
+    "$brief" "no-mistakes brief did not target the durable branch"
+  # shellcheck disable=SC2016 # Extract the generated worker command, a public brief interface.
+  command=$(sed -n 's/^1\. First action: prepare your branch: `\([^`]*\)`.*/\1/p' "$brief")
+  [ -n "$command" ] || fail "main-based feature brief omitted its branch command"
+  (cd "$work" && PATH="$fakebin:$PATH" FM_TEST_HOUSE_FORK="$fork" eval "$command") >/dev/null 2>&1 \
+    || fail "main-based feature start failed: $command"
+  main_head=$(git --git-dir="$fork" rev-parse refs/heads/main)
+  first_head=$(git --git-dir="$fork" rev-parse refs/heads/housefeature/alpha)
+  assert_equals "$main_head" "$first_head" "durable branch was not created at fresh fork main"
+  assert_equals "$first_head" "$(git -C "$work" rev-parse HEAD)" "worker did not start from the durable branch"
+  assert_equals fm/alpha-r1 "$(git -C "$work" branch --show-current)" "worker did not keep its fm/ branch"
+  [ ! -e "$work/house.txt" ] || fail "main-based feature carried house-only files"
+
+  git -C "$seed" fetch -q origin housefeature/alpha
+  git -C "$seed" checkout -qB housefeature/alpha FETCH_HEAD
+  printf 'feature change\n' > "$seed/feature.txt"
+  git -C "$seed" add feature.txt
+  git -C "$seed" -c user.name=Test -c user.email=test@example.invalid commit -qm feature
+  git -C "$seed" push -q origin housefeature/alpha
+  first_head=$(git --git-dir="$fork" rev-parse refs/heads/housefeature/alpha)
+  git -C "$seed" checkout -q main
+  printf 'main refresh\n' > "$seed/refresh.txt"
+  git -C "$seed" add refresh.txt
+  git -C "$seed" -c user.name=Test -c user.email=test@example.invalid commit -qm refresh
+  git -C "$seed" push -q origin main
+  git -C "$work" checkout -q --detach
+
+  FM_HOME="$home" "$ROOT/bin/fm-brief.sh" alpha-r2 fork-project --mode direct-PR \
+    --house-feature alpha --branch-base main >/dev/null \
+    || fail "could not scaffold the follow-up feature round"
+  brief="$home/data/alpha-r2/brief.md"
+  # shellcheck disable=SC2016 # Compare a literal Markdown code span in the generated brief.
+  assert_grep 'pass `--base housefeature/alpha`' "$brief" "direct-PR brief did not target the durable branch"
+  # shellcheck disable=SC2016 # Extract the generated worker command, a public brief interface.
+  command=$(sed -n 's/^1\. First action: prepare your branch: `\([^`]*\)`.*/\1/p' "$brief")
+  (cd "$work" && PATH="$fakebin:$PATH" FM_TEST_HOUSE_FORK="$fork" eval "$command") >/dev/null 2>&1 \
+    || fail "follow-up feature start failed: $command"
+  assert_equals fm/alpha-r2 "$(git -C "$work" branch --show-current)" "follow-up did not get a new task branch"
+  assert_grep 'feature change' "$work/feature.txt" "follow-up lost the durable feature's prior work"
+  assert_grep 'main refresh' "$work/refresh.txt" "follow-up did not merge the fresh main"
+  assert_equals "$first_head" "$(git --git-dir="$fork" rev-parse refs/heads/housefeature/alpha)" \
+    "follow-up preparation moved the remote durable head"
+  git -C "$work" checkout -q --detach
+
+  FM_HOME="$home" "$ROOT/bin/fm-brief.sh" beta-r1 fork-project --mode direct-PR \
+    --house-feature beta --branch-base house >/dev/null \
+    || fail "could not scaffold a house-only feature"
+  brief="$home/data/beta-r1/brief.md"
+  assert_grep 'House feature intake: house-only' "$brief" "house-only intake was not recorded"
+  # shellcheck disable=SC2016 # Compare a literal Markdown code span in the generated brief.
+  assert_grep '`house-only` label' "$brief" "house-only brief omitted the PR label"
+  # shellcheck disable=SC2016 # Extract the generated worker command, a public brief interface.
+  command=$(sed -n 's/^1\. First action: prepare your branch: `\([^`]*\)`.*/\1/p' "$brief")
+  (cd "$work" && PATH="$fakebin:$PATH" FM_TEST_HOUSE_FORK="$fork" eval "$command") >/dev/null 2>&1 \
+    || fail "house-only feature start failed: $command"
+  assert_equals "$(git --git-dir="$fork" rev-parse refs/heads/house)" \
+    "$(git --git-dir="$fork" rev-parse refs/heads/housefeature/beta)" \
+    "house-only durable branch was not cut from house"
+  assert_grep house "$work/house.txt" "house-only worker omitted the house base"
+  git -C "$work" checkout -q --detach
+
+  out=$(cd "$work" && PATH="$fakebin:$PATH" FM_TEST_HOUSE_FORK="$fork" FM_TEST_HOUSE_RACE=1 \
+    "$ROOT/bin/fm-housefeature-start.sh" gamma main fm/gamma-r1 2>&1); status=$?
+  [ "$status" -ne 0 ] || fail "concurrent durable-branch creation unexpectedly succeeded"
+  assert_contains "$out" 'could not create housefeature/gamma' "concurrent creation refusal"
+  assert_equals "$(git --git-dir="$fork" rev-parse refs/heads/house)" \
+    "$(git --git-dir="$fork" rev-parse refs/heads/housefeature/gamma)" \
+    "create-ref race moved a concurrent durable branch"
+
+  out=$(FM_HOME="$home" "$ROOT/bin/fm-brief.sh" feature-missing fork-project --mode direct-PR \
+    --house-feature missing 2>&1); status=$?
+  [ "$status" -ne 0 ] || fail "housefeature brief accepted no explicit base"
+  assert_contains "$out" 'requires --branch-base main or house' "missing base refusal"
+  out=$(FM_HOME="$home" "$ROOT/bin/fm-brief.sh" feature-other fork-project --mode direct-PR \
+    --branch-prefix fm/ --branch-base main 2>&1); status=$?
+  [ "$status" -ne 0 ] || fail "ordinary brief accepted a house-feature base"
+  assert_contains "$out" 'applies only with --house-feature' "missing feature refusal"
+  out=$(FM_HOME="$home" "$ROOT/bin/fm-brief.sh" feature-direct fork-project --mode direct-PR \
+    --branch-prefix housefeature/ 2>&1); status=$?
+  [ "$status" -ne 0 ] || fail "brief accepted direct worker delivery from the durable branch"
+  assert_contains "$out" 'worker uses its ordinary fm/ task branch' "direct durable worker refusal"
+  pass "fm-brief.sh: first and follow-up work rounds use distinct fm/ branches from one durable feature branch"
+}
+
 test_branch_prefix_is_refused_where_it_does_not_apply() {
   local home out status label args expect
   home="$TMP_ROOT/branch-prefix-refused-home"
@@ -1419,6 +1572,7 @@ test_home_brief_include_is_appended_last
 test_ship_branch_prefix_defaults_to_legacy_fm
 test_ship_branch_prefix_override_is_consistent_across_modes
 test_ship_branch_prefix_empty_override_yields_bare_task_id
+test_housefeature_branch_base_selects_fresh_fork_ref
 test_branch_prefix_is_refused_where_it_does_not_apply
 test_branch_prefix_value_is_validated
 test_branch_prefix_command_is_shell_safe

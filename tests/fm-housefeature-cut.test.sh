@@ -40,6 +40,8 @@ test_classify_skips() {
   assert_contains "$(classify_with HF_BASE_REF=main)" "skip base is main" "non-house base skips"
   assert_contains "$(classify_with HF_HEAD_REPO=someone/firstmate)" "skip head is from another repository" "fork PR skips"
   assert_contains "$(classify_with HF_HEAD_REPO=)" "skip head is from another repository" "deleted head repo skips"
+  assert_equals "skip housefeature/alpha is already the durable feature branch" \
+    "$(classify_with HF_HEAD_REF=housefeature/alpha)" "durable head skips"
   assert_contains "$(classify_with HF_HEAD_REF=fm/firstmate-house-upstream-merge-r2)" "brings upstream main" "house upstream merge skips"
   assert_contains "$(classify_with HF_HEAD_REF=fm/quota-axi-house-reconcile-r1)" "brings upstream main" "house reconcile skips"
   assert_equals "cut reconcile-inactive-crew-investigate-s1" \
@@ -114,6 +116,9 @@ test_run_cuts_and_captures() {
   assert_equals "$head" "$(remote_ref housefeature/beta)" "capture points at the pull request head"
 
   before=$(remote_ref housefeature/alpha)
+  out=$(run_cut housefeature/alpha "$before" "$merge") || fail "durable-head skip failed: $out"
+  assert_contains "$out" "already the durable feature branch" "durable-head run is reported as skipped"
+  assert_equals "$before" "$(remote_ref housefeature/alpha)" "durable-head merge never moves its branch"
   out=$(run_cut fm/firstmate-alpha-r2 "$head" "$merge") || fail "existing branch run failed: $out"
   assert_contains "$out" "Left existing \`housefeature/alpha\`" "existing branch is reported"
   assert_equals "$before" "$(remote_ref housefeature/alpha)" "existing branch is never moved"

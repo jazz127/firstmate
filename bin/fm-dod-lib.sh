@@ -746,9 +746,22 @@ The later upstream PR publication must use the same current receipt at its forge
 EOF
 }
 
-fm_dod_block() {  # <mode> <task-id> [branch] [<forge>]
-  local mode=$1 id=$2 forge=${4:-none}
+fm_dod_block() {  # <mode> <task-id> [branch] [<forge>] [<PR base>]
+  local mode=$1 id=$2 forge=${4:-none} pr_base=${5:-}
   local branch=${3:-fm/$id}
+  local base_instruction=
+  if [ -n "$pr_base" ]; then
+    [ "$forge" = none ] && [ "$mode" != local-only ] || {
+      echo "error: a house-feature PR base requires GitHub PR delivery" >&2
+      return 1
+    }
+    git check-ref-format --branch "$pr_base" >/dev/null 2>&1 || return 1
+    if [ "$mode" = no-mistakes ]; then
+      base_instruction="Target the durable \`$pr_base\` branch: pass \`--base-branch $pr_base\` when starting a new \`no-mistakes axi run\`. Reattach without flags."
+    else
+      base_instruction="Target the durable \`$pr_base\` branch: pass \`--base $pr_base\` to \`gh-axi pr create\`."
+    fi
+  fi
   fm_forge_valid_for_mode "$forge" "$mode" fm_dod_block || return 1
   case "$mode:$forge" in
     direct-PR:gerrit)
@@ -805,6 +818,7 @@ EOF
 Delivery contract: mode=direct-PR
 Ship branch: $branch
 This task ships **direct-PR**: you raise the PR yourself, without the no-mistakes pipeline.
+$base_instruction
 The task is complete only when committed on your branch.
 When it is implemented and committed, push your branch and open a PR through the applicable publication path below; it must be ready for review, not a draft.
 EOF
@@ -839,6 +853,7 @@ EOF
 # Definition of done
 Delivery contract: mode=no-mistakes
 Ship branch: $branch
+$base_instruction
 The task is complete only when committed on your branch.
 When you believe it is complete, append \`done [at=<epoch>]: {summary}\` to the status file and stop.
 Firstmate will then instruct you to run /no-mistakes to validate and ship a PR.

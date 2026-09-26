@@ -12,9 +12,9 @@
 #
 # classify reads the HF_* environment below and prints either
 # "cut <name>" or "skip <reason>". It skips a pull request that was not merged,
-# whose base is not house, whose head lives in another repository, or whose
-# head ref contains house-upstream-merge or house-reconcile (upstream main
-# brought into house).
+# whose base is not house, whose head lives in another repository, whose head
+# is already a durable housefeature/ branch, or whose head ref contains
+# house-upstream-merge or house-reconcile (upstream main brought into house).
 #
 # run classifies, then in the current clone of the fork: leaves an existing
 # housefeature/<name> untouched; otherwise commits the pull request's change
@@ -71,6 +71,9 @@ classify() {
     printf 'skip head is from another repository (%s)\n' "${HF_HEAD_REPO:-<deleted>}"
   else
     case "${HF_HEAD_REF:-}" in
+      "$PREFIX"*)
+        printf 'skip %s is already the durable feature branch\n' "$HF_HEAD_REF"
+        ;;
       *house-upstream-merge*|*house-reconcile*)
         printf 'skip %s brings upstream main into %s\n' "$HF_HEAD_REF" "$HOUSE_BRANCH"
         ;;

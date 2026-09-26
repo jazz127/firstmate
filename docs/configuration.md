@@ -1015,6 +1015,10 @@ This section is the single owner of the canonical schema and its per-field seman
 | `use` and optional top-level `default` | Accept one profile object or a non-empty array of profile objects; the single-object form remains fully backward-compatible. |
 | Profile `harness` | Required in every profile. |
 | Profile `model` and `effort`; rule `why` | Optional. |
+| Profile `seat` | Optional; currently accepts only `"luna"` with `"harness": "codex"`, and the launching home's [dock record](#dock-local-seat-binding-configdockjson) maps it to this machine's credential directory. |
+
+Quota resolution matches a Luna profile to that resolved directory's Codex account, even when `codex-home` in the quota snapshot names a different ambient account; without exactly one matching account row, the candidate stays unranked instead of borrowing another account's quota.
+Omitting `seat` preserves the ambient Codex home and its existing quota-row matching.
 
 **Fields applied only by typed resolution**
 
@@ -1078,6 +1082,46 @@ See [`docs/examples/crew-dispatch.json`](examples/crew-dispatch.json) for a star
 
 Secondmate homes inherit this file from the primary, so a secondmate's own crewmates apply the same dispatch profile behavior.
 
+## Dock-local seat binding (config/dock.json)
+
+An optional private `config/dock.json` in the launching home binds portable dispatch seat names to this machine's credential directory.
+The effective config directory is `${FM_CONFIG_OVERRIDE:-$FM_HOME/config}`; no parent home, hostname map, or ambient `CODEX_HOME` is searched.
+Version 1 supports only Luna on Codex:
+
+```json
+{
+  "version": 1,
+  "id": "ji7",
+  "seats": {
+    "luna": {
+      "harness": "codex",
+      "credential_home": "/home/fm-manage/.codex-luna"
+    }
+  }
+}
+```
+
+`id` is a safe single-line diagnostic label, not a host routing instruction.
+The file must be ordinary readable JSON with exactly the fields shown, though `seats` may be `{}` to declare no available seats.
+The credential path must be absolute and free of control characters; spaces and shell punctuation remain literal, and the existing directory is resolved to its physical path.
+An invalid or present incomplete file refuses a seated launch without a fallback.
+Only when the file is absent on Darwin for OS user `jarad` with `HOME=/Users/jarad` does Luna resolve to `/Users/jarad/.codex-luna` as `legacy-mac-jarad`.
+On other machines, create a local record before a seated launch.
+`bin/fm-dock.sh resolve --seat luna --harness codex` prints the resolved identity without changing configuration.
+
+A seated spawn or relaunch requires the selected directory to be readable and searchable and requires native `codex login status` to identify a stored sign-in under a cleared environment.
+This release supports Codex's file-backed CLI authentication mode for seats; a configured keyring, auto, or ephemeral mode refuses until its path selection is guarded.
+The selected home must contain an ordinary readable `auth.json` file that `jq` parses as a JSON object carrying a non-empty `OPENAI_API_KEY` or non-empty ID, access, and refresh tokens, because the CLI's status also reports placeholder files as signed in; Firstmate checks presence only and never prints or compares credential values.
+The canonical launch forces that home and the built-in OpenAI provider while removing ambient OpenAI and Codex key and endpoint overrides; seated raw commands refuse.
+The task record saves `seat`, `dock`, `seat_home`, and `seat_source` as launch provenance, while a later attempt resolves the current dock file again.
+A failed replacement preflight leaves the old worker running.
+An explicit seated remote secondmate request refuses before transport until logical-seat transport exists.
+
+`config/dock.json` and credential directories are machine-local and never inherited, seeded, synchronized, or copied to another home.
+A local secondmate agent uses the launching home's dock, while its own workers use its own dock record.
+After seeding a secondmate home, provision the credential store and create that home's dock record there before its first seated worker.
+Dispatch profiles remain inherited and contain seat names only.
+[`bin/fm-dock-lib.sh`](../bin/fm-dock-lib.sh) owns parsing and resolution; [`bin/fm-worker-account-lib.sh`](../bin/fm-worker-account-lib.sh) owns the Codex sign-in discriminator and credential override filter.
 ## Typed dispatch resolution (.env TYPESAFE_API_KEY)
 
 `bin/fm-dispatch-resolve.sh` resolves one concrete crewmate or scout profile from a written brief with typesafe.ai's System One model (Jev), so the rule match that firstmate otherwise reasons out in its own context becomes one short tool turn.

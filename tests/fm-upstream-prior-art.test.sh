@@ -305,8 +305,16 @@ printf 'refs/heads/fix %s refs/heads/main %s\n' "$(git rev-parse HEAD)" 0 \
       https://github.com/owner/demo.git || fail 'external push with receipt was blocked'
 pass 'pre-push boundary gates external targets and permits owned or checked pushes'
 rg -q '^## Prior art checked$' "$FAKE_PUBLISHED_BODY" || fail 'published body missed prior-art section'
-rg -q 'https://github.com/owner/demo/pull/7 by @author7' "$FAKE_PUBLISHED_BODY" || fail 'published body missed author credit'
-pass 'fresh distinct receipt permits publication and adds author credit'
+rg -q '^Searched open issues and pull requests, plus recently closed unmerged pull requests, in owner/demo on [0-9]{4}-[0-9]{2}-[0-9]{2}\. No existing work overlaps\.' "$FAKE_PUBLISHED_BODY" || fail 'published body missed concise search and verdict summary'
+rg -q '#7: Changes a different pause transition\.' "$FAKE_PUBLISHED_BODY" || fail 'published body missed closest-match reason'
+! rg -q 'https://github.com/owner/demo/(pull|issues)/|@[[:alnum:]_-]+' "$FAKE_PUBLISHED_BODY" || fail 'published summary exposed candidate URLs or mentions'
+python3 - "$TMP_ROOT/published-record.json" <<'PY' || fail 'published receipt lost candidate evidence'
+import json, sys
+r=json.load(open(sys.argv[1]))
+assert len(r['candidates']) == 3
+assert all(c['url'] and c['verdict'] and c['reason'] for c in r['candidates'])
+PY
+pass 'fresh distinct receipt publishes a concise summary while retaining full local evidence'
 
 python3 - "$TMP_ROOT/published-record.json" "$TMP_ROOT/aged-record.json" <<'PY'
 import json, sys
@@ -391,7 +399,8 @@ p=sys.argv[1]; r=json.load(open(p)); r['captain_decision']='Proceed and credit a
 PY
 "$tool" decide --record "$TMP_ROOT/prior-art.json" --decisions-file "$TMP_ROOT/decisions.json" > "$TMP_ROOT/out" || fail 'captain decision record failed'
 "$tool" publish "${common[@]}" --body-file "$TMP_ROOT/body.md" --head owner:fix > "$TMP_ROOT/out" || fail 'captain-approved overlap refused'
-rg -q 'Captain decision: Proceed and credit author7.' "$FAKE_PUBLISHED_BODY" || fail 'captain decision absent from published body'
+rg -q 'Existing work overlaps: #7 by author7: Both change pause detection.' "$FAKE_PUBLISHED_BODY" || fail 'overlap author credit absent from published summary'
+! rg -q '@author7|https://github.com/owner/demo/pull/7' "$FAKE_PUBLISHED_BODY" || fail 'overlap summary used a mention or full URL'
 pass 'overlap blocks publication until a captain decision is recorded'
 
 printf 'another change\n' >> worker.py

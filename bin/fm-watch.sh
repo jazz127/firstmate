@@ -1754,6 +1754,7 @@ ready_session_timeout_consider() {  # <task> <meta> <timeout-secs>
   [ "$agent" = alive ] || return 0
   verdict=$(fm_busy_classify_meta "$meta" "$task" "$STATE" 2>/dev/null) || return 0
   [ "${verdict%% *}" = idle ] || return 0
+  [ "$(crew_absorb_class "$task")" != working ] || return 0
   if out=$(FM_HOME="$FM_HOME" "$READY_TIMEOUT_CONTROL_BIN" "$task" exit 2>&1); then
     fm_ready_timeout_record_write "$STATE" "$task" stopped "$gen" "$pr" "$secs" "${out%%$'\n'*}" \
       || triage_log "ready-session timeout stopped $task but could not record it"

@@ -242,7 +242,14 @@ test_busy_or_active_worker_is_left_running() {
   : > "$dir/config/ready-session-timeout"
   watch_rounds "$dir" zsh || fail "watcher exited: $(cat "$dir/watch.out")"
   expect_no_stop "$dir" "an agent that is already gone"
-  pass "a busy, recently active, unread-steer, or agent-less worker is never stopped"
+
+  dir=$(ready_fixture live-run 90000) || fail "fixture failed"
+  : > "$dir/config/ready-session-timeout"
+  watch_rounds "$dir" claude \
+    FM_FAKE_CREW_STATE='state: working · source: run-step · ci (running)' \
+    || fail "watcher exited: $(cat "$dir/watch.out")"
+  expect_no_stop "$dir" "a live no-mistakes run on the branch"
+  pass "a busy, recently active, unread-steer, agent-less, or live-run worker is never stopped"
 }
 
 # After the stop the pane holds a bare shell, the exit fired a turn-end, and the

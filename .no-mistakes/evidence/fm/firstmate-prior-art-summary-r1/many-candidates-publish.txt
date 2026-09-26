@@ -1,0 +1,14 @@
+$ fm-upstream-prior-art.py scan ... (23 candidates: #7 linked, #4/#8 keywords, #205-#224 file-only)
+prior-art verdict recorded: distinct
+https://github.com/owner/demo/pull/50
+publish rc=0
+--- published PR body ---
+This change fixes stale worker detection.
+
+## Prior art checked
+
+Searched open issues and pull requests, plus recently closed unmerged pull requests, in owner/demo on 2026-09-26. No existing work overlaps. The closest matches are #7: Covers fix paused worker marked stale only; #4: Covers stale worker detected incorrectly only. The remaining 21 reviewed candidates were judged distinct. Search coverage was bounded to the most relevant hits per query; skipped queries: detection.
+--- lines in Prior art section:
+       3
+--- URLs/mentions in body:
+       0

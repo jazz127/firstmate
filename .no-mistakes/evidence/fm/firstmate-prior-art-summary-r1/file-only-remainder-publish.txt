@@ -1,0 +1,11 @@
+$ scan/decide/publish with file-only remainder (no closed-PR keyword hit)
+prior-art scan recorded 22 candidates: /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-prior-art-live.tVF8lI/rec2.json
+prior-art verdict recorded: distinct
+https://github.com/owner/demo/pull/50
+publish rc=0
+--- published PR body ---
+This change fixes stale worker detection.
+
+## Prior art checked
+
+Searched open issues and pull requests, plus recently closed unmerged pull requests, in owner/demo on 2026-09-26. No existing work overlaps. The closest matches are #7: Covers fix paused worker marked stale only; #4: Covers stale worker detected incorrectly only. The remaining 20 matches only share files. Search coverage was bounded to the most relevant hits per query; skipped queries: detection.

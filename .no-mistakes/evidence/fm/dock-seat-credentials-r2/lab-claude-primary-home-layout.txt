@@ -1,0 +1,26 @@
+ ▐▛███▛█   Claude Code v2.1.283
+▝▜██████▀  Opus 5.5 · Claude Pro
+ ▝▝   ▝▝   ~/.no-mistakes/worktrees/119cd7a6b9a4/01M3H15AWJ85BJQ0SV6TYERVH9
+❯ Do not start firstmate bootstrap or any lifecycle scripts. Just answer from the repo's instructions: where does firstmate document the purpose of config/claude-account and
+  config/crew-dispatch.json, what does it say about who may change a worker account pin and what to do on a pin refusal, and does crew-dispatch.json allow an optional seat? Name the file you read it
+  from.
+  Searched for 1 pattern, read 1 file, ran 2 shell commands
+⏺ Captain, the short purpose lines for both files are in .agents/skills/operational-home-layout/SKILL.md (lines 25–26), which AGENTS.md section 2 tells agents to load for home and config paths. The
+  full rules are in docs/configuration.md, which AGENTS.md names as the owner of the config schemas. I read both files and ran no scripts.
+  Purpose
+  - config/claude-account (with config/pi-account): an optional pin that picks which account this home's Claude and Pi workers launch on. It stays on this machine only (not committed to git) and is
+    not inherited by secondmate homes. If the file is absent, workers use whatever account is signed in by default. If it's present, a launch is refused unless the pinned account resolves and is
+    signed in. Details are in docs/configuration.md under "Worker account pin", starting at line 824. The file holds one line: ordinary or an absolute path to a Claude config directory.
+  - config/crew-dispatch.json: optional dispatch profiles, also kept only on this machine and inherited by secondmate homes. Firstmate maintains it, but a person can edit it. It holds plain-English
+    rules that choose the runner, model, effort and optional seat for each crewmate or scout task. The schema is in docs/configuration.md under "Crew dispatch profiles", starting at line 970.
+  Who may change a pin, and what to do when a launch is refused
+  - The skill file (line 25) says: "only the captain chooses or changes a pin, so on a refusal report the needed login and never edit or remove the file to unblock a spawn."
+  - docs/configuration.md adds (line 865): a malformed file, an unreadable directory or a signed-out account refuses the launch and names the file to fix. Firstmate never falls back to the default
+    account, never changes a global login and never copies a credential.
+  - For a raw Claude launch command that sets CLAUDE_CONFIG_DIR or a credential like ANTHROPIC_API_KEY, the refusal names that variable. The fix is to remove that assignment from the command, or to
+    change or remove the pin (line 854). Under the skill's rule, changing the pin is your call, not firstmate's.
+  - One gap: the "only the captain" rule appears only in the skill file. The "Worker account pin" section of docs/configuration.md doesn't say who may change the pin.
+  Optional seat in crew-dispatch.json
+  Yes. docs/configuration.md line 1016 says a profile's seat is optional. Right now it accepts only "luna", and only with "harness": "codex". This machine's config/dock.json maps that seat name to a
+  credential directory. If you leave seat out, launches keep the default Codex home. AGENTS.md section 4 also says to pass "an optional seat when selected".
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────

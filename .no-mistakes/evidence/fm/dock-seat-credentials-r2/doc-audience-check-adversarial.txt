@@ -1,0 +1,3 @@
+$ bin/fm-doc-audience-check.sh --root <copy of target with the new skill entry removed>
+fm-doc-audience-check: unclassified: .agents/skills/operational-home-layout/SKILL.md
+exit=1

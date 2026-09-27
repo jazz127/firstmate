@@ -155,6 +155,7 @@ write_legacy_execution() { # <start>
 write_legacy_execution "$(LC_ALL=C ps -p "$OLD_PID" -o lstart=)"
 (
   set +eu
+  # shellcheck disable=SC2030,SC2031 # each subshell deliberately scopes its own override
   export FM_ROOT_OVERRIDE="$TMP_ROOT/root"
   # shellcheck source=/dev/null
   . "$TMP_ROOT/worker-bin/fm-remote-job-worker.sh"
@@ -174,6 +175,7 @@ start_old_worker
 write_legacy_execution "$WALL_BEFORE"
 (
   set +eu
+  # shellcheck disable=SC2030,SC2031 # each subshell deliberately scopes its own override
   export FM_ROOT_OVERRIDE="$TMP_ROOT/root"
   # shellcheck source=/dev/null
   . "$TMP_ROOT/worker-bin/fm-remote-job-worker.sh"

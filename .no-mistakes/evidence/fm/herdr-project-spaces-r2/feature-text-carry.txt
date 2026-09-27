@@ -1,0 +1,9 @@
+# Feature text carry check (herdr project spaces round)
+## feature-branch AGENTS.md (91bf2be6) line:
+config/herdr-presentation-spaces  optional "off" opt-out from, or "on" opt-in to, Herdr's default-on disposable single-task visual projection, which is unconfigured-default-on only at or above a Herdr version floor, or "project" for one workspace per project; LOCAL, gitignored; inherited by secondmate homes; see docs/herdr-backend.md "Presentation spaces"
+## merged operational-home-layout skill line:
+config/herdr-presentation-spaces  optional "off" opt-out from, or "on" opt-in to, Herdr's default-on disposable single-task visual projection, which is unconfigured-default-on only at or above a Herdr version floor, or "project" for one workspace per project; LOCAL, gitignored; inherited by secondmate homes; see docs/herdr-backend.md "Presentation spaces"
+## AGENTS.md pointer:
+62:Load `operational-home-layout` when locating, interpreting, or changing Firstmate home, config, data, state, project, or generated runtime paths.
+## house lines in base AGENTS.md (not in upstream pre-#5872) missing verbatim from merged AGENTS.md+skills:
+(none)

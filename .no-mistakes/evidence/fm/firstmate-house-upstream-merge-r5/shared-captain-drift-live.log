@@ -1,0 +1,67 @@
+== S1 first push (no receipt, no dest)
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  watcher supervision needs Stop-owned automatic recovery; inspect the hook registration and startup status before ending the turn.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+config-push: $LAB -> live secondmate homes
+secondmate labsm ($SM): skipped - unsafe home: not a firstmate home (missing AGENTS.md)
+exit=0
+stat: /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab-sm.KHpUMs/data/captain-shared.md: stat: No such file or directory
+cat: /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab-sm.KHpUMs/data/.captain-shared.md.inherited: No such file or directory
+dest mode:  receipt: 
+quarantine files: 0
+== S2 primary advances v2; untouched inherited copy
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+config-push: $LAB -> live secondmate homes
+secondmate labsm ($SM): skipped - unsafe home: not a firstmate home (missing AGENTS.md)
+exit=0
+quarantine files: 0
+tail: /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab-sm.KHpUMs/data/captain-shared.md: No such file or directory
+== S3 unchanged rerun
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+config-push: $LAB -> live secondmate homes
+secondmate labsm ($SM): skipped - unsafe home: not a firstmate home (missing AGENTS.md)
+exit=0
+quarantine files: 0
+== S4 ADVERSARIAL: local edit in secondmate, then primary advances v3
+chmod: /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab-sm.KHpUMs/data/captain-shared.md: No such file or directory
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+config-push: $LAB -> live secondmate homes
+secondmate labsm ($SM): skipped - unsafe home: not a firstmate home (missing AGENTS.md)
+exit=0
+quarantine files: 0
+tail: /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab-sm.KHpUMs/data/.captain-shared.md.quarantine*: No such file or directory
+quarantined content tail: 
+LOCAL EDIT
+== S5 ADVERSARIAL: corrupt receipt + primary advances v4 (untouched dest)
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+config-push: $LAB -> live secondmate homes
+secondmate labsm ($SM): skipped - unsafe home: not a firstmate home (missing AGENTS.md)
+exit=0
+quarantine files: 0
+receipt now: garbage
+== S6 primary absence
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+config-push: $LAB -> live secondmate homes
+secondmate labsm ($SM): skipped - unsafe home: not a firstmate home (missing AGENTS.md)
+exit=0
+dest exists? yes receipt exists? yes quarantine files: 0
+== S7 remote receiver (fm-remote-inherit.sh) on a separate home
+pushed: data/captain-shared.md
+exit=0
+quarantine: 0
+-- r2 over untouched r1
+pushed: data/captain-shared.md
+exit=0
+quarantine: 0
+r2
+-- ADVERSARIAL local edit then r3
+quarantined: data/captain-shared.md.remote-quarantine-20260927T004406Z-32335 (replaced)
+pushed: data/captain-shared.md
+exit=0
+quarantine: 1
+r3
+lab removed

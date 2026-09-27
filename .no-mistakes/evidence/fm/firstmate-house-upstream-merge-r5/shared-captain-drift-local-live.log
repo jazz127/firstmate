@@ -1,0 +1,100 @@
+== S1 first push (no receipt, no dest)
+config-push: $LAB -> live secondmate homes
+secondmate labsm ($SM):
+  crew-dispatch.json: unchanged
+  crew-harness: unchanged
+  backlog-backend: unchanged
+  backend: unchanged
+  herdr-presentation-spaces: unchanged
+  startup-memory-budget: unchanged
+  launch-env-allowlist: unchanged
+  claude-permission-mode: unchanged
+  lavish-axi-host: unchanged
+  data/captain-shared.md: pushed
+exit=0
+dest mode: 444 receipt: c98667f9790079b6a6febff2409e71144da408440a894d962b5b5bbe003e2b21
+dest sha:          c98667f9790079b6a6febff2409e71144da408440a894d962b5b5bbe003e2b21
+quarantine files: 0
+== S2 primary advances v2; untouched inherited copy
+config-push: $LAB -> live secondmate homes
+secondmate labsm ($SM):
+  crew-dispatch.json: unchanged
+  crew-harness: unchanged
+  backlog-backend: unchanged
+  backend: unchanged
+  herdr-presentation-spaces: unchanged
+  startup-memory-budget: unchanged
+  launch-env-allowlist: unchanged
+  claude-permission-mode: unchanged
+  lavish-axi-host: unchanged
+  data/captain-shared.md: pushed
+exit=0
+quarantine files: 0  dest tail: v2 prefer spaces
+== S3 unchanged rerun
+config-push: $LAB -> live secondmate homes
+secondmate labsm ($SM):
+  crew-dispatch.json: unchanged
+  crew-harness: unchanged
+  backlog-backend: unchanged
+  backend: unchanged
+  herdr-presentation-spaces: unchanged
+  startup-memory-budget: unchanged
+  launch-env-allowlist: unchanged
+  claude-permission-mode: unchanged
+  lavish-axi-host: unchanged
+  data/captain-shared.md: unchanged
+exit=0
+quarantine files: 0
+== S4 ADVERSARIAL: local edit in secondmate, then primary advances v3
+config-push: $LAB -> live secondmate homes
+secondmate labsm ($SM):
+SECONDMATE_SYNC: secondmate home $SM: quarantined data/captain-shared.md drift at $SM/data/.captain-shared.md.quarantine.20260927T004442Z.87494d4219790cbb0af82d315622af36b7e0d5affc309dbaccb265e237b50fb7
+  crew-dispatch.json: unchanged
+  crew-harness: unchanged
+  backlog-backend: unchanged
+  backend: unchanged
+  herdr-presentation-spaces: unchanged
+  startup-memory-budget: unchanged
+  launch-env-allowlist: unchanged
+  claude-permission-mode: unchanged
+  lavish-axi-host: unchanged
+  data/captain-shared.md: pushed - quarantined local drift at $SM/data/.captain-shared.md.quarantine.20260927T004442Z.87494d4219790cbb0af82d315622af36b7e0d5affc309dbaccb265e237b50fb7
+exit=0
+quarantine files: 1
+quarantined content tail: LOCAL EDIT
+dest tail: v3 prefer both
+== S5 ADVERSARIAL: corrupt receipt + primary advances v4 (untouched dest)
+config-push: $LAB -> live secondmate homes
+secondmate labsm ($SM):
+SECONDMATE_SYNC: secondmate home $SM: quarantined data/captain-shared.md drift at $SM/data/.captain-shared.md.quarantine.20260927T004442Z.9833165ad1f6f8beed67c8f241f5904462091adc01639ac5402bb6fdf7718e1f
+  crew-dispatch.json: unchanged
+  crew-harness: unchanged
+  backlog-backend: unchanged
+  backend: unchanged
+  herdr-presentation-spaces: unchanged
+  startup-memory-budget: unchanged
+  launch-env-allowlist: unchanged
+  claude-permission-mode: unchanged
+  lavish-axi-host: unchanged
+  data/captain-shared.md: pushed - quarantined local drift at $SM/data/.captain-shared.md.quarantine.20260927T004442Z.9833165ad1f6f8beed67c8f241f5904462091adc01639ac5402bb6fdf7718e1f
+exit=0
+quarantine files: 2
+receipt now: cfad99c5075332fa5199e5f38ae6d68fc23a5346cdac04ba8623adb7a9850a6b
+dest tail: v4
+== S6 primary absence
+config-push: $LAB -> live secondmate homes
+secondmate labsm ($SM):
+SECONDMATE_SYNC: secondmate home $SM: quarantined data/captain-shared.md drift at $SM/data/.captain-shared.md.quarantine.20260927T004443Z.cfad99c5075332fa5199e5f38ae6d68fc23a5346cdac04ba8623adb7a9850a6b
+  crew-dispatch.json: unchanged
+  crew-harness: unchanged
+  backlog-backend: unchanged
+  backend: unchanged
+  herdr-presentation-spaces: unchanged
+  startup-memory-budget: unchanged
+  launch-env-allowlist: unchanged
+  claude-permission-mode: unchanged
+  lavish-axi-host: unchanged
+  data/captain-shared.md: pushed - mirrored primary absence after quarantining local copy at $SM/data/.captain-shared.md.quarantine.20260927T004443Z.cfad99c5075332fa5199e5f38ae6d68fc23a5346cdac04ba8623adb7a9850a6b
+exit=0
+dest exists? no receipt exists? no quarantine files: 3
+lab removed

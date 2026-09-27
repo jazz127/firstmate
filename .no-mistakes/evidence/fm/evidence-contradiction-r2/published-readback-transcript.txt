@@ -1,0 +1,33 @@
+=== R1 published body consistent
+--- published PR body (served by stand-in gh-axi):
+| Scenario | Result | Live | Evidence |
+| --- | --- | --- | --- |
+| A | pass | yes | x |
+| B | pass | no | f |
+
+1 of 2 scenarios driven live against the product.
+evidence-artifact: /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-cc.m8a1w6/wt/ev.txt
+evidence-command: cat /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-cc.m8a1w6/wt/ev.txt
+evidence-captured: 2026-09-27T00:00:00Z
+--- $ fm-pr-body-preflight.sh --gh-url https://github.com/o/r/pull/7 readback.md wt tmp
+evidence preflight ok
+[exit 0]
+
+=== R2 published body with contradictory generated appendix
+--- published PR body (served by stand-in gh-axi):
+| Scenario | Result | Live | Evidence |
+| --- | --- | --- | --- |
+| A | pass | yes | x |
+| B | pass | no | f |
+
+1 of 2 scenarios driven live against the product.
+Live validation: inconclusive - 0 of 2 scenarios driven live against the product
+evidence-artifact: /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-cc.m8a1w6/wt/ev.txt
+evidence-command: cat /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-cc.m8a1w6/wt/ev.txt
+evidence-captured: 2026-09-27T00:00:00Z
+--- $ fm-pr-body-preflight.sh --gh-url https://github.com/o/r/pull/7 readback.md wt tmp
+evidence claim refused: contradictory driven-scenario results:
+  1 of 2 scenarios driven live against the product.
+  Live validation: inconclusive - 0 of 2 scenarios driven live against the product
+[exit 1]
+

@@ -1,0 +1,14 @@
+$ fm-pr-body-preflight.sh --gh-url https://github.com/jazz127/firstmate/pull/67 /tmp/fm-pf-scan/b67.md /tmp/fm-pf-scan /tmp/fm-pf-scan
+evidence claim refused: artifact is outside the worker worktree or task temp directory: /tmp/fm-firstmate-upstream-5872-merge-r1/doc-checks.txt
+[exit 1]
+--- readback body (claim + metadata lines):
+5:Upstream has three new commits since `house` last merged it: kunchenguid/firstmate PR 5872 moves situational sections of the always-loaded AGENTS.md into on-demand agent-only skills (operational-home-layout, session-start-recovery, validation-supervision, ship-landing, scout-completion, away-quiet-supervision, a trigger index, plus fmx-respond additions), and two readability rewrites of docs/turnend-guard.md and docs/calm.md. A trial merge conflicts only in AGENTS.md, in two places where upstream replaced a whole section with a skill pointer while `house` had added lines inside it: the home-layout listing (house added the optional seat in `config/crew-dispatch.json`, the `project` value of `config/herdr-presentation-spaces`, `config/ready-session-timeout`, and the `<id>.ready-timeout` state record) and the PR ready/landing section (house added the PR reporting-boundary evidence read-back, `evidence-validation=failed`, stale-attestation diagnostic, PR-body preflight, and contradictory scenario-claim lines). Every other house addition merges cleanly.
+19:5. Published PR body read-back at the reporting boundary - `housefeature/evidence-boundary-coverage`.
+20:6. The `evidence-validation=failed` reporting marker - `housefeature/evidence-boundary-coverage`.
+22:8. PR-body preflight before publication - `housefeature/pr-evidence-preflight`.
+23:9. Contradictory driven-scenario claim refusal - `housefeature/evidence-contradiction`.
+25:These are four follow-up areas delivered through seven owning `housefeature/*` branches: dispatch seat, Herdr project spaces, ready-session timeout, and PR evidence validation. Each branch first receives its own update PR. Merge this upstream PR into `house` first, then merge the seven `housefeature/*` integration PRs into `house` immediately afterward. Do not merge `house` into those feature branches.
+33:evidence-artifact: /tmp/fm-firstmate-upstream-5872-merge-r1/doc-checks.txt
+34:evidence-command: bash /tmp/fm-firstmate-upstream-5872-merge-r1/capture-evidence.sh > /tmp/fm-firstmate-upstream-5872-merge-r1/doc-checks.txt 2>&1
+35:evidence-captured: 2026-09-27T08:29:22Z
+39:- Live validation: ⚠️ no-surface - 0 of 3 scenarios driven live against the product

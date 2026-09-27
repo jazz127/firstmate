@@ -1,0 +1,49 @@
+== R0 detected claim, no metadata (control)
+$ /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3H7QZ7H93YCF0N779SATFY8/bin/fm-pr-body-preflight.sh /tmp/fmpf.Lhmckz/wt/d.md /tmp/fmpf.Lhmckz/wt /tmp/fmpf.Lhmckz/task
+evidence claim refused: missing evidence-artifact: path
+[exit 1]
+
+== R3 detected claim + one valid block in worktree
+External validation passed.
+evidence-artifact: /tmp/fmpf.Lhmckz/wt/ev.txt
+evidence-command: cat /tmp/fmpf.Lhmckz/wt/ev.txt
+evidence-captured: 2026-09-27T01:00:00Z
+$ /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3H7QZ7H93YCF0N779SATFY8/bin/fm-pr-body-preflight.sh /tmp/fmpf.Lhmckz/wt/d.md /tmp/fmpf.Lhmckz/wt /tmp/fmpf.Lhmckz/task
+evidence preflight ok
+[exit 0]
+
+== R3b artifact in task temp dir
+$ /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3H7QZ7H93YCF0N779SATFY8/bin/fm-pr-body-preflight.sh /tmp/fmpf.Lhmckz/wt/d.md /tmp/fmpf.Lhmckz/wt /tmp/fmpf.Lhmckz/task
+evidence preflight ok
+[exit 0]
+
+== R4 artifact in another directory
+$ /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3H7QZ7H93YCF0N779SATFY8/bin/fm-pr-body-preflight.sh /tmp/fmpf.Lhmckz/wt/d.md /tmp/fmpf.Lhmckz/wt /tmp/fmpf.Lhmckz/task
+evidence claim refused: artifact is outside the worker worktree or task temp directory: /tmp/fmpf.Lhmckz/other/ev.txt
+[exit 1]
+
+== R5 escaping symlink artifact
+$ /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3H7QZ7H93YCF0N779SATFY8/bin/fm-pr-body-preflight.sh /tmp/fmpf.Lhmckz/wt/d.md /tmp/fmpf.Lhmckz/wt /tmp/fmpf.Lhmckz/task
+evidence claim refused: resolved artifact is outside the allowed roots: /tmp/fmpf.Lhmckz/wt/link.txt
+[exit 1]
+
+== R6 separate block per claim
+$ /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3H7QZ7H93YCF0N779SATFY8/bin/fm-pr-body-preflight.sh /tmp/fmpf.Lhmckz/wt/d.md /tmp/fmpf.Lhmckz/wt /tmp/fmpf.Lhmckz/task
+evidence claim refused: duplicate evidence-artifact metadata
+[exit 1]
+
+== R7 bullet-prefixed metadata
+$ /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3H7QZ7H93YCF0N779SATFY8/bin/fm-pr-body-preflight.sh /tmp/fmpf.Lhmckz/wt/d.md /tmp/fmpf.Lhmckz/wt /tmp/fmpf.Lhmckz/task
+evidence claim refused: missing evidence-artifact: path
+[exit 1]
+
+== R8 bad timestamp
+$ /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3H7QZ7H93YCF0N779SATFY8/bin/fm-pr-body-preflight.sh /tmp/fmpf.Lhmckz/wt/d.md /tmp/fmpf.Lhmckz/wt /tmp/fmpf.Lhmckz/task
+evidence claim refused: invalid evidence-captured timestamp: yesterday
+[exit 1]
+
+== R9 missing artifact file
+$ /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3H7QZ7H93YCF0N779SATFY8/bin/fm-pr-body-preflight.sh /tmp/fmpf.Lhmckz/wt/d.md /tmp/fmpf.Lhmckz/wt /tmp/fmpf.Lhmckz/task
+evidence claim refused: artifact is missing or unreadable: /tmp/fmpf.Lhmckz/wt/gone.txt
+[exit 1]
+

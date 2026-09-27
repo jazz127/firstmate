@@ -1,0 +1,80 @@
+== S1 plain body with no evidence claims
+$ /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3H7QZ7H93YCF0N779SATFY8/bin/fm-pr-body-preflight.sh /tmp/fmpf.Lhmckz/wt/d.md /tmp/fmpf.Lhmckz/wt /tmp/fmpf.Lhmckz/task
+evidence preflight ok
+[exit 0]
+
+== S2 '0 of 3 scenarios driven live' without metadata
+$ /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3H7QZ7H93YCF0N779SATFY8/bin/fm-pr-body-preflight.sh /tmp/fmpf.Lhmckz/wt/d.md /tmp/fmpf.Lhmckz/wt /tmp/fmpf.Lhmckz/task
+evidence claim refused: missing evidence-artifact: path
+[exit 1]
+
+== S3 live claim with full single metadata block
+$ /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3H7QZ7H93YCF0N779SATFY8/bin/fm-pr-body-preflight.sh /tmp/fmpf.Lhmckz/wt/d.md /tmp/fmpf.Lhmckz/wt /tmp/fmpf.Lhmckz/task
+evidence preflight ok
+[exit 0]
+
+== S4 artifact outside worktree/task dir
+$ /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3H7QZ7H93YCF0N779SATFY8/bin/fm-pr-body-preflight.sh /tmp/fmpf.Lhmckz/wt/d.md /tmp/fmpf.Lhmckz/wt /tmp/fmpf.Lhmckz/task
+evidence preflight ok
+[exit 0]
+
+== S5 escaping symlink artifact
+$ /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3H7QZ7H93YCF0N779SATFY8/bin/fm-pr-body-preflight.sh /tmp/fmpf.Lhmckz/wt/d.md /tmp/fmpf.Lhmckz/wt /tmp/fmpf.Lhmckz/task
+evidence preflight ok
+[exit 0]
+
+== S6 two metadata blocks
+$ /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3H7QZ7H93YCF0N779SATFY8/bin/fm-pr-body-preflight.sh /tmp/fmpf.Lhmckz/wt/d.md /tmp/fmpf.Lhmckz/wt /tmp/fmpf.Lhmckz/task
+evidence preflight ok
+[exit 0]
+
+== S7 missing body file / wrong args
+$ /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3H7QZ7H93YCF0N779SATFY8/bin/fm-pr-body-preflight.sh /tmp/fmpf.Lhmckz/wt/nope.md /tmp/fmpf.Lhmckz/wt /tmp/fmpf.Lhmckz/task
+error: draft PR body is missing or unreadable: /tmp/fmpf.Lhmckz/wt/nope.md
+[exit 1]
+
+$ /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3H7QZ7H93YCF0N779SATFY8/bin/fm-pr-body-preflight.sh onlyone
+usage: fm-pr-body-preflight.sh [--gh-url <url>] <body-file> <worker-worktree> <task-temp-dir>
+[exit 2]
+
+== S8 --gh-url non-canonical URL
+$ /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3H7QZ7H93YCF0N779SATFY8/bin/fm-pr-body-preflight.sh --gh-url https://github.com/jazz127/firstmate/pulls/72 /tmp/fmpf.Lhmckz/task/rb.md /tmp/fmpf.Lhmckz/wt /tmp/fmpf.Lhmckz/task
+error: expected a canonical GitHub PR URL: https://github.com/jazz127/firstmate/pulls/72
+[exit 1]
+
+== S9 --gh-url body file outside worktree/task
+$ /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3H7QZ7H93YCF0N779SATFY8/bin/fm-pr-body-preflight.sh --gh-url https://github.com/jazz127/firstmate/pull/72 /tmp/fmpf.Lhmckz/other/rb.md /tmp/fmpf.Lhmckz/wt /tmp/fmpf.Lhmckz/task
+error: body-file must be inside the worker worktree or task temp directory: /tmp/fmpf.Lhmckz/other/rb.md
+[exit 1]
+
+== S10 --gh-url symlink body file
+$ /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3H7QZ7H93YCF0N779SATFY8/bin/fm-pr-body-preflight.sh --gh-url https://github.com/jazz127/firstmate/pull/72 /tmp/fmpf.Lhmckz/task/sym.md /tmp/fmpf.Lhmckz/wt /tmp/fmpf.Lhmckz/task
+error: body-file must not be a symlink: /tmp/fmpf.Lhmckz/task/sym.md
+[exit 1]
+
+other
+== S11 --gh-url real readback of published PR 72 and 74
+$ /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3H7QZ7H93YCF0N779SATFY8/bin/fm-pr-body-preflight.sh --gh-url https://github.com/jazz127/firstmate/pull/72 /tmp/fmpf.Lhmckz/task/rb72.md /tmp/fmpf.Lhmckz/wt /tmp/fmpf.Lhmckz/task
+evidence preflight ok
+[exit 0]
+
+## Purpose
+
+Integrate the dock-seat feature's optional dispatch-seat instruction from its durable `housefeature/dock-seat-credentials` branch into `house`.
+
+## Change
+
+This branch starts at current `house` and merges the durable feature branch with a merge commit. The conflict resolution retains the current upstream home-layout skill and `AGENTS.md` pointer, adding only `optional-seat` to the `config/crew-dispatch.json` row. It retains current upstream account-pin, supervision-host, and git-hooks rules and avoids a duplicate documentation audience row.
+
+## Validation
+
+Synthetic/offline built-C
+$ /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3H7QZ7H93YCF0N779SATFY8/bin/fm-pr-body-preflight.sh --gh-url https://github.com/jazz127/firstmate/pull/74 /tmp/fmpf.Lhmckz/task/rb74.md /tmp/fmpf.Lhmckz/wt /tmp/fmpf.Lhmckz/task
+evidence preflight ok
+[exit 0]
+
+8:- Add the diagnostic rule to `ship-landing`: when a published attestation belongs to a different head, preserve the refusal naming the current head, attested head, and remediation alongside `evidence-validation=failed`.
+21:evidence-artifact: /tmp/fm-firstmate-upstream-5872-merge-r1/pr74-evidence.txt
+22:evidence-command: no-mistakes axi status
+23:evidence-captured: 2026-09-27T10:48:04Z
+NOTE: S3-S6 above used the wording 'Scenario validated live.', which the (unchanged) evidence detector does not classify as a claim, so they returned ok without checking metadata. See preflight-cli-claims-transcript.txt for the same guards driven with a detected claim.

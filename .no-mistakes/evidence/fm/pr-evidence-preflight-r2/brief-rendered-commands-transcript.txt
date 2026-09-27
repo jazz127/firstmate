@@ -1,0 +1,16 @@
+Brief draft command: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3H7QZ7H93YCF0N779SATFY8/bin/fm-pr-body-preflight.sh <draft-body-file> "$(pwd -P)" "/tmp/fm-pf-no-mistakes"
+Brief readback command: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3H7QZ7H93YCF0N779SATFY8/bin/fm-pr-body-preflight.sh --gh-url <PR URL> "/tmp/fm-pf-no-mistakes/pr-body-readback.md" "$(pwd -P)" "/tmp/fm-pf-no-mistakes"
+
+$ /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3H7QZ7H93YCF0N779SATFY8/bin/fm-pr-body-preflight.sh /tmp/fm-lab.EOZKFo/wt/draft.md "$(pwd -P)" "/tmp/fm-pf-no-mistakes"
+evidence claim refused: missing evidence-artifact: path
+[exit 1]
+$ /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3H7QZ7H93YCF0N779SATFY8/bin/fm-pr-body-preflight.sh /tmp/fm-lab.EOZKFo/wt/draft.md "$(pwd -P)" "/tmp/fm-pf-no-mistakes"
+evidence preflight ok
+[exit 0]
+$ /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3H7QZ7H93YCF0N779SATFY8/bin/fm-pr-body-preflight.sh --gh-url https://github.com/jazz127/firstmate/pull/74 "/tmp/fm-pf-no-mistakes/pr-body-readback.md" "$(pwd -P)" "/tmp/fm-pf-no-mistakes"
+evidence preflight ok
+[exit 0]
+-rw-------@ 1 jarad  wheel  2073 Sep 27 20:54 /tmp/fm-pf-no-mistakes/pr-body-readback.md
+## Purpose
+
+Carry the stale-attestation diagnostic instruction into upstream's `ship-landing` skill through its durable `housefeature/attestation-head-boundary` branch.

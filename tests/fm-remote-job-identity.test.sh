@@ -16,11 +16,12 @@ export FM_REMOTE_JOB_STATE_ROOT="$TMP_ROOT/state"
 BOOT_ID=97bd96b2-61ca-4873-8988-39c3bfc0662e
 printf '%s\n' "$BOOT_ID" > "$FM_PROC_ROOT_OVERRIDE/sys/kernel/random/boot_id"
 
-write_stat() { # <start ticks> [comm]
-  local ticks=$1 comm=${2:-'worker ) odd'} i
-  printf '%s (%s) S' "$$" "$comm" > "$FM_PROC_ROOT_OVERRIDE/$$/stat"
-  for ((i=0; i<18; i++)); do printf ' 1' >> "$FM_PROC_ROOT_OVERRIDE/$$/stat"; done
-  printf ' %s\n' "$ticks" >> "$FM_PROC_ROOT_OVERRIDE/$$/stat"
+write_stat() { # <start ticks> [comm] [pid]
+  local ticks=$1 comm=${2:-'worker ) odd'} pid=${3:-$$} i
+  mkdir -p "$FM_PROC_ROOT_OVERRIDE/$pid"
+  printf '%s (%s) S' "$pid" "$comm" > "$FM_PROC_ROOT_OVERRIDE/$pid/stat"
+  for ((i=0; i<18; i++)); do printf ' 1' >> "$FM_PROC_ROOT_OVERRIDE/$pid/stat"; done
+  printf ' %s\n' "$ticks" >> "$FM_PROC_ROOT_OVERRIDE/$pid/stat"
 }
 
 write_stat 23347095
@@ -59,25 +60,109 @@ pass "malformed proc and boot records fail closed"
 
 fm_remote_job_prepare_state "$TMP_ROOT/account" || fail "could not prepare ownership fixture"
 LOCK=$(fm_remote_job_worker_lock_path)
-mkdir "$LOCK"
-printf '%s\n' "$$" > "$LOCK/pid"
-printf '%s\n' "$WALL_BEFORE" > "$LOCK/start"
-printf '%s\n' "$COMMAND" > "$LOCK/command"
-! fm_remote_job_lock_owner_matches_process "$TMP_ROOT/account" \
-  || fail "old wall-clock record was accepted as stable identity"
-fm_remote_job_lock_owner_uncertain_alive "$TMP_ROOT/account" \
-  || fail "live old-format lock was not protected"
-mkdir -p "$TMP_ROOT/root/bin" "$TMP_ROOT/stage"
-printf '#!/bin/bash\n' > "$TMP_ROOT/root/bin/fm-remote-job-worker.sh"
+mkdir -p "$TMP_ROOT/root/bin"
+cat > "$TMP_ROOT/root/bin/fm-remote-job-worker.sh" <<'WORKER'
+#!/bin/bash
+[ "${FM_TEST_OLD_WORKER:-}" = 1 ] || exit 0
+while :; do sleep 0.1; done
+WORKER
 chmod +x "$TMP_ROOT/root/bin/fm-remote-job-worker.sh"
-! fm_remote_job_start_linux_worker "$TMP_ROOT/root" "$TMP_ROOT/account" \
-  || fail "a live old-format worker was replaced without verified ownership"
-[ -f "$LOCK/pid" ] || fail "the old-format lock was deleted"
+OLD_PID=
+
+start_old_worker() {
+  set -m
+  FM_TEST_OLD_WORKER=1 "$TMP_ROOT/root/bin/fm-remote-job-worker.sh" &
+  OLD_PID=$!
+  set +m
+  write_stat 23347200 bash "$OLD_PID"
+  for _ in $(seq 1 50); do
+    case "$(fm_remote_job_process_command "$OLD_PID" 2>/dev/null || true)" in
+      *fm-remote-job-worker.sh*) return 0 ;;
+    esac
+    sleep 0.1
+  done
+  fail "old worker fixture did not start"
+}
+
+stop_old_worker() {
+  [ -n "$OLD_PID" ] || return 0
+  kill -KILL -- "-$OLD_PID" 2>/dev/null || true
+  wait "$OLD_PID" 2>/dev/null || true
+  OLD_PID=
+}
+trap 'stop_old_worker; rm -rf -- "$TMP_ROOT"' EXIT
+
+write_legacy_lock() { # <start> <command>
+  rm -rf -- "$LOCK"
+  mkdir "$LOCK"
+  printf '%s\n' "$OLD_PID" > "$LOCK/pid"
+  printf '%s\n' "$1" > "$LOCK/start"
+  printf '%s\n' "$2" > "$LOCK/command"
+  printf '%s\n' "$OLD_PID" > "$(fm_remote_job_worker_pid_path)"
+  printf '%s\n' 'pre-upgrade-identity' > "$(fm_remote_job_worker_identity_path)"
+  : > "$(fm_remote_job_worker_ready_path)"
+}
+
+assert_legacy_worker_upgraded() { # <start> <case>
+  local old=$OLD_PID
+  write_legacy_lock "$1" "$(fm_remote_job_process_command "$old")"
+  fm_remote_job_start_linux_worker "$TMP_ROOT/root" "$TMP_ROOT/account" \
+    || fail "$2 legacy worker was not replaced: ${FM_REMOTE_JOB_ERROR:-}"
+  ! kill -0 "$old" 2>/dev/null || fail "$2 legacy worker survived the upgrade"
+  OLD_PID=
+}
+
+start_old_worker
+assert_legacy_worker_upgraded "$(LC_ALL=C ps -p "$OLD_PID" -o lstart=)" stable-lstart
+pass "a stable-lstart legacy worker is stopped and replaced on upgrade"
+
+start_old_worker
+assert_legacy_worker_upgraded "$WALL_BEFORE" drifted-lstart
+pass "a drifted-lstart legacy worker with its recorded command is stopped and replaced"
+
+start_old_worker
+assert_legacy_worker_upgraded 'dim. sept. 27 21:51:10 2026' non-English
+pass "a non-English legacy lstart record is still recognized as the pre-upgrade worker"
+
+start_old_worker
+write_legacy_lock "$WALL_BEFORE" "/bin/bash $TMP_ROOT/elsewhere/fm-remote-job-worker.sh"
+! fm_remote_job_lock_owner_matches_process "$TMP_ROOT/account" \
+  || fail "a reused PID running a different command was adopted as the lock owner"
+mkdir -p "$TMP_ROOT/stage"
+printf '%s\n' "$OLD_PID" > "$TMP_ROOT/stage/.owner-pid"
+printf '%s\n' "$WALL_BEFORE" > "$TMP_ROOT/stage/.owner-start"
+! fm_remote_job_stage_owner_alive "$TMP_ROOT/stage" \
+  || fail "a legacy stage owner whose PID runs another command was kept alive"
 printf '%s\n' "$$" > "$TMP_ROOT/stage/.owner-pid"
 printf '%s\n' "$WALL_BEFORE" > "$TMP_ROOT/stage/.owner-start"
-fm_remote_job_stage_owner_alive "$TMP_ROOT/stage" \
-  || fail "a live old-format stage was treated as abandoned"
-printf '%s\n' "$COMMAND different" > "$LOCK/command"
-! fm_remote_job_lock_owner_uncertain_alive "$TMP_ROOT/account" \
-  || fail "a different command retained old-format lock protection"
-pass "live old-format lock and stage records are protected without adoption or signalling"
+! fm_remote_job_stage_owner_alive "$TMP_ROOT/stage" \
+  || fail "a legacy stage owner reused by the test shell was kept alive"
+pass "a legacy record whose PID now runs a different command is dead"
+
+# The worker's own helpers run with its dispatch removed so they can be called.
+mkdir -p "$TMP_ROOT/worker-bin"
+cp "$ROOT/bin/fm-remote-job-lib.sh" "$TMP_ROOT/worker-bin/"
+sed '/^case "${1:-}" in$/,$d' "$ROOT/bin/fm-remote-job-worker.sh" > "$TMP_ROOT/worker-bin/fm-remote-job-worker.sh"
+JOB="$TMP_ROOT/job"
+mkdir -p "$JOB/.claim"
+printf '%s\n' "$TMP_ROOT/root" > "$JOB/root"
+printf '%s\n' "$OLD_PID" > "$JOB/.claim/owner"
+printf '%s\n' 'Sun Sep 27 21:51:10 2026' > "$JOB/.claim/owner_start"
+printf '%s\n' "$OLD_PID" > "$JOB/.claim/supervisor"
+printf '%s\n' 'Sun Sep 27 21:51:10 2026' > "$JOB/.claim/supervisor_start"
+(
+  set +eu
+  export FM_ROOT_OVERRIDE="$TMP_ROOT/root"
+  # shellcheck source=/dev/null
+  . "$TMP_ROOT/worker-bin/fm-remote-job-worker.sh"
+  worker_claim_owner_alive "$JOB" || fail "a live legacy claim owner was treated as dead"
+  worker_recorded_execution_alive "$JOB" process "$OLD_PID" \
+    || fail "a live legacy supervisor was not recognized"
+  worker_stop_recorded_execution "$JOB" || fail "a legacy supervisor record was not stopped"
+  ! kill -0 "$OLD_PID" 2>/dev/null || fail "the legacy supervisor survived its stop"
+  printf '%s\n' "$$" > "$JOB/.claim/owner"
+  ! worker_claim_owner_alive "$JOB" || fail "a legacy claim owner reused by another command was kept"
+) || exit 1
+wait "$OLD_PID" 2>/dev/null || true
+OLD_PID=
+pass "legacy claim and supervisor records are recognized, signalled, and stopped"

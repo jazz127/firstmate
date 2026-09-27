@@ -138,7 +138,6 @@ worker_quarantined_execution_stopped() { # <account-home>
   local account_home=$1 job state kind file pid
   fm_remote_job_regular_bounded "$WORKER_LOCK/quarantine" 256 || return 1
   fm_remote_job_lock_owner_matches_process "$account_home" && return 1
-  fm_remote_job_lock_owner_uncertain_alive "$account_home" && return 1
   for job in "$FM_REMOTE_JOB_JOBS"/job-*; do
     [ -d "$job" ] && [ ! -L "$job" ] || continue
     state=$(fm_remote_job_read_state "$job" 2>/dev/null || true)
@@ -173,9 +172,6 @@ worker_acquire_lock() {
       continue
     fi
     if fm_remote_job_lock_owner_matches_process "$account_home"; then return 2; fi
-    # A live old-format owner may have a different rendered lstart now. Never
-    # delete its lock merely because the new token cannot match its record.
-    fm_remote_job_lock_owner_uncertain_alive "$account_home" && return 3
     if fm_remote_job_probe "$account_home" || worker_lock_recent; then
       attempt=$((attempt + 1))
       sleep 0.1
@@ -319,6 +315,16 @@ worker_signal_process_or_group() { # process|group <signal> <pid>
   esac
 }
 
+# A pre-upgrade supervisor is a worker lane; a pre-upgrade group leader is that
+# lane before exec or the job's git check or command under the job root.
+worker_legacy_execution_owner() { # <job-dir> <pid> <recorded start>
+  local command root
+  command=$(fm_remote_job_legacy_owner_command "$2" "$3") || return 1
+  [[ "$command" == *fm-remote-job-worker.sh* ]] && return 0
+  root=$(fm_remote_job_read_single_line "$1/root" 8192 2>/dev/null) || return 1
+  [ -n "$root" ] && [[ "$command" == *"$root"* ]]
+}
+
 worker_supervisor_identity_status() { # <job-dir> <pid>
   local job=$1 pid=$2 recorded_start actual_start
   recorded_start=$(fm_remote_job_read_single_line "$job/.claim/supervisor_start" 256 2>/dev/null) || return 2
@@ -327,8 +333,7 @@ worker_supervisor_identity_status() { # <job-dir> <pid>
     return 1
   }
   [ "$recorded_start" = "$actual_start" ] && return 0
-  if fm_remote_job_legacy_start_record "$recorded_start" && kill -0 "$pid" 2>/dev/null; then return 2; fi
-  return 1
+  worker_legacy_execution_owner "$job" "$pid" "$recorded_start"
 }
 
 # A leaderless live group still belongs to the recorded execution: its PGID
@@ -346,8 +351,7 @@ worker_group_identity_status() { # <job-dir> <pid>
     return 1
   }
   [ "$recorded_start" = "$actual_start" ] && return 0
-  if fm_remote_job_legacy_start_record "$recorded_start" && kill -0 "$pid" 2>/dev/null; then return 2; fi
-  return 1
+  worker_legacy_execution_owner "$job" "$pid" "$recorded_start"
 }
 
 worker_recorded_execution_alive() { # <job-dir> process|group <pid>
@@ -554,7 +558,7 @@ worker_claim() { # <job-dir>
 }
 
 worker_claim_owner_alive() { # <job-dir>
-  local job=$1 claim="$1/.claim" owner pid recorded_start actual_start
+  local job=$1 claim="$1/.claim" owner pid recorded_start actual_start command
   [ -d "$claim" ] && [ ! -L "$claim" ] || return 1
   owner="$claim/owner"
   fm_remote_job_regular_bounded "$owner" 64 || return 1
@@ -567,8 +571,9 @@ worker_claim_owner_alive() { # <job-dir>
       return $?
     }
     [ "$recorded_start" = "$actual_start" ] && return 0
-    fm_remote_job_legacy_start_record "$recorded_start" && kill -0 "$pid" 2>/dev/null
-    return $?
+    command=$(fm_remote_job_legacy_owner_command "$pid" "$recorded_start") || return 1
+    [[ "$command" == *fm-remote-job-worker.sh* ]]
+    return
   fi
   kill -0 "$pid" 2>/dev/null
 }

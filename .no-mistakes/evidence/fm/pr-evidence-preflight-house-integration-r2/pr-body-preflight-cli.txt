@@ -1,0 +1,15 @@
+$ fm-pr-body-preflight.sh good-draft.md <wt> <task-tmp>
+evidence preflight ok
+exit=0
+$ fm-pr-body-preflight.sh bullet-metadata-draft.md <wt> <task-tmp>
+evidence preflight ok
+exit=0
+$ fm-pr-body-preflight.sh no-provenance-draft.md <wt> <task-tmp>
+evidence claim refused: missing evidence-artifact: path
+exit=1
+$ fm-pr-body-preflight.sh bullet-metadata-draft.md (with "External validation passed." claim) <wt> <task-tmp>
+evidence claim refused: missing evidence-artifact: path
+exit=1
+$ fm-pr-body-preflight.sh same claim, plain metadata lines
+evidence preflight ok
+exit=0

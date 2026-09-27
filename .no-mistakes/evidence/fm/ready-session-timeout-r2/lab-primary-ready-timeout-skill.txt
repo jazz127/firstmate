@@ -1,0 +1,40 @@
+
+ ▐▛███▛█   Claude Code v2.1.283
+▝▜██████▀  Opus 5.5 · Claude Pro
+ ▝▝   ▝▝   ~/.no-mistakes/worktrees/119cd7a6b9a4/01M3H2BCWYR7AWMS54S0NY3B8A
+
+
+❯ Lab test question, do not spawn anything or change files: I want to opt this home into stopping idle ship workers whose PR sits ready awaiting merge. Which config file do I create, what does an
+  empty file mean, and which state record tells you a worker was deliberately stopped rather than stuck? Name the skill you consulted.
+
+  Searched for 1 pattern
+
+⏺ Captain, I checked the operational-home-layout skill and confirmed it against docs/configuration.md, section "Ready-session timeout". I didn't spawn anything or change any files.
+
+  - File to create: config/ready-session-timeout in this home. It's local, gitignored and not inherited, so second mates don't pick it up. If the file is absent, the feature is off.
+  - Empty file: turns the feature on with the default of 2 hours. A ship worker whose PR has sat ready awaiting merge that long gets its idle agent stopped. Its local copy, branch, PR and merge
+    monitoring all stay in place, so it can be relaunched when needed.
+  - Record showing a deliberate stop: state/<id>.ready-timeout, which is owned by bin/fm-ready-timeout-lib.sh. It records whether the timeout stopped the worker's agent or failed to stop it. The
+    worker counts as deliberately stopped rather than stuck when both of these are true:
+    - the stopped record names the current spawn_gen;
+    - crew state still reads done.
+
+    In that case, relaunch it on demand rather than using the stuck-worker recovery steps. The stop is silent, is not repeated for the same worker launch, and cleanup removes the record.
+
+✻ Crunched for 12s · done 7:55 PM
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

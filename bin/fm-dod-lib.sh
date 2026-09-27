@@ -245,6 +245,7 @@ fm_dod_validate_scenario_consistency() {  # <complete-pr-body>
       table_lines = ""
     }
     function table_agrees(n) {
+      if (stored_tables > 1 && stored_table_rows[n] != count_total) return 0
       return !(count_driven < stored_table_driven[n] ||
                (count_total == stored_table_rows[n] && count_driven != stored_table_driven[n]) ||
                (stored_table_rows[n] >= 2 && count_total != stored_table_rows[n]) ||

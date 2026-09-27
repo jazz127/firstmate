@@ -331,6 +331,33 @@ EOF
   pass "scenario count refusal cites the table matching the claimed total"
 }
 
+test_one_row_table_cannot_mask_scenario_contradiction() {
+  local body reason
+  body=$(cat <<'EOF'
+| Scenario | Result | Live |
+| --- | --- | --- |
+| Unrelated check | pass | no |
+
+| Scenario | Result | Live |
+| --- | --- | --- |
+| Account A | pass | yes |
+| Account B | pass | yes |
+| Account C | pass | yes |
+| Account D | pass | no |
+
+1 of 4 scenarios driven live against the product.
+EOF
+)
+  if reason=$(fm_dod_validate_scenario_consistency "$body" 2>&1); then
+    fail "one-row table masked a contradictory scenario count"
+  fi
+  case "$reason" in
+    *"Account A"*) ;;
+    *) fail "refusal did not cite the four-row scenario table: $reason" ;;
+  esac
+  pass "one-row table cannot mask a contradictory scenario count"
+}
+
 test_unpushed_ship_done_is_refused() {
   local repo wt sha reason rc
   repo="$TMP_ROOT/unpushed-repo"
@@ -609,6 +636,7 @@ test_evidence_claim_enforces_mechanical_provenance
 test_scenario_consistency_is_publication_only
 test_scenario_count_agreeing_with_any_complete_table_is_accepted
 test_scenario_count_refusal_cites_matching_table
+test_one_row_table_cannot_mask_scenario_contradiction
 test_unpushed_ship_done_is_refused
 test_no_mistakes_prevalidation_done_is_not_gated
 test_remote_containing_named_head_is_accepted

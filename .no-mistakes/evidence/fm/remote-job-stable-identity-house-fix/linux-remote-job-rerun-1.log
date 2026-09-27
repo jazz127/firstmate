@@ -1,0 +1,5 @@
+ok - a lost owner terminates without stopping the replacement owner's work
+ok - an ousted worker in shutdown leaves the replacement quarantine untouched
+ok - barely healthy worker failures remain bounded by the restart guard
+ALL TESTS PASSED
+exit=0

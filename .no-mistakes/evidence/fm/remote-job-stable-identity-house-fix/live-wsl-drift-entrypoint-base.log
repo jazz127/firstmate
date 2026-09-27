@@ -1,0 +1,18 @@
+[BASE] btime drift=0s entrypoint rc=0 out=[job-ran pid=1171 args=drift=0] worker.pid=258 lstart(worker)=[Sun Sep 27 14:52:18 2026] groups=1
+[BASE] btime drift=3s entrypoint rc=0 out=[job-ran pid=2570 args=drift=3] worker.pid=258 lstart(worker)=[Sun Sep 27 14:52:21 2026] groups=1
+[BASE] btime drift=-5s entrypoint rc=0 out=[job-ran pid=3976 args=drift=-5] worker.pid=258 lstart(worker)=[Sun Sep 27 14:52:13 2026] groups=1
+[BASE] btime drift=7s entrypoint rc=0 out=[job-ran pid=5375 args=drift=7] worker.pid=258 lstart(worker)=[Sun Sep 27 14:52:25 2026] groups=1
+[BASE] btime drift=-2s entrypoint rc=0 out=[job-ran pid=6775 args=drift=-2] worker.pid=258 lstart(worker)=[Sun Sep 27 14:52:16 2026] groups=1
+[BASE] long job running under worker (entrypoint pid 7010)
+[BASE] processes before stop:
+  185     1   185 Sun Sep 27 14:52:29 2026 /bin/bash /work/bin/fm-remote-job-worker.sh
+  258   185   185 Sun Sep 27 14:52:29 2026 /bin/bash /work/bin/fm-remote-job-worker.sh --serve
+ 7941   258   185 Sun Sep 27 14:52:32 2026 /bin/bash /work/bin/fm-remote-job-worker.sh --lane job-NV0Ncd
+ 8177  7941   185 Sun Sep 27 14:52:32 2026 /bin/bash /work/bin/fm-remote-job-worker.sh --lane job-NV0Ncd
+ 8178  7941   185 Sun Sep 27 14:52:32 2026 /bin/bash /work/bin/fm-remote-job-worker.sh --lane job-NV0Ncd
+ 8182  7941  8182 Sun Sep 27 14:52:32 2026 sh -c sleep 600; : 
+ 8206  8182  8182 Sun Sep 27 14:52:32 2026 sleep 600
+ 8237   258   185 Sun Sep 27 14:52:32 2026 /bin/bash /work/bin/fm-remote-job-worker.sh --serve
+[BASE] tree enumeration under drift:
+
+bin/fm-remote-job-lib.sh: line 1147: members: unbound variable

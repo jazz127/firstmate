@@ -1,0 +1,36 @@
+fatal: not a git repository: /Users/jarad/.no-mistakes/repos/119cd7a6b9a4.git/worktrees/01M3HM0WYYGZHAW0343VF8PZQ8
+Linux 09009fc3d800 6.12.76-linuxkit #1 SMP Sun Mar  8 14:41:59 UTC 2026 aarch64 GNU/Linux
+== tests/fm-remote-job-identity.test.sh
+ok - fixed PID, start ticks, and boot ID keep identity across synthetic wall-clock rendering changes
+ok - PID reuse, command changes, and reboot invalidate identity
+ok - malformed proc and boot records fail closed
+ok - a stable-lstart legacy worker is stopped and replaced on upgrade
+ok - a drifted-lstart legacy worker with its recorded command is stopped and replaced
+ok - a non-English legacy lstart record is still recognized as the pre-upgrade worker
+ok - a legacy record whose PID now runs a different command is dead
+ok - proven legacy claim and supervisor records are recognized, signalled, and stopped
+ok - a reused PID that fails the legacy start proof is never signalled and its records are reclaimed
+exit=0
+== tests/fm-remote-job.test.sh
+ok - default queue and execution bounds independently cover long polls
+ok - disappeared worker targets are successful signal no-ops
+ok - single-digit-day process identities normalize ps padding
+/work/bin/fm-remote-job-lib.sh: line 955:  1625 Killed                  sleep 30
+ok - pidfd identity verification treats a disappeared worker as a successful no-op
+ok - pidfd signaling reaches the intended process without PATH ps
+ok - pidfd revalidation rejects PID reuse and malformed proc records
+ok - Linux fallback signaling refuses an unbound live target
+Terminated
+ok - late reparented descendants are included in cleanup convergence
+ok - tree cleanup includes descendants whose command ends in whitespace
+ok - a dead Linux worker starter does not strand the start guard
+ok - operator PATH excludes a symlinked local bin
+ok - operator PATH honors nvm defaults with a deterministic fallback
+ok - operator PATH resolves the authorized Nix profile bin link
+ok - operator PATH orders discovered tool installs deterministically
+not ok - remote job worker did not report ready after startup
+exit=1
+== tests/fm-remote-job-orphan-reap.test.sh
+tail: cannot open '/tmp/fm-remote-job-orphan-reap.euHaX4/case1/remote-jobs/worker.lock/command' for reading: No such file or directory
+not ok - could not start the fixture remote job worker
+exit=1

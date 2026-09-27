@@ -1,0 +1,26 @@
+[HEAD] btime drift=0s entrypoint rc=0 out=[job-ran pid=1101 args=drift=0] worker.pid=254 lstart(worker)=[Sun Sep 27 14:52:06 2026] groups=1
+[HEAD] btime drift=3s entrypoint rc=0 out=[job-ran pid=2647 args=drift=3] worker.pid=254 lstart(worker)=[Sun Sep 27 14:52:09 2026] groups=1
+[HEAD] btime drift=-5s entrypoint rc=0 out=[job-ran pid=4196 args=drift=-5] worker.pid=254 lstart(worker)=[Sun Sep 27 14:52:01 2026] groups=1
+[HEAD] btime drift=7s entrypoint rc=0 out=[job-ran pid=5742 args=drift=7] worker.pid=254 lstart(worker)=[Sun Sep 27 14:52:13 2026] groups=1
+[HEAD] btime drift=-2s entrypoint rc=0 out=[job-ran pid=7286 args=drift=-2] worker.pid=254 lstart(worker)=[Sun Sep 27 14:52:04 2026] groups=1
+[HEAD] long job running under worker (entrypoint pid 7515)
+[HEAD] processes before stop:
+  181     1   181 Sun Sep 27 14:52:17 2026 /bin/bash /work/bin/fm-remote-job-worker.sh
+  254   181   181 Sun Sep 27 14:52:17 2026 /bin/bash /work/bin/fm-remote-job-worker.sh --serve
+ 8673   254   181 Sun Sep 27 14:52:21 2026 /bin/bash /work/bin/fm-remote-job-worker.sh --lane job-lbLWnq
+ 8885  8673   181 Sun Sep 27 14:52:21 2026 /bin/bash /work/bin/fm-remote-job-worker.sh --lane job-lbLWnq
+ 8886  8673   181 Sun Sep 27 14:52:21 2026 /bin/bash /work/bin/fm-remote-job-worker.sh --lane job-lbLWnq
+ 8890  8673  8890 Sun Sep 27 14:52:21 2026 sh -c sleep 600; : 
+ 8927  8890  8890 Sun Sep 27 14:52:21 2026 sleep 600
+[HEAD] tree enumeration under drift:
+254	linux-starttime=80958 boot-id=d6721a65-704e-4813-a34a-a4fb3461a7da	/bin/bash /work/bin/fm-remote-job-worker.sh --serve
+8673	linux-starttime=81307 boot-id=d6721a65-704e-4813-a34a-a4fb3461a7da	/bin/bash /work/bin/fm-remote-job-worker.sh --lane job-lbLWnq
+8885	linux-starttime=81319 boot-id=d6721a65-704e-4813-a34a-a4fb3461a7da	/bin/bash /work/bin/fm-remote-job-worker.sh --lane job-lbLWnq
+8886	linux-starttime=81319 boot-id=d6721a65-704e-4813-a34a-a4fb3461a7da	/bin/bash /work/bin/fm-remote-job-worker.sh --lane job-lbLWnq
+8890	linux-starttime=81319 boot-id=d6721a65-704e-4813-a34a-a4fb3461a7da	sh -c sleep 600; : 
+8888	linux-starttime=81319 boot-id=d6721a65-704e-4813-a34a-a4fb3461a7da	head -c 1048576
+8889	linux-starttime=81319 boot-id=d6721a65-704e-4813-a34a-a4fb3461a7da	head -c 1048576
+8927	linux-starttime=81320 boot-id=d6721a65-704e-4813-a34a-a4fb3461a7da	sleep 600
+[HEAD] stop_worker_tree(supervisor 181) rc=0
+[HEAD] leftover after stop: []
+[HEAD] RESULT fail=0

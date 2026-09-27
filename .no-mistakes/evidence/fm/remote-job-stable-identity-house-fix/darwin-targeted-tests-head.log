@@ -1,0 +1,20 @@
+== tests/fm-remote-job-identity.test.sh
+ok - fixed PID, start ticks, and boot ID keep identity across synthetic wall-clock rendering changes
+ok - PID reuse, command changes, and reboot invalidate identity
+ok - malformed proc and boot records fail closed
+ok - legacy worker upgrade signal cases require Linux
+exit=0
+== tests/fm-remote-job.test.sh
+ok - default queue and execution bounds independently cover long polls
+ok - disappeared worker targets are successful signal no-ops
+ok - non-Linux signaling refuses unbound live targets
+ok - single-digit-day process identities normalize ps padding
+ok - pidfd identity verification regression requires Linux pidfd support
+ok - tree cleanup includes descendants whose command ends in whitespace
+ok - a dead Linux worker starter does not strand the start guard
+ok - operator PATH excludes a symlinked local bin
+ok - operator PATH honors nvm defaults with a deterministic fallback
+ok - operator PATH resolves the authorized Nix profile bin link
+ok - operator PATH orders discovered tool installs deterministically
+not ok - a concurrent worker ensure call failed
+exit=1

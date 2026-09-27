@@ -1,0 +1,12 @@
+ok - default queue and execution bounds independently cover long polls
+ok - disappeared worker targets are successful signal no-ops
+ok - non-Linux signaling refuses unbound live targets
+ok - single-digit-day process identities normalize ps padding
+ok - pidfd identity verification regression requires Linux pidfd support
+ok - a dead Linux worker starter does not strand the start guard
+ok - operator PATH excludes a symlinked local bin
+ok - operator PATH honors nvm defaults with a deterministic fallback
+ok - operator PATH resolves the authorized Nix profile bin link
+ok - operator PATH orders discovered tool installs deterministically
+ensure failed: cannot release the remote job start guard
+not ok - a concurrent worker ensure call failed

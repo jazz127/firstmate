@@ -1,0 +1,10 @@
+[HEAD] comm bytes: 0000000   s   l 351 377   e   p  \n
+[HEAD] signal_identity rc=0
+[HEAD] non-ASCII-named process terminated
+[HEAD] reused-identity signal rc=1
+[HEAD] reused-identity process left untouched
+[BASE] comm bytes: 0000000   s   l 351 377   e   p  \n
+[BASE] signal_identity rc=1
+[BASE] non-ASCII-named process SURVIVED
+[BASE] reused-identity signal rc=1
+[BASE] reused-identity process left untouched

@@ -1023,6 +1023,42 @@ test_secondmate_relaunch_picks_up_the_configured_harness_pin() {
   pass "fm-control relaunch: a secondmate relaunch re-resolves its durable configured harness pin"
 }
 
+test_secondmate_relaunch_picks_up_per_mate_override() {
+  local dir home out rc
+  dir=$(new_case sm-override sm3)
+  home="$dir/home"
+  mkdir -p "$home/config/secondmate-harness.d" "$home/data/sm3"
+  printf 'claude opus high\n' > "$home/config/secondmate-harness"
+  printf 'codex gpt-5.5 xhigh\n' > "$home/config/secondmate-harness.d/sm3"
+  printf '# secondmate brief\n' > "$home/data/sm3/brief.md"
+  fm_git_worktree "$dir/proj" "$dir/smhome" sm-branch
+  mkdir -p "$dir/smhome/state" "$dir/smhome/data" "$dir/smhome/bin"
+  printf 'sm3\n' > "$dir/smhome/.fm-secondmate-home"
+  printf '# agents\n' > "$dir/smhome/AGENTS.md"
+  {
+    echo "window=fmses:fm-sm3"
+    echo "endpoint_task_id=sm3"
+    echo "worktree=$dir/smhome"
+    echo "project=$dir/smhome"
+    echo "harness=claude"
+    echo "kind=secondmate"
+    echo "mode=secondmate"
+    echo "yolo=off"
+    echo "model=default"
+    echo "effort=default"
+    echo "home=$dir/smhome"
+  } > "$home/state/sm3.meta"
+  printf '%s\n' "fm-sm3" > "$dir/fake/windows"
+  printf '%s' "$dir/smhome" > "$dir/fake/cwd"
+  printf 'codex' > "$dir/fake/becomes"
+  out=$(run_control "$dir" sm3 relaunch); rc=$?
+  expect_code 0 "$rc" "a per-mate override should relaunch"$'\n'"$out"
+  [ "$(journal_field "$dir" sm3 to_harness)" = codex ] || fail "relaunch ignored the per-mate harness"
+  [ "$(journal_field "$dir" sm3 to_model)" = gpt-5.5 ] || fail "relaunch ignored the per-mate model"
+  [ "$(journal_field "$dir" sm3 to_effort)" = xhigh ] || fail "relaunch ignored the per-mate effort"
+  pass "fm-control relaunch resolves the selected mate's override profile"
+}
+
 test_secondmate_relaunch_ignores_invalid_configured_effort_before_stop() {
   local dir home out rc
   dir=$(new_case invalid-effort sm6)
@@ -2497,6 +2533,7 @@ test_prior_harness_turnend_registry_entry_is_cleared
 test_wiring_removal_failure_refuses_before_replacement_arm
 test_turnend_auth_paths_are_owned_by_the_control_adapter
 test_secondmate_relaunch_picks_up_the_configured_harness_pin
+test_secondmate_relaunch_picks_up_per_mate_override
 test_secondmate_relaunch_ignores_invalid_configured_effort_before_stop
 test_secondmate_relaunch_onto_a_crewmate_only_adapter_refuses_before_stop
 test_explicit_secondmate_harness_ignores_configured_profile_axes

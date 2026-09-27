@@ -547,16 +547,18 @@ test_remote_mate_restarts_over_the_transport_hop() {
   # The parent's own pin is what the replacement must run on; the remote home's
   # copy of config/secondmate-harness is a different home's file.
   printf 'codex big-model high\n' > "$dir/home/config/secondmate-harness"
+  mkdir -p "$dir/home/config/secondmate-harness.d"
+  printf 'pi deepseek/deepseek-v4-pro high\n' > "$dir/home/config/secondmate-harness.d/sm2"
 
   out=$(run_restart "$dir" fm-sm2); rc=$?
   unset FM_FAKE_ANSWER_STATUS
 
   expect_code 0 "$rc" "a remote mate should restart over its transport hop"$'\n'"$out"
-  assert_contains "$out" "restarted: sm2 on remote-mac (codex)" \
+  assert_contains "$out" "restarted: sm2 on remote-mac (pi)" \
     "a remote restart should be reported with its host and the parent's pinned runtime"
   relaunch_line=$(grep '^fm-remote-secondmate-control.sh relaunch' "$dir/ssh.log" | head -1)
   [ -n "$relaunch_line" ] || fail "no relaunch crossed the transport hop"$'\n'"$(cat "$dir/ssh.log")"
-  [ "$relaunch_line" = "fm-remote-secondmate-control.sh relaunch sm2 codex big-model high" ] \
+  [ "$relaunch_line" = "fm-remote-secondmate-control.sh relaunch sm2 pi deepseek/deepseek-v4-pro high" ] \
     || fail "the host-local relaunch did not carry the parent's resolved profile: $relaunch_line"
   # The persist request crossed the SAME hop before the restart did.
   [ "$(grep -n '^fm-remote-secondmate-control.sh send' "$dir/ssh.log" | head -1 | cut -d: -f1)" \

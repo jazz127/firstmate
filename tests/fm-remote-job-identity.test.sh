@@ -58,6 +58,14 @@ printf '%s\n' invalid > "$FM_PROC_ROOT_OVERRIDE/sys/kernel/random/boot_id"
 printf '%s\n' "$BOOT_ID" > "$FM_PROC_ROOT_OVERRIDE/sys/kernel/random/boot_id"
 pass "malformed proc and boot records fail closed"
 
+# The upgrade cases exercise the Linux pidfd signal path. Darwin keeps its
+# existing refusal to signal a live process without a bound pidfd.
+if [ "$(uname -s 2>/dev/null || true)" != Linux ]; then
+  pass "legacy worker upgrade signal cases require Linux"
+  exit 0
+fi
+unset FM_PROC_ROOT_OVERRIDE
+
 fm_remote_job_prepare_state "$TMP_ROOT/account" || fail "could not prepare ownership fixture"
 LOCK=$(fm_remote_job_worker_lock_path)
 mkdir -p "$TMP_ROOT/root/bin"
@@ -68,13 +76,15 @@ while :; do sleep 0.1; done
 WORKER
 chmod +x "$TMP_ROOT/root/bin/fm-remote-job-worker.sh"
 OLD_PID=
+# This fixture tests replacement of a legacy process; its dummy replacement
+# does not serve jobs or publish a ready file.
+fm_remote_job_wait_for_probe() { return 0; }
 
 start_old_worker() {
   set -m
   FM_TEST_OLD_WORKER=1 "$TMP_ROOT/root/bin/fm-remote-job-worker.sh" &
   OLD_PID=$!
   set +m
-  write_stat 23347200 bash "$OLD_PID"
   for _ in $(seq 1 50); do
     case "$(fm_remote_job_process_command "$OLD_PID" 2>/dev/null || true)" in
       *fm-remote-job-worker.sh*) return 0 ;;

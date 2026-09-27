@@ -221,7 +221,8 @@ cat > "$PIDFD_NO_PS_BIN/uname" <<SH
 exec "$UNAME_BIN" "\$@"
 SH
 chmod +x "$PIDFD_NO_PS_BIN/python3" "$PIDFD_NO_PS_BIN/uname"
-PIDFD_NO_PS_MARKER="$TMP_ROOT/pidfd-no-ps-marker" \
+PIDFD_NO_PS_MARKER="$TMP_ROOT/pidfd-no-ps-marker"
+PIDFD_NO_PS_MARKER="$PIDFD_NO_PS_MARKER" \
   sh -c 'trap '\''touch "$PIDFD_NO_PS_MARKER"; exit 0'\'' TERM; sleep 30' & PIDFD_NO_PS_PID=$!
 PIDFD_NO_PS_START=$(fm_remote_job_process_start "$PIDFD_NO_PS_PID")
 PIDFD_NO_PS_COMMAND=$(fm_remote_job_process_command "$PIDFD_NO_PS_PID")
@@ -232,6 +233,54 @@ PIDFD_NO_PS_MARKER="$PIDFD_NO_PS_MARKER" PATH="$PIDFD_NO_PS_BIN" \
 wait "$PIDFD_NO_PS_PID" 2>/dev/null || fail "pidfd TERM did not reach the intended process"
 [ -f "$PIDFD_NO_PS_MARKER" ] || fail "pidfd TERM did not trigger the intended process handler"
 pass "pidfd signaling reaches the intended process without PATH ps"
+
+# Change the synthetic proc record after the shell check but before Python's
+# pidfd check. A reused PID or malformed stat must never receive the signal.
+PIDFD_RECHECK_BIN="$TMP_ROOT/pidfd-recheck-bin"
+PIDFD_RECHECK_PROC="$TMP_ROOT/pidfd-recheck-proc"
+mkdir -p "$PIDFD_RECHECK_BIN" "$PIDFD_RECHECK_PROC/sys/kernel/random"
+cp /proc/sys/kernel/random/boot_id "$PIDFD_RECHECK_PROC/sys/kernel/random/boot_id"
+cat > "$PIDFD_RECHECK_BIN/python3" <<SH
+#!/bin/sh
+"$PYTHON3_BIN" - "\$FM_PIDFD_STAT_PATH" "\$FM_PIDFD_REVALIDATE_MODE" <<'PY'
+import sys
+path, mode = sys.argv[1:]
+with open(path, encoding="ascii") as handle:
+    line = handle.read()
+if mode == "reuse":
+    prefix, fields = line.rsplit(") ", 1)
+    parts = fields.split()
+    parts[19] = str(int(parts[19]) + 1)
+    line = prefix + ") " + " ".join(parts) + "\n"
+else:
+    line = "malformed proc stat\n"
+with open(path, "w", encoding="ascii") as handle:
+    handle.write(line)
+PY
+exec "$PYTHON3_BIN" "\$@"
+SH
+chmod +x "$PIDFD_RECHECK_BIN/python3"
+for PIDFD_REVALIDATE_MODE in reuse malformed; do
+  sleep 30 & PIDFD_RECHECK_PID=$!
+  mkdir -p "$PIDFD_RECHECK_PROC/$PIDFD_RECHECK_PID"
+  cp "/proc/$PIDFD_RECHECK_PID/stat" "$PIDFD_RECHECK_PROC/$PIDFD_RECHECK_PID/stat"
+  PIDFD_RECHECK_START=$(fm_remote_job_process_start "$PIDFD_RECHECK_PID")
+  PIDFD_RECHECK_COMMAND=$(fm_remote_job_process_command "$PIDFD_RECHECK_PID")
+  if FM_PROC_ROOT_OVERRIDE="$PIDFD_RECHECK_PROC" \
+    FM_PIDFD_STAT_PATH="$PIDFD_RECHECK_PROC/$PIDFD_RECHECK_PID/stat" \
+    FM_PIDFD_REVALIDATE_MODE="$PIDFD_REVALIDATE_MODE" \
+    PATH="$PIDFD_RECHECK_BIN:$PATH" \
+    fm_remote_job_signal_identity "$PIDFD_RECHECK_PID" TERM \
+    "$PIDFD_RECHECK_START" "$PIDFD_RECHECK_COMMAND"; then
+    kill -KILL "$PIDFD_RECHECK_PID" 2>/dev/null || true
+    wait "$PIDFD_RECHECK_PID" 2>/dev/null || true
+    fail "pidfd accepted a changed $PIDFD_REVALIDATE_MODE proc record"
+  fi
+  kill -0 "$PIDFD_RECHECK_PID" 2>/dev/null || fail "pidfd signalled a changed $PIDFD_REVALIDATE_MODE proc record"
+  kill -KILL "$PIDFD_RECHECK_PID" 2>/dev/null || true
+  wait "$PIDFD_RECHECK_PID" 2>/dev/null || true
+done
+pass "pidfd revalidation rejects PID reuse and malformed proc records"
 
 FALLBACK_RECHECK_BIN="$TMP_ROOT/fallback-recheck-bin"
 mkdir -p "$FALLBACK_RECHECK_BIN"
@@ -301,6 +350,38 @@ LATE_GRANDCHILD_PID=$(cat "$LATE_MARKER" 2>/dev/null || true)
 kill -0 "$LATE_GRANDCHILD_PID" 2>/dev/null && fail "late reparented descendant survived cleanup"
 pass "late reparented descendants are included in cleanup convergence"
 fi
+
+TRAILING_ROOT="$TMP_ROOT/trailing-root.sh"
+TRAILING_MARKER="$TMP_ROOT/trailing-child.pid"
+cat > "$TRAILING_ROOT" <<'SH'
+#!/bin/sh
+sh -c 'sleep 30; : ' & printf '%s\n' "$!" > "$1"
+wait
+SH
+chmod +x "$TRAILING_ROOT"
+"$TRAILING_ROOT" "$TRAILING_MARKER" & TRAILING_ROOT_PID=$!
+TRAILING_CHILD_PID=
+TRAILING_GRANDCHILD_PID=
+for _ in $(seq 1 100); do
+  TRAILING_CHILD_PID=$(cat "$TRAILING_MARKER" 2>/dev/null || true)
+  [ -n "$TRAILING_CHILD_PID" ] &&
+    TRAILING_GRANDCHILD_PID=$(ps -A -o pid=,ppid= | awk -v p="$TRAILING_CHILD_PID" '$2 == p { print $1; exit }')
+  [ -n "$TRAILING_GRANDCHILD_PID" ] && break
+  sleep 0.05
+done
+[ -n "$TRAILING_GRANDCHILD_PID" ] || fail "trailing-whitespace fixture did not start its job"
+TRAILING_CHILD_COMMAND=$(fm_remote_job_process_command "$TRAILING_CHILD_PID")
+[ "$TRAILING_CHILD_COMMAND" = "sh -c sleep 30; : " ] || fail "trailing-whitespace fixture has unexpected command: '$TRAILING_CHILD_COMMAND'"
+TRAILING_TREE=$(fm_remote_job_process_tree_pids "$TRAILING_ROOT_PID")
+printf '%s\n' "$TRAILING_TREE" | awk -F '\t' -v p="$TRAILING_CHILD_PID" -v c="$TRAILING_CHILD_COMMAND" '$1 == p && $3 == c { found = 1 } END { exit !found }' \
+  || fail "tree enumeration dropped a descendant whose command ends in whitespace"
+printf '%s\n' "$TRAILING_TREE" | awk -F '\t' -v p="$TRAILING_GRANDCHILD_PID" '$1 == p { found = 1 } END { exit !found }' \
+  || fail "tree enumeration dropped the subtree of a trailing-whitespace descendant"
+fm_remote_job_stop_worker_tree "$TRAILING_ROOT_PID" || fail "trailing-whitespace tree cleanup did not converge"
+wait "$TRAILING_ROOT_PID" 2>/dev/null || true
+kill -0 "$TRAILING_CHILD_PID" 2>/dev/null && fail "trailing-whitespace descendant survived cleanup"
+kill -0 "$TRAILING_GRANDCHILD_PID" 2>/dev/null && fail "trailing-whitespace descendant's child survived cleanup"
+pass "tree cleanup includes descendants whose command ends in whitespace"
 
 fm_remote_job_prepare_state "$ACCOUNT_HOME" || fail "$FM_REMOTE_JOB_ERROR"
 mkdir "$STATE_ROOT/worker.starting"

@@ -928,13 +928,13 @@ fm_remote_job_process_start() {
   if [ "$(uname -s 2>/dev/null || true)" = Linux ] || [ -n "${FM_PROC_ROOT_OVERRIDE:-}" ]; then
     proc_root=${FM_PROC_ROOT_OVERRIDE:-/proc}
     [ -r "$proc_root/$pid/stat" ] && [ -r "$proc_root/sys/kernel/random/boot_id" ] || return 1
-    stat_line=$(cat "$proc_root/$pid/stat" 2>/dev/null) || return 1
+    IFS= read -r stat_line < "$proc_root/$pid/stat" || return 1
     [[ "$stat_line" == *') '* ]] || return 1
     read -r -a stat_fields <<< "${stat_line##*)}"
     [ "${#stat_fields[@]}" -ge 20 ] || return 1
     starttime=${stat_fields[19]}
     case "$starttime" in ''|*[!0-9]*) return 1 ;; esac
-    boot_id=$(cat "$proc_root/sys/kernel/random/boot_id" 2>/dev/null) || return 1
+    IFS= read -r boot_id < "$proc_root/sys/kernel/random/boot_id" || return 1
     [[ "$boot_id" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]] || return 1
     printf 'linux-starttime=%s boot-id=%s\n' "$starttime" "$boot_id"
     return 0
@@ -944,19 +944,8 @@ fm_remote_job_process_start() {
   fm_remote_job_normalize_process_start "$value"
 }
 
-fm_remote_job_process_identity_matches() { # <pid> <start> <command>
-  local pid=$1 expected_start=$2 expected_command=$3 ps_bin value state weekday month day clock year command start
-  if [ -x /bin/ps ]; then ps_bin=/bin/ps; elif [ -x /usr/bin/ps ]; then ps_bin=/usr/bin/ps; else return 1; fi
-  value=$("$ps_bin" -p "$pid" -o stat= -o lstart= -o command= 2>/dev/null) || return 1
-  IFS=' ' read -r state weekday month day clock year command <<< "$value"
-  case "$state" in Z*) return 1 ;; esac
-  [ -n "$command" ] || return 1
-  start=$(fm_remote_job_normalize_process_start "$weekday $month $day $clock $year") || return 1
-  [ "$start" = "$expected_start" ] && [ "$command" = "$expected_command" ]
-}
-
 fm_remote_job_signal_identity() { # <pid> <signal> <start> <command>
-  local pid=$1 signal=$2 expected_start=$3 expected_command=$4 state ps_bin=
+  local pid=$1 signal=$2 expected_start=$3 expected_command=$4 state ps_bin='' status
   if ! fm_remote_job_process_identity_matches "$pid" "$expected_start" "$expected_command"; then
     state=$(fm_remote_job_process_state "$pid" 2>/dev/null || true)
     case "$state" in Z*) return 0 ;; esac
@@ -970,6 +959,7 @@ fm_remote_job_signal_identity() { # <pid> <signal> <start> <command>
         python3 - "$pid" "$signal" "$expected_start" "$expected_command" "$ps_bin" <<'PY'
 import errno
 import os
+import re
 import signal
 import subprocess
 import sys
@@ -988,15 +978,29 @@ except OSError as exc:
         raise SystemExit(2)
     raise
 try:
+    proc_root = os.environ.get("FM_PROC_ROOT_OVERRIDE", "/proc")
+    try:
+        with open(f"{proc_root}/{pid}/stat", "rb") as stat_file:
+            stat_line = stat_file.read()
+        with open(f"{proc_root}/sys/kernel/random/boot_id", encoding="ascii") as boot_file:
+            boot_id = boot_file.read().strip()
+    except (OSError, UnicodeError):
+        raise SystemExit(1)
+    if not stat_line.startswith(f"{pid} (".encode()) or b") " not in stat_line:
+        raise SystemExit(1)
+    fields = stat_line.rsplit(b") ", 1)[1].split()
+    if len(fields) < 20 or not fields[19].isdigit():
+        raise SystemExit(1)
+    if not re.fullmatch(r"[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}", boot_id):
+        raise SystemExit(1)
+    start = f"linux-starttime={fields[19].decode()} boot-id={boot_id}"
     try:
         result = subprocess.run(
-            [ps_bin, "-p", str(pid), "-o", "lstart=", "-o", "command="],
+            [ps_bin, "-p", str(pid), "-o", "command="],
             check=True, capture_output=True, text=True)
     except subprocess.CalledProcessError:
         raise SystemExit(0)
-    line = result.stdout.rstrip("\n")
-    start = " ".join(line[:24].split())
-    command = line[24:].strip()
+    command = result.stdout.rstrip("\n")
     if start != expected_start or command != expected_command:
         raise SystemExit(1)
     try:
@@ -1034,7 +1038,7 @@ fm_remote_job_process_state() {
   local pid=$1 ps_bin value
   if [ -x /bin/ps ]; then ps_bin=/bin/ps; elif [ -x /usr/bin/ps ]; then ps_bin=/usr/bin/ps; else return 1; fi
   value=$("$ps_bin" -p "$pid" -o stat= 2>/dev/null) || return 1
-  value=$(printf '%s\n' "$value" | tr -d '[:space:]')
+  value=${value//[[:space:]]/}
   [ -n "$value" ] || return 1
   case "$value" in *[![:alnum:]+_-]*) return 1 ;; esac
   printf '%s\n' "$value"
@@ -1050,7 +1054,9 @@ fm_remote_job_process_command() {
 }
 
 fm_remote_job_process_identity_matches() { # <pid> <start> <command>
-  local actual_start actual_command
+  local actual_start actual_command state
+  state=$(fm_remote_job_process_state "$1") || return 1
+  case "$state" in Z*) return 1 ;; esac
   if actual_command=$(fm_remote_job_legacy_owner_command "$1" "$2"); then
     [ "$actual_command" = "$3" ]
     return
@@ -1465,18 +1471,19 @@ fm_remote_job_start_linux_worker_locked() { # <remote-root> <account-home>
 }
 
 fm_remote_job_linux_worker_processes() { # <remote-root>
-  local root=$1 worker ps_bin uid pid pgid state weekday month day clock year command start
+  local root=$1 worker ps_bin uid pid pgid state command start
   worker="$root/bin/fm-remote-job-worker.sh"
   if [ -x /bin/ps ]; then ps_bin=/bin/ps; elif [ -x /usr/bin/ps ]; then ps_bin=/usr/bin/ps; else return 1; fi
   uid=$(id -u 2>/dev/null) || return 1
   case "$uid" in ''|*[!0-9]*) return 1 ;; esac
-  while read -r pid pgid state weekday month day clock year command; do
+  while read -r pid pgid state command; do
     case "$pgid" in ''|*[!0-9]*|0|1) continue ;; esac
     case "$state" in Z*) continue ;; esac
     fm_remote_job_worker_command_matches "$worker" "$command" || continue
-    start=$(fm_remote_job_normalize_process_start "$weekday $month $day $clock $year") || continue
-    [ -n "$start" ] && printf '%s\t%s\t%s\n' "$pid" "$start" "$command"
-  done < <("$ps_bin" -u "$uid" -o pid=,pgid=,stat=,lstart=,command= 2>/dev/null)
+    start=$(fm_remote_job_process_start "$pid") || continue
+    fm_remote_job_process_identity_matches "$pid" "$start" "$command" || continue
+    printf '%s\t%s\t%s\n' "$pid" "$start" "$command"
+  done < <("$ps_bin" -u "$uid" -o pid=,pgid=,stat=,command= 2>/dev/null)
   return 0
 }
 
@@ -1500,19 +1507,21 @@ fm_remote_job_process_descends_from_identity() { # <pid> <ancestor> <start> <com
 }
 
 fm_remote_job_process_tree_pids() { # <pid> [start] [command]
-  local root=$1 expected_start=${2:-} expected_command=${3:-} ps_bin uid pid ppid state weekday month day clock year start command processes frontier next root_valid=0
+  local root=$1 expected_start=${2:-} expected_command=${3:-} ps_bin uid pid ppid state start command processes frontier next root_valid=0
   if [ -x /bin/ps ]; then ps_bin=/bin/ps; elif [ -x /usr/bin/ps ]; then ps_bin=/usr/bin/ps; else return 1; fi
   uid=$(id -u 2>/dev/null) || return 1
   case "$uid" in ''|*[!0-9]*) return 1 ;; esac
-  processes=$("$ps_bin" -u "$uid" -o pid=,ppid=,stat=,lstart=,command= 2>/dev/null) || return 1
+  processes=$("$ps_bin" -u "$uid" -o pid=,ppid=,stat=,command= 2>/dev/null) || return 1
   frontier=$root
-  while read -r pid ppid state weekday month day clock year command; do
+  while read -r pid ppid state _; do
     case "$pid" in ''|*[!0-9]*) continue ;; esac
     [ "$pid" = "$root" ] || continue
-    start=$(fm_remote_job_normalize_process_start "$weekday $month $day $clock $year") || continue
+    start=$(fm_remote_job_process_start "$pid") || continue
+    command=$(fm_remote_job_process_command "$pid") || continue
     if [ -n "$expected_start" ] && { [ "$start" != "$expected_start" ] || [ "$command" != "$expected_command" ]; }; then
       break
     fi
+    fm_remote_job_process_identity_matches "$pid" "$start" "$command" || break
     root_valid=1
     case "$state" in
       Z*) ;;
@@ -1523,12 +1532,14 @@ fm_remote_job_process_tree_pids() { # <pid> [start] [command]
   [ "$root_valid" -eq 1 ] || return 0
   while [ -n "$frontier" ]; do
     next=
-    while read -r pid ppid state weekday month day clock year command; do
+    while read -r pid ppid state _; do
       case "$pid:$ppid" in *[!0-9:]*|:) continue ;; esac
       case " $frontier " in *" $ppid "*) ;; *) continue ;; esac
       case "$state" in Z*) continue ;; esac
-      start=$(fm_remote_job_normalize_process_start "$weekday $month $day $clock $year") || continue
+      start=$(fm_remote_job_process_start "$pid") || continue
+      command=$(fm_remote_job_process_command "$pid") || continue
       [ -n "$start" ] && [ -n "$command" ] || continue
+      fm_remote_job_process_identity_matches "$pid" "$start" "$command" || continue
       printf '%s\t%s\t%s\n' "$pid" "$start" "$command"
       next="$next $pid"
     done <<< "$processes"

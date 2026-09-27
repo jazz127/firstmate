@@ -67,6 +67,16 @@ SH
   chmod +x "$1/$2"
 }
 
+install_secondmate_override_probe() {  # <fakebin> <harness>
+  cat > "$1/$2" <<'SH'
+#!/bin/sh
+printf 'COMPACT_ADVISER_DISABLE=%s\n' "${COMPACT_ADVISER_DISABLE-unset}"
+printf 'FM_STATE_OVERRIDE=%s\n' "${FM_STATE_OVERRIDE-unset}"
+printf 'FM_ROOT_OVERRIDE=%s\n' "${FM_ROOT_OVERRIDE-unset}"
+SH
+  chmod +x "$1/$2"
+}
+
 # Run the emitted launch command in a synthetic pane shell. The pane carries the
 # CONTRARY value, so a launch that merely forwarded the ambient environment
 # would be caught here rather than reported as a pass.
@@ -204,7 +214,7 @@ test_launch_command_carries_the_switch_without_the_pane_export() {
 }
 
 test_secondmate_launch() {
-  local setting rec sm out status seen
+  local setting rec sm out status seen launch preamble
   for setting in absent enabled; do
     rec=$(make_case "secondmate-$setting" codex "sm-$setting")
     read_case "$rec"
@@ -220,11 +230,19 @@ test_secondmate_launch() {
     status=$?
     expect_code 0 "$status" "secondmate spawn with allowlist=$setting should succeed: $out"
     assert_pane_export_precedes_launch "$PANE_LOG" "secondmate, allowlist $setting"
-    install_env_probe "$FAKEBIN_DIR" codex
-    seen=$(emitted_launch_env "$FAKEBIN_DIR" "$LAUNCH_LOG" "$PANE_LOG") \
+    install_secondmate_override_probe "$FAKEBIN_DIR" codex
+    launch=$(cat "$LAUNCH_LOG")
+    # Seed both names in the synthetic pane so this executes the emitted env
+    # prefix and verifies it unsets state while clearing the root override.
+    preamble=$(grep '^export ' "$PANE_LOG")
+    seen=$(env -i HOME="$TMP_ROOT/pane-home" PATH="$FAKEBIN_DIR:$PATH" TERM=xterm \
+      TMUX=synthetic-pane COMPACT_ADVISER_DISABLE="$CONTRARY" \
+      FM_STATE_OVERRIDE=inherited-state FM_ROOT_OVERRIDE=inherited-root \
+      /bin/sh -c "$preamble
+$launch") \
       || fail "secondmate, allowlist $setting: the emitted launch failed to run"
-    assert_equals 1 "$seen" \
-      "a secondmate launched with allowlist=$setting must start with the compact adviser disabled"
+    assert_equals $'COMPACT_ADVISER_DISABLE=1\nFM_STATE_OVERRIDE=unset\nFM_ROOT_OVERRIDE=' "$seen" \
+      "a secondmate launch must set the compact-adviser switch, remove inherited FM_STATE_OVERRIDE, and clear FM_ROOT_OVERRIDE"
   done
   pass "a secondmate launch carries the compact-adviser switch in both allowlist postures"
 }

@@ -1,0 +1,50 @@
+/Users/jarad/.zshrc:source:1: no such file or directory: /Users/jarad/.bashprofile
+jarad@Mac jdgx-ops % export GOTMPDIR=/tmp/fm-jdgx-ops/gotmp
+jarad@Mac jdgx-ops % export COMPACT_ADVISER_DISABLE=1
+jarad@Mac jdgx-ops % . '/tmp/fm-jdgx-ops+18b31867a5731c36192c562b5f498fb0563f2720b8d989e3e26f31b347d152d1/launch.s1790516309.38172.28666.sh'
+Error: Failed to load extension "/private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab-sm.uCZCnl/jdgx-ops/.pi/extensions/fm-primary-turnend-guard.ts": Extension path does not exist: /private
+/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab-sm.uCZCnl/jdgx-ops/.pi/extensions/fm-primary-turnend-guard.ts
+Error: Failed to load extension "/private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab-sm.uCZCnl/jdgx-ops/.pi/extensions/fm-primary-pi-watch.ts": Extension path does not exist: /private/var/
+folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab-sm.uCZCnl/jdgx-ops/.pi/extensions/fm-primary-pi-watch.ts
+Hint: Start without extensions using "pi -ne".
+jarad@Mac jdgx-ops % export GOTMPDIR=/tmp/fm-jdgx-ops/gotmp
+jarad@Mac jdgx-ops % export COMPACT_ADVISER_DISABLE=1
+jarad@Mac jdgx-ops % . '/tmp/fm-jdgx-ops+18b31867a5731c36192c562b5f498fb0563f2720b8d989e3e26f31b347d152d1/launch.s1790516361.28021.17169.sh'
+
+ pi v0.87.1
+ escape interrupt · ctrl+c/ctrl+d clear/exit · / commands · ! bash · ctrl+o more
+ Press ctrl+o to show full startup help and loaded resources.
+
+ Pi can explain its own features and look up its docs. Ask it how to use or extend Pi.
+
+
+[Context]
+  AGENTS.md
+
+[Skills]
+  ad-hoc-profile-load, afk, agent-skill-trigger-index, ahoy, ask-user-authority, away-quiet-supervision, bearings, bootstrap-diagnostics, captain-hold-lifecycle, caveman, caveman-commit,
+caveman-compress, caveman-review, decision-hold-lifecycle, defuddle, diagnose, diagnostic-reasoning, dotnet-backend-patterns, ef-core, find-skills, firstmate-codexapp, firstmate-coding-guidelines,
+firstmate-orca, fmx-respond, grill-with-docs, harness-adapters, improve-codebase-architecture, json-canvas, kun, no-mistakes, obsidian-bases, obsidian-cli, obsidian-markdown, operational-home-layout,
+process-event-sources, project-management, prototype, quiet, quota-array-dispatch, quota-axi, scout-completion, secondmate-provisioning, session-start-recovery, setup-matt-pocock-skills, ship-landing,
+stow, stuck-crewmate-recovery, to-issues, to-prd, triage, updatefirstmate, validation-supervision, write-a-skill, zoom-out
+
+[Extensions]
+  compact-adviser:src, fm-branch-supervision.ts, fm-calm.ts, fm-primary-pi-watch.ts, fm-primary-turnend-guard.ts, herdr-agent-state.ts
+
+
+ Warning: tmux extended-keys is off. Modified Enter keys may not work. Add `set -g extended-keys on` to ~/.tmux.conf and restart tmux.
+
+
+ ⁣FIRSTMATE_OP: v1 launch-brief: charter
+
+
+ Thinking...
+
+── ⠹ Working ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+/private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab-sm.uCZCnl/jdgx-ops (main)
+2.4%/1.0M (auto)                                                                                                                                                       (deepseek) deepseek-v4-pro • high
+
+
+

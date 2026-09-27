@@ -1,0 +1,15 @@
+window=primary:fm-jdgx-ops
+endpoint_task_id=jdgx-ops
+worktree=/private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab-sm.uCZCnl/jdgx-ops
+project=/private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab-sm.uCZCnl/jdgx-ops
+harness=pi
+kind=secondmate
+mode=secondmate
+yolo=off
+tasktmp=/tmp/fm-jdgx-ops
+model=deepseek/deepseek-v4-pro
+effort=high
+spawn_gen=s1790516488.24677.26043
+home=/private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab-sm.uCZCnl/jdgx-ops
+projects=
+control_relaunch_tx=19693.20260927T134127Z.20185

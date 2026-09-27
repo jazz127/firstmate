@@ -1,0 +1,4 @@
+config/secondmate-harness: claude opus high
+config/secondmate-harness.d/bare-pi: pi
+config/secondmate-harness.d/deferred: default
+config/secondmate-harness.d/jdgx-ops: pi deepseek/deepseek-v4-pro high

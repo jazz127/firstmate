@@ -1,0 +1,50 @@
+/Users/jarad/.zshrc:source:1: no such file or directory: /Users/jarad/.bashprofile
+jarad@Mac jdgx-ops % export GOTMPDIR=/tmp/fm-jdgx-ops/gotmp
+jarad@Mac jdgx-ops % export COMPACT_ADVISER_DISABLE=1
+jarad@Mac jdgx-ops % . '/tmp/fm-jdgx-ops+18b31867a5731c36192c562b5f498fb0563f2720b8d989e3e26f31b347d152d1/launch.s1790516309.38172.28666.sh'
+Error: Failed to load extension "/private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab-sm.uCZCnl/jdgx-ops/.pi/extensions/fm-primary-turnend-guard.ts": Extension path does not exist: /private
+/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab-sm.uCZCnl/jdgx-ops/.pi/extensions/fm-primary-turnend-guard.ts
+Error: Failed to load extension "/private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab-sm.uCZCnl/jdgx-ops/.pi/extensions/fm-primary-pi-watch.ts": Extension path does not exist: /private/var/
+folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab-sm.uCZCnl/jdgx-ops/.pi/extensions/fm-primary-pi-watch.ts
+Hint: Start without extensions using "pi -ne".
+jarad@Mac jdgx-ops %
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

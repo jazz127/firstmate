@@ -1,0 +1,12 @@
+== state/jdgx-ops.meta
+harness=pi
+kind=secondmate
+model=deepseek/deepseek-v4-pro
+effort=high
+pane process tree:
+== state/other-mate.meta
+harness=claude
+kind=secondmate
+model=opus
+effort=high
+pane process tree:

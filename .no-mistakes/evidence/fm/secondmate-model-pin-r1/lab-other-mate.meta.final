@@ -1,0 +1,15 @@
+window=primary:fm-other-mate
+endpoint_task_id=other-mate
+worktree=/private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab-sm.uCZCnl/other-mate
+project=/private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab-sm.uCZCnl/other-mate
+harness=claude
+kind=secondmate
+mode=secondmate
+yolo=off
+tasktmp=/tmp/fm-other-mate
+model=opus
+effort=high
+spawn_gen=s1790516368.44223.23684
+home=/private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab-sm.uCZCnl/other-mate
+projects=
+control_relaunch_tx=36196.20260927T133927Z.25204

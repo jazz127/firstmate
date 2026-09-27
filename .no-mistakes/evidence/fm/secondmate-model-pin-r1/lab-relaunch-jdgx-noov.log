@@ -1,0 +1,5 @@
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.vqf2Hk
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.vqf2Hk
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+warning: secondmate jdgx-ops sync skipped before launch: primary default-branch commit cannot be resolved
+relaunched jdgx-ops harness=claude from=pi model=opus effort=high backend=tmux endpoint=primary:fm-jdgx-ops worktree=/private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab-sm.uCZCnl/jdgx-ops

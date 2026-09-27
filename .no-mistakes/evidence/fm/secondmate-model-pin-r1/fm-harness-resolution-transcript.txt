@@ -1,0 +1,8 @@
+jdgx-ops: harness=pi model=deepseek/deepseek-v4-pro effort=high
+other-mate: harness=claude model=opus effort=high
+deferred: harness=claude model=opus effort=high
+bare-pi: harness=pi model= effort=
+no-id: harness=claude model=opus effort=high
+id '../jdgx-ops' rc=2 -> error: invalid secondmate id '../jdgx-ops'
+id '..' rc=2 -> error: invalid secondmate id '..'
+id 'a/b' rc=2 -> error: invalid secondmate id 'a/b'

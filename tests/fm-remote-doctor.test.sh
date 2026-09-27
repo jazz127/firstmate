@@ -37,14 +37,18 @@ ln -sf "$(command -v git)" "$TOOLS/git"
 ln -sf "$(command -v jq)" "$TOOLS/jq"
 BASE_PATH="$TOOLS:/usr/bin:/bin:/usr/sbin:/sbin"
 
-# Real socket-owner holders for the Darwin birth check: jq blocked on a fifo
+# Real socket-owner holders for the Darwin birth check: a non-platform tool blocked on a fifo
 # this test keeps open, with exactly the marker environment each birth needs.
-JQ=$(command -v jq)
+HOLDER_BIN=$(command -v node 2>/dev/null || command -v jq)
 HOLDER_FD=5
 hold() { # <marker-env...> -> HOLDER_PID
   local fifo="$TMP_ROOT/holder-$HOLDER_FD.fifo"
   mkfifo "$fifo"
-  env -i "$@" "$JQ" . "$fifo" &
+  if [ "${HOLDER_BIN##*/}" = node ]; then
+    env -i "$@" "$HOLDER_BIN" -e 'require("fs").readFileSync(process.argv[1])' "$fifo" &
+  else
+    env -i "$@" "$HOLDER_BIN" . "$fifo" &
+  fi
   HOLDER_PID=$!
   HOLDER_PIDS+=("$HOLDER_PID")
   eval "exec ${HOLDER_FD}>\"\$fifo\""
@@ -173,6 +177,7 @@ EOF
         if [ ! -f "$FM_FAKE_STATE/bootstrap-does-not-start" ]; then
           printf 'true\n' > "$FM_FAKE_HERDR_RUNNING"
           printf '%s\n' "$FM_FAKE_AQUA_PID" > "$FM_FAKE_STATE/socket-owner"
+          rm -f "$FM_FAKE_STATE/not-detached"
         fi
         ;;
     esac
@@ -186,6 +191,7 @@ EOF
         # The real job execs the guard, which stops a foreign server and
         # becomes the Aqua-born owner; the fixture models that outcome.
         printf '%s\n' "$FM_FAKE_AQUA_PID" > "$FM_FAKE_STATE/socket-owner"
+        rm -f "$FM_FAKE_STATE/not-detached"
         if [ -f "$FM_FAKE_STATE/kickstart-delay" ]; then
           cp "$FM_FAKE_STATE/kickstart-delay" "$FM_FAKE_STATE/herdr-delay"
         else
@@ -260,7 +266,9 @@ case "${1:-} ${2:-}" in
         running=true
       fi
     fi
-    printf '{"client":{"version":"0.7.5","protocol":16},"server":{"running":%s,"socket":"%s"}}\n' "$running" "$FM_FAKE_HERDR_SOCKET"
+    detached=true
+    [ ! -f "$FM_FAKE_STATE/not-detached" ] || detached=false
+    printf '{"client":{"version":"0.9.1","protocol":22},"server":{"running":%s,"socket":"%s","capabilities":{"detached_server_daemon":%s}}}\n' "$running" "$FM_FAKE_HERDR_SOCKET" "$detached"
     ;;
   "server "*|"server ")
     printf 'true\n' > "$FM_FAKE_HERDR_RUNNING"
@@ -617,6 +625,17 @@ expect_code 0 "$DOCTOR_RC" "the Aqua-owner fixture could not be initialized"
 assert_contains "$DOCTOR_OUT" "check herdr-server=ok: session fm-remote is running in the Aqua login session (pid $AQUA_HOLDER_PID, launchd)" \
   "a launchd-born owner was not reported with its pid and birth"
 
+touch "$CASE_STATE/not-detached"
+doctor
+expect_code 1 "$DOCTOR_RC" "an Aqua-born foreground server was reported ready for saved machines"
+assert_contains "$DOCTOR_OUT" 'check herdr-server=fixable: session fm-remote is Aqua-born but not a session-leader server' \
+  "the doctor did not identify the saved-machine readiness gap"
+doctor --fix
+expect_code 0 "$DOCTOR_RC" "--fix did not replace the Aqua-born foreground server"
+assert_absent "$CASE_STATE/not-detached" "the fixture did not start a session-leader server"
+assert_contains "$DOCTOR_OUT" 'ready for saved machines' "the doctor did not confirm saved-machine readiness"
+pass "--fix replaces an Aqua-born foreground server with a session-leader server"
+
 printf '%s\n' "$BACKGROUND_HOLDER_PID" > "$CASE_STATE/socket-owner"
 printf 'background job\n' > "$CASE_STATE/user-loaded-$LABEL"
 doctor
@@ -886,4 +905,3 @@ assert_contains "$DOCTOR_OUT" 'check entrypoint-link=human:' "an operator-owned 
   || fail "--fix overwrote a file it did not create"
 unset FM_ROOT_OVERRIDE
 pass "the entrypoint symlink is recreated when absent and never overwritten when operator-owned"
-

@@ -1107,7 +1107,17 @@ Its `ProgramArguments` ran `/run/current-system/sw/bin/zsh -l -c "exec /etc/prof
 No other herdr process existed for that session, and after 15 seconds the job remained running with pid 4806.
 After a guarded `herdr session stop`, the job reported `state = not running` and `last exit code = 0`, and it stayed at rest through the throttle interval.
 A second `launchctl kickstart -k gui/501/dev.fm-rca.herdr-fg` started pid 45574, which was also the new socket owner.
-This proves that `herdr server` remains in the foreground as the launchd job, so the guard's final `exec` supplies the intended supervision and the earlier server that survived `launchctl bootout` was the unrelated SSH-bridge-born process.
+This proved that `herdr server` stays in the foreground and that the earlier server surviving `launchctl bootout` was the unrelated SSH-bridge-born process.
+The current guard starts a POSIX session-leader server as its child and waits for it so launchd can restart the guard after the server exits.
+Herdr 0.9.1's `remote_server_restart_reason` requires `detached_server_daemon` for saved machines, and `current_process_is_detached_server_daemon` defines that capability as `getsid(0) == getpid()` on macOS and Linux.
+On 2026-09-28 with Herdr 0.9.1 on macOS, a named lab server started directly reported `"detached_server_daemon":false` alongside `"surface_interest":true` and `"health_check":true`; a lab server started through a POSIX `setsid` wrapper reported all three as true.
+That lab probe did not exercise an Aqua launch agent or login-keychain access; the existing Aqua birth and keychain observations above remain the evidence for that separate property.
+The guard and doctor regressions exercise the new takeover and readiness decisions with controlled fixtures:
+
+```sh
+bash tests/fm-remote-herdr-guard.test.sh
+bash tests/fm-remote-doctor.test.sh
+```
 
 `bin/fm-test-run.sh tests/fm-remote-herdr-guard.test.sh` pins the resulting decision table against real marker-carrying processes, and `tests/fm-remote-doctor.test.sh` pins the doctor's verdicts on the same markers.
 

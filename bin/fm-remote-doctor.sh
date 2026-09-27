@@ -17,8 +17,8 @@
 # shell (`-l -c`) so the server inherits the account's own environment; the
 # gui/<uid> launchd domain it is bootstrapped into, not the shell, is what
 # gives the server and its panes the Aqua audit session and login-keychain
-# access. The guard execs the server in the foreground under launchd, leaves an
-# Aqua-born server alone, and takes the session over from a server born
+# access. The guard supervises a session-leader server in the foreground under
+# launchd, leaves a compatible Aqua-born server alone, and takes the session over from a server born
 # outside that session (an SSH remote attach wins the socket at boot), because
 # such a server's panes cannot read the login keychain;
 # bin/fm-remote-herdr-owner-lib.sh owns that birth test. Doctor remains
@@ -171,6 +171,12 @@ herdr_server_running() {
   [ "$running" = true ]
 }
 
+herdr_server_detached() {
+  local detached
+  detached=$(herdr_server_status_json | jq -r '.server.capabilities.detached_server_daemon // false' 2>/dev/null) || return 1
+  [ "$detached" = true ]
+}
+
 # Birth of the process serving the session, as the guard classifies it:
 # prints "<birth> <pid>" (launchd, worker, ssh, or unknown), "unproven" when
 # no herdr process can be shown to hold the socket, or "nolsof" when lsof does
@@ -196,6 +202,7 @@ herdr_server_birth() {
 herdr_server_aqua_owned() {
   local birth
   herdr_server_running || return 1
+  herdr_server_detached || return 1
   [ "$PLATFORM" = darwin ] || return 0
   birth=$(herdr_server_birth)
   fm_remote_herdr_birth_is_aqua "${birth%% *}"
@@ -672,7 +679,12 @@ check_herdr_server() {
     birth=$(herdr_server_birth)
     case "$birth" in
       launchd\ *|worker\ *)
-        record herdr-server "ok: session $HERDR_SESSION_NAME is running in the Aqua login session (pid ${birth#* }, ${birth%% *})"
+        if herdr_server_detached; then
+          record herdr-server "ok: session $HERDR_SESSION_NAME is running in the Aqua login session (pid ${birth#* }, ${birth%% *}) and is ready for saved machines"
+        else
+          record herdr-server "fixable: session $HERDR_SESSION_NAME is Aqua-born but not a session-leader server, so saved machines refuse it" \
+            "rerun this command with --fix while the host is quiet; the launch agent will restart the server and its panes"
+        fi
         ;;
       nolsof)
         record herdr-server "human: session $HERDR_SESSION_NAME is running but lsof does not resolve, so its server's birth cannot be proven" \

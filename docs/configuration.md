@@ -614,7 +614,7 @@ A value under 60 seconds, or one that does not parse, leaves the timeout off rat
 The watcher checks on its ordinary poll loop, with no separate daemon.
 It stops only a ship worker whose ready report names the pull request with merge monitoring armed by `bin/fm-pr-check.sh`, that has shown no activity for the duration, whose steering inbox holds no unacknowledged instruction, whose agent reads alive and exactly idle, and whose current state (`bin/fm-crew-state.sh`) reads exactly done.
 A busy agent, or one whose idle state cannot be proven, is left running.
-Scouts and secondmates are never stopped.
+Scouts, secondmates, and remotely placed agents are never stopped.
 
 The stop goes through `bin/fm-control.sh <id> exit`, so the worker's terminal, local copy, branch, and uncommitted changes survive.
 The task record, pull request, and merge monitoring are untouched, so a later merge is still reported and cleaned up normally.

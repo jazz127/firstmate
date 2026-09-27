@@ -277,6 +277,29 @@ EOF
   pass "scenario consistency is enforced only for PR-body publication"
 }
 
+test_scenario_count_agreeing_with_any_complete_table_is_accepted() {
+  local body
+  body=$(cat <<'EOF'
+| Scenario | Result | Live |
+| --- | --- | --- |
+| Account A | pass | yes |
+| Account B | pass | no |
+| Account C | pass | no |
+| Account D | pass | no |
+
+1 of 4 scenarios driven live against the product.
+
+| Check | Result | Live |
+| --- | --- | --- |
+| Lint | pass | no |
+| Unit tests | pass | no |
+EOF
+)
+  fm_dod_validate_scenario_consistency "$body" \
+    || fail "count agreeing with the scenario table was refused because of a later table"
+  pass "scenario count agreeing with any complete table is accepted"
+}
+
 test_unpushed_ship_done_is_refused() {
   local repo wt sha reason rc
   repo="$TMP_ROOT/unpushed-repo"
@@ -553,6 +576,7 @@ test_scout_done_is_not_gated
 test_evidence_claim_requires_provenance
 test_evidence_claim_enforces_mechanical_provenance
 test_scenario_consistency_is_publication_only
+test_scenario_count_agreeing_with_any_complete_table_is_accepted
 test_unpushed_ship_done_is_refused
 test_no_mistakes_prevalidation_done_is_not_gated
 test_remote_containing_named_head_is_accepted

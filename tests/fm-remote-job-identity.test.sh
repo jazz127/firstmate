@@ -144,12 +144,15 @@ mkdir -p "$TMP_ROOT/worker-bin"
 cp "$ROOT/bin/fm-remote-job-lib.sh" "$TMP_ROOT/worker-bin/"
 sed '/^case "${1:-}" in$/,$d' "$ROOT/bin/fm-remote-job-worker.sh" > "$TMP_ROOT/worker-bin/fm-remote-job-worker.sh"
 JOB="$TMP_ROOT/job"
-mkdir -p "$JOB/.claim"
-printf '%s\n' "$TMP_ROOT/root" > "$JOB/root"
-printf '%s\n' "$OLD_PID" > "$JOB/.claim/owner"
-printf '%s\n' 'Sun Sep 27 21:51:10 2026' > "$JOB/.claim/owner_start"
-printf '%s\n' "$OLD_PID" > "$JOB/.claim/supervisor"
-printf '%s\n' 'Sun Sep 27 21:51:10 2026' > "$JOB/.claim/supervisor_start"
+write_legacy_execution() { # <start>
+  mkdir -p "$JOB/.claim"
+  printf '%s\n' "$TMP_ROOT/root" > "$JOB/root"
+  printf '%s\n' "$OLD_PID" > "$JOB/.claim/owner"
+  printf '%s\n' "$1" > "$JOB/.claim/owner_start"
+  printf '%s\n' "$OLD_PID" > "$JOB/.claim/supervisor"
+  printf '%s\n' "$1" > "$JOB/.claim/supervisor_start"
+}
+write_legacy_execution "$(LC_ALL=C ps -p "$OLD_PID" -o lstart=)"
 (
   set +eu
   export FM_ROOT_OVERRIDE="$TMP_ROOT/root"
@@ -165,4 +168,25 @@ printf '%s\n' 'Sun Sep 27 21:51:10 2026' > "$JOB/.claim/supervisor_start"
 ) || exit 1
 wait "$OLD_PID" 2>/dev/null || true
 OLD_PID=
-pass "legacy claim and supervisor records are recognized, signalled, and stopped"
+pass "proven legacy claim and supervisor records are recognized, signalled, and stopped"
+
+start_old_worker
+write_legacy_execution "$WALL_BEFORE"
+(
+  set +eu
+  export FM_ROOT_OVERRIDE="$TMP_ROOT/root"
+  # shellcheck source=/dev/null
+  . "$TMP_ROOT/worker-bin/fm-remote-job-worker.sh"
+  ! worker_claim_owner_alive "$JOB" || fail "an unproven legacy claim owner was kept alive"
+  ! worker_recorded_execution_alive "$JOB" process "$OLD_PID" \
+    || fail "an unproven legacy supervisor was treated as live"
+  worker_stop_recorded_execution "$JOB" || fail "an unproven legacy supervisor record was not cleared"
+  [ ! -e "$JOB/.claim/supervisor" ] || fail "an unproven legacy supervisor record was kept"
+) || exit 1
+kill -0 "$OLD_PID" 2>/dev/null || fail "a reused PID with a mismatched legacy start was signalled"
+mkdir -p "$TMP_ROOT/stage"
+printf '%s\n' "$OLD_PID" > "$TMP_ROOT/stage/.owner-pid"
+printf '%s\n' "$WALL_BEFORE" > "$TMP_ROOT/stage/.owner-start"
+! fm_remote_job_stage_owner_alive "$TMP_ROOT/stage" || fail "an unproven legacy stage owner was kept alive"
+stop_old_worker
+pass "a reused PID that fails the legacy start proof is never signalled and its records are reclaimed"

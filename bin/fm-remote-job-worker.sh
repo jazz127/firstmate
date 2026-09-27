@@ -319,7 +319,7 @@ worker_signal_process_or_group() { # process|group <signal> <pid>
 # lane before exec or the job's git check or command under the job root.
 worker_legacy_execution_owner() { # <job-dir> <pid> <recorded start>
   local command root
-  command=$(fm_remote_job_legacy_owner_command "$2" "$3") || return 1
+  command=$(fm_remote_job_proven_legacy_command "$2" "$3") || return 1
   [[ "$command" == *fm-remote-job-worker.sh* ]] && return 0
   root=$(fm_remote_job_read_single_line "$1/root" 8192 2>/dev/null) || return 1
   [ -n "$root" ] && [[ "$command" == *"$root"* ]]
@@ -571,7 +571,7 @@ worker_claim_owner_alive() { # <job-dir>
       return $?
     }
     [ "$recorded_start" = "$actual_start" ] && return 0
-    command=$(fm_remote_job_legacy_owner_command "$pid" "$recorded_start") || return 1
+    command=$(fm_remote_job_proven_legacy_command "$pid" "$recorded_start") || return 1
     [[ "$command" == *fm-remote-job-worker.sh* ]]
     return
   fi

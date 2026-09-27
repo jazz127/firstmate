@@ -772,7 +772,7 @@ fm_remote_job_stage_owner_alive() { # <stage-dir>
     return $?
   }
   [ "$recorded_start" = "$actual_start" ] && return 0
-  command=$(fm_remote_job_legacy_owner_command "$pid" "$recorded_start") || return 1
+  command=$(fm_remote_job_proven_legacy_command "$pid" "$recorded_start") || return 1
   [[ "$command" == *fm-remote-entrypoint.sh* || "$command" == *fm-remote-doctor.sh* ]]
 }
 
@@ -968,6 +968,16 @@ fm_remote_job_legacy_owner_command() { # <pid> <recorded start>
   case "$2" in ''|linux-starttime=*) return 1 ;; esac
   kill -0 "$1" 2>/dev/null || return 1
   fm_remote_job_process_command "$1"
+}
+
+# Records without a recorded command must also still match the C-locale lstart
+# rendering; an unproven owner is treated as gone and is never signalled.
+fm_remote_job_proven_legacy_command() { # <pid> <recorded start>
+  local ps_bin command
+  command=$(fm_remote_job_legacy_owner_command "$1" "$2") || return 1
+  if [ -x /bin/ps ]; then ps_bin=/bin/ps; elif [ -x /usr/bin/ps ]; then ps_bin=/usr/bin/ps; else return 1; fi
+  [ "$(LC_ALL=C "$ps_bin" -p "$1" -o lstart= 2>/dev/null)" = "$2" ] || return 1
+  printf '%s\n' "$command"
 }
 
 fm_remote_job_process_pgid() { # <pid>

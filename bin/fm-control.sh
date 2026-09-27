@@ -66,7 +66,7 @@
 #              it refuses.
 #              An explicit `default` model or effort clears that
 #              axis for the replacement. With no explicit axis, a secondmate
-#              re-resolves its durable config/secondmate-harness pin (harness
+#              re-resolves its durable per-mate or global secondmate pin (harness
 #              plus its optional model and effort tokens) exactly as any other
 #              respawn does, while a ship or scout keeps the exact adapter
 #              already recorded for it.

@@ -1,0 +1,37 @@
+Doctor = bin/fm-remote-doctor.sh copy with only HERDR_SESSION_NAME=fm-lab-sl-14029-13497; HOME=/tmp/fh.whAF; FM_REMOTE_JOB_PLATFORM_OVERRIDE=linux; real herdr 0.9.1
+(remote-job-worker=human is a property of this dev Mac, not of this change)
+
+## D0 before: plain server from fm-herdr-lab provision
+{"running":true,"detached":false,"surface_interest":true,"health_check":true}
+server pid(s): 17943 
+
+## D1 plain --fix (what automatic readiness runs) must NOT restart the server
+mode=fix
+check herdr-server=notice: session fm-lab-sl-14029-13497 is running, but it is not a session-leader server, so Herdr saved machines refuse it
+action: herdr-server: while the host is quiet, rerun this command with --fix --restart-herdr; the server restarts and its panes close
+error: this host is not ready for a remote second mate; unresolved: remote-job-worker
+rc=
+{"running":true,"detached":false,"surface_interest":true,"health_check":true}
+server pid(s): 17943 
+
+## D2 operator --fix --restart-herdr restarts it as a session leader
+mode=fix
+fix herdr-server=applied: started the herdr server for session fm-lab-sl-14029-13497
+check herdr-server=ok: session fm-lab-sl-14029-13497 is running
+error: this host is not ready for a remote second mate; unresolved: remote-job-worker
+rc=
+{"running":true,"detached":true,"surface_interest":true,"health_check":true}
+server pid(s): 34451 
+
+## D3 re-check after restart
+mode=check
+check herdr-server=ok: session fm-lab-sl-14029-13497 is running
+error: this host is not ready for a remote second mate; unresolved: remote-job-worker
+rc=
+{"running":true,"detached":true,"surface_interest":true,"health_check":true}
+server pid(s): 34451 
+
+## D3 re-check (output to file, no pipe)
+rc=1
+check herdr-server=ok: session fm-lab-sl-14029-13497 is running
+error: this host is not ready for a remote second mate; unresolved: remote-job-worker

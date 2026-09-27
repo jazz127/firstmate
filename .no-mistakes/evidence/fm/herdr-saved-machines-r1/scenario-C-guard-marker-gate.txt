@@ -1,0 +1,50 @@
+HOME=/tmp/fh.whAF (.config -> real ~/.config so the lab socket resolves; Library/Caches is private for the marker)
+XPC_SERVICE_NAME=com.kunchenguid.no-mistakes.daemon.93e4927a (loaded only in gui/501 on this Mac -> launchd/Aqua birth)
+
+## Setup: Aqua-born plain (non-session-leader) server, the Jharbour state
+{"running":true,"detached":false,"surface_interest":true,"health_check":true}
+getsid is not a valid POSIX macro at -e line 1
+socket-owner pid=19898 birth=unknown ppid=19895 sid-leader=
+
+## Scenario C1: guard WITHOUT operator restart marker (what an automatic readiness reload launches)
+fm-remote-herdr-guard: session fm-lab-sl-14029-13497 is served by pid 19898 born outside the Aqua login session (unknown); its panes cannot reach the login keychain, taking the session over
+fm-remote-herdr-guard: session fm-lab-sl-14029-13497 released its socket after 0 tenths of a second
+fm-remote-herdr-guard: starting a session-leader herdr server for session fm-lab-sl-14029-13497 inside this launch agent (pid 24072)
+herdr server running; you can use any herdr CLI command in another terminal.
+api socket: /tmp/fh.whAF/.config/herdr/sessions/fm-lab-sl-14029-13497/herdr.sock
+client socket: /tmp/fh.whAF/.config/herdr/sessions/fm-lab-sl-14029-13497/herdr-client.sock
+logs: /tmp/fh.whAF/.config/herdr/sessions/fm-lab-sl-14029-13497/herdr-server.log
+did you mean to open the Herdr TUI? run `herdr`; you do not need `herdr server`.
+fm-remote-herdr-guard: server for session fm-lab-sl-14029-13497 exited (0); asking launchd to restart the guard
+guard exit=1
+{"running":false,"detached":null,"surface_interest":null,"health_check":null}
+ps: option requires an argument -- p
+usage: ps [-AaCcEefhjlMmrSTvwXx] [-O fmt | -o fmt] [-G gid[,gid...]]
+          [-g grp[,grp...]] [-u [uid,uid...]]
+          [-p pid[,pid...]] [-t tty[,tty...]] [-U user[,user...]]
+       ps [-L]
+getsid is not a valid POSIX macro at -e line 1
+socket-owner pid= birth=unknown ppid= sid-leader=
+
+## Scenario C2: operator marker present (left by --fix --restart-herdr) -> guard consumes it, replaces the server
+marker before: dev.firstmate.herdr.fm-lab-sl-14029-13497.restart
+guard pid=45625
+marker after: [] (empty = consumed)
+{"running":true,"detached":true,"surface_interest":true,"health_check":true}
+getsid is not a valid POSIX macro at -e line 1
+socket-owner pid=45657 birth=unknown ppid=45625 sid-leader=
+guard still in foreground supervising: yes
+--- guard log
+fm-remote-herdr-guard: no server owns session fm-lab-sl-14029-13497
+fm-remote-herdr-guard: starting a session-leader herdr server for session fm-lab-sl-14029-13497 inside this launch agent (pid 45625)
+herdr server running; you can use any herdr CLI command in another terminal.
+api socket: /tmp/fh.whAF/.config/herdr/sessions/fm-lab-sl-14029-13497/herdr.sock
+client socket: /tmp/fh.whAF/.config/herdr/sessions/fm-lab-sl-14029-13497/herdr-client.sock
+logs: /tmp/fh.whAF/.config/herdr/sessions/fm-lab-sl-14029-13497/herdr-server.log
+did you mean to open the Herdr TUI? run `herdr`; you do not need `herdr server`.
+
+## Reviewer note (added after the run)
+The tool sandbox forces XPC_SERVICE_NAME=0 on every child process, so the setup server classified as birth=unknown, not launchd.
+The section labelled "C1" therefore exercised the foreign-owner takeover: the guard stopped the non-Aqua, non-leader server, started a setsid session-leader child, and exited 1 when that child exited, which is launchd's restart signal.
+The section labelled "C2" exercised the no-owner start with a marker present: the marker was consumed, the new server reported detached_server_daemon=true, surface_interest=true, and health_check=true, and its ppid is the guard pid.
+The Aqua-born marker gate (no marker leaves the server alone; a marker replaces it) is covered only by the fixture suites (fixture-guard-test.txt, fixture-doctor-test.txt), not live.

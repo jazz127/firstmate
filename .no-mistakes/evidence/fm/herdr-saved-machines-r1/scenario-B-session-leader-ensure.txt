@@ -1,0 +1,19 @@
+## Scenario B: fm_backend_herdr_server_ensure <s> session-leader (doctor's start path)
+ensure-rc=0
+{
+  "running": true,
+  "pid": null,
+  "caps": {
+    "live_handoff": true,
+    "detached_server_daemon": true,
+    "endpoint_protocol_generation": 1,
+    "surface_interest": true,
+    "health_check": true
+  }
+}
+socket owner pid=25604
+  PID  PPID  PGID   SESS COMMAND
+25604 25599 25604      0 herdr server --session fm-lab-sl-14029-13497
+## Scenario B2: same without session-leader arg (default callers unchanged)
+ensure-rc=0
+{"running":true,"detached":false}

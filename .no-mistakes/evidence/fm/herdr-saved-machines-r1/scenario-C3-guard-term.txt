@@ -1,0 +1,14 @@
+## Scenario C3: TERM to the guard (launchd bootout/stop) stops its setsid server; guard exits 0
+before: guard 45625 alive=yes; server:
+jarad 45657 45625 45657      0    0 SNs    ??    0:00.21 /Users/jarad/.local/bin/herdr server --session fm-lab-sl-14029-13497
+guard alive after TERM: no
+server 45657 alive: no
+{"running":false}
+--- guard log tail
+logs: /tmp/fh.whAF/.config/herdr/sessions/fm-lab-sl-14029-13497/herdr-server.log
+did you mean to open the Herdr TUI? run `herdr`; you do not need `herdr server`.
+## C3b: TERM exit status
+guard=65537 child-server=65591
+jarad 65591 65537 65591      0    0 SNs    ??    0:00.18 /Users/jarad/.local/bin/herdr server --session fm-lab-sl-14029-13497
+guard-exit=0
+server alive: no

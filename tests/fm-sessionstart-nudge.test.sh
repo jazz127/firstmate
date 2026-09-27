@@ -95,12 +95,16 @@ test_gate_common_dir_is_silent() {
 }
 
 test_unmarked_linked_worktree_is_silent() {
-  local base="$TMP_ROOT/worktree-base" root="$TMP_ROOT/worktree-child"
+  local base="$TMP_ROOT/worktree-base" root="$TMP_ROOT/worktree-child" out status=0
   fm_git_worktree "$base" "$root" fm/sessionstart-linked
   mkdir -p "$root/bin" "$root/state"
   : > "$root/AGENTS.md"
   expect_silent_zero "linked worktree nudge" run_nudge "$root"
-  pass "fm-sessionstart-nudge: an unmarked linked task worktree is silent"
+  out=$(FM_ROOT_OVERRIDE="$root" FM_HOME="$root" "$ROOT/bin/fm-session-start.sh" 2>&1) || status=$?
+  expect_code 2 "$status" "unmarked linked worktree direct session start"
+  assert_contains "$out" 'refusing linked task worktree' "a manual session start did not identify the linked task worktree"
+  assert_absent "$root/state/.lock" "a manual task-worktree session start took the home lock"
+  pass "fm-sessionstart-nudge: an unmarked linked task worktree stays silent and direct session start refuses"
 }
 
 test_linked_secondmate_primary_nudges() {

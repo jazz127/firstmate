@@ -24,6 +24,7 @@
 #   - composition: the script invokes the real fm-lock.sh/fm-bootstrap.sh/
 #     fm-wake-drain.sh (their real, distinctive output appears verbatim), it
 #     does not reimplement their logic
+#   - a marked task worker is refused before the home lock or bootstrap runs
 #   - the deferred startup stage: slow network and inactive current-state reads
 #     do not delay the digest, the work still runs and lands durable findings, a
 #     network result surfaces exactly once (inline or as a wake, never both), a
@@ -525,6 +526,24 @@ run_session_start() {
       FM_HOME="$home" FM_ROOT_OVERRIDE="$root" PATH="$path" \
       "$SESSION_START"
   fi
+}
+
+test_marked_worker_cannot_start_primary_session() {
+  local rec root home fakebin out rc
+  rec=$(new_world marked-worker)
+  IFS='|' read -r root home fakebin <<EOF
+$rec
+EOF
+
+  rc=0
+  out=$(FM_TASK_ID=worker-task FM_HOME="$home" FM_ROOT_OVERRIDE="$root" \
+    "$SESSION_START" 2>&1) || rc=$?
+  [ "$rc" -eq 2 ] || fail "marked worker session start exited $rc: $out"
+  assert_contains "$out" 'refusing task worker FM_TASK_ID=worker-task' \
+    "marked worker was not given a clear refusal"
+  assert_absent "$home/state/.lock" "marked worker took the home lock"
+  assert_absent "$home/state/.session-start-complete" "marked worker completed startup"
+  pass "session start refuses a marked task worker before touching the home"
 }
 
 run_pi_session_start() {  # <home> <root> <path> [fm-session-start args...]
@@ -2703,6 +2722,7 @@ EOF
   pass "session start rejects Pi loaded markers from previous sessions"
 }
 
+test_marked_worker_cannot_start_primary_session
 test_context_digest_absent_empty_present
 test_lock_refusal_read_only_path
 test_lock_write_failure_read_only_path

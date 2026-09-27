@@ -189,34 +189,6 @@ test_outcome_startup_replay_preserves_silence() {
   pass "routine task and fleet no-change outcomes stay stored and silent captain outcomes are refused"
 }
 
-test_silent_bookkeeping_outcomes_stay_out_of_replay() {
-  local home replay store out shown
-  home="$TMP_ROOT/store-bookkeeping-home"
-  mkdir -p "$home/state"
-  store="$home/state/branch-outcomes.jsonl"
-  printf 'blocked: waiting\n' > "$home/state/task-p.status"
-
-  append() { FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" append --task "$1" --verdict "$2" --summary "$3" "${@:4}" >/dev/null || fail "append failed: $3"; }
-  append task-p routine 'echo of the pause I just recorded' --silent true
-  append task-p routine 'scheduled recheck of the registered pause' --silent true
-  append task-p routine 'pause still holds on the same terms' --silent true
-  append task-p routine 'pause cleared: worker relaunched on a new seat'
-  append task-p captain 'PR is ready for review https://example.com/pr/1'
-  append task-q routine 'merged and cleaned up'
-
-  replay=$(FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" startup-replay) || fail "bookkeeping startup replay failed"
-  assert_not_contains "$replay" "echo of the pause I just recorded" "silent pause echo was rendered"
-  assert_not_contains "$replay" "scheduled recheck" "silent scheduled recheck was rendered"
-  assert_not_contains "$replay" "still holds on the same terms" "silent pause re-confirmation was rendered"
-  assert_contains "$replay" "pause cleared: worker relaunched" "a genuine pause state change was suppressed"
-
-  out=$(jq -s '[.[] | select(.silent == true)] | length' "$store")
-  [ "$out" = 3 ] || fail "expected 3 silent bookkeeping rows in the 6-row corpus, got $out"
-  shown=$(jq -s '[.[] | select(.silent != true)] | length' "$store")
-  [ "$shown" = 3 ] || fail "expected 3 rendered rows in the 6-row corpus, got $shown"
-  pass "silent bookkeeping outcomes are not replayed while state changes and captain outcomes render"
-}
-
 test_outcome_startup_replay_stops_at_captain_barrier() {
   local home replay unread
   home="$TMP_ROOT/store-captain-barrier-home"
@@ -1372,7 +1344,6 @@ WRAPPER
 test_branch_prompt_is_byte_stable_and_above_cache_floor
 test_outcome_store_is_append_only_with_cursor_reads
 test_outcome_startup_replay_preserves_silence
-test_silent_bookkeeping_outcomes_stay_out_of_replay
 test_outcome_startup_replay_stops_at_captain_barrier
 test_outcome_cursor_corruption_fails_closed
 test_cursor_advancement_refuses_ahead_processed_marker

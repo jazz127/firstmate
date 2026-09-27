@@ -1638,24 +1638,24 @@ if (taskRoutineMerge.message.display !== false) throw new Error("a task-scoped r
 if (!taskRoutineMerge.message.content.startsWith("⛵ task-9: worker healthy, no action needed")) {
   throw new Error(`task-scoped routine note changed: ${taskRoutineMerge.message.content}`);
 }
-// Bookkeeping that only re-states an already-recorded pause is silent for any
-// task: stored, no rendered note, no main turn. A state change still renders,
-// and a captain outcome can never be silent.
+// A still-busy no-change outcome is silent for any task: stored, no rendered
+// note, no main turn. A state change stays hidden, and a captain outcome can
+// never be silent.
 await heartbeatReport.execute(
-  "pause-echo",
-  { task: "task-9", verdict: "routine", summary: "echo of the pause I just recorded", silent: true },
+  "still-busy",
+  { task: "task-9", verdict: "routine", summary: "worker still busy, nothing new, no action taken", silent: true },
   undefined,
   undefined,
   {},
 );
-const pauseEcho = sentToMain[sentToMain.length - 1];
-if (pauseEcho.options.triggerTurn) throw new Error("a bookkeeping echo must not open a main turn");
-if (pauseEcho.message.display !== false) throw new Error("a bookkeeping echo must not render a note");
-const storedEcho = readFileSync(`${home}/state/branch-outcomes.jsonl`, "utf8")
+const stillBusy = sentToMain[sentToMain.length - 1];
+if (stillBusy.options.triggerTurn) throw new Error("a silent no-change outcome must not open a main turn");
+if (stillBusy.message.display !== false) throw new Error("a silent no-change outcome must not render a note");
+const storedStillBusy = readFileSync(`${home}/state/branch-outcomes.jsonl`, "utf8")
   .trim().split("\n").map((line) => JSON.parse(line))
-  .find((row) => row.task === "task-9" && row.summary === "echo of the pause I just recorded");
-if (!storedEcho || storedEcho.silent !== true || storedEcho.verdict !== "routine") {
-  throw new Error("the silent bookkeeping outcome was not stored durably");
+  .find((row) => row.task === "task-9" && row.summary === "worker still busy, nothing new, no action taken");
+if (!storedStillBusy || storedStillBusy.silent !== true || storedStillBusy.verdict !== "routine") {
+  throw new Error("the silent no-change outcome was not stored durably");
 }
 await heartbeatReport.execute(
   "pause-cleared",

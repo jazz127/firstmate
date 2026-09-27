@@ -442,7 +442,7 @@ The generated [Pi supervision protocol](supervision-protocols/pi.md) owns event 
 Deterministic entry delivery owns captain visibility.
 
 Every `routine` outcome is durable and hidden from captain chat, regardless of `silent`.
-The branch prompt's "Verdict: routine or captain" section owns the classification criteria, including task-level silence eligibility and the rule to escalate doubt, and its "Silent outcomes" section owns when `silent=true` may also mark bookkeeping already durably recorded; that mark never covers a new state change or a captain outcome.
+The branch prompt's "Verdict: routine or captain" section owns the classification criteria, including task-level silence eligibility and the rule to escalate doubt; `silent=true` never covers an action, a state change, a new result, or a captain outcome.
 
 Its "PR identity: copy or abstain" section owns where a PR URL in a summary or tool argument may come from:
 

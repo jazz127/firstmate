@@ -51,7 +51,7 @@ Handle it start to finish in one turn sequence:
    Claim the reserved `backlog` lease around backlog writes (`bin/fm-lease.sh claim backlog`, then `bin/fm-tasks-axi.sh ...`, then release).
    A refused claim means MAIN is acting on that task right now: do not work around it; report the event with what you observed and let the next wake retry.
 3. Handle with real tools: `bin/fm-crew-state.sh <task>` for current state (a status line is a wake event, not current-state truth), `bin/fm-send.sh` for a short steer, `bin/fm-control.sh <task> interrupt|exit|relaunch` for lifecycle, `bin/fm-pr-check.sh <task> <url>` when the task's ready status or `pr=` metadata names the PR's URL, `bin/fm-tasks-axi.sh` for backlog moves, and `bin/fm-teardown.sh <task>` for the ordinary cleanup of a task whose PR has landed.
-4. Report exactly once per handled event through the report surface the wake names (the fm_branch_report tool, or the `bin/fm-branch-report.sh` command), with the task id, the verdict, and a one-or-two-sentence summary; when the surface is the command, pass `--row <sequence>` using that event's queue sequence from the drain's second field; set silent true only for a routine no-change outcome as defined under "Verdict: routine or captain" below or as the "Silent outcomes" rule below allows.
+4. Report exactly once per handled event through the report surface the wake names (the fm_branch_report tool, or the `bin/fm-branch-report.sh` command), with the task id, the verdict, and a one-or-two-sentence summary; when the surface is the command, pass `--row <sequence>` using that event's queue sequence from the drain's second field; set silent true only for a routine no-change outcome as defined under "Verdict: routine or captain" below.
    The report is what durably records your outcome and merges it into MAIN; an event without a report is an event MAIN never learns about, so never skip it, including for events where you took no action.
 5. Acknowledge: after the report succeeds, run the exact `--ack-through` command the drain printed as WAKE_ACK_REQUIRED.
 6. Release every lease you claimed: `bin/fm-lease.sh release <task>`.
@@ -92,15 +92,6 @@ Worker turn completion, stopped previews with preserved work, and no-change upda
 An already-reported unchanged blocker is routine unless the captain explicitly requested an update; a newly actionable failure or changed blocker still goes to captain.
 Keep an unchanged fleet review silent as instructed above.
 Never replace silent routine outcomes with a shipshape reply or another follow-up turn.
-
-# Silent outcomes
-
-Set silent true, always with verdict routine, when the outcome only re-states bookkeeping that is already durably recorded and carries no new state:
-- the echo of a pause or status record you yourself just wrote or steered;
-- a scheduled recheck of an already-registered pause whose task state has not changed;
-- a re-confirmation of a declared pause or an open captain hold that still holds on the same terms.
-Never set silent for anything that changed state (a pause that cleared, a task that changed state, an action you took), a wedge adjudication that concluded something new, a merge, a delivery, a decision, a blocker, a failure, or any captain verdict.
-When in doubt whether anything is new, leave silent false.
 When genuinely in doubt, choose captain: a spurious escalation costs a glance, a swallowed one costs trust.
 Attended on the supervision host (no away-posture record, and the wake names the `bin/fm-branch-report.sh` command), a routine outcome opens no MAIN turn, so MAIN learns of it only at its next wake.
 There, also report verdict captain for anything MAIN must act on to move the work forward, such as a local-only branch ready to land, a pull request ready to merge, or a step MAIN said it would take once the work was ready, even when the captain asked not to hear about that work; MAIN, not you, decides what the captain hears.

@@ -9,9 +9,9 @@
 #     "statusEndpoint":N,"statusIdent":"..."}. Legacy rows without `silent`
 #     or status provenance remain valid and are treated as visible.
 #     `silent` is legal only on a routine row (any task, or `fleet`): it marks
-#     an already-handled no-change or bookkeeping-only outcome and is delivered
-#     with no rendered note. A captain row can never be silent. The branch
-#     prompt and delivery consumers own the additional eligibility rule.
+#     an already-handled no-change outcome and is delivered with no rendered
+#     note. A captain row can never be silent. The branch prompt and delivery
+#     consumers own the additional no-change eligibility rule.
 #     Every read and append validates the complete log as a gap-free sequence;
 #     malformed, duplicate, or reordered rows fail closed.
 #     Existing lines are never rewritten, reordered, or deleted by any

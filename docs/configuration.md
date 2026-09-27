@@ -216,7 +216,7 @@ The branch prompt's "Verdict: routine or captain" section owns the distinction b
 
 The generated [Pi supervision protocol](supervision-protocols/pi.md) owns main's event ownership, acknowledgement duty, and conversational treatment for merged outcomes, while the persisted entry itself owns captain visibility.
 Routine outcomes stay hidden and turn-free by default, independently of Calm; [Pi supervision branch](pi-supervision-branch.md#two-stage-noise-filter) owns presentation, historical-message handling, and reload requirements.
-A task-level routine no-change outcome, a no-change heartbeat, or pure already-recorded bookkeeping may carry `silent=true`, which also keeps it out of captain-return relays; the branch prompt owns the eligibility criteria.
+A task-level routine no-change outcome or a no-change heartbeat may carry `silent=true`, which also keeps it out of captain-return relays; the branch prompt owns the eligibility criteria.
 
 ## Pi supervision branch model and effort (config/supervision-branch-model, config/supervision-branch-effort)
 
@@ -1031,7 +1031,8 @@ This applies only to agents Firstmate launches; the captain's own primary Firstm
 
 The optional local, gitignored `config/keep-ai-trailers` presence flag opts this home into keeping AI co-author trailers on its launched workers.
 With the flag absent, every Claude launch's inline `--settings` JSON carries `"attribution":{"commit":"","pr":"","sessionUrl":false}`, every Devin worker config sets `"attribution": false`, and every fleet launch receives a pane-scoped `GIT_CONFIG` `core.hooksPath` pointing at `state/<id>.git-hooks`, where git's `commit-msg` hook strips known AI trailers even when a runtime injects them after the typed message.
-When the flag is present, Claude launches omit those attribution-off settings, Devin worker configs keep the user config's `attribution` setting (Devin's default is on), and fleet launches do not install or select the strip hooks, so Git uses the repository's configured hooks directly.
+When the flag is present, Claude launches omit those attribution-off settings, Devin worker configs keep the user config's `attribution` setting (Devin's default is on), and fleet launches do not install or select the pane hooks, so Git uses the repository's configured hooks directly.
+Because the upstream prior-art push guard is installed only through those pane hooks, a shipping worker in a home with the flag present also skips that guard.
 `bin/fm-git-strip-ai-trailers.sh` owns the identities, the install, and chaining the hooks of whichever repository git is running in, including when `git -c core.hooksPath` supplies the pane's hook override, so a project hook such as husky still runs when stripping is enabled.
 If the wrapper cannot resolve that repository's hooks directory, the git operation fails rather than silently skipping a project hook such as a pre-push guard.
 When stripping is enabled, the hooks directory is read-only, so a hook manager run inside a fleet pane (lefthook's npm postinstall, `pre-commit install`) fails instead of displacing the strip; install a project's hooks from outside the pane, where the wrappers chain them.

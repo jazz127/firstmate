@@ -1179,7 +1179,7 @@ export default function (pi: ExtensionAPI) {
         }),
         wake: Type.Optional(Type.String({ description: "The wake reason line this outcome answers" })),
         silent: Type.Optional(Type.Boolean({
-          description: "True only for an eligible routine no-change or bookkeeping-only outcome that merely re-states already durable state, such as an unchanged heartbeat, a still-busy worker, or a pause echo; routine outcomes are hidden regardless, captain outcomes are never silent, and omit or use false for any state change, action, failure, blocker, or result worth a note",
+          description: "True only for an eligible routine no-change outcome, such as an unchanged heartbeat or a still-busy worker with nothing new and no action taken; routine outcomes are hidden regardless, captain outcomes are never silent, and omit or use false for any state change, action, failure, blocker, or result worth a note",
         })),
       }),
       execute: async (_toolCallId, params) => {

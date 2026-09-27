@@ -931,7 +931,12 @@ apply_fixes() { # <resolved-login-shell>
           reload_launch_agent herdr-server || true
           continue
         fi
-        case "$value" in notice:*) [ "$PLATFORM" != darwin ] && stop_herdr_server || continue ;; esac
+        case "$value" in
+          notice:*)
+            [ "$PLATFORM" != darwin ] || continue
+            stop_herdr_server || continue
+            ;;
+        esac
         start_herdr_server || true
         ;;
       entrypoint-link) link_entrypoint || true ;;

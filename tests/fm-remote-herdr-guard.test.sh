@@ -134,7 +134,7 @@ hold_under() {
   rm -f "$fifo" "$pidfile"
   mkfifo "$fifo"
   eval "exec ${HOLDER_FD}<>\"\$fifo\""
-  ( export FM_HOLDER_JQ="$JQ" FM_HOLDER_FIFO="$fifo" FM_HOLDER_PIDFILE="$pidfile"
+  ( FM_HOLDER_JQ="$JQ" FM_HOLDER_FIFO="$fifo" FM_HOLDER_PIDFILE="$pidfile" \
     exec -a "$argv0" bash -c 'env -i FM_HOLDER=1 "$FM_HOLDER_JQ" . "$FM_HOLDER_FIFO" & printf "%s\n" "$!" > "$FM_HOLDER_PIDFILE"; wait' "$@" ) &
   HOLDER_PIDS+=("$!")
   HOLDER_FD=$((HOLDER_FD + 1))
@@ -158,7 +158,7 @@ hold_child() {
   else
     reader=("$HOLDER_BIN" .)
   fi
-  ( export FM_HOLDER_PIDFILE="$pidfile"
+  ( FM_HOLDER_PIDFILE="$pidfile" \
     exec bash -c 'env -i "$@" & printf "%s\n" "$!" > "$FM_HOLDER_PIDFILE"; wait' holder-parent "$@" "${reader[@]}" "$fifo" ) &
   HOLDER_PARENT_PID=$!
   HOLDER_PIDS+=("$HOLDER_PARENT_PID")

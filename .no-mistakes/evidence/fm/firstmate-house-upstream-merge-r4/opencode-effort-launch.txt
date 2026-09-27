@@ -1,0 +1,18 @@
+# fm-spawn --harness opencode --model openai/gpt-5.1 --effort high (lab home, fake pane records the launch)
+export COMPACT_ADVISER_DISABLE=1; export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0='/private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab.tCp1mO/oc/a/home/state/oc-effort-s1.git-hooks'; env -u CURSOR_AGENT -u CURSOR_INVOKED_AS -u GEMINI_CLI OPENCODE_CONFIG_CONTENT='{"permission":{"*":"allow"},"agent":{"build":{"model":"openai/gpt-5.1","variant":"high"}}}' opencode --model 'openai/gpt-5.1' --prompt "$('/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3G1A0G19G91WV0MH9976JDV/bin/fm-operational-input.sh' encode launch-brief < '/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.tCp1mO/oc/a/home/data/oc-effort-s1/launch-brief.md')"
+
+# real opencode 1.18.18 parsing that OPENCODE_CONFIG_CONTENT: opencode debug config | jq .agent.build
+{
+  "permission": {
+    "*": "allow"
+  },
+  "build": {
+    "model": "openai/gpt-5.1",
+    "variant": "high",
+    "options": {},
+    "permission": {}
+  }
+}
+
+# control: --model anthropic/claude-sonnet-4-5 --effort low (effort outside anthropic family -> recorded, omitted)
+OPENCODE_CONFIG_CONTENT='{"permission":{"*":"allow"}}'

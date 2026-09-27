@@ -1,0 +1,15 @@
+== test_declared_pause_is_absorbed_for_every_agent_liveness_verdict
+ok - a declared pause is absorbed on the bounded cadence for alive, unknown, and dead agent liveness
+rc=0
+== test_own_work_wait_is_absorbed_then_long_cadence
+ok - own-work waits are absorbed from first sight, then bounded rechecks without wedges; undeclared idle still alarms
+rc=0
+== test_exited_declared_pause_is_bounded_and_live_gate_uses_pause_cadence
+ok - exited declared-pause and captain-held panes use bounded pause cadence, and a live decision gate is absorbed on that same cadence
+rc=0
+== test_live_declared_wait_churn_honors_the_resurface_throttle
+ok - a parked live worker absorbs pane churn, rechecks once when its declaration ages past the cadence, then absorbs churn again
+rc=0
+== test_nonterminal_stale_paused_absorbed_then_resurfaced
+ok - a declared pause is absorbed on first sight, then re-surfaced as a recheck past the threshold, never wedge-escalated
+rc=0

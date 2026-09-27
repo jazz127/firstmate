@@ -1,0 +1,45 @@
+# Live lab (private tmux socket fm-lab, lab FM_HOME), real bin/fm-watch.sh + bin/fm-crew-state.sh, repeated and drained like firstmate
+# worker panes (real long-lived processes):
+primary:bash cmd=bash dead=0
+primary:fm-held cmd=grok dead=0
+primary:fm-ctl cmd=grok dead=0
+primary:driver cmd=sleep dead=0
+# held.status: paused: waiting on CI for the upstream merge PR
+# ctl.status:  working: implementing the parser
+# held.meta:
+window=primary:fm-held
+kind=ship
+harness=grok
+backend=tmux
+
+# watcher transcript:
+--- watcher round 1 09:57:32
+signal: $LAB/state/ctl.status $LAB/state/held.status
+exit=0
+--- watcher round 2 09:57:40
+stale: primary:fm-ctl
+exit=0
+--- watcher round 3 09:57:49
+(still quiet after 25s, stopped)
+exit=143
+--- watcher round 4 09:58:50
+(still quiet after 25s, stopped)
+exit=143
+--- watcher round 5 09:59:18
+(still quiet after 25s, stopped)
+exit=143
+--- watcher round 6 09:59:47
+(still quiet after 25s, stopped)
+exit=143
+DONE
+
+# post-run state markers:
+.paused-holdcheck-primary_fm-held
+.paused-primary_fm-held
+.paused-rechecked-primary_fm-held
+.paused-since-primary_fm-held
+.stale-primary_fm-ctl
+.stale-primary_fm-held
+.stale-since-primary_fm-ctl
+# fm-crew-state for held:
+state: unknown · source: none · worktree gone (torn down?)

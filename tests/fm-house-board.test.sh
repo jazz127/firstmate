@@ -61,8 +61,19 @@ if compare:
   calls[path] = {"status":"diverged","ahead_by":ahead,"behind_by":1,"commits":listed[:1]}
  else:
   calls[path] = listed[(page - 1) * size:page * size]
-  with open(os.environ["FM_HOME"] + "/compare-pages", "a") as log:
-   log.write(str(page) + "\n")
+ with open(os.environ["FM_HOME"] + "/compare-pages", "a") as log:
+  log.write(str(page) + "\n")
+pulls = re.fullmatch(r"repos/jazz127/demo/pulls\?state=all&per_page=(\d+)&page=(\d+)", path)
+if pulls and os.environ.get("FAKE_PULLS_TRUNCATE"):
+ size, page = int(pulls.group(1)), int(pulls.group(2))
+ with open(os.environ["FM_HOME"] + "/pull-pages", "a") as log:
+  log.write(f"{size}:{page}\n")
+ mode = os.environ["FAKE_PULLS_TRUNCATE"]
+ if mode == "overflow" or (mode == "smaller" and size == 8):
+  print("api_response:\n  truncated: true")
+  sys.exit(0)
+ original = calls["repos/jazz127/demo/pulls?state=all&per_page=8&page=1"]
+ calls[path] = original[(page - 1) * size:page * size]
 if path not in calls:
  print("unknown endpoint: " + path, file=sys.stderr)
  sys.exit(1)
@@ -174,5 +185,23 @@ if PATH="$TMP_ROOT/fakebin:$PATH" FM_HOME="$TMP_ROOT/short" FM_HOUSE_BOARD_NO_SE
 fi
 grep -q 'listed 64 of 65 house commits' "$TMP_ROOT/short.out" || fail "short house comparison error unclear: $(cat "$TMP_ROOT/short.out")"
 [ ! -e "$TMP_ROOT/short/.lavish/house-board.json" ] || fail 'short house comparison wrote a payload'
+
+mkdir -p "$TMP_ROOT/retry/data"
+cp "$TMP_ROOT/data/house-line.md" "$TMP_ROOT/retry/data/"
+PATH="$TMP_ROOT/fakebin:$PATH" FM_HOME="$TMP_ROOT/retry" FM_HOUSE_BOARD_NO_SERVE=1 FAKE_PULLS_TRUNCATE=smaller \
+  "$ROOT/bin/fm-house-board.sh" build > "$TMP_ROOT/retry.out" 2>&1 || fail "smaller pull page did not build: $(cat "$TMP_ROOT/retry.out")"
+[ "$(cat "$TMP_ROOT/retry/pull-pages")" = $'8:1\n4:1' ] || fail 'truncated pull page was not retried at half size'
+[ -s "$TMP_ROOT/retry/.lavish/house-board.json" ] || fail 'smaller pull page did not render a payload'
+
+mkdir -p "$TMP_ROOT/overflow/data"
+cp "$TMP_ROOT/data/house-line.md" "$TMP_ROOT/overflow/data/"
+if PATH="$TMP_ROOT/fakebin:$PATH" FM_HOME="$TMP_ROOT/overflow" FM_HOUSE_BOARD_NO_SERVE=1 FAKE_PULLS_TRUNCATE=overflow \
+  "$ROOT/bin/fm-house-board.sh" build > "$TMP_ROOT/overflow.out" 2>&1; then
+  fail 'single-item truncated pull page unexpectedly rendered'
+fi
+grep -q 'still truncated at one item; refusing to render a partial board' "$TMP_ROOT/overflow.out" \
+  || fail "single-item truncation error unclear: $(cat "$TMP_ROOT/overflow.out")"
+[ "$(tail -n 1 "$TMP_ROOT/overflow/pull-pages")" = '1:1' ] || fail 'truncation did not retry down to one item'
+[ ! -e "$TMP_ROOT/overflow/.lavish/house-board.json" ] || fail 'single-item truncation wrote a partial payload'
 
 pass 'house board payload, mismatches, and combined page filters'

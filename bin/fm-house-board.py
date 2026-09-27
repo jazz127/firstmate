@@ -19,6 +19,10 @@ SHA = re.compile(r"(?<![A-Za-z0-9])[0-9a-f]{7,40}(?![A-Za-z0-9])")
 PR = re.compile(r"\bPR\s+(\d+)\b")
 
 
+class TruncatedResponse(RuntimeError):
+    """A gh-axi response hit its body limit and can be retried smaller."""
+
+
 def api(path, selector="."):
     """gh-axi presents a bounded YAML envelope; base64 keeps selected JSON unambiguous."""
     run = subprocess.run(
@@ -27,6 +31,8 @@ def api(path, selector="."):
     )
     if run.returncode:
         raise RuntimeError(f"GitHub read failed for {path}: {run.stderr.strip() or run.stdout.strip()}")
+    if re.search(r"^  truncated: true$", run.stdout, re.M):
+        raise TruncatedResponse(f"GitHub response was truncated for {path}")
     match = re.search(r"^  body: ([A-Za-z0-9+/=]+)$", run.stdout, re.M)
     if not match or not re.search(r"^  truncated: false$", run.stdout, re.M):
         raise RuntimeError(f"GitHub response was unreadable or truncated for {path}")
@@ -39,14 +45,24 @@ def api(path, selector="."):
 def pages(path, selector):
     rows = []
     page_size = 8
-    for page in range(1, 101):
+    offset = 0
+    for _ in range(1, 1001):
         separator = "&" if "?" in path else "?"
-        part = api(f"{path}{separator}per_page={page_size}&page={page}", selector)
+        while True:
+            page = offset // page_size + 1
+            try:
+                part = api(f"{path}{separator}per_page={page_size}&page={page}", selector)
+                break
+            except TruncatedResponse:
+                if page_size == 1:
+                    raise RuntimeError(f"GitHub response for {path} is still truncated at one item; refusing to render a partial board")
+                page_size = max(1, page_size // 2)
         if not isinstance(part, list):
             raise RuntimeError(f"GitHub list was not an array for {path}")
         rows.extend(part)
         if len(part) < page_size:
             return rows
+        offset += len(part)
     raise RuntimeError(f"GitHub pagination did not finish for {path}")
 
 
@@ -129,16 +145,27 @@ def house_comparison(fork, base, head):
     path = f"repos/{fork}/compare/{base}...{head}"
     comparison = api(f"{path}?per_page=1&page=1", "{status,ahead_by,behind_by}")
     commits = []
-    page_size = 30
-    for page in range(1, 1001):
+    # Keep adaptive halving aligned with every prior page boundary.
+    page_size = 32
+    offset = 0
+    for _ in range(1, 1001):
         if len(commits) >= comparison["ahead_by"]:
             break
-        part = api(f"{path}?per_page={page_size}&page={page}", "[.commits[].sha]")
+        while True:
+            page = offset // page_size + 1
+            try:
+                part = api(f"{path}?per_page={page_size}&page={page}", "[.commits[].sha]")
+                break
+            except TruncatedResponse:
+                if page_size == 1:
+                    raise RuntimeError(f"GitHub response for {path} is still truncated at one item; refusing to render a partial board")
+                page_size = max(1, page_size // 2)
         if not isinstance(part, list):
             raise RuntimeError(f"GitHub commit list was not an array for {path}")
         commits.extend(part)
         if len(part) < page_size:
             break
+        offset += len(part)
     if len(commits) != comparison["ahead_by"]:
         raise RuntimeError(f"GitHub listed {len(commits)} of {comparison['ahead_by']} house commits for {path}; "
                            "refusing to render a partial board")

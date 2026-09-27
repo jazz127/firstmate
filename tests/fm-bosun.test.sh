@@ -121,7 +121,7 @@ test_general_bosun_evidence_is_maneuver_scoped() {
 }
 
 test_general_order_checks_primary_named_routes() {
-  local primary dir commit
+  local primary dir commit fake_root
   primary=$(new_home general-order-primary)
   dir=$(new_home general-order)
   printf '%s\n' bosun-general > "$dir/.fm-secondmate-home"
@@ -135,7 +135,22 @@ test_general_order_checks_primary_named_routes() {
     fail 'general Bosun order passed without a parent home to check named routes'
   fi
   assert_grep 'local parent home' "$dir/out" 'missing parent refusal diagnostic missing'
+  printf 'schema=fm-secondmate-parent.v1\nroute=local\nparent_home=%s\n' "$primary-moved" > "$dir/.fm-secondmate-parent"
+  if call "$dir" order --task moved --bosun bosun-general --maneuver general \
+    --forge github --owner kunchenguid --repository sample --source housefeature/general \
+    --branch contribution/moved --captain-words 'Contribute general' --path general.txt \
+    --fork-owner captain --default-branch main --commit "$commit" >"$dir/out" 2>&1; then
+    fail 'general Bosun order passed with a missing bound parent home'
+  fi
+  assert_grep 'local parent home' "$dir/out" 'missing parent home refusal diagnostic missing'
   printf 'schema=fm-secondmate-parent.v1\nroute=local\nparent_home=%s\n' "$primary" > "$dir/.fm-secondmate-parent"
+  if call "$dir" order --task unregistered --bosun bosun-general --maneuver general \
+    --forge github --owner kunchenguid --repository sample --source housefeature/general \
+    --branch contribution/unregistered --captain-words 'Contribute general' --path general.txt \
+    --fork-owner captain --default-branch main --commit "$commit" >"$dir/out" 2>&1; then
+    fail 'general Bosun order passed with a parent that is not a Firstmate home'
+  fi
+  : > "$primary/data/secondmates.md"
   routes_fixture "$primary"
   if call "$dir" order --task named --bosun bosun-general --maneuver general \
     --forge github --owner kunchenguid --repository sample --source housefeature/general \
@@ -155,6 +170,16 @@ EOF
     || fail 'general Bosun order was refused for an unrouted target'
   jq -e '.bosun == "bosun-general"' "$dir/data/general/bosun-contribution.json" >/dev/null \
     || fail 'general Bosun contribution record missing'
+  fake_root="$dir/fake-root"
+  mkdir -p "$fake_root/bin"
+  printf '#!/usr/bin/env bash\nprintf "%%s\\n" "no-mistakes off"\n' > "$fake_root/bin/fm-project-mode.sh"
+  printf '#!/usr/bin/env bash\nmkdir -p "$FM_HOME/data/$1"\nprintf "%%s\\n" "{TASK}" "{FIRSTMATE_SPEC}" > "$FM_HOME/data/$1/brief.md"\n' > "$fake_root/bin/fm-brief.sh"
+  printf '#!/usr/bin/env bash\nprintf "%%s\\n" "spawned $1 worktree=$FM_HOME/projects/sample/task-worktree"\n' > "$fake_root/bin/fm-spawn.sh"
+  chmod +x "$fake_root/bin"/*.sh
+  FM_HOME="$dir" FM_ROOT_OVERRIDE="$fake_root" python3 "$CLI" intake --task general >/dev/null \
+    || fail 'general Bosun intake failed'
+  assert_grep 'convention --bosun bosun-general --scope repository --task general ' "$dir/data/general/brief.md" \
+    'general Bosun brief did not name the contribution task for evidence'
   pass 'general Bosun order checks the primary home named routes'
 }
 

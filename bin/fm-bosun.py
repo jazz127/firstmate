@@ -440,9 +440,12 @@ def parent_home():
                              '[ "$FM_SECONDMATE_PARENT_ROUTE" = local ] && printf %s "$FM_SECONDMATE_PARENT_HOME"',
                              "_", str(lib), str(home() / ".fm-secondmate-parent")],
                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-    if result.returncode or not result.stdout:
+    parent = Path(result.stdout)
+    registry = parent / "data/secondmates.md"
+    if (result.returncode or not result.stdout or parent.is_symlink() or not parent.is_dir()
+            or registry.is_symlink() or not registry.is_file()):
         fail("general Bosun order needs a local parent home to check named Bosun routes")
-    return Path(result.stdout)
+    return parent
 
 
 def cmd_order(args):
@@ -648,7 +651,7 @@ def cmd_intake_locked(args):
         task += ("\nAs the general Bosun, carry no maintainer conventions between maneuvers. "
                  "Read the current target repository instructions and contribution policy for "
                  "this maneuver, then record any relevant evidence only with "
-                 "`convention --bosun bosun-general --scope repository --task <task> ...`; "
+                 f"`convention --bosun bosun-general --scope repository --task {record['task']} ...`; "
                  "never write shared profile memory or reuse evidence from another maneuver.\n")
     spec = (f"Bosun assignment `{record['assignment_id']}`.\n"
             f"This task is authorized only for Bosun `{record['bosun']}`, source branch "

@@ -30,8 +30,8 @@ Leave its shared Kun profile empty until current repository files or accepted PR
 The built-in general upstream Bosun uses id `bosun-general` and has no maintainer scope or shared profile.
 Provision it on demand as a local home through the ordinary persistent-secondmate path, because a remote home cannot recheck the primary home's named routes and every general order there is refused; give it a charter limited to explicitly ordered maneuvers and current target-repository policy.
 Configure its role in the primary home and its own home as for any Bosun; no route row is needed.
-Its `order` rechecks the target against the primary home's current named routes through its local `.fm-secondmate-parent` binding and refuses when a named Bosun matches or no local parent home is bound.
-Its confirmed convention evidence must be recorded under the current maneuver with `--scope repository --task <task>` and cannot be read by another maneuver.
+Its `order` rechecks the target against the primary home's current named routes through its local `.fm-secondmate-parent` binding and refuses when a named Bosun matches or the bound parent is not an existing Firstmate home with `data/secondmates.md`.
+Its confirmed convention evidence must be recorded under the contribution record's task id with `--scope repository --task <task>`, never the spawned ship task id, and cannot be read by another maneuver.
 
 ## Route and order
 

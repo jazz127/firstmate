@@ -104,6 +104,8 @@ Untracked files and directories whose names begin with `scratchpad` are also git
 
 - `bin/fm-contributions.sh` owns durable published-contribution records under each task, observation bounds, equivalent triage-label configuration, and the authenticated contribution check.
 
+- The Bosun route file and contribution workflow are described below and in [`bosun.md`](bosun.md).
+
 - The producing PR and Relay helpers own the fields they append, [`bin/fm-classify-lib.sh`](../bin/fm-classify-lib.sh) owns status-event vocabulary, optional emission-time syntax, and legacy unknown-time handling, and `bin/fm-crew-state.sh` owns current-state reconciliation.
 
 - The [`bin/fm-fleet-snapshot.sh` header](../bin/fm-fleet-snapshot.sh) owns the snapshot's event-time and age fields, including secondmate parent-event projections.
@@ -127,6 +129,20 @@ Untracked files and directories whose names begin with `scratchpad` are also git
 The shared orchestrator behavior lives in [`AGENTS.md`](../AGENTS.md).
 Edit it like any prompt when the fleet is empty.
 While tasks are in flight, dispatch shared-repo edits to a crewmate.
+
+## Bosun routes (config/bosun-routes.json)
+
+Each home that resolves a Bosun route reads its own gitignored `config/bosun-routes.json`.
+The file has schema `fm-bosun-routes.v1` and a `routes` array whose rows name `bosun` plus any nonempty combination of `forge`, `owner`, and either `repository` or `repository_pattern`.
+The repository pattern uses shell-style `*` and `?` matching against the repository name only.
+The [Bosun-Kun example](examples/bosun-routes.json) matches every `github` repository owned by `kunchenguid`.
+When a route names a fork owner without `fork_repository`, the fork repository defaults to the target repository name; set `fork_repository` on an exact-repository route when the fork was renamed.
+Optional `fork_owner`, `fork_repository`, and `upstream_default_branch` fields provide the Captain's fork identity and upstream base branch used when recording an order.
+Routing first prefers exact repository, then repository pattern, then owner, then forge; within a level, a named owner beats an omitted owner and a named forge beats an omitted forge.
+An equal-rank tie refuses even when both entries name the same Bosun.
+No match refuses and asks whether to create a Bosun, never falling back to a sole configured Bosun.
+The matched id must have the existing `data/secondmates.md` entry and a Bosun role record.
+Run `bin/fm-bosun.py route --forge <forge> --owner <owner> --repository <repo>` to resolve without contacting a forge.
 
 ## Calm preference (config/calm)
 

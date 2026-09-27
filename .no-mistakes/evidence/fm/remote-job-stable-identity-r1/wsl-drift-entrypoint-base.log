@@ -1,0 +1,25 @@
+== ref=base kernel=Linux 6.12.76-linuxkit drift-shim=on ==
+[13:19:50] steady call=1 rc=0 worker.pid=216 ps-lstart-now='Sun Sep 27 13:19:49 2026' out=probe ok pid=852 
+[13:19:52] steady call=2 rc=0 worker.pid=216 ps-lstart-now='Sun Sep 27 13:19:49 2026' out=probe ok pid=2549 
+[13:19:54] steady call=3 rc=0 worker.pid=216 ps-lstart-now='Sun Sep 27 13:19:51 2026' out=probe ok pid=4378 
+[13:19:55] steady call=4 rc=0 worker.pid=216 ps-lstart-now='Sun Sep 27 13:19:52 2026' out=probe ok pid=7310 
+[13:19:57] steady call=5 rc=0 worker.pid=216 ps-lstart-now='Sun Sep 27 13:19:52 2026' out=probe ok pid=11270 
+[13:19:59] steady call=6 rc=0 worker.pid=216 ps-lstart-now='Sun Sep 27 13:19:53 2026' out=probe ok pid=16245 
+== deploy new worker code (upgrade): append to fm-remote-job-worker.sh and commit ==
+[13:20:01] post-upgrade call=1 rc=64 worker.pid=216 ps-lstart-now='Sun Sep 27 13:20:11 2026' out=error: remote job worker did not report ready after startup 
+[13:20:58] post-upgrade call=2 rc=64 worker.pid=216 ps-lstart-now='Sun Sep 27 13:20:30 2026' out=error: remote job worker did not report ready after startup 
+[13:21:55] post-upgrade call=3 rc=64 worker.pid=216 ps-lstart-now='Sun Sep 27 13:20:49 2026' out=error: remote job worker did not report ready after startup 
+[13:22:53] post-upgrade call=4 rc=64 worker.pid=216 ps-lstart-now='Sun Sep 27 13:21:08 2026' out=error: remote job worker did not report ready after startup 
+[13:23:50] post-upgrade call=5 rc=64 worker.pid=216 ps-lstart-now='Sun Sep 27 13:21:28 2026' out=error: remote job worker did not report ready after startup 
+worker.lock/start=Sun Sep 27 13:19:49 2026
+distinct worker pids: 216 
+RESULT ref=base ok=6 failed=5
+--- worker log tail ---
+remote-job-worker: cannot acquire or safely reclaim worker ownership
+remote-job-worker: cannot acquire or safely reclaim worker ownership
+remote-job-worker: cannot acquire or safely reclaim worker ownership
+remote-job-worker: cannot acquire or safely reclaim worker ownership
+remote-job-worker: cannot acquire or safely reclaim worker ownership
+remote-job-worker: cannot acquire or safely reclaim worker ownership
+remote-job-worker: cannot acquire or safely reclaim worker ownership
+remote-job-worker: cannot acquire or safely reclaim worker ownership

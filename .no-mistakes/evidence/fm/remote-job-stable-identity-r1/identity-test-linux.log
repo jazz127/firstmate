@@ -1,0 +1,11 @@
+uname=Linux 6.12.76-linuxkit
+ok - fixed PID, start ticks, and boot ID keep identity across synthetic wall-clock rendering changes
+ok - PID reuse, command changes, and reboot invalidate identity
+ok - malformed proc and boot records fail closed
+ok - a stable-lstart legacy worker is stopped and replaced on upgrade
+ok - a drifted-lstart legacy worker with its recorded command is stopped and replaced
+ok - a non-English legacy lstart record is still recognized as the pre-upgrade worker
+ok - a legacy record whose PID now runs a different command is dead
+ok - proven legacy claim and supervisor records are recognized, signalled, and stopped
+ok - a reused PID that fails the legacy start proof is never signalled and its records are reclaimed
+exit=0

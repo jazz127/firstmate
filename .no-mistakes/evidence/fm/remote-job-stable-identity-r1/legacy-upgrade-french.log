@@ -1,0 +1,13 @@
+== case=french: pre-upgrade worker from base commit ==
+base call: rc=0 probe ok pid=811
+old worker pid=210 pgid=154 cmd='/bin/bash /srv/fm-root/bin/fm-remote-job-worker.sh --serve'
+legacy worker.lock/start='dim. sept. 27 13:26:23 2026'
+ps lstart of old worker now='Sun Sep 27 13:26:23 2026'
+== deploy target commit ==
+target call 1: rc=0 probe ok pid=2071  worker.pid=1452
+target call 2: rc=0 probe ok pid=3588  worker.pid=1452
+target call 3: rc=0 probe ok pid=5055  worker.pid=1452
+old worker 210 alive? no; old group alive? no
+new worker pid=1452 worker.lock/start='linux-starttime=53995 boot-id=a9c98ce2-5f9b-4b94-844e-73b87368356a'
+--- worker log ---
+Terminated

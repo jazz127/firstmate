@@ -1,0 +1,16 @@
+== case=reused-pid: pre-upgrade worker from base commit ==
+base call: rc=0 probe ok pid=862
+old worker pid=210 pgid=154 cmd='/bin/bash /srv/fm-root/bin/fm-remote-job-worker.sh --serve'
+legacy worker.lock/start='Sun Sep 27 13:26:43 2026'
+ps lstart of old worker now='Sun Sep 27 13:26:53 2026'
+decoy pid=1090 cmd='/bin/bash /srv/decoy/fm-remote-job-worker.sh' real-lstart='Sun Sep 27 13:26:44 2026'
+planted running job job-lsE6rz with legacy claim/supervisor records naming decoy 1090: owner owner_start supervisor supervisor_start 
+== deploy target commit ==
+target call 1: rc=0 probe ok pid=2287  worker.pid=1417
+target call 2: rc=0 probe ok pid=4003  worker.pid=1417
+target call 3: rc=0 probe ok pid=5768  worker.pid=1417
+old worker 210 alive? no; old group alive? no
+new worker pid=1417 worker.lock/start='linux-starttime=56144 boot-id=a9c98ce2-5f9b-4b94-844e-73b87368356a'
+decoy 1090 alive after upgrade? YES
+planted job state=done exit=125 claim-present=no stderr='remote job worker stopped before this job completed'
+--- worker log ---

@@ -1,0 +1,11 @@
+#!/bin/bash
+# Lab-only /usr/bin/ps shim: re-renders lstart with a time-varying offset, as WSL's drifting btime does.
+out=$(/usr/bin/ps.real "$@") || exit $?
+case " $* " in *lstart*) ;; *) printf '%s\n' "$out"; exit 0 ;; esac
+[ -e /tmp/drift-on ] || { printf '%s\n' "$out"; exit 0; }
+t0=$(stat -c %Y /tmp/drift-on); drift=$(( ($(date +%s) - t0) / 3 ))
+while IFS= read -r line; do
+  [ -n "$line" ] || continue
+  e=$(LC_ALL=C date -d "$line" +%s 2>/dev/null) || { printf '%s\n' "$line"; continue; }
+  LC_ALL=C date -d "@$((e + drift))" '+%a %b %e %H:%M:%S %Y'
+done <<< "$out"

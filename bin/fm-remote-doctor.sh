@@ -85,6 +85,7 @@ LAUNCH_AGENT_LOG="$LAUNCH_AGENT_LOG_DIR/$LAUNCH_AGENT_LABEL.log"
 # Read and removed by bin/fm-remote-herdr-guard.sh at launch; only
 # --restart-herdr leaves it, so no automatic reload replaces a healthy server.
 HERDR_RESTART_MARKER="${HOME:-}/Library/Caches/$LAUNCH_AGENT_LABEL.restart"
+HERDR_RESTART_PENDING=0
 ENTRYPOINT_LINK="${HOME:-}/.local/bin/fm-remote-entrypoint.sh"
 
 usage() { sed -n '2,5p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
@@ -829,7 +830,10 @@ reload_launch_agent() { # <check-to-report-under>
 wait_for_herdr_server() {
   local i=0
   while [ "$i" -lt 20 ]; do
-    herdr_server_aqua_owned && return 0
+    if herdr_server_aqua_owned; then
+      [ "$HERDR_RESTART_PENDING" = 1 ] || return 0
+      [ ! -e "$HERDR_RESTART_MARKER" ] && ! herdr_server_needs_session_leader && return 0
+    fi
     i=$((i + 1))
     sleep 0.5
   done
@@ -879,7 +883,11 @@ apply_fixes() { # <resolved-login-shell>
   repair_required_wrappers
   if [ "$RESTART_HERDR" = 1 ] && [ "$PLATFORM" = darwin ]; then
     case "$(check_value herdr-server 2>/dev/null || true)" in
-      notice:*) mkdir -p "${HERDR_RESTART_MARKER%/*}" 2>/dev/null && : > "$HERDR_RESTART_MARKER" ;;
+      notice:*)
+        trap 'rm -f -- "$HERDR_RESTART_MARKER"' EXIT
+        trap 'exit 130' INT TERM HUP
+        mkdir -p "${HERDR_RESTART_MARKER%/*}" 2>/dev/null && : > "$HERDR_RESTART_MARKER" && HERDR_RESTART_PENDING=1
+        ;;
     esac
   fi
   i=0
@@ -929,7 +937,7 @@ apply_fixes() { # <resolved-login-shell>
       entrypoint-link) link_entrypoint || true ;;
     esac
   done
-  [ "$RESTART_HERDR" != 1 ] || rm -f -- "$HERDR_RESTART_MARKER"
+  [ "$HERDR_RESTART_PENDING" != 1 ] || { rm -f -- "$HERDR_RESTART_MARKER"; HERDR_RESTART_PENDING=0; }
 }
 
 # --- report -----------------------------------------------------------------

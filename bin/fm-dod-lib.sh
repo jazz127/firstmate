@@ -252,9 +252,12 @@ fm_dod_validate_scenario_consistency() {  # <complete-pr-body>
     }
     function check_stored() {
       if (stored_tables == 0 || count_line == "") return
-      for (n = 1; n <= stored_tables; n++)
+      cited = stored_tables
+      for (n = 1; n <= stored_tables; n++) {
         if (table_agrees(n)) return
-      refuse(count_line, stored_table_lines[stored_tables])
+        if (stored_table_rows[n] == count_total) cited = n
+      }
+      refuse(count_line, stored_table_lines[cited])
     }
     {
       original = $0

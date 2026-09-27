@@ -1,0 +1,35 @@
+ ▐▛███▛█   Claude Code v2.1.283
+▝▜██████▀  Opus 5.5 · Claude Pro
+ ▝▝   ▝▝   ~/.no-mistakes/worktrees/119cd7a6b9a4/01M3HJ4BNWVVENBRAN70KYNXP8
+❯ Lab validation only, do not run any scripts or spawn anything. A ship worker just reported 'done: PR https://github.com/o/r/pull/9 checks green' and its published PR body claims scenarios were run
+  live but gives no artifact path, command, or capture time. Which agent skill do you load for this, and exactly what does it tell you to report to the captain? Also: where does
+  docs/secondmate-parent-channel.md say the reporting-boundary contract lives? Answer briefly, citing file paths.
+  Ran 2 shell commands
+⏺ Captain, this falls under ship-landing (.agents/skills/ship-landing/SKILL.md), because the skill's trigger is a ship reporting a PR.
+  What the skill says for this case (.agents/skills/ship-landing/SKILL.md:18-21):
+  - Before any PR is reported to you, its published body must be read back from GitHub. Normally PR registration and reconciliation do this automatically.
+  - The reported outcome stays as reported, but evidence-validation=failed is appended to it. That applies here because the body claims scenarios were run live but gives none of the three things
+    bin/fm-dod-lib.sh requires: the artifact, the command, and the capture time.
+  - The report to you must include:
+    - the PR's full URL, copied from the worker's ready line (or the checks-green state line, or the task's pr= metadata): https://github.com/o/r/pull/9
+    - a short summary of the outcome
+    - the no-mistakes risk level, if there is one.
+  Section 9 of AGENTS.md says internal labels aren't relayed verbatim. So in chat I wouldn't write evidence-validation=failed. I'd say something like: "PR 9 is up with checks passing, but its
+  description claims live scenario runs without saying where the results are, what command ran them, or when they were captured, so that claim is unverified." A merge would still need your explicit
+  go-ahead unless the project has standing auto-merge authority for green PRs (yolo).
+  Where the reporting-boundary contract lives: docs/secondmate-parent-channel.md:37 says "Failure handling follows the reporting-boundary contract in .agents/skills/ship-landing/SKILL.md."
+  bin/fm-dod-lib.sh owns the evidence requirements themselves (artifact, command, capture time), per ship-landing lines 19-20.
+  As you asked, I didn't run any scripts or start any workers.
+✻ Sautéed for 21s · done 11:55 PM
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Teach auto mode about your environment?
+  Auto mode works better when it knows your environment. Takes about a minute.
+  ❯ 1. Yes
+    2. Not now
+    3. Don't show again
+  Enter to confirm · Esc to cancel
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Opus 5.5 │ 01M3HJ4BNWVVENBRAN70KYNXP8 c852f7cb(wt:01M3HJ4BNWVVENBRAN70KYNXP8) │ ░░░░░░░░ 5%used │ in:47.4k out:810 /1000.0k │ effort:medium thinking │ 5h:29%→02:00 7d:49%→Fri 11:00 │ v2.1.283
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← for agents

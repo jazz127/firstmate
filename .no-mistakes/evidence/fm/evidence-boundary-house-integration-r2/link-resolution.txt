@@ -1,0 +1,8 @@
+OK   docs/secondmate-parent-channel.md -> ../.agents/skills/ship-landing/SKILL.md (/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3HJ4BNWVVENBRAN70KYNXP8/.agents/skills/ship-landing/SKILL.md)
+OK   docs/verification/secondmate-parent-channel.md -> ../../.agents/skills/ship-landing/SKILL.md (/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3HJ4BNWVVENBRAN70KYNXP8/.agents/skills/ship-landing/SKILL.md)
+
+Stale AGENTS.md reporting-boundary links remaining:
+none
+
+0
+0

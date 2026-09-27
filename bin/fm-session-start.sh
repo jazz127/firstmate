@@ -189,8 +189,8 @@
 #   Prints the full ordered digest to stdout and exits 0 for an eligible
 #   primary session: this is a reporting command, not a gate. A lock refusal
 #   is reported as a loud banner inline, never a silent failure or a non-zero
-#   exit that would make an agent skip the rest of the digest. A proven task
-#   worker invocation exits 2 before any home mutation.
+#   exit that would make an agent skip the rest of the digest. An invocation
+#   with FM_TASK_ID set exits 2 before any home mutation.
 #
 #   --reemit  This process ALREADY took the helm at its own startup and has
 #             only lost its context (a /clear or a compaction). Skip the
@@ -220,8 +220,10 @@
 #             current AGENTS.md to print before the bulky digest. The baseline
 #             remains immutable so every later drifted compaction refreshes
 #             again, while an equal baseline emits no instruction refresh.
-# A direct manual invocation from a marked task worker or an unmarked linked
-# task worktree refuses before taking a home lock or running bootstrap.
+# A direct manual invocation with FM_TASK_ID set refuses before taking a home
+# lock or running bootstrap. fm-spawn.sh exports FM_TASK_ID only into ship and
+# scout panes, never a secondmate or primary, and fm-test-run.sh already
+# refuses on the same marker.
 set -u
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -262,23 +264,10 @@ while [ "$#" -gt 0 ]; do
 done
 
 # Native session-open hooks already stand down for task workers. This check
-# covers a worker invoking the composed command by hand, including a fresh
-# shell that lost FM_TASK_ID but is still inside its linked worktree.
-# shellcheck source=bin/fm-primary-scope-lib.sh
-. "$SCRIPT_DIR/fm-primary-scope-lib.sh"
+# covers a marked worker invoking the composed command by hand.
 if [ -n "${FM_TASK_ID:-}" ]; then
   printf 'fm-session-start: refusing task worker FM_TASK_ID=%s; this command belongs to the supervising firstmate\n' "$FM_TASK_ID" >&2
   exit 2
-fi
-# A plain checkout has a .git directory; inspect Git only for the .git-file
-# shape that a linked worktree uses, so normal startup adds no Git probe.
-if [ -f "$FM_ROOT/.git" ] && ! fm_root_is_secondmate_home "$FM_ROOT"; then
-  git_dir=$(git -C "$FM_ROOT" rev-parse --git-dir 2>/dev/null || true)
-  git_common_dir=$(git -C "$FM_ROOT" rev-parse --git-common-dir 2>/dev/null || true)
-  if [ -n "$git_dir" ] && [ "$git_dir" != "$git_common_dir" ]; then
-    printf 'fm-session-start: refusing linked task worktree %s; this command belongs to the supervising firstmate\n' "$FM_ROOT" >&2
-    exit 2
-  fi
 fi
 
 # --- 0. runtime bound ---------------------------------------------------------

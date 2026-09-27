@@ -1,0 +1,7 @@
+== pid 98432 -zsh
+== pid 1654 claude
+FM_HOME=/private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab-sub.CBDslQ
+FM_ROOT_OVERRIDE=
+FM_DATA_OVERRIDE=
+FM_PROJECTS_OVERRIDE=
+FM_CONFIG_OVERRIDE=

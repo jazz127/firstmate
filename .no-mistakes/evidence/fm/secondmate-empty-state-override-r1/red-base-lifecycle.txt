@@ -1,0 +1,6 @@
+changes and commit them, and you can discard any commits you make in this
+If you want to create a new branch to retain commits you create, you may
+Or undo this operation with:
+ok - seed: registry scope+projects, charter copied, clones+origins, no-mistakes init in subhome only
+warning: secondmate design sync skipped before launch: primary default-branch commit cannot be resolved
+not ok - launch did not clear operational overrides and unset the state override

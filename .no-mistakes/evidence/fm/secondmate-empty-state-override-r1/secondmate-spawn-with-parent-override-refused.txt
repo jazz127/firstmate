@@ -1,0 +1,1 @@
+error: refusing fleet lifecycle from inside a no-mistakes gate worktree (/Users/jarad/.no-mistakes/repos/119cd7a6b9a4.git)

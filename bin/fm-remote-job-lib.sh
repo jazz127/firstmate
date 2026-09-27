@@ -980,20 +980,20 @@ except OSError as exc:
 try:
     proc_root = os.environ.get("FM_PROC_ROOT_OVERRIDE", "/proc")
     try:
-        with open(f"{proc_root}/{pid}/stat", encoding="ascii") as stat_file:
+        with open(f"{proc_root}/{pid}/stat", "rb") as stat_file:
             stat_line = stat_file.read()
         with open(f"{proc_root}/sys/kernel/random/boot_id", encoding="ascii") as boot_file:
             boot_id = boot_file.read().strip()
     except (OSError, UnicodeError):
         raise SystemExit(1)
-    if not stat_line.startswith(f"{pid} (") or ") " not in stat_line:
+    if not stat_line.startswith(f"{pid} (".encode()) or b") " not in stat_line:
         raise SystemExit(1)
-    fields = stat_line.rsplit(") ", 1)[1].split()
+    fields = stat_line.rsplit(b") ", 1)[1].split()
     if len(fields) < 20 or not fields[19].isdigit():
         raise SystemExit(1)
     if not re.fullmatch(r"[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}", boot_id):
         raise SystemExit(1)
-    start = f"linux-starttime={fields[19]} boot-id={boot_id}"
+    start = f"linux-starttime={fields[19].decode()} boot-id={boot_id}"
     try:
         result = subprocess.run(
             [ps_bin, "-p", str(pid), "-o", "command="],
@@ -1513,10 +1513,11 @@ fm_remote_job_process_tree_pids() { # <pid> [start] [command]
   case "$uid" in ''|*[!0-9]*) return 1 ;; esac
   processes=$("$ps_bin" -u "$uid" -o pid=,ppid=,stat=,command= 2>/dev/null) || return 1
   frontier=$root
-  while read -r pid ppid state command; do
+  while read -r pid ppid state _; do
     case "$pid" in ''|*[!0-9]*) continue ;; esac
     [ "$pid" = "$root" ] || continue
     start=$(fm_remote_job_process_start "$pid") || continue
+    command=$(fm_remote_job_process_command "$pid") || continue
     if [ -n "$expected_start" ] && { [ "$start" != "$expected_start" ] || [ "$command" != "$expected_command" ]; }; then
       break
     fi
@@ -1531,11 +1532,12 @@ fm_remote_job_process_tree_pids() { # <pid> [start] [command]
   [ "$root_valid" -eq 1 ] || return 0
   while [ -n "$frontier" ]; do
     next=
-    while read -r pid ppid state command; do
+    while read -r pid ppid state _; do
       case "$pid:$ppid" in *[!0-9:]*|:) continue ;; esac
       case " $frontier " in *" $ppid "*) ;; *) continue ;; esac
       case "$state" in Z*) continue ;; esac
       start=$(fm_remote_job_process_start "$pid") || continue
+      command=$(fm_remote_job_process_command "$pid") || continue
       [ -n "$start" ] && [ -n "$command" ] || continue
       fm_remote_job_process_identity_matches "$pid" "$start" "$command" || continue
       printf '%s\t%s\t%s\n' "$pid" "$start" "$command"

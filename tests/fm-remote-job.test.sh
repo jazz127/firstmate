@@ -351,6 +351,38 @@ kill -0 "$LATE_GRANDCHILD_PID" 2>/dev/null && fail "late reparented descendant s
 pass "late reparented descendants are included in cleanup convergence"
 fi
 
+TRAILING_ROOT="$TMP_ROOT/trailing-root.sh"
+TRAILING_MARKER="$TMP_ROOT/trailing-child.pid"
+cat > "$TRAILING_ROOT" <<'SH'
+#!/bin/sh
+sh -c 'sleep 30; : ' & printf '%s\n' "$!" > "$1"
+wait
+SH
+chmod +x "$TRAILING_ROOT"
+"$TRAILING_ROOT" "$TRAILING_MARKER" & TRAILING_ROOT_PID=$!
+TRAILING_CHILD_PID=
+TRAILING_GRANDCHILD_PID=
+for _ in $(seq 1 100); do
+  TRAILING_CHILD_PID=$(cat "$TRAILING_MARKER" 2>/dev/null || true)
+  [ -n "$TRAILING_CHILD_PID" ] &&
+    TRAILING_GRANDCHILD_PID=$(ps -A -o pid=,ppid= | awk -v p="$TRAILING_CHILD_PID" '$2 == p { print $1; exit }')
+  [ -n "$TRAILING_GRANDCHILD_PID" ] && break
+  sleep 0.05
+done
+[ -n "$TRAILING_GRANDCHILD_PID" ] || fail "trailing-whitespace fixture did not start its job"
+TRAILING_CHILD_COMMAND=$(fm_remote_job_process_command "$TRAILING_CHILD_PID")
+[ "$TRAILING_CHILD_COMMAND" = "sh -c sleep 30; : " ] || fail "trailing-whitespace fixture has unexpected command: '$TRAILING_CHILD_COMMAND'"
+TRAILING_TREE=$(fm_remote_job_process_tree_pids "$TRAILING_ROOT_PID")
+printf '%s\n' "$TRAILING_TREE" | awk -F '\t' -v p="$TRAILING_CHILD_PID" -v c="$TRAILING_CHILD_COMMAND" '$1 == p && $3 == c { found = 1 } END { exit !found }' \
+  || fail "tree enumeration dropped a descendant whose command ends in whitespace"
+printf '%s\n' "$TRAILING_TREE" | awk -F '\t' -v p="$TRAILING_GRANDCHILD_PID" '$1 == p { found = 1 } END { exit !found }' \
+  || fail "tree enumeration dropped the subtree of a trailing-whitespace descendant"
+fm_remote_job_stop_worker_tree "$TRAILING_ROOT_PID" || fail "trailing-whitespace tree cleanup did not converge"
+wait "$TRAILING_ROOT_PID" 2>/dev/null || true
+kill -0 "$TRAILING_CHILD_PID" 2>/dev/null && fail "trailing-whitespace descendant survived cleanup"
+kill -0 "$TRAILING_GRANDCHILD_PID" 2>/dev/null && fail "trailing-whitespace descendant's child survived cleanup"
+pass "tree cleanup includes descendants whose command ends in whitespace"
+
 fm_remote_job_prepare_state "$ACCOUNT_HOME" || fail "$FM_REMOTE_JOB_ERROR"
 mkdir "$STATE_ROOT/worker.starting"
 (exit 0) & STALE_GUARD_PID=$!

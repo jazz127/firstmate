@@ -1,0 +1,70 @@
+== S1: primary with no routes file -> any upstream routes to general Bosun
+$ FM_HOME=/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.sJNPxd/primary fm-bosun.py route --forge github --owner someorg --repository widget
+bosun-general
+[exit=0]
+== configure roles (primary: bosun-kun + bosun-general; general home: own role)
+fm-bosun.py: error: argument command: invalid choice: 'configure-role' (choose from route, configure-home, order, intake, convention, conventions, registration-check, escalate, merged, upstream-ref)
+[exit=2]
+$ FM_HOME=/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.sJNPxd/gen fm-bosun.py configure-home --bosun bosun-general
+[exit=0]
+== S2: named route wins over general; unmatched upstream falls back to general
+$ FM_HOME=/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.sJNPxd/primary fm-bosun.py route --forge github --owner kunchenguid --repository sample
+fm-bosun: Bosun bosun-kun is not one registered secondmate
+[exit=1]
+$ FM_HOME=/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.sJNPxd/primary fm-bosun.py route --forge github --owner KunChenGuid --repository Anything
+fm-bosun: Bosun bosun-kun is not one registered secondmate
+[exit=1]
+$ FM_HOME=/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.sJNPxd/primary fm-bosun.py route --forge github --owner someorg --repository widget
+bosun-general
+[exit=0]
+== S2b: equal-rank tie still refuses (no silent general fallback)
+$ FM_HOME=/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.sJNPxd/primary fm-bosun.py route --forge github --owner tie --repository x
+fm-bosun: ambiguous Bosun route; needs-decision
+[exit=1]
+== S3 (adversarial): general home has NO routes file; order for a kunchenguid target (owned by bosun-kun in primary) must refuse
+ls: /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.sJNPxd/gen/config/bosun-routes.json: No such file or directory
+$ FM_HOME=/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.sJNPxd/gen fm-bosun.py order --task named --bosun bosun-general --maneuver general --forge github --owner kunchenguid --repository sample --source housefeature/general --branch contribution/named --captain-words Contribute general --path general.txt --fork-owner captain --default-branch main --commit cb2dde6556f8db59b27257fd0f07e2735bc0d9cb
+fm-bosun: target routes to a different Bosun
+[exit=1]
+ls: /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.sJNPxd/gen/data/named/bosun-contribution.json: No such file or directory
+== S3b (adversarial): stale copied routes in general home that lack the named row still cannot bypass
+$ FM_HOME=/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.sJNPxd/gen fm-bosun.py order --task named2 --bosun bosun-general --maneuver general --forge github --owner kunchenguid --repository sample --source housefeature/general --branch contribution/named2 --captain-words Contribute general --path general.txt --fork-owner captain --default-branch main --commit cb2dde6556f8db59b27257fd0f07e2735bc0d9cb
+fm-bosun: target routes to a different Bosun
+[exit=1]
+== S4: order for an unrouted upstream (someorg) is accepted and recorded for bosun-general
+$ FM_HOME=/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.sJNPxd/gen fm-bosun.py order --task gen1 --bosun bosun-general --maneuver general --forge github --owner someorg --repository sample --source housefeature/general --branch contribution/gen1 --captain-words Contribute general --path general.txt --fork-owner captain --default-branch main --commit cb2dde6556f8db59b27257fd0f07e2735bc0d9cb
+fm-bosun: upstream project clone targets another repository: someorg/sample
+[exit=1]
+jq: error: Could not open file /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.sJNPxd/gen/data/gen1/bosun-contribution.json: No such file or directory
+cat: /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.sJNPxd/gen/data/gen1/bosun-contribution.json: No such file or directory
+== S5 (adversarial): parent binding points at a moved/missing primary -> fail closed
+$ FM_HOME=/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.sJNPxd/gen fm-bosun.py order --task moved --bosun bosun-general --maneuver general --forge github --owner someorg --repository sample --source housefeature/general --branch contribution/moved --captain-words Contribute general --path general.txt --fork-owner captain --default-branch main --commit cb2dde6556f8db59b27257fd0f07e2735bc0d9cb
+fm-bosun: general Bosun order needs a local parent home to check named Bosun routes
+[exit=1]
+== S5b: parent binding route=remote -> fail closed
+$ FM_HOME=/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.sJNPxd/gen fm-bosun.py order --task remote --bosun bosun-general --maneuver general --forge github --owner someorg --repository sample --source housefeature/general --branch contribution/remote --captain-words Contribute general --path general.txt --fork-owner captain --default-branch main --commit cb2dde6556f8db59b27257fd0f07e2735bc0d9cb
+fm-bosun: general Bosun order needs a local parent home to check named Bosun routes
+[exit=1]
+== S5c: parent binding removed -> fail closed
+$ FM_HOME=/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.sJNPxd/gen fm-bosun.py order --task nobind --bosun bosun-general --maneuver general --forge github --owner someorg --repository sample --source housefeature/general --branch contribution/nobind --captain-words Contribute general --path general.txt --fork-owner captain --default-branch main --commit cb2dde6556f8db59b27257fd0f07e2735bc0d9cb
+fm-bosun: general Bosun order needs a local parent home to check named Bosun routes
+[exit=1]
+== S6: general evidence is maneuver-scoped; shared memory refused; other maneuvers can't read it
+$ FM_HOME=/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.sJNPxd/gen fm-bosun.py convention --bosun bosun-general --forge github --owner someorg --repository sample --scope shared --key commits --value squash
+fm-bosun: general Bosun evidence must be repository-scoped to the current maneuver
+[exit=1]
+$ FM_HOME=/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.sJNPxd/gen fm-bosun.py convention --bosun bosun-general --forge github --owner someorg --repository sample --scope repository --key commits --value squash
+fm-bosun: general Bosun evidence must be repository-scoped to the current maneuver
+[exit=1]
+$ FM_HOME=/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.sJNPxd/gen fm-bosun.py convention --bosun bosun-general --forge github --owner someorg --repository sample --scope repository --task gen1 --key commits --value squash --confirmed --evidence CONTRIBUTING.md --showed requires squash --read-at 2026-09-28T00:00:00Z
+[exit=0]
+/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.sJNPxd/gen/data/gen1/bosun-evidence/github/someorg/sample.json
+ls: /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.sJNPxd/gen/data/bosun-memory: No such file or directory
+-- same maneuver (gen1):
+$ FM_HOME=/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.sJNPxd/gen fm-bosun.py conventions --bosun bosun-general --forge github --owner someorg --repository sample --task gen1 --policy /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.sJNPxd/gen/policy.json
+{"commits": {"source": "current_repository_policy", "value": "merge"}}
+[exit=0]
+-- different maneuver (gen2):
+$ FM_HOME=/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.sJNPxd/gen fm-bosun.py conventions --bosun bosun-general --forge github --owner someorg --repository sample --task gen2 --policy /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.sJNPxd/gen/policy.json
+{"commits": {"source": "current_repository_policy", "value": "merge"}}
+[exit=0]

@@ -1,0 +1,51 @@
+== provision named bosun-kun in lab primary through fm-home-seed.sh
+home=/private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab.sJNPxd/kun
+$ FM_HOME=/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.sJNPxd/primary fm-bosun.py configure-home --bosun bosun-kun
+[exit=0]
+$ FM_HOME=/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.sJNPxd/primary fm-bosun.py configure-home --bosun bosun-general
+[exit=0]
+== S2: named Bosun wins for its upstreams; unmatched upstreams resolve to bosun-general
+$ FM_HOME=/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.sJNPxd/primary fm-bosun.py route --forge github --owner kunchenguid --repository sample
+bosun-kun
+[exit=0]
+$ FM_HOME=/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.sJNPxd/primary fm-bosun.py route --forge github --owner KunChenGuid --repository Anything
+bosun-kun
+[exit=0]
+$ FM_HOME=/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.sJNPxd/primary fm-bosun.py route --forge github --owner someorg --repository widget
+bosun-general
+[exit=0]
+$ FM_HOME=/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.sJNPxd/primary fm-bosun.py route --forge github --owner kunchenguid-fork --repository sample
+bosun-general
+[exit=0]
+== S4: order for an unrouted upstream (someorg/sample) accepted and recorded for bosun-general
+$ FM_HOME=/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.sJNPxd/gen fm-bosun.py order --task gen1 --bosun bosun-general --maneuver general --forge github --owner someorg --repository sample --source housefeature/general --branch contribution/gen1 --captain-words Contribute general to someorg --path general.txt --fork-owner captain --default-branch main --commit cb2dde6556f8db59b27257fd0f07e2735bc0d9cb
+/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab.sJNPxd/gen/data/gen1/bosun-contribution.json
+[exit=0]
+{"task":"gen1","bosun":"bosun-general","state":"ordered","maneuver":"general","target":{"forge":"github","owner":"someorg","repository":"sample"},"captain_order":{"recorded_at":"2026-09-27T14:49:41+00:00","words":"Contribute general to someorg"}}
+== S4b: even when the project clone targets kunchenguid, general order for kunchenguid still refuses on named route
+$ FM_HOME=/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.sJNPxd/gen fm-bosun.py order --task gen-kun --bosun bosun-general --maneuver general --forge github --owner kunchenguid --repository sample --source housefeature/general --branch contribution/gen-kun --captain-words x --path general.txt --fork-owner captain --default-branch main --commit cb2dde6556f8db59b27257fd0f07e2735bc0d9cb
+fm-bosun: target routes to a different Bosun
+[exit=1]
+== S4c: general Bosun cannot order without Captain words / maneuver (explicit-order guard)
+fm-bosun.py order: error: the following arguments are required: --maneuver, --captain-words
+[exit=2]
+== S6: evidence under the maneuver task id; another maneuver cannot read it
+$ FM_HOME=/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.sJNPxd/gen fm-bosun.py convention --bosun bosun-general --forge github --owner someorg --repository sample --scope repository --task gen1 --key commits --value squash --confirmed --evidence CONTRIBUTING.md --showed requires squash --read-at 2026-09-28T00:00:00Z
+[exit=0]
+-- same maneuver (gen1):
+$ FM_HOME=/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.sJNPxd/gen fm-bosun.py conventions --bosun bosun-general --forge github --owner someorg --repository sample --task gen1 --policy /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.sJNPxd/gen/policy.json
+{"commits": {"evidence": {"confirmed": true, "key": "commits", "read_at": "2026-09-28T00:00:00Z", "showed": "requires squash", "source": "CONTRIBUTING.md", "value": "squash"}, "source": "repository", "value": "squash"}}
+[exit=0]
+-- different maneuver (gen2):
+$ FM_HOME=/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.sJNPxd/gen fm-bosun.py conventions --bosun bosun-general --forge github --owner someorg --repository sample --task gen2 --policy /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.sJNPxd/gen/policy.json
+{}
+[exit=0]
+== S7: intake of general contribution builds the ship brief via real fm-brief.sh (spawn stubbed) naming the contribution task for evidence
+$ FM_HOME=/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.sJNPxd/gen FM_ROOT_OVERRIDE=<lab copy of HEAD with fm-spawn.sh stub> fm-bosun.py intake --task gen1
+spawned gen1 worktree=/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab.sJNPxd/gen/projects/sample/task-worktree
+[exit=0]
+{"state":"assigned","task_mode":"no-mistakes","task_worktree":"/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab.sJNPxd/gen/projects/sample/task-worktree"}
+-- brief excerpt:
+16:Captain's exact order: Contribute general to someorg
+17:As the general Bosun, carry no maintainer conventions between maneuvers. Read the current target repository instructions and contribution policy for this maneuver, then record any relevant evidence only with `convention --bosun bosun-general --scope repository --task gen1 ...`; never write shared profile memory or reuse evidence from another maneuver.
+22:This task is authorized only for Bosun `bosun-general`, source branch `housefeature/general`, contribution branch `contribution/gen1`, Captain fork `captain/sample`, and upstream default branch `main`. Do not select other work, widen the scope, or contact unrelated projects.

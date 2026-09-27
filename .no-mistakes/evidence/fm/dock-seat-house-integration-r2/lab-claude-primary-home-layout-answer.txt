@@ -1,0 +1,26 @@
+ ▐▛███▛█   Claude Code v2.1.283
+▝▜██████▀  Opus 5.5 · Claude Pro
+ ▝▝   ▝▝   ~/.no-mistakes/worktrees/119cd7a6b9a4/01M3H50EJ70KQSQV0V95EZX7XP
+❯ Captain question, answer only, do not change anything: per the firstmate home layout, what kinds of profile can config/crew-dispatch.json choose, and is it inherited by secondmate homes? Quote the
+  layout line verbatim.
+  Ran 1 shell command
+⏺ Captain, here's the layout line, quoted exactly from .agents/skills/operational-home-layout/SKILL.md:26:
+  ▎ config/crew-dispatch.json  optional crewmate dispatch profiles; LOCAL, gitignored; firstmate-maintained but human-editable natural-language rules that choose a per-task
+  ▎ harness/model/effort/optional-seat profile (section 4). Inherited by secondmate homes
+  - What it chooses: a profile for each task. A profile is a harness, a model, an effort level, and optionally a seat. Its rules are written in plain language, and firstmate maintains them while you
+    can still edit them by hand.
+  - Inherited by secondmate homes? Yes, the line says so directly.
+  I didn't change anything.
+✻ Cogitated for 8s · done 8:03 PM
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Teach auto mode about your environment?
+  Auto mode works better when it knows your environment. Takes about a minute.
+  ❯ 1. Yes
+    2. Not now
+    3. Don't show again
+  Enter to confirm · Esc to cancel
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Opus 5.5 │ 01M3H50EJ70KQSQV0V95EZX7XP fb3705de(wt:01M3H50EJ70KQSQV0V95EZX7XP) │ ░░░░░░░░ 5%used │ in:45.9k out:252 /1000.0k │ effort:medium thinking │ 5h:27%→21:00 7d:41%→Fri 11:00 │ v2.1.283
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← for agents

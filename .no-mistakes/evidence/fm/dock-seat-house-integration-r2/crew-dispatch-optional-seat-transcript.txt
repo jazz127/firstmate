@@ -1,0 +1,44 @@
+### A: optional seat luna on codex profile is accepted (rules validate, reaches resolver call)
+$ cat config/crew-dispatch.json
+{"rules":[{"when":"small docs edits","use":{"harness":"codex","seat":"luna"}}]}
+$ fm-dispatch-resolve.sh brief.md
+dispatch-resolve: error (http 000 after 1000 ms: )
+dispatch-resolve:
+  status: error
+  reason: http 000 after 1000 ms: 
+exit=0
+
+### B: seat stays optional (profile without seat accepted)
+$ cat config/crew-dispatch.json
+{"rules":[{"when":"small docs edits","use":{"harness":"codex"}}]}
+$ fm-dispatch-resolve.sh brief.md
+dispatch-resolve: error (http 000 after 0 ms: )
+dispatch-resolve:
+  status: error
+  reason: http 000 after 0 ms: 
+exit=0
+
+### C (adversarial): seat on a non-codex harness is refused
+$ cat config/crew-dispatch.json
+{"rules":[{"when":"small docs edits","use":{"harness":"claude","seat":"luna"}}]}
+$ fm-dispatch-resolve.sh brief.md
+error: malformed rules file: /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.gXtEss/config/crew-dispatch.json - unsupported use profile seat (only luna on codex): luna
+exit=2
+
+### D (adversarial): unknown seat value is refused
+$ cat config/crew-dispatch.json
+{"rules":[{"when":"small docs edits","use":{"harness":"codex","seat":"other"}}]}
+$ fm-dispatch-resolve.sh brief.md
+error: malformed rules file: /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.gXtEss/config/crew-dispatch.json - unsupported use profile seat (only luna on codex): other
+exit=2
+
+### E: optional seat on default profile accepted
+$ cat config/crew-dispatch.json
+{"rules":[{"when":"x","use":{"harness":"codex"}}],"default":{"harness":"codex","seat":"luna"}}
+$ fm-dispatch-resolve.sh brief.md
+dispatch-resolve: error (http 000 after 0 ms: )
+dispatch-resolve:
+  status: error
+  reason: http 000 after 0 ms: 
+exit=0
+

@@ -37,14 +37,18 @@ ln -sf "$(command -v git)" "$TOOLS/git"
 ln -sf "$(command -v jq)" "$TOOLS/jq"
 BASE_PATH="$TOOLS:/usr/bin:/bin:/usr/sbin:/sbin"
 
-# Real socket-owner holders for the Darwin birth check: jq blocked on a fifo
+# Real socket-owner holders for the Darwin birth check: a non-platform tool blocked on a fifo
 # this test keeps open, with exactly the marker environment each birth needs.
-JQ=$(command -v jq)
+HOLDER_BIN=$(command -v node 2>/dev/null || command -v jq)
 HOLDER_FD=5
 hold() { # <marker-env...> -> HOLDER_PID
   local fifo="$TMP_ROOT/holder-$HOLDER_FD.fifo"
   mkfifo "$fifo"
-  env -i "$@" "$JQ" . "$fifo" &
+  if [ "${HOLDER_BIN##*/}" = node ]; then
+    env -i "$@" "$HOLDER_BIN" -e 'require("fs").readFileSync(process.argv[1])' "$fifo" &
+  else
+    env -i "$@" "$HOLDER_BIN" . "$fifo" &
+  fi
   HOLDER_PID=$!
   HOLDER_PIDS+=("$HOLDER_PID")
   eval "exec ${HOLDER_FD}>\"\$fifo\""
@@ -107,6 +111,25 @@ printf '%s\n' "$*" >> "$FM_FAKE_LAUNCHCTL_LOG"
 domain=${2:-}
 label=${domain##*/}
 loaded="$FM_FAKE_STATE/loaded-$label"
+# The guard leaves an Aqua-born server that is not a session leader alone
+# unless the operator restart marker asks it to take the session over; it
+# consumes that marker at launch.
+# With guard-delay, the guard reads the marker only after that many later
+# herdr status calls, as a guard still starting through the login shell does.
+guard_takes_session() {
+  local marker="$HOME/Library/Caches/dev.firstmate.herdr.fm-remote.restart"
+  [ ! -f "$FM_FAKE_STATE/guard-pending" ] || return 1
+  if [ -f "$marker" ] && [ -f "$FM_FAKE_STATE/guard-delay" ]; then
+    mv "$FM_FAKE_STATE/guard-delay" "$FM_FAKE_STATE/guard-pending"
+    return 1
+  elif [ -f "$marker" ]; then
+    rm -f "$marker"
+    printf '%s\n' "${1:-}" >> "$FM_FAKE_STATE/restart-marker-consumed"
+  elif [ -f "$FM_FAKE_STATE/not-detached" ]; then
+    return 1
+  fi
+  rm -f "$FM_FAKE_STATE/not-detached"
+}
 case "${1:-}" in
   print)
     case "$domain" in
@@ -170,7 +193,7 @@ semaphores = {
 }
 properties = runatload | inferred program
 EOF
-        if [ ! -f "$FM_FAKE_STATE/bootstrap-does-not-start" ]; then
+        if [ ! -f "$FM_FAKE_STATE/bootstrap-does-not-start" ] && guard_takes_session bootstrap; then
           printf 'true\n' > "$FM_FAKE_HERDR_RUNNING"
           printf '%s\n' "$FM_FAKE_AQUA_PID" > "$FM_FAKE_STATE/socket-owner"
         fi
@@ -183,8 +206,9 @@ EOF
     case "$label" in
       dev.firstmate.remote-job) : ;;
       *)
-        # The real job execs the guard, which stops a foreign server and
+        # The real job runs the guard, which stops a foreign server and
         # becomes the Aqua-born owner; the fixture models that outcome.
+        guard_takes_session kickstart || exit 0
         printf '%s\n' "$FM_FAKE_AQUA_PID" > "$FM_FAKE_STATE/socket-owner"
         if [ -f "$FM_FAKE_STATE/kickstart-delay" ]; then
           cp "$FM_FAKE_STATE/kickstart-delay" "$FM_FAKE_STATE/herdr-delay"
@@ -249,6 +273,33 @@ set -u
 running=$(cat "$FM_FAKE_HERDR_RUNNING" 2>/dev/null || printf 'false')
 case "${1:-} ${2:-}" in
   "status --json")
+    # After the guard stops the old server, status reports no server until its
+    # replacement comes up guard-stopped status calls later.
+    if [ -f "$FM_FAKE_STATE/guard-stopped" ]; then
+      left=$(cat "$FM_FAKE_STATE/guard-stopped")
+      if [ "$left" -gt 0 ]; then
+        printf '%s\n' "$((left - 1))" > "$FM_FAKE_STATE/guard-stopped"
+        printf 'false\n' > "$FM_FAKE_HERDR_RUNNING"
+      else
+        rm -f "$FM_FAKE_STATE/guard-stopped" "$FM_FAKE_STATE/not-detached"
+        printf '%s\n' "$FM_FAKE_AQUA_PID" > "$FM_FAKE_STATE/socket-owner"
+        printf 'true\n' > "$FM_FAKE_HERDR_RUNNING"
+      fi
+      running=$(cat "$FM_FAKE_HERDR_RUNNING")
+    elif [ -f "$FM_FAKE_STATE/guard-pending" ]; then
+      left=$(cat "$FM_FAKE_STATE/guard-pending")
+      if [ "$left" -gt 0 ]; then
+        printf '%s\n' "$((left - 1))" > "$FM_FAKE_STATE/guard-pending"
+      else
+        rm -f "$FM_FAKE_STATE/guard-pending"
+        marker="$HOME/Library/Caches/dev.firstmate.herdr.fm-remote.restart"
+        if [ -f "$marker" ]; then
+          rm -f "$marker"
+          printf 'async\n' >> "$FM_FAKE_STATE/restart-marker-consumed"
+          printf '6\n' > "$FM_FAKE_STATE/guard-stopped"
+        fi
+      fi
+    fi
     if [ -f "$FM_FAKE_STATE/herdr-delay" ]; then
       delay=$(cat "$FM_FAKE_STATE/herdr-delay")
       if [ "$delay" -gt 0 ]; then
@@ -260,9 +311,26 @@ case "${1:-} ${2:-}" in
         running=true
       fi
     fi
-    printf '{"client":{"version":"0.7.5","protocol":16},"server":{"running":%s,"socket":"%s"}}\n' "$running" "$FM_FAKE_HERDR_SOCKET"
+    detached=true
+    [ ! -f "$FM_FAKE_STATE/not-detached" ] || detached=false
+    if [ -f "$FM_FAKE_STATE/pre-capabilities" ] || [ "$running" != true ]; then
+      printf '{"client":{"version":"0.9.0","protocol":21},"server":{"running":%s,"socket":"%s"}}\n' "$running" "$FM_FAKE_HERDR_SOCKET"
+    else
+      printf '{"client":{"version":"0.9.1","protocol":22},"server":{"running":%s,"socket":"%s","capabilities":{"detached_server_daemon":%s}}}\n' "$running" "$FM_FAKE_HERDR_SOCKET" "$detached"
+    fi
+    ;;
+  "server stop")
+    printf 'server stop\n' >> "$FM_FAKE_STATE/herdr-calls"
+    printf 'false\n' > "$FM_FAKE_HERDR_RUNNING"
     ;;
   "server "*|"server ")
+    printf 'server start\n' >> "$FM_FAKE_STATE/herdr-calls"
+    # Herdr reports detached_server_daemon only for a session leader.
+    if [ "$(ps -o pgid= -p "$$" | tr -d ' ')" = "$$" ]; then
+      rm -f "$FM_FAKE_STATE/not-detached"
+    else
+      touch "$FM_FAKE_STATE/not-detached"
+    fi
     printf 'true\n' > "$FM_FAKE_HERDR_RUNNING"
     ;;
 esac
@@ -617,6 +685,75 @@ expect_code 0 "$DOCTOR_RC" "the Aqua-owner fixture could not be initialized"
 assert_contains "$DOCTOR_OUT" "check herdr-server=ok: session fm-remote is running in the Aqua login session (pid $AQUA_HOLDER_PID, launchd)" \
   "a launchd-born owner was not reported with its pid and birth"
 
+touch "$CASE_STATE/not-detached"
+: > "$CASE_LAUNCHCTL_LOG"
+doctor
+expect_code 0 "$DOCTOR_RC" "an Aqua-born foreground server blocked readiness"
+assert_contains "$DOCTOR_OUT" "check herdr-server=notice: session fm-remote is running in the Aqua login session (pid $AQUA_HOLDER_PID, launchd), but it is not a session-leader server" \
+  "the doctor did not report the saved-machine notice"
+assert_contains "$DOCTOR_OUT" 'action: herdr-server: while the host is quiet, rerun this command with --fix --restart-herdr' \
+  "the notice did not name the operator-run restart"
+doctor --fix
+expect_code 0 "$DOCTOR_RC" "a plain --fix failed over a saved-machine notice"
+assert_no_grep 'bootout\|kickstart' "$CASE_LAUNCHCTL_LOG" "a plain --fix restarted a healthy Aqua-born server"
+[ -f "$CASE_STATE/not-detached" ] || fail "a plain --fix replaced a healthy Aqua-born server"
+assert_contains "$DOCTOR_OUT" 'check herdr-server=notice:' "a plain --fix cleared the notice without a restart"
+
+# The automatic readiness gate runs a plain --fix when another gap exists; its
+# launch-agent reload must leave the worker-born server and its panes alone.
+printf '%s\n' "$WORKER_HOLDER_PID" > "$CASE_STATE/socket-owner"
+rm -f "$CASE_STATE/loaded-$LABEL"
+: > "$CASE_LAUNCHCTL_LOG"
+doctor --fix
+expect_code 0 "$DOCTOR_RC" "the automatic reload failed over a saved-machine notice"
+assert_grep "kickstart gui/$(id -u)/$LABEL" "$CASE_LAUNCHCTL_LOG" "the fixture did not reload the unloaded launch agent"
+assert_absent "$CASE_STATE/restart-marker-consumed" "an automatic reload asked the guard to replace a healthy server"
+[ -f "$CASE_STATE/not-detached" ] || fail "an automatic reload replaced a healthy worker-born server"
+assert_contains "$DOCTOR_OUT" "check herdr-server=notice: session fm-remote is running in the Aqua login session (pid $WORKER_HOLDER_PID, worker)" \
+  "the worker-born server did not survive the automatic reload"
+
+printf '1000\n' > "$CASE_STATE/guard-delay"
+doctor --fix --restart-herdr
+assert_contains "$DOCTOR_OUT" 'fix herdr-server=failed:' "an operator restart the guard never read was reported applied"
+assert_contains "$DOCTOR_OUT" 'check herdr-server=notice:' "an operator restart the guard never read cleared the notice"
+assert_absent "$CASE_HOME/Library/Caches/$LABEL.restart" "a timed-out operator restart left its marker for a later automatic reload"
+rm -f "$CASE_STATE/guard-pending"
+[ -f "$CASE_STATE/not-detached" ] || fail "the timed-out restart fixture replaced the server"
+
+printf '0\n' > "$CASE_STATE/guard-delay"
+: > "$CASE_LAUNCHCTL_LOG"
+doctor --fix --restart-herdr
+expect_code 0 "$DOCTOR_RC" "--fix --restart-herdr did not wait for a slow guard to replace the server"
+assert_contains "$DOCTOR_OUT" 'fix herdr-server=applied:' "the awaited operator restart was not reported applied"
+assert_absent "$CASE_STATE/guard-stopped" "the doctor reported the restart applied while the session had no server"
+assert_grep async "$CASE_STATE/restart-marker-consumed" "the doctor removed the marker before a slow guard read it"
+assert_absent "$CASE_HOME/Library/Caches/$LABEL.restart" "the operator restart left its marker behind"
+assert_absent "$CASE_STATE/not-detached" "the slow guard did not start a session-leader server"
+assert_contains "$DOCTOR_OUT" "check herdr-server=ok: session fm-remote is running in the Aqua login session (pid $AQUA_HOLDER_PID, launchd)" \
+  "the doctor did not confirm the server a slow guard restarted"
+
+printf '%s\n' "$WORKER_HOLDER_PID" > "$CASE_STATE/socket-owner"
+touch "$CASE_STATE/not-detached"
+rm -f "$CASE_STATE/restart-marker-consumed"
+: > "$CASE_LAUNCHCTL_LOG"
+doctor --fix --restart-herdr
+expect_code 0 "$DOCTOR_RC" "--fix --restart-herdr did not replace the Aqua-born foreground server"
+assert_grep "kickstart gui/$(id -u)/$LABEL" "$CASE_LAUNCHCTL_LOG" "the operator restart did not go through launchd"
+assert_no_grep 'kickstart -k' "$CASE_LAUNCHCTL_LOG" "a reload killed the guard it had just bootstrapped"
+assert_grep bootstrap "$CASE_STATE/restart-marker-consumed" "the operator restart did not reach the guard"
+assert_absent "$CASE_HOME/Library/Caches/$LABEL.restart" "the operator restart left its marker behind"
+assert_absent "$CASE_STATE/not-detached" "the fixture did not start a session-leader server"
+assert_contains "$DOCTOR_OUT" "check herdr-server=ok: session fm-remote is running in the Aqua login session (pid $AQUA_HOLDER_PID, launchd)" \
+  "the doctor did not confirm the restarted server"
+
+touch "$CASE_STATE/pre-capabilities"
+doctor
+expect_code 0 "$DOCTOR_RC" "an Aqua-born server without the session-leader capability was not ready"
+assert_contains "$DOCTOR_OUT" "check herdr-server=ok: session fm-remote is running in the Aqua login session (pid $AQUA_HOLDER_PID, launchd)" \
+  "a server predating the session-leader capability was judged by it"
+rm -f "$CASE_STATE/pre-capabilities"
+pass "only an operator --restart-herdr replaces an Aqua-born foreground server"
+
 printf '%s\n' "$BACKGROUND_HOLDER_PID" > "$CASE_STATE/socket-owner"
 printf 'background job\n' > "$CASE_STATE/user-loaded-$LABEL"
 doctor
@@ -651,7 +788,7 @@ assert_contains "$DOCTOR_OUT" 'check launchagent-loaded=ok:' "a healthy loaded c
 doctor --fix
 expect_code 0 "$DOCTOR_RC" "--fix did not hand the session back to the launch agent"
 assert_contains "$DOCTOR_OUT" 'fix herdr-server=applied:' "--fix did not report the takeover through the launch agent"
-assert_grep "kickstart -k gui/$(id -u)/$LABEL" "$CASE_LAUNCHCTL_LOG" "the takeover did not go through launchd"
+assert_grep "kickstart gui/$(id -u)/$LABEL" "$CASE_LAUNCHCTL_LOG" "the takeover did not go through launchd"
 assert_contains "$DOCTOR_OUT" "check herdr-server=ok: session fm-remote is running in the Aqua login session (pid $AQUA_HOLDER_PID, launchd)" \
   "the launch-agent-owned server was not confirmed after the takeover"
 assert_no_dangerous_calls "the takeover reached for auto-login, FileVault, or the keychain"
@@ -777,7 +914,25 @@ expect_code 0 "$DOCTOR_RC" "--fix did not start the herdr server on linux"
 assert_contains "$DOCTOR_OUT" 'fix herdr-server=applied:' "--fix did not report starting the server"
 assert_contains "$DOCTOR_OUT" 'check herdr-server=ok:' "the started server was not confirmed by the re-check"
 [ ! -s "$CASE_LAUNCHCTL_LOG" ] || fail "the linux path invoked launchctl"
+assert_absent "$CASE_STATE/not-detached" "the linux server was not started as a session leader"
 pass "a non-darwin host skips launch agents and starts its herdr server directly"
+
+touch "$CASE_STATE/not-detached"
+: > "$CASE_STATE/herdr-calls"
+doctor
+expect_code 0 "$DOCTOR_RC" "a linux foreground server blocked readiness"
+assert_contains "$DOCTOR_OUT" 'check herdr-server=notice: session fm-remote is running, but it is not a session-leader server' \
+  "the linux saved-machine notice was not reported"
+doctor --fix
+expect_code 0 "$DOCTOR_RC" "a plain --fix failed over a linux saved-machine notice"
+assert_no_grep 'server' "$CASE_STATE/herdr-calls" "a plain --fix restarted a healthy linux server"
+doctor --fix --restart-herdr
+expect_code 0 "$DOCTOR_RC" "--fix --restart-herdr did not replace the linux foreground server"
+[ "$(cat "$CASE_STATE/herdr-calls")" = "$(printf 'server stop\nserver start')" ] \
+  || fail "the linux restart did not stop then start the server: $(cat "$CASE_STATE/herdr-calls")"
+assert_absent "$CASE_STATE/not-detached" "the linux restart did not start a session leader"
+assert_contains "$DOCTOR_OUT" 'check herdr-server=ok: session fm-remote is running' "the restarted linux server was not confirmed"
+pass "only an operator --restart-herdr restarts a linux server as a session leader"
 
 # --- --fix may add only owned wrappers for version-manager tools -------------
 
@@ -886,4 +1041,3 @@ assert_contains "$DOCTOR_OUT" 'check entrypoint-link=human:' "an operator-owned 
   || fail "--fix overwrote a file it did not create"
 unset FM_ROOT_OVERRIDE
 pass "the entrypoint symlink is recreated when absent and never overwritten when operator-owned"
-

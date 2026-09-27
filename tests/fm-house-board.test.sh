@@ -61,8 +61,8 @@ if compare:
   calls[path] = {"status":"diverged","ahead_by":ahead,"behind_by":1,"commits":listed[:1]}
  else:
   calls[path] = listed[(page - 1) * size:page * size]
- with open(os.environ["FM_HOME"] + "/compare-pages", "a") as log:
-  log.write(str(page) + "\n")
+  with open(os.environ["FM_HOME"] + "/compare-pages", "a") as log:
+   log.write(str(page) + "\n")
 pulls = re.fullmatch(r"repos/jazz127/demo/pulls\?state=all&per_page=(\d+)&page=(\d+)", path)
 if pulls and os.environ.get("FAKE_PULLS_TRUNCATE"):
  size, page = int(pulls.group(1)), int(pulls.group(2))

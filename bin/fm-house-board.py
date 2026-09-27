@@ -145,27 +145,16 @@ def house_comparison(fork, base, head):
     path = f"repos/{fork}/compare/{base}...{head}"
     comparison = api(f"{path}?per_page=1&page=1", "{status,ahead_by,behind_by}")
     commits = []
-    # Keep adaptive halving aligned with every prior page boundary.
-    page_size = 32
-    offset = 0
-    for _ in range(1, 1001):
+    page_size = 30
+    for page in range(1, 1001):
         if len(commits) >= comparison["ahead_by"]:
             break
-        while True:
-            page = offset // page_size + 1
-            try:
-                part = api(f"{path}?per_page={page_size}&page={page}", "[.commits[].sha]")
-                break
-            except TruncatedResponse:
-                if page_size == 1:
-                    raise RuntimeError(f"GitHub response for {path} is still truncated at one item; refusing to render a partial board")
-                page_size = max(1, page_size // 2)
+        part = api(f"{path}?per_page={page_size}&page={page}", "[.commits[].sha]")
         if not isinstance(part, list):
             raise RuntimeError(f"GitHub commit list was not an array for {path}")
         commits.extend(part)
         if len(part) < page_size:
             break
-        offset += len(part)
     if len(commits) != comparison["ahead_by"]:
         raise RuntimeError(f"GitHub listed {len(commits)} of {comparison['ahead_by']} house commits for {path}; "
                            "refusing to render a partial board")

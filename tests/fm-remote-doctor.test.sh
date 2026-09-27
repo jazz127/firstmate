@@ -273,7 +273,20 @@ set -u
 running=$(cat "$FM_FAKE_HERDR_RUNNING" 2>/dev/null || printf 'false')
 case "${1:-} ${2:-}" in
   "status --json")
-    if [ -f "$FM_FAKE_STATE/guard-pending" ]; then
+    # After the guard stops the old server, status reports no server until its
+    # replacement comes up guard-stopped status calls later.
+    if [ -f "$FM_FAKE_STATE/guard-stopped" ]; then
+      left=$(cat "$FM_FAKE_STATE/guard-stopped")
+      if [ "$left" -gt 0 ]; then
+        printf '%s\n' "$((left - 1))" > "$FM_FAKE_STATE/guard-stopped"
+        printf 'false\n' > "$FM_FAKE_HERDR_RUNNING"
+      else
+        rm -f "$FM_FAKE_STATE/guard-stopped" "$FM_FAKE_STATE/not-detached"
+        printf '%s\n' "$FM_FAKE_AQUA_PID" > "$FM_FAKE_STATE/socket-owner"
+        printf 'true\n' > "$FM_FAKE_HERDR_RUNNING"
+      fi
+      running=$(cat "$FM_FAKE_HERDR_RUNNING")
+    elif [ -f "$FM_FAKE_STATE/guard-pending" ]; then
       left=$(cat "$FM_FAKE_STATE/guard-pending")
       if [ "$left" -gt 0 ]; then
         printf '%s\n' "$((left - 1))" > "$FM_FAKE_STATE/guard-pending"
@@ -281,9 +294,9 @@ case "${1:-} ${2:-}" in
         rm -f "$FM_FAKE_STATE/guard-pending"
         marker="$HOME/Library/Caches/dev.firstmate.herdr.fm-remote.restart"
         if [ -f "$marker" ]; then
-          rm -f "$marker" "$FM_FAKE_STATE/not-detached"
+          rm -f "$marker"
           printf 'async\n' >> "$FM_FAKE_STATE/restart-marker-consumed"
-          printf '%s\n' "$FM_FAKE_AQUA_PID" > "$FM_FAKE_STATE/socket-owner"
+          printf '6\n' > "$FM_FAKE_STATE/guard-stopped"
         fi
       fi
     fi
@@ -300,7 +313,7 @@ case "${1:-} ${2:-}" in
     fi
     detached=true
     [ ! -f "$FM_FAKE_STATE/not-detached" ] || detached=false
-    if [ -f "$FM_FAKE_STATE/pre-capabilities" ]; then
+    if [ -f "$FM_FAKE_STATE/pre-capabilities" ] || [ "$running" != true ]; then
       printf '{"client":{"version":"0.9.0","protocol":21},"server":{"running":%s,"socket":"%s"}}\n' "$running" "$FM_FAKE_HERDR_SOCKET"
     else
       printf '{"client":{"version":"0.9.1","protocol":22},"server":{"running":%s,"socket":"%s","capabilities":{"detached_server_daemon":%s}}}\n' "$running" "$FM_FAKE_HERDR_SOCKET" "$detached"
@@ -707,11 +720,12 @@ assert_absent "$CASE_HOME/Library/Caches/$LABEL.restart" "a timed-out operator r
 rm -f "$CASE_STATE/guard-pending"
 [ -f "$CASE_STATE/not-detached" ] || fail "the timed-out restart fixture replaced the server"
 
-printf '3\n' > "$CASE_STATE/guard-delay"
+printf '0\n' > "$CASE_STATE/guard-delay"
 : > "$CASE_LAUNCHCTL_LOG"
 doctor --fix --restart-herdr
 expect_code 0 "$DOCTOR_RC" "--fix --restart-herdr did not wait for a slow guard to replace the server"
 assert_contains "$DOCTOR_OUT" 'fix herdr-server=applied:' "the awaited operator restart was not reported applied"
+assert_absent "$CASE_STATE/guard-stopped" "the doctor reported the restart applied while the session had no server"
 assert_grep async "$CASE_STATE/restart-marker-consumed" "the doctor removed the marker before a slow guard read it"
 assert_absent "$CASE_HOME/Library/Caches/$LABEL.restart" "the operator restart left its marker behind"
 assert_absent "$CASE_STATE/not-detached" "the slow guard did not start a session-leader server"

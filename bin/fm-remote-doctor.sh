@@ -180,28 +180,24 @@ herdr_server_status_json() {
   fm_backend_herdr_cli "$HERDR_SESSION_NAME" status --json 2>/dev/null
 }
 
-herdr_server_running() {
-  local running
-  running=$(herdr_server_status_json | jq -r '.server.running // false' 2>/dev/null) || return 1
-  [ "$running" = true ]
+herdr_server_running() { # <status-json>
+  [ "$(printf '%s' "$1" | jq -r '.server.running == true' 2>/dev/null)" = true ]
 }
 
 # Herdr 0.9.1 saved machines refuse a server that reports
 # detached_server_daemon=false; an older server without the capability is not
 # judged by it.
-herdr_server_needs_session_leader() {
-  local refused
-  refused=$(herdr_server_status_json | jq -r '.server.capabilities.detached_server_daemon == false' 2>/dev/null) || return 1
-  [ "$refused" = true ]
+herdr_server_needs_session_leader() { # <status-json>
+  [ "$(printf '%s' "$1" | jq -r '.server.capabilities.detached_server_daemon == false' 2>/dev/null)" = true ]
 }
 
 # Birth of the process serving the session, as the guard classifies it:
 # prints "<birth> <pid>" (launchd, worker, ssh, or unknown), "unproven" when
 # no herdr process can be shown to hold the socket, or "nolsof" when lsof does
 # not resolve. bin/fm-remote-herdr-owner-lib.sh owns the markers.
-herdr_server_birth() {
+herdr_server_birth() { # <status-json>
   local socket owner rc birth
-  socket=$(herdr_server_status_json | jq -r '.server.socket // empty' 2>/dev/null) || socket=
+  socket=$(printf '%s' "$1" | jq -r '.server.socket // empty' 2>/dev/null) || socket=
   owner=$(fm_remote_herdr_socket_owner "$socket"); rc=$?
   if [ "$rc" -eq 2 ]; then
     printf 'nolsof\n'
@@ -217,11 +213,11 @@ herdr_server_birth() {
 
 # On darwin the session is ready only when its server was born in the Aqua
 # login session; elsewhere any running server is.
-herdr_server_aqua_owned() {
+herdr_server_aqua_owned() { # <status-json>
   local birth
-  herdr_server_running || return 1
+  herdr_server_running "$1" || return 1
   [ "$PLATFORM" = darwin ] || return 0
-  birth=$(herdr_server_birth)
+  birth=$(herdr_server_birth "$1")
   fm_remote_herdr_birth_is_aqua "${birth%% *}"
 }
 
@@ -681,8 +677,10 @@ check_launch_agent_loaded() { # <resolved-login-shell>
     "close the login-session gap first; a launch agent can only be bootstrapped into an existing GUI session"
 }
 
-record_herdr_server_running() { # <evidence>
-  if herdr_server_needs_session_leader; then
+record_herdr_server_running() { # <status-json> <evidence>
+  local status=$1
+  shift
+  if herdr_server_needs_session_leader "$status"; then
     record herdr-server "notice: $1, but it is not a session-leader server, so Herdr saved machines refuse it" \
       "while the host is quiet, rerun this command with --fix --restart-herdr; the server restarts and its panes close"
     return 0
@@ -696,16 +694,17 @@ check_herdr_server() {
       "install the missing tool reported above, then rerun this command"
     return 0
   fi
-  if herdr_server_running; then
+  local status birth
+  status=$(herdr_server_status_json) || status=
+  if herdr_server_running "$status"; then
     if [ "$PLATFORM" != darwin ]; then
-      record_herdr_server_running "session $HERDR_SESSION_NAME is running"
+      record_herdr_server_running "$status" "session $HERDR_SESSION_NAME is running"
       return 0
     fi
-    local birth
-    birth=$(herdr_server_birth)
+    birth=$(herdr_server_birth "$status")
     case "$birth" in
       launchd\ *|worker\ *)
-        record_herdr_server_running "session $HERDR_SESSION_NAME is running in the Aqua login session (pid ${birth#* }, ${birth%% *})"
+        record_herdr_server_running "$status" "session $HERDR_SESSION_NAME is running in the Aqua login session (pid ${birth#* }, ${birth%% *})"
         ;;
       nolsof)
         record herdr-server "human: session $HERDR_SESSION_NAME is running but lsof does not resolve, so its server's birth cannot be proven" \
@@ -828,11 +827,12 @@ reload_launch_agent() { # <check-to-report-under>
 }
 
 wait_for_herdr_server() {
-  local i=0
+  local i=0 status
   while [ "$i" -lt 20 ]; do
-    if herdr_server_aqua_owned; then
+    status=$(herdr_server_status_json) || status=
+    if herdr_server_aqua_owned "$status"; then
       [ "$HERDR_RESTART_PENDING" = 1 ] || return 0
-      [ ! -e "$HERDR_RESTART_MARKER" ] && ! herdr_server_needs_session_leader && return 0
+      [ ! -e "$HERDR_RESTART_MARKER" ] && ! herdr_server_needs_session_leader "$status" && return 0
     fi
     i=$((i + 1))
     sleep 0.5
@@ -844,7 +844,7 @@ stop_herdr_server() {
   local i=0
   fm_backend_herdr_cli "$HERDR_SESSION_NAME" server stop >/dev/null 2>&1 || true
   while [ "$i" -lt 20 ]; do
-    herdr_server_running || return 0
+    herdr_server_running "$(herdr_server_status_json)" || return 0
     i=$((i + 1))
     sleep 0.5
   done

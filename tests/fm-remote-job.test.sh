@@ -221,7 +221,8 @@ cat > "$PIDFD_NO_PS_BIN/uname" <<SH
 exec "$UNAME_BIN" "\$@"
 SH
 chmod +x "$PIDFD_NO_PS_BIN/python3" "$PIDFD_NO_PS_BIN/uname"
-PIDFD_NO_PS_MARKER="$TMP_ROOT/pidfd-no-ps-marker" \
+PIDFD_NO_PS_MARKER="$TMP_ROOT/pidfd-no-ps-marker"
+PIDFD_NO_PS_MARKER="$PIDFD_NO_PS_MARKER" \
   sh -c 'trap '\''touch "$PIDFD_NO_PS_MARKER"; exit 0'\'' TERM; sleep 30' & PIDFD_NO_PS_PID=$!
 PIDFD_NO_PS_START=$(fm_remote_job_process_start "$PIDFD_NO_PS_PID")
 PIDFD_NO_PS_COMMAND=$(fm_remote_job_process_command "$PIDFD_NO_PS_PID")
@@ -232,6 +233,54 @@ PIDFD_NO_PS_MARKER="$PIDFD_NO_PS_MARKER" PATH="$PIDFD_NO_PS_BIN" \
 wait "$PIDFD_NO_PS_PID" 2>/dev/null || fail "pidfd TERM did not reach the intended process"
 [ -f "$PIDFD_NO_PS_MARKER" ] || fail "pidfd TERM did not trigger the intended process handler"
 pass "pidfd signaling reaches the intended process without PATH ps"
+
+# Change the synthetic proc record after the shell check but before Python's
+# pidfd check. A reused PID or malformed stat must never receive the signal.
+PIDFD_RECHECK_BIN="$TMP_ROOT/pidfd-recheck-bin"
+PIDFD_RECHECK_PROC="$TMP_ROOT/pidfd-recheck-proc"
+mkdir -p "$PIDFD_RECHECK_BIN" "$PIDFD_RECHECK_PROC/sys/kernel/random"
+cp /proc/sys/kernel/random/boot_id "$PIDFD_RECHECK_PROC/sys/kernel/random/boot_id"
+cat > "$PIDFD_RECHECK_BIN/python3" <<SH
+#!/bin/sh
+"$PYTHON3_BIN" - "\$FM_PIDFD_STAT_PATH" "\$FM_PIDFD_REVALIDATE_MODE" <<'PY'
+import sys
+path, mode = sys.argv[1:]
+with open(path, encoding="ascii") as handle:
+    line = handle.read()
+if mode == "reuse":
+    prefix, fields = line.rsplit(") ", 1)
+    parts = fields.split()
+    parts[19] = str(int(parts[19]) + 1)
+    line = prefix + ") " + " ".join(parts) + "\n"
+else:
+    line = "malformed proc stat\n"
+with open(path, "w", encoding="ascii") as handle:
+    handle.write(line)
+PY
+exec "$PYTHON3_BIN" "\$@"
+SH
+chmod +x "$PIDFD_RECHECK_BIN/python3"
+for PIDFD_REVALIDATE_MODE in reuse malformed; do
+  sleep 30 & PIDFD_RECHECK_PID=$!
+  mkdir -p "$PIDFD_RECHECK_PROC/$PIDFD_RECHECK_PID"
+  cp "/proc/$PIDFD_RECHECK_PID/stat" "$PIDFD_RECHECK_PROC/$PIDFD_RECHECK_PID/stat"
+  PIDFD_RECHECK_START=$(fm_remote_job_process_start "$PIDFD_RECHECK_PID")
+  PIDFD_RECHECK_COMMAND=$(fm_remote_job_process_command "$PIDFD_RECHECK_PID")
+  if FM_PROC_ROOT_OVERRIDE="$PIDFD_RECHECK_PROC" \
+    FM_PIDFD_STAT_PATH="$PIDFD_RECHECK_PROC/$PIDFD_RECHECK_PID/stat" \
+    FM_PIDFD_REVALIDATE_MODE="$PIDFD_REVALIDATE_MODE" \
+    PATH="$PIDFD_RECHECK_BIN:$PATH" \
+    fm_remote_job_signal_identity "$PIDFD_RECHECK_PID" TERM \
+    "$PIDFD_RECHECK_START" "$PIDFD_RECHECK_COMMAND"; then
+    kill -KILL "$PIDFD_RECHECK_PID" 2>/dev/null || true
+    wait "$PIDFD_RECHECK_PID" 2>/dev/null || true
+    fail "pidfd accepted a changed $PIDFD_REVALIDATE_MODE proc record"
+  fi
+  kill -0 "$PIDFD_RECHECK_PID" 2>/dev/null || fail "pidfd signalled a changed $PIDFD_REVALIDATE_MODE proc record"
+  kill -KILL "$PIDFD_RECHECK_PID" 2>/dev/null || true
+  wait "$PIDFD_RECHECK_PID" 2>/dev/null || true
+done
+pass "pidfd revalidation rejects PID reuse and malformed proc records"
 
 FALLBACK_RECHECK_BIN="$TMP_ROOT/fallback-recheck-bin"
 mkdir -p "$FALLBACK_RECHECK_BIN"

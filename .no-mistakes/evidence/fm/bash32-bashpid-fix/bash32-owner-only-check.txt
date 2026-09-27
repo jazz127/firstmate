@@ -1,0 +1,7 @@
+## C: nested subshell; kill only the owner (outer $$) while the watchdog's own parent survives, so only the owner check can end the command
+outer(owner)=89146 middle-subshell=89150 watchdog=89151 bounded-cmd=89157 cmd=alive
+after killing only the owner: middle=gone watchdog-parent-now= cmd=gone
+## C-control: same shape, owner kept alive -> command must keep running
+(eval):15: no matches found: /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-bashpid.IgAnje/d.*
+owner alive after 3s: cmd=alive
+after owner killed: cmd=gone

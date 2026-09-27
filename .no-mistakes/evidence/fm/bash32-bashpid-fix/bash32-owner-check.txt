@@ -1,0 +1,9 @@
+## A: direct call in a top-level /bin/bash; owner must resolve to that shell's parent (PPID)
+parent=76717 bounded-cmd=76740 cmd-before-kill=alive
+after killing parent (owner): cmd=gone
+## B: call inside a subshell; owner must stay the outer shell ($$), and the subshell pid must be resolved correctly
+outer=79005 subshell=79015 watchdog(perl, exec-replaced subshell)=79015 bounded-cmd=79022
+watchdog replaced the subshell in place (same pid): yes
+watchdog proc: 79015 perl -MPOSIX=WNOHANG,setpgid -MTime::HiRes=time -e \01
+cmd-before-kill=alive
+after killing outer shell (owner): cmd=gone

@@ -1,0 +1,10 @@
+=== base: /bin/bash 3.2.57(1)-release ===
+/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-bashpid.IgAnje/base/bin/fm-timeout-lib.sh: line 209: BASHPID: unbound variable
+subshell rc=127
+/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-bashpid.IgAnje/base/bin/fm-timeout-lib.sh: line 209: BASHPID: unbound variable
+direct rc=127
+=== head: /bin/bash 3.2.57(1)-release ===
+subshell-ran
+subshell rc=3
+direct-ran
+direct rc=4

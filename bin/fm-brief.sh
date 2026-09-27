@@ -14,7 +14,7 @@
 # charters still use a single `{TASK}` charter fill. Firstmate may adjust other
 # sections when the task genuinely deviates (e.g. working an existing external
 # PR instead of shipping a new one).
-# Usage: fm-brief.sh <task-id> <repo-name> --mode <no-mistakes|direct-PR|local-only> [--branch-prefix <prefix>] [--forge <none|gerrit> [--shape squash]] [--herdr-lab]
+# Usage: fm-brief.sh <task-id> <repo-name> --mode <no-mistakes|direct-PR|local-only> [--branch-prefix <prefix>] [--house-feature <name> --branch-base <main|house>] [--forge <none|gerrit> [--shape squash]] [--herdr-lab]
 #        fm-brief.sh <task-id> <repo-name> --scout [--herdr-lab]
 #        fm-brief.sh <task-id> --secondmate {<project>...|--no-projects}
 #   --scout writes the scout contract instead: the deliverable is a report at
@@ -59,6 +59,12 @@
 # standing per-project preference, and firstmate resolves it per task at intake
 # and passes the explicit flag. Refused on --scout and --secondmate: a scout
 # makes no branch and a charter is not a delivery contract.
+# --house-feature <name> selects a durable housefeature/<name> integration
+# branch while the ordinary ship branch remains <prefix><task-id>. The paired
+# --branch-base selects main for a contribution-ready feature, or house for a
+# captain-marked house-only feature. Both are required together on a PR-based
+# ship and refused elsewhere. The generated first action uses
+# fm-housefeature-start.sh to create or reuse the durable branch before work.
 # --forge names the project's forge, defaults to none, and is orthogonal to --mode
 # exactly as the registry's `forge=` token is. It is the captain's confirmed
 # registry binding, read from data/projects.md at intake and passed here; this
@@ -88,10 +94,10 @@
 # There is no --yolo flag here. The worker never owns merge decisions, so yolo is
 # a spawn-time and firstmate-side input only (AGENTS.md section 7).
 # Every scaffold's status protocol distinguishes the configured
-# declared-wait verb (FM_CLASSIFY_PAUSED_VERB, default "paused") from
-# "blocked:": pause for a known external wait expected to clear on its own, or
-# for a long job the worker launched itself and parks on with a stated bound;
-# blocked when firstmate must act.
+# declared-external-wait verb (FM_CLASSIFY_PAUSED_VERB, default "paused") from
+# "blocked:": pause for a known wait expected to clear on its own, including
+# the worker's own background work, pipeline or long command; blocked when
+# firstmate must act. A standing declaration is honored from first sight.
 # Emission-time syntax and legacy unknown-time handling are owned by
 # bin/fm-classify-lib.sh; each scaffold renders the stamp as a literal <epoch>
 # placeholder the worker replaces with a numeric Unix time as it appends, so a
@@ -143,13 +149,17 @@ esac
 # shellcheck source=bin/fm-dod-lib.sh
 . "$SCRIPT_DIR/fm-dod-lib.sh"
 PAUSED_VERB=${FM_CLASSIFY_PAUSED_VERB:-$FM_CLASSIFY_PAUSED_VERB_DEFAULT}
-CREWMATE_PAUSE_WAIT_EXAMPLES='an upstream release, a rate-limit reset, a scheduled window, or your own validation round'
-# A long job the worker launched itself is a declared wait too: an undeclared
-# idle pane reads as a possible wedge, and a wait with no stated bound hides a job
-# that died. Shared by the ship and scout status protocols.
-CREWMATE_SELF_JOB_WAIT_RULE="   The same applies to a long job you launched yourself (a build, a test suite, a long poll):
-   if you end a turn while it runs, append the \`$PAUSED_VERB:\` line first, naming the job and how long
-   you expect it to take, check on it again once that time has passed, and append \`working:\` when you resume."
+IFS= read -r -d '' CREWMATE_PAUSE_INSTRUCTIONS <<EOF || true
+   Use \`$PAUSED_VERB: {why}\` - distinct from \`blocked:\` - when deliberately waiting for work or a known external wait you expect to clear on its own, including your own validation round.
+   Before ending your turn with your own background shell or monitor still running, or before waiting on your own pipeline run or a long foreground command, append \`$PAUSED_VERB [at=<epoch>]: {job and completion condition}\` to the status file.
+   Name what you are waiting for and what will let you resume; do not repeat the declaration on every poll.
+   For a long job you launched yourself, append the \`$PAUSED_VERB:\` line first, naming the job and how long you expect it to take, check on it again once that time has passed, and append \`working:\` when you resume.
+   Do not declare active implementation or reasoning as a wait.
+   Firstmate then leaves your idle pane alone and rechecks it on a long cadence instead of treating it as a possible wedge.
+   When you know when the wait clears, include \`until <YYYY-MM-DDTHH:MMZ>\` (UTC) for a recheck at that time.
+   Follow the resolution rule below when the wait clears, then resume the task.
+   Use \`blocked:\` when you are stuck and need help.
+EOF
 
 resolve_directory_input() {
   local name=$1 path=$2 resolved
@@ -184,6 +194,10 @@ MODE=
 MODE_SET=0
 BRANCH_PREFIX=fm/
 BRANCH_PREFIX_SET=0
+HOUSE_FEATURE=
+HOUSE_FEATURE_SET=0
+BRANCH_BASE=
+BRANCH_BASE_SET=0
 FORGE=none
 FORGE_SET=0
 SHAPE=
@@ -198,6 +212,8 @@ for a in "$@"; do
     case "$want_value" in
       mode) MODE=$a; MODE_SET=1 ;;
       branch-prefix) BRANCH_PREFIX=$a; BRANCH_PREFIX_SET=1 ;;
+      house-feature) HOUSE_FEATURE=$a; HOUSE_FEATURE_SET=1 ;;
+      branch-base) BRANCH_BASE=$a; BRANCH_BASE_SET=1 ;;
       forge) FORGE=$a; FORGE_SET=1 ;;
       shape) SHAPE=$a; SHAPE_SET=1 ;;
       *) echo "error: internal parser state for --$want_value" >&2; exit 1 ;;
@@ -214,6 +230,10 @@ for a in "$@"; do
     --mode=*) MODE=${a#--mode=}; MODE_SET=1 ;;
     --branch-prefix) want_value="branch-prefix" ;;
     --branch-prefix=*) BRANCH_PREFIX=${a#--branch-prefix=}; BRANCH_PREFIX_SET=1 ;;
+    --house-feature) want_value="house-feature" ;;
+    --house-feature=*) HOUSE_FEATURE=${a#--house-feature=}; HOUSE_FEATURE_SET=1 ;;
+    --branch-base) want_value="branch-base" ;;
+    --branch-base=*) BRANCH_BASE=${a#--branch-base=}; BRANCH_BASE_SET=1 ;;
     --forge) want_value=forge ;;
     --forge=*) FORGE=${a#--forge=}; FORGE_SET=1 ;;
     --shape) want_value=shape ;;
@@ -252,6 +272,34 @@ if [ "$KIND" != ship ] && [ "$BRANCH_PREFIX_SET" -eq 1 ]; then
   echo "error: --branch-prefix applies only to ship briefs; a scout makes no branch and a secondmate charter is not a delivery contract" >&2
   exit 1
 fi
+if [ "$KIND" != ship ] && { [ "$HOUSE_FEATURE_SET" -eq 1 ] || [ "$BRANCH_BASE_SET" -eq 1 ]; }; then
+  echo "error: --house-feature and --branch-base apply only to ship briefs" >&2
+  exit 1
+fi
+if [ "$BRANCH_PREFIX" = housefeature/ ]; then
+  echo "error: a house-feature worker uses its ordinary fm/ task branch; select the durable target with --house-feature" >&2
+  exit 1
+fi
+if [ "$HOUSE_FEATURE_SET" -eq 1 ]; then
+  [ "$MODE" != local-only ] && [ "$FORGE" = none ] || {
+    echo "error: --house-feature requires a GitHub PR delivery mode" >&2
+    exit 1
+  }
+  case "$HOUSE_FEATURE" in
+    ''|*[!a-zA-Z0-9._-]*) echo "error: --house-feature must be a single branch-name component" >&2; exit 1 ;;
+  esac
+  git check-ref-format --branch "housefeature/$HOUSE_FEATURE" >/dev/null 2>&1 || {
+    echo "error: --house-feature gives an invalid branch name" >&2
+    exit 1
+  }
+  case "$BRANCH_BASE" in
+    main|house) ;;
+    *) echo "error: --house-feature requires --branch-base main or house" >&2; exit 1 ;;
+  esac
+elif [ "$BRANCH_BASE_SET" -eq 1 ]; then
+  echo "error: --branch-base applies only with --house-feature" >&2
+  exit 1
+fi
 case "$BRANCH_PREFIX" in
   *' '*) echo "error: --branch-prefix must not contain a space (got '$BRANCH_PREFIX')" >&2; exit 1 ;;
   -*) echo "error: --branch-prefix must not start with '-' (got '$BRANCH_PREFIX')" >&2; exit 1 ;;
@@ -284,6 +332,24 @@ if ! git check-ref-format --branch "$BRANCH" >/dev/null 2>&1; then
   exit 1
 fi
 printf -v BRANCH_Q '%q' "$BRANCH"
+BRANCH_SETUP="git checkout -b $BRANCH_Q --"
+BRANCH_SETUP_VERB="create your branch"
+BRANCH_NOTE=
+PR_BASE=
+if [ -n "$HOUSE_FEATURE" ]; then
+  PR_BASE="housefeature/$HOUSE_FEATURE"
+  printf -v HOUSE_FEATURE_Q '%q' "$HOUSE_FEATURE"
+  printf -v HOUSE_START_Q '%q' "$FM_ROOT/bin/fm-housefeature-start.sh"
+  BRANCH_SETUP="$HOUSE_START_Q $HOUSE_FEATURE_Q $BRANCH_BASE $BRANCH_Q"
+  BRANCH_SETUP_VERB="prepare your branch"
+  if [ "$BRANCH_BASE" = house ]; then
+    BRANCH_NOTE="House feature intake: house-only. Apply the existing \`house-only\` label to the integration pull request you open from \`$PR_BASE\` into \`house\`."
+  else
+    BRANCH_NOTE="House feature intake: main-based. Work on \`$BRANCH\` and deliver it into \`$PR_BASE\`; resolve later conflicts with \`house\` on the \`house\` integration line."
+  fi
+  BRANCH_NOTE="$BRANCH_NOTE
+The setup command may create only \`$PR_BASE\` at an existing fork base commit; the selected delivery path owns publishing your \`$BRANCH\` work."
+fi
 
 if [ "$KIND" = secondmate ] && [ "$HERDR_LAB" -eq 1 ]; then
   echo "error: --herdr-lab applies only to crewmate ship or scout briefs" >&2
@@ -577,13 +643,7 @@ The report is the only thing that survives, so anything worth keeping must be in
    Whenever you mention a PR anywhere - a status line, your terminal, a summary - write its full
    https:// URL exactly as the forge printed it, never a bare number such as "PR 108"; firstmate
    copies that URL from your line rather than assembling one.
-   Use \`$PAUSED_VERB: {why}\` - distinct from \`blocked:\` - ONLY when you are deliberately idling on a
-   known external wait you expect to clear on its own ($CREWMATE_PAUSE_WAIT_EXAMPLES):
-   firstmate then leaves your idle pane alone and rechecks it on a long cadence instead of
-   treating it as a possible wedge. When you know when the wait clears, say so in the line with
-   \`until <YYYY-MM-DDTHH:MMZ>\` (UTC) and firstmate rechecks at that time instead.
-$CREWMATE_SELF_JOB_WAIT_RULE
-   Use \`blocked:\` when you are stuck and need help.
+$CREWMATE_PAUSE_INSTRUCTIONS
 5. If you hit the same obstacle twice, append \`blocked [at=<epoch>]: {why}\` and stop; firstmate will help.
 6. If a decision belongs to a human (product choices, destructive actions),
    append \`needs-decision [at=<epoch>]: {summary of options}\` and stop. Firstmate will reply with the decision.
@@ -625,7 +685,7 @@ case "$MODE" in
     ;;
 esac
 RULE1=$(fm_ship_rule_one "$MODE" "$ID" "$BRANCH" "$FORGE") || exit 1
-DOD=$(fm_dod_block "$MODE" "$ID" "$BRANCH" "$FORGE") || exit 1
+DOD=$(fm_dod_block "$MODE" "$ID" "$BRANCH" "$FORGE" "$PR_BASE") || exit 1
 BOSUN_SECTION=
 if [ "$MODE" != local-only ] && { [ -f "$DATA/bosun-role.json" ] || [ -L "$DATA/bosun-role.json" ]; }; then
   BOSUN_SECTION="# Bosun publication authorization
@@ -649,7 +709,8 @@ You are in a disposable git worktree of $REPO, at a detached HEAD on a clean def
 The path check is authoritative: \`git rev-parse --git-dir\` and \`git rev-parse --git-common-dir\` can help inspect the repo, but they do not prove you are outside the primary checkout.
 If the top-level path is the primary checkout or not the worktree you were launched in, STOP - do not branch or commit here - append \`blocked [at=<epoch>]: launched in primary checkout, not an isolated worktree\` to the status file and stop.
 
-1. First action: create your branch: \`git checkout -b $BRANCH_Q --\`$SETUP2
+1. First action: $BRANCH_SETUP_VERB: \`$BRANCH_SETUP\`$SETUP2
+$BRANCH_NOTE
 
 # Rules
 $RULE1
@@ -666,15 +727,9 @@ $RULE1
    Whenever you mention a PR anywhere - a status line, your terminal, a summary - write its full
    https:// URL exactly as the forge printed it, never a bare number such as "PR 108"; firstmate
    copies that URL from your line rather than assembling one.
-   A mid-task \`working:\` line (including setup complete) is nonterminal: do not end the turn
-   after it unless a \`$PAUSED_VERB:\` line declares the wait; otherwise continue the same stage until a
-   defined \`done:\` gate under Definition of done.
-   Use \`$PAUSED_VERB: {why}\` - distinct from \`blocked:\` - ONLY when you are deliberately idling on a
-   known external wait you expect to clear on its own ($CREWMATE_PAUSE_WAIT_EXAMPLES):
-   firstmate then leaves your idle pane alone and rechecks it on a long
-   cadence instead of treating it as a possible wedge.
-$CREWMATE_SELF_JOB_WAIT_RULE
-   Use \`blocked:\` when you are stuck and need help.
+   A mid-task \`working:\` line (including setup complete) is nonterminal: do not end the
+   turn after it unless a \`$PAUSED_VERB:\` line declares the wait; otherwise continue the same stage until a defined \`done:\` gate under Definition of done.
+$CREWMATE_PAUSE_INSTRUCTIONS
 5. If you hit the same obstacle twice, append \`blocked [at=<epoch>]: {why}\` and stop; firstmate will help.
 6. If a decision belongs above the implementation worker (product choices, destructive actions),
    append \`needs-decision [at=<epoch>]: {summary of options}\` and stop. Firstmate will reply with the decision.

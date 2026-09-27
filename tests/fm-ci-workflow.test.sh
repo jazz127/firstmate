@@ -260,7 +260,7 @@ end
 house_path, main_path, required_path = ARGV
 house = YAML.load_file(house_path)
 pull_request = events(house_path).fetch("pull_request")
-raise "house workflow must target only house PRs" unless pull_request.fetch("branches") == ["house"]
+raise "house workflow must target house and durable feature PRs" unless pull_request.fetch("branches") == ["house", "housefeature/**"]
 raise "house workflow must not add push runs" unless events(house_path).keys == ["pull_request"]
 jobs = house.fetch("jobs")
 raise "house workflow must have one job" unless jobs.keys == ["house"]

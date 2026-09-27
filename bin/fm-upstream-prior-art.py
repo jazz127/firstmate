@@ -496,16 +496,55 @@ def verify_receipt(args):
 
 
 def section(record):
-    lines = ["## Prior art checked", "", f"Checked {record['captured_at']} in https://github.com/{record['context']['repo']}."]
-    if not record["candidates"]:
-        lines.append("No matching open pull requests or issues, or recent closed unmerged pull requests, were found by search.")
-    for item in record["candidates"]:
-        lines.append(f"- {item['url']} by @{item['author']} ({item['state']} {item['kind']}): {item['verdict']} - {item['reason']}")
+    captured = dt.datetime.fromisoformat(record["captured_at"]).date().isoformat()
+    repo = record["context"]["repo"]
+    candidates = record["candidates"]
+    lines = ["## Prior art checked", ""]
+    summary = [f"Searched open issues and pull requests, plus recently closed unmerged pull requests, in {repo} on {captured}."]
+    if not candidates:
+        summary.append("No matching work was found.")
+    elif record["verdict"] == "overlaps":
+        overlaps = [item for item in candidates if item["verdict"] == "overlaps"]
+        credited = "; ".join(
+            f"#{item['url'].rsplit('/', 1)[1]} by {item['author']}: {item['reason']}"
+            for item in overlaps
+        )
+        summary.append(f"Existing work overlaps: {credited}.")
+        remaining = len(candidates) - len(overlaps)
+        if remaining:
+            summary.append(f"The remaining {remaining} candidate{'s' if remaining != 1 else ''} were judged distinct.")
+    else:
+        summary.append("No existing work overlaps.")
+        closest = sorted(
+            candidates,
+            key=lambda item: (
+                -(
+                    8 * any(reason.startswith("linked issues:") for reason in item["reasons"])
+                    + 4 * any(reason.startswith("shared keywords:") for reason in item["reasons"])
+                    + 2 * any(reason.startswith("shared files:") for reason in item["reasons"])
+                ),
+                item["url"],
+            ),
+        )[:2]
+        if closest:
+            summary.append("The closest matches are " + "; ".join(
+                f"#{item['url'].rsplit('/', 1)[1]}: {item['reason']}" for item in closest
+            ) + ".")
+        remaining = len(candidates) - len(closest)
+        if remaining:
+            file_only = sum(
+                "shared files:" in " ".join(item["reasons"])
+                and not any(reason.startswith(("linked issues:", "shared keywords:")) for reason in item["reasons"])
+                for item in candidates if item not in closest
+            )
+            if file_only == remaining:
+                summary.append(f"The remaining {remaining} match{'es' if remaining != 1 else ''} only share files.")
+            else:
+                summary.append(f"The remaining {remaining} reviewed candidate{'s' if remaining != 1 else ''} were judged distinct.")
     if record["coverage"]["truncated"]:
-        lines.append("Search coverage was bounded: only the most relevant hits per query were read"
-                     + (f"; skipped queries: {', '.join(record['coverage']['dropped_queries'])}." if record["coverage"]["dropped_queries"] else "."))
-    if record["verdict"] == "overlaps":
-        lines.append(f"Captain decision: {record['captain_decision']}")
+        summary.append("Search coverage was bounded to the most relevant hits per query"
+                       + (f"; skipped queries: {', '.join(record['coverage']['dropped_queries'])}." if record['coverage']['dropped_queries'] else "."))
+    lines.append(" ".join(summary))
     return "\n".join(lines) + "\n"
 
 

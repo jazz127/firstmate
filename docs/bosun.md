@@ -2,7 +2,8 @@
 
 A Bosun is a persistent secondmate with a named maintainer scope, a Bosun role record, and its own evidence-backed memory.
 The contribution path is **Captain's Maneuver -> matching Bosun -> upstream PR -> Admiral's Maneuver**.
-A Captain's Maneuver is the existing house feature on a durable `housefeature/<name>` branch cut from the fork's untouched upstream mirror.
+A Captain's Maneuver is a main-based house feature on a durable `housefeature/<name>` branch, following the [fork-house branch guide](fork-house-branch.md#house-features).
+The `house-only` branch exception in that guide is outside this upstream contribution path.
 The older house-feature records keep their format and name.
 An Admiral's Maneuver is a Captain's Maneuver whose matching upstream PR has been observed merged.
 
@@ -63,7 +64,8 @@ Before publication, run the prior-art scan and record the verdict required by [`
 Use `bin/fm-upstream-prior-art.py publish` to open the PR from the captain's fork to upstream after validation; an automatic PR creation path must not bypass its receipt gate.
 `fm-pr-check.sh` reads the PR through its existing forge path and refuses registration unless the ordered Bosun, fork, upstream repository, and default branch match.
 Rerunning it for the same registered PR accepts the originally published commit series plus all linear follow-up commits and upstream refresh merges on top of it, scope-checks every follow-up commit against the ordered paths without requiring the latest upstream branch to be merged in first, and refreshes the recorded PR head and validation evidence; rewritten published history and a different PR for the same order are refused.
-The existing PR poll and contribution observer track checks and review feedback; route scope changes, ambiguous maintainer requests, policy conflicts, and consequential decisions through the parent channel.
+For contribution wakes, follow [Bearings' Contribution follow-up](../.agents/skills/bearings/SKILL.md#contribution-follow-up) in the owning Bosun home; the existing PR poll and contribution observer own checks, verdicts, and acknowledgement.
+Carry unresolved scope changes, ambiguous maintainer requests, policy conflicts, and consequential decisions through [captain-hold-lifecycle](../.agents/skills/captain-hold-lifecycle/SKILL.md) in that home and the ordinary parent channel.
 For review feedback that asks for a scope change, is an ambiguous maintainer request, or conflicts with policy, run `fm-bosun.py escalate --task <task> --feedback <review-url> --reason scope-change|ambiguous-request|policy-conflict --note <summary>` in the Bosun home.
 It adds one entry to the record's `review_events` and one `needs-decision` line on the parent channel; stop acting on that feedback until the captain decides.
 When the existing merge outcome reports that exact PR merged, it changes the record to `admirals-maneuver`.

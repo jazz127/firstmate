@@ -9,6 +9,9 @@ Keep the fork's `main` as a straight mirror of upstream `main`.
 Keep the fork's `main` identical to upstream `main`, with no house changes or other fork-owned commits on the mirror.
 The fork's GitHub default branch is `house`, so new pull requests default to the fleet integration line rather than the upstream mirror.
 The `house` branch is the line the fleet runs, with local operator changes layered on top.
+Each house feature has a durable `housefeature/<name>` integration branch, and each work round starts on a separate `fm/<task>` branch from it.
+The work round first merges into `housefeature/<name>` through a pull request; a separate pull request then merges that durable branch into `house`.
+The normal feature branch starts at the fork's `main`; a feature marked `house-only` at intake may start at `house`.
 Configure the primary checkout's local `house` branch to track `jazz127/house`, and set `firstmate.runtimeBranch=house` in that repository's Git config.
 The setting selects the primary runtime branch; its branch tracking configuration supplies the update remote and merge ref.
 
@@ -36,7 +39,25 @@ gh api -X POST repos/<owner>/<repo>/rulesets --input - <<'JSON'
 JSON
 ```
 
-`bin/fm-pr-merge.sh` reads the base branch's allowed methods when no method is named, so it merges into `house` with a merge commit; its header owns that choice.
+Every pull request into a durable `housefeature/<name>` branch also lands as a merge commit, so the branch keeps `main` as an ancestor and later syncs and contributions carry only the feature.
+Apply the matching ruleset on `refs/heads/housefeature/**` once per house fork; besides merge-commits-only, it refuses deletion and force pushes of every durable branch:
+
+```sh
+gh api -X POST repos/<owner>/<repo>/rulesets --input - <<'JSON'
+{"name": "housefeature: merge commits only, never delete", "target": "branch", "enforcement": "active",
+ "conditions": {"ref_name": {"include": ["refs/heads/housefeature/**"], "exclude": []}},
+ "rules": [
+  {"type": "pull_request", "parameters": {"allowed_merge_methods": ["merge"],
+   "required_approving_review_count": 0, "dismiss_stale_reviews_on_push": false,
+   "require_code_owner_review": false, "require_last_push_approval": false,
+   "required_review_thread_resolution": false}},
+  {"type": "non_fast_forward"},
+  {"type": "deletion"}]}
+JSON
+```
+
+`bin/fm-pr-merge.sh` reads the base branch's allowed methods when no method is named, so it merges into `house` with a merge commit; into a `housefeature/*` base it always passes `--merge` and refuses a caller-named squash or rebase; its header owns that choice.
+Merge a pull request into either base by hand only with `--merge`.
 
 ## Watching the quota-axi house line
 
@@ -50,11 +71,26 @@ Do not rebase `house` onto upstream: preserving merge history keeps the house in
 ## House features
 
 A house feature is anything we build for ourselves on our own line, whether the captain asked for it or firstmate found it.
-Every house feature has a durable `housefeature/<name>` branch cut from the fork's `main`.
-The [`housefeature-cut.yml`](../.github/workflows/housefeature-cut.yml) workflow cuts that branch automatically when a pull request merges into `house`, capturing the merged pull request head instead when the change does not apply cleanly to `main`.
-That branch gives the feature a stable name, keeps it findable, and makes it straightforward to offer without relying on a disposable task branch.
-Task branches are working branches and may be deleted once their feature is captured on its durable branch.
-The Bosun guide defines when a Captain's Maneuver becomes an Admiral's Maneuver.
+Choose a stable feature name at intake and scaffold each ship brief with `--house-feature <name> --branch-base main`, keeping the worker's ordinary `fm/<task>` branch prefix.
+The generated first action uses `bin/fm-housefeature-start.sh` in the fork-origin worktree: it fetches the fork's `main`, creates `housefeature/<name>` at that commit only when absent, and checks out `fm/<task>` from the durable branch.
+The GitHub create-ref call carries an existing base commit and refuses if another task has already created the durable branch; it cannot replace an existing head.
+When that branch already exists, the same command fetches it and starts a new `fm/<task>` branch from its current head; it never merges `main`.
+Use a new round-suffixed task id such as `<name>-r2` for follow-up work and pass the same stable `<name>` to `--house-feature`; the task id and durable branch name serve different purposes.
+The worker's first pull request targets `housefeature/<name>` (`no-mistakes axi run --base-branch housefeature/<name>` or `gh-axi pr create --base housefeature/<name>`) and merges with `--merge`.
+After it merges, firstmate steers the same live worker, without a new pipeline run, to open the integration pull request with `gh-axi pr create --base house --head housefeature/<name>` from the fork checkout.
+The worker reports that pull request with a `done` line, and firstmate does not tear the task down until it is open.
+The fork's House CI workflow checks pull requests into `house` and into a `housefeature/*` base that already contains that workflow, such as a house-only branch cut from `house`.
+A main-based feature cut from upstream `main` may have no workflow configured for its first pull request; verify the target branch's workflows and use the delivery pipeline's documented no-check path when none apply.
+Repeat that pair of pull requests for a later work round when the feature should enter `house` again.
+Keep a main-based feature clean for possible contribution and never merge `house` into the durable branch or its worker branch.
+Refreshing from `main` is an explicit, deliberate step: when a round needs newer upstream code, merge the fork's `main` into its worker branch with `git merge origin/main` and resolve any conflict there before delivery.
+If the pull request from `housefeature/<name>` conflicts with `house`, reconcile the conflicting house code in a separate pull request based on `house`, then merge the original feature pull request when it becomes mergeable.
+When the captain marks a feature as never to be contributed, record that choice in the intake brief; the worker applies the existing `house-only` label to the integration pull request it opens from the durable branch into `house`.
+For that exception, scaffold with `--house-feature <name> --branch-base house`; its first durable branch may depend on other house features, while later rounds still reuse that branch and refresh from `main` only by that explicit step.
+Never delete or force-push a `housefeature/*` head after either pull request merges: the fork ruleset blocks both operations on `refs/heads/housefeature/**`, automatic branch deletion on merge is off, `fm-pr-merge.sh` refuses branch-deletion flags by default, and task teardown removes the worker worktree rather than the remote durable branch.
+The [`housefeature-cut.yml`](../.github/workflows/housefeature-cut.yml) workflow remains a safety net for merged `house` pull requests whose heads still use other branch names; it leaves an existing durable branch untouched and skips a pull request already headed by `housefeature/<name>`.
+A contributed house feature is a house feature the captain chose to submit and that has landed in upstream `main`.
+The [Bosun guide](bosun.md) defines when an ordered Captain's Maneuver becomes an Admiral's Maneuver.
 
 ## House board
 
@@ -83,10 +119,11 @@ The branch name in fleet records, a previous fork copy, or an older note is not 
 Check the pipeline's own status and the lanes already assigned to that branch before steering another lane.
 An existing pipeline run or lane keeps ownership until it is explicitly handed over through the supported pipeline flow; never edit ownership records or hand-edit the branch to escape a blocked state.
 
-An upstream contribution branch must remain a clean diff from upstream `main`.
-Never merge `house` or another fork-only line into a branch that backs an upstream pull request, even to fix conflicts on a fork pull request.
+The main-based `housefeature/<name>` branch is also the branch for a later upstream contribution and must remain a clean diff from upstream `main`.
+Never merge `house` or another fork-only line into that branch, even to fix conflicts on its fork pull request; reconcile the conflict on the `house` side as described above.
 The fork and upstream pull requests can share one head branch while targeting different bases, so a merge from `house` into that shared head would carry fork-only commits into the upstream contribution.
-Keep our delivery on its durable `housefeature/<name>` branch and its own fork pull request, with the upstream contribution reviewed against upstream `main`.
+Keep our delivery on its durable `housefeature/<name>` branch and its own pull request into `house`, with the upstream contribution reviewed against upstream `main`.
+The `house-only` branch is excluded from this path because it can start at `house` and carry other house features.
 
 Refresh a contribution branch only by merging upstream `main` into it, including when conflicts or CI prompt a refresh; never rebase it.
 Rebasing rewrites the attested head, which upstream's gate rejects.
@@ -99,7 +136,7 @@ It reads the most relevant hits for each query within a fixed request and time b
 Queries beyond the per-scan query cap and hits beyond the most relevant page are not read; the receipt discloses that truncation with read and total counts and any dropped queries, `decide` refuses a record without that disclosure, and the published `Prior art checked` section states that search coverage was bounded.
 A duplicate with different wording or files can evade those keyword, changed-file, and linked-issue matches.
 A `none-found` verdict requires no candidates; a `distinct` verdict requires a one-line reason for each candidate; an `overlaps` verdict requires the captain's recorded decision before publication.
-Use that command's `publish` operation for upstream creation so its receipt check is immediately before the forge write and the generated pull request body credits overlapping authors in a `Prior art checked` section.
+Use that command's `publish` operation for upstream creation so its receipt check is immediately before the forge write and the generated `Prior art checked` section summarizes the search, names the closest matches, and credits authors of overlapping work.
 It refuses missing receipts, a changed branch head or diff, a changed title or summary, scans over one hour old, and unresolved overlaps.
 The one-hour limit applies before the push and the forge write; the post-publication registration and done checks verify the published head without it, and accept a published head equal to the scanned head or one the forge reports as strictly ahead of it, so pipeline auto-fix commits pass while a force-push or rewrite is refused.
 The command's `check` operation is the reusable gate for a Bosun workflow; it does not depend on Bosun's code.
@@ -117,6 +154,8 @@ The private house-feature register maintained with the operator's fleet records 
 
 The `house` branch consists of upstream `main` plus the house-feature merges we chose to include.
 To rebuild it, record its exact previous tip, reset `house` to `main`, and merge back only the wanted `housefeature/` branches.
+Merge main-based feature branches directly; merge house-only branches only when their required house features are also included, in dependency order.
+Resolve any rebuild conflict on the new `house` integration line, leaving each main-based feature branch free of `house` commits.
 Push the rebuilt branch with `--force-with-lease` against that exact previous tip.
 The house ruleset refuses that force push, so a rebuild needs the captain to disable the ruleset for the push and restore it to active immediately afterwards.
 A dropped feature remains recoverable while its durable branch or commits still exist.

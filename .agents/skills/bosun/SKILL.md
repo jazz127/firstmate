@@ -22,4 +22,4 @@ The Bosun reads current repository policy, checks accepted PR and review evidenc
 It extracts from the ordered `housefeature/` branch onto freshly fetched upstream, reviews the result for private or house-only material, and runs expected validation.
 It uses the existing prior-art receipt and guarded publication path before the ordinary registration checks record the PR and validation evidence.
 Treat a scope change, ambiguous maintainer request, policy conflict, or consequential external decision as a `needs-decision` through the normal secondmate parent channel.
-The contribution observer and existing PR poll own subsequent signals; a confirmed merge updates the maneuver record through the ordinary merge outcome path.
+Use Bearings' Contribution follow-up for observer wakes and captain-hold-lifecycle for unresolved decisions in the owning Bosun home; a confirmed merge updates the maneuver record through the ordinary merge outcome path.

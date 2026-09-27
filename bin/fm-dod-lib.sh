@@ -650,6 +650,7 @@ Do not hand-edit code, commit, or fix pipeline findings yourself while a run is 
 
 One drive call blocks until the next gate or outcome, which routinely outlives what your harness lets a single command run: Claude Code kills a command at ten minutes maximum, while one fix round is capped around thirty minutes and up to three rounds chain.
 So background the drive call instead of sitting in one blocking hold your harness will kill, and read its return when it finishes.
+Declare that wait using the brief's status-reporting rule before waiting on the backgrounded drive call.
 Where a harness's own command limit is not established, assume it bounds commands and use that same backgrounded shape.
 ${pr_return_line}Whenever a drive call returns without a gate or an outcome - its own wait elapsed, or it was killed or timed out - reattach at once by re-running \`no-mistakes axi run\` without flags, backgrounded the same way${pr_reattach_clause} if it refuses because no run is active, read the finished outcome from \`no-mistakes axi status\`.
 A killed or timed-out call is never evidence the daemon died: the daemon accepts your response immediately and runs the round in the background, so the call was only ever waiting for a read while the run kept working.
@@ -746,9 +747,26 @@ The later upstream PR publication must use the same current receipt at its forge
 EOF
 }
 
-fm_dod_block() {  # <mode> <task-id> [branch] [<forge>]
-  local mode=$1 id=$2 forge=${4:-none}
+fm_dod_block() {  # <mode> <task-id> [branch] [<forge>] [<PR base>]
+  local mode=$1 id=$2 forge=${4:-none} pr_base=${5:-}
   local branch=${3:-fm/$id}
+  local base_instruction=
+  if [ -n "$pr_base" ]; then
+    [ "$forge" = none ] && [ "$mode" != local-only ] || {
+      echo "error: a house-feature PR base requires GitHub PR delivery" >&2
+      return 1
+    }
+    git check-ref-format --branch "$pr_base" >/dev/null 2>&1 || return 1
+    if [ "$mode" = no-mistakes ]; then
+      base_instruction="Target the durable \`$pr_base\` branch: pass \`--base-branch $pr_base\` when starting a new \`no-mistakes axi run\`. Reattach without flags."
+    else
+      base_instruction="Target the durable \`$pr_base\` branch: pass \`--base $pr_base\` to \`gh-axi pr create\`."
+    fi
+    base_instruction="$base_instruction
+Every pull request into \`$pr_base\` lands as a merge commit (\`--merge\`), never a squash or rebase.
+After your pull request into \`$pr_base\` merges, firstmate steers you, in this same session and without a new pipeline run, to open the integration pull request: \`gh-axi pr create --base house --head $pr_base\`, ready for review rather than a draft.
+Then append \`done [at=<epoch>]: integration PR {url} open into house\` and stop; this task is not torn down until that pull request is open."
+  fi
   fm_forge_valid_for_mode "$forge" "$mode" fm_dod_block || return 1
   case "$mode:$forge" in
     direct-PR:gerrit)
@@ -805,6 +823,7 @@ EOF
 Delivery contract: mode=direct-PR
 Ship branch: $branch
 This task ships **direct-PR**: you raise the PR yourself, without the no-mistakes pipeline.
+$base_instruction
 The task is complete only when committed on your branch.
 When it is implemented and committed, push your branch and open a PR through the applicable publication path below; it must be ready for review, not a draft.
 EOF
@@ -839,6 +858,7 @@ EOF
 # Definition of done
 Delivery contract: mode=no-mistakes
 Ship branch: $branch
+$base_instruction
 The task is complete only when committed on your branch.
 When you believe it is complete, append \`done [at=<epoch>]: {summary}\` to the status file and stop.
 Firstmate will then instruct you to run /no-mistakes to validate and ship a PR.

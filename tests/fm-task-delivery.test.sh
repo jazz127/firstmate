@@ -273,6 +273,35 @@ test_promote_requires_and_records_the_delivery_contract() {
   pass "fm-promote: promotion requires the delivery contract and records it exactly once"
 }
 
+test_promotion_keeps_a_worker_branch_for_house_feature() {
+  local home id meta instructions out status
+  home="$TMP_ROOT/promote-house-feature/home"
+  id=alpha-r2
+  meta="$home/state/$id.meta"
+  mkdir -p "$home/state"
+  write_brief "$home" "$id"
+  printf 'window=fm-alpha-r2\nkind=scout\nworktree=/tmp/wt\n' > "$meta"
+  out=$(FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" "$PROMOTE" "$id" \
+    --mode direct-PR --yolo off --house-feature alpha 2>&1)
+  status=$?
+  [ "$status" -ne 0 ] || fail "house-feature promotion accepted no explicit branch base"
+  assert_contains "$out" 'requires --branch-base main or house' "promotion missing-base refusal"
+  assert_grep 'kind=scout' "$meta" "refused house-feature promotion changed task kind"
+
+  out=$(FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" "$PROMOTE" "$id" \
+    --mode direct-PR --yolo off --house-feature alpha --branch-base main 2>&1)
+  status=$?
+  expect_code 0 "$status" "house-feature promotion should succeed"
+  instructions="$home/data/$id/ship-instructions.md"
+  assert_grep 'branch=fm/alpha-r2' "$meta" "promotion did not keep the worker's fm/ task branch"
+  assert_grep 'fm-housefeature-start.sh alpha main fm/alpha-r2' "$instructions" \
+    "promotion did not prepare the worker from the durable branch"
+  # shellcheck disable=SC2016 # Compare a literal Markdown code span in worker instructions.
+  assert_grep 'pass `--base housefeature/alpha`' "$instructions" \
+    "promotion did not target the durable branch for its first PR"
+  pass "fm-promote: a house-feature round keeps its fm/ worker branch and durable PR base"
+}
+
 # A symlink at state/<id>.meta is the containment hazard the shared publisher
 # refuses: promotion must not rewrite the symlink target in place.
 test_promote_refuses_a_symlinked_task_record() {
@@ -1676,6 +1705,7 @@ test_spawn_refuses_a_brief_mode_mismatch
 test_spawn_notices_a_rigor_downgrade_against_the_registry
 test_scout_records_no_delivery_posture
 test_promote_requires_and_records_the_delivery_contract
+test_promotion_keeps_a_worker_branch_for_house_feature
 test_promote_refuses_a_symlinked_task_record
 test_promotion_delivers_the_real_definition_of_done
 test_promotion_persists_the_selected_ship_branch

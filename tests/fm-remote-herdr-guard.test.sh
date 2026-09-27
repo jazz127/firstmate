@@ -294,16 +294,31 @@ assert_contains "$GUARD_OUT" "pid $WORKER_PID born in the Aqua login session (wo
   "the guard did not name the worker owner"
 pass "launchd and worker markers require gui-domain launchctl proof"
 
+RESTART_MARKER="$TMP_ROOT/Library/Caches/dev.firstmate.herdr.$SESSION.restart"
+
 new_case running
-printf '%s\n' "$LAUNCHD_PID" > "$CASE_OWNER"
-load_job gui dev.firstmate.herdr.fm-remote "$LAUNCHD_PID"
+printf '%s\n' "$WORKER_PID" > "$CASE_OWNER"
+load_job gui dev.firstmate.remote-job
 touch "$CASE_STATE/not-detached"
 guard
-expect_code 1 "$GUARD_RC" "the guard did not replace an Aqua-born foreground server"
+expect_code 0 "$GUARD_RC" "an automatic guard launch replaced a healthy worker-born server"
+assert_not_started "an automatic guard launch started a second server over a worker-born owner"
+assert_not_contains "$(herdr_calls)" 'server stop' "an automatic guard launch closed a worker-born server's panes"
+pass "without an operator restart, an Aqua-born foreground server is left alone"
+
+new_case running
+printf '%s\n' "$WORKER_PID" > "$CASE_OWNER"
+load_job gui dev.firstmate.remote-job
+touch "$CASE_STATE/not-detached"
+mkdir -p "${RESTART_MARKER%/*}"
+: > "$RESTART_MARKER"
+guard
+expect_code 1 "$GUARD_RC" "the guard did not replace an Aqua-born foreground server on operator restart"
 assert_stop_before_start
+assert_absent "$RESTART_MARKER" "the guard did not consume the operator restart marker"
 assert_contains "$GUARD_OUT" 'born in Aqua but is not a session-leader daemon' \
   "the guard did not identify why an Aqua-born server needs replacement"
-pass "an Aqua-born foreground server is replaced for saved-machine readiness"
+pass "an operator restart replaces an Aqua-born foreground server for saved-machine readiness"
 
 new_case running
 printf '%s\n' "$LAUNCHD_PID" > "$CASE_OWNER"

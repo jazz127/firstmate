@@ -270,8 +270,8 @@ It acts on whichever server owns the `fm-remote` socket:
 | Socket owner | Guard action |
 | --- | --- |
 | Nothing | Starts a foreground server as a POSIX session leader and waits for it under launchd. |
-| An Aqua-born session-leader server, or one whose Herdr predates the `detached_server_daemon` capability | Exits 0. |
-| An Aqua-born server reporting `detached_server_daemon=false` | Stops it and starts a compatible server. |
+| An Aqua-born server | Exits 0, leaving the server and its panes alone. |
+| An Aqua-born server reporting `detached_server_daemon=false`, when the operator ran `--fix --restart-herdr` | Stops it and starts a compatible server. |
 | Any other (foreign) server | Stops the foreign server and takes the session over, closing its panes so the parent firstmate relaunches its mates into the Aqua-born server. |
 
 `KeepAlive={SuccessfulExit=false}` lets that exit 0 rest instead of respawning against a held socket.
@@ -288,7 +288,8 @@ While that host is quiet, restart it once yourself:
 bin/fm-on.sh <secondmate-id|ssh-alias> fm-remote-doctor.sh --fix --restart-herdr
 ```
 
-On macOS this reloads the Herdr launch agent; on Linux it stops the server and starts it again as a session leader.
+On macOS this leaves a one-shot restart marker for the guard and reloads the Herdr launch agent; the guard consumes the marker, so no automatic reload ever replaces the server.
+On Linux it stops the server and starts it again as a session leader.
 Either way the session's panes close.
 Then run these one-time commands on the local Mac, using the SSH aliases configured there:
 

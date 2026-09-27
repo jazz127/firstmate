@@ -82,6 +82,9 @@ LAUNCH_AGENT_DIR="${HOME:-}/Library/LaunchAgents"
 LAUNCH_AGENT_PLIST="$LAUNCH_AGENT_DIR/$LAUNCH_AGENT_LABEL.plist"
 LAUNCH_AGENT_LOG_DIR="${HOME:-}/Library/Logs"
 LAUNCH_AGENT_LOG="$LAUNCH_AGENT_LOG_DIR/$LAUNCH_AGENT_LABEL.log"
+# Read and removed by bin/fm-remote-herdr-guard.sh at launch; only
+# --restart-herdr leaves it, so no automatic reload replaces a healthy server.
+HERDR_RESTART_MARKER="${HOME:-}/Library/Caches/$LAUNCH_AGENT_LABEL.restart"
 ENTRYPOINT_LINK="${HOME:-}/.local/bin/fm-remote-entrypoint.sh"
 
 usage() { sed -n '2,5p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
@@ -812,7 +815,7 @@ reload_launch_agent() { # <check-to-report-under>
     fix_report "$report" failed "launchctl bootstrap gui/$UID_NUM refused: ${out:-no diagnostic}"
     return 1
   fi
-  if ! out=$(launchctl kickstart -k "gui/$UID_NUM/$LAUNCH_AGENT_LABEL" 2>&1); then
+  if ! out=$(launchctl kickstart "gui/$UID_NUM/$LAUNCH_AGENT_LABEL" 2>&1); then
     fix_report "$report" failed "launchctl kickstart gui/$UID_NUM/$LAUNCH_AGENT_LABEL refused: ${out:-no diagnostic}"
     return 1
   fi
@@ -874,6 +877,11 @@ link_entrypoint() {
 apply_fixes() { # <resolved-login-shell>
   local shell=$1 i name value launch_agent_written=0 launch_agent_reloaded=0 remote_job_fixed=0
   repair_required_wrappers
+  if [ "$RESTART_HERDR" = 1 ] && [ "$PLATFORM" = darwin ]; then
+    case "$(check_value herdr-server 2>/dev/null || true)" in
+      notice:*) mkdir -p "${HERDR_RESTART_MARKER%/*}" 2>/dev/null && : > "$HERDR_RESTART_MARKER" ;;
+    esac
+  fi
   i=0
   while [ "$i" -lt "${#CHECK_NAMES[@]}" ]; do
     name=${CHECK_NAMES[$i]}
@@ -921,6 +929,7 @@ apply_fixes() { # <resolved-login-shell>
       entrypoint-link) link_entrypoint || true ;;
     esac
   done
+  [ "$RESTART_HERDR" != 1 ] || rm -f -- "$HERDR_RESTART_MARKER"
 }
 
 # --- report -----------------------------------------------------------------

@@ -38,14 +38,18 @@ ln -sf "$(command -v git)" "$TOOLS/git"
 ln -sf "$(command -v jq)" "$TOOLS/jq"
 BASE_PATH="$TOOLS:/usr/bin:/bin:/usr/sbin:/sbin"
 
-# Real socket-owner holders for the Darwin birth check: Node blocked on a fifo
+# Real socket-owner holders for the Darwin birth check: a non-platform tool blocked on a fifo
 # this test keeps open, with exactly the marker environment each birth needs.
-HOLDER_NODE=$(command -v node)
+HOLDER_BIN=$(command -v node 2>/dev/null || command -v jq)
 HOLDER_FD=5
 hold() { # <marker-env...> -> HOLDER_PID
   local fifo="$TMP_ROOT/holder-$HOLDER_FD.fifo"
   mkfifo "$fifo"
-  env -i "$@" "$HOLDER_NODE" -e 'require("node:fs").readFileSync(process.argv[1])' "$fifo" &
+  if [ "${HOLDER_BIN##*/}" = node ]; then
+    env -i "$@" "$HOLDER_BIN" -e 'require("fs").readFileSync(process.argv[1])' "$fifo" &
+  else
+    env -i "$@" "$HOLDER_BIN" . "$fifo" &
+  fi
   HOLDER_PID=$!
   HOLDER_PIDS+=("$HOLDER_PID")
   eval "exec ${HOLDER_FD}>\"\$fifo\""

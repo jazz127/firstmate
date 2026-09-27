@@ -1130,7 +1130,7 @@ fm_remote_job_worker_command_matches() { # <worker> <command>
 # survivor. Returns non-zero when any verified worker-tree member is still alive
 # afterwards.
 fm_remote_job_stop_worker_tree() { # <pid> [start] [command]
-  local pid=$1 expected_start=${2:-} expected_command=${3:-} members rescanned='' survivors previous_members member member_start member_command state i=0 alive deadline signal=TERM signal_failed=0 root_live descendant_tree actual_start
+  local pid=$1 expected_start=${2:-} expected_command=${3:-} members rescanned='' survivors previous_members member member_start member_command state i=0 alive deadline signal=TERM signal_failed=0 root_live descendant_tree
   case "$pid" in ''|*[!0-9]*) return 1 ;; esac
   [ "$pid" -gt 1 ] || return 1
   if [ -n "$expected_start" ] || [ -n "$expected_command" ]; then
@@ -1145,13 +1145,6 @@ fm_remote_job_stop_worker_tree() { # <pid> [start] [command]
     case "$state" in Z*) return 0 ;; esac
     kill -0 "$pid" 2>/dev/null && return 1
     return 0
-  fi
-  # Upgrade a proven legacy worker to its current stable token before any
-  # tree scan or signal. Descendants and the pidfd check then use one format.
-  if [ "$(uname -s 2>/dev/null || true)" = Linux ] && [[ "$expected_start" != linux-starttime=* ]]; then
-    actual_start=$(fm_remote_job_process_start "$pid") || return 1
-    fm_remote_job_process_identity_matches "$pid" "$actual_start" "$expected_command" || return 1
-    expected_start=$actual_start
   fi
   deadline=$((SECONDS + 30))
   while :; do

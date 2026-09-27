@@ -315,6 +315,16 @@ worker_signal_process_or_group() { # process|group <signal> <pid>
   esac
 }
 
+# A pre-upgrade supervisor is a worker lane; a pre-upgrade group leader is that
+# lane before exec or the job's git check or command under the job root.
+worker_legacy_execution_owner() { # <job-dir> <pid> <recorded start>
+  local command root
+  command=$(fm_remote_job_proven_legacy_command "$2" "$3") || return 1
+  [[ "$command" == *fm-remote-job-worker.sh* ]] && return 0
+  root=$(fm_remote_job_read_single_line "$1/root" 8192 2>/dev/null) || return 1
+  [ -n "$root" ] && [[ "$command" == *"$root"* ]]
+}
+
 worker_supervisor_identity_status() { # <job-dir> <pid>
   local job=$1 pid=$2 recorded_start actual_start
   recorded_start=$(fm_remote_job_read_single_line "$job/.claim/supervisor_start" 256 2>/dev/null) || return 2
@@ -323,7 +333,7 @@ worker_supervisor_identity_status() { # <job-dir> <pid>
     return 1
   }
   [ "$recorded_start" = "$actual_start" ] && return 0
-  return 1
+  worker_legacy_execution_owner "$job" "$pid" "$recorded_start"
 }
 
 # A leaderless live group still belongs to the recorded execution: its PGID
@@ -341,7 +351,7 @@ worker_group_identity_status() { # <job-dir> <pid>
     return 1
   }
   [ "$recorded_start" = "$actual_start" ] && return 0
-  return 1
+  worker_legacy_execution_owner "$job" "$pid" "$recorded_start"
 }
 
 worker_recorded_execution_alive() { # <job-dir> process|group <pid>
@@ -548,7 +558,7 @@ worker_claim() { # <job-dir>
 }
 
 worker_claim_owner_alive() { # <job-dir>
-  local job=$1 claim="$1/.claim" owner pid recorded_start actual_start
+  local job=$1 claim="$1/.claim" owner pid recorded_start actual_start command
   [ -d "$claim" ] && [ ! -L "$claim" ] || return 1
   owner="$claim/owner"
   fm_remote_job_regular_bounded "$owner" 64 || return 1
@@ -556,8 +566,13 @@ worker_claim_owner_alive() { # <job-dir>
   case "$pid" in ''|*[!0-9]*) return 1 ;; esac
   if [ -e "$claim/owner_start" ] || [ -L "$claim/owner_start" ]; then
     recorded_start=$(fm_remote_job_read_single_line "$claim/owner_start" 256 2>/dev/null) || return 1
-    actual_start=$(fm_remote_job_process_start "$pid" 2>/dev/null) || return 1
-    [ "$recorded_start" = "$actual_start" ]
+    actual_start=$(fm_remote_job_process_start "$pid" 2>/dev/null) || {
+      kill -0 "$pid" 2>/dev/null
+      return $?
+    }
+    [ "$recorded_start" = "$actual_start" ] && return 0
+    command=$(fm_remote_job_proven_legacy_command "$pid" "$recorded_start") || return 1
+    [[ "$command" == *fm-remote-job-worker.sh* ]]
     return
   fi
   kill -0 "$pid" 2>/dev/null

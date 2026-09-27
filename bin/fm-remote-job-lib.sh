@@ -762,13 +762,18 @@ fm_remote_job_path_mtime() { # <path>
 }
 
 fm_remote_job_stage_owner_alive() { # <stage-dir>
-  local stage=$1 pid recorded_start actual_start
+  local stage=$1 pid recorded_start actual_start command
   pid=$(fm_remote_job_read_single_line "$stage/.owner-pid" 64 2>/dev/null) || return 1
   case "$pid" in ''|*[!0-9]*) return 1 ;; esac
   [ "$pid" -gt 1 ] || return 1
   recorded_start=$(fm_remote_job_read_single_line "$stage/.owner-start" 256 2>/dev/null) || return 1
-  actual_start=$(fm_remote_job_process_start "$pid" 2>/dev/null) || return 1
-  [ "$recorded_start" = "$actual_start" ]
+  actual_start=$(fm_remote_job_process_start "$pid" 2>/dev/null) || {
+    kill -0 "$pid" 2>/dev/null
+    return $?
+  }
+  [ "$recorded_start" = "$actual_start" ] && return 0
+  command=$(fm_remote_job_proven_legacy_command "$pid" "$recorded_start") || return 1
+  [[ "$command" == *fm-remote-entrypoint.sh* || "$command" == *fm-remote-doctor.sh* ]]
 }
 
 fm_remote_job_reap_stale() { # <account-home>
@@ -903,7 +908,28 @@ fm_remote_job_worker_identity_path() { printf '%s\n' "$FM_REMOTE_JOB_STATE/worke
 fm_remote_job_worker_lock_path() { printf '%s\n' "$FM_REMOTE_JOB_STATE/worker.lock"; }
 
 fm_remote_job_process_start() {
-  local pid=$1 ps_bin value
+  local pid=$1 ps_bin value proc_root stat_line starttime boot_id
+  local -a stat_fields
+  case "$pid" in ''|*[!0-9]*) return 1 ;; esac
+  [ "$pid" -gt 1 ] || return 1
+  # Use the same final-comm-delimiter parse as fm_pid_identity in
+  # fm-wake-lib.sh. Linux start ticks do not change when WSL re-renders
+  # wall-clock process dates; the boot ID keeps persisted records distinct
+  # across a reboot.
+  if [ "$(uname -s 2>/dev/null || true)" = Linux ] || [ -n "${FM_PROC_ROOT_OVERRIDE:-}" ]; then
+    proc_root=${FM_PROC_ROOT_OVERRIDE:-/proc}
+    [ -r "$proc_root/$pid/stat" ] && [ -r "$proc_root/sys/kernel/random/boot_id" ] || return 1
+    stat_line=$(cat "$proc_root/$pid/stat" 2>/dev/null) || return 1
+    [[ "$stat_line" == *') '* ]] || return 1
+    read -r -a stat_fields <<< "${stat_line##*)}"
+    [ "${#stat_fields[@]}" -ge 20 ] || return 1
+    starttime=${stat_fields[19]}
+    case "$starttime" in ''|*[!0-9]*) return 1 ;; esac
+    boot_id=$(cat "$proc_root/sys/kernel/random/boot_id" 2>/dev/null) || return 1
+    [[ "$boot_id" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]] || return 1
+    printf 'linux-starttime=%s boot-id=%s\n' "$starttime" "$boot_id"
+    return 0
+  fi
   if [ -x /bin/ps ]; then ps_bin=/bin/ps; elif [ -x /usr/bin/ps ]; then ps_bin=/usr/bin/ps; else return 1; fi
   value=$("$ps_bin" -p "$pid" -o lstart= 2>/dev/null) || return 1
   [ -n "$value" ] || return 1
@@ -918,6 +944,40 @@ fm_remote_job_process_command() {
   [ -n "$value" ] || return 1
   case "$value" in *$'\n'*|*$'\r'*) return 1 ;; esac
   printf '%s\n' "$value"
+}
+
+fm_remote_job_process_identity_matches() { # <pid> <start> <command>
+  local actual_start actual_command
+  if actual_command=$(fm_remote_job_legacy_owner_command "$1" "$2"); then
+    [ "$actual_command" = "$3" ]
+    return
+  fi
+  actual_start=$(fm_remote_job_process_start "$1") || return 1
+  [ "$actual_start" = "$2" ] || return 1
+  actual_command=$(fm_remote_job_process_command "$1") || return 1
+  [ "$actual_command" = "$3" ] || return 1
+  [ "$(fm_remote_job_process_start "$1")" = "$2" ]
+}
+
+# Records written before the Linux start-tick token hold a wall-clock lstart
+# rendering in whatever locale the old worker ran, which drifts on WSL. Such a
+# record still names a live PID that runs its owner's command; any other command
+# proves the PID was reused and the record is dead.
+fm_remote_job_legacy_owner_command() { # <pid> <recorded start>
+  [ "$(uname -s 2>/dev/null || true)" = Linux ] || [ -n "${FM_PROC_ROOT_OVERRIDE:-}" ] || return 1
+  case "$2" in ''|linux-starttime=*) return 1 ;; esac
+  kill -0 "$1" 2>/dev/null || return 1
+  fm_remote_job_process_command "$1"
+}
+
+# Records without a recorded command must also still match the C-locale lstart
+# rendering; an unproven owner is treated as gone and is never signalled.
+fm_remote_job_proven_legacy_command() { # <pid> <recorded start>
+  local ps_bin command
+  command=$(fm_remote_job_legacy_owner_command "$1" "$2") || return 1
+  if [ -x /bin/ps ]; then ps_bin=/bin/ps; elif [ -x /usr/bin/ps ]; then ps_bin=/usr/bin/ps; else return 1; fi
+  [ "$(LC_ALL=C "$ps_bin" -p "$1" -o lstart= 2>/dev/null)" = "$2" ] || return 1
+  printf '%s\n' "$command"
 }
 
 fm_remote_job_process_pgid() { # <pid>
@@ -1003,7 +1063,7 @@ fm_remote_job_read_single_line() {
 }
 
 fm_remote_job_lock_owner_matches_process() {
-  local account_home=$1 lock pid recorded_start actual_start recorded_command actual_command
+  local account_home=$1 lock pid recorded_start recorded_command
   fm_remote_job_prepare_state "$account_home" || return 1
   lock=$(fm_remote_job_worker_lock_path)
   [ -d "$lock" ] && [ ! -L "$lock" ] || return 1
@@ -1011,11 +1071,8 @@ fm_remote_job_lock_owner_matches_process() {
   case "$pid" in ''|*[!0-9]*) return 1 ;; esac
   [ "$pid" -gt 1 ] || return 1
   recorded_start=$(fm_remote_job_read_single_line "$lock/start" 256) || return 1
-  actual_start=$(fm_remote_job_process_start "$pid") || return 1
-  [ "$recorded_start" = "$actual_start" ] || return 1
   recorded_command=$(fm_remote_job_read_single_line "$lock/command" 8192) || return 1
-  actual_command=$(fm_remote_job_process_command "$pid") || return 1
-  [ "$recorded_command" = "$actual_command" ] || return 1
+  fm_remote_job_process_identity_matches "$pid" "$recorded_start" "$recorded_command" || return 1
   FM_REMOTE_JOB_OWNER_PID=$pid
 }
 

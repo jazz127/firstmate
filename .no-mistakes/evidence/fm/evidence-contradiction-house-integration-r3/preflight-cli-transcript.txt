@@ -1,0 +1,68 @@
+=== 1-one-row-mask-adversarial.md via target (8c9fc9de) ===
+evidence claim refused: contradictory driven-scenario results:
+  1 of 4 scenarios driven live against the product.
+  | Scenario | Result | Live |
+  | Account A | pass | yes |
+  | Account B | pass | yes |
+  | Account C | pass | yes |
+  | Account D | pass | no |
+exit=1
+=== 1-one-row-mask-adversarial.md via base (03669fb5) ===
+evidence claim refused: contradictory driven-scenario results:
+  1 of 4 scenarios driven live against the product.
+  | Scenario | Result | Live |
+  | Account A | pass | yes |
+  | Account B | pass | yes |
+  | Account C | pass | yes |
+  | Account D | pass | no |
+exit=1
+=== 2-one-row-yes-mask-adversarial.md via target (8c9fc9de) ===
+evidence claim refused: contradictory driven-scenario results:
+  3 of 3 scenarios driven live against the product.
+  | Scenario | Result | Live |
+  | Account A | pass | yes |
+  | Account B | pass | no |
+  | Account C | pass | no |
+exit=1
+=== 2-one-row-yes-mask-adversarial.md via base (03669fb5) ===
+evidence claim refused: contradictory driven-scenario results:
+  3 of 3 scenarios driven live against the product.
+  | Scenario | Result | Live |
+  | Account A | pass | yes |
+  | Account B | pass | no |
+  | Account C | pass | no |
+exit=1
+=== 3-sole-one-row-table-accepted.md via target (8c9fc9de) ===
+evidence preflight ok
+exit=0
+=== 3-sole-one-row-table-accepted.md via base (03669fb5) ===
+evidence preflight ok
+exit=0
+=== 4-count-agrees-with-scenario-table-accepted.md via target (8c9fc9de) ===
+evidence preflight ok
+exit=0
+=== 4-count-agrees-with-scenario-table-accepted.md via base (03669fb5) ===
+evidence claim refused: contradictory driven-scenario results:
+  1 of 4 scenarios driven live against the product.
+  | Check | Result | Live |
+  | Lint | pass | no |
+  | Unit tests | pass | no |
+exit=1
+=== 5-plain-contradiction-refused.md via target (8c9fc9de) ===
+evidence claim refused: contradictory driven-scenario results:
+  4 of 4 scenarios driven live against the product.
+  | Scenario | Result | Live |
+  | Account A | pass | yes |
+  | Account B | pass | no |
+  | Account C | pass | no |
+  | Account D | pass | no |
+exit=1
+=== 5-plain-contradiction-refused.md via base (03669fb5) ===
+evidence claim refused: contradictory driven-scenario results:
+  4 of 4 scenarios driven live against the product.
+  | Scenario | Result | Live |
+  | Account A | pass | yes |
+  | Account B | pass | no |
+  | Account C | pass | no |
+  | Account D | pass | no |
+exit=1

@@ -3970,6 +3970,30 @@ test_composer_state_pi_separator_idle_is_empty() {
   pass "fm_backend_herdr_composer_state: a native idle Pi separator composer reads empty"
 }
 
+test_composer_state_pi_separator_working_is_empty() {
+  local dir log resp fb out
+  dir="$TMP_ROOT/composer-pi-separated-working"; mkdir -p "$dir/responses"; log="$dir/log"; resp="$dir/responses"; : > "$log"
+  printf 'transcript\n─────────────────────────────────────────────────────\n\n─────────────────────────────────────────────────────\n' > "$resp/1.out"
+  printf '{"result":{"agent":{"agent":"pi","agent_status":"working"}}}\n' > "$resp/2.out"
+  fb=$(make_herdr_fakebin "$dir")
+  out=$( PATH="$fb:$PATH" FM_HERDR_LOG="$log" FM_HERDR_RESPONSES="$resp" \
+    bash -c '. "$0/bin/backends/herdr.sh"; fm_backend_herdr_composer_state lab:w1:p2' "$ROOT" )
+  [ "$out" = empty ] || fail "a working Pi's blank native Herdr composer should read empty, got '$out'"
+  pass "fm_backend_herdr_composer_state: a native working Pi's blank composer reads empty"
+}
+
+test_composer_state_pi_labelled_working_rule_is_empty() {
+  local dir log resp fb out
+  dir="$TMP_ROOT/composer-pi-labelled-working"; mkdir -p "$dir/responses"; log="$dir/log"; resp="$dir/responses"; : > "$log"
+  printf 'transcript\n── ⠏ Working ───────────────────────────────────────\n\n─────────────────────────────────────────────────────\n' > "$resp/1.out"
+  printf '{"result":{"agent":{"agent":"pi","agent_status":"working"}}}\n' > "$resp/2.out"
+  fb=$(make_herdr_fakebin "$dir")
+  out=$( PATH="$fb:$PATH" FM_HERDR_LOG="$log" FM_HERDR_RESPONSES="$resp" \
+    bash -c '. "$0/bin/backends/herdr.sh"; fm_backend_herdr_composer_state lab:w1:p2' "$ROOT" )
+  [ "$out" = empty ] || fail "a working Pi's labelled top rule should read empty, got '$out'"
+  pass "fm_backend_herdr_composer_state: a labelled working Pi rule reads empty"
+}
+
 test_composer_state_pi_dollar_status_footer_is_empty() {
   # `$0.000 (sub) 5.4%/272k (auto)` at column 0 made herdr composer_state
   # unknown, so exit and relaunch refused on an otherwise idle Pi pane.
@@ -4032,7 +4056,7 @@ test_composer_state_pi_incomplete_separator_below_stale_generic_is_unknown() {
 
 test_composer_state_pi_separator_requires_safe_native_identity() {
   local dir log resp fb out status case_id idx=0
-  for case_id in working non-pi unreadable over-tall; do
+  for case_id in non-pi unreadable over-tall; do
     dir="$TMP_ROOT/composer-pi-separated-$case_id"; mkdir -p "$dir/responses"; log="$dir/log"; resp="$dir/responses"; : > "$log"
     if [ "$case_id" = over-tall ]; then
       {
@@ -4044,7 +4068,6 @@ test_composer_state_pi_separator_requires_safe_native_identity() {
       printf '─────────────────────────────────────────────────────\n\n─────────────────────────────────────────────────────\n' > "$resp/1.out"
     fi
     case "$case_id" in
-      working) printf '{"result":{"agent":{"agent":"pi","agent_status":"working"}}}\n' > "$resp/2.out" ;;
       non-pi) printf '{"result":{"agent":{"agent":"shell","agent_status":"idle"}}}\n' > "$resp/2.out" ;;
       unreadable) printf '1\n' > "$resp/2.exit" ;;
       over-tall) printf '{"result":{"agent":{"agent":"pi","agent_status":"idle"}}}\n' > "$resp/2.out" ;;
@@ -4054,7 +4077,7 @@ test_composer_state_pi_separator_requires_safe_native_identity() {
       bash -c '. "$0/bin/backends/herdr.sh"; fm_backend_herdr_composer_state lab:w1:p2' "$ROOT" )
     [ "$out" = unknown ] || fail "unsafe Pi separator case '$case_id' must remain unknown, got '$out'"
   done
-  pass "fm_backend_herdr_composer_state: Pi separators never authorize working, non-Pi, unreadable, or over-tall targets"
+  pass "fm_backend_herdr_composer_state: Pi separators never authorize non-Pi, unreadable, or over-tall targets"
 }
 
 # --- composer_state: unbordered (bare) composer rows -------------------------
@@ -5827,6 +5850,8 @@ test_composer_state_unknown_on_capture_failure
 test_composer_state_unknown_when_no_composer_row_found
 test_composer_state_pi_parked_prompt_is_not_empty
 test_composer_state_pi_separator_idle_is_empty
+test_composer_state_pi_separator_working_is_empty
+test_composer_state_pi_labelled_working_rule_is_empty
 test_composer_state_pi_dollar_status_footer_is_empty
 test_composer_state_pi_separator_real_text_is_pending
 test_composer_state_pi_incomplete_separator_below_stale_generic_is_unknown

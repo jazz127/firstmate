@@ -218,7 +218,9 @@ EOF
 # Refuse conflicting live-scenario summaries before the provenance check can
 # misdiagnose a generated appendix as missing metadata. Only tables with an
 # explicit Live column and fully classified rows supply a table total; a
-# count is contradictory only when no such table agrees with it.
+# count is contradictory only when no such table agrees with it. A one-row
+# table agrees with a larger count only when it is the body's sole such table,
+# so a summary row cannot mask a contradicting scenario table.
 fm_dod_validate_scenario_consistency() {  # <complete-pr-body>
   printf '%s\n' "$1" | awk '
     function trim(value) {

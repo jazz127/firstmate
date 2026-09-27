@@ -421,13 +421,16 @@ hash_pane() {
 }
 
 # Bash may defer its native TERM until a command substitution's child exits.
-# Bound tmux capture so a stuck pane read cannot hold a stopped watcher inside
-# that wait indefinitely. A failed capture is already treated as no evidence.
+# Bound tmux pane captures well inside stop_home_watcher's 5s deadline, leaving
+# room for timeout's kill grace and the watcher's EXIT cleanup. A failed
+# capture is already treated as no evidence. Only pane captures are bounded:
+# agent-state, composer-state, alive, and window-meta tmux queries can still
+# defer TERM if the tmux server wedges.
 watcher_capture() {  # <backend> <target> <lines> [expected-label]
   local backend=$1 target=$2 lines=$3
   if [ "$backend" = tmux ]; then
     _fm_wake_require_timeout || return 1
-    fm_run_timed 5 tmux capture-pane -p -t "$target" -S "-$lines"
+    fm_run_timed 2 tmux capture-pane -p -t "$target" -S "-$lines"
   else
     fm_backend_capture "$@"
   fi

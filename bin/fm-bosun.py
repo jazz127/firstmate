@@ -245,8 +245,8 @@ def target(forge, owner, repo):
     return {"forge": forge, "owner": owner.lower(), "repository": repo.lower()}
 
 
-def routes():
-    data = read_json(home() / "config/bosun-routes.json", {"schema": "fm-bosun-routes.v1", "routes": []})
+def routes(root=None):
+    data = read_json((root or home()) / "config/bosun-routes.json", {"schema": "fm-bosun-routes.v1", "routes": []})
     if data.get("schema") != "fm-bosun-routes.v1" or not isinstance(data.get("routes"), list):
         fail("invalid Bosun route schema")
     for row in data["routes"]:
@@ -256,9 +256,9 @@ def routes():
     return data["routes"]
 
 
-def resolve_route(want):
+def resolve_route(want, root=None):
     matches = []
-    for row in routes():
+    for row in routes(root):
         if not isinstance(row, dict) or not isinstance(row.get("bosun"), str):
             fail("invalid Bosun route")
         bosun = safe_name(row["bosun"])
@@ -434,9 +434,23 @@ def cmd_configure_home(args):
     write_json(path, {"schema": "fm-bosun-role.v1", "id": args.bosun, "kind": "bosun"})
 
 
+def parent_home():
+    lib = Path(__file__).resolve().parent / "fm-secondmate-parent-lib.sh"
+    result = subprocess.run(["bash", "-c", '. "$1"; fm_secondmate_parent_record_parse "$2" && '
+                             '[ "$FM_SECONDMATE_PARENT_ROUTE" = local ] && printf %s "$FM_SECONDMATE_PARENT_HOME"',
+                             "_", str(lib), str(home() / ".fm-secondmate-parent")],
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    if result.returncode or not result.stdout:
+        fail("general Bosun order needs a local parent home to check named Bosun routes")
+    return Path(result.stdout)
+
+
 def cmd_order(args):
     want = target(args.forge, args.owner, args.repository)
-    route = resolve_route(want)
+    route_home = None
+    if args.bosun == GENERAL_BOSUN and (home() / ".fm-secondmate-home").exists():
+        route_home = parent_home()
+    route = resolve_route(want, route_home)
     if route["bosun"] != args.bosun:
         fail("target routes to a different Bosun")
     role(args.bosun)

@@ -120,6 +120,44 @@ test_general_bosun_evidence_is_maneuver_scoped() {
   pass 'general Bosun keeps evidence scoped to the current maneuver'
 }
 
+test_general_order_checks_primary_named_routes() {
+  local primary dir commit
+  primary=$(new_home general-order-primary)
+  dir=$(new_home general-order)
+  printf '%s\n' bosun-general > "$dir/.fm-secondmate-home"
+  call "$dir" configure-home --bosun bosun-general >/dev/null || fail 'general Bosun home setup failed'
+  prepare_project "$dir" general
+  commit=$(git --git-dir "$FORK_BARE" rev-parse refs/heads/housefeature/general)
+  if call "$dir" order --task unbound --bosun bosun-general --maneuver general \
+    --forge github --owner kunchenguid --repository sample --source housefeature/general \
+    --branch contribution/unbound --captain-words 'Contribute general' --path general.txt \
+    --fork-owner captain --default-branch main --commit "$commit" >"$dir/out" 2>&1; then
+    fail 'general Bosun order passed without a parent home to check named routes'
+  fi
+  assert_grep 'local parent home' "$dir/out" 'missing parent refusal diagnostic missing'
+  printf 'schema=fm-secondmate-parent.v1\nroute=local\nparent_home=%s\n' "$primary" > "$dir/.fm-secondmate-parent"
+  routes_fixture "$primary"
+  if call "$dir" order --task named --bosun bosun-general --maneuver general \
+    --forge github --owner kunchenguid --repository sample --source housefeature/general \
+    --branch contribution/named --captain-words 'Contribute general' --path general.txt \
+    --fork-owner captain --default-branch main --commit "$commit" >"$dir/out" 2>&1; then
+    fail 'general Bosun took a target owned by a named Bosun in the primary home'
+  fi
+  assert_grep 'routes to a different Bosun' "$dir/out" 'named route refusal diagnostic missing'
+  [ ! -e "$dir/data/named/bosun-contribution.json" ] || fail 'refused general order wrote a contribution record'
+  cat > "$primary/config/bosun-routes.json" <<'EOF'
+{"schema":"fm-bosun-routes.v1","routes":[{"bosun":"bosun-kun","forge":"github","owner":"kunchenguid","repository":"special"}]}
+EOF
+  call "$dir" order --task general --bosun bosun-general --maneuver general \
+    --forge github --owner kunchenguid --repository sample --source housefeature/general \
+    --branch contribution/general --captain-words 'Contribute general' --path general.txt \
+    --fork-owner captain --default-branch main --commit "$commit" >/dev/null \
+    || fail 'general Bosun order was refused for an unrouted target'
+  jq -e '.bosun == "bosun-general"' "$dir/data/general/bosun-contribution.json" >/dev/null \
+    || fail 'general Bosun contribution record missing'
+  pass 'general Bosun order checks the primary home named routes'
+}
+
 test_memory_and_paths() {
   local dir outside
   dir=$(new_home memory)
@@ -725,6 +763,7 @@ EOF
 
 test_routing
 test_general_bosun_evidence_is_maneuver_scoped
+test_general_order_checks_primary_named_routes
 test_memory_and_paths
 test_bosun_id_path_refusal
 test_order_accepts_dotfiles

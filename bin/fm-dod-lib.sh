@@ -218,7 +218,9 @@ EOF
 # Refuse conflicting live-scenario summaries before the provenance check can
 # misdiagnose a generated appendix as missing metadata. Only tables with an
 # explicit Live column and fully classified rows supply a table total; a
-# count is contradictory only when no such table agrees with it.
+# count is contradictory only when no such table agrees with it. A one-row
+# table agrees with a larger count only when it is the body's sole such table,
+# so a summary row cannot mask a contradicting scenario table.
 fm_dod_validate_scenario_consistency() {  # <complete-pr-body>
   printf '%s\n' "$1" | awk '
     function trim(value) {
@@ -245,6 +247,7 @@ fm_dod_validate_scenario_consistency() {  # <complete-pr-body>
       table_lines = ""
     }
     function table_agrees(n) {
+      if (stored_tables > 1 && stored_table_rows[n] != count_total) return 0
       return !(count_driven < stored_table_driven[n] ||
                (count_total == stored_table_rows[n] && count_driven != stored_table_driven[n]) ||
                (stored_table_rows[n] >= 2 && count_total != stored_table_rows[n]) ||
@@ -252,9 +255,12 @@ fm_dod_validate_scenario_consistency() {  # <complete-pr-body>
     }
     function check_stored() {
       if (stored_tables == 0 || count_line == "") return
-      for (n = 1; n <= stored_tables; n++)
+      cited = stored_tables
+      for (n = 1; n <= stored_tables; n++) {
         if (table_agrees(n)) return
-      refuse(count_line, stored_table_lines[stored_tables])
+        if (stored_table_rows[n] == count_total) cited = n
+      }
+      refuse(count_line, stored_table_lines[cited])
     }
     {
       original = $0

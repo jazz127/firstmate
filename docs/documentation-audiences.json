@@ -541,6 +541,10 @@
       "audience": "operator-current"
     },
     {
+      "path": ".agents/skills/operational-home-layout/SKILL.md",
+      "audience": "agent-runtime"
+    },
+    {
       "path": "skills/stow/SKILL.md",
       "audience": "public-product"
     },

@@ -217,7 +217,8 @@ EOF
 
 # Refuse conflicting live-scenario summaries before the provenance check can
 # misdiagnose a generated appendix as missing metadata. Only tables with an
-# explicit Live column and fully classified rows supply a table total.
+# explicit Live column and fully classified rows supply a table total; a
+# count is contradictory only when no such table agrees with it.
 fm_dod_validate_scenario_consistency() {  # <complete-pr-body>
   printf '%s\n' "$1" | awk '
     function trim(value) {
@@ -234,21 +235,26 @@ fm_dod_validate_scenario_consistency() {  # <complete-pr-body>
     }
     function check_table() {
       if (table_rows > 0 && table_known == table_rows) {
-        stored_table_rows = table_rows
-        stored_table_driven = table_driven
-        stored_table_lines = table_lines
+        stored_tables++
+        stored_table_rows[stored_tables] = table_rows
+        stored_table_driven[stored_tables] = table_driven
+        stored_table_lines[stored_tables] = table_lines
       }
       table_rows = table_known = table_driven = live_column = 0
       table_header = ""
       table_lines = ""
     }
+    function table_agrees(n) {
+      return !(count_driven < stored_table_driven[n] ||
+               (count_total == stored_table_rows[n] && count_driven != stored_table_driven[n]) ||
+               (stored_table_rows[n] >= 2 && count_total != stored_table_rows[n]) ||
+               (count_driven == count_total && stored_table_driven[n] < stored_table_rows[n]))
+    }
     function check_stored() {
-      if (stored_table_rows > 0 && count_line != "" &&
-          (count_driven < stored_table_driven ||
-           (count_total == stored_table_rows && count_driven != stored_table_driven) ||
-           (stored_table_rows >= 2 && count_total != stored_table_rows) ||
-           (count_driven == count_total && stored_table_driven < stored_table_rows)))
-        refuse(count_line, stored_table_lines)
+      if (stored_tables == 0 || count_line == "") return
+      for (n = 1; n <= stored_tables; n++)
+        if (table_agrees(n)) return
+      refuse(count_line, stored_table_lines[stored_tables])
     }
     {
       original = $0

@@ -1,0 +1,25 @@
+ ▐▛███▛█   Claude Code v2.1.283
+▝▜██████▀  Opus 5.5 · Claude Pro
+ ▝▝   ▝▝   ~/.no-mistakes/worktrees/119cd7a6b9a4/01M3HJSNA2MM846VJN5N3YY1W7
+❯ Lab validation question, do not run any bin/ scripts or change files. A ship task reports its PR ready, but the published no-mistakes attestation in the PR body is bound to a different head than the PR's current head, 
+  and a report carries evidence-validation=failed. Load whichever of your firstmate skills covers PR landing, then answer: which skill did you load, and quote verbatim the line in it that tells you what to preserve in   
+  this situation.                                                                                                                                                                                                           
+⏺ Skill(ship-landing)
+  ⎿  Successfully loaded skill
+⏺ Captain, I loaded the ship-landing skill. I ran no scripts and changed no files.
+  This is the line in it that says what to preserve in this situation:
+  ▎ Preserve the validator diagnostic alongside evidence-validation=failed when a published attestation is bound to a different head, so the refusal names the current head, attested head, and remediation.
+  So the PR is not ready to land. The validator's diagnostic must be kept with the evidence-validation=failed result so the refusal shows the PR's current head, the head the attestation was bound to, and how to fix it.
+✻ Cogitated for 9s · done 12:04 AM
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Teach auto mode about your environment?
+  Auto mode works better when it knows your environment. Takes about a minute.
+  ❯ 1. Yes
+    2. Not now
+    3. Don't show again                                                                                                                                                                                                   
+  Enter to confirm · Esc to cancel                                                                                                                                                                                        
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯                                        
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Opus 5.5 │ 01M3HJSNA2MM846VJN5N3YY1W7 67ecef7f(wt:01M3HJSNA2MM846VJN5N3YY1W7) │ ░░░░░░░░ 5%used │ in:46.4k out:187 /1000.0k │ effort:medium thinking │ 5h:31%→02:00 7d:50%→Fri 11:00 │ v2.1.283
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← for agents

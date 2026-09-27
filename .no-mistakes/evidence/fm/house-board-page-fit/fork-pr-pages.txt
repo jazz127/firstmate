@@ -1,0 +1,17 @@
+ok        repos/jazz127/firstmate/pulls?state=all&per_page=8&page=1 rows=8
+truncated repos/jazz127/firstmate/pulls?state=all&per_page=8&page=2
+ok        repos/jazz127/firstmate/pulls?state=all&per_page=4&page=3 rows=4
+ok        repos/jazz127/firstmate/pulls?state=all&per_page=4&page=4 rows=4
+ok        repos/jazz127/firstmate/pulls?state=all&per_page=4&page=5 rows=4
+ok        repos/jazz127/firstmate/pulls?state=all&per_page=4&page=6 rows=4
+ok        repos/jazz127/firstmate/pulls?state=all&per_page=4&page=7 rows=4
+ok        repos/jazz127/firstmate/pulls?state=all&per_page=4&page=8 rows=4
+ok        repos/jazz127/firstmate/pulls?state=all&per_page=4&page=9 rows=4
+ok        repos/jazz127/firstmate/pulls?state=all&per_page=4&page=10 rows=4
+ok        repos/jazz127/firstmate/pulls?state=all&per_page=4&page=11 rows=4
+ok        repos/jazz127/firstmate/pulls?state=all&per_page=4&page=12 rows=4
+ok        repos/jazz127/firstmate/pulls?state=all&per_page=4&page=13 rows=4
+ok        repos/jazz127/firstmate/pulls?state=all&per_page=4&page=14 rows=4
+ok        repos/jazz127/firstmate/pulls?state=all&per_page=4&page=15 rows=4
+ok        repos/jazz127/firstmate/pulls?state=all&per_page=4&page=16 rows=1
+board rows: 61 unique: 61 gh truth: 61 exact match: True

@@ -1,0 +1,4 @@
+== fix 54bbf566 ==
+board: /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab.IdSog5/.lavish/house-board.html
+payload: /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab.IdSog5/.lavish/house-board.json
+exit=0

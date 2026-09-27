@@ -173,7 +173,9 @@ EOF
   fake_root="$dir/fake-root"
   mkdir -p "$fake_root/bin"
   printf '#!/usr/bin/env bash\nprintf "%%s\\n" "no-mistakes off"\n' > "$fake_root/bin/fm-project-mode.sh"
+  # shellcheck disable=SC2016
   printf '#!/usr/bin/env bash\nmkdir -p "$FM_HOME/data/$1"\nprintf "%%s\\n" "{TASK}" "{FIRSTMATE_SPEC}" > "$FM_HOME/data/$1/brief.md"\n' > "$fake_root/bin/fm-brief.sh"
+  # shellcheck disable=SC2016
   printf '#!/usr/bin/env bash\nprintf "%%s\\n" "spawned $1 worktree=$FM_HOME/projects/sample/task-worktree"\n' > "$fake_root/bin/fm-spawn.sh"
   chmod +x "$fake_root/bin"/*.sh
   FM_HOME="$dir" FM_ROOT_OVERRIDE="$fake_root" python3 "$CLI" intake --task general >/dev/null \

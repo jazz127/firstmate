@@ -1,0 +1,32 @@
+## PR https://github.com/jazz127/firstmate/pull/69: live head=fb7a7d5602faa23bc733681fac2b9a13893f0536, attested head_sha="head_sha":"fb7a7d5602faa23bc733681fac2b9a13893f0536"
+$ FM_HOME=<lab> bin/fm-pr-check.sh match https://github.com/jazz127/firstmate/pull/69
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  3 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  watcher supervision needs Stop-owned automatic recovery; inspect the hook registration and startup status before ending the turn.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+armed: state/match.check.sh
+exit=0
+armed check: yes
+pr=https://github.com/jazz127/firstmate/pull/69
+pr_head=fb7a7d5602faa23bc733681fac2b9a13893f0536
+
+## PR https://github.com/jazz127/firstmate/pull/42: live head=9a54e847887fc1cd05b763ce727b478a10b26400, attested head_sha="head_sha":"735ef548c5a07e7f670dbbd08f2ff9c895bed5fb"
+$ FM_HOME=<lab> bin/fm-pr-check.sh stale https://github.com/jazz127/firstmate/pull/42
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+evidence claim refused: missing evidence-artifact: path
+error: published intent validation failed
+exit=1
+armed check: none
+
+## PR https://github.com/jazz127/firstmate/pull/70: live head=d4825551980bbd8f2cdeac317d8a72048d720a57, attested head_sha=<no attestation>
+$ FM_HOME=<lab> bin/fm-pr-check.sh noatt https://github.com/jazz127/firstmate/pull/70
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+armed: state/noatt.check.sh
+exit=0
+armed check: yes
+pr=https://github.com/jazz127/firstmate/pull/70
+pr_head=d4825551980bbd8f2cdeac317d8a72048d720a57
+

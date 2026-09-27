@@ -1,0 +1,19 @@
+## real validator, PR #69 body, head read live from PR #69 (fm_pr_read_published_head)
+live head via fm_pr_read_published_head: fb7a7d5602faa23bc733681fac2b9a13893f0536
+exit=0
+
+## adversarial: PR #69 attestation presented for PR #72 (live head read from forge)
+error: published attestation head mismatch: current head fb3705de44edb558d59f1eeffd82670139472a20, attested head fb7a7d5602faa23bc733681fac2b9a13893f0536; run the pipeline once against the current head to re-attest it. Hand-editing the attestation is not an option; use a merge, not a rebase.
+exit=1
+
+## adversarial: two attestations in one body
+error: published intent has multiple pipeline attestations
+exit=1
+
+## adversarial: attestation with no head_sha
+error: published pipeline attestation has no valid head_sha
+exit=1
+
+## adversarial: unreadable current head (nonexistent PR #999999)
+error: cannot read the current head of https://github.com/jazz127/firstmate/pull/999999 to check its published attestation
+exit=1

@@ -1,0 +1,122 @@
+## Primary home configures Bosun-Kun role record
+configure-home rc=0
+## Routing with the shipped Bosun-Kun example route
+$ python3 /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3HJ6Y7Z1Z1H1T92GK58PNMX/bin/fm-bosun.py route --forge github --owner kunchenguid --repository no-mistakes
+bosun-kun
+[rc=0]
+
+$ python3 /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3HJ6Y7Z1Z1H1T92GK58PNMX/bin/fm-bosun.py route --forge github --owner someone-else --repository tool
+fm-bosun: no Bosun matches; ask whether to create one
+[rc=1]
+
+$ python3 /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3HJ6Y7Z1Z1H1T92GK58PNMX/bin/fm-bosun.py route --forge gitlab --owner kunchenguid --repository no-mistakes
+fm-bosun: unsupported Bosun forge 'gitlab'; supported: github
+[rc=1]
+
+## Exact repository route outranks owner pattern; equal-rank tie refuses
+$ python3 /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3HJ6Y7Z1Z1H1T92GK58PNMX/bin/fm-bosun.py route --forge github --owner kunchenguid --repository special
+bosun-special
+[rc=0]
+
+$ python3 /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3HJ6Y7Z1Z1H1T92GK58PNMX/bin/fm-bosun.py route --forge github --owner kunchenguid --repository other
+bosun-kun
+[rc=0]
+
+$ python3 /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3HJ6Y7Z1Z1H1T92GK58PNMX/bin/fm-bosun.py route --forge github --owner tie --repository x
+fm-bosun: ambiguous Bosun route; needs-decision
+[rc=1]
+
+## Unregistered Bosun in a route is refused
+$ python3 /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3HJ6Y7Z1Z1H1T92GK58PNMX/bin/fm-bosun.py route --forge github --owner ghost --repository any
+fm-bosun: Bosun bosun-ghost is not one registered secondmate
+[rc=1]
+
+## Evidence-backed memory and convention precedence (inside the Bosun's own secondmate home)
+$ python3 /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3HJ6Y7Z1Z1H1T92GK58PNMX/bin/fm-bosun.py configure-home --bosun bosun-kun
+[rc=0]
+
+$ python3 /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3HJ6Y7Z1Z1H1T92GK58PNMX/bin/fm-bosun.py convention --bosun bosun-kun --forge github --owner kunchenguid --repository no-mistakes --scope shared --key commit_style --value conventional --confirmed --evidence https://github.com/kunchenguid/no-mistakes/pull/1 --showed merged PR titles use conventional commits --read-at 2026-09-27T00:00:00Z
+[rc=0]
+
+$ python3 /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3HJ6Y7Z1Z1H1T92GK58PNMX/bin/fm-bosun.py convention --bosun bosun-kun --forge github --owner kunchenguid --repository no-mistakes --scope shared --key commit_style --value guess --confirmed
+fm-bosun: confirmed convention requires evidence source, finding, and read time
+[rc=1]
+
+$ python3 /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3HJ6Y7Z1Z1H1T92GK58PNMX/bin/fm-bosun.py convention --bosun bosun-kun --forge github --owner kunchenguid --repository no-mistakes --scope repository --key pr_body --value guess-only note
+[rc=0]
+
+$ python3 /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3HJ6Y7Z1Z1H1T92GK58PNMX/bin/fm-bosun.py convention --bosun bosun-kun --forge github --owner kunchenguid --repository no-mistakes --scope repository --key commit_style --value conventional+scope --confirmed --evidence CONTRIBUTING.md --showed scope required --read-at 2026-09-27T00:00:00Z
+[rc=0]
+
+$ python3 /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3HJ6Y7Z1Z1H1T92GK58PNMX/bin/fm-bosun.py conventions --bosun bosun-kun --forge github --owner kunchenguid --repository no-mistakes --policy /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-bosun-home.NefIui/policy.json
+{"commit_style": {"evidence": {"confirmed": true, "key": "commit_style", "read_at": "2026-09-27T00:00:00Z", "showed": "scope required", "source": "CONTRIBUTING.md", "value": "conventional+scope"}, "source": "repository", "value": "conventional+scope"}}
+[rc=0]
+
+$ python3 /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3HJ6Y7Z1Z1H1T92GK58PNMX/bin/fm-bosun.py conventions --bosun bosun-kun --forge github --owner kunchenguid --repository no-mistakes --policy /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-bosun-home.NefIui/policy.json
+{"commit_style": {"source": "current_repository_policy", "value": "from-current-AGENTS.md"}}
+[rc=0]
+
+$ python3 /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3HJ6Y7Z1Z1H1T92GK58PNMX/bin/fm-bosun.py conventions --bosun bosun-kun --forge github --owner kunchenguid --repository no-mistakes --policy /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-bosun-home.NefIui/policy.json --decisions /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-bosun-home.NefIui/decisions.json
+fm-bosun: needs-decision: captain decision conflicts with current policy for commit_style
+[rc=1]
+
+## Authorization boundaries without an order/published PR
+$ python3 /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3HJ6Y7Z1Z1H1T92GK58PNMX/bin/fm-bosun.py escalate --task nosuch --feedback https://github.com/kunchenguid/no-mistakes/pull/9#r1 --reason scope-change --note asks for more
+fm-bosun: missing record: /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-bosun-home.NefIui/data/nosuch/bosun-contribution.json
+[rc=1]
+
+$ python3 /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3HJ6Y7Z1Z1H1T92GK58PNMX/bin/fm-bosun.py merged --task nosuch --url https://github.com/kunchenguid/no-mistakes/pull/9
+[rc=0]
+
+## Files written in Bosun home
+data/bosun-memory/bosun-kun/profile.json
+data/bosun-memory/bosun-kun/repos/github/kunchenguid/no-mistakes.json
+data/bosun-role.json
+data/nosuch/bosun-contribution.json.lock
+
+{
+  "conventions": [
+    {
+      "confirmed": true,
+      "key": "commit_style",
+      "read_at": "2026-09-27T00:00:00Z",
+      "showed": "merged PR titles use conventional commits",
+      "source": "https://github.com/kunchenguid/no-mistakes/pull/1",
+      "value": "conventional"
+    }
+  ],
+  "schema": "fm-bosun-memory.v1"
+}
+
+{
+  "conventions": [
+    {
+      "confirmed": false,
+      "key": "pr_body",
+      "read_at": null,
+      "showed": null,
+      "source": null,
+      "value": "guess-only note"
+    },
+    {
+      "confirmed": true,
+      "key": "commit_style",
+      "read_at": "2026-09-27T00:00:00Z",
+      "showed": "scope required",
+      "source": "CONTRIBUTING.md",
+      "value": "conventional+scope"
+    }
+  ],
+  "schema": "fm-bosun-memory.v1"
+}
+
+## Primary role records
+data/bosuns/bosun-a.json
+data/bosuns/bosun-b.json
+data/bosuns/bosun-kun.json
+data/bosuns/bosun-special.json
+{
+  "id": "bosun-kun",
+  "kind": "bosun",
+  "schema": "fm-bosun-role.v1"
+}

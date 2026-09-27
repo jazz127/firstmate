@@ -1,0 +1,4 @@
+ok - fixed PID, start ticks, and boot ID keep identity across synthetic wall-clock rendering changes
+ok - PID reuse, command changes, and reboot invalidate identity
+ok - malformed proc and boot records fail closed
+not ok - stable-lstart legacy worker was not replaced: stale remote job worker did not stop safely

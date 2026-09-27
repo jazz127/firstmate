@@ -1,0 +1,9 @@
+ok - the knob reads absent as off, empty as two hours, and rejects values under a minute or unparseable
+ok - without a valid config/ready-session-timeout no ready worker is stopped
+ok - an empty knob stops a worker ready and idle for two hours, and not before
+ok - a configured duration replaces the default
+ok - a busy, recently active, unread-steer, or agent-less worker is never stopped
+ok - a ready worker whose crew state is working, parked, blocked, paused, failed, or unknown is never stopped
+ok - a worker the timeout stopped raises no stale, turn-end, or dead-endpoint alarm
+ok - a stopped worker whose run parks on it wakes firstmate once to relaunch it and is never re-stopped
+all fm-ready-timeout tests passed

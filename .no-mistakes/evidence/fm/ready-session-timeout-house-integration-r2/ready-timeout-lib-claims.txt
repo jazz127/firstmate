@@ -1,0 +1,15 @@
+## Drive bin/fm-ready-timeout-lib.sh (bash) against disposable lab home to check the skill line claims
+absent config  -> secs=[] rc=1 (feature off)
+empty config   -> secs=[7200] (skill: empty = 2 hours)
+90m            -> secs=[5400]
+30 (too short) -> secs=[] rc=2 (rejected, feature off)
+--- t1.ready-timeout:
+v=1
+result=stopped
+spawn_gen=7
+at=1790516196
+timeout=7200
+pr=https://example.invalid/pr/1
+detail=exit ok
+stopped + current spawn_gen -> parked (deliberately stopped, not stuck)
+relaunched (spawn_gen 8) -> no longer parked (relaunch ends parked reading)

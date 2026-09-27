@@ -1,0 +1,32 @@
+ ▐▛███▛█   Claude Code v2.1.283
+▝▜██████▀  Opus 5.5 · Claude Pro
+ ▝▝   ▝▝   ~/.no-mistakes/worktrees/119cd7a6b9a4/01M3HH7P5RJDY8FSMBT6YPN5V9
+❯ Read-only question, do not modify anything or run any fm-* scripts. Load the operational-home-layout skill, then quote verbatim the lines it gives for config/ready-session-timeout and for
+  state/<id>.ready-timeout, and tell me which file you got them from.
+⏺ Skill(operational-home-layout)
+  ⎿  Successfully loaded skill
+  ⎿  Read AGENTS.md (431 lines)
+  Listed 1 directory
+⏺ Captain, here are the two lines from the operational-home-layout skill, quoted exactly.
+  config/ready-session-timeout (line 41):
+  config/ready-session-timeout  optional opt-in to stopping the idle agent of a ship worker whose PR has sat ready awaiting merge for the configured duration (empty = 2 hours), keeping its local copy,
+  branch, PR, and merge monitoring for an on-demand relaunch; LOCAL, gitignored, and not inherited; see docs/configuration.md "Ready-session timeout"
+  state/<id>.ready-timeout (line 70; in the file it's indented under state/ as <id>.ready-timeout):
+    <id>.ready-timeout  durable record that the opt-in ready-session timeout stopped (or failed to stop) this ship worker's idle agent while its PR awaited merge; while a `stopped` record names the
+  current spawn_gen and crew state still reads done the worker is deliberately stopped, not stuck, and relaunches on demand; bin/fm-ready-timeout-lib.sh owns it; removed by teardown
+  Source file: .agents/skills/operational-home-layout/SKILL.md, in this local copy (/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3HH7P5RJDY8FSMBT6YPN5V9). The skill loaded through
+  .claude/skills/operational-home-layout/, but .claude/skills is a symlink to ../.agents/skills, so both paths point to the same file. I found the line numbers by searching that file. I didn't change
+  anything or run any fm-* scripts.
+✻ Sautéed for 21s · done 11:41 PM
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Teach auto mode about your environment?
+  Auto mode works better when it knows your environment. Takes about a minute.
+  ❯ 1. Yes
+    2. Not now
+    3. Don't show again
+  Enter to confirm · Esc to cancel
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ show the Ready-session timeout section in docs/configuration.md
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Opus 5.5 │ 01M3HH7P5RJDY8FSMBT6YPN5V9 45046418(wt:01M3HH7P5RJDY8FSMBT6YPN5V9) │ ░░░░░░░░ 5%used │ in:54.2k out:566 /1000.0k │ effort:medium thinking │ 5h:26%→02:00 7d:49%→Fri 11:00 │ v2.1.283
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← for agents

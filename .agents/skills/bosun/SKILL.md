@@ -15,7 +15,8 @@ Load `secondmate-provisioning` before provisioning a Bosun home or editing the s
 [`docs/configuration.md`](../../../docs/configuration.md#bosun-routes-configbosun-routesjson) owns the route schema and precedence.
 
 On an explicit captain order naming a maneuver and upstream target, resolve the target with `bin/fm-bosun.py route` in the primary home.
-If no route matches, ask whether to create a Bosun; never substitute another maintainer profile.
+Routing prefers a matching named Bosun, then the reserved upstream-defined slot, then `bosun-general`; never use the general Bosun in place of a named match.
+Provision the general Bosun through the ordinary secondmate path when first needed.
 If the route ties, hold for a captain decision instead of guessing.
 Send the order to that registered secondmate through the ordinary parent channel and preserve the captain's exact words in its contribution record.
 The Bosun reads current repository policy, checks accepted PR and review evidence when needed, and records only evidenced conventions as confirmed.

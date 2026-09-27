@@ -138,10 +138,12 @@ The repository pattern uses shell-style `*` and `?` matching against the reposit
 The [Bosun-Kun example](examples/bosun-routes.json) matches every `github` repository owned by `kunchenguid`.
 When a route names a fork owner without `fork_repository`, the fork repository defaults to the target repository name; set `fork_repository` on an exact-repository route when the fork was renamed.
 Optional `fork_owner`, `fork_repository`, and `upstream_default_branch` fields provide the Captain's fork identity and upstream base branch used when recording an order.
-Routing first prefers exact repository, then repository pattern, then owner, then forge; within a level, a named owner beats an omitted owner and a named forge beats an omitted forge.
+Routing checks configured named Bosuns first, preferring exact repository, then repository pattern, then owner, then forge; within a level, a named owner beats an omitted owner and a named forge beats an omitted forge.
 An equal-rank tie refuses even when both entries name the same Bosun.
-No match refuses and asks whether to create a Bosun, never falling back to a sole configured Bosun.
-The matched id must have the existing `data/secondmates.md` entry and a Bosun role record.
+When no named route matches, the resolver checks the reserved upstream-defined slot, which currently returns no match, then selects the built-in `bosun-general` fallback.
+The upstream-defined slot has no file format in this version.
+A configured named match always wins over the general fallback, and the resolver never substitutes a sole configured named Bosun.
+A matching named Bosun id must have the existing `data/secondmates.md` entry and a Bosun role record; provision `bosun-general` through the ordinary secondmate path when first needed.
 Run `bin/fm-bosun.py route --forge <forge> --owner <owner> --repository <repo>` to resolve without contacting a forge.
 
 ## Calm preference (config/calm)

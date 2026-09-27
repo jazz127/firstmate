@@ -77,10 +77,10 @@ test_routing() {
   [ "$out" = bosun-kun ] || fail 'exact route picked another Bosun'
   out=$(call "$dir" route --forge github --owner kunchenguid --repository sample) || fail 'pattern route failed'
   [ "$out" = bosun-kun ] || fail 'pattern route picked another Bosun'
-  if call "$dir" route --forge github --owner other --repository sample > "$dir/out" 2>&1; then
-    fail 'unmatched route silently selected a Bosun'
-  fi
-  assert_grep 'ask whether to create one' "$dir/out" 'no match did not request Bosun creation'
+  out=$(call "$dir" route --forge github --owner other --repository sample) || fail 'general fallback route failed'
+  [ "$out" = bosun-general ] || fail 'unmatched route did not select the general Bosun'
+  out=$(call "$dir" route --forge github --owner kunchenguid --repository special) || fail 'named route failed with general fallback available'
+  [ "$out" = bosun-kun ] || fail 'general Bosun replaced a matching named Bosun'
   unsupported=$(new_home unsupported-forge)
   cat > "$unsupported/config/bosun-routes.json" <<'EOF'
 {"schema":"fm-bosun-routes.v1","routes":[{"bosun":"bosun-kun","forge":"gerrit","owner":"kunchenguid"}]}
@@ -89,7 +89,35 @@ EOF
     fail 'unsupported forge route was accepted'
   fi
   assert_grep "unsupported Bosun forge 'gerrit'; supported: github" "$unsupported/out" 'unsupported forge diagnostic missing'
-  pass 'route precedence, no match, and unsupported forge refusal'
+  pass 'named route precedence, general fallback, and unsupported forge refusal'
+}
+
+test_general_bosun_evidence_is_maneuver_scoped() {
+  local dir out
+  dir=$(new_home general-memory)
+  printf '%s\n' bosun-general > "$dir/.fm-secondmate-home"
+  call "$dir" configure-home --bosun bosun-general >/dev/null || fail 'general Bosun home setup failed'
+  if call "$dir" convention --bosun bosun-general --forge github --owner other --repository sample \
+    --scope shared --key commits --value squash >"$dir/out" 2>&1; then
+    fail 'general Bosun accepted shared maintainer memory'
+  fi
+  assert_grep 'repository-scoped to the current maneuver' "$dir/out" 'shared memory refusal missing'
+  if call "$dir" convention --bosun bosun-general --forge github --owner other --repository sample \
+    --scope repository --key commits --value squash >"$dir/out" 2>&1; then
+    fail 'general Bosun accepted evidence without a maneuver id'
+  fi
+  call "$dir" convention --bosun bosun-general --forge github --owner other --repository sample \
+    --scope repository --task maneuver-a --key commits --value squash --confirmed \
+    --evidence CONTRIBUTING.md --showed 'requires squash' --read-at 2026-09-26T00:00:00Z \
+    || fail 'general Bosun could not record current-maneuver evidence'
+  [ -f "$dir/data/maneuver-a/bosun-evidence/github/other/sample.json" ] || fail 'general evidence was not maneuver-scoped'
+  printf '{"commits":"merge"}\n' > "$dir/policy.json"
+  call "$dir" conventions --bosun bosun-general --forge github --owner other --repository sample \
+    --task maneuver-b --policy "$dir/policy.json" > "$dir/conventions.json" \
+    || fail 'general Bosun could not resolve current maneuver evidence'
+  jq -e '.commits.source == "current_repository_policy" and .commits.value == "merge"' \
+    "$dir/conventions.json" >/dev/null || fail 'general Bosun reused evidence from a different maneuver'
+  pass 'general Bosun keeps evidence scoped to the current maneuver'
 }
 
 test_memory_and_paths() {
@@ -696,6 +724,7 @@ EOF
 }
 
 test_routing
+test_general_bosun_evidence_is_maneuver_scoped
 test_memory_and_paths
 test_bosun_id_path_refusal
 test_order_accepts_dotfiles

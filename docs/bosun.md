@@ -1,6 +1,7 @@
 # Bosuns and upstream maneuvers
 
-A Bosun is a persistent secondmate with a named maintainer scope, a Bosun role record, and its own evidence-backed memory.
+A named Bosun is a persistent secondmate with a maintainer scope, a Bosun role record, and evidence-backed memory.
+The built-in general upstream Bosun is also a persistent secondmate, but carries evidence only for its current maneuver.
 The contribution path is **Captain's Maneuver -> matching Bosun -> upstream PR -> Admiral's Maneuver**.
 A Captain's Maneuver is a main-based house feature on a durable `housefeature/<name>` branch, following the [fork-house branch guide](fork-house-branch.md#house-features).
 The `house-only` branch exception in that guide is outside this upstream contribution path.
@@ -26,11 +27,15 @@ For Bosun-Kun, use id `bosun-kun`, scope `contributions to kunchenguid/*`, and t
 Provision the actual home only after this change lands.
 Leave its shared Kun profile empty until current repository files or accepted PR and review artifacts provide evidence.
 
+The built-in general upstream Bosun uses id `bosun-general` and has no maintainer scope or shared profile.
+Provision it on demand through the ordinary persistent-secondmate path, with a charter limited to explicitly ordered maneuvers and current target-repository policy.
+Configure its role in the primary home and its own home as for any Bosun; no route row is needed.
+Its confirmed convention evidence must be recorded under the current maneuver with `--scope repository --task <task>` and cannot be read by another maneuver.
+
 ## Route and order
 
 [`configuration.md`](configuration.md#bosun-routes-configbosun-routesjson) owns the route schema and precedence.
 Run `FM_HOME=<primary-home> bin/fm-bosun.py route --forge github --owner kunchenguid --repository <repo>` before assigning an upstream contribution.
-No match asks whether to create a Bosun; an equal-rank tie refuses.
 Forward the captain's explicit words, named maneuver, and exact target to the matching secondmate.
 The Bosun records the order with `fm-bosun.py order` in its own home, including the durable source branch, selected source commit IDs, allowed changed paths, and contribution branch.
 Use a repeated `--deviation path=reason` only for an explicitly recorded stripped or rewritten path.

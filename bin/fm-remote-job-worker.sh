@@ -138,6 +138,7 @@ worker_quarantined_execution_stopped() { # <account-home>
   local account_home=$1 job state kind file pid
   fm_remote_job_regular_bounded "$WORKER_LOCK/quarantine" 256 || return 1
   fm_remote_job_lock_owner_matches_process "$account_home" && return 1
+  fm_remote_job_lock_owner_uncertain_alive "$account_home" && return 1
   for job in "$FM_REMOTE_JOB_JOBS"/job-*; do
     [ -d "$job" ] && [ ! -L "$job" ] || continue
     state=$(fm_remote_job_read_state "$job" 2>/dev/null || true)
@@ -172,6 +173,9 @@ worker_acquire_lock() {
       continue
     fi
     if fm_remote_job_lock_owner_matches_process "$account_home"; then return 2; fi
+    # A live old-format owner may have a different rendered lstart now. Never
+    # delete its lock merely because the new token cannot match its record.
+    fm_remote_job_lock_owner_uncertain_alive "$account_home" && return 3
     if fm_remote_job_probe "$account_home" || worker_lock_recent; then
       attempt=$((attempt + 1))
       sleep 0.1
@@ -323,6 +327,7 @@ worker_supervisor_identity_status() { # <job-dir> <pid>
     return 1
   }
   [ "$recorded_start" = "$actual_start" ] && return 0
+  if fm_remote_job_legacy_start_record "$recorded_start" && kill -0 "$pid" 2>/dev/null; then return 2; fi
   return 1
 }
 
@@ -341,6 +346,7 @@ worker_group_identity_status() { # <job-dir> <pid>
     return 1
   }
   [ "$recorded_start" = "$actual_start" ] && return 0
+  if fm_remote_job_legacy_start_record "$recorded_start" && kill -0 "$pid" 2>/dev/null; then return 2; fi
   return 1
 }
 
@@ -556,9 +562,13 @@ worker_claim_owner_alive() { # <job-dir>
   case "$pid" in ''|*[!0-9]*) return 1 ;; esac
   if [ -e "$claim/owner_start" ] || [ -L "$claim/owner_start" ]; then
     recorded_start=$(fm_remote_job_read_single_line "$claim/owner_start" 256 2>/dev/null) || return 1
-    actual_start=$(fm_remote_job_process_start "$pid" 2>/dev/null) || return 1
-    [ "$recorded_start" = "$actual_start" ]
-    return
+    actual_start=$(fm_remote_job_process_start "$pid" 2>/dev/null) || {
+      kill -0 "$pid" 2>/dev/null
+      return $?
+    }
+    [ "$recorded_start" = "$actual_start" ] && return 0
+    fm_remote_job_legacy_start_record "$recorded_start" && kill -0 "$pid" 2>/dev/null
+    return $?
   fi
   kill -0 "$pid" 2>/dev/null
 }

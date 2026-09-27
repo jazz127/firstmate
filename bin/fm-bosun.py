@@ -18,6 +18,7 @@ import tempfile
 from urllib.parse import urlparse
 
 SUPPORTED_FORGES = {"github"}
+GENERAL_BOSUN = "bosun-general"
 
 
 class Refusal(Exception):
@@ -244,8 +245,8 @@ def target(forge, owner, repo):
     return {"forge": forge, "owner": owner.lower(), "repository": repo.lower()}
 
 
-def routes():
-    data = read_json(home() / "config/bosun-routes.json", {"schema": "fm-bosun-routes.v1", "routes": []})
+def routes(root=None):
+    data = read_json((root or home()) / "config/bosun-routes.json", {"schema": "fm-bosun-routes.v1", "routes": []})
     if data.get("schema") != "fm-bosun-routes.v1" or not isinstance(data.get("routes"), list):
         fail("invalid Bosun route schema")
     for row in data["routes"]:
@@ -255,9 +256,9 @@ def routes():
     return data["routes"]
 
 
-def resolve_route(want):
+def resolve_route(want, root=None):
     matches = []
-    for row in routes():
+    for row in routes(root):
         if not isinstance(row, dict) or not isinstance(row.get("bosun"), str):
             fail("invalid Bosun route")
         bosun = safe_name(row["bosun"])
@@ -280,13 +281,22 @@ def resolve_route(want):
         score = (3 if row.get("repository") else 2 if row.get("repository_pattern") else 1 if row.get("owner") else 0,
                  bool(row.get("owner")), bool(row.get("forge")))
         matches.append((score, row))
-    if not matches:
-        fail("no Bosun matches; ask whether to create one")
-    best = max(score for score, _ in matches)
-    winners = [row for score, row in matches if score == best]
-    if len(winners) != 1:
-        fail("ambiguous Bosun route; needs-decision")
-    return winners[0]
+    if matches:
+        best = max(score for score, _ in matches)
+        winners = [row for score, row in matches if score == best]
+        if len(winners) != 1:
+            fail("ambiguous Bosun route; needs-decision")
+        return winners[0]
+    upstream_bosun = resolve_upstream_bosun(want)
+    if upstream_bosun:
+        return {"bosun": upstream_bosun}
+    return {"bosun": GENERAL_BOSUN, "kind": "general"}
+
+
+def resolve_upstream_bosun(want):
+    """Reserved routing hook for a future upstream-defined Bosun; no format is defined yet."""
+    del want
+    return None
 
 
 def resolve(want):
@@ -406,7 +416,8 @@ def validate_extraction(worktree, source_commits, actual_commits, merges, deviat
 
 def cmd_route(args):
     bosun = resolve(target(args.forge, args.owner, args.repository))
-    role(bosun)
+    if bosun != GENERAL_BOSUN:
+        role(bosun)
     print(bosun)
 
 
@@ -423,9 +434,26 @@ def cmd_configure_home(args):
     write_json(path, {"schema": "fm-bosun-role.v1", "id": args.bosun, "kind": "bosun"})
 
 
+def parent_home():
+    lib = Path(__file__).resolve().parent / "fm-secondmate-parent-lib.sh"
+    result = subprocess.run(["bash", "-c", '. "$1"; fm_secondmate_parent_record_parse "$2" && '
+                             '[ "$FM_SECONDMATE_PARENT_ROUTE" = local ] && printf %s "$FM_SECONDMATE_PARENT_HOME"',
+                             "_", str(lib), str(home() / ".fm-secondmate-parent")],
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    parent = Path(result.stdout)
+    registry = parent / "data/secondmates.md"
+    if (result.returncode or not result.stdout or parent.is_symlink() or not parent.is_dir()
+            or registry.is_symlink() or not registry.is_file()):
+        fail("general Bosun order needs a local parent home to check named Bosun routes")
+    return parent
+
+
 def cmd_order(args):
     want = target(args.forge, args.owner, args.repository)
-    route = resolve_route(want)
+    route_home = None
+    if args.bosun == GENERAL_BOSUN and (home() / ".fm-secondmate-home").exists():
+        route_home = parent_home()
+    route = resolve_route(want, route_home)
     if route["bosun"] != args.bosun:
         fail("target routes to a different Bosun")
     role(args.bosun)
@@ -619,6 +647,12 @@ def cmd_intake_locked(args):
             "maintainer requests, policy conflicts, and consequential decisions through "
             "captain-hold-lifecycle in this home and needs-decision through the parent channel.\n\n"
             f"Captain's exact order: {record['captain_order']['words']}")
+    if record["bosun"] == GENERAL_BOSUN:
+        task += ("\nAs the general Bosun, carry no maintainer conventions between maneuvers. "
+                 "Read the current target repository instructions and contribution policy for "
+                 "this maneuver, then record any relevant evidence only with "
+                 f"`convention --bosun bosun-general --scope repository --task {record['task']} ...`; "
+                 "never write shared profile memory or reuse evidence from another maneuver.\n")
     spec = (f"Bosun assignment `{record['assignment_id']}`.\n"
             f"This task is authorized only for Bosun `{record['bosun']}`, source branch "
             f"`{record['source_branch']}`, contribution branch `{record['contribution_branch']}`, "
@@ -646,8 +680,13 @@ def cmd_intake_locked(args):
     print(spawn.stdout.strip())
 
 
-def memory_path(bosun, scope, want):
+def memory_path(bosun, scope, want, task=None):
     role(bosun)
+    if bosun == GENERAL_BOSUN:
+        if scope != "repository" or not task:
+            fail("general Bosun evidence must be repository-scoped to the current maneuver")
+        task = safe_name(task)
+        return home() / "data" / task / "bosun-evidence" / want["forge"] / want["owner"] / f"{want['repository']}.json"
     root = home() / "data/bosun-memory" / bosun
     return root / ("profile.json" if scope == "shared" else f"repos/{want['forge']}/{want['owner']}/{want['repository']}.json")
 
@@ -656,7 +695,7 @@ def cmd_convention(args):
     want = target(args.forge, args.owner, args.repository)
     if args.scope not in ("shared", "repository"):
         fail(f"invalid Bosun convention scope: {args.scope}")
-    path = memory_path(args.bosun, args.scope, want)
+    path = memory_path(args.bosun, args.scope, want, args.task)
     record = read_json(path, {"schema": "fm-bosun-memory.v1", "conventions": []})
     if record.get("schema") != "fm-bosun-memory.v1" or not isinstance(record.get("conventions"), list):
         fail("invalid Bosun memory")
@@ -670,8 +709,9 @@ def cmd_convention(args):
 def cmd_conventions(args):
     want = target(args.forge, args.owner, args.repository)
     result = {}
-    for scope in ("shared", "repository"):
-        data = read_json(memory_path(args.bosun, scope, want), {"schema": "fm-bosun-memory.v1", "conventions": []})
+    scopes = ("repository",) if args.bosun == GENERAL_BOSUN else ("shared", "repository")
+    for scope in scopes:
+        data = read_json(memory_path(args.bosun, scope, want, args.task), {"schema": "fm-bosun-memory.v1", "conventions": []})
         if data.get("schema") != "fm-bosun-memory.v1":
             fail("invalid Bosun memory")
         for item in data.get("conventions", []):
@@ -910,8 +950,9 @@ def main():
     p = sub.add_parser("convention"); add_target(p)
     for name in ("bosun", "scope", "key", "value"):
         p.add_argument("--" + name, required=True)
+    p.add_argument("--task")
     p.add_argument("--evidence"); p.add_argument("--showed"); p.add_argument("--read-at"); p.add_argument("--confirmed", action="store_true"); p.set_defaults(func=cmd_convention)
-    p = sub.add_parser("conventions"); add_target(p); p.add_argument("--bosun", required=True); p.add_argument("--policy", required=True); p.add_argument("--decisions"); p.set_defaults(func=cmd_conventions)
+    p = sub.add_parser("conventions"); add_target(p); p.add_argument("--bosun", required=True); p.add_argument("--policy", required=True); p.add_argument("--task"); p.add_argument("--decisions"); p.set_defaults(func=cmd_conventions)
     p = sub.add_parser("registration-check"); p.add_argument("--task", required=True); p.add_argument("--url", required=True); p.add_argument("--forge", required=True); p.add_argument("--head", required=True); p.add_argument("--base", required=True); p.add_argument("--branch", required=True); p.add_argument("--head-branch", required=True); p.add_argument("--pr-head", required=True); p.add_argument("--validation-head", required=True); p.add_argument("--validation-mode", required=True); p.add_argument("--upstream-base", required=True); p.add_argument("--worktree"); p.add_argument("--changed-path", action="append", default=[]); p.add_argument("--check-only", action="store_true"); p.add_argument("--forge-verify", action="store_true"); p.set_defaults(func=cmd_registration_check)
     p = sub.add_parser("escalate"); p.add_argument("--task", required=True); p.add_argument("--feedback", required=True); p.add_argument("--reason", required=True); p.add_argument("--note", required=True); p.set_defaults(func=cmd_escalate)
     p = sub.add_parser("merged"); p.add_argument("--task", required=True); p.add_argument("--url", required=True); p.set_defaults(func=cmd_merged)

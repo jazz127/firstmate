@@ -1,0 +1,12 @@
+=== S3 masking body against PRE-FIX bin (033ea697)
+evidence preflight ok
+exit=0
+=== same body against FIXED bin (7f96ab74)
+evidence claim refused: contradictory driven-scenario results:
+  4 of 4 scenarios driven live.
+  | Scenario | Result | Live |
+  | A | pass | yes |
+  | B | pass | yes |
+  | C | pass | yes |
+  | D | pass | no |
+exit=1

@@ -1,0 +1,166 @@
+=== S1 honest 4-row table + 4 of 4 claim
+--- body:
+## Testing
+4 of 4 scenarios driven live.
+
+| Scenario | Result | Live |
+|---|---|---|
+| A | pass | yes |
+| B | pass | yes |
+| C | pass | yes |
+| D | pass | yes |
+
+evidence-artifact: /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-pf.dWADJJ/wt/e.txt
+evidence-command: cat /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-pf.dWADJJ/wt/e.txt
+evidence-captured: 2026-09-27T10:00:00+10:00
+--- preflight:
+evidence preflight ok
+exit=0
+
+=== S2 contradictory 4-row table (3 live) + 4 of 4 claim
+--- body:
+## Testing
+4 of 4 scenarios driven live.
+
+| Scenario | Result | Live |
+|---|---|---|
+| A | pass | yes |
+| B | pass | yes |
+| C | pass | yes |
+| D | pass | no |
+
+evidence-artifact: /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-pf.dWADJJ/wt/e.txt
+evidence-command: cat /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-pf.dWADJJ/wt/e.txt
+evidence-captured: 2026-09-27T10:00:00+10:00
+--- preflight:
+evidence claim refused: contradictory driven-scenario results:
+  4 of 4 scenarios driven live.
+  | Scenario | Result | Live |
+  | A | pass | yes |
+  | B | pass | yes |
+  | C | pass | yes |
+  | D | pass | no |
+exit=1
+
+=== S3 one-row table tries to mask contradictory 4-row table
+--- body:
+## Testing
+4 of 4 scenarios driven live.
+
+| Scenario | Result | Live |
+|---|---|---|
+| All four accounts | pass | yes |
+
+| Scenario | Result | Live |
+|---|---|---|
+| A | pass | yes |
+| B | pass | yes |
+| C | pass | yes |
+| D | pass | no |
+
+evidence-artifact: /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-pf.dWADJJ/wt/e.txt
+evidence-command: cat /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-pf.dWADJJ/wt/e.txt
+evidence-captured: 2026-09-27T10:00:00+10:00
+--- preflight:
+evidence claim refused: contradictory driven-scenario results:
+  4 of 4 scenarios driven live.
+  | Scenario | Result | Live |
+  | A | pass | yes |
+  | B | pass | yes |
+  | C | pass | yes |
+  | D | pass | no |
+exit=1
+
+=== S3b masking attempt, one-row table placed after 4-row table
+--- body:
+## Testing
+4 of 4 scenarios driven live.
+
+| Scenario | Result | Live |
+|---|---|---|
+| A | pass | yes |
+| B | pass | yes |
+| C | pass | yes |
+| D | pass | no |
+
+| Scenario | Result | Live |
+|---|---|---|
+| All four accounts | pass | yes |
+
+evidence-artifact: /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-pf.dWADJJ/wt/e.txt
+evidence-command: cat /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-pf.dWADJJ/wt/e.txt
+evidence-captured: 2026-09-27T10:00:00+10:00
+--- preflight:
+evidence claim refused: contradictory driven-scenario results:
+  4 of 4 scenarios driven live.
+  | Scenario | Result | Live |
+  | A | pass | yes |
+  | B | pass | yes |
+  | C | pass | yes |
+  | D | pass | no |
+exit=1
+
+=== S4 single one-row summary table alone still accepted
+--- body:
+## Testing
+4 of 4 scenarios driven live.
+
+| Scenario | Result | Live |
+|---|---|---|
+| All four accounts | pass | yes |
+
+evidence-artifact: /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-pf.dWADJJ/wt/e.txt
+evidence-command: cat /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-pf.dWADJJ/wt/e.txt
+evidence-captured: 2026-09-27T10:00:00+10:00
+--- preflight:
+evidence preflight ok
+exit=0
+
+=== S5 one-row summary + honest 4-row table accepted
+--- body:
+## Testing
+4 of 4 scenarios driven live.
+
+| Scenario | Result | Live |
+|---|---|---|
+| All four accounts | pass | yes |
+
+| Scenario | Result | Live |
+|---|---|---|
+| A | pass | yes |
+| B | pass | yes |
+| C | pass | yes |
+| D | pass | yes |
+
+evidence-artifact: /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-pf.dWADJJ/wt/e.txt
+evidence-command: cat /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-pf.dWADJJ/wt/e.txt
+evidence-captured: 2026-09-27T10:00:00+10:00
+--- preflight:
+evidence preflight ok
+exit=0
+
+=== S6 declined case: one-row summary + unrelated 2-row check table
+--- body:
+## Testing
+4 of 4 scenarios driven live.
+
+| Scenario | Result | Live |
+|---|---|---|
+| All four accounts | pass | yes |
+
+| Check | Result | Live |
+|---|---|---|
+| Lint | pass | no |
+| Unit | pass | no |
+
+evidence-artifact: /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-pf.dWADJJ/wt/e.txt
+evidence-command: cat /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-pf.dWADJJ/wt/e.txt
+evidence-captured: 2026-09-27T10:00:00+10:00
+--- preflight:
+evidence claim refused: contradictory driven-scenario results:
+  4 of 4 scenarios driven live.
+  | Check | Result | Live |
+  | Lint | pass | no |
+  | Unit | pass | no |
+exit=1
+

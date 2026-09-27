@@ -1,0 +1,32 @@
+== lab tmux global env (inherited by new secondmate panes):
+FM_STATE_OVERRIDE=
+== primary drive transcript:
++ export FM_STATE_OVERRIDE=
++ FM_STATE_OVERRIDE=
++ export FM_BACKEND=tmux
++ FM_BACKEND=tmux
++ cd /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3HSMBB0EX5ADBCD8G8NQ3Z5
++ FM_SECONDMATE_CHARTER='ops charter'
++ bin/fm-brief.sh ops --secondmate alpha
+scaffolded: /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.ElVNyX/data/ops/brief.md (secondmate charter)
++ bin/fm-home-seed.sh ops /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.ElVNyX-sub2 alpha
+home=/private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab.ElVNyX-sub2
++ bin/fm-spawn.sh ops /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.ElVNyX-sub2 codex --secondmate
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.ElVNyX
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+warning: secondmate ops sync skipped before launch: primary default-branch commit cannot be resolved
+spawned ops harness=codex kind=secondmate mode=secondmate yolo=off window=primary:fm-ops worktree=/private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab.ElVNyX-sub2
++ echo SPAWN_EXIT=0
+SPAWN_EXIT=0
+== windows:
+primary:0: bash* (1 panes) [200x50] 
+primary:1: fm-design (1 panes) [200x50] 
+primary:2: fm-ops (1 panes) [200x50] 
+== ops pane:
+  Folder access
+  /private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab.ElVNyX-sub2
+  Trust this folder? Codex can read, edit, and run files here, subject to your permission settings. Folder settings can run code automatically, even without a model request. Continue only if you
+  trust these files. Your trust decision will be saved.
+› 1. Trust and continue
+  2. Quit
+  enter continue · esc quit

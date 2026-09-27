@@ -1,0 +1,35 @@
+== fm-secondmate-lifecycle-e2e
+ok - seed: registry scope+projects, charter copied, clones+origins, no-mistakes init in subhome only
+warning: secondmate design sync skipped before launch: primary default-branch commit cannot be resolved
+unregistered: state/secondmate-launch.check.sh
+ok - spawn: launches in the subhome with persistent charter, records routing meta
+ok - send: a bare fm-<id> secondmate enqueues a marked request and rings the meta window
+ok - handoff: in-scope items move verbatim, out-of-scope stays, idempotent
+ok - recovery: respawns from the durable registry and persistent home
+ok - teardown: removes the home, then clears meta and the registry route
+exit=
+== fm-spawn-compact-adviser-disable
+ok - ship launch with no allowlist starts its agent with the compact-adviser switch on
+ok - ship launch under an enabled allowlist keeps the compact-adviser switch through the cleared environment
+ok - the launch command sets the switch on its own, whichever allowlist posture is in force
+ok - a secondmate launch carries the compact-adviser switch in both allowlist postures
+ok - relaunch rebuilds the compact-adviser switch for the replacement agent in both allowlist postures
+ok - a compound raw launch-command still starts its agent with the compact-adviser switch on
+exit=
+== fm-spawn-dispatch-profile
+ok - absent Lavish configuration preserves the destination environment
+ok - claude omits the config-dir prefix when firstmate runs with the single-store default
+ok - config/claude-permission-mode=bypass launches exactly as an absent file does
+ok - config/claude-permission-mode=auto replaces --dangerously-skip-permissions with --permission-mode auto
+ok - config/claude-permission-mode=auto reaches scout launches too
+ok - an unrecognized config/claude-permission-mode token refuses before any endpoint or metadata
+ok - config/claude-permission-mode changes claude launches only
+ok - non-claude harnesses do not receive the claude CLAUDE_CONFIG_DIR prefix
+ok - a claude task launch establishes only Firstmate's task control channels through the system prompt
+ok - a persistent claude secondmate keeps its supervisor contract without a task-worker authority overlay
+ok - fm-spawn: a Claude launch longer than 1024 bytes is delivered intact through the staging path
+ok - a claude crewmate launch carries the attribution-off policy in its own settings
+ok - a claude secondmate launch carries the attribution-off policy too
+ok - active crew-dispatch profile does not block secondmate launches
+# all fm-spawn-dispatch-profile tests passed
+exit=

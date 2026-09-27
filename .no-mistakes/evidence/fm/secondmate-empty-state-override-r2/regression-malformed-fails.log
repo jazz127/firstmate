@@ -1,0 +1,6 @@
+== e2e lifecycle test with MALFORMED concatenated prefix
+ok - seed: registry scope+projects, charter copied, clones+origins, no-mistakes init in subhome only
+warning: secondmate design sync skipped before launch: primary default-branch commit cannot be resolved
+not ok - launch did not clear operational overrides and unset the state override
+== compact-adviser behavioral test with MALFORMED prefix
+not ok - secondmate, allowlist absent: the emitted launch failed to run

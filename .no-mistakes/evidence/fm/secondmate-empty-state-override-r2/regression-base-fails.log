@@ -1,0 +1,9 @@
+== e2e lifecycle test with BASE bin/fm-spawn.sh (49a218bb)
+ok - seed: registry scope+projects, charter copied, clones+origins, no-mistakes init in subhome only
+warning: secondmate design sync skipped before launch: primary default-branch commit cannot be resolved
+not ok - launch did not clear operational overrides and unset the state override
+== compact-adviser behavioral test (executes emitted launch) with BASE fm-spawn.sh
+not ok - a secondmate launch must set the compact-adviser switch, remove inherited FM_STATE_OVERRIDE, and clear FM_ROOT_OVERRIDE (expected 'COMPACT_ADVISER_DISABLE=1
+FM_STATE_OVERRIDE=unset
+FM_ROOT_OVERRIDE=', got 'COMPACT_ADVISER_DISABLE=1
+FM_STATE_OVERRIDE=

@@ -5,7 +5,7 @@
 # a private HOME, a fake launchctl backed by state files, a fake herdr CLI, a
 # fake lsof that names a real holder process as the fm-remote socket owner, and
 # a fake uname that selects the platform under test. The holders are real
-# non-platform processes (Node blocked on a fifo) whose environment carries the
+# non-platform processes (node, else jq, blocked on a fifo) whose environment carries the
 # birth markers bin/fm-remote-herdr-owner-lib.sh reads, so the Aqua-versus-SSH
 # verdict is exercised for real. Nothing here touches the runner's own launch
 # agents, login session, or herdr server.
@@ -14,7 +14,6 @@ set -u
 # shellcheck source=tests/lib.sh
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 command -v jq >/dev/null 2>&1 || { echo "skip: jq not found (the herdr adapter parses its JSON)"; exit 0; }
-command -v node >/dev/null 2>&1 || { echo "skip: node not found for holder process"; exit 0; }
 command -v python3 >/dev/null 2>&1 || { echo "skip: python3 not found (plistlib parses the owned launch-agent contract)"; exit 0; }
 
 TMP_ROOT=$(fm_test_tmproot fm-remote-doctor)

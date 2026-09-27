@@ -2,7 +2,7 @@
 # Check, and optionally repair, one remote account's second-mate readiness.
 #
 # Usage:
-#   bin/fm-on.sh <secondmate-id|ssh-alias> fm-remote-doctor.sh [--fix]
+#   bin/fm-on.sh <secondmate-id|ssh-alias> fm-remote-doctor.sh [--fix [--restart-herdr]]
 #
 # Run it through fm-on.sh so the fixed entrypoint invokes this readiness owner
 # over its plain SSH bootstrap. The command reports the same filesystem-composed
@@ -39,11 +39,12 @@
 #   check <check>=skip: <why this host is exempt>
 #   check <check>=fixable: <gap --fix can close>
 #   check <check>=human: <gap only a person at that machine can close>
+#   check <check>=notice: <non-blocking condition only an operator repairs>
 #   action: <check>: <the exact step to take>
 # Every check line is authoritative for the moment it printed: under --fix it is
 # the state after the repair attempt, so a human gap is never presented as
 # fixed. Any remaining fixable or human gap, and any missing required tool,
-# exits non-zero.
+# exits non-zero; a notice does not.
 #
 # --fix is idempotent and closes only automatable gaps: it writes and reloads
 # both Firstmate-owned Aqua agents, starts the Linux workers where no Aqua agent
@@ -51,7 +52,9 @@
 # wrapper for a required tool it can discover under nvm, asdf, or mise. It never
 # installs packages, creates a login session, writes an auto-login password,
 # changes FileVault, stores an account password, or replaces a non-Firstmate
-# wrapper; those remain reported gaps.
+# wrapper; those remain reported gaps. It restarts a healthy fm-remote server
+# that Herdr saved machines refuse, closing its panes, only when an operator
+# adds --restart-herdr; the automatic readiness gate never passes it.
 set -eu
 
 # Resolve this script's directory with builtins only: a host missing a required
@@ -84,9 +87,17 @@ ENTRYPOINT_LINK="${HOME:-}/.local/bin/fm-remote-entrypoint.sh"
 usage() { sed -n '2,5p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 
 MODE=check
+RESTART_HERDR=0
 case "${1:-}" in
   '') ;;
-  --fix) MODE=fix; shift ;;
+  --fix)
+    MODE=fix
+    shift
+    if [ "${1:-}" = --restart-herdr ]; then
+      RESTART_HERDR=1
+      shift
+    fi
+    ;;
   --worker-tool-probe)
     [ "${FM_REMOTE_JOB_ACTIVE:-}" = 1 ] || { printf 'error: worker tool probe requires the remote job worker\n' >&2; exit 64; }
     MODE='worker-tool-probe'
@@ -171,10 +182,13 @@ herdr_server_running() {
   [ "$running" = true ]
 }
 
-herdr_server_detached() {
-  local detached
-  detached=$(herdr_server_status_json | jq -r '.server.capabilities.detached_server_daemon // false' 2>/dev/null) || return 1
-  [ "$detached" = true ]
+# Herdr 0.9.1 saved machines refuse a server that reports
+# detached_server_daemon=false; an older server without the capability is not
+# judged by it.
+herdr_server_needs_session_leader() {
+  local refused
+  refused=$(herdr_server_status_json | jq -r '.server.capabilities.detached_server_daemon == false' 2>/dev/null) || return 1
+  [ "$refused" = true ]
 }
 
 # Birth of the process serving the session, as the guard classifies it:
@@ -202,7 +216,6 @@ herdr_server_birth() {
 herdr_server_aqua_owned() {
   local birth
   herdr_server_running || return 1
-  herdr_server_detached || return 1
   [ "$PLATFORM" = darwin ] || return 0
   birth=$(herdr_server_birth)
   fm_remote_herdr_birth_is_aqua "${birth%% *}"
@@ -664,6 +677,15 @@ check_launch_agent_loaded() { # <resolved-login-shell>
     "close the login-session gap first; a launch agent can only be bootstrapped into an existing GUI session"
 }
 
+record_herdr_server_running() { # <evidence>
+  if herdr_server_needs_session_leader; then
+    record herdr-server "notice: $1, but it is not a session-leader server, so Herdr saved machines refuse it" \
+      "while the host is quiet, rerun this command with --fix --restart-herdr; the server restarts and its panes close"
+    return 0
+  fi
+  record herdr-server "ok: $1"
+}
+
 check_herdr_server() {
   if ! herdr_cli_available; then
     record herdr-server "human: herdr server status cannot be read without both herdr and jq on the runtime PATH" \
@@ -672,19 +694,14 @@ check_herdr_server() {
   fi
   if herdr_server_running; then
     if [ "$PLATFORM" != darwin ]; then
-      record herdr-server "ok: session $HERDR_SESSION_NAME is running"
+      record_herdr_server_running "session $HERDR_SESSION_NAME is running"
       return 0
     fi
     local birth
     birth=$(herdr_server_birth)
     case "$birth" in
       launchd\ *|worker\ *)
-        if herdr_server_detached; then
-          record herdr-server "ok: session $HERDR_SESSION_NAME is running in the Aqua login session (pid ${birth#* }, ${birth%% *}) and is ready for saved machines"
-        else
-          record herdr-server "fixable: session $HERDR_SESSION_NAME is Aqua-born but not a session-leader server, so saved machines refuse it" \
-            "rerun this command with --fix while the host is quiet; the launch agent will restart the server and its panes"
-        fi
+        record_herdr_server_running "session $HERDR_SESSION_NAME is running in the Aqua login session (pid ${birth#* }, ${birth%% *})"
         ;;
       nolsof)
         record herdr-server "human: session $HERDR_SESSION_NAME is running but lsof does not resolve, so its server's birth cannot be proven" \
@@ -816,12 +833,24 @@ wait_for_herdr_server() {
   return 1
 }
 
+stop_herdr_server() {
+  local i=0
+  fm_backend_herdr_cli "$HERDR_SESSION_NAME" server stop >/dev/null 2>&1 || true
+  while [ "$i" -lt 20 ]; do
+    herdr_server_running || return 0
+    i=$((i + 1))
+    sleep 0.5
+  done
+  fix_report herdr-server failed "the herdr server for session $HERDR_SESSION_NAME did not stop within 10s"
+  return 1
+}
+
 start_herdr_server() {
   if ! herdr_adapter_load; then
     fix_report herdr-server failed "herdr and jq must both resolve before the server can be started"
     return 1
   fi
-  if fm_backend_herdr_server_ensure "$HERDR_SESSION_NAME" >/dev/null 2>&1; then
+  if fm_backend_herdr_server_ensure "$HERDR_SESSION_NAME" session-leader >/dev/null 2>&1; then
     fix_report herdr-server applied "started the herdr server for session $HERDR_SESSION_NAME"
     return 0
   fi
@@ -850,7 +879,11 @@ apply_fixes() { # <resolved-login-shell>
     name=${CHECK_NAMES[$i]}
     value=${CHECK_VALUES[$i]}
     i=$((i + 1))
-    case "$value" in fixable:*) ;; *) continue ;; esac
+    case "$value" in
+      fixable:*) ;;
+      notice:*) [ "$RESTART_HERDR" = 1 ] && [ "$name" = herdr-server ] || continue ;;
+      *) continue ;;
+    esac
     case "$name" in
       remote-job-worker|remote-job-worker-loaded|remote-job-probe)
         [ "$remote_job_fixed" -eq 0 ] || continue
@@ -882,6 +915,7 @@ apply_fixes() { # <resolved-login-shell>
           reload_launch_agent herdr-server || true
           continue
         fi
+        case "$value" in notice:*) [ "$PLATFORM" != darwin ] && stop_herdr_server || continue ;; esac
         start_herdr_server || true
         ;;
       entrypoint-link) link_entrypoint || true ;;
@@ -933,15 +967,17 @@ for tool in "${OPTIONAL_TOOLS[@]}"; do
 done
 
 GAPS=()
+ACTIONABLE=()
 i=0
 while [ "$i" -lt "${#CHECK_NAMES[@]}" ]; do
   printf 'check %s=%s\n' "${CHECK_NAMES[$i]}" "${CHECK_VALUES[$i]}"
   case "${CHECK_VALUES[$i]}" in
-    fixable:*|human:*) GAPS+=("$i") ;;
+    fixable:*|human:*) GAPS+=("$i"); ACTIONABLE+=("$i") ;;
+    notice:*) ACTIONABLE+=("$i") ;;
   esac
   i=$((i + 1))
 done
-for i in ${GAPS[@]+"${GAPS[@]}"}; do
+for i in ${ACTIONABLE[@]+"${ACTIONABLE[@]}"}; do
   [ -z "${CHECK_ACTIONS[$i]}" ] || printf 'action: %s: %s\n' "${CHECK_NAMES[$i]}" "${CHECK_ACTIONS[$i]}"
 done
 

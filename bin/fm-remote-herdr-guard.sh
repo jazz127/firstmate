@@ -22,8 +22,10 @@
 # for a retry after the throttle interval):
 #   no server owns the session socket  -> start a session-leader foreground
 #                                          server and wait for it
-#   an Aqua-born session-leader owner  -> exit 0, leave it alone
-#   an Aqua-born non-session-leader    -> stop it and start a compatible server
+#   an Aqua-born session-leader owner, or one whose Herdr predates the
+#   detached_server_daemon capability  -> exit 0, leave it alone
+#   an Aqua-born owner reporting detached_server_daemon=false
+#                                      -> stop it and start a compatible server
 #   the owner was born anywhere else (an SSH remote attach, a shell over
 #   ssh/mosh, or a birth it cannot prove) -> `herdr server stop`, wait until the
 #                                          socket is released, then start a
@@ -67,8 +69,8 @@ status_running() { # <status-json>
   [ "$(printf '%s' "$1" | jq -r '.server.running // false' 2>/dev/null)" = true ]
 }
 
-status_detached() { # <status-json>
-  [ "$(printf '%s' "$1" | jq -r '.server.capabilities.detached_server_daemon // false' 2>/dev/null)" = true ]
+status_not_session_leader() { # <status-json>
+  [ "$(printf '%s' "$1" | jq -r '.server.capabilities.detached_server_daemon == false' 2>/dev/null)" = true ]
 }
 
 start_server() {
@@ -103,7 +105,7 @@ else
   BIRTH=$(fm_remote_herdr_owner_birth "$OWNER")
 fi
 
-if fm_remote_herdr_birth_is_aqua "$BIRTH" && status_detached "$STATUS"; then
+if fm_remote_herdr_birth_is_aqua "$BIRTH" && ! status_not_session_leader "$STATUS"; then
   log "session $SESSION is served by pid $OWNER born in the Aqua login session ($BIRTH); nothing to do"
   exit 0
 fi

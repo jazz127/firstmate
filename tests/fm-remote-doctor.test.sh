@@ -268,9 +268,24 @@ case "${1:-} ${2:-}" in
     fi
     detached=true
     [ ! -f "$FM_FAKE_STATE/not-detached" ] || detached=false
-    printf '{"client":{"version":"0.9.1","protocol":22},"server":{"running":%s,"socket":"%s","capabilities":{"detached_server_daemon":%s}}}\n' "$running" "$FM_FAKE_HERDR_SOCKET" "$detached"
+    if [ -f "$FM_FAKE_STATE/pre-capabilities" ]; then
+      printf '{"client":{"version":"0.9.0","protocol":21},"server":{"running":%s,"socket":"%s"}}\n' "$running" "$FM_FAKE_HERDR_SOCKET"
+    else
+      printf '{"client":{"version":"0.9.1","protocol":22},"server":{"running":%s,"socket":"%s","capabilities":{"detached_server_daemon":%s}}}\n' "$running" "$FM_FAKE_HERDR_SOCKET" "$detached"
+    fi
+    ;;
+  "server stop")
+    printf 'server stop\n' >> "$FM_FAKE_STATE/herdr-calls"
+    printf 'false\n' > "$FM_FAKE_HERDR_RUNNING"
     ;;
   "server "*|"server ")
+    printf 'server start\n' >> "$FM_FAKE_STATE/herdr-calls"
+    # Herdr reports detached_server_daemon only for a session leader.
+    if [ "$(ps -o pgid= -p "$$" | tr -d ' ')" = "$$" ]; then
+      rm -f "$FM_FAKE_STATE/not-detached"
+    else
+      touch "$FM_FAKE_STATE/not-detached"
+    fi
     printf 'true\n' > "$FM_FAKE_HERDR_RUNNING"
     ;;
 esac
@@ -626,15 +641,32 @@ assert_contains "$DOCTOR_OUT" "check herdr-server=ok: session fm-remote is runni
   "a launchd-born owner was not reported with its pid and birth"
 
 touch "$CASE_STATE/not-detached"
+: > "$CASE_LAUNCHCTL_LOG"
 doctor
-expect_code 1 "$DOCTOR_RC" "an Aqua-born foreground server was reported ready for saved machines"
-assert_contains "$DOCTOR_OUT" 'check herdr-server=fixable: session fm-remote is Aqua-born but not a session-leader server' \
-  "the doctor did not identify the saved-machine readiness gap"
+expect_code 0 "$DOCTOR_RC" "an Aqua-born foreground server blocked readiness"
+assert_contains "$DOCTOR_OUT" "check herdr-server=notice: session fm-remote is running in the Aqua login session (pid $AQUA_HOLDER_PID, launchd), but it is not a session-leader server" \
+  "the doctor did not report the saved-machine notice"
+assert_contains "$DOCTOR_OUT" 'action: herdr-server: while the host is quiet, rerun this command with --fix --restart-herdr' \
+  "the notice did not name the operator-run restart"
 doctor --fix
-expect_code 0 "$DOCTOR_RC" "--fix did not replace the Aqua-born foreground server"
+expect_code 0 "$DOCTOR_RC" "a plain --fix failed over a saved-machine notice"
+assert_no_grep 'bootout\|kickstart' "$CASE_LAUNCHCTL_LOG" "a plain --fix restarted a healthy Aqua-born server"
+[ -f "$CASE_STATE/not-detached" ] || fail "a plain --fix replaced a healthy Aqua-born server"
+assert_contains "$DOCTOR_OUT" 'check herdr-server=notice:' "a plain --fix cleared the notice without a restart"
+doctor --fix --restart-herdr
+expect_code 0 "$DOCTOR_RC" "--fix --restart-herdr did not replace the Aqua-born foreground server"
+assert_grep "kickstart -k gui/$(id -u)/$LABEL" "$CASE_LAUNCHCTL_LOG" "the operator restart did not go through launchd"
 assert_absent "$CASE_STATE/not-detached" "the fixture did not start a session-leader server"
-assert_contains "$DOCTOR_OUT" 'ready for saved machines' "the doctor did not confirm saved-machine readiness"
-pass "--fix replaces an Aqua-born foreground server with a session-leader server"
+assert_contains "$DOCTOR_OUT" "check herdr-server=ok: session fm-remote is running in the Aqua login session (pid $AQUA_HOLDER_PID, launchd)" \
+  "the doctor did not confirm the restarted server"
+
+touch "$CASE_STATE/pre-capabilities"
+doctor
+expect_code 0 "$DOCTOR_RC" "an Aqua-born server without the session-leader capability was not ready"
+assert_contains "$DOCTOR_OUT" "check herdr-server=ok: session fm-remote is running in the Aqua login session (pid $AQUA_HOLDER_PID, launchd)" \
+  "a server predating the session-leader capability was judged by it"
+rm -f "$CASE_STATE/pre-capabilities"
+pass "only an operator --restart-herdr replaces an Aqua-born foreground server"
 
 printf '%s\n' "$BACKGROUND_HOLDER_PID" > "$CASE_STATE/socket-owner"
 printf 'background job\n' > "$CASE_STATE/user-loaded-$LABEL"
@@ -796,7 +828,25 @@ expect_code 0 "$DOCTOR_RC" "--fix did not start the herdr server on linux"
 assert_contains "$DOCTOR_OUT" 'fix herdr-server=applied:' "--fix did not report starting the server"
 assert_contains "$DOCTOR_OUT" 'check herdr-server=ok:' "the started server was not confirmed by the re-check"
 [ ! -s "$CASE_LAUNCHCTL_LOG" ] || fail "the linux path invoked launchctl"
+assert_absent "$CASE_STATE/not-detached" "the linux server was not started as a session leader"
 pass "a non-darwin host skips launch agents and starts its herdr server directly"
+
+touch "$CASE_STATE/not-detached"
+: > "$CASE_STATE/herdr-calls"
+doctor
+expect_code 0 "$DOCTOR_RC" "a linux foreground server blocked readiness"
+assert_contains "$DOCTOR_OUT" 'check herdr-server=notice: session fm-remote is running, but it is not a session-leader server' \
+  "the linux saved-machine notice was not reported"
+doctor --fix
+expect_code 0 "$DOCTOR_RC" "a plain --fix failed over a linux saved-machine notice"
+assert_no_grep 'server' "$CASE_STATE/herdr-calls" "a plain --fix restarted a healthy linux server"
+doctor --fix --restart-herdr
+expect_code 0 "$DOCTOR_RC" "--fix --restart-herdr did not replace the linux foreground server"
+[ "$(cat "$CASE_STATE/herdr-calls")" = "$(printf 'server stop\nserver start')" ] \
+  || fail "the linux restart did not stop then start the server: $(cat "$CASE_STATE/herdr-calls")"
+assert_absent "$CASE_STATE/not-detached" "the linux restart did not start a session leader"
+assert_contains "$DOCTOR_OUT" 'check herdr-server=ok: session fm-remote is running' "the restarted linux server was not confirmed"
+pass "only an operator --restart-herdr restarts a linux server as a session leader"
 
 # --- --fix may add only owned wrappers for version-manager tools -------------
 

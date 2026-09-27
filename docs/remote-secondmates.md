@@ -226,9 +226,10 @@ Each gap carries one of two tags:
 | --- | --- |
 | `fixable:` | `--fix` can close the gap. |
 | `human:` | Only a person at that machine can close the gap. |
+| `notice:` | A non-blocking condition that only an operator repairs. |
 
-Every gap is followed by an `action:` line naming the exact step.
-Any remaining gap exits non-zero.
+Every gap and notice is followed by an `action:` line naming the exact step.
+Any remaining gap exits non-zero; a notice does not.
 The script's own header owns the full line protocol.
 
 ### Repair with --fix
@@ -269,8 +270,8 @@ It acts on whichever server owns the `fm-remote` socket:
 | Socket owner | Guard action |
 | --- | --- |
 | Nothing | Starts a foreground server as a POSIX session leader and waits for it under launchd. |
-| An Aqua-born session-leader server | Exits 0. |
-| An Aqua-born foreground server without session leadership | Stops it and starts a compatible server. |
+| An Aqua-born session-leader server, or one whose Herdr predates the `detached_server_daemon` capability | Exits 0. |
+| An Aqua-born server reporting `detached_server_daemon=false` | Stops it and starts a compatible server. |
 | Any other (foreign) server | Stops the foreign server and takes the session over, closing its panes so the parent firstmate relaunches its mates into the Aqua-born server. |
 
 `KeepAlive={SuccessfulExit=false}` lets that exit 0 rest instead of respawning against a held socket.
@@ -279,7 +280,17 @@ The guard's header owns the decision table, and [`bin/fm-remote-herdr-owner-lib.
 
 ### Add the remote machines to the local Herdr window
 
-After the updated doctor has repaired each host while its `fm-remote` session is quiet, run these one-time commands on the local Mac, using the SSH aliases configured there:
+Herdr 0.9.1 saved machines refuse an `fm-remote` server that is not a POSIX session leader.
+The doctor reports such a running server as `check herdr-server=notice:`, which does not block readiness, so the automatic readiness gate never restarts it.
+While that host is quiet, restart it once yourself:
+
+```sh
+bin/fm-on.sh <secondmate-id|ssh-alias> fm-remote-doctor.sh --fix --restart-herdr
+```
+
+On macOS this reloads the Herdr launch agent; on Linux it stops the server and starts it again as a session leader.
+Either way the session's panes close.
+Then run these one-time commands on the local Mac, using the SSH aliases configured there:
 
 ```sh
 herdr machine add '<JI7-ssh-alias>' --label JI7 --remote-session fm-remote

@@ -39,8 +39,9 @@
 #       ssh      SSH_CONNECTION, SSH_CLIENT, or SSH_TTY in the environment, or
 #                an ancestor that is sshd or herdr's remote-client-bridge
 #                (matched on argv[0] and whole arguments only)
-#       launchd  XPC_SERVICE_NAME=<label>, with launchctl proving that job is
-#                the owner in gui/<uid> or is loaded only in that domain
+#       launchd  XPC_SERVICE_NAME=<label>, with launchctl proving that job,
+#                or the guard it runs as the owner's parent, is the owner in
+#                gui/<uid>, or that the job is loaded only in that domain
 #       worker   FM_REMOTE_JOB_ACTIVE=1, with launchctl proving that
 #                dev.firstmate.remote-job is loaded only in gui/<uid>
 #       unknown  none of the above; XPC_SERVICE_NAME alone, including value 0,
@@ -103,11 +104,12 @@ fm_remote_herdr_process_ancestry() { # <pid>
 }
 
 fm_remote_herdr_gui_job_proves_owner() { # <uid> <label> <pid>
-  local uid=$1 label=$2 pid=$3 job
+  local uid=$1 label=$2 pid=$3 job ppid
   [ -n "$label" ] && [ "$label" != 0 ] || return 1
   job=$(launchctl print "gui/$uid/$label" 2>/dev/null) || return 1
-  if printf '%s\n' "$job" | awk -v expected="$pid" '
-    $1 == "pid" && $2 == "=" && $3 == expected { found = 1 }
+  ppid=$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d ' ') || ppid=
+  if printf '%s\n' "$job" | awk -v expected="$pid" -v parent="$ppid" '
+    $1 == "pid" && $2 == "=" && ($3 == expected || (parent != "" && $3 == parent)) { found = 1 }
     END { exit found ? 0 : 1 }
   '; then
     return 0

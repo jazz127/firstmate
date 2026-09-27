@@ -80,8 +80,13 @@ case "$*" in
         running=false
       fi
     fi
-    printf '{"server":{"running":%s,"socket":"%s","version":"0.9.1","capabilities":{"detached_server_daemon":%s}},"client":{"version":"0.9.1"}}\n' \
-      "$running" "$FM_FAKE_HERDR_SOCKET" "$detached"
+    if [ -f "$FM_FAKE_STATE/pre-capabilities" ]; then
+      printf '{"server":{"running":%s,"socket":"%s","version":"0.9.0"},"client":{"version":"0.9.0"}}\n' \
+        "$running" "$FM_FAKE_HERDR_SOCKET"
+    else
+      printf '{"server":{"running":%s,"socket":"%s","version":"0.9.1","capabilities":{"detached_server_daemon":%s}},"client":{"version":"0.9.1"}}\n' \
+        "$running" "$FM_FAKE_HERDR_SOCKET" "$detached"
+    fi
     ;;
   "server stop --session "*)
     if [ -f "$FM_FAKE_STATE/stop-ignored" ]; then
@@ -136,6 +141,31 @@ hold_under() {
   local i=0
   while [ ! -s "$pidfile" ] && [ "$i" -lt 100 ]; do sleep 0.05; i=$((i + 1)); done
   [ -s "$pidfile" ] || fail "holder under $argv0 did not report its pid"
+  HOLDER_PID=$(cat "$pidfile")
+  HOLDER_PIDS+=("$HOLDER_PID")
+}
+
+# hold_child <marker-env...> -> HOLDER_PID, HOLDER_PARENT_PID: a holder whose
+# environment is exactly the markers, started by a parent process that stays
+# alive, as the guard stays alive as the parent of the server it starts.
+hold_child() {
+  local fifo="$TMP_ROOT/holder-$HOLDER_FD.fifo" pidfile="$TMP_ROOT/holder-$HOLDER_FD.pid" reader
+  rm -f "$fifo" "$pidfile"
+  mkfifo "$fifo"
+  eval "exec ${HOLDER_FD}<>\"\$fifo\""
+  if [ "${HOLDER_BIN##*/}" = node ]; then
+    reader=("$HOLDER_BIN" -e 'require("fs").readFileSync(process.argv[1])')
+  else
+    reader=("$HOLDER_BIN" .)
+  fi
+  ( export FM_HOLDER_PIDFILE="$pidfile"
+    exec bash -c 'env -i "$@" & printf "%s\n" "$!" > "$FM_HOLDER_PIDFILE"; wait' holder-parent "$@" "${reader[@]}" "$fifo" ) &
+  HOLDER_PARENT_PID=$!
+  HOLDER_PIDS+=("$HOLDER_PARENT_PID")
+  HOLDER_FD=$((HOLDER_FD + 1))
+  local i=0
+  while [ ! -s "$pidfile" ] && [ "$i" -lt 100 ]; do sleep 0.05; i=$((i + 1)); done
+  [ -s "$pidfile" ] || fail "child holder did not report its pid"
   HOLDER_PID=$(cat "$pidfile")
   HOLDER_PIDS+=("$HOLDER_PID")
 }
@@ -238,6 +268,9 @@ hold_under herdr --session "$SESSION" remote-client-bridge
 BRIDGE_CHILD_PID=$HOLDER_PID
 hold_under 'sshd-session:' kunchen@notty
 SSHD_CHILD_PID=$HOLDER_PID
+hold_child XPC_SERVICE_NAME=dev.firstmate.herdr.fm-remote
+GUARD_CHILD_PID=$HOLDER_PID
+GUARD_PARENT_PID=$HOLDER_PARENT_PID
 sleep 0.3
 
 new_case running
@@ -271,6 +304,27 @@ assert_stop_before_start
 assert_contains "$GUARD_OUT" 'born in Aqua but is not a session-leader daemon' \
   "the guard did not identify why an Aqua-born server needs replacement"
 pass "an Aqua-born foreground server is replaced for saved-machine readiness"
+
+new_case running
+printf '%s\n' "$LAUNCHD_PID" > "$CASE_OWNER"
+load_job gui dev.firstmate.herdr.fm-remote "$LAUNCHD_PID"
+touch "$CASE_STATE/pre-capabilities"
+guard
+expect_code 0 "$GUARD_RC" "the guard replaced an Aqua-born server whose Herdr predates the session-leader capability"
+assert_not_started "the guard started a second server over a pre-capability Aqua-born owner"
+assert_not_contains "$(herdr_calls)" 'server stop' "the guard stopped a pre-capability Aqua-born owner"
+pass "an Aqua-born server without the session-leader capability is left alone"
+
+new_case running
+printf '%s\n' "$GUARD_CHILD_PID" > "$CASE_OWNER"
+load_job gui dev.firstmate.herdr.fm-remote "$GUARD_PARENT_PID"
+load_job user dev.firstmate.herdr.fm-remote
+guard
+expect_code 0 "$GUARD_RC" "the guard took over the server its own launchd job started"
+assert_not_started "the guard started a second server over its own launchd job's child"
+assert_contains "$GUARD_OUT" "pid $GUARD_CHILD_PID born in the Aqua login session (launchd)" \
+  "the guard's child was not proven launchd-born through its parent job pid"
+pass "a server whose parent is the gui launchd job is proven launchd-born"
 
 # --- a foreign owner is stopped, then the guard becomes the server -----------
 

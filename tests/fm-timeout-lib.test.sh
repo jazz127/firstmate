@@ -94,13 +94,13 @@ test_the_bound_replaces_the_calling_shell() {
   dir="$TMP_ROOT/replace"
   mkdir -p "$dir"
   for path in "$PATH" "$PERL_ONLY"; do
-    rm -f "$dir/caller" "$dir/parent"
+    rm -f "$dir/parent"
     (
       . "$ROOT/bin/fm-timeout-lib.sh"
-      printf '%s\n' "$BASHPID" > "$dir/caller"
       PATH=$path fm_exec_timed 5 1 bash -c 'echo "$PPID" > "$1"' _ "$dir/parent"
-    ) || fail "the bounded probe failed under PATH=$path"
-    caller=$(cat "$dir/caller")
+    ) &
+    caller=$!
+    wait "$caller" || fail "the bounded probe failed under PATH=$path"
     parent=$(cat "$dir/parent")
     [ "$caller" = "$parent" ] \
       || fail "the command's parent $parent is not the replaced caller $caller under PATH=$path"
@@ -158,6 +158,64 @@ test_a_signal_to_the_bounding_process_reaches_the_command() {
   [ "$(cat "$dir/term" 2>/dev/null)" = forwarded ] || fail "the TERM never reached the bounded command"
   [ "$rc" -eq 3 ] || fail "a forwarded TERM did not report the command's own status (rc=$rc)"
   pass "fm_exec_timed forwards a TERM it receives to the bounded command"
+}
+
+# A caller that names its owner before launching the watchdog is watched even
+# when that owner died while the watchdog was still starting: the watchdog's
+# parent is then not the named owner, so the escalation starts at once rather
+# than at the bound.
+test_a_named_owner_that_is_gone_ends_the_command() {
+  local dir gone rc=0 started elapsed pid
+  dir="$TMP_ROOT/owner"
+  mkdir -p "$dir"
+  sleep 0 &
+  gone=$!
+  wait "$gone" 2>/dev/null || true
+  started=$SECONDS
+  (
+    . "$ROOT/bin/fm-timeout-lib.sh"
+    PATH=$PERL_ONLY FM_EXEC_TIMED_OWNER_PID=$gone \
+      fm_exec_timed 60 1 bash -c 'echo $$ > "$1"; exec sleep 300' _ "$dir/pid"
+  ) || rc=$?
+  elapsed=$((SECONDS - started))
+  [ "$elapsed" -lt 15 ] || fail "a watchdog whose named owner was gone ran to its bound (${elapsed}s)"
+  [ "$rc" -ne 0 ] || fail "a command ended by its owner's death reported success"
+  if [ -s "$dir/pid" ]; then
+    pid=$(cat "$dir/pid")
+    ! kill -0 "$pid" 2>/dev/null || fail "the bounded command outlived its named owner"
+  fi
+  pass "fm_exec_timed ends the command when its named owner is already gone"
+}
+
+# With no named owner the calling script is captured before the watchdog
+# starts, so a script that dies while its subshell is still on the way into
+# fm_exec_timed - the watchdog then starts already reparented - is still
+# detected instead of leaving the command running to its bound.
+test_an_owner_that_dies_during_startup_ends_the_command() {
+  local dir watchdog started
+  dir="$TMP_ROOT/startup-owner"
+  mkdir -p "$dir"
+  # shellcheck disable=SC2016
+  PATH=$PERL_ONLY bash -c '
+    . "$1/bin/fm-timeout-lib.sh"
+    (
+      while kill -0 "$$" 2>/dev/null; do sleep 0.05; done
+      fm_exec_timed 60 1 bash -c "exec sleep 300"
+    ) >/dev/null 2>&1 &
+    echo "$!" > "$2/watchdog"
+    exit 0
+  ' _ "$ROOT" "$dir"
+  wait_for_file "$dir/watchdog"
+  watchdog=$(cat "$dir/watchdog")
+  started=$SECONDS
+  while kill -0 "$watchdog" 2>/dev/null; do
+    if [ "$((SECONDS - started))" -ge 15 ]; then
+      kill -KILL "$watchdog" 2>/dev/null || true
+      fail "a watchdog whose owner died during startup ran on toward its bound"
+    fi
+    sleep 0.02
+  done
+  pass "fm_exec_timed ends the command when its owner dies during watchdog startup"
 }
 
 # perl is preferred whenever it exists, because only its watchdog can reap a
@@ -242,12 +300,36 @@ test_timed_out_names_exactly_the_bound_statuses() {
   pass "fm_timed_out accepts 124 and 137 and nothing else"
 }
 
+# Stock macOS /bin/bash is 3.2 and has no BASHPID. Exercise the owner check
+# under set -u in a subshell and in the shell that calls exec directly.
+test_bash32_owner_check() {
+  local out rc=0
+  if [ ! -x /bin/bash ] || ! /bin/bash -c '[ "${BASH_VERSINFO[0]}" -eq 3 ] && [ "${BASH_VERSINFO[1]}" -eq 2 ]'; then
+    pass "fm_exec_timed works under Bash 3.2 (skipped: /bin/bash is not Bash 3.2)"
+    return 0
+  fi
+  out=$(PATH=$PERL_ONLY /bin/bash -c '
+    set -u
+    . "$1/bin/fm-timeout-lib.sh"
+    (fm_exec_timed 5 1 bash -c "echo subshell; exit 3")
+    [ "$?" -eq 3 ] || exit 41
+    fm_exec_timed 5 1 bash -c "echo direct; exit 4"
+  ' _ "$ROOT" 2>&1) || rc=$?
+  [ "$rc" -eq 4 ] || fail "Bash 3.2 owner check failed (rc=$rc): $out"
+  assert_contains "$out" "subshell" "Bash 3.2 subshell did not run the bounded command"
+  assert_contains "$out" "direct" "Bash 3.2 direct call did not run the bounded command"
+  pass "fm_exec_timed works in direct and subshell calls under Bash 3.2"
+}
+
 test_passes_the_command_status_and_output_through
+test_bash32_owner_check
 test_term_ends_a_cooperative_command_at_the_bound
 test_kill_ends_a_term_ignoring_command_after_the_grace
 test_the_bound_replaces_the_calling_shell
 test_a_descendant_holding_the_output_cannot_outlast_the_bound
 test_a_signal_to_the_bounding_process_reaches_the_command
+test_a_named_owner_that_is_gone_ends_the_command
+test_an_owner_that_dies_during_startup_ends_the_command
 test_perl_is_preferred_over_timeout
 test_refuses_rather_than_running_unbounded
 test_rejects_malformed_bounds_before_running_anything

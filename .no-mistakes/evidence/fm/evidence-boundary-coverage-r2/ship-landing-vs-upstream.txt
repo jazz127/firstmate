@@ -1,0 +1,28 @@
+## ship-landing skill: upstream 49a218bb (#5872) vs target
+diff --git a/.agents/skills/ship-landing/SKILL.md b/.agents/skills/ship-landing/SKILL.md
+index fe17397f..7a1a44d3 100644
+--- a/.agents/skills/ship-landing/SKILL.md
++++ b/.agents/skills/ship-landing/SKILL.md
+@@ -15,6 +15,9 @@ That blocked reading is the gate working, not a stuck worker, so steer the worke
+ A direct-PR worker pushes that commit to its PR branch, and a local-only worker commits it on its ship branch.
+ A no-mistakes worker re-validates it with /no-mistakes so the pipeline stays the one publisher; it never pushes from its copy.
+ In no-mistakes mode the earlier `done [at=<epoch>]: {summary}` is the pipeline handoff and is not gated.
++Before reporting any pull request to the captain, its published body is read back from the forge at the PR reporting boundary; task-owned PR registration and inactive reconciliation perform this check automatically, including for reports without an owning task record.
++Preserve the reported PR outcome but append `evidence-validation=failed` when its body cannot be read or parsed, or when an evidence claim lacks the artifact, command, and capture time required by `bin/fm-dod-lib.sh`.
++This check validates published text at the reporting boundary; it does not police what a generator writes before publication.
+ Tell the captain the PR's full `https://...` URL copied from the worker's ready line, the resolved checks-green crew-state line, or the task's `pr=` metadata, a concise outcome summary, and the no-mistakes risk level when applicable.
+ A captain instruction to merge is explicit authority; `yolo` is the only standing routine merge authority.
+ For any custom `state/<id>.check.sh` you write yourself, keep it an ordinary single-link mode-`0700` file, print one line only when firstmate should wake, print nothing otherwise, finish before `FM_CHECK_TIMEOUT`, then bind its current bytes with `bin/fm-check-register.sh <id>` before the watcher may execute it.
+
+## AGENTS.md PR-ready section at target
+### PR ready, landing, and teardown
+
+Load `ship-landing` when a ship reports a PR or ready branch, when deciding or monitoring landing, and before task cleanup.
+
+### Scout outcome and promotion
+## upstream AGENTS.md same section
+### PR ready, landing, and teardown
+
+Load `ship-landing` when a ship reports a PR or ready branch, when deciding or monitoring landing, and before task cleanup.
+
+### Scout outcome and promotion

@@ -1,0 +1,9 @@
+### Scenario B (target 7cef8346): no-mistakes task, readable real PR body without evidence claims (jazz127/firstmate#72, real gh)
+$ FM_HOME=$LAB/home bin/fm-pr-check.sh taskB https://github.com/jazz127/firstmate/pull/72
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+armed: state/taskB.check.sh
+exit=
+meta after:
+pr=https://github.com/jazz127/firstmate/pull/72
+pr_head=fb3705de44edb558d59f1eeffd82670139472a20
+-rw-------@ /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.FZSrgr/home/state/taskB.check.sh

@@ -1,0 +1,10 @@
+$ bin/fm-doc-audience-check.sh
+fm-doc-audience-check: ok surfaces=109 local_links=490
+exit=0
+
+## link resolution
+docs/secondmate-parent-channel.md -> ../.agents/skills/ship-landing/SKILL.md : resolves
+docs/verification/secondmate-parent-channel.md -> ../../.agents/skills/ship-landing/SKILL.md : resolves
+
+## remaining AGENTS.md reporting-boundary pointers
+docs/verification/secondmate-parent-channel.md:20:This fixture predates the reporting-boundary published-body validation, so its PR line verifies delivery only and is not evidence that the referenced body passed validation.

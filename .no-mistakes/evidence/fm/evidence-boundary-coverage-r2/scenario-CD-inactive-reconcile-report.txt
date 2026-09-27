@@ -1,0 +1,14 @@
+### Scenario C: inactive reconcile report, child PR body unreadable (jazz127/firstmate#999999, real gh)
+report exit=0
+parent channel (main/state/mate.status):
+done [key=child-outcome-child-done-d3c7e113] [at=1790504316]: child child done: PR https://github.com/jazz127/firstmate/pull/999999 checks green pr=https://github.com/jazz127/firstmate/pull/999999 evidence-validation=failed mode=no-mistakes yolo=off
+
+### Scenario D: inactive reconcile report, child PR body readable and claim-free (jazz127/firstmate#72, real gh)
+report exit=0
+parent channel (main/state/mate.status):
+done [key=child-outcome-child-done-d56916df] [at=1790504319]: child child done: PR https://github.com/jazz127/firstmate/pull/72 checks green pr=https://github.com/jazz127/firstmate/pull/72 mode=no-mistakes yolo=off
+
+### Base c218b1f5 for comparison, unreadable PR
+report exit=0
+parent channel (main/state/mate.status):
+done [key=child-outcome-child-done-c63a0d65] [at=1790504320]: child child done: PR https://github.com/jazz127/firstmate/pull/999999 checks green pr=https://github.com/jazz127/firstmate/pull/999999 mode=no-mistakes yolo=off

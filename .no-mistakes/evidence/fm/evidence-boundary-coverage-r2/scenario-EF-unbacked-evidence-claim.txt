@@ -1,0 +1,20 @@
+### Scenario E: direct-PR task on real jazz127/firstmate#67 whose published body carries an evidence claim without artifact/command/capture time
+--- claim-bearing lines of the real PR body:
+25:These are four follow-up areas delivered through seven owning `housefeature/*` branches: dispatch seat, Herdr project spaces, ready-session timeout, and PR evidence validation. Each branch first receives its own update PR. Merge this upstream PR into `house` first, then merge the seven `housefeature/*` integration PRs into `house` immediately afterward. Do not merge `house` into those feature branches.
+37:The merge touches instruction prose and a docs manifest. The captured local checks are synthetic/offline built-CLI validation: the documentation checker, its focused test, a whitespace check, and the merge-parent read. No runtime scenario was driven against a real account. The nine omitted lines are assigned above to their feature branches.
+39:- Live validation: ⚠️ no-surface - 0 of 3 scenarios driven live against the product
+41:| Scenario | Result | Live | Evidence |
+43:| Agents that load the merged docs get upstream&#39;s new on-demand skills and the rewritten turnend-guard/calm docs | ⏸️ untested | no | No live-validatable surface: these are agent-instruction and prose files with no runtime behavior. The repo&#39;s doc checker passed. |
+44:| House AGENTS.md additions outside the two conflicted sections survive the merge | ⏸️ untested | no | No live-validatable surface: this is instruction prose. The dropped lines in the conflicted sections are handed to the housefeature branches under the recorded round-1 decision. |
+$ FM_HOME=$LAB/home bin/fm-pr-check.sh taskE https://github.com/jazz127/firstmate/pull/67
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+evidence claim refused: artifact is outside the worker worktree or task temp directory: /tmp/fm-firstmate-upstream-5872-merge-r1/doc-checks.txt
+error: published intent failed evidence validation
+meta pr= line: <none>
+armed check: <none>
+
+### Scenario F: inactive reconcile report for a child whose PR is #67
+evidence claim refused: artifact is outside the worker worktree or task temp directory: /tmp/fm-firstmate-upstream-5872-merge-r1/doc-checks.txt
+report exit=0
+parent channel (main/state/mate.status):
+done [key=child-outcome-child-done-146b5d8c] [at=1790504959]: child child done: PR https://github.com/jazz127/firstmate/pull/67 checks green pr=https://github.com/jazz127/firstmate/pull/67 evidence-validation=failed mode=no-mistakes yolo=off

@@ -34,7 +34,7 @@ Every captain-facing outcome that leaves durable evidence in the mate home is pu
 | An outcome that exists only in the mate's reasoning | none | the charter and the `AGENTS.md` carve-outs only |
 
 The ledger delivery reads files, plus a local git reachability check on a ship `done:` with no delivery record yet (`bin/fm-dod-lib.sh`), and a bounded forge read when the report carries a pull request URL so the published body can be validated before it reaches the parent channel.
-Failure handling follows the reporting-boundary contract in [`AGENTS.md`](../AGENTS.md).
+Failure handling follows the reporting-boundary contract in [`.agents/skills/ship-landing/SKILL.md`](../.agents/skills/ship-landing/SKILL.md).
 Each delivery is keyed with the first eight hexadecimal characters of its receipt fingerprint and uses the shared append contract above, and the ledger path reuses the inactive scan's per-fingerprint receipts, so a replayed poll or restart cannot deliver an event twice while a genuinely new terminal event is delivered again.
 A duplicate line is harmless and a missed one is not, so the mate may still append its own judgement about a delivered outcome, and the parent reads the script's line as the fact and the mate's line as commentary.
 For marked replies, the report helper accepts no caller-selected destination and uses the channel resolver for both local and remote homes; its script header owns the exact invocation contract.

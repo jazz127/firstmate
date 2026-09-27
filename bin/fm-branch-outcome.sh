@@ -9,9 +9,9 @@
 #     "statusEndpoint":N,"statusIdent":"..."}. Legacy rows without `silent`
 #     or status provenance remain valid and are treated as visible.
 #     `silent` is legal only on a routine row (any task, or `fleet`): it marks
-#     an already-handled outcome that only re-states durably recorded
-#     bookkeeping, is delivered with no rendered note, and never updates the
-#     task's status-coverage index. A captain row can never be silent.
+#     an already-handled no-change or bookkeeping-only outcome and is delivered
+#     with no rendered note. A captain row can never be silent. The branch
+#     prompt and delivery consumers own the additional eligibility rule.
 #     Every read and append validates the complete log as a gap-free sequence;
 #     malformed, duplicate, or reordered rows fail closed.
 #     Existing lines are never rewritten, reordered, or deleted by any
@@ -94,6 +94,9 @@
 #     the nested acquire so drain's bounded lock wait remains the deadline.
 #   fm-branch-outcome.sh list [--recent <n>]
 #     Print the last n records (default 20), read or not.
+#   fm-branch-outcome.sh lookup --seqs <n,...>
+#     Print the requested records in sequence order only when every sequence
+#     exists; validate the full store while holding its lock.
 #   fm-branch-outcome.sh startup-replay
 #     Session-start recovery: print the leading routine unread records under a
 #     labeled header into the locked startup digest, skip rows whose `silent`
@@ -104,7 +107,7 @@
 #     call site).
 set -eu
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(d=${BASH_SOURCE[0]%/*}; [ "$d" != "${BASH_SOURCE[0]}" ] || d=.; cd "${d:-/}" && pwd)"
 # shellcheck source=bin/fm-wake-lib.sh
 . "$SCRIPT_DIR/fm-wake-lib.sh"
 # shellcheck source=bin/fm-classify-lib.sh
@@ -120,7 +123,7 @@ OUTCOME_INDEX_MAX_BYTES=512
 OUTCOME_INDEX_READY="$STATE/.branch-outcome-index-ready"
 
 usage() {
-  echo "usage: fm-branch-outcome.sh append --task <id> --verdict routine|captain --summary <text> [--wake <text>] [--silent true|false] | unread | mark-read --through <seq> | unprocessed | mark-processed --through <seq> | present | processed-init [--held-lock] | list [--recent <n>] | startup-replay" >&2
+  echo "usage: fm-branch-outcome.sh append --task <id> --verdict routine|captain --summary <text> [--wake <text>] [--silent true|false] | unread | mark-read --through <seq> | unprocessed | mark-processed --through <seq> | present | processed-init [--held-lock] | list [--recent <n>] | lookup --seqs <n,...> | startup-replay" >&2
   exit 2
 }
 
@@ -272,7 +275,7 @@ rebuild_outcome_indexes() {
   rm -f -- "$OUTCOME_INDEX_READY" || return 1
   [ -s "$STORE" ] || { publish_outcome_index_ready 0; return; }
   rows=$(jq -r -s '
-    map(select(.task != "fleet" and .silent != true))
+    map(select(.task != "fleet"))
     | group_by(.task)
     | map(.[-1])[]
     | [.task, (.seq | tostring), (.epoch | tostring),
@@ -456,7 +459,7 @@ case "$CMD" in
     case "$VERDICT" in routine|captain) ;; *) usage ;; esac
     case "$SILENT" in true|false) ;; *) usage ;; esac
     if [ "$SILENT" = true ] && [ "$VERDICT" != routine ]; then
-      echo "error: silent outcomes must be routine outcomes" >&2
+      echo "error: silent outcomes must have the routine verdict" >&2
       exit 2
     fi
     fm_lock_acquire_wait "$LOCK"
@@ -481,10 +484,7 @@ case "$CMD" in
     # reports the teardown it just performed, and writing the index here would
     # recreate the footprint teardown removed. The outcome itself is still
     # stored and delivered; only the reader-less cache is skipped.
-    # A silent outcome never becomes a task's coverage index: it records
-    # bookkeeping only, so it must not make the lost-wake backstop treat a
-    # captain-facing status event as already covered.
-    if [ "$SILENT" != true ] && { [ -e "$STATE/$TASK.meta" ] || [ -e "$STATE/$TASK.status" ]; } \
+    if { [ -e "$STATE/$TASK.meta" ] || [ -e "$STATE/$TASK.status" ]; } \
         && ! write_outcome_index "$TASK" "$SEQ"; then
       fm_lock_release "$LOCK"
       echo "error: outcome was stored but its bounded task index could not be updated" >&2
@@ -651,6 +651,38 @@ case "$CMD" in
     fi
     if [ -s "$STORE" ]; then
       tail -n "$RECENT" "$STORE"
+    fi
+    fm_lock_release "$LOCK"
+    ;;
+  lookup)
+    [ "$#" -eq 2 ] && [ "$1" = --seqs ] || usage
+    SEQS=$2
+    case "$SEQS" in ''|,*|*,|*,,*) usage ;; esac
+    IFS=, read -r -a REQUESTED <<< "$SEQS"
+    [ "${#REQUESTED[@]}" -gt 0 ] || usage
+    WANT='['
+    SEP=
+    for SEQ in "${REQUESTED[@]}"; do
+      bounded_uint "$SEQ" || usage
+      WANT="${WANT}${SEP}${SEQ}"
+      SEP=,
+    done
+    WANT="${WANT}]"
+    printf '%s\n' "$WANT" | jq -e 'length == (unique | length)' >/dev/null || usage
+    fm_lock_acquire_wait "$LOCK"
+    if ! last_seq >/dev/null; then
+      fm_lock_release "$LOCK"
+      echo "error: refusing lookup because the outcome store is malformed or non-sequential" >&2
+      exit 1
+    fi
+    if ! jq -cs --argjson wanted "$WANT" '
+      . as $rows
+      | [ $wanted[] as $seq | $rows[] | select(.seq == $seq) ]
+      | if length == ($wanted | length) then .[] else error("requested outcome sequence is missing") end
+    ' "$STORE" 2>/dev/null; then
+      fm_lock_release "$LOCK"
+      echo "error: refusing lookup because one or more requested outcome sequences are missing" >&2
+      exit 1
     fi
     fm_lock_release "$LOCK"
     ;;

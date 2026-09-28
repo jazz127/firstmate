@@ -33,6 +33,7 @@ trap 'if [ "${#HOLDER_PIDS[@]}" -gt 0 ]; then kill "${HOLDER_PIDS[@]}" 2>/dev/nu
 
 GUARD="$ROOT/bin/fm-remote-herdr-guard.sh"
 JQ=$(command -v jq)
+HOLDER_BIN=$(command -v node 2>/dev/null || printf '%s' "$JQ")
 SESSION=fm-remote
 
 # The guard must see only the fixture and the system tools it really needs,
@@ -133,7 +134,11 @@ hold() {
   # Open read-write so this never blocks on the reader; the holder sees EOF
   # only when the descriptor closes at exit.
   eval "exec ${HOLDER_FD}<>\"\$fifo\""
-  env -i "$@" "$JQ" . "$fifo" &
+  if [ "${HOLDER_BIN##*/}" = node ]; then
+    env -i "$@" "$HOLDER_BIN" -e 'require("fs").readFileSync(process.argv[1])' "$fifo" &
+  else
+    env -i "$@" "$HOLDER_BIN" . "$fifo" &
+  fi
   HOLDER_PID=$!
   HOLDER_PIDS+=("$HOLDER_PID")
   HOLDER_FD=$((HOLDER_FD + 1))
@@ -162,17 +167,22 @@ hold_under() {
 # bin/fm-remote-herdr-supervisor.pl started as the leader of its own session,
 # the shape the launch agent gives the fm-remote server.
 hold_supervised() {
-  local fifo="$TMP_ROOT/holder-$HOLDER_FD.fifo" i=0
+  local fifo="$TMP_ROOT/holder-$HOLDER_FD.fifo" i=0 reader
   rm -f "$fifo"
   mkfifo "$fifo"
   eval "exec ${HOLDER_FD}<>\"\$fifo\""
-  perl "$SUPERVISOR" env -i "$@" "$JQ" . "$fifo" 2>> "$TMP_ROOT/supervisor.log" &
+  if [ "${HOLDER_BIN##*/}" = node ]; then
+    reader=("$HOLDER_BIN" -e 'require("fs").readFileSync(process.argv[1])')
+  else
+    reader=("$HOLDER_BIN" .)
+  fi
+  perl "$SUPERVISOR" env -i "$@" "${reader[@]}" "$fifo" 2>> "$TMP_ROOT/supervisor.log" &
   SUPERVISOR_PID=$!
   HOLDER_PIDS+=("$SUPERVISOR_PID")
   HOLDER_FD=$((HOLDER_FD + 1))
   HOLDER_PID=
   while [ -z "$HOLDER_PID" ] && [ "$i" -lt 100 ]; do
-    HOLDER_PID=$(ps -A -o pid=,ppid=,command= | awk -v parent="$SUPERVISOR_PID" -v jq="$JQ" '$2 == parent && $3 == jq { print $1; exit }')
+    HOLDER_PID=$(ps -A -o pid=,ppid=,command= | awk -v parent="$SUPERVISOR_PID" -v holder="$HOLDER_BIN" '$2 == parent && $3 == holder { print $1; exit }')
     [ -n "$HOLDER_PID" ] || sleep 0.05
     i=$((i + 1))
   done

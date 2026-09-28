@@ -38,14 +38,22 @@ ln -sf "$(command -v git)" "$TOOLS/git"
 ln -sf "$(command -v jq)" "$TOOLS/jq"
 BASE_PATH="$TOOLS:/usr/bin:/bin:/usr/sbin:/sbin"
 
-# Real socket-owner holders for the Darwin birth check: jq blocked on a fifo
+# Real socket-owner holders for the Darwin birth check: a non-platform tool blocked on a fifo
 # this test keeps open, with exactly the marker environment each birth needs.
-JQ=$(command -v jq)
+HOLDER_BIN=$(command -v node 2>/dev/null || command -v jq)
 HOLDER_FD=5
+holder_argv() { # <fifo> -> HOLDER_ARGV
+  if [ "${HOLDER_BIN##*/}" = node ]; then
+    HOLDER_ARGV=("$HOLDER_BIN" -e 'require("fs").readFileSync(process.argv[1])' "$1")
+  else
+    HOLDER_ARGV=("$HOLDER_BIN" . "$1")
+  fi
+}
 hold() { # <marker-env...> -> HOLDER_PID
   local fifo="$TMP_ROOT/holder-$HOLDER_FD.fifo"
   mkfifo "$fifo"
-  env -i "$@" "$JQ" . "$fifo" &
+  holder_argv "$fifo"
+  env -i "$@" "${HOLDER_ARGV[@]}" &
   HOLDER_PID=$!
   HOLDER_PIDS+=("$HOLDER_PID")
   eval "exec ${HOLDER_FD}>\"\$fifo\""
@@ -66,14 +74,15 @@ SSH_HOLDER_PID=$HOLDER_PID
 # the server.
 SUPERVISED_FIFO="$TMP_ROOT/holder-$HOLDER_FD.fifo"
 mkfifo "$SUPERVISED_FIFO"
+holder_argv "$SUPERVISED_FIFO"
 eval "exec ${HOLDER_FD}<>\"\$SUPERVISED_FIFO\""
 HOLDER_FD=$((HOLDER_FD + 1))
-perl "$ROOT/bin/fm-remote-herdr-supervisor.pl" env -i XPC_SERVICE_NAME=dev.firstmate.herdr.fm-remote "$JQ" . "$SUPERVISED_FIFO" 2>> "$TMP_ROOT/supervisor.log" &
+perl "$ROOT/bin/fm-remote-herdr-supervisor.pl" env -i XPC_SERVICE_NAME=dev.firstmate.herdr.fm-remote "${HOLDER_ARGV[@]}" 2>> "$TMP_ROOT/supervisor.log" &
 SUPERVISOR_PID=$!
 HOLDER_PIDS+=("$SUPERVISOR_PID")
 SESSION_LEADER_HOLDER_PID=
 for _ in $(seq 1 100); do
-  SESSION_LEADER_HOLDER_PID=$(ps -A -o pid=,ppid=,command= | awk -v parent="$SUPERVISOR_PID" -v jq="$JQ" '$2 == parent && $3 == jq { print $1; exit }')
+  SESSION_LEADER_HOLDER_PID=$(ps -A -o pid=,ppid=,command= | awk -v parent="$SUPERVISOR_PID" -v holder="$HOLDER_BIN" '$2 == parent && $3 == holder { print $1; exit }')
   [ -z "$SESSION_LEADER_HOLDER_PID" ] || break
   sleep 0.05
 done
@@ -309,7 +318,7 @@ SH
   cat > "$CASE_BIN/tasks-axi" <<'SH'
 #!/usr/bin/env bash
 case "${1:-}:${2:-}" in
-  --version:*) printf '0.2.4\n' ;;
+  --version:*) printf '0.2.6\n' ;;
   update:--help) printf '%s\n' --archive-body ;;
   mv:--help) printf '%s\n' 'usage: tasks-axi mv <id> [<id>...]' ;;
 esac

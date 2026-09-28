@@ -1504,6 +1504,42 @@ SH
   pass "host ShellCheck lock serializes across TMPDIRs, excludes queue time, and recovers dead owners, reapers, and legacy locks"
 }
 
+test_host_lock_skips_roots_without_source_following() {
+  local tmp fakebin log diff_file lock holder_pid pid i rc
+  tmp=$(fm_test_tmproot fm-lint-host-lock-nofollow)
+  fakebin=$(fm_fakebin "$tmp")
+  fm_lint_stub_git "$fakebin"
+  log="$tmp/shellcheck.log"
+  fm_lint_stub_shellcheck "$fakebin" "$log"
+  diff_file="$tmp/diff.nul"
+  fm_lint_write_diff_file "$diff_file" "bin/fm-install-shellcheck.sh"
+  lock="/tmp/fm-lint-shellcheck-${UID:-$(id -u)}.lock"
+
+  sleep 60 &
+  holder_pid=$!
+  fm_lint_test_plant_lock "$lock" "$holder_pid"
+  PATH="$fakebin:$PATH" GITHUB_ACTIONS='' CI='' FM_LINT_JOBS=1 FM_LINT_HOST_LOCK=on \
+    FM_TEST_GIT_BRANCH=feature FM_TEST_GIT_DIFF_FILE="$diff_file" \
+    FM_TEST_FLAG_LOG="$tmp/flags.log" "$LINT" > "$tmp/lint.out" 2>&1 &
+  pid=$!
+  i=0
+  while kill -0 "$pid" 2>/dev/null && [ "$i" -le 100 ]; do
+    i=$((i + 1))
+    sleep 0.1
+  done
+  kill "$pid" 2>/dev/null || true
+  rc=0
+  wait "$pid" || rc=$?
+  [ "$(readlink "$lock" 2>/dev/null || true)" != "$holder_pid.test" ] || rm -f "$lock"
+  kill "$holder_pid" 2>/dev/null || true
+  wait "$holder_pid" 2>/dev/null || true
+  [ "$rc" -eq 0 ] \
+    || fail "a changed-mode lint without source following waited on the host lock ($rc): $(cat "$tmp/lint.out")"
+  [ "$(cat "$log")" = "bin/fm-install-shellcheck.sh" ] \
+    || fail "changed-mode lint did not analyze its root while the host lock was held"
+  pass "roots without source following run without the host ShellCheck lock"
+}
+
 test_host_lock_rejects_unknown_values() {
   local value out rc
   for value in 1 0 yes; do
@@ -2062,6 +2098,7 @@ test_ignores_ambient_shellcheck_opts
 test_clean_fixture_passes
 test_jobs_are_deterministic_and_complete
 test_host_lock_serializes_and_recovers_stale_owner
+test_host_lock_skips_roots_without_source_following
 test_host_lock_rejects_unknown_values
 test_worker_trees_stop_on_signal
 test_root_deadline_names_the_root_and_reaps_the_tree

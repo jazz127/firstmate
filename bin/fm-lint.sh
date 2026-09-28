@@ -87,10 +87,12 @@
 #
 # Optional quiet telemetry writes one bounded TSV snapshot of content and source
 # graph identity, wall/CPU/RSS, shard load, and competing ShellCheck processes.
-# Local runs serialize ShellCheck roots across all of this user's lint processes
-# on the host, regardless of TMPDIR, because source-following analysis can use several GiB of resident memory. Set
-# FM_LINT_HOST_LOCK=off to allow concurrent roots on a larger host; CI defaults
-# to off because its runner already isolates lint concurrency.
+# Local runs serialize source-following (--external-sources) ShellCheck roots
+# across all of this user's lint processes on the host, regardless of TMPDIR,
+# because that analysis can use several GiB of resident memory; roots that do
+# not follow sources run without the lock. Set FM_LINT_HOST_LOCK=off to allow
+# concurrent roots on a larger host; CI defaults to off because its runner
+# already isolates lint concurrency.
 #
 # Usage:
 #   fm-lint.sh                         lint the context-selected file set (see above)
@@ -128,8 +130,8 @@ FM_LINT_HOST_LOCK_HELD=0
 FM_LINT_HOST_LOCK_TOKEN=
 FM_LINT_HOST_LOCK_PATH="/tmp/fm-lint-shellcheck-${UID:-$(id -u)}.lock"
 
-# Serialize memory-heavy ShellCheck processes across lint invocations by this
-# user. The lock lives at a fixed /tmp path so every invocation on the host
+# Serialize memory-heavy source-following ShellCheck processes across lint
+# invocations by this user. The lock lives at a fixed /tmp path so every invocation on the host
 # shares it whatever its TMPDIR. It is a symlink whose target is the owner
 # token, so the lock and its owner appear in one atomic step. Only the waiter
 # that publishes the reap symlink for a dead owner's token may remove that
@@ -180,6 +182,7 @@ fm_lint_host_lock_reap() {  # <path>
 }
 
 fm_lint_host_lock_acquire() {  # <path>
+  [ "${FM_LINT_INTERNAL_FOLLOW_SOURCES:-1}" -eq 1 ] || return 0
   fm_lint_host_lock_enabled || return 0
   local lock=$FM_LINT_HOST_LOCK_PATH queued=0
   FM_LINT_HOST_LOCK_TOKEN="${BASHPID:-$$}.$RANDOM.$RANDOM"

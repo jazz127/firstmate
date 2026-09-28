@@ -1,0 +1,21 @@
+=== BASE (49a218bb) slow-draining worker ===
+label=dev.firstmate.remote-job-labtest.77288 mode=slow lib=/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/tmp.cSn8SXSOjy/fm-remote-job-lib.sh
+before: pid=77333
+reload rc=1 elapsed~0s error='launchctl bootstrap gui/501 refused: Bootstrap failed: 5: Input/output error
+Try re-running the command as root for richer errors.'
+after: loaded pid=77333 state=SIGTERMed
+teardown: job removed
+
+=== FIX (e47a05dc) slow-draining worker ===
+label=dev.firstmate.remote-job-labtest.80930 mode=slow lib=/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3JZCF9K7542HS46E3R6F93Y/bin/fm-remote-job-lib.sh
+before: pid=80940
+reload rc=0 elapsed~13s error=''
+after: loaded pid=93251 state=running
+teardown: job removed
+
+=== FIX (e47a05dc) worker ignoring SIGTERM (stuck > 5s) ===
+label=dev.firstmate.remote-job-labtest.77286 mode=stuck lib=/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3JZCF9K7542HS46E3R6F93Y/bin/fm-remote-job-lib.sh
+before: pid=96643
+reload rc=1 elapsed~9s error='launchd job gui/501/dev.firstmate.remote-job-labtest.77286 remained loaded after bootout'
+after: loaded pid=96643 state=SIGTERMed
+teardown: job removed

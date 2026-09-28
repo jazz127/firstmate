@@ -1,0 +1,11 @@
+== working-with-draft ==
+tmux identity: pi idle
+tmux backend composer_state: pending
+herdr-caps replay identity=[pi working]: pending
+herdr-caps replay identity=[pi idle]: pending
+herdr-caps replay identity=[pi blocked]: pending
+herdr-caps replay identity=[pi busy]: pending
+herdr-caps replay identity=[probe-absent]: unknown
+composer rows:
+32:── ⠸ Working ────────────────────────────────────────────────────────────────
+34:─────────────────────────────────────────────────────────────────────────────

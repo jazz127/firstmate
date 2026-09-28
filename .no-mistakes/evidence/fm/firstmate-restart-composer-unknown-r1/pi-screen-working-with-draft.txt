@@ -1,0 +1,36 @@
+
+ pi v0.87.1
+ escape interrupt · ctrl+c/ctrl+d clear/exit · / commands · ! bash · ctrl+o more
+ Press ctrl+o to show full startup help and loaded resources.
+
+ Pi can explain its own features and look up its docs. Ask it how to use or extend Pi.
+
+
+[Context]
+  AGENTS.md
+
+[Skills]
+  no-mistakes
+
+ This project is not trusted. Project .pi resources and packages are ignored. Use /trust to save a trust decision, then
+ restart pi.
+
+ Warning: tmux extended-keys is off. Modified Enter keys may not work. Add `set -g extended-keys on` to ~/.tmux.conf
+ and restart tmux.
+
+
+ Without using any tools, write a very long 3000-word essay about the history of rivers.
+
+
+ The user is asking me to write a 3000-word essay on the history of rivers without using any tools. This is a creative
+ writing task that doesn't require file operations or code.
+
+ Let me think about the rules I should follow:
+ - I'm a first mate, and the user is the captain
+ - In every chat message I send to the user, including public replies, I should address the user as "captain" at least
+
+── ⠸ Working ───────────────────────────────────────────────────────────────────────────────────────────────────────────
+half typed draft 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+~/.no-mistakes/worktrees/daaee59c4bbe/01M3K73J672C3G2TR9RJB5K4AA (detached)
+10.7%/128k (auto)                                                                       (jdgx) unsloth/Qwen3.8-27B-NVFP4

@@ -1,0 +1,11 @@
+== working ==
+tmux identity: pi idle
+tmux backend composer_state: unknown
+herdr-caps replay identity=[pi working]: empty
+herdr-caps replay identity=[pi idle]: unknown
+herdr-caps replay identity=[pi blocked]: unknown
+herdr-caps replay identity=[pi busy]: unknown
+herdr-caps replay identity=[probe-absent]: unknown
+composer rows:
+25:── ⠋ Working ────────────────────────────────────────────────────────────────
+27:─────────────────────────────────────────────────────────────────────────────

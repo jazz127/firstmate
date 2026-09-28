@@ -1,0 +1,6 @@
+base screen=idle herdr-caps identity=pi working: unknown
+base screen=working herdr-caps identity=pi working: unknown
+base screen=working-with-draft herdr-caps identity=pi working: unknown
+fix screen=idle herdr-caps identity=pi working: empty
+fix screen=working herdr-caps identity=pi working: empty
+fix screen=working-with-draft herdr-caps identity=pi working: pending

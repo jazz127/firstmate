@@ -190,7 +190,10 @@ fm_lint_host_lock_acquire() {  # <path>
     fi
     if [ -d "$lock" ] && [ ! -L "$lock" ]; then
       # A directory here is an earlier mkdir-style lock with an owner file.
-      fm_lint_host_lock_owner_live "$(cat "$lock/owner" 2>/dev/null || true)" || rm -rf "$lock"
+      if ! fm_lint_host_lock_owner_live "$(cat "$lock/owner" 2>/dev/null || true)"; then
+        rm -f "$lock/owner"
+        rmdir "$lock" 2>/dev/null || true
+      fi
     else
       fm_lint_host_lock_reap "$lock"
     fi

@@ -1,0 +1,22 @@
+== [target-3ae5fcfc] source: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3K8G4W1ESNVT9DGS8CTVPWG
+worker lock/start recorded by C-locale worker: Mon Sep 28 15:50:07 2026    
+-- SSH caller LANG=en_AU.UTF-8: raw ps lstart="Mon 28 Sep 15:50:07 2026"
+   fm_remote_job_process_start => "Mon Sep 28 15:50:07 2026    "
+   lock_owner_matches_process: MATCH
+   worker_owned_alive: yes
+-- SSH caller LANG=de_DE.UTF-8: raw ps lstart="Mo. 28 Sep. 15:50:07 2026"
+   fm_remote_job_process_start => "Mon Sep 28 15:50:07 2026    "
+   lock_owner_matches_process: MATCH
+   worker_owned_alive: yes
+-- SSH caller LANG=fr_FR.UTF-8: raw ps lstart="lun. 28 sept. 15:50:07 2026"
+   fm_remote_job_process_start => "Mon Sep 28 15:50:07 2026    "
+   lock_owner_matches_process: MATCH
+   worker_owned_alive: yes
+-- SSH caller LANG=C: raw ps lstart="Mon Sep 28 15:50:07 2026"
+   fm_remote_job_process_start => "Mon Sep 28 15:50:07 2026    "
+   lock_owner_matches_process: MATCH
+   worker_owned_alive: yes
+-- steer round-trip from LANG=en_AU.UTF-8 caller (stage+wait a real job through the worker):
+   exit=0 output=steer-ok hello elapsed=1s
+-- adversarial: tamper recorded start (simulated PID reuse) from en_AU caller:
+   tampered start: rejected (guard intact)

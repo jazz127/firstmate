@@ -1,0 +1,2 @@
+not ok - a C-locale worker lock did not match under LANG=en_AU.UTF-8
+not ok - locale-independent remote worker identity check failed

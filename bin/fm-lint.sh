@@ -126,16 +126,16 @@ FM_LINT_WORKER_RUN_PID=
 FM_LINT_WORKER_ARGS=()
 FM_LINT_HOST_LOCK_HELD=0
 FM_LINT_HOST_LOCK_TOKEN=
-FM_LINT_HOST_LOCK_REAP=
 FM_LINT_HOST_LOCK_PATH="/tmp/fm-lint-shellcheck-${UID:-$(id -u)}.lock"
 
 # Serialize memory-heavy ShellCheck processes across lint invocations by this
 # user. The lock lives at a fixed /tmp path so every invocation on the host
 # shares it whatever its TMPDIR. It is a symlink whose target is the owner
-# token, so the lock and its owner appear in one atomic step. A waiter that
-# finds a dead owner takes that owner's reap guard and removes the lock only if
-# it still names the same owner, so simultaneous waiters cannot remove a lock a
-# live owner has since taken. The owner validates FM_LINT_HOST_LOCK before any
+# token, so the lock and its owner appear in one atomic step. Only the waiter
+# that publishes the reap symlink for a dead owner's token may remove that
+# owner's lock, and only while the lock still names that owner. A reap symlink
+# is itself a lock owned by its reaper, so a reaper that dies mid-reap is
+# recovered the same way. The owner validates FM_LINT_HOST_LOCK before any
 # worker reads it.
 fm_lint_host_lock_enabled() {
   case "${FM_LINT_HOST_LOCK:-auto}" in
@@ -145,11 +145,15 @@ fm_lint_host_lock_enabled() {
   esac
 }
 
+fm_lint_host_lock_owner_live() {  # <token>
+  local owner_pid=${1%%.*}
+  case "$owner_pid" in
+    ''|*[!0-9]*) return 1 ;;
+  esac
+  kill -0 "$owner_pid" 2>/dev/null
+}
+
 fm_lint_host_lock_release() {
-  if [ -n "$FM_LINT_HOST_LOCK_REAP" ]; then
-    rmdir "$FM_LINT_HOST_LOCK_REAP" 2>/dev/null || true
-    FM_LINT_HOST_LOCK_REAP=
-  fi
   [ "$FM_LINT_HOST_LOCK_HELD" -eq 1 ] || return 0
   if [ "$(readlink "$FM_LINT_HOST_LOCK_PATH" 2>/dev/null || true)" = "$FM_LINT_HOST_LOCK_TOKEN" ]; then
     rm -f "$FM_LINT_HOST_LOCK_PATH"
@@ -158,32 +162,45 @@ fm_lint_host_lock_release() {
   FM_LINT_HOST_LOCK_TOKEN=
 }
 
+# Remove the lock symlink at <path> if its owner is dead, recovering a reap
+# symlink left by a dead reaper first.
+fm_lint_host_lock_reap() {  # <path>
+  local path=$1 owner guard
+  owner=$(readlink "$path" 2>/dev/null) || return 0
+  fm_lint_host_lock_owner_live "$owner" && return 0
+  guard="$FM_LINT_HOST_LOCK_PATH.reap.$owner"
+  if ln -s "$FM_LINT_HOST_LOCK_TOKEN" "$guard" 2>/dev/null; then
+    if [ "$(readlink "$path" 2>/dev/null || true)" = "$owner" ]; then
+      rm -f "$path"
+    fi
+    rm -f "$guard"
+  else
+    fm_lint_host_lock_reap "$guard"
+  fi
+}
+
 fm_lint_host_lock_acquire() {  # <path>
   fm_lint_host_lock_enabled || return 0
-  local lock=$FM_LINT_HOST_LOCK_PATH owner owner_pid queued=0
+  local lock=$FM_LINT_HOST_LOCK_PATH queued=0
   FM_LINT_HOST_LOCK_TOKEN="${BASHPID:-$$}.$RANDOM.$RANDOM"
-  until ln -s "$FM_LINT_HOST_LOCK_TOKEN" "$lock" 2>/dev/null; do
-    owner=$(readlink "$lock" 2>/dev/null || true)
-    owner_pid=${owner%%.*}
-    case "$owner_pid" in
-      ''|*[!0-9]*) ;;
-      *)
-        if ! kill -0 "$owner_pid" 2>/dev/null && mkdir "$lock.reap.$owner" 2>/dev/null; then
-          FM_LINT_HOST_LOCK_REAP="$lock.reap.$owner"
-          if [ "$(readlink "$lock" 2>/dev/null || true)" = "$owner" ]; then
-            rm -f "$lock"
-          fi
-          rmdir "$FM_LINT_HOST_LOCK_REAP"
-          FM_LINT_HOST_LOCK_REAP=
-          continue
-        fi
-        ;;
-    esac
-    if [ "$queued" -eq 0 ] && [ "${FM_LINT_INTERNAL_PROGRESS:-0}" = 1 ]; then
-      printf 'fm-lint: queued %s behind the host ShellCheck lock\n' "$1" >&2
+  while :; do
+    if ln -s "$FM_LINT_HOST_LOCK_TOKEN" "$lock" 2>/dev/null; then
+      [ "$(readlink "$lock" 2>/dev/null || true)" != "$FM_LINT_HOST_LOCK_TOKEN" ] || break
+      rm -f "$lock/$FM_LINT_HOST_LOCK_TOKEN"
     fi
-    queued=1
-    sleep 0.1
+    if [ -d "$lock" ] && [ ! -L "$lock" ]; then
+      # A directory here is an earlier mkdir-style lock with an owner file.
+      fm_lint_host_lock_owner_live "$(cat "$lock/owner" 2>/dev/null || true)" || rm -rf "$lock"
+    else
+      fm_lint_host_lock_reap "$lock"
+    fi
+    if [ -L "$lock" ] || [ -e "$lock" ]; then
+      if [ "$queued" -eq 0 ] && [ "${FM_LINT_INTERNAL_PROGRESS:-0}" = 1 ]; then
+        printf 'fm-lint: queued %s behind the host ShellCheck lock\n' "$1" >&2
+      fi
+      queued=1
+      sleep 0.1
+    fi
   done
   FM_LINT_HOST_LOCK_HELD=1
 }

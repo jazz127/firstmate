@@ -1352,6 +1352,7 @@ SH
 # left behind with a dead owner means ours was not released.
 fm_lint_test_lock_released() {
   local owner
+  [ -L "$1" ] || [ ! -e "$1" ] || return 1
   [ -L "$1" ] || return 0
   owner=$(readlink "$1" 2>/dev/null || true)
   owner=${owner%%.*}
@@ -1370,7 +1371,7 @@ fm_lint_test_plant_lock() {  # <lock> <pid>
 }
 
 test_host_lock_serializes_and_recovers_stale_owner() {
-  local tmp fakebin fixture lock active overlap pid holder_pid dead_pid rc i duration
+  local tmp fakebin fixture lock active overlap pid holder_pid dead_pid reaper_pid rc i duration
   local -a pids
   tmp=$(fm_test_tmproot fm-lint-host-lock)
   fakebin=$(fm_fakebin "$tmp")
@@ -1378,7 +1379,8 @@ test_host_lock_serializes_and_recovers_stale_owner() {
   lock="/tmp/fm-lint-shellcheck-${UID:-$(id -u)}.lock"
   active="$tmp/shellcheck-active"
   overlap="$tmp/shellcheck-overlap"
-  mkdir -p "$tmp/tmp-a" "$tmp/tmp-b" "$tmp/tmp-c" "$tmp/tmp-d" "$tmp/tmp-e" "$tmp/tmp-f"
+  mkdir -p "$tmp/tmp-a" "$tmp/tmp-b" "$tmp/tmp-c" "$tmp/tmp-d" "$tmp/tmp-e" "$tmp/tmp-f" \
+    "$tmp/tmp-g" "$tmp/tmp-h" "$tmp/tmp-j"
   cat > "$fixture" <<'SH'
 #!/usr/bin/env bash
 printf '%s\n' ok
@@ -1438,6 +1440,10 @@ SH
   dead_pid=$!
   kill "$dead_pid" 2>/dev/null || true
   wait "$dead_pid" 2>/dev/null || true
+  sleep 30 &
+  reaper_pid=$!
+  kill "$reaper_pid" 2>/dev/null || true
+  wait "$reaper_pid" 2>/dev/null || true
   fm_lint_test_plant_lock "$lock" "$dead_pid"
   pids=()
   for i in d e f; do
@@ -1453,7 +1459,49 @@ SH
   done
   [ ! -e "$overlap" ] || fail "simultaneous stale-lock waiters overlapped ShellCheck"
   fm_lint_test_lock_released "$lock" || fail "stale host ShellCheck lock remained after recovery"
-  pass "host ShellCheck lock serializes across TMPDIRs, excludes queue time, and recovers a dead owner"
+
+  fm_lint_test_plant_lock "$lock" "$dead_pid"
+  ln -s "$reaper_pid.test" "$lock.reap.$dead_pid.test"
+  PATH="$fakebin:$PATH" TMPDIR="$tmp/tmp-g" FM_LINT_HOST_LOCK=on \
+    FM_TEST_ACTIVE="$active" FM_TEST_OVERLAP="$overlap" \
+    "$LINT" "$fixture" > "$tmp/reaper.out" 2>&1 &
+  pid=$!
+  i=0
+  while kill -0 "$pid" 2>/dev/null; do
+    i=$((i + 1))
+    if [ "$i" -gt 200 ]; then
+      kill "$pid" 2>/dev/null || true
+      break
+    fi
+    sleep 0.1
+  done
+  rc=0
+  wait "$pid" || rc=$?
+  [ "$rc" -eq 0 ] || fail "lint did not recover a lock whose reaper died mid-reap ($rc): $(cat "$tmp/reaper.out")"
+  fm_lint_test_lock_released "$lock" || fail "stale host ShellCheck lock remained after reaper recovery"
+
+  i=0
+  until mkdir "$lock" 2>/dev/null; do
+    i=$((i + 1))
+    [ "$i" -le 3000 ] || fail "host ShellCheck lock stayed busy; cannot plant a legacy lock"
+    sleep 0.1
+  done
+  printf '%s.legacy\n' "$dead_pid" > "$lock/owner"
+  pids=()
+  for i in h j; do
+    PATH="$fakebin:$PATH" TMPDIR="$tmp/tmp-$i" FM_LINT_HOST_LOCK=on \
+      FM_TEST_ACTIVE="$active" FM_TEST_OVERLAP="$overlap" \
+      "$LINT" "$fixture" > "$tmp/legacy-$i.out" 2>&1 &
+    pids+=("$!")
+  done
+  for pid in "${pids[@]}"; do
+    rc=0
+    wait "$pid" || rc=$?
+    [ "$rc" -eq 0 ] || fail "lint failed to recover a legacy lock directory with $rc"
+  done
+  [ ! -e "$overlap" ] || fail "lints overlapped ShellCheck after a legacy lock directory"
+  fm_lint_test_lock_released "$lock" || fail "legacy host ShellCheck lock directory remained"
+  pass "host ShellCheck lock serializes across TMPDIRs, excludes queue time, and recovers dead owners, reapers, and legacy locks"
 }
 
 test_host_lock_rejects_unknown_values() {

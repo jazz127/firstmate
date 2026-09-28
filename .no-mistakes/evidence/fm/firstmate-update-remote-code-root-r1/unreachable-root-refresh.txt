@@ -1,0 +1,11 @@
+=== code root refresh transport fails (warning then connection refused); homes' origin is the forge
+firstmate: updated 7583d2e..5a7f9fd
+no watches registered
+remote code root fixture-host (<W>/remote-root): skipped: ssh: connect to host fixture-host port 22: Connection refused
+remote secondmate sm1: updated on fixture-host (5a7f9fd363ca6fe3ccf7c43e8023db22a5e09c82)
+remote secondmate sm2: updated on fixture-host (5a7f9fd363ca6fe3ccf7c43e8023db22a5e09c82)
+reread-firstmate: no
+restart-secondmates: none
+nudge-secondmates: none
+sm1 converged=yes
+sm2 converged=yes

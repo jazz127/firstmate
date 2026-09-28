@@ -1,0 +1,44 @@
+=== before-fix: updater=/tmp/fm-basebin.swNp/bin/fm-update.sh
+remote code root HEAD before: 230dd47  (fork/release tip / primary target: c731f7d)
+registry:
+  - sm1 - remote domain (host: fixture-host; root: /private/var/folders/kw/cjk9qxvx0kq5874xngqgywth0000gn/T/fm-update-tests.pXkRG7/before-fix/remote-root; home: /private/var/folders/kw/cjk9qxvx0kq5874xngqgywth0000gn/T/fm-update-tests.pXkRG7/before-fix/sm1; scope: things; projects: p; added 2026-09-03)
+  - sm2 - remote domain (host: fixture-host; root: /private/var/folders/kw/cjk9qxvx0kq5874xngqgywth0000gn/T/fm-update-tests.pXkRG7/before-fix/remote-root; home: /private/var/folders/kw/cjk9qxvx0kq5874xngqgywth0000gn/T/fm-update-tests.pXkRG7/before-fix/sm2; scope: things; projects: p; added 2026-09-03)
+--- fm-update.sh stdout+stderr:
+firstmate: updated 230dd47..c731f7d
+no watches registered
+remote secondmate sm1: skipped on fixture-host: error: remote home could not import c731f7d96cb31d3bcfc65eed5602026a0d146d9e from this host's Firstmate copy or the home's origin; run /updatefirstmate to refresh this host's copy, or push that commit first
+remote secondmate sm2: skipped on fixture-host: error: remote home could not import c731f7d96cb31d3bcfc65eed5602026a0d146d9e from this host's Firstmate copy or the home's origin; run /updatefirstmate to refresh this host's copy, or push that commit first
+reread-firstmate: no
+restart-secondmates: none
+nudge-secondmates: none
+--- after:
+remote code root HEAD: 230dd47 branch=house
+sm1 HEAD: 230dd47  converged=no
+sm2 HEAD: 230dd47  converged=no
+remote transport calls:
+  fm-remote-secondmate-control.sh sync sm1 c731f7d96cb31d3bcfc65eed5602026a0d146d9e
+  fm-remote-secondmate-control.sh sync sm2 c731f7d96cb31d3bcfc65eed5602026a0d146d9e
+
+=== after-fix: updater=/Users/jarad/.no-mistakes/worktrees/daaee59c4bbe/01M3N160JX893BXX2MNTQS57YJ/bin/fm-update.sh
+remote code root HEAD before: c803b25  (fork/release tip / primary target: 3cedfcd)
+registry:
+  - sm1 - remote domain (host: fixture-host; root: /private/var/folders/kw/cjk9qxvx0kq5874xngqgywth0000gn/T/fm-update-tests.pXkRG7/after-fix/remote-root; home: /private/var/folders/kw/cjk9qxvx0kq5874xngqgywth0000gn/T/fm-update-tests.pXkRG7/after-fix/sm1; scope: things; projects: p; added 2026-09-03)
+  - sm2 - remote domain (host: fixture-host; root: /private/var/folders/kw/cjk9qxvx0kq5874xngqgywth0000gn/T/fm-update-tests.pXkRG7/after-fix/remote-root; home: /private/var/folders/kw/cjk9qxvx0kq5874xngqgywth0000gn/T/fm-update-tests.pXkRG7/after-fix/sm2; scope: things; projects: p; added 2026-09-03)
+--- fm-update.sh stdout+stderr:
+firstmate: updated c803b25..3cedfcd
+no watches registered
+remote code root fixture-host (<W>/remote-root): updated c803b25..3cedfcd
+remote secondmate sm1: updated on fixture-host (3cedfcdff93d71990c03db740fdf3319b0f791e3)
+remote secondmate sm2: updated on fixture-host (3cedfcdff93d71990c03db740fdf3319b0f791e3)
+reread-firstmate: no
+restart-secondmates: none
+nudge-secondmates: none
+--- after:
+remote code root HEAD: 3cedfcd branch=house
+sm1 HEAD: 3cedfcd  converged=yes
+sm2 HEAD: 3cedfcd  converged=yes
+remote transport calls:
+  code-root-refresh
+  fm-remote-secondmate-control.sh sync sm1 3cedfcdff93d71990c03db740fdf3319b0f791e3
+  fm-remote-secondmate-control.sh sync sm2 3cedfcdff93d71990c03db740fdf3319b0f791e3
+

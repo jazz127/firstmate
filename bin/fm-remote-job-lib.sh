@@ -936,6 +936,10 @@ fm_remote_job_normalize_process_start() {
   printf '%s\n' "$value"
 }
 
+fm_remote_job_ps_bin() {
+  if [ -x /bin/ps ]; then printf '/bin/ps\n'; elif [ -x /usr/bin/ps ]; then printf '/usr/bin/ps\n'; else return 1; fi
+}
+
 fm_remote_job_process_start() {
   local pid=$1 ps_bin value proc_root stat_line starttime boot_id
   local -a stat_fields
@@ -959,8 +963,10 @@ fm_remote_job_process_start() {
     printf 'linux-starttime=%s boot-id=%s\n' "$starttime" "$boot_id"
     return 0
   fi
-  if [ -x /bin/ps ]; then ps_bin=/bin/ps; elif [ -x /usr/bin/ps ]; then ps_bin=/usr/bin/ps; else return 1; fi
-  value=$("$ps_bin" -p "$pid" -o lstart= 2>/dev/null) || return 1
+  ps_bin=$(fm_remote_job_ps_bin) || return 1
+  # Pin LC_ALL=C so lstart is locale-invariant: the launchd worker records its
+  # start under the C locale, but SSH callers re-read it under their own locale.
+  value=$(LC_ALL=C "$ps_bin" -p "$pid" -o lstart= 2>/dev/null) || return 1
   fm_remote_job_normalize_process_start "$value"
 }
 

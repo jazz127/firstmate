@@ -116,6 +116,7 @@ herdr server stop --session fm-remote && launchctl kickstart -k gui/<uid>/dev.fi
 ```
 
 The guard then starts a supervised server that leads its own session, and the parent firstmate's secondmate liveness sweep relaunches its mates into it.
+On Linux, `--fix` starts a stopped `fm-remote` server as the leader of its own session, and a running server that Herdr reports is not a session leader is a non-blocking `notice:` naming `herdr server stop --session fm-remote` followed by another `--fix`, which --fix never runs itself because the restart closes its panes.
 It starts the same workers directly on Linux, recreates the `~/.local/bin/fm-remote-entrypoint.sh` symlink when it is absent, and creates only Firstmate-owned required-tool wrappers that it can prove resolve to a version-manager target, stopping after one harness satisfies the at-least-one requirement.
 It never installs packages or overwrites a non-Firstmate file at a reserved wrapper path.
 The dedicated Herdr launch agent owns only the remote-secondmate `fm-remote` server and does not inspect, rewrite, start, stop, or require the user's interactive `default` session or its `dev.firstmate.herdr` launch agent.

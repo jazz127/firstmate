@@ -44,11 +44,12 @@
 #   check <check>=skip: <why this host is exempt>
 #   check <check>=fixable: <gap --fix can close>
 #   check <check>=human: <gap only a person at that machine can close>
+#   check <check>=notice: <non-blocking condition only an operator repairs>
 #   action: <check>: <the exact step to take>
 # Every check line is authoritative for the moment it printed: under --fix it is
 # the state after the repair attempt, so a human gap is never presented as
 # fixed. Any remaining fixable or human gap, and any missing required tool,
-# exits non-zero.
+# exits non-zero; a notice does not.
 #
 # --fix is idempotent and closes only automatable gaps: it writes and reloads
 # both Firstmate-owned Aqua agents, starts the Linux workers where no Aqua agent
@@ -176,6 +177,13 @@ herdr_server_running() {
   local running
   running=$(herdr_server_status_json | jq -r '.server.running // false' 2>/dev/null) || return 1
   [ "$running" = true ]
+}
+
+# Herdr 0.9.1 saved machines refuse a server that reports
+# detached_server_daemon=false; an older server without the capability is not
+# judged by it.
+herdr_server_needs_session_leader() {
+  [ "$(herdr_server_status_json | jq -r '.server.capabilities.detached_server_daemon == false' 2>/dev/null)" = true ]
 }
 
 # Birth of the process serving the session, as the guard classifies it:
@@ -682,7 +690,12 @@ check_herdr_server() { # <resolved-login-shell>
   fi
   if herdr_server_running; then
     if [ "$PLATFORM" != darwin ]; then
-      record herdr-server "ok: session $HERDR_SESSION_NAME is running"
+      if herdr_server_needs_session_leader; then
+        record herdr-server "notice: session $HERDR_SESSION_NAME is running, but it is not a session-leader server, so Herdr saved machines refuse it" \
+          "while the host is quiet, run 'herdr server stop --session $HERDR_SESSION_NAME' on that account, then rerun this command with --fix; the server restarts as a session leader and its panes close"
+      else
+        record herdr-server "ok: session $HERDR_SESSION_NAME is running"
+      fi
       return 0
     fi
     local birth
@@ -830,7 +843,7 @@ start_herdr_server() {
     fix_report herdr-server failed "herdr and jq must both resolve before the server can be started"
     return 1
   fi
-  if fm_backend_herdr_server_ensure "$HERDR_SESSION_NAME" >/dev/null 2>&1; then
+  if fm_backend_herdr_server_ensure "$HERDR_SESSION_NAME" session-leader >/dev/null 2>&1; then
     fix_report herdr-server applied "started the herdr server for session $HERDR_SESSION_NAME"
     return 0
   fi
@@ -942,15 +955,17 @@ for tool in "${OPTIONAL_TOOLS[@]}"; do
 done
 
 GAPS=()
+ACTIONABLE=()
 i=0
 while [ "$i" -lt "${#CHECK_NAMES[@]}" ]; do
   printf 'check %s=%s\n' "${CHECK_NAMES[$i]}" "${CHECK_VALUES[$i]}"
   case "${CHECK_VALUES[$i]}" in
-    fixable:*|human:*) GAPS+=("$i") ;;
+    fixable:*|human:*) GAPS+=("$i"); ACTIONABLE+=("$i") ;;
+    notice:*) ACTIONABLE+=("$i") ;;
   esac
   i=$((i + 1))
 done
-for i in ${GAPS[@]+"${GAPS[@]}"}; do
+for i in ${ACTIONABLE[@]+"${ACTIONABLE[@]}"}; do
   [ -z "${CHECK_ACTIONS[$i]}" ] || printf 'action: %s: %s\n' "${CHECK_NAMES[$i]}" "${CHECK_ACTIONS[$i]}"
 done
 

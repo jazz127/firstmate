@@ -279,9 +279,26 @@ case "${1:-} ${2:-}" in
         running=true
       fi
     fi
-    printf '{"client":{"version":"0.7.5","protocol":16},"server":{"running":%s,"socket":"%s"}}\n' "$running" "$FM_FAKE_HERDR_SOCKET"
+    detached=true
+    [ ! -f "$FM_FAKE_STATE/not-detached" ] || detached=false
+    if [ "$running" != true ]; then
+      printf '{"client":{"version":"0.9.1","protocol":22},"server":{"running":%s,"socket":"%s"}}\n' "$running" "$FM_FAKE_HERDR_SOCKET"
+    else
+      printf '{"client":{"version":"0.9.1","protocol":22},"server":{"running":%s,"socket":"%s","capabilities":{"detached_server_daemon":%s}}}\n' "$running" "$FM_FAKE_HERDR_SOCKET" "$detached"
+    fi
+    ;;
+  "server stop")
+    printf 'server stop\n' >> "$FM_FAKE_STATE/herdr-calls"
+    printf 'false\n' > "$FM_FAKE_HERDR_RUNNING"
     ;;
   "server "*|"server ")
+    printf 'server start\n' >> "$FM_FAKE_STATE/herdr-calls"
+    # Herdr reports detached_server_daemon only for a session leader.
+    if [ "$(ps -o pgid= -p "$$" | tr -d ' ')" = "$$" ]; then
+      rm -f "$FM_FAKE_STATE/not-detached"
+    else
+      touch "$FM_FAKE_STATE/not-detached"
+    fi
     printf 'true\n' > "$FM_FAKE_HERDR_RUNNING"
     ;;
 esac
@@ -949,7 +966,28 @@ expect_code 0 "$DOCTOR_RC" "--fix did not start the herdr server on linux"
 assert_contains "$DOCTOR_OUT" 'fix herdr-server=applied:' "--fix did not report starting the server"
 assert_contains "$DOCTOR_OUT" 'check herdr-server=ok:' "the started server was not confirmed by the re-check"
 [ ! -s "$CASE_LAUNCHCTL_LOG" ] || fail "the linux path invoked launchctl"
+assert_absent "$CASE_STATE/not-detached" "the linux server was not started as a session leader"
 pass "a non-darwin host skips launch agents and starts its herdr server directly"
+
+touch "$CASE_STATE/not-detached"
+: > "$CASE_STATE/herdr-calls"
+doctor
+expect_code 0 "$DOCTOR_RC" "a linux foreground server blocked readiness"
+assert_contains "$DOCTOR_OUT" 'check herdr-server=notice: session fm-remote is running, but it is not a session-leader server' \
+  "the linux saved-machine notice was not reported"
+assert_contains "$DOCTOR_OUT" "action: herdr-server: while the host is quiet, run 'herdr server stop --session fm-remote' on that account, then rerun this command with --fix" \
+  "the linux notice did not name the operator-run restart"
+doctor --fix
+expect_code 0 "$DOCTOR_RC" "--fix failed over a linux saved-machine notice"
+assert_no_grep 'server' "$CASE_STATE/herdr-calls" "--fix restarted a healthy linux server"
+printf 'false\n' > "$CASE_HERDR_RUNNING"
+doctor --fix
+expect_code 0 "$DOCTOR_RC" "--fix did not restart the stopped linux server"
+[ "$(cat "$CASE_STATE/herdr-calls")" = 'server start' ] \
+  || fail "the linux restart did not start the server once: $(cat "$CASE_STATE/herdr-calls")"
+assert_absent "$CASE_STATE/not-detached" "the linux restart did not start a session leader"
+assert_contains "$DOCTOR_OUT" 'check herdr-server=ok: session fm-remote is running' "the restarted linux server was not confirmed"
+pass "a linux foreground server is a notice that --fix never restarts, and a stopped one restarts as a session leader"
 
 # --- --fix may add only owned wrappers for version-manager tools -------------
 

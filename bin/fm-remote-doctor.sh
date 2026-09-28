@@ -779,6 +779,10 @@ reload_launch_agent() { # <check-to-report-under>
     return 1
   fi
   launchctl bootout "gui/$UID_NUM/$LAUNCH_AGENT_LABEL" >/dev/null 2>&1 || true
+  if ! fm_remote_job_wait_launchagent_unloaded "gui/$UID_NUM/$LAUNCH_AGENT_LABEL"; then
+    fix_report "$report" failed "$FM_REMOTE_JOB_ERROR"
+    return 1
+  fi
   if ! out=$(launchctl bootstrap "gui/$UID_NUM" "$LAUNCH_AGENT_PLIST" 2>&1); then
     fix_report "$report" failed "launchctl bootstrap gui/$UID_NUM refused: ${out:-no diagnostic}"
     return 1

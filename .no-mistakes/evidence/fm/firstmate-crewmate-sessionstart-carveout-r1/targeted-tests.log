@@ -1,0 +1,111 @@
+FM_TEST_BEGIN 2026-09-28T05:21:17Z tests/fm-task-delivery.test.sh family=pure-contract-unit expected_gate_skip=none
+ok - fm-spawn/fm-promote: authorized intent preserves exact words and refuses operator-address lines
+ok - fm-spawn: every legacy worker receives scoped role instructions without changing project or primary instructions
+ok - fm-spawn: a ship spawn requires a valid explicit mode and yolo before anything is created
+ok - fm-spawn: scout and secondmate spawns refuse ship delivery flags
+ok - fm-spawn: the brief's recorded mode and the spawn's explicit mode must agree
+ok - fm-spawn: a rigor downgrade against the registered posture is announced, never blocked
+ok - fm-spawn: a scout spawn resolves no delivery posture from the registry
+ok - fm-promote: promotion requires the delivery contract and records it exactly once
+ok - fm-promote: a symlinked task record is refused and its target is left untouched
+ok - fm-promote: a promoted worker receives the same mode-specific delivery contract a briefed one does
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  watcher supervision needs Stop-owned automatic recovery; inspect the hook registration and startup status before ending the turn.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ok - fm-promote: a selected branch prefix reaches both worker instructions and durable task state
+Switched to a new branch '$(touch${IFS}/private/var/folders/kw/cjk9qxvx0kq5874xngqgywth0000gn/T/fm-test-run.qVc1M1/w1/tmp/fm-task-delivery.aiIq9n/promote-branch-shell-safe-marker)/promote-branch-safe-e3'
+ok - fm-promote: ref-format-valid shell metacharacters stay literal in promotion branch commands
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  watcher supervision needs Stop-owned automatic recovery; inspect the hook registration and startup status before ending the turn.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ok - fm-merge-local: a registry change cannot redirect an in-flight local-only task
+ok - fm-project-mode: the registry lookup matches a whole multi-word name, not just its first token
+ok - fm-project-mode: the conditional policy is accepted, mapped for mechanical callers, and readable raw
+ok - fm-project-mode: the forge binds from its own token and is reported only through --forge
+ok - fm-project-mode: only a malformed forge binding refuses; every other token keeps its old tolerance
+ok - forge=gerrit: yolo is refused with its reason, never silently dropped
+ok - forge=gerrit: no-mistakes runs with its forge steps skipped, recovers its fixes, then publishes one change
+ok - forge=gerrit: direct-PR publishes one squashed change and a stack is refused with its reason
+ok - fm-spawn: a registered forge must reach the worker's brief
+ok - fm-spawn: the brief must carry the spawn's selected ship branch, and the selection is validated before anything is created
+ok - fm-spawn: a ship branch that deviates from the registered prefix is announced, never blocked
+ok - fm-spawn: a registry forge token the parser refuses stops the launch, reason included
+ok - fm-promote: a promoted worker receives the project's registered forge contract with no flag to remember
+ok - fm-spawn/fm-promote: leftover Task placeholders are refused until both subsections are filled
+ok - fm-project-mode: --branch-prefix resolves order-independently and defaults to the legacy fm/ prefix
+# all fm-task-delivery tests passed
+FM_TEST_END 2026-09-28T05:23:49Z tests/fm-task-delivery.test.sh exit=0 duration_ms=152166 gate_skip=false
+FM_TEST_BEGIN 2026-09-28T05:23:49Z tests/fm-session-start.test.sh family=session-bootstrap expected_gate_skip=none
+ok - session start refuses a marked task worker before touching the home
+ok - session start still runs for an unmarked linked worktree home
+ok - context digest distinguishes ABSENT, empty-but-present, and populated files
+ok - a lock refusal prints a loud read-only banner, skips every mutating step, and still completes the digest
+ok - session start stays read-only when lock ownership cannot be published
+ok - locked session start freezes trace context and lock refusal leaves it unchanged
+ok - concurrent session-lock acquisition admits exactly one live harness
+ok - digest sections are ordered safety-preamble first, live fleet state before curated memory
+ok - the read-once contract is stated once, ahead of the sources it governs
+ok - session start: configured and auto-detected Herdr homes never require tmux
+ok - session start: an absent recorded tmux window relaunches its Pi secondmate exactly once, off the blocking path
+ok - session start: a deferred relaunch is always reported, so the digest's stale endpoint record cannot stand
+ok - session start: inactive reconciliation runs after the digest and retains its durable wake
+ok - session start: an unreachable host delays a reported check, not the digest
+ok - session start: a deferred result the digest outran still reaches the agent as a wake
+ok - session start: a read-only session declares its skipped network checks rather than dropping them
+ok - session start: the tasks-axi compatibility verdict is computed once and reused
+ok - session start: an existing ambiguous Pi process prevents duplicate recovery
+ok - session start: transient tmux unreadability never licenses a relaunch
+ok - session start: the proven bare-shell recovery path remains intact
+ok - session start: a confirmed Herdr husk is closed and relaunched
+ok - status tail is bounded to the configured line count, with the full log path always printed
+ok - status tail lines are capped with a truncation marker while the full log stays reachable
+ok - orphan status logs are printed once with bounded tails
+ok - tmux endpoint liveness is reported per task: alive for a live window, dead for a gone one
+ok - herdr endpoint liveness is reported per task: alive for a live pane, dead for a gone one
+ok - fm-session-start.sh composes the real fm-lock.sh, fm-bootstrap.sh, and fm-wake-drain.sh output verbatim
+ok - locked Pi session start replays leading routine outcomes, preserves the captain barrier, and sweeps only dead leases
+ok - non-Pi session start neither sweeps nor replays Pi branch state
+ok - compatible tasks-axi backlog rendering drops done rows and keeps every in-flight, held, and blocked row
+ok - the startup backlog bound cuts only dispatchable queued rows and discloses the remainder exactly
+ok - manual backlog rendering drops done rows, keeps every held or blocked title line, and bounds the rest
+ok - unavailable or incompatible tasks-axi falls back to compact manual backlog rendering
+ok - an empty fleet reports (none) for in-flight tasks and an absent AFK flag
+ok - session start emits X-mode cadence guidance in the harness supervision block
+ok - next step delegates watcher ownership to the AFK daemon
+ok - next step delegates watcher ownership to the daemon in quiet mode, distinctly from away mode
+ok - a legacy empty .afk flag (written before mode existed) still reads as away mode
+ok - session start emits exactly one detected harness block and reports Pi extension load state
+ok - session start preserves pi-signed primary identity while applying Pi extension guarantees
+ok - session start rejects stale Pi loaded markers
+ok - session start rejects a Pi watcher generation left in handoff
+ok - session start accepts current Pi markers written before lock acquisition
+ok - session start emits the omp block and reports omp extension load state
+ok - session start accepts current omp markers written before lock acquisition
+ok - session start rejects Pi sessions missing the turn-end guard marker
+ok - session start rejects Pi loaded markers from previous sessions
+ok - the pure-Bash watchdog bounds session start, kills its hung grandchild, and emits the truncation contract
+ok - the portable timeout path force-kills a command that ignores TERM
+ok - a session start inside its budget prints no truncation banner
+ok - the runtime bound leaves enough ancestry headroom for a deeply nested session to take the lock
+ok - --reemit reprints the digest without repeating startup's mutating sweeps and still drains queued wakes
+ok - true-start AGENTS baselines stay immutable while every drifted Pi compact re-emits the current contract
+ok - read-only Pi compact refreshes against the rebuilding session identity without mutation
+ok - Codex reset sources do not claim an unavailable instruction-refresh channel
+ok - instruction baselines require SHA-256 and successful startup completion
+ok - --reemit re-verifies lock ownership and keeps repair ownership with whoever holds it
+# fm-session-start.test.sh: all assertions passed
+FM_TEST_END 2026-09-28T05:40:28Z tests/fm-session-start.test.sh exit=0 duration_ms=999050 gate_skip=false
+FM_TEST_SUMMARY total=2 failed=0 skipped_gate=0 duration_ms=1152031
+FM_TEST_SUMMARY_FAMILY family=pure-contract-unit count=1 duration_ms=152166 failed=0
+FM_TEST_SUMMARY_FAMILY family=session-bootstrap count=1 duration_ms=999050 failed=0
+FM_TEST_SLOWEST rank=1 script=tests/fm-session-start.test.sh duration_ms=999050
+FM_TEST_SLOWEST rank=2 script=tests/fm-task-delivery.test.sh duration_ms=152166
+exit=0

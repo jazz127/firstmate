@@ -1,0 +1,19 @@
+## Scenario A: task worker (FM_TASK_ID set) runs bin/fm-session-start.sh in this linked gate worktree
+$ git rev-parse --git-dir => /Users/jarad/.no-mistakes/repos/daaee59c4bbe.git/worktrees/01M3K77SDMN81P8ZKQ13TF6TSD
+--- lab home before:
+.
+./.fm-lab-home
+./config
+./data
+./projects
+./state
+$ FM_HOME=$LAB FM_TASK_ID=lab-worker-1 bin/fm-session-start.sh
+fm-session-start: refusing task worker FM_TASK_ID=lab-worker-1; this command belongs to the supervising firstmate
+exit=2
+--- lab home after:
+.
+./.fm-lab-home
+./config
+./data
+./projects
+./state

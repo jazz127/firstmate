@@ -1,0 +1,11 @@
+Live Claude (sonnet) crewmate in the firstmate gate worktree, FM_TASK_ID=live-crew-1, FM_HOME=<fresh lab>, prompt = rendered worker role contract + task
+SessionStart hook (project fm-sessionstart-run.sh): exit 0 output empty (stood down for task worker)
+TOOL CALL: {"command": "git branch --show-current", "description": "Show current git branch"}
+FINAL ANSWER:
+I skipped `bin/fm-session-start.sh` since that command is reserved for the supervising firstmate, not a task crewmate — per my worker role contract there's no separate session-start ritual for this role, so I went straight to the requested check.
+
+**`git branch --show-current` output:** (empty — HEAD is detached, no branch checked out)
+
+**Commands run:**
+1. `git branch --show-current`
+Lab home after run: only stock dirs, no state/.lock or .session-start-complete

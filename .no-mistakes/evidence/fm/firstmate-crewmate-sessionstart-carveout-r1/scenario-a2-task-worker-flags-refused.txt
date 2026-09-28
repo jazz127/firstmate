@@ -1,0 +1,17 @@
+## Scenario A2 (adversarial): task worker passes --reemit / --source flags
+$ FM_TASK_ID=lab-worker-1 bin/fm-session-start.sh --reemit
+fm-session-start: refusing task worker FM_TASK_ID=lab-worker-1; this command belongs to the supervising firstmate
+exit=2
+$ FM_TASK_ID=lab-worker-1 bin/fm-session-start.sh --source claude-startup
+fm-session-start: refusing task worker FM_TASK_ID=lab-worker-1; this command belongs to the supervising firstmate
+exit=2
+$ FM_TASK_ID=lab-worker-1 bin/fm-session-start.sh --reemit --source compact
+fm-session-start: refusing task worker FM_TASK_ID=lab-worker-1; this command belongs to the supervising firstmate
+exit=2
+--- lab home after:
+.
+./.fm-lab-home
+./config
+./data
+./projects
+./state

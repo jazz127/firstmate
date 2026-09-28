@@ -1,0 +1,5 @@
+holder 55856 took lock
+contender rc=1 (expected 1); real holder pid=55856
+--- /var/folders/kw/cjk9qxvx0kq5874xngqgywth0000gn/T/tmp.RWfrynJCHh/marker-lock-held.failure:
+lock holder pid=55856; watcher pid=
+55856 55855 SN   bash -c . bin/fm-wake-lib.sh; fm_lock_acquire_wait_max "$1/.watcher-down.lock" 2 || exit 1; echo "holder $$ took lock"; : > "$1/go"; sleep 6; fm_lock_release "$1/.watcher-down.lock" _ /var/folders/kw/cjk9qxvx0kq5874xngqgywth0000gn/T/tmp.RWfrynJCHh

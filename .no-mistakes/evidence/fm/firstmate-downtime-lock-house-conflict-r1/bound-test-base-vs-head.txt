@@ -1,0 +1,10 @@
+== tests/.base-tmp.test.sh run 1: ok - the cleanup marker-lock bound is decimal and zero falls back to the default
+== tests/.base-tmp.test.sh run 2: ok - the cleanup marker-lock bound is decimal and zero falls back to the default
+== tests/.base-tmp.test.sh run 3: ok - the cleanup marker-lock bound is decimal and zero falls back to the default
+== tests/.base-tmp.test.sh run 4: ok - the cleanup marker-lock bound is decimal and zero falls back to the default
+== tests/.base-tmp.test.sh run 5: ok - the cleanup marker-lock bound is decimal and zero falls back to the default
+== tests/fm-watch-triage.test.sh run 1: ok - the cleanup marker-lock bound is decimal and zero falls back to the default
+== tests/fm-watch-triage.test.sh run 2: not ok - cleanup lock bound 08 gave up before the marker lock freed
+== tests/fm-watch-triage.test.sh run 3: ok - the cleanup marker-lock bound is decimal and zero falls back to the default
+== tests/fm-watch-triage.test.sh run 4: ok - the cleanup marker-lock bound is decimal and zero falls back to the default
+== tests/fm-watch-triage.test.sh run 5: ok - the cleanup marker-lock bound is decimal and zero falls back to the default

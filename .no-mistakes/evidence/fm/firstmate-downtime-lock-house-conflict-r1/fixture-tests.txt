@@ -1,0 +1,43 @@
+== tests/fm-watch-triage.test.sh test_term_stops_a_watcher_whose_cleanup_marker_lock_is_held run 1
+watcher: recovery state could not be persisted; retaining stale lock evidence
+ok - TERM stops a watcher whose downtime-marker lock is held, retaining stale evidence
+rc=
+== tests/fm-watch-triage.test.sh test_term_stops_a_watcher_whose_cleanup_marker_lock_is_held run 2
+watcher: recovery state could not be persisted; retaining stale lock evidence
+ok - TERM stops a watcher whose downtime-marker lock is held, retaining stale evidence
+rc=
+== tests/fm-watch-triage.test.sh test_term_stops_a_watcher_whose_cleanup_marker_lock_is_held run 3
+watcher: recovery state could not be persisted; retaining stale lock evidence
+ok - TERM stops a watcher whose downtime-marker lock is held, retaining stale evidence
+rc=
+== tests/fm-watch-triage.test.sh test_cleanup_marker_lock_bound_is_decimal_with_zero_default run 1
+watcher: recovery state could not be persisted; retaining stale lock evidence
+not ok - cleanup lock bound 08 gave up before the marker lock freed
+rc=
+== tests/fm-watch-triage.test.sh test_cleanup_marker_lock_bound_is_decimal_with_zero_default run 2
+ok - the cleanup marker-lock bound is decimal and zero falls back to the default
+rc=
+== tests/fm-watch-triage.test.sh test_cleanup_marker_lock_bound_is_decimal_with_zero_default run 3
+ok - the cleanup marker-lock bound is decimal and zero falls back to the default
+rc=
+== tests/.merged-tmp.test.sh test_term_stops_a_watcher_whose_cleanup_marker_lock_is_held run 1
+watcher: recovery state could not be persisted; retaining stale lock evidence
+ok - TERM stops a watcher whose downtime-marker lock is held, retaining stale evidence
+rc=
+== tests/.merged-tmp.test.sh test_term_stops_a_watcher_whose_cleanup_marker_lock_is_held run 2
+watcher: recovery state could not be persisted; retaining stale lock evidence
+ok - TERM stops a watcher whose downtime-marker lock is held, retaining stale evidence
+rc=
+== tests/.merged-tmp.test.sh test_term_stops_a_watcher_whose_cleanup_marker_lock_is_held run 3
+watcher: recovery state could not be persisted; retaining stale lock evidence
+ok - TERM stops a watcher whose downtime-marker lock is held, retaining stale evidence
+rc=
+== tests/.merged-tmp.test.sh test_cleanup_marker_lock_bound_is_decimal_with_zero_default run 1
+ok - the cleanup marker-lock bound is decimal and zero falls back to the default
+rc=
+== tests/.merged-tmp.test.sh test_cleanup_marker_lock_bound_is_decimal_with_zero_default run 2
+ok - the cleanup marker-lock bound is decimal and zero falls back to the default
+rc=
+== tests/.merged-tmp.test.sh test_cleanup_marker_lock_bound_is_decimal_with_zero_default run 3
+ok - the cleanup marker-lock bound is decimal and zero falls back to the default
+rc=

@@ -1,0 +1,16 @@
+== Before reconcile: merge PR#117 head 37525ba into house c44161cf (base 49a218bb) ==
+conflicts: 1
+5260:<<<<<<< /var/folders/kw/cjk9qxvx0kq5874xngqgywth0000gn/T/tmp.FfvrwRBfF1/oldhouse_ours
+5271:>>>>>>> /var/folders/kw/cjk9qxvx0kq5874xngqgywth0000gn/T/tmp.FfvrwRBfF1/theirs
+
+== After reconcile: merge PR#117 head 37525ba into reconciled house 0ae10266 ==
+conflicts: 0
+
+== merged result vs reconciled commit (empty = PR#117 becomes a no-op content-wise for this file) ==
+5323c5323
+<     reap "$pid"; fail "the fixture could not take the downtime-marker lock"
+---
+>     reap "$pid"; fail "the fixture could not take the downtime-marker lock: $(cat "$dir/marker-lock-held.failure" 2>/dev/null || true)"
+
+== merged result vs feature head 37525ba in the fixture hunk ==
+fixture function identical to feature head

@@ -87,8 +87,8 @@
 #
 # Optional quiet telemetry writes one bounded TSV snapshot of content and source
 # graph identity, wall/CPU/RSS, shard load, and competing ShellCheck processes.
-# Local runs serialize ShellCheck roots across processes sharing TMPDIR because
-# source-following analysis can use several GiB of resident memory. Set
+# Local runs serialize ShellCheck roots across all of this user's lint processes
+# on the host, regardless of TMPDIR, because source-following analysis can use several GiB of resident memory. Set
 # FM_LINT_HOST_LOCK=off to allow concurrent roots on a larger host; CI defaults
 # to off because its runner already isolates lint concurrency.
 #
@@ -126,44 +126,34 @@ FM_LINT_WORKER_RUN_PID=
 FM_LINT_WORKER_ARGS=()
 FM_LINT_HOST_LOCK_HELD=0
 FM_LINT_HOST_LOCK_TOKEN=
+FM_LINT_HOST_LOCK_DIR="/tmp/fm-lint-shellcheck-${UID:-$(id -u)}.lock"
 
 # Serialize memory-heavy ShellCheck processes across lint invocations by this
-# user. The lock directory is shared through TMPDIR, which is per-user and
-# stable across processes on macOS and Linux. A dead owner is atomically moved
-# aside before another worker acquires the lock.
+# user. The lock directory lives at a fixed /tmp path so every invocation on the
+# host shares it whatever its TMPDIR. A dead owner is atomically moved aside
+# before another worker acquires the lock. The owner validates
+# FM_LINT_HOST_LOCK before any worker reads it.
 fm_lint_host_lock_enabled() {
   case "${FM_LINT_HOST_LOCK:-auto}" in
-    auto)
-      [ "${CI:-}" != true ] && [ "${GITHUB_ACTIONS:-}" != true ]
-      ;;
-    on|1) return 0 ;;
-    off|0) return 1 ;;
-    *)
-      printf 'fm-lint.sh: FM_LINT_HOST_LOCK must be auto, on, or off.\n' >&2
-      return 2
-      ;;
+    auto) [ "${CI:-}" != true ] && [ "${GITHUB_ACTIONS:-}" != true ] ;;
+    on) return 0 ;;
+    *) return 1 ;;
   esac
 }
 
 fm_lint_host_lock_release() {
   [ "$FM_LINT_HOST_LOCK_HELD" -eq 1 ] || return 0
-  local owner_file="${TMPDIR:-/tmp}/fm-lint-shellcheck-${UID:-$(id -u)}.lock/owner"
+  local owner_file="$FM_LINT_HOST_LOCK_DIR/owner"
   if [ -f "$owner_file" ] && [ "$(cat "$owner_file" 2>/dev/null || true)" = "$FM_LINT_HOST_LOCK_TOKEN" ]; then
-    rm -rf "${owner_file%/owner}"
+    rm -rf "$FM_LINT_HOST_LOCK_DIR"
   fi
   FM_LINT_HOST_LOCK_HELD=0
   FM_LINT_HOST_LOCK_TOKEN=
 }
 
 fm_lint_host_lock_acquire() {
-  local enabled_rc=0
-  fm_lint_host_lock_enabled || enabled_rc=$?
-  case "$enabled_rc" in
-    0) ;;
-    1) return 0 ;;
-    *) return "$enabled_rc" ;;
-  esac
-  local lock_dir="${TMPDIR:-/tmp}/fm-lint-shellcheck-${UID:-$(id -u)}.lock"
+  fm_lint_host_lock_enabled || return 0
+  local lock_dir="$FM_LINT_HOST_LOCK_DIR"
   local owner_file="$lock_dir/owner" owner_pid stale_dir attempts=0
   FM_LINT_HOST_LOCK_TOKEN="${BASHPID:-$$}.$RANDOM.$RANDOM"
   while ! mkdir "$lock_dir" 2>/dev/null; do
@@ -783,7 +773,7 @@ case "$JOBS" in
 esac
 
 case "${FM_LINT_HOST_LOCK:-auto}" in
-  auto|on|off|0|1) ;;
+  auto|on|off) ;;
   *) printf 'fm-lint.sh: FM_LINT_HOST_LOCK must be auto, on, or off.\n' >&2; exit 2 ;;
 esac
 

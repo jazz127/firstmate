@@ -1345,16 +1345,26 @@ SH
   pass "jobs=1 and jobs=2 preserve deterministic diagnostics, failures, cleanup bounds, and quiet telemetry"
 }
 
+# Another lint on this host may legitimately hold the shared lock; only a lock
+# left behind with a dead owner means ours was not released.
+fm_lint_test_lock_released() {
+  local owner
+  [ -e "$1" ] || return 0
+  owner=$(cat "$1/owner" 2>/dev/null || true)
+  owner=${owner%%.*}
+  case "$owner" in ''|*[!0-9]*) return 0 ;; esac
+  kill -0 "$owner" 2>/dev/null
+}
+
 test_host_lock_serializes_and_recovers_stale_owner() {
-  local tmp fakebin fixture shared lock active overlap first_pid second_pid dead_pid rc
+  local tmp fakebin fixture lock active overlap first_pid second_pid dead_pid rc i
   tmp=$(fm_test_tmproot fm-lint-host-lock)
   fakebin=$(fm_fakebin "$tmp")
   fixture="$tmp/good.sh"
-  shared="$tmp/shared"
-  lock="$shared/fm-lint-shellcheck-${UID:-$(id -u)}.lock"
+  lock="/tmp/fm-lint-shellcheck-${UID:-$(id -u)}.lock"
   active="$tmp/shellcheck-active"
   overlap="$tmp/shellcheck-overlap"
-  mkdir -p "$shared"
+  mkdir -p "$tmp/tmp-a" "$tmp/tmp-b" "$tmp/tmp-c"
   cat > "$fixture" <<'SH'
 #!/usr/bin/env bash
 printf '%s\n' ok
@@ -1373,11 +1383,11 @@ rmdir "$FM_TEST_ACTIVE" 2>/dev/null || true
 SH
   chmod +x "$fakebin/shellcheck"
 
-  PATH="$fakebin:$PATH" TMPDIR="$shared" FM_LINT_HOST_LOCK=on \
+  PATH="$fakebin:$PATH" TMPDIR="$tmp/tmp-a" FM_LINT_HOST_LOCK=on \
     FM_TEST_ACTIVE="$active" FM_TEST_OVERLAP="$overlap" \
     "$LINT" "$fixture" > "$tmp/first.out" 2>&1 &
   first_pid=$!
-  PATH="$fakebin:$PATH" TMPDIR="$shared" FM_LINT_HOST_LOCK=on \
+  PATH="$fakebin:$PATH" TMPDIR="$tmp/tmp-b" FM_LINT_HOST_LOCK=on \
     FM_TEST_ACTIVE="$active" FM_TEST_OVERLAP="$overlap" \
     "$LINT" "$fixture" > "$tmp/second.out" 2>&1 &
   second_pid=$!
@@ -1387,21 +1397,40 @@ SH
   rc=0
   wait "$second_pid" || rc=$?
   [ "$rc" -eq 0 ] || fail "second concurrent lint failed with $rc: $(cat "$tmp/second.out")"
-  [ ! -e "$overlap" ] || fail "concurrent lint invocations overlapped ShellCheck"
-  [ ! -e "$lock" ] || fail "host ShellCheck lock remained after successful lint"
+  [ ! -e "$overlap" ] || fail "lint invocations with different TMPDIRs overlapped ShellCheck"
+  fm_lint_test_lock_released "$lock" || fail "host ShellCheck lock remained after successful lint"
 
   sleep 30 &
   dead_pid=$!
   kill "$dead_pid" 2>/dev/null || true
   wait "$dead_pid" 2>/dev/null || true
-  mkdir "$lock"
+  i=0
+  until mkdir "$lock" 2>/dev/null; do
+    i=$((i + 1))
+    [ "$i" -le 600 ] || fail "host ShellCheck lock stayed busy; cannot plant a stale owner"
+    sleep 0.1
+  done
   printf '%s.stale\n' "$dead_pid" > "$lock/owner"
-  PATH="$fakebin:$PATH" TMPDIR="$shared" FM_LINT_HOST_LOCK=on \
+  PATH="$fakebin:$PATH" TMPDIR="$tmp/tmp-c" FM_LINT_HOST_LOCK=on \
     FM_TEST_ACTIVE="$active" FM_TEST_OVERLAP="$overlap" \
     "$LINT" "$fixture" > "$tmp/stale.out" 2>&1 \
     || fail "lint failed to recover a stale host lock: $(cat "$tmp/stale.out")"
-  [ ! -e "$lock" ] || fail "stale host ShellCheck lock remained after recovery"
+  fm_lint_test_lock_released "$lock" || fail "stale host ShellCheck lock remained after recovery"
   pass "host ShellCheck lock serializes concurrent invocations and recovers a dead owner"
+}
+
+test_host_lock_rejects_unknown_values() {
+  local value out rc
+  for value in 1 0 yes; do
+    rc=0
+    out=$(FM_LINT_HOST_LOCK="$value" "$LINT" --list-files 2>&1) || rc=$?
+    [ "$rc" -eq 2 ] || fail "FM_LINT_HOST_LOCK=$value exited $rc, want 2"
+    case "$out" in
+      *"FM_LINT_HOST_LOCK must be auto, on, or off."*) ;;
+      *) fail "FM_LINT_HOST_LOCK=$value did not name the accepted values: $out" ;;
+    esac
+  done
+  pass "FM_LINT_HOST_LOCK accepts only auto, on, or off"
 }
 
 test_worker_trees_stop_on_signal() {
@@ -1948,6 +1977,7 @@ test_ignores_ambient_shellcheck_opts
 test_clean_fixture_passes
 test_jobs_are_deterministic_and_complete
 test_host_lock_serializes_and_recovers_stale_owner
+test_host_lock_rejects_unknown_values
 test_worker_trees_stop_on_signal
 test_root_deadline_names_the_root_and_reaps_the_tree
 test_root_memory_limit_reports_a_named_death

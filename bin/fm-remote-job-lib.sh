@@ -909,6 +909,8 @@ fm_remote_job_ps_bin() {
 fm_remote_job_process_start() {
   local pid=$1 ps_bin value
   ps_bin=$(fm_remote_job_ps_bin) || return 1
+  # Pin LC_ALL=C so lstart is locale-invariant: the launchd worker records its
+  # start under the C locale, but SSH callers re-read it under their own locale.
   value=$(LC_ALL=C "$ps_bin" -p "$pid" -o lstart= 2>/dev/null) || return 1
   [ -n "$value" ] || return 1
   case "$value" in *$'\n'*|*$'\r'*) return 1 ;; esac

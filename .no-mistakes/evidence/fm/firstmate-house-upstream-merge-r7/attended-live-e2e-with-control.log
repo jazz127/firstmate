@@ -1,0 +1,11 @@
+not ok - control: Claude never reached its composer
+--- host log
+
+--- cycle exits
+
+--- queue
+
+--- ledger: 
+--- marker: 
+--- screen
+exit=1

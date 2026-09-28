@@ -1,0 +1,13 @@
+== base lib: recorded start (C locale) = Mon Sep 28 16:58:48 2026
+   base  LANG=C            ps-raw=[Mon Sep 28 16:58:48 2026] reread=Mon Sep 28 16:58:48 2026 MATCH owner=56236
+   base  LANG=en_AU.UTF-8  ps-raw=[Mon 28 Sep 16:58:48 2026] reread=Mon 28 Sep 16:58:48 2026 MISMATCH
+   base  LANG=de_DE.UTF-8  ps-raw=[Mo. 28 Sep. 16:58:48 2026] reread=Mo. 28 Sep. 16:58:48 2026 MISMATCH
+   base  LANG=fr_FR.UTF-8  ps-raw=[lun. 28 sept. 16:58:48 2026] reread=lun. 28 sept. 16:58:48 2026 MISMATCH
+   base  LANG=ja_JP.UTF-8  ps-raw=[月  9/28 16:58:48 2026] reread=月 9/28 16:58:48 2026 MISMATCH
+== head lib: recorded start (C locale) = Mon Sep 28 16:58:48 2026
+   head  LANG=C            ps-raw=[Mon Sep 28 16:58:48 2026] reread=Mon Sep 28 16:58:48 2026 MATCH owner=56236
+   head  LANG=en_AU.UTF-8  ps-raw=[Mon 28 Sep 16:58:48 2026] reread=Mon Sep 28 16:58:48 2026 MATCH owner=56236
+   head  LANG=de_DE.UTF-8  ps-raw=[Mo. 28 Sep. 16:58:48 2026] reread=Mon Sep 28 16:58:48 2026 MATCH owner=56236
+   head  LANG=fr_FR.UTF-8  ps-raw=[lun. 28 sept. 16:58:48 2026] reread=Mon Sep 28 16:58:48 2026 MATCH owner=56236
+   head  LANG=ja_JP.UTF-8  ps-raw=[月  9/28 16:58:48 2026] reread=Mon Sep 28 16:58:48 2026 MATCH owner=56236
+/Users/jarad/.no-mistakes/evidence/01M3KCW9JER9GTGBAE0AT2QSKC/drive-locale-lock.sh: line 24: 56236 Terminated: 15          env LC_ALL=C sleep 300

@@ -1,0 +1,10 @@
+== Control: correct C-locale start + command; checker under LANG=fr_FR.UTF-8
+lock: Mon Sep 28 16:59:25 2026 | sleep 300
+MATCH owner=84704
+== Adversarial: lock records a different start (PID reuse); checker under LANG=fr_FR.UTF-8 must refuse
+MISMATCH (correctly refused stale start)
+== Adversarial: correct start, wrong command; checker under LANG=de_DE.UTF-8 must refuse
+MISMATCH (correctly refused wrong command)
+== House Linux /proc start-tick path retained (FM_PROC_ROOT_OVERRIDE fixture, LANG=ja_JP.UTF-8, ps stubbed to nonexistent)
+linux-starttime=987654 boot-id=0a1b2c3d-1111-2222-3333-444455556666
+== Normalize helper applied to macOS ps output under LANG=ja_JP.UTF-8: [Mon Sep 28 16:59:26 2026]

@@ -1,0 +1,36 @@
+== Diagnostics parity: base 49a218bb vs change (FM_LINT_HOST_LOCK=on), explicit roots bin/fm-backlog-handoff.sh + defect fixture
+-- change output
+fm-lint.sh: ShellCheck 0.11.0 (pinned 0.11.0)
+fm-lint.sh: full ShellCheck extended analysis enabled
+
+In bin/zz-defect.sh line 5:
+echo $x
+     ^-- SC2086 (info): Double quote to prevent globbing and word splitting.
+
+Did you mean:
+echo "$x"
+
+
+In bin/zz-defect.sh line 6:
+unused_var=1
+^--------^ SC2034 (warning): unused_var appears unused. Verify use (or export if used externally).
+
+
+In bin/zz-defect.sh line 7:
+for f in $(ls); do echo $f; done
+         ^---^ SC2045 (error): Iterating over ls output is fragile. Use globs.
+                        ^-- SC2086 (info): Double quote to prevent globbing and word splitting.
+
+Did you mean:
+for f in $(ls); do echo "$f"; done
+
+For more information:
+  https://www.shellcheck.net/wiki/SC2045 -- Iterating over ls output is fragi...
+  https://www.shellcheck.net/wiki/SC2034 -- unused_var appears unused. Verify...
+  https://www.shellcheck.net/wiki/SC2086 -- Double quote to prevent globbing ...
+new rc=1
+-- diff base vs change (empty = identical)
+  29c29
+  < base rc=1
+  ---
+  > new rc=1

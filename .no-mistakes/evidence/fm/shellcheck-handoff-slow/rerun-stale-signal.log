@@ -1,0 +1,19 @@
+## 0. leftover from a prior killed run: symlink->55097.758.29136 (owner pid alive? no)
+next lint exit 0 in 1s; lock: absent
+## 1. stale symlink lock naming a dead PID
+planted: symlink->45380.1.2
+lint exit 0 in 2s; lock: absent
+## 2. dead owner + reap guard left by a dead reaper
+planted: symlink->45380.1.2, guard 51139.3.4
+lint exit 0 in 1s; lock: absent; guards: none
+## 3. legacy mkdir-style lock dir with dead owner
+planted: dir
+lint exit 0 in 2s; lock: absent
+## 4. live owner holds lock for 8s; lint queues, then runs; duration excludes wait
+lint exit 0 after 9s wall; lock: absent
+begin	1	bin/fm-lint.sh	0	full	1790587820000
+end	1	bin/fm-lint.sh	0	full	1790587820000	1790587821000	1000	0	ok	unavailable
+## 5. signal the lint while it holds the lock on fm-backlog-handoff.sh
+SIGINT: held symlink->3045.28055.737; lint exit 130; lock after signal: symlink->3045.28055.737; shellcheck left: 0; next lint exit 0 in 1s; lock after: absent
+SIGTERM: held symlink->14423.4788.27068; lint exit 143; lock after signal: symlink->14423.4788.27068; shellcheck left: 0; next lint exit 0 in 1s; lock after: absent
+SIGHUP: held symlink->26635.16802.10484; lint exit 129; lock after signal: symlink->26635.16802.10484; shellcheck left: 0; next lint exit 0 in 1s; lock after: absent

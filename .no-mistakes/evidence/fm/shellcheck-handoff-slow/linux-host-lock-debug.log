@@ -1,0 +1,36 @@
+tests/lib.sh: line 220: wait_for: No record of process 275
+tests/lib.sh: line 220: wait_for: No record of process 341
+tests/.r.test.sh: line 1450: /tmp/fm-lint-host-lock.Twtok0/stale-d.out: No such file or directory
+tests/.r.test.sh: line 1450: /tmp/fm-lint-host-lock.Twtok0/stale-e.out: No such file or directory
+tests/.r.test.sh: line 1450: /tmp/fm-lint-host-lock.Twtok0/stale-f.out: No such file or directory
+lrwxrwxrwx 1 root root 8 Sep 28 09:20 /tmp/fm-lint-shellcheck-0.lock -> 341.test
+tests/.r.test.sh: line 1458: ps: command not found
+== /tmp/fm-lint-host-lock.Twtok0/stale-*.out
+cat: '/tmp/fm-lint-host-lock.Twtok0/stale-*.out': No such file or directory
+dead_pid=341 reaper_pid=348 pids=350 351 352
+not ok - lint failed to recover a stale host lock with 1
+---- run 1 done
+tests/lib.sh: line 220: wait_for: No record of process 271
+tests/lib.sh: line 220: wait_for: No record of process 337
+tests/.r.test.sh: line 1450: /tmp/fm-lint-host-lock.jvmKCx/stale-d.out: No such file or directory
+tests/.r.test.sh: line 1450: /tmp/fm-lint-host-lock.jvmKCx/stale-e.out: No such file or directory
+tests/.r.test.sh: line 1450: /tmp/fm-lint-host-lock.jvmKCx/stale-f.out: No such file or directory
+lrwxrwxrwx 1 root root 8 Sep 28 09:20 /tmp/fm-lint-shellcheck-0.lock -> 337.test
+tests/.r.test.sh: line 1458: ps: command not found
+== /tmp/fm-lint-host-lock.jvmKCx/stale-*.out
+cat: '/tmp/fm-lint-host-lock.jvmKCx/stale-*.out': No such file or directory
+dead_pid=337 reaper_pid=344 pids=346 347 348
+not ok - lint failed to recover a stale host lock with 1
+---- run 2 done
+tests/lib.sh: line 220: wait_for: No record of process 271
+tests/lib.sh: line 220: wait_for: No record of process 337
+tests/.r.test.sh: line 1450: /tmp/fm-lint-host-lock.bPievl/stale-d.out: No such file or directory
+tests/.r.test.sh: line 1450: /tmp/fm-lint-host-lock.bPievl/stale-e.out: No such file or directory
+tests/.r.test.sh: line 1450: /tmp/fm-lint-host-lock.bPievl/stale-f.out: No such file or directory
+lrwxrwxrwx 1 root root 8 Sep 28 09:20 /tmp/fm-lint-shellcheck-0.lock -> 337.test
+tests/.r.test.sh: line 1458: ps: command not found
+== /tmp/fm-lint-host-lock.bPievl/stale-*.out
+cat: '/tmp/fm-lint-host-lock.bPievl/stale-*.out': No such file or directory
+dead_pid=337 reaper_pid=344 pids=346 347 348
+not ok - lint failed to recover a stale host lock with 1
+---- run 3 done

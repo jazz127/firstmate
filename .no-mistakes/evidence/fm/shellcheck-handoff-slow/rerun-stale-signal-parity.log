@@ -1,0 +1,20 @@
+## 1. stale symlink lock naming a dead PID
+/tmp/fm-lint-shellcheck-501.lock -> 8996.1.2
+(eval):5: command not found: timeout
+lint exit 127 after 0s; lock now: 8996.1.2
+## 2. stale reap guard from dead reaper + dead owner
+(eval):8: command not found: timeout
+lint exit 127; lock: 8996.1.2; guard: /tmp/fm-lint-shellcheck-501.lock.reap.8996.1.2
+## 3. legacy mkdir-style lock dir with dead owner
+(eval):11: command not found: timeout
+lint exit 127; lock: absent
+## 4. live owner blocks; lint queues and proceeds after owner exits
+fm-lint.sh: ShellCheck 0.11.0 (pinned 0.11.0)
+fm-lint.sh: full ShellCheck extended analysis enabled
+lint exit 0 after 2s (holder lived 6s)
+begin	1	bin/fm-lint.sh	0	full	1790587749000
+end	1	bin/fm-lint.sh	0	full	1790587749000	1790587749000	0	0	ok	unavailable
+## 5. SIGINT/SIGTERM during a held lock, then next lint
+SIGINT: owner was 14481.30287.16274; lint exit 0; lock after signal: absent; shellcheck left: 0; next lint exit 127 in 1s; lock after: absent
+SIGTERM: owner was 50968.25017.28305; lint exit 143; lock after signal: 50968.25017.28305; shellcheck left: 0; next lint exit 127 in 0s; lock after: 50968.25017.28305
+SIGHUP: owner was 55097.758.29136; lint exit 129; lock after signal: 55097.758.29136; shellcheck left: 0; next lint exit 127 in 0s; lock after: 55097.758.29136

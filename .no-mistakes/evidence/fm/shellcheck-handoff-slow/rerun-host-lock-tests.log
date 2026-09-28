@@ -1,0 +1,5 @@
+ok - ShellCheck installer prefers sha256sum when both hashers are present
+ok - host ShellCheck lock serializes across TMPDIRs, excludes queue time, and recovers dead owners, reapers, and legacy locks
+ok - roots without source following run without the host ShellCheck lock
+ok - FM_LINT_HOST_LOCK accepts only auto, on, or off
+bash $T  3.07s user 1.78s system 25% cpu 19.099 total

@@ -1,0 +1,12 @@
+SIGINT trial 1: held_by=34635.6832.2829 rc=130 exit_after=.01s lock_after=34635.6832.2829 owner_alive=no shellcheck_procs=0
+   next source-following lint rc=0 wall=0s lock_now=none
+SIGINT trial 2: held_by=39664.31910.22328 rc=130 exit_after=.01s lock_after=39664.31910.22328 owner_alive=no shellcheck_procs=0
+   next source-following lint rc=0 wall=1s lock_now=none
+SIGTERM trial 1: held_by=44620.24277.26024 rc=143 exit_after=.01s lock_after=44620.24277.26024 owner_alive=no shellcheck_procs=0
+   next source-following lint rc=0 wall=0s lock_now=none
+SIGTERM trial 2: held_by=49591.23005.6396 rc=143 exit_after=.01s lock_after=49591.23005.6396 owner_alive=no shellcheck_procs=0
+   next source-following lint rc=0 wall=0s lock_now=none
+SIGHUP trial 1: held_by=53996.26739.30927 rc=129 exit_after=.01s lock_after=53996.26739.30927 owner_alive=no shellcheck_procs=0
+   next source-following lint rc=0 wall=0s lock_now=none
+SIGHUP trial 2: held_by=59663.13984.22071 rc=129 exit_after=.02s lock_after=59663.13984.22071 owner_alive=no shellcheck_procs=0
+   next source-following lint rc=0 wall=0s lock_now=none

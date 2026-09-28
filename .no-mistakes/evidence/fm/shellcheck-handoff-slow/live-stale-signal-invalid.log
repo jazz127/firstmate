@@ -1,0 +1,29 @@
+== Stale owner recovery: plant lock owned by a dead PID, then run a real lint
+planted: /tmp/fm-lint-shellcheck-501.lock -> 28325.111.222 (pid 28325 alive? no)
+fm-lint.sh: ShellCheck 0.11.0 (pinned 0.11.0)
+fm-lint.sh: full ShellCheck extended analysis enabled
+rc=0 wall=22s; lock after: ls: /tmp/fm-lint-shellcheck-501.lock: No such file or directory
+
+== Live-owner guard: lock owned by a LIVE pid blocks the lint (queued, not stolen)
+after 5s: lint still running? yes; lock=70261.1.2; shellcheck procs=0
+holder killed -> lint rc=0 finished 21s later; lock after: ls: /tmp/fm-lint-shellcheck-501.lock: No such file or directory
+
+== Release on SIGINT: signal a lint mid-ShellCheck while it holds the lock
+holding: lock=13769.6372.14488 shellcheck procs=1
+rc=0
+after SIGINT: lock=ls: /tmp/fm-lint-shellcheck-501.lock: No such file or directory; shellcheck procs=0
+next lint rc=0 in 0s (not blocked)
+
+== Release on SIGTERM: signal a lint mid-ShellCheck while it holds the lock
+holding: lock=64884.6178.7641 shellcheck procs=1
+rc=143
+after SIGTERM: lock=64884.6178.7641; shellcheck procs=0
+next lint rc=0 in 0s (not blocked)
+
+== Invalid mode values
+fm-lint.sh: FM_LINT_HOST_LOCK must be auto, on, or off.
+FM_LINT_HOST_LOCK=1 rc=2
+fm-lint.sh: FM_LINT_HOST_LOCK must be auto, on, or off.
+FM_LINT_HOST_LOCK=yes rc=2
+fm-lint.sh: FM_LINT_HOST_LOCK must be auto, on, or off.
+FM_LINT_HOST_LOCK=OFF rc=2

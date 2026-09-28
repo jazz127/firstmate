@@ -1,0 +1,25 @@
+# two concurrent real fm-lint.sh runs, distinct TMPDIRs, lock=auto (local)
+Mon Sep 28 19:25:00 AEST 2026
+rc a=0 b=0; max concurrent shellcheck processes observed=1
+## sampled lock owner (unique)
+  42 shellcheck=1 22836.26040.28061
+  44 shellcheck=1 22838.26949.29410
+   1 shellcheck=1 22835.9202.11003
+   1 shellcheck=1 22837.10110.12352
+## roots.tsv a
+begin	1	bin/fm-backlog-handoff.sh	1	full	1790587527000
+end	1	bin/fm-backlog-handoff.sh	1	full	1790587527000	1790587556000	29000	0	ok	unavailable
+begin	2	bin/fm-lint.sh	0	full	1790587556000
+end	2	bin/fm-lint.sh	0	full	1790587556000	1790587556000	0	0	ok	unavailable
+## stderr a
+fm-lint.sh: ShellCheck 0.11.0 (pinned 0.11.0)
+fm-lint.sh: full ShellCheck extended analysis enabled
+## roots.tsv b
+begin	1	bin/fm-backlog-handoff.sh	1	full	1790587500000
+end	1	bin/fm-backlog-handoff.sh	1	full	1790587500000	1790587527000	27000	0	ok	unavailable
+begin	2	bin/fm-lint.sh	0	full	1790587556000
+end	2	bin/fm-lint.sh	0	full	1790587556000	1790587557000	1000	0	ok	unavailable
+## stderr b
+fm-lint.sh: ShellCheck 0.11.0 (pinned 0.11.0)
+fm-lint.sh: full ShellCheck extended analysis enabled
+lock released (absent)

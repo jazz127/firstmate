@@ -1,0 +1,38 @@
+## fixture sourcing lib.sh, lock=on
+fm-lint.sh: ShellCheck 0.11.0 (pinned 0.11.0)
+fm-lint.sh: full ShellCheck extended analysis enabled
+
+In <fixture>/main.sh line 3:
+. "$(dirname "$0")/lib.sh"
+  ^----------------------^ SC1091 (info): Not following: lib.sh: openBinaryFile: does not exist (No such file or directory)
+
+
+In <fixture>/main.sh line 4:
+echo $LIBVAR $UNDEFINED_THING
+     ^-----^ SC2086 (info): Double quote to prevent globbing and word splitting.
+             ^--------------^ SC2086 (info): Double quote to prevent globbing and word splitting.
+
+Did you mean:
+echo "$LIBVAR" "$UNDEFINED_THING"
+
+
+In <fixture>/main.sh line 5:
+cd /nowhere
+^---------^ SC2164 (warning): Use 'cd ... || exit' or 'cd ... || return' in case cd fails.
+
+Did you mean:
+cd /nowhere || exit
+
+For more information:
+  https://www.shellcheck.net/wiki/SC2164 -- Use 'cd ... || exit' or 'cd ... |...
+  https://www.shellcheck.net/wiki/SC1091 -- Not following: lib.sh: openBinary...
+  https://www.shellcheck.net/wiki/SC2086 -- Double quote to prevent globbing ...
+exit=
+## diff on vs off (fixture)
+IDENTICAL
+## fm-backlog-handoff.sh lock=on
+fm-lint.sh: ShellCheck 0.11.0 (pinned 0.11.0)
+fm-lint.sh: full ShellCheck extended analysis enabled
+exit=0
+## diff on vs off (handoff)
+IDENTICAL

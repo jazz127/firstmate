@@ -1,0 +1,54 @@
+== Scenario: two concurrent source-following lints of bin/fm-backlog-handoff.sh (FM_LINT_HOST_LOCK=auto, local, different TMPDIRs)
+rc A=0 rc B=0 total_wall=43s
+-- A stdout/stderr
+fm-lint.sh: ShellCheck 0.11.0 (pinned 0.11.0)
+fm-lint.sh: full ShellCheck extended analysis enabled
+-- B stdout/stderr
+fm-lint.sh: ShellCheck 0.11.0 (pinned 0.11.0)
+fm-lint.sh: full ShellCheck extended analysis enabled
+-- A roots.tsv
+format	fm-lint-roots-v1
+meta	shellcheck_version	0.11.0
+meta	platform	Darwin arm64
+meta	image_os	unknown
+meta	image_version	unknown
+meta	mode	full
+meta	partition	all
+meta	jobs	2
+meta	bounds_enforced	0
+meta	root_deadline_seconds	unbounded
+meta	root_kill_grace_seconds	unbounded
+meta	root_memory_limit_kib	unbounded
+meta	timing_mechanism	none
+begin	1	bin/fm-backlog-handoff.sh	0	full	1790586820000
+end	1	bin/fm-backlog-handoff.sh	0	full	1790586820000	1790586841000	21000	0	ok	unavailable
+meta	roots_begun	1
+meta	roots_completed	1
+meta	roots_unfinished	0
+meta	result_exit	0
+-- B roots.tsv
+format	fm-lint-roots-v1
+meta	shellcheck_version	0.11.0
+meta	platform	Darwin arm64
+meta	image_os	unknown
+meta	image_version	unknown
+meta	mode	full
+meta	partition	all
+meta	jobs	2
+meta	bounds_enforced	0
+meta	root_deadline_seconds	unbounded
+meta	root_kill_grace_seconds	unbounded
+meta	root_memory_limit_kib	unbounded
+meta	timing_mechanism	none
+begin	1	bin/fm-backlog-handoff.sh	0	full	1790586842000
+end	1	bin/fm-backlog-handoff.sh	0	full	1790586842000	1790586863000	21000	0	ok	unavailable
+meta	roots_begun	1
+meta	roots_completed	1
+meta	roots_unfinished	0
+meta	result_exit	0
+-- sampler (max concurrent shellcheck procs / lock owner)
+   2 shellcheck_procs=0
+  64 shellcheck_procs=1
+  32 lock=10214.12169.154
+  33 lock=9962.28756.26762
+post-run lock: ls: /tmp/fm-lint-shellcheck-501.lock: No such file or directory

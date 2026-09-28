@@ -1,0 +1,11 @@
+[explicit opt-out] env: FM_LINT_HOST_LOCK=off -> rc a=0 b=0; max concurrent shellcheck=2; samples with lock held=0
+[CI auto opt-out] env: CI=true -> rc a=0 b=0; max concurrent shellcheck=2; samples with lock held=0
+[GitHub Actions auto opt-out] env: GITHUB_ACTIONS=true -> rc a=0 b=0; max concurrent shellcheck=2; samples with lock held=0
+[CI but forced on] env: CI=true FM_LINT_HOST_LOCK=on -> rc a=0 b=0; max concurrent shellcheck=1; samples with lock held=89
+## invalid values
+fm-lint.sh: FM_LINT_HOST_LOCK must be auto, on, or off.
+FM_LINT_HOST_LOCK=1 -> exit 2
+fm-lint.sh: FM_LINT_HOST_LOCK must be auto, on, or off.
+FM_LINT_HOST_LOCK=yes -> exit 2
+fm-lint.sh: FM_LINT_HOST_LOCK must be auto, on, or off.
+FM_LINT_HOST_LOCK=ON -> exit 2

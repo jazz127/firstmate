@@ -31,7 +31,8 @@ The primary update is fast-forward only, while each secondmate uses the same gua
 By default, the runtime branch remains the origin/HEAD branch with the historical main/master fallback.
 Set the validated repository git config key `firstmate.runtimeBranch` to name a local runtime branch such as `house`; its configured branch remote and merge ref supply the update target.
 The updater captures the resulting primary SHA once and pins every local or remote secondmate to it.
-For a remote route, the persistent home imports and guardedly fast-forwards to that pinned commit.
+For remote routes, the updater first refreshes each configured host/code-root pair once from its tracking remote, then each persistent home imports and guardedly fast-forwards to the pinned primary commit.
+A dirty, diverged, or unavailable code root is skipped and reported while its homes still attempt their existing pinned sync.
 It never forces, never creates a merge commit, and never stashes.
 A clean secondmate divergence advances with `reset --keep` only when a three-way tree proof shows its complete local result is already present at the target, which recognizes squash-merged contributions without discarding unique content.
 Every other dirty, diverged, offline, or wrong-branch target is skipped and reported, and a genuine divergence leaves a durable `state/.secondmate-update-reconcile/<id>.pending` record that future bootstrap and update passes surface until convergence clears it.

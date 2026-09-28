@@ -87,6 +87,10 @@
 #
 # Optional quiet telemetry writes one bounded TSV snapshot of content and source
 # graph identity, wall/CPU/RSS, shard load, and competing ShellCheck processes.
+# Local runs serialize ShellCheck roots across processes sharing TMPDIR because
+# source-following analysis can use several GiB of resident memory. Set
+# FM_LINT_HOST_LOCK=off to allow concurrent roots on a larger host; CI defaults
+# to off because its runner already isolates lint concurrency.
 #
 # Usage:
 #   fm-lint.sh                         lint the context-selected file set (see above)
@@ -95,6 +99,7 @@
 #   fm-lint.sh --jobs <1|2> [path]...  override concurrent worker count
 #   fm-lint.sh --partition <1of2|2of2> lint one full-rigor canonical CI partition
 #   fm-lint.sh --telemetry <path> ...  write a quiet metrics snapshot
+#   FM_LINT_HOST_LOCK=off              allow concurrent local ShellCheck roots
 #   fm-lint.sh --required-version      print the ShellCheck pin
 #   fm-lint.sh --list-files            print the file set that would be linted
 #   fm-lint.sh --help                  print this usage
@@ -119,12 +124,98 @@ fi
 
 FM_LINT_WORKER_RUN_PID=
 FM_LINT_WORKER_ARGS=()
+FM_LINT_HOST_LOCK_HELD=0
+FM_LINT_HOST_LOCK_TOKEN=
+
+# Serialize memory-heavy ShellCheck processes across lint invocations by this
+# user. The lock directory is shared through TMPDIR, which is per-user and
+# stable across processes on macOS and Linux. A dead owner is atomically moved
+# aside before another worker acquires the lock.
+fm_lint_host_lock_enabled() {
+  case "${FM_LINT_HOST_LOCK:-auto}" in
+    auto)
+      [ "${CI:-}" != true ] && [ "${GITHUB_ACTIONS:-}" != true ]
+      ;;
+    on|1) return 0 ;;
+    off|0) return 1 ;;
+    *)
+      printf 'fm-lint.sh: FM_LINT_HOST_LOCK must be auto, on, or off.\n' >&2
+      return 2
+      ;;
+  esac
+}
+
+fm_lint_host_lock_release() {
+  [ "$FM_LINT_HOST_LOCK_HELD" -eq 1 ] || return 0
+  local owner_file="${TMPDIR:-/tmp}/fm-lint-shellcheck-${UID:-$(id -u)}.lock/owner"
+  if [ -f "$owner_file" ] && [ "$(cat "$owner_file" 2>/dev/null || true)" = "$FM_LINT_HOST_LOCK_TOKEN" ]; then
+    rm -rf "${owner_file%/owner}"
+  fi
+  FM_LINT_HOST_LOCK_HELD=0
+  FM_LINT_HOST_LOCK_TOKEN=
+}
+
+fm_lint_host_lock_acquire() {
+  local enabled_rc=0
+  fm_lint_host_lock_enabled || enabled_rc=$?
+  case "$enabled_rc" in
+    0) ;;
+    1) return 0 ;;
+    *) return "$enabled_rc" ;;
+  esac
+  local lock_dir="${TMPDIR:-/tmp}/fm-lint-shellcheck-${UID:-$(id -u)}.lock"
+  local owner_file="$lock_dir/owner" owner_pid stale_dir attempts=0
+  FM_LINT_HOST_LOCK_TOKEN="${BASHPID:-$$}.$RANDOM.$RANDOM"
+  while ! mkdir "$lock_dir" 2>/dev/null; do
+    owner=$(cat "$owner_file" 2>/dev/null || true)
+    owner_pid=${owner%%.*}
+    case "$owner_pid" in
+      ''|*[!0-9]*)
+        # Allow the winner time to publish its owner record after mkdir.
+        attempts=$((attempts + 1))
+        if [ "$attempts" -gt 300 ] && [ -d "$lock_dir" ]; then
+          stale_dir="$lock_dir.stale.${BASHPID:-$$}.$RANDOM"
+          if mv "$lock_dir" "$stale_dir" 2>/dev/null; then
+            rm -rf "$stale_dir"
+          fi
+          attempts=0
+        fi
+        ;;
+      *)
+        if kill -0 "$owner_pid" 2>/dev/null; then
+          :
+        else
+          stale_dir="$lock_dir.stale.${BASHPID:-$$}.$RANDOM"
+          if mv "$lock_dir" "$stale_dir" 2>/dev/null; then
+            # Recheck the moved owner before removing a lock another process
+            # may have replaced between our liveness check and the rename.
+            if [ "$(cat "$stale_dir/owner" 2>/dev/null || true)" = "$owner" ]; then
+              rm -rf "$stale_dir"
+            else
+              [ -e "$lock_dir" ] || mv "$stale_dir" "$lock_dir" 2>/dev/null || rm -rf "$stale_dir"
+            fi
+          fi
+        fi
+        ;;
+    esac
+    sleep 0.1
+  done
+  if ! printf '%s\n' "$FM_LINT_HOST_LOCK_TOKEN" > "$owner_file"; then
+    rmdir "$lock_dir" 2>/dev/null || true
+    printf 'fm-lint.sh: could not record the ShellCheck lock owner.\n' >&2
+    return 1
+  fi
+  FM_LINT_HOST_LOCK_HELD=1
+}
+
 # shellcheck disable=SC2329 # Registered by the private worker's signal traps.
 fm_lint_worker_stop() {
-  [ -n "$FM_LINT_WORKER_RUN_PID" ] || return 0
-  kill "$FM_LINT_WORKER_RUN_PID" 2>/dev/null || true
-  wait "$FM_LINT_WORKER_RUN_PID" 2>/dev/null || true
-  FM_LINT_WORKER_RUN_PID=
+  if [ -n "$FM_LINT_WORKER_RUN_PID" ]; then
+    kill "$FM_LINT_WORKER_RUN_PID" 2>/dev/null || true
+    wait "$FM_LINT_WORKER_RUN_PID" 2>/dev/null || true
+    FM_LINT_WORKER_RUN_PID=
+  fi
+  fm_lint_host_lock_release
 }
 
 fm_lint_now_ms() {
@@ -227,6 +318,7 @@ fm_lint_run_root() {  # <index> <path> <output-dir> <shard-index>
     printf 'fm-lint: begin %s (shard %s, %s mode)\n' \
       "$path" "$shard_index" "${FM_LINT_INTERNAL_MODE:-unknown}" >&2
   fi
+  fm_lint_host_lock_acquire || return $?
   if [ "${FM_LINT_INTERNAL_BOUNDED:-none}" != none ]; then
     # The watchdog runs in a process group of its own (the same setpgrp hop the
     # workers use), so the owner's TERM-then-KILL group sweep cannot kill it
@@ -249,6 +341,7 @@ fm_lint_run_root() {  # <index> <path> <output-dir> <shard-index>
     wait "$FM_LINT_WORKER_RUN_PID" || invocation_rc=$?
     FM_LINT_WORKER_RUN_PID=
   fi
+  fm_lint_host_lock_release
   end_ms=$(fm_lint_now_ms)
   duration_ms=$((end_ms - start_ms))
   rss_kib=$(fm_lint_root_rss "$rss_file")
@@ -689,6 +782,11 @@ case "$JOBS" in
   *) printf 'fm-lint.sh: jobs must be 1 or 2, got %s.\n' "$JOBS" >&2; exit 2 ;;
 esac
 
+case "${FM_LINT_HOST_LOCK:-auto}" in
+  auto|on|off|0|1) ;;
+  *) printf 'fm-lint.sh: FM_LINT_HOST_LOCK must be auto, on, or off.\n' >&2; exit 2 ;;
+esac
+
 case "$PARTITION" in
   '')
     if [ "$PARTITION_REQUESTED" -eq 1 ]; then
@@ -1092,6 +1190,7 @@ fm_lint_run_worker() {  # <worker-index>
     FM_LINT_INTERNAL_PROGRESS="$PROGRESS"
     FM_LINT_SHELLCHECK="$SHELLCHECK_BIN"
     FM_LINT_PERL_BIN="$PERL_BIN"
+    FM_LINT_HOST_LOCK="${FM_LINT_HOST_LOCK:-auto}"
   )
   if [ -n "$TELEMETRY" ] && [ -x /usr/bin/time ]; then
     if [ "$(uname)" = Darwin ]; then

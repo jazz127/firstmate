@@ -1345,6 +1345,65 @@ SH
   pass "jobs=1 and jobs=2 preserve deterministic diagnostics, failures, cleanup bounds, and quiet telemetry"
 }
 
+test_host_lock_serializes_and_recovers_stale_owner() {
+  local tmp fakebin fixture shared lock active overlap first_pid second_pid dead_pid rc
+  tmp=$(fm_test_tmproot fm-lint-host-lock)
+  fakebin=$(fm_fakebin "$tmp")
+  fixture="$tmp/good.sh"
+  shared="$tmp/shared"
+  lock="$shared/fm-lint-shellcheck-${UID:-$(id -u)}.lock"
+  active="$tmp/shellcheck-active"
+  overlap="$tmp/shellcheck-overlap"
+  mkdir -p "$shared"
+  cat > "$fixture" <<'SH'
+#!/usr/bin/env bash
+printf '%s\n' ok
+SH
+  cat > "$fakebin/shellcheck" <<'SH'
+#!/usr/bin/env bash
+if [ "${1:-}" = "--version" ]; then
+  printf 'ShellCheck - shell script analysis tool\nversion: 0.11.0\n'
+  exit 0
+fi
+if ! mkdir "$FM_TEST_ACTIVE" 2>/dev/null; then
+  : > "$FM_TEST_OVERLAP"
+fi
+sleep 0.3
+rmdir "$FM_TEST_ACTIVE" 2>/dev/null || true
+SH
+  chmod +x "$fakebin/shellcheck"
+
+  PATH="$fakebin:$PATH" TMPDIR="$shared" FM_LINT_HOST_LOCK=on \
+    FM_TEST_ACTIVE="$active" FM_TEST_OVERLAP="$overlap" \
+    "$LINT" "$fixture" > "$tmp/first.out" 2>&1 &
+  first_pid=$!
+  PATH="$fakebin:$PATH" TMPDIR="$shared" FM_LINT_HOST_LOCK=on \
+    FM_TEST_ACTIVE="$active" FM_TEST_OVERLAP="$overlap" \
+    "$LINT" "$fixture" > "$tmp/second.out" 2>&1 &
+  second_pid=$!
+  rc=0
+  wait "$first_pid" || rc=$?
+  [ "$rc" -eq 0 ] || fail "first concurrent lint failed with $rc: $(cat "$tmp/first.out")"
+  rc=0
+  wait "$second_pid" || rc=$?
+  [ "$rc" -eq 0 ] || fail "second concurrent lint failed with $rc: $(cat "$tmp/second.out")"
+  [ ! -e "$overlap" ] || fail "concurrent lint invocations overlapped ShellCheck"
+  [ ! -e "$lock" ] || fail "host ShellCheck lock remained after successful lint"
+
+  sleep 30 &
+  dead_pid=$!
+  kill "$dead_pid" 2>/dev/null || true
+  wait "$dead_pid" 2>/dev/null || true
+  mkdir "$lock"
+  printf '%s.stale\n' "$dead_pid" > "$lock/owner"
+  PATH="$fakebin:$PATH" TMPDIR="$shared" FM_LINT_HOST_LOCK=on \
+    FM_TEST_ACTIVE="$active" FM_TEST_OVERLAP="$overlap" \
+    "$LINT" "$fixture" > "$tmp/stale.out" 2>&1 \
+    || fail "lint failed to recover a stale host lock: $(cat "$tmp/stale.out")"
+  [ ! -e "$lock" ] || fail "stale host ShellCheck lock remained after recovery"
+  pass "host ShellCheck lock serializes concurrent invocations and recovers a dead owner"
+}
+
 test_worker_trees_stop_on_signal() {
   local tmp fakebin fixture jobs telemetry lint_tmp pid_file out_file telemetry_file
   local parent_pid shellcheck_pid i parent_rc survivor
@@ -1888,6 +1947,7 @@ test_rejects_direct_beads_cli_in_explicit_core_path
 test_ignores_ambient_shellcheck_opts
 test_clean_fixture_passes
 test_jobs_are_deterministic_and_complete
+test_host_lock_serializes_and_recovers_stale_owner
 test_worker_trees_stop_on_signal
 test_root_deadline_names_the_root_and_reaps_the_tree
 test_root_memory_limit_reports_a_named_death

@@ -83,7 +83,7 @@ if fm_remote_job_reload_launchagent "$ACCOUNT_HOME" 501; then
   fail "reload succeeded while the old job remained loaded"
 fi
 assert_contains "$FM_REMOTE_JOB_ERROR" 'remained loaded after bootout' "the unload timeout was not reported"
-[ "$(rg -c '^bootstrap ' "$STATE/calls")" -eq 1 ] || fail "reload tried to bootstrap after the unload timeout"
+[ "$(grep -c '^bootstrap ' "$STATE/calls")" -eq 1 ] || fail "reload tried to bootstrap after the unload timeout"
 pass "reload reports a bounded unload timeout without bootstrapping"
 
 rm -f "$STATE/remaining" "$STATE/bootout-stays-loaded"
@@ -93,7 +93,7 @@ if fm_remote_job_reload_launchagent "$ACCOUNT_HOME" 501; then
   fail "reload succeeded after bootout refused a loaded job"
 fi
 assert_contains "$FM_REMOTE_JOB_ERROR" 'Boot-out failed: operation not permitted' "the bootout diagnostic was not reported"
-[ "$(rg -c '^bootstrap ' "$STATE/calls" || true)" = "" ] || fail "reload tried to bootstrap after bootout was refused"
+[ "$(grep -c '^bootstrap ' "$STATE/calls")" -eq 0 ] || fail "reload tried to bootstrap after bootout was refused"
 pass "reload reports a refused bootout of a loaded job"
 
 rm -f "$STATE/$FM_REMOTE_JOB_LABEL.loaded"

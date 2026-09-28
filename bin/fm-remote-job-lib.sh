@@ -902,10 +902,16 @@ fm_remote_job_worker_ready_path() { printf '%s\n' "$FM_REMOTE_JOB_STATE/worker.r
 fm_remote_job_worker_identity_path() { printf '%s\n' "$FM_REMOTE_JOB_STATE/worker.identity"; }
 fm_remote_job_worker_lock_path() { printf '%s\n' "$FM_REMOTE_JOB_STATE/worker.lock"; }
 
+fm_remote_job_ps_bin() {
+  if [ -x /bin/ps ]; then printf '/bin/ps\n'; elif [ -x /usr/bin/ps ]; then printf '/usr/bin/ps\n'; else return 1; fi
+}
+
 fm_remote_job_process_start() {
   local pid=$1 ps_bin value
-  if [ -x /bin/ps ]; then ps_bin=/bin/ps; elif [ -x /usr/bin/ps ]; then ps_bin=/usr/bin/ps; else return 1; fi
-  value=$("$ps_bin" -p "$pid" -o lstart= 2>/dev/null) || return 1
+  ps_bin=$(fm_remote_job_ps_bin) || return 1
+  # Pin LC_ALL=C so lstart is locale-invariant: the launchd worker records its
+  # start under the C locale, but SSH callers re-read it under their own locale.
+  value=$(LC_ALL=C "$ps_bin" -p "$pid" -o lstart= 2>/dev/null) || return 1
   [ -n "$value" ] || return 1
   case "$value" in *$'\n'*|*$'\r'*) return 1 ;; esac
   printf '%s\n' "$value"

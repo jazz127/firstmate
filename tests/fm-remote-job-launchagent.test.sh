@@ -22,6 +22,7 @@ label=${target##*/}
 loaded="$FM_FAKE_LAUNCHCTL_STATE/$label.loaded"
 case "$command" in
   bootout)
+    [ ! -f "$FM_FAKE_LAUNCHCTL_STATE/bootout-fail" ] || { printf 'Boot-out failed: operation not permitted\n' >&2; exit 6; }
     if [ -f "$FM_FAKE_LAUNCHCTL_STATE/bootout-stays-loaded" ]; then
       printf '%s\n' "${FM_FAKE_LAUNCHCTL_DELAY:-3}" > "$FM_FAKE_LAUNCHCTL_STATE/remaining"
     else
@@ -84,3 +85,18 @@ fi
 assert_contains "$FM_REMOTE_JOB_ERROR" 'remained loaded after bootout' "the unload timeout was not reported"
 [ "$(rg -c '^bootstrap ' "$STATE/calls")" -eq 1 ] || fail "reload tried to bootstrap after the unload timeout"
 pass "reload reports a bounded unload timeout without bootstrapping"
+
+rm -f "$STATE/remaining" "$STATE/bootout-stays-loaded"
+: > "$STATE/calls"
+touch "$STATE/$FM_REMOTE_JOB_LABEL.loaded" "$STATE/bootout-fail"
+if fm_remote_job_reload_launchagent "$ACCOUNT_HOME" 501; then
+  fail "reload succeeded after bootout refused a loaded job"
+fi
+assert_contains "$FM_REMOTE_JOB_ERROR" 'Boot-out failed: operation not permitted' "the bootout diagnostic was not reported"
+[ "$(rg -c '^bootstrap ' "$STATE/calls" || true)" = "" ] || fail "reload tried to bootstrap after bootout was refused"
+pass "reload reports a refused bootout of a loaded job"
+
+rm -f "$STATE/$FM_REMOTE_JOB_LABEL.loaded"
+fm_remote_job_reload_launchagent "$ACCOUNT_HOME" 501 || fail "reload rejected an already-absent job: $FM_REMOTE_JOB_ERROR"
+[ -f "$STATE/$FM_REMOTE_JOB_LABEL.loaded" ] || fail "reload did not bootstrap after tolerating an absent job"
+pass "reload tolerates bootout failure for an already-absent job"

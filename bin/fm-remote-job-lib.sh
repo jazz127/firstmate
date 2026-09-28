@@ -886,9 +886,14 @@ fm_remote_job_gui_available() { # <uid>
   command -v launchctl >/dev/null 2>&1 && launchctl print "gui/$uid" >/dev/null 2>&1
 }
 
-fm_remote_job_wait_launchagent_unloaded() { # <gui-domain/label>
-  local target=$1 attempt
+fm_remote_job_bootout_launchagent() { # <gui-domain/label>
+  local target=$1 attempt out
   FM_REMOTE_JOB_ERROR=
+  if ! out=$(launchctl bootout "$target" 2>&1); then
+    launchctl print "$target" >/dev/null 2>&1 || return 0
+    FM_REMOTE_JOB_ERROR="launchctl bootout $target refused: ${out:-no diagnostic}"
+    return 1
+  fi
   # Bootout is asynchronous, so allow five seconds for launchd to remove the job.
   for ((attempt = 0; attempt <= 50; attempt++)); do
     if ! launchctl print "$target" >/dev/null 2>&1; then
@@ -1150,8 +1155,7 @@ fm_remote_job_write_launchagent() { # <remote-root> <account-home>
 fm_remote_job_reload_launchagent() { # <account-home> <uid>
   local account_home=$1 uid=$2 out
   fm_remote_job_launchagent_paths "$account_home"
-  launchctl bootout "gui/$uid/$FM_REMOTE_JOB_LABEL" >/dev/null 2>&1 || true
-  fm_remote_job_wait_launchagent_unloaded "gui/$uid/$FM_REMOTE_JOB_LABEL" || return 1
+  fm_remote_job_bootout_launchagent "gui/$uid/$FM_REMOTE_JOB_LABEL" || return 1
   if ! out=$(launchctl bootstrap "gui/$uid" "$FM_REMOTE_JOB_LAUNCH_AGENT_PLIST" 2>&1); then
     FM_REMOTE_JOB_ERROR="launchctl bootstrap gui/$uid refused: ${out:-no diagnostic}"
     return 1

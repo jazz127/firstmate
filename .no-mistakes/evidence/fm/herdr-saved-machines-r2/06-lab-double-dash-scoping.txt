@@ -1,0 +1,8 @@
+## provision fm-lab-dd-46289-6466
+## run agent start with -- passthrough (via argv-logging shim)
+argv: [agent] [start] [probe] [--kind] [pi] [--pane] [w1:p1] [--timeout] [2000] [--session] [fm-lab-dd-46289-6466] [--] [--no-session]
+{"error":{"code":"invalid_agent_timeout","message":"agent start timeout must be greater than 3000ms and at most 300000ms"},"id":"cli:agent:start"}
+rc=
+## teardown
+teardown_rc=0
+{"lab_sessions_left":0}

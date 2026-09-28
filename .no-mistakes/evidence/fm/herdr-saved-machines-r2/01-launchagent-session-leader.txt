@@ -1,0 +1,38 @@
+## launchctl print (excerpt)
+	state = running
+	program = /bin/zsh
+	arguments = {
+	pid = 55526
+	last exit code = (never exited)
+		state = active
+		state = active
+	properties = runatload | inferred program
+## processes of session
+  PID  PPID  PGID   SESS STAT COMMAND
+55526     1 55526      0 S    /usr/bin/perl /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3K9XMN42T4S8H00ZDDCAMBM/bin/fm-remote-herdr-supervisor.pl /Users/jarad/.local/bin/herdr server --session fm-lab-slr2-55409-11151
+55570 55526 55570      0 Ss   /Users/jarad/.local/bin/herdr server --session fm-lab-slr2-55409-11151
+55572 55570 55570      0 S    /usr/bin/perl /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3K9XMN42T4S8H00ZDDCAMBM/bin/fm-remote-herdr-supervisor.pl /Users/jarad/.local/bin/herdr server --session fm-lab-slr2-55409-11151
+JOB=55526 SRV=55570
+## getsid via perl
+server getsid= 55570 pid= 55570
+server getsid= 55570 pid= 55570 leads session: True
+## server env XPC_SERVICE_NAME
+XPC_SERVICE_NAME=dev.firstmate.herdr-lab.fm-lab-slr2-55409-11151
+## herdr status (lab session)
+{"server":{"running":true,"pid":null,"capabilities":{"live_handoff":true,"detached_server_daemon":true,"endpoint_protocol_generation":1,"surface_interest":true,"health_check":true}}}
+## owner lib classification
+declare -f fm_remote_herdr_ancestry_has_ssh_origin
+declare -f fm_remote_herdr_birth_is_aqua
+declare -f fm_remote_herdr_gui_job_is_exclusive
+declare -f fm_remote_herdr_gui_job_proves_owner
+declare -f fm_remote_herdr_owner_birth
+declare -f fm_remote_herdr_process_ancestry
+declare -f fm_remote_herdr_process_env
+declare -f fm_remote_herdr_process_leads_session
+declare -f fm_remote_herdr_render_launch_agent
+declare -f fm_remote_herdr_socket_owner
+declare -f fm_remote_herdr_xml_escape
+## owner-lib classification of lab server pid 55570
+owner_birth=launchd
+birth_is_aqua=yes
+leads_session=yes

@@ -1,0 +1,7 @@
+## teardown
+rc=0
+## label loaded?
+not loaded
+## leftover processes
+(none above = clean)
+{"lab_sessions_left":0}

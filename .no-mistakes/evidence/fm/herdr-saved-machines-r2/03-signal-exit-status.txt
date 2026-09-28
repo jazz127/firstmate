@@ -1,0 +1,85 @@
+--- before
+	state = running
+	pid = 55526
+	last exit code = (never exited)
+		state = active
+55526     1 55526 S    /usr/bin/perl /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3K9XMN42T4S8H00ZDDCAMBM/bin/fm-remote-herdr-supervisor.pl /Users/jarad/.local/bin/herdr server --session fm-lab-slr2-55409-11151
+55570 55526 55570 Ss   /Users/jarad/.local/bin/herdr server --session fm-lab-slr2-55409-11151
+55572 55570 55570 S    /usr/bin/perl /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3K9XMN42T4S8H00ZDDCAMBM/bin/fm-remote-herdr-supervisor.pl /Users/jarad/.local/bin/herdr server --session fm-lab-slr2-55409-11151
+## kill server SIGKILL
+--- 2s after server SIGKILL
+	state = running
+	pid = 7805
+	last exit code = 137
+		state = active
+ 7805     1  7805 S    /usr/bin/perl /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3K9XMN42T4S8H00ZDDCAMBM/bin/fm-remote-herdr-supervisor.pl /Users/jarad/.local/bin/herdr server --session fm-lab-slr2-55409-11151
+ 7922  7805  7922 Ss   /Users/jarad/.local/bin/herdr server --session fm-lab-slr2-55409-11151
+ 7925  7922  7922 S    /usr/bin/perl /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3K9XMN42T4S8H00ZDDCAMBM/bin/fm-remote-herdr-supervisor.pl /Users/jarad/.local/bin/herdr server --session fm-lab-slr2-55409-11151
+--- 14s after (throttle respawn)
+	state = running
+	pid = 7805
+	last exit code = 137
+		state = active
+ 7805     1  7805 S    /usr/bin/perl /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3K9XMN42T4S8H00ZDDCAMBM/bin/fm-remote-herdr-supervisor.pl /Users/jarad/.local/bin/herdr server --session fm-lab-slr2-55409-11151
+ 7922  7805  7922 Ss   /Users/jarad/.local/bin/herdr server --session fm-lab-slr2-55409-11151
+ 7925  7922  7922 S    /usr/bin/perl /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3K9XMN42T4S8H00ZDDCAMBM/bin/fm-remote-herdr-supervisor.pl /Users/jarad/.local/bin/herdr server --session fm-lab-slr2-55409-11151
+## kill job SIGKILL
+--- 1s after job SIGKILL (watcher should kill group)
+	state = running
+	pid = 28057
+	last terminating signal = Killed: 9
+		state = active
+28057     1 28057 S    /usr/bin/perl /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3K9XMN42T4S8H00ZDDCAMBM/bin/fm-remote-herdr-supervisor.pl /Users/jarad/.local/bin/herdr server --session fm-lab-slr2-55409-11151
+28109 28057 28109 Ss   /Users/jarad/.local/bin/herdr server --session fm-lab-slr2-55409-11151
+28110 28109 28109 S    /usr/bin/perl /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3K9XMN42T4S8H00ZDDCAMBM/bin/fm-remote-herdr-supervisor.pl /Users/jarad/.local/bin/herdr server --session fm-lab-slr2-55409-11151
+--- 13s after job SIGKILL
+	state = running
+	pid = 28057
+	last terminating signal = Killed: 9
+		state = active
+28057     1 28057 S    /usr/bin/perl /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3K9XMN42T4S8H00ZDDCAMBM/bin/fm-remote-herdr-supervisor.pl /Users/jarad/.local/bin/herdr server --session fm-lab-slr2-55409-11151
+28109 28057 28109 Ss   /Users/jarad/.local/bin/herdr server --session fm-lab-slr2-55409-11151
+28110 28109 28109 S    /usr/bin/perl /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3K9XMN42T4S8H00ZDDCAMBM/bin/fm-remote-herdr-supervisor.pl /Users/jarad/.local/bin/herdr server --session fm-lab-slr2-55409-11151
+## kickstart -k (SIGTERM forwarded)
+--- 2s after restart
+	state = running
+	pid = 39830
+	last exit code = 0
+		state = active
+39830     1 39830 S    /usr/bin/perl /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3K9XMN42T4S8H00ZDDCAMBM/bin/fm-remote-herdr-supervisor.pl /Users/jarad/.local/bin/herdr server --session fm-lab-slr2-55409-11151
+39873 39830 39873 Ss   /Users/jarad/.local/bin/herdr server --session fm-lab-slr2-55409-11151
+39875 39873 39873 S    /usr/bin/perl /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3K9XMN42T4S8H00ZDDCAMBM/bin/fm-remote-herdr-supervisor.pl /Users/jarad/.local/bin/herdr server --session fm-lab-slr2-55409-11151
+--- 14s after restart
+	state = running
+	pid = 39830
+	last exit code = 0
+		state = active
+39830     1 39830 S    /usr/bin/perl /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3K9XMN42T4S8H00ZDDCAMBM/bin/fm-remote-herdr-supervisor.pl /Users/jarad/.local/bin/herdr server --session fm-lab-slr2-55409-11151
+39873 39830 39873 Ss   /Users/jarad/.local/bin/herdr server --session fm-lab-slr2-55409-11151
+39875 39873 39873 S    /usr/bin/perl /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3K9XMN42T4S8H00ZDDCAMBM/bin/fm-remote-herdr-supervisor.pl /Users/jarad/.local/bin/herdr server --session fm-lab-slr2-55409-11151
+## launchagent log tail
+fm-remote-herdr-supervisor: started pid 7922 to lead its own session: /Users/jarad/.local/bin/herdr server --session fm-lab-slr2-55409-11151
+herdr server running; you can use any herdr CLI command in another terminal.
+api socket: /Users/jarad/.config/herdr/sessions/fm-lab-slr2-55409-11151/herdr.sock
+client socket: /Users/jarad/.config/herdr/sessions/fm-lab-slr2-55409-11151/herdr-client.sock
+logs: /Users/jarad/.config/herdr/sessions/fm-lab-slr2-55409-11151/herdr-server.log
+did you mean to open the Herdr TUI? run `herdr`; you do not need `herdr server`.
+fm-remote-herdr-supervisor: the supervisor of process group 7922 is gone; killing that group
+fm-remote-herdr-guard: no server owns session fm-lab-slr2-55409-11151
+fm-remote-herdr-guard: starting the herdr server for session fm-lab-slr2-55409-11151 as the leader of its own session under this launch agent (pid 28057)
+fm-remote-herdr-supervisor: started pid 28109 to lead its own session: /Users/jarad/.local/bin/herdr server --session fm-lab-slr2-55409-11151
+herdr server running; you can use any herdr CLI command in another terminal.
+api socket: /Users/jarad/.config/herdr/sessions/fm-lab-slr2-55409-11151/herdr.sock
+client socket: /Users/jarad/.config/herdr/sessions/fm-lab-slr2-55409-11151/herdr-client.sock
+logs: /Users/jarad/.config/herdr/sessions/fm-lab-slr2-55409-11151/herdr-server.log
+did you mean to open the Herdr TUI? run `herdr`; you do not need `herdr server`.
+fm-remote-herdr-supervisor: forwarding SIGTERM to pid 28109
+fm-remote-herdr-supervisor: pid 28109 exited with status 0
+fm-remote-herdr-guard: no server owns session fm-lab-slr2-55409-11151
+fm-remote-herdr-guard: starting the herdr server for session fm-lab-slr2-55409-11151 as the leader of its own session under this launch agent (pid 39830)
+fm-remote-herdr-supervisor: started pid 39873 to lead its own session: /Users/jarad/.local/bin/herdr server --session fm-lab-slr2-55409-11151
+herdr server running; you can use any herdr CLI command in another terminal.
+api socket: /Users/jarad/.config/herdr/sessions/fm-lab-slr2-55409-11151/herdr.sock
+client socket: /Users/jarad/.config/herdr/sessions/fm-lab-slr2-55409-11151/herdr-client.sock
+logs: /Users/jarad/.config/herdr/sessions/fm-lab-slr2-55409-11151/herdr-server.log
+did you mean to open the Herdr TUI? run `herdr`; you do not need `herdr server`.

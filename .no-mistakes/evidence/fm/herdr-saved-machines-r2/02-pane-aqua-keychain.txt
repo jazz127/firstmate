@@ -1,0 +1,8 @@
+/Users/jarad/.zshrc:source:1: no such file or directory: /Users/jarad/.bashprofile
+jarad@Mac tmp % echo MGR=$(launchctl managername); security show-keychain-info ~/Library/Keychains/login.keychain-db >/
+dev/null 2>&1; echo KEYCHAIN_RC=$?; echo XPC=$XPC_SERVICE_NAME; echo SID_LEADER_PID=$(ps -o sess= -p $$)
+MGR=Aqua
+KEYCHAIN_RC=0
+XPC=dev.firstmate.herdr-lab.fm-lab-slr2-55409-11151
+SID_LEADER_PID= 0
+jarad@Mac tmp %

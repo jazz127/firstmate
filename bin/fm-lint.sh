@@ -126,13 +126,17 @@ FM_LINT_WORKER_RUN_PID=
 FM_LINT_WORKER_ARGS=()
 FM_LINT_HOST_LOCK_HELD=0
 FM_LINT_HOST_LOCK_TOKEN=
-FM_LINT_HOST_LOCK_DIR="/tmp/fm-lint-shellcheck-${UID:-$(id -u)}.lock"
+FM_LINT_HOST_LOCK_REAP=
+FM_LINT_HOST_LOCK_PATH="/tmp/fm-lint-shellcheck-${UID:-$(id -u)}.lock"
 
 # Serialize memory-heavy ShellCheck processes across lint invocations by this
-# user. The lock directory lives at a fixed /tmp path so every invocation on the
-# host shares it whatever its TMPDIR. A dead owner is atomically moved aside
-# before another worker acquires the lock. The owner validates
-# FM_LINT_HOST_LOCK before any worker reads it.
+# user. The lock lives at a fixed /tmp path so every invocation on the host
+# shares it whatever its TMPDIR. It is a symlink whose target is the owner
+# token, so the lock and its owner appear in one atomic step. A waiter that
+# finds a dead owner takes that owner's reap guard and removes the lock only if
+# it still names the same owner, so simultaneous waiters cannot remove a lock a
+# live owner has since taken. The owner validates FM_LINT_HOST_LOCK before any
+# worker reads it.
 fm_lint_host_lock_enabled() {
   case "${FM_LINT_HOST_LOCK:-auto}" in
     auto) [ "${CI:-}" != true ] && [ "${GITHUB_ACTIONS:-}" != true ] ;;
@@ -142,59 +146,45 @@ fm_lint_host_lock_enabled() {
 }
 
 fm_lint_host_lock_release() {
+  if [ -n "$FM_LINT_HOST_LOCK_REAP" ]; then
+    rmdir "$FM_LINT_HOST_LOCK_REAP" 2>/dev/null || true
+    FM_LINT_HOST_LOCK_REAP=
+  fi
   [ "$FM_LINT_HOST_LOCK_HELD" -eq 1 ] || return 0
-  local owner_file="$FM_LINT_HOST_LOCK_DIR/owner"
-  if [ -f "$owner_file" ] && [ "$(cat "$owner_file" 2>/dev/null || true)" = "$FM_LINT_HOST_LOCK_TOKEN" ]; then
-    rm -rf "$FM_LINT_HOST_LOCK_DIR"
+  if [ "$(readlink "$FM_LINT_HOST_LOCK_PATH" 2>/dev/null || true)" = "$FM_LINT_HOST_LOCK_TOKEN" ]; then
+    rm -f "$FM_LINT_HOST_LOCK_PATH"
   fi
   FM_LINT_HOST_LOCK_HELD=0
   FM_LINT_HOST_LOCK_TOKEN=
 }
 
-fm_lint_host_lock_acquire() {
+fm_lint_host_lock_acquire() {  # <path>
   fm_lint_host_lock_enabled || return 0
-  local lock_dir="$FM_LINT_HOST_LOCK_DIR"
-  local owner_file="$lock_dir/owner" owner_pid stale_dir attempts=0
+  local lock=$FM_LINT_HOST_LOCK_PATH owner owner_pid queued=0
   FM_LINT_HOST_LOCK_TOKEN="${BASHPID:-$$}.$RANDOM.$RANDOM"
-  while ! mkdir "$lock_dir" 2>/dev/null; do
-    owner=$(cat "$owner_file" 2>/dev/null || true)
+  until ln -s "$FM_LINT_HOST_LOCK_TOKEN" "$lock" 2>/dev/null; do
+    owner=$(readlink "$lock" 2>/dev/null || true)
     owner_pid=${owner%%.*}
     case "$owner_pid" in
-      ''|*[!0-9]*)
-        # Allow the winner time to publish its owner record after mkdir.
-        attempts=$((attempts + 1))
-        if [ "$attempts" -gt 300 ] && [ -d "$lock_dir" ]; then
-          stale_dir="$lock_dir.stale.${BASHPID:-$$}.$RANDOM"
-          if mv "$lock_dir" "$stale_dir" 2>/dev/null; then
-            rm -rf "$stale_dir"
-          fi
-          attempts=0
-        fi
-        ;;
+      ''|*[!0-9]*) ;;
       *)
-        if kill -0 "$owner_pid" 2>/dev/null; then
-          :
-        else
-          stale_dir="$lock_dir.stale.${BASHPID:-$$}.$RANDOM"
-          if mv "$lock_dir" "$stale_dir" 2>/dev/null; then
-            # Recheck the moved owner before removing a lock another process
-            # may have replaced between our liveness check and the rename.
-            if [ "$(cat "$stale_dir/owner" 2>/dev/null || true)" = "$owner" ]; then
-              rm -rf "$stale_dir"
-            else
-              [ -e "$lock_dir" ] || mv "$stale_dir" "$lock_dir" 2>/dev/null || rm -rf "$stale_dir"
-            fi
+        if ! kill -0 "$owner_pid" 2>/dev/null && mkdir "$lock.reap.$owner" 2>/dev/null; then
+          FM_LINT_HOST_LOCK_REAP="$lock.reap.$owner"
+          if [ "$(readlink "$lock" 2>/dev/null || true)" = "$owner" ]; then
+            rm -f "$lock"
           fi
+          rmdir "$FM_LINT_HOST_LOCK_REAP"
+          FM_LINT_HOST_LOCK_REAP=
+          continue
         fi
         ;;
     esac
+    if [ "$queued" -eq 0 ] && [ "${FM_LINT_INTERNAL_PROGRESS:-0}" = 1 ]; then
+      printf 'fm-lint: queued %s behind the host ShellCheck lock\n' "$1" >&2
+    fi
+    queued=1
     sleep 0.1
   done
-  if ! printf '%s\n' "$FM_LINT_HOST_LOCK_TOKEN" > "$owner_file"; then
-    rmdir "$lock_dir" 2>/dev/null || true
-    printf 'fm-lint.sh: could not record the ShellCheck lock owner.\n' >&2
-    return 1
-  fi
   FM_LINT_HOST_LOCK_HELD=1
 }
 
@@ -298,6 +288,7 @@ fm_lint_run_root() {  # <index> <path> <output-dir> <shard-index>
   local root_err="$output_dir/root.$shard_index.$index.err"
   local rss_file="$output_dir/root.$shard_index.$index.rss"
   local start_ms end_ms duration_ms invocation_rc=0 reason rss_kib
+  fm_lint_host_lock_acquire "$path"
   start_ms=$(fm_lint_now_ms)
   if [ -n "${FM_LINT_INTERNAL_ROOTS_LOG:-}" ]; then
     printf 'begin\t%s\t%s\t%s\t%s\t%s\n' \
@@ -308,7 +299,6 @@ fm_lint_run_root() {  # <index> <path> <output-dir> <shard-index>
     printf 'fm-lint: begin %s (shard %s, %s mode)\n' \
       "$path" "$shard_index" "${FM_LINT_INTERNAL_MODE:-unknown}" >&2
   fi
-  fm_lint_host_lock_acquire || return $?
   if [ "${FM_LINT_INTERNAL_BOUNDED:-none}" != none ]; then
     # The watchdog runs in a process group of its own (the same setpgrp hop the
     # workers use), so the owner's TERM-then-KILL group sweep cannot kill it

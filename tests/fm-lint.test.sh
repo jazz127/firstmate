@@ -18,6 +18,9 @@ set -u
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 LINT="$ROOT/bin/fm-lint.sh"
+# Routine fixtures must not queue behind unrelated lints on this host; the
+# host-lock tests opt back in explicitly.
+export FM_LINT_HOST_LOCK=off
 INSTALLER="$ROOT/bin/fm-install-shellcheck.sh"
 # The pinned version, read from the single source (the one owner itself).
 REQUIRED=$("$LINT" --required-version)
@@ -1349,22 +1352,33 @@ SH
 # left behind with a dead owner means ours was not released.
 fm_lint_test_lock_released() {
   local owner
-  [ -e "$1" ] || return 0
-  owner=$(cat "$1/owner" 2>/dev/null || true)
+  [ -L "$1" ] || return 0
+  owner=$(readlink "$1" 2>/dev/null || true)
   owner=${owner%%.*}
   case "$owner" in ''|*[!0-9]*) return 0 ;; esac
   kill -0 "$owner" 2>/dev/null
 }
 
+# Publish a lock owned by <pid> once any unrelated host lint has released it.
+fm_lint_test_plant_lock() {  # <lock> <pid>
+  local i=0
+  until ln -s "$2.test" "$1" 2>/dev/null; do
+    i=$((i + 1))
+    [ "$i" -le 3000 ] || fail "host ShellCheck lock stayed busy; cannot plant an owner"
+    sleep 0.1
+  done
+}
+
 test_host_lock_serializes_and_recovers_stale_owner() {
-  local tmp fakebin fixture lock active overlap first_pid second_pid dead_pid rc i
+  local tmp fakebin fixture lock active overlap pid holder_pid dead_pid rc i duration
+  local -a pids
   tmp=$(fm_test_tmproot fm-lint-host-lock)
   fakebin=$(fm_fakebin "$tmp")
   fixture="$tmp/good.sh"
   lock="/tmp/fm-lint-shellcheck-${UID:-$(id -u)}.lock"
   active="$tmp/shellcheck-active"
   overlap="$tmp/shellcheck-overlap"
-  mkdir -p "$tmp/tmp-a" "$tmp/tmp-b" "$tmp/tmp-c"
+  mkdir -p "$tmp/tmp-a" "$tmp/tmp-b" "$tmp/tmp-c" "$tmp/tmp-d" "$tmp/tmp-e" "$tmp/tmp-f"
   cat > "$fixture" <<'SH'
 #!/usr/bin/env bash
 printf '%s\n' ok
@@ -1383,40 +1397,63 @@ rmdir "$FM_TEST_ACTIVE" 2>/dev/null || true
 SH
   chmod +x "$fakebin/shellcheck"
 
-  PATH="$fakebin:$PATH" TMPDIR="$tmp/tmp-a" FM_LINT_HOST_LOCK=on \
-    FM_TEST_ACTIVE="$active" FM_TEST_OVERLAP="$overlap" \
-    "$LINT" "$fixture" > "$tmp/first.out" 2>&1 &
-  first_pid=$!
-  PATH="$fakebin:$PATH" TMPDIR="$tmp/tmp-b" FM_LINT_HOST_LOCK=on \
-    FM_TEST_ACTIVE="$active" FM_TEST_OVERLAP="$overlap" \
-    "$LINT" "$fixture" > "$tmp/second.out" 2>&1 &
-  second_pid=$!
-  rc=0
-  wait "$first_pid" || rc=$?
-  [ "$rc" -eq 0 ] || fail "first concurrent lint failed with $rc: $(cat "$tmp/first.out")"
-  rc=0
-  wait "$second_pid" || rc=$?
-  [ "$rc" -eq 0 ] || fail "second concurrent lint failed with $rc: $(cat "$tmp/second.out")"
+  pids=()
+  for i in a b; do
+    PATH="$fakebin:$PATH" TMPDIR="$tmp/tmp-$i" FM_LINT_HOST_LOCK=on \
+      FM_TEST_ACTIVE="$active" FM_TEST_OVERLAP="$overlap" \
+      "$LINT" "$fixture" > "$tmp/queue-$i.out" 2>&1 &
+    pids+=("$!")
+  done
+  i=0
+  for pid in "${pids[@]}"; do
+    i=$((i + 1))
+    rc=0
+    wait "$pid" || rc=$?
+    [ "$rc" -eq 0 ] || fail "concurrent lint $i failed with $rc"
+  done
   [ ! -e "$overlap" ] || fail "lint invocations with different TMPDIRs overlapped ShellCheck"
   fm_lint_test_lock_released "$lock" || fail "host ShellCheck lock remained after successful lint"
+
+  sleep 30 &
+  holder_pid=$!
+  fm_lint_test_plant_lock "$lock" "$holder_pid"
+  PATH="$fakebin:$PATH" TMPDIR="$tmp/tmp-c" FM_LINT_HOST_LOCK=on \
+    FM_TEST_ACTIVE="$active" FM_TEST_OVERLAP="$overlap" \
+    "$LINT" --telemetry "$tmp/queued.tsv" "$fixture" > "$tmp/queued.out" 2>&1 &
+  pid=$!
+  sleep 1.5
+  ! grep -q $'^begin\t' "$tmp/queued.roots.tsv" 2>/dev/null \
+    || fail "a root queued behind the host lock was reported as begun"
+  kill "$holder_pid" 2>/dev/null || true
+  wait "$holder_pid" 2>/dev/null || true
+  rc=0
+  wait "$pid" || rc=$?
+  [ "$rc" -eq 0 ] || fail "queued lint failed with $rc: $(cat "$tmp/queued.out")"
+  duration=$(awk -F '\t' '$1 == "end" { print $8 }' "$tmp/queued.roots.tsv")
+  case "$duration" in ''|*[!0-9]*) fail "queued lint recorded no root duration" ;; esac
+  [ "$duration" -lt 1500 ] \
+    || fail "queued root duration ${duration}ms counted time spent waiting for the host lock"
 
   sleep 30 &
   dead_pid=$!
   kill "$dead_pid" 2>/dev/null || true
   wait "$dead_pid" 2>/dev/null || true
-  i=0
-  until mkdir "$lock" 2>/dev/null; do
-    i=$((i + 1))
-    [ "$i" -le 600 ] || fail "host ShellCheck lock stayed busy; cannot plant a stale owner"
-    sleep 0.1
+  fm_lint_test_plant_lock "$lock" "$dead_pid"
+  pids=()
+  for i in d e f; do
+    PATH="$fakebin:$PATH" TMPDIR="$tmp/tmp-$i" FM_LINT_HOST_LOCK=on \
+      FM_TEST_ACTIVE="$active" FM_TEST_OVERLAP="$overlap" \
+      "$LINT" "$fixture" > "$tmp/stale-$i.out" 2>&1 &
+    pids+=("$!")
   done
-  printf '%s.stale\n' "$dead_pid" > "$lock/owner"
-  PATH="$fakebin:$PATH" TMPDIR="$tmp/tmp-c" FM_LINT_HOST_LOCK=on \
-    FM_TEST_ACTIVE="$active" FM_TEST_OVERLAP="$overlap" \
-    "$LINT" "$fixture" > "$tmp/stale.out" 2>&1 \
-    || fail "lint failed to recover a stale host lock: $(cat "$tmp/stale.out")"
+  for pid in "${pids[@]}"; do
+    rc=0
+    wait "$pid" || rc=$?
+    [ "$rc" -eq 0 ] || fail "lint failed to recover a stale host lock with $rc"
+  done
+  [ ! -e "$overlap" ] || fail "simultaneous stale-lock waiters overlapped ShellCheck"
   fm_lint_test_lock_released "$lock" || fail "stale host ShellCheck lock remained after recovery"
-  pass "host ShellCheck lock serializes concurrent invocations and recovers a dead owner"
+  pass "host ShellCheck lock serializes across TMPDIRs, excludes queue time, and recovers a dead owner"
 }
 
 test_host_lock_rejects_unknown_values() {

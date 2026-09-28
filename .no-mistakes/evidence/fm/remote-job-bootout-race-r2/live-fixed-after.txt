@@ -1,0 +1,9 @@
+== [fixed] label gui/501/dev.firstmate.nmtest.fixed.83664
+old job state: 	state = running 	pid = 83684 
+reload rc=0 elapsed=14s error=''
+new job state: 	state = running 	pid = 96588 
+worker log:
+  13:26:25 worker start pid 83684
+  13:26:28 TERM received, draining 3s
+  13:26:31 exit
+  13:26:41 worker start pid 96588

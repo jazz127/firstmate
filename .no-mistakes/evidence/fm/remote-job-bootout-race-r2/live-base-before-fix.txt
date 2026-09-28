@@ -1,0 +1,8 @@
+== [base] label gui/501/dev.firstmate.nmtest.base.78542
+old job state: 	state = running 	pid = 78783 
+reload rc=1 elapsed=0s error='launchctl bootstrap gui/501 refused: Bootstrap failed: 5: Input/output error
+Try re-running the command as root for richer errors.'
+new job state: 	state = SIGTERMed 	pid = 78783 
+worker log:
+  13:26:20 worker start pid 78783
+  13:26:22 TERM received, draining 3s

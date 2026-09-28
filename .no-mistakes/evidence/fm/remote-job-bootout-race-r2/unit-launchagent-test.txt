@@ -1,0 +1,5 @@
+ok - reload waits for asynchronous bootout before bootstrapping
+ok - reload reports a bounded unload timeout without bootstrapping
+ok - reload reports a refused bootout of a loaded job
+ok - reload tolerates bootout failure for an already-absent job
+exit=0

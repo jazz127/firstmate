@@ -1,0 +1,12 @@
+== [traced] label gui/501/dev.firstmate.nmtest.traced.18234
+old job state: 	state = running 	pid = 18760 
+reload rc=0 elapsed=14s error=''
+new job state: 	state = running 	pid = 46856 
+worker log:
+  13:26:56 worker start pid 18760
+  13:26:58 TERM received, draining 3s
+  13:27:01 exit
+  13:27:01 worker start pid 28886
+  13:27:02 TERM received, draining 3s
+  13:27:05 exit
+  13:27:11 worker start pid 46856

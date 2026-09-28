@@ -1,0 +1,8 @@
+== [slow] label gui/501/dev.firstmate.nmtest.slow.69009
+old job state: 	state = running 	pid = 69245 
+reload rc=0 elapsed=15s error=''
+new job state: 	state = running 	pid = 82563 
+worker log:
+  13:27:29 worker start pid 69245
+  13:27:31 TERM received, draining 9s
+  13:27:45 worker start pid 82563

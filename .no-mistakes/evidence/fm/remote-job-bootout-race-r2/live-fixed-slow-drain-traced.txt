@@ -1,0 +1,10 @@
+== [slowtrace] label gui/501/dev.firstmate.nmtest.slowtrace.95253
+old job state: 	state = running 	pid = 95795 
+reload rc=0 elapsed=15s error=''
+new job state: 	state = running 	pid = 18714 
+worker log:
+  13:28:02 worker start pid 95795
+  13:28:04 TERM received, draining 9s
+  13:28:08 worker start pid 7534
+  13:28:09 TERM received, draining 9s
+  13:28:18 worker start pid 18714

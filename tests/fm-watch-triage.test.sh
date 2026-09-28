@@ -5320,7 +5320,7 @@ term_watcher_with_held_marker_lock() {  # <dir> [release-ticks]
   done
   if [ ! -e "$dir/marker-lock-held" ]; then
     kill "$holder" 2>/dev/null || true; wait "$holder" 2>/dev/null || true
-    reap "$pid"; fail "the fixture could not take the downtime-marker lock"
+    reap "$pid"; fail "the fixture could not take the downtime-marker lock: $(cat "$dir/marker-lock-held.failure" 2>/dev/null || true)"
   fi
   kill "$pid" 2>/dev/null || true
   wait_for_exit "$pid" 100

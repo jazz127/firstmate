@@ -1,0 +1,51 @@
+# HEAD (/Users/jarad/.no-mistakes/worktrees/daaee59c4bbe/01M3KJ8VE7Z9BFFMF1Q9VEPPE7), idle, 3 runs
+arm: watcher: started pid=24473 (beacon fresh)
+watcher pid=24473 blocked_in_capture=yes
+fm-watch-arm.sh --stop -> rc=0 elapsed_ms=1395 output: watcher: stopped pid=24473
+watcher alive after --stop returned: no
+watch lock after --stop: released
+
+arm: watcher: started pid=30531 (beacon fresh)
+watcher pid=30531 blocked_in_capture=yes
+fm-watch-arm.sh --stop -> rc=0 elapsed_ms=1377 output: watcher: stopped pid=30531
+watcher alive after --stop returned: no
+watch lock after --stop: released
+
+arm: watcher: started pid=35732 (beacon fresh)
+watcher pid=35732 blocked_in_capture=yes
+fm-watch-arm.sh --stop -> rc=0 elapsed_ms=4921 output: watcher: stopped pid=35732
+watcher alive after --stop returned: no
+watch lock after --stop: released
+
+# HEAD, 16 CPU hogs on 8 cores, 3 runs
+arm: watcher: started pid=41808 (beacon fresh)
+watcher pid=41808 blocked_in_capture=yes
+fm-watch-arm.sh --stop -> rc=0 elapsed_ms=1487 output: watcher: stopped pid=41808
+watcher alive after --stop returned: no
+watch lock after --stop: released
+
+arm: watcher: started pid=46317 (beacon fresh)
+watcher pid=46317 blocked_in_capture=yes
+fm-watch-arm.sh --stop -> rc=0 elapsed_ms=1545 output: watcher: stopped pid=46317
+watcher alive after --stop returned: no
+watch lock after --stop: released
+
+arm: watcher: started pid=49681 (beacon fresh)
+watcher pid=49681 blocked_in_capture=yes
+fm-watch-arm.sh --stop -> rc=0 elapsed_ms=1488 output: watcher: stopped pid=49681
+watcher alive after --stop returned: no
+watch lock after --stop: released
+
+# BASE 49a218bb, idle, 2 runs
+arm: watcher: started pid=53467 (beacon fresh)
+watcher pid=53467 blocked_in_capture=yes
+fm-watch-arm.sh --stop -> rc=1 elapsed_ms=11238 output: watcher: FAILED - pid=53467 did not stop
+watcher alive after --stop returned: YES
+watch lock after --stop: HELD
+
+arm: watcher: started pid=68841 (beacon fresh)
+watcher pid=68841 blocked_in_capture=yes
+fm-watch-arm.sh --stop -> rc=1 elapsed_ms=23979 output: watcher: FAILED - pid=68841 did not stop
+watcher alive after --stop returned: YES
+watch lock after --stop: HELD
+

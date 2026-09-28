@@ -1,0 +1,3 @@
+# base 49a218bb: FM_TEST_ONLY=test_term_stops_a_watcher_blocked_inside_a_poll bash tests/fm-watch-triage.test.sh (idle), 2 runs
+run=1 secs=33 not ok - TERM did not stop a watcher blocked inside a poll
+run=2 secs=2 ok - TERM stops a watcher blocked inside a poll and still runs its cleanup

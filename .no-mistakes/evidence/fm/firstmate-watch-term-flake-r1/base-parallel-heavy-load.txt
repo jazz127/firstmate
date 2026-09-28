@@ -1,0 +1,11 @@
+# base-load: tree=/var/folders/kw/cjk9qxvx0kq5874xngqgywth0000gn/T//fm-base.WFW1lR hogs=16 parallel_drivers=2 trials=4 ncpu=8
+== driver 1
+trial=1 term_to_exit_ms=29760 poll_ticks=182 lock=released stop_ack=ok
+trial=2 term_to_exit_ms=41405 poll_ticks=206 lock=released stop_ack=ok
+trial=3 term_to_exit_ms=34932 poll_ticks=184 lock=released stop_ack=ok
+trial=4 term_to_exit_ms=29852 poll_ticks=182 lock=released stop_ack=ok
+== driver 2
+trial=1 term_to_exit_ms=29880 poll_ticks=183 lock=released stop_ack=ok
+trial=2 term_to_exit_ms=41586 poll_ticks=202 lock=released stop_ack=ok
+trial=3 term_to_exit_ms=34928 poll_ticks=200 lock=released stop_ack=ok
+trial=4 term_to_exit_ms=29702 poll_ticks=189 lock=released stop_ack=ok

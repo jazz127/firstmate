@@ -1,0 +1,40 @@
+# head-load2: tree=/Users/jarad/.no-mistakes/worktrees/daaee59c4bbe/01M3KJ8VE7Z9BFFMF1Q9VEPPE7 hogs=16 parallel_drivers=3 trials=12 ncpu=8
+== driver 1
+trial=1 term_to_exit_ms=2312 poll_ticks=15 lock=released stop_ack=ok
+trial=2 term_to_exit_ms=2156 poll_ticks=13 lock=released stop_ack=ok
+trial=3 term_to_exit_ms=2296 poll_ticks=16 lock=released stop_ack=ok
+trial=4 term_to_exit_ms=2284 poll_ticks=16 lock=released stop_ack=ok
+trial=5 term_to_exit_ms=2196 poll_ticks=13 lock=released stop_ack=ok
+trial=6 term_to_exit_ms=2202 poll_ticks=14 lock=released stop_ack=ok
+trial=7 term_to_exit_ms=2073 poll_ticks=17 lock=released stop_ack=ok
+trial=8 term_to_exit_ms=2028 poll_ticks=15 lock=released stop_ack=ok
+trial=9 term_to_exit_ms=2297 poll_ticks=13 lock=released stop_ack=ok
+trial=10 term_to_exit_ms=8869 poll_ticks=15 lock=released stop_ack=ok
+trial=11 term_to_exit_ms=2040 poll_ticks=11 lock=released stop_ack=ok
+trial=12 term_to_exit_ms=2205 poll_ticks=14 lock=released stop_ack=ok
+== driver 2
+trial=1 term_to_exit_ms=2288 poll_ticks=14 lock=released stop_ack=ok
+trial=2 term_to_exit_ms=1971 poll_ticks=14 lock=released stop_ack=ok
+trial=3 term_to_exit_ms=2265 poll_ticks=13 lock=released stop_ack=ok
+trial=4 term_to_exit_ms=2260 poll_ticks=18 lock=released stop_ack=ok
+trial=5 term_to_exit_ms=2087 poll_ticks=13 lock=released stop_ack=ok
+trial=6 term_to_exit_ms=2031 poll_ticks=14 lock=released stop_ack=ok
+trial=7 term_to_exit_ms=2093 poll_ticks=14 lock=released stop_ack=ok
+trial=8 term_to_exit_ms=2245 poll_ticks=14 lock=released stop_ack=ok
+trial=9 term_to_exit_ms=2148 poll_ticks=13 lock=released stop_ack=ok
+trial=10 term_to_exit_ms=2134 poll_ticks=14 lock=released stop_ack=ok
+trial=11 term_to_exit_ms=2203 poll_ticks=13 lock=released stop_ack=ok
+trial=12 term_to_exit_ms=2169 poll_ticks=14 lock=released stop_ack=ok
+== driver 3
+trial=1 term_to_exit_ms=2259 poll_ticks=14 lock=released stop_ack=ok
+trial=2 term_to_exit_ms=2251 poll_ticks=14 lock=released stop_ack=ok
+trial=3 term_to_exit_ms=2352 poll_ticks=16 lock=released stop_ack=ok
+trial=4 term_to_exit_ms=2275 poll_ticks=18 lock=released stop_ack=ok
+trial=5 term_to_exit_ms=2171 poll_ticks=13 lock=released stop_ack=ok
+trial=6 term_to_exit_ms=2043 poll_ticks=14 lock=released stop_ack=ok
+trial=7 term_to_exit_ms=1989 poll_ticks=14 lock=released stop_ack=ok
+trial=8 term_to_exit_ms=2112 poll_ticks=12 lock=released stop_ack=ok
+trial=9 term_to_exit_ms=2213 poll_ticks=13 lock=released stop_ack=ok
+trial=10 term_to_exit_ms=2228 poll_ticks=13 lock=released stop_ack=ok
+trial=11 term_to_exit_ms=2201 poll_ticks=12 lock=released stop_ack=ok
+trial=12 term_to_exit_ms=2268 poll_ticks=14 lock=released stop_ack=ok

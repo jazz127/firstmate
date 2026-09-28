@@ -1,0 +1,33 @@
+== driver 1 (3 parallel drivers, 16 busy-loop CPU hogs on 8 cores)
+trial=1 term_to_exit_ms=2007 lock=released stop_ack=ok
+trial=2 term_to_exit_ms=2239 lock=released stop_ack=ok
+trial=3 term_to_exit_ms=2113 lock=released stop_ack=ok
+trial=4 term_to_exit_ms=2196 lock=released stop_ack=ok
+trial=5 term_to_exit_ms=2190 lock=released stop_ack=ok
+trial=6 term_to_exit_ms=20335 lock=released stop_ack=ok
+trial=7 term_to_exit_ms=2370 lock=released stop_ack=ok
+trial=8 term_to_exit_ms=2255 lock=released stop_ack=ok
+trial=9 term_to_exit_ms=2197 lock=released stop_ack=ok
+trial=10 term_to_exit_ms=2178 lock=released stop_ack=ok
+== driver 2 (3 parallel drivers, 16 busy-loop CPU hogs on 8 cores)
+trial=1 term_to_exit_ms=2209 lock=released stop_ack=ok
+trial=2 term_to_exit_ms=2271 lock=released stop_ack=ok
+trial=3 term_to_exit_ms=2216 lock=released stop_ack=ok
+trial=4 term_to_exit_ms=2268 lock=released stop_ack=ok
+trial=5 term_to_exit_ms=2245 lock=released stop_ack=ok
+trial=6 term_to_exit_ms=20383 lock=released stop_ack=ok
+trial=7 term_to_exit_ms=1967 lock=released stop_ack=ok
+trial=8 term_to_exit_ms=2350 lock=released stop_ack=ok
+trial=9 term_to_exit_ms=2282 lock=released stop_ack=ok
+trial=10 term_to_exit_ms=2077 lock=released stop_ack=ok
+== driver 3 (3 parallel drivers, 16 busy-loop CPU hogs on 8 cores)
+trial=1 term_to_exit_ms=2383 lock=released stop_ack=ok
+trial=2 term_to_exit_ms=2269 lock=released stop_ack=ok
+trial=3 term_to_exit_ms=2137 lock=released stop_ack=ok
+trial=4 term_to_exit_ms=1994 lock=released stop_ack=ok
+trial=5 term_to_exit_ms=2142 lock=released stop_ack=ok
+trial=6 term_to_exit_ms=20054 lock=released stop_ack=ok
+trial=7 term_to_exit_ms=2115 lock=released stop_ack=ok
+trial=8 term_to_exit_ms=1966 lock=released stop_ack=ok
+trial=9 term_to_exit_ms=2162 lock=released stop_ack=ok
+trial=10 term_to_exit_ms=2107 lock=released stop_ack=ok

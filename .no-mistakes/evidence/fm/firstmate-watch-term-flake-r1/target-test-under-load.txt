@@ -1,0 +1,10 @@
+# FM_TEST_ONLY=test_term_stops_a_watcher_blocked_inside_a_poll bash tests/fm-watch-triage.test.sh, 16 CPU hogs on 8 cores, 3 parallel copies x 3 rounds
+round=1 copy=3 rc=0 secs=8 ok - TERM stops a watcher blocked inside a poll and still runs its cleanup
+round=1 copy=2 rc=0 secs=8 ok - TERM stops a watcher blocked inside a poll and still runs its cleanup
+round=1 copy=1 rc=0 secs=8 ok - TERM stops a watcher blocked inside a poll and still runs its cleanup
+round=2 copy=3 rc=0 secs=8 ok - TERM stops a watcher blocked inside a poll and still runs its cleanup
+round=2 copy=1 rc=0 secs=8 ok - TERM stops a watcher blocked inside a poll and still runs its cleanup
+round=2 copy=2 rc=0 secs=8 ok - TERM stops a watcher blocked inside a poll and still runs its cleanup
+round=3 copy=3 rc=0 secs=9 ok - TERM stops a watcher blocked inside a poll and still runs its cleanup
+round=3 copy=1 rc=0 secs=9 ok - TERM stops a watcher blocked inside a poll and still runs its cleanup
+round=3 copy=2 rc=0 secs=9 ok - TERM stops a watcher blocked inside a poll and still runs its cleanup

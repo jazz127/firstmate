@@ -420,6 +420,22 @@ hash_pane() {
   if command -v md5 >/dev/null 2>&1; then md5 -q; else md5sum | cut -d' ' -f1; fi
 }
 
+# Bash may defer its native TERM until a command substitution's child exits.
+# Bound tmux pane captures well inside stop_home_watcher's 5s deadline, leaving
+# room for timeout's kill grace and the watcher's EXIT cleanup. A failed
+# capture is already treated as no evidence. Only pane captures are bounded:
+# agent-state, composer-state, alive, and window-meta tmux queries can still
+# defer TERM if the tmux server wedges.
+watcher_capture() {  # <backend> <target> <lines> [expected-label]
+  local backend=$1 target=$2 lines=$3
+  if [ "$backend" = tmux ]; then
+    _fm_wake_require_timeout || return 1
+    fm_run_timed 2 tmux capture-pane -p -t "$target" -S "-$lines"
+  else
+    fm_backend_capture "$@"
+  fi
+}
+
 # window_is_busy: 0 (busy) iff the task's harness is PROVABLY working, through
 # the semantic busy-state contract (bin/fm-busy-lib.sh). Only an exact busy
 # verdict returns 0: idle, unknown, and dead all return 1, so a converted
@@ -548,7 +564,7 @@ inbox_steer_check() {  # <window> <task>
       return 0
       ;;
   esac
-  tail40=$(fm_backend_capture "$backend" "$w" 40 "$(window_label "$w")" 2>/dev/null) || tail40=
+  tail40=$(watcher_capture "$backend" "$w" 40 "$(window_label "$w")" 2>/dev/null) || tail40=
   if window_is_busy "$w" "$tail40"; then
     return 0
   fi
@@ -740,7 +756,7 @@ signal_turnend_panes_churned() {  # <file> ...
     [ "$hash_bytes" = 32 ] || return 1
     prev=$(cat "$hash_file" 2>/dev/null) || return 1
     [[ $prev =~ ^[0-9a-f]{32}$ ]] || return 1
-    now=$(fm_backend_capture "$backend" "$w" 40 "$label" 2>/dev/null) || return 1
+    now=$(watcher_capture "$backend" "$w" 40 "$label" 2>/dev/null) || return 1
     [ -n "$now" ] || return 1
     [ "$(printf '%s' "$now" | hash_pane)" != "$prev" ] || return 1
     churned_keys+=("$key")
@@ -846,7 +862,7 @@ secondmate_in_active_turn() {  # <window> <idle>
   local w=$1 idle=$2 tail40
   [ -n "$w" ] || return 1
   [ "$idle" -lt "$BUSY_TURN_MAX_SECS" ] || return 1
-  tail40=$(fm_backend_capture "$(window_backend "$w")" "$w" 40 "$(window_label "$w")" 2>/dev/null) || return 1
+  tail40=$(watcher_capture "$(window_backend "$w")" "$w" 40 "$(window_label "$w")" 2>/dev/null) || return 1
   window_is_busy "$w" "$tail40"
 }
 
@@ -861,7 +877,7 @@ secondmate_busy_class() {  # <window>
     printf 'unknown'
     return 0
   fi
-  tail40=$(fm_backend_capture "$(window_backend "$w")" "$w" 40 "$(window_label "$w")" 2>/dev/null) || {
+  tail40=$(watcher_capture "$(window_backend "$w")" "$w" 40 "$(window_label "$w")" 2>/dev/null) || {
     printf 'unknown'
     return 0
   }
@@ -2983,7 +2999,7 @@ EOF
     if [ "$kind" = secondmate ] && ! status_is_paused_or_captain_held "$last"; then
       continue
     fi
-    tail40=$(fm_backend_capture "$(window_backend "$w")" "$w" 40 "$(window_label "$w")" 2>/dev/null) || continue
+    tail40=$(watcher_capture "$(window_backend "$w")" "$w" 40 "$(window_label "$w")" 2>/dev/null) || continue
     h=$(printf '%s' "$tail40" | hash_pane)
     hf="$STATE/.hash-$key"
     cf="$STATE/.count-$key"

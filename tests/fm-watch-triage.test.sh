@@ -4568,14 +4568,13 @@ test_wedge_escalation_resets_when_pane_becomes_active() {
 
 # --- a stop request is honored mid-poll --------------------------------------
 # Every stopper (the arm's signal path, the away-mode daemon, reap above) waits
-# for the watcher to exit after one TERM, so TERM must end it through its EXIT
-# cleanup at any point of a poll. A TERM trap body cannot promise that: bash
-# defers it until the blocked command returns, and bash 5.2 can drop it outright
-# when it is pending as a command substitution is parsed, which left CI watchers
-# polling after reap until the job timed out. The pane capture here blocks on a
-# FIFO whose writer never writes, so only a TERM honored mid-poll stops the
-# watcher inside the bound; the released lock and acknowledgeable stop record
-# prove its cleanup still ran.
+# for the watcher to exit after one TERM, so TERM must run its EXIT cleanup
+# during a poll. Bash can defer its native TERM until a command substitution's
+# child exits, and bash 5.2 can drop a pending TERM trap while parsing the next
+# substitution. The pane capture here blocks on a FIFO whose writer never
+# writes; the watcher's bounded capture lets the native TERM finish before the
+# stopper deadline. The released lock and acknowledgeable stop record prove
+# its cleanup still ran.
 test_term_stops_a_watcher_blocked_inside_a_poll() {
   local dir state fakebin out fifo window sig pid holder i rc
   dir=$(make_case term-blocked-poll); state="$dir/state"; fakebin="$dir/fakebin"

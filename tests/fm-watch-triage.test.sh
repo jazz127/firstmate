@@ -4650,7 +4650,14 @@ term_watcher_with_held_marker_lock() {  # <dir> [release-ticks]
   FM_STATE_OVERRIDE="$state" bash -c '
     . "$1" || exit 1
     lock=$2 held=$3 release=$4 contended=$5 release_ticks=$6
-    fm_lock_try_acquire "$lock" || exit 1
+    # The running watcher briefly takes this lock on each poll to check the
+    # marker. Wait for that ordinary check before holding it across TERM.
+    if ! fm_lock_acquire_wait_max "$lock" 10; then
+      printf "lock holder pid=%s; watcher pid=%s\n" "${FM_LOCK_HELD_PID:-}" \
+        "$(cat "$(dirname "$lock")/.watch.lock/pid" 2>/dev/null || true)" > "$held.failure"
+      ps -o pid=,ppid=,state=,command= -p "${FM_LOCK_HELD_PID:-}" >> "$held.failure" 2>/dev/null || true
+      exit 1
+    fi
     if [ -n "$release_ticks" ]; then
       record="$(fm_lock_link_owner "$lock")/pid"
       mkfifo "$record.fifo" "$record.retry" && mv -f "$record.fifo" "$record" || exit 1
@@ -4706,7 +4713,7 @@ term_watcher_with_held_marker_lock() {  # <dir> [release-ticks]
   done
   if [ ! -e "$dir/marker-lock-held" ]; then
     kill "$holder" 2>/dev/null || true; wait "$holder" 2>/dev/null || true
-    reap "$pid"; fail "the fixture could not take the downtime-marker lock"
+    reap "$pid"; fail "the fixture could not take the downtime-marker lock: $(cat "$dir/marker-lock-held.failure" 2>/dev/null || true)"
   fi
   kill "$pid" 2>/dev/null || true
   wait_for_exit "$pid" 100

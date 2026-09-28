@@ -1,0 +1,6 @@
+# 8 lanes x 5 iters, 8 CPU hogs (yes), FM_TEST_ONLY=test_term_stops_a_watcher_whose_cleanup_marker_lock_is_held
+base: 33 pass / 40
+fixed: 40 pass / 40
+fixed-bound: 18 pass / 18
+base failures:
+   7 not ok - the fixture could not take the downtime-marker lock

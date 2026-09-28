@@ -1,0 +1,4 @@
+watcher: recovery state could not be persisted; retaining stale lock evidence
+not ok - the fixture could not take the downtime-marker lock: lock holder pid=75900; watcher pid=75999
+75900 75895 SN   /bin/bash /Users/jarad/.no-mistakes/evidence/01M3KQYZT10YQK03BD8A4SSTG8/foreign-holder.sh /Users/jarad/.no-mistakes/worktrees/daaee59c4bbe/01M3KQYZT10YQK03BD8A4SSTG8/bin/fm-wake-lib.sh /var/folders/kw/cjk9qxvx0kq5874xngqgywth0000gn/T//fmadv.Er4dnP
+fixture rc=1 elapsed=37s

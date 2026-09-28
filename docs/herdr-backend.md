@@ -869,6 +869,7 @@ The helper:
 - Supplies an explicit `--session` Herdr option before any `--` delimiter in allowed task commands.
 - Refuses caller-supplied session flags and server/session lifecycle subcommands.
 - Performs destructive stop/delete only through its guarded lifecycle actions.
+- Runs a lab server under a temporary `gui/<uid>` launch agent confined to that lab session's own label through its `launchagent` commands, so isolated verification can observe launchd supervision, and boots that agent out at teardown before any other destructive step.
 
 Immediately before every destructive call it re-queries the named session and refuses empty, missing, literal `default`, or `default:true` identities.
 Its before/after tripwire requires the live default-session snapshot to remain byte-identical.

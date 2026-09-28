@@ -2,7 +2,7 @@
 # Check, and optionally repair, one remote account's second-mate readiness.
 #
 # Usage:
-#   bin/fm-on.sh <secondmate-id|ssh-alias> fm-remote-doctor.sh [--fix [--restart-herdr]]
+#   bin/fm-on.sh <secondmate-id|ssh-alias> fm-remote-doctor.sh [--fix]
 #
 # Run it through fm-on.sh so the fixed entrypoint invokes this readiness owner
 # over its plain SSH bootstrap. The command reports the same filesystem-composed
@@ -17,11 +17,16 @@
 # shell (`-l -c`) so the server inherits the account's own environment; the
 # gui/<uid> launchd domain it is bootstrapped into, not the shell, is what
 # gives the server and its panes the Aqua audit session and login-keychain
-# access. The guard supervises a session-leader server in the foreground under
-# launchd, leaves a compatible Aqua-born server alone, and takes the session over from a server born
-# outside that session (an SSH remote attach wins the socket at boot), because
-# such a server's panes cannot read the login keychain;
-# bin/fm-remote-herdr-owner-lib.sh owns that birth test. Doctor remains
+# access. The guard starts the server as the leader of its own session under a
+# supervisor that stays in the foreground under launchd, leaves an Aqua-born
+# server alone, and takes the session over from a server born outside that
+# session (an SSH remote attach wins the socket at boot), because such a
+# server's panes cannot read the login keychain;
+# bin/fm-remote-herdr-owner-lib.sh owns that birth test. The guard starts a
+# server only through a perl that compiles bin/fm-remote-herdr-supervisor.pl
+# on that login shell's PATH, so a host without one is a human gap that names
+# the interpreter rather than a fixable server gap: --fix could only reload
+# the agent into a retry loop. Doctor remains
 # invokable over the plain-SSH bootstrap path to inspect and repair that worker.
 # SSH cannot create an Aqua session, so a host with no GUI login is a human
 # gap rather than something --fix attempts to bypass.
@@ -52,9 +57,7 @@
 # wrapper for a required tool it can discover under nvm, asdf, or mise. It never
 # installs packages, creates a login session, writes an auto-login password,
 # changes FileVault, stores an account password, or replaces a non-Firstmate
-# wrapper; those remain reported gaps. It restarts a healthy fm-remote server
-# that Herdr saved machines refuse, closing its panes, only when an operator
-# adds --restart-herdr; the automatic readiness gate never passes it.
+# wrapper; those remain reported gaps.
 set -eu
 
 # Resolve this script's directory with builtins only: a host missing a required
@@ -70,6 +73,8 @@ FM_ROOT="${FM_ROOT_OVERRIDE:-$(CDPATH='' cd "$SCRIPT_DIR/.." && pwd -P)}"
 . "$SCRIPT_DIR/fm-tasks-axi-lib.sh"
 # shellcheck source=bin/fm-remote-herdr-owner-lib.sh
 . "$SCRIPT_DIR/fm-remote-herdr-owner-lib.sh"
+# shellcheck source=bin/fm-timeout-lib.sh
+. "$SCRIPT_DIR/fm-timeout-lib.sh"
 REQUIRED_TOOLS=(git jq herdr tasks-axi treehouse)
 HARNESS_TOOLS=(claude codex opencode pi pi-signed grok kimi)
 OPTIONAL_TOOLS=(tmux no-mistakes gh)
@@ -82,26 +87,14 @@ LAUNCH_AGENT_DIR="${HOME:-}/Library/LaunchAgents"
 LAUNCH_AGENT_PLIST="$LAUNCH_AGENT_DIR/$LAUNCH_AGENT_LABEL.plist"
 LAUNCH_AGENT_LOG_DIR="${HOME:-}/Library/Logs"
 LAUNCH_AGENT_LOG="$LAUNCH_AGENT_LOG_DIR/$LAUNCH_AGENT_LABEL.log"
-# Read and removed by bin/fm-remote-herdr-guard.sh at launch; only
-# --restart-herdr leaves it, so no automatic reload replaces a healthy server.
-HERDR_RESTART_MARKER="${HOME:-}/Library/Caches/$LAUNCH_AGENT_LABEL.restart"
-HERDR_RESTART_PENDING=0
 ENTRYPOINT_LINK="${HOME:-}/.local/bin/fm-remote-entrypoint.sh"
 
 usage() { sed -n '2,5p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 
 MODE=check
-RESTART_HERDR=0
 case "${1:-}" in
   '') ;;
-  --fix)
-    MODE=fix
-    shift
-    if [ "${1:-}" = --restart-herdr ]; then
-      RESTART_HERDR=1
-      shift
-    fi
-    ;;
+  --fix) MODE=fix; shift ;;
   --worker-tool-probe)
     [ "${FM_REMOTE_JOB_ACTIVE:-}" = 1 ] || { printf 'error: worker tool probe requires the remote job worker\n' >&2; exit 64; }
     MODE='worker-tool-probe'
@@ -180,24 +173,26 @@ herdr_server_status_json() {
   fm_backend_herdr_cli "$HERDR_SESSION_NAME" status --json 2>/dev/null
 }
 
-herdr_server_running() { # <status-json>
-  [ "$(printf '%s' "$1" | jq -r '.server.running == true' 2>/dev/null)" = true ]
+herdr_server_running() {
+  local running
+  running=$(herdr_server_status_json | jq -r '.server.running // false' 2>/dev/null) || return 1
+  [ "$running" = true ]
 }
 
 # Herdr 0.9.1 saved machines refuse a server that reports
 # detached_server_daemon=false; an older server without the capability is not
 # judged by it.
-herdr_server_needs_session_leader() { # <status-json>
-  [ "$(printf '%s' "$1" | jq -r '.server.capabilities.detached_server_daemon == false' 2>/dev/null)" = true ]
+herdr_server_needs_session_leader() {
+  [ "$(herdr_server_status_json | jq -r '.server.capabilities.detached_server_daemon == false' 2>/dev/null)" = true ]
 }
 
 # Birth of the process serving the session, as the guard classifies it:
 # prints "<birth> <pid>" (launchd, worker, ssh, or unknown), "unproven" when
 # no herdr process can be shown to hold the socket, or "nolsof" when lsof does
 # not resolve. bin/fm-remote-herdr-owner-lib.sh owns the markers.
-herdr_server_birth() { # <status-json>
+herdr_server_birth() {
   local socket owner rc birth
-  socket=$(printf '%s' "$1" | jq -r '.server.socket // empty' 2>/dev/null) || socket=
+  socket=$(herdr_server_status_json | jq -r '.server.socket // empty' 2>/dev/null) || socket=
   owner=$(fm_remote_herdr_socket_owner "$socket"); rc=$?
   if [ "$rc" -eq 2 ]; then
     printf 'nolsof\n'
@@ -213,11 +208,11 @@ herdr_server_birth() { # <status-json>
 
 # On darwin the session is ready only when its server was born in the Aqua
 # login session; elsewhere any running server is.
-herdr_server_aqua_owned() { # <status-json>
+herdr_server_aqua_owned() {
   local birth
-  herdr_server_running "$1" || return 1
+  herdr_server_running || return 1
   [ "$PLATFORM" = darwin ] || return 0
-  birth=$(herdr_server_birth "$1")
+  birth=$(herdr_server_birth)
   fm_remote_herdr_birth_is_aqua "${birth%% *}"
 }
 
@@ -233,10 +228,6 @@ launch_agent_is_aqua() {
 
 launch_agent_shell_quote() { # <value>
   printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"
-}
-
-launch_agent_xml_escape() { # <value>
-  printf '%s' "$1" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g'
 }
 
 # Directory Services UserShell is the account's real login shell on darwin
@@ -270,15 +261,62 @@ resolve_launch_agent_shell() {
   printf '%s' /bin/sh
 }
 
-# Login-shell command that execs the Firstmate-owned guard, which in turn execs
-# the resolved herdr so launchd keeps one foreground process in the Aqua
-# session, or exits 0 when an Aqua-born server already owns the session.
+# Login-shell command that execs the Firstmate-owned guard, which in turn starts
+# the resolved herdr through its supervisor so launchd keeps one foreground
+# process in the Aqua session, or exits 0 when an Aqua-born server already owns
+# the session.
 # KeepAlive={SuccessfulExit=false} is load-bearing for that exit: an
 # unconditional KeepAlive would respawn the job every throttle interval
 # forever while a foreign server holds the socket, exactly the loop this guard
 # replaces, and would never let the guard's "nothing to do" verdict rest.
+# bin/fm-remote-herdr-owner-lib.sh owns that contract's render, which the lab
+# in bin/fm-herdr-lab.sh loads under its own label.
 launch_agent_guard_path() {
   printf '%s/bin/fm-remote-herdr-guard.sh' "$FM_ROOT"
+}
+
+launch_agent_supervisor_path() {
+  printf '%s/bin/fm-remote-herdr-supervisor.pl' "$FM_ROOT"
+}
+
+# Asks the resolved login shell, the way the launch agent runs the guard
+# (`-l -c`), whether a perl on its PATH compiles the supervisor; prints why
+# not and returns the probe's status, 124 when the bound was hit because the
+# login shell stalled, or prints nothing and returns 0 when one does.
+supervisor_interpreter_gap() { # <resolved-login-shell>
+  local shell=$1 supervisor rc
+  supervisor=$(launch_agent_supervisor_path)
+  if fm_run_timed 5 "$shell" -l -c "perl -c $(launch_agent_shell_quote "$supervisor")" </dev/null >/dev/null 2>&1; then
+    return 0
+  else
+    rc=$?
+  fi
+  if [ "$rc" -eq 124 ]; then
+    printf '%s' "the launch agent starts a server only through a perl that compiles $supervisor, and '$shell -l -c' did not finish running perl -c on it within 5s"
+  else
+    printf '%s' "the launch agent starts a server only through a perl that compiles $supervisor, and '$shell -l -c' found none (exit $rc)"
+  fi
+  return "$rc"
+}
+
+# A server gap --fix would close through the launch agent is fixable only when
+# the guard can start a server there; otherwise it is the interpreter gap.
+record_herdr_server_gap() { # <resolved-login-shell> <gap> <fix-action>
+  local shell=$1 gap=$2 action=$3 why='' rc=0
+  if [ "$PLATFORM" = darwin ]; then
+    why=$(supervisor_interpreter_gap "$shell") || rc=$?
+  fi
+  if [ "$rc" -eq 124 ]; then
+    record herdr-server "human: $gap; $why" \
+      "inspect what makes '$shell -l' slow or block at startup on that account, such as a profile that waits on the network or for input, resolve it, then rerun this command; the perl there is unverified rather than missing, so do not install one for this"
+    return 0
+  fi
+  if [ -n "$why" ]; then
+    record herdr-server "human: $gap; $why" \
+      "install perl on that account (macOS ships /usr/bin/perl) or put a working one on the login-shell PATH of $shell, then rerun this command; --fix cannot start a server without it"
+    return 0
+  fi
+  record herdr-server "fixable: $gap" "$action"
 }
 
 launch_agent_exec_command() { # <resolved-herdr-path>
@@ -289,41 +327,7 @@ launch_agent_exec_command() { # <resolved-herdr-path>
 }
 
 render_launch_agent() { # <resolved-herdr-path> <resolved-login-shell>
-  local herdr_bin=$1 shell=$2 exec_cmd shell_xml
-  shell_xml=$(launch_agent_xml_escape "$shell")
-  exec_cmd=$(launch_agent_exec_command "$herdr_bin")
-  cat <<XML
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-	<key>Label</key>
-	<string>$LAUNCH_AGENT_LABEL</string>
-	<key>ProgramArguments</key>
-	<array>
-		<string>$shell_xml</string>
-		<string>-l</string>
-		<string>-c</string>
-		<string>$exec_cmd</string>
-	</array>
-	<key>LimitLoadToSessionType</key>
-	<string>Aqua</string>
-	<key>RunAtLoad</key>
-	<true/>
-	<key>KeepAlive</key>
-	<dict>
-		<key>SuccessfulExit</key>
-		<false/>
-	</dict>
-	<key>ThrottleInterval</key>
-	<integer>10</integer>
-	<key>StandardOutPath</key>
-	<string>$LAUNCH_AGENT_LOG</string>
-	<key>StandardErrorPath</key>
-	<string>$LAUNCH_AGENT_LOG</string>
-</dict>
-</plist>
-XML
+  fm_remote_herdr_render_launch_agent "$LAUNCH_AGENT_LABEL" "$2" "$(launch_agent_exec_command "$1")" "$LAUNCH_AGENT_LOG"
 }
 
 launch_agent_contract_matches() { # <resolved-login-shell>
@@ -671,45 +675,43 @@ check_launch_agent_loaded() { # <resolved-login-shell>
     "close the login-session gap first; a launch agent can only be bootstrapped into an existing GUI session"
 }
 
-record_herdr_server_running() { # <status-json> <evidence>
-  local status=$1
-  shift
-  if herdr_server_needs_session_leader "$status"; then
-    record herdr-server "notice: $1, but it is not a session-leader server, so Herdr saved machines refuse it" \
-      "while the host is quiet, rerun this command with --fix --restart-herdr; the server restarts and its panes close"
-    return 0
-  fi
-  record herdr-server "ok: $1"
-}
-
-check_herdr_server() {
+check_herdr_server() { # <resolved-login-shell>
+  local shell=$1
   if ! herdr_cli_available; then
     record herdr-server "human: herdr server status cannot be read without both herdr and jq on the runtime PATH" \
       "install the missing tool reported above, then rerun this command"
     return 0
   fi
-  local status birth
-  status=$(herdr_server_status_json) || status=
-  if herdr_server_running "$status"; then
+  if herdr_server_running; then
     if [ "$PLATFORM" != darwin ]; then
-      record_herdr_server_running "$status" "session $HERDR_SESSION_NAME is running"
+      if herdr_server_needs_session_leader; then
+        record herdr-server "notice: session $HERDR_SESSION_NAME is running, but it is not a session-leader server, so Herdr saved machines refuse it" \
+          "while the host is quiet, run 'herdr server stop --session $HERDR_SESSION_NAME' on that account, then rerun this command with --fix; the server restarts as a session leader and its panes close"
+      else
+        record herdr-server "ok: session $HERDR_SESSION_NAME is running"
+      fi
       return 0
     fi
-    birth=$(herdr_server_birth "$status")
+    local birth
+    birth=$(herdr_server_birth)
     case "$birth" in
       launchd\ *|worker\ *)
-        record_herdr_server_running "$status" "session $HERDR_SESSION_NAME is running in the Aqua login session (pid ${birth#* }, ${birth%% *})"
+        if fm_remote_herdr_process_leads_session "${birth#* }"; then
+          record herdr-server "ok: session $HERDR_SESSION_NAME is running in the Aqua login session (pid ${birth#* }, ${birth%% *}); it leads its own session, as Herdr saved SSH machines require"
+        else
+          record herdr-server "ok: session $HERDR_SESSION_NAME is running in the Aqua login session (pid ${birth#* }, ${birth%% *}), which is all a remote second mate needs; that server does not lead its own session, so Herdr saved SSH machines refuse it until it is restarted, and neither updating Firstmate nor --fix restarts a running Aqua-born server because the restart closes its panes; when that is acceptable, run 'herdr server stop --session $HERDR_SESSION_NAME && launchctl kickstart -k gui/$UID_NUM/$LAUNCH_AGENT_LABEL' on that account and the parent firstmate relaunches its mates"
+        fi
         ;;
       nolsof)
         record herdr-server "human: session $HERDR_SESSION_NAME is running but lsof does not resolve, so its server's birth cannot be proven" \
           "install lsof on that account so the launch agent and this check can tell an Aqua-born server from one started over SSH"
         ;;
       unproven)
-        record herdr-server "fixable: session $HERDR_SESSION_NAME is running but no herdr process can be shown to own its socket, so its birth cannot be proven" \
+        record_herdr_server_gap "$shell" "session $HERDR_SESSION_NAME is running but no herdr process can be shown to own its socket, so its birth cannot be proven" \
           "rerun this command with --fix so the launch agent takes the session over (its current panes close and the parent firstmate relaunches its mates)"
         ;;
       *)
-        record herdr-server "fixable: session $HERDR_SESSION_NAME is served by pid ${birth#* } born outside the Aqua login session (${birth%% *}), so its panes cannot reach the login keychain" \
+        record_herdr_server_gap "$shell" "session $HERDR_SESSION_NAME is served by pid ${birth#* } born outside the Aqua login session (${birth%% *}), so its panes cannot reach the login keychain" \
           "rerun this command with --fix so the launch agent takes the session over (its current panes close and the parent firstmate relaunches its mates)"
         ;;
     esac
@@ -720,7 +722,7 @@ check_herdr_server() {
       "close the login-session gap first; a server started over SSH would not belong to an Aqua session"
     return 0
   fi
-  record herdr-server "fixable: the herdr server for session $HERDR_SESSION_NAME is not running" \
+  record_herdr_server_gap "$shell" "the herdr server for session $HERDR_SESSION_NAME is not running" \
     "rerun this command with --fix to start it"
 }
 
@@ -753,7 +755,7 @@ run_checks() { # <resolved-login-shell>
   check_gui_session
   check_remote_job_worker
   check_launch_agent "$shell"
-  check_herdr_server
+  check_herdr_server "$shell"
   check_entrypoint_link
 }
 
@@ -812,40 +814,24 @@ reload_launch_agent() { # <check-to-report-under>
     fix_report "$report" failed "launchctl bootstrap gui/$UID_NUM refused: ${out:-no diagnostic}"
     return 1
   fi
-  if ! out=$(launchctl kickstart "gui/$UID_NUM/$LAUNCH_AGENT_LABEL" 2>&1); then
+  if ! out=$(launchctl kickstart -k "gui/$UID_NUM/$LAUNCH_AGENT_LABEL" 2>&1); then
     fix_report "$report" failed "launchctl kickstart gui/$UID_NUM/$LAUNCH_AGENT_LABEL refused: ${out:-no diagnostic}"
     return 1
   fi
   if ! wait_for_herdr_server; then
-    fix_report "$report" failed "the herdr server for session $HERDR_SESSION_NAME did not come up inside the Aqua launch agent within 10s"
+    fix_report "$report" failed "the herdr server for session $HERDR_SESSION_NAME did not come up inside the Aqua launch agent within 10s; the guard's own reason is in $LAUNCH_AGENT_LOG"
     return 1
   fi
   fix_report "$report" applied "bootstrapped and started $LAUNCH_AGENT_LABEL in gui/$UID_NUM"
 }
 
 wait_for_herdr_server() {
-  local i=0 status
-  while [ "$i" -lt 20 ]; do
-    status=$(herdr_server_status_json) || status=
-    if herdr_server_aqua_owned "$status"; then
-      [ "$HERDR_RESTART_PENDING" = 1 ] || return 0
-      [ ! -e "$HERDR_RESTART_MARKER" ] && ! herdr_server_needs_session_leader "$status" && return 0
-    fi
-    i=$((i + 1))
-    sleep 0.5
-  done
-  return 1
-}
-
-stop_herdr_server() {
   local i=0
-  fm_backend_herdr_cli "$HERDR_SESSION_NAME" server stop >/dev/null 2>&1 || true
   while [ "$i" -lt 20 ]; do
-    herdr_server_running "$(herdr_server_status_json)" || return 0
+    herdr_server_aqua_owned && return 0
     i=$((i + 1))
     sleep 0.5
   done
-  fix_report herdr-server failed "the herdr server for session $HERDR_SESSION_NAME did not stop within 10s"
   return 1
 }
 
@@ -878,25 +864,12 @@ link_entrypoint() {
 apply_fixes() { # <resolved-login-shell>
   local shell=$1 i name value launch_agent_written=0 launch_agent_reloaded=0 remote_job_fixed=0
   repair_required_wrappers
-  if [ "$RESTART_HERDR" = 1 ] && [ "$PLATFORM" = darwin ]; then
-    case "$(check_value herdr-server 2>/dev/null || true)" in
-      notice:*)
-        trap 'rm -f -- "$HERDR_RESTART_MARKER"' EXIT
-        trap 'exit 130' INT TERM HUP
-        mkdir -p "${HERDR_RESTART_MARKER%/*}" 2>/dev/null && : > "$HERDR_RESTART_MARKER" && HERDR_RESTART_PENDING=1
-        ;;
-    esac
-  fi
   i=0
   while [ "$i" -lt "${#CHECK_NAMES[@]}" ]; do
     name=${CHECK_NAMES[$i]}
     value=${CHECK_VALUES[$i]}
     i=$((i + 1))
-    case "$value" in
-      fixable:*) ;;
-      notice:*) [ "$RESTART_HERDR" = 1 ] && [ "$name" = herdr-server ] || continue ;;
-      *) continue ;;
-    esac
+    case "$value" in fixable:*) ;; *) continue ;; esac
     case "$name" in
       remote-job-worker|remote-job-worker-loaded|remote-job-probe)
         [ "$remote_job_fixed" -eq 0 ] || continue
@@ -928,18 +901,11 @@ apply_fixes() { # <resolved-login-shell>
           reload_launch_agent herdr-server || true
           continue
         fi
-        case "$value" in
-          notice:*)
-            [ "$PLATFORM" != darwin ] || continue
-            stop_herdr_server || continue
-            ;;
-        esac
         start_herdr_server || true
         ;;
       entrypoint-link) link_entrypoint || true ;;
     esac
   done
-  [ "$HERDR_RESTART_PENDING" != 1 ] || { rm -f -- "$HERDR_RESTART_MARKER"; HERDR_RESTART_PENDING=0; }
 }
 
 # --- report -----------------------------------------------------------------

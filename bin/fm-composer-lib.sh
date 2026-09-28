@@ -267,8 +267,12 @@ fm_composer_normalize_trim_var() {  # <varname>
 #     A reset (SGR 0) or normal-intensity (SGR 22) ends a dim run.
 #   - dark/muted TRUECOLOR foreground runs (SGR 38;2;r;g;b or the colon form
 #     38:2::r:g:b) whose perceived luminance (0.299R + 0.587G + 0.114B) is below
-#     FM_COMPOSER_GHOST_LUMA_MAX (default 128): how grok renders its placeholder
-#     and hint text. A reset (SGR 0), a default-foreground (SGR 39), any base
+#     FM_COMPOSER_GHOST_LUMA_MAX (default 128) and whose channel spread
+#     (max - min of R, G, B) is below 96, i.e. a muted near-grey: how grok
+#     renders its placeholder and hint text. A saturated dark colour is typed
+#     input, not ghost text: Claude Code 2.1.283 draws a recognised slash
+#     command in 38;2;87;105;247 (luminance ~115.8, spread 160), and stripping
+#     it made the pre-Enter proof clear a typed /exit. A reset (SGR 0), a default-foreground (SGR 39), any base
 #     foreground colour (30-37 / 90-97), or a lighter 38;2 foreground ends the
 #     dark-foreground run. This assumes a DARK terminal theme, the firstmate
 #     fleet reality, where real typed input is bright and only de-emphasised UI
@@ -277,11 +281,11 @@ fm_composer_normalize_trim_var() {  # <varname>
 #     no fleet harness uses it for ghost text, so it is kept (real text wins:
 #     under-stripping merely defers, which the max-defer alarm surfaces, while
 #     over-stripping would inject over real input).
-# Raising FM_COMPOSER_GHOST_LUMA_MAX is not free: muse draws its `⟩` prompt glyph
-# in truecolor 38;2;90;160;255, luminance ~149.9 (verified, muse 0.1.0-R708.1),
-# the tightest margin over the 128 default in the fleet. Above ~150 that glyph is
-# stripped as ghost text, which is why the bare-glyph fallback below must also
-# recognise every agent glyph from the UNSTRIPPED plain row.
+# muse draws its `⟩` prompt glyph in truecolor 38;2;90;160;255, luminance
+# ~149.9 (verified, muse 0.1.0-R708.1); its spread keeps it from being stripped
+# at any FM_COMPOSER_GHOST_LUMA_MAX. The bare-glyph fallback below still
+# recognises every agent glyph from the UNSTRIPPED plain row, so a glyph lost
+# to styling never decides the verdict alone.
 # The dim/faint and dark-foreground states are tracked together as "de-emphasis";
 # codes are processed left to right within a sequence, so "ESC[0;2m" reads as dim.
 # LC_ALL=C makes awk walk bytes, so multibyte glyphs (e.g. ❯) and de-emphasised
@@ -304,20 +308,25 @@ fm_composer_strip_ghost() {
       if (code == "2") return p + 4
       return p + 1
     }
+    # muted_dark: 1 when r,g,b is below lumamax AND a muted near-grey (channel
+    # spread under 96); a saturated colour is emphasis, never ghost text.
+    function muted_dark(r, g, b, lumamax,   hi, lo) {
+      hi = r; if (g > hi) hi = g; if (b > hi) hi = b
+      lo = r; if (g < lo) lo = g; if (b < lo) lo = b
+      return ((299*r + 587*g + 114*b) / 1000 < lumamax && hi - lo < 96) ? 1 : 0
+    }
     # fg38_is_dark: 1 when the SGR 38 foreground starting at param p is a
-    # TRUECOLOR (38;2 / 38:2) whose luminance is below lumamax; 0 otherwise
-    # (a 38;5 palette colour, a bright truecolor, or a malformed run).
-    function fg38_is_dark(a, p, k, lumamax,   spec, nf, f, r, g, b) {
+    # TRUECOLOR (38;2 / 38:2) muted dark colour; 0 otherwise (a 38;5 palette
+    # colour, a bright or saturated truecolor, or a malformed run).
+    function fg38_is_dark(a, p, k, lumamax,   spec, nf, f) {
       spec = a[p]
       if (index(spec, ":") > 0) {           # colon form: whole colour in a[p]
         nf = split(spec, f, ":")
         if (f[2] != "2" || nf < 5) return 0
-        r = f[nf - 2] + 0; g = f[nf - 1] + 0; b = f[nf] + 0
-        return ((299*r + 587*g + 114*b) / 1000 < lumamax) ? 1 : 0
+        return muted_dark(f[nf - 2] + 0, f[nf - 1] + 0, f[nf] + 0, lumamax)
       }
       if (p + 1 > k || a[p + 1] != "2" || p + 4 > k) return 0
-      r = a[p + 2] + 0; g = a[p + 3] + 0; b = a[p + 4] + 0
-      return ((299*r + 587*g + 114*b) / 1000 < lumamax) ? 1 : 0
+      return muted_dark(a[p + 2] + 0, a[p + 3] + 0, a[p + 4] + 0, lumamax)
     }
     {
       line = $0; out = ""; dim = 0; darkfg = 0; n = length(line); i = 1
@@ -582,11 +591,12 @@ fm_composer_strip_braille() {
   '
 }
 
-# The bounded row window adapters should capture for a composer read. One
-# shared policy (previously three per-backend variables that had drifted to
-# 20/20/200): the composer is bottom-anchored, so a small tail window is
-# sufficient and keeps stale scrollback (startup banners, old transcript
-# boxes) from ever competing with the live composer.
+# The bounded row window for adapters that use tail-capture composer reads and
+# for the shared inbox confirmation read. One shared policy (previously three
+# per-backend variables that had drifted to 20/20/200) keeps stale scrollback
+# (startup banners, old transcript boxes) out of those candidate sets. tmux
+# and Herdr adapter composer reads use their visible viewports instead; Herdr
+# also uses this value as the minimum Ctrl+U clear budget after a refused proof.
 FM_COMPOSER_CAPTURE_LINES=${FM_COMPOSER_CAPTURE_LINES:-20}
 
 # Pi allows a multi-line composer between its horizontal separators. Bound the

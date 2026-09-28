@@ -359,6 +359,25 @@ test_matrix_muse_truecolor_glyph_survives_signal_loss() {
   pass "matrix: muse's ⟩ reads empty everywhere and survives losing the styled-glyph signal"
 }
 
+test_claude_saturated_slash_command_is_typed_content() {
+  # Real Claude Code 2.1.283 through Herdr 0.9.1, captured from a live pane
+  # with `/exit` typed: the command popup renders above the composer and the
+  # recognised command is drawn in saturated truecolor blue (38;2;87;105;247,
+  # luminance ~115.8). That is typed input, not muted ghost text; stripping it
+  # made the pre-Enter proof read an empty composer and clear the command.
+  local rule screen out
+  rule="${ESC}[0m${ESC}[38;2;153;153;153m────────────────────${ESC}[0m"
+  screen="  ${ESC}[0m${ESC}[38;2;102;102;102m/exit          Exit the CLI${ESC}[0m"$'\n'"$rule"$'\n'
+  screen="${screen}❯${NBSP}${ESC}[0m${ESC}[38;2;87;105;247m/exit${ESC}[0m"$'\n'"$rule"$'\n'
+  screen="${screen}  ${ESC}[0m${ESC}[38;2;171;43;63m⏵⏵ bypass permissions on${ESC}[0m${ESC}[38;2;102;102;102m (shift+tab to cycle)${ESC}[0m"
+  out=$(fm_composer_extract_selected_content "$CAPS_STYLED_NOID" "$screen")
+  [ "$out" = /exit ] || fail "a saturated slash-command highlight must stay typed content, got '$out'"
+  assert_screen "claude typed /exit on herdr" pending "$CAPS_STYLED_NOID" "$screen"
+  out=$(printf '%s\n' "  ${ESC}[38;2;86;82;110mType a message...${ESC}[0m" | fm_composer_strip_ghost)
+  [ -z "${out//[[:space:]]/}" ] || fail "muted dark truecolor must still strip as ghost text, got '$out'"
+  pass "fm_composer_strip_ghost: saturated dark truecolor is typed input, muted dark truecolor stays ghost"
+}
+
 test_matrix_cursor_reverse_video_placeholder_remnant() {
   # Real idle cursor-agent (2026.08.11-e8db854), captured byte-for-byte from a
   # live pane: the `→ ` glyph and the placeholder tail are dim (SGR 2), but the
@@ -1296,6 +1315,7 @@ test_composer_footer_zone_is_shape_independent
 test_composer_footer_zone_refuses_rather_than_allows
 test_matrix_codex_dim_hint_row
 test_matrix_muse_truecolor_glyph_survives_signal_loss
+test_claude_saturated_slash_command_is_typed_content
 test_matrix_cursor_reverse_video_placeholder_remnant
 test_matrix_herdr_halfblock_rule_bounds_bare_wrap
 test_matrix_omp_status_row_bounds_bare_composer

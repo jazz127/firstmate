@@ -1179,7 +1179,7 @@ export default function (pi: ExtensionAPI) {
         }),
         wake: Type.Optional(Type.String({ description: "The wake reason line this outcome answers" })),
         silent: Type.Optional(Type.Boolean({
-          description: "Optional bookkeeping marker for a routine outcome that merely re-states already durable state, such as an unchanged heartbeat or pause echo; routine outcomes are hidden regardless, and omit or use false for any state change, action, failure, blocker, or result worth a note",
+          description: "True only for an eligible routine no-change outcome, such as an unchanged heartbeat or a still-busy worker with nothing new and no action taken; routine outcomes are hidden regardless, captain outcomes are never silent, and omit or use false for any state change, action, failure, blocker, or result worth a note",
         })),
       }),
       execute: async (_toolCallId, params) => {
@@ -1188,9 +1188,16 @@ export default function (pi: ExtensionAPI) {
         const summary = String((params as { summary: unknown }).summary || "").trim();
         const wake = String((params as { wake?: unknown }).wake ?? "").trim();
         const silent = (params as { silent?: unknown }).silent === true;
-        if (!task || !summary || (verdictRaw !== "routine" && verdictRaw !== "captain") || (silent && verdictRaw !== "routine")) {
+        if (!task || !summary || (verdictRaw !== "routine" && verdictRaw !== "captain")) {
           return {
             content: [{ type: "text", text: "invalid report: task, verdict (routine|captain), and summary are required" }],
+            details: undefined,
+            isError: true,
+          };
+        }
+        if (silent && verdictRaw !== "routine") {
+          return {
+            content: [{ type: "text", text: "invalid report: --silent true requires the routine verdict" }],
             details: undefined,
             isError: true,
           };

@@ -50,7 +50,7 @@ test_branch_prompt_is_byte_stable_and_above_cache_floor() {
     *) fail "branch prompt lost the inlined recovery playbook" ;;
   esac
   case "$out_a" in
-    *"Report verdict captain for the finished result of work the captain requested, even when that result is healthy."*"A start or still-working update on requested work that brings no new artifact, finding, or decision is verdict routine."*"Keep an unsolicited routine outcome as verdict routine"*"Keep an unchanged fleet review silent"*) ;;
+    *"Report verdict captain for the finished result of work the captain requested, even when that result is healthy."*"A start or still-working update on requested work that brings no new artifact, finding, or decision is verdict routine."*"Set silent true for a task-level routine outcome only when it says the worker is still busy, nothing new has happened since the last outcome, and no action was taken."*"Any routine outcome reporting an action, state change, or new result is never silent; captain outcomes are never silent."*"Keep an unsolicited routine outcome as verdict routine"*"Keep an unchanged fleet review silent"*) ;;
     *) fail "branch prompt lost the requested-result, progress-routine, or routine-silence rules" ;;
   esac
   case "$out_a" in
@@ -64,6 +64,10 @@ test_branch_prompt_is_byte_stable_and_above_cache_floor() {
   case "$out_a" in
     *"A worker whose pull request has landed is finished, not stuck"*"\`check: merge landed:\` wake names exactly that moment"*"\`bin/fm-teardown.sh <task>\` with no flags"*"never forced, worked around, or repaired by hand"*) ;;
     *) fail "branch prompt lost the landed-work cleanup rule" ;;
+  esac
+  case "$out_a" in
+    *"A second mate's status log is a relay channel for its child work"*"retiring a second mate is MAIN's alone"*"Report a second mate's signal wake from the status lines that wake newly presents"*"A second mate's stale wake is a liveness event: report it even when it presents no new status lines."*) ;;
+    *) fail "branch prompt lost the second-mate relay, signal-span, or stale-liveness rule" ;;
   esac
   pass "branch prompt is byte-stable across homes, cwd, timezone, and time, above the cache floor"
 }
@@ -145,22 +149,27 @@ test_outcome_startup_replay_preserves_silence() {
     --task task-a --verdict captain --summary 'blocked' --silent true 2>&1)
   status=$?
   [ "$status" -ne 0 ] || fail "append accepted a silent captain outcome"
-  assert_contains "$out" "silent outcomes must be routine outcomes" "silent captain refusal lost its diagnostic"
-  if ! out=$(FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" append \
-    --task task-a --verdict routine --summary 'healthy' --silent true 2>&1); then
-    fail "append rejected a silent task-scoped outcome: $out"
-  fi
+  assert_contains "$out" "silent outcomes must have the routine verdict" "silent captain refusal lost its diagnostic"
+  [ ! -e "$store" ] || fail "refused silent captain outcome changed the durable store"
 
+  printf 'working: still building\n' > "$home/state/task-a.status"
+  FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" append \
+    --task task-a --verdict routine --summary 'worker still busy, nothing new, no action taken' --silent true >/dev/null \
+    || fail "silent task-scoped routine append failed"
+  [ -s "$home/state/.task-a.branch-outcome-index" ] \
+    || fail "silent task outcome was omitted from the status-outcome backstop index"
+  assert_contains "$(cat "$home/state/.task-a.branch-outcome-index")" \
+    "$(printf 'fm-branch-outcome-index-v1\t1\t')" "status-outcome backstop index lost the silent task outcome"
   FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" append \
     --task fleet --verdict routine --summary 'fleet reviewed, nothing changed' --silent true >/dev/null \
-    || fail "silent outcome append failed"
+    || fail "silent heartbeat append failed"
   FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" append \
     --task task-1 --verdict routine --summary 'worker recovered automatically' >/dev/null \
     || fail "visible outcome append failed"
 
   replay=$(FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" startup-replay) || fail "mixed startup replay failed"
-  assert_not_contains "$replay" "healthy" "startup replay printed a silent task outcome"
-  assert_not_contains "$replay" "fleet reviewed, nothing changed" "startup replay printed a silent outcome"
+  assert_not_contains "$replay" "fleet reviewed, nothing changed" "startup replay printed a silent heartbeat outcome"
+  assert_not_contains "$replay" "worker still busy, nothing new, no action taken" "startup replay printed a silent task outcome"
   assert_contains "$replay" "worker recovered automatically" "startup replay lost a visible routine outcome"
   [ -z "$(FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" unread)" ] \
     || fail "startup replay did not mark the silent and visible rows read"
@@ -177,42 +186,7 @@ test_outcome_startup_replay_preserves_silence() {
   status=$?
   [ "$status" -ne 0 ] || fail "unread accepted a stored silent captain outcome"
   assert_contains "$out" "malformed or non-sequential" "stored silent captain refusal lost its diagnostic"
-  pass "only routine outcomes can be silent"
-}
-
-test_silent_bookkeeping_outcomes_stay_out_of_replay_and_coverage() {
-  local home replay store out shown index_seq
-  home="$TMP_ROOT/store-bookkeeping-home"
-  mkdir -p "$home/state"
-  store="$home/state/branch-outcomes.jsonl"
-  printf 'blocked: waiting\n' > "$home/state/task-p.status"
-
-  append() { FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" append --task "$1" --verdict "$2" --summary "$3" "${@:4}" >/dev/null || fail "append failed: $3"; }
-  append task-p routine 'echo of the pause I just recorded' --silent true
-  append task-p routine 'scheduled recheck of the registered pause' --silent true
-  append task-p routine 'pause still holds on the same terms' --silent true
-  [ ! -e "$home/state/.task-p.branch-outcome-index" ] || fail "silent bookkeeping outcomes wrote a status-coverage index before any visible outcome"
-  append task-p routine 'pause cleared: worker relaunched on a new seat'
-  append task-p captain 'PR is ready for review https://example.com/pr/1'
-  append task-q routine 'merged and cleaned up'
-
-  append task-p routine 'captain-facing status was already recorded' --silent true
-  rm -f -- "$home/state/.task-p.branch-outcome-index" "$home/state/.branch-outcome-index-ready"
-  FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" processed-init >/dev/null || fail "coverage index rebuild failed"
-  index_seq=$(cut -f2 "$home/state/.task-p.branch-outcome-index")
-  [ "$index_seq" = 5 ] || fail "silent latest row replaced the latest visible coverage index: $index_seq"
-
-  replay=$(FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" startup-replay) || fail "bookkeeping startup replay failed"
-  assert_not_contains "$replay" "echo of the pause I just recorded" "silent pause echo was rendered"
-  assert_not_contains "$replay" "scheduled recheck" "silent scheduled recheck was rendered"
-  assert_not_contains "$replay" "still holds on the same terms" "silent pause re-confirmation was rendered"
-  assert_contains "$replay" "pause cleared: worker relaunched" "a genuine pause state change was suppressed"
-
-  out=$(jq -s '[.[] | select(.silent == true)] | length' "$store")
-  [ "$out" = 4 ] || fail "expected 4 silent bookkeeping rows in the 7-row corpus, got $out"
-  shown=$(jq -s '[.[] | select(.silent != true)] | length' "$store")
-  [ "$shown" = 3 ] || fail "expected 3 rendered rows in the 7-row corpus, got $shown"
-  pass "silent bookkeeping outcomes are not replayed or indexed while state changes, captain outcomes render"
+  pass "routine task and fleet no-change outcomes stay stored and silent captain outcomes are refused"
 }
 
 test_outcome_startup_replay_stops_at_captain_barrier() {
@@ -345,6 +319,31 @@ test_outcome_sequence_conflicts_fail_closed() {
   assert_contains "$out" "malformed or non-sequential" "sequence-conflict list refusal lost its diagnostic"
   [ "$(cat "$store")" = "$snapshot" ] || fail "sequence-conflict refusal changed the durable store"
   pass "middle sequence conflicts fail closed for every store read and append"
+}
+
+test_outcome_lookup_returns_exact_sequences_and_refuses_missing_rows() {
+  local home out status selected
+  home="$TMP_ROOT/store-exact-lookup-home"
+  mkdir -p "$home/state"
+  FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" append \
+    --task task-1 --verdict routine --summary first >/dev/null || fail "lookup fixture append 1 failed"
+  FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" append \
+    --task task-2 --verdict routine --summary second --silent true >/dev/null || fail "lookup fixture append 2 failed"
+  FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" append \
+    --task task-3 --verdict captain --summary third >/dev/null || fail "lookup fixture append 3 failed"
+
+  out=$(FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" lookup --seqs 3,1) \
+    || fail "lookup refused existing sequences 3 and 1"
+  selected=$(printf '%s\n' "$out" | jq -sr '[.[].seq] | join(",")')
+  [ "$selected" = "3,1" ] || fail "lookup changed requested sequence order: $selected"
+  assert_contains "$out" '"task":"task-1"' "lookup omitted the first requested row"
+  assert_contains "$out" '"task":"task-3"' "lookup omitted the second requested row"
+
+  out=$(FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" lookup --seqs 1,4 2>&1)
+  status=$?
+  [ "$status" -ne 0 ] || fail "lookup accepted a missing sequence"
+  assert_contains "$out" "requested outcome sequences are missing" "missing-row lookup lost its diagnostic"
+  pass "outcome lookup returns exact sequence rows and distinguishes missing receipts"
 }
 
 test_outcome_non_jsonl_layout_fails_closed() {
@@ -1345,11 +1344,11 @@ WRAPPER
 test_branch_prompt_is_byte_stable_and_above_cache_floor
 test_outcome_store_is_append_only_with_cursor_reads
 test_outcome_startup_replay_preserves_silence
-test_silent_bookkeeping_outcomes_stay_out_of_replay_and_coverage
 test_outcome_startup_replay_stops_at_captain_barrier
 test_outcome_cursor_corruption_fails_closed
 test_cursor_advancement_refuses_ahead_processed_marker
 test_outcome_sequence_conflicts_fail_closed
+test_outcome_lookup_returns_exact_sequences_and_refuses_missing_rows
 test_outcome_non_jsonl_layout_fails_closed
 test_outcome_processed_marker_is_sequence_bound
 test_outcome_present_reads_without_advancing

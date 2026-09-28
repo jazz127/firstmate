@@ -1436,14 +1436,10 @@ SH
   [ "$duration" -lt 1500 ] \
     || fail "queued root duration ${duration}ms counted time spent waiting for the host lock"
 
-  sleep 30 &
-  dead_pid=$!
-  kill "$dead_pid" 2>/dev/null || true
-  wait "$dead_pid" 2>/dev/null || true
-  sleep 30 &
-  reaper_pid=$!
-  kill "$reaper_pid" 2>/dev/null || true
-  wait "$reaper_pid" 2>/dev/null || true
+  # Let these exit on their own: signalling a just-forked child can run this
+  # suite's inherited TERM trap and delete every fixture before exec.
+  dead_pid=$(sh -c 'echo "$$"')
+  reaper_pid=$(sh -c 'echo "$$"')
   fm_lint_test_plant_lock "$lock" "$dead_pid"
   pids=()
   for i in d e f; do

@@ -909,11 +909,7 @@ fm_remote_job_ps_bin() {
 fm_remote_job_process_start() {
   local pid=$1 ps_bin value
   ps_bin=$(fm_remote_job_ps_bin) || return 1
-  if [ "$(fm_remote_job_platform)" = linux ]; then
-    value=$("$ps_bin" -p "$pid" -o lstart= 2>/dev/null) || return 1
-  else
-    value=$(LC_ALL=C "$ps_bin" -p "$pid" -o lstart= 2>/dev/null) || return 1
-  fi
+  value=$(LC_ALL=C "$ps_bin" -p "$pid" -o lstart= 2>/dev/null) || return 1
   [ -n "$value" ] || return 1
   case "$value" in *$'\n'*|*$'\r'*) return 1 ;; esac
   printf '%s\n' "$value"

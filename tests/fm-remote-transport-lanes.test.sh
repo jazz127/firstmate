@@ -138,7 +138,6 @@ SH
 chmod +x "$LOCALE_PS"
 (
   fm_remote_job_ps_bin() { printf '%s\n' "$LOCALE_PS"; }
-  fm_remote_job_platform() { printf 'darwin\n'; }
   unset LC_ALL
   export LANG=en_AU.UTF-8
   locale_lock=$(fm_remote_job_worker_lock_path)

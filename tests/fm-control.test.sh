@@ -362,7 +362,7 @@ test_exit_types_each_harness_verified_command() {
 }
 
 test_pi_exit_herdr_cost_footer_boundary() {
-  # Pi's cost-first status row below an idle two-rule composer (issue
+  # Pi's cost-first status row below a blank two-rule composer (issue
   # kunchenguid/firstmate#5666, furniture rule from #5683) permits exactly one
   # /quit; every unproven variant types nothing.
   local dir case_id rule screen mode want
@@ -383,14 +383,15 @@ test_pi_exit_herdr_cost_footer_boundary() {
       malformed) screen+=$'$0.000 (sub)\n' ;;
       shell-after) screen+=$'$0.000 (sub) 5.4%/272k (auto)\n$ ls\n' ;;
       dollar-shell) screen+=$'$ 0.000 (sub) 5.4%/272k (auto)\n' ;;
-      working|blocked|missing-identity|contradictory-identity)
+      working) screen+=$'$0.000 (sub) 5.4%/272k (auto)\n'; mode=working; want=allow ;;
+      blocked|missing-identity|contradictory-identity)
         screen+=$'$0.000 (sub) 5.4%/272k (auto)\n'; mode=$case_id ;;
     esac
     printf '%s' "$screen" > "$dir/fake/herdr-screen"
     printf '%s' "$mode" > "$dir/fake/herdr-mode"
     expect_pi_exit "$dir" "$want" "Pi exit with a '$case_id' cost footer"
   done
-  pass "fm-control Pi exit: a cost-first footer permits one /quit only under a proven idle Pi composer"
+  pass "fm-control Pi exit: a cost-first footer permits one /quit under a proven native Pi composer"
 }
 
 test_pi_exit_uses_herdr_compact_proof_boundary() {
@@ -1000,6 +1001,20 @@ test_idle_agent_is_not_interrupted() {
   pass "fm-control exit: an idle agent goes straight to its exit command"
 }
 
+test_footer_busy_pi_on_tmux_refuses_exit() {
+  local dir out rc
+  dir=$(new_case footer-busy-pi-composer)
+  add_task "$dir" t1 pi
+  alive_as "$dir" pi
+  printf '────────────────────────\n\n────────────────────────\nworking Pi footer\n' > "$dir/fake/pane"
+  out=$(FM_BUSY_REGEX='working Pi footer' run_control "$dir" t1 exit); rc=$?
+  expect_code 1 "$rc" "a footer-busy Pi on tmux cannot prove its composer empty"
+  assert_contains "$out" "composer state is 'unknown'" "the refusal should name the unproven composer"
+  [ -z "$(literals "$dir")" ] \
+    || fail "a footer-busy Pi on tmux may be blocked on a prompt and must receive no /quit"
+  pass "fm-control exit: a footer-busy Pi on tmux refuses instead of typing /quit"
+}
+
 test_interrupt_without_acknowledgement_preserves_busy_state() {
   local dir gen before after out rc
   dir=$(new_case unconfirmed)
@@ -1249,6 +1264,7 @@ test_interrupt_refuses_when_no_agent_runs
 test_ambiguous_endpoint_refuses
 test_busy_agent_is_interrupted_before_the_exit_command
 test_idle_agent_is_not_interrupted
+test_footer_busy_pi_on_tmux_refuses_exit
 test_interrupt_without_acknowledgement_preserves_busy_state
 test_muse_interrupt_confirms_adapter_acknowledgement
 test_interrupt_revalidates_agent_after_acknowledgement_wait

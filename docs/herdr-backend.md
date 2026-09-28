@@ -670,13 +670,14 @@ It hands the visible pane's ANSI viewport plus Herdr's capability facts to the f
 - Bordered boxes.
 - Bare agent-glyph rows, including muse's `⟩`, which the adapter's retired local pattern silently omitted.
 - opencode's left bar.
-- The Pi separator region this adapter pioneered, admitted only when native `agent get` identity is exactly Pi and state is idle or done.
+- The Pi separator region this adapter pioneered, admitted only when native `agent get` identity is exactly Pi and state is idle, done, or working.
 
 ### Pi composer states
 
 A blocked Pi is parked on an interactive prompt, so its blank composer region is a menu's and not a free composer's.
 That state defers instead of proving emptiness.
-A working Pi, pending middle row, missing identity, incomplete separator pair, a pair enclosing no row, or an over-tall candidate remains unknown or pending.
+A working Pi with a structurally blank separator composer is empty, including its spinner-labelled top rule, because native status distinguishes it from a blocked Pi.
+A pending middle row, missing identity, incomplete separator pair, a pair enclosing no row, or an over-tall candidate remains unknown or pending.
 A `>` on the pair's first row is input by default, because stock Pi 0.87.1 draws no editor prompt there, and a user's lone `>` must never have `/quit` typed onto it.
 Setting `FM_BACKEND_HERDR_PI_PROMPT=1` opts in to Pi editors that do draw one: a lone leading `>` on the first row is then the editor's own prompt, while text beside it, a `>` on a later row, and any other glyph remain input.
 Pi's cost-first stats row (`$0.000 (sub) 0.0%/272k (auto)`) is footer furniture only as Pi's complete stats tuple, first in the row run directly below the pair, and only when the pair itself proves the verdict; a truncated tuple, a repeat, or any other `$` row still refuses.

@@ -197,7 +197,8 @@ refresh_remote_code_root() {  # <host> <root>
   done
   REFRESHED_REMOTE_ROOTS+=("$key")
   # Bootstrap with the library already on the host: a new command or updater
-  # flag cannot refresh an older code root that does not yet implement it.
+  # flag cannot refresh an older code root that does not yet implement it, and a
+  # library predating runtime branches only knows the origin base mode.
   case "$host" in
     ''|-*|*[!A-Za-z0-9._-]*) printf 'remote code root: skipped: unsafe SSH alias\n' >&2; return 0 ;;
   esac
@@ -230,7 +231,9 @@ FM_ROOT=$(printf '%s' "$1" | base64 --decode 2>/dev/null) \
 FM_HOME=$FM_ROOT
 # shellcheck source=bin/fm-ff-lib.sh
 . "$FM_ROOT/bin/fm-ff-lib.sh"
-ff_target "$FM_ROOT" firstmate tracking no no
+mode=origin
+! declare -F firstmate_runtime_branch >/dev/null || mode=tracking
+ff_target "$FM_ROOT" firstmate "$mode" no no
 SH
   ); then
     case "$out" in

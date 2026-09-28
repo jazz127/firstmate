@@ -353,9 +353,38 @@ SH
 
 test_remote_code_root_refresh() {
   local mode w out target before status_before id refresh_count first_call unrelated_before
-  for mode in behind dirty diverged; do
+  for mode in behind legacy dirty diverged; do
     w=$(new_world "remote-refresh-$mode")
     new_remote_refresh_world "$w"
+    if [ "$mode" = legacy ]; then
+      # A root installed before runtime branches: plain origin clone whose
+      # library treats any base mode except origin as a local commit-ish.
+      cat > "$w/seed/bin/fm-ff-lib.sh" <<'SH'
+ff_target() {
+  local dir=$1 label=$2 base_mode=$3 base
+  if [ "$base_mode" = origin ]; then
+    git -C "$dir" fetch -q origin || { echo "$label: skipped: fetch failed"; return 0; }
+    base=origin/$(git -C "$dir" symbolic-ref --short HEAD)
+  else
+    base=$base_mode
+  fi
+  git -C "$dir" rev-parse --verify --quiet "$base^{commit}" >/dev/null \
+    || { echo "$label: skipped: $base does not exist"; return 0; }
+  git -C "$dir" merge -q --ff-only "$base" >/dev/null 2>&1 \
+    || { echo "$label: skipped: diverged"; return 0; }
+  echo "$label: updated to $(git -C "$dir" rev-parse --short HEAD)"
+}
+SH
+      git -C "$w/seed" commit -qam 'legacy ff library'
+      git -C "$w/seed" push -q origin main
+      git -C "$w/remote-root" remote rename fork origin
+      git -C "$w/remote-root" config --unset firstmate.runtimeBranch
+      git -C "$w/remote-root" checkout -q main
+      git -C "$w/remote-root" pull -q --ff-only
+      git -C "$w/seed" checkout -q HEAD~1 -- bin/fm-ff-lib.sh
+      git -C "$w/seed" commit -qm 'current ff library'
+      git -C "$w/seed" push -q origin main
+    fi
     unrelated_before=$(git -C "$w/unrelated" rev-parse HEAD)
     case "$mode" in
       dirty) printf 'uncommitted root edit\n' >> "$w/remote-root/README.md" ;;
@@ -373,7 +402,7 @@ test_remote_code_root_refresh() {
     for id in sm1 sm2; do
       git -C "$w/$id" cat-file -e "$target^{commit}" 2>/dev/null \
         && fail "home unexpectedly already holds the pinned commit"
-      if [ "$mode" != behind ]; then
+      if [ "$mode" != behind ] && [ "$mode" != legacy ]; then
         # Preserve the existing forge-backed-origin fallback after a root skip.
         git -C "$w/$id" remote set-url origin "$w/origin.git"
       fi
@@ -385,7 +414,10 @@ test_remote_code_root_refresh() {
     assert_equals 'code-root-refresh' "$first_call" "$mode: refresh precedes home sync"
     assert_equals 3 "$(wc -l < "$w/fake/remote-calls" | tr -d ' ')" "$mode: both homes still attempt sync"
     assert_equals "$unrelated_before" "$(git -C "$w/unrelated" rev-parse HEAD)" 'root refresh leaves its own registered home untouched'
-    if [ "$mode" = behind ]; then
+    if [ "$mode" = legacy ]; then
+      assert_equals "$(git -C "$w/remote-root" rev-parse HEAD)" "$target" 'legacy root follows origin before importing to homes'
+      assert_contains "$out" "remote code root fixture-host ($w/remote-root): updated " 'legacy root advance reported by name'
+    elif [ "$mode" = behind ]; then
       assert_equals "$(git -C "$w/remote-root" rev-parse HEAD)" "$target" 'root follows fork/release before importing to homes'
       assert_contains "$out" "remote code root fixture-host ($w/remote-root): updated " 'root advance reported by name'
       assert_equals "$(git -C "$w/remote-root" symbolic-ref --short HEAD)" house 'root remains on runtime branch'

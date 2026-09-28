@@ -620,13 +620,14 @@ It hands a bounded ANSI tail plus Herdr's capability facts to the fleet-wide cla
 - Bordered boxes.
 - Bare agent-glyph rows, including muse's `⟩`, which the adapter's retired local pattern silently omitted.
 - opencode's left bar.
-- The Pi separator region this adapter pioneered, admitted only when native `agent get` identity is exactly Pi and state is idle or done.
+- The Pi separator region this adapter pioneered, admitted only when native `agent get` identity is exactly Pi and state is idle, done, or working.
 
 ### Pi composer states
 
 A blocked Pi is parked on an interactive prompt, so its blank composer region is a menu's and not a free composer's.
 That state defers instead of proving emptiness.
-A working Pi, pending middle row, missing identity, incomplete separator pair, or over-tall candidate remains unknown or pending.
+A working Pi with a structurally blank composer is empty, including its spinner-labelled top rule, because native status distinguishes it from a blocked Pi.
+A pending middle row, missing identity, incomplete separator pair, or over-tall candidate remains unknown or pending.
 Identity stays a lazy second read, consulted only when a separator pair could change the verdict.
 
 ### Placeholder and ghost text

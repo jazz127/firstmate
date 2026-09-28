@@ -33,7 +33,7 @@ fm_git_identity fmtest fmtest@example.com
 TMP_ROOT=$(fm_test_tmproot fm-secondmate-restart)
 mkdir -p "$TMP_ROOT"
 TMP_ROOT=$(cd "$TMP_ROOT" && pwd -P)
-trap 'rm -rf -- "$TMP_ROOT"' EXIT
+trap 'chmod -R u+w "$TMP_ROOT" 2>/dev/null || true; rm -rf -- "$TMP_ROOT"' EXIT
 
 # A session-provider stub that models the two things this pass depends on: the
 # harness exit command stops the agent, a launch brief starts the replacement,
@@ -131,6 +131,62 @@ esac
 exit 0
 SH
   chmod +x "$fb/sleep"
+}
+
+# A synthetic Herdr CLI for the restart-to-control boundary. It presents a
+# native working Pi with a blank separator composer, then models /quit and the
+# replacement launch while the real restart and control scripts run unchanged.
+make_working_pi_herdr_stub() {  # <case-dir>
+  local fb="$1/fakebin"
+  cat > "$fb/herdr" <<'SH'
+#!/usr/bin/env bash
+set -u
+D=$FM_FAKE_DIR
+printf '%s\n' "$*" >> "$D/herdr-calls"
+handle_payload() {
+  local payload=$1 inbox corr
+  printf '%s\n' "$payload" >> "$D/literal"
+  case "$payload" in
+    /quit) printf zsh > "$D/command" ;;
+    ". '"*"'") printf pi > "$D/command" ;;
+    *'Firstmate instruction waiting: list '*)
+      inbox=$(cat "$D/answer-inbox")
+      corr=$(cat "$inbox"/*.msg 2>/dev/null | grep -oE 'corr=[0-9a-f]{16}' | head -1)
+      [ -z "$corr" ] || printf 'done [%s]: open records written down\n' "$corr" >> "$(cat "$D/answer-status")"
+      ;;
+    *'encode launch-brief'* | *'Firstmate operational input waiting: read'*) printf pi > "$D/command" ;;
+  esac
+}
+case "${1:-} ${2:-}" in
+  'status --json') printf '{"client":{"protocol":22},"server":{"running":true,"protocol":22,"compatible":true}}\n' ;;
+  'pane get') printf '{"result":{"pane":{"pane_id":"w1:p1","foreground_cwd":"%s","workspace_id":"w1","tab_id":"w1:t1"}}}\n' "$(cat "$D/cwd")" ;;
+  'agent get')
+    if [ "$(cat "$D/command")" = pi ]; then
+      printf '{"result":{"agent":{"agent":"pi","agent_status":"working"}}}\n'
+    else
+      printf '{"error":{"code":"agent_not_found"}}\n'
+    fi ;;
+  'pane process-info')
+    printf '{"result":{"type":"pane_process_info","process_info":{"pane_id":"w1:p1","shell_pid":%s,"foreground_processes":[{"pid":%s,"name":"pi","argv":["pi"],"cmdline":"pi"}]}}}\n' "$PPID" "$PPID" ;;
+  'pane read')
+    printf 'transcript\n─────────────────────────────────────────────────────\n%s\n─────────────────────────────────────────────────────\n' "$(cat "$D/draft" 2>/dev/null || true)" ;;
+  'pane send-text') printf '%s' "${4:-}" > "$D/draft" ;;
+  'pane send-keys')
+    case "${4:-}" in
+      enter)
+        payload=$(cat "$D/draft" 2>/dev/null || true)
+        : > "$D/draft"
+        handle_payload "$payload"
+        ;;
+    esac ;;
+  'pane run') handle_payload "${4:-}" ;;
+  'workspace list') printf '{"result":{"workspaces":[{"workspace_id":"w1","label":"2ndmate-sm1"}]}}\n' ;;
+  'tab list') printf '{"result":{"tabs":[{"tab_id":"w1:t1","label":"fm-sm1","workspace_id":"w1","root_pane_id":"w1:p1"}]}}\n' ;;
+  'tab get') printf '{"result":{"tab":{"tab_id":"w1:t1","workspace_id":"w1","root_pane_id":"w1:p1","label":"fm-sm1"}}}\n' ;;
+  *) printf '{"result":{}}\n' ;;
+esac
+SH
+  chmod +x "$fb/herdr"
 }
 
 # new_case <name> -> a parent home with a stub session provider.
@@ -307,6 +363,39 @@ test_persist_precedes_restart() {
   grep -h '^phase=' "$dir/home/state/pending-replies"/* | grep -q '^phase=resolved$' \
     || fail "the persist answer did not settle its durable expectation"
   pass "T2 the mate persists before anything is stopped"
+}
+
+# A successful persist reply arrives while Pi still reports working. The
+# restart command must reach the same fm-control relaunch gate as a hand-run
+# and submit /quit when the native Pi composer is structurally blank.
+test_working_pi_blank_composer_restarts() {
+  local dir out rc
+  dir=$(new_case working-pi-blank)
+  add_repo_backed_mate "$dir" sm1 pi herdr
+  cp "$ROOT/bin/fm-git-strip-ai-trailers.sh" "$dir/fmrepo/bin/"
+  arm_answer "$dir" sm1
+  make_working_pi_herdr_stub "$dir"
+  printf pi > "$dir/fake/command"
+  printf pi > "$dir/fake/becomes"
+  printf 'pi\n' > "$dir/home/config/secondmate-harness"
+  sed 's/^window=.*/window=fm-lab-synthetic:w1:p1/' "$dir/home/state/sm1.meta" \
+    > "$dir/home/state/sm1.meta.tmp"
+  mv "$dir/home/state/sm1.meta.tmp" "$dir/home/state/sm1.meta"
+  {
+    printf 'herdr_session=fm-lab-synthetic\n'
+    printf 'herdr_workspace_id=w1\n'
+    printf 'herdr_tab_id=w1:t1\n'
+    printf 'herdr_pane_id=w1:p1\n'
+  } >> "$dir/home/state/sm1.meta"
+
+  out=$(FM_ROOT_OVERRIDE="$dir/fmrepo" FM_TEST_PERSIST_WAIT=0 run_restart "$dir" sm1); rc=$?
+  expect_code 0 "$rc" "a working Pi with a blank native Herdr composer should restart"$'\n'"$out"
+  assert_contains "$out" "restarted: sm1 (pi)" "the restart pass must report its real control outcome"
+  grep -Fxq '/quit' "$dir/fake/literal" \
+    || fail "the control gate must submit /quit after persistence"
+  assert_contains "$(cat "$dir/fake/herdr-calls")" "pane read w1:p1" \
+    "the real control path must inspect the native Pi composer"
+  pass "T2a a working Pi's blank composer passes the restart-to-control exit gate"
 }
 
 # --- T2b: an answer delivered at a zero-second bound still releases the gate -
@@ -849,6 +938,7 @@ test_already_current_unprovable_mate_stays_on_the_nudge_path() {
 
 test_persist_gates_and_asks_only_for_open_records
 test_persist_precedes_restart
+test_working_pi_blank_composer_restarts
 test_arrived_answer_precedes_deadline_check
 test_answer_between_resolution_and_timeout_wins
 test_unprovable_runtime_falls_back

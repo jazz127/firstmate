@@ -581,13 +581,12 @@ test_matrix_codex_idle_starfield_furniture() {
 }
 
 test_matrix_pi_separated_needs_identity() {
-  # Real idle pi: a blank row between two solid rules. The blank row alone is
-  # exactly what the strict rule refuses; only structure PLUS a live
-  # idle/done pi identity proves the composer (herdr's rule, now
-  # fleet-wide; tmux supplies identity from its foreground-process probe).
-  local screen typed pi_idle pi_working pi_blocked none
+  # A blank row between two solid rules needs structure and a live Pi identity.
+  # Herdr's native working status is distinct from blocked; tmux's inferred
+  # busy status cannot prove the same blank composer safe.
+  local screen typed labelled pi_idle pi_working pi_busy pi_blocked none
   screen=$'transcript\n────────────────────────\n\n────────────────────────\n footer'
-  pi_idle=$(printf 'pi\tidle'); pi_working=$(printf 'pi\tworking'); none=$(printf 'zsh\t')
+  pi_idle=$(printf 'pi\tidle'); pi_working=$(printf 'pi\tworking'); pi_busy=$(printf 'pi\tbusy'); none=$(printf 'zsh\t')
   pi_blocked=$(printf 'pi\tblocked')
   assert_screen "pi idle with identity" empty "$CAPS_STYLED" "$screen" '' "$pi_idle"
   assert_screen "pi idle on tmux with identity" empty "$CAPS_TMUX" "$screen" 2 "$pi_idle"
@@ -597,12 +596,19 @@ test_matrix_pi_separated_needs_identity() {
     || fail "an identity-capable profile should request the lazy identity probe"
   # No identity capability (cmux/orca/zellij): the shape is unprovable.
   assert_screen "pi pair without identity capability" unknown "$CAPS_PLAIN" "$screen"
-  # A working pi cannot authorize injection into the blank region.
-  assert_screen "working pi defers" unknown "$CAPS_STYLED" "$screen" '' "$pi_working"
+  assert_screen "native working pi with a blank composer" empty "$CAPS_STYLED" "$screen" '' "$pi_working"
+  assert_screen "footer-inferred busy pi on tmux defers" unknown "$CAPS_TMUX" "$screen" 2 "$pi_busy"
   # A pi parked on an interactive prompt reports `blocked`: it is waiting on a
   # human keystroke, so the blank region is a menu's, not a free composer's.
   # Typing there answers the prompt and the text is discarded (issue #2797).
   assert_screen "blocked pi defers" unknown "$CAPS_STYLED" "$screen" '' "$pi_blocked"
+  labelled=$'transcript\n── ⠏ Working ───────────────\n\n────────────────────────\n footer'
+  assert_screen "labelled working rule with native status" empty "$CAPS_STYLED" "$labelled" '' "$pi_working"
+  assert_screen "labelled working rule with idle status defers" unknown "$CAPS_STYLED" "$labelled" '' "$pi_idle"
+  assert_screen "labelled working rule with blocked status defers" unknown "$CAPS_STYLED" "$labelled" '' "$pi_blocked"
+  assert_screen "labelled working rule on tmux defers" unknown "$CAPS_TMUX" "$labelled" 2 "$pi_busy"
+  typed=$'── ⠏ Working ───────────────\nfix the flaky test\n────────────────────────'
+  assert_screen "labelled working rule with a draft" pending "$CAPS_STYLED" "$typed" '' "$pi_working"
   # The audit's live counterexample: a plain shell running sleep, cursor
   # parked on a blank line between two rules, NO pi process. The permissive
   # rule read this `empty`; identity+structure refuses it.
@@ -610,6 +616,7 @@ test_matrix_pi_separated_needs_identity() {
   assert_screen "absent identity cannot prove blank pi pair" unknown "$CAPS_TMUX" "$screen" 2 probe-absent
   typed=$'────────────────────────\nfix the flaky test\n────────────────────────'
   assert_screen "pi typed" pending "$CAPS_STYLED" "$typed" '' "$pi_idle"
+  assert_screen "working pi typed" pending "$CAPS_STYLED" "$typed" '' "$pi_working"
   typed=$'────────────────────────\n❯\n────────────────────────'
   assert_screen "pi lone-glyph draft with identity" pending "$CAPS_STYLED" "$typed" '' "$pi_idle"
   assert_screen "pi lone-glyph draft on tmux" pending "$CAPS_TMUX" "$typed" 1 "$pi_idle"
@@ -636,7 +643,7 @@ test_matrix_pi_dollar_status_footer_is_empty() {
   [ "$(fm_composer_classify_screen "$CAPS_STYLED" "$dollar")" = need-identity ] \
     || fail "a dollar-first Pi footer must still request the lazy identity probe"
   assert_screen "dollar-first status without identity capability" unknown "$CAPS_PLAIN" "$dollar"
-  assert_screen "working pi with dollar-first status defers" unknown \
+  assert_screen "native working pi with dollar-first status" empty \
     "$CAPS_STYLED" "$dollar" '' "$pi_working"
   assert_screen "non-pi identity with dollar-first status defers" unknown \
     "$CAPS_STYLED" "$dollar" '' "$none"

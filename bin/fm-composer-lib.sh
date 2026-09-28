@@ -69,10 +69,10 @@
 #                mode/model footer line.
 #   separated  - pi: content rows between two solid horizontal `─` rules, no
 #                glyph and no side border. Provable only with a live agent
-#                identity reporting an idle/done pi (herdr `agent
-#                get`; the tmux foreground-process probe), because a blank
-#                region between two transcript rules is otherwise exactly the
-#                strict rule's unidentifiable blank row.
+#                identity reporting an idle/done Pi (Herdr `agent get` or
+#                the tmux foreground-process probe), or a working Pi through
+#                native Herdr status. A blank region between two transcript
+#                rules is otherwise exactly the strict rule's unidentified row.
 #                A separated pair that closes over a bare AGENT-GLYPH row is a
 #                different, self-proving thing: real claude 2.x draws exactly
 #                that (`─` rule, `❯`+NBSP, `─` rule), so the glyph inside the
@@ -750,10 +750,21 @@ fm_composer_classify_content() {  # <bordered> <content> [idle_re] [idle_case] [
 
 # _fm_composer_pi_separator_row: a solid pi separator - nothing but `─`, at
 # least 8 columns wide. The width floor is a literal substring test so it is
-# byte-exact in every locale.
+# byte-exact in every locale. A working Pi labels its top rule with a spinner;
+# the verdict admits that rule only under native `working` status.
 _fm_composer_pi_separator_row() {  # <trimmed-row>
-  local row=$1
+  local row=$1 spinner
+  FM_COMPOSER_PI_ROW_LABELLED=0
   [ -n "$row" ] || return 1
+  case "$row" in
+    '── '?*' Working '*)
+      spinner=${row#── }
+      spinner=${spinner%% Working *}
+      case "$spinner" in *[[:space:]]*|*─*) return 1 ;; esac
+      row=${row#*' Working '}
+      FM_COMPOSER_PI_ROW_LABELLED=1
+      ;;
+  esac
   [ -z "${row//─/}" ] || return 1
   case "$row" in
     *────────*) return 0 ;;
@@ -786,6 +797,7 @@ _fm_composer_scan_screen() {  # <plain-screen> <cursor-or-empty> [extract-wrap]
   FM_COMPOSER_SCAN_PI_OPEN=-1
   FM_COMPOSER_SCAN_PI_CLOSE=-1
   FM_COMPOSER_SCAN_PI_LAST_SEPARATOR=-1
+  FM_COMPOSER_SCAN_PI_OPEN_LABELLED=0
   # The glyph PROOF of each envelope: the first row strictly inside it whose
   # content leads with an agent prompt glyph once its side borders are
   # stripped, and that glyph. This is what tells a composer container from a
@@ -797,7 +809,7 @@ _fm_composer_scan_screen() {  # <plain-screen> <cursor-or-empty> [extract-wrap]
   FM_COMPOSER_SCAN_PI_GLYPH=
   FM_COMPOSER_SCAN_LEFTBAR_GLYPH_ROW=-1
   FM_COMPOSER_SCAN_LEFTBAR_GLYPH=
-  local leftbar_start=-1 pi_open=-1 pi_lines=0 pi_max
+  local leftbar_start=-1 pi_open=-1 pi_open_labelled=0 pi_lines=0 pi_max
   local probe row_glyph row_glyph_row
   local box_glyph_row=-1 box_glyph='' pi_glyph_row=-1 pi_glyph=''
   pi_max=$FM_COMPOSER_PI_MAX_LINES
@@ -849,6 +861,7 @@ _fm_composer_scan_screen() {  # <plain-screen> <cursor-or-empty> [extract-wrap]
         FM_COMPOSER_SCAN_PI_PAIR_FOUND=1
         FM_COMPOSER_SCAN_PI_OPEN=$pi_open
         FM_COMPOSER_SCAN_PI_CLOSE=$row
+        FM_COMPOSER_SCAN_PI_OPEN_LABELLED=$pi_open_labelled
         if [ "$pi_lines" -le "$pi_max" ]; then
           FM_COMPOSER_SCAN_PI_PAIR_VALID=1
         else
@@ -858,6 +871,7 @@ _fm_composer_scan_screen() {  # <plain-screen> <cursor-or-empty> [extract-wrap]
         FM_COMPOSER_SCAN_PI_GLYPH=$pi_glyph
       fi
       pi_open=$row
+      pi_open_labelled=$FM_COMPOSER_PI_ROW_LABELLED
       pi_lines=0
       pi_glyph_row=-1
       pi_glyph=''
@@ -1807,9 +1821,11 @@ _fm_composer_classify_bare_pi_overlap() {  # <screen> <styled> <has-identity> <i
 # rule, now fleet-wide). A missing identity capability keeps the shape
 # unknown; an unfetched identity on an identity-capable backend asks the
 # adapter to probe (lazily) and re-call. Proven input remains pending for every
-# live pi state, while only an idle/done pi proves an empty composer. A blocked
-# pi is parked on an interactive prompt waiting for a human keystroke: its menu
-# is drawn above the separator pair, so the composer region looks free while the
+# live pi state. Idle/done Pi proves an empty composer on every identity
+# backend. A working Pi proves it only with native Herdr status, which can
+# distinguish working from blocked; tmux's footer-inferred busy stays unknown.
+# A blocked Pi is parked on an interactive prompt waiting for a human keystroke.
+# Its menu is drawn above the separator pair, so the composer region looks free while the
 # keys would answer the prompt instead of composing (issue #2797). Structure
 # cannot disprove that, so a blocked pi defers rather than claiming empty.
 _fm_composer_pi_verdict() {  # <screen> <styled> <has_identity> <identity>
@@ -1837,8 +1853,12 @@ _fm_composer_pi_verdict() {  # <screen> <styled> <has_identity> <identity>
     printf 'pending'
     return 0
   fi
+  if [ "$FM_COMPOSER_SCAN_PI_OPEN_LABELLED" = 1 ] && [ "$agent_status" != working ]; then
+    printf 'unknown'
+    return 0
+  fi
   case "$agent_status" in
-    idle|done) printf 'empty' ;;
+    idle|done|working) printf 'empty' ;;
     *) printf 'unknown' ;;
   esac
 }

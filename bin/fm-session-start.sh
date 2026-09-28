@@ -196,10 +196,11 @@
 # the digest never runs without the same hard bound and process-group cleanup.
 #
 # Usage: fm-session-start.sh [--reemit] [--source <source>]
-#   Prints the full ordered digest to stdout and always exits 0: this is a
-#   reporting command, not a gate. A lock refusal is reported as a loud
-#   banner inline, never a silent failure or a non-zero exit that would make
-#   an agent skip the rest of the digest.
+#   Prints the full ordered digest to stdout and exits 0 for an eligible
+#   primary session: this is a reporting command, not a gate. A lock refusal
+#   is reported as a loud banner inline, never a silent failure or a non-zero
+#   exit that would make an agent skip the rest of the digest. An invocation
+#   with FM_TASK_ID set exits 2 before any home mutation.
 #
 #   --reemit  This process ALREADY took the helm at its own startup and has
 #             only lost its context (a /clear or a compaction). Skip the
@@ -229,6 +230,10 @@
 #             current AGENTS.md to print before the bulky digest. The baseline
 #             remains immutable so every later drifted compaction refreshes
 #             again, while an equal baseline emits no instruction refresh.
+# A direct manual invocation with FM_TASK_ID set refuses before taking a home
+# lock or running bootstrap. fm-spawn.sh exports FM_TASK_ID only into ship and
+# scout panes, never a secondmate or primary, and fm-test-run.sh already
+# refuses on the same marker.
 set -u
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -267,6 +272,13 @@ while [ "$#" -gt 0 ]; do
       ;;
   esac
 done
+
+# Native session-open hooks already stand down for task workers. This check
+# covers a marked worker invoking the composed command by hand.
+if [ -n "${FM_TASK_ID:-}" ]; then
+  printf 'fm-session-start: refusing task worker FM_TASK_ID=%s; this command belongs to the supervising firstmate\n' "$FM_TASK_ID" >&2
+  exit 2
+fi
 
 # --- 0. runtime bound ---------------------------------------------------------
 # The ordered stage list is the contract behind the truncation banner: the child

@@ -336,6 +336,8 @@ done
 decode() { printf '%s' "$1" | base64 --decode 2>/dev/null || printf '%s' "$1" | base64 -D; }
 if [ "$2" = bash ]; then
   printf 'code-root-refresh\n' >> "$FM_FAKE_DIR/remote-calls"
+  printf "Warning: Permanently added 'fixture-host' to the list of known hosts.\n" >&2
+  printf '** WARNING: connection is not using a post-quantum key exchange algorithm.\n' >&2
   shift
   exec "$@"
 fi

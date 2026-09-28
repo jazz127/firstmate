@@ -190,7 +190,7 @@ sweep_live_secondmate_metas "$STATE" "$runtime_commit" yes
 # the per-pass set too: subsequent homes must not retry an uncertain transport.
 REFRESHED_REMOTE_ROOTS=()
 refresh_remote_code_root() {  # <host> <root>
-  local host=$1 root=$2 key seen out root_b64 interval count
+  local host=$1 root=$2 key seen out ok=yes root_b64 interval count
   key="$host:$root"
   for seen in "${REFRESHED_REMOTE_ROOTS[@]+"${REFRESHED_REMOTE_ROOTS[@]}"}"; do
     [ "$seen" != "$key" ] || return 0
@@ -222,7 +222,7 @@ refresh_remote_code_root() {  # <host> <root>
     return 0
   fi
   root_b64=$(printf '%s' "$root" | base64 | tr -d '\n')
-  if out=$("${FM_SSH_BIN:-ssh}" -o ForwardAgent=no -o ClearAllForwardings=yes \
+  out=$("${FM_SSH_BIN:-ssh}" -o ForwardAgent=no -o ClearAllForwardings=yes \
     -o 'SendEnv=-*' -o "ServerAliveInterval=$interval" -o "ServerAliveCountMax=$count" \
     -- "$host" bash -s -- "$root_b64" 2>&1 <<'SH'
 set -eu
@@ -235,7 +235,9 @@ mode=origin
 ! declare -F firstmate_runtime_branch >/dev/null || mode=tracking
 ff_target "$FM_ROOT" firstmate "$mode" no no
 SH
-  ); then
+  ) || ok=no
+  out=$(printf '%s\n' "$out" | awk 'NF { last = $0 } END { print last }')
+  if [ "$ok" = yes ]; then
     case "$out" in
       'firstmate: updated '*|'firstmate: already current'*|'firstmate: skipped: '*)
         printf 'remote code root %s (%s): %s\n' "$host" "$root" "${out#firstmate: }"
@@ -243,7 +245,7 @@ SH
       *) printf 'remote code root %s (%s): skipped: malformed refresh result\n' "$host" "$root" >&2 ;;
     esac
   else
-    printf 'remote code root %s (%s): skipped: %s\n' "$host" "$root" "${out%%$'\n'*}" >&2
+    printf 'remote code root %s (%s): skipped: %s\n' "$host" "$root" "$out" >&2
   fi
 }
 

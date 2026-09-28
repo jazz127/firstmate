@@ -1,0 +1,10 @@
+   1 not ok - 14 contribution regressions
+   1 not ok - could not register away delivery
+   1 not ok - could not register child away delivery
+   1 not ok - could not register delivery
+   1 not ok - could not register delivery before judging its head
+   1 not ok - could not register delivery before replacement
+   1 not ok - could not register delivery for diagnostic watcher wake
+   1 not ok - could not register delivery for watcher wake
+   1 not ok - could not register shared contribution owner
+   6 not ok - could not register the owned delivery

@@ -1,0 +1,118 @@
+{
+  "families": [
+    {
+      "count": 3,
+      "duration_ms": 539230,
+      "failed": 0,
+      "name": "backend-dispatch"
+    },
+    {
+      "count": 1,
+      "duration_ms": 9607,
+      "failed": 0,
+      "name": "pure-contract-unit"
+    },
+    {
+      "count": 1,
+      "duration_ms": 82775,
+      "failed": 0,
+      "name": "secondmate"
+    },
+    {
+      "count": 1,
+      "duration_ms": 150094,
+      "failed": 1,
+      "name": "snapshot-bearings"
+    },
+    {
+      "count": 2,
+      "duration_ms": 118986,
+      "failed": 0,
+      "name": "standalone"
+    }
+  ],
+  "finished_at": "2026-09-27T23:58:16Z",
+  "run_id": "fm-test-run-1790552623212-69486",
+  "scripts": [
+    {
+      "duration_ms": 92765,
+      "exit": 0,
+      "expected_gate_skip": "none",
+      "family": "backend-dispatch",
+      "gate_skip": false,
+      "gate_skip_reason": "",
+      "path": "tests/fm-backend-herdr.test.sh"
+    },
+    {
+      "duration_ms": 9607,
+      "exit": 0,
+      "expected_gate_skip": "none",
+      "family": "pure-contract-unit",
+      "gate_skip": false,
+      "gate_skip_reason": "",
+      "path": "tests/fm-timeout-lib.test.sh"
+    },
+    {
+      "duration_ms": 82775,
+      "exit": 0,
+      "expected_gate_skip": "none",
+      "family": "secondmate",
+      "gate_skip": false,
+      "gate_skip_reason": "",
+      "path": "tests/fm-remote-job.test.sh"
+    },
+    {
+      "duration_ms": 27977,
+      "exit": 0,
+      "expected_gate_skip": "none",
+      "family": "standalone",
+      "gate_skip": false,
+      "gate_skip_reason": "",
+      "path": "tests/fm-branch-supervision.test.sh"
+    },
+    {
+      "duration_ms": 91009,
+      "exit": 0,
+      "expected_gate_skip": "none",
+      "family": "standalone",
+      "gate_skip": false,
+      "gate_skip_reason": "",
+      "path": "tests/fm-pi-branch-extension.test.sh"
+    },
+    {
+      "duration_ms": 21163,
+      "exit": 0,
+      "expected_gate_skip": "none",
+      "family": "backend-dispatch",
+      "gate_skip": false,
+      "gate_skip_reason": "",
+      "path": "tests/fm-git-strip-ai-trailers.test.sh"
+    },
+    {
+      "duration_ms": 150094,
+      "exit": 1,
+      "expected_gate_skip": "optional-binary",
+      "family": "snapshot-bearings",
+      "gate_skip": false,
+      "gate_skip_reason": "",
+      "path": "tests/fm-contributions.test.sh"
+    },
+    {
+      "duration_ms": 425302,
+      "exit": 0,
+      "expected_gate_skip": "none",
+      "family": "backend-dispatch",
+      "gate_skip": false,
+      "gate_skip_reason": "",
+      "path": "tests/fm-spawn-dispatch-profile.test.sh"
+    }
+  ],
+  "selection": "scripts;jobs=4",
+  "started_at": "2026-09-27T23:43:43Z",
+  "summary": {
+    "duration_ms": 873373,
+    "failed": 1,
+    "skipped_gate": 0,
+    "total": 8
+  }
+}

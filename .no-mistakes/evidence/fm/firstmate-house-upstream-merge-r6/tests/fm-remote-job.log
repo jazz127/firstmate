@@ -1,0 +1,15 @@
+ok - default queue and execution bounds independently cover long polls
+ok - disappeared worker targets are successful signal no-ops
+ok - non-Linux signaling refuses unbound live targets
+ok - single-digit-day process identities normalize ps padding
+ok - pidfd identity verification regression requires Linux pidfd support
+ok - tree cleanup includes descendants whose command ends in whitespace
+ok - a dead Linux worker starter does not strand the start guard
+ok - operator PATH excludes a symlinked local bin
+ok - operator PATH honors nvm defaults with a deterministic fallback
+ok - operator PATH resolves the authorized Nix profile bin link
+ok - operator PATH orders discovered tool installs deterministically
+ok - concurrent remote entrypoints converge on one Linux worker process group
+ok - the worker preserves bounded argv and stdin in an empty environment
+ok - active jobs keep the worker ready for concurrent requests
+skip: worker replacement and signal lifecycle require Linux process identity support

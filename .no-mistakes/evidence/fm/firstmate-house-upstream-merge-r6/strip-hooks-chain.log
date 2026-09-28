@@ -1,0 +1,25 @@
+$ install pane hooks with guard
+rc=0
+$ commit via pane env (GIT_CONFIG_COUNT core.hooksPath) with AI trailer + human trailer
+rc=0
+feat: a
+
+Co-Authored-By: Alice <alice@example.com>
+
+$ commit via git -c core.hooksPath=<pane hooks> (#5877)
+rc=0
+feat: b
+
+$ push (guard passes)
+rc=0
+$ push (guard refuses)
+guard: refused
+error: failed to push some refs to '../remote.git'
+rc=1
+$ project hook log:
+PROJECT commit-msg hook ran
+PROJECT commit-msg hook ran
+GUARD ran args=origin ../remote.git
+PROJECT pre-push hook ran
+PROJECT commit-msg hook ran
+GUARD ran args=origin ../remote.git

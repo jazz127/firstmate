@@ -1,0 +1,43 @@
++(eval):4> git init -q -b main /tmp/fmtrail.eDrs/repo
++(eval):4> cd /tmp/fmtrail.eDrs/repo
++(eval):4> git config user.email t@t
++(eval):4> git config user.name t
++(eval):5> mkdir -p .githooks
++(eval):5> printf '#!/bin/sh\necho REPO-PRE-COMMIT-RAN >&2\n'
++(eval):5> printf '#!/bin/sh\necho REPO-PRE-PUSH-RAN >&2\ncat >/dev/null\n'
++(eval):5> chmod +x .githooks/pre-commit .githooks/pre-push
++(eval):5> git config core.hooksPath .githooks
++(eval):6> printf '#!/bin/sh\necho GUARD-RAN args="$*" >&2\nexit ${GUARD_EXIT:-0}\n'
++(eval):6> chmod +x /tmp/fmtrail.eDrs/guard.sh
++(eval):7> /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3JKE2A0CXRKS09614X376T2/bin/fm-git-strip-ai-trailers.sh install /tmp/fmtrail.eDrs/hooks /tmp/fmtrail.eDrs/repo /tmp/fmtrail.eDrs/guard.sh g1
++(eval):8> echo a
++(eval):8> git add f
++(eval):10> GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=/tmp/fmtrail.eDrs/hooks git commit -q -m $'feat: x\n\nCo-Authored-By: Claude Opus <noreply@anthropic.com>\nCo-Authored-By: Jane Human <jane@example.com>'
+REPO-PRE-COMMIT-RAN
++(eval):14> git log -1 '--format=%B'
+feat: x
+
+Co-Authored-By: Jane Human <jane@example.com>
+
++(eval):16> echo b
++(eval):16> git add f
++(eval):17> git -c 'core.hooksPath=/tmp/fmtrail.eDrs/hooks' commit -q -m $'fix: y\n\nCo-authored-by: Cursor Agent <cursoragent@cursor.com>'
+REPO-PRE-COMMIT-RAN
++(eval):20> git log -1 '--format=%B'
+fix: y
+
++(eval):22> git init -q --bare /tmp/fmtrail.eDrs/remote.git
++(eval):22> git remote add origin /tmp/fmtrail.eDrs/remote.git
++(eval):23> git -c 'core.hooksPath=/tmp/fmtrail.eDrs/hooks' push -q origin main
+GUARD-RAN args=g1 origin /tmp/fmtrail.eDrs/remote.git
+REPO-PRE-PUSH-RAN
++(eval):23> echo 'push-exit=0'
+push-exit=0
++(eval):24> echo c
++(eval):24> git commit -qam z --no-verify
++(eval):25> GUARD_EXIT=1 git -c 'core.hooksPath=/tmp/fmtrail.eDrs/hooks' push -q origin main
+GUARD-RAN args=g1 origin /tmp/fmtrail.eDrs/remote.git
+error: failed to push some refs to '/tmp/fmtrail.eDrs/remote.git'
++(eval):25> echo 'refused-push-exit=1'
+refused-push-exit=1
++(eval):26> set +x

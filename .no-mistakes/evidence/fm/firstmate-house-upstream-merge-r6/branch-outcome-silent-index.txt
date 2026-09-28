@@ -1,0 +1,26 @@
+# silent routine append (worker still busy, no change)
+1
+exit=0
+# index for task-p after silent row:
+.branch-outcome-index-ready
+.task-p.branch-outcome-index
+branch-outcomes.jsonl
+fm-branch-outcome-index-v1	1	16	strong:16777234:897420419:1790554478.350705228
+
+# adversarial: captain + silent must be refused
+error: silent outcomes must have the routine verdict
+exit=2
+# worker writes new status, visible routine row
+2
+exit=0
+fm-branch-outcome-index-v1	2	42	strong:16777234:897420419:1790554478.350705228
+
+# store:
+{"seq":1,"epoch":1790554478,"task":"task-p","wake":"","verdict":"routine","summary":"task-p still busy, no change","silent":true,"statusEndpoint":16,"statusIdent":"strong:16777234:897420419:1790554478.350705228"}
+{"seq":2,"epoch":1790554478,"task":"task-p","wake":"","verdict":"routine","summary":"task-p blocked on credential; paused","silent":false,"statusEndpoint":42,"statusIdent":"strong:16777234:897420419:1790554478.350705228"}
+# unread:
+{"seq":1,"epoch":1790554478,"task":"task-p","wake":"","verdict":"routine","summary":"task-p still busy, no change","silent":true,"statusEndpoint":16,"statusIdent":"strong:16777234:897420419:1790554478.350705228"}
+{"seq":2,"epoch":1790554478,"task":"task-p","wake":"","verdict":"routine","summary":"task-p blocked on credential; paused","silent":false,"statusEndpoint":42,"statusIdent":"strong:16777234:897420419:1790554478.350705228"}
+# present (supervision-host drain view):
+{"seq":1,"epoch":1790554478,"task":"task-p","wake":"","verdict":"routine","summary":"task-p still busy, no change","silent":true,"statusEndpoint":16,"statusIdent":"strong:16777234:897420419:1790554478.350705228","unread":true}
+{"seq":2,"epoch":1790554478,"task":"task-p","wake":"","verdict":"routine","summary":"task-p blocked on credential; paused","silent":false,"statusEndpoint":42,"statusIdent":"strong:16777234:897420419:1790554478.350705228","unread":true}

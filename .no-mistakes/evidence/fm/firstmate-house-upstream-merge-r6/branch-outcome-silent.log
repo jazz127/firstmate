@@ -1,0 +1,20 @@
+$ append routine silent (still busy, no change)
+1
+rc=0
+$ index after silent row:
+.branch-outcome-index-ready
+.task-p.branch-outcome-index
+fm-branch-outcome-index-v1	1	14	strong:16777234:897186287:1790552635.293874993
+
+$ append captain silent (must be refused)
+error: silent outcomes must have the routine verdict
+rc=2
+$ append captain visible
+2
+rc=0
+$ store:
+{"seq":1,"epoch":1790552635,"task":"task-p","wake":"","verdict":"routine","summary":"still busy, no change","silent":true,"statusEndpoint":14,"statusIdent":"strong:16777234:897186287:1790552635.293874993"}
+{"seq":2,"epoch":1790552635,"task":"task-p","wake":"","verdict":"captain","summary":"blocked: needs credential","silent":false,"statusEndpoint":14,"statusIdent":"strong:16777234:897186287:1790552635.293874993"}
+$ unread:
+{"seq":1,"epoch":1790552635,"task":"task-p","wake":"","verdict":"routine","summary":"still busy, no change","silent":true,"statusEndpoint":14,"statusIdent":"strong:16777234:897186287:1790552635.293874993"}
+{"seq":2,"epoch":1790552635,"task":"task-p","wake":"","verdict":"captain","summary":"blocked: needs credential","silent":false,"statusEndpoint":14,"statusIdent":"strong:16777234:897186287:1790552635.293874993"}

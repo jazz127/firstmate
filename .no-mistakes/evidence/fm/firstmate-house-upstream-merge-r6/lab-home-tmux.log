@@ -1,0 +1,10 @@
+$ fm-lab-home.sh create <deep TMPDIR path>
+/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.BeWv6N
+rc=0
+$ tmux-dir
+/tmp/fml.JH49kV (len 15)
+drwx------@
+primary: 1 windows (created Mon Sep 28 09:44:29 2026)
+$ teardown
+rc=0
+tmux dir removed

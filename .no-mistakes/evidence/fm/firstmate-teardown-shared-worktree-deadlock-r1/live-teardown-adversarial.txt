@@ -1,0 +1,10 @@
+=== [unclaimed] claim:  ; teardown stale-task --force ===
+REFUSED: task stale-task's recorded worktree /private/var/folders/kw/cjk9qxvx0kq5874xngqgywth0000gn/T/fm-lab.bmhKN2/pool/1/project is also task current-task's recorded worktree.
+Returning that pool slot would kill current-task's processes and reset its copy, so nothing was changed - not even with --force.
+exit=1 records=[current-task.meta stale-task.meta ] windows=[fm-stale-task fm-current-task ] treehouse_calls=0
+
+=== [claim-names-target] claim: task=stale-task ; teardown stale-task --force ===
+REFUSED: task stale-task's recorded worktree /private/var/folders/kw/cjk9qxvx0kq5874xngqgywth0000gn/T/fm-lab.CYKYpv/pool/1/project is also task current-task's recorded worktree.
+Returning that pool slot would kill current-task's processes and reset its copy, so nothing was changed - not even with --force.
+exit=1 records=[current-task.meta stale-task.meta ] windows=[fm-stale-task fm-current-task ] treehouse_calls=0
+

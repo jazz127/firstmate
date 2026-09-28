@@ -1,0 +1,58 @@
+=== [base 49a218b] two records name one reused pool slot; claim -> current-task ===
+  records: current-task.meta stale-task.meta 
+  claim: task=current-task home=/var/folders/kw/cjk9qxvx0kq5874xngqgywth0000gn/T//fm-lab.700ZvS/home 
+  work.txt: preserved
+  tmux windows: fm-stale-task fm-current-task 
+  treehouse calls: 0
+
+--- 1. current owner tears down with --force while stale record still names slot ---
+$ fm-teardown.sh current-task --force
+fm-gate-refuse: gate agent lifecycle permitted only against lab home <LAB>/home
+REFUSED: task current-task's recorded worktree /private/var/folders/kw/cjk9qxvx0kq5874xngqgywth0000gn/T/fm-lab.700ZvS/pool/1/project is also task stale-task's recorded worktree.
+Returning that pool slot would kill stale-task's processes and reset its copy, so nothing was changed - not even with --force.
+Reconcile whichever record is wrong (bin/fm-crew-state.sh current-task; bin/fm-crew-state.sh stale-task), then re-run teardown.
+exit=1
+  records: current-task.meta stale-task.meta 
+  claim: task=current-task home=/var/folders/kw/cjk9qxvx0kq5874xngqgywth0000gn/T//fm-lab.700ZvS/home 
+  work.txt: preserved
+  tmux windows: fm-stale-task fm-current-task 
+  treehouse calls: 0
+
+--- 2. stale record teardown (no --force) ---
+$ fm-teardown.sh stale-task
+fm-gate-refuse: gate agent lifecycle permitted only against lab home <LAB>/home
+REFUSED: task stale-task's recorded worktree /private/var/folders/kw/cjk9qxvx0kq5874xngqgywth0000gn/T/fm-lab.700ZvS/pool/1/project is also task current-task's recorded worktree.
+Returning that pool slot would kill current-task's processes and reset its copy, so nothing was changed - not even with --force.
+Reconcile whichever record is wrong (bin/fm-crew-state.sh stale-task; bin/fm-crew-state.sh current-task), then re-run teardown.
+exit=1
+  records: current-task.meta stale-task.meta 
+  claim: task=current-task home=/var/folders/kw/cjk9qxvx0kq5874xngqgywth0000gn/T//fm-lab.700ZvS/home 
+  work.txt: preserved
+  tmux windows: fm-stale-task fm-current-task 
+  treehouse calls: 0
+
+--- 3. current owner teardown with unlanded work, no --force ---
+$ fm-teardown.sh current-task
+fm-gate-refuse: gate agent lifecycle permitted only against lab home <LAB>/home
+REFUSED: task current-task's recorded worktree /private/var/folders/kw/cjk9qxvx0kq5874xngqgywth0000gn/T/fm-lab.700ZvS/pool/1/project is also task stale-task's recorded worktree.
+Returning that pool slot would kill stale-task's processes and reset its copy, so nothing was changed - not even with --force.
+Reconcile whichever record is wrong (bin/fm-crew-state.sh current-task; bin/fm-crew-state.sh stale-task), then re-run teardown.
+exit=1
+  records: current-task.meta stale-task.meta 
+  claim: task=current-task home=/var/folders/kw/cjk9qxvx0kq5874xngqgywth0000gn/T//fm-lab.700ZvS/home 
+  work.txt: preserved
+  tmux windows: fm-stale-task fm-current-task 
+  treehouse calls: 0
+
+--- 4. current owner lands work (commit + origin/main) then tears down ---
+$ fm-teardown.sh current-task
+fm-gate-refuse: gate agent lifecycle permitted only against lab home <LAB>/home
+REFUSED: task current-task's recorded worktree /private/var/folders/kw/cjk9qxvx0kq5874xngqgywth0000gn/T/fm-lab.700ZvS/pool/1/project is also task stale-task's recorded worktree.
+Returning that pool slot would kill stale-task's processes and reset its copy, so nothing was changed - not even with --force.
+Reconcile whichever record is wrong (bin/fm-crew-state.sh current-task; bin/fm-crew-state.sh stale-task), then re-run teardown.
+exit=1
+  records: current-task.meta stale-task.meta 
+  claim: task=current-task home=/var/folders/kw/cjk9qxvx0kq5874xngqgywth0000gn/T//fm-lab.700ZvS/home 
+  work.txt: GONE
+  tmux windows: fm-stale-task fm-current-task 
+  treehouse calls: 0

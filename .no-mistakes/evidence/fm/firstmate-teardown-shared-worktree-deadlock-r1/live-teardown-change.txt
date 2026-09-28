@@ -1,0 +1,72 @@
+=== [change 3e5baa3] two records name one reused pool slot; claim -> current-task ===
+  records: current-task.meta stale-task.meta 
+  claim: task=current-task home=/var/folders/kw/cjk9qxvx0kq5874xngqgywth0000gn/T//fm-lab.VkBKG9/home 
+  work.txt: preserved
+  tmux windows: fm-stale-task fm-current-task 
+  treehouse calls: 0
+
+--- 1. current owner tears down with --force while stale record still names slot ---
+$ fm-teardown.sh current-task --force
+fm-gate-refuse: gate agent lifecycle permitted only against lab home <LAB>/home
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  2 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  watcher supervision needs Stop-owned automatic recovery; inspect the hook registration and startup status before ending the turn.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+REFUSED: task current-task's recorded worktree /private/var/folders/kw/cjk9qxvx0kq5874xngqgywth0000gn/T/fm-lab.VkBKG9/pool/1/project is also task stale-task's recorded worktree.
+Returning that pool slot would kill stale-task's processes and reset its copy, so nothing was changed - not even with --force.
+Reconcile whichever record is wrong (bin/fm-crew-state.sh current-task; bin/fm-crew-state.sh stale-task), then re-run teardown.
+exit=1
+  records: current-task.meta stale-task.meta 
+  claim: task=current-task home=/var/folders/kw/cjk9qxvx0kq5874xngqgywth0000gn/T//fm-lab.VkBKG9/home 
+  work.txt: preserved
+  tmux windows: fm-stale-task fm-current-task 
+  treehouse calls: 0
+
+--- 2. stale record teardown (no --force) ---
+$ fm-teardown.sh stale-task
+fm-gate-refuse: gate agent lifecycle permitted only against lab home <LAB>/home
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+warning: task stale-task's recorded worktree /private/var/folders/kw/cjk9qxvx0kq5874xngqgywth0000gn/T/fm-lab.VkBKG9/pool/1/project was reassigned to task current-task (home <LAB>/home), which claimed that pool slot after this record was written; that slot is no longer stale-task's, so its processes, copy, and claim are left untouched and only stale-task's own cleanup runs.
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+<LAB>/project: skipped: no origin remote
+teardown stale-task complete (window firstmate:fm-stale-task; pool slot <LAB>/pool/1/project left to task current-task (home <LAB>/home), which it was reassigned to)
+Backlog: stale-task just finished (this home keeps no markdown backlog at /private/var/folders/kw/cjk9qxvx0kq5874xngqgywth0000gn/T/fm-lab.VkBKG9/home/data/backlog.md). Update /private/var/folders/kw/cjk9qxvx0kq5874xngqgywth0000gn/T/fm-lab.VkBKG9/home/data/backlog.md - move stale-task to Done, keep Done to the 10 most recent, then re-scan Queued and dispatch only work whose blockers are gone and date is due.
+exit=0
+  records: current-task.meta 
+  claim: task=current-task home=/var/folders/kw/cjk9qxvx0kq5874xngqgywth0000gn/T//fm-lab.VkBKG9/home 
+  work.txt: preserved
+  tmux windows: fm-current-task 
+  treehouse calls: 0
+
+--- 3. current owner teardown with unlanded work, no --force ---
+$ fm-teardown.sh current-task
+fm-gate-refuse: gate agent lifecycle permitted only against lab home <LAB>/home
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+REFUSED: worktree <LAB>/pool/1/project has uncommitted changes.
+uncommitted changes present
+Commit them (or get the captain's explicit OK to discard, then --force).
+exit=1
+  records: current-task.meta 
+  claim: task=current-task home=/var/folders/kw/cjk9qxvx0kq5874xngqgywth0000gn/T//fm-lab.VkBKG9/home 
+  work.txt: preserved
+  tmux windows: fm-current-task 
+  treehouse calls: 0
+
+--- 4. current owner lands work (commit + origin/main) then tears down ---
+no server running on /private/var/folders/kw/cjk9qxvx0kq5874xngqgywth0000gn/T/fm-lab.VkBKG9/tmux/tmux-501/default
+$ fm-teardown.sh current-task
+fm-gate-refuse: gate agent lifecycle permitted only against lab home <LAB>/home
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+<LAB>/project: skipped: no origin remote
+teardown current-task complete (window firstmate:fm-current-task, worktree <LAB>/pool/1/project)
+Backlog: current-task just finished (this home keeps no markdown backlog at /private/var/folders/kw/cjk9qxvx0kq5874xngqgywth0000gn/T/fm-lab.VkBKG9/home/data/backlog.md). Update /private/var/folders/kw/cjk9qxvx0kq5874xngqgywth0000gn/T/fm-lab.VkBKG9/home/data/backlog.md - move current-task to Done, keep Done to the 10 most recent, then re-scan Queued and dispatch only work whose blockers are gone and date is due.
+exit=0
+  records: 
+/tmp/fm-live-scn.sh: line 31: /var/folders/kw/cjk9qxvx0kq5874xngqgywth0000gn/T//fm-lab.VkBKG9/pool/1/.fm-slot-owner: No such file or directory
+  claim: none
+  work.txt: GONE
+  tmux windows: 
+  treehouse calls: 1

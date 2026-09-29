@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# shellcheck source=bin/fm-tangle-lib.sh
+# The branch resolver is linted as its own root. Following its function-local
+# variables through a caller's subshell gives ShellCheck false SC2031 notes.
+# shellcheck source=/dev/null
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/fm-tangle-lib.sh"
 
 fm_scratch_reserved_path() {

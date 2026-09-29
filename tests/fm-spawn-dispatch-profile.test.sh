@@ -64,6 +64,10 @@ case "${1:-} ${2:-}" in
   "status --json")
     printf '%s\n' '{"client":{"version":"0.7.1","protocol":14},"server":{"running":true}}'
     ;;
+  "session list")
+    jq -n --arg name "${FM_FAKE_HERDR_SESSION:?}" --arg socket "${FM_FAKE_HERDR_SOCKET:?}" \
+      '{sessions:[{name:$name,running:true,socket_path:$socket}]}'
+    ;;
   "workspace list")
     printf '%s\n' '{"result":{"workspaces":[{"workspace_id":"w-seat","label":"firstmate"}]}}'
     ;;
@@ -74,7 +78,10 @@ case "${1:-} ${2:-}" in
     printf '%s\n' '{"result":{"tab":{"tab_id":"w-seat:t-seat"},"root_pane":{"pane_id":"w-seat:p-seat"}}}'
     ;;
   "pane get")
-    printf '%s\n' '{"result":{"pane":{"pane_id":"w-seat:p-seat","foreground_cwd":"'"${FM_FAKE_PANE_PATH:?}"'"}}}'
+    printf '%s\n' '{"result":{"pane":{"pane_id":"w-seat:p-seat","tab_id":"w-seat:t-seat","workspace_id":"w-seat","foreground_cwd":"'"${FM_FAKE_PANE_PATH:?}"'"}}}'
+    ;;
+  "tab get")
+    printf '%s\n' '{"result":{"tab":{"tab_id":"w-seat:t-seat","workspace_id":"w-seat"}}}'
     ;;
   "pane send-text")
     payload=${4:-}
@@ -664,12 +671,14 @@ SH
 }
 
 test_codex_luna_seat_reaches_herdr_backend() {
-  local rec id out status seat_home launch_log
+  local rec id out status seat_home launch_log test_session test_socket
   id=profile-codex-luna-herdr-z4
   rec=$(make_spawn_case profile-codex-luna-herdr codex "$id")
   read_case_record "$rec"
   seat_home="$CASE_DIR/herdr seat"
   launch_log="$CASE_DIR/herdr-launch.log"
+  test_session=fm-test-codex-luna-seat
+  test_socket="$CASE_DIR/herdr.sock"
   mkdir -p "$seat_home"
   printf '%s\n' '{"OPENAI_API_KEY":"sk-fm-synthetic"}' > "$seat_home/auth.json"
   jq -n --arg home "$seat_home" '{version:1,id:"herdr-dock",seats:{luna:{harness:"codex",credential_home:$home}}}' \
@@ -683,7 +692,10 @@ fi
 SH
   chmod +x "$FAKEBIN_DIR/codex"
 
-  out=$(FM_HERDR_LAUNCH_LOG="$launch_log" run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" \
+  out=$(HERDR_ENV=1 HERDR_PANE_ID=w-seat:p-seat HERDR_SESSION="$test_session" \
+    HERDR_SOCKET_PATH="$test_socket" FM_FAKE_HERDR_SESSION="$test_session" \
+    FM_FAKE_HERDR_SOCKET="$test_socket" FM_HERDR_LAUNCH_LOG="$launch_log" \
+    run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" \
     "$id" "$PROJ_DIR" --backend herdr --harness codex --seat luna)
   status=$?
   expect_code 0 "$status" "Herdr-backed Codex Luna spawn should succeed: $out"

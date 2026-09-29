@@ -31,7 +31,7 @@ PARENT_ROUTE_INBOX="$REMOTE_HOME/state/parent-route/ios.inbox"
 CLAIMS="$TMP_ROOT/claims"
 mkdir -p "$PARENT/data" "$PARENT/state" "$PARENT/config" "$PARENT/projects" "$REMOTE_ROOT" "$CLAIMS"
 cleanup() {
-  local worker_pid=''
+  local worker_pid='' cleanup_attempt=0
   touch "$TMP_ROOT/provision.release" "$TMP_ROOT/seed.release" "$TMP_ROOT/handoff.release" \
     "$TMP_ROOT/inherit.release" "$TMP_ROOT/launch.release" "$TMP_ROOT/race-clone.release" 2>/dev/null || true
   # A watcher leg cut short by a failed assertion is still polling the root.
@@ -48,6 +48,17 @@ cleanup() {
     . "$ROOT/bin/fm-remote-job-lib.sh"
     fm_remote_job_stop_worker_tree "$worker_pid" || true
   fi
+  # The remote job worker can publish its final ready marker while its process
+  # tree is stopping. Retry removal until the fixture root is actually gone.
+  while [ "$cleanup_attempt" -lt 5 ]; do
+    cleanup_attempt=$((cleanup_attempt + 1))
+    if rm -rf -- "$TMP_ROOT" 2>/dev/null; then
+      return 0
+    fi
+    [ -d "$TMP_ROOT" ] || return 0
+    find "$TMP_ROOT" -type d -exec chmod u+rwx {} + 2>/dev/null || true
+    sleep 0.05
+  done
   rm -rf -- "$TMP_ROOT"
 }
 trap cleanup EXIT
@@ -1284,14 +1295,17 @@ FM_STATE_OVERRIDE="$WATCH_STATE" FM_SECONDMATE_LIVENESS_SECS=1 FM_POLL=1 \
   remote_env exec "$ROOT/bin/fm-watch.sh" \
   > "$TMP_ROOT/watch-liveness.out" 2> "$TMP_ROOT/watch-liveness.err" &
 watch_pid=$!
-watch_wait=0
-while kill -0 "$watch_pid" 2>/dev/null && [ "$watch_wait" -lt 1500 ]; do
-  sleep 0.02
-  watch_wait=$((watch_wait + 1))
+watch_deadline=$((SECONDS + 150))
+# The relaunch itself has a 120-second production bound. Wait for the actual
+# background job to finish, leaving headroom for the fixture's SSH round trips.
+# `kill -0` can still succeed for a completed child awaiting `wait`.
+while jobs -pr | grep -Fxq "$watch_pid"; do
+  [ "$SECONDS" -lt "$watch_deadline" ] || break
+  sleep 0.05
 done
-if kill -0 "$watch_pid" 2>/dev/null; then
+if jobs -pr | grep -Fxq "$watch_pid"; then
   kill "$watch_pid" 2>/dev/null || true
-  fail "the watcher did not exit on its auto-relaunch wake within the bound"
+  fail "the watcher did not exit on its auto-relaunch wake within 150 seconds: $(cat "$TMP_ROOT/watch-liveness.out" "$TMP_ROOT/watch-liveness.err")"
 fi
 wait "$watch_pid" \
   || fail "the liveness watcher leg exited non-zero: $(cat "$TMP_ROOT/watch-liveness.err")"

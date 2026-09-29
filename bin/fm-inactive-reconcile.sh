@@ -27,6 +27,9 @@
 # and failure outcomes from depending on the mate model appending them
 # (docs/secondmate-parent-channel.md). A main home has no parent channel and
 # skips this path: its watcher already signals every child status line.
+# Published evidence keeps its metadata, consistency, file-list, and attestation
+# checks after cleanup. Only a forge-confirmed merged PR may cite an artifact
+# beneath a removed task root without requiring that retired file to survive.
 # `report <task-id>` runs that same delivery for one child on behalf of a
 # caller that already holds the child's meta lock, which bin/fm-teardown.sh
 # does before it removes the child's record; it exits 0 when the line is
@@ -361,7 +364,19 @@ published_pr_validation_failed() { # <pr> <meta>
         . "$script_dir/fm-pr-lib.sh"
         . "$script_dir/fm-dod-lib.sh"
         body=$(fm_pr_read_published_body "$pr") || exit 1
-        fm_dod_validate_published_intent "$body" "$wt" "$task_tmp" "" "$pr"
+        phase=publish
+        # Cleanup may already have removed a task evidence root. Only a
+        # forge-confirmed merge permits treating that root as retired.
+        if { [ -n "$wt" ] && [ ! -e "$wt" ] && [ ! -L "$wt" ]; } \
+          || { [ -n "$task_tmp" ] && [ ! -e "$task_tmp" ] && [ ! -L "$task_tmp" ]; }; then
+          fm_pr_url_parse "$pr" || exit 1
+          case "$FM_PR_PROVIDER" in
+            github) fm_pr_github_read_record "$FM_PR_OWNER" "$FM_PR_REPO" "$FM_PR_NUMBER" ;;
+            gitlab) fm_pr_gitlab_read_record "$FM_PR_HOST" "$FM_PR_PATH" "$FM_PR_NUMBER" ;;
+            gerrit) fm_pr_gerrit_read_record "$FM_PR_HOST" "$FM_PR_NUMBER" ;;
+          esac && [ "$FM_PR_RECORD_MERGED" = true ] && phase=retired
+        fi
+        fm_dod_validate_published_intent "$body" "$wt" "$task_tmp" "" "$pr" "$phase"
       ' _ "$SCRIPT_DIR" "$FM_PR_URL" "$(meta_field "$meta" worktree)" \
       "$(meta_field "$meta" tasktmp)" > /dev/null
   } 2>&1

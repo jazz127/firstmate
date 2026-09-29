@@ -685,6 +685,76 @@ SH
   pass "parent PR reports retain outcomes and surface evidence validation failures"
 }
 
+# Synthetic cleanup replay: registration validates a task-temp proof, cleanup
+# removes it, and the terminal report must still describe the landed task.
+evidence_cleanup_report_case() { # <case> <forge-state> <removal> <expected>
+  local key body task_tmp name=$1 forge_state=$2 removal=$3 expected=$4
+  make_world "evidence-cleanup-$name"; bind_secondmate local
+  write_child "$MATE" child 'done: PR https://github.com/owner/repo/pull/1 checks green'
+  sed -i.bak 's#https://example.test/owner/repo/pull/1#https://github.com/owner/repo/pull/1#g' "$MATE/state/child.meta"
+  rm -f "$MATE/state/child.meta.bak"
+  task_tmp="$WORLD/tasktmp"
+  mkdir -p "$task_tmp"
+  printf 'synthetic fixture proof\n' > "$task_tmp/proof.txt"
+  printf 'tasktmp=%s\n' "$task_tmp" >> "$MATE/state/child.meta"
+  body="$WORLD/body.md"
+  cat > "$body" <<EOF
+Synthetic validator input: The scenarios were run against a real account.
+evidence-artifact: $task_tmp/proof.txt
+evidence-command: synthetic fixture
+evidence-captured: 2026-09-29T00:00:00Z
+EOF
+  cat > "$WORLD/fakebin/gh" <<SH
+#!/usr/bin/env bash
+case "\$*" in
+  'pr view '*"--json body --jq .body"*) cat '$body' ;;
+  'api graphql '*) printf 'state=$forge_state\\nmerged=$([ "$forge_state" = MERGED ] && printf true || printf false)\\n' ;;
+  'api '*) printf 'bin/example.sh\\n' ;;
+  *) exit 1 ;;
+esac
+SH
+  chmod +x "$WORLD/fakebin/gh"
+  PATH="$WORLD/fakebin:$PATH" bash -c '
+    . "$1/bin/fm-pr-lib.sh"
+    . "$1/bin/fm-dod-lib.sh"
+    fm_dod_validate_published_intent "$(cat "$2")" "$3" "$4" "" https://github.com/owner/repo/pull/1
+  ' _ "$ROOT" "$body" "$MATE/projects/child" "$task_tmp" \
+    || fail "synthetic registration evidence did not pass before cleanup"
+  cp "$MATE/.fm-secondmate-parent" "$WORLD/parent-binding"
+  printf 'schema=fm-secondmate-parent.v1\nroute=invalid\n' > "$MATE/.fm-secondmate-parent"
+  run_report "$MATE" child || true
+  [ "$(outcome_count "$MATE" pending)" = 1 ] || fail "synthetic task did not leave a pending outcome"
+  case "$removal" in
+    roots) rm -rf "$task_tmp" "$MATE/projects/child" ;;
+    tasktmp) rm -rf "$task_tmp" ;;
+    file) rm -f "$task_tmp/proof.txt"; rm -rf "$MATE/projects/child" ;;
+    metadata) rm -rf "$task_tmp" "$MATE/projects/child"; sed -i.bak '/^evidence-command:/d' "$body" ;;
+  esac
+  cp "$WORLD/parent-binding" "$MATE/.fm-secondmate-parent"
+  # Keep the delivered-head record so the terminal event remains attributable.
+  run_report "$MATE" child || fail "cleaned merged task was not reported"
+  key=$(reported_outcome_key "$MATE" child "done") || fail "cleaned merged report has no receipt"
+  assert_grep "[key=$key]" "$MAIN/state/mate.status" "cleaned merged outcome was not delivered"
+  if [ "$expected" = ok ]; then
+    assert_not_contains "$(cat "$MAIN/state/mate.status")" 'evidence-validation=failed' \
+      "cleanup falsely failed previously accepted evidence"
+  else
+    assert_grep 'evidence-validation=failed' "$MAIN/state/mate.status" \
+      "$name evidence failure was hidden"
+  fi
+  pass "synthetic cleanup evidence report: $name"
+}
+
+test_merged_report_after_evidence_cleanup() {
+  evidence_cleanup_report_case merged MERGED roots ok
+  evidence_cleanup_report_case tasktmp-only MERGED tasktmp ok
+  evidence_cleanup_report_case open OPEN roots failed
+  evidence_cleanup_report_case closed CLOSED roots failed
+  evidence_cleanup_report_case surviving-root MERGED file failed
+  evidence_cleanup_report_case malformed MERGED metadata failed
+  evidence_cleanup_report_case unavailable '' roots failed
+}
+
 test_parent_report_bounds_published_read() {
   local key
   make_world published-read-timeout; bind_secondmate local
@@ -1160,6 +1230,7 @@ test_secondmate_remote_route_ledger_delivery
 test_report_subcommand_delivers_and_refuses
 test_pending_ledger_done_is_delivered_after_worktree_removal
 test_parent_report_surfaces_published_evidence_failure
+test_merged_report_after_evidence_cleanup
 test_parent_report_bounds_published_read
 test_report_avoids_scan_meta_lock_inversion
 test_local_secondmate_rejects_relative_parent_home

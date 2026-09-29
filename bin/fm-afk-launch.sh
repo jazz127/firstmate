@@ -327,15 +327,6 @@ fm_afk_launch_daemon_allowed() {
     pi|pi-signed)
       fm_afk_launch_log "the away daemon is no longer launched on $harness; the away-posture record is the posture there (run bin/fm-afk-launch.sh enter and stop)"
       return 1 ;;
-    claude)
-      [ -f "${FM_CONFIG_OVERRIDE:-$FM_HOME/config}/supervision-host" ] || return 0
-      mode=${FM_AFK_MODE:-}
-      if [ -z "$mode" ] && [ -f "$FM_AFK_LAUNCH_STATE/.afk" ]; then
-        mode=$(head -n 1 "$FM_AFK_LAUNCH_STATE/.afk" 2>/dev/null || true)
-      fi
-      [ "$mode" != quiet ] || return 0
-      fm_afk_launch_log "the away daemon is not launched on this claude home, which runs the supervision host (config/supervision-host); the away-posture record is the posture here (run bin/fm-afk-launch.sh enter and stop)"
-      return 1 ;;
   esac
   fm_afk_launch_host_primary "$harness" || return 0
   [ -f "${FM_CONFIG_OVERRIDE:-$FM_HOME/config}/supervision-host" ] || return 0

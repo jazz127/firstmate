@@ -146,6 +146,7 @@ test_flag_on_records_a_pr_registration() {
 #!/usr/bin/env bash
 case "$*" in
   'pr view '*"--json body --jq .body"*) printf 'Fixture body\n' ;;
+  'api repos/'*'/pulls/'*'/files?per_page=100 --paginate --jq '*) printf 'README.md\n' ;;
   *) exit 1 ;;
 esac
 SH

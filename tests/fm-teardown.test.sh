@@ -264,6 +264,9 @@ exit 0
 SH
   cat > "$case_dir/fakebin/gh" <<SH
 #!/usr/bin/env bash
+case "\$*" in
+  'api repos/'*'/pulls/'*'/files?per_page=100 --paginate --jq '*) printf 'README.md\n'; exit 0 ;;
+esac
 case "\${1:-} \${2:-}" in
   "pr view")
     case " \$* " in

@@ -1,0 +1,21 @@
+== BEFORE (a73ded47): bash bin/fm-lint.sh tests/fm-afk-return.test.sh
+fm-lint.sh: ShellCheck 0.11.0 (pinned 0.11.0)
+fm-lint.sh: full ShellCheck extended analysis enabled
+
+In tests/fm-afk-return.test.sh line 631:
+  touch "$dir/home/state/.last-watcher-beat"
+         ^--^ SC2031 (info): dir was modified in a subshell. That change might be lost.
+
+
+In tests/fm-afk-return.test.sh line 632:
+  : > "$dir/home/state/.fake-drain"
+       ^--^ SC2031 (info): dir was modified in a subshell. That change might be lost.
+
+
+In tests/fm-afk-return.test.sh line 634:
+  out=$(run_return "$dir" begin) || fail "a return with only landed work should clear: $out"
+                    ^--^ SC2031 (info): dir was modified in a subshell. That change might be lost.
+
+For more information:
+  https://www.shellcheck.net/wiki/SC2031 -- dir was modified in a subshell. T...
+exit=1

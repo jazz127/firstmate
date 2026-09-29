@@ -1,0 +1,4 @@
+== AFTER (db425f21): bash bin/fm-lint.sh tests/fm-afk-return.test.sh bin/fm-scratch-lib.sh
+fm-lint.sh: ShellCheck 0.11.0 (pinned 0.11.0)
+fm-lint.sh: full ShellCheck extended analysis enabled
+exit=0

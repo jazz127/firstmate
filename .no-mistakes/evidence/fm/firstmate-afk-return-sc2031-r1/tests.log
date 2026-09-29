@@ -1,0 +1,113 @@
+FM_TEST_BEGIN 2026-09-29T00:01:09Z tests/fm-afk-return.test.sh family=afk expected_gate_skip=none
+ok - return catch-up owns live blocker remediation, reports itself to Bearings as content, preserves evidence once, and clears idempotently
+ok - tmux and Herdr blockers require the same explicit durable reclassification before ordinary work
+ok - needs-decision remains reportable without masquerading as a firstmate-actionable blocker
+ok - AFK return re-drains published wakes until handling acknowledges
+ok - away-mode re-entry fails closed while the prior return catch-up is pending
+ok - /quiet off's return path behaves identically for a quiet-content flag as for a legacy away-content one
+ok - check retries recorded terminal teardown and keeps catch-up gated until success
+ok - an unreadable superseded mandate stays required until its record validates
+ok - the retained contract epoch requires its final archive on every check
+ok - the return brief renders health, the words with the session account, waiting, could-not-fix, handled, and cost from durable records, and the gate shrinks to what the away session could not fix
+ok - the return brief lists landed work whose worker is still up, from the durable merge marker only, without gating on it and never offering a secondmate for teardown
+ok - the return brief points at the drain for branch outcomes on a host home and leaves the read cursor to it, and a Pi home's brief is unchanged
+ok - the all-silent return keeps the outcome stored without promising a drain presentation
+ok - a drain that cannot record its branch-outcome presentation keeps the return's catch-up gated until a check records it
+ok - a refreshed posture keeps its original window, superseded mandate, and earlier outcomes
+ok - a malformed posture record stays live and gates return catch-up
+ok - an epochless malformed record remains required until restored valid
+ok - an unreadable outcome store gates catch-up until a successful reread
+ok - an unavailable held listing gates catch-up until a successful reread
+ok - an unreadable status stays private and gates until a successful reread
+ok - a status-file-less leftover record gates return; a readable status on that same record is the proven path that passes
+ok - a leftover record with a readable status file lets return catch-up clear
+ok - the read-only guard treats the away-posture record as active away mode without the legacy flag
+ok - the return brief leads with supervisor health and names every detected gap
+ok - the return brief does not report an already-acked watcher-down marker as an open gap
+ok - a return with only the legacy away flag still renders the brief and measures the window from the flag
+FM_TEST_END 2026-09-29T00:02:17Z tests/fm-afk-return.test.sh exit=0 duration_ms=68340 gate_skip=false
+FM_TEST_BEGIN 2026-09-29T00:02:17Z tests/fm-pr-body-preflight.test.sh family=unclassified expected_gate_skip=none
+ok - valid draft body passes preflight
+ok - missing artifact: preflight preserves the evidence validator refusal
+ok - bullet-prefixed metadata: preflight preserves the evidence validator refusal
+ok - mocked fetch labelled live without provenance: preflight preserves the evidence validator refusal
+ok - non-ISO capture time: preflight preserves the evidence validator refusal
+ok - artifact outside allowed roots: preflight preserves the evidence validator refusal
+ok - duplicate metadata blocks: preflight preserves the evidence validator refusal
+ok - pipeline-shaped body can mechanically pass with one metadata block
+ok - one consistent driven-scenario statement passes
+ok - split appendix count is refused with both conflicting lines
+ok - contradiction takes precedence over a generic missing-metadata refusal
+ok - corrected scenario body passes
+ok - table and count contradiction is refused
+ok - corrected table and count pass
+ok - table and incompatible driven-scenario total is refused
+ok - table and incompatible total-only mismatch is refused
+ok - fully classified fixture table rejects an incompatible total
+ok - passed verdict with a driven scenario remains consistent
+ok - unrelated passed validation beside a fixture-only table is accepted
+ok - published-body readback refuses a bad body and saves it for correction
+ok - corrected published-body readback passes the same validator
+ok - scratch preflight refuses staged and committed cache bundles by path
+all fm-pr-body-preflight tests passed
+FM_TEST_END 2026-09-29T00:02:25Z tests/fm-pr-body-preflight.test.sh exit=0 duration_ms=8010 gate_skip=false
+FM_TEST_BEGIN 2026-09-29T00:02:25Z tests/fm-pr-check-security.test.sh family=pr-forge expected_gate_skip=none
+ok - raw-byte parser accepts canonical URLs and rejects the complete adversarial matrix
+ok - GitLab merge requests are followed on any instance and never wake falsely
+ok - the Gerrit watch wakes only on an explicit merged status and never on submittability
+ok - Gerrit arming records no patch set revision and the merge path refuses to submit
+ok - Gerrit arming accepts a published HEAD only by the change's current patch set tree
+ok - published attestation accepts its current head, refuses a stale head, and leaves absent attestations unchanged
+ok - a no-mistakes Gerrit ready report requires the pipeline's fixes recovered into the published copy
+ok - validated merged polls notify once and retire before the next watcher cycle
+ok - a repeat identical merged poll for an already-notified task is absorbed, never queued as a main-blocking row
+ok - a failed upward merge report keeps its poll armed for repair and retry
+ok - staged self-merge and poll interleavings are never silent
+ok - queued merges retain their away authority after captain return
+ok - poll distinguishes attended authorization from external landing
+ok - accepted merge authority refuses rebound task metadata
+ok - accepted merge authority persists under the lifecycle lock
+ok - teardown cannot race merged-poll authority consumption
+ok - poll retirement preserves a replacement authority record
+ok - a merge detected by the poll is reported upward from a secondmate home exactly once
+ok - a different merged PR for the same task gets its own first notification
+ok - a merged poll on a persistent secondmate retires silently: no outcome, marker, or wake, and every lifecycle artifact preserved
+ok - queue, receipt, and every fixed-path removal crash point recover without loss or repeated execution
+ok - open/red, closed-unmerged, malformed, and forge errors remain armed until an exact merged transition
+ok - replacement, nonterminal, tampered, and custom results receive no deletion authority
+ok - queue failure and untrusted receipts preserve canonical poll evidence
+ok - GitHub and GitLab exact merged results share one retirement path
+ok - PR and teardown entrypoints reject invalid arguments before every side effect
+ok - arming refuses a draft pull request, naming it, and arms a ready or unreadable one
+ok - fm-pr-check refuses to record a PR or arm a merge watch on a secondmate record
+ok - fm-pr-check refuses to register a PR whose named head is only in the worker copy
+ok - fm-pr-check refuses a direct-PR registration while a later commit is only in the copy
+ok - fm-pr-check refuses a published pipeline scratch path
+ok - fm-pr-check refuses a published GitLab scratch path
+ok - fm-pr-check registers a pull request that only removes scratch
+ok - fm-pr-check registers a merge request that only removes scratch
+ok - valid direct and merge flows record exact metadata and reject multiline head metadata
+ok - rejected metacharacter bytes remain inert at generation and watcher time
+ok - static poll is silent except for one merged line and remains watcher-bounded
+ok - interrupted atomic preparation cleans private temporaries and publishes nothing
+ok - concurrent watchers observe only complete private poll publications
+ok - poll publication paths refuse symlinks and directories
+ok - live poll and custom-check artifacts require private single-link files
+ok - a poll armed before a volume renumber is re-recorded under the control lock and keeps detecting merges
+ok - a renumbered registration is never re-recorded around a tampered artifact: swapped-check altered-check swapped-sidecar altered-sidecar altered-template-hash wrong-mode hardlinked-check split-device (foreign-device not exercisable on Darwin), or a pending retirement
+ok - direct re-arm publication waits without replacing an armed poll
+ok - device re-record publication waits without rewriting its registration
+ok - post-rename poll validation faults revoke both names and allow a clean retry
+ok - bootstrap does not rewrite unauthenticated checks or emit retired migration diagnostics
+ok - watcher signals promptly stop custom checks and clean private state
+ok - returned custom check descendants are drained on installed and fallback timeout paths
+ok - teardown removes safe poll artifacts and refuses directory-shaped check files without traversal
+FM_TEST_END 2026-09-29T00:11:01Z tests/fm-pr-check-security.test.sh exit=0 duration_ms=515902 gate_skip=false
+FM_TEST_SUMMARY total=3 failed=0 skipped_gate=0 duration_ms=592470
+FM_TEST_SUMMARY_FAMILY family=afk count=1 duration_ms=68340 failed=0
+FM_TEST_SUMMARY_FAMILY family=pr-forge count=1 duration_ms=515902 failed=0
+FM_TEST_SUMMARY_FAMILY family=unclassified count=1 duration_ms=8010 failed=0
+FM_TEST_SLOWEST rank=1 script=tests/fm-pr-check-security.test.sh duration_ms=515902
+FM_TEST_SLOWEST rank=2 script=tests/fm-afk-return.test.sh duration_ms=68340
+FM_TEST_SLOWEST rank=3 script=tests/fm-pr-body-preflight.test.sh duration_ms=8010
+exit=0

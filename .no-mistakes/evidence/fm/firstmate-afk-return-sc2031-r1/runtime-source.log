@@ -1,0 +1,7 @@
+== runtime: sourcing bin/fm-scratch-lib.sh still loads fm-tangle-lib.sh and fm-runtime-branch-lib.sh
+fm_default_branch: function
+fm_primary_tangle_branch: function
+firstmate_runtime_branch: function
+firstmate_runtime_branch_is_configured: function
+firstmate_runtime_tracking_source: function
+exit=0

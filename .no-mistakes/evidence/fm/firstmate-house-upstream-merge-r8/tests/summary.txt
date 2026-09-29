@@ -1,0 +1,8 @@
+fm-afk-contract rc=0
+fm-teardown rc=1
+fm-branch-supervision rc=0
+fm-afk-launch rc=0
+fm-claude-stop-autoarm rc=0
+fm-afk-return rc=0
+fm-procevent rc=0
+fm-pr-merge rc=0

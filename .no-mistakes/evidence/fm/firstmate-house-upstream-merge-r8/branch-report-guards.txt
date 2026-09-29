@@ -1,0 +1,15 @@
+=== Row scoping (house): row 16 bound to demo, report task other ===
+report refused: wake row 16 names demo, not other; report only that event's task, never fleet or a task from memory
+rc=3
+=== Row scoping: fleet refused ===
+report refused: wake row 16 names demo, not fleet; report only that event's task, never fleet or a task from memory
+rc=3
+=== Receipt dedupe (house safe receipt handling): same row twice ===
+report refused: wake row 16 already has an outcome for turn t6
+rc=3
+=== Stale turn refused ===
+report refused: the wake this shell was handling is over; report only while handling a wake
+rc=3
+=== MAIN actor refused ===
+report refused: only the supervision branch reports outcomes; MAIN acts on them instead
+rc=3

@@ -1,0 +1,2 @@
+not ok - mate-pr-ready: fm-pr-check failed: error: cannot inspect the published file list for https://github.com/example/repo/pull/7
+error: published intent validation failed

@@ -1,0 +1,40 @@
+$ echo HARNESS_PIN=$FM_TEST_HARNESS TMUX=$TMUX; echo "== AWAY on claude supervision-host home"; bin/fm-afk-launch.sh enter --words "away till 6pm" 2>&1 | tail -3; bin/fm-afk-contract.sh mode; bin/fm-a
+fk-launch.sh start; echo start_rc=$?
+HARNESS_PIN=claude TMUX=/private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab.Dgis11/tmux/tmux-501/fm-lab,25150,0
+== AWAY on claude supervision-host home
+  reach: hold-for-return only. No phone channel is configured; anything that needs you waits for your return.
+  your words (verbatim):
+    away till 6pm
+away
+fm-afk-launch: the away daemon is not launched on this claude home, which runs the supervision host (config/supervision-host); the away-posture record is the posture here (run bin/fm-afk-launch.sh ent
+er and stop)
+start_rc=1
+$ clear; bin/fm-afk-launch.sh stop 2>&1|tail -1; echo "== QUIET on claude supervision-host home"; FM_AFK_MODE=quiet bin/fm-afk-launch.sh quiet-check; echo qc_rc=$?; FM_AFK_MODE=quiet bin/fm-afk-launch
+.sh enter 2>&1 | tail -4; bin/fm-afk-contract.sh mode; FM_AFK_MODE=quiet bin/fm-afk-launch.sh start; echo start_rc=$?
+fm-afk-launch: away mode stopped; no daemon terminal was running, .afk cleared, and the posture record archived
+== QUIET on claude supervision-host home
+Quiet mode is not already the ordinary posture on this home, because the main session could not be identified, so every attended wake reaches this conversation; quiet mode enters through the quiet dae
+mon instead.
+qc_rc=1
+Quiet mode (recorded):
+  entered: 2026-09-29T04:47:32Z
+  holds: none - you are present, so nothing waits for your return: every action you ask for, a local landing or a merge included, proceeds now under ordinary attended authority, and quiet mode changes
+ only which updates reach this conversation.
+  your words: (none)
+quiet
+fm-afk-launch: daemon launched in detached tmux session 'fm-afk-daemon-3186166886-73297-31697-1790657252', supervising %0
+start_rc=0
+$ echo "== refresh of running quiet daemon, no FM_AFK_MODE (record owns mode)"; head -1 $FM_HOME/state/.afk; bin/fm-afk-launch.sh start; echo refresh_rc=$?; echo "== stop"; bin/fm-afk-launch.sh stop;
+echo stop_rc=$?; bin/fm-afk-contract.sh mode; echo mode_rc=$?
+== refresh of running quiet daemon, no FM_AFK_MODE (record owns mode)
+quiet
+fm-afk-launch: daemon already running; refreshed away-mode flag (no new terminal)
+refresh_rc=0
+== stop
+fm-afk-launch: terminal close command failed, but exact absence was confirmed
+fm-afk-launch: away-posture record archived at /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.Dgis11/state/afk-contracts/1790657252.afk-contract
+fm-afk-launch: away mode stopped; daemon terminal torn down, .afk cleared, and the posture record archived
+stop_rc=0
+fm-afk-contract: no record at /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.Dgis11/state/.afk-contract
+mode_rc=1
+$

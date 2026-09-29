@@ -1,0 +1,34 @@
+=== Case A: QUIET record (captain present), away-posture turn, captain verdict ===
+record mode: quiet
+recorded seq 1 [captain]; the captain has returned, so it is queued for MAIN to relay
+rc=0
+-- wake queue now contains:
+1790657189	1	check	supervision-host-return:1	check: supervision-host outcome 1 for demo [captain] was recorded after the captain returned, so the return brief may not show it; relay it to the captain: demo PR merged after quiet
+
+=== Case B: QUIET record, attended turn, captain verdict ===
+recorded seq 2 [captain]; MAIN processes it from its next drain
+rc=0
+
+=== Case C: AWAY record, away turn, captain verdict (must wait for return brief, not queue) ===
+record mode: away
+recorded seq 3 [captain]; it waits in the outcome store for MAIN
+rc=0
+
+=== Case D: AWAY record, attended turn, captain verdict (must wait in store) ===
+recorded seq 4 [captain]; it waits in the outcome store for MAIN
+rc=0
+
+=== Case E: NO record, away turn (captain returned) ===
+fm-afk-contract: no record at /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-lab.Dgis11/state/.afk-contract
+mode rc=1
+recorded seq 5 [routine]; the captain has returned, so it is queued for MAIN to relay
+rc=0
+
+=== Case F: damaged mode field reads as away (adversarial) ===
+record mode: away
+recorded seq 6 [captain]; it waits in the outcome store for MAIN
+rc=0
+
+=== Durable relay wakes queued for MAIN ===
+1790657189	1	check	supervision-host-return:1	check: supervision-host outcome 1 for demo [captain] was recorded after the captain returned, so the return brief may not show it; relay it to the captain: demo PR merged after quiet
+1790657190	2	check	supervision-host-return:5	check: supervision-host outcome 5 for demo [routine] was recorded after the captain returned, so the return brief may not show it; relay it to the captain: late routine after return

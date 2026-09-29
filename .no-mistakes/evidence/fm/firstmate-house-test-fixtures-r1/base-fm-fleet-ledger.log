@@ -1,0 +1,4 @@
+ok - flag on: dispatch, polled status lines, the local merge after its task's pending lines, and cleanup are recorded in order
+ok - flag on: a PR merge is recorded once, after the task's pending status lines
+not ok - PR registration failed: error: cannot inspect the published file list for https://github.com/acme/sample/pull/9
+error: published intent validation failed

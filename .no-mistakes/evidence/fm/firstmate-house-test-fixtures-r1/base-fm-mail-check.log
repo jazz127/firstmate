@@ -1,0 +1,13 @@
+ok - fm-mail-check: help and usage plumbing
+ok - fm-mail-check: arm writes and binds, re-arm is idempotent, disarm removes
+ok - fm-mail-check: arm resolves a relative home into the shim
+ok - fm-mail-check: arm refuses a symlink at the shim path
+ok - fm-mail-check: arm refuses without the mail plane
+ok - fm-mail-check: a successful poll that surfaces new mail emits one wake line
+ok - fm-mail-check: a poll failure is reported once and re-reported after recovery
+ok - fm-mail-check: an unconfigured home is reported once, not every poll
+ok - fm-mail-check: a slow poll times out into a one-line report
+ok - fm-mail-check: a fail-closed poll after a wake reports the failure, not the wake
+ok - fm-mail-check: a repeated status-4 fail-closed poll still wakes
+not ok - the repeat report is exactly one line: /private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-mail-check.dnhMo8/repeat-status2/bin/fm-pr-lib.sh: line 3: /private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-mail-check.dnhMo8/repeat-status2/bin/fm-scratch-lib.sh: No such file or directory
+mail: wake for 9 could not be rolled back or durably recorded; the wake stays queued and the next poll heals it - a possible duplicate, never a lost mail

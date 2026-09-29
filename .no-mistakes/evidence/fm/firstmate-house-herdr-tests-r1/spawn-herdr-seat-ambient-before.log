@@ -1,0 +1,6 @@
+# ambient: HERDR_ENV=1 HERDR_SESSION=fm-ambient-operator HERDR_SOCKET_PATH=/nonexistent/ambient.sock HERDR_PANE_ID=w-amb:p-amb
+not ok - Herdr-backed Codex Luna spawn should succeed: warning: /private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-spawn-dispatch-profile.HHpXby/profile-codex-luna-herdr/home/data/profile-codex-luna-herdr-z4/launch-brief.md records no ship branch; defaulting to legacy branch fm/profile-codex-luna-herdr-z4
+warning: /private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-spawn-dispatch-profile.HHpXby/profile-codex-luna-herdr/home/data/profile-codex-luna-herdr-z4/launch-brief.md records no delivery contract line (scaffolded before ship briefs recorded one); launching on the explicit --mode no-mistakes - confirm its definition of done matches
+warning: herdr version 0.7.1 (protocol 14) is older than the 0.8.0 floor for presentation spaces, where projected cleanup can steal the active workspace; using the ordinary flat layout instead. Upgrade herdr to 0.8.0 or newer (herdr update) to restore the projection, or write "on" into config/herdr-presentation-spaces to force it on this release.
+error: herdr session 'fm-ambient-operator' has no unambiguous socket to match against the launcher pane's own; refusing to place a worker from an unverifiable parent identity: expected exit 0, got 1
+exit=1

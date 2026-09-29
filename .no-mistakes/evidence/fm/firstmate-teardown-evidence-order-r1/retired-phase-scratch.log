@@ -1,0 +1,4 @@
+# retired-phase scratch-publication probe (corrected reserved path)
+files=.codex-live-check/proof.txt phase=retired rc=1 error: scratch path would be published: .codex-live-check/proof.txt
+files=.npm/cache phase=retired rc=1 error: scratch path would be published: .npm/cache
+files=FAIL phase=retired rc=1 error: cannot inspect the published file list for https://github.com/owner/repo/pull/1

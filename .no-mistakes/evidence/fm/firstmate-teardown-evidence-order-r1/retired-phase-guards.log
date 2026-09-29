@@ -1,0 +1,12 @@
+# retired-phase guard probe (roots /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-retired.dQfkGl/removed-tmp and /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-retired.dQfkGl/removed-wt do not exist)
+removed-root-publish               phase=publish  rc=1 evidence claim refused: artifact is missing or unreadable: /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-retired.dQfkGl/removed-tmp/proof.txt
+removed-root-retired               phase=retired  rc=0 
+retired+scratch-published          phase=retired  rc=0 
+retired+attestation-mismatch       phase=retired  rc=1 error: published attestation head mismatch: current head aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, attested head bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb; run the pipeline once against the current head to re-attest it. Hand-editing the attestation is not an option; use a merge, not a rebase.
+retired+attestation-bad-head       phase=retired  rc=1 error: published pipeline attestation has no valid head_sha
+retired+artifact-outside-roots     phase=retired  rc=1 evidence claim refused: artifact is outside the worker worktree or task temp directory: /etc/hosts
+retired+missing-command            phase=retired  rc=1 evidence claim refused: missing evidence-command: exact command
+bogus-phase                        phase=preflight rc=1 
+retired+surviving-root-missing-file phase=retired  rc=1 evidence claim refused: artifact is missing or unreadable: /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-retired.dQfkGl/removed-tmp/proof.txt
+retired+dangling-symlink-root      phase=retired  rc=1 evidence claim refused: artifact is missing or unreadable: /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T//fm-retired.dQfkGl/removed-tmp/proof.txt
+NOTE: row 'retired+scratch-published' in this log used a non-reserved path (.no-mistakes/x.md) and is superseded by retired-phase-scratch.log, which uses real reserved paths.

@@ -1,0 +1,6 @@
+== base (d61b069)
+actionable: child outcome needs parent report: child=child state=done (missing or unreadable parent binding .fm-secondmate-parent)
+not ok - cleanup falsely failed previously accepted evidence (unexpected: 'evidence-validation=failed')
+--- output ---
+done [key=child-outcome-child-done-f4d61f88] [at=1790657974]: child child done: PR https://github.com/owner/repo/pull/1 checks green pr=https://github.com/owner/repo/pull/1 evidence-validation=failed evidence claim refused: artifact is missing or unreadable: /private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-inactive-reconcile.zgPUFn/evidence-cleanup-merged/tasktmp/proof.txt mode=no-mistakes yolo=off
+exit=1

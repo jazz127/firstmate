@@ -1,0 +1,9 @@
+=== after tree (f4f248aa) against real merged PR jazz127/firstmate#109
+pending outcomes before cleanup: 1
+--- child.meta
+worktree=/private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-inactive-reconcile.0gwXLe/live-pr109/mate/projects/child
+pr=https://github.com/jazz127/firstmate/pull/109
+tasktmp=/tmp/fm-firstmate-crewmate-sessionstart-carveout-r1
+report rc=0
+--- parent mate.status (what the captain sees)
+done [key=child-outcome-child-done-b8834246] [at=1790658377]: child child done: PR https://github.com/jazz127/firstmate/pull/109 checks green pr=https://github.com/jazz127/firstmate/pull/109 mode=no-mistakes yolo=off

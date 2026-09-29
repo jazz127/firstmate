@@ -1,0 +1,9 @@
+=== base tree (8f75cac4) against real merged PR jazz127/firstmate#109
+pending outcomes before cleanup: 1
+--- child.meta
+worktree=/private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-inactive-reconcile.BKlaoE/live-pr109/mate/projects/child
+pr=https://github.com/jazz127/firstmate/pull/109
+tasktmp=/tmp/fm-firstmate-crewmate-sessionstart-carveout-r1
+report rc=0
+--- parent mate.status (what the captain sees)
+done [key=child-outcome-child-done-29f1c3bd] [at=1790658357]: child child done: PR https://github.com/jazz127/firstmate/pull/109 checks green pr=https://github.com/jazz127/firstmate/pull/109 evidence-validation=failed evidence claim refused: artifact is missing or unreadable: /tmp/fm-firstmate-crewmate-sessionstart-carveout-r1/pipeline-evidence-readback.toon mode=no-mistakes yolo=off

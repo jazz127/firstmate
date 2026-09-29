@@ -355,12 +355,12 @@ fm_dod_validate_scenario_consistency() {  # <complete-pr-body>
   '
 }
 
-fm_dod_validate_intent_evidence() {  # <intent> <worktree> <task-temp> [preflight|publish]
+fm_dod_validate_intent_evidence() {  # <intent> <worktree> <task-temp> [preflight|publish|retired]
   local intent=$1 worktree=$2 task_temp=$3 phase=${4:-preflight}
   local line previous_line='' previous_previous_line='' candidate detector_input artifact command captured claim=0 normalized_artifact normalized_root resolved_artifact link_target symlink_hops
   local timestamp_date timestamp_clock timestamp_year timestamp_month timestamp_day timestamp_hour timestamp_minute timestamp_second timestamp_zone timestamp_offset_hour timestamp_offset_minute days_in_month
   local artifact_count=0 command_count=0 captured_count=0
-  if [ "$phase" = publish ]; then
+  if [ "$phase" != preflight ]; then
     fm_dod_validate_scenario_consistency "$intent" || return 1
   fi
   detector_input=$(printf '%s\n' "$intent" | tr '.!?;' '\n' | sed -E 's/,[[:space:]]+(but|however|yet)[[:space:]]+/\n/g')
@@ -501,7 +501,13 @@ EOF
     printf '%s\n' "evidence claim refused: artifact is outside the worker worktree or task temp directory: $artifact" >&2
     return 1
   fi
-  if [ "$phase" = publish ]; then
+  if [ "$phase" != preflight ]; then
+    # A confirmed merged PR may outlive its disposable evidence root.
+    # Metadata, claim consistency, path containment, and publication checks
+    # still apply; a missing file inside a surviving root still fails.
+    if [ "$phase" = retired ] && [ ! -e "$normalized_root" ] && [ ! -L "$normalized_root" ]; then
+      return 0
+    fi
     if [ ! -f "$artifact" ] || [ ! -r "$artifact" ]; then
       printf '%s\n' "evidence claim refused: artifact is missing or unreadable: $artifact" >&2
       return 1
@@ -549,9 +555,11 @@ EOF
   return 0
 }
 
-fm_dod_validate_published_intent() {  # <intent> <worktree> <task-temp> [current-head] [pr-url]
+fm_dod_validate_published_intent() {  # <intent> <worktree> <task-temp> [current-head] [pr-url] [publish|retired]
   local body=$1 current_head=${4:-} url=${5:-} line payload attested_head count=0
-  fm_dod_validate_intent_evidence "$body" "$2" "$3" publish || return 1
+  # retired is for reconciliation after a forge-confirmed merge only.
+  case "${6:-publish}" in publish|retired) ;; *) return 1 ;; esac
+  fm_dod_validate_intent_evidence "$body" "$2" "$3" "${6:-publish}" || return 1
   [ -z "$url" ] || fm_pr_refuse_published_scratch "$url" || return 1
   while IFS= read -r line || [ -n "$line" ]; do
     case "$line" in

@@ -52,7 +52,7 @@ test_plugin_shape() {
 import { readFileSync, readdirSync, existsSync } from "node:fs";
 const mod = process.env.FM_TEST_MOD;
 const manifest = JSON.parse(readFileSync(\`\${mod}/.claude-plugin/plugin.json\`, "utf8"));
-if (manifest.name !== "firstmate-calm") throw new Error(\`manifest name \${manifest.name}\`);
+if (manifest.name !== "fm") throw new Error(\`manifest name \${manifest.name}\`);
 for (const key of ["commands", "agents", "skills", "hooks", "mcpServers", "lspServers", "outputStyles"]) {
   if (key in manifest) throw new Error(\`manifest declares \${key}, which would load while the flag is off\`);
 }

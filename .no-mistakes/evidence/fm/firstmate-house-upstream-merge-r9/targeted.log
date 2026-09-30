@@ -1,0 +1,21 @@
+== fm-pr-merge
+rc=0
+ok - fm-pr-merge enforces required producer identity and named waivers
+ok - fm-pr-merge matches an app-bound required commit status by name
+ok - fm-pr-merge reports known missing checks and all independent read errors
+== fm-contributions
+rc=0
+ok - a configured automated reviewer wakes as fleet triage and an unconfigured bot does not
+ok - the automated reviewer set is configurable and can be disabled
+ok - an author comment is an event only with the configured marker
+== fm-pending-reply
+rc=0
+ok - local parent-replies.status remains wrong-home evidence
+ok - an escalated correlation stays retryable only while undelivered
+ok - all pending-reply tests passed
+== fm-watch-arm
+rc=0
+ok - watch-arm: a moved recovery generation consumes handled rows and names its remedy
+ok - watch-arm: downtime marker publication does not follow symlinks
+ok - watch-arm: --stop ends only this home's watcher, publishes downtime, and reports when none runs
+== fm-supervision-host

@@ -61,9 +61,12 @@
 # gh-axi view could not prove the outcome either.
 # A green PR that is BEHIND updates its branch whatever merge method applies.
 # The update uses GitHub's merge-commit default, records the new head, then
-# waits up to ten minutes for checks at that head, and for a transient UNKNOWN
+# waits briefly (five poll delays, 15 seconds by default) under the merge and
+# away locks for that head to appear and for its checks and a transient UNKNOWN
 # mergeable state to settle, and repeats this full preflight before the
-# exact-head merge. A failed check still refuses.
+# exact-head merge. If the head or its checks are not ready in that time, the
+# helper stops without merging and says to run the merge again once checks
+# pass. A failed check still refuses.
 # If the pull request remains open and the base branch has an effective
 # merge_queue rule, an attended refusal names the queue's configured merge
 # method and exact --attended-override -- --auto --<method> retry flags. While

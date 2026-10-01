@@ -3848,6 +3848,27 @@ test_composer_state_bare_prompt_is_empty() {
   pass "fm_backend_herdr_composer_state: a bare '❯' composer row reads empty"
 }
 
+test_composer_state_titled_claude_rules() {
+  # Synthetic replay of upstream issue #6127's titled Herdr composer capture.
+  local kind dir log resp fb out row want
+  for kind in idle pending; do
+    dir="$TMP_ROOT/composer-claude-titled-$kind"
+    mkdir -p "$dir/responses"
+    log="$dir/log"; resp="$dir/responses"; : > "$log"
+    row='❯'; want=empty
+    if [ "$kind" = pending ]; then
+      row='❯ Firstmate instruction waiting'; want=pending
+    fi
+    printf '────────────────────────── Firstmate ──\n%s\n───────────────────────────────────────\n  Opus 5 (1M context) │ firstmate │ main │ fleet idle\n' "$row" > "$resp/1.out"
+    printf '{"result":{"agent":{"agent":"claude","agent_status":"working"}}}\n' > "$resp/2.out"
+    fb=$(make_herdr_fakebin "$dir")
+    out=$( PATH="$fb:$PATH" FM_HERDR_LOG="$log" FM_HERDR_RESPONSES="$resp" \
+      bash -c '. "$0/bin/backends/herdr.sh"; fm_backend_herdr_composer_state default:w1:p2' "$ROOT" )
+    [ "$out" = "$want" ] || fail "a $kind Claude composer under titled Herdr rules should read $want, got '$out'"
+  done
+  pass "fm_backend_herdr_composer_state: titled Claude rules expose idle and pending input"
+}
+
 test_composer_state_styled_placeholder_draft_is_pending() {
   local dir log resp fb out
   dir="$TMP_ROOT/composer-ghost"; mkdir -p "$dir/responses"; log="$dir/log"; resp="$dir/responses"; : > "$log"
@@ -5819,6 +5840,7 @@ test_busy_state_working_maps_to_busy
 test_busy_state_done_and_blocked_map_to_idle
 test_busy_state_unknown_on_no_agent
 test_composer_state_bare_prompt_is_empty
+test_composer_state_titled_claude_rules
 test_composer_state_styled_placeholder_draft_is_pending
 test_composer_state_real_text_is_pending
 test_composer_state_grok_oversized_title_preserves_safe_verdicts

@@ -621,6 +621,7 @@ It hands a bounded ANSI tail plus Herdr's capability facts to the fleet-wide cla
 - Bare agent-glyph rows, including muse's `⟩`, which the adapter's retired local pattern silently omitted.
 - opencode's left bar.
 - The Pi separator region this adapter pioneered, admitted only when native `agent get` identity is exactly Pi and state is idle or done.
+- Claude's rule-framed composer under Herdr: a titled opening rule (`──── Title ──`) and a plain closing rule around a bare `❯` row.
 
 ### Pi composer states
 

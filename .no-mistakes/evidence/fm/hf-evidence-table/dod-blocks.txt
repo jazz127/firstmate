@@ -1,0 +1,27 @@
+== no-mistakes
+That CI-ready `done:` is accepted only when this copy's HEAD - your latest commit - is one the /no-mistakes run pushed, so commit nothing after the run; the check tests that commit, not merely that a branch moved.
+If you deliberately keep the PR a draft, append `paused [at=<epoch>]: {why the draft is held}` instead of done.
+
+Evidence required before reporting a fix as validated:
+- Name the reproduction artifact or exact command that fails before the change and passes after it through the same path users exercise.
+- Each failure mode claimed in a before/after validation table must have a non-zero pre-change observation or be marked not exercised by the sample.
+- State how many cases scanned and how many exhibited the defect.
+- A sample that cannot exhibit the defect is not evidence for the fix; describe all-zero rows as not exercised, not as validation.
+== direct-PR
+If you deliberately keep the PR a draft, append `paused [at=<epoch>]: {why the draft is held}` instead of done.
+Do NOT run /no-mistakes. The configured merge authority decides whether to merge the PR; firstmate relays the outcome.
+
+Evidence required before reporting a fix as validated:
+- Name the reproduction artifact or exact command that fails before the change and passes after it through the same path users exercise.
+- Each failure mode claimed in a before/after validation table must have a non-zero pre-change observation or be marked not exercised by the sample.
+- State how many cases scanned and how many exhibited the defect.
+- A sample that cannot exhibit the defect is not evidence for the fix; describe all-zero rows as not exercised, not as validation.
+== local-only
+When it is implemented and committed, append `done [at=<epoch>]: ready in branch fm/t1` to the status file and stop.
+The configured merge authority approves the ready branch, then firstmate merges it into local `main` through the guarded fast-forward path.
+
+Evidence required before reporting a fix as validated:
+- Name the reproduction artifact or exact command that fails before the change and passes after it through the same path users exercise.
+- Each failure mode claimed in a before/after validation table must have a non-zero pre-change observation or be marked not exercised by the sample.
+- State how many cases scanned and how many exhibited the defect.
+- A sample that cannot exhibit the defect is not evidence for the fix; describe all-zero rows as not exercised, not as validation.

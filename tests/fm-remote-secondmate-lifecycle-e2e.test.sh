@@ -233,6 +233,7 @@ case "${FM_FAKE_SSH_MODE:-normal}:$command_name:$command_rel" in
     exit 0
     ;;
   provision-block-fail:fm-remote-home-provision.sh:*)
+    [ "$_command_action" = --timeout ] && [ "$command_rel" = 7200 ] || exit 94
     touch "$FM_FAKE_SEED_ENTERED"
     while [ ! -f "$FM_FAKE_SEED_RELEASE" ]; do sleep 0.02; done
     exit 1
@@ -484,6 +485,7 @@ fi
 
 mkdir -p "$TMP_ROOT/seed-parent/data" "$TMP_ROOT/seed-parent/state"
 FM_SECONDMATE_CHARTER='Failing seed charter.' FM_SECONDMATE_SCOPE='failed seed' \
+  FM_REMOTE_PROVISION_TIMEOUT=7200 \
   FM_FAKE_SSH_MODE=provision-block-fail seed_env "$ROOT/bin/fm-remote-home-seed.sh" \
   seed-fail remote-mac "$REMOTE_ROOT" "$TMP_ROOT/seed-fail-home" --no-projects \
   > "$TMP_ROOT/seed-fail.out" 2>&1 &

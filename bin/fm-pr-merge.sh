@@ -885,7 +885,8 @@ EOF
 
 github_update_behind_branch() {
   local old_head=$FM_PR_MERGE_HEAD new_head attempt_error
-  local deadline=$((SECONDS + 600))
+  local poll=${mergeable_retry_delay:-3} deadline
+  deadline=$((SECONDS + poll * 5))
   attempt_error=$(mktemp "${TMPDIR:-/tmp}/fm-pr-merge-update.XXXXXX") || return 1
   if ! gh pr update-branch "$PR_NUMBER" --repo "$PR_OWNER/$PR_REPO"; then
     rm -f "$attempt_error"
@@ -897,11 +898,11 @@ github_update_behind_branch() {
       break
     fi
     if [ "$SECONDS" -ge "$deadline" ]; then
-      echo "error: timed out verifying a new GitHub head after updating $URL" >&2
+      echo "error: $URL was updated but its new head is not visible yet; run the merge again once its checks pass" >&2
       rm -f "$attempt_error"
       return 1
     fi
-    sleep 5
+    sleep "$poll"
   done
   if ! record_pr_metadata || ! grep -qxF "pr_head=$new_head" "$META"; then
     echo "error: could not record the updated GitHub head $new_head" >&2
@@ -933,11 +934,11 @@ github_update_behind_branch() {
     fi
     if [ "$SECONDS" -ge "$deadline" ]; then
       cat "$attempt_error" >&2
-      echo "error: timed out waiting for required checks on updated head $new_head" >&2
+      echo "error: $URL was updated to $new_head but its checks are not ready; run the merge again once its checks pass" >&2
       rm -f "$attempt_error"
       return 1
     fi
-    sleep 5
+    sleep "$poll"
   done
 }
 

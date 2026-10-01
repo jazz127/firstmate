@@ -2693,6 +2693,28 @@ test_github_behind_updates_and_rechecks_before_merge() {
     > "$case_dir/stdout" 2> "$case_dir/stderr" \
     || fail "github-behind-unknown-after-update: transient UNKNOWN should be awaited: $(cat "$case_dir/stderr")"
   assert_logged_gh_merge "$case_dir" 6182 example/repo --squash
+
+  case_dir=$(make_case github-behind-pending-cap)
+  add_gh_mocks "$case_dir" "$old_head"
+  write_github_required "$case_dir" classic:ci
+  jq '.mergeStateStatus = "BEHIND"' "$case_dir/github-view.json" > "$case_dir/github-view-after-update.json"
+  mv "$case_dir/github-view-after-update.json" "$case_dir/github-view.json"
+  jq --arg head "$new_head" '.mergeStateStatus = "CLEAN" | .headRefOid = $head | .statusCheckRollup[0].status = "IN_PROGRESS" | .statusCheckRollup[0].conclusion = null' \
+    "$case_dir/github-view.json" > "$case_dir/github-view-after-update.json"
+  printf '%s\n' "$new_head" > "$case_dir/github-head-after-update"
+  set +e
+  FM_PR_GITHUB_MERGEABLE_RETRY_DELAY=1 \
+    run_pr_merge "$case_dir" task-x1 https://github.com/example/repo/pull/6183 -- --merge \
+    > "$case_dir/stdout" 2> "$case_dir/stderr"
+  rc=$?
+  set -e
+  expect_code 1 "$rc" "github-behind-pending-cap: checks still pending past the cap must stop"
+  assert_grep 'pr update-branch 6183 --repo example/repo' "$case_dir/gh.log" \
+    "github-behind-pending-cap: the branch was not updated"
+  assert_grep "was updated to $new_head but its checks are not ready; run the merge again once its checks pass" "$case_dir/stderr" \
+    "github-behind-pending-cap: the stop message was not printed"
+  assert_no_grep 'pr merge' "$case_dir/gh.log" \
+    "github-behind-pending-cap: an unverified head was merged"
   pass "fm-pr-merge updates a green behind branch and merges only after the new head is green"
 }
 

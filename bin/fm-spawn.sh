@@ -150,9 +150,9 @@
 #   the slot. It reacquires the lock before claiming the reserved slot and holds
 #   it through task metadata publication. Teardown holds that same lock while
 #   proving and returning a slot. Under that lock spawn writes the slot's owner
-#   claim, which is
-#   what lets teardown leave a slot reassigned since untouched; bin/fm-wake-lib.sh
-#   owns the claim and bin/fm-teardown.sh owns what it protects. A slot that
+#   claim, which is what lets teardown leave a slot reassigned since untouched;
+#   bin/fm-wake-lib.sh owns the claim and bin/fm-teardown.sh owns what it
+#   protects. A slot that
 #   cannot be claimed refuses the spawn rather than launching a worker whose slot
 #   could later be released out from under its successor. A spawn that aborts
 #   while it still holds the allocation lock drops its own claim; an abort after

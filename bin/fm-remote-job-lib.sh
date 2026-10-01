@@ -28,6 +28,8 @@
 # then publishes state=done last. Callers wait for done, relay stdout and
 # stderr separately, then reap only their completed record. Input, argv,
 # stdout, and stderr are each capped at 1048576 bytes.
+# Provisioning records use --timeout <seconds> from their argv, default 21600,
+# maximum 86400; other jobs keep FM_REMOTE_JOB_TIMEOUT (default 360, max 3600).
 #
 # The worker serves one lane per staged home: jobs for the same home run
 # strictly FIFO in seq order while lanes for different homes run concurrently,
@@ -131,6 +133,16 @@ fm_remote_job_safe_id() {
 
 fm_remote_job_command_preemptible() { # <staged argv command>
   case "${1:-}" in fm-remote-delta-read.sh) return 0 ;; *) return 1 ;; esac
+}
+
+# Provisioning alone accepts a longer execution window. Its --timeout argv
+# carries the parent's choice across env -i; every other command retains the
+# ordinary 3600-second maximum. Wait and execution validate the same record.
+fm_remote_job_timeout_valid() { # <seconds> <command>
+  local limit=3600
+  [ "$2" != fm-remote-home-provision.sh ] || limit=86400
+  case "$1" in ''|*[!0-9]*|0) return 1 ;; esac
+  [ "$1" -gt 0 ] && [ "$1" -le "$limit" ]
 }
 
 fm_remote_job_validate_settings() {
@@ -624,7 +636,7 @@ fm_remote_job_cancel() { # <account-home> <id>
 }
 
 fm_remote_job_stage() { # <account-home> <root> <home> <command> [args...]; stdin is captured
-  local account_home=$1 root=$2 home=$3 command=$4 stage id destination bytes queue_deadline owner_start
+  local account_home=$1 root=$2 home=$3 command=$4 stage id destination bytes queue_deadline owner_start timeout
   shift 4
   fm_remote_job_prepare_state "$account_home" || return 1
   root=$(fm_remote_job_canonical_existing_dir "$root") || {
@@ -637,6 +649,24 @@ fm_remote_job_stage() { # <account-home> <root> <home> <command> [args...]; stdi
   }
   case "$command" in fm-*.sh) ;; *) FM_REMOTE_JOB_ERROR="remote job command is outside the fm-*.sh namespace"; return 1 ;; esac
   case "$command" in */*|*..*) FM_REMOTE_JOB_ERROR="remote job command contains a path or traversal"; return 1 ;; esac
+  timeout=$FM_REMOTE_JOB_TIMEOUT
+  if [ "$command" = fm-remote-home-provision.sh ]; then
+    timeout=21600
+    if [ "$#" -gt 0 ]; then
+      [ "$#" -eq 2 ] && [ "$1" = --timeout ] || {
+        FM_REMOTE_JOB_ERROR="provisioning expects --timeout <seconds>"
+        fm_remote_job_die "$FM_REMOTE_JOB_ERROR"
+        return 1
+      }
+      timeout=$2
+    fi
+  fi
+  fm_remote_job_timeout_valid "$timeout" "$command" || {
+    FM_REMOTE_JOB_ERROR="invalid execution timeout for $command: $timeout"
+    fm_remote_job_die "$FM_REMOTE_JOB_ERROR"
+    return 1
+  }
+  timeout=$((10#$timeout))
   owner_start=$(fm_remote_job_process_start "$$") || {
     FM_REMOTE_JOB_ERROR="cannot establish remote job staging ownership"
     return 1
@@ -653,7 +683,7 @@ fm_remote_job_stage() { # <account-home> <root> <home> <command> [args...]; stdi
     ! printf '%s\n' "$root" > "$stage/root" ||
     ! printf '%s\n' "$home" > "$stage/home" ||
     ! printf '%s\n' "$queue_deadline" > "$stage/queue_deadline" ||
-    ! printf '%s\n' "$FM_REMOTE_JOB_TIMEOUT" > "$stage/timeout" ||
+    ! printf '%s\n' "$timeout" > "$stage/timeout" ||
     ! printf '%s\0' "$command" "$@" > "$stage/argv" ||
     ! head -c "$((FM_REMOTE_JOB_MAX_BYTES + 1))" > "$stage/stdin"; then
     rm -rf -- "$stage"
@@ -690,7 +720,7 @@ fm_remote_job_stage() { # <account-home> <root> <home> <command> [args...]; stdi
 
 fm_remote_job_wait() { # <account-home> <id>; honors FM_REMOTE_JOB_DISCONNECT_PROBE
   local account_home=$1 id=$2 job state queue_deadline execution_timeout wait_deadline exit_value
-  local now next_probe=0
+  local now next_probe=0 command=
   fm_remote_job_prepare_state "$account_home" || return 1
   job=$(fm_remote_job_job_dir "$id") || {
     FM_REMOTE_JOB_ERROR="remote job record disappeared or became unsafe"
@@ -704,7 +734,14 @@ fm_remote_job_wait() { # <account-home> <id>; honors FM_REMOTE_JOB_DISCONNECT_PR
     FM_REMOTE_JOB_ERROR="remote job execution timeout is invalid"
     return 1
   }
-  [ "$execution_timeout" -le 3600 ] || {
+  if [ "$execution_timeout" -gt 3600 ]; then
+    if ! fm_remote_job_regular_bounded "$job/argv" "$FM_REMOTE_JOB_MAX_BYTES" ||
+      ! IFS= read -r -d '' command < "$job/argv"; then
+      FM_REMOTE_JOB_ERROR="remote provisioning timeout has no safe command record"
+      return 1
+    fi
+  fi
+  fm_remote_job_timeout_valid "$execution_timeout" "$command" || {
     FM_REMOTE_JOB_ERROR="remote job execution timeout is invalid"
     return 1
   }

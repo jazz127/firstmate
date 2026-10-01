@@ -647,12 +647,25 @@ worker_read_text() { # <job-dir> <field> <max>
 }
 
 worker_publish_result() { # <job-dir> <exit>
-  local job=$1 exit_status=$2 tmp account_home
+  local job=$1 exit_status=$2 tmp account_home timeout
   case "$exit_status" in ''|*[!0-9]*) exit_status=125 ;; esac
   [ "$exit_status" -le 255 ] || exit_status=125
   for tmp in stdout stderr; do
     fm_remote_job_regular_bounded "$job/$tmp" "$FM_REMOTE_JOB_MAX_BYTES" || return 1
   done
+  if [ "$exit_status" -eq 124 ]; then
+    timeout=$(fm_remote_job_read_number "$job" timeout 2>/dev/null || printf '?')
+    tmp=$(umask 077; mktemp "$job/.timeout-error.XXXXXX") || return 1
+    {
+      if [ "$(fm_remote_job_read_state "$job" 2>/dev/null)" = queued ]; then
+        printf 'error: remote job queue deadline elapsed before execution (%s)\n' "$(worker_job_command "$job")"
+      else
+        printf 'error: remote job exceeded its %s s bound (%s)\n' "$timeout" "$(worker_job_command "$job")"
+      fi
+      cat "$job/stderr"
+    } | head -c "$FM_REMOTE_JOB_MAX_BYTES" > "$tmp"
+    chmod 600 "$tmp" && mv -f -- "$tmp" "$job/stderr" || return 1
+  fi
   tmp=$(umask 077; mktemp "$job/.exit.XXXXXX") || return 1
   printf '%s\n' "$exit_status" > "$tmp" || { rm -f -- "$tmp"; return 1; }
   chmod 600 "$tmp" || { rm -f -- "$tmp"; return 1; }
@@ -1012,7 +1025,7 @@ worker_lane_execute() { # <account-home> <job-dir>
   fi
   timeout=$(fm_remote_job_read_number "$job" timeout 2>/dev/null || true)
   case "$timeout" in ''|*[!0-9]*) worker_publish_result "$job" 126 || true; return 0 ;; esac
-  if [ "$timeout" -gt 3600 ]; then
+  if ! fm_remote_job_timeout_valid "$timeout" "$(worker_job_command "$job")"; then
     worker_publish_result "$job" 126 || true
     return 0
   fi

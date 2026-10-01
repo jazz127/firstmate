@@ -691,8 +691,7 @@ EOF
   fi
 
   # 7. cost.
-  live=0
-  for meta in "$STATE"/*.meta; do [ -f "$meta" ] && live=$((live + 1)); done
+  live=$("$SCRIPT_DIR/fm-afk-spend-count.sh" "$STATE") || live=unknown
   printf 'Cost: %s supervision outcome(s) recorded (%s routine, %s captain); %s task(s) live at return.\n' \
     "$((routine + captain))" "$routine" "$captain" "$live"
 }

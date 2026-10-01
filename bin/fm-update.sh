@@ -227,7 +227,7 @@ if [ -f "$SECONDMATES_MD" ]; then
           *) echo "remote secondmate $id: skipped on $SECONDMATE_REGISTRY_HOST: malformed update result" >&2 ;;
         esac
       else
-        echo "remote secondmate $id: skipped on $SECONDMATE_REGISTRY_HOST: ${remote_out%%$'\n'*}" >&2
+        echo "remote secondmate $id: skipped on $SECONDMATE_REGISTRY_HOST: $(remote_inherit_failure_reason "$remote_out")" >&2
       fi
     else
       process_secondmate "$id" "$home" "" origin yes

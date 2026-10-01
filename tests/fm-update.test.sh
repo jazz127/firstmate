@@ -296,6 +296,37 @@ EOF
   pass "T3e a legacy remote advance still restarts the live remote mate"
 }
 
+# --- T3f: remote failure reasons prefer the actual error over guard output --
+test_remote_skip_reason_prefers_error_line() {
+  local w fake_ssh out
+  w=$(new_world t3f)
+  fake_ssh="$w/fakebin/fake-ssh"
+  cat > "$fake_ssh" <<'SH'
+#!/usr/bin/env bash
+set -u
+cat > /dev/null
+while [ "$#" -gt 0 ]; do
+  case "$1" in -o) shift 2 ;; --) shift; break ;; *) exit 90 ;; esac
+done
+printf 'WARNING: watcher still down (same stale episode) - full banner already printed this episode.\n' >&2
+printf 'error: Firstmate code root diverged from origin/main\n' >&2
+exit 1
+SH
+  chmod +x "$fake_ssh"
+  printf -- '- sm1 - remote domain (host: remote-mac; root: /srv/fm; home: /srv/sm1; scope: things; projects: p; added 2026-09-03)\n' \
+    > "$w/home/data/secondmates.md"
+
+  out=$(PATH="$w/fakebin:$PATH" FM_SSH_BIN="$fake_ssh" \
+    FM_ROOT_OVERRIDE="$w/main" FM_HOME="$w/home" "$UPDATE" 2>&1)
+
+  assert_contains "$out" \
+    "remote secondmate sm1: skipped on remote-mac: error: Firstmate code root diverged from origin/main" \
+    "remote failure reason should select the actionable error line"
+  assert_not_contains "$out" "skipped on remote-mac: WARNING:" \
+    "remote guard banner should not replace the actionable failure reason"
+  pass "T3f a remote skip reports its error instead of the guard banner"
+}
+
 # --- T4: dirty secondmate is skipped, its edit preserved -------------------
 test_dirty_secondmate_skipped() {
   local w out
@@ -562,6 +593,7 @@ test_bin_only_advance_restarts
 test_unprovable_runtime_gets_fallback_nudge
 test_dead_secondmate_gets_no_action
 test_legacy_remote_advance_restarts
+test_remote_skip_reason_prefers_error_line
 test_dirty_secondmate_skipped
 test_diverged_secondmate_skipped
 test_squash_merged_divergence_reconciles

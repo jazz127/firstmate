@@ -71,7 +71,12 @@ fi
 SH
   # The cost line uses the same worker count as the spawn cap.
   for f in "$ROOT/bin"/*; do
-    [ -e "$dir/bin/${f##*/}" ] || ln -s "$f" "$dir/bin/${f##*/}"
+    [ ! -e "$dir/bin/${f##*/}" ] || continue
+    if [ -d "$f" ]; then
+      ln -s "$f" "$dir/bin/${f##*/}"
+    else
+      cp "$f" "$dir/bin/${f##*/}"
+    fi
   done
   for f in "$dir/bin/"*.sh; do
     [ -L "$f" ] || chmod +x "$f"

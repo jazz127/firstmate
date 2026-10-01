@@ -328,12 +328,13 @@ STALE_ESCALATE_SECS=${FM_STALE_ESCALATE_SECS:-240}  # idle secs before a provabl
 # A busy pane is unconditional proof of liveness with no built-in duration bound,
 # so a hung foreground call can remain hidden even while its rendered busy
 # footer changes every poll. BUSY_TURN_MAX_SECS bounds how long any busy pane
-# may go without a completed turn or explicit native-harness progress (the
-# marker-selection contract is in busy_turn_over_age below). Once this bound
+# may go without a current turn start, completed turn, or explicit native-harness
+# progress (the marker-selection contract is in busy_turn_over_age below). Once this bound
 # is crossed, busy_turn_over_age routes the pane through
 # busy_turn_bound_check, which hands a crossed bound to the same
-# STALE_ESCALATE_SECS-paced wedge_timer_check used for a provably-working
-# non-busy stale - so it escalates via the existing stale reason, escalation
+# wedge_timer_check used for a provably-working non-busy stale, with the first
+# alert after STALE_ESCALATE_SECS and repeats on PAUSE_RESURFACE_SECS - so it
+# escalates via the existing stale reason, escalation
 # counter, and demand-deep-inspection marker for human inspection only, never an
 # automatic interrupt, signal, or restart - unless the crew declared the wait
 # itself, which takes the long pause cadence instead. Set generously above
@@ -1491,8 +1492,9 @@ wedge_dead_record() {  # <window> <since-file> <triage-label> <idle-age> <pane-h
 # runs last of the three, so the two cheaper deferrals keep the panes they
 # already own on their existing bounded cadences and only a pane that would
 # otherwise alarm pays for a backend read.
-wedge_timer_check() {  # <window> <since-file> <triage-label> <escalation-count-file> <task> <pane-hash>
-  local win=$1 since_file=$2 label=$3 escalation_file=$4 task=$5 hash=$6 since age n reason evidence
+wedge_timer_check() {  # <window> <since-file> <triage-label> <escalation-count-file> <task> <pane-hash> [repeat-secs]
+  local win=$1 since_file=$2 label=$3 escalation_file=$4 task=$5 hash=$6 repeat_secs=${7:-$STALE_ESCALATE_SECS}
+  local since age n reason evidence interval
   since=$(cat "$since_file" 2>/dev/null || true)
   case "$since" in
     ''|*[!0-9]*)
@@ -1504,7 +1506,9 @@ wedge_timer_check() {  # <window> <since-file> <triage-label> <escalation-count-
       ;;
     *)
       age=$(( $(date +%s) - since ))
-      if [ "$age" -ge "$STALE_ESCALATE_SECS" ]; then
+      interval=$STALE_ESCALATE_SECS
+      if [ "$(cat "$escalation_file" 2>/dev/null || echo 0)" -gt 0 ]; then interval=$repeat_secs; fi
+      if [ "$age" -ge "$interval" ]; then
         if evidence=$(wedge_wait_evidence "$task") &&
            wedge_defer_wait "$win" "$since_file" "$label" "$age" "$evidence"; then
           return 0
@@ -1531,18 +1535,29 @@ wedge_timer_check() {  # <window> <since-file> <triage-label> <escalation-count-
   esac
 }
 
-# busy_turn_over_age: 0 iff the last completed turn or explicit native-harness
-# progress is at least BUSY_TURN_MAX_SECS old. Progress is actual observed model
-# or tool activity, never a timer or a busy footer. It does not emit a wake or
-# change semantic busy state. Before either marker exists, age the spawn record.
+# busy_turn_over_age: 0 iff the current semantic turn start, last completed
+# turn, or explicit native-harness progress is at least BUSY_TURN_MAX_SECS old.
+# Only a valid, gen-matching busy record from the task's trusted source supplies
+# a turn start; sources without one retain the completed-turn/spawn fallback.
+# Progress is actual observed model or tool activity, never a busy footer.
 # The caller checks busy state and routes a crossed bound through inspection.
 busy_turn_over_age() {  # <task>
-  local task=$1 f progress
+  local task=$1 f progress record state source started harness age started_age
   f="$STATE/$task.turn-ended"
   [ -e "$f" ] || f="$STATE/$task.meta"
   progress="$STATE/$task.progress"
   if [ -f "$progress" ] && [ "$progress" -nt "$f" ]; then f="$progress"; fi
-  [ "$(age_of "$f")" -ge "$BUSY_TURN_MAX_SECS" ]
+  age=$(age_of "$f")
+  record=$(fm_busy_record_read "$STATE" "$task" 2>/dev/null) || record=
+  if [ -n "$record" ]; then
+    read -r state source _ _ started <<< "$record"
+    harness=$(fm_meta_get "$STATE/$task.meta" harness)
+    if [ "$state" = busy ] && fm_busy_source_trusted "$harness" "$source"; then
+      started_age=$(( $(date +%s) - started ))
+      if [ "$started_age" -lt "$age" ]; then age=$started_age; fi
+    fi
+  fi
+  [ "$age" -ge "$BUSY_TURN_MAX_SECS" ]
 }
 
 # Absorb a stale pane under a declared external-wait pause (paused:) or a
@@ -1671,7 +1686,7 @@ busy_turn_bound_check() {  # <window> <task> <hash> <since-file> <escalation-fil
     handle_paused_stale "$win" "$task" "$h"
     return 0
   fi
-  wedge_timer_check "$win" "$since_file" "busy (no completed turn)" "$escalation_file" "$task" "$h"
+  wedge_timer_check "$win" "$since_file" "busy (no completed turn)" "$escalation_file" "$task" "$h" "$PAUSE_RESURFACE_SECS"
   return 1
 }
 
@@ -2649,7 +2664,7 @@ while :; do
   # parent reports, observe backend busy/idle turn completion, send one recovery
   # repost after grace, and escalate once if the recovery turn is also missed.
   # No conversation scraping; unresolved records are never silently expired.
-  fm_pending_reply_tick "$STATE" || true
+  fm_pending_reply_tick "$STATE" "$BEAT" || true
 
   # Endpoint liveness runs before queue observation: a positively dead or
   # missing secondmate endpoint is relaunched here on a bounded cadence, which

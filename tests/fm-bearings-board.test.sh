@@ -420,18 +420,25 @@ if [ "${1:-}" != poll ]; then
   printf 'session:\n  status: opened\n'
   exit 0
 fi
+# The work item's answer is what the board page itself queues when its card
+# is answered, so a board that drops the card's close mode cannot release it.
+work_prompt=$(node "$BOARD_RENDER_HARNESS" "$(cat "$FM_HOME/order-open")" \
+  | jq -r --arg key "$ORDER_PROOF_WORK" '
+      .answers[] | select(.key == $key)
+      | (.prompt + "\n\nContext data:\n" + (.data | tojson)) | @json')
 cat <<EOF
 session:
   status: feedback
   session_ended: false
 prompts[2]{uid,prompt,selector,tag,text}:
   "2","Order proof: yes\\n\\nContext data:\\n{\\n  \\"schema\\": \\"fm-bearings-answer.v1\\",\\n  \\"question\\": \\"$ORDER_PROOF_HOLD\\",\\n  \\"selection\\": \\"yes\\",\\n  \\"note\\": \\"\\"\\n}","form",choice,"Order proof: yes"
-  "3","Gated work: go\\n\\nContext data:\\n{\\n  \\"schema\\": \\"fm-bearings-answer.v1\\",\\n  \\"question\\": \\"$ORDER_PROOF_WORK\\",\\n  \\"selection\\": \\"go\\",\\n  \\"note\\": \\"\\",\\n  \\"close\\": \\"release\\"\\n}","form",choice,"Gated work: go"
+  "3",$work_prompt,"form",choice,"Gated work"
 EOF
 SH
   chmod +x "$home/fakebin/lavish-axi"
 
-  ORDER_PROOF_HOLD="$hold" ORDER_PROOF_WORK="$work" run_board "$home" build "$data" >/dev/null \
+  BOARD_RENDER_HARNESS="$ROOT/tests/assets/board-render-harness.mjs" \
+    ORDER_PROOF_HOLD="$hold" ORDER_PROOF_WORK="$work" run_board "$home" build "$data" >/dev/null \
     || fail "the order-proof board build failed"
   extract_payload "$board" | jq -e --arg work "$work" '
     [.captains_call[] | select(.key == $work) | .close] == ["release"]

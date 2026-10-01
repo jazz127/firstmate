@@ -384,7 +384,13 @@ When a host stays red, the seed prints the doctor's remaining gaps and their ope
 
 ### Failure and rollback
 
-A known provisioning failure rolls back the new route.
+A known provisioning failure rolls back the new route and prints the remote command's failure reason.
+Provisioning has its own longer execution window, selected by the parent through argv rather than forwarded environment; [`fm-remote-home-seed.sh`](../bin/fm-remote-home-seed.sh) owns the timeout override and bounds.
+A timeout reports its bound alongside the last project clone or initialization progress.
+Before cloning projects, the home records the provisioning id in `.fm-secondmate-provisioning`.
+A retry for that same id discards unpublished project staging and resumes from completed clones, while a different id and an unmarked home containing operational data remain refused.
+The marker is removed after the complete home identity is published.
+Homes left unmarked by older versions still require operator reconciliation; they are not automatically adopted.
 A new remote home is published only after its checkout is complete, so removing the public path during cloning cannot interrupt the clone.
 If a competing home appears before publication, provisioning fails and leaves that home intact.
 SSH exit 255 preserves the route, because remote completion is unknown and must be reconciled on the same host.

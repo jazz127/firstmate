@@ -796,6 +796,23 @@ test_pr_based_dod_draft_check_uses_gh_axi() {
   pass "PR-based DoD draft check uses gh-axi"
 }
 
+test_ship_dod_requires_defect_exercising_evidence() {
+  local mode out
+  for mode in no-mistakes direct-PR local-only; do
+    out="$TMP_ROOT/dod-evidence-$mode.md"
+    fm_dod_block "$mode" dod-evidence-task > "$out"
+    assert_grep 'fails before the change and passes after it through the same path users exercise' "$out" \
+      "$mode: a fix claim must require a before/after reproduction on the user path"
+    assert_grep 'non-zero pre-change observation or be marked not exercised' "$out" \
+      "$mode: an all-zero failure mode must not be presented as exercised"
+    assert_grep 'cases scanned and how many exhibited the defect' "$out" \
+      "$mode: validation must report sample size and defect prevalence"
+    assert_grep 'cannot exhibit the defect is not evidence for the fix' "$out" \
+      "$mode: a sample unable to reproduce the defect must not validate it"
+  done
+  pass "ship DoD requires evidence that exercises each claimed failure mode"
+}
+
 test_scout_done_is_not_gated
 test_evidence_claim_requires_provenance
 test_evidence_claim_enforces_mechanical_provenance
@@ -823,5 +840,6 @@ test_standalone_local_only_needs_project_ref
 test_non_done_lines_are_not_gated
 test_fenced_and_indented_captain_lines_are_not_intent
 test_pr_based_dod_draft_check_uses_gh_axi
+test_ship_dod_requires_defect_exercising_evidence
 
 echo "all fm-dod-lib tests passed"

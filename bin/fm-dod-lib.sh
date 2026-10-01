@@ -919,6 +919,14 @@ EOF
       echo "error: fm_dod_block: unknown delivery mode '$mode'" >&2
       return 1 ;;
   esac
+  cat <<'EOF'
+
+Evidence required before reporting a fix as validated:
+- Name the reproduction artifact or exact command that fails before the change and passes after it through the same path users exercise.
+- Each failure mode claimed in a before/after validation table must have a non-zero pre-change observation or be marked not exercised by the sample.
+- State how many cases scanned and how many exhibited the defect.
+- A sample that cannot exhibit the defect is not evidence for the fix; describe all-zero rows as not exercised, not as validation.
+EOF
 }
 
 # 0 when <sha> is contained in a ref under <namespace> in <repo>.

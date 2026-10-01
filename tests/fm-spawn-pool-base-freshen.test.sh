@@ -712,7 +712,7 @@ lay_out_as_pool_slot() {
   local slot_root="$CASE_DIR/slots"
   mkdir -p "$slot_root/1"
   git -C "$PROJECT_DIR" worktree move "$POOL_DIR" "$slot_root/1/project"
-  printf '{"worktrees":[{"name":"1","path":"%s"}]}\n' "$slot_root/1/project" \
+  printf '{"worktrees":[{"name":"1","path":"%s","owner_pid":%s}]}\n' "$slot_root/1/project" "$$" \
     > "$slot_root/treehouse-state.json"
   POOL_DIR="$slot_root/1/project"
   SLOT_CLAIM="$slot_root/1/.fm-slot-owner"
@@ -772,8 +772,32 @@ test_pool_slot_claim_follows_the_spawn_outcome() {
   pass "a Treehouse slot claim names the launched task, refuses when unclaimable, and is dropped by a locked abort"
 }
 
+test_reserved_pool_branch_is_never_reset() {
+  local rec id out status before
+  id='pool-named-branch-r1'
+  rec=$(make_case named-branch "$id")
+  read_case_record "$rec"
+  lay_out_as_pool_slot
+  git -C "$POOL_DIR" checkout --quiet -b protected-work
+  printf 'unique work\n' > "$POOL_DIR/unique.txt"
+  git -C "$POOL_DIR" add unique.txt
+  git -C "$POOL_DIR" -c user.name='Firstmate Tests' -c user.email='tests@example.invalid' commit -qm unique
+  before=$(git -C "$POOL_DIR" rev-parse HEAD)
+
+  out=$(run_spawn "$id" --mode no-mistakes --yolo off)
+  status=$?
+  [ "$status" -ne 0 ] || fail "spawn reset a reserved slot with a named branch"
+  assert_contains "$out" "has branch 'protected-work' checked out" \
+    "spawn did not identify the protected branch"
+  [ "$(git -C "$POOL_DIR" rev-parse protected-work)" = "$before" ] \
+    || fail "spawn moved the protected branch"
+  [ ! -e "$HOME_DIR/state/$id.meta" ] || fail "refused spawn published task metadata"
+  pass "a reserved pool slot with a named branch keeps its unique commit"
+}
+
 test_remote_seeded_home_spawns_from_treehouse_pool
 test_pool_slot_claim_follows_the_spawn_outcome
+test_reserved_pool_branch_is_never_reset
 test_linked_spawning_home_rejects_primary_before_refresh
 test_stale_pool_base_refreshes_before_branching
 test_non_main_default_branch_refreshes_before_branching

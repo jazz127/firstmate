@@ -59,6 +59,11 @@
 # own view still proves a landed merge, and every outcome it cannot prove
 # refuses, reporting the failed gh read and naming both failed reads when the
 # gh-axi view could not prove the outcome either.
+# A source-branch update is only a substep of an already-authorized merge
+# request: fm-pr-merge resolves the merge authority, passes the captain-hold
+# check and full live preflight, then re-resolves authority under the merge
+# locks before it updates. This helper has no standalone branch-update path;
+# any refused guard stops before the update.
 # A green PR that is BEHIND updates its branch whatever merge method applies.
 # The update uses GitHub's merge-commit default, records the new head, then
 # waits briefly (five poll delays, 15 seconds by default) under the merge and

@@ -1196,6 +1196,15 @@ SPAWN_TASK_SET_LOCK_HELD=0
 SPAWN_TREEHOUSE_PROJECT_LOCK=
 SPAWN_TREEHOUSE_PROJECT_LOCK_HELD=0
 SPAWN_SLOT_CLAIMED=0
+
+fm_spawn_treehouse_project_lock_acquire() {
+  if ! fm_lock_acquire_wait_max "$SPAWN_TREEHOUSE_PROJECT_LOCK" 30; then
+    echo "error: Treehouse project lock conflict for $PROJ_ABS; another slot allocation or return did not finish within 30s; refusing to race it" >&2
+    return 1
+  fi
+  SPAWN_TREEHOUSE_PROJECT_LOCK_HELD=1
+}
+
 RELAUNCH_REPLACEMENT_PENDING=0
 RELAUNCH_REPLACEMENT_BUSY_GEN=
 RELAUNCH_REPLACEMENT_HARNESS=
@@ -2993,11 +3002,9 @@ if [ "$RELAUNCH" -eq 0 ] && [ "$KIND" != secondmate ] && [ "$BACKEND" != orca ];
     echo "error: could not resolve the shared Treehouse project lock for $PROJ_ABS" >&2
     exit 1
   }
-  if ! fm_lock_try_acquire "$SPAWN_TREEHOUSE_PROJECT_LOCK"; then
-    echo "error: another Treehouse slot allocation or return is in progress for $PROJ_ABS; refusing to race it" >&2
+  if ! fm_spawn_treehouse_project_lock_acquire; then
     exit 1
   fi
-  SPAWN_TREEHOUSE_PROJECT_LOCK_HELD=1
 fi
 [ -f "$BRIEF" ] || {
   echo "error: task $ID has no brief at inaccessible data path $BRIEF" >&2
@@ -3154,7 +3161,7 @@ BRIEF_REAL="$BRIEF_DIR_REAL/$(basename "$BRIEF")"
 
 # PROJ_ABS can still carry a symlinked path component (e.g. macOS's /tmp ->
 # /private/tmp) when it came from the ship/scout branch's logical `pwd` above.
-# Every backend's own current-path read (tmux's pane_current_path, herdr's
+# Every backend's own current-path read (tmux's foreground process cwd, herdr's
 # foreground_cwd, zellij/cmux's active pwd probe against the live shell) can
 # report the OS-level, physically-resolved cwd, so comparing it against a
 # still-symlinked PROJ_ABS can misfire both ways: false-negative (the poll
@@ -4220,6 +4227,16 @@ elif [ "$RELAUNCH" -eq 1 ]; then
   fi
   [ "$KIND" = secondmate ] || validate_spawn_worktree "relaunch" "$T"
 elif [ "$KIND" != secondmate ] && [ "$BACKEND" != orca ]; then
+  # Treehouse must be able to acquire its own worktree-pool lock while get is
+  # running. Release Firstmate's project lock for that external operation, then
+  # reacquire it before validating and claiming the returned slot.
+  if [ "$SPAWN_TREEHOUSE_PROJECT_LOCK_HELD" = 1 ]; then
+    if ! fm_lock_release "$SPAWN_TREEHOUSE_PROJECT_LOCK"; then
+      echo "error: could not release the Treehouse project lock before treehouse get for $PROJ_ABS" >&2
+      exit 1
+    fi
+    SPAWN_TREEHOUSE_PROJECT_LOCK_HELD=0
+  fi
   spawn_send_text_line "$WT_TARGET" 'treehouse get'
 
   # Wait for the treehouse subshell: the pane's cwd moves from the project to the worktree.
@@ -4233,9 +4250,8 @@ elif [ "$KIND" != secondmate ] && [ "$BACKEND" != orca ]; then
   # the very first poll, before the pane has actually moved.
   #
   # A single read that already looks isolated is not proof the pane settled
-  # there: on some tmux/WSL setups a brand-new window's pane_current_path
-  # transiently reports an unrelated stale path (seen live as another real git
-  # checkout entirely) before the shell catches up with treehouse get's cd. That
+  # there: a new pane's foreground-cwd probe can transiently report an unrelated
+  # stale path before the shell catches up with treehouse get's cd. That
   # stale path passes spawn_worktree_isolated too (it resolves to a real,
   # distinct worktree top-level), so accepting it on one read alone silently
   # records the wrong worktree= in state/<id>.meta. Require two consecutive
@@ -4275,7 +4291,11 @@ elif [ "$KIND" != secondmate ] && [ "$BACKEND" != orca ]; then
     sleep 1
   done
   if [ -z "$WT" ]; then
-    echo "error: treehouse get did not enter an isolated worktree within 60s (last seen '${last_seen:-none}': $last_reason; spawning project '$PROJ_ABS'); inspect window $T" >&2
+    echo "error: treehouse get did not enter an isolated worktree within 60s (last seen '${last_seen:-none}': $last_reason; spawning project '$PROJ_ABS'); no isolated worktree appeared after releasing the Treehouse project lock; inspect for a Treehouse lock conflict and window $T" >&2
+    exit 1
+  fi
+
+  if ! fm_spawn_treehouse_project_lock_acquire; then
     exit 1
   fi
 

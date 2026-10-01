@@ -577,6 +577,38 @@ test_backend_source_requires_adapter_file() {
   done
 }
 
+test_tmux_current_path_uses_foreground_process_cwd() {
+  local dir="$TMP_ROOT/tmux-foreground-cwd" fakebin project worktree out
+  fakebin="$dir/fakebin"
+  project="$dir/project"
+  worktree="$dir/worktree"
+  mkdir -p "$fakebin" "$project" "$worktree"
+  cat > "$fakebin/tmux" <<SH
+#!/usr/bin/env bash
+case "\$*" in
+  *"#{pane_tty}"*) printf '%s\\n' '/dev/pts/91' ;;
+  *"#{pane_current_path}"*) printf '%s\\n' '$project' ;;
+esac
+SH
+  cat > "$fakebin/ps" <<'SH'
+#!/usr/bin/env bash
+case "$*" in
+  *"-t pts/91"*) printf '%s\n' '987654321 987654321 987654321' ;;
+esac
+SH
+  cat > "$fakebin/lsof" <<SH
+#!/usr/bin/env bash
+printf '%s\\n' 'p987654321' 'fcwd' 'n$worktree'
+SH
+  chmod +x "$fakebin/tmux" "$fakebin/ps" "$fakebin/lsof"
+
+  fm_backend_source tmux || fail "could not load tmux backend for foreground-cwd probe"
+  out=$(PATH="$fakebin:$PATH" fm_backend_tmux_current_path 'firstmate:@fake')
+  [ "$out" = "$worktree" ] \
+    || fail "tmux current_path returned '$out'; expected foreground cwd '$worktree' when pane_current_path was frozen at '$project'"
+  pass "tmux current_path follows the foreground process cwd instead of the pane creation path"
+}
+
 test_backend_validate_spawn_accepts_orca() {
   local out
   fm_backend_validate_spawn tmux 2>/dev/null || fail "fm_backend_validate_spawn should accept tmux"
@@ -847,6 +879,35 @@ test_peek_conformance_old_vs_new() {
 
 # --- old vs new: fm-spawn.sh --------------------------------------------------
 
+make_spawn_fake_process_tools() {  # <fakebin> <worktree> [cwd-counter] [initial-path]
+  local fakebin=$1 worktree=$2 counter=${3:-} initial=${4:-}
+  cat > "$fakebin/ps" <<'SH'
+#!/usr/bin/env bash
+case "$*" in
+  *"-t pts/91"*) printf '%s\n' '987654321 987654321 987654321' ;;
+esac
+SH
+  if [ -n "$counter" ]; then
+    cat > "$fakebin/lsof" <<SH
+#!/usr/bin/env bash
+countfile='$counter'
+n=0
+[ -f "\$countfile" ] && n=\$(cat "\$countfile")
+n=\$((n + 1))
+printf '%s\\n' "\$n" > "\$countfile"
+if [ "\$n" -le 1 ]; then path='$initial'; else path='$worktree'; fi
+[ -n "\$path" ] || exit 1
+printf 'p987654321\\nfcwd\\nn%s\\n' "\$path"
+SH
+  else
+    cat > "$fakebin/lsof" <<SH
+#!/usr/bin/env bash
+printf 'p987654321\\nfcwd\\nn%s\\n' '$worktree'
+SH
+  fi
+  chmod +x "$fakebin/ps" "$fakebin/lsof"
+}
+
 make_spawn_fakebin() {  # <dir> <fake-worktree-path> -> echoes fakebin dir
   local dir=$1 wt=$2 fb="$1/fakebin"
   mkdir -p "$fb"
@@ -856,6 +917,7 @@ set -u
 { printf 'tmux'; for a in "\$@"; do printf '\\x1f%s' "\$a"; done; printf '\\n'; } >> "\${FM_TMUX_LOG:?}"
 case "\${1:-}" in
   display-message)
+    for a in "\$@"; do case "\$a" in *pane_tty*) printf '/dev/pts/91\\n'; exit 0 ;; esac; done
     for a in "\$@"; do case "\$a" in *pane_current_path*) printf '%s\\n' "$wt"; exit 0 ;; esac; done
     printf 'firstmate\\n'; exit 0 ;;
   list-windows) exit 0 ;;
@@ -863,6 +925,7 @@ esac
 exit 0
 SH
   chmod +x "$fb/tmux"
+  make_spawn_fake_process_tools "$fb" "$wt"
   fm_fake_exit0 "$fb" treehouse
   printf '%s\n' "$fb"
 }
@@ -898,16 +961,16 @@ run_spawn_case() {  # <bin-root> <fakebin> <log> <state> <data> <config> <proj> 
 
 # --- symlinked project prefix must not false-refuse the isolation guard -----
 #
-# docs/herdr-backend.md "Known gaps": a real backend's pane_current_path read
-# (tmux, herdr) reports the OS-level PHYSICALLY-resolved cwd. When the project
+# A backend's foreground-cwd read reports the OS-level PHYSICALLY-resolved cwd.
+# When the project
 # itself lives under a symlinked prefix (e.g. macOS's /tmp -> /private/tmp),
 # fm-spawn.sh's PROJ_ABS - a logical `cd && pwd` - differs string-for-string
 # from that physical read even before treehouse moves the pane at all, so the
 # worktree-discovery poll used to mistake an UNMOVED pane for one that had
 # already left the project, handing validate_spawn_worktree the project's own
 # directory as "the worktree" and tripping its false isolation refusal.
-# make_spawn_symlink_fakebin's tmux stub returns an unmoved project path on the
-# first pane_current_path poll, then the real worktree path from the second poll
+# make_spawn_symlink_fakebin's process stub returns an unmoved project path on the
+# first foreground-cwd poll, then the real worktree path from the second poll
 # onward, so this test fails loudly if the PROJ_ABS/PROJ_ABS_REAL
 # canonicalization in bin/fm-spawn.sh ever regresses.
 make_spawn_symlink_fakebin() {  # <dir> <initial-project-path> <worktree-path> -> echoes fakebin dir
@@ -920,6 +983,7 @@ set -u
 { printf 'tmux'; for a in "\$@"; do printf '\\x1f%s' "\$a"; done; printf '\\n'; } >> "\${FM_TMUX_LOG:?}"
 case "\${1:-}" in
   display-message)
+    for a in "\$@"; do case "\$a" in *pane_tty*) printf '/dev/pts/91\\n'; exit 0 ;; esac; done
     for a in "\$@"; do case "\$a" in *pane_current_path*)
       printf x >> "$counter"
       if [ "\$(wc -c < "$counter")" -le 1 ]; then
@@ -935,6 +999,7 @@ esac
 exit 0
 SH
   chmod +x "$fb/tmux"
+  make_spawn_fake_process_tools "$fb" "$wt" "$counter" "$initial_path"
   fm_fake_exit0 "$fb" treehouse
   printf '%s\n' "$fb"
 }
@@ -1225,6 +1290,7 @@ test_backend_name_explicit_beats_detection
 test_backend_validate_refuses_unknown
 test_backend_source_shell_portable
 test_backend_source_requires_adapter_file
+test_tmux_current_path_uses_foreground_process_cwd
 test_backend_validate_spawn_accepts_orca
 test_meta_get_and_backend_of_meta
 test_resolve_selector_three_forms

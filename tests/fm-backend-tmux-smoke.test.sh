@@ -91,6 +91,22 @@ for _ in $(seq 1 100); do
 done
 [ "$SHELL_READY" = true ] || fail "the tmux task shell did not become ready"
 
+if [ -d /proc ]; then
+  FOREGROUND_DIR="$SHIM_DIR/foreground"
+  mkdir -p "$FOREGROUND_DIR"
+  tmux send-keys -t "$TARGET" "bash -c 'cd \"$FOREGROUND_DIR\"; while :; do sleep 0.1; done'" Enter
+  CURRENT_PATH=
+  for _ in $(seq 1 50); do
+    CURRENT_PATH=$(fm_backend_tmux_current_path "$TARGET" || true)
+    [ "$CURRENT_PATH" = "$FOREGROUND_DIR" ] && break
+    sleep 0.1
+  done
+  tmux send-keys -t "$TARGET" C-c
+  [ "$CURRENT_PATH" = "$FOREGROUND_DIR" ] \
+    || fail "tmux reported '$CURRENT_PATH' instead of the foreground process path"
+  pass "real tmux: current path follows the foreground process group on Linux"
+fi
+
 tmux send-keys -t "$TARGET" "cd /tmp && PS1='smoke\$ ' && clear && printf 'setup-%s\\n' ready" Enter
 wait_for_capture_text "$TARGET" "setup-ready" || fail "the tmux task shell did not complete setup"
 

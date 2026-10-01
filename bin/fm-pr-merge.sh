@@ -59,10 +59,11 @@
 # own view still proves a landed merge, and every outcome it cannot prove
 # refuses, reporting the failed gh read and naming both failed reads when the
 # gh-axi view could not prove the outcome either.
-# A green PR that is BEHIND may update its branch only for a requested merge
-# commit. The update uses GitHub's merge-commit default, records the new head,
-# then waits up to ten minutes for checks at that head and repeats this full
-# preflight before the exact-head merge. A failed check still refuses.
+# A green PR that is BEHIND updates its branch whatever merge method applies.
+# The update uses GitHub's merge-commit default, records the new head, then
+# waits up to ten minutes for checks at that head, and for a transient UNKNOWN
+# mergeable state to settle, and repeats this full preflight before the
+# exact-head merge. A failed check still refuses.
 # If the pull request remains open and the base branch has an effective
 # merge_queue rule, an attended refusal names the queue's configured merge
 # method and exact --attended-override -- --auto --<method> retry flags. While
@@ -729,6 +730,7 @@ github_verify_mergeable() {
   FM_PR_GITHUB_BEHIND=false
   FM_PR_GITHUB_CHECKS_PENDING=false
   FM_PR_GITHUB_UNREPORTED=false
+  FM_PR_GITHUB_MERGEABLE_UNKNOWN=false
   FM_PR_GITHUB_LIVE_HEAD=
 
   if ! json=$(gh pr view "$URL" --json state,isDraft,mergeable,mergeStateStatus,headRefOid,baseRefName,statusCheckRollup 2>/dev/null) \
@@ -784,6 +786,9 @@ FIELDS
     elif .__typename == "StatusContext" and (.state == "PENDING" or .state == "EXPECTED") then .context // "(unnamed check)"
     else empty end' 2>/dev/null) || pending=''
   [ -z "$pending" ] || FM_PR_GITHUB_CHECKS_PENDING=true
+  if [ "$mergeable" = UNKNOWN ] && [ -z "$red" ]; then
+    FM_PR_GITHUB_MERGEABLE_UNKNOWN=true
+  fi
 
   case "$state" in
     [oO][pP][eE][nN]) ;;
@@ -920,7 +925,8 @@ github_update_behind_branch() {
       return 1
     fi
     if [ "$FM_PR_GITHUB_CHECKS_PENDING" != true ] \
-      && [ "$FM_PR_GITHUB_UNREPORTED" != true ]; then
+      && [ "$FM_PR_GITHUB_UNREPORTED" != true ] \
+      && [ "$FM_PR_GITHUB_MERGEABLE_UNKNOWN" != true ]; then
       cat "$attempt_error" >&2
       rm -f "$attempt_error"
       return 1
@@ -1457,8 +1463,7 @@ case "$PROVIDER" in
     require_current_away_authority || away_status=$?
     [ "$away_status" -eq 0 ] || exit "$away_status"
     refuse_github_queue_while_away || exit 2
-    if [ "$FM_PR_GITHUB_BEHIND" = true ] \
-      && [ "$FM_PR_GITHUB_CALLER_METHOD" = merge ]; then
+    if [ "$FM_PR_GITHUB_BEHIND" = true ]; then
       github_update_behind_branch || exit 1
     fi
     merge_status=0

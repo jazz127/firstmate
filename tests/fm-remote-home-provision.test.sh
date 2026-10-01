@@ -167,4 +167,4 @@ run_provision "$SHORT_HOME" short 20 || rc=$?
 [ "$rc" -ne 0 ] || fail "staging symlink was accepted"
 assert_equals keep "$(cat "$TMP_ROOT/victim/sentinel")" "staging refusal removed unrelated data"
 pass 'synthetic/offline: unmarked homes and unsafe staging stay refused; no remote host or 6 GiB clone'
-printf 'ALL TESTS PASSED (synthetic/offline; no remote host or 6 GiB clone)\n' 
+printf 'ALL TESTS PASSED (synthetic/offline; no remote host or 6 GiB clone)\n'

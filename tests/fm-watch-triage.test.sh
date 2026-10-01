@@ -177,6 +177,13 @@ record_pi_busy() {  # <state-dir> <id>
     --source pi-ext --event agent-start
 }
 
+backdate_pi_turn_start() {  # <state-dir> <id> <age-seconds>
+  local rec="$1/$2.busy-state" tmp="$1/$2.busy-state.tmp" started
+  started=$(( $(date +%s) - $3 ))
+  sed "s/ts=[0-9][0-9]*/ts=$started/" "$rec" > "$tmp"
+  mv "$tmp" "$rec"
+}
+
 # Stop an owned watcher. TERM must end it through its EXIT cleanup, so one still
 # alive after the file's standard 100-tick budget fails the case here, with the
 # process evidence wait_for_exit prints, instead of an unbounded wait hanging
@@ -5429,6 +5436,7 @@ test_busy_pane_stable_hash_escalates_past_turn_age_bound() {
   printf '1\n' > "$state/.count-$key"
   # No completed turn ever recorded for this task: age the spawn record itself.
   touch -t 200001010000 "$state/busy-stable.meta"
+  backdate_pi_turn_start "$state" busy-stable 4000
 
   # Phase A: past the bound, the stable-hash busy pane is absorbed but starts
   # the wedge timer (mirrors the existing provably-working-stale Phase A/B).
@@ -5453,7 +5461,7 @@ test_busy_pane_stable_hash_escalates_past_turn_age_bound() {
   wait_for_exit "$pid" 100 || fail "a stable-hash busy pane did not wedge-escalate past the turn-age bound"
   grep -F "stale: $window" "$out" >/dev/null || fail "busy turn-age escalation did not print the stale wake"
   grep -F "possible wedge" "$out" >/dev/null || fail "busy turn-age escalation did not flag a possible wedge"
-  pass "a busy worker with a stable pane hash still escalates once its completed-turn age reaches the bound"
+  pass "a busy worker with a stable pane hash still escalates once its turn age reaches the bound"
 }
 
 # Regression fixture for the incident's actual masking condition: Pi's rendered
@@ -5470,6 +5478,7 @@ test_busy_pane_changing_hash_escalates_past_turn_age_bound() {
   sig=$(seen_sig "$state/busy-ticking.status"); printf '%s' "$sig" > "$state/.seen-busy-ticking_status"
   key=$(printf '%s' "$window" | tr ':/.' '___')
   touch -t 200001010000 "$state/busy-ticking.meta"
+  backdate_pi_turn_start "$state" busy-ticking 4000
   # No pre-seeded .hash-<key>: with a real ticking elapsed footer, every poll
   # lands here (h != prev) - the reproduction's actual masking condition.
 
@@ -5498,7 +5507,7 @@ test_busy_pane_changing_hash_escalates_past_turn_age_bound() {
   wait_for_exit "$pid" 100 || fail "a changing-hash busy pane did not wedge-escalate past the turn-age bound"
   grep -F "stale: $window" "$out" >/dev/null || fail "busy turn-age escalation (changing hash) did not print the stale wake"
   grep -F "possible wedge" "$out" >/dev/null || fail "busy turn-age escalation (changing hash) did not flag a possible wedge"
-  pass "a busy worker whose pane hash changes every poll still escalates once its completed-turn age reaches the bound"
+  pass "a busy worker whose pane hash changes every poll still escalates once its turn age reaches the bound"
 }
 
 test_busy_pane_turn_end_touch_resets_age() {
@@ -5585,6 +5594,7 @@ test_busy_pane_repeated_escalation_reaches_demand_deep_inspection() {
   printf '%s' "$pane_hash" > "$state/.hash-$key"
   printf '1\n' > "$state/.count-$key"
   touch -t 200001010000 "$state/busy-demand.turn-ended"
+  backdate_pi_turn_start "$state" busy-demand 4000
   prime_turnend_seen "$state/busy-demand.turn-ended"
 
   # Priming round: first sighting past the turn-age bound absorbs and starts
@@ -5601,10 +5611,11 @@ test_busy_pane_repeated_escalation_reaches_demand_deep_inspection() {
 
   n=1
   while [ "$n" -le 3 ]; do
-    echo $(( $(date +%s) - 500 )) > "$state/.stale-since-$key"
+    echo $(( $(date +%s) - 1000 )) > "$state/.stale-since-$key"
     : > "$out"
     PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
-      FM_STATE_OVERRIDE="$state" FM_BUSY_TURN_MAX_SECS=1 FM_STALE_ESCALATE_SECS=240 FM_POLL=1 FM_SIGNAL_GRACE=1 \
+      FM_STATE_OVERRIDE="$state" FM_BUSY_TURN_MAX_SECS=1 FM_STALE_ESCALATE_SECS=240 \
+      FM_PAUSE_RESURFACE_SECS=900 FM_POLL=1 FM_SIGNAL_GRACE=1 \
       FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" &
     pid=$!
     wait_for_exit "$pid" 100 || fail "busy turn-age escalation round $n did not escalate: $(cat "$out")"
@@ -5615,6 +5626,21 @@ test_busy_pane_repeated_escalation_reaches_demand_deep_inspection() {
       grep -F "demand-deep-inspection" "$out" >/dev/null || fail "busy turn-age round $n (threshold) did not demand deep inspection: $(cat "$out")"
     fi
     ack_stopped_cycle "$state" || fail "could not acknowledge busy turn-age escalation round $n"
+    if [ "$n" = 1 ]; then
+      echo $(( $(date +%s) - 500 )) > "$state/.stale-since-$key"
+      : > "$out"
+      PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
+        FM_STATE_OVERRIDE="$state" FM_BUSY_TURN_MAX_SECS=1 FM_STALE_ESCALATE_SECS=240 \
+        FM_PAUSE_RESURFACE_SECS=900 FM_POLL=1 FM_SIGNAL_GRACE=1 \
+        FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" &
+      pid=$!
+      if ! wait_poll_cycle "$state" "$pid"; then
+        reap "$pid"; fail "busy pane repeated before the long recheck interval: $(cat "$out")"
+      fi
+      [ "$(cat "$state/.wedge-escalations-$key")" = 1 ] || fail "early busy repeat advanced escalation count"
+      reap "$pid"
+      ack_stopped_cycle "$state" || fail "could not acknowledge the intentional early-repeat stop"
+    fi
     n=$((n + 1))
   done
   [ "$(cat "$state/.wedge-escalations-$key" 2>/dev/null || echo 0)" = 3 ] || fail "busy turn-age escalation counter did not persist across consecutive rounds"
@@ -5644,6 +5670,7 @@ test_busy_declared_pause_is_rechecked_not_wedge_escalated() {
   # No completed turn for hours (the single blocking poll call): age the spawn
   # record itself, exactly as the never-completed-a-turn fixtures above do.
   touch -t 200001010000 "$state/review-scout.meta"
+  backdate_pi_turn_start "$state" review-scout 4000
   # No pre-seeded .hash-<key>: a live harness footer ticks, so every poll lands
   # on the changed-hash branch - the review scout's real masking condition.
 
@@ -5749,6 +5776,7 @@ test_afk_busy_declared_pause_hands_off_plain_stale() {
   sig=$(seen_sig "$statusf"); printf '%s' "$sig" > "$state/.seen-afk-review-scout_status"
   key=$(printf '%s' "$window" | tr ':/.' '___')
   touch -t 200001010000 "$state/afk-review-scout.meta"
+  backdate_pi_turn_start "$state" afk-review-scout 4000
   date '+%s' > "$state/.afk"
 
   # Phase A: past the bound, with the wedge threshold as low as it goes, the
@@ -5854,6 +5882,7 @@ SH
   sig=$(seen_sig "$statusf"); printf '%s' "$sig" > "$state/.seen-afk-ticking-scout_status"
   key=$(printf '%s' "$window" | tr ':/.' '___')
   touch -t 200001010000 "$state/afk-ticking-scout.meta"
+  backdate_pi_turn_start "$state" afk-ticking-scout 4000
   date '+%s' > "$state/.afk"
   # An undeclared busy phase already ran the wedge timer and escalated twice
   # before the crew declared the wait.
@@ -5963,11 +5992,24 @@ test_busy_pane_default_turn_age_bound_is_3600s() {
     FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" &
   pid=$!
   if ! wait_poll_cycle "$state" "$pid"; then
+    reap "$pid"; fail "an old completed turn aged a fresh semantic busy turn: $(cat "$out")"
+  fi
+  [ ! -e "$state/.stale-since-$key" ] || fail "an old completed turn started a wedge timer for a fresh semantic busy turn"
+  reap "$pid"
+  ack_stopped_cycle "$state" || fail "could not acknowledge the intentional fresh-turn stop"
+
+  backdate_pi_turn_start "$state" busy-default 4000
+  : > "$out"
+  PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
+    FM_STATE_OVERRIDE="$state" FM_STALE_ESCALATE_SECS=999 FM_POLL=1 FM_SIGNAL_GRACE=1 \
+    FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" &
+  pid=$!
+  if ! wait_poll_cycle "$state" "$pid"; then
     reap "$pid"; fail "a 66-minute-old completed turn escalated before the wedge threshold under the default bound: $(cat "$out")"
   fi
   [ -s "$state/.stale-since-$key" ] || fail "a 66-minute-old completed turn did not start a wedge timer under the default bound (default is not 3600s)"
   reap "$pid"
-  pass "the production default busy-turn-age bound is 3600s (5min under does not wedge, 66min over does)"
+  pass "the production default busy-turn-age bound follows the semantic turn start, not an old completed turn"
 }
 
 test_nonterminal_stale_repairs_missing_or_corrupt_timer() {
@@ -6159,6 +6201,7 @@ test_secondmate_home_supervision_churn_is_not_write_evidence() {
   sig=$(seen_sig "$state/mate.status"); printf '%s' "$sig" > "$state/.seen-mate_status"
   key=$(printf '%s' "$window" | tr ':/.' '___')
   set_mtime "$(( $(date +%s) - 4000 ))" "$state/mate.meta"
+  backdate_pi_turn_start "$state" mate 4000
   back=$(( $(date +%s) - 500 ))
   echo "$back" > "$state/.stale-since-$key"
   set_mtime "$back" "$state/.stale-since-$key"

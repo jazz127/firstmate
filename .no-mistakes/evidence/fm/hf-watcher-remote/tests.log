@@ -1,0 +1,27 @@
+== fm-pending-reply
+ok - same-basename self-home corr= is restated onto the parent channel and resolves
+ok - same-basename reply resolves at the recovery failure boundary
+ok - a child-file mate-home sighting is not copied and still escalates
+ok - mechanical helper writes the parent channel from verb, corr, and note
+ok - remote parent-replies.status is not classified as wrong-home
+ok - local parent-replies.status remains wrong-home evidence
+ok - an escalated correlation stays retryable only while undelivered
+ok - all pending-reply tests passed
+== fm-watch-triage
+ok - a live wedged agent, an unattributable one, and an unreadable endpoint escalate unchanged
+ok - the once-only gone report re-arms when the endpoint comes back, and reports a later death again
+ok - a second death after a same-window relaunch reports in full without a live probe, and an unchanged dead pane stays silent
+ok - a successor's byte-identical dead display reports in full, and the same incarnation still absorbs
+wait_for_exit: owned pid 52774 exceeded 100 polls; sending TERM
+52774 45931 S    bash /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M3V6M7TB7BBQ72E284EJEHZY/bin/fm-watch.sh
+wait_for_exit: owned pid 52774 survived TERM; sending KILL
+not ok - TERM did not stop a watcher blocked inside a poll
+== fm-busy-state
+ok - codex classifies unknown until a semantic source passes its verification gate
+ok - standalone kimi classifies unknown until the live verification gate opens
+ok - cursor classifies only from its transcript fold, never rendered text or native state
+ok - endpoint death is the only process-level override and yields dead, never busy
+ok - herdr's native verdict is trusted for busy only, and records outrank it
+ok - record parsing never clobbers the caller's positional parameters, glob setting, or fields
+ok - the boolean view reports busy only on an exact busy verdict
+all fm-busy-state tests passed

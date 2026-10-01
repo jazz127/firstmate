@@ -324,7 +324,7 @@ test_relative_home_overrides_launch_with_absolute_cross_process_paths() {
   launch=$(cat "$LAUNCH_LOG")
   assert_contains "$launch" "-e '$home_real/state/$id.pi-ext.ts'" \
     "relative FM_STATE_OVERRIDE leaked into Pi's cross-process extension path"
-  assert_contains "$launch" "< '$home_real/data/$id/launch-brief.md'" \
+  assert_contains "$launch" "at $home_real/data/$id/launch-brief.md before" \
     "relative FM_DATA_OVERRIDE leaked into the cross-process brief path"
   pass "relative home overrides ignore CDPATH and become absolute before spawn launch construction"
 }
@@ -353,7 +353,7 @@ test_home_defaults_preserve_absolute_or_resolve_relative_paths() {
   launch=$(cat "$LAUNCH_LOG")
   assert_contains "$launch" "-e '$home_real/state/$relative_id.pi-ext.ts'" \
     "relative FM_HOME leaked into Pi's default cross-process extension path"
-  assert_contains "$launch" "< '$home_real/data/$relative_id/launch-brief.md'" \
+  assert_contains "$launch" "at $home_real/data/$relative_id/launch-brief.md before" \
     "relative FM_HOME leaked into the default cross-process brief path"
 
   linked_home="$CASE_DIR/home-link"
@@ -373,7 +373,7 @@ test_home_defaults_preserve_absolute_or_resolve_relative_paths() {
   launch=$(cat "$LAUNCH_LOG")
   assert_contains "$launch" "-e '$linked_home/state/$absolute_id.pi-ext.ts'" \
     "absolute FM_HOME spelling changed in Pi's default cross-process extension path"
-  assert_contains "$launch" "< '$linked_home/data/$absolute_id/launch-brief.md'" \
+  assert_contains "$launch" "at $linked_home/data/$absolute_id/launch-brief.md before" \
     "absolute FM_HOME spelling changed in the default cross-process brief path"
   pass "FM_HOME defaults resolve relative paths and preserve absolute spellings"
 }
@@ -401,7 +401,7 @@ test_absolute_override_spelling_is_preserved_in_launch_paths() {
   launch=$(cat "$LAUNCH_LOG")
   assert_contains "$launch" "-e '$linked_home/state/$id.pi-ext.ts'" \
     "absolute FM_STATE_OVERRIDE spelling changed in Pi's cross-process extension path"
-  assert_contains "$launch" "< '$linked_home/data/$id/launch-brief.md'" \
+  assert_contains "$launch" "at $linked_home/data/$id/launch-brief.md before" \
     "absolute FM_DATA_OVERRIDE spelling changed in the cross-process brief path"
   pass "absolute override spellings are preserved in spawn launch paths"
 }
@@ -973,7 +973,7 @@ test_grok_omits_invalid_max_reasoning_effort() {
   expect_code 0 "$status" "grok spawn with unsupported max reasoning effort should omit the effort flag"
   assert_meta_profile "$HOME_DIR/state/$id.meta" grok grok-4 max
   launch=$(cat "$LAUNCH_LOG")
-  assert_contains "$launch" "grok --always-approve --model 'grok-4' \"\$('${ROOT}/bin/fm-operational-input.sh' encode launch-brief < " \
+  assert_contains "$launch" "grok --always-approve --model 'grok-4' '⁣FIRSTMATE_OP: v1 launch-brief: Read and follow" \
     "grok launch did not preserve the model flag and typed brief when max effort was omitted"
   assert_not_contains "$launch" "--reasoning-effort" "grok launch must omit unsupported max reasoning effort"
   assert_not_contains "$launch" "--effort" "grok launch must not fall back to --effort for reasoning effort"
@@ -992,7 +992,7 @@ test_grok_omits_invalid_xhigh_reasoning_effort() {
   expect_code 0 "$status" "grok spawn with unsupported xhigh reasoning effort should omit the effort flag"
   assert_meta_profile "$HOME_DIR/state/$id.meta" grok grok-4 xhigh
   launch=$(cat "$LAUNCH_LOG")
-  assert_contains "$launch" "grok --always-approve --model 'grok-4' \"\$('${ROOT}/bin/fm-operational-input.sh' encode launch-brief < " \
+  assert_contains "$launch" "grok --always-approve --model 'grok-4' '⁣FIRSTMATE_OP: v1 launch-brief: Read and follow" \
     "grok launch did not preserve the model flag and typed brief when xhigh effort was omitted"
   assert_not_contains "$launch" "--reasoning-effort" "grok launch must omit unsupported xhigh reasoning effort"
   assert_not_contains "$launch" "--effort" "grok launch must not fall back to --effort for reasoning effort"
@@ -1025,7 +1025,7 @@ test_cursor_threads_model_workspace_and_omits_effort_axis() {
   assert_not_contains "$launch" " -w " "cursor launch must never allocate a second worktree"
   # An inherited CLAUDECODE would otherwise outrank cursor's own marker.
   assert_contains "$launch" "env -u CLAUDECODE" "cursor launch must clear foreign primary markers"
-  assert_contains "$launch" "encode launch-brief" "cursor launch did not deliver the brief positionally"
+  assert_contains "$launch" "launch-brief: Read and follow" "cursor launch did not deliver the brief pointer positionally"
   assert_not_contains "$launch" "--effort" "cursor launch must not invent a separate effort flag"
   assert_not_contains "$launch" "--reasoning-effort" "cursor launch must not invent a separate reasoning-effort flag"
   assert_grep 'harness=cursor' "$HOME_DIR/state/$id.meta" "cursor harness was not recorded in meta"
@@ -1247,7 +1247,7 @@ test_pi_threads_model_and_max_effort() {
     "pi launch did not force the regular TUI while threading the requested model and max thinking level"
   assert_not_contains "$launch" "FM_FIRSTMATE_PI_LAUNCH_BRIEF=" \
     "pi launch still exports the removed Calm input-reroute binding"
-  assert_contains "$launch" "fm-operational-input.sh' encode launch-brief" \
+  assert_contains "$launch" "launch-brief: Read and follow" \
     "pi launch lost the canonical typed launch-brief envelope"
   pass "pi receives --model and --thinking max profile flags"
 }
@@ -1267,7 +1267,7 @@ test_pi_signed_threads_shared_pi_profile_and_preserves_identity() {
   launch=$(cat "$LAUNCH_LOG")
   assert_contains "$launch" "FM_PI_HARNESS=pi-signed '$FAKEBIN_DIR/pi-signed' --tui-mode regular --model 'openai-codex/gpt-5.6-sol' --thinking 'max' -e" \
     "pi-signed launch did not force the regular TUI with Pi's model, thinking, and extension semantics"
-  assert_contains "$launch" "fm-operational-input.sh' encode launch-brief" \
+  assert_contains "$launch" "launch-brief: Read and follow" \
     "pi-signed launch lost the canonical typed launch-brief envelope"
   assert_present "$HOME_DIR/state/$id.pi-ext.ts" "pi-signed launch did not install Pi's turn-end extension"
   assert_present "$HOME_DIR/state/$id.busy-gen" "pi-signed spawn did not arm the busy-state contract"
@@ -1360,7 +1360,7 @@ test_pi_signed_persistent_secondmate_uses_pi_extensions_and_identity() {
   cmp -s "$CASE_DIR/charter-before" "$sm/data/charter.md" || fail "secondmate launch rewrote the charter"
   assert_absent "$HOME_DIR/data/$id/launch-brief.md" "secondmate launch received a worker overlay"
   launch=$(cat "$LAUNCH_LOG")
-  assert_contains "$launch" "< '$sm/data/charter.md'" "secondmate launch lost its original charter"
+  assert_contains "$launch" "at $sm/data/charter.md before" "secondmate launch lost its original charter pointer"
   assert_contains "$launch" "FM_PI_HARNESS=pi-signed '$FAKEBIN_DIR/pi-signed' --tui-mode regular -e '$sm/.pi/extensions/fm-primary-turnend-guard.ts' -e '$sm/.pi/extensions/fm-primary-pi-watch.ts'" \
     "pi-signed secondmate did not force the regular TUI with Pi's primary extension launch shape"
   if [ "${FM_TEST_EVIDENCE:-0}" = 1 ]; then
@@ -1932,6 +1932,9 @@ SH
     sed -n '/FIRSTMATE_OP: v1 launch-brief:/,$p' "$envelope" > "$encoded"
     "$ROOT/bin/fm-operational-input.sh" body < "$encoded" > "$prompt" ||
       fail "could not decode $kind launch-brief envelope"
+    [ "$(cat "$prompt")" = "Read and follow the complete Firstmate launch brief at $HOME_DIR/data/$id/launch-brief.md before doing any other work." ] ||
+      fail "$brief_kind $kind launch did not point at its own complete brief"
+    cp "$HOME_DIR/data/$id/launch-brief.md" "$prompt"
     # The final prompt delivered to the harness is the generated interface.
     # The current identity must precede the authored task, because a Firstmate
     # worktree's own AGENTS.md assigns the unrelated supervisor identity.

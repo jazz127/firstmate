@@ -340,7 +340,8 @@
 #   secondmate reads this launching home's file; pins are never inherited.
 #   bin/fm-worker-account-lib.sh owns parsing, the check, and the shed list.
 #   Launch templates live in launch_template() below; placeholders replaced before launch:
-#     __BRIEF__    absolute path to data/<task-id>/brief.md
+#     __BRIEF__    absolute path to data/<task-id>/launch-brief.md
+#     __BRIEFPROMPT__ quoted typed launch prompt naming that brief without its contents
 #     __CLAUDEPERMFLAG__ the claude permission flag selected by config/claude-permission-mode
 #     __CLAUDEADDDIRS__ quoted --add-dir flags granting exactly this task's
 #                  Firstmate channel directories (claude_add_dirs_flag below;
@@ -2071,21 +2072,21 @@ launch_template() {
   # secondmate launch deliberately keeps hooks on.
   codex)
     if [ "$kind" = secondmate ]; then
-      printf '%s' '__CODEXBIN__ __SEATAUTHFLAG____MODELFLAG____EFFORTFLAG__--dangerously-bypass-approvals-and-sandbox "$(__OPINPUT__ encode launch-brief < __BRIEF__)"'
+      printf '%s' '__CODEXBIN__ __SEATAUTHFLAG____MODELFLAG____EFFORTFLAG__--dangerously-bypass-approvals-and-sandbox __BRIEFPROMPT__'
     else
-      printf '%s' '__CODEXBIN__ __SEATAUTHFLAG____MODELFLAG____EFFORTFLAG__--dangerously-bypass-approvals-and-sandbox --disable hooks -c "notify=[\"bash\",\"-c\",\"touch __TURNEND__\"]" "$(__OPINPUT__ encode launch-brief < __BRIEF__)"'
+      printf '%s' '__CODEXBIN__ __SEATAUTHFLAG____MODELFLAG____EFFORTFLAG__--dangerously-bypass-approvals-and-sandbox --disable hooks -c "notify=[\"bash\",\"-c\",\"touch __TURNEND__\"]" __BRIEFPROMPT__'
     fi
     ;;
-  opencode) printf '%s' 'OPENCODE_CONFIG_CONTENT='\''{"permission":{"*":"allow"}__EFFORTFLAG__}'\'' opencode __MODELFLAG__--prompt "$(__OPINPUT__ encode launch-brief < __BRIEF__)"' ;;
+  opencode) printf '%s' 'OPENCODE_CONFIG_CONTENT='\''{"permission":{"*":"allow"}__EFFORTFLAG__}'\'' opencode __MODELFLAG__--prompt __BRIEFPROMPT__' ;;
   pi | pi-signed)
     printf '%s' '__PIBIN____PITUIMODE____PIRESUME__'
     if [ "$kind" = secondmate ]; then
-      printf '%s' ' __MODELFLAG____EFFORTFLAG__-e __PITURNEND__ -e __PIWATCH__ "$(__OPINPUT__ encode launch-brief < __BRIEF__)"'
+      printf '%s' ' __MODELFLAG____EFFORTFLAG__-e __PITURNEND__ -e __PIWATCH__ __BRIEFPROMPT__'
     else
-      printf '%s' ' __MODELFLAG____EFFORTFLAG__-e __PIEXT__ "$(__OPINPUT__ encode launch-brief < __BRIEF__)"'
+      printf '%s' ' __MODELFLAG____EFFORTFLAG__-e __PIEXT__ __BRIEFPROMPT__'
     fi
     ;;
-  # omp (Oh My Pi), a Pi fork. Same one-positional-brief, --model, --thinking,
+  # omp (Oh My Pi), a Pi fork. Same one-positional-prompt, --model, --thinking,
   # and -e shape as Pi, verified on omp 18.1.11. The differences are all at
   # the launch boundary and documented in the header above: foreign markers
   # cleared (omp has none of its own, so an inherited CLAUDECODE would win),
@@ -2100,14 +2101,14 @@ launch_template() {
   omp)
     printf '%s' 'env -u CLAUDECODE -u PI_CODING_AGENT -u GROK_AGENT -u FM_PI_HARNESS -u GEMINI_CLI -u CURSOR_AGENT -u CURSOR_INVOKED_AS FM_OMP_HARNESS=omp OMP_SKIP_SETUP=1 __OMPBIN__ --config __OMPWORKERCFG__ --auto-approve --cwd __WORKTREE__'
     if [ "$kind" = secondmate ]; then
-      printf '%s' ' __MODELFLAG____EFFORTFLAG__"$(__OPINPUT__ encode launch-brief < __BRIEF__)"'
+      printf '%s' ' __MODELFLAG____EFFORTFLAG____BRIEFPROMPT__'
     else
-      printf '%s' ' __MODELFLAG____EFFORTFLAG__-e __OMPEXT__ "$(__OPINPUT__ encode launch-brief < __BRIEF__)"'
+      printf '%s' ' __MODELFLAG____EFFORTFLAG__-e __OMPEXT__ __BRIEFPROMPT__'
     fi
     ;;
-  # agy (Antigravity CLI): --prompt-interactive "<brief>" starts the supervised
-  # interactive session and auto-submits it, so the brief rides the launch
-  # command (verified: a multi-line brief submitted itself with no extra Enter,
+  # agy (Antigravity CLI): --prompt-interactive "<prompt>" starts the supervised
+  # interactive session and auto-submits it, so the brief pointer rides the launch
+  # command (verified: a multi-line prompt submitted itself with no extra Enter,
   # agy 1.2.0). --model takes the bare catalog id from `agy models`
   # (gemini-3.8-flash-high, never the unlisted bare gemini-3.8-flash).
   # --effort takes low|medium|high. --dangerously-skip-permissions
@@ -2128,7 +2129,7 @@ launch_template() {
   # TUI), so bin/fm-harness.sh must not read an agy worker as its launcher.
   # agy exposes no hook surface, so busy state is a rendered-tail fallback
   # (bin/fm-busy-lib.sh) and nothing is armed below.
-  agy) printf '%s' 'env -u CLAUDECODE -u PI_CODING_AGENT -u GROK_AGENT -u FM_PI_HARNESS __AGYBIN__ --prompt-interactive "$(__OPINPUT__ encode launch-brief < __BRIEF__)" __MODELFLAG____EFFORTFLAG__--dangerously-skip-permissions' ;;
+  agy) printf '%s' 'env -u CLAUDECODE -u PI_CODING_AGENT -u GROK_AGENT -u FM_PI_HARNESS __AGYBIN__ --prompt-interactive __BRIEFPROMPT__ __MODELFLAG____EFFORTFLAG__--dangerously-skip-permissions' ;;
   # grok (Grok Build TUI): a positional prompt starts the supervised interactive
   # session. --always-approve auto-approves every tool execution (verified: the
   # crewmate runs fully autonomously, no permission gate), which an unattended
@@ -2136,7 +2137,7 @@ launch_template() {
   # --dangerously-skip-permissions. grok's turn-end signal does NOT ride the
   # launch command - it is a Stop-event hook installed below (global hook +
   # per-task pointer), so the template is identical for ship/scout/secondmate.
-  grok) printf '%s' 'grok --always-approve __MODELFLAG____EFFORTFLAG__"$(__OPINPUT__ encode launch-brief < __BRIEF__)"' ;;
+  grok) printf '%s' 'grok --always-approve __MODELFLAG____EFFORTFLAG____BRIEFPROMPT__' ;;
   # Cursor Agent CLI. --trust suppresses the workspace-trust prompt, which
   # --yolo does NOT cover and which would otherwise block every spawn, since
   # each task gets a fresh worktree path cursor has never seen. --yolo is the
@@ -2149,11 +2150,11 @@ launch_template() {
   # inherited CLAUDECODE cannot outrank cursor's own marker in a process that
   # only reads the environment. Cursor exposes no effort flag, so the shared
   # effort axis is deliberately omitted and stays in task metadata only.
-  cursor) printf '%s' 'env -u CLAUDECODE -u PI_CODING_AGENT -u GROK_AGENT -u FM_PI_HARNESS -u GEMINI_CLI -u CURSOR_INVOKED_AS __CURSORBIN__ --trust --yolo __MODELFLAG__--workspace __WORKTREE__ "$(__OPINPUT__ encode launch-brief < __BRIEF__)"' ;;
+  cursor) printf '%s' 'env -u CLAUDECODE -u PI_CODING_AGENT -u GROK_AGENT -u FM_PI_HARNESS -u GEMINI_CLI -u CURSOR_INVOKED_AS __CURSORBIN__ --trust --yolo __MODELFLAG__--workspace __WORKTREE__ __BRIEFPROMPT__' ;;
   # gemini (Google Gemini CLI): a positional query starts the supervised
-  # interactive session and auto-submits it, so the brief rides the launch
-  # command exactly as it does for claude and grok (verified: a multi-line
-  # brief submitted itself with no extra Enter, gemini-cli 0.58.0).
+  # interactive session and auto-submits it, so the brief pointer rides the launch
+  # command (verified: a multi-line prompt submitted itself with no extra Enter,
+  # gemini-cli 0.58.0).
   # -y (--yolo) auto-approves every tool call, which an unattended crewmate
   # needs; the footer renders ` YOLO Ctrl+Y` while it is on and a WriteFile
   # was verified to land with no approval gate.
@@ -2184,11 +2185,11 @@ launch_template() {
   # stays in task metadata only, per the record-and-omit contract.
   # Its turn-end and busy-state signals do NOT ride the launch command:
   # they are project hooks written into the worktree below.
-  gemini) printf '%s' 'env -u CLAUDECODE -u PI_CODING_AGENT -u GROK_AGENT -u FM_PI_HARNESS GEMINI_CLI_TRUST_WORKSPACE=true GEMINI_CLI_SYSTEM_SETTINGS_PATH=__GEMINISETTINGS__ gemini -y __MODELFLAG__"$(__OPINPUT__ encode launch-brief < __BRIEF__)"' ;;
+  gemini) printf '%s' 'env -u CLAUDECODE -u PI_CODING_AGENT -u GROK_AGENT -u FM_PI_HARNESS GEMINI_CLI_TRUST_WORKSPACE=true GEMINI_CLI_SYSTEM_SETTINGS_PATH=__GEMINISETTINGS__ gemini -y __MODELFLAG____BRIEFPROMPT__' ;;
   # Devin receives the typed launch envelope after --. Its private config
   # appends native worker lifecycle hooks. Clear NO_COLOR so the shared
   # composer guard can distinguish the dim placeholder from a real draft.
-  devin) printf '%s' 'env -u CLAUDECODE -u PI_CODING_AGENT -u GROK_AGENT -u FM_PI_HARNESS -u FM_OMP_HARNESS -u ATLASSIAN_AGENT_TYPE -u ROVODEV_CLI -u NO_COLOR __DEVINBIN__ --permission-mode dangerous --respect-workspace-trust false --config __DEVINCONFIG__ __MODELFLAG__-- "$(__OPINPUT__ encode launch-brief < __BRIEF__)"' ;;
+  devin) printf '%s' 'env -u CLAUDECODE -u PI_CODING_AGENT -u GROK_AGENT -u FM_PI_HARNESS -u FM_OMP_HARNESS -u ATLASSIAN_AGENT_TYPE -u ROVODEV_CLI -u NO_COLOR __DEVINBIN__ --permission-mode dangerous --respect-workspace-trust false --config __DEVINCONFIG__ __MODELFLAG__-- __BRIEFPROMPT__' ;;
   # Kimi Code rejects a positional prompt, so it launches bare and receives
   # only an absolute brief pointer after the TUI readiness gate below.
   # Its turn-end signal is a globally configured Stop hook plus a guarded
@@ -2220,7 +2221,7 @@ launch_template() {
   # inherited marker. The clearing stays on the cursor and muse templates as the
   # verified launch behavior their evidence records, not as the only thing
   # standing between a retained marker and a misidentified worker.
-  muse) printf '%s' 'env -u CLAUDECODE -u PI_CODING_AGENT -u GROK_AGENT -u FM_PI_HARNESS XDG_CONFIG_HOME=__MUSECONFIG__ XDG_DATA_HOME=__MUSEDATA__ MUSE_EXPERIMENTAL_FOREIGN_PERSONAL_CONTEXT_KILL=on __MUSEBIN__ --yolo __MODELFLAG____EFFORTFLAG__"$(__OPINPUT__ encode launch-brief < __BRIEF__)"' ;;
+  muse) printf '%s' 'env -u CLAUDECODE -u PI_CODING_AGENT -u GROK_AGENT -u FM_PI_HARNESS XDG_CONFIG_HOME=__MUSECONFIG__ XDG_DATA_HOME=__MUSEDATA__ MUSE_EXPERIMENTAL_FOREIGN_PERSONAL_CONTEXT_KILL=on __MUSEBIN__ --yolo __MODELFLAG____EFFORTFLAG____BRIEFPROMPT__' ;;
   # rovo (Atlassian Rovo CLI): a positional brief is dead-on-arrival - rovo
   # loads, never enters a working state, and drops back to an idle shell within
   # about 10-15 seconds (confirmed live four times over a raw PTY and once under
@@ -4279,7 +4280,7 @@ rovo_endpoint_cleanup() {
   fm_backend_kill "$BACKEND" "$T" "$tab_id" "fm-$ID" 2>/dev/null && SPAWN_ENDPOINT_CLOSED=1 || true
 }
 
-# agy carries its brief on the launch command, so it needs no delivery gate,
+# agy carries its brief pointer on the launch command, so it needs no delivery gate,
 # but a worktree agy does not trust parks the TUI on the folder-trust dialog
 # and an unanswered dialog sends the turn into agy's scratch directory instead
 # of the worktree. The trust is pre-registered before launch
@@ -5217,6 +5218,13 @@ if [ "$HARNESS" = rovo ]; then
   LAUNCH=${LAUNCH//__ROVOCONFIGOVERRIDE__/$ROVOCONFIGOVERRIDE}
 fi
 LAUNCH=${LAUNCH//__BRIEF__/$sq_brief}
+if [[ "$LAUNCH" == *__BRIEFPROMPT__* ]]; then
+  brief_prompt=$(printf 'Read and follow the complete Firstmate launch brief at %s before doing any other work.' "$BRIEF" | "$FM_ROOT/bin/fm-operational-input.sh" encode launch-brief) || {
+    echo "error: could not construct the launch brief pointer for $ID" >&2
+    exit 1
+  }
+  LAUNCH=${LAUNCH//__BRIEFPROMPT__/"$(shell_quote "$brief_prompt")"}
+fi
 LAUNCH=${LAUNCH//__TURNEND__/$sq_turnend}
 LAUNCH=${LAUNCH//__PIEXT__/$sq_piext}
 LAUNCH=${LAUNCH//__PITURNEND__/$sq_piturnend}

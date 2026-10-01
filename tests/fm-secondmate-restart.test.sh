@@ -77,7 +77,7 @@ case "${1:-}" in
           fi
           printf 'zsh' > "$D/command.$target"
           ;;
-        *'encode launch-brief'* | *'Firstmate operational input waiting: read'*) cat "$D/becomes" > "$D/command.$target" ;;
+        *'launch-brief: Read and follow'* | *'Firstmate operational input waiting: read'*) cat "$D/becomes" > "$D/command.$target" ;;
         ': Firstmate instruction waiting: list '*)
           printf 'doorbell\n' >> "$D/rings"
           if [ -x "$D/on-doorbell" ]; then
@@ -155,7 +155,7 @@ handle_payload() {
       corr=$(cat "$inbox"/*.msg 2>/dev/null | grep -oE 'corr=[0-9a-f]{16}' | head -1)
       [ -z "$corr" ] || printf 'done [%s]: open records written down\n' "$corr" >> "$(cat "$D/answer-status")"
       ;;
-    *'encode launch-brief'* | *'Firstmate operational input waiting: read'*) printf pi > "$D/command" ;;
+    *'launch-brief: Read and follow'* | *'Firstmate operational input waiting: read'*) printf pi > "$D/command" ;;
   esac
 }
 case "${1:-} ${2:-}" in
@@ -375,7 +375,7 @@ test_working_pi_blank_composer_restarts() {
   local dir out rc
   dir=$(new_case working-pi-blank)
   add_repo_backed_mate "$dir" sm1 pi herdr
-  cp "$ROOT/bin/fm-git-strip-ai-trailers.sh" "$dir/fmrepo/bin/"
+  cp "$ROOT/bin/fm-git-strip-ai-trailers.sh" "$ROOT/bin/fm-operational-input.sh" "$dir/fmrepo/bin/"
   arm_answer "$dir" sm1
   make_working_pi_herdr_stub "$dir"
   printf pi > "$dir/fake/command"

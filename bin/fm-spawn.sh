@@ -4207,8 +4207,8 @@ elif [ "$KIND" != secondmate ] && [ "$BACKEND" != orca ]; then
   fi
 
   validate_spawn_worktree "treehouse get" "$T"
-  if ! fm_lock_try_acquire "$SPAWN_TREEHOUSE_PROJECT_LOCK"; then
-    echo "error: another Treehouse slot claim or return is in progress for $PROJ_ABS; refusing to race it" >&2
+  if ! fm_lock_acquire_wait_max "$SPAWN_TREEHOUSE_PROJECT_LOCK" 30; then
+    echo "error: another Treehouse slot claim or return held the project lock for $PROJ_ABS for 30s; refusing to race it" >&2
     exit 1
   fi
   SPAWN_TREEHOUSE_PROJECT_LOCK_HELD=1

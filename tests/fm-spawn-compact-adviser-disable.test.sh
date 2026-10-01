@@ -227,7 +227,7 @@ case "${1:-}" in
       printf '%s\n' "$payload" >> "$D/literal"
       case "$payload" in
         /exit|/quit) printf 'zsh' > "$D/command" ;;
-        *'encode launch-brief'*) printf 'codex' > "$D/command" ;;
+        *'launch-brief: Read and follow'*) printf 'codex' > "$D/command" ;;
       esac
     else
       printf '%s\n' "$payload" >> "$D/keys"
@@ -298,7 +298,7 @@ test_relaunch_rebuilds_the_switch() {
 
     grep -qx 'export COMPACT_ADVISER_DISABLE=1' "$dir/fake/keys" \
       || fail "relaunch with allowlist=$setting did not re-export the compact-adviser switch into the pane"
-    launch=$(grep 'encode launch-brief' "$dir/fake/literal" | tail -1)
+    launch=$(grep 'launch-brief: Read and follow' "$dir/fake/literal" | tail -1)
     [ -n "$launch" ] || fail "relaunch with allowlist=$setting sent no replacement launch command"
     install_env_probe "$dir/fakebin" codex
     preamble=$(grep '^export ' "$dir/fake/keys")

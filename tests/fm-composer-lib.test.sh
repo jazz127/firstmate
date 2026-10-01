@@ -219,6 +219,30 @@ test_matrix_claude_arrow_statusline_footer() {
   pass "matrix: claude's arrow statusline is footer furniture, not a composer holding text"
 }
 
+test_matrix_herdr_titled_claude_composer() {
+  # Synthetic replay of the screen shape reported in upstream issue #6127.
+  # The titled opening rule and plain closing rule enclose Claude's bare input.
+  local head foot screen typed content claude_working out
+  head=$'────────────────────────── Firstmate ──\n❯'
+  foot=$'\n───────────────────────────────────────\n  Opus 5 (1M context) │ firstmate │ main │ fleet idle'
+  claude_working=$(printf 'claude\tworking')
+  screen="$head$foot"
+  assert_screen "idle Claude under a titled Herdr rule" empty "$CAPS_STYLED" "$screen" '' "$claude_working"
+  typed="${head} Firstmate instruction waiting${foot}"
+  assert_screen "pending Claude doorbell under a titled Herdr rule" pending "$CAPS_STYLED" "$typed" '' "$claude_working"
+  content=$(fm_composer_extract_selected_content "$CAPS_STYLED" "$typed")
+  [ "$content" = 'Firstmate instruction waiting' ] \
+    || fail "the selected Herdr composer should expose its pending doorbell, got '$content'"
+  assert_screen "titled rules around a bare shell" unknown "$CAPS_STYLED" \
+    "${head/❯/\$}$foot" '' "$claude_working"
+  assert_screen "short titled rule under either locale" unknown "$CAPS_STYLED" \
+    $'─── Firstmate ──\n❯\n───────────────────────────────────────' '' "$claude_working"
+  out=$(fm_composer_classify_screen "$CAPS_STYLED" \
+    $'────────────────────────── Firstmate ──\n❯\n  Opus 5 (1M context)' '' "$claude_working")
+  [ "$out" != empty ] || fail "an unclosed titled rule must not authorize injection"
+  pass "matrix: titled Herdr rules preserve Claude's empty and pending composer verdicts"
+}
+
 test_composer_footer_demotion_needs_a_proven_pair() {
   # The demotion is bounded in three directions, and each bound is a case
   # where a lower glyph row IS the live composer.
@@ -969,6 +993,7 @@ test_idle_placeholder_case_mode_is_explicit
 test_real_text_is_pending
 test_matrix_claude_bare_nbsp_row
 test_matrix_claude_arrow_statusline_footer
+test_matrix_herdr_titled_claude_composer
 test_composer_footer_demotion_needs_a_proven_pair
 test_composer_footer_zone_is_shape_independent
 test_composer_footer_zone_refuses_rather_than_allows

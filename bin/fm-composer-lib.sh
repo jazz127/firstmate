@@ -748,16 +748,26 @@ fm_composer_classify_content() {  # <bordered> <content> [idle_re] [idle_case] [
 # exact positive proof they require (`empty`), so unrecognized future verdicts
 # fail safe by default.
 
-# _fm_composer_pi_separator_row: a solid pi separator - nothing but `─`, at
-# least 8 columns wide. The width floor is a literal substring test so it is
-# byte-exact in every locale.
+# _fm_composer_pi_separator_row: a solid separator of at least 8 `─` glyphs,
+# or a titled rule with that prefix and a closing `──` suffix. Claude
+# under Herdr uses the titled form above its bare `❯` row and a solid rule
+# below it. The width floor uses literal glyphs in every locale. Both rules
+# must be seen before the row becomes a proven composer.
 _fm_composer_pi_separator_row() {  # <trimmed-row>
-  local row=$1
+  local row=$1 prefix suffix title
   [ -n "$row" ] || return 1
-  [ -z "${row//─/}" ] || return 1
-  case "$row" in
-    *────────*) return 0 ;;
-  esac
+  if [ -z "${row//─/}" ]; then
+    case "$row" in *────────*) return 0 ;; esac
+    return 1
+  fi
+  prefix=${row%% *}
+  suffix=${row##* }
+  title=${row#"$prefix "}
+  title=${title%" $suffix"}
+  [ -z "${prefix//─/}" ] && [ -z "${suffix//─/}" ] \
+    && [ -n "$title" ] && [ "$title" != "$row" ] || return 1
+  case "$prefix" in *────────*) ;; *) return 1 ;; esac
+  case "$suffix" in *──*) return 0 ;; esac
   return 1
 }
 

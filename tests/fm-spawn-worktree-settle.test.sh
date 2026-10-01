@@ -56,7 +56,18 @@ case "${1:-}" in
   display-message) printf 'firstmate\n'; exit 0 ;;
   list-windows) exit 0 ;;
   has-session|new-session|new-window|kill-window) exit 0 ;;
-  send-keys) exit 0 ;;
+  send-keys)
+    for arg in "$@"; do
+      if [ "$arg" = 'treehouse get' ] && [ -n "${FM_FAKE_LOCK_PATH:-}" ]; then
+        if [ -d "$FM_FAKE_LOCK_PATH" ]; then
+          printf 'held\n' > "$FM_FAKE_LOCK_RESULT"
+        else
+          printf 'released\n' > "$FM_FAKE_LOCK_RESULT"
+        fi
+      fi
+    done
+    exit 0
+    ;;
 esac
 exit 0
 SH
@@ -110,6 +121,7 @@ run_settle_spawn() {
     FM_SPAWN_NO_GUARD=1 TMUX="fake,1,0" \
     FM_FAKE_PANE_PATH="$WT_DIR" FM_FAKE_PANE_STALE="$STALE_DIR" \
     FM_FAKE_PANE_STALE_READS="$STALE_READS" FM_FAKE_PANE_COUNTFILE="$COUNTFILE" \
+    FM_FAKE_LOCK_PATH="${FM_FAKE_LOCK_PATH:-}" FM_FAKE_LOCK_RESULT="${FM_FAKE_LOCK_RESULT:-}" \
     PATH="$FAKEBIN_DIR:$PATH" \
     "$SPAWN" "$id" "$PROJ_DIR" --mode no-mistakes --yolo off 2>&1
 }
@@ -221,9 +233,75 @@ test_primary_checkout_that_never_settles_fails_at_the_deadline() {
   pass "a pane stuck on the primary checkout fails loudly at the deadline"
 }
 
+make_pool_case() { # <name> <id> <stale-reads>
+  local name=$1 id=$2 stale_reads=$3 case_dir home project pool first second fakebin countfile
+  case_dir="$TMP_ROOT/$name"
+  home="$case_dir/home"
+  project="$case_dir/project"
+  pool="$case_dir/pool"
+  first="$pool/1/project"
+  second="$pool/2/project"
+  countfile="$case_dir/pane-call-count"
+  fakebin=$(make_settle_fakebin "$case_dir/fake")
+  fm_test_spawn_home "$home" codex
+  fm_git_init_commit "$project"
+  mkdir -p "$pool/1" "$pool/2"
+  git -C "$project" worktree add --quiet -b "protected-$name" "$first"
+  printf 'unique work\n' > "$first/unique.txt"
+  git -C "$first" add unique.txt
+  git -C "$first" -c user.name='Firstmate Tests' -c user.email='tests@example.invalid' commit -qm unique
+  git -C "$project" worktree add --quiet --detach "$second"
+  printf '{"worktrees":[{"name":"1","path":"%s"},{"name":"2","path":"%s","owner_pid":%s}]}\n' \
+    "$first" "$second" "$$" > "$pool/treehouse-state.json"
+  fm_test_spawn_brief "$home" "$id"
+  printf '%s\n' "$case_dir|$home|$project|$second|$first|$fakebin|$countfile|$stale_reads"
+}
+
+test_inspected_unreserved_slot_is_not_adopted() {
+  local rec id out status before
+  id=settle-rejected-slot-z5
+  rec=$(make_pool_case settle-rejected-slot "$id" 2)
+  read_settle_record "$rec"
+  before=$(git -C "$STALE_DIR" rev-parse HEAD)
+  printf 'task=older\nhome=elsewhere\n' > "$(dirname "$STALE_DIR")/.fm-slot-owner"
+  fm_test_fake_sleep_noop "$FAKEBIN_DIR"
+
+  out=$(run_settle_spawn "$id")
+  status=$?
+  expect_code 0 "$status" "spawn should wait for Treehouse's reserved slot"$'\n'"$out"
+  assert_grep "worktree=$WT_DIR" "$HOME_DIR/state/$id.meta" \
+    "spawn recorded the inspected slot instead of the reserved slot"
+  [ "$(git -C "$STALE_DIR" rev-parse HEAD)" = "$before" ] \
+    || fail "spawn moved the inspected slot's protected branch"
+  assert_grep 'task=older' "$(dirname "$STALE_DIR")/.fm-slot-owner" \
+    "spawn replaced the inspected slot's claim"
+  pass "an inspected unreserved pool slot is not recorded, claimed, or reset"
+}
+
+test_treehouse_get_runs_without_project_lock() {
+  local rec id out status
+  id=settle-lock-window-z6
+  rec=$(make_pool_case settle-lock-window "$id" 0)
+  read_settle_record "$rec"
+  FM_FAKE_LOCK_PATH=$(FM_HOME="$HOME_DIR" bash -c '. "$1"; fm_treehouse_project_lock_path "$2"' _ \
+    "$ROOT/bin/fm-wake-lib.sh" "$PROJ_DIR")
+  FM_FAKE_LOCK_RESULT="$HOME_DIR/lock-result"
+  export FM_FAKE_LOCK_PATH FM_FAKE_LOCK_RESULT
+  fm_test_fake_sleep_noop "$FAKEBIN_DIR"
+  out=$(run_settle_spawn "$id")
+  status=$?
+  expect_code 0 "$status" "spawn should claim the second slot"$'\n'"$out"
+  assert_grep 'released' "$FM_FAKE_LOCK_RESULT" \
+    "the project lock still surrounded treehouse get"
+  unset FM_FAKE_LOCK_PATH FM_FAKE_LOCK_RESULT
+  pass "treehouse get runs outside the project lock and spawn reacquires it"
+}
+
 test_single_stale_first_read_is_not_accepted
 test_already_settled_pane_costs_one_confirm_read
 test_transient_primary_checkout_is_not_accepted
 test_primary_checkout_that_never_settles_fails_at_the_deadline
+test_inspected_unreserved_slot_is_not_adopted
+test_treehouse_get_runs_without_project_lock
 
 echo "# all fm-spawn-worktree-settle tests passed"

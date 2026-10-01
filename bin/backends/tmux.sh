@@ -106,10 +106,25 @@ fm_backend_tmux_create_task() {  # <session> <window-name> <proj-abs> -> prints 
   printf '%s\n' "$wid"
 }
 
-# fm_backend_tmux_current_path: the live pane's current working directory, or
-# empty on any tmux error. Mirrors fm-spawn.sh's worktree-discovery poll:
-# `tmux display-message -p -t "$T" '#{pane_current_path}'`.
+# fm_backend_tmux_current_path: the live foreground process group's working
+# directory on Linux, falling back to tmux's pane path elsewhere. The pane path
+# can remain at the original project while `treehouse get` opens a subshell.
 fm_backend_tmux_current_path() {  # <target>
+  local pane_pid foreground
+  if [ -d /proc ]; then
+    pane_pid=$(tmux display-message -p -t "$1" '#{pane_pid}' 2>/dev/null || true)
+    case $pane_pid in
+      ''|*[!0-9]*) ;;
+      *)
+        foreground=$(ps -o tpgid= -p "$pane_pid" 2>/dev/null)
+        foreground=${foreground//[[:space:]]/}
+        if [ -n "$foreground" ] && [ "$foreground" -gt 0 ] 2>/dev/null && [ -L "/proc/$foreground/cwd" ]; then
+          readlink "/proc/$foreground/cwd"
+          return
+        fi
+        ;;
+    esac
+  fi
   tmux display-message -p -t "$1" '#{pane_current_path}' 2>/dev/null
 }
 

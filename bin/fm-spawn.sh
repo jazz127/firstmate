@@ -145,11 +145,12 @@
 #   even when they select different backends. A fresh spawn first takes the
 #   per-home task-set lock and refuses rather than waits when forced teardown owns
 #   it; relaunch is exempt because the existing task's control lock covers it.
-#   A fresh Treehouse-backed spawn also takes the project-identity lock in the local
-#   root Firstmate home's state directory before slot allocation and holds it through
-#   task metadata publication. Teardown holds that same lock while proving and
-#   returning a slot, so allocation cannot reuse a slot before its owner record
-#   is published. Under that same lock it writes the slot's owner claim, which is
+#   A fresh Treehouse-backed spawn takes the project-identity lock in the local
+#   root Firstmate home's state directory, but releases it while Treehouse gets
+#   the slot. It reacquires the lock before claiming the reserved slot and holds
+#   it through task metadata publication. Teardown holds that same lock while
+#   proving and returning a slot. Under that lock spawn writes the slot's owner
+#   claim, which is
 #   what lets teardown leave a slot reassigned since untouched; bin/fm-wake-lib.sh
 #   owns the claim and bin/fm-teardown.sh owns what it protects. A slot that
 #   cannot be claimed refuses the spawn rather than launching a worker whose slot
@@ -3185,6 +3186,20 @@ spawn_worktree_isolated() { # <path>
   return 0
 }
 
+# A foreground Git process can make a pane report a pool slot that Treehouse is
+# only inspecting. Its state entry is reserved only after Treehouse selects it.
+spawn_treehouse_slot_reserved() { # <worktree>
+  local worktree=$1 slot pool state owner
+  fm_treehouse_pool_slot "$PROJ_ABS" "$worktree" || return 0
+  slot=$(real_path_or_raw "$worktree")
+  pool=$(dirname "$(dirname "$slot")")
+  state="$pool/treehouse-state.json"
+  owner=$(jq -er --arg path "$slot" \
+    '.worktrees[]? | select(.path == $path) | if .leased == true then "leased" elif (.owner_pid | type) == "number" then (.owner_pid | tostring) else empty end' \
+    "$state" 2>/dev/null) || return 1
+  [ "$owner" = leased ] || { [ "$owner" -gt 0 ] 2>/dev/null && kill -0 "$owner" 2>/dev/null; }
+}
+
 validate_spawn_worktree() { # <source> <inspect-target>
   local source=$1 inspect_target=$2
   if ! spawn_worktree_isolated "$WT"; then
@@ -3249,7 +3264,13 @@ spawn_worktree_has_origin_config() { # <worktree>
 }
 
 freshen_spawn_worktree_base() { # <worktree>
-  local worktree=$1 default target expected actual status
+  local worktree=$1 default target expected actual status branch
+  if fm_treehouse_pool_slot "$PROJ_ABS" "$worktree"; then
+    branch=$(git -C "$worktree" symbolic-ref -q --short HEAD 2>/dev/null) && {
+      echo "error: pooled worktree '$worktree' has branch '$branch' checked out; refusing to move its commits while refreshing the base" >&2
+      return 1
+    }
+  fi
   status=$(git -C "$worktree" -c core.quotePath=false status --porcelain) || {
     echo "error: could not inspect pooled worktree '$worktree' before refreshing its base" >&2
     return 1
@@ -4122,6 +4143,10 @@ if [ "$RELAUNCH" -eq 1 ]; then
   fi
   [ "$KIND" = secondmate ] || validate_spawn_worktree "relaunch" "$T"
 elif [ "$KIND" != secondmate ] && [ "$BACKEND" != orca ]; then
+  # Treehouse must be able to reserve a slot without waiting on our project
+  # lock. Its reservation is checked below before the lock is reacquired.
+  fm_lock_release "$SPAWN_TREEHOUSE_PROJECT_LOCK" || exit 1
+  SPAWN_TREEHOUSE_PROJECT_LOCK_HELD=0
   spawn_send_text_line "$WT_TARGET" 'treehouse get'
 
   # Wait for the treehouse subshell: the pane's cwd moves from the project to the worktree.
@@ -4162,7 +4187,7 @@ elif [ "$KIND" != secondmate ] && [ "$BACKEND" != orca ]; then
   for _ in $(seq 1 60); do
     p=$(spawn_current_path "$WT_TARGET" || true)
     [ -z "$p" ] || last_seen="$p"
-    if [ -n "$p" ] && spawn_worktree_isolated "$p"; then
+    if [ -n "$p" ] && spawn_worktree_isolated "$p" && spawn_treehouse_slot_reserved "$p"; then
       p_real=$(real_path_or_raw "$p")
       last_reason="it is an isolated worktree, but no second read agreed with it"
       if [ -n "$candidate" ] && [ "$p_real" = "$candidate" ]; then
@@ -4172,7 +4197,7 @@ elif [ "$KIND" != secondmate ] && [ "$BACKEND" != orca ]; then
       candidate="$p_real"
     else
       candidate=""
-      [ -z "$p" ] || last_reason=$SPAWN_WT_REASON
+      [ -z "$p" ] || last_reason=${SPAWN_WT_REASON:-"Treehouse has not reserved this pool slot"}
     fi
     sleep 1
   done
@@ -4182,6 +4207,15 @@ elif [ "$KIND" != secondmate ] && [ "$BACKEND" != orca ]; then
   fi
 
   validate_spawn_worktree "treehouse get" "$T"
+  if ! fm_lock_try_acquire "$SPAWN_TREEHOUSE_PROJECT_LOCK"; then
+    echo "error: another Treehouse slot claim or return is in progress for $PROJ_ABS; refusing to race it" >&2
+    exit 1
+  fi
+  SPAWN_TREEHOUSE_PROJECT_LOCK_HELD=1
+  if ! spawn_treehouse_slot_reserved "$WT"; then
+    echo "error: Treehouse no longer reserves pool slot '$WT'; refusing to claim or refresh it" >&2
+    exit 1
+  fi
 
   # Claim the pool slot for this task. The interactive `treehouse get` sent to
   # the pane above records only a process lease (Treehouse's durable
@@ -4193,8 +4227,9 @@ elif [ "$KIND" != secondmate ] && [ "$BACKEND" != orca ]; then
   # a slot that cannot be claimed is refused here, at the cheapest point, rather
   # than launching a worker whose slot teardown could later release out from
   # under its successor.
-  # Written under the Treehouse project lock held from before slot allocation
-  # through metadata publication, so no other spawn or return sees a half-claim.
+  # Written after Treehouse reserves the slot and while the project lock is
+  # held through metadata publication, so no other spawn or return sees a
+  # half-claim.
   if fm_treehouse_pool_slot "$PROJ_ABS" "$WT"; then
     if ! fm_treehouse_slot_owner_claim "$WT" "$ID" "$FM_HOME"; then
       echo "error: could not claim Treehouse pool slot $WT for task $ID; refusing to launch a worker whose slot cannot later be proved to be its own; inspect window $T" >&2

@@ -1,0 +1,36 @@
+## Live: two concurrent real fm-spawn.sh into the same project (home-root + child secondmate home sharing the project lock), real treehouse get in lab tmux
+spawn A (home-root, live-conc-a-q1): exit=0 after 6s
+spawn B (home-child, live-conc-b-q2): exit=0 after 7s
+--- A output ---
+fm-gate-refuse: gate agent lifecycle permitted only against lab home $LAB/home-root
+warning: $LAB/home-root/data/live-conc-a-q1/launch-brief.md records no ship branch; defaulting to legacy branch fm/live-conc-a-q1
+warning: $LAB/home-root/data/live-conc-a-q1/launch-brief.md records no delivery contract line (scaffolded before ship briefs recorded one); launching on the explicit --mode no-mistakes - confirm its definition of done matches
+spawned live-conc-a-q1 harness=claude kind=ship mode=no-mistakes yolo=off window=firstmate:fm-live-conc-a-q1 worktree=/private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab.Q393Ti/pool/.treehouse/project-7fc2f7/1/project
+--- B output ---
+fm-gate-refuse: gate agent lifecycle permitted only against lab home $LAB/home-child
+warning: $LAB/home-child/data/live-conc-b-q2/launch-brief.md records no ship branch; defaulting to legacy branch fm/live-conc-b-q2
+warning: $LAB/home-child/data/live-conc-b-q2/launch-brief.md records no delivery contract line (scaffolded before ship briefs recorded one); launching on the explicit --mode no-mistakes - confirm its definition of done matches
+spawned live-conc-b-q2 harness=claude kind=ship mode=no-mistakes yolo=off window=firstmate:fm-live-conc-b-q2 worktree=/private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab.Q393Ti/pool/.treehouse/project-7fc2f7/2/project
+--- A meta worktree ---
+window=firstmate:fm-live-conc-a-q1
+worktree=/private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab.Q393Ti/pool/.treehouse/project-7fc2f7/1/project
+project=/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab.Q393Ti/project
+--- B meta worktree ---
+window=firstmate:fm-live-conc-b-q2
+worktree=/private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab.Q393Ti/pool/.treehouse/project-7fc2f7/2/project
+project=/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab.Q393Ti/project
+--- slot owner claims ---
+$LAB/pool/.treehouse/project-7fc2f7/1/.fm-slot-owner:
+task=live-conc-a-q1
+home=$LAB/home-root
+$LAB/pool/.treehouse/project-7fc2f7/2/.fm-slot-owner:
+task=live-conc-b-q2
+home=$LAB/home-child
+--- treehouse status ---
+A new version of treehouse is available: v2.0.0 → v3.1.1
+Run "treehouse update" to update
+
+1     in-use       /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab.Q393Ti/pool/.treehouse/project-7fc2f7/1/project
+                   bash (12374), sleep (16751)
+2     in-use       /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab.Q393Ti/pool/.treehouse/project-7fc2f7/2/project
+                   bash (12653), sleep (17018)

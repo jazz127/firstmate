@@ -1,0 +1,36 @@
+## Live adversarial: task A's worker exited (A's slot processes gone, claim still A's); spawn H (other home) gets A's slot via real treehouse get; real fm-teardown A --force fires as soon as H's pane enters the slot (H's project lock released during get)
+--- treehouse status of slot 1 after A exited ---
+1     available    /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab.Q393Ti/pool/.treehouse/project-7fc2f7/1/project
+2     in-use       /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab.Q393Ti/pool/.treehouse/project-7fc2f7/2/project
+--- watcher + teardown A ---
+watcher: H pane entered slot1 at poll 7; running real fm-teardown A --force now
+fm-gate-refuse: gate agent lifecycle permitted only against lab home $LAB/home-root
+teardown: reaping leaked worktree process(es) for live-conc-a-q1: 590
+teardown: force-killing leaked worktree process(es) for live-conc-a-q1: 590
+A new version of treehouse is available: v2.0.0 → v3.1.1
+Run "treehouse update" to update
+
+worktree /private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab.Q393Ti/pool/.treehouse/project-7fc2f7/1/project is not managed by treehouse
+error: treehouse return failed for worktree /private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab.Q393Ti/pool/.treehouse/project-7fc2f7/1/project; teardown aborted
+teardown A exit=1
+--- spawn H exit=1 ---
+fm-gate-refuse: gate agent lifecycle permitted only against lab home $LAB/home-child
+warning: $LAB/home-child/data/live-race-h-q8/launch-brief.md records no ship branch; defaulting to legacy branch fm/live-race-h-q8
+warning: $LAB/home-child/data/live-race-h-q8/launch-brief.md records no delivery contract line (scaffolded before ship briefs recorded one); launching on the explicit --mode no-mistakes - confirm its definition of done matches
+error: Treehouse pool slot /private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab.Q393Ti/pool/.treehouse/project-7fc2f7/1/project is no longer held by this spawn's pane (now '/private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab.Q393Ti/project'); it was returned or reassigned while the Treehouse project lock was released for treehouse get, so it is abandoned untouched; inspect window firstmate:fm-live-race-h-q8
+--- H meta present? ---
+ls: $LAB/home-child/state/live-race-h-q8.meta: No such file or directory
+--- slot1 claim after ---
+task=live-conc-a-q1
+home=$LAB/home-root
+--- H pane now ---
+/private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab.Q393Ti/project
+--- treehouse status after ---
+
+1     available    /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab.Q393Ti/pool/.treehouse/project-7fc2f7/1/project
+2     in-use       /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab.Q393Ti/pool/.treehouse/project-7fc2f7/2/project
+                   bash (12653), sleep (17018)
+3     in-use       /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab.Q393Ti/pool/.treehouse/project-7fc2f7/3/project
+                   bash (30241), sleep (33810)
+4     in-use       /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab.Q393Ti/pool/.treehouse/project-7fc2f7/4/project
+                   bash (41543)

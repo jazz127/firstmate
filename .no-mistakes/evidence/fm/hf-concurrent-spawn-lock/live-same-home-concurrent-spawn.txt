@@ -1,0 +1,9 @@
+## Live: two concurrent fm-spawn.sh from the SAME home (out of scope per decision F2; expected: second refuses fast at task-set lock)
+spawn C exit=0
+fm-gate-refuse: gate agent lifecycle permitted only against lab home $LAB/home-root
+warning: $LAB/home-root/data/live-same-c-q3/launch-brief.md records no ship branch; defaulting to legacy branch fm/live-same-c-q3
+warning: $LAB/home-root/data/live-same-c-q3/launch-brief.md records no delivery contract line (scaffolded before ship briefs recorded one); launching on the explicit --mode no-mistakes - confirm its definition of done matches
+spawned live-same-c-q3 harness=claude kind=ship mode=no-mistakes yolo=off window=firstmate:fm-live-same-c-q3 worktree=/private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab.Q393Ti/pool/.treehouse/project-7fc2f7/3/project
+spawn D exit=1 (total 5s)
+fm-gate-refuse: gate agent lifecycle permitted only against lab home $LAB/home-root
+error: this home's task set is locked by another operation (a forced teardown is enumerating or removing its tasks); refusing to create task live-same-d-q4 rather than racing it

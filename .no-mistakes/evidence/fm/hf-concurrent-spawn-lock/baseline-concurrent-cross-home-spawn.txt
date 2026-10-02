@@ -1,0 +1,10 @@
+## Baseline (base commit 8f756bbc fm-spawn.sh): same two-home concurrent spawn into the same project
+spawn E (home-root) exit=1
+fm-gate-refuse: gate agent lifecycle permitted only against lab home $LAB/home-root
+warning: $LAB/home-root/data/base-conc-e-q5/launch-brief.md records no ship branch; defaulting to legacy branch fm/base-conc-e-q5
+warning: $LAB/home-root/data/base-conc-e-q5/launch-brief.md records no delivery contract line (scaffolded before ship briefs recorded one); launching on the explicit --mode no-mistakes - confirm its definition of done matches
+error: could not resolve the task-channel directories for base-conc-e-q5's claude --add-dir grant
+warning: leaving task base-conc-e-q5's slot claim on /private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab.Q393Ti/pool/.treehouse/project-7fc2f7/4/project in place; the Treehouse project lock is no longer held, so the next spawn's claim replaces it
+spawn F (home-child) exit=1
+fm-gate-refuse: gate agent lifecycle permitted only against lab home $LAB/home-child
+error: another Treehouse slot allocation or return is in progress for /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab.Q393Ti/project; refusing to race it

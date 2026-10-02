@@ -1,0 +1,22 @@
+## Live probe: real 'treehouse get' in a lab tmux pane (private socket fm-lab)
+$ tmux display-message -p '#{pane_current_path}'
+/private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab.Q393Ti/pool/.treehouse/project-7fc2f7/1/project
+$ fm_backend_tmux_current_path firstmate:probe   # this change
+/private/var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab.Q393Ti/pool/.treehouse/project-7fc2f7/1/project
+rc=0
+$ ps -t <pane tty> -o pid,pgid,tpgid,comm
+  PID  PGID TPGID COMM
+83690 83690 84931 bash
+84801 84801 84931 treehouse
+84931 84931 84931 /bin/bash
+--- pane capture ---
+The default interactive shell is now zsh.
+To update your account to use zsh, please run `chsh -s /bin/zsh`.
+For more details, please visit https://support.apple.com/kb/HT208050.
+bash-3.2$ treehouse get
+🌳 Setting up worktree...
+🌳 Entered worktree at /var/folders/9h/6hvtvt257md69k7nq7ycyq5h0000gn/T/fm-lab.Q393Ti/pool/.treehouse/project-7fc2f7/1/project. Type 'exit' to return.
+The default interactive shell is now zsh.
+To update your account to use zsh, please run `chsh -s /bin/zsh`.
+For more details, please visit https://support.apple.com/kb/HT208050.
+bash-3.2$

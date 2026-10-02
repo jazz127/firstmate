@@ -380,7 +380,7 @@ test_policy_cli_direct() {
 test_scripts_are_shellcheck_clean() {
   local out
   command -v shellcheck >/dev/null 2>&1 || { pass "shellcheck not installed, skipping"; return; }
-  out=$("$ROOT/bin/fm-lint.sh" "$ROOT/bin/fm-cd-pretool-check.sh" 2>&1) \
+  out=$(FM_LINT_HOST_LOCK=off "$ROOT/bin/fm-lint.sh" "$ROOT/bin/fm-cd-pretool-check.sh" 2>&1) \
     || fail "bin/fm-cd-pretool-check.sh is not lint-clean under the pinned definition: $out"
   pass "bin/fm-cd-pretool-check.sh is clean under bin/fm-lint.sh"
 }

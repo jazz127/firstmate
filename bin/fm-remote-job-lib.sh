@@ -28,6 +28,8 @@
 # then publishes state=done last. Callers wait for done, relay stdout and
 # stderr separately, then reap only their completed record. Input, argv,
 # stdout, and stderr are each capped at 1048576 bytes.
+# Provisioning records use --timeout <seconds> from their argv, default 21600,
+# maximum 86400; other jobs keep FM_REMOTE_JOB_TIMEOUT (default 360, max 3600).
 #
 # The worker serves one lane per staged home: jobs for the same home run
 # strictly FIFO in seq order while lanes for different homes run concurrently,
@@ -83,16 +85,16 @@
 # an Aqua requirement. The launch-agent renderer and repair helpers here are
 # shared by the entrypoint and remote doctor so their ownership cannot drift.
 #
-# The Linux start path puts the worker tree in its own process group, so
-# stopping a worker signals its restart supervisor, its serving child, and any
-# job descendant together instead of leaving a supervisor to restart what was
-# just killed. fm_remote_job_stop_worker_tree owns that stop and refuses to
-# signal a group whose leader is not itself a worker, so a worker inherited
-# from an older build or from launchd's own session is still stopped safely as
-# a single process. fm_remote_job_root_is_live is the shared predicate for
-# whether a worker's code root still exists; bin/fm-remote-job-worker.sh uses
-# it to stop itself once its root is pruned, and
-# bin/fm-remote-job-reap-orphans.sh uses it to reap workers that were already
+# The Linux start path puts the worker tree in its own process group, keeping
+# the worker and its descendants separate from the launching shell.
+# fm_remote_job_stop_worker_tree owns identity-checked TERM/KILL cleanup of the
+# root and every verified descendant, including descendants that remain after
+# the root exits. Linux ensure retains one verified matching worker, converges
+# stale or duplicate workers before starting a replacement, and refuses to
+# claim readiness when safe cleanup cannot be proven. fm_remote_job_root_is_live
+# is the shared predicate for whether a worker's code root still exists;
+# bin/fm-remote-job-worker.sh uses it to stop itself once its root is pruned,
+# and bin/fm-remote-job-reap-orphans.sh uses it to reap workers already
 # orphaned that way.
 
 FM_REMOTE_JOB_LABEL=dev.firstmate.remote-job
@@ -131,6 +133,16 @@ fm_remote_job_safe_id() {
 
 fm_remote_job_command_preemptible() { # <staged argv command>
   case "${1:-}" in fm-remote-delta-read.sh) return 0 ;; *) return 1 ;; esac
+}
+
+# Provisioning alone accepts a longer execution window. Its --timeout argv
+# carries the parent's choice across env -i; every other command retains the
+# ordinary 3600-second maximum. Wait and execution validate the same record.
+fm_remote_job_timeout_valid() { # <seconds> <command>
+  local limit=3600
+  [ "$2" != fm-remote-home-provision.sh ] || limit=86400
+  case "$1" in ''|*[!0-9]*|0) return 1 ;; esac
+  [ "$1" -gt 0 ] && [ "$1" -le "$limit" ]
 }
 
 fm_remote_job_validate_settings() {
@@ -624,7 +636,7 @@ fm_remote_job_cancel() { # <account-home> <id>
 }
 
 fm_remote_job_stage() { # <account-home> <root> <home> <command> [args...]; stdin is captured
-  local account_home=$1 root=$2 home=$3 command=$4 stage id destination bytes queue_deadline owner_start
+  local account_home=$1 root=$2 home=$3 command=$4 stage id destination bytes queue_deadline owner_start timeout
   shift 4
   fm_remote_job_prepare_state "$account_home" || return 1
   root=$(fm_remote_job_canonical_existing_dir "$root") || {
@@ -637,6 +649,24 @@ fm_remote_job_stage() { # <account-home> <root> <home> <command> [args...]; stdi
   }
   case "$command" in fm-*.sh) ;; *) FM_REMOTE_JOB_ERROR="remote job command is outside the fm-*.sh namespace"; return 1 ;; esac
   case "$command" in */*|*..*) FM_REMOTE_JOB_ERROR="remote job command contains a path or traversal"; return 1 ;; esac
+  timeout=$FM_REMOTE_JOB_TIMEOUT
+  if [ "$command" = fm-remote-home-provision.sh ]; then
+    timeout=21600
+    if [ "$#" -gt 0 ]; then
+      [ "$#" -eq 2 ] && [ "$1" = --timeout ] || {
+        FM_REMOTE_JOB_ERROR="provisioning expects --timeout <seconds>"
+        fm_remote_job_die "$FM_REMOTE_JOB_ERROR"
+        return 1
+      }
+      timeout=$2
+    fi
+  fi
+  fm_remote_job_timeout_valid "$timeout" "$command" || {
+    FM_REMOTE_JOB_ERROR="invalid execution timeout for $command: $timeout"
+    fm_remote_job_die "$FM_REMOTE_JOB_ERROR"
+    return 1
+  }
+  timeout=$((10#$timeout))
   owner_start=$(fm_remote_job_process_start "$$") || {
     FM_REMOTE_JOB_ERROR="cannot establish remote job staging ownership"
     return 1
@@ -653,7 +683,7 @@ fm_remote_job_stage() { # <account-home> <root> <home> <command> [args...]; stdi
     ! printf '%s\n' "$root" > "$stage/root" ||
     ! printf '%s\n' "$home" > "$stage/home" ||
     ! printf '%s\n' "$queue_deadline" > "$stage/queue_deadline" ||
-    ! printf '%s\n' "$FM_REMOTE_JOB_TIMEOUT" > "$stage/timeout" ||
+    ! printf '%s\n' "$timeout" > "$stage/timeout" ||
     ! printf '%s\0' "$command" "$@" > "$stage/argv" ||
     ! head -c "$((FM_REMOTE_JOB_MAX_BYTES + 1))" > "$stage/stdin"; then
     rm -rf -- "$stage"
@@ -690,7 +720,7 @@ fm_remote_job_stage() { # <account-home> <root> <home> <command> [args...]; stdi
 
 fm_remote_job_wait() { # <account-home> <id>; honors FM_REMOTE_JOB_DISCONNECT_PROBE
   local account_home=$1 id=$2 job state queue_deadline execution_timeout wait_deadline exit_value
-  local now next_probe=0
+  local now next_probe=0 command=
   fm_remote_job_prepare_state "$account_home" || return 1
   job=$(fm_remote_job_job_dir "$id") || {
     FM_REMOTE_JOB_ERROR="remote job record disappeared or became unsafe"
@@ -704,7 +734,14 @@ fm_remote_job_wait() { # <account-home> <id>; honors FM_REMOTE_JOB_DISCONNECT_PR
     FM_REMOTE_JOB_ERROR="remote job execution timeout is invalid"
     return 1
   }
-  [ "$execution_timeout" -le 3600 ] || {
+  if [ "$execution_timeout" -gt 3600 ]; then
+    if ! fm_remote_job_regular_bounded "$job/argv" "$FM_REMOTE_JOB_MAX_BYTES" ||
+      ! IFS= read -r -d '' command < "$job/argv"; then
+      FM_REMOTE_JOB_ERROR="remote provisioning timeout has no safe command record"
+      return 1
+    fi
+  fi
+  fm_remote_job_timeout_valid "$execution_timeout" "$command" || {
     FM_REMOTE_JOB_ERROR="remote job execution timeout is invalid"
     return 1
   }
@@ -775,13 +812,18 @@ fm_remote_job_path_mtime() { # <path>
 }
 
 fm_remote_job_stage_owner_alive() { # <stage-dir>
-  local stage=$1 pid recorded_start actual_start
+  local stage=$1 pid recorded_start actual_start command
   pid=$(fm_remote_job_read_single_line "$stage/.owner-pid" 64 2>/dev/null) || return 1
   case "$pid" in ''|*[!0-9]*) return 1 ;; esac
   [ "$pid" -gt 1 ] || return 1
   recorded_start=$(fm_remote_job_read_single_line "$stage/.owner-start" 256 2>/dev/null) || return 1
-  actual_start=$(fm_remote_job_process_start "$pid" 2>/dev/null) || return 1
-  [ "$recorded_start" = "$actual_start" ]
+  actual_start=$(fm_remote_job_process_start "$pid" 2>/dev/null) || {
+    kill -0 "$pid" 2>/dev/null
+    return $?
+  }
+  [ "$recorded_start" = "$actual_start" ] && return 0
+  command=$(fm_remote_job_proven_legacy_command "$pid" "$recorded_start") || return 1
+  [[ "$command" == *fm-remote-entrypoint.sh* || "$command" == *fm-remote-doctor.sh* ]]
 }
 
 fm_remote_job_reap_stale() { # <account-home>
@@ -899,6 +941,26 @@ fm_remote_job_gui_available() { # <uid>
   command -v launchctl >/dev/null 2>&1 && launchctl print "gui/$uid" >/dev/null 2>&1
 }
 
+fm_remote_job_bootout_launchagent() { # <gui-domain/label>
+  local target=$1 attempt out
+  FM_REMOTE_JOB_ERROR=
+  if ! out=$(launchctl bootout "$target" 2>&1); then
+    launchctl print "$target" >/dev/null 2>&1 || return 0
+    FM_REMOTE_JOB_ERROR="launchctl bootout $target refused: ${out:-no diagnostic}"
+    return 1
+  fi
+  # Bootout is asynchronous, so allow five seconds for launchd to remove the job.
+  for ((attempt = 0; attempt <= 50; attempt++)); do
+    if ! launchctl print "$target" >/dev/null 2>&1; then
+      return 0
+    fi
+    [ "$attempt" -lt 50 ] || break
+    sleep 0.1
+  done
+  FM_REMOTE_JOB_ERROR="launchd job $target remained loaded after bootout"
+  return 1
+}
+
 fm_remote_job_launchagent_loaded() { # <remote-root> <account-home> <uid>
   local root=$1 account_home=$2 uid=$3 worker loaded compact
   fm_remote_job_launchagent_paths "$account_home"
@@ -915,12 +977,146 @@ fm_remote_job_worker_ready_path() { printf '%s\n' "$FM_REMOTE_JOB_STATE/worker.r
 fm_remote_job_worker_identity_path() { printf '%s\n' "$FM_REMOTE_JOB_STATE/worker.identity"; }
 fm_remote_job_worker_lock_path() { printf '%s\n' "$FM_REMOTE_JOB_STATE/worker.lock"; }
 
-fm_remote_job_process_start() {
-  local pid=$1 ps_bin value
-  if [ -x /bin/ps ]; then ps_bin=/bin/ps; elif [ -x /usr/bin/ps ]; then ps_bin=/usr/bin/ps; else return 1; fi
-  value=$("$ps_bin" -p "$pid" -o lstart= 2>/dev/null) || return 1
+fm_remote_job_normalize_process_start() {
+  local value=$1
   [ -n "$value" ] || return 1
   case "$value" in *$'\n'*|*$'\r'*) return 1 ;; esac
+  value=$(printf '%s\n' "$value" | LC_ALL=C awk '{$1=$1; print}') || return 1
+  [ -n "$value" ] || return 1
+  printf '%s\n' "$value"
+}
+
+fm_remote_job_ps_bin() {
+  if [ -x /bin/ps ]; then printf '/bin/ps\n'; elif [ -x /usr/bin/ps ]; then printf '/usr/bin/ps\n'; else return 1; fi
+}
+
+fm_remote_job_process_start() {
+  local pid=$1 ps_bin value proc_root stat_line starttime boot_id
+  local -a stat_fields
+  case "$pid" in ''|*[!0-9]*) return 1 ;; esac
+  [ "$pid" -gt 1 ] || return 1
+  # Use the same final-comm-delimiter parse as fm_pid_identity in
+  # fm-wake-lib.sh. Linux start ticks do not change when WSL re-renders
+  # wall-clock process dates; the boot ID keeps persisted records distinct
+  # across a reboot.
+  if [ "$(uname -s 2>/dev/null || true)" = Linux ] || [ -n "${FM_PROC_ROOT_OVERRIDE:-}" ]; then
+    proc_root=${FM_PROC_ROOT_OVERRIDE:-/proc}
+    [ -r "$proc_root/$pid/stat" ] && [ -r "$proc_root/sys/kernel/random/boot_id" ] || return 1
+    IFS= read -r stat_line < "$proc_root/$pid/stat" || return 1
+    [[ "$stat_line" == *') '* ]] || return 1
+    read -r -a stat_fields <<< "${stat_line##*)}"
+    [ "${#stat_fields[@]}" -ge 20 ] || return 1
+    starttime=${stat_fields[19]}
+    case "$starttime" in ''|*[!0-9]*) return 1 ;; esac
+    IFS= read -r boot_id < "$proc_root/sys/kernel/random/boot_id" || return 1
+    [[ "$boot_id" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]] || return 1
+    printf 'linux-starttime=%s boot-id=%s\n' "$starttime" "$boot_id"
+    return 0
+  fi
+  ps_bin=$(fm_remote_job_ps_bin) || return 1
+  # Pin LC_ALL=C so lstart is locale-invariant: the launchd worker records its
+  # start under the C locale, but SSH callers re-read it under their own locale.
+  value=$(LC_ALL=C "$ps_bin" -p "$pid" -o lstart= 2>/dev/null) || return 1
+  fm_remote_job_normalize_process_start "$value"
+}
+
+fm_remote_job_signal_identity() { # <pid> <signal> <start> <command>
+  local pid=$1 signal=$2 expected_start=$3 expected_command=$4 state ps_bin='' status
+  if ! fm_remote_job_process_identity_matches "$pid" "$expected_start" "$expected_command"; then
+    state=$(fm_remote_job_process_state "$pid" 2>/dev/null || true)
+    case "$state" in Z*) return 0 ;; esac
+    kill -0 "$pid" 2>/dev/null && return 1
+    return 0
+  fi
+  case "$(uname -s 2>/dev/null || true)" in
+    Linux)
+      if [ -x /bin/ps ]; then ps_bin=/bin/ps; elif [ -x /usr/bin/ps ]; then ps_bin=/usr/bin/ps; fi
+      if [ -n "$ps_bin" ] && command -v python3 >/dev/null 2>&1; then
+        python3 - "$pid" "$signal" "$expected_start" "$expected_command" "$ps_bin" <<'PY'
+import errno
+import os
+import re
+import signal
+import subprocess
+import sys
+
+pid = int(sys.argv[1])
+sig = getattr(signal, "SIG" + sys.argv[2])
+expected_start = sys.argv[3]
+expected_command = sys.argv[4]
+ps_bin = sys.argv[5]
+try:
+    fd = os.pidfd_open(pid, 0)
+except AttributeError:
+    raise SystemExit(2)
+except OSError as exc:
+    if exc.errno in (errno.ESRCH, errno.EINVAL, errno.ENOSYS):
+        raise SystemExit(2)
+    raise
+try:
+    proc_root = os.environ.get("FM_PROC_ROOT_OVERRIDE", "/proc")
+    try:
+        with open(f"{proc_root}/{pid}/stat", "rb") as stat_file:
+            stat_line = stat_file.read()
+        with open(f"{proc_root}/sys/kernel/random/boot_id", encoding="ascii") as boot_file:
+            boot_id = boot_file.read().strip()
+    except (OSError, UnicodeError):
+        raise SystemExit(1)
+    if not stat_line.startswith(f"{pid} (".encode()) or b") " not in stat_line:
+        raise SystemExit(1)
+    fields = stat_line.rsplit(b") ", 1)[1].split()
+    if len(fields) < 20 or not fields[19].isdigit():
+        raise SystemExit(1)
+    if not re.fullmatch(r"[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}", boot_id):
+        raise SystemExit(1)
+    start = f"linux-starttime={fields[19].decode()} boot-id={boot_id}"
+    try:
+        result = subprocess.run(
+            [ps_bin, "-p", str(pid), "-o", "command="],
+            check=True, capture_output=True, text=True)
+    except subprocess.CalledProcessError:
+        raise SystemExit(0)
+    command = result.stdout.rstrip("\n")
+    if start != expected_start or command != expected_command:
+        raise SystemExit(1)
+    try:
+        signal.pidfd_send_signal(fd, sig)
+    except AttributeError:
+        raise SystemExit(2)
+    except OSError as exc:
+        if exc.errno == errno.ESRCH:
+            raise SystemExit(0)
+        if exc.errno in (errno.EINVAL, errno.ENOSYS):
+            raise SystemExit(2)
+        raise
+finally:
+    os.close(fd)
+PY
+        status=$?
+        [ "$status" -eq 0 ] && return 0
+        [ "$status" -ne 2 ] && return "$status"
+      fi
+      state=$(fm_remote_job_process_state "$pid" 2>/dev/null || true)
+      case "$state" in Z*) return 0 ;; esac
+      kill -0 "$pid" 2>/dev/null && return 1
+      return 0
+      ;;
+    *)
+      state=$(fm_remote_job_process_state "$pid" 2>/dev/null || true)
+      case "$state" in Z*) return 0 ;; esac
+      kill -0 "$pid" 2>/dev/null && return 1
+      return 0
+      ;;
+  esac
+}
+
+fm_remote_job_process_state() {
+  local pid=$1 ps_bin value
+  if [ -x /bin/ps ]; then ps_bin=/bin/ps; elif [ -x /usr/bin/ps ]; then ps_bin=/usr/bin/ps; else return 1; fi
+  value=$("$ps_bin" -p "$pid" -o stat= 2>/dev/null) || return 1
+  value=${value//[[:space:]]/}
+  [ -n "$value" ] || return 1
+  case "$value" in *[![:alnum:]+_-]*) return 1 ;; esac
   printf '%s\n' "$value"
 }
 
@@ -933,10 +1129,55 @@ fm_remote_job_process_command() {
   printf '%s\n' "$value"
 }
 
+fm_remote_job_process_identity_matches() { # <pid> <start> <command>
+  local actual_start actual_command state
+  state=$(fm_remote_job_process_state "$1") || return 1
+  case "$state" in Z*) return 1 ;; esac
+  if actual_command=$(fm_remote_job_legacy_owner_command "$1" "$2"); then
+    [ "$actual_command" = "$3" ]
+    return
+  fi
+  actual_start=$(fm_remote_job_process_start "$1") || return 1
+  [ "$actual_start" = "$2" ] || return 1
+  actual_command=$(fm_remote_job_process_command "$1") || return 1
+  [ "$actual_command" = "$3" ] || return 1
+  [ "$(fm_remote_job_process_start "$1")" = "$2" ]
+}
+
+# Records written before the Linux start-tick token hold a wall-clock lstart
+# rendering in whatever locale the old worker ran, which drifts on WSL. Such a
+# record still names a live PID that runs its owner's command; any other command
+# proves the PID was reused and the record is dead.
+fm_remote_job_legacy_owner_command() { # <pid> <recorded start>
+  [ "$(uname -s 2>/dev/null || true)" = Linux ] || [ -n "${FM_PROC_ROOT_OVERRIDE:-}" ] || return 1
+  case "$2" in ''|linux-starttime=*) return 1 ;; esac
+  kill -0 "$1" 2>/dev/null || return 1
+  fm_remote_job_process_command "$1"
+}
+
+# Records without a recorded command must also still match the C-locale lstart
+# rendering; an unproven owner is treated as gone and is never signalled.
+fm_remote_job_proven_legacy_command() { # <pid> <recorded start>
+  local ps_bin command
+  command=$(fm_remote_job_legacy_owner_command "$1" "$2") || return 1
+  if [ -x /bin/ps ]; then ps_bin=/bin/ps; elif [ -x /usr/bin/ps ]; then ps_bin=/usr/bin/ps; else return 1; fi
+  [ "$(LC_ALL=C "$ps_bin" -p "$1" -o lstart= 2>/dev/null)" = "$2" ] || return 1
+  printf '%s\n' "$command"
+}
+
 fm_remote_job_process_pgid() { # <pid>
   local pid=$1 ps_bin value
   if [ -x /bin/ps ]; then ps_bin=/bin/ps; elif [ -x /usr/bin/ps ]; then ps_bin=/usr/bin/ps; else return 1; fi
   value=$("$ps_bin" -p "$pid" -o pgid= 2>/dev/null) || return 1
+  value=$(printf '%s' "$value" | tr -d '[:space:]')
+  case "$value" in ''|*[!0-9]*) return 1 ;; esac
+  printf '%s\n' "$value"
+}
+
+fm_remote_job_process_parent() { # <pid>
+  local pid=$1 ps_bin value
+  if [ -x /bin/ps ]; then ps_bin=/bin/ps; elif [ -x /usr/bin/ps ]; then ps_bin=/usr/bin/ps; else return 1; fi
+  value=$("$ps_bin" -p "$pid" -o ppid= 2>/dev/null) || return 1
   value=$(printf '%s' "$value" | tr -d '[:space:]')
   case "$value" in ''|*[!0-9]*) return 1 ;; esac
   printf '%s\n' "$value"
@@ -953,54 +1194,125 @@ fm_remote_job_root_is_live() { # <remote-root>
   [ -f "$root/bin/fm-remote-job-worker.sh" ] && [ ! -L "$root/bin/fm-remote-job-worker.sh" ]
 }
 
-# The isolated process group that owns <pid>'s whole worker tree, echoed only
-# when signalling it is provably safe: the group is not this shell's own, not a
-# reserved id, and its leader is itself a remote job worker. A worker started
-# without group isolation (an older build, or launchd's own session) therefore
-# never yields a group, and callers fall back to signalling the single process.
-fm_remote_job_worker_process_group() { # <pid>
-  local pid=$1 pgid own_pgid leader_command
-  pgid=$(fm_remote_job_process_pgid "$pid") || return 1
-  case "$pgid" in 0|1) return 1 ;; esac
-  own_pgid=$(fm_remote_job_process_pgid "$$") || return 1
-  [ "$pgid" != "$own_pgid" ] || return 1
-  leader_command=$(fm_remote_job_process_command "$pgid" 2>/dev/null || true)
-  case "$leader_command" in *fm-remote-job-worker.sh*) ;; *) return 1 ;; esac
-  printf '%s\n' "$pgid"
+fm_remote_job_worker_command_matches() { # <worker> <command>
+  local worker=$1 command=$2
+  case "$command" in
+    "$worker"|bash\ "$worker"|sh\ "$worker"|*/bash\ "$worker"|*/sh\ "$worker"|"$worker --serve"|bash\ "$worker --serve"|sh\ "$worker --serve"|*/bash\ "$worker --serve"|*/sh\ "$worker --serve"|"$worker --lane "*|bash\ "$worker --lane "*|sh\ "$worker --lane "*|*/bash\ "$worker --lane "*|*/sh\ "$worker --lane "*) return 0 ;;
+  esac
+  return 1
 }
 
 # Stop a worker and every descendant it leaked, TERM first and KILL only for a
-# survivor. Signals the isolated worker group when one is provable and the lone
-# process otherwise. Returns non-zero when any verified worker-group member is
-# still alive afterwards.
-fm_remote_job_stop_worker_tree() { # <pid>
-  local pid=$1 pgid i=0
+# survivor. Returns non-zero when any verified worker-tree member is still alive
+# afterwards.
+fm_remote_job_stop_worker_tree() { # <pid> [start] [command]
+  local pid=$1 expected_start=${2:-} expected_command=${3:-} members rescanned='' survivors previous_members member member_start member_command state i=0 alive deadline signal=TERM signal_failed=0 root_live descendant_tree
   case "$pid" in ''|*[!0-9]*) return 1 ;; esac
   [ "$pid" -gt 1 ] || return 1
-  pgid=$(fm_remote_job_worker_process_group "$pid" 2>/dev/null || true)
-  if [ -n "$pgid" ]; then kill -TERM -- "-$pgid" 2>/dev/null || true; else kill -TERM "$pid" 2>/dev/null || true; fi
-  while { [ -n "$pgid" ] && kill -0 -- "-$pgid" 2>/dev/null || [ -z "$pgid" ] && kill -0 "$pid" 2>/dev/null; } \
-    && [ "$i" -lt 50 ]; do
-    i=$((i + 1))
+  if [ -n "$expected_start" ] || [ -n "$expected_command" ]; then
+    [ -n "$expected_start" ] && [ -n "$expected_command" ] || return 1
+  else
+    expected_start=$(fm_remote_job_process_start "$pid" 2>/dev/null || true)
+    expected_command=$(fm_remote_job_process_command "$pid" 2>/dev/null || true)
+    [ -n "$expected_start" ] && [ -n "$expected_command" ] || return 1
+  fi
+  if ! fm_remote_job_process_identity_matches "$pid" "$expected_start" "$expected_command"; then
+    state=$(fm_remote_job_process_state "$pid" 2>/dev/null || true)
+    case "$state" in Z*) return 0 ;; esac
+    kill -0 "$pid" 2>/dev/null && return 1
+    return 0
+  fi
+  deadline=$((SECONDS + 30))
+  while :; do
+    rescanned=$(fm_remote_job_process_tree_pids "$pid" "$expected_start" "$expected_command" 2>/dev/null) || return 1
+    [ -n "$rescanned" ] && members=$rescanned
+    if [ -z "$members" ]; then
+      if ! fm_remote_job_process_identity_matches "$pid" "$expected_start" "$expected_command"; then
+        state=$(fm_remote_job_process_state "$pid" 2>/dev/null || true)
+        case "$state" in Z*) return 0 ;; esac
+        kill -0 "$pid" 2>/dev/null && return 1
+        return 0
+      fi
+      members=$(printf '%s\t%s\t%s\n' "$pid" "$expected_start" "$expected_command")
+    fi
+    while IFS=$(printf '\t') read -r member member_start member_command; do
+      [ "$member" = "$pid" ] && continue
+      fm_remote_job_process_identity_matches "$member" "$member_start" "$member_command" || continue
+      fm_remote_job_signal_identity "$member" "$signal" "$member_start" "$member_command" || signal_failed=1
+    done <<< "$members"
+    while IFS=$(printf '\t') read -r member member_start member_command; do
+      [ "$member" != "$pid" ] && continue
+      fm_remote_job_process_identity_matches "$member" "$member_start" "$member_command" || continue
+      fm_remote_job_signal_identity "$member" "$signal" "$member_start" "$member_command" || signal_failed=1
+    done <<< "$members"
+    i=0
+    while [ "$i" -lt 50 ]; do
+      alive=0
+      while IFS=$(printf '\t') read -r member member_start member_command; do
+        if kill -0 "$member" 2>/dev/null &&
+          fm_remote_job_process_identity_matches "$member" "$member_start" "$member_command"; then
+          alive=1
+          break
+        fi
+      done <<< "$members"
+      [ "$alive" -eq 0 ] && break
+      i=$((i + 1))
+      sleep 0.1
+    done
+    survivors=''
+      root_live=0
+      if fm_remote_job_process_identity_matches "$pid" "$expected_start" "$expected_command"; then
+        root_live=1
+        rescanned=$(fm_remote_job_process_tree_pids "$pid" "$expected_start" "$expected_command" 2>/dev/null) || return 1
+      if ! fm_remote_job_process_identity_matches "$pid" "$expected_start" "$expected_command"; then
+        root_live=0
+      fi
+      if [ "$root_live" -eq 1 ] && [ -n "$rescanned" ]; then
+        members=$rescanned
+        signal=KILL
+        [ "$SECONDS" -lt "$deadline" ] || return 1
+        continue
+      fi
+      [ "$root_live" -eq 0 ] && [ -n "$rescanned" ] && members=$rescanned
+      fi
+    while IFS=$(printf '\t') read -r member member_start member_command; do
+      if kill -0 "$member" 2>/dev/null &&
+        fm_remote_job_process_identity_matches "$member" "$member_start" "$member_command"; then
+        survivors="$survivors${survivors:+$'\n'}$(printf '%s\t%s\t%s' "$member" "$member_start" "$member_command")"
+      fi
+    done <<< "$members"
+    if [ "$root_live" -eq 0 ] && [ -n "$survivors" ]; then
+      members=$(printf '%s\n' "$members" | LC_ALL=C sort -u) || return 1
+      while :; do
+        [ "$SECONDS" -lt "$deadline" ] || return 1
+        previous_members=$members
+        rescanned=$members
+        while IFS=$(printf '\t') read -r member member_start member_command; do
+          fm_remote_job_process_identity_matches "$member" "$member_start" "$member_command" || continue
+          descendant_tree=$(fm_remote_job_process_tree_pids "$member" "$member_start" "$member_command" 2>/dev/null) || return 1
+          [ -n "$descendant_tree" ] && rescanned="$rescanned${rescanned:+$'\n'}$descendant_tree"
+        done <<< "$survivors"
+        members=$(printf '%s\n' "$rescanned" | LC_ALL=C sort -u) || return 1
+        survivors=''
+        while IFS=$(printf '\t') read -r member member_start member_command; do
+          if kill -0 "$member" 2>/dev/null &&
+            fm_remote_job_process_identity_matches "$member" "$member_start" "$member_command"; then
+            survivors="$survivors${survivors:+$'\n'}$(printf '%s\t%s\t%s' "$member" "$member_start" "$member_command")"
+          fi
+        done <<< "$members"
+        [ -z "$survivors" ] && break
+        [ "$members" = "$previous_members" ] && break
+      done
+    fi
+    if [ -z "$survivors" ]; then
+      return 0
+    fi
+    [ "$signal_failed" -eq 0 ] || return 1
+    members=$survivors
+    signal=KILL
+    [ "$SECONDS" -lt "$deadline" ] || return 1
     sleep 0.1
   done
-  if [ -n "$pgid" ]; then
-    kill -0 -- "-$pgid" 2>/dev/null || return 0
-  else
-    kill -0 "$pid" 2>/dev/null || return 0
-  fi
-  if [ -n "$pgid" ]; then kill -KILL -- "-$pgid" 2>/dev/null || true; else kill -KILL "$pid" 2>/dev/null || true; fi
-  i=0
-  while { [ -n "$pgid" ] && kill -0 -- "-$pgid" 2>/dev/null || [ -z "$pgid" ] && kill -0 "$pid" 2>/dev/null; } \
-    && [ "$i" -lt 50 ]; do
-    i=$((i + 1))
-    sleep 0.1
-  done
-  if [ -n "$pgid" ]; then
-    ! kill -0 -- "-$pgid" 2>/dev/null
-  else
-    ! kill -0 "$pid" 2>/dev/null
-  fi
 }
 
 fm_remote_job_read_single_line() {
@@ -1016,7 +1328,7 @@ fm_remote_job_read_single_line() {
 }
 
 fm_remote_job_lock_owner_matches_process() {
-  local account_home=$1 lock pid recorded_start actual_start recorded_command actual_command
+  local account_home=$1 lock pid recorded_start recorded_command
   fm_remote_job_prepare_state "$account_home" || return 1
   lock=$(fm_remote_job_worker_lock_path)
   [ -d "$lock" ] && [ ! -L "$lock" ] || return 1
@@ -1024,16 +1336,13 @@ fm_remote_job_lock_owner_matches_process() {
   case "$pid" in ''|*[!0-9]*) return 1 ;; esac
   [ "$pid" -gt 1 ] || return 1
   recorded_start=$(fm_remote_job_read_single_line "$lock/start" 256) || return 1
-  actual_start=$(fm_remote_job_process_start "$pid") || return 1
-  [ "$recorded_start" = "$actual_start" ] || return 1
   recorded_command=$(fm_remote_job_read_single_line "$lock/command" 8192) || return 1
-  actual_command=$(fm_remote_job_process_command "$pid") || return 1
-  [ "$recorded_command" = "$actual_command" ] || return 1
+  fm_remote_job_process_identity_matches "$pid" "$recorded_start" "$recorded_command" || return 1
   FM_REMOTE_JOB_OWNER_PID=$pid
 }
 
 fm_remote_job_worker_owned_alive() {
-  local root=$1 account_home=$2 lock pid pid_file identity_file command ps_bin
+  local root=$1 account_home=$2 lock pid pid_file identity_file command ps_bin recorded_start recorded_command actual_start actual_command
   [ "${FM_REMOTE_JOB_ACTIVE:-}" != 1 ] || return 0
   fm_remote_job_prepare_state "$account_home" || return 1
   lock=$(fm_remote_job_worker_lock_path)
@@ -1044,18 +1353,20 @@ fm_remote_job_worker_owned_alive() {
   case "$pid" in ''|*[!0-9]*) return 1 ;; esac
   identity_file=$(fm_remote_job_worker_identity_path)
   fm_remote_job_regular_bounded "$identity_file" 256 || return 1
-  fm_remote_job_probe "$account_home" || return 1
   if fm_remote_job_lock_owner_matches_process "$account_home"; then
     [ "$pid" = "$FM_REMOTE_JOB_OWNER_PID" ] || return 1
     return 0
   fi
-  [ ! -e "$lock/pid" ] && [ ! -L "$lock/pid" ] &&
-    [ ! -e "$lock/start" ] && [ ! -L "$lock/start" ] &&
-    [ ! -e "$lock/command" ] && [ ! -L "$lock/command" ] || return 1
   if [ -x /bin/ps ]; then ps_bin=/bin/ps; elif [ -x /usr/bin/ps ]; then ps_bin=/usr/bin/ps; else return 1; fi
   command=$("$ps_bin" -p "$pid" -o command= 2>/dev/null) || return 1
-  case "$command" in *"$root/bin/fm-remote-job-worker.sh"*) FM_REMOTE_JOB_OWNER_PID=$pid; return 0 ;; esac
-  return 1
+  fm_remote_job_worker_command_matches "$root/bin/fm-remote-job-worker.sh" "$command" || return 1
+  recorded_start=$(fm_remote_job_read_single_line "$lock/start" 256) || return 1
+  recorded_command=$(fm_remote_job_read_single_line "$lock/command" 8192) || return 1
+  actual_start=$(fm_remote_job_process_start "$pid") || return 1
+  actual_command=$(fm_remote_job_process_command "$pid") || return 1
+  [ "$recorded_start" = "$actual_start" ] || return 1
+  [ "$recorded_command" = "$actual_command" ] || return 1
+  FM_REMOTE_JOB_OWNER_PID=$pid
 }
 
 fm_remote_job_code_identity() { # <remote-root> <account-home>
@@ -1098,13 +1409,34 @@ fm_remote_job_worker_alive() { # <account-home>
 }
 
 fm_remote_job_probe() { # <account-home>; a fresh worker heartbeat or active job proves readiness
-  local account_home=$1 ready lock mtime now
+  local account_home=$1 ready lock mtime now pid ready_pid ready_start actual_start extra job
   [ "${FM_REMOTE_JOB_ACTIVE:-}" = 1 ] && return 0
   fm_remote_job_prepare_state "$account_home" || return 1
   lock=$(fm_remote_job_worker_lock_path)
   [ ! -e "$lock/quarantine" ] && [ ! -L "$lock/quarantine" ] || return 1
+  fm_remote_job_lock_owner_matches_process "$account_home" || return 1
+  for job in "$FM_REMOTE_JOB_JOBS"/job-*; do
+    [ -d "$job" ] && [ ! -L "$job" ] || continue
+    [ "$(fm_remote_job_read_state "$job" 2>/dev/null || true)" = running ] && return 0
+  done
   ready=$(fm_remote_job_worker_ready_path)
   [ -f "$ready" ] && [ ! -L "$ready" ] || return 1
+  fm_remote_job_regular_bounded "$ready" 512 || return 1
+  IFS= read -r ready_pid < "$ready" || return 1
+  IFS= read -r ready_start < <(tail -n +2 "$ready") || return 1
+  if IFS= read -r extra < <(tail -n +3 "$ready"); then
+    : "$extra"
+    return 1
+  fi
+  case "$ready_pid" in ''|*[!0-9]*) return 1 ;; esac
+  [ "$ready_pid" -gt 1 ] || return 1
+  [ -n "$ready_start" ] || return 1
+  pid=$(fm_remote_job_read_single_line "$(fm_remote_job_worker_pid_path)" 64) || return 1
+  [ "$ready_pid" = "$pid" ] || return 1
+  [ "$ready_pid" = "$FM_REMOTE_JOB_OWNER_PID" ] || return 1
+  actual_start=$(fm_remote_job_read_single_line "$lock/start" 256) || return 1
+  [ "$ready_start" = "$actual_start" ] || return 1
+  [ "$(fm_remote_job_process_start "$ready_pid" 2>/dev/null || true)" = "$ready_start" ] || return 1
   mtime=$(fm_remote_job_path_mtime "$ready" 2>/dev/null || true)
   case "$mtime" in ''|*[!0-9]*) return 1 ;; esac
   now=$(date +%s)
@@ -1113,7 +1445,7 @@ fm_remote_job_probe() { # <account-home>; a fresh worker heartbeat or active job
 
 fm_remote_job_wait_for_probe() { # <remote-root> <account-home>
   local root=$1 account_home=$2 i=0
-  while [ "$i" -lt 200 ]; do
+  while [ "$i" -lt 400 ]; do
     fm_remote_job_probe "$account_home" && fm_remote_job_worker_identity_matches "$root" "$account_home" && return 0
     i=$((i + 1))
     sleep 0.1
@@ -1148,7 +1480,7 @@ fm_remote_job_write_launchagent() { # <remote-root> <account-home>
 fm_remote_job_reload_launchagent() { # <account-home> <uid>
   local account_home=$1 uid=$2 out
   fm_remote_job_launchagent_paths "$account_home"
-  launchctl bootout "gui/$uid/$FM_REMOTE_JOB_LABEL" >/dev/null 2>&1 || true
+  fm_remote_job_bootout_launchagent "gui/$uid/$FM_REMOTE_JOB_LABEL" || return 1
   if ! out=$(launchctl bootstrap "gui/$uid" "$FM_REMOTE_JOB_LAUNCH_AGENT_PLIST" 2>&1); then
     FM_REMOTE_JOB_ERROR="launchctl bootstrap gui/$uid refused: ${out:-no diagnostic}"
     return 1
@@ -1159,8 +1491,8 @@ fm_remote_job_reload_launchagent() { # <account-home> <uid>
   fi
 }
 
-fm_remote_job_start_linux_worker() { # <remote-root> <account-home>
-  local root=$1 account_home=$2 worker pid
+fm_remote_job_start_linux_worker_locked() { # <remote-root> <account-home>
+  local root=$1 account_home=$2 worker pid keep_pid='' stale_start stale_command
   worker="$root/bin/fm-remote-job-worker.sh"
   [ -f "$worker" ] && [ ! -L "$worker" ] && [ -x "$worker" ] || {
     FM_REMOTE_JOB_ERROR="remote job worker is not a genuine executable in the configured code root"
@@ -1168,17 +1500,31 @@ fm_remote_job_start_linux_worker() { # <remote-root> <account-home>
   }
   fm_remote_job_prepare_state "$account_home" || return 1
   if fm_remote_job_worker_owned_alive "$root" "$account_home"; then
-    if fm_remote_job_worker_identity_matches "$root" "$account_home"; then return 0; fi
-    # The owner pid is the serving child; its restart supervisor sits above it
-    # and would immediately replace a lone process kill, so stop the whole
-    # worker tree through its isolated group.
-    pid=$FM_REMOTE_JOB_OWNER_PID
-    fm_remote_job_stop_worker_tree "$pid" || {
-      FM_REMOTE_JOB_ERROR="stale remote job worker did not stop safely"
-      return 1
-    }
-    wait "$pid" 2>/dev/null || true
-    FM_REMOTE_JOB_REPAIRED=1
+    if fm_remote_job_worker_identity_matches "$root" "$account_home" &&
+      fm_remote_job_probe "$account_home"; then
+      keep_pid=$FM_REMOTE_JOB_OWNER_PID
+    else
+      pid=$FM_REMOTE_JOB_OWNER_PID
+      stale_start=$(fm_remote_job_process_start "$pid" 2>/dev/null || true)
+      stale_command=$(fm_remote_job_process_command "$pid" 2>/dev/null || true)
+      [ -n "$stale_start" ] && [ -n "$stale_command" ] || {
+        FM_REMOTE_JOB_ERROR="stale remote job worker identity could not be verified"
+        return 1
+      }
+      fm_remote_job_stop_worker_tree "$pid" "$stale_start" "$stale_command" || {
+        FM_REMOTE_JOB_ERROR="stale remote job worker did not stop safely"
+        return 1
+      }
+      wait "$pid" 2>/dev/null || true
+      FM_REMOTE_JOB_REPAIRED=1
+    fi
+  fi
+  fm_remote_job_linux_reap_worker_processes "$root" "$keep_pid" || {
+    FM_REMOTE_JOB_ERROR="stale or duplicate remote job workers did not stop safely"
+    return 1
+  }
+  if [ -n "$keep_pid" ]; then
+    return 0
   fi
   # Job control puts the worker tree in its own process group, so a later stop
   # can signal every descendant at once without ever reaching the caller's own
@@ -1194,6 +1540,228 @@ fm_remote_job_start_linux_worker() { # <remote-root> <account-home>
   set +m
   case "$pid" in ''|*[!0-9]*) FM_REMOTE_JOB_ERROR="could not start the remote job worker"; return 1 ;; esac
   FM_REMOTE_JOB_REPAIRED=1
+  fm_remote_job_wait_for_probe "$root" "$account_home" || {
+    FM_REMOTE_JOB_ERROR="remote job worker did not report ready after startup"
+    return 1
+  }
+}
+
+fm_remote_job_linux_worker_processes() { # <remote-root>
+  local root=$1 worker ps_bin uid pid pgid state command start
+  worker="$root/bin/fm-remote-job-worker.sh"
+  if [ -x /bin/ps ]; then ps_bin=/bin/ps; elif [ -x /usr/bin/ps ]; then ps_bin=/usr/bin/ps; else return 1; fi
+  uid=$(id -u 2>/dev/null) || return 1
+  case "$uid" in ''|*[!0-9]*) return 1 ;; esac
+  while read -r pid pgid state command; do
+    case "$pgid" in ''|*[!0-9]*|0|1) continue ;; esac
+    case "$state" in Z*) continue ;; esac
+    fm_remote_job_worker_command_matches "$worker" "$command" || continue
+    start=$(fm_remote_job_process_start "$pid") || continue
+    fm_remote_job_process_identity_matches "$pid" "$start" "$command" || continue
+    printf '%s\t%s\t%s\n' "$pid" "$start" "$command"
+  done < <("$ps_bin" -u "$uid" -o pid=,pgid=,stat=,command= 2>/dev/null)
+  return 0
+}
+
+fm_remote_job_process_descends_from() { # <pid> <ancestor>
+  local pid=$1 ancestor=$2 parent i=0
+  while [ "$i" -lt 64 ]; do
+    [ "$pid" = "$ancestor" ] && return 0
+    parent=$(fm_remote_job_process_parent "$pid" 2>/dev/null || true)
+    [ -n "$parent" ] && [ "$parent" != "$pid" ] || return 1
+    pid=$parent
+    i=$((i + 1))
+  done
+  return 1
+}
+
+fm_remote_job_process_descends_from_identity() { # <pid> <ancestor> <start> <command>
+  local pid=$1 ancestor=$2 start=$3 command=$4
+  fm_remote_job_process_identity_matches "$ancestor" "$start" "$command" || return 1
+  fm_remote_job_process_descends_from "$pid" "$ancestor" || return 1
+  fm_remote_job_process_identity_matches "$ancestor" "$start" "$command"
+}
+
+fm_remote_job_process_tree_pids() { # <pid> [start] [command]
+  local root=$1 expected_start=${2:-} expected_command=${3:-} ps_bin uid pid ppid state start command processes frontier next root_valid=0
+  if [ -x /bin/ps ]; then ps_bin=/bin/ps; elif [ -x /usr/bin/ps ]; then ps_bin=/usr/bin/ps; else return 1; fi
+  uid=$(id -u 2>/dev/null) || return 1
+  case "$uid" in ''|*[!0-9]*) return 1 ;; esac
+  processes=$("$ps_bin" -u "$uid" -o pid=,ppid=,stat=,command= 2>/dev/null) || return 1
+  frontier=$root
+  while read -r pid ppid state _; do
+    case "$pid" in ''|*[!0-9]*) continue ;; esac
+    [ "$pid" = "$root" ] || continue
+    start=$(fm_remote_job_process_start "$pid") || continue
+    command=$(fm_remote_job_process_command "$pid") || continue
+    if [ -n "$expected_start" ] && { [ "$start" != "$expected_start" ] || [ "$command" != "$expected_command" ]; }; then
+      break
+    fi
+    fm_remote_job_process_identity_matches "$pid" "$start" "$command" || break
+    root_valid=1
+    case "$state" in
+      Z*) ;;
+      *) [ -n "$start" ] && [ -n "$command" ] && printf '%s\t%s\t%s\n' "$pid" "$start" "$command" ;;
+    esac
+    break
+  done <<< "$processes"
+  [ "$root_valid" -eq 1 ] || return 0
+  while [ -n "$frontier" ]; do
+    next=
+    while read -r pid ppid state _; do
+      case "$pid:$ppid" in *[!0-9:]*|:) continue ;; esac
+      case " $frontier " in *" $ppid "*) ;; *) continue ;; esac
+      case "$state" in Z*) continue ;; esac
+      start=$(fm_remote_job_process_start "$pid") || continue
+      command=$(fm_remote_job_process_command "$pid") || continue
+      [ -n "$start" ] && [ -n "$command" ] || continue
+      fm_remote_job_process_identity_matches "$pid" "$start" "$command" || continue
+      printf '%s\t%s\t%s\n' "$pid" "$start" "$command"
+      next="$next $pid"
+    done <<< "$processes"
+    frontier=${next# }
+  done
+}
+
+fm_remote_job_linux_reap_worker_processes() { # <remote-root> <keep-pid>
+  local root=$1 keep_pid=$2 keep_root='' keep_root_start='' keep_root_command='' processes pid start command parent parent_start parent_command keep_start keep_command
+  if [ -n "$keep_pid" ]; then
+    keep_start=$(fm_remote_job_process_start "$keep_pid" 2>/dev/null || true)
+    keep_command=$(fm_remote_job_process_command "$keep_pid" 2>/dev/null || true)
+    [ -n "$keep_start" ] && [ -n "$keep_command" ] || return 1
+    [ "$(fm_remote_job_process_start "$keep_pid" 2>/dev/null || true)" = "$keep_start" ] || return 1
+    [ "$(fm_remote_job_process_command "$keep_pid" 2>/dev/null || true)" = "$keep_command" ] || return 1
+    parent=$(fm_remote_job_process_parent "$keep_pid" 2>/dev/null || true)
+    parent_start=$(fm_remote_job_process_start "$parent" 2>/dev/null || true)
+    parent_command=$(fm_remote_job_process_command "$parent" 2>/dev/null || true)
+    if [ -n "$parent_start" ] &&
+      [ "$(fm_remote_job_process_start "$parent" 2>/dev/null || true)" = "$parent_start" ] &&
+      [ "$(fm_remote_job_process_command "$parent" 2>/dev/null || true)" = "$parent_command" ] &&
+      fm_remote_job_worker_command_matches "$root/bin/fm-remote-job-worker.sh" "$parent_command"; then
+      keep_root=$parent
+      keep_root_start=$parent_start
+      keep_root_command=$parent_command
+    else
+      keep_root=$keep_pid
+      keep_root_start=$keep_start
+      keep_root_command=$keep_command
+    fi
+  fi
+  processes=$(fm_remote_job_linux_worker_processes "$root") || return 1
+  while IFS=$(printf '\t') read -r pid start command; do
+    [ -n "$pid" ] || continue
+    [ "$(fm_remote_job_process_start "$pid" 2>/dev/null || true)" = "$start" ] || continue
+    [ "$(fm_remote_job_process_command "$pid" 2>/dev/null || true)" = "$command" ] || continue
+    if [ -n "$keep_root" ] &&
+      fm_remote_job_process_descends_from_identity "$pid" "$keep_root" "$keep_root_start" "$keep_root_command"; then
+      continue
+    fi
+    kill -0 "$pid" 2>/dev/null || continue
+    fm_remote_job_stop_worker_tree "$pid" "$start" "$command" || return 1
+  done <<< "$processes"
+  processes=$(fm_remote_job_linux_worker_processes "$root") || return 1
+  while IFS=$(printf '\t') read -r pid start command; do
+    [ -n "$pid" ] || continue
+    [ "$(fm_remote_job_process_start "$pid" 2>/dev/null || true)" = "$start" ] || continue
+    [ "$(fm_remote_job_process_command "$pid" 2>/dev/null || true)" = "$command" ] || continue
+    if [ -n "$keep_root" ] &&
+      fm_remote_job_process_descends_from_identity "$pid" "$keep_root" "$keep_root_start" "$keep_root_command"; then
+      continue
+    fi
+    return 1
+  done <<< "$processes"
+}
+
+fm_remote_job_linux_start_guard_acquire() { # <account-home>
+  local account_home=$1 guard owner owner_pid owner_start owner_state actual_start mtime now stale attempt=0
+  fm_remote_job_prepare_state "$account_home" || return 1
+  guard="$FM_REMOTE_JOB_STATE/worker.starting"
+  [ ! -L "$guard" ] || { FM_REMOTE_JOB_ERROR="remote job start guard is a symlink"; return 1; }
+  while [ "$attempt" -lt 300 ]; do
+    if (umask 077; mkdir "$guard") 2>/dev/null; then
+      owner="$guard/owner"
+      owner_pid=${BASHPID:-$$}
+      owner_start=$(fm_remote_job_process_start "$owner_pid") || {
+        rmdir "$guard" 2>/dev/null || true
+        FM_REMOTE_JOB_ERROR="cannot identify the remote job start guard owner"
+        return 1
+      }
+      printf '%s\n' "$owner_start" > "$guard/start" || {
+        rm -f -- "$owner" "$guard/start"
+        rmdir "$guard" 2>/dev/null || true
+        FM_REMOTE_JOB_ERROR="cannot publish the remote job start guard identity"
+        return 1
+      }
+      printf '%s\n' "$owner_pid" > "$owner" || {
+        rm -f -- "$owner" "$guard/start"
+        rmdir "$guard" 2>/dev/null || true
+        FM_REMOTE_JOB_ERROR="cannot publish the remote job start guard owner"
+        return 1
+      }
+      FM_REMOTE_JOB_START_GUARD=$guard
+      FM_REMOTE_JOB_START_GUARD_PID=$owner_pid
+      FM_REMOTE_JOB_START_GUARD_START=$owner_start
+      return 0
+    fi
+    [ -d "$guard" ] && [ ! -L "$guard" ] || { FM_REMOTE_JOB_ERROR="remote job start guard is unsafe"; return 1; }
+    owner_pid=$(fm_remote_job_read_single_line "$guard/owner" 64 2>/dev/null || true)
+    owner_start=$(fm_remote_job_read_single_line "$guard/start" 256 2>/dev/null || true)
+    case "$owner_pid" in ''|*[!0-9]*) owner_pid= ;; esac
+    if [ -n "$owner_pid" ] && [ "$owner_pid" -gt 1 ] && [ -n "$owner_start" ]; then
+      owner_state=$(fm_remote_job_process_state "$owner_pid" 2>/dev/null || true)
+      case "$owner_state" in ''|Z*)
+        owner_pid=
+        ;;
+        *)
+          actual_start=$(fm_remote_job_process_start "$owner_pid" 2>/dev/null || true)
+          if [ "$actual_start" = "$owner_start" ]; then
+            attempt=$((attempt + 1))
+            sleep 0.1
+            continue
+          fi
+          owner_pid=
+          ;;
+      esac
+    fi
+    if [ -z "$owner_pid" ]; then
+      mtime=$(fm_remote_job_path_mtime "$guard" 2>/dev/null || true)
+      case "$mtime" in ''|*[!0-9]*) attempt=$((attempt + 1)); sleep 0.1; continue ;; esac
+      now=$(date +%s)
+      [ $((now - mtime)) -gt 2 ] || { attempt=$((attempt + 1)); sleep 0.1; continue; }
+    fi
+    stale="$guard.stale.${BASHPID:-$$}.${RANDOM:-0}"
+    if mv "$guard" "$stale" 2>/dev/null; then rm -rf -- "$stale"; fi
+    attempt=$((attempt + 1))
+  done
+  FM_REMOTE_JOB_ERROR="timed out waiting for the remote job start guard"
+  return 1
+}
+
+fm_remote_job_linux_start_guard_release() {
+  local guard=${FM_REMOTE_JOB_START_GUARD:-} pid=${FM_REMOTE_JOB_START_GUARD_PID:-} start=${FM_REMOTE_JOB_START_GUARD_START:-}
+  [ -n "$guard" ] && [ -n "$pid" ] && [ -n "$start" ] || return 1
+  [ -d "$guard" ] && [ ! -L "$guard" ] || return 1
+  [ "$(fm_remote_job_read_single_line "$guard/owner" 64 2>/dev/null || true)" = "$pid" ] || return 1
+  [ "$(fm_remote_job_read_single_line "$guard/start" 256 2>/dev/null || true)" = "$start" ] || return 1
+  rm -f -- "$guard/owner" "$guard/start" || return 1
+  rmdir "$guard" || return 1
+  FM_REMOTE_JOB_START_GUARD=
+  FM_REMOTE_JOB_START_GUARD_PID=
+  FM_REMOTE_JOB_START_GUARD_START=
+}
+
+fm_remote_job_start_linux_worker() { # <remote-root> <account-home>
+  local root=$1 account_home=$2 status=0
+  FM_REMOTE_JOB_START_GUARD=
+  FM_REMOTE_JOB_START_GUARD_PID=
+  FM_REMOTE_JOB_START_GUARD_START=
+  fm_remote_job_linux_start_guard_acquire "$account_home" || return 1
+  fm_remote_job_start_linux_worker_locked "$root" "$account_home" || status=$?
+  fm_remote_job_linux_start_guard_release || {
+    [ "$status" -ne 0 ] || FM_REMOTE_JOB_ERROR="cannot release the remote job start guard"
+    status=1
+  }
+  return "$status"
 }
 
 fm_remote_job_ensure_worker() { # <remote-root> <account-home>

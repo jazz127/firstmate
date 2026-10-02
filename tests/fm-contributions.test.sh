@@ -119,6 +119,7 @@ forge_home() {
 #!/usr/bin/env bash
 set -eu
 case "$*" in
+  'pr view '*"--json body --jq .body"*) printf 'Fixture body\n' ;;
   'pr view '*headRefOid,reviewDecision*)
     jq -n --arg head "$(cat "$FORGE/head")" '{headRefOid:$head,reviewDecision:"APPROVED"}' ;;
   'pr view '*headRefOid*) cat "$FORGE/head" ;;
@@ -134,6 +135,7 @@ case "$*" in
   'api repos/o/r/issues/'*'/comments?'*) jq -s . "$FORGE/comments.json" ;;
   'api repos/o/r/pulls/'*'/reviews?'*) jq -s . "$FORGE/reviews.json" ;;
   'api repos/o/r/pulls/'*'/comments?'*) jq -s . "$FORGE/inline.json" ;;
+  'api repos/o/r/pulls/'*'/files?'*) : ;;
   'api repos/o/r/commits/'*'/check-runs?'*)
     printf '[{"check_runs":[{"name":"test","id":1,"status":"completed","conclusion":"success","started_at":"2026-09-16T08:00:00Z"}]}]\n' ;;
   'api repos/o/r/commits/'*'/statuses?'*) printf '[[]]\n' ;;
@@ -278,6 +280,43 @@ test_issue_timeline_and_exact_ack() {
   with_home "$home" "$ROOT/bin/fm-contributions.sh" poll >/dev/null || fail 'post-ack poll failed'
   with_home "$home" "$ROOT/bin/fm-contributions.sh" pending | jq -e 'length == 0' >/dev/null || fail 'acknowledged timeline event replayed'
   pass 'a transient ready-for-pr label wakes and its exact acknowledgement survives replay'
+}
+
+test_closed_backlog_pr_owns_landed_contribution() {
+  local home url token
+  home=$(new_home closed-backlog-owner)
+  forge_home "$home"
+  url=https://github.com/o/r/pull/8
+  printf '# Backlog\n\n## Queued\n' > "$home/data/backlog.md"
+  rm -rf "$home/data/delivery" "$home/state/delivery.meta"
+  printf -- '- [ ] landed - Landed upstream contribution (repo: sample) (kind: ship)\n' \
+    >> "$home/data/backlog.md"
+  with_home "$home" "$ROOT/bin/fm-tasks-axi.sh" 'done' landed >/dev/null \
+    || fail 'could not close the originating backlog task'
+  with_home "$home" "$ROOT/bin/fm-tasks-axi.sh" 'done' landed --pr "$url" >/dev/null \
+    || fail 'could not backfill the contribution URL onto the closed backlog task'
+  [ ! -e "$home/state/landed.meta" ] || fail 'fixture unexpectedly retained live task metadata'
+  jq -n '[{id:44,user:{login:"maintainer"},author_association:"OWNER",
+    body:"Please clarify the contract",html_url:"https://github.com/o/r/pull/8#issuecomment-44",
+    updated_at:"2026-09-16T08:01:00Z"}]' > "$home/forge/comments.json"
+  with_home "$home" "$ROOT/bin/fm-contributions.sh" poll >/dev/null \
+    || fail 'observer did not accept the closed structured backlog link as an owner'
+  token=$(with_home "$home" "$ROOT/bin/fm-contributions.sh" pending \
+    | jq -er '.[] | select(.url == "https://github.com/o/r/pull/8") | .token') \
+    || fail 'closed backlog owner did not receive the maintainer event'
+  with_home "$home" "$ROOT/bin/fm-contributions.sh" verdict landed "$url" "$HEAD_A" \
+    "$url#issuecomment-44" maintainer 'awaiting maintainer' \
+    || fail 'closed backlog owner could not record the contribution verdict'
+  with_home "$home" "$ROOT/bin/fm-contributions.sh" ack landed "$url" "$token" \
+    || fail 'closed backlog owner could not acknowledge the contribution event'
+  with_home "$home" "$ROOT/bin/fm-contributions.sh" pending \
+    | jq -e 'length == 0' >/dev/null \
+    || fail 'acknowledged contribution event remained pending without task metadata'
+  jq -e --arg head "$HEAD_A" --arg url "$url" \
+    '.records[0].url == $url and .records[0].verdict.head == $head' \
+    "$home/data/landed/contributions.json" >/dev/null \
+    || fail 'closed backlog owner did not retain its verdict after acknowledgement'
+  pass 'closed structured backlog PR link owns verdict and acknowledgement after task metadata cleanup'
 }
 
 test_verdict_retains_judged_head() {
@@ -1098,8 +1137,85 @@ test_late_owner_keeps_failure_episode_suppressed() {
   pass 'a late owner does not restart a shared forge failure episode'
 }
 
+test_automated_reviewer_signal() {
+  local home out
+  home=$(new_home automated-review)
+  forge_home "$home"
+  with_home "$home" "$ROOT/bin/fm-pr-check.sh" delivery https://github.com/o/r/pull/8 >/dev/null \
+    || fail 'could not register the owned delivery'
+  registered_checks "$home" >/dev/null
+  jq -n '[{id:31,user:{login:"dependabot[bot]"},author_association:"NONE",body:"Bumps a dependency",
+    html_url:"https://github.com/o/r/pull/8#issuecomment-31",updated_at:"2026-09-16T08:01:00Z"}]' > "$home/forge/comments.json"
+  registered_checks "$home" >/dev/null
+  jq -e '.records[0].pending | length == 0' "$home/data/delivery/contributions.json" >/dev/null \
+    || fail 'an unconfigured bot comment must raise no pending signal'
+  [ ! -s "$home/state/.wake-queue" ] || fail 'an unconfigured bot comment must raise no wake'
+  jq -n --arg head "$HEAD_A" '[{id:32,user:{login:"Copilot-Pull-Request-Reviewer[bot]"},author_association:"NONE",
+    body:"Possible nil dereference",html_url:"https://github.com/o/r/pull/8#discussion_r32",
+    updated_at:"2026-09-16T08:02:00Z",commit_id:$head}]' > "$home/forge/inline.json"
+  registered_checks "$home" >/dev/null
+  jq -e '.records[0].pending | length == 1 and .[0].automated == true and .[0].author == "Copilot-Pull-Request-Reviewer[bot]"' \
+    "$home/data/delivery/contributions.json" >/dev/null || fail 'an automated inline comment must persist as a pending signal'
+  [ "$(awk 'END { print NR }' "$home/state/.wake-queue")" = 1 ] || fail 'an automated inline comment must enqueue exactly one wake'
+  registered_checks "$home" >/dev/null
+  [ "$(awk 'END { print NR }' "$home/state/.wake-queue")" = 1 ] || fail 're-poll duplicated the automated-review wake'
+  out=$(bearings "$home") || fail 'Bearings could not read the automated review fixture'
+  printf '%s' "$out" | jq -e '.contributions.counts.fleet == 1 and .contributions.counts.captain == 0' >/dev/null \
+    || fail "an automated finding must be fleet triage work, never a captain call: $out"
+  with_home "$home" "$ROOT/bin/fm-contributions.sh" pending | jq -e 'length == 1 and .[0].automated == true' >/dev/null \
+    || fail 'supervisor cannot retrieve the automated finding'
+  pass 'a configured automated reviewer wakes as fleet triage and an unconfigured bot does not'
+}
+
+test_automated_reviewer_configuration() {
+  local home
+  home=$(new_home automated-config)
+  forge_home "$home"
+  with_home "$home" "$ROOT/bin/fm-pr-check.sh" delivery https://github.com/o/r/pull/8 >/dev/null \
+    || fail 'could not register the owned delivery'
+  jq -n '[{id:41,user:{login:"dependabot[bot]"},author_association:"NONE",body:"Check this",
+    html_url:"https://github.com/o/r/pull/8#issuecomment-41",updated_at:"2026-09-16T08:01:00Z"},
+    {id:42,user:{login:"copilot-pull-request-reviewer[bot]"},author_association:"NONE",body:"Nit",
+    html_url:"https://github.com/o/r/pull/8#issuecomment-42",updated_at:"2026-09-16T08:01:00Z"}]' > "$home/forge/comments.json"
+  with_home "$home" env FM_CONTRIBUTIONS_AUTOMATED_REVIEWERS= "$ROOT/bin/fm-contributions.sh" poll >/dev/null \
+    || fail 'disabled poll failed'
+  jq -e '.records[0].pending | length == 0' "$home/data/delivery/contributions.json" >/dev/null \
+    || fail 'an empty reviewer list must disable automated intake'
+  with_home "$home" env FM_CONTRIBUTIONS_AUTOMATED_REVIEWERS=' Dependabot[bot] ' "$ROOT/bin/fm-contributions.sh" poll >/dev/null \
+    || fail 'extended poll failed'
+  jq -e '.records[0].pending | length == 1 and .[0].author == "dependabot[bot]"' "$home/data/delivery/contributions.json" >/dev/null \
+    || fail 'the environment list must replace the defaults'
+  pass 'the automated reviewer set is configurable and can be disabled'
+}
+
+test_author_marker_directive() {
+  local home
+  home=$(new_home author-marker)
+  forge_home "$home"
+  with_home "$home" "$ROOT/bin/fm-pr-check.sh" delivery https://github.com/o/r/pull/8 >/dev/null \
+    || fail 'could not register the owned delivery'
+  jq -n '[{id:51,user:{login:"author"},author_association:"OWNER",body:"thanks, fixed",
+    html_url:"https://github.com/o/r/pull/8#issuecomment-51",updated_at:"2026-09-16T08:01:00Z"}]' > "$home/forge/comments.json"
+  registered_checks "$home" >/dev/null
+  jq -e '.records[0].pending | length == 0' "$home/data/delivery/contributions.json" >/dev/null \
+    || fail 'an ordinary author comment must stay ignored'
+  [ ! -s "$home/state/.wake-queue" ] || fail 'an ordinary author comment must raise no wake'
+  jq -n '[{id:52,user:{login:"author"},author_association:"OWNER",body:"  @Firstmate please rebase",
+    html_url:"https://github.com/o/r/pull/8#issuecomment-52",updated_at:"2026-09-16T08:02:00Z"}]' > "$home/forge/comments.json"
+  registered_checks "$home" >/dev/null
+  jq -e '.records[0].pending | length == 1 and .[0].directive == true' "$home/data/delivery/contributions.json" >/dev/null \
+    || fail 'a marked author comment must persist as a pending signal'
+  [ "$(awk 'END { print NR }' "$home/state/.wake-queue")" = 1 ] || fail 'a marked author comment must enqueue one wake'
+  jq -n '[{id:53,user:{login:"author"},author_association:"OWNER",body:"@ops please rebase",
+    html_url:"https://github.com/o/r/pull/8#issuecomment-53",updated_at:"2026-09-16T08:03:00Z"}]' > "$home/forge/comments.json"
+  with_home "$home" env FM_CONTRIBUTIONS_AUTHOR_MARKER=@ops "$ROOT/bin/fm-contributions.sh" poll >/dev/null || fail 'custom marker poll failed'
+  jq -e '.records[0].pending | length == 2' "$home/data/delivery/contributions.json" >/dev/null \
+    || fail 'the environment marker must replace the default'
+  pass 'an author comment is an event only with the configured marker'
+}
+
 failures=0
-for test_name in test_actor_coverage test_stale_verdict test_unchecked_is_not_silence test_newest_check_has_no_verdict test_comment_wake test_review_wake test_inline_wake test_ready_issue_wake test_fresh_issue_requires_maintainer test_missing_lane_remains_missing test_partial_freshness_keeps_measured_rows test_malformed_record_cannot_prove_silence test_issue_timeline_and_exact_ack test_verdict_retains_judged_head test_verdict_actor_values_are_discoverable test_observed_replacement_refreshes_verdict test_unobserved_head_leaves_verdict_unknown test_away_yolo_is_fleet_work test_away_yolo_cross_home_is_fleet_work test_retired_and_unsupported_coverage test_unsupported_forge_is_not_fleet_work test_held_unsupported_forge_is_not_captain_work test_shared_contribution_signal_wakes_once test_watcher_keeps_diagnostics_separate_from_contribution_wakes test_expired_child_unsupported_forge_stays_unmeasured test_watcher_surfaces_new_contribution_once test_home_summary_coverage test_unreadable_pending_is_not_empty test_record_task_identity_matches_dirname_basename test_read_only_views_create_no_state test_budget_refusal_between_calls test_budget_bounded_call_timeout test_genuine_failure_near_deadline_is_unavailable test_shared_url_observed_once test_terminal_contribution_settles test_late_owner_inherits_terminal_observation test_interrupted_multi_owner_poll_settles_every_owner test_done_task_open_pr_still_observed test_reservation_defers_later_url_when_fifteen_seconds_do_not_remain test_three_second_pr_reads_complete_fresh_in_one_cycle test_slow_read_deadline_kill_is_budget_refusal test_unmeasured_url_does_not_starve_the_tail test_budget_is_cut_down_to_the_watcher_check_bound test_arm_plumbs_a_configured_budget_into_the_check_shim test_unavailable_forge_records_error_and_wakes_once_per_episode test_late_owner_keeps_failure_episode_suppressed; do
+for test_name in test_actor_coverage test_stale_verdict test_unchecked_is_not_silence test_newest_check_has_no_verdict test_comment_wake test_review_wake test_inline_wake test_ready_issue_wake test_fresh_issue_requires_maintainer test_missing_lane_remains_missing test_partial_freshness_keeps_measured_rows test_malformed_record_cannot_prove_silence test_issue_timeline_and_exact_ack test_closed_backlog_pr_owns_landed_contribution test_verdict_retains_judged_head test_observed_replacement_refreshes_verdict test_unobserved_head_leaves_verdict_unknown test_away_yolo_is_fleet_work test_away_yolo_cross_home_is_fleet_work test_retired_and_unsupported_coverage test_unsupported_forge_is_not_fleet_work test_held_unsupported_forge_is_not_captain_work test_shared_contribution_signal_wakes_once test_watcher_keeps_diagnostics_separate_from_contribution_wakes test_expired_child_unsupported_forge_stays_unmeasured test_watcher_surfaces_new_contribution_once test_home_summary_coverage test_unreadable_pending_is_not_empty test_record_task_identity_matches_dirname_basename test_read_only_views_create_no_state test_budget_refusal_between_calls test_budget_bounded_call_timeout test_genuine_failure_near_deadline_is_unavailable test_shared_url_observed_once test_terminal_contribution_settles test_late_owner_inherits_terminal_observation test_interrupted_multi_owner_poll_settles_every_owner test_done_task_open_pr_still_observed test_reservation_defers_later_url_when_fifteen_seconds_do_not_remain test_three_second_pr_reads_complete_fresh_in_one_cycle test_slow_read_deadline_kill_is_budget_refusal test_unmeasured_url_does_not_starve_the_tail test_budget_is_cut_down_to_the_watcher_check_bound test_arm_plumbs_a_configured_budget_into_the_check_shim test_unavailable_forge_records_error_and_wakes_once_per_episode test_late_owner_keeps_failure_episode_suppressed test_automated_reviewer_signal test_automated_reviewer_configuration test_author_marker_directive test_verdict_actor_values_are_discoverable; do
   ( "$test_name" ) || failures=$((failures + 1))
 done
 [ "$failures" -eq 0 ] || fail "$failures contribution regressions"

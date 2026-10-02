@@ -385,7 +385,7 @@ Stage two is the branch's verdict on each handled event, reported through its `f
 
 | Verdict | Delivery |
 | --- | --- |
-| `routine` | A non-silent outcome uses the custom-message path; a silent outcome is stored without a rendered note. Neither opens a follow-up turn. |
+| `routine` | Uses the custom-message path hidden from captain chat, whether or not it is silent, and never opens a follow-up turn. |
 | `captain` | Appends a versioned `fm-branch-visible-outcome` custom session entry. |
 
 ### The visible captain entry
@@ -446,7 +446,8 @@ A home with no processed marker, including an upgrade or switch from the supervi
 The generated [Pi supervision protocol](supervision-protocols/pi.md) owns event ownership for merged outcomes and main's acknowledgement duty.
 Deterministic entry delivery owns captain visibility.
 
-The branch prompt's "Verdict: routine or captain" section owns the classification criteria, including task-level silence eligibility and the rule to escalate doubt.
+Every `routine` outcome is durable and hidden from captain chat, regardless of `silent`.
+The branch prompt's "Verdict: routine or captain" section owns the classification criteria, including task-level silence eligibility and the rule to escalate doubt; `silent=true` never covers an action, a state change, a new result, or a captain outcome.
 
 Its "PR identity: copy or abstain" section owns where a PR URL in a summary or tool argument may come from:
 
@@ -486,7 +487,7 @@ The branch runs its normal operating procedure for the wake (`bin/fm-branch-prom
 | Review result | Report |
 | --- | --- |
 | Found literally nothing worth reporting | Verdict `routine`, `task=fleet`, and `silent=true`, so it is stored without a rendered note. |
-| A fleet-wide routine action | Omits `silent` and keeps its rendered sailboat note. |
+| A fleet-wide routine action | Omits `silent` and remains in the durable outcome store without a captain chat note. |
 
 Only a captain-worthy finding reports verdict `captain` and appends a visible captain outcome entry.
 
@@ -599,7 +600,7 @@ Each relocated script keeps its own gate, enforcing exactly what a script can ch
 | Script | Gate while away |
 | --- | --- |
 | `bin/fm-pr-merge.sh` | Merges any pull request green at its live head, synchronously, under the record lock, and refuses `--allow-red` and `--allow-missing` while away, so the green gate is absolute in this posture; which pull request the words meant is the branch's reading. |
-| `bin/fm-spawn.sh` | Dispatches only queued work whose blockers cleared - already queued, or filed by the branch because the words explicitly call for it; refuses a fresh ordinary spawn for either actor once the home holds as many ordinary task records as the record's spend cap (relaunches and secondmates exempt). |
+| `bin/fm-spawn.sh` | Dispatches only queued work whose blockers cleared - already queued, or filed by the branch because the words explicitly call for it; refuses a fresh ordinary spawn for either actor once the home holds as many ordinary workers still able to spend (`bin/fm-afk-spend-count.sh`) as the record's spend cap (relaunches and secondmates exempt). |
 | `bin/fm-send.sh --resolve-key` | Answers a decision the words pre-answer, or one `ask-user-authority`'s judgment (carried verbatim in the branch prompt) lets firstmate decide. |
 | `bin/fm-merge-local.sh` | Never relocated. |
 

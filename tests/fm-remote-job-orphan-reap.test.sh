@@ -183,6 +183,11 @@ pass "a worker stops its whole tree once its code root is pruned"
 # that presents the same command line from a pruned root without that
 # self-termination - the shape of every worker started before it shipped.
 
+if [ "$(uname -s)" != Linux ]; then
+  echo 'skip: orphan reaper signaling requires Linux process identity support'
+  exit 0
+fi
+
 CASE2="$TMP_ROOT/case2"
 mkdir -p "$CASE2/remote-root/bin"
 cat > "$CASE2/remote-root/bin/fm-remote-job-worker.sh" <<'SH'

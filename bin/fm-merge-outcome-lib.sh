@@ -105,6 +105,14 @@ fm_merge_outcome_report() {  # <home> <state> <task-id> <pr-url> <origin> [autho
       "check: merge landed: $id $FM_PR_URL$suffix" || status=1
   fi
   if [ "$status" -eq 0 ]; then
+    # A Bosun contribution uses this already-confirmed outcome as its only
+    # transition to Admiral's Maneuver. Other tasks have no such record.
+    if [ -e "$home/data/$id/bosun-contribution.json" ] || [ -L "$home/data/$id/bosun-contribution.json" ]; then
+      FM_HOME=$home python3 "$_FM_MERGE_OUTCOME_LIB_DIR/fm-bosun.py" merged \
+        --task "$id" --url "$FM_PR_URL" || status=1
+    fi
+  fi
+  if [ "$status" -eq 0 ]; then
     fm_pr_poll_merge_mark_notified "$state" "$id" \
       "$provider" "$host" "$path" "$number" || status=1
   fi

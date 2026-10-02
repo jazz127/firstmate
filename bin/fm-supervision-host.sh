@@ -788,8 +788,8 @@ health_record() {  # <engine-error 0|1> <reports>
 # when the turn failed on the engine itself. Runs in the host's own shell,
 # never a subshell, because it advances the host's grant and turn state.
 handle_wake() {  # <reason-lines>
-  local reason=$1 first scope status corrupted rows tasks unscoped rc turn readback
-  local receipts usage result errors unacked mirror
+  local reason=$1 first scope status corrupted rows row_tasks tasks unscoped rc turn readback
+  local receipts usage result errors unacked missing_rows mirror
   LAST_TURN=
   ENGINE_ERROR=0
   HEALTH_NOTE=
@@ -810,6 +810,7 @@ handle_wake() {  # <reason-lines>
   status=$(printf '%s\n' "$scope" | sed -n 's/^status=//p')
   corrupted=$(printf '%s\n' "$scope" | sed -n 's/^corrupted=//p')
   rows=$(printf '%s\n' "$scope" | sed -n 's/^rows=//p')
+  row_tasks=$(printf '%s\n' "$scope" | sed -n 's/^row_tasks=//p')
   tasks=$(printf '%s\n' "$scope" | sed -n 's/^tasks=//p')
   unscoped=$(printf '%s\n' "$scope" | sed -n 's/^unscoped=//p')
   if [ "$corrupted" = 1 ]; then
@@ -849,8 +850,8 @@ handle_wake() {  # <reason-lines>
   turn="$GEN.$TURN_SEQ"
   LAST_TURN=$turn
   : > "$RECEIPTS"
-  printf 'turn=%s\nrows=%s\ntasks=%s\nunscoped=%s\nwake=%s\nposture=%s\n' \
-    "$turn" "$rows" "$tasks" "${unscoped:-0}" "$first" "$TURN_POSTURE" > "$TURN_FILE"
+  printf 'turn=%s\nrows=%s\nrow_tasks=%s\ntasks=%s\nunscoped=%s\nwake=%s\nposture=%s\n' \
+    "$turn" "$rows" "$row_tasks" "$tasks" "${unscoped:-0}" "$first" "$TURN_POSTURE" > "$TURN_FILE"
   readback=
   if [ "$TURN_POSTURE" = away ]; then
     readback=$(mktemp "$STATE/.supervision-host-readback.XXXXXX") || readback=
@@ -879,7 +880,7 @@ handle_wake() {  # <reason-lines>
   fi
   rm -f "$WAKE_FILE"
   rc=0
-  printf '%s\n' "$reason" \
+  { printf '%s\n' "$reason"; printf 'Branch report bindings for this wake: rows=%s row_tasks=%s\n' "$rows" "$row_tasks"; } \
     | (umask 077; exec node "$SCRIPT_DIR/fm-branch-dispatch.mjs" wake-prompt "$@" > "$WAKE_FILE" 2>/dev/null) || rc=$?
   if [ "$rc" -ne 0 ]; then
     [ -z "$readback" ] || rm -f "$readback"
@@ -928,6 +929,15 @@ handle_wake() {  # <reason-lines>
   "$SCRIPT_DIR/fm-wake-grant.sh" release "$GEN" >/dev/null 2>&1 || true
   rm -f "$TURN_FILE"
   receipts=$(awk -F '\t' -v turn="$turn" '$1 == turn { n++ } END { print n + 0 }' "$RECEIPTS" 2>/dev/null)
+  missing_rows=$(awk -F '\t' -v turn="$turn" -v rows="$rows" '
+    BEGIN { count = split(rows, expected, " ") }
+    $1 == turn { reported[$5] = 1 }
+    END {
+      for (i = 1; i <= count; i++) if (expected[i] != "" && !reported[expected[i]]) {
+        printf "%s%s", separator, expected[i]; separator = " "
+      }
+    }
+  ' "$RECEIPTS" 2>/dev/null)
   usage=$(fm_supervision_engine_result "$FM_SUPERVISION_ENGINE" "$result" "${ENGINE_COST:-0}" 2>/dev/null || true)
   [ "$result" = /dev/null ] || rm -f "$result"
   TURN_RESULT=
@@ -935,7 +945,8 @@ handle_wake() {  # <reason-lines>
     ENGINE_ERROR=1
   fi
   health_record "$ENGINE_ERROR" "${receipts:-0}"
-  if [ "$ENGINE_ERROR" -eq 0 ] && [ "${receipts:-0}" -gt 0 ] && [ -z "$unacked" ]; then
+  if [ "$ENGINE_ERROR" -eq 0 ] && [ "${receipts:-0}" -gt 0 ] && [ -z "$missing_rows" ] \
+    && [ -z "$unacked" ]; then
     write_engine_record $((ENGINE_TURNS + 1)) "$(printf '%s\n' "$usage" | sed -n 's/.* conversation_cost=\([^ ]*\).*/\1/p')" \
       || rm -f "$ENGINE_RECORD"
     [ "$TURN_POSTURE" != attended ] || "$SCRIPT_DIR/fm-host-mirror.sh" commit >/dev/null 2>&1 || true
@@ -960,6 +971,8 @@ handle_wake() {  # <reason-lines>
     HANDLE_WHY="the engine turn ended with an error or an incomplete result"
   elif [ "${receipts:-0}" -eq 0 ]; then
     HANDLE_WHY="the engine turn recorded no outcome for its wake"
+  elif [ -n "$missing_rows" ]; then
+    HANDLE_WHY="the engine turn recorded no outcome for its granted wake rows $missing_rows"
   else
     HANDLE_WHY="the engine turn left its granted wake rows $unacked unacknowledged"
   fi

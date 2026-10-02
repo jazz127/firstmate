@@ -416,10 +416,15 @@ fm_test_fake_tmux_foreground_cwd() {
 #!/usr/bin/env bash
 case "$*" in
   *"-t pts/91"*) printf '%s\n' '987654321 987654321 987654321' ;;
+  *) PATH=${PATH#"$(dirname "$0")":} exec ps "$@" ;;
 esac
 SH
   cat > "$fakebin/lsof" <<'SH'
 #!/usr/bin/env bash
+case "$*" in
+  *"-p 987654321"*"-d cwd"*"-Fn"*) ;;
+  *) PATH=${PATH#"$(dirname "$0")":} exec lsof "$@" ;;
+esac
 [ -n "${FM_FAKE_PANE_PATH:-}" ] || exit 1
 printf 'p987654321\nfcwd\nn%s\n' "$FM_FAKE_PANE_PATH"
 SH

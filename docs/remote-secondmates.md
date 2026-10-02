@@ -229,9 +229,10 @@ Each gap carries one of two tags:
 | --- | --- |
 | `fixable:` | `--fix` can close the gap. |
 | `human:` | Only a person at that machine can close the gap. |
+| `notice:` | A non-blocking condition that only an operator repairs. |
 
-Every gap is followed by an `action:` line naming the exact step.
-Any remaining gap exits non-zero.
+Every gap and notice is followed by an `action:` line naming the exact step.
+Any remaining gap exits non-zero; a notice does not.
 The script's own header owns the full line protocol.
 
 ### Repair with --fix
@@ -271,12 +272,47 @@ It acts on whichever server owns the `fm-remote` socket:
 
 | Socket owner | Guard action |
 | --- | --- |
-| Nothing | Execs the server in the foreground under launchd. |
-| An Aqua-born server | Exits 0. |
+| Nothing | Starts the server through [`bin/fm-remote-herdr-supervisor.pl`](../bin/fm-remote-herdr-supervisor.pl), which stays the launchd-supervised foreground process while the server leads its own POSIX session. |
+| An Aqua-born server | Exits 0, leaving the server and its panes alone. |
 | Any other (foreign) server | Stops the foreign server and takes the session over, closing its panes so the parent firstmate relaunches its mates into the Aqua-born server. |
 
 `KeepAlive={SuccessfulExit=false}` lets that exit 0 rest instead of respawning against a held socket.
-The guard's header owns the decision table, and [`bin/fm-remote-herdr-owner-lib.sh`](../bin/fm-remote-herdr-owner-lib.sh) owns the birth markers it reads.
+The guard's header owns the decision table, the supervisor's header owns the supervision contract, and [`bin/fm-remote-herdr-owner-lib.sh`](../bin/fm-remote-herdr-owner-lib.sh) owns the birth markers it reads.
+That library also renders the launch agent contract for the doctor and for the lab in [`bin/fm-herdr-lab.sh`](../bin/fm-herdr-lab.sh), so the two cannot drift.
+
+The supervisor needs a `perl` that can compile it on the launch agent's PATH, which macOS ships at `/usr/bin/perl`.
+Without one the guard starts no server and stops none, exiting 1 with the prerequisite named in `~/Library/Logs/dev.firstmate.herdr.fm-remote.log` so launchd retries once `perl` resolves.
+The doctor asks the same resolved login shell, bounded, whether a `perl` on its PATH compiles the supervisor before it offers `--fix` for a server the launch agent would have to start or replace.
+When none does, that server gap is reported `human:` with the interpreter named, so the readiness gate that spawn and sync run carries the real blocker instead of recommending another `--fix`.
+A login shell that does not answer within the bound is reported the same way but as unverified, with its startup to inspect rather than a `perl` to install.
+
+### Add the remote machines to the local Herdr window
+
+Herdr 0.9.1 saved machines refuse an `fm-remote` server that is not a POSIX session leader.
+A server the launch agent started before the supervisor existed keeps running as the launchd job itself and does not lead its own session.
+That server is all a remote second mate needs, so the doctor reports it `ok:` and names the one thing it cannot do: `herdr machine add` refuses it as a saved SSH machine until it is restarted.
+Neither updating the Firstmate code root nor `--fix` restarts a running Aqua-born server, because the restart closes every pane in the `fm-remote` session; the guard leaves an Aqua-born server alone whenever launchd runs it, and the readiness gate that spawn and sync run sees no gap.
+When closing those panes is acceptable, restart it yourself on that account:
+
+```sh
+herdr server stop --session fm-remote && launchctl kickstart -k gui/<uid>/dev.firstmate.herdr.fm-remote
+```
+
+The guard then starts a supervised server that leads its own session, and the parent firstmate's secondmate liveness sweep relaunches its mates into it.
+
+On Linux, `--fix` starts a stopped `fm-remote` server as the leader of its own session.
+A running Linux server that Herdr reports is not a session leader is a `check herdr-server=notice:`, which does not block readiness.
+Its action names `herdr server stop --session fm-remote` followed by another `--fix`; `--fix` never runs that stop itself, because the restart closes the session's panes.
+
+Then run these one-time commands on the local Mac, using the SSH aliases configured there:
+
+```sh
+herdr machine add '<JI7-ssh-alias>' --label JI7 --remote-session fm-remote
+herdr machine add '<Jharbour-ssh-alias>' --label Jharbour --remote-session fm-remote
+```
+
+`herdr machine list` shows the saved profile IDs and labels.
+Open Herdr to see both remote machines and their agents in the sidebar.
 
 ### Other repairs and limits
 
@@ -312,7 +348,7 @@ A file at `~/.local/bin/fm-remote-entrypoint.sh` that is not Firstmate's own sym
 | --- | --- |
 | Always required | `git`, `jq`, `herdr`, compatible `tasks-axi`, and `treehouse` |
 | At least one of | `claude`, `codex`, `opencode`, `pi`, `pi-signed`, `grok`, or `kimi` |
-| Additionally required on macOS | `lsof`, so the doctor and guard can prove which process owns the session socket |
+| Additionally required on macOS | `lsof`, so the doctor and guard can prove which process owns the session socket, and a `perl` on the launch agent's PATH, so the guard can start the server as the leader of its own session |
 
 ## Provision a route
 
@@ -384,7 +420,13 @@ When a host stays red, the seed prints the doctor's remaining gaps and their ope
 
 ### Failure and rollback
 
-A known provisioning failure rolls back the new route.
+A known provisioning failure rolls back the new route and prints the remote command's failure reason.
+Provisioning has its own longer execution window, selected by the parent through argv rather than forwarded environment; [`fm-remote-home-seed.sh`](../bin/fm-remote-home-seed.sh) owns the timeout override and bounds.
+A timeout reports its bound alongside the last project clone or initialization progress.
+Before cloning projects, the home records the provisioning id in `.fm-secondmate-provisioning`.
+A retry for that same id discards unpublished project staging and resumes from completed clones, while a different id and an unmarked home containing operational data remain refused.
+The marker is removed after the complete home identity is published.
+Homes left unmarked by older versions still require operator reconciliation; they are not automatically adopted.
 A new remote home is published only after its checkout is complete, so removing the public path during cloning cannot interrupt the clone.
 If a competing home appears before publication, provisioning fails and leaves that home intact.
 SSH exit 255 preserves the route, because remote completion is unknown and must be reconciled on the same host.
@@ -571,6 +613,7 @@ A remote reply reaches the primary only through this asynchronous mirror.
 Because of that, the primary treats a missing correlated report as a missed report only once the mirror has been read through the end of the remote log after that turn ended.
 A remote mate that did answer is therefore never asked to repost while its answer is still in flight.
 A genuinely missing answer still gets exactly one repost once the mirror is known to be current.
+Each watcher poll sends at most one such remote repost; other remote records stay due and are retried on later polls, so a slow remote endpoint cannot hold the watcher's liveness beacon stale.
 
 The [process-to-event operating contract](configuration.md#process-to-event-sources-stateprocevent) owns automatic application, one-announcement replay deduplication, and the unhandled fallback path.
 
@@ -710,6 +753,7 @@ The doctor performs these account-level checks, and they are only ever exercised
 
 So the readiness gate's behavior on a genuine Mac remains an operator-run smoke test.
 The audit-session facts the guard relies on are recorded with their commands in [runtime backend verification](verification/runtime-backends.md#fm-remote-server-birth-and-login-keychain-access).
+The session-leader shape the supervisor gives that server under real launchd, with its attach, stop, restart, and SIGKILL behavior, is recorded in [the session-leader record](verification/runtime-backends.md#session-leader-fm-remote-server-under-launchd).
 
 ### Real-host smoke test
 

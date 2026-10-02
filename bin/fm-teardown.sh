@@ -134,15 +134,15 @@
 # before cleanup. Its current working directory is only incidental process
 # state: the same worker remains the owner after changing directory, so cwd can
 # never veto teardown of that exact recorded endpoint.
-# The scan and destructive return hold a project-identity lock in the local root
+# The claim read, scan, and destructive return hold a project-identity lock in the local root
 # Firstmate home's state directory, as resolved by bin/fm-wake-lib.sh's
 # fm_firstmate_root_home; a home seeded from another machine is its own local
 # root, since a lock on this filesystem cannot be held or observed across that
 # boundary. Fresh Treehouse spawns for that project in
-# every local Firstmate home release the same lock while `treehouse get` runs,
-# then retake it, prove the slot is still their pane's and unclaimed by another
-# live task, and hold it through metadata publication, closing the publication
-# gap; forced secondmate teardown takes it and runs the same checks for every
+# every local Firstmate home holds the same lock while claiming the reserved
+# slot and publishing metadata, releasing it only while `treehouse get` runs,
+# then retaking it and proving the slot is still their pane's and unclaimed by
+# another live task; forced secondmate teardown takes it and runs the same checks for every
 # descendant Treehouse slot before touching any child.
 # These refusals are not relaxed by --force: --force authorizes discarding THIS
 # task's unlanded work, never another task's live work. Nothing of this task's
@@ -197,16 +197,15 @@
 #   missing spawn_gen, that leftover would otherwise deadlock: automatic
 #   teardown refuses for want of spawn_gen, and --legacy-record then refuses
 #   for want of a window. When backlog incarnation validation applies, such a
-#   leftover (no window, no spawn_gen or only a retained legacy stamp, no
-#   backend other than tmux, no Orca terminal= or other backend's <backend>_*
-#   endpoint identity, and every other identity field passing the shared
-#   endpoint validator as if it named the task's own window) is accepted as a
-#   missing-endpoint legacy record with or without --legacy-record; the shared
-#   endpoint validator is skipped so it cannot be read as the current window,
-#   kill is skipped, and a still-present worktree still faces the ordinary
-#   landed-work checks. Every other windowless record, including one with a
-#   spawn_gen, a non-tmux backend, or an ambiguous field, still faces the
-#   validator and refuses.
+#   leftover (no window, no spawn_gen or only a retained legacy stamp, a
+#   known backend, no Orca terminal= or any backend's <backend>_* endpoint
+#   identity, and unambiguous task/project/worktree identity fields) is
+#   accepted as a missing-endpoint legacy record with or without
+#   --legacy-record; the shared endpoint validator is skipped so it cannot be
+#   read as a live window, kill is skipped, and a still-present worktree still
+#   faces the ordinary landed-work checks. Every other windowless record,
+#   including one with a spawn_gen, an endpoint identity, or an ambiguous
+#   identity field, still refuses.
 #
 # Transient / stale worktree git lock recovery (teardown-lock-race): a crew process
 # killed mid-git-operation can leave a .git/worktrees/<wt>/index.lock (or, for a
@@ -543,28 +542,39 @@ TEARDOWN_WINDOWLESS=0
 TEARDOWN_WINDOWLESS_SHAPE=0
 TEARDOWN_WINDOW_COUNT=$(LC_ALL=C grep -c '^window=' "$META" 2>/dev/null || true)
 TEARDOWN_BACKEND_COUNT=$(LC_ALL=C grep -c '^backend=' "$META" 2>/dev/null || true)
-case "$TEARDOWN_WINDOW_COUNT:$(fm_meta_get "$META" window)" in
-  0:|1:)
-    case "$TEARDOWN_BACKEND_COUNT:$(fm_meta_get "$META" backend)" in
-      0:|1:tmux)
-        TEARDOWN_FOREIGN_ENDPOINT_KEYS='^terminal='
-        for TEARDOWN_FOREIGN_BACKEND in $FM_BACKEND_KNOWN; do
-          [ "$TEARDOWN_FOREIGN_BACKEND" = tmux ] \
-            || TEARDOWN_FOREIGN_ENDPOINT_KEYS="$TEARDOWN_FOREIGN_ENDPOINT_KEYS|^${TEARDOWN_FOREIGN_BACKEND}_"
-        done
-        if ! LC_ALL=C grep -Eq "$TEARDOWN_FOREIGN_ENDPOINT_KEYS" "$META" 2>/dev/null; then
-          TEARDOWN_SHAPE_META=$(umask 077; mktemp "${TMPDIR:-/tmp}/fm-teardown-shape.XXXXXX") || exit 1
-          { LC_ALL=C grep -v '^window=' "$META" || true; printf 'window=leftover:fm-%s\n' "$ID"; } \
-            > "$TEARDOWN_SHAPE_META"
-          if fm_backend_validate_task_endpoint "$TEARDOWN_SHAPE_META" "$ID" 2>/dev/null; then
-            TEARDOWN_WINDOWLESS_SHAPE=1
-          fi
-          rm -f "$TEARDOWN_SHAPE_META"
-        fi
-        ;;
-    esac
-    ;;
-esac
+if [ "$TEARDOWN_WINDOW_COUNT" = 0 ] \
+   && [ -z "$(fm_meta_get "$META" window)" ] \
+   && { [ "$TEARDOWN_BACKEND_COUNT" = 0 ] \
+        || { [ "$TEARDOWN_BACKEND_COUNT" = 1 ] \
+             && fm_backend_is_known "$(fm_meta_get "$META" backend)"; }; }; then
+  TEARDOWN_FOREIGN_ENDPOINT_KEYS='^terminal='
+  for TEARDOWN_FOREIGN_BACKEND in $FM_BACKEND_KNOWN; do
+    TEARDOWN_FOREIGN_ENDPOINT_KEYS="$TEARDOWN_FOREIGN_ENDPOINT_KEYS|^${TEARDOWN_FOREIGN_BACKEND}_"
+  done
+  TEARDOWN_IDENTITY_FIELDS_VALID=1
+  for TEARDOWN_IDENTITY_KEY in project worktree endpoint_task_id; do
+    TEARDOWN_IDENTITY_COUNT=$(LC_ALL=C grep -c "^${TEARDOWN_IDENTITY_KEY}=" "$META" 2>/dev/null || true)
+    if [ "$TEARDOWN_IDENTITY_COUNT" -gt 1 ] \
+       || { [ "$TEARDOWN_IDENTITY_KEY" != endpoint_task_id ] \
+            && [ "$TEARDOWN_IDENTITY_COUNT" != 1 ]; }; then
+      TEARDOWN_IDENTITY_FIELDS_VALID=0
+    elif [ "$TEARDOWN_IDENTITY_COUNT" = 1 ] \
+         && [ -z "$(fm_meta_get "$META" "$TEARDOWN_IDENTITY_KEY")" ]; then
+      TEARDOWN_IDENTITY_FIELDS_VALID=0
+    fi
+  done
+  case "$(fm_meta_get "$META" project)$(fm_meta_get "$META" worktree)" in
+    *$'\n'*|*$'\r'*|*$'\t'*) TEARDOWN_IDENTITY_FIELDS_VALID=0 ;;
+  esac
+  TEARDOWN_BINDING=$(fm_meta_get "$META" endpoint_task_id)
+  if [ -n "$TEARDOWN_BINDING" ] && [ "$TEARDOWN_BINDING" != "$ID" ]; then
+    TEARDOWN_IDENTITY_FIELDS_VALID=0
+  fi
+  if ! LC_ALL=C grep -Eq "$TEARDOWN_FOREIGN_ENDPOINT_KEYS" "$META" 2>/dev/null \
+     && [ "$TEARDOWN_IDENTITY_FIELDS_VALID" = 1 ]; then
+    TEARDOWN_WINDOWLESS_SHAPE=1
+  fi
+fi
 if [ "$TEARDOWN_CLEANUP_RECOVERY" != orca ]; then
   if fm_backlog_transition_applies "$CONFIG" "$DATA" "$TEARDOWN_META_KIND"; then
     TEARDOWN_BACKLOG_APPLIES=1
@@ -2983,11 +2993,11 @@ preflight_descendant_treehouse_slots() {
       continue
     fi
     fm_backend_validate_task_endpoint "$meta" "$task_id" || return 1
-    require_exclusive_worktree_slot_record "$meta" "$task_id" "$state" "$worktree" || return 1
     owner_rc=0
     require_owned_worktree_slot_record "$task_id" "$worktree" || owner_rc=$?
     case "$owner_rc" in
-      0|"$TEARDOWN_SLOT_REASSIGNED_RC") ;;
+      0) require_exclusive_worktree_slot_record "$meta" "$task_id" "$state" "$worktree" || return 1 ;;
+      "$TEARDOWN_SLOT_REASSIGNED_RC") ;;
       *) return 1 ;;
     esac
   done
@@ -3311,7 +3321,7 @@ cleanup_firstmate_home_children() {
       "$sub_state/$child_id.grok-turnend-token" "$sub_state/$child_id.kimi-turnend-token" \
       "$sub_state/$child_id.muse-session" "$sub_state/$child_id.muse-session-current" \
       "$sub_state/$child_id.cursor-session" "$sub_state/$child_id.reconcile-nudged" \
-      "$sub_state/$child_id.devin-config.json" \
+      "$sub_state/$child_id.devin-config.json" "$sub_state/$child_id.ready-timeout" \
       "$sub_state/.$child_id.branch-outcome-index"
     chmod u+w "$sub_state/$child_id.git-hooks" 2>/dev/null || true
     rm -rf "$sub_state/$child_id.git-hooks"
@@ -3333,8 +3343,10 @@ remove_secondmate_registry_entry() {
   return "$rc"
 }
 
-require_exclusive_task_worktree_slot || exit 1
 require_owned_task_worktree_slot || exit 1
+if teardown_owns_worktree; then
+  require_exclusive_task_worktree_slot || exit 1
+fi
 
 validate_pr_poll_cleanup "$STATE" "$ID" || exit 1
 
@@ -3785,6 +3797,7 @@ rm -f "$STATE/$ID.turn-ended" "$STATE/$ID.progress" \
   "$STATE/$ID.control-relaunch" "$STATE/$ID.control-relaunch.meta-prior" \
   "$STATE/$ID.control-relaunch.brief-prior" "$STATE/$ID.control-relaunch.note" \
   "$STATE/$ID.reconcile-nudged" "$STATE/$ID.gemini-settings.json" "$STATE/$ID.devin-config.json" \
+  "$STATE/$ID.ready-timeout" \
   "$STATE/.$ID.branch-outcome-index" \
   "$STATE/.secondmate-relaunch-$ID" "$STATE/.secondmate-relaunch-bound-$ID"
 # The steering inbox (bin/fm-task-inbox-lib.sh) is runtime state for the

@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# shellcheck source=bin/fm-scratch-lib.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/fm-scratch-lib.sh"
 # Shared PR/MR record reads, validation, and atomic artifact helpers for merge
 # polling on the supported forges. Callers must validate task IDs and raw PR/MR
 # URLs before constructing task paths or performing any side effect.
@@ -95,6 +97,39 @@ FM_PR_RETIRE_RECEIPT_IDENTITY=
 FM_PR_RECORD_STATE=
 FM_PR_RECORD_MERGED=
 FM_PR_POLL_RETIREMENT_REJECTED=
+
+fm_pr_refuse_published_scratch() {  # <canonical-pr-url>
+  local url=$1 files encoded_path json
+  fm_pr_url_parse "$url" || return 1
+  case "$FM_PR_PROVIDER" in
+    github)
+      command -v gh >/dev/null 2>&1 || return 1
+      files=$(gh api "repos/$FM_PR_PATH/pulls/$FM_PR_NUMBER/files?per_page=100" --paginate --jq '.[] | select(.status != "removed") | .filename' 2>/dev/null) || {
+        printf '%s\n' "error: cannot inspect the published file list for $url" >&2
+        return 1
+      }
+      printf '%s\n' "$files" | fm_scratch_check_lines
+      ;;
+    gitlab)
+      command -v glab >/dev/null 2>&1 || return 1
+      command -v jq >/dev/null 2>&1 || return 1
+      encoded_path=$(printf '%s' "$FM_PR_PATH" | jq -sRr @uri) || return 1
+      json=$(GITLAB_HOST="$FM_PR_HOST" glab api \
+        "projects/$encoded_path/merge_requests/$FM_PR_NUMBER/changes?per_page=100" \
+        --paginate 2>/dev/null) || {
+        printf '%s\n' "error: cannot inspect the published file list for $url" >&2
+        return 1
+      }
+      files=$(printf '%s\n' "$json" | jq -r '.changes[] | select(.deleted_file | not) | .new_path' 2>/dev/null) || {
+        printf '%s\n' "error: cannot parse the published file list for $url" >&2
+        return 1
+      }
+      printf '%s\n' "$files" | fm_scratch_check_lines
+      ;;
+    gerrit) return 0 ;;
+    *) return 1 ;;
+  esac
+}
 
 fm_task_id_path_safe() {
   local id=${1-}
@@ -1078,6 +1113,91 @@ fm_pr_gerrit_read_change() {  # <host> <number>
     else
       error("invalid gerrit record")
     end' 2>/dev/null
+}
+
+fm_pr_gerrit_read_description() {  # <host> <number>
+  local record=$1 number=$2
+  record=$(fm_pr_gerrit_read_change "$record" "$number") || return 1
+  printf '%s' "$record" | jq -r '
+    if (.commit_message | type) == "string" then .commit_message
+    elif (.description | type) == "string" then .description
+    elif (.message | type) == "string" then .message
+    else error("no change description")
+    end' 2>/dev/null
+}
+
+fm_pr_read_published_body() {  # <canonical-pr-url>
+  local url=$1 body json
+  fm_pr_url_parse "$url" || return 1
+  url=$FM_PR_URL
+  case "$FM_PR_PROVIDER" in
+    github)
+      command -v gh >/dev/null 2>&1 || {
+        printf '%s\n' 'error: cannot validate the published intent because gh is unavailable' >&2
+        return 1
+      }
+      body=$(gh pr view "$url" --json body --jq .body 2>/dev/null) || {
+        printf '%s\n' 'error: cannot read the published PR body for evidence validation' >&2
+        return 1
+      }
+      ;;
+    gitlab)
+      if ! command -v glab >/dev/null 2>&1 || ! command -v jq >/dev/null 2>&1; then
+        printf '%s\n' 'error: cannot validate the published intent because glab and jq are unavailable' >&2
+        return 1
+      fi
+      json=$(GITLAB_HOST="$FM_PR_HOST" glab mr view "$FM_PR_NUMBER" \
+        -R "https://$FM_PR_HOST/$FM_PR_PATH" -F json 2>/dev/null) || {
+        printf '%s\n' 'error: cannot read the published merge-request body for evidence validation' >&2
+        return 1
+      }
+      body=$(printf '%s\n' "$json" | jq -r '
+        if type == "object" and (.description | type) == "string" then .description
+        else error("no merge-request description")
+        end' 2>/dev/null) || {
+        printf '%s\n' 'error: cannot parse the published merge-request body for evidence validation' >&2
+        return 1
+      }
+      ;;
+    gerrit)
+      body=$(fm_pr_gerrit_read_description "$FM_PR_HOST" "$FM_PR_NUMBER") || {
+        printf '%s\n' 'error: cannot read the published Gerrit description for evidence validation' >&2
+        return 1
+      }
+      ;;
+    *)
+      printf '%s\n' 'error: unsupported forge for published intent validation' >&2
+      return 1
+      ;;
+  esac
+  printf '%s' "$body"
+}
+
+# Read the current revision from the same forge interfaces used for published
+# descriptions. A missing or malformed revision is never a usable head.
+fm_pr_read_published_head() {  # <canonical-pr-url>
+  local url=$1 head json
+  fm_pr_url_parse "$url" || return 1
+  url=$FM_PR_URL
+  case "$FM_PR_PROVIDER" in
+    github)
+      head=$(gh pr view "$url" --json headRefOid -q .headRefOid 2>/dev/null) || return 1
+      ;;
+    gitlab)
+      json=$(GITLAB_HOST="$FM_PR_HOST" glab mr view "$FM_PR_NUMBER" \
+        -R "https://$FM_PR_HOST/$FM_PR_PATH" -F json 2>/dev/null) || return 1
+      head=$(printf '%s\n' "$json" | jq -er '
+        if type == "object" and (.sha | type) == "string" then .sha
+        else error("no merge-request head") end' 2>/dev/null) || return 1
+      ;;
+    gerrit)
+      fm_pr_gerrit_read_revision "$FM_PR_HOST" "$FM_PR_NUMBER" || return 1
+      head=$FM_PR_RECORD_REVISION
+      ;;
+    *) return 1 ;;
+  esac
+  fm_pr_head_valid "$head" || return 1
+  printf '%s\n' "$head"
 }
 
 # The status of one Gerrit change. The status is the only field read: a merged

@@ -1421,9 +1421,10 @@ fm_pending_reply_restatement_copy_same_basename() {  # <state-dir> <corr_id> <se
 
 # One reconciliation tick for a single record: resolve, observe, recover, escalate.
 # busy_state is busy|idle|unknown for the secondmate endpoint.
-# secondmate_home may be empty when unknown.
-fm_pending_reply_tick_one() {  # <state-dir> <corr_id> <busy_state> [secondmate-home]
-  local state=$1 corr=$2 busy_state=$3 sm_home=${4-}
+# secondmate_home may be empty when unknown. The optional final argument defers
+# a remote recovery send while retaining resolution and observation.
+fm_pending_reply_tick_one() {  # <state-dir> <corr_id> <busy_state> [secondmate-home] [allow-recovery]
+  local state=$1 corr=$2 busy_state=$3 sm_home=${4-} allow_recovery=${5:-1}
   local rec phase delivered
   rec=$(fm_pending_reply_path "$state" "$corr")
   [ -f "$rec" ] || return 1
@@ -1480,7 +1481,7 @@ fm_pending_reply_tick_one() {  # <state-dir> <corr_id> <busy_state> [secondmate-
     return 0
   fi
   phase=$(fm_pending_reply_get "$rec" phase)
-  if [ "$phase" = awaiting_report ]; then
+  if [ "$phase" = awaiting_report ] && [ "$allow_recovery" = 1 ]; then
     fm_pending_reply_send_recovery "$state" "$corr" 2>/dev/null || true
   fi
   phase=$(fm_pending_reply_get "$rec" phase)
@@ -1523,10 +1524,15 @@ _fm_pending_reply_select_needing_work() {  # <record-path>...
 # state, and optional secondmate-home wrong-home path checks. Records are
 # selected in one pass first (_fm_pending_reply_select_needing_work), so a
 # settled record costs no lock and no fork, and the per-record path below runs,
-# unchanged, only for the records that selection returns.
-fm_pending_reply_tick() {  # <state-dir>
-  local state=$1 dir rec corr task_id phase delivered meta backend target label busy sm_home harness remote_host
-  local observation observation_task found i
+# only for the records that selection returns.
+fm_pending_reply_remote_observation() {  # <task-id>
+  "$_FM_PENDING_REPLY_LIB_DIR/fm-on.sh" "$1" \
+    fm-remote-secondmate-control.sh observe "$1" < /dev/null 2>/dev/null || printf 'unknown'
+}
+
+fm_pending_reply_tick() {  # <state-dir> [watcher-beacon]
+  local state=$1 beacon=${2-} dir rec corr task_id phase delivered meta backend target label busy sm_home harness remote_host
+  local observation observation_task found i remote_reposts=0 allow_recovery attempted_before
   local -a observation_tasks=() observation_values=() records=() selected=()
   dir=$(fm_pending_reply_dir "$state")
   [ -d "$dir" ] || return 0
@@ -1546,6 +1552,7 @@ fm_pending_reply_tick() {  # <state-dir>
     selected+=("$rec")
   done < <(_fm_pending_reply_select_needing_work ${records[@]+"${records[@]}"})
   for rec in ${selected[@]+"${selected[@]}"}; do
+    [ -z "$beacon" ] || touch "$beacon"
     corr=$(fm_pending_reply_get "$rec" corr_id)
     [ -n "$corr" ] || corr=$(basename "$rec")
     task_id=$(fm_pending_reply_get "$rec" task_id)
@@ -1631,8 +1638,7 @@ fm_pending_reply_tick() {  # <state-dir>
         done
         if [ "$found" = 0 ]; then
           if [ -n "$remote_host" ]; then
-            observation=$("$_FM_PENDING_REPLY_LIB_DIR/fm-on.sh" "$task_id" \
-              fm-remote-secondmate-control.sh observe "$task_id" < /dev/null 2>/dev/null || printf 'unknown')
+            observation=$(fm_pending_reply_remote_observation "$task_id")
             case "$observation" in busy|idle|fallback-idle|unknown) ;; *) observation=unknown ;; esac
           else
             observation=$(fm_pending_reply_backend_observation "$backend" "$target" "$label" "$harness")
@@ -1643,8 +1649,16 @@ fm_pending_reply_tick() {  # <state-dir>
         busy=$(fm_pending_reply_busy_state_from_observation "$rec" "$observation")
       fi
     fi
-    fm_pending_reply_tick_one "$state" "$corr" "$busy" "$sm_home" || true
+    allow_recovery=1
+    if [ -n "$remote_host" ] && [ "$remote_reposts" -ge 1 ]; then allow_recovery=0; fi
+    attempted_before=$(fm_pending_reply_get "$rec" recovery_attempted_epoch)
+    fm_pending_reply_tick_one "$state" "$corr" "$busy" "$sm_home" "$allow_recovery" || true
+    if [ -n "$remote_host" ] && [ -z "$attempted_before" ] &&
+       [ -n "$(fm_pending_reply_get "$rec" recovery_attempted_epoch)" ]; then
+      remote_reposts=$((remote_reposts + 1))
+    fi
   done
+  [ -z "$beacon" ] || touch "$beacon"
   return 0
 }
 

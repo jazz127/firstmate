@@ -407,6 +407,30 @@ fm_fakebin() {
   printf '%s\n' "$fakebin"
 }
 
+# fm_test_fake_tmux_foreground_cwd <fakebin>
+# A synthetic foreground process and lsof cwd sourced from FM_FAKE_PANE_PATH.
+# Pair with tmux stubs that answer #{pane_tty} with /dev/pts/91.
+fm_test_fake_tmux_foreground_cwd() {
+  local fakebin=$1
+  cat > "$fakebin/ps" <<'SH'
+#!/usr/bin/env bash
+case "$*" in
+  *"-t pts/91"*) printf '%s\n' '987654321 987654321 987654321' ;;
+  *) PATH=${PATH#"$(dirname "$0")":} exec ps "$@" ;;
+esac
+SH
+  cat > "$fakebin/lsof" <<'SH'
+#!/usr/bin/env bash
+case "$*" in
+  *"-p 987654321"*"-d cwd"*"-Fn"*) ;;
+  *) PATH=${PATH#"$(dirname "$0")":} exec lsof "$@" ;;
+esac
+[ -n "${FM_FAKE_PANE_PATH:-}" ] || exit 1
+printf 'p987654321\nfcwd\nn%s\n' "$FM_FAKE_PANE_PATH"
+SH
+  chmod +x "$fakebin/ps" "$fakebin/lsof"
+}
+
 fm_fake_exit0() {
   local fakebin=$1 tool
   shift

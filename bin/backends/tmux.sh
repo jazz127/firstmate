@@ -106,26 +106,50 @@ fm_backend_tmux_create_task() {  # <session> <window-name> <proj-abs> -> prints 
   printf '%s\n' "$wid"
 }
 
-# fm_backend_tmux_current_path: the live foreground process group's working
-# directory on Linux, falling back to tmux's pane path elsewhere. The pane path
-# can remain at the original project while `treehouse get` opens a subshell.
+# fm_backend_tmux_current_path: the live foreground process's current working
+# directory, or empty when the foreground process or its cwd cannot be read.
+# `pane_current_path` follows the pane's shell and can stay at its creation cwd
+# while a foreground treehouse subshell has already entered a worktree.
 fm_backend_tmux_current_path() {  # <target>
-  local pane_pid foreground
-  if [ -d /proc ]; then
-    pane_pid=$(tmux display-message -p -t "$1" '#{pane_pid}' 2>/dev/null || true)
-    case $pane_pid in
-      ''|*[!0-9]*) ;;
-      *)
-        foreground=$(ps -o tpgid= -p "$pane_pid" 2>/dev/null)
-        foreground=${foreground//[[:space:]]/}
-        if [ -n "$foreground" ] && [ "$foreground" -gt 0 ] 2>/dev/null && [ -L "/proc/$foreground/cwd" ]; then
-          readlink "/proc/$foreground/cwd"
-          return
-        fi
-        ;;
-    esac
+  local target=$1 tty rows pid pgid tpgid path foreground_pids=
+  tty=$(tmux display-message -p -t "$target" '#{pane_tty}' 2>/dev/null) || return 1
+  [ -n "$tty" ] || return 1
+  rows=$(LC_ALL=C ps -t "${tty#/dev/}" -o pid=,pgid=,tpgid= 2>/dev/null) || return 1
+  while read -r pid pgid tpgid; do
+    [ -n "$pid" ] && [ "$pgid" = "$tpgid" ] || continue
+    if [ "$pid" = "$pgid" ]; then
+      foreground_pids="$pid
+$foreground_pids"
+    else
+      foreground_pids="$foreground_pids$pid
+"
+    fi
+  done <<EOF
+$rows
+EOF
+  while IFS= read -r pid; do
+    [ -n "$pid" ] || continue
+    path=$(fm_backend_tmux_pid_cwd "$pid") || continue
+    printf '%s\n' "$path"
+    return 0
+  done <<EOF
+$foreground_pids
+EOF
+  return 1
+}
+
+# fm_backend_tmux_pid_cwd: read one process cwd without trusting the pane's
+# creation-time path. Linux exposes it through procfs; macOS exposes it through
+# lsof, which is also the portable fallback when procfs is unavailable.
+fm_backend_tmux_pid_cwd() {  # <pid>
+  local pid=$1 path
+  if [ -L "/proc/$pid/cwd" ] || [ -e "/proc/$pid/cwd" ]; then
+    path=$(readlink "/proc/$pid/cwd" 2>/dev/null) || return 1
+  else
+    path=$(lsof -a -p "$pid" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p' | head -n 1)
   fi
-  tmux display-message -p -t "$1" '#{pane_current_path}' 2>/dev/null
+  [ -n "$path" ] && [ -d "$path" ] || return 1
+  printf '%s\n' "$path"
 }
 
 # fm_backend_tmux_send_text_line: send one line of TEXT then Enter, with no

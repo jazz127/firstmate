@@ -725,7 +725,7 @@ meta_field() { grep "^$2=" "$1" 2>/dev/null | tail -1 | cut -d= -f2-; }
 # `send-keys -l <cmd>` launch command into FM_FAKE_LAUNCH_LOG, mirroring the
 # capture technique in fm-spawn-dispatch-profile.test.sh so the constructed
 # launch command (not just meta) can be asserted on. Also answers the
-# `#{pane_current_path}` probe from FM_FAKE_PANE_PATH so this same stub works
+# `#{pane_tty}` probe so this same stub works
 # for a crew/scout (non-secondmate) spawn's treehouse-worktree wait loop.
 make_launch_capturing_tmux() {
   local dir=$1 fakebin="$1/fakebin"
@@ -734,6 +734,7 @@ make_launch_capturing_tmux() {
 #!/usr/bin/env bash
 set -u
 case "$*" in
+  *"#{pane_tty}"*) printf '%s\n' '/dev/pts/91'; exit 0 ;;
   *"#{pane_current_path}"*) printf '%s\n' "${FM_FAKE_PANE_PATH:-}"; exit 0 ;;
 esac
 case "${1:-}" in
@@ -759,6 +760,7 @@ esac
 exit 0
 SH
   chmod +x "$fakebin/tmux"
+  fm_test_fake_tmux_foreground_cwd "$fakebin"
   fm_fake_exit0 "$fakebin" pi
   # BASE_PATH deliberately omits the developer's node, which the trust
   # registration below needs, so link the real one in rather than presenting a

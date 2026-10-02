@@ -73,6 +73,7 @@ make_spawn_fakebin() {
 #!/usr/bin/env bash
 set -u
 case "$*" in
+  *"#{pane_tty}"*) printf '%s\n' '/dev/pts/91'; exit 0 ;;
   *"#{pane_current_path}"*) printf '%s\n' "${FM_FAKE_PANE_PATH:-}"; exit 0 ;;
 esac
 case "${1:-}" in
@@ -111,6 +112,7 @@ esac
 exit 0
 SH
   chmod +x "$fakebin/tmux"
+  fm_test_fake_tmux_foreground_cwd "$fakebin"
   ln -s "$(command -v bash)" "$fakebin/muse-bin-test-version"
   cat > "$fakebin/muse" <<'SH'
 #!/usr/bin/env bash

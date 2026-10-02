@@ -243,6 +243,7 @@ make_spawn_record_fakebin() {
 set -u
 [ -n "${FM_TMUX_REC:-}" ] && printf 'tmux %s\n' "$*" >> "$FM_TMUX_REC"
 case "$*" in
+  *"#{pane_tty}"*) printf '%s\n' '/dev/pts/91'; exit 0 ;;
   *"#{pane_current_path}"*) printf '%s\n' "${FM_FAKE_PANE_PATH:-}"; exit 0 ;;
 esac
 case "${1:-}" in
@@ -254,6 +255,7 @@ esac
 exit 0
 SH
   chmod +x "$fakebin/tmux"
+  fm_test_fake_tmux_foreground_cwd "$fakebin"
   fm_fake_exit0 "$fakebin" treehouse
   printf '%s\n' "$fakebin"
 }
@@ -296,8 +298,8 @@ test_spawn_tmux_window_construction() {
   # Bug 2 fix (b): treehouse-get and the worktree wait loop target the stable id.
   assert_grep "send-keys -t @spawnwid treehouse get Enter" "$rec" \
     "treehouse get must be sent to the stable window id"
-  assert_grep "display-message -p -t @spawnwid #{pane_current_path}" "$rec" \
-    "the worktree wait loop must query the stable window id, not the name"
+  assert_grep "display-message -p -t @spawnwid #{pane_tty}" "$rec" \
+    "the foreground-cwd probe must query the stable window id, not the name"
 
   pass "fm-spawn: appends windows by session-colon, pins the name, and targets the window id"
 }

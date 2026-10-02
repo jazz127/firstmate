@@ -1394,7 +1394,7 @@ fm_firstmate_root_home() {
   printf '%s\n' "$home"
 }
 
-# The one lock serializing Treehouse slot allocation and return for a project.
+# The one lock serializing Treehouse slot claims and returns for a project.
 #
 # It is anchored in the local root home's state directory so that every home on
 # this machine that can reach the same pool - the root, and each secondmate home

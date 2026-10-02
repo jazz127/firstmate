@@ -17,6 +17,7 @@ make_fakebin() {  # <dir>
   cat > "$fakebin/tmux" <<'SH'
 #!/usr/bin/env bash
 case "$*" in
+  *"#{pane_tty}"*) printf '%s\n' '/dev/pts/91'; exit 0 ;;
   *"#{pane_current_path}"*) printf '%s\n' "${FM_FAKE_PANE_PATH:-}"; exit 0 ;;
 esac
 case "${1:-}" in
@@ -25,6 +26,7 @@ esac
 exit 0
 SH
   chmod +x "$fakebin/tmux"
+  fm_test_fake_tmux_foreground_cwd "$fakebin"
   fm_fake_exit0 "$fakebin" treehouse no-mistakes
   printf '%s\n' "$fakebin"
 }

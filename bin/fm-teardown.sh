@@ -139,8 +139,9 @@
 # fm_firstmate_root_home; a home seeded from another machine is its own local
 # root, since a lock on this filesystem cannot be held or observed across that
 # boundary. Fresh Treehouse spawns for that project in
-# every local Firstmate home hold the same lock from before slot allocation
-# through metadata publication, closing the publication
+# every local Firstmate home release the same lock while `treehouse get` runs,
+# then retake it, prove the slot is still their pane's and unclaimed by another
+# live task, and hold it through metadata publication, closing the publication
 # gap; forced secondmate teardown takes it and runs the same checks for every
 # descendant Treehouse slot before touching any child.
 # These refusals are not relaxed by --force: --force authorizes discarding THIS

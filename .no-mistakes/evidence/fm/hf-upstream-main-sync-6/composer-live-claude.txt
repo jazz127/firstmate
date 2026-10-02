@@ -1,0 +1,36 @@
+== empty composer (claude 2.1.288 (Claude Code))
+                                                                                                                        ◐ medium · /effort
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ Try "refactor herdr.sh"
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← for agents
+composer_state=empty
+
+== typed '/exit' (no Enter; suggestion menu dismissed with Escape)
+
+
+                                         tmux detected · scroll with PgUp/PgDn · or add 'set -g mouse on' to ~/.tmux.conf for wheel scroll
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ Try "refactor herdr.sh"
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Opus 5.5 │ 01M3ZDS8STNWBTP2EWD072YPC0 0eb8ef04(wt:01M3ZDS8STNWBTP2EWD072YPC0) │ in:0 out:0 /1000.0k │ effort:medium thinking │ 5h:22%→1…
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← for agents
+composer_state=empty
+
+== typed '/exit' (no Enter, slash menu open)
+^[[39m�M-^]� ^[[38;5;153m/exit^[[39m/exit
+42:❯ /exit/exit
+composer_state=pending
+
+== after clearing draft with C-u
+❯ Try "refactor herdr.sh"
+composer_state=empty
+
+== typed '/exit' once (no Enter)
+^[[39m�M-^]� ^[[38;5;153m/exit^[[39m
+composer_state=pending
+
+== typed 'hello draft' (no Enter)
+❯ hello draft
+composer_state=pending

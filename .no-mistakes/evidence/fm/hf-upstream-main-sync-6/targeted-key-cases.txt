@@ -1,0 +1,24 @@
+ok - matrix: titled Herdr rules preserve Claude's empty and pending composer verdicts
+ok - matrix: grok's real oversized titled bottom is empty while typed and unproved panes stay safe
+ok - matrix: claude's titled top rule proves an idle composer empty and a draft pending (#5601, #5558)
+ok - fm_composer_classify_screen: titled bottoms retain full box geometry
+ok - fm_backend_herdr_container_ensure: version-gates, starts the server, ensures the firstmate workspace, echoes session:workspace_id + the seeded default tab id
+ok - fm_backend_herdr_container_ensure: reuses an existing firstmate workspace without recreating it, and reports no seeded default tab (adopted, not created)
+ok - fm_backend_herdr_create_task: prunes exactly the seeded default tab container_ensure identified, once the first real task tab exists
+ok - fm_backend_herdr_workspace_prune_seeded_default_tab: refuses to close the seeded default tab when its pane reports a working agent (defense in depth)
+ok - fm_backend_herdr_create_task: creates a tab and parses tab_id/pane_id from the JSON response, prunes nothing when no seeded tab id is given
+ok - herdr presentation focus: projected seeded pruning refuses the active tab
+ok - fm_backend_herdr_composer_state: titled Claude rules expose idle and pending input
+ok - fm_backend_herdr_composer_state: a slash-command popup's argument-hint placeholder still reads pending (the incident fix)
+ok - fm_backend_herdr_send_text_submit: a slash-command popup's placeholder fill on Enter #1 never flips agent_status to working, so it does not short-circuit as submitted; Enter #2 is retried and lands it
+ok - fm_backend_herdr_composer_state: a slash-command popup cannot hide a typed composer
+ok - fm_backend_herdr_send_text_submit: a typed slash command hidden behind its popup is still proven and submitted
+ok - fm_backend_herdr_send_text_submit: a typed slash command Claude draws in muted truecolor grey is proven and submitted
+ok - seeded Pi/pi-signed secondmate launches carry session --approve when advertised
+ok - ordinary Pi worker launches omit --approve
+ok - Pi approve probing omits --approve when help does not advertise it
+# live pi version: 0.87.1
+ok - fresh seeded Pi secondmate-shaped home stalls on Trust project folder? without --approve
+ok - seeded home with --approve starts past the trust dialog without rewriting trust.json
+ok - unseeded path without --approve still prompts on Trust project folder?
+# all fm-pi-seeded-home-trust-live-e2e checks passed (3)

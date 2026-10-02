@@ -1,0 +1,11 @@
+== tests/fm-remote-job.test.sh identical across house/upstream/merge?
+house==merge: yes
+house==upstream: no
+== shellcheck 0.11.0 on house-base copy
+house.sh:287:54: note: PATH was modified in a subshell. That change might be lost. [SC2031]
+house.sh:355:30: note: PATH was modified in a subshell. That change might be lost. [SC2031]
+rc=
+== on merge-tip worktree file
+tests/fm-remote-job.test.sh:287:54: note: PATH was modified in a subshell. That change might be lost. [SC2031]
+tests/fm-remote-job.test.sh:355:30: note: PATH was modified in a subshell. That change might be lost. [SC2031]
+rc=1

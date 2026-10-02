@@ -1,0 +1,22 @@
+HEAD=0eb8ef047d3f0a0809c9a4a26122d0a9d94223c2
+parents: 0eb8ef047d3f0a0809c9a4a26122d0a9d94223c2 4f0a04de633c86752fd2e69f1dc3bc13f4379ef0 d719ef3d9abdd11b0a8aea57c74de074feca99b9
+f50e9cdb ancestor-of-HEAD: yes
+87fa81b8 ancestor-of-HEAD: yes
+d719ef3d ancestor-of-HEAD: yes
+4f0a04de ancestor-of-HEAD: yes
+upstream-only changes vs pinned upstream absent from merge? (files where HEAD==upstream for upstream-touched files)
+  .agents/skills/harness-adapters/references/harness/pi.md: same-as-upstream
+  bin/backends/herdr.sh: merged-with-house
+  bin/fm-composer-lib.sh: merged-with-house
+  bin/fm-lint.sh: merged-with-house
+  bin/fm-spawn.sh: merged-with-house
+  bin/fm-test-run.sh: merged-with-house
+  docs/configuration.md: merged-with-house
+  docs/fm-test-portable-shards.md: same-as-upstream
+  docs/verification/runtime-backends.md: merged-with-house
+  tests/fm-backend-herdr.test.sh: merged-with-house
+  tests/fm-composer-lib.test.sh: merged-with-house
+  tests/fm-lint.test.sh: merged-with-house
+  tests/fm-pi-seeded-home-trust-live-e2e.test.sh: same-as-upstream
+  tests/fm-remote-delta-read.test.sh: same-as-upstream
+  tests/fm-spawn-dispatch-profile.test.sh: merged-with-house

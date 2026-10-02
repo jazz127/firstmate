@@ -2781,6 +2781,40 @@ test_github_behind_updates_and_rechecks_before_merge() {
     || fail "github-behind-unknown-after-update: transient UNKNOWN should be awaited: $(cat "$case_dir/stderr")"
   assert_logged_gh_merge "$case_dir" 6182 example/repo --squash
 
+  case_dir=$(make_case github-behind-unknown-after-waived-red)
+  add_gh_mocks "$case_dir" "$old_head"
+  jq '.mergeStateStatus = "BEHIND"' "$case_dir/github-view.json" > "$case_dir/github-view-after-update.json"
+  mv "$case_dir/github-view-after-update.json" "$case_dir/github-view.json"
+  jq --arg head "$new_head" '.mergeStateStatus = "CLEAN" | .headRefOid = $head | .mergeable = "UNKNOWN" | .statusCheckRollup[0].conclusion = "FAILURE"' \
+    "$case_dir/github-view.json" > "$case_dir/github-view-after-update.json"
+  jq '.mergeable = "MERGEABLE"' "$case_dir/github-view-after-update.json" \
+    > "$case_dir/github-view-after-update-final.json"
+  printf '%s\n' "$new_head" > "$case_dir/github-head-after-update"
+  run_pr_merge "$case_dir" task-x1 https://github.com/example/repo/pull/6186 --update-branch --allow-red ci -- --squash \
+    > "$case_dir/stdout" 2> "$case_dir/stderr" \
+    || fail "github-behind-unknown-after-waived-red: UNKNOWN beside a waived failure should be awaited: $(cat "$case_dir/stderr")"
+  assert_logged_gh_merge "$case_dir" 6186 example/repo --squash
+
+  case_dir=$(make_case github-behind-unreadable-after-update)
+  add_gh_mocks "$case_dir" "$old_head"
+  jq '.mergeStateStatus = "BEHIND"' "$case_dir/github-view.json" > "$case_dir/github-view-after-update.json"
+  mv "$case_dir/github-view-after-update.json" "$case_dir/github-view.json"
+  printf '[]\n' > "$case_dir/github-view-after-update.json"
+  printf '%s\n' "$new_head" > "$case_dir/github-head-after-update"
+  set +e
+  FM_PR_GITHUB_MERGEABLE_RETRY_DELAY=0 \
+    run_pr_merge "$case_dir" task-x1 https://github.com/example/repo/pull/6187 --update-branch -- --merge \
+    > "$case_dir/stdout" 2> "$case_dir/stderr"
+  rc=$?
+  set -e
+  expect_code 1 "$rc" "github-behind-unreadable-after-update: an unreadable updated state must refuse"
+  assert_grep 'could not read the GitHub pull request state' "$case_dir/stderr" \
+    "github-behind-unreadable-after-update: the read failure was not reported"
+  assert_no_grep 'head moved again' "$case_dir/stderr" \
+    "github-behind-unreadable-after-update: a read failure was reported as a head change"
+  assert_no_grep 'pr merge' "$case_dir/gh.log" \
+    "github-behind-unreadable-after-update: an unverified head was merged"
+
   case_dir=$(make_case github-behind-pending-cap)
   add_gh_mocks "$case_dir" "$old_head"
   write_github_required "$case_dir" classic:ci

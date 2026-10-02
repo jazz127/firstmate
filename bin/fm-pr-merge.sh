@@ -759,7 +759,6 @@ github_verify_mergeable() {
   FM_PR_GITHUB_CHECKS_PENDING=false
   FM_PR_GITHUB_CHECKS_FAILED=false
   FM_PR_GITHUB_UNREPORTED=false
-  FM_PR_GITHUB_MERGEABLE_UNKNOWN=false
   FM_PR_GITHUB_LIVE_HEAD=
 
   if ! json=$(gh pr view "$URL" --json state,isDraft,mergeable,mergeStateStatus,headRefOid,baseRefName,statusCheckRollup 2>/dev/null) \
@@ -827,9 +826,6 @@ EOF
     elif .__typename == "StatusContext" and (.state == "PENDING" or .state == "EXPECTED") then .context // "(unnamed check)"
     else empty end' 2>/dev/null) || pending=''
   [ -z "$pending" ] || FM_PR_GITHUB_CHECKS_PENDING=true
-  if [ "$mergeable" = UNKNOWN ] && [ -z "$red" ]; then
-    FM_PR_GITHUB_MERGEABLE_UNKNOWN=true
-  fi
 
   case "$state" in
     [oO][pP][eE][nN]) ;;
@@ -925,7 +921,7 @@ EOF
 }
 
 github_update_behind_branch() {
-  local old_head=$FM_PR_MERGE_HEAD new_head attempt_error
+  local old_head=$FM_PR_MERGE_HEAD new_head attempt_error status
   local poll=${mergeable_retry_delay:-3} deadline
   deadline=$((SECONDS + poll * 5))
   attempt_error=$(mktemp "${TMPDIR:-/tmp}/fm-pr-merge-update.XXXXXX") || return 1
@@ -951,7 +947,9 @@ github_update_behind_branch() {
     return 1
   fi
   while :; do
-    if github_verify_mergeable 2> "$attempt_error"; then
+    status=0
+    github_verify_mergeable 2> "$attempt_error" || status=$?
+    if [ "$status" -eq 0 ]; then
       if [ "$FM_PR_MERGE_HEAD" = "$new_head" ] && [ "$FM_PR_GITHUB_BEHIND" = false ]; then
         cat "$attempt_error" >&2
         rm -f "$attempt_error"
@@ -961,15 +959,19 @@ github_update_behind_branch() {
       rm -f "$attempt_error"
       return 1
     fi
+    if [ -z "$FM_PR_GITHUB_LIVE_HEAD" ]; then
+      cat "$attempt_error" >&2
+      rm -f "$attempt_error"
+      return 1
+    fi
     if [ "$FM_PR_GITHUB_LIVE_HEAD" != "$new_head" ]; then
       echo "error: the GitHub pull request head moved again after its branch update" >&2
       rm -f "$attempt_error"
       return 1
     fi
-    if [ "$FM_PR_GITHUB_CHECKS_FAILED" = true ] || {
+    if [ "$status" -ne 3 ] && { [ "$FM_PR_GITHUB_CHECKS_FAILED" = true ] || {
       [ "$FM_PR_GITHUB_CHECKS_PENDING" != true ] \
-      && [ "$FM_PR_GITHUB_UNREPORTED" != true ] \
-      && [ "$FM_PR_GITHUB_MERGEABLE_UNKNOWN" != true ]; }; then
+      && [ "$FM_PR_GITHUB_UNREPORTED" != true ]; }; }; then
       cat "$attempt_error" >&2
       rm -f "$attempt_error"
       return 1

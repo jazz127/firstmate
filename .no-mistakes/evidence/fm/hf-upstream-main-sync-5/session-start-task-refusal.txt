@@ -1,0 +1,4 @@
+$ FM_TASK_ID=lab-task bin/fm-session-start.sh
+fm-session-start: refusing task worker FM_TASK_ID=lab-task; this command belongs to the supervising firstmate
+exit=2
+state after:

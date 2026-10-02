@@ -1,0 +1,35 @@
+$ fm-captain-hold.sh hold labhold --title "Lab hold" --reason "pick A (fast) or B (safe)"
+labhold
+exit=0
+$ fm-captain-hold.sh open labhold
+exit=0
+$ fm-tasks-axi.sh list
+count: 1
+tasks[1]{id,state,kind,repo,title}:
+  labhold,queued,captain,firstmate,Lab hold
+help[2]:
+  - Run `tasks-axi show <id>` for full notes on a task
+  - Run `tasks-axi ready` to see unblocked queued work
+$ fm-tasks-axi.sh show labhold
+task:
+  id: labhold
+  title: Lab hold
+  state: queued
+  blocked: no
+  blocked_by: none
+  held: yes
+  hold_reason: "pick A (fast) or B (safe)"
+  hold_kind: captain
+  hold_until: "-"
+  kind: captain
+  repo: firstmate
+  priority: "-"
+  created: 2026-10-02
+  closed: "-"
+  deps: none
+  links: none
+  body: "Captain hold set: 2026-10-02T11:50:07Z"
+--- raw backlog line (stored encoding):
+5:- [ ] labhold - Lab hold (repo: firstmate) (kind: captain) (since 2026-10-02) (hold: fm-hold-v1:cGljayBBIChmYXN0KSBvciBCIChzYWZlKQ==) (hold-kind: captain)
+$ fm-fleet-snapshot.sh --json | jq backlog hold reason
+{"done":null,"current_role":"queued","pr_url":null,"local_note":null,"body_excerpt":"Captain hold set: 2026-10-02T11:50:07Z","completion":{"date":null,"verb":null},"body_lines":["Captain hold set: 2026-10-02T11:50:07Z"],"reported":null,"hold_age_days":0,"merged":null,"blocked_by":null,"blocked_reason":null,"checked":false,"state":"queued","blocked_by_ids":[],"report_path":null,"hold_until":null,"hold_set":"2026-10-02T11:50:07Z","requires_child_metadata":false,"raw":"- [ ] labhold - Lab hold (repo: firstmate) (kind: captain) (since 2026-10-02) (hold: fm-hold-v1:cGljayBBIChmYXN0KSBvciBCIChzYWZlKQ==) (hold-kind: captain)","priority":null,"unresolved_blocker_ids":[],"hold_reason":"pick A (fast) or B (safe)","structured":true,"kind":"captain","hold_kind":"captain","links":[],"hold_bucket":"live","captain_actionable":true,"id":"labhold","since":"2026-10-02","repo":"firstmate","title":"Lab hold","order":1}

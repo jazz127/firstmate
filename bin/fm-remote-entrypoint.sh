@@ -187,6 +187,13 @@ JOB_COMPLETED=1
 cat "$FM_REMOTE_JOB_STDOUT"
 cat "$FM_REMOTE_JOB_STDERR" >&2
 RESULT=$FM_REMOTE_JOB_EXIT
+if [ "$COMMAND" = fm-remote-home-provision.sh ] && [ "$RESULT" -ne 0 ]; then
+  if [ "$RESULT" -gt 128 ]; then
+    printf 'error: remote command %s killed by signal %s (exit %s)\n' "$COMMAND" "$((RESULT - 128))" "$RESULT" >&2
+  else
+    printf 'error: remote command %s failed (exit %s)\n' "$COMMAND" "$RESULT" >&2
+  fi
+fi
 fm_remote_job_reap "$ACCOUNT_HOME" "$JOB_ID" || true
 trap - EXIT
 rm -rf -- "$TMP"

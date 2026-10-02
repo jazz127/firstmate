@@ -52,7 +52,7 @@ Until they land, their current behavior stays as described in their own owners.
 | Row eligibility and the offer rule | `bin/fm-branch-dispatch.mjs` | The command entry to `.pi/extensions/lib/fm-branch-dispatch.ts`, so the host and the Pi extension compute branch-claimable rows, their task scope, and whether the branch may take a close (`branchOfferForWake`) from one owner; it also renders the wake message with the same away-posture tail, or the dialog mirror at its head. |
 | The grant and the drain | `bin/fm-wake-grant.sh` | Publishes the branch's rows bound to the host's own process; [watcher-continuity.md](watcher-continuity.md#per-actor-acknowledgement) owns the per-actor drain and acknowledgement the engine runs. |
 | The prompt | `bin/fm-branch-prompt.sh` | Emits the same byte-stable prompt the Pi branch runs; each wake names its host's report surface. |
-| The report surface | `bin/fm-branch-report.sh` | The command twin of the Pi branch's `fm_branch_report` tool, with the same task scoping; see [The report surface](#the-report-surface). |
+| The report surface | `bin/fm-branch-report.sh` | The command twin of the Pi branch's `fm_branch_report` tool, with the same task scoping plus an exact claimed-row binding; see [The report surface](#the-report-surface). |
 | Leases and authority | `bin/fm-lease-lib.sh` | Owns the per-task leases, the main-owned role partition, and the away relocation; see [Leases and authority](#leases-and-authority). |
 | The dialog mirror | `bin/fm-host-mirror.sh` | Owns the mirror files, writers, verified-writer list, and feed; see [The dialog mirror](#the-dialog-mirror). |
 | The captain-outcome drain | `bin/fm-wake-drain.sh` | Presents visible new and unprocessed outcomes in its `BRANCH OUTCOMES` section; `bin/fm-branch-outcome.sh mark-processed` is main's acknowledgement; see [Captain outcomes](#captain-outcomes). |
@@ -84,6 +84,9 @@ The other owners read the file at every arm.
 ### The report surface
 
 `bin/fm-branch-report.sh` appends to the outcome store (`bin/fm-branch-outcome.sh`) plus a per-turn receipt the host requires.
+Each command report names its claimed queue sequence with `--row`, and the receipt binds that row to the report's outcome sequence.
+The report surface holds the receipt lock across the duplicate check, outcome append, and receipt write so concurrent reports cannot claim the same row.
+The host requires a report for every claimed row before it counts the turn handled.
 A non-silent row an away turn records after the captain returned is also queued for main as a durable check wake.
 Silent outcomes remain in the store but are not queued or relayed as notes.
 An attended turn queues nothing: its captain rows reach main through the host's `branch-outcome` exit and the drain, and its routine rows stay in the store.
@@ -169,7 +172,7 @@ On each actionable close the engine takes, the host runs these steps:
 The host counts the wake handled only when all three hold:
 
 - The turn exited cleanly.
-- The turn recorded at least one report.
+- The turn recorded a report for every granted wake row.
 - The turn left none of its granted rows in the wake queue.
 
 ### Where a handled wake's outcome goes

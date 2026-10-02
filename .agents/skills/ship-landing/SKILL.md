@@ -15,6 +15,11 @@ That blocked reading is the gate working, not a stuck worker, so steer the worke
 A direct-PR worker pushes that commit to its PR branch, and a local-only worker commits it on its ship branch.
 A no-mistakes worker re-validates it with /no-mistakes so the pipeline stays the one publisher; it never pushes from its copy.
 In no-mistakes mode the earlier `done [at=<epoch>]: {summary}` is the pipeline handoff and is not gated.
+Before reporting any pull request to the captain, its published body is read back from the forge at the PR reporting boundary; task-owned PR registration and inactive reconciliation perform this check automatically, including for reports without an owning task record.
+Preserve the reported PR outcome but append `evidence-validation=failed` when its body cannot be read or parsed, or when an evidence claim lacks the artifact, command, and capture time required by `bin/fm-dod-lib.sh`.
+The reporting-boundary check validates published text, while the generated ship brief's PR-body preflight contract catches worker-authored bodies before publication; `bin/fm-dod-lib.sh` owns both instructions.
+Preserve the validator diagnostic alongside `evidence-validation=failed` when a published attestation is bound to a different head, so the refusal names the current head, attested head, and remediation.
+Those publication checks refuse contradictory driven-scenario claims, including a count that no complete scenario table with a `Live` column agrees with; the check does not apply to captain intent because a brief may quote a defective PR body while requesting its repair.
 Tell the captain the PR's full `https://...` URL copied from the worker's ready line, the resolved checks-green crew-state line, or the task's `pr=` metadata, a concise outcome summary, and the no-mistakes risk level when applicable.
 A captain instruction to merge is explicit authority; `yolo` is the only standing routine merge authority.
 For any custom `state/<id>.check.sh` you write yourself, keep it an ordinary single-link mode-`0700` file, print one line only when firstmate should wake, print nothing otherwise, finish before `FM_CHECK_TIMEOUT`, then bind its current bytes with `bin/fm-check-register.sh <id>` before the watcher may execute it.

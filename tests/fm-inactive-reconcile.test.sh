@@ -34,7 +34,7 @@ make_tools() { # <world>
   mkdir -p "$fake"
   cat > "$fake/fm-crew-state.sh" <<'SH'
 #!/usr/bin/env bash
-printf 'state: %s · source: fake\n' "${FM_FAKE_CREW_STATE:-unknown}"
+printf 'state: %s · source: %s\n' "${FM_FAKE_CREW_STATE:-unknown}" "${FM_FAKE_CREW_SOURCE:-fake}"
 SH
   cat > "$fake/tmux" <<'SH'
 #!/usr/bin/env bash
@@ -119,6 +119,7 @@ run_report() { # <home> <child>
   PATH="$WORLD/fakebin:$PATH" FM_ROOT_OVERRIDE="$WORLD/root" FM_HOME="$home" \
     FM_STATE_OVERRIDE="$home/state" FM_DATA_OVERRIDE="$home/data" FM_CONFIG_OVERRIDE="$home/config" \
     FM_INACTIVE_CREW_STATE_BIN="$WORLD/fakebin/fm-crew-state.sh" \
+    FM_INACTIVE_RECONCILE_BUDGET_SECS="${FM_TEST_RECONCILE_BUDGET:-10}" \
     FM_FORGE_LOG="$WORLD/forge.log" "$RECON" report "$child"
 }
 
@@ -170,6 +171,62 @@ test_main_direct_terminal_presentation_receipt() {
   FM_HOME="$MAIN" FM_STATE_OVERRIDE="$MAIN/state" "$DRAIN" --ack-through "$seq" --recovery-generation "$generation"
   [ "$(outcome_count "$MAIN" presented)" = 1 ] || fail "acknowledged presentation did not receive its own receipt"
   pass "main direct terminal presentation has a durable receipt"
+}
+
+# A committed implementation that still has no attributable validation run
+# must reappear after the inactivity bound, even after its initial done signal
+# was handled. A running validation and a young handoff remain silent.
+test_validation_handoff_backstop() {
+  local seq generation err
+  make_world validation-handoff
+  write_child "$MAIN" child 'done: implementation committed'
+  sed -i.bak '/^mode=/d' "$MAIN/state/child.meta"; rm -f "$MAIN/state/child.meta.bak"
+  git -C "$MAIN/projects/child" checkout -q -b fm/child
+  : > "$MAIN/state/.wake-queue"
+  set_mtime "$(date +%s)" "$MAIN/state/child.meta"
+  FM_FAKE_CREW_STATE='done' FM_FAKE_CREW_SOURCE=status-log run_reconcile "$MAIN" --startup
+  [ "$(wake_count "$MAIN" 'inactive-outcome:')" = 0 ] \
+    || fail "a fresh handoff triggered the inactivity backstop"
+
+  age "$MAIN/state/child.meta" "$MAIN/state/child.status" "$MAIN/state/child.turn-ended"
+  FM_FAKE_CREW_STATE=working FM_FAKE_CREW_SOURCE=run-step run_reconcile "$MAIN" --startup
+  [ "$(wake_count "$MAIN" 'inactive-outcome:')" = 0 ] \
+    || fail "a healthy validation run triggered the handoff backstop"
+
+  FM_FAKE_CREW_STATE='done' FM_FAKE_CREW_SOURCE=status-log run_reconcile "$MAIN" --startup
+  [ "$(wake_count "$MAIN" 'inactive-outcome:')" = 1 ] \
+    || fail "an overdue committed head did not get one durable backstop wake"
+  grep -Fq 'validation handoff overdue: child=child committed_head=' "$MAIN/state/.wake-queue" \
+    || fail "the overdue wake did not identify the missing validation handoff"
+  [ "$(outcome_count "$MAIN" pending)" = 1 ] \
+    || fail "the overdue handoff had no pending acknowledgement receipt"
+
+  err="$WORLD/drain.err"
+  FM_HOME="$MAIN" FM_STATE_OVERRIDE="$MAIN/state" "$DRAIN" >/dev/null 2> "$err"
+  seq=$(sed -n 's/^WAKE_ACK_REQUIRED:.*--ack-through \([0-9][0-9]*\) --recovery-generation .*/\1/p' "$err")
+  generation=$(sed -n 's/^WAKE_ACK_REQUIRED:.*--recovery-generation \([A-Za-z0-9._-][A-Za-z0-9._-]*\)$/\1/p' "$err")
+  [ -n "$seq" ] && [ -n "$generation" ] || fail "handoff wake lacked an acknowledgement"
+  FM_HOME="$MAIN" FM_STATE_OVERRIDE="$MAIN/state" "$DRAIN" --ack-through "$seq" --recovery-generation "$generation"
+  FM_FAKE_CREW_STATE='done' FM_FAKE_CREW_SOURCE=status-log run_reconcile "$MAIN" --startup
+  [ "$(outcome_count "$MAIN" presented)" = 1 ] \
+    || fail "an acknowledged handoff generated another receipt"
+  [ "$(wake_count "$MAIN" 'inactive-outcome:')" = 0 ] \
+    || fail "an acknowledged handoff generated another wake"
+  pass "committed head without validation resurfaces after the bound; healthy and acknowledged heads stay silent"
+}
+
+test_secondmate_validation_handoff_backstop() {
+  make_world mate-validation-handoff
+  bind_secondmate local
+  write_child "$MATE" child 'done: implementation committed'
+  git -C "$MATE/projects/child" checkout -q -b fm/child
+  : > "$MATE/state/.wake-queue"
+  FM_FAKE_CREW_STATE='done' FM_FAKE_CREW_SOURCE=status-log run_reconcile "$MATE" --startup
+  [ "$(wake_count "$MATE" 'inactive-outcome:')" = 1 ] \
+    || fail "a secondmate's already-delivered pre-validation done hid its overdue handoff"
+  grep -Fq 'validation handoff overdue: child=child committed_head=' "$MATE/state/.wake-queue" \
+    || fail "the secondmate handoff alert lacked the committed head"
+  pass "a secondmate's ledger delivery does not suppress the validation backstop"
 }
 
 # Away-posture regression: a branch-actor drain that consumes an
@@ -603,6 +660,119 @@ test_pending_ledger_done_is_delivered_after_worktree_removal() {
   sed -E 's/ \[at=[0-9]+\]//' "$MAIN/state/mate.status" | grep -Fq "done [key=$key]: child child done: PR https://example.test/owner/repo/pull/2 checks green" \
     || fail "report did not deliver the pending done after the worktree was removed"
   pass "a pending ship done: is delivered by report after teardown removed the worktree"
+}
+
+test_parent_report_surfaces_published_evidence_failure() {
+  local key
+  make_world published-evidence-failure; bind_secondmate local
+  cat > "$WORLD/fakebin/gh" <<'SH'
+#!/usr/bin/env bash
+printf '%s\n' 'The scenarios were run against a real account.'
+SH
+  chmod +x "$WORLD/fakebin/gh"
+  write_child "$MATE" child 'done: PR https://github.com/owner/repo/pull/1 checks green'
+  sed -i.bak 's#https://example.test/owner/repo/pull/1#https://github.com/owner/repo/pull/1#g' "$MATE/state/child.meta"
+  rm -f "$MATE/state/child.meta.bak"
+  run_report "$MATE" child || fail "report refused a terminal outcome after evidence validation failed"
+  key=$(reported_outcome_key "$MATE" child "done") || fail "evidence-validation report receipt was not recorded"
+  report=$(sed -E 's/ \[at=[0-9]+\]//' "$MAIN/state/mate.status")
+  printf '%s\n' "$report" | grep -Fq \
+    "done [key=$key]: child child done: PR https://github.com/owner/repo/pull/1 checks green pr=https://github.com/owner/repo/pull/1 evidence-validation=failed" \
+    || fail "published evidence failure was not surfaced beside the reported outcome"
+  printf '%s\n' "$report" | grep -Fq \
+    'evidence claim refused: missing evidence-artifact: path' \
+    || fail "published evidence failure did not preserve its validator diagnostic"
+  pass "parent PR reports retain outcomes and surface evidence validation failures"
+}
+
+# Synthetic cleanup replay: registration validates a task-temp proof, cleanup
+# removes it, and the terminal report must still describe the landed task.
+evidence_cleanup_report_case() { # <case> <forge-state> <removal> <expected>
+  local key body task_tmp name=$1 forge_state=$2 removal=$3 expected=$4
+  make_world "evidence-cleanup-$name"; bind_secondmate local
+  write_child "$MATE" child 'done: PR https://github.com/owner/repo/pull/1 checks green'
+  sed -i.bak 's#https://example.test/owner/repo/pull/1#https://github.com/owner/repo/pull/1#g' "$MATE/state/child.meta"
+  rm -f "$MATE/state/child.meta.bak"
+  task_tmp="$WORLD/tasktmp"
+  mkdir -p "$task_tmp"
+  printf 'synthetic fixture proof\n' > "$task_tmp/proof.txt"
+  printf 'tasktmp=%s\n' "$task_tmp" >> "$MATE/state/child.meta"
+  body="$WORLD/body.md"
+  cat > "$body" <<EOF
+Synthetic validator input: The scenarios were run against a real account.
+evidence-artifact: $task_tmp/proof.txt
+evidence-command: synthetic fixture
+evidence-captured: 2026-09-29T00:00:00Z
+EOF
+  cat > "$WORLD/fakebin/gh" <<SH
+#!/usr/bin/env bash
+case "\$*" in
+  'pr view '*"--json body --jq .body"*) cat '$body' ;;
+  'api graphql '*) printf 'state=$forge_state\\nmerged=$([ "$forge_state" = MERGED ] && printf true || printf false)\\n' ;;
+  'api '*) printf 'bin/example.sh\\n' ;;
+  *) exit 1 ;;
+esac
+SH
+  chmod +x "$WORLD/fakebin/gh"
+  PATH="$WORLD/fakebin:$PATH" bash -c '
+    . "$1/bin/fm-pr-lib.sh"
+    . "$1/bin/fm-dod-lib.sh"
+    fm_dod_validate_published_intent "$(cat "$2")" "$3" "$4" "" https://github.com/owner/repo/pull/1
+  ' _ "$ROOT" "$body" "$MATE/projects/child" "$task_tmp" \
+    || fail "synthetic registration evidence did not pass before cleanup"
+  cp "$MATE/.fm-secondmate-parent" "$WORLD/parent-binding"
+  printf 'schema=fm-secondmate-parent.v1\nroute=invalid\n' > "$MATE/.fm-secondmate-parent"
+  run_report "$MATE" child || true
+  [ "$(outcome_count "$MATE" pending)" = 1 ] || fail "synthetic task did not leave a pending outcome"
+  case "$removal" in
+    roots) rm -rf "$task_tmp" "$MATE/projects/child" ;;
+    tasktmp) rm -rf "$task_tmp" ;;
+    file) rm -f "$task_tmp/proof.txt"; rm -rf "$MATE/projects/child" ;;
+    metadata) rm -rf "$task_tmp" "$MATE/projects/child"; sed -i.bak '/^evidence-command:/d' "$body" ;;
+  esac
+  cp "$WORLD/parent-binding" "$MATE/.fm-secondmate-parent"
+  # Keep the delivered-head record so the terminal event remains attributable.
+  run_report "$MATE" child || fail "cleaned merged task was not reported"
+  key=$(reported_outcome_key "$MATE" child "done") || fail "cleaned merged report has no receipt"
+  assert_grep "[key=$key]" "$MAIN/state/mate.status" "cleaned merged outcome was not delivered"
+  if [ "$expected" = ok ]; then
+    assert_not_contains "$(cat "$MAIN/state/mate.status")" 'evidence-validation=failed' \
+      "cleanup falsely failed previously accepted evidence"
+  else
+    assert_grep 'evidence-validation=failed' "$MAIN/state/mate.status" \
+      "$name evidence failure was hidden"
+  fi
+  pass "synthetic cleanup evidence report: $name"
+}
+
+test_merged_report_after_evidence_cleanup() {
+  evidence_cleanup_report_case merged MERGED roots ok
+  evidence_cleanup_report_case tasktmp-only MERGED tasktmp ok
+  evidence_cleanup_report_case open OPEN roots failed
+  evidence_cleanup_report_case closed CLOSED roots failed
+  evidence_cleanup_report_case surviving-root MERGED file failed
+  evidence_cleanup_report_case malformed MERGED metadata failed
+  evidence_cleanup_report_case unavailable '' roots failed
+}
+
+test_parent_report_bounds_published_read() {
+  local key
+  make_world published-read-timeout; bind_secondmate local
+  cat > "$WORLD/fakebin/gh" <<'SH'
+#!/usr/bin/env bash
+sleep 30
+SH
+  chmod +x "$WORLD/fakebin/gh"
+  write_child "$MATE" child 'done: PR https://github.com/owner/repo/pull/1 checks green'
+  sed -i.bak 's#https://example.test/owner/repo/pull/1#https://github.com/owner/repo/pull/1#g' "$MATE/state/child.meta"
+  rm -f "$MATE/state/child.meta.bak"
+  FM_TEST_RECONCILE_BUDGET=1 run_report "$MATE" child \
+    || fail "report refused a terminal outcome after the bounded read timed out"
+  key=$(reported_outcome_key "$MATE" child "done") || fail "bounded-read report receipt was not recorded"
+  sed -E 's/ \[at=[0-9]+\]//' "$MAIN/state/mate.status" | grep -Fq \
+    "done [key=$key]: child child done: PR https://github.com/owner/repo/pull/1 checks green pr=https://github.com/owner/repo/pull/1 evidence-validation=failed mode=no-mistakes yolo=off" \
+    || fail "bounded-read failure was not surfaced beside the reported outcome"
+  pass "parent PR reports bound published-body reads"
 }
 
 # `report <child>` is the teardown-side delivery: it delivers or says nothing
@@ -1039,6 +1209,8 @@ SH
 }
 
 test_main_direct_terminal_presentation_receipt
+test_validation_handoff_backstop
+test_secondmate_validation_handoff_backstop
 test_branch_ack_retires_inactive_outcome_receipt
 test_unpushed_ci_ready_done_is_not_published
 test_delivered_ledger_done_skips_git_gate
@@ -1057,6 +1229,9 @@ test_secondmate_partial_ledger_line_waits_for_newline
 test_secondmate_remote_route_ledger_delivery
 test_report_subcommand_delivers_and_refuses
 test_pending_ledger_done_is_delivered_after_worktree_removal
+test_parent_report_surfaces_published_evidence_failure
+test_merged_report_after_evidence_cleanup
+test_parent_report_bounds_published_read
 test_report_avoids_scan_meta_lock_inversion
 test_local_secondmate_rejects_relative_parent_home
 test_invalid_secondmate_marker_blocks_routing

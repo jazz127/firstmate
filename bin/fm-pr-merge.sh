@@ -8,8 +8,14 @@
 # is refused outright: that adapter is read-only, and the refusal at the parse
 # below owns why.
 #
-# Merge method on GitHub defaults to --squash when the caller passes none of
-# --squash, --merge, --rebase, or --method after the optional -- separator.
+# When the caller passes none of --squash, --merge, --rebase, or --method after
+# the optional -- separator, the GitHub merge method is chosen from what the
+# base branch allows: --squash wherever squash is allowed, --merge when merge is
+# the only allowed method, and a refusal naming the allowed methods otherwise or
+# when they cannot be read; github_choose_default_method below owns that read.
+# A pull request into a housefeature/* base always lands as a merge commit, so
+# the durable branch keeps main's ancestry: merge is chosen when no method is
+# named, and a caller-named squash or rebase is refused.
 # A GitHub merge is refused unless every pre-merge condition holds, each read
 # live at merge time rather than taken from recorded metadata: the pull request
 # is open, not a draft, mergeable, free of conflicts, every unwaived check
@@ -59,6 +65,11 @@
 # own view still proves a landed merge, and every outcome it cannot prove
 # refuses, reporting the failed gh read and naming both failed reads when the
 # gh-axi view could not prove the outcome either.
+# A green PR that is BEHIND updates its branch whatever merge method applies.
+# The update uses GitHub's merge-commit default, records the new head, then
+# waits up to ten minutes for checks at that head, and for a transient UNKNOWN
+# mergeable state to settle, and repeats this full preflight before the
+# exact-head merge. A failed check still refuses.
 # If the pull request remains open and the base branch has an effective
 # merge_queue rule, an attended refusal names the queue's configured merge
 # method and exact --attended-override -- --auto --<method> retry flags. While
@@ -719,9 +730,14 @@ github_required_checks_missing() {
 # the usual 1, when mergeable=UNKNOWN is the only failing condition, so the
 # caller can retry a still-computing mergeability read instead of refusing.
 github_verify_mergeable() {
-  local json fields line red name covered missing unreported producers runs
+  local json fields line red name covered missing unreported producers runs pending
   local total=0 named=0 refusals='' mergeable_refusal=''
   local state='' draft='' mergeable='' merge_state='' live_head='' base=''
+  FM_PR_GITHUB_BEHIND=false
+  FM_PR_GITHUB_CHECKS_PENDING=false
+  FM_PR_GITHUB_UNREPORTED=false
+  FM_PR_GITHUB_LIVE_HEAD=
+  FM_PR_GITHUB_LIVE_BASE=
 
   if ! json=$(gh pr view "$URL" --json state,isDraft,mergeable,mergeStateStatus,headRefOid,baseRefName,statusCheckRollup 2>/dev/null) \
     || [ -z "$json" ]; then
@@ -765,10 +781,18 @@ FIELDS
     echo "error: could not read the GitHub pull request head commit before merging" >&2
     return 1
   fi
+  FM_PR_GITHUB_LIVE_HEAD=$live_head
+  FM_PR_GITHUB_LIVE_BASE=$base
+  [ "$merge_state" != BEHIND ] || FM_PR_GITHUB_BEHIND=true
   if ! red=$(github_checks_not_green "$json"); then
     echo "error: could not read the GitHub pull request state before merging" >&2
     return 1
   fi
+  pending=$(printf '%s' "$json" | jq -r '.statusCheckRollup[] |
+    if .__typename == "CheckRun" and .status != "COMPLETED" then .name // "(unnamed check)"
+    elif .__typename == "StatusContext" and (.state == "PENDING" or .state == "EXPECTED") then .context // "(unnamed check)"
+    else empty end' 2>/dev/null) || pending=''
+  [ -z "$pending" ] || FM_PR_GITHUB_CHECKS_PENDING=true
 
   case "$state" in
     [oO][pP][eE][nN]) ;;
@@ -836,6 +860,7 @@ EOF
       [ "${#ALLOW_MISSING[@]}" -gt 0 ] && [ "${ALLOW_MISSING[0]}" = "$name" ] && continue
       refusals="$refusals  - required check '$name' has not reported at head $live_head
 "
+      FM_PR_GITHUB_UNREPORTED=true
       unreported="${unreported:+$unreported, }$name"
     done <<EOF
 $missing
@@ -860,6 +885,73 @@ EOF
     "$URL" "$live_head" >&2
   FM_PR_MERGE_HEAD=$live_head
   FM_PR_GITHUB_BASE=$base
+}
+
+github_update_behind_branch() {
+  local old_head=$FM_PR_MERGE_HEAD old_base=$FM_PR_GITHUB_BASE new_head attempt_error verify_status
+  local deadline=$((SECONDS + 600))
+  attempt_error=$(mktemp "${TMPDIR:-/tmp}/fm-pr-merge-update.XXXXXX") || return 1
+  if ! gh pr update-branch "$PR_NUMBER" --repo "$PR_OWNER/$PR_REPO"; then
+    rm -f "$attempt_error"
+    return 1
+  fi
+  while :; do
+    new_head=$(gh pr view "$URL" --json headRefOid -q .headRefOid 2>/dev/null) || new_head=
+    if fm_pr_head_valid "$new_head" && [ "$new_head" != "$old_head" ]; then
+      break
+    fi
+    if [ "$SECONDS" -ge "$deadline" ]; then
+      echo "error: timed out verifying a new GitHub head after updating $URL" >&2
+      rm -f "$attempt_error"
+      return 1
+    fi
+    sleep 5
+  done
+  if ! record_pr_metadata || ! grep -qxF "pr_head=$new_head" "$META"; then
+    echo "error: could not record the updated GitHub head $new_head" >&2
+    rm -f "$attempt_error"
+    return 1
+  fi
+  while :; do
+    verify_status=0
+    github_verify_mergeable 2> "$attempt_error" || verify_status=$?
+    if [ "$verify_status" -eq 0 ]; then
+      if [ "$FM_PR_MERGE_HEAD" = "$new_head" ] \
+        && [ "$FM_PR_GITHUB_BASE" = "$old_base" ] \
+        && [ "$FM_PR_GITHUB_BEHIND" = false ]; then
+        cat "$attempt_error" >&2
+        rm -f "$attempt_error"
+        return 0
+      fi
+      echo "error: the GitHub pull request head or base moved again after its branch update" >&2
+      rm -f "$attempt_error"
+      return 1
+    fi
+    if [ "$FM_PR_GITHUB_LIVE_HEAD" != "$new_head" ]; then
+      echo "error: the GitHub pull request head moved again after its branch update" >&2
+      rm -f "$attempt_error"
+      return 1
+    fi
+    if [ "$FM_PR_GITHUB_LIVE_BASE" != "$old_base" ]; then
+      echo "error: the GitHub pull request base moved after its branch update" >&2
+      rm -f "$attempt_error"
+      return 1
+    fi
+    if [ "$FM_PR_GITHUB_CHECKS_PENDING" != true ] \
+      && [ "$FM_PR_GITHUB_UNREPORTED" != true ] \
+      && [ "$verify_status" -ne 3 ]; then
+      cat "$attempt_error" >&2
+      rm -f "$attempt_error"
+      return 1
+    fi
+    if [ "$SECONDS" -ge "$deadline" ]; then
+      cat "$attempt_error" >&2
+      echo "error: timed out waiting for required checks on updated head $new_head" >&2
+      rm -f "$attempt_error"
+      return 1
+    fi
+    sleep 5
+  done
 }
 
 # Read one live GitHub pull request view after gh returns. The selected
@@ -1060,6 +1152,105 @@ METHODS
     FM_PR_GITHUB_QUEUE_STATUS=single
     FM_PR_GITHUB_QUEUE_METHOD=$method
   fi
+}
+
+# Choose the GitHub merge method for a caller that named none. The methods the
+# base branch allows are the repository's mergeCommitAllowed,
+# squashMergeAllowed, and rebaseMergeAllowed settings, read through gh repo
+# view because REST returns them as null to a token without admin access,
+# narrowed by every effective pull_request rule's allowed_merge_methods; a rule
+# without that parameter narrows nothing, and a plan-gated 403 on the rules
+# endpoint means the repository cannot have branch rules, as in
+# github_read_queue_method.
+# Squash stays the default wherever it is allowed, and merge is chosen when it
+# is the only allowed method. Any other set is ambiguous, and it and every
+# failed read refuse naming what is known, because guessing would either lose
+# upstream ancestry on a merge-commits-only branch or hand GitHub a method it
+# refuses. GitHub remains the final judge of the method passed.
+FM_PR_GITHUB_DEFAULT_METHOD=
+github_choose_default_method() {
+  local settings rules line allowed='' rule_methods method narrowed
+  local branch_path api_err api_err_text refuse_hint
+  FM_PR_GITHUB_DEFAULT_METHOD=
+  refuse_hint='pass --squash, --merge, or --rebase after -- to choose explicitly'
+  if ! settings=$(gh repo view "$PR_OWNER/$PR_REPO" \
+    --json mergeCommitAllowed,squashMergeAllowed,rebaseMergeAllowed \
+    --jq '"merge=" + (.mergeCommitAllowed | tostring), "squash=" + (.squashMergeAllowed | tostring), "rebase=" + (.rebaseMergeAllowed | tostring)' \
+    2>/dev/null); then
+    printf 'error: refusing to merge %s: the repository merge-method settings could not be read, so no merge method was chosen; %s\n' \
+      "$URL" "$refuse_hint" >&2
+    return 1
+  fi
+  for method in merge squash rebase; do
+    line=$(printf '%s\n' "$settings" | grep -x "$method=[a-z]*" | tail -1)
+    case "$line" in
+      "$method=true") allowed="$allowed $method" ;;
+      "$method=false") ;;
+      *)
+        printf 'error: refusing to merge %s: the repository merge-method settings could not be read, so no merge method was chosen; %s\n' \
+          "$URL" "$refuse_hint" >&2
+        return 1
+        ;;
+    esac
+  done
+
+  branch_path=$(github_urlencode_path_segment "$FM_PR_GITHUB_BASE")
+  api_err=$(mktemp "${TMPDIR:-/tmp}/fm-pr-merge-method-rules.XXXXXX") || return 1
+  if ! rules=$(gh api \
+    --paginate "repos/$PR_OWNER/$PR_REPO/rules/branches/$branch_path" \
+    --jq '.[] | select(.type == "pull_request") | "allowed_merge_methods=" + ((.parameters.allowed_merge_methods // ["merge", "squash", "rebase"]) | join(","))' \
+    2>"$api_err"); then
+    api_err_text=$(cat "$api_err" 2>/dev/null)
+    rm -f "$api_err"
+    if github_branch_rules_unavailable_on_plan "$api_err_text"; then
+      rules=''
+    else
+      printf 'error: refusing to merge %s: the branch rules for base branch %s could not be read, so no merge method was chosen; %s\n' \
+        "$URL" "$FM_PR_GITHUB_BASE" "$refuse_hint" >&2
+      return 1
+    fi
+  else
+    rm -f "$api_err"
+  fi
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    case "$line" in
+      allowed_merge_methods=*) rule_methods=${line#allowed_merge_methods=} ;;
+      *)
+        printf 'error: refusing to merge %s: the branch rules for base branch %s could not be read, so no merge method was chosen; %s\n' \
+          "$URL" "$FM_PR_GITHUB_BASE" "$refuse_hint" >&2
+        return 1
+        ;;
+    esac
+    narrowed=''
+    for method in $allowed; do
+      case ",$rule_methods," in
+        *",$method,"*) narrowed="$narrowed $method" ;;
+      esac
+    done
+    allowed=$narrowed
+  done <<RULES
+$rules
+RULES
+
+  allowed=${allowed# }
+  case "$FM_PR_GITHUB_BASE: $allowed " in
+    housefeature/*:*" merge "*) FM_PR_GITHUB_DEFAULT_METHOD=merge ;;
+    housefeature/*)
+      allowed=${allowed// /, }
+      printf 'error: refusing to merge %s: base branch %s takes merge commits only, but allows %s\n' \
+        "$URL" "$FM_PR_GITHUB_BASE" "${allowed:-no merge method}" >&2
+      return 1
+      ;;
+    *" squash "*) FM_PR_GITHUB_DEFAULT_METHOD=squash ;;
+    *": merge ") FM_PR_GITHUB_DEFAULT_METHOD=merge ;;
+    *)
+      allowed=${allowed// /, }
+      printf 'error: refusing to merge %s: base branch %s allows %s, so no default merge method applies; %s\n' \
+        "$URL" "$FM_PR_GITHUB_BASE" "${allowed:-no merge method}" "$refuse_hint" >&2
+      return 1
+      ;;
+  esac
 }
 
 record_pr_metadata() {
@@ -1344,9 +1535,6 @@ case "$PROVIDER" in
   github)
     merge_output=
     merge_args=()
-    if ! caller_has_merge_method "$@"; then
-      merge_args=(--squash)
-    fi
     FM_PR_GITHUB_CALLER_METHOD=$(caller_merge_method "$@")
     # mergeable reads UNKNOWN for a short while after a push or base-branch
     # change while GitHub recomputes it; retry a bounded number of times,
@@ -1377,6 +1565,19 @@ case "$PROVIDER" in
       fi
       exit 1
     fi
+    case "$FM_PR_GITHUB_BASE" in
+      housefeature/*)
+        if caller_has_merge_method "$@" && ! github_caller_method_is merge; then
+          printf 'error: refusing to merge %s: pull requests into %s land as merge commits only; pass --merge or no method\n' \
+            "$URL" "$FM_PR_GITHUB_BASE" >&2
+          exit 1
+        fi
+        ;;
+    esac
+    if ! caller_has_merge_method "$@"; then
+      github_choose_default_method || exit 1
+      merge_args=(--"$FM_PR_GITHUB_DEFAULT_METHOD")
+    fi
     # The away record is locked first, so this last presence and authority read
     # and the forge command below share one live-owner critical section.
     hold_away_record_for_merge || exit 1
@@ -1384,6 +1585,9 @@ case "$PROVIDER" in
     require_current_away_authority || away_status=$?
     [ "$away_status" -eq 0 ] || exit "$away_status"
     refuse_github_queue_while_away || exit 2
+    if [ "$FM_PR_GITHUB_BEHIND" = true ]; then
+      github_update_behind_branch || exit 1
+    fi
     merge_status=0
     merge_output=$(gh pr merge "$PR_NUMBER" --repo "$PR_OWNER/$PR_REPO" \
       --match-head-commit "$FM_PR_MERGE_HEAD" \

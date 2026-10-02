@@ -173,6 +173,33 @@ ROWS
   pass "C1 fm-harness.sh secondmate-model/secondmate-effort resolve the optional tokens; bare harness stays empty (backward-compat)"
 }
 
+test_per_mate_profile_precedence() {
+  local cfg="$TMP_ROOT/per-mate-precedence/config" verb got expected
+  mkdir -p "$cfg/secondmate-harness.d"
+  printf 'claude opus high\n' > "$cfg/secondmate-harness"
+  printf 'pi deepseek/deepseek-v4-pro high\n' > "$cfg/secondmate-harness.d/jdgx-ops"
+  printf 'codex\n' > "$cfg/secondmate-harness.d/bare"
+  printf 'default\n' > "$cfg/secondmate-harness.d/deferred"
+  for verb in secondmate secondmate-model secondmate-effort; do
+    case "$verb" in
+      secondmate) expected=pi ;;
+      secondmate-model) expected=deepseek/deepseek-v4-pro ;;
+      secondmate-effort) expected=high ;;
+    esac
+    got=$(FM_CONFIG_OVERRIDE="$cfg" "$ROOT/bin/fm-harness.sh" "$verb" jdgx-ops)
+    [ "$got" = "$expected" ] || fail "$verb ignored jdgx-ops override: $got"
+  done
+  [ "$(FM_CONFIG_OVERRIDE="$cfg" "$ROOT/bin/fm-harness.sh" secondmate-model bare)" = '' ] \
+    || fail "a harness-only override inherited the global model"
+  [ "$(FM_CONFIG_OVERRIDE="$cfg" "$ROOT/bin/fm-harness.sh" secondmate-effort bare)" = '' ] \
+    || fail "a harness-only override inherited the global effort"
+  [ "$(FM_CONFIG_OVERRIDE="$cfg" "$ROOT/bin/fm-harness.sh" secondmate deferred)" = claude ] \
+    || fail "a default override did not defer to the global profile"
+  [ "$(FM_CONFIG_OVERRIDE="$cfg" "$ROOT/bin/fm-harness.sh" secondmate-model other)" = opus ] \
+    || fail "an unconfigured mate did not inherit the global model"
+  pass "per-mate profile replaces the global pin as a unit; absent and default overrides defer"
+}
+
 # ===========================================================================
 # A/C) pi-signed process identity and shared Pi marker behavior
 # ===========================================================================
@@ -630,6 +657,28 @@ test_spawn_unverified_secondmate_harness_refused() {
   pass "B6 spawn: an unverified resolved secondmate harness is refused (guard intact)"
 }
 
+test_spawn_unverified_per_mate_harness_refused() {
+  local w="$TMP_ROOT/spawn-unverified-override" sm="$TMP_ROOT/spawn-unverified-override/sm" fakebin err rc
+  mkdir -p "$w/home/config/secondmate-harness.d" "$w/home/state"
+  printf 'claude opus high\n' > "$w/home/config/secondmate-harness"
+  printf 'bogus\n' > "$w/home/config/secondmate-harness.d/sm"
+  make_seeded_home "$sm" sm
+  fakebin=$(make_noop_tmux "$w/tmux")
+  err="$w/spawn.err"
+  rc=0
+  PATH="$fakebin:$BASE_PATH" TMUX='' CLAUDECODE=1 \
+    FM_ROOT_OVERRIDE="$ROOT" FM_HOME="$w/home" HOME="$w/home/user-home" CLAUDE_CONFIG_DIR='' \
+    FM_STATE_OVERRIDE="$w/home/state" FM_DATA_OVERRIDE="$w/home/data" \
+    FM_PROJECTS_OVERRIDE="$w/home/projects" FM_CONFIG_OVERRIDE="$w/home/config" \
+    FM_SPAWN_NO_GUARD=1 \
+    "$ROOT/bin/fm-spawn.sh" sm "$sm" --secondmate >/dev/null 2>"$err" || rc=$?
+  [ "$rc" -ne 0 ] || fail "unverified override should have refused spawn"
+  assert_contains "$(cat "$err")" "no launch template for harness 'bogus'" \
+    "the override's unverified adapter was not named"
+  [ ! -e "$w/home/state/sm.meta" ] || fail "an unverified override published metadata"
+  pass "an unverified per-mate adapter is refused before spawn"
+}
+
 test_spawn_cursor_secondmate_launches_with_its_primary_contract() {
   local w sm fakebin launchlog launch meta rc
   w="$TMP_ROOT/spawn-cursor-secondmate"
@@ -861,6 +910,26 @@ test_spawn_secondmate_harness_model_and_effort_tokens() {
   assert_contains "$launch" "claude --dangerously-skip-permissions $(sm_claude_add_dir "$w" sm)--settings '{\"feedbackDrafts\":\"off\",\"attribution\":{\"commit\":\"\",\"pr\":\"\",\"sessionUrl\":false}}' --model 'opus' --effort 'high'" \
     "model-effort-tokens: launch did not carry both --model opus and --effort high"
   pass "C4 spawn: config/secondmate-harness's model+effort tokens thread into the launch and meta"
+}
+
+test_spawn_uses_per_mate_profile() {
+  local w="$TMP_ROOT/spawn-per-mate-profile" sm="$TMP_ROOT/spawn-per-mate-profile/sm" meta launchlog launch
+  launchlog="$w/launch.log"
+  mkdir -p "$w/home/config/secondmate-harness.d"
+  printf 'claude opus high\n' > "$w/home/config/secondmate-harness"
+  printf 'codex gpt-5.5 xhigh\n' > "$w/home/config/secondmate-harness.d/sm"
+  make_seeded_home "$sm" sm
+
+  spawn_secondmate_capture "$w" sm "$sm" "$launchlog" >/dev/null 2>&1
+
+  meta="$w/home/state/sm.meta"
+  [ "$(meta_field "$meta" harness)" = codex ] || fail "spawn ignored the per-mate harness"
+  [ "$(meta_field "$meta" model)" = gpt-5.5 ] || fail "spawn ignored the per-mate model"
+  [ "$(meta_field "$meta" effort)" = xhigh ] || fail "spawn ignored the per-mate effort"
+  launch=$(cat "$launchlog")
+  assert_contains "$launch" "--model 'gpt-5.5'" "spawn did not launch the per-mate model"
+  assert_not_contains "$launch" "--model 'opus'" "spawn leaked the global model"
+  pass "spawn resolves the selected mate's override profile"
 }
 
 # Precedence: an explicit per-spawn --model overrides the file's model token.
@@ -2723,6 +2792,7 @@ SH
 test_harness_resolution
 test_cursor_marker_detection
 test_secondmate_model_effort_tokens
+test_per_mate_profile_precedence
 test_pi_signed_detection_and_session_lock_identity
 test_dash_leading_process_names_are_basename_operands
 test_propagate_lib
@@ -2731,12 +2801,14 @@ test_spawn_backward_compat_crew_fallback
 test_spawn_bare_backward_compat
 test_spawn_explicit_harness_wins
 test_spawn_unverified_secondmate_harness_refused
+test_spawn_unverified_per_mate_harness_refused
 test_spawn_cursor_secondmate_launches_with_its_primary_contract
 test_spawn_backend_precedence_over_inherited_config
 test_spawn_explicit_backend_precedence_over_env_and_inherited_config
 test_spawn_bare_harness_no_model_effort_flag
 test_spawn_secondmate_harness_model_token
 test_spawn_secondmate_harness_model_and_effort_tokens
+test_spawn_uses_per_mate_profile
 test_spawn_explicit_model_overrides_secondmate_harness_token
 test_spawn_explicit_effort_overrides_secondmate_harness_token
 test_spawn_explicit_harness_does_not_inherit_secondmate_harness_tokens

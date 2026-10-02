@@ -617,6 +617,26 @@ skip-runner: pi-signed is not installed, so its pin check was not exercised
 
 The guard submits no prompt and spends no tokens, so it runs by default wherever a runner is installed; rerun it after every Claude or Pi upgrade.
 
+### Codex dock seat status
+
+On 2026-09-26 AEST, the installed `codex-cli 0.156.1` was checked with `bin/fm-test-run.sh tests/fm-dock-auth-live-e2e.test.sh` on macOS.
+The guard used a throwaway `CODEX_HOME`, wrote a synthetic API key with native `codex login --with-api-key`, and submitted no model prompt.
+Its output was:
+
+```text
+ok - codex-cli 0.156.1: native status distinguishes synthetic file stores from empty and keyring selections, and the helper rejects ambient credentials
+```
+
+At `2026-09-25T15:43:11Z`, the installed CLI's native status also returned `Logged in using ChatGPT` with exit 0 for the existing Luna home under a cleared environment:
+
+```sh
+env -i HOME=/Users/jarad PATH="$PATH" USER=jarad LOGNAME=jarad CODEX_HOME=/Users/jarad/.codex-luna codex login status -c 'cli_auth_credentials_store="file"' -c 'model_provider="openai"'
+```
+
+The same command saw `Not logged in` with exit 1 for an empty temporary home.
+That local status check did not send a model request or inspect credential contents.
+The operator contract and supported storage mode are in [`configuration.md`](../configuration.md#dock-local-seat-binding-configdockjson); rerun the guard after a Codex upgrade.
+
 ## Codex hook trust
 
 Verified 2026-09-16 on codex-cli 0.151.0, macOS arm64, in a fresh linked worktree of this repository.
@@ -1163,9 +1183,47 @@ Its `ProgramArguments` ran `/run/current-system/sw/bin/zsh -l -c "exec /etc/prof
 No other herdr process existed for that session, and after 15 seconds the job remained running with pid 4806.
 After a guarded `herdr session stop`, the job reported `state = not running` and `last exit code = 0`, and it stayed at rest through the throttle interval.
 A second `launchctl kickstart -k gui/501/dev.fm-rca.herdr-fg` started pid 45574, which was also the new socket owner.
-This proves that `herdr server` remains in the foreground as the launchd job, so the guard's final `exec` supplies the intended supervision and the earlier server that survived `launchctl bootout` was the unrelated SSH-bridge-born process.
+This proved that `herdr server` stays in the foreground and that the earlier server surviving `launchctl bootout` was the unrelated SSH-bridge-born process.
+The guard now execs `bin/fm-remote-herdr-supervisor.pl` in that foreground position, and [the session-leader record](#session-leader-fm-remote-server-under-launchd) holds the dated evidence for that shape.
+Herdr 0.9.1's `remote_server_restart_reason` requires `detached_server_daemon` for saved machines, and `current_process_is_detached_server_daemon` defines that capability as `getsid(0) == getpid()` on macOS and Linux.
+On 2026-09-28 with Herdr 0.9.1 on macOS, a named lab server started directly reported `"detached_server_daemon":false` alongside `"surface_interest":true` and `"health_check":true`; a lab server started through a POSIX `setsid` wrapper reported all three as true.
+That lab probe did not exercise an Aqua launch agent or login-keychain access; the existing Aqua birth and keychain observations above remain the evidence for that separate property.
+On Linux, where no launch agent runs the server, `fm-remote-doctor.sh --fix` starts it through that same `setsid` shape.
+The guard and doctor regressions exercise the new takeover and readiness decisions with controlled fixtures:
 
-`bin/fm-test-run.sh tests/fm-remote-herdr-guard.test.sh` pins the resulting decision table against real marker-carrying processes, and `tests/fm-remote-doctor.test.sh` pins the doctor's verdicts on the same markers.
+```sh
+bash tests/fm-remote-herdr-guard.test.sh
+bash tests/fm-remote-doctor.test.sh
+```
+
+`bin/fm-test-run.sh tests/fm-remote-herdr-guard.test.sh` pins the resulting decision table against real marker-carrying processes, and `tests/fm-remote-doctor.test.sh` pins the doctor's verdicts on the same markers, including the Linux session-leader start and its non-blocking notice for a server that does not lead its own session.
+
+### Session-leader fm-remote server under launchd
+
+Measured 2026-09-15 on macOS 15.7.3 (Darwin 24.6.0) aarch64 with Herdr 0.9.0 and `/usr/bin/perl` 5.34.1, the guarantee behind `bin/fm-remote-herdr-supervisor.pl`: a launchd-supervised server can lead its own POSIX session, which `herdr machine add` requires, without leaving the Aqua login session or launchd's supervision.
+
+Herdr advertises `detached_server_daemon` only for a server whose `getsid(0)` equals its own pid (`src/platform/mod.rs:157-159`, computed once at API start in `src/api/server.rs:70`), and `herdr machine add` refuses a saved SSH machine whose server lacks it.
+launchd starts every job as a process-group leader inside launchd's own session, where `setsid()` fails with `EPERM`, so a job can never take that shape in place.
+
+Each run used `bin/fm-herdr-lab.sh launchagent provision <session> <code root>`, which renders the fm-remote launch agent contract through `bin/fm-remote-herdr-owner-lib.sh`, the same render the doctor installs (login shell `-l -c 'exec <guard> <herdr> <session>'`, `LimitLoadToSessionType=Aqua`, `RunAtLoad`, `KeepAlive={SuccessfulExit=false}`, `ThrottleInterval=10`), under a lab-only label in `gui/501`, where `launchctl print` reported `exit timeout = 5`.
+
+| Launch shape | launchd job | herdr server | `detached_server_daemon` |
+| --- | --- | --- | --- |
+| guard exec'ing `herdr server` directly (the shape of a server started before the supervisor existed) | pid 19086, ppid 1, pgid 19086, STAT `S` | the job itself | not read in this run; the server does not lead its own session, which is the property the predicate tests |
+| guard through the supervisor | pid 42902 running `/usr/bin/perl .../fm-remote-herdr-supervisor.pl`, ppid 1, STAT `S` | pid 42980, ppid 42902, pgid 42980, STAT `Ss` | `true` |
+
+- A pane of the supervised server reported `launchctl managername` `Aqua`, audit session `asid 100016 flags 0x6030`, and exit 0 reading a temporary probe item from the login keychain, all identical to a terminal in the Aqua login session and to a pane of a server the guard exec'ed directly, so leading its own session costs the server nothing in the login session.
+- `bin/fm-remote-herdr-owner-lib.sh` classified the supervised server `launchd` because `launchctl print gui/501/<label>` named its parent, the job, as `pid`, and `fm_remote_herdr_process_leads_session` reported that the server leads its own session.
+- macOS sets `XPC_SERVICE_NAME=0` in every forked child, observed for `perl`, `bash`, and `zsh` forks alike, while `exec` without a fork keeps the value: a supervisor that did not restore it left its server classified `unknown`, and after the supervisor restores it the server's environment carried `XPC_SERVICE_NAME=<the agent's label>` on every generation.
+- A foreground client attached with `bin/fm-herdr-lab.sh viewer start` and detached again with no change to the server pid, the job pid, or the capability.
+- A guarded `herdr session stop` left `state = not running` with `last exit code = 0`, no respawn through 15 seconds, and no process of that session, its panes included.
+- `launchctl kickstart -k` on a running job delivered SIGTERM, which the supervisor forwarded, and the server exited 0 before the next generation started after launchd's 10-second throttle.
+- `launchctl kill SIGKILL` of the job left the supervisor's watcher to kill the server's process group at once; launchd recorded `last terminating signal = Killed: 9` and respawned a guard that found no server to take over.
+- SIGKILL of the server made the supervisor exit 137, recorded as `last exit code = 137`, so `KeepAlive={SuccessfulExit=false}` still tells a clean stop from a crash.
+- `launchctl bootout` delivered the same forwarded SIGTERM and clean exit, and every run ended with the label unloaded, no process of the lab session left, the lab session deleted, and the `default` session's server pid unchanged.
+
+`bin/fm-test-run.sh tests/fm-remote-herdr-guard.test.sh` pins the supervised start, its session leadership, the preserved launchd label, exit-status and signal propagation, process-group cleanup, and the refusal to start or take over without a usable perl; `tests/fm-remote-doctor.test.sh` pins the doctor's session-leader evidence and that the consent-required restart of an earlier-shape server is named, never applied; `tests/fm-herdr-lab.test.sh` pins the launch agent lab's confinement to its own label and that its plist matches the fm-remote contract in every key but label, command, and log.
+Refresh this record by rerunning `bin/fm-herdr-lab.sh launchagent provision` on a Mac with a GUI login whenever the launch agent contract or the supervisor changes.
 
 ### Client selection
 
@@ -1388,6 +1446,22 @@ The projected spawn in that run used the historical empty opt-in file, so a home
 One concurrent cross-home recovery case refused under contention on a loaded machine and passed on an immediate rerun; recovery-path presentation lock contention is a deliberate hard refusal rather than a flat fallback, which default-on now makes reachable from any Herdr home.
 That run measured the default-on projection on Herdr 0.8.0 only, while the focus-flash regression below was last run on 0.7.5 before the flip, so neither run covered a defective release under default-on projection; the version floor and the focus-flash suite's Part C close that gap.
 
+The per-project task space suite ran on 2026-09-26 against Herdr 0.9.1, with `config/herdr-presentation-spaces` set to `project`:
+
+```sh
+HERDR_LAB_HELPER=bin/fm-herdr-lab.sh \
+  tests/fm-backend-herdr-project-spaces-e2e.test.sh
+```
+
+Observed guarantees:
+
+```text
+ok - real Herdr lab: tasks of one project share one labelled workspace, another project gets its own, and a same-labelled captain workspace keeps its focus and contents
+ok - real Herdr lab: a project space outlives every task but its last, and its removal keeps the captain's focus
+ok - real Herdr lab: after its last task a project reopens a fresh space and every space is removed with its last task
+ok - real Herdr lab validation completed on Herdr 0.9.1 with the default-session tripwire intact
+```
+
 The restored-shell session-start cleanup ran on 2026-07-24 against Herdr 0.7.5 protocol 17:
 
 ```sh
@@ -1571,6 +1645,27 @@ The U+2063 operational and routed-request separators were exercised through a re
 FM_SEND_MARKER_HERDR_E2E=1 \
   tests/fm-send-secondmate-marker-herdr-e2e.test.sh
 ```
+
+### Pi composer exit boundary
+
+Measured on 2026-09-25 with pi 0.87.1 and herdr 0.9.1 on macOS arm64, in an isolated `fm-lab-` session made and removed by `bin/fm-herdr-lab.sh`, on a 120 by 40 pane.
+Pi ran `openai-codex/gpt-5.6-terra` so its footer rendered cost-first, and no prompt was submitted.
+`bin/fm-control.sh <task> exit` ran against a disposable task record whose endpoint was the lab pane, and each verdict came from the adapter itself:
+
+```sh
+bin/fm-herdr-lab.sh run "$LAB" pane run w1:p1 'pi --model openai-codex/gpt-5.6-terra'
+( . bin/backends/herdr.sh; fm_backend_herdr_composer_state "$LAB:w1:p1" )
+FM_HOME="$DISPOSABLE_HOME" bin/fm-control.sh t1 exit
+```
+
+| Pane state | Composer verdict | `exit` result |
+| --- | --- | --- |
+| Idle: rule, reverse-video cursor cell, rule, pwd row, then `$0.000 (sub) 0.0%/272k (auto)` | `empty` | typed `/quit` once and Pi stopped to its shell |
+| `lab draft keep me` typed without Enter | `pending`, extracted as `lab draft keep me` | refused with no lifecycle text; the draft, identity, and scroll offset were unchanged |
+| The draft cleared with `ctrl+u` | `empty` | not run in that state |
+
+The same idle capture read `unknown` on the classifier before the cost-first footer rule, which is the refusal this boundary fixes.
+Stock pi 0.87.1 drew neither a first-row `>` prompt nor the compact rounded-header layout in this run, so those two shapes rest on the portable fixtures in `tests/fm-composer-lib.test.sh` and `tests/fm-backend-herdr.test.sh`, and both stay opt-in: the first-row `>` behind `FM_BACKEND_HERDR_PI_PROMPT=1` and the compact layout behind `FM_BACKEND_HERDR_PI_COMPACT=1`.
 
 ### Native blocked event
 
@@ -2146,6 +2241,31 @@ Evidence produced 2026-08-25 on macOS 26.5.2 arm64, Node v24.13.1:
 - Historical custom-message provider conversion: on 2026-08-26, `FM_PI_BRANCH_LIVE_E2E=1 bin/fm-test-run.sh tests/fm-pi-branch-live-e2e.test.sh` against installed `@earendil-works/pi-coding-agent` 0.84.1 printed `ok - real Pi SDK 0.84.1 delivers a custom message to the provider as user text carrying only content, so the captain outcome's typed envelope is what reaches the model`.
   The guard passes a typed captain outcome and a plain rendered routine note through Pi's exported `convertToLlm`, proves that `customType` and `display` are not model-visible identity, and classifies the resulting provider text with `bin/fm-operational-input.sh`.
   This evidence explains the superseded model-relay path but is no longer the captain-delivery contract.
+
+### 2026-09-05 quiet routine outcomes on Pi 0.85.0
+
+Verified on Linux x86_64 with Node v22.23.2 and TypeScript 5.9.3.
+The global Pi 0.85.0 SDK import failed with `ERR_MODULE_NOT_FOUND: Cannot find package '@earendil-works/pi-server'`, so the runtime checks used an isolated npm installation of `@earendil-works/pi-coding-agent@0.85.0` plus `@earendil-works/pi-server@0.85.0`, with its real pi-ai, pi-tui, and typebox dependencies linked into the package-local layout the test helpers expect.
+The global installation and active session were not modified, no credentials were read or copied, and no provider request left the machine.
+With that isolated package selected through `FM_PI_PACKAGE_DIR`, both runtime suites completed without skips:
+
+```sh
+FM_PI_BRANCH_LIVE_E2E=1 bin/fm-test-run.sh tests/fm-pi-branch-extension.test.sh tests/fm-pi-branch-live-e2e.test.sh
+bin/fm-test-run.sh tests/fm-branch-supervision.test.sh tests/fm-pi-watch-extension.test.sh
+bin/fm-test-run.sh tests/fm-pi-primary-types.test.sh
+```
+
+```text
+ok - real Pi SDK 0.85.0 renders captain entries, hides routine delivery and history without turns, preserves ordinary messages and saved evidence, and excludes captain entries from model context
+ok - real Pi SDK 0.85.0 rejects a post-construction 429 to watcher-owned main delivery without losing its durable row
+ok - real Pi SDK 0.85.0 queues a streaming-time watcher wake without before_agent_start, keeps the successor chain, and surfaces consumption of both follow-ups
+ok - tracked Pi extensions pass strict no-emit typecheck against Pi 0.85.0
+```
+
+The strict typecheck used the global package's declarations with the locally installed TypeScript binary on `PATH`.
+The delivered-report regression covers repeated turn completion, preserved stopped previews, unchanged blockers, fleet no-change and routine-action outcomes, on-demand retrieval, and the counterfactual that the same summary with a captain verdict remains visible.
+The live renderer check reconstructs historical `display: true` routine messages through stock InteractiveMode and reopens the saved session to prove their data survived; only content is hidden, not Pi's historical outer spacer or previously printed terminal scrollback.
+The existing sequence processing, replay, fallback, lease, and watcher tests remain passing; the CLI's live primary session was not restarted for this verification.
 
 ### 2026-08-28 Pi 0.84.4 SDK compatibility refresh
 

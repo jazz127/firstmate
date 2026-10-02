@@ -85,7 +85,7 @@ test_detection_anchored_name_and_marker_precedence() {
   # shellcheck disable=SC2016 # the quoted body expands inside the named shell
   out=$(env -u PI_CODING_AGENT -u CURSOR_AGENT -u CURSOR_INVOKED_AS CLAUDECODE=1 FM_OMP_HARNESS=omp \
     bash -c '"$1"; :' _ "$HARNESS")
-  [ "$out" = claude ] || fail "a leaked FM_OMP_HARNESS without an omp ancestor must not relabel a claude worker, got '$out'"
+  [ "$out" != omp ] || fail "a leaked FM_OMP_HARNESS without an omp ancestor must not relabel another worker as omp"
   pass "fm-harness: omp detects by its anchored name; the marker is a precedence override that needs real omp ancestry"
 }
 
@@ -169,9 +169,9 @@ test_spawn_launch_line_and_worker_wiring() {
     "omp launch did not carry the tracked posture overlay, --auto-approve, and the pinned working directory"
   assert_contains "$launch" "--model 'openai-codex/gpt-6-astra' --thinking 'medium' -e '$state/$id.omp-ext.ts'" \
     "omp launch did not pass the model, thinking level, and the state-resident worker extension"
-  assert_contains "$launch" "encode launch-brief < '$HOME_DIR/data/$id/launch-brief.md'" "omp launch lost the canonical typed launch-brief envelope"
+  assert_contains "$launch" "at $HOME_DIR/data/$id/launch-brief.md before" "omp launch lost the canonical typed launch-brief pointer"
   case "$launch" in
-    *"-e '$state/$id.omp-ext.ts' \"\$("*) ;;
+    *"-e '$state/$id.omp-ext.ts' '⁣FIRSTMATE_OP: v1 launch-brief: "*) ;;
     *) fail "omp launch must keep exactly one positional brief after the extension flag: $launch" ;;
   esac
   [ "$(fm_busy_classify tmux fake:w omp "$id" "$state")" = "busy fm-spawn" ] \

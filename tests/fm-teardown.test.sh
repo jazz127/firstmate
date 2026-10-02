@@ -108,6 +108,9 @@ exit 0
 SH
   cat > "$fakebin/gh" <<'SH'
 #!/usr/bin/env bash
+case "$*" in
+  'pr view '*"--json body --jq .body"*) printf 'Fixture body\n'; exit 0 ;;
+esac
 case "${1:-} ${2:-}" in
   "pr view") echo "error: pull request not found" >&2 ; exit 1 ;;
 esac
@@ -261,9 +264,13 @@ exit 0
 SH
   cat > "$case_dir/fakebin/gh" <<SH
 #!/usr/bin/env bash
+case "\$*" in
+  'api repos/'*'/pulls/'*'/files?per_page=100 --paginate --jq '*) printf 'README.md\n'; exit 0 ;;
+esac
 case "\${1:-} \${2:-}" in
   "pr view")
     case " \$* " in
+      *"--json body --jq .body"*) printf 'Fixture body\n' ; exit 0 ;;
       *"state,headRefOid,url"*) printf '%s\t%s\t%s\n' 'MERGED' '$head' 'https://github.com/example/repo/pull/7' ; exit 0 ;;
       *"headRefOid"*) printf '%s\n' '$head' ; exit 0 ;;
     esac
@@ -1337,6 +1344,26 @@ test_windowless_legacy_record_tears_down_with_the_legacy_flag() {
   [ "$(backlog_row_state "$case_dir")" = "done" ] \
     || fail "windowless-flag: teardown returned success with its backlog item still open"
   pass "a windowless leftover with no spawn_gen also tears down when --legacy-record is passed"
+}
+
+test_windowless_non_tmux_legacy_record_without_endpoint_tears_down() {
+  local case_dir out
+  case_dir=$(make_case windowless-herdr-no-endpoint)
+  write_windowless_legacy_meta "$case_dir" no-mistakes ship
+  printf '%s\n' 'backend=herdr' >> "$case_dir/state/task-x1.meta"
+  seed_backlog_in_flight "$case_dir"
+  wt_commit "$case_dir" "landed windowless Herdr leftover"
+  add_fork_with_pushed_branch "$case_dir"
+
+  out=$(run_teardown "$case_dir") \
+    || fail "windowless-herdr-no-endpoint: teardown refused a landed endpoint-free Herdr leftover"
+  printf '%s\n' "$out" | grep -Fq 'legacy record accepted without spawn_gen: endpoint missing' \
+    || fail "windowless-herdr-no-endpoint: teardown did not log the accepted missing endpoint: $out"
+  [ "$(backlog_row_state "$case_dir")" = "done" ] \
+    || fail "windowless-herdr-no-endpoint: teardown returned success with its backlog item still open"
+  assert_absent "$case_dir/state/task-x1.meta" \
+    "windowless-herdr-no-endpoint: teardown left the task record"
+  pass "a landed windowless Herdr legacy record with no endpoint identity tears down"
 }
 
 test_windowless_legacy_record_still_refuses_unlanded_work() {
@@ -4341,6 +4368,7 @@ test_gh_error_and_content_absent_refuses
 test_legacy_record_without_the_flag_refuses
 test_windowless_legacy_record_with_gone_worktree_tears_down
 test_windowless_legacy_record_tears_down_with_the_legacy_flag
+test_windowless_non_tmux_legacy_record_without_endpoint_tears_down
 test_windowless_legacy_record_still_refuses_unlanded_work
 test_windowless_record_outside_the_leftover_class_still_refuses
 test_windowless_leftover_retries_its_retained_legacy_stamp_without_the_flag

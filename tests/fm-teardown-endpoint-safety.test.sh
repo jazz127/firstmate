@@ -60,6 +60,13 @@ run_case() {  # <case> <id>
     "$TEARDOWN" "$id" --force
 }
 
+run_case_without_force() {  # <case> <id>
+  local dir=$1 id=$2
+  FM_HOME="$dir/home" FM_ROOT_OVERRIDE="$ROOT" \
+  FM_RUNTIME_LOG="$dir/runtime.log" PATH="$dir/fakebin:$PATH" \
+    "$TEARDOWN" "$id"
+}
+
 assert_refused_without_mutation() {  # <case> <id> <description>
   local dir=$1 id=$2 description=$3 rc
   set +e
@@ -550,6 +557,68 @@ test_reused_pool_slot_refuses_before_touching_the_other_task() {
   pass "fm-teardown: a pool slot named by a second task record is never returned, killed, or reset"
 }
 
+test_reassigned_record_collision_retires_stale_then_preserves_current_work() {
+  local dir stale=stale-task current=current-task worker rc
+  dir=$(make_case reassigned-record-collision)
+  mark_case_as_treehouse_pool "$dir"
+  fm_write_meta "$dir/home/state/$stale.meta" \
+    "window=firstmate:fm-$stale" "endpoint_task_id=$stale" \
+    "worktree=$dir/worktree" "project=$dir/project" "kind=ship"
+  fm_write_meta "$dir/home/state/$current.meta" \
+    "window=firstmate:fm-$current" "endpoint_task_id=$current" \
+    "worktree=$dir/worktree" "project=$dir/project" "kind=ship"
+  claim_pool_slot "$dir" "$current"
+  ( cd "$dir/worktree" && exec sleep 30 ) &
+  worker=$!
+
+  set +e
+  run_case "$dir" "$current" > "$dir/stdout" 2> "$dir/stderr"
+  rc=$?
+  set -e
+  [ "$rc" -ne 0 ] || fail "current owner returned a slot still named by a second record, even with --force"
+  assert_present "$dir/home/state/$stale.meta" "current owner's refusal removed the stale record"
+  assert_present "$dir/home/state/$current.meta" "current owner's refusal removed its own record"
+  assert_present "$dir/worktree/sentinel" "current owner's refusal removed uncommitted work"
+  [ ! -s "$dir/runtime.log" ] || fail "current owner's refusal reached the runtime"
+
+  set +e
+  run_case_without_force "$dir" "$stale" > "$dir/stdout" 2> "$dir/stderr"
+  rc=$?
+  set -e
+  [ "$rc" -eq 0 ] || fail "stale record could not retire after its slot was claimed by another recorded task: $(cat "$dir/stderr")"
+  assert_absent "$dir/home/state/$stale.meta" "stale record was not retired"
+  assert_present "$dir/home/state/$current.meta" "current owner's record was removed"
+  assert_present "$dir/worktree/sentinel" "current owner's uncommitted work was removed"
+  assert_present "$dir/pool/1/.fm-slot-owner" "current owner's claim was removed"
+  kill -0 "$worker" 2>/dev/null || fail "stale teardown killed the current owner's worker"
+  if grep -q '^treehouse ' "$dir/runtime.log"; then
+    fail "stale teardown returned the current owner's pool slot"
+  fi
+
+  : > "$dir/runtime.log"
+  set +e
+  run_case_without_force "$dir" "$current" > "$dir/stdout" 2> "$dir/stderr"
+  rc=$?
+  set -e
+  [ "$rc" -ne 0 ] || fail "current owner discarded uncommitted work without --force"
+  assert_contains "$(cat "$dir/stderr")" "uncommitted changes" \
+    "current owner should retain the ordinary unlanded-work guard"
+  assert_present "$dir/home/state/$current.meta" "dirty current owner's record was removed"
+  assert_present "$dir/worktree/sentinel" "dirty current owner's work was removed"
+  [ ! -s "$dir/runtime.log" ] || fail "dirty current owner's teardown reached the runtime"
+
+  kill "$worker" 2>/dev/null || true
+  wait "$worker" 2>/dev/null || true
+  rm "$dir/worktree/sentinel"
+  git -C "$dir/project" update-ref refs/remotes/origin/main HEAD
+  run_case_without_force "$dir" "$current" > "$dir/stdout" 2> "$dir/stderr" \
+    || fail "current owner could not release a clean landed slot: $(cat "$dir/stderr")"
+  assert_absent "$dir/home/state/$current.meta" "current owner's record was not retired"
+  assert_absent "$dir/pool/1/.fm-slot-owner" "current owner's released claim remained"
+  grep -q '^treehouse ' "$dir/runtime.log" || fail "current owner did not return its pool slot"
+  pass "fm-teardown: a claimed slot retires its stale record, then its current record keeps unlanded work and releases the clean slot"
+}
+
 test_cross_home_pool_slot_collision_refuses() {
   local dir id=stale-task other=secondmate-task second_home second_project rc
   dir=$(make_case slot-reuse-cross-home)
@@ -821,7 +890,21 @@ test_remote_seeded_home_still_refuses_a_slot_its_child_holds() {
       "$([ -e "$dir/worktree/sentinel" ] && printf preserved || printf removed)"
   fi
 
-  pass "fm-teardown: slot ownership across a remote-seeded home and its local child still refuses"
+  claim_pool_slot "$dir" "$other" "$child_home"
+  run_case "$dir" "$id" > "$dir/stdout" 2> "$dir/stderr" \
+    || fail "a remote-seeded home could not retire its stale record after its child claimed the slot: $(cat "$dir/stderr")"
+  assert_absent "$dir/home/state/$id.meta" "remote-seeded stale record was not retired"
+  assert_present "$child_home/state/$other.meta" "remote-seeded teardown removed the child owner's record"
+  assert_present "$dir/worktree/sentinel" "remote-seeded teardown reset the child's slot"
+  assert_present "$dir/pool/1/.fm-slot-owner" "remote-seeded teardown removed the child's claim"
+  if grep -q '^treehouse ' "$dir/runtime.log"; then
+    fail "remote-seeded stale teardown returned the child's slot"
+  fi
+  if grep -Fq "<firstmate:fm-$other>" "$dir/runtime.log"; then
+    fail "remote-seeded stale teardown closed the child's endpoint"
+  fi
+
+  pass "fm-teardown: a remote-seeded home refuses an unclaimed collision and retires its stale record after the child claims the slot"
 }
 
 test_remote_layout_homes_serialize_on_one_project_lock() {
@@ -1437,6 +1520,7 @@ test_orca_close_failure_refuses_even_under_force
 test_already_gone_endpoint_still_completes_without_a_refusal
 test_bare_relative_origin_shares_project_lock_with_clone
 test_reused_pool_slot_refuses_before_touching_the_other_task
+test_reassigned_record_collision_retires_stale_then_preserves_current_work
 test_cross_home_pool_slot_collision_refuses
 test_sole_slot_record_still_tears_down
 test_reassigned_pool_slot_finishes_own_cleanup_without_touching_the_slot

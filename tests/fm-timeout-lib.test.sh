@@ -106,13 +106,13 @@ test_the_bound_replaces_the_calling_shell() {
   dir="$TMP_ROOT/replace"
   mkdir -p "$dir"
   for path in "$PATH" "$PERL_ONLY"; do
-    rm -f "$dir/caller" "$dir/parent"
+    rm -f "$dir/parent"
     (
       . "$ROOT/bin/fm-timeout-lib.sh"
-      printf '%s\n' "$BASHPID" > "$dir/caller"
       PATH=$path fm_exec_timed 5 1 bash -c 'echo "$PPID" > "$1"' _ "$dir/parent"
-    ) || fail "the bounded probe failed under PATH=$path"
-    caller=$(cat "$dir/caller")
+    ) &
+    caller=$!
+    wait "$caller" || fail "the bounded probe failed under PATH=$path"
     parent=$(cat "$dir/parent")
     [ "$caller" = "$parent" ] \
       || fail "the command's parent $parent is not the replaced caller $caller under PATH=$path"
@@ -211,10 +211,10 @@ test_an_owner_that_dies_during_startup_ends_the_command() {
   PATH=$PERL_ONLY bash -c '
     . "$1/bin/fm-timeout-lib.sh"
     (
-      echo "$BASHPID" > "$2/watchdog"
       while kill -0 "$$" 2>/dev/null; do sleep 0.05; done
       fm_exec_timed 60 1 bash -c "exec sleep 300"
     ) >/dev/null 2>&1 &
+    echo "$!" > "$2/watchdog"
     exit 0
   ' _ "$ROOT" "$dir"
   wait_for_file "$dir/watchdog"
@@ -312,6 +312,27 @@ test_timed_out_names_exactly_the_bound_statuses() {
   pass "fm_timed_out accepts 124 and 137 and nothing else"
 }
 
+# Stock macOS /bin/bash is 3.2 and has no BASHPID. Exercise the owner check
+# under set -u in a subshell and in the shell that calls exec directly.
+test_bash32_owner_check() {
+  local out rc=0
+  if [ ! -x /bin/bash ] || ! /bin/bash -c '[ "${BASH_VERSINFO[0]}" -eq 3 ] && [ "${BASH_VERSINFO[1]}" -eq 2 ]'; then
+    pass "fm_exec_timed works under Bash 3.2 (skipped: /bin/bash is not Bash 3.2)"
+    return 0
+  fi
+  out=$(PATH=$PERL_ONLY /bin/bash -c '
+    set -u
+    . "$1/bin/fm-timeout-lib.sh"
+    (fm_exec_timed 5 1 bash -c "echo subshell; exit 3")
+    [ "$?" -eq 3 ] || exit 41
+    fm_exec_timed 5 1 bash -c "echo direct; exit 4"
+  ' _ "$ROOT" 2>&1) || rc=$?
+  [ "$rc" -eq 4 ] || fail "Bash 3.2 owner check failed (rc=$rc): $out"
+  assert_contains "$out" "subshell" "Bash 3.2 subshell did not run the bounded command"
+  assert_contains "$out" "direct" "Bash 3.2 direct call did not run the bounded command"
+  pass "fm_exec_timed works in direct and subshell calls under Bash 3.2"
+}
+
 test_run_timed_reports_the_bound_when_the_wrapper_records_a_signal_death() {
   local rc=0
   run_timed 5 bash -c 'kill -TERM $$' || rc=$?
@@ -328,6 +349,7 @@ test_run_timed_passes_a_natural_exit_through_a_fired_bound() {
 }
 
 test_passes_the_command_status_and_output_through
+test_bash32_owner_check
 test_run_timed_reports_the_bound_when_the_wrapper_records_a_signal_death
 test_run_timed_passes_a_natural_exit_through_a_fired_bound
 test_term_ends_a_cooperative_command_at_the_bound

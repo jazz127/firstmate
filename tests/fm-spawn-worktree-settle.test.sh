@@ -163,7 +163,7 @@ test_already_settled_pane_costs_one_confirm_read() {
   assert_grep "worktree=$WT_DIR" "$HOME_DIR/state/$id.meta" \
     "meta did not record the already-settled worktree"
   reads=$(cat "$COUNTFILE")
-  [ "$reads" -eq 3 ] || fail "already-settled pane took $reads reads to confirm - expected the first read, one confirmation, and the launch-boundary cwd check"
+  [ "$reads" -eq 4 ] || fail "already-settled pane took $reads reads to confirm - expected the first read, one confirmation, the post-relock slot check, and the launch-boundary cwd check"
   pass "an already-settled pane confirms on the next read, not a whole extra cycle"
 }
 
@@ -327,10 +327,120 @@ test_concurrent_spawns_reach_treehouse_get_without_project_lock() {
   pass "concurrent spawns reach treehouse get without holding the project lock"
 }
 
+# Releasing the project lock for treehouse get lets an exited task's teardown
+# run in that window. Task A's worker has exited, so Treehouse hands A's slot to
+# spawn B; while B waits on get, the real fm-teardown.sh for A still reads the
+# slot claim as A's and returns the slot, which ends B's pane lease there. After
+# retaking the lock, B must abandon that slot untouched and fail, never claim it.
+make_returned_slot_fakebin() {
+  local dir=$1 fakebin
+  fakebin=$(fm_fakebin "$dir")
+  cat > "$fakebin/tmux" <<'SH'
+#!/usr/bin/env bash
+set -u
+case "$*" in
+  *"#{pane_tty}"*) printf '%s\n' '/dev/pts/91'; exit 0 ;;
+  *"#{window_id}"*) printf '%s\n' '@returned'; exit 0 ;;
+esac
+case "${1:-}" in
+  display-message) printf 'firstmate\n'; exit 0 ;;
+  send-keys)
+    for arg in "$@"; do
+      [ "$arg" = 'treehouse get' ] && printf '%s\n' "${FM_FAKE_SLOT:?}" > "${FM_FAKE_PANE_FILE:?}"
+    done
+    exit 0
+    ;;
+esac
+exit 0
+SH
+  cat > "$fakebin/ps" <<'SH'
+#!/usr/bin/env bash
+case "$*" in
+  *"-t pts/91"*) printf '%s\n' '987654321 987654321 987654321'; exit 0 ;;
+esac
+PATH=${PATH#"$(dirname "$0")":} exec ps "$@"
+SH
+  cat > "$fakebin/lsof" <<'SH'
+#!/usr/bin/env bash
+case "$*" in
+  *"-p 987654321"*) ;;
+  *) PATH=${PATH#"$(dirname "$0")":} exec lsof "$@" ;;
+esac
+countfile="${FM_FAKE_PANE_COUNTFILE:?}"
+n=0
+[ -f "$countfile" ] && n=$(cat "$countfile")
+n=$((n + 1))
+printf '%s\n' "$n" > "$countfile"
+path=$(cat "${FM_FAKE_PANE_FILE:?}" 2>/dev/null)
+[ "$n" -ne "${FM_FAKE_TEARDOWN_AT:?}" ] || "${FM_FAKE_TEARDOWN:?}" >> "${FM_FAKE_TEARDOWN_LOG:?}" 2>&1
+[ -n "$path" ] || exit 1
+printf 'p987654321\nfcwd\nn%s\n' "$path"
+SH
+  cat > "$fakebin/treehouse" <<'SH'
+#!/usr/bin/env bash
+printf 'treehouse %s\n' "$*" >> "${FM_FAKE_TREEHOUSE_LOG:?}"
+if [ "${1:-}" = return ]; then
+  printf '%s\n' "${FM_FAKE_PROJECT:?}" > "${FM_FAKE_PANE_FILE:?}"
+fi
+exit 0
+SH
+  chmod +x "$fakebin/tmux" "$fakebin/ps" "$fakebin/lsof" "$fakebin/treehouse"
+  fm_fake_exit0 "$fakebin" claude
+  printf '%s\n' "$fakebin"
+}
+
+test_slot_returned_by_exited_task_teardown_during_get_is_abandoned() {
+  local dir="$TMP_ROOT/returned-slot" home_b home_a project slot fakebin teardown out rc
+  local id_a=settle-exited-a-z7 id_b=settle-returned-b-z8
+  home_b="$dir/home-root"
+  home_a="$dir/home-child"
+  project="$dir/project"
+  slot="$dir/pool/1/project"
+  mkdir -p "$dir/pool/1"
+  fm_test_spawn_home "$home_b" claude
+  fm_test_spawn_home "$home_a" claude
+  printf 'schema=fm-secondmate-parent.v1\nroute=local\nparent_home=%s\n' "$home_b" \
+    > "$home_a/.fm-secondmate-parent"
+  fm_test_spawn_brief "$home_b" "$id_b" "Exercise a slot returned during get for $id_b."
+  fm_git_worktree "$project" "$slot" returned-slot
+  printf '{"worktrees":[{"name":"1","path":"%s"}]}\n' "$slot" > "$dir/pool/treehouse-state.json"
+  printf 'task=%s\nhome=%s\n' "$id_a" "$home_a" > "$dir/pool/1/.fm-slot-owner"
+  fm_write_meta "$home_a/state/$id_a.meta" \
+    "window=firstmate:fm-$id_a" "endpoint_task_id=$id_a" \
+    "worktree=$slot" "project=$project" "kind=scout"
+  fakebin=$(make_returned_slot_fakebin "$dir/fake")
+  teardown="$dir/teardown-a"
+  cat > "$teardown" <<SH
+#!/usr/bin/env bash
+FM_HOME='$home_a' FM_STATE_OVERRIDE='$home_a/state' FM_DATA_OVERRIDE='$home_a/data' \\
+  FM_PROJECTS_OVERRIDE='$home_a/projects' FM_CONFIG_OVERRIDE='$home_a/config' \\
+  '$ROOT/bin/fm-teardown.sh' '$id_a' --force
+SH
+  chmod +x "$teardown"
+  out="$dir/spawn-b.out"
+
+  FM_FAKE_SLOT="$slot" FM_FAKE_PROJECT="$project" FM_FAKE_PANE_FILE="$dir/pane" \
+    FM_FAKE_PANE_COUNTFILE="$dir/reads" FM_FAKE_TEARDOWN_AT=2 FM_FAKE_TEARDOWN="$teardown" \
+    FM_FAKE_TEARDOWN_LOG="$dir/teardown-a.out" FM_FAKE_TREEHOUSE_LOG="$dir/treehouse.log" \
+    fm_test_run_spawn "$home_b" "$project" "$fakebin" "$id_b" "$project" --mode no-mistakes --yolo off > "$out" 2>&1
+  rc=$?
+
+  assert_grep "treehouse return --force" "$dir/treehouse.log" \
+    "teardown of the exited task did not return its slot during get"$'\n'"$(cat "$dir/teardown-a.out" 2>/dev/null)"
+  [ "$rc" -ne 0 ] || fail "spawn claimed a slot that was returned while it waited on treehouse get"$'\n'"$(cat "$out")"
+  assert_grep "no longer held by this spawn's pane" "$out" "spawn did not explain the abandoned slot"
+  assert_absent "$home_b/state/$id_b.meta" "spawn published a record for a returned slot"
+  assert_absent "$dir/pool/1/.fm-slot-owner" "spawn claimed a returned slot"
+  [ "$(grep -c '^treehouse return' "$dir/treehouse.log")" -eq 1 ] \
+    || fail "spawn returned or forced the abandoned slot itself: $(cat "$dir/treehouse.log")"
+  pass "a slot an exited task's teardown returns during get is abandoned, not claimed"
+}
+
 test_single_stale_first_read_is_not_accepted
 test_already_settled_pane_costs_one_confirm_read
 test_transient_primary_checkout_is_not_accepted
 test_primary_checkout_that_never_settles_fails_at_the_deadline
 test_concurrent_spawns_reach_treehouse_get_without_project_lock
+test_slot_returned_by_exited_task_teardown_during_get_is_abandoned
 
 echo "# all fm-spawn-worktree-settle tests passed"

@@ -1205,6 +1205,34 @@ fm_spawn_treehouse_project_lock_acquire() {
   SPAWN_TREEHOUSE_PROJECT_LOCK_HELD=1
 }
 
+# The project lock is released while `treehouse get` runs, so once it is retaken
+# the slot the pane reported must be proved to still be this spawn's before it
+# is claimed: the pane must still be in it (Treehouse's process lease for an
+# interactive get is the processes running under the slot, and a concurrent
+# teardown's `treehouse return --force` kills them), and no other task whose
+# endpoint is alive may claim it. A claim left by a task whose worker has
+# exited is the ordinary handoff the claim exists to replace.
+spawn_treehouse_slot_still_ours() {  # <worktree> <pane-target> <inspect-target>
+  local wt=$1 pane=$2 target=$3 path owner_meta owner_backend owner_target
+  path=$(spawn_current_path "$pane" || true)
+  if [ -z "$path" ] || [ "$(real_path_or_raw "$path")" != "$(real_path_or_raw "$wt")" ]; then
+    echo "error: Treehouse pool slot $wt is no longer held by this spawn's pane (now '${path:-unreadable}'); it was returned or reassigned while the Treehouse project lock was released for treehouse get, so it is abandoned untouched; inspect window $target" >&2
+    return 1
+  fi
+  fm_treehouse_pool_slot "$PROJ_ABS" "$wt" || return 0
+  fm_treehouse_slot_owner_state "$wt" "$ID"
+  [ "$FM_TREEHOUSE_SLOT_OWNER" = other ] || return 0
+  [ -n "$FM_TREEHOUSE_SLOT_OWNER_HOME" ] || return 0
+  owner_meta="$FM_TREEHOUSE_SLOT_OWNER_HOME/state/$FM_TREEHOUSE_SLOT_OWNER_ID.meta"
+  [ -f "$owner_meta" ] || return 0
+  owner_backend=$(fm_backend_of_meta "$owner_meta")
+  owner_target=$(fm_backend_target_of_meta "$owner_meta")
+  [ -n "$owner_target" ] || return 0
+  [ "$(fm_backend_agent_alive "$owner_backend" "$owner_target")" = alive ] || return 0
+  echo "error: Treehouse pool slot $wt is claimed by live task $FM_TREEHOUSE_SLOT_OWNER_ID (home $FM_TREEHOUSE_SLOT_OWNER_HOME); it is abandoned untouched rather than shared; inspect window $target" >&2
+  return 1
+}
+
 RELAUNCH_REPLACEMENT_PENDING=0
 RELAUNCH_REPLACEMENT_BUSY_GEN=
 RELAUNCH_REPLACEMENT_HARNESS=
@@ -1342,11 +1370,11 @@ spawn_abort_cleanup() {
   fi
   # A spawn that aborts after claiming its slot but before its record survives
   # must not leave a claim naming a task no record describes. The release is a
-  # read-then-remove, so it runs only while the project lock that wrote the
-  # claim is still held (aborts before metadata publication); a later abort has
-  # already released that lock and leaves the claim for the next spawn's
-  # atomic replacement rather than racing it. The release itself never removes
-  # another task's claim.
+  # read-then-remove, so it runs only while the project lock retaken after get
+  # to write the claim is still held (aborts before metadata publication); a
+  # later abort has already released that lock and leaves the claim for the
+  # next spawn's atomic replacement rather than racing it. The release itself
+  # never removes another task's claim.
   if [ "$SPAWN_SLOT_CLAIMED" = 1 ] && [ -n "${WT:-}" ] &&
     [ ! -e "$STATE/$ID.meta" ] && [ ! -L "$STATE/$ID.meta" ] &&
     fm_treehouse_pool_slot "$PROJ_ABS" "$WT"; then
@@ -4227,12 +4255,13 @@ elif [ "$RELAUNCH" -eq 1 ]; then
   fi
   [ "$KIND" = secondmate ] || validate_spawn_worktree "relaunch" "$T"
 elif [ "$KIND" != secondmate ] && [ "$BACKEND" != orca ]; then
-  # Treehouse must be able to acquire its own worktree-pool lock while get is
-  # running. Release Firstmate's project lock for that external operation, then
-  # reacquire it before validating and claiming the returned slot.
+  # Firstmate's own project lock would otherwise be held across the whole
+  # interactive get wait, refusing every other spawn and teardown for this
+  # project from any home. Release it while get runs, then reacquire it and
+  # prove the slot is still this pane's before validating and claiming it.
   if [ "$SPAWN_TREEHOUSE_PROJECT_LOCK_HELD" = 1 ]; then
     if ! fm_lock_release "$SPAWN_TREEHOUSE_PROJECT_LOCK"; then
-      echo "error: could not release the Treehouse project lock before treehouse get for $PROJ_ABS" >&2
+      echo "error: could not release Firstmate's Treehouse project lock before treehouse get for $PROJ_ABS" >&2
       exit 1
     fi
     SPAWN_TREEHOUSE_PROJECT_LOCK_HELD=0
@@ -4291,13 +4320,14 @@ elif [ "$KIND" != secondmate ] && [ "$BACKEND" != orca ]; then
     sleep 1
   done
   if [ -z "$WT" ]; then
-    echo "error: treehouse get did not enter an isolated worktree within 60s (last seen '${last_seen:-none}': $last_reason; spawning project '$PROJ_ABS'); no isolated worktree appeared after releasing the Treehouse project lock; inspect for a Treehouse lock conflict and window $T" >&2
+    echo "error: treehouse get did not enter an isolated worktree within 60s (last seen '${last_seen:-none}': $last_reason; spawning project '$PROJ_ABS'); Firstmate's own Treehouse project lock was released for the whole wait, so it did not block get; inspect window $T" >&2
     exit 1
   fi
 
   if ! fm_spawn_treehouse_project_lock_acquire; then
     exit 1
   fi
+  spawn_treehouse_slot_still_ours "$WT" "$WT_TARGET" "$T" || exit 1
 
   validate_spawn_worktree "treehouse get" "$T"
 
@@ -4311,8 +4341,9 @@ elif [ "$KIND" != secondmate ] && [ "$BACKEND" != orca ]; then
   # a slot that cannot be claimed is refused here, at the cheapest point, rather
   # than launching a worker whose slot teardown could later release out from
   # under its successor.
-  # Written under the Treehouse project lock held from before slot allocation
-  # through metadata publication, so no other spawn or return sees a half-claim.
+  # Written under the Treehouse project lock, retaken after get and held through
+  # metadata publication once the slot is proved still this pane's, so no other
+  # spawn or return sees a half-claim.
   if fm_treehouse_pool_slot "$PROJ_ABS" "$WT"; then
     if ! fm_treehouse_slot_owner_claim "$WT" "$ID" "$FM_HOME"; then
       echo "error: could not claim Treehouse pool slot $WT for task $ID; refusing to launch a worker whose slot cannot later be proved to be its own; inspect window $T" >&2

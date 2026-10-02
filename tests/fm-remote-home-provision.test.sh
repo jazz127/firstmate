@@ -105,7 +105,7 @@ SHORT_HOME="$TMP_ROOT/homes/short"
 rc=0
 run_provision "$SHORT_HOME" short 3 || rc=$?
 [ "$rc" -eq 124 ] || fail "provision timeout did not return 124"
-assert_grep 'remote job exceeded its 3 s bound' "$TMP_ROOT/err" "timeout reason is missing"
+assert_grep 'remote job exceeded its 3 s bound (fm-remote-home-provision.sh)' "$TMP_ROOT/err" "timeout reason is missing"
 assert_grep 'cloning project alpha' "$TMP_ROOT/err" "failed clone project is missing"
 assert_equals short "$(cat "$SHORT_HOME/.fm-secondmate-provisioning")" "killed home has no ownership marker"
 rc=0

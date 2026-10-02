@@ -1,0 +1,166 @@
+=== S1: green PR behind base, no --update-branch consent
+$ fm-pr-merge.sh task-x1 https://github.com/example/repo/pull/6178
+exit=1
+--- stderr
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  watcher supervision needs Stop-owned automatic recovery; inspect the hook registration and startup status before ending the turn.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+verified: https://github.com/example/repo/pull/6178 is open and mergeable, with every unwaived required check reported and every unwaived check green at head aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+error: https://github.com/example/repo/pull/6178 is behind its base; updating its source branch requires explicit --update-branch consent on this authorized merge request (the update remains if new checks prevent merging)
+--- stdout
+armed: state/task-x1.check.sh
+--- fake gh mutating calls
+(none)
+--- github head now: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+pr_head=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+=== S2: green PR behind base, --update-branch, updated head green
+$ fm-pr-merge.sh task-x1 https://github.com/example/repo/pull/6178 --update-branch -- --squash
+exit=0
+--- stderr
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  watcher supervision needs Stop-owned automatic recovery; inspect the hook registration and startup status before ending the turn.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+verified: https://github.com/example/repo/pull/6178 is open and mergeable, with every unwaived required check reported and every unwaived check green at head aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+verified: https://github.com/example/repo/pull/6178 is open and mergeable, with every unwaived required check reported and every unwaived check green at head bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+--- stdout
+armed: state/task-x1.check.sh
+armed: state/task-x1.check.sh
+verified: https://github.com/example/repo/pull/6178 is merged (state=MERGED, merged=true, isInMergeQueue=false)
+--- fake gh mutating calls
+pr update-branch 6178 --repo example/repo
+pr merge 6178 --repo example/repo --match-head-commit bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb --squash
+--- github head now: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+pr_head=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+
+=== S3: --update-branch but a guard refuses (draft PR)
+$ fm-pr-merge.sh task-x1 https://github.com/example/repo/pull/6178 --update-branch
+exit=1
+--- stderr
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  watcher supervision needs Stop-owned automatic recovery; inspect the hook registration and startup status before ending the turn.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+error: refusing to merge https://github.com/example/repo/pull/6178
+  - the pull request is a draft
+--- stdout
+armed: state/task-x1.check.sh
+--- fake gh mutating calls
+(none)
+--- github head now: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+pr_head=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+=== S4: --update-branch, updated head has failed check beside a pending one (CheckRun)
+$ fm-pr-merge.sh task-x1 https://github.com/example/repo/pull/6178 --update-branch
+elapsed_s=3
+exit=1
+--- stderr
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  watcher supervision needs Stop-owned automatic recovery; inspect the hook registration and startup status before ending the turn.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+verified: https://github.com/example/repo/pull/6178 is open and mergeable, with every unwaived required check reported and every unwaived check green at head aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+error: refusing to merge https://github.com/example/repo/pull/6178
+  - check 'ci' is not green
+  - check 'slow' is not green
+error: these checks are not green: ci, slow
+--- stdout
+armed: state/task-x1.check.sh
+armed: state/task-x1.check.sh
+--- fake gh mutating calls
+pr update-branch 6178 --repo example/repo
+--- github head now: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+pr_head=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+
+=== S5: --update-branch, updated head checks stay pending past the capped wait
+$ FM_PR_GITHUB_MERGEABLE_RETRY_DELAY=1 fm-pr-merge.sh task-x1 https://github.com/example/repo/pull/6178 --update-branch
+elapsed_s=7
+exit=1
+--- stderr
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  watcher supervision needs Stop-owned automatic recovery; inspect the hook registration and startup status before ending the turn.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+verified: https://github.com/example/repo/pull/6178 is open and mergeable, with every unwaived required check reported and every unwaived check green at head aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+error: refusing to merge https://github.com/example/repo/pull/6178
+  - check 'ci' is not green
+error: these checks are not green: ci
+error: https://github.com/example/repo/pull/6178 was updated to bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb but its checks are not ready; run the merge again once its checks pass
+--- stdout
+armed: state/task-x1.check.sh
+armed: state/task-x1.check.sh
+--- fake gh mutating calls
+pr update-branch 6178 --repo example/repo
+--- github head now: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+pr_head=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+
+=== S6: --update-branch --allow-red ci, updated head briefly mergeable=UNKNOWN then MERGEABLE
+$ fm-pr-merge.sh task-x1 https://github.com/example/repo/pull/6178 --update-branch --allow-red ci -- --squash
+exit=0
+--- stderr
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  watcher supervision needs Stop-owned automatic recovery; inspect the hook registration and startup status before ending the turn.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+verified: https://github.com/example/repo/pull/6178 is open and mergeable, with every unwaived required check reported and every unwaived check green at head aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+verified: https://github.com/example/repo/pull/6178 is open and mergeable, with every unwaived required check reported and every unwaived check green at head bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+--- stdout
+armed: state/task-x1.check.sh
+armed: state/task-x1.check.sh
+verified: https://github.com/example/repo/pull/6178 is merged (state=MERGED, merged=true, isInMergeQueue=false)
+--- fake gh mutating calls
+pr update-branch 6178 --repo example/repo
+pr merge 6178 --repo example/repo --match-head-commit bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb --squash
+--- github head now: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+pr_head=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+
+=== S7: --update-branch, post-update PR state unreadable
+$ fm-pr-merge.sh task-x1 https://github.com/example/repo/pull/6178 --update-branch -- --merge
+exit=1
+--- stderr
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  watcher supervision needs Stop-owned automatic recovery; inspect the hook registration and startup status before ending the turn.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+verified: https://github.com/example/repo/pull/6178 is open and mergeable, with every unwaived required check reported and every unwaived check green at head aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+error: could not read the GitHub pull request state before merging
+--- stdout
+armed: state/task-x1.check.sh
+armed: state/task-x1.check.sh
+--- fake gh mutating calls
+pr update-branch 6178 --repo example/repo
+--- github head now: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+pr_head=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+
+=== S8: --update-branch on GitLab is rejected
+$ fm-pr-merge.sh task-x1 https://gitlab.example/group/subgroup/project/-/merge_requests/7 --update-branch
+exit=2
+error: --update-branch applies only to GitHub

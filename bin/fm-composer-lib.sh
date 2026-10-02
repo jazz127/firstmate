@@ -860,6 +860,37 @@ EOF
   printf -v "$__fmpi_name" '%s' "$__fmpi_text"
 }
 
+# _fm_composer_titled_rule_row: 0 when a trimmed row is a composer rule with a
+# session title burned into it (Claude Code draws a named session's title into
+# its composer's TOP rule: `──────── <name> ─`, issues #5601 and #5558), proven
+# by collapsing to exactly the column width of <plain-rule-spaces>, the partner
+# closing rule already mapped to spaces.
+#
+# This is deliberately NOT a relaxation of _fm_composer_pi_separator_row, and
+# the two must not be merged: that predicate also feeds the pi identity
+# conjunction, so it stays strictly dashes-only. This one has the single
+# consumer _fm_composer_bare_rule_sandwich.
+#
+# The row must OPEN with the same 8-column dash run the strict separator
+# requires. Width is proven by comparing canonical space strings, never by
+# `${#row}`, which counts characters under UTF-8 and bytes under LC_ALL=C
+# (issue #1988). Title text is ASCII-printable only, the same boundary
+# _fm_composer_titled_bottom_ok holds; any other glyph leaves residue, and the
+# verdict stays `unknown`, the safe direction.
+_fm_composer_titled_rule_row() {  # <trimmed-row> <plain-rule-spaces>
+  local row=$1 expected=$2 spaces
+  case "$row" in
+    ────────*) ;;
+    *) return 1 ;;
+  esac
+  spaces=${row//─/ }
+  spaces=$(printf '%s' "$spaces" | LC_ALL=C sed 's/[!-~]/ /g')
+  case "$spaces" in
+    *[![:space:]]*) return 1 ;;
+  esac
+  [ "$spaces" = "$expected" ]
+}
+
 # Row-scan results are returned through FM_COMPOSER_SCAN_* globals (bash 3.2
 # has no nameref); they are internal to this owner.
 _fm_composer_scan_screen() {  # <plain-screen> <cursor-or-empty> [extract-wrap]
@@ -1604,6 +1635,28 @@ EOF
   return 0
 }
 
+# _fm_composer_bare_rule_sandwich: 0 when bare agent-glyph <row> sits in its
+# own titled composer: a titled rule directly above it and the screen's only
+# unmatched separator directly below it, which is that composer's closing rule.
+#
+# The cursorless staleness rule reads an unmatched separator BELOW a candidate
+# as proof the candidate is scrollback. A titled top rule never opens the
+# separator pair, so the composer's own closing rule becomes that unmatched
+# separator and a genuinely idle composer read `unknown`. Adjacency on BOTH
+# edges keeps the staleness rule intact everywhere else: a glyph stranded in
+# scrollback has transcript rows, not its own rules, around it.
+_fm_composer_bare_rule_sandwich() {  # <plain-screen> <row>
+  local plain=$1 row=$2 above below
+  [ "$row" -ge 1 ] || return 1
+  [ "$FM_COMPOSER_SCAN_PI_LAST_SEPARATOR" -eq "$((row + 1))" ] || return 1
+  below=$(_fm_composer_screen_row "$((row + 1))" "$plain")
+  fm_composer_normalize_trim_var below
+  _fm_composer_pi_separator_row "$below" || return 1
+  above=$(_fm_composer_screen_row "$((row - 1))" "$plain")
+  fm_composer_normalize_trim_var above
+  _fm_composer_titled_rule_row "$above" "${below//─/ }"
+}
+
 # _fm_composer_select_cursorless <plain> [pi-compact]: <pi-compact> is 1 only
 # when THIS call's caps carry pi-compact=1; it defaults to 0.
 _fm_composer_select_cursorless() {
@@ -1669,8 +1722,14 @@ _fm_composer_select_cursorless() {
   fi
   if [ "$FM_COMPOSER_SCAN_PI_PAIR_FOUND" = 0 ] \
      && [ "$FM_COMPOSER_SCAN_PI_LAST_SEPARATOR" -gt "$generic" ]; then
-    FM_COMPOSER_SELECTED_KIND=
-    return 1
+    # Spare only a bare glyph inside its own titled composer rules; see
+    # _fm_composer_bare_rule_sandwich for why that shape is not scrollback.
+    if ! { [ "$FM_COMPOSER_SELECTED_KIND" = bare ] \
+           && [ "$generic" = "$FM_COMPOSER_SCAN_BARE_ROW" ] \
+           && _fm_composer_bare_rule_sandwich "$plain" "$FM_COMPOSER_SCAN_BARE_ROW"; }; then
+      FM_COMPOSER_SELECTED_KIND=
+      return 1
+    fi
   fi
   # Pi's footer status row is furniture only under the pi pair it hangs from;
   # below any other selected shape it is a dead-shell row like any other.

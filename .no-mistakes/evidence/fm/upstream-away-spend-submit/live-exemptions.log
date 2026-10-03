@@ -1,0 +1,45 @@
+$ fm-lab-home.sh create /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l
+/Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l
+exit=0
+$ fm-afk-contract.sh enter --spend 1
+Away posture recorded at 2026-10-03T20:34:52Z: hold-for-return only. No phone channel is configured; anything that needs you waits for your return. No away instructions were recorded; the away session acts on standing authority only, and anything that needs you waits for your return. Destructive, irreversible, and security-sensitive actions are never pre-authorizable, whatever the words say. Expected return: not given. Spend cap: 1 concurrent workers.
+Away posture (recorded):
+  entered: 2026-10-03T20:34:52Z
+  expected return: not given
+  spend cap: 1 concurrent workers
+  reach: hold-for-return only. No phone channel is configured; anything that needs you waits for your return.
+  your words: (none)
+exit=0
+$ fm-spawn.sh fresh /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/absent --scout
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l
+error: spawn refused - the away-posture record caps concurrent workers at 1 and 1 ordinary task(s) are live in this home; task fresh stays queued for the captain's return or for a worker to finish (spend cap: bin/fm-afk-contract.sh)
+exit=1
+$ fm-spawn.sh fresh /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/absent --scout
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l
+note: new-task spawn (fm-spawn) proceeds for the supervision branch under the away-posture record: main is parked and its standing authority is relocated; this script's own gate still applies (docs/pi-supervision-branch.md "Postures")
+error: spawn refused - the away-posture record caps concurrent workers at 1 and 1 ordinary task(s) are live in this home; task fresh stays queued for the captain's return or for a worker to finish (spend cap: bin/fm-afk-contract.sh)
+exit=1
+$ fm-spawn.sh absent --relaunch
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l
+error: --relaunch needs an existing task record; no /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/state/absent.meta
+exit=1
+$ fm-spawn.sh mate /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/absent-home --secondmate
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l
+error: firstmate home does not exist or is not a directory: /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/absent-home
+exit=1
+$ fm-afk-contract.sh archive
+/Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/state/afk-contracts/1791059692.afk-contract
+exit=0
+$ fm-afk-contract.sh enter --spend 1
+Quiet mode recorded at 2026-10-03T20:34:54Z: you are present, so nothing waits for your return: every action you ask for, a local landing or a merge included, proceeds now under ordinary attended authority, and quiet mode changes only which updates reach this conversation. Only an explicit /quiet off ends it.
+Quiet mode (recorded):
+  entered: 2026-10-03T20:34:54Z
+  holds: none - you are present, so nothing waits for your return: every action you ask for, a local landing or a merge included, proceeds now under ordinary attended authority, and quiet mode changes only which updates reach this conversation.
+  your words: (none)
+exit=0
+$ fm-spawn.sh fresh /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/absent --scout
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l
+/Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-spawn.sh: line 3034: cd: /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/absent: No such file or directory
+exit=1
+OBSERVED: main and branch enforce away capacity; recovery, secondmate and quiet requests retain their exemptions.
+CLEANUP: disposable lab removed; no runtime endpoint was created.

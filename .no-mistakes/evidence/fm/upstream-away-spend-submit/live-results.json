@@ -1,0 +1,32 @@
+[
+  {
+    "name": "Supported raw command launches on real tmux, counts and prevents a fresh worker at cap=1",
+    "result": "pass",
+    "live": true
+  },
+  {
+    "name": "A positively exited raw worker frees capacity without deleting its task record",
+    "result": "pass",
+    "live": true
+  },
+  {
+    "name": "Pre-validation and unpublished claims count; accepted terminal deliveries free room; a busy turn counts again",
+    "result": "pass",
+    "live": true
+  },
+  {
+    "name": "Rename and moved windows do not prove death; confirmed closure refuses the stale target",
+    "result": "pass",
+    "live": true
+  },
+  {
+    "name": "Unavailable experimental backends retain capacity and secondmates remain excluded",
+    "result": "pass",
+    "live": true
+  },
+  {
+    "name": "Delayed fresh launch reserves capacity; renaming before cancellation retains surviving endpoint and cleanup capacity",
+    "result": "pass",
+    "live": true
+  }
+]

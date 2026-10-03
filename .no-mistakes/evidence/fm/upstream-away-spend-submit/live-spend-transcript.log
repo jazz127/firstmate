@@ -1,0 +1,754 @@
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-lab-home.sh create /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l
+/Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l
+exit=0
+$ git init -q -b main /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/p
+
+exit=0
+$ git -C /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/p commit -q --allow-empty -m initial
+
+exit=0
+$ git clone --bare -q /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/p /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/origin.git
+
+exit=0
+$ git -C /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/p remote add origin /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/origin.git
+
+exit=0
+$ git -C /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/p fetch -q origin
+
+exit=0
+$ tmux -L fm-lab new-session -d -s fm-lab-spend -x 120 -y 40 -c /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC bash --noprofile --norc
+
+exit=0
+$ tmux -L fm-lab set-option -g default-command bash --noprofile --norc
+
+exit=0
+$ tmux -L fm-lab display-message -p -t fm-lab-spend #{socket_path},#{pid},0
+/Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/t/tmux-501/fm-lab,35239,0
+exit=0
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-afk-contract.sh enter --spend 1
+Away posture recorded at 2026-10-03T20:32:41Z: hold-for-return only. No phone channel is configured; anything that needs you waits for your return. No away instructions were recorded; the away session acts on standing authority only, and anything that needs you waits for your return. Destructive, irreversible, and security-sensitive actions are never pre-authorizable, whatever the words say. Expected return: not given. Spend cap: 1 concurrent workers.
+Away posture (recorded):
+  entered: 2026-10-03T20:32:41Z
+  expected return: not given
+  spend cap: 1 concurrent workers
+  reach: hold-for-return only. No phone channel is configured; anything that needs you waits for your return.
+  your words: (none)
+exit=0
+
+SCENARIO: Supported raw command launches on real tmux, counts and prevents a fresh worker at cap=1
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-spawn.sh lab-raw /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/p sleep 600 --scout
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l
+spawned lab-raw harness=sleep kind=scout window=fm-lab-spend:fm-lab-raw worktree=/Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/pool/.treehouse/p-3f407b/1/p
+exit=0
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-afk-spend-count.sh /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/state
+1
+exit=0
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-spawn.sh lab-next /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/p sleep 600 --scout
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l
+error: spawn refused - the away-posture record caps concurrent workers at 1 and 1 ordinary task(s) are live in this home; task lab-next stays queued for the captain's return or for a worker to finish (spend cap: bin/fm-afk-contract.sh)
+exit=1
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-afk-return.sh check
+fm-afk-launch: away-posture record archived at /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/state/afk-contracts/1791059561.afk-contract
+fm-afk-launch: away mode stopped; no daemon terminal was running, .afk cleared, and the posture record archived
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no live watcher process holds this home lock (last beat: 7s ago).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  repair missing watcher supervision according to the session-start block for this harness; do not use shell &.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+=== Return brief (away 2026-10-03T20:32:41Z -> 2026-10-03T20:32:48Z, 7s) ===
+Supervisor health:
+  - supervision ran through the away window with no detected gap (watcher beat 6s old at return)
+Your instructions:
+  (no away instructions recorded)
+  the away session took no action under them.
+Waiting on you:
+  (nothing)
+Tried and failed, or could not be fixed:
+  (nothing)
+Landed, cleanup due:
+  (nothing)
+Handled while away:
+  0 outcome(s) handled by the away session (0 routine, 0 escalated above)
+  (no routine outcomes recorded in the store for this window)
+Cost: 0 supervision outcome(s) recorded (0 routine, 0 captain); 1 task(s) live at return.
+catch-up health: supervision ran through the away window with no detected gap (watcher beat 6s old at return)
+fm-afk-return: catch-up clear; ordinary captain work may proceed
+exit=0
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-afk-contract.sh enter --spend 1
+Away posture recorded at 2026-10-03T20:32:48Z: hold-for-return only. No phone channel is configured; anything that needs you waits for your return. No away instructions were recorded; the away session acts on standing authority only, and anything that needs you waits for your return. Destructive, irreversible, and security-sensitive actions are never pre-authorizable, whatever the words say. Expected return: not given. Spend cap: 1 concurrent workers.
+Away posture (recorded):
+  entered: 2026-10-03T20:32:48Z
+  expected return: not given
+  spend cap: 1 concurrent workers
+  reach: hold-for-return only. No phone channel is configured; anything that needs you waits for your return.
+  your words: (none)
+exit=0
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-spawn.sh absent --relaunch
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l
+error: --relaunch needs an existing task record; no /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/state/absent.meta
+exit=1
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-spawn.sh mate /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/missing-home --secondmate
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l
+error: firstmate home does not exist or is not a directory: /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/missing-home
+exit=1
+OBSERVED: PASS Supported raw command launches on real tmux, counts and prevents a fresh worker at cap=1
+
+SCENARIO: A positively exited raw worker frees capacity without deleting its task record
+$ tmux -L fm-lab send-keys -t fm-lab-spend:fm-lab-raw C-c
+
+exit=0
+$ bash -c . "$1"; fm_backend_worker_state tmux "$2" _ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-backend.sh fm-lab-spend:fm-lab-raw
+dead
+exit=0
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-afk-spend-count.sh /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/state
+0
+exit=0
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-afk-return.sh check
+fm-afk-launch: away-posture record archived at /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/state/afk-contracts/1791059568.afk-contract
+fm-afk-launch: away mode stopped; no daemon terminal was running, .afk cleared, and the posture record archived
+WARNING: watcher still down (same stale episode; last beat: 10s ago, grace 300s) - full banner already printed this episode.
+=== Return brief (away 2026-10-03T20:32:48Z -> 2026-10-03T20:32:51Z, 3s) ===
+Supervisor health:
+  - supervision ran through the away window with no detected gap (watcher beat 9s old at return)
+Your instructions:
+  (no away instructions recorded)
+  the away session took no action under them.
+Waiting on you:
+  (nothing)
+Tried and failed, or could not be fixed:
+  (nothing)
+Landed, cleanup due:
+  (nothing)
+Handled while away:
+  0 outcome(s) handled by the away session (0 routine, 0 escalated above)
+  (no routine outcomes recorded in the store for this window)
+Cost: 0 supervision outcome(s) recorded (0 routine, 0 captain); 0 task(s) live at return.
+catch-up health: supervision ran through the away window with no detected gap (watcher beat 9s old at return)
+fm-afk-return: catch-up clear; ordinary captain work may proceed
+exit=0
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-afk-contract.sh enter --spend 1
+Away posture recorded at 2026-10-03T20:32:52Z: hold-for-return only. No phone channel is configured; anything that needs you waits for your return. No away instructions were recorded; the away session acts on standing authority only, and anything that needs you waits for your return. Destructive, irreversible, and security-sensitive actions are never pre-authorizable, whatever the words say. Expected return: not given. Spend cap: 1 concurrent workers.
+Away posture (recorded):
+  entered: 2026-10-03T20:32:52Z
+  expected return: not given
+  spend cap: 1 concurrent workers
+  reach: hold-for-return only. No phone channel is configured; anything that needs you waits for your return.
+  your words: (none)
+exit=0
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-spawn.sh lab-admit /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/missing-project sleep 600 --scout
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l
+/Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-spawn.sh: line 3034: cd: /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/missing-project: No such file or directory
+exit=1
+$ tmux -L fm-lab send-keys -t fm-lab-spend:fm-lab-raw sleep 600 Enter
+
+exit=0
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-afk-spend-count.sh /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/state
+1
+exit=0
+OBSERVED: PASS A positively exited raw worker frees capacity without deleting its task record
+
+SCENARIO: Pre-validation and unpublished claims count; accepted terminal deliveries free room; a busy turn counts again
+$ tmux -L fm-lab new-session -d -s primary -n cli -x 120 -y 40 -c /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC env -u NO_MISTAKES_GATE -u FM_GATE_REFUSE_BYPASS -u FM_ROOT_OVERRIDE -u FM_STATE_OVERRIDE -u FM_DATA_OVERRIDE -u FM_CONFIG_OVERRIDE -u FM_PROJECTS_OVERRIDE claude
+
+exit=0
+$ tmux -L fm-lab capture-pane -p -t primary:cli
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ Accessing workspace:
+
+ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC
+
+ Quick safety check: Is this a project you created or one you trust? (Like your own code, a well-known open source
+ project, or work from your team). If not, take a moment to review what's in this folder first.
+
+ Claude Code'll be able to read, edit, and execute files here.
+
+ Security guide
+
+ ❯ No, exit
+   Yes, I trust this folder
+
+ Enter to confirm · Esc to cancel
+exit=0
+$ bash -c . "$1"; fm_backend_worker_state tmux "$2" _ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-backend.sh primary:cli
+alive
+exit=0
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-busy-event.sh arm /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/state lab-raw --state idle --source claude-hook --event stop
+g1791059576.54800.1995
+exit=0
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-afk-spend-count.sh /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/state
+1
+exit=0
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-spawn.sh lab-next /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/p sleep 600 --scout
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l
+error: spawn refused - the away-posture record caps concurrent workers at 1 and 1 ordinary task(s) are live in this home; task lab-next stays queued for the captain's return or for a worker to finish (spend cap: bin/fm-afk-contract.sh)
+exit=1
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-afk-return.sh check
+fm-afk-launch: away-posture record archived at /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/state/afk-contracts/1791059572.afk-contract
+fm-afk-launch: away mode stopped; no daemon terminal was running, .afk cleared, and the posture record archived
+WARNING: watcher still down (same stale episode; last beat: 17s ago, grace 300s) - full banner already printed this episode.
+=== Return brief (away 2026-10-03T20:32:52Z -> 2026-10-03T20:32:58Z, 6s) ===
+Supervisor health:
+  - supervision ran through the away window with no detected gap (watcher beat 16s old at return)
+Your instructions:
+  (no away instructions recorded)
+  the away session took no action under them.
+Waiting on you:
+  (nothing)
+Tried and failed, or could not be fixed:
+  (nothing)
+Landed, cleanup due:
+  (nothing)
+Handled while away:
+  0 outcome(s) handled by the away session (0 routine, 0 escalated above)
+  (no routine outcomes recorded in the store for this window)
+Cost: 0 supervision outcome(s) recorded (0 routine, 0 captain); 1 task(s) live at return.
+catch-up health: supervision ran through the away window with no detected gap (watcher beat 16s old at return)
+catch-up wake: STATUS OUTCOME BACKSTOP (newest captain-facing task event has no covering branch outcome):
+catch-up wake: lab-raw done: implementation complete
+fm-afk-return: catch-up clear; ordinary captain work may proceed
+exit=0
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-afk-contract.sh enter --spend 1
+Away posture recorded at 2026-10-03T20:32:58Z: hold-for-return only. No phone channel is configured; anything that needs you waits for your return. No away instructions were recorded; the away session acts on standing authority only, and anything that needs you waits for your return. Destructive, irreversible, and security-sensitive actions are never pre-authorizable, whatever the words say. Expected return: not given. Spend cap: 1 concurrent workers.
+Away posture (recorded):
+  entered: 2026-10-03T20:32:58Z
+  expected return: not given
+  spend cap: 1 concurrent workers
+  reach: hold-for-return only. No phone channel is configured; anything that needs you waits for your return.
+  your words: (none)
+exit=0
+$ git -C /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/pool/.treehouse/p-3f407b/1/p commit -q --allow-empty -m unpublished change
+
+exit=0
+$ git -C /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/pool/.treehouse/p-3f407b/1/p rev-parse HEAD
+acf86d09d072b8a06db27faab109ab24d9abdf11
+exit=0
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-afk-spend-count.sh /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/state
+1
+exit=0
+$ git -C /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/pool/.treehouse/p-3f407b/1/p update-ref refs/remotes/origin/worker acf86d09d072b8a06db27faab109ab24d9abdf11
+
+exit=0
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-busy-event.sh arm /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/state lab-raw --state idle --source claude-hook --event stop
+g1791059579.61092.16390
+exit=0
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-afk-spend-count.sh /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/state
+0
+exit=0
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-afk-return.sh check
+fm-afk-launch: away-posture record archived at /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/state/afk-contracts/1791059578.afk-contract
+fm-afk-launch: away mode stopped; no daemon terminal was running, .afk cleared, and the posture record archived
+WARNING: watcher still down (same stale episode; last beat: 19s ago, grace 300s) - full banner already printed this episode.
+=== Return brief (away 2026-10-03T20:32:58Z -> 2026-10-03T20:33:00Z, 2s) ===
+Supervisor health:
+  - supervision ran through the away window with no detected gap (watcher beat 18s old at return)
+Your instructions:
+  (no away instructions recorded)
+  the away session took no action under them.
+Waiting on you:
+  (nothing)
+Tried and failed, or could not be fixed:
+  (nothing)
+Landed, cleanup due:
+  (nothing)
+Handled while away:
+  0 outcome(s) handled by the away session (0 routine, 0 escalated above)
+  (no routine outcomes recorded in the store for this window)
+Cost: 0 supervision outcome(s) recorded (0 routine, 0 captain); 0 task(s) live at return.
+catch-up health: supervision ran through the away window with no detected gap (watcher beat 18s old at return)
+catch-up wake: STATUS OUTCOME BACKSTOP (newest captain-facing task event has no covering branch outcome):
+catch-up wake: lab-raw done: PR https://example.invalid/lab/repo/pull/1 checks green
+fm-afk-return: catch-up clear; ordinary captain work may proceed
+exit=0
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-afk-contract.sh enter --spend 1
+Away posture recorded at 2026-10-03T20:33:01Z: hold-for-return only. No phone channel is configured; anything that needs you waits for your return. No away instructions were recorded; the away session acts on standing authority only, and anything that needs you waits for your return. Destructive, irreversible, and security-sensitive actions are never pre-authorizable, whatever the words say. Expected return: not given. Spend cap: 1 concurrent workers.
+Away posture (recorded):
+  entered: 2026-10-03T20:33:01Z
+  expected return: not given
+  spend cap: 1 concurrent workers
+  reach: hold-for-return only. No phone channel is configured; anything that needs you waits for your return.
+  your words: (none)
+exit=0
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-busy-event.sh arm /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/state lab-raw --state busy --source claude-hook --event user-prompt-submit
+g1791059581.65573.2163
+exit=0
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-afk-spend-count.sh /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/state
+1
+exit=0
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-spawn.sh lab-next /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/p sleep 600 --scout
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l
+error: spawn refused - the away-posture record caps concurrent workers at 1 and 1 ordinary task(s) are live in this home; task lab-next stays queued for the captain's return or for a worker to finish (spend cap: bin/fm-afk-contract.sh)
+exit=1
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-afk-return.sh check
+fm-afk-launch: away-posture record archived at /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/state/afk-contracts/1791059581.afk-contract
+fm-afk-launch: away mode stopped; no daemon terminal was running, .afk cleared, and the posture record archived
+WARNING: watcher still down (same stale episode; last beat: 21s ago, grace 300s) - full banner already printed this episode.
+=== Return brief (away 2026-10-03T20:33:01Z -> 2026-10-03T20:33:03Z, 2s) ===
+Supervisor health:
+  - supervision ran through the away window with no detected gap (watcher beat 21s old at return)
+Your instructions:
+  (no away instructions recorded)
+  the away session took no action under them.
+Waiting on you:
+  (nothing)
+Tried and failed, or could not be fixed:
+  (nothing)
+Landed, cleanup due:
+  (nothing)
+Handled while away:
+  0 outcome(s) handled by the away session (0 routine, 0 escalated above)
+  (no routine outcomes recorded in the store for this window)
+Cost: 0 supervision outcome(s) recorded (0 routine, 0 captain); 1 task(s) live at return.
+catch-up health: supervision ran through the away window with no detected gap (watcher beat 21s old at return)
+fm-afk-return: catch-up clear; ordinary captain work may proceed
+exit=0
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-afk-contract.sh enter --spend 1
+Away posture recorded at 2026-10-03T20:33:03Z: hold-for-return only. No phone channel is configured; anything that needs you waits for your return. No away instructions were recorded; the away session acts on standing authority only, and anything that needs you waits for your return. Destructive, irreversible, and security-sensitive actions are never pre-authorizable, whatever the words say. Expected return: not given. Spend cap: 1 concurrent workers.
+Away posture (recorded):
+  entered: 2026-10-03T20:33:03Z
+  expected return: not given
+  spend cap: 1 concurrent workers
+  reach: hold-for-return only. No phone channel is configured; anything that needs you waits for your return.
+  your words: (none)
+exit=0
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-busy-event.sh arm /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/state lab-raw --state idle --source claude-hook --event stop
+g1791059583.68117.13124
+exit=0
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-afk-spend-count.sh /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/state
+0
+exit=0
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-busy-event.sh arm /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/state lab-raw --state busy --source claude-hook --event user-prompt-submit
+g1791059583.68408.19835
+exit=0
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-afk-spend-count.sh /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/state
+1
+exit=0
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-busy-event.sh arm /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/state lab-raw --state idle --source claude-hook --event stop
+g1791059584.68569.27044
+exit=0
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-afk-spend-count.sh /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/state
+0
+exit=0
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-busy-event.sh arm /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/state lab-raw --state busy --source claude-hook --event user-prompt-submit
+g1791059584.68956.21628
+exit=0
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-afk-spend-count.sh /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/state
+1
+exit=0
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-busy-event.sh arm /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/state lab-raw --state idle --source claude-hook --event stop
+g1791059584.69127.32101
+exit=0
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-afk-spend-count.sh /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/state
+0
+exit=0
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-busy-event.sh arm /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/state lab-raw --state busy --source claude-hook --event user-prompt-submit
+g1791059584.69468.27575
+exit=0
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-afk-spend-count.sh /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/state
+1
+exit=0
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-busy-event.sh arm /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/state lab-raw --state idle --source claude-hook --event stop
+g1791059584.69634.28828
+exit=0
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-afk-spend-count.sh /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/state
+1
+exit=0
+OBSERVED: PASS Pre-validation and unpublished claims count; accepted terminal deliveries free room; a busy turn counts again
+
+SCENARIO: Rename and moved windows do not prove death; confirmed closure refuses the stale target
+$ tmux -L fm-lab rename-session -t fm-lab-spend fm-lab-renamed
+
+exit=0
+$ bash -c . "$1"; fm_backend_worker_state tmux "$2" _ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-backend.sh fm-lab-spend:fm-lab-raw
+missing
+exit=0
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-afk-spend-count.sh /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/state
+1
+exit=0
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-spawn.sh lab-next /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/p sleep 600 --scout
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l
+error: spawn refused - the away-posture record caps concurrent workers at 1 and 1 ordinary task(s) are live in this home; task lab-next stays queued for the captain's return or for a worker to finish (spend cap: bin/fm-afk-contract.sh)
+exit=1
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-afk-return.sh check
+fm-afk-launch: away-posture record archived at /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/state/afk-contracts/1791059583.afk-contract
+fm-afk-launch: away mode stopped; no daemon terminal was running, .afk cleared, and the posture record archived
+WARNING: watcher still down (same stale episode; last beat: 25s ago, grace 300s) - full banner already printed this episode.
+=== Return brief (away 2026-10-03T20:33:03Z -> 2026-10-03T20:33:06Z, 3s) ===
+Supervisor health:
+  - supervision ran through the away window with no detected gap (watcher beat 24s old at return)
+Your instructions:
+  (no away instructions recorded)
+  the away session took no action under them.
+Waiting on you:
+  (nothing)
+Tried and failed, or could not be fixed:
+  (nothing)
+Landed, cleanup due:
+  (nothing)
+Handled while away:
+  0 outcome(s) handled by the away session (0 routine, 0 escalated above)
+  (no routine outcomes recorded in the store for this window)
+Cost: 0 supervision outcome(s) recorded (0 routine, 0 captain); 1 task(s) live at return.
+catch-up health: supervision ran through the away window with no detected gap (watcher beat 24s old at return)
+fm-afk-return: catch-up clear; ordinary captain work may proceed
+exit=0
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-afk-contract.sh enter --spend 1
+Away posture recorded at 2026-10-03T20:33:06Z: hold-for-return only. No phone channel is configured; anything that needs you waits for your return. No away instructions were recorded; the away session acts on standing authority only, and anything that needs you waits for your return. Destructive, irreversible, and security-sensitive actions are never pre-authorizable, whatever the words say. Expected return: not given. Spend cap: 1 concurrent workers.
+Away posture (recorded):
+  entered: 2026-10-03T20:33:06Z
+  expected return: not given
+  spend cap: 1 concurrent workers
+  reach: hold-for-return only. No phone channel is configured; anything that needs you waits for your return.
+  your words: (none)
+exit=0
+$ tmux -L fm-lab new-session -d -s fm-lab-moved -x 120 -y 40 bash --noprofile --norc
+
+exit=0
+$ tmux -L fm-lab move-window -s fm-lab-renamed:fm-lab-raw -t fm-lab-moved:
+
+exit=0
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-afk-spend-count.sh /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/state
+1
+exit=0
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-spawn.sh lab-next /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/p sleep 600 --scout
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l
+error: spawn refused - the away-posture record caps concurrent workers at 1 and 1 ordinary task(s) are live in this home; task lab-next stays queued for the captain's return or for a worker to finish (spend cap: bin/fm-afk-contract.sh)
+exit=1
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-afk-return.sh check
+fm-afk-launch: away-posture record archived at /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/state/afk-contracts/1791059586.afk-contract
+fm-afk-launch: away mode stopped; no daemon terminal was running, .afk cleared, and the posture record archived
+WARNING: watcher still down (same stale episode; last beat: 27s ago, grace 300s) - full banner already printed this episode.
+=== Return brief (away 2026-10-03T20:33:06Z -> 2026-10-03T20:33:08Z, 2s) ===
+Supervisor health:
+  - supervision ran through the away window with no detected gap (watcher beat 26s old at return)
+Your instructions:
+  (no away instructions recorded)
+  the away session took no action under them.
+Waiting on you:
+  (nothing)
+Tried and failed, or could not be fixed:
+  (nothing)
+Landed, cleanup due:
+  (nothing)
+Handled while away:
+  0 outcome(s) handled by the away session (0 routine, 0 escalated above)
+  (no routine outcomes recorded in the store for this window)
+Cost: 0 supervision outcome(s) recorded (0 routine, 0 captain); 1 task(s) live at return.
+catch-up health: supervision ran through the away window with no detected gap (watcher beat 26s old at return)
+fm-afk-return: catch-up clear; ordinary captain work may proceed
+exit=0
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-afk-contract.sh enter --spend 1
+Away posture recorded at 2026-10-03T20:33:08Z: hold-for-return only. No phone channel is configured; anything that needs you waits for your return. No away instructions were recorded; the away session acts on standing authority only, and anything that needs you waits for your return. Destructive, irreversible, and security-sensitive actions are never pre-authorizable, whatever the words say. Expected return: not given. Spend cap: 1 concurrent workers.
+Away posture (recorded):
+  entered: 2026-10-03T20:33:08Z
+  expected return: not given
+  spend cap: 1 concurrent workers
+  reach: hold-for-return only. No phone channel is configured; anything that needs you waits for your return.
+  your words: (none)
+exit=0
+$ tmux -L fm-lab new-session -d -s fm-lab-foreign -x 120 -y 40 bash --noprofile --norc
+
+exit=0
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-afk-spend-count.sh /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/state
+1
+exit=0
+$ bash -c . "$1"; fm_backend_kill_confirmed tmux "$2" _ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-backend.sh fm-lab-spend:fm-lab-raw
+
+exit=1
+$ bash -c . "$1"; fm_backend_kill tmux "$2" _ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.baseline/bin/fm-backend.sh fm-lab-spend:fm-lab-raw
+
+exit=0
+$ tmux -L fm-lab capture-pane -p -t fm-lab-moved:fm-lab-raw
+bash-5.3$ treehouse get
+🌳 Setting up worktree...
+🌳 Entered worktree at ~/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/pool/.treehouse/p-3f407b/1/p.
+ Type 'exit' to return.
+bash-5.3$ cd -- '/Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/pool/.treehouse/p-3f407b
+/1/p'
+bash-5.3$ export GOTMPDIR=/tmp/fm-lab-raw/gotmp
+bash-5.3$ export COMPACT_ADVISER_DISABLE=1
+bash-5.3$ export FM_TASK_ID=lab-raw
+bash-5.3$ . '/tmp/fm-lab-raw+0023b9d4fdb41f2df1582d472c669cc0f5a9e10534246fdb2eca2f7526f199a9/launch.s1791059565.35399.2
+5844.sh'
+^C
+bash-5.3$ sleep 600
+exit=0
+$ tmux -L fm-lab send-keys -t fm-lab-moved:fm-lab-raw C-c
+
+exit=0
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-afk-spend-count.sh /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/state
+0
+exit=0
+OBSERVED: PASS Rename and moved windows do not prove death; confirmed closure refuses the stale target
+
+SCENARIO: Unavailable experimental backends retain capacity and secondmates remain excluded
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-afk-spend-count.sh /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/state
+1
+exit=0
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-spawn.sh lab-next /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/p sleep 600 --scout
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l
+error: spawn refused - the away-posture record caps concurrent workers at 1 and 1 ordinary task(s) are live in this home; task lab-next stays queued for the captain's return or for a worker to finish (spend cap: bin/fm-afk-contract.sh)
+exit=1
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-afk-return.sh check
+fm-afk-launch: away-posture record archived at /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/state/afk-contracts/1791059588.afk-contract
+fm-afk-launch: away mode stopped; no daemon terminal was running, .afk cleared, and the posture record archived
+WARNING: watcher still down (same stale episode; last beat: 30s ago, grace 300s) - full banner already printed this episode.
+=== Return brief (away 2026-10-03T20:33:08Z -> 2026-10-03T20:33:12Z, 4s) ===
+Supervisor health:
+  - supervision ran through the away window with no detected gap (watcher beat 29s old at return)
+  - status file unreadable: /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/state/unreadable.status; catch-up stays gated
+Your instructions:
+  (no away instructions recorded)
+  the away session took no action under them.
+Waiting on you:
+  (nothing)
+Tried and failed, or could not be fixed:
+  (nothing)
+Landed, cleanup due:
+  (nothing)
+Handled while away:
+  0 outcome(s) handled by the away session (0 routine, 0 escalated above)
+  (no routine outcomes recorded in the store for this window)
+Cost: 0 supervision outcome(s) recorded (0 routine, 0 captain); 1 task(s) live at return.
+fm-afk-return: catch-up must finish before the captain request
+catch-up health: supervision ran through the away window with no detected gap (watcher beat 29s old at return)
+catch-up lifecycle: status file unreadable: /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/state/unreadable.status; catch-up stays gated
+fm-afk-return: handle each blocker now, or close it with resolved [key=...] and append a durable reclassification reason, then run bin/fm-afk-return.sh check
+exit=3
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-afk-contract.sh enter --spend 1
+Away posture recorded at 2026-10-03T20:33:12Z: hold-for-return only. No phone channel is configured; anything that needs you waits for your return. No away instructions were recorded; the away session acts on standing authority only, and anything that needs you waits for your return. Destructive, irreversible, and security-sensitive actions are never pre-authorizable, whatever the words say. Expected return: not given. Spend cap: 1 concurrent workers.
+Away posture (recorded):
+  entered: 2026-10-03T20:33:12Z
+  expected return: not given
+  spend cap: 1 concurrent workers
+  reach: hold-for-return only. No phone channel is configured; anything that needs you waits for your return.
+  your words: (none)
+exit=0
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-afk-spend-count.sh /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/state
+1
+exit=0
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-spawn.sh lab-next /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/p sleep 600 --scout
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l
+error: spawn refused - the away-posture record caps concurrent workers at 1 and 1 ordinary task(s) are live in this home; task lab-next stays queued for the captain's return or for a worker to finish (spend cap: bin/fm-afk-contract.sh)
+exit=1
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-afk-return.sh check
+fm-afk-launch: away-posture record archived at /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/state/afk-contracts/1791059592.afk-contract
+fm-afk-launch: away mode stopped; no daemon terminal was running, .afk cleared, and the posture record archived
+WARNING: watcher still down (same stale episode; last beat: 33s ago, grace 300s) - full banner already printed this episode.
+=== Return brief (away 2026-10-03T20:33:08Z -> 2026-10-03T20:33:14Z, 6s) ===
+Supervisor health:
+  - supervision ran through the away window with no detected gap (watcher beat 29s old at return)
+  - status file unreadable: /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/state/unreadable.status; catch-up stays gated
+Your instructions:
+  (no away instructions recorded)
+  the away session took no action under them.
+Waiting on you:
+  (nothing)
+Tried and failed, or could not be fixed:
+  (nothing)
+Landed, cleanup due:
+  (nothing)
+Handled while away:
+  0 outcome(s) handled by the away session (0 routine, 0 escalated above)
+  (no routine outcomes recorded in the store for this window)
+Cost: 0 supervision outcome(s) recorded (0 routine, 0 captain); 1 task(s) live at return.
+fm-afk-return: catch-up must finish before the captain request
+catch-up health: supervision ran through the away window with no detected gap (watcher beat 29s old at return)
+catch-up lifecycle: status file unreadable: /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/state/unreadable.status; catch-up stays gated
+fm-afk-return: handle each blocker now, or close it with resolved [key=...] and append a durable reclassification reason, then run bin/fm-afk-return.sh check
+exit=3
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-afk-contract.sh enter --spend 1
+Away posture recorded at 2026-10-03T20:33:15Z: hold-for-return only. No phone channel is configured; anything that needs you waits for your return. No away instructions were recorded; the away session acts on standing authority only, and anything that needs you waits for your return. Destructive, irreversible, and security-sensitive actions are never pre-authorizable, whatever the words say. Expected return: not given. Spend cap: 1 concurrent workers.
+Away posture (recorded):
+  entered: 2026-10-03T20:33:15Z
+  expected return: not given
+  spend cap: 1 concurrent workers
+  reach: hold-for-return only. No phone channel is configured; anything that needs you waits for your return.
+  your words: (none)
+exit=0
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-afk-spend-count.sh /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/state
+1
+exit=0
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-spawn.sh lab-next /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/p sleep 600 --scout
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l
+error: spawn refused - the away-posture record caps concurrent workers at 1 and 1 ordinary task(s) are live in this home; task lab-next stays queued for the captain's return or for a worker to finish (spend cap: bin/fm-afk-contract.sh)
+exit=1
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-afk-return.sh check
+fm-afk-launch: away-posture record archived at /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/state/afk-contracts/1791059595.afk-contract
+fm-afk-launch: away mode stopped; no daemon terminal was running, .afk cleared, and the posture record archived
+WARNING: watcher still down (same stale episode; last beat: 35s ago, grace 300s) - full banner already printed this episode.
+=== Return brief (away 2026-10-03T20:33:08Z -> 2026-10-03T20:33:16Z, 8s) ===
+Supervisor health:
+  - supervision ran through the away window with no detected gap (watcher beat 29s old at return)
+  - status file unreadable: /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/state/unreadable.status; catch-up stays gated
+Your instructions:
+  (no away instructions recorded)
+  the away session took no action under them.
+Waiting on you:
+  (nothing)
+Tried and failed, or could not be fixed:
+  (nothing)
+Landed, cleanup due:
+  (nothing)
+Handled while away:
+  0 outcome(s) handled by the away session (0 routine, 0 escalated above)
+  (no routine outcomes recorded in the store for this window)
+Cost: 0 supervision outcome(s) recorded (0 routine, 0 captain); 1 task(s) live at return.
+fm-afk-return: catch-up must finish before the captain request
+catch-up health: supervision ran through the away window with no detected gap (watcher beat 29s old at return)
+catch-up lifecycle: status file unreadable: /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/state/unreadable.status; catch-up stays gated
+fm-afk-return: handle each blocker now, or close it with resolved [key=...] and append a durable reclassification reason, then run bin/fm-afk-return.sh check
+exit=3
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-afk-contract.sh enter --spend 1
+Away posture recorded at 2026-10-03T20:33:17Z: hold-for-return only. No phone channel is configured; anything that needs you waits for your return. No away instructions were recorded; the away session acts on standing authority only, and anything that needs you waits for your return. Destructive, irreversible, and security-sensitive actions are never pre-authorizable, whatever the words say. Expected return: not given. Spend cap: 1 concurrent workers.
+Away posture (recorded):
+  entered: 2026-10-03T20:33:17Z
+  expected return: not given
+  spend cap: 1 concurrent workers
+  reach: hold-for-return only. No phone channel is configured; anything that needs you waits for your return.
+  your words: (none)
+exit=0
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-afk-spend-count.sh /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/state
+0
+exit=0
+OBSERVED: PASS Unavailable experimental backends retain capacity and secondmates remain excluded
+
+SCENARIO: Delayed fresh launch reserves capacity; renaming before cancellation retains surviving endpoint and cleanup capacity
+$ tmux -L fm-lab rename-session -t fm-lab-renamed fm-lab-pending
+
+exit=0
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-afk-spend-count.sh /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/state
+1
+exit=0
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-spawn.sh lab-next /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/p sleep 600 --scout
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l
+error: spawn refused - the away-posture record caps concurrent workers at 1 and 1 ordinary task(s) are live in this home; task lab-next stays queued for the captain's return or for a worker to finish (spend cap: bin/fm-afk-contract.sh)
+exit=1
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-afk-return.sh check
+fm-afk-launch: away-posture record archived at /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/state/afk-contracts/1791059597.afk-contract
+fm-afk-launch: away mode stopped; no daemon terminal was running, .afk cleared, and the posture record archived
+WARNING: watcher still down (same stale episode; last beat: 42s ago, grace 300s) - full banner already printed this episode.
+=== Return brief (away 2026-10-03T20:33:08Z -> 2026-10-03T20:33:23Z, 15s) ===
+Supervisor health:
+  - supervision ran through the away window with no detected gap (watcher beat 29s old at return)
+  - status file unreadable: /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/state/unreadable.status; catch-up stays gated
+  - status file unreadable: /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/state/lab-pending.status; catch-up stays gated
+Your instructions:
+  (no away instructions recorded)
+  the away session took no action under them.
+Waiting on you:
+  (nothing)
+Tried and failed, or could not be fixed:
+  (nothing)
+Landed, cleanup due:
+  (nothing)
+Handled while away:
+  0 outcome(s) handled by the away session (0 routine, 0 escalated above)
+  (no routine outcomes recorded in the store for this window)
+Cost: 0 supervision outcome(s) recorded (0 routine, 0 captain); 1 task(s) live at return.
+fm-afk-return: catch-up must finish before the captain request
+catch-up health: supervision ran through the away window with no detected gap (watcher beat 29s old at return)
+catch-up lifecycle: status file unreadable: /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/state/unreadable.status; catch-up stays gated
+catch-up lifecycle: status file unreadable: /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/state/lab-pending.status; catch-up stays gated
+fm-afk-return: handle each blocker now, or close it with resolved [key=...] and append a durable reclassification reason, then run bin/fm-afk-return.sh check
+exit=3
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-afk-contract.sh enter --spend 1
+Away posture recorded at 2026-10-03T20:33:23Z: hold-for-return only. No phone channel is configured; anything that needs you waits for your return. No away instructions were recorded; the away session acts on standing authority only, and anything that needs you waits for your return. Destructive, irreversible, and security-sensitive actions are never pre-authorizable, whatever the words say. Expected return: not given. Spend cap: 1 concurrent workers.
+Away posture (recorded):
+  entered: 2026-10-03T20:33:23Z
+  expected return: not given
+  spend cap: 1 concurrent workers
+  reach: hold-for-return only. No phone channel is configured; anything that needs you waits for your return.
+  your words: (none)
+exit=0
+$ tmux -L fm-lab capture-pane -p -t fm-lab-foreign:fm-lab-pending
+bash-5.3$ treehouse get
+🌳 Setting up worktree...
+🌳 Entered worktree at ~/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/pool/.treehouse/p-3f407b/2/p.
+ Type 'exit' to return.
+bash-5.3$ cd -- '/Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/pool/.treehouse/p-3f407b
+/2/p'
+bash-5.3$ export GOTMPDIR=/tmp/fm-lab-pending/gotmp
+bash-5.3$ export COMPACT_ADVISER_DISABLE=1
+bash-5.3$ export FM_TASK_ID=lab-pending
+bash-5.3$ . '/tmp/fm-lab-pending+0023b9d4fdb41f2df1582d472c669cc0f5a9e10534246fdb2eca2f7526f199a9/launch.s1791059600.940
+30.12457.sh'
+LAB_PENDING_READY
+exit=0
+$ tmux -L fm-lab rename-session -t fm-lab-foreign fm-lab-surviving
+
+exit=0
+$ bash -c . "$1"; fm_backend_worker_state tmux "$2" _ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-backend.sh fm-lab-surviving:fm-lab-pending
+ambiguous
+exit=0
+Cancellation exit=143
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l
+error: task lab-pending's startup could not be cancelled; its record is retained for endpoint cleanup
+
+Persisted cancellation contract:
+window=fm-lab-foreign:fm-lab-pending
+endpoint_task_id=lab-pending
+worktree=/Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/pool/.treehouse/p-3f407b/2/p
+project=/Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/p
+harness=printf
+kind=scout
+tasktmp=/tmp/fm-lab-pending
+model=default
+effort=default
+spawn_gen=s1791059600.94030.12457
+cleanup_recovery=launch
+
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-afk-spend-count.sh /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/state
+1
+exit=0
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-spawn.sh lab-next /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/p sleep 600 --scout
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l
+error: spawn refused - the away-posture record caps concurrent workers at 1 and 1 ordinary task(s) are live in this home; task lab-next stays queued for the captain's return or for a worker to finish (spend cap: bin/fm-afk-contract.sh)
+exit=1
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-afk-return.sh check
+fm-afk-launch: away-posture record archived at /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/state/afk-contracts/1791059603.afk-contract
+fm-afk-launch: away mode stopped; no daemon terminal was running, .afk cleared, and the posture record archived
+WARNING: watcher still down (same stale episode; last beat: 44s ago, grace 300s) - full banner already printed this episode.
+=== Return brief (away 2026-10-03T20:33:08Z -> 2026-10-03T20:33:25Z, 17s) ===
+Supervisor health:
+  - supervision ran through the away window with no detected gap (watcher beat 29s old at return)
+  - status file unreadable: /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/state/unreadable.status; catch-up stays gated
+  - status file unreadable: /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/state/lab-pending.status; catch-up stays gated
+Your instructions:
+  (no away instructions recorded)
+  the away session took no action under them.
+Waiting on you:
+  (nothing)
+Tried and failed, or could not be fixed:
+  (nothing)
+Landed, cleanup due:
+  (nothing)
+Handled while away:
+  0 outcome(s) handled by the away session (0 routine, 0 escalated above)
+  (no routine outcomes recorded in the store for this window)
+Cost: 0 supervision outcome(s) recorded (0 routine, 0 captain); 1 task(s) live at return.
+fm-afk-return: catch-up must finish before the captain request
+catch-up health: supervision ran through the away window with no detected gap (watcher beat 29s old at return)
+catch-up lifecycle: status file unreadable: /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/state/unreadable.status; catch-up stays gated
+catch-up lifecycle: status file unreadable: /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/.l/state/lab-pending.status; catch-up stays gated
+fm-afk-return: handle each blocker now, or close it with resolved [key=...] and append a durable reclassification reason, then run bin/fm-afk-return.sh check
+exit=3
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-afk-contract.sh enter --spend 1
+Away posture recorded at 2026-10-03T20:33:26Z: hold-for-return only. No phone channel is configured; anything that needs you waits for your return. No away instructions were recorded; the away session acts on standing authority only, and anything that needs you waits for your return. Destructive, irreversible, and security-sensitive actions are never pre-authorizable, whatever the words say. Expected return: not given. Spend cap: 1 concurrent workers.
+Away posture (recorded):
+  entered: 2026-10-03T20:33:26Z
+  expected return: not given
+  spend cap: 1 concurrent workers
+  reach: hold-for-return only. No phone channel is configured; anything that needs you waits for your return.
+  your words: (none)
+exit=0
+$ bash -c . "$1"; fm_backend_worker_state tmux "$2" _ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M41455GSYFXNEE083YS370GC/bin/fm-backend.sh fm-lab-surviving:fm-lab-pending
+ambiguous
+exit=0
+OBSERVED: PASS Delayed fresh launch reserves capacity; renaming before cancellation retains surviving endpoint and cleanup capacity
+$ tmux -L fm-lab kill-server
+
+exit=0
+CLEANUP: private tmux server stopped and disposable worktree lab removed

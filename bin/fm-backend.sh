@@ -852,6 +852,9 @@ fm_backend_kill() {  # <backend> <target>
   esac
 }
 
+# Closure proof for launch rollback, stricter than the idempotent fm_backend_kill:
+# tmux requires the kill acknowledgement, Herdr also confirms endpoint absence,
+# and unsupported or unproven closure fails so ownership can be retained.
 fm_backend_kill_confirmed() {
   local backend=$1 target=$2
   [ -n "$target" ] || return 1
@@ -1007,6 +1010,10 @@ fm_backend_agent_state() {  # <backend> <target>
   esac
 }
 
+# Startup/spend view, separate from recovery-grade harness attribution.
+# A Herdr agent_not_found verdict can hide an unregistered raw worker; consult
+# pane process evidence before treating it as dead, keeping unattributed running
+# processes ambiguous and unreadable process evidence conservative.
 fm_backend_worker_state() {
   local backend=$1 target=$2 state
   state=$(fm_backend_agent_state "$backend" "$target") || state=unreadable

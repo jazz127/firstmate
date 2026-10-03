@@ -282,8 +282,12 @@
 #   This keeps commands beyond the terminal's roughly 1,024-byte input boundary
 #   intact, prevents a delayed source line from being rebound by a relaunch, and
 #   prevents equal task ids in different Firstmate homes from sharing a file.
-#   Spawn refuses an unsafe pre-existing task temp root or launch namespace;
-#   capped fresh launches retain their metadata lock through startup confirmation.
+#   Spawn refuses an unsafe pre-existing task temp root or launch namespace.
+#   On tmux and Herdr, capped fresh launches retain their metadata lock while a
+#   30s confirmation loop establishes startup or successful command completion.
+#   Running raw commands need process evidence rather than recognized harness identity.
+#   An abort during confirmation rolls back only after fm_backend_kill_confirmed proves closure;
+#   otherwise cleanup_recovery=launch retains the record for endpoint recovery.
 #   Task teardown removes only the current home's launch namespace.
 # Launch environment (config/launch-env-allowlist):
 #   Absent means unchanged ambient inheritance. A present readable regular file
@@ -1579,9 +1583,9 @@ spawn_refuse_if_away_spend_cap() {
 # away record exists (never a quiet-mode one, whose captain is present and
 # spends as attended: bin/fm-afk-contract.sh mode), a fresh ordinary spawn
 # refuses for BOTH actors once this home already holds that many ordinary
-# workers able to spend, counted the same way the return brief counts tasks
-# live at return. Relaunches are exempt recovery of existing tasks, regardless
-# of whether they currently count; secondmates are exempt persistent homes.
+# workers able to spend (classification: bin/fm-afk-spend-count.sh).
+# Relaunches are exempt recovery of existing tasks, regardless of whether they
+# currently count; secondmates are exempt persistent homes.
 # Checked before any endpoint, worktree, or record exists, so a refusal costs
 # nothing to unwind; rechecked after the task-set lock so two fresh spawns
 # cannot both publish from a stale count.

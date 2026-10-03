@@ -29,6 +29,7 @@
 # is fleet work and so waits for the gate rather than holding it), then what
 # the away session handled, then cost. The health snapshot is taken BEFORE the
 # daemon shutdown so the shutdown itself cannot read as a gap.
+# The live-task cost count uses bin/fm-afk-spend-count.sh's admission snapshot.
 #
 # THE GATE. `blocked:` is the crewmate protocol's firstmate-actionable verb. A
 # live task's open blocked event must be remediated and closed with

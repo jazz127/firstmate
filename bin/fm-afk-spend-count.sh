@@ -2,8 +2,11 @@
 # Count ordinary task workers still able to spend in this home.
 # Usage: fm-afk-spend-count.sh <state-dir>
 # Missing or stopped endpoints and current terminal-ready tasks do not count.
-# Unreadable endpoint state counts conservatively; a done status is excluded
-# only when fm-crew-state.sh accepts its current state and named-head gate.
+# Unreadable, ambiguous and unverified endpoint state counts conservatively.
+# Orca, Zellij and cmux have no recovery-grade death classifier, so a failed
+# presence probe cannot exclude their recorded endpoints. A ship's done status
+# is excluded only for a mode-specific terminal delivery accepted by the DoD
+# predicate and fm-crew-state.sh's current-state and named-head gates.
 set -u
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -11,6 +14,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$SCRIPT_DIR/fm-backend.sh"
 # shellcheck source=bin/fm-classify-lib.sh
 . "$SCRIPT_DIR/fm-classify-lib.sh"
+# shellcheck source=bin/fm-dod-lib.sh
+. "$SCRIPT_DIR/fm-dod-lib.sh"
 
 STATE=${1:-}
 [ -d "$STATE" ] || { echo "usage: fm-afk-spend-count.sh <state-dir>" >&2; exit 2; }
@@ -24,18 +29,15 @@ for meta in "$STATE"/*.meta; do
   backend=$(fm_backend_of_meta "$meta")
   target=$(fm_backend_target_of_meta "$meta")
   [ -n "$target" ] || continue
-  case "$backend" in
-    tmux|herdr)
-      endpoint_state=$(fm_backend_agent_state "$backend" "$target" 2>/dev/null) || endpoint_state=unreadable
-      case "$endpoint_state" in dead|missing) continue ;; esac
-      ;;
-    *)
-      fm_backend_target_exists "$backend" "$target" "fm-$id" || continue
-      ;;
-  esac
+  endpoint_state=$(fm_backend_agent_state "$backend" "$target" 2>/dev/null) || endpoint_state=unreadable
+  case "$endpoint_state" in dead|missing) continue ;; esac
 
   status="$STATE/$id.status"
-  if [ -f "$status" ] && [ "$(status_line_verb "$(status_current_line "$status" "$(fm_meta_get "$meta" kind)")")" = "done" ]; then
+  kind=$(fm_meta_get "$meta" kind)
+  line=$(status_current_line "$status" "$kind")
+  if [ "$(status_line_verb "$line")" = "done" ] && {
+    [ "$kind" != ship ] || fm_dod_should_gate_ship_done "$kind" "$(fm_meta_get "$meta" mode)" "$line"
+  }; then
     current=$(FM_STATE_OVERRIDE="$STATE" FM_CREW_STATE_NO_FORGE=1 \
       "$SCRIPT_DIR/fm-crew-state.sh" "$id" 2>/dev/null) || current=
     case "$current" in "state: done "*) continue ;; esac

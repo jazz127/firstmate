@@ -48,11 +48,13 @@ case "$1" in
     [ ! -f "$FM_HOME/endpoint" ] || printf 'fm-%s\n' "$FM_RESERVATION_ID"
     ;;
   display-message)
+    [ ! -f "$FM_HOME/invisible" ] || exit 1
     case "${*: -1}" in
       '#{pane_current_path}') printf '%s\n' "$FM_RESERVATION_WT" ;;
       '#{pane_current_command}')
         [ ! -f "$FM_HOME/unreadable" ] || exit 1
         if [ -f "$FM_HOME/started" ]; then
+          [ ! -f "$FM_HOME/invisible" ] || exit 1
           if [ -f "$FM_HOME/raw" ]; then printf 'custom-agent\n'; else printf 'codex\n'; fi
         else printf 'bash\n'; fi
         ;;
@@ -632,6 +634,10 @@ test_other_delivery_modes_and_scout() {
       --source claude-hook --event user-prompt-submit >/dev/null || fail "$mode busy record failed"
     count=$(count_workers "$dir")
     [ "$count" = 1 ] || fail "busy $mode delivery was excluded"
+    "$ROOT/bin/fm-busy-event.sh" apply "$dir/state" task unknown --current-gen \
+      --source claude-hook --event unavailable >/dev/null || fail "$mode unknown record failed"
+    count=$(count_workers "$dir")
+    [ "$count" = 1 ] || fail "unknown $mode delivery was excluded"
     "$ROOT/bin/fm-busy-event.sh" apply "$dir/state" task idle --current-gen \
       --source claude-hook --event stop >/dev/null || fail "$mode stop record failed"
   done
@@ -649,9 +655,145 @@ test_other_delivery_modes_and_scout() {
     --source claude-hook --event user-prompt-submit >/dev/null || fail "scout busy record failed"
   count=$(count_workers "$dir")
   [ "$count" = 1 ] || fail "busy scout with stale done status was excluded"
+  "$ROOT/bin/fm-busy-event.sh" apply "$dir/state" task unknown --current-gen \
+    --source claude-hook --event unavailable >/dev/null || fail "scout unknown record failed"
+  count=$(count_workers "$dir")
+  [ "$count" = 1 ] || fail "unknown scout with stale done status was excluded"
   pass "direct-PR, local-only and scout deliveries are excluded; the default-mode handoff still counts"
 }
 
+test_completed_run_unknown_activity() {
+  local dir head out harness activity
+  dir="$TMP_ROOT/completed-run-unknown"
+  install_tools "$dir"
+  git init -q -b fm/worker "$dir/wt"
+  git -C "$dir/wt" commit -q --allow-empty -m init
+  head=$(git -C "$dir/wt" rev-parse HEAD)
+  git -C "$dir/wt" update-ref refs/remotes/origin/worker "$head"
+  printf 'done: PR https://example.test/o/r/pull/9 checks green\n' > "$dir/state/task.status"
+  cat > "$dir/run.toon" <<EOF
+run:
+  id: "01RUN"
+  branch: fm/worker
+  status: completed
+  head: "$head"
+  pr: "https://example.test/o/r/pull/9"
+  findings: none
+outcome: passed
+EOF
+  printf '  completed fm/worker %s 2026-10-04 10:00\n' "${head:0:7}" > "$dir/runs.toon"
+  for harness in claude codex; do
+    fm_write_meta "$dir/state/task.meta" "window=fixture:worker" "worktree=$dir/wt" \
+      "project=$dir/wt" "kind=ship" "mode=no-mistakes" "harness=$harness"
+    for activity in busy unknown; do
+      "$ROOT/bin/fm-busy-event.sh" arm "$dir/state" task --state "$activity" \
+        --source fm-spawn --event resume >/dev/null || fail "resume record failed"
+      if [ "$harness" = codex ]; then
+        out=$(PATH="$dir/fakebin:$PATH" FM_HOME="$dir" bash -c \
+          '. "$1/bin/fm-backend.sh"; . "$1/bin/fm-busy-lib.sh"; fm_busy_classify_meta "$2/state/task.meta" task "$2/state"' \
+          _ "$ROOT" "$dir")
+        [ "$out" = 'unknown codex-unverified' ] || fail "Codex did not reproduce unknown activity: $out"
+      fi
+      out=$(read_worker "$dir" task)
+      assert_contains "$out" "state: done" "completed run did not reproduce stale done: $out"
+      assert_contains "$out" "source: run-step" "completed run was not attributed: $out"
+      assert_spending_snapshot "$dir"
+    done
+    [ "$(git -C "$dir/wt" rev-parse HEAD)" = "$head" ] || fail "resume changed HEAD"
+  done
+  # Even an idle record cannot turn an unreadable endpoint into proven idle presence.
+  fm_write_meta "$dir/state/task.meta" "window=unreadable:worker" "worktree=$dir/wt" \
+    "project=$dir/wt" "kind=ship" "mode=no-mistakes" "harness=claude"
+  "$ROOT/bin/fm-busy-event.sh" arm "$dir/state" task --state idle \
+    --source claude-hook --event stop >/dev/null || fail "idle record failed"
+  assert_spending_snapshot "$dir"
+  pass "busy then unknown activity and unreadable endpoints override an accepted completed run"
+}
+
+test_bounded_presence_reads() {
+  local dir stage harness backend target count rc
+  # Each fixture stalls an external read reached by a different production path.
+  for stage in inventory process activity crew-presence crew-capture herdr-presence herdr-agent herdr-process herdr-absence herdr-activity herdr-crew; do
+    dir="$TMP_ROOT/hung-$stage"
+    install_tools "$dir"
+    mkdir -p "$dir/wt"
+    backend=tmux
+    target=fixture:worker
+    harness=claude
+    [ "$stage" != activity ] || harness=grok
+    case "$stage" in herdr-*) backend=herdr; target=fixture:w1:p2 ;; esac
+    fm_write_meta "$dir/state/task.meta" "window=$target" "worktree=$dir/wt" \
+      "kind=scout" "backend=$backend" "harness=$harness"
+    printf 'done: report complete\n' > "$dir/state/task.status"
+    if [ "$stage" != activity ] && [ "$stage" != herdr-activity ]; then
+      "$ROOT/bin/fm-busy-event.sh" arm "$dir/state" task --state idle \
+        --source claude-hook --event stop >/dev/null || fail "hang idle record failed"
+    fi
+    mv "$dir/fakebin/tmux" "$dir/fakebin/tmux-ok"
+    cat > "$dir/fakebin/tmux" <<'SH'
+#!/usr/bin/env bash
+case "$FM_HANG_STAGE:$1:${*: -1}" in
+  inventory:list-windows:*|process:display-message:'#{pane_current_command}'|\
+  activity:capture-pane:*|crew-presence:display-message:'#{pane_id}'|crew-capture:capture-pane:*)
+    touch "$FM_HOME/read-hung"
+    sleep 30
+    exit 1
+    ;;
+esac
+exec "$FM_HOME/fakebin/tmux-ok" "$@"
+SH
+    cat > "$dir/fakebin/herdr" <<'SH'
+#!/usr/bin/env bash
+case "$1 $2" in
+  'pane get')
+    if [ "$FM_HANG_STAGE" = herdr-absence ] && [ ! -f "$FM_HOME/absence-read" ]; then
+      touch "$FM_HOME/absence-read"
+      printf '{"error":{"code":"pane_not_found"}}\n'
+      exit 0
+    fi
+    case "$FM_HANG_STAGE" in
+      herdr-presence|herdr-absence) touch "$FM_HOME/read-hung"; sleep 30; exit 1 ;;
+    esac
+    printf '{"result":{"pane":{"pane_id":"w1:p2"}}}\n'
+    ;;
+  'agent get')
+    if [ "$FM_HANG_STAGE" = herdr-agent ]; then
+      touch "$FM_HOME/read-hung"; sleep 30; exit 1
+    fi
+    printf '{"error":{"code":"agent_not_found"}}\n'
+    ;;
+  'pane process-info')
+    if [ "$FM_HANG_STAGE" = herdr-process ]; then
+      touch "$FM_HOME/read-hung"; sleep 30; exit 1
+    fi
+    printf '{"result":{"type":"pane_process_info","process_info":{"pane_id":"w1:p2","shell_pid":101,"foreground_processes":[{"pid":102,"name":"claude","argv":["claude"]}]}}}\n'
+    ;;
+  'status --json')
+    if [ "$FM_HANG_STAGE" = herdr-activity ]; then
+      touch "$FM_HOME/read-hung"; sleep 30; exit 1
+    fi
+    printf '{"server":{"running":true}}\n'
+    ;;
+  'pane read') touch "$FM_HOME/read-hung"; sleep 30; exit 1 ;;
+  *) exit 1 ;;
+esac
+SH
+    chmod +x "$dir/fakebin/tmux" "$dir/fakebin/herdr"
+    # This outer watchdog makes an unbounded regression fail instead of wedging CI.
+    rc=0
+    count=$(PATH="$dir/fakebin:$PATH" FM_HOME="$dir" FM_HANG_STAGE="$stage" \
+      NM_HOME="$dir/unused-nm-home" bash -c \
+      '. "$1/bin/fm-timeout-lib.sh"; fm_run_timed 12 "$1/bin/fm-afk-spend-count.sh" "$2"' \
+      _ "$ROOT" "$dir/state") || rc=$?
+    [ -f "$dir/read-hung" ] || fail "$stage never reached the stalled CLI read"
+    [ "$rc" -eq 0 ] || fail "$stage stalled the counter (exit $rc)"
+    [ "$count" = 1 ] || fail "$stage dropped the worker after timeout: $count"
+    pass "$stage timeout returns a conservative spend count"
+  done
+}
+
+test_completed_run_unknown_activity
+test_bounded_presence_reads
 test_exited_worker_does_not_fill_cap
 test_fresh_launch_reservation
 test_admission_exemptions

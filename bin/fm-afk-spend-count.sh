@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Count ordinary task workers still able to spend in this home.
 # Usage: fm-afk-spend-count.sh <state-dir>
-# Missing or stopped endpoints and current terminal-ready tasks do not count.
+# Live lifecycle-lock owners reserve launches; stopped and ready tasks do not.
 # Unreadable, ambiguous and unverified endpoint state counts conservatively.
 # Orca, Zellij and cmux have no recovery-grade death classifier, so a failed
 # presence probe cannot exclude their recorded endpoints. A ship's done status
@@ -19,11 +19,18 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 STATE=${1:-}
 [ -d "$STATE" ] || { echo "usage: fm-afk-spend-count.sh <state-dir>" >&2; exit 2; }
+# shellcheck source=bin/fm-wake-lib.sh
+FM_STATE_OVERRIDE="$STATE" . "$SCRIPT_DIR/fm-wake-lib.sh"
 
 live=0
 for meta in "$STATE"/*.meta; do
   [ -f "$meta" ] || continue
   [ "$(fm_meta_get "$meta" kind)" != secondmate ] || continue
+  meta_lock=$(fm_meta_lock_path "$meta") || exit 1
+  if fm_pid_alive "$(cat "$meta_lock/pid" 2>/dev/null)"; then
+    live=$((live + 1))
+    continue
+  fi
   id=${meta##*/}
   id=${id%.meta}
   backend=$(fm_backend_of_meta "$meta")

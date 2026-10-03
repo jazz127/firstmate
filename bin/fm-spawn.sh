@@ -1560,8 +1560,8 @@ spawn_refuse_if_away_spend_cap() {
 # spends as attended: bin/fm-afk-contract.sh mode), a fresh ordinary spawn
 # refuses for BOTH actors once this home already holds that many ordinary
 # workers able to spend, counted the same way the return brief counts tasks
-# live at return. A relaunch replaces a worker that already counts, and a
-# secondmate is a persistent home rather than spend, so both are exempt.
+# live at return. Relaunches are exempt recovery of existing tasks, regardless
+# of whether they currently count; secondmates are exempt persistent homes.
 # Checked before any endpoint, worktree, or record exists, so a refusal costs
 # nothing to unwind; rechecked after the task-set lock so two fresh spawns
 # cannot both publish from a stale count.

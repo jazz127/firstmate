@@ -1227,6 +1227,8 @@ spawn_cancel_pending_start() {
   [ "$SPAWN_START_PENDING" = 1 ] || return 0
   SPAWN_START_PENDING=0
   rm -f "$LAUNCH_FILE"
+  # Single quotes defer positional argument expansion to the child bash.
+  # shellcheck disable=SC2016
   if fm_run_timed 10 bash -c \
     '. "$1"; fm_backend_kill_confirmed "$2" "$3"' \
     _ "$SCRIPT_DIR/fm-backend.sh" "$BACKEND" "$T" 2>/dev/null; then
@@ -5474,6 +5476,8 @@ if [ "$SPAWN_START_PENDING" = 1 ]; then
       fi
       break
     fi
+    # Single quotes defer positional argument expansion to the child bash.
+    # shellcheck disable=SC2016
     spawn_start_state=$(fm_run_timed 2 bash -c \
       '. "$1"; fm_backend_worker_state "$2" "$3"' _ \
       "$SCRIPT_DIR/fm-backend.sh" "$BACKEND" "$T" 2>/dev/null) || spawn_start_state=unreadable

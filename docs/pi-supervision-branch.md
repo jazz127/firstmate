@@ -50,9 +50,7 @@ The away posture, recorded by `state/.afk-contract`, hands every row to the bran
 
 ### How outcomes reach main
 
-While attended, captain-relevant branch outcomes persist as exact, sequence-keyed visible transcript entries.
-They then open one sequence-keyed processing turn on main, which stays open until main acknowledges that sequence.
-While away, the entries persist but processing waits until the record is archived.
+The [two-stage noise filter](#two-stage-noise-filter) owns transcript delivery and main's acknowledgement-bound processing retries; [Postures](#postures) owns processing deferral while away.
 
 ### Design source
 
@@ -429,6 +427,16 @@ Nothing else advances that marker.
 An unrelated reply, an empty reply, or a reply that paraphrases the outcome leaves the sequence unprocessed.
 The extension presents the current unprocessed sequence set again at the next main run boundary and at every session start.
 
+The first presentation of a sequence set is an ordinary turn whose response stays visible, including prose alongside `fm_branch_processed`.
+From the second triggered presentation of that same set on, until its listed outcomes are acknowledged, an assistant final's content is cleared before persistence only when its text is empty after trimming or exactly matches a final already visible for that sequence set after trimming.
+The message envelope, including provider usage accounting, is preserved.
+Differing replies stay visible, including the first real handling after an empty or unrelated reply.
+Messages carrying tool calls always retain their prose, signed reasoning, and usage accounting.
+Pi's Markdown transformer API buffers retry prose while streaming on versions that expose it, so the complete reply can be compared before rendering.
+A retained reply renders when the message ends.
+Successful acknowledgement through the request's highest sequence releases subsequent assistant output; a partial acknowledgement leaves the retry comparison active.
+A real user message restores ordinary output immediately, including when a processing request rides that prompt.
+
 ### Re-presentation pacing
 
 A presentation already pending its run boundary is not resent or widened.
@@ -436,7 +444,7 @@ Once that run settles, the extension presents the then-current sequence set.
 
 The first two presentations of a given sequence set open a turn of their own.
 After that, the request rides the captain's next prompt, so an ignored request cannot become an unbounded loop of empty turns.
-Changed sequence membership and a session replacement each start that budget over.
+Changed sequence membership and a session replacement each start that budget and the visible-final comparison over.
 
 Routine outcomes never enter this path and stay turn-free.
 A home with no processed marker, including an upgrade or switch from the supervision host, re-presents delivered captain rows dated and check-first until acknowledged; see the marker contract in `bin/fm-branch-outcome.sh`.
@@ -634,7 +642,7 @@ At that moment the branch reports any refusal instead of concluding there is "no
 - The new branch conversation at every main session start with continuation inside one session, and the mirror re-anchor that pairs with it.
 - Requested-versus-unsolicited delivery, exact visible entry content, and no unkeyed model turn.
 - The sequence-keyed processing request and its acknowledgement.
-- Re-presentation after an empty reply and after an unrelated prior answer, the triggered-then-next-turn pacing, and session-start re-presentation.
+- Suppression of empty or exact-repeat retry finals with differing replies preserved, preserved tool calls and user responses, the triggered-then-next-turn pacing, and session-start re-presentation.
 - Routine outcomes staying turn-free, task-level no-change notes staying hidden, absent-marker re-presentation, and malformed-age reporting without acknowledgement.
 - Idle and busy main state, and incident-shaped compaction and unrelated-assistant context.
 - Cold-start post-lock recovery, crash-before-cursor reload recovery, and repeated-reload idempotency.

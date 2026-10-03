@@ -996,6 +996,22 @@ fm_backend_agent_state() {  # <backend> <target>
   esac
 }
 
+fm_backend_worker_state() {
+  local backend=$1 target=$2 state
+  state=$(fm_backend_agent_state "$backend" "$target") || state=unreadable
+  if [ "$backend" = herdr ] && [ "$state" = dead ]; then
+    fm_backend_source "$backend" || { printf 'unreadable'; return 0; }
+    fm_backend_herdr_parse_target "$target" || { printf 'unreadable'; return 0; }
+    case "$(fm_backend_herdr_pane_process_state "$FM_BACKEND_HERDR_SESSION" "$FM_BACKEND_HERDR_PANE")" in
+      agent) state=alive ;;
+      other) state=ambiguous ;;
+      shell) state=dead ;;
+      *) state=unreadable ;;
+    esac
+  fi
+  printf '%s' "$state"
+}
+
 # Backward-compatible three-state view for existing callers. An
 # authoritatively missing endpoint is confidently not a live agent, while every
 # ambiguous, unreadable, or unverified result stays unknown.

@@ -5470,9 +5470,12 @@ if [ "$SPAWN_START_PENDING" = 1 ]; then
       break
     fi
     spawn_start_state=$(fm_run_timed 2 bash -c \
-      '. "$1"; fm_backend_agent_state "$2" "$3"' _ \
+      '. "$1"; fm_backend_worker_state "$2" "$3"' _ \
       "$SCRIPT_DIR/fm-backend.sh" "$BACKEND" "$T" 2>/dev/null) || spawn_start_state=unreadable
-    [ "$spawn_start_state" != alive ] || break
+    case "$spawn_start_state" in
+      alive) break ;;
+      ambiguous) [ "$RAW_LAUNCH" != 1 ] || break ;;
+    esac
     if [ "$SECONDS" -ge "$spawn_start_deadline" ]; then
       echo "error: task $ID's startup was not established within 30s (endpoint: $spawn_start_state)" >&2
       exit 1

@@ -20,9 +20,9 @@ cleanup_launch() {
 trap cleanup_launch EXIT
 
 test_fresh_launch_reservation() {
-  local kind scenario entry dir home id out rc count i endpoint_state staged
+  local kind scenario entry dir home id out rc count i endpoint_state staged marker
   local -a args
-  for entry in ship:delayed scout:delayed ship:raw scout:raw ship:timeout scout:cancel ship:failed scout:finished ship:cleanup-refused; do
+  for entry in ship:delayed scout:delayed ship:raw scout:raw ship:timeout scout:cancel ship:failed scout:finished ship:cleanup-refused ship:rename-timeout scout:move-cancel ship:socket-cancel scout:rename-raw-cancel; do
     kind=${entry%:*}
     scenario=${entry#*:}
     dir="$TMP_ROOT/launch-$kind-$scenario"
@@ -39,10 +39,12 @@ case "$1" in
   has-session|set-window-option) exit 0 ;;
   kill-window)
     [ ! -f "$FM_HOME/refuse-cleanup" ] || exit 1
+    [ ! -f "$FM_HOME/invisible" ] && [ -f "$FM_HOME/endpoint" ] || exit 1
     rm -f "$FM_HOME/endpoint"
     ;;
   new-window) touch "$FM_HOME/endpoint"; printf '@1\n' ;;
   list-windows)
+    [ ! -f "$FM_HOME/invisible" ] || exit 0
     [ ! -f "$FM_HOME/endpoint" ] || printf 'fm-%s\n' "$FM_RESERVATION_ID"
     ;;
   display-message)
@@ -77,6 +79,7 @@ case "$1" in
     esac
     ;;
   capture-pane) printf '> \n' ;;
+  rename-session|move-window) touch "$FM_HOME/invisible" ;;
   *) exit 1 ;;
 esac
 SH
@@ -85,7 +88,7 @@ SH
       || fail "launch away entry failed"
     args=()
     if [ "$kind" = ship ]; then args=(--mode no-mistakes --yolo off); else args=(--scout); fi
-    if [ "$scenario" = raw ]; then
+    if [ "$scenario" = raw ] || [ "$scenario" = rename-raw-cancel ]; then
       touch "$home/raw"
       args=('custom-agent --flag' "${args[@]}")
     fi
@@ -149,6 +152,22 @@ SH
         ;;
       cancel) kill -TERM "$SPAWN_PID" ;;
       timeout) ;;
+      rename-timeout|move-cancel|socket-cancel|rename-raw-cancel)
+        case "$scenario" in
+          rename*) FM_HOME="$home" "$home/fakebin/tmux" rename-session -t firstmate relocated ;;
+          move*) FM_HOME="$home" "$home/fakebin/tmux" move-window -s "firstmate:fm-$id" -t relocated ;;
+          socket*) touch "$home/invisible" ;;
+        esac
+        touch "$home/started"
+        endpoint_state=$(FM_HOME="$home" FM_RESERVATION_ID="$id" \
+          PATH="$home/fakebin:$PATH" bash -c '. "$1"; fm_backend_agent_state tmux "$2"' \
+          _ "$ROOT/bin/fm-backend.sh" "firstmate:fm-$id")
+        [ "$endpoint_state" = missing ] || fail "relocated launch did not reproduce missing identity: $endpoint_state"
+        FM_HOME="$home" FM_RESERVATION_ID="$id" PATH="$home/fakebin:$PATH" bash -c \
+          '. "$1"; fm_backend_kill tmux "$2"' _ "$ROOT/bin/fm-backend.sh" "firstmate:fm-$id" \
+          || fail "fixture did not reproduce the idempotent close's absence success"
+        [ "$scenario" = rename-timeout ] || kill -TERM "$SPAWN_PID"
+        ;;
       failed|finished|cleanup-refused)
         staged=$(cat "$home/staged-path")
         cat > "$home/fakebin/codex" <<'SH'
@@ -165,6 +184,21 @@ SH
     wait "$SPAWN_PID" || rc=$?
     SPAWN_PID=
     case "$scenario" in
+      rename-timeout|move-cancel|socket-cancel|rename-raw-cancel)
+        [ "$rc" -ne 0 ] || fail "unconfirmed cancellation reported success"
+        [ "$scenario" != rename-timeout ] || assert_grep 'startup was not established within 30s' "$home/launch.log" "relocated startup did not reach timeout cancellation"
+        [ -f "$home/endpoint" ] && [ -f "$home/started" ] || fail "relocated worker did not survive"
+        staged=$(cat "$home/staged-path")
+        [ ! -f "$staged" ] || fail "unconfirmed cancellation left a runnable staged launch"
+        [ -f "$home/state/$id.meta" ] || fail "unconfirmed cancellation discarded the surviving worker's record"
+        [ ! -e "$home/state/.meta-$id.lock" ] || fail "unconfirmed cancellation retained the lifecycle lock"
+        marker=$(bash -c '. "$1"; fm_meta_get "$2" cleanup_recovery' _ \
+          "$ROOT/bin/fm-backend.sh" "$home/state/$id.meta")
+        [ "$marker" = launch ] || fail "unconfirmed cancellation did not retain its cleanup reservation"
+        FM_RESERVATION_ID="$id" FM_RESERVATION_WT="$dir/wt" assert_spending_snapshot "$home"
+        pass "$kind $scenario cancellation retains the surviving worker, admission reservation and return cost"
+        continue
+        ;;
       timeout|cancel|failed|cleanup-refused)
         [ "$rc" -ne 0 ] || fail "unsuccessful startup reported success: $(cat "$home/launch.log")"
         [ "$scenario" != timeout ] || assert_grep 'startup was not established within 30s' "$home/launch.log" "timeout did not report startup failure"

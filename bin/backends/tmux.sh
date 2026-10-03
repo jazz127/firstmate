@@ -189,6 +189,7 @@ fm_backend_tmux_kill() {  # <target>
     :*|*:|*:*:*) return 1 ;;
   esac
   tmux kill-window -t "=$session:=$window" 2>/dev/null && return 0
+  [ "${2:-}" != --require-ack ] || return 1
   windows=$(fm_backend_tmux_window_inventory "=$session")
   inventory_status=$?
   if [ "$inventory_status" -eq 2 ]; then

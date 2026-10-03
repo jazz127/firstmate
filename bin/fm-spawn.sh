@@ -1224,7 +1224,7 @@ spawn_cancel_pending_start() {
   SPAWN_START_PENDING=0
   rm -f "$LAUNCH_FILE"
   if fm_run_timed 10 bash -c \
-    '. "$1"; fm_backend_kill "$2" "$3" && { [ "$2" != herdr ] || fm_backend_herdr_endpoint_confirmed_gone "$3"; }' \
+    '. "$1"; fm_backend_kill_confirmed "$2" "$3"' \
     _ "$SCRIPT_DIR/fm-backend.sh" "$BACKEND" "$T" 2>/dev/null; then
     SPAWN_ENDPOINT_CLOSED=1
   else
@@ -4166,6 +4166,7 @@ rovo_spawn_fail() { # <detail>
 # the exact terminal is closed: that stops the CLI while its worktree stays
 # for the record's own teardown, which owns worktree deletion.
 rovo_endpoint_cleanup() {
+  [ "$SPAWN_START_PENDING" != 1 ] || return 0
   if [ "$BACKEND" = orca ]; then
     fm_backend_kill orca "$T" 2>/dev/null && SPAWN_ENDPOINT_CLOSED=1 || true
     return 0

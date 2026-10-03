@@ -852,6 +852,17 @@ fm_backend_kill() {  # <backend> <target>
   esac
 }
 
+fm_backend_kill_confirmed() {
+  local backend=$1 target=$2
+  [ -n "$target" ] || return 1
+  fm_backend_source "$backend" || return 1
+  case "$backend" in
+    tmux) fm_backend_tmux_kill "$target" --require-ack ;;
+    herdr) fm_backend_herdr_kill "$target" && fm_backend_herdr_endpoint_confirmed_gone "$target" ;;
+    *) return 1 ;;
+  esac
+}
+
 fm_backend_remove_worktree() {  # <backend> <worktree-id>
   local backend=$1
   shift

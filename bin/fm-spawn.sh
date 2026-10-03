@@ -282,8 +282,9 @@
 #   This keeps commands beyond the terminal's roughly 1,024-byte input boundary
 #   intact, prevents a delayed source line from being rebound by a relaunch, and
 #   prevents equal task ids in different Firstmate homes from sharing a file.
-#   Spawn refuses an unsafe pre-existing task temp root or launch namespace, and
-#   task teardown removes only the current home's launch namespace.
+#   Spawn refuses an unsafe pre-existing task temp root or launch namespace;
+#   capped fresh launches retain their metadata lock through startup confirmation.
+#   Task teardown removes only the current home's launch namespace.
 # Launch environment (config/launch-env-allowlist):
 #   Absent means unchanged ambient inheritance. A present readable regular file
 #   opts every launch (ship, scout, secondmate, raw command, and relaunch) into
@@ -1215,6 +1216,23 @@ CONFIG_INHERIT_LOCK_HELD=0
 GIT_HOOKS_DIR=
 SPAWN_LAUNCH_SENT=0
 SPAWN_ENDPOINT_CLOSED=0
+SPAWN_AWAY_ADMISSION=0
+SPAWN_START_PENDING=0
+
+spawn_cancel_pending_start() {
+  [ "$SPAWN_START_PENDING" = 1 ] || return 0
+  SPAWN_START_PENDING=0
+  rm -f "$LAUNCH_FILE"
+  if fm_run_timed 10 bash -c \
+    '. "$1"; fm_backend_kill "$2" "$3" && { [ "$2" != herdr ] || fm_backend_herdr_endpoint_confirmed_gone "$3"; }' \
+    _ "$SCRIPT_DIR/fm-backend.sh" "$BACKEND" "$T" 2>/dev/null; then
+    SPAWN_ENDPOINT_CLOSED=1
+  else
+    SPAWN_FRESH_COMMIT_PENDING=0
+    printf 'cleanup_recovery=launch\n' >> "$STATE/$ID.meta" || return 1
+    echo "error: task $ID's startup could not be cancelled; its record is retained for endpoint cleanup" >&2
+  fi
+}
 
 spawn_fresh_commit_rollback() {
   if fm_backlog_atomic_transition rollback "$STATE/$ID.meta" \
@@ -1245,6 +1263,7 @@ parse_orca_worktree_result() {
 
 spawn_abort_cleanup() {
   local status=$?
+  spawn_cancel_pending_start || status=1
   if [ "$RELAUNCH_REPLACEMENT_PENDING" = 1 ] &&
     [ "$SPAWN_META_PUBLISH_STARTED" = 1 ] &&
     [ -n "$SPAWN_META_TMP" ] &&
@@ -1546,6 +1565,7 @@ spawn_refuse_if_away_spend_cap() {
   case "$cap" in
   '' | *[!0-9]* | 0) return 0 ;;
   esac
+  SPAWN_AWAY_ADMISSION=1
   live=$("$SCRIPT_DIR/fm-afk-spend-count.sh" "$STATE") || {
     echo "error: spawn refused - could not read away spend count" >&2
     exit 1
@@ -4888,7 +4908,7 @@ SPAWN_META_PATH=$SPAWN_META_TMP
 preserve_relaunch_meta() {
   awk -F= '
     BEGIN {
-      split("window endpoint_task_id worktree project harness kind mode yolo branch tasktmp model effort account account_provider busy_gen spawn_gen traceparent backend herdr_session herdr_workspace_id herdr_tab_id herdr_pane_id zellij_session zellij_tab_id zellij_pane_id orca_worktree_id terminal cmux_workspace_id cmux_surface_id home projects control_relaunch_tx", keys, " ")
+      split("window endpoint_task_id worktree project harness kind mode yolo branch tasktmp model effort account account_provider busy_gen spawn_gen traceparent backend herdr_session herdr_workspace_id herdr_tab_id herdr_pane_id zellij_session zellij_tab_id zellij_pane_id orca_worktree_id terminal cmux_workspace_id cmux_surface_id home projects control_relaunch_tx cleanup_recovery", keys, " ")
       for (i in keys) owned[keys[i]] = 1
     }
     !($1 in owned)
@@ -5348,6 +5368,10 @@ if ! (umask 077 && mkdir "$LAUNCH_DIR") 2>/dev/null; then
 fi
 LAUNCH_FILE="$LAUNCH_DIR/launch.$SPAWN_GEN.sh"
 LAUNCH_STAGE="$LAUNCH_DIR/.launch.$SPAWN_GEN.tmp"
+LAUNCH_EXIT_FILE="$LAUNCH_FILE.exit"
+if [ "$SPAWN_AWAY_ADMISSION" = 1 ] && fm_control_backend_state_verified "$BACKEND"; then
+  LAUNCH="$LAUNCH"$'\n'"printf '%s\\n' \"\$?\" > $(shell_quote "$LAUNCH_STAGE") && mv -f -- $(shell_quote "$LAUNCH_STAGE") $(shell_quote "$LAUNCH_EXIT_FILE")"
+fi
 if [ -e "$LAUNCH_FILE" ] || [ -L "$LAUNCH_FILE" ]; then
   echo "error: task launch file $LAUNCH_FILE already exists; refusing to replace it" >&2
   exit 1
@@ -5359,6 +5383,12 @@ if ! (umask 077 && printf '%s\n' "$LAUNCH" >"$LAUNCH_STAGE" &&
   exit 1
 fi
 sleep 0.3
+if [ "$SPAWN_AWAY_ADMISSION" = 1 ] && fm_control_backend_state_verified "$BACKEND"; then
+  SPAWN_START_PENDING=1
+  trap 'exit 129' HUP
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+fi
 SPAWN_LAUNCH_SENT=1
 spawn_send_literal "$T" ". $(shell_quote "$LAUNCH_FILE")"
 sleep 0.3
@@ -5426,6 +5456,31 @@ if [ "$HARNESS" = agy ]; then
     fi
     exit 1
   fi
+fi
+
+if [ "$SPAWN_START_PENDING" = 1 ]; then
+  spawn_start_deadline=$((SECONDS + 30))
+  while :; do
+    if [ -f "$LAUNCH_EXIT_FILE" ]; then
+      spawn_start_exit=$(cat "$LAUNCH_EXIT_FILE")
+      if [ "$spawn_start_exit" != 0 ]; then
+        echo "error: task $ID's launch command exited with status ${spawn_start_exit:-unknown}" >&2
+        exit 1
+      fi
+      break
+    fi
+    spawn_start_state=$(fm_run_timed 2 bash -c \
+      '. "$1"; fm_backend_agent_state "$2" "$3"' _ \
+      "$SCRIPT_DIR/fm-backend.sh" "$BACKEND" "$T" 2>/dev/null) || spawn_start_state=unreadable
+    [ "$spawn_start_state" != alive ] || break
+    if [ "$SECONDS" -ge "$spawn_start_deadline" ]; then
+      echo "error: task $ID's startup was not established within 30s (endpoint: $spawn_start_state)" >&2
+      exit 1
+    fi
+    sleep 0.1
+  done
+  SPAWN_START_PENDING=0
+  trap - HUP INT TERM
 fi
 
 if [ "$KIND" = secondmate ] && [ "${FM_SKIP_SECONDMATE_INHERIT:-0}" != 1 ]; then

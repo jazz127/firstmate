@@ -20,21 +20,27 @@ cleanup_launch() {
 trap cleanup_launch EXIT
 
 test_fresh_launch_reservation() {
-  local kind dir home id out rc count i endpoint_state
+  local kind scenario entry dir home id out rc count i endpoint_state staged
   local -a args
-  for kind in ship scout; do
-    dir="$TMP_ROOT/launch-$kind"
+  for entry in ship:delayed scout:delayed ship:timeout scout:cancel ship:failed scout:finished ship:cleanup-refused; do
+    kind=${entry%:*}
+    scenario=${entry#*:}
+    dir="$TMP_ROOT/launch-$kind-$scenario"
     home="$dir/home"
-    id="spend-launch-$kind-$$"
+    id="spend-launch-$kind-$scenario-$$"
     fm_test_spawn_home "$home" codex
     fm_test_spawn_brief "$home" "$id"
-    fm_git_worktree "$dir/project" "$dir/wt" "slot-$kind"
+    fm_git_worktree "$dir/project" "$dir/wt" "slot-$kind-$scenario"
     mkdir -p "$home/fakebin"
     fm_fake_exit0 "$home/fakebin" treehouse
     cat > "$home/fakebin/tmux" <<'SH'
 #!/usr/bin/env bash
 case "$1" in
-  has-session|set-window-option|kill-window) exit 0 ;;
+  has-session|set-window-option) exit 0 ;;
+  kill-window)
+    [ ! -f "$FM_HOME/refuse-cleanup" ] || exit 1
+    rm -f "$FM_HOME/endpoint"
+    ;;
   new-window) touch "$FM_HOME/endpoint"; printf '@1\n' ;;
   list-windows)
     [ ! -f "$FM_HOME/endpoint" ] || printf 'fm-%s\n' "$FM_RESERVATION_ID"
@@ -43,7 +49,8 @@ case "$1" in
     case "${*: -1}" in
       '#{pane_current_path}') printf '%s\n' "$FM_RESERVATION_WT" ;;
       '#{pane_current_command}')
-        if [ -f "$FM_HOME/delivered" ]; then printf 'codex\n'; else printf 'bash\n'; fi
+        [ ! -f "$FM_HOME/unreadable" ] || exit 1
+        if [ -f "$FM_HOME/started" ]; then printf 'codex\n'; else printf 'bash\n'; fi
         ;;
       '#S'|'#{session_name}') printf 'firstmate\n' ;;
       '#{pane_id}') printf '%%1\n' ;;
@@ -53,6 +60,10 @@ case "$1" in
   send-keys)
     case "$*" in
       *launch.*.sh*)
+        staged=${*: -1}
+        staged=${staged#". '"}
+        staged=${staged%"'"}
+        printf '%s\n' "$staged" > "$FM_HOME/staged-path"
         touch "$FM_HOME/paused"
         for _ in $(seq 1 200); do
           [ ! -f "$FM_HOME/release" ] || exit 0
@@ -101,17 +112,91 @@ SH
     [ "$rc" -eq 1 ] || fail "concurrent fresh spawn was not refused: $out"
     assert_contains "$out" "caps concurrent workers" "startup reservation did not enforce admission: $out"
     touch "$SPAWN_RELEASE"
+    for i in $(seq 1 200); do
+      [ ! -f "$home/delivered" ] || break
+      kill -0 "$SPAWN_PID" 2>/dev/null || break
+      sleep 0.1
+    done
+    [ -f "$home/delivered" ] || fail "launch key was not delivered: $(cat "$home/launch.log")"
+    kill -0 "$SPAWN_PID" 2>/dev/null || fail "spawn exited before establishing delayed startup"
+    count=$(FM_RESERVATION_ID="$id" FM_RESERVATION_WT="$dir/wt" count_workers "$home")
+    [ "$count" = 1 ] || fail "successfully delivered $kind launch lost its reservation: $count"
+    rc=0
+    out=$(FM_RESERVATION_ID="$id" FM_RESERVATION_WT="$dir/wt" \
+      FM_SUPERVISION_ACTOR=main fm_test_run_spawn "$home" "$dir/wt" "$home/fakebin" \
+      "spend-after-key-$kind-$$" "$dir/project" "${args[@]}") || rc=$?
+    [ "$rc" -eq 1 ] || fail "post-delivery concurrent spawn was not refused: $out"
+    assert_contains "$out" "caps concurrent workers" "post-delivery reservation did not enforce admission: $out"
+    case "$scenario" in
+      delayed)
+        touch "$home/unreadable"
+        count=$(FM_RESERVATION_ID="$id" FM_RESERVATION_WT="$dir/wt" count_workers "$home")
+        [ "$count" = 1 ] || fail "uncertain startup lost its reservation"
+        rm "$home/unreadable"
+        rc=0
+        out=$(FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" FM_SUPERVISION_ACTOR=main \
+          FM_RESERVATION_ID="$id" FM_RESERVATION_WT="$dir/wt" PATH="$home/fakebin:$PATH" \
+          "$ROOT/bin/fm-afk-return.sh" check 2>&1) || rc=$?
+        [ "$rc" -eq 0 ] || [ "$rc" -eq 3 ] || fail "return count failed: $out"
+        assert_contains "$out" '1 task(s) live at return.' "return dropped a delivered launch reservation: $out"
+        touch "$home/started"
+        ;;
+      cancel) kill -TERM "$SPAWN_PID" ;;
+      timeout) ;;
+      failed|finished|cleanup-refused)
+        staged=$(cat "$home/staged-path")
+        cat > "$home/fakebin/codex" <<'SH'
+#!/usr/bin/env bash
+exit "${FM_FAKE_AGENT_EXIT_CODE:-0}"
+SH
+        chmod +x "$home/fakebin/codex"
+        if [ "$scenario" = finished ]; then rc=0; else rc=17; fi
+        [ "$scenario" != cleanup-refused ] || touch "$home/refuse-cleanup"
+        PATH="$home/fakebin:$PATH" FM_FAKE_AGENT_EXIT_CODE="$rc" bash "$staged" > "$home/agent.log" 2>&1
+        ;;
+    esac
     rc=0
     wait "$SPAWN_PID" || rc=$?
     SPAWN_PID=
+    case "$scenario" in
+      timeout|cancel|failed|cleanup-refused)
+        [ "$rc" -ne 0 ] || fail "unsuccessful startup reported success: $(cat "$home/launch.log")"
+        [ "$scenario" != timeout ] || assert_grep 'startup was not established within 30s' "$home/launch.log" "timeout did not report startup failure"
+        staged=$(cat "$home/staged-path")
+        [ ! -f "$staged" ] || fail "cancelled startup left a runnable staged launch"
+        if [ "$scenario" = cleanup-refused ]; then
+          [ -f "$home/state/$id.meta" ] || fail "uncertain cleanup discarded the endpoint record"
+          count=$(FM_RESERVATION_ID="$id" FM_RESERVATION_WT="$dir/wt" count_workers "$home")
+          [ "$count" = 1 ] || fail "uncancelled startup stopped reserving spending capacity"
+          out=$(FM_RESERVATION_ID="$id" FM_RESERVATION_WT="$dir/wt" \
+            FM_SUPERVISION_ACTOR=main fm_test_run_spawn "$home" "$dir/wt" "$home/fakebin" \
+            "$id" --relaunch) || fail "recovery relaunch failed: $out"
+          assert_contains "$out" "spawned $id" "recovery relaunch did not report success"
+          count=$(FM_RESERVATION_ID="$id" FM_RESERVATION_WT="$dir/wt" count_workers "$home")
+          [ "$count" = 0 ] || fail "successful recovery retained the previous cleanup reservation"
+          rm "$home/endpoint"
+        else
+          [ ! -e "$home/state/$id.meta" ] || fail "cancelled startup retained its record"
+          [ ! -e "$home/endpoint" ] || fail "cancelled startup retained its endpoint"
+        fi
+        count=$(FM_RESERVATION_ID="$id" FM_RESERVATION_WT="$dir/wt" count_workers "$home")
+        [ "$count" = 0 ] || fail "cancelled startup left a permanent reservation: $count"
+        pass "$kind $scenario startup frees capacity after confirmed cancellation"
+        continue
+        ;;
+    esac
     [ "$rc" -eq 0 ] || fail "reserved launch failed: $(cat "$home/launch.log")"
     [ ! -e "$home/state/.meta-$id.lock" ] || fail "successful launch left its lifecycle lock"
     count=$(FM_RESERVATION_ID="$id" FM_RESERVATION_WT="$dir/wt" count_workers "$home")
-    [ "$count" = 1 ] || fail "delivered worker stopped counting: $count"
-    rm "$home/delivered"
+    if [ "$scenario" = finished ]; then
+      [ "$count" = 0 ] || fail "a command that finished between probes retained its reservation"
+    else
+      [ "$count" = 1 ] || fail "started worker stopped counting: $count"
+      rm "$home/started"
+    fi
     count=$(FM_RESERVATION_ID="$id" FM_RESERVATION_WT="$dir/wt" count_workers "$home")
     [ "$count" = 0 ] || fail "stopped worker retained its launch reservation: $count"
-    pass "$kind startup reserves admission until delivery; stopped workers free room"
+    pass "$kind $scenario startup reserves admission after delivery; stopped workers free room"
   done
 }
 

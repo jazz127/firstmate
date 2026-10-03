@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Count ordinary task workers still able to spend in this home.
 # Usage: fm-afk-spend-count.sh <state-dir>
-# Live lifecycle-lock owners reserve launches; stopped and ready tasks do not.
+# Live lifecycle locks and unresolved launch cleanup reserve spending capacity.
 # Unreadable, ambiguous and unverified endpoint state counts conservatively.
 # Orca, Zellij and cmux have no recovery-grade death classifier, so a failed
 # presence probe cannot exclude their recorded endpoints. A ship's done status
@@ -37,6 +37,10 @@ for meta in "$STATE"/*.meta; do
   target=$(fm_backend_target_of_meta "$meta")
   [ -n "$target" ] || continue
   endpoint_state=$(fm_backend_agent_state "$backend" "$target" 2>/dev/null) || endpoint_state=unreadable
+  if [ "$(fm_meta_get "$meta" cleanup_recovery)" = launch ] && [ "$endpoint_state" != missing ]; then
+    live=$((live + 1))
+    continue
+  fi
   case "$endpoint_state" in dead|missing) continue ;; esac
 
   status="$STATE/$id.status"

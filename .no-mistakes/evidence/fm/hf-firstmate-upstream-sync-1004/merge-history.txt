@@ -1,0 +1,6 @@
+258909aa80484ef7f4ffa61066d368c170b152bd
+038f7185d76b1a0ea7a5a47d69ddd9a190adf4da 1f3e769616fdf9f31f85f4c3e6a9f71606634238
+Merge upstream main into house
+258909aa Merge upstream main into house
+1f3e7696 fix(pi): hide duplicate assistant finals from hidden processing retries (#5863)
+e31bc6e6 fix(pi): restore watcher continuity across successor gaps and make extension log opt-in (#5489)

@@ -1,0 +1,40 @@
+$ bin/fm-lab-home.sh create /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M414DWEJKB1KZEC39HKT1E0P/.l
+/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M414DWEJKB1KZEC39HKT1E0P/.l
+exit=0
+Pi child environment with its path overrides:
+watcher: FAILED - refusing to arm from a disposable validation checkout: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M414DWEJKB1KZEC39HKT1E0P/bin
+exit=1
+Real running arm readiness:
+watcher: started pid=33737 (beacon fresh)
+$ bash -c . bin/fm-wake-lib.sh; fm_recovery_marker_publish "$FM_HOME/state/.watcher-down" downtime
+exit=0
+$ bin/fm-watch-arm.sh --handling-delivered 34564.1791040450.KHtpAg --watcher-pid 33737
+exit=0
+$ bash -c . bin/fm-wake-lib.sh; fm_recovery_marker_ack "$FM_HOME/state/.watcher-down" "$1" _ 34564.1791040450.KHtpAg
+exit=0
+$ bin/fm-watch-arm.sh --handling-delivered 34564.1791040450.KHtpAg --watcher-pid 33737
+exit=0
+Already-acknowledged token persisted unchanged: acked:handling:34564.1791040450.KHtpAg
+$ bin/fm-watch-arm.sh --handling-delivered superseded.0.deadbeef --watcher-pid 33737
+exit=3
+$ bin/fm-watch-arm.sh --handling-delivered 34564.1791040450.KHtpAg --watcher-pid 99999999
+exit=1
+$ bin/fm-watch-arm.sh --handling-delivered 34564.1791040450.KHtpAg --watcher-pid 33737
+exit=1
+Live watcher preserved after stale generation, dead PID and foreign lock identity rejection.
+Real arm output after status event:
+watcher: started pid=33737 (beacon fresh)
+signal: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M414DWEJKB1KZEC39HKT1E0P/.l/state/probe.status
+LIVE ARM SCENARIOS PASSED
+$ bin/fm-watch-arm.sh --stop
+watcher: none running
+exit=0
+.watch-cycle-exits.log:
+arm_pid=33718	watcher_pid=33737	origin=started	started_at=1791040450	ended_at=1791040453	exit_code=0	signal=none	reason=actionable-signal	beacon_age=2	lock_before=pid:33737|identity:Sun Oct  4 01:14:10 2026     bash /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M414DWEJKB1KZEC39HKT1E0P/bin/fm-watch.sh	lock_after=pid:none|identity:none	successor=none
+.watch-deliveries.log:
+33737	Sun Oct  4 01:14:10 2026     bash /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M414DWEJKB1KZEC39HKT1E0P/bin/fm-watch.sh	signal: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M414DWEJKB1KZEC39HKT1E0P/.l/state/probe.status
+.wake-queue:
+1791040453	1	signal	probe.status	signal: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M414DWEJKB1KZEC39HKT1E0P/.l/state/probe.status
+1791040453	2	signal	probe.status	signal: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M414DWEJKB1KZEC39HKT1E0P/.l/state/probe.status
+.watcher-down:
+pending:downtime:33737.1791040453.blv61Z

@@ -47,24 +47,23 @@
 #     its delivered captain rows again, dated and check-first, until main
 #     acknowledges them. A marker ahead of the read cursor fails closed.
 #   - Outcome index: $STATE/.<task>.branch-outcome-index stores one bounded
-#     cache of the latest non-silent outcome's status provenance. The authoritative copy
-#     is in the append-only row. $STATE/.branch-outcome-index-ready is removed
+#     cache of the latest non-silent outcome's status provenance. The
+#     authoritative copy is in the append-only row.
+#     $STATE/.branch-outcome-index-ready is removed
 #     before append and published only after the cache update; processed-init
 #     removes every task cache and rebuilds only non-silent coverage before
 #     publishing it. The ready marker is `visible-only-v1:<seq>`, where seq is
 #     the store tail sequence, including silent rows. Legacy numeric markers
-#     are invalid: append and main-actor drain rebuild under the outcome lock
-#     before republishing or accepting readiness. Interruption or upgrade
-#     fails closed without making each drain scan lifetime history.
+#     are invalid: append and main-actor drain, on every harness, rebuild under
+#     the outcome lock when readiness is absent or invalid before republishing
+#     or accepting it. Interruption or upgrade fails closed without making
+#     each drain scan lifetime history.
 #     bin/fm-teardown.sh removes a retired task's cache with its other records,
 #     and append skips the cache for a task that has neither a live meta nor a
 #     status log (the outcome itself is still stored), so the branch's report
 #     of a teardown it just performed leaves no index behind.
-#     Main-actor drain calls processed-init under the outcome lock when the
-#     ready marker is absent or invalid, on every harness; append also rebuilds
-#     before storing a row when readiness is absent or invalid.
-#     Only a genuine store fault keeps the lost-wake backstop
-#     skipped.
+#     If readiness cannot be repaired, the lost-wake backstop skips unsafe
+#     coverage; bin/fm-wake-drain.sh owns its skip diagnostics.
 #   - Tail copy: $STATE/.branch-outcomes-tail.jsonl holds the newest
 #     OUTCOME_TAIL_ROWS store lines verbatim, and only as many of the newest
 #     as fit in OUTCOME_TAIL_MAX_BYTES (1 MiB): older rows leave first, a row

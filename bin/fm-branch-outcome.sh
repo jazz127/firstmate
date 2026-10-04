@@ -308,7 +308,7 @@ write_outcome_index() { # <task> <seq> [<endpoint> <identity>]
 publish_outcome_index_ready() { # <seq>
   local tmp
   tmp=$(mktemp "$STATE/.branch-outcome-index-ready.XXXXXX") || return 1
-  printf '%s\n' "$1" > "$tmp" || { rm -f -- "$tmp"; return 1; }
+  printf 'visible-only-v1:%s\n' "$1" > "$tmp" || { rm -f -- "$tmp"; return 1; }
   mv -f -- "$tmp" "$OUTCOME_INDEX_READY"
 }
 
@@ -533,6 +533,11 @@ case "$CMD" in
     if ! CURSOR_SEQ=$(read_cursor) || [ "$CURSOR_SEQ" -gt "$LAST_SEQ" ]; then
       fm_lock_release "$LOCK"
       echo "error: refusing append because the outcome cursor is invalid or ahead of the store" >&2
+      exit 1
+    fi
+    if ! fm_branch_outcome_index_ready_ok "$OUTCOME_INDEX_READY" && ! rebuild_outcome_indexes; then
+      fm_lock_release "$LOCK"
+      echo "error: outcome index migration could not be completed safely" >&2
       exit 1
     fi
     SEQ=$(( LAST_SEQ + 1 ))

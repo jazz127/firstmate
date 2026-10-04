@@ -18,6 +18,15 @@ FM_LOCK_STALE_AFTER="${FM_LOCK_STALE_AFTER:-2}"
 _FM_UNAME=$(uname 2>/dev/null || echo unknown)
 mkdir -p "$STATE"
 
+fm_branch_outcome_index_ready_ok() {
+  local seq
+  [ -f "$1" ] && [ -r "$1" ] && [ ! -L "$1" ] || return 1
+  seq=$(LC_ALL=C command cat "$1" 2>/dev/null) || return 1
+  case "$seq" in visible-only-v1:*) seq=${seq#visible-only-v1:} ;; *) return 1 ;; esac
+  case "$seq" in ''|*[!0-9]*) return 1 ;; esac
+  return 0
+}
+
 # Most wake-library consumers need only queue and lock primitives, including
 # deliberately minimal recovery fixtures and remote installations.
 # Load the classifier only when a status presentation helper is actually used.

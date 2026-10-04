@@ -28,13 +28,16 @@ If stow exposes an unresolved exception or captain decision, the old session rem
 
 After a reset-safe receipt, Firstmate runs the exact `bin/fm-context-restart.sh handoff --session <id> --reset-safe` command carried by the directive.
 The command verifies that the caller still owns the home session lock and that the durable crossing belongs to the current Claude session.
-It advances the crossing to a reset-safe ready sentinel before the wrapper-owned supervisor transfers the watcher and asks the current Claude process to terminate.
+It advances the crossing to a reset-safe ready sentinel.
+For an automatic handoff, it then waits for the wrapper-owned supervisor to commit replacement before reporting success.
+If that transfer does not commit, the command reports failure so the caller keeps the current session running.
 Repeating the command against the same session and wrapper generation is idempotent.
 
 ## Automatic successor
 
 `bin/fm-primary.sh` is the selected automatic successor owner.
 It remains as the terminal parent while Claude runs, gives each child generation a private token, and forwards the chosen Claude options.
+Replacement requires no backend-specific terminal control.
 It restarts only when the exited child left a reset-safe replacing sentinel carrying that exact token, published after the wrapper-owned supervisor transferred any needed watcher.
 Preparation alone cannot turn an ordinary exit into a relaunch after a failed watcher transfer.
 
@@ -85,8 +88,11 @@ An interruption after ready publication leaves a reset-safe manual launch path e
 
 The context hook does not arm, stop, restart, or wait on the fleet watcher.
 The automatic handoff's `bin/fm-context-restart-supervise.sh` process belongs to the terminal wrapper, outside Claude's hook process tree.
-When the home needs supervision, it takes over the current arm through the existing identity-bound `fm-watch-arm.sh --take-over` interface before terminating Claude.
-It keeps watcher cycles running through successor startup and hands delivery back to the successor's Stop auto-arm.
+When the home needs supervision, it takes over the current arm through the existing identity-bound `fm-watch-arm.sh --take-over` interface.
+After a bounded wait for the crossing publication lock, it revalidates the exact wrapper generation, session, and live session-lock owner and reestablishes a healthy bridge-owned watcher if the transferred cycle completed while it waited.
+Only then does it commit replacement and request termination.
+If the authorized Claude owner exits naturally after that commit, the bridge treats termination as complete and retains supervision.
+It keeps watcher cycles running through successor startup until the successor's Stop auto-arm takes over the bridge-owned cycle and restores ordinary queue delivery.
 An independent away daemon remains the supervision owner when present.
 If watcher transfer fails, the prepared Claude session stays running and the wrapper reports the error.
 Claude's existing asynchronous watcher auto-arm and synchronous turn-end guard continue to run on the same Stop event under their existing single-flight and bounded-continuation rules.
@@ -101,7 +107,8 @@ Adding an adapter later requires a verified turn-boundary context measurement, o
 
 ## Verification
 
-`tests/fm-context-restart.test.sh` covers exact threshold accounting, malformed transcript and usage rejection, concurrent one-directive publication, and wrapper lock transfer over synthetic process fixtures.
+`tests/fm-context-restart.test.sh` covers exact threshold accounting, malformed transcript and usage rejection, concurrent one-directive publication, wrapper lock transfer, and handoff completion over synthetic process fixtures.
+Its continuity regressions exercise a worker notification completing the transferred watcher during publication-lock contention and an authorized owner exiting naturally before termination; both require monitoring through replacement and native successor takeover without losing queued notifications.
 `tests/fm-secondmate-harness.test.sh` covers opted-out and opted-in launches, inheritance, and the unsynced-home fallback.
 `FM_CONTEXT_RESTART_CLAUDE_LIVE_E2E=1 tests/fm-context-restart-claude-live-e2e.test.sh` checks the installed Claude Stop payload and transcript usage with a high threshold, then exercises stow and one replacement in print mode with a low threshold.
 Watcher continuity and wake retention are covered separately by synthetic process fixtures; interactive terminal replacement is not measured by that probe.

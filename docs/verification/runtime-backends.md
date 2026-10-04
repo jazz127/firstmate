@@ -395,10 +395,7 @@ Dropping the retention-is-not-durable line makes the refusal claim a retention t
 
 ## Claude context usage
 
-On 2026-10-04, `FM_CONTEXT_RESTART_CLAUDE_LIVE_E2E=1 bash bin/fm-test-run.sh tests/fm-context-restart-claude-live-e2e.test.sh` exercised Claude Code 2.1.285's completed-turn Stop payload, transcript accounting, and one automatic print-mode replacement after stow.
-Its output and supported evidence boundary are recorded in [supervision verification](supervision.md#claude-context-refresh).
-This adapter uses no backend-specific terminal control; synthetic process tests cover its watcher transfer through both the plain auto-arm and supervision host.
-The credentialed probe did not measure an interactive terminal or fleet work.
+[Supervision verification](supervision.md#claude-context-refresh) owns the versioned Claude context-refresh results, repeatable command, and boundary between credentialed print-mode observations and synthetic watcher tests.
 
 ## Claude workspace trust
 

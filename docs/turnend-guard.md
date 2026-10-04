@@ -277,7 +277,7 @@ The registrations in detail:
   Cursor also loads `<project>/.claude/settings.json`, so every tracked Claude-shaped entrypoint whose event Cursor covers stands down on a Cursor-delivered payload through `bin/fm-hook-host-lib.sh`.
   That predicate reads the delivered payload's own `cursor_version`, never the environment.
   Cursor exports `CURSOR_INVOKED_AS`, `CURSOR_PROJECT_DIR`, and `CURSOR_VERSION` into every child process, so an environment guard would also disable the hooks of a Claude session started by hand from a Cursor pane, which is the hazard the `GROK_SESSION_ID` exclusion below records.
-  The guarded set is the `SessionStart` entry, the two `PreToolUse` Bash entries, and both `Stop` entries.
+  The guarded set is the `SessionStart` entry, the two `PreToolUse` Bash entries, and all `Stop` entries.
   Cursor 2026.08.11-e8db854 does not fire the Claude-shaped `Stop` entry at all, but it is guarded anyway because Cursor has no `asyncRewake`.
   If a later build did fire it, `bin/fm-claude-stop-autoarm.sh` would run synchronously inside Cursor's stop step and hold that turn open for its declared multi-hour timeout, exactly the wedge grok 1.0.0 produced.
 - Grok registers a `Stop` hook in `.grok/hooks/fm-primary-turnend-guard.json` and delegates capability selection to `bin/fm-turnend-guard-grok.sh`.
@@ -296,7 +296,8 @@ The registrations in detail:
   Pi's own native extensions own its supervision.
   The discriminator is the payload's own `transcript_path`, not the environment and not the shared foreign-host predicate above.
   pi-code stamps it with Pi's session file under `/.pi/`, a path component a Claude transcript never carries.
-  The stand-down fails toward running, matching the guards above, so no payload, no `jq`, or no `transcript_path` still arms, and every other Claude-shaped hook pi-code delivers keeps running.
+  The auto-arm stand-down fails toward running, matching the guards above, so no payload, no `jq`, or no `transcript_path` still arms.
+  The optional [context detector](context-refresh.md) also rejects Pi transcript paths; the remaining Claude-shaped hooks pi-code delivers keep running.
 
 ### Claude and Codex blocking
 

@@ -7,11 +7,9 @@
 #     object per line: {"seq":N,"epoch":N,"task":"...","wake":"...",
 #     "verdict":"routine"|"captain","summary":"...","silent":true|false,
 #     "statusEndpoint":N,"statusIdent":"..."}. Legacy rows without `silent`
-#     or status provenance remain valid and are treated as visible.
-#     `silent` is legal only on a routine row (any task, or `fleet`): it marks
-#     an already-handled no-change outcome and is delivered with no rendered
-#     note. A captain row can never be silent. The branch prompt and delivery
-#     consumers own the additional no-change eligibility rule.
+#     or status provenance remain valid and are treated as visible. A silent
+#     row must have verdict `routine` and never updates the task's status-
+#     coverage index; the branch prompt owns the no-change eligibility rule.
 #     Every read and append validates the complete log as a gap-free sequence;
 #     malformed, duplicate, or reordered rows fail closed.
 #     Existing lines are never rewritten, reordered, or deleted by any
@@ -19,6 +17,8 @@
 #     entirely in the cursor sidecar so marking outcomes read cannot disturb
 #     the log. Retention: the log is small (one line per handled fleet event)
 #     and truncation, if ever needed, is a captain-approved manual act.
+#     Silent rows are stored without rendered notes; this includes unchanged
+#     fleet heartbeat reviews when the prompt makes them silent.
 #   - Cursor: $STATE/.branch-outcomes-cursor holds the highest seq presented
 #     by Pi as a routine merge note or sequence-keyed visible captain entry,
 #     emitted by Pi's locked session-start replay, silently consumed there

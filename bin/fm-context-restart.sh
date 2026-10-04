@@ -203,7 +203,9 @@ while fm_context_restart_record_read "$RECORD" >/dev/null 2>&1 \
     printf 'context-restart: reset-safe handoff committed; wrapper will end this Claude session\n'
     exit 0
   fi
-  [ "$FM_CONTEXT_RESTART_RECORD_PHASE" = ready ] && fm_pid_alive "$BRIDGE_PID" || break
+  if [ "$FM_CONTEXT_RESTART_RECORD_PHASE" != ready ] || ! fm_pid_alive "$BRIDGE_PID"; then
+    break
+  fi
   sleep 0.1
 done
 echo 'context-restart: supervision transfer did not commit; keep this session running' >&2

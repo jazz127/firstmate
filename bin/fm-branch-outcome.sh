@@ -47,19 +47,24 @@
 #     its delivered captain rows again, dated and check-first, until main
 #     acknowledges them. A marker ahead of the read cursor fails closed.
 #   - Outcome index: $STATE/.<task>.branch-outcome-index stores one bounded
-#     cache of the latest non-silent outcome's status provenance. The authoritative copy
-#     is in the append-only row. $STATE/.branch-outcome-index-ready is removed
+#     cache of the latest non-silent outcome's status provenance. The
+#     authoritative copy is in the append-only row.
+#     $STATE/.branch-outcome-index-ready is removed
 #     before append and published only after the cache update; processed-init
 #     rebuilds every cache before publishing it and the one-time
-#     $STATE/.branch-outcome-index-visible-only migration marker, so interruption or upgrade
-#     fails closed without making each drain scan lifetime history.
+#     $STATE/.branch-outcome-index-visible-only migration marker, so interruption
+#     or upgrade fails closed without making each drain scan lifetime history.
+#     Rebuild first removes existing indexes, excluding silent rows when
+#     restoring coverage so pre-upgrade silent-derived coverage cannot survive.
 #     bin/fm-teardown.sh removes a retired task's cache with its other records,
 #     and append skips the cache for a task that has neither a live meta nor a
 #     status log (the outcome itself is still stored), so the branch's report
 #     of a teardown it just performed leaves no index behind.
-#     Main-actor drain calls processed-init under the outcome lock when that
-#     ready marker is absent or invalid, on every harness; only a genuine store
-#     fault keeps the lost-wake backstop skipped.
+#     Main-actor drain calls processed-init under the outcome lock when the
+#     ready marker is absent or invalid or the migration marker is absent,
+#     on every harness; append also rebuilds before storing a row when either
+#     marker is absent. Only a genuine store fault keeps the lost-wake backstop
+#     skipped.
 #   - Tail copy: $STATE/.branch-outcomes-tail.jsonl holds the newest
 #     OUTCOME_TAIL_ROWS store lines verbatim, and only as many of the newest
 #     as fit in OUTCOME_TAIL_MAX_BYTES (1 MiB): older rows leave first, a row

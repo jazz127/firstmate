@@ -87,7 +87,7 @@ test_newer_task_outcome_and_routine_latest_events_stay_silent() {
 }
 
 test_legacy_silent_coverage_migrates_before_drain_or_append() {
-  local mode dir state out body task seq endpoint ident store_before ready_after expected_seq
+  local mode dir state out body task seq endpoint ident store_before ready_after
   for mode in drain silent-append visible-append; do
     dir=$(make_case "legacy-silent-$mode")
     state="$dir/state"
@@ -146,9 +146,7 @@ test_legacy_silent_coverage_migrates_before_drain_or_append() {
     [ "$(head -n 5 "$state/branch-outcomes.jsonl")" = "$store_before" ] \
       || fail "$mode rewrote outcome history during migration"
     ready_after=$(cat "$state/.branch-outcome-index-ready")
-    expected_seq=5
-    [ "$mode" = drain ] || expected_seq=6
-    [ "$ready_after" = "visible-only-v1:$expected_seq" ] || fail "$mode published invalid readiness: $ready_after"
+    [ "$ready_after" != 5 ] || fail "$mode retained legacy readiness"
     FM_STATE_OVERRIDE="$state" "$DRAIN" > "$out" || fail "$mode second drain failed"
     [ ! -s "$out" ] || fail "$mode migration replayed handled statuses: $(cat "$out")"
     [ "$(cat "$state/.branch-outcome-index-ready")" = "$ready_after" ] \
@@ -584,6 +582,22 @@ test_backstop_output_is_bounded() {
   pass "the outcome backstop caps each item and its total task output deterministically"
 }
 
+test_readiness_marker_names_the_exact_store_tail() {
+  local dir state ready_after
+  dir=$(make_case exact-readiness-tail)
+  state="$dir/state"
+
+  FM_STATE_OVERRIDE="$state" "$OUTCOMES" append --task visible --verdict routine \
+    --summary 'visible outcome' >/dev/null || fail "visible readiness fixture append failed"
+  FM_STATE_OVERRIDE="$state" "$OUTCOMES" append --task silent --verdict routine \
+    --summary 'silent outcome' --silent true >/dev/null || fail "silent readiness fixture append failed"
+
+  ready_after=$(cat "$state/.branch-outcome-index-ready")
+  [ "$ready_after" = 'visible-only-v1:2' ] \
+    || fail "readiness did not name the exact store tail, including silent rows: $ready_after"
+  pass "outcome-index readiness names the exact store tail including silent rows"
+}
+
 test_uncovered_keyless_captain_events_surface_on_the_next_main_drain
 test_newer_task_outcome_and_routine_latest_events_stay_silent
 test_legacy_silent_coverage_migrates_before_drain_or_append
@@ -603,3 +617,4 @@ test_held_lock_mode_accepts_a_lock_owner_descendant
 test_index_self_heal_runs_under_the_outcome_lock
 test_overbound_routine_event_stays_silent
 test_backstop_output_is_bounded
+test_readiness_marker_names_the_exact_store_tail

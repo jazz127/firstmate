@@ -320,7 +320,7 @@ Reparenting and pid reuse can invalidate a remembered chain, and this answer dec
 
 ## Lost-wake outcome backstop
 
-Every main-actor wake drain checks each task's newest non-blank status event against the latest supervision-branch outcome that causally covers that task's status log.
+Every main-actor wake drain checks each task's newest non-blank status event against the latest non-silent supervision-branch outcome that causally covers that task's status log.
 When that event is terminal or otherwise captain-facing and remains uncovered, the drain prints it once in `STATUS OUTCOME BACKSTOP`.
 It does so even if the original queue row was already acknowledged.
 Routine events stay silent, and valid open decisions remain owned by `OPEN DECISIONS`.
@@ -345,9 +345,7 @@ This is an accepted limit, not a status-line size contract.
 
 ### Index repair
 
-A missing or invalid outcome-index ready marker is rebuilt from the authoritative outcome rows by `processed-init` under the outcome lock.
-That rebuild runs on the next main drain, on every harness.
-Only a genuine store fault keeps that backstop skipped.
+The [`bin/fm-branch-outcome.sh` header](../bin/fm-branch-outcome.sh) owns index repair and migration, including removal of pre-upgrade silent-derived coverage.
 
 ## How the branch knows what the captain said
 
@@ -455,7 +453,7 @@ The generated [Pi supervision protocol](supervision-protocols/pi.md) owns event 
 Deterministic entry delivery owns captain visibility.
 
 Every `routine` outcome is durable and hidden from captain chat, regardless of `silent`.
-The branch prompt's "Verdict: routine or captain" section owns the classification criteria, including task-level silence eligibility and the rule to escalate doubt; `silent=true` never covers an action, a state change, a new result, or a captain outcome.
+The branch prompt's "Verdict: routine or captain" section owns the classification criteria, silence eligibility, and the rule to escalate doubt.
 
 Its "PR identity: copy or abstain" section owns where a PR URL in a summary or tool argument may come from:
 
@@ -676,7 +674,7 @@ For the away posture:
 - `tests/fm-pi-watch-extension.test.sh` covers the away eligibility collapse (check-kind and decision-owned triggers offered) with the broken-queue vetoes and the watcher-failure alarm still reaching main.
 - `tests/fm-pi-branch-extension.test.sh` covers the posture tail with the verbatim read-back, the unscoped claim of check and heartbeat rows, no processing turn under the record, cancellation of a request pending when the record appears, and the re-presentation at the first run boundary after archive.
 
-`tests/fm-wake-drain-outcome-backstop.test.sh` covers keyless resurfacing, causal suppression, same-second ordering, one-shot presentation, first-drain index self-healing under the outcome lock, store-fault fail-closed behavior, bounded history cost and output, and the oversized-line limit.
+`tests/fm-wake-drain-outcome-backstop.test.sh` covers keyless resurfacing, causal suppression, silent outcomes excluded from coverage through append, rebuild, and upgrade, same-second ordering, one-shot presentation, first-drain index self-healing under the outcome lock, store-fault fail-closed behavior, bounded history cost and output, and the oversized-line limit.
 
 `tests/fm-teardown.test.sh` covers removal of the retired task's outcome index and the append-side rule that a post-teardown report does not recreate it.
 

@@ -281,6 +281,7 @@ BRANCH_OUTCOME_INDEX_IDENT=
 STATUS_OUTCOME_BACKSTOP_ACKNOWLEDGED=
 outcome_index_ready_ok() { # <ready-path>
   local seq
+  [ -f "$STATE/.branch-outcome-index-visible-only" ] || return 1
   [ -f "$1" ] && [ -r "$1" ] && [ ! -L "$1" ] || return 1
   seq=$(LC_ALL=C command cat "$1" 2>/dev/null) || return 1
   case "$seq" in ''|*[!0-9]*) return 1 ;; esac

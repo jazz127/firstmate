@@ -7,11 +7,9 @@
 #     object per line: {"seq":N,"epoch":N,"task":"...","wake":"...",
 #     "verdict":"routine"|"captain","summary":"...","silent":true|false,
 #     "statusEndpoint":N,"statusIdent":"..."}. Legacy rows without `silent`
-#     or status provenance remain valid and are treated as visible.
-#     `silent` is legal only on a routine row (any task, or `fleet`): it marks
-#     an already-handled no-change outcome and is delivered with no rendered
-#     note. A captain row can never be silent. The branch prompt and delivery
-#     consumers own the additional no-change eligibility rule.
+#     or status provenance remain valid and are treated as visible. A silent
+#     row must have verdict `routine` and never updates the task's status-
+#     coverage index; the branch prompt owns the no-change eligibility rule.
 #     Every read and append validates the complete log as a gap-free sequence;
 #     malformed, duplicate, or reordered rows fail closed.
 #     Existing lines are never rewritten, reordered, or deleted by any
@@ -19,6 +17,8 @@
 #     entirely in the cursor sidecar so marking outcomes read cannot disturb
 #     the log. Retention: the log is small (one line per handled fleet event)
 #     and truncation, if ever needed, is a captain-approved manual act.
+#     Silent rows are stored without rendered notes; this includes unchanged
+#     fleet heartbeat reviews when the prompt makes them silent.
 #   - Cursor: $STATE/.branch-outcomes-cursor holds the highest seq presented
 #     by Pi as a routine merge note or sequence-keyed visible captain entry,
 #     emitted by Pi's locked session-start replay, silently consumed there
@@ -47,18 +47,24 @@
 #     its delivered captain rows again, dated and check-first, until main
 #     acknowledges them. A marker ahead of the read cursor fails closed.
 #   - Outcome index: $STATE/.<task>.branch-outcome-index stores one bounded
-#     cache of the latest outcome's status provenance. The authoritative copy
-#     is in the append-only row. $STATE/.branch-outcome-index-ready is removed
+#     cache of the latest non-silent outcome's status provenance. The
+#     authoritative copy is in the append-only row.
+#     $STATE/.branch-outcome-index-ready is removed
 #     before append and published only after the cache update; processed-init
-#     rebuilds every cache before publishing it, so interruption or upgrade
-#     fails closed without making each drain scan lifetime history.
+#     rebuilds every cache before publishing it and the one-time
+#     $STATE/.branch-outcome-index-visible-only migration marker, so interruption
+#     or upgrade fails closed without making each drain scan lifetime history.
+#     Rebuild first removes existing indexes, excluding silent rows when
+#     restoring coverage so pre-upgrade silent-derived coverage cannot survive.
 #     bin/fm-teardown.sh removes a retired task's cache with its other records,
 #     and append skips the cache for a task that has neither a live meta nor a
 #     status log (the outcome itself is still stored), so the branch's report
 #     of a teardown it just performed leaves no index behind.
-#     Main-actor drain calls processed-init under the outcome lock when that
-#     ready marker is absent or invalid, on every harness; only a genuine store
-#     fault keeps the lost-wake backstop skipped.
+#     Main-actor drain calls processed-init under the outcome lock when the
+#     ready marker is absent or invalid or the migration marker is absent,
+#     on every harness; append also rebuilds before storing a row when either
+#     marker is absent. Only a genuine store fault keeps the lost-wake backstop
+#     skipped.
 #   - Tail copy: $STATE/.branch-outcomes-tail.jsonl holds the newest
 #     OUTCOME_TAIL_ROWS store lines verbatim, and only as many of the newest
 #     as fit in OUTCOME_TAIL_MAX_BYTES (1 MiB): older rows leave first, a row
@@ -152,6 +158,7 @@ MAX_SAFE_SEQ=9007199254740991
 OUTCOME_INDEX_VERSION=fm-branch-outcome-index-v1
 OUTCOME_INDEX_MAX_BYTES=512
 OUTCOME_INDEX_READY="$STATE/.branch-outcome-index-ready"
+OUTCOME_INDEX_VISIBLE_ONLY="$STATE/.branch-outcome-index-visible-only"
 OUTCOME_TAIL="$STATE/.branch-outcomes-tail.jsonl"
 OUTCOME_TAIL_ROWS=200
 OUTCOME_TAIL_MAX_BYTES=1048576
@@ -315,10 +322,10 @@ publish_outcome_index_ready() { # <seq>
 
 rebuild_outcome_indexes() {
   local rows task seq epoch endpoint ident f mtime
-  rm -f -- "$OUTCOME_INDEX_READY" || return 1
-  [ -s "$STORE" ] || { publish_outcome_index_ready 0; return; }
+  rm -f -- "$OUTCOME_INDEX_READY" "$STATE"/.*.branch-outcome-index || return 1
+  [ -s "$STORE" ] || { publish_outcome_index_ready 0 && touch "$OUTCOME_INDEX_VISIBLE_ONLY"; return; }
   rows=$(jq -r -s '
-    map(select(.task != "fleet"))
+    map(select(.task != "fleet" and .silent != true))
     | group_by(.task)
     | map(.[-1])[]
     | [.task, (.seq | tostring), (.epoch | tostring),
@@ -352,7 +359,7 @@ rebuild_outcome_indexes() {
   done <<EOF
 $rows
 EOF
-  publish_outcome_index_ready "$(last_seq)"
+  publish_outcome_index_ready "$(last_seq)" && touch "$OUTCOME_INDEX_VISIBLE_ONLY"
 }
 
 write_outcome_tail() { # [<bounded input file>] (append uses the store)
@@ -535,6 +542,12 @@ case "$CMD" in
       echo "error: refusing append because the outcome cursor is invalid or ahead of the store" >&2
       exit 1
     fi
+    if { [ ! -f "$OUTCOME_INDEX_VISIBLE_ONLY" ] || [ ! -f "$OUTCOME_INDEX_READY" ]; } \
+        && ! rebuild_outcome_indexes; then
+      fm_lock_release "$LOCK"
+      echo "error: outcome index migration could not be completed safely" >&2
+      exit 1
+    fi
     SEQ=$(( LAST_SEQ + 1 ))
     capture_status_position "$TASK"
     rm -f -- "$OUTCOME_INDEX_READY" || { fm_lock_release "$LOCK"; exit 1; }
@@ -547,7 +560,8 @@ case "$CMD" in
     # reports the teardown it just performed, and writing the index here would
     # recreate the footprint teardown removed. The outcome itself is still
     # stored and delivered; only the reader-less cache is skipped.
-    if { [ -e "$STATE/$TASK.meta" ] || [ -e "$STATE/$TASK.status" ]; } \
+    if [ "$SILENT" != true ] && [ "$TASK" != fleet ] \
+        && { [ -e "$STATE/$TASK.meta" ] || [ -e "$STATE/$TASK.status" ]; } \
         && ! write_outcome_index "$TASK" "$SEQ"; then
       fm_lock_release "$LOCK"
       echo "error: outcome was stored but its bounded task index could not be updated" >&2

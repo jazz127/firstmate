@@ -260,7 +260,7 @@ PY
 }
 
 test_outcome_startup_replay_preserves_silence() {
-  local home replay out status store
+  local home replay out status store visible_index index_after_silent
   home="$TMP_ROOT/store-silent-home"
   mkdir -p "$home/state"
   store="$home/state/branch-outcomes.jsonl"
@@ -303,14 +303,14 @@ test_outcome_startup_replay_preserves_silence() {
   [ -z "$(FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" unread)" ] \
     || fail "startup replay did not mark the silent and visible rows read"
 
-  printf '%s\n' '{"seq":4,"epoch":1,"task":"task-legacy","wake":"","verdict":"routine","summary":"legacy visible outcome"}' \
+  printf '%s\n' '{"seq":6,"epoch":1,"task":"task-legacy","wake":"","verdict":"routine","summary":"legacy visible outcome"}' \
     >> "$home/state/branch-outcomes.jsonl"
   replay=$(FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" startup-replay) || fail "legacy startup replay failed"
   assert_contains "$replay" "legacy visible outcome" "startup replay hid a legacy row with no silent field"
   [ -z "$(FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" unread)" ] \
     || fail "startup replay did not mark the legacy row read"
 
-  printf '%s\n' '{"seq":5,"epoch":1,"task":"task-bad","wake":"","verdict":"captain","summary":"poisoned","silent":true}' >> "$store"
+  printf '%s\n' '{"seq":7,"epoch":1,"task":"task-bad","wake":"","verdict":"captain","summary":"poisoned","silent":true}' >> "$store"
   out=$(FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" unread 2>&1)
   status=$?
   [ "$status" -ne 0 ] || fail "unread accepted a stored silent captain outcome"

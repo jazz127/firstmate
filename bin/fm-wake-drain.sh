@@ -334,9 +334,9 @@ print_status_outcome_backstop_section() {  # <task-and-endpoint-snapshot>
       return 0
     fi
     ready="$STATE/.branch-outcome-index-ready"
-    if ! outcome_index_ready_ok "$ready"; then
+    if ! fm_branch_outcome_index_ready_ok "$ready"; then
       if ! "$SCRIPT_DIR/fm-branch-outcome.sh" processed-init --held-lock >/dev/null 2>&1 \
-        || ! outcome_index_ready_ok "$ready"; then
+        || ! fm_branch_outcome_index_ready_ok "$ready"; then
         fm_lock_release "$lock"
         printf 'STATUS OUTCOME BACKSTOP SKIPPED: bounded outcome indexes could not be rebuilt because the outcome store is unsafe; repair it before relying on drain recovery.\n'
         return 0

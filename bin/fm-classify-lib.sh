@@ -1637,6 +1637,15 @@ EOF
   printf '%s' "$offset"
 }
 
+fm_branch_outcome_index_ready_ok() {
+  local marker seq
+  [ -f "$1" ] && [ -r "$1" ] && [ ! -L "$1" ] || return 1
+  marker=$(LC_ALL=C command cat "$1" 2>/dev/null) || return 1
+  case "$marker" in visible-only-v1:*) seq=${marker#visible-only-v1:} ;; *) return 1 ;; esac
+  case "$seq" in ''|*[!0-9]*|0[0-9]*) return 1 ;; esac
+  [ "${#seq}" -le 16 ] && [ "$seq" -le 9007199254740991 ]
+}
+
 status_outcome_backstop_cursor_offset() {  # <status-file>
   local f=$1 state task manifest data row_task ident presented row_backstop backstop extra current size
   [ -f "$f" ] && [ -r "$f" ] && [ ! -L "$f" ] || return 1

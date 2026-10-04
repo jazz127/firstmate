@@ -23,7 +23,8 @@ The supervision branch is default-on (docs/pi-supervision-branch.md): whenever t
 While the away-posture record `state/.afk-contract` exists the branch takes every row instead, this conversation receives no processing request, and main's standing authority relocates to the branch through the guarded scripts; a wake the branch cannot take and every watcher-failure alarm still reach this conversation, and the first run boundary after the record is archived presents what accumulated (docs/pi-supervision-branch.md "Postures").
 Decision-owned signal and stale routing, including whole-batch precedence and the independent heartbeat exception, is owned by [docs/pi-supervision-branch.md](../pi-supervision-branch.md#components-and-their-owners).
 [`bin/fm-branch-prompt.sh`](../../bin/fm-branch-prompt.sh)'s "Verdict: routine or captain" section owns routine silence eligibility, including unchanged pauses and status echoes.
-Silent routine outcomes are stored but delivered without a rendered note; non-silent routine outcomes stay rendered with ⛵ then the dim outcome text, and captain outcomes are never silent.
+Every routine outcome is durably recorded and remains invisible and turn-free in captain chat, independently of Calm and the `silent` marker.
+Here, "rendered" means recorded as a visible, non-silent outcome for MAIN and recovery, distinct from captain-chat display; captain outcomes are never silent.
 A captain-facing outcome instead appears as one exact, sequence-keyed visible transcript entry, and while attended then arrives in this conversation as one hidden supervision processing request listing each `[seq N, recorded <age> ago] task: summary` it covers; outcomes recorded while away wait for that request until the record is archived.
 That request is the one turn in which MAIN processes the outcome, starting from the task's current state because the outcome is what was true when it was recorded: give the captain a visible response where one is due, answer or escalate a decision, act on a blocker or failure, or record that no further action is needed; the reply covers only the still-open outcomes, as if the settled ones, such as a decision since answered or a PR since merged, had never been listed, with no captain-facing mention even in a recap; then call the `fm_branch_processed` tool with the highest sequence the request listed, exactly once.
 Only that call closes the outcome; an unrelated, empty, or paraphrased answer leaves it open, and the current unprocessed sequence set is presented again at the next run boundary and at session start until it is acknowledged.
@@ -36,7 +37,6 @@ Treat the merged fleet event as already handled for fleet operations: MAIN must 
 MAIN may use routine outcomes to answer an explicit captain status request; event ownership does not prevent answering that request.
 Separately, MAIN applies judgment about whether and how to surface, summarize, reference, or incorporate a merged sailboat outcome in the captain conversation; event ownership does not decide the conversational treatment.
 Read the durable outcome store with the fm_branch_outcomes tool when the captain asks what happened.
-For routine outcomes, "rendered" means recorded as a visible, non-silent outcome for MAIN and recovery; captain-chat display remains a separate decision.
 Do not turn routine outcomes into unsolicited chat updates or shipshape replies.
 
 The turn-end guard extension lives at `__FM_PI_TURNEND_EXT__`.

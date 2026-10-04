@@ -87,7 +87,7 @@ test_newer_task_outcome_and_routine_latest_events_stay_silent() {
 }
 
 test_legacy_silent_coverage_migrates_before_drain_or_append() {
-  local mode dir state out body task seq endpoint ident store_before ready_after
+  local mode dir state out body task seq endpoint ident store_before ready_after expected_seq
   for mode in drain silent-append visible-append; do
     dir=$(make_case "legacy-silent-$mode")
     state="$dir/state"
@@ -146,7 +146,9 @@ test_legacy_silent_coverage_migrates_before_drain_or_append() {
     [ "$(head -n 5 "$state/branch-outcomes.jsonl")" = "$store_before" ] \
       || fail "$mode rewrote outcome history during migration"
     ready_after=$(cat "$state/.branch-outcome-index-ready")
-    [ "$ready_after" != 5 ] || fail "$mode retained legacy readiness"
+    expected_seq=5
+    [ "$mode" = drain ] || expected_seq=6
+    [ "$ready_after" = "visible-only-v1:$expected_seq" ] || fail "$mode published invalid readiness: $ready_after"
     FM_STATE_OVERRIDE="$state" "$DRAIN" > "$out" || fail "$mode second drain failed"
     [ ! -s "$out" ] || fail "$mode migration replayed handled statuses: $(cat "$out")"
     [ "$(cat "$state/.branch-outcome-index-ready")" = "$ready_after" ] \

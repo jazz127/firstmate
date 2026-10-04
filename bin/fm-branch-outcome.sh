@@ -61,9 +61,9 @@
 #     status log (the outcome itself is still stored), so the branch's report
 #     of a teardown it just performed leaves no index behind.
 #     Main-actor drain calls processed-init under the outcome lock when the
-#     ready marker is absent or invalid or the migration marker is absent,
-#     on every harness; append also rebuilds before storing a row when either
-#     marker is absent. Only a genuine store fault keeps the lost-wake backstop
+#     ready marker is absent or invalid, on every harness; append also rebuilds
+#     before storing a row when readiness is absent or invalid.
+#     Only a genuine store fault keeps the lost-wake backstop
 #     skipped.
 #   - Tail copy: $STATE/.branch-outcomes-tail.jsonl holds the newest
 #     OUTCOME_TAIL_ROWS store lines verbatim, and only as many of the newest
@@ -158,7 +158,6 @@ MAX_SAFE_SEQ=9007199254740991
 OUTCOME_INDEX_VERSION=fm-branch-outcome-index-v1
 OUTCOME_INDEX_MAX_BYTES=512
 OUTCOME_INDEX_READY="$STATE/.branch-outcome-index-ready"
-OUTCOME_INDEX_VISIBLE_ONLY="$STATE/.branch-outcome-index-visible-only"
 OUTCOME_TAIL="$STATE/.branch-outcomes-tail.jsonl"
 OUTCOME_TAIL_ROWS=200
 OUTCOME_TAIL_MAX_BYTES=1048576
@@ -316,7 +315,7 @@ write_outcome_index() { # <task> <seq> [<endpoint> <identity>]
 publish_outcome_index_ready() { # <seq>
   local tmp
   tmp=$(mktemp "$STATE/.branch-outcome-index-ready.XXXXXX") || return 1
-  printf '%s\n' "$1" > "$tmp" || { rm -f -- "$tmp"; return 1; }
+  printf 'visible-only-v1:%s\n' "$1" > "$tmp" || { rm -f -- "$tmp"; return 1; }
   mv -f -- "$tmp" "$OUTCOME_INDEX_READY"
 }
 
@@ -360,7 +359,7 @@ rebuild_outcome_indexes() {
   done <<EOF
 $rows
 EOF
-  publish_outcome_index_ready "$(last_seq)" && touch "$OUTCOME_INDEX_VISIBLE_ONLY"
+  publish_outcome_index_ready "$(last_seq)"
 }
 
 write_outcome_tail() { # [<bounded input file>] (append uses the store)

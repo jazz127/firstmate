@@ -15,7 +15,7 @@
 #   B) Inheritance. The primary pushes a declared, extensible set of LOCAL
 #      (gitignored) config items - config/crew-dispatch.json, config/crew-harness,
 #      config/backlog-backend, config/backend, config/herdr-presentation-spaces,
-#      config/startup-memory-budget, config/trace-context, and
+#      config/startup-memory-budget, config/context-restart-budget, config/trace-context, and
 #      config/supervision-host-off -
 #      down into each secondmate home's config/, so the secondmate's OWN crewmates,
 #      dispatch profiles, backlog backend, runtime-backend default, Herdr
@@ -1071,7 +1071,7 @@ new_world() {
     printf 'projects/\nstate/\ndata/\n.no-mistakes/\n'
     [ "$dispatch_ignore" = no ] || printf 'config/crew-dispatch.json\n'
     printf 'config/crew-harness\nconfig/secondmate-harness\nconfig/backlog-backend\n'
-    printf 'config/backend\nconfig/herdr-presentation-spaces\nconfig/startup-memory-budget\n'
+    printf 'config/backend\nconfig/herdr-presentation-spaces\nconfig/startup-memory-budget\nconfig/context-restart-budget\n'
     printf 'config/claude-permission-mode\n'
   } > "$w/main/.gitignore"
   printf 'v1\n' > "$w/main/AGENTS.md"
@@ -1451,6 +1451,8 @@ test_bootstrap_sweep_materializes_and_inherits_memory_default() {
     || fail "primary bootstrap did not materialize the startup-memory default"
   [ "$(cat "$w/sm/config/startup-memory-budget")" = 7500 ] \
     || fail "default-only sweep did not converge startup-memory-budget"
+  [ ! -e "$w/home/config/context-restart-budget" ] || fail "bootstrap unexpectedly opted the primary into context refresh"
+  [ ! -e "$w/sm/config/context-restart-budget" ] || fail "bootstrap unexpectedly opted the secondmate into context refresh"
   [ "$(git -C "$w/sm" rev-parse HEAD)" = "$head" ] \
     || fail "default-only sweep did not still fast-forward the tracked files"
   pass "B10 bootstrap sweep materializes and inherits the startup-memory default while fast-forwarding"
@@ -2724,6 +2726,44 @@ test_secondmate_model_effort_tokens
 test_pi_signed_detection_and_session_lock_identity
 test_dash_leading_process_names_are_basename_operands
 test_propagate_lib
+
+test_spawn_context_refresh_opt_in_and_unsynced_fallback() {
+  local mode w sm launchlog out status launch
+  for mode in absent enabled unsynced malformed; do
+    w="$TMP_ROOT/spawn-context-$mode"
+    sm="$w/sm"
+    launchlog="$w/launch.log"
+    mkdir -p "$w/home/config"
+    printf 'claude opus high\n' > "$w/home/config/secondmate-harness"
+    make_seeded_home "$sm" sm
+    cp "$ROOT/bin/fm-primary.sh" "$ROOT/bin/fm-context-restart-supervise.sh" \
+      "$ROOT/bin/fm-context-restart.sh" "$ROOT/bin/fm-context-restart-lib.sh" "$sm/bin/"
+    mkdir -p "$sm/config"
+    case "$mode" in
+      enabled|unsynced) printf '400000\n' > "$w/home/config/context-restart-budget" ;;
+      malformed) printf 'invalid\n' > "$sm/config/context-restart-budget" ;;
+    esac
+    [ "$mode" != unsynced ] || rm "$sm/bin/fm-primary.sh"
+    out=$(spawn_secondmate_capture "$w" sm "$sm" "$launchlog" 2>&1); status=$?
+    expect_code 0 "$status" "$mode secondmate launch failed: $out"
+    launch=$(cat "$launchlog")
+    if [ "$mode" = enabled ]; then
+      assert_contains "$launch" 'fm-primary.sh --firstmate-initial-prompt' "opted-in home did not use wrapper"
+      assert_contains "$launch" '--settings' "wrapper lost existing Claude settings"
+      assert_contains "$launch" "--model 'opus' --effort 'high'" "wrapper lost model/effort"
+      assert_contains "$launch" 'Firstmate operational input waiting:' "wrapper lost the record-backed initial charter"
+      [ "$(cat "$sm/config/context-restart-budget")" = 400000 ] || fail "budget was not inherited"
+    else
+      assert_not_contains "$launch" 'fm-primary.sh' "$mode home changed its Claude launch"
+      if [ "$mode" = unsynced ] || [ "$mode" = malformed ]; then
+        assert_contains "$out" 'cannot enable context refresh' "fallback did not warn"
+      fi
+    fi
+  done
+  pass "Claude secondmate refresh: absent leaves launch unchanged; opt-in preserves settings/charter; unsynced or invalid stays plain"
+}
+
+
 test_spawn_split_and_inherit
 test_spawn_backward_compat_crew_fallback
 test_spawn_bare_backward_compat
@@ -2772,3 +2812,5 @@ test_spawn_quarantines_pending_rereads_on_cleanup_failure
 test_bootstrap_detect_only_does_not_create_state
 
 echo "# all fm-secondmate-harness tests passed"
+
+test_spawn_context_refresh_opt_in_and_unsynced_fallback

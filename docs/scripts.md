@@ -47,6 +47,11 @@ The shared no-mistakes gate lifecycle boundary is summarized in [architecture.md
 | `fm-test-isolation-proof.sh` | Concurrent isolation harness and portable candidate set owner |
 | `fm-ensure-agents-md.sh` | Manually initialize project agent-memory files (see the helper's header and help) |
 | `fm-guard.sh`            | Warn on primary-checkout tangles, main-session pending wakes, and unhealthy supervision |
+| `fm-primary.sh` | Opt-in Claude primary wrapper with fresh-session relaunch after reset-safe handoff |
+| `fm-context-restart-lib.sh` | Exact opt-in budget validation, transcript accounting, and durable crossing format |
+| `fm-context-restart-claude-hook.sh` | One-shot Claude Stop context threshold detector |
+| `fm-context-restart.sh` | Validate a budget or publish a reset-safe handoff request |
+| `fm-context-restart-supervise.sh` | Wrapper-owned watcher transfer across Claude replacement |
 | `fm-primary-scope-lib.sh` | Shared marker-or-plain-checkout primary-home predicate for tracked hooks             |
 | `fm-session-lock-lib.sh` | Shared session-lock ownership from harness ancestry or a trusted Claude session id for fm-lock.sh and the Claude Stop auto-arm, plus the read-only lock inspection behind `fm-lock.sh status` and `fm-inbox.sh ready` |
 | `fm-claude-stop-autoarm.sh` | Claude Stop `asyncRewake` hook owning tokenless watcher continuity with single-flight exit-2 rewake (docs/watcher-continuity.md) |

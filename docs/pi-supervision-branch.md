@@ -347,6 +347,7 @@ This is an accepted limit, not a status-line size contract.
 ### Index repair
 
 The [`bin/fm-branch-outcome.sh` header](../bin/fm-branch-outcome.sh) owns index readiness, repair, and migration, including removal of pre-upgrade silent-derived coverage.
+Temporary outcome-lock contention skips that drain's backstop and retries on the next drain; unsafe storage or indexes require repair before relying on recovery.
 
 ## How the branch knows what the captain said
 

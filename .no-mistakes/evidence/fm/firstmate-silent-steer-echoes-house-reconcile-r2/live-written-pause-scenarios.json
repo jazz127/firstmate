@@ -1,0 +1,38 @@
+[
+  {
+    "task": "echo-write",
+    "result": "pass",
+    "expected_silent": false,
+    "expected_verdict": "routine",
+    "outcomes": [
+      {
+        "seq": 2,
+        "epoch": 1791115881,
+        "task": "echo-write",
+        "wake": "check: isolated live silence scenarios",
+        "verdict": "routine",
+        "summary": "Registered the new deliberate pause for echo-write: waiting for the registered release window.",
+        "silent": false,
+        "statusEndpoint": 87,
+        "statusIdent": "strong:16777231:7051300:1791115872.636407044"
+      }
+    ]
+  },
+  {
+    "task": "echo-of-branch-written-pause",
+    "result": "pass",
+    "outcomes": [
+      {
+        "seq": 3,
+        "epoch": 1791115890,
+        "task": "echo-write",
+        "wake": "check: echo of branch-written pause",
+        "verdict": "routine",
+        "summary": "Echo of the pause just registered for echo-write; nothing changed, no action taken.",
+        "silent": true,
+        "statusEndpoint": 87,
+        "statusIdent": "strong:16777231:7051300:1791115872.636407044"
+      }
+    ]
+  }
+]

@@ -1,0 +1,98 @@
+{
+  "duration_api_ms": 12677,
+  "stop_reason": "end_turn",
+  "session_id": "fa50f2bc-7bb1-4ac8-9170-67e1b4aafb6e",
+  "total_cost_usd": 0.04301579999999999,
+  "usage": {
+    "input_tokens": 12,
+    "cache_creation_input_tokens": 3421,
+    "cache_read_input_tokens": 80639,
+    "output_tokens": 1318,
+    "output_tokens_details": {
+      "thinking_tokens": 64
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 3421,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 452,
+        "cache_read_input_tokens": 14857,
+        "cache_creation_input_tokens": 128,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 128
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard",
+    "fallback_credit": null
+  },
+  "modelUsage": {
+    "claude-sonnet-5-5": {
+      "inputTokens": 12,
+      "outputTokens": 1318,
+      "cacheReadInputTokens": 80639,
+      "cacheCreationInputTokens": 3421,
+      "webSearchRequests": 0,
+      "costUSD": 0.04301579999999999,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "thinkingTokens": 64,
+      "canonicalModel": "claude-sonnet-5-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "is_error": false,
+  "num_turns": 6,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "I handled all eight notifications, reported each once, and acknowledged the wake through row 8. I didn't claim any leases because I didn't change any task or backlog state. Each task's state was checked with `bin/fm-crew-state.sh` before I reported it.\n\n| Task | State | Verdict | Silent |\n|---|---|---|---|\n| echo | paused | routine | yes |\n| scheduled | paused | routine | yes |\n| declared | paused | routine | yes |\n| hold | parked | routine | yes |\n| changed | working | routine | no |\n| failure | failed | captain | no |\n| finished | done | captain | no |\n| uncertain | paused | routine | no |\n\n- **echo, scheduled, declared:** each is still paused awaiting its release window, with nothing new.\n- **hold:** the REST-or-RPC choice is still open on the same terms. I did not answer it.\n- **changed:** the pause cleared and the worker resumed, which is a real state change, so it stays visible.\n- **failure:** a new dependency-check failure arrived while the pause stands, so I sent it to the captain.\n- **finished:** the investigation the captain requested is done and its report is at `data/finished/report.md`, so I sent it to the captain.\n- **uncertain:** it is still paused, but I couldn't tell whether the terms changed. I left it non-silent rather than assume nothing happened.",
+  "ttft_ms": 1568,
+  "type": "result",
+  "duration_ms": 17193,
+  "uuid": "d1e2bde3-197a-4b9d-bc08-9cb8e89dbc3a",
+  "ttft_stream_ms": 948,
+  "time_to_request_ms": 96,
+  "first_content_frame_ms": 948,
+  "queued_turn_count": 0,
+  "result_index": 0
+}

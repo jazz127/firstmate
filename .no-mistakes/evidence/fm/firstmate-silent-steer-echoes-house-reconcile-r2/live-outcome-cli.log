@@ -1,0 +1,312 @@
+$ bin/fm-lab-home.sh create /Users/jarad/.no-mistakes/evidence/01M43B8VZWC2WBFGKQFC7M11CS/l
+/Users/jarad/.no-mistakes/evidence/01M43B8VZWC2WBFGKQFC7M11CS/l
+[exit 0]
+
+$ tmux -L fm-lab new-session -d -s fixture -x 120 -y 40 -c /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M43B8VZWC2WBFGKQFC7M11CS sleep 1800
+[exit 0]
+
+$ tmux -L fm-lab display-message -p #{socket_path},#{pid},#{session_id}
+/Users/jarad/.no-mistakes/evidence/01M43B8VZWC2WBFGKQFC7M11CS/l/tmux/tmux-501/fm-lab,23256,$0
+[exit 0]
+
+$ bin/fm-lab-home.sh create /Users/jarad/.no-mistakes/evidence/01M43B8VZWC2WBFGKQFC7M11CS/l/current
+/Users/jarad/.no-mistakes/evidence/01M43B8VZWC2WBFGKQFC7M11CS/l/current
+[exit 0]
+
+$ bin/fm-branch-outcome.sh append --task visible --verdict captain --summary Completion already delivered. --silent false
+1
+[exit 0]
+
+$ bin/fm-branch-outcome.sh append --task mixed --verdict captain --summary Earlier completion delivered. --silent false
+2
+[exit 0]
+
+$ bin/fm-branch-outcome.sh append --task mixed --verdict routine --summary Unchanged status echo. --silent true
+3
+[exit 0]
+
+$ bin/fm-branch-outcome.sh append --task silent-done --verdict routine --summary Unchanged status echo. --silent true
+4
+[exit 0]
+
+$ bin/fm-branch-outcome.sh append --task silent-failed --verdict routine --summary Unchanged status echo. --silent true
+5
+[exit 0]
+
+$ bin/fm-branch-outcome.sh mark-read --through 5
+[exit 0]
+
+$ bin/fm-wake-drain.sh
+STATUS OUTCOME BACKSTOP (newest captain-facing task event has no covering branch outcome):
+mixed failed: later failure has no visible outcome
+silent-done done: completion has only a silent echo
+silent-failed failed: failure has only a silent echo
+[exit 0]
+
+$ bin/fm-wake-drain.sh
+[exit 0]
+
+$ bin/fm-lab-home.sh create /Users/jarad/.no-mistakes/evidence/01M43B8VZWC2WBFGKQFC7M11CS/l/legacy-drain
+/Users/jarad/.no-mistakes/evidence/01M43B8VZWC2WBFGKQFC7M11CS/l/legacy-drain
+[exit 0]
+
+$ bin/fm-branch-outcome.sh append --task visible --verdict captain --summary Completion already delivered. --silent false
+1
+[exit 0]
+
+$ bin/fm-branch-outcome.sh append --task mixed --verdict captain --summary Earlier completion delivered. --silent false
+2
+[exit 0]
+
+$ bin/fm-branch-outcome.sh append --task mixed --verdict routine --summary Unchanged status echo. --silent true
+3
+[exit 0]
+
+$ bin/fm-branch-outcome.sh append --task silent-done --verdict routine --summary Unchanged status echo. --silent true
+4
+[exit 0]
+
+$ bin/fm-branch-outcome.sh append --task silent-failed --verdict routine --summary Unchanged status echo. --silent true
+5
+[exit 0]
+
+$ bin/fm-branch-outcome.sh mark-read --through 5
+[exit 0]
+
+$ bin/fm-wake-drain.sh
+STATUS OUTCOME BACKSTOP (newest captain-facing task event has no covering branch outcome):
+mixed failed: later failure has no visible outcome
+silent-done done: completion has only a silent echo
+silent-failed failed: failure has only a silent echo
+[exit 0]
+
+$ bin/fm-wake-drain.sh
+[exit 0]
+
+$ bin/fm-lab-home.sh create /Users/jarad/.no-mistakes/evidence/01M43B8VZWC2WBFGKQFC7M11CS/l/legacy-silent-append
+/Users/jarad/.no-mistakes/evidence/01M43B8VZWC2WBFGKQFC7M11CS/l/legacy-silent-append
+[exit 0]
+
+$ bin/fm-branch-outcome.sh append --task visible --verdict captain --summary Completion already delivered. --silent false
+1
+[exit 0]
+
+$ bin/fm-branch-outcome.sh append --task mixed --verdict captain --summary Earlier completion delivered. --silent false
+2
+[exit 0]
+
+$ bin/fm-branch-outcome.sh append --task mixed --verdict routine --summary Unchanged status echo. --silent true
+3
+[exit 0]
+
+$ bin/fm-branch-outcome.sh append --task silent-done --verdict routine --summary Unchanged status echo. --silent true
+4
+[exit 0]
+
+$ bin/fm-branch-outcome.sh append --task silent-failed --verdict routine --summary Unchanged status echo. --silent true
+5
+[exit 0]
+
+$ bin/fm-branch-outcome.sh mark-read --through 5
+[exit 0]
+
+$ bin/fm-branch-outcome.sh append --task fleet --verdict routine --summary Fleet unchanged. --silent true
+6
+[exit 0]
+
+$ bin/fm-wake-drain.sh
+STATUS OUTCOME BACKSTOP (newest captain-facing task event has no covering branch outcome):
+mixed failed: later failure has no visible outcome
+silent-done done: completion has only a silent echo
+silent-failed failed: failure has only a silent echo
+[exit 0]
+
+$ bin/fm-wake-drain.sh
+[exit 0]
+
+$ bin/fm-lab-home.sh create /Users/jarad/.no-mistakes/evidence/01M43B8VZWC2WBFGKQFC7M11CS/l/legacy-visible-append
+/Users/jarad/.no-mistakes/evidence/01M43B8VZWC2WBFGKQFC7M11CS/l/legacy-visible-append
+[exit 0]
+
+$ bin/fm-branch-outcome.sh append --task visible --verdict captain --summary Completion already delivered. --silent false
+1
+[exit 0]
+
+$ bin/fm-branch-outcome.sh append --task mixed --verdict captain --summary Earlier completion delivered. --silent false
+2
+[exit 0]
+
+$ bin/fm-branch-outcome.sh append --task mixed --verdict routine --summary Unchanged status echo. --silent true
+3
+[exit 0]
+
+$ bin/fm-branch-outcome.sh append --task silent-done --verdict routine --summary Unchanged status echo. --silent true
+4
+[exit 0]
+
+$ bin/fm-branch-outcome.sh append --task silent-failed --verdict routine --summary Unchanged status echo. --silent true
+5
+[exit 0]
+
+$ bin/fm-branch-outcome.sh mark-read --through 5
+[exit 0]
+
+$ bin/fm-branch-outcome.sh append --task fleet --verdict routine --summary Unrelated real result. --silent false
+6
+[exit 0]
+
+$ bin/fm-wake-drain.sh
+STATUS OUTCOME BACKSTOP (newest captain-facing task event has no covering branch outcome):
+mixed failed: later failure has no visible outcome
+silent-done done: completion has only a silent echo
+silent-failed failed: failure has only a silent echo
+[exit 0]
+
+$ bin/fm-wake-drain.sh
+[exit 0]
+
+$ bin/fm-lab-home.sh create /Users/jarad/.no-mistakes/evidence/01M43B8VZWC2WBFGKQFC7M11CS/l/missing
+/Users/jarad/.no-mistakes/evidence/01M43B8VZWC2WBFGKQFC7M11CS/l/missing
+[exit 0]
+
+$ bin/fm-branch-outcome.sh append --task visible --verdict captain --summary Completion already delivered. --silent false
+1
+[exit 0]
+
+$ bin/fm-branch-outcome.sh append --task mixed --verdict captain --summary Earlier completion delivered. --silent false
+2
+[exit 0]
+
+$ bin/fm-branch-outcome.sh append --task mixed --verdict routine --summary Unchanged status echo. --silent true
+3
+[exit 0]
+
+$ bin/fm-branch-outcome.sh append --task silent-done --verdict routine --summary Unchanged status echo. --silent true
+4
+[exit 0]
+
+$ bin/fm-branch-outcome.sh append --task silent-failed --verdict routine --summary Unchanged status echo. --silent true
+5
+[exit 0]
+
+$ bin/fm-branch-outcome.sh mark-read --through 5
+[exit 0]
+
+$ bin/fm-wake-drain.sh
+STATUS OUTCOME BACKSTOP (newest captain-facing task event has no covering branch outcome):
+mixed failed: later failure has no visible outcome
+silent-done done: completion has only a silent echo
+silent-failed failed: failure has only a silent echo
+[exit 0]
+
+$ bin/fm-wake-drain.sh
+[exit 0]
+
+$ bin/fm-lab-home.sh create /Users/jarad/.no-mistakes/evidence/01M43B8VZWC2WBFGKQFC7M11CS/l/invalid
+/Users/jarad/.no-mistakes/evidence/01M43B8VZWC2WBFGKQFC7M11CS/l/invalid
+[exit 0]
+
+$ bin/fm-branch-outcome.sh append --task visible --verdict captain --summary Completion already delivered. --silent false
+1
+[exit 0]
+
+$ bin/fm-branch-outcome.sh append --task mixed --verdict captain --summary Earlier completion delivered. --silent false
+2
+[exit 0]
+
+$ bin/fm-branch-outcome.sh append --task mixed --verdict routine --summary Unchanged status echo. --silent true
+3
+[exit 0]
+
+$ bin/fm-branch-outcome.sh append --task silent-done --verdict routine --summary Unchanged status echo. --silent true
+4
+[exit 0]
+
+$ bin/fm-branch-outcome.sh append --task silent-failed --verdict routine --summary Unchanged status echo. --silent true
+5
+[exit 0]
+
+$ bin/fm-branch-outcome.sh mark-read --through 5
+[exit 0]
+
+$ bin/fm-wake-drain.sh
+STATUS OUTCOME BACKSTOP (newest captain-facing task event has no covering branch outcome):
+mixed failed: later failure has no visible outcome
+silent-done done: completion has only a silent echo
+silent-failed failed: failure has only a silent echo
+[exit 0]
+
+$ bin/fm-wake-drain.sh
+[exit 0]
+
+$ bin/fm-lab-home.sh create /Users/jarad/.no-mistakes/evidence/01M43B8VZWC2WBFGKQFC7M11CS/l/symlink
+/Users/jarad/.no-mistakes/evidence/01M43B8VZWC2WBFGKQFC7M11CS/l/symlink
+[exit 0]
+
+$ bin/fm-branch-outcome.sh append --task visible --verdict captain --summary Completion already delivered. --silent false
+1
+[exit 0]
+
+$ bin/fm-branch-outcome.sh append --task mixed --verdict captain --summary Earlier completion delivered. --silent false
+2
+[exit 0]
+
+$ bin/fm-branch-outcome.sh append --task mixed --verdict routine --summary Unchanged status echo. --silent true
+3
+[exit 0]
+
+$ bin/fm-branch-outcome.sh append --task silent-done --verdict routine --summary Unchanged status echo. --silent true
+4
+[exit 0]
+
+$ bin/fm-branch-outcome.sh append --task silent-failed --verdict routine --summary Unchanged status echo. --silent true
+5
+[exit 0]
+
+$ bin/fm-branch-outcome.sh mark-read --through 5
+[exit 0]
+
+$ bin/fm-wake-drain.sh
+STATUS OUTCOME BACKSTOP (newest captain-facing task event has no covering branch outcome):
+mixed failed: later failure has no visible outcome
+silent-done done: completion has only a silent echo
+silent-failed failed: failure has only a silent echo
+[exit 0]
+
+$ bin/fm-wake-drain.sh
+[exit 0]
+
+$ bin/fm-lab-home.sh create /Users/jarad/.no-mistakes/evidence/01M43B8VZWC2WBFGKQFC7M11CS/l/replay
+/Users/jarad/.no-mistakes/evidence/01M43B8VZWC2WBFGKQFC7M11CS/l/replay
+[exit 0]
+
+$ bin/fm-branch-outcome.sh append --task repeat --verdict routine --summary Registered pause still holds. --silent true
+1
+[exit 0]
+
+$ bin/fm-branch-outcome.sh append --task recovered --verdict routine --summary Pause cleared; work resumed. --silent false
+2
+[exit 0]
+
+$ bin/fm-branch-outcome.sh startup-replay
+BRANCH OUTCOMES (handled by the supervision branch, not yet seen by this session):
+{"seq":2,"epoch":1791115292,"task":"recovered","wake":"","verdict":"routine","summary":"Pause cleared; work resumed.","silent":false,"statusEndpoint":0,"statusIdent":"-"}
+[exit 0]
+
+$ bin/fm-branch-outcome.sh append --task requested --verdict captain --summary Requested work finished. --silent false
+3
+[exit 0]
+
+$ bin/fm-branch-outcome.sh append --task requested --verdict captain --summary Never hide a captain result. --silent true
+error: silent outcomes must have the routine verdict
+[exit 2]
+
+$ bin/fm-branch-outcome.sh startup-replay
+[exit 0]
+
+$ bin/fm-branch-outcome.sh unread
+{"seq":3,"epoch":1791115292,"task":"requested","wake":"","verdict":"captain","summary":"Requested work finished.","silent":false,"statusEndpoint":0,"statusIdent":"-"}
+[exit 0]
+
+$ tmux -L fm-lab kill-server
+[exit 0]

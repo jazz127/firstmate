@@ -1,0 +1,65 @@
+[
+  {
+    "mode": "current",
+    "first_drain": "STATUS OUTCOME BACKSTOP (newest captain-facing task event has no covering branch outcome):\nmixed failed: later failure has no visible outcome\nsilent-done done: completion has only a silent echo\nsilent-failed failed: failure has only a silent echo\n",
+    "second_drain": "",
+    "ready": "visible-only-v1:5",
+    "coverage_after_silent": "mixed retained visible seq 2; silent-only indexes absent",
+    "history_preserved": true
+  },
+  {
+    "mode": "legacy-drain",
+    "first_drain": "STATUS OUTCOME BACKSTOP (newest captain-facing task event has no covering branch outcome):\nmixed failed: later failure has no visible outcome\nsilent-done done: completion has only a silent echo\nsilent-failed failed: failure has only a silent echo\n",
+    "second_drain": "",
+    "ready": "visible-only-v1:5",
+    "coverage_after_silent": "mixed retained visible seq 2; silent-only indexes absent",
+    "history_preserved": true
+  },
+  {
+    "mode": "legacy-silent-append",
+    "first_drain": "STATUS OUTCOME BACKSTOP (newest captain-facing task event has no covering branch outcome):\nmixed failed: later failure has no visible outcome\nsilent-done done: completion has only a silent echo\nsilent-failed failed: failure has only a silent echo\n",
+    "second_drain": "",
+    "ready": "visible-only-v1:6",
+    "coverage_after_silent": "mixed retained visible seq 2; silent-only indexes absent",
+    "history_preserved": true
+  },
+  {
+    "mode": "legacy-visible-append",
+    "first_drain": "STATUS OUTCOME BACKSTOP (newest captain-facing task event has no covering branch outcome):\nmixed failed: later failure has no visible outcome\nsilent-done done: completion has only a silent echo\nsilent-failed failed: failure has only a silent echo\n",
+    "second_drain": "",
+    "ready": "visible-only-v1:6",
+    "coverage_after_silent": "mixed retained visible seq 2; silent-only indexes absent",
+    "history_preserved": true
+  },
+  {
+    "mode": "missing",
+    "first_drain": "STATUS OUTCOME BACKSTOP (newest captain-facing task event has no covering branch outcome):\nmixed failed: later failure has no visible outcome\nsilent-done done: completion has only a silent echo\nsilent-failed failed: failure has only a silent echo\n",
+    "second_drain": "",
+    "ready": "visible-only-v1:5",
+    "coverage_after_silent": "mixed retained visible seq 2; silent-only indexes absent",
+    "history_preserved": true
+  },
+  {
+    "mode": "invalid",
+    "first_drain": "STATUS OUTCOME BACKSTOP (newest captain-facing task event has no covering branch outcome):\nmixed failed: later failure has no visible outcome\nsilent-done done: completion has only a silent echo\nsilent-failed failed: failure has only a silent echo\n",
+    "second_drain": "",
+    "ready": "visible-only-v1:5",
+    "coverage_after_silent": "mixed retained visible seq 2; silent-only indexes absent",
+    "history_preserved": true
+  },
+  {
+    "mode": "symlink",
+    "first_drain": "STATUS OUTCOME BACKSTOP (newest captain-facing task event has no covering branch outcome):\nmixed failed: later failure has no visible outcome\nsilent-done done: completion has only a silent echo\nsilent-failed failed: failure has only a silent echo\n",
+    "second_drain": "",
+    "ready": "visible-only-v1:5",
+    "coverage_after_silent": "mixed retained visible seq 2; silent-only indexes absent",
+    "history_preserved": true
+  },
+  {
+    "mode": "replay-and-captain-guard",
+    "startup_replay": "BRANCH OUTCOMES (handled by the supervision branch, not yet seen by this session):\n{\"seq\":2,\"epoch\":1791115292,\"task\":\"recovered\",\"wake\":\"\",\"verdict\":\"routine\",\"summary\":\"Pause cleared; work resumed.\",\"silent\":false,\"statusEndpoint\":0,\"statusIdent\":\"-\"}\n",
+    "captain_refusal": "error: silent outcomes must have the routine verdict\n",
+    "pending_captain_row": "{\"seq\":3,\"epoch\":1791115292,\"task\":\"requested\",\"wake\":\"\",\"verdict\":\"captain\",\"summary\":\"Requested work finished.\",\"silent\":false,\"statusEndpoint\":0,\"statusIdent\":\"-\"}\n",
+    "cursor": "2"
+  }
+]

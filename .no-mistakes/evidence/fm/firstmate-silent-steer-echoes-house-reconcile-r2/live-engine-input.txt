@@ -1,0 +1,13 @@
+Fleet notifications have arrived. Use bin/fm-branch-report.sh as the report surface, with --row from the drained queue, and follow your normal supervision contract. These are isolated local records; do not sign in, merge, dispatch, install tools, or touch any other home. Private paths are rooted at $FM_HOME. Verify each task through bin/fm-crew-state.sh before reporting. The fixture window is a live terminal representing each recorded waiting worker; native idle/busy records and task logs are available through bin/fm-crew-state.sh. Handle the presented notifications without editing source.
+
+Initial delivered outcomes: sequences 1-8.
+Actual queued notifications:
+1791115912	1	check	echo	check: echo: Pause was recorded and the wait instruction was already delivered by the supervision branch. This notification only echoes that same branch-owned record; no additional action is needed.
+1791115912	2	check	scheduled	check: scheduled: This is the scheduled recheck of the already-registered pause. The release window has not arrived and the task state has not changed.
+1791115912	3	check	declared	check: declared: This is a re-confirmation of the declared pause, which still holds on exactly the same terms. Nothing changed.
+1791115912	4	check	hold	check: hold: The captain has not answered the existing API choice. The open decision was already presented and remains on the same terms. This is a re-confirmation, not a new decision.
+1791115912	5	check	changed	check: changed: The previously registered pause cleared and the task changed state: the worker resumed. This is a new transition.
+1791115912	6	check	failure	check: failure: The pause still exists, but a new dependency-check failure has occurred. The failure needs captain attention and must be reported.
+1791115912	7	check	finished	check: finished: The captain-requested investigation has now finished and its report is saved at data/finished/report.md. This is the requested result, not a periodic healthy check.
+1791115913	8	check	uncertain	check: uncertain: The records still name the release window, but this event cannot establish whether its terms changed. There is no evidence sufficient to assert nothing new happened; use judgment.
+

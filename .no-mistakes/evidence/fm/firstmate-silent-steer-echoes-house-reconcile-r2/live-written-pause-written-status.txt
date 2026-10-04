@@ -1,0 +1,2 @@
+working: checking the release window
+paused: waiting for the registered release window

@@ -9,6 +9,7 @@
 #                 "PRESENTATION_UNAVAILABLE: lavish-axi (requires >=<floor>; install: <command>) - nonvisual work may proceed with plain-text decisions and reports; install or upgrade before using Lavish",
 #                 "MISSING_MANUAL: <tool> (instructions: <url>)", "NEEDS_GH_AUTH",
 #                 "BACKEND_INVALID: <name> (known: <names>)",
+#                 "CONTEXT_RESTART_BUDGET: invalid config/context-restart-budget - <reason>",
 #                 "STARTUP_MEMORY_BUDGET: invalid config/startup-memory-budget - <reason>",
 #                 "CREW_DISPATCH: invalid config/crew-dispatch.json - <reason>",
 #                 "FLEET_SYNC: <repo>: skipped|recovered|STUCK: <detail>",
@@ -195,6 +196,8 @@ DATA="${FM_DATA_OVERRIDE:-$FM_HOME/data}"
 . "$SCRIPT_DIR/fm-secondmate-nudge-lib.sh"
 # shellcheck source=bin/fm-startup-memory-budget-lib.sh disable=SC1091
 . "$SCRIPT_DIR/fm-startup-memory-budget-lib.sh"
+# shellcheck source=bin/fm-context-restart-lib.sh disable=SC1091
+. "$SCRIPT_DIR/fm-context-restart-lib.sh"
 # shellcheck source=bin/fm-x-lib.sh disable=SC1091
 . "$SCRIPT_DIR/fm-x-lib.sh"
 # shellcheck source=bin/fm-backend.sh disable=SC1091
@@ -1319,6 +1322,14 @@ startup_memory_budget_setup() {
   fi
 }
 
+# Absent means opt-out, including secondmate homes; never create a budget.
+context_restart_budget_setup() {
+  [ -e "$CONFIG/context-restart-budget" ] || [ -L "$CONFIG/context-restart-budget" ] || return 0
+  if ! fm_context_restart_budget_read "$CONFIG" >/dev/null; then
+    echo "CONTEXT_RESTART_BUDGET: invalid config/$FM_CONTEXT_RESTART_BUDGET_FILE - $FM_CONTEXT_RESTART_BUDGET_ERROR"
+  fi
+}
+
 if [ "${1:-}" = "lavish-compatible" ]; then
   tool_version_at_least lavish-axi "$LAVISH_AXI_BOARD_MIN"
   exit
@@ -1391,6 +1402,7 @@ if [ "${FM_BOOTSTRAP_DETECT_ONLY:-0}" != 1 ] && local_phase; then
     fi
   fi
   startup_memory_budget_setup
+  context_restart_budget_setup
   if backlog_record_reconcile; then
     :
   else

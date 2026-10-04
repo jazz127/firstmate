@@ -674,6 +674,15 @@ Only the file's presence is read, so its contents are ignored; remove it to retu
 
 The skill text owns the marker spelling, the tick order, and the reinforcement rule.
 
+## Context restart budget (config/context-restart-budget)
+
+The optional, gitignored `config/context-restart-budget` file enables Claude primary conversation refresh at a completed-turn context threshold.
+Absence disables refresh; bootstrap never creates this file.
+The primary-authoritative inherited-local-material path propagates the setting or its absence to secondmate homes.
+Unsafe or malformed files are reported by bootstrap and remain inert in the Stop detector.
+`bin/fm-context-restart-lib.sh` owns the exact safe file format, parsing, and transcript accounting, and `bin/fm-context-restart.sh read-budget` prints the validated value.
+[Context refresh](context-refresh.md) owns enablement, handoff, supervision, and supported-harness behavior.
+
 ## Secondmate routes (data/secondmates.md)
 
 Persistent secondmate routes live locally in `data/secondmates.md`.

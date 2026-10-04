@@ -93,6 +93,8 @@ Then launch one of the co-primary harnesses; AGENTS.md takes over from there:
 claude
 ```
 
+For opt-in automatic Claude conversation refresh, see [context refresh setup](docs/context-refresh.md#enable-automatic-refresh).
+
 **Grok**
 
 ```sh

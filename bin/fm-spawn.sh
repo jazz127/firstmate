@@ -5039,6 +5039,19 @@ fi
 "$SCRIPT_DIR/fm-home-summary-refresh.sh" --best-effort || true
 [ "$BACKEND" = orca ] && ORCA_ABORT_CLEANUP=0
 
+# Refresh is opt-in in the receiving home after inherited config convergence.
+# Preserve all existing Claude options and the record-backed initial charter.
+if [ "$KIND" = secondmate ] && [ "$HARNESS" = claude ] \
+  && { [ -e "$PROJ_ABS/config/context-restart-budget" ] || [ -L "$PROJ_ABS/config/context-restart-budget" ]; }; then
+  if [ -x "$PROJ_ABS/bin/fm-primary.sh" ] && [ -x "$PROJ_ABS/bin/fm-context-restart-supervise.sh" ] \
+    && FM_CONFIG_OVERRIDE="$PROJ_ABS/config" "$PROJ_ABS/bin/fm-context-restart.sh" read-budget >/dev/null 2>&1; then
+    LAUNCH=${LAUNCH/claude __CLAUDEPERMFLAG__/__WORKTREE__/bin/fm-primary.sh --firstmate-initial-prompt __BRIEFDOORBELL__ -- __CLAUDEPERMFLAG__}
+    LAUNCH=${LAUNCH/__MODELFLAG____EFFORTFLAG____BRIEFDOORBELL__/__MODELFLAG____EFFORTFLAG__}
+  else
+    echo "warning: secondmate $ID cannot enable context refresh (invalid budget or unsynced wrapper); keeping its existing Claude launch" >&2
+  fi
+fi
+
 sq_brief=$(shell_quote "$BRIEF")
 sq_turnend=$(shell_quote "$TURNEND")
 sq_piext=$(shell_quote "$STATE/$ID.pi-ext.ts")

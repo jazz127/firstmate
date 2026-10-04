@@ -552,7 +552,7 @@ test_unreadable_and_unverified_backends_still_count() {
     case "$backend" in
       tmux) target=unreadable:worker ;;
       herdr) target=fm-lab-synthetic:w1:p2 ;;
-      *) target=recorded-target ;;
+      *) target='recorded-target' ;;
     esac
     fm_write_meta "$dir/state/$backend.meta" "kind=ship" "backend=$backend" "window=$target"
   done

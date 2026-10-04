@@ -1890,6 +1890,10 @@ await heartbeatReport.execute(
 );
 const fleetRoutineMerge = sentToMain[sentToMain.length - 1];
 if (fleetRoutineMerge.message.display !== false) throw new Error("a fleet routine action must stay hidden");
+if (fleetRoutineMerge.options.triggerTurn) throw new Error("a fleet routine action opened a main turn");
+const storedFleetAction = outcomeScript(["list", "--recent", "100"]).split("\n").filter(Boolean)
+  .map(JSON.parse).find((row) => row.summary === "reconciled the backlog after completed work");
+if (!storedFleetAction || storedFleetAction.silent !== false) throw new Error("a fleet routine action was lost or recorded as silent");
 if (!fleetRoutineMerge.message.content.startsWith("⛵ fleet: reconciled the backlog after completed work")) {
   throw new Error(`fleet routine action note changed: ${fleetRoutineMerge.message.content}`);
 }
@@ -1905,6 +1909,7 @@ const visibleTaskIndexPath = `${home}/state/.task-9.branch-outcome-index`;
 if (!existsSync(visibleTaskIndexPath)) throw new Error("a visible task outcome did not update its status-coverage index");
 const visibleTaskIndex = readFileSync(visibleTaskIndexPath, "utf8");
 const taskNoChangeSummary = "The check 1 worker is still building. Nothing new has happened.";
+writeFileSync(`${home}/state/task-9.status`, "done: completion arrived before the no-change report\n");
 const sentBeforeSilentTask = sentToMain.length;
 const silentTaskResult = await heartbeatReport.execute(
   "task-no-change",
@@ -1925,6 +1930,10 @@ if (!storedTaskNoChange || storedTaskNoChange.verdict !== "routine" || storedTas
 }
 if (readFileSync(visibleTaskIndexPath, "utf8") !== visibleTaskIndex) {
   throw new Error("the silent task outcome changed status coverage and could hide a lost wake");
+}
+outcomeScript(["processed-init"]);
+if (readFileSync(visibleTaskIndexPath, "utf8") !== visibleTaskIndex) {
+  throw new Error("rebuilding gave the silent task outcome status coverage");
 }
 const outcomesTool = mainTools.find((tool) => tool.name === "fm_branch_outcomes");
 const listedTaskNoChange = await outcomesTool.execute("read-silent-task", { recent: 100 }, undefined, undefined, {});
@@ -1984,6 +1993,26 @@ await heartbeatReport.execute(
   {},
 );
 if (sentToMain[sentToMain.length - 1].message.display !== false) throw new Error("a pause state change must remain hidden");
+const pauseMerge = sentToMain[sentToMain.length - 1];
+if (pauseMerge.options.triggerTurn || !pauseMerge.message.content.includes("the pause cleared and the worker resumed")) {
+  throw new Error("the pause change did not reach main as a turn-free routine note");
+}
+const storedPause = outcomeScript(["list", "--recent", "100"]).split("\n").filter(Boolean)
+  .map(JSON.parse).find((row) => row.summary === "the pause cleared and the worker resumed");
+if (!storedPause || storedPause.silent !== false) throw new Error("the pause change was lost or recorded as silent");
+const replaySummary = "worker recovered after the last recorded pause";
+outcomeScript(["append", "--task", "task-9", "--verdict", "routine", "--summary", replaySummary]);
+outcomeScript(["append", "--task", "task-9", "--verdict", "routine", "--summary", "open hold still unchanged", "--silent", "true"]);
+const beforeRoutineReplay = sentToMain.length;
+await fire("turn_end", {}, defaultSessionCtx);
+const replayedRoutine = sentToMain.slice(beforeRoutineReplay);
+if (replayedRoutine.length !== 2 || replayedRoutine.some(({ message, options }) => message.display !== false || options.triggerTurn)) {
+  throw new Error("routine recovery replay became visible, opened a turn, or lost a report");
+}
+if (!replayedRoutine.some(({ message }) => message.content.includes(replaySummary))) {
+  throw new Error("the non-silent recovery report did not reach main on replay");
+}
+if (outcomeScript(["unread"]) !== "") throw new Error("routine replay did not acknowledge the recorded reports");
 const silentCaptain = await heartbeatReport.execute(
   "silent-captain",
   { task: "task-9", verdict: "captain", summary: "needs a decision", silent: true },

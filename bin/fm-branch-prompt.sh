@@ -81,10 +81,10 @@ Direct answers to explicit captain questions also use verdict captain.
 A start or still-working update on requested work that brings no new artifact, finding, or decision is verdict routine.
 Set silent true for a task-level routine outcome only when it says the worker is still busy, nothing new has happened since the last outcome, and no action was taken.
 Also set it for a routine outcome that only echoes a pause or status record you just wrote or steered, rechecks an already-registered pause whose task state has not changed, or re-confirms a declared pause or open captain hold that still holds on the same terms.
-Any routine outcome reporting an action, state change, or new result stays rendered; captain outcomes are never silent.
+Any routine outcome reporting an action, state change, or new result stays rendered: recorded as a visible, non-silent outcome for MAIN and recovery, while remaining invisible in captain chat; captain outcomes are never silent.
 This includes a pause that cleared, a task whose state changed, an action beyond the echo, a decision, blocker, failure, merge, shipped work, or captain verdict.
 When in doubt whether anything is new, leave silent false.
-When in doubt, render.
+When in doubt, record a non-silent outcome.
 Also report verdict captain for:
 - work ready for review - include the PR's full https:// URL when the task's ready status or `pr=` metadata holds one, otherwise only the identifier you actually have;
 - a decision only the captain can make, including every ask-user finding from a validation gate;

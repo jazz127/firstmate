@@ -113,14 +113,13 @@ if needs_bridge; then
     exit 1
   fi
 fi
-# Recheck the generation and exact owner after the arm handover.
-ready && [ "$(cat "$STATE/.lock" 2>/dev/null)" = "$OLD_PID" ] \
-  && fm_harness_pid_alive "$OLD_PID" || exit 1
 # Only a completed transfer authorizes the wrapper's automatic relaunch.
 # Ready preparation alone must not turn a later ordinary exit into a restart
 # after a failed bridge, so commit the replacing phase under the crossing lock.
-fm_lock_try_acquire "$STATE/.context-restart.lock" || exit 1
-if ! ready || [ "$(cat "$STATE/.lock" 2>/dev/null)" != "$OLD_PID" ] \
+fm_lock_acquire_wait_bounded "$STATE/.context-restart.lock" 10 || exit 1
+if ! ready || [ "$FM_CONTEXT_RESTART_RECORD_LOCK_PID" != "$OLD_PID" ] \
+  || [ "$(cat "$STATE/.lock" 2>/dev/null)" != "$OLD_PID" ] \
+  || ! fm_harness_pid_alive "$OLD_PID" \
   || ! fm_context_restart_record_publish "$STATE" "$FM_CONTEXT_RESTART_RECORD_SESSION" \
     "$FM_CONTEXT_RESTART_RECORD_CONTEXT" "$FM_CONTEXT_RESTART_RECORD_BUDGET" \
     "$FM_CONTEXT_RESTART_RECORD_DETECTED_AT" replacing automatic "$TOKEN" "$OLD_PID"; then

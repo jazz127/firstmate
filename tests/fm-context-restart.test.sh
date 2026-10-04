@@ -237,11 +237,80 @@ SH
   pass "context restart: reset-safe sentinel releases the old lock and starts one fresh successor"
 }
 
-test_claude_registers_one_stop_hook() {
-  local count
-  count=$(jq '[.hooks.Stop[].hooks[] | select(.command | contains("fm-context-restart-claude-hook.sh"))] | length' "$ROOT/.claude/settings.json")
-  [ "$count" = 1 ] || fail "Claude must register exactly one context-restart Stop hook, found $count"
-  pass "context restart: Claude registers exactly one context-restart Stop hook"
+test_wrapper_waits_for_publication_and_revalidates_ownership() {
+  local home fake scenario rc expected count
+  for scenario in contention generation record-owner session-owner; do
+    home="$TMP_ROOT/publication-$scenario"
+    make_primary "$home" 10
+    fake="$home/fake-claude"
+    cat > "$fake" <<'SCRIPT'
+#!/usr/bin/env bash
+exec -a claude /bin/bash -c '
+  . "$LIB"
+  . "$FM_REPO/bin/fm-wake-lib.sh"
+  n=$(cat "$FM_HOME/generations" 2>/dev/null || echo 0)
+  n=$((n + 1)); printf "%s\n" "$n" > "$FM_HOME/generations"
+  if [ "$n" -eq 2 ]; then
+    [ ! -e "$STATE/.lock" ] || exit 91
+    [ ! -e "$STATE/.context-restart-crossing" ] || exit 92
+    exit 0
+  fi
+  printf "%s\n" "$$" > "$STATE/.lock"
+  fm_lock_try_acquire "$STATE/.context-restart.lock" || exit 81
+  trap '\''fm_lock_release "$STATE/.context-restart.lock"'\'' EXIT
+  fm_context_restart_record_publish "$STATE" publication-session 40 10 1700000000 \
+    ready automatic "$FM_CONTEXT_RESTART_WRAPPER_TOKEN" "$$" || exit 82
+  sleep 1
+  [ "$(cat "$STATE/.context-restart.lock/pid")" = "$$" ] || exit 83
+  fm_context_restart_record_read "$STATE/.context-restart-crossing" || exit 84
+  [ "$FM_CONTEXT_RESTART_RECORD_PHASE" = ready ] || exit 85
+  fm_pid_alive "$FM_CONTEXT_RESTART_BRIDGE_PID" || exit 86
+  : > "$FM_HOME/foreign-lock-preserved"
+  token=$FM_CONTEXT_RESTART_WRAPPER_TOKEN
+  owner=$$
+  case "$SCENARIO" in
+    generation) token=aaaaaaaaaaaaaaaa ;;
+    record-owner) owner=$FM_CONTEXT_RESTART_BRIDGE_PID ;;
+    session-owner) printf "22222222\n" > "$STATE/.lock" ;;
+  esac
+  if [ "$SCENARIO" != contention ]; then
+    fm_context_restart_record_publish "$STATE" publication-session 40 10 1700000000 \
+      ready automatic "$token" "$owner" || exit 87
+  fi
+  fm_lock_release "$STATE/.context-restart.lock"
+  trap - EXIT
+  trap '\''exit 0'\'' TERM
+  i=0
+  while [ "$i" -lt 200 ]; do
+    if [ "$SCENARIO" != contention ] && ! fm_pid_alive "$FM_CONTEXT_RESTART_BRIDGE_PID"; then
+      exit 17
+    fi
+    sleep 0.1
+    i=$((i + 1))
+  done
+  exit 88
+' claude "$@"
+SCRIPT
+    chmod +x "$fake"
+    rc=0
+    FM_ROOT_OVERRIDE="$home" FM_HOME="$home" FM_CLAUDE_BIN="$fake" FM_REPO="$ROOT" \
+      SCENARIO="$scenario" "$WRAPPER" > "$home/wrapper.out" 2> "$home/wrapper.err" || rc=$?
+    expected=17
+    count=1
+    if [ "$scenario" = contention ]; then expected=0; count=2; fi
+    expect_code "$expected" "$rc" "$scenario publication handoff failed: $(cat "$home/wrapper.err")"
+    [ -f "$home/foreign-lock-preserved" ] || fail "$scenario bridge released another process publication lock"
+    [ "$(cat "$home/generations")" = "$count" ] || fail "$scenario launched an unexpected successor"
+    [ ! -e "$home/state/.context-restart.lock" ] || fail "$scenario retained the released publication lock"
+    if [ "$scenario" != contention ]; then
+      [ "$(record_phase "$home")" = ready ] || fail "$scenario committed a stale replacement"
+      [ -f "$home/state/.lock" ] || fail "$scenario released the session lock"
+    fi
+    if [ "$scenario" = session-owner ]; then
+      [ "$(cat "$home/state/.lock")" = 22222222 ] || fail "bridge removed a foreign session lock"
+    fi
+    pass "context restart: $scenario publication wait preserves locks and revalidates replacement"
+  done
 }
 
 test_opt_out_paths_are_unchanged() {
@@ -468,7 +537,7 @@ test_threshold_and_one_directive_per_crossing
 test_malformed_transcript_and_usage_are_inert
 test_concurrent_stop_firings_publish_one_directive
 test_reset_safe_wrapper_restarts_fresh_and_releases_lock
-test_claude_registers_one_stop_hook
+test_wrapper_waits_for_publication_and_revalidates_ownership
 test_opt_out_paths_are_unchanged
 test_foreign_hooks_and_handoff_guards
 test_wrapper_ordinary_exit_and_resume_refusal

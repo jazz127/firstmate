@@ -283,6 +283,7 @@ chmod +x "$PIDFD_RACE_BIN/python3"
 sleep 30 & PIDFD_RACE_PID=$!
 PIDFD_RACE_START=$(fm_remote_job_process_start "$PIDFD_RACE_PID")
 PIDFD_RACE_COMMAND=$(fm_remote_job_process_command "$PIDFD_RACE_PID")
+# shellcheck disable=SC2031 # The cadence fixture's PATH override is confined to its subshell.
 FM_PIDFD_RACE_PID="$PIDFD_RACE_PID" FM_PIDFD_RACE_KILLED="$TMP_ROOT/pidfd-race-killed" \
   PYTHONPATH="$PIDFD_RACE_BIN" PATH="$PIDFD_RACE_BIN:$PATH" \
   fm_remote_job_signal_identity "$PIDFD_RACE_PID" TERM "$PIDFD_RACE_START" "$PIDFD_RACE_COMMAND" \
@@ -349,6 +350,7 @@ for PIDFD_REVALIDATE_MODE in reuse malformed; do
   cp "/proc/$PIDFD_RECHECK_PID/stat" "$PIDFD_RECHECK_PROC/$PIDFD_RECHECK_PID/stat"
   PIDFD_RECHECK_START=$(fm_remote_job_process_start "$PIDFD_RECHECK_PID")
   PIDFD_RECHECK_COMMAND=$(fm_remote_job_process_command "$PIDFD_RECHECK_PID")
+  # shellcheck disable=SC2031 # The cadence fixture's PATH override is confined to its subshell.
   if FM_PROC_ROOT_OVERRIDE="$PIDFD_RECHECK_PROC" \
     FM_PIDFD_STAT_PATH="$PIDFD_RECHECK_PROC/$PIDFD_RECHECK_PID/stat" \
     FM_PIDFD_REVALIDATE_MODE="$PIDFD_REVALIDATE_MODE" \

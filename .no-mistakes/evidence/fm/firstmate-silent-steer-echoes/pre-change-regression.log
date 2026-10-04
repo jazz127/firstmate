@@ -1,0 +1,3 @@
+not ok - drain hid a keyless done status (missing: 'silent-done done: completion only echoed silently')
+--- output ---
+

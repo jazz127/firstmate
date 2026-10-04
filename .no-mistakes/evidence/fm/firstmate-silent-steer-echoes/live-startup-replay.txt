@@ -1,0 +1,14 @@
+Persisted outcome rows before replay:
+{"seq":1,"epoch":1791104850,"task":"task-replay","wake":"","verdict":"routine","summary":"Pause record echoed","silent":true,"statusEndpoint":26,"statusIdent":"strong:16777231:6628626:1791104850.746889133"}
+{"seq":2,"epoch":1791104850,"task":"task-replay","wake":"","verdict":"routine","summary":"Scheduled pause recheck unchanged","silent":true,"statusEndpoint":26,"statusIdent":"strong:16777231:6628626:1791104850.746889133"}
+{"seq":3,"epoch":1791104851,"task":"task-replay","wake":"","verdict":"routine","summary":"Declared pause still holds","silent":true,"statusEndpoint":26,"statusIdent":"strong:16777231:6628626:1791104850.746889133"}
+{"seq":4,"epoch":1791104851,"task":"task-replay","wake":"","verdict":"routine","summary":"Pause cleared and worker resumed","silent":false,"statusEndpoint":26,"statusIdent":"strong:16777231:6628626:1791104850.746889133"}
+{"seq":5,"epoch":1791104851,"task":"task-replay","wake":"","verdict":"routine","summary":"Existing working status echoed","silent":true,"statusEndpoint":26,"statusIdent":"strong:16777231:6628626:1791104850.746889133"}
+
+$ bin/fm-branch-outcome.sh startup-replay
+BRANCH OUTCOMES (handled by the supervision branch, not yet seen by this session):
+{"seq":4,"epoch":1791104851,"task":"task-replay","wake":"","verdict":"routine","summary":"Pause cleared and worker resumed","silent":false,"statusEndpoint":26,"statusIdent":"strong:16777231:6628626:1791104850.746889133"}
+
+Persisted read cursor: 5
+Second startup replay: 0 output bytes
+Append-only rows unchanged; status coverage remains visible sequence 4 after a later silent row and processed-init.

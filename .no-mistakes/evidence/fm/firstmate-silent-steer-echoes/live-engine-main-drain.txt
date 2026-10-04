@@ -1,0 +1,13 @@
+BRANCH OUTCOMES (captain outcomes the supervision session recorded for you, one line per task, oldest first; each says what was true when it was recorded, so check the task's current state first, including its still-open decisions listed above under OPEN DECISIONS, and sort them into still open and already settled, such as a decision since answered, a PR since merged, or a task since finished - process the still-open ones as firstmate: tell the captain, land or merge what is ready, answer or escalate a decision, or act on a blocker; your reply to the captain covers only those, as if the settled ones had never been listed, and a settled one needs only the acknowledgement):
+[seq 9, recorded 0m ago] new-decision: Worker needs the captain to choose between REST and RPC; not presented before.
+[seq 10, recorded 0m ago] new-blocker: Worker cannot release because a deployment credential is unavailable; recovery exhausted.
+[seq 11, recorded 0m ago] new-failure: Requested build failed after recovery was exhausted.
+[seq 13, recorded 0m ago] new-shipped: Requested fix has shipped successfully.
+[seq 14, recorded 0m ago] captain-result: Requested diagnostic check finished healthy and produced a new report.
+[seq 15, recorded 0m ago] uncertain: Worker says it might still be paused but records conflict; cannot verify whether state or pause terms changed.
+BRANCH OUTCOMES: after processing them run bin/fm-branch-outcome.sh mark-processed --through 15; until then every drain presents them again
+BRANCH OUTCOMES, ROUTINE (handled by the supervision session since your last drain; for your awareness, nothing to acknowledge):
+[seq 6] pause-cleared: Pause deadline passed and the worker resumed; state moved from paused to working.
+[seq 7] state-changed: Worker unexpectedly moved from paused to working before the original deadline.
+[seq 8] extra-action: Pause still holds on the same terms; I also repaired and restarted a broken watcher.
+[seq 12] new-merge: Unsolicited maintenance PR merged and cleanup completed.

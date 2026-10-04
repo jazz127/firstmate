@@ -1,0 +1,3 @@
+ok - routine task and fleet no-change outcomes stay silent without advancing status coverage
+ok - silent bookkeeping outcomes do not advance appended or rebuilt status coverage
+ok - startup replay cannot advance the cursor across an unrendered captain outcome

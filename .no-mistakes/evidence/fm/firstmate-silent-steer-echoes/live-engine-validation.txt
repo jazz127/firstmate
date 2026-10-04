@@ -1,0 +1,3 @@
+The real supervision engine recorded 15 independent outcomes.
+Five unchanged echo/recheck/reconfirmation outcomes are stored with silent=true and absent from the actual main drain.
+All ten state-change, action, new-result, decision, blocker, failure, merge, shipped-work, requested-result and uncertain outcomes are stored with silent=false and present in the main drain.

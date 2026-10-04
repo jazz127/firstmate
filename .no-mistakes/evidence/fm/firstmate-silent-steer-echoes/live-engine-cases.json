@@ -1,0 +1,62 @@
+[
+  {
+    "task": "pause-echo",
+    "context": "You just wrote a pause record for the worker waiting until its scheduled deployment window, following its already agreed pause. The only outcome now is an echo of that pause record. No action beyond that echo, new result, decision, blocker or change in terms."
+  },
+  {
+    "task": "status-echo",
+    "context": "You just steered the worker to record its existing working status, and it recorded it. The only outcome now repeats that status. No extra action, new result, decision, blocker or changed terms."
+  },
+  {
+    "task": "scheduled-recheck",
+    "context": "A scheduled recheck finds an already registered intentional deployment-window pause. Its deadline is in the future. Task state and terms have not changed, and no action was taken."
+  },
+  {
+    "task": "pause-confirm",
+    "context": "The worker reconfirms its declared deployment-window pause on exactly the same terms. It remains paused and no action was taken."
+  },
+  {
+    "task": "hold-confirm",
+    "context": "The captain already received the choice between REST and RPC and has not answered. The existing open captain hold still holds on exactly the same terms. You only reconfirm it; there is no new question, changed state, new blocker or action."
+  },
+  {
+    "task": "pause-cleared",
+    "context": "The registered pause has now cleared because its deadline passed and the worker resumed. Task state changed from paused to working."
+  },
+  {
+    "task": "state-changed",
+    "context": "The prior registered pause still has its original deadline, but the worker unexpectedly moved from paused to working. This state change is new."
+  },
+  {
+    "task": "extra-action",
+    "context": "An intentional pause still holds on the same terms, but you additionally repaired a broken watcher and restarted it during this event."
+  },
+  {
+    "task": "new-decision",
+    "context": "The worker now needs a new decision from the captain: choose between REST and RPC. This choice has never been presented before."
+  },
+  {
+    "task": "new-blocker",
+    "context": "The worker now cannot release because a deployment credential is unavailable. This is a new real blocker and the recovery playbook is exhausted."
+  },
+  {
+    "task": "new-failure",
+    "context": "The worker attempted its requested build and failed after exhausting recovery. This failure is newly reported."
+  },
+  {
+    "task": "new-merge",
+    "context": "An unsolicited maintenance PR was merged and cleanup was completed. This merge is new."
+  },
+  {
+    "task": "new-shipped",
+    "context": "The requested fix has shipped successfully. This finished result is new and was requested by the captain."
+  },
+  {
+    "task": "captain-result",
+    "context": "The captain requested a diagnostic check. It has finished healthy and produced a new report. This is the finished requested result."
+  },
+  {
+    "task": "uncertain",
+    "context": "The worker says it might still be paused, but current records conflict and you cannot establish whether its state or pause terms changed. No verified unchanged state is available."
+  }
+]

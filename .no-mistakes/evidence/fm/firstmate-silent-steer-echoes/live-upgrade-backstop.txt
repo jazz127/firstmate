@@ -1,0 +1,56 @@
+Upgrade path: drain
+Existing readiness: 5
+Existing index rows include silent-only done/failed statuses.
+
+$ bin/fm-wake-drain.sh
+STATUS OUTCOME BACKSTOP (newest captain-facing task event has no covering branch outcome):
+mixed failed: later failure only echoed silently
+silent-done done: completion only echoed silently
+silent-failed failed: failure only echoed silently
+
+Persisted readiness: visible-only-v1:5
+Mixed coverage restored to visible sequence: fm-branch-outcome-index-v1	2	41	strong:16777231:6627195:1791104794.777062455
+Second main drain: 0 output bytes
+Prior append-only outcome rows unchanged.
+
+$ bin/fm-branch-outcome.sh append --task adversary --verdict captain --summary "Captain verdict must render" --silent true
+error: silent outcomes must have the routine verdict
+Exit status: 2; no adversarial row persisted.
+
+Upgrade path: silent-append
+Existing readiness: 5
+Existing index rows include silent-only done/failed statuses.
+
+$ bin/fm-wake-drain.sh
+STATUS OUTCOME BACKSTOP (newest captain-facing task event has no covering branch outcome):
+mixed failed: later failure only echoed silently
+silent-done done: completion only echoed silently
+silent-failed failed: failure only echoed silently
+
+Persisted readiness: visible-only-v1:6
+Mixed coverage restored to visible sequence: fm-branch-outcome-index-v1	2	41	strong:16777231:6627746:1791104798.055155692
+Second main drain: 0 output bytes
+Prior append-only outcome rows unchanged.
+
+$ bin/fm-branch-outcome.sh append --task adversary --verdict captain --summary "Captain verdict must render" --silent true
+error: silent outcomes must have the routine verdict
+Exit status: 2; no adversarial row persisted.
+
+Upgrade path: visible-append
+Existing readiness: 5
+Existing index rows include silent-only done/failed statuses.
+
+$ bin/fm-wake-drain.sh
+STATUS OUTCOME BACKSTOP (newest captain-facing task event has no covering branch outcome):
+mixed failed: later failure only echoed silently
+silent-done done: completion only echoed silently
+silent-failed failed: failure only echoed silently
+
+Persisted readiness: visible-only-v1:6
+Mixed coverage restored to visible sequence: fm-branch-outcome-index-v1	2	41	strong:16777231:6627875:1791104801.219940187
+Second main drain: 0 output bytes
+Prior append-only outcome rows unchanged.
+
+$ bin/fm-branch-outcome.sh append --task adversary --verdict captain --summary "Captain verdict must render" --silent true
+error: silent outcomes must have the routine verdict
+Exit status: 2; no adversarial row persisted.

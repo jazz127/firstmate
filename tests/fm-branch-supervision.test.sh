@@ -50,7 +50,7 @@ test_branch_prompt_is_byte_stable_and_above_cache_floor() {
     *) fail "branch prompt lost the inlined recovery playbook" ;;
   esac
   case "$out_a" in
-    *"Report verdict captain for the finished result of work the captain requested, even when that result is healthy."*"A start or still-working update on requested work that brings no new artifact, finding, or decision is verdict routine."*"Set silent true for a task-level routine outcome only when it says the worker is still busy, nothing new has happened since the last outcome, and no action was taken."*"Any routine outcome reporting an action, state change, or new result stays rendered; captain outcomes are never silent."*"Keep an unsolicited routine outcome as verdict routine"*"Keep an unchanged fleet review silent"*) ;;
+    *"Report verdict captain for the finished result of work the captain requested, even when that result is healthy."*"A start or still-working update on requested work that brings no new artifact, finding, or decision is verdict routine."*"Set silent true for a task-level routine outcome only when it says the worker is still busy, nothing new has happened since the last outcome, and no action was taken."*"Also set it for a routine outcome that only echoes a pause or status record you just wrote or steered, rechecks an already-registered pause whose task state has not changed, or re-confirms a declared pause or open captain hold that still holds on the same terms."*"Any routine outcome reporting an action, state change, or new result stays rendered; captain outcomes are never silent."*"Keep an unsolicited routine outcome as verdict routine"*"Keep an unchanged fleet review silent"*) ;;
     *) fail "branch prompt lost the requested-result, progress-routine, or routine-silence rules" ;;
   esac
   case "$out_a" in
@@ -260,7 +260,7 @@ PY
 }
 
 test_outcome_startup_replay_preserves_silence() {
-  local home replay out status store
+  local home replay out status store visible_index index_after_silent
   home="$TMP_ROOT/store-silent-home"
   mkdir -p "$home/state"
   store="$home/state/branch-outcomes.jsonl"
@@ -276,37 +276,82 @@ test_outcome_startup_replay_preserves_silence() {
   FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" append \
     --task task-a --verdict routine --summary 'worker still busy, nothing new, no action taken' --silent true >/dev/null \
     || fail "silent task-scoped routine append failed"
-  [ -s "$home/state/.task-a.branch-outcome-index" ] \
-    || fail "silent task outcome was omitted from the status-outcome backstop index"
-  assert_contains "$(cat "$home/state/.task-a.branch-outcome-index")" \
-    "$(printf 'fm-branch-outcome-index-v1\t1\t')" "status-outcome backstop index lost the silent task outcome"
+  [ ! -e "$home/state/.task-a.branch-outcome-index" ] \
+    || fail "silent task outcome created a status-outcome backstop index"
+  FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" append \
+    --task task-a --verdict routine --summary 'worker recovered automatically' >/dev/null \
+    || fail "visible task outcome append failed"
+  visible_index=$(cut -f2 "$home/state/.task-a.branch-outcome-index")
+  [ "$visible_index" = 2 ] || fail "visible task outcome did not become the coverage index: $visible_index"
+  FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" append \
+    --task task-a --verdict routine --summary 'pause still holds' --silent true >/dev/null \
+    || fail "second silent task outcome append failed"
+  index_after_silent=$(cut -f2 "$home/state/.task-a.branch-outcome-index")
+  [ "$index_after_silent" = "$visible_index" ] \
+    || fail "silent outcome replaced the visible status-coverage index: $index_after_silent"
   FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" append \
     --task fleet --verdict routine --summary 'fleet reviewed, nothing changed' --silent true >/dev/null \
     || fail "silent heartbeat append failed"
   FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" append \
     --task task-1 --verdict routine --summary 'worker recovered automatically' >/dev/null \
-    || fail "visible outcome append failed"
+    || fail "visible task-1 outcome append failed"
 
   replay=$(FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" startup-replay) || fail "mixed startup replay failed"
   assert_not_contains "$replay" "fleet reviewed, nothing changed" "startup replay printed a silent heartbeat outcome"
   assert_not_contains "$replay" "worker still busy, nothing new, no action taken" "startup replay printed a silent task outcome"
   assert_contains "$replay" "worker recovered automatically" "startup replay lost a visible routine outcome"
+  assert_not_contains "$replay" "pause still holds" "startup replay printed a silent task outcome"
   [ -z "$(FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" unread)" ] \
     || fail "startup replay did not mark the silent and visible rows read"
 
-  printf '%s\n' '{"seq":4,"epoch":1,"task":"task-legacy","wake":"","verdict":"routine","summary":"legacy visible outcome"}' \
+  printf '%s\n' '{"seq":6,"epoch":1,"task":"task-legacy","wake":"","verdict":"routine","summary":"legacy visible outcome"}' \
     >> "$home/state/branch-outcomes.jsonl"
   replay=$(FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" startup-replay) || fail "legacy startup replay failed"
   assert_contains "$replay" "legacy visible outcome" "startup replay hid a legacy row with no silent field"
   [ -z "$(FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" unread)" ] \
     || fail "startup replay did not mark the legacy row read"
 
-  printf '%s\n' '{"seq":5,"epoch":1,"task":"task-bad","wake":"","verdict":"captain","summary":"poisoned","silent":true}' >> "$store"
+  printf '%s\n' '{"seq":7,"epoch":1,"task":"task-bad","wake":"","verdict":"captain","summary":"poisoned","silent":true}' >> "$store"
   out=$(FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" unread 2>&1)
   status=$?
   [ "$status" -ne 0 ] || fail "unread accepted a stored silent captain outcome"
   assert_contains "$out" "malformed or non-sequential" "stored silent captain refusal lost its diagnostic"
-  pass "routine task and fleet no-change outcomes stay stored and silent captain outcomes are refused"
+  pass "routine task and fleet no-change outcomes stay silent without advancing status coverage"
+}
+
+test_silent_outcomes_do_not_advance_rebuilt_status_coverage() {
+  local home store index_seq
+  home="$TMP_ROOT/store-bookkeeping-home"
+  mkdir -p "$home/state"
+  store="$home/state/branch-outcomes.jsonl"
+  printf 'blocked: waiting\n' > "$home/state/task-p.status"
+
+  append() {
+    FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" append \
+      --task "$1" --verdict "$2" --summary "$3" "${@:4}" >/dev/null \
+      || fail "append failed: $3"
+  }
+  append task-p routine 'echo of the pause I just recorded' --silent true
+  append task-p routine 'scheduled recheck of the registered pause' --silent true
+  append task-p routine 'pause still holds on the same terms' --silent true
+  [ ! -e "$home/state/.task-p.branch-outcome-index" ] \
+    || fail "silent bookkeeping outcomes wrote a status-coverage index before a visible outcome"
+  append task-p routine 'pause cleared: worker relaunched on a new seat'
+  append task-p captain 'PR is ready for review https://example.com/pr/1'
+  append task-q routine 'merged and cleaned up'
+  append task-p routine 'captain-facing status was already recorded' --silent true
+
+  printf 'fm-branch-outcome-index-v1\t7\t999\tstale\n' \
+    > "$home/state/.task-p.branch-outcome-index"
+  rm -f -- "$home/state/.branch-outcome-index-ready"
+  FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" processed-init >/dev/null \
+    || fail "coverage index rebuild failed"
+  index_seq=$(cut -f2 "$home/state/.task-p.branch-outcome-index")
+  [ "$index_seq" = 5 ] || fail "silent latest row replaced the latest visible coverage index: $index_seq"
+
+  [ "$(jq -s '[.[] | select(.silent == true)] | length' "$store")" = 4 ] \
+    || fail "expected 4 silent rows in the 7-row coverage corpus"
+  pass "silent bookkeeping outcomes do not advance appended or rebuilt status coverage"
 }
 
 test_outcome_startup_replay_stops_at_captain_barrier() {
@@ -1547,6 +1592,7 @@ test_outcome_tail_keeps_whole_newest_rows_within_its_byte_budget
 test_outcome_seed_tail_creates_only_an_absent_display_tail
 test_outcome_seed_tail_only_reads_bounded_suffix
 test_outcome_startup_replay_preserves_silence
+test_silent_outcomes_do_not_advance_rebuilt_status_coverage
 test_outcome_startup_replay_stops_at_captain_barrier
 test_outcome_cursor_corruption_fails_closed
 test_cursor_advancement_refuses_ahead_processed_marker

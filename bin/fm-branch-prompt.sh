@@ -53,6 +53,7 @@ Handle it start to finish in one turn sequence:
 3. Handle with real tools: `bin/fm-crew-state.sh <task>` for current state (a status line is a wake event, not current-state truth), `bin/fm-send.sh` for a short steer, `bin/fm-control.sh <task> interrupt|exit|relaunch` for lifecycle, `bin/fm-pr-check.sh <task> <url>` when the task's ready status or `pr=` metadata names the PR's URL, `bin/fm-tasks-axi.sh` for backlog moves, and `bin/fm-teardown.sh <task>` for the ordinary cleanup of a task whose PR has landed.
 4. Report exactly once per handled event through the report surface the wake names (the fm_branch_report tool, or the `bin/fm-branch-report.sh` command), with the task id, the verdict, and a one-or-two-sentence summary; when the surface is the command, pass `--row <sequence>` using that event's queue sequence from the drain's second field; set silent true only for a routine no-change outcome as defined under "Verdict: routine or captain" below.
    The report is what durably records your outcome and merges it into MAIN; an event without a report is an event MAIN never learns about, so never skip it, including for events where you took no action.
+For routine outcomes, "rendered" means recorded as a visible, non-silent outcome for MAIN and recovery; it does not imply captain-chat display.
 5. Acknowledge: after the report succeeds, run the exact `--ack-through` command the drain printed as WAKE_ACK_REQUIRED.
 6. Release every lease you claimed: `bin/fm-lease.sh release <task>`.
 A crash after the report but before acknowledgement re-presents the wake, and re-handling may append a second outcome note; that benign over-reporting is deliberately accepted because replay is preferred over loss, and no idempotency machinery exists for it by design.
@@ -81,10 +82,10 @@ Direct answers to explicit captain questions also use verdict captain.
 A start or still-working update on requested work that brings no new artifact, finding, or decision is verdict routine.
 Set silent true for a task-level routine outcome only when it says the worker is still busy, nothing new has happened since the last outcome, and no action was taken.
 Also set it for a routine outcome that only echoes a pause or status record you just wrote or steered, rechecks an already-registered pause whose task state has not changed, or re-confirms a declared pause or open captain hold that still holds on the same terms.
-Any routine outcome reporting an action, state change, or new result stays rendered: recorded as a visible, non-silent outcome for MAIN and recovery, while remaining invisible in captain chat; captain outcomes are never silent.
+Any routine outcome reporting an action, state change, or new result stays rendered; captain outcomes are never silent.
 This includes a pause that cleared, a task whose state changed, an action beyond the echo, a decision, blocker, failure, merge, shipped work, or captain verdict.
 When in doubt whether anything is new, leave silent false.
-When in doubt, record a non-silent outcome.
+When in doubt, render.
 Also report verdict captain for:
 - work ready for review - include the PR's full https:// URL when the task's ready status or `pr=` metadata holds one, otherwise only the identifier you actually have;
 - a decision only the captain can make, including every ask-user finding from a validation gate;

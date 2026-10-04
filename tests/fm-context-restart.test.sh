@@ -239,7 +239,7 @@ SH
 
 test_wrapper_waits_for_publication_and_revalidates_ownership() {
   local home fake scenario rc expected count
-  for scenario in contention generation record-owner session-owner; do
+  for scenario in contention generation record-session record-owner session-owner; do
     home="$TMP_ROOT/publication-$scenario"
     make_primary "$home" 10
     fake="$home/fake-claude"
@@ -268,13 +268,15 @@ exec -a claude /bin/bash -c '
   : > "$FM_HOME/foreign-lock-preserved"
   token=$FM_CONTEXT_RESTART_WRAPPER_TOKEN
   owner=$$
+  session=publication-session
   case "$SCENARIO" in
     generation) token=aaaaaaaaaaaaaaaa ;;
+    record-session) session=foreign-session ;;
     record-owner) owner=$FM_CONTEXT_RESTART_BRIDGE_PID ;;
     session-owner) printf "22222222\n" > "$STATE/.lock" ;;
   esac
   if [ "$SCENARIO" != contention ]; then
-    fm_context_restart_record_publish "$STATE" publication-session 40 10 1700000000 \
+    fm_context_restart_record_publish "$STATE" "$session" 40 10 1700000000 \
       ready automatic "$token" "$owner" || exit 87
   fi
   fm_lock_release "$STATE/.context-restart.lock"
@@ -588,6 +590,127 @@ SCRIPT
   done
 }
 
+test_bridge_continuity_race() {
+  local scenario=$1 home fake shim rc real_mv
+  real_mv=$(command -v mv)
+  home="$TMP_ROOT/bridge-$scenario"
+  make_primary "$home" 10
+  fm_test_track_watcher_state "$home/state"
+  : > "$home/config/supervision-host-off"
+  printf 'project=demo\nwindow=fm-demo\nharness=claude\n' > "$home/state/demo.meta"
+  shim=$(fm_fakebin "$home/shim")
+  cat > "$shim/mv" <<'SCRIPT'
+#!/usr/bin/env bash
+"$REAL_MV" "$@" || exit $?
+STATE="$FM_HOME/state"
+[ "${*: -1}" = "$STATE/.context-restart-crossing" ] || exit 0
+. "$LIB"
+fm_context_restart_record_read "$STATE/.context-restart-crossing" || exit 71
+[ "$FM_CONTEXT_RESTART_RECORD_PHASE" = replacing ] || exit 0
+owner=$FM_CONTEXT_RESTART_RECORD_LOCK_PID
+. "$FM_REPO/bin/fm-wake-lib.sh"
+if fm_watcher_healthy "$STATE" "$FM_REPO/bin/fm-watch.sh" 300 "$FM_HOME"; then
+  : > "$FM_HOME/commit-supervised"
+else
+  : > "$FM_HOME/commit-uncovered"
+fi
+if [ "$SCENARIO" = natural-exit ]; then
+  i=0
+  while kill -0 "$owner" 2>/dev/null || [ ! -e "$FM_HOME/successor-started" ]; do
+    i=$((i+1)); [ "$i" -lt 200 ] || exit 72; sleep 0.1
+  done
+  : > "$FM_HOME/term-window-open"
+fi
+SCRIPT
+  chmod +x "$shim/mv"
+  fake="$home/fake-claude"
+  cat > "$fake" <<'SCRIPT'
+#!/usr/bin/env bash
+exec -a claude /bin/bash -c '
+  . "$LIB"
+  . "$FM_REPO/bin/fm-wake-lib.sh"
+  n=$(cat "$FM_HOME/generations" 2>/dev/null || echo 0)
+  n=$((n+1)); printf "%s\n" "$n" > "$FM_HOME/generations"
+  printf "%s\n" "$$" > "$STATE/.lock"
+  if [ "$n" -eq 1 ]; then
+    trap '\''exit 0'\'' TERM
+    if [ "$SCENARIO" = contention ]; then
+      fm_lock_try_acquire "$STATE/.context-restart.lock" || exit 81
+      trap '\''fm_lock_release "$STATE/.context-restart.lock"'\'' EXIT
+      fm_context_restart_record_publish "$STATE" race-session 40 10 1700000000 \
+        ready automatic "$FM_CONTEXT_RESTART_WRAPPER_TOKEN" "$$" || exit 82
+      i=0
+      until fm_watcher_healthy "$STATE" "$FM_REPO/bin/fm-watch.sh" 300 "$FM_HOME"; do
+        i=$((i+1)); [ "$i" -lt 100 ] || exit 83; sleep 0.1
+      done
+      watcher=$FM_WATCHER_HEALTHY_PID
+      arm=$(ps -o ppid= -p "$watcher" | tr -d " ")
+      [ "$(ps -o ppid= -p "$arm" | tr -d " ")" = "$FM_CONTEXT_RESTART_BRIDGE_PID" ] || exit 84
+      printf "needs-decision [key=race]: choose release\n" > "$STATE/demo.status"
+      i=0
+      until grep -q "watcher_pid=$watcher.*reason=actionable-signal" "$STATE/.watch-cycle-exits.log" 2>/dev/null; do
+        i=$((i+1)); [ "$i" -lt 70 ] || exit 85; sleep 0.1
+      done
+      [ "$(cat "$STATE/.context-restart.lock/pid")" = "$$" ] || exit 86
+      fm_context_restart_record_read "$STATE/.context-restart-crossing" || exit 87
+      [ "$FM_CONTEXT_RESTART_RECORD_PHASE" = ready ] || exit 88
+      grep "needs-decision:" "$STATE/.wake-queue" > "$FM_HOME/queued-decision"
+      [ -s "$FM_HOME/queued-decision" ] || exit 80
+      : > "$FM_HOME/watcher-completed-under-contention"
+      fm_lock_release "$STATE/.context-restart.lock"
+      trap - EXIT
+      i=0; while [ "$i" -lt 200 ]; do sleep 0.1; i=$((i+1)); done
+      exit 89
+    fi
+    fm_context_restart_record_publish "$STATE" race-session 40 10 1700000000 detected || exit 90
+    "$HANDOFF" handoff --session race-session --reset-safe > "$FM_HOME/handoff.out" 2>&1 || exit 91
+    : > "$FM_HOME/natural-owner-exit"
+    exit 0
+  fi
+  : > "$FM_HOME/successor-started"
+  if [ "$SCENARIO" = natural-exit ]; then
+    i=0
+    until [ -e "$FM_HOME/term-window-open" ]; do
+      i=$((i+1)); [ "$i" -lt 100 ] || exit 92; sleep 0.1
+    done
+  fi
+  sleep 1
+  fm_pid_alive "$FM_CONTEXT_RESTART_PREVIOUS_BRIDGE_PID" || exit 93
+  fm_watcher_healthy "$STATE" "$FM_REPO/bin/fm-watch.sh" 300 "$FM_HOME" || exit 94
+  [ -e "$FM_HOME/commit-supervised" ] && [ ! -e "$FM_HOME/commit-uncovered" ] || exit 95
+  fm_wake_append check successor-ready "check: successor-ready"
+  "$FM_REPO/bin/fm-claude-stop-autoarm.sh" <<< "{\"session_id\":\"successor\"}" > "$FM_HOME/native.out" 2>&1 & native=$!
+  i=0
+  until grep -q "firstmate watcher wake" "$FM_HOME/native.out"; do
+    i=$((i+1)); [ "$i" -lt 200 ] || exit 96; sleep 0.1
+  done
+  wait "$native"
+  [ "$?" -eq 2 ] || exit 97
+  fm_watcher_healthy "$STATE" "$FM_REPO/bin/fm-watch.sh" 300 "$FM_HOME" || exit 98
+  if [ "$SCENARIO" = contention ]; then
+    grep "needs-decision:" "$STATE/.wake-queue" | cmp -s "$FM_HOME/queued-decision" - || exit 99
+  fi
+  [ "$(grep -c "firstmate watcher wake" "$FM_HOME/native.out")" = 1 ] || exit 100
+  exit 0
+' claude "$@"
+SCRIPT
+  chmod +x "$fake"
+  rc=0
+  PATH="$shim:$PATH" REAL_MV="$real_mv" SCENARIO="$scenario" \
+    FM_ROOT_OVERRIDE="$home" FM_HOME="$home" FM_CLAUDE_BIN="$fake" FM_REPO="$ROOT" \
+    FM_POLL=1 FM_SIGNAL_GRACE=0 FM_HEARTBEAT=999999 FM_CHECK_INTERVAL=999999 \
+    "$WRAPPER" > "$home/wrapper.out" 2> "$home/wrapper.err" || rc=$?
+  [ -z "${FM_CONTEXT_RESTART_TEST_EVIDENCE:-}" ] || cp -R "$home" "$FM_CONTEXT_RESTART_TEST_EVIDENCE/bridge-$scenario"
+  expect_code 0 "$rc" "$scenario bridge continuity failed: $(cat "$home/wrapper.err")"
+  [ "$(cat "$home/generations")" = 2 ] || fail "$scenario replacement looped"
+  if [ "$scenario" = contention ]; then
+    [ -e "$home/watcher-completed-under-contention" ] || fail "contention did not close the transferred watcher"
+  else
+    [ -e "$home/natural-owner-exit" ] && [ -e "$home/term-window-open" ] || fail "owner did not exit before TERM"
+  fi
+  pass "context restart: synthetic $scenario preserves monitoring through commit and native takeover"
+}
+
 test_successor_baseline_prevents_restart_loops() {
   local home transcript out rc
   home="$TMP_ROOT/successor-baseline"
@@ -627,5 +750,7 @@ test_foreign_hooks_and_handoff_guards
 test_wrapper_ordinary_exit_and_resume_refusal
 test_wrapper_refuses_incomplete_or_foreign_handoffs
 test_supervision_transfer_and_queued_wakes
+test_bridge_continuity_race contention
+test_bridge_continuity_race natural-exit
 
 test_successor_baseline_prevents_restart_loops

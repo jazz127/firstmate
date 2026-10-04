@@ -55,6 +55,7 @@ while kill -0 "$WRAPPER_PID" 2>/dev/null; do
 done
 ready || exit 0
 OLD_PID=$FM_CONTEXT_RESTART_RECORD_LOCK_PID
+OLD_SESSION=$FM_CONTEXT_RESTART_RECORD_SESSION
 [ "$(cat "$STATE/.lock" 2>/dev/null)" = "$OLD_PID" ] || exit 1
 fm_harness_pid_alive "$OLD_PID" || exit 0
 
@@ -98,6 +99,18 @@ start_arm_once() {
 }
 start_arm() {
   local attempt=0
+  if [ -n "$ARM_PID" ]; then
+    if fm_watcher_healthy "$STATE" "$SCRIPT_DIR/fm-watch.sh" "$GRACE" "$FM_HOME" \
+      && [ "$(ps -o ppid= -p "$FM_WATCHER_HEALTHY_PID" 2>/dev/null | tr -d ' ')" = "$ARM_PID" ]; then
+      return 0
+    fi
+    kill -TERM "$ARM_PID" 2>/dev/null || true
+    LAST_ARM_PID=$ARM_PID
+    wait "$ARM_PID" 2>/dev/null || true
+    ARM_PID=
+    rm -f "$ARM_OUT"
+    ARM_OUT=
+  fi
   # An old auto-arm may have concurrently detached a handling successor.
   # Take over that now-current peer once rather than mistaking a safe attach
   # for a bridge-owned child, or terminating Claude over an unowned watcher.
@@ -117,9 +130,22 @@ fi
 # Ready preparation alone must not turn a later ordinary exit into a restart
 # after a failed bridge, so commit the replacing phase under the crossing lock.
 fm_lock_acquire_wait_bounded "$STATE/.context-restart.lock" 10 || exit 1
-if ! ready || [ "$FM_CONTEXT_RESTART_RECORD_LOCK_PID" != "$OLD_PID" ] \
-  || [ "$(cat "$STATE/.lock" 2>/dev/null)" != "$OLD_PID" ] \
-  || ! fm_harness_pid_alive "$OLD_PID" \
+ready_for_owner() {
+  ready && [ "$FM_CONTEXT_RESTART_RECORD_SESSION" = "$OLD_SESSION" ] \
+    && [ "$FM_CONTEXT_RESTART_RECORD_LOCK_PID" = "$OLD_PID" ] \
+    && [ "$(cat "$STATE/.lock" 2>/dev/null)" = "$OLD_PID" ] \
+    && fm_harness_pid_alive "$OLD_PID"
+}
+if ! ready_for_owner; then
+  fm_lock_release "$STATE/.context-restart.lock"
+  exit 1
+fi
+if needs_bridge && ! start_arm; then
+  fm_lock_release "$STATE/.context-restart.lock"
+  echo 'context-restart: watcher handoff failed; leaving the prepared Claude session running' >&2
+  exit 1
+fi
+if ! ready_for_owner \
   || ! fm_context_restart_record_publish "$STATE" "$FM_CONTEXT_RESTART_RECORD_SESSION" \
     "$FM_CONTEXT_RESTART_RECORD_CONTEXT" "$FM_CONTEXT_RESTART_RECORD_BUDGET" \
     "$FM_CONTEXT_RESTART_RECORD_DETECTED_AT" replacing automatic "$TOKEN" "$OLD_PID"; then
@@ -127,7 +153,7 @@ if ! ready || [ "$FM_CONTEXT_RESTART_RECORD_LOCK_PID" != "$OLD_PID" ] \
   exit 1
 fi
 fm_lock_release "$STATE/.context-restart.lock"
-kill -TERM "$OLD_PID" 2>/dev/null || exit 1
+kill -TERM "$OLD_PID" 2>/dev/null || ! fm_pid_alive "$OLD_PID" || exit 1
 
 # A close only enqueues durable notifications. Keep a successor cycle until the
 # new session's Stop hook takes delivery responsibility. Once it does, wait for

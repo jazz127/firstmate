@@ -346,9 +346,8 @@ This is an accepted limit, not a status-line size contract.
 
 ### Index repair
 
-A missing, legacy, or invalid outcome-index ready marker requires rebuilding the indexes from the authoritative outcome rows under the outcome lock.
-That rebuild runs on the next main drain or before the next append, on every harness; [`bin/fm-branch-outcome.sh`](../bin/fm-branch-outcome.sh) owns the marker format and migration mechanics.
-Only a genuine store fault keeps that backstop skipped.
+The [`bin/fm-branch-outcome.sh` header](../bin/fm-branch-outcome.sh) owns index readiness, repair, and migration, including removal of pre-upgrade silent-derived coverage.
+Temporary outcome-lock contention skips that drain's backstop and retries on the next drain; unsafe storage or indexes require repair before relying on recovery.
 
 ## How the branch knows what the captain said
 

@@ -104,6 +104,11 @@ rm -f "$HOME_DIR/state/live-context-stop-payloads.jsonl"
       -- --dangerously-skip-permissions --effort low --model sonnet -p --max-turns 30 --output-format json
 ) > "$LAB/relaunch-result.json" 2> "$LAB/relaunch.err" \
   || fail "Claude wrapper replacement failed: $(tail -30 "$LAB/relaunch.err")"
+if [ -n "${FM_CONTEXT_RESTART_EVIDENCE_DIR:-}" ]; then
+  cp "$HOME_DIR/state/live-context-stop-payloads.jsonl" "$FM_CONTEXT_RESTART_EVIDENCE_DIR/relaunch-stop-payloads.jsonl"
+  cp "$LAB/relaunch-result.json" "$FM_CONTEXT_RESTART_EVIDENCE_DIR/relaunch-result.json"
+  cp "$LAB/relaunch.err" "$FM_CONTEXT_RESTART_EVIDENCE_DIR/relaunch-stderr.txt"
+fi
 REPLACEMENTS=$(grep -c 'starting a fresh Claude session' "$LAB/relaunch.err" || true)
 [ "$REPLACEMENTS" = 1 ] || fail "expected exactly one actual Claude replacement, got $REPLACEMENTS: $(tail -30 "$LAB/relaunch.err")"
 SESSIONS=$(jq -sr '[.[].session_id] | unique | length' "$HOME_DIR/state/live-context-stop-payloads.jsonl") \
@@ -113,9 +118,6 @@ PHASE=$(bash -c '. "$1"; fm_context_restart_record_read "$2"; printf "%s\n" "$FM
   _ "$ROOT/bin/fm-context-restart-lib.sh" "$HOME_DIR/state/.context-restart-crossing")
 [ "$PHASE" = inhibited ] || fail "the real fresh successor did not inhibit an over-budget startup baseline"
 if [ -n "${FM_CONTEXT_RESTART_EVIDENCE_DIR:-}" ]; then
-  cp "$HOME_DIR/state/live-context-stop-payloads.jsonl" "$FM_CONTEXT_RESTART_EVIDENCE_DIR/relaunch-stop-payloads.jsonl"
-  cp "$LAB/relaunch-result.json" "$FM_CONTEXT_RESTART_EVIDENCE_DIR/relaunch-result.json"
-  cp "$LAB/relaunch.err" "$FM_CONTEXT_RESTART_EVIDENCE_DIR/relaunch-stderr.txt"
   cp "$HOME_DIR/state/.context-restart-crossing" "$FM_CONTEXT_RESTART_EVIDENCE_DIR/successor-crossing.txt"
   date -u +%Y-%m-%dT%H:%M:%SZ > "$FM_CONTEXT_RESTART_EVIDENCE_DIR/relaunch-captured-at.txt"
 fi

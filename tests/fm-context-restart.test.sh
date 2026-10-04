@@ -313,6 +313,89 @@ SCRIPT
   done
 }
 
+test_handoff_waits_for_replacement_commit() {
+  local home fake rc scenario expected count i
+  for scenario in contention bridge-exit; do
+    home="$TMP_ROOT/handoff-completion-$scenario"
+    make_primary "$home" 10
+    FM_STATE_OVERRIDE="$home/state" bash -c '
+    . "$1"
+    fm_context_restart_record_publish "$2" completion-session 40 10 1700000000 detected
+  ' _ "$LIB" "$home/state" || fail "could not seed the completion crossing"
+    fake="$home/fake-claude"
+    cat > "$fake" <<'SCRIPT'
+#!/usr/bin/env bash
+exec -a claude /bin/bash -c '
+  . "$LIB"
+  . "$FM_REPO/bin/fm-wake-lib.sh"
+  n=$(cat "$FM_HOME/generations" 2>/dev/null || echo 0)
+  n=$((n + 1)); printf "%s\n" "$n" > "$FM_HOME/generations"
+  if [ "$n" -eq 2 ]; then
+    [ ! -e "$STATE/.lock" ] || exit 91
+    [ ! -e "$STATE/.context-restart-crossing" ] || exit 92
+    exit 0
+  fi
+  printf "%s\n" "$$" > "$STATE/.lock"
+  kill -STOP "$FM_CONTEXT_RESTART_BRIDGE_PID" || exit 81
+  (
+    trap '\''kill -CONT "$FM_CONTEXT_RESTART_BRIDGE_PID" 2>/dev/null || true'\'' EXIT
+    i=0
+    until fm_context_restart_record_read "$STATE/.context-restart-crossing" \
+      && [ "$FM_CONTEXT_RESTART_RECORD_PHASE" = ready ] \
+      && fm_lock_try_acquire "$STATE/.context-restart.lock"; do
+      i=$((i + 1)); [ "$i" -lt 100 ] || exit 82; sleep 0.1
+    done
+    kill -CONT "$FM_CONTEXT_RESTART_BRIDGE_PID" || exit 83
+    sleep 1
+    # The public handoff must keep its caller pending until the bridge can
+    # commit replacement, even when publication contention delays it.
+    if [ -e "$FM_HOME/handoff-returned" ]; then
+      : > "$FM_HOME/returned-before-commit"
+    fi
+    fm_current_pid owner
+    [ "$(cat "$STATE/.context-restart.lock/pid")" = "$owner" ] || exit 84
+    : > "$FM_HOME/foreign-lock-preserved"
+    if [ "$SCENARIO" = bridge-exit ]; then
+      kill -TERM "$FM_CONTEXT_RESTART_BRIDGE_PID" || exit 85
+    fi
+    fm_lock_release "$STATE/.context-restart.lock"
+    : > "$FM_HOME/contender-finished"
+  ) &
+  "$HANDOFF" handoff --session completion-session --reset-safe > "$FM_HOME/handoff.out" 2>&1
+  rc=$?
+  : > "$FM_HOME/handoff-returned"
+  exit "$rc"
+' claude "$@"
+SCRIPT
+    chmod +x "$fake"
+    rc=0
+    FM_ROOT_OVERRIDE="$home" FM_HOME="$home" FM_CLAUDE_BIN="$fake" FM_REPO="$ROOT" \
+      SCENARIO="$scenario" "$WRAPPER" > "$home/wrapper.out" 2> "$home/wrapper.err" || rc=$?
+    # The contender outlives an early child exit in the broken implementation.
+    i=0
+    while [ ! -e "$home/contender-finished" ] && [ "$i" -lt 100 ]; do
+      sleep 0.1
+      i=$((i + 1))
+    done
+    [ -f "$home/contender-finished" ] || fail "completion contender did not finish"
+    [ ! -e "$home/returned-before-commit" ] || fail "handoff returned success before replacement committed"
+    expected=0
+    count=2
+    if [ "$scenario" = bridge-exit ]; then
+      expected=1
+      count=1
+      [ "$(record_phase "$home")" = ready ] || fail "failed transfer committed replacement"
+      [ -f "$home/state/.lock" ] || fail "failed transfer released the session lock"
+      assert_contains "$(cat "$home/handoff.out")" 'supervision transfer did not commit' \
+        "handoff did not report failed transfer"
+    fi
+    expect_code "$expected" "$rc" "$scenario completion handoff failed: $(cat "$home/wrapper.err")"
+    [ -f "$home/foreign-lock-preserved" ] || fail "completion bridge released a foreign publication lock"
+    [ "$(cat "$home/generations")" = "$count" ] || fail "$scenario handoff launched an unexpected successor"
+    pass "context restart: $scenario handoff waits for replacement commit without false success"
+  done
+}
+
 test_opt_out_paths_are_unchanged() {
   local home out rc fake
   home="$TMP_ROOT/opt-out"
@@ -532,6 +615,7 @@ test_successor_baseline_prevents_restart_loops() {
   pass "context restart: over-budget successor baseline inhibits loops and a raised budget rearms it"
 }
 
+test_handoff_waits_for_replacement_commit
 test_budget_parser_and_opt_in
 test_threshold_and_one_directive_per_crossing
 test_malformed_transcript_and_usage_are_inert

@@ -9,7 +9,8 @@
 # verifies the durable threshold crossing and current session-lock ownership,
 # advances the record to ready when bin/fm-primary.sh supplied a private wrapper
 # token. Its supervisor transfers any needed watcher, publishes replacing, and
-# terminates Claude. The wrapper requires that token-matching replacing sentinel
+# terminates Claude. Automatic handoff waits for that replacing commit before
+# reporting success. The wrapper requires that token-matching replacing sentinel
 # after its child exits, releases only the exact dead owner's session lock, and
 # starts a fresh session.
 #
@@ -187,7 +188,23 @@ if [ "$MODE" = manual ]; then
   exit 3
 fi
 
-# The wrapper-owned child observes the sentinel, establishes watcher continuity
-# outside Claude's process tree, and only then signals the prepared session.
-printf 'context-restart: reset-safe handoff prepared; wrapper will transfer supervision and end this Claude session\n'
-exit 0
+# Let the bridge acquire the publication lock, then keep the tool call pending
+# until supervision transfer commits. A print-mode Claude can otherwise finish
+# its final turn and exit while the record is only ready, before the wrapper is
+# authorized to launch a successor.
+fm_lock_release "$CLAIM"
+trap - EXIT
+while fm_context_restart_record_read "$RECORD" >/dev/null 2>&1 \
+  && [ "$FM_CONTEXT_RESTART_RECORD_SESSION" = "$SESSION_ID" ] \
+  && [ "$FM_CONTEXT_RESTART_RECORD_MODE" = automatic ] \
+  && [ "$FM_CONTEXT_RESTART_RECORD_TOKEN" = "$TOKEN" ] \
+  && [ "$FM_CONTEXT_RESTART_RECORD_LOCK_PID" = "$LOCK_PID" ]; do
+  if [ "$FM_CONTEXT_RESTART_RECORD_PHASE" = replacing ]; then
+    printf 'context-restart: reset-safe handoff committed; wrapper will end this Claude session\n'
+    exit 0
+  fi
+  [ "$FM_CONTEXT_RESTART_RECORD_PHASE" = ready ] && fm_pid_alive "$BRIDGE_PID" || break
+  sleep 0.1
+done
+echo 'context-restart: supervision transfer did not commit; keep this session running' >&2
+exit 1

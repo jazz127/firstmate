@@ -1,0 +1,174 @@
+$ bin/fm-lab-home.sh create /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4372PFF3JWKYX618ESNHJ6Q/.gate-test-tmp/live-append
+/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4372PFF3JWKYX618ESNHJ6Q/.gate-test-tmp/live-append
+exit=0
+
+$ bin/fm-branch-outcome.sh append --task raced --verdict routine --summary Earlier progress reviewed --silent false
+1
+exit=0
+
+$ bin/fm-branch-outcome.sh append --task raced --verdict routine --summary The registered pause is unchanged --silent true
+2
+exit=0
+
+$ bin/fm-branch-outcome.sh append --task silent-only --verdict routine --summary The captain hold remains unchanged --silent true
+3
+exit=0
+
+$ bin/fm-branch-outcome.sh append --task covered --verdict routine --summary The completion is already handled --silent false
+4
+exit=0
+
+$ bin/fm-branch-outcome.sh list --recent 10
+{"seq":1,"epoch":1791111376,"task":"raced","wake":"","verdict":"routine","summary":"Earlier progress reviewed","silent":false,"statusEndpoint":26,"statusIdent":"strong:16777231:6898509:1791111376.591422208"}
+{"seq":2,"epoch":1791111376,"task":"raced","wake":"","verdict":"routine","summary":"The registered pause is unchanged","silent":true,"statusEndpoint":84,"statusIdent":"strong:16777231:6898509:1791111376.591422208"}
+{"seq":3,"epoch":1791111376,"task":"silent-only","wake":"","verdict":"routine","summary":"The captain hold remains unchanged","silent":true,"statusEndpoint":59,"statusIdent":"strong:16777231:6898525:1791111376.715359122"}
+{"seq":4,"epoch":1791111377,"task":"covered","wake":"","verdict":"routine","summary":"The completion is already handled","silent":false,"statusEndpoint":36,"statusIdent":"strong:16777231:6898680:1791111376.928125581"}
+exit=0
+
+$ bin/fm-wake-drain.sh
+STATUS OUTCOME BACKSTOP (newest captain-facing task event has no covering branch outcome):
+raced done: The fix completed before the unchanged pause report
+silent-only failed: The worker failed before the unchanged hold report
+exit=0
+
+$ bin/fm-wake-drain.sh
+exit=0
+
+$ bin/fm-branch-outcome.sh append --task guard --verdict captain --summary A new failure needs attention --silent true
+error: silent outcomes must have the routine verdict
+exit=2
+
+Verified append: completion and failure surfaced exactly once; visible coverage preserved; silent captain outcome rejected.
+
+$ bin/fm-lab-home.sh create /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4372PFF3JWKYX618ESNHJ6Q/.gate-test-tmp/live-rebuild
+/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4372PFF3JWKYX618ESNHJ6Q/.gate-test-tmp/live-rebuild
+exit=0
+
+$ bin/fm-branch-outcome.sh append --task raced --verdict routine --summary Earlier progress reviewed --silent false
+1
+exit=0
+
+$ bin/fm-branch-outcome.sh append --task raced --verdict routine --summary The registered pause is unchanged --silent true
+2
+exit=0
+
+$ bin/fm-branch-outcome.sh append --task silent-only --verdict routine --summary The captain hold remains unchanged --silent true
+3
+exit=0
+
+$ bin/fm-branch-outcome.sh append --task covered --verdict routine --summary The completion is already handled --silent false
+4
+exit=0
+
+$ bin/fm-branch-outcome.sh list --recent 10
+{"seq":1,"epoch":1791111379,"task":"raced","wake":"","verdict":"routine","summary":"Earlier progress reviewed","silent":false,"statusEndpoint":26,"statusIdent":"strong:16777231:6898868:1791111379.214832667"}
+{"seq":2,"epoch":1791111379,"task":"raced","wake":"","verdict":"routine","summary":"The registered pause is unchanged","silent":true,"statusEndpoint":84,"statusIdent":"strong:16777231:6898868:1791111379.214832667"}
+{"seq":3,"epoch":1791111379,"task":"silent-only","wake":"","verdict":"routine","summary":"The captain hold remains unchanged","silent":true,"statusEndpoint":59,"statusIdent":"strong:16777231:6898879:1791111379.331578716"}
+{"seq":4,"epoch":1791111379,"task":"covered","wake":"","verdict":"routine","summary":"The completion is already handled","silent":false,"statusEndpoint":36,"statusIdent":"strong:16777231:6898901:1791111379.518859793"}
+exit=0
+
+$ bin/fm-branch-outcome.sh processed-init
+exit=0
+
+$ bin/fm-wake-drain.sh
+STATUS OUTCOME BACKSTOP (newest captain-facing task event has no covering branch outcome):
+raced done: The fix completed before the unchanged pause report
+silent-only failed: The worker failed before the unchanged hold report
+exit=0
+
+$ bin/fm-wake-drain.sh
+exit=0
+
+$ bin/fm-branch-outcome.sh append --task guard --verdict captain --summary A new failure needs attention --silent true
+error: silent outcomes must have the routine verdict
+exit=2
+
+Verified rebuild: completion and failure surfaced exactly once; visible coverage preserved; silent captain outcome rejected.
+
+$ bin/fm-lab-home.sh create /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4372PFF3JWKYX618ESNHJ6Q/.gate-test-tmp/live-upgrade-drain
+/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4372PFF3JWKYX618ESNHJ6Q/.gate-test-tmp/live-upgrade-drain
+exit=0
+
+$ bin/fm-branch-outcome.sh append --task raced --verdict routine --summary Earlier progress reviewed --silent false
+1
+exit=0
+
+$ bin/fm-branch-outcome.sh append --task raced --verdict routine --summary The registered pause is unchanged --silent true
+2
+exit=0
+
+$ bin/fm-branch-outcome.sh append --task silent-only --verdict routine --summary The captain hold remains unchanged --silent true
+3
+exit=0
+
+$ bin/fm-branch-outcome.sh append --task covered --verdict routine --summary The completion is already handled --silent false
+4
+exit=0
+
+$ bin/fm-branch-outcome.sh list --recent 10
+{"seq":1,"epoch":1791111381,"task":"raced","wake":"","verdict":"routine","summary":"Earlier progress reviewed","silent":false,"statusEndpoint":26,"statusIdent":"strong:16777231:6899046:1791111381.826683516"}
+{"seq":2,"epoch":1791111382,"task":"raced","wake":"","verdict":"routine","summary":"The registered pause is unchanged","silent":true,"statusEndpoint":84,"statusIdent":"strong:16777231:6899046:1791111381.826683516"}
+{"seq":3,"epoch":1791111382,"task":"silent-only","wake":"","verdict":"routine","summary":"The captain hold remains unchanged","silent":true,"statusEndpoint":59,"statusIdent":"strong:16777231:6899058:1791111381.936119325"}
+{"seq":4,"epoch":1791111382,"task":"covered","wake":"","verdict":"routine","summary":"The completion is already handled","silent":false,"statusEndpoint":36,"statusIdent":"strong:16777231:6899080:1791111382.136714927"}
+exit=0
+
+$ bin/fm-wake-drain.sh
+STATUS OUTCOME BACKSTOP (newest captain-facing task event has no covering branch outcome):
+raced done: The fix completed before the unchanged pause report
+silent-only failed: The worker failed before the unchanged hold report
+exit=0
+
+$ bin/fm-wake-drain.sh
+exit=0
+
+$ bin/fm-branch-outcome.sh append --task guard --verdict captain --summary A new failure needs attention --silent true
+error: silent outcomes must have the routine verdict
+exit=2
+
+Verified upgrade-drain: completion and failure surfaced exactly once; visible coverage preserved; silent captain outcome rejected.
+
+$ bin/fm-lab-home.sh create /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4372PFF3JWKYX618ESNHJ6Q/.gate-test-tmp/live-upgrade-append
+/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4372PFF3JWKYX618ESNHJ6Q/.gate-test-tmp/live-upgrade-append
+exit=0
+
+$ bin/fm-branch-outcome.sh append --task raced --verdict routine --summary Earlier progress reviewed --silent false
+1
+exit=0
+
+$ bin/fm-branch-outcome.sh append --task raced --verdict routine --summary The registered pause is unchanged --silent true
+2
+exit=0
+
+$ bin/fm-branch-outcome.sh append --task silent-only --verdict routine --summary The captain hold remains unchanged --silent true
+3
+exit=0
+
+$ bin/fm-branch-outcome.sh append --task covered --verdict routine --summary The completion is already handled --silent false
+4
+exit=0
+
+$ bin/fm-branch-outcome.sh list --recent 10
+{"seq":1,"epoch":1791111384,"task":"raced","wake":"","verdict":"routine","summary":"Earlier progress reviewed","silent":false,"statusEndpoint":26,"statusIdent":"strong:16777231:6899257:1791111384.542227683"}
+{"seq":2,"epoch":1791111384,"task":"raced","wake":"","verdict":"routine","summary":"The registered pause is unchanged","silent":true,"statusEndpoint":84,"statusIdent":"strong:16777231:6899257:1791111384.542227683"}
+{"seq":3,"epoch":1791111384,"task":"silent-only","wake":"","verdict":"routine","summary":"The captain hold remains unchanged","silent":true,"statusEndpoint":59,"statusIdent":"strong:16777231:6899267:1791111384.653405489"}
+{"seq":4,"epoch":1791111384,"task":"covered","wake":"","verdict":"routine","summary":"The completion is already handled","silent":false,"statusEndpoint":36,"statusIdent":"strong:16777231:6899281:1791111384.849704929"}
+exit=0
+
+$ bin/fm-branch-outcome.sh append --task unrelated --verdict routine --summary Another task progressed --silent false
+5
+exit=0
+
+$ bin/fm-wake-drain.sh
+STATUS OUTCOME BACKSTOP (newest captain-facing task event has no covering branch outcome):
+raced done: The fix completed before the unchanged pause report
+silent-only failed: The worker failed before the unchanged hold report
+exit=0
+
+$ bin/fm-wake-drain.sh
+exit=0
+
+$ bin/fm-branch-outcome.sh append --task guard --verdict captain --summary A new failure needs attention --silent true
+error: silent outcomes must have the routine verdict
+exit=2
+
+Verified upgrade-append: completion and failure surfaced exactly once; visible coverage preserved; silent captain outcome rejected.

@@ -1,0 +1,4 @@
+{"seq":1,"epoch":1791111381,"task":"raced","wake":"","verdict":"routine","summary":"Earlier progress reviewed","silent":false,"statusEndpoint":26,"statusIdent":"strong:16777231:6899046:1791111381.826683516"}
+{"seq":2,"epoch":1791111382,"task":"raced","wake":"","verdict":"routine","summary":"The registered pause is unchanged","silent":true,"statusEndpoint":84,"statusIdent":"strong:16777231:6899046:1791111381.826683516"}
+{"seq":3,"epoch":1791111382,"task":"silent-only","wake":"","verdict":"routine","summary":"The captain hold remains unchanged","silent":true,"statusEndpoint":59,"statusIdent":"strong:16777231:6899058:1791111381.936119325"}
+{"seq":4,"epoch":1791111382,"task":"covered","wake":"","verdict":"routine","summary":"The completion is already handled","silent":false,"statusEndpoint":36,"statusIdent":"strong:16777231:6899080:1791111382.136714927"}

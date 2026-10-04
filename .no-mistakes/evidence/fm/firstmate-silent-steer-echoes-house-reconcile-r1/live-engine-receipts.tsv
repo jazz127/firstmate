@@ -1,0 +1,11 @@
+lab-classification	1	routine	echo	1
+lab-classification	2	routine	recheck	2
+lab-classification	3	routine	paused	3
+lab-classification	4	routine	hold	4
+lab-classification	5	routine	cleared	5
+lab-classification	6	routine	changed	6
+lab-classification	7	routine	action	7
+lab-classification	8	captain	decision	8
+lab-classification	9	captain	failure	9
+lab-classification	10	captain	merge	10
+lab-classification	11	captain	requested	11

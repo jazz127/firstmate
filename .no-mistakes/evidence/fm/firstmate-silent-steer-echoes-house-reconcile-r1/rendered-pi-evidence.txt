@@ -1,0 +1,91 @@
+page:
+  title: Session Export
+  url: "file:///Users/jarad/.no-mistakes/evidence/01M4372PFF3JWKYX618ESNHJ6Q/live-pi-replay.html"
+  refs: 74
+snapshot:
+uid=g2:1_0 RootWebArea "Session Export" url="file:///Users/jarad/.no-mistakes/evidence/01M4372PFF3JWKYX618ESNHJ6Q/live-pi-replay.html"
+  uid=g2:1_1 complementary
+    uid=g2:1_2 textbox "Search..."
+    uid=g2:1_3 button "Default" description="Hide settings entries"
+    uid=g2:1_4 button "No-tools" description="Default minus tool results"
+    uid=g2:1_5 button "User" description="Only user messages"
+    uid=g2:1_6 button "Labeled" description="Only labeled entries"
+    uid=g2:1_7 button "All" description="Show everything"
+    uid=g2:1_8 StaticText "•"
+    uid=g2:1_9 StaticText "[lab-visible-check]:"
+    uid=g2:1_10 StaticText " Live Pi replay check: routine outcomes must remain hidden."
+    uid=g2:1_11 StaticText "•"
+    uid=g2:1_12 StaticText "[fm-branch-merge]:"
+    uid=g2:1_13 StaticText " ⛵ restored: The pause cleared and worker resumed"
+    uid=g2:1_14 StaticText "•"
+    uid=g2:1_15 StaticText "[fm-branch-merge]:"
+    uid=g2:1_16 StaticText " ⛵ recovered: The worker recovered after the registered pause"
+    uid=g2:1_17 StaticText "•"
+    uid=g2:1_18 StaticText "[fm-branch-merge]:"
+    uid=g2:1_19 StaticText " ⛵ held: The existing captain hold is unchanged"
+    uid=g2:1_20 StaticText "4 / 5 entries"
+  uid=g2:1_21 separator "Resize session tree sidebar" orientation="vertical"
+  uid=g2:1_22 main
+    uid=g2:1_23 heading "Session: 01a10696-499e-70c9-95b9-aefa174b618b" level="1"
+    uid=g2:1_24 StaticText "T toggle thinking · O toggle tools"
+    uid=g2:1_25 button "Toggle thinking" description="Toggle thinking (T)"
+    uid=g2:1_26 button "Toggle tools" description="Toggle tools (O)"
+    uid=g2:1_27 button "↓ JSONL" description="Download session as JSONL"
+    uid=g2:1_28 StaticText "Date:"
+    uid=g2:1_29 StaticText "04/10/2026, 21:04:34"
+    uid=g2:1_30 StaticText "Models:"
+    uid=g2:1_31 StaticText "unknown"
+    uid=g2:1_32 StaticText "Messages:"
+    uid=g2:1_33 StaticText "4 custom"
+    uid=g2:1_34 StaticText "Tool Calls:"
+    uid=g2:1_35 StaticText "0"
+    uid=g2:1_36 StaticText "Tokens:"
+    uid=g2:1_37 StaticText "0"
+    uid=g2:1_38 StaticText "Cost:"
+    uid=g2:1_39 StaticText "0.000"
+    uid=g2:1_40 StaticText "Available Tools"
+    uid=g2:1_41 StaticText "read"
+    uid=g2:1_42 StaticText " - "
+    uid=g2:1_43 StaticText "Read the contents of a file. Supports text files and images (jpg, png, gif, webp, bmp). Images are sent as attachments. For text files, output is truncated to 2000 lines or 50KB (whichever is hit first). Use offset/limit for large files. When you need the full file, continue with offset until complete."
+    uid=g2:1_44 StaticText " "
+    uid=g2:1_45 StaticText "[click to show parameters]"
+    uid=g2:1_46 StaticText "bash"
+    uid=g2:1_47 StaticText " - "
+    uid=g2:1_48 StaticText "Execute a bash command in the current working directory. Returns stdout and stderr. Output is truncated to last 2000 lines or 50KB (whichever is hit first). If truncated, full output is saved to a temp file. Optionally provide a timeout in seconds."
+    uid=g2:1_49 StaticText " "
+    uid=g2:1_45 StaticText "[click to show parameters]"
+    uid=g2:1_50 StaticText "edit"
+    uid=g2:1_51 StaticText " - "
+    uid=g2:1_52 StaticText "Edit a single file using exact text replacement. Every edits[].oldText must match a unique, non-overlapping region of the original file. If two changes affect the same block or nearby lines, merge them into one edit instead of emitting overlapping edits. Do not include large unchanged regions just to connect distant changes."
+    uid=g2:1_53 StaticText " "
+    uid=g2:1_45 StaticText "[click to show parameters]"
+    uid=g2:1_54 StaticText "write"
+    uid=g2:1_55 StaticText " - "
+    uid=g2:1_56 StaticText "Write content to a file. Creates the file if it doesn't exist, overwrites if it does. Automatically creates parent directories."
+    uid=g2:1_57 StaticText " "
+    uid=g2:1_45 StaticText "[click to show parameters]"
+    uid=g2:1_58 StaticText "fm_branch_outcomes"
+    uid=g2:1_59 StaticText " - "
+    uid=g2:1_60 StaticText "Read the durable outcome store of the supervision branch: what fleet events it handled, each verdict, and each summary. Use when the captain asks what happened in the fleet."
+    uid=g2:1_61 StaticText " "
+    uid=g2:1_45 StaticText "[click to show parameters]"
+    uid=g2:1_62 StaticText "fm_branch_processed"
+    uid=g2:1_63 StaticText " - "
+    uid=g2:1_64 StaticText "Acknowledge that every captain-facing supervision outcome up to a sequence number has been processed by this conversation. Call it exactly once after handling a supervision processing request, with through set to the highest sequence that request listed; an outcome that is not acknowledged is presented again."
+    uid=g2:1_65 StaticText " "
+    uid=g2:1_45 StaticText "[click to show parameters]"
+    uid=g2:1_66 StaticText "21:04:35"
+    uid=g2:1_67 StaticText "[lab-visible-check]"
+    uid=g2:1_68 StaticText "Live Pi replay check: routine outcomes must remain hidden."
+help[4]:
+  Run `chrome-devtools-axi fill @g2:1_2 "text"` to fill the "Search..." field
+  Run `chrome-devtools-axi click @g2:1_3` to click the "Default" button
+  Run `chrome-devtools-axi scroll down` to scroll down
+  Use `chrome-devtools-axi eval <expr>` for JS expressions. For multi-statement code, pass a function: `eval "() => { ...; return result }"`
+resized:
+  width: 1200
+  height: 800
+screenshot: /Users/jarad/.no-mistakes/evidence/01M4372PFF3JWKYX618ESNHJ6Q/live-pi-replay.png
+result: "{\"visibleProbe\":true,\"routineNotesVisibleInTranscript\":false}"
+help[1]:
+  Run `chrome-devtools-axi snapshot` to see current page state

@@ -1,0 +1,3 @@
+{"seq":1,"epoch":1791111874,"task":"restored","wake":"","verdict":"routine","summary":"The pause cleared and worker resumed","silent":false,"statusEndpoint":0,"statusIdent":"-"}
+{"seq":2,"epoch":1791111874,"task":"recovered","wake":"","verdict":"routine","summary":"The worker recovered after the registered pause","silent":false,"statusEndpoint":0,"statusIdent":"-"}
+{"seq":3,"epoch":1791111874,"task":"held","wake":"","verdict":"routine","summary":"The existing captain hold is unchanged","silent":true,"statusEndpoint":0,"statusIdent":"-"}

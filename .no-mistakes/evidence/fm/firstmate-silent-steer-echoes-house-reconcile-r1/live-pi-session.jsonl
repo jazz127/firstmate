@@ -1,0 +1,5 @@
+{"type":"thinking_level_change","id":"8ae578e2","parentId":null,"timestamp":"2026-10-04T11:04:35.056Z","thinkingLevel":"off"}
+{"type":"custom_message","customType":"lab-visible-check","content":"Live Pi replay check: routine outcomes must remain hidden.","display":true,"id":"e610e501","parentId":"8ae578e2","timestamp":"2026-10-04T11:04:35.150Z"}
+{"type":"custom_message","customType":"fm-branch-merge","content":"⛵ restored: The pause cleared and worker resumed","display":false,"id":"05a86cb8","parentId":"e610e501","timestamp":"2026-10-04T11:04:35.417Z"}
+{"type":"custom_message","customType":"fm-branch-merge","content":"⛵ recovered: The worker recovered after the registered pause","display":false,"id":"f4028aff","parentId":"05a86cb8","timestamp":"2026-10-04T11:04:35.483Z"}
+{"type":"custom_message","customType":"fm-branch-merge","content":"⛵ held: The existing captain hold is unchanged","display":false,"id":"996ff9ff","parentId":"f4028aff","timestamp":"2026-10-04T11:04:35.548Z"}

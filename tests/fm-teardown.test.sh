@@ -694,7 +694,7 @@ test_local_only_fork_remote_allows() {
     || fail "fork-allow: post-teardown branch report was not stored"
   [ ! -e "$case_dir/state/.task-x1.branch-outcome-index" ] \
     || fail "fork-allow: post-teardown branch report recreated the retired task index"
-  [ "$(cat "$case_dir/state/.branch-outcome-index-ready")" = 1 ] \
+  [ "$(cat "$case_dir/state/.branch-outcome-index-ready")" = visible-only-v1:1 ] \
     || fail "fork-allow: post-teardown branch report did not publish its ready sequence"
   jq -e --arg id task-x1 '
     .schema == "fm-secondmate-home-summary.v1"

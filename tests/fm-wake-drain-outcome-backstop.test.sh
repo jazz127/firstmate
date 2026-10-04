@@ -86,64 +86,73 @@ test_newer_task_outcome_and_routine_latest_events_stay_silent() {
   pass "a newer task-matching branch outcome suppresses the backstop and routine latest events stay silent"
 }
 
-test_silent_outcomes_never_cover_status_across_rebuild_and_upgrade() {
-  local mode dir state out index row task
-  for mode in append rebuild upgrade-drain upgrade-append; do
-    dir=$(make_case "silent-coverage-$mode")
+test_legacy_silent_coverage_migrates_before_drain_or_append() {
+  local mode dir state out body task seq endpoint ident store_before ready_after
+  for mode in drain silent-append visible-append; do
+    dir=$(make_case "legacy-silent-$mode")
     state="$dir/state"
     out="$dir/drain.out"
-    printf 'working: still building\n' > "$state/raced.status"
-    append_outcome "$state" raced 'earlier visible progress'
-    index=$(cat "$state/.raced.branch-outcome-index")
-    printf 'done: completion arrived before the unchanged pause report\n' >> "$state/raced.status"
-    printf 'failed: failure arrived before the unchanged hold report\n' > "$state/silent-only.status"
-    for task in raced silent-only; do
+
+    printf 'done: visible completion already delivered\n' > "$state/visible.status"
+    printf 'done: earlier mixed completion delivered\n' > "$state/mixed.status"
+    append_outcome "$state" visible 'visible completion handled' || fail "visible fixture append failed"
+    append_outcome "$state" mixed 'earlier mixed completion handled' || fail "mixed fixture append failed"
+    printf 'failed: later mixed failure only echoed silently\n' >> "$state/mixed.status"
+    printf 'done: completion only echoed silently\n' > "$state/silent-done.status"
+    printf 'failed: failure only echoed silently\n' > "$state/silent-failed.status"
+    for task in mixed silent-done silent-failed; do
       FM_STATE_OVERRIDE="$state" "$OUTCOMES" append --task "$task" --verdict routine \
-        --summary 'unchanged pause or hold' --silent true >/dev/null \
-        || fail "silent append failed for $mode/$task"
+        --summary 'unchanged status echo' --silent true >/dev/null || fail "silent fixture append failed"
     done
-    [ "$(cat "$state/.raced.branch-outcome-index")" = "$index" ] \
-      || fail "silent append changed the earlier visible coverage"
-    [ ! -e "$state/.silent-only.branch-outcome-index" ] \
-      || fail "silent-only append created status coverage"
-    printf 'done: already handled completion\n' > "$state/covered.status"
-    append_outcome "$state" covered 'visible handled completion'
-
-    case "$mode" in
-      rebuild|upgrade-*)
-        for task in raced silent-only; do
-          row=$(FM_STATE_OVERRIDE="$state" "$OUTCOMES" list --recent 10 \
-            | jq -r --arg task "$task" 'select(.task == $task and .silent == true) | ["fm-branch-outcome-index-v1", .seq, .statusEndpoint, .statusIdent] | @tsv')
-          printf '%s\n' "$row" > "$state/.$task.branch-outcome-index"
+    jq -rs 'group_by(.task) | .[] | .[-1]
+      | [.task, .seq, .statusEndpoint, .statusIdent] | @tsv' "$state/branch-outcomes.jsonl" \
+      | while IFS=$(printf '\t') read -r task seq endpoint ident; do
+          printf 'fm-branch-outcome-index-v1\t%s\t%s\t%s\n' "$seq" "$endpoint" "$ident" \
+            > "$state/.$task.branch-outcome-index"
         done
-        ;;
-    esac
-    case "$mode" in
-      rebuild)
-        FM_STATE_OVERRIDE="$state" "$OUTCOMES" processed-init || fail "explicit visible-only rebuild failed"
-        ;;
-      upgrade-*)
-        rm -f "$state/.branch-outcome-index-visible-only"
-        if [ "$mode" = upgrade-append ]; then
-          append_outcome "$state" unrelated 'unrelated visible outcome after upgrade'
-        fi
-        ;;
-    esac
+    printf '5\n' > "$state/.branch-outcome-index-ready"
+    FM_STATE_OVERRIDE="$state" "$OUTCOMES" mark-read --through 5 || fail "fixture mark-read failed"
+    store_before=$(cat "$state/branch-outcomes.jsonl")
 
-    FM_STATE_OVERRIDE="$state" "$DRAIN" > "$out" || fail "silent coverage drain failed for $mode"
-    assert_contains "$(backstop_body "$out")" 'raced done: completion arrived before the unchanged pause report' \
-      "$mode allowed a silent pause report to hide a lost completion"
-    assert_contains "$(backstop_body "$out")" 'silent-only failed: failure arrived before the unchanged hold report' \
-      "$mode allowed a silent-only hold report to hide a lost failure"
-    assert_not_contains "$(backstop_body "$out")" 'covered done:' "$mode lost ordinary visible coverage"
-    [ "$(cat "$state/.raced.branch-outcome-index")" = "$index" ] \
-      || fail "$mode did not preserve the earlier visible outcome's provenance"
-    [ ! -e "$state/.silent-only.branch-outcome-index" ] \
-      || fail "$mode retained silent-only status coverage"
-    FM_STATE_OVERRIDE="$state" "$DRAIN" > "$out" || fail "second silent coverage drain failed for $mode"
-    [ ! -s "$out" ] || fail "$mode repeated recovered status: $(cat "$out")"
+    case "$mode" in
+      silent-append)
+        FM_STATE_OVERRIDE="$state" "$OUTCOMES" append --task fleet --verdict routine \
+          --summary 'fleet unchanged' --silent true >/dev/null || fail "upgrade silent append failed"
+        ;;
+      visible-append)
+        FM_STATE_OVERRIDE="$state" "$OUTCOMES" append --task fleet --verdict routine \
+          --summary 'unrelated visible result' >/dev/null || fail "upgrade visible append failed"
+        ;;
+    esac
+    if [ "$mode" != drain ]; then
+      [ ! -e "$state/.silent-done.branch-outcome-index" ] \
+        && [ ! -e "$state/.silent-failed.branch-outcome-index" ] \
+        || fail "$mode republished readiness with silent-only coverage"
+      [ "$(cut -f2 "$state/.mixed.branch-outcome-index")" = 2 ] \
+        || fail "$mode republished readiness with mixed silent coverage"
+    fi
+
+    FM_STATE_OVERRIDE="$state" "$DRAIN" > "$out" || fail "$mode upgrade drain failed"
+    body=$(backstop_body "$out")
+    assert_contains "$body" 'silent-done done: completion only echoed silently' "$mode hid a keyless done status"
+    assert_contains "$body" 'silent-failed failed: failure only echoed silently' "$mode hid a keyless failed status"
+    assert_contains "$body" 'mixed failed: later mixed failure only echoed silently' "$mode retained mixed silent coverage"
+    assert_not_contains "$body" 'visible done:' "$mode lost legitimate visible coverage"
+    [ ! -e "$state/.silent-done.branch-outcome-index" ] \
+      && [ ! -e "$state/.silent-failed.branch-outcome-index" ] \
+      || fail "$mode retained a silent-only index"
+    [ "$(cut -f2 "$state/.mixed.branch-outcome-index")" = 2 ] \
+      || fail "$mode did not restore the latest visible mixed index"
+    [ "$(head -n 5 "$state/branch-outcomes.jsonl")" = "$store_before" ] \
+      || fail "$mode rewrote outcome history during migration"
+    ready_after=$(cat "$state/.branch-outcome-index-ready")
+    [ "$ready_after" != 5 ] || fail "$mode retained legacy readiness"
+    FM_STATE_OVERRIDE="$state" "$DRAIN" > "$out" || fail "$mode second drain failed"
+    [ ! -s "$out" ] || fail "$mode migration replayed handled statuses: $(cat "$out")"
+    [ "$(cat "$state/.branch-outcome-index-ready")" = "$ready_after" ] \
+      || fail "$mode second drain changed readiness"
   done
-  pass "silent reports cannot hide lost status through append, rebuild, or pre-upgrade indexes"
+  pass "legacy silent coverage migrates before drain or append without removing readiness"
 }
 
 test_older_or_other_task_outcome_cannot_hide_a_new_captain_event() {
@@ -575,7 +584,7 @@ test_backstop_output_is_bounded() {
 
 test_uncovered_keyless_captain_events_surface_on_the_next_main_drain
 test_newer_task_outcome_and_routine_latest_events_stay_silent
-test_silent_outcomes_never_cover_status_across_rebuild_and_upgrade
+test_legacy_silent_coverage_migrates_before_drain_or_append
 test_older_or_other_task_outcome_cannot_hide_a_new_captain_event
 test_branch_annotation_cannot_consume_the_main_resurfacing_backstop
 test_same_second_outcome_uses_status_causal_position

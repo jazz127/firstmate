@@ -47,15 +47,15 @@
 #     its delivered captain rows again, dated and check-first, until main
 #     acknowledges them. A marker ahead of the read cursor fails closed.
 #   - Outcome index: $STATE/.<task>.branch-outcome-index stores one bounded
-#     cache of the latest non-silent outcome's status provenance. The
-#     authoritative copy is in the append-only row.
-#     $STATE/.branch-outcome-index-ready is removed
+#     cache of the latest non-silent outcome's status provenance. The authoritative copy
+#     is in the append-only row. $STATE/.branch-outcome-index-ready is removed
 #     before append and published only after the cache update; processed-init
-#     rebuilds every cache before publishing it and the one-time
-#     $STATE/.branch-outcome-index-visible-only migration marker, so interruption
-#     or upgrade fails closed without making each drain scan lifetime history.
-#     Rebuild first removes existing indexes, excluding silent rows when
-#     restoring coverage so pre-upgrade silent-derived coverage cannot survive.
+#     removes every task cache and rebuilds only non-silent coverage before
+#     publishing it. The ready marker is `visible-only-v1:<seq>`, where seq is
+#     the store tail sequence, including silent rows. Legacy numeric markers
+#     are invalid: append and main-actor drain rebuild under the outcome lock
+#     before republishing or accepting readiness. Interruption or upgrade
+#     fails closed without making each drain scan lifetime history.
 #     bin/fm-teardown.sh removes a retired task's cache with its other records,
 #     and append skips the cache for a task that has neither a live meta nor a
 #     status log (the outcome itself is still stored), so the branch's report
@@ -322,8 +322,9 @@ publish_outcome_index_ready() { # <seq>
 
 rebuild_outcome_indexes() {
   local rows task seq epoch endpoint ident f mtime
-  rm -f -- "$OUTCOME_INDEX_READY" "$STATE"/.*.branch-outcome-index || return 1
-  [ -s "$STORE" ] || { publish_outcome_index_ready 0 && touch "$OUTCOME_INDEX_VISIBLE_ONLY"; return; }
+  rm -f -- "$OUTCOME_INDEX_READY" || return 1
+  find "$STATE" -maxdepth 1 -type f -name '.*.branch-outcome-index' -exec rm -f {} + || return 1
+  [ -s "$STORE" ] || { publish_outcome_index_ready 0; return; }
   rows=$(jq -r -s '
     map(select(.task != "fleet" and .silent != true))
     | group_by(.task)
@@ -542,8 +543,7 @@ case "$CMD" in
       echo "error: refusing append because the outcome cursor is invalid or ahead of the store" >&2
       exit 1
     fi
-    if { [ ! -f "$OUTCOME_INDEX_VISIBLE_ONLY" ] || [ ! -f "$OUTCOME_INDEX_READY" ]; } \
-        && ! rebuild_outcome_indexes; then
+    if ! fm_branch_outcome_index_ready_ok "$OUTCOME_INDEX_READY" && ! rebuild_outcome_indexes; then
       fm_lock_release "$LOCK"
       echo "error: outcome index migration could not be completed safely" >&2
       exit 1
@@ -560,8 +560,7 @@ case "$CMD" in
     # reports the teardown it just performed, and writing the index here would
     # recreate the footprint teardown removed. The outcome itself is still
     # stored and delivered; only the reader-less cache is skipped.
-    if [ "$SILENT" != true ] && [ "$TASK" != fleet ] \
-        && { [ -e "$STATE/$TASK.meta" ] || [ -e "$STATE/$TASK.status" ]; } \
+    if [ "$SILENT" != true ] && { [ -e "$STATE/$TASK.meta" ] || [ -e "$STATE/$TASK.status" ]; } \
         && ! write_outcome_index "$TASK" "$SEQ"; then
       fm_lock_release "$LOCK"
       echo "error: outcome was stored but its bounded task index could not be updated" >&2

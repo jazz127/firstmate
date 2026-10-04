@@ -321,6 +321,7 @@ Reparenting and pid reuse can invalidate a remembered chain, and this answer dec
 ## Lost-wake outcome backstop
 
 Every main-actor wake drain checks each task's newest non-blank status event against the latest non-silent supervision-branch outcome that causally covers that task's status log.
+A silent outcome never updates the task's status-coverage index, so the backstop can still surface captain-facing status events.
 When that event is terminal or otherwise captain-facing and remains uncovered, the drain prints it once in `STATUS OUTCOME BACKSTOP`.
 It does so even if the original queue row was already acknowledged.
 Routine events stay silent, and valid open decisions remain owned by `OPEN DECISIONS`.
@@ -345,7 +346,9 @@ This is an accepted limit, not a status-line size contract.
 
 ### Index repair
 
-The [`bin/fm-branch-outcome.sh` header](../bin/fm-branch-outcome.sh) owns index repair and migration, including removal of pre-upgrade silent-derived coverage.
+A missing, legacy, or invalid outcome-index ready marker requires rebuilding the indexes from the authoritative outcome rows under the outcome lock.
+That rebuild runs on the next main drain or before the next append, on every harness; [`bin/fm-branch-outcome.sh`](../bin/fm-branch-outcome.sh) owns the marker format and migration mechanics.
+Only a genuine store fault keeps that backstop skipped.
 
 ## How the branch knows what the captain said
 

@@ -50,7 +50,7 @@ test_branch_prompt_is_byte_stable_and_above_cache_floor() {
     *) fail "branch prompt lost the inlined recovery playbook" ;;
   esac
   case "$out_a" in
-    *"Report verdict captain for the finished result of work the captain requested, even when that result is healthy."*"A start or still-working update on requested work that brings no new artifact, finding, or decision is verdict routine."*"Set silent true for a task-level routine outcome only when it says the worker is still busy, nothing new has happened since the last outcome, and no action was taken."*"Also set it for a routine outcome that only echoes a pause or status record you just wrote or steered, rechecks an already-registered pause whose task state has not changed, or re-confirms a declared pause or open captain hold that still holds on the same terms."*"Any routine outcome reporting an action, state change, or new result stays rendered: recorded as a visible, non-silent outcome for MAIN and recovery, while remaining invisible in captain chat; captain outcomes are never silent."*"Keep an unsolicited routine outcome as verdict routine"*"Keep an unchanged fleet review silent"*) ;;
+    *"Report verdict captain for the finished result of work the captain requested, even when that result is healthy."*"A start or still-working update on requested work that brings no new artifact, finding, or decision is verdict routine."*"Set silent true for a task-level routine outcome only when it says the worker is still busy, nothing new has happened since the last outcome, and no action was taken."*"Also set it for a routine outcome that only echoes a pause or status record you just wrote or steered, rechecks an already-registered pause whose task state has not changed, or re-confirms a declared pause or open captain hold that still holds on the same terms."*"Any routine outcome reporting an action, state change, or new result stays rendered; captain outcomes are never silent."*"Keep an unsolicited routine outcome as verdict routine"*"Keep an unchanged fleet review silent"*) ;;
     *) fail "branch prompt lost the requested-result, progress-routine, or routine-silence rules" ;;
   esac
   case "$out_a" in
@@ -277,11 +277,18 @@ test_outcome_startup_replay_preserves_silence() {
     --task task-a --verdict routine --summary 'worker still busy, nothing new, no action taken' --silent true >/dev/null \
     || fail "silent task-scoped routine append failed"
   [ ! -e "$home/state/.task-a.branch-outcome-index" ] \
-    || fail "silent task outcome covered status in the backstop index"
-  FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" processed-init \
-    || fail "silent-only outcome index rebuild failed"
-  [ ! -e "$home/state/.task-a.branch-outcome-index" ] \
-    || fail "rebuilding gave silent task outcomes status coverage"
+    || fail "silent task outcome created a status-outcome backstop index"
+  FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" append \
+    --task task-a --verdict routine --summary 'worker recovered automatically' >/dev/null \
+    || fail "visible task outcome append failed"
+  visible_index=$(cut -f2 "$home/state/.task-a.branch-outcome-index")
+  [ "$visible_index" = 2 ] || fail "visible task outcome did not become the coverage index: $visible_index"
+  FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" append \
+    --task task-a --verdict routine --summary 'pause still holds' --silent true >/dev/null \
+    || fail "second silent task outcome append failed"
+  index_after_silent=$(cut -f2 "$home/state/.task-a.branch-outcome-index")
+  [ "$index_after_silent" = "$visible_index" ] \
+    || fail "silent outcome replaced the visible status-coverage index: $index_after_silent"
   FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" append \
     --task fleet --verdict routine --summary 'fleet reviewed, nothing changed' --silent true >/dev/null \
     || fail "silent heartbeat append failed"

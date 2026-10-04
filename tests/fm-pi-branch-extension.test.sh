@@ -1894,6 +1894,16 @@ if (!fleetRoutineMerge.message.content.startsWith("⛵ fleet: reconciled the bac
   throw new Error(`fleet routine action note changed: ${fleetRoutineMerge.message.content}`);
 }
 writeFileSync(`${home}/state/task-9.status`, "working: check 1 worker still building\n");
+await heartbeatReport.execute(
+  "task-visible-outcome",
+  { task: "task-9", verdict: "routine", summary: "visible task outcome before silent no-change" },
+  undefined,
+  undefined,
+  {},
+);
+const visibleTaskIndexPath = `${home}/state/.task-9.branch-outcome-index`;
+if (!existsSync(visibleTaskIndexPath)) throw new Error("a visible task outcome did not update its status-coverage index");
+const visibleTaskIndex = readFileSync(visibleTaskIndexPath, "utf8");
 const taskNoChangeSummary = "The check 1 worker is still building. Nothing new has happened.";
 const sentBeforeSilentTask = sentToMain.length;
 const silentTaskResult = await heartbeatReport.execute(
@@ -1913,8 +1923,8 @@ const storedTaskNoChange = outcomeScript(["list", "--recent", "100"]).split("\n"
 if (!storedTaskNoChange || storedTaskNoChange.verdict !== "routine" || storedTaskNoChange.silent !== true) {
   throw new Error("the silent task no-change outcome was not stored durably");
 }
-if (!existsSync(`${home}/state/.task-9.branch-outcome-index`)) {
-  throw new Error("the silent task outcome was omitted from the status-outcome backstop index");
+if (readFileSync(visibleTaskIndexPath, "utf8") !== visibleTaskIndex) {
+  throw new Error("the silent task outcome changed status coverage and could hide a lost wake");
 }
 const outcomesTool = mainTools.find((tool) => tool.name === "fm_branch_outcomes");
 const listedTaskNoChange = await outcomesTool.execute("read-silent-task", { recent: 100 }, undefined, undefined, {});

@@ -166,6 +166,7 @@ describe("operational user rows", () => {
     operational("watcher", "signal: /tmp/x.status changed"),
     operational("turn-end-guard", "supervision is off"),
     operational("away-supervisor", "escalate"),
+    operational("context-refresh", "stow then refresh"),
     operational("launch-brief", "# Task"),
     operational("branch-outcome", "note"),
     operational("watcher", "multi\nline\n\nbody"),

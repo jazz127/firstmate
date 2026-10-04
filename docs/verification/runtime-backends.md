@@ -393,6 +393,10 @@ Removing the `--force` arm makes the forced generic case refuse; honoring `--for
 Restoring `fm_backend_orca_kill`'s swallowed tool check makes the CLI-absent adapter case report success.
 Dropping the retention-is-not-durable line makes the refusal claim a retention teardown does not own.
 
+## Claude context usage
+
+[Supervision verification](supervision.md#claude-context-refresh) owns the versioned Claude context-refresh results, repeatable command, and boundary between credentialed print-mode observations and synthetic watcher tests.
+
 ## Claude workspace trust
 
 Verified 2026-09-03 on Claude Code 2.1.259.

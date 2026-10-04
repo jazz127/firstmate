@@ -506,6 +506,26 @@ The timeout hook trapped `TERM`, backgrounded `sleep 300`, waited, and on `TERM`
 | Control, exit 2 before the timeout | started +2, exited 2 at +12 | `Stop hook feedback` followed by the requested reply |
 | Timeout, exit 2 from the `TERM` handler | started +2, `TERM` and exit 2 at +32 | no `Stop hook feedback` and no reply, still idle at +111 |
 
+## Claude context refresh
+
+The Stop transport, transcript accounting, and automatic print-mode replacement were exercised on 2026-10-04 with Claude Code 2.1.285.
+The guard captured the installed Claude's Stop payload and transcript, matched its latest assistant usage to the CLI result, and observed no crossing with an explicitly high budget.
+A second credentialed probe ran the wrapper with a low budget: the native Stop continuation completed stow and handoff, and exactly one replacement produced two distinct session ids.
+The successor's initial above-budget context inhibited another refresh.
+The probe had no fleet work; watcher transfer and queue retention are synthetic process regressions in `tests/fm-context-restart.test.sh` using the ordinary plain auto-arm and supervision host with a synthetic Claude-shaped process.
+Interactive terminal replacement was not measured.
+
+```sh
+FM_CONTEXT_RESTART_CLAUDE_LIVE_E2E=1 bash bin/fm-test-run.sh tests/fm-context-restart-claude-live-e2e.test.sh
+```
+
+Observed guard output:
+
+```text
+ok - Claude 2.1.285 (Claude Code) live Stop payload session=787fb66a-9da4-4d17-b5f7-9410e3b71bbf exposed transcript usage=43265 and stayed inert below budget
+ok - Claude 2.1.285 (Claude Code) print-mode Stop continuation stowed and replaced once into two distinct sessions; fresh above-budget baseline inhibited further replacement
+```
+
 ## Watcher continuity
 
 The cross-harness evidence combines the 2026-07-17 live pass with Claude's replacement Stop-owned path revalidated on 2026-09-21, all against isolated project and home state.

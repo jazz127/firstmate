@@ -4140,6 +4140,7 @@ export default function (pi: ExtensionAPI): void {
         ["watcher", "CURRENT_WATCHER_E2E /tmp/active-probe.status"],
         ["turn-end-guard", "CURRENT_TURN_END_E2E"],
         ["away-supervisor", "CURRENT_AWAY_E2E"],
+        ["context-refresh", "CURRENT_CONTEXT_REFRESH_E2E"],
         ["from-firstmate", "corr=0123456789abcdef CURRENT_FROM_FIRSTMATE_E2E"],
         ["launch-brief", "CURRENT_LAUNCH_BRIEF_E2E"],
       ] as const);
@@ -4299,6 +4300,7 @@ JSON
     "watcher|CURRENT_WATCHER_E2E" \
     "turn-end-guard|CURRENT_TURN_END_E2E" \
     "away-supervisor|CURRENT_AWAY_E2E" \
+    "context-refresh|CURRENT_CONTEXT_REFRESH_E2E" \
     "from-firstmate|CURRENT_FROM_FIRSTMATE_E2E" \
     "launch-brief|CURRENT_LAUNCH_BRIEF_E2E"
   do
@@ -4336,6 +4338,7 @@ const expected = new Map([
   ["CURRENT_WATCHER_E2E", "watcher"],
   ["CURRENT_TURN_END_E2E", "turn-end-guard"],
   ["CURRENT_AWAY_E2E", "away-supervisor"],
+  ["CURRENT_CONTEXT_REFRESH_E2E", "context-refresh"],
   ["CURRENT_FROM_FIRSTMATE_E2E", "from-firstmate"],
   ["CURRENT_LAUNCH_BRIEF_E2E", "launch-brief"],
 ]);

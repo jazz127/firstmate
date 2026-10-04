@@ -31,7 +31,11 @@
 # silently; an exit status above 128, or no output at all, means the host
 # itself died and the owner retries it. Any other close is judged exactly as
 # the arm's. --restart starts the first cycle with fm-watch-arm.sh --restart,
-# and an FM_WATCH_PREDECESSOR_ARM_PID the owner passes reaches that first
+# FM_SUPERVISION_HOST_TAKE_OVER_ARM_PID, passed by a context-refresh successor
+# auto-arm, instead transfers its first cycle from that wrapper-owned arm via
+# fm-watch-arm.sh --take-over; the value must be a numeric pid and is consumed
+# only once. An explicit --restart takes precedence.
+# An FM_WATCH_PREDECESSOR_ARM_PID the owner passes reaches that first
 # cycle only, for owners that start their own successor after every close
 # (OpenCode, omp).
 #
@@ -1066,9 +1070,15 @@ trap 'exit 130' INT
 activate || { echo "supervision-host stood down: the host record could not be written"; exit 0; }
 log_line "start	gen=$GEN	primary=$PRIMARY"
 
-# The first cycle.
+# The first cycle. A Claude context-refresh successor supplies the bridge arm
+# its hook verified as a child of the previous wrapper-owned transition owner.
+CONTEXT_ARM=${FM_SUPERVISION_HOST_TAKE_OVER_ARM_PID:-}
+case "$CONTEXT_ARM" in ''|*[!0-9]*) CONTEXT_ARM= ;; esac
 if [ "$FIRST_ARM_RESTART" -eq 1 ]; then
   start_arm "$OWNER_PREDECESSOR" --restart
+elif [ -n "$CONTEXT_ARM" ]; then
+  log_line "context-take-over\tarm=$CONTEXT_ARM"
+  start_arm "$OWNER_PREDECESSOR" --take-over "$CONTEXT_ARM"
 elif [ -n "$LEFT_ARM" ]; then
   log_line "take-over	arm=$LEFT_ARM"
   start_arm "$OWNER_PREDECESSOR" --take-over "$LEFT_ARM"

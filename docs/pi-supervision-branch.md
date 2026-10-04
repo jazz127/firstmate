@@ -388,6 +388,10 @@ Stage two is the branch's verdict on each handled event, reported through its `f
 | `routine` | A non-silent outcome uses the custom-message path; a silent outcome is stored without a rendered note. Neither opens a follow-up turn. |
 | `captain` | Appends a versioned `fm-branch-visible-outcome` custom session entry. |
 
+Task-level routine outcomes may be silent when they only echo a pause or status record the branch just wrote or steered, recheck an already-registered pause whose task state has not changed, or re-confirm a declared pause or open captain hold that still holds on the same terms.
+Anything that changed state, any action beyond that echo, a decision, blocker, failure, merge, shipped work, or captain verdict stays rendered; when in doubt, render.
+A silent outcome never updates the task's status-coverage index, so the lost-wake backstop can still surface captain-facing status events.
+
 ### The visible captain entry
 
 The captain entry contains the store sequence, task, verdict, exact summary, and silent flag.

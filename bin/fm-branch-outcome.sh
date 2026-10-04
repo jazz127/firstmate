@@ -8,8 +8,8 @@
 #     "verdict":"routine"|"captain","summary":"...","silent":true|false,
 #     "statusEndpoint":N,"statusIdent":"..."}. Legacy rows without `silent`
 #     or status provenance remain valid and are treated as visible. A silent
-#     row must have verdict `routine`; the branch prompt and delivery consumers
-#     own the additional no-change eligibility rule.
+#     row must have verdict `routine` and never updates the task's status-
+#     coverage index; the branch prompt owns the no-change eligibility rule.
 #     Every read and append validates the complete log as a gap-free sequence;
 #     malformed, duplicate, or reordered rows fail closed.
 #     Existing lines are never rewritten, reordered, or deleted by any
@@ -48,8 +48,9 @@
 #     cache of the latest outcome's status provenance. The authoritative copy
 #     is in the append-only row. $STATE/.branch-outcome-index-ready is removed
 #     before append and published only after the cache update; processed-init
-#     rebuilds every cache before publishing it, so interruption or upgrade
-#     fails closed without making each drain scan lifetime history.
+#     removes and rebuilds every task cache before publishing it, so
+#     interruption or upgrade fails closed without making each drain scan
+#     lifetime history.
 #     bin/fm-teardown.sh removes a retired task's cache with its other records,
 #     and append skips the cache for a task that has neither a live meta nor a
 #     status log (the outcome itself is still stored), so the branch's report
@@ -314,9 +315,10 @@ publish_outcome_index_ready() { # <seq>
 rebuild_outcome_indexes() {
   local rows task seq epoch endpoint ident f mtime
   rm -f -- "$OUTCOME_INDEX_READY" || return 1
+  find "$STATE" -maxdepth 1 -type f -name '.*.branch-outcome-index' -exec rm -f {} + || return 1
   [ -s "$STORE" ] || { publish_outcome_index_ready 0; return; }
   rows=$(jq -r -s '
-    map(select(.task != "fleet"))
+    map(select(.task != "fleet" and .silent != true))
     | group_by(.task)
     | map(.[-1])[]
     | [.task, (.seq | tostring), (.epoch | tostring),
@@ -545,7 +547,7 @@ case "$CMD" in
     # reports the teardown it just performed, and writing the index here would
     # recreate the footprint teardown removed. The outcome itself is still
     # stored and delivered; only the reader-less cache is skipped.
-    if { [ -e "$STATE/$TASK.meta" ] || [ -e "$STATE/$TASK.status" ]; } \
+    if [ "$SILENT" != true ] && { [ -e "$STATE/$TASK.meta" ] || [ -e "$STATE/$TASK.status" ]; } \
         && ! write_outcome_index "$TASK" "$SEQ"; then
       fm_lock_release "$LOCK"
       echo "error: outcome was stored but its bounded task index could not be updated" >&2

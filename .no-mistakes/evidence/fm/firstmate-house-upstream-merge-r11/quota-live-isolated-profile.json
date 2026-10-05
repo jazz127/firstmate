@@ -1,0 +1,23 @@
+{
+  "generatedAt": "2026-10-05T04:57:53.750Z",
+  "schemaVersion": 5,
+  "providers": [
+    {
+      "provider": "codex",
+      "windows": [],
+      "state": {
+        "status": "unavailable",
+        "stale": false,
+        "error": "Codex profile credentials missing"
+      },
+      "accountKeys": [
+        "codex-home"
+      ],
+      "quotaSemantics": {
+        "status": "unknown",
+        "effectiveAvailability": []
+      },
+      "notSetUp": true
+    }
+  ]
+}

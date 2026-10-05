@@ -1,0 +1,4 @@
+quota: quota-codex
+status: error
+detail: quota-axi is missing
+condition_polls: 1

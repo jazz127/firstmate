@@ -1,0 +1,12 @@
+Real worker owner: 33359
+Initial readiness:
+33359
+Mon Oct 5 14:55:17 2026
+Readiness recreated with the serving owner stopped:
+33359
+Mon Oct 5 14:55:17 2026
+Serving process state after 12 seconds:
+33359 T    /bin/bash
+Readiness file timestamp:
+2026-10-05T14:55:30 mode=600
+Probe passed beyond the 10-second freshness bound while serving remained stopped.

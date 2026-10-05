@@ -1,0 +1,4 @@
+quota: quota-codex
+status: error
+detail: 3 consecutive read failures; last quota-axi read failed
+condition_polls: 3

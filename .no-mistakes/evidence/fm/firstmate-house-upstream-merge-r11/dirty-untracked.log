@@ -1,0 +1,23 @@
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M455W9R326CJ1BPJVJB6ADKS/.test-phase/tmp/fm-lab.h0byHV
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no live watcher process holds this home lock (last beat: 1s ago).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  repair missing watcher supervision with a foreground checkpoint: bin/fm-watch-checkpoint.sh --seconds 180.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+REFUSED: local-only worktree /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M455W9R326CJ1BPJVJB6ADKS/.test-phase/tmp/fm-lab.h0byHV/task has work not yet merged into main and not on any remote.
+uncommitted changes present (untracked-only leftovers)
+untracked paths (up to 10):
+  scratch-01.txt
+  scratch-02.txt
+  scratch-03.txt
+  scratch-04.txt
+  scratch-05.txt
+  scratch-06.txt
+  scratch-07.txt
+  scratch-08.txt
+  scratch-09.txt
+  scratch-10.txt
+  ... additional untracked paths omitted
+Merge the branch into local main first (bin/fm-merge-local.sh after the captain approves), or push to a fork/remote, or get the captain's explicit OK to discard, then --force.

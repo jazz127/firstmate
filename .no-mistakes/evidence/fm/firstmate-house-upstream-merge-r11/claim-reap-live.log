@@ -1,0 +1,4 @@
+Product job result: id=job-YJmPdK state=done exit=0 elapsed=1s deadline=15s
+Product command side effect: ran
+Claim sweep: seeded=17460 expired=8730 remaining=8731 fresh-boundary=8731
+ok - a due claim sweep over ~17460 dirs does not starve job serving

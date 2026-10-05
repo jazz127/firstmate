@@ -1,0 +1,4 @@
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+promoted promote-direct-pr to ship mode=direct-PR yolo=off (teardown protection restored)
+wrote ship instructions for mode=direct-PR: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M455W9R326CJ1BPJVJB6ADKS/.test-phase/tmp/fm-lab.JapAko/data/promote-direct-pr/ship-instructions.md
+next: FM_HOME=/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M455W9R326CJ1BPJVJB6ADKS/.test-phase/tmp/fm-lab.JapAko bin/fm-send.sh fm-promote-direct-pr "$(cat /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M455W9R326CJ1BPJVJB6ADKS/.test-phase/tmp/fm-lab.JapAko/data/promote-direct-pr/ship-instructions.md)"

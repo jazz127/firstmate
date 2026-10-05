@@ -1,0 +1,23 @@
+
+quota-live-environment.log
+Isolated quota-axi JSON exit status: 1 (missing disposable profile credentials).
+
+quota-live-failure-budget.log
+quota: quota-codex
+status: error
+detail: 3 consecutive read failures; last quota-axi read failed
+condition_polls: 3
+
+quota-live-invocations.log
+--version
+--json
+--version
+--json
+--version
+--json
+
+quota-live-missing.log
+quota: quota-codex
+status: error
+detail: quota-axi is missing
+condition_polls: 1

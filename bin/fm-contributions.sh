@@ -412,7 +412,9 @@ closeout_signal() { # task canonical-url row-file
   meta="$STATE/$task.meta"
   # The contribution record survives teardown so later feedback is still
   # observed; a missing task record means closeout has already happened.
-  [ -f "$meta" ] && [ ! -L "$meta" ] || return 0
+  fm_pr_metadata_identity_parse "$meta" || return 0
+  [ "$FM_PR_META_URL" = "$url" ] || return 0
+  [ "$(sed -n 's/^kind=//p' "$meta" | tail -1)" = ship ] || return 0
   since=$(jq -r '.closeout_since // ""' "$row")
   old_notice=$(jq -r '.closeout_notice // ""' "$row")
   checked_seconds=$(jq -nr --arg at "$since" '$at | fromdateiso8601') || return 0
@@ -427,10 +429,7 @@ closeout_signal() { # task canonical-url row-file
   status=ready
   if jq -e '(.pending | length) > 0' "$row" >/dev/null; then
     status=review
-  elif ! jq -e '
-    (.observation.checks | length) > 0
-    and all((.observation.checks | group_by(.name) | map(sort_by([(.started_at // ""),(.id // 0)]) | last))[];
-      .status == "completed" and (.conclusion | IN("success","skipped","neutral")))' "$row" >/dev/null; then
+  elif ! jq_lib -e '.observation | check_readiness | .reason == null' < "$row" >/dev/null; then
     status=ci
   else
     wt=$(sed -n 's/^worktree=//p' "$meta" | tail -1)

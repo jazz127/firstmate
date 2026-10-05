@@ -34,6 +34,20 @@ def known($input; $saved):
   | unique_by([.task,.url]);
 def latest_checks:
   group_by(.name) | map(sort_by([(.started_at // ""),(.id // 0)]) | last);
+def check_readiness:
+  . as $o
+  | ((.checks // []) | latest_checks) as $checks
+  | {distinct_checks:($checks | length),
+     missing_verdicts:(([$checks[] | select(.status == "completed" and (.conclusion == null or .conclusion == ""))] | length)
+       + (($o.absent_checks // []) | length)),
+     pending_checks:([$checks[] | select(.status != "completed")] | length),
+     failed_checks:([$checks[] | select(.status == "completed" and .conclusion != null
+       and .conclusion != "" and (.conclusion | IN("success","skipped","neutral") | not))] | length)}
+  | . + {reason:(if .failed_checks > 0 then "checks failed"
+      elif .missing_verdicts > 0 then "check lane has no verdict"
+      elif .distinct_checks == 0 then "no reported checks; readiness unconfirmed"
+      elif .pending_checks > 0 then "checks still running"
+      else null end)};
 def projected($input; $saved; $now; $max_age):
   known($input; $saved) as $known
   | [$known[] as $k
@@ -54,11 +68,7 @@ def projected($input; $saved; $now; $max_age):
        and (if $record.kind == "pr" then $observed_head != null
             else $record.error == null and $record.observation != null end)
        and ($k.url | startswith("https://github.com/"))) as $fresh
-    | (($o.checks // []) | latest_checks) as $checks
-    | [$checks[] | select(.status == "completed" and (.conclusion == null or .conclusion == ""))] as $no_verdict
-    | [$checks[] | select(.status != "completed")] as $pending
-    | [$checks[] | select(.status == "completed" and .conclusion != null
-        and .conclusion != "" and (.conclusion | IN("success","skipped","neutral") | not))] as $failed
+    | ($o | check_readiness) as $ci
     | (($record.verdict != null) and $observed_head != null and ($record.verdict.head != $observed_head)) as $stale
     | (if $record.verdict == null then null
        else $record.verdict + {freshness:(if $stale then "STALE" elif $fresh then "current" else "unverified" end)} end) as $verdict
@@ -79,11 +89,7 @@ def projected($input; $saved; $now; $max_age):
          else {actor:"maintainer",reason:"awaiting issue triage"} end
        elif $o.draft then {actor:"fleet",reason:"draft delivery"}
        elif $o.mergeable != "mergeable" then {actor:"fleet",reason:("mergeability " + ($o.mergeable // "unknown"))}
-       elif ($failed | length) > 0 then {actor:"fleet",reason:"checks failed"}
-       elif ($no_verdict | length) > 0 or (($o.absent_checks // []) | length) > 0 then
-         {actor:"fleet",reason:"check lane has no verdict"}
-       elif ($checks | length) == 0 then {actor:"fleet",reason:"no reported checks; readiness unconfirmed"}
-       elif ($pending | length) > 0 then {actor:"fleet",reason:"checks still running"}
+       elif $ci.reason != null then {actor:"fleet",reason:$ci.reason}
        elif $o.review_decision == "CHANGES_REQUESTED" then {actor:"fleet",reason:"forge requests changes"}
        elif $verdict != null and $verdict.actor == "fleet" then {actor:"fleet",reason:$verdict.summary}
        elif $verdict != null and $verdict.actor == "captain" then
@@ -95,8 +101,8 @@ def projected($input; $saved; $now; $max_age):
        else {actor:"maintainer",reason:"delivery awaits the maintainer"} end) as $action
     | $k + {kind:($record.kind // (if ($k.url | contains("/issues/")) then "issue" else "pr" end)),
          checked_at:$record.checked_at,checked:$fresh,final:$final,head:($observed_head // $recorded_head // $o.head),verdict:$verdict,reviews:$reviews,
-         distinct_checks:($checks | length),missing_verdicts:(($no_verdict | length) + (($o.absent_checks // []) | length)),
-         pending_checks:($pending | length),failed_checks:($failed | length),
+         distinct_checks:$ci.distinct_checks,missing_verdicts:$ci.missing_verdicts,
+         pending_checks:$ci.pending_checks,failed_checks:$ci.failed_checks,
          stale_verdicts:((if $stale then 1 else 0 end) + ([$reviews[] | select(.freshness == "STALE")] | length)),
          signals:($record.pending // [])} + $action]
   # Multiple filed tasks may own the same URL. Retain every owner but count a

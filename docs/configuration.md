@@ -621,9 +621,10 @@ Later PR timestamp updates and CI reruns do not move an existing window.
 It applies only when the PR base repository is outside this home's merge scope, regardless of whether the head and base repositories differ.
 Owned repositories are the GitHub origin repositories of projects registered in `data/projects.md`, plus repositories under owners listed in the optional `config/house-fork-owners` file (one GitHub owner per line, for example `jazz127`).
 Fork PRs into those repositories retain cleanup-after-merge.
-At expiry, the observer signals Firstmate to close out only when the latest checks pass, no contribution feedback remains unacknowledged, and the task worktree is clean.
+Closeout signals apply only to a live ship task whose current canonical `pr=` matches the observed URL; retained links to replaced PRs continue observing feedback without producing closeout signals.
+At expiry, the observer signals Firstmate to close out only when every latest check lane passes, no previously observed lane is missing, no contribution feedback remains unacknowledged, and the task worktree is clean.
 An older `CHANGES_REQUESTED` decision does not block closeout, and a clean worker checkout may precede the published PR head.
-Red or pending checks, any unacknowledged feedback, or dirty work produce a closeout hold signal and leave the task in place.
+Red, pending, or missing checks, any unacknowledged feedback, or dirty work produce a closeout hold signal and leave the task in place.
 Firstmate still owns cleanup through the guarded `bin/fm-teardown.sh` path, which verifies that work is landed or pushed; a teardown refusal leaves the task intact.
 Missing repository identity does not opt a PR into outside-repository cleanup.
 Malformed values disable closeout and wake Firstmate once for that configuration-error episode instead of using the default.

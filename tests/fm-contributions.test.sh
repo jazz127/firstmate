@@ -245,15 +245,38 @@ test_review_wake() { test_incoming_signal review; }
 test_inline_wake() { test_incoming_signal inline; }
 
 test_missing_lane_remains_missing() {
-  local home
+  local home out
   home=$(new_home absent-lane)
   forge_home "$home"
-  mutate_record "$home" delivery '.records[0].observation.checks += [{name:"required-extra",id:2,status:"completed",conclusion:"success",started_at:"2026-09-16T07:59:00Z"}]'
-  with_home "$home" "$ROOT/bin/fm-contributions.sh" poll >/dev/null || fail 'first poll failed'
-  with_home "$home" "$ROOT/bin/fm-contributions.sh" poll >/dev/null || fail 'second poll failed'
-  bearings "$home" | jq -e '.contributions.missing_verdicts == 1 and .contributions.counts.fleet == 1' >/dev/null \
+  with_home "$home" "$ROOT/bin/fm-pr-check.sh" delivery https://github.com/o/r/pull/8 >/dev/null \
+    || fail 'could not register the current PR for missing CI lanes'
+  printf '%s\n' '[{"check_runs":[
+    {"name":"test","id":1,"status":"completed","conclusion":"success","started_at":"2026-09-16T08:00:00Z"},
+    {"name":"required-extra","id":2,"status":"completed","conclusion":"success","started_at":"2026-09-16T08:00:00Z"}]}]' > "$home/forge/checks.json"
+  with_home "$home" "$ROOT/bin/fm-contributions.sh" poll >/dev/null || fail 'baseline CI poll failed'
+  printf '%s\n' "$HEAD_B" > "$home/forge/head"
+  printf '%s\n' '[{"check_runs":[{"name":"test","id":3,"status":"completed","conclusion":"success","started_at":"2026-09-16T10:00:00Z"}]}]' > "$home/forge/checks.json"
+  with_home "$home" env FM_CONTRIBUTIONS_NOW=2026-09-16T10:00:00Z "$ROOT/bin/fm-contributions.sh" poll >/dev/null \
+    || fail 'replacement head CI poll failed'
+  out=$(with_home "$home" env FM_CONTRIBUTIONS_NOW=2026-09-16T12:00:00Z "$ROOT/bin/fm-contributions.sh" poll) \
+    || fail 'missing lane expiry poll failed'
+  case "$out" in *'state=ci'*) ;; *) fail "a missing CI lane allowed closeout: $out" ;; esac
+  case "$out" in *'state=ready'*) fail 'missing CI lane counted as green' ;; esac
+  out=$(with_home "$home" env FM_CONTRIBUTIONS_NOW=2026-09-16T12:05:00Z "$ROOT/bin/fm-contributions.sh" poll) \
+    || fail 'repeated missing lane poll failed'
+  [ -z "$out" ] || fail "a stable missing lane repeated its closeout hold: $out"
+  NOW=2026-09-16T12:05:00Z bearings "$home" | jq -e '.contributions.missing_verdicts == 1 and .contributions.counts.fleet == 1' >/dev/null \
     || fail 'repeated polling erased the absent lane from measured readiness'
-  pass 'an absent check lane remains missing across repeated observations'
+  printf '%s\n' '[{"check_runs":[
+    {"name":"test","id":1,"status":"completed","conclusion":"failure","started_at":"2026-09-16T07:00:00Z"},
+    {"name":"test","id":3,"status":"completed","conclusion":"neutral","started_at":"2026-09-16T10:00:00Z"},
+    {"name":"required-extra","id":4,"status":"completed","conclusion":"skipped","started_at":"2026-09-16T12:10:00Z"}]}]' > "$home/forge/checks.json"
+  out=$(with_home "$home" env FM_CONTRIBUTIONS_NOW=2026-09-16T12:10:00Z "$ROOT/bin/fm-contributions.sh" poll) \
+    || fail 'restored lane poll failed'
+  case "$out" in *'state=ready'*) ;; *) fail "restored passing lanes did not permit closeout: $out" ;; esac
+  NOW=2026-09-16T12:10:00Z bearings "$home" | jq -e '.contributions.missing_verdicts == 0 and .contributions.counts.maintainer == 1' >/dev/null \
+    || fail 'restored latest lanes did not restore contribution readiness'
+  pass 'absent CI lanes hold closeout until every latest lane reports a passing verdict'
 }
 
 test_partial_freshness_keeps_measured_rows() {
@@ -1169,6 +1192,8 @@ test_own_repository_pr_is_unchanged() {
   done
   home=$(new_home owned-house-fork)
   forge_home "$home"
+  with_home "$home" "$ROOT/bin/fm-pr-check.sh" delivery https://github.com/o/r/pull/8 >/dev/null \
+    || fail 'could not register the current closeout PR'
   printf '2026-09-16T08:00:00Z\n' > "$home/forge/pr-time"
   printf 'jazz127/r\n' > "$home/forge/base-repo"
   mkdir "$home/review-config"
@@ -1190,6 +1215,8 @@ test_non_github_authority_remains_outside() {
     n=$((n + 1))
     home=$(new_home "outside-authority-$n")
     forge_home "$home"
+    with_home "$home" "$ROOT/bin/fm-pr-check.sh" delivery https://github.com/o/r/pull/8 >/dev/null \
+      || fail 'could not register the current closeout PR'
     printf '2026-09-16T08:00:00Z\n' > "$home/forge/pr-time"
     mkdir -p "$home/projects/registered"
     git -C "$home/projects/registered" init -q
@@ -1207,6 +1234,8 @@ test_initial_observation_uses_forge_timestamp() {
   for timestamp_kind in pr-time pr-created-time; do
     home=$(new_home "initial-forge-timestamp-$timestamp_kind")
     forge_home "$home"
+    with_home "$home" "$ROOT/bin/fm-pr-check.sh" delivery https://github.com/o/r/pull/8 >/dev/null \
+      || fail 'could not register the current closeout PR'
     printf '2026-09-16T08:00:00Z\n' > "$home/forge/$timestamp_kind"
     printf 'owner/r\n' > "$home/forge/head-repo"
     out=$(with_home "$home" env FM_CONTRIBUTIONS_NOW=2026-09-16T11:00:00Z "$ROOT/bin/fm-contributions.sh" poll) \
@@ -1227,6 +1256,8 @@ test_missing_forge_timestamp_falls_back_to_observation() {
   local home out
   home=$(new_home missing-forge-timestamp)
   forge_home "$home"
+  with_home "$home" "$ROOT/bin/fm-pr-check.sh" delivery https://github.com/o/r/pull/8 >/dev/null \
+    || fail 'could not register the current closeout PR'
   out=$(with_home "$home" env FM_CONTRIBUTIONS_NOW=2026-09-16T11:00:00Z "$ROOT/bin/fm-contributions.sh" poll) \
     || fail 'observation without forge timestamp failed'
   [ -z "$out" ] || fail "missing forge timestamp expired the window immediately: $out"
@@ -1243,6 +1274,8 @@ test_worker_head_can_precede_published_head() {
   local home out
   home=$(new_home pipeline-descendant-head)
   forge_home "$home"
+  with_home "$home" "$ROOT/bin/fm-pr-check.sh" delivery https://github.com/o/r/pull/8 >/dev/null \
+    || fail 'could not register the current closeout PR'
   printf '2026-09-16T08:00:00Z\n' > "$home/forge/pr-time"
   git -C "$home/wt" update-ref refs/remotes/fork/offer HEAD
   printf 'pipeline fix\n' >> "$home/wt/tracked"
@@ -1303,6 +1336,8 @@ test_returned_head_restarts_closeout_window() {
   local home out initial_head
   home=$(new_home returned-head-closeout)
   forge_home "$home"
+  with_home "$home" "$ROOT/bin/fm-pr-check.sh" delivery https://github.com/o/r/pull/8 >/dev/null \
+    || fail 'could not register the current closeout PR'
   printf '2026-09-16T08:00:00Z\n' > "$home/forge/pr-time"
   initial_head=$(cat "$home/forge/head")
   out=$(with_home "$home" env FM_CONTRIBUTIONS_NOW=2026-09-16T08:00:00Z "$ROOT/bin/fm-contributions.sh" poll) \
@@ -1354,6 +1389,8 @@ test_unacknowledged_feedback_with_observation_fallback() {
   for type in review comment inline; do
     home=$(new_home "feedback-fallback-$type")
     forge_home "$home"
+    with_home "$home" "$ROOT/bin/fm-pr-check.sh" delivery https://github.com/o/r/pull/8 >/dev/null \
+      || fail 'could not register the current closeout PR'
     case "$type" in review) fixture=reviews ;; comment) fixture=comments ;; inline) fixture=inline ;; esac
     jq -n --arg head "$(cat "$home/forge/head")" '[{id:12,user:{login:"maintainer"},author_association:"OWNER",
       body:"Please clarify",html_url:"https://github.com/o/r/pull/8#feedback-12",
@@ -1378,6 +1415,8 @@ test_unanswered_feedback_and_dirty_worktree_hold_closeout() {
   for type in review comment inline; do
     home=$(new_home "feedback-closeout-$type")
     forge_home "$home"
+    with_home "$home" "$ROOT/bin/fm-pr-check.sh" delivery https://github.com/o/r/pull/8 >/dev/null \
+      || fail 'could not register the current closeout PR'
     printf '2026-09-16T08:00:00Z\n' > "$home/forge/pr-time"
     printf 'CHANGES_REQUESTED\n' > "$home/forge/review-decision"
     case "$type" in review) fixture=reviews ;; comment) fixture=comments ;; inline) fixture=inline ;; esac
@@ -1430,8 +1469,64 @@ test_unanswered_feedback_and_dirty_worktree_hold_closeout() {
   pass 'unanswered review feedback and dirty worktrees hold closeout'
 }
 
+test_replaced_pr_cannot_closeout_current_task() {
+  local home out token
+  home=$(new_home replaced-pr-closeout)
+  forge_home "$home"
+  with_home "$home" "$ROOT/bin/fm-pr-check.sh" delivery https://github.com/o/r/pull/8 >/dev/null \
+    || fail 'could not register original PR'
+  with_home "$home" "$ROOT/bin/fm-contributions.sh" poll >/dev/null || fail 'original PR observation failed'
+  with_home "$home" "$ROOT/bin/fm-pr-check.sh" delivery https://github.com/o/r/pull/9 >/dev/null \
+    || fail 'could not replace task PR'
+  printf '2026-09-16T11:00:00Z\n' > "$home/forge/pr-time"
+  out=$(with_home "$home" env FM_CONTRIBUTIONS_NOW=2026-09-16T11:00:00Z "$ROOT/bin/fm-contributions.sh" poll) \
+    || fail 'replacement PR observation failed'
+  [ -z "$out" ] && [ ! -s "$home/state/.wake-queue" ] \
+    || fail "the expired original PR bypassed the current PR window: $out"
+  jq -e '(.records | length) == 2 and any(.records[]; .url == "https://github.com/o/r/pull/8"
+    and .closeout_since == "2026-09-16T08:00:00Z" and .closeout_notice == null)
+    and any(.records[]; .url == "https://github.com/o/r/pull/9" and .closeout_since == "2026-09-16T11:00:00Z")' \
+    "$home/data/delivery/contributions.json" >/dev/null || fail 'replacement discarded the original contribution or reused its window'
+  printf '%s\n' '[{"id":12,"user":{"login":"maintainer"},"author_association":"OWNER",
+    "body":"Please clarify","html_url":"https://github.com/o/r/pull/8#issuecomment-12","updated_at":"2026-09-16T11:30:00Z"}]' > "$home/forge/comments.json"
+  out=$(with_home "$home" env FM_CONTRIBUTIONS_NOW=2026-09-16T11:30:00Z "$ROOT/bin/fm-contributions.sh" poll) \
+    || fail 'retained PR feedback observation failed'
+  jq -e 'any(.records[]; .url == "https://github.com/o/r/pull/8" and (.pending | length) == 1)' \
+    "$home/data/delivery/contributions.json" >/dev/null || fail 'replaced PR stopped observing feedback'
+  case "$out" in *'contributions closeout'*) fail "retained PR feedback emitted a closeout signal: $out" ;; esac
+  token=$(jq -r '.records[] | select(.url == "https://github.com/o/r/pull/9") | .pending[0].token' "$home/data/delivery/contributions.json")
+  with_home "$home" "$ROOT/bin/fm-contributions.sh" ack delivery https://github.com/o/r/pull/9 "$token" \
+    || fail 'current PR feedback acknowledgement failed'
+  out=$(with_home "$home" env FM_CONTRIBUTIONS_NOW=2026-09-16T13:00:00Z "$ROOT/bin/fm-contributions.sh" poll) \
+    || fail 'current PR expiry observation failed'
+  [ "$out" = "contribution-wake: check: contributions closeout delivery https://github.com/o/r/pull/9 head=$(cat "$home/forge/head") state=ready" ] \
+    || fail "expiry did not select only the current PR: $out"
+  pass 'replaced PRs retain feedback observation while only the current PR can close out a ship'
+}
+
+test_closeout_requires_current_ship_metadata() {
+  local home out scenario
+  for scenario in scout secondmate missing-kind missing-pr invalid-pr duplicate-pr; do
+    home=$(new_home "closeout-metadata-$scenario")
+    forge_home "$home"
+    printf '0\n' > "$home/config/outside-pr-review-window-hours"
+    case "$scenario" in
+      scout|secondmate) printf 'worktree=%s/wt\nkind=%s\npr=https://github.com/o/r/pull/8\n' "$home" "$scenario" ;;
+      missing-kind) printf 'worktree=%s/wt\npr=https://github.com/o/r/pull/8\n' "$home" ;;
+      missing-pr) printf 'worktree=%s/wt\nkind=ship\n' "$home" ;;
+      invalid-pr) printf 'worktree=%s/wt\nkind=ship\npr=https://github.com/o/r/pull/8?bad\n' "$home" ;;
+      duplicate-pr) printf 'worktree=%s/wt\nkind=ship\npr=https://github.com/o/r/pull/8\npr=https://github.com/o/r/pull/9\n' "$home" ;;
+    esac > "$home/state/delivery.meta"
+    out=$(with_home "$home" "$ROOT/bin/fm-contributions.sh" poll) || fail 'ineligible task observation failed'
+    [ -z "$out" ] && [ ! -s "$home/state/.wake-queue" ] || fail "$scenario metadata authorized closeout: $out"
+    jq -e '.records[0].checked_at == "2026-09-16T08:00:00Z" and .records[0].error == null' \
+      "$home/data/delivery/contributions.json" >/dev/null || fail "$scenario task stopped observing its linked contribution"
+  done
+  pass 'closeout requires a ship with one valid current canonical PR'
+}
+
 failures=0
-for test_name in test_actor_coverage test_stale_verdict test_unchecked_is_not_silence test_newest_check_has_no_verdict test_comment_wake test_review_wake test_inline_wake test_ready_issue_wake test_fresh_issue_requires_maintainer test_missing_lane_remains_missing test_partial_freshness_keeps_measured_rows test_malformed_record_cannot_prove_silence test_issue_timeline_and_exact_ack test_verdict_retains_judged_head test_verdict_actor_values_are_discoverable test_observed_replacement_refreshes_verdict test_unobserved_head_leaves_verdict_unknown test_away_yolo_is_fleet_work test_away_yolo_cross_home_is_fleet_work test_retired_and_unsupported_coverage test_unsupported_forge_is_not_fleet_work test_held_unsupported_forge_is_not_captain_work test_shared_contribution_signal_wakes_once test_watcher_keeps_diagnostics_separate_from_contribution_wakes test_expired_child_unsupported_forge_stays_unmeasured test_watcher_surfaces_new_contribution_once test_home_summary_coverage test_unreadable_pending_is_not_empty test_record_task_identity_matches_dirname_basename test_read_only_views_create_no_state test_budget_refusal_between_calls test_budget_bounded_call_timeout test_genuine_failure_near_deadline_is_unavailable test_shared_url_observed_once test_terminal_contribution_settles test_late_owner_inherits_terminal_observation test_interrupted_multi_owner_poll_settles_every_owner test_done_task_open_pr_still_observed test_reservation_defers_later_url_when_fifteen_seconds_do_not_remain test_three_second_pr_reads_complete_fresh_in_one_cycle test_slow_read_deadline_kill_is_budget_refusal test_unmeasured_url_does_not_starve_the_tail test_budget_is_cut_down_to_the_watcher_check_bound test_arm_plumbs_a_configured_budget_into_the_check_shim test_unavailable_forge_records_error_and_wakes_once_per_episode test_late_owner_keeps_failure_episode_suppressed test_outside_pr_closeout_window_and_green_ci test_own_repository_pr_is_unchanged test_red_ci_holds_closeout test_new_push_restarts_closeout_window test_zero_and_malformed_closeout_window test_unanswered_feedback_and_dirty_worktree_hold_closeout test_initial_observation_uses_forge_timestamp test_missing_forge_timestamp_falls_back_to_observation test_worker_head_can_precede_published_head test_returned_head_restarts_closeout_window test_unacknowledged_feedback_with_observation_fallback test_non_github_authority_remains_outside; do
+for test_name in test_actor_coverage test_stale_verdict test_unchecked_is_not_silence test_newest_check_has_no_verdict test_comment_wake test_review_wake test_inline_wake test_ready_issue_wake test_fresh_issue_requires_maintainer test_missing_lane_remains_missing test_partial_freshness_keeps_measured_rows test_malformed_record_cannot_prove_silence test_issue_timeline_and_exact_ack test_verdict_retains_judged_head test_verdict_actor_values_are_discoverable test_observed_replacement_refreshes_verdict test_unobserved_head_leaves_verdict_unknown test_away_yolo_is_fleet_work test_away_yolo_cross_home_is_fleet_work test_retired_and_unsupported_coverage test_unsupported_forge_is_not_fleet_work test_held_unsupported_forge_is_not_captain_work test_shared_contribution_signal_wakes_once test_watcher_keeps_diagnostics_separate_from_contribution_wakes test_expired_child_unsupported_forge_stays_unmeasured test_watcher_surfaces_new_contribution_once test_home_summary_coverage test_unreadable_pending_is_not_empty test_record_task_identity_matches_dirname_basename test_read_only_views_create_no_state test_budget_refusal_between_calls test_budget_bounded_call_timeout test_genuine_failure_near_deadline_is_unavailable test_shared_url_observed_once test_terminal_contribution_settles test_late_owner_inherits_terminal_observation test_interrupted_multi_owner_poll_settles_every_owner test_done_task_open_pr_still_observed test_reservation_defers_later_url_when_fifteen_seconds_do_not_remain test_three_second_pr_reads_complete_fresh_in_one_cycle test_slow_read_deadline_kill_is_budget_refusal test_unmeasured_url_does_not_starve_the_tail test_budget_is_cut_down_to_the_watcher_check_bound test_arm_plumbs_a_configured_budget_into_the_check_shim test_unavailable_forge_records_error_and_wakes_once_per_episode test_late_owner_keeps_failure_episode_suppressed test_outside_pr_closeout_window_and_green_ci test_own_repository_pr_is_unchanged test_red_ci_holds_closeout test_new_push_restarts_closeout_window test_zero_and_malformed_closeout_window test_unanswered_feedback_and_dirty_worktree_hold_closeout test_initial_observation_uses_forge_timestamp test_missing_forge_timestamp_falls_back_to_observation test_worker_head_can_precede_published_head test_returned_head_restarts_closeout_window test_unacknowledged_feedback_with_observation_fallback test_non_github_authority_remains_outside test_replaced_pr_cannot_closeout_current_task test_closeout_requires_current_ship_metadata; do
   ( "$test_name" ) || failures=$((failures + 1))
 done
 [ "$failures" -eq 0 ] || fail "$failures contribution regressions"

@@ -19,7 +19,9 @@ Tell the captain the PR's full `https://...` URL copied from the worker's ready 
 A captain instruction to merge is explicit authority; `yolo` is the only standing routine merge authority.
 
 An outside-PR closeout wake is `check: contributions closeout <task> <url> head=<sha> state=<ready|review|ci|workspace>`.
+Before acting on any closeout wake, confirm that the live task is a ship and its current canonical `pr=` matches the wake's URL; disregard a stale wake for a replaced PR or retired task.
 For `state=ready`, confirm that the wake's PR head is still current and the closeout conditions still hold, then run the ordinary guarded teardown; if the head changed, a closeout condition fails, or teardown refuses, leave the task in place and report the reason.
+CI is ready only when every latest check lane has a passing verdict and no previously observed lane is missing.
 For `state=review`, `state=ci`, or `state=workspace`, leave the task in place and surface the unacknowledged feedback, check result, or workspace state.
 Any unacknowledged contribution feedback holds closeout, even after a newer push; acknowledged feedback never holds it.
 An older review decision alone does not hold closeout; a clean worker checkout behind the published PR head still uses the ordinary guarded teardown safety gate.

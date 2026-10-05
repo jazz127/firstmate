@@ -3,7 +3,8 @@
 # Usage: fm-afk-spend-count.sh <state-dir>
 # This is an admission snapshot shared with return reporting, not token metering.
 # Live lifecycle locks and unresolved launch cleanup reserve spending capacity.
-# Unreadable, ambiguous and unverified endpoint state counts conservatively.
+# Unreadable, ambiguous, unverified and timed-out reads count conservatively.
+# Backend presence, activity and current-state calls each have a 5s budget.
 # Orca, Zellij and cmux have no recovery-grade death classifier, so a failed
 # presence probe cannot exclude their recorded endpoints. Raw tmux absence is
 # also unproven: fm_control_endpoint_absence_verdict owns that proof boundary.

@@ -70,8 +70,8 @@
 # eligible outside-repository PR on its first observation. Initially the PR's
 # updated_at (or created_at) starts the window when available, otherwise first
 # observation does. Every observed head change starts a new window at that poll,
-# including a return to an older SHA. Registered project origins
-# and owners listed in config/house-fork-owners retain merge-based cleanup.
+# including a return to an older SHA. PR base repositories
+# with authenticated write-or-higher permission retain merge-based cleanup.
 # Malformed values disable closeout and print one diagnostic per error episode.
 #
 # New maintainer comments/reviews (OWNER, MEMBER, COLLABORATOR, excluding the
@@ -242,7 +242,7 @@ wait_forges() { # background forge pids from one independent read wave
 }
 
 observe() { # canonical GitHub URL -> normalized JSON
-  local url=$1 part number kind endpoint head after label
+  local url=$1 part number kind endpoint head after label base_repo
   case "$url" in https://github.com/*) ;; *) return 1 ;; esac
   part=${url#https://github.com/}; number=${part##*/}; part=${part%/*}; kind=${part##*/}; part=${part%/*}
   case "$kind" in pull) endpoint="repos/$part/pulls/$number" ;; issues) endpoint="repos/$part/issues/$number" ;; *) return 1 ;; esac
@@ -252,6 +252,7 @@ observe() { # canonical GitHub URL -> normalized JSON
   jq -e '(.state == "open" or .state == "closed") and (.user.login | type == "string")' "$TMP/core.json" >/dev/null || return 1
   if [ "$kind" = pull ]; then
     head=$(jq -er '.head.sha | select(test("^[a-fA-F0-9]{40}$"))' "$TMP/core.json") || return 1
+    base_repo=$(jq -er '.base.repo.full_name | select(type == "string" and test("^[A-Za-z0-9-]+/[A-Za-z0-9._-]+$"))' "$TMP/core.json") || return 1
     FORGE_ERR="$TMP/comments.err" forge api "repos/$part/issues/$number/comments?per_page=100" --paginate --slurp > "$TMP/comments.json" &
     local comments_pid=$!
     FORGE_ERR="$TMP/reviews.err" forge api "$endpoint/reviews?per_page=100" --paginate --slurp > "$TMP/reviews.json" &
@@ -262,9 +263,13 @@ observe() { # canonical GitHub URL -> normalized JSON
     local checks_pid=$!
     FORGE_ERR="$TMP/statuses.err" forge api "repos/$part/commits/$head/statuses?per_page=100" --paginate --slurp > "$TMP/statuses.json" &
     local statuses_pid=$!
-    FORGE_ERR="$TMP/repo.err" forge api "repos/$part" > "$TMP/repo.json" &
+    # shellcheck disable=SC2016
+    FORGE_ERR="$TMP/repo.err" forge api graphql \
+      -f query='query($owner:String!,$repo:String!){repository(owner:$owner,name:$repo){viewerPermission}}' \
+      -f owner="${base_repo%%/*}" -f repo="${base_repo#*/}" > "$TMP/repo.json" &
     local repo_pid=$!
     wait_forges "$comments_pid" "$reviews_pid" "$inline_pid" "$checks_pid" "$statuses_pid" "$repo_pid" || return 1
+    jq -e '.data.repository.viewerPermission | IN("ADMIN","MAINTAIN","WRITE","TRIAGE","READ")' "$TMP/repo.json" >/dev/null || return 1
     jq -e 'type == "array" and all(.[]; type == "array")' "$TMP/comments.json" >/dev/null || return 1
     forge pr view "$url" --json headRefOid,reviewDecision > "$TMP/after.json" || return 1
     after=$(jq -er .headRefOid "$TMP/after.json")
@@ -279,7 +284,8 @@ observe() { # canonical GitHub URL -> normalized JSON
           updated_at:([$c.updated_at,$c.created_at] | map(select(type == "string")
             | select(try (fromdateiso8601 | type == "number") catch false)) | first),
           draft:$c.draft,mergeable:(if $c.mergeable == true then "mergeable" elif $c.mergeable == false then "conflicting" else "unknown" end),
-          can_merge:($repo[0].permissions.push // false),
+          viewer_permission:$repo[0].data.repository.viewerPermission,
+          can_merge:($repo[0].data.repository.viewerPermission | IN("ADMIN","MAINTAIN","WRITE")),
           review_decision:($after[0].reviewDecision // ""),
           reviews:$reviews,
           checks:([ $checks[0][] | .check_runs[] | {name,id,status,conclusion,started_at} ]
@@ -359,56 +365,16 @@ closeout_window() {
   return 1
 }
 
-repository_is_owned() {
-  local base_repo=$1 owner project project_dir prefix origin authority host repo
-  base_repo=$(printf '%s' "$base_repo" | tr '[:upper:]' '[:lower:]')
-  if [ -f "$CONFIG/house-fork-owners" ]; then
-    while IFS= read -r owner || [ -n "$owner" ]; do
-      owner=$(printf '%s' "$owner" | tr '[:upper:]' '[:lower:]')
-      [ -n "$owner" ] || continue
-      [ "${base_repo%%/*}" != "$owner" ] || return 0
-    done < "$CONFIG/house-fork-owners"
-  fi
-  [ -f "$DATA/projects.md" ] || return 1
-  while IFS= read -r project; do
-    case "$project" in ''|.|..|*/*) continue ;; esac
-    project_dir="${FM_PROJECTS_OVERRIDE:-$FM_HOME/projects}/$project"
-    prefix=$(git -C "$project_dir" rev-parse --show-prefix 2>/dev/null) || continue
-    [ -z "$prefix" ] || continue
-    origin=$(git -C "$project_dir" remote get-url origin 2>/dev/null) || continue
-    origin=$(printf '%s' "$origin" | tr '[:upper:]' '[:lower:]')
-    case "$origin" in
-      https://*|http://*|ssh://*|git://*)
-        repo=${origin#*://}
-        authority=${repo%%/*}
-        repo=${repo#*/}
-        authority=${authority##*@}
-        host=${authority%%:*}
-        ;;
-      *:*)
-        authority=${origin%%:*}
-        host=${authority##*@}
-        repo=${origin#*:}
-        ;;
-      *) continue ;;
-    esac
-    [ "$host" = github.com ] || continue
-    repo=${repo#/}; repo=${repo%/}; repo=${repo%.git}
-    [ "$base_repo" != "$repo" ] || return 0
-  done < <(awk '/^- / { name=substr($0,3); sub(/ \[.*$/, "", name); sub(/ - .*$/, "", name); print name }' "$DATA/projects.md")
-  return 1
-}
-
 closeout_signal() { # task canonical-url row-file
   local task=$1 url=$2 row=$3 head since old_notice notice status meta wt dirty
-  local base_repo checked_seconds age seconds key
+  local checked_seconds age seconds key
   [ "$CLOSEOUT_ENABLED" = 1 ] || return 0
   jq -e '.kind == "pr" and .observation.state == "open"' "$row" >/dev/null || return 0
   head=$(jq -r '.observation.head // ""' "$row")
-  base_repo=$(jq -r '.observation.base_repo // ""' "$row")
-  # Unknown repository identity is not evidence that this is outside the home.
-  [ -n "$base_repo" ] || return 0
-  repository_is_owned "$base_repo" && return 0
+  case "$(jq -r '.observation.viewer_permission // ""' "$row")" in
+    READ|TRIAGE) ;;
+    *) return 0 ;;
+  esac
   meta="$STATE/$task.meta"
   # The contribution record survives teardown so later feedback is still
   # observed; a missing task record means closeout has already happened.

@@ -23,6 +23,7 @@ def valid_record:
       and (if $kind == "pr" then (.head | sha) and (.draft | type == "boolean")
         and (.mergeable | IN("mergeable","conflicting","unknown")) and (.can_merge | type == "boolean")
         and ((.base_repo == null) or (.base_repo | type == "string" and length > 0))
+        and (.viewer_permission == null or (.viewer_permission | IN("ADMIN","MAINTAIN","WRITE","TRIAGE","READ")))
         and (.review_decision | IN("","APPROVED","CHANGES_REQUESTED","REVIEW_REQUIRED"))
         else (.ready | type == "boolean") end))))) catch false;
 def known($input; $saved):

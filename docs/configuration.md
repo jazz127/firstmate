@@ -619,8 +619,11 @@ This estimates push time within one observer poll.
 For initial observation of an already-open PR, it uses the directly available PR `updated_at` timestamp, or `created_at` when that is unavailable; with neither timestamp it uses observation time.
 Later PR timestamp updates and CI reruns do not move an existing window.
 It applies only when the PR base repository is outside this home's merge scope, regardless of whether the head and base repositories differ.
-Owned repositories are the GitHub origin repositories of projects registered in `data/projects.md`, plus repositories under owners listed in the optional `config/house-fork-owners` file (one GitHub owner per line, for example `jazz127`).
-Fork PRs into those repositories retain cleanup-after-merge.
+The observer reads GitHub's structured `viewerPermission` for the PR base repository using the authenticated account.
+`ADMIN`, `MAINTAIN`, and `WRITE` permissions identify repositories in this home's merge scope; `READ` and `TRIAGE` identify outside repositories eligible for closeout.
+Registering or cloning a project does not establish ownership.
+Fork PRs into repositories with write-or-higher permission retain cleanup-after-merge.
+Unreadable, missing, or unknown permissions prevent closeout and report an unavailable observation through the existing observer error path.
 Closeout signals apply only to a live ship task whose current canonical `pr=` matches the observed URL; retained links to replaced PRs continue observing feedback without producing closeout signals.
 At expiry, the observer signals Firstmate to close out only when every latest check lane passes, no previously observed lane is missing, no contribution feedback remains unacknowledged, and the task worktree is clean.
 An older `CHANGES_REQUESTED` decision does not block closeout, and a clean worker checkout may precede the published PR head.

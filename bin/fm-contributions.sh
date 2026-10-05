@@ -360,7 +360,7 @@ closeout_window() {
 }
 
 repository_is_owned() {
-  local base_repo=$1 owner project project_dir prefix origin repo
+  local base_repo=$1 owner project project_dir prefix origin authority host repo
   base_repo=$(printf '%s' "$base_repo" | tr '[:upper:]' '[:lower:]')
   if [ -f "$CONFIG/house-fork-owners" ]; then
     while IFS= read -r owner || [ -n "$owner" ]; do
@@ -376,14 +376,24 @@ repository_is_owned() {
     prefix=$(git -C "$project_dir" rev-parse --show-prefix 2>/dev/null) || continue
     [ -z "$prefix" ] || continue
     origin=$(git -C "$project_dir" remote get-url origin 2>/dev/null) || continue
+    origin=$(printf '%s' "$origin" | tr '[:upper:]' '[:lower:]')
     case "$origin" in
-      https://github.com/*) repo=${origin#https://github.com/} ;;
-      git@github.com:*) repo=${origin#git@github.com:} ;;
-      ssh://git@github.com/*) repo=${origin#ssh://git@github.com/} ;;
+      https://*|http://*|ssh://*|git://*)
+        repo=${origin#*://}
+        authority=${repo%%/*}
+        repo=${repo#*/}
+        authority=${authority##*@}
+        host=${authority%%:*}
+        ;;
+      *:*)
+        authority=${origin%%:*}
+        host=${authority##*@}
+        repo=${origin#*:}
+        ;;
       *) continue ;;
     esac
-    repo=${repo%/}; repo=${repo%.git}
-    repo=$(printf '%s' "$repo" | tr '[:upper:]' '[:lower:]')
+    [ "$host" = github.com ] || continue
+    repo=${repo#/}; repo=${repo%/}; repo=${repo%.git}
     [ "$base_repo" != "$repo" ] || return 0
   done < <(awk '/^- / { name=substr($0,3); sub(/ \[.*$/, "", name); sub(/ - .*$/, "", name); print name }' "$DATA/projects.md")
   return 1

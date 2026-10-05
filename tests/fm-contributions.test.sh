@@ -1143,22 +1143,29 @@ test_outside_pr_closeout_window_and_green_ci() {
 }
 
 test_own_repository_pr_is_unchanged() {
-  local home out head_repo
-  for head_repo in owner/r fork/r; do
-    home=$(new_home "owned-${head_repo%/*}")
-    forge_home "$home"
-    printf '2026-09-16T08:00:00Z\n' > "$home/forge/pr-time"
-    printf '%s\n' "$head_repo" > "$home/forge/head-repo"
-    mkdir -p "$home/projects/owned project"
-    git -C "$home/projects/owned project" init -q
-    git -C "$home/projects/owned project" remote add origin git@github.com:Owner/r.git
-    printf -- '- owned project [no-mistakes] - Owned repository (added 2026-09-16)\n' > "$home/data/projects.md"
-    with_home "$home" "$ROOT/bin/fm-pr-check.sh" delivery https://github.com/o/r/pull/8 >/dev/null \
-      || fail 'could not register owned PR'
-    out=$(with_home "$home" env FM_CONTRIBUTIONS_NOW=2026-09-16T12:00:00Z "$ROOT/bin/fm-contributions.sh" poll) \
-      || fail 'owned PR observation failed'
-    [ -z "$out" ] && [ ! -s "$home/state/.wake-queue" ] \
-      || fail "owned base repository gained a closeout wake: $out"
+  local home out head_repo origin n=0
+  for origin in 'git@github.com:Owner/r.git' 'github.com:Owner/r' \
+    'https://github.com/Owner/r.git' 'https://alice@github.com/Owner/r.git' \
+    'https://alice:fixture@GitHub.COM:443/OWNER/r.GIT/' \
+    'http://alice@github.com/Owner/r.git' 'ssh://alice@github.com:22/Owner/r.git' \
+    'git://github.com/Owner/r.git' 'git@github.com:/Owner/r.git'; do
+    for head_repo in owner/r fork/r; do
+      n=$((n + 1))
+      home=$(new_home "owned-$n")
+      forge_home "$home"
+      printf '2026-09-16T08:00:00Z\n' > "$home/forge/pr-time"
+      printf '%s\n' "$head_repo" > "$home/forge/head-repo"
+      mkdir -p "$home/projects/owned project"
+      git -C "$home/projects/owned project" init -q
+      git -C "$home/projects/owned project" remote add origin "$origin"
+      printf -- '- owned project [no-mistakes] - Owned repository (added 2026-09-16)\n' > "$home/data/projects.md"
+      with_home "$home" "$ROOT/bin/fm-pr-check.sh" delivery https://github.com/o/r/pull/8 >/dev/null \
+        || fail 'could not register owned PR'
+      out=$(with_home "$home" env FM_CONTRIBUTIONS_NOW=2026-09-16T12:00:00Z "$ROOT/bin/fm-contributions.sh" poll) \
+        || fail 'owned PR observation failed'
+      [ -z "$out" ] && [ ! -s "$home/state/.wake-queue" ] \
+        || fail "owned origin $origin gained a closeout wake: $out"
+    done
   done
   home=$(new_home owned-house-fork)
   forge_home "$home"
@@ -1173,6 +1180,26 @@ test_own_repository_pr_is_unchanged() {
   [ -z "$out" ] && [ ! -s "$home/state/.wake-queue" ] \
     || fail "configured house fork gained a closeout wake: $out"
   pass 'registered origins and configured house forks retain merge-based cleanup across PR topologies'
+}
+
+test_non_github_authority_remains_outside() {
+  local home out origin n=0
+  for origin in 'https://github.com@other.example/Owner/r.git' \
+    'https://alice@github.com.other.example/Owner/r.git' \
+    'ssh://git@other.example:22/Owner/r.git' 'git@other.example:Owner/r.git'; do
+    n=$((n + 1))
+    home=$(new_home "outside-authority-$n")
+    forge_home "$home"
+    printf '2026-09-16T08:00:00Z\n' > "$home/forge/pr-time"
+    mkdir -p "$home/projects/registered"
+    git -C "$home/projects/registered" init -q
+    git -C "$home/projects/registered" remote add origin "$origin"
+    printf -- '- registered [no-mistakes] - Other forge repository (added 2026-09-16)\n' > "$home/data/projects.md"
+    out=$(with_home "$home" env FM_CONTRIBUTIONS_NOW=2026-09-16T12:00:00Z "$ROOT/bin/fm-contributions.sh" poll) \
+      || fail 'outside authority observation failed'
+    case "$out" in *'state=ready'*) ;; *) fail "origin $origin incorrectly claimed the GitHub base repository: $out" ;; esac
+  done
+  pass 'userinfo and hostname substrings cannot turn another authority into an owned GitHub repository'
 }
 
 test_initial_observation_uses_forge_timestamp() {
@@ -1404,7 +1431,7 @@ test_unanswered_feedback_and_dirty_worktree_hold_closeout() {
 }
 
 failures=0
-for test_name in test_actor_coverage test_stale_verdict test_unchecked_is_not_silence test_newest_check_has_no_verdict test_comment_wake test_review_wake test_inline_wake test_ready_issue_wake test_fresh_issue_requires_maintainer test_missing_lane_remains_missing test_partial_freshness_keeps_measured_rows test_malformed_record_cannot_prove_silence test_issue_timeline_and_exact_ack test_verdict_retains_judged_head test_verdict_actor_values_are_discoverable test_observed_replacement_refreshes_verdict test_unobserved_head_leaves_verdict_unknown test_away_yolo_is_fleet_work test_away_yolo_cross_home_is_fleet_work test_retired_and_unsupported_coverage test_unsupported_forge_is_not_fleet_work test_held_unsupported_forge_is_not_captain_work test_shared_contribution_signal_wakes_once test_watcher_keeps_diagnostics_separate_from_contribution_wakes test_expired_child_unsupported_forge_stays_unmeasured test_watcher_surfaces_new_contribution_once test_home_summary_coverage test_unreadable_pending_is_not_empty test_record_task_identity_matches_dirname_basename test_read_only_views_create_no_state test_budget_refusal_between_calls test_budget_bounded_call_timeout test_genuine_failure_near_deadline_is_unavailable test_shared_url_observed_once test_terminal_contribution_settles test_late_owner_inherits_terminal_observation test_interrupted_multi_owner_poll_settles_every_owner test_done_task_open_pr_still_observed test_reservation_defers_later_url_when_fifteen_seconds_do_not_remain test_three_second_pr_reads_complete_fresh_in_one_cycle test_slow_read_deadline_kill_is_budget_refusal test_unmeasured_url_does_not_starve_the_tail test_budget_is_cut_down_to_the_watcher_check_bound test_arm_plumbs_a_configured_budget_into_the_check_shim test_unavailable_forge_records_error_and_wakes_once_per_episode test_late_owner_keeps_failure_episode_suppressed test_outside_pr_closeout_window_and_green_ci test_own_repository_pr_is_unchanged test_red_ci_holds_closeout test_new_push_restarts_closeout_window test_zero_and_malformed_closeout_window test_unanswered_feedback_and_dirty_worktree_hold_closeout test_initial_observation_uses_forge_timestamp test_missing_forge_timestamp_falls_back_to_observation test_worker_head_can_precede_published_head test_returned_head_restarts_closeout_window test_unacknowledged_feedback_with_observation_fallback; do
+for test_name in test_actor_coverage test_stale_verdict test_unchecked_is_not_silence test_newest_check_has_no_verdict test_comment_wake test_review_wake test_inline_wake test_ready_issue_wake test_fresh_issue_requires_maintainer test_missing_lane_remains_missing test_partial_freshness_keeps_measured_rows test_malformed_record_cannot_prove_silence test_issue_timeline_and_exact_ack test_verdict_retains_judged_head test_verdict_actor_values_are_discoverable test_observed_replacement_refreshes_verdict test_unobserved_head_leaves_verdict_unknown test_away_yolo_is_fleet_work test_away_yolo_cross_home_is_fleet_work test_retired_and_unsupported_coverage test_unsupported_forge_is_not_fleet_work test_held_unsupported_forge_is_not_captain_work test_shared_contribution_signal_wakes_once test_watcher_keeps_diagnostics_separate_from_contribution_wakes test_expired_child_unsupported_forge_stays_unmeasured test_watcher_surfaces_new_contribution_once test_home_summary_coverage test_unreadable_pending_is_not_empty test_record_task_identity_matches_dirname_basename test_read_only_views_create_no_state test_budget_refusal_between_calls test_budget_bounded_call_timeout test_genuine_failure_near_deadline_is_unavailable test_shared_url_observed_once test_terminal_contribution_settles test_late_owner_inherits_terminal_observation test_interrupted_multi_owner_poll_settles_every_owner test_done_task_open_pr_still_observed test_reservation_defers_later_url_when_fifteen_seconds_do_not_remain test_three_second_pr_reads_complete_fresh_in_one_cycle test_slow_read_deadline_kill_is_budget_refusal test_unmeasured_url_does_not_starve_the_tail test_budget_is_cut_down_to_the_watcher_check_bound test_arm_plumbs_a_configured_budget_into_the_check_shim test_unavailable_forge_records_error_and_wakes_once_per_episode test_late_owner_keeps_failure_episode_suppressed test_outside_pr_closeout_window_and_green_ci test_own_repository_pr_is_unchanged test_red_ci_holds_closeout test_new_push_restarts_closeout_window test_zero_and_malformed_closeout_window test_unanswered_feedback_and_dirty_worktree_hold_closeout test_initial_observation_uses_forge_timestamp test_missing_forge_timestamp_falls_back_to_observation test_worker_head_can_precede_published_head test_returned_head_restarts_closeout_window test_unacknowledged_feedback_with_observation_fallback test_non_github_authority_remains_outside; do
   ( "$test_name" ) || failures=$((failures + 1))
 done
 [ "$failures" -eq 0 ] || fail "$failures contribution regressions"

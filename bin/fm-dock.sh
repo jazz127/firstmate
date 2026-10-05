@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Read-only diagnostic: fm-dock.sh resolve --seat luna --harness codex
+# Read-only diagnostic: fm-dock.sh resolve --seat <luna|main> --harness codex
 # Reads ${FM_CONFIG_OVERRIDE:-${FM_HOME:-<repo>}/config}/dock.json.
 set -eu
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -7,7 +7,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$SCRIPT_DIR/fm-dock-lib.sh"
 seat=''
 harness=''
-[ "${1:-}" = resolve ] || { echo 'usage: fm-dock.sh resolve --seat luna --harness codex' >&2; exit 2; }
+[ "${1:-}" = resolve ] || { echo 'usage: fm-dock.sh resolve --seat <luna|main> --harness codex' >&2; exit 2; }
 shift
 while [ "$#" -gt 0 ]; do
   case "$1" in

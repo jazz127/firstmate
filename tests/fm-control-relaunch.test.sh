@@ -864,7 +864,7 @@ SH
   printf '%s\n' "$dir/home/config/dock.json" > "$seat_home/dock-path"
   out=$(run_control "$dir" "$id" relaunch --harness claude --note "wrong harness"); rc=$?
   expect_code 1 "$rc" "incompatible harness must refuse before stop"
-  assert_contains "$out" 'only seat luna on the codex harness' "harness mismatch should name seat contract"
+  assert_contains "$out" "unsupported dock seat 'luna' for harness 'claude'" "harness mismatch should name seat contract"
   [ "$(cat "$dir/fake/command")" = codex ] || fail "harness mismatch stopped the old worker"
   [ ! -s "$dir/fake/literal" ] || fail "harness mismatch sent lifecycle input"
 

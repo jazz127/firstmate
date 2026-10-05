@@ -1,0 +1,23 @@
+[
+  {
+    "name": "Remote reply lifecycle retirement recovers mismatched and dead owners",
+    "result": "pass"
+  },
+  {
+    "name": "Live owner survives exec, bounded contention, and uncertain stored identity",
+    "result": "pass"
+  },
+  {
+    "name": "Legacy PID-only locks protect live owners and recover after exit",
+    "result": "pass"
+  },
+  {
+    "name": "Bounded wait transfers PID and start identity to the live caller",
+    "result": "pass"
+  },
+  {
+    "name": "A live paused reaper excludes contenders despite old tombstone identity",
+    "result": "fail",
+    "reason": "no ready file: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4686PH2GP7CEXRMA82HD1G6/.gate-lock-runtime/live-lab-nyoj0k6v/reaper-ready"
+  }
+]

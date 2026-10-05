@@ -1,0 +1,13 @@
+ok - disposable watcher refuses inherited state outside its marked lab
+ok - concurrent fm_lock_try_acquire yields exactly one winner
+ok - dead-pid stale lock is reclaimed by a single acquirer
+ok - a live reused pid with a different process identity is reclaimed
+ok - an identity-matched live lock owner remains held
+ok - an unreadable current owner identity keeps the lock held
+ok - bounded handoff preserves caller identity, exclusion, and release
+ok - legacy locks without identity retain dead-pid reclaim behavior
+ok - concurrent stale-lock steal yields exactly one winner
+ok - dead nested steal chain from an interrupted reclaim is recovered
+ok - a competing reaper cannot remove the successor's steal mutex
+ok - live steal mutex is not reclaimed
+ok - live-held lock is not stolen

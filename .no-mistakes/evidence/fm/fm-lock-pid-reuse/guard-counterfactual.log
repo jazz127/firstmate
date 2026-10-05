@@ -1,0 +1,6 @@
+/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4686PH2GP7CEXRMA82HD1G6/.gate-lock-runtime/counterfactual.SxuH2E
+REGRESSION INPUT: alive PID=65361 old start=Tue Oct  6 01:07:10 2026     current OS start=Tue Oct  6 01:07:11 2026    
+PRE-FIX OBSERVED: original product times out instead of recovering
+FIXED OBSERVED: product acquired stale lock, owner=64985 start=Tue Oct  6 01:07:10 2026    
+MISSING-PS OBSERVED: live PID=65972; actual start lookup failed; owner-alive guard keeps lock held; final stale recheck refuses reclaim
+TEARDOWN: owned processes stopped; disposable state removed

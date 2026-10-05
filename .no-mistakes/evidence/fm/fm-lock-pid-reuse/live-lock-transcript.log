@@ -1,0 +1,85 @@
+$ /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4686PH2GP7CEXRMA82HD1G6/bin/fm-lab-home.sh create /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4686PH2GP7CEXRMA82HD1G6/.gate-lock-runtime/live-lab-nyoj0k6v
+rc=0
+/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4686PH2GP7CEXRMA82HD1G6/.gate-lock-runtime/live-lab-nyoj0k6v
+
+
+SCENARIO: Remote reply lifecycle retirement recovers mismatched and dead owners
+BEFORE reused: lock PID=78388, recorded start=Tue Oct  6 01:04:39 2026, actual live process start=Tue Oct  6 01:04:40 2026; cursor exists=True
+$ /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4686PH2GP7CEXRMA82HD1G6/bin/fm-procevent-remote-reply.sh retire reused
+rc=0
+retired: remote-reply-reused
+
+AFTER reused: cursor removed, lifecycle lock released, unrelated PID 78388 still alive
+BEFORE dead: lock PID=78102, recorded start=Tue Oct  6 01:04:39 2026, actual live process start=Tue Oct  6 01:04:40 2026; cursor exists=True
+$ /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4686PH2GP7CEXRMA82HD1G6/bin/fm-procevent-remote-reply.sh retire dead
+rc=0
+retired: remote-reply-dead
+
+AFTER dead: cursor removed, lifecycle lock released, unrelated PID 78388 still alive
+OBSERVED: scenario assertions satisfied
+
+SCENARIO: Live owner survives exec, bounded contention, and uncertain stored identity
+Owner acquired through real library, then execed sleep: PID=79151, recorded start=Tue Oct  6 01:04:42 2026, OS start=Tue Oct  6 01:04:42 2026
+$ bash -c . "$1"; shift; fm_lock_acquire_wait_bounded "$1" 1; rc=$?; printf "bounded_rc=%s held_pid=%s\n" "$rc" "$FM_LOCK_HELD_PID"; [ "$rc" = 124 ] && [ "$FM_LOCK_HELD_PID" = "$2" ] _ /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4686PH2GP7CEXRMA82HD1G6/bin/fm-wake-lib.sh /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4686PH2GP7CEXRMA82HD1G6/.gate-lock-runtime/live-lab-nyoj0k6v/state/.live-exec.lock 79151
+rc=0
+bounded_rc=124 held_pid=79151
+
+$ bash -c . "$1"; shift; if fm_lock_try_acquire "$1"; then exit 9; fi; printf "preserved_owner=%s\n" "$(cat "$1/pid")" _ /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4686PH2GP7CEXRMA82HD1G6/bin/fm-wake-lib.sh /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4686PH2GP7CEXRMA82HD1G6/.gate-lock-runtime/live-lab-nyoj0k6v/state/.live-exec.lock
+rc=0
+preserved_owner=79151
+
+empty stored identity: acquisition refused, original owner link preserved
+$ bash -c . "$1"; shift; if fm_lock_try_acquire "$1"; then exit 9; fi; printf "preserved_owner=%s\n" "$(cat "$1/pid")" _ /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4686PH2GP7CEXRMA82HD1G6/bin/fm-wake-lib.sh /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4686PH2GP7CEXRMA82HD1G6/.gate-lock-runtime/live-lab-nyoj0k6v/state/.live-exec.lock
+rc=0
+preserved_owner=79151
+
+unreadable stored identity: acquisition refused, original owner link preserved
+$ bash -c . "$1"; shift; fm_lock_acquire_wait "$1"; printf "recovered_pid=%s\n" "$(cat "$1/pid")"; fm_lock_release "$1" _ /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4686PH2GP7CEXRMA82HD1G6/bin/fm-wake-lib.sh /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4686PH2GP7CEXRMA82HD1G6/.gate-lock-runtime/live-lab-nyoj0k6v/state/.live-exec.lock
+rc=0
+recovered_pid=79785
+
+OBSERVED: scenario assertions satisfied
+
+SCENARIO: Legacy PID-only locks protect live owners and recover after exit
+$ bash -c . "$1"; shift; if fm_lock_try_acquire "$1"; then exit 9; fi; printf "legacy live PID remains=%s\n" "$(cat "$1/pid")" _ /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4686PH2GP7CEXRMA82HD1G6/bin/fm-wake-lib.sh /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4686PH2GP7CEXRMA82HD1G6/.gate-lock-runtime/live-lab-nyoj0k6v/state/.legacy.lock
+rc=0
+legacy live PID remains=79963
+
+$ bash -c . "$1"; shift; fm_lock_acquire_wait "$1"; printf "legacy dead PID recovered by=%s\n" "$(cat "$1/pid")"; fm_lock_release "$1" _ /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4686PH2GP7CEXRMA82HD1G6/bin/fm-wake-lib.sh /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4686PH2GP7CEXRMA82HD1G6/.gate-lock-runtime/live-lab-nyoj0k6v/state/.legacy.lock
+rc=0
+legacy dead PID recovered by=79981
+
+OBSERVED: scenario assertions satisfied
+
+SCENARIO: Bounded wait transfers PID and start identity to the live caller
+$ bash -c . "$1"; shift; 
+fm_current_pid caller
+sleep 1.1
+( fm_lock_try_acquire "$1" || exit 7; touch "$2/ready"; while [ ! -e "$2/release" ]; do sleep 0.02; done; fm_lock_release "$1" ) &
+holder=$!
+while [ ! -e "$2/ready" ]; do sleep 0.02; done
+( sleep 0.5; touch "$2/release" ) &
+fm_lock_acquire_wait_bounded "$1" 5 || exit 9
+wait "$holder" || exit 10
+observed=$(cat "$1/lock-owner-start")
+expected=$(LC_ALL=C ps -p "$caller" -o lstart= | sed 's/^[[:space:]]*//')
+printf 'handoff caller=%s lock_pid=%s recorded_start=%s OS_start=%s\n' "$caller" "$(cat "$1/pid")" "$observed" "$expected"
+[ "$(cat "$1/pid")" = "$caller" ] && [ "$observed" = "$expected" ] || exit 11
+if (fm_lock_try_acquire "$1"); then exit 12; fi
+printf 'independent contender refused while caller lives\n'
+fm_lock_release "$1"
+fm_lock_try_acquire "$1" || exit 13
+printf 'next acquisition succeeds after release\n'
+fm_lock_release "$1"
+[ ! -e "$1.steal" ] && [ ! -L "$1.steal" ]
+ _ /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4686PH2GP7CEXRMA82HD1G6/bin/fm-wake-lib.sh /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4686PH2GP7CEXRMA82HD1G6/.gate-lock-runtime/live-lab-nyoj0k6v/state/.handoff.lock /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4686PH2GP7CEXRMA82HD1G6/.gate-lock-runtime/live-lab-nyoj0k6v
+rc=0
+handoff caller=80086 lock_pid=80086 recorded_start=Tue Oct  6 01:04:44 2026     OS_start=Tue Oct  6 01:04:44 2026    
+independent contender refused while caller lives
+next acquisition succeeds after release
+
+OBSERVED: scenario assertions satisfied
+
+SCENARIO: A live paused reaper excludes contenders despite old tombstone identity
+FAIL: AssertionError('no ready file: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4686PH2GP7CEXRMA82HD1G6/.gate-lock-runtime/live-lab-nyoj0k6v/reaper-ready')
+TEARDOWN: all owned processes stopped; disposable lab home removed

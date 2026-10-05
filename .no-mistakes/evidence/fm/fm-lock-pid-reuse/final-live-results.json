@@ -1,0 +1,27 @@
+[
+  {
+    "name": "Remote reply lifecycle retirement recovers mismatched and dead owners",
+    "result": "pass"
+  },
+  {
+    "name": "Live owner survives exec, bounded contention, and uncertain stored identity",
+    "result": "pass"
+  },
+  {
+    "name": "Legacy PID-only locks protect live owners and recover after exit",
+    "result": "pass"
+  },
+  {
+    "name": "Bounded wait transfers PID and start identity to the live caller",
+    "result": "pass"
+  },
+  {
+    "name": "A live paused reaper excludes contenders despite old tombstone identity",
+    "result": "pass"
+  },
+  {
+    "name": "Missing process identity lookup refuses stale-owner reclamation",
+    "result": "pass",
+    "driver": "guard-counterfactual.sh"
+  }
+]

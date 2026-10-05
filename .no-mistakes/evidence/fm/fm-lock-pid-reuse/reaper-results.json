@@ -1,0 +1,6 @@
+[
+  {
+    "name": "A live paused reaper excludes contenders despite old tombstone identity",
+    "result": "pass"
+  }
+]

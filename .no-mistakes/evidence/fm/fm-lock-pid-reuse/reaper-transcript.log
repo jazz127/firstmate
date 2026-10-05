@@ -1,0 +1,20 @@
+$ /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4686PH2GP7CEXRMA82HD1G6/bin/fm-lab-home.sh create /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4686PH2GP7CEXRMA82HD1G6/.gate-lock-runtime/live-lab-s8s86jf0
+rc=0
+/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4686PH2GP7CEXRMA82HD1G6/.gate-lock-runtime/live-lab-s8s86jf0
+
+
+SCENARIO: A live paused reaper excludes contenders despite old tombstone identity
+Reaper paused by SIGSTOP before real unlink: PID=99342, OS start=Tue Oct  6 01:05:35 2026, retained dead-owner start=Tue Oct  6 01:05:34 2026, tombstone present=True
+$ bash -c . "$1"; shift; if fm_lock_try_acquire_steal_mutex "$1"; then exit 9; fi; printf "contender refused while reaper alive\n" _ /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4686PH2GP7CEXRMA82HD1G6/bin/fm-wake-lib.sh /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4686PH2GP7CEXRMA82HD1G6/.gate-lock-runtime/live-lab-s8s86jf0/state/.reaper.steal
+rc=0
+contender refused while reaper alive
+
+RESUMED REAPER: rc=0
+reaper acquired PID=99342 recorded_start=Tue Oct  6 01:05:35 2026    
+
+$ bash -c . "$1"; shift; fm_lock_try_acquire_steal_mutex "$1" || exit 7; printf "successor acquired=%s\n" "$(cat "$1/pid")"; fm_lock_release "$1" _ /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4686PH2GP7CEXRMA82HD1G6/bin/fm-wake-lib.sh /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4686PH2GP7CEXRMA82HD1G6/.gate-lock-runtime/live-lab-s8s86jf0/state/.reaper.steal
+rc=0
+successor acquired=99560
+
+OBSERVED: scenario assertions satisfied
+TEARDOWN: all owned processes stopped; disposable lab home removed

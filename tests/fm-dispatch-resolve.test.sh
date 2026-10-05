@@ -1126,6 +1126,26 @@ TYPESAFE_API_KEY=$KEY QUOTA_AXI_FIXTURE="$SEAT_QUOTA" run code out err "$BRIEF"
 expect_code 2 "$code" "unknown default seat is a configuration error"
 assert_contains "$err" 'unsupported default profile seat (only luna or main on codex): other' "resolver names the unsupported default seat"
 
+for invalid_seat in '[]' '["luna"]' '["main"]' '["luna","main"]' null '{}' false 0; do
+  for location in use default; do
+    for representation in object array; do
+      jq -n --argjson seat "$invalid_seat" --arg location "$location" --arg representation "$representation" '
+        {harness:"codex", seat:$seat} |
+        (if $representation == "array" then [.] else . end) as $profiles |
+        if $location == "use" then {rules:[{when:"Seat tasks",use:$profiles}]}
+        else {rules:[{when:"Seat tasks",use:{harness:"codex"}}],default:$profiles} end
+      ' > "$RULES"
+      reset_log
+      TYPESAFE_API_KEY=$KEY run code out err "$BRIEF"
+      expect_code 2 "$code" "$invalid_seat seat in $location $representation is a configuration error"
+      assert_contains "$err" "malformed rules file: $RULES - unsupported $location profile seat (only luna or main on codex): $invalid_seat" \
+        "invalid seat type is rejected by schema validation"
+      assert_absent "$LOG/argv" "invalid seat type is refused before the API call"
+      assert_absent "$LOG/quota-axi.calls" "invalid seat type is refused before quota ranking"
+    done
+  done
+done
+
 printf '%s\n' '{"rules":[{"when":"Luna seat tasks","use":{"harness":"codex","model":"gpt-5.6-sol"}}]}' > "$RULES"
 TYPESAFE_API_KEY=$KEY QUOTA_AXI_FIXTURE="$SCHEMA6_NATIVE" run code out err "$BRIEF"
 assert_contains "$out" 'candidate: codex:gpt-5.6-sol  provider=codex  scope=all_models  remaining=80%  spendPriority=0.8  runway=through_reset  -> eligible' \

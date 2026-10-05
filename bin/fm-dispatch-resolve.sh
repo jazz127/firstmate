@@ -173,14 +173,14 @@ rules_err=$(jq -r --argjson verified_harnesses "$VERIFIED_HARNESSES" --arg provi
     or (($p.harness | type) != "string") or (($p.harness | length) == 0)
     or ($p | has("model") and ((.model | type) != "string" or (.model | length) == 0))
     or ($p | has("effort") and ((.effort | type) != "string" or (.effort | length) == 0))
-    or ($p | has("seat") and ((["luna", "main"] | index($p.seat)) == null or $p.harness != "codex"))
+    or ($p | has("seat") and ((.seat != "luna" and .seat != "main") or .harness != "codex"))
     or ($p | has("provider") and (provider_id(.provider) | not))
     or ($p | has("floor") and floor_bad(.floor; false));
   def duplicate_profiles($items):
     ($items | map([.harness, (.model // null), (.effort // null), (.seat // null)] | @json)) as $keys
     | ($keys | length) != ($keys | unique | length);
   def invalid_seats($items):
-    [$items[] | . as $p | select(has("seat") and ((["luna", "main"] | index($p.seat)) == null or $p.harness != "codex")) | (.seat | tostring)] | unique;
+    [$items[] | select(has("seat") and ((.seat != "luna" and .seat != "main") or .harness != "codex")) | (.seat | tostring)] | unique;
   if type != "object" then "top-level value must be an object"
   elif has("rules") and (.rules | type) != "array" then "rules must be an array"
   elif any((.rules // [])[]; type != "object") then "each rule must be an object"

@@ -1095,7 +1095,7 @@ crew_dispatch_validate() {
       ([(.rules // [])[]? | profiles(.use?)[]?]
         + (if has("default") then [profiles(.default)[]?] else [] end));
     def invalid_seats($items):
-      [$items[] | . as $p | select(has("seat") and ((["luna", "main"] | index($p.seat)) == null or $p.harness != "codex")) | (.seat | tostring)] | unique;
+      [$items[] | select(has("seat") and ((.seat != "luna" and .seat != "main") or .harness != "codex")) | (.seat | tostring)] | unique;
     def malformed_optional_fields($items):
       ($items | any(has("model") and (((.model | type) != "string") or (.model | length) == 0)))
       or ($items | any(has("effort") and (((.effort | type) != "string") or (.effort | length) == 0)))

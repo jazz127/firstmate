@@ -614,14 +614,16 @@ The flag is a home-local supervision-noise preference and is not inherited by se
 
 The outside pull request review window defaults to `2` hours.
 Set the file to an integer from `0` to `87600` hours; `0` allows immediate closeout.
-The contribution observer counts the window from the earliest check-suite creation time for the current PR head in its head repository, as forge evidence of that push, and restarts it when the head changes.
-When no push evidence is available, it falls back to the first observation of that head; later evidence replaces that fallback, and CI reruns do not restart the window.
+The contribution observer starts a new window when it first sees each changed PR head SHA, including a return to an older SHA.
+This estimates push time within one observer poll.
+For initial observation of an already-open PR, it uses the directly available PR `updated_at` timestamp, or `created_at` when that is unavailable; with neither timestamp it uses observation time.
+Later PR timestamp updates and CI reruns do not move an existing window.
 It applies only when the PR base repository is outside this home's merge scope, regardless of whether the head and base repositories differ.
 Owned repositories are the GitHub origin repositories of projects registered in `data/projects.md`, plus repositories under owners listed in the optional `config/house-fork-owners` file (one GitHub owner per line, for example `jazz127`).
 Fork PRs into those repositories retain cleanup-after-merge.
-At expiry, the observer signals Firstmate to close out only when the latest checks pass, no maintainer feedback newer than the last push remains unacknowledged, and the task worktree is clean.
+At expiry, the observer signals Firstmate to close out only when the latest checks pass, no contribution feedback remains unacknowledged, and the task worktree is clean.
 An older `CHANGES_REQUESTED` decision does not block closeout, and a clean worker checkout may precede the published PR head.
-Red or pending checks, newer unacknowledged feedback, or dirty work produce a closeout hold signal and leave the task in place.
+Red or pending checks, any unacknowledged feedback, or dirty work produce a closeout hold signal and leave the task in place.
 Firstmate still owns cleanup through the guarded `bin/fm-teardown.sh` path, which verifies that work is landed or pushed; a teardown refusal leaves the task intact.
 Missing repository identity does not opt a PR into outside-repository cleanup.
 Malformed values disable closeout and wake Firstmate once for that configuration-error episode instead of using the default.

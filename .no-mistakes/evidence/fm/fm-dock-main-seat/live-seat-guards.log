@@ -1,0 +1,247 @@
+$ bash bin/fm-lab-home.sh create <disposable-worktree-home>
+exit=0
+/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4687SB7R6HXT3B6F34XJ7FP/.local-test-tmp/seat-lab-_qsilc61
+
+$ FM_HOME=<lab> bash bin/fm-dock.sh resolve --seat main --harness codex
+exit=0
+seat=main
+dock=isolated-seat-lab
+credential_home=/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4687SB7R6HXT3B6F34XJ7FP/.local-test-tmp/seat-lab-_qsilc61/credentials/main
+source=dock.json
+
+$ FM_HOME=<lab> bash bin/fm-dock.sh resolve --seat luna --harness codex
+exit=0
+seat=luna
+dock=isolated-seat-lab
+credential_home=/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4687SB7R6HXT3B6F34XJ7FP/.local-test-tmp/seat-lab-_qsilc61/credentials/luna
+source=dock.json
+
+$ unknown seat refuses
+exit=1
+error: unknown or unsupported dock seat 'other' for harness 'codex' (supported seats: luna, main on codex); launch refused, no ambient account selected
+
+$ main on Claude refuses
+exit=1
+error: unknown or unsupported dock seat 'main' for harness 'claude' (supported seats: luna, main on codex); launch refused, no ambient account selected
+
+$ git init disposable project
+exit=0
+(no crew-dispatch diagnostic)
+
+$ scaffold disposable scout brief
+exit=0
+scaffolded: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4687SB7R6HXT3B6F34XJ7FP/.local-test-tmp/seat-lab-_qsilc61/data/probe/brief.md (scout; replace {TASK} and {FIRSTMATE_SPEC})
+
+$ fm-spawn --scout --harness codex --seat main: missing sign-in refuses
+exit=1
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4687SB7R6HXT3B6F34XJ7FP/.local-test-tmp/seat-lab-_qsilc61
+error: Codex seat at /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4687SB7R6HXT3B6F34XJ7FP/.local-test-tmp/seat-lab-_qsilc61/credentials/main has no ordinary readable file-backed sign-in; launch refused, no ambient account selected
+
+$ fm-spawn --scout --harness codex --seat luna: missing sign-in refuses
+exit=1
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4687SB7R6HXT3B6F34XJ7FP/.local-test-tmp/seat-lab-_qsilc61
+error: Codex seat at /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4687SB7R6HXT3B6F34XJ7FP/.local-test-tmp/seat-lab-_qsilc61/credentials/luna has no ordinary readable file-backed sign-in; launch refused, no ambient account selected
+
+$ fm-spawn mismatched measured seat home refuses
+exit=1
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4687SB7R6HXT3B6F34XJ7FP/.local-test-tmp/seat-lab-_qsilc61
+error: dispatch seat binding resolved to /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4687SB7R6HXT3B6F34XJ7FP/.local-test-tmp/seat-lab-_qsilc61/credentials/main, but the profile was measured against /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4687SB7R6HXT3B6F34XJ7FP/.local-test-tmp/seat-lab-_qsilc61/credentials/luna; launch refused, no ambient account selected
+
+$ fm-spawn missing main binding refuses rather than selecting Luna
+exit=1
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4687SB7R6HXT3B6F34XJ7FP/.local-test-tmp/seat-lab-_qsilc61
+error: dock record /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4687SB7R6HXT3B6F34XJ7FP/.local-test-tmp/seat-lab-_qsilc61/config/dock.json is malformed, unsupported, or does not bind seat main to codex; launch refused, no ambient account selected
+
+$ main without dock refuses even on legacy-compatible host
+exit=1
+error: dock record /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4687SB7R6HXT3B6F34XJ7FP/.local-test-tmp/seat-lab-_qsilc61/config/dock.json is absent; configure seat main on this host; launch refused, no ambient account selected
+
+$ real bootstrap accepts string main and luna profiles
+exit=0
+(no crew-dispatch diagnostic)
+
+$ resolver rejects use object seat=[]
+exit=2
+error: malformed rules file: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4687SB7R6HXT3B6F34XJ7FP/.local-test-tmp/seat-lab-_qsilc61/config/crew-dispatch.json - unsupported use profile seat (only luna or main on codex): []
+
+$ resolver rejects use array seat=[]
+exit=2
+error: malformed rules file: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4687SB7R6HXT3B6F34XJ7FP/.local-test-tmp/seat-lab-_qsilc61/config/crew-dispatch.json - unsupported use profile seat (only luna or main on codex): []
+
+$ resolver rejects default object seat=[]
+exit=2
+error: malformed rules file: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4687SB7R6HXT3B6F34XJ7FP/.local-test-tmp/seat-lab-_qsilc61/config/crew-dispatch.json - unsupported default profile seat (only luna or main on codex): []
+
+$ resolver rejects default array seat=[]
+exit=2
+error: malformed rules file: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4687SB7R6HXT3B6F34XJ7FP/.local-test-tmp/seat-lab-_qsilc61/config/crew-dispatch.json - unsupported default profile seat (only luna or main on codex): []
+
+$ bootstrap diagnoses default seat=[]
+exit=0
+CREW_DISPATCH: invalid config/crew-dispatch.json - unsupported default profile seat (only luna or main on codex): []
+
+$ resolver rejects use object seat=["main"]
+exit=2
+error: malformed rules file: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4687SB7R6HXT3B6F34XJ7FP/.local-test-tmp/seat-lab-_qsilc61/config/crew-dispatch.json - unsupported use profile seat (only luna or main on codex): ["main"]
+
+$ resolver rejects use array seat=["main"]
+exit=2
+error: malformed rules file: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4687SB7R6HXT3B6F34XJ7FP/.local-test-tmp/seat-lab-_qsilc61/config/crew-dispatch.json - unsupported use profile seat (only luna or main on codex): ["main"]
+
+$ resolver rejects default object seat=["main"]
+exit=2
+error: malformed rules file: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4687SB7R6HXT3B6F34XJ7FP/.local-test-tmp/seat-lab-_qsilc61/config/crew-dispatch.json - unsupported default profile seat (only luna or main on codex): ["main"]
+
+$ resolver rejects default array seat=["main"]
+exit=2
+error: malformed rules file: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4687SB7R6HXT3B6F34XJ7FP/.local-test-tmp/seat-lab-_qsilc61/config/crew-dispatch.json - unsupported default profile seat (only luna or main on codex): ["main"]
+
+$ bootstrap diagnoses default seat=["main"]
+exit=0
+CREW_DISPATCH: invalid config/crew-dispatch.json - unsupported default profile seat (only luna or main on codex): ["main"]
+
+$ resolver rejects use object seat=["luna"]
+exit=2
+error: malformed rules file: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4687SB7R6HXT3B6F34XJ7FP/.local-test-tmp/seat-lab-_qsilc61/config/crew-dispatch.json - unsupported use profile seat (only luna or main on codex): ["luna"]
+
+$ resolver rejects use array seat=["luna"]
+exit=2
+error: malformed rules file: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4687SB7R6HXT3B6F34XJ7FP/.local-test-tmp/seat-lab-_qsilc61/config/crew-dispatch.json - unsupported use profile seat (only luna or main on codex): ["luna"]
+
+$ resolver rejects default object seat=["luna"]
+exit=2
+error: malformed rules file: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4687SB7R6HXT3B6F34XJ7FP/.local-test-tmp/seat-lab-_qsilc61/config/crew-dispatch.json - unsupported default profile seat (only luna or main on codex): ["luna"]
+
+$ resolver rejects default array seat=["luna"]
+exit=2
+error: malformed rules file: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4687SB7R6HXT3B6F34XJ7FP/.local-test-tmp/seat-lab-_qsilc61/config/crew-dispatch.json - unsupported default profile seat (only luna or main on codex): ["luna"]
+
+$ bootstrap diagnoses default seat=["luna"]
+exit=0
+CREW_DISPATCH: invalid config/crew-dispatch.json - unsupported default profile seat (only luna or main on codex): ["luna"]
+
+$ resolver rejects use object seat=["main", "luna"]
+exit=2
+error: malformed rules file: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4687SB7R6HXT3B6F34XJ7FP/.local-test-tmp/seat-lab-_qsilc61/config/crew-dispatch.json - unsupported use profile seat (only luna or main on codex): ["main","luna"]
+
+$ resolver rejects use array seat=["main", "luna"]
+exit=2
+error: malformed rules file: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4687SB7R6HXT3B6F34XJ7FP/.local-test-tmp/seat-lab-_qsilc61/config/crew-dispatch.json - unsupported use profile seat (only luna or main on codex): ["main","luna"]
+
+$ resolver rejects default object seat=["main", "luna"]
+exit=2
+error: malformed rules file: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4687SB7R6HXT3B6F34XJ7FP/.local-test-tmp/seat-lab-_qsilc61/config/crew-dispatch.json - unsupported default profile seat (only luna or main on codex): ["main","luna"]
+
+$ resolver rejects default array seat=["main", "luna"]
+exit=2
+error: malformed rules file: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4687SB7R6HXT3B6F34XJ7FP/.local-test-tmp/seat-lab-_qsilc61/config/crew-dispatch.json - unsupported default profile seat (only luna or main on codex): ["main","luna"]
+
+$ bootstrap diagnoses default seat=["main", "luna"]
+exit=0
+CREW_DISPATCH: invalid config/crew-dispatch.json - unsupported default profile seat (only luna or main on codex): ["main","luna"]
+
+$ resolver rejects use object seat=null
+exit=2
+error: malformed rules file: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4687SB7R6HXT3B6F34XJ7FP/.local-test-tmp/seat-lab-_qsilc61/config/crew-dispatch.json - unsupported use profile seat (only luna or main on codex): null
+
+$ resolver rejects use array seat=null
+exit=2
+error: malformed rules file: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4687SB7R6HXT3B6F34XJ7FP/.local-test-tmp/seat-lab-_qsilc61/config/crew-dispatch.json - unsupported use profile seat (only luna or main on codex): null
+
+$ resolver rejects default object seat=null
+exit=2
+error: malformed rules file: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4687SB7R6HXT3B6F34XJ7FP/.local-test-tmp/seat-lab-_qsilc61/config/crew-dispatch.json - unsupported default profile seat (only luna or main on codex): null
+
+$ resolver rejects default array seat=null
+exit=2
+error: malformed rules file: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4687SB7R6HXT3B6F34XJ7FP/.local-test-tmp/seat-lab-_qsilc61/config/crew-dispatch.json - unsupported default profile seat (only luna or main on codex): null
+
+$ bootstrap diagnoses default seat=null
+exit=0
+CREW_DISPATCH: invalid config/crew-dispatch.json - unsupported default profile seat (only luna or main on codex): null
+
+$ resolver rejects use object seat={}
+exit=2
+error: malformed rules file: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4687SB7R6HXT3B6F34XJ7FP/.local-test-tmp/seat-lab-_qsilc61/config/crew-dispatch.json - unsupported use profile seat (only luna or main on codex): {}
+
+$ resolver rejects use array seat={}
+exit=2
+error: malformed rules file: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4687SB7R6HXT3B6F34XJ7FP/.local-test-tmp/seat-lab-_qsilc61/config/crew-dispatch.json - unsupported use profile seat (only luna or main on codex): {}
+
+$ resolver rejects default object seat={}
+exit=2
+error: malformed rules file: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4687SB7R6HXT3B6F34XJ7FP/.local-test-tmp/seat-lab-_qsilc61/config/crew-dispatch.json - unsupported default profile seat (only luna or main on codex): {}
+
+$ resolver rejects default array seat={}
+exit=2
+error: malformed rules file: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4687SB7R6HXT3B6F34XJ7FP/.local-test-tmp/seat-lab-_qsilc61/config/crew-dispatch.json - unsupported default profile seat (only luna or main on codex): {}
+
+$ bootstrap diagnoses default seat={}
+exit=0
+CREW_DISPATCH: invalid config/crew-dispatch.json - unsupported default profile seat (only luna or main on codex): {}
+
+$ resolver rejects use object seat=false
+exit=2
+error: malformed rules file: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4687SB7R6HXT3B6F34XJ7FP/.local-test-tmp/seat-lab-_qsilc61/config/crew-dispatch.json - unsupported use profile seat (only luna or main on codex): false
+
+$ resolver rejects use array seat=false
+exit=2
+error: malformed rules file: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4687SB7R6HXT3B6F34XJ7FP/.local-test-tmp/seat-lab-_qsilc61/config/crew-dispatch.json - unsupported use profile seat (only luna or main on codex): false
+
+$ resolver rejects default object seat=false
+exit=2
+error: malformed rules file: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4687SB7R6HXT3B6F34XJ7FP/.local-test-tmp/seat-lab-_qsilc61/config/crew-dispatch.json - unsupported default profile seat (only luna or main on codex): false
+
+$ resolver rejects default array seat=false
+exit=2
+error: malformed rules file: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4687SB7R6HXT3B6F34XJ7FP/.local-test-tmp/seat-lab-_qsilc61/config/crew-dispatch.json - unsupported default profile seat (only luna or main on codex): false
+
+$ bootstrap diagnoses default seat=false
+exit=0
+CREW_DISPATCH: invalid config/crew-dispatch.json - unsupported default profile seat (only luna or main on codex): false
+
+$ resolver rejects use object seat=0
+exit=2
+error: malformed rules file: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4687SB7R6HXT3B6F34XJ7FP/.local-test-tmp/seat-lab-_qsilc61/config/crew-dispatch.json - unsupported use profile seat (only luna or main on codex): 0
+
+$ resolver rejects use array seat=0
+exit=2
+error: malformed rules file: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4687SB7R6HXT3B6F34XJ7FP/.local-test-tmp/seat-lab-_qsilc61/config/crew-dispatch.json - unsupported use profile seat (only luna or main on codex): 0
+
+$ resolver rejects default object seat=0
+exit=2
+error: malformed rules file: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4687SB7R6HXT3B6F34XJ7FP/.local-test-tmp/seat-lab-_qsilc61/config/crew-dispatch.json - unsupported default profile seat (only luna or main on codex): 0
+
+$ resolver rejects default array seat=0
+exit=2
+error: malformed rules file: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4687SB7R6HXT3B6F34XJ7FP/.local-test-tmp/seat-lab-_qsilc61/config/crew-dispatch.json - unsupported default profile seat (only luna or main on codex): 0
+
+$ bootstrap diagnoses default seat=0
+exit=0
+CREW_DISPATCH: invalid config/crew-dispatch.json - unsupported default profile seat (only luna or main on codex): 0
+
+$ resolver rejects use object seat="other"
+exit=2
+error: malformed rules file: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4687SB7R6HXT3B6F34XJ7FP/.local-test-tmp/seat-lab-_qsilc61/config/crew-dispatch.json - unsupported use profile seat (only luna or main on codex): other
+
+$ resolver rejects use array seat="other"
+exit=2
+error: malformed rules file: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4687SB7R6HXT3B6F34XJ7FP/.local-test-tmp/seat-lab-_qsilc61/config/crew-dispatch.json - unsupported use profile seat (only luna or main on codex): other
+
+$ resolver rejects default object seat="other"
+exit=2
+error: malformed rules file: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4687SB7R6HXT3B6F34XJ7FP/.local-test-tmp/seat-lab-_qsilc61/config/crew-dispatch.json - unsupported default profile seat (only luna or main on codex): other
+
+$ resolver rejects default array seat="other"
+exit=2
+error: malformed rules file: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4687SB7R6HXT3B6F34XJ7FP/.local-test-tmp/seat-lab-_qsilc61/config/crew-dispatch.json - unsupported default profile seat (only luna or main on codex): other
+
+$ bootstrap diagnoses default seat="other"
+exit=0
+CREW_DISPATCH: invalid config/crew-dispatch.json - unsupported default profile seat (only luna or main on codex): other
+
+All commands used real installed product CLIs; no CLI/service substitutes.
+Rejected resolver inputs used an opt-in sentinel solely to reach the configuration validator; no request was made.
+No authenticated credential homes or TYPESAFE_API_KEY were supplied for successful upstream scenarios.
+
+Disposable lab, project, and credential directories removed.

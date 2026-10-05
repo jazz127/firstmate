@@ -1,0 +1,5 @@
+ok - dispatch can pin Luna or main while the seatless Codex default remains ambient
+ok - Herdr-backed seated Codex launch carries home and credential guards
+ok - missing, signed-out, indeterminate, unsupported store, and raw seated launches refuse before provisioning
+ok - seated launch enforces its home after launch-environment grants
+ok - scout and batch entry points preserve the dock-bound seat

@@ -552,12 +552,18 @@ assert_present "$STATE_ROOT/worker.ready" "the worker did not publish its readin
 fm_remote_job_lock_owner_matches_process "$ACCOUNT_HOME" \
   || fail "the live worker's lock owner identity did not match its process"
 LIVE_WORKER_PID=$(cat "$STATE_ROOT/worker.pid")
-kill -STOP "$LIVE_WORKER_PID"
+# Freeze the serving process and its independent heartbeat together so the
+# deliberately stale record cannot be repaired before the rejection assertion.
+LIVE_WORKER_GROUP=$(ps -p "$LIVE_WORKER_PID" -o pgid= | tr -d '[:space:]')
+CALLER_GROUP=$(ps -p "$$" -o pgid= | tr -d '[:space:]')
+case "$LIVE_WORKER_GROUP" in ''|*[!0-9]*|0|1) fail "the fixture worker has no safe process group" ;; esac
+[ "$LIVE_WORKER_GROUP" != "$CALLER_GROUP" ] || fail "the fixture worker shares the test process group"
+kill -STOP -- "-$LIVE_WORKER_GROUP"
 printf '999999\nstale incarnation\n' > "$STATE_ROOT/worker.ready"
 touch -t 200001010000 "$STATE_ROOT/worker.ready"
 if fm_remote_job_probe "$ACCOUNT_HOME"; then STALE_PROBE_REJECTED=0; else STALE_PROBE_REJECTED=1; fi
 if fm_remote_job_worker_owned_alive "$REMOTE_ROOT" "$ACCOUNT_HOME"; then STALE_OWNER_RECOGNIZED=1; else STALE_OWNER_RECOGNIZED=0; fi
-kill -CONT "$LIVE_WORKER_PID"
+kill -CONT -- "-$LIVE_WORKER_GROUP"
 [ "$STALE_PROBE_REJECTED" -eq 1 ] || fail "a stale heartbeat still passed the readiness probe"
 [ "$STALE_OWNER_RECOGNIZED" -eq 1 ] || fail "a stale heartbeat made the running worker look unowned"
 for _ in $(seq 1 100); do
@@ -1168,14 +1174,15 @@ done
   || fail "the ownership-loss worker did not stop"
 rm -rf -- "$LOST_STATE/worker.lock"
 kill -CONT "$LOST_TERM_PID"
-LOST_READY_BEFORE=$(file_inode "$LOST_STATE/worker.ready")
-for _ in $(seq 1 100); do
-  LOST_READY_AFTER=$(file_inode "$LOST_STATE/worker.ready")
-  [ -n "$LOST_READY_AFTER" ] && [ "$LOST_READY_AFTER" != "$LOST_READY_BEFORE" ] && break
-  sleep 0.05
+# The independent heartbeat may already have verified ownership before the
+# lock was removed. Let that in-flight refresh expire through the public
+# probe's 10-second freshness window instead of racing it with a backdated file.
+for _ in $(seq 1 80); do
+  ( FM_REMOTE_JOB_STATE_ROOT="$LOST_STATE"; fm_remote_job_probe "$LOST_HOME" ) || break
+  sleep 0.25
 done
-[ -n "${LOST_READY_AFTER:-}" ] && [ "$LOST_READY_AFTER" != "$LOST_READY_BEFORE" ] \
-  || fail "a worker with no ownership lock stopped publishing heartbeats before TERM"
+! ( FM_REMOTE_JOB_STATE_ROOT="$LOST_STATE"; fm_remote_job_probe "$LOST_HOME" ) \
+  || fail "a worker without its ownership lock kept readiness fresh"
 assert_absent "$LOST_STATE/worker.lock" "the ownership lock reappeared before TERM"
 kill -TERM "$LOST_TERM_PID"
 for _ in $(seq 1 100); do
@@ -1450,8 +1457,9 @@ pass "an ousted worker in shutdown leaves the replacement quarantine untouched"
 
 # An idle worker must not busy-poll its queue: between passes it sleeps one
 # second, so its only steady cost is that sleep and the once-a-second heartbeat
-# plus the periodic sweep, which the 2-second stage reap age pulls in to every
-# 2 seconds. Every external command the worker runs by name goes through a
+# (including its lock-owner validation and state preparation) plus the periodic
+# sweep, which the 2-second stage reap age pulls in to every 2 seconds.
+# Every external command the worker runs by name goes through a
 # counting shim, which makes the exec rate observable without privileges.
 QUIET_HOME="$TMP_ROOT/quiet-account"
 QUIET_STATE="$TMP_ROOT/quiet-state"
@@ -1498,7 +1506,10 @@ quiet_measure() { # <label> <max-sleeps>
   sleeps=$(grep -cx sleep "$QUIET_EXEC_LOG" || true)
   [ "$sleeps" -le "$2" ] \
     || fail "$1 kept polling with sleep ($sleeps sleeps in 4s)"
-  [ "$execs" -le 80 ] \
+  # Allow the independent heartbeat's bounded ownership checks as well as
+  # sweeps at either edge of the window; the sleep limit still rejects fast
+  # queue polling independently of this external-command budget.
+  [ "$execs" -le 120 ] \
     || fail "$1 ran $execs commands in 4s; expected only heartbeats and sweeps"$'\n'"$(sort "$QUIET_EXEC_LOG" | uniq -c)"
 }
 # fm_remote_job_probe must keep reading an idle worker as ready: its heartbeat

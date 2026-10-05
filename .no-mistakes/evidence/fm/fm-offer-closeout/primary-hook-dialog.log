@@ -1,0 +1,172 @@
+$ /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/bin/fm-lab-home.sh create /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/.p
+/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/.p
+$ git clone --quiet --depth 1 https://github.com/kunchenguid/quota-axi.git /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/.p/projects/quota-axi
+(no output)
+$ git -C /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/.p/projects/quota-axi fetch --quiet --depth 1 origin refs/pull/292/head:refs/remotes/fork/offer
+(no output)
+$ git -C /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/.p/projects/quota-axi branch offer refs/remotes/fork/offer
+(no output)
+$ treehouse get --lease --no-fetch --base offer --branch fm-lab-offer
+🌳 Setting up worktree...
+🌳 Leased worktree at ~/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/.p/pool/.treehouse/quota-axi-35f98d/1/quota-axi. Run 'treehouse return ~/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/.p/pool/.treehouse/quota-axi-35f98d/1/quota-axi' to release it.
+/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/.p/pool/.treehouse/quota-axi-35f98d/1/quota-axi
+$ /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/bin/fm-pr-check.sh offer https://github.com/kunchenguid/quota-axi/pull/292
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  repair missing watcher supervision with a foreground checkpoint: bin/fm-watch-checkpoint.sh --seconds 180.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+armed: state/offer.check.sh
+SCENARIO: prepare actual ready closeout wake for primary
+$ /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/bin/fm-contributions.sh poll
+contribution-wake: check: contributions closeout offer https://github.com/kunchenguid/quota-axi/pull/292 head=758eee54ea5e5cb966d9ac6195a83bd7e9b82e27 state=review
+contribution-wake: check: contributions offer 3f7a65e34e94041406ca6e0111d6ea9f296fb289ce4b7a0f40bd625a11b9a18d
+contribution-wake: check: contributions offer 9c2958ce3533d3363e69192db9ebb472b7085f00af5950667e2d813fe0b6c508
+{
+  "url": "https://github.com/kunchenguid/quota-axi/pull/292",
+  "checked_at": "2026-10-05T22:53:28Z",
+  "error": null,
+  "closeout_head": "758eee54ea5e5cb966d9ac6195a83bd7e9b82e27",
+  "closeout_since": "2026-09-26T13:47:34Z",
+  "closeout_notice": "758eee54ea5e5cb966d9ac6195a83bd7e9b82e27:review",
+  "permission": "READ",
+  "state": "open",
+  "checks": [
+    {
+      "name": "PR must be raised via no-mistakes",
+      "id": 108402500884,
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-09-26T12:16:44Z"
+    },
+    {
+      "name": "PR must be raised via no-mistakes",
+      "id": 108399968072,
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-09-26T11:59:16Z"
+    },
+    {
+      "name": "Greptile Review",
+      "id": 108399941960,
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-09-26T11:59:01Z"
+    },
+    {
+      "name": "PR must be raised via no-mistakes",
+      "id": 108399936082,
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-09-26T11:59:01Z"
+    },
+    {
+      "name": "Generated files must not be hand-edited",
+      "id": 108399935961,
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-09-26T11:59:01Z"
+    },
+    {
+      "name": "build-and-test",
+      "id": 108399935723,
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-09-26T11:59:01Z"
+    }
+  ],
+  "absent_checks": [],
+  "pending": [
+    {
+      "token": "comment:5845214547:2026-09-26T09:49:35Z:",
+      "source": "https://github.com/kunchenguid/quota-axi/pull/292#issuecomment-5845214547",
+      "type": "comment"
+    },
+    {
+      "token": "comment:5846777936:2026-09-26T13:47:34Z:",
+      "source": "https://github.com/kunchenguid/quota-axi/pull/292#issuecomment-5846777936",
+      "type": "comment"
+    }
+  ]
+}
+$ /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/bin/fm-contributions.sh ack offer https://github.com/kunchenguid/quota-axi/pull/292 comment:5845214547:2026-09-26T09:49:35Z:
+(no output)
+$ /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/bin/fm-contributions.sh ack offer https://github.com/kunchenguid/quota-axi/pull/292 comment:5846777936:2026-09-26T13:47:34Z:
+(no output)
+SCENARIO: ready wake after real feedback acknowledgement
+$ /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/bin/fm-contributions.sh poll
+contribution-wake: check: contributions closeout offer https://github.com/kunchenguid/quota-axi/pull/292 head=758eee54ea5e5cb966d9ac6195a83bd7e9b82e27 state=ready
+{
+  "url": "https://github.com/kunchenguid/quota-axi/pull/292",
+  "checked_at": "2026-10-05T22:53:32Z",
+  "error": null,
+  "closeout_head": "758eee54ea5e5cb966d9ac6195a83bd7e9b82e27",
+  "closeout_since": "2026-09-26T13:47:34Z",
+  "closeout_notice": "758eee54ea5e5cb966d9ac6195a83bd7e9b82e27:ready",
+  "permission": "READ",
+  "state": "open",
+  "checks": [
+    {
+      "name": "PR must be raised via no-mistakes",
+      "id": 108402500884,
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-09-26T12:16:44Z"
+    },
+    {
+      "name": "PR must be raised via no-mistakes",
+      "id": 108399968072,
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-09-26T11:59:16Z"
+    },
+    {
+      "name": "Greptile Review",
+      "id": 108399941960,
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-09-26T11:59:01Z"
+    },
+    {
+      "name": "PR must be raised via no-mistakes",
+      "id": 108399936082,
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-09-26T11:59:01Z"
+    },
+    {
+      "name": "Generated files must not be hand-edited",
+      "id": 108399935961,
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-09-26T11:59:01Z"
+    },
+    {
+      "name": "build-and-test",
+      "id": 108399935723,
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-09-26T11:59:01Z"
+    }
+  ],
+  "absent_checks": [],
+  "pending": []
+}
+$ tmux -L fm-lab new-session -d -s primary -x 120 -y 40 -c /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5 -e FM_HOME=/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/.p codex
+(no output)
+$ tmux -L fm-lab capture-pane -p -t primary
+
+  Hooks need review
+  4 hooks are new or changed.
+  Hooks can run outside the sandbox after you trust them.
+
+
+› 1. Review hooks
+  2. Trust all and continue
+  3. Continue without trusting (hooks won't run)
+
+  enter confirm · esc skip
+PRIMARY BLOCKER: trust/login/hook dialog; cannot change user-level settings or credentials in this phase.
+Private lab tmux server stopped; disposable primary home, clone and pool removed.

@@ -1,0 +1,17 @@
+ok - outside PR closeout waits two hours, then signals once for green clean work
+ok - write-or-higher forge permissions retain merge-based cleanup across PR topologies
+ok - red CI notifies firstmate and holds the task in place
+ok - absent CI lanes hold closeout until every latest lane reports a passing verdict
+ok - a changed PR head restarts the closeout window
+ok - zero means immediate closeout and malformed configuration fails visibly
+ok - unanswered review feedback and dirty worktrees hold closeout
+ok - initial observation uses an available PR timestamp and later updates preserve the window
+ok - missing forge timestamps use the first observation without extending its window
+ok - a clean pushed worker checkout behind the PR head remains eligible for guarded teardown
+ok - A to B to A starts a new window for every observed head change
+ok - observation fallback never dismisses unacknowledged feedback
+ok - registered third-party clones remain outside according to forge permissions
+ok - unreadable permissions report once and never authorize closeout before recovery
+ok - replaced PRs retain feedback observation while only the current PR can close out a ship
+ok - closeout requires a ship with one valid current canonical PR
+ok - relaunch and trace metadata tails preserve current ship closeout eligibility

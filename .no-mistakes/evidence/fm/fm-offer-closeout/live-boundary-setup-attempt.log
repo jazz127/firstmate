@@ -1,0 +1,101 @@
+$ /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/bin/fm-lab-home.sh create /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/.live-boundaries-hy3o_0n4/0
+/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/.live-boundaries-hy3o_0n4/0
+$ git init --quiet /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/.live-boundaries-hy3o_0n4/0/projects/local-checkout
+(no output)
+$ git -C /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/.live-boundaries-hy3o_0n4/0/projects/local-checkout -c user.name=Lab -c user.email=lab@example.invalid commit --allow-empty --quiet -m Disposable local state
+(no output)
+SCENARIO: owned repository remains merge-based
+$ /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/bin/fm-contributions.sh poll
+(no output)
+{
+  "url": "https://github.com/jazz127/firstmate/pull/23",
+  "error": null,
+  "permission": "ADMIN",
+  "checks": [
+    {
+      "name": "House checks",
+      "id": 107722925799,
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-09-24T16:15:42Z"
+    }
+  ],
+  "closeout_notice": null,
+  "metadata_retained": true
+}
+PASS: owned repository remains merge-based
+$ /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/bin/fm-lab-home.sh create /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/.live-boundaries-hy3o_0n4/1
+/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/.live-boundaries-hy3o_0n4/1
+$ git init --quiet /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/.live-boundaries-hy3o_0n4/1/projects/local-checkout
+(no output)
+$ git -C /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/.live-boundaries-hy3o_0n4/1/projects/local-checkout -c user.name=Lab -c user.email=lab@example.invalid commit --allow-empty --quiet -m Disposable local state
+(no output)
+SCENARIO: red CI holds expired outside offer
+$ /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/bin/fm-contributions.sh poll
+contribution-wake: check: contributions closeout offer https://github.com/kunchenguid/quota-axi/pull/295 head=764bd81eeb469678dc205556092e4a06723ef4c9 state=review
+contribution-wake: check: contributions offer 27713d2f94e81d58df5c78c649899ae47726e70751cfc62653d951f5c1e52955
+contribution-wake: check: contributions offer 6a088f11a92a91e52cf4d8555812c33e41dfb4cfff1e5cba6c852ad0d5189d46
+$ /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/bin/fm-contributions.sh ack offer https://github.com/kunchenguid/quota-axi/pull/295 comment:5867459074:2026-09-28T09:45:24Z:
+(no output)
+$ /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/bin/fm-contributions.sh ack offer https://github.com/kunchenguid/quota-axi/pull/295 comment:5871441511:2026-09-28T14:00:07Z:
+(no output)
+$ /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/bin/fm-contributions.sh poll
+contribution-wake: check: contributions closeout offer https://github.com/kunchenguid/quota-axi/pull/295 head=764bd81eeb469678dc205556092e4a06723ef4c9 state=ci
+{
+  "url": "https://github.com/kunchenguid/quota-axi/pull/295",
+  "error": null,
+  "permission": "READ",
+  "checks": [
+    {
+      "name": "PR must be raised via no-mistakes",
+      "id": 108961926752,
+      "status": "completed",
+      "conclusion": "failure",
+      "started_at": "2026-09-28T13:58:39Z"
+    },
+    {
+      "name": "build-and-test",
+      "id": 108961922116,
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-09-28T13:58:37Z"
+    },
+    {
+      "name": "Generated files must not be hand-edited",
+      "id": 108961921051,
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-09-28T13:58:38Z"
+    },
+    {
+      "name": "Greptile Review",
+      "id": 108892815169,
+      "status": "completed",
+      "conclusion": "failure",
+      "started_at": "2026-09-28T10:45:31Z"
+    }
+  ],
+  "closeout_notice": "764bd81eeb469678dc205556092e4a06723ef4c9:ci",
+  "metadata_retained": true
+}
+PASS: red CI holds expired outside offer
+$ /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/bin/fm-lab-home.sh create /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/.live-boundaries-hy3o_0n4/2
+/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/.live-boundaries-hy3o_0n4/2
+$ git init --quiet /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/.live-boundaries-hy3o_0n4/2/projects/local-checkout
+(no output)
+$ git -C /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/.live-boundaries-hy3o_0n4/2/projects/local-checkout -c user.name=Lab -c user.email=lab@example.invalid commit --allow-empty --quiet -m Disposable local state
+(no output)
+SCENARIO: no CI verdict holds expired outside offer
+$ /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/bin/fm-contributions.sh poll
+(no output)
+$ /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/bin/fm-contributions.sh poll
+(no output)
+{
+  "url": "https://github.com/sthi-1005/fm-quarterdeck/pull/12",
+  "error": null,
+  "permission": "WRITE",
+  "checks": [],
+  "closeout_notice": null,
+  "metadata_retained": true
+}
+All disposable boundary homes and local repositories removed.

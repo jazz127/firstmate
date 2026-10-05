@@ -1,0 +1,10 @@
+$ /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/bin/fm-lab-home.sh create /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/.live-closeout-k8mueai5
+/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/.live-closeout-k8mueai5
+$ git clone --quiet --depth 1 https://github.com/kunchenguid/quota-axi.git /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/.live-closeout-k8mueai5/projects/quota-axi
+(no output)
+$ git -C /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/.live-closeout-k8mueai5/projects/quota-axi fetch --quiet --depth 1 origin refs/pull/292/head:refs/remotes/fork/offer
+(no output)
+$ treehouse get --lease --no-fetch --base refs/remotes/fork/offer --branch fm-lab-offer
+🌳 Setting up worktree...
+base branch "refs/remotes/fork/offer" does not exist: no local branch refs/remotes/fork/offer and no remote-tracking branch origin/refs/remotes/fork/offer (fetch first, or fix base_branch/--base)
+Disposable local home, clone and Treehouse pool removed.

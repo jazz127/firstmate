@@ -1,0 +1,11 @@
+Retired task has no metadata: True
+Local unread cursor reset for one genuine GitHub comment: comment:5845214547:2026-09-26T09:49:35Z:
+$ FM_HOME=<marked-lab> bin/fm-contributions.sh poll
+contribution-wake: check: contributions offer 3f7a65e34e94041406ca6e0111d6ea9f296fb289ce4b7a0f40bd625a11b9a18d
+Persisted pending feedback:
+[
+  {
+    "token": "comment:5845214547:2026-09-26T09:49:35Z:",
+    "source": "https://github.com/kunchenguid/quota-axi/pull/292#issuecomment-5845214547"
+  }
+]

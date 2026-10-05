@@ -1,0 +1,40 @@
+› The host rg executable has repeatedly hung on bounded local searches in this run. Stop only your own stuck rg termin…
+• Explored
+  └ Read offer.meta, contributions.json, backlog.md
+    Search closeout\|state=ready\|absent_checks\|review_decision in fm-contributions.sh
+    Read fm-contributions.sh
+    + Show details
+
+• Ran env FM_HOME=/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/.p TREEHOUSE_ROOT=/Users/…
+  └ contributions: observation unavailable for https://github.com/kunchenguid/quota-axi/pull/292
+    + Show details
+
+• Ran grep -n '"checked_at"\|"head"\|"state"\|"draft"\|"pending"\|"error"\|"closeout_notice"\|"absent_checks"\|"status"…
+  └ 255:      "error": "forge observation unavailable or changed during read",
+    258:      "closeout_notice": "758eee54ea5e5cb966d9ac6195a83bd7e9b82e27:ready"
+    758eee54ea5e5cb966d9ac6195a83bd7e9b82e27
+    + 24 lines (ctrl+t to expand)
+
+• Running env FM_HOME=/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/.p TREEHOUSE_ROOT=/Us…
+    + Show details
+
+
+  Would you like to run the following command?
+
+  Environment: local
+
+  Reason: Captain, may I perform the required read-only GitHub refresh for PR #292 so the closeout head and checks are
+  current before guarded teardown?
+
+  $ env FM_HOME=/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/.p
+  TREEHOUSE_ROOT=/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/.p/pool
+  bin/fm-contributions.sh poll
+
+
+› 1. Yes, proceed (y)
+  2. Yes, and don't ask again for commands that start with `env 'FM_HOME=/Users/jarad/.no-mistakes/
+     worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/.p' 'TREEHOUSE_ROOT=/Users/jarad/.no-mistakes/
+     worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/.p/pool' bin/fm-contributions.sh poll` (p)
+  3. No, and tell Codex what to do differently (esc)
+
+  Press enter to confirm or esc to cancel

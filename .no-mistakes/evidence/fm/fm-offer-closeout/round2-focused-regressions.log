@@ -1,0 +1,475 @@
+SIMULATED: real contribution CLI with fake gh responses and disposable local Git remote.
+Selectors: test_returned_head_restarts_closeout_window, test_ci_lane_disappearing_after_ready_holds_closeout, test_permission_lookup_failure_after_readable_observation
++ test_returned_head_restarts_closeout_window
++ local home out initial_head replacement_head
+++ new_home returned-head-closeout
+++ local home=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout
+++ mkdir -p /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/data /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/state /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/config /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/projects /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/fakebin
+++ printf '# Backlog\n\n## Queued\n'
+++ printf '#!/bin/sh\nexit 1\n'
+++ printf '#!/bin/sh\nexit 0\n'
+++ chmod +x /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/fakebin/no-mistakes /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/fakebin/tmux
+++ printf '%s\n' /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout
++ home=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout
++ forge_home /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout
++ local home=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout
++ mkdir -p /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/forge /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/root/bin /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/wt
++ printf '#!/bin/sh\nexit 0\n'
++ chmod +x /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/root/bin/fm-guard.sh
++ printf 'worktree=%s/wt\nkind=ship\n' /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout
++ chmod 600 /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/state/delivery.meta
++ git -C /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/wt init -q
++ git -C /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/wt config user.name Fixture
++ git -C /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/wt config user.email fixture@example.invalid
++ printf 'clean\n'
++ git -C /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/wt add tracked
++ GIT_AUTHOR_DATE=2026-09-16T08:00:00Z
++ GIT_COMMITTER_DATE=2026-09-16T08:00:00Z
++ git -C /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/wt commit -qm initial
++ record /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout delivery 8 open mergeable
++ local home=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout id=delivery number=8 state=open mergeable=mergeable hold=
++ mkdir -p /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/data/delivery
++ printf -- '- [ ] %s - Contribution %s https://github.com/o/r/pull/%s (repo: sample) (kind: ship) %s\n' delivery delivery 8 ''
++ jq -n --arg task delivery --arg url https://github.com/o/r/pull/8 --arg head aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --arg at 2026-09-16T08:00:00Z --arg state open --arg mergeable mergeable $'\n    {schema:"fm-contributions.v1",task:$task,records:[{\n      url:$url,kind:"pr",checked_at:$at,error:null,pending:[],seen:[],verdict:null,\n      observation:{head:$head,state:$state,draft:false,mergeable:$mergeable,\n        review_decision:"APPROVED",can_merge:false,\n        checks:[{name:"test",id:1,status:"completed",conclusion:"success",started_at:$at}],\n        reviews:[],events:[]}}]}'
++ git -C /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/wt rev-parse HEAD
++ printf 'owner/r\n'
++ printf 'fork/r\n'
++ printf '%s\n' '[{"check_runs":[{"name":"test","id":1,"status":"completed","conclusion":"success","started_at":"2026-09-16T08:00:00Z"}]}]'
++ printf '[]\n'
++ printf '[]\n'
++ printf '[]\n'
++ printf '[]\n'
++ printf '[]\n'
++ cat
++ chmod +x /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/fakebin/gh
++ git init --bare -q /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/fork.git
++ git -C /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/wt remote add fork /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/fork.git
++ git -C /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/wt push -q fork HEAD:refs/heads/offer
++ with_home /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/bin/fm-pr-check.sh delivery https://github.com/o/r/pull/8
++ local home=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout
++ shift
++ PATH=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/fakebin:/opt/homebrew/Caskroom/codex/0.160.0/codex-path:/opt/homebrew/bin:/opt/homebrew/sbin:/Users/jarad/.codex/tmp/arg0/codex-arg0iZR68H:/opt/homebrew/Caskroom/codex/0.160.0/codex-path:/Users/jarad/.local/bin:/Users/jarad/.nix-profile/bin:/etc/profiles/per-user/jarad/bin:/run/current-system/sw/bin:/nix/var/nix/profiles/default/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/Users/jarad/.lmstudio/bin:/Users/jarad/go/bin:/Users/jarad/.cargo/bin:/Users/jarad/bin:/usr/local/sbin:/Users/jarad/.lmstudio/bin:/Users/jarad/.local/bin
++ FORGE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/forge
++ HEAD_A=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
++ FM_HOME=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout
++ FM_ROOT_OVERRIDE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/root
++ FM_STATE_OVERRIDE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/state
++ FM_DATA_OVERRIDE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/data
++ FM_CONFIG_OVERRIDE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/config
++ FM_CONTRIBUTIONS_NOW=2026-09-16T08:00:00Z
++ /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/bin/fm-pr-check.sh delivery https://github.com/o/r/pull/8
++ printf '2026-09-16T08:00:00Z\n'
+++ cat /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/forge/head
++ initial_head=80582564e9cb82452b0cd5974a9eeb666e0d415f
+++ with_home /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout env FM_CONTRIBUTIONS_NOW=2026-09-16T08:00:00Z /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/bin/fm-contributions.sh poll
+++ local home=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout
+++ shift
+++ PATH=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/fakebin:/opt/homebrew/Caskroom/codex/0.160.0/codex-path:/opt/homebrew/bin:/opt/homebrew/sbin:/Users/jarad/.codex/tmp/arg0/codex-arg0iZR68H:/opt/homebrew/Caskroom/codex/0.160.0/codex-path:/Users/jarad/.local/bin:/Users/jarad/.nix-profile/bin:/etc/profiles/per-user/jarad/bin:/run/current-system/sw/bin:/nix/var/nix/profiles/default/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/Users/jarad/.lmstudio/bin:/Users/jarad/go/bin:/Users/jarad/.cargo/bin:/Users/jarad/bin:/usr/local/sbin:/Users/jarad/.lmstudio/bin:/Users/jarad/.local/bin
+++ FORGE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/forge
+++ HEAD_A=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+++ FM_HOME=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout
+++ FM_ROOT_OVERRIDE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/root
+++ FM_STATE_OVERRIDE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/state
+++ FM_DATA_OVERRIDE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/data
+++ FM_CONFIG_OVERRIDE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/config
+++ FM_CONTRIBUTIONS_NOW=2026-09-16T08:00:00Z
+++ env FM_CONTRIBUTIONS_NOW=2026-09-16T08:00:00Z /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/bin/fm-contributions.sh poll
++ out=
++ '[' -z '' ']'
+++ with_home /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout env FM_CONTRIBUTIONS_NOW=2026-09-16T10:00:00Z /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/bin/fm-contributions.sh poll
+++ local home=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout
+++ shift
+++ PATH=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/fakebin:/opt/homebrew/Caskroom/codex/0.160.0/codex-path:/opt/homebrew/bin:/opt/homebrew/sbin:/Users/jarad/.codex/tmp/arg0/codex-arg0iZR68H:/opt/homebrew/Caskroom/codex/0.160.0/codex-path:/Users/jarad/.local/bin:/Users/jarad/.nix-profile/bin:/etc/profiles/per-user/jarad/bin:/run/current-system/sw/bin:/nix/var/nix/profiles/default/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/Users/jarad/.lmstudio/bin:/Users/jarad/go/bin:/Users/jarad/.cargo/bin:/Users/jarad/bin:/usr/local/sbin:/Users/jarad/.lmstudio/bin:/Users/jarad/.local/bin
+++ FORGE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/forge
+++ HEAD_A=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+++ FM_HOME=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout
+++ FM_ROOT_OVERRIDE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/root
+++ FM_STATE_OVERRIDE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/state
+++ FM_DATA_OVERRIDE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/data
+++ FM_CONFIG_OVERRIDE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/config
+++ FM_CONTRIBUTIONS_NOW=2026-09-16T08:00:00Z
+++ env FM_CONTRIBUTIONS_NOW=2026-09-16T10:00:00Z /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/bin/fm-contributions.sh poll
++ out='contribution-wake: check: contributions closeout delivery https://github.com/o/r/pull/8 head=80582564e9cb82452b0cd5974a9eeb666e0d415f state=ready'
++ case "$out" in
++ printf 'fix\n'
++ git -C /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/wt add tracked
++ git -C /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/wt commit -qm fix
++ git -C /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/wt push -q fork HEAD:refs/heads/offer
++ git --git-dir=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/fork.git rev-parse refs/heads/offer
+++ cat /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/forge/head
++ replacement_head=88a82983788dc44df88690f445a683926ac890bf
+++ with_home /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout env FM_CONTRIBUTIONS_NOW=2026-09-16T11:00:00Z /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/bin/fm-contributions.sh poll
+++ local home=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout
+++ shift
+++ PATH=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/fakebin:/opt/homebrew/Caskroom/codex/0.160.0/codex-path:/opt/homebrew/bin:/opt/homebrew/sbin:/Users/jarad/.codex/tmp/arg0/codex-arg0iZR68H:/opt/homebrew/Caskroom/codex/0.160.0/codex-path:/Users/jarad/.local/bin:/Users/jarad/.nix-profile/bin:/etc/profiles/per-user/jarad/bin:/run/current-system/sw/bin:/nix/var/nix/profiles/default/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/Users/jarad/.lmstudio/bin:/Users/jarad/go/bin:/Users/jarad/.cargo/bin:/Users/jarad/bin:/usr/local/sbin:/Users/jarad/.lmstudio/bin:/Users/jarad/.local/bin
+++ FORGE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/forge
+++ HEAD_A=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+++ FM_HOME=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout
+++ FM_ROOT_OVERRIDE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/root
+++ FM_STATE_OVERRIDE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/state
+++ FM_DATA_OVERRIDE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/data
+++ FM_CONFIG_OVERRIDE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/config
+++ FM_CONTRIBUTIONS_NOW=2026-09-16T08:00:00Z
+++ env FM_CONTRIBUTIONS_NOW=2026-09-16T11:00:00Z /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/bin/fm-contributions.sh poll
++ out=
++ '[' -z '' ']'
++ jq -e --arg head 88a82983788dc44df88690f445a683926ac890bf '.records[0] | .closeout_head == $head and .closeout_since == "2026-09-16T11:00:00Z"' /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/data/delivery/contributions.json
+++ with_home /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout env FM_CONTRIBUTIONS_NOW=2026-09-16T12:59:00Z /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/bin/fm-contributions.sh poll
+++ local home=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout
+++ shift
+++ PATH=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/fakebin:/opt/homebrew/Caskroom/codex/0.160.0/codex-path:/opt/homebrew/bin:/opt/homebrew/sbin:/Users/jarad/.codex/tmp/arg0/codex-arg0iZR68H:/opt/homebrew/Caskroom/codex/0.160.0/codex-path:/Users/jarad/.local/bin:/Users/jarad/.nix-profile/bin:/etc/profiles/per-user/jarad/bin:/run/current-system/sw/bin:/nix/var/nix/profiles/default/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/Users/jarad/.lmstudio/bin:/Users/jarad/go/bin:/Users/jarad/.cargo/bin:/Users/jarad/bin:/usr/local/sbin:/Users/jarad/.lmstudio/bin:/Users/jarad/.local/bin
+++ FORGE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/forge
+++ HEAD_A=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+++ FM_HOME=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout
+++ FM_ROOT_OVERRIDE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/root
+++ FM_STATE_OVERRIDE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/state
+++ FM_DATA_OVERRIDE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/data
+++ FM_CONFIG_OVERRIDE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/config
+++ FM_CONTRIBUTIONS_NOW=2026-09-16T08:00:00Z
+++ env FM_CONTRIBUTIONS_NOW=2026-09-16T12:59:00Z /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/bin/fm-contributions.sh poll
++ out=
++ '[' -z '' ']'
+++ with_home /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout env FM_CONTRIBUTIONS_NOW=2026-09-16T13:00:00Z /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/bin/fm-contributions.sh poll
+++ local home=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout
+++ shift
+++ PATH=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/fakebin:/opt/homebrew/Caskroom/codex/0.160.0/codex-path:/opt/homebrew/bin:/opt/homebrew/sbin:/Users/jarad/.codex/tmp/arg0/codex-arg0iZR68H:/opt/homebrew/Caskroom/codex/0.160.0/codex-path:/Users/jarad/.local/bin:/Users/jarad/.nix-profile/bin:/etc/profiles/per-user/jarad/bin:/run/current-system/sw/bin:/nix/var/nix/profiles/default/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/Users/jarad/.lmstudio/bin:/Users/jarad/go/bin:/Users/jarad/.cargo/bin:/Users/jarad/bin:/usr/local/sbin:/Users/jarad/.lmstudio/bin:/Users/jarad/.local/bin
+++ FORGE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/forge
+++ HEAD_A=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+++ FM_HOME=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout
+++ FM_ROOT_OVERRIDE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/root
+++ FM_STATE_OVERRIDE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/state
+++ FM_DATA_OVERRIDE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/data
+++ FM_CONFIG_OVERRIDE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/config
+++ FM_CONTRIBUTIONS_NOW=2026-09-16T08:00:00Z
+++ env FM_CONTRIBUTIONS_NOW=2026-09-16T13:00:00Z /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/bin/fm-contributions.sh poll
++ out='contribution-wake: check: contributions closeout delivery https://github.com/o/r/pull/8 head=88a82983788dc44df88690f445a683926ac890bf state=ready'
++ case "$out" in
++ git -C /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/wt reset --hard -q 80582564e9cb82452b0cd5974a9eeb666e0d415f
++ git -C /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/wt push --force -q fork HEAD:refs/heads/offer
++ git --git-dir=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/fork.git rev-parse refs/heads/offer
+++ with_home /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout env FM_CONTRIBUTIONS_NOW=2026-09-16T14:00:00Z /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/bin/fm-contributions.sh poll
+++ local home=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout
+++ shift
+++ PATH=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/fakebin:/opt/homebrew/Caskroom/codex/0.160.0/codex-path:/opt/homebrew/bin:/opt/homebrew/sbin:/Users/jarad/.codex/tmp/arg0/codex-arg0iZR68H:/opt/homebrew/Caskroom/codex/0.160.0/codex-path:/Users/jarad/.local/bin:/Users/jarad/.nix-profile/bin:/etc/profiles/per-user/jarad/bin:/run/current-system/sw/bin:/nix/var/nix/profiles/default/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/Users/jarad/.lmstudio/bin:/Users/jarad/go/bin:/Users/jarad/.cargo/bin:/Users/jarad/bin:/usr/local/sbin:/Users/jarad/.lmstudio/bin:/Users/jarad/.local/bin
+++ FORGE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/forge
+++ HEAD_A=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+++ FM_HOME=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout
+++ FM_ROOT_OVERRIDE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/root
+++ FM_STATE_OVERRIDE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/state
+++ FM_DATA_OVERRIDE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/data
+++ FM_CONFIG_OVERRIDE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/config
+++ FM_CONTRIBUTIONS_NOW=2026-09-16T08:00:00Z
+++ env FM_CONTRIBUTIONS_NOW=2026-09-16T14:00:00Z /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/bin/fm-contributions.sh poll
++ out=
++ '[' -z '' ']'
++ jq -e --arg head 80582564e9cb82452b0cd5974a9eeb666e0d415f '.records[0] | .closeout_head == $head and .closeout_since == "2026-09-16T14:00:00Z"' /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/data/delivery/contributions.json
+++ with_home /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout env FM_CONTRIBUTIONS_NOW=2026-09-16T15:59:00Z /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/bin/fm-contributions.sh poll
+++ local home=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout
+++ shift
+++ PATH=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/fakebin:/opt/homebrew/Caskroom/codex/0.160.0/codex-path:/opt/homebrew/bin:/opt/homebrew/sbin:/Users/jarad/.codex/tmp/arg0/codex-arg0iZR68H:/opt/homebrew/Caskroom/codex/0.160.0/codex-path:/Users/jarad/.local/bin:/Users/jarad/.nix-profile/bin:/etc/profiles/per-user/jarad/bin:/run/current-system/sw/bin:/nix/var/nix/profiles/default/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/Users/jarad/.lmstudio/bin:/Users/jarad/go/bin:/Users/jarad/.cargo/bin:/Users/jarad/bin:/usr/local/sbin:/Users/jarad/.lmstudio/bin:/Users/jarad/.local/bin
+++ FORGE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/forge
+++ HEAD_A=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+++ FM_HOME=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout
+++ FM_ROOT_OVERRIDE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/root
+++ FM_STATE_OVERRIDE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/state
+++ FM_DATA_OVERRIDE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/data
+++ FM_CONFIG_OVERRIDE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/config
+++ FM_CONTRIBUTIONS_NOW=2026-09-16T08:00:00Z
+++ env FM_CONTRIBUTIONS_NOW=2026-09-16T15:59:00Z /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/bin/fm-contributions.sh poll
++ out=
++ '[' -z '' ']'
+++ with_home /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout env FM_CONTRIBUTIONS_NOW=2026-09-16T16:00:00Z /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/bin/fm-contributions.sh poll
+++ local home=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout
+++ shift
+++ PATH=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/fakebin:/opt/homebrew/Caskroom/codex/0.160.0/codex-path:/opt/homebrew/bin:/opt/homebrew/sbin:/Users/jarad/.codex/tmp/arg0/codex-arg0iZR68H:/opt/homebrew/Caskroom/codex/0.160.0/codex-path:/Users/jarad/.local/bin:/Users/jarad/.nix-profile/bin:/etc/profiles/per-user/jarad/bin:/run/current-system/sw/bin:/nix/var/nix/profiles/default/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/Users/jarad/.lmstudio/bin:/Users/jarad/go/bin:/Users/jarad/.cargo/bin:/Users/jarad/bin:/usr/local/sbin:/Users/jarad/.lmstudio/bin:/Users/jarad/.local/bin
+++ FORGE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/forge
+++ HEAD_A=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+++ FM_HOME=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout
+++ FM_ROOT_OVERRIDE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/root
+++ FM_STATE_OVERRIDE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/state
+++ FM_DATA_OVERRIDE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/data
+++ FM_CONFIG_OVERRIDE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/returned-head-closeout/config
+++ FM_CONTRIBUTIONS_NOW=2026-09-16T08:00:00Z
+++ env FM_CONTRIBUTIONS_NOW=2026-09-16T16:00:00Z /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/bin/fm-contributions.sh poll
++ out='contribution-wake: check: contributions closeout delivery https://github.com/o/r/pull/8 head=80582564e9cb82452b0cd5974a9eeb666e0d415f state=ready'
++ case "$out" in
++ pass 'A to B to A starts a new window for every observed head change'
++ printf 'ok - %s\n' 'A to B to A starts a new window for every observed head change'
+ok - A to B to A starts a new window for every observed head change
++ test_ci_lane_disappearing_after_ready_holds_closeout
++ local home out head
+++ new_home disappearing-lane-closeout
+++ local home=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout
+++ mkdir -p /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout/data /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout/state /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout/config /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout/projects /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout/fakebin
+++ printf '# Backlog\n\n## Queued\n'
+++ printf '#!/bin/sh\nexit 1\n'
+++ printf '#!/bin/sh\nexit 0\n'
+++ chmod +x /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout/fakebin/no-mistakes /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout/fakebin/tmux
+++ printf '%s\n' /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout
++ home=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout
++ forge_home /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout
++ local home=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout
++ mkdir -p /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout/forge /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout/root/bin /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout/wt
++ printf '#!/bin/sh\nexit 0\n'
++ chmod +x /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout/root/bin/fm-guard.sh
++ printf 'worktree=%s/wt\nkind=ship\n' /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout
++ chmod 600 /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout/state/delivery.meta
++ git -C /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout/wt init -q
++ git -C /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout/wt config user.name Fixture
++ git -C /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout/wt config user.email fixture@example.invalid
++ printf 'clean\n'
++ git -C /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout/wt add tracked
++ GIT_AUTHOR_DATE=2026-09-16T08:00:00Z
++ GIT_COMMITTER_DATE=2026-09-16T08:00:00Z
++ git -C /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout/wt commit -qm initial
++ record /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout delivery 8 open mergeable
++ local home=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout id=delivery number=8 state=open mergeable=mergeable hold=
++ mkdir -p /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout/data/delivery
++ printf -- '- [ ] %s - Contribution %s https://github.com/o/r/pull/%s (repo: sample) (kind: ship) %s\n' delivery delivery 8 ''
++ jq -n --arg task delivery --arg url https://github.com/o/r/pull/8 --arg head aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --arg at 2026-09-16T08:00:00Z --arg state open --arg mergeable mergeable $'\n    {schema:"fm-contributions.v1",task:$task,records:[{\n      url:$url,kind:"pr",checked_at:$at,error:null,pending:[],seen:[],verdict:null,\n      observation:{head:$head,state:$state,draft:false,mergeable:$mergeable,\n        review_decision:"APPROVED",can_merge:false,\n        checks:[{name:"test",id:1,status:"completed",conclusion:"success",started_at:$at}],\n        reviews:[],events:[]}}]}'
++ git -C /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout/wt rev-parse HEAD
++ printf 'owner/r\n'
++ printf 'fork/r\n'
++ printf '%s\n' '[{"check_runs":[{"name":"test","id":1,"status":"completed","conclusion":"success","started_at":"2026-09-16T08:00:00Z"}]}]'
++ printf '[]\n'
++ printf '[]\n'
++ printf '[]\n'
++ printf '[]\n'
++ printf '[]\n'
++ cat
++ chmod +x /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout/fakebin/gh
+++ cat /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout/forge/head
++ head=80582564e9cb82452b0cd5974a9eeb666e0d415f
++ with_home /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/bin/fm-pr-check.sh delivery https://github.com/o/r/pull/8
++ local home=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout
++ shift
++ PATH=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout/fakebin:/opt/homebrew/Caskroom/codex/0.160.0/codex-path:/opt/homebrew/bin:/opt/homebrew/sbin:/Users/jarad/.codex/tmp/arg0/codex-arg0iZR68H:/opt/homebrew/Caskroom/codex/0.160.0/codex-path:/Users/jarad/.local/bin:/Users/jarad/.nix-profile/bin:/etc/profiles/per-user/jarad/bin:/run/current-system/sw/bin:/nix/var/nix/profiles/default/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/Users/jarad/.lmstudio/bin:/Users/jarad/go/bin:/Users/jarad/.cargo/bin:/Users/jarad/bin:/usr/local/sbin:/Users/jarad/.lmstudio/bin:/Users/jarad/.local/bin
++ FORGE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout/forge
++ HEAD_A=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
++ FM_HOME=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout
++ FM_ROOT_OVERRIDE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout/root
++ FM_STATE_OVERRIDE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout/state
++ FM_DATA_OVERRIDE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout/data
++ FM_CONFIG_OVERRIDE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout/config
++ FM_CONTRIBUTIONS_NOW=2026-09-16T08:00:00Z
++ /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/bin/fm-pr-check.sh delivery https://github.com/o/r/pull/8
++ printf '%s\n' $'[{"check_runs":[\n    {"name":"test","id":1,"status":"completed","conclusion":"success","started_at":"2026-09-16T08:00:00Z"},\n    {"name":"required-extra","id":2,"status":"completed","conclusion":"success","started_at":"2026-09-16T08:00:00Z"}]}]'
++ with_home /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/bin/fm-contributions.sh poll
++ local home=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout
++ shift
++ PATH=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout/fakebin:/opt/homebrew/Caskroom/codex/0.160.0/codex-path:/opt/homebrew/bin:/opt/homebrew/sbin:/Users/jarad/.codex/tmp/arg0/codex-arg0iZR68H:/opt/homebrew/Caskroom/codex/0.160.0/codex-path:/Users/jarad/.local/bin:/Users/jarad/.nix-profile/bin:/etc/profiles/per-user/jarad/bin:/run/current-system/sw/bin:/nix/var/nix/profiles/default/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/Users/jarad/.lmstudio/bin:/Users/jarad/go/bin:/Users/jarad/.cargo/bin:/Users/jarad/bin:/usr/local/sbin:/Users/jarad/.lmstudio/bin:/Users/jarad/.local/bin
++ FORGE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout/forge
++ HEAD_A=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
++ FM_HOME=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout
++ FM_ROOT_OVERRIDE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout/root
++ FM_STATE_OVERRIDE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout/state
++ FM_DATA_OVERRIDE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout/data
++ FM_CONFIG_OVERRIDE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout/config
++ FM_CONTRIBUTIONS_NOW=2026-09-16T08:00:00Z
++ /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/bin/fm-contributions.sh poll
+++ with_home /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout env FM_CONTRIBUTIONS_NOW=2026-09-16T10:00:00Z /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/bin/fm-contributions.sh poll
+++ local home=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout
+++ shift
+++ PATH=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout/fakebin:/opt/homebrew/Caskroom/codex/0.160.0/codex-path:/opt/homebrew/bin:/opt/homebrew/sbin:/Users/jarad/.codex/tmp/arg0/codex-arg0iZR68H:/opt/homebrew/Caskroom/codex/0.160.0/codex-path:/Users/jarad/.local/bin:/Users/jarad/.nix-profile/bin:/etc/profiles/per-user/jarad/bin:/run/current-system/sw/bin:/nix/var/nix/profiles/default/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/Users/jarad/.lmstudio/bin:/Users/jarad/go/bin:/Users/jarad/.cargo/bin:/Users/jarad/bin:/usr/local/sbin:/Users/jarad/.lmstudio/bin:/Users/jarad/.local/bin
+++ FORGE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout/forge
+++ HEAD_A=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+++ FM_HOME=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout
+++ FM_ROOT_OVERRIDE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout/root
+++ FM_STATE_OVERRIDE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout/state
+++ FM_DATA_OVERRIDE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout/data
+++ FM_CONFIG_OVERRIDE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout/config
+++ FM_CONTRIBUTIONS_NOW=2026-09-16T08:00:00Z
+++ env FM_CONTRIBUTIONS_NOW=2026-09-16T10:00:00Z /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/bin/fm-contributions.sh poll
++ out='contribution-wake: check: contributions closeout delivery https://github.com/o/r/pull/8 head=80582564e9cb82452b0cd5974a9eeb666e0d415f state=ready'
++ case "$out" in
++ printf '%s\n' '[{"check_runs":[{"name":"test","id":1,"status":"completed","conclusion":"success","started_at":"2026-09-16T08:00:00Z"}]}]'
+++ with_home /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout env FM_CONTRIBUTIONS_NOW=2026-09-16T10:05:00Z /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/bin/fm-contributions.sh poll
+++ local home=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout
+++ shift
+++ PATH=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout/fakebin:/opt/homebrew/Caskroom/codex/0.160.0/codex-path:/opt/homebrew/bin:/opt/homebrew/sbin:/Users/jarad/.codex/tmp/arg0/codex-arg0iZR68H:/opt/homebrew/Caskroom/codex/0.160.0/codex-path:/Users/jarad/.local/bin:/Users/jarad/.nix-profile/bin:/etc/profiles/per-user/jarad/bin:/run/current-system/sw/bin:/nix/var/nix/profiles/default/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/Users/jarad/.lmstudio/bin:/Users/jarad/go/bin:/Users/jarad/.cargo/bin:/Users/jarad/bin:/usr/local/sbin:/Users/jarad/.lmstudio/bin:/Users/jarad/.local/bin
+++ FORGE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout/forge
+++ HEAD_A=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+++ FM_HOME=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout
+++ FM_ROOT_OVERRIDE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout/root
+++ FM_STATE_OVERRIDE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout/state
+++ FM_DATA_OVERRIDE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout/data
+++ FM_CONFIG_OVERRIDE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout/config
+++ FM_CONTRIBUTIONS_NOW=2026-09-16T08:00:00Z
+++ env FM_CONTRIBUTIONS_NOW=2026-09-16T10:05:00Z /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/bin/fm-contributions.sh poll
++ out='contribution-wake: check: contributions closeout delivery https://github.com/o/r/pull/8 head=80582564e9cb82452b0cd5974a9eeb666e0d415f state=ci'
++ '[' 'contribution-wake: check: contributions closeout delivery https://github.com/o/r/pull/8 head=80582564e9cb82452b0cd5974a9eeb666e0d415f state=ci' = 'contribution-wake: check: contributions closeout delivery https://github.com/o/r/pull/8 head=80582564e9cb82452b0cd5974a9eeb666e0d415f state=ci' ']'
+++ with_home /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout env FM_CONTRIBUTIONS_NOW=2026-09-16T10:10:00Z /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/bin/fm-contributions.sh poll
+++ local home=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout
+++ shift
+++ PATH=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout/fakebin:/opt/homebrew/Caskroom/codex/0.160.0/codex-path:/opt/homebrew/bin:/opt/homebrew/sbin:/Users/jarad/.codex/tmp/arg0/codex-arg0iZR68H:/opt/homebrew/Caskroom/codex/0.160.0/codex-path:/Users/jarad/.local/bin:/Users/jarad/.nix-profile/bin:/etc/profiles/per-user/jarad/bin:/run/current-system/sw/bin:/nix/var/nix/profiles/default/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/Users/jarad/.lmstudio/bin:/Users/jarad/go/bin:/Users/jarad/.cargo/bin:/Users/jarad/bin:/usr/local/sbin:/Users/jarad/.lmstudio/bin:/Users/jarad/.local/bin
+++ FORGE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout/forge
+++ HEAD_A=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+++ FM_HOME=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout
+++ FM_ROOT_OVERRIDE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout/root
+++ FM_STATE_OVERRIDE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout/state
+++ FM_DATA_OVERRIDE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout/data
+++ FM_CONFIG_OVERRIDE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout/config
+++ FM_CONTRIBUTIONS_NOW=2026-09-16T08:00:00Z
+++ env FM_CONTRIBUTIONS_NOW=2026-09-16T10:10:00Z /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/bin/fm-contributions.sh poll
++ out=
++ '[' -z '' ']'
++ jq -e --arg head 80582564e9cb82452b0cd5974a9eeb666e0d415f $'.records[0] | .observation.head == $head\n    and .observation.absent_checks == ["required-extra"] and .closeout_notice == ($head + ":ci")' /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout/data/delivery/contributions.json
++ '[' -f /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout/state/delivery.meta ']'
++ '[' -d /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout/wt ']'
+++ awk -F '\t' '$3 == "check" {n++} END {print n+0}' /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/disappearing-lane-closeout/state/.wake-queue
++ '[' 2 = 2 ']'
++ pass 'a disappearing CI lane revokes closeout readiness and keeps the task held'
++ printf 'ok - %s\n' 'a disappearing CI lane revokes closeout readiness and keeps the task held'
+ok - a disappearing CI lane revokes closeout readiness and keeps the task held
++ test_permission_lookup_failure_after_readable_observation
++ local home out
+++ new_home permission-lost-at-expiry
+++ local home=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry
+++ mkdir -p /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry/data /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry/state /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry/config /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry/projects /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry/fakebin
+++ printf '# Backlog\n\n## Queued\n'
+++ printf '#!/bin/sh\nexit 1\n'
+++ printf '#!/bin/sh\nexit 0\n'
+++ chmod +x /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry/fakebin/no-mistakes /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry/fakebin/tmux
+++ printf '%s\n' /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry
++ home=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry
++ forge_home /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry
++ local home=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry
++ mkdir -p /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry/forge /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry/root/bin /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry/wt
++ printf '#!/bin/sh\nexit 0\n'
++ chmod +x /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry/root/bin/fm-guard.sh
++ printf 'worktree=%s/wt\nkind=ship\n' /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry
++ chmod 600 /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry/state/delivery.meta
++ git -C /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry/wt init -q
++ git -C /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry/wt config user.name Fixture
++ git -C /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry/wt config user.email fixture@example.invalid
++ printf 'clean\n'
++ git -C /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry/wt add tracked
++ GIT_AUTHOR_DATE=2026-09-16T08:00:00Z
++ GIT_COMMITTER_DATE=2026-09-16T08:00:00Z
++ git -C /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry/wt commit -qm initial
++ record /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry delivery 8 open mergeable
++ local home=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry id=delivery number=8 state=open mergeable=mergeable hold=
++ mkdir -p /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry/data/delivery
++ printf -- '- [ ] %s - Contribution %s https://github.com/o/r/pull/%s (repo: sample) (kind: ship) %s\n' delivery delivery 8 ''
++ jq -n --arg task delivery --arg url https://github.com/o/r/pull/8 --arg head aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --arg at 2026-09-16T08:00:00Z --arg state open --arg mergeable mergeable $'\n    {schema:"fm-contributions.v1",task:$task,records:[{\n      url:$url,kind:"pr",checked_at:$at,error:null,pending:[],seen:[],verdict:null,\n      observation:{head:$head,state:$state,draft:false,mergeable:$mergeable,\n        review_decision:"APPROVED",can_merge:false,\n        checks:[{name:"test",id:1,status:"completed",conclusion:"success",started_at:$at}],\n        reviews:[],events:[]}}]}'
++ git -C /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry/wt rev-parse HEAD
++ printf 'owner/r\n'
++ printf 'fork/r\n'
++ printf '%s\n' '[{"check_runs":[{"name":"test","id":1,"status":"completed","conclusion":"success","started_at":"2026-09-16T08:00:00Z"}]}]'
++ printf '[]\n'
++ printf '[]\n'
++ printf '[]\n'
++ printf '[]\n'
++ printf '[]\n'
++ cat
++ chmod +x /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry/fakebin/gh
++ with_home /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/bin/fm-pr-check.sh delivery https://github.com/o/r/pull/8
++ local home=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry
++ shift
++ PATH=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry/fakebin:/opt/homebrew/Caskroom/codex/0.160.0/codex-path:/opt/homebrew/bin:/opt/homebrew/sbin:/Users/jarad/.codex/tmp/arg0/codex-arg0iZR68H:/opt/homebrew/Caskroom/codex/0.160.0/codex-path:/Users/jarad/.local/bin:/Users/jarad/.nix-profile/bin:/etc/profiles/per-user/jarad/bin:/run/current-system/sw/bin:/nix/var/nix/profiles/default/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/Users/jarad/.lmstudio/bin:/Users/jarad/go/bin:/Users/jarad/.cargo/bin:/Users/jarad/bin:/usr/local/sbin:/Users/jarad/.lmstudio/bin:/Users/jarad/.local/bin
++ FORGE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry/forge
++ HEAD_A=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
++ FM_HOME=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry
++ FM_ROOT_OVERRIDE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry/root
++ FM_STATE_OVERRIDE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry/state
++ FM_DATA_OVERRIDE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry/data
++ FM_CONFIG_OVERRIDE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry/config
++ FM_CONTRIBUTIONS_NOW=2026-09-16T08:00:00Z
++ /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/bin/fm-pr-check.sh delivery https://github.com/o/r/pull/8
++ with_home /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/bin/fm-contributions.sh poll
++ local home=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry
++ shift
++ PATH=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry/fakebin:/opt/homebrew/Caskroom/codex/0.160.0/codex-path:/opt/homebrew/bin:/opt/homebrew/sbin:/Users/jarad/.codex/tmp/arg0/codex-arg0iZR68H:/opt/homebrew/Caskroom/codex/0.160.0/codex-path:/Users/jarad/.local/bin:/Users/jarad/.nix-profile/bin:/etc/profiles/per-user/jarad/bin:/run/current-system/sw/bin:/nix/var/nix/profiles/default/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/Users/jarad/.lmstudio/bin:/Users/jarad/go/bin:/Users/jarad/.cargo/bin:/Users/jarad/bin:/usr/local/sbin:/Users/jarad/.lmstudio/bin:/Users/jarad/.local/bin
++ FORGE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry/forge
++ HEAD_A=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
++ FM_HOME=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry
++ FM_ROOT_OVERRIDE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry/root
++ FM_STATE_OVERRIDE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry/state
++ FM_DATA_OVERRIDE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry/data
++ FM_CONFIG_OVERRIDE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry/config
++ FM_CONTRIBUTIONS_NOW=2026-09-16T08:00:00Z
++ /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/bin/fm-contributions.sh poll
++ jq -e '.records[0].observation.viewer_permission == "READ" and .records[0].error == null' /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry/data/delivery/contributions.json
++ :
+++ with_home /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry env FM_CONTRIBUTIONS_NOW=2026-09-16T10:00:00Z /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/bin/fm-contributions.sh poll
+++ local home=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry
+++ shift
+++ PATH=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry/fakebin:/opt/homebrew/Caskroom/codex/0.160.0/codex-path:/opt/homebrew/bin:/opt/homebrew/sbin:/Users/jarad/.codex/tmp/arg0/codex-arg0iZR68H:/opt/homebrew/Caskroom/codex/0.160.0/codex-path:/Users/jarad/.local/bin:/Users/jarad/.nix-profile/bin:/etc/profiles/per-user/jarad/bin:/run/current-system/sw/bin:/nix/var/nix/profiles/default/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/Users/jarad/.lmstudio/bin:/Users/jarad/go/bin:/Users/jarad/.cargo/bin:/Users/jarad/bin:/usr/local/sbin:/Users/jarad/.lmstudio/bin:/Users/jarad/.local/bin
+++ FORGE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry/forge
+++ HEAD_A=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+++ FM_HOME=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry
+++ FM_ROOT_OVERRIDE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry/root
+++ FM_STATE_OVERRIDE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry/state
+++ FM_DATA_OVERRIDE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry/data
+++ FM_CONFIG_OVERRIDE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry/config
+++ FM_CONTRIBUTIONS_NOW=2026-09-16T08:00:00Z
+++ env FM_CONTRIBUTIONS_NOW=2026-09-16T10:00:00Z /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/bin/fm-contributions.sh poll
++ out='contributions: observation unavailable for https://github.com/o/r/pull/8'
++ '[' 'contributions: observation unavailable for https://github.com/o/r/pull/8' = 'contributions: observation unavailable for https://github.com/o/r/pull/8' ']'
++ jq -e '.records[0] | .checked_at == "2026-09-16T10:00:00Z" and .error != null and .closeout_notice == null' /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry/data/delivery/contributions.json
++ '[' -f /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry/state/delivery.meta ']'
++ '[' -d /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry/wt ']'
++ '[' '!' -s /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry/state/.wake-queue ']'
+++ with_home /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry env FM_CONTRIBUTIONS_NOW=2026-09-16T10:05:00Z /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/bin/fm-contributions.sh poll
+++ local home=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry
+++ shift
+++ PATH=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry/fakebin:/opt/homebrew/Caskroom/codex/0.160.0/codex-path:/opt/homebrew/bin:/opt/homebrew/sbin:/Users/jarad/.codex/tmp/arg0/codex-arg0iZR68H:/opt/homebrew/Caskroom/codex/0.160.0/codex-path:/Users/jarad/.local/bin:/Users/jarad/.nix-profile/bin:/etc/profiles/per-user/jarad/bin:/run/current-system/sw/bin:/nix/var/nix/profiles/default/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/Users/jarad/.lmstudio/bin:/Users/jarad/go/bin:/Users/jarad/.cargo/bin:/Users/jarad/bin:/usr/local/sbin:/Users/jarad/.lmstudio/bin:/Users/jarad/.local/bin
+++ FORGE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry/forge
+++ HEAD_A=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+++ FM_HOME=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry
+++ FM_ROOT_OVERRIDE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry/root
+++ FM_STATE_OVERRIDE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry/state
+++ FM_DATA_OVERRIDE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry/data
+++ FM_CONFIG_OVERRIDE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry/config
+++ FM_CONTRIBUTIONS_NOW=2026-09-16T08:00:00Z
+++ env FM_CONTRIBUTIONS_NOW=2026-09-16T10:05:00Z /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/bin/fm-contributions.sh poll
++ out=
++ '[' -z '' ']'
++ rm /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry/forge/permission-error
+++ with_home /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry env FM_CONTRIBUTIONS_NOW=2026-09-16T10:10:00Z /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/bin/fm-contributions.sh poll
+++ local home=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry
+++ shift
+++ PATH=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry/fakebin:/opt/homebrew/Caskroom/codex/0.160.0/codex-path:/opt/homebrew/bin:/opt/homebrew/sbin:/Users/jarad/.codex/tmp/arg0/codex-arg0iZR68H:/opt/homebrew/Caskroom/codex/0.160.0/codex-path:/Users/jarad/.local/bin:/Users/jarad/.nix-profile/bin:/etc/profiles/per-user/jarad/bin:/run/current-system/sw/bin:/nix/var/nix/profiles/default/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/Users/jarad/.lmstudio/bin:/Users/jarad/go/bin:/Users/jarad/.cargo/bin:/Users/jarad/bin:/usr/local/sbin:/Users/jarad/.lmstudio/bin:/Users/jarad/.local/bin
+++ FORGE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry/forge
+++ HEAD_A=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+++ FM_HOME=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry
+++ FM_ROOT_OVERRIDE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry/root
+++ FM_STATE_OVERRIDE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry/state
+++ FM_DATA_OVERRIDE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry/data
+++ FM_CONFIG_OVERRIDE=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v/permission-lost-at-expiry/config
+++ FM_CONTRIBUTIONS_NOW=2026-09-16T08:00:00Z
+++ env FM_CONTRIBUTIONS_NOW=2026-09-16T10:10:00Z /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M46XS3FHE09Z71KNW1MME0W5/bin/fm-contributions.sh poll
++ out='contribution-wake: check: contributions closeout delivery https://github.com/o/r/pull/8 head=80582564e9cb82452b0cd5974a9eeb666e0d415f state=ready'
++ case "$out" in
++ pass 'an unreadable permission lookup cannot reuse prior outside cleanup authority'
++ printf 'ok - %s\n' 'an unreadable permission lookup cannot reuse prior outside cleanup authority'
+ok - an unreadable permission lookup cannot reuse prior outside cleanup authority
++ fm_test_cleanup
++ local d
++ fm_test_reap_watchers
++ local state lock_home $'seen=\n'
++ '[' -f /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/.fm-test-watcher.10863.VFmAz3 ']'
++ IFS=
++ read -r state
++ rm -f /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/.fm-test-watcher.10863.VFmAz3
++ fm_test_reap_procevent_homes
++ local home claim_root $'seen=\n'
++ '[' -f /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/.fm-test-procevent.10863.1Bul89 ']'
++ IFS=$'\t'
++ read -r home claim_root
++ rm -f /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/.fm-test-procevent.10863.1Bul89
++ for d in "${FM_TEST_CLEANUP_DIRS[@]:-}"
++ '[' -n '' ']'
++ '[' -f /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/.fm-test-cleanup.10863.7vSvdi ']'
++ IFS=
++ read -r d
++ '[' -n /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v ']'
++ fm_test_remove_tree /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v
++ local dir=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v
++ '[' -d /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v ']'
++ '[' '!' -L /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v ']'
++ find /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v -type d -exec chmod u+rwx '{}' +
++ rm -rf /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-contributions.fYNE7v
++ IFS=
++ read -r d
++ rm -f /private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/.fm-test-cleanup.10863.7vSvdi

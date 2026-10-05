@@ -473,6 +473,8 @@ It checks that a newly appended keyed decision is classified without rereading e
 
 - Verified-successor attach.
 - Recovery publication before stale-lock removal.
+- Generic lock PID reuse, matched live owners, unreadable identity, and legacy locks without identity evidence.
+- Bounded ownership handoff and reaper exclusion of competing successors.
 - The typed self-eviction failure.
 - Bounded and successor-linked lifecycle rows.
 - A SIGSTOP counterfactual that distinguishes a live PID from a stale beacon before classifying termination.

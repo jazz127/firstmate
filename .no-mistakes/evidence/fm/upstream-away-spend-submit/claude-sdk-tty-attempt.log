@@ -1,0 +1,25 @@
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/bin/fm-lab-home.sh create /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l
+/Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l
+[exit=0]
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/bin/fm-busy-event.sh arm /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/state task --state unknown --source fm-spawn --event launch
+g1791240070.84617.4624
+[exit=0]
+$ tmux -L fm-lab new-session -d -s primary -n probe -x 120 -y 40 -c /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX -e FM_HOME=/Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l claude --print --verbose --input-format stream-json --output-format stream-json --setting-sources '' --settings /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/hooks.json --strict-mcp-config --mcp-config '{"mcpServers":{}}' --tools '' --system-prompt 'This is an isolated live-validation probe. Answer the supplied prompt. Do not run tools, change files, start supervision, or delegate.'
+[exit=0]
+$ tmux -L fm-lab set-window-option -t primary:probe automatic-rename off
+[exit=0]
+$ tmux -L fm-lab display-message -p -t primary:probe #{socket_path}
+/Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/tmux/tmux-501/fm-lab
+[exit=0]
+$ tmux -L fm-lab display-message -p -t primary:probe #{pid}
+84675
+[exit=0]
+$ tmux -L fm-lab capture-pane -p -t primary:probe -S -100
+no server running on /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/tmux/tmux-501/fm-lab
+[exit=1]
+ERROR: no server running on /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/tmux/tmux-501/fm-lab
+
+$ tmux -L fm-lab kill-server
+no server running on /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/tmux/tmux-501/fm-lab
+[exit=1]
+Private server stopped and disposable lab removed.

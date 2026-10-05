@@ -1,0 +1,438 @@
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/bin/fm-lab-home.sh create /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l
+/Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l
+[exit=0]
+$ git init -q -b main /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/projects/demo
+[exit=0]
+$ git -C /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/projects/demo commit -q --allow-empty -m Disposable test seed
+[exit=0]
+$ treehouse init
+Created /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/projects/demo/treehouse.toml
+[exit=0]
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/bin/fm-brief.sh fm-lab-raw-44893 demo --scout
+scaffolded: /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/data/fm-lab-raw-44893/brief.md (scout; replace {TASK} and {FIRSTMATE_SPEC})
+[exit=0]
+$ tmux -L fm-lab new-session -d -s primary -n probe -x 120 -y 40 -c /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX -e FM_HOME=/Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l codex --disable hooks
+[exit=0]
+$ tmux -L fm-lab set-window-option -t primary:probe automatic-rename off
+[exit=0]
+$ tmux -L fm-lab display-message -p -t primary:probe #{socket_path}
+/Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/tmux/tmux-501/fm-lab
+[exit=0]
+$ tmux -L fm-lab display-message -p -t primary:probe #{pid}
+45061
+[exit=0]
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/bin/fm-afk-contract.sh enter --spend 1
+Away posture recorded at 2026-10-05T22:37:18Z: hold-for-return only. No phone channel is configured; anything that needs you waits for your return. No away instructions were recorded; the away session acts on standing authority only, and anything that needs you waits for your return. Destructive, irreversible, and security-sensitive actions are never pre-authorizable, whatever the words say. Expected return: not given. Spend cap: 1 concurrent workers.
+Away posture (recorded):
+  entered: 2026-10-05T22:37:18Z
+  expected return: not given
+  spend cap: 1 concurrent workers
+  reach: hold-for-return only. No phone channel is configured; anything that needs you waits for your return.
+  your words: (none)
+[exit=0]
+$ tmux -L fm-lab capture-pane -p -t primary:fm-fm-lab-raw-44893 -S -100
+treehouse get
+compinit:527: no such file or directory: /opt/homebrew/share/zsh/site-functions/_brew
+compinit:527: no such file or directory: /opt/homebrew/share/zsh/site-functions/_brew
+jarad@jengine:~/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/projects/demo/ > treehouse get
+🌳 Setting up worktree...
+🌳 Entered worktree at ~/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/pool/.treehouse/demo-0db6fd/1
+/demo. Type 'exit' to return.
+compinit:527: no such file or directory: /opt/homebrew/share/zsh/site-functions/_brew
+compinit:527: no such file or directory: /opt/homebrew/share/zsh/site-functions/_brew
+jarad@jengine:~/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/pool/.treehouse/demo-0db6fd/1/demo/ >
+cd -- '/Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/pool/.treehouse/demo-0db6fd/1/demo
+'
+jarad@jengine:~/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/pool/.treehouse/demo-0db6fd/1/demo/ >
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[exit=0]
+$ tmux -L fm-lab capture-pane -p -t primary:fm-fm-lab-raw-44893 -S -100
+treehouse get
+compinit:527: no such file or directory: /opt/homebrew/share/zsh/site-functions/_brew
+compinit:527: no such file or directory: /opt/homebrew/share/zsh/site-functions/_brew
+jarad@jengine:~/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/projects/demo/ > treehouse get
+🌳 Setting up worktree...
+🌳 Entered worktree at ~/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/pool/.treehouse/demo-0db6fd/1
+/demo. Type 'exit' to return.
+compinit:527: no such file or directory: /opt/homebrew/share/zsh/site-functions/_brew
+compinit:527: no such file or directory: /opt/homebrew/share/zsh/site-functions/_brew
+jarad@jengine:~/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/pool/.treehouse/demo-0db6fd/1/demo/ >
+cd -- '/Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/pool/.treehouse/demo-0db6fd/1/demo
+'
+jarad@jengine:~/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/pool/.treehouse/demo-0db6fd/1/demo/ >
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[exit=0]
+$ tmux -L fm-lab capture-pane -p -t primary:fm-fm-lab-raw-44893 -S -100
+treehouse get
+compinit:527: no such file or directory: /opt/homebrew/share/zsh/site-functions/_brew
+compinit:527: no such file or directory: /opt/homebrew/share/zsh/site-functions/_brew
+jarad@jengine:~/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/projects/demo/ > treehouse get
+🌳 Setting up worktree...
+🌳 Entered worktree at ~/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/pool/.treehouse/demo-0db6fd/1
+/demo. Type 'exit' to return.
+compinit:527: no such file or directory: /opt/homebrew/share/zsh/site-functions/_brew
+compinit:527: no such file or directory: /opt/homebrew/share/zsh/site-functions/_brew
+jarad@jengine:~/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/pool/.treehouse/demo-0db6fd/1/demo/ >
+cd -- '/Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/pool/.treehouse/demo-0db6fd/1/demo
+'
+jarad@jengine:~/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/pool/.treehouse/demo-0db6fd/1/demo/ >
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[exit=0]
+$ tmux -L fm-lab capture-pane -p -t primary:fm-fm-lab-raw-44893 -S -100
+treehouse get
+compinit:527: no such file or directory: /opt/homebrew/share/zsh/site-functions/_brew
+compinit:527: no such file or directory: /opt/homebrew/share/zsh/site-functions/_brew
+jarad@jengine:~/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/projects/demo/ > treehouse get
+🌳 Setting up worktree...
+🌳 Entered worktree at ~/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/pool/.treehouse/demo-0db6fd/1
+/demo. Type 'exit' to return.
+compinit:527: no such file or directory: /opt/homebrew/share/zsh/site-functions/_brew
+compinit:527: no such file or directory: /opt/homebrew/share/zsh/site-functions/_brew
+jarad@jengine:~/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/pool/.treehouse/demo-0db6fd/1/demo/ >
+cd -- '/Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/pool/.treehouse/demo-0db6fd/1/demo
+'
+jarad@jengine:~/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/pool/.treehouse/demo-0db6fd/1/demo/ >
+export GOTMPDIR=/tmp/fm-fm-lab-raw-44893/gotmp
+jarad@jengine:~/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/pool/.treehouse/demo-0db6fd/1/demo/ >
+export COMPACT_ADVISER_DISABLE=1
+jarad@jengine:~/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/pool/.treehouse/demo-0db6fd/1/demo/ >
+export FM_TASK_ID=fm-lab-raw-44893
+jarad@jengine:~/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/pool/.treehouse/demo-0db6fd/1/demo/ >
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[exit=0]
+$ tmux -L fm-lab capture-pane -p -t primary:fm-fm-lab-raw-44893 -S -100
+treehouse get
+compinit:527: no such file or directory: /opt/homebrew/share/zsh/site-functions/_brew
+compinit:527: no such file or directory: /opt/homebrew/share/zsh/site-functions/_brew
+jarad@jengine:~/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/projects/demo/ > treehouse get
+🌳 Setting up worktree...
+🌳 Entered worktree at ~/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/pool/.treehouse/demo-0db6fd/1
+/demo. Type 'exit' to return.
+compinit:527: no such file or directory: /opt/homebrew/share/zsh/site-functions/_brew
+compinit:527: no such file or directory: /opt/homebrew/share/zsh/site-functions/_brew
+jarad@jengine:~/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/pool/.treehouse/demo-0db6fd/1/demo/ >
+cd -- '/Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/pool/.treehouse/demo-0db6fd/1/demo
+'
+jarad@jengine:~/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/pool/.treehouse/demo-0db6fd/1/demo/ >
+export GOTMPDIR=/tmp/fm-fm-lab-raw-44893/gotmp
+jarad@jengine:~/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/pool/.treehouse/demo-0db6fd/1/demo/ >
+export COMPACT_ADVISER_DISABLE=1
+jarad@jengine:~/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/pool/.treehouse/demo-0db6fd/1/demo/ >
+export FM_TASK_ID=fm-lab-raw-44893
+jarad@jengine:~/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/pool/.treehouse/demo-0db6fd/1/demo/ >
+. '/tmp/fm-fm-lab-raw-44893+afb6b3313ce47926cc43623e5f19464b11d5e9299231f7dec89004310453e07b/launch.s1791239842.45197.32
+674.sh'
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[exit=0]
+$ tmux -L fm-lab capture-pane -p -t primary:fm-fm-lab-raw-44893 -S -100
+treehouse get
+compinit:527: no such file or directory: /opt/homebrew/share/zsh/site-functions/_brew
+compinit:527: no such file or directory: /opt/homebrew/share/zsh/site-functions/_brew
+jarad@jengine:~/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/projects/demo/ > treehouse get
+🌳 Setting up worktree...
+🌳 Entered worktree at ~/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/pool/.treehouse/demo-0db6fd/1
+/demo. Type 'exit' to return.
+compinit:527: no such file or directory: /opt/homebrew/share/zsh/site-functions/_brew
+compinit:527: no such file or directory: /opt/homebrew/share/zsh/site-functions/_brew
+jarad@jengine:~/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/pool/.treehouse/demo-0db6fd/1/demo/ >
+cd -- '/Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/pool/.treehouse/demo-0db6fd/1/demo
+'
+jarad@jengine:~/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/pool/.treehouse/demo-0db6fd/1/demo/ >
+export GOTMPDIR=/tmp/fm-fm-lab-raw-44893/gotmp
+jarad@jengine:~/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/pool/.treehouse/demo-0db6fd/1/demo/ >
+export COMPACT_ADVISER_DISABLE=1
+jarad@jengine:~/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/pool/.treehouse/demo-0db6fd/1/demo/ >
+export FM_TASK_ID=fm-lab-raw-44893
+jarad@jengine:~/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/pool/.treehouse/demo-0db6fd/1/demo/ >
+. '/tmp/fm-fm-lab-raw-44893+afb6b3313ce47926cc43623e5f19464b11d5e9299231f7dec89004310453e07b/launch.s1791239842.45197.32
+674.sh'
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[exit=0]
+$ tmux -L fm-lab capture-pane -p -t primary:fm-fm-lab-raw-44893 -S -100
+treehouse get
+compinit:527: no such file or directory: /opt/homebrew/share/zsh/site-functions/_brew
+compinit:527: no such file or directory: /opt/homebrew/share/zsh/site-functions/_brew
+jarad@jengine:~/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/projects/demo/ > treehouse get
+🌳 Setting up worktree...
+🌳 Entered worktree at ~/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/pool/.treehouse/demo-0db6fd/1
+/demo. Type 'exit' to return.
+compinit:527: no such file or directory: /opt/homebrew/share/zsh/site-functions/_brew
+compinit:527: no such file or directory: /opt/homebrew/share/zsh/site-functions/_brew
+jarad@jengine:~/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/pool/.treehouse/demo-0db6fd/1/demo/ >
+cd -- '/Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/pool/.treehouse/demo-0db6fd/1/demo
+'
+jarad@jengine:~/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/pool/.treehouse/demo-0db6fd/1/demo/ >
+export GOTMPDIR=/tmp/fm-fm-lab-raw-44893/gotmp
+jarad@jengine:~/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/pool/.treehouse/demo-0db6fd/1/demo/ >
+export COMPACT_ADVISER_DISABLE=1
+jarad@jengine:~/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/pool/.treehouse/demo-0db6fd/1/demo/ >
+export FM_TASK_ID=fm-lab-raw-44893
+jarad@jengine:~/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/pool/.treehouse/demo-0db6fd/1/demo/ >
+. '/tmp/fm-fm-lab-raw-44893+afb6b3313ce47926cc43623e5f19464b11d5e9299231f7dec89004310453e07b/launch.s1791239842.45197.32
+674.sh'
+RAW_PENDING_WAIT
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[exit=0]
+$ bash -c . "$1/bin/fm-backend.sh"; fm_backend_worker_state tmux "$2" _ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX primary:fm-fm-lab-raw-44893
+dead[exit=0]
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/bin/fm-afk-spend-count.sh /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/state
+1
+[exit=0]
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/bin/fm-spawn.sh second /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/projects/demo sleep 120 --scout
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  repair missing watcher supervision with a foreground checkpoint: bin/fm-watch-checkpoint.sh --seconds 180.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+error: spawn refused - the away-posture record caps concurrent workers at 1 and 1 ordinary task(s) are live in this home; task second stays queued for the captain's return or for a worker to finish (spend cap: bin/fm-afk-contract.sh)
+[exit=1]
+$ tmux -L fm-lab rename-session -t primary relocated
+[exit=0]
+Pending spawn termination exit=143
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l
+error: task fm-lab-raw-44893's startup could not be cancelled; its record is retained for endpoint cleanup
+Retained task record (public persisted protocol):
+window=primary:fm-fm-lab-raw-44893
+endpoint_task_id=fm-lab-raw-44893
+worktree=/Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/pool/.treehouse/demo-0db6fd/1/demo
+project=/Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/projects/demo
+harness=printf
+kind=scout
+tasktmp=/tmp/fm-fm-lab-raw-44893
+model=default
+effort=default
+spawn_gen=s1791239842.45197.32674
+cleanup_recovery=launch
+$ tmux -L fm-lab capture-pane -p -t relocated:fm-fm-lab-raw-44893 -S -100
+treehouse get
+compinit:527: no such file or directory: /opt/homebrew/share/zsh/site-functions/_brew
+compinit:527: no such file or directory: /opt/homebrew/share/zsh/site-functions/_brew
+jarad@jengine:~/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/projects/demo/ > treehouse get
+🌳 Setting up worktree...
+🌳 Entered worktree at ~/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/pool/.treehouse/demo-0db6fd/1
+/demo. Type 'exit' to return.
+compinit:527: no such file or directory: /opt/homebrew/share/zsh/site-functions/_brew
+compinit:527: no such file or directory: /opt/homebrew/share/zsh/site-functions/_brew
+jarad@jengine:~/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/pool/.treehouse/demo-0db6fd/1/demo/ >
+cd -- '/Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/pool/.treehouse/demo-0db6fd/1/demo
+'
+jarad@jengine:~/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/pool/.treehouse/demo-0db6fd/1/demo/ >
+export GOTMPDIR=/tmp/fm-fm-lab-raw-44893/gotmp
+jarad@jengine:~/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/pool/.treehouse/demo-0db6fd/1/demo/ >
+export COMPACT_ADVISER_DISABLE=1
+jarad@jengine:~/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/pool/.treehouse/demo-0db6fd/1/demo/ >
+export FM_TASK_ID=fm-lab-raw-44893
+jarad@jengine:~/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/pool/.treehouse/demo-0db6fd/1/demo/ >
+. '/tmp/fm-fm-lab-raw-44893+afb6b3313ce47926cc43623e5f19464b11d5e9299231f7dec89004310453e07b/launch.s1791239842.45197.32
+674.sh'
+RAW_PENDING_WAIT
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[exit=0]
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/bin/fm-afk-spend-count.sh /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/state
+1
+[exit=0]
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/bin/fm-spawn.sh second /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/projects/demo sleep 120 --scout
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+error: spawn refused - the away-posture record caps concurrent workers at 1 and 1 ordinary task(s) are live in this home; task second stays queued for the captain's return or for a worker to finish (spend cap: bin/fm-afk-contract.sh)
+[exit=1]
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/bin/fm-afk-return.sh check
+fm-afk-launch: away-posture record archived at /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/state/afk-contracts/1791239838.afk-contract
+fm-afk-launch: away mode stopped; no daemon terminal was running, .afk cleared, and the posture record archived
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+=== Return brief (away 2026-10-05T22:37:18Z -> 2026-10-05T22:37:25Z, 7s) ===
+Supervisor health:
+  - GAP: the watcher beat was 999999s old at return (grace 300s)
+  - status file unreadable: /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/state/fm-lab-raw-44893.status; catch-up stays gated
+Your instructions:
+  (no away instructions recorded)
+  the away session took no action under them.
+Waiting on you:
+  (nothing)
+Tried and failed, or could not be fixed:
+  (nothing)
+Landed, cleanup due:
+  (nothing)
+Handled while away:
+  0 outcome(s) handled by the away session (0 routine, 0 escalated above)
+  (no routine outcomes recorded in the store for this window)
+Cost: 0 supervision outcome(s) recorded (0 routine, 0 captain); 1 task(s) live at return.
+fm-afk-return: catch-up must finish before the captain request
+catch-up health: GAP: the watcher beat was 999999s old at return (grace 300s)
+catch-up lifecycle: status file unreadable: /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/state/fm-lab-raw-44893.status; catch-up stays gated
+fm-afk-return: handle each blocker now, or close it with resolved [key=...] and append a durable reclassification reason, then run bin/fm-afk-return.sh check
+[exit=3]
+$ tmux -L fm-lab kill-server
+[exit=0]
+Private fm-lab server stopped; disposable lab and launch temp removed.

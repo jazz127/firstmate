@@ -1,0 +1,10 @@
+[
+  {
+    "name": "Real pending shell-only launch reserves capacity and refuses another fresh spawn",
+    "result": "pass"
+  },
+  {
+    "name": "Rename followed by cancellation preserves the actual pending launch record, capacity, fresh admission refusal and return count",
+    "result": "pass"
+  }
+]

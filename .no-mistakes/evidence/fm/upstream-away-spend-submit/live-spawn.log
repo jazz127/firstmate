@@ -1,0 +1,95 @@
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/bin/fm-lab-home.sh create /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l
+/Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l
+[exit=0]
+$ git init -q -b main /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/projects/demo
+[exit=0]
+$ git -C /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/projects/demo commit -q --allow-empty -m Disposable test seed
+[exit=0]
+$ treehouse init
+Created /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/projects/demo/treehouse.toml
+[exit=0]
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/bin/fm-brief.sh fm-lab-raw-89038 demo --scout
+scaffolded: /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/data/fm-lab-raw-89038/brief.md (scout; replace {TASK} and {FIRSTMATE_SPEC})
+[exit=0]
+$ tmux -L fm-lab new-session -d -s primary -n probe -x 120 -y 40 -c /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX -e FM_HOME=/Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l codex --disable hooks
+[exit=0]
+$ tmux -L fm-lab set-window-option -t primary:probe automatic-rename off
+[exit=0]
+$ tmux -L fm-lab display-message -p -t primary:probe #{socket_path}
+/Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/tmux/tmux-501/fm-lab
+[exit=0]
+$ tmux -L fm-lab display-message -p -t primary:probe #{pid}
+91345
+[exit=0]
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/bin/fm-afk-contract.sh enter --spend 1
+Away posture recorded at 2026-10-05T22:35:33Z: hold-for-return only. No phone channel is configured; anything that needs you waits for your return. No away instructions were recorded; the away session acts on standing authority only, and anything that needs you waits for your return. Destructive, irreversible, and security-sensitive actions are never pre-authorizable, whatever the words say. Expected return: not given. Spend cap: 1 concurrent workers.
+Away posture (recorded):
+  entered: 2026-10-05T22:35:33Z
+  expected return: not given
+  spend cap: 1 concurrent workers
+  reach: hold-for-return only. No phone channel is configured; anything that needs you waits for your return.
+  your words: (none)
+[exit=0]
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/bin/fm-spawn.sh fm-lab-raw-89038 /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/projects/demo sleep 120 --scout
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l
+spawned fm-lab-raw-89038 harness=sleep kind=scout window=primary:fm-fm-lab-raw-89038 worktree=/Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/pool/.treehouse/demo-0db6fd/1/demo
+[exit=0]
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/bin/fm-afk-spend-count.sh /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/state
+1
+[exit=0]
+$ /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/bin/fm-spawn.sh second /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/projects/demo sleep 120 --scout
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  repair missing watcher supervision with a foreground checkpoint: bin/fm-watch-checkpoint.sh --seconds 180.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+error: spawn refused - the away-posture record caps concurrent workers at 1 and 1 ordinary task(s) are live in this home; task second stays queued for the captain's return or for a worker to finish (spend cap: bin/fm-afk-contract.sh)
+[exit=1]
+$ tmux -L fm-lab capture-pane -p -t primary:fm-fm-lab-raw-89038 -S -100
+treehouse get
+compinit:527: no such file or directory: /opt/homebrew/share/zsh/site-functions/_brew
+compinit:527: no such file or directory: /opt/homebrew/share/zsh/site-functions/_brew
+jarad@jengine:~/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/projects/demo/ > treehouse get
+🌳 Setting up worktree...
+🌳 Entered worktree at ~/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/pool/.treehouse/demo-0db6fd/1
+/demo. Type 'exit' to return.
+compinit:527: no such file or directory: /opt/homebrew/share/zsh/site-functions/_brew
+compinit:527: no such file or directory: /opt/homebrew/share/zsh/site-functions/_brew
+jarad@jengine:~/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/pool/.treehouse/demo-0db6fd/1/demo/ >
+cd -- '/Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/pool/.treehouse/demo-0db6fd/1/demo
+'
+jarad@jengine:~/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/pool/.treehouse/demo-0db6fd/1/demo/ >
+export GOTMPDIR=/tmp/fm-fm-lab-raw-89038/gotmp
+jarad@jengine:~/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/pool/.treehouse/demo-0db6fd/1/demo/ >
+export COMPACT_ADVISER_DISABLE=1
+jarad@jengine:~/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/pool/.treehouse/demo-0db6fd/1/demo/ >
+export FM_TASK_ID=fm-lab-raw-89038
+jarad@jengine:~/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l/pool/.treehouse/demo-0db6fd/1/demo/ >
+. '/tmp/fm-fm-lab-raw-89038+afb6b3313ce47926cc43623e5f19464b11d5e9299231f7dec89004310453e07b/launch.s1791239736.91953.20
+838.sh'
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[exit=0]
+$ tmux -L fm-lab kill-server
+[exit=0]
+Cleanup corrected for the production read-only hooks directory; private lab and both exact per-task temp namespaces removed.

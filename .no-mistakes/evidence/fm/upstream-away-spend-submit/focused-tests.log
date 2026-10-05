@@ -1,4 +1,16 @@
-FM_TEST_BEGIN 2026-10-03T20:22:17Z tests/fm-afk-spend-cap.test.sh family=afk expected_gate_skip=none
+FM_TEST_BEGIN 2026-10-05T22:27:03Z tests/fm-afk-spend-cap.test.sh family=afk expected_gate_skip=none
+ok - busy then unknown activity and unreadable endpoints override an accepted completed run
+ok - inventory timeout returns a conservative spend count
+ok - process timeout returns a conservative spend count
+ok - activity timeout returns a conservative spend count
+ok - crew-presence timeout returns a conservative spend count
+ok - crew-capture timeout returns a conservative spend count
+ok - herdr-presence timeout returns a conservative spend count
+ok - herdr-agent timeout returns a conservative spend count
+ok - herdr-process timeout returns a conservative spend count
+ok - herdr-absence timeout returns a conservative spend count
+ok - herdr-activity timeout returns a conservative spend count
+ok - herdr-crew timeout returns a conservative spend count
 ok - an exited worker frees cap room and spawn reaches its queued-work gate
 ok - ship delayed startup reserves admission after delivery; stopped workers free room
 ok - scout delayed startup reserves admission after delivery; stopped workers free room
@@ -9,16 +21,16 @@ ok - scout cancel startup frees capacity after confirmed cancellation
 ok - ship failed startup frees capacity after confirmed cancellation
 ok - scout finished startup reserves admission after delivery; stopped workers free room
 ok - ship cleanup-refused startup frees capacity after confirmed cancellation
-fm-afk-contract: away posture already recorded at 2026-10-03T20:24:22Z; a refresh leaves it untouched
+fm-afk-contract: away posture already recorded at 2026-10-05T22:29:52Z; a refresh leaves it untouched
 fm-afk-contract: the expected return and spend cap given with this refresh were not applied; enter new words to replace the mandate
 ok - ship rename-timeout cancellation retains the surviving worker, admission reservation and return cost
-fm-afk-contract: away posture already recorded at 2026-10-03T20:25:26Z; a refresh leaves it untouched
+fm-afk-contract: away posture already recorded at 2026-10-05T22:30:29Z; a refresh leaves it untouched
 fm-afk-contract: the expected return and spend cap given with this refresh were not applied; enter new words to replace the mandate
 ok - scout move-cancel cancellation retains the surviving worker, admission reservation and return cost
-fm-afk-contract: away posture already recorded at 2026-10-03T20:25:38Z; a refresh leaves it untouched
+fm-afk-contract: away posture already recorded at 2026-10-05T22:30:36Z; a refresh leaves it untouched
 fm-afk-contract: the expected return and spend cap given with this refresh were not applied; enter new words to replace the mandate
 ok - ship socket-cancel cancellation retains the surviving worker, admission reservation and return cost
-fm-afk-contract: away posture already recorded at 2026-10-03T20:25:49Z; a refresh leaves it untouched
+fm-afk-contract: away posture already recorded at 2026-10-05T22:30:43Z; a refresh leaves it untouched
 fm-afk-contract: the expected return and spend cap given with this refresh were not applied; enter new words to replace the mandate
 ok - scout rename-raw-cancel cancellation retains the surviving worker, admission reservation and return cost
 ok - relaunches, secondmates and quiet mode keep their admission exemptions
@@ -36,8 +48,8 @@ ok - accepted terminal-ready delivery leaves the away spend count
 ok - authoritative busy state overrides an unchanged ready log for spend admission
 ok - an explicit working declaration keeps resumed work counted
 ok - direct-PR, local-only and scout deliveries are excluded; the default-mode handoff still counts
-FM_TEST_END 2026-10-03T20:27:01Z tests/fm-afk-spend-cap.test.sh exit=0 duration_ms=283442 gate_skip=false
-FM_TEST_BEGIN 2026-10-03T20:27:01Z tests/fm-afk-return.test.sh family=afk expected_gate_skip=none
+FM_TEST_END 2026-10-05T22:31:19Z tests/fm-afk-spend-cap.test.sh exit=0 duration_ms=256125 gate_skip=false
+FM_TEST_BEGIN 2026-10-05T22:31:19Z tests/fm-afk-return.test.sh family=afk expected_gate_skip=none
 ok - return catch-up owns live blocker remediation, reports itself to Bearings as content, preserves evidence once, and clears idempotently
 ok - tmux and Herdr blockers require the same explicit durable reclassification before ordinary work
 ok - needs-decision remains reportable without masquerading as a firstmate-actionable blocker
@@ -71,9 +83,9 @@ ok - a later failed probe does not change the trip-row error count
 ok - the return brief excludes prior-session latch rows
 ok - the return brief retains in-window trips and failed turns across a main restart
 ok - a return with only the legacy away flag still renders the brief and measures the window from the flag
-FM_TEST_END 2026-10-03T20:29:06Z tests/fm-afk-return.test.sh exit=0 duration_ms=124755 gate_skip=false
-FM_TEST_SUMMARY total=2 failed=0 skipped_gate=0 duration_ms=408315
-FM_TEST_SUMMARY_FAMILY family=afk count=2 duration_ms=408197 failed=0
-FM_TEST_SLOWEST rank=1 script=tests/fm-afk-spend-cap.test.sh duration_ms=283442
-FM_TEST_SLOWEST rank=2 script=tests/fm-afk-return.test.sh duration_ms=124755
-fm-test-run: wrote timing artifact: /Users/jarad/.no-mistakes/evidence/01M41455GSYFXNEE083YS370GC/focused-tests.json
+FM_TEST_END 2026-10-05T22:33:07Z tests/fm-afk-return.test.sh exit=0 duration_ms=107867 gate_skip=false
+FM_TEST_SUMMARY total=2 failed=0 skipped_gate=0 duration_ms=364082
+FM_TEST_SUMMARY_FAMILY family=afk count=2 duration_ms=363992 failed=0
+FM_TEST_SLOWEST rank=1 script=tests/fm-afk-spend-cap.test.sh duration_ms=256125
+FM_TEST_SLOWEST rank=2 script=tests/fm-afk-return.test.sh duration_ms=107867
+fm-test-run: wrote timing artifact: /Users/jarad/.no-mistakes/evidence/01M472BY3F7ZBVXN1MGABMMSVX/focused-tests.json

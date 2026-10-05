@@ -1,32 +1,28 @@
 [
   {
-    "name": "Supported raw command launches on real tmux, counts and prevents a fresh worker at cap=1",
-    "result": "pass",
-    "live": true
+    "name": "Codex resumed done worker remains counted under unknown activity",
+    "passed": true,
+    "upstream_reply": true
   },
   {
-    "name": "A positively exited raw worker frees capacity without deleting its task record",
-    "result": "pass",
-    "live": true
+    "name": "Unattributed raw foreground command consumes cap and return count",
+    "passed": true
   },
   {
-    "name": "Pre-validation and unpublished claims count; accepted terminal deliveries free room; a busy turn counts again",
-    "result": "pass",
-    "live": true
+    "name": "Stalled real tmux presence read returns conservatively within the bound",
+    "passed": true,
+    "seconds": 5.408057166961953
   },
   {
-    "name": "Rename and moved windows do not prove death; confirmed closure refuses the stale target",
-    "result": "pass",
-    "live": true
+    "name": "Rename keeps surviving worker counted and closure of old target unacknowledged",
+    "passed": true
   },
   {
-    "name": "Unavailable experimental backends retain capacity and secondmates remain excluded",
-    "result": "pass",
-    "live": true
+    "name": "Positively shell-only exited worker releases capacity and return reports zero",
+    "passed": true
   },
   {
-    "name": "Delayed fresh launch reserves capacity; renaming before cancellation retains surviving endpoint and cleanup capacity",
-    "result": "pass",
-    "live": true
+    "name": "Relaunch and secondmate remain exempt at the live admission boundary",
+    "passed": true
   }
 ]

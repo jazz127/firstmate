@@ -1,0 +1,2 @@
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /Users/jarad/.no-mistakes/worktrees/a00b7db52042/01M472BY3F7ZBVXN1MGABMMSVX/.l
+error: task fm-lab-raw-44893's startup could not be cancelled; its record is retained for endpoint cleanup

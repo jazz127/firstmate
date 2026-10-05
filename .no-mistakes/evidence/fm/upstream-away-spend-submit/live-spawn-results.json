@@ -1,0 +1,7 @@
+[
+  {
+    "name": "Fresh raw command starts through real tmux and Treehouse and reserves cap against a second fresh spawn",
+    "result": "pass",
+    "cleanup": "complete"
+  }
+]

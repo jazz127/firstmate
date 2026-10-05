@@ -1,0 +1,10 @@
+[
+  {
+    "name": "Actual idle scout terminal delivery frees cap and return count",
+    "result": "pass"
+  },
+  {
+    "name": "Actual resumed busy turn overrides unchanged terminal done for cap and return count",
+    "result": "pass"
+  }
+]

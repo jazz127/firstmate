@@ -124,7 +124,7 @@ fm_pid_start_identity() {  # <pid>
   printf '%s\n' "$identity" | sed 's/^[[:space:]]*//'
 }
 
-# True when a lock owner's pid still names the process that acquired it.
+# True unless the lock's original owner is proven gone.
 # Locks predating identity recording retain the original kill -0 behavior;
 # once identity evidence exists, a read failure is uncertainty and stays held.
 fm_lock_owner_alive() {  # <lockdir> <pid>
@@ -1144,9 +1144,9 @@ fm_recovery_marker_handover_restore() {  # <marker> <snapshot-token> <snapshot-s
 }
 
 # fm_lock_reap_dead_link <lockdir>
-# Remove a link lock whose owner is dead without a nested mutex. Renaming the
-# dead owner directory to this process's tombstone elects exactly one reaper,
-# so a competing reaper that verified the same dead owner cannot remove a
+# Remove a link lock whose owner is stale without a nested mutex. Renaming the
+# stale owner directory to this process's tombstone elects exactly one reaper,
+# so a competing reaper that verified the same stale owner cannot remove a
 # successor's link. A reaper that died after winning leaves its tombstone; a
 # later reaper re-elects itself by renaming that dead reaper's tombstone, and a
 # reaper whose own election a trap interrupted resumes it from its tombstone.
@@ -1164,6 +1164,8 @@ fm_lock_reap_dead_link() {
     for tomb in "$owner".reaped.*; do
       [ -d "$tomb" ] || continue
       if [ "${tomb##*.reaped.}" != "$current" ]; then
+        # The tombstone retains the original owner's start identity, not the
+        # reaper's. Only the PID in its name identifies the elected reaper.
         fm_pid_alive "${tomb##*.reaped.}" && return 1
       fi
       token=$tomb
@@ -1181,7 +1183,7 @@ fm_lock_reap_dead_link() {
 }
 
 # Acquire the short-lived steal mutex without recursively creating another
-# steal mutex. A dead holder is reaped once; a dead nested steal marker left by
+# steal mutex. A stale holder is reaped once; a dead nested steal marker left by
 # the former recursive reclaim is reaped too so it cannot block the claim. A
 # hold abandoned by this very process (a trap interrupted its critical section)
 # is reclaimed like fm_lock_try_acquire's self-held branch.
@@ -1320,9 +1322,10 @@ fm_lock_acquire_wait_max() {  # <lockdir> <max-seconds>
 }
 
 # Acquire in the timed helper process, then transfer the lock record to the
-# waiting caller before exiting. The lock's ordinary stale-owner recovery makes
-# every interruption safe: before transfer the helper is the owner; after
-# transfer the still-live caller is the owner.
+# waiting caller before exiting. Hold the steal mutex while replacing both
+# start identity and PID so reclaimers cannot act on a mixed ownership record.
+# Ordinary stale-owner recovery handles an interrupted transfer; once both
+# fields are transferred, the still-live caller is the owner.
 _fm_lock_acquire_wait_handoff() {  # <lockdir> <caller-pid>
   local lockdir=$1 caller_pid=$2 ownerdir current back steal="$1.steal"
   case "$caller_pid" in ''|*[!0-9]*) return 1 ;; esac
@@ -1695,8 +1698,7 @@ fm_failure_episode_reset() {
 #     "epoch=N owner_pid=P outcome=O updated_at=T" record. A "rewake" outcome
 #     also records "session_pid=S recovery_generation=G", binding that
 #     handling turn to its live session-lock owner and watcher recovery episode.
-#     Line 2 is the claiming process's pid-identity, the same identity every other
-#     supervision lock in this repo records (fm_pid_identity above). The
+#     Line 2 is the claiming process's pid-identity from fm_pid_identity above. The
 #     identity is MANDATORY: a claimant that cannot record it does not claim
 #     (continuity falls to the synchronous guard), and the identity is read
 #     from the ledger entry alone - never substituted from any lock - so a

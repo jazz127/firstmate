@@ -373,6 +373,102 @@ test_lock_steals_dead_pid_lock() {
   pass "dead-pid stale lock is reclaimed by a single acquirer"
 }
 
+test_lock_reclaims_reused_pid() {
+  local dir state lockdir holder previous identity current_identity rc newpid
+  dir=$(make_case lock-reused-pid)
+  state="$dir/state"
+  lockdir="$state/.contend.lock"
+  mkdir -p "$lockdir"
+  sleep 30 &
+  previous=$!
+  identity=$(FM_STATE_OVERRIDE="$state" bash -c '. "$1"; fm_pid_start_identity "$2"' _ "$LIB" "$previous") \
+    || fail "could not identify predecessor process"
+  kill "$previous" 2>/dev/null || true
+  wait "$previous" 2>/dev/null || true
+  sleep 1.1
+  sleep 30 &
+  holder=$!
+  current_identity=$(FM_STATE_OVERRIDE="$state" bash -c '. "$1"; fm_pid_start_identity "$2"' _ "$LIB" "$holder") \
+    || fail "could not identify live reused-pid fixture"
+  [ "$current_identity" != "$identity" ] || fail "reused-pid fixture did not have a different process identity"
+  printf '%s\n' "$holder" > "$lockdir/pid"
+  printf '%s\n' "$identity" > "$lockdir/lock-owner-start"
+  rc=0
+  newpid=$(FM_STATE_OVERRIDE="$state" bash -c '. "$1"; if fm_lock_try_acquire "$2"; then cat "$2/pid"; else exit 7; fi' \
+    _ "$LIB" "$lockdir") || rc=$?
+  kill "$holder" 2>/dev/null || true
+  wait "$holder" 2>/dev/null || true
+  [ "$rc" -eq 0 ] || fail "acquirer did not reclaim a live pid whose identity was reused (rc=$rc)"
+  [ "$newpid" != "$holder" ] || fail "reused-pid lock was not replaced (still $holder)"
+  pass "a live reused pid with a different process identity is reclaimed"
+}
+
+test_lock_keeps_same_live_owner() {
+  local dir state lockdir holder identity rc
+  dir=$(make_case lock-same-live-owner)
+  state="$dir/state"
+  lockdir="$state/.contend.lock"
+  mkdir -p "$lockdir"
+  sleep 30 &
+  holder=$!
+  identity=$(FM_STATE_OVERRIDE="$state" bash -c '. "$1"; fm_pid_start_identity "$2"' _ "$LIB" "$holder") \
+    || fail "could not identify live lock owner"
+  printf '%s\n' "$holder" > "$lockdir/pid"
+  printf '%s\n' "$identity" > "$lockdir/lock-owner-start"
+  rc=0
+  FM_STATE_OVERRIDE="$state" bash -c '. "$1"; fm_lock_try_acquire "$2"' _ "$LIB" "$lockdir" || rc=$?
+  kill "$holder" 2>/dev/null || true
+  wait "$holder" 2>/dev/null || true
+  [ "$rc" -ne 0 ] || fail "acquirer stole a lock from its identity-matched live owner"
+  pass "an identity-matched live lock owner remains held"
+}
+
+test_lock_keeps_owner_when_identity_unreadable() {
+  local dir state lockdir fake_proc fakebin holder rc
+  dir=$(make_case lock-unreadable-identity)
+  state="$dir/state"
+  lockdir="$state/.contend.lock"
+  fake_proc="$dir/no-proc"
+  fakebin="$dir/bin"
+  mkdir -p "$lockdir" "$fakebin"
+  printf '#!/bin/sh\nexit 1\n' > "$fakebin/ps"
+  chmod +x "$fakebin/ps"
+  sleep 30 &
+  holder=$!
+  printf '%s\n' "$holder" > "$lockdir/pid"
+  printf '%s\n' "recorded owner identity" > "$lockdir/lock-owner-start"
+  rc=0
+  PATH="$fakebin:$PATH" FM_PROC_ROOT_OVERRIDE="$fake_proc" FM_STATE_OVERRIDE="$state" \
+    bash -c '. "$1"; fm_lock_try_acquire "$2"' _ "$LIB" "$lockdir" || rc=$?
+  kill "$holder" 2>/dev/null || true
+  wait "$holder" 2>/dev/null || true
+  [ "$rc" -ne 0 ] || fail "acquirer reclaimed a live owner when its current identity could not be read"
+  pass "an unreadable current owner identity keeps the lock held"
+}
+
+test_lock_without_identity_keeps_legacy_behavior() {
+  local dir state lockdir holder rc
+  dir=$(make_case lock-legacy-owner)
+  state="$dir/state"
+  lockdir="$state/.contend.lock"
+  mkdir -p "$lockdir"
+  sleep 30 &
+  holder=$!
+  printf '%s\n' "$holder" > "$lockdir/pid"
+  rc=0
+  FM_STATE_OVERRIDE="$state" bash -c '. "$1"; fm_lock_try_acquire "$2"' _ "$LIB" "$lockdir" || rc=$?
+  kill "$holder" 2>/dev/null || true
+  wait "$holder" 2>/dev/null || true
+  [ "$rc" -ne 0 ] || fail "legacy lock without identity was not kept held for a live pid"
+
+  printf '%s\n' "$(dead_pid)" > "$lockdir/pid"
+  if FM_STATE_OVERRIDE="$state" bash -c '. "$1"; fm_lock_try_acquire "$2"' _ "$LIB" "$lockdir"; then
+    pass "legacy locks without identity retain dead-pid reclaim behavior"
+  else
+    fail "legacy lock without identity no longer reclaims a dead pid"
+  fi
+}
+
 # Start a process that claims each given link lock, then SIGKILL it so every
 # claim is left behind with a dead owner - an acquirer TERMed mid-steal.
 leave_dead_link_locks() {  # <state> <lock>...
@@ -1559,6 +1655,10 @@ test_live_stalled_watch_lock_is_replaced_past_hard_bound
 test_guard_warnings
 test_lock_single_winner_under_concurrency
 test_lock_steals_dead_pid_lock
+test_lock_reclaims_reused_pid
+test_lock_keeps_same_live_owner
+test_lock_keeps_owner_when_identity_unreadable
+test_lock_without_identity_keeps_legacy_behavior
 test_lock_stale_steal_single_winner_under_concurrency
 test_lock_reclaims_dead_steal_owner_without_nested_markers
 test_lock_recovers_dead_nested_steal_chain

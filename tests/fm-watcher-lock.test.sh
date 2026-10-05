@@ -424,26 +424,90 @@ test_lock_keeps_same_live_owner() {
 }
 
 test_lock_keeps_owner_when_identity_unreadable() {
-  local dir state lockdir fake_proc fakebin holder rc
+  local dir state lockdir fake_proc fakebin holder rc real_ps
   dir=$(make_case lock-unreadable-identity)
   state="$dir/state"
   lockdir="$state/.contend.lock"
   fake_proc="$dir/no-proc"
   fakebin="$dir/bin"
   mkdir -p "$lockdir" "$fakebin"
-  printf '#!/bin/sh\nexit 1\n' > "$fakebin/ps"
+  real_ps=$(command -v ps) || fail "ps is unavailable for the unreadable-identity fixture"
+  cat > "$fakebin/ps" <<'SH'
+#!/bin/sh
+previous=
+for arg do
+  if [ "$previous" = -p ] && [ "$arg" = "$FM_TEST_UNREADABLE_PID" ]; then
+    exit 1
+  fi
+  previous=$arg
+done
+exec "$FM_TEST_REAL_PS" "$@"
+SH
   chmod +x "$fakebin/ps"
   sleep 30 &
   holder=$!
   printf '%s\n' "$holder" > "$lockdir/pid"
   printf '%s\n' "recorded owner identity" > "$lockdir/lock-owner-start"
   rc=0
-  PATH="$fakebin:$PATH" FM_PROC_ROOT_OVERRIDE="$fake_proc" FM_STATE_OVERRIDE="$state" \
-    bash -c '. "$1"; fm_lock_try_acquire "$2"' _ "$LIB" "$lockdir" || rc=$?
+  PATH="$fakebin:$PATH" FM_TEST_REAL_PS="$real_ps" FM_TEST_UNREADABLE_PID="$holder" \
+    FM_PROC_ROOT_OVERRIDE="$fake_proc" FM_STATE_OVERRIDE="$state" bash -c '
+      . "$1"
+      fm_lock_try_acquire "$2.control" || exit 8
+      fm_lock_release "$2.control"
+      if fm_pid_start_identity "$3"; then exit 9; fi
+      if fm_lock_try_acquire "$2"; then exit 7; fi
+      [ "$(cat "$2/pid")" = "$3" ] || exit 10
+    ' _ "$LIB" "$lockdir" "$holder" || rc=$?
   kill "$holder" 2>/dev/null || true
   wait "$holder" 2>/dev/null || true
-  [ "$rc" -ne 0 ] || fail "acquirer reclaimed a live owner when its current identity could not be read"
+  [ "$rc" -eq 0 ] || fail "unreadable owner was reclaimed or fixture identity isolation failed (rc=$rc)"
   pass "an unreadable current owner identity keeps the lock held"
+}
+
+test_lock_bounded_handoff_preserves_live_owner_identity() {
+  local dir state lockdir rc
+  dir=$(make_case lock-bounded-handoff-identity)
+  state="$dir/state"
+  lockdir="$state/.contend.lock"
+  rc=0
+  FM_STATE_OVERRIDE="$state" bash -c '
+    . "$1"
+    fm_current_pid caller || exit 6
+    sleep 1.1
+    (
+      fm_lock_try_create "$2" || exit 7
+      : > "$3/holder.ready"
+      while [ ! -e "$3/release-holder" ]; do sleep 0.05; done
+      fm_lock_release "$2"
+    ) &
+    holder=$!
+    trap "kill $holder 2>/dev/null || true" EXIT
+    i=0
+    while [ "$i" -lt 100 ] && [ ! -e "$3/holder.ready" ]; do
+      sleep 0.05
+      i=$((i + 1))
+    done
+    [ -e "$3/holder.ready" ] || exit 8
+    (
+      sleep 0.3
+      : > "$3/release-holder"
+    ) &
+    releaser=$!
+    fm_lock_acquire_wait_bounded "$2" 5 || exit 9
+    wait "$holder" || exit 10
+    wait "$releaser" || exit 11
+    trap - EXIT
+    [ "$(cat "$2/pid")" = "$caller" ] || exit 12
+    [ "$(cat "$2/lock-owner-start")" = "$(fm_pid_start_identity "$caller")" ] || exit 13
+    if (fm_lock_try_acquire "$2"); then exit 14; fi
+    fm_lock_release "$2"
+    [ ! -e "$2" ] && [ ! -L "$2" ] || exit 15
+    fm_lock_try_acquire "$2" || exit 16
+    fm_lock_release "$2"
+    [ ! -e "$2.steal" ] && [ ! -L "$2.steal" ] || exit 17
+  ' _ "$LIB" "$lockdir" "$dir" || rc=$?
+  [ "$rc" -eq 0 ] || fail "bounded handoff did not preserve the caller identity and exclusion (rc=$rc)"
+  pass "bounded handoff preserves caller identity, exclusion, and release"
 }
 
 test_lock_without_identity_keeps_legacy_behavior() {
@@ -612,6 +676,7 @@ test_lock_steal_reap_cannot_remove_successor() {
   fakebin="$dir/fakebin"
   out="$dir/competitor"
   leave_dead_link_locks "$state" "$steal"
+  sleep 1.1
   cat > "$fakebin/rm" <<'SH'
 #!/usr/bin/env bash
 last=
@@ -640,6 +705,8 @@ SH
     FM_TEST_RACE_ONCE="$dir/race-once" FM_TEST_RACE_OUT="$out" \
     FM_STATE_OVERRIDE="$state" bash -c '
       . "$1"
+      fm_current_pid current || exit 3
+      [ "$(cat "$2/lock-owner-start")" != "$(fm_pid_start_identity "$current")" ] || exit 3
       fm_lock_try_acquire_steal_mutex "$2" || exit 1
       [ "$(cat "$2/pid" 2>/dev/null)" = "${BASHPID:-$$}" ] || exit 2
     ' _ "$LIB" "$steal" || rc=$?
@@ -1658,6 +1725,7 @@ test_lock_steals_dead_pid_lock
 test_lock_reclaims_reused_pid
 test_lock_keeps_same_live_owner
 test_lock_keeps_owner_when_identity_unreadable
+test_lock_bounded_handoff_preserves_live_owner_identity
 test_lock_without_identity_keeps_legacy_behavior
 test_lock_stale_steal_single_winner_under_concurrency
 test_lock_reclaims_dead_steal_owner_without_nested_markers

@@ -541,12 +541,12 @@ fm_lock_owner_dir() {
 }
 
 fm_lock_prepare_owner() {
-  local ownerdir=$1 mypid back identity
-  fm_current_pid mypid || return 1
+  local ownerdir=$1 mypid=${2:-} back identity
+  [ -n "$mypid" ] || fm_current_pid mypid || return 1
   identity=$(fm_pid_start_identity "$mypid" 2>/dev/null) || return 1
   [ -n "$identity" ] || return 1
-  printf '%s\n' "$mypid" > "$ownerdir/pid" 2>/dev/null || return 1
   printf '%s\n' "$identity" > "$ownerdir/lock-owner-start" 2>/dev/null || return 1
+  printf '%s\n' "$mypid" > "$ownerdir/pid" 2>/dev/null || return 1
   back=$(cat "$ownerdir/pid" 2>/dev/null || true)
   [ "$back" = "$mypid" ] \
     && [ "$(cat "$ownerdir/lock-owner-start" 2>/dev/null || true)" = "$identity" ]
@@ -1164,7 +1164,7 @@ fm_lock_reap_dead_link() {
     for tomb in "$owner".reaped.*; do
       [ -d "$tomb" ] || continue
       if [ "${tomb##*.reaped.}" != "$current" ]; then
-        fm_lock_owner_alive "$tomb" "${tomb##*.reaped.}" && return 1
+        fm_pid_alive "${tomb##*.reaped.}" && return 1
       fi
       token=$tomb
     done
@@ -1324,27 +1324,28 @@ fm_lock_acquire_wait_max() {  # <lockdir> <max-seconds>
 # every interruption safe: before transfer the helper is the owner; after
 # transfer the still-live caller is the owner.
 _fm_lock_acquire_wait_handoff() {  # <lockdir> <caller-pid>
-  local lockdir=$1 caller_pid=$2 ownerdir current back
+  local lockdir=$1 caller_pid=$2 ownerdir current back steal="$1.steal"
   case "$caller_pid" in ''|*[!0-9]*) return 1 ;; esac
   fm_pid_alive "$caller_pid" || return 1
-  trap 'fm_lock_release "$lockdir"; exit 143' TERM INT
+  trap 'fm_lock_release "$lockdir"; fm_lock_release "$steal"; exit 143' TERM INT
   fm_lock_acquire_wait "$lockdir" || return 1
-  if [ -L "$lockdir" ]; then
-    ownerdir=$(fm_lock_link_owner "$lockdir" 2>/dev/null) || {
-      fm_lock_release "$lockdir"
-      return 1
-    }
-  else
-    ownerdir=$lockdir
-  fi
-  fm_current_pid current || { fm_lock_release "$lockdir"; return 1; }
+  while ! fm_lock_try_acquire_steal_mutex "$steal"; do
+    sleep 0.1
+  done
+  ownerdir=$(fm_lock_link_owner "$lockdir" 2>/dev/null) || {
+    fm_lock_release "$lockdir"
+    fm_lock_release "$steal"
+    return 1
+  }
+  fm_current_pid current || { fm_lock_release "$lockdir"; fm_lock_release "$steal"; return 1; }
   back=$(cat "$ownerdir/pid" 2>/dev/null || true)
   if [ "$back" != "$current" ] \
-    || ! printf '%s\n' "$caller_pid" > "$ownerdir/pid" 2>/dev/null \
-    || [ "$(cat "$ownerdir/pid" 2>/dev/null || true)" != "$caller_pid" ]; then
+    || ! fm_lock_prepare_owner "$ownerdir" "$caller_pid"; then
     fm_lock_release "$lockdir"
+    fm_lock_release "$steal"
     return 1
   fi
+  fm_lock_release "$steal"
   trap - TERM INT
 }
 

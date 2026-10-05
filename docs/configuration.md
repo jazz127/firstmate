@@ -610,6 +610,21 @@ The flag is a home-local supervision-noise preference and is not inherited by se
 
 [`architecture.md`](architecture.md) owns the wait-evidence contract and which records may take the ladder away; `bin/fm-watch.sh`'s `wedge_wait_evidence` owns the exact derivation and its fail-closed boundaries.
 
+## Outside pull request review window (config/outside-pr-review-window-hours)
+
+The outside pull request review window defaults to `2` hours.
+Set the file to an integer from `0` to `87600` hours; `0` allows immediate closeout.
+The contribution observer starts the window when it first observes a PR head and restarts it when a new head appears, so polling delay can extend the review window but cannot shorten it.
+It applies only when GitHub reports different base and head repositories, which identifies a fork contribution using forge data rather than repository naming.
+At expiry, the observer signals Firstmate to close out only when the latest checks pass, no maintainer feedback remains unanswered, and the task worktree is clean and exactly matches the PR head.
+Red or pending checks, outstanding feedback, or dirty/unpushed work produce a closeout hold signal and leave the task in place.
+Firstmate still owns cleanup through the guarded `bin/fm-teardown.sh` path, so a teardown refusal leaves the task intact.
+Missing repository identity does not opt a PR into outside-repository cleanup.
+Malformed values disable closeout and wake Firstmate once for that configuration-error episode instead of using the default.
+
+The check is part of the published-contribution observer and wakes Firstmate through the authenticated watcher check.
+The observer keeps the PR linked and watched after teardown, so later upstream feedback still reaches Firstmate.
+
 ## Gate defaults (.no-mistakes.yaml)
 
 The tracked `.no-mistakes.yaml` sets `test.evidence.store_in_repo: true` and pins `commands.lint` to `bin/fm-lint.sh`, the same owner CI invokes.

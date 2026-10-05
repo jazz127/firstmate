@@ -19,6 +19,8 @@
 # This script owns fm-contributions.v1: one atomic file per durable task with
 # task and records[]. Each record contains url, kind, checked_at, error,
 # observation, verdict, seen event tokens, pending events, and notified tokens.
+# Outside-PR closeout records the current head, its first-observed time, and
+# the last closeout notification state so each head and condition wakes once.
 # observation is one coherent forge read (a PR head is rechecked after fetching
 # checks/reviews). Checks are normalized by name, id, started_at, status and
 # conclusion; projection picks the newest attempt per distinct name. The last
@@ -64,6 +66,10 @@
 # FM_CONTRIBUTIONS_NOW supplies an ISO UTC clock for tests, otherwise UTC now.
 # FM_CONTRIBUTIONS_READY_LABEL selects the equivalent triage label, default
 # ready-for-pr. Labels are matched case-insensitively and exactly.
+# config/outside-pr-review-window-hours defaults to 2; zero closes out an
+# eligible outside-repository PR on its first observation. The head's first
+# observed time starts the window, and a new head starts a new window.
+# Malformed values disable closeout and print one diagnostic per error episode.
 #
 # New maintainer comments/reviews (OWNER, MEMBER, COLLABORATOR, excluding the
 # contribution author) and issue transitions to ready-for-pr persist as pending
@@ -85,6 +91,7 @@ FM_ROOT="${FM_ROOT_OVERRIDE:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 FM_HOME="${FM_HOME:-$FM_ROOT}"
 STATE="${FM_STATE_OVERRIDE:-$FM_HOME/state}"
 DATA="${FM_DATA_OVERRIDE:-$FM_HOME/data}"
+CONFIG="${FM_CONFIG_OVERRIDE:-$FM_HOME/config}"
 export FM_HOME FM_STATE_OVERRIDE="$STATE"
 # shellcheck source=bin/fm-pr-lib.sh
 . "$SCRIPT_DIR/fm-pr-lib.sh"
@@ -265,6 +272,7 @@ observe() { # canonical GitHub URL -> normalized JSON
       $core[0] as $c
       | ($reviews[0] | add // []) as $reviews
       | {head:$c.head.sha,state:(if $c.merged_at != null then "merged" else $c.state end),
+          head_repo:($c.head.repo.full_name // null),base_repo:($c.base.repo.full_name // null),
           draft:$c.draft,mergeable:(if $c.mergeable == true then "mergeable" elif $c.mergeable == false then "conflicting" else "unknown" end),
           can_merge:($repo[0].permissions.push // false),
           review_decision:($after[0].reviewDecision // ""),
@@ -300,6 +308,110 @@ observe() { # canonical GitHub URL -> normalized JSON
     {schema:"fm-contributions.v1",task:"observation",records:[{url:$url,
       kind:(if $kind == "pull" then "pr" else "issue" end),pending:[],seen:[],observation:$observed[0]}]}
     | valid_record' >/dev/null
+}
+
+closeout_window() {
+  local file="$CONFIG/outside-pr-review-window-hours" marker="$STATE/.contributions-closeout-config-error" value detail='' tmp device
+  if [ -L "$file" ]; then
+    detail='invalid config/outside-pr-review-window-hours: expected a regular file'
+  elif [ ! -e "$file" ]; then
+    CLOSEOUT_HOURS=2
+    detail=
+  elif [ ! -f "$file" ]; then
+    detail='invalid config/outside-pr-review-window-hours: expected a regular file'
+  elif ! value=$(cat "$file"); then
+    detail='cannot read config/outside-pr-review-window-hours'
+  else
+    case "$value" in
+      ''|*[!0-9]*) detail='invalid config/outside-pr-review-window-hours: expected a non-negative integer' ;;
+      *)
+        if [ "${#value}" -gt 5 ] || [ "$((10#$value))" -gt 87600 ]; then
+          detail='invalid config/outside-pr-review-window-hours: expected 0..87600'
+        else
+          CLOSEOUT_HOURS=$((10#$value))
+        fi
+        ;;
+    esac
+  fi
+  if [ -z "$detail" ]; then
+    if [ -e "$marker" ] || [ -L "$marker" ]; then
+      [ -f "$marker" ] && [ ! -L "$marker" ] || fail 'unsafe closeout configuration diagnostic record'
+      rm -f -- "$marker"
+    fi
+    return 0
+  fi
+  if [ -f "$marker" ] && [ ! -L "$marker" ] && [ "$(cat "$marker" 2>/dev/null || true)" = "$detail" ]; then
+    return 1
+  fi
+  printf 'contributions: %s\n' "$detail"
+  device=$(fm_pr_file_device "$STATE") || return 1
+  fm_pr_regular_destination_on_device_or_absent "$marker" "$device" || return 1
+  tmp=$(umask 077; mktemp "$STATE/.contributions-config-error.XXXXXX") || return 1
+  printf '%s\n' "$detail" > "$tmp" || { rm -f -- "$tmp"; return 1; }
+  chmod 600 "$tmp" || { rm -f -- "$tmp"; return 1; }
+  fm_pr_regular_destination_on_device_or_absent "$marker" "$device" || { rm -f -- "$tmp"; return 1; }
+  mv -f -- "$tmp" "$marker" || { rm -f -- "$tmp"; return 1; }
+  return 1
+}
+
+closeout_signal() { # task canonical-url row-file
+  local task=$1 url=$2 row=$3 head since old_head old_notice notice status meta wt local_head
+  local base_repo head_repo checked_seconds age seconds key
+  [ "$CLOSEOUT_ENABLED" = 1 ] || return 0
+  jq -e '.kind == "pr" and .observation.state == "open"' "$row" >/dev/null || return 0
+  head=$(jq -r '.observation.head // ""' "$row")
+  base_repo=$(jq -r '.observation.base_repo // ""' "$row")
+  head_repo=$(jq -r '.observation.head_repo // ""' "$row")
+  # Unknown repository identity is not evidence that this is outside the home.
+  [ -n "$base_repo" ] && [ -n "$head_repo" ] && [ "$base_repo" != "$head_repo" ] || return 0
+  meta="$STATE/$task.meta"
+  # The contribution record survives teardown so later feedback is still
+  # observed; a missing task record means closeout has already happened.
+  [ -f "$meta" ] && [ ! -L "$meta" ] || return 0
+  old_head=$(jq -r '.closeout_head // ""' "$row")
+  since=$(jq -r '.closeout_since // ""' "$row")
+  old_notice=$(jq -r '.closeout_notice // ""' "$row")
+  if [ "$old_head" != "$head" ] || [ -z "$since" ]; then
+    since=$NOW
+    old_notice=
+  fi
+  checked_seconds=$(jq -nr --arg at "$since" '$at | fromdateiso8601') || return 0
+  age=$((EPOCH - checked_seconds))
+  seconds=$((CLOSEOUT_HOURS * 3600))
+  if [ "$age" -lt "$seconds" ]; then
+    jq --arg head "$head" --arg since "$since" \
+      '.closeout_head=$head | .closeout_since=$since | .closeout_notice=null' "$row" > "$TMP/closeout-row.json"
+    mv "$TMP/closeout-row.json" "$row"
+    return 0
+  fi
+  status=ready
+  if jq -e '(.pending | length) > 0 or .observation.review_decision == "CHANGES_REQUESTED"' "$row" >/dev/null; then
+    status=review
+  elif ! jq -e '
+    (.observation.checks | length) > 0
+    and all((.observation.checks | group_by(.name) | map(sort_by([(.started_at // ""),(.id // 0)]) | last))[];
+      .status == "completed" and (.conclusion | IN("success","skipped","neutral")))' "$row" >/dev/null; then
+    status=ci
+  else
+    wt=$(sed -n 's/^worktree=//p' "$meta" | tail -1)
+    if [ -z "$wt" ] || [ ! -d "$wt" ] || [ -L "$wt" ]; then
+      status=workspace
+    elif ! local_head=$(git -C "$wt" rev-parse HEAD 2>/dev/null) \
+      || [ "$local_head" != "$head" ] \
+      || [ -n "$(git -C "$wt" status --porcelain --untracked-files=normal 2>/dev/null)" ]; then
+      status=workspace
+    fi
+  fi
+  notice="$head:$status"
+  jq --arg head "$head" --arg since "$since" --arg notice "$notice" \
+    '.closeout_head=$head | .closeout_since=$since | .closeout_notice=$notice' "$row" > "$TMP/closeout-row.json"
+  mv "$TMP/closeout-row.json" "$row"
+  [ "$notice" = "$old_notice" ] && return 0
+  key=$(printf '%s\n' "$task" "$head" "$status" | shasum -a 256 | awk '{print $1}')
+  fm_wake_append check "contrib-closeout-$key" \
+    "check: contributions closeout $task $url head=$head state=$status" || return 1
+  printf 'contribution-wake: check: contributions closeout %s %s head=%s state=%s\n' \
+    "$task" "$url" "$head" "$status"
 }
 
 publish_pending() { # task canonical-url record-file
@@ -351,7 +463,9 @@ settle_final() { # canonical-url task... : copy the URL's final observation to e
 poll() {
   local task url old kind error observed
   local -a row
+  CLOSEOUT_ENABLED=1
   acquire
+  closeout_window || CLOSEOUT_ENABLED=0
   get_input
   read_saved
   [ "$ERRORS" -eq 0 ] || printf 'contributions: %s unreadable durable record(s)\n' "$ERRORS"
@@ -407,10 +521,17 @@ poll() {
             observation:($o + {absent_checks:((($old.observation.absent_checks // []) + [($old.observation.checks // [])[] | .name]) - [$o.checks[].name] | unique)}),
             seen:($events | map(.token)),
             pending:(($old.pending // []) + [$events[] | select(.token as $t | ($old.seen // [] | index($t)) == null)] | unique_by(.token))}' > "$TMP/row.json"
+        # A newly observed PR head starts its own review window.
+        if [ "$(jq -r '.observation.head // ""' "$old")" != "$(jq -r '.head // ""' "$TMP/observation.json")" ]; then
+          jq --arg head "$(jq -r '.head' "$TMP/observation.json")" --arg since "$NOW" \
+            '.closeout_head=$head | .closeout_since=$since | .closeout_notice=null' "$TMP/row.json" > "$TMP/head-row.json"
+          mv "$TMP/head-row.json" "$TMP/row.json"
+        fi
       else
         error='forge observation unavailable or changed during read'
         jq --arg now "$NOW" --arg error "$error" '.checked_at=$now | .error=$error' "$old" > "$TMP/row.json"
       fi
+      [ "$observed" -ne 0 ] || closeout_signal "$task" "$url" "$TMP/row.json"
       write_record "$task" "$TMP/row.json"
       publish_pending "$task" "$url" "$TMP/row.json"
     done

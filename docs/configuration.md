@@ -614,11 +614,15 @@ The flag is a home-local supervision-noise preference and is not inherited by se
 
 The outside pull request review window defaults to `2` hours.
 Set the file to an integer from `0` to `87600` hours; `0` allows immediate closeout.
-The contribution observer starts the window when it first observes a PR head and restarts it when a new head appears, so polling delay can extend the review window but cannot shorten it.
-It applies only when GitHub reports different base and head repositories, which identifies a fork contribution using forge data rather than repository naming.
-At expiry, the observer signals Firstmate to close out only when the latest checks pass, no maintainer feedback remains unanswered, and the task worktree is clean and exactly matches the PR head.
-Red or pending checks, outstanding feedback, or dirty/unpushed work produce a closeout hold signal and leave the task in place.
-Firstmate still owns cleanup through the guarded `bin/fm-teardown.sh` path, so a teardown refusal leaves the task intact.
+The contribution observer counts the window from the earliest check-suite creation time for the current PR head in its head repository, as forge evidence of that push, and restarts it when the head changes.
+When no push evidence is available, it falls back to the first observation of that head; later evidence replaces that fallback, and CI reruns do not restart the window.
+It applies only when the PR base repository is outside this home's merge scope, regardless of whether the head and base repositories differ.
+Owned repositories are the GitHub origin repositories of projects registered in `data/projects.md`, plus repositories under owners listed in the optional `config/house-fork-owners` file (one GitHub owner per line, for example `jazz127`).
+Fork PRs into those repositories retain cleanup-after-merge.
+At expiry, the observer signals Firstmate to close out only when the latest checks pass, no maintainer feedback newer than the last push remains unacknowledged, and the task worktree is clean.
+An older `CHANGES_REQUESTED` decision does not block closeout, and a clean worker checkout may precede the published PR head.
+Red or pending checks, newer unacknowledged feedback, or dirty work produce a closeout hold signal and leave the task in place.
+Firstmate still owns cleanup through the guarded `bin/fm-teardown.sh` path, which verifies that work is landed or pushed; a teardown refusal leaves the task intact.
 Missing repository identity does not opt a PR into outside-repository cleanup.
 Malformed values disable closeout and wake Firstmate once for that configuration-error episode instead of using the default.
 

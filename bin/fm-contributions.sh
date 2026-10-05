@@ -19,8 +19,9 @@
 # This script owns fm-contributions.v1: one atomic file per durable task with
 # task and records[]. Each record contains url, kind, checked_at, error,
 # observation, verdict, seen event tokens, pending events, and notified tokens.
-# Outside-PR closeout records the current head, its first-observed time, and
-# the last closeout notification state so each head and condition wakes once.
+# Outside-PR closeout records the current head, its push-evidence time (or
+# first observation when no evidence exists), and the last closeout notification
+# state so each head and condition wakes once.
 # observation is one coherent forge read (a PR head is rechecked after fetching
 # checks/reviews). Checks are normalized by name, id, started_at, status and
 # conclusion; projection picks the newest attempt per distinct name. The last
@@ -41,7 +42,7 @@
 # a direct child) with a three-second margin. Every read is capped at five
 # seconds, and a read killed at that bound or at the deadline is budget
 # refusal, never a forge failure. A pull observation has three
-# dependent waves: core, six independent reads, then the closing head read;
+# dependent waves: core, seven independent reads, then the closing head read;
 # an issue has two waves. Before starting a URL, poll reserves the smaller of
 # the effective budget and 15 seconds for those waves. URLs needing forge
 # reads are sorted by URL and rotated by the current five-minute epoch bucket
@@ -67,8 +68,10 @@
 # FM_CONTRIBUTIONS_READY_LABEL selects the equivalent triage label, default
 # ready-for-pr. Labels are matched case-insensitively and exactly.
 # config/outside-pr-review-window-hours defaults to 2; zero closes out an
-# eligible outside-repository PR on its first observation. The head's first
-# observed time starts the window, and a new head starts a new window.
+# eligible outside-repository PR on its first observation. The head's earliest
+# check-suite creation time supplies push evidence; without it, first observation
+# starts the window. A new head starts a new window. Registered project origins
+# and owners listed in config/house-fork-owners retain merge-based cleanup.
 # Malformed values disable closeout and print one diagnostic per error episode.
 #
 # New maintainer comments/reviews (OWNER, MEMBER, COLLABORATOR, excluding the
@@ -239,7 +242,7 @@ wait_forges() { # background forge pids from one independent read wave
 }
 
 observe() { # canonical GitHub URL -> normalized JSON
-  local url=$1 part number kind endpoint head after label
+  local url=$1 part number kind endpoint head after label suite_repo
   case "$url" in https://github.com/*) ;; *) return 1 ;; esac
   part=${url#https://github.com/}; number=${part##*/}; part=${part%/*}; kind=${part##*/}; part=${part%/*}
   case "$kind" in pull) endpoint="repos/$part/pulls/$number" ;; issues) endpoint="repos/$part/issues/$number" ;; *) return 1 ;; esac
@@ -261,18 +264,24 @@ observe() { # canonical GitHub URL -> normalized JSON
     local statuses_pid=$!
     FORGE_ERR="$TMP/repo.err" forge api "repos/$part" > "$TMP/repo.json" &
     local repo_pid=$!
-    wait_forges "$comments_pid" "$reviews_pid" "$inline_pid" "$checks_pid" "$statuses_pid" "$repo_pid" || return 1
+    suite_repo=$(jq -r '.head.repo.full_name // ""' "$TMP/core.json")
+    (FORGE_ERR="$TMP/suites.err" forge api "repos/${suite_repo:-$part}/commits/$head/check-suites?per_page=100" --paginate --slurp > "$TMP/suites.json" \
+      || printf '[]\n' > "$TMP/suites.json") &
+    local suites_pid=$!
+    wait_forges "$comments_pid" "$reviews_pid" "$inline_pid" "$checks_pid" "$statuses_pid" "$repo_pid" "$suites_pid" || return 1
     jq -e 'type == "array" and all(.[]; type == "array")' "$TMP/comments.json" >/dev/null || return 1
     forge pr view "$url" --json headRefOid,reviewDecision > "$TMP/after.json" || return 1
     after=$(jq -er .headRefOid "$TMP/after.json")
     [ "$head" = "$after" ] || { printf 'head changed during observation\n' > "$TMP/forge.err"; return 1; }
     jq -n --slurpfile core "$TMP/core.json" --slurpfile comments "$TMP/comments.json" \
       --slurpfile reviews "$TMP/reviews.json" --slurpfile inline "$TMP/inline.json" --slurpfile after "$TMP/after.json" --slurpfile checks "$TMP/checks.json" \
-      --slurpfile statuses "$TMP/statuses.json" --slurpfile repo "$TMP/repo.json" '
+      --slurpfile statuses "$TMP/statuses.json" --slurpfile repo "$TMP/repo.json" --slurpfile suites "$TMP/suites.json" '
       $core[0] as $c
       | ($reviews[0] | add // []) as $reviews
       | {head:$c.head.sha,state:(if $c.merged_at != null then "merged" else $c.state end),
-          head_repo:($c.head.repo.full_name // null),base_repo:($c.base.repo.full_name // null),
+          base_repo:($c.base.repo.full_name // null),
+          pushed_at:([$suites[0][]? | .check_suites[]? | select(.head_sha == $c.head.sha)
+            | .created_at | select(type == "string") | select(try (fromdateiso8601 | type == "number") catch false)] | min),
           draft:$c.draft,mergeable:(if $c.mergeable == true then "mergeable" elif $c.mergeable == false then "conflicting" else "unknown" end),
           can_merge:($repo[0].permissions.push // false),
           review_decision:($after[0].reviewDecision // ""),
@@ -284,7 +293,7 @@ observe() { # canonical GitHub URL -> normalized JSON
           events:((($comments[0] | add // [] | map(. + {_signal:"comment"})) + ($reviews | map(. + {_signal:"review"})) + ($inline[0] | add // [] | map(. + {_signal:"review-comment"})))
             | map(select(.user.login != $c.user.login and (.author_association | IN("OWNER","MEMBER","COLLABORATOR")))
               | {token:((._signal + ":") + (.id|tostring) + ":" + (.updated_at // .submitted_at // "") + ":" + (.state // "")),
-                 type:._signal,source:.html_url,head:.commit_id,
+                 type:._signal,source:.html_url,head:.commit_id,at:(.updated_at // .submitted_at // .created_at // null),
                  author:.user.login,body:(.body // "" | .[:500])}))}' > "$TMP/observation.json" || return 1
   else
     label=${FM_CONTRIBUTIONS_READY_LABEL:-ready-for-pr}
@@ -354,27 +363,52 @@ closeout_window() {
   return 1
 }
 
+repository_is_owned() {
+  local base_repo=$1 owner project project_dir prefix origin repo
+  base_repo=$(printf '%s' "$base_repo" | tr '[:upper:]' '[:lower:]')
+  if [ -f "$CONFIG/house-fork-owners" ]; then
+    while IFS= read -r owner || [ -n "$owner" ]; do
+      owner=$(printf '%s' "$owner" | tr '[:upper:]' '[:lower:]')
+      [ -n "$owner" ] || continue
+      [ "${base_repo%%/*}" != "$owner" ] || return 0
+    done < "$CONFIG/house-fork-owners"
+  fi
+  [ -f "$DATA/projects.md" ] || return 1
+  while IFS= read -r project; do
+    case "$project" in ''|.|..|*/*) continue ;; esac
+    project_dir="${FM_PROJECTS_OVERRIDE:-$FM_HOME/projects}/$project"
+    prefix=$(git -C "$project_dir" rev-parse --show-prefix 2>/dev/null) || continue
+    [ -z "$prefix" ] || continue
+    origin=$(git -C "$project_dir" remote get-url origin 2>/dev/null) || continue
+    case "$origin" in
+      https://github.com/*) repo=${origin#https://github.com/} ;;
+      git@github.com:*) repo=${origin#git@github.com:} ;;
+      ssh://git@github.com/*) repo=${origin#ssh://git@github.com/} ;;
+      *) continue ;;
+    esac
+    repo=${repo%/}; repo=${repo%.git}
+    repo=$(printf '%s' "$repo" | tr '[:upper:]' '[:lower:]')
+    [ "$base_repo" != "$repo" ] || return 0
+  done < <(awk '/^- / { name=substr($0,3); sub(/ \[.*$/, "", name); sub(/ - .*$/, "", name); print name }' "$DATA/projects.md")
+  return 1
+}
+
 closeout_signal() { # task canonical-url row-file
-  local task=$1 url=$2 row=$3 head since old_head old_notice notice status meta wt local_head
-  local base_repo head_repo checked_seconds age seconds key
+  local task=$1 url=$2 row=$3 head since old_notice notice status meta wt dirty
+  local base_repo checked_seconds age seconds key
   [ "$CLOSEOUT_ENABLED" = 1 ] || return 0
   jq -e '.kind == "pr" and .observation.state == "open"' "$row" >/dev/null || return 0
   head=$(jq -r '.observation.head // ""' "$row")
   base_repo=$(jq -r '.observation.base_repo // ""' "$row")
-  head_repo=$(jq -r '.observation.head_repo // ""' "$row")
   # Unknown repository identity is not evidence that this is outside the home.
-  [ -n "$base_repo" ] && [ -n "$head_repo" ] && [ "$base_repo" != "$head_repo" ] || return 0
+  [ -n "$base_repo" ] || return 0
+  repository_is_owned "$base_repo" && return 0
   meta="$STATE/$task.meta"
   # The contribution record survives teardown so later feedback is still
   # observed; a missing task record means closeout has already happened.
   [ -f "$meta" ] && [ ! -L "$meta" ] || return 0
-  old_head=$(jq -r '.closeout_head // ""' "$row")
   since=$(jq -r '.closeout_since // ""' "$row")
   old_notice=$(jq -r '.closeout_notice // ""' "$row")
-  if [ "$old_head" != "$head" ] || [ -z "$since" ]; then
-    since=$NOW
-    old_notice=
-  fi
   checked_seconds=$(jq -nr --arg at "$since" '$at | fromdateiso8601') || return 0
   age=$((EPOCH - checked_seconds))
   seconds=$((CLOSEOUT_HOURS * 3600))
@@ -385,7 +419,8 @@ closeout_signal() { # task canonical-url row-file
     return 0
   fi
   status=ready
-  if jq -e '(.pending | length) > 0 or .observation.review_decision == "CHANGES_REQUESTED"' "$row" >/dev/null; then
+  if jq -e --argjson since "$checked_seconds" '
+    any(.pending[]; ((.at | try fromdateiso8601 catch null) // 0) > $since)' "$row" >/dev/null; then
     status=review
   elif ! jq -e '
     (.observation.checks | length) > 0
@@ -396,9 +431,8 @@ closeout_signal() { # task canonical-url row-file
     wt=$(sed -n 's/^worktree=//p' "$meta" | tail -1)
     if [ -z "$wt" ] || [ ! -d "$wt" ] || [ -L "$wt" ]; then
       status=workspace
-    elif ! local_head=$(git -C "$wt" rev-parse HEAD 2>/dev/null) \
-      || [ "$local_head" != "$head" ] \
-      || [ -n "$(git -C "$wt" status --porcelain --untracked-files=normal 2>/dev/null)" ]; then
+    elif ! dirty=$(git -C "$wt" status --porcelain --untracked-files=normal 2>/dev/null) \
+      || [ -n "$dirty" ]; then
       status=workspace
     fi
   fi
@@ -520,13 +554,13 @@ poll() {
           | $old + {checked_at:$now,error:null,
             observation:($o + {absent_checks:((($old.observation.absent_checks // []) + [($old.observation.checks // [])[] | .name]) - [$o.checks[].name] | unique)}),
             seen:($events | map(.token)),
-            pending:(($old.pending // []) + [$events[] | select(.token as $t | ($old.seen // [] | index($t)) == null)] | unique_by(.token))}' > "$TMP/row.json"
-        # A newly observed PR head starts its own review window.
-        if [ "$(jq -r '.observation.head // ""' "$old")" != "$(jq -r '.head // ""' "$TMP/observation.json")" ]; then
-          jq --arg head "$(jq -r '.head' "$TMP/observation.json")" --arg since "$NOW" \
-            '.closeout_head=$head | .closeout_since=$since | .closeout_notice=null' "$TMP/row.json" > "$TMP/head-row.json"
-          mv "$TMP/head-row.json" "$TMP/row.json"
-        fi
+            pending:(($old.pending // []) + [$events[] | select(.token as $t | ($old.seen // [] | index($t)) == null)]
+              | unique_by(.token) | map(. as $p | ([$events[] | select(.token == $p.token)] | first) // $p))}
+          | if .kind == "pr" then
+              .closeout_head=$o.head
+              | .closeout_since=($o.pushed_at // (if $old.closeout_head == $o.head then $old.closeout_since else null end) // $now)
+              | .closeout_notice=(if $old.closeout_head == $o.head and $old.closeout_since == .closeout_since then $old.closeout_notice else null end)
+            else . end' > "$TMP/row.json"
       else
         error='forge observation unavailable or changed during read'
         jq --arg now "$NOW" --arg error "$error" '.checked_at=$now | .error=$error' "$old" > "$TMP/row.json"
@@ -555,7 +589,11 @@ arm() {
   shim=('#!/usr/bin/env bash'
     "export FM_HOME=$(printf '%q' "$FM_HOME")"
     "export FM_STATE_OVERRIDE=$(printf '%q' "$STATE")"
-    "export FM_DATA_OVERRIDE=$(printf '%q' "$DATA")")
+    "export FM_DATA_OVERRIDE=$(printf '%q' "$DATA")"
+    "export FM_CONFIG_OVERRIDE=$(printf '%q' "$CONFIG")")
+  if [ -n "${FM_PROJECTS_OVERRIDE:-}" ]; then
+    shim+=("export FM_PROJECTS_OVERRIDE=$(printf '%q' "$FM_PROJECTS_OVERRIDE")")
+  fi
   if [ -n "${FM_CONTRIBUTIONS_BUDGET:-}" ]; then
     shim+=("export FM_CONTRIBUTIONS_BUDGET=$(printf '%q' "$FM_CONTRIBUTIONS_BUDGET")")
   fi

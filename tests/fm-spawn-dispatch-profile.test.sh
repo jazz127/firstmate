@@ -610,7 +610,7 @@ test_codex_threads_model_and_max_effort() {
 }
 
 test_codex_luna_and_main_seats_are_explicit_and_default_is_unchanged() {
-  local rec id out status launch seat_home main_home other_seat_home
+  local rec id out status launch seat_home main_home other_seat_home codex_probe
   id=profile-codex-luna-seat-z4
   rec=$(make_spawn_case profile-codex-luna-seat codex "$id")
   read_case_record "$rec"
@@ -631,6 +631,7 @@ printf 'CODEX_HOME=%s\nOPENAI_API_KEY=%s\nCODEX_API_KEY=%s\n' \
 printf '%s\n' "$@" >> "$FM_TEST_CODEX_EXEC_LOG"
 SH
   chmod +x "$FAKEBIN_DIR/codex"
+  codex_probe="$FAKEBIN_DIR/codex"
 
   out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" \
     "$id" "$PROJ_DIR" --harness codex --model gpt-5.6-luna --effort medium --seat luna --seat-home "$seat_home")
@@ -654,6 +655,7 @@ SH
   id=profile-codex-main-seat-z4m
   rec=$(make_spawn_case profile-codex-main-seat codex "$id")
   read_case_record "$rec"
+  cp "$codex_probe" "$FAKEBIN_DIR/codex"
   main_home="$CASE_DIR/main credential home"
   mkdir -p "$main_home"
   printf '%s\n' '{"OPENAI_API_KEY":"sk-fm-synthetic-main"}' > "$main_home/auth.json"
@@ -666,6 +668,13 @@ SH
   expect_code 0 "$status" "Codex main seat dispatch should succeed: $out"
   launch=$(cat "$LAUNCH_LOG")
   assert_contains "$launch" "CODEX_HOME='$main_home'" "main seat launch did not pin its selected CODEX_HOME"
+  FM_TEST_CODEX_EXEC_LOG="$TMP_ROOT/main-codex-exec.log" CODEX_HOME="$seat_home" OPENAI_API_KEY=ambient-luna-key CODEX_API_KEY=ambient-other-key PATH="$FAKEBIN_DIR:$PATH" bash -c "$launch"
+  assert_contains "$(cat "$TMP_ROOT/main-codex-exec.log")" "CODEX_HOME=$main_home" \
+    "executed main worker borrowed the ambient Luna CODEX_HOME"
+  assert_contains "$(cat "$TMP_ROOT/main-codex-exec.log")" 'OPENAI_API_KEY=unset' \
+    "executed main worker retained ambient OpenAI authentication"
+  assert_contains "$(cat "$TMP_ROOT/main-codex-exec.log")" 'CODEX_API_KEY=unset' \
+    "executed main worker retained ambient Codex authentication"
   assert_grep 'seat=main' "$HOME_DIR/state/$id.meta" "main seat provenance was not saved"
 
   id=profile-codex-luna-seat-binding-z4a

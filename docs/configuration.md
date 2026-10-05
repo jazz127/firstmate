@@ -1086,13 +1086,13 @@ This section is the single owner of the canonical schema and its per-field seman
       "min_confidence": 0.85,
       "floor": { "scope": "<quota-axi scope>", "min_percent": 20, "provider": "<quota-axi provider>" },
       "use": [
-        { "harness": "<adapter>", "model": "<optional model>", "effort": "<low|medium|high|xhigh|max|ultra, optional>", "seat": "<optional luna Codex seat>", "provider": "<optional quota-axi provider>", "floor": { "scope": "<quota-axi scope>", "min_percent": 50 } }
+        { "harness": "<adapter>", "model": "<optional model>", "effort": "<low|medium|high|xhigh|max|ultra, optional>", "seat": "<optional Codex seat name>", "provider": "<optional quota-axi provider>", "floor": { "scope": "<quota-axi scope>", "min_percent": 50 } }
       ],
       "why": "<optional rationale that helps firstmate choose>"
     }
   ],
   "default": [
-    { "harness": "<adapter>", "model": "<optional model>", "effort": "<optional effort>", "seat": "<optional luna Codex seat>" }
+    { "harness": "<adapter>", "model": "<optional model>", "effort": "<optional effort>", "seat": "<optional Codex seat name>" }
   ]
 }
 ```
@@ -1106,10 +1106,9 @@ This section is the single owner of the canonical schema and its per-field seman
 | `use` and optional top-level `default` | Accept one profile object or a non-empty array of profile objects; the single-object form remains fully backward-compatible. |
 | Profile `harness` | Required in every profile. |
 | Profile `model` and `effort`; rule `why` | Optional. |
-| Profile `seat` | Optional; accepts `"luna"` or `"main"` with `"harness": "codex"`, and the launching home's [dock record](#dock-local-seat-binding-configdockjson) maps each name to this machine's credential directory. |
+| Profile `seat` | Optional; accepts only the strings `"luna"` or `"main"` with `"harness": "codex"`, and the launching home's [dock record](#dock-local-seat-binding-configdockjson) maps each name to this machine's credential directory. |
 
-Quota resolution matches a named seat profile to that resolved directory's Codex account, even when `codex-home` in the quota snapshot names a different ambient account; without exactly one matching account row, the candidate stays unranked instead of borrowing another account's quota.
-Omitting `seat` preserves the ambient Codex home and its existing quota-row matching.
+[`quota-array-dispatch`](../.agents/skills/quota-array-dispatch/SKILL.md#1-eligibility) owns account and quota matching for named seats and ambient profiles.
 
 **Fields applied only by typed resolution**
 
@@ -1198,7 +1197,7 @@ Version 1 supports the named `luna` and `main` seats on Codex:
 ```
 
 `id` is a safe single-line diagnostic label, not a host routing instruction.
-The file must be ordinary readable JSON with exactly the fields shown, though `seats` may be `{}` to declare no available seats.
+The file must be ordinary readable JSON with exactly the top-level and per-seat fields shown; `seats` may bind either supported name or both, or be `{}` to declare no available seats.
 The credential path must be absolute and free of control characters; spaces and shell punctuation remain literal, and the existing directory is resolved to its physical path.
 An invalid or present incomplete file refuses a seated launch without a fallback.
 Only when the file is absent on Darwin for OS user `jarad` with `HOME=/Users/jarad` does Luna resolve to `/Users/jarad/.codex-luna` as `legacy-mac-jarad`; the `main` seat always requires an explicit dock binding.
@@ -1299,7 +1298,7 @@ No qualifying option, or two equally probable qualifying options, produces `ambi
 
 - Any applicable `exhausted_now` row or known zero bound makes that candidate ineligible, and a known profile-floor shortfall does the same before unrelated quota uncertainty is considered.
 - Missing or nonnumeric `spendPriority` evidence is never ranked, and every candidate is printed beside its evidence or the reason it was not rankable, including on ambiguous and approval-gated outcomes that emit no profile.
-- On the opted-in path, duplicate concrete profiles with the same harness, model, and effort inside one rule or the default array are configuration errors rather than ties.
+- On the opted-in path, duplicate concrete profiles with the same harness, model, effort, and seat inside one rule or the default array are configuration errors rather than ties.
 
 **Outcomes and exit status**
 

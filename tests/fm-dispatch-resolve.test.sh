@@ -1007,8 +1007,10 @@ pass "configuration errors exit 2 before any network call"
 
 # --- Codex seat profile field -------------------------------------------------
 SEAT_HOME="$TMP_ROOT/seat-home"
-mkdir -p "$SEAT_HOME"
-jq -n --arg home "$SEAT_HOME" '{version:1,id:"fixture-dock",seats:{luna:{harness:"codex",credential_home:$home}}}' \
+MAIN_SEAT_HOME="$TMP_ROOT/main-seat-home"
+mkdir -p "$SEAT_HOME" "$MAIN_SEAT_HOME"
+jq -n --arg home "$SEAT_HOME" --arg main "$MAIN_SEAT_HOME" \
+  '{version:1,id:"fixture-dock",seats:{luna:{harness:"codex",credential_home:$home},main:{harness:"codex",credential_home:$main}}}' \
   > "$HOME_DIR/config/dock.json"
 reset_log
 printf '%s\n' '{"rules":[{"when":"Luna seat tasks","use":[{"harness":"codex","model":"gpt-5.6-luna","effort":"medium"},{"harness":"codex","model":"gpt-5.6-luna","effort":"medium","seat":"luna"}]}],"default":{"harness":"codex","model":"gpt-5.6-sol"}}' > "$RULES"
@@ -1034,6 +1036,23 @@ assert_contains "$out" "profile: --harness 'codex' --model 'gpt-5.6-luna' --effo
   "the selected Codex seat is emitted as a concrete spawn flag"
 assert_contains "$out" "--seat-home '$SEAT_HOME'" \
   "the selected Codex seat carries its quota-bound dock path to spawn"
+MAIN_SEAT_QUOTA="$TMP_ROOT/schema6-main-seat.json"
+jq --arg main_home "$MAIN_SEAT_HOME" '.providers |= map(
+  if .provider == "codex" and .accountKey == "codex-luna" then
+    .accountKey = "codex-main" | .account.credentialHome = $main_home + "/auth.json" |
+    .quotaSemantics.effectiveAvailability |= map(.effectivePercentRemaining = 63 |
+      .runway.status = "through_reset" | .selection.spendPriority = 0.214)
+  else . end)' "$SEAT_QUOTA" > "$MAIN_SEAT_QUOTA"
+printf '%s\n' '{"rules":[{"when":"Main seat tasks","use":{"harness":"codex","model":"gpt-5.6-sol","effort":"medium","seat":"main"}}]}' > "$RULES"
+TYPESAFE_API_KEY=$KEY QUOTA_AXI_FIXTURE="$MAIN_SEAT_QUOTA" run code out err "$BRIEF"
+assert_contains "$out" 'candidate: codex:gpt-5.6-sol  provider=codex  scope=all_models  remaining=63%  spendPriority=0.214  runway=through_reset  -> eligible' \
+  "the main seat reads the quota row bound to its own credential folder"
+assert_contains "$out" "profile: --harness 'codex' --model 'gpt-5.6-sol' --effort 'medium' --seat 'main' --seat-home '$MAIN_SEAT_HOME'" \
+  "the selected main seat carries its own measured home to spawn"
+printf '%s\n' '{"rules":[{"when":"Main seat tasks","use":{"harness":"codex","model":"gpt-5.6-sol","seat":"main"}}]}' > "$RULES"
+jq '.providers |= map(select(.accountKey != "codex-main"))' "$MAIN_SEAT_QUOTA" > "$TMP_ROOT/schema6-no-main-seat-row.json"
+TYPESAFE_API_KEY=$KEY QUOTA_AXI_FIXTURE="$TMP_ROOT/schema6-no-main-seat-row.json" run code out err "$BRIEF"
+assert_contains "$out" 'no quota row for account main' "a missing main account is disclosed without borrowing Luna or ambient quota"
 SEAT_SCHEMA5="$TMP_ROOT/schema5-seat.json"
 jq '.schemaVersion = 5 | .providers |= map(select(.provider != "codex" or .accountKey == "codex-luna") | del(.accountKey))' \
   "$SEAT_QUOTA" > "$SEAT_SCHEMA5"
@@ -1099,13 +1118,13 @@ printf '%s\n' '{"rules":[{"when":"Luna seat tasks","use":{"harness":"codex","mod
 reset_log
 TYPESAFE_API_KEY=$KEY QUOTA_AXI_FIXTURE="$SEAT_QUOTA" run code out err "$BRIEF"
 expect_code 2 "$code" "unknown seat is a configuration error"
-assert_contains "$err" 'unsupported use profile seat (only luna on codex): other' "resolver names the unsupported seat"
+assert_contains "$err" 'unsupported use profile seat (only luna or main on codex): other' "resolver names the unsupported seat"
 assert_absent "$LOG/argv" "unknown seat is refused before the API call"
 
 printf '%s\n' '{"rules":[{"when":"Luna seat tasks","use":{"harness":"codex"}}],"default":{"harness":"codex","seat":"other"}}' > "$RULES"
 TYPESAFE_API_KEY=$KEY QUOTA_AXI_FIXTURE="$SEAT_QUOTA" run code out err "$BRIEF"
 expect_code 2 "$code" "unknown default seat is a configuration error"
-assert_contains "$err" 'unsupported default profile seat (only luna on codex): other' "resolver names the unsupported default seat"
+assert_contains "$err" 'unsupported default profile seat (only luna or main on codex): other' "resolver names the unsupported default seat"
 
 printf '%s\n' '{"rules":[{"when":"Luna seat tasks","use":{"harness":"codex","model":"gpt-5.6-sol"}}]}' > "$RULES"
 TYPESAFE_API_KEY=$KEY QUOTA_AXI_FIXTURE="$SCHEMA6_NATIVE" run code out err "$BRIEF"

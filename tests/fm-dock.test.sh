@@ -12,10 +12,10 @@ SEAT="$TMP_ROOT/seat with spaces and \$(literal) 'quotes'"
 mkdir -p "$CONFIG" "$SEAT"
 
 resolve() {
-  FM_CONFIG_OVERRIDE="$CONFIG" "$ROOT/bin/fm-dock.sh" resolve --seat luna --harness codex 2>&1
+  FM_CONFIG_OVERRIDE="$CONFIG" "$ROOT/bin/fm-dock.sh" resolve --seat "${1:-luna}" --harness codex 2>&1
 }
 write_record() {
-  jq -n --arg home "$1" '{version:1,id:"test-dock",seats:{luna:{harness:"codex",credential_home:$home}}}' > "$CONFIG/dock.json"
+  jq -n --arg home "$1" --arg seat "${2:-luna}" '{version:1,id:"test-dock",seats:{($seat):{harness:"codex",credential_home:$home}}}' > "$CONFIG/dock.json"
 }
 write_record "$SEAT"
 out=$(resolve); rc=$?
@@ -24,6 +24,15 @@ assert_contains "$out" "credential_home=$SEAT" "punctuation must remain literal"
 assert_contains "$out" 'dock=test-dock' "dock id must be visible"
 assert_absent "$TMP_ROOT/literal" "path punctuation must not execute shell text"
 pass "valid dock record resolves a literal credential path"
+
+MAIN_SEAT="$TMP_ROOT/main-seat"
+mkdir -p "$MAIN_SEAT"
+write_record "$MAIN_SEAT" main
+out=$(resolve main); rc=$?
+expect_code 0 "$rc" "valid main dock seat should resolve: $out"
+assert_contains "$out" "seat=main" "main seat identity should be visible"
+assert_contains "$out" "credential_home=$MAIN_SEAT" "main seat must resolve its own credential directory"
+pass "main Codex seat resolves independently by name"
 
 ln -s "$SEAT" "$TMP_ROOT/seat-link"
 write_record "$TMP_ROOT/seat-link"

@@ -1064,7 +1064,7 @@ Per-machine Cursor `cli-config.json` attribution-off is not this contract: it do
 
 `config/crew-dispatch.json` is an optional local, gitignored file containing natural-language rules that firstmate reads before dispatching a crewmate or scout.
 Firstmate chooses the best matching rule with judgment; shell scripts do not match the natural-language rules.
-Firstmate resolves the rule's profile object or array under `AGENTS.md` section 4 and `quota-array-dispatch`, then passes only concrete `--harness`, `--model`, and `--effort` flags to `fm-spawn.sh`.
+Firstmate resolves the rule's profile object or array under `AGENTS.md` section 4 and `quota-array-dispatch`, then passes concrete `--harness`, `--model`, and `--effort` flags plus an optional named `--seat` to `fm-spawn.sh`.
 
 **Spawn requirements**
 
@@ -1106,9 +1106,9 @@ This section is the single owner of the canonical schema and its per-field seman
 | `use` and optional top-level `default` | Accept one profile object or a non-empty array of profile objects; the single-object form remains fully backward-compatible. |
 | Profile `harness` | Required in every profile. |
 | Profile `model` and `effort`; rule `why` | Optional. |
-| Profile `seat` | Optional; currently accepts only `"luna"` with `"harness": "codex"`, and the launching home's [dock record](#dock-local-seat-binding-configdockjson) maps it to this machine's credential directory. |
+| Profile `seat` | Optional; accepts `"luna"` or `"main"` with `"harness": "codex"`, and the launching home's [dock record](#dock-local-seat-binding-configdockjson) maps each name to this machine's credential directory. |
 
-Quota resolution matches a Luna profile to that resolved directory's Codex account, even when `codex-home` in the quota snapshot names a different ambient account; without exactly one matching account row, the candidate stays unranked instead of borrowing another account's quota.
+Quota resolution matches a named seat profile to that resolved directory's Codex account, even when `codex-home` in the quota snapshot names a different ambient account; without exactly one matching account row, the candidate stays unranked instead of borrowing another account's quota.
 Omitting `seat` preserves the ambient Codex home and its existing quota-row matching.
 
 **Fields applied only by typed resolution**
@@ -1178,7 +1178,7 @@ Secondmate homes inherit this file from the primary, so a secondmate's own crewm
 
 An optional private `config/dock.json` in the launching home binds portable dispatch seat names to this machine's credential directory.
 The effective config directory is `${FM_CONFIG_OVERRIDE:-$FM_HOME/config}`; no parent home, hostname map, or ambient `CODEX_HOME` is searched.
-Version 1 supports only Luna on Codex:
+Version 1 supports the named `luna` and `main` seats on Codex:
 
 ```json
 {
@@ -1188,6 +1188,10 @@ Version 1 supports only Luna on Codex:
     "luna": {
       "harness": "codex",
       "credential_home": "/home/fm-manage/.codex-luna"
+    },
+    "main": {
+      "harness": "codex",
+      "credential_home": "/home/fm-manage/.codex"
     }
   }
 }
@@ -1197,9 +1201,9 @@ Version 1 supports only Luna on Codex:
 The file must be ordinary readable JSON with exactly the fields shown, though `seats` may be `{}` to declare no available seats.
 The credential path must be absolute and free of control characters; spaces and shell punctuation remain literal, and the existing directory is resolved to its physical path.
 An invalid or present incomplete file refuses a seated launch without a fallback.
-Only when the file is absent on Darwin for OS user `jarad` with `HOME=/Users/jarad` does Luna resolve to `/Users/jarad/.codex-luna` as `legacy-mac-jarad`.
+Only when the file is absent on Darwin for OS user `jarad` with `HOME=/Users/jarad` does Luna resolve to `/Users/jarad/.codex-luna` as `legacy-mac-jarad`; the `main` seat always requires an explicit dock binding.
 On other machines, create a local record before a seated launch.
-`bin/fm-dock.sh resolve --seat luna --harness codex` prints the resolved identity without changing configuration.
+`bin/fm-dock.sh resolve --seat main --harness codex` or `--seat luna` prints the selected binding's identity without changing configuration.
 
 A seated spawn or relaunch requires the selected directory to be readable and searchable and requires native `codex login status` to identify a stored sign-in under a cleared environment.
 This release supports Codex's file-backed CLI authentication mode for seats; a configured keyring, auto, or ephemeral mode refuses until its path selection is guarded.

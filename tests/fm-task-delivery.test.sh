@@ -394,6 +394,14 @@ STUB
         "$mode: $instructions omitted handoff-qualified ship authority"
       assert_no_grep "Your own validation and delivery path needs no such approval" "$instructions" \
         "$mode: $instructions retained approval wording that conflicts with the handoff"
+      assert_grep "This replaces the scout rule limiting outside-worktree writes to the report and status file." "$instructions" \
+        "$mode: $instructions retained the scout-only write restriction"
+      assert_grep "Keep project edits inside this worktree; keep proof and scratch output outside it, under \`$home/data/$id/\` or a temporary directory." "$instructions" \
+        "$mode: $instructions omitted the ship scratch-location rule"
+      assert_grep "Outside the worktree, write only that task material and the status and steering-inbox records authorized below." "$instructions" \
+        "$mode: $instructions omitted the ship outside-worktree write boundary"
+      assert_grep "Leave the worktree clean before reporting done." "$instructions" \
+        "$mode: $instructions omitted the clean-before-done rule"
     done
 
     # Compare the public outputs of both real generation paths. The promoted

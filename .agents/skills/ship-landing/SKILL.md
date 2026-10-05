@@ -18,14 +18,10 @@ In no-mistakes mode the earlier `done [at=<epoch>]: {summary}` is the pipeline h
 Tell the captain the PR's full `https://...` URL copied from the worker's ready line, the resolved checks-green crew-state line, or the task's `pr=` metadata, a concise outcome summary, and the no-mistakes risk level when applicable.
 A captain instruction to merge is explicit authority; `yolo` is the only standing routine merge authority.
 
-An outside-PR closeout wake is `check: contributions closeout <task> <url> head=<sha> state=<ready|review|ci|workspace>`.
+On a `check: contributions closeout` wake, follow the [outside-PR review-window contract](../../../docs/configuration.md#outside-pull-request-review-window-configoutside-pr-review-window-hours); `bin/fm-contributions.sh`'s header owns the wake format.
 Before acting on any closeout wake, confirm that the live task is a ship and its current canonical `pr=` matches the wake's URL; disregard a stale wake for a replaced PR or retired task.
 For `state=ready`, confirm that the wake's PR head is still current and the closeout conditions still hold, then run the ordinary guarded teardown; if the head changed, a closeout condition fails, or teardown refuses, leave the task in place and report the reason.
-CI is ready only when every latest check lane has a passing verdict and no previously observed lane is missing.
 For `state=review`, `state=ci`, or `state=workspace`, leave the task in place and surface the unacknowledged feedback, check result, or workspace state.
-Any unacknowledged contribution feedback holds closeout, even after a newer push; acknowledged feedback never holds it.
-An older review decision alone does not hold closeout; a clean worker checkout behind the published PR head still uses the ordinary guarded teardown safety gate.
-The contribution observer retains ownership through the durable PR link after teardown, so later maintainer feedback continues to wake Firstmate.
 For any custom `state/<id>.check.sh` you write yourself, keep it an ordinary single-link mode-`0700` file, print one line only when firstmate should wake, print nothing otherwise, finish before `FM_CHECK_TIMEOUT`, then bind its current bytes with `bin/fm-check-register.sh <id>` before the watcher may execute it.
 Retire a custom check only through `bin/fm-check-unregister.sh <id>` (or `bin/fm-teardown.sh` for a spawned task); never hand-compose an `rm` with `$STATE`/`$ID`.
 

@@ -625,7 +625,9 @@ Registering or cloning a project does not establish ownership.
 Fork PRs into repositories with write-or-higher permission retain cleanup-after-merge.
 Unreadable, missing, or unknown permissions prevent closeout and report an unavailable observation through the existing observer error path.
 Closeout signals apply only to a live ship task whose current canonical `pr=` matches the observed URL; retained links to replaced PRs continue observing feedback without producing closeout signals.
-At expiry, the observer signals Firstmate to close out only when every latest check lane passes, no previously observed lane is missing, no contribution feedback remains unacknowledged, and the task worktree is clean.
+At expiry, the observer signals Firstmate to close out only when CI readiness is confirmed, no contribution feedback remains unacknowledged, and the task worktree is clean.
+CI readiness uses the shared [`check_readiness` rule](../bin/fm-contributions.jq); it requires at least one latest check lane, completed conclusions of `success`, `skipped`, or `neutral`, and no missing verdicts or previously observed lanes.
+Unacknowledged feedback holds closeout even after a newer push; acknowledged feedback never holds it.
 An older `CHANGES_REQUESTED` decision does not block closeout, and a clean worker checkout may precede the published PR head.
 Red, pending, or missing checks, any unacknowledged feedback, or dirty work produce a closeout hold signal and leave the task in place.
 Firstmate still owns cleanup through the guarded `bin/fm-teardown.sh` path, which verifies that work is landed or pushed; a teardown refusal leaves the task intact.

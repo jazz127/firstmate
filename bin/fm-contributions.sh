@@ -19,8 +19,11 @@
 # This script owns fm-contributions.v1: one atomic file per durable task with
 # task and records[]. Each record contains url, kind, checked_at, error,
 # observation, verdict, seen event tokens, pending events, and notified tokens.
-# Outside-PR closeout records the current head, its window start, and the last
-# closeout notification state so each head and condition wakes once.
+# Outside-PR closeout fields closeout_head, closeout_since, and closeout_notice
+# track the current head, window start, and last notification condition;
+# unchanged conditions do not repeat a wake.
+# The closeout wake format is:
+#   check: contributions closeout <task> <url> head=<sha> state=<ready|review|ci|workspace>
 # observation is one coherent forge read (a PR head is rechecked after fetching
 # checks/reviews). Checks are normalized by name, id, started_at, status and
 # conclusion; projection picks the newest attempt per distinct name. The last
@@ -66,13 +69,9 @@
 # FM_CONTRIBUTIONS_NOW supplies an ISO UTC clock for tests, otherwise UTC now.
 # FM_CONTRIBUTIONS_READY_LABEL selects the equivalent triage label, default
 # ready-for-pr. Labels are matched case-insensitively and exactly.
-# config/outside-pr-review-window-hours defaults to 2; zero closes out an
-# eligible outside-repository PR on its first observation. Initially the PR's
-# updated_at (or created_at) starts the window when available, otherwise first
-# observation does. Every observed head change starts a new window at that poll,
-# including a return to an older SHA. PR base repositories
-# with authenticated write-or-higher permission retain merge-based cleanup.
-# Malformed values disable closeout and print one diagnostic per error episode.
+# docs/configuration.md "Outside pull request review window" owns closeout
+# configuration, timing, and eligibility. FM_CONFIG_OVERRIDE selects its config
+# directory instead of FM_HOME/config and rides the generated check shim.
 #
 # New maintainer comments/reviews (OWNER, MEMBER, COLLABORATOR, excluding the
 # contribution author) and issue transitions to ready-for-pr persist as pending

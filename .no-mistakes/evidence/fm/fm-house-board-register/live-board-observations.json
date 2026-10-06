@@ -1,0 +1,80 @@
+{
+  "driver": "FM_HOME=<isolated worktree home> FM_HOUSE_BOARD_NO_SERVE=1 bin/fm-house-board.sh build; real gh-axi api -> GitHub",
+  "oracle": "Author intent helper-name examples; actual PR 192 durable feature and PR 128 ordinary feature with house-test wording",
+  "feature_count": 110,
+  "plumbing_count": 12,
+  "required_helpers": [
+    "housefeature/attestation-house-integration",
+    "housefeature/hf-upstream-main-sync-5",
+    "housefeature/house-test-fixes",
+    "housefeature/remote-job-stable-identity-house-fix",
+    "housefeature/upstream-5872-merge"
+  ],
+  "actual_helpers": [
+    "housefeature/attestation-house-integration",
+    "housefeature/dock-seat-house-integration",
+    "housefeature/evidence-boundary-house-integration",
+    "housefeature/evidence-contradiction-house-integration",
+    "housefeature/hf-pr-merge-update-house-integration",
+    "housefeature/hf-upstream-main-sync-5",
+    "housefeature/hf-upstream-main-sync-6",
+    "housefeature/house-test-fixes",
+    "housefeature/pr-evidence-preflight-house-integration",
+    "housefeature/ready-session-timeout-house-integration",
+    "housefeature/remote-job-stable-identity-house-fix",
+    "housefeature/upstream-5872-merge"
+  ],
+  "registered_feature": {
+    "project": "firstmate",
+    "name": "Offer closeout",
+    "description": "Integrated closeout feature",
+    "branch": "housefeature/offer-closeout",
+    "branch_tip": "db4f1eccd3b3bc7c8beb466c82efa1018cc98685",
+    "branch_url": "https://github.com/jazz127/firstmate/tree/housefeature/offer-closeout",
+    "commits": [
+      "db4f1eccd3b3bc7c8beb466c82efa1018cc98685",
+      "6f3598480e37fcd350a5c05d5c8dc3926901b1e1"
+    ],
+    "landed": true,
+    "presence": "both",
+    "label": "house-only",
+    "label_source": "fork PR",
+    "state": "landed",
+    "on_house": "yes",
+    "fork_pr": {
+      "html_url": "https://github.com/jazz127/firstmate/pull/192",
+      "state": "closed",
+      "merged_at": "2026-10-06T00:18:16Z"
+    },
+    "upstream_pr": null,
+    "age_days": 0,
+    "age_since": "2026-10-05T23:36:34Z"
+  },
+  "ordinary_feature": {
+    "project": "firstmate",
+    "name": "Herdr tests",
+    "description": "Branch exists on the fork but is absent from the house register.",
+    "branch": "housefeature/herdr-tests",
+    "branch_tip": "df714f4e01475ccb668d93b99f306bee884fc708",
+    "branch_url": "https://github.com/jazz127/firstmate/tree/housefeature/herdr-tests",
+    "commits": [
+      "df714f4e01475ccb668d93b99f306bee884fc708",
+      "5abea1d819b67633cdfec4e20da4ecd011d2bafa"
+    ],
+    "landed": true,
+    "presence": "fork only",
+    "label": "house-only",
+    "label_source": "fork PR",
+    "state": "landed",
+    "on_house": "yes",
+    "fork_pr": {
+      "html_url": "https://github.com/jazz127/firstmate/pull/128",
+      "state": "closed",
+      "merged_at": "2026-09-29T10:06:49Z"
+    },
+    "upstream_pr": null,
+    "age_days": 6,
+    "age_since": "2026-09-29T10:03:57Z"
+  },
+  "setup_correction": "An initial assertion named launch-brief-argv-house-fix, a branch absent from the live fork. Replaced it with the real remote-job-stable-identity-house-fix branch to exercise the same required helper suffix."
+}

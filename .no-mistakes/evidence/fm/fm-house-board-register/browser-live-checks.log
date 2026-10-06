@@ -1,0 +1,18 @@
+result: "{\"featureRows\":110,\"plumbingRows\":12,\"stats\":\"110 / 110Showing83On house0Offered0Historical109Register mismatches\"}"
+help[1]:
+  Run `chrome-devtools-axi snapshot` to see current page state
+error: "Error: Registered feature not retained"
+code: UNKNOWN
+error: "Error: Registered feature not retained"
+code: UNKNOWN
+result: "{\"feature\":\"Offer closeoutIntegrated closeout featurefirstmatehousefeature/offer-closeoutRegister + forkdb4f1ecc6f359848Yeshouse-onlylanded · fork PRFork · merged0d\",\"counts\":\"1 / 110Showing1On house0Offered0Historical0Register mismatches\",\"plumbing\":\"firstmate · House integration · housefeature/attestation-house-integrationfirstmate · House integration · housefeature/dock-seat-house-integrationfirstmate · House integration · housefeature/evidence-boundary-house-integrationfirstmate · House integration · housefeature/evidence-contradiction-house-integrationfirstmate · House integration · housefeature/hf-pr-merge-update-house-integrationfirstmate · Upstream main sync · housefeature/hf-upstream-main-sync-5firstmate · Upstream main sync · housefeature/hf-upstream-main-sync-6firstmate · House test fixes · housefeature/house-test-fixesfirstmate · House integration · housefeature/pr-evidence-preflight-house-integrationfirstmate · House integration · housefeature/ready-session-timeout-house-integrationfirstmate · House reconciliation or fix · housefeature/remote-job-stable-identity-house-fixfirstmate · Upstream merge · housefeature/upstream-5872-merge\",\"setupCorrection\":\"Refreshed stale browser reference; asserted rendered Register + fork label rather than serialized presence value both.\"}"
+help[1]:
+  Run `chrome-devtools-axi snapshot` to see current page state
+result: "{\"mismatchRows\":109,\"helperSearchFeatureRows\":0,\"emptyMessage\":\"No features match these filters.\",\"plumbingCount\":\"Plumbing branches (12)\"}"
+help[1]:
+  Run `chrome-devtools-axi snapshot` to see current page state
+result: "{\"feature\":\"Herdr testsBranch exists on the fork but is absent from the house register.firstmatehousefeature/herdr-testsfork onlydf714f4e5abea1d8Yeshouse-onlylanded · fork PRFork · merged6d\",\"counts\":\"1 / 110Showing1On house0Offered0Historical1Register mismatches\"}"
+help[1]:
+  Run `chrome-devtools-axi snapshot` to see current page state
+
+Setup corrections: initial fill used a stale Chrome snapshot reference; re-snapshot and fresh fill succeeded. Initial assertion used serialized presence value "both" as visible text; the page correctly renders "Register + fork". The corrected assertion and subsequent mismatch/helper/ordinary-feature assertions all passed. No product failure was observed.

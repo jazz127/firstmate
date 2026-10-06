@@ -1,0 +1,407 @@
+TOOL Read
+{
+  "file_path": "/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M47F5G2PB5FR3SPDXDPN116F/.agents/skills/ship-landing/SKILL.md"
+}
+
+OUTPUT
+1	---
+2	name: ship-landing
+3	description: Load when a ship reports a PR or ready branch, when an outside-PR closeout signal arrives, when deciding or monitoring landing, and before task cleanup.
+4	user-invocable: false
+5	metadata:
+6	  internal: true
+7	---
+8	
+9	# Ship landing
+10	
+11	For PR-based ship tasks, the ready signal depends on mode: `no-mistakes` reports `done [at=<epoch>]: PR <url> checks green` after CI is green, while `direct-PR` reports `done [at=<epoch>]: PR <url>` after opening the PR, each only for a non-draft PR; a lane that deliberately holds a draft declares a wait instead, and `bin/fm-pr-check.sh` refuses to arm merge monitoring on a draft.
+12	Run `bin/fm-pr-check.sh <id> <PR url>` with the URL copied from that ready signal or the resolved checks-green `fm-crew-state.sh` line - it records `pr=` and the forge's `pr_head=` when available in the task's meta and arms the watcher's merge poll.
+13	`bin/fm-dod-lib.sh` owns the named-head gate on that ready signal: a ship `done:` whose named head exists only in the worker's disposable copy is not ready (`bin/fm-crew-state.sh` reports blocked, `bin/fm-pr-check.sh` refuses to register, and a secondmate does not publish that done upstream).
+14	That blocked reading is the gate working, not a stuck worker, so steer the worker on the commit the refusal names rather than waiting.
+15	A direct-PR worker pushes that commit to its PR branch, and a local-only worker commits it on its ship branch.
+16	A no-mistakes worker re-validates it with /no-mistakes so the pipeline stays the one publisher; it never pushes from its copy.
+17	In no-mistakes mode the earlier `done [at=<epoch>]: {summary}` is the pipeline handoff and is not gated.
+18	Before reporting any pull request to the captain, its published body is read back from the forge at the PR reporting boundary; task-owned PR registration and inactive reconciliation perform this check automatically, including for reports without an owning task record.
+19	Preserve the reported PR outcome but append `evidence-validation=failed` when its body cannot be read or parsed, or when an evidence claim lacks the artifact, command, and capture time required by `bin/fm-dod-lib.sh`.
+20	The reporting-boundary check validates published text, while the generated ship brief's PR-body preflight contract catches worker-authored bodies before publication; `bin/fm-dod-lib.sh` owns both instructions.
+21	Preserve the validator diagnostic alongside `evidence-validation=failed` when a published attestation is bound to a different head, so the refusal names the current head, attested head, and remediation.
+22	Those publication checks refuse contradictory driven-scenario claims, including a count that no complete scenario table with a `Live` column agrees with; the check does not apply to captain intent because a brief may quote a defective PR body while requesting its repair.
+23	Tell the captain the PR's full `https://...` URL copied from the worker's ready line, the resolved checks-green crew-state line, or the task's `pr=` metadata, a concise outcome summary, and the no-mistakes risk level when applicable.
+24	A captain instruction to merge is explicit authority; `yolo` is the only standing routine merge authority.
+25	After a house-feature pull request into `house` is confirmed merged, add or update that feature's bullet in the private `$FM_HOME/data/house-line.md` register under the matching project, with its exact durable `housefeature/<name>` branch.
+26	For a `housefeature/<name>` head, use that branch; for other same-fork feature heads, including `fm/<name>`, resolve the durable name with `bin/fm-housefeature-cut.sh name <head-ref>` and confirm the safety-net workflow created that branch or left an existing one unchanged before recording it.
+27	Exclude helper branches classified as plumbing by `bin/fm-house-board.py`.
+28	If the safety-net branch is still absent, keep registration outstanding and report the blocker before task cleanup.
+29	Update an existing entry instead of duplicating it, and keep the register private; it is operator data, not a tracked project file.
+30	
+31	On a `check: contributions closeout` wake, follow the [outside-PR review-window contract](../../../docs/configuration.md#outside-pull-request-review-window-configoutside-pr-review-window-hours); `bin/fm-contributions.sh`'s header owns the wake format.
+32	Before acting on any closeout wake, confirm that the live task is a ship and its current canonical `pr=` matches the wake's URL; disregard a stale wake for a replaced PR or retired task.
+33	For `state=ready`, confirm that the wake's PR head is still current and the closeout conditions still hold, then run the ordinary guarded teardown; if the head changed, a closeout condition fails, or teardown refuses, leave the task in place and report the reason.
+34	For `state=review`, `state=ci`, or `state=workspace`, leave the task in place and surface the unacknowledged feedback, check result, or workspace state.
+35	For any custom `state/<id>.check.sh` you write yourself, keep it an ordinary single-link mode-`0700` file, print one line only when firstmate should wake, print nothing otherwise, finish before `FM_CHECK_TIMEOUT`, then bind its current bytes with `bin/fm-check-register.sh <id>` before the watcher may execute it.
+36	Retire a custom check only through `bin/fm-check-unregister.sh <id>` (or `bin/fm-teardown.sh` for a spawned task); never hand-compose an `rm` with `$STATE`/`$ID`.
+37	
+38	Tear down a ship task only after landing is confirmed.
+39	A teardown refusal for uncommitted or unlanded work is a stop-and-investigate result, never an obstacle to bypass.
+40	Never force teardown without explicit discard authority.
+41	After successful teardown, record completion, retain only the configured recent Done history, and re-evaluate queued work whose blockers and time gates have cleared.
+42	
+43	A secondmate is persistent and an empty queue is healthy.
+44	Retire one only on an explicit captain or main-firstmate decision, after loading `secondmate-provisioning`; its home must contain no work under way, and forced discard still requires explicit captain authority.
+45	
+
+TOOL Bash
+{
+  "command": "echo \"FM_HOME=$FM_HOME\"; ls -la \"$FM_HOME\" \"$FM_HOME/data\" 2>&1 | head -50",
+  "description": "Show lab home location and contents"
+}
+
+OUTPUT
+FM_HOME=/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M47F5G2PB5FR3SPDXDPN116F/l
+/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M47F5G2PB5FR3SPDXDPN116F/l:
+total 8
+drwxr-xr-x   8 jarad  staff  256 Oct  6 12:07 .
+drwxr-xr-x  31 jarad  staff  992 Oct  6 12:07 ..
+-rw-r--r--   1 jarad  staff   15 Oct  6 12:07 .fm-lab-home
+drwxr-xr-x   2 jarad  staff   64 Oct  6 12:07 config
+drwxr-xr-x   3 jarad  staff   96 Oct  6 12:09 data
+drwxr-xr-x   2 jarad  staff   64 Oct  6 12:07 projects
+drwxr-xr-x   2 jarad  staff   64 Oct  6 12:07 state
+drwxr-xr-x   3 jarad  staff   96 Oct  6 12:07 tmux
+
+/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M47F5G2PB5FR3SPDXDPN116F/l/data:
+total 8
+drwxr-xr-x  3 jarad  staff   96 Oct  6 12:09 .
+drwxr-xr-x  8 jarad  staff  256 Oct  6 12:07 ..
+-rw-r--r--  1 jarad  staff  614 Oct  6 12:09 house-line.md
+
+TOOL Read
+{
+  "file_path": "/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M47F5G2PB5FR3SPDXDPN116F/l/data/house-line.md"
+}
+
+OUTPUT
+1	# Disposable house register
+2	## firstmate
+3	- Fork `jazz127/firstmate` (default branch `house`); upstream `kunchenguid/firstmate`.
+4	- On `house`:
+5	  - **Offer closeout** (PR 192, `housefeature/offer-closeout`) — Configurable review window for outside PRs (two-hour default, zero for immediate closeout); signals guarded cleanup only when CI is ready, feedback is acknowledged, and the workspace is clean, and keeps monitoring the PR after cleanup.
+6	  - **Lock PID reuse** (PR 188, `housefeature/fm-lock-pid-reuse`) — Reclaims stale locks whose recorded PID was reused by an unrelated process after the owner exited.
+7	
+
+TOOL Bash
+{
+  "command": "cd /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M47F5G2PB5FR3SPDXDPN116F; cat l/.fm-lab-home; gh-axi pr view 192 --repo jazz127/firstmate --help 2>&1 | head -30",
+  "description": "Check lab marker and gh-axi PR view help"
+}
+
+OUTPUT
+fm-lab-home v1
+usage: gh-axi pr <subcommand> [flags]
+subcommands[15]:
+  list, view <number>, create, edit <number>, close <number>, merge <number>, review <number>, checks <number>, diff <number>, checkout <number>, ready <number>, reopen <number>, comment <number>, update-branch <number>, revert <number>
+flags{list}:
+  --state <open|closed|all>, --label (repeatable), --assignee, --author, --base, --head, --draft, --limit <n> (default 30), --fields <a,b,c>
+flags{view}:
+  --comments, --reviews (show review submissions and inline review comments), --full (show complete body without truncation)
+flags{create}:
+  --title <text> (required), --body <text> or --body-file <path>, --base, --head, --draft, --assignee <login> (repeatable), --reviewer <login> (repeatable), --label <name> (repeatable), --milestone, --project <name> (repeatable)
+flags{edit}:
+  --title <text>, --body <text> or --body-file <path>, --add-label <name> (repeatable), --remove-label <name> (repeatable), --add-assignee <login> (repeatable), --remove-assignee <login> (repeatable), --add-reviewer <login> (repeatable), --remove-reviewer <login> (repeatable), --milestone
+flags{merge}:
+  --method <merge|squash|rebase>, --merge, --squash, --rebase, --auto, --delete-branch, --body <text> or --body-file <path>, --subject
+flags{review}:
+  --approve, --request-changes, --comment, --body <text> or --body-file <path>
+flags{comment}:
+  --body <text> or --body-file <path> (required)
+flags{checks}:
+  (none)
+flags{diff}:
+  --full (show complete diff without truncation)
+examples:
+  gh-axi pr list --state open --label bug
+  gh-axi pr view 42 --comments
+  gh-axi pr view 42 --reviews
+  gh-axi pr comment 42 --body-file review.md
+  gh-axi pr merge 42 --squash --delete-branch
+
+TOOL Bash
+{
+  "command": "cd /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M47F5G2PB5FR3SPDXDPN116F; for n in 192 35; do echo \"=== $n\"; gh-axi pr view $n --repo jazz127/firstmate 2>&1 | head -40; done",
+  "description": "Fetch PR 192 and 35 facts from GitHub"
+}
+
+OUTPUT
+=== 192
+pull_request:
+  number: 192
+  title: Integrate offer closeout house feature
+  state: merged
+  author: jazz127
+  draft: no
+  merged: "2026-10-06T00:18:16Z"
+  checks: "1 passed, 0 failed, 1 total"
+  body: "## Summary\n\nIntegrates the outside-PR closeout house feature into `house`.\n\n- Adds a configurable review window for outside PRs, with a two-hour default and zero for immediate closeout.\n- Signals Firstmate for guarded cleanup only when CI is ready, feedback is acknowledged, and the workspace is clean.\n- Keeps monitoring the PR after cleanup so later feedback can still reach Firstmate.\n\nSource feature PR: https://github.com/jazz127/firstmate/pull/191\n"
+  comment_count: 0 — use --comments to see full comments
+  review_count: 0 — use --reviews to see full reviews
+=== 35
+pull_request:
+  number: 35
+  title: "fix: recover rejected delivery confirmations"
+  state: merged
+  author: jazz127
+  draft: no
+  merged: "2026-09-25T09:20:21Z"
+  checks: "1 passed, 0 failed, 1 total"
+  body: "## Intent\n\nObserved repeatedly on 2026-09-21: the Pi primary watcher reports \"watcher: FAILED - handling delivery confirmation was rejected (status=1 ...)\" and exits; the extension arm child restarts it within minutes, so the turn-end guard fires \"supervision is off\" alarms while supervision actually self-heals. Root-cause the rejection path in .pi/extensions/fm-primary-pi-watch.ts (around line 573) and the waking path it calls, and make a rejected confirmation recover in place instead of ending\n... (truncated, 2167 chars total - use --full to see complete body)"
+  comment_count: 0 — use --comments to see full comments
+  review_count: 0 — use --reviews to see full reviews
+
+Need head/base refs; use the gh API via gh-axi.
+
+TOOL Bash
+{
+  "command": "cd /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M47F5G2PB5FR3SPDXDPN116F; gh-axi --help 2>&1 | head -40",
+  "description": "Show gh-axi top-level help"
+}
+
+OUTPUT
+usage: gh-axi [command] [args] [flags]
+commands[15]:
+  (none)=dashboard, issue, pr, run, workflow, release, repo, label, gist, project, secret, variable, search, api, setup
+flags[4]:
+  -R/--repo <OWNER/NAME> (after command), --hostname <host> (after command) or GH_HOST env, both flags accept space or equals form, --help, -v/-V/--version
+examples:
+  gh-axi
+  gh-axi issue list --state open
+  gh-axi issue list -R owner/name
+  gh-axi issue list --repo=owner/name
+  gh-axi issue list --hostname git.example.com
+  gh-axi pr view 42
+  gh-axi secret list
+  gh-axi setup hooks
+"built-in":
+  update: Upgrade `gh-axi` to the latest published version
+  "update --check": Report current vs latest without installing
+
+TOOL Bash
+{
+  "command": "cd /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M47F5G2PB5FR3SPDXDPN116F; for n in 192 35; do echo \"=== $n\"; gh-axi api repos/jazz127/firstmate/pulls/$n --jq '{base:.base.ref, head:.head.ref, head_repo:.head.repo.full_name, head_sha:.head.sha, merged:.merged, merged_at:.merged_at, merge_sha:.merge_commit_sha}' 2>&1; done",
+  "description": "Fetch base/head refs and merge facts for both PRs"
+}
+
+OUTPUT
+=== 192
+base: house
+head: housefeature/offer-closeout
+head_repo: jazz127/firstmate
+head_sha: db4f1eccd3b3bc7c8beb466c82efa1018cc98685
+merge_sha: 6f3598480e37fcd350a5c05d5c8dc3926901b1e1
+merged: true
+merged_at: "2026-10-06T00:18:16Z"
+=== 35
+base: house
+head: fm/firstmate-watcher-delivery-rejection-restart-c1
+head_repo: jazz127/firstmate
+head_sha: 9c0ad3316ecbe0da40e21709ce273970bfb51ee8
+merge_sha: 3bd6ac3bedabca76d8d309afe4006aac777c955e
+merged: true
+merged_at: "2026-09-25T09:20:21Z"
+
+TOOL Bash
+{
+  "command": "cd /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M47F5G2PB5FR3SPDXDPN116F; sed -n '1,60p' bin/fm-housefeature-cut.sh; echo ----; bin/fm-housefeature-cut.sh name fm/firstmate-watcher-delivery-rejection-restart-c1; echo \"rc=$?\"; grep -n -i 'plumbing' bin/fm-house-board.py | head -30",
+  "description": "Read cut script header, resolve durable name, find plumbing rules"
+}
+
+OUTPUT
+#!/usr/bin/env bash
+# fm-housefeature-cut.sh - cut a merged house pull request's durable housefeature/<name> branch.
+#
+# Usage: bin/fm-housefeature-cut.sh name <head-ref>
+#        bin/fm-housefeature-cut.sh classify
+#        bin/fm-housefeature-cut.sh run
+#
+# name prints the durable feature name for a pull request head ref: a ref
+# already under housefeature/ keeps its name; otherwise a leading fm/, then a
+# leading firstmate-, then a trailing round suffix such as -r1 or -c2 is
+# stripped. It exits 1 when no valid branch name remains.
+#
+# classify reads the HF_* environment below and prints either
+# "cut <name>" or "skip <reason>". It skips a pull request that was not merged,
+# whose base is not house, whose head lives in another repository, whose head
+# is already a durable housefeature/ branch, or whose head ref contains
+# house-upstream-merge or house-reconcile (upstream main brought into house).
+#
+# run classifies, then in the current clone of the fork: leaves an existing
+# housefeature/<name> untouched; otherwise commits the pull request's change
+# on top of the fork's main when it applies cleanly there, else captures the
+# merged pull request head, and pushes only refs/heads/housefeature/<name>
+# create-only: the push expects the ref to be absent, so a branch that appeared
+# meanwhile is refused, never moved. Every outcome, including every failure,
+# appends one line to $GITHUB_STEP_SUMMARY (stdout when unset). Only a failed
+# git operation or push exits non-zero.
+#
+# Environment (the .github/workflows/housefeature-cut.yml event fields):
+#   HF_MERGED      "true" when the pull request was merged
+#   HF_BASE_REF    base branch name
+#   HF_HEAD_REF    head branch name
+#   HF_BASE_REPO   base repository full name
+#   HF_HEAD_REPO   head repository full name
+#   HF_PR_NUMBER   pull request number (run)
+#   HF_PR_TITLE    pull request title (run; commit subject for a main cut)
+#   HF_HEAD_SHA    pull request head commit (run)
+#   HF_MERGE_SHA   commit the merge created on house (run)
+#   HF_REMOTE      fork remote name, default origin (run)
+# The committer identity for a main cut comes from GIT_COMMITTER_NAME and
+# GIT_COMMITTER_EMAIL; the author is the pull request head commit's author.
+set -eu
+
+HOUSE_BRANCH=house
+MAIN_BRANCH=main
+PREFIX=housefeature/
+
+feature_name() {
+  local ref=$1 name
+  case "$ref" in
+    "$PREFIX"*) name=${ref#"$PREFIX"} ;;
+    *)
+      name=${ref#fm/}
+      name=${name#firstmate-}
+      if [[ "$name" =~ ^(.+)-[rc][0-9]+$ ]]; then
+        name=${BASH_REMATCH[1]}
+      fi
+      ;;
+  esac
+  [ -n "$name" ] || return 1
+  git check-ref-format "refs/heads/$PREFIX$name" || return 1
+----
+watcher-delivery-rejection-restart
+rc=0
+20:PLUMBING = (
+213:def plumbing_kind(slug, pulls):
+216:    kind = next((kind for pattern, kind in PLUMBING if pattern.search(slug)), None)
+222:    result = {"schema": SCHEMA, "generated": now.isoformat(timespec="seconds").replace("+00:00", "Z"), "projects": [], "features": [], "plumbing": []}
+230:            helper_kind, integration_pr = plumbing_kind(slug, live["pulls"])
+232:                result["plumbing"].append({
+
+TOOL Bash
+{
+  "command": "cd /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M47F5G2PB5FR3SPDXDPN116F; sed -n '15,35p;205,225p' bin/fm-house-board.py; echo ----; for b in housefeature/watcher-delivery-rejection-restart housefeature/offer-closeout; do echo \"== $b\"; gh-axi api \"repos/jazz127/firstmate/branches/$b\" --jq '{name:.name, sha:.commit.sha}' 2>&1 | head -5; done",
+  "description": "Read plumbing rules and check durable branches on GitHub"
+}
+
+OUTPUT
+SCHEMA = "fm-house-board.v1"
+LABELS = {"house-only", "upstream-candidate", "upstream-offered", "contributed-house-feature", "historical"}
+BRANCH = re.compile(r"housefeature/([A-Za-z0-9._-]+)")
+SHA = re.compile(r"(?<![A-Za-z0-9])[0-9a-f]{7,40}(?![A-Za-z0-9])")
+PR = re.compile(r"\bPR\s+(\d+)\b")
+PLUMBING = (
+    (re.compile(r"(?:^|-)house-integration(?:-\d+)?$"), "House integration"),
+    (re.compile(r"(?:^|-)house-(?:reconcile|reconciliation|fix)(?:-\d+)?$"), "House reconciliation or fix"),
+    (re.compile(r"^hf-upstream-main-sync(?:-\d+)?$"), "Upstream main sync"),
+    (re.compile(r"^upstream-[0-9]+-merge(?:-\d+)?$"), "Upstream merge"),
+    (re.compile(r"(?:^|-)house-test-fixes(?:-\d+)?$"), "House test fixes"),
+)
+
+
+class TruncatedResponse(RuntimeError):
+    """A gh-axi response hit its body limit and can be retried smaller."""
+
+
+def api(path, selector="."):
+    """gh-axi presents a bounded YAML envelope; base64 keeps selected JSON unambiguous."""
+    run = subprocess.run(
+                      if existing.startswith(commit) or commit.startswith(existing)), None)
+        if match is None:
+            unique.append(commit)
+        elif len(commit) > len(unique[match]):
+            unique[match] = commit
+    return unique
+
+
+def plumbing_kind(slug, pulls):
+    integration_pr = next((pr for pr in pulls.values()
+                           if pr["head"] == f"housefeature/{slug}" and pr.get("base") == "house"), None)
+    kind = next((kind for pattern, kind in PLUMBING if pattern.search(slug)), None)
+    return kind, integration_pr
+
+
+def compose(projects):
+    now = dt.datetime.now(dt.timezone.utc)
+    result = {"schema": SCHEMA, "generated": now.isoformat(timespec="seconds").replace("+00:00", "Z"), "projects": [], "features": [], "plumbing": []}
+    for project in projects.values():
+        live = repo_snapshot(project)
+        project_row = {key: live[key] for key in ("fork", "upstream", "house_tip", "upstream_tip", "fork_main_tip", "mirror_equal", "ahead", "behind")}
+----
+== housefeature/watcher-delivery-rejection-restart
+error: "gh: Branch not found (HTTP 404)"
+code: NOT_FOUND
+== housefeature/offer-closeout
+name: housefeature/offer-closeout
+sha: db4f1eccd3b3bc7c8beb466c82efa1018cc98685
+
+TOOL Bash
+{
+  "command": "cd /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M47F5G2PB5FR3SPDXDPN116F; gh-axi api 'repos/jazz127/firstmate/actions/workflows/housefeature-cut.yml' --jq '{id:.id,state:.state,created:.created_at}' 2>&1 | head; gh-axi api 'repos/jazz127/firstmate/actions/workflows/housefeature-cut.yml/runs?per_page=100' --jq '[.workflow_runs[] | select(.head_branch==\"fm/firstmate-watcher-delivery-rejection-restart-c1\")] | map({id,conclusion,created_at})' 2>&1 | head; gh-axi api 'repos/jazz127/firstmate/branches?per_page=100' --jq '[.[].name | select(test(\"watcher|delivery\"))]' 2>&1",
+  "description": "Check safety-net workflow existence, runs for PR 35, and related branches"
+}
+
+OUTPUT
+created: "2026-09-26T11:54:23.000+10:00"
+id: 367427370
+state: active
+[]
+[2]: fm/fm-watcher-hardening-r1,fm/fm-watcher-hardening-r3
+
+Captain, I applied the post-merge registration steps to both PRs. The lab register did not need any change: PR 192 is already recorded correctly, and PR 35 can't be recorded yet because its long-lived feature branch doesn't exist.
+
+**What GitHub shows now (read-only checks):**
+
+| PR | Merged | Into | Head branch | Head commit |
+|---|---|---|---|---|
+| https://github.com/jazz127/firstmate/pull/192 | 2026-10-06 00:18 UTC, merge commit `6f359848` | `house` | `housefeature/offer-closeout` (same fork) | `db4f1ecc` |
+| https://github.com/jazz127/firstmate/pull/35 | 2026-09-25 09:20 UTC, merge commit `3bd6ac3b` | `house` | `fm/firstmate-watcher-delivery-rejection-restart-c1` (same fork) | `9c0ad331` |
+
+**PR 192 (repeated completion event): no change.**
+- The head is already a `housefeature/` branch, so that branch is the one to record.
+- `housefeature/offer-closeout` exists on GitHub at `db4f1ecc`, which matches the PR head.
+- The lab register already has the right entry ("Offer closeout", PR 192, `housefeature/offer-closeout`), so I left it alone rather than adding a duplicate.
+
+**PR 35: blocked, still unregistered.**
+- `bin/fm-housefeature-cut.sh name` turns the head name into the feature branch `housefeature/watcher-delivery-rejection-restart`. That name doesn't match any helper-branch pattern in `bin/fm-house-board.py`, so it should be registered.
+- That branch doesn't exist on GitHub (the branch lookup returned 404). So per the skill I did not write an entry. A row pointing at a missing branch would be made-up branch information.
+- The likely cause is timing: the workflow that creates these branches (`housefeature-cut.yml`) was added on 2026-09-26 (01:54 UTC), after PR 35 merged on 2026-09-25 (09:20 UTC). It has no runs for this PR, so the branch was never created.
+
+**Still outstanding:**
+1. PR 35 stays unregistered until someone creates `housefeature/watcher-delivery-rejection-restart`. Creating it would mean writing a branch to GitHub, which this lab run doesn't allow, so I didn't. Once it exists, I'll add a bullet under `firstmate` → "On `house`" in the lab register.
+2. If PR 35 belongs to a task, that task shouldn't be cleaned up until this registration is done.
+
+I didn't run startup, monitoring, the validation pipeline, cleanup, or any GitHub write. Nothing was written outside the lab home, and the only file in scope (`l/data/house-line.md`) is unchanged.
+
+FINAL RESULT
+Captain, I applied the post-merge registration steps to both PRs. The lab register did not need any change: PR 192 is already recorded correctly, and PR 35 can't be recorded yet because its long-lived feature branch doesn't exist.
+
+**What GitHub shows now (read-only checks):**
+
+| PR | Merged | Into | Head branch | Head commit |
+|---|---|---|---|---|
+| https://github.com/jazz127/firstmate/pull/192 | 2026-10-06 00:18 UTC, merge commit `6f359848` | `house` | `housefeature/offer-closeout` (same fork) | `db4f1ecc` |
+| https://github.com/jazz127/firstmate/pull/35 | 2026-09-25 09:20 UTC, merge commit `3bd6ac3b` | `house` | `fm/firstmate-watcher-delivery-rejection-restart-c1` (same fork) | `9c0ad331` |
+
+**PR 192 (repeated completion event): no change.**
+- The head is already a `housefeature/` branch, so that branch is the one to record.
+- `housefeature/offer-closeout` exists on GitHub at `db4f1ecc`, which matches the PR head.
+- The lab register already has the right entry ("Offer closeout", PR 192, `housefeature/offer-closeout`), so I left it alone rather than adding a duplicate.
+
+**PR 35: blocked, still unregistered.**
+- `bin/fm-housefeature-cut.sh name` turns the head name into the feature branch `housefeature/watcher-delivery-rejection-restart`. That name doesn't match any helper-branch pattern in `bin/fm-house-board.py`, so it should be registered.
+- That branch doesn't exist on GitHub (the branch lookup returned 404). So per the skill I did not write an entry. A row pointing at a missing branch would be made-up branch information.
+- The likely cause is timing: the workflow that creates these branches (`housefeature-cut.yml`) was added on 2026-09-26 (01:54 UTC), after PR 35 merged on 2026-09-25 (09:20 UTC). It has no runs for this PR, so the branch was never created.
+
+**Still outstanding:**
+1. PR 35 stays unregistered until someone creates `housefeature/watcher-delivery-rejection-restart`. Creating it would mean writing a branch to GitHub, which this lab run doesn't allow, so I didn't. Once it exists, I'll add a bullet under `firstmate` → "On `house`" in the lab register.
+2. If PR 35 belongs to a task, that task shouldn't be cleaned up until this registration is done.
+
+I didn't run startup, monitoring, the validation pipeline, cleanup, or any GitHub write. Nothing was written outside the lab home, and the only file in scope (`l/data/house-line.md`) is unchanged.

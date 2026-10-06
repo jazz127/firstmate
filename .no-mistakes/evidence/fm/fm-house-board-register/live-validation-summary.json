@@ -1,0 +1,15 @@
+{
+  "product_driver": "bin/fm-house-board.sh build with disposable FM_HOME and real gh-axi GitHub reads; generated HTML loaded in isolated headless Chrome using chrome-devtools-axi. Lavish serving disabled through documented test override; no GitHub or renderer substitute.",
+  "registration_driver": "Two real Claude print-mode primaries on marked worktree-local FM_HOME, private fm-lab tmux socket, 140x40 grid, normal existing login and actual GitHub PR/workflow/branch reads. Interactive trust was not accepted; noninteractive mode avoided user-level trust mutation.",
+  "scenarios": {
+    "helper_names": "Five required pattern categories present among 12 plumbing branches, absent from 110 feature rows.",
+    "ordinary_features": "PR 192 integration feature and PR 128 house-test feature retained; actual upstream titles saved separately.",
+    "filters": "Registered Offer closeout has 0 mismatches; mismatch filter excludes it and all helpers. Searching House test fixes yields 0 feature rows while all 12 plumbing rows remain.",
+    "direct_registration_and_repeat": "Actual merged PR 192 updates existing bullet; fresh repeated completion leaves one entry.",
+    "safety_net_registration": "Actual merged fm/fm-lock-pid-reuse PR 188 resolves to exact housefeature/fm-lock-pid-reuse; actual workflow success and branch creation verified by primary before writing.",
+    "helper_completion": "Actual merged upstream-sync PR 177 produces no register bullet.",
+    "missing_branch_guard": "Actual merged PR 35 durable branch returns GitHub 404; primary leaves it unregistered and reports registration outstanding before cleanup."
+  },
+  "supplemental_check": "TMPDIR=\"$PWD/.test-house-live\" bash tests/fm-house-board.test.sh passed using its fake gh-axi and VM DOM harness. Supplemental offline regression coverage only; live verdict based on product scenarios above.",
+  "cleanup": "Private lab homes, tmux socket, isolated Chrome profile, and generated Python bytecode removed; evidence preserved."
+}

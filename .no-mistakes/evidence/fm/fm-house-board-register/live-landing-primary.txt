@@ -1,0 +1,613 @@
+TOOL Bash
+{
+  "command": "echo \"FM_HOME=$FM_HOME\"; cat .agents/skills/ship-landing/SKILL.md",
+  "description": "Show FM_HOME and read ship-landing skill"
+}
+
+OUTPUT
+FM_HOME=/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M47F5G2PB5FR3SPDXDPN116F/l
+---
+name: ship-landing
+description: Load when a ship reports a PR or ready branch, when an outside-PR closeout signal arrives, when deciding or monitoring landing, and before task cleanup.
+user-invocable: false
+metadata:
+  internal: true
+---
+
+# Ship landing
+
+For PR-based ship tasks, the ready signal depends on mode: `no-mistakes` reports `done [at=<epoch>]: PR <url> checks green` after CI is green, while `direct-PR` reports `done [at=<epoch>]: PR <url>` after opening the PR, each only for a non-draft PR; a lane that deliberately holds a draft declares a wait instead, and `bin/fm-pr-check.sh` refuses to arm merge monitoring on a draft.
+Run `bin/fm-pr-check.sh <id> <PR url>` with the URL copied from that ready signal or the resolved checks-green `fm-crew-state.sh` line - it records `pr=` and the forge's `pr_head=` when available in the task's meta and arms the watcher's merge poll.
+`bin/fm-dod-lib.sh` owns the named-head gate on that ready signal: a ship `done:` whose named head exists only in the worker's disposable copy is not ready (`bin/fm-crew-state.sh` reports blocked, `bin/fm-pr-check.sh` refuses to register, and a secondmate does not publish that done upstream).
+That blocked reading is the gate working, not a stuck worker, so steer the worker on the commit the refusal names rather than waiting.
+A direct-PR worker pushes that commit to its PR branch, and a local-only worker commits it on its ship branch.
+A no-mistakes worker re-validates it with /no-mistakes so the pipeline stays the one publisher; it never pushes from its copy.
+In no-mistakes mode the earlier `done [at=<epoch>]: {summary}` is the pipeline handoff and is not gated.
+Before reporting any pull request to the captain, its published body is read back from the forge at the PR reporting boundary; task-owned PR registration and inactive reconciliation perform this check automatically, including for reports without an owning task record.
+Preserve the reported PR outcome but append `evidence-validation=failed` when its body cannot be read or parsed, or when an evidence claim lacks the artifact, command, and capture time required by `bin/fm-dod-lib.sh`.
+The reporting-boundary check validates published text, while the generated ship brief's PR-body preflight contract catches worker-authored bodies before publication; `bin/fm-dod-lib.sh` owns both instructions.
+Preserve the validator diagnostic alongside `evidence-validation=failed` when a published attestation is bound to a different head, so the refusal names the current head, attested head, and remediation.
+Those publication checks refuse contradictory driven-scenario claims, including a count that no complete scenario table with a `Live` column agrees with; the check does not apply to captain intent because a brief may quote a defective PR body while requesting its repair.
+Tell the captain the PR's full `https://...` URL copied from the worker's ready line, the resolved checks-green crew-state line, or the task's `pr=` metadata, a concise outcome summary, and the no-mistakes risk level when applicable.
+A captain instruction to merge is explicit authority; `yolo` is the only standing routine merge authority.
+After a house-feature pull request into `house` is confirmed merged, add or update that feature's bullet in the private `$FM_HOME/data/house-line.md` register under the matching project, with its exact durable `housefeature/<name>` branch.
+For a `housefeature/<name>` head, use that branch; for other same-fork feature heads, including `fm/<name>`, resolve the durable name with `bin/fm-housefeature-cut.sh name <head-ref>` and confirm the safety-net workflow created that branch or left an existing one unchanged before recording it.
+Exclude helper branches classified as plumbing by `bin/fm-house-board.py`.
+If the safety-net branch is still absent, keep registration outstanding and report the blocker before task cleanup.
+Update an existing entry instead of duplicating it, and keep the register private; it is operator data, not a tracked project file.
+
+On a `check: contributions closeout` wake, follow the [outside-PR review-window contract](../../../docs/configuration.md#outside-pull-request-review-window-configoutside-pr-review-window-hours); `bin/fm-contributions.sh`'s header owns the wake format.
+Before acting on any closeout wake, confirm that the live task is a ship and its current canonical `pr=` matches the wake's URL; disregard a stale wake for a replaced PR or retired task.
+For `state=ready`, confirm that the wake's PR head is still current and the closeout conditions still hold, then run the ordinary guarded teardown; if the head changed, a closeout condition fails, or teardown refuses, leave the task in place and report the reason.
+For `state=review`, `state=ci`, or `state=workspace`, leave the task in place and surface the unacknowledged feedback, check result, or workspace state.
+For any custom `state/<id>.check.sh` you write yourself, keep it an ordinary single-link mode-`0700` file, print one line only when firstmate should wake, print nothing otherwise, finish before `FM_CHECK_TIMEOUT`, then bind its current bytes with `bin/fm-check-register.sh <id>` before the watcher may execute it.
+Retire a custom check only through `bin/fm-check-unregister.sh <id>` (or `bin/fm-teardown.sh` for a spawned task); never hand-compose an `rm` with `$STATE`/`$ID`.
+
+Tear down a ship task only after landing is confirmed.
+A teardown refusal for uncommitted or unlanded work is a stop-and-investigate result, never an obstacle to bypass.
+Never force teardown without explicit discard authority.
+After successful teardown, record completion, retain only the configured recent Done history, and re-evaluate queued work whose blockers and time gates have cleared.
+
+A secondmate is persistent and an empty queue is healthy.
+Retire one only on an explicit captain or main-firstmate decision, after loading `secondmate-provisioning`; its home must contain no work under way, and forced discard still requires explicit captain authority.
+
+TOOL Bash
+{
+  "command": "ls -la l l/data 2>&1; cat l/data/house-line.md 2>&1; ls -la .test-house-live | head",
+  "description": "Inspect lab home and register"
+}
+
+OUTPUT
+l:
+total 8
+drwxr-xr-x   8 jarad  staff  256 Oct  6 12:07 .
+drwxr-xr-x  31 jarad  staff  992 Oct  6 12:07 ..
+-rw-r--r--   1 jarad  staff   15 Oct  6 12:07 .fm-lab-home
+drwxr-xr-x   2 jarad  staff   64 Oct  6 12:07 config
+drwxr-xr-x   3 jarad  staff   96 Oct  6 12:08 data
+drwxr-xr-x   2 jarad  staff   64 Oct  6 12:07 projects
+drwxr-xr-x   2 jarad  staff   64 Oct  6 12:07 state
+drwxr-xr-x   3 jarad  staff   96 Oct  6 12:07 tmux
+
+l/data:
+total 8
+drwxr-xr-x  3 jarad  staff   96 Oct  6 12:08 .
+drwxr-xr-x  8 jarad  staff  256 Oct  6 12:07 ..
+-rw-r--r--  1 jarad  staff  253 Oct  6 12:08 house-line.md
+# Disposable house register
+## firstmate
+- Fork `jazz127/firstmate` (default branch `house`); upstream `kunchenguid/firstmate`.
+- On `house`:
+  - **Offer closeout** (PR 192, `housefeature/offer-closeout`) — Old description for repeated landing event.
+total 16
+drwxr-xr-x   7 jarad  staff   224 Oct  6 12:08 .
+drwxr-xr-x  31 jarad  staff   992 Oct  6 12:07 ..
+drwxr-xr-x   3 jarad  staff    96 Oct  6 12:07 board
+drwx------@ 43 jarad  staff  1376 Oct  6 12:08 chrome
+drwx------   8 jarad  staff   256 Oct  6 12:07 fm-lab.ITEvfm
+-rw-r--r--   1 jarad  staff   107 Oct  6 12:07 lab-path
+-rw-r--r--   1 jarad  staff  1250 Oct  6 12:08 landing-prompt.txt
+
+TOOL Bash
+{
+  "command": "cat l/.fm-lab-home; gh-axi --help 2>&1 | head -40",
+  "description": "Check lab marker and gh-axi help"
+}
+
+OUTPUT
+fm-lab-home v1
+usage: gh-axi [command] [args] [flags]
+commands[15]:
+  (none)=dashboard, issue, pr, run, workflow, release, repo, label, gist, project, secret, variable, search, api, setup
+flags[4]:
+  -R/--repo <OWNER/NAME> (after command), --hostname <host> (after command) or GH_HOST env, both flags accept space or equals form, --help, -v/-V/--version
+examples:
+  gh-axi
+  gh-axi issue list --state open
+  gh-axi issue list -R owner/name
+  gh-axi issue list --repo=owner/name
+  gh-axi issue list --hostname git.example.com
+  gh-axi pr view 42
+  gh-axi secret list
+  gh-axi setup hooks
+"built-in":
+  update: Upgrade `gh-axi` to the latest published version
+  "update --check": Report current vs latest without installing
+
+TOOL Bash
+{
+  "command": "for n in 192 188 177; do echo \"=== $n\"; gh-axi pr view $n -R jazz127/firstmate 2>&1 | head -40; done",
+  "description": "Fetch PR facts from GitHub"
+}
+
+OUTPUT
+=== 192
+pull_request:
+  number: 192
+  title: Integrate offer closeout house feature
+  state: merged
+  author: jazz127
+  draft: no
+  merged: "2026-10-06T00:18:16Z"
+  checks: "1 passed, 0 failed, 1 total"
+  body: "## Summary\n\nIntegrates the outside-PR closeout house feature into `house`.\n\n- Adds a configurable review window for outside PRs, with a two-hour default and zero for immediate closeout.\n- Signals Firstmate for guarded cleanup only when CI is ready, feedback is acknowledged, and the workspace is clean.\n- Keeps monitoring the PR after cleanup so later feedback can still reach Firstmate.\n\nSource feature PR: https://github.com/jazz127/firstmate/pull/191\n"
+  comment_count: 0 — use --comments to see full comments
+  review_count: 0 — use --reviews to see full reviews
+=== 188
+pull_request:
+  number: 188
+  title: "fix: reclaim stale locks after PID reuse"
+  state: merged
+  author: jazz127
+  draft: no
+  merged: "2026-10-05T19:27:18Z"
+  checks: "2 passed, 0 failed, 2 total"
+  body: "evidence-artifact: /tmp/fm-fm-lock-pid-reuse/pipeline-evidence-bundle.md\nevidence-command: bash /tmp/fm-fm-lock-pid-reuse/build-evidence-bundle.sh\nevidence-captured: 2026-10-05T15:18:41Z\n\n## Intent\n\nHouse only for the stale lock fix, with any good code from those other PRs as well, and attributed if you do take anything.\n\nContext: on 2026-10-05 the lock state/.remote-reply-lifecycle-dockmaster-ji7.lock was left by a process that had exited; its pid 42913 was later reused by an unrelated macOS se\n... (truncated, 20359 chars total - use --full to see complete body)"
+  comment_count: 0 — use --comments to see full comments
+  review_count: 0 — use --reviews to see full reviews
+=== 177
+pull_request:
+  number: 177
+  title: "fix(bin): sync upstream main into house (hold reasons, orphan arms, hand-back downtime, polling churn)"
+  state: merged
+  author: jazz127
+  draft: no
+  merged: "2026-10-02T12:14:43Z"
+  checks: "2 passed, 0 failed, 2 total"
+  body: "## Intent\n\nyou better have a look and bring in upstream main for firstmate and no mistakes\n\nContext for reading that ask. The fork jazz127/firstmate runs `house` (default branch, merge commits only) as the line the fleet runs from; its `main` mirrors upstream kunchenguid/firstmate `main`. Fork `house` is at 79066a8692. Upstream `main` is at 65e2aa443a, five commits past the last sync: 349e189f (Pi 1.0 calm transcript test captures, #6338), 6af83310 (preserve hold reasons and reject invalid compl\n... (truncated, 4276 chars total - use --full to see complete body)"
+  comment_count: 0 — use --comments to see full comments
+  review_count: 0 — use --reviews to see full reviews
+
+TOOL Bash
+{
+  "command": "for n in 192 188 177; do echo \"=== $n\"; gh-axi api repos/jazz127/firstmate/pulls/$n 2>&1 | grep -E '^\\s*(ref|label|merged|merge_commit_sha|title|head|base|full_name)' | head -20; done",
+  "description": "Fetch PR head and base refs"
+}
+
+OUTPUT
+=== 192
+title: Integrate offer closeout house feature
+merged_at: "2026-10-06T00:18:16Z"
+merge_commit_sha: 6f3598480e37fcd350a5c05d5c8dc3926901b1e1
+labels[1]{id,name,color,default,description,archived_at,archived_by}:
+head:
+  label: "jazz127:housefeature/offer-closeout"
+  ref: housefeature/offer-closeout
+    full_name: jazz127/firstmate
+base:
+  label: "jazz127:house"
+  ref: house
+    full_name: jazz127/firstmate
+merged: true
+merged_by:
+=== 188
+title: "fix: reclaim stale locks after PID reuse"
+merged_at: "2026-10-05T19:27:18Z"
+merge_commit_sha: ceaaeba0bcc7486f96c58bd716a77828a2c9dc37
+labels[1]{id,name,color,default,description,archived_at,archived_by}:
+head:
+  label: "jazz127:fm/fm-lock-pid-reuse"
+  ref: fm/fm-lock-pid-reuse
+    full_name: jazz127/firstmate
+base:
+  label: "jazz127:house"
+  ref: house
+    full_name: jazz127/firstmate
+merged: true
+merged_by:
+=== 177
+title: "fix(bin): sync upstream main into house (hold reasons, orphan arms, hand-back downtime, polling churn)"
+merged_at: "2026-10-02T12:14:43Z"
+merge_commit_sha: 4f0a04de633c86752fd2e69f1dc3bc13f4379ef0
+labels: []
+head:
+  label: "jazz127:fm/hf-upstream-main-sync-5"
+  ref: fm/hf-upstream-main-sync-5
+    full_name: jazz127/firstmate
+base:
+  label: "jazz127:house"
+  ref: house
+    full_name: jazz127/firstmate
+merged: true
+merged_by:
+
+Captain, I've pulled all three PRs from GitHub; I'm now checking the house-feature naming and the plumbing classification before I update the lab register.
+
+TOOL Bash
+{
+  "command": "for n in 192 188; do gh-axi api repos/jazz127/firstmate/pulls/$n 2>&1 | sed -n '/^labels/,/^[a-z]/p' | head -4; done; bin/fm-housefeature-cut.sh --help 2>&1 | head -30; bin/fm-housefeature-cut.sh name fm/fm-lock-pid-reuse; bin/fm-housefeature-cut.sh name fm/hf-upstream-main-sync-5",
+  "description": "Show labels and resolve durable branch names"
+}
+
+OUTPUT
+labels[1]{id,name,color,default,description,archived_at,archived_by}:
+  12344600978,house-only,"5319e7",false,Part of our own line by design - not intended for upstream,null,null
+milestone: null
+labels[1]{id,name,color,default,description,archived_at,archived_by}:
+  12344600978,house-only,"5319e7",false,Part of our own line by design - not intended for upstream,null,null
+milestone: null
+fm-housefeature-cut.sh - cut a merged house pull request's durable housefeature/<name> branch.
+
+Usage: bin/fm-housefeature-cut.sh name <head-ref>
+       bin/fm-housefeature-cut.sh classify
+       bin/fm-housefeature-cut.sh run
+
+name prints the durable feature name for a pull request head ref: a ref
+already under housefeature/ keeps its name; otherwise a leading fm/, then a
+leading firstmate-, then a trailing round suffix such as -r1 or -c2 is
+stripped. It exits 1 when no valid branch name remains.
+
+classify reads the HF_* environment below and prints either
+"cut <name>" or "skip <reason>". It skips a pull request that was not merged,
+whose base is not house, whose head lives in another repository, whose head
+is already a durable housefeature/ branch, or whose head ref contains
+house-upstream-merge or house-reconcile (upstream main brought into house).
+
+run classifies, then in the current clone of the fork: leaves an existing
+housefeature/<name> untouched; otherwise commits the pull request's change
+on top of the fork's main when it applies cleanly there, else captures the
+merged pull request head, and pushes only refs/heads/housefeature/<name>
+create-only: the push expects the ref to be absent, so a branch that appeared
+meanwhile is refused, never moved. Every outcome, including every failure,
+appends one line to $GITHUB_STEP_SUMMARY (stdout when unset). Only a failed
+git operation or push exits non-zero.
+
+Environment (the .github/workflows/housefeature-cut.yml event fields):
+  HF_MERGED      "true" when the pull request was merged
+  HF_BASE_REF    base branch name
+  HF_HEAD_REF    head branch name
+fm-lock-pid-reuse
+hf-upstream-main-sync-5
+
+TOOL Bash
+{
+  "command": "grep -n -i -E 'plumb|helper|upstream-main|sync|reconcile' bin/fm-house-board.py | head -40; for b in offer-closeout fm-lock-pid-reuse hf-upstream-main-sync-5; do echo \"== $b\"; gh-axi api repos/jazz127/firstmate/branches/housefeature/$b 2>&1 | head -6; done",
+  "description": "Check plumbing rules and durable branch existence"
+}
+
+OUTPUT
+20:PLUMBING = (
+22:    (re.compile(r"(?:^|-)house-(?:reconcile|reconciliation|fix)(?:-\d+)?$"), "House reconciliation or fix"),
+23:    (re.compile(r"^hf-upstream-main-sync(?:-\d+)?$"), "Upstream main sync"),
+213:def plumbing_kind(slug, pulls):
+216:    kind = next((kind for pattern, kind in PLUMBING if pattern.search(slug)), None)
+222:    result = {"schema": SCHEMA, "generated": now.isoformat(timespec="seconds").replace("+00:00", "Z"), "projects": [], "features": [], "plumbing": []}
+230:            helper_kind, integration_pr = plumbing_kind(slug, live["pulls"])
+231:            if helper_kind:
+232:                result["plumbing"].append({
+234:                    "branch_tip": live["branches"].get(slug), "kind": helper_kind,
+== offer-closeout
+name: housefeature/offer-closeout
+commit:
+  sha: db4f1eccd3b3bc7c8beb466c82efa1018cc98685
+  commit:
+    author:
+      name: jazz127
+== fm-lock-pid-reuse
+name: housefeature/fm-lock-pid-reuse
+commit:
+  sha: a7b0ef5f57f311a30c18f8c345f13cf26460845d
+  commit:
+    author:
+      name: jazz127
+== hf-upstream-main-sync-5
+name: housefeature/hf-upstream-main-sync-5
+commit:
+  sha: a8cab31abfb1ccfb05b0ae2ec147781f75ab2d07
+  commit:
+    author:
+      name: jazz127
+
+TOOL Bash
+{
+  "command": "sed -n 18,30p bin/fm-house-board.py; sed -n 213,221p bin/fm-house-board.py; gh-axi run list -R jazz127/firstmate --workflow housefeature-cut.yml --limit 30 2>&1 | head -45",
+  "description": "Read plumbing rules and safety-net workflow runs"
+}
+
+OUTPUT
+SHA = re.compile(r"(?<![A-Za-z0-9])[0-9a-f]{7,40}(?![A-Za-z0-9])")
+PR = re.compile(r"\bPR\s+(\d+)\b")
+PLUMBING = (
+    (re.compile(r"(?:^|-)house-integration(?:-\d+)?$"), "House integration"),
+    (re.compile(r"(?:^|-)house-(?:reconcile|reconciliation|fix)(?:-\d+)?$"), "House reconciliation or fix"),
+    (re.compile(r"^hf-upstream-main-sync(?:-\d+)?$"), "Upstream main sync"),
+    (re.compile(r"^upstream-[0-9]+-merge(?:-\d+)?$"), "Upstream merge"),
+    (re.compile(r"(?:^|-)house-test-fixes(?:-\d+)?$"), "House test fixes"),
+)
+
+
+class TruncatedResponse(RuntimeError):
+    """A gh-axi response hit its body limit and can be retried smaller."""
+def plumbing_kind(slug, pulls):
+    integration_pr = next((pr for pr in pulls.values()
+                           if pr["head"] == f"housefeature/{slug}" and pr.get("base") == "house"), None)
+    kind = next((kind for pattern, kind in PLUMBING if pattern.search(slug)), None)
+    return kind, integration_pr
+
+
+def compose(projects):
+    now = dt.datetime.now(dt.timezone.utc)
+count: 30 (showing first 30)
+runs[30]{id,title,status,conclusion,workflow,branch,event,created}:
+  37393292711,Integrate offer closeout house feature,completed,success,House feature branch,housefeature/offer-closeout,pull_request,1h ago
+  37392982979,Reconcile house closeout conflict sites,completed,success,House feature branch,fm/fm-offer-closeout-house-reconcile,pull_request,1h ago
+  37368110154,"feat: add named main Codex account routing",completed,failure,House feature branch,housefeature/dock-main-seat,pull_request,5h ago
+  37367384139,"feat: add named main Codex account routing",completed,failure,House feature branch,fm/fm-dock-main-seat,pull_request,6h ago
+  37363496121,"fix: reclaim stale locks after PID reuse",completed,success,House feature branch,fm/fm-lock-pid-reuse,pull_request,6h ago
+  37267862177,"fix: integrate upstream reliability fixes into house",completed,success,House feature branch,fm/firstmate-house-upstream-merge-r11,pull_request,20h ago
+  37233947485,"feat: integrate opt-in Claude context refresh into house",completed,success,House feature branch,housefeature/context-refresh,pull_request,1d ago
+  37206977226,"test: refine supervision outcome readiness coverage",completed,success,House feature branch,fm/firstmate-silent-steer-echoes-house-reconcile-r3,pull_request,1d ago
+  37202331136,"fix: preserve status recovery across silent outcome upgrades",completed,success,House feature branch,fm/firstmate-silent-steer-echoes-house-reconcile-r2,pull_request,1d ago
+  37198294383,"fix: silence unchanged supervision echoes and preserve lost-wake recovery",completed,success,House feature branch,fm/firstmate-silent-steer-echoes-house-reconcile-r1,pull_request,1d ago
+  37148583035,"fix: improve Pi watcher recovery and processing retry visibility",completed,success,House feature branch,fm/hf-firstmate-upstream-sync-1004,pull_request,2d ago
+  37081133962,"fix: sync upstream main d719ef3d into house",completed,success,House feature branch,fm/hf-upstream-main-sync-6,pull_request,3d ago
+  37005540166,"fix(bin): sync upstream main into house (hold reasons, orphan arms, hand-back downtime, polling churn)",completed,success,House feature branch,fm/hf-upstream-main-sync-5,pull_request,3d ago
+  36972019825,Integrate concurrent spawn lock house feature,completed,success,House feature branch,housefeature/concurrent-spawn-lock,pull_request,3d ago
+  36971403193,Merge house into concurrent spawn lock feature,completed,success,House feature branch,fm/hf-concurrent-spawn-lock-house-sync,pull_request,3d ago
+  36925900520,Integrate remote seeding timeout and interrupted-home recovery,completed,success,House feature branch,housefeature/remote-seed-clone-bound,pull_request,4d ago
+  36925548889,Sync upstream main into house,completed,failure,House feature branch,main,pull_request,4d ago
+  36925546114,Resolve upstream main conflicts on house,completed,failure,House feature branch,fm/hf-upstream-main-sync-4,pull_request,4d ago
+  36843200972,"fix: reduce remote-job and supervision polling churn (#6255)",completed,success,House feature branch,main,pull_request,4d ago
+  36838855628,Integrate watcher remote lag and busy-pane fixes into house,completed,success,House feature branch,housefeature/watcher-remote-lag,pull_request,4d ago
+  36838852848,Reconcile watcher feature with house,completed,success,House feature branch,fm/hf-watcher-remote-house-reconcile,pull_request,4d ago
+  36838091466,Integrate behind-PR merge update into house,completed,success,House feature branch,housefeature/pr-merge-update-branch,pull_request,4d ago
+  36838089116,"fix: update behind green PRs before merging in fm-pr-merge",completed,success,House feature branch,fm/hf-pr-merge-update-house-integration,pull_request,4d ago
+  36835865652,Integrate spawn slot safety into house,completed,success,House feature branch,housefeature/spawn-slot-safety,pull_request,4d ago
+  36835861844,Integrate spawn slot safety into current house,completed,success,House feature branch,fm/hf-spawn-slot-r2,pull_request,4d ago
+  36835767390,Integrate remote update skip reason fix,completed,success,House feature branch,housefeature/update-remote-skip-reason,pull_request,4d ago
+  36835764357,Reconcile remote update fix with house,completed,success,House feature branch,fm/hf-update-skip-reason-house,pull_request,4d ago
+  36834629546,"fix(composer): integrate Herdr Claude composer rules into house",completed,success,House feature branch,housefeature/herdr-claude-composer,pull_request,4d ago
+  36834626919,"fix(composer): reconcile Herdr Claude feature with house",completed,success,House feature branch,fm/hf-herdr-composer-r2,pull_request,4d ago
+  36834361771,Integrate evidence table check into house,completed,success,House feature branch,housefeature/evidence-table-check,pull_request,4d ago
+help[1]:
+  Run `gh-axi run view <id> -R jazz127/firstmate` to view details
+
+TOOL Bash
+{
+  "command": "gh-axi run view 37363496121 -R jazz127/firstmate 2>&1 | head -30; gh-axi api repos/jazz127/firstmate/pulls/188 2>&1 | sed -n '/^head:/,/^base:/p' | grep -E '^\\s+sha:' | head -2",
+  "description": "Inspect safety-net run for PR 188"
+}
+
+OUTPUT
+run:
+  id: 37363496121
+  title: "fix: reclaim stale locks after PID reuse"
+  status: completed
+  conclusion: success
+  workflow: House feature branch
+  branch: fm/fm-lock-pid-reuse
+  created: 6h ago
+jobs[1]{id,name,status,conclusion}:
+  111943285169,Cut housefeature branch,completed,success
+  sha: 291b3762fb52f4d6397d22ac54ddb39f0a2a12ba
+
+TOOL Bash
+{
+  "command": "gh-axi run view --help 2>&1 | head -20; gh-axi run view 37363496121 -R jazz127/firstmate --log 2>&1 | grep -i -E 'housefeature|cut |skip|push|created|exist' | head -15",
+  "description": "Read safety-net run log outcome for PR 188"
+}
+
+OUTPUT
+usage: gh-axi run <subcommand> [flags]
+subcommands[7]:
+  list, view <id>, watch <id>, rerun <id>, cancel <id>, delete <id>, download <id>
+note:
+  manages existing runs; to trigger (dispatch) a workflow, use `gh-axi workflow run <name> --ref <ref>`
+flags{list}:
+  --workflow, --branch, --status, --event, --user, --commit, --limit (default 10), --fields <a,b,c>
+flags{view}:
+  --job <job-id>, --log, --log-failed, --conclusion <success|failure|cancelled|skipped> (filter jobs by conclusion)
+  long --log/--log-failed output keeps the tail and may include full_log for grep searches
+flags{rerun}:
+  --failed, --debug, --job
+flags{download}:
+  --name, --dir
+examples:
+  gh-axi run list --workflow ci.yml --status failure
+  gh-axi run view 123456 --log-failed
+  gh-axi run rerun 123456 --failed  output: "  housefeature/house-board-compare-fix -> origin/housefeature/house-board-compare-fix\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.5553095Z  * [new branch]        housefeature/house-board-page-fit -> origin/housefeature/house-board-page-fit\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.5554788Z  * [new branch]        housefeature/house-board-paged-compare-na -> origin/housefeature/house-board-paged-compare-na\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.5556667Z  * [new branch]        housefeature/house-ci-checks -> origin/housefeature/house-ci-checks\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.5558165Z  * [new branch]        housefeature/house-feature-docs -> origin/housefeature/house-feature-docs\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.5559790Z  * [new branch]        housefeature/house-guide -> origin/housefeature/house-guide\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.5562440Z  * [new branch]        housefeature/house-guide-default-branch -> origin/housefeature/house-guide-default-branch\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.5564434Z  * [new branch]        housefeature/house-integrate/restart-composer-unknown -> origin/housefeature/house-integrate/restart-composer-unknown\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.5566494Z  * [new branch]        housefeature/house-merge-only-standard -> origin/housefeature/house-merge-only-standard\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.5568087Z  * [new branch]        housefeature/house-test-fixes -> origin/housefeature/house-test-fixes\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.5569864Z  * [new branch]        housefeature/housefeature-autocut -> origin/housefeature/housefeature-autocut\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.5571449Z  * [new branch]        housefeature/housefeature-branch -> origin/housefeature/housefeature-branch\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.5572965Z  * [new branch]        housefeature/launch-brief-argv -> origin/housefeature/launch-brief-argv\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.5574918Z  * [new branch]        housefeature/legacy-record-teardown -> origin/housefeature/legacy-record-teardown\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.5576699Z  * [new branch]        housefeature/livecheck-scratch-c2-followup -> origin/housefeature/livecheck-scratch-c2-followup\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.5578487Z  * [new branch]        housefeature/lock-pid-reuse -> origin/housefeature/lock-pid-reuse\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.5580330Z  * [new branch]        housefeature/luna-dispatch-seat -> origin/housefeature/luna-dispatch-seat\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.5581851Z  * [new branch]        housefeature/merge-method-from-base -> origin/housefeature/merge-method-from-base\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.5583334Z  * [new branch]        housefeature/pi-composer-restart -> origin/housefeature/pi-composer-restart\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.5584847Z  * [new branch]        housefeature/pi-composer-restart-build -> origin/housefeature/pi-composer-restart-build\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.5587028Z  * [new branch]        housefeature/pi-watch-confirmation-recovery -> origin/housefeature/pi-watch-confirmation-recovery\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.5588657Z  * [new branch]        housefeature/pr-evidence-preflight -> origin/housefeature/pr-evidence-preflight\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.5590352Z  * [new branch]        housefeature/pr-evidence-preflight-house-integration -> origin/housefeature/pr-evidence-preflight-house-integration\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.5592265Z  * [new branch]        housefeature/pr-merge-update-branch -> origin/housefeature/pr-merge-update-branch\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.5593712Z  * [new branch]        housefeature/pr-poll-relaunch -> origin/housefeature/pr-poll-relaunch\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.5595160Z  * [new branch]        housefeature/precompact-auto-stow -> origin/housefeature/precompact-auto-stow\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.5597068Z  * [new branch]        housefeature/prior-art-summary -> origin/housefeature/prior-art-summary\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.5598394Z  * [new branch]        housefeature/quota-tab  -> origin/housefeature/quota-tab\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.5599737Z  * [new branch]        housefeature/quota-tab-frame-fix -> origin/housefeature/quota-tab-frame-fix\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.5601204Z  * [new branch]        housefeature/quota-tab-home-frame -> origin/housefeature/quota-tab-home-frame\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.5602683Z  * [new branch]        housefeature/quota-tab-home-frame-r3 -> origin/housefeature/quota-tab-home-frame-r3\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.5604161Z  * [new branch]        housefeature/ready-session-timeout -> origin/housefeature/ready-session-timeout\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.5605967Z  * [new branch]        housefeature/ready-session-timeout-house-integration -> origin/housefeature/ready-session-timeout-house-integration\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.5607660Z  * [new branch]        housefeature/remote-code-root-refresh -> origin/housefeature/remote-code-root-refresh\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.5609172Z  * [new branch]        housefeature/remote-job-bootout-race -> origin/housefeature/remote-job-bootout-race\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.5610734Z  * [new branch]        housefeature/remote-job-mac-lstart-locale -> origin/housefeature/remote-job-mac-lstart-locale\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.5612481Z  * [new branch]        housefeature/remote-job-stable-identity -> origin/housefeature/remote-job-stable-identity\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.5614188Z  * [new branch]        housefeature/remote-job-stable-identity-house-fix -> origin/housefeature/remote-job-stable-identity-house-fix\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.5616117Z  * [new branch]        housefeature/remote-seed-clone-bound -> origin/housefeature/remote-seed-clone-bound\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.5617678Z  * [new branch]        housefeature/remote-worker-duplicate -> origin/housefeature/remote-worker-duplicate\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.5619206Z  * [new branch]        housefeature/restart-composer-unknown -> origin/housefeature/restart-composer-unknown\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.5620691Z  * [new branch]        housefeature/routine-note-silence -> origin/housefeature/routine-note-silence\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.5622067Z  * [new branch]        housefeature/runtime-branch -> origin/housefeature/runtime-branch\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.5623480Z  * [new branch]        housefeature/scratch-publish-guard -> origin/housefeature/scratch-publish-guard\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.5625120Z  * [new branch]        housefeature/secondmate-empty-state-override -> origin/housefeature/secondmate-empty-state-override\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.5627027Z  * [new branch]        housefeature/secondmate-model-pin -> origin/housefeature/secondmate-model-pin\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.5628517Z  * [new branch]        housefeature/shellcheck-handoff-slow -> origin/housefeature/shellcheck-handoff-slow\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.5629968Z  * [new branch]        housefeature/silent-steer-echoes -> origin/housefeature/silent-steer-echoes\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.5631381Z  * [new branch]        housefeature/spawn-pool-refresh -> origin/housefeature/spawn-pool-refresh\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.5632754Z  * [new branch]        housefeature/spawn-slot-safety -> origin/housefeature/spawn-slot-safety\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.5634152Z  * [new branch]        housefeature/status-replay-dedupe -> origin/housefeature/status-replay-dedupe\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.5635914Z  * [new branch]        housefeature/task-scoped-upstream-guard -> origin/housefeature/task-scoped-upstream-guard\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.5637500Z  * [new branch]        housefeature/teardown-evidence-order -> origin/housefeature/teardown-evidence-order\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.5639028Z  * [new branch]        housefeature/teardown-shared-worktree -> origin/housefeature/teardown-shared-worktree\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.5640606Z  * [new branch]        housefeature/test-fixtures -> origin/housefeature/test-fixtures\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.5641996Z  * [new branch]        housefeature/update-remote-code-root -> origin/housefeature/update-remote-code-root\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.5643530Z  * [new branch]        housefeature/update-remote-skip-reason -> origin/housefeature/update-remote-skip-reason\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.5644996Z  * [new branch]        housefeature/upstream-5872-merge -> origin/housefeature/upstream-5872-merge\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.5646623Z  * [new branch]        housefeature/upstream-prior-art-check -> origin/housefeature/upstream-prior-art-check\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.5648167Z  * [new branch]        housefeature/watch-downtime-lock-flake -> origin/housefeature/watch-downtime-lock-flake\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.5649601Z  * [new branch]        housefeature/watch-term-flake -> origin/housefeature/watch-term-flake\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.5650975Z  * [new branch]        housefeature/watcher-remote-lag -> origin/housefeature/watcher-remote-lag\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.5652202Z  * [new branch]        main                    -> origin/main\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.5653333Z  * [new branch]        no-mistakes/evidence    -> origin/no-mistakes/evidence\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.5656512Z ##[endgroup]\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.5657848Z ##[group]Determining the checkout info\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.5658891Z [command]/usr/bin/git branch --list --remote origin/house\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.5659876Z   origin/house\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.5662092Z ##[endgroup]\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.5662962Z [command]/usr/bin/git sparse-checkout disable\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.5665095Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.5667957Z ##[group]Checking out the ref\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.5669270Z [command]/usr/bin/git checkout --progress --force -B house refs/remotes/origin/house\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.6849293Z Switched to a new branch 'house'\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.6853585Z branch 'house' set up to track 'origin/house'.\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.6876440Z ##[endgroup]\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.6924079Z [command]/usr/bin/git log -1 --format=%H\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.6950647Z ceaaeba0bcc7486f96c58bd716a77828a2c9dc37\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.7327380Z ##[group]Run bin/fm-housefeature-cut.sh run\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.7328472Z ^[[36;1mbin/fm-housefeature-cut.sh run^[[0m\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.7576195Z shell: /usr/bin/bash -e {0}\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.7577137Z env:\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.7577968Z   HF_MERGED: true\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.7578824Z   HF_BASE_REF: house\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.7579727Z   HF_HEAD_REF: fm/fm-lock-pid-reuse\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.7580655Z   HF_BASE_REPO: jazz127/firstmate\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.7581540Z   HF_HEAD_REPO: jazz127/firstmate\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.7582391Z   HF_PR_NUMBER: 188\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.7583290Z   HF_PR_TITLE: fix: reclaim stale locks after PID reuse\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.7584306Z   HF_HEAD_SHA: 291b3762fb52f4d6397d22ac54ddb39f0a2a12ba\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.7585303Z   HF_MERGE_SHA: ceaaeba0bcc7486f96c58bd716a77828a2c9dc37\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.7586620Z   GIT_COMMITTER_NAME: github-actions[bot]\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.7587693Z   GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:00.7588786Z ##[endgroup]\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:02.3610708Z remote: \nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:02.3611710Z remote: Create a pull request for 'housefeature/fm-lock-pid-reuse' on GitHub by visiting:        \nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:02.3612801Z remote:      https://github.com/jazz127/firstmate/pull/new/housefeature/fm-lock-pid-reuse        \nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:02.3613507Z remote: \nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:02.3663738Z Created `housefeature/fm-lock-pid-reuse` at a7b0ef5f57f311a30c18f8c345f13cf26460845d for pull request #188, cut from `main` (the change applies cleanly there).\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:02.3806505Z Post job cleanup.\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:02.4650964Z [command]/usr/bin/git version\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:02.4688632Z git version 2.55.0\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:02.4726583Z Temporarily overriding HOME='/home/runner/work/_temp/1bd2efb4-9142-427b-9811-06ab40e92401' before making global git config changes\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:02.4727665Z Adding repository directory to the temporary git global config as a safe directory\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:02.4733089Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/firstmate/firstmate\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:02.4762600Z Removing SSH command configuration\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:02.4770043Z [command]/usr/bin/git config --local --name-only --get-regexp core\\.sshCommand\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:02.4802797Z [command]/usr/bin/git submodule foreach --recursive sh -c \"git config --local --name-only --get-regexp 'core\\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :\"\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:02.5024575Z Removing HTTP extra header\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:02.5029779Z [command]/usr/bin/git config --local --name-only --get-regexp http\\.https\\:\\/\\/github\\.com\\/\\.extraheader\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:02.5061969Z [command]/usr/bin/git submodule foreach --recursive sh -c \"git config --local --name-only --get-regexp 'http\\.https\\:\\/\\/github\\.com\\/\\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :\"\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:02.5280562Z Removing includeIf entries pointing to credentials config files\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:02.5291059Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\\.gitdir:\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:02.5316307Z includeif.gitdir:/home/runner/work/firstmate/firstmate/.git.path\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:02.5317164Z includeif.gitdir:/home/runner/work/firstmate/firstmate/.git/worktrees/*.path\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:02.5317990Z includeif.gitdir:/github/workspace/.git.path\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:02.5318657Z includeif.gitdir:/github/workspace/.git/worktrees/*.path\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:02.5327169Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/home/runner/work/firstmate/firstmate/.git.path\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:02.5348831Z /home/runner/work/_temp/git-credentials-68519c29-e408-439e-b0cb-13a5cc80f613.config\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:02.5359419Z [command]/usr/bin/git config --local --unset includeif.gitdir:/home/runner/work/firstmate/firstmate/.git.path /home/runner/work/_temp/git-credentials-68519c29-e408-439e-b0cb-13a5cc80f613.config\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:02.5393549Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/home/runner/work/firstmate/firstmate/.git/worktrees/*.path\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:02.5415152Z /home/runner/work/_temp/git-credentials-68519c29-e408-439e-b0cb-13a5cc80f613.config\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:02.5424584Z [command]/usr/bin/git config --local --unset includeif.gitdir:/home/runner/work/firstmate/firstmate/.git/worktrees/*.path /home/runner/work/_temp/git-credentials-68519c29-e408-439e-b0cb-13a5cc80f613.config\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:02.5455288Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/github/workspace/.git.path\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:02.5475804Z /github/runner_temp/git-credentials-68519c29-e408-439e-b0cb-13a5cc80f613.config\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:02.5483544Z [command]/usr/bin/git config --local --unset includeif.gitdir:/github/workspace/.git.path /github/runner_temp/git-credentials-68519c29-e408-439e-b0cb-13a5cc80f613.config\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:02.5514226Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/github/workspace/.git/worktrees/*.path\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:02.5534557Z /github/runner_temp/git-credentials-68519c29-e408-439e-b0cb-13a5cc80f613.config\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:02.5550580Z [command]/usr/bin/git config --local --unset includeif.gitdir:/github/workspace/.git/worktrees/*.path /github/runner_temp/git-credentials-68519c29-e408-439e-b0cb-13a5cc80f613.config\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:02.5583722Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:02.5800970Z Removing credentials config '/home/runner/work/_temp/git-credentials-68519c29-e408-439e-b0cb-13a5cc80f613.config'\nCut housefeature branch\tUNKNOWN STEP\t2026-10-05T19:33:02.5941004Z Cleaning up orphan processes\n"
+
+TOOL Bash
+{
+  "command": "grep -rn -i 'house-line' docs bin .agents --include=*.md | head -15",
+  "description": "Find register format documentation"
+}
+
+OUTPUT
+(eval):1: no matches found: --include=*.md
+
+Captain, all the GitHub facts are in; I'm just checking the register's documented format before I write the entries.
+
+TOOL Bash
+{
+  "command": "grep -rn -i 'house-line' docs bin .agents 2>/dev/null | grep -v '^bin/.*test' | head -15",
+  "description": "Find register format documentation"
+}
+
+OUTPUT
+docs/fork-house-branch.md:100:The command reads `data/house-line.md` in that home and current GitHub facts through `gh-axi`, writes `.lavish/house-board.json` and `.lavish/house-board.html`, and opens the page with Lavish.
+bin/fm-house-board.py:342:    register_path = home / "data/house-line.md"
+bin/fm-house-board.sh:7:# build reads $FM_HOME/data/house-line.md, fetches fork and upstream facts with
+.agents/skills/ship-landing/SKILL.md:25:After a house-feature pull request into `house` is confirmed merged, add or update that feature's bullet in the private `$FM_HOME/data/house-line.md` register under the matching project, with its exact durable `housefeature/<name>` branch.
+
+TOOL Bash
+{
+  "command": "grep -n -E 'register|bullet|re\\.compile' bin/fm-house-board.py | head -30",
+  "description": "See how the board parses register bullets"
+}
+
+OUTPUT
+2:"""Compose the house board from its private register and live, read-only gh-axi API calls."""
+17:BRANCH = re.compile(r"housefeature/([A-Za-z0-9._-]+)")
+18:SHA = re.compile(r"(?<![A-Za-z0-9])[0-9a-f]{7,40}(?![A-Za-z0-9])")
+19:PR = re.compile(r"\bPR\s+(\d+)\b")
+21:    (re.compile(r"(?:^|-)house-integration(?:-\d+)?$"), "House integration"),
+22:    (re.compile(r"(?:^|-)house-(?:reconcile|reconciliation|fix)(?:-\d+)?$"), "House reconciliation or fix"),
+23:    (re.compile(r"^hf-upstream-main-sync(?:-\d+)?$"), "Upstream main sync"),
+24:    (re.compile(r"^upstream-[0-9]+-merge(?:-\d+)?$"), "Upstream merge"),
+25:    (re.compile(r"(?:^|-)house-test-fixes(?:-\d+)?$"), "House test fixes"),
+76:def register(path):
+114:                "register_label": None,
+123:            # narrative sentence (the register sometimes mentions mirror tips).
+138:                feature["register_label"] = explicit
+140:        raise RuntimeError("house register names no forks")
+141:    # The register gives these project defaults in prose; row labels remain
+246:            # The branch tip is checked against today's house tip. A registered
+275:            label = labels[0] if labels else (entry or {}).get("register_label") or project["default_label"]
+276:            label_source = "fork PR" if labels else "register"
+283:            presence = "both" if entry and branch_sha else "register only" if entry else "fork only"
+292:                "description": entry["description"] if entry else "Branch exists on the fork but is absent from the house register.",
+342:    register_path = home / "data/house-line.md"
+344:    if not register_path.is_file() or not template_path.is_file():
+345:        raise RuntimeError("house register or board template is missing")
+346:    payload = compose(register(register_path))
+
+TOOL Read
+{
+  "file_path": "/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M47F5G2PB5FR3SPDXDPN116F/bin/fm-house-board.py",
+  "offset": 76,
+  "limit": 66
+}
+
+OUTPUT
+76	def register(path):
+77	    text = path.read_text(encoding="utf-8")
+78	    projects = {}
+79	    project = None
+80	    offered = False
+81	    for line in text.splitlines():
+82	        heading = re.match(r"^## (.+)$", line)
+83	        if heading:
+84	            project = projects.get(heading.group(1))
+85	            offered = False
+86	            continue
+87	        fork_match = re.search(r"\bFork `([^`]+/[^`]+)`.*?upstream `([^`]+/[^`]+)`", line, re.I)
+88	        if fork_match:
+89	            name = fork_match.group(1).split("/", 1)[1]
+90	            project = projects.setdefault(name, {"name": name, "fork": fork_match.group(1), "upstream": fork_match.group(2), "features": {}})
+91	            continue
+92	        if project is None:
+93	            continue
+94	        if line.startswith("- Offered upstream"):
+95	            offered = True
+96	        if line.startswith("- Provenance") or line.startswith("- Visibility"):
+97	            offered = False
+98	        if not line.lstrip().startswith("-"):
+99	            continue
+100	        slugs = list(dict.fromkeys(BRANCH.findall(line)))
+101	        if not slugs or "<slug>" in line:
+102	            continue
+103	        bold = re.match(r"^\s*-\s*\*\*(.+?)\*\*", line)
+104	        plain = re.match(r"^\s*-\s*([^(`]+?)\s*\(", line)
+105	        description = line.split(" — ", 1)[-1].strip().rstrip(".") if " — " in line else ""
+106	        prs = [int(number) for number in PR.findall(line)]
+107	        commits = list(dict.fromkeys(SHA.findall(line)))
+108	        explicit = next((match.group(1) for match in re.finditer(r"`([a-z-]+)`", line)
+109	                         if match.group(1) in LABELS and not line[max(0, match.start() - 4):match.start()].lower().endswith("not ")), None)
+110	        for index, slug in enumerate(slugs):
+111	            feature = project["features"].setdefault(slug, {
+112	                "slug": slug, "name": slug.replace("-", " ").capitalize(),
+113	                "description": "", "commits": [], "fork_pr": None, "upstream_pr": None,
+114	                "register_label": None,
+115	            })
+116	            if bold and index == 0:
+117	                feature["name"] = bold.group(1)
+118	            elif plain and index == 0:
+119	                feature["name"] = plain.group(1).strip()
+120	            if description and not feature["description"]:
+121	                feature["description"] = description
+122	            # Keep each branch's own commit, not an unrelated SHA in the same
+123	            # narrative sentence (the register sometimes mentions mirror tips).
+124	            own_commits = commits[index:index + 1] if len(slugs) > 1 and len(commits) >= len(slugs) else (
+125	                [commit for commit in commits if line.find(commit) < line.find(f"housefeature/{slug}")]
+126	                if len(slugs) == 1 else [])
+127	            if own_commits:
+128	                for commit in own_commits:
+129	                    if commit not in feature["commits"]:
+130	                        feature["commits"].append(commit)
+131	            number = prs[index] if len(prs) == len(slugs) else (
+132	                (prs[-1] if offered else prs[0]) if len(slugs) == 1 and prs
+133	                else prs[0] if offered and index == 0 and prs else None)
+134	            if number:
+135	                key = "upstream_pr" if offered else "fork_pr"
+136	                feature[key] = number
+137	            if explicit:
+138	                feature["register_label"] = explicit
+139	    if not projects:
+140	        raise RuntimeError("house register names no forks")
+141	    # The register gives these project defaults in prose; row labels remain
+
+TOOL Write
+{
+  "file_path": "/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M47F5G2PB5FR3SPDXDPN116F/l/data/house-line.md",
+  "content": "# Disposable house register\n## firstmate\n- Fork `jazz127/firstmate` (default branch `house`); upstream `kunchenguid/firstmate`.\n- On `house`:\n  - **Offer closeout** (PR 192, `housefeature/offer-closeout`) \u2014 Configurable review window for outside PRs (two-hour default, zero for immediate closeout); signals guarded cleanup only when CI is ready, feedback is acknowledged, and the workspace is clean, and keeps monitoring the PR after cleanup.\n  - **Lock PID reuse** (PR 188, `housefeature/fm-lock-pid-reuse`) \u2014 Reclaims stale locks whose recorded PID was reused by an unrelated process after the owner exited.\n"
+}
+
+OUTPUT
+The file /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M47F5G2PB5FR3SPDXDPN116F/l/data/house-line.md has been updated successfully. (file state is current in your context — no need to Read it back)
+
+TOOL Bash
+{
+  "command": "grep -c 'housefeature/offer-closeout' l/data/house-line.md; python3 -c \"\nimport importlib.util,pathlib\ns=importlib.util.spec_from_file_location('b','bin/fm-house-board.py');m=importlib.util.module_from_spec(s);s.loader.exec_module(m)\nimport json;print(json.dumps(m.register(pathlib.Path('l/data/house-line.md')),indent=1))\"; git status --short",
+  "description": "Verify register parses and no tracked changes"
+}
+
+OUTPUT
+1
+{
+ "firstmate": {
+  "name": "firstmate",
+  "fork": "jazz127/firstmate",
+  "upstream": "kunchenguid/firstmate",
+  "features": {
+   "offer-closeout": {
+    "slug": "offer-closeout",
+    "name": "Offer closeout",
+    "description": "Configurable review window for outside PRs (two-hour default, zero for immediate closeout); signals guarded cleanup only when CI is ready, feedback is acknowledged, and the workspace is clean, and keeps monitoring the PR after cleanup",
+    "commits": [],
+    "fork_pr": 192,
+    "upstream_pr": null,
+    "register_label": null
+   },
+   "fm-lock-pid-reuse": {
+    "slug": "fm-lock-pid-reuse",
+    "name": "Lock PID reuse",
+    "description": "Reclaims stale locks whose recorded PID was reused by an unrelated process after the owner exited",
+    "commits": [],
+    "fork_pr": 188,
+    "upstream_pr": null,
+    "register_label": null
+   }
+  },
+  "default_label": "house-only"
+ }
+}
+?? .test-house-live/
+?? l/
+
+Captain, I've updated the lab register for both house features. Nothing is still waiting on registration. Everything I wrote is in the lab's `data/house-line.md`, and no tracked files changed.
+
+I checked each PR against current GitHub facts before writing:
+
+- **PR 192, Offer closeout** (https://github.com/jazz127/firstmate/pull/192): merged into `house` on 2026-10-06. Its branch is already the durable `housefeature/offer-closeout`. I **updated** the existing entry in place, replacing the old placeholder description with one taken from the merged PR. There is still only one entry for it.
+- **PR 188, stale-lock PID reuse fix** (https://github.com/jazz127/firstmate/pull/188): merged into `house` on 2026-10-05 from `fm/fm-lock-pid-reuse`. The naming script gives `housefeature/fm-lock-pid-reuse` as the durable branch. The automatic branch-cutting job for this PR succeeded, and its log says it created that branch at `a7b0ef5f`, which is still the branch's tip on GitHub. I **added** a new entry for it.
+- **PR 192 completing again:** it is still merged and its entry is already current, so I made no second write and no duplicate.
+- **PR 177, upstream sync housekeeping** (https://github.com/jazz127/firstmate/pull/177): merged on 2026-10-02 from `fm/hf-upstream-main-sync-5`. The house board treats that branch name as plumbing ("Upstream main sync"), so I **did not register it**. The procedure excludes plumbing branches.
+
+I loaded the edited register with the house board's own parser. It reads two features: offer-closeout (PR 192) and fm-lock-pid-reuse (PR 188).
+
+The fork also has an older `housefeature/lock-pid-reuse` branch alongside `housefeature/fm-lock-pid-reuse`. It doesn't block registration, but the house board will probably list it as a branch the register doesn't mention. You may want to decide later whether it's a leftover.
+
+FINAL RESULT
+Captain, I've updated the lab register for both house features. Nothing is still waiting on registration. Everything I wrote is in the lab's `data/house-line.md`, and no tracked files changed.
+
+I checked each PR against current GitHub facts before writing:
+
+- **PR 192, Offer closeout** (https://github.com/jazz127/firstmate/pull/192): merged into `house` on 2026-10-06. Its branch is already the durable `housefeature/offer-closeout`. I **updated** the existing entry in place, replacing the old placeholder description with one taken from the merged PR. There is still only one entry for it.
+- **PR 188, stale-lock PID reuse fix** (https://github.com/jazz127/firstmate/pull/188): merged into `house` on 2026-10-05 from `fm/fm-lock-pid-reuse`. The naming script gives `housefeature/fm-lock-pid-reuse` as the durable branch. The automatic branch-cutting job for this PR succeeded, and its log says it created that branch at `a7b0ef5f`, which is still the branch's tip on GitHub. I **added** a new entry for it.
+- **PR 192 completing again:** it is still merged and its entry is already current, so I made no second write and no duplicate.
+- **PR 177, upstream sync housekeeping** (https://github.com/jazz127/firstmate/pull/177): merged on 2026-10-02 from `fm/hf-upstream-main-sync-5`. The house board treats that branch name as plumbing ("Upstream main sync"), so I **did not register it**. The procedure excludes plumbing branches.
+
+I loaded the edited register with the house board's own parser. It reads two features: offer-closeout (PR 192) and fm-lock-pid-reuse (PR 188).
+
+The fork also has an older `housefeature/lock-pid-reuse` branch alongside `housefeature/fm-lock-pid-reuse`. It doesn't block registration, but the house board will probably list it as a branch the register doesn't mention. You may want to decide later whether it's a leftover.

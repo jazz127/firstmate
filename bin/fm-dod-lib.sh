@@ -108,8 +108,8 @@
 # the Claude launch grants the skills directory that holds it.
 # fm_ship_rule_one owns the mode-specific first ship safety rule shared by an
 # ordinary ship brief and the durable contract written during scout promotion.
-# It takes the same optional trailing forge argument, because the rule that keeps
-# a worker off a remote is exactly the rule that changes when the forge does.
+# It takes the same optional forge and base arguments, because the rule must
+# protect the selected publication path and its target branch.
 
 # shellcheck source=bin/fm-pr-lib.sh
 . "$(d=${BASH_SOURCE[0]%/*}; [ "$d" != "${BASH_SOURCE[0]}" ] || d=.; cd "${d:-/}" && pwd)/fm-pr-lib.sh"

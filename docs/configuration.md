@@ -598,7 +598,7 @@ The flag is a home-local preference and is not inherited by secondmate homes.
 
 ## No-mistakes pipeline spend (config/pipeline-spend)
 
-The optional local, gitignored `config/pipeline-spend` presence flag opts this home into recording per-task no-mistakes pipeline spend in `data/pipeline-spend.jsonl` during teardown.
+The optional local, gitignored `config/pipeline-spend` presence flag opts this home into recording ship tasks' no-mistakes pipeline spend in `data/pipeline-spend.jsonl` during teardown; [`fm-pipeline-spend.sh`](../bin/fm-pipeline-spend.sh) owns attribution, unknown usage, and the record schema.
 When the flag is absent, teardown skips recording and the recorder exits before reading task metadata, no-mistakes state, or the spend ledger.
 An existing ledger is left untouched while recording is disabled.
 
@@ -1471,7 +1471,7 @@ It uses the same live secondmate discovery and propagation helper as bootstrap; 
 When `firstmate.runtimeBranch` is unset, it preserves the historical origin/HEAD selection and local main/master fallback.
 When set, the value must be a valid Git branch name that exists locally; invalid values and missing local branches fail closed without falling back.
 `bin/fm-update.sh` follows that branch's `branch.<name>.remote` and `branch.<name>.merge` settings, then pins the resulting commit for all secondmate updates.
-Fresh ship and scout spawns use the same tracking source when refreshing a pooled task worktree, so an upstream `origin` does not need to carry the fork-only runtime branch.
+Fresh ship and scout spawns without an explicit task base use the same tracking source when refreshing a pooled task worktree, so an upstream `origin` does not need to carry the fork-only runtime branch; [`fm-spawn.sh`](../bin/fm-spawn.sh) owns task-base precedence and freshness refusals.
 Project clones keep their own upstream-default resolution in `bin/fm-fleet-sync.sh`; this setting applies to the Firstmate runtime repository only.
 
 ## Watched tool updates (config/watched-tools.json)

@@ -295,10 +295,9 @@ Portable regressions live in [`tests/fm-spawn-pool-base-freshen.test.sh`](../tes
 
 The firstmate repo has one extra exposure because it can dispatch crewmates to work on itself.
 Its operating checkout (`FM_ROOT`) and the disposable crewmate worktrees are all linked git worktrees of the same repository, so the valid discriminator is branch state, not whether the checkout is linked.
-The primary checkout is healthy on its default branch, and linked worktrees or secondmate homes are healthy at detached HEAD.
-Only a named non-default branch checked out in `FM_ROOT` is a worktree tangle.
+The primary checkout is healthy on its resolved runtime branch, and linked worktrees or secondmate homes are healthy at detached HEAD.
 
-`fm-tangle-lib.sh` resolves the default branch from `origin/HEAD`, then local `main` or `master`, and classifies that named non-default primary branch as the tangle.
+`fm-tangle-lib.sh` uses the [configured runtime-branch resolver](configuration.md#firstmate-runtime-branch-git-config-firstmateruntimebranch) and classifies a named primary branch other than that runtime branch as the tangle.
 `fm-guard.sh` prints the repair command on the next mutable fleet action, while `bin/fm-session-start.sh` reports the same condition through bootstrap as a `TANGLE:` line at session start.
 If another live session holds the fleet lock, both surfaces keep the alarm but switch to read-only wording with no repair command.
 Ship briefs also tell the crewmate to verify `pwd -P` and `git rev-parse --show-toplevel` before creating its ship branch (`fm/<id>` by default, or the project's registered prefix), then stop with a blocked status if it landed in the primary checkout.
@@ -383,7 +382,7 @@ Firstmate passes the binding unchanged to `bin/fm-brief.sh --forge` and never in
 `bin/fm-forge-detect.sh` only proposes a binding at project-add intake; nothing re-derives one from a clone at use time.
 `bin/fm-project-mode.sh` remains the one registry parser for the mechanical consumers that have no task in hand: fleet sync's `local-only` skip and home seeding's refusal and no-mistakes initialization.
 The registry's optional `branch=<prefix>` annotation overrides a project's ship-branch prefix (default `fm/`) the same way: firstmate resolves it via `bin/fm-project-mode.sh --branch-prefix` at intake and passes it explicitly to `bin/fm-brief.sh --branch-prefix`, which never reads the registry itself; each script's own header owns its side of that contract.
-A task's base branch is a per-task choice with no registry entry: `bin/fm-brief.sh --base-branch` records it in the brief, a fresh spawn passed the same `--base-branch` resets the task's copy to `origin/<base>` and records `base_branch=` in task meta, and the worker's pull request targets that branch; review, cleanup, and promotion read the recorded value instead of the default branch.
+A named task base is a per-task choice with no registry entry; [`fm-dod-lib.sh`](../bin/fm-dod-lib.sh)'s `fm_base_branch_valid` owns the shared base contract and delivery limits, and [`fm-spawn.sh`](../bin/fm-spawn.sh) owns launch selection and metadata.
 When a selected delivery path calls for a diff, `bin/fm-review-diff.sh` refreshes the authoritative base and, when task meta records a GitHub pull-request `pr=`, always fetches and compares against `refs/pull/<n>/head` by default (recorded `pr_head=` is only an offline fallback) before falling back to the local branch with a warning.
 A GitLab merge request and a Gerrit change expose no such ref, so a task recording one of those diffs the local branch under that same warning, which is its current content.
 Where a no-mistakes pipeline stores evidence in the repo, it publishes that PR-viewable validation evidence to an orphan evidence branch that shares no history with code branches, so it never enters the crew branch or the default branch.

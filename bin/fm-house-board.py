@@ -17,6 +17,13 @@ LABELS = {"house-only", "upstream-candidate", "upstream-offered", "contributed-h
 BRANCH = re.compile(r"housefeature/([A-Za-z0-9._-]+)")
 SHA = re.compile(r"(?<![A-Za-z0-9])[0-9a-f]{7,40}(?![A-Za-z0-9])")
 PR = re.compile(r"\bPR\s+(\d+)\b")
+PLUMBING = (
+    (re.compile(r"(?:^|-)house-integration(?:-\d+)?$"), "House integration"),
+    (re.compile(r"(?:^|-)house-(?:reconcile|reconciliation|fix)(?:-\d+)?$"), "House reconciliation or fix"),
+    (re.compile(r"^hf-upstream-main-sync(?:-\d+)?$"), "Upstream main sync"),
+    (re.compile(r"^upstream-[0-9]+-merge(?:-\d+)?$"), "Upstream merge"),
+    (re.compile(r"(?:^|-)house-test-fixes(?:-\d+)?$"), "House test fixes"),
+)
 
 
 class TruncatedResponse(RuntimeError):
@@ -169,7 +176,7 @@ def repo_snapshot(project):
     house = api(f"repos/{fork}/branches/house", "{sha:.commit.sha}")["sha"]
     comparison = house_comparison(fork, upstream_main, house)
     branches = pages(f"repos/{fork}/branches", "[.[]|{name,sha:.commit.sha}]")
-    pulls = pages(f"repos/{fork}/pulls?state=all", "[.[]|{number,title,state,merged_at,merge_commit_sha,created_at,head:.head.ref,labels:[.labels[].name],html_url}]")
+    pulls = pages(f"repos/{fork}/pulls?state=all", "[.[]|{number,title,state,merged_at,merge_commit_sha,created_at,head:.head.ref,base:.base.ref,labels:[.labels[].name],html_url}]")
     return {
         "fork": fork, "upstream": upstream, "house_tip": house,
         "upstream_tip": upstream_main, "fork_main_tip": fork_main,
@@ -203,9 +210,27 @@ def distinct_commits(commits):
     return unique
 
 
+def plumbing_kind(slug, pulls):
+    """Use an explicit house integration PR title when available, then known helper ref shapes."""
+    integration_pr = next((pr for pr in pulls.values()
+                           if pr["head"] == f"housefeature/{slug}" and pr.get("base") == "house"), None)
+    if integration_pr:
+        title = integration_pr.get("title", "").lower()
+        if re.search(r"house.{0,24}(?:reconcil|fix)|(?:reconcil|fix).{0,24}house", title):
+            return "House reconciliation or fix", integration_pr
+        if re.search(r"(?:upstream.{0,24}main.{0,12}sync|sync.{0,12}upstream.{0,24}main)", title):
+            return "Upstream main sync", integration_pr
+        if re.search(r"house.{0,24}test.{0,12}fix|test.{0,12}fix.{0,24}house", title):
+            return "House test fixes", integration_pr
+        if re.search(r"house.{0,24}integration|integration.{0,24}house", title):
+            return "House integration", integration_pr
+    kind = next((kind for pattern, kind in PLUMBING if pattern.search(slug)), None)
+    return kind, integration_pr
+
+
 def compose(projects):
     now = dt.datetime.now(dt.timezone.utc)
-    result = {"schema": SCHEMA, "generated": now.isoformat(timespec="seconds").replace("+00:00", "Z"), "projects": [], "features": []}
+    result = {"schema": SCHEMA, "generated": now.isoformat(timespec="seconds").replace("+00:00", "Z"), "projects": [], "features": [], "plumbing": []}
     for project in projects.values():
         live = repo_snapshot(project)
         project_row = {key: live[key] for key in ("fork", "upstream", "house_tip", "upstream_tip", "fork_main_tip", "mirror_equal", "ahead", "behind")}
@@ -213,6 +238,15 @@ def compose(projects):
         result["projects"].append(project_row)
         house_commits = set(live["house_commits"])
         for slug in sorted(set(project["features"]) | set(live["branches"])):
+            helper_kind, integration_pr = plumbing_kind(slug, live["pulls"])
+            if helper_kind:
+                result["plumbing"].append({
+                    "project": project["name"], "branch": f"housefeature/{slug}",
+                    "branch_tip": live["branches"].get(slug), "kind": helper_kind,
+                    "pull_request": {key: integration_pr[key] for key in ("html_url", "title", "state")}
+                    if integration_pr else None,
+                })
+                continue
             entry = project["features"].get(slug)
             branch_sha = live["branches"].get(slug)
             fork_pr = live["pulls"].get(entry["fork_pr"]) if entry and entry["fork_pr"] else None

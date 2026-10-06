@@ -97,6 +97,7 @@ tbody tr:hover { background: var(--warm); }
   </section>
   <div class="results"><h2>Feature ledger</h2><p id="result-count"></p></div>
   <div class="table-wrap"><table><thead><tr><th>Feature</th><th>Project / branch</th><th>Commits</th><th>On house</th><th>Label / state</th><th>Pull requests</th><th>Age</th></tr></thead><tbody id="features"></tbody></table><div id="empty" class="empty" hidden>No features match these filters.</div></div>
+  <details id="plumbing-group" class="table-wrap"><summary id="plumbing-count"></summary><ul id="plumbing"></ul></details>
   <p class="foot">Age begins at the fork PR creation when available, otherwise the upstream PR creation or branch tip date. Regenerate to refresh GitHub facts.</p>
 </main>
 <script id="house-data" type="application/json">
@@ -214,6 +215,17 @@ __FM_HOUSE_BOARD_DATA__
       body.appendChild(tr);
     });
     byId("empty").hidden = rows.length !== 0;
+    const plumbing = payload.plumbing || [];
+    byId("plumbing-count").textContent = "Plumbing branches (" + plumbing.length + ")";
+    const list = byId("plumbing");
+    list.replaceChildren();
+    plumbing.forEach(row => {
+      const item = node("li");
+      append(item, node("span", "", row.project + " · " + row.kind + " · "), link(row.branch_tip ? "https://github.com/" + (payload.projects.find(project => project.name === row.project)?.fork || "") + "/tree/" + row.branch : null, row.branch));
+      if (row.pull_request) append(item, node("span", "", " · "), link(row.pull_request.html_url, "PR · " + row.pull_request.state));
+      list.appendChild(item);
+    });
+    byId("plumbing-group").hidden = plumbing.length === 0;
   }
   filterIds.forEach(id => byId(id).addEventListener(id === "search" ? "input" : "change", render));
   render();

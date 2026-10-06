@@ -22,6 +22,8 @@ Preserve the validator diagnostic alongside `evidence-validation=failed` when a 
 Those publication checks refuse contradictory driven-scenario claims, including a count that no complete scenario table with a `Live` column agrees with; the check does not apply to captain intent because a brief may quote a defective PR body while requesting its repair.
 Tell the captain the PR's full `https://...` URL copied from the worker's ready line, the resolved checks-green crew-state line, or the task's `pr=` metadata, a concise outcome summary, and the no-mistakes risk level when applicable.
 A captain instruction to merge is explicit authority; `yolo` is the only standing routine merge authority.
+After a house-feature integration pull request from `housefeature/<name>` into `house` is confirmed merged, add or update that feature's bullet in the private `$FM_HOME/data/house-line.md` register under the matching project, with the exact `housefeature/<name>` branch.
+Update an existing entry instead of duplicating it, and keep the register private; it is operator data, not a tracked project file.
 
 On a `check: contributions closeout` wake, follow the [outside-PR review-window contract](../../../docs/configuration.md#outside-pull-request-review-window-configoutside-pr-review-window-hours); `bin/fm-contributions.sh`'s header owns the wake format.
 Before acting on any closeout wake, confirm that the live task is a ship and its current canonical `pr=` matches the wake's URL; disregard a stale wake for a replaced PR or retired task.

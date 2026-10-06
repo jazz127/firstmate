@@ -23,7 +23,7 @@ class Element {
   replaceChildren(...children) { this._text = ""; this.children = children; }
   addEventListener(name, handler) { this.handlers[name] = handler; }
 }
-const ids = ["house-data", "stamp", "lines", "stats", "search", "project", "label", "state", "posture", "age", "sort", "result-count", "features", "empty"];
+const ids = ["house-data", "stamp", "lines", "stats", "search", "project", "label", "state", "posture", "age", "sort", "result-count", "features", "empty", "plumbing-group", "plumbing-count", "plumbing"];
 const elements = Object.fromEntries(ids.map(id => [id, new Element()]));
 elements["house-data"].textContent = data[1];
 elements.sort.value = "project";
@@ -46,6 +46,8 @@ const payload = {
   names: elements.features.children.map(row => row.children[0].children[0].textContent),
   rows: elements.features.children.map(row => row.textContent),
   visibleProjects: elements.lines.children.filter(card => !card.hidden).map(card => card.dataset.project),
+  plumbingCount: elements["plumbing-count"].textContent,
+  plumbing: elements.plumbing.children.map(item => item.textContent),
   empty: !elements.empty.hidden,
 };
 process.stdout.write(JSON.stringify(payload) + "\n");

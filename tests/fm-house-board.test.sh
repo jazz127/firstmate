@@ -30,8 +30,8 @@ calls = {
  "repos/owner/demo/branches/main": sha("mainupstream"),
  "repos/jazz127/demo/branches/house": sha("housetip"),
  "repos/jazz127/demo/branches?per_page=8&page=1": [{"name":"main","sha":"mainfork"},{"name":"house","sha":"housetip"},{"name":"fm/one","sha":"x"},{"name":"fm/two","sha":"x"},{"name":"fm/three","sha":"x"},{"name":"fm/four","sha":"x"},{"name":"fm/five","sha":"x"},{"name":"housefeature/alpha","sha":"aaaaaaa1111111111111111111111111111111111"}],
- "repos/jazz127/demo/branches?per_page=8&page=2": [{"name":"housefeature/extra","sha":"bbbbbbb2222222222222222222222222222222"}],
- "repos/jazz127/demo/pulls?state=all&per_page=8&page=1": [{"number":2,"title":"Alpha","state":"closed","merged_at":"2026-09-20T00:00:00Z","created_at":"2026-09-01T00:00:00Z","head":"fm/alpha","labels":[],"html_url":"https://github.com/jazz127/demo/pull/2"},{"number":3,"title":"Missing","state":"closed","merged_at":"2026-09-12T00:00:00Z","created_at":"2026-09-05T00:00:00Z","head":"fm/missing","labels":[],"html_url":"https://github.com/jazz127/demo/pull/3"},{"number":4,"title":"Gone","state":"closed","merged_at":None,"created_at":"2026-09-06T00:00:00Z","head":"fm/gone","labels":[],"html_url":"https://github.com/jazz127/demo/pull/4"}],
+ "repos/jazz127/demo/branches?per_page=8&page=2": [{"name":"housefeature/extra","sha":"bbbbbbb2222222222222222222222222222222"},{"name":"housefeature/alpha-house-integration","sha":"1111111222222222222222222222222222222222"},{"name":"housefeature/alpha-house-fix","sha":"2222222333333333333333333333333333333333"},{"name":"housefeature/hf-upstream-main-sync-5","sha":"3333333444444444444444444444444444444444"},{"name":"housefeature/upstream-5872-merge","sha":"4444444555555555555555555555555555555555"},{"name":"housefeature/house-test-fixes","sha":"5555555666666666666666666666666666666666"},{"name":"housefeature/odd-maintenance","sha":"6666666777777777777777777777777777777777"}],
+ "repos/jazz127/demo/pulls?state=all&per_page=8&page=1": [{"number":2,"title":"Alpha","state":"closed","merged_at":"2026-09-20T00:00:00Z","created_at":"2026-09-01T00:00:00Z","head":"fm/alpha","base":"housefeature/alpha","labels":[],"html_url":"https://github.com/jazz127/demo/pull/2"},{"number":3,"title":"Missing","state":"closed","merged_at":"2026-09-12T00:00:00Z","created_at":"2026-09-05T00:00:00Z","head":"fm/missing","base":"housefeature/missing","labels":[],"html_url":"https://github.com/jazz127/demo/pull/3"},{"number":4,"title":"Gone","state":"closed","merged_at":None,"created_at":"2026-09-06T00:00:00Z","head":"fm/gone","base":"housefeature/gone","labels":[],"html_url":"https://github.com/jazz127/demo/pull/4"},{"number":5,"title":"Alpha house integration","state":"closed","merged_at":"2026-09-21T00:00:00Z","created_at":"2026-09-21T00:00:00Z","head":"housefeature/alpha-house-integration","base":"house","labels":[],"html_url":"https://github.com/jazz127/demo/pull/5"},{"number":6,"title":"House reconciliation for integration","state":"closed","merged_at":"2026-09-22T00:00:00Z","created_at":"2026-09-22T00:00:00Z","head":"housefeature/odd-maintenance","base":"house","labels":[],"html_url":"https://github.com/jazz127/demo/pull/6"}],
  "repos/jazz127/demo/compare/aaaaaaa1111111111111111111111111111111111...housetip": {"behind_by":0},
  "repos/jazz127/demo/compare/bbbbbbb2222222222222222222222222222222...housetip": {"behind_by":1},
  "repos/jazz127/demo/commits/aaaaaaa1111111111111111111111111111111111": {"date":"2026-09-01T00:00:00Z"},
@@ -106,6 +106,15 @@ assert p['projects'][0]['mirror_equal'] is False
 assert (p['projects'][0]['ahead'],p['projects'][0]['behind'])==(2,1)
 r={row['branch']:row for row in p['features']}
 assert len(r)==3
+assert len(p['plumbing'])==6
+assert {row['kind'] for row in p['plumbing']} == {
+    'House integration', 'House reconciliation or fix', 'Upstream main sync',
+    'Upstream merge', 'House test fixes'}
+integration = next(row for row in p['plumbing'] if row['kind'] == 'House integration')
+assert integration['pull_request']['html_url']=='https://github.com/jazz127/demo/pull/5'
+structural = next(row for row in p['plumbing'] if row['branch'] == 'housefeature/odd-maintenance')
+assert structural['kind']=='House reconciliation or fix'
+assert structural['pull_request']['html_url']=='https://github.com/jazz127/demo/pull/6'
 assert r['housefeature/alpha']['landed'] is True
 assert r['housefeature/alpha']['state']=='offered'
 assert r['housefeature/alpha']['upstream_pr']['html_url']=='https://github.com/owner/demo/pull/247'
@@ -125,6 +134,8 @@ assert p['count']=='2 matching features'
 assert p['names']==['Missing feature','Extra']
 assert p['visibleProjects']==['demo']
 assert '2 / 3Showing' in p['stats']
+assert p['plumbingCount']=='Plumbing branches (6)'
+assert len(p['plumbing'])==6 and any('housefeature/alpha-house-integration' in row for row in p['plumbing'])
 assert p['empty'] is False
 PY
 
@@ -190,7 +201,7 @@ mkdir -p "$TMP_ROOT/retry/data"
 cp "$TMP_ROOT/data/house-line.md" "$TMP_ROOT/retry/data/"
 PATH="$TMP_ROOT/fakebin:$PATH" FM_HOME="$TMP_ROOT/retry" FM_HOUSE_BOARD_NO_SERVE=1 FAKE_PULLS_TRUNCATE=smaller \
   "$ROOT/bin/fm-house-board.sh" build > "$TMP_ROOT/retry.out" 2>&1 || fail "smaller pull page did not build: $(cat "$TMP_ROOT/retry.out")"
-[ "$(cat "$TMP_ROOT/retry/pull-pages")" = $'8:1\n4:1' ] || fail 'truncated pull page was not retried at half size'
+[ "$(cat "$TMP_ROOT/retry/pull-pages")" = $'8:1\n4:1\n4:2' ] || fail 'truncated pull page was not retried at half size'
 [ -s "$TMP_ROOT/retry/.lavish/house-board.json" ] || fail 'smaller pull page did not render a payload'
 
 mkdir -p "$TMP_ROOT/overflow/data"

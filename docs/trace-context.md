@@ -110,7 +110,7 @@ This is a deliberate, source-owned choice:
 
 Trace-context propagation and OTLP span export are separate home-local opt-ins.
 `config/trace-export.json` does not enable carrier propagation, and the current session must already have a valid trace-context decision and a recorded carrier before a span can be exported.
-The standalone `bin/fm-trace-span-lib.sh` emitter is default-off, sends authenticated OTLP/HTTP when configured, and silently preserves caller success on export failure.
+The standalone `bin/fm-trace-span-lib.sh` emitter is default-off, sends authenticated OTLP/HTTP when configured, and preserves caller success on export failure.
 This increment defines no lifecycle hooks, collector, storage, or UI; see [configuration.md](configuration.md#otlp-span-export-configtrace-exportjson--fm_trace_export) for its settings.
 
 ## Verification

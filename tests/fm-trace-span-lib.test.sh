@@ -4,6 +4,21 @@ set -u
 
 # shellcheck source=tests/lib.sh
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+for options in - e u p eu ep up eup; do
+  bash -c '
+    case $1 in *e*) set -e ;; *) set +e ;; esac
+    case $1 in *u*) set -u ;; *) set +u ;; esac
+    case $1 in *p*) set -o pipefail ;; *) set +o pipefail ;; esac
+    before=$-
+    . "$2/bin/fm-trace-span-lib.sh"
+    [ "$-" = "$before" ] || exit 1
+    FM_TRACE_EXPORT=off fm_trace_span_emit missing.meta off 1 2
+    [ "$-" = "$before" ] || exit 1
+    case $1 in *p*) [[ -o pipefail ]] ;; *) ! [[ -o pipefail ]] ;; esac || exit 1
+    case $1 in *u*) ;; *) unset optional; [ -z "$optional" ] || exit 1 ;; esac
+  ' _ "$options" "$ROOT" || fail "loading or calling emitter changed shell options ($options)"
+done
+pass "loading and disabled emission preserve errexit, nounset, pipefail, and unset-variable behavior"
 # shellcheck source=/dev/null
 . "$ROOT/bin/fm-trace-span-lib.sh"
 
@@ -22,6 +37,7 @@ META
 TOKEN='never-put-this-token-in-output-argv-or-body'
 HEADER="$WORK/auth-header"
 printf 'Authorization: Bearer %s\n' "$TOKEN" > "$HEADER"
+chmod 600 "$HEADER"
 
 cat > "$WORK/server.py" <<'PY'
 import http.server
@@ -41,6 +57,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             "content_type": self.headers.get("Content-Type"),
             "body": body.decode("utf-8"),
         }), encoding="utf-8")
+        with pathlib.Path(str(capture) + ".requests").open("a", encoding="utf-8") as requests:
+            requests.write(self.path + "\n")
         if self.path == "/slow":
             time.sleep(1.3)
         self.send_response({"/unauthorized": 401, "/failure": 500}.get(self.path, 200))
@@ -77,7 +95,7 @@ export PATH="$WORK/wrapper:$PATH"
 write_config() {
   local endpoint=$1 enabled=${2:-true}
   jq -n --arg endpoint "$endpoint" --arg header "$HEADER" --argjson enabled "$enabled" \
-    '{enabled:$enabled,endpoint:$endpoint,"auth-header-file":$header,"home-label":"test-home"}' > "$CONFIG/trace-export.json"
+    '{enabled:$enabled,endpoint:$endpoint,"auth-header-file":$header}' > "$CONFIG/trace-export.json"
 }
 request_count() { wc -l < "$WORK/curl-argv" 2>/dev/null | tr -d ' '; }
 
@@ -126,6 +144,93 @@ jq -e '
 ' "$WORK/capture.json" >/dev/null || fail "child identity or negative-duration clamp failed"
 pass "child spans link to the carrier parent and negative durations clamp to zero"
 
+PRIVATE_HEADER=$HEADER
+HEADER="$WORK/"'auth\header'
+printf 'Authorization: Bearer %s\n' "$TOKEN" > "$HEADER"
+chmod 600 "$HEADER"
+write_config "$BASE/"'literal\path'
+fm_trace_span_emit "$META" literal.config 1 2 --root || fail "literal configuration changed caller result"
+jq -e --arg path '/literal\path' --arg token "Bearer $TOKEN" \
+  '.path == $path and .authorization == $token' "$WORK/capture.json" >/dev/null \
+  || fail "backslashes in endpoint or header path were altered"
+HEADER=$PRIVATE_HEADER
+pass "endpoint and private header paths preserve literal backslashes through HTTP export"
+
+for route in '{a,b}/v1/traces' '[1-2]/v1/traces'; do
+  HTTP_COUNT=$(wc -l < "$WORK/capture.json.requests")
+  write_config "$BASE/$route"
+  fm_trace_span_emit "$META" literal.url 1 2 --root || fail "literal URL changed caller result"
+  jq -e --arg path "/$route" '.path == $path' "$WORK/capture.json" >/dev/null \
+    || fail "URL glob syntax was expanded"
+  [ "$(wc -l < "$WORK/capture.json.requests")" -eq "$((HTTP_COUNT + 1))" ] \
+    || fail "one emission produced multiple HTTP requests"
+done
+pass "brace and range URL syntax each produce one request to the literal endpoint"
+
+write_config "$BASE/private-header"
+COUNT=$(request_count)
+for mode in 640 604 644; do
+  chmod "$mode" "$HEADER"
+  fm_trace_span_emit "$META" unsafe.header 1 2 --root > "$WORK/stdout" 2> "$WORK/stderr" \
+    || fail "unsafe header mode changed caller result"
+  [ "$(request_count)" = "$COUNT" ] || fail "readable-to-others header issued a request ($mode)"
+  [ ! -s "$WORK/stdout" ] || fail "invalid header wrote to stdout"
+  [ "$(cat "$WORK/stderr")" = 'firstmate: trace export skipped: invalid private bearer header file' ] \
+    && [ "$(wc -l < "$WORK/stderr")" -eq 1 ] || fail "invalid header did not emit exactly one safe diagnostic"
+done
+chmod 600 "$HEADER"
+pass "group or other readable headers skip export with one diagnostic and preserve success"
+
+if [ "$EUID" -eq 0 ]; then
+  python3 -c 'import os, sys; os.chown(sys.argv[1], 1, -1)' "$HEADER"
+  fm_trace_span_emit "$META" foreign.owner 1 2 --root 2> "$WORK/stderr" \
+    || fail "foreign-owned header changed caller result"
+  [ "$(request_count)" = "$COUNT" ] || fail "foreign-owned header issued a request"
+  [ "$(cat "$WORK/stderr")" = 'firstmate: trace export skipped: invalid private bearer header file' ] \
+    && [ "$(wc -l < "$WORK/stderr")" -eq 1 ] || fail "foreign-owned header diagnostic was incorrect"
+  python3 -c 'import os, sys; os.chown(sys.argv[1], 0, -1)' "$HEADER"
+  pass "foreign-owned header skips export while preserving success"
+else
+  printf 'skip - foreign-owner fixture requires root to change file ownership\n'
+fi
+
+for extra in second-line unterminated-line blank-line nul-tail nul-token; do
+  case $extra in
+    second-line) printf 'Authorization: Bearer %s\nAuthorization: Bearer other\n' "$TOKEN" ;;
+    unterminated-line) printf 'Authorization: Bearer %s\nAuthorization: Bearer other' "$TOKEN" ;;
+    blank-line) printf 'Authorization: Bearer %s\n\n' "$TOKEN" ;;
+    nul-tail) printf 'Authorization: Bearer %s\n\000' "$TOKEN" ;;
+    nul-token) printf 'Authorization: Bearer %s\000' "$TOKEN" ;;
+  esac > "$HEADER"
+  fm_trace_span_emit "$META" extra.header 1 2 --root 2> "$WORK/stderr" \
+    || fail "extra header bytes changed caller result"
+  [ "$(request_count)" = "$COUNT" ] || fail "extra header bytes issued a request ($extra)"
+  [ "$(cat "$WORK/stderr")" = 'firstmate: trace export skipped: invalid private bearer header file' ] \
+    && [ "$(wc -l < "$WORK/stderr")" -eq 1 ] || fail "extra header bytes diagnostic was incorrect"
+done
+for ending in terminated unterminated; do
+  if [ "$ending" = terminated ]; then
+    printf 'Authorization: Bearer %s\n' "$TOKEN" > "$HEADER"
+  else
+    printf 'Authorization: Bearer %s' "$TOKEN" > "$HEADER"
+  fi
+  fm_trace_span_emit "$META" valid.header 1 2 --root 2> "$WORK/stderr" \
+    || fail "single header line changed caller result"
+  [ "$(request_count)" -eq "$((COUNT + 1))" ] || fail "single header line did not export ($ending)"
+  [ ! -s "$WORK/stderr" ] || fail "valid header emitted a diagnostic"
+  COUNT=$(request_count)
+done
+pass "single bearer lines export with optional newline; all extra bytes reject export"
+
+for field in endpoint auth-header-file; do
+  write_config "$BASE/nul-config"
+  jq --arg field "$field" '.[$field] += "\u0000"' "$CONFIG/trace-export.json" > "$WORK/nul-config.json"
+  mv "$WORK/nul-config.json" "$CONFIG/trace-export.json"
+  fm_trace_span_emit "$META" nul.config 1 2 --root || fail "NUL configuration changed caller result"
+  [ "$(request_count)" = "$COUNT" ] || fail "unrepresentable configuration issued a request"
+done
+pass "configuration rejects NUL bytes rather than changing accepted values"
+
 # A metadata file with no optional fields remains exportable without phantom values;
 # an absent file and invalid carrier are safe no-ops.
 MINIMAL="$STATE/minimal.meta"
@@ -164,7 +269,14 @@ elapsed=$(( $(date +%s) - start ))
 [ "$elapsed" -le 3 ] || fail "slow endpoint exceeded bounded export time ($elapsed seconds)"
 
 # A PATH containing jq and the standard helpers but no curl simulates a missing client.
-for tool in jq sed head basename dirname tail tr od; do ln -sf "$(command -v "$tool")" "$WORK/no-curl/$tool"; done
+for tool in jq grep sed head basename dirname tr od uname stat cmp; do ln -sf "$(command -v "$tool")" "$WORK/no-curl/$tool"; done
+PATH="$WORK/no-curl" fm_trace_context_valid "$(PATH="$WORK/no-curl" fm_trace_context_recorded "$META")" \
+  || fail "missing-curl fixture cannot read and validate the carrier"
+PATH="$WORK/no-curl" fm_trace_span_header_valid "$HEADER" \
+  || fail "missing-curl fixture cannot validate the private header"
+if PATH="$WORK/no-curl" command -v curl >/dev/null 2>&1; then fail "missing-curl fixture contains curl"; fi
+COUNT=$(request_count)
 PATH="$WORK/no-curl" fm_trace_span_emit "$META" nocurl 1 2 --root \
   || fail "missing curl changed caller result"
+[ "$(request_count)" = "$COUNT" ] || fail "missing-curl fixture invoked the HTTP client"
 pass "malformed/stale config, missing curl, refused/slow endpoints, and HTTP 401/500 all preserve success"

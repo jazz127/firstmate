@@ -572,9 +572,10 @@ See [`trace-context.md`](trace-context.md) for carrier semantics, supported rout
 ## OTLP span export (config/trace-export.json / FM_TRACE_EXPORT)
 
 OTLP span export is off unless the local, gitignored `config/trace-export.json` is valid and sets `enabled` to `true`.
-The object requires an explicit `endpoint` using HTTP or HTTPS, an absolute `auth-header-file` path, and accepts an optional `home-label` of at most 64 characters.
-The header file contains exactly one `Authorization: Bearer <token>` line and should be readable only by its owner.
-For example: `{"enabled":true,"endpoint":"http://127.0.0.1:14318/v1/traces","auth-header-file":"/Users/me/.config/firstmate/otlp-header","home-label":"primary"}`.
+The object requires an explicit `endpoint` using HTTP or HTTPS and an absolute `auth-header-file` path.
+The header file must be owned by the current user, have no group or other read permission (for example, mode `0600`), and contain exactly one `Authorization: Bearer <token>` line with an optional final newline and no trailing bytes.
+An invalid header file skips export with one stderr diagnostic while preserving caller success.
+For example: `{"enabled":true,"endpoint":"http://127.0.0.1:14318/v1/traces","auth-header-file":"/Users/me/.config/firstmate/otlp-header"}`.
 `FM_TRACE_EXPORT=off` disables export immediately for the current process without changing carrier propagation.
 Export also requires the current session's trace-context decision to be `on` and the task metadata to contain a valid traceparent.
 `bin/fm-trace-span-lib.sh` owns the wire format and request mechanics; it has no lifecycle hooks in this increment and every exporter failure leaves the caller successful.

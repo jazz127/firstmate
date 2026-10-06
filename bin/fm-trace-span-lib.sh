@@ -21,10 +21,13 @@
 # Secrets stay in that file; curl reads it through -H @file. curl's implicit
 # config is disabled with its first-argument -q.
 
+_fm_trace_span_shell_flags=$-
 # shellcheck source=bin/fm-trace-context-lib.sh
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/fm-trace-context-lib.sh"
 # shellcheck source=bin/fm-timing-lib.sh
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/fm-timing-lib.sh"
+case $_fm_trace_span_shell_flags in *u*) ;; *) set +u ;; esac
+unset _fm_trace_span_shell_flags
 
 fm_trace_span_json_escape() {
   local s=$1 out='' i ch code
@@ -73,34 +76,41 @@ fm_trace_span_resource_json() {
 }
 
 fm_trace_span_config() {
-  local file=$1 json
+  local file=$1 values
   command -v jq >/dev/null 2>&1 || return 1
   [ -f "$file" ] || return 1
-  json=$(jq -er '
+  values=$(jq -er '
     if type == "object" and .enabled == true and (.endpoint | type == "string")
       and (.endpoint | test("^https?://[^/?#@[:space:]]+(/[^?#[:space:]]*)?$"))
-      and ((keys - ["enabled", "endpoint", "auth-header-file", "home-label"]) | length == 0)
-      and (.["auth-header-file"] | type == "string" and length > 0 and startswith("/") and (test("[\\t\\r\\n]") | not))
-      and ((has("home-label") | not) or (."home-label" | type == "string" and length > 0 and length <= 64 and (test("[\\t\\r\\n]") | not)))
-    then [.endpoint, .["auth-header-file"], (."home-label" // "")] | @tsv
+      and (.endpoint | contains("\u0000") | not)
+      and ((keys - ["enabled", "endpoint", "auth-header-file"]) | length == 0)
+      and (.["auth-header-file"] | type == "string" and length > 0 and startswith("/")
+        and (contains("\u0000") | not) and (test("[\\t\\r\\n]") | not))
+    then .endpoint, .["auth-header-file"]
     else error("invalid trace export config") end
   ' "$file" 2>/dev/null) || return 1
-  printf '%s\n' "$json"
+  printf '%s\n' "$values"
 }
 
 fm_trace_span_header_valid() {
-  local file=$1 line
-  [ -f "$file" ] && [ -r "$file" ] || return 1
+  local file=$1 line='' mode
+  [ -f "$file" ] && [ -r "$file" ] && [ -O "$file" ] || return 1
+  if [ "$(uname -s)" = Darwin ]; then
+    mode=$(stat -L -f '%Lp' "$file" 2>/dev/null) || return 1
+  else
+    mode=$(stat -L -c '%a' "$file" 2>/dev/null) || return 1
+  fi
+  case $mode in '' | *[!0-7]*) return 1 ;; esac
+  [ "$((8#$mode & 044))" -eq 0 ] || return 1
   IFS= read -r line < "$file" || [ -n "$line" ] || return 1
   case $line in 'Authorization: Bearer '*) ;; *) return 1 ;; esac
   local token=${line#Authorization: Bearer }
   [[ $token =~ ^[A-Za-z0-9._~+/-]+=*$ ]] || return 1
-  if IFS= read -r _ < <(tail -n +2 "$file" 2>/dev/null); then return 1; fi
-  return 0
+  cmp -s "$file" <(printf '%s\n' "$line") || cmp -s "$file" <(printf '%s' "$line")
 }
 
 _fm_trace_span_emit_impl() {
-  local meta=$1 name=$2 start_ms=$3 end_ms=$4 state_dir config_file config_json
+  local meta=$1 name=$2 start_ms=$3 end_ms=$4 state_dir config_file config_values
   shift 4
   local root=0 status=unset pair
   while [ "$#" -gt 0 ]; do
@@ -116,15 +126,18 @@ _fm_trace_span_emit_impl() {
   [ "${FM_TRACE_EXPORT:-}" != off ] || return 0
   state_dir=${meta%/*}; [ "$state_dir" != "$meta" ] || state_dir=.
   config_file="$(dirname "$state_dir")/config/trace-export.json"
-  config_json=$(fm_trace_span_config "$config_file") || return 0
+  config_values=$(fm_trace_span_config "$config_file") || return 0
   [ "$(fm_trace_context_session_effective "$state_dir/.trace-context-effective")" = on ] || return 0
   local carrier
   carrier=$(fm_trace_context_recorded "$meta")
   fm_trace_context_valid "$carrier" || return 0
 
-  local endpoint auth_file home_label
-  IFS=$'\t' read -r endpoint auth_file home_label <<<"$config_json"
-  if [ -n "$auth_file" ]; then fm_trace_span_header_valid "$auth_file" || return 0; fi
+  local endpoint auth_file
+  { IFS= read -r endpoint; IFS= read -r auth_file; } <<<"$config_values"
+  fm_trace_span_header_valid "$auth_file" || {
+    printf '%s\n' 'firstmate: trace export skipped: invalid private bearer header file' >&3
+    return 0
+  }
   case $start_ms in '' | - | *[!0-9]*) start_ms=$(fm_timing_now_ms) ;; esac
   case $end_ms in '' | - | *[!0-9]*) end_ms=$(fm_timing_now_ms) ;; esac
   [ "$end_ms" -ge "$start_ms" ] || end_ms=$start_ms
@@ -137,7 +150,6 @@ _fm_trace_span_emit_impl() {
 
   local resource='{"key":"service.name","value":{"stringValue":"firstmate"}}'
   resource+="$(fm_trace_span_resource_json "$meta")"
-  [ -z "$home_label" ] || resource+="$(fm_trace_span_attr_json "firstmate.home.label=$home_label")"
   local attrs=''
   for pair in "$@"; do attrs+="$(fm_trace_span_attr_json "$pair")"; done
   local status_json=''
@@ -151,13 +163,8 @@ _fm_trace_span_emit_impl() {
   command -v curl >/dev/null 2>&1 || return 0
   local body
   body='{"resourceSpans":[{"resource":{"attributes":['"$resource"']},"scopeSpans":[{"scope":{"name":"firstmate"},"spans":['"$span"']}]}]}'
-  if [ -n "$auth_file" ]; then
-    printf '%s' "$body" | curl -q -sS --max-time 1 -o /dev/null \
-      -H 'Content-Type: application/json' -H "@$auth_file" --data-binary @- "$endpoint" >/dev/null 2>&1 || true
-  else
-    printf '%s' "$body" | curl -q -sS --max-time 1 -o /dev/null \
-      -H 'Content-Type: application/json' --data-binary @- "$endpoint" >/dev/null 2>&1 || true
-  fi
+  printf '%s' "$body" | curl -q --globoff -sS --max-time 1 -o /dev/null \
+    -H 'Content-Type: application/json' -H "@$auth_file" --data-binary @- "$endpoint" >/dev/null 2>&1 || true
   return 0
 }
 
@@ -165,7 +172,7 @@ fm_trace_span_emit() {
   local restore_errexit=0
   case $- in *e*) restore_errexit=1 ;; esac
   set +e
-  [ "$#" -ge 4 ] && _fm_trace_span_emit_impl "$@" >/dev/null 2>&1 || :
+  [ "$#" -ge 4 ] && _fm_trace_span_emit_impl "$@" 3>&2 >/dev/null 2>&1 || :
   [ "$restore_errexit" -eq 0 ] || set -e
   return 0
 }

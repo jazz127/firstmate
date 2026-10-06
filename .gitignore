@@ -3,6 +3,10 @@ state/
 data/
 scratchpad*
 .no-mistakes/
+.codex-live-check/
+.corepack/
+.pnpm-store/
+.npm/
 .lavish/
 .fm-secondmate-home
 .fm-secondmate-parent

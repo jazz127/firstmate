@@ -246,6 +246,100 @@ assert_not_contains "$body" 'spendPriority' "quota never leaves the machine"
 assert_not_contains "$body" 'cursor-grok' "use profiles never leave the machine"
 pass "clear: one rule Choice request, key on the fd header only, spendPriority argmax over every candidate"
 
+# --- never-send list: a match or a bad list withholds the request -------------
+NEVER_SEND="$HOME_DIR/config/dispatch-never-send"
+PRIVATE_BRIEF="$TMP_ROOT/private-brief.md"
+cat > "$PRIVATE_BRIEF" <<'MD'
+# Task
+## Captain's intent
+Fix the pager for the Acme-Ledger account 4417-2290.
+
+## Firstmate spec
+- Keep the change small.
+MD
+expect_withheld() {  # <label> <stderr fragment> [<value that must not print>...]
+  local label=$1 fragment=$2
+  shift 2
+  expect_code 0 "$code" "$label exits 0"
+  assert_equals '' "$out" "$label prints nothing on stdout, so firstmate uses its existing intake"
+  assert_contains "$err" "dispatch-resolve: off ($fragment" "$label names why on stderr"
+  assert_contains "$err" 'nothing sent)' "$label says nothing was sent"
+  assert_equals '1' "$(grep -c . <<<"$err")" "$label prints one diagnostic line"
+  assert_absent "$LOG/argv" "$label never calls curl"
+  assert_absent "$LOG/quota-axi.calls" "$label never reads quota"
+  local value
+  for value in "$@"; do
+    assert_not_contains "$err" "$value" "$label never prints the listed value"
+  done
+}
+
+printf '%s\n' '# private values' '' '   ' 'Unlisted-Value' > "$NEVER_SEND"
+reset_log
+write_response "$RESPONSE" rule_4 0.9
+TYPESAFE_API_KEY=$KEY run code out err "$PRIVATE_BRIEF" --project pager
+assert_contains "$out" '  status: clear' "a list with no match leaves resolution unchanged"
+assert_contains "$(jq -r .state.task.brief "$LOG/body")" 'Acme-Ledger' "a list with no match sends the task text"
+
+printf '%s\n' '# private values' '' '  acme-ledger  ' > "$NEVER_SEND"
+reset_log
+TYPESAFE_API_KEY=$KEY run code out err "$PRIVATE_BRIEF" --project pager
+expect_withheld "a case-insensitive literal match" "brief text matches $NEVER_SEND line 3" 'acme-ledger' 'Acme-Ledger'
+
+WRAPPED_BRIEF="$TMP_ROOT/wrapped-brief.md"
+printf '# Task\n## Captain'"'"'s intent\nFix the pager for Example Client\nLtd before\tthe\xc2\xa0release.\n' > "$WRAPPED_BRIEF"
+printf '%s\n' 'example  client ltd' > "$NEVER_SEND"
+reset_log
+TYPESAFE_API_KEY=$KEY run code out err "$WRAPPED_BRIEF" --project pager
+expect_withheld "a literal the brief wraps across lines" "brief text matches $NEVER_SEND line 1" 'example' 'Example'
+
+printf '%s\n' 'before the release' > "$NEVER_SEND"
+reset_log
+TYPESAFE_API_KEY=$KEY run code out err "$WRAPPED_BRIEF" --project pager
+expect_withheld "a literal the brief spaces with a tab and a no-break space" "brief text matches $NEVER_SEND line 1" 'release'
+
+printf '%s\n' 'orion-private' > "$NEVER_SEND"
+reset_log
+TYPESAFE_API_KEY=$KEY run code out err "$BRIEF" --project orion-private
+expect_withheld "a project-name match" "brief text matches $NEVER_SEND line 1" 'orion-private'
+
+printf '%s\n' 'stated root cause' > "$NEVER_SEND"
+reset_log
+TYPESAFE_API_KEY=$KEY run code out err "$BRIEF" --project pager
+expect_withheld "a rule-criterion match" "brief text matches $NEVER_SEND line 1" 'stated root cause'
+
+SECOND_HOME="$TMP_ROOT/secondmate-home"
+mkdir -p "$SECOND_HOME/config"
+printf '%s\n' 'acme-ledger' > "$NEVER_SEND"
+# A child shell keeps the lib's own globals (such as out) out of this script
+# shellcheck disable=SC2016 # Expanded by the child shell
+bash -c '. "$1" && propagate_inheritable_config "$2" "$3"' _ \
+  "$ROOT/bin/fm-config-inherit-lib.sh" "$HOME_DIR/config" "$SECOND_HOME/config" \
+  || fail "inheritance into the secondmate home failed"
+PRIMARY_HOME=$HOME_DIR
+HOME_DIR=$SECOND_HOME
+reset_log
+TYPESAFE_API_KEY=$KEY run code out err "$PRIVATE_BRIEF" --project pager
+expect_withheld "an inherited list in a secondmate home" "brief text matches $SECOND_HOME/config/dispatch-never-send line 1" 'acme-ledger' 'Acme-Ledger'
+HOME_DIR=$PRIMARY_HOME
+
+rm -f "$NEVER_SEND"
+mkdir "$NEVER_SEND"
+reset_log
+TYPESAFE_API_KEY=$KEY run code out err "$PRIVATE_BRIEF" --project pager
+expect_withheld "a directory at the list path" "$NEVER_SEND is not a readable regular file"
+rmdir "$NEVER_SEND"
+ln -s "$TMP_ROOT/missing-never-send" "$NEVER_SEND"
+reset_log
+TYPESAFE_API_KEY=$KEY run code out err "$PRIVATE_BRIEF" --project pager
+expect_withheld "a broken symlink at the list path" "$NEVER_SEND is not a readable regular file"
+rm -f "$NEVER_SEND"
+
+reset_log
+TYPESAFE_API_KEY=$KEY run code out err "$PRIVATE_BRIEF" --project pager
+assert_contains "$out" '  status: clear' "no list resolves exactly as before"
+assert_contains "$(jq -r .state.task.brief "$LOG/body")" 'Acme-Ledger' "no list sends the task text as before"
+pass "never-send list withholds the request on a match or a bad list, and never prints the value"
+
 # --- rules are snapshotted and line output is injection-safe -------------------
 MUTATED_RULES="$TMP_ROOT/mutated-rules.json"
 jq '.rules[3].use = {"harness":"claude","model":"opus"}' "$BASE_RULES" > "$MUTATED_RULES"
@@ -876,10 +970,10 @@ for bad in \
   '{"rules":[{"when":"x","use":{"harness":"claude"},"min_confidence":1.5}]}|min_confidence must be a number from 0 through 1 when present' \
   '{"rules":[{"when":"x","use":{"harness":"claude"},"floor":{"scope":"model:fable","min_percent":20}}]}|rule floor needs scope, min_percent 0..100, and provider matching ^[a-z0-9]+(-[a-z0-9]+)*\z' \
   '{"rules":[{"when":"x","use":{"harness":"claude"},"floor":{"scope":"model:fable","min_percent":20,"provider":"CLAUDE"}}]}|rule floor needs scope, min_percent 0..100, and provider matching ^[a-z0-9]+(-[a-z0-9]+)*\z' \
-  '{"rules":[{"when":"x","use":{"harness":"claude","provider":""}}]}|each use profile needs harness; model, effort, and floor must be well formed, and provider must match ^[a-z0-9]+(-[a-z0-9]+)*\z when present' \
-  '{"rules":[{"when":"x","use":{"harness":"claude","provider":" claude"}}]}|each use profile needs harness; model, effort, and floor must be well formed, and provider must match ^[a-z0-9]+(-[a-z0-9]+)*\z when present' \
-  '{"rules":[{"when":"x","use":{"harness":"claude","provider":"claude\n"}}]}|each use profile needs harness; model, effort, and floor must be well formed, and provider must match ^[a-z0-9]+(-[a-z0-9]+)*\z when present' \
-  '{"rules":[{"when":"x","use":{"harness":"codex","floor":{"scope":"all_models","min_percent":20,"provider":"claude"}}}]}|each use profile needs harness; model, effort, and floor must be well formed, and provider must match ^[a-z0-9]+(-[a-z0-9]+)*\z when present' \
+  '{"rules":[{"when":"x","use":{"harness":"claude","provider":""}}]}|each use profile needs harness; model, effort, seat, and floor must be well formed, and provider must match ^[a-z0-9]+(-[a-z0-9]+)*\z when present' \
+  '{"rules":[{"when":"x","use":{"harness":"claude","provider":" claude"}}]}|each use profile needs harness; model, effort, seat, and floor must be well formed, and provider must match ^[a-z0-9]+(-[a-z0-9]+)*\z when present' \
+  '{"rules":[{"when":"x","use":{"harness":"claude","provider":"claude\n"}}]}|each use profile needs harness; model, effort, seat, and floor must be well formed, and provider must match ^[a-z0-9]+(-[a-z0-9]+)*\z when present' \
+  '{"rules":[{"when":"x","use":{"harness":"codex","floor":{"scope":"all_models","min_percent":20,"provider":"claude"}}}]}|each use profile needs harness; model, effort, seat, and floor must be well formed, and provider must match ^[a-z0-9]+(-[a-z0-9]+)*\z when present' \
   '{"rules":[{"when":"x","use":[{"harness":"codex","model":"gpt-5.5","effort":"high"},{"harness":"codex","model":"gpt-5.5","effort":"high"}]}]}|each rule use must not contain duplicate harness, model, and effort profiles' \
   '{"rules":[{"when":"x","use":{"harness":"codex"}}],"default":[{"harness":"claude","model":"opus"},{"harness":"claude","model":"opus"}]}|default must not contain duplicate harness, model, and effort profiles' \
   '{"rules":[{"when":"x","use":{"harness":"spaceship"}}]}|each use profile must name a verified harness' \
@@ -892,6 +986,11 @@ for bad in \
   expect_code 2 "$code" "malformed rules exit 2: ${bad#*|}"
   assert_contains "$err" "malformed rules file: $RULES - ${bad#*|}" "malformed rules are named: ${bad#*|}"
 done
+printf '%s\n' '{"rules":[{"when":"x","use":[{"harness":"opencode"},{"harness":"rovo"},{"harness":"codex"}]}],"default":[{"harness":"pi"},{"harness":"claude"}]}' > "$RULES"
+TYPESAFE_API_KEY=$KEY run code out err "$BRIEF"
+expect_code 2 "$code" "multiple provider-less profiles exit 2"
+assert_contains "$err" "malformed rules file: $RULES - use profiles whose harness lacks one authoritative provider family require provider: opencode; use profiles whose harness lacks one authoritative provider family require provider: rovo; default profiles whose harness lacks one authoritative provider family require provider: pi" "all provider-less profiles are reported together across use and default"
+[ "$(printf '%s\n' "$err" | wc -l | tr -d ' ')" -eq 1 ] || fail "provider errors must use one diagnostic"
 assert_absent "$LOG/argv" "configuration errors never reach the network"
 cp "$BASE_RULES" "$RULES"
 for removed in --json --rules --quota; do
@@ -906,4 +1005,152 @@ expect_code 0 "$code" "--help exits 0"
 assert_contains "$out" 'Usage:' "--help prints usage"
 pass "configuration errors exit 2 before any network call"
 
+# --- Codex seat profile field -------------------------------------------------
+SEAT_HOME="$TMP_ROOT/seat-home"
+MAIN_SEAT_HOME="$TMP_ROOT/main-seat-home"
+mkdir -p "$SEAT_HOME" "$MAIN_SEAT_HOME"
+jq -n --arg home "$SEAT_HOME" --arg main "$MAIN_SEAT_HOME" \
+  '{version:1,id:"fixture-dock",seats:{luna:{harness:"codex",credential_home:$home},main:{harness:"codex",credential_home:$main}}}' \
+  > "$HOME_DIR/config/dock.json"
+reset_log
+printf '%s\n' '{"rules":[{"when":"Luna seat tasks","use":[{"harness":"codex","model":"gpt-5.6-luna","effort":"medium"},{"harness":"codex","model":"gpt-5.6-luna","effort":"medium","seat":"luna"}]}],"default":{"harness":"codex","model":"gpt-5.6-sol"}}' > "$RULES"
+cat > "$RESPONSE" <<'JSON'
+{"model":"jev-1.13.0","answers":{"rule":{"type":"choice","choice":"rule_1","confidence":0.98,"probabilities":{"rule_1":0.98,"default":0.02}}},"usage":{"input_tokens":100,"output_tokens":40}}
+JSON
+SEAT_QUOTA="$TMP_ROOT/schema6-seat.json"
+jq --arg seat_home "$SEAT_HOME" '.providers |= map(
+  if .provider == "codex" and .accountKey == "codex-home" then
+    .account.credentialHome = "~/.codex/auth.json" |
+    .quotaSemantics.effectiveAvailability |= map(.effectivePercentRemaining = 0 | .runway.status = "exhausted_now")
+  elif .provider == "codex" and .accountKey == "default" then
+    .accountKey = "codex-luna" | .account.credentialHome = $seat_home + "/auth.json" |
+    .quotaSemantics.effectiveAvailability |= map(.effectivePercentRemaining = 11 |
+      .runway.status = "projected_exhaustion" | .selection.spendPriority = -5.6819)
+  else . end)' "$SCHEMA6_NATIVE" > "$SEAT_QUOTA"
+TYPESAFE_API_KEY=$KEY QUOTA_AXI_FIXTURE="$SEAT_QUOTA" run code out err "$BRIEF"
+assert_contains "$out" 'candidate: codex:gpt-5.6-luna  provider=codex  scope=all_models  remaining=0%  spendPriority=-  runway=exhausted_now  -> not eligible: runway exhausted_now at all_models' \
+  "the seatless candidate keeps the ambient Codex account"
+assert_contains "$out" 'candidate: codex:gpt-5.6-luna  provider=codex  scope=all_models  remaining=11%  spendPriority=-5.6819  runway=projected_exhaustion  -> eligible' \
+  "the Luna candidate reads its own account despite an exhausted ambient account"
+assert_contains "$out" "profile: --harness 'codex' --model 'gpt-5.6-luna' --effort 'medium' --seat 'luna'" \
+  "the selected Codex seat is emitted as a concrete spawn flag"
+assert_contains "$out" "--seat-home '$SEAT_HOME'" \
+  "the selected Codex seat carries its quota-bound dock path to spawn"
+MAIN_SEAT_QUOTA="$TMP_ROOT/schema6-main-seat.json"
+jq --arg main_home "$MAIN_SEAT_HOME" '.providers |= map(
+  if .provider == "codex" and .accountKey == "codex-luna" then
+    .accountKey = "codex-main" | .account.credentialHome = $main_home + "/auth.json" |
+    .quotaSemantics.effectiveAvailability |= map(.effectivePercentRemaining = 63 |
+      .runway.status = "through_reset" | .selection.spendPriority = 0.214)
+  else . end)' "$SEAT_QUOTA" > "$MAIN_SEAT_QUOTA"
+printf '%s\n' '{"rules":[{"when":"Main seat tasks","use":{"harness":"codex","model":"gpt-5.6-sol","effort":"medium","seat":"main"}}]}' > "$RULES"
+TYPESAFE_API_KEY=$KEY QUOTA_AXI_FIXTURE="$MAIN_SEAT_QUOTA" run code out err "$BRIEF"
+assert_contains "$out" 'candidate: codex:gpt-5.6-sol  provider=codex  scope=all_models  remaining=63%  spendPriority=0.214  runway=through_reset  -> eligible' \
+  "the main seat reads the quota row bound to its own credential folder"
+assert_contains "$out" "profile: --harness 'codex' --model 'gpt-5.6-sol' --effort 'medium' --seat 'main' --seat-home '$MAIN_SEAT_HOME'" \
+  "the selected main seat carries its own measured home to spawn"
+printf '%s\n' '{"rules":[{"when":"Main seat tasks","use":{"harness":"codex","model":"gpt-5.6-sol","seat":"main"}}]}' > "$RULES"
+jq '.providers |= map(select(.accountKey != "codex-main"))' "$MAIN_SEAT_QUOTA" > "$TMP_ROOT/schema6-no-main-seat-row.json"
+TYPESAFE_API_KEY=$KEY QUOTA_AXI_FIXTURE="$TMP_ROOT/schema6-no-main-seat-row.json" run code out err "$BRIEF"
+assert_contains "$out" 'no quota row for account main' "a missing main account is disclosed without borrowing Luna or ambient quota"
+SEAT_SCHEMA5="$TMP_ROOT/schema5-seat.json"
+jq '.schemaVersion = 5 | .providers |= map(select(.provider != "codex" or .accountKey == "codex-luna") | del(.accountKey))' \
+  "$SEAT_QUOTA" > "$SEAT_SCHEMA5"
+cp "$RULES" "$TMP_ROOT/seat-two-profiles.json"
+printf '%s\n' '{"rules":[{"when":"Luna seat tasks","use":{"harness":"codex","model":"gpt-5.6-luna","effort":"medium","seat":"luna"}}]}' > "$RULES"
+TYPESAFE_API_KEY=$KEY QUOTA_AXI_FIXTURE="$SEAT_SCHEMA5" run code out err "$BRIEF"
+assert_contains "$out" "profile: --harness 'codex' --model 'gpt-5.6-luna' --effort 'medium' --seat 'luna'" \
+  "schema 5 must join a seated Codex profile by its credential home"
+SEAT_TILDE="$TMP_ROOT/schema6-seat-tilde.json"
+jq '.providers |= map(if .provider == "codex" and .accountKey == "codex-luna" then
+  .account.credentialHome = "~/seat-home/auth.json" else . end)' "$SEAT_QUOTA" > "$SEAT_TILDE"
+cat > "$FAKEBIN/python3" <<SH
+#!/usr/bin/env bash
+printf '%s\n' '$TMP_ROOT'
+SH
+chmod +x "$FAKEBIN/python3"
+TYPESAFE_API_KEY=$KEY QUOTA_AXI_FIXTURE="$SEAT_TILDE" run code out err "$BRIEF"
+assert_contains "$out" "profile: --harness 'codex' --model 'gpt-5.6-luna' --effort 'medium' --seat 'luna'" \
+  "tilde quota path should expand against the snapshot host's OS home"
+cat > "$FAKEBIN/python3" <<SH
+#!/usr/bin/env bash
+printf '%s\n' '$TMP_ROOT/other-home'
+SH
+TYPESAFE_API_KEY=$KEY QUOTA_AXI_FIXTURE="$SEAT_TILDE" run code out err "$BRIEF"
+assert_contains "$out" 'no quota row for account luna' "tilde path must not expand against another user's home"
+rm "$FAKEBIN/python3"
+cp "$TMP_ROOT/seat-two-profiles.json" "$RULES"
+SEAT_AS_HOME="$TMP_ROOT/schema6-seat-as-home.json"
+jq '.providers |= map(
+  if .provider == "codex" and .accountKey == "codex-home" then
+    .accountKey = "codex-default"
+  elif .provider == "codex" and .accountKey == "codex-luna" then
+    .accountKey = "codex-home"
+  else . end)' "$SEAT_QUOTA" > "$SEAT_AS_HOME"
+printf '%s\n' '{"rules":[{"when":"Luna seat tasks","use":{"harness":"codex","model":"gpt-5.6-luna","effort":"medium","seat":"luna"}}]}' > "$RULES"
+TYPESAFE_API_KEY=$KEY QUOTA_AXI_FIXTURE="$SEAT_AS_HOME" run code out err "$BRIEF"
+assert_contains "$out" "profile: --harness 'codex' --model 'gpt-5.6-luna' --effort 'medium' --seat 'luna'" \
+  "the Luna candidate still finds its account when it is the ambient codex-home row"
+
+printf '%s\n' '{"rules":[{"when":"Luna seat tasks","use":{"harness":"codex","model":"gpt-5.6-luna","seat":"luna"}}]}' > "$RULES"
+jq '.providers |= map(select(.accountKey != "codex-luna"))' "$SEAT_QUOTA" > "$TMP_ROOT/schema6-no-seat-row.json"
+TYPESAFE_API_KEY=$KEY QUOTA_AXI_FIXTURE="$TMP_ROOT/schema6-no-seat-row.json" run code out err "$BRIEF"
+assert_contains "$out" 'candidate: codex:gpt-5.6-luna  provider=codex  -> eligible, unranked: provider codex has no quota row for account luna: disclosed uncertainty' \
+  "a missing Luna account is not scored against the ambient Codex account"
+assert_contains "$out" '  status: escalate' "the absent Luna account cannot select a worker"
+
+SEAT_DUPLICATE="$TMP_ROOT/schema6-seat-duplicate.json"
+jq '.providers += [.providers[] | select(.provider == "codex" and .accountKey == "codex-luna") | .accountKey = "duplicate-seat"]' \
+  "$SEAT_QUOTA" > "$SEAT_DUPLICATE"
+TYPESAFE_API_KEY=$KEY QUOTA_AXI_FIXTURE="$SEAT_DUPLICATE" run code out err "$BRIEF"
+assert_contains "$out" '  status: escalate' "duplicate credential-home rows must be unmeasured"
+assert_contains "$out" 'no quota row for account luna' "duplicate rows must not borrow a default account"
+
+printf '%s\n' '{"version":1,"id":"bad dock","seats":{}}' > "$HOME_DIR/config/dock.json"
+reset_log
+TYPESAFE_API_KEY=$KEY QUOTA_AXI_FIXTURE="$SEAT_QUOTA" run code out err "$BRIEF"
+expect_code 2 "$code" "malformed dock must refuse typed resolution"
+assert_contains "$err" 'dock record' "typed refusal should name the dock"
+assert_absent "$LOG/argv" "malformed dock must refuse before the API call"
+rm "$HOME_DIR/config/dock.json"
+
+printf '%s\n' '{"rules":[{"when":"Luna seat tasks","use":{"harness":"codex","model":"gpt-5.6-luna","seat":"other"}}]}' > "$RULES"
+reset_log
+TYPESAFE_API_KEY=$KEY QUOTA_AXI_FIXTURE="$SEAT_QUOTA" run code out err "$BRIEF"
+expect_code 2 "$code" "unknown seat is a configuration error"
+assert_contains "$err" 'unsupported use profile seat (only luna or main on codex): other' "resolver names the unsupported seat"
+assert_absent "$LOG/argv" "unknown seat is refused before the API call"
+
+printf '%s\n' '{"rules":[{"when":"Luna seat tasks","use":{"harness":"codex"}}],"default":{"harness":"codex","seat":"other"}}' > "$RULES"
+TYPESAFE_API_KEY=$KEY QUOTA_AXI_FIXTURE="$SEAT_QUOTA" run code out err "$BRIEF"
+expect_code 2 "$code" "unknown default seat is a configuration error"
+assert_contains "$err" 'unsupported default profile seat (only luna or main on codex): other' "resolver names the unsupported default seat"
+
+for invalid_seat in '[]' '["luna"]' '["main"]' '["luna","main"]' null '{}' false 0; do
+  for location in use default; do
+    for representation in object array; do
+      jq -n --argjson seat "$invalid_seat" --arg location "$location" --arg representation "$representation" '
+        {harness:"codex", seat:$seat} |
+        (if $representation == "array" then [.] else . end) as $profiles |
+        if $location == "use" then {rules:[{when:"Seat tasks",use:$profiles}]}
+        else {rules:[{when:"Seat tasks",use:{harness:"codex"}}],default:$profiles} end
+      ' > "$RULES"
+      reset_log
+      TYPESAFE_API_KEY=$KEY run code out err "$BRIEF"
+      expect_code 2 "$code" "$invalid_seat seat in $location $representation is a configuration error"
+      assert_contains "$err" "malformed rules file: $RULES - unsupported $location profile seat (only luna or main on codex): $invalid_seat" \
+        "invalid seat type is rejected by schema validation"
+      assert_absent "$LOG/argv" "invalid seat type is refused before the API call"
+      assert_absent "$LOG/quota-axi.calls" "invalid seat type is refused before quota ranking"
+    done
+  done
+done
+
+printf '%s\n' '{"rules":[{"when":"Luna seat tasks","use":{"harness":"codex","model":"gpt-5.6-sol"}}]}' > "$RULES"
+TYPESAFE_API_KEY=$KEY QUOTA_AXI_FIXTURE="$SCHEMA6_NATIVE" run code out err "$BRIEF"
+assert_contains "$out" 'candidate: codex:gpt-5.6-sol  provider=codex  scope=all_models  remaining=80%  spendPriority=0.8  runway=through_reset  -> eligible' \
+  "a profile with no seat still reads the ambient codex-home row"
+assert_contains "$out" "profile: --harness 'codex' --model 'gpt-5.6-sol'" "seatless profile still resolves"
+assert_not_contains "$out" '--seat' "seatless profile emits no seat flag"
+pass "Codex seat quota follows its credential home; unsupported and absent seats retain their contracts"
 printf '# all fm-dispatch-resolve tests passed\n'

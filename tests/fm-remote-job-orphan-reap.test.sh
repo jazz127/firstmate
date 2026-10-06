@@ -114,7 +114,8 @@ start_worker() {
     export FM_REMOTE_JOB_STATE_ROOT="$state_root"
     export FM_REMOTE_JOB_PLATFORM_OVERRIDE=Linux
     export FM_REMOTE_JOB_ORPHAN_GRACE_SECONDS=1
-    # shellcheck source=bin/fm-remote-job-lib.sh
+    # Production libraries are linted independently by fm-lint.sh.
+    # shellcheck source=/dev/null
     . "$ROOT/bin/fm-remote-job-lib.sh"
     fm_remote_job_start_linux_worker "$root" "$account_home" >&2 || exit 1
     deadline=$(( $(date +%s) + 10 ))
@@ -182,6 +183,11 @@ pass "a worker stops its whole tree once its code root is pruned"
 # A current worker stops itself, so the sweep is exercised against a stand-in
 # that presents the same command line from a pruned root without that
 # self-termination - the shape of every worker started before it shipped.
+
+if [ "$(uname -s)" != Linux ]; then
+  echo 'skip: orphan reaper signaling requires Linux process identity support'
+  exit 0
+fi
 
 CASE2="$TMP_ROOT/case2"
 mkdir -p "$CASE2/remote-root/bin"

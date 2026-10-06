@@ -97,7 +97,11 @@
 #      (the id-addressed detail read carries step words the overview does not),
 #      awaiting_approval/fix_review -> parked (with gate findings), terminal
 #      passed/checks-passed/passed-with-override/passed-with-skips -> done,
-#      failed/cancelled -> failed. passed-with-override is a passing outcome
+#      failed -> failed, cancelled -> unknown (no verdict unless the green
+#      delivery safeguard below applies). A cancelled outcome takes precedence
+#      over an interrupted step's failed status or outstanding gate findings;
+#      it does not rewrite historical events or backlog records.
+#      passed-with-override is a passing outcome
 #      carrying an explicitly approved Test or CI exception (no-mistakes' own
 #      vocabulary), read identically to a clean passed. passed-with-skips is
 #      also a passing outcome (publication or CI verification was
@@ -108,12 +112,15 @@
 #      checks" from "checks green, waiting on merge" (see nm_ci_checks_state) -
 #      a check of the full ci-step log overrides working -> done once checks read
 #      green, so a green PR is never silently read as still-validating. And a
-#      terminal FAILED run whose only failure is the ci monitor step, after
-#      every substantive step completed and the ci log's last marker reads
-#      checks green, also reads done (held-for-merge), never failed: a monitor
-#      whose only remaining job is to observe a human merge decision must not
+#      terminal failed or cancelled run whose only unfinished step is the ci
+#      monitor, after every substantive step completed (an explicitly skipped
+#      rebase is allowed) and the ci log's last marker reads checks green,
+#      also reads done only when the bounded forge read confirms the PR is
+#      open (held-for-merge) or merged. Closed, missing, unreadable, or skipped
+#      forge evidence leaves the original failed or unknown classification.
+#      A monitor whose only remaining job is to observe a merge decision must not
 #      convert the absence of that decision into a failure verdict
-#      (nm_failed_run_is_green_held_ci; 2026-09-05 jr-voice incident). In the
+#      (nm_reclassify_failed_run_as_held_green). In the
 #      coarse runs-ledger fallback (no steps table, no ci log), a terminal
 #      FAILED record whose daemon an explicit probe proves down reads unknown,
 #      never failed: an instrument failure must not read as work failure
@@ -150,6 +157,10 @@
 #      unreachable, and an alive endpoint whose scrollback read failed is still
 #      classified by step 4. Backends with no classifier keep reading a failed
 #      capture as gone. The fallback's own comment owns the per-verdict rules.
+#      Steps 4 and 5 share one exception: for an agent the opt-in ready-session
+#      timeout stopped on purpose (bin/fm-ready-timeout-lib.sh), its `done`
+#      delivery still answers, with the stop named in the detail, whether its
+#      pane shell remains readable or not.
 #
 # Read-only and side-effect free. Always exits 0 on a successful read regardless
 # of state; exit 2 only on a usage error (no id).
@@ -176,6 +187,8 @@ STATE="${FM_STATE_OVERRIDE:-$FM_HOME/state}"
 . "$SCRIPT_DIR/fm-timeout-lib.sh"
 # shellcheck source=bin/fm-dod-lib.sh
 . "$SCRIPT_DIR/fm-dod-lib.sh"
+# shellcheck source=bin/fm-ready-timeout-lib.sh
+. "$SCRIPT_DIR/fm-ready-timeout-lib.sh"
 
 ID=${1:-}
 [ -n "$ID" ] || { echo "usage: fm-crew-state.sh <id>" >&2; exit 2; }
@@ -707,12 +720,12 @@ nm_run_activity_is_recent() {
   ! printf '%s\n' "$rows" | grep -q 'quiet'
 }
 
-# 0 when a terminal FAILED run's only failure is the ci monitor step and the
+# 0 when a terminal failed or cancelled run ended at the ci monitor and the
 # ci log's last recognized marker reads checks green. Requires the exact
 # shape, all on positive evidence: a steps[] table where every step completed
-# except exactly `ci` failed (any other non-completed status, or a second
-# failed step, disqualifies), plus nm_ci_checks_state=green (a genuinely red
-# check, or an unreadable ci log, keeps the failure a failure). This is the
+# except `ci` failed/cancelled and an optional skipped rebase (any other
+# non-completed step disqualifies), plus nm_ci_checks_state=green (a genuinely red
+# check, or an unreadable ci log, cannot prove delivery). This is the
 # orphaned-CI-monitor gap (2026-09-05 jr-voice): a run held for a captain
 # merge decision polls until the shared daemon restarts under it and marks
 # the run failed, although GitHub's own check state - the actual shippability
@@ -729,7 +742,11 @@ nm_failed_run_is_green_held_ci() {
     status=$(strip_quotes "$(trim "${rest%%,*}")")
     case "$status" in
       completed) continue ;;
-      failed)
+      skipped)
+        [ "$step" = rebase ] || return 1
+        continue
+        ;;
+      failed|cancelled)
         [ "$step" = ci ] || return 1
         saw_ci_failed=1
         continue
@@ -743,14 +760,18 @@ EOF
   [ "$(nm_ci_checks_state)" = green ]
 }
 
-# Reclassify a terminal failed run as done (held-for-merge) when
-# nm_failed_run_is_green_held_ci matches, surfacing the run's PR URL so the
-# supervisor reads the concrete review-ready outcome instead of a failure.
+# Apply the header's terminal-delivery safeguard. The earlier green log cannot
+# prove current PR disposition: a subsequent close can itself end the monitor.
 nm_reclassify_failed_run_as_held_green() {
   nm_failed_run_is_green_held_ci || return 1
+  local disposition pr_url
+  disposition=$(passed_pr_detail)
+  case "$disposition" in
+    "run passed: PR open") RUN_DETAIL="checks green: PR held for merge (ci monitor ended)" ;;
+    "run passed: PR merged") RUN_DETAIL="checks green: PR merged (ci monitor ended)" ;;
+    *) return 1 ;;
+  esac
   RUN_STATE="done"
-  RUN_DETAIL="checks green: PR held for merge (ci monitor ended)"
-  local pr_url
   pr_url=$(strip_quotes "$(nm_field pr)")
   [ -n "$pr_url" ] && RUN_DETAIL="$RUN_DETAIL: $pr_url"
   return 0
@@ -1058,7 +1079,7 @@ if [ "$HAVE_RUN" = 1 ]; then
         else
           RUN_STATE=failed; RUN_DETAIL="run failed"
         fi ;;
-      cancelled) RUN_STATE=failed;  RUN_DETAIL="run cancelled" ;;
+      cancelled) RUN_STATE=unknown; RUN_DETAIL="run cancelled: no verdict" ;;
       *)         RUN_STATE=unknown; RUN_DETAIL="runs list status: $COARSE_STATUS" ;;
     esac
   else
@@ -1079,7 +1100,10 @@ if [ "$HAVE_RUN" = 1 ]; then
           if nm_reclassify_failed_run_as_held_green; then :; else
             RUN_STATE=failed; RUN_DETAIL="run failed"
           fi ;;
-        cancelled)     RUN_STATE=failed; RUN_DETAIL="run cancelled" ;;
+        cancelled)
+          if nm_reclassify_failed_run_as_held_green; then :; else
+            RUN_STATE=unknown; RUN_DETAIL="run cancelled: no verdict"
+          fi ;;
         *)             RUN_STATE=unknown; RUN_DETAIL="outcome: $outcome" ;;
       esac
     elif [ -n "$awaiting" ] || [ "$status" = awaiting_approval ] || [ "$status" = fix_review ] || [ -n "$gate_status" ] || [ "$has_gate" = 1 ]; then
@@ -1109,7 +1133,10 @@ if [ "$HAVE_RUN" = 1 ]; then
           if nm_reclassify_failed_run_as_held_green; then :; else
             RUN_STATE=failed; RUN_DETAIL="run failed"
           fi ;;
-        cancelled)      RUN_STATE=failed;  RUN_DETAIL="run cancelled" ;;
+        cancelled)
+          if nm_reclassify_failed_run_as_held_green; then :; else
+            RUN_STATE=unknown; RUN_DETAIL="run cancelled: no verdict"
+          fi ;;
         "")             RUN_STATE=working; RUN_DETAIL="run active" ;;
         *)              RUN_STATE=working; RUN_DETAIL="run active ($status)" ;;
       esac
@@ -1213,6 +1240,12 @@ fi
 # verdict reports unknown rather than trusting a possibly-stale status log as
 # the current state.
 [ -n "$BACKEND_TARGET" ] || emit unknown none "no backend target recorded"
+# An agent the ready-session timeout stopped on purpose while its pull request
+# waited on a merge keeps its delivered outcome, named as such, whether its pane
+# shell still answers or not (bin/fm-ready-timeout-lib.sh owns the record).
+if [ "$LOG_VERB" = "done" ] && fm_ready_timeout_parked "$STATE" "$ID"; then
+  emit_ship_status_done "agent stopped by the ready-session timeout; relaunch to resume work"
+fi
 if ! pane_readable "$BACKEND_TARGET"; then
   # A failed probe is not itself evidence the pane is gone: the herdr CLI can
   # error or stall under load, and tmux can fail to be executed at all (a

@@ -112,7 +112,8 @@ phase_seed() {
 
 phase_spawn() {
   : > "$LOG"
-  PATH="$FAKEBIN:$PATH" FM_HOME="$HOME_DIR" FM_CONFIG_OVERRIDE="$HOME_DIR/parent-config" \
+  PATH="$FAKEBIN:$PATH" FM_HOME="$HOME_DIR" FM_STATE_OVERRIDE="$HOME_DIR/state" \
+    FM_CONFIG_OVERRIDE="$HOME_DIR/parent-config" \
     FM_FAKE_TMUX_LOG="$LOG" FM_FAKE_TMUX_CAPTURE="$PANE" \
     "$ROOT/bin/fm-spawn.sh" design "$SUB" codex --secondmate >/dev/null \
     || fail "secondmate spawn failed"
@@ -124,12 +125,36 @@ phase_spawn() {
   # Launch ran in the subhome, with the persistent charter and cleared overrides,
   # and never ran a project-style treehouse get.
   assert_grep "FM_HOME='$SUB_ABS'" "$LOG" "secondmate launch did not set FM_HOME to the subhome"
-  assert_grep 'FM_ROOT_OVERRIDE= FM_STATE_OVERRIDE= FM_DATA_OVERRIDE= FM_PROJECTS_OVERRIDE=' "$LOG" "launch did not clear operational overrides"
+  assert_grep 'env -u FM_STATE_OVERRIDE FM_ROOT_OVERRIDE= FM_DATA_OVERRIDE= FM_PROJECTS_OVERRIDE=' "$LOG" "launch did not clear operational overrides and unset the state override"
   assert_grep 'FM_CONFIG_OVERRIDE=' "$LOG" "launch did not clear the config override"
   assert_grep "$SUB_ABS/data/charter.md" "$LOG" "launch did not use the persistent charter"
   assert_no_grep 'notify=' "$LOG" "secondmate codex launch included the parent turn-end notify hook"
   assert_no_grep 'turn-ended' "$LOG" "secondmate codex launch referenced a parent turn-ended signal"
   assert_no_grep 'treehouse get' "$LOG" "secondmate spawn ran a project treehouse get"
+
+  # Execute the captured public launch command with a fake codex entry point.
+  # This reproduces the launch environment, including inherited parent state,
+  # and proves the secondmate can use the public unregister command there.
+  local launch
+  mkdir -p "$SUB/state"
+  printf '#!/usr/bin/env bash\nprintf check\n' > "$SUB/state/secondmate-launch.check.sh"
+  printf 'trust\n' > "$SUB/state/secondmate-launch.check-trust"
+  cat > "$FAKEBIN/codex" <<'SH'
+#!/usr/bin/env bash
+if [ "${FM_STATE_OVERRIDE+x}" = x ]; then
+  echo "FM_STATE_OVERRIDE was not unset: $FM_STATE_OVERRIDE" >&2
+  exit 42
+fi
+"$FM_CHECK_UNREGISTER" secondmate-launch
+SH
+  chmod +x "$FAKEBIN/codex"
+  launch=$(sed -n 's/^staged-launch //p' "$LOG" | tail -1)
+  [ -n "$launch" ] || fail "spawn did not stage a launch command"
+  PATH="$FAKEBIN:$PATH" FM_HOME="$HOME_DIR" FM_STATE_OVERRIDE="$HOME_DIR/state" \
+    FM_CHECK_UNREGISTER="$ROOT/bin/fm-check-unregister.sh" bash -c "$launch" \
+    || fail "unregister failed in the generated secondmate launch environment"
+  assert_absent "$SUB/state/secondmate-launch.check.sh" "launch environment left the custom check behind"
+  assert_absent "$SUB/state/secondmate-launch.check-trust" "launch environment left the trust binding behind"
   pass "spawn: launches in the subhome with persistent charter, records routing meta"
 }
 
@@ -303,6 +328,8 @@ phase_teardown() {
     "$HOME_DIR/state/pending-replies/$other_corr" \
     "$HOME_DIR/state/pending-replies/.delivery-confirmed-$other_corr"
   printf 'confirmed:%s\n' "$corr" > "$HOME_DIR/state/.backlog-handoff-design.wake-pending"
+  printf '%s\tattempt\n' "$(date +%s)" > "$HOME_DIR/state/.secondmate-relaunch-design"
+  printf '%s\tdead\n' "$(date +%s)" > "$HOME_DIR/state/.secondmate-relaunch-bound-design"
   : > "$LOG"
   teardown_out=$(PATH="$FAKEBIN:$PATH" FM_HOME="$HOME_DIR" FM_FAKE_TMUX_LOG="$LOG" FM_FAKE_TMUX_CAPTURE="$PANE" \
     "$ROOT/bin/fm-teardown.sh" design 2>&1) \
@@ -314,6 +341,12 @@ phase_teardown() {
   assert_absent "$HOME_DIR/state/.backlog-handoff-design.wake-pending" \
     "teardown left receiver wake state that could poison a replacement route"
   assert_absent "$rec" "teardown left the retired receiver wake correlation"
+  assert_absent "$HOME_DIR/state/.secondmate-relaunch-design" \
+    "teardown left the relaunch ledger a same-id replacement would inherit"
+  assert_absent "$HOME_DIR/state/.secondmate-relaunch-bound-design" \
+    "teardown left the relaunch park marker a same-id replacement would inherit"
+  assert_absent "$HOME_DIR/state/.secondmate-liveness-design.lock" \
+    "teardown left the liveness lock it took to retire relaunch state"
   assert_absent "$leftover_rec" "teardown left a resolved pending-reply for the retired secondmate"
   assert_no_grep '- design ' "$HOME_DIR/data/secondmates.md" "teardown did not remove the registry route"
   # The parent's source projects are untouched (no write through a parent home).

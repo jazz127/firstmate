@@ -140,6 +140,10 @@ SH
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$FM_TEST_GH_LOG"
 case "${1:-} ${2:-}" in
+  "repo view")
+    printf '%s\n' merge=true squash=true rebase=true
+    exit 0
+    ;;
   "api graphql")
     printf '%s\n' \
       "state=${FM_TEST_GH_GRAPHQL_STATE:-MERGED}" \
@@ -150,6 +154,11 @@ case "${1:-} ${2:-}" in
     ;;
   "pr view")
     case " $* " in
+      *" --json body --jq .body "*)
+        [ "${FM_TEST_GH_BODY_FAIL:-0}" = 0 ] || exit 1
+        printf '%s' "${FM_TEST_GH_BODY:-}"
+        exit 0
+        ;;
       *statusCheckRollup*)
         printf '%s\n' "{\"state\":\"OPEN\",\"isDraft\":false,\"mergeable\":\"MERGEABLE\",\"mergeStateStatus\":\"CLEAN\",\"headRefOid\":\"${FM_TEST_GH_HEAD:-0123456789abcdef0123456789abcdef01234567}\",\"baseRefName\":\"main\",\"statusCheckRollup\":[{\"__typename\":\"CheckRun\",\"name\":\"ci\",\"status\":\"COMPLETED\",\"conclusion\":\"SUCCESS\"}]}"
         exit 0
@@ -179,7 +188,24 @@ case " $* " in
   *" api repos/"*"/commits/"*"/statuses?per_page=100 "*)
     printf '%s\n' '[[]]'
     ;;
+  *" api --paginate repos/"*"/rules/branches/"*merge_queue*|*" api --paginate repos/"*"/rules/branches/"*pull_request*)
+    ;;
+  *" api --paginate repos/"*"/rules/branches/"*)
+    printf '%s\n' '[]'
+    ;;
+  *" api repos/"*"/branches/"*)
+    printf '%s\n' '{"name":"main","protected":false}'
+    ;;
   *" api repos/"*"/pulls/"*)
+    if [ -n "${FM_TEST_GH_FILES:-}" ]; then
+      filter=.
+      while [ "$#" -gt 0 ]; do
+        [ "$1" != --jq ] || filter=$2
+        shift
+      done
+      printf '%s\n' "$FM_TEST_GH_FILES" | jq -r "$filter"
+      exit
+    fi
     printf '%s\n' "{\"state\":\"open\",\"user\":{\"login\":\"author\"},\"head\":{\"sha\":\"${FM_TEST_GH_HEAD:-0123456789abcdef0123456789abcdef01234567}\"},\"draft\":false,\"mergeable\":true,\"merged_at\":null}"
     ;;
   *" api repos/"*)
@@ -210,6 +236,33 @@ SH
   cat > "$fakebin/glab" <<'SH'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$FM_TEST_GLAB_LOG"
+case " $* " in
+  *" --jq "*)
+    printf '%s\n' 'unknown flag: --jq' >&2
+    exit 1
+    ;;
+  *" api projects/"*)
+    if [ -n "${FM_TEST_GLAB_FILES:-}" ]; then
+      printf '%s\n' "$FM_TEST_GLAB_FILES"
+      exit 0
+    fi
+    printf '%s\n' '{"changes":[]}'
+    exit 0
+    ;;
+  *" -F json "*)
+    [ "${FM_TEST_GLAB_BODY_FAIL:-0}" = 0 ] || exit 1
+    count=0
+    [ ! -f "$FM_TEST_GLAB_LOG.json-count" ] || count=$(cat "$FM_TEST_GLAB_LOG.json-count")
+    count=$((count + 1))
+    printf '%s\n' "$count" > "$FM_TEST_GLAB_LOG.json-count"
+    if [ "${FM_TEST_GLAB_BAD_STATE_AFTER_BODY:-0}" = 1 ] && [ "$count" -gt 1 ]; then
+      printf 'title:\tfixture merge request\nstate:\topened\nauthor:\tsomeone\n'
+      exit 0
+    fi
+    printf '%s\n' "${FM_TEST_GLAB_BODY_JSON:-{\"description\":\"\",\"state\":\"opened\",\"sha\":\"0123456789abcdef0123456789abcdef01234567\",\"detailed_merge_status\":\"mergeable\",\"has_conflicts\":false,\"blocking_discussions_resolved\":true,\"head_pipeline\":{\"sha\":\"0123456789abcdef0123456789abcdef01234567\",\"status\":\"success\"}}}"
+    exit 0
+    ;;
+esac
 [ "${FM_TEST_GLAB_FAIL:-0}" = 0 ] || exit 1
 [ "${FM_TEST_GLAB_SLEEP:-0}" = 0 ] || sleep "$FM_TEST_GLAB_SLEEP"
 printf 'title:\tfixture merge request\nstate:\t%s\nauthor:\tsomeone\n' "${FM_TEST_GLAB_STATE:-opened}"
@@ -228,9 +281,10 @@ if [ -n "${FM_TEST_GERRIT_RAW:-}" ]; then
   exit 0
 fi
 change=${FM_TEST_GERRIT_CHANGE:-${2:-0}}
-printf '{"ok":true,"op":"show","count":1,"missing":[],"changes":[{"change":%s,"subject":%s,"project":"p","status":"%s","wip":false,"submit":"%s","submittable":%s,"blocked_on":"%s","patch_set":1,"revision":"%s","url":"%s"}]}\n' \
+printf '{"ok":true,"op":"show","count":1,"missing":[],"changes":[{"change":%s,"subject":%s,"commit_message":%s,"project":"p","status":"%s","wip":false,"submit":"%s","submittable":%s,"blocked_on":"%s","patch_set":1,"revision":"%s","url":"%s"}]}\n' \
   "$change" \
   "${FM_TEST_GERRIT_SUBJECT:-\"fixture change\"}" \
+  "${FM_TEST_GERRIT_COMMIT_MESSAGE:-\"fixture commit message\"}" \
   "${FM_TEST_GERRIT_STATUS:-NEW}" \
   "${FM_TEST_GERRIT_SUBMIT:-NOT_READY}" \
   "${FM_TEST_GERRIT_SUBMITTABLE:-false}" \
@@ -655,6 +709,41 @@ test_draft_pull_request_is_not_armed() {
   pass "arming refuses a draft pull request, naming it, and arms a ready or unreadable one"
 }
 
+# A secondmate is a persistent worker, not a delivery lane: it never owns a
+# pull request of its own. A URL relayed onto its status channel belongs to a
+# task in the mate's own home, which arms its own watch, so arming one here is
+# refused before anything is recorded - a poll on the mate would otherwise mark
+# the merge notified and queue the mate itself for teardown as landed work.
+test_secondmate_record_refuses_a_pr_watch() {
+  local dir rc
+  dir=$(make_case secondmate-refuses-watch)
+  fm_write_meta "$dir/home/state/domain.meta" \
+    'window=session:fm-domain' \
+    "worktree=$dir/secondmate-home" \
+    "project=$dir/project" \
+    'kind=secondmate' \
+    'mode=secondmate' \
+    'backend=tmux' \
+    "home=$dir/secondmate-home"
+  mkdir -p "$dir/secondmate-home"
+  cp "$dir/home/state/domain.meta" "$dir/meta.before"
+  set +e
+  run_check_entry "$dir" domain https://github.com/o/r/pull/9 \
+    > "$dir/stdout" 2> "$dir/stderr"; rc=$?
+  set -e
+  [ "$rc" -ne 0 ] || fail "a merge watch was armed on a secondmate record"
+  grep -qi 'secondmate' "$dir/stderr" || fail "the refusal did not name the record's kind"
+  grep -qF 'https://github.com/o/r/pull/9' "$dir/stderr" \
+    || fail "the refusal did not name the pull request it refused"
+  cmp -s "$dir/meta.before" "$dir/home/state/domain.meta" \
+    || fail "the refusal changed secondmate metadata"
+  [ ! -e "$dir/home/state/domain.check.sh" ] || fail "the refusal armed a poll on a secondmate"
+  [ ! -e "$dir/home/state/domain.pr-poll" ] || fail "the refusal wrote a poll sidecar on a secondmate"
+  [ ! -s "$dir/gh.log" ] || fail "the refusal reached the forge"
+  [ ! -s "$dir/guard.log" ] || fail "the refusal reached the guard"
+  pass "fm-pr-check refuses to record a PR or arm a merge watch on a secondmate record"
+}
+
 # With no forge-reported head (gh cannot supply one), the named head is the
 # worker copy's HEAD, and a HEAD that exists only there is refused.
 test_unpushed_named_head_refuses_registration() {
@@ -690,6 +779,98 @@ test_direct_pr_unpushed_commit_refuses_registration() {
     || fail "direct-PR refusal did not name the unpushed commit: $(cat "$dir/stderr")"
   [ ! -e "$dir/home/state/task-a.check.sh" ] || fail "direct-PR unpushed commit still armed a poll"
   pass "fm-pr-check refuses a direct-PR registration while a later commit is only in the copy"
+}
+
+test_published_scratch_refuses_registration() {
+  local dir
+  dir=$(make_case published-scratch-refused)
+  write_task_meta "$dir"
+  FM_TEST_GH_FILES='[{"filename":".codex-live-check/cache/node/corepack/v1/pnpm/11.1.1/package.json","status":"added"}]' \
+    run_check_entry "$dir" task-a https://github.com/o/r/pull/4 \
+    > "$dir/stdout" 2> "$dir/stderr" && fail "published scratch path was registered"
+  grep -Fq 'scratch path would be published' "$dir/stderr" \
+    || fail "published scratch refusal did not name the publication boundary"
+  [ ! -e "$dir/home/state/task-a.check.sh" ] || fail "published scratch path armed a poll"
+  pass "fm-pr-check refuses a published pipeline scratch path"
+}
+
+test_published_gitlab_scratch_refuses_registration() {
+  local dir
+  dir=$(make_case published-gitlab-scratch-refused)
+  write_task_meta "$dir"
+  FM_TEST_GLAB_FILES='{"changes":[{"new_path":".codex-live-check/cache/node/corepack/v1/pnpm/11.1.1/package.json","deleted_file":false}]}' \
+    run_check_entry "$dir" task-a https://gitlab.example/g/p/-/merge_requests/4 \
+    > "$dir/stdout" 2> "$dir/stderr" && fail "published GitLab scratch path was registered"
+  grep -Fq 'scratch path would be published' "$dir/stderr" \
+    || fail "published GitLab scratch refusal did not name the publication boundary"
+  [ ! -e "$dir/home/state/task-a.check.sh" ] || fail "published GitLab scratch path armed a poll"
+  pass "fm-pr-check refuses a published GitLab scratch path"
+}
+
+test_published_scratch_removal_is_registered() {
+  local dir
+  dir=$(make_case published-scratch-removal)
+  write_task_meta "$dir"
+  FM_TEST_GH_FILES='[{"filename":".codex-live-check/cache/node/corepack/v1/pnpm/11.1.1/package.json","status":"removed"},{"filename":"src/app.js","status":"modified"}]' \
+    run_check_entry "$dir" task-a https://github.com/o/r/pull/4 \
+    > "$dir/stdout" 2> "$dir/stderr" || fail "published scratch removal was refused: $(cat "$dir/stderr")"
+  pass "fm-pr-check registers a pull request that only removes scratch"
+}
+
+test_published_gitlab_scratch_removal_is_registered() {
+  local dir
+  dir=$(make_case published-gitlab-scratch-removal)
+  write_task_meta "$dir"
+  FM_TEST_GLAB_FILES='{"changes":[{"new_path":".codex-live-check/cache/node/corepack/v1/pnpm/11.1.1/package.json","deleted_file":true},{"new_path":"src/app.js","deleted_file":false}]}' \
+    run_check_entry "$dir" task-a https://gitlab.example/g/p/-/merge_requests/4 \
+    > "$dir/stdout" 2> "$dir/stderr" || fail "published GitLab scratch removal was refused: $(cat "$dir/stderr")"
+  pass "fm-pr-check registers a merge request that only removes scratch"
+}
+
+test_published_attestation_matches_current_head() {
+  local dir current attested out rc url steps
+  url=https://github.com/o/r/pull/4
+  current=0123456789abcdef0123456789abcdef01234567
+  attested=fedcba9876543210fedcba9876543210fedcba98
+  steps='[{"step":"review","status":"completed"},{"step":"test","status":"completed"},{"step":"document","status":"completed"}]'
+
+  dir=$(make_case matching-attestation)
+  write_task_meta "$dir"
+  ln -sf "$REAL_JQ" "$dir/fakebin/jq"
+  FM_TEST_GH_HEAD=$current \
+    FM_TEST_GH_BODY="<!-- no-mistakes-pipeline-attestation:v1 {\"head_sha\":\"$current\",\"steps\":$steps} -->" \
+    run_check_entry "$dir" task-a "$url" > "$dir/stdout" 2> "$dir/stderr" \
+    || fail "matching published attestation was refused: $(cat "$dir/stderr")"
+  [ -f "$dir/home/state/task-a.check.sh" ] || fail "matching attestation left no poll armed"
+
+  dir=$(make_case stale-attestation)
+  write_task_meta "$dir"
+  ln -sf "$REAL_JQ" "$dir/fakebin/jq"
+  set +e
+  out=$(FM_TEST_GH_HEAD=$current \
+    FM_TEST_GH_BODY="<!-- no-mistakes-pipeline-attestation:v1 {\"head_sha\":\"$attested\",\"steps\":$steps} -->" \
+    run_check_entry "$dir" task-a "$url" 2>&1)
+  rc=$?
+  set -e
+  [ "$rc" -ne 0 ] || fail "stale published attestation was accepted"
+  assert_contains "$out" "current head $current, attested head $attested" \
+    "stale-attestation refusal omitted one of the two heads"
+  assert_contains "$out" 'run the pipeline once against the current head to re-attest it' \
+    "stale-attestation refusal omitted the remedy"
+  assert_contains "$out" 'Hand-editing the attestation is not an option; use a merge, not a rebase.' \
+    "stale-attestation refusal omitted the merge and hand-edit guidance"
+  [ ! -e "$dir/home/state/task-a.check.sh" ] || fail "stale attestation armed a poll"
+
+  dir=$(make_case no-attestation)
+  fm_write_meta "$dir/home/state/task-a.meta" \
+    'window=firstmate:fm-task-a' 'endpoint_task_id=task-a' "worktree=$dir/wt" \
+    "project=$dir/project" 'kind=ship' 'mode=direct-PR'
+  current=$(git -C "$dir/wt" rev-parse HEAD)
+  FM_TEST_GH_HEAD=$current FM_TEST_GH_BODY='Ordinary published description.' \
+    run_check_entry "$dir" task-a "$url" > "$dir/stdout" 2> "$dir/stderr" \
+    || fail "description without attestation was refused: $(cat "$dir/stderr")"
+  [ -f "$dir/home/state/task-a.check.sh" ] || fail "description without attestation left no poll armed"
+  pass "published attestation accepts its current head, refuses a stale head, and leaves absent attestations unchanged"
 }
 
 test_valid_recording_and_merge_derivation() {
@@ -1581,6 +1762,12 @@ group/apps/console
     FM_TEST_GERRIT_URL=https://alias.example/c/group/apps/console/+/4201 run_poll "$dir")
   [ "$out" = merged ] || fail "Gerrit poll stayed silent for a merged change behind an alias host"
 
+  out=$(PATH="$dir/fakebin:$BASE_PATH" \
+    FM_TEST_GERRIT_SUBJECT='"subject must not be used as the body"' \
+    FM_TEST_GERRIT_COMMIT_MESSAGE='"commit message body"' \
+    fm_pr_gerrit_read_description gerrit.example 4201)
+  [ "$out" = 'commit message body' ] || fail "Gerrit description reader did not use commit_message"
+
   # A free-text subject carrying the merged spelling and the field separators
   # cannot forge a status, because the status is read from the structured
   # record rather than off a rendered line.
@@ -2016,21 +2203,20 @@ EOF
   [ ! -e "$state/task-b.check.sh" ] || fail "refused GitLab arming left a poll armed"
 
   # The merge path addresses the forge the URL names, and never the other one.
-  # This fixture's glab answers with the field output the poll reads, so the
-  # merge's JSON read cannot be parsed, which must refuse rather than merge on a
-  # state it could not read.
+  # The first JSON read supplies the published body; the next returns the
+  # field output the merge path cannot parse as state, which must refuse.
   write_task_meta "$dir" task-c
   : > "$dir/glab.log"
   # The merge path needs jq before it reads anything, so this case supplies it
   # and the refusal below is the unreadable state rather than a missing tool.
   ln -sf "$REAL_JQ" "$dir/fakebin/jq"
   set +e
-  run_merge_entry "$dir" task-c "$url" >/dev/null 2> "$dir/merge-c.err"
+  FM_TEST_GLAB_BAD_STATE_AFTER_BODY=1 run_merge_entry "$dir" task-c "$url" >/dev/null 2> "$dir/merge-c.err"
   rc=$?
   set -e
   [ "$rc" -ne 0 ] || fail "merge wrapper merged a GitLab merge request it could not read"
   grep -qF 'could not read the GitLab merge request state before merging' "$dir/merge-c.err" \
-    || fail "merge wrapper refused for some reason other than the state it could not read"
+    || fail "merge wrapper refused for some reason other than the state it could not read: $(cat "$dir/merge-c.err")"
   [ ! -s "$dir/gh-axi.log" ] || fail "merge wrapper reached the GitHub CLI for a GitLab URL"
   grep -qF "mr view 7 -R https://gitlab.example/group/subgroup/project" "$dir/glab.log" \
     || fail "merge wrapper did not read the merge request through glab at its own instance"
@@ -2396,6 +2582,11 @@ test_different_merged_pr_for_same_task_is_not_absorbed() {
   pass "a different merged PR for the same task gets its own first notification"
 }
 
+# A secondmate is a persistent worker, never landed work: a merge poll armed
+# on its record (bin/fm-pr-check.sh refuses new ones) is residue carrying a
+# relayed child's pr=. When that residue reads merged the watcher retires the
+# poll silently - no merge outcome, no notified marker, no wake that could put
+# the mate itself up for teardown - and leaves every lifecycle artifact whole.
 test_persistent_secondmate_retirement_is_poll_only() {
   local dir state meta_before status_before registry_before endpoint_before rc
   dir=$(make_case merged-retirement-secondmate)
@@ -2419,19 +2610,30 @@ test_persistent_secondmate_retirement_is_poll_only() {
   registry_before=$(shasum -a 256 "$dir/home/data/secondmates.md")
   endpoint_before=$(shasum -a 256 "$dir/endpoint-sentinel")
   seed_canonical_poll "$dir" domain https://github.com/o/r/pull/2
+  add_stop_custom_check "$dir"
 
   set +e
   FM_TEST_GH_STATE=MERGED run_watcher_bounded "$dir/home" "$dir/fakebin" > "$dir/watch.out" 2> "$dir/watch.err"
   rc=$?
   set -e
   [ "$rc" -eq 0 ] || fail "persistent secondmate merged watcher failed: $(cat "$dir/watch.err")"
+  case "$(cat "$dir/watch.out")" in
+    check:*z-stop.check.sh:*stop-cycle) ;;
+    *) fail "a secondmate's merged poll woke the watcher instead of retiring silently: $(cat "$dir/watch.out")" ;;
+  esac
   assert_poll_absent "$state" domain
+  [ ! -e "$state/domain.pr-poll-merge-notified" ] \
+    || fail "a secondmate's retired poll recorded a merge notification"
+  ! grep -F 'merged-domain-' "$state/.wake-queue" >/dev/null 2>&1 \
+    || fail "a secondmate's merged poll queued a landed-work wake"
+  ! grep -F 'domain.check.sh' "$state/.wake-queue" >/dev/null 2>&1 \
+    || fail "a secondmate's merged poll queued a check wake"
   [ "$(shasum -a 256 "$state/domain.meta")" = "$meta_before" ] || fail "retirement changed secondmate metadata"
   [ "$(shasum -a 256 "$state/domain.status")" = "$status_before" ] || fail "retirement changed secondmate status"
   [ "$(shasum -a 256 "$dir/home/data/secondmates.md")" = "$registry_before" ] || fail "retirement changed secondmate registry"
   [ "$(shasum -a 256 "$dir/endpoint-sentinel")" = "$endpoint_before" ] || fail "retirement changed secondmate endpoint evidence"
   [ -d "$dir/secondmate-home" ] || fail "retirement removed the persistent secondmate home"
-  pass "merged poll retirement preserves every persistent secondmate lifecycle artifact"
+  pass "a merged poll on a persistent secondmate retires silently: no outcome, marker, or wake, and every lifecycle artifact preserved"
 }
 
 test_retirement_crash_recovery() {
@@ -3385,6 +3587,7 @@ test_gitlab_merge_watch
 test_gerrit_merge_watch
 test_gerrit_arming_records_no_patch_set_revision
 test_gerrit_ready_gate_reads_the_published_tree
+test_published_attestation_matches_current_head
 test_gerrit_nm_ready_gate_requires_recovered_custody
 test_merged_poll_retires_once
 test_merged_poll_reregistration_after_notification_is_absorbed
@@ -3406,8 +3609,13 @@ test_retirement_queue_failure_and_receipt_tampering
 test_gitlab_merged_poll_retires
 test_invalid_entrypoints_have_zero_side_effects
 test_draft_pull_request_is_not_armed
+test_secondmate_record_refuses_a_pr_watch
 test_unpushed_named_head_refuses_registration
 test_direct_pr_unpushed_commit_refuses_registration
+test_published_scratch_refuses_registration
+test_published_gitlab_scratch_refuses_registration
+test_published_scratch_removal_is_registered
+test_published_gitlab_scratch_removal_is_registered
 test_valid_recording_and_merge_derivation
 test_rejected_metacharacter_bytes_are_inert
 test_static_poll_contract

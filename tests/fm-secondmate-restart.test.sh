@@ -33,7 +33,7 @@ fm_git_identity fmtest fmtest@example.com
 TMP_ROOT=$(fm_test_tmproot fm-secondmate-restart)
 mkdir -p "$TMP_ROOT"
 TMP_ROOT=$(cd "$TMP_ROOT" && pwd -P)
-trap 'rm -rf -- "$TMP_ROOT"' EXIT
+trap 'chmod -R u+w "$TMP_ROOT" 2>/dev/null || true; rm -rf -- "$TMP_ROOT"' EXIT
 
 # A session-provider stub that models the two things this pass depends on: the
 # harness exit command stops the agent, a launch brief starts the replacement,
@@ -77,7 +77,7 @@ case "${1:-}" in
           fi
           printf 'zsh' > "$D/command.$target"
           ;;
-        *'encode launch-brief'*) cat "$D/becomes" > "$D/command.$target" ;;
+        *'launch-brief: Read and follow'* | *'Firstmate operational input waiting: read'*) cat "$D/becomes" > "$D/command.$target" ;;
         ': Firstmate instruction waiting: list '*)
           printf 'doorbell\n' >> "$D/rings"
           if [ -x "$D/on-doorbell" ]; then
@@ -91,7 +91,8 @@ case "${1:-}" in
             corr=$(cat "$inbox"/*.msg 2>/dev/null \
               | grep -oE 'corr=[0-9a-f]{16}' | head -1)
             if [ -n "$corr" ]; then
-              printf 'done [%s]: open records written down\n' "$corr" \
+              verb=$(cat "$D/answer-verb" 2>/dev/null || printf 'done')
+              printf '%s [%s]: persistence response\n' "$verb" "$corr" \
                 >> "$(cat "$D/answer-status")"
             fi
           fi
@@ -131,6 +132,62 @@ esac
 exit 0
 SH
   chmod +x "$fb/sleep"
+}
+
+# A synthetic Herdr CLI for the restart-to-control boundary. It presents a
+# native working Pi with a blank separator composer, then models /quit and the
+# replacement launch while the real restart and control scripts run unchanged.
+make_working_pi_herdr_stub() {  # <case-dir>
+  local fb="$1/fakebin"
+  cat > "$fb/herdr" <<'SH'
+#!/usr/bin/env bash
+set -u
+D=$FM_FAKE_DIR
+printf '%s\n' "$*" >> "$D/herdr-calls"
+handle_payload() {
+  local payload=$1 inbox corr
+  printf '%s\n' "$payload" >> "$D/literal"
+  case "$payload" in
+    /quit) printf zsh > "$D/command" ;;
+    ". '"*"'") printf pi > "$D/command" ;;
+    *'Firstmate instruction waiting: list '*)
+      inbox=$(cat "$D/answer-inbox")
+      corr=$(cat "$inbox"/*.msg 2>/dev/null | grep -oE 'corr=[0-9a-f]{16}' | head -1)
+      [ -z "$corr" ] || printf 'done [%s]: open records written down\n' "$corr" >> "$(cat "$D/answer-status")"
+      ;;
+    *'launch-brief: Read and follow'* | *'Firstmate operational input waiting: read'*) printf pi > "$D/command" ;;
+  esac
+}
+case "${1:-} ${2:-}" in
+  'status --json') printf '{"client":{"protocol":22},"server":{"running":true,"protocol":22,"compatible":true}}\n' ;;
+  'pane get') printf '{"result":{"pane":{"pane_id":"w1:p1","foreground_cwd":"%s","workspace_id":"w1","tab_id":"w1:t1"}}}\n' "$(cat "$D/cwd")" ;;
+  'agent get')
+    if [ "$(cat "$D/command")" = pi ]; then
+      printf '{"result":{"agent":{"agent":"pi","agent_status":"working"}}}\n'
+    else
+      printf '{"error":{"code":"agent_not_found"}}\n'
+    fi ;;
+  'pane process-info')
+    printf '{"result":{"type":"pane_process_info","process_info":{"pane_id":"w1:p1","shell_pid":%s,"foreground_processes":[{"pid":%s,"name":"pi","argv":["pi"],"cmdline":"pi"}]}}}\n' "$PPID" "$PPID" ;;
+  'pane read')
+    printf 'transcript\n─────────────────────────────────────────────────────\n%s\n─────────────────────────────────────────────────────\n' "$(cat "$D/draft" 2>/dev/null || true)" ;;
+  'pane send-text') printf '%s' "${4:-}" > "$D/draft" ;;
+  'pane send-keys')
+    case "${4:-}" in
+      enter)
+        payload=$(cat "$D/draft" 2>/dev/null || true)
+        : > "$D/draft"
+        handle_payload "$payload"
+        ;;
+    esac ;;
+  'pane run') handle_payload "${4:-}" ;;
+  'workspace list') printf '{"result":{"workspaces":[{"workspace_id":"w1","label":"2ndmate-sm1"}]}}\n' ;;
+  'tab list') printf '{"result":{"tabs":[{"tab_id":"w1:t1","label":"fm-sm1","workspace_id":"w1","root_pane_id":"w1:p1"}]}}\n' ;;
+  'tab get') printf '{"result":{"tab":{"tab_id":"w1:t1","workspace_id":"w1","root_pane_id":"w1:p1","label":"fm-sm1"}}}\n' ;;
+  *) printf '{"result":{}}\n' ;;
+esac
+SH
+  chmod +x "$fb/herdr"
 }
 
 # new_case <name> -> a parent home with a stub session provider.
@@ -280,6 +337,8 @@ test_persist_gates_and_asks_only_for_open_records() {
     "the request must flush an unregistered captain call"
   assert_contains "$request" "Do NOT run the memory, learnings, or captain-preference sweeps" \
     "the request must exclude the memory curation half of stow"
+  assert_contains "$request" "reply on your parent channel with a done status" \
+    "the request must name the done reply that alone releases the restart"
   pass "T1 persist is a gate, and asks for open records and task status only"
 }
 
@@ -309,6 +368,39 @@ test_persist_precedes_restart() {
   pass "T2 the mate persists before anything is stopped"
 }
 
+# A successful persist reply arrives while Pi still reports working. The
+# restart command must reach the same fm-control relaunch gate as a hand-run
+# and submit /quit when the native Pi composer is structurally blank.
+test_working_pi_blank_composer_restarts() {
+  local dir out rc
+  dir=$(new_case working-pi-blank)
+  add_repo_backed_mate "$dir" sm1 pi herdr
+  cp "$ROOT/bin/fm-git-strip-ai-trailers.sh" "$ROOT/bin/fm-operational-input.sh" "$dir/fmrepo/bin/"
+  arm_answer "$dir" sm1
+  make_working_pi_herdr_stub "$dir"
+  printf pi > "$dir/fake/command"
+  printf pi > "$dir/fake/becomes"
+  printf 'pi\n' > "$dir/home/config/secondmate-harness"
+  sed 's/^window=.*/window=fm-lab-synthetic:w1:p1/' "$dir/home/state/sm1.meta" \
+    > "$dir/home/state/sm1.meta.tmp"
+  mv "$dir/home/state/sm1.meta.tmp" "$dir/home/state/sm1.meta"
+  {
+    printf 'herdr_session=fm-lab-synthetic\n'
+    printf 'herdr_workspace_id=w1\n'
+    printf 'herdr_tab_id=w1:t1\n'
+    printf 'herdr_pane_id=w1:p1\n'
+  } >> "$dir/home/state/sm1.meta"
+
+  out=$(FM_ROOT_OVERRIDE="$dir/fmrepo" FM_TEST_PERSIST_WAIT=0 run_restart "$dir" sm1); rc=$?
+  expect_code 0 "$rc" "a working Pi with a blank native Herdr composer should restart"$'\n'"$out"
+  assert_contains "$out" "restarted: sm1 (pi)" "the restart pass must report its real control outcome"
+  grep -Fxq '/quit' "$dir/fake/literal" \
+    || fail "the control gate must submit /quit after persistence"
+  assert_contains "$(cat "$dir/fake/herdr-calls")" "pane read w1:p1" \
+    "the real control path must inspect the native Pi composer"
+  pass "T2a a working Pi's blank composer passes the restart-to-control exit gate"
+}
+
 # --- T2b: an answer delivered at a zero-second bound still releases the gate -
 test_arrived_answer_precedes_deadline_check() {
   local dir out rc
@@ -323,41 +415,72 @@ test_arrived_answer_precedes_deadline_check() {
   pass "T2b an arrived persist answer is resolved before timeout"
 }
 
-# --- T2c: an answer arriving between resolution and timeout wins -------------
-test_answer_between_resolution_and_timeout_wins() {
-  local dir out rc
-  dir=$(new_case answer-at-timeout-decision)
-  add_local_mate "$dir" sm1
+# --- T2c: only a correlated done reply releases the gate --------------------
+# Cases adapted from kunchenguid/firstmate#5600.
+test_only_done_persist_reply_releases_restart_gate() {
+  local dir out rc verb phase corr
+  for verb in blocked failed needs-decision working; do
+    dir=$(new_case "persist-$verb")
+    add_local_mate "$dir" sm1
+    arm_answer "$dir" sm1
+    printf '%s\n' "$verb" > "$dir/fake/answer-verb"
 
-  # Delay the modelled answer until the first resolution attempt has completed
-  # its unsuccessful status scan. The real pending-reply machinery publishes
-  # that scan signature with mv; this wrapper appends the correlated answer only
-  # after that publication, reproducing the boundary race deterministically.
-  cat > "$dir/fakebin/mv" <<'SH'
+    out=$(FM_TEST_PERSIST_WAIT=0 run_restart "$dir" sm1); rc=$?
+
+    expect_code 3 "$rc" "$verb persistence reply must not authorize a restart"$'\n'"$out"
+    assert_not_contains "$out" "restarted: sm1" "$verb persistence reply authorized a restart"
+    assert_contains "$out" "nudged: sm1:" "$verb persistence reply did not take the safe fallback"
+    [ "$verb" = working ] || assert_contains "$out" "reported $verb instead of done" \
+      "$verb persistence reply reason was not reported"
+    assert_no_grep '^/exit$' "$dir/fake/literal" "$verb persistence reply stopped the live mate"
+    assert_absent "$dir/home/state/sm1.control-relaunch" \
+      "$verb persistence reply opened a relaunch transaction"
+    # The fallback nudge arms its own reply record, so read the persist
+    # request's record by the correlation its answer carried.
+    corr=$(grep -oE 'corr=[0-9a-f]{16}' "$dir/home/state/sm1.status" | head -1)
+    corr=${corr#corr=}
+    phase=$(sed -n 's/^phase=//p' "$dir/home/state/pending-replies/$corr")
+    if [ "$verb" = working ]; then
+      [ "$phase" = awaiting_report ] || fail "progress reply unexpectedly settled its persistence expectation"
+    else
+      [ "$phase" = resolved ] || fail "terminal non-success reply did not settle its persistence expectation"
+    fi
+  done
+  pass "T2c only a correlated done persistence reply releases the restart gate"
+}
+
+# --- T2d: progress does not release the gate, but later success does ---------
+test_progress_then_success_releases_gate() {
+  local dir out rc
+  dir=$(new_case answer-during-wait)
+  add_local_mate "$dir" sm1
+  arm_answer "$dir" sm1
+  printf 'working\n' > "$dir/fake/answer-verb"
+
+  # The live mate first reports progress, then completes persistence while the
+  # restart pass waits. The first status must not release the gate; the later
+  # terminal success must still be observed before timeout.
+  cat > "$dir/fakebin/sleep" <<'SH'
 #!/usr/bin/env bash
 set -u
-/bin/mv "$@" || exit $?
-target=${!#}
-case "$target" in
-  "${FM_FAKE_DIR%/fake}"/home/state/pending-replies/*)
-    if [ ! -e "$FM_FAKE_DIR/answer-after-scan" ] \
-      && grep -q '^parent_status_scan_signature=.' "$target"; then
-      : > "$FM_FAKE_DIR/answer-after-scan"
-      corr=${target##*/}
-      status=$(sed -n 's/^parent_status=//p' "$target")
-      printf 'done [corr=%s]: open records written down\n' "$corr" >> "$status"
-    fi
-    ;;
-esac
+inbox=$(cat "$FM_FAKE_DIR/answer-inbox" 2>/dev/null || true)
+status=$(cat "$FM_FAKE_DIR/answer-status" 2>/dev/null || true)
+corr=$(cat "$inbox"/*.msg 2>/dev/null | grep -oE 'corr=[0-9a-f]{16}' | head -1)
+if [ -n "$corr" ] && [ ! -e "$FM_FAKE_DIR/answer-after-progress" ] \
+  && grep -q "^working \\[$corr\\]" "$status"; then
+  : > "$FM_FAKE_DIR/answer-after-progress"
+  printf 'done [%s]: persistence completed\n' "$corr" >> "$status"
+fi
+/bin/sleep 0.01
 SH
-  chmod +x "$dir/fakebin/mv"
+  chmod +x "$dir/fakebin/sleep"
 
-  out=$(FM_TEST_PERSIST_WAIT=0 run_restart "$dir" sm1); rc=$?
+  out=$(FM_TEST_PERSIST_WAIT=2 run_restart "$dir" sm1); rc=$?
 
-  expect_code 0 "$rc" "an answer already on disk at the timeout decision must release the gate"$'\n'"$out"
-  assert_contains "$out" "restarted: sm1" "the reply that raced the timeout was ignored"
+  expect_code 0 "$rc" "a later terminal success must release the gate after progress"$'\n'"$out"
+  assert_contains "$out" "restarted: sm1" "the later correlated success was ignored"
   assert_not_contains "$out" "nudged: sm1" "a confirmed mate must not take the timeout fallback"
-  pass "T2c a reply between the preliminary scan and timeout decision wins"
+  pass "T2d progress leaves the gate open for a later terminal success"
 }
 
 # --- T3: a runtime that cannot prove a restart never gets one ----------------
@@ -485,7 +608,15 @@ case "${rargs[1]:-}" in
         : > "$FM_FAKE_DIR/remote-relaunch-end"
         ;;
     esac
-    printf 'relaunched %s\n' "${rargs[2]}"
+    printf 'relaunched %s harness=%s from=claude model=%s effort=%s backend=herdr endpoint=fm-remote:2ndmate-%s worktree=/srv/fm\n' \
+      "${rargs[2]}" "${rargs[3]}" "${rargs[4]}" "${rargs[5]}" "${rargs[2]}"
+    printf 'schema=fm-remote-secondmate-control.v1\n'
+    printf 'backend=herdr\n'
+    printf 'target=fm-remote:2ndmate-%s\n' "${rargs[2]}"
+    printf 'herdr_session=fm-remote\n'
+    printf 'harness=%s\n' "${rargs[3]}"
+    printf 'model=%s\n' "${rargs[4]}"
+    printf 'effort=%s\n' "${rargs[5]}"
     ;;
 esac
 exit 0
@@ -505,16 +636,18 @@ test_remote_mate_restarts_over_the_transport_hop() {
   # The parent's own pin is what the replacement must run on; the remote home's
   # copy of config/secondmate-harness is a different home's file.
   printf 'codex big-model high\n' > "$dir/home/config/secondmate-harness"
+  mkdir -p "$dir/home/config/secondmate-harness.d"
+  printf 'pi deepseek/deepseek-v4-pro high\n' > "$dir/home/config/secondmate-harness.d/sm2"
 
   out=$(run_restart "$dir" fm-sm2); rc=$?
   unset FM_FAKE_ANSWER_STATUS
 
   expect_code 0 "$rc" "a remote mate should restart over its transport hop"$'\n'"$out"
-  assert_contains "$out" "restarted: sm2 on remote-mac (codex)" \
+  assert_contains "$out" "restarted: sm2 on remote-mac (pi)" \
     "a remote restart should be reported with its host and the parent's pinned runtime"
   relaunch_line=$(grep '^fm-remote-secondmate-control.sh relaunch' "$dir/ssh.log" | head -1)
   [ -n "$relaunch_line" ] || fail "no relaunch crossed the transport hop"$'\n'"$(cat "$dir/ssh.log")"
-  [ "$relaunch_line" = "fm-remote-secondmate-control.sh relaunch sm2 codex big-model high" ] \
+  [ "$relaunch_line" = "fm-remote-secondmate-control.sh relaunch sm2 pi deepseek/deepseek-v4-pro high" ] \
     || fail "the host-local relaunch did not carry the parent's resolved profile: $relaunch_line"
   # The persist request crossed the SAME hop before the restart did.
   [ "$(grep -n '^fm-remote-secondmate-control.sh send' "$dir/ssh.log" | head -1 | cut -d: -f1)" \
@@ -841,8 +974,10 @@ test_already_current_unprovable_mate_stays_on_the_nudge_path() {
 
 test_persist_gates_and_asks_only_for_open_records
 test_persist_precedes_restart
+test_working_pi_blank_composer_restarts
 test_arrived_answer_precedes_deadline_check
-test_answer_between_resolution_and_timeout_wins
+test_only_done_persist_reply_releases_restart_gate
+test_progress_then_success_releases_gate
 test_unprovable_runtime_falls_back
 test_unknown_mate_is_accounted_for
 test_refused_restart_falls_back_without_claiming_a_reload

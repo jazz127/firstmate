@@ -41,6 +41,10 @@
 # Relaunch is not a second lifecycle implementation: it runs the ORDINARY local
 # control plane here, because from this host the mate is a plain local
 # secondmate. cmd_relaunch below owns why the parent must hand it the profile.
+# It ends by printing the same route block `route` prints, so a caller that
+# invoked it directly (rather than through bin/fm-remote-secondmate-relaunch.sh,
+# which reads this block to keep the parent's own record in sync) still gets
+# the confirmed identity.
 #
 # The optional launch traceparent is the per-task W3C trace-context carrier the
 # PARENT home resolved for this secondmate; this host only delivers it to the
@@ -128,15 +132,19 @@ state_value() { # <id>; prints recovery-grade state
 }
 
 print_route() { # <id>
-  local id=$1 harness traceparent
+  local id=$1 harness model effort traceparent
   remote_endpoint_require "$id"
   harness=$(fm_meta_get "$REMOTE_ENDPOINT_META" harness)
+  model=$(fm_meta_get "$REMOTE_ENDPOINT_META" model)
+  effort=$(fm_meta_get "$REMOTE_ENDPOINT_META" effort)
   traceparent=$(fm_meta_get "$REMOTE_ENDPOINT_META" traceparent)
   printf 'schema=fm-remote-secondmate-control.v1\n'
   printf 'backend=%s\n' "$REMOTE_ENDPOINT_BACKEND"
   printf 'target=%s\n' "$REMOTE_ENDPOINT_TARGET"
   printf 'herdr_session=%s\n' "$REMOTE_HERDR_SESSION"
   printf 'harness=%s\n' "$harness"
+  printf 'model=%s\n' "$model"
+  printf 'effort=%s\n' "$effort"
   [ -z "$traceparent" ] || printf 'traceparent=%s\n' "$traceparent"
 }
 
@@ -251,6 +259,13 @@ cmd_relaunch() {
     FM_CONFIG_OVERRIDE="$TARGET_HOME/config" FM_SKIP_SECONDMATE_INHERIT=1 \
     FM_SKIP_SECONDMATE_SYNC=1 \
     "$SCRIPT_DIR/fm-control.sh" "${control_args[@]}"
+  # A parent tracking this route needs the identity the relaunch actually
+  # produced, not the one it asked for, so it can republish its own record the
+  # same way cmd_launch's caller already does. Reading it back from the
+  # endpoint's own republished metadata - rather than trusting these argv
+  # values - is what makes that record correct even when relaunch resolved
+  # "default" against a configured pin this call never saw.
+  print_route "$id"
 }
 
 cmd_send() {
@@ -330,9 +345,16 @@ cmd_observe() {
 # read-only fetch of that one commit, which never advances that copy's HEAD), then
 # the home's own origin for that one commit. No pack transport beyond those two.
 import_home_commit() { # <home> <commit>
-  local home=$1 commit=$2
+  local home=$1 commit=$2 runtime remote
   if git -C "$home" cat-file -e "$commit^{commit}" 2>/dev/null; then return 0; fi
   if git -C "$home" fetch --quiet --no-tags -- "$FM_ROOT" "$commit" 2>/dev/null \
+    && git -C "$home" cat-file -e "$commit^{commit}" 2>/dev/null; then
+    return 0
+  fi
+  runtime=$(firstmate_runtime_branch "$home" 2>/dev/null || true)
+  remote=$(git -C "$home" config --get "branch.$runtime.remote" 2>/dev/null || true)
+  if [ -n "$remote" ] && git -C "$home" remote get-url "$remote" >/dev/null 2>&1 \
+    && git -C "$home" fetch --quiet --no-tags -- "$remote" "$commit" 2>/dev/null \
     && git -C "$home" cat-file -e "$commit^{commit}" 2>/dev/null; then
     return 0
   fi

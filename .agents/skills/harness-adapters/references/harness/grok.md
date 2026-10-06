@@ -42,7 +42,7 @@ For unavoidable non-project launch, `[hints] project_picker_disabled = true` in 
 The project picker and the folder-trust gate are separate dialogs.
 On 2026-09-24, on those same first dispatches, Grok 1.0.41 rendered a folder-trust gate in a linked git worktree.
 The dialog printed the primary checkout path, because a linked worktree's git root resolves to the main one, so the text reads exactly like a worktree-isolation violation when isolation is intact.
-Check the worker's real location with `/proc/<pid>/cwd`, never the path the dialog prints.
+Check the worker's real location with `readlink /proc/<pid>/cwd` on Linux or `lsof -a -p <pid> -d cwd -Fn | sed -n 's/^n//p'` on macOS, never the path the dialog prints.
 Answer the gate with the key path's Enter (`../../../bin/fm-send.sh <target> --key Enter`).
 `../../../bin/fm-send.sh` carries only Escape, Enter, and C-c, and a literal `y` has no sanctioned route.
 On 2026-09-24 Grok 1.0.41 persisted that answer to `~/.grok/trusted_folders.toml`, keyed by the path the dialog prints.
@@ -90,4 +90,5 @@ The exact running Stop payload selects same-process continuation on 0.2.112; 0.2
 Grok also loads Claude project settings, so Claude entries for Grok-covered events stand down under `GROK_AGENT` or `GROK_HOOK_EVENT`; that owner records the exact set and why `GROK_SESSION_ID` is excluded.
 Project-local hooks require launch-time `--trust`; without it the guard steps aside and `../../../bin/fm-guard.sh` is the next-command alarm.
 Watcher supervision remains tracked background notification around `../../../bin/fm-watch-arm.sh`, not Pi-style extension ownership.
+In a home with `config/supervision-host` and no `config/supervision-host-off` the session-start block renders that background call as `../../../bin/fm-supervision-host.sh park`, with Claude's print mode as its headless engine; [`supervision-host.md`](../../../../../docs/supervision-host.md) owns the host.
 PreToolUse blocks directly, but every `$VAR` in a hook command needs inline `:-default` or Grok refuses the hook.

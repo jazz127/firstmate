@@ -132,7 +132,7 @@ case "${1:-}" in
         printf 'zsh' > "$D/command"
       fi
       case "$payload" in
-        *'encode launch-brief'*) cat "$D/becomes" > "$D/command" ;;
+        *'launch-brief: Read and follow'* | *'Firstmate operational input waiting: read'*) cat "$D/becomes" > "$D/command" ;;
       esac
     else
       printf '%s\n' "$payload" >> "$D/keys"
@@ -175,6 +175,18 @@ case "${1:-}" in
     done
     printf 'fakepane\n'; exit 0 ;;
   capture-pane)
+    if [ -f "$D/after-enter" ] && [ -f "$D/keys" ] && grep -qx Enter "$D/keys"; then
+      # after-enter-late holds how many captures after Enter still show the
+      # ordinary pane, for a screen that renders after the submit has read it.
+      late=0
+      [ ! -f "$D/after-enter-late" ] || late=$(cat "$D/after-enter-late")
+      if [ "$late" -gt 0 ]; then
+        printf '%s' "$((late - 1))" > "$D/after-enter-late"
+      else
+        cat "$D/after-enter"
+        exit 0
+      fi
+    fi
     if [ -f "$D/devin" ]; then devin_screen "$(cat "$D/devin")"; elif [ -f "$D/pane" ]; then cat "$D/pane"; else printf '╭────╮\n│    │\n╰────╯\n'; fi
     exit 0 ;;
   list-windows)
@@ -196,7 +208,80 @@ fi
 exit 0
 SH
   chmod +x "$fb/sleep"
+  # A Herdr pane running Pi, for the cursorless composer proof exit relies on.
+  # The screen comes from herdr-screen and the native identity from
+  # herdr-mode; the missing and contradictory identity modes answer the first
+  # two `agent get` calls (liveness) truthfully and only then misreport, so the
+  # composer's own identity probe is what sees them. Adapted from the fake in
+  # kunchenguid/firstmate#5473.
+  cat > "$fb/herdr" <<'SH'
+#!/usr/bin/env bash
+set -u
+D=$FM_FAKE_DIR
+case "${1:-} ${2:-}" in
+  "status --json")
+    printf '%s\n' '{"client":{"version":"0.9.0","protocol":22},"server":{"running":true}}'
+    ;;
+  "pane get")
+    printf '%s\n' '{"result":{"pane":{"pane_id":"w1:p2","workspace_id":"ws1","tab_id":"tab1"}}}'
+    ;;
+  "pane process-info")
+    printf '{"result":{"type":"pane_process_info","process_info":{"pane_id":"w1:p2","shell_pid":%s,"foreground_processes":[{"pid":%s,"name":"node","argv":["pi"]}]}}}\n' "$$" "$$"
+    ;;
+  "agent get")
+    if [ -e "$D/herdr-stopped" ]; then
+      printf '%s\n' '{"error":{"code":"agent_not_found"}}'
+    else
+      count=$(( $(cat "$D/herdr-agent-count" 2>/dev/null || echo 0) + 1 ))
+      printf '%s' "$count" > "$D/herdr-agent-count"
+      mode=$(cat "$D/herdr-mode" 2>/dev/null || echo idle)
+      if [ "$mode" = missing-identity ] && [ "$count" -ge 3 ]; then
+        printf '%s\n' '{"error":{"code":"agent_not_found"}}'
+      elif [ "$mode" = contradictory-identity ] && [ "$count" -ge 3 ]; then
+        printf '%s\n' '{"result":{"agent":{"agent":"shell","agent_status":"idle"}}}'
+      else
+        case "$mode" in working|blocked) status=$mode ;; *) status=idle ;; esac
+        printf '{"result":{"agent":{"agent":"pi","agent_status":"%s"}}}\n' "$status"
+      fi
+    fi
+    ;;
+  "pane read") cat "$D/herdr-screen" ;;
+  "pane send-text")
+    printf '%s\n' "${4:-}" >> "$D/literal"
+    [ "${4:-}" != /quit ] || : > "$D/herdr-stopped"
+    ;;
+  "pane send-keys") printf '%s\n' "${4:-}" >> "$D/keys" ;;
+  *) printf '%s\n' '{}' ;;
+esac
+SH
+  chmod +x "$fb/herdr"
   printf '%s\n' "$fb"
+}
+
+# add_herdr_pi_task <case-dir> <id>: a Pi task recorded on the fake Herdr pane.
+add_herdr_pi_task() {
+  add_task "$1" "$2" pi ship herdr "lab:w1:p2"
+  {
+    echo 'herdr_session=lab'
+    echo 'herdr_workspace_id=ws1'
+    echo 'herdr_tab_id=tab1'
+    echo 'herdr_pane_id=w1:p2'
+  } >> "$1/home/state/$2.meta"
+}
+
+# expect_pi_exit <case-dir> <allow|refuse> <label>: run exit and require exactly
+# one /quit when allowed and no lifecycle text at all when refused.
+expect_pi_exit() {
+  local dir=$1 want=$2 label=$3 out rc
+  out=$(run_control "$dir" t1 exit); rc=$?
+  if [ "$want" = allow ]; then
+    expect_code 0 "$rc" "$label should exit"$'\n'"$out"
+    [ "$(literals "$dir")" = /quit ] \
+      || fail "$label should type exactly /quit, got: $(literals "$dir")"
+  else
+    expect_code 1 "$rc" "$label must refuse"$'\n'"$out"
+    [ ! -s "$dir/fake/literal" ] || fail "$label typed lifecycle text: $(literals "$dir")"
+  fi
 }
 
 # new_case <name> -> echoes a case dir holding home/, fake/, and fakebin.
@@ -286,6 +371,81 @@ test_exit_types_each_harness_verified_command() {
     assert_contains "$out" "stopped t1 harness=$harness" "exit should report the stop for $harness"
   done
   pass "fm-control exit: every verified harness gets its own verified exit command"
+}
+
+test_pi_exit_herdr_cost_footer_boundary() {
+  # Pi's cost-first status row below a blank two-rule composer (issue
+  # kunchenguid/firstmate#5666, furniture rule from #5683) permits exactly one
+  # /quit; every unproven variant types nothing.
+  local dir case_id rule screen mode want
+  rule=$'\033[38;2;178;148;187m────────────────────────────────────────\033[0m'
+  for case_id in idle idle-subscription-free draft malformed shell-after dollar-shell \
+      working blocked missing-identity contradictory-identity; do
+    dir=$(new_case "pi-herdr-footer-$case_id")
+    add_herdr_pi_task "$dir" t1
+    screen="transcript"$'\n'"$rule"$'\n\033[0m\033[7m \033[0m\n'"$rule"$'\n\033[38;2;102;102;102m/private/tmp/lab/cwd\033[0m\n'
+    mode=idle
+    want=refuse
+    case "$case_id" in
+      idle) screen+=$'\033[38;2;102;102;102m$0.000 (sub) 0.0%/272k (auto)            (openai-codex) gpt-5.6-terra • high\033[0m\n'; want=allow ;;
+      idle-subscription-free) screen+=$'\033[38;2;102;102;102m$0.012 5.4%/272k (auto)\033[0m\n'; want=allow ;;
+      draft)
+        screen="transcript"$'\n'"$rule"$'\nkeep this draft\n'"$rule"$'\n$0.000 (sub) 5.4%/272k (auto)\n'
+        ;;
+      malformed) screen+=$'$0.000 (sub)\n' ;;
+      shell-after) screen+=$'$0.000 (sub) 5.4%/272k (auto)\n$ ls\n' ;;
+      dollar-shell) screen+=$'$ 0.000 (sub) 5.4%/272k (auto)\n' ;;
+      working) screen+=$'$0.000 (sub) 5.4%/272k (auto)\n'; mode=working; want=allow ;;
+      blocked|missing-identity|contradictory-identity)
+        screen+=$'$0.000 (sub) 5.4%/272k (auto)\n'; mode=$case_id ;;
+    esac
+    printf '%s' "$screen" > "$dir/fake/herdr-screen"
+    printf '%s' "$mode" > "$dir/fake/herdr-mode"
+    expect_pi_exit "$dir" "$want" "Pi exit with a '$case_id' cost footer"
+  done
+  pass "fm-control Pi exit: a cost-first footer permits one /quit under a proven native Pi composer"
+}
+
+test_pi_exit_uses_herdr_compact_proof_boundary() {
+  # Pi's experimental compact layout on Herdr (kunchenguid/firstmate#5445;
+  # matrix adapted from #5473): with the opt-in, only a proven idle compact
+  # composer earns one /quit; without it, even that screen types nothing.
+  local dir case_id header rule screen mode history i want
+  header=$'\033[38;2;129;162;190m╭ gpt-5.6-terra · firstmate ────────────────╮\033[0m'
+  rule=$'\033[38;2;129;162;190m─────────────────────────────────────────────\033[0m'
+  for case_id in idle idle-short-history idle-long-history default-off draft whitespace boxed unstyled-row continuation working blocked missing-identity contradictory-identity truncated shell; do
+    dir=$(new_case "pi-herdr-exit-$case_id")
+    add_herdr_pi_task "$dir" t1
+    screen="$header"$'\n\033[7m \033[0m\n'"$rule"$'\n'
+    mode=idle
+    history=
+    want=refuse
+    case "$case_id" in
+      idle|default-off) [ "$case_id" = default-off ] || want=allow ;;
+      idle-short-history) history="$rule"$'\nold transcript one\nold transcript two\n'; want=allow ;;
+      idle-long-history)
+        history="$rule"$'\n'
+        for i in $(seq 1 9); do history+="old transcript $i"$'\n'; done
+        want=allow
+        ;;
+      draft) screen="$header"$'\nprivacy-safe draft\033[7m \033[0m\n'"$rule"$'\n' ;;
+      whitespace) screen="$header"$'\n  \033[7m \033[0m\n'"$rule"$'\n' ;;
+      boxed) screen="$header"$'\n│\033[7m \033[0m│\n'"$rule"$'\n' ;;
+      unstyled-row) screen="$header"$'\n \n'"$rule"$'\n' ;;
+      continuation) screen="$header"$'\n> continued input\033[7m \033[0m\n'"$rule"$'\n' ;;
+      working|blocked|missing-identity|contradictory-identity) mode=$case_id ;;
+      truncated) screen="$header"$'\n\033[7m \033[0m\n' ;;
+      shell) screen+=$'\n$ prompt after stale Pi registration\n' ;;
+    esac
+    printf '%s' "$history$screen" > "$dir/fake/herdr-screen"
+    printf '%s' "$mode" > "$dir/fake/herdr-mode"
+    if [ "$case_id" = default-off ]; then
+      FM_BACKEND_HERDR_PI_COMPACT=0 expect_pi_exit "$dir" "$want" "Pi exit on the compact '$case_id' shape"
+    else
+      FM_BACKEND_HERDR_PI_COMPACT=1 expect_pi_exit "$dir" "$want" "Pi exit on the compact '$case_id' shape"
+    fi
+  done
+  pass "fm-control Pi exit: the opted-in Herdr compact proof alone permits /quit"
 }
 
 test_interrupt_sends_each_harness_verified_key() {
@@ -838,6 +998,77 @@ test_busy_agent_is_interrupted_before_the_exit_command() {
   pass "fm-control exit: a busy agent receives interrupt delivery before the exit command"
 }
 
+exit_picker_screen() {
+  printf '%s\n' \
+    'Background work is running' \
+    '❯ 1. Exit and stop tasks' \
+    'The following will stop when you exit:' \
+    'shell · sleep 300' \
+    '  2. Move to background and exit' \
+    '  3. Stay' \
+    'Enter to confirm · Esc to cancel'
+}
+
+test_exit_refuses_an_open_background_picker() {
+  local dir out rc
+  dir=$(new_case open-picker)
+  add_task "$dir" t1 claude
+  alive_as "$dir" claude
+  exit_picker_screen > "$dir/fake/pane"
+  out=$(run_control "$dir" t1 exit); rc=$?
+  expect_code 1 "$rc" "an open exit picker should refuse"$'\n'"$out"
+  assert_contains "$out" "blocked on a prompt: Claude background-task exit picker" \
+    "the refusal should name the dialog"
+  assert_not_contains "$out" "Esc" "the refusal must not name a dismissal key"
+  [ ! -s "$dir/fake/literal" ] || fail "an open picker must not be typed into"
+  [ ! -s "$dir/fake/keys" ] || fail "an open picker must receive no keys"
+  pass "fm-control exit: an already-open background-task picker is not typed into"
+}
+
+test_exit_refuses_the_confirming_enter() {
+  local dir out rc enters
+  dir=$(new_case confirm-picker)
+  add_task "$dir" t1 claude
+  alive_as "$dir" claude
+  exit_picker_screen > "$dir/fake/after-enter"
+  out=$(env FM_FAKE_NEVER_DIES=1 PATH="$dir/fakebin:$PATH" FM_HOME="$dir/home" \
+    FM_FAKE_DIR="$dir/fake" FM_CONTROL_POLL=0.01 FM_CONTROL_EXIT_WAIT=0.05 \
+    "$CONTROL" t1 exit 2>&1); rc=$?
+  expect_code 1 "$rc" "the confirming Enter should refuse"$'\n'"$out"
+  assert_contains "$out" "blocked on a prompt: Claude background-task exit picker" \
+    "the refusal should name the dialog"
+  assert_not_contains "$out" "Esc" "the refusal must not name a dismissal key"
+  [ "$(literals "$dir")" = /exit ] || fail "the exit command should still be typed, got '$(literals "$dir")'"
+  enters=$(grep -c '^Enter$' "$dir/fake/keys" || true)
+  [ "$enters" -eq 1 ] || fail "only the submitting Enter should be sent, got $enters"
+  pass "fm-control exit: the Enter that opens the background-task picker is not followed by a confirming Enter"
+}
+
+# The submit reads a cleared composer before the picker renders, so it reports
+# delivery and no read inside it sees the picker. Exit's own read after the
+# stop wait times out must still name the dialog.
+test_exit_names_a_picker_that_renders_after_the_submit() {
+  local dir out rc enters
+  dir=$(new_case late-picker)
+  add_task "$dir" t1 claude
+  alive_as "$dir" claude
+  exit_picker_screen > "$dir/fake/after-enter"
+  printf '1' > "$dir/fake/after-enter-late"
+  out=$(env FM_FAKE_NEVER_DIES=1 PATH="$dir/fakebin:$PATH" FM_HOME="$dir/home" \
+    FM_FAKE_DIR="$dir/fake" FM_CONTROL_POLL=0.01 FM_CONTROL_EXIT_WAIT=0.05 \
+    "$CONTROL" t1 exit 2>&1); rc=$?
+  expect_code 1 "$rc" "a picker that renders after the submit should refuse"$'\n'"$out"
+  [ "$(cat "$dir/fake/after-enter-late")" = 0 ] \
+    || fail "the submit should have read the ordinary pane once after Enter"
+  assert_contains "$out" "blocked on a prompt: Claude background-task exit picker" \
+    "the refusal should name the dialog"
+  assert_not_contains "$out" "did not stop within" \
+    "a recognised picker must not fall back to the generic timeout message"
+  enters=$(grep -c '^Enter$' "$dir/fake/keys" || true)
+  [ "$enters" -eq 1 ] || fail "only the submitting Enter should be sent, got $enters"
+  pass "fm-control exit: a picker that renders after the submit returned is named when the stop wait times out"
+}
+
 test_idle_agent_is_not_interrupted() {
   local dir out rc gen
   dir=$(new_case idle)
@@ -851,6 +1082,20 @@ test_idle_agent_is_not_interrupted() {
     || fail "an idle agent needs no interrupt, got keys: $(keys_sent "$dir")"
   [ "$(literals "$dir")" = "/exit" ] || fail "the exit command should still be sent"
   pass "fm-control exit: an idle agent goes straight to its exit command"
+}
+
+test_footer_busy_pi_on_tmux_refuses_exit() {
+  local dir out rc
+  dir=$(new_case footer-busy-pi-composer)
+  add_task "$dir" t1 pi
+  alive_as "$dir" pi
+  printf '────────────────────────\n\n────────────────────────\nworking Pi footer\n' > "$dir/fake/pane"
+  out=$(FM_BUSY_REGEX='working Pi footer' run_control "$dir" t1 exit); rc=$?
+  expect_code 1 "$rc" "a footer-busy Pi on tmux cannot prove its composer empty"
+  assert_contains "$out" "composer state is 'unknown'" "the refusal should name the unproven composer"
+  [ -z "$(literals "$dir")" ] \
+    || fail "a footer-busy Pi on tmux may be blocked on a prompt and must receive no /quit"
+  pass "fm-control exit: a footer-busy Pi on tmux refuses instead of typing /quit"
 }
 
 test_interrupt_without_acknowledgement_preserves_busy_state() {
@@ -1031,7 +1276,46 @@ test_fm_send_still_marks_the_same_secondmate_task() {
   pass "fm-control's arrival leaves fm-send's from-firstmate marking untouched"
 }
 
+# Only an adapter whose runtime records an exact per-pane agent session has a
+# relaunch resume form, and only a reference its OWN agent reported may be
+# handed to it: resuming another adapter's reference would inject that agent's
+# conversation into this launch. Every other pair must print nothing so the
+# relaunch stays a fresh session exactly as it does today.
+test_relaunch_resume_flag_is_per_adapter_and_reference_owner() {
+  local got harness label want
+  # (harness | registered agent label | expected flag) lines, written out
+  # independently of the implementation.
+  local cases='pi|pi|--session
+pi-signed|pi|--session
+pi||
+pi-signed||
+pi|codex|
+pi-signed|claude|
+claude|claude|
+codex|codex|
+opencode|opencode|
+omp|omp|
+grok|grok|
+kimi|kimi|
+cursor|cursor|
+muse|muse|
+rovo|rovo|
+agy|agy|'
+  while IFS='|' read -r harness label want; do
+    [ -n "$harness" ] || continue
+    got=$(fm_control_relaunch_resume_flag "$harness" "$label") \
+      || fail "the resume-flag lookup must never fail; it did for '$harness'/'$label'"
+    [ "$got" = "$want" ] \
+      || fail "$harness with a '$label' registration should print '$want', got '$got'"
+  done <<EOF
+$cases
+EOF
+  pass "fm-control-lib: only a runtime's own recorded session has a relaunch resume form"
+}
+
 test_exit_types_each_harness_verified_command
+test_pi_exit_herdr_cost_footer_boundary
+test_pi_exit_uses_herdr_compact_proof_boundary
 test_interrupt_sends_each_harness_verified_key
 test_devin_interrupt_invalidates_busy
 test_devin_idle_interrupt_sends_one_press
@@ -1041,6 +1325,7 @@ test_devin_stuck_picker_refuses_and_exit_types_nothing
 test_opencode_interrupts_twice_and_others_once
 test_unverified_harness_is_refused
 test_harness_family_resolution
+test_relaunch_resume_flag_is_per_adapter_and_reference_owner
 test_prefixed_recorded_harness_reaches_each_control_verb
 test_backend_key_capability_matrix
 test_harness_kind_capability
@@ -1062,6 +1347,10 @@ test_interrupt_refuses_when_no_agent_runs
 test_ambiguous_endpoint_refuses
 test_busy_agent_is_interrupted_before_the_exit_command
 test_idle_agent_is_not_interrupted
+test_footer_busy_pi_on_tmux_refuses_exit
+test_exit_refuses_an_open_background_picker
+test_exit_refuses_the_confirming_enter
+test_exit_names_a_picker_that_renders_after_the_submit
 test_interrupt_without_acknowledgement_preserves_busy_state
 test_muse_interrupt_confirms_adapter_acknowledgement
 test_interrupt_revalidates_agent_after_acknowledgement_wait

@@ -23,7 +23,7 @@ Verify the spawned process receives the expected trace context.
 EOF
 }
 
-# Fake tmux: answers the pane-path query and logs every literal `send-keys -l`
+# Fake tmux: answers the pane-tty query and logs every literal `send-keys -l`
 # argument (the GOTMPDIR export, the TRACEPARENT export, and the launch command)
 # one per line, in send order, so ordering is observable.
 make_spawn_fakebin() {
@@ -33,7 +33,7 @@ make_spawn_fakebin() {
 #!/usr/bin/env bash
 set -u
 case "$*" in
-  *"#{pane_current_path}"*) printf '%s\n' "${FM_FAKE_PANE_PATH:-}"; exit 0 ;;
+  *"#{pane_tty}"*) printf '%s\n' '/dev/pts/91'; exit 0 ;;
 esac
 case "${1:-}" in
   display-message) printf 'firstmate\n'; exit 0 ;;
@@ -93,6 +93,7 @@ esac
 exit 0
 SH
   chmod +x "$fakebin/tmux"
+  fm_test_fake_tmux_foreground_cwd "$fakebin"
   fm_fake_exit0 "$fakebin" treehouse
   printf '%s\n' "$fakebin"
 }
@@ -210,6 +211,8 @@ run_two_level() {
   printf '# Firstmate\n' > "$sm/AGENTS.md"
   printf 'sm-%s\n' "$name" > "$sm/.fm-secondmate-home"
   printf 'charter\n' > "$sm/data/charter.md"
+  git -C "$sm" init -q -b main
+  printf '%s\n' 'projects/' 'state/' 'data/' 'config/' '.no-mistakes/' > "$sm/.gitignore"
 
   # Spawn 1: the primary launches the secondmate; capture what it injects.
   sm_id="sm-$name"
@@ -393,6 +396,7 @@ test_duplicate_secondmate_spawn_does_not_converge_trace_context() {
   printf '# Firstmate\n' > "$sm/AGENTS.md"
   printf '%s\n' "$id" > "$sm/.fm-secondmate-home"
   printf 'charter\n' > "$sm/data/charter.md"
+  git -C "$sm" init -q -b main
   fake=$(make_spawn_fakebin "$base/fake")
 
   # A claude secondmate spawn pre-registers workspace trust for the HOME it

@@ -2,6 +2,7 @@
 # Exercise the public one-frame renderer with an isolated local house ref.
 set -u
 
+# shellcheck source=tests/lib.sh disable=SC1091
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 TMP_ROOT=$(fm_test_tmproot fm-quota-tab)
@@ -32,11 +33,6 @@ printf 'Codex home card: $72 credit\nCodex Luna card: weekly headroom 41%%\n'
 EOF
 chmod +x "$FAKEBIN/quota-axi"
 
-# line_of <marker> prints the 1-based line of the first <marker> hit in $OUTPUT.
-line_of() {
-  printf '%s\n' "$OUTPUT" | rg -n "$1" | head -n1 | cut -d: -f1
-}
-
 OUTPUT=$(PATH="$FAKEBIN:$PATH" FM_QUOTA_CLONE="$CLONE" FM_QUOTA_TAB_INTERVAL=17 \
   QUOTA_ARGS="$TMP_ROOT/quota-args" \
   TERM=dumb "$ROOT/bin/fm-quota-tab.sh" once 2>&1) \
@@ -49,12 +45,12 @@ assert_contains "$OUTPUT" "quota-axi executable: $FAKEBIN/quota-axi" 'executable
 assert_contains "$OUTPUT" "Codex home card: \$72 credit" 'first Codex seat card is missing'
 assert_contains "$OUTPUT" 'Codex Luna card: weekly headroom 41%' 'second Codex seat card is missing'
 assert_contains "$OUTPUT" 'interval: 17 seconds' 'refresh interval is missing'
-title_line=$(line_of 'quota-axi view of the fleet house line')
-report_line=$(line_of 'Codex home card')
-label_line=$(line_of 'Fleet house line:')
-house_line=$(line_of 'House tip:')
-exec_line=$(line_of 'quota-axi executable:')
-refresh_line=$(line_of 'Refreshed: ')
+title_line=$(printf '%s\n' "$OUTPUT" | rg -n 'quota-axi view of the fleet house line' | head -n1 | cut -d: -f1)
+report_line=$(printf '%s\n' "$OUTPUT" | rg -n 'Codex home card' | head -n1 | cut -d: -f1)
+label_line=$(printf '%s\n' "$OUTPUT" | rg -n 'Fleet house line:' | head -n1 | cut -d: -f1)
+house_line=$(printf '%s\n' "$OUTPUT" | rg -n 'House tip:' | head -n1 | cut -d: -f1)
+exec_line=$(printf '%s\n' "$OUTPUT" | rg -n 'quota-axi executable:' | head -n1 | cut -d: -f1)
+refresh_line=$(printf '%s\n' "$OUTPUT" | rg -n 'Refreshed: ' | head -n1 | cut -d: -f1)
 for pos in "$title_line" "$report_line" "$label_line" "$house_line" "$exec_line" "$refresh_line"; do
   [ -n "$pos" ] || fail "output position check lost a marker line: $OUTPUT"
 done

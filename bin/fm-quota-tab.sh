@@ -3,8 +3,7 @@
 #
 # Usage: bin/fm-quota-tab.sh [once|loop]
 # FM_QUOTA_CLONE defaults to "$FM_HOME/projects/quota-axi" when FM_HOME is set.
-# With FM_HOME unset it defaults to the home this script lives in, so a plain
-# run never expands an empty home to /projects/quota-axi.
+# With FM_HOME unset it defaults to the home this script lives in.
 # FM_QUOTA_TAB_INTERVAL defaults to 300 seconds and must be a positive integer.
 # Reads jazz127/house after a quiet fetch attempt, resolves quota-axi from PATH,
 # and runs quota-axi once per frame. It never writes to the quota-axi clone.

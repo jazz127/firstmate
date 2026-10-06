@@ -41,10 +41,15 @@
 # probe, and the capability descriptor - plus the busy detection and submit
 # cores that consume the shared verdict.
 
+# The sibling directory is derived without forking dirname, because a backend
+# probe can re-source this adapter inside a subshell on every watcher cycle.
+_FM_TMUX_LIB_DIR=${BASH_SOURCE[0]%/*}
+[ "$_FM_TMUX_LIB_DIR" != "${BASH_SOURCE[0]}" ] || _FM_TMUX_LIB_DIR=.
 # shellcheck source=bin/fm-composer-lib.sh
-. "$(dirname -- "${BASH_SOURCE[0]}")/fm-composer-lib.sh"
+. "${_FM_TMUX_LIB_DIR:-/}/fm-composer-lib.sh"
 # shellcheck source=bin/fm-cursor-lib.sh
-. "$(dirname -- "${BASH_SOURCE[0]}")/fm-cursor-lib.sh"
+. "${_FM_TMUX_LIB_DIR:-/}/fm-cursor-lib.sh"
+unset _FM_TMUX_LIB_DIR
 
 
 # fm_tmux_strip_ghost: thin adapter over the shared, fleet-wide ghost extractor
@@ -95,9 +100,10 @@ fm_tmux_composer_caps() {
 #     agent died to a shell has no pi foreground process and gets NO identity,
 #     which is exactly what keeps the strict blank-row rule honest: a blank
 #     row between two stale rules stays unknown.
-#   - status: pi's verified busy footer via fm_pane_is_busy, mapped onto the
-#     idle/working vocabulary herdr's probe reports natively.
-# Prints "pi<TAB>idle" or "pi<TAB>working"; exits 1 when the pane is not a
+#   - status: pi's verified busy footer via fm_pane_is_busy. A rendered footer
+#     cannot distinguish working from blocked, so busy stays `busy` rather
+#     than claiming herdr's native `working` status.
+# Prints "pi<TAB>idle" or "pi<TAB>busy"; exits 1 when the pane is not a
 # live pi.
 fm_tmux_composer_identity() {  # <target>
   local target=$1 tty pgid tpgid comm found=0 status
@@ -124,7 +130,7 @@ EOF
   [ "$found" -eq 1 ] || return 1
   status=$(fm_pane_busy_state "$target" pi)
   case "$status" in
-    busy) printf 'pi\tworking' ;;
+    busy) printf 'pi\tbusy' ;;
     idle) printf 'pi\tidle' ;;
     *) return 1 ;;
   esac
@@ -245,6 +251,11 @@ fm_tmux_submit_enter_core() {  # <target> <retries> <enter-sleep> [baseline-idle
     tmux send-keys -t "$target" Enter 2>/dev/null || true
     sleep "$sleep_s"
     state=$(fm_tmux_composer_state "$target")
+    # The first Enter can open a picker. A later Enter would confirm it.
+    if fm_composer_blocking_dialog_noted >/dev/null; then
+      printf 'unknown'
+      return 0
+    fi
     case "$state" in
       pending|pending-unproven) ;;
       unknown)
@@ -279,13 +290,19 @@ fm_tmux_submit_enter_core() {  # <target> <retries> <enter-sleep> [baseline-idle
 }
 
 fm_tmux_submit_core() {  # <target> <text> <retries> <enter-sleep> <settle>
-  local target=$1 text=$2 retries=$3 sleep_s=$4 settle=$5 baseline_idle='' baseline_state
+  local target=$1 text=$2 retries=$3 sleep_s=$4 settle=$5 baseline_idle='' baseline_state err
   # The turn-started baseline must predate our own typing: a pane already
   # busy before the text lands can turn "busy" for reasons unrelated to our
   # Enter, so only a clean idle-to-busy transition may confirm a submit.
   baseline_state=$(fm_pane_busy_state "$target")
   [ "$baseline_state" = idle ] && baseline_idle=1
-  tmux send-keys -t "$target" -l "$text" 2>/dev/null || { printf 'send-failed'; return 0; }
+  # A failed literal send replays tmux's stderr (for example "command too
+  # long") so the caller can log why nothing was typed.
+  if ! err=$(tmux send-keys -t "$target" -l "$text" 2>&1 >/dev/null); then
+    [ -z "$err" ] || printf '%s\n' "$err" >&2
+    printf 'send-failed'
+    return 0
+  fi
   sleep "$settle"
   fm_tmux_submit_enter_core "$target" "$retries" "$sleep_s" "$baseline_idle"
 }

@@ -108,8 +108,18 @@ forge_home() {
   chmod +x "$home/root/bin/fm-guard.sh"
   printf 'worktree=%s/wt\nkind=ship\n' "$home" > "$home/state/delivery.meta"
   chmod 600 "$home/state/delivery.meta"
+  git -C "$home/wt" init -q
+  git -C "$home/wt" config user.name Fixture
+  git -C "$home/wt" config user.email fixture@example.invalid
+  printf 'clean\n' > "$home/wt/tracked"
+  git -C "$home/wt" add tracked
+  GIT_AUTHOR_DATE=2026-09-16T08:00:00Z GIT_COMMITTER_DATE=2026-09-16T08:00:00Z \
+    git -C "$home/wt" commit -qm initial
   record "$home" delivery 8 open mergeable
-  printf '%s\n' "$HEAD_A" > "$home/forge/head"
+  git -C "$home/wt" rev-parse HEAD > "$home/forge/head"
+  printf 'owner/r\n' > "$home/forge/base-repo"
+  printf 'fork/r\n' > "$home/forge/head-repo"
+  printf '%s\n' '[{"check_runs":[{"name":"test","id":1,"status":"completed","conclusion":"success","started_at":"2026-09-16T08:00:00Z"}]}]' > "$home/forge/checks.json"
   printf '[]\n' > "$home/forge/comments.json"
   printf '[]\n' > "$home/forge/reviews.json"
   printf '[]\n' > "$home/forge/inline.json"
@@ -119,25 +129,44 @@ forge_home() {
 #!/usr/bin/env bash
 set -eu
 case "$*" in
+  'pr view '*"--json body --jq .body"*) printf 'Fixture body\n' ;;
   'pr view '*headRefOid,reviewDecision*)
-    jq -n --arg head "$(cat "$FORGE/head")" '{headRefOid:$head,reviewDecision:"APPROVED"}' ;;
+    jq -n --arg head "$(cat "$FORGE/head")" --arg decision "$(cat "$FORGE/review-decision" 2>/dev/null || printf APPROVED)" '{headRefOid:$head,reviewDecision:$decision}' ;;
   'pr view '*headRefOid*) cat "$FORGE/head" ;;
   'pr view '*state*) printf 'OPEN\n' ;;
-  'api repos/o/r/pulls/8')
-    jq -n --arg head "$(cat "$FORGE/head")" --arg state "$(cat "$FORGE/state" 2>/dev/null || printf open)" '
-      {state:(if $state == "open" then "open" else "closed" end),user:{login:"author"},head:{sha:$head},draft:false,
+  'api repos/o/r/pulls/8'|'api repos/o/r/pulls/9'|'api repos/o/r/pulls/10')
+    jq -n --arg head "$(cat "$FORGE/head")" --arg state "$(cat "$FORGE/state" 2>/dev/null || printf open)" \
+      --arg head_repo "$(cat "$FORGE/head-repo")" --arg base_repo "$(cat "$FORGE/base-repo")" \
+      --arg timestamp "$(cat "$FORGE/pr-time" 2>/dev/null || true)" \
+      --arg created "$(cat "$FORGE/pr-created-time" 2>/dev/null || true)" '
+      {state:(if $state == "open" then "open" else "closed" end),user:{login:"author"},
+       updated_at:(if $timestamp == "" then null else $timestamp end),
+       created_at:(if $created == "" then null else $created end),
+       head:{sha:$head,repo:{full_name:$head_repo}},base:{repo:{full_name:$base_repo}},draft:false,
        mergeable:(if $state == "open" then true else null end),
        merged_at:(if $state == "merged" then "2026-09-16T07:00:00Z" else null end)}' ;;
   'api repos/o/r/issues/9')
     jq -n --slurpfile labels "$FORGE/labels.json" '{state:"open",user:{login:"author"},labels:$labels[0]}' ;;
   'api repos/o/r/issues/'*'/events?'*) jq -s . "$FORGE/events.json" ;;
   'api repos/o/r/issues/'*'/comments?'*) jq -s . "$FORGE/comments.json" ;;
-  'api repos/o/r/pulls/8/reviews?'*) jq -s . "$FORGE/reviews.json" ;;
-  'api repos/o/r/pulls/8/comments?'*) jq -s . "$FORGE/inline.json" ;;
+  'api repos/o/r/pulls/'*'/reviews?'*) jq -s . "$FORGE/reviews.json" ;;
+  'api repos/o/r/pulls/'*'/comments?'*) jq -s . "$FORGE/inline.json" ;;
+  'api repos/o/r/pulls/'*'/files?'*) : ;;
   'api repos/o/r/commits/'*'/check-runs?'*)
-    printf '[{"check_runs":[{"name":"test","id":1,"status":"completed","conclusion":"success","started_at":"2026-09-16T08:00:00Z"}]}]\n' ;;
+    cat "$FORGE/checks.json" ;;
   'api repos/o/r/commits/'*'/statuses?'*) printf '[[]]\n' ;;
-  'api repos/o/r') printf '{"permissions":{"push":false}}\n' ;;
+  'api graphql '*viewerPermission*)
+    requested_owner= requested_repo=
+    for argument; do
+      case "$argument" in owner=*) requested_owner=${argument#owner=} ;; repo=*) requested_repo=${argument#repo=} ;; esac
+    done
+    [ "$requested_owner/$requested_repo" = "$(cat "$FORGE/base-repo")" ] || exit 1
+    [ ! -f "$FORGE/permission-error" ] || { printf 'HTTP 403\n' >&2; exit 1; }
+    if [ -f "$FORGE/permission-response.json" ]; then
+      cat "$FORGE/permission-response.json"
+    else
+      jq -n --arg permission "$(cat "$FORGE/permission" 2>/dev/null || printf READ)" '{data:{repository:{viewerPermission:$permission}}}'
+    fi ;;
   *) printf 'unexpected gh fixture call: %s\n' "$*" >&2; exit 1 ;;
 esac
 SH
@@ -229,15 +258,38 @@ test_review_wake() { test_incoming_signal review; }
 test_inline_wake() { test_incoming_signal inline; }
 
 test_missing_lane_remains_missing() {
-  local home
+  local home out
   home=$(new_home absent-lane)
   forge_home "$home"
-  mutate_record "$home" delivery '.records[0].observation.checks += [{name:"required-extra",id:2,status:"completed",conclusion:"success",started_at:"2026-09-16T07:59:00Z"}]'
-  with_home "$home" "$ROOT/bin/fm-contributions.sh" poll >/dev/null || fail 'first poll failed'
-  with_home "$home" "$ROOT/bin/fm-contributions.sh" poll >/dev/null || fail 'second poll failed'
-  bearings "$home" | jq -e '.contributions.missing_verdicts == 1 and .contributions.counts.fleet == 1' >/dev/null \
+  with_home "$home" "$ROOT/bin/fm-pr-check.sh" delivery https://github.com/o/r/pull/8 >/dev/null \
+    || fail 'could not register the current PR for missing CI lanes'
+  printf '%s\n' '[{"check_runs":[
+    {"name":"test","id":1,"status":"completed","conclusion":"success","started_at":"2026-09-16T08:00:00Z"},
+    {"name":"required-extra","id":2,"status":"completed","conclusion":"success","started_at":"2026-09-16T08:00:00Z"}]}]' > "$home/forge/checks.json"
+  with_home "$home" "$ROOT/bin/fm-contributions.sh" poll >/dev/null || fail 'baseline CI poll failed'
+  printf '%s\n' "$HEAD_B" > "$home/forge/head"
+  printf '%s\n' '[{"check_runs":[{"name":"test","id":3,"status":"completed","conclusion":"success","started_at":"2026-09-16T10:00:00Z"}]}]' > "$home/forge/checks.json"
+  with_home "$home" env FM_CONTRIBUTIONS_NOW=2026-09-16T10:00:00Z "$ROOT/bin/fm-contributions.sh" poll >/dev/null \
+    || fail 'replacement head CI poll failed'
+  out=$(with_home "$home" env FM_CONTRIBUTIONS_NOW=2026-09-16T12:00:00Z "$ROOT/bin/fm-contributions.sh" poll) \
+    || fail 'missing lane expiry poll failed'
+  case "$out" in *'state=ci'*) ;; *) fail "a missing CI lane allowed closeout: $out" ;; esac
+  case "$out" in *'state=ready'*) fail 'missing CI lane counted as green' ;; esac
+  out=$(with_home "$home" env FM_CONTRIBUTIONS_NOW=2026-09-16T12:05:00Z "$ROOT/bin/fm-contributions.sh" poll) \
+    || fail 'repeated missing lane poll failed'
+  [ -z "$out" ] || fail "a stable missing lane repeated its closeout hold: $out"
+  NOW=2026-09-16T12:05:00Z bearings "$home" | jq -e '.contributions.missing_verdicts == 1 and .contributions.counts.fleet == 1' >/dev/null \
     || fail 'repeated polling erased the absent lane from measured readiness'
-  pass 'an absent check lane remains missing across repeated observations'
+  printf '%s\n' '[{"check_runs":[
+    {"name":"test","id":1,"status":"completed","conclusion":"failure","started_at":"2026-09-16T07:00:00Z"},
+    {"name":"test","id":3,"status":"completed","conclusion":"neutral","started_at":"2026-09-16T10:00:00Z"},
+    {"name":"required-extra","id":4,"status":"completed","conclusion":"skipped","started_at":"2026-09-16T12:10:00Z"}]}]' > "$home/forge/checks.json"
+  out=$(with_home "$home" env FM_CONTRIBUTIONS_NOW=2026-09-16T12:10:00Z "$ROOT/bin/fm-contributions.sh" poll) \
+    || fail 'restored lane poll failed'
+  case "$out" in *'state=ready'*) ;; *) fail "restored passing lanes did not permit closeout: $out" ;; esac
+  NOW=2026-09-16T12:10:00Z bearings "$home" | jq -e '.contributions.missing_verdicts == 0 and .contributions.counts.maintainer == 1' >/dev/null \
+    || fail 'restored latest lanes did not restore contribution readiness'
+  pass 'absent CI lanes hold closeout until every latest lane reports a passing verdict'
 }
 
 test_partial_freshness_keeps_measured_rows() {
@@ -280,6 +332,44 @@ test_issue_timeline_and_exact_ack() {
   pass 'a transient ready-for-pr label wakes and its exact acknowledgement survives replay'
 }
 
+test_closed_backlog_pr_owns_landed_contribution() {
+  local home url token
+  home=$(new_home closed-backlog-owner)
+  forge_home "$home"
+  url=https://github.com/o/r/pull/8
+  printf '# Backlog\n\n## Queued\n' > "$home/data/backlog.md"
+  rm -rf "$home/data/delivery" "$home/state/delivery.meta"
+  printf -- '- [ ] landed - Landed upstream contribution (repo: sample) (kind: ship)\n' \
+    >> "$home/data/backlog.md"
+  with_home "$home" "$ROOT/bin/fm-tasks-axi.sh" 'done' landed >/dev/null \
+    || fail 'could not close the originating backlog task'
+  with_home "$home" "$ROOT/bin/fm-tasks-axi.sh" 'done' landed --pr "$url" >/dev/null \
+    || fail 'could not backfill the contribution URL onto the closed backlog task'
+  [ ! -e "$home/state/landed.meta" ] || fail 'fixture unexpectedly retained live task metadata'
+  jq -n '[{id:44,user:{login:"maintainer"},author_association:"OWNER",
+    body:"Please clarify the contract",html_url:"https://github.com/o/r/pull/8#issuecomment-44",
+    updated_at:"2026-09-16T08:01:00Z"}]' > "$home/forge/comments.json"
+  with_home "$home" "$ROOT/bin/fm-contributions.sh" poll >/dev/null \
+    || fail 'observer did not accept the closed structured backlog link as an owner'
+  token=$(with_home "$home" "$ROOT/bin/fm-contributions.sh" pending \
+    | jq -er '.[] | select(.url == "https://github.com/o/r/pull/8") | .token') \
+    || fail 'closed backlog owner did not receive the maintainer event'
+  with_home "$home" "$ROOT/bin/fm-contributions.sh" verdict landed "$url" "$HEAD_A" \
+    "$url#issuecomment-44" maintainer 'awaiting maintainer' \
+    || fail 'closed backlog owner could not record the contribution verdict'
+  with_home "$home" "$ROOT/bin/fm-contributions.sh" ack landed "$url" "$token" \
+    || fail 'closed backlog owner could not acknowledge the contribution event'
+  with_home "$home" "$ROOT/bin/fm-contributions.sh" pending \
+    | jq -e 'length == 0' >/dev/null \
+    || fail 'acknowledged contribution event remained pending without task metadata'
+  jq -e --arg head "$HEAD_A" --arg url "$url" \
+    '.records[0].url == $url and .records[0].verdict.head == $head' \
+    "$home/data/landed/contributions.json" >/dev/null \
+    || fail 'closed backlog owner did not retain its verdict after acknowledgement'
+  pass 'closed structured backlog PR link owns verdict and acknowledgement after task metadata cleanup'
+}
+
+
 test_verdict_retains_judged_head() {
   local home
   home=$(new_home verdict-roundtrip)
@@ -297,6 +387,32 @@ test_verdict_retains_judged_head() {
   jq -e --arg head "$HEAD_A" '.records[0].verdict.head==$head' "$home/data/delivery/contributions.json" >/dev/null \
     || fail 'projection rewrote the judged head'
   pass 'recorded judgment keeps its exact head and is stale immediately on a published replacement'
+}
+
+test_verdict_actor_values_are_discoverable() {
+  local home help out actor
+  home=$(new_home verdict-actors)
+  forge_home "$home"
+  with_home "$home" "$ROOT/bin/fm-pr-check.sh" delivery https://github.com/o/r/pull/8 >/dev/null \
+    || fail 'could not register delivery before judging its head'
+  help=$("$ROOT/bin/fm-contributions.sh" --help) || fail 'verdict help did not print'
+  out=$(with_home "$home" "$ROOT/bin/fm-contributions.sh" verdict delivery https://github.com/o/r/pull/8 "$HEAD_A" \
+    https://github.com/o/r/pull/8#issuecomment-99 bogus 'no such actor' 2>&1) \
+    && fail 'an unknown actor was accepted'
+  [ "$(printf '%s\n' "$help" | sed -n '/^  fm-contributions.sh verdict /p')" = \
+    '  fm-contributions.sh verdict <task> <url> <judged-head> <source-url> <captain|fleet|maintainer|nobody> <summary>' ] \
+    || fail "help usage does not name exactly the accepted actors: $help"
+  [ "$(printf '%s\n' "$help" | sed -n '/^actor is exactly one of /p')" = \
+    'actor is exactly one of captain, fleet, maintainer or nobody; any other value' ] \
+    || fail "help explanation does not name exactly the accepted actors: $help"
+  [ "$out" = "fm-contributions: invalid required actor 'bogus'; expected one of: captain, fleet, maintainer, nobody" ] \
+    || fail "refusal does not name exactly the accepted actors: $out"
+  for actor in captain fleet maintainer nobody; do
+    with_home "$home" "$ROOT/bin/fm-contributions.sh" verdict delivery https://github.com/o/r/pull/8 "$HEAD_A" \
+      https://github.com/o/r/pull/8#issuecomment-99 "$actor" 'documented actor' >/dev/null \
+      || fail "documented actor $actor was refused"
+  done
+  pass 'verdict help and refusal name exactly the actors the command accepts'
 }
 
 test_observed_replacement_refreshes_verdict() {
@@ -544,6 +660,59 @@ test_unreadable_pending_is_not_empty() {
   pass 'unreadable pending signals refuse an empty-inbox claim'
 }
 
+# Each record's durable task identity is the directory the snapshot loop finds
+# it in, exactly as `basename "$(dirname "$file")"` named it, however the data
+# root is spelled and whatever bytes the directory name carries.
+test_record_task_identity_matches_dirname_basename() {
+  local home data name file want n=0 names=() tasks=() expected actual
+  home=$(new_home task-identity)
+  names=(plain dot.ted 'two words' -dash $'caf\xc3\xa9' $'nl\n' '*')
+  for data in "$home/data" "$home/data/" "$home/data//"; do
+    for name in "${names[@]}"; do
+      n=$((n + 1))
+      mkdir -p "$home/data/$name"
+      file="$data/$name/contributions.json"
+      want=$(basename "$(dirname "$file")")
+      jq -n --arg task "$want" --arg url "https://github.com/o/r/pull/$n" --arg token "t$n" \
+        '{schema:"fm-contributions.v1",task:$task,records:[{url:$url,kind:"pr",checked_at:null,error:null,
+          pending:[{token:$token}],seen:[],verdict:null,observation:null}]}' > "$file"
+      tasks+=("$want")
+    done
+    expected=$(printf '%s\0' "${tasks[@]}" | jq -Rs 'split("\u0000")[:-1] | sort')
+    actual=$(with_home "$home" env FM_DATA_OVERRIDE="$data" "$ROOT/bin/fm-contributions.sh" pending | jq '[.[].task] | sort') \
+      || fail "records under data root '$data' were refused"
+    [ "$actual" = "$expected" ] || fail "data root '$data' named tasks $actual, expected $expected"
+    rm -rf "${home:?}/data/"*/
+    tasks=()
+  done
+  mkdir -p "$home/data/named"
+  jq -n '{schema:"fm-contributions.v1",task:"other",records:[]}' > "$home/data/named/contributions.json"
+  if with_home "$home" "$ROOT/bin/fm-contributions.sh" pending > /dev/null 2>&1; then
+    fail 'a record naming another task was accepted'
+  fi
+  pass 'record task identity is the directory dirname/basename named'
+}
+
+# snapshot and pending are read-only: reading saved records never creates the
+# state directory or anything else, even in a home that has none.
+test_read_only_views_create_no_state() {
+  local home before after
+  home=$(new_home read-only-views)
+  record "$home" delivery 8 open mergeable
+  with_home "$home" "$ROOT/bin/fm-fleet-snapshot.sh" --contribution-input > "$TMP_ROOT/read-only-input.json" \
+    || fail 'could not collect contribution input'
+  rm -rf "${home:?}/state"
+  before=$(find "$home" | sort)
+  with_home "$home" "$ROOT/bin/fm-contributions.sh" snapshot "$TMP_ROOT/read-only-input.json" --all \
+    | jq -e '.checked == 1' >/dev/null || fail 'snapshot did not read the saved record without a state directory'
+  with_home "$home" "$ROOT/bin/fm-contributions.sh" pending | jq -e 'length == 0' >/dev/null \
+    || fail 'pending did not read the saved record without a state directory'
+  after=$(find "$home" | sort)
+  [ ! -e "$home/state" ] || fail 'a read-only contribution view created the state directory'
+  [ "$after" = "$before" ] || fail "a read-only contribution view created files: $(comm -13 <(printf '%s\n' "$before") <(printf '%s\n' "$after"))"
+  pass 'snapshot and pending create nothing in a home without state'
+}
+
 wrap_forge() { # home: log gh calls and apply per-call faults from $FORGE/fault
   local home=$1
   mv "$home/fakebin/gh" "$home/fakebin/gh-fixture"
@@ -553,17 +722,27 @@ set -eu
 printf '%s\n' "$*" >> "$FORGE/calls"
 fault=$(cat "$FORGE/fault" 2>/dev/null || true)
 case "$fault" in latency) sleep "${FORGE_LATENCY:-2}" ;; esac
+# Concurrent forge callers each advance one shared clock. Truncating it in
+# place races with the other callers and the fake date: an interleaved write
+# can publish a half-written value (or the 6 an emptied read computes), and a
+# caller then evaluates DEADLINE against torn arithmetic. Publish every new
+# value by rename so each reader always sees one complete old-or-new clock.
+clock_bump() {
+  local tmp
+  tmp=$(mktemp "$FORGE/clock.XXXXXX")
+  printf '%s\n' "$(( $(cat "$FORGE/clock") + $1 ))" > "$tmp"
+  mv -f "$tmp" "$FORGE/clock"
+}
 case "$fault:$*" in
   # Advance once before the parallel read wave; its readers share this clock.
-  reserve:'api repos/o/r/issues/9')
-    printf '%s\n' "$(( $(cat "$FORGE/clock") + 6 ))" > "$FORGE/clock" ;;
-  exhaust:'api repos/o/r/issues/8/comments?'*)
-    printf '%s\n' "$(( $(cat "$FORGE/clock") + 100 ))" > "$FORGE/clock" ;;
-  fail-late:'api repos/o/r/pulls/8/reviews?'*)
-    printf '%s\n' "$(( $(cat "$FORGE/clock") + 100 ))" > "$FORGE/clock"
-    printf 'HTTP 502\n' >&2; exit 1 ;;
+  reserve:'api repos/o/r/issues/9') clock_bump 6 ;;
+  slow-wave:'api repos/o/r/pulls/8') sleep 3 ;;
+  slow-wave:'api repos/o/r/pulls/8/reviews?'*) sleep 6 ;;
+  exhaust:'api repos/o/r/issues/8/comments?'*) clock_bump 100 ;;
+  fail-late:'api repos/o/r/pulls/8/reviews?'*) clock_bump 100; printf 'HTTP 502\n' >&2; exit 1 ;;
   fail:'api repos/o/r/pulls/8/reviews?'*) printf 'HTTP 502\n' >&2; exit 1 ;;
   down:*) printf 'HTTP 502\n' >&2; exit 1 ;;
+  not-found:'api repos/o/r/'*) printf 'HTTP 404\n' >&2; exit 1 ;;
   hang:'api repos/o/r/pulls/8') sleep 4 ;;
   head:'pr view '*) printf '{"headRefOid":"%s","reviewDecision":"APPROVED"}\n' "$(printf 'b%.0s' $(seq 40))"; exit 0 ;;
 esac
@@ -711,6 +890,43 @@ test_late_owner_inherits_terminal_observation() {
   pass 'a late owner inherits a terminal observation without a forge read or wake'
 }
 
+test_interrupted_multi_owner_poll_settles_every_owner() {
+  local home later=2026-09-17T08:00:00Z
+  home=$(new_home multi-owner-open)
+  forge_home "$home"
+  wrap_forge "$home"
+  record "$home" duplicate 8 open mergeable
+  mutate_record "$home" duplicate '.records[0].pending=[{token:"evt-1"}] | .records[0].notified=["evt-0"]
+    | .records[0].checked_at="2026-09-15T08:00:00Z"'
+  mutate_record "$home" delivery ".records[0].observation.state=\"merged\" | .records[0].observation.head=\"$HEAD_B\""
+  printf 'down\n' > "$home/forge/fault"
+  with_home "$home" env FM_CONTRIBUTIONS_NOW="$later" "$ROOT/bin/fm-contributions.sh" poll >/dev/null \
+    || fail 'interrupted multi-owner poll failed'
+  [ ! -s "$home/forge/calls" ] || fail 'a known terminal URL triggered a forge read'
+  jq -e --slurpfile terminal "$home/data/delivery/contributions.json" '.records[0] | .observation.state == "merged"
+    and .observation == $terminal[0].records[0].observation
+    and .error == null and .checked_at == $terminal[0].records[0].checked_at
+    and .pending == [{token:"evt-1"}] and .notified == ["evt-0"]' \
+    "$home/data/duplicate/contributions.json" >/dev/null \
+    || fail "an owner whose saved row stayed open did not converge on the known terminal observation: $(cat "$home/data/duplicate/contributions.json")"
+
+  home=$(new_home multi-owner-errored)
+  forge_home "$home"
+  wrap_forge "$home"
+  record "$home" duplicate 8 open mergeable
+  mutate_record "$home" duplicate '.records[0].error="forge observation unavailable or changed during read"'
+  mutate_record "$home" delivery ".records[0].observation.state=\"merged\" | .records[0].observation.head=\"$HEAD_B\""
+  printf 'down\n' > "$home/forge/fault"
+  with_home "$home" env FM_CONTRIBUTIONS_NOW="$later" "$ROOT/bin/fm-contributions.sh" poll >/dev/null \
+    || fail 'interrupted multi-owner poll (errored owner) failed'
+  [ ! -s "$home/forge/calls" ] || fail 'a known terminal URL triggered a forge read (errored owner)'
+  jq -e --slurpfile terminal "$home/data/delivery/contributions.json" '.records[0] | .observation.state == "merged"
+    and .observation == $terminal[0].records[0].observation and .error == null' \
+    "$home/data/duplicate/contributions.json" >/dev/null \
+    || fail "an errored owner did not converge on the known terminal observation: $(cat "$home/data/duplicate/contributions.json")"
+  pass 'a retry converges every owner whose saved row is not terminal, keeping its own acknowledgement state'
+}
+
 test_done_task_open_pr_still_observed() {
   local home later=2026-09-17T08:00:00Z
   home=$(new_home done-open)
@@ -745,7 +961,7 @@ test_reservation_defers_later_url_when_fifteen_seconds_do_not_remain() {
   [ -z "$out" ] || fail "reservation poll printed an unavailable wake: $out"
   jq -e --arg now "$NOW" '.records[0] | .checked_at == $now and .error == null' \
     "$home/data/filed/contributions.json" >/dev/null \
-    || fail 'the first oldest issue was not observed before reserving the remaining budget'
+    || fail 'the first issue was not observed before reserving the remaining budget'
   grep -F 'api repos/o/r/pulls/8' "$home/forge/calls" >/dev/null \
     && fail 'a later PR began without the fifteen-second observation reservation'
   jq -e '.records[0].checked_at == "2026-09-15T08:00:00Z"' "$home/data/delivery/contributions.json" >/dev/null \
@@ -767,6 +983,151 @@ test_three_second_pr_reads_complete_fresh_in_one_cycle() { # 3-second reads: 8 s
     "$home/data/delivery/contributions.json" >/dev/null \
     || fail 'a 3-second-read PR observation was not fresh within one cycle'
   pass 'eight 3-second PR reads complete fresh within one 20-second poll cycle'
+}
+
+test_slow_read_deadline_kill_is_budget_refusal() {
+  local home out
+  home=$(new_home slow-kill)
+  forge_home "$home"
+  wrap_forge "$home"
+  mutate_record "$home" delivery '.records[0].checked_at="2026-09-15T08:00:00Z"'
+  cp "$home/data/delivery/contributions.json" "$home/prior.json"
+  /bin/date +%s > "$home/forge/clock"
+  printf 'latency\n' > "$home/forge/fault"
+  out=$(with_home "$home" env FM_CONTRIBUTIONS_BUDGET=20 FORGE_LATENCY=6 "$ROOT/bin/fm-contributions.sh" poll) \
+    || fail 'poll failed on a deadline-killed slow read'
+  [ -z "$out" ] || fail "a deadline-killed slow read printed an unavailable wake: $out"
+  cmp -s "$home/prior.json" "$home/data/delivery/contributions.json" \
+    || fail 'a deadline-killed slow read rewrote the prior record'
+  [ ! -s "$home/state/.wake-queue" ] || fail 'a deadline-killed slow read enqueued a wake'
+  pass 'a read killed at the five-second bound is budget refusal and stays silent'
+}
+
+test_unmeasured_url_does_not_starve_the_tail() {
+  local home out cycle at started elapsed task
+  home=$(new_home unmeasured-tail)
+  forge_home "$home"
+  wrap_forge "$home"
+  record "$home" second 9 open mergeable
+  record "$home" third 10 open mergeable
+  mutate_record "$home" delivery '.records[0].checked_at="2026-09-15T08:00:00Z"'
+  cp "$home/data/delivery/contributions.json" "$home/prior.json"
+  printf 'slow-wave\n' > "$home/forge/fault"
+  for cycle in 0 1 2; do
+    at=$(jq -nr --arg now "$NOW" --argjson cycle "$cycle" '(($now | fromdateiso8601) + ($cycle + 1) * 300) | todateiso8601')
+    started=$(/bin/date +%s)
+    out=$(with_home "$home" env FM_CONTRIBUTIONS_NOW="$at" FM_CONTRIBUTIONS_BUDGET=20 "$ROOT/bin/fm-contributions.sh" poll) \
+      || fail 'poll failed after an unmeasured first URL'
+    elapsed=$(( $(/bin/date +%s) - started ))
+    [ -z "$out" ] || fail "a poll after an unmeasured URL printed a wake: $out"
+    [ "$elapsed" -le 23 ] || fail "poll exceeded its elapsed budget: $elapsed seconds"
+    if [ "$cycle" -eq 0 ]; then
+      [ "$elapsed" -ge 8 ] || fail 'the slow head did not consume its core and parallel-wave budget'
+      if grep -Eq '^api repos/o/r/pulls/(9|10)$' "$home/forge/calls"; then
+        fail 'a tail PR began without its observation reserve'
+      fi
+    fi
+    cmp -s "$home/prior.json" "$home/data/delivery/contributions.json" \
+      || fail 'a timed-out observation changed its prior freshness or record'
+  done
+  for task in second third; do
+    jq -e --arg prior "$NOW" '.records[0] | .checked_at != $prior and .error == null' \
+      "$home/data/$task/contributions.json" >/dev/null \
+      || fail "successive polls starved $task behind the slow head"
+  done
+  [ ! -s "$home/state/.wake-queue" ] || fail 'routine slow reads enqueued a wake'
+  home=$(new_home sustained-slow-refresh)
+  forge_home "$home"
+  wrap_forge "$home"
+  record "$home" second 9 open mergeable
+  record "$home" third 10 open mergeable
+  record "$home" merged-one 90 merged mergeable
+  record "$home" closed-one 91 closed mergeable
+  record "$home" merged-two 92 merged mergeable
+  record "$home" closed-two 93 closed mergeable
+  mutate_record "$home" closed-two '.records[0].error="forge observation unavailable or changed during read"'
+  cp "$home/data/closed-two/contributions.json" "$home/terminal.json"
+  printf -- '- [ ] late-owner - Shared https://github.com/o/r/pull/93 (repo: sample) (kind: ship)\n' >> "$home/data/backlog.md"
+  for task in delivery second third; do
+    mutate_record "$home" "$task" '.records[0].checked_at="2026-09-16T07:55:00Z"'
+  done
+  printf 'latency\n' > "$home/forge/fault"
+  for cycle in 0 1 2 3 4 5; do
+    at=$(jq -nr --arg now "$NOW" --argjson cycle "$cycle" '(($now | fromdateiso8601) + $cycle * 300) | todateiso8601')
+    started=$(/bin/date +%s)
+    out=$(with_home "$home" env FM_CONTRIBUTIONS_NOW="$at" FM_CONTRIBUTIONS_BUDGET=20 FORGE_LATENCY=3 "$ROOT/bin/fm-contributions.sh" poll) \
+      || fail 'sustained slow-read poll failed'
+    elapsed=$(( $(/bin/date +%s) - started ))
+    [ "$elapsed" -ge 9 ] && [ "$elapsed" -le 23 ] \
+      || fail "slow successful poll did not respect its elapsed budget: $elapsed seconds"
+    [ -z "$out" ] || fail "slow successful reads printed a wake: $out"
+    for task in closed-two late-owner; do
+      jq -e --slurpfile prior "$home/terminal.json" '.records[0] | .error == null
+        and .checked_at == $prior[0].records[0].checked_at
+        and .observation == $prior[0].records[0].observation' \
+        "$home/data/$task/contributions.json" >/dev/null \
+        || fail "terminal settlement or freshness changed for $task"
+    done
+    if grep -Eq '^api repos/o/r/pulls/9[0-3]($|/)' "$home/forge/calls"; then
+      fail 'a retained terminal PR was read from the forge'
+    fi
+    if [ "$cycle" -ge 2 ]; then
+      for task in delivery second third; do
+        jq -e --arg at "$at" '.records[0] | .error == null
+          and (($at | fromdateiso8601) - (.checked_at | fromdateiso8601) <= 600)' \
+          "$home/data/$task/contributions.json" >/dev/null \
+          || fail "$task was not refreshed within three consecutive slow polls at $at"
+      done
+    fi
+  done
+  [ ! -s "$home/state/.wake-queue" ] || fail 'slow successful reads enqueued a wake'
+  pass 'rotation preserves timed-out records and refreshes every slow PR on successive cycles'
+}
+
+test_budget_is_cut_down_to_the_watcher_check_bound() {
+  local home out
+  home=$(new_home check-bound-budget)
+  forge_home "$home"
+  wrap_forge "$home"
+  mutate_record "$home" delivery '.records[0].checked_at="2026-09-15T08:00:00Z"'
+  cp "$home/data/delivery/contributions.json" "$home/prior.json"
+  /bin/date +%s > "$home/forge/clock"
+  printf 'hang\n' > "$home/forge/fault"
+  out=$(with_home "$home" env FM_CHECK_TIMEOUT=6 "$ROOT/bin/fm-contributions.sh" poll) \
+    || fail 'poll failed under a small watcher check bound'
+  [ -z "$out" ] || fail "a check-bound-capped poll printed a wake: $out"
+  cmp -s "$home/prior.json" "$home/data/delivery/contributions.json" \
+    || fail 'a poll observed with the full budget despite a six-second check bound'
+  [ ! -s "$home/state/.wake-queue" ] || fail 'a check-bound-capped poll enqueued a wake'
+  pass 'the effective budget is cut down to the watcher per-check bound with margin'
+}
+
+test_arm_plumbs_a_configured_budget_into_the_check_shim() {
+  local home out mode
+  for mode in configured inherited; do
+    home=$(new_home "arm-budget-$mode")
+    forge_home "$home"
+    wrap_forge "$home"
+    mutate_record "$home" delivery '.records[0].checked_at="2026-09-15T08:00:00Z"'
+    cp "$home/data/delivery/contributions.json" "$home/prior.json"
+    printf 'hang\n' > "$home/forge/fault"
+    if [ "$mode" = configured ]; then
+      with_home "$home" env FM_CONTRIBUTIONS_BUDGET=3 "$ROOT/bin/fm-contributions.sh" arm >/dev/null \
+        || fail 'arm with a configured budget failed'
+      out=$(with_home "$home" env -u FM_CONTRIBUTIONS_BUDGET bash "$home/state/contributions.check.sh") \
+        || fail 'configured check shim failed'
+    else
+      with_home "$home" env -u FM_CONTRIBUTIONS_BUDGET "$ROOT/bin/fm-contributions.sh" arm >/dev/null \
+        || fail 'arm without a configured budget failed'
+      out=$(with_home "$home" env FM_CONTRIBUTIONS_BUDGET=3 bash "$home/state/contributions.check.sh") \
+        || fail 'inherited-budget check shim failed'
+    fi
+    [ -z "$out" ] || fail "generated check printed an unavailable wake: $out"
+    grep -Fxq 'api repos/o/r/pulls/8' "$home/forge/calls" || fail 'generated check did not attempt a read'
+    cmp -s "$home/prior.json" "$home/data/delivery/contributions.json" \
+      || fail "generated check failed to preserve the $mode one-second budget"
+  done
+  pass 'generated checks enforce configured and inherited budgets at runtime'
 }
 
 test_unavailable_forge_records_error_and_wakes_once_per_episode() { # genuine outage, two consecutive cycles
@@ -828,8 +1189,683 @@ test_late_owner_keeps_failure_episode_suppressed() {
   pass 'a late owner does not restart a shared forge failure episode'
 }
 
+test_outside_pr_closeout_window_and_green_ci() {
+  local home out
+  home=$(new_home outside-closeout-window)
+  forge_home "$home"
+  with_home "$home" "$ROOT/bin/fm-pr-check.sh" delivery https://github.com/o/r/pull/8 >/dev/null \
+    || fail 'could not register outside PR'
+  out=$(with_home "$home" env FM_CONTRIBUTIONS_NOW=2026-09-16T08:00:00Z "$ROOT/bin/fm-contributions.sh" poll) \
+    || fail 'initial outside PR observation failed'
+  [ -z "$out" ] || fail "a new outside PR closed out immediately: $out"
+  out=$(with_home "$home" env FM_CONTRIBUTIONS_NOW=2026-09-16T09:59:00Z "$ROOT/bin/fm-contributions.sh" poll) \
+    || fail 'inside-window outside PR poll failed'
+  [ -z "$out" ] || fail "an outside PR woke before its two-hour window: $out"
+  out=$(with_home "$home" env FM_CONTRIBUTIONS_NOW=2026-09-16T10:00:00Z "$ROOT/bin/fm-contributions.sh" poll) \
+    || fail 'expired outside PR poll failed'
+  case "$out" in *'state=ready'*) ;; *) fail "green clean outside PR did not become cleanup-due: $out" ;; esac
+  [ "$(awk -F '\t' '$3 == "check" {n++} END {print n+0}' "$home/state/.wake-queue")" = 1 ] \
+    || fail 'cleanup due was not durably enqueued exactly once'
+  out=$(with_home "$home" env FM_CONTRIBUTIONS_NOW=2026-09-16T10:05:00Z "$ROOT/bin/fm-contributions.sh" poll) \
+    || fail 'repeat closeout observation failed'
+  [ -z "$out" ] && [ "$(awk -F '\t' '$3 == "check" {n++} END {print n+0}' "$home/state/.wake-queue")" = 1 ] \
+    || fail "a stable closeout episode woke more than once: $out"
+  rm "$home/state/delivery.meta"
+  out=$(with_home "$home" env FM_CONTRIBUTIONS_NOW=2026-09-16T10:10:00Z "$ROOT/bin/fm-contributions.sh" poll) \
+    || fail 'post-cleanup contribution observation failed'
+  [ -z "$out" ] || fail "a retained contribution was treated as another cleanup: $out"
+  pass 'outside PR closeout waits two hours, then signals once for green clean work'
+}
+
+test_own_repository_pr_is_unchanged() {
+  local home out head_repo permission
+  for permission in ADMIN MAINTAIN WRITE; do
+    for head_repo in owner/r fork/r; do
+      home=$(new_home "owned-$permission-${head_repo%%/*}")
+      forge_home "$home"
+      printf '%s\n' "$permission" > "$home/forge/permission"
+      printf '2026-09-16T08:00:00Z\n' > "$home/forge/pr-time"
+      printf '%s\n' "$head_repo" > "$home/forge/head-repo"
+      with_home "$home" "$ROOT/bin/fm-pr-check.sh" delivery https://github.com/o/r/pull/8 >/dev/null \
+        || fail 'could not register owned PR'
+      out=$(with_home "$home" env FM_CONTRIBUTIONS_NOW=2026-09-16T12:00:00Z "$ROOT/bin/fm-contributions.sh" poll) \
+        || fail 'owned PR observation failed'
+      [ -z "$out" ] && [ ! -s "$home/state/.wake-queue" ] \
+        || fail "$permission base permission gained a closeout wake: $out"
+      jq -e --arg permission "$permission" '.records[0].observation | .viewer_permission == $permission and .can_merge == true' \
+        "$home/data/delivery/contributions.json" >/dev/null || fail 'write-or-higher permission did not establish merge readiness'
+    done
+  done
+  pass 'write-or-higher forge permissions retain merge-based cleanup across PR topologies'
+}
+
+test_registered_clones_do_not_establish_ownership() {
+  local home out head_repo permission
+  for permission in READ TRIAGE; do
+    for head_repo in owner/r fork/r; do
+      home=$(new_home "registered-outside-$permission-${head_repo%%/*}")
+      forge_home "$home"
+      with_home "$home" "$ROOT/bin/fm-pr-check.sh" delivery https://github.com/o/r/pull/8 >/dev/null \
+        || fail 'could not register outside PR'
+      printf '%s\n' "$permission" > "$home/forge/permission"
+      printf '%s\n' "$head_repo" > "$home/forge/head-repo"
+      printf '2026-09-16T08:00:00Z\n' > "$home/forge/pr-time"
+      mkdir -p "$home/projects/registered"
+      git -C "$home/projects/registered" init -q
+      git -C "$home/projects/registered" remote add origin https://alice@github.com/Owner/r.git
+      printf -- '- registered [no-mistakes] - Third-party repository (added 2026-09-16)\n' > "$home/data/projects.md"
+      out=$(with_home "$home" env FM_CONTRIBUTIONS_NOW=2026-09-16T12:00:00Z "$ROOT/bin/fm-contributions.sh" poll) \
+        || fail 'registered outside repository observation failed'
+      case "$out" in *'state=ready'*) ;; *) fail "a registered clone with $permission permission suppressed closeout: $out" ;; esac
+      jq -e --arg permission "$permission" '.records[0].observation | .viewer_permission == $permission and .can_merge == false' \
+        "$home/data/delivery/contributions.json" >/dev/null || fail 'read-or-triage permission incorrectly established merge readiness'
+    done
+  done
+  pass 'registered third-party clones remain outside according to forge permissions'
+}
+
+test_unreadable_permission_blocks_closeout() {
+  local home out scenario
+  for scenario in missing null unknown wrong-type inaccessible request-error; do
+    home=$(new_home "permission-unavailable-$scenario")
+    forge_home "$home"
+    with_home "$home" "$ROOT/bin/fm-pr-check.sh" delivery https://github.com/o/r/pull/8 >/dev/null \
+      || fail 'could not register PR before permission failure'
+    printf '0\n' > "$home/config/outside-pr-review-window-hours"
+    case "$scenario" in
+      missing) printf '{"data":{"repository":{}}}\n' ;;
+      null) printf '{"data":{"repository":{"viewerPermission":null}}}\n' ;;
+      unknown) printf '{"data":{"repository":{"viewerPermission":"UNKNOWN"}}}\n' ;;
+      wrong-type) printf '{"data":{"repository":{"viewerPermission":false}}}\n' ;;
+      inaccessible) printf '{"data":{"repository":null},"errors":[{"message":"Not accessible"}]}\n' ;;
+      request-error) : > "$home/forge/permission-error" ;;
+    esac > "$home/forge/permission-response.json"
+    out=$(with_home "$home" "$ROOT/bin/fm-contributions.sh" poll) || fail 'permission failure poll failed'
+    [ "$out" = 'contributions: observation unavailable for https://github.com/o/r/pull/8' ] \
+      || fail "$scenario permission did not block and report closeout: $out"
+    jq -e '.records[0].error != null and .records[0].closeout_notice == null' \
+      "$home/data/delivery/contributions.json" >/dev/null || fail 'unreadable permission authorized closeout'
+    out=$(with_home "$home" "$ROOT/bin/fm-contributions.sh" poll) || fail 'repeat permission failure poll failed'
+    [ -z "$out" ] || fail "unchanged permission failure repeated its diagnostic: $out"
+    rm -f "$home/forge/permission-response.json" "$home/forge/permission-error"
+    out=$(with_home "$home" "$ROOT/bin/fm-contributions.sh" poll) || fail 'permission recovery poll failed'
+    case "$out" in *'state=ready'*) ;; *) fail "readable outside permission did not restore closeout: $out" ;; esac
+  done
+  pass 'unreadable permissions report once and never authorize closeout before recovery'
+}
+
+# Contract: docs/configuration.md requires readable permissions at closeout.
+# A prior READ observation must not authorize cleanup after a lookup fails.
+test_permission_lookup_failure_after_readable_observation() {
+  local home out
+  home=$(new_home permission-lost-at-expiry)
+  forge_home "$home"
+  with_home "$home" "$ROOT/bin/fm-pr-check.sh" delivery https://github.com/o/r/pull/8 >/dev/null \
+    || fail 'could not register PR before permission lookup failure'
+  with_home "$home" "$ROOT/bin/fm-contributions.sh" poll >/dev/null || fail 'readable permission baseline failed'
+  jq -e '.records[0].observation.viewer_permission == "READ" and .records[0].error == null' \
+    "$home/data/delivery/contributions.json" >/dev/null || fail 'baseline did not establish outside permission'
+  : > "$home/forge/permission-error"
+  out=$(with_home "$home" env FM_CONTRIBUTIONS_NOW=2026-09-16T10:00:00Z "$ROOT/bin/fm-contributions.sh" poll) \
+    || fail 'permission lookup failure at expiry failed'
+  [ "$out" = 'contributions: observation unavailable for https://github.com/o/r/pull/8' ] \
+    || fail "unreadable permission reused prior cleanup authority: $out"
+  jq -e '.records[0] | .checked_at == "2026-09-16T10:00:00Z" and .error != null and .closeout_notice == null' \
+    "$home/data/delivery/contributions.json" >/dev/null || fail 'failed permission read authorized closeout'
+  [ -f "$home/state/delivery.meta" ] && [ -d "$home/wt" ] || fail 'unreadable permission removed the task'
+  [ ! -s "$home/state/.wake-queue" ] \
+    || [ "$(awk -F '\t' 'index($0, "contributions closeout") {n++} END {print n+0}' "$home/state/.wake-queue")" = 0 ] \
+    || fail 'unreadable permission enqueued a closeout wake'
+  out=$(with_home "$home" env FM_CONTRIBUTIONS_NOW=2026-09-16T10:05:00Z "$ROOT/bin/fm-contributions.sh" poll) \
+    || fail 'repeat unreadable permission poll failed'
+  [ -z "$out" ] || fail "unreadable permission repeated its diagnostic or authorized cleanup: $out"
+  rm "$home/forge/permission-error"
+  out=$(with_home "$home" env FM_CONTRIBUTIONS_NOW=2026-09-16T10:10:00Z "$ROOT/bin/fm-contributions.sh" poll) \
+    || fail 'permission lookup recovery failed'
+  case "$out" in *'state=ready'*) ;; *) fail "restored outside permission did not permit closeout: $out" ;; esac
+  pass 'an unreadable permission lookup cannot reuse prior outside cleanup authority'
+}
+
+test_initial_observation_uses_forge_timestamp() {
+  local home out timestamp_kind
+  for timestamp_kind in pr-time pr-created-time; do
+    home=$(new_home "initial-forge-timestamp-$timestamp_kind")
+    forge_home "$home"
+    with_home "$home" "$ROOT/bin/fm-pr-check.sh" delivery https://github.com/o/r/pull/8 >/dev/null \
+      || fail 'could not register the current closeout PR'
+    printf '2026-09-16T08:00:00Z\n' > "$home/forge/$timestamp_kind"
+    printf 'owner/r\n' > "$home/forge/head-repo"
+    out=$(with_home "$home" env FM_CONTRIBUTIONS_NOW=2026-09-16T11:00:00Z "$ROOT/bin/fm-contributions.sh" poll) \
+      || fail 'delayed observation failed'
+    case "$out" in *'state=ready'*) ;; *) fail "PR timestamp 08:00 first seen at 11:00 was not already due: $out" ;; esac
+    jq -e '.records[0].closeout_since == "2026-09-16T08:00:00Z"' "$home/data/delivery/contributions.json" >/dev/null \
+      || fail 'initial forge timestamp did not supply the saved review-window start'
+    printf '2026-09-16T11:30:00Z\n' > "$home/forge/pr-time"
+    out=$(with_home "$home" env FM_CONTRIBUTIONS_NOW=2026-09-16T12:00:00Z "$ROOT/bin/fm-contributions.sh" poll) \
+      || fail 'CI rerun observation failed'
+    [ -z "$out" ] || fail "CI rerun restarted closeout or repeated its wake: $out"
+  done
+  pass 'initial observation uses an available PR timestamp and later updates preserve the window'
+}
+
+
+test_missing_forge_timestamp_falls_back_to_observation() {
+  local home out
+  home=$(new_home missing-forge-timestamp)
+  forge_home "$home"
+  with_home "$home" "$ROOT/bin/fm-pr-check.sh" delivery https://github.com/o/r/pull/8 >/dev/null \
+    || fail 'could not register the current closeout PR'
+  out=$(with_home "$home" env FM_CONTRIBUTIONS_NOW=2026-09-16T11:00:00Z "$ROOT/bin/fm-contributions.sh" poll) \
+    || fail 'observation without forge timestamp failed'
+  [ -z "$out" ] || fail "missing forge timestamp expired the window immediately: $out"
+  out=$(with_home "$home" env FM_CONTRIBUTIONS_NOW=2026-09-16T12:59:00Z "$ROOT/bin/fm-contributions.sh" poll) \
+    || fail 'fallback inside-window observation failed'
+  [ -z "$out" ] || fail "fallback window ended early: $out"
+  out=$(with_home "$home" env FM_CONTRIBUTIONS_NOW=2026-09-16T13:00:00Z "$ROOT/bin/fm-contributions.sh" poll) \
+    || fail 'fallback expiry observation failed'
+  case "$out" in *'state=ready'*) ;; *) fail "fallback did not expire two hours after first observation: $out" ;; esac
+  pass 'missing forge timestamps use the first observation without extending its window'
+}
+
+test_worker_head_can_precede_published_head() {
+  local home out
+  home=$(new_home pipeline-descendant-head)
+  forge_home "$home"
+  with_home "$home" "$ROOT/bin/fm-pr-check.sh" delivery https://github.com/o/r/pull/8 >/dev/null \
+    || fail 'could not register the current closeout PR'
+  printf '2026-09-16T08:00:00Z\n' > "$home/forge/pr-time"
+  git -C "$home/wt" update-ref refs/remotes/fork/offer HEAD
+  printf 'pipeline fix\n' >> "$home/wt/tracked"
+  git -C "$home/wt" add tracked
+  git -C "$home/wt" commit -qm 'pipeline fix'
+  git -C "$home/wt" rev-parse HEAD > "$home/forge/head"
+  git -C "$home/wt" reset --hard -q HEAD~1
+  out=$(with_home "$home" env FM_CONTRIBUTIONS_NOW=2026-09-16T10:00:00Z "$ROOT/bin/fm-contributions.sh" poll) \
+    || fail 'pipeline descendant observation failed'
+  case "$out" in *'state=ready'*) ;; *) fail "clean pushed worker head behind pipeline head was held: $out" ;; esac
+  pass 'a clean pushed worker checkout behind the PR head remains eligible for guarded teardown'
+}
+
+test_red_ci_holds_closeout() {
+  local home out
+  home=$(new_home red-ci-closeout)
+  forge_home "$home"
+  with_home "$home" "$ROOT/bin/fm-pr-check.sh" delivery https://github.com/o/r/pull/8 >/dev/null \
+    || fail 'could not register outside PR for red CI case'
+  out=$(with_home "$home" env FM_CONTRIBUTIONS_NOW=2026-09-16T08:00:00Z "$ROOT/bin/fm-contributions.sh" poll) \
+    || fail 'initial outside PR observation failed'
+  printf '%s\n' '[{"check_runs":[{"name":"test","id":2,"status":"completed","conclusion":"failure","started_at":"2026-09-16T10:00:00Z"}]}]' \
+    > "$home/forge/checks.json"
+  out=$(with_home "$home" env FM_CONTRIBUTIONS_NOW=2026-09-16T10:00:00Z "$ROOT/bin/fm-contributions.sh" poll) \
+    || fail 'red CI outside PR poll failed'
+  case "$out" in *'state=ci'*) ;; *) fail "red CI was not reported as a closeout hold: $out" ;; esac
+  case "$out" in *'state=ready'*) fail 'red CI was marked ready for cleanup' ;; esac
+  pass 'red CI notifies firstmate and holds the task in place'
+}
+
+# Contract: docs/configuration.md requires every previously observed CI lane.
+# Losing one lane must revoke readiness even while the remaining lane is green.
+test_ci_lane_disappearing_after_ready_holds_closeout() {
+  local home out head
+  home=$(new_home disappearing-lane-closeout)
+  forge_home "$home"
+  head=$(cat "$home/forge/head")
+  with_home "$home" "$ROOT/bin/fm-pr-check.sh" delivery https://github.com/o/r/pull/8 >/dev/null \
+    || fail 'could not register PR before CI lane disappearance'
+  printf '%s\n' '[{"check_runs":[
+    {"name":"test","id":1,"status":"completed","conclusion":"success","started_at":"2026-09-16T08:00:00Z"},
+    {"name":"required-extra","id":2,"status":"completed","conclusion":"success","started_at":"2026-09-16T08:00:00Z"}]}]' > "$home/forge/checks.json"
+  with_home "$home" "$ROOT/bin/fm-contributions.sh" poll >/dev/null || fail 'complete CI baseline failed'
+  out=$(with_home "$home" env FM_CONTRIBUTIONS_NOW=2026-09-16T10:00:00Z "$ROOT/bin/fm-contributions.sh" poll) \
+    || fail 'complete CI expiry poll failed'
+  case "$out" in *'state=ready'*) ;; *) fail "complete green CI did not establish readiness: $out" ;; esac
+  printf '%s\n' '[{"check_runs":[{"name":"test","id":1,"status":"completed","conclusion":"success","started_at":"2026-09-16T08:00:00Z"}]}]' \
+    > "$home/forge/checks.json"
+  out=$(with_home "$home" env FM_CONTRIBUTIONS_NOW=2026-09-16T10:05:00Z "$ROOT/bin/fm-contributions.sh" poll) \
+    || fail 'disappearing CI lane poll failed'
+  [ "$out" = "contribution-wake: check: contributions closeout delivery https://github.com/o/r/pull/8 head=$head state=ci" ] \
+    || fail "disappearing lane retained cleanup readiness: $out"
+  out=$(with_home "$home" env FM_CONTRIBUTIONS_NOW=2026-09-16T10:10:00Z "$ROOT/bin/fm-contributions.sh" poll) \
+    || fail 'repeated disappearing CI lane poll failed'
+  [ -z "$out" ] || fail "missing lane repeated its hold or authorized cleanup: $out"
+  jq -e --arg head "$head" '.records[0] | .observation.head == $head
+    and .observation.absent_checks == ["required-extra"] and .closeout_notice == ($head + ":ci")' \
+    "$home/data/delivery/contributions.json" >/dev/null || fail 'repeated polling lost the disappeared CI lane'
+  [ -f "$home/state/delivery.meta" ] && [ -d "$home/wt" ] || fail 'missing CI lane removed the task'
+  [ "$(awk -F '\t' '$3 == "check" {n++} END {print n+0}' "$home/state/.wake-queue")" = 2 ] \
+    || fail 'lane disappearance did not enqueue exactly one new hold'
+  pass 'a disappearing CI lane revokes closeout readiness and keeps the task held'
+}
+
+test_new_push_restarts_closeout_window() {
+  local home out
+  home=$(new_home pushed-fix-closeout)
+  forge_home "$home"
+  with_home "$home" "$ROOT/bin/fm-pr-check.sh" delivery https://github.com/o/r/pull/8 >/dev/null \
+    || fail 'could not register outside PR for push case'
+  out=$(with_home "$home" env FM_CONTRIBUTIONS_NOW=2026-09-16T08:00:00Z "$ROOT/bin/fm-contributions.sh" poll) \
+    || fail 'initial outside PR observation failed'
+  printf 'fixed\n' >> "$home/wt/tracked"
+  git -C "$home/wt" add tracked
+  GIT_AUTHOR_DATE=2026-09-16T10:00:00Z GIT_COMMITTER_DATE=2026-09-16T10:00:00Z \
+    git -C "$home/wt" commit -qm fix
+  git -C "$home/wt" rev-parse HEAD > "$home/forge/head"
+  printf '2026-09-16T08:00:00Z\n' > "$home/forge/pr-time"
+  out=$(with_home "$home" env FM_CONTRIBUTIONS_NOW=2026-09-16T11:00:00Z "$ROOT/bin/fm-contributions.sh" poll) \
+    || fail 'new pushed head observation failed'
+  [ -z "$out" ] || fail "new push did not restart its review window: $out"
+  out=$(with_home "$home" env FM_CONTRIBUTIONS_NOW=2026-09-16T12:59:00Z "$ROOT/bin/fm-contributions.sh" poll) \
+    || fail 'post-push inside-window poll failed'
+  [ -z "$out" ] || fail "new head closed out before two hours: $out"
+  out=$(with_home "$home" env FM_CONTRIBUTIONS_NOW=2026-09-16T13:00:00Z "$ROOT/bin/fm-contributions.sh" poll) \
+    || fail 'post-push expiry poll failed'
+  case "$out" in *'state=ready'*) ;; *) fail "new head did not become closeout-due after its own window: $out" ;; esac
+  pass 'a changed PR head restarts the closeout window'
+}
+
+# Contract: docs/configuration.md gives each observed head change two hours.
+# Reject both inheriting an expired window and reusing a returned SHA's old window.
+test_returned_head_restarts_closeout_window() {
+  local home out initial_head replacement_head
+  home=$(new_home returned-head-closeout)
+  forge_home "$home"
+  git init --bare -q "$home/fork.git"
+  git -C "$home/wt" remote add fork "$home/fork.git"
+  git -C "$home/wt" push -q fork HEAD:refs/heads/offer || fail 'initial offer push failed'
+  with_home "$home" "$ROOT/bin/fm-pr-check.sh" delivery https://github.com/o/r/pull/8 >/dev/null \
+    || fail 'could not register the current closeout PR'
+  printf '2026-09-16T08:00:00Z\n' > "$home/forge/pr-time"
+  initial_head=$(cat "$home/forge/head")
+  out=$(with_home "$home" env FM_CONTRIBUTIONS_NOW=2026-09-16T08:00:00Z "$ROOT/bin/fm-contributions.sh" poll) \
+    || fail 'initial head observation failed'
+  [ -z "$out" ] || fail "initial head did not receive a review window: $out"
+  out=$(with_home "$home" env FM_CONTRIBUTIONS_NOW=2026-09-16T10:00:00Z "$ROOT/bin/fm-contributions.sh" poll) \
+    || fail 'initial head expiry poll failed'
+  case "$out" in *"head=$initial_head state=ready"*) ;; *) fail "initial head did not expire after two hours: $out" ;; esac
+  printf 'fix\n' >> "$home/wt/tracked"
+  git -C "$home/wt" add tracked
+  git -C "$home/wt" commit -qm fix
+  git -C "$home/wt" push -q fork HEAD:refs/heads/offer || fail 'replacement offer push failed'
+  git --git-dir="$home/fork.git" rev-parse refs/heads/offer > "$home/forge/head"
+  replacement_head=$(cat "$home/forge/head")
+  out=$(with_home "$home" env FM_CONTRIBUTIONS_NOW=2026-09-16T11:00:00Z "$ROOT/bin/fm-contributions.sh" poll) \
+    || fail 'replacement head observation failed'
+  [ -z "$out" ] || fail "replacement head inherited the expired window: $out"
+  jq -e --arg head "$replacement_head" '.records[0] | .closeout_head == $head and .closeout_since == "2026-09-16T11:00:00Z"' \
+    "$home/data/delivery/contributions.json" >/dev/null || fail 'replacement head did not persist a fresh window'
+  out=$(with_home "$home" env FM_CONTRIBUTIONS_NOW=2026-09-16T12:59:00Z "$ROOT/bin/fm-contributions.sh" poll) \
+    || fail 'replacement head inside-window poll failed'
+  [ -z "$out" ] || fail "replacement head closed out before its new window expired: $out"
+  out=$(with_home "$home" env FM_CONTRIBUTIONS_NOW=2026-09-16T13:00:00Z "$ROOT/bin/fm-contributions.sh" poll) \
+    || fail 'replacement head expiry poll failed'
+  case "$out" in *"head=$replacement_head state=ready"*) ;; *) fail "replacement head did not expire after two hours: $out" ;; esac
+  git -C "$home/wt" reset --hard -q "$initial_head"
+  git -C "$home/wt" push --force -q fork HEAD:refs/heads/offer || fail 'returned offer push failed'
+  git --git-dir="$home/fork.git" rev-parse refs/heads/offer > "$home/forge/head"
+  out=$(with_home "$home" env FM_CONTRIBUTIONS_NOW=2026-09-16T14:00:00Z "$ROOT/bin/fm-contributions.sh" poll) \
+    || fail 'returned head observation failed'
+  [ -z "$out" ] || fail "an older SHA reused its historical window: $out"
+  jq -e --arg head "$initial_head" '.records[0] | .closeout_head == $head and .closeout_since == "2026-09-16T14:00:00Z"' \
+    "$home/data/delivery/contributions.json" >/dev/null || fail 'returned head did not persist a fresh window'
+  out=$(with_home "$home" env FM_CONTRIBUTIONS_NOW=2026-09-16T15:59:00Z "$ROOT/bin/fm-contributions.sh" poll) \
+    || fail 'returned head inside-window poll failed'
+  [ -z "$out" ] || fail "returned head closed out before its new window expired: $out"
+  out=$(with_home "$home" env FM_CONTRIBUTIONS_NOW=2026-09-16T16:00:00Z "$ROOT/bin/fm-contributions.sh" poll) \
+    || fail 'returned head expiry poll failed'
+  case "$out" in *"head=$initial_head state=ready"*) ;; *) fail "returned head did not close out after its new two-hour window: $out" ;; esac
+  pass 'A to B to A starts a new window for every observed head change'
+}
+
+test_zero_and_malformed_closeout_window() {
+  local home out
+  home=$(new_home closeout-window-config)
+  forge_home "$home"
+  with_home "$home" "$ROOT/bin/fm-pr-check.sh" delivery https://github.com/o/r/pull/8 >/dev/null \
+    || fail 'could not register outside PR for config cases'
+  printf '0\n' > "$home/config/outside-pr-review-window-hours"
+  out=$(with_home "$home" env FM_CONTRIBUTIONS_NOW=2026-09-16T08:00:00Z "$ROOT/bin/fm-contributions.sh" poll) \
+    || fail 'zero-hour closeout poll failed'
+  case "$out" in *'state=ready'*) ;; *) fail "zero did not mean immediate closeout: $out" ;; esac
+  printf 'two\n' > "$home/config/outside-pr-review-window-hours"
+  out=$(with_home "$home" env FM_CONTRIBUTIONS_NOW=2026-09-16T08:00:00Z "$ROOT/bin/fm-contributions.sh" poll) \
+    || fail 'poll failed while reporting malformed config'
+  [[ "$out" == *'invalid config/outside-pr-review-window-hours'* ]] \
+    || fail "malformed closeout config was not reported: $out"
+  out=$(with_home "$home" env FM_CONTRIBUTIONS_NOW=2026-09-16T08:05:00Z "$ROOT/bin/fm-contributions.sh" poll) \
+    || fail 'repeat malformed-config poll failed'
+  [ -z "$out" ] || fail "same malformed-config episode woke more than once: $out"
+  pass 'zero means immediate closeout and malformed configuration fails visibly'
+}
+
+test_unacknowledged_feedback_with_observation_fallback() {
+  local home out type fixture token
+  for type in review comment inline; do
+    home=$(new_home "feedback-fallback-$type")
+    forge_home "$home"
+    with_home "$home" "$ROOT/bin/fm-pr-check.sh" delivery https://github.com/o/r/pull/8 >/dev/null \
+      || fail 'could not register the current closeout PR'
+    case "$type" in review) fixture=reviews ;; comment) fixture=comments ;; inline) fixture=inline ;; esac
+    jq -n --arg head "$(cat "$home/forge/head")" '[{id:12,user:{login:"maintainer"},author_association:"OWNER",
+      body:"Please clarify",html_url:"https://github.com/o/r/pull/8#feedback-12",
+      updated_at:"2026-09-16T10:30:00Z",submitted_at:"2026-09-16T10:30:00Z",commit_id:$head,state:"COMMENTED"}]' > "$home/forge/$fixture.json"
+    out=$(with_home "$home" env FM_CONTRIBUTIONS_NOW=2026-09-16T11:00:00Z "$ROOT/bin/fm-contributions.sh" poll) \
+      || fail 'initial feedback observation without forge timestamp failed'
+    out=$(with_home "$home" env FM_CONTRIBUTIONS_NOW=2026-09-16T13:00:00Z "$ROOT/bin/fm-contributions.sh" poll) \
+      || fail 'fallback feedback expiry poll failed'
+    case "$out" in *'state=review'*) ;; *) fail "observation fallback dismissed unacknowledged $type feedback: $out" ;; esac
+    token=$(jq -r '.records[0].pending[0].token' "$home/data/delivery/contributions.json")
+    with_home "$home" "$ROOT/bin/fm-contributions.sh" ack delivery https://github.com/o/r/pull/8 "$token" \
+      || fail 'fallback feedback acknowledgement failed'
+    out=$(with_home "$home" env FM_CONTRIBUTIONS_NOW=2026-09-16T13:05:00Z "$ROOT/bin/fm-contributions.sh" poll) \
+      || fail 'acknowledged fallback feedback observation failed'
+    case "$out" in *'state=ready'*) ;; *) fail "acknowledged $type feedback still blocked the fallback window: $out" ;; esac
+  done
+  pass 'observation fallback never dismisses unacknowledged feedback'
+}
+
+test_unanswered_feedback_and_dirty_worktree_hold_closeout() {
+  local home out type token fixture
+  for type in review comment inline; do
+    home=$(new_home "feedback-closeout-$type")
+    forge_home "$home"
+    with_home "$home" "$ROOT/bin/fm-pr-check.sh" delivery https://github.com/o/r/pull/8 >/dev/null \
+      || fail 'could not register the current closeout PR'
+    printf '2026-09-16T08:00:00Z\n' > "$home/forge/pr-time"
+    printf 'CHANGES_REQUESTED\n' > "$home/forge/review-decision"
+    case "$type" in review) fixture=reviews ;; comment) fixture=comments ;; inline) fixture=inline ;; esac
+    jq -n --arg head "$(cat "$home/forge/head")" '[{id:12,user:{login:"maintainer"},author_association:"OWNER",
+      body:"Please clarify the contract",html_url:"https://github.com/o/r/pull/8#feedback-12",
+      updated_at:"2026-09-16T07:59:00Z",submitted_at:"2026-09-16T07:59:00Z",commit_id:$head,state:"CHANGES_REQUESTED"}]' > "$home/forge/$fixture.json"
+    out=$(with_home "$home" env FM_CONTRIBUTIONS_NOW=2026-09-16T10:00:00Z "$ROOT/bin/fm-contributions.sh" poll) \
+      || fail 'feedback expiry observation failed'
+    case "$out" in *'state=review'*) ;; *) fail "older unacknowledged $type feedback was not held: $out" ;; esac
+    token=$(jq -r '.records[0].pending[0].token' "$home/data/delivery/contributions.json")
+    with_home "$home" "$ROOT/bin/fm-contributions.sh" ack delivery https://github.com/o/r/pull/8 "$token" \
+      || fail 'feedback acknowledgement failed'
+    out=$(with_home "$home" env FM_CONTRIBUTIONS_NOW=2026-09-16T10:05:00Z "$ROOT/bin/fm-contributions.sh" poll) \
+      || fail 'acknowledged feedback observation failed'
+    case "$out" in *'state=ready'*) ;; *) fail "acknowledged $type feedback or review decision still blocked cleanup: $out" ;; esac
+    jq '.[0].updated_at="2026-09-16T10:06:00Z" | .[0].submitted_at="2026-09-16T10:06:00Z"' \
+      "$home/forge/$fixture.json" > "$home/forge/new-feedback.json"
+    mv "$home/forge/new-feedback.json" "$home/forge/$fixture.json"
+    out=$(with_home "$home" env FM_CONTRIBUTIONS_NOW=2026-09-16T10:10:00Z "$ROOT/bin/fm-contributions.sh" poll) \
+      || fail 'renewed feedback observation failed'
+    case "$out" in *'state=review'*) ;; *) fail "edited $type feedback did not hold closeout again: $out" ;; esac
+    printf 'fix\n' >> "$home/wt/tracked"
+    git -C "$home/wt" add tracked
+    git -C "$home/wt" commit -qm fix
+    git -C "$home/wt" rev-parse HEAD > "$home/forge/head"
+    out=$(with_home "$home" env FM_CONTRIBUTIONS_NOW=2026-09-16T11:00:00Z "$ROOT/bin/fm-contributions.sh" poll) \
+      || fail 'pushed fix observation failed'
+    out=$(with_home "$home" env FM_CONTRIBUTIONS_NOW=2026-09-16T13:00:00Z "$ROOT/bin/fm-contributions.sh" poll) \
+      || fail 'post-feedback pushed fix observation failed'
+    case "$out" in *'state=review'*) ;; *) fail "a pushed fix dismissed unacknowledged $type feedback: $out" ;; esac
+    jq -e '(.records[0].pending | length) == 1' "$home/data/delivery/contributions.json" >/dev/null \
+      || fail 'closeout consumed feedback instead of retaining observer acknowledgement'
+    token=$(jq -r '.records[0].pending[0].token' "$home/data/delivery/contributions.json")
+    with_home "$home" "$ROOT/bin/fm-contributions.sh" ack delivery https://github.com/o/r/pull/8 "$token" \
+      || fail 'post-push feedback acknowledgement failed'
+    out=$(with_home "$home" env FM_CONTRIBUTIONS_NOW=2026-09-16T13:05:00Z "$ROOT/bin/fm-contributions.sh" poll) \
+      || fail 'acknowledged post-push observation failed'
+    case "$out" in *'state=ready'*) ;; *) fail "acknowledged $type feedback blocked post-push closeout: $out" ;; esac
+  done
+  home=$(new_home dirty-closeout)
+  forge_home "$home"
+  with_home "$home" "$ROOT/bin/fm-pr-check.sh" delivery https://github.com/o/r/pull/8 >/dev/null \
+    || fail 'could not register outside PR for dirty workspace case'
+  out=$(with_home "$home" env FM_CONTRIBUTIONS_NOW=2026-09-16T08:00:00Z "$ROOT/bin/fm-contributions.sh" poll) \
+    || fail 'clean baseline observation failed'
+  printf 'uncommitted\n' >> "$home/wt/tracked"
+  out=$(with_home "$home" env FM_CONTRIBUTIONS_NOW=2026-09-16T10:01:00Z "$ROOT/bin/fm-contributions.sh" poll) \
+    || fail 'dirty workspace expiry poll failed'
+  case "$out" in *'state=workspace'*) ;; *) fail "dirty worktree was not held: $out" ;; esac
+  pass 'unanswered review feedback and dirty worktrees hold closeout'
+}
+
+test_replaced_pr_cannot_closeout_current_task() {
+  local home out token
+  home=$(new_home replaced-pr-closeout)
+  forge_home "$home"
+  with_home "$home" "$ROOT/bin/fm-pr-check.sh" delivery https://github.com/o/r/pull/8 >/dev/null \
+    || fail 'could not register original PR'
+  with_home "$home" "$ROOT/bin/fm-contributions.sh" poll >/dev/null || fail 'original PR observation failed'
+  with_home "$home" "$ROOT/bin/fm-pr-check.sh" delivery https://github.com/o/r/pull/9 >/dev/null \
+    || fail 'could not replace task PR'
+  printf 'control_relaunch_tx=relaunch-fixture\ntraceparent=00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01\n' >> "$home/state/delivery.meta"
+  printf '2026-09-16T11:00:00Z\n' > "$home/forge/pr-time"
+  out=$(with_home "$home" env FM_CONTRIBUTIONS_NOW=2026-09-16T11:00:00Z "$ROOT/bin/fm-contributions.sh" poll) \
+    || fail 'replacement PR observation failed'
+  [ -z "$out" ] && [ ! -s "$home/state/.wake-queue" ] \
+    || fail "the expired original PR bypassed the current PR window: $out"
+  jq -e '(.records | length) == 2 and any(.records[]; .url == "https://github.com/o/r/pull/8"
+    and .closeout_since == "2026-09-16T08:00:00Z" and .closeout_notice == null)
+    and any(.records[]; .url == "https://github.com/o/r/pull/9" and .closeout_since == "2026-09-16T11:00:00Z")' \
+    "$home/data/delivery/contributions.json" >/dev/null || fail 'replacement discarded the original contribution or reused its window'
+  printf '%s\n' '[{"id":12,"user":{"login":"maintainer"},"author_association":"OWNER",
+    "body":"Please clarify","html_url":"https://github.com/o/r/pull/8#issuecomment-12","updated_at":"2026-09-16T11:30:00Z"}]' > "$home/forge/comments.json"
+  out=$(with_home "$home" env FM_CONTRIBUTIONS_NOW=2026-09-16T11:30:00Z "$ROOT/bin/fm-contributions.sh" poll) \
+    || fail 'retained PR feedback observation failed'
+  jq -e 'any(.records[]; .url == "https://github.com/o/r/pull/8" and (.pending | length) == 1)' \
+    "$home/data/delivery/contributions.json" >/dev/null || fail 'replaced PR stopped observing feedback'
+  case "$out" in *'contributions closeout'*) fail "retained PR feedback emitted a closeout signal: $out" ;; esac
+  token=$(jq -r '.records[] | select(.url == "https://github.com/o/r/pull/9") | .pending[0].token' "$home/data/delivery/contributions.json")
+  with_home "$home" "$ROOT/bin/fm-contributions.sh" ack delivery https://github.com/o/r/pull/9 "$token" \
+    || fail 'current PR feedback acknowledgement failed'
+  out=$(with_home "$home" env FM_CONTRIBUTIONS_NOW=2026-09-16T13:00:00Z "$ROOT/bin/fm-contributions.sh" poll) \
+    || fail 'current PR expiry observation failed'
+  [ "$out" = "contribution-wake: check: contributions closeout delivery https://github.com/o/r/pull/9 head=$(cat "$home/forge/head") state=ready" ] \
+    || fail "expiry did not select only the current PR: $out"
+  pass 'replaced PRs retain feedback observation while only the current PR can close out a ship'
+}
+
+test_closeout_requires_current_ship_metadata() {
+  local home out scenario
+  for scenario in scout secondmate missing-kind missing-pr invalid-pr duplicate-pr; do
+    home=$(new_home "closeout-metadata-$scenario")
+    forge_home "$home"
+    printf '0\n' > "$home/config/outside-pr-review-window-hours"
+    case "$scenario" in
+      scout|secondmate) printf 'worktree=%s/wt\nkind=%s\npr=https://github.com/o/r/pull/8\n' "$home" "$scenario" ;;
+      missing-kind) printf 'worktree=%s/wt\npr=https://github.com/o/r/pull/8\n' "$home" ;;
+      missing-pr) printf 'worktree=%s/wt\nkind=ship\n' "$home" ;;
+      invalid-pr) printf 'worktree=%s/wt\nkind=ship\npr=https://github.com/o/r/pull/8?bad\n' "$home" ;;
+      duplicate-pr) printf 'worktree=%s/wt\nkind=ship\npr=https://github.com/o/r/pull/8\npr=https://github.com/o/r/pull/9\n' "$home" ;;
+    esac > "$home/state/delivery.meta"
+    printf 'control_relaunch_tx=relaunch-fixture\ntraceparent=00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01\n' >> "$home/state/delivery.meta"
+    out=$(with_home "$home" "$ROOT/bin/fm-contributions.sh" poll) || fail 'ineligible task observation failed'
+    [ -z "$out" ] && [ ! -s "$home/state/.wake-queue" ] || fail "$scenario metadata authorized closeout: $out"
+    jq -e '.records[0].checked_at == "2026-09-16T08:00:00Z" and .records[0].error == null' \
+      "$home/data/delivery/contributions.json" >/dev/null || fail "$scenario task stopped observing its linked contribution"
+  done
+  pass 'closeout requires a ship with one valid current canonical PR'
+}
+
+test_closeout_accepts_supported_metadata_tails() {
+  local home out layout
+  for layout in relaunch traced relaunch-traced; do
+    home=$(new_home "closeout-metadata-$layout")
+    forge_home "$home"
+    with_home "$home" "$ROOT/bin/fm-pr-check.sh" delivery https://github.com/o/r/pull/8 >/dev/null \
+      || fail 'could not register PR before appending producer metadata'
+    case "$layout" in
+      relaunch|relaunch-traced) printf 'control_relaunch_tx=relaunch-fixture\n' >> "$home/state/delivery.meta" ;;
+    esac
+    case "$layout" in
+      traced|relaunch-traced) printf 'traceparent=00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01\n' >> "$home/state/delivery.meta" ;;
+    esac
+    printf '0\n' > "$home/config/outside-pr-review-window-hours"
+    out=$(with_home "$home" "$ROOT/bin/fm-contributions.sh" poll) || fail 'supported metadata observation failed'
+    [ "$out" = "contribution-wake: check: contributions closeout delivery https://github.com/o/r/pull/8 head=$(cat "$home/forge/head") state=ready" ] \
+      || fail "$layout metadata suppressed a valid ship closeout: $out"
+    [ "$(awk -F '\t' '$3 == "check" {n++} END {print n+0}' "$home/state/.wake-queue")" = 1 ] \
+      || fail "$layout metadata did not enqueue exactly one closeout wake"
+    out=$(with_home "$home" "$ROOT/bin/fm-contributions.sh" poll) || fail 'repeat supported metadata observation failed'
+    [ -z "$out" ] || fail "$layout metadata repeated its closeout wake: $out"
+  done
+  pass 'relaunch and trace metadata tails preserve current ship closeout eligibility'
+}
+
+test_retire_ends_observation_of_a_gone_contribution() {
+  local home out line='contributions: observation unavailable for https://github.com/o/r/pull/8' url=https://github.com/o/r/pull/8
+  home=$(new_home retire-gone)
+  forge_home "$home"
+  wrap_forge "$home"
+  printf 'not-found\n' > "$home/forge/fault"
+  out=$(with_home "$home" env FM_CONTRIBUTIONS_NOW=2026-09-16T09:00:00Z "$ROOT/bin/fm-contributions.sh" poll) || fail 'failing poll failed'
+  [ "$out" = "$line" ] || fail "a gone repository did not raise the unavailable check: $out"
+  bearings "$home" | jq -e '.contributions.known == 1 and .contributions.checked == 0
+    and .contributions.complete == false and .contributions.proven_clear == false' >/dev/null \
+    || fail 'an unreadable contribution did not hold coverage incomplete before retirement'
+  with_home "$home" env FM_CONTRIBUTIONS_NOW=2026-09-16T09:30:00Z "$ROOT/bin/fm-contributions.sh" retire delivery "$url" captain 'repository deleted' \
+    || fail 'retire of an owned unreadable contribution failed'
+  jq -e '.records[0].retired == {actor:"captain",reason:"repository deleted",at:"2026-09-16T09:30:00Z"}' \
+    "$home/data/delivery/contributions.json" >/dev/null || fail 'retire did not record its provenance'
+  : > "$home/forge/calls"
+  for at in 2026-09-16T10:00:00Z 2026-09-16T10:05:00Z; do
+    out=$(with_home "$home" env FM_CONTRIBUTIONS_NOW="$at" "$ROOT/bin/fm-contributions.sh" poll) || fail "poll after retire failed at $at"
+    [ -z "$out" ] || fail "a retired contribution still raised a check: $out"
+  done
+  [ ! -s "$home/forge/calls" ] || fail "a retired contribution stayed in rotation: $(cat "$home/forge/calls")"
+  bearings "$home" | jq -e '.contributions.known == 0 and .contributions.checked == 0
+    and .contributions.complete == true and .contributions.proven_clear == true' >/dev/null \
+    || fail 'a retired contribution still counted against coverage despite its backlog link'
+  pass 'retire stops the unavailable check, leaves rotation and restores complete coverage'
+}
+
+test_late_owner_of_a_retired_final_contribution_is_not_retired() {
+  local home out
+  home=$(new_home retire-late-owner)
+  forge_home "$home"
+  wrap_forge "$home"
+  mutate_record "$home" delivery '.records[0].observation.state="merged"
+    | .records[0].retired={actor:"captain",reason:"repository deleted",at:"2026-09-16T09:30:00Z"}'
+  record "$home" duplicate 8 merged mergeable
+  mutate_record "$home" duplicate '.records[0].error="forge observation unavailable or changed during read"'
+  printf -- '- [ ] late - Filed https://github.com/o/r/pull/8 (repo: sample) (kind: ship)\n' >> "$home/data/backlog.md"
+  out=$(with_home "$home" env FM_CONTRIBUTIONS_NOW=2026-09-17T08:00:00Z "$ROOT/bin/fm-contributions.sh" poll) || fail 'late-owner poll failed'
+  [ -z "$out" ] || fail "a late owner of a retired final contribution printed: $out"
+  [ ! -s "$home/forge/calls" ] || fail 'a known final contribution triggered a forge read'
+  jq -e '.records[0] | .retired == null and .observation.state == "merged" and .error == null' \
+    "$home/data/late/contributions.json" >/dev/null || fail 'a late owner inherited another task'"'"'s retirement'
+  jq -e '.records[0].retired.reason == "repository deleted"' "$home/data/delivery/contributions.json" >/dev/null \
+    || fail 'settling a late owner changed the retired record'
+  with_home "$home" "$ROOT/bin/fm-fleet-snapshot.sh" --contribution-input > "$home/input.json" || fail 'contribution input failed'
+  with_home "$home" "$ROOT/bin/fm-contributions.sh" snapshot "$home/input.json" --all | jq -e '.rows[0].tasks == ["duplicate","late"]' >/dev/null \
+    || fail 'a late owner settled beside a retired final record left known'
+  pass 'a late owner settled beside a retired final record stays unretired and known'
+}
+
+test_retire_is_idempotent_and_refuses_unknown_pairs() {
+  local home url=https://github.com/o/r/pull/8 before err
+  home=$(new_home retire-refusals)
+  forge_home "$home"
+  retire() { with_home "$home" "$ROOT/bin/fm-contributions.sh" retire "$@"; }
+  retire delivery "$url" fleet 'repository deleted' >/dev/null 2>&1 && fail 'retire accepted the fleet as its actor'
+  jq -e '.records[0].retired == null' "$home/data/delivery/contributions.json" >/dev/null || fail 'a fleet retire changed the record'
+  retire delivery "$url" captain 'repository deleted' >/dev/null || fail 'first retire failed'
+  before=$(cat "$home/data/delivery/contributions.json")
+  retire delivery "$url" captain 'second reason' >/dev/null || fail 'repeating a retire was refused'
+  [ "$(cat "$home/data/delivery/contributions.json")" = "$before" ] || fail 'repeating a retire rewrote its first provenance'
+  printf -- '- [ ] linked - Linked only https://github.com/o/r/pull/30 (repo: sample) (kind: ship)\n' >> "$home/data/backlog.md"
+  err=$(retire linked https://github.com/o/r/pull/30 captain gone 2>&1) && fail 'retire created a record for an unobserved pair'
+  case "$err" in *'not recorded for this durable task'*) ;; *) fail "unrecorded-pair refusal was unclear: $err" ;; esac
+  [ ! -e "$home/data/linked/contributions.json" ] || fail 'a refused retire created a record'
+  retire other "$url" captain gone >/dev/null 2>&1 && fail 'retire accepted a task that does not own the URL'
+  record "$home" queued 31 open mergeable
+  retire queued https://github.com/o/r/pull/31 owner gone >/dev/null 2>&1 && fail 'retire accepted an unknown actor'
+  retire queued https://github.com/o/r/pull/31 captain '' >/dev/null 2>&1 && fail 'retire accepted an empty reason'
+  retire queued https://github.com/o/r/pull/31 captain ' 	 ' >/dev/null 2>&1 && fail 'retire accepted a whitespace-only reason'
+  retire queued https://github.com/o/r/pull/31 captain >/dev/null 2>&1 && fail 'retire accepted a missing reason'
+  mutate_record "$home" queued '.records[0].pending=[{token:"comment:1:x",type:"comment"}]'
+  retire queued https://github.com/o/r/pull/31 captain gone >/dev/null 2>&1 && fail 'retire dropped an unacknowledged signal'
+  jq -e '.records[0].retired == null' "$home/data/queued/contributions.json" >/dev/null || fail 'a refused retire changed the record'
+  pass 'retire is idempotent and refuses non-captain, unknown, malformed and signal-bearing pairs'
+}
+
 failures=0
-for test_name in test_actor_coverage test_stale_verdict test_unchecked_is_not_silence test_newest_check_has_no_verdict test_comment_wake test_review_wake test_inline_wake test_ready_issue_wake test_fresh_issue_requires_maintainer test_missing_lane_remains_missing test_partial_freshness_keeps_measured_rows test_malformed_record_cannot_prove_silence test_issue_timeline_and_exact_ack test_verdict_retains_judged_head test_observed_replacement_refreshes_verdict test_unobserved_head_leaves_verdict_unknown test_away_yolo_is_fleet_work test_away_yolo_cross_home_is_fleet_work test_retired_and_unsupported_coverage test_unsupported_forge_is_not_fleet_work test_held_unsupported_forge_is_not_captain_work test_shared_contribution_signal_wakes_once test_watcher_keeps_diagnostics_separate_from_contribution_wakes test_expired_child_unsupported_forge_stays_unmeasured test_watcher_surfaces_new_contribution_once test_home_summary_coverage test_unreadable_pending_is_not_empty test_budget_refusal_between_calls test_budget_bounded_call_timeout test_genuine_failure_near_deadline_is_unavailable test_shared_url_observed_once test_terminal_contribution_settles test_late_owner_inherits_terminal_observation test_done_task_open_pr_still_observed test_reservation_defers_later_url_when_fifteen_seconds_do_not_remain test_three_second_pr_reads_complete_fresh_in_one_cycle test_unavailable_forge_records_error_and_wakes_once_per_episode test_late_owner_keeps_failure_episode_suppressed; do
+for test_name in test_actor_coverage test_stale_verdict test_unchecked_is_not_silence test_newest_check_has_no_verdict test_comment_wake test_review_wake test_inline_wake test_ready_issue_wake test_fresh_issue_requires_maintainer test_missing_lane_remains_missing test_partial_freshness_keeps_measured_rows test_malformed_record_cannot_prove_silence test_issue_timeline_and_exact_ack test_verdict_retains_judged_head test_verdict_actor_values_are_discoverable test_observed_replacement_refreshes_verdict test_unobserved_head_leaves_verdict_unknown test_away_yolo_is_fleet_work test_away_yolo_cross_home_is_fleet_work test_retired_and_unsupported_coverage test_unsupported_forge_is_not_fleet_work test_held_unsupported_forge_is_not_captain_work test_shared_contribution_signal_wakes_once test_watcher_keeps_diagnostics_separate_from_contribution_wakes test_expired_child_unsupported_forge_stays_unmeasured test_watcher_surfaces_new_contribution_once test_home_summary_coverage test_unreadable_pending_is_not_empty test_record_task_identity_matches_dirname_basename test_read_only_views_create_no_state test_budget_refusal_between_calls test_budget_bounded_call_timeout test_genuine_failure_near_deadline_is_unavailable test_shared_url_observed_once test_terminal_contribution_settles test_late_owner_inherits_terminal_observation test_interrupted_multi_owner_poll_settles_every_owner test_done_task_open_pr_still_observed test_reservation_defers_later_url_when_fifteen_seconds_do_not_remain test_three_second_pr_reads_complete_fresh_in_one_cycle test_slow_read_deadline_kill_is_budget_refusal test_unmeasured_url_does_not_starve_the_tail test_budget_is_cut_down_to_the_watcher_check_bound test_arm_plumbs_a_configured_budget_into_the_check_shim test_unavailable_forge_records_error_and_wakes_once_per_episode test_late_owner_keeps_failure_episode_suppressed test_outside_pr_closeout_window_and_green_ci test_own_repository_pr_is_unchanged test_red_ci_holds_closeout test_new_push_restarts_closeout_window test_zero_and_malformed_closeout_window test_unanswered_feedback_and_dirty_worktree_hold_closeout test_initial_observation_uses_forge_timestamp test_missing_forge_timestamp_falls_back_to_observation test_worker_head_can_precede_published_head test_returned_head_restarts_closeout_window test_unacknowledged_feedback_with_observation_fallback test_registered_clones_do_not_establish_ownership test_unreadable_permission_blocks_closeout test_replaced_pr_cannot_closeout_current_task test_closeout_requires_current_ship_metadata test_closeout_accepts_supported_metadata_tails test_ci_lane_disappearing_after_ready_holds_closeout test_permission_lookup_failure_after_readable_observation test_retire_ends_observation_of_a_gone_contribution test_late_owner_of_a_retired_final_contribution_is_not_retired test_retire_is_idempotent_and_refuses_unknown_pairs; do
   ( "$test_name" ) || failures=$((failures + 1))
 done
 [ "$failures" -eq 0 ] || fail "$failures contribution regressions"
+
+test_automated_reviewer_signal() {
+  local home out
+  home=$(new_home automated-review)
+  forge_home "$home"
+  with_home "$home" "$ROOT/bin/fm-pr-check.sh" delivery https://github.com/o/r/pull/8 >/dev/null \
+    || fail 'could not register the owned delivery'
+  registered_checks "$home" >/dev/null
+  jq -n '[{id:31,user:{login:"dependabot[bot]"},author_association:"NONE",body:"Bumps a dependency",
+    html_url:"https://github.com/o/r/pull/8#issuecomment-31",updated_at:"2026-09-16T08:01:00Z"}]' > "$home/forge/comments.json"
+  registered_checks "$home" >/dev/null
+  jq -e '.records[0].pending | length == 0' "$home/data/delivery/contributions.json" >/dev/null \
+    || fail 'an unconfigured bot comment must raise no pending signal'
+  [ ! -s "$home/state/.wake-queue" ] || fail 'an unconfigured bot comment must raise no wake'
+  jq -n --arg head "$HEAD_A" '[{id:32,user:{login:"Copilot-Pull-Request-Reviewer[bot]"},author_association:"NONE",
+    body:"Possible nil dereference",html_url:"https://github.com/o/r/pull/8#discussion_r32",
+    updated_at:"2026-09-16T08:02:00Z",commit_id:$head}]' > "$home/forge/inline.json"
+  registered_checks "$home" >/dev/null
+  jq -e '.records[0].pending | length == 1 and .[0].automated == true and .[0].author == "Copilot-Pull-Request-Reviewer[bot]"' \
+    "$home/data/delivery/contributions.json" >/dev/null || fail 'an automated inline comment must persist as a pending signal'
+  [ "$(awk 'END { print NR }' "$home/state/.wake-queue")" = 1 ] || fail 'an automated inline comment must enqueue exactly one wake'
+  registered_checks "$home" >/dev/null
+  [ "$(awk 'END { print NR }' "$home/state/.wake-queue")" = 1 ] || fail 're-poll duplicated the automated-review wake'
+  out=$(bearings "$home") || fail 'Bearings could not read the automated review fixture'
+  printf '%s' "$out" | jq -e '.contributions.counts.fleet == 1 and .contributions.counts.captain == 0' >/dev/null \
+    || fail "an automated finding must be fleet triage work, never a captain call: $out"
+  with_home "$home" "$ROOT/bin/fm-contributions.sh" pending | jq -e 'length == 1 and .[0].automated == true' >/dev/null \
+    || fail 'supervisor cannot retrieve the automated finding'
+  pass 'a configured automated reviewer wakes as fleet triage and an unconfigured bot does not'
+}
+
+test_automated_reviewer_configuration() {
+  local home
+  home=$(new_home automated-config)
+  forge_home "$home"
+  with_home "$home" "$ROOT/bin/fm-pr-check.sh" delivery https://github.com/o/r/pull/8 >/dev/null \
+    || fail 'could not register the owned delivery'
+  jq -n '[{id:41,user:{login:"dependabot[bot]"},author_association:"NONE",body:"Check this",
+    html_url:"https://github.com/o/r/pull/8#issuecomment-41",updated_at:"2026-09-16T08:01:00Z"},
+    {id:42,user:{login:"copilot-pull-request-reviewer[bot]"},author_association:"NONE",body:"Nit",
+    html_url:"https://github.com/o/r/pull/8#issuecomment-42",updated_at:"2026-09-16T08:01:00Z"}]' > "$home/forge/comments.json"
+  with_home "$home" env FM_CONTRIBUTIONS_AUTOMATED_REVIEWERS= "$ROOT/bin/fm-contributions.sh" poll >/dev/null \
+    || fail 'disabled poll failed'
+  jq -e '.records[0].pending | length == 0' "$home/data/delivery/contributions.json" >/dev/null \
+    || fail 'an empty reviewer list must disable automated intake'
+  with_home "$home" env FM_CONTRIBUTIONS_AUTOMATED_REVIEWERS=' Dependabot[bot] ' "$ROOT/bin/fm-contributions.sh" poll >/dev/null \
+    || fail 'extended poll failed'
+  jq -e '.records[0].pending | length == 1 and .[0].author == "dependabot[bot]"' "$home/data/delivery/contributions.json" >/dev/null \
+    || fail 'the environment list must replace the defaults'
+  pass 'the automated reviewer set is configurable and can be disabled'
+}
+
+test_author_marker_directive() {
+  local home
+  home=$(new_home author-marker)
+  forge_home "$home"
+  with_home "$home" "$ROOT/bin/fm-pr-check.sh" delivery https://github.com/o/r/pull/8 >/dev/null \
+    || fail 'could not register the owned delivery'
+  jq -n '[{id:51,user:{login:"author"},author_association:"OWNER",body:"thanks, fixed",
+    html_url:"https://github.com/o/r/pull/8#issuecomment-51",updated_at:"2026-09-16T08:01:00Z"}]' > "$home/forge/comments.json"
+  registered_checks "$home" >/dev/null
+  jq -e '.records[0].pending | length == 0' "$home/data/delivery/contributions.json" >/dev/null \
+    || fail 'an ordinary author comment must stay ignored'
+  [ ! -s "$home/state/.wake-queue" ] || fail 'an ordinary author comment must raise no wake'
+  jq -n '[{id:52,user:{login:"author"},author_association:"OWNER",body:"  @Firstmate please rebase",
+    html_url:"https://github.com/o/r/pull/8#issuecomment-52",updated_at:"2026-09-16T08:02:00Z"}]' > "$home/forge/comments.json"
+  registered_checks "$home" >/dev/null
+  jq -e '.records[0].pending | length == 1 and .[0].directive == true' "$home/data/delivery/contributions.json" >/dev/null \
+    || fail 'a marked author comment must persist as a pending signal'
+  [ "$(awk 'END { print NR }' "$home/state/.wake-queue")" = 1 ] || fail 'a marked author comment must enqueue one wake'
+  jq -n '[{id:53,user:{login:"author"},author_association:"OWNER",body:"@ops please rebase",
+    html_url:"https://github.com/o/r/pull/8#issuecomment-53",updated_at:"2026-09-16T08:03:00Z"}]' > "$home/forge/comments.json"
+  with_home "$home" env FM_CONTRIBUTIONS_AUTHOR_MARKER=@ops "$ROOT/bin/fm-contributions.sh" poll >/dev/null || fail 'custom marker poll failed'
+  jq -e '.records[0].pending | length == 2' "$home/data/delivery/contributions.json" >/dev/null \
+    || fail 'the environment marker must replace the default'
+  pass 'an author comment is an event only with the configured marker'
+}
+
+test_closed_backlog_pr_owns_landed_contribution
+test_automated_reviewer_signal
+test_automated_reviewer_configuration
+test_author_marker_directive

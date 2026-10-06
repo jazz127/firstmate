@@ -27,7 +27,10 @@ FM_QUOTA_PROVIDER_ID_RE='^[a-z0-9]+(-[a-z0-9]+)*\z'
 #                                  is identified by the contract.
 #   quota_row($snapshot; $provider; $lane)
 #                                  the one provider row the candidate binds to,
-#                                  or null; schema 5 ignores $lane.
+#                                  or null. An explicit seat uses lane
+#                                  seat:<physical credential home> under both
+#                                  schemas; FM_QUOTA_OS_HOME is the snapshot
+#                                  host OS user's home for ~/ expansion.
 # shellcheck disable=SC2016,SC2034  # jq program text, not shell expansion; read by the sourcing consumers
 FM_QUOTA_ROW_JQ='
   def quota_lane($harness; $model):
@@ -37,26 +40,27 @@ FM_QUOTA_ROW_JQ='
     else "" end;
   def quota_row($snapshot; $provider; $lane):
     ([$snapshot.providers[]? | select(.provider == $provider)]) as $rows |
-    if $snapshot.schemaVersion == 6 then
+    if $provider == "codex" and ($lane | startswith("seat:")) then
+      ($lane | ltrimstr("seat:") + "/auth.json") as $selected |
+      ([$rows[] | select((.account.credentialHome // "") as $home |
+        $home == $selected or
+        (($home | startswith("~/")) and ((env.FM_QUOTA_OS_HOME // "") != "") and
+         ((env.FM_QUOTA_OS_HOME + "/" + ($home | ltrimstr("~/"))) == $selected)))] |
+        if length == 1 then .[0] else null end)
+    elif $snapshot.schemaVersion == 6 then
       (([$rows[] | select(.accountKey == $lane)] | first) //
        ([$rows[] | select(.accountKey == "default")] | first) // null)
     else ($rows | first) // null
     end;
 '
 
-fm_quota_axi_compatible() {
-  local timeout=${1:-} output parts major minor patch extra
+# fm_quota_axi_version_compatible <version-output>
+# True when the printed `quota-axi --version` text meets FM_QUOTA_AXI_MIN.
+# Callers that already captured a bounded --version pass that text here so they
+# do not launch a second, unbounded version probe.
+fm_quota_axi_version_compatible() {
+  local output=${1-} parts major minor patch extra
   local min_major min_minor min_patch min_extra
-  command -v quota-axi >/dev/null 2>&1 || return 1
-  if [ -n "$timeout" ]; then
-    case "$timeout" in
-      ''|*[!0-9]*|0) return 1 ;;
-    esac
-    [ "$(type -t fm_run_timed)" = function ] || return 1
-    output=$(fm_run_timed "$timeout" quota-axi --version 2>/dev/null </dev/null) || return 1
-  else
-    output=$(quota-axi --version 2>/dev/null </dev/null) || return 1
-  fi
   parts=$(printf '%s\n' "$output" |
     sed -n 's/.*\([0-9][0-9]*\)\.\([0-9][0-9]*\)\.\([0-9][0-9]*\).*/\1 \2 \3/p' |
     head -1)
@@ -72,6 +76,21 @@ fm_quota_axi_compatible() {
   [ "$minor" -gt "$min_minor" ] && return 0
   [ "$minor" -eq "$min_minor" ] || return 1
   [ "$patch" -ge "$min_patch" ]
+}
+
+fm_quota_axi_compatible() {
+  local timeout=${1:-} output
+  command -v quota-axi >/dev/null 2>&1 || return 1
+  if [ -n "$timeout" ]; then
+    case "$timeout" in
+      ''|*[!0-9]*|0) return 1 ;;
+    esac
+    [ "$(type -t fm_run_timed)" = function ] || return 1
+    output=$(fm_run_timed "$timeout" quota-axi --version 2>/dev/null </dev/null) || return 1
+  else
+    output=$(quota-axi --version 2>/dev/null </dev/null) || return 1
+  fi
+  fm_quota_axi_version_compatible "$output"
 }
 
 fm_quota_json_valid() {
@@ -145,15 +164,16 @@ fm_quota_single_provider_table() {
     'muse meta'
 }
 
+# Reads the whole table before answering: leaving the loop early closes the
+# pipe mid-write, and where SIGPIPE is ignored the writer prints a broken-pipe
+# error on stderr.
 fm_quota_single_provider_for_harness() {
-  local harness provider
+  local harness provider found=''
   while read -r harness provider; do
-    if [ "$harness" = "$1" ]; then
-      printf '%s\n' "$provider"
-      return 0
-    fi
+    [ -z "$found" ] && [ "$harness" = "$1" ] && found=$provider || :
   done < <(fm_quota_single_provider_table)
-  return 1
+  [ -n "$found" ] || return 1
+  printf '%s\n' "$found"
 }
 
 fm_quota_provider_for_harness() {

@@ -15,11 +15,11 @@
 # the host's turn record; this script only compares against it.
 #
 # Usage:
-#   fm-branch-report.sh --task <id|fleet> --verdict routine|captain \
+#   fm-branch-report.sh --row <wake-sequence> --task <id|fleet> --verdict routine|captain \
 #       --summary <text> [--silent true|false] [--wake <text>]
 #
 # The verdict criteria are owned by bin/fm-branch-prompt.sh ("Verdict: routine
-# or captain"); --silent true is legal only for a routine fleet outcome.
+# or captain"); --silent true is legal only for a routine outcome.
 # --wake defaults to the wake reason the host recorded for the turn.
 #
 # Only the branch actor of a live host turn may report: FM_SUPERVISION_ACTOR
@@ -28,6 +28,20 @@
 # ended, or from any other shell, is refused. Exit codes: 0 recorded, 1 the
 # store refused or failed (nothing recorded), 2 usage, 3 refused (actor, turn,
 # or scope).
+#
+# A non-silent row an away turn recorded after the captain returned (the turn
+# record says posture=away, or predates the posture field, and no away record
+# remains: none, or quiet mode's, whose captain is present; bin/fm-afk-contract.sh
+# AWAY OR QUIET) may be missing from the return brief, so it is also queued
+# for MAIN as a durable check wake keyed supervision-host-return:<seq>,
+# presented by the drain until MAIN acknowledges it. bin/fm-afk-return.sh
+# archives the record before it reads the store and this check follows the
+# append, so every visible row is in the brief, queued, or both: the relay does
+# not depend on the host surviving its turn or on its owner delivering the
+# host's own handback. Silent outcomes remain in the store but are not queued
+# or relayed as notes. An attended turn queues nothing: its captain rows reach
+# MAIN through the host's branch-outcome exit and the drain's BRANCH OUTCOMES
+# section (bin/fm-wake-drain.sh), and its routine rows stay in the store.
 set -u
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -36,6 +50,12 @@ FM_HOME="${FM_HOME:-${FM_ROOT_OVERRIDE:-$FM_ROOT}}"
 STATE="${FM_STATE_OVERRIDE:-$FM_HOME/state}"
 TURN_FILE="$STATE/.supervision-host-turn"
 RECEIPTS="$STATE/.supervision-host-receipts"
+RECEIPT_LOCK="$STATE/.supervision-host-receipts.lock"
+
+# shellcheck source=bin/fm-wake-lib.sh
+. "$SCRIPT_DIR/fm-wake-lib.sh"
+# shellcheck source=bin/fm-afk-contract.sh
+. "$SCRIPT_DIR/fm-afk-contract.sh"
 
 usage() {
   sed -n '/^# Usage:/,/^# --wake/p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//' >&2
@@ -47,9 +67,10 @@ refuse() {
   exit 3
 }
 
-TASK='' VERDICT='' SUMMARY='' SILENT=false WAKE='' WAKE_SET=0
+ROW='' TASK='' VERDICT='' SUMMARY='' SILENT=false WAKE='' WAKE_SET=0
 while [ "$#" -gt 0 ]; do
   case "$1" in
+    --row) ROW=${2:-}; shift 2 || usage ;;
     --task) TASK=${2:-}; shift 2 || usage ;;
     --verdict) VERDICT=${2:-}; shift 2 || usage ;;
     --summary) SUMMARY=${2:-}; shift 2 || usage ;;
@@ -64,12 +85,13 @@ TASK=$(printf '%s' "$TASK" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
 SUMMARY=$(printf '%s' "$SUMMARY" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
 case "$VERDICT" in routine|captain) ;; *) VERDICT= ;; esac
 case "$SILENT" in true|false) ;; *) usage ;; esac
-if [ -z "$TASK" ] || [ -z "$SUMMARY" ] || [ -z "$VERDICT" ]; then
-  echo "invalid report: --task, --verdict (routine|captain), and --summary are required" >&2
+if [ -z "$TASK" ] || [ -z "$SUMMARY" ] || [ -z "$VERDICT" ] || [ -z "$ROW" ]; then
+  echo "invalid report: --row, --task, --verdict (routine|captain), and --summary are required" >&2
   exit 2
 fi
-if [ "$SILENT" = true ] && { [ "$TASK" != fleet ] || [ "$VERDICT" != routine ]; }; then
-  echo "invalid report: --silent true is only for a routine fleet outcome" >&2
+case "$ROW" in *[!0-9]*) echo "invalid report: --row must be a wake sequence" >&2; exit 2 ;; esac
+if [ "$SILENT" = true ] && [ "$VERDICT" != routine ]; then
+  echo "invalid report: --silent true requires the routine verdict" >&2
   exit 2
 fi
 
@@ -89,14 +111,29 @@ turn_field() {  # <name>
 [ "$(turn_field turn)" = "$TURN" ] \
   || refuse "the wake this shell was handling is over; report only while handling a wake"
 
-if [ "$(turn_field unscoped)" != 1 ]; then
-  TASKS=$(turn_field tasks)
-  case " $TASKS " in
-    *" $TASK "*) ;;
-    *)
-      refuse "the wake being handled (row $(turn_field rows)) names ${TASKS:-no task}, not $TASK; report only that task, never fleet or a task from memory"
-      ;;
-  esac
+TURN_ROWS=$(turn_field rows)
+case " $TURN_ROWS " in
+  *" $ROW "*) ;;
+  *) refuse "wake row $ROW is not part of the current turn (rows ${TURN_ROWS:-none})" ;;
+esac
+ROW_TASK=$(printf '%s\n' "$(turn_field row_tasks)" | awk -v row="$ROW" '
+  { for (i = 1; i <= NF; i++) if ($i ~ ("^" row "=")) { sub(/^[^=]*=/, "", $i); print $i; exit } }
+')
+[ -n "$ROW_TASK" ] || refuse "wake row $ROW has no task binding in the current turn"
+if [ "$ROW_TASK" != fleet ]; then
+  [ "$TASK" = "$ROW_TASK" ] \
+    || refuse "wake row $ROW names $ROW_TASK, not $TASK; report only that event's task, never fleet or a task from memory"
+fi
+fm_lock_acquire_wait "$RECEIPT_LOCK" || {
+  echo "receipt lock could not be acquired (nothing recorded)" >&2
+  exit 1
+}
+if awk -F '\t' -v turn="$TURN" -v row="$ROW" '
+  $1 == turn && $5 == row { found = 1 }
+  END { exit(found ? 0 : 1) }
+' "$RECEIPTS" 2>/dev/null; then
+  fm_lock_release "$RECEIPT_LOCK"
+  refuse "wake row $ROW already has an outcome for turn $TURN"
 fi
 
 [ "$WAKE_SET" -eq 1 ] || WAKE=$(turn_field wake)
@@ -104,11 +141,35 @@ fi
 set -- append --task "$TASK" --verdict "$VERDICT" --summary "$SUMMARY" --silent "$SILENT"
 [ -z "$WAKE" ] || set -- "$@" --wake "$WAKE"
 if ! SEQ=$("$SCRIPT_DIR/fm-branch-outcome.sh" "$@"); then
+  fm_lock_release "$RECEIPT_LOCK"
   echo "outcome store append failed (nothing recorded)" >&2
   exit 1
 fi
-printf '%s\t%s\t%s\t%s\n' "$TURN" "$SEQ" "$VERDICT" "$TASK" >> "$RECEIPTS" || {
+printf '%s\t%s\t%s\t%s\t%s\n' "$TURN" "$SEQ" "$VERDICT" "$TASK" "$ROW" >> "$RECEIPTS" || {
+  fm_lock_release "$RECEIPT_LOCK"
   echo "recorded seq $SEQ, but the host receipt could not be written; the host will hand this wake to MAIN" >&2
   exit 1
 }
+fm_lock_release "$RECEIPT_LOCK"
+if [ "$SILENT" = true ]; then
+  printf 'recorded seq %s [routine]; silent outcome remains in the outcome store\n' "$SEQ"
+  exit 0
+fi
+if [ "$(turn_field posture)" = attended ]; then
+  if [ "$VERDICT" = captain ] && ! fm_afk_contract_away_present "$STATE"; then
+    printf 'recorded seq %s [captain]; MAIN processes it from its next drain\n' "$SEQ"
+  else
+    printf 'recorded seq %s [%s]; it waits in the outcome store for MAIN\n' "$SEQ" "$VERDICT"
+  fi
+  exit 0
+fi
+if ! fm_afk_contract_away_present "$STATE"; then
+  if ! fm_wake_append check "supervision-host-return:$SEQ" \
+    "check: supervision-host outcome $SEQ for $TASK [$VERDICT] was recorded after the captain returned, so the return brief may not show it; relay it to the captain: $SUMMARY"; then
+    printf 'recorded seq %s [%s], but the captain has returned and its relay to MAIN could not be queued; the host hands this turn to MAIN\n' "$SEQ" "$VERDICT" >&2
+    exit 0
+  fi
+  printf 'recorded seq %s [%s]; the captain has returned, so it is queued for MAIN to relay\n' "$SEQ" "$VERDICT"
+  exit 0
+fi
 printf 'recorded seq %s [%s]; it waits in the outcome store for MAIN\n' "$SEQ" "$VERDICT"

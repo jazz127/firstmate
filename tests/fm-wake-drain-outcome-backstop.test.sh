@@ -12,6 +12,14 @@ GRANT="$ROOT/bin/fm-wake-grant.sh"
 OUTCOMES="$ROOT/bin/fm-branch-outcome.sh"
 TMP_ROOT=$(fm_test_tmproot fm-wake-drain-outcome-backstop-tests)
 
+# These regressions exercise the backstop on a home that does not run the
+# supervision host, so its BRANCH OUTCOMES section stays out of the drain; the
+# explicit off file pins that posture on every primary instead of reading the
+# code root's config (bin/fm-supervision-engine-lib.sh owns the gate).
+mkdir -p "$TMP_ROOT/config"
+: > "$TMP_ROOT/config/supervision-host-off"
+export FM_CONFIG_OVERRIDE="$TMP_ROOT/config"
+
 set_mtime() {  # <epoch> <file>
   perl -e 'utime($ARGV[0], $ARGV[0], $ARGV[1]) or exit 1' "$1" "$2"
 }
@@ -76,6 +84,75 @@ test_newer_task_outcome_and_routine_latest_events_stay_silent() {
   fi
   [ ! -s "$out" ] || fail "covered and routine latest events broke the silent drain contract: $(cat "$out")"
   pass "a newer task-matching branch outcome suppresses the backstop and routine latest events stay silent"
+}
+
+test_legacy_silent_coverage_migrates_before_drain_or_append() {
+  local mode dir state out body task seq endpoint ident store_before ready_after
+  for mode in drain silent-append visible-append; do
+    dir=$(make_case "legacy-silent-$mode")
+    state="$dir/state"
+    out="$dir/drain.out"
+
+    printf 'done: visible completion already delivered\n' > "$state/visible.status"
+    printf 'done: earlier mixed completion delivered\n' > "$state/mixed.status"
+    append_outcome "$state" visible 'visible completion handled' || fail "visible fixture append failed"
+    append_outcome "$state" mixed 'earlier mixed completion handled' || fail "mixed fixture append failed"
+    printf 'failed: later mixed failure only echoed silently\n' >> "$state/mixed.status"
+    printf 'done: completion only echoed silently\n' > "$state/silent-done.status"
+    printf 'failed: failure only echoed silently\n' > "$state/silent-failed.status"
+    for task in mixed silent-done silent-failed; do
+      FM_STATE_OVERRIDE="$state" "$OUTCOMES" append --task "$task" --verdict routine \
+        --summary 'unchanged status echo' --silent true >/dev/null || fail "silent fixture append failed"
+    done
+    jq -rs 'group_by(.task) | .[] | .[-1]
+      | [.task, .seq, .statusEndpoint, .statusIdent] | @tsv' "$state/branch-outcomes.jsonl" \
+      | while IFS=$(printf '\t') read -r task seq endpoint ident; do
+          printf 'fm-branch-outcome-index-v1\t%s\t%s\t%s\n' "$seq" "$endpoint" "$ident" \
+            > "$state/.$task.branch-outcome-index"
+        done
+    printf '5\n' > "$state/.branch-outcome-index-ready"
+    FM_STATE_OVERRIDE="$state" "$OUTCOMES" mark-read --through 5 || fail "fixture mark-read failed"
+    store_before=$(cat "$state/branch-outcomes.jsonl")
+
+    case "$mode" in
+      silent-append)
+        FM_STATE_OVERRIDE="$state" "$OUTCOMES" append --task fleet --verdict routine \
+          --summary 'fleet unchanged' --silent true >/dev/null || fail "upgrade silent append failed"
+        ;;
+      visible-append)
+        FM_STATE_OVERRIDE="$state" "$OUTCOMES" append --task fleet --verdict routine \
+          --summary 'unrelated visible result' >/dev/null || fail "upgrade visible append failed"
+        ;;
+    esac
+    if [ "$mode" != drain ]; then
+      [ ! -e "$state/.silent-done.branch-outcome-index" ] \
+        && [ ! -e "$state/.silent-failed.branch-outcome-index" ] \
+        || fail "$mode republished readiness with silent-only coverage"
+      [ "$(cut -f2 "$state/.mixed.branch-outcome-index")" = 2 ] \
+        || fail "$mode republished readiness with mixed silent coverage"
+    fi
+
+    FM_STATE_OVERRIDE="$state" "$DRAIN" > "$out" || fail "$mode upgrade drain failed"
+    body=$(backstop_body "$out")
+    assert_contains "$body" 'silent-done done: completion only echoed silently' "$mode hid a keyless done status"
+    assert_contains "$body" 'silent-failed failed: failure only echoed silently' "$mode hid a keyless failed status"
+    assert_contains "$body" 'mixed failed: later mixed failure only echoed silently' "$mode retained mixed silent coverage"
+    assert_not_contains "$body" 'visible done:' "$mode lost legitimate visible coverage"
+    [ ! -e "$state/.silent-done.branch-outcome-index" ] \
+      && [ ! -e "$state/.silent-failed.branch-outcome-index" ] \
+      || fail "$mode retained a silent-only index"
+    [ "$(cut -f2 "$state/.mixed.branch-outcome-index")" = 2 ] \
+      || fail "$mode did not restore the latest visible mixed index"
+    [ "$(head -n 5 "$state/branch-outcomes.jsonl")" = "$store_before" ] \
+      || fail "$mode rewrote outcome history during migration"
+    ready_after=$(cat "$state/.branch-outcome-index-ready")
+    [ "$ready_after" != 5 ] || fail "$mode retained legacy readiness"
+    FM_STATE_OVERRIDE="$state" "$DRAIN" > "$out" || fail "$mode second drain failed"
+    [ ! -s "$out" ] || fail "$mode migration replayed handled statuses: $(cat "$out")"
+    [ "$(cat "$state/.branch-outcome-index-ready")" = "$ready_after" ] \
+      || fail "$mode second drain changed readiness"
+  done
+  pass "legacy silent coverage migrates before drain or append without removing readiness"
 }
 
 test_older_or_other_task_outcome_cannot_hide_a_new_captain_event() {
@@ -505,8 +582,25 @@ test_backstop_output_is_bounded() {
   pass "the outcome backstop caps each item and its total task output deterministically"
 }
 
+test_readiness_marker_names_the_exact_store_tail() {
+  local dir state ready_after
+  dir=$(make_case exact-readiness-tail)
+  state="$dir/state"
+
+  FM_STATE_OVERRIDE="$state" "$OUTCOMES" append --task visible --verdict routine \
+    --summary 'visible outcome' >/dev/null || fail "visible readiness fixture append failed"
+  FM_STATE_OVERRIDE="$state" "$OUTCOMES" append --task silent --verdict routine \
+    --summary 'silent outcome' --silent true >/dev/null || fail "silent readiness fixture append failed"
+
+  ready_after=$(cat "$state/.branch-outcome-index-ready")
+  [ "$ready_after" = 'visible-only-v1:2' ] \
+    || fail "readiness did not name the exact store tail, including silent rows: $ready_after"
+  pass "outcome-index readiness names the exact store tail including silent rows"
+}
+
 test_uncovered_keyless_captain_events_surface_on_the_next_main_drain
 test_newer_task_outcome_and_routine_latest_events_stay_silent
+test_legacy_silent_coverage_migrates_before_drain_or_append
 test_older_or_other_task_outcome_cannot_hide_a_new_captain_event
 test_branch_annotation_cannot_consume_the_main_resurfacing_backstop
 test_same_second_outcome_uses_status_causal_position
@@ -523,3 +617,4 @@ test_held_lock_mode_accepts_a_lock_owner_descendant
 test_index_self_heal_runs_under_the_outcome_lock
 test_overbound_routine_event_stays_silent
 test_backstop_output_is_bounded
+test_readiness_marker_names_the_exact_store_tail

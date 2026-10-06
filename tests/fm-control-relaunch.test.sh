@@ -27,6 +27,8 @@ set -u
 . "$ROOT/bin/fm-trace-context-lib.sh"
 # shellcheck source=/dev/null
 . "$ROOT/bin/fm-tasks-axi-lib.sh"
+# shellcheck source=/dev/null
+. "$ROOT/bin/fm-pr-lib.sh"
 
 CONTROL="$ROOT/bin/fm-control.sh"
 SPAWN="$ROOT/bin/fm-spawn.sh"
@@ -81,7 +83,7 @@ case "${1:-}" in
           printf 'zsh' > "$D/command"
           [ -z "${FM_FAKE_EXIT_TRANSPORT_FAIL_AFTER_STOP:-}" ] || exit 1
           ;;
-        *'encode launch-brief'*)
+        *'launch-brief: Read and follow'* | *'Firstmate operational input waiting: read'*)
           cat "$D/becomes" > "$D/command"
           [ -z "${FM_FAKE_LAUNCH_TRANSPORT_FAIL_AFTER_START:-}" ] || exit 1
           ;;
@@ -227,6 +229,21 @@ EOF
   printf '%s' "$ses" > "$dir/fake/session-name"
   printf '%s' "$wt" > "$dir/fake/cwd"
   TASK_TMPS+=("/tmp/fm-$id")
+}
+
+arm_pr_fixture() {  # <case-dir> <id> <url>
+  local dir=$1 id=$2 url=$3 state="$1/home/state" data_hash template_hash data_identity check_identity
+  cp "$ROOT/bin/fm-pr-poll.sh" "$state/$id.check.sh"
+  printf 'github\n%s\ngithub.com\no/r\n1\n' "$url" > "$state/$id.pr-poll"
+  chmod 0600 "$state/$id.check.sh" "$state/$id.pr-poll"
+  data_hash=$(fm_pr_sha256 "$state/$id.pr-poll")
+  template_hash=$(fm_pr_sha256 "$ROOT/bin/fm-pr-poll.sh")
+  data_identity=$(fm_pr_file_identity "$state/$id.pr-poll")
+  check_identity=$(fm_pr_file_identity "$state/$id.check.sh")
+  printf 'fm-pr-poll-registration-v2\n%s\ngithub\n%s\ngithub.com\no/r\n1\n%s\n%s\n%s\n%s\n' \
+    "$id" "$url" "$data_hash" "$template_hash" "$data_identity" "$check_identity" \
+    > "$state/$id.pr-poll-registration"
+  chmod 0600 "$state/$id.pr-poll-registration"
 }
 
 run_control() {  # <case-dir> <args...>
@@ -385,8 +402,27 @@ test_same_harness_relaunch_keeps_identity_and_reuses_the_endpoint() {
   [ "$(journal_field "$dir" rl1 phase)" = complete ] \
     || fail "the transaction journal should end complete"
   assert_grep "/exit" "$dir/fake/literal" "the previous agent should have been exited"
-  assert_grep "encode launch-brief" "$dir/fake/literal" "the replacement should have been launched"
+  assert_grep "cd -- '$dir/wt'" "$dir/fake/keys" "the replacement launch must enter the recorded worktree"
+  assert_grep "Firstmate operational input waiting: read" "$dir/fake/literal" "the replacement should have been launched"
   pass "fm-control relaunch: a same-harness relaunch replaces the agent in the same endpoint and worktree"
+}
+
+test_relaunch_keeps_an_armed_pr_poll_authenticated() {
+  local dir out rc url
+  dir=$(new_case pr-poll-order rl-pr)
+  url=https://github.com/o/r/pull/1
+  add_ship_task "$dir" rl-pr claude
+  printf 'pr=%s\npr_head=0123456789abcdef0123456789abcdef01234567\n' "$url" \
+    >> "$dir/home/state/rl-pr.meta"
+  arm_pr_fixture "$dir" rl-pr "$url"
+  fm_pr_poll_artifacts_content_valid "$dir/home/state" rl-pr "$ROOT/bin/fm-pr-poll.sh" \
+    || fail "the armed PR poll fixture was not authenticated before relaunch"
+
+  out=$(run_control "$dir" rl-pr relaunch --note "preserve the PR poll"); rc=$?
+  expect_code 0 "$rc" "a relaunch holding an armed PR poll should succeed"$'\n'"$out"
+  fm_pr_poll_artifacts_content_valid "$dir/home/state" rl-pr "$ROOT/bin/fm-pr-poll.sh" \
+    || fail "a relaunched task's armed PR poll was no longer authenticated"
+  pass "fm-control relaunch: an armed PR poll remains authenticated after metadata replacement"
 }
 
 test_relaunch_refuses_before_exit_when_the_composer_holds_pending_text() {
@@ -790,6 +826,58 @@ test_signed_out_worker_account_pin_refuses_before_stop() {
   pass "fm-control relaunch: a signed-out worker account pin refuses before the old agent stops"
 }
 
+test_seated_codex_relaunch_preflights_current_dock_before_stop() {
+  local dir out rc id=rl-seat-dock seat_home
+  dir=$(new_case seat-dock "$id")
+  add_ship_task "$dir" "$id" codex
+  printf codex > "$dir/fake/command"
+  printf codex > "$dir/fake/becomes"
+  mkdir -p "$dir/home/config"
+  seat_home="$dir/current-seat"
+  mkdir -p "$seat_home"
+  printf '%s\n' '{"OPENAI_API_KEY":"sk-fm-synthetic"}' > "$seat_home/auth.json"
+  jq -n --arg home "$seat_home" '{version:1,id:"control-dock",seats:{luna:{harness:"codex",credential_home:$home}}}' \
+    > "$dir/home/config/dock.json"
+  printf '%s\n' 'seat=luna' 'dock=old-dock' 'seat_home=/old/seat' >> "$dir/home/state/$id.meta"
+  cat > "$dir/fakebin/codex" <<'SH'
+#!/usr/bin/env bash
+if [ "${1:-}" = login ] && [ "${2:-}" = status ]; then
+  [ -f "$CODEX_HOME/signed-in" ] || { echo 'Not logged in' >&2; exit 1; }
+  if [ -f "$CODEX_HOME/mutate-dock" ] && [ ! -f "$CODEX_HOME/mutated-dock" ]; then
+    : > "$CODEX_HOME/mutated-dock"
+    printf '%s\n' '{"version":2}' > "$(cat "$CODEX_HOME/dock-path")"
+  fi
+  echo 'Logged in using ChatGPT' >&2
+fi
+exit 0
+SH
+  chmod +x "$dir/fakebin/codex"
+  cp "$dir/home/state/$id.meta" "$dir/meta-before"
+  out=$(run_control "$dir" "$id" relaunch --note "current dock"); rc=$?
+  expect_code 1 "$rc" "signed-out current dock must refuse replacement"
+  assert_contains "$out" 'signed out' "control preflight should name the sign-out"
+  [ "$(cat "$dir/fake/command")" = codex ] || fail "sign-out stopped the old Codex worker"
+  [ ! -s "$dir/fake/literal" ] || fail "sign-out sent lifecycle input"
+  cmp -s "$dir/meta-before" "$dir/home/state/$id.meta" || fail "pre-stop refusal changed metadata"
+
+  : > "$seat_home/signed-in"
+  printf '%s\n' "$dir/home/config/dock.json" > "$seat_home/dock-path"
+  out=$(run_control "$dir" "$id" relaunch --harness claude --note "wrong harness"); rc=$?
+  expect_code 1 "$rc" "incompatible harness must refuse before stop"
+  assert_contains "$out" "unsupported dock seat 'luna' for harness 'claude'" "harness mismatch should name seat contract"
+  [ "$(cat "$dir/fake/command")" = codex ] || fail "harness mismatch stopped the old worker"
+  [ ! -s "$dir/fake/literal" ] || fail "harness mismatch sent lifecycle input"
+
+  : > "$seat_home/mutate-dock"
+  out=$(run_control "$dir" "$id" relaunch --note "current dock now signed in"); rc=$?
+  expect_code 0 "$rc" "signed-in current dock should relaunch: $out"
+  [ "$(meta_field "$dir" "$id" seat_home)" = "$seat_home" ] || fail "replacement did not re-resolve the current dock"
+  [ "$(meta_field "$dir" "$id" dock)" = control-dock ] || fail "replacement retained a stale dock id"
+  jq -n --arg home "$seat_home" '{version:1,id:"control-dock",seats:{luna:{harness:"codex",credential_home:$home}}}' \
+    > "$dir/home/config/dock.json"
+  pass "fm-control preflights the current seat before stop and re-resolves its path on replacement"
+}
+
 test_worker_account_pin_follows_the_relaunch() {
   local dir out rc id=rl-acct
   dir=$(new_case acct "$id")
@@ -866,7 +954,7 @@ test_wiring_removal_failure_refuses_before_replacement_arm() {
   assert_contains "$out" "could not retire claude wiring" \
     "the failure should identify prior wiring cleanup"
   [ -e "$hook" ] || fail "the fixture should retain the undeletable prior hook"
-  assert_no_grep "encode launch-brief" "$dir/fake/literal" \
+  assert_no_grep "Firstmate operational input waiting: read" "$dir/fake/literal" \
     "replacement launch must not be armed after wiring cleanup fails"
   [ "$(journal_field "$dir" rl29 phase)" = failed:launching ] \
     || fail "the transaction should record the partial launch failure"
@@ -934,6 +1022,42 @@ test_secondmate_relaunch_picks_up_the_configured_harness_pin() {
     || fail "the configured effort token should come with the pin"
   assert_not_contains "$out" "not a verified harness" "codex is a verified harness"
   pass "fm-control relaunch: a secondmate relaunch re-resolves its durable configured harness pin"
+}
+
+test_secondmate_relaunch_picks_up_per_mate_override() {
+  local dir home out rc
+  dir=$(new_case sm-override sm3)
+  home="$dir/home"
+  mkdir -p "$home/config/secondmate-harness.d" "$home/data/sm3"
+  printf 'claude opus high\n' > "$home/config/secondmate-harness"
+  printf 'codex gpt-5.5 xhigh\n' > "$home/config/secondmate-harness.d/sm3"
+  printf '# secondmate brief\n' > "$home/data/sm3/brief.md"
+  fm_git_worktree "$dir/proj" "$dir/smhome" sm-branch
+  mkdir -p "$dir/smhome/state" "$dir/smhome/data" "$dir/smhome/bin"
+  printf 'sm3\n' > "$dir/smhome/.fm-secondmate-home"
+  printf '# agents\n' > "$dir/smhome/AGENTS.md"
+  {
+    echo "window=fmses:fm-sm3"
+    echo "endpoint_task_id=sm3"
+    echo "worktree=$dir/smhome"
+    echo "project=$dir/smhome"
+    echo "harness=claude"
+    echo "kind=secondmate"
+    echo "mode=secondmate"
+    echo "yolo=off"
+    echo "model=default"
+    echo "effort=default"
+    echo "home=$dir/smhome"
+  } > "$home/state/sm3.meta"
+  printf '%s\n' "fm-sm3" > "$dir/fake/windows"
+  printf '%s' "$dir/smhome" > "$dir/fake/cwd"
+  printf 'codex' > "$dir/fake/becomes"
+  out=$(run_control "$dir" sm3 relaunch); rc=$?
+  expect_code 0 "$rc" "a per-mate override should relaunch"$'\n'"$out"
+  [ "$(journal_field "$dir" sm3 to_harness)" = codex ] || fail "relaunch ignored the per-mate harness"
+  [ "$(journal_field "$dir" sm3 to_model)" = gpt-5.5 ] || fail "relaunch ignored the per-mate model"
+  [ "$(journal_field "$dir" sm3 to_effort)" = xhigh ] || fail "relaunch ignored the per-mate effort"
+  pass "fm-control relaunch resolves the selected mate's override profile"
 }
 
 test_secondmate_relaunch_ignores_invalid_configured_effort_before_stop() {
@@ -1626,6 +1750,7 @@ test_concurrent_relaunch_is_refused() {
     i=$((i + 1))
   done
   [ -e "$lock" ] || { kill "$holder" 2>/dev/null; fail "could not stage a held control lock"; }
+  printf 'held\n' > "$dir/home/state/rl19.composer-dialog"
   out=$(run_control "$dir" rl19 relaunch --note "concurrent"); rc=$?
   kill "$holder" 2>/dev/null || true
   wait "$holder" 2>/dev/null || true
@@ -1634,6 +1759,8 @@ test_concurrent_relaunch_is_refused() {
     "the refusal should name the concurrent action"
   [ "$(cat "$dir/fake/command")" = claude ] \
     || fail "a refused concurrent relaunch must not stop the agent"
+  [ "$(cat "$dir/home/state/rl19.composer-dialog" 2>/dev/null)" = held ] \
+    || fail "a refused concurrent relaunch must not remove the lock holder's dialog file"
   pass "fm-control relaunch: two control actions on one task serialize instead of interleaving"
 }
 
@@ -1979,7 +2106,9 @@ case "${1:-} ${2:-}" in
     fi
     exit 0 ;;
   'agent get')
-    if [ -f "$D/herdr-agent-live" ]; then
+    if [ -f "$D/herdr-agent-registration" ]; then
+      cat "$D/herdr-agent-registration"
+    elif [ -f "$D/herdr-agent-live" ]; then
       # The agent came back with its server. Nothing here is reclaimable.
       printf '{"result":{"agent":{"agent_status":"idle"}}}\n'
     else
@@ -1988,9 +2117,15 @@ case "${1:-} ${2:-}" in
     fi
     exit 0 ;;
   'pane process-info')
-    # Only asked for once an agent IS registered, to prove it at process level.
-    printf '{"result":{"type":"pane_process_info","process_info":{"pane_id":"%s","shell_pid":4242,"foreground_processes":[{"pid":4243,"name":"claude","argv":["claude"],"cmdline":"claude"}]}}}\n' \
-      "$(cat "$D/herdr-pane")"
+    # A retained registration with a shell-only pane models an exited agent
+    # whose Herdr status authority still belongs to its previous session.
+    if [ -f "$D/herdr-agent-registration" ]; then
+      printf '{"result":{"type":"pane_process_info","process_info":{"pane_id":"%s","shell_pid":4242,"foreground_processes":[]}}}\n' \
+        "$(cat "$D/herdr-pane")"
+    else
+      printf '{"result":{"type":"pane_process_info","process_info":{"pane_id":"%s","shell_pid":4242,"foreground_processes":[{"pid":4243,"name":"claude","argv":["claude"],"cmdline":"claude"}]}}}\n' \
+        "$(cat "$D/herdr-pane")"
+    fi
     exit 0 ;;
   'pane send-text')
     # Mirrors the tmux fake's `becomes`: delivering the launch brief is what
@@ -2004,7 +2139,9 @@ case "${1:-} ${2:-}" in
       ". '"*"'") staged=${payload#". '"}; staged=${staged%"'"}; [ ! -f "$staged" ] || payload=$(cat "$staged") ;;
     esac
     case "$payload" in
-      *'encode launch-brief'*) : > "$D/herdr-agent-live" ;;
+      *'launch-brief: Read and follow'* | *'Firstmate operational input waiting: read'*)
+        printf '%s\n' "$payload" > "$D/launched-command"
+        : > "$D/herdr-agent-live" ;;
     esac
     exit 0 ;;
   'workspace list')
@@ -2032,6 +2169,19 @@ esac
 exit 0
 SH
   chmod +x "$fb/herdr"
+  cat > "$fb/ps" <<'SH'
+#!/usr/bin/env bash
+if [ -f "$FM_FAKE_DIR/herdr-agent-registration" ]; then
+  case "$*" in
+    '-axo pid=,ppid=,comm=') printf '4242 1 bash\n' ;;
+    '-p 4242 -o args=') printf 'bash\n' ;;
+    *) exec /bin/ps "$@" ;;
+  esac
+else
+  exec /bin/ps "$@"
+fi
+SH
+  chmod +x "$fb/ps"
 }
 
 # add_herdr_ship_task <case-dir> <id> [session] [surviving-pane]: a ship task
@@ -2090,6 +2240,35 @@ herdr_case_or_skip() {  # <name> <id> [session] [surviving-pane]
   add_herdr_ship_task "$HERDR_CASE_DIR" "$2" "${3:-fmlab}" "${4:-%7}"
   make_herdr_stub "$HERDR_CASE_DIR"
   return 0
+}
+
+test_herdr_relaunch_resumes_only_the_registered_pi_session() {
+  local dir out rc=0 command registered
+  for registered in pi claude; do
+    herdr_case_or_skip "resume-$registered" "resume-$registered" || {
+      echo "skip - herdr relaunch needs jq (the herdr adapter parses JSON with it)"
+      return 0
+    }
+    dir=$HERDR_CASE_DIR
+    rm -f "$dir/fake/herdr-stopped"
+    sed -i 's/^harness=claude$/harness=pi/' "$dir/home/state/resume-$registered.meta"
+    # Keep the pane's status authority registered to an existing Pi session,
+    # while process-info proves that its previous agent has exited.
+    printf '{"result":{"agent":{"agent":"%s","agent_status":"idle","agent_session":{"kind":"path","value":"/tmp/pi-bound-session.jsonl"}}}}\n' \
+      "$registered" > "$dir/fake/herdr-agent-registration"
+    out=$(run_spawn "$dir" "resume-$registered" --relaunch --harness pi) || rc=$?
+    expect_code 0 "$rc" "Herdr Pi relaunch should complete ($registered registration)"$'\n'"$out"
+    command=$(cat "$dir/fake/launched-command")
+    if [ "$registered" = pi ]; then
+      assert_contains "$command" "--session '/tmp/pi-bound-session.jsonl'" \
+        "the replacement Pi must resume the session that owns Herdr status authority"
+    else
+      assert_not_contains "$command" "--session" \
+        "a Pi replacement must not resume a foreign adapter's conversation"
+    fi
+    rc=0
+  done
+  pass "fm-spawn --relaunch: resumes the bound Pi session only for a Pi registration"
 }
 
 test_herdr_reclaim_adopts_a_pane_that_outlived_its_server() {
@@ -2333,7 +2512,59 @@ test_relaunch_moves_a_drifted_item_back_in_flight() {
   pass "relaunch heals an item that drifted out of In flight while the task stayed live"
 }
 
+test_exit_and_relaunch_remove_the_dialog_file() {
+  local dir out rc
+  dir=$(new_case dialog-file-exit rl70)
+  add_ship_task "$dir" rl70 claude
+  out=$(run_control "$dir" rl70 exit); rc=$?
+  expect_code 0 "$rc" "exit should stop the agent"$'\n'"$out"
+  [ ! -e "$dir/home/state/rl70.composer-dialog" ] \
+    || fail "exit should remove the dialog file"
+
+  dir=$(new_case dialog-file-relaunch rl71)
+  add_ship_task "$dir" rl71 claude
+  out=$(run_control "$dir" rl71 relaunch --note "replace the agent"); rc=$?
+  expect_code 0 "$rc" "relaunch should replace the agent"$'\n'"$out"
+  [ ! -e "$dir/home/state/rl71.composer-dialog" ] \
+    || fail "relaunch should remove the dialog file"
+  pass "fm-control removes the dialog file after exit and after relaunch"
+}
+
+# The lock release removes paths at or under the control lock with rm, so a
+# recording rm sees the state directory at the moment of release without a
+# second overlapping command.
+test_exit_removes_the_dialog_file_before_releasing_the_lock() {
+  local dir out rc lock sink trace
+  dir=$(new_case dialog-file-order rl72)
+  add_ship_task "$dir" rl72 claude
+  lock="$dir/home/state/.control-rl72.lock"
+  sink="$dir/home/state/rl72.composer-dialog"
+  trace="$dir/fake/rm-trace"
+  cat > "$dir/fakebin/rm" <<SH
+#!/usr/bin/env bash
+for arg in "\$@"; do
+  case "\$arg" in
+    "$lock"|"$lock"/*)
+      if [ -e "$sink" ]; then echo present; else echo absent; fi >> "$trace"
+      break
+      ;;
+  esac
+done
+exec "$(command -v rm)" "\$@"
+SH
+  chmod +x "$dir/fakebin/rm"
+  out=$(run_control "$dir" rl72 exit); rc=$?
+  expect_code 0 "$rc" "exit should stop the agent"$'\n'"$out"
+  [ ! -e "$lock" ] || fail "exit should release the control lock"
+  [ "$(tail -n 1 "$trace" 2>/dev/null)" = absent ] \
+    || fail "the dialog file must be gone when the control lock is released, got: $(cat "$trace" 2>/dev/null)"
+  pass "fm-control exit removes the dialog file before it releases the control lock"
+}
+
+test_exit_and_relaunch_remove_the_dialog_file
+test_exit_removes_the_dialog_file_before_releasing_the_lock
 test_same_harness_relaunch_keeps_identity_and_reuses_the_endpoint
+test_relaunch_keeps_an_armed_pr_poll_authenticated
 test_relaunch_refuses_before_exit_when_the_composer_holds_pending_text
 test_relaunch_refuses_before_exit_when_the_composer_state_is_unproven
 test_relaunch_from_linked_home_preserves_recorded_worktree
@@ -2349,6 +2580,7 @@ test_prefixed_recorded_harness_requires_explicit_replacement
 test_same_harness_relaunch_keeps_the_profile_axes
 test_native_ultra_relaunch_preserves_profile_and_rejects_before_stop
 test_signed_out_worker_account_pin_refuses_before_stop
+test_seated_codex_relaunch_preflights_current_dock_before_stop
 test_worker_account_pin_follows_the_relaunch
 test_explicit_model_wins_over_the_recorded_one
 test_relaunch_onto_an_unverified_harness_is_refused
@@ -2356,6 +2588,7 @@ test_prior_harness_turnend_registry_entry_is_cleared
 test_wiring_removal_failure_refuses_before_replacement_arm
 test_turnend_auth_paths_are_owned_by_the_control_adapter
 test_secondmate_relaunch_picks_up_the_configured_harness_pin
+test_secondmate_relaunch_picks_up_per_mate_override
 test_secondmate_relaunch_ignores_invalid_configured_effort_before_stop
 test_secondmate_relaunch_onto_a_crewmate_only_adapter_refuses_before_stop
 test_explicit_secondmate_harness_ignores_configured_profile_axes
@@ -2395,6 +2628,7 @@ test_tmux_refuses_a_window_missing_from_its_session
 test_tmux_refuses_a_session_that_cannot_be_found
 test_tmux_refuses_when_the_server_is_gone
 test_reclaim_refuses_an_unreadable_endpoint
+test_herdr_relaunch_resumes_only_the_registered_pi_session
 test_herdr_reclaim_adopts_a_pane_that_outlived_its_server
 test_herdr_exit_reports_already_stopped_when_the_pane_outlived_its_server
 test_herdr_rebind_stays_in_the_recorded_session

@@ -7,7 +7,7 @@
 # data/<task-id>/brief.md for future relaunches, and prints the fm-send.sh command
 # that delivers it to the current worker. Those instructions carry the
 # scratch-state inventory, the clean
-# default-branch base, the immutable ship branch, and - rendered from
+# default-branch base (or selected house-feature branch), the immutable ship branch, and - rendered from
 # bin/fm-dod-lib.sh, the single owner an ordinary ship brief also uses - the
 # mode-specific Definition of done, so a promoted worker receives exactly the same
 # delivery contract as a briefed one, including the no-mistakes mode's ask-user
@@ -17,23 +17,28 @@
 # is not relabeled as the ship spec. Promotion refuses leftover `{TASK}` /
 # `{FIRSTMATE_SPEC}` placeholders and a `## Captain's intent` line opening with
 # a Captain label or address (bin/fm-dod-lib.sh). A pre-subsection scout
-# brief contributes only Task lines explicitly marked as captain words to intent.
+# brief contributes only Task lines explicitly marked as captain words to intent,
+# read outside fenced blocks and indented examples so a quoted `Captain:` sample
+# never passes the provenance gate as the ask (bin/fm-dod-lib.sh).
 # A scout records no delivery posture, so promotion is where this task's delivery
 # contract is decided: --mode, --yolo, and the ship branch resolved from
 # --branch-prefix are written into the meta alongside the kind= flip. Firstmate resolves all three at promotion time, having just
 # read the scout's report (AGENTS.md section 7); data/projects.md holds the
-# captain's standing posture as context, and this script never looks that posture
-# up. The registry IS read for one thing only: the project's forge binding, which
-# is a project fact rather than a per-task decision, so promotion takes it from
-# there instead of asking firstmate to remember it.
+# captain's standing posture as context. The registry is read for the project's
+# forge binding and to announce a ship-branch naming deviation.
 # no-mistakes-prod-only is a registry policy rather than a task mode and is refused.
+# A scout spawned on a named base records base_branch= in its meta; promotion
+# keeps that base as the ship's starting point and pull-request target, and
+# refuses a mode that cannot carry one (bin/fm-dod-lib.sh fm_base_branch_valid).
+# A recorded named base cannot be combined with --house-feature, which selects
+# its own durable base instead.
 # There is no --forge flag here: the binding comes from the registry, and for a
 # task record naming no project it is none. bin/fm-brief.sh takes --forge instead
 # because that script has no registry access at all, and bin/fm-spawn.sh checks
 # its value against the registry; bin/fm-project-mode.sh's header owns the
 # binding and bin/fm-dod-lib.sh owns what it changes for the worker, including
 # the refusal of a forge on local-only.
-# Usage: fm-promote.sh <task-id> --mode <no-mistakes|direct-PR|local-only> --yolo <on|off> [--branch-prefix <prefix>]
+# Usage: fm-promote.sh <task-id> --mode <no-mistakes|direct-PR|local-only> --yolo <on|off> [--branch-prefix <prefix>] [--house-feature <name> --branch-base <main|house>]
 set -eu
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -62,6 +67,10 @@ DATA="${FM_DATA_OVERRIDE:-$FM_HOME/data}"
 MODE=
 YOLO=
 BRANCH_PREFIX=fm/
+HOUSE_FEATURE=
+HOUSE_FEATURE_SET=0
+BRANCH_BASE=
+BRANCH_BASE_SET=0
 MODE_SET=0
 YOLO_SET=0
 FORGE=none
@@ -76,6 +85,8 @@ for a in "$@"; do
       mode) MODE=$a; MODE_SET=1 ;;
       yolo) YOLO=$a; YOLO_SET=1 ;;
       branch-prefix) BRANCH_PREFIX=$a ;;
+      house-feature) HOUSE_FEATURE=$a; HOUSE_FEATURE_SET=1 ;;
+      branch-base) BRANCH_BASE=$a; BRANCH_BASE_SET=1 ;;
     esac
     want_value=
     continue
@@ -87,6 +98,10 @@ for a in "$@"; do
     --yolo=*) YOLO=${a#--yolo=}; YOLO_SET=1 ;;
     --branch-prefix) want_value="branch-prefix" ;;
     --branch-prefix=*) BRANCH_PREFIX=${a#--branch-prefix=} ;;
+    --house-feature) want_value="house-feature" ;;
+    --house-feature=*) HOUSE_FEATURE=${a#--house-feature=}; HOUSE_FEATURE_SET=1 ;;
+    --branch-base) want_value="branch-base" ;;
+    --branch-base=*) BRANCH_BASE=${a#--branch-base=}; BRANCH_BASE_SET=1 ;;
     *) POS+=("$a") ;;
   esac
 done
@@ -111,6 +126,27 @@ case "$YOLO" in
   on|off) ;;
   *) echo "error: --yolo must be on or off (got '$YOLO')" >&2; exit 1 ;;
 esac
+if [ "$BRANCH_PREFIX" = housefeature/ ]; then
+  echo "error: a house-feature worker uses its ordinary fm/ task branch; select the durable target with --house-feature" >&2
+  exit 1
+fi
+if [ "$HOUSE_FEATURE_SET" -eq 1 ]; then
+  [ "$MODE" != local-only ] || { echo "error: --house-feature requires a PR delivery mode" >&2; exit 1; }
+  case "$HOUSE_FEATURE" in
+    ''|*[!a-zA-Z0-9._-]*) echo "error: --house-feature must be a single branch-name component" >&2; exit 1 ;;
+  esac
+  git check-ref-format --branch "housefeature/$HOUSE_FEATURE" >/dev/null 2>&1 || {
+    echo "error: --house-feature gives an invalid branch name" >&2
+    exit 1
+  }
+  case "$BRANCH_BASE" in
+    main|house) ;;
+    *) echo "error: --house-feature requires --branch-base main or house" >&2; exit 1 ;;
+  esac
+elif [ "$BRANCH_BASE_SET" -eq 1 ]; then
+  echo "error: --branch-base applies only with --house-feature" >&2
+  exit 1
+fi
 # A posture this forge cannot carry is refused once the registry binding has been
 # read. Merge authority on a Gerrit forge is refused rather than quietly dropped,
 # on the captain's decision of 2026-09-15 (bin/fm-project-mode.sh's header carries
@@ -136,6 +172,22 @@ if ! git check-ref-format --branch "$BRANCH" >/dev/null 2>&1; then
   exit 1
 fi
 printf -v BRANCH_Q '%q' "$BRANCH"
+PROMOTE_BRANCH_COMMAND="git checkout -b $BRANCH_Q --"
+PROMOTE_BRANCH_WORDS="Return to a clean default-branch base, then create your branch"
+PROMOTE_HOUSE_NOTE=
+PROMOTE_PR_BASE=
+if [ -n "$HOUSE_FEATURE" ]; then
+  PROMOTE_PR_BASE="housefeature/$HOUSE_FEATURE"
+  printf -v PROMOTE_HOUSE_Q '%q' "$HOUSE_FEATURE"
+  printf -v PROMOTE_START_Q '%q' "$FM_ROOT/bin/fm-housefeature-start.sh"
+  PROMOTE_BRANCH_COMMAND="$PROMOTE_START_Q $PROMOTE_HOUSE_Q $BRANCH_BASE $BRANCH_Q"
+  PROMOTE_BRANCH_WORDS="Return to a clean worktree, then prepare your branch"
+  if [ "$BRANCH_BASE" = house ]; then
+    PROMOTE_HOUSE_NOTE="This feature is house-only; apply the existing \`house-only\` label to the integration pull request you open from \`$PROMOTE_PR_BASE\` into \`house\`."
+  else
+    PROMOTE_HOUSE_NOTE="This feature is main-based; refresh it only by merging \`main\` into a worker branch."
+  fi
+fi
 CONTROL_LOCK="$STATE/.control-$ID.lock"
 CONTROL_LOCK_HELD=0
 META_LOCK=
@@ -192,6 +244,25 @@ if [ -n "$PROMOTE_PROJECT" ]; then
   fi
   FORGE=${PROMOTE_STANDING_FORGE:-none}
   refuse_impossible_forge_posture || exit 1
+  if [ -n "$HOUSE_FEATURE" ] && [ "$FORGE" != none ]; then
+    echo "error: --house-feature requires a GitHub pull-request project" >&2
+    exit 1
+  fi
+  PROMOTE_STANDING_BRANCH=$("$FM_ROOT/bin/fm-project-mode.sh" --branch-prefix "$PROMOTE_PROJECT_NAME" 2>/dev/null) || PROMOTE_STANDING_BRANCH=
+  if [ "$BRANCH" != "$PROMOTE_STANDING_BRANCH$ID" ]; then
+    echo "notice: $ID ships branch=$BRANCH while $PROMOTE_PROJECT_NAME registers the ship-branch prefix '$PROMOTE_STANDING_BRANCH' (branch $PROMOTE_STANDING_BRANCH$ID) - this naming deviates from the captain's standing project preference; proceed only on a current explicit captain instruction or an intake judgment you can state" >&2
+  fi
+fi
+BASE_BRANCH=$(sed -n 's/^base_branch=//p' "$META" | head -n 1)
+fm_base_branch_valid "$BASE_BRANCH" "$MODE" "$FORGE" "fm-promote.sh $ID" || exit 1
+PROMOTE_BASE_WORDS='default-branch base'
+[ -z "$BASE_BRANCH" ] || PROMOTE_BASE_WORDS="copy of the base branch \`$BASE_BRANCH\`"
+if [ -n "$BASE_BRANCH" ]; then
+  [ -z "$HOUSE_FEATURE" ] || {
+    echo "error: a scout with a recorded base branch cannot be promoted with --house-feature, which selects its own durable base" >&2
+    exit 1
+  }
+  PROMOTE_BRANCH_WORDS="Return to a clean $PROMOTE_BASE_WORDS, then create your branch"
 fi
 # An unbound project keeps the exact wording it always had.
 PROMOTE_FORGE_WORDS=
@@ -220,6 +291,10 @@ if [ -z "$(printf '%s' "$INTENT_BODY" | tr -d '[:space:]')" ]; then
   echo "error: $SCOUT_BRIEF has no provenance-marked Captain's intent; add the captain's actual words before promotion" >&2
   exit 1
 fi
+if [ "$MODE" = no-mistakes ] && ! fm_dod_validate_intent_evidence "$INTENT_BODY" "$(grep '^worktree=' "$STATE/$ID.meta" | tail -1 | cut -d= -f2-)" "$(grep '^tasktmp=' "$STATE/$ID.meta" | tail -1 | cut -d= -f2-)"; then
+  echo "error: $SCOUT_BRIEF contains an evidence claim that cannot be published" >&2
+  exit 1
+fi
 
 # The promoted worker must receive the same delivery contract an ordinary ship
 # brief carries, so the mode-specific Definition of done is rendered from its
@@ -235,7 +310,8 @@ IFS= read -r -d '' PROMOTION_SHIP_SPEC <<EOF || true
 If these promotion steps were already completed before a relaunch, preserve the existing \`$BRANCH_Q\` branch and continue from its current state; do not repeat them destructively.
 1. **Verify isolation before anything else.** Run \`pwd -P\` and \`git rev-parse --show-toplevel\`; both must resolve to the disposable task worktree you were launched in, such as a treehouse pool path or an Orca-managed worktree, not the primary checkout firstmate operates from. If either does not resolve to the worktree you were launched in, stop and escalate to firstmate.
 2. Inventory this worktree's scratch state with \`git status\` and \`git log\` before changing anything.
-3. Return to a clean default-branch base, then create your branch: \`git checkout -b $BRANCH_Q --\`.
+3. $PROMOTE_BRANCH_WORDS: \`$PROMOTE_BRANCH_COMMAND\`.
+$PROMOTE_HOUSE_NOTE
 4. Carry over only the intended fix changes. Leave scratch commits, debug edits, and experiment files behind.
 5. If you reproduced a bug, turn that reproduction into a regression test.
 6. Treat the scout-time Firstmate spec and any unmarked legacy \`# Task\` text as investigation context, not captain intent or current ship-time instructions.
@@ -248,17 +324,25 @@ This task is now kind=ship with mode=$MODE$PROMOTE_FORGE_WORDS.
 This section supersedes every earlier brief instruction about delivery mode.
 These current ship instructions supersede the scout delivery rules and report-based Definition of done.
 Any earlier "Never push" or scout-only delivery language in this file is superseded.
+This replaces the scout rule limiting outside-worktree writes to the report and status file.
+Keep project edits inside this worktree; keep proof and scratch output outside it, under \`$DATA/$ID/\` or a temporary directory.
+Outside the worktree, write only that task material and the status and steering-inbox records authorized below.
+Leave the worktree clean before reporting done.
 The mode-specific Definition of done below is the current delivery contract.
 
 # Current ship safety rule
 EOF
-  fm_ship_rule_one "$MODE" "$ID" "$BRANCH" "$FORGE"
+  fm_ship_rule_one "$MODE" "$ID" "$BRANCH" "$FORGE" "${PROMOTE_PR_BASE:-$BASE_BRANCH}"
+  cat <<EOF
+Never end a turn on an announced next step: take it in the same turn with your tools instead of stopping on the announcement, or report \`${FM_CLASSIFY_PAUSED_VERB:-$FM_CLASSIFY_PAUSED_VERB_DEFAULT}:\`/\`blocked:\` with the reason.
+Drive your own validation and delivery path: beyond the handoff your Definition of done names, wait for no approval you did not request through \`needs-decision\`.
+EOF
   if [ -n "$PROMOTION_ASK_USER_BLOCK" ]; then
     printf '\nThe no-mistakes ask-user escalation below supersedes the scout rule 6 escalation shape.\n'
     printf '%s\n' "$PROMOTION_ASK_USER_BLOCK"
   fi
   printf '\n'
-  fm_dod_block "$MODE" "$ID" "$BRANCH" "$FORGE"
+  fm_dod_block "$MODE" "$ID" "$BRANCH" "$FORGE" "${PROMOTE_PR_BASE:-$BASE_BRANCH}" "$PROMOTE_PR_BASE"
 }
 mkdir -p "$DATA/$ID"
 [ ! -d "$INSTRUCTIONS" ] || { echo "error: ship instructions path is a directory: $INSTRUCTIONS" >&2; exit 1; }

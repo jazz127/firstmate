@@ -1,0 +1,6 @@
+off: Absent config, enabled=false and FM_TRACE_EXPORT=off made zero curl calls and zero collector spans.
+wire-and-privacy: Authenticated official collector accepted root/child, all representable controls, Unicode, decimal nanoseconds, clamping, statuses and basename-only metadata.
+home-boundaries: FM_HOME, explicit state/config overrides, unset-home code root and FM_ROOT_OVERRIDE selected the correct real collector; foreign metadata was rejected.
+invalid-input-and-dependencies: Malformed/concatenated config, invalid options/carrier, absent metadata, stale session, unsafe headers and absent curl skipped transport and preserved caller options/result.
+credential-secrecy: All live calls with BASH_XTRACEFD=9 left token absent from diagnostic output, traced curl argv and collector payloads; only a private file supplied bearer auth.
+collector-failure-isolation: Real collector HTTP 401 and 500, connection refusal, and stalled collector relay preserved success; slow call returned in 1.189s.

@@ -1,0 +1,41 @@
+{
+  "collector_versions": {
+    "main_and_relay": "0.162.0",
+    "http_500_fault": "0.80.0"
+  },
+  "upstream": "Official OpenTelemetry Collector Contrib: bearer-authenticated ingestion and relay v0.162.0; separate loopback v0.80.0 processor-failure endpoint for HTTP 500 (server auth disabled on that endpoint; emitter still supplied its private bearer header). No fake product or upstream.",
+  "substitutes": [],
+  "scenarios": [
+    {
+      "scenario": "off",
+      "result": "pass",
+      "detail": "Absent config, enabled=false and FM_TRACE_EXPORT=off made zero curl calls and zero collector spans."
+    },
+    {
+      "scenario": "wire-and-privacy",
+      "result": "pass",
+      "detail": "Authenticated official collector accepted root/child, all representable controls, Unicode, decimal nanoseconds, clamping, statuses and basename-only metadata."
+    },
+    {
+      "scenario": "home-boundaries",
+      "result": "pass",
+      "detail": "FM_HOME, explicit state/config overrides, unset-home code root and FM_ROOT_OVERRIDE selected the correct real collector; foreign metadata was rejected."
+    },
+    {
+      "scenario": "invalid-input-and-dependencies",
+      "result": "pass",
+      "detail": "Malformed/concatenated config, invalid options/carrier, absent metadata, stale session, unsafe headers and absent curl skipped transport and preserved caller options/result."
+    },
+    {
+      "scenario": "credential-secrecy",
+      "result": "pass",
+      "detail": "All live calls with BASH_XTRACEFD=9 left token absent from diagnostic output, traced curl argv and collector payloads; only a private file supplied bearer auth."
+    },
+    {
+      "scenario": "collector-failure-isolation",
+      "result": "pass",
+      "detail": "Real collector HTTP 401 and 500, connection refusal, and stalled collector relay preserved success; slow call returned in 1.189s."
+    }
+  ],
+  "cleanup": "All three collector processes terminated and waited for; workspace-local binaries, configuration, credentials, and disposable homes removed."
+}

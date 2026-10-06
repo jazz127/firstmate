@@ -1,0 +1,23 @@
+ok - loading and disabled emission preserve errexit, nounset, pipefail, and unset-variable behavior
+ok - relative library loading with CDPATH preserves caller success and shell options
+ok - unset export config is off and makes zero HTTP requests
+ok - FM_TRACE_EXPORT=off makes zero HTTP requests
+ok - synthetic HTTP capture confirms escaped root JSON, root identity, nanoseconds, auth header, and no token in argv/payload
+ok - credential validation and authenticated exports preserve xtrace settings without leaking to a dedicated descriptor
+ok - authenticated HTTP export preserves accented, Japanese, and emoji text in names and attributes across locales
+ok - child spans link to the carrier parent and negative durations clamp to zero
+ok - root and child exports honor directory precedence and relative overrides without crossing homes or falling back
+ok - unset home uses the library code root after caller directory changes and state overrides never select another home
+ok - only one enabled JSON object exports; concatenated values and malformed input silently preserve success
+ok - root and child spans use decimal milliseconds, including padding, 08/09, zero, and clamping
+ok - all task kinds export the project basename and task identity without paths or incarnation identities
+ok - unknown options, invalid statuses, and malformed attribute arguments silently skip export
+ok - documented statuses and attributes remain exportable
+ok - endpoint and private header paths preserve literal backslashes through HTTP export
+ok - brace and range URL syntax each produce one request to the literal endpoint
+ok - group or other readable headers skip export with one diagnostic and preserve success
+skip - foreign-owner fixture requires root to change file ownership
+ok - single bearer lines export with optional newline; all extra bytes reject export
+ok - configuration rejects NUL bytes rather than changing accepted values
+ok - absent optional metadata is omitted; missing metadata and malformed carriers issue no request
+ok - malformed/stale config, missing curl, refused/slow endpoints, and HTTP 401/500 all preserve success

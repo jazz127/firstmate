@@ -1,0 +1,4 @@
+{
+  "unauthorized": 401,
+  "processor_failure": 500
+}

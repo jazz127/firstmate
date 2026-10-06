@@ -1,0 +1,72 @@
+2026-10-07T00:02:23.520+1000	info	service/telemetry.go:73	Skipping telemetry setup.	{"address": ":8888", "level": "None"}
+2026-10-07T00:02:23.520+1000	info	exporter@v0.80.0/exporter.go:275	Development component. May change in the future.	{"kind": "exporter", "data_type": "traces", "name": "logging"}
+2026-10-07T00:02:23.521+1000	info	service/service.go:131	Starting otelcol-contrib...	{"Version": "0.80.0", "NumCPU": 15}
+2026-10-07T00:02:23.521+1000	info	extensions/extensions.go:30	Starting extensions...
+2026-10-07T00:02:23.521+1000	info	otlpreceiver@v0.80.0/otlp.go:101	Starting HTTP server	{"kind": "receiver", "name": "otlp", "data_type": "traces", "endpoint": "127.0.0.1:58179"}
+2026-10-07T00:02:23.521+1000	info	service/service.go:148	Everything is ready. Begin running and processing data.
+2026-10-07T00:02:31.424+1000	error	traces/processor.go:48	failed processing traces	{"kind": "processor", "name": "transform", "pipeline": "traces", "error": "failed to execute statement: set(attributes[\"parsed\"], ParseJSON(attributes[\"bad\"])), ReadString: expects \" or n, but found i, error found in #2 byte of ...|{invalid|..., bigger context ...|{invalid|..."}
+github.com/open-telemetry/opentelemetry-collector-contrib/processor/transformprocessor/internal/traces.(*Processor).ProcessTraces
+	github.com/open-telemetry/opentelemetry-collector-contrib/processor/transformprocessor@v0.80.0/internal/traces/processor.go:48
+go.opentelemetry.io/collector/processor/processorhelper.NewTracesProcessor.func1
+	go.opentelemetry.io/collector/processor@v0.80.0/processorhelper/traces.go:52
+go.opentelemetry.io/collector/consumer.ConsumeTracesFunc.ConsumeTraces
+	go.opentelemetry.io/collector/consumer@v0.80.0/traces.go:25
+go.opentelemetry.io/collector/consumer.ConsumeTracesFunc.ConsumeTraces
+	go.opentelemetry.io/collector/consumer@v0.80.0/traces.go:25
+go.opentelemetry.io/collector/receiver/otlpreceiver/internal/trace.(*Receiver).Export
+	go.opentelemetry.io/collector/receiver/otlpreceiver@v0.80.0/internal/trace/otlp.go:41
+go.opentelemetry.io/collector/receiver/otlpreceiver.handleTraces
+	go.opentelemetry.io/collector/receiver/otlpreceiver@v0.80.0/otlphttp.go:37
+go.opentelemetry.io/collector/receiver/otlpreceiver.(*otlpReceiver).registerTraceConsumer.func1
+	go.opentelemetry.io/collector/receiver/otlpreceiver@v0.80.0/otlp.go:201
+net/http.HandlerFunc.ServeHTTP
+	net/http/server.go:2122
+net/http.(*ServeMux).ServeHTTP
+	net/http/server.go:2500
+go.opentelemetry.io/collector/config/confighttp.(*decompressor).wrap.func1
+	go.opentelemetry.io/collector/config/confighttp@v0.80.0/compression.go:111
+net/http.HandlerFunc.ServeHTTP
+	net/http/server.go:2122
+go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp.(*Handler).ServeHTTP
+	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp@v0.42.0/handler.go:212
+go.opentelemetry.io/collector/config/confighttp.(*clientInfoHandler).ServeHTTP
+	go.opentelemetry.io/collector/config/confighttp@v0.80.0/clientinfohandler.go:28
+net/http.serverHandler.ServeHTTP
+	net/http/server.go:2936
+net/http.(*conn).serve
+	net/http/server.go:1995
+2026-10-07T00:02:31.491+1000	error	traces/processor.go:48	failed processing traces	{"kind": "processor", "name": "transform", "pipeline": "traces", "error": "failed to execute statement: set(attributes[\"parsed\"], ParseJSON(attributes[\"bad\"])), ReadString: expects \" or n, but found i, error found in #2 byte of ...|{invalid|..., bigger context ...|{invalid|..."}
+github.com/open-telemetry/opentelemetry-collector-contrib/processor/transformprocessor/internal/traces.(*Processor).ProcessTraces
+	github.com/open-telemetry/opentelemetry-collector-contrib/processor/transformprocessor@v0.80.0/internal/traces/processor.go:48
+go.opentelemetry.io/collector/processor/processorhelper.NewTracesProcessor.func1
+	go.opentelemetry.io/collector/processor@v0.80.0/processorhelper/traces.go:52
+go.opentelemetry.io/collector/consumer.ConsumeTracesFunc.ConsumeTraces
+	go.opentelemetry.io/collector/consumer@v0.80.0/traces.go:25
+go.opentelemetry.io/collector/consumer.ConsumeTracesFunc.ConsumeTraces
+	go.opentelemetry.io/collector/consumer@v0.80.0/traces.go:25
+go.opentelemetry.io/collector/receiver/otlpreceiver/internal/trace.(*Receiver).Export
+	go.opentelemetry.io/collector/receiver/otlpreceiver@v0.80.0/internal/trace/otlp.go:41
+go.opentelemetry.io/collector/receiver/otlpreceiver.handleTraces
+	go.opentelemetry.io/collector/receiver/otlpreceiver@v0.80.0/otlphttp.go:37
+go.opentelemetry.io/collector/receiver/otlpreceiver.(*otlpReceiver).registerTraceConsumer.func1
+	go.opentelemetry.io/collector/receiver/otlpreceiver@v0.80.0/otlp.go:201
+net/http.HandlerFunc.ServeHTTP
+	net/http/server.go:2122
+net/http.(*ServeMux).ServeHTTP
+	net/http/server.go:2500
+go.opentelemetry.io/collector/config/confighttp.(*decompressor).wrap.func1
+	go.opentelemetry.io/collector/config/confighttp@v0.80.0/compression.go:111
+net/http.HandlerFunc.ServeHTTP
+	net/http/server.go:2122
+go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp.(*Handler).ServeHTTP
+	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp@v0.42.0/handler.go:212
+go.opentelemetry.io/collector/config/confighttp.(*clientInfoHandler).ServeHTTP
+	go.opentelemetry.io/collector/config/confighttp@v0.80.0/clientinfohandler.go:28
+net/http.serverHandler.ServeHTTP
+	net/http/server.go:2936
+net/http.(*conn).serve
+	net/http/server.go:1995
+2026-10-07T00:02:37.206+1000	info	otelcol/collector.go:236	Received signal from OS	{"signal": "terminated"}
+2026-10-07T00:02:37.206+1000	info	service/service.go:157	Starting shutdown...
+2026-10-07T00:02:37.210+1000	info	extensions/extensions.go:44	Stopping extensions...
+2026-10-07T00:02:37.210+1000	info	service/service.go:171	Shutdown complete.

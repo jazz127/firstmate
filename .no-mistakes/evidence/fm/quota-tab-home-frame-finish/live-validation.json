@@ -1,0 +1,87 @@
+{
+  "upstream": "https://github.com/jazz127/quota-axi.git",
+  "house_sha": "55cf4aa087b87e4c7179526a11d3a29e90f2e8d6",
+  "house_subject": "Merge pull request #41 from jazz127/fm/quota-axi-house-upstream-merge-r5",
+  "terminal_size": [
+    40,
+    132
+  ],
+  "quota_launcher": "exec /opt/homebrew/bin/quota-axi --provider codex --profile-only --no-credential-refresh \"$@\"",
+  "credential_profile": "Empty disposable CODEX_HOME; no provider API quota or real-account proof claimed. No substitute service or synthetic quota response.",
+  "before_after_working_file_sha256": "8fa1bbdd99fedce8ddf0a67712aea63ce1a133d7c9016b181589fa2655e14844",
+  "cases": [
+    {
+      "name": "unset-from-unrelated-directory",
+      "exit": 0,
+      "cwd": "/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M487Y8VV6T9T98TTKWE05EAK/.quota-test-run/elsewhere",
+      "command": [
+        "bash",
+        "/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M487Y8VV6T9T98TTKWE05EAK/.quota-test-run/script home/bin/fm-quota-tab.sh",
+        "once"
+      ],
+      "env_overrides": {},
+      "observed_house_line": "House tip: 55cf4aa Merge pull request #41 from jazz127/fm/quota-axi-house-upstream-merge-r5",
+      "html": "/Users/jarad/.no-mistakes/evidence/01M487Y8VV6T9T98TTKWE05EAK/unset-from-unrelated-directory.html"
+    },
+    {
+      "name": "empty-home-and-override",
+      "exit": 0,
+      "cwd": "/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M487Y8VV6T9T98TTKWE05EAK/.quota-test-run/elsewhere",
+      "command": [
+        "bash",
+        "/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M487Y8VV6T9T98TTKWE05EAK/.quota-test-run/script home/bin/fm-quota-tab.sh",
+        "once"
+      ],
+      "env_overrides": {
+        "FM_HOME": "",
+        "FM_QUOTA_CLONE": ""
+      },
+      "observed_house_line": "House tip: 55cf4aa Merge pull request #41 from jazz127/fm/quota-axi-house-upstream-merge-r5",
+      "html": "/Users/jarad/.no-mistakes/evidence/01M487Y8VV6T9T98TTKWE05EAK/empty-home-and-override.html"
+    },
+    {
+      "name": "explicit-home",
+      "exit": 0,
+      "cwd": "/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M487Y8VV6T9T98TTKWE05EAK/.quota-test-run/elsewhere",
+      "command": [
+        "bash",
+        "/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M487Y8VV6T9T98TTKWE05EAK/bin/fm-quota-tab.sh",
+        "once"
+      ],
+      "env_overrides": {
+        "FM_HOME": "/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M487Y8VV6T9T98TTKWE05EAK/.quota-test-run/script home"
+      },
+      "observed_house_line": "House tip: 55cf4aa Merge pull request #41 from jazz127/fm/quota-axi-house-upstream-merge-r5",
+      "html": "/Users/jarad/.no-mistakes/evidence/01M487Y8VV6T9T98TTKWE05EAK/explicit-home.html"
+    },
+    {
+      "name": "clone-overrides-conflicting-home",
+      "exit": 0,
+      "cwd": "/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M487Y8VV6T9T98TTKWE05EAK/.quota-test-run/elsewhere",
+      "command": [
+        "bash",
+        "/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M487Y8VV6T9T98TTKWE05EAK/bin/fm-quota-tab.sh",
+        "once"
+      ],
+      "env_overrides": {
+        "FM_HOME": "/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M487Y8VV6T9T98TTKWE05EAK/.quota-test-run/nonexistent",
+        "FM_QUOTA_CLONE": "/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M487Y8VV6T9T98TTKWE05EAK/.quota-test-run/script home/projects/quota-axi"
+      },
+      "observed_house_line": "House tip: 55cf4aa Merge pull request #41 from jazz127/fm/quota-axi-house-upstream-merge-r5",
+      "html": "/Users/jarad/.no-mistakes/evidence/01M487Y8VV6T9T98TTKWE05EAK/clone-overrides-conflicting-home.html"
+    },
+    {
+      "name": "missing-home-clone-diagnostic",
+      "exit": 0,
+      "cwd": "/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M487Y8VV6T9T98TTKWE05EAK/.quota-test-run/elsewhere",
+      "command": [
+        "bash",
+        "/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M487Y8VV6T9T98TTKWE05EAK/.quota-test-run/missing-home/bin/fm-quota-tab.sh",
+        "once"
+      ],
+      "env_overrides": {},
+      "observed_house_line": "House tip: quota-axi clone is absent (/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M487Y8VV6T9T98TTKWE05EAK/.quota-test-run/mi",
+      "html": "/Users/jarad/.no-mistakes/evidence/01M487Y8VV6T9T98TTKWE05EAK/missing-home-clone-diagnostic.html"
+    }
+  ]
+}

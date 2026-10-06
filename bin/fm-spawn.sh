@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Spawn a direct report: a crewmate in a treehouse or Orca worktree, or a
 # secondmate in its isolated firstmate home.
-# Usage: fm-spawn.sh <task-id> <project-dir> --mode <no-mistakes|direct-PR|local-only> --yolo <on|off> [--branch-prefix <prefix>] [--harness <name>|harness|launch-command] [--model <name>] [--effort <level>] [--seat luna|main] [--backend <name>]
-#        fm-spawn.sh <task-id> <project-dir> --scout [--harness <name>|harness|launch-command] [--model <name>] [--effort <level>] [--seat luna|main] [--backend <name>]
+# Usage: fm-spawn.sh <task-id> <project-dir> --mode <no-mistakes|direct-PR|local-only> --yolo <on|off> [--branch-prefix <prefix>] [--base-branch <branch>] [--harness <name>|harness|launch-command] [--model <name>] [--effort <level>] [--seat luna|main] [--backend <name>]
+#        fm-spawn.sh <task-id> <project-dir> --scout [--base-branch <branch>] [--harness <name>|harness|launch-command] [--model <name>] [--effort <level>] [--seat luna|main] [--backend <name>]
 #        fm-spawn.sh <task-id> [<firstmate-home>] [--harness <name>|harness|launch-command] [--model <name>] [--effort <level>] [--seat luna|main] [--backend <name>] --secondmate
 #   --mode and --yolo are this task's delivery contract, REQUIRED for every ship
 #   spawn and refused on --scout and --secondmate spawns. Firstmate resolves both
@@ -38,6 +38,16 @@
 #   prints a one-line deviation notice and continues, because the registered
 #   prefix is the captain's standing preference and the brief agreement above
 #   already guarantees the worker's instructions match the branch.
+#   --base-branch is the optional branch selected at intake for a ship or scout
+#   to start from and target instead of origin's default branch. A fresh launch
+#   resets its pooled copy to origin/<branch>, refusing when the project has no
+#   origin or origin lacks that branch, or when the project's registered forge
+#   cannot carry it. It must agree with every Setup "Base branch:" line in the
+#   brief (bin/fm-brief.sh --base-branch writes one; other such lines are prose),
+#   and a brief with such a line refuses a spawn without the flag. The spawn records it as
+#   base_branch= in state/<id>.meta, which a relaunch reuses and later review and
+#   cleanup read; it is refused on secondmates and relaunches, and without it
+#   nothing changes.
 #   Ship/scout launches always put fm-dod-lib.sh's current worker role scope
 #   first in the private launch-brief overlay, including the exact task-owned
 #   steering inbox. This never rewrites a project's instruction files or a
@@ -256,7 +266,8 @@
 #   set (its header owns the refusal). A secondmate runs in its own home and is
 #   not marked.
 #   Only after this isolation check, every fresh ship or scout requires a clean
-#   task worktree. When firstmate.runtimeBranch is configured, spawn fetches that
+#   task worktree. An explicit --base-branch fetches and selects origin/<branch>.
+#   Otherwise, when firstmate.runtimeBranch is configured, spawn fetches that
 #   branch's configured tracking remote and resets to its merge ref. Otherwise,
 #   an origin configuration triggers the historical origin-default refresh, and
 #   no detected origin skips the freshness check. Relaunch reuses the recorded
@@ -676,6 +687,8 @@ BACKEND_SET=0
 MODE_SET=0
 YOLO_SET=0
 BRANCH_PREFIX_SET=0
+BASE_BRANCH=
+BASE_BRANCH_SET=0
 TRACEPARENT_SET=0
 RELAUNCH=0
 POS=()
@@ -723,6 +736,10 @@ for a in "$@"; do
     branch-prefix)
       BRANCH_PREFIX=$a
       BRANCH_PREFIX_SET=1
+      ;;
+    base-branch)
+      BASE_BRANCH=$a
+      BASE_BRANCH_SET=1
       ;;
     traceparent)
       TRACEPARENT_ARG=$a
@@ -784,6 +801,11 @@ for a in "$@"; do
   --branch-prefix=*)
     BRANCH_PREFIX=${a#--branch-prefix=}
     BRANCH_PREFIX_SET=1
+    ;;
+  --base-branch) want_value="base-branch" ;;
+  --base-branch=*)
+    BASE_BRANCH=${a#--base-branch=}
+    BASE_BRANCH_SET=1
     ;;
   --traceparent) want_value=traceparent ;;
   --traceparent=*)
@@ -882,6 +904,10 @@ if [ "$RELAUNCH" -eq 1 ]; then
     echo "error: --relaunch reuses the task's recorded ship branch; --branch-prefix cannot override it" >&2
     exit 1
   }
+  [ "$BASE_BRANCH_SET" -eq 0 ] || {
+    echo "error: --relaunch reuses the task's recorded base branch; --base-branch cannot override it" >&2
+    exit 1
+  }
 else
   # Delivery contract (AGENTS.md section 7). A ship task's mode and yolo are
   # firstmate's per-task decision, so they are required and closed-set validated
@@ -925,6 +951,10 @@ else
     }
     [ "$BRANCH_PREFIX_SET" -eq 0 ] || {
       echo "error: --branch-prefix applies only to ship spawns; a scout makes no branch and a secondmate records no ship branch" >&2
+      exit 1
+    }
+    [ "$KIND" != secondmate ] || [ "$BASE_BRANCH_SET" -eq 0 ] || {
+      echo "error: --base-branch applies only to ship and scout spawns; a secondmate charter has no task base" >&2
       exit 1
     }
   fi
@@ -1553,6 +1583,7 @@ if [ "${#POS[@]}" -gt 0 ] && [ "${POS[0]}" != "$idpart" ] && case "$idpart" in *
   [ "$MODE_SET" -eq 0 ] || shared_args+=(--mode "$MODE")
   [ "$YOLO_SET" -eq 0 ] || shared_args+=(--yolo "$YOLO")
   [ "$BRANCH_PREFIX_SET" -eq 0 ] || shared_args+=(--branch-prefix "$BRANCH_PREFIX")
+  [ "$BASE_BRANCH_SET" -eq 0 ] || shared_args+=(--base-branch "$BASE_BRANCH")
   for pair in "${POS[@]}"; do
     case "$pair" in
     *=*) : ;;
@@ -2912,10 +2943,13 @@ rovo_config_override_flag() {
 # Firstmate worker always reads outside its cwd - a secondmate's steers live
 # in the PARENT home's state/<id>.inbox, and a ship or scout worker's launch
 # record, steers, and brief live in this home's state/operational-inbox,
-# state/<id>.inbox, and data/<id>, with the code root's .agents/skills named
-# by its definition of done - so every Claude launch, fresh spawn and
-# relaunch, in both permission modes, grants exactly those task-channel
-# directories. Paths resolve the way rovo_config_override_flag resolves them
+# state/<id>.inbox, and data/<id>, plus the code root's .agents/skills so the
+# worker can read the skill file the launch role names as the fallback for a
+# session where the skill name does not resolve - so every Claude launch,
+# fresh spawn and relaunch, in both permission modes, grants exactly those
+# task-channel directories. The skills grant is that directory, not the
+# checkout root, so the grant does not open the whole checkout. Paths resolve
+# the way rovo_config_override_flag resolves them
 # (real paths under the task's home). The state channel dirs are created
 # lazily by their first record, so they are made here: an --add-dir naming a
 # directory that does not exist at launch would leave the channel created
@@ -3184,13 +3218,30 @@ if [ "$KIND" = ship ] || [ "$KIND" = scout ]; then
       exit 1
     fi
   fi
+  if [ "$RELAUNCH" -eq 1 ]; then
+    BASE_BRANCH=$(fm_meta_get "$RELAUNCH_META" base_branch)
+  elif [ "$BASE_BRANCH_SET" -eq 1 ]; then
+    [ -n "$BASE_BRANCH" ] || {
+      echo "error: --base-branch requires a branch name" >&2
+      exit 1
+    }
+    BASE_FORGE=$("$FM_ROOT/bin/fm-project-mode.sh" --forge "$(basename "$PROJ_ABS")") || exit 1
+    fm_base_branch_valid "$BASE_BRANCH" "$MODE" "${BASE_FORGE:-none}" "fm-spawn.sh --base-branch" || exit 1
+    if ! fm_brief_base_branches "$BRIEF" >/dev/null || fm_brief_base_branches "$BRIEF" | grep -vxF -- "$BASE_BRANCH" >/dev/null; then
+      echo "error: $BRIEF must record Base branch: $BASE_BRANCH and no other Base branch line to spawn with --base-branch $BASE_BRANCH; scaffold it with bin/fm-brief.sh --base-branch $BASE_BRANCH" >&2
+      exit 1
+    fi
+  elif fm_brief_base_branches "$BRIEF" >/dev/null; then
+    echo "error: $BRIEF records a Base branch line but the spawn has no --base-branch; pass the brief's base with --base-branch or re-scaffold the brief without one" >&2
+    exit 1
+  fi
   # Use the existing launch-brief overlay for every worker kind, including
   # pre-scope briefs and relaunches. Charters never enter this worker path.
   SOURCE_BRIEF=$BRIEF
   BRIEF="$DATA/$ID/launch-brief.md"
   BRIEF_TMP="$DATA/$ID/.launch-brief.md.${BASHPID:-$$}"
   {
-    fm_brief_worker_role "$STATE" "$ID" &&
+    fm_brief_worker_role "$STATE" "$ID" "$FM_ROOT" &&
       printf '\n' &&
       cat "$SOURCE_BRIEF" &&
       if [ "$KIND" = ship ] && [ "$MODE" = no-mistakes ]; then
@@ -3486,8 +3537,8 @@ spawn_worktree_has_origin_config() { # <worktree>
   return 1
 }
 
-freshen_spawn_worktree_base() { # <worktree>
-  local worktree=$1 default target expected actual status remote fetch_refspec configured=no branch
+freshen_spawn_worktree_base() { # <worktree> [<base-branch>]
+  local worktree=$1 base=${2:-} default target expected actual status remote fetch_refspec branch
   if fm_treehouse_pool_slot "$PROJ_ABS" "$worktree"; then
     branch=$(git -C "$worktree" symbolic-ref -q --short HEAD 2>/dev/null) && {
       echo "error: pooled worktree '$worktree' has branch '$branch' checked out; refusing to move its commits while refreshing the base" >&2
@@ -3506,14 +3557,18 @@ freshen_spawn_worktree_base() { # <worktree>
     fi
     return 1
   fi
-  if firstmate_runtime_branch_is_configured "$worktree"; then
-    configured=yes
-  elif spawn_worktree_has_origin_config "$worktree"; then
-    configured=no
-  else
-    return 0
-  fi
-  if [ "$configured" = yes ]; then
+  if [ -n "$base" ]; then
+    if ! spawn_worktree_has_origin_config "$worktree"; then
+      echo "error: pooled worktree '$worktree' has no origin, so it cannot start from base branch '$base'" >&2
+      return 1
+    fi
+    if ! git -C "$worktree" fetch --quiet origin "+refs/heads/$base:refs/remotes/origin/$base"; then
+      echo "error: could not fetch 'origin/$base' for pooled worktree '$worktree'; refusing to launch from a potentially stale base" >&2
+      return 1
+    fi
+    default=$base
+    target="origin/$base"
+  elif firstmate_runtime_branch_is_configured "$worktree"; then
     default=$(default_branch "$worktree") || {
       echo "error: could not determine configured runtime branch for pooled worktree '$worktree'; refusing to launch from a potentially stale base" >&2
       return 1
@@ -3529,7 +3584,7 @@ freshen_spawn_worktree_base() { # <worktree>
       echo "error: could not fetch runtime branch '$default' from '$remote' for pooled worktree '$worktree'; refusing to launch from a potentially stale base" >&2
       return 1
     fi
-  else
+  elif spawn_worktree_has_origin_config "$worktree"; then
     if ! git -C "$worktree" fetch --quiet origin; then
       echo "error: could not fetch origin for pooled worktree '$worktree'; refusing to launch from a potentially stale base" >&2
       return 1
@@ -3547,6 +3602,8 @@ freshen_spawn_worktree_base() { # <worktree>
       echo "error: could not fetch '$target' for pooled worktree '$worktree'; refusing to launch from a potentially stale base" >&2
       return 1
     fi
+  else
+    return 0
   fi
   expected=$(git -C "$worktree" rev-parse --verify --quiet "$target^{commit}" 2>/dev/null) || {
     echo "error: '$target' is not a commit for pooled worktree '$worktree'; refusing to launch from a potentially stale base" >&2
@@ -4559,7 +4616,7 @@ elif [ "$KIND" != secondmate ] && [ "$BACKEND" != orca ]; then
   fi
 fi
 if [ "$RELAUNCH" -eq 0 ] && [ "$KIND" != secondmate ]; then
-  freshen_spawn_worktree_base "$WT" || exit 1
+  freshen_spawn_worktree_base "$WT" "$BASE_BRANCH" || exit 1
 fi
 
 # Re-assert the durable task copy after either treehouse acquisition or endpoint
@@ -5123,7 +5180,7 @@ SPAWN_META_PATH=$SPAWN_META_TMP
 preserve_relaunch_meta() {
   awk -F= '
     BEGIN {
-      split("window endpoint_task_id worktree project harness kind mode yolo branch tasktmp model effort seat dock seat_home seat_source account account_provider busy_gen spawn_gen traceparent backend herdr_session herdr_workspace_id herdr_tab_id herdr_pane_id zellij_session zellij_tab_id zellij_pane_id orca_worktree_id terminal cmux_workspace_id cmux_surface_id home projects control_relaunch_tx", keys, " ")
+      split("window endpoint_task_id worktree project harness kind mode yolo branch tasktmp base_branch model effort seat dock seat_home seat_source account account_provider busy_gen spawn_gen traceparent backend herdr_session herdr_workspace_id herdr_tab_id herdr_pane_id zellij_session zellij_tab_id zellij_pane_id orca_worktree_id terminal cmux_workspace_id cmux_surface_id home projects control_relaunch_tx", keys, " ")
       for (i in keys) owned[keys[i]] = 1
     }
     !($1 in owned)
@@ -5140,6 +5197,7 @@ preserve_relaunch_meta() {
   [ -z "$YOLO" ] || echo "yolo=$YOLO"
   [ -z "${BRANCH:-}" ] || echo "branch=$BRANCH"
   echo "tasktmp=$TASK_TMP"
+  [ -z "$BASE_BRANCH" ] || echo "base_branch=$BASE_BRANCH"
   echo "model=${MODEL:-default}"
   echo "effort=${EFFORT:-default}"
   [ -z "$SEAT" ] || echo "seat=$SEAT"

@@ -1134,22 +1134,13 @@ cmd_start() {
   # broken only by KILL. On contention, leave the generation-bound claim for
   # the stopper or subsequent reconciliation to reclaim.
   release_start_claim() {
-    local capture_adapter=${1-} interrupted_result=''
+    local keep_staging=${1-}
     extension_lifecycle_lock_release 2>/dev/null || true
-    if [ -z "$capture_adapter" ]; then
-      [ -z "$STAGED_OUTPUT" ] || rm -f -- "$STAGED_OUTPUT"
+    if [ -n "$keep_staging" ] && [ -n "$STAGED_OUTPUT" ] && [ -s "$STAGED_OUTPUT" ]; then
+      return 0
     fi
+    [ -z "$STAGED_OUTPUT" ] || rm -f -- "$STAGED_OUTPUT"
     fm_procevent_source_lock_try_acquire "$CLAIM_ID" 2>/dev/null || return 0
-    if [ -n "$capture_adapter" ] && [ -n "$STAGED_OUTPUT" ]; then
-      if [ -s "$STAGED_OUTPUT" ]; then
-        interrupted_result=$(capture_lavish_output_locked "$CLAIM_ID" "$STAGED_OUTPUT") || {
-          fm_procevent_source_lock_release "$CLAIM_ID" 2>/dev/null || true
-          return 0
-        }
-      else
-        rm -f -- "$STAGED_OUTPUT"
-      fi
-    fi
     if fm_procevent_claim_load_locked "$CLAIM_ID" 2>/dev/null \
       && [ "$FM_PROCEVENT_CLAIM_HOME" = "$CLAIM_HOME" ] \
       && [ "$FM_PROCEVENT_CLAIM_PID" = "$CLAIM_PID" ] \
@@ -1160,14 +1151,9 @@ cmd_start() {
     fi
     fm_procevent_claim_release_locked "$CLAIM_ID" "$CLAIM_HOME" "$CLAIM_PID" "$CLAIM_TOKEN" 2>/dev/null || true
     fm_procevent_source_lock_release "$CLAIM_ID" 2>/dev/null || true
-    if [ -n "$interrupted_result" ]; then
-      feed_reconcile_requests lavish "$CLAIM_ID" "$interrupted_result" || true
-      feed_keyed_answers lavish "$CLAIM_ID" "$interrupted_result" || true
-      publish_result "$interrupted_result" >/dev/null || true
-    fi
   }
   if [ "$extension_owner" -eq 0 ] && [ "$adapter" = lavish ] && [ -z "$task_owner" ]; then
-    trap 'release_start_claim lavish' EXIT
+    trap 'release_start_claim keep-staging' EXIT
   else
     trap release_start_claim EXIT
   fi
@@ -2158,9 +2144,10 @@ stop_reply_listener_locked() {  # <source-id>
     if [ -s "$output" ]; then
       [ "$(read_adapter "$id")" = lavish ] || return 1
       capture_lavish_output_locked "$id" "$output" >/dev/null || return 1
+    else
+      rm -f -- "$output"
     fi
     fm_procevent_claim_reclaim_locked "$id" "$owner" "$pid" "$token" || return 1
-    rm -f -- "$output"
   fi
   rm -f -- "$(runner_file "$id")"
 }
@@ -2169,7 +2156,8 @@ capture_lavish_output_locked() {
   local id=$1 output=$2 durable
   [ -f "$output" ] && [ ! -L "$output" ] || return 1
   durable=$(fm_procevent_capture "$STATE" "$id" lavish "$output") || return 1
-  rm -f -- "$output" || return 1
+  rm -f -- "$output" || printf 'warning: result committed at %s; cannot remove staged output: %s\n' \
+    "$durable" "$output" >&2
   printf '%s\n' "$durable"
 }
 

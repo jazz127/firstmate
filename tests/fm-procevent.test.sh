@@ -374,8 +374,9 @@ done
 
 OWNER_RACE_CAT=$(command -v cat) || fail "reply races require cat"
 OWNER_RACE_MKTEMP=$(command -v mktemp) || fail "reply races require mktemp"
-export OWNER_RACE_CAT OWNER_RACE_MKTEMP
-for owner_race_case in legacy-staged synchronous-staged legacy-capture synchronous-capture diagnostic-capture; do
+OWNER_RACE_RM=$(command -v rm) || fail "reply cleanup requires rm"
+export OWNER_RACE_CAT OWNER_RACE_MKTEMP OWNER_RACE_RM
+for owner_race_case in legacy-staged synchronous-staged legacy-capture synchronous-capture diagnostic-capture legacy-cleanup synchronous-cleanup; do
   OWNER_RACE="$TMP_ROOT/owner-race-$owner_race_case"
   export OWNER_RACE
   mkdir -p "$OWNER_RACE/bin" "$OWNER_RACE/home/state"
@@ -443,6 +444,21 @@ if [ "${OWNER_RACE_REARM:-}" = 1 ]; then
 fi
 exec "$OWNER_RACE_MKTEMP" "$@"
 SH
+  cat > "$OWNER_RACE/bin/rm" <<'SH'
+#!/usr/bin/env bash
+set -eu
+if [ -e "$OWNER_RACE/reject-cleanup" ]; then
+  for arg in "$@"; do
+    case "$arg" in
+      "$OWNER_RACE/home/state/procevent/".*.output)
+        printf 'simulated staging deletion denial\n' >&2
+        exit 1
+        ;;
+    esac
+  done
+fi
+exec "$OWNER_RACE_RM" "$@"
+SH
   chmod +x "$OWNER_RACE/bin/"*
   owner_race_art="$OWNER_RACE/board.html"
   printf '<h1>reply capture race</h1>\n' > "$owner_race_art"
@@ -454,12 +470,13 @@ SH
   printf 'replacement reply\n' > "$OWNER_RACE/reply2"
   owner_race_reply_args=()
   case "$owner_race_case" in
-    *-staged) touch "$OWNER_RACE/hold-output" ;;
+    *-staged|*-cleanup) touch "$OWNER_RACE/hold-output" ;;
     *-capture)
       touch "$OWNER_RACE/pause-capture"
       owner_race_reply_args=(--agent-reply-file "$OWNER_RACE/reply1")
       ;;
   esac
+  case "$owner_race_case" in *-cleanup) touch "$OWNER_RACE/reject-cleanup" ;; esac
   if [ "$owner_race_case" = diagnostic-capture ]; then
     touch "$OWNER_RACE/reject"
     printf 'error: Lavish did not accept the staged reply: simulated race reply rejection\n' \
@@ -475,7 +492,7 @@ SH
     touch "$OWNER_RACE/release-1"
   fi
   case "$owner_race_case" in
-    *-staged)
+    *-staged|*-cleanup)
       owner_race_token=$(sed -n '3p' "$FM_PROCEVENT_CLAIM_ROOT/$OWNER_RACE_ID.claim")
       owner_race_output="$OWNER_RACE/home/state/procevent/.$OWNER_RACE_ID.$owner_race_token.output"
       for _ in $(seq 1 100); do
@@ -521,7 +538,26 @@ SH
     || fail "$owner_race_case changed the old generation's received bytes"
   assert_contains "$(wake_payloads "$OWNER_RACE/home")" "procevent lavish $OWNER_RACE_ID 1" \
     "$owner_race_case did not announce its retained result"
-  [ ! -e "$owner_race_output" ] || fail "$owner_race_case left already captured staging behind"
+  case "$owner_race_case" in
+    *-cleanup)
+      [ -s "$owner_race_output" ] || fail "$owner_race_case did not reject staging deletion"
+      assert_contains "$(cat "$OWNER_RACE/arm2.err")" "result committed at $owner_race_result" \
+        "$owner_race_case did not distinguish committed output from cleanup failure"
+      printf 'followup reply\n' > "$OWNER_RACE/reply3"
+      PATH="$OWNER_RACE/bin:$PATH" FM_HOME="$OWNER_RACE/home" \
+        "$ROOT/bin/fm-procevent-lavish.sh" arm "$owner_race_art" \
+        --agent-reply-file "$OWNER_RACE/reply3" > "$OWNER_RACE/arm3.out" 2> "$OWNER_RACE/arm3.err" \
+        || fail "$owner_race_case could not replace again after a committed cleanup failure"
+      owner_race_poll_count=3
+      wait_for_lines "$OWNER_RACE/polls" 3 || fail "$owner_race_case did not resume after another replacement"
+      [ "$(count_results "$OWNER_RACE/home" "$OWNER_RACE_ID")" = 1 ] \
+        || fail "$owner_race_case re-committed output left by a cleanup failure"
+      [ "$(cat "$OWNER_RACE/replies")" = "$(printf 'replacement reply\nfollowup reply')" ] \
+        || fail "$owner_race_case replayed a reply after a cleanup failure"
+      rm -f "$OWNER_RACE/reject-cleanup"
+      ;;
+    *) [ ! -e "$owner_race_output" ] || fail "$owner_race_case left already captured staging behind" ;;
+  esac
   printf 'session:\n  status: feedback\nprompts[1]{uid,prompt,selector,tag,text}:\n  "","feedback after replacement","","message",""\n' \
     > "$OWNER_RACE/expected-next"
   cp "$OWNER_RACE/expected-next" "$OWNER_RACE/expected"
@@ -534,6 +570,50 @@ SH
   PATH="$OWNER_RACE/bin:$PATH" pe "$OWNER_RACE/home" retire "$OWNER_RACE_ID" >/dev/null
   pass "firstmate $owner_race_case preserves locally received output during reply replacement"
 done
+
+OWNER_CLEANUP="$TMP_ROOT/owner-normal-cleanup"
+export OWNER_CLEANUP
+mkdir -p "$OWNER_CLEANUP/bin" "$OWNER_CLEANUP/home/state"
+cat > "$OWNER_CLEANUP/bin/rm" <<'SH'
+#!/usr/bin/env bash
+set -eu
+for arg in "$@"; do
+  case "$arg" in
+    "$OWNER_CLEANUP/home/state/procevent/".*.output)
+      printf '%s\n' "$arg" >> "$OWNER_CLEANUP/rejected-deletions"
+      printf 'simulated staging deletion denial\n' >&2
+      exit 1
+      ;;
+  esac
+done
+exec "$OWNER_RACE_RM" "$@"
+SH
+chmod +x "$OWNER_CLEANUP/bin/rm"
+printf 'session:\n  status: feedback\nprompts[1]{uid,prompt,selector,tag,text}:\n  "","normal capture with cleanup failure","","message",""\n' \
+  > "$OWNER_CLEANUP/expected"
+pe_register "$OWNER_CLEANUP/home" lavish normal-cleanup -- \
+  "$OWNER_RACE_CAT" "$OWNER_CLEANUP/expected" >/dev/null
+PATH="$OWNER_CLEANUP/bin:$PATH" pe "$OWNER_CLEANUP/home" start normal-cleanup \
+  > "$OWNER_CLEANUP/start.out" 2> "$OWNER_CLEANUP/start.err" \
+  || fail "normal capture treated a committed cleanup failure as uncommitted"
+[ "$(count_results "$OWNER_CLEANUP/home" normal-cleanup)" = 1 ] \
+  || fail "EXIT cleanup re-committed the normal capture"
+owner_cleanup_result=$(first_result "$OWNER_CLEANUP/home" normal-cleanup)
+cmp -s "$OWNER_CLEANUP/expected" "$owner_cleanup_result" \
+  || fail "cleanup failure changed the committed normal feedback"
+assert_contains "$(cat "$OWNER_CLEANUP/start.out")" "captured: $owner_cleanup_result" \
+  "normal capture lost its committed result identity"
+assert_contains "$(cat "$OWNER_CLEANUP/start.err")" "result committed at $owner_cleanup_result" \
+  "normal capture did not report cleanup failure separately"
+[ "$(wc -l < "$OWNER_CLEANUP/rejected-deletions" | tr -d ' ')" = 1 ] \
+  || fail "normal capture retried staging cleanup from EXIT"
+[ -s "$(cat "$OWNER_CLEANUP/rejected-deletions")" ] || fail "the fixture did not leave rejected staging"
+[ ! -e "$FM_PROCEVENT_CLAIM_ROOT/normal-cleanup.claim" ] \
+  || fail "committed normal capture retained ownership for re-commit"
+assert_contains "$(wake_payloads "$OWNER_CLEANUP/home")" 'procevent lavish normal-cleanup 1' \
+  "cleanup failure prevented publication of the committed result"
+pe "$OWNER_CLEANUP/home" retire normal-cleanup >/dev/null
+pass "firstmate normal cleanup failure preserves one committed result without EXIT capture"
 
 [ "${1-}" != --owner-replies-only ] || exit 0
 

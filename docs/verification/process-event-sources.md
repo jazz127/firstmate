@@ -35,8 +35,10 @@ It covers fresh registration and replacement of a blocked listener for each vers
 The fixture rejects concurrent polls, proves a superseded unconsumed reply is never posted and a missing reply file leaves the active listener alone, and retains the original reply file for its caller.
 The failure cases require a durable announced diagnostic for reply rejection, missing session evidence, and an unknown version, with the private staged reply retained until recovery and reconciliation accept it once and resume polling.
 Replacement races pause feedback after local staging or during capture for both reply versions, and pause a modern reply rejection during capture; re-arm must retain and announce the original bytes once, deliver the replacement reply once, and capture the next feedback round normally.
+Staging deletion failures are injected at the filesystem command boundary for normal capture and replacement with both reply versions; the committed result remains unique, cleanup failure is reported separately, another replacement does not re-commit it, and ordinary feedback still follows.
 The oracle is the firstmate reply acceptance contract: a failed attempt must remain visible and retryable, while polling begins only after reply acceptance; silently dropping stderr or consuming a rejected reply fails these assertions.
 For replacement, the oracle is byte conservation at the runner boundary: replacing a listener must retain its locally received result, and deleting staging or committing it twice fails the executable assertions.
+For cleanup failure, the durable result rename is the commit point; a later failed unlink cannot invalidate that commit or justify another captured sequence, and the tests reject EXIT capture, repeated cleanup, and replacement re-commit.
 No live Lavish server or account is used by this regression.
 
 Refresh with `bash tests/fm-procevent.test.sh --owner-replies-only`.
@@ -61,6 +63,9 @@ ok - firstmate synchronous-staged preserves locally received output during reply
 ok - firstmate legacy-capture preserves locally received output during reply replacement
 ok - firstmate synchronous-capture preserves locally received output during reply replacement
 ok - firstmate diagnostic-capture preserves locally received output during reply replacement
+ok - firstmate legacy-cleanup preserves locally received output during reply replacement
+ok - firstmate synchronous-cleanup preserves locally received output during reply replacement
+ok - firstmate normal cleanup failure preserves one committed result without EXIT capture
 ```
 
 ## Why an ended Lavish review is terminal

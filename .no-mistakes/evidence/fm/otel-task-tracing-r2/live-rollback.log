@@ -1,0 +1,4 @@
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /Users/jarad/.no-mistakes/evidence/01M49NWEKR13QYMQCKQZYD09Z2/l
+can't find window: fm-trace-live-rollback-a7
+warning: leaving task trace-live-rollback-a7's slot claim on /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M49NWEKR13QYMQCKQZYD09Z2/.live-validation/pool/.treehouse/project-c32741/1/project in place; the Treehouse project lock is no longer held, so the next spawn's claim replaces it
+spawn-exit=1 metadata-present=no

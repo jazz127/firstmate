@@ -1,0 +1,12 @@
+window=primary:fm-trace-live-a7
+endpoint_task_id=trace-live-a7
+worktree=/Users/jarad/.treehouse/project-c32741/1/project
+project=/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M49NWEKR13QYMQCKQZYD09Z2/.live-validation/project
+harness=codex
+kind=scout
+tasktmp=/tmp/fm-trace-live-a7
+model=default
+effort=default
+spawn_gen=s1791330205.22739.29278
+traceparent=00-eff1740e3680a239e7594c99422b85a4-cc4de5f95e2e3293-01
+trace_started=1791330160427

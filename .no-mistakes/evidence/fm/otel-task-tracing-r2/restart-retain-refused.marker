@@ -1,0 +1,7 @@
+id=trace-restart-retain-a7
+data=/Users/jarad/.no-mistakes/evidence/01M49NWEKR13QYMQCKQZYD09Z2/l/data
+spawn_gen=restart-one
+cleanup_incomplete=0
+mode=retain
+arg=--note
+arg=local%20main

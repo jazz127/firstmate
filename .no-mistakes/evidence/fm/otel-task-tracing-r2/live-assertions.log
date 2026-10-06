@@ -1,0 +1,16 @@
+Driver: real Firstmate CLI + private tmux lab + authenticated OpenTelemetry Collector 0.162.0 at http://127.0.0.1:24318/v1/traces. Codex workers reached the real OpenAI service. No fake CLI or upstream service was used in these live checks.
+Oracle: accepted lifecycle contract; W3C carrier identity; OTLP OK=1, ERROR=2, and unset=0.
+Assertions passed: launch count and parent identity; relaunch carrier/start preservation and generation replacement; historical fallback and stable task IDs; terminal notes; renewed-work reset; cursor and deletion failures retaining retryability; pending-close/retain restart refusal; repair/retry exports exactly once; repeat refusal; default-off and disabled scrubbing; rollback omission; deferred pane-resource attributes.
+
+Task | Span | Outcome | Status | Generation
+trace-live-a7 | firstmate.spawn | - | 0 | s1791330160.23673.1596
+trace-live-a7 | firstmate.spawn | - | 0 | s1791330205.22739.29278
+trace-live-a7 | firstmate.task | done | 1 | s1791330205.22739.29278
+trace-historical-failed | firstmate.task | failed | 2 | historical-one
+trace-historical-unknown | firstmate.task | unknown | 0 | historical-one
+trace-historical-renewed | firstmate.task | unknown | 0 | historical-one
+trace-live-disabled-a7 | firstmate.spawn | - | 0 | s1791330269.14776.24004
+trace-restart-close-a7 | firstmate.task | failed | 2 | restart-one
+trace-restart-retain-a7 | firstmate.task | failed | 2 | restart-one
+trace-remove-failed-a7 | firstmate.task | failed | 2 | remove-one
+trace-remove-done-a7 | firstmate.task | done | 1 | remove-one

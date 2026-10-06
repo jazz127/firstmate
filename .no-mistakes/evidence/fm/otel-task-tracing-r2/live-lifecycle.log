@@ -1,0 +1,41 @@
+=== Relaunch enabled ===
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /Users/jarad/.no-mistakes/evidence/01M49NWEKR13QYMQCKQZYD09Z2/l
+spawned trace-live-a7 harness=codex kind=scout window=primary:fm-trace-live-a7 worktree=/Users/jarad/.treehouse/project-c32741/1/project
+=== Malformed cursor refuses cleanup ===
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /Users/jarad/.no-mistakes/evidence/01M49NWEKR13QYMQCKQZYD09Z2/l
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  repair missing watcher supervision according to the session-start block for this harness; do not use shell &.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+fm-captain-hold: origin trace-live-a7 has no completed captain-call inventory
+REFUSED: scout task trace-live-a7 has not passed the captain-call completion gate.
+Inventory its report and any visual review through bin/fm-captain-hold.sh before teardown.
+=== Repair cursor and retry cleanup ===
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /Users/jarad/.no-mistakes/evidence/01M49NWEKR13QYMQCKQZYD09Z2/l
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+fm-captain-hold: origin trace-live-a7 has no completed captain-call inventory
+REFUSED: scout task trace-live-a7 has not passed the captain-call completion gate.
+Inventory its report and any visual review through bin/fm-captain-hold.sh before teardown.
+complete: trace-live-a7 captain-call inventory reviewed
+=== Malformed cursor refuses cleanup ===
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /Users/jarad/.no-mistakes/evidence/01M49NWEKR13QYMQCKQZYD09Z2/l
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+teardown: reaping leaked worktree process(es) for trace-live-a7: 26169
+teardown: force-killing leaked worktree process(es) for trace-live-a7: 26169
+🌳 Worktree returned to pool.
+error: trace-live-a7's status presentation could not be retired; retaining its task record
+=== Repair cursor and retry cleanup ===
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /Users/jarad/.no-mistakes/evidence/01M49NWEKR13QYMQCKQZYD09Z2/l
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+🌳 Worktree returned to pool.
+teardown trace-live-a7 complete (window primary:fm-trace-live-a7, worktree /Users/jarad/.treehouse/project-c32741/1/project)
+Backlog: trace-live-a7 just finished (this home keeps no markdown backlog at /Users/jarad/.no-mistakes/evidence/01M49NWEKR13QYMQCKQZYD09Z2/l/data/backlog.md). Update /Users/jarad/.no-mistakes/evidence/01M49NWEKR13QYMQCKQZYD09Z2/l/data/backlog.md - move trace-live-a7 to Done, keep Done to the 10 most recent, then re-scan Queued and dispatch only work whose blockers are gone and date is due.
+=== Repeat cleanup refuses missing record ===
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /Users/jarad/.no-mistakes/evidence/01M49NWEKR13QYMQCKQZYD09Z2/l
+error: teardown refused: task record is not a regular file at /Users/jarad/.no-mistakes/evidence/01M49NWEKR13QYMQCKQZYD09Z2/l/state/trace-live-a7.meta
+=== Remove disposable pool slot created by initial inherited environment ===
+🌳 Destroyed 1 worktree in ~/.treehouse/project-c32741/1/project and freed 388 B.
+  1     [disposable]  388 B  ~/.treehouse/project-c32741/1/project

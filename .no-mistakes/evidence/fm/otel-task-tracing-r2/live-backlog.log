@@ -1,0 +1,158 @@
+ok: added trace-restart-close-a7 (ship) -> In flight
+task:
+  id: trace-restart-close-a7
+  title: Disposable restart close
+  state: in_flight
+  blocked: no
+  blocked_by: none
+  held: no
+  hold_reason: "-"
+  hold_kind: "-"
+  hold_until: "-"
+  kind: ship
+  repo: "-"
+  priority: "-"
+  created: 2026-10-07
+  closed: "-"
+  deps: none
+  links: none
+  body: ""
+help[2]:
+  - Run `tasks-axi done trace-restart-close-a7 --pr <url> --backend=markdown --file=/Users/jarad/.no-mistakes/evidence/01M49NWEKR13QYMQCKQZYD09Z2/l/data/backlog.md` when it ships
+  - Run `tasks-axi block trace-restart-close-a7 --by <other> --backend=markdown --file=/Users/jarad/.no-mistakes/evidence/01M49NWEKR13QYMQCKQZYD09Z2/l/data/backlog.md` to record a dependency
+=== close cursor refusal before restart ===
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /Users/jarad/.no-mistakes/evidence/01M49NWEKR13QYMQCKQZYD09Z2/l
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+error: trace-restart-close-a7's status presentation could not be retired; retaining its task record
+=== close restart recovery refuses malformed cursor ===
+task:
+  id: trace-restart-close-a7
+  title: Disposable restart close
+  state: in_flight
+  blocked: no
+  blocked_by: none
+  held: no
+  hold_reason: "-"
+  hold_kind: "-"
+  hold_until: "-"
+  kind: ship
+  repo: "-"
+  priority: "-"
+  created: 2026-10-07
+  closed: "-"
+  deps: none
+  links: none
+  body: ""
+=== close repair and teardown retry ===
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /Users/jarad/.no-mistakes/evidence/01M49NWEKR13QYMQCKQZYD09Z2/l
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+teardown trace-restart-close-a7 complete (window primary:fm-trace-restart-close-a7, worktree /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M49NWEKR13QYMQCKQZYD09Z2/.live-validation/absent-trace-restart-close-a7)
+Backlog: trace-restart-close-a7 is closed in /Users/jarad/.no-mistakes/evidence/01M49NWEKR13QYMQCKQZYD09Z2/l/data/backlog.md. Run bin/fm-tasks-axi.sh ready for dependency-cleared candidates, check date gates, and dispatch only work whose blockers are gone and date is due.
+task:
+  id: trace-restart-close-a7
+  title: Disposable restart close
+  state: done
+  blocked: no
+  blocked_by: none
+  held: no
+  hold_reason: "-"
+  hold_kind: "-"
+  hold_until: "-"
+  kind: ship
+  repo: "-"
+  priority: "-"
+  created: "-"
+  closed: 2026-10-07
+  deps: none
+  links: none
+  body: local main
+ok: added trace-restart-retain-a7 (ship) -> In flight
+task:
+  id: trace-restart-retain-a7
+  title: Disposable restart retain
+  state: in_flight
+  blocked: no
+  blocked_by: none
+  held: no
+  hold_reason: "-"
+  hold_kind: "-"
+  hold_until: "-"
+  kind: ship
+  repo: "-"
+  priority: "-"
+  created: 2026-10-07
+  closed: "-"
+  deps: none
+  links: none
+  body: ""
+help[2]:
+  - Run `tasks-axi done trace-restart-retain-a7 --pr <url> --backend=markdown --file=/Users/jarad/.no-mistakes/evidence/01M49NWEKR13QYMQCKQZYD09Z2/l/data/backlog.md` when it ships
+  - Run `tasks-axi block trace-restart-retain-a7 --by <other> --backend=markdown --file=/Users/jarad/.no-mistakes/evidence/01M49NWEKR13QYMQCKQZYD09Z2/l/data/backlog.md` to record a dependency
+ok: hold trace-restart-retain-a7 -> held (captain)
+task:
+  id: trace-restart-retain-a7
+  title: Disposable restart retain
+  state: in_flight
+  blocked: no
+  blocked_by: none
+  held: yes
+  hold_reason: Disposable test pending decision
+  hold_kind: captain
+  hold_until: "-"
+  kind: ship
+  repo: "-"
+  priority: "-"
+  created: 2026-10-07
+  closed: "-"
+  deps: none
+  links: none
+  body: ""
+help[2]:
+  - Run `tasks-axi unhold trace-restart-retain-a7 --backend=markdown --file=/Users/jarad/.no-mistakes/evidence/01M49NWEKR13QYMQCKQZYD09Z2/l/data/backlog.md` to resume dispatch
+  - Run `tasks-axi ready --include-held --backend=markdown --file=/Users/jarad/.no-mistakes/evidence/01M49NWEKR13QYMQCKQZYD09Z2/l/data/backlog.md` to review paused work
+=== retain cursor refusal before restart ===
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /Users/jarad/.no-mistakes/evidence/01M49NWEKR13QYMQCKQZYD09Z2/l
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+error: trace-restart-retain-a7's status presentation could not be retired; retaining its task record
+=== retain restart recovery refuses malformed cursor ===
+task:
+  id: trace-restart-retain-a7
+  title: Disposable restart retain
+  state: in_flight
+  blocked: no
+  blocked_by: none
+  held: yes
+  hold_reason: Disposable test pending decision
+  hold_kind: captain
+  hold_until: "-"
+  kind: ship
+  repo: "-"
+  priority: "-"
+  created: 2026-10-07
+  closed: "-"
+  deps: none
+  links: none
+  body: ""
+=== retain repair and teardown retry ===
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /Users/jarad/.no-mistakes/evidence/01M49NWEKR13QYMQCKQZYD09Z2/l
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+teardown trace-restart-retain-a7 complete (window primary:fm-trace-restart-retain-a7, worktree /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M49NWEKR13QYMQCKQZYD09Z2/.live-validation/absent-trace-restart-retain-a7)
+Backlog: trace-restart-retain-a7 stays open in /Users/jarad/.no-mistakes/evidence/01M49NWEKR13QYMQCKQZYD09Z2/l/data/backlog.md, still held for the captain with its deliverable recorded. Relay the question and close it only with bin/fm-captain-hold.sh answer.
+task:
+  id: trace-restart-retain-a7
+  title: Disposable restart retain
+  state: queued
+  blocked: no
+  blocked_by: none
+  held: yes
+  hold_reason: Disposable test pending decision
+  hold_kind: captain
+  hold_until: "-"
+  kind: ship
+  repo: "-"
+  priority: "-"
+  created: 2026-10-07
+  closed: "-"
+  deps: none
+  links: none
+  body: "Deliverable of the finished work: local main"

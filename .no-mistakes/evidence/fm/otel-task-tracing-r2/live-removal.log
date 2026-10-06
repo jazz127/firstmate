@@ -1,0 +1,27 @@
+=== failed final metadata removal failure ===
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /Users/jarad/.no-mistakes/evidence/01M49NWEKR13QYMQCKQZYD09Z2/l
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+error: trace-remove-failed-a7's endpoint and local copy are cleaned up, but its task record could not be removed (task record could not be removed at /Users/jarad/.no-mistakes/evidence/01M49NWEKR13QYMQCKQZYD09Z2/l/state/trace-remove-failed-a7.meta)
+=== failed repair and retry without original status log ===
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /Users/jarad/.no-mistakes/evidence/01M49NWEKR13QYMQCKQZYD09Z2/l
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+teardown trace-remove-failed-a7 complete (window primary:fm-trace-remove-failed-a7, worktree /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M49NWEKR13QYMQCKQZYD09Z2/.live-validation/absent-trace-remove-failed-a7)
+Backlog: trace-remove-failed-a7 just finished (this home keeps no markdown backlog at /Users/jarad/.no-mistakes/evidence/01M49NWEKR13QYMQCKQZYD09Z2/l/data/backlog.md). Update /Users/jarad/.no-mistakes/evidence/01M49NWEKR13QYMQCKQZYD09Z2/l/data/backlog.md - move trace-remove-failed-a7 to Done, keep Done to the 10 most recent, then re-scan Queued and dispatch only work whose blockers are gone and date is due.
+=== done final metadata removal failure ===
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /Users/jarad/.no-mistakes/evidence/01M49NWEKR13QYMQCKQZYD09Z2/l
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+error: trace-remove-done-a7's endpoint and local copy are cleaned up, but its task record could not be removed (task record could not be removed at /Users/jarad/.no-mistakes/evidence/01M49NWEKR13QYMQCKQZYD09Z2/l/state/trace-remove-done-a7.meta)
+=== done repair and retry without original status log ===
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /Users/jarad/.no-mistakes/evidence/01M49NWEKR13QYMQCKQZYD09Z2/l
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+teardown trace-remove-done-a7 complete (window primary:fm-trace-remove-done-a7, worktree /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M49NWEKR13QYMQCKQZYD09Z2/.live-validation/absent-trace-remove-done-a7)
+Backlog: trace-remove-done-a7 just finished (this home keeps no markdown backlog at /Users/jarad/.no-mistakes/evidence/01M49NWEKR13QYMQCKQZYD09Z2/l/data/backlog.md). Update /Users/jarad/.no-mistakes/evidence/01M49NWEKR13QYMQCKQZYD09Z2/l/data/backlog.md - move trace-remove-done-a7 to Done, keep Done to the 10 most recent, then re-scan Queued and dispatch only work whose blockers are gone and date is due.
+=== disabled final metadata removal failure ===
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /Users/jarad/.no-mistakes/evidence/01M49NWEKR13QYMQCKQZYD09Z2/l
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+error: trace-remove-disabled-a7's endpoint and local copy are cleaned up, but its task record could not be removed (task record could not be removed at /Users/jarad/.no-mistakes/evidence/01M49NWEKR13QYMQCKQZYD09Z2/l/state/trace-remove-disabled-a7.meta)
+=== disabled repair and retry without original status log ===
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /Users/jarad/.no-mistakes/evidence/01M49NWEKR13QYMQCKQZYD09Z2/l
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+teardown trace-remove-disabled-a7 complete (window primary:fm-trace-remove-disabled-a7, worktree /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M49NWEKR13QYMQCKQZYD09Z2/.live-validation/absent-trace-remove-disabled-a7)
+Backlog: trace-remove-disabled-a7 just finished (this home keeps no markdown backlog at /Users/jarad/.no-mistakes/evidence/01M49NWEKR13QYMQCKQZYD09Z2/l/data/backlog.md). Update /Users/jarad/.no-mistakes/evidence/01M49NWEKR13QYMQCKQZYD09Z2/l/data/backlog.md - move trace-remove-disabled-a7 to Done, keep Done to the 10 most recent, then re-scan Queued and dispatch only work whose blockers are gone and date is due.

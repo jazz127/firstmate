@@ -1,0 +1,2 @@
+BACKLOG_RECONCILE: trace-restart-retain-a7: recorded backlog close could not be replayed: trace-restart-retain-a7's status presentation could not be retired; retaining its task record
+BOOTSTRAP_INFO: lavish-axi >=0.1.80 enables confirmed board replies; this older compatible version retains the legacy reply path, but upgrade to prevent handing back a board before its reply is accepted

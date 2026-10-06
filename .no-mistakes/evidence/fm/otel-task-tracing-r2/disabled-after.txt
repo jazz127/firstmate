@@ -1,0 +1,40 @@
+user
+Reply TRACE_WORKER_READY without using tools or changing files.
+codex
+TRACE_WORKER_READY
+tokens used
+4,162
+carrier-after-worker:00-ab2ac770f487d84e38973944dc0cce7d-6e50e2ae8ae01013-01
+jarad@jengine:~/.no-mistakes/worktrees/119cd7a6b9a4/01M49NWEKR13QYMQCKQZYD09Z2/.live-validation/pool/.treehouse/project-
+c32741/1/project/ > cd -- '/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M49NWEKR13QYMQCKQZYD09Z2/.live-validation/
+pool/.treehouse/project-c32741/1/project'
+jarad@jengine:~/.no-mistakes/worktrees/119cd7a6b9a4/01M49NWEKR13QYMQCKQZYD09Z2/.live-validation/pool/.treehouse/project-
+c32741/1/project/ > export GOTMPDIR=/tmp/fm-trace-live-disabled-a7/gotmp
+jarad@jengine:~/.no-mistakes/worktrees/119cd7a6b9a4/01M49NWEKR13QYMQCKQZYD09Z2/.live-validation/pool/.treehouse/project-
+c32741/1/project/ > export COMPACT_ADVISER_DISABLE=1
+jarad@jengine:~/.no-mistakes/worktrees/119cd7a6b9a4/01M49NWEKR13QYMQCKQZYD09Z2/.live-validation/pool/.treehouse/project-
+c32741/1/project/ > export FM_TASK_ID=trace-live-disabled-a7
+jarad@jengine:~/.no-mistakes/worktrees/119cd7a6b9a4/01M49NWEKR13QYMQCKQZYD09Z2/.live-validation/pool/.treehouse/project-
+c32741/1/project/ > . '/tmp/fm-trace-live-disabled-a7+49a0ecc4a8e79e7e72f0ddc59adc67ccf4e74e8b6bb1a3a9e02d9c9f308513eb/l
+aunch.s1791330279.27941.1464.sh'
+OpenAI Codex v0.160.0
+--------
+workdir: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M49NWEKR13QYMQCKQZYD09Z2/.live-validation/pool/.treehouse/pr
+oject-c32741/1/project
+model: gpt-5.6-sol
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 01a1139a-e5c7-7021-8891-baa36ec92319
+--------
+user
+Reply TRACE_WORKER_READY without using tools or changing files.
+codex
+TRACE_WORKER_READY
+tokens used
+4,162
+carrier-after-worker:unset
+jarad@jengine:~/.no-mistakes/worktrees/119cd7a6b9a4/01M49NWEKR13QYMQCKQZYD09Z2/.live-validation/pool/.treehouse/project-
+c32741/1/project/ >

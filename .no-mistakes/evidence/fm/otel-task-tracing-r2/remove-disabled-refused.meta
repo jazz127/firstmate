@@ -1,0 +1,10 @@
+window=primary:fm-trace-remove-disabled-a7
+worktree=/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M49NWEKR13QYMQCKQZYD09Z2/.live-validation/absent-trace-remove-disabled-a7
+project=/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M49NWEKR13QYMQCKQZYD09Z2/.live-validation/project
+harness=codex
+kind=ship
+mode=local-only
+yolo=off
+spawn_gen=remove-one
+traceparent=00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01
+trace_outcome=failed

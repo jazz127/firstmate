@@ -1,0 +1,6 @@
+ok - fm-teardown removes the dir pointed to by tasktmp= in meta
+ok - fm-teardown skips gracefully when tasktmp= is absent (backward compat)
+ok - fm-teardown skips gracefully when tasktmp= points to a nonexistent dir
+ok - successful cleanup emits one done/failed/unknown root with missing-start fallback; refusal and repeat emit none
+ok - terminal outcomes survive notes, reset on renewed work, and follow a later terminal event
+ok - disabled export preserves retryable records through cursor and removal failures

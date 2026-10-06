@@ -1,0 +1,40 @@
+treehouse get
+compinit:527: no such file or directory: /opt/homebrew/share/zsh/site-functions/_brew
+compinit:527: no such file or directory: /opt/homebrew/share/zsh/site-functions/_brew
+jarad@jengine:~/.no-mistakes/worktrees/119cd7a6b9a4/01M49NWEKR13QYMQCKQZYD09Z2/.live-validation/project/ > treehouse get
+
+🌳 Setting up worktree...
+🌳 Entered worktree at ~/.treehouse/project-c32741/1/project. Type 'exit' to return.
+compinit:527: no such file or directory: /opt/homebrew/share/zsh/site-functions/_brew
+compinit:527: no such file or directory: /opt/homebrew/share/zsh/site-functions/_brew
+jarad@jengine:~/.treehouse/project-c32741/1/project/ > cd -- '/Users/jarad/.treehouse/project-c32741/1/project'
+jarad@jengine:~/.treehouse/project-c32741/1/project/ > export GOTMPDIR=/tmp/fm-trace-live-a7/gotmp
+jarad@jengine:~/.treehouse/project-c32741/1/project/ > export COMPACT_ADVISER_DISABLE=1
+jarad@jengine:~/.treehouse/project-c32741/1/project/ > export FM_TASK_ID=trace-live-a7
+jarad@jengine:~/.treehouse/project-c32741/1/project/ > export TRACEPARENT=00-eff1740e3680a239e7594c99422b85a4-cc4de5f95e
+2e3293-01
+jarad@jengine:~/.treehouse/project-c32741/1/project/ > . '/tmp/fm-trace-live-a7+49a0ecc4a8e79e7e72f0ddc59adc67ccf4e74e8b
+6bb1a3a9e02d9c9f308513eb/launch.s1791330160.23673.1596.sh'
+OpenAI Codex v0.160.0
+--------
+workdir: /Users/jarad/.treehouse/project-c32741/1/project
+model: gpt-5.6-sol
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 01a11399-15df-7631-bd75-e989fb76bec7
+--------
+user
+Reply TRACE_WORKER_READY without using tools or changing files.
+codex
+TRACE_WORKER_READY
+tokens used
+4,082
+jarad@jengine:~/.treehouse/project-c32741/1/project/ >
+
+
+
+
+

@@ -1,0 +1,29 @@
+=== Historical failed cleanup ===
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /Users/jarad/.no-mistakes/evidence/01M49NWEKR13QYMQCKQZYD09Z2/l
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+teardown trace-historical-failed complete (window primary:fm-trace-historical-failed, worktree /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M49NWEKR13QYMQCKQZYD09Z2/.live-validation/absent-trace-historical-failed)
+Backlog: trace-historical-failed just finished (this home keeps no markdown backlog at /Users/jarad/.no-mistakes/evidence/01M49NWEKR13QYMQCKQZYD09Z2/l/data/backlog.md). Update /Users/jarad/.no-mistakes/evidence/01M49NWEKR13QYMQCKQZYD09Z2/l/data/backlog.md - move trace-historical-failed to Done, keep Done to the 10 most recent, then re-scan Queued and dispatch only work whose blockers are gone and date is due.
+=== Historical unknown cleanup ===
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /Users/jarad/.no-mistakes/evidence/01M49NWEKR13QYMQCKQZYD09Z2/l
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+teardown trace-historical-unknown complete (window primary:fm-trace-historical-unknown, worktree /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M49NWEKR13QYMQCKQZYD09Z2/.live-validation/absent-trace-historical-unknown)
+Backlog: trace-historical-unknown just finished (this home keeps no markdown backlog at /Users/jarad/.no-mistakes/evidence/01M49NWEKR13QYMQCKQZYD09Z2/l/data/backlog.md). Update /Users/jarad/.no-mistakes/evidence/01M49NWEKR13QYMQCKQZYD09Z2/l/data/backlog.md - move trace-historical-unknown to Done, keep Done to the 10 most recent, then re-scan Queued and dispatch only work whose blockers are gone and date is due.
+=== Historical renewed cleanup ===
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /Users/jarad/.no-mistakes/evidence/01M49NWEKR13QYMQCKQZYD09Z2/l
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+teardown trace-historical-renewed complete (window primary:fm-trace-historical-renewed, worktree /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M49NWEKR13QYMQCKQZYD09Z2/.live-validation/absent-trace-historical-renewed)
+Backlog: trace-historical-renewed just finished (this home keeps no markdown backlog at /Users/jarad/.no-mistakes/evidence/01M49NWEKR13QYMQCKQZYD09Z2/l/data/backlog.md). Update /Users/jarad/.no-mistakes/evidence/01M49NWEKR13QYMQCKQZYD09Z2/l/data/backlog.md - move trace-historical-renewed to Done, keep Done to the 10 most recent, then re-scan Queued and dispatch only work whose blockers are gone and date is due.
+=== Enabled local-pool launch ===
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /Users/jarad/.no-mistakes/evidence/01M49NWEKR13QYMQCKQZYD09Z2/l
+spawned trace-live-disabled-a7 harness=codex kind=scout window=primary:fm-trace-live-disabled-a7 worktree=/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M49NWEKR13QYMQCKQZYD09Z2/.live-validation/pool/.treehouse/project-c32741/1/project
+=== Disabled relaunch scrubs old trace fields and environment ===
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /Users/jarad/.no-mistakes/evidence/01M49NWEKR13QYMQCKQZYD09Z2/l
+spawned trace-live-disabled-a7 harness=codex kind=scout window=primary:fm-trace-live-disabled-a7 worktree=/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M49NWEKR13QYMQCKQZYD09Z2/.live-validation/pool/.treehouse/project-c32741/1/project
+complete: trace-live-disabled-a7 captain-call inventory reviewed
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /Users/jarad/.no-mistakes/evidence/01M49NWEKR13QYMQCKQZYD09Z2/l
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+teardown: reaping leaked worktree process(es) for trace-live-disabled-a7: 15701
+teardown: force-killing leaked worktree process(es) for trace-live-disabled-a7: 15701
+🌳 Worktree returned to pool.
+teardown trace-live-disabled-a7 complete (window primary:fm-trace-live-disabled-a7, worktree /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M49NWEKR13QYMQCKQZYD09Z2/.live-validation/pool/.treehouse/project-c32741/1/project)
+Backlog: trace-live-disabled-a7 just finished (this home keeps no markdown backlog at /Users/jarad/.no-mistakes/evidence/01M49NWEKR13QYMQCKQZYD09Z2/l/data/backlog.md). Update /Users/jarad/.no-mistakes/evidence/01M49NWEKR13QYMQCKQZYD09Z2/l/data/backlog.md - move trace-live-disabled-a7 to Done, keep Done to the 10 most recent, then re-scan Queued and dispatch only work whose blockers are gone and date is due.

@@ -1,0 +1,19 @@
+extensions:
+  bearertokenauth/lab:
+    token: disposable-lab-token
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 127.0.0.1:24318
+        auth:
+          authenticator: bearertokenauth/lab
+exporters:
+  file:
+    path: /Users/jarad/.no-mistakes/evidence/01M49NWEKR13QYMQCKQZYD09Z2/otlp.jsonl
+service:
+  extensions: [bearertokenauth/lab]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      exporters: [file]

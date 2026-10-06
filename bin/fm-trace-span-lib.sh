@@ -21,10 +21,11 @@
 # config is disabled with its first-argument -q.
 
 _fm_trace_span_shell_flags=$-
+_fm_trace_span_code_root=$(CDPATH='' cd -- "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 # shellcheck source=bin/fm-trace-context-lib.sh
-. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/fm-trace-context-lib.sh"
+. "$(CDPATH='' cd -- "$(dirname "${BASH_SOURCE[0]}")" && pwd)/fm-trace-context-lib.sh"
 # shellcheck source=bin/fm-timing-lib.sh
-. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/fm-timing-lib.sh"
+. "$(CDPATH='' cd -- "$(dirname "${BASH_SOURCE[0]}")" && pwd)/fm-timing-lib.sh"
 case $_fm_trace_span_shell_flags in *u*) ;; *) set +u ;; esac
 unset _fm_trace_span_shell_flags
 
@@ -102,11 +103,18 @@ fm_trace_span_header_valid() {
   fi
   case $mode in '' | *[!0-7]*) return 1 ;; esac
   [ "$((8#$mode & 044))" -eq 0 ] || return 1
-  IFS= read -r line < "$file" || [ -n "$line" ] || return 1
-  case $line in 'Authorization: Bearer '*) ;; *) return 1 ;; esac
-  local token=${line#Authorization: Bearer }
-  [[ $token =~ ^[A-Za-z0-9._~+/-]+=*$ ]] || return 1
-  cmp -s "$file" <(printf '%s\n' "$line") || cmp -s "$file" <(printf '%s' "$line")
+  local restore_xtrace=0 result=1 token
+  case $- in *x*) restore_xtrace=1 ;; esac
+  set +x
+  if { IFS= read -r line < "$file" || [ -n "$line" ]; } && [[ $line == 'Authorization: Bearer '* ]]; then
+    token=${line#Authorization: Bearer }
+    if [[ $token =~ ^[A-Za-z0-9._~+/-]+=*$ ]] \
+      && { cmp -s "$file" <(printf '%s\n' "$line") || cmp -s "$file" <(printf '%s' "$line"); }; then
+      result=0
+    fi
+  fi
+  [ "$restore_xtrace" -eq 0 ] || set -x
+  return "$result"
 }
 
 _fm_trace_span_emit_impl() {
@@ -132,7 +140,7 @@ _fm_trace_span_emit_impl() {
 
   [ "${FM_TRACE_EXPORT:-}" != off ] || return 0
   state_dir=${meta%/*}; [ "$state_dir" != "$meta" ] || state_dir=.
-  home_dir=${FM_HOME:-${FM_ROOT_OVERRIDE:-$(dirname "$state_dir")}}
+  home_dir=${FM_HOME:-${FM_ROOT_OVERRIDE:-$_fm_trace_span_code_root}}
   effective_state=${FM_STATE_OVERRIDE:-$home_dir/state}
   state_dir=$(CDPATH='' cd -- "$state_dir" && pwd -P) || return 0
   effective_state=$(CDPATH='' cd -- "$effective_state" && pwd -P) || return 0

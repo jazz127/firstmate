@@ -20,11 +20,27 @@ for options in - e u p eu ep up eup; do
   ' _ "$options" "$ROOT" || fail "loading or calling emitter changed shell options ($options)"
 done
 pass "loading and disabled emission preserve errexit, nounset, pipefail, and unset-variable behavior"
+for options in - e u p eu ep up eup; do
+  bash -c '
+    cd "$2" || exit 1
+    case $1 in *e*) set -e ;; *) set +e ;; esac
+    case $1 in *u*) set -u ;; *) set +u ;; esac
+    case $1 in *p*) set -o pipefail ;; *) set +o pipefail ;; esac
+    CDPATH=.
+    before=$-
+    . bin/fm-trace-span-lib.sh
+    [ "$-" = "$before" ] && [ "$CDPATH" = . ] || exit 1
+    FM_TRACE_EXPORT=off fm_trace_span_emit missing.meta off 1 2
+    [ "$-" = "$before" ] && [ "$CDPATH" = . ] || exit 1
+  ' _ "$options" "$ROOT" || fail "relative loading with CDPATH changed caller result or options ($options)"
+done
+pass "relative library loading with CDPATH preserves caller success and shell options"
 # shellcheck source=/dev/null
 . "$ROOT/bin/fm-trace-span-lib.sh"
 
 WORK=$(fm_test_tmproot fm-trace-span)
 HOME_FIX="$WORK/home"
+export FM_HOME="$HOME_FIX"
 STATE="$HOME_FIX/state"
 CONFIG="$HOME_FIX/config"
 mkdir -p "$STATE" "$CONFIG" "$WORK/wrapper" "$WORK/no-curl"
@@ -136,6 +152,52 @@ if grep -Fq "$TOKEN" "$WORK/curl-argv" || jq -r '.body' "$WORK/capture.json" | g
 fi
 pass "synthetic HTTP capture confirms escaped root JSON, root identity, nanoseconds, auth header, and no token in argv/payload"
 
+if bash -c '((BASH_VERSINFO[0] > 4 || (BASH_VERSINFO[0] == 4 && BASH_VERSINFO[1] >= 1)))'; then
+  printf 'Wrong: Bearer %s\n' "$TOKEN" > "$WORK/bad-prefix"
+  printf 'Authorization: Bearer %s invalid\n' "$TOKEN" > "$WORK/bad-token"
+  printf 'Authorization: Bearer %s\nextra\n' "$TOKEN" > "$WORK/extra-header"
+  chmod 600 "$WORK/bad-prefix" "$WORK/bad-token" "$WORK/extra-header"
+  write_config "$BASE/xtrace"
+  COUNT=$(request_count)
+  bash -c '
+    set -eu
+    . "$1/bin/fm-trace-span-lib.sh"
+    exec 9> "$4/xtrace"
+    BASH_XTRACEFD=9
+    for tracing in on off; do
+      case $tracing in on) set -x ;; off) set +x ;; esac
+      before=$-
+      for mode in root child; do
+        option=""
+        [ "$mode" != root ] || option=--root
+        fm_trace_span_emit "$2" xtrace.event 1 2 ${option:+"$option"}
+        [ "$-" = "$before" ] || exit 1
+      done
+      for header in "$3" "$4/absent-header" "$4/bad-prefix" "$4/bad-token" "$4/extra-header"; do
+        if fm_trace_span_header_valid "$header"; then
+          [ "$header" = "$3" ] || exit 1
+        else
+          [ "$header" != "$3" ] || exit 1
+        fi
+        [ "$-" = "$before" ] || exit 1
+      done
+    done
+    set +x
+    printf "%s\n" continued
+  ' _ "$ROOT" "$META" "$HEADER" "$WORK" > "$WORK/caller-output" 2> "$WORK/stderr" \
+    || fail "credential handling changed caller success or xtrace setting"
+  [ "$(cat "$WORK/caller-output")" = continued ] && [ ! -s "$WORK/stderr" ] \
+    || fail "traced export emitted unexpected output"
+  [ "$(request_count)" -eq "$((COUNT + 4))" ] || fail "traced root or child export skipped authentication"
+  [ -s "$WORK/xtrace" ] || fail "dedicated xtrace descriptor captured no tracing"
+  if grep -Fq "$TOKEN" "$WORK/xtrace"; then fail "bearer token leaked to the xtrace descriptor"; fi
+  jq -e --arg token "Bearer $TOKEN" '.path == "/xtrace" and .authorization == $token' \
+    "$WORK/capture.json" >/dev/null || fail "traced export did not authenticate"
+  pass "credential validation and authenticated exports preserve xtrace settings without leaking to a dedicated descriptor"
+else
+  printf 'skip - dedicated xtrace descriptor requires Bash 4.1 or newer\n'
+fi
+
 # The JSON string contract preserves the supplied Unicode text exactly, rather
 # than escaping high-bit bytes as ASCII controls (a Bash 3.2 regression).
 UNICODE='café 日本語 🐟'
@@ -211,7 +273,7 @@ for mode in root child; do
   FM_STATE_OVERRIDE="$STATE" assert_config_route "$META" /home-config
   FM_HOME="$HOME_FIX" FM_STATE_OVERRIDE="$ALT_STATE" FM_CONFIG_OVERRIDE="$ALT_CONFIG" \
     assert_config_route "$ALT_STATE/task-1.meta" /override-config
-  FM_ROOT_OVERRIDE="$HOME_FIX" assert_config_route "$META" /home-config
+  (unset FM_HOME; FM_ROOT_OVERRIDE="$HOME_FIX" assert_config_route "$META" /home-config)
   FM_HOME="$HOME_FIX" FM_ROOT_OVERRIDE="$WORK/runtime" assert_config_route "$META" /home-config
   (
     cd "$WORK" || fail "relative override fixture could not change directory"
@@ -227,6 +289,33 @@ for mode in root child; do
     FM_TRACE_EXPORT=off assert_config_skip "$ALT_STATE/task-1.meta"
 done
 pass "root and child exports honor directory precedence and relative overrides without crossing homes or falling back"
+
+CODE_HOME="$WORK/code-home"
+mkdir -p "$CODE_HOME/bin" "$CODE_HOME/config" "$CODE_HOME/state"
+cp "$ROOT/bin/fm-trace-span-lib.sh" "$ROOT/bin/fm-trace-context-lib.sh" "$ROOT/bin/fm-timing-lib.sh" "$CODE_HOME/bin/"
+cp "$STATE/.lock" "$STATE/.trace-context-effective" "$META" "$CODE_HOME/state/"
+CONFIG="$CODE_HOME/config" write_config "$BASE/code-home-config"
+(
+  unset FM_HOME FM_ROOT_OVERRIDE
+  cd "$CODE_HOME" || fail "default home fixture could not change directory"
+  # shellcheck source=/dev/null
+  . bin/fm-trace-span-lib.sh
+  cd "$WORK" || fail "default home fixture could not change caller directory"
+  for mode in root child; do
+    CONFIG_MODE=''
+    [ "$mode" != root ] || CONFIG_MODE=--root
+    assert_config_route "$CODE_HOME/state/task-1.meta" /code-home-config
+    FM_STATE_OVERRIDE="$ALT_STATE" assert_config_route "$ALT_STATE/task-1.meta" /code-home-config
+    FM_STATE_OVERRIDE="$STATE" assert_config_route "$META" /code-home-config
+    FM_STATE_OVERRIDE="$ALT_STATE" FM_CONFIG_OVERRIDE="$ALT_CONFIG" \
+      assert_config_route "$ALT_STATE/task-1.meta" /override-config
+    FM_ROOT_OVERRIDE="$HOME_FIX" assert_config_route "$META" /home-config
+    assert_config_skip "$META"
+    FM_CONFIG_OVERRIDE="$ALT_CONFIG" assert_config_skip "$META"
+    FM_STATE_OVERRIDE="$ALT_STATE" assert_config_skip "$META"
+  done
+)
+pass "unset home uses the library code root after caller directory changes and state overrides never select another home"
 
 for mode in root child; do
   CONFIG_MODE=''

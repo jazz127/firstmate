@@ -31,14 +31,17 @@ calls = {
  "repos/jazz127/demo/branches/house": sha("housetip"),
  "repos/jazz127/demo/branches?per_page=8&page=1": [{"name":"main","sha":"mainfork"},{"name":"house","sha":"housetip"},{"name":"fm/one","sha":"x"},{"name":"fm/two","sha":"x"},{"name":"fm/three","sha":"x"},{"name":"fm/four","sha":"x"},{"name":"fm/five","sha":"x"},{"name":"housefeature/alpha","sha":"aaaaaaa1111111111111111111111111111111111"}],
  "repos/jazz127/demo/branches?per_page=8&page=2": [{"name":"housefeature/extra","sha":"bbbbbbb2222222222222222222222222222222"},{"name":"housefeature/alpha-house-integration","sha":"1111111222222222222222222222222222222222"},{"name":"housefeature/alpha-house-fix","sha":"2222222333333333333333333333333333333333"},{"name":"housefeature/hf-upstream-main-sync-5","sha":"3333333444444444444444444444444444444444"},{"name":"housefeature/upstream-5872-merge","sha":"4444444555555555555555555555555555555555"},{"name":"housefeature/house-test-fixes","sha":"5555555666666666666666666666666666666666"},{"name":"housefeature/odd-maintenance","sha":"6666666777777777777777777777777777777777"}],
- "repos/jazz127/demo/pulls?state=all&per_page=8&page=1": [{"number":2,"title":"Alpha","state":"closed","merged_at":"2026-09-20T00:00:00Z","created_at":"2026-09-01T00:00:00Z","head":"fm/alpha","base":"housefeature/alpha","labels":[],"html_url":"https://github.com/jazz127/demo/pull/2"},{"number":3,"title":"Missing","state":"closed","merged_at":"2026-09-12T00:00:00Z","created_at":"2026-09-05T00:00:00Z","head":"fm/missing","base":"housefeature/missing","labels":[],"html_url":"https://github.com/jazz127/demo/pull/3"},{"number":4,"title":"Gone","state":"closed","merged_at":None,"created_at":"2026-09-06T00:00:00Z","head":"fm/gone","base":"housefeature/gone","labels":[],"html_url":"https://github.com/jazz127/demo/pull/4"},{"number":5,"title":"Alpha house integration","state":"closed","merged_at":"2026-09-21T00:00:00Z","created_at":"2026-09-21T00:00:00Z","head":"housefeature/alpha-house-integration","base":"house","labels":[],"html_url":"https://github.com/jazz127/demo/pull/5"},{"number":6,"title":"House reconciliation for integration","state":"closed","merged_at":"2026-09-22T00:00:00Z","created_at":"2026-09-22T00:00:00Z","head":"housefeature/odd-maintenance","base":"house","labels":[],"html_url":"https://github.com/jazz127/demo/pull/6"}],
+ "repos/jazz127/demo/pulls?state=all&per_page=8&page=1": [{"number":2,"title":"Alpha house integration","state":"closed","merged_at":"2026-09-20T00:00:00Z","created_at":"2026-09-01T00:00:00Z","head":"housefeature/alpha","base":"house","labels":[],"html_url":"https://github.com/jazz127/demo/pull/2"},{"number":3,"title":"House test fixes for missing feature","state":"closed","merged_at":"2026-09-12T00:00:00Z","created_at":"2026-09-05T00:00:00Z","head":"housefeature/missing","base":"house","labels":[],"html_url":"https://github.com/jazz127/demo/pull/3"},{"number":4,"title":"Gone","state":"closed","merged_at":None,"created_at":"2026-09-06T00:00:00Z","head":"fm/gone","base":"housefeature/gone","labels":[],"html_url":"https://github.com/jazz127/demo/pull/4"},{"number":5,"title":"Alpha house integration","state":"closed","merged_at":"2026-09-21T00:00:00Z","created_at":"2026-09-21T00:00:00Z","head":"housefeature/alpha-house-integration","base":"house","labels":[],"html_url":"https://github.com/jazz127/demo/pull/5"},{"number":6,"title":"House reconciliation for integration","state":"closed","merged_at":"2026-09-22T00:00:00Z","created_at":"2026-09-22T00:00:00Z","head":"housefeature/odd-maintenance","base":"house","labels":[],"html_url":"https://github.com/jazz127/demo/pull/6"},{"number":7,"title":"Sync upstream main for extra feature","state":"closed","merged_at":"2026-09-22T00:00:00Z","created_at":"2026-09-10T00:00:00Z","head":"housefeature/extra","base":"house","labels":[],"html_url":"https://github.com/jazz127/demo/pull/7"}],
  "repos/jazz127/demo/compare/aaaaaaa1111111111111111111111111111111111...housetip": {"behind_by":0},
  "repos/jazz127/demo/compare/bbbbbbb2222222222222222222222222222222...housetip": {"behind_by":1},
+ "repos/jazz127/demo/compare/6666666777777777777777777777777777777777...housetip": {"behind_by":1},
+ "repos/jazz127/demo/commits/6666666777777777777777777777777777777777": {"date":"2026-09-22T00:00:00Z"},
  "repos/jazz127/demo/commits/aaaaaaa1111111111111111111111111111111111": {"date":"2026-09-01T00:00:00Z"},
  "repos/jazz127/demo/commits/bbbbbbb2222222222222222222222222222222": {"date":"2026-09-10T00:00:00Z"},
  "repos/jazz127/demo/commits/ccccccc3": {"date":"2026-09-05T00:00:00Z"},
  "repos/jazz127/demo/commits/fffffff6": {"date":"2026-09-04T00:00:00Z"},
  "repos/owner/demo/pulls/247": {"number":247,"state":"open","merged_at":None,"created_at":"2026-09-02T00:00:00Z","html_url":"https://github.com/owner/demo/pull/247","head":"housefeature/alpha"},
+ "repos/owner/demo/pulls?state=all&head=jazz127%3Ahousefeature/odd-maintenance&per_page=20": [],
  "repos/owner/demo/pulls?state=all&head=jazz127%3Ahousefeature/missing&per_page=20": [],
  "repos/owner/demo/pulls?state=all&head=jazz127%3Ahousefeature/gone&per_page=20": [],
  "repos/owner/demo/pulls?state=all&head=jazz127%3Ahousefeature/shipped&per_page=20": [{"number":249,"state":"closed","merged_at":"2026-09-15T00:00:00Z","created_at":"2026-09-03T00:00:00Z","html_url":"https://github.com/owner/demo/pull/249","head":"housefeature/shipped"}],
@@ -105,16 +108,18 @@ assert p['schema']=='fm-house-board.v1'
 assert p['projects'][0]['mirror_equal'] is False
 assert (p['projects'][0]['ahead'],p['projects'][0]['behind'])==(2,1)
 r={row['branch']:row for row in p['features']}
-assert len(r)==3
-assert len(p['plumbing'])==6
+assert set(r)=={'housefeature/alpha', 'housefeature/missing', 'housefeature/extra', 'housefeature/odd-maintenance'}
+assert {row['branch'] for row in p['plumbing']} == {
+    'housefeature/alpha-house-integration', 'housefeature/alpha-house-fix',
+    'housefeature/hf-upstream-main-sync-5', 'housefeature/upstream-5872-merge',
+    'housefeature/house-test-fixes'}
 assert {row['kind'] for row in p['plumbing']} == {
     'House integration', 'House reconciliation or fix', 'Upstream main sync',
     'Upstream merge', 'House test fixes'}
 integration = next(row for row in p['plumbing'] if row['kind'] == 'House integration')
 assert integration['pull_request']['html_url']=='https://github.com/jazz127/demo/pull/5'
-structural = next(row for row in p['plumbing'] if row['branch'] == 'housefeature/odd-maintenance')
-assert structural['kind']=='House reconciliation or fix'
-assert structural['pull_request']['html_url']=='https://github.com/jazz127/demo/pull/6'
+assert r['housefeature/odd-maintenance']['presence']=='fork only'
+assert r['housefeature/odd-maintenance']['fork_pr']['html_url']=='https://github.com/jazz127/demo/pull/6'
 assert r['housefeature/alpha']['landed'] is True
 assert r['housefeature/alpha']['state']=='offered'
 assert r['housefeature/alpha']['upstream_pr']['html_url']=='https://github.com/owner/demo/pull/247'
@@ -130,12 +135,12 @@ node "$ROOT/tests/assets/house-board-render-harness.mjs" "$TMP_ROOT/.lavish/hous
 python3 - "$TMP_ROOT/filter.json" <<'PY' || fail 'combined filters differ from expected behavior'
 import json,sys
 p=json.load(open(sys.argv[1]))
-assert p['count']=='2 matching features'
-assert p['names']==['Missing feature','Extra']
+assert p['count']=='3 matching features'
+assert p['names']==['Missing feature','Extra','Odd maintenance']
 assert p['visibleProjects']==['demo']
-assert '2 / 3Showing' in p['stats']
-assert p['plumbingCount']=='Plumbing branches (6)'
-assert len(p['plumbing'])==6 and any('housefeature/alpha-house-integration' in row for row in p['plumbing'])
+assert '3 / 4Showing' in p['stats']
+assert p['plumbingCount']=='Plumbing branches (5)'
+assert len(p['plumbing'])==5 and any('housefeature/alpha-house-integration' in row for row in p['plumbing'])
 assert p['empty'] is False
 PY
 
@@ -165,7 +170,7 @@ r={row['branch']:row for row in p['features']}
 assert r['housefeature/missing']['landed'] is True, 'commit on the last page was not collected'
 assert {branch: row['on_house'] for branch, row in r.items()} == {
     'housefeature/alpha': 'yes', 'housefeature/missing': 'yes', 'housefeature/extra': 'no',
-    'housefeature/gone': 'n/a', 'housefeature/shipped': 'n/a'}
+    'housefeature/gone': 'n/a', 'housefeature/shipped': 'n/a', 'housefeature/odd-maintenance': 'no'}
 assert r['housefeature/shipped']['state'] == 'contributed' and r['housefeature/shipped']['landed'] is True
 PY
 node "$ROOT/tests/assets/house-board-render-harness.mjs" "$TMP_ROOT/deep/.lavish/house-board.html" \

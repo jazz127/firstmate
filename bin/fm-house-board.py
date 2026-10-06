@@ -211,19 +211,8 @@ def distinct_commits(commits):
 
 
 def plumbing_kind(slug, pulls):
-    """Use an explicit house integration PR title when available, then known helper ref shapes."""
     integration_pr = next((pr for pr in pulls.values()
                            if pr["head"] == f"housefeature/{slug}" and pr.get("base") == "house"), None)
-    if integration_pr:
-        title = integration_pr.get("title", "").lower()
-        if re.search(r"house.{0,24}(?:reconcil|fix)|(?:reconcil|fix).{0,24}house", title):
-            return "House reconciliation or fix", integration_pr
-        if re.search(r"(?:upstream.{0,24}main.{0,12}sync|sync.{0,12}upstream.{0,24}main)", title):
-            return "Upstream main sync", integration_pr
-        if re.search(r"house.{0,24}test.{0,12}fix|test.{0,12}fix.{0,24}house", title):
-            return "House test fixes", integration_pr
-        if re.search(r"house.{0,24}integration|integration.{0,24}house", title):
-            return "House integration", integration_pr
     kind = next((kind for pattern, kind in PLUMBING if pattern.search(slug)), None)
     return kind, integration_pr
 

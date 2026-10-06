@@ -3810,30 +3810,14 @@ if [ -n "$LAUNCH_HOME_TOKEN" ]; then
 fi
 remove_pr_poll_artifacts "$STATE" "$ID" || exit 1
 retire_busy_state "$STATE" "$ID" "$BUSY_GEN" || exit 1
-# Capture the last recognized event before status retirement; unknown is a
-# deliberate outcome when no done/failed event was recorded.
-TEARDOWN_SPAN_OUTCOME=$(status_line_verb "$(last_status_line "$STATE/$ID.status")")
-case "$TEARDOWN_SPAN_OUTCOME" in
-  done|failed) ;;
-  *)
-    TEARDOWN_SPAN_OUTCOME=$(sed -n 's/^trace_outcome=//p' "$META" 2>/dev/null | head -n 1 || true)
-    case "$TEARDOWN_SPAN_OUTCOME" in done|failed) ;; *) TEARDOWN_SPAN_OUTCOME=unknown ;; esac
-    ;;
-esac
-if [ -d "$STATE" ] && [ -f "$META" ]; then
-  TEARDOWN_OUTCOME_TMP=$(umask 077; mktemp "$STATE/.$ID.trace-outcome.XXXXXX") || exit 1
-  if ! awk -F= '$1 != "trace_outcome"' "$META" > "$TEARDOWN_OUTCOME_TMP" ||
-    ! printf 'trace_outcome=%s\n' "$TEARDOWN_SPAN_OUTCOME" >> "$TEARDOWN_OUTCOME_TMP" ||
-    ! fm_backlog_atomic_transition publish "$TEARDOWN_OUTCOME_TMP" "$META" "task record" "$STATE"; then
-    rm -f "$TEARDOWN_OUTCOME_TMP"
-    echo "error: $ID's terminal outcome could not be recorded; retaining its task and status records" >&2
-    exit 1
-  fi
-fi
 # Opt-in fleet activity ledger (docs/fleet-ledger.md), before the status log is
 # retired so its last lines are captured; off costs one file test.
 [ ! -e "$CONFIG/fleet-ledger" ] || FM_HOME=$FM_HOME FM_STATE_OVERRIDE=$STATE FM_CONFIG_OVERRIDE=$CONFIG "$SCRIPT_DIR/fm-fleet-ledger.sh" cleaned_up "$ID" || true
-status_retire_presentation_task "$STATE" "$ID" || exit 1
+if ! fm_backlog_task_status_retire "$STATE" "$ID"; then
+  echo "error: $FM_BACKLOG_TRANSITION_ERROR" >&2
+  exit 1
+fi
+TEARDOWN_SPAN_OUTCOME=$FM_BACKLOG_TASK_OUTCOME
 fm_wake_queue_prune_task "$STATE" "$ID" "$T" 2>/dev/null || true
 rm -f "$STATE/$ID.turn-ended" "$STATE/$ID.progress" \
   "$(fm_wake_signal_seen_path "$STATE" "$STATE/$ID.turn-ended")" \

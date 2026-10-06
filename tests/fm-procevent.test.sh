@@ -226,6 +226,99 @@ hold_source_lock_then_handle() {  # <home> <source-id> <sequence> <ready-file> <
   HOLDER_PID=$!
 }
 
+# --- firstmate-owned replies use one listener and one staged copy per arm ---
+# Synthetic CLI fixtures cover both published reply paths, fresh registration,
+# replacement of an active poll, and later rounds without replaying a reply.
+for owner_reply_version in 0.1.79 0.1.80; do
+  OWNER_REPLY="$TMP_ROOT/owner-reply-$owner_reply_version"
+  export OWNER_REPLY
+  mkdir -p "$OWNER_REPLY/bin" "$OWNER_REPLY/home/state"
+  printf '%s\n' "$owner_reply_version" > "$OWNER_REPLY/version"
+  cat > "$OWNER_REPLY/bin/lavish-axi" <<'SH'
+#!/usr/bin/env bash
+set -eu
+case "${1-}" in
+  --version) cat "$OWNER_REPLY/version" ;;
+  reply)
+    [ "$(cat "$OWNER_REPLY/version")" = 0.1.80 ] || exit 2
+    [ "${3-}" = --agent-reply-file ] || exit 2
+    cat "$4" >> "$OWNER_REPLY/replies"
+    printf 'reply\n' >> "$OWNER_REPLY/order"
+    ;;
+  poll)
+    # A replacement must stop the earlier poll before starting another.
+    mkdir "$OWNER_REPLY/poll-active" || exit 3
+    trap 'rmdir "$OWNER_REPLY/poll-active"' EXIT
+    trap 'exit 0' TERM INT HUP
+    if [ "${3-}" = --agent-reply ]; then
+      printf '%s\n' "$4" >> "$OWNER_REPLY/replies"
+      printf 'reply\n' >> "$OWNER_REPLY/order"
+    fi
+    printf 'poll\n' >> "$OWNER_REPLY/order"
+    printf 'poll\n' >> "$OWNER_REPLY/polls"
+    round=$(wc -l < "$OWNER_REPLY/polls" | tr -d ' ')
+    while [ ! -e "$OWNER_REPLY/release-$round" ]; do sleep 0.05; done
+    printf 'session:\n  status: feedback\nprompts[1]{uid,prompt,selector,tag,text}:\n  "","next round","","message",""\n'
+    ;;
+  *) exit 2 ;;
+esac
+SH
+  chmod +x "$OWNER_REPLY/bin/lavish-axi"
+  owner_reply_art="$OWNER_REPLY/board.html"
+  printf '<h1>firstmate board</h1>\n' > "$owner_reply_art"
+  lavish_session "$owner_reply_art"
+  owner_reply_id=$("$ROOT/bin/fm-procevent-lavish.sh" source-id "$owner_reply_art")
+  fm_test_track_procevent_home "$OWNER_REPLY/home"
+  # Publish a reply-carrying registration without starting it. A later arm
+  # must supersede this unconsumed staged reply instead of replaying it.
+  printf 'superseded owner reply\n' > "$OWNER_REPLY/reply0"
+  PATH="$OWNER_REPLY/bin:$PATH" pe "$OWNER_REPLY/home" register lavish "$owner_reply_id" -- \
+    "$ROOT/bin/fm-procevent-lavish.sh" poll "$owner_reply_art" \
+    --agent-reply-file "$OWNER_REPLY/reply0" >/dev/null
+  [ ! -e "$OWNER_REPLY/polls" ] || fail "register unexpectedly started a listener"
+  printf 'fresh owner reply\n' > "$OWNER_REPLY/reply1"
+  PATH="$OWNER_REPLY/bin:$PATH" FM_HOME="$OWNER_REPLY/home" \
+    "$ROOT/bin/fm-procevent-lavish.sh" arm "$owner_reply_art" \
+    --agent-reply-file "$OWNER_REPLY/reply1" > "$OWNER_REPLY/arm1.out" 2> "$OWNER_REPLY/arm1.err" \
+    || fail "firstmate fresh reply arm failed ($owner_reply_version): $(cat "$OWNER_REPLY/arm1.err")"
+  wait_for_lines "$OWNER_REPLY/polls" 1 || fail "firstmate reply arm never polled"
+  [ "$(cat "$OWNER_REPLY/replies")" = 'fresh owner reply' ] || fail "fresh reply was not delivered once"
+  [ "$(head -1 "$OWNER_REPLY/order")" = reply ] || fail "poll started before fresh reply"
+  [ "$(cat "$OWNER_REPLY/reply1")" = 'fresh owner reply' ] || fail "arm consumed the original reply file"
+  pass "firstmate fresh reply arm delivers once before polling ($owner_reply_version)"
+
+  cp "$FM_PROCEVENT_CLAIM_ROOT/$owner_reply_id.claim" "$OWNER_REPLY/prior.claim"
+  if PATH="$OWNER_REPLY/bin:$PATH" FM_HOME="$OWNER_REPLY/home" \
+    "$ROOT/bin/fm-procevent-lavish.sh" arm "$owner_reply_art" \
+    --agent-reply-file "$OWNER_REPLY/missing" > "$OWNER_REPLY/missing.out" 2> "$OWNER_REPLY/missing.err"; then
+    fail "an arm with a missing reply was accepted"
+  fi
+  cmp -s "$OWNER_REPLY/prior.claim" "$FM_PROCEVENT_CLAIM_ROOT/$owner_reply_id.claim" \
+    || fail "a missing reply disturbed the existing listener"
+  [ -d "$OWNER_REPLY/poll-active" ] || fail "a missing reply stopped the active poll"
+  printf 'active owner reply\n' > "$OWNER_REPLY/reply2"
+  PATH="$OWNER_REPLY/bin:$PATH" FM_HOME="$OWNER_REPLY/home" \
+    "$ROOT/bin/fm-procevent-lavish.sh" arm "$owner_reply_art" \
+    --agent-reply-file "$OWNER_REPLY/reply2" > "$OWNER_REPLY/arm2.out" 2> "$OWNER_REPLY/arm2.err" \
+    || fail "firstmate active reply arm failed ($owner_reply_version): $(cat "$OWNER_REPLY/arm2.err")"
+  assert_contains "$(cat "$OWNER_REPLY/arm2.out")" "armed: $owner_reply_id" "reply arm did not replace the active listener"
+  assert_not_contains "$(cat "$OWNER_REPLY/arm2.out")" still-listening "reply arm left its reply waiting"
+  wait_for_lines "$OWNER_REPLY/polls" 2 || fail "replacement listener never resumed polling"
+  [ "$(cat "$OWNER_REPLY/replies")" = "$(printf 'fresh owner reply\nactive owner reply')" ] \
+    || fail "replacement reply was not delivered once"
+  [ "$(cat "$OWNER_REPLY/order")" = "$(printf 'reply\npoll\nreply\npoll')" ] \
+    || fail "replacement did not reply before polling"
+  # Let the new listener capture feedback, then launch a later round from the
+  # same registration: its consumed staged reply must not be posted again.
+  touch "$OWNER_REPLY/release-2"
+  wait_capture "$OWNER_REPLY/home" "$owner_reply_id" || fail "replacement never captured feedback"
+  PATH="$OWNER_REPLY/bin:$PATH" pe "$OWNER_REPLY/home" reconcile >/dev/null
+  wait_for_lines "$OWNER_REPLY/polls" 3 || fail "later round did not resume polling"
+  [ "$(wc -l < "$OWNER_REPLY/replies" | tr -d ' ')" = 2 ] || fail "later round replayed a consumed reply"
+  PATH="$OWNER_REPLY/bin:$PATH" pe "$OWNER_REPLY/home" retire "$owner_reply_id" >/dev/null
+  pass "firstmate active reply arm replaces the poll and later rounds do not replay ($owner_reply_version)"
+done
+
 # --- inert with nothing configured ------------------------------------------
 IDLE="$TMP_ROOT/idle"; mkdir -p "$IDLE"
 out=$(pe "$IDLE" list)
@@ -4895,7 +4988,7 @@ done
 [ ! -e "$drain_claim" ] || fail "the first generation of the draining fixture never exited"
 # Stand the first generation's claim back up on a live process so the re-arm
 # meets it still held, then release it partway through the confirm window.
-setsid sleep 60 &
+perl -MPOSIX=setsid -e 'setsid() >= 0 or exit 1; exec @ARGV' sleep 60 &
 drain_holder=$!
 # Read the identity only once the holder has exec'd sleep: mid-exec its cmdline
 # can read empty, and a pre-exec identity would never match the live holder.

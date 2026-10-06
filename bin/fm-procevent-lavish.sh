@@ -14,6 +14,15 @@
 #   fm-procevent-lavish.sh poll <artifact.html> [--agent-reply-file <path>]
 #   fm-procevent-lavish.sh deliver-reply poll <artifact.html> --agent-reply-file <path>
 #
+# arm        Register and start the listener. Without --for, a reply file is
+#            copied into a private staged file for the next listener to post
+#            before blocking. A reply-carrying re-arm stops this home's earlier
+#            listener under the source lock, so the new reply is not left waiting
+#            behind it. The caller's original file is retained. Consumed replies
+#            are not replayed in later rounds; this is not an exactly-once
+#            delivery guarantee (the legacy path can lose a consumed reply
+#            before posting, and acceptance followed by a crash before staged
+#            file removal can repeat a synchronous reply).
 # classify   Print the lifecycle state a handler should act on: feedback, ended,
 #            waiting, disconnected, missing, or unknown.
 # read       Print a structured presentation of one already-captured result so a
@@ -242,7 +251,6 @@ cmd_arm() {
     esac
   done
   [ -n "$artifact" ] || usage
-  [ -z "$reply_file" ] || [ -n "$task" ] || usage
   command -v lavish-axi >/dev/null 2>&1 || die "lavish-axi is not installed"
   poll_retry_delay >/dev/null
   id=$(cmd_source_id "$artifact") || exit 1

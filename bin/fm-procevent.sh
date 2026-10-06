@@ -24,7 +24,10 @@
 #            exact argv to execute. argv is stored one argument per line and
 #            executed directly, so there is no shell surface and no argument
 #            splitting. Built-in adapters register sources; nothing here parses
-#            user text.
+#            user text. A firstmate-owned Lavish poll carrying a reply stages
+#            a private copy and stops this home's prior listener under the source
+#            lock before publishing its replacement; the new listener consumes
+#            that copy through the adapter's existing reply path.
 # register-task
 #            Record a worker-owned built-in source. Its one source record
 #            persists across rounds, and re-registration by the same task
@@ -520,7 +523,8 @@ extension_registration_replacement_safe_locked() {  # <source-id>
 }
 
 cmd_register() {
-  local adapter=${1-} id=${2-} sep=${3-}
+  local adapter=${1-} id=${2-} sep=${3-} reply_dest='' stale
+  local -a argv=()
   shift 3 2>/dev/null || usage
   fm_procevent_adapter_valid "$adapter" || die "adapter name must be lowercase alphanumeric or dash: $adapter"
   fm_procevent_source_id_valid "$id" || die "source id must be path-safe and at most 64 characters: $id"
@@ -542,9 +546,47 @@ cmd_register() {
     fm_procevent_source_lock_release "$id"
     die "cannot replace extension registration while its prior runner remains active: $id"
   fi
-  if ! fm_procevent_registration_publish_locked "$STATE" "$adapter" "$id" "$@"; then
+  argv=("$@")
+  if [ "$adapter" = lavish ] && [ "${argv[3]-}" = --agent-reply-file ]; then
+    [ "${#argv[@]}" -eq 5 ] && [ "${argv[0]}" = "$(adapter_script "$adapter")" ] \
+      && [ "${argv[1]}" = poll ] || {
+      fm_procevent_source_lock_release "$id"
+      die "invalid Lavish reply listener"
+    }
+    [ -f "${argv[4]}" ] && [ ! -L "${argv[4]}" ] || {
+      fm_procevent_source_lock_release "$id"
+      die "agent reply file does not exist: ${argv[4]}"
+    }
+    (umask 077; mkdir -p "$REG") && [ -d "$REG" ] && [ ! -L "$REG" ] || {
+      fm_procevent_source_lock_release "$id"
+      die "cannot prepare the process-event registry"
+    }
+    reply_dest=$(umask 077; mktemp "$REG/.$id.reply.XXXXXX") || {
+      fm_procevent_source_lock_release "$id"
+      die "cannot stage agent reply"
+    }
+    if ! cat -- "${argv[4]}" > "$reply_dest" || ! chmod 0600 "$reply_dest"; then
+      rm -f -- "$reply_dest"
+      fm_procevent_source_lock_release "$id"
+      die "cannot persist agent reply"
+    fi
+    argv[4]=$reply_dest
+    if ! stop_reply_listener_locked "$id"; then
+      rm -f -- "$reply_dest"
+      fm_procevent_source_lock_release "$id"
+      die "cannot replace the listener for reply delivery: $id"
+    fi
+  fi
+  if ! fm_procevent_registration_publish_locked "$STATE" "$adapter" "$id" "${argv[@]}"; then
+    [ -z "$reply_dest" ] || rm -f -- "$reply_dest"
     fm_procevent_source_lock_release "$id"
     die "cannot publish the registration"
+  fi
+  if [ -n "$reply_dest" ]; then
+    for stale in "$REG/.$id.reply."*; do
+      [ -e "$stale" ] || continue
+      [ "$stale" = "$reply_dest" ] || rm -f -- "$stale"
+    done
   fi
   fm_procevent_source_lock_release "$id"
   owner_lease_refresh
@@ -2053,6 +2095,27 @@ stop_runner_pid() {  # <pid> <identity>
     i=$((i + 1))
   done
   return 2
+}
+
+# Reply-carrying firstmate re-arms use the same ownership and group proof as
+# retire, retaining the registration, captures, and answer binding. Never stop
+# a foreign or ambiguous group, or release its claim to launch a second poller.
+stop_reply_listener_locked() {  # <source-id>
+  local id=$1 owner pid token identity stop_state
+  if [ -e "$(fm_procevent_claim_path "$id")" ] || [ -L "$(fm_procevent_claim_path "$id")" ]; then
+    fm_procevent_claim_load_locked "$id" || return 1
+    fm_procevent_claim_owned_by_state "$STATE" "$FM_HOME" || return 1
+    owner=$FM_PROCEVENT_CLAIM_HOME
+    pid=$FM_PROCEVENT_CLAIM_PID
+    token=$FM_PROCEVENT_CLAIM_TOKEN
+    identity=$FM_PROCEVENT_CLAIM_IDENTITY
+    stop_runner_pid "$pid" "$identity"
+    stop_state=$?
+    [ "$stop_state" -ne 2 ] || return 1
+    fm_procevent_claim_reclaim_locked "$id" "$owner" "$pid" "$token" || return 1
+    rm -f -- "$(staging_file "$id" "$token")"
+  fi
+  rm -f -- "$(runner_file "$id")"
 }
 
 # The owned handling interface: durably and idempotently record that a

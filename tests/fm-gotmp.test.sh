@@ -391,6 +391,71 @@ test_terminal_spans_follow_successful_cleanup_only() {
   pass "successful cleanup emits one done/failed/unknown root with missing-start fallback; refusal and repeat emit none"
 }
 
+test_terminal_outcomes_survive_notes_and_yield_to_renewed_work() {
+  local outcome phase id fake capture status expected rc n
+  for outcome in done failed; do
+    for phase in plain tagged long-notes working saved-working finished-again saved-notes; do
+      id="trace-$outcome-$phase"
+      fake=$(make_fake_root "$id" "")
+      capture="$TMP_ROOT/$id-spans"
+      status="$outcome [at=1712345678]: finished"
+      [ "$phase" != plain ] || status="$outcome: finished"
+      enable_trace_export "$fake" "$capture" "$status" "$id"
+      expected=$outcome
+      printf 'note [at=1712345679]: cleanup complete\nContinuation mentioning failed: is prose\n\n' \
+        >> "$fake/state/$id.status"
+      case "$phase" in
+        long-notes)
+          for ((n=0; n<205; n++)); do
+            printf 'note: cleanup detail %s\n' "$n" >> "$fake/state/$id.status"
+          done
+          ;;
+        working|finished-again)
+          printf 'working [at=1712345680]: resumed\nnote: more progress\n' >> "$fake/state/$id.status"
+          expected=unknown
+          if [ "$phase" = finished-again ]; then
+            case "$outcome" in done) expected=failed ;; failed) expected=done ;; esac
+            printf '%s [at=1712345681]: finished again\nnote: cleanup complete' "$expected" \
+              >> "$fake/state/$id.status"
+          fi
+          ;;
+        saved-working|saved-notes)
+          rc=0
+          FM_HOME="$fake" PATH="$TMP_ROOT/fakebin:$PATH" FM_TRACE_CAPTURE_DIR="$capture" \
+            FM_TRACE_FAIL_META_REMOVE="$fake/state/$id.meta" \
+            bash "$fake/bin/fm-teardown.sh" "$id" > "$fake/refused.out" 2> "$fake/refused.err" || rc=$?
+          [ "$rc" -ne 0 ] || fail "$id final metadata removal unexpectedly succeeded"
+          [ "$(sed -n 's/^trace_outcome=//p' "$fake/state/$id.meta")" = "$outcome" ] \
+            || fail "$id note hid the terminal outcome before a failed removal"
+          [ ! -e "$capture/request-1.json" ] || fail "$id failed removal emitted a root"
+          if [ "$phase" = saved-working ]; then
+            printf 'working: resumed\nnote: progress' > "$fake/state/$id.status"
+            expected=unknown
+          else
+            printf 'note: cleanup complete' > "$fake/state/$id.status"
+          fi
+          ;;
+      esac
+      FM_HOME="$fake" PATH="$TMP_ROOT/fakebin:$PATH" FM_TRACE_CAPTURE_DIR="$capture" \
+        bash "$fake/bin/fm-teardown.sh" "$id" > "$fake/success.out" 2> "$fake/success.err" \
+        || fail "$id cleanup failed"
+      [ "$(find "$capture" -type f -name 'request-*.json' | wc -l | tr -d ' ')" -eq 1 ] \
+        || fail "$id cleanup should emit exactly one terminal root"
+      jq -e --arg expected "$expected" '
+        .resourceSpans[0].scopeSpans[0].spans[0] |
+        .name == "firstmate.task" and
+        any(.attributes[]; .key == "firstmate.task.outcome" and .value.stringValue == $expected) and
+        (if $expected == "done" then .status.code == 1
+         elif $expected == "failed" then .status.code == 2
+         else has("status") | not end)
+      ' "$capture/request-1.json" >/dev/null || fail "$id emitted the wrong outcome after $phase"
+      [ ! -e "$fake/state/$id.meta" ] && [ ! -e "$fake/state/$id.status" ] \
+        || fail "$id successful cleanup retained task records"
+    done
+  done
+  pass "terminal outcomes survive notes, reset on renewed work, and follow a later terminal event"
+}
+
 test_untraced_cleanup_failures_remain_retryable() {
   local id=trace-disabled status='done [at=1712345678]: finished' fake capture rc
   fake=$(make_fake_root "$id" "")
@@ -427,4 +492,5 @@ test_teardown_removes_tasktmp_dir
 test_teardown_skips_gracefully_without_tasktmp
 test_teardown_skips_gracefully_when_dir_missing
 test_terminal_spans_follow_successful_cleanup_only
+test_terminal_outcomes_survive_notes_and_yield_to_renewed_work
 test_untraced_cleanup_failures_remain_retryable

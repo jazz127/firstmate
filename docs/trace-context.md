@@ -110,6 +110,7 @@ This is a deliberate, source-owned choice:
 
 Carrier propagation creates no spans by itself; the separate opt-in standalone emitter is described in [configuration.md](configuration.md#otlp-span-export-configtrace-exportjson--fm_trace_export).
 When export is enabled, a successful spawn emits one `firstmate.spawn` child after launch delivery and backlog commit, and successful task-record retirement emits one `firstmate.task` root with the last recognized `done` or `failed` status, or `unknown` when neither exists.
+Informational notes preserve the terminal outcome; a later state-changing event supersedes it, so renewed work without another terminal event exports `unknown`.
 The root starts at the task's first carrier mint; relaunch preserves that time while each spawn span records the new generation.
 Direct local Secondmate retirement uses the same outcome mapping, including `unknown` when no terminal status exists.
 Teardown and pending-close restart recovery record the terminal outcome in task metadata before retiring status presentation; retirement failure preserves metadata for retry, a failed record removal can retry with that outcome, and relaunch clears it for the new generation.

@@ -1128,16 +1128,22 @@ fm_backlog_close_marker_clear() {  # <state-dir> <id>
 }
 
 fm_backlog_task_status_retire() {
-  local state=$1 id=$2 meta="$1/$2.meta" tmp
+  local state=$1 id=$2 meta="$1/$2.meta" tmp line verb legacy_re
   _fm_wake_require_classify || return 1
-  FM_BACKLOG_TASK_OUTCOME=$(status_line_verb "$(last_status_line "$state/$id.status")")
-  case "$FM_BACKLOG_TASK_OUTCOME" in
-    done|failed) ;;
-    *)
-      FM_BACKLOG_TASK_OUTCOME=$(sed -n 's/^trace_outcome=//p' "$meta" 2>/dev/null | head -n 1 || true)
-      case "$FM_BACKLOG_TASK_OUTCOME" in done|failed) ;; *) FM_BACKLOG_TASK_OUTCOME=unknown ;; esac
-      ;;
-  esac
+  FM_BACKLOG_TASK_OUTCOME=$(sed -n 's/^trace_outcome=//p' "$meta" 2>/dev/null | head -n 1 || true)
+  case "$FM_BACKLOG_TASK_OUTCOME" in done|failed) ;; *) FM_BACKLOG_TASK_OUTCOME=unknown ;; esac
+  if [ -f "$state/$id.status" ] && [ -r "$state/$id.status" ]; then
+    legacy_re="^[[:space:]]*(${FM_CAPTAIN_RE:-$FM_CLASSIFY_CAPTAIN_RE_DEFAULT})"
+    while IFS= read -r line || [ -n "$line" ]; do
+      _fm_status_line_is_event "$line" "$legacy_re" || continue
+      status_line_verb "$line" verb
+      case "$verb" in
+        note) ;;
+        done|failed) FM_BACKLOG_TASK_OUTCOME=$verb ;;
+        *) FM_BACKLOG_TASK_OUTCOME=unknown ;;
+      esac
+    done < "$state/$id.status"
+  fi
   if [ -d "$state" ] && [ -f "$meta" ]; then
     tmp=$(umask 077; mktemp "$state/.$id.trace-outcome.XXXXXX") || {
       FM_BACKLOG_TRANSITION_ERROR="$id's terminal outcome could not be recorded; retaining its task and status records"

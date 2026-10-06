@@ -30,12 +30,14 @@ Its separate routing lookup reads the board's saved Lavish session; the adapter 
 
 ## Firstmate-owned reply regression
 
-Synthetic CLI validation on 2026-10-06 exercises `arm --agent-reply-file` without `--for` against fixtures reporting 0.1.79 and 0.1.80.
+Synthetic CLI validation on 2026-10-07 exercises `arm --agent-reply-file` without `--for` against fixtures reporting 0.1.79 and 0.1.80.
 It covers fresh registration and replacement of a blocked listener for each version, requires reply-before-poll ordering, and resumes a later round from the same registration without replaying the consumed staged reply.
 The fixture rejects concurrent polls, proves a superseded unconsumed reply is never posted and a missing reply file leaves the active listener alone, and retains the original reply file for its caller.
+The failure cases require a durable announced diagnostic for reply rejection, missing session evidence, and an unknown version, with the private staged reply retained until recovery and reconciliation accept it once and resume polling.
+The oracle is the firstmate reply acceptance contract: a failed attempt must remain visible and retryable, while polling begins only after reply acceptance; silently dropping stderr or consuming a rejected reply fails these assertions.
 No live Lavish server or account is used by this regression.
 
-Refresh with `bash bin/fm-test-run.sh tests/fm-procevent.test.sh`.
+Refresh with `bash tests/fm-procevent.test.sh --owner-replies-only`.
 The exact reply-specific output is:
 
 ```text
@@ -43,6 +45,15 @@ ok - firstmate fresh reply arm delivers once before polling (0.1.79)
 ok - firstmate active reply arm replaces the poll and later rounds do not replay (0.1.79)
 ok - firstmate fresh reply arm delivers once before polling (0.1.80)
 ok - firstmate active reply arm replaces the poll and later rounds do not replay (0.1.80)
+ok - firstmate reply-rejected is captured and retry resumes polling
+ok - firstmate fresh reply arm delivers once before polling (reply-rejected)
+ok - firstmate active reply arm replaces the poll and later rounds do not replay (reply-rejected)
+ok - firstmate missing-session is captured and retry resumes polling
+ok - firstmate fresh reply arm delivers once before polling (missing-session)
+ok - firstmate active reply arm replaces the poll and later rounds do not replay (missing-session)
+ok - firstmate unknown-version is captured and retry resumes polling
+ok - firstmate fresh reply arm delivers once before polling (unknown-version)
+ok - firstmate active reply arm replaces the poll and later rounds do not replay (unknown-version)
 ```
 
 ## Why an ended Lavish review is terminal

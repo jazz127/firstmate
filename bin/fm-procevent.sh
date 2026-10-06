@@ -1331,7 +1331,12 @@ EOF
       fm_procevent_source_lock_release "$id"
       die "cannot retain the source output boundary: $id"
     }
-    "${ARGV[@]}" >&5 5>&- 4<&- 2>/dev/null &
+    if [ "$adapter" = lavish ] && [ -z "$task_owner" ] \
+      && [ "${ARGV[3]-}" = --agent-reply-file ]; then
+      "${ARGV[@]}" >&5 2>&5 5>&- 4<&- &
+    else
+      "${ARGV[@]}" >&5 5>&- 4<&- 2>/dev/null &
+    fi
     launch_pid=$!
     exec 5>&-
     rm -f -- "$launch_ready"

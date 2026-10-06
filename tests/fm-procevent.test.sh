@@ -229,8 +229,10 @@ hold_source_lock_then_handle() {  # <home> <source-id> <sequence> <ready-file> <
 # --- firstmate-owned replies use one listener and one staged copy per arm ---
 # Synthetic CLI fixtures cover both published reply paths, fresh registration,
 # replacement of an active poll, and later rounds without replaying a reply.
-for owner_reply_version in 0.1.79 0.1.80; do
-  OWNER_REPLY="$TMP_ROOT/owner-reply-$owner_reply_version"
+for owner_reply_case in 0.1.79 0.1.80 reply-rejected missing-session unknown-version; do
+  owner_reply_version=0.1.80
+  case "$owner_reply_case" in 0.1.*) owner_reply_version=$owner_reply_case ;; esac
+  OWNER_REPLY="$TMP_ROOT/owner-reply-$owner_reply_case"
   export OWNER_REPLY
   mkdir -p "$OWNER_REPLY/bin" "$OWNER_REPLY/home/state"
   printf '%s\n' "$owner_reply_version" > "$OWNER_REPLY/version"
@@ -242,6 +244,10 @@ case "${1-}" in
   reply)
     [ "$(cat "$OWNER_REPLY/version")" = 0.1.80 ] || exit 2
     [ "${3-}" = --agent-reply-file ] || exit 2
+    if [ -e "$OWNER_REPLY/reject-reply" ]; then
+      printf 'simulated reply timeout\n' >&2
+      exit 1
+    fi
     cat "$4" >> "$OWNER_REPLY/replies"
     printf 'reply\n' >> "$OWNER_REPLY/order"
     ;;
@@ -277,15 +283,62 @@ SH
     --agent-reply-file "$OWNER_REPLY/reply0" >/dev/null
   [ ! -e "$OWNER_REPLY/polls" ] || fail "register unexpectedly started a listener"
   printf 'fresh owner reply\n' > "$OWNER_REPLY/reply1"
+  case "$owner_reply_case" in
+    reply-rejected) touch "$OWNER_REPLY/reject-reply" ;;
+    missing-session)
+      cp "$LAVISH_AXI_STATE_DIR/state.json" "$OWNER_REPLY/saved-state.json"
+      rm -f "$LAVISH_AXI_STATE_DIR/state.json"
+      ;;
+    unknown-version) printf 'unidentified build\n' > "$OWNER_REPLY/version" ;;
+  esac
   PATH="$OWNER_REPLY/bin:$PATH" FM_HOME="$OWNER_REPLY/home" \
     "$ROOT/bin/fm-procevent-lavish.sh" arm "$owner_reply_art" \
     --agent-reply-file "$OWNER_REPLY/reply1" > "$OWNER_REPLY/arm1.out" 2> "$OWNER_REPLY/arm1.err" \
     || fail "firstmate fresh reply arm failed ($owner_reply_version): $(cat "$OWNER_REPLY/arm1.err")"
+  case "$owner_reply_case" in
+    reply-rejected|missing-session|unknown-version)
+      wait_capture "$OWNER_REPLY/home" "$owner_reply_id" \
+        || fail "$owner_reply_case produced no durable failure result"
+      owner_reply_failure=$(first_result "$OWNER_REPLY/home" "$owner_reply_id")
+      case "$owner_reply_case" in
+        reply-rejected) owner_reply_diagnostic='simulated reply timeout' ;;
+        missing-session) owner_reply_diagnostic='cannot resolve the board server' ;;
+        unknown-version) owner_reply_diagnostic='cannot confirm a supported lavish-axi version' ;;
+      esac
+      assert_contains "$(cat "$owner_reply_failure")" "$owner_reply_diagnostic" \
+        "$owner_reply_case lost its failure diagnostic"
+      [ "$(pe "$OWNER_REPLY/home" classify "$owner_reply_failure")" = unknown ] \
+        || fail "$owner_reply_case retired or hid a retryable failure"
+      owner_reply_sequence=${owner_reply_failure%.result}
+      owner_reply_sequence=${owner_reply_sequence##*.}
+      assert_contains "$(wake_payloads "$OWNER_REPLY/home")" \
+        "procevent lavish $owner_reply_id $owner_reply_sequence" \
+        "$owner_reply_case did not announce its durable failure"
+      [ ! -e "$OWNER_REPLY/polls" ] && [ ! -e "$OWNER_REPLY/replies" ] \
+        || fail "$owner_reply_case polled or accepted a rejected reply"
+      owner_reply_staged=$(tail -1 "$OWNER_REPLY/home/state/procevent/$owner_reply_id.source")
+      [ "$owner_reply_staged" != "$OWNER_REPLY/reply1" ] \
+        && [ "$(cat "$owner_reply_staged")" = 'fresh owner reply' ] \
+        || fail "$owner_reply_case lost its private staged reply"
+      pe "$OWNER_REPLY/home" handled "$owner_reply_id" "$owner_reply_sequence" >/dev/null
+      rm -f "$OWNER_REPLY/reject-reply"
+      printf '%s\n' "$owner_reply_version" > "$OWNER_REPLY/version"
+      if [ "$owner_reply_case" = missing-session ]; then
+        cp "$OWNER_REPLY/saved-state.json" "$LAVISH_AXI_STATE_DIR/state.json"
+      fi
+      for _ in $(seq 1 20); do
+        PATH="$OWNER_REPLY/bin:$PATH" pe "$OWNER_REPLY/home" reconcile >/dev/null
+        wait_for_lines "$OWNER_REPLY/polls" 1 1 && break
+      done
+      [ ! -e "$owner_reply_staged" ] || fail "successful retry did not consume its staged reply"
+      pass "firstmate $owner_reply_case is captured and retry resumes polling"
+      ;;
+  esac
   wait_for_lines "$OWNER_REPLY/polls" 1 || fail "firstmate reply arm never polled"
   [ "$(cat "$OWNER_REPLY/replies")" = 'fresh owner reply' ] || fail "fresh reply was not delivered once"
   [ "$(head -1 "$OWNER_REPLY/order")" = reply ] || fail "poll started before fresh reply"
   [ "$(cat "$OWNER_REPLY/reply1")" = 'fresh owner reply' ] || fail "arm consumed the original reply file"
-  pass "firstmate fresh reply arm delivers once before polling ($owner_reply_version)"
+  pass "firstmate fresh reply arm delivers once before polling ($owner_reply_case)"
 
   cp "$FM_PROCEVENT_CLAIM_ROOT/$owner_reply_id.claim" "$OWNER_REPLY/prior.claim"
   if PATH="$OWNER_REPLY/bin:$PATH" FM_HOME="$OWNER_REPLY/home" \
@@ -316,8 +369,10 @@ SH
   wait_for_lines "$OWNER_REPLY/polls" 3 || fail "later round did not resume polling"
   [ "$(wc -l < "$OWNER_REPLY/replies" | tr -d ' ')" = 2 ] || fail "later round replayed a consumed reply"
   PATH="$OWNER_REPLY/bin:$PATH" pe "$OWNER_REPLY/home" retire "$owner_reply_id" >/dev/null
-  pass "firstmate active reply arm replaces the poll and later rounds do not replay ($owner_reply_version)"
+  pass "firstmate active reply arm replaces the poll and later rounds do not replay ($owner_reply_case)"
 done
+
+[ "${1-}" != --owner-replies-only ] || exit 0
 
 # --- inert with nothing configured ------------------------------------------
 IDLE="$TMP_ROOT/idle"; mkdir -p "$IDLE"

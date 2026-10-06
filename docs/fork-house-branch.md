@@ -89,6 +89,7 @@ When the captain marks a feature as never to be contributed, record that choice 
 For that exception, scaffold with `--house-feature <name> --branch-base house`; its first durable branch may depend on other house features, while later rounds still reuse that branch and refresh from `main` only by that explicit step.
 Never delete or force-push a `housefeature/*` head after either pull request merges: the fork ruleset blocks both operations on `refs/heads/housefeature/**`, automatic branch deletion on merge is off, `fm-pr-merge.sh` refuses branch-deletion flags by default, and task teardown removes the worker worktree rather than the remote durable branch.
 The [`housefeature-cut.yml`](../.github/workflows/housefeature-cut.yml) workflow remains a safety net for merged `house` pull requests whose heads still use other branch names; it leaves an existing durable branch untouched and skips a pull request already headed by `housefeature/<name>`.
+The [`ship-landing` skill](../.agents/skills/ship-landing/SKILL.md) owns post-merge registration in the private house-feature register, including safety-net feature branches and the exclusion of plumbing.
 A contributed house feature is a house feature the captain chose to submit and that has landed in upstream `main`.
 The [Bosun guide](bosun.md) defines when an ordered Captain's Maneuver becomes an Admiral's Maneuver.
 
@@ -100,6 +101,8 @@ The command reads `data/house-line.md` in that home and current GitHub facts thr
 It does not label, push, comment, submit, or register an answer source.
 The page filters immediately by project, label, state, landing or offering posture, historical status, register mismatch, age, and name or description text; it sorts by project, age, or state.
 The counts update with the visible features.
+The board separates plumbing from features using the helper-branch name patterns owned by [`bin/fm-house-board.py`](../bin/fm-house-board.py); pull request titles do not determine that classification.
+Recognized plumbing appears in a separate expandable ledger, outside the feature filters, counts, and register-mismatch rows.
 Each project card compares the current fork `house` tip with upstream `main`, reports the ahead and behind counts, and flags a fork `main` tip that differs from upstream.
 Each feature row shows its durable branch, commits, current house membership, label, pull request states, and age.
 House membership comes from live commit ancestry or a fork pull request merge commit still reachable from today's `house` tip, never from the register's merged heading alone.

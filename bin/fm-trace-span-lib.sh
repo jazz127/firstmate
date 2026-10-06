@@ -38,7 +38,7 @@ fm_trace_span_json_escape() {
       '"') out+="\\$ch" ;;
       *)
         printf -v code '%d' "'$ch"
-        if [ "$code" -lt 32 ]; then printf -v ch '\\u%04x' "$code"; fi
+        if [ "$code" -ge 0 ] && [ "$code" -lt 32 ]; then printf -v ch '\\u%04x' "$code"; fi
         out+=$ch
         ;;
     esac

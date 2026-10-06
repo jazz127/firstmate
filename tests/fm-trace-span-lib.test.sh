@@ -135,6 +135,32 @@ if grep -Fq "$TOKEN" "$WORK/curl-argv" || jq -r '.body' "$WORK/capture.json" | g
 fi
 pass "synthetic HTTP capture confirms escaped root JSON, root identity, nanoseconds, auth header, and no token in argv/payload"
 
+# The JSON string contract preserves the supplied Unicode text exactly, rather
+# than escaping high-bit bytes as ASCII controls (a Bash 3.2 regression).
+UNICODE='café 日本語 🐟'
+UNICODE_META="$STATE/unicode.meta"
+printf 'traceparent=00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01\nmodel=%s\n' \
+  "$UNICODE" > "$UNICODE_META"
+for locale in C C.UTF-8 en_US.UTF-8; do
+  write_config "$BASE/unicode"
+  COUNT=$(request_count)
+  LC_ALL="$locale" "$BASH" -c '
+    . "$1/bin/fm-trace-span-lib.sh"
+    fm_trace_span_emit "$2" "$3" 1000 2000 --root "$3=$3"
+  ' _ "$ROOT" "$UNICODE_META" "$UNICODE" || fail "Unicode emission changed caller result ($locale)"
+  [ "$(request_count)" -eq "$((COUNT + 1))" ] || fail "Unicode emission skipped export ($locale)"
+  jq -e --arg text "$UNICODE" --arg token "Bearer $TOKEN" '
+    .path == "/unicode" and .authorization == $token
+    and (.body | fromjson | .resourceSpans[0] as $r
+      | $r.scopeSpans[0].spans[0] as $s
+      | $s.name == $text
+        and $s.attributes == [{key:$text,value:{stringValue:$text}}]
+        and ([$r.resource.attributes[] | select(.key == "firstmate.model")]
+          == [{key:"firstmate.model",value:{stringValue:$text}}]))
+  ' "$WORK/capture.json" >/dev/null || fail "Unicode span name or attributes were corrupted ($locale)"
+done
+pass "authenticated HTTP export preserves accented, Japanese, and emoji text in names and attributes across locales"
+
 write_config "$BASE/child"
 fm_trace_span_emit "$META" child.event 3000 2000 'firstmate.test=value' || fail "child emission changed caller result"
 jq -e '

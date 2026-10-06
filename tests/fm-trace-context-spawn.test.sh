@@ -43,6 +43,11 @@ case "${1:-}" in
     ;;
   has-session|new-session|new-window|kill-window) exit 0 ;;
   send-keys)
+    if [ "${FM_FAKE_LAUNCH_SEND_FAIL:-0}" = 1 ]; then
+      for a in "$@"; do
+        case "$a" in .\ *) exit 1 ;; esac
+      done
+    fi
     if [ "${FM_FAKE_TRACEPARENT_SEND_FAIL:-0}" = 1 ]; then
       for a in "$@"; do
         case "$a" in
@@ -93,6 +98,15 @@ esac
 exit 0
 SH
   chmod +x "$fakebin/tmux"
+  cat > "$fakebin/curl" <<'SH'
+#!/usr/bin/env bash
+body=$(cat)
+[ -n "${FM_TRACE_CAPTURE_DIR:-}" ] || exit 1
+mkdir -p "$FM_TRACE_CAPTURE_DIR"
+n=$(find "$FM_TRACE_CAPTURE_DIR" -type f -name 'request-*.json' | wc -l | tr -d ' ')
+printf '%s' "$body" > "$FM_TRACE_CAPTURE_DIR/request-$((n + 1)).json"
+SH
+  chmod +x "$fakebin/curl"
   fm_fake_exit0 "$fakebin" treehouse
   printf '%s\n' "$fakebin"
 }
@@ -136,6 +150,7 @@ run_spawn() {
     FM_FAKE_TRACEPARENT_SEND_FAIL="${FM_FAKE_TRACEPARENT_SEND_FAIL:-0}" \
     FM_FAKE_TRACEPARENT_SEND_UNSAFE="${FM_FAKE_TRACEPARENT_SEND_UNSAFE:-0}" \
     FM_FAKE_TRACE_METADATA_APPEND_FAIL="${FM_FAKE_TRACE_METADATA_APPEND_FAIL:-0}" \
+    FM_FAKE_LAUNCH_SEND_FAIL="${FM_FAKE_LAUNCH_SEND_FAIL:-0}" \
     FM_FAKE_META_PATH="$home/state/$1.meta" \
     FM_FAKE_LAUNCH_LOG="$launchlog" PATH="$fakebin:$PATH" \
     "$SPAWN" "$@" --mode no-mistakes --yolo off 2>&1
@@ -182,6 +197,15 @@ EOF
 
 meta_traceparent() { sed -n 's/^traceparent=//p' "$1"; }
 injected_traceparent() { sed -n 's/^export TRACEPARENT=//p' "$1"; }
+
+enable_span_export() {  # <home> <capture-dir>
+  local home=$1 capture=$2 auth="$1/config/trace-auth-header"
+  mkdir -p "$capture"
+  printf 'Authorization: Bearer synthetic-token\n' > "$auth"
+  chmod 600 "$auth"
+  jq -n --arg auth "$auth" '{enabled:true,endpoint:"http://127.0.0.1:14318/v1/traces","auth-header-file":$auth}' \
+    > "$home/config/trace-export.json"
+}
 
 # Two-level primary -> secondmate -> worker regression for the FM_TRACE_CONTEXT
 # effective override. Drives bin/fm-spawn.sh TWICE against real homes and a real
@@ -288,6 +312,7 @@ test_enabled_records_and_injects_identical_carrier_before_launch() {
   itp=$(injected_traceparent "$LAUNCH_LOG")
   fm_trace_context_valid "$itp" || fail "enabled spawn must inject a valid TRACEPARENT export (got '$itp')"
   [ "$mtp" = "$itp" ] || fail "the recorded and injected carriers must be identical (meta='$mtp' injected='$itp')"
+  grep -q '^trace_started=[0-9][0-9]*$' "$meta" || fail "enabled spawn must record the first-mint trace_started time"
 
   gl=$(grep -n '^export GOTMPDIR=' "$LAUNCH_LOG" | tail -1 | cut -d: -f1)
   tl=$(grep -n '^export TRACEPARENT=' "$LAUNCH_LOG" | tail -1 | cut -d: -f1)
@@ -340,10 +365,12 @@ test_failed_delivery_omits_metadata_and_still_launches() {
 }
 
 test_unsafe_delivery_refuses_to_append_launch() {
-  local rec out status
+  local rec out status capture
   rec=$(make_spawn_case tc-send-unsafe)
   read_case_record "$rec"
   : > "$HOME_DIR/config/trace-context"
+  capture="$HOME_DIR/captured-spans"
+  enable_span_export "$HOME_DIR" "$capture"
   start_trace_session "$HOME_DIR"
 
   out=$(FM_FAKE_TRACEPARENT_SEND_UNSAFE=1 \
@@ -354,7 +381,48 @@ test_unsafe_delivery_refuses_to_append_launch() {
     "unsafe traceparent delivery should report why spawn stopped"
   ! grep -q 'claude' "$LAUNCH_LOG" \
     || fail "unsafe traceparent delivery must not append the launch command"
+  [ "$(find "$capture" -type f -name 'request-*.json' | wc -l | tr -d ' ')" -eq 0 ] \
+    || fail "a refused launch emitted a spawn span"
   pass "uncleared TRACEPARENT input stops before the launch command is appended"
+}
+
+test_successful_spawn_emits_one_child_span() {
+  local rec capture request
+  rec=$(make_spawn_case tc-span-success)
+  read_case_record "$rec"
+  : > "$HOME_DIR/config/trace-context"
+  capture="$HOME_DIR/captured-spans"
+  enable_span_export "$HOME_DIR" "$capture"
+  start_trace_session "$HOME_DIR"
+  FM_TRACE_CAPTURE_DIR="$capture" run_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$CASE_ID" "$PROJ_DIR" >/dev/null \
+    || fail "successful trace-enabled spawn failed"
+  [ "$(find "$capture" -type f -name 'request-*.json' | wc -l | tr -d ' ')" -eq 1 ] \
+    || fail "successful launch should emit exactly one span request"
+  request="$capture/request-1.json"
+  jq -e '.resourceSpans[0].scopeSpans[0].spans | length == 1 and .[0].name == "firstmate.spawn" and (.[0].parentSpanId | length) == 16' \
+    "$request" >/dev/null || fail "successful launch did not emit one child span"
+  pass "successful enabled launch emits one synthetic firstmate.spawn child"
+}
+
+test_rolled_back_launch_emits_no_span() {
+  local rec capture out status
+  rec=$(make_spawn_case tc-span-rollback)
+  read_case_record "$rec"
+  : > "$HOME_DIR/config/trace-context"
+  capture="$HOME_DIR/captured-spans"
+  enable_span_export "$HOME_DIR" "$capture"
+  start_trace_session "$HOME_DIR"
+  out=$(FM_FAKE_LAUNCH_SEND_FAIL=1 FM_TRACE_CAPTURE_DIR="$capture" \
+    run_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$CASE_ID" "$PROJ_DIR")
+  status=$?
+  [ "$status" -ne 0 ] || fail "simulated launch delivery failure should roll back the fresh spawn"
+  ! grep -q '^spawned ' <<EOF
+$out
+EOF
+  [ ! -e "$HOME_DIR/state/$CASE_ID.meta" ] || fail "rolled-back launch left task metadata behind"
+  [ "$(find "$capture" -type f -name 'request-*.json' 2>/dev/null | wc -l | tr -d ' ')" -eq 0 ] \
+    || fail "rolled-back launch emitted a spawn span"
+  pass "rolled-back launch emits no synthetic spawn span"
 }
 
 test_failed_metadata_append_unsets_carrier_and_still_launches() {
@@ -419,7 +487,7 @@ test_duplicate_secondmate_spawn_does_not_converge_trace_context() {
 }
 
 test_relaunch_reuses_recorded_carrier() {
-  local rec out status meta first second injected
+  local rec out status meta first second injected started first_gen second_gen
   rec=$(make_spawn_case tc-relaunch)
   read_case_record "$rec"
   : > "$HOME_DIR/config/trace-context"
@@ -431,6 +499,8 @@ test_relaunch_reuses_recorded_carrier() {
   expect_code 0 "$status" "first trace-context spawn should succeed"
   assert_contains "$out" "spawned $CASE_ID" "first spawn should report success"
   first=$(meta_traceparent "$meta")
+  started=$(sed -n 's/^trace_started=//p' "$meta")
+  first_gen=$(sed -n 's/^spawn_gen=//p' "$meta")
   fm_trace_context_valid "$first" || fail "first spawn must record a valid carrier (got '$first')"
 
   # Relaunch the same task: the recorded carrier must be reused verbatim for both
@@ -441,10 +511,15 @@ test_relaunch_reuses_recorded_carrier() {
   expect_code 0 "$status" "relaunch spawn should succeed"
   assert_contains "$out" "spawned $CASE_ID" "relaunch spawn should report success"
   second=$(meta_traceparent "$meta")
+  second_gen=$(sed -n 's/^spawn_gen=//p' "$meta")
   injected=$(injected_traceparent "$LAUNCH_LOG")
   [ "$second" = "$first" ] || fail "relaunch must reuse the recorded carrier in meta (first='$first' second='$second')"
+  [ "$(sed -n 's/^trace_started=//p' "$meta")" = "$started" ] \
+    || fail "relaunch must preserve the original first-mint time"
+  [ -n "$first_gen" ] && [ -n "$second_gen" ] && [ "$second_gen" != "$first_gen" ] \
+    || fail "relaunch must publish a new spawn generation"
   [ "$injected" = "$first" ] || fail "relaunch must inject the same recorded carrier (first='$first' injected='$injected')"
-  pass "relaunch reuses the recorded carrier verbatim for both the meta record and the injected export"
+  pass "relaunch preserves carrier and first-mint time while publishing a new generation"
 }
 
 test_session_start_freezes_env_override_and_ignores_later_edits() {
@@ -605,6 +680,8 @@ test_enabled_records_and_injects_identical_carrier_before_launch
 test_disabled_writes_and_injects_neither
 test_failed_delivery_omits_metadata_and_still_launches
 test_unsafe_delivery_refuses_to_append_launch
+test_successful_spawn_emits_one_child_span
+test_rolled_back_launch_emits_no_span
 test_failed_metadata_append_unsets_carrier_and_still_launches
 test_duplicate_secondmate_spawn_does_not_converge_trace_context
 test_relaunch_reuses_recorded_carrier

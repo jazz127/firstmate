@@ -39,6 +39,29 @@ cleanup() {
 trap cleanup EXIT
 
 TMP_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/fm-gotmp-tests.XXXXXX")
+mkdir -p "$TMP_ROOT/fakebin"
+cat > "$TMP_ROOT/fakebin/curl" <<'SH'
+#!/usr/bin/env bash
+body=$(cat)
+[ -n "${FM_TRACE_CAPTURE_DIR:-}" ] || exit 1
+mkdir -p "$FM_TRACE_CAPTURE_DIR"
+n=$(find "$FM_TRACE_CAPTURE_DIR" -type f -name 'request-*.json' | wc -l | tr -d ' ')
+printf '%s' "$body" > "$FM_TRACE_CAPTURE_DIR/request-$((n + 1)).json"
+SH
+chmod +x "$TMP_ROOT/fakebin/curl"
+
+enable_trace_export() {  # <home> <capture-dir> <status> <task-id>
+  local home=$1 capture=$2 status=$3 id=$4 auth="$1/config/auth-header"
+  printf 'Authorization: Bearer synthetic-token\n' > "$auth"
+  chmod 600 "$auth"
+  jq -n --arg auth "$auth" '{enabled:true,endpoint:"http://127.0.0.1:14318/v1/traces","auth-header-file":$auth}' \
+    > "$home/config/trace-export.json"
+  printf '%s\n' "$$" > "$home/state/.lock"
+  printf '%s on\n' "$$" > "$home/state/.trace-context-effective"
+  printf 'traceparent=00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01\nspawn_gen=s1.1.1\n' \
+    >> "$home/state/$id.meta"
+  printf '%s\n' "$status" > "$home/state/$id.status"
+}
 
 # Build a fake FM_HOME/FM_ROOT so the real fm-teardown.sh (symlinked in) resolves
 # state and helper scripts inside it. Stub the helper scripts fm-teardown calls so no
@@ -47,7 +70,7 @@ TMP_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/fm-gotmp-tests.XXXXXX")
 make_fake_root() {
   local id=$1 tasktmp=$2
   local fake="$TMP_ROOT/$id"
-  mkdir -p "$fake/bin/backends" "$fake/state" "$fake/data"
+  mkdir -p "$fake/bin/backends" "$fake/state" "$fake/data" "$fake/config"
   # Symlink the REAL teardown so the test exercises actual code, not a copy.
   ln -s "$TEARDOWN" "$fake/bin/fm-teardown.sh"
   # fm-backend.sh is real, while its adapter is stubbed so this temp-cleanup
@@ -95,6 +118,9 @@ SH
   ln -s "$ROOT/bin/fm-pending-reply-lib.sh" "$fake/bin/fm-pending-reply-lib.sh"
   ln -s "$ROOT/bin/fm-marker-lib.sh" "$fake/bin/fm-marker-lib.sh"
   ln -s "$ROOT/bin/fm-operational-input.sh" "$fake/bin/fm-operational-input.sh"
+  ln -s "$ROOT/bin/fm-trace-span-lib.sh" "$fake/bin/fm-trace-span-lib.sh"
+  ln -s "$ROOT/bin/fm-trace-context-lib.sh" "$fake/bin/fm-trace-context-lib.sh"
+  ln -s "$ROOT/bin/fm-timing-lib.sh" "$fake/bin/fm-timing-lib.sh"
   # Ordinary teardown reports any final ledger outcome before removing records.
   ln -s "$ROOT/bin/fm-inactive-reconcile.sh" "$fake/bin/fm-inactive-reconcile.sh"
   ln -s "$ROOT/bin/fm-parent-channel-lib.sh" "$fake/bin/fm-parent-channel-lib.sh"
@@ -197,6 +223,9 @@ SH
   ln -s "$ROOT/bin/fm-secondmate-parent-lib.sh" "$fake/bin/fm-secondmate-parent-lib.sh"
   ln -s "$ROOT/bin/fm-pending-reply-lib.sh" "$fake/bin/fm-pending-reply-lib.sh"
   ln -s "$ROOT/bin/fm-marker-lib.sh" "$fake/bin/fm-marker-lib.sh"
+  ln -s "$ROOT/bin/fm-trace-span-lib.sh" "$fake/bin/fm-trace-span-lib.sh"
+  ln -s "$ROOT/bin/fm-trace-context-lib.sh" "$fake/bin/fm-trace-context-lib.sh"
+  ln -s "$ROOT/bin/fm-timing-lib.sh" "$fake/bin/fm-timing-lib.sh"
   ln -s "$ROOT/bin/fm-operational-input.sh" "$fake/bin/fm-operational-input.sh"
   ln -s "$ROOT/bin/fm-inactive-reconcile.sh" "$fake/bin/fm-inactive-reconcile.sh"
   ln -s "$ROOT/bin/fm-parent-channel-lib.sh" "$fake/bin/fm-parent-channel-lib.sh"
@@ -247,6 +276,52 @@ test_teardown_skips_gracefully_when_dir_missing() {
   pass "fm-teardown skips gracefully when tasktmp= points to a nonexistent dir"
 }
 
+test_terminal_spans_follow_successful_cleanup_only() {
+  local id status line rc fake capture request
+  for status in 'done [at=1712345678]: finished' 'failed [at=1712345678]: failed' ''; do
+    case "$status" in done*) id=trace-done ;; failed*) id=trace-failed ;; *) id=trace-unknown ;; esac
+    fake=$(make_fake_root "$id" "")
+    capture="$TMP_ROOT/$id-spans"
+    enable_trace_export "$fake" "$capture" "$status" "$id"
+    # The missing-start case models historical task metadata from before tracing.
+    rc=0
+    if [ "$id" = trace-done ]; then
+      mv "$fake/bin/fm-nm-run-lib.sh" "$fake/bin/fm-nm-run-lib.saved"
+      FM_HOME="$fake" PATH="$TMP_ROOT/fakebin:$PATH" \
+        FM_TRACE_CAPTURE_DIR="$capture" bash "$fake/bin/fm-teardown.sh" "$id" >/dev/null 2>&1 || rc=$?
+      [ "$rc" -ne 0 ] || fail "refused cleanup unexpectedly succeeded"
+      [ "$(find "$capture" -type f -name 'request-*.json' | wc -l | tr -d ' ')" -eq 0 ] \
+        || fail "refused cleanup emitted a terminal root"
+      mv "$fake/bin/fm-nm-run-lib.saved" "$fake/bin/fm-nm-run-lib.sh"
+    fi
+    FM_HOME="$fake" PATH="$TMP_ROOT/fakebin:$PATH" FM_TRACE_CAPTURE_DIR="$capture" \
+      bash "$fake/bin/fm-teardown.sh" "$id" >/dev/null 2>&1 \
+      || fail "$id cleanup failed"
+    [ "$(find "$capture" -type f -name 'request-*.json' | wc -l | tr -d ' ')" -eq 1 ] \
+      || fail "$id cleanup should emit exactly one terminal root"
+    request="$capture/request-1.json"
+    line=$(jq -r '.resourceSpans[0].scopeSpans[0].spans[0] | [.name, (.attributes[] | select(.key == "firstmate.task.outcome").value.stringValue)] | @tsv' "$request")
+    case "$id:$line" in
+      "trace-done:firstmate.task"$'\t'done) jq -e '.resourceSpans[0].scopeSpans[0].spans[0].status.code == 1' "$request" >/dev/null || fail "done should map to OK" ;;
+      "trace-failed:firstmate.task"$'\t'failed) jq -e '.resourceSpans[0].scopeSpans[0].spans[0].status.code == 2' "$request" >/dev/null || fail "failed should map to ERROR" ;;
+      "trace-unknown:firstmate.task"$'\t'unknown) jq -e '(.resourceSpans[0].scopeSpans[0].spans[0] | has("status") | not)' "$request" >/dev/null || fail "unknown should leave status unset" ;;
+      *) fail "$id emitted unexpected root span: $line" ;;
+    esac
+    [ "$(jq -r '.resourceSpans[0].scopeSpans[0].spans[0].startTimeUnixNano' "$request")" -gt 0 ] \
+      || fail "$id missing historical start data did not get a safe current start"
+    if [ "$id" = trace-done ]; then
+      rc=0
+      FM_HOME="$fake" PATH="$TMP_ROOT/fakebin:$PATH" FM_TRACE_CAPTURE_DIR="$capture" \
+        bash "$fake/bin/fm-teardown.sh" "$id" >/dev/null 2>&1 || rc=$?
+      [ "$rc" -ne 0 ] || fail "repeated cleanup unexpectedly succeeded after record removal"
+      [ "$(find "$capture" -type f -name 'request-*.json' | wc -l | tr -d ' ')" -eq 1 ] \
+        || fail "repeated cleanup duplicated the terminal root"
+    fi
+  done
+  pass "successful cleanup emits one done/failed/unknown root with missing-start fallback; refusal and repeat emit none"
+}
+
 test_teardown_removes_tasktmp_dir
 test_teardown_skips_gracefully_without_tasktmp
 test_teardown_skips_gracefully_when_dir_missing
+test_terminal_spans_follow_successful_cleanup_only

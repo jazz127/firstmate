@@ -178,11 +178,17 @@ pass "Secondmate home-session state stays off or on despite later file state; am
 # --- recovery: a recorded value is reused verbatim, disabled still omits -----
 
 REC_META="$WORK/rec.meta"
-printf 'kind=ship\ntraceparent=%s\nmode=no-mistakes\n' "$VALID" > "$REC_META"
+printf 'kind=ship\ntraceparent=%s\ntrace_started=1712345678901\nmode=no-mistakes\n' "$VALID" > "$REC_META"
 out=$(TRACEPARENT='00-ffffffffffffffffffffffffffffffff-1111111111111111-01' \
   FM_TRACE_CONTEXT=on fm_trace_context_resolve "$CFG_ON" "$REC_META")
 [ "$out" = "$VALID" ] || fail "recovery must reuse the recorded traceparent verbatim, ignoring the ambient environment (got '$out')"
 pass "resolve reuses a valid recorded traceparent verbatim on relaunch (stable identity across restarts)"
+[ "$(fm_trace_context_started_resolve "$REC_META")" = 1712345678901 ] \
+  || fail "recovery must preserve the original trace_started mint time"
+printf 'kind=ship\ntraceparent=%s\nmode=no-mistakes\n' "$VALID" > "$WORK/no-start.meta"
+started_now=$(fm_trace_context_started_resolve "$WORK/no-start.meta")
+case "$started_now" in ''|*[!0-9]*) fail "a valid historical carrier without trace_started must get a current numeric start" ;; esac
+pass "the started-time helper preserves a recorded first mint and fills missing historical start data"
 
 out=$(fm_trace_context_resolve "$CFG_OFF" "$REC_META")
 [ -z "$out" ] || fail "a disabled home must omit even when a traceparent is already recorded (got '$out')"

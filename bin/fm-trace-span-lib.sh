@@ -74,6 +74,43 @@ fm_trace_span_resource_json() {
   printf '%s\n' "$out"
 }
 
+fm_trace_span_meta_value() {  # <meta-file> <key>
+  local meta=$1 key=$2
+  sed -n "s/^${key}=//p" "$meta" 2>/dev/null | head -n 1
+}
+
+# Per-event wrappers keep attribute assembly beside the emitter. Their callers
+# pass only facts owned by the lifecycle script and never duplicate span shape.
+fm_trace_span_spawn() {  # <meta> <start-ms> <relaunch> <generation> <prior-generation> <backend> <window>
+  local meta=$1 start=$2 relaunch=$3 generation=$4 prior=$5 backend=$6 window=$7
+  local attrs=("firstmate.relaunch=$relaunch" "firstmate.spawn_gen=$generation")
+  [ -z "$prior" ] || attrs+=("firstmate.spawn_gen.prior=$prior")
+  attrs+=("firstmate.backend=$backend" "firstmate.window=$window")
+  fm_trace_span_emit "$meta" firstmate.spawn "$start" - "${attrs[@]}"
+}
+
+fm_trace_span_task() {  # <meta> <outcome> <forced>
+  local meta=$1 outcome=$2 forced=$3 start status value
+  start=$(sed -n 's/^trace_started=//p' "$meta" 2>/dev/null | head -n 1)
+  case "$start" in ''|*[!0-9]*) start=- ;; esac
+  case "$outcome" in
+    done) status=ok ;;
+    failed) status=error ;;
+    *) status='unset' ;;
+  esac
+  local attrs=("firstmate.task.outcome=$outcome")
+  value=$(fm_trace_span_meta_value "$meta" mode)
+  [ -z "$value" ] || attrs+=("firstmate.task.mode=$value")
+  value=$(fm_trace_span_meta_value "$meta" yolo)
+  [ -z "$value" ] || attrs+=("firstmate.task.yolo=$value")
+  value=$(fm_trace_span_meta_value "$meta" pr)
+  [ -z "$value" ] || attrs+=("firstmate.pr.url=$value")
+  [ "$forced" != true ] || attrs+=("firstmate.teardown.forced=true")
+  value=$(fm_trace_span_meta_value "$meta" spawn_gen)
+  [ -z "$value" ] || attrs+=("firstmate.spawn_gen=$value")
+  fm_trace_span_emit "$meta" firstmate.task "$start" - --root --status "$status" "${attrs[@]}"
+}
+
 fm_trace_span_config() {
   local file=$1 values
   command -v jq >/dev/null 2>&1 || return 1
@@ -172,15 +209,15 @@ _fm_trace_span_emit_impl() {
 
   local resource='{"key":"service.name","value":{"stringValue":"firstmate"}}'
   resource+="$(fm_trace_span_resource_json "$meta")"
-  local attrs=''
-  for pair in "$@"; do attrs+="$(fm_trace_span_attr_json "$pair")"; done
+  local span_attrs=''
+  for pair in "$@"; do span_attrs+="$(fm_trace_span_attr_json "$pair")"; done
   local status_json=''
   case $status in ok) status_json=',"status":{"code":1}' ;; error) status_json=',"status":{"code":2}' ;; esac
   local span='{"traceId":"'"${carrier:3:32}"'","spanId":"'"$span_id"'",'
   [ -z "$parent_id" ] || span+='"parentSpanId":"'"$parent_id"'",'
   span+='"name":"'"$(fm_trace_span_json_escape "$name")"'","kind":1,'
   span+='"startTimeUnixNano":"'"$((start_ms * 1000000))"'","endTimeUnixNano":"'"$((end_ms * 1000000))"'",'
-  span+='"attributes":['"${attrs#,}"']'"$status_json"
+  span+='"attributes":['"${span_attrs#,}"']'"$status_json"
   span+='}'
   command -v curl >/dev/null 2>&1 || return 0
   local body

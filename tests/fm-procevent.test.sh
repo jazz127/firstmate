@@ -372,6 +372,169 @@ SH
   pass "firstmate active reply arm replaces the poll and later rounds do not replay ($owner_reply_case)"
 done
 
+OWNER_RACE_CAT=$(command -v cat) || fail "reply races require cat"
+OWNER_RACE_MKTEMP=$(command -v mktemp) || fail "reply races require mktemp"
+export OWNER_RACE_CAT OWNER_RACE_MKTEMP
+for owner_race_case in legacy-staged synchronous-staged legacy-capture synchronous-capture diagnostic-capture; do
+  OWNER_RACE="$TMP_ROOT/owner-race-$owner_race_case"
+  export OWNER_RACE
+  mkdir -p "$OWNER_RACE/bin" "$OWNER_RACE/home/state"
+  owner_race_version=0.1.80
+  case "$owner_race_case" in legacy-*) owner_race_version=0.1.79 ;; esac
+  printf '%s\n' "$owner_race_version" > "$OWNER_RACE/version"
+  printf 'session:\n  status: feedback\nprompts[1]{uid,prompt,selector,tag,text}:\n  "","feedback received during reply","","message",""\n' \
+    > "$OWNER_RACE/expected"
+  cat > "$OWNER_RACE/bin/lavish-axi" <<'SH'
+#!/usr/bin/env bash
+set -eu
+case "${1-}" in
+  --version) cat "$OWNER_RACE/version" ;;
+  reply)
+    if [ -e "$OWNER_RACE/reject" ]; then
+      printf 'simulated race reply rejection\n' >&2
+      exit 1
+    fi
+    cat "$4" >> "$OWNER_RACE/replies"
+    ;;
+  poll)
+    mkdir "$OWNER_RACE/poll-active" || exit 3
+    trap 'rmdir "$OWNER_RACE/poll-active"' EXIT
+    trap 'exit 0' TERM INT HUP
+    [ "${3-}" != --agent-reply ] || printf '%s\n' "$4" >> "$OWNER_RACE/replies"
+    printf 'poll\n' >> "$OWNER_RACE/polls"
+    round=$(wc -l < "$OWNER_RACE/polls" | tr -d ' ')
+    while [ ! -e "$OWNER_RACE/release-$round" ]; do
+      [ "$SECONDS" -lt "${FM_TEST_STUB_MAX_BLOCK_SECONDS:-120}" ] || exit 75
+      sleep 0.02
+    done
+    cat "$OWNER_RACE/expected"
+    if [ "$round" -eq 1 ] && [ -e "$OWNER_RACE/hold-output" ]; then
+      while [ "$SECONDS" -lt "${FM_TEST_STUB_MAX_BLOCK_SECONDS:-120}" ]; do sleep 0.02; done
+    fi
+    ;;
+  *) exit 2 ;;
+esac
+SH
+  cat > "$OWNER_RACE/bin/cat" <<'SH'
+#!/usr/bin/env bash
+set -eu
+if [ "$#" -eq 1 ] && [ -e "$OWNER_RACE/pause-capture" ]; then
+  case "$1" in
+    "$OWNER_RACE/home/state/procevent/".*.output)
+      printf '%s\n' "$1" > "$OWNER_RACE/capture-ready"
+      while [ ! -e "$OWNER_RACE/release-capture" ]; do
+        [ "$SECONDS" -lt "${FM_TEST_STUB_MAX_BLOCK_SECONDS:-120}" ] || exit 75
+        sleep 0.02
+      done
+      ;;
+  esac
+fi
+exec "$OWNER_RACE_CAT" "$@"
+SH
+  cat > "$OWNER_RACE/bin/mktemp" <<'SH'
+#!/usr/bin/env bash
+set -eu
+if [ "${OWNER_RACE_REARM:-}" = 1 ]; then
+  for arg in "$@"; do
+    if [ "$arg" = "$FM_PROCEVENT_CLAIM_ROOT/$OWNER_RACE_ID.lock.owner.XXXXXX" ]; then
+      printf 'attempted\n' > "$OWNER_RACE/rearm-attempted"
+    fi
+  done
+fi
+exec "$OWNER_RACE_MKTEMP" "$@"
+SH
+  chmod +x "$OWNER_RACE/bin/"*
+  owner_race_art="$OWNER_RACE/board.html"
+  printf '<h1>reply capture race</h1>\n' > "$owner_race_art"
+  lavish_session "$owner_race_art"
+  OWNER_RACE_ID=$("$ROOT/bin/fm-procevent-lavish.sh" source-id "$owner_race_art")
+  export OWNER_RACE_ID
+  fm_test_track_procevent_home "$OWNER_RACE/home"
+  printf 'first reply\n' > "$OWNER_RACE/reply1"
+  printf 'replacement reply\n' > "$OWNER_RACE/reply2"
+  owner_race_reply_args=()
+  case "$owner_race_case" in
+    *-staged) touch "$OWNER_RACE/hold-output" ;;
+    *-capture)
+      touch "$OWNER_RACE/pause-capture"
+      owner_race_reply_args=(--agent-reply-file "$OWNER_RACE/reply1")
+      ;;
+  esac
+  if [ "$owner_race_case" = diagnostic-capture ]; then
+    touch "$OWNER_RACE/reject"
+    printf 'error: Lavish did not accept the staged reply: simulated race reply rejection\n' \
+      > "$OWNER_RACE/expected"
+  fi
+  PATH="$OWNER_RACE/bin:$PATH" FM_HOME="$OWNER_RACE/home" \
+    "$ROOT/bin/fm-procevent-lavish.sh" arm "$owner_race_art" \
+    "${owner_race_reply_args[@]+"${owner_race_reply_args[@]}"}" \
+    > "$OWNER_RACE/arm1.out" 2> "$OWNER_RACE/arm1.err" \
+    || fail "$owner_race_case could not arm its first listener: $(cat "$OWNER_RACE/arm1.err")"
+  if [ "$owner_race_case" != diagnostic-capture ]; then
+    wait_for_lines "$OWNER_RACE/polls" 1 || fail "$owner_race_case did not start polling"
+    touch "$OWNER_RACE/release-1"
+  fi
+  case "$owner_race_case" in
+    *-staged)
+      owner_race_token=$(sed -n '3p' "$FM_PROCEVENT_CLAIM_ROOT/$OWNER_RACE_ID.claim")
+      owner_race_output="$OWNER_RACE/home/state/procevent/.$OWNER_RACE_ID.$owner_race_token.output"
+      for _ in $(seq 1 100); do
+        cmp -s "$OWNER_RACE/expected" "$owner_race_output" && break
+        sleep 0.05
+      done
+      cmp -s "$OWNER_RACE/expected" "$owner_race_output" \
+        || fail "$owner_race_case never received the complete local feedback"
+      ;;
+    *-capture)
+      wait_for "$OWNER_RACE/capture-ready" || fail "$owner_race_case never reached capture"
+      owner_race_output=$(cat "$OWNER_RACE/capture-ready")
+      ;;
+  esac
+  [ "$(count_results "$OWNER_RACE/home" "$OWNER_RACE_ID")" = 0 ] \
+    || fail "$owner_race_case did not pause before durable capture"
+  rm -f "$OWNER_RACE/reject"
+  OWNER_RACE_REARM=1 PATH="$OWNER_RACE/bin:$PATH" FM_HOME="$OWNER_RACE/home" \
+    "$ROOT/bin/fm-procevent-lavish.sh" arm "$owner_race_art" \
+    --agent-reply-file "$OWNER_RACE/reply2" > "$OWNER_RACE/arm2.out" 2> "$OWNER_RACE/arm2.err" &
+  owner_race_armer=$!
+  wait_for "$OWNER_RACE/rearm-attempted" || fail "$owner_race_case did not attempt replacement"
+  touch "$OWNER_RACE/release-capture"
+  wait "$owner_race_armer" \
+    || fail "$owner_race_case could not re-arm: $(cat "$OWNER_RACE/arm2.err")"
+  owner_race_poll_count=2
+  owner_race_replies='replacement reply'
+  case "$owner_race_case" in
+    legacy-capture|synchronous-capture) owner_race_replies=$(printf 'first reply\nreplacement reply') ;;
+  esac
+  if [ "$owner_race_case" = diagnostic-capture ]; then
+    owner_race_poll_count=1
+    owner_race_replies='replacement reply'
+  fi
+  wait_for_lines "$OWNER_RACE/polls" "$owner_race_poll_count" \
+    || fail "$owner_race_case did not resume polling"
+  [ "$(cat "$OWNER_RACE/replies")" = "$owner_race_replies" ] \
+    || fail "$owner_race_case lost or repeated its replacement reply"
+  [ "$(count_results "$OWNER_RACE/home" "$OWNER_RACE_ID")" = 1 ] \
+    || fail "$owner_race_case lost or duplicated the old generation's result"
+  owner_race_result=$(first_result "$OWNER_RACE/home" "$OWNER_RACE_ID")
+  cmp -s "$OWNER_RACE/expected" "$owner_race_result" \
+    || fail "$owner_race_case changed the old generation's received bytes"
+  assert_contains "$(wake_payloads "$OWNER_RACE/home")" "procevent lavish $OWNER_RACE_ID 1" \
+    "$owner_race_case did not announce its retained result"
+  [ ! -e "$owner_race_output" ] || fail "$owner_race_case left already captured staging behind"
+  printf 'session:\n  status: feedback\nprompts[1]{uid,prompt,selector,tag,text}:\n  "","feedback after replacement","","message",""\n' \
+    > "$OWNER_RACE/expected-next"
+  cp "$OWNER_RACE/expected-next" "$OWNER_RACE/expected"
+  touch "$OWNER_RACE/release-$owner_race_poll_count"
+  wait_capture "$OWNER_RACE/home" "$OWNER_RACE_ID" || fail "$owner_race_case did not finish its next capture"
+  [ "$(count_results "$OWNER_RACE/home" "$OWNER_RACE_ID")" = 2 ] \
+    || fail "$owner_race_case broke the replacement's ordinary capture"
+  cmp -s "$OWNER_RACE/expected-next" "$OWNER_RACE/home/state/procevent-inbox/$OWNER_RACE_ID.2.result" \
+    || fail "$owner_race_case changed the replacement's ordinary feedback"
+  PATH="$OWNER_RACE/bin:$PATH" pe "$OWNER_RACE/home" retire "$OWNER_RACE_ID" >/dev/null
+  pass "firstmate $owner_race_case preserves locally received output during reply replacement"
+done
+
 [ "${1-}" != --owner-replies-only ] || exit 0
 
 # --- inert with nothing configured ------------------------------------------

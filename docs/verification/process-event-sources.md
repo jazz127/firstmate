@@ -34,7 +34,9 @@ Synthetic CLI validation on 2026-10-07 exercises `arm --agent-reply-file` withou
 It covers fresh registration and replacement of a blocked listener for each version, requires reply-before-poll ordering, and resumes a later round from the same registration without replaying the consumed staged reply.
 The fixture rejects concurrent polls, proves a superseded unconsumed reply is never posted and a missing reply file leaves the active listener alone, and retains the original reply file for its caller.
 The failure cases require a durable announced diagnostic for reply rejection, missing session evidence, and an unknown version, with the private staged reply retained until recovery and reconciliation accept it once and resume polling.
+Replacement races pause feedback after local staging or during capture for both reply versions, and pause a modern reply rejection during capture; re-arm must retain and announce the original bytes once, deliver the replacement reply once, and capture the next feedback round normally.
 The oracle is the firstmate reply acceptance contract: a failed attempt must remain visible and retryable, while polling begins only after reply acceptance; silently dropping stderr or consuming a rejected reply fails these assertions.
+For replacement, the oracle is byte conservation at the runner boundary: replacing a listener must retain its locally received result, and deleting staging or committing it twice fails the executable assertions.
 No live Lavish server or account is used by this regression.
 
 Refresh with `bash tests/fm-procevent.test.sh --owner-replies-only`.
@@ -54,6 +56,11 @@ ok - firstmate active reply arm replaces the poll and later rounds do not replay
 ok - firstmate unknown-version is captured and retry resumes polling
 ok - firstmate fresh reply arm delivers once before polling (unknown-version)
 ok - firstmate active reply arm replaces the poll and later rounds do not replay (unknown-version)
+ok - firstmate legacy-staged preserves locally received output during reply replacement
+ok - firstmate synchronous-staged preserves locally received output during reply replacement
+ok - firstmate legacy-capture preserves locally received output during reply replacement
+ok - firstmate synchronous-capture preserves locally received output during reply replacement
+ok - firstmate diagnostic-capture preserves locally received output during reply replacement
 ```
 
 ## Why an ended Lavish review is terminal

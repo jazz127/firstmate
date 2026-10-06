@@ -523,7 +523,7 @@ extension_registration_replacement_safe_locked() {  # <source-id>
 }
 
 cmd_register() {
-  local adapter=${1-} id=${2-} sep=${3-} reply_dest='' stale
+  local adapter=${1-} id=${2-} sep=${3-} reply_dest='' stale pending_result
   local -a argv=()
   shift 3 2>/dev/null || usage
   fm_procevent_adapter_valid "$adapter" || die "adapter name must be lowercase alphanumeric or dash: $adapter"
@@ -589,6 +589,13 @@ cmd_register() {
     done
   fi
   fm_procevent_source_lock_release "$id"
+  if [ -n "$reply_dest" ]; then
+    while IFS= read -r pending_result; do
+      feed_reconcile_requests lavish "$id" "$pending_result" || true
+      feed_keyed_answers lavish "$id" "$pending_result" || true
+      publish_result "$pending_result" >/dev/null || true
+    done < <(source_pending "$id")
+  fi
   owner_lease_refresh
   printf 'registered: %s (%s)\n' "$id" "$adapter"
 }
@@ -1127,9 +1134,22 @@ cmd_start() {
   # broken only by KILL. On contention, leave the generation-bound claim for
   # the stopper or subsequent reconciliation to reclaim.
   release_start_claim() {
+    local capture_adapter=${1-} interrupted_result=''
     extension_lifecycle_lock_release 2>/dev/null || true
-    [ -z "$STAGED_OUTPUT" ] || rm -f -- "$STAGED_OUTPUT"
+    if [ -z "$capture_adapter" ]; then
+      [ -z "$STAGED_OUTPUT" ] || rm -f -- "$STAGED_OUTPUT"
+    fi
     fm_procevent_source_lock_try_acquire "$CLAIM_ID" 2>/dev/null || return 0
+    if [ -n "$capture_adapter" ] && [ -n "$STAGED_OUTPUT" ]; then
+      if [ -s "$STAGED_OUTPUT" ]; then
+        interrupted_result=$(capture_lavish_output_locked "$CLAIM_ID" "$STAGED_OUTPUT") || {
+          fm_procevent_source_lock_release "$CLAIM_ID" 2>/dev/null || true
+          return 0
+        }
+      else
+        rm -f -- "$STAGED_OUTPUT"
+      fi
+    fi
     if fm_procevent_claim_load_locked "$CLAIM_ID" 2>/dev/null \
       && [ "$FM_PROCEVENT_CLAIM_HOME" = "$CLAIM_HOME" ] \
       && [ "$FM_PROCEVENT_CLAIM_PID" = "$CLAIM_PID" ] \
@@ -1140,8 +1160,17 @@ cmd_start() {
     fi
     fm_procevent_claim_release_locked "$CLAIM_ID" "$CLAIM_HOME" "$CLAIM_PID" "$CLAIM_TOKEN" 2>/dev/null || true
     fm_procevent_source_lock_release "$CLAIM_ID" 2>/dev/null || true
+    if [ -n "$interrupted_result" ]; then
+      feed_reconcile_requests lavish "$CLAIM_ID" "$interrupted_result" || true
+      feed_keyed_answers lavish "$CLAIM_ID" "$interrupted_result" || true
+      publish_result "$interrupted_result" >/dev/null || true
+    fi
   }
-  trap release_start_claim EXIT
+  if [ "$extension_owner" -eq 0 ] && [ "$adapter" = lavish ] && [ -z "$task_owner" ]; then
+    trap 'release_start_claim lavish' EXIT
+  else
+    trap release_start_claim EXIT
+  fi
   # 0 when this runner should poll again. The adapter's relisten command is the
   # only adapter-specific signal; a replacement registration is adopted only
   # when this claim still owns it and the registered command is unchanged.
@@ -1400,6 +1429,14 @@ EOF
 
   if [ "$extension_owner" -eq 1 ]; then
     :
+  elif [ "$adapter" = lavish ] && [ -z "$task_owner" ]; then
+    fm_procevent_source_lock_acquire "$id" || die "cannot lock the result capture: $id"
+    durable=$(capture_lavish_output_locked "$id" "$out") || {
+      fm_procevent_source_lock_release "$id"
+      die "cannot durably capture the result"
+    }
+    STAGED_OUTPUT=
+    fm_procevent_source_lock_release "$id" || die "cannot release the result capture: $id"
   else
     if [ -n "$task_owner" ]; then
       durable=$(fm_procevent_capture "$STATE" "$id" "$adapter" "$out" "$task_owner") \
@@ -1408,8 +1445,8 @@ EOF
       durable=$(fm_procevent_capture "$STATE" "$id" "$adapter" "$out") \
         || { rm -f -- "$out"; die "cannot durably capture the result"; }
     fi
+    rm -f -- "$out"
   fi
-  [ "$extension_owner" -eq 1 ] || rm -f -- "$out"
   STAGED_OUTPUT=
   [ "$truncated" -eq 1 ] && printf 'truncated: %s at %s bytes\n' "$id" "$MAX_OUTPUT_BYTES" >&2
 
@@ -2106,7 +2143,7 @@ stop_runner_pid() {  # <pid> <identity>
 # retire, retaining the registration, captures, and answer binding. Never stop
 # a foreign or ambiguous group, or release its claim to launch a second poller.
 stop_reply_listener_locked() {  # <source-id>
-  local id=$1 owner pid token identity stop_state
+  local id=$1 owner pid token identity stop_state output
   if [ -e "$(fm_procevent_claim_path "$id")" ] || [ -L "$(fm_procevent_claim_path "$id")" ]; then
     fm_procevent_claim_load_locked "$id" || return 1
     fm_procevent_claim_owned_by_state "$STATE" "$FM_HOME" || return 1
@@ -2117,10 +2154,23 @@ stop_reply_listener_locked() {  # <source-id>
     stop_runner_pid "$pid" "$identity"
     stop_state=$?
     [ "$stop_state" -ne 2 ] || return 1
+    output=$(staging_file "$id" "$token")
+    if [ -s "$output" ]; then
+      [ "$(read_adapter "$id")" = lavish ] || return 1
+      capture_lavish_output_locked "$id" "$output" >/dev/null || return 1
+    fi
     fm_procevent_claim_reclaim_locked "$id" "$owner" "$pid" "$token" || return 1
-    rm -f -- "$(staging_file "$id" "$token")"
+    rm -f -- "$output"
   fi
   rm -f -- "$(runner_file "$id")"
+}
+
+capture_lavish_output_locked() {
+  local id=$1 output=$2 durable
+  [ -f "$output" ] && [ ! -L "$output" ] || return 1
+  durable=$(fm_procevent_capture "$STATE" "$id" lavish "$output") || return 1
+  rm -f -- "$output" || return 1
+  printf '%s\n' "$durable"
 }
 
 # The owned handling interface: durably and idempotently record that a

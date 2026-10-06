@@ -446,7 +446,7 @@ META
       ' "$WORK/capture.json" >/dev/null || fail "spawn exported attributes outside the approved lifecycle contract"
     done
   done
-  for outcome in done failed unknown; do
+  for outcome in 'done' failed unknown; do
     for forced in false true; do
       write_config "$BASE/lifecycle/task"
       COUNT=$(request_count)

@@ -393,7 +393,7 @@ test_terminal_spans_follow_successful_cleanup_only() {
 
 test_terminal_outcomes_survive_notes_and_yield_to_renewed_work() {
   local outcome phase id fake capture status expected rc n
-  for outcome in done failed; do
+  for outcome in 'done' failed; do
     for phase in plain tagged long-notes working saved-working finished-again saved-notes; do
       id="trace-$outcome-$phase"
       fake=$(make_fake_root "$id" "")
@@ -414,7 +414,7 @@ test_terminal_outcomes_survive_notes_and_yield_to_renewed_work() {
           printf 'working [at=1712345680]: resumed\nnote: more progress\n' >> "$fake/state/$id.status"
           expected=unknown
           if [ "$phase" = finished-again ]; then
-            case "$outcome" in done) expected=failed ;; failed) expected=done ;; esac
+            case "$outcome" in 'done') expected=failed ;; failed) expected='done' ;; esac
             printf '%s [at=1712345681]: finished again\nnote: cleanup complete' "$expected" \
               >> "$fake/state/$id.status"
           fi
@@ -476,7 +476,7 @@ test_untraced_cleanup_failures_remain_retryable() {
   [ "$rc" -ne 0 ] || fail "disabled export unexpectedly removed its task record"
   grep -Fq 'task record could not be removed' "$fake/removal.err" \
     || fail "disabled export did not reach the final removal refusal"
-  [ -f "$fake/state/$id.meta" ] && [ "$(sed -n 's/^trace_outcome=//p' "$fake/state/$id.meta")" = done ] \
+  [ -f "$fake/state/$id.meta" ] && [ "$(sed -n 's/^trace_outcome=//p' "$fake/state/$id.meta")" = 'done' ] \
     || fail "disabled export lost retryable records after removal failure"
   FM_HOME="$fake" PATH="$TMP_ROOT/fakebin:$PATH" FM_TRACE_CAPTURE_DIR="$capture" FM_TRACE_EXPORT=off \
     bash "$fake/bin/fm-teardown.sh" "$id" > "$fake/success.out" 2> "$fake/success.err" \

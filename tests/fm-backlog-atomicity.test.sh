@@ -2168,19 +2168,19 @@ test_recovery_finishes_a_close_for_the_same_meta_incarnation() {
 }
 
 test_pending_close_restart_preserves_status_retirement_retryability() {
-  local mode export outcome case_dir home id meta marker capture out rc expected_state
+  local mode trace_export outcome case_dir home id meta marker capture out rc expected_state
   for mode in close retain; do
-    for export in on off; do
-      for outcome in done failed; do
-        id="atomic-restart-$mode-$export-$outcome"
-        case_dir=$(make_home "restart-$mode-$export-$outcome")
+    for trace_export in on off; do
+      for outcome in 'done' failed; do
+        id="atomic-restart-$mode-$trace_export-$outcome"
+        case_dir=$(make_home "restart-$mode-$trace_export-$outcome")
         home=$(home_of "$case_dir")
         meta="$home/state/$id.meta"
         marker="$home/state/$id.backlog-close"
         capture="$case_dir/trace-requests.jsonl"
         add_item "$case_dir" "$id"
         start_item "$case_dir" "$id"
-        expected_state=done
+        expected_state='done'
         if [ "$mode" = retain ]; then
           tasks-axi hold "$id" --reason "captain decision pending" --kind captain \
             --file "$(backlog_of "$case_dir")" >/dev/null
@@ -2206,13 +2206,13 @@ SH
         chmod +x "$case_dir/fakebin/curl"
 
         rc=0
-        out=$(FM_TRACE_EXPORT=$export run_teardown "$case_dir" "$id") || rc=$?
-        [ "$rc" -ne 0 ] || fail "$mode/$export/$outcome accepted a malformed status cursor"
+        out=$(FM_TRACE_EXPORT=$trace_export run_teardown "$case_dir" "$id") || rc=$?
+        [ "$rc" -ne 0 ] || fail "$mode/$trace_export/$outcome accepted a malformed status cursor"
         assert_present "$meta" "cursor failure discarded retryable metadata"
         assert_present "$marker" "cursor failure discarded the pending $mode"
         assert_present "$home/state/$id.status" "cursor failure discarded terminal status"
 
-        out=$(FM_TRACE_EXPORT=$export run_bootstrap "$case_dir")
+        out=$(FM_TRACE_EXPORT=$trace_export run_bootstrap "$case_dir")
         assert_contains "$out" "status presentation could not be retired" \
           "restart did not enforce the status-retirement prerequisite"
         assert_present "$meta" "restart bypassed the failed status-retirement gate"
@@ -2225,14 +2225,14 @@ SH
         : > "$home/state/.status-presentation-cursor"
         break_meta_removal "$case_dir" "$meta"
         rc=0
-        out=$(FM_TRACE_EXPORT=$export run_teardown "$case_dir" "$id") || rc=$?
+        out=$(FM_TRACE_EXPORT=$trace_export run_teardown "$case_dir" "$id") || rc=$?
         [ "$rc" -ne 0 ] || fail "teardown concealed failed metadata removal"
         assert_present "$meta" "failed metadata removal discarded the task"
         assert_equals "$outcome" "$(sed -n 's/^trace_outcome=//p' "$meta")" \
           "failed teardown lost its terminal outcome"
         assert_absent "$home/state/$id.status" "repaired cursor did not allow status retirement"
 
-        out=$(FM_TRACE_EXPORT=$export run_bootstrap "$case_dir")
+        out=$(FM_TRACE_EXPORT=$trace_export run_bootstrap "$case_dir")
         assert_contains "$out" "the interrupted task record could not be removed" \
           "restart did not report failed metadata removal"
         assert_present "$meta" "restart lost metadata after failed removal"
@@ -2244,15 +2244,15 @@ SH
         assert_absent "$capture" "failed metadata removal exported a terminal root"
 
         rm -f "$case_dir/fakebin/rm"
-        out=$(FM_TRACE_EXPORT=$export run_teardown "$case_dir" "$id") \
+        out=$(FM_TRACE_EXPORT=$trace_export run_teardown "$case_dir" "$id") \
           || fail "cleanup was not retryable after restart: $out"
         assert_absent "$meta" "successful retry retained metadata"
         assert_absent "$marker" "successful retry retained its pending $mode"
         [ "$(row_state "$case_dir" "$id")" = "$expected_state" ] \
           || fail "successful retry did not apply the $mode transition"
-        if [ "$export" = on ]; then
+        if [ "$trace_export" = on ]; then
           jq -se --arg outcome "$outcome" --arg id "$id" \
-            --argjson code "$([ "$outcome" = done ] && printf 1 || printf 2)" '
+            --argjson code "$([ "$outcome" = 'done' ] && printf 1 || printf 2)" '
               length == 1 and
               (.[0].resourceSpans[0] as $resource |
                 $resource.scopeSpans[0].spans[0] as $span |

@@ -1,0 +1,1 @@
+18805 18675 curl -q --globoff -sS --max-time 1 -o /dev/null -H Content-Type: application/json -H @/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M48SHPA9FD7YQ9F7T8E0CW9B/.tmp-otel-validation/header --data-binary @- http://127.0.0.1:64600/v1/traces

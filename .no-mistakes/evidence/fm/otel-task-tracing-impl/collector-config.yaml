@@ -1,0 +1,56 @@
+extensions:
+  bearertokenauth:
+    filename: "/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M48SHPA9FD7YQ9F7T8E0CW9B/.tmp-otel-validation/collector-token"
+  health_check:
+    endpoint: 127.0.0.1:64589
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 127.0.0.1:64586
+        auth:
+          authenticator: bearertokenauth
+  otlp/reject:
+    protocols:
+      http:
+        endpoint: 127.0.0.1:64587
+        auth:
+          authenticator: bearertokenauth
+processors:
+  filter/reject:
+    error_mode: propagate
+    traces:
+      span:
+        - 'Int(name) > 0'
+connectors:
+  span_metrics:
+    namespace: fleet
+    metrics_flush_interval: 100ms
+    histogram:
+      unit: ms
+    dimensions:
+      - name: firstmate.project
+      - name: firstmate.task.kind
+    resource_metrics_key_attributes: [service.name]
+    exclude_dimensions: [collector.instance.id]
+exporters:
+  file:
+    path: "/Users/jarad/.no-mistakes/evidence/01M48SHPA9FD7YQ9F7T8E0CW9B/collector-spans.jsonl"
+  prometheus:
+    endpoint: 127.0.0.1:64588
+service:
+  extensions: [bearertokenauth, health_check]
+  telemetry:
+    metrics:
+      level: none
+  pipelines:
+    traces:
+      receivers: [otlp]
+      exporters: [file, span_metrics]
+    traces/reject:
+      receivers: [otlp/reject]
+      processors: [filter/reject]
+      exporters: [file]
+    metrics:
+      receivers: [span_metrics]
+      exporters: [prometheus]

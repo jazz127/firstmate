@@ -1,0 +1,43 @@
+2026-10-07T00:35:27.798+1000	info	service/telemetry.go:76	Skipping telemetry setup.	{"address": ":8888", "level": "None"}
+2026-10-07T00:35:27.798+1000	info	exporter@v0.85.0/exporter.go:275	Development component. May change in the future.	{"kind": "exporter", "data_type": "traces", "name": "logging"}
+2026-10-07T00:35:27.799+1000	info	service/service.go:138	Starting otelcol-contrib...	{"Version": "0.85.0", "NumCPU": 15}
+2026-10-07T00:35:27.799+1000	info	extensions/extensions.go:31	Starting extensions...
+2026-10-07T00:35:27.800+1000	info	otlpreceiver@v0.85.0/otlp.go:101	Starting HTTP server	{"kind": "receiver", "name": "otlp", "data_type": "traces", "endpoint": "127.0.0.1:64635"}
+2026-10-07T00:35:27.800+1000	info	service/service.go:161	Everything is ready. Begin running and processing data.
+2026-10-07T00:35:27.910+1000	error	filterprocessor@v0.85.0/traces.go:112	failed processing traces	{"kind": "processor", "name": "filter/reject", "pipeline": "traces", "error": "failed to eval statement: drop() where Substring(name, 999, 1) != \"\", invalid range for substring function, 1000 cannot be greater than the length of target string(32)"}
+github.com/open-telemetry/opentelemetry-collector-contrib/processor/filterprocessor.(*filterSpanProcessor).processTraces
+	github.com/open-telemetry/opentelemetry-collector-contrib/processor/filterprocessor@v0.85.0/traces.go:112
+go.opentelemetry.io/collector/processor/processorhelper.NewTracesProcessor.func1
+	go.opentelemetry.io/collector/processor@v0.85.0/processorhelper/traces.go:52
+go.opentelemetry.io/collector/consumer.ConsumeTracesFunc.ConsumeTraces
+	go.opentelemetry.io/collector/consumer@v0.85.0/traces.go:25
+go.opentelemetry.io/collector/consumer.ConsumeTracesFunc.ConsumeTraces
+	go.opentelemetry.io/collector/consumer@v0.85.0/traces.go:25
+go.opentelemetry.io/collector/receiver/otlpreceiver/internal/trace.(*Receiver).Export
+	go.opentelemetry.io/collector/receiver/otlpreceiver@v0.85.0/internal/trace/otlp.go:41
+go.opentelemetry.io/collector/receiver/otlpreceiver.handleTraces
+	go.opentelemetry.io/collector/receiver/otlpreceiver@v0.85.0/otlphttp.go:37
+go.opentelemetry.io/collector/receiver/otlpreceiver.(*otlpReceiver).registerTraceConsumer.func1
+	go.opentelemetry.io/collector/receiver/otlpreceiver@v0.85.0/otlp.go:201
+net/http.HandlerFunc.ServeHTTP
+	net/http/server.go:2136
+net/http.(*ServeMux).ServeHTTP
+	net/http/server.go:2514
+go.opentelemetry.io/collector/config/confighttp.(*decompressor).ServeHTTP
+	go.opentelemetry.io/collector/config/confighttp@v0.85.0/compression.go:147
+go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp.(*middleware).serveHTTP
+	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp@v0.43.0/handler.go:217
+go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp.NewMiddleware.func1.1
+	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp@v0.43.0/handler.go:81
+net/http.HandlerFunc.ServeHTTP
+	net/http/server.go:2136
+go.opentelemetry.io/collector/config/confighttp.(*clientInfoHandler).ServeHTTP
+	go.opentelemetry.io/collector/config/confighttp@v0.85.0/clientinfohandler.go:28
+net/http.serverHandler.ServeHTTP
+	net/http/server.go:2938
+net/http.(*conn).serve
+	net/http/server.go:2009
+2026-10-07T00:35:30.356+1000	info	otelcol/collector.go:250	Received signal from OS	{"signal": "terminated"}
+2026-10-07T00:35:30.357+1000	info	service/service.go:170	Starting shutdown...
+2026-10-07T00:35:30.362+1000	info	extensions/extensions.go:45	Stopping extensions...
+2026-10-07T00:35:30.362+1000	info	service/service.go:184	Shutdown complete.

@@ -1,0 +1,23 @@
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 127.0.0.1:64635
+processors:
+  filter/reject:
+    error_mode: propagate
+    traces:
+      span:
+        - 'Substring(name, 999, 1) != ""'
+exporters:
+  logging:
+    verbosity: basic
+service:
+  telemetry:
+    metrics:
+      level: none
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [filter/reject]
+      exporters: [logging]

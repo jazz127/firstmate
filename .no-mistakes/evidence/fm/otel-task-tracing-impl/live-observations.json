@@ -1,0 +1,379 @@
+[
+  {
+    "case": "official collector running",
+    "version": "0.162.0",
+    "receiver": 64586,
+    "error_receiver": 64587,
+    "prometheus": 64588,
+    "transparent_tcp_tap": "http://127.0.0.1:64598/v1/traces",
+    "synthetic_responses": false
+  },
+  {
+    "case": "default off without configuration",
+    "caller_exit": 0,
+    "caller_stdout": "caller continued; shell options preserved",
+    "caller_stderr": "",
+    "elapsed_seconds": 0.066
+  },
+  {
+    "case": "default off without configuration observation",
+    "real_receiver_requests": 0
+  },
+  {
+    "case": "explicit disabled configuration",
+    "caller_exit": 0,
+    "caller_stdout": "caller continued; shell options preserved",
+    "caller_stderr": "",
+    "elapsed_seconds": 0.02
+  },
+  {
+    "case": "explicit disabled configuration observation",
+    "real_receiver_requests": 0
+  },
+  {
+    "case": "process off override",
+    "caller_exit": 0,
+    "caller_stdout": "caller continued; shell options preserved",
+    "caller_stderr": "",
+    "elapsed_seconds": 0.013
+  },
+  {
+    "case": "process off override observation",
+    "real_receiver_requests": 0
+  },
+  {
+    "case": "root \"quoted\" \\ slash\ncontrol\u0001 café 日本語 🐟",
+    "caller_exit": 0,
+    "caller_stdout": "caller continued; shell options preserved",
+    "caller_stderr": "",
+    "elapsed_seconds": 0.071
+  },
+  {
+    "case": "child clamped duration",
+    "caller_exit": 0,
+    "caller_stdout": "caller continued; shell options preserved",
+    "caller_stderr": "",
+    "elapsed_seconds": 0.069
+  },
+  {
+    "case": "minimal metadata",
+    "caller_exit": 0,
+    "caller_stdout": "caller continued; shell options preserved",
+    "caller_stderr": "",
+    "elapsed_seconds": 0.059
+  },
+  {
+    "case": "xtrace credential secrecy",
+    "caller_exit": 0,
+    "caller_stdout": "caller continued; shell options preserved",
+    "caller_stderr": "",
+    "elapsed_seconds": 0.071
+  },
+  {
+    "case": "wire and secret oracle",
+    "exact_w3c_identity": true,
+    "nanoseconds": true,
+    "negative_duration_zero": true,
+    "controls_and_unicode_preserved": true,
+    "project_basename_only": true,
+    "absent_metadata_omitted": true,
+    "token_absent_from_stdout_stderr_payload_and_dedicated_xtrace": true
+  },
+  {
+    "case": "concatenated enabled objects",
+    "caller_exit": 0,
+    "caller_stdout": "caller continued; shell options preserved",
+    "caller_stderr": "",
+    "elapsed_seconds": 0.019
+  },
+  {
+    "case": "concatenated enabled objects observation",
+    "real_receiver_requests": 0
+  },
+  {
+    "case": "malformed config",
+    "caller_exit": 0,
+    "caller_stdout": "caller continued; shell options preserved",
+    "caller_stderr": "",
+    "elapsed_seconds": 0.019
+  },
+  {
+    "case": "malformed config observation",
+    "real_receiver_requests": 0
+  },
+  {
+    "case": "empty config",
+    "caller_exit": 0,
+    "caller_stdout": "caller continued; shell options preserved",
+    "caller_stderr": "",
+    "elapsed_seconds": 0.02
+  },
+  {
+    "case": "empty config observation",
+    "real_receiver_requests": 0
+  },
+  {
+    "case": "array config",
+    "caller_exit": 0,
+    "caller_stdout": "caller continued; shell options preserved",
+    "caller_stderr": "",
+    "elapsed_seconds": 0.019
+  },
+  {
+    "case": "array config observation",
+    "real_receiver_requests": 0
+  },
+  {
+    "case": "null config",
+    "caller_exit": 0,
+    "caller_stdout": "caller continued; shell options preserved",
+    "caller_stderr": "",
+    "elapsed_seconds": 0.019
+  },
+  {
+    "case": "null config observation",
+    "real_receiver_requests": 0
+  },
+  {
+    "case": "invalid traceparent",
+    "caller_exit": 0,
+    "caller_stdout": "caller continued; shell options preserved",
+    "caller_stderr": "",
+    "elapsed_seconds": 0.025
+  },
+  {
+    "case": "invalid traceparent observation",
+    "real_receiver_requests": 0
+  },
+  {
+    "case": "zero trace identity",
+    "caller_exit": 0,
+    "caller_stdout": "caller continued; shell options preserved",
+    "caller_stderr": "",
+    "elapsed_seconds": 0.024
+  },
+  {
+    "case": "zero trace identity observation",
+    "real_receiver_requests": 0
+  },
+  {
+    "case": "missing metadata",
+    "caller_exit": 0,
+    "caller_stdout": "caller continued; shell options preserved",
+    "caller_stderr": "",
+    "elapsed_seconds": 0.023
+  },
+  {
+    "case": "missing metadata observation",
+    "real_receiver_requests": 0
+  },
+  {
+    "case": "stale session-bound state",
+    "caller_exit": 0,
+    "caller_stdout": "caller continued; shell options preserved",
+    "caller_stderr": "",
+    "elapsed_seconds": 0.021
+  },
+  {
+    "case": "stale session-bound state observation",
+    "real_receiver_requests": 0
+  },
+  {
+    "case": "invalid invocation ('--rot',)",
+    "caller_exit": 0,
+    "caller_stdout": "caller continued; shell options preserved",
+    "caller_stderr": "",
+    "elapsed_seconds": 0.013
+  },
+  {
+    "case": "invalid invocation ('--rot',) observation",
+    "real_receiver_requests": 0
+  },
+  {
+    "case": "invalid invocation ('--status',)",
+    "caller_exit": 0,
+    "caller_stdout": "caller continued; shell options preserved",
+    "caller_stderr": "",
+    "elapsed_seconds": 0.013
+  },
+  {
+    "case": "invalid invocation ('--status',) observation",
+    "real_receiver_requests": 0
+  },
+  {
+    "case": "invalid invocation ('--status', 'invalid')",
+    "caller_exit": 0,
+    "caller_stdout": "caller continued; shell options preserved",
+    "caller_stderr": "",
+    "elapsed_seconds": 0.013
+  },
+  {
+    "case": "invalid invocation ('--status', 'invalid') observation",
+    "real_receiver_requests": 0
+  },
+  {
+    "case": "invalid invocation ('detail=value', '--root')",
+    "caller_exit": 0,
+    "caller_stdout": "caller continued; shell options preserved",
+    "caller_stderr": "",
+    "elapsed_seconds": 0.013
+  },
+  {
+    "case": "invalid invocation ('detail=value', '--root') observation",
+    "real_receiver_requests": 0
+  },
+  {
+    "case": "non-private bearer header",
+    "caller_exit": 0,
+    "caller_stdout": "caller continued; shell options preserved",
+    "caller_stderr": "firstmate: trace export skipped: invalid private bearer header file",
+    "elapsed_seconds": 0.028
+  },
+  {
+    "case": "non-private bearer header observation",
+    "real_receiver_requests": 0
+  },
+  {
+    "case": "header extra bytes",
+    "caller_exit": 0,
+    "caller_stdout": "caller continued; shell options preserved",
+    "caller_stderr": "firstmate: trace export skipped: invalid private bearer header file",
+    "elapsed_seconds": 0.033
+  },
+  {
+    "case": "header extra bytes observation",
+    "real_receiver_requests": 0
+  },
+  {
+    "case": "state override keeps home collector",
+    "caller_exit": 0,
+    "caller_stdout": "caller continued; shell options preserved",
+    "caller_stderr": "",
+    "elapsed_seconds": 0.073
+  },
+  {
+    "case": "explicit config and state override",
+    "caller_exit": 0,
+    "caller_stdout": "caller continued; shell options preserved",
+    "caller_stderr": "",
+    "elapsed_seconds": 0.085
+  },
+  {
+    "case": "root override when home unset",
+    "caller_exit": 0,
+    "caller_stdout": "caller continued; shell options preserved",
+    "caller_stderr": "",
+    "elapsed_seconds": 0.097
+  },
+  {
+    "case": "metadata belonging to another home",
+    "caller_exit": 0,
+    "caller_stdout": "caller continued; shell options preserved",
+    "caller_stderr": "",
+    "elapsed_seconds": 0.023
+  },
+  {
+    "case": "metadata belonging to another home observation",
+    "real_receiver_requests": 0
+  },
+  {
+    "case": "state override refuses old home metadata",
+    "caller_exit": 0,
+    "caller_stdout": "caller continued; shell options preserved",
+    "caller_stderr": "",
+    "elapsed_seconds": 0.016
+  },
+  {
+    "case": "state override refuses old home metadata observation",
+    "real_receiver_requests": 0
+  },
+  {
+    "case": "unset home with explicit config and state",
+    "caller_exit": 0,
+    "caller_stdout": "caller continued; shell options preserved",
+    "caller_stderr": "",
+    "elapsed_seconds": 0.064
+  },
+  {
+    "case": "default configuration from library code home",
+    "caller_exit": 0,
+    "caller_stdout": "caller continued; shell options preserved",
+    "caller_stderr": "",
+    "elapsed_seconds": 0.067
+  },
+  {
+    "case": "state override retains default code-home collector",
+    "caller_exit": 0,
+    "caller_stdout": "caller continued; shell options preserved",
+    "caller_stderr": "",
+    "elapsed_seconds": 0.068
+  },
+  {
+    "case": "missing curl",
+    "caller_exit": 0,
+    "caller_stdout": "caller continued; shell options preserved",
+    "caller_stderr": "",
+    "elapsed_seconds": 0.057
+  },
+  {
+    "case": "missing curl observation",
+    "real_receiver_requests": 0
+  },
+  {
+    "case": "actual collector rejects wrong credential",
+    "caller_exit": 0,
+    "caller_stdout": "caller continued; shell options preserved",
+    "caller_stderr": "",
+    "elapsed_seconds": 0.065
+  },
+  {
+    "case": "actual collector pipeline fails",
+    "caller_exit": 0,
+    "caller_stdout": "caller continued; shell options preserved",
+    "caller_stderr": "",
+    "elapsed_seconds": 0.067
+  },
+  {
+    "case": "actual legacy collector HTTP 500",
+    "caller_exit": 0,
+    "caller_stdout": "caller continued; shell options preserved",
+    "caller_stderr": "",
+    "elapsed_seconds": 0.072
+  },
+  {
+    "case": "connection refused",
+    "caller_exit": 0,
+    "caller_stdout": "caller continued; shell options preserved",
+    "caller_stderr": "",
+    "elapsed_seconds": 0.085
+  },
+  {
+    "case": "delayed collector transport",
+    "caller_exit": 0,
+    "caller_stdout": "caller continued; shell options preserved",
+    "caller_stderr": "",
+    "elapsed_seconds": 1.219
+  },
+  {
+    "case": "failure oracle",
+    "actual_http_401": "HTTP/1.1 401 Unauthorized",
+    "actual_http_500": "HTTP/1.1 500 Internal Server Error",
+    "actual_http_503": "HTTP/1.1 503 Service Unavailable",
+    "http_500_collector_version": "0.85.0",
+    "delayed_request_later_accepted_by_real_collector": true,
+    "timeout_elapsed_seconds": 1.219,
+    "token_absent_from_actual_curl_argv": true
+  },
+  {
+    "case": "aggregate fleet metrics",
+    "real_prometheus_endpoint": "http://127.0.0.1:64588/metrics",
+    "project_dimension": "client-alpha",
+    "per_task_identity_dimension": false,
+    "spans_accepted": 11
+  },
+  {
+    "case": "complete",
+    "result": "pass",
+    "all_requests_forwarded_to_official_collector": true
+  }
+]

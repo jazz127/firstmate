@@ -1,0 +1,1078 @@
+[
+  {
+    "request_line": "POST /v1/traces HTTP/1.1",
+    "content_type": "application/json",
+    "bearer_header_present": true,
+    "bearer_header_matches_collector": true,
+    "body": {
+      "resourceSpans": [
+        {
+          "resource": {
+            "attributes": [
+              {
+                "key": "service.name",
+                "value": {
+                  "stringValue": "firstmate"
+                }
+              },
+              {
+                "key": "firstmate.task.id",
+                "value": {
+                  "stringValue": "lab-task"
+                }
+              },
+              {
+                "key": "firstmate.project",
+                "value": {
+                  "stringValue": "client-alpha"
+                }
+              },
+              {
+                "key": "firstmate.task.kind",
+                "value": {
+                  "stringValue": "ship"
+                }
+              },
+              {
+                "key": "firstmate.harness",
+                "value": {
+                  "stringValue": "codex"
+                }
+              },
+              {
+                "key": "firstmate.model",
+                "value": {
+                  "stringValue": "café 日本語 🐟"
+                }
+              },
+              {
+                "key": "firstmate.effort",
+                "value": {
+                  "stringValue": "high"
+                }
+              }
+            ]
+          },
+          "scopeSpans": [
+            {
+              "scope": {
+                "name": "firstmate"
+              },
+              "spans": [
+                {
+                  "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+                  "spanId": "00f067aa0ba902b7",
+                  "name": "root \"quoted\" \\ slash\ncontrol\u0001 café 日本語 🐟",
+                  "kind": 1,
+                  "startTimeUnixNano": "1000000000",
+                  "endTimeUnixNano": "2500000000",
+                  "attributes": [
+                    {
+                      "key": "detail",
+                      "value": {
+                        "stringValue": "quote\" \\ newline\n\u0002"
+                      }
+                    }
+                  ],
+                  "status": {
+                    "code": 1
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "delay_seconds": 0,
+    "actual_collector_response": "HTTP/1.1 200 OK"
+  },
+  {
+    "request_line": "POST /v1/traces HTTP/1.1",
+    "content_type": "application/json",
+    "bearer_header_present": true,
+    "bearer_header_matches_collector": true,
+    "body": {
+      "resourceSpans": [
+        {
+          "resource": {
+            "attributes": [
+              {
+                "key": "service.name",
+                "value": {
+                  "stringValue": "firstmate"
+                }
+              },
+              {
+                "key": "firstmate.task.id",
+                "value": {
+                  "stringValue": "lab-task"
+                }
+              },
+              {
+                "key": "firstmate.project",
+                "value": {
+                  "stringValue": "client-alpha"
+                }
+              },
+              {
+                "key": "firstmate.task.kind",
+                "value": {
+                  "stringValue": "ship"
+                }
+              },
+              {
+                "key": "firstmate.harness",
+                "value": {
+                  "stringValue": "codex"
+                }
+              },
+              {
+                "key": "firstmate.model",
+                "value": {
+                  "stringValue": "café 日本語 🐟"
+                }
+              },
+              {
+                "key": "firstmate.effort",
+                "value": {
+                  "stringValue": "high"
+                }
+              }
+            ]
+          },
+          "scopeSpans": [
+            {
+              "scope": {
+                "name": "firstmate"
+              },
+              "spans": [
+                {
+                  "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+                  "spanId": "2744e6c0cc4d8578",
+                  "parentSpanId": "00f067aa0ba902b7",
+                  "name": "child clamped duration",
+                  "kind": 1,
+                  "startTimeUnixNano": "9000000",
+                  "endTimeUnixNano": "9000000",
+                  "attributes": [],
+                  "status": {
+                    "code": 2
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "delay_seconds": 0,
+    "actual_collector_response": "HTTP/1.1 200 OK"
+  },
+  {
+    "request_line": "POST /v1/traces HTTP/1.1",
+    "content_type": "application/json",
+    "bearer_header_present": true,
+    "bearer_header_matches_collector": true,
+    "body": {
+      "resourceSpans": [
+        {
+          "resource": {
+            "attributes": [
+              {
+                "key": "service.name",
+                "value": {
+                  "stringValue": "firstmate"
+                }
+              },
+              {
+                "key": "firstmate.task.id",
+                "value": {
+                  "stringValue": "minimal"
+                }
+              }
+            ]
+          },
+          "scopeSpans": [
+            {
+              "scope": {
+                "name": "firstmate"
+              },
+              "spans": [
+                {
+                  "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+                  "spanId": "00f067aa0ba902b7",
+                  "name": "minimal metadata",
+                  "kind": 1,
+                  "startTimeUnixNano": "1000000000",
+                  "endTimeUnixNano": "2000000000",
+                  "attributes": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "delay_seconds": 0,
+    "actual_collector_response": "HTTP/1.1 200 OK"
+  },
+  {
+    "request_line": "POST /v1/traces HTTP/1.1",
+    "content_type": "application/json",
+    "bearer_header_present": true,
+    "bearer_header_matches_collector": true,
+    "body": {
+      "resourceSpans": [
+        {
+          "resource": {
+            "attributes": [
+              {
+                "key": "service.name",
+                "value": {
+                  "stringValue": "firstmate"
+                }
+              },
+              {
+                "key": "firstmate.task.id",
+                "value": {
+                  "stringValue": "lab-task"
+                }
+              },
+              {
+                "key": "firstmate.project",
+                "value": {
+                  "stringValue": "client-alpha"
+                }
+              },
+              {
+                "key": "firstmate.task.kind",
+                "value": {
+                  "stringValue": "ship"
+                }
+              },
+              {
+                "key": "firstmate.harness",
+                "value": {
+                  "stringValue": "codex"
+                }
+              },
+              {
+                "key": "firstmate.model",
+                "value": {
+                  "stringValue": "café 日本語 🐟"
+                }
+              },
+              {
+                "key": "firstmate.effort",
+                "value": {
+                  "stringValue": "high"
+                }
+              }
+            ]
+          },
+          "scopeSpans": [
+            {
+              "scope": {
+                "name": "firstmate"
+              },
+              "spans": [
+                {
+                  "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+                  "spanId": "00f067aa0ba902b7",
+                  "name": "xtrace credential secrecy",
+                  "kind": 1,
+                  "startTimeUnixNano": "1000000000",
+                  "endTimeUnixNano": "2500000000",
+                  "attributes": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "delay_seconds": 0,
+    "actual_collector_response": "HTTP/1.1 200 OK"
+  },
+  {
+    "request_line": "POST /v1/traces HTTP/1.1",
+    "content_type": "application/json",
+    "bearer_header_present": true,
+    "bearer_header_matches_collector": true,
+    "body": {
+      "resourceSpans": [
+        {
+          "resource": {
+            "attributes": [
+              {
+                "key": "service.name",
+                "value": {
+                  "stringValue": "firstmate"
+                }
+              },
+              {
+                "key": "firstmate.task.id",
+                "value": {
+                  "stringValue": "lab-task"
+                }
+              },
+              {
+                "key": "firstmate.project",
+                "value": {
+                  "stringValue": "client-alpha"
+                }
+              },
+              {
+                "key": "firstmate.task.kind",
+                "value": {
+                  "stringValue": "ship"
+                }
+              },
+              {
+                "key": "firstmate.harness",
+                "value": {
+                  "stringValue": "codex"
+                }
+              },
+              {
+                "key": "firstmate.model",
+                "value": {
+                  "stringValue": "café 日本語 🐟"
+                }
+              },
+              {
+                "key": "firstmate.effort",
+                "value": {
+                  "stringValue": "high"
+                }
+              }
+            ]
+          },
+          "scopeSpans": [
+            {
+              "scope": {
+                "name": "firstmate"
+              },
+              "spans": [
+                {
+                  "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+                  "spanId": "00f067aa0ba902b7",
+                  "name": "state override keeps home collector",
+                  "kind": 1,
+                  "startTimeUnixNano": "1000000000",
+                  "endTimeUnixNano": "2500000000",
+                  "attributes": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "delay_seconds": 0,
+    "actual_collector_response": "HTTP/1.1 200 OK"
+  },
+  {
+    "request_line": "POST /v1/traces HTTP/1.1",
+    "content_type": "application/json",
+    "bearer_header_present": true,
+    "bearer_header_matches_collector": true,
+    "body": {
+      "resourceSpans": [
+        {
+          "resource": {
+            "attributes": [
+              {
+                "key": "service.name",
+                "value": {
+                  "stringValue": "firstmate"
+                }
+              },
+              {
+                "key": "firstmate.task.id",
+                "value": {
+                  "stringValue": "lab-task"
+                }
+              },
+              {
+                "key": "firstmate.project",
+                "value": {
+                  "stringValue": "client-alpha"
+                }
+              },
+              {
+                "key": "firstmate.task.kind",
+                "value": {
+                  "stringValue": "ship"
+                }
+              },
+              {
+                "key": "firstmate.harness",
+                "value": {
+                  "stringValue": "codex"
+                }
+              },
+              {
+                "key": "firstmate.model",
+                "value": {
+                  "stringValue": "café 日本語 🐟"
+                }
+              },
+              {
+                "key": "firstmate.effort",
+                "value": {
+                  "stringValue": "high"
+                }
+              }
+            ]
+          },
+          "scopeSpans": [
+            {
+              "scope": {
+                "name": "firstmate"
+              },
+              "spans": [
+                {
+                  "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+                  "spanId": "00f067aa0ba902b7",
+                  "name": "explicit config and state override",
+                  "kind": 1,
+                  "startTimeUnixNano": "1000000000",
+                  "endTimeUnixNano": "2500000000",
+                  "attributes": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "delay_seconds": 0,
+    "actual_collector_response": "HTTP/1.1 200 OK"
+  },
+  {
+    "request_line": "POST /v1/traces HTTP/1.1",
+    "content_type": "application/json",
+    "bearer_header_present": true,
+    "bearer_header_matches_collector": true,
+    "body": {
+      "resourceSpans": [
+        {
+          "resource": {
+            "attributes": [
+              {
+                "key": "service.name",
+                "value": {
+                  "stringValue": "firstmate"
+                }
+              },
+              {
+                "key": "firstmate.task.id",
+                "value": {
+                  "stringValue": "lab-task"
+                }
+              },
+              {
+                "key": "firstmate.project",
+                "value": {
+                  "stringValue": "client-alpha"
+                }
+              },
+              {
+                "key": "firstmate.task.kind",
+                "value": {
+                  "stringValue": "ship"
+                }
+              },
+              {
+                "key": "firstmate.harness",
+                "value": {
+                  "stringValue": "codex"
+                }
+              },
+              {
+                "key": "firstmate.model",
+                "value": {
+                  "stringValue": "café 日本語 🐟"
+                }
+              },
+              {
+                "key": "firstmate.effort",
+                "value": {
+                  "stringValue": "high"
+                }
+              }
+            ]
+          },
+          "scopeSpans": [
+            {
+              "scope": {
+                "name": "firstmate"
+              },
+              "spans": [
+                {
+                  "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+                  "spanId": "00f067aa0ba902b7",
+                  "name": "root override when home unset",
+                  "kind": 1,
+                  "startTimeUnixNano": "1000000000",
+                  "endTimeUnixNano": "2500000000",
+                  "attributes": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "delay_seconds": 0,
+    "actual_collector_response": "HTTP/1.1 200 OK"
+  },
+  {
+    "request_line": "POST /v1/traces HTTP/1.1",
+    "content_type": "application/json",
+    "bearer_header_present": true,
+    "bearer_header_matches_collector": true,
+    "body": {
+      "resourceSpans": [
+        {
+          "resource": {
+            "attributes": [
+              {
+                "key": "service.name",
+                "value": {
+                  "stringValue": "firstmate"
+                }
+              },
+              {
+                "key": "firstmate.task.id",
+                "value": {
+                  "stringValue": "lab-task"
+                }
+              },
+              {
+                "key": "firstmate.project",
+                "value": {
+                  "stringValue": "client-alpha"
+                }
+              },
+              {
+                "key": "firstmate.task.kind",
+                "value": {
+                  "stringValue": "ship"
+                }
+              },
+              {
+                "key": "firstmate.harness",
+                "value": {
+                  "stringValue": "codex"
+                }
+              },
+              {
+                "key": "firstmate.model",
+                "value": {
+                  "stringValue": "café 日本語 🐟"
+                }
+              },
+              {
+                "key": "firstmate.effort",
+                "value": {
+                  "stringValue": "high"
+                }
+              }
+            ]
+          },
+          "scopeSpans": [
+            {
+              "scope": {
+                "name": "firstmate"
+              },
+              "spans": [
+                {
+                  "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+                  "spanId": "00f067aa0ba902b7",
+                  "name": "unset home with explicit config and state",
+                  "kind": 1,
+                  "startTimeUnixNano": "1000000000",
+                  "endTimeUnixNano": "2500000000",
+                  "attributes": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "delay_seconds": 0,
+    "actual_collector_response": "HTTP/1.1 200 OK"
+  },
+  {
+    "request_line": "POST /v1/traces HTTP/1.1",
+    "content_type": "application/json",
+    "bearer_header_present": true,
+    "bearer_header_matches_collector": true,
+    "body": {
+      "resourceSpans": [
+        {
+          "resource": {
+            "attributes": [
+              {
+                "key": "service.name",
+                "value": {
+                  "stringValue": "firstmate"
+                }
+              },
+              {
+                "key": "firstmate.task.id",
+                "value": {
+                  "stringValue": "lab-task"
+                }
+              },
+              {
+                "key": "firstmate.project",
+                "value": {
+                  "stringValue": "client-alpha"
+                }
+              },
+              {
+                "key": "firstmate.task.kind",
+                "value": {
+                  "stringValue": "ship"
+                }
+              },
+              {
+                "key": "firstmate.harness",
+                "value": {
+                  "stringValue": "codex"
+                }
+              },
+              {
+                "key": "firstmate.model",
+                "value": {
+                  "stringValue": "café 日本語 🐟"
+                }
+              },
+              {
+                "key": "firstmate.effort",
+                "value": {
+                  "stringValue": "high"
+                }
+              }
+            ]
+          },
+          "scopeSpans": [
+            {
+              "scope": {
+                "name": "firstmate"
+              },
+              "spans": [
+                {
+                  "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+                  "spanId": "00f067aa0ba902b7",
+                  "name": "default configuration from library code home",
+                  "kind": 1,
+                  "startTimeUnixNano": "1000000000",
+                  "endTimeUnixNano": "2500000000",
+                  "attributes": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "delay_seconds": 0,
+    "actual_collector_response": "HTTP/1.1 200 OK"
+  },
+  {
+    "request_line": "POST /v1/traces HTTP/1.1",
+    "content_type": "application/json",
+    "bearer_header_present": true,
+    "bearer_header_matches_collector": true,
+    "body": {
+      "resourceSpans": [
+        {
+          "resource": {
+            "attributes": [
+              {
+                "key": "service.name",
+                "value": {
+                  "stringValue": "firstmate"
+                }
+              },
+              {
+                "key": "firstmate.task.id",
+                "value": {
+                  "stringValue": "lab-task"
+                }
+              },
+              {
+                "key": "firstmate.project",
+                "value": {
+                  "stringValue": "client-alpha"
+                }
+              },
+              {
+                "key": "firstmate.task.kind",
+                "value": {
+                  "stringValue": "ship"
+                }
+              },
+              {
+                "key": "firstmate.harness",
+                "value": {
+                  "stringValue": "codex"
+                }
+              },
+              {
+                "key": "firstmate.model",
+                "value": {
+                  "stringValue": "café 日本語 🐟"
+                }
+              },
+              {
+                "key": "firstmate.effort",
+                "value": {
+                  "stringValue": "high"
+                }
+              }
+            ]
+          },
+          "scopeSpans": [
+            {
+              "scope": {
+                "name": "firstmate"
+              },
+              "spans": [
+                {
+                  "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+                  "spanId": "00f067aa0ba902b7",
+                  "name": "state override retains default code-home collector",
+                  "kind": 1,
+                  "startTimeUnixNano": "1000000000",
+                  "endTimeUnixNano": "2500000000",
+                  "attributes": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "delay_seconds": 0,
+    "actual_collector_response": "HTTP/1.1 200 OK"
+  },
+  {
+    "request_line": "POST /v1/traces HTTP/1.1",
+    "content_type": "application/json",
+    "bearer_header_present": true,
+    "bearer_header_matches_collector": false,
+    "body": {
+      "resourceSpans": [
+        {
+          "resource": {
+            "attributes": [
+              {
+                "key": "service.name",
+                "value": {
+                  "stringValue": "firstmate"
+                }
+              },
+              {
+                "key": "firstmate.task.id",
+                "value": {
+                  "stringValue": "lab-task"
+                }
+              },
+              {
+                "key": "firstmate.project",
+                "value": {
+                  "stringValue": "client-alpha"
+                }
+              },
+              {
+                "key": "firstmate.task.kind",
+                "value": {
+                  "stringValue": "ship"
+                }
+              },
+              {
+                "key": "firstmate.harness",
+                "value": {
+                  "stringValue": "codex"
+                }
+              },
+              {
+                "key": "firstmate.model",
+                "value": {
+                  "stringValue": "café 日本語 🐟"
+                }
+              },
+              {
+                "key": "firstmate.effort",
+                "value": {
+                  "stringValue": "high"
+                }
+              }
+            ]
+          },
+          "scopeSpans": [
+            {
+              "scope": {
+                "name": "firstmate"
+              },
+              "spans": [
+                {
+                  "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+                  "spanId": "00f067aa0ba902b7",
+                  "name": "actual collector rejects wrong credential",
+                  "kind": 1,
+                  "startTimeUnixNano": "1000000000",
+                  "endTimeUnixNano": "2500000000",
+                  "attributes": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "delay_seconds": 0,
+    "actual_collector_response": "HTTP/1.1 401 Unauthorized"
+  },
+  {
+    "request_line": "POST /v1/traces HTTP/1.1",
+    "content_type": "application/json",
+    "bearer_header_present": true,
+    "bearer_header_matches_collector": true,
+    "body": {
+      "resourceSpans": [
+        {
+          "resource": {
+            "attributes": [
+              {
+                "key": "service.name",
+                "value": {
+                  "stringValue": "firstmate"
+                }
+              },
+              {
+                "key": "firstmate.task.id",
+                "value": {
+                  "stringValue": "lab-task"
+                }
+              },
+              {
+                "key": "firstmate.project",
+                "value": {
+                  "stringValue": "client-alpha"
+                }
+              },
+              {
+                "key": "firstmate.task.kind",
+                "value": {
+                  "stringValue": "ship"
+                }
+              },
+              {
+                "key": "firstmate.harness",
+                "value": {
+                  "stringValue": "codex"
+                }
+              },
+              {
+                "key": "firstmate.model",
+                "value": {
+                  "stringValue": "café 日本語 🐟"
+                }
+              },
+              {
+                "key": "firstmate.effort",
+                "value": {
+                  "stringValue": "high"
+                }
+              }
+            ]
+          },
+          "scopeSpans": [
+            {
+              "scope": {
+                "name": "firstmate"
+              },
+              "spans": [
+                {
+                  "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+                  "spanId": "00f067aa0ba902b7",
+                  "name": "actual collector pipeline fails",
+                  "kind": 1,
+                  "startTimeUnixNano": "1000000000",
+                  "endTimeUnixNano": "2500000000",
+                  "attributes": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "delay_seconds": 0,
+    "actual_collector_response": "HTTP/1.1 503 Service Unavailable"
+  },
+  {
+    "request_line": "POST /v1/traces HTTP/1.1",
+    "content_type": "application/json",
+    "bearer_header_present": true,
+    "bearer_header_matches_collector": true,
+    "body": {
+      "resourceSpans": [
+        {
+          "resource": {
+            "attributes": [
+              {
+                "key": "service.name",
+                "value": {
+                  "stringValue": "firstmate"
+                }
+              },
+              {
+                "key": "firstmate.task.id",
+                "value": {
+                  "stringValue": "lab-task"
+                }
+              },
+              {
+                "key": "firstmate.project",
+                "value": {
+                  "stringValue": "client-alpha"
+                }
+              },
+              {
+                "key": "firstmate.task.kind",
+                "value": {
+                  "stringValue": "ship"
+                }
+              },
+              {
+                "key": "firstmate.harness",
+                "value": {
+                  "stringValue": "codex"
+                }
+              },
+              {
+                "key": "firstmate.model",
+                "value": {
+                  "stringValue": "café 日本語 🐟"
+                }
+              },
+              {
+                "key": "firstmate.effort",
+                "value": {
+                  "stringValue": "high"
+                }
+              }
+            ]
+          },
+          "scopeSpans": [
+            {
+              "scope": {
+                "name": "firstmate"
+              },
+              "spans": [
+                {
+                  "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+                  "spanId": "00f067aa0ba902b7",
+                  "name": "actual legacy collector HTTP 500",
+                  "kind": 1,
+                  "startTimeUnixNano": "1000000000",
+                  "endTimeUnixNano": "2500000000",
+                  "attributes": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "delay_seconds": 0,
+    "actual_collector_response": "HTTP/1.1 500 Internal Server Error"
+  },
+  {
+    "request_line": "POST /v1/traces HTTP/1.1",
+    "content_type": "application/json",
+    "bearer_header_present": true,
+    "bearer_header_matches_collector": true,
+    "body": {
+      "resourceSpans": [
+        {
+          "resource": {
+            "attributes": [
+              {
+                "key": "service.name",
+                "value": {
+                  "stringValue": "firstmate"
+                }
+              },
+              {
+                "key": "firstmate.task.id",
+                "value": {
+                  "stringValue": "lab-task"
+                }
+              },
+              {
+                "key": "firstmate.project",
+                "value": {
+                  "stringValue": "client-alpha"
+                }
+              },
+              {
+                "key": "firstmate.task.kind",
+                "value": {
+                  "stringValue": "ship"
+                }
+              },
+              {
+                "key": "firstmate.harness",
+                "value": {
+                  "stringValue": "codex"
+                }
+              },
+              {
+                "key": "firstmate.model",
+                "value": {
+                  "stringValue": "café 日本語 🐟"
+                }
+              },
+              {
+                "key": "firstmate.effort",
+                "value": {
+                  "stringValue": "high"
+                }
+              }
+            ]
+          },
+          "scopeSpans": [
+            {
+              "scope": {
+                "name": "firstmate"
+              },
+              "spans": [
+                {
+                  "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+                  "spanId": "00f067aa0ba902b7",
+                  "name": "delayed collector transport",
+                  "kind": 1,
+                  "startTimeUnixNano": "1000000000",
+                  "endTimeUnixNano": "2500000000",
+                  "attributes": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "delay_seconds": 2,
+    "actual_collector_response": "HTTP/1.1 200 OK"
+  }
+]

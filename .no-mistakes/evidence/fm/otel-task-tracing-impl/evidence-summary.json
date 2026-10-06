@@ -1,0 +1,34 @@
+{
+  "real_upstreams": [
+    "Official otelcol-contrib 0.162.0 authenticated OTLP/HTTP receiver and span_metrics connector",
+    "Official otelcol-contrib 0.85.0 with a failing OTTL processor for actual HTTP 500"
+  ],
+  "driver": "Public fm_trace_span_emit Bash interface, actual curl, transparent forwarding TCP observation tap",
+  "substitutes": [],
+  "real_upstream_responses": {
+    "HTTP/1.1 200 OK": 11,
+    "HTTP/1.1 401 Unauthorized": 1,
+    "HTTP/1.1 503 Service Unavailable": 1,
+    "HTTP/1.1 500 Internal Server Error": 1
+  },
+  "collector_decoded_spans": 11,
+  "timing": {
+    "case": "failure oracle",
+    "actual_http_401": "HTTP/1.1 401 Unauthorized",
+    "actual_http_500": "HTTP/1.1 500 Internal Server Error",
+    "actual_http_503": "HTTP/1.1 503 Service Unavailable",
+    "http_500_collector_version": "0.85.0",
+    "delayed_request_later_accepted_by_real_collector": true,
+    "timeout_elapsed_seconds": 1.219,
+    "token_absent_from_actual_curl_argv": true
+  },
+  "baseline": "bash tests/fm-trace-span-lib.test.sh passed against its synthetic HTTP server; foreign-owner fixture skipped because EUID is non-root",
+  "setup_repairs": "Selected an older real collector for HTTP 500 because current collectors emit 503; corrected the lab processor to trigger a runtime failure. No product changes.",
+  "oracles": [
+    "Published W3C traceparent test identity",
+    "OTLP/JSON protocol",
+    "Firstmate documented off, home resolution, caller preservation, private header and metadata contracts",
+    "Real collector decoded spans and Prometheus metrics"
+  ],
+  "teardown": "Both collector subprocesses and every TCP listener stopped by the driver; scratch binaries, headers and homes removed after evidence verification"
+}

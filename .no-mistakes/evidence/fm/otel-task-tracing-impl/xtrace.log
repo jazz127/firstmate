@@ -1,0 +1,1628 @@
++ shift 2
++ before=ehuxBc
++ fm_trace_span_emit /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M48SHPA9FD7YQ9F7T8E0CW9B/.tmp-otel-validation/home/state/task.meta 'xtrace credential secrecy' 1000 2500 --root
++ local restore_errexit=0
++ case $- in
++ restore_errexit=1
++ set +e
++ '[' 5 -ge 4 ']'
++ _fm_trace_span_emit_impl /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M48SHPA9FD7YQ9F7T8E0CW9B/.tmp-otel-validation/home/state/task.meta 'xtrace credential secrecy' 1000 2500 --root
++ local meta=/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M48SHPA9FD7YQ9F7T8E0CW9B/.tmp-otel-validation/home/state/task.meta 'name=xtrace credential secrecy' start_ms=1000 end_ms=2500 state_dir config_file config_values home_dir effective_state
++ shift 4
++ local root=0 status=unset pair
++ '[' 1 -gt 0 ']'
++ case $1 in
++ root=1
++ shift
++ '[' 0 -gt 0 ']'
++ '[' '' '!=' off ']'
++ state_dir=/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M48SHPA9FD7YQ9F7T8E0CW9B/.tmp-otel-validation/home/state
++ '[' /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M48SHPA9FD7YQ9F7T8E0CW9B/.tmp-otel-validation/home/state '!=' /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M48SHPA9FD7YQ9F7T8E0CW9B/.tmp-otel-validation/home/state/task.meta ']'
++ home_dir=/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M48SHPA9FD7YQ9F7T8E0CW9B/.tmp-otel-validation/home
++ effective_state=/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M48SHPA9FD7YQ9F7T8E0CW9B/.tmp-otel-validation/home/state
+++ CDPATH=
+++ cd -- /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M48SHPA9FD7YQ9F7T8E0CW9B/.tmp-otel-validation/home/state
+++ pwd -P
++ state_dir=/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M48SHPA9FD7YQ9F7T8E0CW9B/.tmp-otel-validation/home/state
+++ CDPATH=
+++ cd -- /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M48SHPA9FD7YQ9F7T8E0CW9B/.tmp-otel-validation/home/state
+++ pwd -P
++ effective_state=/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M48SHPA9FD7YQ9F7T8E0CW9B/.tmp-otel-validation/home/state
++ '[' /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M48SHPA9FD7YQ9F7T8E0CW9B/.tmp-otel-validation/home/state = /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M48SHPA9FD7YQ9F7T8E0CW9B/.tmp-otel-validation/home/state ']'
++ config_file=/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M48SHPA9FD7YQ9F7T8E0CW9B/.tmp-otel-validation/home/config/trace-export.json
+++ fm_trace_span_config /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M48SHPA9FD7YQ9F7T8E0CW9B/.tmp-otel-validation/home/config/trace-export.json
+++ local file=/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M48SHPA9FD7YQ9F7T8E0CW9B/.tmp-otel-validation/home/config/trace-export.json values
+++ command -v jq
+++ '[' -f /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M48SHPA9FD7YQ9F7T8E0CW9B/.tmp-otel-validation/home/config/trace-export.json ']'
++++ jq -ser $'\n    if length == 1 then .[0] else error("invalid trace export config") end\n    |\n    if type == "object" and .enabled == true and (.endpoint | type == "string")\n      and (.endpoint | test("^https?://[^/?#@[:space:]]+(/[^?#[:space:]]*)?$"))\n      and (.endpoint | contains("\\u0000") | not)\n      and ((keys - ["enabled", "endpoint", "auth-header-file"]) | length == 0)\n      and (.["auth-header-file"] | type == "string" and length > 0 and startswith("/")\n        and (contains("\\u0000") | not) and (test("[\\\\t\\\\r\\\\n]") | not))\n    then .endpoint, .["auth-header-file"]\n    else error("invalid trace export config") end\n  ' /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M48SHPA9FD7YQ9F7T8E0CW9B/.tmp-otel-validation/home/config/trace-export.json
+++ values=$'http://127.0.0.1:64598/v1/traces\n/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M48SHPA9FD7YQ9F7T8E0CW9B/.tmp-otel-validation/header'
+++ printf '%s\n' $'http://127.0.0.1:64598/v1/traces\n/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M48SHPA9FD7YQ9F7T8E0CW9B/.tmp-otel-validation/header'
++ config_values=$'http://127.0.0.1:64598/v1/traces\n/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M48SHPA9FD7YQ9F7T8E0CW9B/.tmp-otel-validation/header'
+++ fm_trace_context_session_effective /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M48SHPA9FD7YQ9F7T8E0CW9B/.tmp-otel-validation/home/state/.trace-context-effective
+++ local effective_file=/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M48SHPA9FD7YQ9F7T8E0CW9B/.tmp-otel-validation/home/state/.trace-context-effective current_lock recorded_lock= value= extra=
++++ fm_trace_context_session_lock /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M48SHPA9FD7YQ9F7T8E0CW9B/.tmp-otel-validation/home/state/.trace-context-effective
++++ local effective_file=/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M48SHPA9FD7YQ9F7T8E0CW9B/.tmp-otel-validation/home/state/.trace-context-effective state_dir lock_pid
++++ state_dir=/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M48SHPA9FD7YQ9F7T8E0CW9B/.tmp-otel-validation/home/state
++++ '[' /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M48SHPA9FD7YQ9F7T8E0CW9B/.tmp-otel-validation/home/state = /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M48SHPA9FD7YQ9F7T8E0CW9B/.tmp-otel-validation/home/state/.trace-context-effective ']'
++++ IFS=
++++ read -r lock_pid
++++ case "$lock_pid" in
++++ '[' 13976 -gt 1 ']'
++++ printf %s 13976
+++ current_lock=13976
+++ '[' -f /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M48SHPA9FD7YQ9F7T8E0CW9B/.tmp-otel-validation/home/state/.trace-context-effective ']'
+++ '[' '!' -L /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M48SHPA9FD7YQ9F7T8E0CW9B/.tmp-otel-validation/home/state/.trace-context-effective ']'
+++ IFS=' '
+++ read -r recorded_lock value extra
+++ '[' 13976 = 13976 ']'
+++ '[' on = on ']'
+++ '[' -z '' ']'
+++ printf %s on
++ '[' on = on ']'
++ local carrier
+++ fm_trace_context_recorded /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M48SHPA9FD7YQ9F7T8E0CW9B/.tmp-otel-validation/home/state/task.meta
+++ local meta=/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M48SHPA9FD7YQ9F7T8E0CW9B/.tmp-otel-validation/home/state/task.meta line
+++ '[' -f /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M48SHPA9FD7YQ9F7T8E0CW9B/.tmp-otel-validation/home/state/task.meta ']'
++++ grep '^traceparent=' /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M48SHPA9FD7YQ9F7T8E0CW9B/.tmp-otel-validation/home/state/task.meta
++++ head -n1
+++ line=traceparent=00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01
+++ printf %s 00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01
++ carrier=00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01
++ fm_trace_context_valid 00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01
++ local tp=00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01
++ local 're=^00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$'
++ [[ 00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01 =~ ^00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$ ]]
++ '[' 4bf92f3577b34da6a3ce929d0e0e4736 = 00000000000000000000000000000000 ']'
++ '[' 00f067aa0ba902b7 = 0000000000000000 ']'
++ return 0
++ local endpoint auth_file
++ IFS=
++ read -r endpoint
++ IFS=
++ read -r auth_file
++ fm_trace_span_header_valid /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M48SHPA9FD7YQ9F7T8E0CW9B/.tmp-otel-validation/header
++ local file=/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M48SHPA9FD7YQ9F7T8E0CW9B/.tmp-otel-validation/header line= mode
++ '[' -f /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M48SHPA9FD7YQ9F7T8E0CW9B/.tmp-otel-validation/header ']'
++ '[' -r /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M48SHPA9FD7YQ9F7T8E0CW9B/.tmp-otel-validation/header ']'
++ '[' -O /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M48SHPA9FD7YQ9F7T8E0CW9B/.tmp-otel-validation/header ']'
+++ uname -s
++ '[' Darwin = Darwin ']'
+++ stat -L -f %Lp /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M48SHPA9FD7YQ9F7T8E0CW9B/.tmp-otel-validation/header
++ mode=600
++ case $mode in
++ '[' 0 -eq 0 ']'
++ local restore_xtrace=0 result=1 token
++ case $- in
++ restore_xtrace=1
++ set +x
++ return 0
++ case $start_ms in
++ case $end_ms in
++ start_ms=1000
++ end_ms=2500
++ '[' 2500 -ge 1000 ']'
++ local span_id parent_id=
++ '[' 1 = 1 ']'
++ span_id=00f067aa0ba902b7
++ local 'resource={"key":"service.name","value":{"stringValue":"firstmate"}}'
+++ fm_trace_span_resource_json /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M48SHPA9FD7YQ9F7T8E0CW9B/.tmp-otel-validation/home/state/task.meta
+++ local meta=/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M48SHPA9FD7YQ9F7T8E0CW9B/.tmp-otel-validation/home/state/task.meta kind v id key out=
+++ '[' -f /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M48SHPA9FD7YQ9F7T8E0CW9B/.tmp-otel-validation/home/state/task.meta ']'
++++ sed -n 's/^endpoint_task_id=//p' /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M48SHPA9FD7YQ9F7T8E0CW9B/.tmp-otel-validation/home/state/task.meta
++++ head -n 1
+++ id=lab-task
+++ '[' -n lab-task ']'
++++ fm_trace_span_attr_json firstmate.task.id=lab-task
++++ local pair=firstmate.task.id=lab-task k v
++++ case $pair in
++++ k=firstmate.task.id
++++ v=lab-task
++++ '[' -n firstmate.task.id ']'
+++++ fm_trace_span_json_escape firstmate.task.id
+++++ local s=firstmate.task.id out= i ch code
+++++ (( i = 0 ))
+++++ (( i < 17 ))
+++++ ch=f
+++++ case $ch in
+++++ printf -v code %d ''\''f'
+++++ '[' 102 -ge 0 ']'
+++++ '[' 102 -lt 32 ']'
+++++ out+=f
+++++ (( i++ ))
+++++ (( i < 17 ))
+++++ ch=i
+++++ case $ch in
+++++ printf -v code %d ''\''i'
+++++ '[' 105 -ge 0 ']'
+++++ '[' 105 -lt 32 ']'
+++++ out+=i
+++++ (( i++ ))
+++++ (( i < 17 ))
+++++ ch=r
+++++ case $ch in
+++++ printf -v code %d ''\''r'
+++++ '[' 114 -ge 0 ']'
+++++ '[' 114 -lt 32 ']'
+++++ out+=r
+++++ (( i++ ))
+++++ (( i < 17 ))
+++++ ch=s
+++++ case $ch in
+++++ printf -v code %d ''\''s'
+++++ '[' 115 -ge 0 ']'
+++++ '[' 115 -lt 32 ']'
+++++ out+=s
+++++ (( i++ ))
+++++ (( i < 17 ))
+++++ ch=t
+++++ case $ch in
+++++ printf -v code %d ''\''t'
+++++ '[' 116 -ge 0 ']'
+++++ '[' 116 -lt 32 ']'
+++++ out+=t
+++++ (( i++ ))
+++++ (( i < 17 ))
+++++ ch=m
+++++ case $ch in
+++++ printf -v code %d ''\''m'
+++++ '[' 109 -ge 0 ']'
+++++ '[' 109 -lt 32 ']'
+++++ out+=m
+++++ (( i++ ))
+++++ (( i < 17 ))
+++++ ch=a
+++++ case $ch in
+++++ printf -v code %d ''\''a'
+++++ '[' 97 -ge 0 ']'
+++++ '[' 97 -lt 32 ']'
+++++ out+=a
+++++ (( i++ ))
+++++ (( i < 17 ))
+++++ ch=t
+++++ case $ch in
+++++ printf -v code %d ''\''t'
+++++ '[' 116 -ge 0 ']'
+++++ '[' 116 -lt 32 ']'
+++++ out+=t
+++++ (( i++ ))
+++++ (( i < 17 ))
+++++ ch=e
+++++ case $ch in
+++++ printf -v code %d ''\''e'
+++++ '[' 101 -ge 0 ']'
+++++ '[' 101 -lt 32 ']'
+++++ out+=e
+++++ (( i++ ))
+++++ (( i < 17 ))
+++++ ch=.
+++++ case $ch in
+++++ printf -v code %d ''\''.'
+++++ '[' 46 -ge 0 ']'
+++++ '[' 46 -lt 32 ']'
+++++ out+=.
+++++ (( i++ ))
+++++ (( i < 17 ))
+++++ ch=t
+++++ case $ch in
+++++ printf -v code %d ''\''t'
+++++ '[' 116 -ge 0 ']'
+++++ '[' 116 -lt 32 ']'
+++++ out+=t
+++++ (( i++ ))
+++++ (( i < 17 ))
+++++ ch=a
+++++ case $ch in
+++++ printf -v code %d ''\''a'
+++++ '[' 97 -ge 0 ']'
+++++ '[' 97 -lt 32 ']'
+++++ out+=a
+++++ (( i++ ))
+++++ (( i < 17 ))
+++++ ch=s
+++++ case $ch in
+++++ printf -v code %d ''\''s'
+++++ '[' 115 -ge 0 ']'
+++++ '[' 115 -lt 32 ']'
+++++ out+=s
+++++ (( i++ ))
+++++ (( i < 17 ))
+++++ ch=k
+++++ case $ch in
+++++ printf -v code %d ''\''k'
+++++ '[' 107 -ge 0 ']'
+++++ '[' 107 -lt 32 ']'
+++++ out+=k
+++++ (( i++ ))
+++++ (( i < 17 ))
+++++ ch=.
+++++ case $ch in
+++++ printf -v code %d ''\''.'
+++++ '[' 46 -ge 0 ']'
+++++ '[' 46 -lt 32 ']'
+++++ out+=.
+++++ (( i++ ))
+++++ (( i < 17 ))
+++++ ch=i
+++++ case $ch in
+++++ printf -v code %d ''\''i'
+++++ '[' 105 -ge 0 ']'
+++++ '[' 105 -lt 32 ']'
+++++ out+=i
+++++ (( i++ ))
+++++ (( i < 17 ))
+++++ ch=d
+++++ case $ch in
+++++ printf -v code %d ''\''d'
+++++ '[' 100 -ge 0 ']'
+++++ '[' 100 -lt 32 ']'
+++++ out+=d
+++++ (( i++ ))
+++++ (( i < 17 ))
+++++ printf %s firstmate.task.id
+++++ fm_trace_span_json_escape lab-task
+++++ local s=lab-task out= i ch code
+++++ (( i = 0 ))
+++++ (( i < 8 ))
+++++ ch=l
+++++ case $ch in
+++++ printf -v code %d ''\''l'
+++++ '[' 108 -ge 0 ']'
+++++ '[' 108 -lt 32 ']'
+++++ out+=l
+++++ (( i++ ))
+++++ (( i < 8 ))
+++++ ch=a
+++++ case $ch in
+++++ printf -v code %d ''\''a'
+++++ '[' 97 -ge 0 ']'
+++++ '[' 97 -lt 32 ']'
+++++ out+=a
+++++ (( i++ ))
+++++ (( i < 8 ))
+++++ ch=b
+++++ case $ch in
+++++ printf -v code %d ''\''b'
+++++ '[' 98 -ge 0 ']'
+++++ '[' 98 -lt 32 ']'
+++++ out+=b
+++++ (( i++ ))
+++++ (( i < 8 ))
+++++ ch=-
+++++ case $ch in
+++++ printf -v code %d ''\''-'
+++++ '[' 45 -ge 0 ']'
+++++ '[' 45 -lt 32 ']'
+++++ out+=-
+++++ (( i++ ))
+++++ (( i < 8 ))
+++++ ch=t
+++++ case $ch in
+++++ printf -v code %d ''\''t'
+++++ '[' 116 -ge 0 ']'
+++++ '[' 116 -lt 32 ']'
+++++ out+=t
+++++ (( i++ ))
+++++ (( i < 8 ))
+++++ ch=a
+++++ case $ch in
+++++ printf -v code %d ''\''a'
+++++ '[' 97 -ge 0 ']'
+++++ '[' 97 -lt 32 ']'
+++++ out+=a
+++++ (( i++ ))
+++++ (( i < 8 ))
+++++ ch=s
+++++ case $ch in
+++++ printf -v code %d ''\''s'
+++++ '[' 115 -ge 0 ']'
+++++ '[' 115 -lt 32 ']'
+++++ out+=s
+++++ (( i++ ))
+++++ (( i < 8 ))
+++++ ch=k
+++++ case $ch in
+++++ printf -v code %d ''\''k'
+++++ '[' 107 -ge 0 ']'
+++++ '[' 107 -lt 32 ']'
+++++ out+=k
+++++ (( i++ ))
+++++ (( i < 8 ))
+++++ printf %s lab-task
++++ printf ',{"key":"%s","value":{"stringValue":"%s"}}' firstmate.task.id lab-task
+++ out=',{"key":"firstmate.task.id","value":{"stringValue":"lab-task"}}'
++++ sed -n 's/^project=//p' /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M48SHPA9FD7YQ9F7T8E0CW9B/.tmp-otel-validation/home/state/task.meta
++++ head -n 1
+++ v=/private/client-alpha
+++ '[' -n /private/client-alpha ']'
++++ basename /private/client-alpha
+++ v=client-alpha
+++ '[' client-alpha = / ']'
++++ fm_trace_span_attr_json firstmate.project=client-alpha
++++ local pair=firstmate.project=client-alpha k v
++++ case $pair in
++++ k=firstmate.project
++++ v=client-alpha
++++ '[' -n firstmate.project ']'
+++++ fm_trace_span_json_escape firstmate.project
+++++ local s=firstmate.project out= i ch code
+++++ (( i = 0 ))
+++++ (( i < 17 ))
+++++ ch=f
+++++ case $ch in
+++++ printf -v code %d ''\''f'
+++++ '[' 102 -ge 0 ']'
+++++ '[' 102 -lt 32 ']'
+++++ out+=f
+++++ (( i++ ))
+++++ (( i < 17 ))
+++++ ch=i
+++++ case $ch in
+++++ printf -v code %d ''\''i'
+++++ '[' 105 -ge 0 ']'
+++++ '[' 105 -lt 32 ']'
+++++ out+=i
+++++ (( i++ ))
+++++ (( i < 17 ))
+++++ ch=r
+++++ case $ch in
+++++ printf -v code %d ''\''r'
+++++ '[' 114 -ge 0 ']'
+++++ '[' 114 -lt 32 ']'
+++++ out+=r
+++++ (( i++ ))
+++++ (( i < 17 ))
+++++ ch=s
+++++ case $ch in
+++++ printf -v code %d ''\''s'
+++++ '[' 115 -ge 0 ']'
+++++ '[' 115 -lt 32 ']'
+++++ out+=s
+++++ (( i++ ))
+++++ (( i < 17 ))
+++++ ch=t
+++++ case $ch in
+++++ printf -v code %d ''\''t'
+++++ '[' 116 -ge 0 ']'
+++++ '[' 116 -lt 32 ']'
+++++ out+=t
+++++ (( i++ ))
+++++ (( i < 17 ))
+++++ ch=m
+++++ case $ch in
+++++ printf -v code %d ''\''m'
+++++ '[' 109 -ge 0 ']'
+++++ '[' 109 -lt 32 ']'
+++++ out+=m
+++++ (( i++ ))
+++++ (( i < 17 ))
+++++ ch=a
+++++ case $ch in
+++++ printf -v code %d ''\''a'
+++++ '[' 97 -ge 0 ']'
+++++ '[' 97 -lt 32 ']'
+++++ out+=a
+++++ (( i++ ))
+++++ (( i < 17 ))
+++++ ch=t
+++++ case $ch in
+++++ printf -v code %d ''\''t'
+++++ '[' 116 -ge 0 ']'
+++++ '[' 116 -lt 32 ']'
+++++ out+=t
+++++ (( i++ ))
+++++ (( i < 17 ))
+++++ ch=e
+++++ case $ch in
+++++ printf -v code %d ''\''e'
+++++ '[' 101 -ge 0 ']'
+++++ '[' 101 -lt 32 ']'
+++++ out+=e
+++++ (( i++ ))
+++++ (( i < 17 ))
+++++ ch=.
+++++ case $ch in
+++++ printf -v code %d ''\''.'
+++++ '[' 46 -ge 0 ']'
+++++ '[' 46 -lt 32 ']'
+++++ out+=.
+++++ (( i++ ))
+++++ (( i < 17 ))
+++++ ch=p
+++++ case $ch in
+++++ printf -v code %d ''\''p'
+++++ '[' 112 -ge 0 ']'
+++++ '[' 112 -lt 32 ']'
+++++ out+=p
+++++ (( i++ ))
+++++ (( i < 17 ))
+++++ ch=r
+++++ case $ch in
+++++ printf -v code %d ''\''r'
+++++ '[' 114 -ge 0 ']'
+++++ '[' 114 -lt 32 ']'
+++++ out+=r
+++++ (( i++ ))
+++++ (( i < 17 ))
+++++ ch=o
+++++ case $ch in
+++++ printf -v code %d ''\''o'
+++++ '[' 111 -ge 0 ']'
+++++ '[' 111 -lt 32 ']'
+++++ out+=o
+++++ (( i++ ))
+++++ (( i < 17 ))
+++++ ch=j
+++++ case $ch in
+++++ printf -v code %d ''\''j'
+++++ '[' 106 -ge 0 ']'
+++++ '[' 106 -lt 32 ']'
+++++ out+=j
+++++ (( i++ ))
+++++ (( i < 17 ))
+++++ ch=e
+++++ case $ch in
+++++ printf -v code %d ''\''e'
+++++ '[' 101 -ge 0 ']'
+++++ '[' 101 -lt 32 ']'
+++++ out+=e
+++++ (( i++ ))
+++++ (( i < 17 ))
+++++ ch=c
+++++ case $ch in
+++++ printf -v code %d ''\''c'
+++++ '[' 99 -ge 0 ']'
+++++ '[' 99 -lt 32 ']'
+++++ out+=c
+++++ (( i++ ))
+++++ (( i < 17 ))
+++++ ch=t
+++++ case $ch in
+++++ printf -v code %d ''\''t'
+++++ '[' 116 -ge 0 ']'
+++++ '[' 116 -lt 32 ']'
+++++ out+=t
+++++ (( i++ ))
+++++ (( i < 17 ))
+++++ printf %s firstmate.project
+++++ fm_trace_span_json_escape client-alpha
+++++ local s=client-alpha out= i ch code
+++++ (( i = 0 ))
+++++ (( i < 12 ))
+++++ ch=c
+++++ case $ch in
+++++ printf -v code %d ''\''c'
+++++ '[' 99 -ge 0 ']'
+++++ '[' 99 -lt 32 ']'
+++++ out+=c
+++++ (( i++ ))
+++++ (( i < 12 ))
+++++ ch=l
+++++ case $ch in
+++++ printf -v code %d ''\''l'
+++++ '[' 108 -ge 0 ']'
+++++ '[' 108 -lt 32 ']'
+++++ out+=l
+++++ (( i++ ))
+++++ (( i < 12 ))
+++++ ch=i
+++++ case $ch in
+++++ printf -v code %d ''\''i'
+++++ '[' 105 -ge 0 ']'
+++++ '[' 105 -lt 32 ']'
+++++ out+=i
+++++ (( i++ ))
+++++ (( i < 12 ))
+++++ ch=e
+++++ case $ch in
+++++ printf -v code %d ''\''e'
+++++ '[' 101 -ge 0 ']'
+++++ '[' 101 -lt 32 ']'
+++++ out+=e
+++++ (( i++ ))
+++++ (( i < 12 ))
+++++ ch=n
+++++ case $ch in
+++++ printf -v code %d ''\''n'
+++++ '[' 110 -ge 0 ']'
+++++ '[' 110 -lt 32 ']'
+++++ out+=n
+++++ (( i++ ))
+++++ (( i < 12 ))
+++++ ch=t
+++++ case $ch in
+++++ printf -v code %d ''\''t'
+++++ '[' 116 -ge 0 ']'
+++++ '[' 116 -lt 32 ']'
+++++ out+=t
+++++ (( i++ ))
+++++ (( i < 12 ))
+++++ ch=-
+++++ case $ch in
+++++ printf -v code %d ''\''-'
+++++ '[' 45 -ge 0 ']'
+++++ '[' 45 -lt 32 ']'
+++++ out+=-
+++++ (( i++ ))
+++++ (( i < 12 ))
+++++ ch=a
+++++ case $ch in
+++++ printf -v code %d ''\''a'
+++++ '[' 97 -ge 0 ']'
+++++ '[' 97 -lt 32 ']'
+++++ out+=a
+++++ (( i++ ))
+++++ (( i < 12 ))
+++++ ch=l
+++++ case $ch in
+++++ printf -v code %d ''\''l'
+++++ '[' 108 -ge 0 ']'
+++++ '[' 108 -lt 32 ']'
+++++ out+=l
+++++ (( i++ ))
+++++ (( i < 12 ))
+++++ ch=p
+++++ case $ch in
+++++ printf -v code %d ''\''p'
+++++ '[' 112 -ge 0 ']'
+++++ '[' 112 -lt 32 ']'
+++++ out+=p
+++++ (( i++ ))
+++++ (( i < 12 ))
+++++ ch=h
+++++ case $ch in
+++++ printf -v code %d ''\''h'
+++++ '[' 104 -ge 0 ']'
+++++ '[' 104 -lt 32 ']'
+++++ out+=h
+++++ (( i++ ))
+++++ (( i < 12 ))
+++++ ch=a
+++++ case $ch in
+++++ printf -v code %d ''\''a'
+++++ '[' 97 -ge 0 ']'
+++++ '[' 97 -lt 32 ']'
+++++ out+=a
+++++ (( i++ ))
+++++ (( i < 12 ))
+++++ printf %s client-alpha
++++ printf ',{"key":"%s","value":{"stringValue":"%s"}}' firstmate.project client-alpha
+++ out+=',{"key":"firstmate.project","value":{"stringValue":"client-alpha"}}'
++++ sed -n 's/^kind=//p' /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M48SHPA9FD7YQ9F7T8E0CW9B/.tmp-otel-validation/home/state/task.meta
++++ head -n 1
+++ kind=ship
+++ '[' -z ship ']'
++++ fm_trace_span_attr_json firstmate.task.kind=ship
++++ local pair=firstmate.task.kind=ship k v
++++ case $pair in
++++ k=firstmate.task.kind
++++ v=ship
++++ '[' -n firstmate.task.kind ']'
+++++ fm_trace_span_json_escape firstmate.task.kind
+++++ local s=firstmate.task.kind out= i ch code
+++++ (( i = 0 ))
+++++ (( i < 19 ))
+++++ ch=f
+++++ case $ch in
+++++ printf -v code %d ''\''f'
+++++ '[' 102 -ge 0 ']'
+++++ '[' 102 -lt 32 ']'
+++++ out+=f
+++++ (( i++ ))
+++++ (( i < 19 ))
+++++ ch=i
+++++ case $ch in
+++++ printf -v code %d ''\''i'
+++++ '[' 105 -ge 0 ']'
+++++ '[' 105 -lt 32 ']'
+++++ out+=i
+++++ (( i++ ))
+++++ (( i < 19 ))
+++++ ch=r
+++++ case $ch in
+++++ printf -v code %d ''\''r'
+++++ '[' 114 -ge 0 ']'
+++++ '[' 114 -lt 32 ']'
+++++ out+=r
+++++ (( i++ ))
+++++ (( i < 19 ))
+++++ ch=s
+++++ case $ch in
+++++ printf -v code %d ''\''s'
+++++ '[' 115 -ge 0 ']'
+++++ '[' 115 -lt 32 ']'
+++++ out+=s
+++++ (( i++ ))
+++++ (( i < 19 ))
+++++ ch=t
+++++ case $ch in
+++++ printf -v code %d ''\''t'
+++++ '[' 116 -ge 0 ']'
+++++ '[' 116 -lt 32 ']'
+++++ out+=t
+++++ (( i++ ))
+++++ (( i < 19 ))
+++++ ch=m
+++++ case $ch in
+++++ printf -v code %d ''\''m'
+++++ '[' 109 -ge 0 ']'
+++++ '[' 109 -lt 32 ']'
+++++ out+=m
+++++ (( i++ ))
+++++ (( i < 19 ))
+++++ ch=a
+++++ case $ch in
+++++ printf -v code %d ''\''a'
+++++ '[' 97 -ge 0 ']'
+++++ '[' 97 -lt 32 ']'
+++++ out+=a
+++++ (( i++ ))
+++++ (( i < 19 ))
+++++ ch=t
+++++ case $ch in
+++++ printf -v code %d ''\''t'
+++++ '[' 116 -ge 0 ']'
+++++ '[' 116 -lt 32 ']'
+++++ out+=t
+++++ (( i++ ))
+++++ (( i < 19 ))
+++++ ch=e
+++++ case $ch in
+++++ printf -v code %d ''\''e'
+++++ '[' 101 -ge 0 ']'
+++++ '[' 101 -lt 32 ']'
+++++ out+=e
+++++ (( i++ ))
+++++ (( i < 19 ))
+++++ ch=.
+++++ case $ch in
+++++ printf -v code %d ''\''.'
+++++ '[' 46 -ge 0 ']'
+++++ '[' 46 -lt 32 ']'
+++++ out+=.
+++++ (( i++ ))
+++++ (( i < 19 ))
+++++ ch=t
+++++ case $ch in
+++++ printf -v code %d ''\''t'
+++++ '[' 116 -ge 0 ']'
+++++ '[' 116 -lt 32 ']'
+++++ out+=t
+++++ (( i++ ))
+++++ (( i < 19 ))
+++++ ch=a
+++++ case $ch in
+++++ printf -v code %d ''\''a'
+++++ '[' 97 -ge 0 ']'
+++++ '[' 97 -lt 32 ']'
+++++ out+=a
+++++ (( i++ ))
+++++ (( i < 19 ))
+++++ ch=s
+++++ case $ch in
+++++ printf -v code %d ''\''s'
+++++ '[' 115 -ge 0 ']'
+++++ '[' 115 -lt 32 ']'
+++++ out+=s
+++++ (( i++ ))
+++++ (( i < 19 ))
+++++ ch=k
+++++ case $ch in
+++++ printf -v code %d ''\''k'
+++++ '[' 107 -ge 0 ']'
+++++ '[' 107 -lt 32 ']'
+++++ out+=k
+++++ (( i++ ))
+++++ (( i < 19 ))
+++++ ch=.
+++++ case $ch in
+++++ printf -v code %d ''\''.'
+++++ '[' 46 -ge 0 ']'
+++++ '[' 46 -lt 32 ']'
+++++ out+=.
+++++ (( i++ ))
+++++ (( i < 19 ))
+++++ ch=k
+++++ case $ch in
+++++ printf -v code %d ''\''k'
+++++ '[' 107 -ge 0 ']'
+++++ '[' 107 -lt 32 ']'
+++++ out+=k
+++++ (( i++ ))
+++++ (( i < 19 ))
+++++ ch=i
+++++ case $ch in
+++++ printf -v code %d ''\''i'
+++++ '[' 105 -ge 0 ']'
+++++ '[' 105 -lt 32 ']'
+++++ out+=i
+++++ (( i++ ))
+++++ (( i < 19 ))
+++++ ch=n
+++++ case $ch in
+++++ printf -v code %d ''\''n'
+++++ '[' 110 -ge 0 ']'
+++++ '[' 110 -lt 32 ']'
+++++ out+=n
+++++ (( i++ ))
+++++ (( i < 19 ))
+++++ ch=d
+++++ case $ch in
+++++ printf -v code %d ''\''d'
+++++ '[' 100 -ge 0 ']'
+++++ '[' 100 -lt 32 ']'
+++++ out+=d
+++++ (( i++ ))
+++++ (( i < 19 ))
+++++ printf %s firstmate.task.kind
+++++ fm_trace_span_json_escape ship
+++++ local s=ship out= i ch code
+++++ (( i = 0 ))
+++++ (( i < 4 ))
+++++ ch=s
+++++ case $ch in
+++++ printf -v code %d ''\''s'
+++++ '[' 115 -ge 0 ']'
+++++ '[' 115 -lt 32 ']'
+++++ out+=s
+++++ (( i++ ))
+++++ (( i < 4 ))
+++++ ch=h
+++++ case $ch in
+++++ printf -v code %d ''\''h'
+++++ '[' 104 -ge 0 ']'
+++++ '[' 104 -lt 32 ']'
+++++ out+=h
+++++ (( i++ ))
+++++ (( i < 4 ))
+++++ ch=i
+++++ case $ch in
+++++ printf -v code %d ''\''i'
+++++ '[' 105 -ge 0 ']'
+++++ '[' 105 -lt 32 ']'
+++++ out+=i
+++++ (( i++ ))
+++++ (( i < 4 ))
+++++ ch=p
+++++ case $ch in
+++++ printf -v code %d ''\''p'
+++++ '[' 112 -ge 0 ']'
+++++ '[' 112 -lt 32 ']'
+++++ out+=p
+++++ (( i++ ))
+++++ (( i < 4 ))
+++++ printf %s ship
++++ printf ',{"key":"%s","value":{"stringValue":"%s"}}' firstmate.task.kind ship
+++ out+=',{"key":"firstmate.task.kind","value":{"stringValue":"ship"}}'
+++ for key in harness model effort
++++ sed -n 's/^harness=//p' /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M48SHPA9FD7YQ9F7T8E0CW9B/.tmp-otel-validation/home/state/task.meta
++++ head -n 1
+++ v=codex
+++ '[' -z codex ']'
++++ fm_trace_span_attr_json firstmate.harness=codex
++++ local pair=firstmate.harness=codex k v
++++ case $pair in
++++ k=firstmate.harness
++++ v=codex
++++ '[' -n firstmate.harness ']'
+++++ fm_trace_span_json_escape firstmate.harness
+++++ local s=firstmate.harness out= i ch code
+++++ (( i = 0 ))
+++++ (( i < 17 ))
+++++ ch=f
+++++ case $ch in
+++++ printf -v code %d ''\''f'
+++++ '[' 102 -ge 0 ']'
+++++ '[' 102 -lt 32 ']'
+++++ out+=f
+++++ (( i++ ))
+++++ (( i < 17 ))
+++++ ch=i
+++++ case $ch in
+++++ printf -v code %d ''\''i'
+++++ '[' 105 -ge 0 ']'
+++++ '[' 105 -lt 32 ']'
+++++ out+=i
+++++ (( i++ ))
+++++ (( i < 17 ))
+++++ ch=r
+++++ case $ch in
+++++ printf -v code %d ''\''r'
+++++ '[' 114 -ge 0 ']'
+++++ '[' 114 -lt 32 ']'
+++++ out+=r
+++++ (( i++ ))
+++++ (( i < 17 ))
+++++ ch=s
+++++ case $ch in
+++++ printf -v code %d ''\''s'
+++++ '[' 115 -ge 0 ']'
+++++ '[' 115 -lt 32 ']'
+++++ out+=s
+++++ (( i++ ))
+++++ (( i < 17 ))
+++++ ch=t
+++++ case $ch in
+++++ printf -v code %d ''\''t'
+++++ '[' 116 -ge 0 ']'
+++++ '[' 116 -lt 32 ']'
+++++ out+=t
+++++ (( i++ ))
+++++ (( i < 17 ))
+++++ ch=m
+++++ case $ch in
+++++ printf -v code %d ''\''m'
+++++ '[' 109 -ge 0 ']'
+++++ '[' 109 -lt 32 ']'
+++++ out+=m
+++++ (( i++ ))
+++++ (( i < 17 ))
+++++ ch=a
+++++ case $ch in
+++++ printf -v code %d ''\''a'
+++++ '[' 97 -ge 0 ']'
+++++ '[' 97 -lt 32 ']'
+++++ out+=a
+++++ (( i++ ))
+++++ (( i < 17 ))
+++++ ch=t
+++++ case $ch in
+++++ printf -v code %d ''\''t'
+++++ '[' 116 -ge 0 ']'
+++++ '[' 116 -lt 32 ']'
+++++ out+=t
+++++ (( i++ ))
+++++ (( i < 17 ))
+++++ ch=e
+++++ case $ch in
+++++ printf -v code %d ''\''e'
+++++ '[' 101 -ge 0 ']'
+++++ '[' 101 -lt 32 ']'
+++++ out+=e
+++++ (( i++ ))
+++++ (( i < 17 ))
+++++ ch=.
+++++ case $ch in
+++++ printf -v code %d ''\''.'
+++++ '[' 46 -ge 0 ']'
+++++ '[' 46 -lt 32 ']'
+++++ out+=.
+++++ (( i++ ))
+++++ (( i < 17 ))
+++++ ch=h
+++++ case $ch in
+++++ printf -v code %d ''\''h'
+++++ '[' 104 -ge 0 ']'
+++++ '[' 104 -lt 32 ']'
+++++ out+=h
+++++ (( i++ ))
+++++ (( i < 17 ))
+++++ ch=a
+++++ case $ch in
+++++ printf -v code %d ''\''a'
+++++ '[' 97 -ge 0 ']'
+++++ '[' 97 -lt 32 ']'
+++++ out+=a
+++++ (( i++ ))
+++++ (( i < 17 ))
+++++ ch=r
+++++ case $ch in
+++++ printf -v code %d ''\''r'
+++++ '[' 114 -ge 0 ']'
+++++ '[' 114 -lt 32 ']'
+++++ out+=r
+++++ (( i++ ))
+++++ (( i < 17 ))
+++++ ch=n
+++++ case $ch in
+++++ printf -v code %d ''\''n'
+++++ '[' 110 -ge 0 ']'
+++++ '[' 110 -lt 32 ']'
+++++ out+=n
+++++ (( i++ ))
+++++ (( i < 17 ))
+++++ ch=e
+++++ case $ch in
+++++ printf -v code %d ''\''e'
+++++ '[' 101 -ge 0 ']'
+++++ '[' 101 -lt 32 ']'
+++++ out+=e
+++++ (( i++ ))
+++++ (( i < 17 ))
+++++ ch=s
+++++ case $ch in
+++++ printf -v code %d ''\''s'
+++++ '[' 115 -ge 0 ']'
+++++ '[' 115 -lt 32 ']'
+++++ out+=s
+++++ (( i++ ))
+++++ (( i < 17 ))
+++++ ch=s
+++++ case $ch in
+++++ printf -v code %d ''\''s'
+++++ '[' 115 -ge 0 ']'
+++++ '[' 115 -lt 32 ']'
+++++ out+=s
+++++ (( i++ ))
+++++ (( i < 17 ))
+++++ printf %s firstmate.harness
+++++ fm_trace_span_json_escape codex
+++++ local s=codex out= i ch code
+++++ (( i = 0 ))
+++++ (( i < 5 ))
+++++ ch=c
+++++ case $ch in
+++++ printf -v code %d ''\''c'
+++++ '[' 99 -ge 0 ']'
+++++ '[' 99 -lt 32 ']'
+++++ out+=c
+++++ (( i++ ))
+++++ (( i < 5 ))
+++++ ch=o
+++++ case $ch in
+++++ printf -v code %d ''\''o'
+++++ '[' 111 -ge 0 ']'
+++++ '[' 111 -lt 32 ']'
+++++ out+=o
+++++ (( i++ ))
+++++ (( i < 5 ))
+++++ ch=d
+++++ case $ch in
+++++ printf -v code %d ''\''d'
+++++ '[' 100 -ge 0 ']'
+++++ '[' 100 -lt 32 ']'
+++++ out+=d
+++++ (( i++ ))
+++++ (( i < 5 ))
+++++ ch=e
+++++ case $ch in
+++++ printf -v code %d ''\''e'
+++++ '[' 101 -ge 0 ']'
+++++ '[' 101 -lt 32 ']'
+++++ out+=e
+++++ (( i++ ))
+++++ (( i < 5 ))
+++++ ch=x
+++++ case $ch in
+++++ printf -v code %d ''\''x'
+++++ '[' 120 -ge 0 ']'
+++++ '[' 120 -lt 32 ']'
+++++ out+=x
+++++ (( i++ ))
+++++ (( i < 5 ))
+++++ printf %s codex
++++ printf ',{"key":"%s","value":{"stringValue":"%s"}}' firstmate.harness codex
+++ out+=',{"key":"firstmate.harness","value":{"stringValue":"codex"}}'
+++ for key in harness model effort
++++ sed -n 's/^model=//p' /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M48SHPA9FD7YQ9F7T8E0CW9B/.tmp-otel-validation/home/state/task.meta
++++ head -n 1
+++ v='café 日本語 🐟'
+++ '[' -z 'café 日本語 🐟' ']'
++++ fm_trace_span_attr_json 'firstmate.model=café 日本語 🐟'
++++ local 'pair=firstmate.model=café 日本語 🐟' k v
++++ case $pair in
++++ k=firstmate.model
++++ v='café 日本語 🐟'
++++ '[' -n firstmate.model ']'
+++++ fm_trace_span_json_escape firstmate.model
+++++ local s=firstmate.model out= i ch code
+++++ (( i = 0 ))
+++++ (( i < 15 ))
+++++ ch=f
+++++ case $ch in
+++++ printf -v code %d ''\''f'
+++++ '[' 102 -ge 0 ']'
+++++ '[' 102 -lt 32 ']'
+++++ out+=f
+++++ (( i++ ))
+++++ (( i < 15 ))
+++++ ch=i
+++++ case $ch in
+++++ printf -v code %d ''\''i'
+++++ '[' 105 -ge 0 ']'
+++++ '[' 105 -lt 32 ']'
+++++ out+=i
+++++ (( i++ ))
+++++ (( i < 15 ))
+++++ ch=r
+++++ case $ch in
+++++ printf -v code %d ''\''r'
+++++ '[' 114 -ge 0 ']'
+++++ '[' 114 -lt 32 ']'
+++++ out+=r
+++++ (( i++ ))
+++++ (( i < 15 ))
+++++ ch=s
+++++ case $ch in
+++++ printf -v code %d ''\''s'
+++++ '[' 115 -ge 0 ']'
+++++ '[' 115 -lt 32 ']'
+++++ out+=s
+++++ (( i++ ))
+++++ (( i < 15 ))
+++++ ch=t
+++++ case $ch in
+++++ printf -v code %d ''\''t'
+++++ '[' 116 -ge 0 ']'
+++++ '[' 116 -lt 32 ']'
+++++ out+=t
+++++ (( i++ ))
+++++ (( i < 15 ))
+++++ ch=m
+++++ case $ch in
+++++ printf -v code %d ''\''m'
+++++ '[' 109 -ge 0 ']'
+++++ '[' 109 -lt 32 ']'
+++++ out+=m
+++++ (( i++ ))
+++++ (( i < 15 ))
+++++ ch=a
+++++ case $ch in
+++++ printf -v code %d ''\''a'
+++++ '[' 97 -ge 0 ']'
+++++ '[' 97 -lt 32 ']'
+++++ out+=a
+++++ (( i++ ))
+++++ (( i < 15 ))
+++++ ch=t
+++++ case $ch in
+++++ printf -v code %d ''\''t'
+++++ '[' 116 -ge 0 ']'
+++++ '[' 116 -lt 32 ']'
+++++ out+=t
+++++ (( i++ ))
+++++ (( i < 15 ))
+++++ ch=e
+++++ case $ch in
+++++ printf -v code %d ''\''e'
+++++ '[' 101 -ge 0 ']'
+++++ '[' 101 -lt 32 ']'
+++++ out+=e
+++++ (( i++ ))
+++++ (( i < 15 ))
+++++ ch=.
+++++ case $ch in
+++++ printf -v code %d ''\''.'
+++++ '[' 46 -ge 0 ']'
+++++ '[' 46 -lt 32 ']'
+++++ out+=.
+++++ (( i++ ))
+++++ (( i < 15 ))
+++++ ch=m
+++++ case $ch in
+++++ printf -v code %d ''\''m'
+++++ '[' 109 -ge 0 ']'
+++++ '[' 109 -lt 32 ']'
+++++ out+=m
+++++ (( i++ ))
+++++ (( i < 15 ))
+++++ ch=o
+++++ case $ch in
+++++ printf -v code %d ''\''o'
+++++ '[' 111 -ge 0 ']'
+++++ '[' 111 -lt 32 ']'
+++++ out+=o
+++++ (( i++ ))
+++++ (( i < 15 ))
+++++ ch=d
+++++ case $ch in
+++++ printf -v code %d ''\''d'
+++++ '[' 100 -ge 0 ']'
+++++ '[' 100 -lt 32 ']'
+++++ out+=d
+++++ (( i++ ))
+++++ (( i < 15 ))
+++++ ch=e
+++++ case $ch in
+++++ printf -v code %d ''\''e'
+++++ '[' 101 -ge 0 ']'
+++++ '[' 101 -lt 32 ']'
+++++ out+=e
+++++ (( i++ ))
+++++ (( i < 15 ))
+++++ ch=l
+++++ case $ch in
+++++ printf -v code %d ''\''l'
+++++ '[' 108 -ge 0 ']'
+++++ '[' 108 -lt 32 ']'
+++++ out+=l
+++++ (( i++ ))
+++++ (( i < 15 ))
+++++ printf %s firstmate.model
+++++ fm_trace_span_json_escape 'café 日本語 🐟'
+++++ local 's=café 日本語 🐟' out= i ch code
+++++ (( i = 0 ))
+++++ (( i < 10 ))
+++++ ch=c
+++++ case $ch in
+++++ printf -v code %d ''\''c'
+++++ '[' 99 -ge 0 ']'
+++++ '[' 99 -lt 32 ']'
+++++ out+=c
+++++ (( i++ ))
+++++ (( i < 10 ))
+++++ ch=a
+++++ case $ch in
+++++ printf -v code %d ''\''a'
+++++ '[' 97 -ge 0 ']'
+++++ '[' 97 -lt 32 ']'
+++++ out+=a
+++++ (( i++ ))
+++++ (( i < 10 ))
+++++ ch=f
+++++ case $ch in
+++++ printf -v code %d ''\''f'
+++++ '[' 102 -ge 0 ']'
+++++ '[' 102 -lt 32 ']'
+++++ out+=f
+++++ (( i++ ))
+++++ (( i < 10 ))
+++++ ch=é
+++++ case $ch in
+++++ printf -v code %d ''\''é'
+++++ '[' 233 -ge 0 ']'
+++++ '[' 233 -lt 32 ']'
+++++ out+=é
+++++ (( i++ ))
+++++ (( i < 10 ))
+++++ ch=' '
+++++ case $ch in
+++++ printf -v code %d ''\'' '
+++++ '[' 32 -ge 0 ']'
+++++ '[' 32 -lt 32 ']'
+++++ out+=' '
+++++ (( i++ ))
+++++ (( i < 10 ))
+++++ ch=日
+++++ case $ch in
+++++ printf -v code %d ''\''日'
+++++ '[' 26085 -ge 0 ']'
+++++ '[' 26085 -lt 32 ']'
+++++ out+=日
+++++ (( i++ ))
+++++ (( i < 10 ))
+++++ ch=本
+++++ case $ch in
+++++ printf -v code %d ''\''本'
+++++ '[' 26412 -ge 0 ']'
+++++ '[' 26412 -lt 32 ']'
+++++ out+=本
+++++ (( i++ ))
+++++ (( i < 10 ))
+++++ ch=語
+++++ case $ch in
+++++ printf -v code %d ''\''語'
+++++ '[' 35486 -ge 0 ']'
+++++ '[' 35486 -lt 32 ']'
+++++ out+=語
+++++ (( i++ ))
+++++ (( i < 10 ))
+++++ ch=' '
+++++ case $ch in
+++++ printf -v code %d ''\'' '
+++++ '[' 32 -ge 0 ']'
+++++ '[' 32 -lt 32 ']'
+++++ out+=' '
+++++ (( i++ ))
+++++ (( i < 10 ))
+++++ ch=🐟
+++++ case $ch in
+++++ printf -v code %d ''\''🐟'
+++++ '[' 128031 -ge 0 ']'
+++++ '[' 128031 -lt 32 ']'
+++++ out+=🐟
+++++ (( i++ ))
+++++ (( i < 10 ))
+++++ printf %s 'café 日本語 🐟'
++++ printf ',{"key":"%s","value":{"stringValue":"%s"}}' firstmate.model 'café 日本語 🐟'
+++ out+=',{"key":"firstmate.model","value":{"stringValue":"café 日本語 🐟"}}'
+++ for key in harness model effort
++++ sed -n 's/^effort=//p' /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M48SHPA9FD7YQ9F7T8E0CW9B/.tmp-otel-validation/home/state/task.meta
++++ head -n 1
+++ v=high
+++ '[' -z high ']'
++++ fm_trace_span_attr_json firstmate.effort=high
++++ local pair=firstmate.effort=high k v
++++ case $pair in
++++ k=firstmate.effort
++++ v=high
++++ '[' -n firstmate.effort ']'
+++++ fm_trace_span_json_escape firstmate.effort
+++++ local s=firstmate.effort out= i ch code
+++++ (( i = 0 ))
+++++ (( i < 16 ))
+++++ ch=f
+++++ case $ch in
+++++ printf -v code %d ''\''f'
+++++ '[' 102 -ge 0 ']'
+++++ '[' 102 -lt 32 ']'
+++++ out+=f
+++++ (( i++ ))
+++++ (( i < 16 ))
+++++ ch=i
+++++ case $ch in
+++++ printf -v code %d ''\''i'
+++++ '[' 105 -ge 0 ']'
+++++ '[' 105 -lt 32 ']'
+++++ out+=i
+++++ (( i++ ))
+++++ (( i < 16 ))
+++++ ch=r
+++++ case $ch in
+++++ printf -v code %d ''\''r'
+++++ '[' 114 -ge 0 ']'
+++++ '[' 114 -lt 32 ']'
+++++ out+=r
+++++ (( i++ ))
+++++ (( i < 16 ))
+++++ ch=s
+++++ case $ch in
+++++ printf -v code %d ''\''s'
+++++ '[' 115 -ge 0 ']'
+++++ '[' 115 -lt 32 ']'
+++++ out+=s
+++++ (( i++ ))
+++++ (( i < 16 ))
+++++ ch=t
+++++ case $ch in
+++++ printf -v code %d ''\''t'
+++++ '[' 116 -ge 0 ']'
+++++ '[' 116 -lt 32 ']'
+++++ out+=t
+++++ (( i++ ))
+++++ (( i < 16 ))
+++++ ch=m
+++++ case $ch in
+++++ printf -v code %d ''\''m'
+++++ '[' 109 -ge 0 ']'
+++++ '[' 109 -lt 32 ']'
+++++ out+=m
+++++ (( i++ ))
+++++ (( i < 16 ))
+++++ ch=a
+++++ case $ch in
+++++ printf -v code %d ''\''a'
+++++ '[' 97 -ge 0 ']'
+++++ '[' 97 -lt 32 ']'
+++++ out+=a
+++++ (( i++ ))
+++++ (( i < 16 ))
+++++ ch=t
+++++ case $ch in
+++++ printf -v code %d ''\''t'
+++++ '[' 116 -ge 0 ']'
+++++ '[' 116 -lt 32 ']'
+++++ out+=t
+++++ (( i++ ))
+++++ (( i < 16 ))
+++++ ch=e
+++++ case $ch in
+++++ printf -v code %d ''\''e'
+++++ '[' 101 -ge 0 ']'
+++++ '[' 101 -lt 32 ']'
+++++ out+=e
+++++ (( i++ ))
+++++ (( i < 16 ))
+++++ ch=.
+++++ case $ch in
+++++ printf -v code %d ''\''.'
+++++ '[' 46 -ge 0 ']'
+++++ '[' 46 -lt 32 ']'
+++++ out+=.
+++++ (( i++ ))
+++++ (( i < 16 ))
+++++ ch=e
+++++ case $ch in
+++++ printf -v code %d ''\''e'
+++++ '[' 101 -ge 0 ']'
+++++ '[' 101 -lt 32 ']'
+++++ out+=e
+++++ (( i++ ))
+++++ (( i < 16 ))
+++++ ch=f
+++++ case $ch in
+++++ printf -v code %d ''\''f'
+++++ '[' 102 -ge 0 ']'
+++++ '[' 102 -lt 32 ']'
+++++ out+=f
+++++ (( i++ ))
+++++ (( i < 16 ))
+++++ ch=f
+++++ case $ch in
+++++ printf -v code %d ''\''f'
+++++ '[' 102 -ge 0 ']'
+++++ '[' 102 -lt 32 ']'
+++++ out+=f
+++++ (( i++ ))
+++++ (( i < 16 ))
+++++ ch=o
+++++ case $ch in
+++++ printf -v code %d ''\''o'
+++++ '[' 111 -ge 0 ']'
+++++ '[' 111 -lt 32 ']'
+++++ out+=o
+++++ (( i++ ))
+++++ (( i < 16 ))
+++++ ch=r
+++++ case $ch in
+++++ printf -v code %d ''\''r'
+++++ '[' 114 -ge 0 ']'
+++++ '[' 114 -lt 32 ']'
+++++ out+=r
+++++ (( i++ ))
+++++ (( i < 16 ))
+++++ ch=t
+++++ case $ch in
+++++ printf -v code %d ''\''t'
+++++ '[' 116 -ge 0 ']'
+++++ '[' 116 -lt 32 ']'
+++++ out+=t
+++++ (( i++ ))
+++++ (( i < 16 ))
+++++ printf %s firstmate.effort
+++++ fm_trace_span_json_escape high
+++++ local s=high out= i ch code
+++++ (( i = 0 ))
+++++ (( i < 4 ))
+++++ ch=h
+++++ case $ch in
+++++ printf -v code %d ''\''h'
+++++ '[' 104 -ge 0 ']'
+++++ '[' 104 -lt 32 ']'
+++++ out+=h
+++++ (( i++ ))
+++++ (( i < 4 ))
+++++ ch=i
+++++ case $ch in
+++++ printf -v code %d ''\''i'
+++++ '[' 105 -ge 0 ']'
+++++ '[' 105 -lt 32 ']'
+++++ out+=i
+++++ (( i++ ))
+++++ (( i < 4 ))
+++++ ch=g
+++++ case $ch in
+++++ printf -v code %d ''\''g'
+++++ '[' 103 -ge 0 ']'
+++++ '[' 103 -lt 32 ']'
+++++ out+=g
+++++ (( i++ ))
+++++ (( i < 4 ))
+++++ ch=h
+++++ case $ch in
+++++ printf -v code %d ''\''h'
+++++ '[' 104 -ge 0 ']'
+++++ '[' 104 -lt 32 ']'
+++++ out+=h
+++++ (( i++ ))
+++++ (( i < 4 ))
+++++ printf %s high
++++ printf ',{"key":"%s","value":{"stringValue":"%s"}}' firstmate.effort high
+++ out+=',{"key":"firstmate.effort","value":{"stringValue":"high"}}'
+++ printf '%s\n' ',{"key":"firstmate.task.id","value":{"stringValue":"lab-task"}},{"key":"firstmate.project","value":{"stringValue":"client-alpha"}},{"key":"firstmate.task.kind","value":{"stringValue":"ship"}},{"key":"firstmate.harness","value":{"stringValue":"codex"}},{"key":"firstmate.model","value":{"stringValue":"café 日本語 🐟"}},{"key":"firstmate.effort","value":{"stringValue":"high"}}'
++ resource+=',{"key":"firstmate.task.id","value":{"stringValue":"lab-task"}},{"key":"firstmate.project","value":{"stringValue":"client-alpha"}},{"key":"firstmate.task.kind","value":{"stringValue":"ship"}},{"key":"firstmate.harness","value":{"stringValue":"codex"}},{"key":"firstmate.model","value":{"stringValue":"café 日本語 🐟"}},{"key":"firstmate.effort","value":{"stringValue":"high"}}'
++ local attrs=
++ local status_json=
++ case $status in
++ local 'span={"traceId":"4bf92f3577b34da6a3ce929d0e0e4736","spanId":"00f067aa0ba902b7",'
++ '[' -z '' ']'
+++ fm_trace_span_json_escape 'xtrace credential secrecy'
+++ local 's=xtrace credential secrecy' out= i ch code
+++ (( i = 0 ))
+++ (( i < 25 ))
+++ ch=x
+++ case $ch in
+++ printf -v code %d ''\''x'
+++ '[' 120 -ge 0 ']'
+++ '[' 120 -lt 32 ']'
+++ out+=x
+++ (( i++ ))
+++ (( i < 25 ))
+++ ch=t
+++ case $ch in
+++ printf -v code %d ''\''t'
+++ '[' 116 -ge 0 ']'
+++ '[' 116 -lt 32 ']'
+++ out+=t
+++ (( i++ ))
+++ (( i < 25 ))
+++ ch=r
+++ case $ch in
+++ printf -v code %d ''\''r'
+++ '[' 114 -ge 0 ']'
+++ '[' 114 -lt 32 ']'
+++ out+=r
+++ (( i++ ))
+++ (( i < 25 ))
+++ ch=a
+++ case $ch in
+++ printf -v code %d ''\''a'
+++ '[' 97 -ge 0 ']'
+++ '[' 97 -lt 32 ']'
+++ out+=a
+++ (( i++ ))
+++ (( i < 25 ))
+++ ch=c
+++ case $ch in
+++ printf -v code %d ''\''c'
+++ '[' 99 -ge 0 ']'
+++ '[' 99 -lt 32 ']'
+++ out+=c
+++ (( i++ ))
+++ (( i < 25 ))
+++ ch=e
+++ case $ch in
+++ printf -v code %d ''\''e'
+++ '[' 101 -ge 0 ']'
+++ '[' 101 -lt 32 ']'
+++ out+=e
+++ (( i++ ))
+++ (( i < 25 ))
+++ ch=' '
+++ case $ch in
+++ printf -v code %d ''\'' '
+++ '[' 32 -ge 0 ']'
+++ '[' 32 -lt 32 ']'
+++ out+=' '
+++ (( i++ ))
+++ (( i < 25 ))
+++ ch=c
+++ case $ch in
+++ printf -v code %d ''\''c'
+++ '[' 99 -ge 0 ']'
+++ '[' 99 -lt 32 ']'
+++ out+=c
+++ (( i++ ))
+++ (( i < 25 ))
+++ ch=r
+++ case $ch in
+++ printf -v code %d ''\''r'
+++ '[' 114 -ge 0 ']'
+++ '[' 114 -lt 32 ']'
+++ out+=r
+++ (( i++ ))
+++ (( i < 25 ))
+++ ch=e
+++ case $ch in
+++ printf -v code %d ''\''e'
+++ '[' 101 -ge 0 ']'
+++ '[' 101 -lt 32 ']'
+++ out+=e
+++ (( i++ ))
+++ (( i < 25 ))
+++ ch=d
+++ case $ch in
+++ printf -v code %d ''\''d'
+++ '[' 100 -ge 0 ']'
+++ '[' 100 -lt 32 ']'
+++ out+=d
+++ (( i++ ))
+++ (( i < 25 ))
+++ ch=e
+++ case $ch in
+++ printf -v code %d ''\''e'
+++ '[' 101 -ge 0 ']'
+++ '[' 101 -lt 32 ']'
+++ out+=e
+++ (( i++ ))
+++ (( i < 25 ))
+++ ch=n
+++ case $ch in
+++ printf -v code %d ''\''n'
+++ '[' 110 -ge 0 ']'
+++ '[' 110 -lt 32 ']'
+++ out+=n
+++ (( i++ ))
+++ (( i < 25 ))
+++ ch=t
+++ case $ch in
+++ printf -v code %d ''\''t'
+++ '[' 116 -ge 0 ']'
+++ '[' 116 -lt 32 ']'
+++ out+=t
+++ (( i++ ))
+++ (( i < 25 ))
+++ ch=i
+++ case $ch in
+++ printf -v code %d ''\''i'
+++ '[' 105 -ge 0 ']'
+++ '[' 105 -lt 32 ']'
+++ out+=i
+++ (( i++ ))
+++ (( i < 25 ))
+++ ch=a
+++ case $ch in
+++ printf -v code %d ''\''a'
+++ '[' 97 -ge 0 ']'
+++ '[' 97 -lt 32 ']'
+++ out+=a
+++ (( i++ ))
+++ (( i < 25 ))
+++ ch=l
+++ case $ch in
+++ printf -v code %d ''\''l'
+++ '[' 108 -ge 0 ']'
+++ '[' 108 -lt 32 ']'
+++ out+=l
+++ (( i++ ))
+++ (( i < 25 ))
+++ ch=' '
+++ case $ch in
+++ printf -v code %d ''\'' '
+++ '[' 32 -ge 0 ']'
+++ '[' 32 -lt 32 ']'
+++ out+=' '
+++ (( i++ ))
+++ (( i < 25 ))
+++ ch=s
+++ case $ch in
+++ printf -v code %d ''\''s'
+++ '[' 115 -ge 0 ']'
+++ '[' 115 -lt 32 ']'
+++ out+=s
+++ (( i++ ))
+++ (( i < 25 ))
+++ ch=e
+++ case $ch in
+++ printf -v code %d ''\''e'
+++ '[' 101 -ge 0 ']'
+++ '[' 101 -lt 32 ']'
+++ out+=e
+++ (( i++ ))
+++ (( i < 25 ))
+++ ch=c
+++ case $ch in
+++ printf -v code %d ''\''c'
+++ '[' 99 -ge 0 ']'
+++ '[' 99 -lt 32 ']'
+++ out+=c
+++ (( i++ ))
+++ (( i < 25 ))
+++ ch=r
+++ case $ch in
+++ printf -v code %d ''\''r'
+++ '[' 114 -ge 0 ']'
+++ '[' 114 -lt 32 ']'
+++ out+=r
+++ (( i++ ))
+++ (( i < 25 ))
+++ ch=e
+++ case $ch in
+++ printf -v code %d ''\''e'
+++ '[' 101 -ge 0 ']'
+++ '[' 101 -lt 32 ']'
+++ out+=e
+++ (( i++ ))
+++ (( i < 25 ))
+++ ch=c
+++ case $ch in
+++ printf -v code %d ''\''c'
+++ '[' 99 -ge 0 ']'
+++ '[' 99 -lt 32 ']'
+++ out+=c
+++ (( i++ ))
+++ (( i < 25 ))
+++ ch=y
+++ case $ch in
+++ printf -v code %d ''\''y'
+++ '[' 121 -ge 0 ']'
+++ '[' 121 -lt 32 ']'
+++ out+=y
+++ (( i++ ))
+++ (( i < 25 ))
+++ printf %s 'xtrace credential secrecy'
++ span+='"name":"xtrace credential secrecy","kind":1,'
++ span+='"startTimeUnixNano":"1000000000","endTimeUnixNano":"2500000000",'
++ span+='"attributes":[]'
++ span+='}'
++ command -v curl
++ local body
++ body='{"resourceSpans":[{"resource":{"attributes":[{"key":"service.name","value":{"stringValue":"firstmate"}},{"key":"firstmate.task.id","value":{"stringValue":"lab-task"}},{"key":"firstmate.project","value":{"stringValue":"client-alpha"}},{"key":"firstmate.task.kind","value":{"stringValue":"ship"}},{"key":"firstmate.harness","value":{"stringValue":"codex"}},{"key":"firstmate.model","value":{"stringValue":"café 日本語 🐟"}},{"key":"firstmate.effort","value":{"stringValue":"high"}}]},"scopeSpans":[{"scope":{"name":"firstmate"},"spans":[{"traceId":"4bf92f3577b34da6a3ce929d0e0e4736","spanId":"00f067aa0ba902b7","name":"xtrace credential secrecy","kind":1,"startTimeUnixNano":"1000000000","endTimeUnixNano":"2500000000","attributes":[]}]}]}]}'
++ printf %s '{"resourceSpans":[{"resource":{"attributes":[{"key":"service.name","value":{"stringValue":"firstmate"}},{"key":"firstmate.task.id","value":{"stringValue":"lab-task"}},{"key":"firstmate.project","value":{"stringValue":"client-alpha"}},{"key":"firstmate.task.kind","value":{"stringValue":"ship"}},{"key":"firstmate.harness","value":{"stringValue":"codex"}},{"key":"firstmate.model","value":{"stringValue":"café 日本語 🐟"}},{"key":"firstmate.effort","value":{"stringValue":"high"}}]},"scopeSpans":[{"scope":{"name":"firstmate"},"spans":[{"traceId":"4bf92f3577b34da6a3ce929d0e0e4736","spanId":"00f067aa0ba902b7","name":"xtrace credential secrecy","kind":1,"startTimeUnixNano":"1000000000","endTimeUnixNano":"2500000000","attributes":[]}]}]}]}'
++ curl -q --globoff -sS --max-time 1 -o /dev/null -H 'Content-Type: application/json' -H @/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M48SHPA9FD7YQ9F7T8E0CW9B/.tmp-otel-validation/header --data-binary @- http://127.0.0.1:64598/v1/traces
++ return 0
++ '[' 1 -eq 0 ']'
++ set -e
++ return 0
++ '[' ehuxBc = ehuxBc ']'
++ '[' . = . ']'
++ printf 'caller continued; shell options preserved\n'

@@ -1,13 +1,68 @@
-2026-10-07T00:02:23.141+1000	info	otelconftelemetry/metrics.go:29	Internal metrics telemetry disabled	{"resource": {"service.instance.id": "0cede3ff-fbc0-4369-8133-20fc3272b581", "service.name": "otelcol-contrib", "service.version": "0.162.0"}}
-2026-10-07T00:02:23.141+1000	info	otelconftelemetry/tracer.go:47	Internal trace telemetry disabled	{"resource": {"service.instance.id": "0cede3ff-fbc0-4369-8133-20fc3272b581", "service.name": "otelcol-contrib", "service.version": "0.162.0"}}
-2026-10-07T00:02:23.141+1000	info	service@v0.162.0/service.go:233	Starting otelcol-contrib...	{"resource": {"service.instance.id": "0cede3ff-fbc0-4369-8133-20fc3272b581", "service.name": "otelcol-contrib", "service.version": "0.162.0"}, "Version": "0.162.0", "NumCPU": 15}
-2026-10-07T00:02:23.141+1000	info	extensions/extensions.go:43	Starting extensions...	{"resource": {"service.instance.id": "0cede3ff-fbc0-4369-8133-20fc3272b581", "service.name": "otelcol-contrib", "service.version": "0.162.0"}}
-2026-10-07T00:02:23.141+1000	info	extensions/extensions.go:47	Extension is starting...	{"resource": {"service.instance.id": "0cede3ff-fbc0-4369-8133-20fc3272b581", "service.name": "otelcol-contrib", "service.version": "0.162.0"}, "otelcol.component.id": "bearertokenauth", "otelcol.component.kind": "extension"}
-2026-10-07T00:02:23.142+1000	info	extensions/extensions.go:65	Extension started.	{"resource": {"service.instance.id": "0cede3ff-fbc0-4369-8133-20fc3272b581", "service.name": "otelcol-contrib", "service.version": "0.162.0"}, "otelcol.component.id": "bearertokenauth", "otelcol.component.kind": "extension"}
-2026-10-07T00:02:23.142+1000	info	otlpreceiver@v0.162.0/otlp.go:175	Starting HTTP server	{"resource": {"service.instance.id": "0cede3ff-fbc0-4369-8133-20fc3272b581", "service.name": "otelcol-contrib", "service.version": "0.162.0"}, "otelcol.component.id": "otlp/alternate", "otelcol.component.kind": "receiver", "endpoint": "127.0.0.1:58178"}
-2026-10-07T00:02:23.142+1000	info	otlpreceiver@v0.162.0/otlp.go:175	Starting HTTP server	{"resource": {"service.instance.id": "0cede3ff-fbc0-4369-8133-20fc3272b581", "service.name": "otelcol-contrib", "service.version": "0.162.0"}, "otelcol.component.id": "otlp/main", "otelcol.component.kind": "receiver", "endpoint": "127.0.0.1:58177"}
-2026-10-07T00:02:23.142+1000	info	service@v0.162.0/service.go:256	Everything is ready. Begin running and processing data.	{"resource": {"service.instance.id": "0cede3ff-fbc0-4369-8133-20fc3272b581", "service.name": "otelcol-contrib", "service.version": "0.162.0"}}
-2026-10-07T00:02:37.191+1000	info	otelcol@v0.162.0/collector.go:476	Received signal from OS	{"resource": {"service.instance.id": "0cede3ff-fbc0-4369-8133-20fc3272b581", "service.name": "otelcol-contrib", "service.version": "0.162.0"}, "signal": "terminated"}
-2026-10-07T00:02:37.191+1000	info	service@v0.162.0/service.go:294	Starting shutdown...	{"resource": {"service.instance.id": "0cede3ff-fbc0-4369-8133-20fc3272b581", "service.name": "otelcol-contrib", "service.version": "0.162.0"}}
-2026-10-07T00:02:37.191+1000	info	extensions/extensions.go:72	Stopping extensions...	{"resource": {"service.instance.id": "0cede3ff-fbc0-4369-8133-20fc3272b581", "service.name": "otelcol-contrib", "service.version": "0.162.0"}}
-2026-10-07T00:02:37.191+1000	info	service@v0.162.0/service.go:308	Shutdown complete.	{"resource": {"service.instance.id": "0cede3ff-fbc0-4369-8133-20fc3272b581", "service.name": "otelcol-contrib", "service.version": "0.162.0"}}
+2026-10-07T00:35:25.964+1000	info	otelconftelemetry/metrics.go:29	Internal metrics telemetry disabled	{"resource": {"service.instance.id": "33bad165-0918-4d8d-b586-f4bce4917bd6", "service.name": "otelcol-contrib", "service.version": "0.162.0"}}
+2026-10-07T00:35:25.965+1000	info	otelconftelemetry/tracer.go:47	Internal trace telemetry disabled	{"resource": {"service.instance.id": "33bad165-0918-4d8d-b586-f4bce4917bd6", "service.name": "otelcol-contrib", "service.version": "0.162.0"}}
+2026-10-07T00:35:25.966+1000	info	spanmetricsconnector@v0.162.0/connector.go:135	Building spanmetrics connector	{"resource": {"service.instance.id": "33bad165-0918-4d8d-b586-f4bce4917bd6", "service.name": "otelcol-contrib", "service.version": "0.162.0"}, "otelcol.component.id": "span_metrics", "otelcol.component.kind": "connector", "otelcol.signal": "traces", "otelcol.signal.output": "metrics"}
+2026-10-07T00:35:25.967+1000	info	service@v0.162.0/service.go:233	Starting otelcol-contrib...	{"resource": {"service.instance.id": "33bad165-0918-4d8d-b586-f4bce4917bd6", "service.name": "otelcol-contrib", "service.version": "0.162.0"}, "Version": "0.162.0", "NumCPU": 15}
+2026-10-07T00:35:25.967+1000	info	extensions/extensions.go:43	Starting extensions...	{"resource": {"service.instance.id": "33bad165-0918-4d8d-b586-f4bce4917bd6", "service.name": "otelcol-contrib", "service.version": "0.162.0"}}
+2026-10-07T00:35:25.968+1000	info	extensions/extensions.go:47	Extension is starting...	{"resource": {"service.instance.id": "33bad165-0918-4d8d-b586-f4bce4917bd6", "service.name": "otelcol-contrib", "service.version": "0.162.0"}, "otelcol.component.id": "health_check", "otelcol.component.kind": "extension"}
+2026-10-07T00:35:25.968+1000	info	healthcheckextension@v0.162.0/healthcheckextension.go:32	Starting health_check extension	{"resource": {"service.instance.id": "33bad165-0918-4d8d-b586-f4bce4917bd6", "service.name": "otelcol-contrib", "service.version": "0.162.0"}, "otelcol.component.id": "health_check", "otelcol.component.kind": "extension", "config": {"Config":{"ServerConfig":{"NetAddr":{"DialerConfig":{"Timeout":0},"Endpoint":"127.0.0.1:64589","Transport":"tcp"},"TLS":{},"CORS":{},"Auth":{},"MaxRequestBodySize":0,"IncludeMetadata":false,"ResponseHeaders":null,"CompressionAlgorithms":null,"ReadTimeout":0,"ReadHeaderTimeout":60000000000,"WriteTimeout":30000000000,"Middlewares":null,"Keepalive":{},"IdleTimeout":0,"KeepAlivesEnabled":false},"Path":"/","ResponseBody":null,"CheckCollectorPipeline":{"Enabled":false,"Interval":"5m","ExporterFailureThreshold":5},"UseV2":false,"GRPCConfig":null,"HTTPConfig":null,"ComponentHealthConfig":null}}}
+2026-10-07T00:35:25.969+1000	info	extensions/extensions.go:65	Extension started.	{"resource": {"service.instance.id": "33bad165-0918-4d8d-b586-f4bce4917bd6", "service.name": "otelcol-contrib", "service.version": "0.162.0"}, "otelcol.component.id": "health_check", "otelcol.component.kind": "extension"}
+2026-10-07T00:35:25.969+1000	info	extensions/extensions.go:47	Extension is starting...	{"resource": {"service.instance.id": "33bad165-0918-4d8d-b586-f4bce4917bd6", "service.name": "otelcol-contrib", "service.version": "0.162.0"}, "otelcol.component.id": "bearertokenauth", "otelcol.component.kind": "extension"}
+2026-10-07T00:35:25.969+1000	info	extensions/extensions.go:65	Extension started.	{"resource": {"service.instance.id": "33bad165-0918-4d8d-b586-f4bce4917bd6", "service.name": "otelcol-contrib", "service.version": "0.162.0"}, "otelcol.component.id": "bearertokenauth", "otelcol.component.kind": "extension"}
+2026-10-07T00:35:25.970+1000	info	spanmetricsconnector@v0.162.0/connector.go:248	Starting spanmetrics connector	{"resource": {"service.instance.id": "33bad165-0918-4d8d-b586-f4bce4917bd6", "service.name": "otelcol-contrib", "service.version": "0.162.0"}, "otelcol.component.id": "span_metrics", "otelcol.component.kind": "connector", "otelcol.signal": "traces", "otelcol.signal.output": "metrics"}
+2026-10-07T00:35:25.969+1000	info	bearertokenauthextension@v0.162.0/bearertokenauth.go:106	refresh token	{"resource": {"service.instance.id": "33bad165-0918-4d8d-b586-f4bce4917bd6", "service.name": "otelcol-contrib", "service.version": "0.162.0"}, "otelcol.component.id": "bearertokenauth", "otelcol.component.kind": "extension", "filename": "/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M48SHPA9FD7YQ9F7T8E0CW9B/.tmp-otel-validation/collector-token"}
+2026-10-07T00:35:25.971+1000	info	otlpreceiver@v0.162.0/otlp.go:175	Starting HTTP server	{"resource": {"service.instance.id": "33bad165-0918-4d8d-b586-f4bce4917bd6", "service.name": "otelcol-contrib", "service.version": "0.162.0"}, "otelcol.component.id": "otlp", "otelcol.component.kind": "receiver", "endpoint": "127.0.0.1:64586"}
+2026-10-07T00:35:25.971+1000	info	otlpreceiver@v0.162.0/otlp.go:175	Starting HTTP server	{"resource": {"service.instance.id": "33bad165-0918-4d8d-b586-f4bce4917bd6", "service.name": "otelcol-contrib", "service.version": "0.162.0"}, "otelcol.component.id": "otlp/reject", "otelcol.component.kind": "receiver", "endpoint": "127.0.0.1:64587"}
+2026-10-07T00:35:25.971+1000	info	healthcheck/handler.go:131	Health Check state change	{"resource": {"service.instance.id": "33bad165-0918-4d8d-b586-f4bce4917bd6", "service.name": "otelcol-contrib", "service.version": "0.162.0"}, "otelcol.component.id": "health_check", "otelcol.component.kind": "extension", "status": "ready"}
+2026-10-07T00:35:25.971+1000	info	service@v0.162.0/service.go:256	Everything is ready. Begin running and processing data.	{"resource": {"service.instance.id": "33bad165-0918-4d8d-b586-f4bce4917bd6", "service.name": "otelcol-contrib", "service.version": "0.162.0"}}
+2026-10-07T00:35:27.523+1000	error	filterprocessor@v0.162.0/traces.go:131	failed processing traces	{"resource": {"service.instance.id": "33bad165-0918-4d8d-b586-f4bce4917bd6", "service.name": "otelcol-contrib", "service.version": "0.162.0"}, "otelcol.component.id": "filter/reject", "otelcol.component.kind": "processor", "otelcol.pipeline.id": "traces/reject", "otelcol.signal": "traces", "error": "failed to eval condition: Int(name) > 0, strconv.ParseInt: parsing \"actual collector pipeline fails\": invalid syntax"}
+github.com/open-telemetry/opentelemetry-collector-contrib/processor/filterprocessor.(*filterSpanProcessor).processTraces
+	github.com/open-telemetry/opentelemetry-collector-contrib/processor/filterprocessor@v0.162.0/traces.go:131
+go.opentelemetry.io/collector/processor/processorhelper.NewTraces.func1
+	go.opentelemetry.io/collector/processor/processorhelper@v0.162.0/traces.go:59
+go.opentelemetry.io/collector/consumer.ConsumeTracesFunc.ConsumeTraces
+	go.opentelemetry.io/collector/consumer@v1.68.0/traces.go:27
+go.opentelemetry.io/collector/service/internal/refconsumer.refTraces.ConsumeTraces
+	go.opentelemetry.io/collector/service@v0.162.0/internal/refconsumer/traces.go:29
+go.opentelemetry.io/collector/consumer.ConsumeTracesFunc.ConsumeTraces
+	go.opentelemetry.io/collector/consumer@v1.68.0/traces.go:27
+go.opentelemetry.io/collector/internal/fanoutconsumer.(*tracesConsumer).ConsumeTraces
+	go.opentelemetry.io/collector/internal/fanoutconsumer@v0.162.0/traces.go:60
+go.opentelemetry.io/collector/receiver/otlpreceiver/internal/trace.(*Receiver).Export
+	go.opentelemetry.io/collector/receiver/otlpreceiver@v0.162.0/internal/trace/otlp.go:42
+go.opentelemetry.io/collector/receiver/otlpreceiver.handleTraces
+	go.opentelemetry.io/collector/receiver/otlpreceiver@v0.162.0/otlphttp.go:46
+go.opentelemetry.io/collector/receiver/otlpreceiver.(*otlpReceiver).startHTTPServer.func1
+	go.opentelemetry.io/collector/receiver/otlpreceiver@v0.162.0/otlp.go:141
+net/http.HandlerFunc.ServeHTTP
+	net/http/server.go:2286
+net/http.(*ServeMux).ServeHTTP
+	net/http/server.go:2828
+go.opentelemetry.io/collector/config/confighttp.(*decompressor).ServeHTTP
+	go.opentelemetry.io/collector/config/confighttp@v0.162.0/compression.go:287
+go.opentelemetry.io/collector/config/confighttp.(*ServerConfig).ToServer.maxRequestBodySizeInterceptor.func3
+	go.opentelemetry.io/collector/config/confighttp@v0.162.0/server.go:611
+net/http.HandlerFunc.ServeHTTP
+	net/http/server.go:2286
+go.opentelemetry.io/collector/config/confighttp.(*ServerConfig).ToServer.authInterceptor.func4
+	go.opentelemetry.io/collector/config/confighttp@v0.162.0/server.go:604
+net/http.HandlerFunc.ServeHTTP
+	net/http/server.go:2286
+go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp.(*middleware).serveHTTP
+	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp@v0.71.0/handler.go:185
+go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp.NewMiddleware.func2.1
+	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp@v0.71.0/handler.go:67
+net/http.HandlerFunc.ServeHTTP
+	net/http/server.go:2286
+go.opentelemetry.io/collector/config/confighttp.(*clientInfoHandler).ServeHTTP
+	go.opentelemetry.io/collector/config/confighttp@v0.162.0/clientinfohandler.go:26
+net/http.serverHandler.ServeHTTP
+	net/http/server.go:3311
+net/http.(*conn).serve
+	net/http/server.go:2067
+2026-10-07T00:35:30.395+1000	info	otelcol@v0.162.0/collector.go:476	Received signal from OS	{"resource": {"service.instance.id": "33bad165-0918-4d8d-b586-f4bce4917bd6", "service.name": "otelcol-contrib", "service.version": "0.162.0"}, "signal": "terminated"}
+2026-10-07T00:35:30.396+1000	info	service@v0.162.0/service.go:294	Starting shutdown...	{"resource": {"service.instance.id": "33bad165-0918-4d8d-b586-f4bce4917bd6", "service.name": "otelcol-contrib", "service.version": "0.162.0"}}
+2026-10-07T00:35:30.396+1000	info	healthcheck/handler.go:131	Health Check state change	{"resource": {"service.instance.id": "33bad165-0918-4d8d-b586-f4bce4917bd6", "service.name": "otelcol-contrib", "service.version": "0.162.0"}, "otelcol.component.id": "health_check", "otelcol.component.kind": "extension", "status": "unavailable"}
+2026-10-07T00:35:30.396+1000	info	spanmetricsconnector@v0.162.0/connector.go:268	Shutting down spanmetrics connector	{"resource": {"service.instance.id": "33bad165-0918-4d8d-b586-f4bce4917bd6", "service.name": "otelcol-contrib", "service.version": "0.162.0"}, "otelcol.component.id": "span_metrics", "otelcol.component.kind": "connector", "otelcol.signal": "traces", "otelcol.signal.output": "metrics"}
+2026-10-07T00:35:30.396+1000	info	spanmetricsconnector@v0.162.0/connector.go:270	Stopping ticker	{"resource": {"service.instance.id": "33bad165-0918-4d8d-b586-f4bce4917bd6", "service.name": "otelcol-contrib", "service.version": "0.162.0"}, "otelcol.component.id": "span_metrics", "otelcol.component.kind": "connector", "otelcol.signal": "traces", "otelcol.signal.output": "metrics"}
+2026-10-07T00:35:30.397+1000	info	extensions/extensions.go:72	Stopping extensions...	{"resource": {"service.instance.id": "33bad165-0918-4d8d-b586-f4bce4917bd6", "service.name": "otelcol-contrib", "service.version": "0.162.0"}}
+2026-10-07T00:35:30.397+1000	info	service@v0.162.0/service.go:308	Shutdown complete.	{"resource": {"service.instance.id": "33bad165-0918-4d8d-b586-f4bce4917bd6", "service.name": "otelcol-contrib", "service.version": "0.162.0"}}

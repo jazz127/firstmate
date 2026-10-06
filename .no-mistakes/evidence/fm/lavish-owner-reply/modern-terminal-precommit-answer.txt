@@ -1,0 +1,18 @@
+task:
+  id: sample-keyed-answer
+  title: Captain call sample-keyed-answer
+  state: done
+  blocked: no
+  blocked_by: none
+  held: no
+  hold_reason: "fm-hold-v1:d2FpdGluZyBmb3IgdGhlIGNhcHRhaW4="
+  hold_kind: captain
+  hold_until: "-"
+  kind: task
+  repo: sample
+  priority: "-"
+  created: "-"
+  closed: 2026-10-07
+  deps: none
+  links: none
+  body: "Resolution recorded by fm-captain-hold.\nDecision digest: 3eebf2fbb413a75a1305ae2581152b36a3f965ebeec5e5443848c78f91bab6be\nResolution mode: answered\n\nCaptain decision:\nCaptain answered this call through the captured result lavish-6e6f7b7d0dd36372 sequence 1.\nTask: sample-keyed-answer\nAnswer: accepted\nAnswer as shown to the captain: Accepted"

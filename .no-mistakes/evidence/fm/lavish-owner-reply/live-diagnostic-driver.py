@@ -1,0 +1,31 @@
+exec(open('.test-live/live.py').read().split('try:\n    for version')[0])
+try:
+    env,art,id=prepare('modern-routing-retry','modern')
+    broken=env.copy();broken['LAVISH_AXI_STATE_DIR']=str(W/'missing-session-state')
+    Path(broken['LAVISH_AXI_STATE_DIR']).mkdir(exist_ok=True)
+    (Path(broken['LAVISH_AXI_STATE_DIR'])/'state.json').unlink(missing_ok=True)
+    reply=W/'routing-reply.md';reply.write_text('Reply delivered after session routing was restored.\n')
+    lavish(broken,'arm',art,'--agent-reply-file',reply)
+    wait_capture(broken,id,1)
+    f=captures(broken,id)[0];assert 'cannot read Lavish session store' in f.read_text() and 'cannot resolve the board server from its Lavish session:' in f.read_text()
+    wake=Path(env['FM_HOME'])/'state/.wake-queue'
+    wait(lambda:wake.exists() and 'procevent lavish '+id+' 1' in wake.read_text(),'routing failure announced')
+    staged=list((Path(env['FM_HOME'])/'state/procevent').glob('.'+id+'.reply.*'))
+    assert len(staged)==1 and staged[0].read_text()==reply.read_text()
+    shutil.copyfile(f,E/'routing-error.result')
+    LOG.write('Observed durable routing failure and retained private staged reply\n'+f.read_text())
+    # Restore the monitor's configuration to the real server's own session directory.
+    wait(lambda:not (Path(env['FM_PROCEVENT_CLAIM_ROOT'])/(id+'.claim')).exists(),'failed attempt released claim')
+    pe(env,'reconcile')
+    wait(lambda:text_contains('Reply delivered after session routing was restored.'),'recovered reply visible')
+    assert not staged[0].exists() and reply.exists()
+    screenshot('modern-routing-retry')
+    send('Feedback after successful retry.')
+    wait(lambda:any('Feedback after successful retry.' in x.read_text() for x in captures(broken,id)),'retry resumed feedback')
+    for f in captures(broken,id):shutil.copyfile(f,E/('routing-'+f.name))
+    result('modern routing failure is announced, reply is retained, and restoring real session evidence retries the reply and resumes feedback')
+    lavish(env,'retire',art);run(['lavish-axi','end',art],env=env)
+finally:
+    for home in ACTIVE:
+        env=BASE.copy();env['FM_HOME']=str(home);pe(env,'sweep-home',ok=False)
+    LOG.close()

@@ -1,0 +1,37 @@
+/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M48RKGRN8MZABF6PR8SCS3NE/.test-live/modern-bound-precommit
+swept: attempted=0
+/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M48RKGRN8MZABF6PR8SCS3NE/.test-live/home
+swept: attempted=0
+/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M48RKGRN8MZABF6PR8SCS3NE/.test-live/modern-terminal-postcommit
+swept: attempted=0
+/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M48RKGRN8MZABF6PR8SCS3NE/.test-live/modern-terminal-precommit
+swept: attempted=0
+/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M48RKGRN8MZABF6PR8SCS3NE/.test-live/modern-unlink-denied
+swept: attempted=0
+/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M48RKGRN8MZABF6PR8SCS3NE/.test-live/legacy-unlink-denied
+swept: attempted=0
+/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M48RKGRN8MZABF6PR8SCS3NE/.test-live/modern-conversation-foreign
+swept: attempted=0
+/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M48RKGRN8MZABF6PR8SCS3NE/.test-live/modern-routing-retry
+swept: attempted=0
+/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M48RKGRN8MZABF6PR8SCS3NE/.test-live/legacy-terminal-precommit
+swept: attempted=0
+/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M48RKGRN8MZABF6PR8SCS3NE/.test-live/modern-conversation
+swept: attempted=0
+/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M48RKGRN8MZABF6PR8SCS3NE/.test-live/legacy-bound-postcommit
+swept: attempted=0
+/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M48RKGRN8MZABF6PR8SCS3NE/.test-live/legacy-terminal-postcommit
+swept: attempted=0
+/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M48RKGRN8MZABF6PR8SCS3NE/.test-live/legacy-bound-precommit
+swept: attempted=0
+/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M48RKGRN8MZABF6PR8SCS3NE/.test-live/legacy-conversation
+swept: attempted=0
+/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M48RKGRN8MZABF6PR8SCS3NE/.test-live/modern-bound-postcommit
+swept: attempted=0
+/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M48RKGRN8MZABF6PR8SCS3NE/.test-live/legacy-conversation-foreign
+swept: attempted=0
+No isolated source claims remain.
+server:
+  status: stopped
+  port: 18487
+status: stopped

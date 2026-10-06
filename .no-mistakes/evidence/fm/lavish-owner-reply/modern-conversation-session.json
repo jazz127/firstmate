@@ -1,0 +1,50 @@
+{
+  "key": "533a8f776b1b0e6d",
+  "file": "/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M48RKGRN8MZABF6PR8SCS3NE/.test-live/modern-conversation-73309.html",
+  "url": "http://127.0.0.1:18487/session/533a8f776b1b0e6d",
+  "status": "open",
+  "pending_prompts": 0,
+  "prompts": [],
+  "layout_warnings": [],
+  "artifact_revision": 1,
+  "artifact_load": {
+    "artifact_load_token": "Rc7dEAQpVloExvcAifdawaZOPX-Mpc9B",
+    "artifact_revision": 1,
+    "last_pass_sequence": 0,
+    "request_id": "lavish-load-muwum2ka-1-z574g707v9",
+    "request_sequence": 1,
+    "handoff_token": "Gqw52is77dlq9LF9YgTJorG9D2t5lBdH"
+  },
+  "artifact_failures": [],
+  "delivered_attachments": [],
+  "dom_snapshot": "",
+  "chat": [
+    {
+      "role": "agent",
+      "text": "Firstmate is ready to review this private atlas.\n",
+      "at": "2026-10-06T15:43:38.531Z"
+    },
+    {
+      "role": "user",
+      "kind": "message",
+      "text": "Can firstmate answer back on this page?",
+      "at": "2026-10-06T15:43:39.456Z",
+      "prompt_id": "7b013608-0e6c-4e8c-acb0-bf5a1a4f8b20"
+    },
+    {
+      "role": "agent",
+      "text": "Yes. Firstmate can answer here and continue receiving your feedback.\n",
+      "at": "2026-10-06T15:43:42.923Z"
+    },
+    {
+      "role": "user",
+      "kind": "message",
+      "text": "Second message after the reply.",
+      "at": "2026-10-06T15:43:44.063Z",
+      "prompt_id": "cb3a3a67-b4f8-4ce3-acb3-414732d1e736"
+    }
+  ],
+  "chat_revision": 4,
+  "chat_ack_ids": [],
+  "updated_at": "2026-10-06T15:43:44.064Z"
+}

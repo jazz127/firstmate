@@ -1,0 +1,9 @@
+registered: lavish-63c9f2604a8e5e8e (lavish)
+armed: lavish-63c9f2604a8e5e8e
+artifact: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M48RKGRN8MZABF6PR8SCS3NE/.test-live/board.html
+error: "Stale ref @g1:1_18: from snapshot generation 1, current is 3. Re-snapshot to get fresh refs."
+code: STALE_REF
+help[1]: "Run `chrome-devtools-axi snapshot` to capture current refs, then retry the action"
+error: "Stale ref @g1:1_22: from snapshot generation 1, current is 3. Re-snapshot to get fresh refs."
+code: STALE_REF
+help[1]: "Run `chrome-devtools-axi snapshot` to capture current refs, then retry the action"

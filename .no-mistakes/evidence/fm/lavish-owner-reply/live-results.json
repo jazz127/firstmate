@@ -1,0 +1,54 @@
+[
+  {
+    "name": "modern-conversation fresh reply, active replacement, continued feedback, missing-file and foreign-owner refusal",
+    "result": "pass"
+  },
+  {
+    "name": "modern-bound-precommit preserves reconcile and keyed decisions without replaying old requests",
+    "result": "pass"
+  },
+  {
+    "name": "modern-bound-postcommit preserves reconcile and keyed decisions without replaying old requests",
+    "result": "pass"
+  },
+  {
+    "name": "modern-terminal-precommit preserves reconcile and keyed decisions and refuses further replies/polls",
+    "result": "pass"
+  },
+  {
+    "name": "modern-terminal-postcommit preserves reconcile and keyed decisions and refuses further replies/polls",
+    "result": "pass"
+  },
+  {
+    "name": "legacy-conversation fresh reply, active replacement, continued feedback, missing-file and foreign-owner refusal",
+    "result": "pass"
+  },
+  {
+    "name": "legacy-bound-precommit preserves reconcile and keyed decisions without replaying old requests",
+    "result": "pass"
+  },
+  {
+    "name": "legacy-bound-postcommit preserves reconcile and keyed decisions without replaying old requests",
+    "result": "pass"
+  },
+  {
+    "name": "legacy-terminal-precommit preserves reconcile and keyed decisions and refuses further replies/polls",
+    "result": "pass"
+  },
+  {
+    "name": "legacy-terminal-postcommit preserves reconcile and keyed decisions and refuses further replies/polls",
+    "result": "pass"
+  },
+  {
+    "name": "modern routing failure is announced, reply is retained, and restoring real session evidence retries the reply and resumes feedback",
+    "result": "pass"
+  },
+  {
+    "name": "modern-unlink-denied retains one committed feedback result, does not replay staging on reply re-arm, and accepts subsequent feedback",
+    "result": "pass"
+  },
+  {
+    "name": "legacy-unlink-denied retains one committed feedback result, does not replay staging on reply re-arm, and accepts subsequent feedback",
+    "result": "pass"
+  }
+]

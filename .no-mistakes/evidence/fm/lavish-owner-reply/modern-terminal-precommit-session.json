@@ -1,0 +1,60 @@
+{
+  "key": "6e6f7b7d0dd36372",
+  "file": "/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M48RKGRN8MZABF6PR8SCS3NE/.test-live/modern-terminal-precommit-59715.html",
+  "url": "http://127.0.0.1:18487/session/6e6f7b7d0dd36372",
+  "status": "ended",
+  "pending_prompts": 0,
+  "prompts": [],
+  "layout_warnings": [],
+  "artifact_revision": 1,
+  "artifact_load": {
+    "artifact_load_token": "ocwaEYyL2GK6ja-aBe9LP9YdUSPORbwA",
+    "artifact_revision": 1,
+    "last_pass_sequence": 0,
+    "request_id": "lavish-load-muwuphln-1-1r253b1alju",
+    "request_sequence": 1,
+    "handoff_token": "A2sUl0vgLg5tYpF3cqihJF8GRNpaIr6k"
+  },
+  "artifact_failures": [],
+  "delivered_attachments": [],
+  "dom_snapshot": "",
+  "chat": [
+    {
+      "role": "user",
+      "kind": "annotation",
+      "text": "Reconcile\n\nContext data:\n{\n  \"schema\": \"fm-bearings-answer.v1\",\n  \"question\": \"sample-reconcile-call\",\n  \"selection\": \"reconcile\",\n  \"note\": \"Please recheck\"\n}",
+      "at": "2026-10-06T15:46:22.477Z",
+      "prompt_id": "c615951a-e75b-4e27-aff6-e8ae56e3cd77",
+      "anchor": {
+        "kind": "element",
+        "label": "<choice>",
+        "excerpt": "Reconcile",
+        "selector": "button#reconcile"
+      }
+    },
+    {
+      "role": "user",
+      "kind": "annotation",
+      "text": "Accepted\n\nContext data:\n{\n  \"schema\": \"fm-bearings-answer.v1\",\n  \"question\": \"sample-keyed-answer\",\n  \"selection\": \"accepted\",\n  \"note\": \"\"\n}",
+      "at": "2026-10-06T15:46:22.477Z",
+      "prompt_id": "028190c0-3754-4a45-a9a5-9be21f9ac5f7",
+      "anchor": {
+        "kind": "element",
+        "label": "<choice>",
+        "excerpt": "Accepted",
+        "selector": "button#accept"
+      }
+    },
+    {
+      "role": "user",
+      "kind": "message",
+      "text": "Final decisions.",
+      "at": "2026-10-06T15:46:22.477Z",
+      "prompt_id": "71bf4d27-8fdf-4035-9172-4e3f990273e9"
+    }
+  ],
+  "chat_revision": 1,
+  "chat_ack_ids": [],
+  "updated_at": "2026-10-06T15:46:22.478Z",
+  "ended_by": "user"
+}

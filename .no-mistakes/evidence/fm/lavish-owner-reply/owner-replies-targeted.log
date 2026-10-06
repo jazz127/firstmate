@@ -1,0 +1,36 @@
+ok - firstmate fresh reply arm delivers once before polling (0.1.79)
+ok - firstmate active reply arm replaces the poll and later rounds do not replay (0.1.79)
+ok - firstmate fresh reply arm delivers once before polling (0.1.80)
+ok - firstmate active reply arm replaces the poll and later rounds do not replay (0.1.80)
+ok - firstmate reply-rejected is captured and retry resumes polling
+ok - firstmate fresh reply arm delivers once before polling (reply-rejected)
+ok - firstmate active reply arm replaces the poll and later rounds do not replay (reply-rejected)
+ok - firstmate missing-session is captured and retry resumes polling
+ok - firstmate fresh reply arm delivers once before polling (missing-session)
+ok - firstmate active reply arm replaces the poll and later rounds do not replay (missing-session)
+ok - firstmate unknown-version is captured and retry resumes polling
+ok - firstmate fresh reply arm delivers once before polling (unknown-version)
+ok - firstmate active reply arm replaces the poll and later rounds do not replay (unknown-version)
+ok - firstmate legacy-staged preserves locally received output during reply replacement
+ok - firstmate synchronous-staged preserves locally received output during reply replacement
+ok - firstmate legacy-capture preserves locally received output during reply replacement
+ok - firstmate synchronous-capture preserves locally received output during reply replacement
+ok - firstmate diagnostic-capture preserves locally received output during reply replacement
+ok - firstmate legacy-cleanup preserves locally received output during reply replacement
+ok - firstmate synchronous-cleanup preserves locally received output during reply replacement
+ok - firstmate legacy-postcommit preserves locally received output during reply replacement
+ok - firstmate synchronous-postcommit preserves locally received output during reply replacement
+ok - firstmate synchronous-reclaim preserves locally received output during reply replacement
+ok - firstmate legacy-bound-staged preserves locally received output during reply replacement
+ok - firstmate synchronous-bound-staged preserves locally received output during reply replacement
+ok - firstmate legacy-bound-postcommit preserves locally received output during reply replacement
+ok - firstmate synchronous-bound-postcommit preserves locally received output during reply replacement
+ok - firstmate synchronous-bound-reclaim preserves locally received output during reply replacement
+ok - firstmate legacy-terminal-staged applies final decisions and refuses reply replacement
+ok - firstmate synchronous-terminal-staged applies final decisions and refuses reply replacement
+ok - firstmate legacy-terminal-postcommit applies final decisions and refuses reply replacement
+ok - firstmate synchronous-terminal-postcommit applies final decisions and refuses reply replacement
+ok - firstmate normal cleanup failure preserves one committed result without EXIT capture
+reconciles-fed: lavish-8aefc1a789a1706b
+answers-fed: lavish-8aefc1a789a1706b
+ok - firstmate reply replacement feeds rescued decisions without replaying pending decisions

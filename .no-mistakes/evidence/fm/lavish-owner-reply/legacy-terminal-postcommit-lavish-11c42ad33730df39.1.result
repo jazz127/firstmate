@@ -1,0 +1,11 @@
+session:
+  file: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M48RKGRN8MZABF6PR8SCS3NE/.test-live/legacy-terminal-postcommit-59715.html
+  status: feedback
+  session_ended: true
+  ended_by: user
+prompts[3]{uid,prompt,selector,tag,text}:
+  "1","Reconcile\n\nContext data:\n{\n  \"schema\": \"fm-bearings-answer.v1\",\n  \"question\": \"sample-reconcile-call\",\n  \"selection\": \"reconcile\",\n  \"note\": \"Please recheck\"\n}",button#reconcile,choice,Reconcile
+  "2","Accepted\n\nContext data:\n{\n  \"schema\": \"fm-bearings-answer.v1\",\n  \"question\": \"sample-keyed-answer\",\n  \"selection\": \"accepted\",\n  \"note\": \"\"\n}",button#accept,choice,Accepted
+  "",Final decisions.,"",message,Freeform message
+next_step: This was the last feedback before the user ended the session. Stop polling /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M48RKGRN8MZABF6PR8SCS3NE/.test-live/legacy-terminal-postcommit-59715.html and do not reopen it - deliver any remaining updates directly in this conversation instead. Only run `lavish-axi /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M48RKGRN8MZABF6PR8SCS3NE/.test-live/legacy-terminal-postcommit-59715.html --reopen` if the user explicitly asks for further review or something genuinely important needs their visual attention.
+dom_snapshot: "uid=3 body \"Private project review This disposable page checks firstmate's conversation repl\"\n  uid=4 h1 \"Private project review\"\n  uid=5 p \"This disposable page checks firstmate's conversation reply.\"\n  uid=6 section \"Project atlas Ask a question in the Conversation panel. Firstmate should answer \"\n    uid=7 h2 \"Project atlas\"\n    uid=8 p \"Ask a question in the Conversation panel. Firstmate should answer here and keep \"\n  uid=9 section \"Captain calls Queue Reconcile Queue Accepted\"\n    uid=10 h2 \"Captain calls\"\n    uid=1 button \"Queue Reconcile\"\n    uid=2 button \"Queue Accepted\"\n  uid=11 script"

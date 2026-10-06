@@ -1,0 +1,4 @@
+schema=fm-reconcile-request.v1
+task=sample-reconcile-call
+requested=2026-10-06T15:47:12Z
+source=the captured result lavish-9e5c25c04587ee19 sequence 1; captain note: Please recheck

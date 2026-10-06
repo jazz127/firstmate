@@ -375,8 +375,9 @@ done
 OWNER_RACE_CAT=$(command -v cat) || fail "reply races require cat"
 OWNER_RACE_MKTEMP=$(command -v mktemp) || fail "reply races require mktemp"
 OWNER_RACE_RM=$(command -v rm) || fail "reply cleanup requires rm"
-export OWNER_RACE_CAT OWNER_RACE_MKTEMP OWNER_RACE_RM
-for owner_race_case in legacy-staged synchronous-staged legacy-capture synchronous-capture diagnostic-capture legacy-cleanup synchronous-cleanup; do
+OWNER_RACE_BASH=$(command -v bash) || fail "reply publication races require bash"
+export OWNER_RACE_CAT OWNER_RACE_MKTEMP OWNER_RACE_RM OWNER_RACE_BASH
+for owner_race_case in legacy-staged synchronous-staged legacy-capture synchronous-capture diagnostic-capture legacy-cleanup synchronous-cleanup legacy-postcommit synchronous-postcommit synchronous-reclaim; do
   OWNER_RACE="$TMP_ROOT/owner-race-$owner_race_case"
   export OWNER_RACE
   mkdir -p "$OWNER_RACE/bin" "$OWNER_RACE/home/state"
@@ -409,7 +410,8 @@ case "${1-}" in
       sleep 0.02
     done
     cat "$OWNER_RACE/expected"
-    if [ "$round" -eq 1 ] && [ -e "$OWNER_RACE/hold-output" ]; then
+    if { [ "$round" -eq 1 ] && [ -e "$OWNER_RACE/hold-output" ]; } \
+      || [ -e "$OWNER_RACE/hold-output-$round" ]; then
       while [ "$SECONDS" -lt "${FM_TEST_STUB_MAX_BLOCK_SECONDS:-120}" ]; do sleep 0.02; done
     fi
     ;;
@@ -447,6 +449,14 @@ SH
   cat > "$OWNER_RACE/bin/rm" <<'SH'
 #!/usr/bin/env bash
 set -eu
+if [ -e "$OWNER_RACE/reject-reclaim" ]; then
+  for arg in "$@"; do
+    if [ "$arg" = "$FM_PROCEVENT_CLAIM_ROOT/$OWNER_RACE_ID.claim" ]; then
+      printf 'simulated claim reclamation denial\n' >&2
+      exit 1
+    fi
+  done
+fi
 if [ -e "$OWNER_RACE/reject-cleanup" ]; then
   for arg in "$@"; do
     case "$arg" in
@@ -459,6 +469,28 @@ if [ -e "$OWNER_RACE/reject-cleanup" ]; then
 fi
 exec "$OWNER_RACE_RM" "$@"
 SH
+  cat > "$OWNER_RACE/bin/bash" <<'SH'
+#!/bin/sh
+set -eu
+case "${1-}" in
+  */bin/fm-captain-hold.sh)
+    if [ "${2-}" = binding ] && [ "${3-}" = "$OWNER_RACE_ID" ] \
+      && [ -e "$OWNER_RACE/pause-publication" ] \
+      && [ -f "$OWNER_RACE/home/state/procevent-inbox/$OWNER_RACE_ID.1.result" ] \
+      && mkdir "$OWNER_RACE/publication-paused" 2>/dev/null; then
+      printf 'ready\n' > "$OWNER_RACE/publication-ready"
+      exec "$OWNER_RACE_BASH" -c '
+        while [ ! -e "$OWNER_RACE/release-publication" ]; do
+          [ "$SECONDS" -lt "${FM_TEST_STUB_MAX_BLOCK_SECONDS:-120}" ] || exit 75
+          sleep 0.02
+        done
+        exec "$OWNER_RACE_BASH" "$@"
+      ' _ "$@"
+    fi
+    ;;
+esac
+exec "$OWNER_RACE_BASH" "$@"
+SH
   chmod +x "$OWNER_RACE/bin/"*
   owner_race_art="$OWNER_RACE/board.html"
   printf '<h1>reply capture race</h1>\n' > "$owner_race_art"
@@ -470,13 +502,16 @@ SH
   printf 'replacement reply\n' > "$OWNER_RACE/reply2"
   owner_race_reply_args=()
   case "$owner_race_case" in
-    *-staged|*-cleanup) touch "$OWNER_RACE/hold-output" ;;
+    *-staged|*-cleanup|*-reclaim) touch "$OWNER_RACE/hold-output" ;;
     *-capture)
       touch "$OWNER_RACE/pause-capture"
       owner_race_reply_args=(--agent-reply-file "$OWNER_RACE/reply1")
       ;;
   esac
-  case "$owner_race_case" in *-cleanup) touch "$OWNER_RACE/reject-cleanup" ;; esac
+  case "$owner_race_case" in
+    *-cleanup|*-reclaim) touch "$OWNER_RACE/reject-cleanup" ;;
+    *-postcommit) touch "$OWNER_RACE/reject-cleanup" "$OWNER_RACE/pause-publication" ;;
+  esac
   if [ "$owner_race_case" = diagnostic-capture ]; then
     touch "$OWNER_RACE/reject"
     printf 'error: Lavish did not accept the staged reply: simulated race reply rejection\n' \
@@ -492,7 +527,7 @@ SH
     touch "$OWNER_RACE/release-1"
   fi
   case "$owner_race_case" in
-    *-staged|*-cleanup)
+    *-staged|*-cleanup|*-reclaim)
       owner_race_token=$(sed -n '3p' "$FM_PROCEVENT_CLAIM_ROOT/$OWNER_RACE_ID.claim")
       owner_race_output="$OWNER_RACE/home/state/procevent/.$OWNER_RACE_ID.$owner_race_token.output"
       for _ in $(seq 1 100); do
@@ -502,14 +537,38 @@ SH
       cmp -s "$OWNER_RACE/expected" "$owner_race_output" \
         || fail "$owner_race_case never received the complete local feedback"
       ;;
+    *-postcommit)
+      owner_race_token=$(sed -n '3p' "$FM_PROCEVENT_CLAIM_ROOT/$OWNER_RACE_ID.claim")
+      owner_race_output="$OWNER_RACE/home/state/procevent/.$OWNER_RACE_ID.$owner_race_token.output"
+      wait_for "$OWNER_RACE/publication-ready" || fail "$owner_race_case never paused after commit"
+      [ -f "$FM_PROCEVENT_CLAIM_ROOT/$OWNER_RACE_ID.claim" ] \
+        || fail "$owner_race_case lost its old claim before replacement"
+      ;;
     *-capture)
       wait_for "$OWNER_RACE/capture-ready" || fail "$owner_race_case never reached capture"
       owner_race_output=$(cat "$OWNER_RACE/capture-ready")
       ;;
   esac
-  [ "$(count_results "$OWNER_RACE/home" "$OWNER_RACE_ID")" = 0 ] \
-    || fail "$owner_race_case did not pause before durable capture"
+  owner_race_prior_results=0
+  case "$owner_race_case" in *-postcommit) owner_race_prior_results=1 ;; esac
+  [ "$(count_results "$OWNER_RACE/home" "$OWNER_RACE_ID")" = "$owner_race_prior_results" ] \
+    || fail "$owner_race_case did not pause at its capture boundary"
   rm -f "$OWNER_RACE/reject"
+  if [ "$owner_race_case" = synchronous-reclaim ]; then
+    touch "$OWNER_RACE/reject-reclaim"
+    if PATH="$OWNER_RACE/bin:$PATH" FM_HOME="$OWNER_RACE/home" \
+      "$ROOT/bin/fm-procevent-lavish.sh" arm "$owner_race_art" \
+      --agent-reply-file "$OWNER_RACE/reply2" > "$OWNER_RACE/failed-arm.out" 2> "$OWNER_RACE/failed-arm.err"; then
+      fail "reply replacement ignored failed claim reclamation"
+    fi
+    [ "$(count_results "$OWNER_RACE/home" "$OWNER_RACE_ID")" = 1 ] \
+      || fail "failed claim reclamation did not retain the committed result"
+    [ -f "$FM_PROCEVENT_CLAIM_ROOT/$OWNER_RACE_ID.claim" ] \
+      || fail "the fixture did not preserve the unreclaimed generation"
+    [ -f "$owner_race_output" ] && [ ! -s "$owner_race_output" ] \
+      || fail "failed claim reclamation left committed staging eligible"
+    rm -f "$OWNER_RACE/reject-reclaim"
+  fi
   OWNER_RACE_REARM=1 PATH="$OWNER_RACE/bin:$PATH" FM_HOME="$OWNER_RACE/home" \
     "$ROOT/bin/fm-procevent-lavish.sh" arm "$owner_race_art" \
     --agent-reply-file "$OWNER_RACE/reply2" > "$OWNER_RACE/arm2.out" 2> "$OWNER_RACE/arm2.err" &
@@ -539,10 +598,15 @@ SH
   assert_contains "$(wake_payloads "$OWNER_RACE/home")" "procevent lavish $OWNER_RACE_ID 1" \
     "$owner_race_case did not announce its retained result"
   case "$owner_race_case" in
-    *-cleanup)
-      [ -s "$owner_race_output" ] || fail "$owner_race_case did not reject staging deletion"
-      assert_contains "$(cat "$OWNER_RACE/arm2.err")" "result committed at $owner_race_result" \
-        "$owner_race_case did not distinguish committed output from cleanup failure"
+    *-cleanup|*-postcommit|*-reclaim)
+      [ -f "$owner_race_output" ] && [ ! -s "$owner_race_output" ] \
+        || fail "$owner_race_case left committed staging eligible for capture"
+      case "$owner_race_case" in
+        *-cleanup)
+          assert_contains "$(cat "$OWNER_RACE/arm2.err")" "result committed at $owner_race_result" \
+            "$owner_race_case did not distinguish committed output from cleanup failure"
+          ;;
+      esac
       printf 'followup reply\n' > "$OWNER_RACE/reply3"
       PATH="$OWNER_RACE/bin:$PATH" FM_HOME="$OWNER_RACE/home" \
         "$ROOT/bin/fm-procevent-lavish.sh" arm "$owner_race_art" \
@@ -607,13 +671,108 @@ assert_contains "$(cat "$OWNER_CLEANUP/start.err")" "result committed at $owner_
   "normal capture did not report cleanup failure separately"
 [ "$(wc -l < "$OWNER_CLEANUP/rejected-deletions" | tr -d ' ')" = 1 ] \
   || fail "normal capture retried staging cleanup from EXIT"
-[ -s "$(cat "$OWNER_CLEANUP/rejected-deletions")" ] || fail "the fixture did not leave rejected staging"
+owner_cleanup_staging=$(cat "$OWNER_CLEANUP/rejected-deletions")
+[ -f "$owner_cleanup_staging" ] && [ ! -s "$owner_cleanup_staging" ] \
+  || fail "committed normal staging remained eligible for capture"
 [ ! -e "$FM_PROCEVENT_CLAIM_ROOT/normal-cleanup.claim" ] \
   || fail "committed normal capture retained ownership for re-commit"
 assert_contains "$(wake_payloads "$OWNER_CLEANUP/home")" 'procevent lavish normal-cleanup 1' \
   "cleanup failure prevented publication of the committed result"
 pe "$OWNER_CLEANUP/home" retire normal-cleanup >/dev/null
 pass "firstmate normal cleanup failure preserves one committed result without EXIT capture"
+
+OWNER_INTAKE="$TMP_ROOT/owner-reply-intake"
+mkdir -p "$OWNER_INTAKE/bin" "$OWNER_INTAKE/home/"{data,state,config}
+cp "$OWNER_RACE/bin/lavish-axi" "$OWNER_INTAKE/bin/lavish-axi"
+cp "$ROOT/.tasks.toml" "$OWNER_INTAKE/home/.tasks.toml"
+printf '## In flight\n\n## Queued\n\n## Done\n' > "$OWNER_INTAKE/home/data/backlog.md"
+OWNER_RACE=$OWNER_INTAKE
+export OWNER_RACE
+printf '0.1.80\n' > "$OWNER_INTAKE/version"
+owner_intake_captain() {
+  PATH="$OWNER_INTAKE/bin:$PATH" FM_HOME="$OWNER_INTAKE/home" \
+    "$ROOT/bin/fm-captain-hold.sh" "$@"
+}
+for owner_intake_task in sample-reconcile-call sample-rescued-answer; do
+  (cd "$OWNER_INTAKE/home" && tasks-axi add "$owner_intake_task" "Captain call $owner_intake_task" --repo sample) \
+    >/dev/null || fail "could not create the reply intake task"
+  owner_intake_captain hold "$owner_intake_task" --reason "waiting for the captain" \
+    >/dev/null || fail "could not hold the reply intake task"
+done
+owner_intake_art="$OWNER_INTAKE/board.html"
+printf '<h1>reply intake</h1>\n' > "$owner_intake_art"
+lavish_session "$owner_intake_art"
+OWNER_RACE_ID=$("$ROOT/bin/fm-procevent-lavish.sh" source-id "$owner_intake_art")
+export OWNER_RACE_ID
+owner_intake_captain bind "$OWNER_RACE_ID" >/dev/null || fail "could not bind the reply intake"
+fm_test_track_procevent_home "$OWNER_INTAKE/home"
+cat > "$OWNER_INTAKE/expected" <<'EOF'
+session:
+  status: feedback
+prompts[1]{uid,prompt,selector,tag,text}:
+  "1","Reconcile first\n\nContext data:\n{\n  \"schema\": \"fm-bearings-answer.v1\",\n  \"question\": \"sample-reconcile-call\",\n  \"selection\": \"reconcile\",\n  \"note\": \"\"\n}","section#call > form",choice,"Reconcile"
+EOF
+PATH="$OWNER_INTAKE/bin:$PATH" FM_HOME="$OWNER_INTAKE/home" \
+  "$ROOT/bin/fm-procevent-lavish.sh" arm "$owner_intake_art" >/dev/null \
+  || fail "could not arm the reply intake"
+wait_for_lines "$OWNER_INTAKE/polls" 1 || fail "reply intake never began polling"
+touch "$OWNER_INTAKE/release-1"
+wait_capture "$OWNER_INTAKE/home" "$OWNER_RACE_ID" || fail "reply intake never captured the first selection"
+[ -f "$OWNER_INTAKE/home/state/reconcile-requests/sample-reconcile-call.request" ] \
+  || fail "normal capture did not feed its reconcile selection"
+printf 'Still open after checking; waiting for the captain.\n' > "$OWNER_INTAKE/note"
+owner_intake_captain reconcile note sample-reconcile-call --note-file "$OWNER_INTAKE/note" \
+  >/dev/null || fail "could not complete the first reconcile request"
+[ ! -e "$OWNER_INTAKE/home/state/reconcile-requests/sample-reconcile-call.request" ] \
+  || fail "the completed reconcile request remained pending"
+[ ! -e "$OWNER_INTAKE/home/state/procevent-inbox/$OWNER_RACE_ID.1.handled" ] \
+  || fail "the first capture was acknowledged before its reply"
+printf 'Firstmate checked; the call remains open.\n' > "$OWNER_INTAKE/reply1"
+PATH="$OWNER_INTAKE/bin:$PATH" FM_HOME="$OWNER_INTAKE/home" \
+  "$ROOT/bin/fm-procevent-lavish.sh" arm "$owner_intake_art" \
+  --agent-reply-file "$OWNER_INTAKE/reply1" >/dev/null \
+  || fail "could not reply before acknowledging the first capture"
+wait_for_lines "$OWNER_INTAKE/polls" 2 || fail "reply intake did not resume polling"
+[ ! -e "$OWNER_INTAKE/home/state/reconcile-requests/sample-reconcile-call.request" ] \
+  || fail "reply re-arm replayed the pending capture and recreated a completed request"
+owner_intake_show=$(cd "$OWNER_INTAKE/home" && tasks-axi show sample-reconcile-call --full)
+assert_contains "$owner_intake_show" 'held: yes' "reconcile note no longer leaves the task held"
+cat > "$OWNER_INTAKE/expected" <<'EOF'
+session:
+  status: feedback
+prompts[2]{uid,prompt,selector,tag,text}:
+  "1","Reconcile again\n\nContext data:\n{\n  \"schema\": \"fm-bearings-answer.v1\",\n  \"question\": \"sample-reconcile-call\",\n  \"selection\": \"reconcile\",\n  \"note\": \"fresh request\"\n}","section#call > form",choice,"Reconcile"
+  "2","Accepted\n\nContext data:\n{\n  \"schema\": \"fm-bearings-answer.v1\",\n  \"question\": \"sample-rescued-answer\",\n  \"selection\": \"accepted\",\n  \"note\": \"\"\n}","section#call > form",choice,"Accepted"
+EOF
+touch "$OWNER_INTAKE/hold-output-2" "$OWNER_INTAKE/release-2"
+owner_intake_token=$(sed -n '3p' "$FM_PROCEVENT_CLAIM_ROOT/$OWNER_RACE_ID.claim")
+owner_intake_output="$OWNER_INTAKE/home/state/procevent/.$OWNER_RACE_ID.$owner_intake_token.output"
+for _ in $(seq 1 100); do
+  cmp -s "$OWNER_INTAKE/expected" "$owner_intake_output" && break
+  sleep 0.05
+done
+cmp -s "$OWNER_INTAKE/expected" "$owner_intake_output" || fail "fresh intake feedback never reached staging"
+[ "$(count_results "$OWNER_INTAKE/home" "$OWNER_RACE_ID")" = 1 ] \
+  || fail "fresh intake feedback was not paused before capture"
+printf 'Firstmate received the new choices.\n' > "$OWNER_INTAKE/reply2"
+PATH="$OWNER_INTAKE/bin:$PATH" FM_HOME="$OWNER_INTAKE/home" \
+  "$ROOT/bin/fm-procevent-lavish.sh" arm "$owner_intake_art" \
+  --agent-reply-file "$OWNER_INTAKE/reply2" >/dev/null \
+  || fail "could not replace the listener with fresh intake feedback"
+wait_for_lines "$OWNER_INTAKE/polls" 3 || fail "rescued intake feedback prevented resumed polling"
+[ "$(count_results "$OWNER_INTAKE/home" "$OWNER_RACE_ID")" = 2 ] \
+  || fail "replacement did not capture exactly the fresh intake feedback"
+assert_contains "$(cat "$OWNER_INTAKE/home/state/reconcile-requests/sample-reconcile-call.request")" \
+  "sequence 2" "replacement did not feed the rescued reconcile selection"
+owner_intake_show=$(cd "$OWNER_INTAKE/home" && tasks-axi show sample-rescued-answer --full)
+assert_contains "$owner_intake_show" 'state: done' "replacement did not feed the rescued keyed answer"
+assert_contains "$owner_intake_show" 'Answer: accepted' "replacement changed the rescued keyed answer"
+assert_contains "$(wake_payloads "$OWNER_INTAKE/home")" "procevent lavish $OWNER_RACE_ID 1" \
+  "reply replacement dropped publication of the previously pending capture"
+assert_contains "$(wake_payloads "$OWNER_INTAKE/home")" "procevent lavish $OWNER_RACE_ID 2" \
+  "reply replacement did not publish the rescued capture"
+PATH="$OWNER_INTAKE/bin:$PATH" pe "$OWNER_INTAKE/home" retire "$OWNER_RACE_ID" >/dev/null
+pass "firstmate reply replacement feeds rescued decisions without replaying pending decisions"
 
 [ "${1-}" != --owner-replies-only ] || exit 0
 

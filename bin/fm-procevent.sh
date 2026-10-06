@@ -523,7 +523,7 @@ extension_registration_replacement_safe_locked() {  # <source-id>
 }
 
 cmd_register() {
-  local adapter=${1-} id=${2-} sep=${3-} reply_dest='' stale pending_result
+  local adapter=${1-} id=${2-} sep=${3-} reply_dest='' stale pending_result rescued_result=''
   local -a argv=()
   shift 3 2>/dev/null || usage
   fm_procevent_adapter_valid "$adapter" || die "adapter name must be lowercase alphanumeric or dash: $adapter"
@@ -571,7 +571,7 @@ cmd_register() {
       die "cannot persist agent reply"
     fi
     argv[4]=$reply_dest
-    if ! stop_reply_listener_locked "$id"; then
+    if ! rescued_result=$(stop_reply_listener_locked "$id"); then
       rm -f -- "$reply_dest"
       fm_procevent_source_lock_release "$id"
       die "cannot replace the listener for reply delivery: $id"
@@ -590,9 +590,11 @@ cmd_register() {
   fi
   fm_procevent_source_lock_release "$id"
   if [ -n "$reply_dest" ]; then
+    if [ -n "$rescued_result" ]; then
+      feed_reconcile_requests lavish "$id" "$rescued_result" || true
+      feed_keyed_answers lavish "$id" "$rescued_result" || true
+    fi
     while IFS= read -r pending_result; do
-      feed_reconcile_requests lavish "$id" "$pending_result" || true
-      feed_keyed_answers lavish "$id" "$pending_result" || true
       publish_result "$pending_result" >/dev/null || true
     done < <(source_pending "$id")
   fi
@@ -2129,7 +2131,7 @@ stop_runner_pid() {  # <pid> <identity>
 # retire, retaining the registration, captures, and answer binding. Never stop
 # a foreign or ambiguous group, or release its claim to launch a second poller.
 stop_reply_listener_locked() {  # <source-id>
-  local id=$1 owner pid token identity stop_state output
+  local id=$1 owner pid token identity stop_state output durable=''
   if [ -e "$(fm_procevent_claim_path "$id")" ] || [ -L "$(fm_procevent_claim_path "$id")" ]; then
     fm_procevent_claim_load_locked "$id" || return 1
     fm_procevent_claim_owned_by_state "$STATE" "$FM_HOME" || return 1
@@ -2143,19 +2145,22 @@ stop_reply_listener_locked() {  # <source-id>
     output=$(staging_file "$id" "$token")
     if [ -s "$output" ]; then
       [ "$(read_adapter "$id")" = lavish ] || return 1
-      capture_lavish_output_locked "$id" "$output" >/dev/null || return 1
+      durable=$(capture_lavish_output_locked "$id" "$output") || return 1
     else
       rm -f -- "$output"
     fi
     fm_procevent_claim_reclaim_locked "$id" "$owner" "$pid" "$token" || return 1
   fi
-  rm -f -- "$(runner_file "$id")"
+  rm -f -- "$(runner_file "$id")" || return 1
+  [ -z "$durable" ] || printf '%s\n' "$durable"
+  return 0
 }
 
 capture_lavish_output_locked() {
   local id=$1 output=$2 durable
   [ -f "$output" ] && [ ! -L "$output" ] || return 1
   durable=$(fm_procevent_capture "$STATE" "$id" lavish "$output") || return 1
+  : > "$output"
   rm -f -- "$output" || printf 'warning: result committed at %s; cannot remove staged output: %s\n' \
     "$durable" "$output" >&2
   printf '%s\n' "$durable"

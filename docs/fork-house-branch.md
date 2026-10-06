@@ -63,7 +63,7 @@ Merge a pull request into either base by hand only with `--merge`.
 
 The quota-axi view uses quota-axi's read-only TUI report as its body, with the fleet's `jazz127/house` commit and subject, the `quota-axi` executable on `PATH`, and the refresh time and interval in a closing block.
 Run `bin/fm-quota-tab.sh once` to print one frame, or `bin/fm-quota-tab.sh` (the default `loop` mode) in a terminal tab to keep the fleet's house line and provider headroom in view.
-The loop refreshes every 300 seconds by default; `FM_QUOTA_TAB_INTERVAL` changes that interval.
+The [script header](../bin/fm-quota-tab.sh) owns clone selection, including the fallback when `FM_HOME` is unset, and refresh settings.
 
 Bring upstream changes to the fleet by merging upstream `main` into `house` through a pull request that lands as a merge commit (see [Merging into house](#merging-into-house)).
 Do not rebase `house` onto upstream: preserving merge history keeps the house integration visible, leaves upstream-bound commits extractable, and preserves the head identity used by gate attestations.

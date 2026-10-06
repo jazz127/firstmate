@@ -2,11 +2,12 @@
 # fm-quota-tab.sh - read-only terminal view of the quota-axi fleet house line.
 #
 # Usage: bin/fm-quota-tab.sh [once|loop]
-# FM_QUOTA_CLONE defaults to "$FM_HOME/projects/quota-axi" when FM_HOME is set.
-# With FM_HOME unset it defaults to the home this script lives in.
+# FM_QUOTA_CLONE overrides the clone path; otherwise use projects/quota-axi under
+# nonempty FM_HOME, or under this script's home (the parent of bin/).
+# This fallback is independent of the caller's working directory.
 # FM_QUOTA_TAB_INTERVAL defaults to 300 seconds and must be a positive integer.
-# Reads jazz127/house after a quiet fetch attempt, resolves quota-axi from PATH,
-# and runs quota-axi once per frame. It never writes to the quota-axi clone.
+# Displays jazz127/house after a quiet fetch attempt and runs quota-axi from PATH
+# once per frame. Fetching updates Git metadata, never checked-out clone files.
 set -u
 
 usage() {

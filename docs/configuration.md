@@ -572,8 +572,10 @@ See [`trace-context.md`](trace-context.md) for carrier semantics, supported rout
 ## OTLP span export (config/trace-export.json / FM_TRACE_EXPORT)
 
 OTLP span export is off unless the local, gitignored `config/trace-export.json` is valid and sets `enabled` to `true`.
-The object accepts only `enabled`, `endpoint`, and `auth-header-file`; export requires an explicit HTTP or HTTPS endpoint without userinfo, query, fragment, whitespace, or NUL bytes, and an absolute header-file path without tabs, carriage returns, newlines, or NUL bytes.
+The emitter uses the effective configuration directory selected by the [home and directory overrides](#root-and-directory-overrides) and skips metadata outside the effective state directory.
+The file must contain exactly one JSON object, accepting only `enabled`, `endpoint`, and `auth-header-file`; export requires an explicit HTTP or HTTPS endpoint without userinfo, query, fragment, whitespace, or NUL bytes, and an absolute header-file path without tabs, carriage returns, newlines, or NUL bytes.
 The header file must be readable and owned by the current user, have no group or other read permission (for example, mode `0600`), and contain exactly one `Authorization: Bearer <token>` line with an optional final newline and no trailing bytes.
+The token must contain one or more ASCII letters, digits, or characters from `._~+/-`, optionally followed by `=` padding.
 An invalid header file skips export with one stderr diagnostic while preserving caller success.
 For example: `{"enabled":true,"endpoint":"http://127.0.0.1:14318/v1/traces","auth-header-file":"/Users/me/.config/firstmate/otlp-header"}`.
 Credentials remain in the local header file, outside worker launch environments; export configuration and credentials are not inherited by remote homes.

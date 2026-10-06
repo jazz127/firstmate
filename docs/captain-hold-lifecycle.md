@@ -231,10 +231,7 @@ Three channels feed that one intake today, and all are ordinary callers rather t
 
 `bin/fm-procevent.sh` is the captured-result channel:
 
-- After capture, the runner passes a bound built-in source's result to `bin/fm-procevent-<adapter>.sh answers <result-file>`.
-- The runner pipes whatever that prints into the intake.
-- Any built-in adapter with an `answers` command therefore works.
-- The runner names no adapter, parses no result, and carries no decision rule.
+The [runner contract](configuration.md#process-to-event-sources-stateprocevent) owns how bound built-in results reach this intake and the capture and replacement ordering.
 
 `bin/fm-procevent-lavish.sh answers` is one such built-in adapter command.
 It reads only rows tagged `choice` and relays a card's declared close mode.

@@ -24,8 +24,68 @@ Usage: lavish-axi poll <html-file> [--owner <label>] [--takeover] [--agent-reply
 
 `reply --help` states that the command exits 0 only after the server answers that the reply was sent, which is when the board stops showing Working, and exits non-zero if that answer does not arrive within 10 seconds.
 `poll --help` states that the command long-polls indefinitely; when `--agent-reply` is supplied, it posts the reply and then keeps waiting, so its return is not an acceptance receipt.
-The adapter uses `lavish-axi reply` under the source lock after arm eligibility and before listener registration on 0.1.80 and newer, and preserves poll-with-reply for older compatible versions.
+Worker-owned arms use `lavish-axi reply` under the source lock after arm eligibility and before listener registration on 0.1.80 and newer; firstmate-owned arms stage the reply for their next listener, which posts it before polling.
+Both paths preserve poll-with-reply for older compatible versions.
 Its separate routing lookup reads the board's saved Lavish session; the adapter header owns that contract.
+
+## Firstmate-owned reply regression
+
+Synthetic CLI validation on 2026-10-07 exercises `arm --agent-reply-file` without `--for` against fixtures reporting 0.1.79 and 0.1.80.
+It covers fresh registration and replacement of a blocked listener for each version, requires reply-before-poll ordering, and resumes a later round from the same registration without replaying the consumed staged reply.
+The fixture rejects concurrent polls, proves a superseded unconsumed reply is never posted and a missing reply file leaves the active listener alone, and retains the original reply file for its caller.
+The failure cases require a durable announced diagnostic for reply rejection, missing session evidence, and an unknown version, with the private staged reply retained until recovery and reconciliation accept it once and resume polling.
+Replacement races pause feedback after local staging or during capture for both reply versions, and pause a modern reply rejection during capture; re-arm must retain and announce the original bytes once, deliver the replacement reply once, and capture the next feedback round normally.
+Staging deletion failures are injected at the filesystem command boundary for normal capture and replacement with both reply versions, including replacement paused after commit while the old runner still owns its claim and retry after failed claim reclamation; the committed result remains unique, cleanup failure is reported separately, another replacement does not re-commit it, and ordinary feedback still follows.
+The oracle is the firstmate reply acceptance contract: a failed attempt must remain visible and retryable, while polling begins only after reply acceptance; silently dropping stderr or consuming a rejected reply fails these assertions.
+For replacement, the oracle is byte conservation at the runner boundary: replacing a listener must retain its locally received result, and deleting staging or committing it twice fails the executable assertions.
+For cleanup failure, the durable result rename is the commit point; a later failed unlink cannot invalidate that commit or justify another captured sequence, and the tests reject EXIT capture, repeated cleanup, and replacement re-commit.
+A bound board completes a reconcile request with a note, replies before acknowledging its capture, and must leave that completed request absent; later feedback rescued by replacement must still feed both reconcile selections and keyed answers.
+The intake oracle is that only new feedback creates new decision work; replaying a previously completed request fails the assertions.
+Bound feedback races cover staged output and committed output paused before decision intake for both reply versions; a real competing re-arm must wait at the source lock until reconcile selections and keyed answers are applied.
+The same bound fixture denies claim reclamation after replacement capture and requires intake to have completed before the failed arm returns.
+Send & End fixtures cover both boundaries and versions: final decisions must be applied and published, reply re-arm must refuse, and reconciliation must perform no further poll.
+The terminal oracle is the published Send & End contract: one final feedback result ends the listener; accepting another reply listener or emitting another terminal result fails the assertions.
+No live Lavish server or account is used by this regression.
+
+Refresh with `bash tests/fm-procevent.test.sh --owner-replies-only`.
+The exact reply-specific output is:
+
+```text
+ok - firstmate fresh reply arm delivers once before polling (0.1.79)
+ok - firstmate active reply arm replaces the poll and later rounds do not replay (0.1.79)
+ok - firstmate fresh reply arm delivers once before polling (0.1.80)
+ok - firstmate active reply arm replaces the poll and later rounds do not replay (0.1.80)
+ok - firstmate reply-rejected is captured and retry resumes polling
+ok - firstmate fresh reply arm delivers once before polling (reply-rejected)
+ok - firstmate active reply arm replaces the poll and later rounds do not replay (reply-rejected)
+ok - firstmate missing-session is captured and retry resumes polling
+ok - firstmate fresh reply arm delivers once before polling (missing-session)
+ok - firstmate active reply arm replaces the poll and later rounds do not replay (missing-session)
+ok - firstmate unknown-version is captured and retry resumes polling
+ok - firstmate fresh reply arm delivers once before polling (unknown-version)
+ok - firstmate active reply arm replaces the poll and later rounds do not replay (unknown-version)
+ok - firstmate legacy-staged preserves locally received output during reply replacement
+ok - firstmate synchronous-staged preserves locally received output during reply replacement
+ok - firstmate legacy-capture preserves locally received output during reply replacement
+ok - firstmate synchronous-capture preserves locally received output during reply replacement
+ok - firstmate diagnostic-capture preserves locally received output during reply replacement
+ok - firstmate legacy-cleanup preserves locally received output during reply replacement
+ok - firstmate synchronous-cleanup preserves locally received output during reply replacement
+ok - firstmate legacy-postcommit preserves locally received output during reply replacement
+ok - firstmate synchronous-postcommit preserves locally received output during reply replacement
+ok - firstmate synchronous-reclaim preserves locally received output during reply replacement
+ok - firstmate legacy-bound-staged preserves locally received output during reply replacement
+ok - firstmate synchronous-bound-staged preserves locally received output during reply replacement
+ok - firstmate legacy-bound-postcommit preserves locally received output during reply replacement
+ok - firstmate synchronous-bound-postcommit preserves locally received output during reply replacement
+ok - firstmate synchronous-bound-reclaim preserves locally received output during reply replacement
+ok - firstmate legacy-terminal-staged applies final decisions and refuses reply replacement
+ok - firstmate synchronous-terminal-staged applies final decisions and refuses reply replacement
+ok - firstmate legacy-terminal-postcommit applies final decisions and refuses reply replacement
+ok - firstmate synchronous-terminal-postcommit applies final decisions and refuses reply replacement
+ok - firstmate normal cleanup failure preserves one committed result without EXIT capture
+ok - firstmate reply replacement feeds rescued decisions without replaying pending decisions
+```
 
 ## Why an ended Lavish review is terminal
 
@@ -114,7 +174,7 @@ Exercised by `tests/fm-procevent.test.sh` against a fake blocking source whose c
 | launch pacing during owner-loss grace | an immediately returning source that attempts detached self-relaunches is held to the configured minimum interval between command launches and remains bounded until its expired owner lease stops the generation; replacement starts a fresh pacing generation, prunes prior pacing state, and prevents a superseded sleeping runner from recreating it |
 | stale reclaim without displacement | concurrent contenders replacing one stale claim start exactly one runner, cross-home replacement removes the old generation's staging file from its recorded state directory, and a generation whose stale owner and independently empty process group prove it gone remains reclaimable when its recorded state-root identity can no longer be revalidated or its recorded registry directory no longer resolves to a directory, so `reconcile` reclaims it once, the replacement runs the source, and later cycles report nothing to do |
 | confirmed launches only | `reconcile` counts a launch as `started` only after the source is observed owned or its launch-pacing stamp has moved: a registration that cannot start is reported `failed=` with a non-zero exit and its source still listed `none`, a source that claimed, ran and exited before confirmation looked is still `started`, a zero-padded confirm window reads as base 10, and an unusable `FM_PROCEVENT_LAUNCH_CONFIRM_SECONDS` is refused by name before any runner is launched |
-| Lavish arm reports only a running listener | `bin/fm-procevent-lavish.sh arm` prints `armed` only after its own registration generation's listener has claimed the source, including when the claim is delayed by a held source lock; a registration whose runner can never claim exits non-zero after the confirm window without `armed` and is retired unless `retire` refuses; a re-arm over an earlier generation still live at the window's end exits zero with `still-listening` and starts no second listener; a re-arm whose earlier claim is released inside the window launches the new generation, which posts the worker's reply once and reports `armed`; and a stale claim with a live process group gets no second listener, a non-zero exit, and no retirement |
+| Lavish arm reports only a running listener | `bin/fm-procevent-lavish.sh arm` prints `armed` only after its own registration generation's listener has claimed the source, including when the claim is delayed by a held source lock; a registration whose runner can never claim exits non-zero after the confirm window without `armed` and is retired unless `retire` refuses; a re-arm without a firstmate-owned reply over an earlier generation still live at the window's end exits zero with `still-listening` and starts no second listener; a re-arm whose earlier claim is released inside the window launches the new generation, which posts the worker's reply once and reports `armed`; and a stale claim with a live process group gets no second listener, a non-zero exit, and no retirement |
 | launch failure announced once per episode | an unconfirmed launch queues one `check` wake keyed by source, registration identity and an episode nonce; a second failure in the same episode queues nothing, a confirmed launch queues no failure and closes the episode, a later failure opens a new episode under a fresh key, and a 64-character source id keeps that key within the watcher's marker bound |
 | crashed leader with a live group | `SIGKILL` on only the runner leader leaves its blocking child group alive; reconcile treats that leaderless group as ambiguous, preserves its claim without starting or signalling anything, `start` runs nothing beside it, the strand is queued as one `check` wake keyed by source and claim token that a second cycle does not repeat, and reconcile still reclaims a generation with no leader and no surviving group |
 | reused pid with a live group | a stale claim whose recorded pid is alive under a different identity while its process group still has members is listed `orphaned`, is never relaunched by `reconcile` across cycles, is announced once naming the `start` command that clears it, and `start` reclaims it while the dead generation's leftovers can be tidied and refuses with `cannot claim source`, replacing nothing, when they cannot |

@@ -2017,10 +2017,11 @@ A long-polling external process is registered as a *source* through its adapter,
 `bin/fm-procevent.sh` owns the generic contract; built-in adapters retain their tracked `bin/fm-procevent-<adapter>.sh` commands, while an explicitly bound external adapter routes through the trusted host contract above.
 
 `bin/fm-procevent-lavish.sh` is the first built-in adapter and wraps the published `lavish-axi poll` interface plus `lavish-axi reply` when the installed version supports synchronous reply acceptance.
+A board owned by firstmate can also receive firstmate's reply through its registered listener; the [handling procedure](../.agents/skills/process-event-sources/SKILL.md#arming-a-source) owns feedback handling and acknowledgement, while the adapter's header owns reply staging, listener replacement, and delivery limits.
 
 **Open the Lavish artifact first**
 
-Before arming any Lavish source, open its artifact with `lavish-axi` so the saved session identifies the board's server; reply and poll attempts derive their host and port from that session and refuse missing or invalid session evidence before posting or consuming a staged worker reply.
+Before arming any Lavish source, open its artifact with `lavish-axi` so the saved session identifies the board's server; reply and poll attempts derive their host and port from that session and refuse missing or invalid session evidence before posting or consuming a staged reply.
 
 **Retry interrupted Lavish polls**
 
@@ -2028,7 +2029,7 @@ That adapter, and only that adapter, retries the one exact transient response a 
 This start-to-start governor is a no-op after a normally blocking poll but caps an immediately returning poll under the shipped defaults independently of the owner lease and registration launch pacing.
 
 Real feedback, ended and missing sessions, any other `SERVER_ERROR`, and that same interruption still standing once the bound is spent are all captured and announced normally; `FM_LAVISH_POLL_RETRY_DELAY` is a bounded 1 to 60 second test override for the interval only, and the runner itself stays adapter-agnostic.
-An already-armed Lavish source keeps its registered listener command until it is retired and armed again, so retire the source, then arm it again to adopt this retry policy.
+To adopt this retry policy on an already-armed Lavish source, retire the source, then arm it again.
 
 ### Crew-hosted Lavish review boards
 
@@ -2146,6 +2147,7 @@ Whether a captured result ends its source is adapter knowledge, never the runner
 After capture, the runner asks the immutable captured owner whether the result is terminal.
 It uses the built-in `terminal` command or external `result.terminal` operation.
 Under the default ordering, this happens after the initial `check` publication.
+For a firstmate-owned Lavish source, terminal classification and retirement instead run within the shared capture/replacement boundary before publication, so a reply re-arm cannot restart an ended session.
 
 - Exit 0 retires the registration.
   The exception is a task-owned board, whose owner must first acknowledge the round as defined above.
@@ -2163,9 +2165,9 @@ Under the default ordering, this happens after the initial `check` publication.
 **Apply built-in results automatically**
 
 Applying a captured result through code is a built-in adapter seam, and some built-in results carry no judgement at all: they must simply be applied idempotently to this home's own durable state.
-Leaving that to a handler means it can silently not happen, so immediately after the terminal check above the runner calls `bin/fm-procevent-<adapter>.sh autohandle <source-id> <sequence> <result-file>` and lets the built-in adapter apply and acknowledge its own result.
+Leaving that to a handler means it can silently not happen, so the runner calls `bin/fm-procevent-<adapter>.sh autohandle <source-id> <sequence> <result-file>` at the adapter's announcement boundary defined below and lets the built-in adapter apply and acknowledge its own result.
 
-That call runs strictly after terminal retirement, because a handling adapter re-arms its own next source and retiring afterwards would drop that fresh registration and leave the source silently dead.
+Terminal retirement retains the registration-generation guard defined above when automatic handling re-arms a source.
 Exit 0 means the adapter fully applied and acknowledged the result; a missing command, an error, or any other exit is not a capture failure but leaves the result unacknowledged and therefore still eligible for re-announcement, so a handler receives it exactly as before and an adapter with no such command needs no change.
 
 **Adapter-controlled announcement order**
@@ -2187,12 +2189,13 @@ Some built-in sources carry the captain's answer to a captain-held task, and wha
 
 - A built-in source bound with `bin/fm-captain-hold.sh bind` therefore has each captured result passed to `bin/fm-procevent-<adapter>.sh answers <result-file>`, and whatever that prints is piped straight into that intake.
 - A binding can select one decision origin or the script's cross-origin mode; the command header owns the exact forms and key interpretation.
-- The built-in adapter reports only what the captain chose; the intake owns every rule about what happens next, so the runner names no adapter, parses no result, and carries no decision rule, and a future built-in answer source needs nothing here beyond an `answers` command and a binding.
+- The built-in adapter reports only what the captain chose; the intake owns every rule about what happens next, so the runner parses no result and carries no decision rule, and a future built-in answer source needs nothing here beyond an `answers` command and a binding.
 
 **Reconcile selections and handling boundaries**
 
 - The reserved Reconcile selection uses the parallel optional `reconciles` adapter command and binding-verified `reconcile-requests` intake rather than entering keyed answers; [`captain-hold-lifecycle.md`](captain-hold-lifecycle.md#reconcile-re-check-reality-never-a-blind-close) owns those semantics.
 - Feeding is independent of handling: it never acknowledges a result and never suppresses a wake, because recording the answer or request is transcription while acting on it is firstmate's judgement.
+- For firstmate-owned Lavish sources, normal capture and reply replacement finish both intake calls under the shared source lock before committed staging becomes ineligible for capture; republication of older pending results never feeds either intake again.
 - An unbound built-in source, a built-in adapter without the corresponding command, and a failure on either side all leave the capture untouched and still announced.
 - External binding responses never enter either authority-bearing intake.
 
@@ -2203,7 +2206,7 @@ Ownership is machine-wide per canonical source, because separate homes can share
 - Claims live under `$XDG_STATE_HOME/firstmate/procevent-claims` (override with `FM_PROCEVENT_CLAIM_ROOT`).
 - Each claim binds its caller-reported home and runner PID to a process identity, unique claim generation, exact registration-file generation, and resolved state-root identity.
 - Registration, acquisition, replacement, retirement, and generation-bound release are serialized at one machine-wide boundary per source.
-- A live identity-matched owner is never displaced, and release removes only the exact generation the caller acquired.
+- Claim acquisition never displaces a live identity-matched owner, and release removes only the exact generation the caller acquired.
 
 **Prove ownership before stopping a runner**
 

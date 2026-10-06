@@ -278,9 +278,13 @@ test_teardown_skips_gracefully_when_dir_missing() {
 
 test_terminal_spans_follow_successful_cleanup_only() {
   local id status line rc fake capture request
-  for status in 'done [at=1712345678]: finished' 'failed [at=1712345678]: failed' ''; do
-    case "$status" in done*) id=trace-done ;; failed*) id=trace-failed ;; *) id=trace-unknown ;; esac
+  for status in 'done [at=1712345678]: finished' 'failed [at=1712345678]: failed' '' secondmate; do
+    case "$status" in done*) id=trace-done ;; failed*) id=trace-failed ;; secondmate) id=trace-secondmate; status= ;; *) id=trace-unknown ;; esac
     fake=$(make_fake_root "$id" "")
+    if [ "$id" = trace-secondmate ]; then
+      sed 's/^kind=ship$/kind=secondmate/' "$fake/state/$id.meta" > "$fake/state/$id.meta.tmp"
+      mv "$fake/state/$id.meta.tmp" "$fake/state/$id.meta"
+    fi
     capture="$TMP_ROOT/$id-spans"
     enable_trace_export "$fake" "$capture" "$status" "$id"
     # The missing-start case models historical task metadata from before tracing.
@@ -305,6 +309,11 @@ test_terminal_spans_follow_successful_cleanup_only() {
       "trace-done:firstmate.task"$'\t'done) jq -e '.resourceSpans[0].scopeSpans[0].spans[0].status.code == 1' "$request" >/dev/null || fail "done should map to OK" ;;
       "trace-failed:firstmate.task"$'\t'failed) jq -e '.resourceSpans[0].scopeSpans[0].spans[0].status.code == 2' "$request" >/dev/null || fail "failed should map to ERROR" ;;
       "trace-unknown:firstmate.task"$'\t'unknown) jq -e '(.resourceSpans[0].scopeSpans[0].spans[0] | has("status") | not)' "$request" >/dev/null || fail "unknown should leave status unset" ;;
+      "trace-secondmate:firstmate.task"$'\t'unknown) jq -e '
+        (.resourceSpans[0].resource.attributes | map({key:.key,value:.value.stringValue}) | from_entries)
+          ["firstmate.task.kind"] == "secondmate"
+        and (.resourceSpans[0].scopeSpans[0].spans[0] | has("status") | not)
+      ' "$request" >/dev/null || fail "secondmate without terminal status should leave status unset" ;;
       *) fail "$id emitted unexpected root span: $line" ;;
     esac
     [ "$(jq -r '.resourceSpans[0].scopeSpans[0].spans[0].startTimeUnixNano' "$request")" -gt 0 ] \

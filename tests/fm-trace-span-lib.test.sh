@@ -417,6 +417,58 @@ for kind in ship scout secondmate; do
 done
 pass "all task kinds export the project basename and task identity without paths or incarnation identities"
 
+LIFECYCLE_META="$STATE/lifecycle.meta"
+for kind in ship scout secondmate; do
+  cat > "$LIFECYCLE_META" <<META
+traceparent=00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01
+trace_started=1000
+kind=$kind
+mode=no-mistakes
+yolo=off
+spawn_gen=current-generation
+window=private-session:private-pane
+pr=https://github.com/private-organization/private-repository/pull/123
+META
+  for relaunch in false true; do
+    for backend in tmux herdr zellij orca cmux; do
+      case "$kind:$backend" in secondmate:orca|secondmate:cmux) continue ;; esac
+      write_config "$BASE/lifecycle/spawn"
+      COUNT=$(request_count)
+      fm_trace_span_spawn "$LIFECYCLE_META" 1000 "$relaunch" current-generation "$backend" \
+        || fail "spawn wrapper changed caller result ($kind/$relaunch/$backend)"
+      [ "$(request_count)" -eq "$((COUNT + 1))" ] || fail "spawn wrapper skipped export"
+      jq -e --arg relaunch "$relaunch" --arg backend "$backend" '
+        .body | fromjson | .resourceSpans[0].scopeSpans[0].spans[0]
+        | .name == "firstmate.spawn" and .parentSpanId == "00f067aa0ba902b7"
+          and ((.attributes | map({key:.key,value:.value.stringValue}) | from_entries)
+            == {"firstmate.relaunch":$relaunch,"firstmate.spawn_gen":"current-generation",
+                "firstmate.backend":$backend})
+      ' "$WORK/capture.json" >/dev/null || fail "spawn exported attributes outside the approved lifecycle contract"
+    done
+  done
+  for outcome in done failed unknown; do
+    for forced in false true; do
+      write_config "$BASE/lifecycle/task"
+      COUNT=$(request_count)
+      fm_trace_span_task "$LIFECYCLE_META" "$outcome" "$forced" \
+        || fail "task wrapper changed caller result ($kind/$outcome/$forced)"
+      [ "$(request_count)" -eq "$((COUNT + 1))" ] || fail "task wrapper skipped export"
+      jq -e --arg outcome "$outcome" --arg forced "$forced" '
+        .body | fromjson | .resourceSpans[0].scopeSpans[0].spans[0]
+        | .name == "firstmate.task" and .spanId == "00f067aa0ba902b7"
+          and (has("parentSpanId") | not) and .startTimeUnixNano == "1000000000"
+          and (if $outcome == "done" then .status.code == 1
+               elif $outcome == "failed" then .status.code == 2 else (has("status") | not) end)
+          and ((.attributes | map({key:.key,value:.value.stringValue}) | from_entries)
+            == ({"firstmate.task.outcome":$outcome,"firstmate.task.mode":"no-mistakes",
+                 "firstmate.task.yolo":"off","firstmate.spawn_gen":"current-generation"}
+              + (if $forced == "true" then {"firstmate.teardown.forced":"true"} else {} end)))
+      ' "$WORK/capture.json" >/dev/null || fail "task exported attributes outside the approved lifecycle contract"
+    done
+  done
+done
+pass "lifecycle exports honor the approved attribute contract across task kinds, backends, relaunch, outcomes, and forced cleanup"
+
 assert_invalid_invocation() {
   local before
   before=$(request_count)

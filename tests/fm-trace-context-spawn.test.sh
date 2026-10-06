@@ -401,6 +401,11 @@ test_successful_spawn_emits_one_child_span() {
   request="$capture/request-1.json"
   jq -e '.resourceSpans[0].scopeSpans[0].spans | length == 1 and .[0].name == "firstmate.spawn" and (.[0].parentSpanId | length) == 16' \
     "$request" >/dev/null || fail "successful launch did not emit one child span"
+  jq -e --arg generation "$(sed -n 's/^spawn_gen=//p' "$HOME_DIR/state/$CASE_ID.meta")" '
+    .resourceSpans[0].scopeSpans[0].spans[0].attributes
+    | map({key:.key,value:.value.stringValue}) | from_entries
+    | . == {"firstmate.relaunch":"false","firstmate.spawn_gen":$generation,"firstmate.backend":"tmux"}
+  ' "$request" >/dev/null || fail "successful spawn exported attributes outside the approved lifecycle contract"
   pass "successful enabled launch emits one synthetic firstmate.spawn child"
 }
 

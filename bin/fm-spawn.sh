@@ -4934,10 +4934,6 @@ SPAWN_TRACE_STARTED=
 if [ -n "$SPAWN_TRACEPARENT" ]; then
   SPAWN_TRACE_STARTED=$(fm_trace_context_started_resolve "$STATE/$ID.meta")
 fi
-SPAWN_SPAN_GEN_PRIOR=
-if [ "$RELAUNCH" -eq 1 ]; then
-  SPAWN_SPAN_GEN_PRIOR=$(fm_meta_get "$RELAUNCH_META" spawn_gen)
-fi
 
 META_WINDOW=$T
 [ "$BACKEND" = orca ] && META_WINDOW=$W
@@ -5581,7 +5577,7 @@ if [ -n "$SPAWN_TRACEPARENT" ]; then
   SPAWN_SPAN_RELAUNCH=false
   [ "$RELAUNCH" -eq 1 ] && SPAWN_SPAN_RELAUNCH=true
   fm_trace_span_spawn "$STATE/$ID.meta" "$SPAWN_SPAN_START" "$SPAWN_SPAN_RELAUNCH" \
-    "$SPAWN_GEN" "$SPAWN_SPAN_GEN_PRIOR" "$BACKEND" "$META_WINDOW"
+    "$SPAWN_GEN" "$BACKEND"
 fi
 
 SPAWN_DELIVERY=

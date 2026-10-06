@@ -3815,9 +3815,7 @@ retire_busy_state "$STATE" "$ID" "$BUSY_GEN" || exit 1
 TEARDOWN_SPAN_OUTCOME=$(status_line_verb "$(last_status_line "$STATE/$ID.status")")
 case "$TEARDOWN_SPAN_OUTCOME" in
   done|failed) ;;
-  *)
-    if [ "$KIND" = secondmate ]; then TEARDOWN_SPAN_OUTCOME=retired; else TEARDOWN_SPAN_OUTCOME=unknown; fi
-    ;;
+  *) TEARDOWN_SPAN_OUTCOME=unknown ;;
 esac
 # Opt-in fleet activity ledger (docs/fleet-ledger.md), before the status log is
 # retired so its last lines are captured; off costs one file test.

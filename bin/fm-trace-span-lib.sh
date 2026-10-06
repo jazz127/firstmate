@@ -81,11 +81,9 @@ fm_trace_span_meta_value() {  # <meta-file> <key>
 
 # Per-event wrappers keep attribute assembly beside the emitter. Their callers
 # pass only facts owned by the lifecycle script and never duplicate span shape.
-fm_trace_span_spawn() {  # <meta> <start-ms> <relaunch> <generation> <prior-generation> <backend> <window>
-  local meta=$1 start=$2 relaunch=$3 generation=$4 prior=$5 backend=$6 window=$7
-  local attrs=("firstmate.relaunch=$relaunch" "firstmate.spawn_gen=$generation")
-  [ -z "$prior" ] || attrs+=("firstmate.spawn_gen.prior=$prior")
-  attrs+=("firstmate.backend=$backend" "firstmate.window=$window")
+fm_trace_span_spawn() {
+  local meta=$1 start=$2 relaunch=$3 generation=$4 backend=$5
+  local attrs=("firstmate.relaunch=$relaunch" "firstmate.spawn_gen=$generation" "firstmate.backend=$backend")
   fm_trace_span_emit "$meta" firstmate.spawn "$start" - "${attrs[@]}"
 }
 
@@ -103,8 +101,6 @@ fm_trace_span_task() {  # <meta> <outcome> <forced>
   [ -z "$value" ] || attrs+=("firstmate.task.mode=$value")
   value=$(fm_trace_span_meta_value "$meta" yolo)
   [ -z "$value" ] || attrs+=("firstmate.task.yolo=$value")
-  value=$(fm_trace_span_meta_value "$meta" pr)
-  [ -z "$value" ] || attrs+=("firstmate.pr.url=$value")
   [ "$forced" != true ] || attrs+=("firstmate.teardown.forced=true")
   value=$(fm_trace_span_meta_value "$meta" spawn_gen)
   [ -z "$value" ] || attrs+=("firstmate.spawn_gen=$value")

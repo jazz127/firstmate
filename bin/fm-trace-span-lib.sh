@@ -61,14 +61,13 @@ fm_trace_span_resource_json() {
   [ -n "$id" ] || id=$(basename "$meta" .meta)
   out=$(fm_trace_span_attr_json "firstmate.task.id=$id")
   v=$(sed -n 's/^project=//p' "$meta" 2>/dev/null | head -n 1)
-  [ -z "$v" ] || out+="$(fm_trace_span_attr_json "firstmate.project=${v##*/}")"
-  out+="$(fm_trace_span_attr_json "firstmate.home=$(dirname "$(dirname "$meta")")")"
-  kind=$(sed -n 's/^kind=//p' "$meta" 2>/dev/null | head -n 1)
-  if [ -n "$kind" ]; then
-    out+="$(fm_trace_span_attr_json "firstmate.task.kind=$kind")"
-    [ "$kind" != secondmate ] || out+="$(fm_trace_span_attr_json "firstmate.secondmate.id=$id")"
+  if [ -n "$v" ]; then
+    v=$(basename "$v")
+    [ "$v" = / ] || out+="$(fm_trace_span_attr_json "firstmate.project=$v")"
   fi
-  for key in harness model effort spawn_gen; do
+  kind=$(sed -n 's/^kind=//p' "$meta" 2>/dev/null | head -n 1)
+  [ -z "$kind" ] || out+="$(fm_trace_span_attr_json "firstmate.task.kind=$kind")"
+  for key in harness model effort; do
     v=$(sed -n "s/^${key}=//p" "$meta" 2>/dev/null | head -n 1)
     [ -z "$v" ] || out+="$(fm_trace_span_attr_json "firstmate.${key}=$v")"
   done
@@ -116,11 +115,18 @@ _fm_trace_span_emit_impl() {
   while [ "$#" -gt 0 ]; do
     case $1 in
       --root) root=1 ;;
-      --status) [ "$#" -ge 2 ] || return 0; status=$2; shift ;;
-      --*) : ;;
+      --status)
+        [ "$#" -ge 2 ] || return 0
+        case $2 in ok | error | unset) status=$2 ;; *) return 0 ;; esac
+        shift
+        ;;
+      --*) return 0 ;;
       *) break ;;
     esac
     shift
+  done
+  for pair in "$@"; do
+    case $pair in --* | =*) return 0 ;; *=*) ;; *) return 0 ;; esac
   done
 
   [ "${FM_TRACE_EXPORT:-}" != off ] || return 0
@@ -140,6 +146,8 @@ _fm_trace_span_emit_impl() {
   }
   case $start_ms in '' | - | *[!0-9]*) start_ms=$(fm_timing_now_ms) ;; esac
   case $end_ms in '' | - | *[!0-9]*) end_ms=$(fm_timing_now_ms) ;; esac
+  start_ms=$((10#$start_ms))
+  end_ms=$((10#$end_ms))
   [ "$end_ms" -ge "$start_ms" ] || end_ms=$start_ms
 
   local span_id parent_id=''

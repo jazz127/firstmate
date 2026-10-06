@@ -578,6 +578,7 @@ An invalid header file skips export with one stderr diagnostic while preserving 
 For example: `{"enabled":true,"endpoint":"http://127.0.0.1:14318/v1/traces","auth-header-file":"/Users/me/.config/firstmate/otlp-header"}`.
 `FM_TRACE_EXPORT=off` disables export immediately for the current process without changing carrier propagation.
 Export also requires the current session's trace-context decision to be `on` and the task metadata to contain a valid traceparent.
+Exported resource metadata omits home and metadata filesystem paths and identifies the project only by its short registered name (basename), which the private collector may use as a metric dimension.
 `bin/fm-trace-span-lib.sh` owns the wire format and request mechanics; it has no lifecycle hooks in this increment and every exporter failure leaves the caller successful.
 See [`trace-context.md`](trace-context.md) for the distinction between carrier propagation and span export.
 

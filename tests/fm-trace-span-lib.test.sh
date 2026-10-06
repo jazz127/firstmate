@@ -144,6 +144,118 @@ jq -e '
 ' "$WORK/capture.json" >/dev/null || fail "child identity or negative-duration clamp failed"
 pass "child spans link to the carrier parent and negative durations clamp to zero"
 
+for span_mode in root child; do
+  write_config "$BASE/decimal/$span_mode"
+  for sample in \
+    '01000 02000 1000000000 2000000000' \
+    '1000 02000 1000000000 2000000000' \
+    '01000 2000 1000000000 2000000000' \
+    '08 09 8000000 9000000' \
+    '09 08 9000000 9000000' \
+    '000 0 0 0' \
+    '0 000 0 0'; do
+    IFS=' ' read -r start_ms end_ms start_ns end_ns <<< "$sample"
+    COUNT=$(request_count)
+    bash -c '
+      set -eu
+      set -o pipefail
+      . "$1/bin/fm-trace-span-lib.sh"
+      if [ "$5" = root ]; then
+        fm_trace_span_emit "$2" decimal.time "$3" "$4" --root
+      else
+        fm_trace_span_emit "$2" decimal.time "$3" "$4"
+      fi
+      printf "%s\n" continued
+    ' _ "$ROOT" "$META" "$start_ms" "$end_ms" "$span_mode" > "$WORK/caller-output" \
+      || fail "decimal timestamp input terminated the caller ($sample)"
+    [ "$(cat "$WORK/caller-output")" = continued ] || fail "caller did not continue after decimal emission"
+    [ "$(request_count)" -eq "$((COUNT + 1))" ] || fail "decimal timestamp input skipped export"
+    jq -e --arg start "$start_ns" --arg end "$end_ns" '
+      .body | fromjson | .resourceSpans[0].scopeSpans[0].spans[0]
+      | .name == "decimal.time" and .startTimeUnixNano == $start and .endTimeUnixNano == $end
+    ' "$WORK/capture.json" >/dev/null || fail "decimal timestamps or clamp were incorrect ($sample)"
+  done
+done
+pass "root and child spans use decimal milliseconds, including padding, 08/09, zero, and clamping"
+
+for kind in ship scout secondmate; do
+  case $kind in
+    ship) project_value=/projects/private-client ;;
+    scout) project_value=/projects/private-client/// ;;
+    secondmate) project_value=private-client ;;
+  esac
+  RESOURCE_META="$STATE/resource-$kind.meta"
+  for identity in explicit inferred; do
+    {
+      printf 'traceparent=00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01\n'
+      printf 'kind=%s\nproject=%s\n' "$kind" "$project_value"
+      printf 'harness=codex\nmodel=test-model\neffort=high\nspawn_gen=12345\n'
+      printf 'home=%s\nworktree=%s/private-checkout\n' "$HOME_FIX" "$WORK"
+      [ "$identity" != explicit ] || printf 'endpoint_task_id=registered-task\n'
+    } > "$RESOURCE_META"
+    root_option=''
+    expected_id="resource-$kind"
+    if [ "$identity" = explicit ]; then
+      root_option=--root
+      expected_id=registered-task
+    fi
+    write_config "$BASE/resources/$kind/$identity"
+    COUNT=$(request_count)
+    fm_trace_span_emit "$RESOURCE_META" resource.metadata 1 2 ${root_option:+"$root_option"} \
+      || fail "resource metadata export changed caller result"
+    [ "$(request_count)" -eq "$((COUNT + 1))" ] || fail "resource metadata did not export"
+    jq -e --arg id "$expected_id" --arg kind "$kind" '
+      .body | fromjson | .resourceSpans[0].resource.attributes
+      | map({key:.key,value:.value.stringValue}) | from_entries
+      | . == {
+          "service.name":"firstmate", "firstmate.task.id":$id,
+          "firstmate.project":"private-client", "firstmate.task.kind":$kind,
+          "firstmate.harness":"codex", "firstmate.model":"test-model", "firstmate.effort":"high"
+        }
+    ' "$WORK/capture.json" >/dev/null || fail "resources exported paths or extra identities ($kind/$identity)"
+  done
+done
+pass "all task kinds export the project basename and task identity without paths or incarnation identities"
+
+assert_invalid_invocation() {
+  local before
+  before=$(request_count)
+  fm_trace_span_emit "$META" invalid.invocation 1 2 "$@" > "$WORK/stdout" 2> "$WORK/stderr" \
+    || fail "invalid invocation changed caller result"
+  [ "$(request_count)" = "$before" ] || fail "invalid invocation issued a request"
+  [ ! -s "$WORK/stdout" ] && [ ! -s "$WORK/stderr" ] || fail "invalid invocation emitted output"
+}
+write_config "$BASE/invalid-invocation"
+assert_invalid_invocation --rot
+assert_invalid_invocation --
+assert_invalid_invocation --root=1
+assert_invalid_invocation --status
+assert_invalid_invocation --status invalid
+assert_invalid_invocation --status --root
+assert_invalid_invocation detail=value --rot
+assert_invalid_invocation detail=value --root
+assert_invalid_invocation detail=value --status error
+assert_invalid_invocation plain
+assert_invalid_invocation =value
+assert_invalid_invocation detail=value plain
+pass "unknown options, invalid statuses, and malformed attribute arguments silently skip export"
+
+for status in error unset; do
+  write_config "$BASE/status/$status"
+  COUNT=$(request_count)
+  fm_trace_span_emit "$META" valid.invocation 1 2 --status "$status" --root 'detail=--rot' 'empty=' \
+    || fail "documented invocation changed caller result"
+  [ "$(request_count)" -eq "$((COUNT + 1))" ] || fail "documented invocation did not export"
+  jq -e --arg status "$status" '
+    .body | fromjson | .resourceSpans[0].scopeSpans[0].spans[0]
+    | .name == "valid.invocation"
+      and (if $status == "error" then .status.code == 2 else (has("status") | not) end)
+      and ((.attributes | map({key:.key,value:.value.stringValue}) | from_entries)
+        == {"detail":"--rot","empty":""})
+  ' "$WORK/capture.json" >/dev/null || fail "documented status or attributes were incorrect"
+done
+pass "documented statuses and attributes remain exportable"
+
 PRIVATE_HEADER=$HEADER
 HEADER="$WORK/"'auth\header'
 printf 'Authorization: Bearer %s\n' "$TOKEN" > "$HEADER"

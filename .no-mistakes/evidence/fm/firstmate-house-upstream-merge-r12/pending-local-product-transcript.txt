@@ -1,0 +1,25 @@
+Driver: real pending-reply library; local durable expectation and status protocol. No harness or transport is substituted or launched.
+
+Persisted status after reconciliation:
+blocked [key=pending-reply-3fd5af632d2ead37] [at=1791269093]: pending-reply-delivery-unknown: task=proof pending-reply-id=3fd5af632d2ead37 request=reconcile an unanswered delivery attempt
+Open decisions:
+pending-reply-3fd5af632d2ead37	blocked	pending-reply-delivery-unknown: task=proof pending-reply-id=3fd5af632d2ead37 request=reconcile an unanswered delivery attempt
+Persisted status after reconciliation:
+blocked [key=pending-reply-3fd5af632d2ead37] [at=1791269093]: pending-reply-delivery-unknown: task=proof pending-reply-id=3fd5af632d2ead37 request=reconcile an unanswered delivery attempt
+Open decisions:
+pending-reply-3fd5af632d2ead37	blocked	pending-reply-delivery-unknown: task=proof pending-reply-id=3fd5af632d2ead37 request=reconcile an unanswered delivery attempt
+After operator close, open decisions are empty.
+
+Persisted status after reconciliation:
+blocked [key=pending-reply-3fd5af632d2ead37] [at=1791269093]: pending-reply-delivery-unknown: task=proof pending-reply-id=3fd5af632d2ead37 request=reconcile an unanswered delivery attempt
+resolved [key=pending-reply-3fd5af632d2ead37] [at=1791269093]: pending-reply-resolved: operator closed the earlier hold
+blocked [key=pending-reply-3fd5af632d2ead37] [at=1791269093]: pending-reply-delivery-unknown: task=proof pending-reply-id=3fd5af632d2ead37 request=reconcile an unanswered delivery attempt
+Open decisions:
+pending-reply-3fd5af632d2ead37	blocked	pending-reply-delivery-unknown: task=proof pending-reply-id=3fd5af632d2ead37 request=reconcile an unanswered delivery attempt
+Persisted status after reconciliation:
+blocked [key=pending-reply-3fd5af632d2ead37] [at=1791269093]: pending-reply-delivery-unknown: task=proof pending-reply-id=3fd5af632d2ead37 request=reconcile an unanswered delivery attempt
+resolved [key=pending-reply-3fd5af632d2ead37] [at=1791269093]: pending-reply-resolved: operator closed the earlier hold
+blocked [key=pending-reply-3fd5af632d2ead37] [at=1791269093]: pending-reply-delivery-unknown: task=proof pending-reply-id=3fd5af632d2ead37 request=reconcile an unanswered delivery attempt
+Open decisions:
+pending-reply-3fd5af632d2ead37	blocked	pending-reply-delivery-unknown: task=proof pending-reply-id=3fd5af632d2ead37 request=reconcile an unanswered delivery attempt
+The new episode reopened the same key; retries added no duplicate blocked line.

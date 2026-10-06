@@ -1,0 +1,45 @@
+Real fm-pipeline-spend.sh public CLI; no fake no-mistakes or database.
+$ /bin/bash bin/fm-pipeline-spend.sh record absent
+
+exit=0
+
+$ /bin/bash bin/fm-pipeline-spend.sh record gone
+recorded gone proof1
+
+exit=0
+
+$ /bin/bash bin/fm-pipeline-spend.sh record gone
+already recorded gone proof1
+
+exit=0
+
+Persisted ledger after retry:
+{"task":"gone","spawn_gen":"proof1","recorded_at":"2026-10-06T06:43:47Z","source":"unavailable","reason":"the task copy /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M47Y1SJ1V22FPGCJR39F05VD/fm-test-phase-temp/product/spend/gone-copy is gone","repo":null,"branch":null,"since":null,"total":null,"runs":[],"purposes":[]}
+$ /bin/bash bin/fm-pipeline-spend.sh record gone
+recorded gone proof1
+
+exit=0
+
+Relative FM_DATA_OVERRIDE ledger:
+{"task": "gone", "spawn_gen": "proof1", "recorded_at": "2026-10-06T06:43:47Z", "source": "unavailable", "reason": "the task copy /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M47Y1SJ1V22FPGCJR39F05VD/fm-test-phase-temp/product/spend/gone-copy is gone", "repo": null, "branch": null, "since": null, "total": null, "runs": [], "purposes": []}
+$ /bin/bash bin/fm-pipeline-spend.sh record copy
+recorded copy proof2
+
+exit=0
+
+$ /bin/bash bin/fm-pipeline-spend.sh record copy
+already recorded copy proof2
+
+exit=0
+
+Live task copy; real no-mistakes read on uninitialized disposable NM_HOME; ledger:
+{"task":"copy","spawn_gen":"proof2","recorded_at":"2026-10-06T06:43:48Z","source":"unavailable","reason":"no-mistakes resolved no repository for the task copy: error: repo not initialized (run 'no-mistakes init' first)","repo":null,"branch":"fm/proof","since":"2026-10-06T06:43:47Z","total":null,"runs":[],"purposes":[]}
+$ /bin/bash bin/fm-pipeline-spend.sh record missing
+fm-pipeline-spend: no task record for missing
+
+exit=1
+
+$ /bin/bash bin/fm-pipeline-spend.sh record ../unsafe
+fm-pipeline-spend: invalid task id
+
+exit=2

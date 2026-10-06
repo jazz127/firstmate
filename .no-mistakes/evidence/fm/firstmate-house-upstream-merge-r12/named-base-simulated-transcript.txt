@@ -1,0 +1,48 @@
+SIMULATED: real fm-spawn.sh, Git file:// disposable upstream, fake treehouse/tmux/ps/harness; no real harness launched.
+$ fm-spawn.sh base-evidence /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M47Y1SJ1V22FPGCJR39F05VD/fm-test-phase-temp/tmp/fm-spawn-pool-base-freshen.LxQBY5/evidence/project --mode direct-PR --yolo off --base-branch feature/hub
+warn: no registry at /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M47Y1SJ1V22FPGCJR39F05VD/fm-test-phase-temp/tmp/fm-spawn-pool-base-freshen.LxQBY5/evidence/home/data/projects.md; defaulting project to no-mistakes off
+warning: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M47Y1SJ1V22FPGCJR39F05VD/fm-test-phase-temp/tmp/fm-spawn-pool-base-freshen.LxQBY5/evidence/home/data/base-evidence/launch-brief.md records no ship branch; defaulting to legacy branch fm/base-evidence
+warning: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M47Y1SJ1V22FPGCJR39F05VD/fm-test-phase-temp/tmp/fm-spawn-pool-base-freshen.LxQBY5/evidence/home/data/base-evidence/launch-brief.md records no delivery contract line (scaffolded before ship briefs recorded one); launching on the explicit --mode direct-PR - confirm its definition of done matches
+notice: base-evidence ships mode=direct-PR while the standing posture for project is no-mistakes - less rigor than the captain's standing posture; proceed only on a current explicit captain instruction or an intake judgment you can state
+spawned base-evidence harness=codex kind=ship mode=direct-PR yolo=off window=firstmate:fm-base-evidence worktree=/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M47Y1SJ1V22FPGCJR39F05VD/fm-test-phase-temp/tmp/fm-spawn-pool-base-freshen.LxQBY5/evidence/pool
+exit=0
+Task HEAD=63fb710d9c5dcfed4fb2bee3ea1e5ea1be10fb58
+origin/feature/hub=63fb710d9c5dcfed4fb2bee3ea1e5ea1be10fb58
+window=firstmate:fm-base-evidence
+endpoint_task_id=base-evidence
+worktree=/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M47Y1SJ1V22FPGCJR39F05VD/fm-test-phase-temp/tmp/fm-spawn-pool-base-freshen.LxQBY5/evidence/pool
+project=/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M47Y1SJ1V22FPGCJR39F05VD/fm-test-phase-temp/tmp/fm-spawn-pool-base-freshen.LxQBY5/evidence/project
+harness=codex
+kind=ship
+mode=direct-PR
+yolo=off
+branch=fm/base-evidence
+tasktmp=/tmp/fm-base-evidence
+base_branch=feature/hub
+model=default
+effort=default
+spawn_gen=s1791269245.57332.22073
+
+Delivered launch role:
+# Current worker role contract
+You are a crewmate: an autonomous worker agent managed by firstmate.
+This section establishes your current identity before every project or task instruction below and supersedes any conflicting role identity in those instructions.
+Do the assigned work yourself and report only to firstmate; do not adopt a firstmate or secondmate supervisor identity, delegate the task, run fleet supervision, or address the captain.
+Do not run `bin/fm-session-start.sh`, `bin/fm-bootstrap.sh`, or `bin/fm-guard.sh` from a disposable task worktree; those commands belong to the supervising firstmate.
+Ignore the expected feature-branch worktree-tangle warning those primary-only commands would emit for this task worktree.
+Your steering inbox is `/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M47Y1SJ1V22FPGCJR39F05VD/fm-test-phase-temp/tmp/fm-spawn-pool-base-freshen.LxQBY5/evidence/home/state/base-evidence.inbox`; this exact path belongs to your current task even when it is outside the worktree or under the supervising firstmate home, so read and acknowledge its messages and do not reject it as another home's state.
+Never inspect or change any other home's endpoint namespace; this authorization is limited to the exact task paths named by this brief.
+When this task works on Firstmate itself, the repository root `AGENTS.md` (also imported by `CLAUDE.md`) is project content and the supervisor contract for the firstmate managing you: follow this brief instead of that supervisor contract.
+Project instructions still govern the work wherever they do not conflict with this worker identity, including `CONTRIBUTING.md` and `firstmate-coding-guidelines` for Firstmate changes.
+If the `firstmate-coding-guidelines` skill name does not resolve in this session, read `/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M47Y1SJ1V22FPGCJR39F05VD/.agents/skills/firstmate-coding-guidelines/SKILL.md` instead.
+
+# Task
+## Captain's intent
+brief for base-evidence
+
+## Firstmate spec
+Exercise the spawn behavior under test.
+
+# Setup
+You are in a disposable git worktree of project, at a detached HEAD on a clean copy of its base branch.
+Base branch: feature/hub

@@ -1,0 +1,3 @@
+The repeat attempt refused startup with exit 64. Direct fm-procevent-remote-reply.sh source ios on the same disposable route reported: error: stale or duplicate remote job workers did not stop safely.
+Two Firstmate remote-job-worker processes left from the preceding direct source check were still running under the disposable remote-code source path after its fixture cleanup. Their identities and command paths were checked, then only those two processes were terminated.
+The earlier target attempt failed to capture generation 7 (NUL-bearing line); the original-house snapshot passed that same prefix. This does not establish a code cause; a final clean target retry follows the startup cleanup.

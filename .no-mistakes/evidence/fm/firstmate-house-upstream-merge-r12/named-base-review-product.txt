@@ -1,0 +1,20 @@
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no live watcher process holds this home lock (last beat: 1s ago).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  repair missing watcher supervision according to the session-start block for this harness; do not use shell &.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Real fm-review-diff.sh with disposable Git repositories and file:// origin; recorded base feature/hub.
+diff base: origin/feature/hub
+ feature.txt | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/feature.txt b/feature.txt
+index df967b9..871492f 100644
+--- a/feature.txt
++++ b/feature.txt
+@@ -1 +1 @@
+-base
++task change
+ok - fm-review-diff compares a task against its recorded base branch

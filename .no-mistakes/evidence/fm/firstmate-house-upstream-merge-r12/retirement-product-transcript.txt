@@ -1,0 +1,124 @@
+Real fm-contributions.sh local retire and snapshot commands on disposable saved records; no forge polling or forge substitution. This proves the local retirement contract only.
+$ /bin/bash bin/fm-contributions.sh snapshot /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M47Y1SJ1V22FPGCJR39F05VD/fm-test-phase-temp/product/contributions/input.json --all
+{
+  "known": 1,
+  "checked": 0,
+  "counts": {
+    "captain": 0,
+    "fleet": 1,
+    "maintainer": 0,
+    "nobody": 0
+  },
+  "unmeasured": 0,
+  "complete": false,
+  "proven_clear": false,
+  "stale_verdicts": 0,
+  "missing_verdicts": 0,
+  "unreadable_records": 0,
+  "valid_until": 900,
+  "captain": [],
+  "captain_omitted": 0,
+  "rows": [
+    {
+      "task": "proof",
+      "url": "https://github.com/disposable-proof/deleted/pull/1",
+      "kind": "pr",
+      "checked_at": null,
+      "checked": false,
+      "final": false,
+      "head": null,
+      "verdict": null,
+      "reviews": [],
+      "distinct_checks": 0,
+      "missing_verdicts": 0,
+      "pending_checks": 0,
+      "failed_checks": 0,
+      "stale_verdicts": 0,
+      "signals": [],
+      "actor": "fleet",
+      "reason": "object unavailable",
+      "tasks": [
+        "proof"
+      ]
+    }
+  ]
+}
+
+exit=0
+
+$ /bin/bash bin/fm-contributions.sh retire proof https://github.com/disposable-proof/deleted/pull/1 fleet gone
+fm-contributions: invalid retire actor 'fleet'; expected: captain
+
+exit=1
+
+$ /bin/bash bin/fm-contributions.sh retire proof https://github.com/disposable-proof/deleted/pull/1 captain   
+fm-contributions: retire needs a non-empty reason
+
+exit=1
+
+$ /bin/bash bin/fm-contributions.sh retire unknown https://github.com/disposable-proof/deleted/pull/1 captain gone
+fm-contributions: contribution is not recorded for this durable task
+
+exit=1
+
+$ /bin/bash bin/fm-contributions.sh retire proof https://github.com/disposable-proof/deleted/pull/1 captain gone
+fm-contributions: acknowledge pending signals before retiring this contribution
+
+exit=1
+
+$ /bin/bash bin/fm-contributions.sh retire proof https://github.com/disposable-proof/deleted/pull/1 captain repository permanently removed
+
+exit=0
+
+$ /bin/bash bin/fm-contributions.sh retire proof https://github.com/disposable-proof/deleted/pull/1 captain replacement reason
+contributions: already retired https://github.com/disposable-proof/deleted/pull/1 for proof
+
+exit=0
+
+$ /bin/bash bin/fm-contributions.sh snapshot /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M47Y1SJ1V22FPGCJR39F05VD/fm-test-phase-temp/product/contributions/input.json --all
+{
+  "known": 0,
+  "checked": 0,
+  "counts": {
+    "captain": 0,
+    "fleet": 0,
+    "maintainer": 0,
+    "nobody": 0
+  },
+  "unmeasured": 0,
+  "complete": true,
+  "proven_clear": true,
+  "stale_verdicts": 0,
+  "missing_verdicts": 0,
+  "unreadable_records": 0,
+  "valid_until": 900,
+  "captain": [],
+  "captain_omitted": 0,
+  "rows": []
+}
+
+exit=0
+
+Saved retirement provenance:
+{
+  "schema": "fm-contributions.v1",
+  "task": "proof",
+  "records": [
+    {
+      "url": "https://github.com/disposable-proof/deleted/pull/1",
+      "kind": "pr",
+      "checked_at": null,
+      "error": "object unavailable",
+      "observation": null,
+      "verdict": null,
+      "pending": [],
+      "seen": [],
+      "notified": [],
+      "retired": {
+        "actor": "captain",
+        "reason": "repository permanently removed",
+        "at": "2026-10-06T06:43:48Z"
+      }
+    }
+  ]
+}

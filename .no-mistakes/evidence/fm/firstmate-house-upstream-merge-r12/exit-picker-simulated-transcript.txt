@@ -1,0 +1,15 @@
+SIMULATED: real fm-control.sh CLI, fake tmux/ps and synthetic Claude screen; no harness launched.
+Background work is running
+❯ 1. Exit and stop tasks
+The following will stop when you exit:
+shell · sleep 300
+  2. Move to background and exit
+  3. Stay
+Enter to confirm · Esc to cancel
+
+$ fm-control.sh proof exit
+error: task proof is blocked on a prompt: Claude background-task exit picker. Refusing to type Enter into it.
+exit=1
+Literal command delivered: /exit
+Keys delivered:
+Enter

@@ -1,0 +1,70 @@
+Real fm-brief.sh public CLI; stock /bin/bash; disposable FM_HOME. No harness launched.
+$ /bin/bash -c echo "$BASH_VERSION"
+3.2.57(1)-release
+
+exit=0
+
+$ /bin/bash bin/fm-brief.sh proof-no-mistakes sample --mode no-mistakes
+scaffolded: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M47Y1SJ1V22FPGCJR39F05VD/fm-test-phase-temp/product/briefs/data/proof-no-mistakes/brief.md (ship, mode=no-mistakes; replace {TASK} and {FIRSTMATE_SPEC})
+
+exit=0
+
+$ /bin/bash bin/fm-brief.sh proof-direct-PR sample --mode direct-PR
+scaffolded: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M47Y1SJ1V22FPGCJR39F05VD/fm-test-phase-temp/product/briefs/data/proof-direct-PR/brief.md (ship, mode=direct-PR; replace {TASK} and {FIRSTMATE_SPEC})
+
+exit=0
+
+$ /bin/bash bin/fm-brief.sh proof-local-only sample --mode local-only
+scaffolded: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M47Y1SJ1V22FPGCJR39F05VD/fm-test-phase-temp/product/briefs/data/proof-local-only/brief.md (ship, mode=local-only; replace {TASK} and {FIRSTMATE_SPEC})
+
+exit=0
+
+$ /bin/bash bin/fm-brief.sh proof-scout sample --scout
+scaffolded: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M47Y1SJ1V22FPGCJR39F05VD/fm-test-phase-temp/product/briefs/data/proof-scout/brief.md (scout; replace {TASK} and {FIRSTMATE_SPEC})
+
+exit=0
+
+$ /bin/bash bin/fm-brief.sh proof-secondmate --secondmate --no-projects
+scaffolded: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M47Y1SJ1V22FPGCJR39F05VD/fm-test-phase-temp/product/briefs/data/proof-secondmate/brief.md (secondmate charter)
+
+exit=0
+
+$ /bin/bash bin/fm-brief.sh proof-base sample --mode direct-PR --base-branch release/proof
+scaffolded: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M47Y1SJ1V22FPGCJR39F05VD/fm-test-phase-temp/product/briefs/data/proof-base/brief.md (ship, mode=direct-PR; replace {TASK} and {FIRSTMATE_SPEC})
+
+exit=0
+
+$ /bin/bash bin/fm-brief.sh refuse-local sample --mode local-only --base-branch release/proof
+error: fm-brief.sh --base-branch: a base branch cannot ship mode=local-only, whose landing fast-forwards local main; ship no-mistakes or direct-PR, which open a pull request against the base
+
+exit=1
+
+$ /bin/bash bin/fm-brief.sh refuse-invalid sample --mode direct-PR --base-branch bad..name
+error: fm-brief.sh --base-branch: base branch 'bad..name' is not a valid git branch name
+
+exit=1
+
+$ /bin/bash bin/fm-brief.sh refuse-gerrit sample --mode direct-PR --forge gerrit --base-branch release/proof
+error: fm-brief.sh --base-branch: a base branch is not supported on forge=gerrit
+
+exit=1
+
+$ /bin/bash bin/fm-brief.sh refuse-house sample --mode direct-PR --base-branch release/proof --house-feature proof --branch-base house
+error: --base-branch cannot be combined with --house-feature, which selects its own durable base
+
+exit=1
+
+$ /bin/bash -c . "$1/bin/fm-dod-lib.sh"; fm_brief_worker_role "$2/state" proof "$1" _ /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M47Y1SJ1V22FPGCJR39F05VD /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M47Y1SJ1V22FPGCJR39F05VD/fm-test-phase-temp/product/briefs
+# Current worker role contract
+You are a crewmate: an autonomous worker agent managed by firstmate.
+This section establishes your current identity before every project or task instruction below and supersedes any conflicting role identity in those instructions.
+Do the assigned work yourself and report only to firstmate; do not adopt a firstmate or secondmate supervisor identity, delegate the task, run fleet supervision, or address the captain.
+Do not run `bin/fm-session-start.sh`, `bin/fm-bootstrap.sh`, or `bin/fm-guard.sh` from a disposable task worktree; those commands belong to the supervising firstmate.
+Ignore the expected feature-branch worktree-tangle warning those primary-only commands would emit for this task worktree.
+Your steering inbox is `/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M47Y1SJ1V22FPGCJR39F05VD/fm-test-phase-temp/product/briefs/state/proof.inbox`; this exact path belongs to your current task even when it is outside the worktree or under the supervising firstmate home, so read and acknowledge its messages and do not reject it as another home's state.
+Never inspect or change any other home's endpoint namespace; this authorization is limited to the exact task paths named by this brief.
+When this task works on Firstmate itself, the repository root `AGENTS.md` (also imported by `CLAUDE.md`) is project content and the supervisor contract for the firstmate managing you: follow this brief instead of that supervisor contract.
+Project instructions still govern the work wherever they do not conflict with this worker identity, including `CONTRIBUTING.md` and `firstmate-coding-guidelines` for Firstmate changes.
+If the `firstmate-coding-guidelines` skill name does not resolve in this session, read `/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M47Y1SJ1V22FPGCJR39F05VD/.agents/skills/firstmate-coding-guidelines/SKILL.md` instead.
+
+exit=0

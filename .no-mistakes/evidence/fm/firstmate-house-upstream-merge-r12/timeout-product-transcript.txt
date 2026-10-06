@@ -1,0 +1,33 @@
+Real fm-timeout-lib.sh with /bin/bash 3.2, actual Perl watchdog and child processes. No command substitutions or fake services.
+$ /bin/bash -c . "$1/bin/fm-timeout-lib.sh"; fm_exec_timed 5 1 /bin/sh -c 'echo complete; exit 7' _ /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M47Y1SJ1V22FPGCJR39F05VD
+complete
+
+exit=7
+
+$ /bin/bash -c . "$1/bin/fm-timeout-lib.sh"; fm_exec_timed 5 1 /bin/sh -c 'kill -TERM $$' _ /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M47Y1SJ1V22FPGCJR39F05VD
+
+exit=143
+
+$ /bin/bash -c . "$1/bin/fm-timeout-lib.sh"; fm_exec_timed 5 1 /bin/sh -c 'kill -KILL $$' _ /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M47Y1SJ1V22FPGCJR39F05VD
+
+exit=137
+
+$ /bin/bash -c . "$1/bin/fm-timeout-lib.sh"; (fm_exec_timed 5 1 /bin/sh -c 'echo complete; exit 7') _ /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M47Y1SJ1V22FPGCJR39F05VD
+complete
+
+exit=7
+
+$ /bin/bash -c . "$1/bin/fm-timeout-lib.sh"; (fm_exec_timed 5 1 /bin/sh -c 'kill -TERM $$') _ /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M47Y1SJ1V22FPGCJR39F05VD
+
+exit=143
+
+$ /bin/bash -c . "$1/bin/fm-timeout-lib.sh"; (fm_exec_timed 5 1 /bin/sh -c 'kill -KILL $$') _ /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M47Y1SJ1V22FPGCJR39F05VD
+
+exit=137
+
+$ /bin/bash -c . "$1/bin/fm-timeout-lib.sh"; fm_exec_timed 1 1 /bin/sh -c 'trap "" TERM; echo ignoring-TERM; exec sleep 30' _ /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M47Y1SJ1V22FPGCJR39F05VD
+ignoring-TERM
+
+exit=124
+
+TERM-ignoring child stopped after 2.345s (bound=1s, grace=1s; exit 124).

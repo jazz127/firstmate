@@ -1,18 +1,5 @@
 #!/usr/bin/env bash
 # Behavior tests for bin/fm-brief.sh.
-#
-# Regression coverage for the heredoc-in-command-substitution parse bug (issues
-# #166, #958, #1069). Building a variable with `VAR=$(cat <<EOF ... EOF)` is
-# unsafe on Bash 3.2 (macOS /bin/bash): the lexer scans for the matching `)` of
-# the command substitution textually and tracks quote state through the heredoc
-# body, so a single apostrophe, unbalanced quote, or unbalanced paren anywhere
-# in that body breaks parsing of the *entire rest of the script* - `bash -n`
-# fails, not just the generated brief. The DOD and Herdr-section builders now
-# use `IFS= read -r -d '' VAR <<EOF || true` instead, which removes the `$(...)`
-# wrapper and eliminates the whole defect class regardless of future prose.
-# test_no_heredoc_in_command_substitution guards that structure directly.
-# Ambient `bash -n` here is Bash 5 and cannot see the bug, so the real
-# cross-version enforcement lives in the macos-stock-bash CI job.
 set -u
 
 # shellcheck source=tests/lib.sh
@@ -22,152 +9,60 @@ TMP_ROOT=$(fm_test_tmproot fm-brief)
 BRIEF_HOME="$TMP_ROOT/home"
 mkdir -p "$BRIEF_HOME/data"
 
-# The script itself must always parse under the ambient bash. That is Bash 5 in
-# CI and locally, where the issue #958/#1069 parser bug does not fire, so this
-# is a weak guard on its own; test_no_heredoc_in_command_substitution and the
-# macos-stock-bash CI job carry the real cross-version enforcement.
-test_script_parses() {
-  local out rc
-  out=$(bash -n "$ROOT/bin/fm-brief.sh" 2>&1); rc=$?
-  expect_code 0 "$rc" "bash -n bin/fm-brief.sh must parse cleanly (got: $out)"
-  [ -z "$out" ] || fail "bash -n bin/fm-brief.sh emitted unexpected output: $out"
-  pass "fm-brief.sh: bash -n succeeds"
-}
-
-# Structural class guard (issues #166, #958, #1069): never build a variable by
-# wrapping a heredoc in a command substitution (`VAR=$(cat <<EOF ... EOF)`).
-# That construct is what breaks Bash 3.2 parsing, and pinning one historical
-# apostrophe phrase (as the old test did) missed the #945 reintroduction. This
-# guards the *shape* directly against the whole file, so any future DOD or
-# section builder that reintroduces the class fails here regardless of prose.
-test_no_heredoc_in_command_substitution() {
-  local unsafe safe
-  unsafe="$TMP_ROOT/heredoc-in-substitution.sh"
-  safe="$TMP_ROOT/plain-heredoc.sh"
-  # shellcheck disable=SC2016 # Literal shell fixtures must remain unexpanded.
-  printf '%s\n' 'value=$(' '  cat <<EOF' 'body' 'EOF' ')' > "$unsafe"
-  # shellcheck disable=SC2016 # Literal shell fixtures must remain unexpanded.
-  printf '%s\n' 'cat <<EOF' '$(' '  cat <<INNER' 'INNER' ')' 'EOF' > "$safe"
-  if no_heredoc_in_command_substitution "$unsafe"; then
-    fail "structural guard accepted a multiline heredoc nested in a command substitution"
+test_system_bash_generates_all_scaffolds() {
+  local home mode lab id brief out rc version
+  version=$(/bin/bash -c 'printf "%s" "$BASH_VERSION"')
+  if [ "$(uname -s)" = Darwin ]; then
+    case "$version" in
+      3.2.*) ;;
+      *) fail "expected stock macOS Bash 3.2, got $version" ;;
+    esac
   fi
-  no_heredoc_in_command_substitution "$safe" \
-    || fail "structural guard treated heredoc body prose as shell structure"
-  no_heredoc_in_command_substitution "$ROOT/bin/fm-brief.sh" \
-    || fail "fm-brief.sh wraps a heredoc in a command substitution (breaks Bash 3.2 parsing)"
-  pass "fm-brief.sh: no heredoc is nested inside a command substitution (Bash 3.2 parse-safe)"
-}
-
-no_heredoc_in_command_substitution() {
-  perl - "$1" <<'PERL'
-use strict;
-use warnings;
-
-my $path = shift;
-open my $source, '<', $path or die "$path: $!\n";
-my @frames;
-my @heredocs;
-my $quote = '';
-my $line_number = 0;
-
-while (my $line = <$source>) {
-  $line_number++;
-  if (@heredocs) {
-    my $candidate = $line;
-    $candidate =~ s/\r?\n\z//;
-    $candidate =~ s/^\t+// if $heredocs[0]{strip_tabs};
-    shift @heredocs if $candidate eq $heredocs[0]{delimiter};
-    next;
-  }
-
-  my $length = length $line;
-  for (my $i = 0; $i < $length; $i++) {
-    my $char = substr($line, $i, 1);
-    if ($quote eq "'") {
-      $quote = '' if $char eq "'";
-      next;
-    }
-    if ($char eq '\\') {
-      $i++;
-      next;
-    }
-    if ($quote eq '"' && $char eq '"') {
-      $quote = '';
-      next;
-    }
-    if ($char eq "'" && $quote eq '') {
-      $quote = "'";
-      next;
-    }
-    if ($char eq '"' && $quote eq '') {
-      $quote = '"';
-      next;
-    }
-    if ($char eq '#' && $quote eq '' && ($i == 0 || substr($line, $i - 1, 1) =~ /[\s;|&()]/)) {
-      last;
-    }
-    if ($char eq '$' && substr($line, $i + 1, 1) eq '(') {
-      push @frames, { depth => 1, quote => $quote };
-      $quote = '';
-      $i++;
-      next;
-    }
-    if (@frames && $quote eq '' && $char eq '(') {
-      $frames[-1]{depth}++;
-      next;
-    }
-    if (@frames && $quote eq '' && $char eq ')') {
-      $frames[-1]{depth}--;
-      if ($frames[-1]{depth} == 0) {
-        my $frame = pop @frames;
-        $quote = $frame->{quote};
-      }
-      next;
-    }
-    next unless $quote eq '' && $char eq '<' && substr($line, $i + 1, 1) eq '<';
-    if (@frames) {
-      print STDERR "$path:$line_number\n";
-      exit 1;
-    }
-
-    my $j = $i + 2;
-    my $strip_tabs = substr($line, $j, 1) eq '-';
-    $j++ if $strip_tabs;
-    $j++ while substr($line, $j, 1) =~ /[ \t]/;
-    my $delimiter = '';
-    my $delimiter_quote = '';
-    for (; $j < $length; $j++) {
-      my $token = substr($line, $j, 1);
-      if ($delimiter_quote) {
-        if ($token eq $delimiter_quote) {
-          $delimiter_quote = '';
-        } elsif ($token eq '\\' && $delimiter_quote eq '"') {
-          $j++;
-          $delimiter .= substr($line, $j, 1);
-        } else {
-          $delimiter .= $token;
-        }
-        next;
-      }
-      if ($token eq "'" || $token eq '"') {
-        $delimiter_quote = $token;
-        next;
-      }
-      if ($token eq '\\') {
-        $j++;
-        $delimiter .= substr($line, $j, 1);
-        next;
-      }
-      last if $token =~ /[\s;|&()<>]/;
-      $delimiter .= $token;
-    }
-    push @heredocs, { delimiter => $delimiter, strip_tabs => $strip_tabs };
-    $i = $j - 1;
-  }
-}
-
-exit 0;
-PERL
+  home="$TMP_ROOT/system-bash-home"
+  mkdir -p "$home/data"
+  for mode in no-mistakes direct-PR local-only scout secondmate; do
+    for lab in omitted isolated; do
+      [ "$mode" != secondmate ] || [ "$lab" != isolated ] || continue
+      id="system-bash-$mode-$lab"
+      case "$mode" in
+        scout) set -- "$id" some-proj --scout ;;
+        secondmate) set -- "$id" --secondmate some-proj ;;
+        *) set -- "$id" some-proj --mode "$mode" ;;
+      esac
+      [ "$lab" != isolated ] || set -- "$@" --herdr-lab
+      out=$(FM_HOME="$home" FM_SECONDMATE_CHARTER='Supervise the fixture domain.' \
+        /bin/bash "$ROOT/bin/fm-brief.sh" "$@" 2>&1); rc=$?
+      expect_code 0 "$rc" "system Bash $version failed to generate $mode: $out"
+      brief="$home/data/$id/brief.md"
+      assert_present "$brief" "$mode: system Bash did not emit a brief"
+      assert_grep "# Definition of done" "$brief" "$mode: completion instructions missing"
+      assert_grep "# Firstmate instruction inbox" "$brief" "$mode: inbox instructions missing"
+      case "$mode" in
+        secondmate)
+          assert_grep 'Supervise the fixture domain.' "$brief" 'secondmate charter missing'
+          assert_grep 'You are persistent by default.' "$brief" 'secondmate completion instructions missing'
+          ;;
+        *)
+          assert_grep "## Captain's intent" "$brief" "$mode: task instructions missing"
+          if [ "$lab" = isolated ]; then
+            assert_grep "# Herdr isolation - HARD SAFETY CONTRACT" "$brief" "$mode: Herdr instructions missing"
+          else
+            assert_grep "# Herdr lifecycle declaration - NOT ENABLED" "$brief" "$mode: Herdr declaration missing"
+          fi
+          case "$mode" in
+            scout) assert_grep "$home/data/$id/report.md" "$brief" 'scout report destination missing' ;;
+            *) assert_grep "Delivery contract: mode=$mode" "$brief" "$mode: delivery contract missing" ;;
+          esac
+          case "$mode" in
+            no-mistakes) assert_grep 'run /no-mistakes to validate and ship a PR' "$brief" 'pipeline handoff missing' ;;
+            direct-PR) assert_grep 'push your branch and open a PR' "$brief" 'PR delivery instructions missing' ;;
+            local-only) assert_grep "ready in branch fm/$id" "$brief" 'local delivery instructions missing' ;;
+          esac
+          ;;
+      esac
+    done
+  done
+  pass "fm-brief.sh: system Bash $version generates every scaffold and its instructions"
 }
 
 test_help_includes_entire_header() {
@@ -1283,6 +1178,82 @@ test_home_brief_include_is_appended_last() {
   pass "fm-brief.sh: the home brief include lands last on ship and scout, verbatim, and fails closed"
 }
 
+# --base-branch names the branch a task starts from and a ship's PR targets. It is
+# recorded as a Base branch line under # Setup, which fm-spawn reads back, and is
+# refused where no pull request carries the work.
+test_base_branch_is_rendered_and_bounded() {
+  local home out rc brief base meta_base
+  home="$TMP_ROOT/base-branch-home"
+  mkdir -p "$home/data"
+  # shellcheck source=bin/fm-dod-lib.sh
+  . "$ROOT/bin/fm-dod-lib.sh"
+
+  FM_HOME="$home" "$ROOT/bin/fm-brief.sh" brief-base-dp-b1 some-proj --mode direct-PR --base-branch feature/hub >/dev/null 2>&1 \
+    || fail "direct-PR --base-branch should scaffold"
+  brief="$home/data/brief-base-dp-b1/brief.md"
+  base=$(fm_brief_base_branches "$brief")
+  [ "$base" = feature/hub ] || fail "the direct-PR brief recorded base '$base', not feature/hub"
+  # shellcheck disable=SC2016  # literal backticks in rendered prose must stay unexpanded
+  assert_grep 'ready for review, not a draft, against the base branch `feature/hub` (`--base feature/hub`)' "$brief" \
+    "the direct-PR definition of done does not target the base branch"
+  # shellcheck disable=SC2016
+  assert_grep 'Never push to the base branch `feature/hub` or the default branch' "$brief" \
+    "the direct-PR safety rule does not protect the base branch"
+  assert_no_grep 'open the integration pull request' "$brief" \
+    "an ordinary named base gained the house-feature integration handoff"
+
+  FM_HOME="$home" "$ROOT/bin/fm-brief.sh" brief-base-nm-b2 some-proj --mode no-mistakes --base-branch release/1.2 >/dev/null 2>&1 \
+    || fail "no-mistakes --base-branch should scaffold"
+  brief="$home/data/brief-base-nm-b2/brief.md"
+  # shellcheck disable=SC2016
+  assert_grep 'pass `--base-branch release/1.2` on every `no-mistakes axi run`' "$brief" \
+    "the no-mistakes definition of done does not pass the base branch to the pipeline"
+
+  # A base git accepts but the shell would expand is quoted in worker commands.
+  # shellcheck disable=SC2016  # the literal $HOTFIX is the point
+  meta_base='release/$HOTFIX'
+  FM_HOME="$home" "$ROOT/bin/fm-brief.sh" brief-base-meta-b8 some-proj --mode no-mistakes --base-branch "$meta_base" >/dev/null 2>&1 \
+    || fail "no-mistakes --base-branch with a shell metacharacter should scaffold"
+  brief="$home/data/brief-base-meta-b8/brief.md"
+  base=$(fm_brief_base_branches "$brief")
+  [ "$base" = "$meta_base" ] || fail "the brief recorded base '$base', not $meta_base"
+  # shellcheck disable=SC2016
+  assert_grep 'pass `--base-branch release/\$HOTFIX` on every' "$brief" \
+    "the no-mistakes command did not shell-quote the base branch"
+  FM_HOME="$home" "$ROOT/bin/fm-brief.sh" brief-base-meta-b9 some-proj --mode direct-PR --base-branch "$meta_base" >/dev/null 2>&1 \
+    || fail "direct-PR --base-branch with a shell metacharacter should scaffold"
+  # shellcheck disable=SC2016
+  assert_grep '(`--base release/\$HOTFIX`)' "$home/data/brief-base-meta-b9/brief.md" \
+    "the direct-PR command did not shell-quote the base branch"
+
+  FM_HOME="$home" "$ROOT/bin/fm-brief.sh" brief-base-scout-b3 some-proj --scout --base-branch feature/hub >/dev/null 2>&1 \
+    || fail "scout --base-branch should scaffold"
+  base=$(fm_brief_base_branches "$home/data/brief-base-scout-b3/brief.md")
+  [ "$base" = feature/hub ] || fail "the scout brief recorded base '$base', not feature/hub"
+
+  FM_HOME="$home" "$ROOT/bin/fm-brief.sh" brief-base-none-b4 some-proj --mode direct-PR >/dev/null 2>&1
+  brief="$home/data/brief-base-none-b4/brief.md"
+  ! fm_brief_base_branches "$brief" >/dev/null || fail "a brief without --base-branch recorded a base"
+  assert_grep 'at a detached HEAD on a clean default branch.' "$brief" \
+    "a brief without --base-branch changed its default-branch setup line"
+
+  out=$(FM_HOME="$home" "$ROOT/bin/fm-brief.sh" brief-base-lo-b5 some-proj --mode local-only --base-branch feature/hub 2>&1); rc=$?
+  [ "$rc" -ne 0 ] || fail "local-only --base-branch should be refused"
+  assert_contains "$out" "mode=local-only" "the local-only refusal did not explain itself"
+  out=$(FM_HOME="$home" "$ROOT/bin/fm-brief.sh" brief-base-bad-b6 some-proj --mode direct-PR --base-branch 'bad..name' 2>&1); rc=$?
+  [ "$rc" -ne 0 ] || fail "an invalid base branch name should be refused"
+  out=$(FM_HOME="$home" FM_SECONDMATE_CHARTER=charter "$ROOT/bin/fm-brief.sh" brief-base-sm-b7 --secondmate --no-projects --base-branch feature/hub 2>&1); rc=$?
+  [ "$rc" -ne 0 ] || fail "a secondmate charter should refuse --base-branch"
+  out=$(FM_HOME="$home" "$ROOT/bin/fm-brief.sh" brief-base-house-b10 some-proj --mode direct-PR \
+    --base-branch release/1.2 --house-feature alpha --branch-base main 2>&1); rc=$?
+  [ "$rc" -ne 0 ] || fail "a house feature silently accepted a different named base"
+  assert_contains "$out" 'cannot be combined with --house-feature' "conflicting base refusal did not explain itself"
+  for id in brief-base-lo-b5 brief-base-bad-b6 brief-base-sm-b7 brief-base-house-b10; do
+    [ ! -e "$home/data/$id/brief.md" ] || fail "a refused --base-branch scaffold wrote $id"
+  done
+  pass "fm-brief.sh: --base-branch records the base, targets the PR at it, and is refused where no PR carries it"
+}
+
 # (a) An unregistered/default project - no --branch-prefix passed at all - must
 # keep every generated ship mode's branch on the legacy "fm/<task-id>" name, byte
 # for byte, so every existing firstmate installation is unaffected.
@@ -1661,8 +1632,7 @@ test_crewmate_scaffolds_forbid_pool_administration() {
   pass "fm-brief.sh: every crewmate scaffold forbids administering the shared worktree pool"
 }
 
-test_script_parses
-test_no_heredoc_in_command_substitution
+test_system_bash_generates_all_scaffolds
 test_help_includes_entire_header
 test_ship_modes_generate_clean_briefs
 test_ship_mode_is_required_and_closed_set
@@ -1693,6 +1663,7 @@ test_scout_lavish_line_follows_presentation_floor
 test_workers_wait_without_spending_turns
 test_wait_no_turns_absent_keeps_the_previous_brief
 test_home_brief_include_is_appended_last
+test_base_branch_is_rendered_and_bounded
 test_ship_branch_prefix_defaults_to_legacy_fm
 test_ship_branch_prefix_override_is_consistent_across_modes
 test_ship_branch_prefix_empty_override_yields_bare_task_id

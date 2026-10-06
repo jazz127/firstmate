@@ -27,6 +27,11 @@
 # captain's standing posture as context. The registry is read for the project's
 # forge binding and to announce a ship-branch naming deviation.
 # no-mistakes-prod-only is a registry policy rather than a task mode and is refused.
+# A scout spawned on a named base records base_branch= in its meta; promotion
+# keeps that base as the ship's starting point and pull-request target, and
+# refuses a mode that cannot carry one (bin/fm-dod-lib.sh fm_base_branch_valid).
+# A recorded named base cannot be combined with --house-feature, which selects
+# its own durable base instead.
 # There is no --forge flag here: the binding comes from the registry, and for a
 # task record naming no project it is none. bin/fm-brief.sh takes --forge instead
 # because that script has no registry access at all, and bin/fm-spawn.sh checks
@@ -248,6 +253,17 @@ if [ -n "$PROMOTE_PROJECT" ]; then
     echo "notice: $ID ships branch=$BRANCH while $PROMOTE_PROJECT_NAME registers the ship-branch prefix '$PROMOTE_STANDING_BRANCH' (branch $PROMOTE_STANDING_BRANCH$ID) - this naming deviates from the captain's standing project preference; proceed only on a current explicit captain instruction or an intake judgment you can state" >&2
   fi
 fi
+BASE_BRANCH=$(sed -n 's/^base_branch=//p' "$META" | head -n 1)
+fm_base_branch_valid "$BASE_BRANCH" "$MODE" "$FORGE" "fm-promote.sh $ID" || exit 1
+PROMOTE_BASE_WORDS='default-branch base'
+[ -z "$BASE_BRANCH" ] || PROMOTE_BASE_WORDS="copy of the base branch \`$BASE_BRANCH\`"
+if [ -n "$BASE_BRANCH" ]; then
+  [ -z "$HOUSE_FEATURE" ] || {
+    echo "error: a scout with a recorded base branch cannot be promoted with --house-feature, which selects its own durable base" >&2
+    exit 1
+  }
+  PROMOTE_BRANCH_WORDS="Return to a clean $PROMOTE_BASE_WORDS, then create your branch"
+fi
 # An unbound project keeps the exact wording it always had.
 PROMOTE_FORGE_WORDS=
 [ "$FORGE" = none ] || PROMOTE_FORGE_WORDS=" forge=$FORGE"
@@ -316,7 +332,7 @@ The mode-specific Definition of done below is the current delivery contract.
 
 # Current ship safety rule
 EOF
-  fm_ship_rule_one "$MODE" "$ID" "$BRANCH" "$FORGE"
+  fm_ship_rule_one "$MODE" "$ID" "$BRANCH" "$FORGE" "${PROMOTE_PR_BASE:-$BASE_BRANCH}"
   cat <<EOF
 Never end a turn on an announced next step: take it in the same turn with your tools instead of stopping on the announcement, or report \`${FM_CLASSIFY_PAUSED_VERB:-$FM_CLASSIFY_PAUSED_VERB_DEFAULT}:\`/\`blocked:\` with the reason.
 Drive your own validation and delivery path: beyond the handoff your Definition of done names, wait for no approval you did not request through \`needs-decision\`.
@@ -326,7 +342,7 @@ EOF
     printf '%s\n' "$PROMOTION_ASK_USER_BLOCK"
   fi
   printf '\n'
-  fm_dod_block "$MODE" "$ID" "$BRANCH" "$FORGE" "$PROMOTE_PR_BASE"
+  fm_dod_block "$MODE" "$ID" "$BRANCH" "$FORGE" "${PROMOTE_PR_BASE:-$BASE_BRANCH}" "$PROMOTE_PR_BASE"
 }
 mkdir -p "$DATA/$ID"
 [ ! -d "$INSTRUCTIONS" ] || { echo "error: ship instructions path is a directory: $INSTRUCTIONS" >&2; exit 1; }

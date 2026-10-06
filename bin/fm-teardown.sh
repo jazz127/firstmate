@@ -3820,7 +3820,6 @@ esac
 # Opt-in fleet activity ledger (docs/fleet-ledger.md), before the status log is
 # retired so its last lines are captured; off costs one file test.
 [ ! -e "$CONFIG/fleet-ledger" ] || FM_HOME=$FM_HOME FM_STATE_OVERRIDE=$STATE FM_CONFIG_OVERRIDE=$CONFIG "$SCRIPT_DIR/fm-fleet-ledger.sh" cleaned_up "$ID" || true
-status_retire_presentation_task "$STATE" "$ID" || exit 1
 fm_wake_queue_prune_task "$STATE" "$ID" "$T" 2>/dev/null || true
 rm -f "$STATE/$ID.turn-ended" "$STATE/$ID.progress" \
   "$(fm_wake_signal_seen_path "$STATE" "$STATE/$ID.turn-ended")" \
@@ -3856,7 +3855,10 @@ fi
 TEARDOWN_TRACE_SNAPSHOT=
 if [ -d "$STATE" ] && [ -f "$META" ]; then
   TEARDOWN_TRACE_SNAPSHOT=$(umask 077; mktemp "$STATE/.$ID.trace-snapshot.XXXXXX" 2>/dev/null || true)
-  if [ -n "$TEARDOWN_TRACE_SNAPSHOT" ] && ! cp "$META" "$TEARDOWN_TRACE_SNAPSHOT"; then
+  if [ -n "$TEARDOWN_TRACE_SNAPSHOT" ] && ! {
+    awk -F= '$1 != "endpoint_task_id"' "$META" > "$TEARDOWN_TRACE_SNAPSHOT" &&
+      printf 'endpoint_task_id=%s\n' "$ID" >> "$TEARDOWN_TRACE_SNAPSHOT"
+  }; then
     rm -f "$TEARDOWN_TRACE_SNAPSHOT"
     TEARDOWN_TRACE_SNAPSHOT=
   fi
@@ -3895,6 +3897,7 @@ else
     exit 1
   fi
 fi
+status_retire_presentation_task "$STATE" "$ID" || exit 1
 if [ -n "$TEARDOWN_TRACE_SNAPSHOT" ]; then
   if [ ! -e "$STATE/$ID.meta" ]; then
     FM_HOME=$FM_HOME FM_STATE_OVERRIDE=$STATE FM_CONFIG_OVERRIDE=$CONFIG \

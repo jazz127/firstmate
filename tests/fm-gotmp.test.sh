@@ -40,6 +40,18 @@ trap cleanup EXIT
 
 TMP_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/fm-gotmp-tests.XXXXXX")
 mkdir -p "$TMP_ROOT/fakebin"
+FM_TRACE_TEST_REAL_RM=$(command -v rm)
+export FM_TRACE_TEST_REAL_RM
+cat > "$TMP_ROOT/fakebin/rm" <<'SH'
+#!/usr/bin/env bash
+for arg in "$@"; do
+  if [ -n "${FM_TRACE_FAIL_META_REMOVE:-}" ] && [ "$arg" = "$FM_TRACE_FAIL_META_REMOVE" ]; then
+    exit 1
+  fi
+done
+exec "$FM_TRACE_TEST_REAL_RM" "$@"
+SH
+chmod +x "$TMP_ROOT/fakebin/rm"
 cat > "$TMP_ROOT/fakebin/curl" <<'SH'
 #!/usr/bin/env bash
 body=$(cat)
@@ -52,6 +64,7 @@ chmod +x "$TMP_ROOT/fakebin/curl"
 
 enable_trace_export() {  # <home> <capture-dir> <status> <task-id>
   local home=$1 capture=$2 status=$3 id=$4 auth="$1/config/auth-header"
+  mkdir -p "$capture"
   printf 'Authorization: Bearer synthetic-token\n' > "$auth"
   chmod 600 "$auth"
   jq -n --arg auth "$auth" '{enabled:true,endpoint:"http://127.0.0.1:14318/v1/traces","auth-header-file":$auth}' \
@@ -281,6 +294,9 @@ test_terminal_spans_follow_successful_cleanup_only() {
   for status in 'done [at=1712345678]: finished' 'failed [at=1712345678]: failed' '' secondmate; do
     case "$status" in done*) id=trace-done ;; failed*) id=trace-failed ;; secondmate) id=trace-secondmate; status= ;; *) id=trace-unknown ;; esac
     fake=$(make_fake_root "$id" "")
+    if [ "$id" = trace-failed ]; then
+      printf 'endpoint_task_id=%s\n' "$id" >> "$fake/state/$id.meta"
+    fi
     if [ "$id" = trace-secondmate ]; then
       sed 's/^kind=ship$/kind=secondmate/' "$fake/state/$id.meta" > "$fake/state/$id.meta.tmp"
       mv "$fake/state/$id.meta.tmp" "$fake/state/$id.meta"
@@ -298,12 +314,35 @@ test_terminal_spans_follow_successful_cleanup_only() {
         || fail "refused cleanup emitted a terminal root"
       mv "$fake/bin/fm-nm-run-lib.saved" "$fake/bin/fm-nm-run-lib.sh"
     fi
+    case "$id" in
+      trace-done|trace-failed)
+        rc=0
+        FM_HOME="$fake" PATH="$TMP_ROOT/fakebin:$PATH" FM_TRACE_CAPTURE_DIR="$capture" \
+          FM_TRACE_FAIL_META_REMOVE="$fake/state/$id.meta" \
+          bash "$fake/bin/fm-teardown.sh" "$id" > "$fake/refused.out" 2> "$fake/refused.err" || rc=$?
+        [ "$rc" -ne 0 ] || fail "$id final task-record removal unexpectedly succeeded"
+        grep -Fq 'task record could not be removed' "$fake/refused.err" \
+          || fail "$id did not reach the final removal refusal"
+        [ -f "$fake/state/$id.meta" ] || fail "$id lost metadata on refused removal"
+        [ "$(cat "$fake/state/$id.status")" = "$status" ] \
+          || fail "$id lost terminal status before record retirement committed"
+        [ "$(find "$capture" -type f -name 'request-*.json' | wc -l | tr -d ' ')" -eq 0 ] \
+          || fail "$id refused final removal emitted a root"
+        ;;
+    esac
     FM_HOME="$fake" PATH="$TMP_ROOT/fakebin:$PATH" FM_TRACE_CAPTURE_DIR="$capture" \
       bash "$fake/bin/fm-teardown.sh" "$id" >/dev/null 2>&1 \
       || fail "$id cleanup failed"
     [ "$(find "$capture" -type f -name 'request-*.json' | wc -l | tr -d ' ')" -eq 1 ] \
       || fail "$id cleanup should emit exactly one terminal root"
     request="$capture/request-1.json"
+    jq -e --arg id "$id" '
+      .resourceSpans[0].resource.attributes
+      | map({key:.key,value:.value.stringValue}) | from_entries
+      | .["firstmate.task.id"] == $id
+    ' "$request" >/dev/null || fail "$id terminal span used a snapshot filename as task identity"
+    [ ! -e "$fake/state/$id.meta" ] && [ ! -e "$fake/state/$id.status" ] \
+      || fail "$id successful cleanup retained task records"
     line=$(jq -r '.resourceSpans[0].scopeSpans[0].spans[0] | [.name, (.attributes[] | select(.key == "firstmate.task.outcome").value.stringValue)] | @tsv' "$request")
     case "$id:$line" in
       "trace-done:firstmate.task"$'\t'done) jq -e '.resourceSpans[0].scopeSpans[0].spans[0].status.code == 1' "$request" >/dev/null || fail "done should map to OK" ;;

@@ -5571,14 +5571,14 @@ if [ -n "$SPAWN_DEFERRED_SIGNAL" ]; then
   echo "error: spawn of $ID was interrupted after launch delivery began; $SPAWN_PRESERVED_CLAIM" >&2
   exit "$SPAWN_DEFERRED_SIGNAL_STATUS"
 fi
-fm_lock_release "$SPAWN_META_LOCK"
-SPAWN_META_LOCK_HELD=0
 if [ -n "$SPAWN_TRACEPARENT" ]; then
   SPAWN_SPAN_RELAUNCH=false
   [ "$RELAUNCH" -eq 1 ] && SPAWN_SPAN_RELAUNCH=true
   fm_trace_span_spawn "$STATE/$ID.meta" "$SPAWN_SPAN_START" "$SPAWN_SPAN_RELAUNCH" \
     "$SPAWN_GEN" "$BACKEND"
 fi
+fm_lock_release "$SPAWN_META_LOCK"
+SPAWN_META_LOCK_HELD=0
 
 SPAWN_DELIVERY=
 [ -z "$MODE" ] || SPAWN_DELIVERY=" mode=$MODE yolo=$YOLO"

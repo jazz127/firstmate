@@ -34,6 +34,8 @@ make_spawn_fakebin() {
 set -u
 case "$*" in
   *"#{pane_current_path}"*) printf '%s\n' "${FM_FAKE_PANE_PATH:-}"; exit 0 ;;
+  *"#{pane_current_command}"*) printf 'bash\n'; exit 0 ;;
+  *"#{pane_tty}"*) exit 0 ;;
 esac
 case "${1:-}" in
   display-message) printf 'firstmate\n'; exit 0 ;;
@@ -103,6 +105,16 @@ SH
 body=$(cat)
 [ -n "${FM_TRACE_CAPTURE_DIR:-}" ] || exit 1
 mkdir -p "$FM_TRACE_CAPTURE_DIR"
+if [ -n "${FM_TRACE_TEST_ROOT:-}" ]; then
+  . "$FM_TRACE_TEST_ROOT/bin/fm-wake-lib.sh"
+  lock=$(fm_meta_lock_path "$FM_FAKE_META_PATH") || exit 1
+  if fm_lock_try_acquire "$lock"; then
+    printf 'acquired\n' > "$FM_TRACE_CAPTURE_DIR/meta-lock"
+    fm_lock_release "$lock"
+  else
+    printf 'blocked\n' > "$FM_TRACE_CAPTURE_DIR/meta-lock"
+  fi
+fi
 n=$(find "$FM_TRACE_CAPTURE_DIR" -type f -name 'request-*.json' | wc -l | tr -d ' ')
 printf '%s' "$body" > "$FM_TRACE_CAPTURE_DIR/request-$((n + 1)).json"
 SH
@@ -135,8 +147,16 @@ make_spawn_case() {
 # is decided ONLY by the home's config/trace-context, whether the runner's own
 # environment enables or disables trace context.
 run_spawn() {
-  local home=$1 wt=$2 fakebin=$3 launchlog=$4
+  local home=$1 wt=$2 fakebin=$3 launchlog=$4 arg window=''
+  local delivery_args=(--mode no-mistakes --yolo off)
   shift 4
+  for arg in "$@"; do
+    if [ "$arg" = --relaunch ]; then
+      delivery_args=()
+      window=$(sed -n 's/^window=//p' "$home/state/$1.meta")
+      window=${window#*:}
+    fi
+  done
   : > "$launchlog"
   # A claude spawn pre-registers workspace trust in the launching user's own
   # store (bin/fm-claude-trust.sh), so it runs against a throwaway HOME;
@@ -151,15 +171,24 @@ run_spawn() {
     FM_FAKE_TRACEPARENT_SEND_UNSAFE="${FM_FAKE_TRACEPARENT_SEND_UNSAFE:-0}" \
     FM_FAKE_TRACE_METADATA_APPEND_FAIL="${FM_FAKE_TRACE_METADATA_APPEND_FAIL:-0}" \
     FM_FAKE_LAUNCH_SEND_FAIL="${FM_FAKE_LAUNCH_SEND_FAIL:-0}" \
+    FM_FAKE_DUPLICATE_WINDOW="$window" FM_TRACE_TEST_ROOT="$ROOT" \
     FM_FAKE_META_PATH="$home/state/$1.meta" \
     FM_FAKE_LAUNCH_LOG="$launchlog" PATH="$fakebin:$PATH" \
-    "$SPAWN" "$@" --mode no-mistakes --yolo off 2>&1
+    "$SPAWN" "$@" ${delivery_args[@]+"${delivery_args[@]}"} 2>&1
 }
 
 # Same, but with an explicit FM_TRACE_CONTEXT override, to prove the env decides.
 run_spawn_tc() {
-  local tc=$1 home=$2 wt=$3 fakebin=$4 launchlog=$5
+  local tc=$1 home=$2 wt=$3 fakebin=$4 launchlog=$5 arg window=''
+  local delivery_args=(--mode no-mistakes --yolo off)
   shift 5
+  for arg in "$@"; do
+    if [ "$arg" = --relaunch ]; then
+      delivery_args=()
+      window=$(sed -n 's/^window=//p' "$home/state/$1.meta")
+      window=${window#*:}
+    fi
+  done
   : > "$launchlog"
   # A claude spawn pre-registers workspace trust in the launching user's own
   # store (bin/fm-claude-trust.sh), so it runs against a throwaway HOME;
@@ -170,8 +199,10 @@ run_spawn_tc() {
     FM_STATE_OVERRIDE="$home/state" FM_DATA_OVERRIDE="$home/data" \
     FM_PROJECTS_OVERRIDE="$home/projects" FM_CONFIG_OVERRIDE="$home/config" \
     FM_SPAWN_NO_GUARD=1 FM_FAKE_PANE_PATH="$wt" TMUX="fake,1,0" \
+    FM_FAKE_DUPLICATE_WINDOW="$window" FM_TRACE_TEST_ROOT="$ROOT" \
+    FM_FAKE_META_PATH="$home/state/$1.meta" \
     FM_FAKE_LAUNCH_LOG="$launchlog" PATH="$fakebin:$PATH" \
-    "$SPAWN" "$@" --mode no-mistakes --yolo off 2>&1
+    "$SPAWN" "$@" ${delivery_args[@]+"${delivery_args[@]}"} 2>&1
 }
 
 start_trace_session() {
@@ -373,7 +404,7 @@ test_unsafe_delivery_refuses_to_append_launch() {
   enable_span_export "$HOME_DIR" "$capture"
   start_trace_session "$HOME_DIR"
 
-  out=$(FM_FAKE_TRACEPARENT_SEND_UNSAFE=1 \
+  out=$(FM_FAKE_TRACEPARENT_SEND_UNSAFE=1 FM_TRACE_CAPTURE_DIR="$capture" \
     run_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$CASE_ID" "$PROJ_DIR")
   status=$?
   [ "$status" -ne 0 ] || fail "uncleared traceparent input must stop spawn"
@@ -399,6 +430,8 @@ test_successful_spawn_emits_one_child_span() {
   [ "$(find "$capture" -type f -name 'request-*.json' | wc -l | tr -d ' ')" -eq 1 ] \
     || fail "successful launch should emit exactly one span request"
   request="$capture/request-1.json"
+  [ "$(cat "$capture/meta-lock")" = blocked ] \
+    || fail "successful spawn released its metadata lock before export"
   jq -e '.resourceSpans[0].scopeSpans[0].spans | length == 1 and .[0].name == "firstmate.spawn" and (.[0].parentSpanId | length) == 16' \
     "$request" >/dev/null || fail "successful launch did not emit one child span"
   jq -e --arg generation "$(sed -n 's/^spawn_gen=//p' "$HOME_DIR/state/$CASE_ID.meta")" '
@@ -492,14 +525,17 @@ test_duplicate_secondmate_spawn_does_not_converge_trace_context() {
 }
 
 test_relaunch_reuses_recorded_carrier() {
-  local rec out status meta first second injected started first_gen second_gen
+  local rec out status meta first second injected started first_gen second_gen capture
   rec=$(make_spawn_case tc-relaunch)
   read_case_record "$rec"
   : > "$HOME_DIR/config/trace-context"
+  capture="$HOME_DIR/captured-spans"
+  enable_span_export "$HOME_DIR" "$capture"
   start_trace_session "$HOME_DIR"
   meta="$HOME_DIR/state/$CASE_ID.meta"
 
-  out=$(run_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$CASE_ID" "$PROJ_DIR")
+  out=$(FM_TRACE_CAPTURE_DIR="$capture" \
+    run_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$CASE_ID" "$PROJ_DIR")
   status=$?
   expect_code 0 "$status" "first trace-context spawn should succeed"
   assert_contains "$out" "spawned $CASE_ID" "first spawn should report success"
@@ -511,7 +547,8 @@ test_relaunch_reuses_recorded_carrier() {
   # Relaunch the same task: the recorded carrier must be reused verbatim for both
   # the meta and the injected export, so an observer keeps one identity across
   # restarts.
-  out=$(run_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$CASE_ID" "$PROJ_DIR")
+  out=$(FM_TRACE_CAPTURE_DIR="$capture" \
+    run_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$CASE_ID" --relaunch)
   status=$?
   expect_code 0 "$status" "relaunch spawn should succeed"
   assert_contains "$out" "spawned $CASE_ID" "relaunch spawn should report success"
@@ -524,6 +561,25 @@ test_relaunch_reuses_recorded_carrier() {
   [ -n "$first_gen" ] && [ -n "$second_gen" ] && [ "$second_gen" != "$first_gen" ] \
     || fail "relaunch must publish a new spawn generation"
   [ "$injected" = "$first" ] || fail "relaunch must inject the same recorded carrier (first='$first' injected='$injected')"
+  [ "$(find "$capture" -type f -name 'request-*.json' | wc -l | tr -d ' ')" -eq 2 ] \
+    || fail "fresh launch and genuine relaunch must each emit one child"
+  [ "$(cat "$capture/meta-lock")" = blocked ] \
+    || fail "relaunch released its metadata lock before export"
+  jq -e --arg generation "$second_gen" '
+    .resourceSpans[0].scopeSpans[0].spans[0].attributes
+    | map({key:.key,value:.value.stringValue}) | from_entries
+    | . == {"firstmate.relaunch":"true","firstmate.spawn_gen":$generation,"firstmate.backend":"tmux"}
+  ' "$capture/request-2.json" >/dev/null || fail "genuine relaunch did not export its new generation"
+  start_trace_session "$HOME_DIR" off
+  out=$(FM_TRACE_CAPTURE_DIR="$capture" \
+    run_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$CASE_ID" --relaunch)
+  status=$?
+  expect_code 0 "$status" "disabled relaunch should succeed"
+  ! grep -q '^traceparent=\|^trace_started=' "$meta" || fail "disabled relaunch retained trace metadata"
+  grep -q 'unset TRACEPARENT' "$LAUNCH_LOG" || fail "disabled relaunch did not scrub the carrier environment"
+  ! grep -q '^export TRACEPARENT=' "$LAUNCH_LOG" || fail "disabled relaunch exported a carrier"
+  [ "$(find "$capture" -type f -name 'request-*.json' | wc -l | tr -d ' ')" -eq 2 ] \
+    || fail "disabled relaunch emitted a child"
   pass "relaunch preserves carrier and first-mint time while publishing a new generation"
 }
 
@@ -650,7 +706,7 @@ test_two_routed_tasks_through_one_secondmate_root_distinct_traces() {
 
   # Same environment, same task: a relaunch must reuse task A's recorded
   # carrier verbatim, so the per-task boundary never costs recovery identity.
-  out=$(TRACEPARENT="$sm_tp" run_spawn "$sm" "$wt_a" "$fakebin" "$log_a" "$id_a" "$proj_a")
+  out=$(TRACEPARENT="$sm_tp" run_spawn "$sm" "$wt_a" "$fakebin" "$log_a" "$id_a" --relaunch)
   status=$?
   expect_code 0 "$status" "routed task A relaunch should succeed"
   relaunch_tp=$(meta_traceparent "$sm/state/$id_a.meta")

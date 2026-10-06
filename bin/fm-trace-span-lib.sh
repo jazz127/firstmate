@@ -1,10 +1,11 @@
 # shellcheck shell=bash
 # Minimal, default-off OTLP/HTTP span emission for Firstmate events.
 #
-# Adapted from andrewesweet/firstmate commits dc36ffac632c9ff9a42c869339231607e52e59fc,
+# Adapted from Andrew Sweet (andrewesweet), andrewesweet/firstmate commits
+# dc36ffac632c9ff9a42c869339231607e52e59fc,
 # 9c3e523e83ef71916faabcd2504e372593d3c991, d9f3e2fe9a33752ff10880b19b00ac3586ac2d81,
 # and ccc3e24c8a37b24979690fa9b0712d977f8ddc5c (merged as 4c9abf4e14cb7a41240abb3ea8512b9c75ffeaf5).
-# The source is MIT licensed; see the repository LICENSE and the port report.
+# The source is MIT licensed; see the repository LICENSE.
 #
 # Usage: . bin/fm-trace-span-lib.sh
 # Public entry point: fm_trace_span_emit <meta-file> <name> <start-ms|-> <end-ms|->
@@ -15,10 +16,8 @@
 # traceparent in the metadata file. Export is synchronous, best-effort, and bounded
 # by curl's one-second maximum transfer time. This library does not install hooks.
 #
-# Config schema (owned in docs/configuration.md): enabled must be true, endpoint
-# must be an explicit HTTP(S) URL without query, fragment, or userinfo, and the
-# auth-header-file must name a single Authorization: Bearer header file.
-# Secrets stay in that file; curl reads it through -H @file. curl's implicit
+# Config schema and credential requirements are owned in docs/configuration.md.
+# curl reads the private bearer header file through -H @file. curl's implicit
 # config is disabled with its first-argument -q.
 
 _fm_trace_span_shell_flags=$-

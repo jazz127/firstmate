@@ -81,7 +81,7 @@ This is a deliberate, source-owned choice:
   Recovery reuses the task's recorded carrier byte-for-byte, flags included, so a task's sampling decision is stable across restarts.
   Firstmate chooses the flag only when it mints a *root*, which is the only way a new carrier is created.
 - **Cost and privacy consequence.**
-  `01` records a sampling *decision*, and a conforming downstream parent-based sampler will honor it - but it does not by itself guarantee that any collector stores a span, and Firstmate emits no spans of its own; it only sets the flag on the carrier.
+  `01` records a sampling *decision*, and a conforming downstream parent-based sampler will honor it - but it does not by itself guarantee that any collector stores a span; carrier propagation only sets the flag and emits no spans by itself.
   An operator who enables the capability and points sampling-respecting instrumentation at it should expect on the order of one trace per task to be recorded, at whatever cardinality and retention that instrumentation is configured for.
   An operator who wants unsampled roots or head-sampling owns that downstream or via a later, explicitly-scoped option; Firstmate does not embed a sampler.
 
@@ -108,10 +108,7 @@ This is a deliberate, source-owned choice:
 
 ## Relationship to OpenTelemetry and later increments
 
-Trace-context propagation and OTLP span export are separate home-local opt-ins.
-`config/trace-export.json` does not enable carrier propagation, and the current session must already have a valid trace-context decision and a recorded carrier before a span can be exported.
-The standalone `bin/fm-trace-span-lib.sh` emitter is default-off, sends authenticated OTLP/HTTP when configured, and preserves caller success on export failure.
-This increment defines no lifecycle hooks, collector, storage, or UI; see [configuration.md](configuration.md#otlp-span-export-configtrace-exportjson--fm_trace_export) for its settings.
+Carrier propagation creates no spans by itself; the separate opt-in standalone emitter is described in [configuration.md](configuration.md#otlp-span-export-configtrace-exportjson--fm_trace_export).
 
 ## Verification
 

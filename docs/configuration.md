@@ -569,6 +569,17 @@ A Secondmate on a remote route is covered the same way: the primary resolves and
 The presence flag is session-scoped enablement, so it transfers at launch and is left unchanged by live convergence into a running home.
 See [`trace-context.md`](trace-context.md) for carrier semantics, supported routes, the manual fleet-restart requirement, the session boundary, and safety limits; `bin/fm-trace-context-lib.sh`'s header owns the exact mechanics, and [`verification/trace-context.md`](verification/trace-context.md) records repeatable evidence.
 
+## OTLP span export (config/trace-export.json / FM_TRACE_EXPORT)
+
+OTLP span export is off unless the local, gitignored `config/trace-export.json` is valid and sets `enabled` to `true`.
+The object requires an explicit `endpoint` using HTTP or HTTPS, an absolute `auth-header-file` path, and accepts an optional `home-label` of at most 64 characters.
+The header file contains exactly one `Authorization: Bearer <token>` line and should be readable only by its owner.
+For example: `{"enabled":true,"endpoint":"http://127.0.0.1:14318/v1/traces","auth-header-file":"/Users/me/.config/firstmate/otlp-header","home-label":"primary"}`.
+`FM_TRACE_EXPORT=off` disables export immediately for the current process without changing carrier propagation.
+Export also requires the current session's trace-context decision to be `on` and the task metadata to contain a valid traceparent.
+`bin/fm-trace-span-lib.sh` owns the wire format and request mechanics; it has no lifecycle hooks in this increment and every exporter failure leaves the caller successful.
+See [`trace-context.md`](trace-context.md) for the distinction between carrier propagation and span export.
+
 ## Fleet activity ledger (config/fleet-ledger)
 
 See [`fleet-ledger.md`](fleet-ledger.md) for the opt-in setup, record contract, and limits.

@@ -108,9 +108,10 @@ This is a deliberate, source-owned choice:
 
 ## Relationship to OpenTelemetry and later increments
 
-Firstmate learns nothing about OpenTelemetry, any exporter, collector, storage, or UI.
-It emits a standard W3C carrier and records the same identity; a downstream observer owns everything else and discovers active propagation from the home session's frozen decision or the `traceparent=` field.
-Native lifecycle-event emission, extra stable IDs, intake metadata, and any embedded OTLP are deliberately deferred until a running observer demonstrates a concrete fidelity gap that the derived artifacts cannot cover.
+Trace-context propagation and OTLP span export are separate home-local opt-ins.
+`config/trace-export.json` does not enable carrier propagation, and the current session must already have a valid trace-context decision and a recorded carrier before a span can be exported.
+The standalone `bin/fm-trace-span-lib.sh` emitter is default-off, sends authenticated OTLP/HTTP when configured, and silently preserves caller success on export failure.
+This increment defines no lifecycle hooks, collector, storage, or UI; see [configuration.md](configuration.md#otlp-span-export-configtrace-exportjson--fm_trace_export) for its settings.
 
 ## Verification
 

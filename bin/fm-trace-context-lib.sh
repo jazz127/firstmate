@@ -205,7 +205,7 @@ fm_trace_context_recorded() {  # <meta-file>
 
 # Echo the task's first-mint epoch-ms, or the current time when no valid start
 # is recorded. Call only after a carrier has been resolved; this helper is
-# independent of export enablement so parent-owned remote spawns use it too.
+# independent of export enablement.
 fm_trace_context_started_resolve() {  # <meta-file>
   local meta=$1 existing started
   existing=$(fm_trace_context_recorded "$meta")

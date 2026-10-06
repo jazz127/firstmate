@@ -36,11 +36,17 @@ $ bash tests/fm-trace-context-spawn.test.sh | tail -1
 # all fm-trace-context-spawn tests passed
 $ bash tests/fm-teardown.test.sh | tail -1
 ok - the run abort and the leaked-process reap both complete before the destructive worktree return
-$ bash tests/fm-gotmp.test.sh | tail -1
-ok - successful cleanup emits one done/failed/unknown root with missing-start fallback; refusal and repeat emit none
 $ bash tests/fm-remote-secondmate-trace-context.test.sh | tail -1
 ALL TESTS PASSED
 ```
 
-Run the five listed trace-context and teardown suites from the repo root; each prints one `ok - ...` per assertion.
+Run the recorded commands from the repo root; each suite prints one `ok - ...` per assertion.
+Refresh the additional cleanup, recovery, and lifecycle-wrapper evidence with:
+
+```sh
+bash tests/fm-gotmp.test.sh
+bash tests/fm-backlog-atomicity.test.sh
+bash tests/fm-trace-span-lib.test.sh
+```
+
 A single live-backend end-to-end check - a real spawn confirming the pane received the `TRACEPARENT` export before the launch line, with nothing left after teardown - is a bounded manual step, deferred here because a live agent spawn disrupts a running fleet.

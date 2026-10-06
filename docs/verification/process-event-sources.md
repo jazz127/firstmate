@@ -41,6 +41,10 @@ For replacement, the oracle is byte conservation at the runner boundary: replaci
 For cleanup failure, the durable result rename is the commit point; a later failed unlink cannot invalidate that commit or justify another captured sequence, and the tests reject EXIT capture, repeated cleanup, and replacement re-commit.
 A bound board completes a reconcile request with a note, replies before acknowledging its capture, and must leave that completed request absent; later feedback rescued by replacement must still feed both reconcile selections and keyed answers.
 The intake oracle is that only new feedback creates new decision work; replaying a previously completed request fails the assertions.
+Bound feedback races cover staged output and committed output paused before decision intake for both reply versions; a real competing re-arm must wait at the source lock until reconcile selections and keyed answers are applied.
+The same bound fixture denies claim reclamation after replacement capture and requires intake to have completed before the failed arm returns.
+Send & End fixtures cover both boundaries and versions: final decisions must be applied and published, reply re-arm must refuse, and reconciliation must perform no further poll.
+The terminal oracle is the published Send & End contract: one final feedback result ends the listener; accepting another reply listener or emitting another terminal result fails the assertions.
 No live Lavish server or account is used by this regression.
 
 Refresh with `bash tests/fm-procevent.test.sh --owner-replies-only`.
@@ -70,6 +74,15 @@ ok - firstmate synchronous-cleanup preserves locally received output during repl
 ok - firstmate legacy-postcommit preserves locally received output during reply replacement
 ok - firstmate synchronous-postcommit preserves locally received output during reply replacement
 ok - firstmate synchronous-reclaim preserves locally received output during reply replacement
+ok - firstmate legacy-bound-staged preserves locally received output during reply replacement
+ok - firstmate synchronous-bound-staged preserves locally received output during reply replacement
+ok - firstmate legacy-bound-postcommit preserves locally received output during reply replacement
+ok - firstmate synchronous-bound-postcommit preserves locally received output during reply replacement
+ok - firstmate synchronous-bound-reclaim preserves locally received output during reply replacement
+ok - firstmate legacy-terminal-staged applies final decisions and refuses reply replacement
+ok - firstmate synchronous-terminal-staged applies final decisions and refuses reply replacement
+ok - firstmate legacy-terminal-postcommit applies final decisions and refuses reply replacement
+ok - firstmate synchronous-terminal-postcommit applies final decisions and refuses reply replacement
 ok - firstmate normal cleanup failure preserves one committed result without EXIT capture
 ok - firstmate reply replacement feeds rescued decisions without replaying pending decisions
 ```

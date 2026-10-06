@@ -376,8 +376,9 @@ OWNER_RACE_CAT=$(command -v cat) || fail "reply races require cat"
 OWNER_RACE_MKTEMP=$(command -v mktemp) || fail "reply races require mktemp"
 OWNER_RACE_RM=$(command -v rm) || fail "reply cleanup requires rm"
 OWNER_RACE_BASH=$(command -v bash) || fail "reply publication races require bash"
-export OWNER_RACE_CAT OWNER_RACE_MKTEMP OWNER_RACE_RM OWNER_RACE_BASH
-for owner_race_case in legacy-staged synchronous-staged legacy-capture synchronous-capture diagnostic-capture legacy-cleanup synchronous-cleanup legacy-postcommit synchronous-postcommit synchronous-reclaim; do
+OWNER_RACE_LN=$(command -v ln) || fail "reply intake races require ln"
+export OWNER_RACE_CAT OWNER_RACE_MKTEMP OWNER_RACE_RM OWNER_RACE_BASH OWNER_RACE_LN
+for owner_race_case in legacy-staged synchronous-staged legacy-capture synchronous-capture diagnostic-capture legacy-cleanup synchronous-cleanup legacy-postcommit synchronous-postcommit synchronous-reclaim legacy-bound-staged synchronous-bound-staged legacy-bound-postcommit synchronous-bound-postcommit synchronous-bound-reclaim legacy-terminal-staged synchronous-terminal-staged legacy-terminal-postcommit synchronous-terminal-postcommit; do
   OWNER_RACE="$TMP_ROOT/owner-race-$owner_race_case"
   export OWNER_RACE
   mkdir -p "$OWNER_RACE/bin" "$OWNER_RACE/home/state"
@@ -421,6 +422,15 @@ SH
   cat > "$OWNER_RACE/bin/cat" <<'SH'
 #!/usr/bin/env bash
 set -eu
+if [ "${OWNER_RACE_REARM:-}" = 1 ] && [ -e "$OWNER_RACE/pause-intake" ] \
+  && [ "$#" -eq 1 ] && [ "$1" = "$FM_PROCEVENT_CLAIM_ROOT/$OWNER_RACE_ID.lock/pid" ]; then
+  owner=$("$OWNER_RACE_CAT" "$@") || exit $?
+  if [ -n "$owner" ] && kill -0 "$owner" 2>/dev/null; then
+    (set -C; printf '1\n' > "$OWNER_RACE/rearm-lock-status") 2>/dev/null || true
+  fi
+  printf '%s\n' "$owner"
+  exit 0
+fi
 if [ "$#" -eq 1 ] && [ -e "$OWNER_RACE/pause-capture" ]; then
   case "$1" in
     "$OWNER_RACE/home/state/procevent/".*.output)
@@ -469,26 +479,46 @@ if [ -e "$OWNER_RACE/reject-cleanup" ]; then
 fi
 exec "$OWNER_RACE_RM" "$@"
 SH
+  cat > "$OWNER_RACE/bin/ln" <<'SH'
+#!/usr/bin/env bash
+set -u
+if [ "${OWNER_RACE_REARM:-}" = 1 ] && [ -e "$OWNER_RACE/pause-intake" ]; then
+  for arg in "$@"; do
+    if [ "$arg" = "$FM_PROCEVENT_CLAIM_ROOT/$OWNER_RACE_ID.lock" ]; then
+      "$OWNER_RACE_LN" "$@"
+      status=$?
+      (set -C; printf '%s\n' "$status" > "$OWNER_RACE/rearm-lock-status") 2>/dev/null || true
+      exit "$status"
+    fi
+  done
+fi
+exec "$OWNER_RACE_LN" "$@"
+SH
   cat > "$OWNER_RACE/bin/bash" <<'SH'
 #!/bin/sh
 set -eu
+pause=0
 case "${1-}" in
   */bin/fm-captain-hold.sh)
     if [ "${2-}" = binding ] && [ "${3-}" = "$OWNER_RACE_ID" ] \
-      && [ -e "$OWNER_RACE/pause-publication" ] \
-      && [ -f "$OWNER_RACE/home/state/procevent-inbox/$OWNER_RACE_ID.1.result" ] \
-      && mkdir "$OWNER_RACE/publication-paused" 2>/dev/null; then
-      printf 'ready\n' > "$OWNER_RACE/publication-ready"
-      exec "$OWNER_RACE_BASH" -c '
-        while [ ! -e "$OWNER_RACE/release-publication" ]; do
-          [ "$SECONDS" -lt "${FM_TEST_STUB_MAX_BLOCK_SECONDS:-120}" ] || exit 75
-          sleep 0.02
-        done
-        exec "$OWNER_RACE_BASH" "$@"
-      ' _ "$@"
-    fi
+      && [ -e "$OWNER_RACE/pause-intake" ]; then pause=1; fi
+    ;;
+  */bin/fm-procevent-lavish.sh)
+    if [ "${2-}" = self-announcing ] && [ -e "$OWNER_RACE/pause-publication" ]; then pause=1; fi
     ;;
 esac
+if [ "$pause" = 1 ] \
+  && [ -f "$OWNER_RACE/home/state/procevent-inbox/$OWNER_RACE_ID.1.result" ] \
+  && mkdir "$OWNER_RACE/publication-paused" 2>/dev/null; then
+  printf 'ready\n' > "$OWNER_RACE/publication-ready"
+  exec "$OWNER_RACE_BASH" -c '
+    while [ ! -e "$OWNER_RACE/release-publication" ]; do
+      [ "$SECONDS" -lt "${FM_TEST_STUB_MAX_BLOCK_SECONDS:-120}" ] || exit 75
+      sleep 0.02
+    done
+    exec "$OWNER_RACE_BASH" "$@"
+  ' _ "$@"
+fi
 exec "$OWNER_RACE_BASH" "$@"
 SH
   chmod +x "$OWNER_RACE/bin/"*
@@ -498,6 +528,35 @@ SH
   OWNER_RACE_ID=$("$ROOT/bin/fm-procevent-lavish.sh" source-id "$owner_race_art")
   export OWNER_RACE_ID
   fm_test_track_procevent_home "$OWNER_RACE/home"
+  case "$owner_race_case" in
+    *-bound-*|*-terminal-*)
+      mkdir -p "$OWNER_RACE/home/"{data,config}
+      cp "$ROOT/.tasks.toml" "$OWNER_RACE/home/.tasks.toml"
+      printf '## In flight\n\n## Queued\n\n## Done\n' > "$OWNER_RACE/home/data/backlog.md"
+      for owner_race_task in sample-reconcile-call sample-keyed-answer; do
+        (cd "$OWNER_RACE/home" && tasks-axi add "$owner_race_task" "Captain call $owner_race_task" --repo sample) \
+          >/dev/null || fail "$owner_race_case could not create its held task"
+        FM_HOME="$OWNER_RACE/home" "$ROOT/bin/fm-captain-hold.sh" hold "$owner_race_task" \
+          --reason "waiting for the captain" >/dev/null || fail "$owner_race_case could not hold its task"
+      done
+      FM_HOME="$OWNER_RACE/home" "$ROOT/bin/fm-captain-hold.sh" bind "$OWNER_RACE_ID" \
+        >/dev/null || fail "$owner_race_case could not bind its decisions"
+      cat > "$OWNER_RACE/expected" <<'EOF'
+session:
+  status: feedback
+prompts[2]{uid,prompt,selector,tag,text}:
+  "1","Reconcile\n\nContext data:\n{\n  \"schema\": \"fm-bearings-answer.v1\",\n  \"question\": \"sample-reconcile-call\",\n  \"selection\": \"reconcile\",\n  \"note\": \"new feedback\"\n}","section#call > form",choice,"Reconcile"
+  "2","Accepted\n\nContext data:\n{\n  \"schema\": \"fm-bearings-answer.v1\",\n  \"question\": \"sample-keyed-answer\",\n  \"selection\": \"accepted\",\n  \"note\": \"\"\n}","section#call > form",choice,"Accepted"
+EOF
+      case "$owner_race_case" in
+        *-terminal-*)
+          sed 's/  status: feedback/  status: feedback\
+  session_ended: true/' "$OWNER_RACE/expected" > "$OWNER_RACE/terminal"
+          mv "$OWNER_RACE/terminal" "$OWNER_RACE/expected"
+          ;;
+      esac
+      ;;
+  esac
   printf 'first reply\n' > "$OWNER_RACE/reply1"
   printf 'replacement reply\n' > "$OWNER_RACE/reply2"
   owner_race_reply_args=()
@@ -510,7 +569,13 @@ SH
   esac
   case "$owner_race_case" in
     *-cleanup|*-reclaim) touch "$OWNER_RACE/reject-cleanup" ;;
-    *-postcommit) touch "$OWNER_RACE/reject-cleanup" "$OWNER_RACE/pause-publication" ;;
+    *-postcommit)
+      touch "$OWNER_RACE/reject-cleanup"
+      case "$owner_race_case" in
+        *-bound-*|*-terminal-*) touch "$OWNER_RACE/pause-intake" ;;
+        *) touch "$OWNER_RACE/pause-publication" ;;
+      esac
+      ;;
   esac
   if [ "$owner_race_case" = diagnostic-capture ]; then
     touch "$OWNER_RACE/reject"
@@ -554,7 +619,7 @@ SH
   [ "$(count_results "$OWNER_RACE/home" "$OWNER_RACE_ID")" = "$owner_race_prior_results" ] \
     || fail "$owner_race_case did not pause at its capture boundary"
   rm -f "$OWNER_RACE/reject"
-  if [ "$owner_race_case" = synchronous-reclaim ]; then
+  if [[ "$owner_race_case" = *-reclaim ]]; then
     touch "$OWNER_RACE/reject-reclaim"
     if PATH="$OWNER_RACE/bin:$PATH" FM_HOME="$OWNER_RACE/home" \
       "$ROOT/bin/fm-procevent-lavish.sh" arm "$owner_race_art" \
@@ -567,6 +632,12 @@ SH
       || fail "the fixture did not preserve the unreclaimed generation"
     [ -f "$owner_race_output" ] && [ ! -s "$owner_race_output" ] \
       || fail "failed claim reclamation left committed staging eligible"
+    if [ "$owner_race_case" = synchronous-bound-reclaim ]; then
+      assert_contains "$(cat "$OWNER_RACE/home/state/reconcile-requests/sample-reconcile-call.request")" \
+        'sequence 1' "failed reclamation lost its new reconcile selection"
+      owner_race_show=$(cd "$OWNER_RACE/home" && tasks-axi show sample-keyed-answer --full)
+      assert_contains "$owner_race_show" 'Answer: accepted' "failed reclamation lost its new keyed answer"
+    fi
     rm -f "$OWNER_RACE/reject-reclaim"
   fi
   OWNER_RACE_REARM=1 PATH="$OWNER_RACE/bin:$PATH" FM_HOME="$OWNER_RACE/home" \
@@ -575,7 +646,47 @@ SH
   owner_race_armer=$!
   wait_for "$OWNER_RACE/rearm-attempted" || fail "$owner_race_case did not attempt replacement"
   touch "$OWNER_RACE/release-capture"
-  wait "$owner_race_armer" \
+  case "$owner_race_case" in
+    *-bound-postcommit|*-terminal-postcommit)
+      wait_for "$OWNER_RACE/rearm-lock-status" || fail "$owner_race_case never contested the intake lock"
+      [ "$(cat "$OWNER_RACE/rearm-lock-status")" -ne 0 ] \
+        || fail "$owner_race_case allowed replacement to interrupt committed intake"
+      touch "$OWNER_RACE/release-publication"
+      ;;
+  esac
+  owner_race_arm_status=0
+  wait "$owner_race_armer" || owner_race_arm_status=$?
+  case "$owner_race_case" in
+    *-bound-*|*-terminal-*)
+      assert_contains "$(cat "$OWNER_RACE/home/state/reconcile-requests/sample-reconcile-call.request")" \
+        'sequence 1' "$owner_race_case lost or replayed its reconcile intake"
+      owner_race_show=$(cd "$OWNER_RACE/home" && tasks-axi show sample-keyed-answer --full)
+      assert_contains "$owner_race_show" 'state: done' "$owner_race_case lost its keyed answer"
+      assert_contains "$owner_race_show" 'Answer: accepted' "$owner_race_case changed its keyed answer"
+      ;;
+  esac
+  case "$owner_race_case" in
+    *-terminal-*)
+      [ "$owner_race_arm_status" -ne 0 ] || fail "$owner_race_case re-armed an ended session"
+      assert_contains "$(cat "$OWNER_RACE/arm2.err")" 'stop and conclude' \
+        "$owner_race_case did not explain the terminal refusal"
+      [ "$(count_results "$OWNER_RACE/home" "$OWNER_RACE_ID")" = 1 ] \
+        || fail "$owner_race_case duplicated terminal feedback"
+      cmp -s "$OWNER_RACE/expected" "$(first_result "$OWNER_RACE/home" "$OWNER_RACE_ID")" \
+        || fail "$owner_race_case changed terminal feedback"
+      [ ! -e "$OWNER_RACE/home/state/procevent/$OWNER_RACE_ID.source" ] \
+        || fail "$owner_race_case left its ended source registered"
+      PATH="$OWNER_RACE/bin:$PATH" pe "$OWNER_RACE/home" reconcile >/dev/null
+      [ "$(wc -l < "$OWNER_RACE/polls" | tr -d ' ')" = 1 ] \
+        || fail "$owner_race_case polled after Send & End"
+      [ ! -e "$OWNER_RACE/replies" ] || fail "$owner_race_case posted a reply after Send & End"
+      assert_contains "$(wake_payloads "$OWNER_RACE/home")" "procevent lavish $OWNER_RACE_ID 1" \
+        "$owner_race_case did not publish terminal feedback"
+      pass "firstmate $owner_race_case applies final decisions and refuses reply replacement"
+      continue
+      ;;
+  esac
+  [ "$owner_race_arm_status" -eq 0 ] \
     || fail "$owner_race_case could not re-arm: $(cat "$OWNER_RACE/arm2.err")"
   owner_race_poll_count=2
   owner_race_replies='replacement reply'

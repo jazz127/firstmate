@@ -62,9 +62,10 @@
 #            to poll again in this same runner. It blocks for as long as the
 #            source blocks and is meant
 #            to run as a supervised background process, never in a conversational
-#            turn. After publishing, it asks the source's own adapter whether the
-#            captured result ends the source and normally retires the registration
+#            turn. Under the default ordering, after publishing it asks the
+#            adapter whether the captured result ends the source and retires the registration
 #            when it says so, so a source that has ended stops being restarted.
+#            docs/configuration.md owns the firstmate-owned Lavish ordering exception.
 #            A task-owned source instead keeps its terminal round open and
 #            registered until its owner concludes it with `handled`.
 # reconcile  Idempotent liveness entry the watcher calls on its ordinary cycle:
@@ -199,7 +200,7 @@
 # `bin/fm-procevent-<adapter>.sh answers <result-file>`, and whatever that prints
 # is piped straight into that one intake. The adapter reports only what the
 # captain chose; the intake owns every rule about what happens next. This runner
-# names no adapter, parses no result, and knows no decision rule, so a future
+# parses no result and knows no decision rule, so a future
 # built-in source needs nothing here beyond an `answers` command and a binding.
 # Reconcile selections use the parallel `reconciles` adapter command and the
 # binding-verified `reconcile-requests` intake, never the keyed-answer value.
@@ -233,7 +234,8 @@
 # another home is untouched. See bin/fm-procevent-lib.sh for the lease itself.
 #
 # Ownership is machine-wide per canonical source, because separate Firstmate
-# homes can share one underlying source store. A live owner is never displaced;
+# homes can share one underlying source store. Claim acquisition never displaces
+# a live owner;
 # only a claim whose stale owner and independently absent process group prove
 # its whole generation gone is reclaimed. A crashed leader or reused pid whose
 # process group still has members cannot relax ownership cleanup. Reconcile

@@ -18,7 +18,10 @@
 #            copied into a private staged file for the next listener to post
 #            before blocking. A reply-carrying re-arm stops this home's earlier
 #            listener under the source lock, so the new reply is not left waiting
-#            behind it. The caller's original file is retained. Consumed replies
+#            behind it. Arm confirms listener startup, not reply acceptance.
+#            Reply/setup failures become captured results; a synchronous reply
+#            rejected by Lavish stays staged for the next reconciliation retry.
+#            The caller's original file is retained. Consumed replies
 #            are not replayed in later rounds; this is not an exactly-once
 #            delivery guarantee (the legacy path can lose a consumed reply
 #            before posting, and acceptance followed by a crash before staged

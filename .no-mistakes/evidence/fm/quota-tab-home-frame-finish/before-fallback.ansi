@@ -1,0 +1,27 @@
+[3J[H[2Jquota-axi view of the fleet house line
+
+[38;5;103m  quota-axi · 2026-10-06 19:03 GMT+10 · 0 live · 0 stale · 4 need attention · 15 not set up[0m
+
+[38;5;59m╭─[0m[1;38;5;103m ○ claude [0m[38;5;59m────────────────────────────[0m[38;5;103m error [0m[38;5;59m─╮[0m  [38;5;59m╭─[0m[1;38;5;103m ○ codex [0m[38;5;59m───────────────────────[0m[38;5;103m unavailable [0m[38;5;59m─╮[0m
+[38;5;59m│[0m                                               [38;5;59m│[0m  [38;5;59m│[0m[38;5;103m   account unknown · source unavailable · sele…[0m[38;5;59m│[0m
+[38;5;59m│[0m[38;5;103m   keychain presence check failed[0m              [38;5;59m│[0m  [38;5;59m│[0m                                               [38;5;59m│[0m
+[38;5;59m│[0m[38;5;59m   excluded from fleet totals[0m                  [38;5;59m│[0m  [38;5;59m│[0m[38;5;103m   Codex quota unavailable[0m                     [38;5;59m│[0m
+[38;5;59m│[0m                                               [38;5;59m│[0m  [38;5;59m│[0m[38;5;59m   excluded from fleet totals[0m                  [38;5;59m│[0m
+[38;5;59m│[0m                                               [38;5;59m│[0m  [38;5;59m│[0m                                               [38;5;59m│[0m
+[38;5;59m╰───────────────────────────────────────────────╯[0m  [38;5;59m╰───────────────────────────────────────────────╯[0m
+
+[38;5;59m╭─[0m[1;38;5;103m ○ agy [0m[38;5;59m───────────────────────────────[0m[38;5;103m error [0m[38;5;59m─╮[0m  [38;5;59m╭─[0m[1;38;5;103m ○ muse [0m[38;5;59m──────────────────────────────[0m[38;5;103m error [0m[38;5;59m─╮[0m
+[38;5;59m│[0m                                               [38;5;59m│[0m  [38;5;59m│[0m                                               [38;5;59m│[0m
+[38;5;59m│[0m[38;5;103m   Antigravity process discovery failed[0m        [38;5;59m│[0m  [38;5;59m│[0m[38;5;103m   keychain presence check failed[0m              [38;5;59m│[0m
+[38;5;59m│[0m[38;5;59m   excluded from fleet totals[0m                  [38;5;59m│[0m  [38;5;59m│[0m[38;5;59m   excluded from fleet totals[0m                  [38;5;59m│[0m
+[38;5;59m│[0m                                               [38;5;59m│[0m  [38;5;59m│[0m                                               [38;5;59m│[0m
+[38;5;59m╰───────────────────────────────────────────────╯[0m  [38;5;59m╰───────────────────────────────────────────────╯[0m
+
+  [1;38;5;103m○ not set up  [0m[38;5;103mcursor[0m[38;5;59m · [0m[38;5;103mcopilot[0m[38;5;59m · [0m[38;5;103mgrok[0m[38;5;59m · [0m[38;5;103mkimi[0m[38;5;59m · [0m[38;5;103mzai[0m[38;5;59m · [0m[38;5;103malibaba[0m[38;5;59m · [0m[38;5;103mopencode-go[0m[38;5;59m · [0m[38;5;103mcommandcode[0m[38;5;59m · [0m[38;5;103mminimax[0m[38;5;59m · [0m[38;5;103mmimo[0m[38;5;59m · [0m[38;5;103mdeepseek[0m
+                [38;5;103mopenrouter[0m[38;5;59m · [0m[38;5;103melevenlabs[0m[38;5;59m · [0m[38;5;103mdevin[0m[38;5;59m · [0m[38;5;103mhiggsfield[0m   [38;5;59mquota-axi auth shows where each is read[0m
+
+Fleet house line:
+House tip: quota-axi clone is absent (/projects/quota-axi)
+quota-axi executable: /opt/homebrew/bin/quota-axi
+
+Refreshed: 2026-10-06 19:03:39 AEST | interval: 300 seconds | refreshes while running

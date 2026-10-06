@@ -1,0 +1,5 @@
+(version 1)
+(allow default)
+(deny file-read* (subpath "/Users/jarad"))
+(allow file-read* (subpath "/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M485WZXY5YFW1E8JX78M2KFK"))
+(deny process-exec (literal "/usr/bin/security"))

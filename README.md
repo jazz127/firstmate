@@ -166,7 +166,7 @@ Setup guides for tmux (the default) and every other supported backend (herdr, ze
      ▼            ▼               ▼
   treehouse worktree, Orca worktree, or isolated secondmate home
      │
-     ├─ ship: project mode ► PR/local merge ► teardown
+     ├─ ship: project mode ► PR/local merge or outside PR closeout ► teardown
      │
      └─ scout: report at data/<id>/report.md ► decision inventory ► relay findings ► teardown
 ```
@@ -174,6 +174,7 @@ Setup guides for tmux (the default) and every other supported backend (herdr, ze
 You chat with the first mate.
 It routes each request to a crewmate in its own session endpoint and git worktree, supervises the fleet with a zero-token event-driven watcher, and brings you finished PRs, approved local merges, or investigation reports.
 Optional secondmates extend this to persistent local or whole-home remote second mates, dispatch profiles let you steer which harness handles which task, and opt-in Relay lets the same fleet answer public mentions.
+Outside PR closeout follows the [configured review window](docs/configuration.md#outside-pull-request-review-window-configoutside-pr-review-window-hours).
 `codex-app` is not a runtime backend yet; [docs/codex-app-backend.md](docs/codex-app-backend.md) owns the Codex App boundary.
 
 Full architecture - the supervision engine, worktree isolation, secondmates, dispatch profiles, project modes, optional Relay, fleet sync, and self-update - is in [docs/architecture.md](docs/architecture.md).

@@ -626,6 +626,33 @@ The flag is a home-local supervision-noise preference and is not inherited by se
 
 [`architecture.md`](architecture.md) owns the wait-evidence contract and which records may take the ladder away; `bin/fm-watch.sh`'s `wedge_wait_evidence` owns the exact derivation and its fail-closed boundaries.
 
+## Outside pull request review window (config/outside-pr-review-window-hours)
+
+The outside pull request review window defaults to `2` hours.
+Set the file to an integer from `0` to `87600` hours; `0` allows immediate closeout.
+The contribution observer starts a new window when it first sees each changed PR head SHA, including a return to an older SHA.
+This estimates push time within one observer poll.
+For initial observation of an already-open PR, it uses the directly available PR `updated_at` timestamp, or `created_at` when that is unavailable; with neither timestamp it uses observation time.
+Later PR timestamp updates and CI reruns do not move an existing window.
+It applies only when the PR base repository is outside this home's merge scope, regardless of whether the head and base repositories differ.
+The observer reads GitHub's structured `viewerPermission` for the PR base repository using the authenticated account.
+`ADMIN`, `MAINTAIN`, and `WRITE` permissions identify repositories in this home's merge scope; `READ` and `TRIAGE` identify outside repositories eligible for closeout.
+Registering or cloning a project does not establish ownership.
+Fork PRs into repositories with write-or-higher permission retain cleanup-after-merge.
+Unreadable, missing, or unknown permissions prevent closeout and report an unavailable observation through the existing observer error path.
+Closeout signals apply only to a live ship task whose current canonical `pr=` matches the observed URL; retained links to replaced PRs continue observing feedback without producing closeout signals.
+At expiry, the observer signals Firstmate to close out only when CI readiness is confirmed, no contribution feedback remains unacknowledged, and the task worktree is clean.
+CI readiness uses the shared [`check_readiness` rule](../bin/fm-contributions.jq); it requires at least one latest check lane, completed conclusions of `success`, `skipped`, or `neutral`, and no missing verdicts or previously observed lanes.
+Unacknowledged feedback holds closeout even after a newer push; acknowledged feedback never holds it.
+An older `CHANGES_REQUESTED` decision does not block closeout, and a clean worker checkout may precede the published PR head.
+Red, pending, or missing checks, any unacknowledged feedback, or dirty work produce a closeout hold signal and leave the task in place.
+Firstmate still owns cleanup through the guarded `bin/fm-teardown.sh` path, which verifies that work is landed or pushed; a teardown refusal leaves the task intact.
+Missing repository identity does not opt a PR into outside-repository cleanup.
+Malformed values disable closeout and wake Firstmate once for that configuration-error episode instead of using the default.
+
+The check is part of the published-contribution observer and wakes Firstmate through the authenticated watcher check.
+The observer keeps the PR linked and watched after teardown, so later upstream feedback still reaches Firstmate.
+
 ## Gate defaults (.no-mistakes.yaml)
 
 The tracked `.no-mistakes.yaml` sets `test.evidence.store_in_repo: true` and pins `commands.lint` to `bin/fm-lint.sh`, the same owner CI invokes.

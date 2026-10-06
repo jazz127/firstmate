@@ -68,7 +68,7 @@
 # with the trace id and span id never all-zero (W3C rejects both). New roots use
 # RANDOM ids from /dev/urandom. The root's `01` (sampled) flag records a
 # sampling DECISION that downstream parent-based samplers honor; it does not
-# guarantee any collector stores a span, and firstmate emits no spans itself.
+# guarantee any collector stores a span; this propagation library emits no spans.
 #
 # Security / trust boundary. This feature adds no OTEL_* variables, no
 # tracestate, no arbitrary environment injection, and no configurable or

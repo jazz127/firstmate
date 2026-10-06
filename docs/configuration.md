@@ -569,6 +569,24 @@ A Secondmate on a remote route is covered the same way: the primary resolves and
 The presence flag is session-scoped enablement, so it transfers at launch and is left unchanged by live convergence into a running home.
 See [`trace-context.md`](trace-context.md) for carrier semantics, supported routes, the manual fleet-restart requirement, the session boundary, and safety limits; `bin/fm-trace-context-lib.sh`'s header owns the exact mechanics, and [`verification/trace-context.md`](verification/trace-context.md) records repeatable evidence.
 
+## OTLP span export (config/trace-export.json / FM_TRACE_EXPORT)
+
+OTLP span export is off unless the local, gitignored `config/trace-export.json` is valid and sets `enabled` to `true`.
+The emitter uses the effective configuration directory selected by the [home and directory overrides](#root-and-directory-overrides) and skips metadata outside the effective state directory.
+The file must contain exactly one JSON object, accepting only `enabled`, `endpoint`, and `auth-header-file`; export requires an explicit HTTP or HTTPS endpoint without userinfo, query, fragment, whitespace, or NUL bytes, and an absolute header-file path without tabs, carriage returns, newlines, or NUL bytes.
+The header file must be readable and owned by the current user, have no group or other read permission (for example, mode `0600`), and contain exactly one `Authorization: Bearer <token>` line with an optional final newline and no trailing bytes.
+The token must contain one or more ASCII letters, digits, or characters from `._~+/-`, optionally followed by `=` padding.
+An invalid header file skips export with one stderr diagnostic while preserving caller success.
+For example: `{"enabled":true,"endpoint":"http://127.0.0.1:14318/v1/traces","auth-header-file":"/Users/me/.config/firstmate/otlp-header"}`.
+Credentials remain in the local header file, outside worker launch environments; export configuration and credentials are not inherited by remote homes.
+`FM_TRACE_EXPORT=off` disables export immediately for the current process without changing carrier propagation.
+Export does not enable carrier propagation; it requires the current session's trace-context decision to be `on` and the task metadata to contain a valid traceparent.
+Exported resource metadata omits home and metadata filesystem paths and identifies the project only by its short registered name (basename), which the private collector may use as a metric dimension.
+`bin/fm-trace-span-lib.sh` owns the wire format and request mechanics; it has no lifecycle hooks in this increment and every exporter failure leaves the caller successful.
+The standalone emitter supports aggregate fleet-work metrics; it adds no collector, per-task trace store, or timeline viewer.
+[`tests/fm-trace-span-lib.test.sh`](../tests/fm-trace-span-lib.test.sh) exercises the export contract through a local HTTP capture server.
+See [`trace-context.md`](trace-context.md) for the distinction between carrier propagation and span export.
+
 ## Fleet activity ledger (config/fleet-ledger)
 
 See [`fleet-ledger.md`](fleet-ledger.md) for the opt-in setup, record contract, and limits.

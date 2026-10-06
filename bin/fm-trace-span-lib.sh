@@ -77,7 +77,9 @@ fm_trace_span_config() {
   local file=$1 values
   command -v jq >/dev/null 2>&1 || return 1
   [ -f "$file" ] || return 1
-  values=$(jq -er '
+  values=$(jq -ser '
+    if length == 1 then .[0] else error("invalid trace export config") end
+    |
     if type == "object" and .enabled == true and (.endpoint | type == "string")
       and (.endpoint | test("^https?://[^/?#@[:space:]]+(/[^?#[:space:]]*)?$"))
       and (.endpoint | contains("\u0000") | not)
@@ -108,7 +110,7 @@ fm_trace_span_header_valid() {
 }
 
 _fm_trace_span_emit_impl() {
-  local meta=$1 name=$2 start_ms=$3 end_ms=$4 state_dir config_file config_values
+  local meta=$1 name=$2 start_ms=$3 end_ms=$4 state_dir config_file config_values home_dir effective_state
   shift 4
   local root=0 status=unset pair
   while [ "$#" -gt 0 ]; do
@@ -130,7 +132,12 @@ _fm_trace_span_emit_impl() {
 
   [ "${FM_TRACE_EXPORT:-}" != off ] || return 0
   state_dir=${meta%/*}; [ "$state_dir" != "$meta" ] || state_dir=.
-  config_file="$(dirname "$state_dir")/config/trace-export.json"
+  home_dir=${FM_HOME:-${FM_ROOT_OVERRIDE:-$(dirname "$state_dir")}}
+  effective_state=${FM_STATE_OVERRIDE:-$home_dir/state}
+  state_dir=$(CDPATH='' cd -- "$state_dir" && pwd -P) || return 0
+  effective_state=$(CDPATH='' cd -- "$effective_state" && pwd -P) || return 0
+  [ "$state_dir" = "$effective_state" ] || return 0
+  config_file="${FM_CONFIG_OVERRIDE:-$home_dir/config}/trace-export.json"
   config_values=$(fm_trace_span_config "$config_file") || return 0
   [ "$(fm_trace_context_session_effective "$state_dir/.trace-context-effective")" = on ] || return 0
   local carrier

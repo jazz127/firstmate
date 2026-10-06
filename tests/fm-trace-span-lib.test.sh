@@ -4,6 +4,7 @@ set -u
 
 # shellcheck source=tests/lib.sh
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+unset FM_HOME FM_ROOT_OVERRIDE FM_STATE_OVERRIDE FM_CONFIG_OVERRIDE
 for options in - e u p eu ep up eup; do
   bash -c '
     case $1 in *e*) set -e ;; *) set +e ;; esac
@@ -171,6 +172,88 @@ jq -e '
     and $s.startTimeUnixNano == $s.endTimeUnixNano)
 ' "$WORK/capture.json" >/dev/null || fail "child identity or negative-duration clamp failed"
 pass "child spans link to the carrier parent and negative durations clamp to zero"
+
+ALT_STATE="$WORK/runtime/state"
+ALT_CONFIG="$WORK/alternate-config"
+mkdir -p "$ALT_STATE" "$WORK/runtime/config" "$ALT_CONFIG"
+cp "$STATE/.lock" "$STATE/.trace-context-effective" "$META" "$ALT_STATE/"
+CONFIG="$WORK/runtime/config" write_config "$BASE/wrong-state-config"
+
+assert_config_route() {
+  local meta=$1 route=$2 count
+  count=$(request_count)
+  fm_trace_span_emit "$meta" config.route 1 2 ${CONFIG_MODE:+"$CONFIG_MODE"} \
+    || fail "configuration resolution changed caller result ($route)"
+  [ "$(request_count)" -eq "$((count + 1))" ] || fail "configuration resolution skipped export ($route)"
+  jq -e --arg route "$route" --arg token "Bearer $TOKEN" \
+    '.path == $route and .authorization == $token' "$WORK/capture.json" >/dev/null \
+    || fail "export selected another configuration ($route)"
+}
+assert_config_skip() {
+  local meta=$1 count
+  count=$(request_count)
+  fm_trace_span_emit "$meta" config.skip 1 2 ${CONFIG_MODE:+"$CONFIG_MODE"} > "$WORK/stdout" 2> "$WORK/stderr" \
+    || fail "configuration rejection changed caller result"
+  [ "$(request_count)" = "$count" ] || fail "configuration rejection issued a request"
+  [ ! -s "$WORK/stdout" ] && [ ! -s "$WORK/stderr" ] || fail "configuration rejection emitted output"
+}
+for mode in root child; do
+  CONFIG_MODE=''
+  [ "$mode" != root ] || CONFIG_MODE=--root
+  write_config "$BASE/home-config"
+  CONFIG="$ALT_CONFIG" write_config "$BASE/override-config"
+  FM_HOME="$HOME_FIX" assert_config_route "$META" /home-config
+  FM_HOME="$HOME_FIX" FM_STATE_OVERRIDE="$ALT_STATE" \
+    assert_config_route "$ALT_STATE/task-1.meta" /home-config
+  FM_HOME="$HOME_FIX" FM_CONFIG_OVERRIDE="$ALT_CONFIG" \
+    assert_config_route "$META" /override-config
+  FM_CONFIG_OVERRIDE="$ALT_CONFIG" assert_config_route "$META" /override-config
+  FM_STATE_OVERRIDE="$STATE" assert_config_route "$META" /home-config
+  FM_HOME="$HOME_FIX" FM_STATE_OVERRIDE="$ALT_STATE" FM_CONFIG_OVERRIDE="$ALT_CONFIG" \
+    assert_config_route "$ALT_STATE/task-1.meta" /override-config
+  FM_ROOT_OVERRIDE="$HOME_FIX" assert_config_route "$META" /home-config
+  FM_HOME="$HOME_FIX" FM_ROOT_OVERRIDE="$WORK/runtime" assert_config_route "$META" /home-config
+  (
+    cd "$WORK" || fail "relative override fixture could not change directory"
+    FM_HOME=home FM_STATE_OVERRIDE=runtime/state FM_CONFIG_OVERRIDE=alternate-config \
+      assert_config_route runtime/state/task-1.meta /override-config
+  )
+  FM_HOME="$HOME_FIX" assert_config_skip "$ALT_STATE/task-1.meta"
+  FM_HOME="$HOME_FIX" FM_CONFIG_OVERRIDE="$ALT_CONFIG" assert_config_skip "$ALT_STATE/task-1.meta"
+  FM_HOME="$HOME_FIX" FM_STATE_OVERRIDE="$ALT_STATE" assert_config_skip "$META"
+  FM_HOME="$WORK/absent-home" assert_config_skip "$META"
+  FM_HOME="$HOME_FIX" FM_CONFIG_OVERRIDE="$WORK/absent-config" assert_config_skip "$META"
+  FM_HOME="$HOME_FIX" FM_STATE_OVERRIDE="$ALT_STATE" FM_CONFIG_OVERRIDE="$ALT_CONFIG" \
+    FM_TRACE_EXPORT=off assert_config_skip "$ALT_STATE/task-1.meta"
+done
+pass "root and child exports honor directory precedence and relative overrides without crossing homes or falling back"
+
+for mode in root child; do
+  CONFIG_MODE=''
+  [ "$mode" != root ] || CONFIG_MODE=--root
+  for shape in two-enabled enabled-disabled disabled-enabled object-scalar array empty null malformed-tail; do
+    write_config "$BASE/single-config"
+    cp "$CONFIG/trace-export.json" "$WORK/valid-config.json"
+    case $shape in
+      two-enabled) cat "$WORK/valid-config.json" >> "$CONFIG/trace-export.json" ;;
+      enabled-disabled) printf '%s\n' '{"enabled":false}' >> "$CONFIG/trace-export.json" ;;
+      disabled-enabled)
+        printf '%s\n' '{"enabled":false}' > "$CONFIG/trace-export.json"
+        cat "$WORK/valid-config.json" >> "$CONFIG/trace-export.json"
+        ;;
+      object-scalar) printf '%s\n' 'null' >> "$CONFIG/trace-export.json" ;;
+      array) jq -s '.' "$WORK/valid-config.json" > "$CONFIG/trace-export.json" ;;
+      empty) : > "$CONFIG/trace-export.json" ;;
+      null) printf '%s\n' 'null' > "$CONFIG/trace-export.json" ;;
+      malformed-tail) printf '%s\n' '{bad json' >> "$CONFIG/trace-export.json" ;;
+    esac
+    assert_config_skip "$META"
+  done
+  write_config "$BASE/single-config"
+  printf ' \n\t\r\n' >> "$CONFIG/trace-export.json"
+  assert_config_route "$META" /single-config
+done
+pass "only one enabled JSON object exports; concatenated values and malformed input silently preserve success"
 
 for span_mode in root child; do
   write_config "$BASE/decimal/$span_mode"

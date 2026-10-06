@@ -316,6 +316,28 @@ test_terminal_spans_follow_successful_cleanup_only() {
     fi
     case "$id" in
       trace-done|trace-failed)
+        printf 'malformed cursor\n' > "$fake/state/.status-presentation-cursor"
+        rc=0
+        FM_HOME="$fake" PATH="$TMP_ROOT/fakebin:$PATH" FM_TRACE_CAPTURE_DIR="$capture" \
+          bash "$fake/bin/fm-teardown.sh" "$id" > "$fake/cursor.out" 2> "$fake/cursor.err" || rc=$?
+        [ "$rc" -ne 0 ] || fail "$id malformed status cursor unexpectedly allowed cleanup"
+        [ -f "$fake/state/$id.meta" ] || fail "$id malformed cursor made the task non-retryable"
+        [ "$(cat "$fake/state/$id.status")" = "$status" ] \
+          || fail "$id malformed cursor lost the terminal status"
+        [ "$(find "$capture" -type f -name 'request-*.json' | wc -l | tr -d ' ')" -eq 0 ] \
+          || fail "$id malformed cursor emitted a root"
+        [ "$(find "$fake/state" -type f -name ".$id.trace-snapshot.*" | wc -l | tr -d ' ')" -eq 0 ] \
+          || fail "$id malformed cursor leaked a trace snapshot"
+        : > "$fake/state/.status-presentation-cursor"
+        rc=0
+        FM_HOME="$fake" PATH="$TMP_ROOT/fakebin:$PATH" FM_TRACE_CAPTURE_DIR="$capture" \
+          FM_TRACE_FAIL_META_REMOVE="$fake/state/$id.status" \
+          bash "$fake/bin/fm-teardown.sh" "$id" > "$fake/status-removal.out" 2> "$fake/status-removal.err" || rc=$?
+        [ "$rc" -ne 0 ] || fail "$id status removal unexpectedly succeeded"
+        [ -f "$fake/state/$id.meta" ] && [ "$(cat "$fake/state/$id.status")" = "$status" ] \
+          || fail "$id status-removal failure made the task non-retryable"
+        [ "$(find "$capture" -type f -name 'request-*.json' | wc -l | tr -d ' ')" -eq 0 ] \
+          || fail "$id status-removal failure emitted a root"
         rc=0
         FM_HOME="$fake" PATH="$TMP_ROOT/fakebin:$PATH" FM_TRACE_CAPTURE_DIR="$capture" \
           FM_TRACE_FAIL_META_REMOVE="$fake/state/$id.meta" \
@@ -324,7 +346,7 @@ test_terminal_spans_follow_successful_cleanup_only() {
         grep -Fq 'task record could not be removed' "$fake/refused.err" \
           || fail "$id did not reach the final removal refusal"
         [ -f "$fake/state/$id.meta" ] || fail "$id lost metadata on refused removal"
-        [ "$(cat "$fake/state/$id.status")" = "$status" ] \
+        [ "$(sed -n 's/^trace_outcome=//p' "$fake/state/$id.meta")" = "${status%% *}" ] \
           || fail "$id lost terminal status before record retirement committed"
         [ "$(find "$capture" -type f -name 'request-*.json' | wc -l | tr -d ' ')" -eq 0 ] \
           || fail "$id refused final removal emitted a root"
@@ -369,7 +391,40 @@ test_terminal_spans_follow_successful_cleanup_only() {
   pass "successful cleanup emits one done/failed/unknown root with missing-start fallback; refusal and repeat emit none"
 }
 
+test_untraced_cleanup_failures_remain_retryable() {
+  local id=trace-disabled status='done [at=1712345678]: finished' fake capture rc
+  fake=$(make_fake_root "$id" "")
+  capture="$TMP_ROOT/$id-spans"
+  enable_trace_export "$fake" "$capture" "$status" "$id"
+  printf 'malformed cursor\n' > "$fake/state/.status-presentation-cursor"
+  rc=0
+  FM_HOME="$fake" PATH="$TMP_ROOT/fakebin:$PATH" FM_TRACE_CAPTURE_DIR="$capture" FM_TRACE_EXPORT=off \
+    bash "$fake/bin/fm-teardown.sh" "$id" > "$fake/cursor.out" 2> "$fake/cursor.err" || rc=$?
+  [ "$rc" -ne 0 ] || fail "disabled export allowed cleanup with a malformed cursor"
+  [ -f "$fake/state/$id.meta" ] && [ "$(cat "$fake/state/$id.status")" = "$status" ] \
+    || fail "disabled export lost retryable records after cursor failure"
+  : > "$fake/state/.status-presentation-cursor"
+  rc=0
+  FM_HOME="$fake" PATH="$TMP_ROOT/fakebin:$PATH" FM_TRACE_CAPTURE_DIR="$capture" FM_TRACE_EXPORT=off \
+    FM_TRACE_FAIL_META_REMOVE="$fake/state/$id.meta" \
+    bash "$fake/bin/fm-teardown.sh" "$id" > "$fake/removal.out" 2> "$fake/removal.err" || rc=$?
+  [ "$rc" -ne 0 ] || fail "disabled export unexpectedly removed its task record"
+  grep -Fq 'task record could not be removed' "$fake/removal.err" \
+    || fail "disabled export did not reach the final removal refusal"
+  [ -f "$fake/state/$id.meta" ] && [ "$(sed -n 's/^trace_outcome=//p' "$fake/state/$id.meta")" = done ] \
+    || fail "disabled export lost retryable records after removal failure"
+  FM_HOME="$fake" PATH="$TMP_ROOT/fakebin:$PATH" FM_TRACE_CAPTURE_DIR="$capture" FM_TRACE_EXPORT=off \
+    bash "$fake/bin/fm-teardown.sh" "$id" > "$fake/success.out" 2> "$fake/success.err" \
+    || fail "disabled export could not retry repaired cleanup"
+  [ ! -e "$fake/state/$id.meta" ] && [ ! -e "$fake/state/$id.status" ] \
+    || fail "disabled export retained records after successful cleanup"
+  [ "$(find "$capture" -type f -name 'request-*.json' | wc -l | tr -d ' ')" -eq 0 ] \
+    || fail "disabled export emitted a terminal root"
+  pass "disabled export preserves retryable records through cursor and removal failures"
+}
+
 test_teardown_removes_tasktmp_dir
 test_teardown_skips_gracefully_without_tasktmp
 test_teardown_skips_gracefully_when_dir_missing
 test_terminal_spans_follow_successful_cleanup_only
+test_untraced_cleanup_failures_remain_retryable

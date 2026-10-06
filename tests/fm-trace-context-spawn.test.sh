@@ -543,6 +543,7 @@ test_relaunch_reuses_recorded_carrier() {
   started=$(sed -n 's/^trace_started=//p' "$meta")
   first_gen=$(sed -n 's/^spawn_gen=//p' "$meta")
   fm_trace_context_valid "$first" || fail "first spawn must record a valid carrier (got '$first')"
+  printf 'trace_outcome=failed\n' >> "$meta"
 
   # Relaunch the same task: the recorded carrier must be reused verbatim for both
   # the meta and the injected export, so an observer keeps one identity across
@@ -554,6 +555,7 @@ test_relaunch_reuses_recorded_carrier() {
   assert_contains "$out" "spawned $CASE_ID" "relaunch spawn should report success"
   second=$(meta_traceparent "$meta")
   second_gen=$(sed -n 's/^spawn_gen=//p' "$meta")
+  ! grep -q '^trace_outcome=' "$meta" || fail "relaunch retained an obsolete terminal outcome"
   injected=$(injected_traceparent "$LAUNCH_LOG")
   [ "$second" = "$first" ] || fail "relaunch must reuse the recorded carrier in meta (first='$first' second='$second')"
   [ "$(sed -n 's/^trace_started=//p' "$meta")" = "$started" ] \
@@ -571,11 +573,12 @@ test_relaunch_reuses_recorded_carrier() {
     | . == {"firstmate.relaunch":"true","firstmate.spawn_gen":$generation,"firstmate.backend":"tmux"}
   ' "$capture/request-2.json" >/dev/null || fail "genuine relaunch did not export its new generation"
   start_trace_session "$HOME_DIR" off
+  printf 'trace_outcome=done\n' >> "$meta"
   out=$(FM_TRACE_CAPTURE_DIR="$capture" \
     run_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$CASE_ID" --relaunch)
   status=$?
   expect_code 0 "$status" "disabled relaunch should succeed"
-  ! grep -q '^traceparent=\|^trace_started=' "$meta" || fail "disabled relaunch retained trace metadata"
+  ! grep -q '^traceparent=\|^trace_started=\|^trace_outcome=' "$meta" || fail "disabled relaunch retained trace metadata"
   grep -q 'unset TRACEPARENT' "$LAUNCH_LOG" || fail "disabled relaunch did not scrub the carrier environment"
   ! grep -q '^export TRACEPARENT=' "$LAUNCH_LOG" || fail "disabled relaunch exported a carrier"
   [ "$(find "$capture" -type f -name 'request-*.json' | wc -l | tr -d ' ')" -eq 2 ] \

@@ -112,6 +112,7 @@ Carrier propagation creates no spans by itself; the separate opt-in standalone e
 When export is enabled, a successful spawn emits one `firstmate.spawn` child after launch delivery and backlog commit, and successful task-record retirement emits one `firstmate.task` root with the last recognized `done` or `failed` status, or `unknown` when neither exists.
 The root starts at the task's first carrier mint; relaunch preserves that time while each spawn span records the new generation.
 Direct local Secondmate retirement uses the same outcome mapping, including `unknown` when no terminal status exists.
+Teardown records the terminal outcome in task metadata before retiring status presentation; a failed record removal can retry with that outcome, and relaunch clears it for the new generation.
 Exported lifecycle attributes omit pane/window identity, private PR URLs, and prior-generation linkage.
 Approved untraced paths for this chunk:
 

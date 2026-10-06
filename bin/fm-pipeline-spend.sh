@@ -149,7 +149,7 @@ else
 fi
 
 [ -d "$DATA" ] || fail "data directory $DATA is missing"
-LEDGER="$DATA/pipeline-spend.jsonl"
+LEDGER="$(CDPATH='' cd -- "$DATA" && pwd -P)/pipeline-spend.jsonl"
 
 RUN_DIR=$WT
 [ -n "$RUN_DIR" ] && [ -d "$RUN_DIR" ] || RUN_DIR=$STATE

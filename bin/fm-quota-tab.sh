@@ -2,10 +2,12 @@
 # fm-quota-tab.sh - read-only terminal view of the quota-axi fleet house line.
 #
 # Usage: bin/fm-quota-tab.sh [once|loop]
-# FM_QUOTA_CLONE defaults to "$FM_HOME/projects/quota-axi".
+# FM_QUOTA_CLONE overrides the clone path; otherwise use projects/quota-axi under
+# nonempty FM_HOME, or under this script's home (the parent of bin/).
+# This fallback is independent of the caller's working directory.
 # FM_QUOTA_TAB_INTERVAL defaults to 300 seconds and must be a positive integer.
-# Reads jazz127/house after a quiet fetch attempt, resolves quota-axi from PATH,
-# and runs quota-axi once per frame. It never writes to the quota-axi clone.
+# Displays jazz127/house after a quiet fetch attempt and runs quota-axi from PATH
+# once per frame. Fetching updates Git metadata, never checked-out clone files.
 set -u
 
 usage() {
@@ -30,7 +32,18 @@ case "$interval" in
     ;;
 esac
 
-quota_clone=${FM_QUOTA_CLONE:-${FM_HOME:-}/projects/quota-axi}
+if [ -n "${FM_QUOTA_CLONE:-}" ]; then
+  quota_clone=$FM_QUOTA_CLONE
+elif [ -n "${FM_HOME:-}" ]; then
+  quota_clone="$FM_HOME/projects/quota-axi"
+else
+  script_home=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." 2>/dev/null && pwd -P) || script_home=''
+  if [ -z "$script_home" ]; then
+    printf 'fm-quota-tab.sh: cannot resolve the home that contains this script\n' >&2
+    exit 2
+  fi
+  quota_clone="$script_home/projects/quota-axi"
+fi
 
 frame() {
   local executable short subject

@@ -144,6 +144,8 @@ printf 'traceparent=00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01\nmod
 for locale in C C.UTF-8 en_US.UTF-8; do
   write_config "$BASE/unicode"
   COUNT=$(request_count)
+  # Positional parameters expand in the inner shell.
+  # shellcheck disable=SC2016
   LC_ALL="$locale" "$BASH" -c '
     . "$1/bin/fm-trace-span-lib.sh"
     fm_trace_span_emit "$2" "$3" 1000 2000 --root "$3=$3"
@@ -262,7 +264,7 @@ assert_invalid_invocation detail=value --rot
 assert_invalid_invocation detail=value --root
 assert_invalid_invocation detail=value --status error
 assert_invalid_invocation plain
-assert_invalid_invocation =value
+assert_invalid_invocation '=value'
 assert_invalid_invocation detail=value plain
 pass "unknown options, invalid statuses, and malformed attribute arguments silently skip export"
 

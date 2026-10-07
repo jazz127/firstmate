@@ -39,6 +39,42 @@ cleanup() {
 trap cleanup EXIT
 
 TMP_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/fm-gotmp-tests.XXXXXX")
+mkdir -p "$TMP_ROOT/fakebin"
+FM_TRACE_TEST_REAL_RM=$(command -v rm)
+export FM_TRACE_TEST_REAL_RM
+cat > "$TMP_ROOT/fakebin/rm" <<'SH'
+#!/usr/bin/env bash
+for arg in "$@"; do
+  if [ -n "${FM_TRACE_FAIL_META_REMOVE:-}" ] && [ "$arg" = "$FM_TRACE_FAIL_META_REMOVE" ]; then
+    exit 1
+  fi
+done
+exec "$FM_TRACE_TEST_REAL_RM" "$@"
+SH
+chmod +x "$TMP_ROOT/fakebin/rm"
+cat > "$TMP_ROOT/fakebin/curl" <<'SH'
+#!/usr/bin/env bash
+body=$(cat)
+[ -n "${FM_TRACE_CAPTURE_DIR:-}" ] || exit 1
+mkdir -p "$FM_TRACE_CAPTURE_DIR"
+n=$(find "$FM_TRACE_CAPTURE_DIR" -type f -name 'request-*.json' | wc -l | tr -d ' ')
+printf '%s' "$body" > "$FM_TRACE_CAPTURE_DIR/request-$((n + 1)).json"
+SH
+chmod +x "$TMP_ROOT/fakebin/curl"
+
+enable_trace_export() {  # <home> <capture-dir> <status> <task-id>
+  local home=$1 capture=$2 status=$3 id=$4 auth="$1/config/auth-header"
+  mkdir -p "$capture"
+  printf 'Authorization: Bearer synthetic-token\n' > "$auth"
+  chmod 600 "$auth"
+  jq -n --arg auth "$auth" '{enabled:true,endpoint:"http://127.0.0.1:14318/v1/traces","auth-header-file":$auth}' \
+    > "$home/config/trace-export.json"
+  printf '%s\n' "$$" > "$home/state/.lock"
+  printf '%s on\n' "$$" > "$home/state/.trace-context-effective"
+  printf 'traceparent=00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01\nspawn_gen=s1.1.1\n' \
+    >> "$home/state/$id.meta"
+  printf '%s\n' "$status" > "$home/state/$id.status"
+}
 
 # Build a fake FM_HOME/FM_ROOT so the real fm-teardown.sh (symlinked in) resolves
 # state and helper scripts inside it. Stub the helper scripts fm-teardown calls so no
@@ -47,7 +83,7 @@ TMP_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/fm-gotmp-tests.XXXXXX")
 make_fake_root() {
   local id=$1 tasktmp=$2
   local fake="$TMP_ROOT/$id"
-  mkdir -p "$fake/bin/backends" "$fake/state" "$fake/data"
+  mkdir -p "$fake/bin/backends" "$fake/state" "$fake/data" "$fake/config"
   # Symlink the REAL teardown so the test exercises actual code, not a copy.
   ln -s "$TEARDOWN" "$fake/bin/fm-teardown.sh"
   # fm-backend.sh is real, while its adapter is stubbed so this temp-cleanup
@@ -98,6 +134,9 @@ SH
   ln -s "$ROOT/bin/fm-pending-reply-lib.sh" "$fake/bin/fm-pending-reply-lib.sh"
   ln -s "$ROOT/bin/fm-marker-lib.sh" "$fake/bin/fm-marker-lib.sh"
   ln -s "$ROOT/bin/fm-operational-input.sh" "$fake/bin/fm-operational-input.sh"
+  ln -s "$ROOT/bin/fm-trace-span-lib.sh" "$fake/bin/fm-trace-span-lib.sh"
+  ln -s "$ROOT/bin/fm-trace-context-lib.sh" "$fake/bin/fm-trace-context-lib.sh"
+  ln -s "$ROOT/bin/fm-timing-lib.sh" "$fake/bin/fm-timing-lib.sh"
   # Ordinary teardown reports any final ledger outcome before removing records.
   ln -s "$ROOT/bin/fm-inactive-reconcile.sh" "$fake/bin/fm-inactive-reconcile.sh"
   ln -s "$ROOT/bin/fm-parent-channel-lib.sh" "$fake/bin/fm-parent-channel-lib.sh"
@@ -203,6 +242,9 @@ SH
   ln -s "$ROOT/bin/fm-secondmate-parent-lib.sh" "$fake/bin/fm-secondmate-parent-lib.sh"
   ln -s "$ROOT/bin/fm-pending-reply-lib.sh" "$fake/bin/fm-pending-reply-lib.sh"
   ln -s "$ROOT/bin/fm-marker-lib.sh" "$fake/bin/fm-marker-lib.sh"
+  ln -s "$ROOT/bin/fm-trace-span-lib.sh" "$fake/bin/fm-trace-span-lib.sh"
+  ln -s "$ROOT/bin/fm-trace-context-lib.sh" "$fake/bin/fm-trace-context-lib.sh"
+  ln -s "$ROOT/bin/fm-timing-lib.sh" "$fake/bin/fm-timing-lib.sh"
   ln -s "$ROOT/bin/fm-operational-input.sh" "$fake/bin/fm-operational-input.sh"
   ln -s "$ROOT/bin/fm-inactive-reconcile.sh" "$fake/bin/fm-inactive-reconcile.sh"
   ln -s "$ROOT/bin/fm-parent-channel-lib.sh" "$fake/bin/fm-parent-channel-lib.sh"
@@ -253,6 +295,208 @@ test_teardown_skips_gracefully_when_dir_missing() {
   pass "fm-teardown skips gracefully when tasktmp= points to a nonexistent dir"
 }
 
+test_terminal_spans_follow_successful_cleanup_only() {
+  local id status line rc fake capture request
+  for status in 'done [at=1712345678]: finished' 'failed [at=1712345678]: failed' '' secondmate; do
+    case "$status" in done*) id=trace-done ;; failed*) id=trace-failed ;; secondmate) id=trace-secondmate; status= ;; *) id=trace-unknown ;; esac
+    fake=$(make_fake_root "$id" "")
+    if [ "$id" = trace-failed ]; then
+      printf 'endpoint_task_id=%s\n' "$id" >> "$fake/state/$id.meta"
+    fi
+    if [ "$id" = trace-secondmate ]; then
+      sed 's/^kind=ship$/kind=secondmate/' "$fake/state/$id.meta" > "$fake/state/$id.meta.tmp"
+      mv "$fake/state/$id.meta.tmp" "$fake/state/$id.meta"
+    fi
+    capture="$TMP_ROOT/$id-spans"
+    enable_trace_export "$fake" "$capture" "$status" "$id"
+    # The missing-start case models historical task metadata from before tracing.
+    rc=0
+    if [ "$id" = trace-done ]; then
+      mv "$fake/bin/fm-nm-run-lib.sh" "$fake/bin/fm-nm-run-lib.saved"
+      FM_HOME="$fake" PATH="$TMP_ROOT/fakebin:$PATH" \
+        FM_TRACE_CAPTURE_DIR="$capture" bash "$fake/bin/fm-teardown.sh" "$id" >/dev/null 2>&1 || rc=$?
+      [ "$rc" -ne 0 ] || fail "refused cleanup unexpectedly succeeded"
+      [ "$(find "$capture" -type f -name 'request-*.json' | wc -l | tr -d ' ')" -eq 0 ] \
+        || fail "refused cleanup emitted a terminal root"
+      mv "$fake/bin/fm-nm-run-lib.saved" "$fake/bin/fm-nm-run-lib.sh"
+    fi
+    case "$id" in
+      trace-done|trace-failed)
+        printf 'malformed cursor\n' > "$fake/state/.status-presentation-cursor"
+        rc=0
+        FM_HOME="$fake" PATH="$TMP_ROOT/fakebin:$PATH" FM_TRACE_CAPTURE_DIR="$capture" \
+          bash "$fake/bin/fm-teardown.sh" "$id" > "$fake/cursor.out" 2> "$fake/cursor.err" || rc=$?
+        [ "$rc" -ne 0 ] || fail "$id malformed status cursor unexpectedly allowed cleanup"
+        [ -f "$fake/state/$id.meta" ] || fail "$id malformed cursor made the task non-retryable"
+        [ "$(cat "$fake/state/$id.status")" = "$status" ] \
+          || fail "$id malformed cursor lost the terminal status"
+        [ "$(find "$capture" -type f -name 'request-*.json' | wc -l | tr -d ' ')" -eq 0 ] \
+          || fail "$id malformed cursor emitted a root"
+        [ "$(find "$fake/state" -type f -name ".$id.trace-snapshot.*" | wc -l | tr -d ' ')" -eq 0 ] \
+          || fail "$id malformed cursor leaked a trace snapshot"
+        : > "$fake/state/.status-presentation-cursor"
+        rc=0
+        FM_HOME="$fake" PATH="$TMP_ROOT/fakebin:$PATH" FM_TRACE_CAPTURE_DIR="$capture" \
+          FM_TRACE_FAIL_META_REMOVE="$fake/state/$id.status" \
+          bash "$fake/bin/fm-teardown.sh" "$id" > "$fake/status-removal.out" 2> "$fake/status-removal.err" || rc=$?
+        [ "$rc" -ne 0 ] || fail "$id status removal unexpectedly succeeded"
+        [ -f "$fake/state/$id.meta" ] && [ "$(cat "$fake/state/$id.status")" = "$status" ] \
+          || fail "$id status-removal failure made the task non-retryable"
+        [ "$(find "$capture" -type f -name 'request-*.json' | wc -l | tr -d ' ')" -eq 0 ] \
+          || fail "$id status-removal failure emitted a root"
+        rc=0
+        FM_HOME="$fake" PATH="$TMP_ROOT/fakebin:$PATH" FM_TRACE_CAPTURE_DIR="$capture" \
+          FM_TRACE_FAIL_META_REMOVE="$fake/state/$id.meta" \
+          bash "$fake/bin/fm-teardown.sh" "$id" > "$fake/refused.out" 2> "$fake/refused.err" || rc=$?
+        [ "$rc" -ne 0 ] || fail "$id final task-record removal unexpectedly succeeded"
+        grep -Fq 'task record could not be removed' "$fake/refused.err" \
+          || fail "$id did not reach the final removal refusal"
+        [ -f "$fake/state/$id.meta" ] || fail "$id lost metadata on refused removal"
+        [ "$(sed -n 's/^trace_outcome=//p' "$fake/state/$id.meta")" = "${status%% *}" ] \
+          || fail "$id lost terminal status before record retirement committed"
+        [ "$(find "$capture" -type f -name 'request-*.json' | wc -l | tr -d ' ')" -eq 0 ] \
+          || fail "$id refused final removal emitted a root"
+        ;;
+    esac
+    FM_HOME="$fake" PATH="$TMP_ROOT/fakebin:$PATH" FM_TRACE_CAPTURE_DIR="$capture" \
+      bash "$fake/bin/fm-teardown.sh" "$id" >/dev/null 2>&1 \
+      || fail "$id cleanup failed"
+    [ "$(find "$capture" -type f -name 'request-*.json' | wc -l | tr -d ' ')" -eq 1 ] \
+      || fail "$id cleanup should emit exactly one terminal root"
+    request="$capture/request-1.json"
+    jq -e --arg id "$id" '
+      .resourceSpans[0].resource.attributes
+      | map({key:.key,value:.value.stringValue}) | from_entries
+      | .["firstmate.task.id"] == $id
+    ' "$request" >/dev/null || fail "$id terminal span used a snapshot filename as task identity"
+    [ ! -e "$fake/state/$id.meta" ] && [ ! -e "$fake/state/$id.status" ] \
+      || fail "$id successful cleanup retained task records"
+    line=$(jq -r '.resourceSpans[0].scopeSpans[0].spans[0] | [.name, (.attributes[] | select(.key == "firstmate.task.outcome").value.stringValue)] | @tsv' "$request")
+    case "$id:$line" in
+      "trace-done:firstmate.task"$'\t'done) jq -e '.resourceSpans[0].scopeSpans[0].spans[0].status.code == 1' "$request" >/dev/null || fail "done should map to OK" ;;
+      "trace-failed:firstmate.task"$'\t'failed) jq -e '.resourceSpans[0].scopeSpans[0].spans[0].status.code == 2' "$request" >/dev/null || fail "failed should map to ERROR" ;;
+      "trace-unknown:firstmate.task"$'\t'unknown) jq -e '(.resourceSpans[0].scopeSpans[0].spans[0] | has("status") | not)' "$request" >/dev/null || fail "unknown should leave status unset" ;;
+      "trace-secondmate:firstmate.task"$'\t'unknown) jq -e '
+        (.resourceSpans[0].resource.attributes | map({key:.key,value:.value.stringValue}) | from_entries)
+          ["firstmate.task.kind"] == "secondmate"
+        and (.resourceSpans[0].scopeSpans[0].spans[0] | has("status") | not)
+      ' "$request" >/dev/null || fail "secondmate without terminal status should leave status unset" ;;
+      *) fail "$id emitted unexpected root span: $line" ;;
+    esac
+    [ "$(jq -r '.resourceSpans[0].scopeSpans[0].spans[0].startTimeUnixNano' "$request")" -gt 0 ] \
+      || fail "$id missing historical start data did not get a safe current start"
+    if [ "$id" = trace-done ]; then
+      rc=0
+      FM_HOME="$fake" PATH="$TMP_ROOT/fakebin:$PATH" FM_TRACE_CAPTURE_DIR="$capture" \
+        bash "$fake/bin/fm-teardown.sh" "$id" >/dev/null 2>&1 || rc=$?
+      [ "$rc" -ne 0 ] || fail "repeated cleanup unexpectedly succeeded after record removal"
+      [ "$(find "$capture" -type f -name 'request-*.json' | wc -l | tr -d ' ')" -eq 1 ] \
+        || fail "repeated cleanup duplicated the terminal root"
+    fi
+  done
+  pass "successful cleanup emits one done/failed/unknown root with missing-start fallback; refusal and repeat emit none"
+}
+
+test_terminal_outcomes_survive_notes_and_yield_to_renewed_work() {
+  local outcome phase id fake capture status expected rc n
+  for outcome in 'done' failed; do
+    for phase in plain tagged long-notes working saved-working finished-again saved-notes; do
+      id="trace-$outcome-$phase"
+      fake=$(make_fake_root "$id" "")
+      capture="$TMP_ROOT/$id-spans"
+      status="$outcome [at=1712345678]: finished"
+      [ "$phase" != plain ] || status="$outcome: finished"
+      enable_trace_export "$fake" "$capture" "$status" "$id"
+      expected=$outcome
+      printf 'note [at=1712345679]: cleanup complete\nContinuation mentioning failed: is prose\n\n' \
+        >> "$fake/state/$id.status"
+      case "$phase" in
+        long-notes)
+          for ((n=0; n<205; n++)); do
+            printf 'note: cleanup detail %s\n' "$n" >> "$fake/state/$id.status"
+          done
+          ;;
+        working|finished-again)
+          printf 'working [at=1712345680]: resumed\nnote: more progress\n' >> "$fake/state/$id.status"
+          expected=unknown
+          if [ "$phase" = finished-again ]; then
+            case "$outcome" in 'done') expected=failed ;; failed) expected='done' ;; esac
+            printf '%s [at=1712345681]: finished again\nnote: cleanup complete' "$expected" \
+              >> "$fake/state/$id.status"
+          fi
+          ;;
+        saved-working|saved-notes)
+          rc=0
+          FM_HOME="$fake" PATH="$TMP_ROOT/fakebin:$PATH" FM_TRACE_CAPTURE_DIR="$capture" \
+            FM_TRACE_FAIL_META_REMOVE="$fake/state/$id.meta" \
+            bash "$fake/bin/fm-teardown.sh" "$id" > "$fake/refused.out" 2> "$fake/refused.err" || rc=$?
+          [ "$rc" -ne 0 ] || fail "$id final metadata removal unexpectedly succeeded"
+          [ "$(sed -n 's/^trace_outcome=//p' "$fake/state/$id.meta")" = "$outcome" ] \
+            || fail "$id note hid the terminal outcome before a failed removal"
+          [ ! -e "$capture/request-1.json" ] || fail "$id failed removal emitted a root"
+          if [ "$phase" = saved-working ]; then
+            printf 'working: resumed\nnote: progress' > "$fake/state/$id.status"
+            expected=unknown
+          else
+            printf 'note: cleanup complete' > "$fake/state/$id.status"
+          fi
+          ;;
+      esac
+      FM_HOME="$fake" PATH="$TMP_ROOT/fakebin:$PATH" FM_TRACE_CAPTURE_DIR="$capture" \
+        bash "$fake/bin/fm-teardown.sh" "$id" > "$fake/success.out" 2> "$fake/success.err" \
+        || fail "$id cleanup failed"
+      [ "$(find "$capture" -type f -name 'request-*.json' | wc -l | tr -d ' ')" -eq 1 ] \
+        || fail "$id cleanup should emit exactly one terminal root"
+      jq -e --arg expected "$expected" '
+        .resourceSpans[0].scopeSpans[0].spans[0] |
+        .name == "firstmate.task" and
+        any(.attributes[]; .key == "firstmate.task.outcome" and .value.stringValue == $expected) and
+        (if $expected == "done" then .status.code == 1
+         elif $expected == "failed" then .status.code == 2
+         else has("status") | not end)
+      ' "$capture/request-1.json" >/dev/null || fail "$id emitted the wrong outcome after $phase"
+      [ ! -e "$fake/state/$id.meta" ] && [ ! -e "$fake/state/$id.status" ] \
+        || fail "$id successful cleanup retained task records"
+    done
+  done
+  pass "terminal outcomes survive notes, reset on renewed work, and follow a later terminal event"
+}
+
+test_untraced_cleanup_failures_remain_retryable() {
+  local id=trace-disabled status='done [at=1712345678]: finished' fake capture rc
+  fake=$(make_fake_root "$id" "")
+  capture="$TMP_ROOT/$id-spans"
+  enable_trace_export "$fake" "$capture" "$status" "$id"
+  printf 'malformed cursor\n' > "$fake/state/.status-presentation-cursor"
+  rc=0
+  FM_HOME="$fake" PATH="$TMP_ROOT/fakebin:$PATH" FM_TRACE_CAPTURE_DIR="$capture" FM_TRACE_EXPORT=off \
+    bash "$fake/bin/fm-teardown.sh" "$id" > "$fake/cursor.out" 2> "$fake/cursor.err" || rc=$?
+  [ "$rc" -ne 0 ] || fail "disabled export allowed cleanup with a malformed cursor"
+  [ -f "$fake/state/$id.meta" ] && [ "$(cat "$fake/state/$id.status")" = "$status" ] \
+    || fail "disabled export lost retryable records after cursor failure"
+  : > "$fake/state/.status-presentation-cursor"
+  rc=0
+  FM_HOME="$fake" PATH="$TMP_ROOT/fakebin:$PATH" FM_TRACE_CAPTURE_DIR="$capture" FM_TRACE_EXPORT=off \
+    FM_TRACE_FAIL_META_REMOVE="$fake/state/$id.meta" \
+    bash "$fake/bin/fm-teardown.sh" "$id" > "$fake/removal.out" 2> "$fake/removal.err" || rc=$?
+  [ "$rc" -ne 0 ] || fail "disabled export unexpectedly removed its task record"
+  grep -Fq 'task record could not be removed' "$fake/removal.err" \
+    || fail "disabled export did not reach the final removal refusal"
+  [ -f "$fake/state/$id.meta" ] && [ "$(sed -n 's/^trace_outcome=//p' "$fake/state/$id.meta")" = 'done' ] \
+    || fail "disabled export lost retryable records after removal failure"
+  FM_HOME="$fake" PATH="$TMP_ROOT/fakebin:$PATH" FM_TRACE_CAPTURE_DIR="$capture" FM_TRACE_EXPORT=off \
+    bash "$fake/bin/fm-teardown.sh" "$id" > "$fake/success.out" 2> "$fake/success.err" \
+    || fail "disabled export could not retry repaired cleanup"
+  [ ! -e "$fake/state/$id.meta" ] && [ ! -e "$fake/state/$id.status" ] \
+    || fail "disabled export retained records after successful cleanup"
+  [ "$(find "$capture" -type f -name 'request-*.json' | wc -l | tr -d ' ')" -eq 0 ] \
+    || fail "disabled export emitted a terminal root"
+  pass "disabled export preserves retryable records through cursor and removal failures"
+}
+
 test_teardown_removes_tasktmp_dir
 test_teardown_skips_gracefully_without_tasktmp
 test_teardown_skips_gracefully_when_dir_missing
+test_terminal_spans_follow_successful_cleanup_only
+test_terminal_outcomes_survive_notes_and_yield_to_renewed_work
+test_untraced_cleanup_failures_remain_retryable

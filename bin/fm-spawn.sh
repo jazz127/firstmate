@@ -653,6 +653,8 @@ fm_backlog_directory_present "$STATE" "state directory" || {
 . "$SCRIPT_DIR/fm-dod-lib.sh"
 # shellcheck source=bin/fm-trace-context-lib.sh
 . "$SCRIPT_DIR/fm-trace-context-lib.sh"
+# shellcheck source=bin/fm-trace-span-lib.sh
+. "$SCRIPT_DIR/fm-trace-span-lib.sh"
 # shellcheck source=bin/fm-remote-readiness-lib.sh
 . "$SCRIPT_DIR/fm-remote-readiness-lib.sh"
 # shellcheck source=bin/fm-timeout-lib.sh
@@ -5160,6 +5162,10 @@ else
     SPAWN_TRACEPARENT=
   fi
 fi
+SPAWN_TRACE_STARTED=
+if [ -n "$SPAWN_TRACEPARENT" ]; then
+  SPAWN_TRACE_STARTED=$(fm_trace_context_started_resolve "$STATE/$ID.meta")
+fi
 
 META_WINDOW=$T
 [ "$BACKEND" = orca ] && META_WINDOW=$W
@@ -5180,7 +5186,7 @@ SPAWN_META_PATH=$SPAWN_META_TMP
 preserve_relaunch_meta() {
   awk -F= '
     BEGIN {
-      split("window endpoint_task_id worktree project harness kind mode yolo branch tasktmp base_branch model effort seat dock seat_home seat_source account account_provider busy_gen spawn_gen traceparent backend herdr_session herdr_workspace_id herdr_tab_id herdr_pane_id zellij_session zellij_tab_id zellij_pane_id orca_worktree_id terminal cmux_workspace_id cmux_surface_id home projects control_relaunch_tx", keys, " ")
+      split("window endpoint_task_id worktree project harness kind mode yolo branch tasktmp base_branch model effort seat dock seat_home seat_source account account_provider busy_gen spawn_gen traceparent trace_started trace_outcome backend herdr_session herdr_workspace_id herdr_tab_id herdr_pane_id zellij_session zellij_tab_id zellij_pane_id orca_worktree_id terminal cmux_workspace_id cmux_surface_id home projects control_relaunch_tx", keys, " ")
       for (i in keys) owned[keys[i]] = 1
     }
     !($1 in owned)
@@ -5552,7 +5558,7 @@ if [ -z "$SPAWN_TRACEPARENT" ] && [ "$RELAUNCH" -eq 1 ]; then
 fi
 
 spawn_record_traceparent() {
-  local meta="$STATE/$ID.meta" status=0 acquired=0
+  local meta="$STATE/$ID.meta" status=0 acquired=0 record
   # Fresh publication still owns the lock. Relaunch deliberately uses a short
   # independent critical section so other metadata interfaces can serialize.
   if [ "$SPAWN_META_LOCK_HELD" != 1 ]; then
@@ -5561,10 +5567,12 @@ spawn_record_traceparent() {
     SPAWN_META_LOCK_HELD=1
     acquired=1
   fi
+  record="traceparent=$SPAWN_TRACEPARENT"
+  [ -z "$SPAWN_TRACE_STARTED" ] || record+=$'\n'"trace_started=$SPAWN_TRACE_STARTED"
   SPAWN_META_TMP="$STATE/.$ID.meta.trace.${BASHPID:-$$}"
   if [ ! -f "$meta" ] || [ ! -w "$meta" ] ||
-    ! awk -F= '$1 != "traceparent"' "$meta" >"$SPAWN_META_TMP" ||
-    ! printf 'traceparent=%s\n' "$SPAWN_TRACEPARENT" >>"$SPAWN_META_TMP" ||
+    ! awk -F= '$1 != "traceparent" && $1 != "trace_started"' "$meta" >"$SPAWN_META_TMP" ||
+    ! printf '%s\n' "$record" >>"$SPAWN_META_TMP" ||
     ! fm_backlog_atomic_transition publish "$SPAWN_META_TMP" "$meta" "task record" "$STATE"; then
     status=1
     rm -f "$SPAWN_META_TMP" 2>/dev/null || true
@@ -5580,6 +5588,7 @@ spawn_record_traceparent() {
 # Export GOTMPDIR and default Corepack and npm cache homes into the crewmate's
 # pane shell before its launch. The task temp root sits outside the worktree and
 # teardown removes it; cache homes the pane already sets are kept.
+SPAWN_SPAN_START=$(fm_timing_now_ms)
 spawn_send_text_line "$T" "export GOTMPDIR=$TASK_TMP/gotmp"
 spawn_send_text_line "$T" "export COREPACK_HOME=\"\${COREPACK_HOME:-$TASK_TMP/cache/corepack}\""
 spawn_send_text_line "$T" "export npm_config_cache=\"\${npm_config_cache:-\${NPM_CONFIG_CACHE:-$TASK_TMP/cache/npm}}\""
@@ -5838,6 +5847,12 @@ if [ -n "$SPAWN_DEFERRED_SIGNAL" ]; then
   trap - HUP INT TERM
   echo "error: spawn of $ID was interrupted after launch delivery began; $SPAWN_PRESERVED_CLAIM" >&2
   exit "$SPAWN_DEFERRED_SIGNAL_STATUS"
+fi
+if [ -n "$SPAWN_TRACEPARENT" ]; then
+  SPAWN_SPAN_RELAUNCH=false
+  [ "$RELAUNCH" -eq 1 ] && SPAWN_SPAN_RELAUNCH=true
+  fm_trace_span_spawn "$STATE/$ID.meta" "$SPAWN_SPAN_START" "$SPAWN_SPAN_RELAUNCH" \
+    "$SPAWN_GEN" "$BACKEND"
 fi
 fm_lock_release "$SPAWN_META_LOCK"
 SPAWN_META_LOCK_HELD=0

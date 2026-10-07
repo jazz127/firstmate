@@ -152,7 +152,16 @@ FM_TEST_ONLY=test_term_stops_a_watcher_blocked_in_tmux_queries bash bin/fm-test-
 FM_TEST_ONLY=test_term_cancels_watcher_owned_timeouts bash bin/fm-test-run.sh tests/fm-watch-triage.test.sh
 ```
 
-Selected assertion output:
+`test_recovered_panes_outlive_watcher_timeout_owner` covers successful tmux and Herdr recovery with synthetic fresh servers and panes, under Perl and Bash timeout mechanisms and both ambient and allowlisted launch environments.
+It checks that persistent launches clear ownership and worker startup completes after watcher exit, including a destination pane with stale ownership values.
+The tmux cases also check that transient spawn queries retain watcher ownership.
+Refresh that separate regression with:
+
+```sh
+FM_TEST_ONLY=test_recovered_panes_outlive_watcher_timeout_owner bash bin/fm-test-run.sh tests/fm-watch-triage.test.sh
+```
+
+Selected stalled-query and timeout assertion output:
 
 ```text
 ok - TERM stops inbox blocked in tmux list-windows and runs cleanup

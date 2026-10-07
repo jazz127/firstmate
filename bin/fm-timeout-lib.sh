@@ -6,9 +6,10 @@
 # repo agrees on what "the bound was hit" means.
 #
 #   fm_timeout_mechanism
-#       Prints the mechanism fm_run_timed will use on this host: "timeout",
+#       Prints the default mechanism for this host: "timeout",
 #       "gtimeout", "perl", or "bash". Set FM_TIMEOUT_MECHANISM_OVERRIDE=bash
-#       to force the dependency-free fallback.
+#       to force the dependency-free fallback. Watcher-owned calls use the
+#       owner-aware selection described under fm_run_timed instead.
 #
 #   fm_run_timed <seconds> <command> [args...]
 #       Runs the command with a hard bound. Exit status is the command's own,
@@ -22,6 +23,13 @@
 #       own KILL escalation, with no status recorded by the bounded command,
 #       also collapses into 124: there it means the bound fired, not that the
 #       command chose to die.
+#       With FM_TIMEOUT_OWNER_PID set by the watcher, use fm_exec_timed's
+#       owner-aware Perl runner with a one-second grace, or the Bash fallback
+#       when forced or Perl is absent. The Bash watchdog checks both the watcher
+#       and its nested supervisor, then terminates and reaps the child group
+#       after either owner disappears or the deadline expires. These owner
+#       variables belong only to transient operations, never persistent servers
+#       or worker launches; fm-spawn.sh owns the launch-boundary exclusion.
 #
 #   fm_exec_timed <seconds> <grace-seconds> <command> [args...]
 #       Replaces the calling shell with the bounded command, so it must be the

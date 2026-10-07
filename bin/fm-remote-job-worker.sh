@@ -22,6 +22,20 @@
 # its recorded command group, leaving interrupted records for the replacement
 # worker's orphan recovery.
 #
+# A contender leaves a verified live lock owner untouched and retries while
+# readiness probes succeed or the lock directory is at most ten seconds old.
+# Once those guards clear, stale-lock reclamation removes the final pid, start,
+# and command files plus interrupted .pid.XXXXXX, .start.XXXXXX, and
+# .command.XXXXXX publications, where XXXXXX is six alphanumeric characters.
+# Cleanup validates every entry before deleting any lock file and accepts only
+# regular non-symlink files with those names; unknown entries, directories,
+# and symlinks fail closed. It removes the lock directory only when empty.
+# Worker exit and the Linux supervisor's verified dead-child cleanup use the
+# same publication cleanup. Quarantine recovery keeps its separate check that
+# recorded execution has stopped before allowing stale-lock reclamation.
+# tests/fm-remote-job.test.sh covers stale fragments, unknown entries, and
+# preservation of a live owner's lock.
+#
 # The serving loop does not busy-poll an idle queue. After a lane starts or is
 # reaped it rescans every FM_REMOTE_JOB_POLL_SECONDS for four passes, so a home
 # whose lane just finished starts its next job promptly; otherwise it sleeps
@@ -190,6 +204,39 @@ worker_lock_recent() {
   [ $((now - mtime)) -le 10 ]
 }
 
+worker_remove_lock_publication_files() {
+  local path name suffix
+  for path in "$WORKER_LOCK"/* "$WORKER_LOCK"/.[!.]* "$WORKER_LOCK"/..?*; do
+    [ -e "$path" ] || [ -L "$path" ] || continue
+    name=${path##*/}
+    case "$name" in
+      pid|start|command) ;;
+      .pid.*|.start.*|.command.*)
+        suffix=${name#*.}
+        suffix=${suffix#*.}
+        [[ "$suffix" =~ ^[[:alnum:]]{6}$ ]] || return 1
+        ;;
+      *) return 1 ;;
+    esac
+    [ -f "$path" ] && [ ! -L "$path" ] || return 1
+  done
+  for path in "$WORKER_LOCK"/* "$WORKER_LOCK"/.[!.]* "$WORKER_LOCK"/..?*; do
+    [ -e "$path" ] || [ -L "$path" ] || continue
+    name=${path##*/}
+    case "$name" in
+      pid|start|command) ;;
+      .pid.*|.start.*|.command.*)
+        suffix=${name#*.}
+        suffix=${suffix#*.}
+        [[ "$suffix" =~ ^[[:alnum:]]{6}$ ]] || return 1
+        ;;
+      *) return 1 ;;
+    esac
+    [ -f "$path" ] && [ ! -L "$path" ] || return 1
+    rm -f -- "$path" || return 1
+  done
+}
+
 worker_quarantined_execution_stopped() { # <account-home>
   local account_home=$1 job state kind file pid
   fm_remote_job_regular_bounded "$WORKER_LOCK/quarantine" 256 || return 1
@@ -237,8 +284,7 @@ worker_acquire_lock() { # <account-home> <identity>
       sleep 0.1
       continue
     fi
-    [ ! -L "$WORKER_LOCK/pid" ] && [ ! -L "$WORKER_LOCK/start" ] && [ ! -L "$WORKER_LOCK/command" ] || return 1
-    rm -f -- "$WORKER_LOCK/pid" "$WORKER_LOCK/start" "$WORKER_LOCK/command" || return 1
+    worker_remove_lock_publication_files || return 1
     rmdir "$WORKER_LOCK" || return 1
   done
   return 1
@@ -318,9 +364,7 @@ worker_cleanup() {
   [ "$WORKER_LOCK_HELD" -eq 1 ] && [ "$WORKER_RELEASE_OWNERSHIP" -eq 1 ] || return 0
   owner_pid=$(fm_remote_job_read_single_line "$WORKER_LOCK/pid" 64 2>/dev/null || true)
   if [ -z "$owner_pid" ]; then
-    [ ! -L "$WORKER_LOCK/start" ] && [ ! -L "$WORKER_LOCK/command" ] &&
-      rm -f -- "$WORKER_LOCK/start" "$WORKER_LOCK/command" 2>/dev/null || true
-    rmdir "$WORKER_LOCK" 2>/dev/null || true
+    worker_remove_lock_publication_files && rmdir "$WORKER_LOCK" 2>/dev/null || true
     WORKER_LOCK_HELD=0
     return 0
   fi
@@ -331,8 +375,7 @@ worker_cleanup() {
   [ ! -L "$pid_file" ] && rm -f -- "$pid_file" 2>/dev/null || true
   [ ! -L "$ready" ] && rm -f -- "$ready" 2>/dev/null || true
   [ ! -L "$identity" ] && rm -f -- "$identity" 2>/dev/null || true
-  rm -f -- "$WORKER_LOCK/pid" "$WORKER_LOCK/start" "$WORKER_LOCK/command" 2>/dev/null || true
-  rmdir "$WORKER_LOCK" 2>/dev/null || true
+  worker_remove_lock_publication_files && rmdir "$WORKER_LOCK" 2>/dev/null || true
   WORKER_LOCK_HELD=0
 }
 
@@ -1301,8 +1344,7 @@ worker_supervisor_cleanup_dead_child() { # <account-home> <pid>
   [ ! -L "$pid_file" ] && rm -f -- "$pid_file" || return 1
   [ ! -L "$ready" ] && rm -f -- "$ready" || return 1
   [ ! -L "$identity" ] && rm -f -- "$identity" || return 1
-  [ ! -L "$lock/start" ] && [ ! -L "$lock/command" ] || return 1
-  rm -f -- "$lock/pid" "$lock/start" "$lock/command" || return 1
+  WORKER_LOCK=$lock worker_remove_lock_publication_files || return 1
   rmdir "$lock"
 }
 

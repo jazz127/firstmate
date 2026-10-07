@@ -1,0 +1,58 @@
+[
+  {
+    "name": "Default-off key delivery produces no export",
+    "result": "pass"
+  },
+  {
+    "name": "Durable inbox delivery exports aggregate dimensions without message contents",
+    "result": "pass"
+  },
+  {
+    "name": "Decision answer closes the hold and exports no decision or answer identities",
+    "result": "pass"
+  },
+  {
+    "name": "Empty steer key-answer combination and unowned control are refused without export",
+    "result": "pass"
+  },
+  {
+    "name": "Delivered Escape key exports one key-plane observation",
+    "result": "pass"
+  },
+  {
+    "name": "Harness-native status submission exports only after confirmed acceptance",
+    "result": "pass"
+  },
+  {
+    "name": "Interrupted typed delivery before Enter exports no success observation",
+    "result": "pass"
+  },
+  {
+    "name": "Verified interrupt preserves the agent and distinguishes unconfirmed cancellation",
+    "result": "pass"
+  },
+  {
+    "name": "Scout promotion publishes ship metadata before its lifecycle observation",
+    "result": "pass"
+  },
+  {
+    "name": "Re-promoting a ship is refused without metadata change or export",
+    "result": "pass"
+  },
+  {
+    "name": "Explicit export off switch suppresses successful lifecycle delivery",
+    "result": "pass"
+  },
+  {
+    "name": "Relaunch replaces the real harness without counting its internal stop as interrupt or exit",
+    "result": "pass"
+  },
+  {
+    "name": "Verified exit emits one observation and preserves endpoint and uncommitted work",
+    "result": "pass"
+  },
+  {
+    "name": "Already-stopped exit reports the verified postcondition and exports successfully",
+    "result": "pass"
+  }
+]

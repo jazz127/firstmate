@@ -1,0 +1,13 @@
+window=primary:fm-probe
+endpoint_task_id=probe
+worktree=/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4AJTXSFP6X4C9M1TFE2BGVN/.l/wt
+project=/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4AJTXSFP6X4C9M1TFE2BGVN/.l/project
+backend=tmux
+harness=codex
+model=default
+effort=default
+traceparent=00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01
+kind=ship
+mode=local-only
+yolo=off
+branch=fm/probe

@@ -1,0 +1,40 @@
+╭─────────────────────────────────────────────────╮
+│ ✨ Update available! 0.160.0 -> 0.160.1         │
+│ Run brew upgrade --cask codex to update.        │
+│                                                 │
+│ See full release notes:                         │
+│ https://github.com/openai/codex/releases/latest │
+╰─────────────────────────────────────────────────╯
+
+
+  >_ OpenAI Codex (v0.160.0)
+     ~/.no-mistakes/worktrees/119cd7a6b9a4/01M4AJTXSFP6X4C9M1TFE2BGVN/.l/wt
+
+  Welcome to the blinking edge of possibility.
+
+/status
+
+  >_ OpenAI Codex (v0.160.0)
+
+  Visit https://chatgpt.com/codex/settings/usage for up-to-date
+  information on rate limits and credits
+
+  Model:               GPT-6.1-Sol (reasoning low, summaries auto)
+  Model provider:      openai
+  Directory:           ~/.no-mistakes/worktrees/119cd7a6b9a4/01M4AJTXSFP6X4C9M1TFE2BGVN/.l/wt
+  Permissions:         Workspace (Ask for approval)
+  Agents.md:           <none>
+  Account:             Pro 200
+  Collaboration mode:  Default
+  Session:             01a1154b-037f-78c2-915c-8b91d2e5ffd2
+
+  Weekly limit:        [███████████████████░] 96% left (resets 1:56 PM on 14 Oct)
+  Credits:             80687 credits
+
+› /status      show current session configuration and token usage
+  /statusline  configure which items appear in the status line
+
+› /status
+
+  GPT-6.1-Sol default · ~/.no-mistakes/worktrees/119cd7a6b9a4/01M4AJTXSFP6X4C9M1TFE2BGVN/.l/wt
+

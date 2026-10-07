@@ -1,0 +1,17 @@
+$ /usr/sbin/sshd -D -e -f <worktree lab>/ssh/sshd_config
+Server listening on 127.0.0.1 port 24222.
+$ ssh -F /dev/null -p 24222 -i <disposable key> -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=<lab>/known_hosts localhost true
+Connection from 127.0.0.1 port 65374 on 127.0.0.1 port 24222
+Warning: Permanently added '[127.0.0.1]:24222' (ED25519) to the list of known hosts.
+Accepted key ED25519 SHA256:Oc3zNCThLYkMyVuOJWy4OEtwwFZZLoIJ6IO2w1i+PkM found at /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4AJTXSFP6X4C9M1TFE2BGVN/.l/ssh/authorized_keys:1
+Postponed publickey for jarad from 127.0.0.1 port 65374 ssh2 [preauth]
+Accepted key ED25519 SHA256:Oc3zNCThLYkMyVuOJWy4OEtwwFZZLoIJ6IO2w1i+PkM found at /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4AJTXSFP6X4C9M1TFE2BGVN/.l/ssh/authorized_keys:1
+Accepted publickey for jarad from 127.0.0.1 port 65374 ssh2: ED25519 SHA256:Oc3zNCThLYkMyVuOJWy4OEtwwFZZLoIJ6IO2w1i+PkM
+BSM audit: bsm_audit_session_setup: setaudit_addr failed: Operation not permitted
+User child is on pid 92726
+Starting session: command for jarad from 127.0.0.1 port 65374 id 0
+Received disconnect from 127.0.0.1 port 65374:11: disconnected by user
+Disconnected from user jarad 127.0.0.1 port 65374
+Received signal 15; terminating.
+SSH operation exit=0
+Disposable sshd stopped. No operator SSH configuration or credentials changed.

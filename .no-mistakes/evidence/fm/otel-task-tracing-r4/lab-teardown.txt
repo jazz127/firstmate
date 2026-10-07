@@ -1,0 +1,4 @@
+Stopped the private fm-lab tmux server.
+no server running on /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4AJTXSFP6X4C9M1TFE2BGVN/.l/tmux/tmux-501/fm-lab
+Collector received SIGTERM and logged Shutdown complete.
+Disposable sshd was stopped after authenticated SSH completed.

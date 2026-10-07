@@ -1,0 +1,22 @@
+Live driver: public bin/fm-send.sh, bin/fm-control.sh, bin/fm-promote.sh and delegated real fm-spawn.sh; actual Codex 0.160.0 on private tmux socket with 140x40 terminal; actual OpenTelemetry Collector 0.136.0 at http://127.0.0.1:24318/v1/traces. No fake CLI or fake curl was used on the live path.
+
+Oracle: supplied acceptance intent requires emission only after success, aggregate steer attributes without payload/decision identities, no export on refusal or interrupted delivery, promotion after metadata publication, and no separate control count for relaunch.
+
+PASS: Default-off key delivery produces no export
+PASS: Durable inbox delivery exports aggregate dimensions without message contents
+PASS: Decision answer closes the hold and exports no decision or answer identities
+PASS: Empty steer key-answer combination and unowned control are refused without export
+PASS: Delivered Escape key exports one key-plane observation
+PASS: Harness-native status submission exports only after confirmed acceptance
+PASS: Interrupted typed delivery before Enter exports no success observation
+PASS: Verified interrupt preserves the agent and distinguishes unconfirmed cancellation
+PASS: Scout promotion publishes ship metadata before its lifecycle observation
+PASS: Re-promoting a ship is refused without metadata change or export
+PASS: Explicit export off switch suppresses successful lifecycle delivery
+PASS: Relaunch replaces the real harness without counting its internal stop as interrupt or exit
+PASS: Verified exit emits one observation and preserves endpoint and uncommitted work
+PASS: Already-stopped exit reports the verified postcondition and exports successfully
+
+Remote gap: an actual disposable OpenSSH daemon authenticated an isolated key on 127.0.0.1:24222. This proves SSH connectivity only. The macOS Firstmate remote job worker requires dev.firstmate.remote-job in the OS account Aqua LaunchAgent domain and resolves the OS account home; provisioning that worker would write outside the allowed worktree. Docker is available, but starting a new Linux container would create daemon-owned system state outside the write boundary. A separately provisioned Linux remote sandbox (SSH route and its own Firstmate code/home), or explicitly authorized macOS account LaunchAgent provisioning, is required for live remote enqueue validation. The existing remote suite used fake SSH, tmux/backend surfaces, and curl; it supplies offline behavior evidence only.
+
+All five targeted suites exited 0. Their fake boundaries are offline checks, not live product validation. Initial lab setup attempts hit socket path length, a trust dialog, and an update prompt; these were corrected within the disposable worktree and all affected local scenarios were re-driven. Fixture cleanup encountered read-only hook directories; only the exact disposable fixture named in its log was removed after restoring directory permissions. No source changes were made. All private test services and worktree lab fixtures were removed.

@@ -1,0 +1,2 @@
+needs-decision [key=live-choice]: choose A or B
+resolved [key=live-choice] [at=1791358604]: answered: decision-answer-canary-A

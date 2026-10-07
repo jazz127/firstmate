@@ -1,0 +1,16 @@
+window=primary:fm-probe
+endpoint_task_id=probe
+worktree=/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4AJTXSFP6X4C9M1TFE2BGVN/.l/wt
+project=/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4AJTXSFP6X4C9M1TFE2BGVN/.l/project
+harness=codex
+kind=ship
+mode=local-only
+yolo=off
+branch=fm/probe
+tasktmp=/tmp/fm-probe
+model=default
+effort=default
+spawn_gen=s1791358625.62799.28172
+control_relaunch_tx=61138.20261007T073704Z.16875
+traceparent=00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01
+trace_started=1791358625176

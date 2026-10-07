@@ -1,0 +1,40 @@
+Session ID: 01a1154b-037f-78c2-915c-8b91d2e5ffd2
+bash-5.3$ cd -- '/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4AJTXSFP6X4C9M1TFE2BGVN/.l/wt'
+bash-5.3$ export GOTMPDIR=/tmp/fm-probe/gotmp
+bash-5.3$ export COMPACT_ADVISER_DISABLE=1
+bash-5.3$ export FM_TASK_ID=probe
+bash-5.3$ export TRACEPARENT=00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01
+bash-5.3$ . '/tmp/fm-probe+ebf2e24cd994442cc8528fddeb1b6a2b9b26cd4c11bf2a390994595a4ec03ad3/launch.s1791358625.62799.28172.sh'
+To continue this session, run:
+  codex resume 01a1154b-6e7f-7811-986d-ee119ab33103
+bash-5.3$
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,174 @@
+2026-10-07T17:30:37.888+1000	info	service@v0.136.0/service.go:239	Starting otelcol...	{"resource": {"service.instance.id": "043eaa2f-8d37-4170-b1a4-3361bad2514c", "service.name": "otelcol", "service.version": "0.136.0"}, "Version": "0.136.0", "NumCPU": 15}
+2026-10-07T17:30:37.888+1000	info	extensions/extensions.go:41	Starting extensions...	{"resource": {"service.instance.id": "043eaa2f-8d37-4170-b1a4-3361bad2514c", "service.name": "otelcol", "service.version": "0.136.0"}}
+2026-10-07T17:30:37.889+1000	info	otlpreceiver@v0.136.0/otlp.go:179	Starting HTTP server	{"resource": {"service.instance.id": "043eaa2f-8d37-4170-b1a4-3361bad2514c", "service.name": "otelcol", "service.version": "0.136.0"}, "otelcol.component.id": "otlp", "otelcol.component.kind": "receiver", "endpoint": "127.0.0.1:24318"}
+2026-10-07T17:30:37.889+1000	info	service@v0.136.0/service.go:262	Everything is ready. Begin running and processing data.	{"resource": {"service.instance.id": "043eaa2f-8d37-4170-b1a4-3361bad2514c", "service.name": "otelcol", "service.version": "0.136.0"}}
+2026-10-07T17:30:41.488+1000	info	Traces	{"resource": {"service.instance.id": "043eaa2f-8d37-4170-b1a4-3361bad2514c", "service.name": "otelcol", "service.version": "0.136.0"}, "otelcol.component.id": "debug", "otelcol.component.kind": "exporter", "otelcol.signal": "traces", "resource spans": 1, "spans": 1}
+2026-10-07T17:30:41.489+1000	info	ResourceSpans #0
+Resource SchemaURL: 
+Resource attributes:
+     -> service.name: Str(firstmate)
+     -> firstmate.task.id: Str(probe)
+     -> firstmate.project: Str(project)
+     -> firstmate.task.kind: Str(scout)
+     -> firstmate.harness: Str(codex)
+     -> firstmate.model: Str(default)
+     -> firstmate.effort: Str(default)
+ScopeSpans #0
+ScopeSpans SchemaURL: 
+InstrumentationScope firstmate 
+Span #0
+    Trace ID       : 4bf92f3577b34da6a3ce929d0e0e4736
+    Parent ID      : 00f067aa0ba902b7
+    ID             : 7efd40cf12894612
+    Name           : firstmate.steer
+    Kind           : Internal
+    Start time     : 2026-10-07 07:30:41.446 +0000 UTC
+    End time       : 2026-10-07 07:30:41.447 +0000 UTC
+    Status code    : Unset
+    Status message : 
+Attributes:
+     -> firstmate.plane: Str(inbox)
+	{"resource": {"service.instance.id": "043eaa2f-8d37-4170-b1a4-3361bad2514c", "service.name": "otelcol", "service.version": "0.136.0"}, "otelcol.component.id": "debug", "otelcol.component.kind": "exporter", "otelcol.signal": "traces"}
+2026-10-07T17:30:43.373+1000	info	Traces	{"resource": {"service.instance.id": "043eaa2f-8d37-4170-b1a4-3361bad2514c", "service.name": "otelcol", "service.version": "0.136.0"}, "otelcol.component.id": "debug", "otelcol.component.kind": "exporter", "otelcol.signal": "traces", "resource spans": 1, "spans": 1}
+2026-10-07T17:30:43.373+1000	info	ResourceSpans #0
+Resource SchemaURL: 
+Resource attributes:
+     -> service.name: Str(firstmate)
+     -> firstmate.task.id: Str(probe)
+     -> firstmate.project: Str(project)
+     -> firstmate.task.kind: Str(scout)
+     -> firstmate.harness: Str(codex)
+     -> firstmate.model: Str(default)
+     -> firstmate.effort: Str(default)
+ScopeSpans #0
+ScopeSpans SchemaURL: 
+InstrumentationScope firstmate 
+Span #0
+    Trace ID       : 4bf92f3577b34da6a3ce929d0e0e4736
+    Parent ID      : 00f067aa0ba902b7
+    ID             : 75c6796a738184e8
+    Name           : firstmate.steer
+    Kind           : Internal
+    Start time     : 2026-10-07 07:30:43.325 +0000 UTC
+    End time       : 2026-10-07 07:30:43.326 +0000 UTC
+    Status code    : Unset
+    Status message : 
+Attributes:
+     -> firstmate.plane: Str(key)
+	{"resource": {"service.instance.id": "043eaa2f-8d37-4170-b1a4-3361bad2514c", "service.name": "otelcol", "service.version": "0.136.0"}, "otelcol.component.id": "debug", "otelcol.component.kind": "exporter", "otelcol.signal": "traces"}
+2026-10-07T17:30:44.292+1000	info	Traces	{"resource": {"service.instance.id": "043eaa2f-8d37-4170-b1a4-3361bad2514c", "service.name": "otelcol", "service.version": "0.136.0"}, "otelcol.component.id": "debug", "otelcol.component.kind": "exporter", "otelcol.signal": "traces", "resource spans": 1, "spans": 1}
+2026-10-07T17:30:44.292+1000	info	ResourceSpans #0
+Resource SchemaURL: 
+Resource attributes:
+     -> service.name: Str(firstmate)
+     -> firstmate.task.id: Str(probe)
+     -> firstmate.project: Str(project)
+     -> firstmate.task.kind: Str(scout)
+     -> firstmate.harness: Str(codex)
+     -> firstmate.model: Str(default)
+     -> firstmate.effort: Str(default)
+ScopeSpans #0
+ScopeSpans SchemaURL: 
+InstrumentationScope firstmate 
+Span #0
+    Trace ID       : 4bf92f3577b34da6a3ce929d0e0e4736
+    Parent ID      : 00f067aa0ba902b7
+    ID             : 1a3a42694a7f460a
+    Name           : firstmate.steer
+    Kind           : Internal
+    Start time     : 2026-10-07 07:30:44.248 +0000 UTC
+    End time       : 2026-10-07 07:30:44.249 +0000 UTC
+    Status code    : Unset
+    Status message : 
+Attributes:
+     -> firstmate.plane: Str(key)
+	{"resource": {"service.instance.id": "043eaa2f-8d37-4170-b1a4-3361bad2514c", "service.name": "otelcol", "service.version": "0.136.0"}, "otelcol.component.id": "debug", "otelcol.component.kind": "exporter", "otelcol.signal": "traces"}
+2026-10-07T17:30:52.348+1000	info	Traces	{"resource": {"service.instance.id": "043eaa2f-8d37-4170-b1a4-3361bad2514c", "service.name": "otelcol", "service.version": "0.136.0"}, "otelcol.component.id": "debug", "otelcol.component.kind": "exporter", "otelcol.signal": "traces", "resource spans": 1, "spans": 1}
+2026-10-07T17:30:52.348+1000	info	ResourceSpans #0
+Resource SchemaURL: 
+Resource attributes:
+     -> service.name: Str(firstmate)
+     -> firstmate.task.id: Str(probe)
+     -> firstmate.project: Str(project)
+     -> firstmate.task.kind: Str(ship)
+     -> firstmate.harness: Str(codex)
+     -> firstmate.model: Str(default)
+     -> firstmate.effort: Str(default)
+ScopeSpans #0
+ScopeSpans SchemaURL: 
+InstrumentationScope firstmate 
+Span #0
+    Trace ID       : 4bf92f3577b34da6a3ce929d0e0e4736
+    Parent ID      : 00f067aa0ba902b7
+    ID             : 651c800b1f24ebd0
+    Name           : firstmate.promote
+    Kind           : Internal
+    Start time     : 2026-10-07 07:30:52.225 +0000 UTC
+    End time       : 2026-10-07 07:30:52.226 +0000 UTC
+    Status code    : Unset
+    Status message : 
+Attributes:
+     -> firstmate.task.kind.prior: Str(scout)
+     -> firstmate.task.mode: Str(local-only)
+     -> firstmate.task.yolo: Str(off)
+	{"resource": {"service.instance.id": "043eaa2f-8d37-4170-b1a4-3361bad2514c", "service.name": "otelcol", "service.version": "0.136.0"}, "otelcol.component.id": "debug", "otelcol.component.kind": "exporter", "otelcol.signal": "traces"}
+2026-10-07T17:30:57.155+1000	info	Traces	{"resource": {"service.instance.id": "043eaa2f-8d37-4170-b1a4-3361bad2514c", "service.name": "otelcol", "service.version": "0.136.0"}, "otelcol.component.id": "debug", "otelcol.component.kind": "exporter", "otelcol.signal": "traces", "resource spans": 1, "spans": 1}
+2026-10-07T17:30:57.155+1000	info	ResourceSpans #0
+Resource SchemaURL: 
+Resource attributes:
+     -> service.name: Str(firstmate)
+     -> firstmate.task.id: Str(probe)
+     -> firstmate.project: Str(project)
+     -> firstmate.task.kind: Str(ship)
+     -> firstmate.harness: Str(codex)
+     -> firstmate.model: Str(default)
+     -> firstmate.effort: Str(default)
+ScopeSpans #0
+ScopeSpans SchemaURL: 
+InstrumentationScope firstmate 
+Span #0
+    Trace ID       : 4bf92f3577b34da6a3ce929d0e0e4736
+    Parent ID      : 00f067aa0ba902b7
+    ID             : 3bbacc52468d30ec
+    Name           : firstmate.control
+    Kind           : Internal
+    Start time     : 2026-10-07 07:30:57.111 +0000 UTC
+    End time       : 2026-10-07 07:30:57.112 +0000 UTC
+    Status code    : Unset
+    Status message : 
+Attributes:
+     -> firstmate.control.verb: Str(exit)
+     -> firstmate.control.confirmed: Str(true)
+	{"resource": {"service.instance.id": "043eaa2f-8d37-4170-b1a4-3361bad2514c", "service.name": "otelcol", "service.version": "0.136.0"}, "otelcol.component.id": "debug", "otelcol.component.kind": "exporter", "otelcol.signal": "traces"}
+2026-10-07T17:30:58.586+1000	info	Traces	{"resource": {"service.instance.id": "043eaa2f-8d37-4170-b1a4-3361bad2514c", "service.name": "otelcol", "service.version": "0.136.0"}, "otelcol.component.id": "debug", "otelcol.component.kind": "exporter", "otelcol.signal": "traces", "resource spans": 1, "spans": 1}
+2026-10-07T17:30:58.586+1000	info	ResourceSpans #0
+Resource SchemaURL: 
+Resource attributes:
+     -> service.name: Str(firstmate)
+     -> firstmate.task.id: Str(probe)
+     -> firstmate.project: Str(project)
+     -> firstmate.task.kind: Str(ship)
+     -> firstmate.harness: Str(codex)
+     -> firstmate.model: Str(default)
+     -> firstmate.effort: Str(default)
+ScopeSpans #0
+ScopeSpans SchemaURL: 
+InstrumentationScope firstmate 
+Span #0
+    Trace ID       : 4bf92f3577b34da6a3ce929d0e0e4736
+    Parent ID      : 00f067aa0ba902b7
+    ID             : d891642f1b43cc01
+    Name           : firstmate.control
+    Kind           : Internal
+    Start time     : 2026-10-07 07:30:58.543 +0000 UTC
+    End time       : 2026-10-07 07:30:58.544 +0000 UTC
+    Status code    : Unset
+    Status message : 
+Attributes:
+     -> firstmate.control.verb: Str(exit)
+     -> firstmate.control.confirmed: Str(true)
+	{"resource": {"service.instance.id": "043eaa2f-8d37-4170-b1a4-3361bad2514c", "service.name": "otelcol", "service.version": "0.136.0"}, "otelcol.component.id": "debug", "otelcol.component.kind": "exporter", "otelcol.signal": "traces"}
+2026-10-07T17:30:59.153+1000	info	otelcol@v0.136.0/collector.go:356	Received signal from OS	{"resource": {"service.instance.id": "043eaa2f-8d37-4170-b1a4-3361bad2514c", "service.name": "otelcol", "service.version": "0.136.0"}, "signal": "terminated"}
+2026-10-07T17:30:59.156+1000	info	service@v0.136.0/service.go:276	Starting shutdown...	{"resource": {"service.instance.id": "043eaa2f-8d37-4170-b1a4-3361bad2514c", "service.name": "otelcol", "service.version": "0.136.0"}}
+2026-10-07T17:30:59.160+1000	info	extensions/extensions.go:69	Stopping extensions...	{"resource": {"service.instance.id": "043eaa2f-8d37-4170-b1a4-3361bad2514c", "service.name": "otelcol", "service.version": "0.136.0"}}
+2026-10-07T17:30:59.160+1000	info	service@v0.136.0/service.go:290	Shutdown complete.	{"resource": {"service.instance.id": "043eaa2f-8d37-4170-b1a4-3361bad2514c", "service.name": "otelcol", "service.version": "0.136.0"}}

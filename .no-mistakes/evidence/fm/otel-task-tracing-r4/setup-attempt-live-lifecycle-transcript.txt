@@ -1,0 +1,195 @@
+$ tmux -L fm-lab capture-pane -p -t primary:fm-probe
+
+  Folder access
+  /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4AJTXSFP6X4C9M1TFE2BGVN/.l/wt
+
+  Note: You’re in a subdirectory of a Git project. Trusting will apply to the repository root:
+  /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4AJTXSFP6X4C9M1TFE2BGVN/.l/project
+
+  Trust this folder? Codex can read, edit, and run files here, subject to your permission settings. Folder settings can run code
+  automatically, even without a model request. Continue only if you trust these files. Your trust decision will be saved.
+
+› 1. Trust and continue
+  2. Quit
+
+  enter continue · esc quit
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+exit=0
+$ bin/fm-send.sh probe --key Escape
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4AJTXSFP6X4C9M1TFE2BGVN/.l
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the requested message WILL still be sent.
+●  repair missing watcher supervision with a foreground checkpoint: bin/fm-watch-checkpoint.sh --seconds 180.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+exit=0
+OBSERVED: Default-off key delivery produces no export passed
+$ bash -c . bin/fm-trace-context-lib.sh; fm_trace_context_session_start "$FM_HOME/config" "$FM_HOME/state/.trace-context-effective"
+
+exit=0
+$ tmux -L fm-lab send-keys -t primary:fm-probe -l pending-validation-text
+
+exit=0
+$ bin/fm-send.sh probe --fire-and-forget live-delivery privacy-canary-7zQ
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4AJTXSFP6X4C9M1TFE2BGVN/.l
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+error: --fire-and-forget delivery id must be 16 lowercase hex characters
+
+exit=1
+FAILED: Durable inbox delivery exports aggregate dimensions without message contents fm-gate-refuse: gate agent lifecycle permitted only against lab home /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4AJTXSFP6X4C9M1TFE2BGVN/.l
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+error: --fire-and-forget delivery id must be 16 lowercase hex characters
+
+$ bin/fm-send.sh probe --resolve-key live-choice decision-answer-canary-A
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4AJTXSFP6X4C9M1TFE2BGVN/.l
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+fm-send: doorbell not typed because the agent in primary:fm-probe has exited; the steer is durably recorded at /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4AJTXSFP6X4C9M1TFE2BGVN/.l/state/probe.inbox/001.msg for recovery (stuck-crewmate-recovery), and the watcher will not re-ring a dead pane
+
+exit=0
+OBSERVED: Decision answer closes the hold and exports no decision or answer identities passed
+$ bin/fm-send.sh probe    
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4AJTXSFP6X4C9M1TFE2BGVN/.l
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+error: a text steer requires a nonempty message; nothing was sent (an empty marked request would deliver only marker and correlation bytes and leave the parent waiting on a reply to nothing)
+
+exit=1
+$ bin/fm-send.sh probe --key Delete
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4AJTXSFP6X4C9M1TFE2BGVN/.l
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+
+exit=0
+FAILED: Empty steer unsupported key and unowned control are refused without export 
+$ bin/fm-send.sh probe --key Escape
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4AJTXSFP6X4C9M1TFE2BGVN/.l
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+
+exit=0
+OBSERVED: Delivered Escape key exports one key-plane observation passed
+$ tmux -L fm-lab send-keys -t primary:fm-probe C-u
+
+exit=0
+$ bin/fm-send.sh probe /status
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4AJTXSFP6X4C9M1TFE2BGVN/.l
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+error: text not submitted to primary:fm-probe (delivery unconfirmed; verdict=unknown; tried meta=/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4AJTXSFP6X4C9M1TFE2BGVN/.l/state/probe.meta; backend=from-meta)
+
+exit=1
+FAILED: Harness-native status submission exports only after confirmed acceptance fm-gate-refuse: gate agent lifecycle permitted only against lab home /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4AJTXSFP6X4C9M1TFE2BGVN/.l
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+error: text not submitted to primary:fm-probe (delivery unconfirmed; verdict=unknown; tried meta=/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4AJTXSFP6X4C9M1TFE2BGVN/.l/state/probe.meta; backend=from-meta)
+
+$ bin/fm-control.sh probe interrupt
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4AJTXSFP6X4C9M1TFE2BGVN/.l
+error: no agent is running at task probe's recorded endpoint (state: dead); there is nothing to interrupt
+
+exit=1
+FAILED: Verified interrupt preserves the agent and distinguishes unconfirmed cancellation fm-gate-refuse: gate agent lifecycle permitted only against lab home /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4AJTXSFP6X4C9M1TFE2BGVN/.l
+error: no agent is running at task probe's recorded endpoint (state: dead); there is nothing to interrupt
+
+$ bin/fm-promote.sh probe --mode local-only --yolo off
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+promoted probe to ship mode=local-only yolo=off (teardown protection restored)
+wrote ship instructions for mode=local-only: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4AJTXSFP6X4C9M1TFE2BGVN/.l/data/probe/ship-instructions.md
+next: FM_HOME=/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4AJTXSFP6X4C9M1TFE2BGVN/.l bin/fm-send.sh fm-probe "$(cat /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4AJTXSFP6X4C9M1TFE2BGVN/.l/data/probe/ship-instructions.md)"
+
+exit=0
+OBSERVED: Scout promotion publishes ship metadata before its lifecycle observation passed
+$ bin/fm-promote.sh probe --mode local-only --yolo off
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+error: task probe is not a scout task (kind=scout not in meta)
+
+exit=1
+OBSERVED: Re-promoting a ship is refused without metadata change or export passed
+$ bin/fm-send.sh probe --key Escape
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4AJTXSFP6X4C9M1TFE2BGVN/.l
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+
+exit=0
+OBSERVED: Explicit export off switch suppresses successful lifecycle delivery passed
+$ bin/fm-control.sh probe exit
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4AJTXSFP6X4C9M1TFE2BGVN/.l
+already-stopped probe harness=codex backend=tmux endpoint=primary:fm-probe worktree=/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4AJTXSFP6X4C9M1TFE2BGVN/.l/wt
+
+exit=0
+$ tmux -L fm-lab has-session -t primary
+
+exit=0
+$ tmux -L fm-lab capture-pane -p -t primary:fm-probe
+codex -c features.hooks=false -c 'projects."/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4AJTXSFP6X4C9M1TFE2BGVN/.l/wt".trust_level="
+trusted"'
+compinit:527: no such file or directory: /opt/homebrew/share/zsh/site-functions/_brew
+compinit:527: no such file or directory: /opt/homebrew/share/zsh/site-functions/_brew
+jarad@jengine:~/.no-mistakes/worktrees/119cd7a6b9a4/01M4AJTXSFP6X4C9M1TFE2BGVN/.l/wt/ > codex -c features.hooks=false -c 'projects."/Users/j
+arad/.no-mistakes/worktrees/119cd7a6b9a4/01M4AJTXSFP6X4C9M1TFE2BGVN/.l/wt".trust_level="trusted"'
+jarad@jengine:~/.no-mistakes/worktrees/119cd7a6b9a4/01M4AJTXSFP6X4C9M1TFE2BGVN/.l/wt/ > pending-validation-text~/status
+zsh: no such file or directory: pending-validation-text~/status
+jarad@jengine:~/.no-mistakes/worktrees/119cd7a6b9a4/01M4AJTXSFP6X4C9M1TFE2BGVN/.l/wt/ >
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+exit=0
+OBSERVED: Verified exit emits one observation and preserves endpoint and uncommitted work passed
+$ bin/fm-control.sh probe exit
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4AJTXSFP6X4C9M1TFE2BGVN/.l
+already-stopped probe harness=codex backend=tmux endpoint=primary:fm-probe worktree=/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4AJTXSFP6X4C9M1TFE2BGVN/.l/wt
+
+exit=0
+OBSERVED: Already-stopped exit reports the verified postcondition and exports successfully passed

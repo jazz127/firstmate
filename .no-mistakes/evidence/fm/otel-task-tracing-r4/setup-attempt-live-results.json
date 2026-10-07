@@ -1,0 +1,54 @@
+[
+  {
+    "name": "Default-off key delivery produces no export",
+    "result": "pass"
+  },
+  {
+    "name": "Durable inbox delivery exports aggregate dimensions without message contents",
+    "result": "fail",
+    "error": "fm-gate-refuse: gate agent lifecycle permitted only against lab home /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4AJTXSFP6X4C9M1TFE2BGVN/.l\nWARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.\nerror: --fire-and-forget delivery id must be 16 lowercase hex characters\n"
+  },
+  {
+    "name": "Decision answer closes the hold and exports no decision or answer identities",
+    "result": "pass"
+  },
+  {
+    "name": "Empty steer unsupported key and unowned control are refused without export",
+    "result": "fail",
+    "error": ""
+  },
+  {
+    "name": "Delivered Escape key exports one key-plane observation",
+    "result": "pass"
+  },
+  {
+    "name": "Harness-native status submission exports only after confirmed acceptance",
+    "result": "fail",
+    "error": "fm-gate-refuse: gate agent lifecycle permitted only against lab home /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4AJTXSFP6X4C9M1TFE2BGVN/.l\nWARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.\nerror: text not submitted to primary:fm-probe (delivery unconfirmed; verdict=unknown; tried meta=/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4AJTXSFP6X4C9M1TFE2BGVN/.l/state/probe.meta; backend=from-meta)\n"
+  },
+  {
+    "name": "Verified interrupt preserves the agent and distinguishes unconfirmed cancellation",
+    "result": "fail",
+    "error": "fm-gate-refuse: gate agent lifecycle permitted only against lab home /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4AJTXSFP6X4C9M1TFE2BGVN/.l\nerror: no agent is running at task probe's recorded endpoint (state: dead); there is nothing to interrupt\n"
+  },
+  {
+    "name": "Scout promotion publishes ship metadata before its lifecycle observation",
+    "result": "pass"
+  },
+  {
+    "name": "Re-promoting a ship is refused without metadata change or export",
+    "result": "pass"
+  },
+  {
+    "name": "Explicit export off switch suppresses successful lifecycle delivery",
+    "result": "pass"
+  },
+  {
+    "name": "Verified exit emits one observation and preserves endpoint and uncommitted work",
+    "result": "pass"
+  },
+  {
+    "name": "Already-stopped exit reports the verified postcondition and exports successfully",
+    "result": "pass"
+  }
+]

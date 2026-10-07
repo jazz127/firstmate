@@ -692,6 +692,27 @@ fm_write_meta() {
   done
 }
 
+# fm_test_trace_export_enable <home> <capture-file> [fakebin]: enable synthetic
+# OTLP export through a fake curl for lifecycle-hook tests.
+fm_test_trace_export_enable() {
+  local home=$1 capture=$2 fakebin=${3:-"$1/fakebin"} header="$1/auth-header"
+  mkdir -p "$home/state" "$home/config" "$fakebin"
+  printf '4242\n' > "$home/state/.lock"
+  printf '4242 on\n' > "$home/state/.trace-context-effective"
+  printf 'Authorization: Bearer synthetic-test-token\n' > "$header"
+  chmod 600 "$header"
+  jq -n --arg header "$header" \
+    '{enabled:true,endpoint:"http://127.0.0.1:14318/v1/traces","auth-header-file":$header}' \
+    > "$home/config/trace-export.json"
+  cat > "$fakebin/curl" <<'SH'
+#!/usr/bin/env bash
+cat >> "$FM_TRACE_CAPTURE"
+printf '\n' >> "$FM_TRACE_CAPTURE"
+SH
+  chmod +x "$fakebin/curl"
+  export FM_TRACE_CAPTURE=$capture
+}
+
 # fm_write_secondmate_meta <file> <home> [window] [projects] [harness]: write the
 # standard kind=secondmate meta block used across the secondmate suites. Window
 # defaults to firstmate:fm-<id>, projects defaults to alpha, and harness defaults

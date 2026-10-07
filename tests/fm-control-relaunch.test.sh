@@ -365,9 +365,12 @@ SH
 # --- 1. same-harness relaunch -----------------------------------------------
 
 test_same_harness_relaunch_keeps_identity_and_reuses_the_endpoint() {
-  local dir out rc gen_before gen_after
+  local dir out rc gen_before gen_after spans
   dir=$(new_case same rl1)
   add_ship_task "$dir" rl1 claude
+  fm_test_trace_export_enable "$dir/home" "$dir/spans.jsonl" "$dir/fakebin"
+  printf '%s\n' 'traceparent=00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01' \
+    >> "$dir/home/state/rl1.meta"
   gen_before=$("$ROOT/bin/fm-busy-event.sh" arm "$dir/home/state" rl1)
   printf 'busy_gen=%s\n' "$gen_before" >> "$dir/home/state/rl1.meta"
   out=$(run_control "$dir" rl1 relaunch --note "stopped mid-refactor"); rc=$?
@@ -384,6 +387,9 @@ test_same_harness_relaunch_keeps_identity_and_reuses_the_endpoint() {
     || fail "a relaunch must arm a fresh busy generation, got '$gen_after'"
   [ "$(journal_field "$dir" rl1 phase)" = complete ] \
     || fail "the transaction journal should end complete"
+  spans=$(cat "$dir/spans.jsonl" 2>/dev/null || true)
+  assert_not_contains "$spans" '"name":"firstmate.control"' \
+    "the relaunch's internal stop must not emit a separate control observation"
   assert_grep "/exit" "$dir/fake/literal" "the previous agent should have been exited"
   assert_grep "cd -- '$dir/wt'" "$dir/fake/keys" "the replacement launch must enter the recorded worktree"
   assert_grep "Firstmate operational input waiting: read" "$dir/fake/literal" "the replacement should have been launched"
@@ -1100,7 +1106,7 @@ test_spawn_relaunch_of_promoted_scout_uses_the_recorded_branch() {
 }
 
 test_promoted_scout_relaunch_receives_the_current_delivery_contract() {
-  local dir home id brief launch out mode rule
+  local dir home id brief launch out mode rule spans
   for mode in no-mistakes direct-PR local-only; do
     id="rl-promoted-${mode}"
     dir=$(new_case "promoted-scout-$mode" "$id")
@@ -1122,13 +1128,19 @@ test_promoted_scout_relaunch_receives_the_current_delivery_contract() {
       echo "tasktmp=/tmp/fm-$id"
       echo "model=default"
       echo "effort=default"
+      echo 'traceparent=00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01'
     } > "$home/state/$id.meta"
+    fm_test_trace_export_enable "$home" "$dir/spans.jsonl" "$dir/fakebin"
     printf '%s\n' "fm-$id" > "$dir/fake/windows"
     printf '%s' "$dir/wt" > "$dir/fake/cwd"
 
-    out=$(FM_ROOT_OVERRIDE="$ROOT" FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" \
+    out=$(PATH="$dir/fakebin:$PATH" FM_ROOT_OVERRIDE="$ROOT" FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" \
       "$PROMOTE" "$id" --mode "$mode" --yolo off 2>&1) \
       || fail "$mode: scout promotion should succeed: $out"
+    spans=$(cat "$dir/spans.jsonl" 2>/dev/null || true)
+    assert_contains "$spans" '"name":"firstmate.promote"' "$mode: successful promotion should emit an observation"
+    assert_contains "$spans" '"firstmate.task.kind.prior","value":{"stringValue":"scout"}' \
+      "$mode: promotion observation should record only the prior kind"
     assert_grep 'This is a SCOUT task' "$brief" \
       "$mode: the reproduction fixture lost the original scout delivery text"
     assert_grep 'Never push to any remote and never open a PR' "$brief" \
@@ -1674,6 +1686,9 @@ test_promotion_participates_in_the_lifecycle_lock_before_metadata_resolution() {
   local dir out rc lock holder i=0
   dir=$(new_case promotelock rl29)
   add_ship_task "$dir" rl29 claude
+  fm_test_trace_export_enable "$dir/home" "$dir/spans.jsonl" "$dir/fakebin"
+  printf '%s\n' 'traceparent=00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01' \
+    >> "$dir/home/state/rl29.meta"
   lock="$dir/home/state/.control-rl29.lock"
   (
     . "$ROOT/bin/fm-wake-lib.sh"
@@ -1686,7 +1701,7 @@ test_promotion_participates_in_the_lifecycle_lock_before_metadata_resolution() {
     i=$((i + 1))
   done
   [ -e "$lock" ] || fail "could not stage the promotion lifecycle lock"
-  out=$(FM_HOME="$dir/home" "$PROMOTE" rl29 --mode direct-PR --yolo on 2>&1); rc=$?
+  out=$(PATH="$dir/fakebin:$PATH" FM_HOME="$dir/home" "$PROMOTE" rl29 --mode direct-PR --yolo on 2>&1); rc=$?
   kill "$holder" 2>/dev/null || true
   wait "$holder" 2>/dev/null || true
   expect_code 1 "$rc" "promotion should refuse a concurrent lifecycle action"
@@ -1694,6 +1709,7 @@ test_promotion_participates_in_the_lifecycle_lock_before_metadata_resolution() {
     "promotion should lock before interpreting the task metadata"
   [ "$(meta_field "$dir" rl29 kind)" = ship ] \
     || fail "a contended promotion must leave task metadata unchanged"
+  [ ! -s "$dir/spans.jsonl" ] || fail "a refused promotion emitted an observation"
   pass "fm-promote: promotion participates in lifecycle serialization"
 }
 

@@ -131,6 +131,37 @@ zsh
 A persistent parent shell waiting for a child remained reported as the parent process, while a shell that directly execed a simple command changed identity with the process itself.
 Pi and pi-signed 0.82.0 were reverified on 2026-07-27 through real isolated `fm-spawn.sh` launches.
 
+### Watcher stops during stalled queries
+
+On 2026-10-08, synthetic regression testing on macOS with stock Bash 3.2.57 exercised the executable watcher against a tmux stub that stalls one query for 60 seconds.
+No installed harness or tmux server was exercised by this test.
+The watcher exited within the test's 100-poll TERM budget, stopped the stalled query, removed its output file, released its singleton lock, and left an acknowledgeable stop record in all 12 cases.
+The cases cover `list-windows` and `display-message` in inbox checks, both declared-pause liveness branches, wedge checks, and secondmate idle gating, plus the secondmate composer's cursor and capture reads.
+The metadata lookups used by the watcher read local files and do not query tmux.
+
+Refresh this synthetic evidence with:
+
+```sh
+FM_TEST_ONLY=test_term_stops_a_watcher_blocked_in_tmux_queries bash bin/fm-test-run.sh tests/fm-watch-triage.test.sh
+```
+
+Observed assertion output:
+
+```text
+ok - TERM stops inbox blocked in tmux list-windows and runs cleanup
+ok - TERM stops inbox blocked in tmux display-message and runs cleanup
+ok - TERM stops pause-new blocked in tmux list-windows and runs cleanup
+ok - TERM stops pause-new blocked in tmux display-message and runs cleanup
+ok - TERM stops pause-cached blocked in tmux list-windows and runs cleanup
+ok - TERM stops pause-cached blocked in tmux display-message and runs cleanup
+ok - TERM stops wedge blocked in tmux list-windows and runs cleanup
+ok - TERM stops wedge blocked in tmux display-message and runs cleanup
+ok - TERM stops secondmate blocked in tmux list-windows and runs cleanup
+ok - TERM stops secondmate blocked in tmux display-message and runs cleanup
+ok - TERM stops secondmate blocked in tmux composer-cursor and runs cleanup
+ok - TERM stops secondmate blocked in tmux composer-capture and runs cleanup
+```
+
 ### Agent liveness name sources
 
 The earlier record that every harness is observed under its own `#{pane_current_command}` no longer holds and has been replaced by the per-harness evidence below.

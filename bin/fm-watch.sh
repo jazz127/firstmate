@@ -538,7 +538,8 @@ inbox_steer_check() {  # <window> <task>
       ;;
   esac
   backend=$(window_backend "$w")
-  agent_state=$(fm_backend_agent_state "$backend" "$w" 2>/dev/null || true)
+  watcher_query fm_backend_agent_state "$backend" "$w" || WATCHER_QUERY=
+  agent_state=$WATCHER_QUERY
   case "$agent_state" in
     dead|missing)
       if [ "$verb" = retry ]; then
@@ -906,9 +907,11 @@ secondmate_idle_ring_safe() {  # <window>
   secondmate_busy_class "$w"
   [ "$SECONDMATE_BUSY_CLASS" = idle ] || return 1
   backend=$(window_backend "$w")
-  agent_state=$(fm_backend_agent_state "$backend" "$w" 2>/dev/null || true)
+  watcher_query fm_backend_agent_state "$backend" "$w" || WATCHER_QUERY=
+  agent_state=$WATCHER_QUERY
   [ "$agent_state" = alive ] || return 1
-  cstate=$(fm_backend_composer_state "$backend" "$w" "$(window_label "$w")" 2>/dev/null) || cstate=unknown
+  watcher_query fm_backend_composer_state "$backend" "$w" "$(window_label "$w")" || WATCHER_QUERY=unknown
+  cstate=$WATCHER_QUERY
   [ "$cstate" != pending ] || return 1
   return 0
 }
@@ -1472,7 +1475,8 @@ wedge_dead_record() {  # <window> <since-file> <triage-label> <idle-age> <pane-h
   local win=$1 since_file=$2 label=$3 age=$4 hash=$5 task=$6 key marker agent_state detail reason gen id
   key=$(window_key "$win")
   marker="$STATE/.dead-reported-$key"
-  agent_state=$(fm_backend_agent_state "$(window_backend "$win")" "$win" 2>/dev/null) || agent_state=unreadable
+  watcher_query fm_backend_agent_state "$(window_backend "$win")" "$win" || WATCHER_QUERY=unreadable
+  agent_state=$WATCHER_QUERY
   case "$agent_state" in
     dead) detail='the endpoint is still there with no agent running in it' ;;
     missing) detail='the recorded endpoint is gone' ;;
@@ -1731,14 +1735,17 @@ clear_pause_tracking() {  # <window-key>
 # After fm-crew-state has fallen back to stopped or unknown, paused classification is
 # recovered only for a confidently dead ordinary crew, or for a secondmate, whose
 # endpoint liveness this function deliberately never reads.
+PAUSE_STATE_CLASS=
+# Call directly so its tmux read is tracked by the watcher's own shell.
 pause_state_class() {  # <window> <task>
   local win=$1 task=$2 key last recheck_file class agent_alive kind
+  PAUSE_STATE_CLASS=none
   key=$(window_key "$win")
   last=$(status_declared_wait_line "$STATE/$task.status")
   recheck_file="$STATE/.paused-rechecked-$key"
   if ! status_is_paused_or_captain_held "$last"; then
     rm -f "$recheck_file"
-    crew_absorb_class "$task"
+    PAUSE_STATE_CLASS=$(crew_absorb_class "$task")
     return
   fi
   # Read once past the declared-wait gate and reused by both liveness gates below,
@@ -1747,27 +1754,29 @@ pause_state_class() {  # <window> <task>
   kind=$(window_kind "$win")
   if [ -e "$STATE/.paused-$key" ] && [ "$(age_of "$recheck_file")" -lt "$STALE_ESCALATE_SECS" ]; then
     if [ "$kind" != secondmate ]; then
-      agent_alive=$(fm_backend_agent_alive "$(window_backend "$win")" "$win" 2>/dev/null) || agent_alive=unknown
+      watcher_query fm_backend_agent_alive "$(window_backend "$win")" "$win" || WATCHER_QUERY=unknown
+      agent_alive=$WATCHER_QUERY
       if [ "$agent_alive" != dead ]; then
         rm -f "$recheck_file"
-        printf 'none'
+        PAUSE_STATE_CLASS=none
         return
       fi
     fi
-    printf 'paused'
+    PAUSE_STATE_CLASS=paused
     return
   fi
   class=$(crew_absorb_class "$task")
   if [ "$class" = working ]; then
     rm -f "$recheck_file"
-    printf 'working'
+    PAUSE_STATE_CLASS=working
     return
   fi
   if [ "$kind" != secondmate ]; then
-    agent_alive=$(fm_backend_agent_alive "$(window_backend "$win")" "$win" 2>/dev/null) || agent_alive=unknown
+    watcher_query fm_backend_agent_alive "$(window_backend "$win")" "$win" || WATCHER_QUERY=unknown
+    agent_alive=$WATCHER_QUERY
     if [ "$agent_alive" != dead ]; then
       rm -f "$recheck_file"
-      printf 'none'
+      PAUSE_STATE_CLASS=none
       return
     fi
   fi
@@ -1784,7 +1793,7 @@ pause_state_class() {  # <window> <task>
     paused) date +%s > "$recheck_file" ;;
     *) rm -f "$recheck_file" ;;
   esac
-  printf '%s' "$class"
+  PAUSE_STATE_CLASS=$class
 }
 
 # The two records of one ordinary crew wait, and why its stale alarm reads both.
@@ -2145,7 +2154,7 @@ fm_active_check_stop() {
 # and the signal is consumed, so a stop request could leave this watcher
 # polling forever while its stopper waits (fixed upstream in bash 5.3). Bash
 # 3.2 holds HUP and TERM until a running command substitution's child exits, so
-# fm_backend_capture pane reads go through watcher_capture instead. INT keeps
+# backend reads go through watcher_capture or watcher_query instead. INT keeps
 # its trap because bash ignores a direct SIGINT while a child runs.
 watcher_stop_signals() {
   trap - HUP TERM
@@ -2191,14 +2200,15 @@ fm_capture_output_cleanup() {
   FM_CAPTURE_OUTPUT=
 }
 
-# watcher_capture: fm_backend_capture into WATCHER_CAPTURE with its exit status.
+# watcher_read: run a command into WATCHER_READ with its exit status.
 # The read runs as a waited background process group rather than inside $(...),
 # so a stop is not held for a blocked read (watcher_stop_signals). The group is
 # recorded like a check's, so watcher_cleanup stops a read still in flight.
-watcher_capture() {  # <backend> <target> <lines> [expected-label]
+WATCHER_READ=
+watcher_read() {  # <command> [args...]
   local rc pgid
   fm_capture_output_cleanup
-  WATCHER_CAPTURE=
+  WATCHER_READ=
   FM_CAPTURE_OUTPUT=$(mktemp "$STATE/.fm-capture-output.XXXXXX") || return 1
   FM_CHECK_SIGNAL_PENDING=
   trap 'FM_CHECK_SIGNAL_PENDING=1' HUP INT TERM
@@ -2206,7 +2216,9 @@ watcher_capture() {  # <backend> <target> <lines> [expected-label]
   # print a harmless "child setpgid ... Operation not permitted" race from the
   # child before the command's own redirections apply.
   set -m
-  { fm_backend_capture "$@" < /dev/null > "$FM_CAPTURE_OUTPUT" & } 2>/dev/null
+  # Keep nested substitutions in this owned group: inherited monitor mode
+  # would give each tmux child its own group, escaping the cleanup boundary.
+  { ( set +m; "$@" < /dev/null > "$FM_CAPTURE_OUTPUT" ) & } 2>/dev/null
   FM_ACTIVE_CHECK_PID=$!
   FM_ACTIVE_CHECK_PGID=$FM_ACTIVE_CHECK_PID
   set +m
@@ -2222,8 +2234,30 @@ watcher_capture() {  # <backend> <target> <lines> [expected-label]
   rc=$?
   FM_ACTIVE_CHECK_PID=
   fm_active_check_stop || { fm_capture_output_cleanup; return 1; }
-  WATCHER_CAPTURE=$(cat "$FM_CAPTURE_OUTPUT" 2>/dev/null || true)
+  WATCHER_READ=$(cat "$FM_CAPTURE_OUTPUT" 2>/dev/null || true)
   fm_capture_output_cleanup
+  return "$rc"
+}
+
+watcher_capture() {  # <backend> <target> <lines> [expected-label]
+  local rc=0
+  watcher_read fm_backend_capture "$@" || rc=$?
+  WATCHER_CAPTURE=$WATCHER_READ
+  return "$rc"
+}
+
+# Tmux queries share the pane-capture stop boundary, including all nested
+# inventory, process and composer reads. Other backends retain their query path.
+# Call directly, never through $(...), and read WATCHER_QUERY afterwards.
+WATCHER_QUERY=
+watcher_query() {  # <command> <backend> [args...]
+  local rc=0
+  if [ "$2" = tmux ]; then
+    watcher_read "$@" || rc=$?
+    WATCHER_QUERY=$WATCHER_READ
+  else
+    WATCHER_QUERY=$("$@" 2>/dev/null) || rc=$?
+  fi
   return "$rc"
 }
 
@@ -3091,7 +3125,8 @@ EOF
         # The pane is idle/stale at hash $h. Triage decides whether this wakes
         # firstmate. Detection itself is unchanged from above.
         if [ "$kind" = secondmate ]; then
-          case "$(pause_state_class "$w" "$task")" in
+          pause_state_class "$w" "$task"
+          case "$PAUSE_STATE_CLASS" in
             paused) handle_paused_stale "$w" "$task" "$h" ;;
             *)      clear_pause_tracking "$key" ;;
           esac
@@ -3182,7 +3217,8 @@ EOF
           #     wait out the timer.
           if [ "$(cat "$sf" 2>/dev/null || true)" != "$h" ]; then
             task=$(window_to_task "$w" "$STATE")
-            case "$(pause_state_class "$w" "$task")" in
+            pause_state_class "$w" "$task"
+            case "$PAUSE_STATE_CLASS" in
               working)
                 clear_pause_tracking "$key"
                 printf '%s' "$h" > "$sf"
@@ -3199,7 +3235,8 @@ EOF
           else
             task=$(window_to_task "$w" "$STATE")
             if [ -e "$pf" ] || status_is_paused_or_captain_held "$(status_declared_wait_line "$STATE/$task.status")"; then
-              case "$(pause_state_class "$w" "$task")" in
+              pause_state_class "$w" "$task"
+              case "$PAUSE_STATE_CLASS" in
                 paused)  handle_paused_stale "$w" "$task" "$h" ;;
                 working) clear_pause_state "$key"
                          printf '%s' "$h" > "$sf"
@@ -3244,7 +3281,8 @@ EOF
       fi
       task=$(window_to_task "$w" "$STATE")
       if ! afk_present && status_is_paused_or_captain_held "$(status_declared_wait_line "$STATE/$task.status")" && [ "$busy_now" -ne 0 ]; then
-        case "$(pause_state_class "$w" "$task")" in
+        pause_state_class "$w" "$task"
+        case "$PAUSE_STATE_CLASS" in
           paused) handle_paused_stale "$w" "$task" "$h" ;;
           # Inconclusive, but the declared wait itself still stands, so only the
           # per-hash bookkeeping resets. The re-surface throttle bounds the

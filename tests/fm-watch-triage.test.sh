@@ -4612,6 +4612,112 @@ test_term_stops_a_watcher_blocked_inside_a_poll() {
   pass "TERM stops a watcher blocked inside a poll and still runs its cleanup"
 }
 
+# Agent reads reached through both a direct poll helper and a nested pause
+# classifier must honor TERM just like pane capture. The stub marks entry before
+# stalling, so a stop assertion cannot pass without exercising the named query.
+test_term_stops_a_watcher_blocked_in_tmux_queries() {
+  local scenario query dir state fakebin out window key capture pid i rc stalled verdict query_pid query_live queries
+  for scenario in inbox pause-new pause-cached wedge secondmate; do
+    queries='list-windows display-message'
+    [ "$scenario" != secondmate ] || queries="$queries composer-cursor composer-capture"
+    for query in $queries; do
+      dir=$(make_case "term-$scenario-$query"); state="$dir/state"; fakebin="$dir/fakebin"
+      out="$dir/watch.out"; window="test:fm-stalled"; key=test_fm-stalled
+      # Keep detached summary probes from competing for this query marker.
+      touch "$state/home-summary.json"
+      capture="$dir/pane.txt"; stalled="$dir/query-entered"
+      printf 'idle worker\n' > "$capture"
+      printf 'window=%s\nkind=ship\nharness=grok\n' "$window" > "$state/stalled.meta"
+      verdict='state: unknown · source: none · no current-state evidence'
+      case "$scenario" in
+        inbox)
+          printf 'working: implementing\n' > "$state/stalled.status"
+          mkdir -p "$state/stalled.inbox"
+          printf 'an unread steer\n' > "$state/stalled.inbox/001.msg"
+          set_mtime "$(( $(date +%s) - 500 ))" "$state/stalled.inbox/001.msg"
+          ;;
+        pause-*)
+          printf 'paused: awaiting external work\n' > "$state/stalled.status"
+          if [ "$scenario" = pause-cached ]; then
+            touch "$state/.paused-$key"
+            date +%s > "$state/.paused-rechecked-$key"
+          fi
+          ;;
+        wedge)
+          verdict='state: working · source: run-step · validating'
+          printf 'working: implementing\n' > "$state/stalled.status"
+          printf '%s' "$(hash_text "$(cat "$capture")")" > "$state/.hash-$key"
+          printf '1\n' > "$state/.count-$key"
+          printf '%s' "$(hash_text "$(cat "$capture")")" > "$state/.stale-$key"
+          printf '%s\n' "$(( $(date +%s) - 500 ))" > "$state/.stale-since-$key"
+          ;;
+      esac
+      if [ "$scenario" = secondmate ]; then
+        mkdir -p "$dir/child/state"
+        printf 'stalled\n' > "$dir/child/.fm-secondmate-home"
+        printf '100\t7\tcheck\trouted\tcheck: routed row\n' > "$dir/child/state/.wake-queue"
+        printf '%s\t100-7\n' "$(( $(date +%s) - 500 ))" > "$state/.secondmate-wake-progress-stalled"
+        printf 'window=%s\nkind=secondmate\nharness=grok\nhome=%s\n' "$window" "$dir/child" > "$state/stalled.meta"
+        printf 'working: supervision\n' > "$state/stalled.status"
+      fi
+      prime_status_seen "$state" "$state/stalled.status"
+      mv "$fakebin/tmux" "$fakebin/tmux-fast"
+      cat > "$fakebin/tmux" <<'SH'
+#!/usr/bin/env bash
+target=
+previous=
+for arg in "$@"; do
+  [ "$previous" != -t ] || target=$arg
+  previous=$arg
+done
+stall=0
+case "$FM_STALLED_QUERY:$*" in
+  composer-cursor:*cursor_y*|composer-capture:*capture-pane*' -e '*) stall=1 ;;
+esac
+[ "$1" != "$FM_STALLED_QUERY" ] || stall=1
+if [ "$stall" -eq 1 ] && [ ! -s "$FM_STALLED_MARKER" ] && { [ "$target" = test ] || [ "$target" = test:fm-stalled ]; }; then
+  printf '%s\n' "$$" > "$FM_STALLED_MARKER"
+  exec sleep 60
+fi
+# Allow the composer capture case to advance past its cursor read.
+case "$*" in *cursor_y*) printf '0\n'; exit 0 ;; esac
+exec "${0%/*}/tmux-fast" "$@"
+SH
+      chmod +x "$fakebin/tmux"
+      FM_STALLED_QUERY="$query" FM_STALLED_MARKER="$stalled" \
+        FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture" FM_FAKE_TMUX_CURRENT_COMMAND=grok \
+        FM_FAKE_CREW_STATE="$verdict" \
+        watch_bg "$state" "$fakebin" "$out" env FM_STALE_ESCALATE_SECS=240 FM_SECONDMATE_WAKE_STALL_SECS=1
+      pid=$!
+      i=0
+      while [ ! -s "$stalled" ] && [ "$i" -lt 300 ]; do
+        is_live_non_zombie "$pid" || break
+        sleep 0.1
+        i=$((i + 1))
+      done
+      if [ ! -s "$stalled" ] || ! is_live_non_zombie "$pid"; then
+        reap "$pid"
+        fail "$scenario never entered its stalled $query: $(cat "$out")"
+      fi
+      kill "$pid" 2>/dev/null || true
+      wait_for_exit "$pid" 100
+      rc=$?
+      query_pid=$(cat "$stalled")
+      query_live=0
+      is_live_non_zombie "$query_pid" && query_live=1
+      # Release the synthetic stall even on a regression failure.
+      kill "$query_pid" 2>/dev/null || true
+      [ "$rc" -ne 124 ] || fail "TERM did not stop $scenario blocked in $query"
+      [ "$query_live" -eq 0 ] || fail "$scenario left its stalled $query running after TERM"
+      [ ! -e "$state/.watch.lock" ] || fail "$scenario retained its singleton lock after TERM"
+      [ -z "$(find "$state" -name '.fm-capture-output.*' -print)" ] \
+        || fail "$scenario retained its in-flight query output after TERM"
+      ack_stopped_cycle "$state" || fail "$scenario stop record could not be acknowledged"
+      pass "TERM stops $scenario blocked in tmux $query and runs cleanup"
+    done
+  done
+}
+
 # --- held downtime-marker lock must not wedge a TERM'd watcher -------------
 # fm-watch-triage-r1 flake (serial-1 CI): the EXIT cleanup publishes the
 # downtime marker under .watcher-down.lock through an unbounded acquire, so a
@@ -6684,6 +6790,7 @@ test_gone_report_rearms_when_the_endpoint_comes_back
 test_second_death_after_a_same_window_relaunch_reports_in_full
 test_identical_dead_display_of_a_successor_still_reports
 test_term_stops_a_watcher_blocked_inside_a_poll
+test_term_stops_a_watcher_blocked_in_tmux_queries
 test_term_stops_a_watcher_whose_cleanup_marker_lock_is_held
 test_cleanup_marker_lock_bound_is_decimal_with_zero_default
 test_busy_pane_below_turn_age_bound_is_absorbed

@@ -758,6 +758,27 @@ The internal [`/stow` skill](../.agents/skills/stow/SKILL.md) owns curation and 
 
 The helper's header owns exact parsing, publication, and report output mechanics.
 
+### Daily startup growth check
+
+A home can arm a lightweight daily growth monitor with `bin/fm-startup-growth-check.sh arm`.
+It writes `state/startup-growth.check.sh` and binds it through the existing authenticated watcher-check mechanism, so no extra daemon or scheduler is installed.
+Registering it is a reason to watch on the same terms as the [watched-tool check](#watched-tool-updates-configwatched-toolsjson), so an armed home keeps needing a watcher after its last task is torn down.
+Use `bin/fm-startup-growth-check.sh disarm` to remove the check and its local report record.
+
+The check evaluates at most once per day and stays silent when nothing meaningful changed.
+A due evaluation measures startup surfaces through file metadata and byte sizes: it asks `bin/fm-startup-memory-budget.sh report` for the budget verdict over the [budgeted memory files](#startup-memory-budget-configstartup-memory-budget), watches the `data/projects.md` and `data/secondmates.md` that session start also prints in full for growth without entering that budget total, and separately watches the tracked startup/instruction owner files described by the script header.
+`bin/fm-startup-memory-budget.sh` remains the sole owner of the budget total and its verdict, so the check never re-derives either: when that owner annotates an overrun caused by the primary-owned `data/captain-shared.md` alone, a secondmate home is not woken about an overrun it cannot act on.
+A secondmate home is likewise not notified about per-file growth of that same primary-owned `data/captain-shared.md`, which it receives read-only; the growth is still observed and recorded, and a primary home reports it normally.
+Those tracked bytes are code and instruction-surface size, not prompt-memory cost.
+The check does not run session-start, bootstrap, network checks, model calls, repository refreshes, `/stow`, or full preference/learnings rereads.
+
+The [script header](../bin/fm-startup-growth-check.sh) owns the retained-baseline rules and fixed growth thresholds.
+The local `state/.startup-growth-check` record retains the daily gate, per-file baselines, and last reported finding set; removing it silently re-baselines growth and allows a standing finding such as a budget overrun to be reported again.
+Budget overrun, unsafe or unreadable inputs, missing required tracked owner files, or material growth are reported once and deduplicated until the finding changes or clears; the report line is delivered before the check advances its own record, so a state-publication failure can repeat a finding but never swallow one.
+That one line uses the [shared per-line digest cut](../bin/fm-line-cap-lib.sh), which can cut within a finding and appends `[truncated]`; the full uncapped finding set remains in `state/.startup-growth-check` for inspection and deduplication.
+Older bulk learning files remain reference-only; this monitor neither loads nor merges them.
+A reported review need is only a recommendation, not cleanup authority.
+
 ## Stow pass horizon (config/stow-pass-horizon)
 
 `config/stow-pass-horizon` is an optional local, gitignored presence flag that opts this home in to the pass-count decay horizon in the internal [`/stow` skill](../.agents/skills/stow/SKILL.md).

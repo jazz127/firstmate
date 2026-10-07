@@ -115,6 +115,26 @@ fm_trace_span_pr_merged() {  # <meta>
   fm_trace_span_emit "$1" firstmate.pr.merged - -
 }
 
+fm_trace_span_steer() {  # <meta> <plane> [sequence] [correlation] [decision-keys] [fire-and-forget]
+  local meta=$1 plane=$2 sequence=${3:-} correlation=${4:-} decision_keys=${5:-} fire_and_forget=${6:-}
+  local -a attrs=("firstmate.plane=$plane")
+  [ -z "$sequence" ] || attrs+=("firstmate.inbox.seq=$sequence")
+  [ -z "$correlation" ] || attrs+=("firstmate.corr=$correlation")
+  [ -z "$decision_keys" ] || attrs+=("firstmate.decision.key=$(printf '%s' "$decision_keys" | tr ' ' ',')")
+  [ -z "$fire_and_forget" ] || attrs+=("firstmate.fire_and_forget=true")
+  fm_trace_span_emit "$meta" firstmate.steer - - "${attrs[@]}"
+}
+
+fm_trace_span_control() {  # <meta> <verb> <confirmed>
+  fm_trace_span_emit "$1" firstmate.control - - \
+    "firstmate.control.verb=$2" "firstmate.control.confirmed=$3"
+}
+
+fm_trace_span_promote() {  # <meta> <mode> <yolo>
+  fm_trace_span_emit "$1" firstmate.promote - - \
+    'firstmate.task.kind.prior=scout' "firstmate.task.mode=$2" "firstmate.task.yolo=$3"
+}
+
 fm_trace_span_config() {
   local file=$1 values
   command -v jq >/dev/null 2>&1 || return 1

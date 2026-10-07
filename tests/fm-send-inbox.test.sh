@@ -120,8 +120,11 @@ record_body() { # <record>
 }
 
 test_text_steer_rides_inbox() {
-  local dir err rc rec body typed
+  local dir err rc rec body typed spans
   dir=$(setup_case rides)
+  fm_test_trace_export_enable "$dir/home" "$dir/spans.jsonl" "$dir/fakebin"
+  printf '%s\n' 'traceparent=00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01' \
+    >> "$dir/home/state/t1.meta"
   err="$dir/send.err"
   run_send "$dir" "$err" -- t1 "please rebase onto main"
   rc=$?
@@ -136,6 +139,13 @@ test_text_steer_rides_inbox() {
   case "$typed" in
   *"please rebase onto main"*) fail "the payload must never be typed:"$'\n'"$typed" ;;
   esac
+  spans=$(cat "$dir/spans.jsonl")
+  assert_contains "$spans" '"name":"firstmate.steer"' "a successful inbox enqueue should emit a steer observation"
+  assert_contains "$spans" '"firstmate.plane","value":{"stringValue":"inbox"}' \
+    "the steer observation should identify the inbox plane"
+  assert_contains "$spans" '"firstmate.inbox.seq","value":{"stringValue":"001"}' \
+    "the steer observation should carry only the inbox sequence"
+  assert_not_contains "$spans" 'please rebase onto main' "the steer observation must never contain message text"
   pass "fm-send inbox: the payload is recorded durably and only the doorbell is typed"
 }
 
@@ -331,11 +341,18 @@ test_explicit_target_stays_typed() {
 }
 
 test_key_path_never_touches_inbox() {
-  local dir err
+  local dir err spans
   dir=$(setup_case keypath)
+  fm_test_trace_export_enable "$dir/home" "$dir/spans.jsonl" "$dir/fakebin"
+  printf '%s\n' 'traceparent=00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01' \
+    >> "$dir/home/state/t1.meta"
   err="$dir/send.err"
   run_send "$dir" "$err" -- t1 --key Enter || fail "a --key send should succeed"
   [ ! -d "$dir/home/state/t1.inbox" ] || fail "the --key path must never write an inbox record"
+  spans=$(cat "$dir/spans.jsonl")
+  assert_contains "$spans" '"name":"firstmate.steer"' "a successful key delivery should emit a steer observation"
+  assert_contains "$spans" '"firstmate.plane","value":{"stringValue":"key"}' \
+    "the key delivery observation should identify its plane"
   pass "fm-send planes: the --key lifecycle path never touches the inbox"
 }
 
@@ -480,12 +497,16 @@ test_empty_message_refused() {
   # An explicit empty-string argument is the same refusal.
   dir=$(setup_case empty-string-arg)
   err="$dir/send.err"
+  fm_test_trace_export_enable "$dir/home" "$dir/spans.jsonl" "$dir/fakebin"
+  printf '%s\n' 'traceparent=00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01' \
+    >> "$dir/home/state/t1.meta"
   run_send "$dir" "$err" -- t1 ""
   rc=$?
   [ "$rc" -ne 0 ] || fail "an explicit empty-string message should refuse"
   assert_contains "$(cat "$err")" "nonempty message" \
     "the empty-string refusal should be explicit"
   [ ! -d "$dir/home/state/t1.inbox" ] || fail "an empty-string steer still wrote an inbox record"
+  [ ! -s "$dir/spans.jsonl" ] || fail "a refused empty steer emitted an observation"
 
   # A whitespace-only message is equally contentless and refuses.
   dir=$(setup_case whitespace-only)

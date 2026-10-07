@@ -118,11 +118,14 @@ drain_out() {  # <home>
 }
 
 test_answer_send_closes_open_decision() {
-  local dir fb log home rc out
+  local dir fb log home rc out spans
   dir="$TMP_ROOT/closes"; mkdir -p "$dir"
   fb=$(make_stubs "$dir"); log="$dir/send.log"
   home=$(setup_home closes)
+  fm_test_trace_export_enable "$home" "$dir/spans.jsonl" "$fb"
   fm_write_meta "$home/state/t1.meta" "window=sess:fm-t1" "kind=ship"
+  printf '%s\n' 'traceparent=00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01' \
+    >> "$home/state/t1.meta"
   printf 'needs-decision [key=api-shape]: pick REST or RPC\n' > "$home/state/t1.status"
   printf 'working: kept busy on an unrelated stream\n' >> "$home/state/t1.status"
 
@@ -135,6 +138,11 @@ test_answer_send_closes_open_decision() {
   grep -qF "go with REST" "$home/state/t1.inbox/001.msg" \
     || fail "the answer text should reach the worker's durable inbox record"
   assert_contains "$(cat "$log")" "Firstmate instruction waiting" "the doorbell should be rung for the answer"
+  spans=$(cat "$dir/spans.jsonl")
+  assert_contains "$spans" '"name":"firstmate.steer"' "a delivered answer should emit a steer observation"
+  assert_contains "$spans" '"firstmate.decision.key","value":{"stringValue":"api-shape"}' \
+    "the observation should carry the resolved key without the answer text"
+  assert_not_contains "$spans" 'go with REST' "the steer observation must never contain answer text"
   sed -E 's/ \[at=[0-9]+\]//' "$home/state/t1.status" | grep -qF 'resolved [key=api-shape]: answered: go with REST' \
     || fail "fm-send did not append the closing resolved line:"$'\n'"$(cat "$home/state/t1.status")"
   # The drain folded the worker's `working:` line but never listed it, so the

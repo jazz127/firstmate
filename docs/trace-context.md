@@ -116,8 +116,9 @@ Informational notes preserve the terminal outcome; a later state-changing event 
 The root starts at the task's recorded first carrier mint; relaunch preserves that time while each spawn span records the new generation, and missing or invalid historical start data falls back to the current time.
 Direct local Secondmate retirement uses the same outcome mapping, including `unknown` when no terminal status exists.
 Teardown and pending-close restart recovery record the terminal outcome in task metadata before retiring status presentation, even with export disabled; retirement failure preserves metadata for retry, a failed record removal can retry with that outcome, and relaunch clears it for the new generation.
-PR-ready and PR-merged spans report outcome observations with the existing resource dimensions and no PR-specific attributes.
-Each successful ready registration emits a new observation, including a re-registration of the same PR; merge outcomes emit only after the shared notification deduplication accepts a new outcome.
+PR outcome observations are `firstmate.pr.ready` and `firstmate.pr.merged` child spans under the task carrier, with the existing resource dimensions and no PR-specific attributes.
+Each successful ready registration emits after metadata recording and merge-poll publication, including a re-registration of the same PR; rejected registrations, failed publication, and merge-time re-recording emit no ready observation.
+A confirmed merge performed by the home or detected by its poll emits only after successful outcome publication and notification-marker commit through `bin/fm-merge-outcome-lib.sh`; an already-recorded outcome, refused merge, queued merge, or unconfirmed merge emits no merged observation.
 Exported lifecycle attributes omit pane/window identity, private PR URLs, and prior-generation linkage; pane-resource export is deferred.
 Approved untraced paths for this chunk:
 
@@ -125,9 +126,10 @@ Approved untraced paths for this chunk:
 - descendant cleanup during forced parent teardown; and
 - remote route retirement.
 
-The emitter is synchronous and best-effort, with no durable queue or event deduplication; if launch completion is uncertain and a successful launch is repeated, the collector may receive duplicate spawn events.
+The emitter is synchronous and best-effort, with no durable queue or exporter-level deduplication; if launch completion is uncertain and a successful launch is repeated, the collector may receive duplicate spawn events.
 An unconfirmed HTTP result can also mean an accepted span is absent from the sender's knowledge, so consumers should treat counts as best-effort observations.
 
 ## Verification
 
 Repeatable test evidence - the unit and spawn-path suites with exact commands and output - lives in [`verification/trace-context.md`](verification/trace-context.md).
+PR outcome regressions live in [`fm-pr-check-security.test.sh`](../tests/fm-pr-check-security.test.sh) and [`fm-pr-merge.test.sh`](../tests/fm-pr-merge.test.sh).

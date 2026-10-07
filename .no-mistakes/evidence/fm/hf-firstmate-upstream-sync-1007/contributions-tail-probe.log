@@ -1,0 +1,8 @@
+TARGETED RETRY test_closed_backlog_pr_owns_landed_contribution
+ok - closed structured backlog PR link owns verdict and acknowledgement after task metadata cleanup
+TARGETED RETRY test_automated_reviewer_signal
+ok - a configured automated reviewer wakes as fleet triage and an unconfigured bot does not
+TARGETED RETRY test_automated_reviewer_configuration
+ok - the automated reviewer set is configurable and can be disabled
+TARGETED RETRY test_author_marker_directive
+ok - an author comment is an event only with the configured marker

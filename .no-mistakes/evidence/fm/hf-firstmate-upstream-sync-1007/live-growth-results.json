@@ -1,0 +1,44 @@
+[
+  {
+    "name": "Arm, rearm, deliver a durable growth notification through the real watcher, and disarm",
+    "result": "pass",
+    "live": true,
+    "surface": "product"
+  },
+  {
+    "name": "Daily silence, exact growth thresholds, cumulative growth, and optional-file restoration",
+    "result": "pass",
+    "live": true,
+    "surface": "product"
+  },
+  {
+    "name": "Report budget overrun without counting code or registry bytes, deduplicate, and re-notify after clearing",
+    "result": "pass",
+    "live": true,
+    "surface": "product"
+  },
+  {
+    "name": "Suppress primary-owned shared-memory growth in a secondmate while reporting local growth",
+    "result": "pass",
+    "live": true,
+    "surface": "product"
+  },
+  {
+    "name": "Diagnose unsafe and missing inputs, retain findings on refused publication, and safely sweep orphans",
+    "result": "pass",
+    "live": true,
+    "surface": "product"
+  },
+  {
+    "name": "Reject an altered authenticated shim without executing it",
+    "result": "pass",
+    "live": true,
+    "surface": "product"
+  },
+  {
+    "name": "Cap a real oversized diagnostic with the truncation marker while retaining full deduplication state",
+    "result": "pass",
+    "live": true,
+    "surface": "product"
+  }
+]

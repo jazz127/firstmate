@@ -1,0 +1,21 @@
+$ /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M49YHGQ1ZTS9V2MP714MEZST/bin/fm-startup-growth-check.sh arm
+armed: state/startup-growth.check.sh
+
+$ bash -c source bin/fm-supervision-lib.sh; fm_supervision_status "$FM_HOME/state"; printf "tasks=%s checks=%s needed=%s\n" "$FM_SUP_IN_FLIGHT" "$FM_SUP_CHECKS" "$FM_SUP_NEEDED"; test "$FM_SUP_IN_FLIGHT:$FM_SUP_CHECKS:$FM_SUP_NEEDED" = 0:1:true
+tasks=0 checks=1 needed=true
+
+$ /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M49YHGQ1ZTS9V2MP714MEZST/bin/fm-startup-growth-check.sh arm
+error: custom check trust path is unavailable
+fm-startup-growth-check: could not register the check shim
+
+Unsafe registration refused; no unregistered check or trust link remained; symlink target was unchanged.
+$ /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M49YHGQ1ZTS9V2MP714MEZST/bin/fm-startup-growth-check.sh arm
+armed: state/startup-growth.check.sh
+
+$ /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M49YHGQ1ZTS9V2MP714MEZST/bin/fm-startup-growth-check.sh disarm
+disarmed: state/startup-growth.check.sh
+
+$ bash -c source bin/fm-supervision-lib.sh; fm_supervision_status "$FM_HOME/state"; printf "tasks=%s checks=%s needed=%s\n" "$FM_SUP_IN_FLIGHT" "$FM_SUP_CHECKS" "$FM_SUP_NEEDED"; test "$FM_SUP_IN_FLIGHT:$FM_SUP_CHECKS:$FM_SUP_NEEDED" = 0:0:false
+tasks=0 checks=0 needed=false
+
+Disposable home removed.

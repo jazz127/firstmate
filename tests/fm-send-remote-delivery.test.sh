@@ -262,6 +262,9 @@ test_remote_steer_lands_in_remote_inbox() {
   assert_contains "$spans" '"name":"firstmate.steer"' "a successful remote inbox enqueue should emit from the parent"
   assert_contains "$spans" '"firstmate.plane","value":{"stringValue":"inbox"}' \
     "the remote steer should identify its inbox plane"
+  jq -e '[.resourceSpans[].scopeSpans[].spans[].attributes[]] ==
+    [{key:"firstmate.plane",value:{stringValue:"inbox"}}]' "$dir/spans.jsonl" >/dev/null \
+    || fail "a remote observation must omit correlation and message identities"
   assert_not_contains "$spans" 'please rename the metric' "the remote steer observation must never contain message text"
   pass "fm-send remote: a text steer lands as a durable remote inbox record and exits 0 at enqueue"
 }
@@ -385,6 +388,9 @@ test_remote_fire_and_forget_never_arms_reply_recovery() {
   fb=$(make_stubs "$dir"); ssh_log="$dir/ssh.log"; : > "$ssh_log"
   rhome=$(setup_remote_secondmate_home remote-fire-and-forget)
   home=$(setup_remote_parent_home remote-fire-and-forget "$rhome")
+  fm_test_trace_export_enable "$home" "$dir/spans.jsonl" "$fb"
+  printf '%s\n' 'traceparent=00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01' \
+    >> "$home/state/rsm.meta"
   delivery=0123456789abcdef
 
   rc=0
@@ -392,6 +398,7 @@ test_remote_fire_and_forget_never_arms_reply_recovery() {
     "$SEND" rsm --fire-and-forget "$delivery" "reconcile your own books" \
     >"$dir/out" 2>"$dir/err" || rc=$?
   expect_code 3 "$rc" "an ambiguous fire-and-forget delivery must report unconfirmed"
+  [ ! -s "$dir/spans.jsonl" ] || fail "an unconfirmed fire-and-forget delivery emitted an observation"
   [ "$(find "$home/state/pending-replies" -maxdepth 1 -type f 2>/dev/null | wc -l | tr -d ' ')" = 0 ] \
     || fail "fire-and-forget delivery created a pending-reply expectation"
   count=$(find "$rhome/state/parent-route/rsm.inbox" -name '*.msg' | wc -l | tr -d ' ')
@@ -408,6 +415,10 @@ test_remote_fire_and_forget_never_arms_reply_recovery() {
   [ "$count" = 1 ] || fail "the same fire-and-forget delivery id created a duplicate remote record"
   grep -F "delivery=$delivery" "$(remote_inbox_records "$rhome" | head -1)" >/dev/null \
     || fail "the remote record omitted its fire-and-forget delivery identity"
+  jq -e '[.resourceSpans[].scopeSpans[].spans[].attributes[]] ==
+    [{key:"firstmate.plane",value:{stringValue:"inbox"}},
+     {key:"firstmate.fire_and_forget",value:{stringValue:"true"}}]' "$dir/spans.jsonl" >/dev/null \
+    || fail "a fire-and-forget observation must retain the boolean without delivery identity"
   pass "fm-send remote: fire-and-forget delivery is idempotent without reply recovery"
 }
 

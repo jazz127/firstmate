@@ -140,8 +140,9 @@ test_answer_send_closes_open_decision() {
   assert_contains "$(cat "$log")" "Firstmate instruction waiting" "the doorbell should be rung for the answer"
   spans=$(cat "$dir/spans.jsonl")
   assert_contains "$spans" '"name":"firstmate.steer"' "a delivered answer should emit a steer observation"
-  assert_contains "$spans" '"firstmate.decision.key","value":{"stringValue":"api-shape"}' \
-    "the observation should carry the resolved key without the answer text"
+  jq -e '[.resourceSpans[].scopeSpans[].spans[].attributes[]] ==
+    [{key:"firstmate.plane",value:{stringValue:"inbox"}}]' "$dir/spans.jsonl" >/dev/null \
+    || fail "a decision-answer observation must omit decision and message identities"
   assert_not_contains "$spans" 'go with REST' "the steer observation must never contain answer text"
   sed -E 's/ \[at=[0-9]+\]//' "$home/state/t1.status" | grep -qF 'resolved [key=api-shape]: answered: go with REST' \
     || fail "fm-send did not append the closing resolved line:"$'\n'"$(cat "$home/state/t1.status")"

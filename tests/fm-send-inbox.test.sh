@@ -143,8 +143,9 @@ test_text_steer_rides_inbox() {
   assert_contains "$spans" '"name":"firstmate.steer"' "a successful inbox enqueue should emit a steer observation"
   assert_contains "$spans" '"firstmate.plane","value":{"stringValue":"inbox"}' \
     "the steer observation should identify the inbox plane"
-  assert_contains "$spans" '"firstmate.inbox.seq","value":{"stringValue":"001"}' \
-    "the steer observation should carry only the inbox sequence"
+  jq -e '[.resourceSpans[].scopeSpans[].spans[].attributes[]] ==
+    [{key:"firstmate.plane",value:{stringValue:"inbox"}}]' "$dir/spans.jsonl" >/dev/null \
+    || fail "an inbox observation must contain only aggregate steer dimensions"
   assert_not_contains "$spans" 'please rebase onto main' "the steer observation must never contain message text"
   pass "fm-send inbox: the payload is recorded durably and only the doorbell is typed"
 }
@@ -306,11 +307,17 @@ test_harness_invocations_stay_typed() {
   local dir err typed
   # A slash command must reach the harness's own parser, on any harness.
   dir=$(setup_case slash)
+  fm_test_trace_export_enable "$dir/home" "$dir/spans.jsonl" "$dir/fakebin"
+  printf '%s\n' 'traceparent=00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01' \
+    >> "$dir/home/state/t1.meta"
   err="$dir/send.err"
   run_send "$dir" "$err" -- t1 "/no-mistakes" || fail "a slash send should succeed"
   typed=$(cat "$dir/send.log")
   assert_contains "$typed" "/no-mistakes" "the slash command should be typed literally"
   [ ! -d "$dir/home/state/t1.inbox" ] || fail "a slash command must not be routed to the inbox"
+  jq -e '[.resourceSpans[].scopeSpans[].spans[].attributes[]] ==
+    [{key:"firstmate.plane",value:{stringValue:"typed"}}]' "$dir/spans.jsonl" >/dev/null \
+    || fail "a typed observation must contain only aggregate steer dimensions"
   # A codex `$<skill>` invocation likewise stays typed.
   dir=$(setup_case codexskill codex)
   err="$dir/send.err"
@@ -353,6 +360,9 @@ test_key_path_never_touches_inbox() {
   assert_contains "$spans" '"name":"firstmate.steer"' "a successful key delivery should emit a steer observation"
   assert_contains "$spans" '"firstmate.plane","value":{"stringValue":"key"}' \
     "the key delivery observation should identify its plane"
+  jq -e '[.resourceSpans[].scopeSpans[].spans[].attributes[]] ==
+    [{key:"firstmate.plane",value:{stringValue:"key"}}]' "$dir/spans.jsonl" >/dev/null \
+    || fail "a key observation must contain only aggregate steer dimensions"
   pass "fm-send planes: the --key lifecycle path never touches the inbox"
 }
 

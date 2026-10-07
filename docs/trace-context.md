@@ -119,7 +119,7 @@ Teardown and pending-close restart recovery record the terminal outcome in task 
 PR outcome observations are `firstmate.pr.ready` and `firstmate.pr.merged` child spans under the task carrier, with the existing resource dimensions and no PR-specific attributes.
 Each successful ready registration emits after metadata recording and merge-poll publication, including a re-registration of the same PR; rejected registrations, failed publication, and merge-time re-recording emit no ready observation.
 A confirmed merge performed by the home or detected by its poll emits only after successful outcome publication and notification-marker commit through `bin/fm-merge-outcome-lib.sh`; an already-recorded outcome, refused merge, queued merge, or unconfirmed merge emits no merged observation.
-Successful steers emit `firstmate.steer` after durable inbox delivery or confirmed typed/key delivery, with only the delivery plane and bounded routing identifiers; remote inbox events are emitted by the parent task home.
+Successful steers emit `firstmate.steer` after durable inbox delivery or confirmed typed/key delivery, with only the delivery plane and optional fire-and-forget boolean, omitting inbox sequence, correlation and decision-key identities; remote inbox events are emitted by the parent task home.
 Verified interrupt and exit postconditions emit `firstmate.control`, and scout promotion emits `firstmate.promote` after the promoted metadata is published.
 Refused or interrupted delivery emits no event, relaunch's internal stop emits no separate control event, and steer message text is never an attribute.
 Exported lifecycle attributes omit pane/window identity, private PR URLs, and prior-generation linkage; pane-resource export is deferred.

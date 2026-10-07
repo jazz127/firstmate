@@ -1527,16 +1527,12 @@ trap spawn_abort_cleanup EXIT
 # is required so secondmate and primary spawns serialize against the same
 # session without writing any other home's state directory.
 #
-# Default mode is one BOUNDED attempt. A clean create uses that default and
-# falls back to the ordinary flat layout on contention. An exact resume also
-# defaults to the bounded attempt and hard-refuses on contention (it does not
-# degrade flat). Passing mode `wait` makes this call WAIT for the lock instead
-# (`fm_lock_acquire_wait`, the same unbounded-wait idiom this file already uses
-# for its other fleet-shared locks). Only the recovery path under the explicit
-# --herdr-resume-lock-wait opt-in passes `wait`, so unbounded blocking on a
-# third-party session lock never becomes the default for every caller.
-# Dead-owner reclaim inside `fm_lock_try_acquire` still bounds a wait against a
-# holder that crashed mid-hold.
+# The header owns contention modes and the --herdr-resume-lock-wait scope.
+# Never wait for presentation while holding the Treehouse project lock: the
+# presentation owner may need that project lock to finish its treehouse get.
+# The task spawn lock remains held across this gap. After project relocking,
+# recovery rechecks metadata and the journal before provisioning; slot ownership
+# is separately revalidated after treehouse get before claiming the worktree.
 spawn_herdr_presentation_order_lock_acquire() {
   local session=${1:-} mode=${2:-} attempt lock_path acquired=1
   local project_lock_held=$SPAWN_TREEHOUSE_PROJECT_LOCK_HELD

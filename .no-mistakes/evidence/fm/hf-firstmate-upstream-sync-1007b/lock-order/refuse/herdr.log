@@ -1,0 +1,3 @@
+session list --json --session lock-order
+status --json --session lock-order
+session list --json --session lock-order

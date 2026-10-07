@@ -1,0 +1,29 @@
+Synthetic tmux lifecycle endpoint; real fm-control and persisted task metadata.
+
+before.meta
+window=fmses:fm-t1
+endpoint_task_id=t1
+worktree=/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4BG2CQG285W4NVDKS9TDVH8/.test-phase-tmp/fm-control.hzpecH/codex-retire-20065/wt-t1
+project=/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4BG2CQG285W4NVDKS9TDVH8/.test-phase-tmp/fm-control.hzpecH/codex-retire-20065/proj-t1
+harness=codex
+kind=ship
+mode=no-mistakes
+yolo=off
+model=default
+effort=default
+busy_gen=g1791389489.97609.26034
+
+control.out
+stopped t1 harness=codex backend=tmux endpoint=fmses:fm-t1 worktree=/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4BG2CQG285W4NVDKS9TDVH8/.test-phase-tmp/fm-control.hzpecH/codex-retire-20065/wt-t1
+
+after.meta
+window=fmses:fm-t1
+endpoint_task_id=t1
+worktree=/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4BG2CQG285W4NVDKS9TDVH8/.test-phase-tmp/fm-control.hzpecH/codex-retire-20065/wt-t1
+project=/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4BG2CQG285W4NVDKS9TDVH8/.test-phase-tmp/fm-control.hzpecH/codex-retire-20065/proj-t1
+harness=codex
+kind=ship
+mode=no-mistakes
+yolo=off
+model=default
+effort=default

@@ -1,0 +1,6 @@
+ok - herdr wait releases the project lock during presentation contention and revalidates before provisioning
+ok - herdr batch releases the project lock during presentation contention and revalidates before provisioning
+ok - herdr refuse releases the project lock during presentation contention and revalidates before provisioning
+ok - herdr create releases the project lock during presentation contention and revalidates before provisioning
+ok - herdr project releases the project lock during presentation contention and revalidates before provisioning
+ok - herdr changed releases the project lock during presentation contention and revalidates before provisioning

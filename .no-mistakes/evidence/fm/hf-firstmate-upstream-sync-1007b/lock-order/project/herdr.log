@@ -1,0 +1,39 @@
+session list --json --session lock-order
+status --json --session lock-order
+session list --json --session lock-order
+status --json
+status --json --session lock-order
+workspace list --session lock-order
+tab list --workspace w1 --session lock-order
+tab create --workspace w1 --cwd /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4BG2CQG285W4NVDKS9TDVH8/.test-phase-tmp/fm-spawn-worktree-settle.9hLyi9/presentation-project/project --label fm-settle-presentation-project --no-focus --session lock-order
+status --json --session lock-order
+pane run w1:p1 treehouse get --session lock-order
+status --json --session lock-order
+pane get w1:p1 --session lock-order
+status --json --session lock-order
+pane get w1:p1 --session lock-order
+status --json --session lock-order
+pane get w1:p1 --session lock-order
+status --json --session lock-order
+pane run w1:p1 cd -- '/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4BG2CQG285W4NVDKS9TDVH8/.test-phase-tmp/fm-spawn-worktree-settle.9hLyi9/presentation-project/wt' --session lock-order
+status --json --session lock-order
+pane get w1:p1 --session lock-order
+pane get w1:p1 --session lock-order
+status --json --session lock-order
+pane read w1:p1 --source recent --lines 200 --session lock-order
+pane get w1:p1 --session lock-order
+agent get w1:p1 --session lock-order
+status --json --session lock-order
+pane run w1:p1 export GOTMPDIR=/tmp/fm-settle-presentation-project/gotmp --session lock-order
+status --json --session lock-order
+pane run w1:p1 export COREPACK_HOME="${COREPACK_HOME:-/tmp/fm-settle-presentation-project/cache/corepack}" --session lock-order
+status --json --session lock-order
+pane run w1:p1 export npm_config_cache="${npm_config_cache:-${NPM_CONFIG_CACHE:-/tmp/fm-settle-presentation-project/cache/npm}}" --session lock-order
+status --json --session lock-order
+pane run w1:p1 export COMPACT_ADVISER_DISABLE=1 --session lock-order
+status --json --session lock-order
+pane run w1:p1 export FM_TASK_ID=settle-presentation-project --session lock-order
+status --json --session lock-order
+pane send-text w1:p1 . '/tmp/fm-settle-presentation-project+c6510e134ff9a9df6812d539251de83499447f68ae786d414f83847ac2cf6f0e/launch.s1791389088.29409.30946.sh' --session lock-order
+status --json --session lock-order
+pane send-keys w1:p1 enter --session lock-order

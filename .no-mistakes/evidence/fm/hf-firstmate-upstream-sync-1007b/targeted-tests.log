@@ -1,0 +1,100 @@
+FM_TEST_BEGIN 2026-10-07T16:02:15Z tests/fm-secondmate-harness.test.sh family=secondmate expected_gate_skip=none
+FM_TEST_BEGIN 2026-10-07T16:02:15Z tests/fm-remote-reply.test.sh family=secondmate expected_gate_skip=none
+ok - A1 fm-harness.sh secondmate resolves the fallback chain; crew mode unchanged
+ok - fm-harness detects only Cursor Agent CLI's exact invocation marker
+ok - C1 fm-harness.sh secondmate-model/secondmate-effort resolve the optional tokens; bare harness stays empty (backward-compat)
+ok - per-mate profile replaces the global pin as a unit; absent and default overrides defer
+ok - pi-signed identity: authoritative launch selection distinguishes shared wrapper ancestry
+ok - harness identity: dash-leading ps command names are basename operands, not options
+ok - B1 propagate_inheritable_config: copy, idempotence, convergence, absence-mirror, exclusion, no-op, skip diagnostics
+not ok - split: no meta written
+FM_TEST_END 2026-10-07T16:02:23Z tests/fm-secondmate-harness.test.sh exit=1 duration_ms=7185 gate_skip=false
+ok - default delta reader waits 0.5 seconds then delivers a non-destructive complete-line delta
+ok - override delta reader waits 0.07 seconds then delivers a non-destructive complete-line delta
+runner output:
+no-result: remote-reply-ios (exit 64)
+not ok - the remote reply delta was not durably captured
+FM_TEST_END 2026-10-07T16:04:42Z tests/fm-remote-reply.test.sh exit=1 duration_ms=146341 gate_skip=false
+FM_TEST_BEGIN 2026-10-07T16:04:42Z tests/fm-control.test.sh family=backend-dispatch expected_gate_skip=none
+ok - fm-control exit: every verified harness gets its own verified exit command
+ok - fm-control Pi exit: a cost-first footer permits one /quit under a proven native Pi composer
+ok - fm-control Pi exit: the opted-in Herdr compact proof alone permits /quit
+ok - fm-control interrupt: every verified harness gets its own verified key and repeat count
+ok - fm-control Devin interrupt: second press only after the armed hint, then busy invalidated without fabricating idle
+ok - fm-control Devin interrupt: an idle agent gets one Escape and reports not-running
+ok - fm-control Devin exit: a busy record whose turn already ended never opens the revert picker
+ok - fm-control Devin interrupt: a revert picker a press opened is closed with Escape, never Enter
+ok - fm-control Devin: an open revert picker refuses every typed command
+ok - fm-control interrupt: opencode needs a double Escape, claude a single one
+ok - fm-control: a harness with no verified control mechanics is refused, not guessed at
+ok - fm-control-lib: a recorded harness resolves to its verified adapter without guessing
+ok - fm-control-lib: only a runtime's own recorded session has a relaunch resume form
+ok - fm-control: prefixed recorded harnesses reach interrupt and exit mechanics
+ok - fm-control-lib: the backend key matrix matches each adapter's real send-key surface
+ok - fm-control-lib: adapter capability is per task kind, not per adapter alone
+ok - fm-control interrupt: a backend that cannot deliver the harness's key refuses instead of sending another
+ok - fm-control: a backend that cannot prove an agent stopped refuses exit and relaunch
+ok - fm-control-lib: stop-proving verbs are gated on the backends that really classify agent state
+ok - fm-control: a legacy window label is refused and the exact task id is named
+ok - fm-control: an explicit backend endpoint is never a control target
+ok - fm-control: an unrecorded task id is refused
+ok - fm-control: a record whose endpoint identity names another task is refused
+ok - fm-control: a remotely placed secondmate is refused by placement, not by a metadata complaint
+ok - fm-control: interrupt and exit lock before task-state resolution
+ok - fm-control: the verb list is closed - no raw keys, arbitrary text, or clear verb
+ok - fm-control: resume is refused with the determinism reason and the alternative
+ok - fm-control: profile and note flags belong to relaunch only
+ok - fm-control exit: an already-stopped agent is idempotent success with no bytes sent
+ok - fm-control exit: an unprovable tmux endpoint refuses instead of claiming the agent stopped
+ok - fm-control interrupt: refuses when no agent is running rather than keying a shell
+ok - fm-control exit: an endpoint whose process cannot be attributed refuses
+ok - fm-control exit: a busy agent receives interrupt delivery before the exit command
+ok - fm-control exit: an idle agent goes straight to its exit command
+ok - fm-control exit: a footer-busy Pi on tmux refuses instead of typing /quit
+ok - fm-control exit: retiring a codex incarnation drops busy_gen with the sidecar
+ok - fm-control exit: an already-open background-task picker is not typed into
+ok - fm-control exit: the Enter that opens the background-task picker is not followed by a confirming Enter
+ok - fm-control exit: a picker that renders after the submit returned is named when the stop wait times out
+ok - fm-control interrupt: unconfirmed delivery preserves observed busy state
+ok - fm-control interrupt: muse confirms cancellation from its session log
+ok - fm-control interrupt: postconditions are revalidated after acknowledgement polling
+ok - fm-control exit: an interrupt-stopped agent satisfies the gone-state postcondition
+ok - fm-control exit: a stubborn agent reports delivered input and an unconfirmed exit
+ok - fm-control interrupt: grok reports delivery without claiming cancellation
+ok - fm-control interrupt: grok's idle footer does not confirm cancellation
+ok - fm-control: a lifecycle command to a secondmate is unmarked and opens no reply expectation
+ok - fm-control's arrival leaves fm-send's from-firstmate marking untouched
+FM_TEST_END 2026-10-07T16:06:46Z tests/fm-control.test.sh exit=0 duration_ms=124284 gate_skip=false
+FM_TEST_BEGIN 2026-10-07T16:06:46Z tests/fm-control-relaunch.test.sh family=backend-dispatch expected_gate_skip=none
+not ok - relaunch should replace the agent
+warning: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4BG2CQG285W4NVDKS9TDVH8/.test-phase-tmp/fm-control-relaunch.gVC5kr/dialog-file-relaunch-3902/home/data/rl71/launch-brief.md records no ship branch; defaulting to legacy branch fm/rl71
+warning: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4BG2CQG285W4NVDKS9TDVH8/.test-phase-tmp/fm-control-relaunch.gVC5kr/dialog-file-relaunch-3902/home/data/rl71/launch-brief.md records no delivery contract line (scaffolded before ship briefs recorded one); launching on the explicit --mode no-mistakes - confirm its definition of done matches
+error: task rl71's endpoint is in 'unknown', not its recorded worktree '/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4BG2CQG285W4NVDKS9TDVH8/.test-phase-tmp/fm-control-relaunch.gVC5kr/dialog-file-relaunch-3902/wt'; refusing to relaunch an agent outside the copy holding its work
+error: the replacement agent for rl71 could not be launched on claude
+error: rl71's agent was stopped but the replacement did not launch; no agent is running, and its work plus the recorded progress note are preserved at /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4BG2CQG285W4NVDKS9TDVH8/.test-phase-tmp/fm-control-relaunch.gVC5kr/dialog-file-relaunch-3902/wt: expected exit 0, got 1
+FM_TEST_END 2026-10-07T16:06:50Z tests/fm-control-relaunch.test.sh exit=1 duration_ms=3348 gate_skip=false
+FM_TEST_BEGIN 2026-10-07T16:06:50Z tests/fm-spawn-dispatch-profile.test.sh family=backend-dispatch expected_gate_skip=none
+ok - allowlist=absent preserves the operational floor and filters only when opted in
+ok - allowlist=missing-config preserves the operational floor and filters only when opted in
+ok - allowlist=enabled preserves the operational floor and filters only when opted in
+ok - allowlist=empty preserves the operational floor and filters only when opted in
+ok - invalid allowlist names refuse before launch or task publication
+ok - inaccessible config with present allowlist refuses before launch or task publication
+ok - inaccessible config with absent allowlist refuses before launch or task publication
+ok - inaccessible ancestor with present allowlist refuses before launch or task publication
+ok - inaccessible ancestor with absent allowlist refuses before launch or task publication
+not ok - secondmate with an allowlist should spawn: error: secondmate home cannot be inside the firstmate repo: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4BG2CQG285W4NVDKS9TDVH8/.test-phase-tmp/fm-spawn-dispatch-profile.dUocIJ/env-secondmate/secondmate-home: expected exit 0, got 1
+FM_TEST_END 2026-10-07T16:07:09Z tests/fm-spawn-dispatch-profile.test.sh exit=1 duration_ms=19680 gate_skip=false
+FM_TEST_BEGIN 2026-10-07T16:07:09Z tests/fm-spawn-worktree-settle.test.sh family=backend-dispatch expected_gate_skip=none
+not ok - spawn should succeed once the pane settles: expected exit 0, got 1
+FM_TEST_END 2026-10-07T16:07:10Z tests/fm-spawn-worktree-settle.test.sh exit=1 duration_ms=876 gate_skip=false
+FM_TEST_SUMMARY total=6 failed=5 skipped_gate=0 duration_ms=294922
+FM_TEST_SUMMARY_FAMILY family=backend-dispatch count=4 duration_ms=148188 failed=3
+FM_TEST_SUMMARY_FAMILY family=secondmate count=2 duration_ms=153526 failed=2
+FM_TEST_SLOWEST rank=1 script=tests/fm-remote-reply.test.sh duration_ms=146341
+FM_TEST_SLOWEST rank=2 script=tests/fm-control.test.sh duration_ms=124284
+FM_TEST_SLOWEST rank=3 script=tests/fm-spawn-dispatch-profile.test.sh duration_ms=19680
+FM_TEST_SLOWEST rank=4 script=tests/fm-secondmate-harness.test.sh duration_ms=7185
+FM_TEST_SLOWEST rank=5 script=tests/fm-control-relaunch.test.sh duration_ms=3348
+FM_TEST_SLOWEST rank=6 script=tests/fm-spawn-worktree-settle.test.sh duration_ms=876
+fm-test-run: wrote timing artifact: /Users/jarad/.no-mistakes/evidence/01M4BG2CQG285W4NVDKS9TDVH8/targeted-tests.json

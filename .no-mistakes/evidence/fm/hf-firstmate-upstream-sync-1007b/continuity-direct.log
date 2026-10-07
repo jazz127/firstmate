@@ -1,0 +1,11 @@
+ingested: ios appended=1 offset=30
+continuity-broken: ios (truncated)
+/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4BG2CQG285W4NVDKS9TDVH8/bin/fm-procevent-remote-reply.sh: line 1: tmp: unbound variable
+continuity-broken: ios (truncated)
+/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4BG2CQG285W4NVDKS9TDVH8/bin/fm-procevent-remote-reply.sh: line 1: tmp: unbound variable
+ingested: ios appended=1 offset=66
+continuity-broken: ios (truncated)
+/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4BG2CQG285W4NVDKS9TDVH8/bin/fm-procevent-remote-reply.sh: line 1: tmp: unbound variable
+continuity-broken: ios (truncated)
+/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4BG2CQG285W4NVDKS9TDVH8/bin/fm-procevent-remote-reply.sh: line 1: tmp: unbound variable
+remote-reply-continuity-ios	blocked	remote reply continuity broke for ios (truncated) at offset 66 prefix 154562be5ee1 retirements 0ok - resolved repeated break stays closed; a later break after cursor advance reopens exactly once

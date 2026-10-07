@@ -1,0 +1,1 @@
+not ok - spawn should succeed once the pane settles: error: this home's task set is locked by another operation (a forced teardown is enumerating or removing its tasks); refusing to create task settle-single-stale-z1 rather than racing it: expected exit 0, got 1

@@ -1,0 +1,41 @@
+session list --json --session lock-order
+status --json --session lock-order
+session list --json --session lock-order
+status --json --session lock-order
+workspace list --session lock-order
+status --json
+status --json --session lock-order
+workspace list --session lock-order
+tab list --workspace w1 --session lock-order
+tab create --workspace w1 --cwd /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4BG2CQG285W4NVDKS9TDVH8/.test-phase-tmp/fm-spawn-worktree-settle.9hLyi9/presentation-batch/project --label fm-settle-presentation-batch --no-focus --session lock-order
+status --json --session lock-order
+pane run w1:p1 treehouse get --session lock-order
+status --json --session lock-order
+pane get w1:p1 --session lock-order
+status --json --session lock-order
+pane get w1:p1 --session lock-order
+status --json --session lock-order
+pane get w1:p1 --session lock-order
+status --json --session lock-order
+pane run w1:p1 cd -- '/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4BG2CQG285W4NVDKS9TDVH8/.test-phase-tmp/fm-spawn-worktree-settle.9hLyi9/presentation-batch/wt' --session lock-order
+status --json --session lock-order
+pane get w1:p1 --session lock-order
+pane get w1:p1 --session lock-order
+status --json --session lock-order
+pane read w1:p1 --source recent --lines 200 --session lock-order
+pane get w1:p1 --session lock-order
+agent get w1:p1 --session lock-order
+status --json --session lock-order
+pane run w1:p1 export GOTMPDIR=/tmp/fm-settle-presentation-batch/gotmp --session lock-order
+status --json --session lock-order
+pane run w1:p1 export COREPACK_HOME="${COREPACK_HOME:-/tmp/fm-settle-presentation-batch/cache/corepack}" --session lock-order
+status --json --session lock-order
+pane run w1:p1 export npm_config_cache="${npm_config_cache:-${NPM_CONFIG_CACHE:-/tmp/fm-settle-presentation-batch/cache/npm}}" --session lock-order
+status --json --session lock-order
+pane run w1:p1 export COMPACT_ADVISER_DISABLE=1 --session lock-order
+status --json --session lock-order
+pane run w1:p1 export FM_TASK_ID=settle-presentation-batch --session lock-order
+status --json --session lock-order
+pane send-text w1:p1 . '/tmp/fm-settle-presentation-batch+6593747101d96acd20a6814fcb64746dd8eb019aaa68c5eae09c47e686bd9668/launch.s1791389040.92108.26893.sh' --session lock-order
+status --json --session lock-order
+pane send-keys w1:p1 enter --session lock-order

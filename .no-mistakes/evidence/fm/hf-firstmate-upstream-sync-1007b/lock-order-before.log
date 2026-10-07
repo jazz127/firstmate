@@ -1,0 +1,5 @@
+not ok - wait: presentation owner could not retake project lock (exit 3)
+warning: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4BG2CQG285W4NVDKS9TDVH8/.test-phase-tmp/fm-spawn-worktree-settle.qcUltl/presentation-wait/home-child/data/settle-presentation-wait/launch-brief.md records no ship branch; defaulting to legacy branch fm/settle-presentation-wait
+warning: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4BG2CQG285W4NVDKS9TDVH8/.test-phase-tmp/fm-spawn-worktree-settle.qcUltl/presentation-wait/home-child/data/settle-presentation-wait/launch-brief.md records no delivery contract line (scaffolded before ship briefs recorded one); launching on the explicit --mode no-mistakes - confirm its definition of done matches
+warning: no exact herdr presentation token match for settle-presentation-wait; leaving any stale space untouched and spawning flat
+spawned settle-presentation-wait harness=codex kind=ship mode=no-mistakes yolo=off window=lock-order:w1:p1 worktree=/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4BG2CQG285W4NVDKS9TDVH8/.test-phase-tmp/fm-spawn-worktree-settle.qcUltl/presentation-wait/wt

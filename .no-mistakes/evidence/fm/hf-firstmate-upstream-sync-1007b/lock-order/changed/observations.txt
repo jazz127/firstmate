@@ -1,0 +1,6 @@
+mode=changed
+spawn_exit=1
+peer_exit=0
+project_reacquired=yes
+protected_state_read=yes
+get_outside_project_lock=yes

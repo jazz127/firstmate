@@ -1,0 +1,15 @@
+ok - a single transient stale foreground-cwd read is not accepted as the worktree
+ok - an already-settled pane confirms on the next read, not a whole extra cycle
+ok - a transient primary-checkout pane read is not accepted as the worktree
+ok - a pane stuck on the primary checkout fails loudly at the deadline
+ok - concurrent spawns reach treehouse get without holding the project lock
+ok - a slot an exited task's teardown returns during get is abandoned, not claimed
+ok - an inspected unreserved pool slot is not recorded, claimed, or reset
+ok - treehouse get runs outside the project lock and spawn reacquires it
+ok - herdr wait releases the project lock during presentation contention and revalidates before provisioning
+ok - herdr batch releases the project lock during presentation contention and revalidates before provisioning
+ok - herdr refuse releases the project lock during presentation contention and revalidates before provisioning
+ok - herdr create releases the project lock during presentation contention and revalidates before provisioning
+ok - herdr project releases the project lock during presentation contention and revalidates before provisioning
+ok - herdr changed releases the project lock during presentation contention and revalidates before provisioning
+# all fm-spawn-worktree-settle tests passed

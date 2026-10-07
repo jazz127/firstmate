@@ -1,0 +1,8 @@
+FM_TEST_BEGIN 2026-10-07T16:06:46Z tests/fm-control-relaunch.test.sh family=backend-dispatch expected_gate_skip=none
+not ok - relaunch should replace the agent
+warning: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4BG2CQG285W4NVDKS9TDVH8/.test-phase-tmp/fm-control-relaunch.gVC5kr/dialog-file-relaunch-3902/home/data/rl71/launch-brief.md records no ship branch; defaulting to legacy branch fm/rl71
+warning: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4BG2CQG285W4NVDKS9TDVH8/.test-phase-tmp/fm-control-relaunch.gVC5kr/dialog-file-relaunch-3902/home/data/rl71/launch-brief.md records no delivery contract line (scaffolded before ship briefs recorded one); launching on the explicit --mode no-mistakes - confirm its definition of done matches
+error: task rl71's endpoint is in 'unknown', not its recorded worktree '/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4BG2CQG285W4NVDKS9TDVH8/.test-phase-tmp/fm-control-relaunch.gVC5kr/dialog-file-relaunch-3902/wt'; refusing to relaunch an agent outside the copy holding its work
+error: the replacement agent for rl71 could not be launched on claude
+error: rl71's agent was stopped but the replacement did not launch; no agent is running, and its work plus the recorded progress note are preserved at /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4BG2CQG285W4NVDKS9TDVH8/.test-phase-tmp/fm-control-relaunch.gVC5kr/dialog-file-relaunch-3902/wt: expected exit 0, got 1
+FM_TEST_END 2026-10-07T16:06:50Z tests/fm-control-relaunch.test.sh exit=1 duration_ms=3348 gate_skip=false

@@ -1,0 +1,3 @@
+git merge-base --is-ancestor 852c67dca8054c3d76a70491d985cabbaf3a2096 HEAD: exit 0
+git merge-base --is-ancestor 47aff866db HEAD: exit 0
+5309bbba26aef065434201ab9e56f8f3ca033999 852c67dca8054c3d76a70491d985cabbaf3a2096 47aff866dbe0612bd43df66d8fa76576e06a2b3e

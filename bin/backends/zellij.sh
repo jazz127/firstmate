@@ -236,7 +236,7 @@ fm_backend_zellij_session_exists() {  # <session>
 fm_backend_zellij_server_ensure() {  # <session>
   local session=$1 i
   fm_backend_zellij_session_exists "$session" && return 0
-  ( nohup zellij attach -b "$session" </dev/null >/dev/null 2>&1 & ) || return 1
+  ( unset FM_TIMEOUT_OWNER_PID FM_EXEC_TIMED_OWNER_PID; nohup zellij attach -b "$session" </dev/null >/dev/null 2>&1 & ) || return 1
   for i in $(seq 1 20); do
     fm_backend_zellij_session_exists "$session" && return 0
     sleep 0.5

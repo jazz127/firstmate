@@ -4967,6 +4967,145 @@ SH
   test_watcher_owned_timeout_results
 }
 
+test_recovered_panes_outlive_watcher_timeout_owner() {
+  local backend mechanism allowlist dir home state fakebin out pid rc startup pollution
+  for backend in tmux herdr; do
+    for mechanism in perl bash; do
+      for allowlist in ambient filtered; do
+        dir=$(make_case "recovery-owner-$backend-$mechanism-$allowlist")
+        home="$dir/home"; state="$home/state"; fakebin="$dir/fakebin"; out="$dir/watch.out"
+        mkdir -p "$state" "$home/config" "$dir/code" "$dir/child/bin" "$dir/child/data" "$dir/child/state" "$dir/child/config" "$dir/child/projects"
+        fm_test_track_watcher_state "$state"
+        ln -s "$ROOT/bin" "$dir/code/bin"
+        git -C "$dir/code" init -q -b main
+        git -C "$dir/child" init -q -b main
+        ln -s "$ROOT/AGENTS.md" "$dir/child/AGENTS.md"
+        printf 'recovered\n' > "$dir/child/.fm-secondmate-home"
+        printf 'supervise this disposable home\n' > "$dir/child/data/charter.md"
+        printf 'codex\n' > "$home/config/crew-harness"
+        printf 'codex\n' > "$home/config/secondmate-harness"
+        printf 'off\n' > "$home/config/herdr-presentation-spaces"
+        if [ "$allowlist" = filtered ]; then
+          printf 'FM_TIMEOUT_OWNER_PID\nFM_EXEC_TIMED_OWNER_PID\nFM_RECOVERY_ROOT\nFM_RECOVERY_SENTINEL\n' > "$home/config/launch-env-allowlist"
+        fi
+        printf 'window=firstmate:fm-recovered\nkind=secondmate\nharness=codex\nhome=%s\n' "$dir/child" > "$state/recovered.meta"
+        if [ "$backend" = herdr ]; then
+          printf 'backend=herdr\nherdr_session=owner-test\nherdr_pane_id=p1\n' >> "$state/recovered.meta"
+        fi
+        touch "$state/home-summary.json"
+        mkdir -p "$state/.home-summary-refresh.lock"
+        printf '%s\n' "$$" > "$state/.home-summary-refresh.lock/pid"
+        cat > "$fakebin/server-env" <<'SH'
+#!/usr/bin/env bash
+for name in FM_TIMEOUT_OWNER_PID FM_EXEC_TIMED_OWNER_PID FM_RECOVERY_SENTINEL; do
+  if value=$(printenv "$name"); then
+    printf 'export %s=%q\n' "$name" "$value"
+  fi
+done > "$FM_RECOVERY_DIR/server.env"
+touch "$FM_RECOVERY_DIR/server"
+SH
+        cat > "$fakebin/tmux" <<'SH'
+#!/usr/bin/env bash
+printf '%s\n' "tmux $*" >> "$FM_RECOVERY_DIR/commands"
+case "$1" in
+  has-session)
+    printf '%s\n' "${FM_TIMEOUT_OWNER_PID-unset}" > "$FM_RECOVERY_DIR/transient-owner"
+    [ -e "$FM_RECOVERY_DIR/server" ]; exit $? ;;
+  new-session) "${0%/*}/server-env" ;;
+  list-windows) [ ! -e "$FM_RECOVERY_DIR/pane" ] || printf 'fm-recovered\n' ;;
+  new-window)
+    printf '%s\n' "${FM_TIMEOUT_OWNER_PID-unset}|${FM_EXEC_TIMED_OWNER_PID-unset}" > "$FM_RECOVERY_DIR/pane-client.env"
+    touch "$FM_RECOVERY_DIR/pane"
+    printf '@1\n' ;;
+  display-message)
+    case "$*" in
+      *pane_current_path*) printf '%s/child\n' "$FM_RECOVERY_DIR" ;;
+      *pane_current_command*) printf 'bash\n' ;;
+      *pane_id*) printf '%%1\n' ;;
+      *) printf 'firstmate\n' ;;
+    esac ;;
+  send-keys)
+    prev=
+    for arg in "$@"; do
+      [ "$prev" != -l ] || printf '%s\n' "$arg" > "$FM_RECOVERY_DIR/launch"
+      prev=$arg
+    done ;;
+esac
+exit 0
+SH
+        cat > "$fakebin/herdr" <<'SH'
+#!/usr/bin/env bash
+case "$1 $2" in
+  'status --json')
+    running=false
+    [ ! -e "$FM_RECOVERY_DIR/server" ] || running=true
+    printf '{"client":{"version":"0.7.1","protocol":14},"server":{"running":%s,"compatible":true}}\n' "$running" ;;
+  'server --session') "${0%/*}/server-env" ;;
+  'workspace list')
+    if [ -e "$FM_RECOVERY_DIR/workspace" ]; then
+      printf '{"result":{"workspaces":[{"workspace_id":"w1","label":"2ndmate-recovered"}]}}\n'
+    else
+      printf '{"result":{"workspaces":[]}}\n'
+    fi ;;
+  'workspace create')
+    touch "$FM_RECOVERY_DIR/workspace"
+    printf '{"result":{"workspace":{"workspace_id":"w1"}}}\n' ;;
+  'tab list') printf '{"result":{"tabs":[]}}\n' ;;
+  'tab create')
+    touch "$FM_RECOVERY_DIR/pane"
+    printf '{"result":{"tab":{"tab_id":"t1"},"root_pane":{"pane_id":"p1"}}}\n' ;;
+  'pane get') printf '{"error":{"code":"pane_not_found"}}\n'; exit 1 ;;
+  'pane send-text')
+    shift 3
+    [ "${1:-}" != -- ] || shift
+    case "${1:-}" in '. '*) printf '%s\n' "$1" > "$FM_RECOVERY_DIR/launch" ;; esac ;;
+esac
+exit 0
+SH
+        cat > "$fakebin/codex" <<'SH'
+#!/usr/bin/env bash
+[ "${FM_TIMEOUT_OWNER_PID+x}" != x ] && [ "${FM_EXEC_TIMED_OWNER_PID+x}" != x ] || exit 1
+[ "$FM_RECOVERY_SENTINEL" = kept ] || exit 1
+. "$FM_RECOVERY_ROOT/bin/fm-timeout-lib.sh"
+fm_run_timed 3 bash -c 'sleep 0.2; printf startup-complete'
+SH
+        printf '#!/usr/bin/env bash\nexit 0\n' > "$fakebin/treehouse"
+        chmod +x "$fakebin/server-env" "$fakebin/tmux" "$fakebin/herdr" "$fakebin/codex" "$fakebin/treehouse"
+        FM_RECOVERY_DIR="$dir" FM_RECOVERY_ROOT="$ROOT" FM_RECOVERY_SENTINEL=kept \
+          watch_bg "$state" "$fakebin" "$out" env FM_HOME="$home" FM_ROOT_OVERRIDE="$dir/code" \
+            TMUX='' HERDR_PANE_ID='' HERDR_SESSION=owner-test FM_BACKEND="$backend" \
+            FM_HOME_SUMMARY_IF_IDLE=1 FM_SKIP_SECONDMATE_INHERIT=1 FM_SECONDMATE_LIVENESS_SECS=1 FM_SECONDMATE_LIVENESS_TIMEOUT=30 \
+            FM_TIMEOUT_MECHANISM_OVERRIDE="$([ "$mechanism" != bash ] || printf bash)"
+        pid=$!
+        wait_for_exit "$pid" 300
+        rc=$?
+        [ "$rc" = 0 ] || { reap "$pid"; fail "$backend $mechanism recovery failed: $(cat "$out")"; }
+        assert_grep 'auto-relaunched' "$out" "$backend recovery did not succeed: $(cat "$out") $(cat "$dir/commands" 2>/dev/null)"
+        [ -e "$dir/server" ] && [ -e "$dir/pane" ] && [ -s "$dir/launch" ] || fail "$backend recovery did not create a server, pane, and launch"
+        if [ "$backend" = tmux ]; then
+          [ "$(cat "$dir/transient-owner")" = "$pid" ] || fail "transient spawn lost watcher ownership"
+          [ "$(cat "$dir/pane-client.env")" = 'unset|unset' ] || fail "tmux pane creation inherited watcher ownership"
+        fi
+        for pollution in server existing-pane; do
+          startup=$(env -i HOME="$dir/child" PATH="$fakebin:$PATH" FM_RECOVERY_ROOT="$ROOT" \
+            FM_TIMEOUT_MECHANISM_OVERRIDE="$([ "$mechanism" != bash ] || printf bash)" \
+            bash -c '
+              . "$1/server.env"
+              [ "${FM_TIMEOUT_OWNER_PID+x}" != x ] && [ "${FM_EXEC_TIMED_OWNER_PID+x}" != x ] || exit 1
+              if [ "$2" = existing-pane ]; then
+                export FM_TIMEOUT_OWNER_PID="$3" FM_EXEC_TIMED_OWNER_PID="$3"
+              fi
+              eval "$(cat "$1/launch")"
+              [ "${FM_TIMEOUT_OWNER_PID+x}" != x ] && [ "${FM_EXEC_TIMED_OWNER_PID+x}" != x ]
+            ' _ "$dir" "$pollution" "$pid") || fail "$backend $mechanism $allowlist $pollution startup retained dead watcher ownership"
+          [ "$startup" = startup-complete ] || fail "$backend worker startup did not complete after watcher exit"
+        done
+        pass "$backend $mechanism $allowlist recovered server and pane startup outlive the watcher"
+      done
+    done
+  done
+}
+
 test_watcher_owned_timeout_results() {
   local dir mechanism
   dir=$(make_case owned-timeout-results)
@@ -7117,6 +7256,7 @@ test_identical_dead_display_of_a_successor_still_reports
 test_term_stops_a_watcher_blocked_inside_a_poll
 test_term_stops_a_watcher_blocked_in_tmux_queries
 test_term_cancels_watcher_owned_timeouts
+test_recovered_panes_outlive_watcher_timeout_owner
 test_term_stops_a_watcher_whose_cleanup_marker_lock_is_held
 test_cleanup_marker_lock_bound_is_decimal_with_zero_default
 test_busy_pane_below_turn_age_bound_is_absorbed

@@ -108,7 +108,7 @@ This is a deliberate, source-owned choice:
 
 ## Relationship to OpenTelemetry and later increments
 
-Task, spawn, and PR outcome tracing is an upstream-candidate house feature.
+Task, spawn, PR outcome, steer, control, and promotion tracing is an upstream-candidate house feature.
 Carrier propagation creates no spans by itself; the separate opt-in emitter is configured in [configuration.md](configuration.md#otlp-span-export-configtrace-exportjson--fm_trace_export).
 When export is enabled, a successful local spawn emits one `firstmate.spawn` child after launch delivery and backlog commit, and successful ordinary teardown emits one `firstmate.task` root with the last recognized `done` or `failed` outcome, or `unknown` when neither exists.
 Done maps to OTLP OK, failed to ERROR, and unknown leaves status unset; refused or rolled-back launches and refused teardown emit no lifecycle span.
@@ -119,9 +119,12 @@ Teardown and pending-close restart recovery record the terminal outcome in task 
 PR outcome observations are `firstmate.pr.ready` and `firstmate.pr.merged` child spans under the task carrier, with the existing resource dimensions and no PR-specific attributes.
 Each successful ready registration emits after metadata recording and merge-poll publication, including a re-registration of the same PR; rejected registrations, failed publication, and merge-time re-recording emit no ready observation.
 A confirmed merge performed by the home or detected by its poll emits only after successful outcome publication and notification-marker commit through `bin/fm-merge-outcome-lib.sh`; an already-recorded outcome, refused merge, queued merge, or unconfirmed merge emits no merged observation.
-Successful steers emit `firstmate.steer` after durable inbox delivery or confirmed typed/key delivery, with only the delivery plane and optional fire-and-forget boolean, omitting inbox sequence, correlation and decision-key identities; remote inbox events are emitted by the parent task home.
-Verified interrupt and exit postconditions emit `firstmate.control`, and scout promotion emits `firstmate.promote` after the promoted metadata is published.
-Refused or interrupted delivery emits no event, relaunch's internal stop emits no separate control event, and steer message text is never an attribute.
+Successful steers emit `firstmate.steer` child spans after durable inbox delivery or confirmed typed/key delivery and any required decision-answer bookkeeping, with only `firstmate.plane=inbox|typed|key` and optional `firstmate.fire_and_forget=true`, omitting inbox sequence, correlation and decision-key identities; remote inbox events are emitted by the parent task home.
+Verified interrupt and exit postconditions emit `firstmate.control` child spans with `firstmate.control.verb=interrupt|exit` and `firstmate.control.confirmed=true|false`.
+For interrupt, `confirmed` is true only for adapter-owned cancellation acknowledgement; successful delivery with cancellation unconfirmed or no running turn still emits with false.
+For exit, `confirmed` is true after the agent is verified gone, including an already-stopped agent or a proven-gone endpoint.
+Scout promotion emits a `firstmate.promote` child span after the promoted metadata is published, with `firstmate.task.kind.prior=scout`, the selected `firstmate.task.mode`, and `firstmate.task.yolo`.
+Refused, interrupted, or unconfirmed steer delivery and refused control or promotion emit no event, relaunch's internal stop emits no separate control event, and steer message text is never an attribute.
 Exported lifecycle attributes omit pane/window identity, private PR URLs, and prior-generation linkage; pane-resource export is deferred.
 Approved untraced paths for this chunk:
 

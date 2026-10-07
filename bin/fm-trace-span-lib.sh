@@ -107,6 +107,14 @@ fm_trace_span_task() {  # <meta> <outcome> <forced>
   fm_trace_span_emit "$meta" firstmate.task "$start" - --root --status "$status" "${attrs[@]}"
 }
 
+fm_trace_span_pr_ready() {  # <meta>
+  fm_trace_span_emit "$1" firstmate.pr.ready - -
+}
+
+fm_trace_span_pr_merged() {  # <meta>
+  fm_trace_span_emit "$1" firstmate.pr.merged - -
+}
+
 fm_trace_span_config() {
   local file=$1 values
   command -v jq >/dev/null 2>&1 || return 1

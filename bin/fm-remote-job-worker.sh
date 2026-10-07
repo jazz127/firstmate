@@ -22,6 +22,20 @@
 # its recorded command group, leaving interrupted records for the replacement
 # worker's orphan recovery.
 #
+# A contender leaves a verified live lock owner untouched and retries while
+# readiness probes succeed or the lock directory is at most ten seconds old.
+# Once those guards clear, stale-lock reclamation removes the final pid, start,
+# and command files plus interrupted .pid.XXXXXX, .start.XXXXXX, and
+# .command.XXXXXX publications, where XXXXXX is six alphanumeric characters.
+# Cleanup validates every entry before deleting any lock file and accepts only
+# regular non-symlink files with those names; unknown entries, directories,
+# and symlinks fail closed. It removes the lock directory only when empty.
+# Worker exit and the Linux supervisor's verified dead-child cleanup use the
+# same publication cleanup. Quarantine recovery keeps its separate check that
+# recorded execution has stopped before allowing stale-lock reclamation.
+# tests/fm-remote-job.test.sh covers stale fragments, unknown entries, and
+# preservation of a live owner's lock.
+#
 # The serving loop does not busy-poll an idle queue. After a lane starts or is
 # reaped it rescans every FM_REMOTE_JOB_POLL_SECONDS for four passes, so a home
 # whose lane just finished starts its next job promptly; otherwise it sleeps

@@ -2153,6 +2153,7 @@ test_recovery_finishes_a_close_for_the_same_meta_incarnation() {
   add_item "$case_dir" "$id"
   start_item "$case_dir" "$id"
   write_task_meta "$case_dir" "$id" ship no-mistakes "spawn_gen=spawn-one"
+  printf 'done: finished\n' > "$(home_of "$case_dir")/state/$id.status"
   printf 'id=%s\ndata=%s\nspawn_gen=spawn-one\narg=--note\narg=local%%20main\n' \
     "$id" "$(home_of "$case_dir")/data" \
     > "$(home_of "$case_dir")/state/$id.backlog-close"
@@ -2162,9 +2163,113 @@ test_recovery_finishes_a_close_for_the_same_meta_incarnation() {
     || fail "session start did not close the interrupted incarnation: $out"
   assert_absent "$(home_of "$case_dir")/state/$id.meta" \
     "session start retained the interrupted incarnation's meta"
+  assert_absent "$(home_of "$case_dir")/state/$id.status" \
+    "session start removed metadata without retiring its status"
   assert_absent "$(home_of "$case_dir")/state/$id.backlog-close" \
     "session start retained the completed incarnation's close marker"
   pass "session start finishes a close for the matching meta incarnation"
+}
+
+test_pending_close_restart_preserves_status_retirement_retryability() {
+  local mode trace_export outcome case_dir home id meta marker capture out rc expected_state
+  for mode in close retain; do
+    for trace_export in on off; do
+      for outcome in 'done' failed; do
+        id="atomic-restart-$mode-$trace_export-$outcome"
+        case_dir=$(make_home "restart-$mode-$trace_export-$outcome")
+        home=$(home_of "$case_dir")
+        meta="$home/state/$id.meta"
+        marker="$home/state/$id.backlog-close"
+        capture="$case_dir/trace-requests.jsonl"
+        add_item "$case_dir" "$id"
+        start_item "$case_dir" "$id"
+        expected_state='done'
+        if [ "$mode" = retain ]; then
+          tasks-axi hold "$id" --reason "captain decision pending" --kind captain \
+            --file "$(backlog_of "$case_dir")" >/dev/null
+          expected_state=queued
+        fi
+        write_task_meta "$case_dir" "$id" ship local-only "spawn_gen=restart-one" \
+          "traceparent=00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+        printf '%s: finished\n' "$outcome" > "$home/state/$id.status"
+        printf 'malformed\n' > "$home/state/.status-presentation-cursor"
+        printf 'Authorization: Bearer synthetic-token\n' > "$home/config/auth-header"
+        chmod 600 "$home/config/auth-header"
+        jq -n --arg auth "$home/config/auth-header" \
+          '{enabled:true,endpoint:"http://127.0.0.1:14318/v1/traces","auth-header-file":$auth}' \
+          > "$home/config/trace-export.json"
+        printf '%s\n' "$$" > "$home/state/.lock"
+        printf '%s on\n' "$$" > "$home/state/.trace-context-effective"
+        cat > "$case_dir/fakebin/curl" <<SH
+#!/usr/bin/env bash
+case "\$*" in
+  *"--data-binary @-"*) cat >> "$capture"; printf '\\n' >> "$capture" ;;
+esac
+SH
+        chmod +x "$case_dir/fakebin/curl"
+
+        rc=0
+        out=$(FM_TRACE_EXPORT=$trace_export run_teardown "$case_dir" "$id") || rc=$?
+        [ "$rc" -ne 0 ] || fail "$mode/$trace_export/$outcome accepted a malformed status cursor"
+        assert_present "$meta" "cursor failure discarded retryable metadata"
+        assert_present "$marker" "cursor failure discarded the pending $mode"
+        assert_present "$home/state/$id.status" "cursor failure discarded terminal status"
+
+        out=$(FM_TRACE_EXPORT=$trace_export run_bootstrap "$case_dir")
+        assert_contains "$out" "status presentation could not be retired" \
+          "restart did not enforce the status-retirement prerequisite"
+        assert_present "$meta" "restart bypassed the failed status-retirement gate"
+        assert_present "$marker" "restart lost the pending $mode after cursor failure"
+        assert_present "$home/state/$id.status" "restart lost terminal status after cursor failure"
+        [ "$(row_state "$case_dir" "$id")" = in_flight ] \
+          || fail "restart changed the backlog row despite failed status retirement"
+        assert_absent "$capture" "refused retirement exported a terminal root"
+
+        : > "$home/state/.status-presentation-cursor"
+        break_meta_removal "$case_dir" "$meta"
+        rc=0
+        out=$(FM_TRACE_EXPORT=$trace_export run_teardown "$case_dir" "$id") || rc=$?
+        [ "$rc" -ne 0 ] || fail "teardown concealed failed metadata removal"
+        assert_present "$meta" "failed metadata removal discarded the task"
+        assert_equals "$outcome" "$(sed -n 's/^trace_outcome=//p' "$meta")" \
+          "failed teardown lost its terminal outcome"
+        assert_absent "$home/state/$id.status" "repaired cursor did not allow status retirement"
+
+        out=$(FM_TRACE_EXPORT=$trace_export run_bootstrap "$case_dir")
+        assert_contains "$out" "the interrupted task record could not be removed" \
+          "restart did not report failed metadata removal"
+        assert_present "$meta" "restart lost metadata after failed removal"
+        assert_present "$marker" "restart lost the pending $mode after failed removal"
+        assert_equals "$outcome" "$(sed -n 's/^trace_outcome=//p' "$meta")" \
+          "restart overwrote the saved terminal outcome with unknown"
+        [ "$(row_state "$case_dir" "$id")" = in_flight ] \
+          || fail "restart changed the backlog row despite failed record removal"
+        assert_absent "$capture" "failed metadata removal exported a terminal root"
+
+        rm -f "$case_dir/fakebin/rm"
+        out=$(FM_TRACE_EXPORT=$trace_export run_teardown "$case_dir" "$id") \
+          || fail "cleanup was not retryable after restart: $out"
+        assert_absent "$meta" "successful retry retained metadata"
+        assert_absent "$marker" "successful retry retained its pending $mode"
+        [ "$(row_state "$case_dir" "$id")" = "$expected_state" ] \
+          || fail "successful retry did not apply the $mode transition"
+        if [ "$trace_export" = on ]; then
+          jq -se --arg outcome "$outcome" --arg id "$id" \
+            --argjson code "$([ "$outcome" = 'done' ] && printf 1 || printf 2)" '
+              length == 1 and
+              (.[0].resourceSpans[0] as $resource |
+                $resource.scopeSpans[0].spans[0] as $span |
+                $span.name == "firstmate.task" and $span.status.code == $code and
+                any($span.attributes[]; .key == "firstmate.task.outcome" and .value.stringValue == $outcome) and
+                any($resource.resource.attributes[]; .key == "firstmate.task.id" and .value.stringValue == $id))
+            ' "$capture" >/dev/null || fail "retry exported the wrong terminal outcome or identity"
+        else
+          assert_absent "$capture" "disabled cleanup exported a terminal root"
+        fi
+      done
+    done
+  done
+  pass "pending close and retain recovery preserve outcome and retryability across cursor and removal failures"
 }
 
 test_recovery_preserves_a_close_for_ambiguous_incarnation_metadata() {
@@ -3103,6 +3208,7 @@ test_recovery_backfills_a_recorded_link_on_an_already_done_item
 test_recovery_preserves_a_close_when_the_backlog_cannot_be_read
 test_recovery_retry_preserves_incomplete_cleanup_warning
 test_recovery_finishes_a_close_for_the_same_meta_incarnation
+test_pending_close_restart_preserves_status_retirement_retryability
 test_recovery_preserves_a_close_for_ambiguous_incarnation_metadata
 test_recovery_preserves_both_records_when_meta_removal_fails
 test_recovery_preserves_a_close_beside_symlinked_metadata

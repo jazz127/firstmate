@@ -94,6 +94,14 @@ SH
 # tmux kill-window etc.: succeed silently.
 exit 0
 SH
+  cat > "$fakebin/curl" <<'SH'
+#!/usr/bin/env bash
+body=$(cat)
+[ -n "${FM_TRACE_CAPTURE_DIR:-}" ] || exit 1
+mkdir -p "$FM_TRACE_CAPTURE_DIR"
+n=$(find "$FM_TRACE_CAPTURE_DIR" -type f -name 'request-*.json' | wc -l | tr -d ' ')
+printf '%s' "$body" > "$FM_TRACE_CAPTURE_DIR/request-$((n + 1)).json"
+SH
   # Default gh-axi mock: no PR is associated with the branch, and viewing any PR
   # number fails. This keeps the landed-work check hermetic (never reaching the real
   # gh-axi) and represents the common "no GitHub PR" baseline. Tests that need a
@@ -173,7 +181,7 @@ case "${1:-}" in
 esac
 exit 0
 SH
-  chmod +x "$fakebin/treehouse" "$fakebin/tmux" "$fakebin/gh-axi" "$fakebin/gh" "$fakebin/no-mistakes"
+  chmod +x "$fakebin/treehouse" "$fakebin/tmux" "$fakebin/curl" "$fakebin/gh-axi" "$fakebin/gh" "$fakebin/no-mistakes"
 
   # Bare origin so the clone has an `origin` remote and origin/HEAD.
   git init -q --bare "$case_dir/origin.git"
@@ -641,7 +649,22 @@ run_teardown() {
   FM_DATA_OVERRIDE="$case_dir/data" \
   FM_CONFIG_OVERRIDE="$case_dir/config" \
   PATH="$case_dir/fakebin:${FM_TEARDOWN_TEST_PATH:-$PATH}" \
+  FM_TRACE_CAPTURE_DIR="${FM_TRACE_CAPTURE_DIR:-}" \
     "$TEARDOWN" task-x1 "$@"
+}
+
+enable_trace_export() {  # <case-dir> <capture-dir>
+  local case_dir=$1 capture=$2 auth="$1/config/auth-header"
+  printf 'Authorization: Bearer synthetic-token\n' > "$auth"
+  chmod 600 "$auth"
+  jq -n --arg auth "$auth" '{enabled:true,endpoint:"http://127.0.0.1:14318/v1/traces","auth-header-file":$auth}' \
+    > "$case_dir/config/trace-export.json"
+  printf '%s\n' "$$" > "$case_dir/state/.lock"
+  printf '%s on\n' "$$" > "$case_dir/state/.trace-context-effective"
+  cat >> "$case_dir/state/task-x1.meta" <<'META'
+traceparent=00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01
+trace_started=1712345678901
+META
 }
 
 # Seed a real backlog carrying task-x1 as In flight, so a teardown in this case
@@ -737,6 +760,34 @@ test_teardown_closes_the_backlog_item_itself() {
   printf '%s\n' "$out" | grep -F 'Run tasks-axi done' >/dev/null \
     && fail "teardown still asked a later turn to close the item it already closed: $out"
   pass "teardown closes its own backlog item before reporting success"
+}
+
+test_trace_root_emits_only_after_task_record_removal() {
+  local case_dir capture rc
+  case_dir=$(make_case trace-refused)
+  write_meta "$case_dir" no-mistakes ship
+  printf '%s\n' 'done [at=1712345678]: finished' > "$case_dir/state/task-x1.status"
+  enable_trace_export "$case_dir" "$case_dir/captured"
+  capture="$case_dir/captured"
+  printf '%s\n' dirty > "$case_dir/wt/uncommitted.txt"
+  rc=0
+  FM_TRACE_CAPTURE_DIR="$capture" run_teardown "$case_dir" >"$case_dir/stdout" 2>"$case_dir/stderr" || rc=$?
+  [ "$rc" -ne 0 ] || fail "trace-refused: dirty task should refuse cleanup"
+  [ "$(find "$capture" -type f -name 'request-*.json' | wc -l | tr -d ' ')" -eq 0 ] \
+    || fail "trace-refused: refused cleanup emitted a terminal root"
+
+  case_dir=$(make_case trace-success)
+  write_meta "$case_dir" local-only ship
+  printf '%s\n' 'done [at=1712345678]: finished' > "$case_dir/state/task-x1.status"
+  capture="$case_dir/captured"
+  enable_trace_export "$case_dir" "$capture"
+  FM_TRACE_CAPTURE_DIR="$capture" run_teardown "$case_dir" >"$case_dir/stdout" 2>"$case_dir/stderr" \
+    || fail "trace-success: landed cleanup failed: $(cat "$case_dir/stderr")"
+  [ "$(find "$capture" -type f -name 'request-*.json' | wc -l | tr -d ' ')" -eq 1 ] \
+    || fail "trace-success: successful cleanup did not emit exactly one root"
+  jq -e '.resourceSpans[0].scopeSpans[0].spans[0] as $s | $s.name == "firstmate.task" and $s.parentSpanId == null and $s.status.code == 1 and any($s.attributes[]; .key == "firstmate.task.outcome" and .value.stringValue == "done")' \
+    "$capture/request-1.json" >/dev/null || fail "trace-success: root span did not carry done/OK outcome"
+  pass "teardown emits its terminal root only after successful record removal"
 }
 
 test_teardown_closes_a_gerrit_task_with_its_change_url_as_a_note() {
@@ -4532,6 +4583,7 @@ test_forced_secondmate_own_missing_adapter_sibling_refuses_before_child_cleanup
 test_retained_sources_still_reach_the_ordinary_refusal
 test_local_only_fork_remote_allows
 test_teardown_closes_the_backlog_item_itself
+test_trace_root_emits_only_after_task_record_removal
 test_teardown_closes_a_gerrit_task_with_its_change_url_as_a_note
 test_teardown_manual_backend_leaves_the_backlog_to_the_operator
 test_local_only_truly_unpushed_refuses

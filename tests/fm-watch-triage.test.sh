@@ -5006,7 +5006,8 @@ test_watcher_owned_timeout_results() {
 }
 
 test_watcher_liveness_query_results() {
-  local dir state fakebin
+  local dir state fakebin TMP_ROOT
+  TMP_ROOT=$(fm_test_tmproot fm-watch-liveness-tests)
   dir=$(make_case term-liveness-results); state="$dir/state"; fakebin="$dir/fakebin"
   printf 'window=test:fm-stalled\nkind=secondmate\nharness=grok\n' > "$state/stalled.meta"
   touch "$state/.secondmate-relaunch-bound-stalled"

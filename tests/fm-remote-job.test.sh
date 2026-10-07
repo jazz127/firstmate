@@ -436,6 +436,80 @@ kill -0 "$LATE_GRANDCHILD_PID" 2>/dev/null && fail "late reparented descendant s
 pass "late reparented descendants are included in cleanup convergence"
 fi
 
+# An owner record can remain visible while release removes its start record.
+# The existing publication grace must protect that incomplete identity too.
+python3 - "$ROOT/bin/fm-remote-job-lib.sh" "$TMP_ROOT/partial-start-guard" <<'PY_GUARD' || fail "an incomplete start guard was stolen during release"
+import os
+import pathlib
+import subprocess
+import sys
+
+lib, home = sys.argv[1:]
+pathlib.Path(home).mkdir()
+env = dict(os.environ, FM_REMOTE_JOB_STATE_ROOT=home + "/queue")
+subprocess.run(["bash", "-c", '. "$1"; fm_remote_job_prepare_state "$2"', "_", lib, home],
+               env=env, check=True)
+guard = pathlib.Path(home) / "queue/worker.starting"
+guard.mkdir()
+(guard / "owner").write_text(str(os.getpid()) + "\n")
+# No start record: the contender must leave this recently modified guard alone.
+script = '. "$1"; fm_remote_job_linux_start_guard_acquire "$2" && fm_remote_job_linux_start_guard_release'
+contender = subprocess.Popen(["bash", "-c", script, "_", lib, home], env=env,
+                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+try:
+    try:
+        out, err = contender.communicate(timeout=1)
+    except subprocess.TimeoutExpired:
+        pass
+    else:
+        raise SystemExit(f"contender crossed an unreleased guard: rc={contender.returncode}, {out}{err}")
+    if (guard / "owner").read_text().strip() != str(os.getpid()):
+        raise SystemExit("contender replaced the releasing owner's identity")
+    (guard / "owner").unlink()
+    guard.rmdir()
+    out, err = contender.communicate(timeout=10)
+    if contender.returncode:
+        raise SystemExit(f"contender failed after release: {out}{err}")
+finally:
+    if contender.poll() is None:
+        contender.kill()
+        contender.communicate()
+PY_GUARD
+pass "an incomplete start guard remains exclusive through release"
+
+# Model a normal release finishing after mkdir observes the held directory.
+python3 - "$ROOT/bin/fm-remote-job-lib.sh" "$TMP_ROOT/disappearing-start-guard" <<'PY_GUARD' || fail "a normally released start guard was rejected as unsafe"
+import os
+import pathlib
+import shlex
+import shutil
+import subprocess
+import sys
+
+lib, home = sys.argv[1:]
+pathlib.Path(home).mkdir()
+env = dict(os.environ, FM_REMOTE_JOB_STATE_ROOT=home + "/queue")
+subprocess.run(["bash", "-c", '. "$1"; fm_remote_job_prepare_state "$2"', "_", lib, home],
+               env=env, check=True)
+guard = pathlib.Path(home) / "queue/worker.starting"
+guard.mkdir()
+fakebin = pathlib.Path(home) / "fakebin"
+fakebin.mkdir()
+# Only the first failed mkdir for this exact fixture guard completes release.
+mkdir = fakebin / "mkdir"
+mkdir.write_text("#!/bin/bash\n" + shlex.quote(shutil.which("mkdir")) + ' "$@"\nrc=$?\n' +
+                 'if [ "$*" = "$FM_GUARD_RELEASE_TARGET" ] && [ "$rc" != 0 ] && [ ! -e "$FM_GUARD_RELEASE_TARGET.released" ]; then\n' +
+                 '  rmdir "$FM_GUARD_RELEASE_TARGET" || exit 2\n' +
+                 '  touch "$FM_GUARD_RELEASE_TARGET.released"\nfi\nexit "$rc"\n')
+mkdir.chmod(0o755)
+env.update(PATH=str(fakebin) + ":" + env["PATH"], FM_GUARD_RELEASE_TARGET=str(guard))
+script = '. "$1"; fm_remote_job_linux_start_guard_acquire "$2" && fm_remote_job_linux_start_guard_release'
+result = subprocess.run(["bash", "-c", script, "_", lib, home], env=env, capture_output=True, text=True, timeout=10)
+if result.returncode or not pathlib.Path(str(guard) + ".released").exists():
+    raise SystemExit(f"acquisition after normal release failed: rc={result.returncode}, {result.stdout}{result.stderr}")
+PY_GUARD
+pass "start guard acquisition retries after a concurrent normal release"
+
 TRAILING_ROOT="$TMP_ROOT/trailing-root.sh"
 TRAILING_MARKER="$TMP_ROOT/trailing-child.pid"
 cat > "$TRAILING_ROOT" <<'SH'

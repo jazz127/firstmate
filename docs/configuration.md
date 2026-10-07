@@ -582,10 +582,10 @@ Credentials remain in the local header file, outside worker launch environments;
 `FM_TRACE_EXPORT=off` disables export immediately for the current process without changing carrier propagation.
 Export does not enable carrier propagation; it requires the current session's trace-context decision to be `on` and the task metadata to contain a valid traceparent.
 Exported resource metadata omits home and metadata filesystem paths and identifies the project only by its short registered name (basename), which the private collector may use as a metric dimension.
-`bin/fm-trace-span-lib.sh` owns the wire format and request mechanics; it has no lifecycle hooks in this increment and every exporter failure leaves the caller successful.
-The standalone emitter supports aggregate fleet-work metrics; it adds no collector, per-task trace store, or timeline viewer.
+`bin/fm-trace-span-lib.sh` owns the wire format and request mechanics; every exporter failure leaves the caller successful.
+The emitter supports aggregate fleet-work metrics; it adds no collector, per-task trace store, or timeline viewer.
 [`tests/fm-trace-span-lib.test.sh`](../tests/fm-trace-span-lib.test.sh) exercises the export contract through a local HTTP capture server.
-See [`trace-context.md`](trace-context.md) for the distinction between carrier propagation and span export.
+See [`trace-context.md`](trace-context.md#relationship-to-opentelemetry-and-later-increments) for lifecycle emission boundaries, outcome semantics, and best-effort limits.
 
 ## Fleet activity ledger (config/fleet-ledger)
 

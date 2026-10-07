@@ -352,7 +352,8 @@ for _teardown_source in \
   fm-nm-run-lib.sh \
   fm-wake-lib.sh \
   fm-path-lib.sh \
-  fm-lease-lib.sh
+  fm-lease-lib.sh \
+  fm-trace-span-lib.sh
 do
   teardown_require_source "$SCRIPT_DIR/$_teardown_source"
 done
@@ -383,6 +384,8 @@ unset _teardown_source
 . "$SCRIPT_DIR/fm-pending-reply-lib.sh"
 # shellcheck source=bin/fm-nm-run-lib.sh
 . "$SCRIPT_DIR/fm-nm-run-lib.sh"
+# shellcheck source=bin/fm-trace-span-lib.sh
+. "$SCRIPT_DIR/fm-trace-span-lib.sh"
 if [ "$#" -lt 1 ] || ! fm_task_id_path_safe "$1"; then
   echo "error: invalid teardown request" >&2
   exit 2
@@ -1073,6 +1076,8 @@ remote_secondmate_teardown() {
   mv -f -- "$tmp" "$SECONDMATE_REG"
   [ ! -e "$CONFIG/fleet-ledger" ] || FM_HOME=$FM_HOME FM_STATE_OVERRIDE=$STATE FM_CONFIG_OVERRIDE=$CONFIG "$SCRIPT_DIR/fm-fleet-ledger.sh" cleaned_up "$ID" || true
   status_retire_presentation_task "$STATE" "$ID" || return 1
+  # Remote secondmate retirement is records-only here: the route's parent-side
+  # status stream does not describe the remote worker's terminal outcome.
   fm_backlog_atomic_transition remove "$STATE/$ID.meta" "task record" "$STATE" || return 1
   rm -f -- "$STATE/$ID.turn-ended" "$STATE/$ID.progress" \
     "$(fm_wake_signal_seen_path "$STATE" "$STATE/$ID.turn-ended")" \
@@ -3330,6 +3335,8 @@ cleanup_firstmate_home_children() {
     retire_busy_state "$sub_state" "$child_id" "$child_busy_gen" || return 1
     status_retire_presentation_task "$sub_state" "$child_id" || return 1
     fm_wake_queue_prune_task "$sub_state" "$child_id" "$child_t" 2>/dev/null || true
+    # Forced parent retirement removes child records as part of home teardown;
+    # these descendant task roots are intentionally not exported here.
     fm_backlog_atomic_transition remove "$sub_state/$child_id.meta" "task record" "$sub_state" || return 1
     rm -f "$sub_state/$child_id.turn-ended" "$sub_state/$child_id.progress" \
       "$(fm_wake_signal_seen_path "$sub_state" "$sub_state/$child_id.turn-ended")" \
@@ -3806,7 +3813,11 @@ retire_busy_state "$STATE" "$ID" "$BUSY_GEN" || exit 1
 # Opt-in fleet activity ledger (docs/fleet-ledger.md), before the status log is
 # retired so its last lines are captured; off costs one file test.
 [ ! -e "$CONFIG/fleet-ledger" ] || FM_HOME=$FM_HOME FM_STATE_OVERRIDE=$STATE FM_CONFIG_OVERRIDE=$CONFIG "$SCRIPT_DIR/fm-fleet-ledger.sh" cleaned_up "$ID" || true
-status_retire_presentation_task "$STATE" "$ID" || exit 1
+if ! fm_backlog_task_status_retire "$STATE" "$ID"; then
+  echo "error: $FM_BACKLOG_TRANSITION_ERROR" >&2
+  exit 1
+fi
+TEARDOWN_SPAN_OUTCOME=$FM_BACKLOG_TASK_OUTCOME
 fm_wake_queue_prune_task "$STATE" "$ID" "$T" 2>/dev/null || true
 rm -f "$STATE/$ID.turn-ended" "$STATE/$ID.progress" \
   "$(fm_wake_signal_seen_path "$STATE" "$STATE/$ID.turn-ended")" \
@@ -3837,6 +3848,19 @@ if [ -e "$HERDR_PRESENTATION_JOURNAL" ] || [ -L "$HERDR_PRESENTATION_JOURNAL" ];
     echo "warning: retaining herdr presentation journal for $ID; it still names a projected workspace the session-start sweep owns, not the closed endpoint" >&2
   fi
 fi
+# Snapshot the trace metadata for post-commit emission. If the final record
+# removal refuses, the snapshot is discarded and no terminal root is emitted.
+TEARDOWN_TRACE_SNAPSHOT=
+if [ -d "$STATE" ] && [ -f "$META" ]; then
+  TEARDOWN_TRACE_SNAPSHOT=$(umask 077; mktemp "$STATE/.$ID.trace-snapshot.XXXXXX" 2>/dev/null || true)
+  if [ -n "$TEARDOWN_TRACE_SNAPSHOT" ] && ! {
+    awk -F= '$1 != "endpoint_task_id"' "$META" > "$TEARDOWN_TRACE_SNAPSHOT" &&
+      printf 'endpoint_task_id=%s\n' "$ID" >> "$TEARDOWN_TRACE_SNAPSHOT"
+  }; then
+    rm -f "$TEARDOWN_TRACE_SNAPSHOT"
+    TEARDOWN_TRACE_SNAPSHOT=
+  fi
+fi
 # The record is gone, so the backlog must not still show this task in flight
 # when teardown reports success. Still under this task's meta lock, so a steer
 # racing the same id stays serialized exactly as it was before. A captain-held
@@ -3846,6 +3870,7 @@ if [ "$BACKLOG_CLOSED" = 1 ]; then
   BACKLOG_CLOSE_MARKER=$(fm_backlog_close_marker_path "$STATE" "$ID") || exit 1
   if ! fm_backlog_atomic_transition "$BACKLOG_TRANSITION" "$STATE/$ID.meta" "$BACKLOG_CLOSE_MARKER" \
       "$DATA" "$ID" "$STATE" "${BACKLOG_DONE_ARGS[@]+"${BACKLOG_DONE_ARGS[@]}"}"; then
+    [ -z "$TEARDOWN_TRACE_SNAPSHOT" ] || rm -f "$TEARDOWN_TRACE_SNAPSHOT"
     fm_lock_release "$META_LOCK"
     META_LOCK_HELD=0
     if [ "$BACKLOG_TRANSITION" = retain ]; then
@@ -3859,14 +3884,24 @@ elif [ "$KIND" = secondmate ] && [ ! -e "$STATE" ] && [ ! -L "$STATE" ]; then
   # A nested remote retirement can keep its route record inside the home being
   # removed. remove_firstmate_home above already performed that physical
   # deletion; do not turn its confirmed absence into a false cleanup failure.
+  # There is no surviving state directory in which to make a best-effort export.
   :
 else
   if ! fm_backlog_atomic_transition remove "$STATE/$ID.meta" "task record" "$STATE"; then
+    [ -z "$TEARDOWN_TRACE_SNAPSHOT" ] || rm -f "$TEARDOWN_TRACE_SNAPSHOT"
     fm_lock_release "$META_LOCK"
     META_LOCK_HELD=0
     echo "error: $ID's endpoint and local copy are cleaned up, but its task record could not be removed ($FM_BACKLOG_TRANSITION_ERROR)" >&2
     exit 1
   fi
+fi
+if [ -n "$TEARDOWN_TRACE_SNAPSHOT" ]; then
+  if [ ! -e "$STATE/$ID.meta" ]; then
+    FM_HOME=$FM_HOME FM_STATE_OVERRIDE=$STATE FM_CONFIG_OVERRIDE=$CONFIG \
+      fm_trace_span_task "$TEARDOWN_TRACE_SNAPSHOT" "$TEARDOWN_SPAN_OUTCOME" \
+      "$([ "$FORCE" = --force ] && printf true || printf false)"
+  fi
+  rm -f "$TEARDOWN_TRACE_SNAPSHOT"
 fi
 fm_lock_release "$META_LOCK"
 META_LOCK_HELD=0

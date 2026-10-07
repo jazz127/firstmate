@@ -1127,6 +1127,42 @@ fm_backlog_close_marker_clear() {  # <state-dir> <id>
   fm_backlog_close_marker_remove "$marker" "$1"
 }
 
+fm_backlog_task_status_retire() {
+  local state=$1 id=$2 meta="$1/$2.meta" tmp line verb legacy_re
+  _fm_wake_require_classify || return 1
+  FM_BACKLOG_TASK_OUTCOME=$(sed -n 's/^trace_outcome=//p' "$meta" 2>/dev/null | head -n 1 || true)
+  case "$FM_BACKLOG_TASK_OUTCOME" in done|failed) ;; *) FM_BACKLOG_TASK_OUTCOME=unknown ;; esac
+  if [ -f "$state/$id.status" ] && [ -r "$state/$id.status" ]; then
+    legacy_re="^[[:space:]]*(${FM_CAPTAIN_RE:-$FM_CLASSIFY_CAPTAIN_RE_DEFAULT})"
+    while IFS= read -r line || [ -n "$line" ]; do
+      _fm_status_line_is_event "$line" "$legacy_re" || continue
+      status_line_verb "$line" verb
+      case "$verb" in
+        note) ;;
+        done|failed) FM_BACKLOG_TASK_OUTCOME=$verb ;;
+        *) FM_BACKLOG_TASK_OUTCOME=unknown ;;
+      esac
+    done < "$state/$id.status"
+  fi
+  if [ -d "$state" ] && [ -f "$meta" ]; then
+    tmp=$(umask 077; mktemp "$state/.$id.trace-outcome.XXXXXX") || {
+      FM_BACKLOG_TRANSITION_ERROR="$id's terminal outcome could not be recorded; retaining its task and status records"
+      return 1
+    }
+    if ! awk -F= '$1 != "trace_outcome"' "$meta" > "$tmp" ||
+      ! printf 'trace_outcome=%s\n' "$FM_BACKLOG_TASK_OUTCOME" >> "$tmp" ||
+      ! fm_backlog_atomic_transition publish "$tmp" "$meta" "task record" "$state"; then
+      rm -f "$tmp"
+      FM_BACKLOG_TRANSITION_ERROR="$id's terminal outcome could not be recorded; retaining its task and status records"
+      return 1
+    fi
+  fi
+  if ! status_retire_presentation_task "$state" "$id"; then
+    FM_BACKLOG_TRANSITION_ERROR="$id's status presentation could not be retired; retaining its task record"
+    return 1
+  fi
+}
+
 # Replay one recorded close or retention. Returns 0 when the row is closed (or
 # retained), the marker is stale, or an answer already closed a retained row,
 # and 1 when marker validation or recovery fails. Validation completes before
@@ -1167,6 +1203,7 @@ fm_backlog_close_marker_replay() {  # <state-dir> <marker-path> <authorized-data
       FM_BACKLOG_CLOSE_REPLAY_RESULT=stale
       return 0
     fi
+    fm_backlog_task_status_retire "$state" "$id" || return 1
     fm_backlog_close_marker_mark_cleanup_incomplete "$state" "$marker" "$id" "$data" \
       "$marker_spawn_gen" "${mode_flags[@]+"${mode_flags[@]}"}" "${args[@]+"${args[@]}"}" \
       || return 1

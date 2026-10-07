@@ -5087,6 +5087,7 @@ SH
           [ "$(cat "$dir/pane-client.env")" = 'unset|unset' ] || fail "tmux pane creation inherited watcher ownership"
         fi
         for pollution in server existing-pane; do
+          # shellcheck disable=SC2016 # The quoted bash -c script expands variables in the child shell.
           startup=$(env -i HOME="$dir/child" PATH="$fakebin:$PATH" FM_RECOVERY_ROOT="$ROOT" \
             FM_TIMEOUT_MECHANISM_OVERRIDE="$([ "$mechanism" != bash ] || printf bash)" \
             bash -c '

@@ -350,7 +350,8 @@ write_poll_meta() {
 run_check_entry() {
   local dir=$1
   shift
-  FM_ROOT_OVERRIDE="$dir/root" FM_HOME="$dir/home" \
+  FM_ROOT_OVERRIDE="$dir/root" FM_HOME="$dir/home" FM_STATE_OVERRIDE="$dir/home/state" \
+    FM_CONFIG_OVERRIDE="$dir/home/config" \
     FM_TEST_GUARD_LOG="$dir/guard.log" FM_TEST_GH_LOG="$dir/gh.log" \
     FM_TEST_GH_AXI_LOG="$dir/gh-axi.log" FM_TEST_GLAB_LOG="$dir/glab.log" \
     FM_TEST_GERRIT_AXI_LOG="$dir/gerrit-axi.log" \
@@ -361,12 +362,39 @@ run_check_entry() {
 run_merge_entry() {
   local dir=$1
   shift
-  FM_ROOT_OVERRIDE="$dir/root" FM_HOME="$dir/home" \
+  FM_ROOT_OVERRIDE="$dir/root" FM_HOME="$dir/home" FM_STATE_OVERRIDE="$dir/home/state" \
+    FM_CONFIG_OVERRIDE="$dir/home/config" \
     FM_TEST_GUARD_LOG="$dir/guard.log" FM_TEST_GH_LOG="$dir/gh.log" \
     FM_TEST_GH_AXI_LOG="$dir/gh-axi.log" FM_TEST_GLAB_LOG="$dir/glab.log" \
     FM_TEST_GERRIT_AXI_LOG="$dir/gerrit-axi.log" \
     PATH="$dir/fakebin:$BASE_PATH" \
     "$PR_MERGE" "$@"
+}
+
+enable_trace_capture() {  # <case-dir>
+  local dir=$1 meta="$1/home/state/task-a.meta" capture="$1/trace.capture"
+  FM_TEST_TRACE_CAPTURE=$capture
+  export FM_TEST_TRACE_CAPTURE
+  awk -v carrier='traceparent=00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01' '
+    /^pr=/ && !added { print carrier; added=1 }
+    { print }
+    END { if (!added) print carrier }
+  ' "$meta" > "$meta.trace.tmp" && mv -f "$meta.trace.tmp" "$meta"
+  printf '4242\n' > "$dir/home/state/.lock"
+  printf '4242 on\n' > "$dir/home/state/.trace-context-effective"
+  printf 'Authorization: Bearer synthetic-test-token\n' > "$dir/home/config/trace-auth"
+  chmod 600 "$dir/home/config/trace-auth"
+  ln -s "$REAL_JQ" "$dir/fakebin/jq"
+  printf '{"enabled":true,"endpoint":"http://127.0.0.1:4318","auth-header-file":"%s/home/config/trace-auth"}\n' \
+    "$dir" > "$dir/home/config/trace-export.json"
+  cat > "$dir/fakebin/curl" <<'SH'
+#!/usr/bin/env bash
+body=$(cat)
+printf '%s\n' "$body" > "$FM_TEST_TRACE_CAPTURE"
+printf '%s\n' "$body" >> "$FM_TEST_TRACE_CAPTURE.requests"
+SH
+  chmod 700 "$dir/fakebin/curl"
+  : > "$capture.requests"
 }
 
 # shellcheck disable=SC2016 # Literal rejected URL bytes are parser test data.
@@ -1006,6 +1034,64 @@ SH
   pass "valid direct and merge flows record exact metadata and reject multiline head metadata"
 }
 
+test_pr_ready_trace_follows_successful_publication() {
+  local dir url head rc host revision
+  url=https://github.com/my-org/repo_name.with-dots/pull/39
+  head=0123456789abcdef0123456789abcdef01234567
+
+  dir=$(make_case trace-ready-rejected)
+  write_task_meta "$dir"
+  enable_trace_capture "$dir"
+  set +e
+  FM_TEST_TRACE_CAPTURE="$dir/trace.capture" FM_TEST_GH_DRAFT=true \
+    run_check_entry "$dir" task-a "$url" > "$dir/out" 2> "$dir/err"
+  rc=$?
+  set -e
+  [ "$rc" -ne 0 ] || fail "trace-ready-rejected: draft registration unexpectedly succeeded"
+  [ ! -s "$dir/trace.capture.requests" ] || fail "rejected PR registration emitted a ready span"
+
+  dir=$(make_case trace-ready-publication-failed)
+  write_task_meta "$dir"
+  enable_trace_capture "$dir"
+  mkdir "$dir/home/state/task-a.check.sh"
+  set +e
+  FM_TEST_TRACE_CAPTURE="$dir/trace.capture" run_check_entry "$dir" task-a "$url" \
+    > "$dir/out" 2> "$dir/err"
+  rc=$?
+  set -e
+  [ "$rc" -ne 0 ] || fail "trace-ready-publication-failed: unsafe poll destination was accepted"
+  [ ! -s "$dir/trace.capture.requests" ] || fail "failed poll publication emitted a ready span"
+
+  for url in \
+    https://github.com/my-org/repo_name.with-dots/pull/39 \
+    https://gitlab.internal/group/private/-/merge_requests/7 \
+    https://gerrit.example/c/group/apps/console/+/4201; do
+    host=${url#https://}
+    dir=$(make_case "trace-ready-success-${host%%/*}")
+    revision=$(git -C "$dir/wt" rev-parse HEAD)
+    write_task_meta "$dir"
+    enable_trace_capture "$dir"
+    FM_TRACE_EXPORT=on FM_TEST_TRACE_CAPTURE="$dir/trace.capture" FM_TEST_GH_HEAD=$head \
+      FM_TEST_GERRIT_REVISION=$revision run_check_entry "$dir" task-a "$url" > "$dir/out" 2> "$dir/err" \
+      || fail "trace-ready-success: valid registration failed"
+    FM_TRACE_EXPORT=on FM_TEST_TRACE_CAPTURE="$dir/trace.capture" FM_TEST_GH_HEAD=$head \
+      FM_TEST_GERRIT_REVISION=$revision run_check_entry "$dir" task-a "$url" > "$dir/out2" 2> "$dir/err2" \
+      || fail "trace-ready-success: repeated registration failed"
+    jq -es '
+      length == 2 and all(.[];
+        .resourceSpans[0] as $r
+        | $r.scopeSpans[0].spans[0] as $s
+        | $s.name == "firstmate.pr.ready" and $s.attributes == []
+          and $s.traceId == "4bf92f3577b34da6a3ce929d0e0e4736"
+          and $s.parentSpanId == "00f067aa0ba902b7"
+          and ($r.resource.attributes | map(.key) | sort) ==
+            ["firstmate.project", "firstmate.task.id", "firstmate.task.kind", "service.name"])
+    ' "$dir/trace.capture.requests" >/dev/null \
+      || fail "ready observations exported PR details or lost existing resource dimensions or trace identity"
+  done
+  pass "rejected and unpublished registrations are silent; each successful registration emits a ready observation without PR details"
+}
+
 # Runs one watcher under a hang guard that TERMs it and returns 124 once it has
 # used sixty seconds of its own time. The guard pauses while the file named by
 # FM_TEST_WATCH_BOUND_PAUSE exists, so a case that holds the watcher on work it
@@ -1023,7 +1109,8 @@ run_watcher_bounded() {
   perl -MPOSIX=WNOHANG -MTime::HiRes=time,sleep -e 'my $pause=shift; my $left=60; my $pid=fork; die unless defined $pid; if (!$pid) { exec @ARGV } my $last=time; while (waitpid($pid, WNOHANG) == 0) { my $now=time; $left -= $now - $last unless length $pause && -e $pause; $last=$now; if ($left <= 0) { kill "TERM", $pid; waitpid $pid, 0; exit 124 } sleep 0.02 } exit($? >> 8)' \
     "${FM_TEST_WATCH_BOUND_PAUSE:-}" env "${check_timeout_env[@]}" \
       FM_HOME="$home" FM_ROOT_OVERRIDE="$watch_root" FM_CHECK_INTERVAL="$check_interval" \
-      FM_POLL=0.02 FM_HEARTBEAT=999999 FM_SIGNAL_GRACE=0 PATH="$fakebin:$BASE_PATH" "$WATCH" "$@"
+      FM_TEST_TRACE_CAPTURE="${FM_TEST_TRACE_CAPTURE:-}" FM_POLL=0.02 FM_HEARTBEAT=999999 \
+      FM_SIGNAL_GRACE=0 PATH="$fakebin:$BASE_PATH" "$WATCH" "$@"
 }
 
 test_rejected_metacharacter_bytes_are_inert() {
@@ -2429,13 +2516,14 @@ test_self_merge_and_poll_publish_one_outcome() {
   replies="$state/parent-replies.status"
   seed_secondmate_home "$dir"
   write_task_meta "$dir" task-a
-  run_check_entry "$dir" task-a "$url" >/dev/null 2>"$dir/seed.err" \
+  enable_trace_capture "$dir"
+  FM_TEST_TRACE_CAPTURE="$dir/trace.capture" run_check_entry "$dir" task-a "$url" >/dev/null 2>"$dir/seed.err" \
     || fail "merge-outcome-committed: could not arm merge poll"
-  run_merge_entry "$dir" task-a "$url" >"$dir/merge.out" 2>"$dir/merge.err" \
+  FM_TEST_TRACE_CAPTURE="$dir/trace.capture" run_merge_entry "$dir" task-a "$url" >"$dir/merge.out" 2>"$dir/merge.err" \
     || fail "merge-outcome-committed: merge entrypoint failed: $(cat "$dir/merge.err")"
   add_stop_custom_check "$dir"
   set +e
-  FM_TEST_GH_STATE=MERGED run_watcher_bounded "$dir/home" "$dir/fakebin" \
+  FM_TEST_TRACE_CAPTURE="$dir/trace.capture" FM_TEST_GH_STATE=MERGED run_watcher_bounded "$dir/home" "$dir/fakebin" \
     >"$dir/watch.out" 2>"$dir/watch.err"
   rc=$?
   set -e
@@ -2446,6 +2534,13 @@ test_self_merge_and_poll_publish_one_outcome() {
   assert_no_grep "check: $state/task-a.check.sh: merged" "$state/.wake-queue" \
     "merge-outcome-committed: absorbed poll published a second outcome"
   assert_poll_absent "$state" task-a
+  jq -es '
+    [ .[].resourceSpans[].scopeSpans[].spans[] | select(.name == "firstmate.pr.ready") ] as $ready
+    | [ .[].resourceSpans[].scopeSpans[].spans[] | select(.name == "firstmate.pr.merged") ] as $merged
+    | ($ready | length) == 1 and ($merged | length) == 1
+      and $ready[0].attributes == [] and $merged[0].attributes == []
+  ' "$dir/trace.capture.requests" >/dev/null \
+    || fail "self merge and its poll did not share one post-dedup PR outcome span: $(cat "$dir/trace.capture.requests" 2>/dev/null)"
 
   # Interleaving two: self publication lands but its marker commit fails. After
   # that outcome is drained, the still-armed poll must publish it again rather
@@ -2507,11 +2602,13 @@ test_merged_poll_reports_upward_from_a_secondmate_home_once() {
   replies="$state/parent-replies.status"
   seed_secondmate_home "$dir"
   write_poll_meta "$state" task-a "$url"
+  enable_trace_capture "$dir"
   seed_canonical_poll "$dir" task-a "$url"
   add_stop_custom_check "$dir"
 
   set +e
-  FM_TEST_GH_STATE=MERGED run_watcher_bounded "$dir/home" "$dir/fakebin" > "$dir/watch-1.out" 2> "$dir/watch-1.err"
+  FM_TRACE_EXPORT=on FM_TEST_TRACE_CAPTURE="$dir/trace.capture" FM_TEST_GH_STATE=MERGED \
+    run_watcher_bounded "$dir/home" "$dir/fakebin" > "$dir/watch-1.out" 2> "$dir/watch-1.err"
   rc=$?
   set -e
   [ "$rc" -eq 0 ] || fail "merged-poll-upward: watcher failed: $(cat "$dir/watch-1.err")"
@@ -2523,6 +2620,12 @@ test_merged_poll_reports_upward_from_a_secondmate_home_once() {
     "merged-poll-upward: a merge this home did not perform was never reported upward"
   [ "$(grep -c -F "$url" "$replies")" -eq 1 ] \
     || fail "merged-poll-upward: one detected merge produced more than one upward line"
+  jq -es '
+    [ .[].resourceSpans[].scopeSpans[].spans[] | select(.name == "firstmate.pr.merged") ] as $merged
+    | ($merged | length) == 1
+      and $merged[0].attributes == []
+  ' "$dir/trace.capture.requests" >/dev/null \
+    || fail "poll-detected merge did not emit a post-dedup outcome span without PR details"
   ack_watcher_cycle "$state" || fail "merged-poll-upward: acknowledgement failed"
 
   # Re-registered for the same, already-reported merge: the absorbed duplicate
@@ -2530,12 +2633,15 @@ test_merged_poll_reports_upward_from_a_secondmate_home_once() {
   seed_canonical_poll "$dir" task-a "$url"
   rm -f "$state/.last-check"
   set +e
-  FM_TEST_GH_STATE=MERGED run_watcher_bounded "$dir/home" "$dir/fakebin" > "$dir/watch-2.out" 2> "$dir/watch-2.err"
+  FM_TRACE_EXPORT=on FM_TEST_TRACE_CAPTURE="$dir/trace.capture" FM_TEST_GH_STATE=MERGED \
+    run_watcher_bounded "$dir/home" "$dir/fakebin" > "$dir/watch-2.out" 2> "$dir/watch-2.err"
   rc=$?
   set -e
   [ "$rc" -eq 0 ] || fail "merged-poll-upward: second watcher cycle failed: $(cat "$dir/watch-2.err")"
   [ "$(grep -c -F "$url" "$replies")" -eq 1 ] \
     || fail "merged-poll-upward: an absorbed duplicate detection reported the merge again"
+  [ "$(wc -l < "$dir/trace.capture.requests" | tr -d ' ')" -eq 1 ] \
+    || fail "repeat poll notification emitted another merge span"
   pass "a merge detected by the poll is reported upward from a secondmate home exactly once"
 }
 
@@ -3617,6 +3723,7 @@ test_published_gitlab_scratch_refuses_registration
 test_published_scratch_removal_is_registered
 test_published_gitlab_scratch_removal_is_registered
 test_valid_recording_and_merge_derivation
+test_pr_ready_trace_follows_successful_publication
 test_rejected_metacharacter_bytes_are_inert
 test_static_poll_contract
 test_atomic_interruption_leaves_no_partial_artifact

@@ -174,6 +174,8 @@ DATA="${FM_DATA_OVERRIDE:-$FM_HOME/data}"
 . "$SCRIPT_DIR/fm-pr-lib.sh"
 # shellcheck source=bin/fm-wake-lib.sh
 . "$SCRIPT_DIR/fm-wake-lib.sh"
+# shellcheck source=bin/fm-trace-span-lib.sh
+. "$SCRIPT_DIR/fm-trace-span-lib.sh"
 # shellcheck source=bin/fm-worker-account-lib.sh
 . "$SCRIPT_DIR/fm-worker-account-lib.sh"
 # shellcheck source=bin/fm-dock-lib.sh
@@ -1116,10 +1118,16 @@ case "$VERB" in
     esac
     proof=$(do_interrupt)
     echo "interrupt-delivered $ID harness=$HARNESS backend=$BACKEND verified=$proof"
+    case $proof in
+      *' cancel=confirmed'*) CONTROL_SPAN_CONFIRMED=true ;;
+      *) CONTROL_SPAN_CONFIRMED=false ;;
+    esac
+    fm_trace_span_control "$META" interrupt "$CONTROL_SPAN_CONFIRMED"
     ;;
   exit)
     result=$(do_exit)
     echo "$result $ID harness=$HARNESS backend=$BACKEND endpoint=$T worktree=$WT"
+    fm_trace_span_control "$META" exit true
     ;;
   relaunch)
     do_relaunch

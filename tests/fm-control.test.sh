@@ -927,14 +927,21 @@ test_relaunch_only_flags_are_rejected_on_other_verbs() {
 # --- 5. lifecycle states ----------------------------------------------------
 
 test_already_stopped_exit_is_idempotent() {
-  local dir out rc
+  local dir out rc spans
   dir=$(new_case idempotent)
   add_task "$dir" t1 claude
+  fm_test_trace_export_enable "$dir/home" "$dir/spans.jsonl" "$dir/fakebin"
+  printf '%s\n' 'traceparent=00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01' \
+    >> "$dir/home/state/t1.meta"
   alive_as "$dir" zsh
   out=$(run_control "$dir" t1 exit); rc=$?
   expect_code 0 "$rc" "exiting an already-stopped agent should succeed"
   assert_contains "$out" "already-stopped t1" "the outcome should say it was already stopped"
   [ -z "$(literals "$dir")" ] || fail "an already-stopped agent must not be sent an exit command"
+  spans=$(cat "$dir/spans.jsonl")
+  assert_contains "$spans" '"name":"firstmate.control"' "a verified exit postcondition should emit a control observation"
+  assert_contains "$spans" '"firstmate.control.verb","value":{"stringValue":"exit"}' \
+    "the control observation should identify exit"
   pass "fm-control exit: an already-stopped agent is idempotent success with no bytes sent"
 }
 
@@ -961,11 +968,15 @@ test_interrupt_refuses_when_no_agent_runs() {
   local dir out rc
   dir=$(new_case nointerrupt)
   add_task "$dir" t1 claude
+  fm_test_trace_export_enable "$dir/home" "$dir/spans.jsonl" "$dir/fakebin"
+  printf '%s\n' 'traceparent=00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01' \
+    >> "$dir/home/state/t1.meta"
   alive_as "$dir" zsh
   out=$(run_control "$dir" t1 interrupt); rc=$?
   expect_code 1 "$rc" "interrupting a stopped agent should refuse"
   assert_contains "$out" "nothing to interrupt" "the refusal should say there is no agent"
   [ -z "$(keys_sent "$dir")" ] || fail "no key should reach a stopped agent"
+  [ ! -s "$dir/spans.jsonl" ] || fail "a refused interrupt emitted a control observation"
   pass "fm-control interrupt: refuses when no agent is running rather than keying a shell"
 }
 
@@ -1118,9 +1129,12 @@ test_interrupt_without_acknowledgement_preserves_busy_state() {
 }
 
 test_muse_interrupt_confirms_adapter_acknowledgement() {
-  local dir root log out rc
+  local dir root log out rc spans
   dir=$(new_case confirmed)
   add_task "$dir" t1 muse
+  fm_test_trace_export_enable "$dir/home" "$dir/spans.jsonl" "$dir/fakebin"
+  printf '%s\n' 'traceparent=00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01' \
+    >> "$dir/home/state/t1.meta"
   alive_as "$dir" muse
   root="$dir/muse-sessions"
   log="$root/2026/08/08/session-1/session.jsonl"
@@ -1134,6 +1148,10 @@ test_muse_interrupt_confirms_adapter_acknowledgement() {
   expect_code 0 "$rc" "muse interrupt should observe its adapter acknowledgement"$'\n'"$out"
   assert_contains "$out" "verified=agent-alive cancel=confirmed" \
     "the result should report muse's cancelled terminal acknowledgement"
+  spans=$(cat "$dir/spans.jsonl")
+  assert_contains "$spans" '"name":"firstmate.control"' "a verified interrupt should emit a control observation"
+  assert_contains "$spans" '"firstmate.control.confirmed","value":{"stringValue":"true"}' \
+    "the control observation should preserve the adapter-owned cancellation claim"
   pass "fm-control interrupt: muse confirms cancellation from its session log"
 }
 

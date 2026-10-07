@@ -135,8 +135,10 @@ Pi and pi-signed 0.82.0 were reverified on 2026-07-27 through real isolated `fm-
 
 On 2026-10-08, synthetic regression testing on macOS with stock Bash 3.2.57 exercised the executable watcher against a tmux stub that stalls one query for 60 seconds.
 No installed harness or tmux server was exercised by this test.
-The watcher exited within the test's 100-poll TERM budget, stopped the stalled query, removed its output file, released its singleton lock, and left an acknowledgeable stop record in all 12 cases.
+The watcher exited within the test's 100-poll TERM budget, stopped the stalled query, removed its output file, released its singleton lock, and left an acknowledgeable stop record in all 37 stalled-query cases.
 The cases cover `list-windows` and `display-message` in inbox checks, both declared-pause liveness branches, wedge checks, and secondmate idle gating, plus the secondmate composer's cursor and capture reads.
+They also exercise the real crew-state reader for stale, declared-pause, signal, terminal-status, and pane-churn paths; Grok/Rovo/AGY empty-tail recaptures; inbox ring/retry and secondmate drain delivery; secondmate liveness probes and failed-close inventory; and pending-reply observation and recovery delivery.
+The same focused run checks liveness result globals and bookkeeping, ordinary signal absorption and surfacing, pane-churn absorption, and pause transitions.
 The metadata lookups used by the watcher read local files and do not query tmux.
 
 Refresh this synthetic evidence with:
@@ -145,7 +147,7 @@ Refresh this synthetic evidence with:
 FM_TEST_ONLY=test_term_stops_a_watcher_blocked_in_tmux_queries bash bin/fm-test-run.sh tests/fm-watch-triage.test.sh
 ```
 
-Observed assertion output:
+Selected assertion output:
 
 ```text
 ok - TERM stops inbox blocked in tmux list-windows and runs cleanup
@@ -160,6 +162,14 @@ ok - TERM stops secondmate blocked in tmux list-windows and runs cleanup
 ok - TERM stops secondmate blocked in tmux display-message and runs cleanup
 ok - TERM stops secondmate blocked in tmux composer-cursor and runs cleanup
 ok - TERM stops secondmate blocked in tmux composer-capture and runs cleanup
+ok - TERM stops crew-plain blocked in tmux crew-readable and runs cleanup
+ok - TERM stops crew-paused blocked in tmux crew-capture and runs cleanup
+ok - TERM stops crew-churn blocked in tmux crew-capture and runs cleanup
+ok - TERM stops busy-rovo blocked in tmux recapture and runs cleanup
+ok - TERM stops inbox-retry blocked in tmux submit-read and runs cleanup
+ok - TERM stops secondmate-close blocked in tmux close-inventory and runs cleanup
+ok - TERM stops pending-delivery blocked in tmux composer-cursor and runs cleanup
+ok - liveness query boundary preserves successful and failed results and bookkeeping
 ```
 
 ### Agent liveness name sources

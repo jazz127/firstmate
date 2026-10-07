@@ -88,10 +88,12 @@ fm_timeout_mechanism() {
 }
 
 fm_run_bash_timeout() {
-  local seconds=$1 command_status deadline_status child_pid watchdog_pid command_rc recorded_rc monitor_was_on=0
+  local seconds=$1 command_status deadline_status child_pid watchdog_pid command_rc recorded_rc monitor_was_on=0 timeout_parent timer_pid
   shift
   command_status=$(mktemp "${TMPDIR:-/tmp}/fm-bash-timeout-command.XXXXXX" 2>/dev/null) || return 124
   deadline_status="${command_status}.deadline"
+  timeout_parent=
+  [ -z "${FM_TIMEOUT_OWNER_PID:-}" ] || timeout_parent=${FM_EXEC_TIMED_OWNER_PID:-$FM_TIMEOUT_OWNER_PID}
   case $- in *m*) monitor_was_on=1 ;; esac
   set -m
   (
@@ -100,11 +102,23 @@ fm_run_bash_timeout() {
     command_rc=$?
     printf '%s\n' "$command_rc" > "$command_status"
     exit "$command_rc"
-  ) &
+  ) <&0 &
   child_pid=$!
   (
     set +m
-    sleep "$seconds"
+    if [ -n "${FM_TIMEOUT_OWNER_PID:-}" ]; then
+      sleep "$seconds" &
+      timer_pid=$!
+      while kill -0 "$timer_pid" 2>/dev/null \
+        && kill -0 "$FM_TIMEOUT_OWNER_PID" 2>/dev/null \
+        && kill -0 "$timeout_parent" 2>/dev/null; do
+        sleep 0.05
+      done
+      kill "$timer_pid" 2>/dev/null || true
+      wait "$timer_pid" 2>/dev/null || true
+    else
+      sleep "$seconds"
+    fi
     printf 'expired\n' > "$deadline_status"
     kill -TERM -- "-$child_pid" 2>/dev/null || true
     sleep 0.2
@@ -181,6 +195,24 @@ fm_run_external_timeout() {
 fm_run_timed() {  # <seconds> <command...>
   local seconds=$1
   shift
+  if [ -n "${FM_TIMEOUT_OWNER_PID:-}" ]; then
+    while [ "${seconds#0}" != "$seconds" ] && [ "$seconds" != 0 ]; do seconds=${seconds#0}; done
+    if [ "${FM_TIMEOUT_MECHANISM_OVERRIDE:-}" != bash ] && command -v perl >/dev/null 2>&1; then
+      ( FM_EXEC_TIMED_OWNER_PID=$FM_TIMEOUT_OWNER_PID fm_exec_timed "$seconds" 1 "$@" )
+    else
+      (
+        # This owner belongs only to the nested Bash supervisor.
+        # shellcheck disable=SC2030
+        FM_EXEC_TIMED_OWNER_PID=$(exec bash -c 'printf "%s\n" "$PPID"')
+        export FM_EXEC_TIMED_OWNER_PID
+        set -m
+        ( set +m; fm_run_bash_timeout "$seconds" "$@" ) <&0 &
+        set +m
+        wait "$!"
+      )
+    fi
+    return "$?"
+  fi
   case "$(fm_timeout_mechanism)" in
     timeout) fm_run_external_timeout timeout "$seconds" "$@" ;;
     gtimeout) fm_run_external_timeout gtimeout "$seconds" "$@" ;;
@@ -220,6 +252,8 @@ fm_exec_timed() {  # <seconds> <grace-seconds> <command...>
     echo "fm_exec_timed: usage: fm_exec_timed <positive-seconds> <positive-grace-seconds> <command> [args...]" >&2
     exit 125
   fi
+  # This invocation receives its owner's value from its caller, not a sibling subshell.
+  # shellcheck disable=SC2031
   owner=${FM_EXEC_TIMED_OWNER_PID:-$$}
   unset FM_EXEC_TIMED_OWNER_PID
   if command -v perl >/dev/null 2>&1; then
@@ -228,6 +262,7 @@ fm_exec_timed() {  # <seconds> <grace-seconds> <command...>
       # exec preserves the shell PID, including in Bash 3.2 subshells where
       # BASHPID is unavailable. Keep the pre-exec parent for startup races.
       $owner = $shell_parent if $owner == $$;
+      setpgid(0, 0) if $ENV{FM_TIMEOUT_OWNER_PID};
       my $parent = getppid();
       my ($pid, $pending, $kill_at, $timed_out) = (0, "", 0, 0);
       for my $sig (qw(TERM INT HUP)) {

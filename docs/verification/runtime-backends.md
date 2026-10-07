@@ -139,12 +139,17 @@ The watcher exited within the test's 100-poll TERM budget, stopped the stalled q
 The cases cover `list-windows` and `display-message` in inbox checks, both declared-pause liveness branches, wedge checks, and secondmate idle gating, plus the secondmate composer's cursor and capture reads.
 They also exercise the real crew-state reader for stale, declared-pause, signal, terminal-status, and pane-churn paths; Grok/Rovo/AGY empty-tail recaptures; inbox ring/retry and secondmate drain delivery; secondmate liveness probes and failed-close inventory; and pending-reply observation and recovery delivery.
 The same focused run checks liveness result globals and bookkeeping, ordinary signal absorption and surfacing, pane-churn absorption, and pause transitions.
+Six additional cases exercise the actual timed secondmate spawn, the inactive scan's nested crew-state query, and that reader's bounded no-mistakes query, with both Perl and Bash timeout mechanisms.
+The synthetic query ignores TERM, so the cases require cancellation to escalate and leave no live query or recorded timeout ancestor within three seconds of watcher exit.
+They also check the relaunch attempt ledger, inactive-scan cadence marker, watcher cleanup, and acknowledgeable stop record.
+The focused timeout run checks command output and failure status, deadline status 124 with nested commands reaped, and stdin passed through the no-mistakes timeout boundary.
 The metadata lookups used by the watcher read local files and do not query tmux.
 
 Refresh this synthetic evidence with:
 
 ```sh
 FM_TEST_ONLY=test_term_stops_a_watcher_blocked_in_tmux_queries bash bin/fm-test-run.sh tests/fm-watch-triage.test.sh
+FM_TEST_ONLY=test_term_cancels_watcher_owned_timeouts bash bin/fm-test-run.sh tests/fm-watch-triage.test.sh
 ```
 
 Selected assertion output:
@@ -170,6 +175,13 @@ ok - TERM stops inbox-retry blocked in tmux submit-read and runs cleanup
 ok - TERM stops secondmate-close blocked in tmux close-inventory and runs cleanup
 ok - TERM stops pending-delivery blocked in tmux composer-cursor and runs cleanup
 ok - liveness query boundary preserves successful and failed results and bookkeeping
+ok - TERM reaps perl watcher timeout groups during spawn
+ok - TERM reaps perl watcher timeout groups during inactive-query
+ok - TERM reaps perl watcher timeout groups during inactive-nm
+ok - TERM reaps bash watcher timeout groups during spawn
+ok - TERM reaps bash watcher timeout groups during inactive-query
+ok - TERM reaps bash watcher timeout groups during inactive-nm
+ok - watcher-owned timeout boundaries preserve output, failure, and deadline status
 ```
 
 ### Agent liveness name sources

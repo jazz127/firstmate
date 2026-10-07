@@ -2226,7 +2226,7 @@ watcher_read() {  # <command> [args...]
   set -m
   # Keep nested substitutions in this owned group: inherited monitor mode
   # would give each tmux child its own group, escaping the cleanup boundary.
-  { ( set +m; "$@" < /dev/null > "$FM_CAPTURE_OUTPUT" ) & } 2>/dev/null
+  { ( set +m; export FM_TIMEOUT_OWNER_PID=$$; "$@" < /dev/null > "$FM_CAPTURE_OUTPUT" ) & } 2>/dev/null
   FM_ACTIVE_CHECK_PID=$!
   FM_ACTIVE_CHECK_PGID=$FM_ACTIVE_CHECK_PID
   set +m

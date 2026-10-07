@@ -23,6 +23,11 @@
 fm_nm_bounded() {  # <dir> <timeout_secs> <command> <args...>
   local dir=$1 timeout_secs=$2 have_timeout=none
   shift 2
+  if [ -n "${FM_TIMEOUT_OWNER_PID:-}" ]; then
+    . "${BASH_SOURCE[0]%/*}/fm-timeout-lib.sh"
+    ( cd "$dir" && fm_run_timed "$timeout_secs" "$@" )
+    return "$?"
+  fi
   if command -v timeout >/dev/null 2>&1; then have_timeout=timeout
   elif command -v gtimeout >/dev/null 2>&1; then have_timeout=gtimeout
   elif command -v perl >/dev/null 2>&1; then have_timeout=perl

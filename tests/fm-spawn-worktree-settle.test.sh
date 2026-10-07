@@ -521,6 +521,172 @@ test_treehouse_get_runs_without_project_lock() {
   pass "treehouse get runs outside the project lock and spawn reacquires it"
 }
 
+
+make_presentation_lock_fakebin() {
+  local fakebin
+  fakebin=$(fm_test_make_spawn_fakebin "$1" codex)
+  cat > "$fakebin/herdr" <<'SH'
+#!/usr/bin/env bash
+set -eu
+printf '%s\n' "$*" >> "$FM_FAKE_HERDR_LOG"
+case "${1:-} ${2:-}" in
+  'status --json')
+    printf '{"client":{"version":"0.9.1","protocol":22},"server":{"running":true,"version":"0.9.1","protocol":22}}\n'
+    ;;
+  'session list')
+    : > "$FM_FAKE_LOCK_REACHED"
+    printf '{"sessions":[{"name":"lock-order","running":true,"socket_path":"%s"}]}\n' "$FM_FAKE_SOCKET"
+    ;;
+  'workspace list')
+    if [ -e "$FM_FAKE_LOCK_REACHED" ] && [ ! -e "$FM_FAKE_HERDR_LOG.read" ]; then
+      : > "$FM_FAKE_HERDR_LOG.read"
+      [ -e "$FM_FAKE_PROJECT_LOCK" ] || : > "$FM_FAKE_UNPROTECTED"
+    fi
+    printf '{"result":{"workspaces":[{"workspace_id":"w1","label":"firstmate"}]}}\n'
+    ;;
+  'tab list') printf '{"result":{"tabs":[]}}\n' ;;
+  'tab create') printf '{"result":{"tab":{"tab_id":"t1"},"root_pane":{"pane_id":"w1:p1"}}}\n' ;;
+  'pane get')
+    printf '{"result":{"pane":{"pane_id":"%s","foreground_cwd":"%s"}}}\n' "$3" "$FM_FAKE_PANE_PATH"
+    ;;
+  'agent get') printf '{"error":{"code":"agent_not_found"}}\n' ;;
+  'pane run')
+    if [ "$4" = 'treehouse get' ]; then
+      [ ! -e "$FM_FAKE_PROJECT_LOCK" ] || : > "$FM_FAKE_LOCK_HELD_AT_GET"
+    fi
+    ;;
+  'pane send-text'|'pane send-keys') ;;
+  *) printf 'unexpected fake herdr command: %s\n' "$*" >&2; exit 1 ;;
+esac
+SH
+  chmod +x "$fakebin/herdr"
+  printf '%s\n' "$fakebin"
+}
+
+run_presentation_lock_case() {
+  local mode=$1 dir="$TMP_ROOT/presentation-$1" id="settle-presentation-$1"
+  local home1="$dir/home-root" home2="$dir/home-child" project="$dir/project" wt="$dir/wt"
+  local fakebin code="$dir/code" lock presentation peer_pid peer_rc spawn_rc journal
+  local args=()
+  mkdir -p "$code" "$dir/presentation"
+  chmod 700 "$dir/presentation"
+  cp -R "$ROOT/bin" "$code/bin"
+  cp "$SPAWN" "$code/bin/fm-spawn.sh"
+  ln -s "$ROOT/.agents" "$code/.agents"
+  ln -s "$ROOT/docs" "$code/docs"
+  sed "s|'/tmp/firstmate-herdr-presentation'|'$dir/presentation'|" \
+    "$ROOT/bin/backends/herdr.sh" > "$code/bin/backends/herdr.sh"
+  fm_test_spawn_home "$home1" codex
+  fm_test_spawn_home "$home2" codex
+  mkdir -p "$home2/user-home"
+  printf 'schema=fm-secondmate-parent.v1\nroute=local\nparent_home=%s\n' "$home1" \
+    > "$home2/.fm-secondmate-parent"
+  fm_test_spawn_brief "$home2" "$id" 'Serialize recovery without blocking the presentation owner.'
+  fm_git_worktree "$project" "$wt" "presentation-$mode"
+  fakebin=$(make_presentation_lock_fakebin "$dir/fake")
+  printf 'on\n' > "$home2/config/herdr-presentation-spaces"
+  journal="$home2/state/$id.herdr-presentation"
+  case "$mode" in
+    create) ;;
+    project) printf 'project\n' > "$home2/config/herdr-presentation-spaces" ;;
+    *) printf 'version=1\ntask_id=%s\nprojection_id=AAAAAAAAAAAAAAAAAAAAAA\n' "$id" > "$journal" ;;
+  esac
+  case "$mode" in wait|batch|changed) args+=(--herdr-resume-lock-wait) ;; esac
+  case "$mode" in
+    batch) args+=("$id=$project") ;;
+    *) args+=("$id" "$project") ;;
+  esac
+  lock=$(FM_HOME="$home1" bash -c '. "$1"; fm_treehouse_project_lock_path "$2"' _ \
+    "$ROOT/bin/fm-wake-lib.sh" "$project") || fail 'could not resolve project lock'
+  presentation=$(FM_HOME="$home1" FM_FAKE_HERDR_LOG="$dir/herdr.log" \
+    FM_FAKE_SOCKET="$dir/fake.sock" FM_FAKE_LOCK_REACHED="$dir/resolve-lock" PATH="$fakebin:$PATH" \
+    bash -c '. "$1"; . "$2"; fm_backend_herdr_presentation_session_lock_path lock-order' _ \
+    "$ROOT/bin/fm-wake-lib.sh" "$code/bin/backends/herdr.sh") || fail 'could not resolve fake presentation lock'
+  rm -f "$dir/resolve-lock"
+  FM_HOME="$home1" bash -c '
+    set -eu
+    . "$1/bin/fm-wake-lib.sh"
+    project_lock=$2; presentation_lock=$3; dir=$4; mode=$5; journal=$6
+    trap '\''fm_lock_release "$project_lock" || true; fm_lock_release "$presentation_lock" || true'\'' EXIT
+    fm_lock_acquire_wait "$presentation_lock"
+    : > "$dir/owner-ready"
+    for _ in $(seq 1 1000); do
+      [ ! -e "$dir/resolve-lock" ] || break
+      sleep 0.01
+    done
+    [ -e "$dir/resolve-lock" ] || exit 2
+    fm_lock_acquire_wait_max "$project_lock" 10 || exit 3
+    : > "$dir/owner-retook-project"
+    if [ "$mode" = changed ]; then
+      printf "version=1\ntask_id=foreign-task\nprojection_id=AAAAAAAAAAAAAAAAAAAAAA\n" > "$journal"
+    fi
+    fm_lock_release "$project_lock"
+    case "$mode" in
+      wait|batch|changed) sleep 0.2 ;;
+      *)
+        for _ in $(seq 1 3000); do
+          [ ! -e "$dir/spawn-done" ] || break
+          sleep 0.01
+        done
+        [ -e "$dir/spawn-done" ] || exit 4
+        ;;
+    esac
+  ' _ "$ROOT" "$lock" "$presentation" "$dir" "$mode" "$journal" > "$dir/peer.out" 2>&1 &
+  peer_pid=$!
+  for _ in $(seq 1 1000); do
+    [ ! -e "$dir/owner-ready" ] || break
+    /bin/sleep 0.01
+  done
+  [ -e "$dir/owner-ready" ] || { wait "$peer_pid"; fail 'presentation owner never became ready'; }
+  FM_ROOT_OVERRIDE="$code" FM_HOME="$home2" HOME="$home2/user-home" \
+    CLAUDE_CONFIG_DIR='' FM_STATE_OVERRIDE="$home2/state" FM_DATA_OVERRIDE="$home2/data" \
+    FM_PROJECTS_OVERRIDE="$home2/projects" FM_CONFIG_OVERRIDE="$home2/config" \
+    FM_SPAWN_NO_GUARD=1 FM_BACKEND=herdr HERDR_SESSION=lock-order \
+    HERDR_ENV='' HERDR_PANE_ID='' HERDR_TAB_ID='' HERDR_WORKSPACE_ID='' HERDR_SOCKET_PATH='' \
+    FM_BACKEND_HERDR_BIN="$fakebin/herdr" FM_BACKEND_HERDR_CLIENT_SESSION=lock-order \
+    FM_FAKE_SOCKET="$dir/fake.sock" FM_FAKE_LOCK_REACHED="$dir/resolve-lock" \
+    FM_FAKE_PROJECT_LOCK="$lock" FM_FAKE_UNPROTECTED="$dir/unprotected" \
+    FM_FAKE_LOCK_HELD_AT_GET="$dir/held-at-get" FM_FAKE_PANE_PATH="$wt" \
+    FM_FAKE_HERDR_LOG="$dir/herdr.log" PATH="$fakebin:$PATH" \
+    bash "$code/bin/fm-spawn.sh" "${args[@]}" --mode no-mistakes --yolo off > "$dir/spawn.out" 2>&1
+  spawn_rc=$?
+  : > "$dir/spawn-done"
+  wait "$peer_pid"; peer_rc=$?
+  [ "$peer_rc" -eq 0 ] || fail "$mode: presentation owner could not retake project lock (exit $peer_rc)"$'\n'"$(cat "$dir/peer.out" "$dir/spawn.out")"
+  [ -e "$dir/owner-retook-project" ] || fail "$mode: competing lock sequence was not exercised"
+  [ ! -e "$dir/unprotected" ] || fail "$mode: recovery read protected state before retaking project lock"
+  case "$mode" in
+    refuse)
+      [ "$spawn_rc" -ne 0 ] || fail 'default recovery waited instead of refusing'
+      assert_grep 'refusing a concurrent resume' "$dir/spawn.out" 'default recovery lost its refusal'
+      assert_no_grep 'tab create' "$dir/herdr.log" 'refused recovery provisioned a task'
+      ;;
+    changed)
+      [ "$spawn_rc" -ne 0 ] || fail 'recovery accepted a journal invalidated during the wait'
+      assert_grep 'malformed herdr presentation journal' "$dir/spawn.out" 'recovery did not revalidate its journal'
+      assert_no_grep 'tab create' "$dir/herdr.log" 'invalidated recovery provisioned a task'
+      ;;
+    *)
+      expect_code 0 "$spawn_rc" "$mode: spawn failed"$'\n'"$(cat "$dir/spawn.out")"
+      assert_grep "worktree=$wt" "$home2/state/$id.meta" "$mode: successful spawn lost its worktree"
+      [ ! -e "$dir/held-at-get" ] || fail "$mode: treehouse get held the project lock"
+      ;;
+  esac
+  pass "herdr $mode releases the project lock during presentation contention and revalidates before provisioning"
+}
+
+test_presentation_lock_order() {
+  local mode
+  for mode in wait batch refuse create project changed; do
+    run_presentation_lock_case "$mode"
+  done
+}
+
+if [ "${1:-}" = herdr-lock-order ]; then
+  test_presentation_lock_order
+  exit 0
+fi
+
 test_single_stale_first_read_is_not_accepted
 test_already_settled_pane_costs_one_confirm_read
 test_transient_primary_checkout_is_not_accepted
@@ -529,5 +695,6 @@ test_concurrent_spawns_reach_treehouse_get_without_project_lock
 test_slot_returned_by_exited_task_teardown_during_get_is_abandoned
 test_inspected_unreserved_slot_is_not_adopted
 test_treehouse_get_runs_without_project_lock
+test_presentation_lock_order
 
 echo "# all fm-spawn-worktree-settle tests passed"

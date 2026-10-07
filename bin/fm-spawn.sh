@@ -1538,25 +1538,39 @@ trap spawn_abort_cleanup EXIT
 # Dead-owner reclaim inside `fm_lock_try_acquire` still bounds a wait against a
 # holder that crashed mid-hold.
 spawn_herdr_presentation_order_lock_acquire() {
-  local session=${1:-} mode=${2:-} attempt lock_path
+  local session=${1:-} mode=${2:-} attempt lock_path acquired=1
+  local project_lock_held=$SPAWN_TREEHOUSE_PROJECT_LOCK_HELD
   [ -n "$session" ] || session=$(fm_backend_herdr_session)
   lock_path=$(fm_backend_herdr_presentation_session_lock_path "$session") || return 1
   HERDR_PRESENTATION_ORDER_LOCK="$lock_path"
-  if [ "$mode" = wait ]; then
-    fm_lock_acquire_wait "$HERDR_PRESENTATION_ORDER_LOCK"
-    HERDR_PRESENTATION_ORDER_LOCK_HELD=1
-    return 0
-  fi
-  attempt=0
-  while [ "$attempt" -lt 50 ]; do
-    if fm_lock_try_acquire "$HERDR_PRESENTATION_ORDER_LOCK"; then
-      HERDR_PRESENTATION_ORDER_LOCK_HELD=1
-      return 0
+  if [ "$project_lock_held" = 1 ]; then
+    if ! fm_lock_release "$SPAWN_TREEHOUSE_PROJECT_LOCK"; then
+      echo "error: could not release Firstmate's Treehouse project lock before herdr presentation for $PROJ_ABS" >&2
+      exit 1
     fi
-    sleep 0.1
-    attempt=$((attempt + 1))
-  done
-  return 1
+    SPAWN_TREEHOUSE_PROJECT_LOCK_HELD=0
+  fi
+  if [ "$mode" = wait ]; then
+    if fm_lock_acquire_wait "$HERDR_PRESENTATION_ORDER_LOCK"; then
+      HERDR_PRESENTATION_ORDER_LOCK_HELD=1
+      acquired=0
+    fi
+  else
+    attempt=0
+    while [ "$attempt" -lt 50 ]; do
+      if fm_lock_try_acquire "$HERDR_PRESENTATION_ORDER_LOCK"; then
+        HERDR_PRESENTATION_ORDER_LOCK_HELD=1
+        acquired=0
+        break
+      fi
+      sleep 0.1
+      attempt=$((attempt + 1))
+    done
+  fi
+  if [ "$project_lock_held" = 1 ]; then
+    fm_spawn_treehouse_project_lock_acquire || exit 1
+  fi
+  return "$acquired"
 }
 
 clear_relaunch_harness_wiring() {

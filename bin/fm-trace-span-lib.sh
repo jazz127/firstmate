@@ -107,18 +107,12 @@ fm_trace_span_task() {  # <meta> <outcome> <forced>
   fm_trace_span_emit "$meta" firstmate.task "$start" - --root --status "$status" "${attrs[@]}"
 }
 
-fm_trace_span_pr_ready() {  # <meta> <canonical-url> <head-sha|->
-  local meta=$1 url=$2 head=${3:--}
-  local attrs=("firstmate.pr.url=$url")
-  [ "$head" = - ] || attrs+=("firstmate.pr.head=$head")
-  fm_trace_span_emit "$meta" firstmate.pr.ready - - "${attrs[@]}"
+fm_trace_span_pr_ready() {  # <meta>
+  fm_trace_span_emit "$1" firstmate.pr.ready - -
 }
 
-fm_trace_span_pr_merged() {  # <meta> <canonical-url> <origin> <authority>
-  local meta=$1 url=$2 origin=$3 authority=$4
-  local attrs=("firstmate.pr.url=$url" "firstmate.pr.origin=$origin")
-  [ -z "$authority" ] || attrs+=("firstmate.pr.merge_authority=$authority")
-  fm_trace_span_emit "$meta" firstmate.pr.merged - - "${attrs[@]}"
+fm_trace_span_pr_merged() {  # <meta>
+  fm_trace_span_emit "$1" firstmate.pr.merged - -
 }
 
 fm_trace_span_config() {

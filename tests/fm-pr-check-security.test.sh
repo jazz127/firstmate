@@ -897,7 +897,7 @@ SH
 }
 
 test_pr_ready_trace_follows_successful_publication() {
-  local dir url head rc
+  local dir url head rc host revision
   url=https://github.com/my-org/repo_name.with-dots/pull/39
   head=0123456789abcdef0123456789abcdef01234567
 
@@ -924,24 +924,34 @@ test_pr_ready_trace_follows_successful_publication() {
   [ "$rc" -ne 0 ] || fail "trace-ready-publication-failed: unsafe poll destination was accepted"
   [ ! -s "$dir/trace.capture.requests" ] || fail "failed poll publication emitted a ready span"
 
-  dir=$(make_case trace-ready-success)
-  write_task_meta "$dir"
-  enable_trace_capture "$dir"
-  FM_TRACE_EXPORT=on FM_TEST_TRACE_CAPTURE="$dir/trace.capture" FM_TEST_GH_HEAD=$head \
-    run_check_entry "$dir" task-a "$url" > "$dir/out" 2> "$dir/err" \
-    || fail "trace-ready-success: valid registration failed"
-  jq -es --arg url "$url" --arg head "$head" '
-    length == 1 and (.[0].resourceSpans[0].scopeSpans[0].spans[0] as $s
-    | $s.name == "firstmate.pr.ready"
-      and ([ $s.attributes[] | select(.key == "firstmate.pr.url") | .value.stringValue ] == [$url])
-      and ([ $s.attributes[] | select(.key == "firstmate.pr.head") | .value.stringValue ] == [$head]))
-  ' "$dir/trace.capture" >/dev/null || fail "ready span omitted the canonical URL or forge head"
-  FM_TRACE_EXPORT=on FM_TEST_TRACE_CAPTURE="$dir/trace.capture" FM_TEST_GH_HEAD=$head \
-    run_check_entry "$dir" task-a "$url" > "$dir/out2" 2> "$dir/err2" \
-    || fail "trace-ready-success: repeated registration failed"
-  [ "$(wc -l < "$dir/trace.capture.requests" | tr -d ' ')" -eq 2 ] \
-    || fail "successful re-registration did not emit a fresh ready observation"
-  pass "rejected and unpublished PR registrations are silent; each successful registration records canonical identity"
+  for url in \
+    https://github.com/my-org/repo_name.with-dots/pull/39 \
+    https://gitlab.internal/group/private/-/merge_requests/7 \
+    https://gerrit.example/c/group/apps/console/+/4201; do
+    host=${url#https://}
+    dir=$(make_case "trace-ready-success-${host%%/*}")
+    revision=$(git -C "$dir/wt" rev-parse HEAD)
+    write_task_meta "$dir"
+    enable_trace_capture "$dir"
+    FM_TRACE_EXPORT=on FM_TEST_TRACE_CAPTURE="$dir/trace.capture" FM_TEST_GH_HEAD=$head \
+      FM_TEST_GERRIT_REVISION=$revision run_check_entry "$dir" task-a "$url" > "$dir/out" 2> "$dir/err" \
+      || fail "trace-ready-success: valid registration failed"
+    FM_TRACE_EXPORT=on FM_TEST_TRACE_CAPTURE="$dir/trace.capture" FM_TEST_GH_HEAD=$head \
+      FM_TEST_GERRIT_REVISION=$revision run_check_entry "$dir" task-a "$url" > "$dir/out2" 2> "$dir/err2" \
+      || fail "trace-ready-success: repeated registration failed"
+    jq -es '
+      length == 2 and all(.[];
+        .resourceSpans[0] as $r
+        | $r.scopeSpans[0].spans[0] as $s
+        | $s.name == "firstmate.pr.ready" and $s.attributes == []
+          and $s.traceId == "4bf92f3577b34da6a3ce929d0e0e4736"
+          and $s.parentSpanId == "00f067aa0ba902b7"
+          and ($r.resource.attributes | map(.key) | sort) ==
+            ["firstmate.project", "firstmate.task.id", "firstmate.task.kind", "service.name"])
+    ' "$dir/trace.capture.requests" >/dev/null \
+      || fail "ready observations exported PR details or lost existing resource dimensions or trace identity"
+  done
+  pass "rejected and unpublished registrations are silent; each successful registration emits a ready observation without PR details"
 }
 
 # Runs one watcher under a hang guard that TERMs it and returns 124 once it has
@@ -2381,12 +2391,11 @@ test_self_merge_and_poll_publish_one_outcome() {
   assert_no_grep "check: $state/task-a.check.sh: merged" "$state/.wake-queue" \
     "merge-outcome-committed: absorbed poll published a second outcome"
   assert_poll_absent "$state" task-a
-  jq -es --arg url "$url" '
+  jq -es '
     [ .[].resourceSpans[].scopeSpans[].spans[] | select(.name == "firstmate.pr.ready") ] as $ready
     | [ .[].resourceSpans[].scopeSpans[].spans[] | select(.name == "firstmate.pr.merged") ] as $merged
     | ($ready | length) == 1 and ($merged | length) == 1
-      and ([ $merged[0].attributes[] | select(.key == "firstmate.pr.url") | .value.stringValue ] == [$url])
-      and ([ $merged[0].attributes[] | select(.key == "firstmate.pr.origin") | .value.stringValue ] == ["self"])
+      and $ready[0].attributes == [] and $merged[0].attributes == []
   ' "$dir/trace.capture.requests" >/dev/null \
     || fail "self merge and its poll did not share one post-dedup PR outcome span: $(cat "$dir/trace.capture.requests" 2>/dev/null)"
 
@@ -2468,14 +2477,12 @@ test_merged_poll_reports_upward_from_a_secondmate_home_once() {
     "merged-poll-upward: a merge this home did not perform was never reported upward"
   [ "$(grep -c -F "$url" "$replies")" -eq 1 ] \
     || fail "merged-poll-upward: one detected merge produced more than one upward line"
-  jq -es --arg url "$url" '
+  jq -es '
     [ .[].resourceSpans[].scopeSpans[].spans[] | select(.name == "firstmate.pr.merged") ] as $merged
     | ($merged | length) == 1
-      and ([ $merged[0].attributes[] | select(.key == "firstmate.pr.url") | .value.stringValue ] == [$url])
-      and ([ $merged[0].attributes[] | select(.key == "firstmate.pr.origin") | .value.stringValue ] == ["poll"])
-      and ([ $merged[0].attributes[] | select(.key == "firstmate.pr.merge_authority") | .value.stringValue ] == ["external"])
+      and $merged[0].attributes == []
   ' "$dir/trace.capture.requests" >/dev/null \
-    || fail "poll-detected merge did not emit its canonical post-dedup outcome span"
+    || fail "poll-detected merge did not emit a post-dedup outcome span without PR details"
   ack_watcher_cycle "$state" || fail "merged-poll-upward: acknowledgement failed"
 
   # Re-registered for the same, already-reported merge: the absorbed duplicate

@@ -221,7 +221,7 @@ fi
 # Export only after poll publication succeeds; repeated successful registrations
 # intentionally produce another observation rather than an exactly-once event.
 if [ "${FM_PR_CHECK_MERGE:-}" != 1 ]; then
-  fm_trace_span_pr_ready "$META" "$URL" "${PR_HEAD:--}"
+  fm_trace_span_pr_ready "$META"
 fi
 # Opt-in fleet activity ledger (docs/fleet-ledger.md); off costs one file test.
 # The merge-time re-record is not a new review-ready PR, so it writes nothing.

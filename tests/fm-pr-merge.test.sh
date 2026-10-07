@@ -2251,14 +2251,13 @@ test_main_home_merge_leaves_a_durable_wake() {
   FM_TRACE_EXPORT=on FM_TEST_TRACE_CAPTURE="$case_dir/trace.capture" FM_TEST_HOME="$case_dir/home" \
     run_pr_merge "$case_dir" task-x1 "$url" \
     >"$case_dir/stdout2" 2>"$case_dir/stderr2" || fail "main-merge-wake: repeat merge failed"
-  jq -es --arg url "$url" '
+  jq -es '
     [ .[].resourceSpans[].scopeSpans[].spans[] | select(.name == "firstmate.pr.merged") ] as $merged
     | [ .[].resourceSpans[].scopeSpans[].spans[] | select(.name == "firstmate.pr.ready") ] as $ready
     | ($merged | length) == 1 and ($ready | length) == 0
-      and ([ $merged[0].attributes[] | select(.key == "firstmate.pr.url") | .value.stringValue ] == [$url])
-      and ([ $merged[0].attributes[] | select(.key == "firstmate.pr.origin") | .value.stringValue ] == ["self"])
+      and $merged[0].attributes == []
   ' "$case_dir/trace.capture.requests" >/dev/null \
-    || fail "merge notifications did not emit exactly once after deduplication"
+    || fail "merge notifications did not emit exactly once without PR details after deduplication"
   pass "a merge a main home performs itself leaves one durable wake naming the PR"
 }
 

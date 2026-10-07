@@ -2002,10 +2002,19 @@ fm_remote_job_linux_start_guard_acquire() { # <account-home>
       FM_REMOTE_JOB_START_GUARD_START=$owner_start
       return 0
     fi
-    [ -d "$guard" ] && [ ! -L "$guard" ] || { FM_REMOTE_JOB_ERROR="remote job start guard is unsafe"; return 1; }
+    [ ! -L "$guard" ] || { FM_REMOTE_JOB_ERROR="remote job start guard is unsafe"; return 1; }
+    # A holder can finish release between our mkdir and directory check.
+    if [ ! -e "$guard" ]; then
+      attempt=$((attempt + 1))
+      continue
+    fi
+    [ -d "$guard" ] || { FM_REMOTE_JOB_ERROR="remote job start guard is unsafe"; return 1; }
     owner_pid=$(fm_remote_job_read_single_line "$guard/owner" 64 2>/dev/null || true)
     owner_start=$(fm_remote_job_read_single_line "$guard/start" 256 2>/dev/null || true)
     case "$owner_pid" in ''|*[!0-9]*) owner_pid= ;; esac
+    # Publication and release can expose only one of the identity records.
+    # Apply the same grace as an empty guard before considering reclamation.
+    [ -n "$owner_start" ] && [ "${owner_pid:-0}" -gt 1 ] || owner_pid=
     if [ -n "$owner_pid" ] && [ "$owner_pid" -gt 1 ] && [ -n "$owner_start" ]; then
       owner_state=$(fm_remote_job_process_state "$owner_pid" 2>/dev/null || true)
       case "$owner_state" in ''|Z*)

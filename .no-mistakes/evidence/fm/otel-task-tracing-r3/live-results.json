@@ -1,0 +1,8 @@
+{
+  "ready_observations": 2,
+  "merged_observations": 1,
+  "privacy": "no PR-specific attributes",
+  "default_off": "pass",
+  "off_switch": "pass",
+  "collector_failure": "pass"
+}

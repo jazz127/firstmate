@@ -1,0 +1,176 @@
+Actual upstreams: GitHub API via installed gh; OpenTelemetry Collector Contrib 0.162.0 authenticated OTLP/HTTP receiver and spanmetrics connector.
+$ gh pr view https://github.com/jazz127/firstmate/pull/23 --json state,isDraft,headRefOid
+exit=0
+{"headRefOid":"36ba2b9a3e714683f22a9c917a181ef985d8fef6","isDraft":false,"state":"OPEN"}
+
+$ gh pr view https://github.com/jazz127/firstmate/pull/205 --json state,isDraft,headRefOid
+exit=0
+{"headRefOid":"4e6bcd7ebc433d497d501c595b11ab2c7373ec6d","isDraft":false,"state":"MERGED"}
+
+$ gh pr view https://github.com/open-telemetry/opentelemetry-collector-contrib/pull/51829 --json state,isDraft
+exit=0
+{"isDraft":true,"state":"OPEN"}
+
+$ bin/fm-lab-home.sh create /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4ADJEBW8JDB3406JC90E69V/.live-pr-validation/enabled-home
+exit=0
+/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4ADJEBW8JDB3406JC90E69V/.live-pr-validation/enabled-home
+
+$ bash -c '. bin/fm-trace-context-lib.sh; fm_trace_context_session_start "$FM_HOME/config" "$FM_HOME/state/.trace-context-effective"'
+exit=0
+
+$ bash -c '. bin/fm-trace-context-lib.sh; fm_trace_context_mint'
+exit=0
+00-9a027ca4b5e7fc1b85587dff0a1631de-e74f2241f3924fe9-01
+$ bin/fm-pr-check.sh ready-task https://github.com/jazz127/firstmate/pull/23
+exit=0
+armed: state/ready-task.check.sh
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  repair missing watcher supervision with a foreground checkpoint: bin/fm-watch-checkpoint.sh --seconds 180.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+$ bin/fm-pr-check.sh ready-task https://github.com/jazz127/firstmate/pull/23
+exit=0
+armed: state/ready-task.check.sh
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+
+PASS: two successful ready registrations produce two ready observations.
+$ bin/fm-pr-check.sh draft-task https://github.com/open-telemetry/opentelemetry-collector-contrib/pull/51829
+exit=1
+error: https://github.com/open-telemetry/opentelemetry-collector-contrib/pull/51829 is a draft pull request; a draft cannot be merged, so merge monitoring would wait for an event that cannot occur - mark it ready for review and arm again, or declare a wait instead of done if the draft is deliberate
+
+$ bin/fm-pr-check.sh reject-task https://github.com/jazz127/firstmate/pull/23
+exit=1
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+error: could not publish PR poll
+
+PASS: a real draft PR and unsafe poll destination produce no ready observations.
+$ bin/fm-pr-check.sh merge-task https://github.com/jazz127/firstmate/pull/205
+exit=0
+armed: state/merge-task.check.sh
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+
+$ bin/fm-wake-drain.sh (before watcher)
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+
+$ bin/fm-watch.sh (isolated home; stop after poll retirement)
+check: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4ADJEBW8JDB3406JC90E69V/.live-pr-validation/enabled-home/state/merge-task.check.sh: merged
+
+Persisted wake contract:
+1791352007	1	check	merged-merge-task-https://github.com/jazz127/firstmate/pull/205	check: merge landed: merge-task https://github.com/jazz127/firstmate/pull/205 external
+
+$ bin/fm-wake-drain.sh
+1791352007	1	check	merged-merge-task-https://github.com/jazz127/firstmate/pull/205	check: merge landed: merge-task https://github.com/jazz127/firstmate/pull/205 external
+WAKE_ACK_REQUIRED: after handling completes run bin/fm-wake-drain.sh --ack-through 1 --recovery-generation 43147.1791352007.UG6fv8
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  4 task(s) in flight, but no live watcher process holds this home lock (last beat: 8s ago).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  After draining queued wakes, repair missing watcher supervision with a foreground checkpoint: bin/fm-watch-checkpoint.sh --seconds 180.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+WARNING: queued wakes pending - drain them with bin/fm-wake-drain.sh before anything else.
+
+$ bin/fm-wake-drain.sh --ack-through 1 --recovery-generation 43147.1791352007.UG6fv8
+exit=0
+
+$ bin/fm-pr-check.sh merge-task https://github.com/jazz127/firstmate/pull/205
+exit=0
+armed: state/merge-task.check.sh
+WARNING: watcher still down (same stale episode; last beat: 9s ago, grace 300s) - full banner already printed this episode.
+
+$ bin/fm-wake-drain.sh (before watcher)
+WARNING: watcher still down (same stale episode; last beat: 11s ago, grace 300s) - full banner already printed this episode.
+
+$ bin/fm-watch.sh (isolated home; stop after poll retirement)
+
+PASS: actual GitHub merged state produces one merged observation; re-registration and polling do not duplicate it; merge-time registration emits no ready observation.
+PASS: Collector accepts valid child spans with existing resource dimensions and zero PR-specific attributes.
+$ bin/fm-lab-home.sh create /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4ADJEBW8JDB3406JC90E69V/.live-pr-validation/default-off-home
+exit=0
+/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4ADJEBW8JDB3406JC90E69V/.live-pr-validation/default-off-home
+
+$ bash -c '. bin/fm-trace-context-lib.sh; fm_trace_context_session_start "$FM_HOME/config" "$FM_HOME/state/.trace-context-effective"'
+exit=0
+
+$ bash -c '. bin/fm-trace-context-lib.sh; fm_trace_context_mint'
+exit=0
+00-197ce1ea9fe464985c818d24e06b21e1-1c0dffdcd034edaf-01
+$ bin/fm-pr-check.sh off-task https://github.com/jazz127/firstmate/pull/23
+exit=0
+armed: state/off-task.check.sh
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  repair missing watcher supervision with a foreground checkpoint: bin/fm-watch-checkpoint.sh --seconds 180.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+$ bin/fm-pr-check.sh off-task https://github.com/jazz127/firstmate/pull/205
+exit=0
+armed: state/off-task.check.sh
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+
+$ bin/fm-wake-drain.sh (before watcher)
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+
+$ bin/fm-watch.sh (isolated home; stop after poll retirement)
+check: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4ADJEBW8JDB3406JC90E69V/.live-pr-validation/default-off-home/state/off-task.check.sh: merged
+
+PASS: default-off home still registers and detects merge, without exporting either observation.
+$ bin/fm-pr-check.sh kill-task https://github.com/jazz127/firstmate/pull/23
+exit=0
+armed: state/kill-task.check.sh
+WARNING: watcher still down (same stale episode; last beat: 19s ago, grace 300s) - full banner already printed this episode.
+
+$ bin/fm-pr-check.sh kill-task https://github.com/jazz127/firstmate/pull/205
+exit=0
+armed: state/kill-task.check.sh
+WARNING: watcher still down (same stale episode; last beat: 21s ago, grace 300s) - full banner already printed this episode.
+
+$ bin/fm-wake-drain.sh (before watcher)
+WAKE_ACK_REQUIRED: after handling completes run bin/fm-wake-drain.sh --ack-through 0 --recovery-generation 59651.1791352018.Iq8r30
+WARNING: watcher still down (same stale episode; last beat: 22s ago, grace 300s) - full banner already printed this episode.
+
+$ bin/fm-wake-drain.sh --ack-through 0 --recovery-generation 59651.1791352018.Iq8r30
+exit=0
+
+$ bin/fm-watch.sh (isolated home; stop after poll retirement)
+check: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4ADJEBW8JDB3406JC90E69V/.live-pr-validation/enabled-home/state/kill-task.check.sh: merged
+
+PASS: FM_TRACE_EXPORT=off suppresses both outcomes in an enabled home.
+Collector aggregate metrics:
+# HELP traces_span_metrics_calls_total 
+# TYPE traces_span_metrics_calls_total counter
+traces_span_metrics_calls_total{collector_instance_id="efa10b4c-d916-4a61-9534-3a952fb0057b",job="firstmate",otel_scope_name="spanmetricsconnector",otel_scope_schema_url="",otel_scope_version="",service_name="firstmate",span_kind="SPAN_KIND_INTERNAL",span_name="firstmate.pr.merged",status_code="STATUS_CODE_UNSET"} 1
+traces_span_metrics_calls_total{collector_instance_id="efa10b4c-d916-4a61-9534-3a952fb0057b",job="firstmate",otel_scope_name="spanmetricsconnector",otel_scope_schema_url="",otel_scope_version="",service_name="firstmate",span_kind="SPAN_KIND_INTERNAL",span_name="firstmate.pr.ready",status_code="STATUS_CODE_UNSET"} 2
+$ bin/fm-pr-check.sh unreachable-task https://github.com/jazz127/firstmate/pull/23
+exit=0
+armed: state/unreachable-task.check.sh
+WARNING: watcher still down (same stale episode; last beat: 7s ago, grace 300s) - full banner already printed this episode.
+WARNING: queued wakes pending - drain them with bin/fm-wake-drain.sh before anything else.
+
+$ bin/fm-pr-check.sh unreachable-task https://github.com/jazz127/firstmate/pull/205
+exit=0
+armed: state/unreachable-task.check.sh
+WARNING: watcher still down (same stale episode; last beat: 9s ago, grace 300s) - full banner already printed this episode.
+WARNING: queued wakes pending - drain them with bin/fm-wake-drain.sh before anything else.
+
+$ bin/fm-wake-drain.sh (before watcher)
+1791352039	2	check	merged-kill-task-https://github.com/jazz127/firstmate/pull/205	check: merge landed: kill-task https://github.com/jazz127/firstmate/pull/205 external
+WAKE_ACK_REQUIRED: after handling completes run bin/fm-wake-drain.sh --ack-through 2 --recovery-generation 2778.1791352039.zPpi98
+WARNING: watcher still down (same stale episode; last beat: 11s ago, grace 300s) - full banner already printed this episode.
+WARNING: queued wakes pending - drain them with bin/fm-wake-drain.sh before anything else.
+
+$ bin/fm-wake-drain.sh --ack-through 2 --recovery-generation 2778.1791352039.zPpi98
+exit=0
+
+$ bin/fm-watch.sh (isolated home; stop after poll retirement)
+check: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4ADJEBW8JDB3406JC90E69V/.live-pr-validation/enabled-home/state/unreachable-task.check.sh: merged
+
+PASS: stopped collector leaves registration and durable confirmed-merge notification successful (whole sequence 10.95s).
+Disposable homes removed; Collector and watcher processes stopped.

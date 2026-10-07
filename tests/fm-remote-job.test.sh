@@ -18,6 +18,8 @@ FAKE_PERL_LOG="$TMP_ROOT/perl.log"
 REAL_GIT=$(command -v git)
 OTHER_PID=
 RECOVERY_WORKER_PID=
+FRAGMENT_WORKER_PID=
+LIVE_FRAGMENT_WORKER_PID=
 REPEAT_WORKER_PID=
 RESTART_SUPERVISOR_PID=
 LOST_TERM_PID=
@@ -34,6 +36,8 @@ mkdir -p "$REMOTE_ROOT/bin" "$REMOTE_HOME" "$ACCOUNT_HOME" "$RUNTIME_BIN"
 cleanup_remote_job_fixture() {
   [ -z "$OTHER_PID" ] || kill "$OTHER_PID" 2>/dev/null || true
   [ -z "$RECOVERY_WORKER_PID" ] || kill "$RECOVERY_WORKER_PID" 2>/dev/null || true
+  [ -z "$FRAGMENT_WORKER_PID" ] || kill "$FRAGMENT_WORKER_PID" 2>/dev/null || true
+  [ -z "$LIVE_FRAGMENT_WORKER_PID" ] || kill "$LIVE_FRAGMENT_WORKER_PID" 2>/dev/null || true
   [ -z "$REPEAT_WORKER_PID" ] || kill "$REPEAT_WORKER_PID" 2>/dev/null || true
   [ -z "$RESTART_SUPERVISOR_PID" ] || kill -KILL "$RESTART_SUPERVISOR_PID" 2>/dev/null || true
   [ -z "$LOST_TERM_PID" ] || kill -KILL "$LOST_TERM_PID" 2>/dev/null || true
@@ -217,6 +221,76 @@ export FM_REMOTE_JOB_QUEUE_TIMEOUT=5
 export FM_REMOTE_JOB_TIMEOUT=5
 # shellcheck source=bin/fm-remote-job-lib.sh
 . "$ROOT/bin/fm-remote-job-lib.sh"
+
+FRAGMENT_STATE="$TMP_ROOT/fragment-recovery-jobs"
+mkdir -p "$FRAGMENT_STATE/worker.lock"
+printf '99999999\n' > "$FRAGMENT_STATE/worker.lock/.pid.A1b2C3"
+: > "$FRAGMENT_STATE/worker.lock/.start.D4e5F6"
+: > "$FRAGMENT_STATE/worker.lock/.command.G7h8I9"
+touch -t 200001010000 "$FRAGMENT_STATE/worker.lock"
+HOME="$ACCOUNT_HOME" FM_ROOT_OVERRIDE="$REMOTE_ROOT" FM_REMOTE_JOB_STATE_ROOT="$FRAGMENT_STATE" \
+  FM_REMOTE_JOB_PLATFORM_OVERRIDE=Linux "$BASH" "$REMOTE_ROOT/bin/fm-remote-job-worker.sh" --serve \
+  > "$TMP_ROOT/fragment-recovery.out" 2> "$TMP_ROOT/fragment-recovery.err" &
+FRAGMENT_WORKER_PID=$!
+for ((i = 0; i < 200; i++)); do
+  [ -f "$FRAGMENT_STATE/worker.ready" ] && break
+  sleep 0.05
+done
+assert_present "$FRAGMENT_STATE/worker.ready" "stale lock publication fragments prevented worker startup"
+assert_absent "$FRAGMENT_STATE/worker.lock/.pid.A1b2C3" "stale lock pid fragment was not removed"
+assert_absent "$FRAGMENT_STATE/worker.lock/.start.D4e5F6" "stale lock start fragment was not removed"
+assert_absent "$FRAGMENT_STATE/worker.lock/.command.G7h8I9" "stale lock command fragment was not removed"
+kill -TERM "$FRAGMENT_WORKER_PID" 2>/dev/null || true
+wait "$FRAGMENT_WORKER_PID" 2>/dev/null || true
+pass "worker startup reclaims a dead owner's three interrupted publication fragments"
+
+UNKNOWN_FRAGMENT_STATE="$TMP_ROOT/unknown-fragment-jobs"
+mkdir -p "$UNKNOWN_FRAGMENT_STATE/worker.lock"
+printf '99999999\n' > "$UNKNOWN_FRAGMENT_STATE/worker.lock/pid"
+: > "$UNKNOWN_FRAGMENT_STATE/worker.lock/start"
+: > "$UNKNOWN_FRAGMENT_STATE/worker.lock/command"
+printf 'preserve me\n' > "$UNKNOWN_FRAGMENT_STATE/worker.lock/unrecognized"
+touch -t 200001010000 "$UNKNOWN_FRAGMENT_STATE/worker.lock"
+set +e
+HOME="$ACCOUNT_HOME" FM_ROOT_OVERRIDE="$REMOTE_ROOT" FM_REMOTE_JOB_STATE_ROOT="$UNKNOWN_FRAGMENT_STATE" \
+  FM_REMOTE_JOB_PLATFORM_OVERRIDE=Linux "$BASH" "$REMOTE_ROOT/bin/fm-remote-job-worker.sh" --serve \
+  > "$TMP_ROOT/unknown-fragment.out" 2> "$TMP_ROOT/unknown-fragment.err"
+UNKNOWN_FRAGMENT_RC=$?
+set -e
+[ "$UNKNOWN_FRAGMENT_RC" -ne 0 ] || fail "worker reclaimed a lock with an unrecognized entry"
+assert_present "$UNKNOWN_FRAGMENT_STATE/worker.lock/pid" "refused lock cleanup removed the recorded pid"
+assert_present "$UNKNOWN_FRAGMENT_STATE/worker.lock/unrecognized" "refused lock cleanup removed an unrecognized entry"
+pass "stale lock cleanup refuses unknown entries without removing recognized files"
+
+LIVE_FRAGMENT_STATE="$TMP_ROOT/live-fragment-jobs"
+HOME="$ACCOUNT_HOME" FM_ROOT_OVERRIDE="$REMOTE_ROOT" FM_REMOTE_JOB_STATE_ROOT="$LIVE_FRAGMENT_STATE" \
+  FM_REMOTE_JOB_PLATFORM_OVERRIDE=Linux "$BASH" "$REMOTE_ROOT/bin/fm-remote-job-worker.sh" --serve \
+  > "$TMP_ROOT/live-fragment-worker.out" 2> "$TMP_ROOT/live-fragment-worker.err" &
+LIVE_FRAGMENT_WORKER_PID=$!
+for ((i = 0; i < 200; i++)); do
+  [ -f "$LIVE_FRAGMENT_STATE/worker.ready" ] && break
+  sleep 0.05
+done
+assert_present "$LIVE_FRAGMENT_STATE/worker.ready" "live-fragment fixture worker did not start"
+: > "$LIVE_FRAGMENT_STATE/worker.lock/.pid.A1b2C3"
+: > "$LIVE_FRAGMENT_STATE/worker.lock/.start.D4e5F6"
+: > "$LIVE_FRAGMENT_STATE/worker.lock/.command.G7h8I9"
+LIVE_FRAGMENT_OWNER=$(cat "$LIVE_FRAGMENT_STATE/worker.lock/pid")
+set +e
+HOME="$ACCOUNT_HOME" FM_ROOT_OVERRIDE="$REMOTE_ROOT" FM_REMOTE_JOB_STATE_ROOT="$LIVE_FRAGMENT_STATE" \
+  FM_REMOTE_JOB_PLATFORM_OVERRIDE=Linux "$BASH" "$REMOTE_ROOT/bin/fm-remote-job-worker.sh" --serve \
+  > "$TMP_ROOT/live-fragment-contender.out" 2> "$TMP_ROOT/live-fragment-contender.err"
+LIVE_FRAGMENT_CONTENDER_RC=$?
+set -e
+[ "$LIVE_FRAGMENT_CONTENDER_RC" -eq 0 ] || fail "a contender did not exit cleanly when a live owner held the lock"
+[ "$(cat "$LIVE_FRAGMENT_STATE/worker.lock/pid")" = "$LIVE_FRAGMENT_OWNER" ] \
+  || fail "a contender replaced a live owner's lock identity"
+assert_present "$LIVE_FRAGMENT_STATE/worker.lock/.pid.A1b2C3" "live owner's pid fragment was removed"
+assert_present "$LIVE_FRAGMENT_STATE/worker.lock/.start.D4e5F6" "live owner's start fragment was removed"
+assert_present "$LIVE_FRAGMENT_STATE/worker.lock/.command.G7h8I9" "live owner's command fragment was removed"
+kill -TERM "$LIVE_FRAGMENT_WORKER_PID" 2>/dev/null || true
+wait "$LIVE_FRAGMENT_WORKER_PID" 2>/dev/null || true
+pass "live owner locks with publication fragments remain protected"
 
 (
   sleep 0.05

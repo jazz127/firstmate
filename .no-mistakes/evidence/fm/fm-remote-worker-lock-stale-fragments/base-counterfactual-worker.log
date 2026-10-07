@@ -1,0 +1,2 @@
+rmdir: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4C5NDNCBSM7FMDBWSHYSC01/.remote-lock-live-n_24w4iu/base-counterfactual/queue/worker.lock: Directory not empty
+remote-job-worker: cannot acquire or safely reclaim worker ownership

@@ -465,6 +465,7 @@ run_pr_merge() {
   FM_TEST_GH_HEAD="$case_dir/github-head" \
   FM_TEST_GH_RUNS="$case_dir/github-runs.json" \
   FM_TEST_GH_MERGE_RC_FILE="$case_dir/github-merge-rc" \
+  FM_TEST_TRACE_CAPTURE="${FM_TEST_TRACE_CAPTURE:-}" \
   FM_TEST_GH_MERGE_OUTPUT="$(cat "$case_dir/github-merge-output" 2>/dev/null || true)" \
   FM_TEST_GH_GRAPHQL_FAIL="$case_dir/github-graphql-fail" \
   FM_TEST_GH_RULES_FAIL="$case_dir/github-rules-fail" \
@@ -492,6 +493,24 @@ run_pr_merge() {
     return 1
   fi
   return "$rc"
+}
+
+enable_merge_trace_capture() {  # <case-dir> <task-id>
+  local case_dir=$1 id=$2 meta="$1/state/$2.meta"
+  printf '%s\n' 'traceparent=00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01' >> "$meta"
+  printf '4242\n' > "$case_dir/state/.lock"
+  printf '4242 on\n' > "$case_dir/state/.trace-context-effective"
+  printf 'Authorization: Bearer synthetic-test-token\n' > "$case_dir/home/config/trace-auth"
+  chmod 600 "$case_dir/home/config/trace-auth"
+  printf '{"enabled":true,"endpoint":"http://127.0.0.1:4318","auth-header-file":"%s/home/config/trace-auth"}\n' \
+    "$case_dir" > "$case_dir/home/config/trace-export.json"
+  cat > "$case_dir/fakebin/curl" <<'SH'
+#!/usr/bin/env bash
+body=$(cat)
+printf '%s\n' "$body" >> "$FM_TEST_TRACE_CAPTURE.requests"
+SH
+  chmod 700 "$case_dir/fakebin/curl"
+  : > "$case_dir/trace.capture.requests"
 }
 
 write_github_outcome() {
@@ -2216,9 +2235,11 @@ test_main_home_merge_leaves_a_durable_wake() {
   url=https://github.com/example/repo/pull/64
   case_dir=$(make_home_case main-merge-wake)
   add_gh_mocks "$case_dir" 7777777777777777777777777777777777777777
+  enable_merge_trace_capture "$case_dir" task-x1
   : >"$case_dir/gh-axi.log"
 
-  FM_TEST_HOME="$case_dir/home" run_pr_merge "$case_dir" task-x1 "$url" \
+  FM_TRACE_EXPORT=on FM_TEST_TRACE_CAPTURE="$case_dir/trace.capture" FM_TEST_HOME="$case_dir/home" \
+    run_pr_merge "$case_dir" task-x1 "$url" \
     >"$case_dir/stdout" 2>"$case_dir/stderr" || fail "main-merge-wake: merge failed"
 
   assert_grep "$url" "$case_dir/state/.wake-queue" \
@@ -2227,6 +2248,17 @@ test_main_home_merge_leaves_a_durable_wake() {
     || fail "main-merge-wake: one merge produced more than one durable record"
   assert_absent "$case_dir/state/parent-replies.status" \
     "main-merge-wake: a main home wrote a parent reply channel it does not have"
+  FM_TRACE_EXPORT=on FM_TEST_TRACE_CAPTURE="$case_dir/trace.capture" FM_TEST_HOME="$case_dir/home" \
+    run_pr_merge "$case_dir" task-x1 "$url" \
+    >"$case_dir/stdout2" 2>"$case_dir/stderr2" || fail "main-merge-wake: repeat merge failed"
+  jq -es --arg url "$url" '
+    [ .[].resourceSpans[].scopeSpans[].spans[] | select(.name == "firstmate.pr.merged") ] as $merged
+    | [ .[].resourceSpans[].scopeSpans[].spans[] | select(.name == "firstmate.pr.ready") ] as $ready
+    | ($merged | length) == 1 and ($ready | length) == 0
+      and ([ $merged[0].attributes[] | select(.key == "firstmate.pr.url") | .value.stringValue ] == [$url])
+      and ([ $merged[0].attributes[] | select(.key == "firstmate.pr.origin") | .value.stringValue ] == ["self"])
+  ' "$case_dir/trace.capture.requests" >/dev/null \
+    || fail "merge notifications did not emit exactly once after deduplication"
   pass "a merge a main home performs itself leaves one durable wake naming the PR"
 }
 

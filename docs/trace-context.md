@@ -108,7 +108,7 @@ This is a deliberate, source-owned choice:
 
 ## Relationship to OpenTelemetry and later increments
 
-Task and spawn tracing is an upstream-candidate house feature.
+Task, spawn, and PR outcome tracing is an upstream-candidate house feature.
 Carrier propagation creates no spans by itself; the separate opt-in emitter is configured in [configuration.md](configuration.md#otlp-span-export-configtrace-exportjson--fm_trace_export).
 When export is enabled, a successful local spawn emits one `firstmate.spawn` child after launch delivery and backlog commit, and successful ordinary teardown emits one `firstmate.task` root with the last recognized `done` or `failed` outcome, or `unknown` when neither exists.
 Done maps to OTLP OK, failed to ERROR, and unknown leaves status unset; refused or rolled-back launches and refused teardown emit no lifecycle span.
@@ -116,7 +116,9 @@ Informational notes preserve the terminal outcome; a later state-changing event 
 The root starts at the task's recorded first carrier mint; relaunch preserves that time while each spawn span records the new generation, and missing or invalid historical start data falls back to the current time.
 Direct local Secondmate retirement uses the same outcome mapping, including `unknown` when no terminal status exists.
 Teardown and pending-close restart recovery record the terminal outcome in task metadata before retiring status presentation, even with export disabled; retirement failure preserves metadata for retry, a failed record removal can retry with that outcome, and relaunch clears it for the new generation.
-Exported lifecycle attributes omit pane/window identity, private PR URLs, and prior-generation linkage; pane-resource export is deferred.
+PR-ready spans include the canonical PR URL and an available head SHA, while PR-merged spans include the canonical URL, detection origin, and known merge authority.
+Each successful ready registration emits a new observation, including a re-registration of the same PR; merge outcomes emit only after the shared notification deduplication accepts a new outcome.
+Other exported lifecycle attributes omit pane/window identity and prior-generation linkage; pane-resource export is deferred.
 Approved untraced paths for this chunk:
 
 - remote Secondmate launches;

@@ -312,7 +312,10 @@
 #   Spawn refuses an unsafe pre-existing task temp root or launch namespace, and
 #   task teardown removes only the current home's launch namespace.
 # Launch environment (config/launch-env-allowlist):
-#   Absent means unchanged ambient inheritance. A present readable regular file
+#   Every launch clears FM_TIMEOUT_OWNER_PID and FM_EXEC_TIMED_OWNER_PID,
+#   including names explicitly allowlisted below, so a worker's timeout calls
+#   cannot inherit the lifetime of a watcher that exits after recovery.
+#   Absent otherwise keeps ambient inheritance. A present readable regular file
 #   opts every launch (ship, scout, secondmate, raw command, and relaunch) into
 #   /usr/bin/env -i followed by /bin/sh -c of the existing launch command.
 #   Each line is one POSIX environment name, never a value or shell expression;
@@ -5745,6 +5748,7 @@ if [ "$LAUNCH_ENV_ENABLED" = 1 ]; then
   fi
   LAUNCH="$LAUNCH_ENV_PREFIX /bin/sh -c $(shell_quote "$LAUNCH")"
 fi
+LAUNCH="unset FM_TIMEOUT_OWNER_PID FM_EXEC_TIMED_OWNER_PID; $LAUNCH"
 # Implement the launch-delivery contract in this script's header. The full
 # home-identity hash isolates equal task ids across homes, and the spawn token in
 # the final filename keeps a buffered source line bound to this incarnation.

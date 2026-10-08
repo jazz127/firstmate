@@ -131,6 +131,68 @@ zsh
 A persistent parent shell waiting for a child remained reported as the parent process, while a shell that directly execed a simple command changed identity with the process itself.
 Pi and pi-signed 0.82.0 were reverified on 2026-07-27 through real isolated `fm-spawn.sh` launches.
 
+### Watcher stops during stalled queries
+
+On 2026-10-08, synthetic regression testing on macOS with stock Bash 3.2.57 exercised the executable watcher against a tmux stub that stalls one query for 60 seconds.
+No installed harness or tmux server was exercised by this test.
+The watcher exited within the test's 100-poll TERM budget, stopped the stalled query, removed its output file, released its singleton lock, and left an acknowledgeable stop record in all 37 stalled-query cases.
+The cases cover `list-windows` and `display-message` in inbox checks, both declared-pause liveness branches, wedge checks, and secondmate idle gating, plus the secondmate composer's cursor and capture reads.
+They also exercise the real crew-state reader for stale, declared-pause, signal, terminal-status, and pane-churn paths; Grok/Rovo/AGY empty-tail recaptures; inbox ring/retry and secondmate drain delivery; secondmate liveness probes and failed-close inventory; and pending-reply observation and recovery delivery.
+The same focused run checks liveness result globals and bookkeeping, ordinary signal absorption and surfacing, pane-churn absorption, and pause transitions.
+Six additional cases exercise the actual timed secondmate spawn, the inactive scan's nested crew-state query, and that reader's bounded no-mistakes query, with both Perl and Bash timeout mechanisms.
+The synthetic query ignores TERM, so the cases require cancellation to escalate and leave no live query or recorded timeout ancestor within three seconds of watcher exit.
+They also check the relaunch attempt ledger, inactive-scan cadence marker, watcher cleanup, and acknowledgeable stop record.
+The focused timeout run checks command output and failure status, deadline status 124 with nested commands reaped, and stdin passed through the no-mistakes timeout boundary.
+The metadata lookups used by the watcher read local files and do not query tmux.
+
+Refresh this synthetic evidence with:
+
+```sh
+FM_TEST_ONLY=test_term_stops_a_watcher_blocked_in_tmux_queries bash bin/fm-test-run.sh tests/fm-watch-triage.test.sh
+FM_TEST_ONLY=test_term_cancels_watcher_owned_timeouts bash bin/fm-test-run.sh tests/fm-watch-triage.test.sh
+```
+
+`test_recovered_panes_outlive_watcher_timeout_owner` covers successful tmux and Herdr recovery with synthetic fresh servers and panes, under Perl and Bash timeout mechanisms and both ambient and allowlisted launch environments.
+It checks that persistent launches clear ownership and worker startup completes after watcher exit, including a destination pane with stale ownership values.
+The tmux cases also check that transient spawn queries retain watcher ownership.
+Refresh that separate regression with:
+
+```sh
+FM_TEST_ONLY=test_recovered_panes_outlive_watcher_timeout_owner bash bin/fm-test-run.sh tests/fm-watch-triage.test.sh
+```
+
+Selected stalled-query and timeout assertion output:
+
+```text
+ok - TERM stops inbox blocked in tmux list-windows and runs cleanup
+ok - TERM stops inbox blocked in tmux display-message and runs cleanup
+ok - TERM stops pause-new blocked in tmux list-windows and runs cleanup
+ok - TERM stops pause-new blocked in tmux display-message and runs cleanup
+ok - TERM stops pause-cached blocked in tmux list-windows and runs cleanup
+ok - TERM stops pause-cached blocked in tmux display-message and runs cleanup
+ok - TERM stops wedge blocked in tmux list-windows and runs cleanup
+ok - TERM stops wedge blocked in tmux display-message and runs cleanup
+ok - TERM stops secondmate blocked in tmux list-windows and runs cleanup
+ok - TERM stops secondmate blocked in tmux display-message and runs cleanup
+ok - TERM stops secondmate blocked in tmux composer-cursor and runs cleanup
+ok - TERM stops secondmate blocked in tmux composer-capture and runs cleanup
+ok - TERM stops crew-plain blocked in tmux crew-readable and runs cleanup
+ok - TERM stops crew-paused blocked in tmux crew-capture and runs cleanup
+ok - TERM stops crew-churn blocked in tmux crew-capture and runs cleanup
+ok - TERM stops busy-rovo blocked in tmux recapture and runs cleanup
+ok - TERM stops inbox-retry blocked in tmux submit-read and runs cleanup
+ok - TERM stops secondmate-close blocked in tmux close-inventory and runs cleanup
+ok - TERM stops pending-delivery blocked in tmux composer-cursor and runs cleanup
+ok - liveness query boundary preserves successful and failed results and bookkeeping
+ok - TERM reaps perl watcher timeout groups during spawn
+ok - TERM reaps perl watcher timeout groups during inactive-query
+ok - TERM reaps perl watcher timeout groups during inactive-nm
+ok - TERM reaps bash watcher timeout groups during spawn
+ok - TERM reaps bash watcher timeout groups during inactive-query
+ok - TERM reaps bash watcher timeout groups during inactive-nm
+ok - watcher-owned timeout boundaries preserve output, failure, and deadline status
+```
+
 ### Agent liveness name sources
 
 The earlier record that every harness is observed under its own `#{pane_current_command}` no longer holds and has been replaced by the per-harness evidence below.

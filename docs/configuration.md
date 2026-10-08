@@ -1086,7 +1086,8 @@ The text is static and never executed or expanded; secondmate charters never tak
 ## Worker launch environment (config/launch-env-allowlist)
 
 The optional local, gitignored `config/launch-env-allowlist` limits the ambient environment passed to newly launched workers, scouts, and secondmates, including relaunches.
-With no file, ambient inheritance remains unfiltered: selected harness markers are cleared, while the provider, long-lived terminal daemon, and shell initialization determine which other variables reach the worker.
+With no file, ambient inheritance remains unfiltered apart from Firstmate's launch-boundary exclusions: selected harness markers and transient watcher timeout ownership are cleared, while the provider, long-lived terminal daemon, and shell initialization determine which other variables reach the worker.
+The [`fm-spawn.sh` launch-environment contract](../bin/fm-spawn.sh) owns the exclusions, which apply even when their names appear in an allowlist.
 
 Do not assume every worker inherits the invoking Firstmate process's current environment.
 The file is inherited into secondmate homes through the [primary-authoritative configuration contract](../.agents/skills/secondmate-provisioning/SKILL.md).

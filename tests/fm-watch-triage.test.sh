@@ -5226,6 +5226,580 @@ test_term_stops_a_watcher_blocked_inside_a_poll() {
   pass "TERM stops a watcher blocked inside a poll and still runs its cleanup"
 }
 
+# Agent reads reached through both a direct poll helper and a nested pause
+# classifier must honor TERM just like pane capture. The stub marks entry before
+# stalling, so a stop assertion cannot pass without exercising the named query.
+test_term_stops_a_watcher_blocked_in_tmux_queries() {
+  local scenario query dir state fakebin out window key capture pid i rc stalled verdict query_pid query_live queries
+  local crew_reader liveness current cfg corr capture_nth readable_nth
+  for scenario in inbox pause-new pause-recheck wedge secondmate \
+    crew-plain crew-paused crew-signal crew-terminal crew-churn \
+    busy-grok busy-rovo busy-agy inbox-ring inbox-retry secondmate-ring \
+    secondmate-probe secondmate-close pending-observe pending-delivery; do
+    queries='list-windows display-message'
+    case "$scenario" in
+      secondmate) queries="$queries composer-cursor composer-capture" ;;
+      crew-*|pause-*) queries='crew-readable crew-capture' ;;
+      busy-*) queries=recapture ;;
+      inbox-ring|inbox-retry) queries='ring-agent composer-cursor submit-read' ;;
+      secondmate-ring) queries=ring-agent ;;
+      secondmate-close) queries=close-inventory ;;
+      pending-observe) queries='capture-pane' ;;
+      pending-delivery) queries=composer-cursor ;;
+    esac
+    for query in $queries; do
+      dir=$(make_case "term-$scenario-$query"); state="$dir/state"; fakebin="$dir/fakebin"
+      out="$dir/watch.out"; window="test:fm-stalled"; key=test_fm-stalled
+      # Keep detached summary probes from competing for this query marker.
+      touch "$state/home-summary.json"
+      mkdir -p "$state/.home-summary-refresh.lock"
+      printf '%s\n' "$$" > "$state/.home-summary-refresh.lock/pid"
+      capture="$dir/pane.txt"; stalled="$dir/query-entered"
+      printf 'idle worker\n' > "$capture"
+      printf 'window=%s\nkind=ship\nharness=grok\n' "$window" > "$state/stalled.meta"
+      verdict='state: unknown · source: none · no current-state evidence'
+      crew_reader="$fakebin/fm-crew-state.sh"
+      liveness=99999999
+      current=grok
+      capture_nth=2
+      readable_nth=1
+      cfg="$dir/config"
+      mkdir -p "$cfg"
+      case "$scenario" in
+        inbox|inbox-ring|inbox-retry)
+          printf 'working: implementing\n' > "$state/stalled.status"
+          mkdir -p "$state/stalled.inbox"
+          printf 'an unread steer\n' > "$state/stalled.inbox/001.msg"
+          set_mtime "$(( $(date +%s) - 500 ))" "$state/stalled.inbox/001.msg"
+          ;;
+        pause-*)
+          printf 'paused: awaiting external work\n' > "$state/stalled.status"
+          # Pause admission uses crew state instead of endpoint liveness.
+          # Exercise the remaining crew-state read on fresh admission and
+          # after an existing admission's bounded cache has expired.
+          if [ "$scenario" = pause-recheck ]; then
+            touch "$state/.paused-$key" "$state/.paused-rechecked-$key"
+            set_mtime "$(( $(date +%s) - 500 ))" "$state/.paused-rechecked-$key"
+          fi
+          ;;
+        wedge)
+          verdict='state: working · source: run-step · validating'
+          printf 'working: implementing\n' > "$state/stalled.status"
+          printf '%s' "$(hash_text "$(cat "$capture")")" > "$state/.hash-$key"
+          printf '1\n' > "$state/.count-$key"
+          printf '%s' "$(hash_text "$(cat "$capture")")" > "$state/.stale-$key"
+          printf '%s\n' "$(( $(date +%s) - 500 ))" > "$state/.stale-since-$key"
+          ;;
+      esac
+      case "$scenario" in
+        crew-*|pause-*)
+          mkdir -p "$dir/worker"
+          printf 'worktree=%s\n' "$dir/worker" >> "$state/stalled.meta"
+          printf 'working: implementing\n' > "$state/stalled.status"
+          crew_reader="$ROOT/bin/fm-crew-state.sh"
+          printf '#!/usr/bin/env bash\nexit 0\n' > "$fakebin/no-mistakes"
+          chmod +x "$fakebin/no-mistakes"
+          case "$scenario" in
+            crew-paused|pause-*) printf 'paused: awaiting external work\n' > "$state/stalled.status" ;;
+            crew-terminal) printf 'blocked: awaiting access\n' > "$state/stalled.status" ;;
+            crew-signal) touch "$state/stalled.turn-ended"; capture_nth=1 ;;
+            crew-churn) touch "$state/stalled.turn-ended"; readable_nth=2 ;;
+          esac
+          [ "$scenario" != crew-churn ] || touch "$cfg/turnend-churn-absorb"
+          ;;
+        busy-*) printf 'window=%s\nkind=ship\nharness=%s\n' "$window" "${scenario#busy-}" > "$state/stalled.meta" ;;
+        inbox-retry)
+          printf 'schema=fm-task-inbox.v1\ndelivery=fire-and-forget\n--\nan unread steer\n' > "$state/stalled.inbox/001.msg"
+          printf '001.msg\n' > "$state/stalled.inbox/.retry-ring"
+          set_mtime "$(( $(date +%s) - 500 ))" "$state/stalled.inbox/.retry-ring"
+          touch "$cfg/wait-no-turns"
+          ;;
+      esac
+      case "$scenario" in
+        secondmate|secondmate-ring|secondmate-probe|secondmate-close|pending-*)
+          mkdir -p "$dir/child/state"
+          printf 'stalled\n' > "$dir/child/.fm-secondmate-home"
+          printf '100\t7\tcheck\trouted\tcheck: routed row\n' > "$dir/child/state/.wake-queue"
+          printf '%s\t100-7\n' "$(( $(date +%s) - 500 ))" > "$state/.secondmate-wake-progress-stalled"
+          printf 'window=%s\nkind=secondmate\nharness=grok\nhome=%s\n' "$window" "$dir/child" > "$state/stalled.meta"
+          printf 'working: supervision\n' > "$state/stalled.status"
+          case "$scenario" in
+            secondmate-probe|secondmate-close)
+              liveness=1
+              [ "$scenario" != secondmate-close ] || current=zsh
+              ;;
+            pending-*)
+              rm -f "$dir/child/state/.wake-queue"
+              corr=$(bash -c '
+                . "$1/bin/fm-pending-reply-lib.sh"
+                corr=$(fm_pending_reply_create "$2" "$2/state" stalled "report progress")
+                fm_pending_reply_mark_delivered "$2/state" "$corr" 100
+                [ "$3" != pending-delivery ] || FM_PENDING_REPLY_NOW=100 fm_pending_reply_mark_turn_completed "$2/state" "$corr" request
+                printf "%s" "$corr"
+              ' _ "$ROOT" "$dir" "$scenario")
+              [ -n "$corr" ] || fail "could not create pending reply"
+              ;;
+          esac
+          ;;
+      esac
+      printf '%s' "$(hash_text "$(cat "$capture")")" > "$state/.hash-$key"
+      printf '1\n' > "$state/.count-$key"
+      prime_status_seen "$state" "$state/stalled.status"
+      mv "$fakebin/tmux" "$fakebin/tmux-fast"
+      cat > "$fakebin/tmux" <<'SH'
+#!/usr/bin/env bash
+target=
+previous=
+for arg in "$@"; do
+  [ "$previous" != -t ] || target=$arg
+  previous=$arg
+done
+stall=0
+count_file="${FM_STALLED_MARKER}.$1.count"
+count=$(cat "$count_file" 2>/dev/null || echo 0)
+case "$1" in
+  list-windows|capture-pane)
+    count=$((count + 1))
+    printf '%s\n' "$count" > "$count_file"
+    ;;
+esac
+case "$*" in
+  *'#{pane_id}')
+    count_file="${FM_STALLED_MARKER}.readable.count"
+    count=$(cat "$count_file" 2>/dev/null || echo 0)
+    count=$((count + 1))
+    printf '%s\n' "$count" > "$count_file"
+    ;;
+esac
+case "$FM_STALLED_QUERY:$*" in
+  composer-cursor:*cursor_y*|composer-capture:*capture-pane*' -e '*) stall=1 ;;
+  crew-readable:*display-message*'#{pane_id}') [ "$count" -ne "$FM_STALLED_READABLE_NTH" ] || stall=1 ;;
+  crew-capture:capture-pane*) [ "$count" -ne "$FM_STALLED_CAPTURE_NTH" ] || stall=1 ;;
+  recapture:capture-pane*) [ "$count" -lt 2 ] || stall=1 ;;
+  submit-read:capture-pane*) [ "$count" -lt 3 ] || stall=1 ;;
+  ring-agent:list-windows*) [ "$count" -lt 2 ] || stall=1 ;;
+  close-inventory:list-windows*' -t =test '*) stall=1 ;;
+esac
+[ "$1" != "$FM_STALLED_QUERY" ] || stall=1
+if [ "$stall" -eq 1 ] && [ ! -s "$FM_STALLED_MARKER" ] && { [ "$target" = test ] || [ "$target" = =test ] || [ "$target" = test:fm-stalled ]; }; then
+  printf 'query=%s\n' "$*" > "${FM_STALLED_MARKER}.owner"
+  ancestor=$$
+  for level in 1 2 3 4 5 6; do
+    ps -o pid=,ppid=,pgid=,command= -p "$ancestor" >> "${FM_STALLED_MARKER}.owner"
+    ancestor=$(ps -o ppid= -p "$ancestor" | tr -d '[:space:]')
+    [ -n "$ancestor" ] || break
+  done
+  printf '%s\n' "$$" > "$FM_STALLED_MARKER"
+  exec sleep 60
+fi
+# Allow the composer capture case to advance past its cursor read.
+case "$*" in
+  *cursor_y*) printf '0\n'; exit 0 ;;
+  *'#{pane_id}') printf '%%1\n'; exit 0 ;;
+esac
+if [ "$FM_STALLED_QUERY" = recapture ] && [ "$1" = capture-pane ]; then
+  exit 0
+fi
+exec "${0%/*}/tmux-fast" "$@"
+SH
+      chmod +x "$fakebin/tmux"
+      FM_STALLED_QUERY="$query" FM_STALLED_MARKER="$stalled" \
+        FM_STALLED_CAPTURE_NTH="$capture_nth" FM_STALLED_READABLE_NTH="$readable_nth" \
+        FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture" FM_FAKE_TMUX_CURRENT_COMMAND="$current" \
+        FM_FAKE_CREW_STATE="$verdict" \
+        watch_bg "$state" "$fakebin" "$out" env FM_HOME="$dir" FM_CONFIG_OVERRIDE="$cfg" \
+          FM_CREW_STATE_BIN="$crew_reader" FM_SECONDMATE_LIVENESS_SECS="$liveness" \
+          FM_PENDING_REPLY_NOW=10000 FM_STALE_ESCALATE_SECS=240 FM_SECONDMATE_WAKE_STALL_SECS=1
+      pid=$!
+      i=0
+      while [ ! -s "$stalled" ] && [ "$i" -lt 300 ]; do
+        is_live_non_zombie "$pid" || break
+        sleep 0.1
+        i=$((i + 1))
+      done
+      if [ ! -s "$stalled" ] || ! is_live_non_zombie "$pid"; then
+        reap "$pid"
+        fail "$scenario never entered its stalled $query: $(cat "$out")"
+      fi
+      kill "$pid" 2>/dev/null || true
+      wait_for_exit "$pid" 100
+      rc=$?
+      query_pid=$(cat "$stalled")
+      query_live=0
+      is_live_non_zombie "$query_pid" && query_live=1
+      # Release the synthetic stall even on a regression failure.
+      kill "$query_pid" 2>/dev/null || true
+      [ "$rc" -ne 124 ] || fail "TERM did not stop $scenario blocked in $query"
+      [ "$query_live" -eq 0 ] || fail "$scenario left its stalled $query running after TERM: $(cat "${stalled}.owner") $(cat "$out")"
+      [ ! -e "$state/.watch.lock" ] || fail "$scenario retained its singleton lock after TERM"
+      [ -z "$(find "$state" -name '.fm-capture-output.*' -print)" ] \
+        || fail "$scenario retained its in-flight query output after TERM"
+      ack_stopped_cycle "$state" || fail "$scenario stop record could not be acknowledged"
+      pass "TERM stops $scenario blocked in tmux $query and runs cleanup"
+    done
+  done
+
+  test_watcher_liveness_query_results
+}
+
+test_term_cancels_watcher_owned_timeouts() {
+  local mechanism scenario dir home state fakebin out marker capture pid i rc owned command_seen runner_seen remaining
+  command -v perl >/dev/null 2>&1 || fail "watcher timeout regression requires Perl"
+  for mechanism in perl bash; do
+    for scenario in spawn inactive-query inactive-nm; do
+      dir=$(make_case "term-timeout-$mechanism-$scenario")
+      home="$dir/home"; state="$home/state"; fakebin="$dir/fakebin"
+      mkdir -p "$state" "$home/config" "$dir/code"
+      fm_test_track_watcher_state "$state"
+      ln -s "$ROOT/bin" "$dir/code/bin"
+      git -C "$dir/code" init -q -b main
+      out="$dir/watch.out"; marker="$dir/timed-query"; capture="$dir/pane.txt"
+      printf 'idle worker\n' > "$capture"
+      touch "$state/home-summary.json"
+      mkdir -p "$state/.home-summary-refresh.lock"
+      printf '%s\n' "$$" > "$state/.home-summary-refresh.lock/pid"
+      if [ "$scenario" = spawn ]; then
+        mkdir -p "$dir/child/bin" "$dir/child/data" "$dir/child/state" "$dir/child/config" "$dir/child/projects"
+        git -C "$dir/child" init -q -b main
+        ln -s "$ROOT/AGENTS.md" "$dir/child/AGENTS.md"
+        printf 'stalled\n' > "$dir/child/.fm-secondmate-home"
+        printf 'supervise this disposable home\n' > "$dir/child/data/charter.md"
+        printf 'codex\n' > "$home/config/crew-harness"
+        printf 'window=test:fm-stalled\nkind=secondmate\nharness=codex\nhome=%s\n' "$dir/child" > "$state/stalled.meta"
+      else
+        mkdir -p "$dir/worker"
+        git -C "$dir/worker" init -q -b main
+        printf 'window=test:fm-stalled\nkind=ship\nharness=grok\nworktree=%s\n' "$dir/worker" > "$state/stalled.meta"
+      fi
+      printf 'working: implementing\n' > "$state/stalled.status"
+      prime_status_seen "$state" "$state/stalled.status"
+      set_mtime "$(( $(date +%s) - 2000 ))" "$state/stalled.meta"
+      set_mtime "$(( $(date +%s) - 2000 ))" "$state/stalled.status"
+      cat > "$fakebin/stall" <<'SH'
+#!/usr/bin/env bash
+trap '' TERM
+parent=$$
+watcher=$(cat "$FM_TIMED_MARKER.watcher")
+: > "$FM_TIMED_MARKER.pids"
+: > "$FM_TIMED_MARKER.commands"
+i=0
+while [ -n "$parent" ] && [ "$parent" != "$watcher" ] && [ "$parent" -gt 1 ] && [ "$i" -lt 20 ]; do
+  printf '%s\n' "$parent" >> "$FM_TIMED_MARKER.pids"
+  ps -p "$parent" -o command= >> "$FM_TIMED_MARKER.commands"
+  parent=$(ps -p "$parent" -o ppid= | tr -d '[:space:]')
+  i=$((i + 1))
+done
+printf '%s\n' "$$" > "$FM_TIMED_MARKER"
+exec sleep 60
+SH
+      cat > "$fakebin/tmux" <<'SH'
+#!/usr/bin/env bash
+case "$1" in
+  has-session)
+    [ "$FM_TIMED_SCENARIO" != spawn ] || exec "${0%/*}/stall"
+    exit 0 ;;
+  list-windows)
+    [ -e "$FM_TIMED_MARKER.killed" ] || printf 'fm-stalled\n'
+    exit 0 ;;
+  kill-window) : > "$FM_TIMED_MARKER.killed"; exit 0 ;;
+  display-message)
+    case "$*" in
+      *pane_id*)
+        [ "$FM_TIMED_SCENARIO" != inactive-query ] || exec "${0%/*}/stall"
+        printf '%%1\n' ;;
+      *pane_current_command*) printf 'zsh\n' ;;
+      *cursor_y*) printf '0\n' ;;
+    esac
+    exit 0 ;;
+  capture-pane) cat "$FM_FAKE_TMUX_CAPTURE"; exit 0 ;;
+esac
+exit 0
+SH
+      cat > "$fakebin/no-mistakes" <<'SH'
+#!/usr/bin/env bash
+[ "$FM_TIMED_SCENARIO" != inactive-nm ] || exec "${0%/*}/stall"
+exit 0
+SH
+      chmod +x "$fakebin/stall" "$fakebin/tmux" "$fakebin/no-mistakes"
+      FM_TIMED_MARKER="$marker" FM_TIMED_SCENARIO="$scenario" FM_FAKE_TMUX_CAPTURE="$capture" \
+        watch_bg "$state" "$fakebin" "$out" env FM_HOME="$home" FM_ROOT_OVERRIDE="$dir/code" \
+          TMUX='' FM_BACKEND=tmux FM_SKIP_SECONDMATE_INHERIT=1 \
+          FM_TIMEOUT_MECHANISM_OVERRIDE="$([ "$mechanism" != bash ] || printf bash)" \
+          FM_SECONDMATE_LIVENESS_SECS=1 FM_SECONDMATE_LIVENESS_TIMEOUT=60 \
+          FM_INACTIVE_RECONCILE_BUDGET_SECS=30 FM_CREW_STATE_NM_TIMEOUT=60 \
+          FM_INACTIVE_CREW_STATE_BIN="$ROOT/bin/fm-crew-state.sh"
+      pid=$!
+      printf '%s\n' "$pid" > "$marker.watcher"
+      i=0
+      while [ ! -s "$marker" ] && [ "$i" -lt 300 ]; do
+        is_live_non_zombie "$pid" || break
+        sleep 0.1
+        i=$((i + 1))
+      done
+      if [ ! -s "$marker" ] || ! is_live_non_zombie "$pid"; then
+        reap "$pid"
+        fail "$mechanism $scenario never entered the timed query: $(cat "$out")"
+      fi
+      command_seen=0; runner_seen=0
+      while IFS= read -r owned; do
+        case "$owned" in
+          *fm-spawn.sh*) [ "$scenario" != spawn ] || command_seen=1 ;;
+          *fm-inactive-reconcile.sh*'_scan-locked'*) [ "$scenario" = spawn ] || command_seen=1 ;;
+        esac
+        case "$owned" in *perl*) runner_seen=1 ;; esac
+      done < "$marker.commands"
+      kill "$pid" 2>/dev/null || true
+      wait_for_exit "$pid" 100
+      rc=$?
+      i=0
+      while [ "$i" -lt 30 ]; do
+        remaining=
+        while IFS= read -r owned; do
+          is_live_non_zombie "$owned" && remaining="$remaining $owned"
+        done < "$marker.pids"
+        [ -n "$remaining" ] || break
+        sleep 0.1
+        i=$((i + 1))
+      done
+      while IFS= read -r owned; do
+        kill -KILL "$owned" 2>/dev/null || true
+      done < "$marker.pids"
+      [ "$command_seen" -eq 1 ] || fail "$scenario did not exercise its real timed command: $(cat "$marker.commands")"
+      [ "$mechanism" != perl ] || [ "$runner_seen" -eq 1 ] || fail "$scenario did not exercise the Perl fallback"
+      [ "$mechanism" != bash ] || [ "$runner_seen" -eq 0 ] || fail "$scenario bypassed the Bash fallback"
+      [ "$rc" -ne 124 ] || fail "TERM did not stop $mechanism $scenario watcher"
+      [ -z "$remaining" ] || fail "$mechanism $scenario left timeout descendants alive:$remaining $(cat "$marker.commands")"
+      [ ! -e "$state/.watch.lock" ] || fail "$scenario retained the watcher lock"
+      [ -z "$(find "$state" -name '.fm-capture-output.*' -print)" ] || fail "$scenario retained query output"
+      if [ "$scenario" = spawn ]; then
+        assert_grep 'attempt' "$state/.secondmate-relaunch-stalled" "timed spawn lost its attempt ledger"
+      else
+        [ -s "$state/.inactive-outcome-reconcile" ] || fail "inactive scan lost its cadence marker"
+        [ -d "$state/terminal-outcomes" ] || fail "inactive scan did not initialize receipts"
+      fi
+      ack_stopped_cycle "$state" || fail "$scenario stop record could not be acknowledged"
+      pass "TERM reaps $mechanism watcher timeout groups during $scenario"
+    done
+  done
+  test_watcher_owned_timeout_results
+}
+
+test_recovered_panes_outlive_watcher_timeout_owner() {
+  local backend mechanism allowlist dir home state fakebin out pid rc startup pollution
+  for backend in tmux herdr; do
+    for mechanism in perl bash; do
+      for allowlist in ambient filtered; do
+        dir=$(make_case "recovery-owner-$backend-$mechanism-$allowlist")
+        home="$dir/home"; state="$home/state"; fakebin="$dir/fakebin"; out="$dir/watch.out"
+        mkdir -p "$state" "$home/config" "$dir/code" "$dir/child/bin" "$dir/child/data" "$dir/child/state" "$dir/child/config" "$dir/child/projects"
+        fm_test_track_watcher_state "$state"
+        ln -s "$ROOT/bin" "$dir/code/bin"
+        git -C "$dir/code" init -q -b main
+        git -C "$dir/child" init -q -b main
+        ln -s "$ROOT/AGENTS.md" "$dir/child/AGENTS.md"
+        printf 'recovered\n' > "$dir/child/.fm-secondmate-home"
+        printf 'supervise this disposable home\n' > "$dir/child/data/charter.md"
+        printf 'codex\n' > "$home/config/crew-harness"
+        printf 'codex\n' > "$home/config/secondmate-harness"
+        printf 'off\n' > "$home/config/herdr-presentation-spaces"
+        if [ "$allowlist" = filtered ]; then
+          printf 'FM_TIMEOUT_OWNER_PID\nFM_EXEC_TIMED_OWNER_PID\nFM_RECOVERY_ROOT\nFM_RECOVERY_SENTINEL\n' > "$home/config/launch-env-allowlist"
+        fi
+        printf 'window=firstmate:fm-recovered\nkind=secondmate\nharness=codex\nhome=%s\n' "$dir/child" > "$state/recovered.meta"
+        if [ "$backend" = herdr ]; then
+          printf 'backend=herdr\nherdr_session=owner-test\nherdr_pane_id=p1\n' >> "$state/recovered.meta"
+        fi
+        touch "$state/home-summary.json"
+        mkdir -p "$state/.home-summary-refresh.lock"
+        printf '%s\n' "$$" > "$state/.home-summary-refresh.lock/pid"
+        cat > "$fakebin/server-env" <<'SH'
+#!/usr/bin/env bash
+for name in FM_TIMEOUT_OWNER_PID FM_EXEC_TIMED_OWNER_PID FM_RECOVERY_SENTINEL; do
+  if value=$(printenv "$name"); then
+    printf 'export %s=%q\n' "$name" "$value"
+  fi
+done > "$FM_RECOVERY_DIR/server.env"
+touch "$FM_RECOVERY_DIR/server"
+SH
+        cat > "$fakebin/tmux" <<'SH'
+#!/usr/bin/env bash
+printf '%s\n' "tmux $*" >> "$FM_RECOVERY_DIR/commands"
+case "$1" in
+  has-session)
+    printf '%s\n' "${FM_TIMEOUT_OWNER_PID-unset}" > "$FM_RECOVERY_DIR/transient-owner"
+    [ -e "$FM_RECOVERY_DIR/server" ]; exit $? ;;
+  new-session) "${0%/*}/server-env" ;;
+  list-windows) [ ! -e "$FM_RECOVERY_DIR/pane" ] || printf 'fm-recovered\n' ;;
+  new-window)
+    printf '%s\n' "${FM_TIMEOUT_OWNER_PID-unset}|${FM_EXEC_TIMED_OWNER_PID-unset}" > "$FM_RECOVERY_DIR/pane-client.env"
+    touch "$FM_RECOVERY_DIR/pane"
+    printf '@1\n' ;;
+  display-message)
+    case "$*" in
+      *pane_current_path*) printf '%s/child\n' "$FM_RECOVERY_DIR" ;;
+      *pane_current_command*) printf 'bash\n' ;;
+      *pane_id*) printf '%%1\n' ;;
+      *) printf 'firstmate\n' ;;
+    esac ;;
+  send-keys)
+    prev=
+    for arg in "$@"; do
+      [ "$prev" != -l ] || printf '%s\n' "$arg" > "$FM_RECOVERY_DIR/launch"
+      prev=$arg
+    done ;;
+esac
+exit 0
+SH
+        cat > "$fakebin/herdr" <<'SH'
+#!/usr/bin/env bash
+case "$1 $2" in
+  'status --json')
+    running=false
+    [ ! -e "$FM_RECOVERY_DIR/server" ] || running=true
+    printf '{"client":{"version":"0.7.1","protocol":14},"server":{"running":%s,"compatible":true}}\n' "$running" ;;
+  'server --session') "${0%/*}/server-env" ;;
+  'workspace list')
+    if [ -e "$FM_RECOVERY_DIR/workspace" ]; then
+      printf '{"result":{"workspaces":[{"workspace_id":"w1","label":"2ndmate-recovered"}]}}\n'
+    else
+      printf '{"result":{"workspaces":[]}}\n'
+    fi ;;
+  'workspace create')
+    touch "$FM_RECOVERY_DIR/workspace"
+    printf '{"result":{"workspace":{"workspace_id":"w1"}}}\n' ;;
+  'tab list') printf '{"result":{"tabs":[]}}\n' ;;
+  'tab create')
+    touch "$FM_RECOVERY_DIR/pane"
+    printf '{"result":{"tab":{"tab_id":"t1"},"root_pane":{"pane_id":"p1"}}}\n' ;;
+  'pane get') printf '{"error":{"code":"pane_not_found"}}\n'; exit 1 ;;
+  'pane send-text')
+    shift 3
+    [ "${1:-}" != -- ] || shift
+    case "${1:-}" in '. '*) printf '%s\n' "$1" > "$FM_RECOVERY_DIR/launch" ;; esac ;;
+esac
+exit 0
+SH
+        cat > "$fakebin/codex" <<'SH'
+#!/usr/bin/env bash
+[ "${FM_TIMEOUT_OWNER_PID+x}" != x ] && [ "${FM_EXEC_TIMED_OWNER_PID+x}" != x ] || exit 1
+[ "$FM_RECOVERY_SENTINEL" = kept ] || exit 1
+. "$FM_RECOVERY_ROOT/bin/fm-timeout-lib.sh"
+fm_run_timed 3 bash -c 'sleep 0.2; printf startup-complete'
+SH
+        printf '#!/usr/bin/env bash\nexit 0\n' > "$fakebin/treehouse"
+        chmod +x "$fakebin/server-env" "$fakebin/tmux" "$fakebin/herdr" "$fakebin/codex" "$fakebin/treehouse"
+        FM_RECOVERY_DIR="$dir" FM_RECOVERY_ROOT="$ROOT" FM_RECOVERY_SENTINEL=kept \
+          watch_bg "$state" "$fakebin" "$out" env FM_HOME="$home" FM_ROOT_OVERRIDE="$dir/code" \
+            TMUX='' HERDR_PANE_ID='' HERDR_SESSION=owner-test FM_BACKEND="$backend" \
+            FM_HOME_SUMMARY_IF_IDLE=1 FM_SKIP_SECONDMATE_INHERIT=1 FM_SECONDMATE_LIVENESS_SECS=1 FM_SECONDMATE_LIVENESS_TIMEOUT=30 \
+            FM_TIMEOUT_MECHANISM_OVERRIDE="$([ "$mechanism" != bash ] || printf bash)"
+        pid=$!
+        wait_for_exit "$pid" 300
+        rc=$?
+        [ "$rc" = 0 ] || { reap "$pid"; fail "$backend $mechanism recovery failed: $(cat "$out")"; }
+        assert_grep 'auto-relaunched' "$out" "$backend recovery did not succeed: $(cat "$out") $(cat "$dir/commands" 2>/dev/null)"
+        [ -e "$dir/server" ] && [ -e "$dir/pane" ] && [ -s "$dir/launch" ] || fail "$backend recovery did not create a server, pane, and launch"
+        if [ "$backend" = tmux ]; then
+          [ "$(cat "$dir/transient-owner")" = "$pid" ] || fail "transient spawn lost watcher ownership"
+          [ "$(cat "$dir/pane-client.env")" = 'unset|unset' ] || fail "tmux pane creation inherited watcher ownership"
+        fi
+        for pollution in server existing-pane; do
+          # shellcheck disable=SC2016 # The quoted bash -c script expands variables in the child shell.
+          startup=$(env -i HOME="$dir/child" PATH="$fakebin:$PATH" FM_RECOVERY_ROOT="$ROOT" \
+            FM_TIMEOUT_MECHANISM_OVERRIDE="$([ "$mechanism" != bash ] || printf bash)" \
+            bash -c '
+              . "$1/server.env"
+              [ "${FM_TIMEOUT_OWNER_PID+x}" != x ] && [ "${FM_EXEC_TIMED_OWNER_PID+x}" != x ] || exit 1
+              if [ "$2" = existing-pane ]; then
+                export FM_TIMEOUT_OWNER_PID="$3" FM_EXEC_TIMED_OWNER_PID="$3"
+              fi
+              eval "$(cat "$1/launch")"
+              [ "${FM_TIMEOUT_OWNER_PID+x}" != x ] && [ "${FM_EXEC_TIMED_OWNER_PID+x}" != x ]
+            ' _ "$dir" "$pollution" "$pid") || fail "$backend $mechanism $allowlist $pollution startup retained dead watcher ownership"
+          [ "$startup" = startup-complete ] || fail "$backend worker startup did not complete after watcher exit"
+        done
+        pass "$backend $mechanism $allowlist recovered server and pane startup outlive the watcher"
+      done
+    done
+  done
+}
+
+test_watcher_owned_timeout_results() {
+  local dir mechanism
+  dir=$(make_case owned-timeout-results)
+  for mechanism in perl bash; do
+    FM_HOME="$dir" FM_STATE_OVERRIDE="$dir/state" FM_ROOT_OVERRIDE="$dir" \
+      FM_TIMEOUT_MECHANISM_OVERRIDE="$([ "$mechanism" != bash ] || printf bash)" bash -c '
+        . "$1/bin/fm-watch.sh"
+        watcher_query fm_run_timed 05 bash -c "printf through; exit 7"
+        rc=$?
+        [ "$rc" = 7 ] && [ "$WATCHER_QUERY" = through ] || exit 1
+        watcher_query fm_run_timed 1 bash -c "trap \"\" TERM; exec sleep 60"
+        [ "$?" = 124 ] || exit 1
+        watcher_query fm_run_timed 1 bash -c ". \"\$1/bin/fm-timeout-lib.sh\"; fm_run_timed 60 bash -c \"echo \\\$\\\$ > \\\"\\\$1\\\"; trap \\\"\\\" TERM; exec sleep 60\" _ \"\$2/nested.pid\"" _ "$1" "$2"
+        [ "$?" = 124 ] && [ -s "$2/nested.pid" ] || exit 1
+        nested_pid=$(cat "$2/nested.pid")
+        i=0
+        while kill -0 "$nested_pid" 2>/dev/null && [ "$i" -lt 30 ]; do
+          sleep 0.1
+          i=$((i + 1))
+        done
+        if kill -0 "$nested_pid" 2>/dev/null; then
+          kill -KILL "$nested_pid" 2>/dev/null || true
+          exit 1
+        fi
+        . "$1/bin/fm-nm-run-lib.sh"
+        watcher_query fm_nm_bounded "$2" 5 bash -c "printf through; exit 7"
+        rc=$?
+        [ "$rc" = 7 ] && [ "$WATCHER_QUERY" = through ] || exit 1
+        export FM_TIMEOUT_OWNER_PID=$$
+        result=$(fm_nm_bounded "$2" 5 bash -c "read -r input; printf %s \"\$input\"; exit 7" <<< provided 2>&1)
+        rc=$?
+        [ "$rc" = 7 ] && [ "$result" = provided ] || exit 1
+      ' _ "$ROOT" "$dir" || fail "$mechanism watcher timeout lost completion or deadline status"
+  done
+  pass "watcher-owned timeout boundaries preserve output, failure, and deadline status"
+  test_watcher_liveness_query_results
+}
+
+test_watcher_liveness_query_results() {
+  local dir state fakebin TMP_ROOT
+  TMP_ROOT=$(fm_test_tmproot fm-watch-liveness-tests)
+  dir=$(make_case term-liveness-results); state="$dir/state"; fakebin="$dir/fakebin"
+  printf 'window=test:fm-stalled\nkind=secondmate\nharness=grok\n' > "$state/stalled.meta"
+  touch "$state/.secondmate-relaunch-bound-stalled"
+  printf '100\tattempt\n' > "$state/.secondmate-relaunch-stalled"
+  PATH="$fakebin:$PATH" FM_HOME="$dir" FM_STATE_OVERRIDE="$state" FM_ROOT_OVERRIDE="$dir" \
+    FM_FAKE_TMUX_WINDOW=test:fm-stalled FM_FAKE_TMUX_CURRENT_COMMAND=grok \
+    FM_SECONDMATE_LIVENESS_SECS=1 bash -c '
+      . "$1/bin/fm-watch.sh"
+      secondmate_liveness_tick || exit 1
+      [ "$FM_SM_LIVE_STATUS" = alive ] && [ "$FM_SM_LIVE_STATE" = alive ] || exit 1
+      [ "$FM_SM_LIVE_LINE" = "secondmate stalled already live (backend=tmux)" ] || exit 1
+      [ ! -e "$STATE/.secondmate-relaunch-bound-stalled" ] || exit 1
+      [ ! -e "$STATE/.secondmate-liveness-stalled.lock" ] || exit 1
+      export FM_FAKE_TMUX_CURRENT_COMMAND=zsh
+      watcher_liveness fm_secondmate_liveness_probe "$STATE/stalled.meta" stalled poll || exit 1
+      [ "$FM_SM_LIVE_STATUS" = relaunchable ] && [ "$FM_SM_LIVE_STATE" = dead ] || exit 1
+      [ "$FM_SM_LIVE_KILL" = 1 ] && [ "$FM_SM_LIVE_WHERE" = backend=tmux ] || exit 1
+      rm "$STATE/.secondmate-relaunch-stalled"
+      mkdir "$STATE/.secondmate-relaunch-stalled"
+      watcher_liveness fm_secondmate_liveness_relaunch "$STATE/stalled.meta" stalled 1 && exit 1
+      [ "$FM_SM_LIVE_STATUS" = skipped ] && [ "$FM_SM_LIVE_RC" = 1 ] || exit 1
+      [ -z "$FM_SM_LIVE_OUT" ] || exit 1
+      case "$FM_SM_LIVE_REASON" in
+        "relaunch ledger $STATE/.secondmate-relaunch-stalled is unreadable; endpoint left dead"|"relaunch ledger $STATE/.secondmate-relaunch-stalled is unwritable; endpoint left dead") ;;
+        *) exit 1 ;;
+      esac
+    ' _ "$ROOT" || fail "liveness query boundary lost results or bookkeeping"
+  pass "liveness query boundary preserves successful and failed results and bookkeeping"
+  test_turn_ended_provably_working_absorbed
+  test_turn_ended_not_working_surfaced
+  test_turn_ended_churning_pane_absorbed
+  test_nonterminal_stale_pause_transitions_reclassify_unchanged_hash
+  test_paused_authoritative_working_preserves_wedge_timer
+}
+
 # --- held downtime-marker lock must not wedge a TERM'd watcher -------------
 # fm-watch-triage-r1 flake (serial-1 CI): the EXIT cleanup publishes the
 # downtime marker under .watcher-down.lock through an unbounded acquire, so a
@@ -7345,6 +7919,9 @@ test_gone_report_rearms_when_the_endpoint_comes_back
 test_second_death_after_a_same_window_relaunch_reports_in_full
 test_identical_dead_display_of_a_successor_still_reports
 test_term_stops_a_watcher_blocked_inside_a_poll
+test_term_stops_a_watcher_blocked_in_tmux_queries
+test_term_cancels_watcher_owned_timeouts
+test_recovered_panes_outlive_watcher_timeout_owner
 test_term_stops_a_watcher_whose_cleanup_marker_lock_is_held
 test_cleanup_marker_lock_bound_is_decimal_with_zero_default
 test_busy_pane_below_turn_age_bound_is_absorbed

@@ -1237,6 +1237,8 @@ test_unknown_backend_state_uses_capture_fallback() {
       state="$home/state"
       sm_home="$home/sm"
       mkdir -p "$sm_home/state"
+      # This fixture override is scoped to the isolated subshell.
+      # shellcheck disable=SC2030
       export FM_PENDING_REPLY_GRACE_SECS=10
       # These fixture overrides are intentionally scoped to the isolated subshell.
       # shellcheck disable=SC2030,SC2031
@@ -1479,6 +1481,72 @@ test_tick_leaves_settled_records_alone() {
     || fail "the tick did not resolve the awaiting record from its correlated report"
   pass "the tick leaves settled records alone and still does the selected records' work"
 }
+test_remote_reposts_are_bounded_per_tick_and_refresh_beacon() (
+  local home state beat oldbeat corr sent=0 i
+  home=$(setup_parent remote-repost-budget)
+  state="$home/state"
+  beat="$state/.last-watcher-beat"
+  oldbeat="$home/oldbeat"
+  touch -t 200001010000 "$oldbeat"
+  touch -t 200001010000 "$beat"
+  # The fixture clock and send hook are intentionally scoped to this subshell.
+  # shellcheck disable=SC2030,SC2031
+  export FM_PENDING_REPLY_NOW=10150 FM_PENDING_REPLY_GRACE_SECS=0
+  # shellcheck disable=SC2030,SC2031
+  export FM_PENDING_REPLY_SEND_HOOK=remote_recovery_hook
+  fm_write_secondmate_meta "$state/mate.meta" "$home/mate" "sess:fm-mate"
+  printf 'remote_host=example.test\n' >> "$state/mate.meta"
+  fm_pending_reply_remote_observation() { printf 'idle'; }
+  fm_pending_reply_remote_channel_epoch() { printf '10150'; }
+  # Invoked indirectly through FM_PENDING_REPLY_SEND_HOOK.
+  # shellcheck disable=SC2329
+  remote_recovery_hook() {
+    [ "$beat" -nt "$oldbeat" ] || fail "watcher beacon was stale before a remote repost"
+    sent=$((sent + 1))
+  }
+  for i in 1 2 3; do
+    corr=$(fm_pending_reply_create "$home" "$state" mate "remote request $i")
+    fm_pending_reply_mark_delivered "$state" "$corr"
+    fm_pending_reply_mark_turn_completed "$state" "$corr" request
+  done
+  fm_pending_reply_tick "$state" "$beat"
+  [ "$sent" = 1 ] || fail "one watcher tick sent $sent remote reposts instead of one"
+  touch -t 200001010000 "$beat"
+  fm_pending_reply_tick "$state" "$beat"
+  [ "$sent" = 2 ] || fail "deferred remote repost was not sent on the next tick"
+  [ "$beat" -nt "$oldbeat" ] || fail "watcher beacon was not refreshed after reconciliation"
+  pass "watcher refreshes its beacon and sends at most one remote repost per tick"
+)
+
+test_beacon_refreshes_between_selected_remote_records() (
+  local home state beat oldbeat seen stale corr task
+  home=$(setup_parent selected-remote-beacon)
+  state="$home/state"
+  beat="$state/.last-watcher-beat"
+  oldbeat="$home/oldbeat"
+  seen="$home/first-observation"
+  stale="$home/stale-observation"
+  touch -t 200001010000 "$oldbeat" "$beat"
+  fm_pending_reply_remote_observation() {
+    if [ -e "$seen" ]; then
+      [ "$beat" -nt "$oldbeat" ] || : > "$stale"
+    else
+      : > "$seen"
+      touch -t 200001010000 "$beat"
+    fi
+    printf 'busy'
+  }
+  for task in mate1 mate2; do
+    fm_write_secondmate_meta "$state/$task.meta" "$home/$task" "sess:fm-$task"
+    printf 'remote_host=example.test\n' >> "$state/$task.meta"
+    corr=$(fm_pending_reply_create "$home" "$state" "$task" "request to $task")
+    fm_pending_reply_mark_delivered "$state" "$corr"
+  done
+  fm_pending_reply_tick "$state" "$beat"
+  [ -e "$seen" ] || fail "remote observation was not reached"
+  [ ! -e "$stale" ] || fail "beacon was stale before the next selected remote record"
+  pass "watcher refreshes its beacon between selected remote records"
+)
 
 test_correlations_reuse_only_for_matching_open_task() {
   local dir fb log home state got corr1 corr2 corr3 rec
@@ -2104,6 +2172,8 @@ test_unknown_backend_state_uses_capture_fallback
 test_kimi_capture_fallback_uses_recorded_harness
 test_tick_skips_terminal_and_reuses_target_observation
 test_tick_leaves_settled_records_alone
+test_remote_reposts_are_bounded_per_tick_and_refresh_beacon
+test_beacon_refreshes_between_selected_remote_records
 test_correlations_reuse_only_for_matching_open_task
 test_tick_end_to_end_missed_then_escalate
 test_failed_send_discards_undelivered_expectation

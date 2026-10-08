@@ -131,6 +131,91 @@ test_signal_annotation_surfaces_every_unread_note_not_only_the_newest() {
   pass "a queued status signal annotates every unread note, not only the newest"
 }
 
+test_acknowledged_historical_annotation_does_not_replay() {
+  local dir state status out err ack seq generation
+  dir=$(make_case acknowledged-historical-annotation)
+  state="$dir/state"
+  status="$state/task-history.status"
+  out="$dir/drain.out"
+  err="$dir/drain.err"
+  prime_cursor "$state" "$status"
+
+  printf 'working: I CANNOT SAY IT TO THE WORKER\n' >> "$status"
+  append_wake "$state" signal task-history.turn-ended "signal: task-history.turn-ended" \
+    || fail "queueing the historical status signal failed"
+  FM_STATE_OVERRIDE="$state" "$DRAIN" > "$out" 2> "$err" \
+    || fail "first historical signal drain failed"
+  grep -F 'wake annotation: latest wake-EVENT observed at drain, not current state; historical / not necessarily the triggering event: task-history.status: working: I CANNOT SAY IT TO THE WORKER' "$out" >/dev/null \
+    || fail "the first historical signal did not annotate the status: $(cat "$out")"
+  ack=$(sed -n 's/^WAKE_ACK_REQUIRED: after handling completes run bin\/fm-wake-drain.sh --ack-through \([0-9][0-9]*\) --recovery-generation \([^ ]*\)$/\1 \2/p' "$err")
+  read -r seq generation <<< "$ack"
+  [ -n "$seq" ] && [ -n "$generation" ] || fail "drain printed no acknowledgement command: $(cat "$err")"
+  printf 'note: appended between presentation and acknowledgement\n' >> "$status"
+  FM_STATE_OVERRIDE="$state" "$DRAIN" --ack-through "$seq" --recovery-generation "$generation" >/dev/null \
+    || fail "acknowledging the first historical signal failed"
+
+  append_wake "$state" signal task-history.turn-ended "signal: task-history.turn-ended" \
+    || fail "queueing the next historical status signal failed"
+  FM_STATE_OVERRIDE="$state" "$DRAIN" > "$out" 2> "$err" \
+    || fail "second historical signal drain failed"
+  if grep -F 'wake annotation: ' "$out" | grep -F 'I CANNOT SAY IT TO THE WORKER' >/dev/null; then
+    fail "an acknowledged historical annotation replayed: $(cat "$out")"
+  fi
+  grep -F 'task-history note: appended between presentation and acknowledgement' "$out" >/dev/null \
+    || fail "the append between drain and ack did not surface on the next drain: $(cat "$out")"
+  FM_STATE_OVERRIDE="$state" "$DRAIN" > "$out" 2> "$err" \
+    || fail "third drain after the between-drain append failed"
+  if grep -F 'appended between presentation and acknowledgement' "$out" >/dev/null; then
+    fail "the between-drain append was presented twice: $(cat "$out")"
+  fi
+  pass "acknowledged annotations do not replay and an append before ack surfaces once"
+}
+
+test_append_during_annotation_output_remains_unread() {
+  local dir state status first second err pid i ack seq generation
+  dir=$(make_case append-during-annotation)
+  state="$dir/state"
+  status="$state/task-during.status"
+  first="$dir/first.out"
+  second="$dir/second.out"
+  err="$dir/first.err"
+  prime_cursor "$state" "$status"
+  printf 'working: before snapshot\n' >> "$status"
+  append_wake "$state" signal task-during.turn-ended "signal: task-during.turn-ended" \
+    || fail "queueing the pre-snapshot historical signal failed"
+
+  FM_STATE_OVERRIDE="$state" FM_WAKE_ENRICH_TEST_DELAY=2 "$DRAIN" > "$first" 2> "$err" &
+  pid=$!
+  i=0
+  while [ "$i" -lt 100 ] && ! grep -F 'WAKE_ACK_REQUIRED' "$err" >/dev/null 2>&1; do
+    sleep 0.05
+    i=$((i + 1))
+  done
+  [ "$i" -lt 100 ] || { kill "$pid" 2>/dev/null || true; fail "drain never reached its annotation phase"; }
+  sleep 0.3
+  printf 'working: appended while the drain produces output\n' >> "$status"
+  wait "$pid" || fail "drain failed after concurrent status append"
+  grep -F 'before snapshot' "$first" >/dev/null || fail "the first status line was not annotated"
+  if grep -F 'appended while the drain produces output' "$first" >/dev/null; then
+    fail "the first drain read beyond its captured endpoint: $(cat "$first")"
+  fi
+  ack=$(sed -n 's/^WAKE_ACK_REQUIRED: after handling completes run bin\/fm-wake-drain.sh --ack-through \([0-9][0-9]*\) --recovery-generation \([^ ]*\)$/\1 \2/p' "$err")
+  read -r seq generation <<< "$ack"
+  [ -n "$seq" ] && [ -n "$generation" ] || fail "concurrent drain printed no ack command"
+  FM_STATE_OVERRIDE="$state" "$DRAIN" --ack-through "$seq" --recovery-generation "$generation" >/dev/null \
+    || fail "acknowledging the concurrent drain failed"
+  append_wake "$state" signal task-during.turn-ended "signal: task-during.turn-ended" \
+    || fail "queueing the post-snapshot historical signal failed"
+  FM_STATE_OVERRIDE="$state" "$DRAIN" > "$second" 2> "$dir/second.err" \
+    || fail "post-snapshot drain failed"
+  grep -F 'wake annotation: latest wake-EVENT observed at drain, not current state; historical / not necessarily the triggering event: task-during.status: working: appended while the drain produces output' "$second" >/dev/null \
+    || fail "the concurrent append was not annotated on the next drain: $(cat "$second")"
+  if grep -F 'wake annotation: ' "$second" | grep -F 'before snapshot' >/dev/null; then
+    fail "the pre-snapshot annotation replayed beside the new line: $(cat "$second")"
+  fi
+  pass "a status append during drain output is annotated on the next drain only"
+}
+
 test_pending_reply_resolution_surfaces_once() {
   local dir state out status
   dir=$(make_case pending-reply-resolution)
@@ -453,6 +538,8 @@ test_incident_note_answer_buried_under_routine_note_surfaces_both
 test_already_presented_notes_are_not_replayed
 test_brand_new_note_after_presentation_is_surfaced
 test_signal_annotation_surfaces_every_unread_note_not_only_the_newest
+test_acknowledged_historical_annotation_does_not_replay
+test_append_during_annotation_output_remains_unread
 test_pending_reply_resolution_surfaces_once
 test_self_announced_pending_reply_close_still_surfaces
 test_unread_output_over_cap_remains_recoverable

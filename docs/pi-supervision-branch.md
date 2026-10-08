@@ -50,9 +50,7 @@ The away posture, recorded by `state/.afk-contract`, hands every row to the bran
 
 ### How outcomes reach main
 
-While attended, captain-relevant branch outcomes persist as exact, sequence-keyed visible transcript entries.
-They then open one sequence-keyed processing turn on main, which stays open until main acknowledges that sequence.
-While away, the entries persist but processing waits until the record is archived.
+The [two-stage noise filter](#two-stage-noise-filter) owns transcript delivery and main's acknowledgement-bound processing retries; [Postures](#postures) owns processing deferral while away.
 
 ### Design source
 
@@ -322,7 +320,8 @@ Reparenting and pid reuse can invalidate a remembered chain, and this answer dec
 
 ## Lost-wake outcome backstop
 
-Every main-actor wake drain checks each task's newest non-blank status event against the latest supervision-branch outcome that causally covers that task's status log.
+Every main-actor wake drain checks each task's newest non-blank status event against the latest non-silent supervision-branch outcome that causally covers that task's status log.
+A silent outcome never updates the task's status-coverage index, so the backstop can still surface captain-facing status events.
 When that event is terminal or otherwise captain-facing and remains uncovered, the drain prints it once in `STATUS OUTCOME BACKSTOP`.
 It does so even if the original queue row was already acknowledged.
 Routine events stay silent, and valid open decisions remain owned by `OPEN DECISIONS`.
@@ -347,9 +346,8 @@ This is an accepted limit, not a status-line size contract.
 
 ### Index repair
 
-A missing or invalid outcome-index ready marker is rebuilt from the authoritative outcome rows by `processed-init` under the outcome lock.
-That rebuild runs on the next main drain, on every harness.
-Only a genuine store fault keeps that backstop skipped.
+The [`bin/fm-branch-outcome.sh` header](../bin/fm-branch-outcome.sh) owns index readiness, repair, and migration, including removal of pre-upgrade silent-derived coverage.
+Temporary outcome-lock contention skips that drain's backstop and retries on the next drain; unsafe storage or indexes require repair before relying on recovery.
 
 ## How the branch knows what the captain said
 
@@ -385,7 +383,7 @@ Stage two is the branch's verdict on each handled event, reported through its `f
 
 | Verdict | Delivery |
 | --- | --- |
-| `routine` | A non-silent outcome uses the custom-message path; a silent outcome is stored without a rendered note. Neither opens a follow-up turn. |
+| `routine` | Uses the custom-message path hidden from captain chat, whether or not it is silent, and never opens a follow-up turn. |
 | `captain` | Appends a versioned `fm-branch-visible-outcome` custom session entry. |
 
 ### The visible captain entry
@@ -430,12 +428,14 @@ An unrelated reply, an empty reply, or a reply that paraphrases the outcome leav
 The extension presents the current unprocessed sequence set again at the next main run boundary and at every session start.
 
 The first presentation of a sequence set is an ordinary turn whose response stays visible, including prose alongside `fm_branch_processed`.
-From the second triggered presentation of that same set on, until its listed outcomes are acknowledged, an assistant final is removed before persistence only when its text is empty after trimming or exactly matches a final already visible for that sequence set after trimming.
+From the second triggered presentation of that same set on, until its listed outcomes are acknowledged, an assistant final's content is cleared before persistence only when its text is empty after trimming or exactly matches a final already visible for that sequence set after trimming.
+The message envelope, including provider usage accounting, is preserved.
 Differing replies stay visible, including the first real handling after an empty or unrelated reply.
 Messages carrying tool calls always retain their prose, signed reasoning, and usage accounting.
 Pi's Markdown transformer API buffers retry prose while streaming on versions that expose it, so the complete reply can be compared before rendering.
 A retained reply renders when the message ends.
-Successful acknowledgement releases subsequent assistant output, and a real user message restores ordinary output immediately, including when a processing request rides that prompt.
+Successful acknowledgement through the request's highest sequence releases subsequent assistant output; a partial acknowledgement leaves the retry comparison active.
+A real user message restores ordinary output immediately, including when a processing request rides that prompt.
 
 ### Re-presentation pacing
 
@@ -444,7 +444,7 @@ Once that run settles, the extension presents the then-current sequence set.
 
 The first two presentations of a given sequence set open a turn of their own.
 After that, the request rides the captain's next prompt, so an ignored request cannot become an unbounded loop of empty turns.
-Changed sequence membership and a session replacement each start that budget over.
+Changed sequence membership and a session replacement each start that budget and the visible-final comparison over.
 
 Routine outcomes never enter this path and stay turn-free.
 A home with no processed marker, including an upgrade or switch from the supervision host, re-presents delivered captain rows dated and check-first until acknowledged; see the marker contract in `bin/fm-branch-outcome.sh`.
@@ -454,7 +454,8 @@ A home with no processed marker, including an upgrade or switch from the supervi
 The generated [Pi supervision protocol](supervision-protocols/pi.md) owns event ownership for merged outcomes and main's acknowledgement duty.
 Deterministic entry delivery owns captain visibility.
 
-The branch prompt's "Verdict: routine or captain" section owns the classification criteria, including task-level silence eligibility and the rule to escalate doubt.
+Every `routine` outcome is durable and hidden from captain chat, regardless of `silent`.
+The branch prompt's "Verdict: routine or captain" section owns the classification criteria, silence eligibility, and the rule to escalate doubt.
 
 Its "PR identity: copy or abstain" section owns where a PR URL in a summary or tool argument may come from:
 
@@ -494,7 +495,7 @@ The branch runs its normal operating procedure for the wake (`bin/fm-branch-prom
 | Review result | Report |
 | --- | --- |
 | Found literally nothing worth reporting | Verdict `routine`, `task=fleet`, and `silent=true`, so it is stored without a rendered note. |
-| A fleet-wide routine action | Omits `silent` and keeps its rendered sailboat note. |
+| A fleet-wide routine action | Omits `silent` and remains in the durable outcome store without a captain chat note. |
 
 Only a captain-worthy finding reports verdict `captain` and appends a visible captain outcome entry.
 
@@ -607,7 +608,7 @@ Each relocated script keeps its own gate, enforcing exactly what a script can ch
 | Script | Gate while away |
 | --- | --- |
 | `bin/fm-pr-merge.sh` | Merges any pull request green at its live head, synchronously, under the record lock, and refuses `--allow-red` and `--allow-missing` while away, so the green gate is absolute in this posture; which pull request the words meant is the branch's reading. |
-| `bin/fm-spawn.sh` | Dispatches only queued work whose blockers cleared - already queued, or filed by the branch because the words explicitly call for it; refuses a fresh ordinary spawn for either actor once the home holds as many ordinary task records as the record's spend cap (relaunches and secondmates exempt). |
+| `bin/fm-spawn.sh` | Dispatches only queued work whose blockers cleared - already queued, or filed by the branch because the words explicitly call for it; refuses a fresh ordinary spawn for either actor once the home holds as many ordinary workers still able to spend (`bin/fm-afk-spend-count.sh`) as the record's spend cap (relaunches and secondmates exempt). |
 | `bin/fm-send.sh --resolve-key` | Answers a decision the words pre-answer, or one `ask-user-authority`'s judgment (carried verbatim in the branch prompt) lets firstmate decide. |
 | `bin/fm-merge-local.sh` | Never relocated. |
 
@@ -675,7 +676,7 @@ For the away posture:
 - `tests/fm-pi-watch-extension.test.sh` covers the away eligibility collapse (check-kind and decision-owned triggers offered) with the broken-queue vetoes and the watcher-failure alarm still reaching main.
 - `tests/fm-pi-branch-extension.test.sh` covers the posture tail with the verbatim read-back, the unscoped claim of check and heartbeat rows, no processing turn under the record, cancellation of a request pending when the record appears, and the re-presentation at the first run boundary after archive.
 
-`tests/fm-wake-drain-outcome-backstop.test.sh` covers keyless resurfacing, causal suppression, same-second ordering, one-shot presentation, first-drain index self-healing under the outcome lock, store-fault fail-closed behavior, bounded history cost and output, and the oversized-line limit.
+`tests/fm-wake-drain-outcome-backstop.test.sh` covers keyless resurfacing, causal suppression, silent outcomes excluded from coverage through append, rebuild, and upgrade, same-second ordering, one-shot presentation, first-drain index self-healing under the outcome lock, store-fault fail-closed behavior, bounded history cost and output, and the oversized-line limit.
 
 `tests/fm-teardown.test.sh` covers removal of the retired task's outcome index and the append-side rule that a post-teardown report does not recreate it.
 

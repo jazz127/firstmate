@@ -834,6 +834,7 @@ make_routine_bootstrap_fixture() {
     printf '%s\n' 'config/crew-harness'
     printf '%s\n' 'config/crew-dispatch.json'
     printf '%s\n' 'config/startup-memory-budget'
+    printf '%s\n' 'config/context-restart-budget'
   } > "$root/.gitignore"
   printf '%s\n' 'instructions' > "$root/AGENTS.md"
   mkdir -p "$root/bin" "$root/.agents/skills"
@@ -1135,6 +1136,20 @@ test_crew_dispatch_validation() {
 malformed dispatch config is flagged^{"rules":[^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - malformed JSON
 unverified dispatch harness is flagged^{"rules":[{"when":"anything","use":{"harness":"spaceship"}}],"default":{"harness":"codex"}}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - unverified harness: spaceship
 codex Luna max effort is accepted^{"rules":[{"when":"big feature","use":{"harness":"codex","model":"gpt-5.6-luna","effort":"max"}}]}^empty^
+codex Luna and main seats are accepted in use and default^{"rules":[{"when":"big feature","use":{"harness":"codex","model":"gpt-5.6-luna","seat":"luna"}}],"default":{"harness":"codex","seat":"main"}}^empty^
+unknown use seat is refused^{"rules":[{"when":"big feature","use":{"harness":"codex","seat":"other"}}]}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - unsupported use profile seat (only luna or main on codex): other
+unknown default seat is refused^{"default":{"harness":"codex","seat":"other"}}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - unsupported default profile seat (only luna or main on codex): other
+array Luna seat in use object is refused^{"rules":[{"when":"big feature","use":{"harness":"codex","seat":["luna"]}}]}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - unsupported use profile seat (only luna or main on codex): ["luna"]
+array main seat in use array is refused^{"rules":[{"when":"big feature","use":[{"harness":"codex","seat":["main"]}]}]}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - unsupported use profile seat (only luna or main on codex): ["main"]
+array main seat in default object is refused^{"default":{"harness":"codex","seat":["main"]}}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - unsupported default profile seat (only luna or main on codex): ["main"]
+array Luna seat in default array is refused^{"default":[{"harness":"codex","seat":["luna"]}]}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - unsupported default profile seat (only luna or main on codex): ["luna"]
+empty seat array is refused^{"default":{"harness":"codex","seat":[]}}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - unsupported default profile seat (only luna or main on codex): []
+both seats as an array are refused^{"rules":[{"when":"big feature","use":{"harness":"codex","seat":["luna","main"]}}]}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - unsupported use profile seat (only luna or main on codex): ["luna","main"]
+null seat is refused^{"default":{"harness":"codex","seat":null}}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - unsupported default profile seat (only luna or main on codex): null
+object seat is refused^{"default":{"harness":"codex","seat":{}}}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - unsupported default profile seat (only luna or main on codex): {}
+boolean seat is refused^{"default":{"harness":"codex","seat":false}}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - unsupported default profile seat (only luna or main on codex): false
+numeric seat is refused^{"default":{"harness":"codex","seat":0}}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - unsupported default profile seat (only luna or main on codex): 0
+Luna seat on another harness is refused^{"default":{"harness":"claude","seat":"luna"}}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - unsupported default profile seat (only luna or main on codex): luna
 codex unsupported model max effort is flagged^{"rules":[{"when":"big feature","use":{"harness":"codex","model":"gpt-5","effort":"max"}}]}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - invalid effort: codex:max
 unsupported grok max effort is flagged^{"rules":[{"when":"deep current work","use":{"harness":"grok","model":"grok-4","effort":"max"}}]}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - invalid effort: grok:max
 unsupported grok xhigh effort is flagged^{"rules":[{"when":"deep current work","use":{"harness":"grok","model":"grok-4","effort":"xhigh"}}]}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - invalid effort: grok:xhigh

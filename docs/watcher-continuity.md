@@ -144,9 +144,9 @@ If the handoff confirmation fails, the adapter retries it once: Pi against that 
 A failed confirmation is a restoration failure: the adapter classifies the error and surfaces exactly one typed message.
 Pi retires the current successor only when the failed token names its exact watcher pid and generation and that pid is no longer alive, while omp and OpenCode retire the current successor whenever the restoration's watcher pid is no longer alive.
 On Pi a generation mismatch means a newer pipeline superseded this delivery mid-restore, so the wake routes like a confirmed delivery, with no failure appendix, and nothing is retired.
-An already-acknowledged episode confirms as a no-op when the confirmation names its generation, because the drain acknowledged it after the successor started but before the confirmation ran.
-The Pi extension diagnostic log is opt-in and off by default: only a positive FM_WATCH_EXTENSION_LOG_KEEP_LINES value appends restore attempts, readiness timeouts, and confirmation targets and results to state/.watch-extension.log, a bounded record that never changes supervision behavior.
-docs/configuration.md owns the knob's default and accepted values.
+An already-acknowledged episode confirms as a no-op only when the confirmation names the marker's current generation and the named watcher is alive and holds this home's identity-matched watcher lock, because the drain may acknowledge it after the successor starts but before the confirmation runs.
+The Pi extension diagnostic log records restore attempts, readiness timeouts, confirmation targets and results, and retirement or exhausted-restoration decisions without affecting supervision behavior.
+[`configuration.md`](configuration.md#environment-variables) owns the log's path, opt-in knob, default, and accepted values.
 A failed confirmation is never swallowed.
 
 ### Readiness timeout and retry
@@ -405,6 +405,7 @@ Once per poll the watcher checks that its home, its state directory, and its own
 The watcher uses bash's native fatal handling for HUP and TERM during blocked checks, pane captures, and compound backend reads, so its EXIT cleanup can stop the operation without waiting for a wedged query to finish.
 `watcher_stop_signals` in `bin/fm-watch.sh` owns the signal-handling rationale.
 Nested timeout cancellation is owned by [`fm-timeout-lib.sh`](../bin/fm-timeout-lib.sh).
+Pane captures additionally bound tmux reads to two seconds through `watcher_capture_read`.
 The EXIT cleanup bounds its wait for `state/.watcher-down.lock` while persisting recovery state with `FM_WATCHER_CLEANUP_LOCK_BOUND` (default 2 seconds).
 Only positive decimal integers are accepted, including leading-zero forms such as `08`; empty, non-numeric, and zero values (including `00`) fall back to 2 seconds.
 A live foreign holder therefore cannot strand a TERM'd watcher in this marker-lock wait: on timeout the recovery transition fails without releasing the singleton, leaving dead-pid stale evidence for the next arm to republish and clear.
@@ -476,6 +477,8 @@ It checks that a newly appended keyed decision is classified without rereading e
 
 - Verified-successor attach.
 - Recovery publication before stale-lock removal.
+- Generic lock PID reuse, matched live owners, unreadable identity, and legacy locks without identity evidence.
+- Bounded ownership handoff and reaper exclusion of competing successors.
 - The typed self-eviction failure.
 - Bounded and successor-linked lifecycle rows.
 - A SIGSTOP counterfactual that distinguishes a live PID from a stale beacon before classifying termination.

@@ -218,6 +218,26 @@ test_corrupt_recorded_branch_is_refused() {
   pass "fm-review-diff refuses a corrupt recorded ship branch instead of reviewing the wrong content"
 }
 
+test_missing_recorded_branch_is_refused() {
+  local case_dir out status
+  case_dir=$(make_case missing-recorded-branch)
+  git -C "$case_dir/wt" checkout -q -b roam main
+  git -C "$case_dir/wt" branch -q -D fm/task-x1
+  write_task_meta "$case_dir" "branch=fix/task-x1"
+
+  set +e
+  out=$(run_review_diff "$case_dir" task-x1 2> "$case_dir/stderr")
+  status=$?
+  set -e
+
+  [ "$status" -ne 0 ] || fail "missing-recorded-branch: a missing explicit branch fell back to worktree HEAD"
+  assert_contains "$(cat "$case_dir/stderr")" "recorded ship branch 'fix/task-x1' for task task-x1 does not exist" \
+    "missing-recorded-branch: the refusal did not name the missing recorded branch"
+  assert_not_contains "$out" '+base' \
+    "missing-recorded-branch: the missing recorded branch produced a worktree-HEAD diff"
+  pass "fm-review-diff refuses a missing explicitly recorded ship branch"
+}
+
 test_recorded_base_branch_is_the_review_base() {
   local case_dir out
   case_dir=$(make_case base-branch)
@@ -245,4 +265,5 @@ test_no_pr_meta_uses_local_branch
 test_unreachable_pr_head_falls_back_with_warning
 test_recorded_branch_beats_moved_worktree_head
 test_corrupt_recorded_branch_is_refused
+test_missing_recorded_branch_is_refused
 test_recorded_base_branch_is_the_review_base

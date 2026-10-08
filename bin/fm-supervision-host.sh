@@ -31,7 +31,11 @@
 # silently; an exit status above 128, or no output at all, means the host
 # itself died and the owner retries it. Any other close is judged exactly as
 # the arm's. --restart starts the first cycle with fm-watch-arm.sh --restart,
-# and an FM_WATCH_PREDECESSOR_ARM_PID the owner passes reaches that first
+# FM_SUPERVISION_HOST_TAKE_OVER_ARM_PID, passed by a context-refresh successor
+# auto-arm, instead transfers its first cycle from that wrapper-owned arm via
+# fm-watch-arm.sh --take-over; the value must be a numeric pid and is consumed
+# only once. An explicit --restart takes precedence.
+# An FM_WATCH_PREDECESSOR_ARM_PID the owner passes reaches that first
 # cycle only, for owners that start their own successor after every close
 # (OpenCode, omp).
 #
@@ -836,8 +840,8 @@ health_record() {  # <engine-error 0|1> <reports>
 # when the turn failed on the engine itself. Runs in the host's own shell,
 # never a subshell, because it advances the host's grant and turn state.
 handle_wake() {  # <reason-lines>
-  local reason=$1 first scope status corrupted rows tasks unscoped rc turn readback
-  local receipts usage result errors unacked mirror
+  local reason=$1 first scope status corrupted rows row_tasks tasks unscoped rc turn readback
+  local receipts usage result errors unacked missing_rows mirror
   LAST_TURN=
   ENGINE_ERROR=0
   HEALTH_NOTE=
@@ -858,6 +862,7 @@ handle_wake() {  # <reason-lines>
   status=$(printf '%s\n' "$scope" | sed -n 's/^status=//p')
   corrupted=$(printf '%s\n' "$scope" | sed -n 's/^corrupted=//p')
   rows=$(printf '%s\n' "$scope" | sed -n 's/^rows=//p')
+  row_tasks=$(printf '%s\n' "$scope" | sed -n 's/^row_tasks=//p')
   tasks=$(printf '%s\n' "$scope" | sed -n 's/^tasks=//p')
   unscoped=$(printf '%s\n' "$scope" | sed -n 's/^unscoped=//p')
   if [ "$corrupted" = 1 ]; then
@@ -897,8 +902,8 @@ handle_wake() {  # <reason-lines>
   turn="$GEN.$TURN_SEQ"
   LAST_TURN=$turn
   : > "$RECEIPTS"
-  printf 'turn=%s\nrows=%s\ntasks=%s\nunscoped=%s\nwake=%s\nposture=%s\n' \
-    "$turn" "$rows" "$tasks" "${unscoped:-0}" "$first" "$TURN_POSTURE" > "$TURN_FILE"
+  printf 'turn=%s\nrows=%s\nrow_tasks=%s\ntasks=%s\nunscoped=%s\nwake=%s\nposture=%s\n' \
+    "$turn" "$rows" "$row_tasks" "$tasks" "${unscoped:-0}" "$first" "$TURN_POSTURE" > "$TURN_FILE"
   readback=
   if [ "$TURN_POSTURE" = away ]; then
     readback=$(mktemp "$STATE/.supervision-host-readback.XXXXXX") || readback=
@@ -927,7 +932,7 @@ handle_wake() {  # <reason-lines>
   fi
   rm -f "$WAKE_FILE"
   rc=0
-  printf '%s\n' "$reason" \
+  { printf '%s\n' "$reason"; printf 'Branch report bindings for this wake: rows=%s row_tasks=%s\n' "$rows" "$row_tasks"; } \
     | (umask 077; exec node "$SCRIPT_DIR/fm-branch-dispatch.mjs" wake-prompt "$@" > "$WAKE_FILE" 2>/dev/null) || rc=$?
   if [ "$rc" -ne 0 ]; then
     [ -z "$readback" ] || rm -f "$readback"
@@ -976,6 +981,15 @@ handle_wake() {  # <reason-lines>
   "$SCRIPT_DIR/fm-wake-grant.sh" release "$GEN" >/dev/null 2>&1 || true
   rm -f "$TURN_FILE"
   receipts=$(awk -F '\t' -v turn="$turn" '$1 == turn { n++ } END { print n + 0 }' "$RECEIPTS" 2>/dev/null)
+  missing_rows=$(awk -F '\t' -v turn="$turn" -v rows="$rows" '
+    BEGIN { count = split(rows, expected, " ") }
+    $1 == turn { reported[$5] = 1 }
+    END {
+      for (i = 1; i <= count; i++) if (expected[i] != "" && !reported[expected[i]]) {
+        printf "%s%s", separator, expected[i]; separator = " "
+      }
+    }
+  ' "$RECEIPTS" 2>/dev/null)
   usage=$(fm_supervision_engine_result "$FM_SUPERVISION_ENGINE" "$result" "${ENGINE_COST:-0}" 2>/dev/null || true)
   [ "$result" = /dev/null ] || rm -f "$result"
   TURN_RESULT=
@@ -983,7 +997,8 @@ handle_wake() {  # <reason-lines>
     ENGINE_ERROR=1
   fi
   health_record "$ENGINE_ERROR" "${receipts:-0}"
-  if [ "$ENGINE_ERROR" -eq 0 ] && [ "${receipts:-0}" -gt 0 ] && [ -z "$unacked" ]; then
+  if [ "$ENGINE_ERROR" -eq 0 ] && [ "${receipts:-0}" -gt 0 ] && [ -z "$missing_rows" ] \
+    && [ -z "$unacked" ]; then
     write_engine_record $((ENGINE_TURNS + 1)) "$(printf '%s\n' "$usage" | sed -n 's/.* conversation_cost=\([^ ]*\).*/\1/p')" \
       || rm -f "$ENGINE_RECORD"
     [ "$TURN_POSTURE" != attended ] || "$SCRIPT_DIR/fm-host-mirror.sh" commit >/dev/null 2>&1 || true
@@ -1008,6 +1023,8 @@ handle_wake() {  # <reason-lines>
     HANDLE_WHY="the engine turn ended with an error or an incomplete result"
   elif [ "${receipts:-0}" -eq 0 ]; then
     HANDLE_WHY="the engine turn recorded no outcome for its wake"
+  elif [ -n "$missing_rows" ]; then
+    HANDLE_WHY="the engine turn recorded no outcome for its granted wake rows $missing_rows"
   else
     HANDLE_WHY="the engine turn left its granted wake rows $unacked unacknowledged"
   fi
@@ -1053,9 +1070,15 @@ trap 'exit 130' INT
 activate || { echo "supervision-host stood down: the host record could not be written"; exit 0; }
 log_line "start	gen=$GEN	primary=$PRIMARY"
 
-# The first cycle.
+# The first cycle. A Claude context-refresh successor supplies the bridge arm
+# its hook verified as a child of the previous wrapper-owned transition owner.
+CONTEXT_ARM=${FM_SUPERVISION_HOST_TAKE_OVER_ARM_PID:-}
+case "$CONTEXT_ARM" in ''|*[!0-9]*) CONTEXT_ARM= ;; esac
 if [ "$FIRST_ARM_RESTART" -eq 1 ]; then
   start_arm "$OWNER_PREDECESSOR" --restart
+elif [ -n "$CONTEXT_ARM" ]; then
+  log_line "context-take-over\tarm=$CONTEXT_ARM"
+  start_arm "$OWNER_PREDECESSOR" --take-over "$CONTEXT_ARM"
 elif [ -n "$LEFT_ARM" ]; then
   log_line "take-over	arm=$LEFT_ARM"
   start_arm "$OWNER_PREDECESSOR" --take-over "$LEFT_ARM"

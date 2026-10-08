@@ -218,11 +218,14 @@ send_env() {  # <fakebin> <parent-home> <ssh-log> [extra env...] -- <cmd...>
 }
 
 test_remote_steer_lands_in_remote_inbox() {
-  local dir fb ssh_log home rhome rc err rec recs body pend
+  local dir fb ssh_log home rhome rc err rec recs body pend spans
   dir="$TMP_ROOT/remote-inbox"; mkdir -p "$dir"
   fb=$(make_stubs "$dir"); ssh_log="$dir/ssh.log"; : > "$ssh_log"
   rhome=$(setup_remote_secondmate_home remote-inbox)
   home=$(setup_remote_parent_home remote-inbox "$rhome")
+  fm_test_trace_export_enable "$home" "$dir/spans.jsonl" "$fb"
+  printf '%s\n' 'traceparent=00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01' \
+    >> "$home/state/rsm.meta"
 
   rc=0
   send_env "$fb" "$home" "$ssh_log" \
@@ -255,6 +258,14 @@ test_remote_steer_lands_in_remote_inbox() {
     || fail "a recorded remote steer must mark the expectation delivered at enqueue: $(cat "$pend")"
   [ "$(grep '^phase=' "$pend" | tail -1 | cut -d= -f2-)" = awaiting_report ] \
     || fail "the delivered expectation must await its report: $(cat "$pend")"
+  spans=$(cat "$dir/spans.jsonl")
+  assert_contains "$spans" '"name":"firstmate.steer"' "a successful remote inbox enqueue should emit from the parent"
+  assert_contains "$spans" '"firstmate.plane","value":{"stringValue":"inbox"}' \
+    "the remote steer should identify its inbox plane"
+  jq -e '[.resourceSpans[].scopeSpans[].spans[].attributes[]] ==
+    [{key:"firstmate.plane",value:{stringValue:"inbox"}}]' "$dir/spans.jsonl" >/dev/null \
+    || fail "a remote observation must omit correlation and message identities"
+  assert_not_contains "$spans" 'please rename the metric' "the remote steer observation must never contain message text"
   pass "fm-send remote: a text steer lands as a durable remote inbox record and exits 0 at enqueue"
 }
 
@@ -377,6 +388,9 @@ test_remote_fire_and_forget_never_arms_reply_recovery() {
   fb=$(make_stubs "$dir"); ssh_log="$dir/ssh.log"; : > "$ssh_log"
   rhome=$(setup_remote_secondmate_home remote-fire-and-forget)
   home=$(setup_remote_parent_home remote-fire-and-forget "$rhome")
+  fm_test_trace_export_enable "$home" "$dir/spans.jsonl" "$fb"
+  printf '%s\n' 'traceparent=00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01' \
+    >> "$home/state/rsm.meta"
   delivery=0123456789abcdef
 
   rc=0
@@ -384,6 +398,7 @@ test_remote_fire_and_forget_never_arms_reply_recovery() {
     "$SEND" rsm --fire-and-forget "$delivery" "reconcile your own books" \
     >"$dir/out" 2>"$dir/err" || rc=$?
   expect_code 3 "$rc" "an ambiguous fire-and-forget delivery must report unconfirmed"
+  [ ! -s "$dir/spans.jsonl" ] || fail "an unconfirmed fire-and-forget delivery emitted an observation"
   [ "$(find "$home/state/pending-replies" -maxdepth 1 -type f 2>/dev/null | wc -l | tr -d ' ')" = 0 ] \
     || fail "fire-and-forget delivery created a pending-reply expectation"
   count=$(find "$rhome/state/parent-route/rsm.inbox" -name '*.msg' | wc -l | tr -d ' ')
@@ -400,6 +415,10 @@ test_remote_fire_and_forget_never_arms_reply_recovery() {
   [ "$count" = 1 ] || fail "the same fire-and-forget delivery id created a duplicate remote record"
   grep -F "delivery=$delivery" "$(remote_inbox_records "$rhome" | head -1)" >/dev/null \
     || fail "the remote record omitted its fire-and-forget delivery identity"
+  jq -e '[.resourceSpans[].scopeSpans[].spans[].attributes[]] ==
+    [{key:"firstmate.plane",value:{stringValue:"inbox"}},
+     {key:"firstmate.fire_and_forget",value:{stringValue:"true"}}]' "$dir/spans.jsonl" >/dev/null \
+    || fail "a fire-and-forget observation must retain the boolean without delivery identity"
   pass "fm-send remote: fire-and-forget delivery is idempotent without reply recovery"
 }
 
@@ -551,6 +570,9 @@ test_remote_real_failure_still_fails() {
   fb=$(make_stubs "$dir"); ssh_log="$dir/ssh.log"; : > "$ssh_log"
   rhome=$(setup_remote_secondmate_home remote-fail)
   home=$(setup_remote_parent_home remote-fail "$rhome")
+  fm_test_trace_export_enable "$home" "$dir/spans.jsonl" "$fb"
+  printf '%s\n' 'traceparent=00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01' \
+    >> "$home/state/rsm.meta"
 
   rc=0
   send_env "$fb" "$home" "$ssh_log" FM_FAKE_SSH_RC=1 \
@@ -566,6 +588,7 @@ test_remote_real_failure_still_fails() {
     || fail "a failed send must discard its undelivered expectation"
   [ -z "$(remote_inbox_records "$rhome")" ] \
     || fail "a refused remote leg must leave no inbox record"
+  [ ! -s "$dir/spans.jsonl" ] || fail "a refused remote delivery emitted a steer observation"
   pass "fm-send remote: a real remote failure still fails loudly with the remote diagnostics"
 }
 
@@ -765,7 +788,9 @@ test_local_pending_does_not_close_resolve_key() {
   dir="$TMP_ROOT/local-pending-key"; mkdir -p "$dir"
   fb=$(make_stubs "$dir"); log="$dir/send.log"
   home=$(setup_home local-pending-key)
-  fm_write_meta "$home/state/t2.meta" "window=sess:fm-t2" "kind=ship"
+  fm_test_trace_export_enable "$home" "$dir/spans.jsonl" "$fb"
+  fm_write_meta "$home/state/t2.meta" "window=sess:fm-t2" "kind=ship" \
+    'traceparent=00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01'
   printf 'blocked [key=creds]: need the deploy token\n' > "$home/state/t2.status"
 
   # A harness-native slash answer keeps the typed plane, so the unconfirmed
@@ -776,6 +801,7 @@ test_local_pending_does_not_close_resolve_key() {
     FM_ROOT_OVERRIDE="$home" FM_HOME="$home" FM_SEND_LOG="$log" FM_SEND_SETTLE=0 \
     "$SEND" t2 --resolve-key creds "/vault fetch deploy-token" >/dev/null 2>&1 || rc=$?
   expect_code 3 "$rc" "an unconfirmed local answer must exit with the delivered-unconfirmed status"
+  [ ! -s "$dir/spans.jsonl" ] || fail "an unconfirmed typed delivery emitted a steer observation"
   if grep -F 'resolved' "$home/state/t2.status" >/dev/null; then
     fail "an unconfirmed local answer must not close the decision: $(cat "$home/state/t2.status")"
   fi

@@ -1454,6 +1454,69 @@ SH
   pass "--include-prs maps a custom branch-prefix PR back to its recorded task"
 }
 
+test_include_prs_uses_worktree_origin_before_pr_is_recorded() {
+  local home fakebin json
+  home=$(make_home unrecorded-pr); write_fixture "$home"
+  git -C "$home/projects/ship-wt" init -q
+  git -C "$home/projects/ship-wt" remote add origin https://github.com/kunchenguid/firstmate.git
+  fm_write_meta "$home/state/ship-task.meta" \
+    "window=firstmate:fm-ship-task" \
+    "worktree=$home/projects/ship-wt" \
+    "project=firstmate" \
+    "harness=claude" \
+    "kind=ship" \
+    "mode=no-mistakes" \
+    "branch=fix/ship-task"
+  fakebin=$(make_fakebin "$home"); : > "$home/net.log"
+  cat > "$fakebin/gh" <<'SH'
+#!/usr/bin/env bash
+echo "gh $*" >> "$NET_LOG"
+cat <<'JSON'
+[{"number":9,"title":"Ship the thing","url":"https://github.com/kunchenguid/firstmate/pull/9","headRefName":"fix/ship-task","reviewDecision":"","mergeable":"MERGEABLE","statusCheckRollup":[]}]
+JSON
+SH
+  chmod +x "$fakebin/gh"
+  json=$(run "$home" "$fakebin" --include-prs --json)
+  printf '%s' "$json" | jq -e '
+    .candidate_prs | any(.repo == "kunchenguid/firstmate" and .task == "ship-task")
+  ' >/dev/null || fail "an unrecorded PR was not matched through its task worktree origin: $json"
+  pass "--include-prs uses worktree origin before PR metadata is recorded"
+}
+
+test_include_prs_matches_branch_within_its_repository() {
+  local home fakebin json
+  home=$(make_home repo-scoped-pr); write_fixture "$home"
+  fm_write_meta "$home/state/other-task.meta" \
+    "window=firstmate:fm-other-task" \
+    "worktree=$home/projects/ship-wt" \
+    "project=other" \
+    "harness=claude" \
+    "kind=ship" \
+    "mode=no-mistakes" \
+    "branch=fm/other-task" \
+    "pr=https://github.com/acme/other/pull/4"
+  printf 'working: other task\n' > "$home/state/other-task.status"
+  fakebin=$(make_fakebin "$home"); : > "$home/net.log"
+  cat > "$fakebin/gh" <<'SH'
+#!/usr/bin/env bash
+echo "gh $*" >> "$NET_LOG"
+repo=''
+while [ "$#" -gt 0 ]; do
+  case "$1" in --repo) repo=${2:-}; shift 2 ;; *) shift ;; esac
+done
+cat <<JSON
+[{"number":9,"title":"Same branch","url":"https://github.com/${repo}/pull/9","headRefName":"fm/ship-task","reviewDecision":"","mergeable":"MERGEABLE","statusCheckRollup":[]}]
+JSON
+SH
+  chmod +x "$fakebin/gh"
+  json=$(run "$home" "$fakebin" --include-prs --json)
+  printf '%s' "$json" | jq -e '
+    (.candidate_prs | any(.repo == "kunchenguid/firstmate" and .task == "ship-task"))
+      and (.candidate_prs | any(.repo == "acme/other" and .task == "-"))
+  ' >/dev/null || fail "a same-named branch in another repository was attributed to the task: $json"
+  pass "--include-prs scopes branch-to-task matching to the task repository"
+}
+
 test_partial_github_failure_degrades() {
   local home fakebin json rc
   home=$(make_home partial); write_fixture "$home"
@@ -3404,6 +3467,8 @@ test_report_pointers_surface
 test_queued_item_prose_never_hides_it
 test_include_prs_is_the_only_fetch_path
 test_include_prs_maps_custom_branch_prefix_to_task
+test_include_prs_uses_worktree_origin_before_pr_is_recorded
+test_include_prs_matches_branch_within_its_repository
 test_partial_github_failure_degrades
 test_perl_fallback_bounds_github_call
 test_section_caps_and_expansion_flags

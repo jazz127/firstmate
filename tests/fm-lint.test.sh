@@ -17,6 +17,9 @@ set -u
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 LINT="$ROOT/bin/fm-lint.sh"
+# Routine fixtures must not queue behind unrelated lints on this host; the
+# host-lock tests opt back in explicitly.
+export FM_LINT_HOST_LOCK=off
 INSTALLER="$ROOT/bin/fm-install-shellcheck.sh"
 # The pinned version, read from the single source (the one owner itself).
 REQUIRED=$("$LINT" --required-version)
@@ -1344,6 +1347,208 @@ SH
   pass "jobs=1 and jobs=2 preserve deterministic diagnostics, failures, cleanup bounds, and quiet telemetry"
 }
 
+# Another lint on this host may legitimately hold the shared lock; only a lock
+# left behind with a dead owner means ours was not released.
+fm_lint_test_lock_released() {
+  local owner
+  [ -L "$1" ] || [ ! -e "$1" ] || return 1
+  [ -L "$1" ] || return 0
+  owner=$(readlink "$1" 2>/dev/null || true)
+  owner=${owner%%.*}
+  case "$owner" in ''|*[!0-9]*) return 0 ;; esac
+  kill -0 "$owner" 2>/dev/null
+}
+
+# Publish a lock owned by <pid> once any unrelated host lint has released it.
+fm_lint_test_plant_lock() {  # <lock> <pid>
+  local i=0
+  until ln -s "$2.test" "$1" 2>/dev/null; do
+    i=$((i + 1))
+    [ "$i" -le 3000 ] || fail "host ShellCheck lock stayed busy; cannot plant an owner"
+    sleep 0.1
+  done
+}
+
+test_host_lock_serializes_and_recovers_stale_owner() {
+  local tmp fakebin fixture lock active overlap pid holder_pid dead_pid reaper_pid rc i duration
+  local -a pids
+  tmp=$(fm_test_tmproot fm-lint-host-lock)
+  fakebin=$(fm_fakebin "$tmp")
+  fixture="$tmp/good.sh"
+  lock="/tmp/fm-lint-shellcheck-${UID:-$(id -u)}.lock"
+  active="$tmp/shellcheck-active"
+  overlap="$tmp/shellcheck-overlap"
+  mkdir -p "$tmp/tmp-a" "$tmp/tmp-b" "$tmp/tmp-c" "$tmp/tmp-d" "$tmp/tmp-e" "$tmp/tmp-f" \
+    "$tmp/tmp-g" "$tmp/tmp-h" "$tmp/tmp-j"
+  cat > "$fixture" <<'SH'
+#!/usr/bin/env bash
+printf '%s\n' ok
+SH
+  cat > "$fakebin/shellcheck" <<'SH'
+#!/usr/bin/env bash
+if [ "${1:-}" = "--version" ]; then
+  printf 'ShellCheck - shell script analysis tool\nversion: 0.11.0\n'
+  exit 0
+fi
+if ! mkdir "$FM_TEST_ACTIVE" 2>/dev/null; then
+  : > "$FM_TEST_OVERLAP"
+fi
+sleep 0.3
+rmdir "$FM_TEST_ACTIVE" 2>/dev/null || true
+SH
+  chmod +x "$fakebin/shellcheck"
+
+  pids=()
+  for i in a b; do
+    PATH="$fakebin:$PATH" TMPDIR="$tmp/tmp-$i" FM_LINT_HOST_LOCK=on \
+      FM_TEST_ACTIVE="$active" FM_TEST_OVERLAP="$overlap" \
+      "$LINT" "$fixture" > "$tmp/queue-$i.out" 2>&1 &
+    pids+=("$!")
+  done
+  i=0
+  for pid in "${pids[@]}"; do
+    i=$((i + 1))
+    rc=0
+    wait "$pid" || rc=$?
+    [ "$rc" -eq 0 ] || fail "concurrent lint $i failed with $rc"
+  done
+  [ ! -e "$overlap" ] || fail "lint invocations with different TMPDIRs overlapped ShellCheck"
+  fm_lint_test_lock_released "$lock" || fail "host ShellCheck lock remained after successful lint"
+
+  sleep 30 &
+  holder_pid=$!
+  fm_lint_test_plant_lock "$lock" "$holder_pid"
+  PATH="$fakebin:$PATH" TMPDIR="$tmp/tmp-c" FM_LINT_HOST_LOCK=on \
+    FM_TEST_ACTIVE="$active" FM_TEST_OVERLAP="$overlap" \
+    "$LINT" --telemetry "$tmp/queued.tsv" "$fixture" > "$tmp/queued.out" 2>&1 &
+  pid=$!
+  sleep 1.5
+  ! grep -q $'^begin\t' "$tmp/queued.roots.tsv" 2>/dev/null \
+    || fail "a root queued behind the host lock was reported as begun"
+  kill "$holder_pid" 2>/dev/null || true
+  wait "$holder_pid" 2>/dev/null || true
+  rc=0
+  wait "$pid" || rc=$?
+  [ "$rc" -eq 0 ] || fail "queued lint failed with $rc: $(cat "$tmp/queued.out")"
+  duration=$(awk -F '\t' '$1 == "end" { print $8 }' "$tmp/queued.roots.tsv")
+  case "$duration" in ''|*[!0-9]*) fail "queued lint recorded no root duration" ;; esac
+  [ "$duration" -lt 1500 ] \
+    || fail "queued root duration ${duration}ms counted time spent waiting for the host lock"
+
+  # Let these exit on their own: signalling a just-forked child can run this
+  # suite's inherited TERM trap and delete every fixture before exec.
+  dead_pid=$(sh -c 'echo "$$"')
+  reaper_pid=$(sh -c 'echo "$$"')
+  fm_lint_test_plant_lock "$lock" "$dead_pid"
+  pids=()
+  for i in d e f; do
+    PATH="$fakebin:$PATH" TMPDIR="$tmp/tmp-$i" FM_LINT_HOST_LOCK=on \
+      FM_TEST_ACTIVE="$active" FM_TEST_OVERLAP="$overlap" \
+      "$LINT" "$fixture" > "$tmp/stale-$i.out" 2>&1 &
+    pids+=("$!")
+  done
+  for pid in "${pids[@]}"; do
+    rc=0
+    wait "$pid" || rc=$?
+    [ "$rc" -eq 0 ] || fail "lint failed to recover a stale host lock with $rc"
+  done
+  [ ! -e "$overlap" ] || fail "simultaneous stale-lock waiters overlapped ShellCheck"
+  fm_lint_test_lock_released "$lock" || fail "stale host ShellCheck lock remained after recovery"
+
+  fm_lint_test_plant_lock "$lock" "$dead_pid"
+  ln -s "$reaper_pid.test" "$lock.reap.$dead_pid.test"
+  PATH="$fakebin:$PATH" TMPDIR="$tmp/tmp-g" FM_LINT_HOST_LOCK=on \
+    FM_TEST_ACTIVE="$active" FM_TEST_OVERLAP="$overlap" \
+    "$LINT" "$fixture" > "$tmp/reaper.out" 2>&1 &
+  pid=$!
+  i=0
+  while kill -0 "$pid" 2>/dev/null; do
+    i=$((i + 1))
+    if [ "$i" -gt 200 ]; then
+      kill "$pid" 2>/dev/null || true
+      break
+    fi
+    sleep 0.1
+  done
+  rc=0
+  wait "$pid" || rc=$?
+  [ "$rc" -eq 0 ] || fail "lint did not recover a lock whose reaper died mid-reap ($rc): $(cat "$tmp/reaper.out")"
+  fm_lint_test_lock_released "$lock" || fail "stale host ShellCheck lock remained after reaper recovery"
+
+  i=0
+  until mkdir "$lock" 2>/dev/null; do
+    i=$((i + 1))
+    [ "$i" -le 3000 ] || fail "host ShellCheck lock stayed busy; cannot plant a legacy lock"
+    sleep 0.1
+  done
+  printf '%s.legacy\n' "$dead_pid" > "$lock/owner"
+  pids=()
+  for i in h j; do
+    PATH="$fakebin:$PATH" TMPDIR="$tmp/tmp-$i" FM_LINT_HOST_LOCK=on \
+      FM_TEST_ACTIVE="$active" FM_TEST_OVERLAP="$overlap" \
+      "$LINT" "$fixture" > "$tmp/legacy-$i.out" 2>&1 &
+    pids+=("$!")
+  done
+  for pid in "${pids[@]}"; do
+    rc=0
+    wait "$pid" || rc=$?
+    [ "$rc" -eq 0 ] || fail "lint failed to recover a legacy lock directory with $rc"
+  done
+  [ ! -e "$overlap" ] || fail "lints overlapped ShellCheck after a legacy lock directory"
+  fm_lint_test_lock_released "$lock" || fail "legacy host ShellCheck lock directory remained"
+  pass "host ShellCheck lock serializes across TMPDIRs, excludes queue time, and recovers dead owners, reapers, and legacy locks"
+}
+
+test_host_lock_skips_roots_without_source_following() {
+  local tmp fakebin log diff_file lock holder_pid pid i rc
+  tmp=$(fm_test_tmproot fm-lint-host-lock-nofollow)
+  fakebin=$(fm_fakebin "$tmp")
+  fm_lint_stub_git "$fakebin"
+  log="$tmp/shellcheck.log"
+  fm_lint_stub_shellcheck "$fakebin" "$log"
+  diff_file="$tmp/diff.nul"
+  fm_lint_write_diff_file "$diff_file" "bin/fm-install-shellcheck.sh"
+  lock="/tmp/fm-lint-shellcheck-${UID:-$(id -u)}.lock"
+
+  sleep 60 &
+  holder_pid=$!
+  fm_lint_test_plant_lock "$lock" "$holder_pid"
+  PATH="$fakebin:$PATH" GITHUB_ACTIONS='' CI='' FM_LINT_JOBS=1 FM_LINT_HOST_LOCK=on \
+    FM_TEST_GIT_BRANCH=feature FM_TEST_GIT_DIFF_FILE="$diff_file" \
+    FM_TEST_FLAG_LOG="$tmp/flags.log" "$LINT" > "$tmp/lint.out" 2>&1 &
+  pid=$!
+  i=0
+  while kill -0 "$pid" 2>/dev/null && [ "$i" -le 100 ]; do
+    i=$((i + 1))
+    sleep 0.1
+  done
+  kill "$pid" 2>/dev/null || true
+  rc=0
+  wait "$pid" || rc=$?
+  [ "$(readlink "$lock" 2>/dev/null || true)" != "$holder_pid.test" ] || rm -f "$lock"
+  kill "$holder_pid" 2>/dev/null || true
+  wait "$holder_pid" 2>/dev/null || true
+  [ "$rc" -eq 0 ] \
+    || fail "a changed-mode lint without source following waited on the host lock ($rc): $(cat "$tmp/lint.out")"
+  [ "$(cat "$log")" = "bin/fm-install-shellcheck.sh" ] \
+    || fail "changed-mode lint did not analyze its root while the host lock was held"
+  pass "roots without source following run without the host ShellCheck lock"
+}
+
+test_host_lock_rejects_unknown_values() {
+  local value out rc
+  for value in 1 0 yes; do
+    rc=0
+    out=$(FM_LINT_HOST_LOCK="$value" "$LINT" --list-files 2>&1) || rc=$?
+    [ "$rc" -eq 2 ] || fail "FM_LINT_HOST_LOCK=$value exited $rc, want 2"
+    case "$out" in
+      *"FM_LINT_HOST_LOCK must be auto, on, or off."*) ;;
+      *) fail "FM_LINT_HOST_LOCK=$value did not name the accepted values: $out" ;;
+    esac
+  done
+  pass "FM_LINT_HOST_LOCK accepts only auto, on, or off"
+}
+
 test_worker_trees_stop_on_signal() {
   local tmp fakebin fixture jobs telemetry lint_tmp pid_file out_file telemetry_file
   local parent_pid shellcheck_pid i parent_rc survivor
@@ -2048,6 +2253,9 @@ test_rejects_direct_beads_cli_in_explicit_core_path
 test_ignores_ambient_shellcheck_opts
 test_clean_fixture_passes
 test_jobs_are_deterministic_and_complete
+test_host_lock_serializes_and_recovers_stale_owner
+test_host_lock_skips_roots_without_source_following
+test_host_lock_rejects_unknown_values
 test_worker_trees_stop_on_signal
 test_root_deadline_names_the_root_and_reaps_the_tree
 test_root_memory_limit_reports_a_named_death

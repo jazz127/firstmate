@@ -15,10 +15,12 @@ Herdr provides the terminal session while Treehouse continues to provide task wo
 
 | What you want to know | Start here |
 | --- | --- |
+| Answer one Captain's Call decision in a pane | [Captain's Call pane](#captains-call-pane) |
 | Install Herdr and select it | [Setup](#setup) |
 | Why a command ran on a different `herdr` client | [Client selection](#client-selection) |
 | Where task tabs appear and how to watch them | [Watching and task containers](#watching-and-task-containers) |
 | The one-task workspaces, their setting, and their cleanup | [Presentation spaces](#presentation-spaces) |
+| One workspace per project instead of one per task | [Project spaces](#project-spaces) |
 | Why a seeded default tab is or is not closed | [Default-tab prune safety](#default-tab-prune-safety) |
 | What task metadata records for a Herdr endpoint | [Endpoint metadata](#endpoint-metadata) |
 | How text and keys reach a worker and how delivery is confirmed | [Current transport behavior](#current-transport-behavior) and [Composer and injection safety](#composer-and-injection-safety) |
@@ -27,6 +29,15 @@ Herdr provides the terminal session while Treehouse continues to provide task wo
 | Where the away daemon runs and how it stops | [Away-mode supervisor support](#away-mode-supervisor-support) |
 | Stopping or deleting Herdr sessions during verification | [Destructive lab safety](#destructive-lab-safety) |
 | Known limits and the test suite | [Active limits](#active-limits) and [Regression entry points](#regression-entry-points) |
+
+## Captain's Call pane
+
+Run `FM_HOME=/path/to/firstmate-home /path/to/firstmate/bin/fm-captain-pane.py` in a Herdr shell pane, or run the same command in a plain SSH terminal.
+Run `/bearings` in Firstmate to refresh the queue at `state/captains-call.json` before opening it; `/bearings lavish` refreshes that same queue while building the browser board.
+The pane shows one card at a time in Bearings order, wraps at the current terminal width, and redraws on resize.
+Click an option or press its number; `p`, `n`, `s`, and `q` go back, go forward, skip, and quit.
+Arrow keys and mouse wheel scroll a long card.
+An answer wakes Firstmate through the durable inbox path; a merge selection waits for Firstmate's fresh PR and CI checks before any merge.
 
 ## Setup
 
@@ -125,7 +136,7 @@ Herdr 0.7.5 exports `HERDR_ENV`, `HERDR_PANE_ID`, `HERDR_SESSION`, `HERDR_SOCKET
 A Firstmate or secondmate agent's own commands inherit them.
 Older injection shapes are unverified, so a claimed launcher pane without the injected socket identity cannot be trusted.
 
-With presentation spaces disabled, a crewmate or scout is created in the exact workspace that identity currently resolves to.
+With neither a presentation space nor a [project space](#project-spaces), a crewmate or scout is created in the exact workspace that identity currently resolves to.
 That workspace is read live from Herdr rather than from the injected snapshot, so the worker always appears beside the agent that launched it.
 Duplicate labels elsewhere in the session are irrelevant, and the globally focused workspace is never the target.
 A `--secondmate` launch is the deliberate exception: it stands up that secondmate home's own workspace instead of joining the launcher's.
@@ -178,10 +189,12 @@ The local gitignored `config/herdr-presentation-spaces` file controls the projec
 | Absent | Leaves the choice to the version floor below (the unconfigured default). |
 | `off` | Opts the home out. |
 | `on` | Forces the projection on, as a deliberate opt-in. |
+| `project` | Replaces the projection with one workspace per project, described under [Project spaces](#project-spaces). |
 | Empty | A deliberate opt-in, the same as `on`. |
 | Any other value | Warns and follows the unconfigured default rather than failing a spawn over a purely visual setting. |
 
 Values are compared with whitespace stripped and case ignored.
+The rest of this section describes the one-task projection, except [Project spaces](#project-spaces).
 
 The empty file is the historical presence-based opt-in form.
 So every home that had already enabled the projection stays enabled with no migration step.
@@ -241,6 +254,39 @@ Only an explicit primary `off` propagates the opt-out.
 
 A secondmate agent itself always stays in its ordinary parent workspace; only children launched by that home are eligible.
 An unconverged opt-out keeps the default projection in that home until convergence.
+An inherited `project` value keeps that home's children as ordinary tabs in its own workspace, as [Project spaces](#project-spaces) describes.
+
+### Project spaces
+
+The `project` value replaces the one-task projection with one workspace per project.
+Each fresh crewmate or scout of the primary home becomes an ordinary `fm-<id>` task tab in a workspace labelled `▸ <project>`, where `<project>` is the basename of the task's project directory.
+The prefix keeps that label distinct from the `firstmate` home label, even for a project named `firstmate`, and from the projection's `└ ... · p:<token>` grammar.
+
+Placement works like this:
+
+- The first task of a project creates the workspace with `--no-focus`, prunes Herdr's seeded default tab, and records the workspace's exact id in this home's `state/.herdr-project-space-<key>` record.
+- A later task of the same project reuses that workspace only when the recorded id still names exactly one workspace in the same named session, for this physical home, carrying the expected label, and holding at least one `fm-` task tab.
+- Otherwise the task gets a fresh workspace and the record is replaced.
+- A workspace is never found or adopted by its label, so a captain workspace wearing the same label is left alone.
+- The reuse decision, any create, and the record update run under the named session's presentation lock, so concurrent spawns and cleanups cannot race.
+
+Removal needs no separate path:
+
+- A project-space task tab is an ordinary endpoint with no presentation journal.
+- Its cleanup closes the exact task pane through the focus-safe plan under [Ordinary removal and cleanup locking](#ordinary-removal-and-cleanup-locking).
+- Closing a task that is not its project's last leaves the workspace in place.
+- Closing the last one empties the workspace, which Herdr removes, and the next task of that project opens a fresh workspace.
+
+Fallbacks and limits:
+
+- A missing session server, a contended session lock, or a failed workspace create warns and uses the ordinary flat layout.
+- A failure after Herdr created something stops the spawn like a failed flat create, and a just-created workspace left holding only its seeded tab is closed.
+- Only a fresh task with neither metadata nor a presentation journal is eligible, so a resumed or reclaimed task uses the ordinary flat layout.
+- The value is a deliberate choice, so it is honored at every release like `on`.
+  Below the [0.8.0 floor](#why-the-default-needs-herdr-080), removing a project's last task can briefly move focus when the focus-safe plan falls back to a plain close, before the exact-tab restore pulls it back.
+- A secondmate home keeps every child as a tab in its own `2ndmate-<id>` workspace, and a `--secondmate` launch still stands up that workspace.
+- Project spaces are not ordered beside their home workspace, and already-running workers are not moved when the value changes.
+- Recovery and list-live scan only the home workspace, so, as with projections, they do not see project-space tabs.
 
 ### Presentation journal
 
@@ -477,6 +523,7 @@ Any of these preserves the candidate and lets session startup continue with at m
 
 | Test | What it covers |
 | --- | --- |
+| `tests/fm-backend-herdr-project-spaces-e2e.test.sh` | Per-project reuse, separation across projects, removal only with the last task, a fresh space afterward, no adoption of a same-labelled captain workspace, and preserved focus through the guarded lab path. |
 | `tests/fm-backend-herdr-presentation-e2e.test.sh` | Multi-home ordering, concurrency, lock contention, legacy coexistence, focus preservation, exact same-identity restart replacement, ambiguous bindings and tokens, and exact-pane cleanup through the guarded lab path. |
 | `tests/fm-herdr-session-cleanup.test.sh` | Every discovery, ownership, topology, process, locking, revalidation, focus, retirement, and continue-on-error boundary. |
 | `tests/fm-herdr-session-cleanup-e2e.test.sh` | The restored-shell cleanup in a guarded non-default named lab. |
@@ -630,14 +677,22 @@ It hands the visible pane's ANSI viewport plus Herdr's capability facts to the f
 - Bordered boxes.
 - Bare agent-glyph rows, including muse's `⟩`, which the adapter's retired local pattern silently omitted.
 - opencode's left bar.
-- The Pi separator region this adapter pioneered, admitted only when native `agent get` identity is exactly Pi and state is idle or done.
+- The Pi separator region this adapter pioneered, admitted only when native `agent get` identity is exactly Pi and state is idle, done, or working.
+- Claude's rule-framed composer under Herdr: a titled opening rule (`──── Title ──`) and a plain closing rule around a bare `❯` row.
 
 ### Pi composer states
 
 A blocked Pi is parked on an interactive prompt, so its blank composer region is a menu's and not a free composer's.
 That state defers instead of proving emptiness.
-A working Pi, pending middle row, missing identity, incomplete separator pair, or over-tall candidate remains unknown or pending.
-Identity stays a lazy second read, consulted only when a separator pair could change the verdict.
+A working Pi with a structurally blank separator composer is empty, including its spinner-labelled top rule, because native status distinguishes it from a blocked Pi.
+A pending middle row, missing identity, incomplete separator pair, a pair enclosing no row, or an over-tall candidate remains unknown or pending.
+A `>` on the pair's first row is input by default, because stock Pi 0.87.1 draws no editor prompt there, and a user's lone `>` must never have `/quit` typed onto it.
+Setting `FM_BACKEND_HERDR_PI_PROMPT=1` opts in to Pi editors that do draw one: a lone leading `>` on the first row is then the editor's own prompt, while text beside it, a `>` on a later row, and any other glyph remain input.
+Pi's cost-first stats row (`$0.000 (sub) 0.0%/272k (auto)`) is footer furniture only as Pi's complete stats tuple, first in the row run directly below the pair, and only when the pair itself proves the verdict; a truncated tuple, a repeat, or any other `$` row still refuses.
+Pi's compact layout - a rounded status header, one unboxed input row, and one lower solid rule with nothing but blank rows below - is experimental and off by default, because no real Pi build has been captured drawing it.
+Setting `FM_BACKEND_HERDR_PI_COMPACT=1` lets that layout prove an empty composer, and only when the styled input row is exactly one reverse-video blank cursor cell and native identity is an idle or done Pi.
+That compact row is never ghost-stripped: dim placeholder text on it both classifies pending and extracts as its visible plain text.
+Identity stays a lazy second read, consulted only when a separator pair or an opted-in compact layout could change the verdict.
 
 ### Placeholder and ghost text
 
@@ -823,6 +878,7 @@ The helper:
 - Supplies an explicit `--session` Herdr option before any `--` delimiter in allowed task commands.
 - Refuses caller-supplied session flags and server/session lifecycle subcommands.
 - Performs destructive stop/delete only through its guarded lifecycle actions.
+- Runs a lab server under a temporary `gui/<uid>` launch agent confined to that lab session's own label through its `launchagent` commands, so isolated verification can observe launchd supervision, and boots that agent out at teardown before any other destructive step.
 
 Immediately before every destructive call it re-queries the named session and refuses empty, missing, literal `default`, or `default:true` identities.
 Its before/after tripwire requires the live default-session snapshot to remain byte-identical.
@@ -850,6 +906,7 @@ tests/fm-backend-herdr-respawn-idem-e2e.test.sh
 tests/fm-backend-herdr-workspace-per-home-e2e.test.sh
 tests/fm-backend-herdr-launcher-workspace-e2e.test.sh
 tests/fm-backend-herdr-presentation-e2e.test.sh
+tests/fm-backend-herdr-project-spaces-e2e.test.sh
 tests/fm-backend-herdr-agent-exit-shell-e2e.test.sh
 tests/fm-herdr-pi-stale-registration-live-e2e.test.sh
 tests/fm-backend-herdr-eventwait-smoke.test.sh

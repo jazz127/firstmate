@@ -2,7 +2,11 @@
 # Provision the FM_HOME selected by the fixed remote entrypoint.
 #
 # Usage:
-#   fm-remote-home-provision.sh < manifest
+#   fm-remote-home-provision.sh [--timeout <seconds>] < manifest
+#
+# The remote job library owns execution: default 21600 seconds, maximum 86400.
+# --timeout carries the parent-selected bound without forwarding environment.
+# Direct invocation validates this option but does not itself enforce a timer.
 #
 # Manifest schema fm-remote-home-provision.v1 carries a base64 charter, the
 # base64 parent SSH alias, and one base64 project record per line. Each project
@@ -17,6 +21,10 @@
 # reply promise, which the subsystem can only carry on the parent's own
 # filesystem, is never mistaken for one this child could hold - and the
 # .fm-secondmate-home marker commits the complete seed last.
+# Before project work, .fm-secondmate-provisioning records the owning id.
+# Project clones run in .fm-provision-projects before publication; gate
+# initialization uses the final clone path. A same-id retry discards unpublished
+# staged clones and resumes; unmarked and foreign-owned homes remain refused.
 # A newly created home is removed on failure. An existing matching seeded home
 # is converged only through guarded ordinary-file updates and new project clones.
 set -eu
@@ -25,6 +33,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FM_ROOT="${FM_ROOT_OVERRIDE:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 FM_HOME=${FM_HOME:?FM_HOME is required}
 MAX_MANIFEST_BYTES=1048576
+if [ "$#" -gt 0 ]; then
+  [ "$#" -eq 2 ] && [ "$1" = --timeout ] || { printf 'error: expected --timeout <seconds>\n' >&2; exit 1; }
+  case "$2" in ''|*[!0-9]*|0) printf 'error: invalid provisioning timeout\n' >&2; exit 1 ;; esac
+  [ "$2" -gt 0 ] && [ "$2" -le 86400 ] || { printf 'error: provisioning timeout exceeds 86400 seconds\n' >&2; exit 1; }
+fi
 
 # shellcheck source=bin/fm-project-origin-lib.sh
 . "$SCRIPT_DIR/fm-project-origin-lib.sh"
@@ -54,6 +67,8 @@ PUBLISHED=0
 PROVISION_LOCK=
 PROVISION_LOCK_HELD=0
 STAGE_HOME=
+PROJECT_STAGE=
+RECOVERING=0
 CREATED_PROJECTS="$TMP/created-projects"
 : > "$CREATED_PROJECTS"
 release_provision_lock() {
@@ -79,6 +94,7 @@ rollback() {
     if [ "$CREATED_HOME" -eq 1 ]; then
       rm -rf -- "$FM_HOME"
     elif [ "$EXISTING_HOME" -eq 1 ]; then
+      [ -z "$PROJECT_STAGE" ] || rm -rf -- "$PROJECT_STAGE"
       while IFS= read -r project; do
         [ -n "$project" ] && rm -rf -- "$FM_HOME/projects/$project"
       done < "$CREATED_PROJECTS"
@@ -86,6 +102,7 @@ rollback() {
       restore_owned_file data/projects.md || true
       restore_owned_file .fm-secondmate-home || true
       restore_owned_file .fm-secondmate-parent || true
+      restore_owned_file .fm-secondmate-provisioning || true
       [ "$CREATED_BACKLOG" -eq 0 ] || rm -f -- "$FM_HOME/data/backlog.md"
     fi
   fi
@@ -161,7 +178,7 @@ if [ -e "$FM_HOME" ] || [ -L "$FM_HOME" ]; then
     fi
   done
   mkdir -p "$TMP/before/data"
-  for rel in data/charter.md data/projects.md .fm-secondmate-home .fm-secondmate-parent; do
+  for rel in data/charter.md data/projects.md .fm-secondmate-home .fm-secondmate-parent .fm-secondmate-provisioning; do
     existing="$FM_HOME/$rel"
     if [ -e "$existing" ] || [ -L "$existing" ]; then
       [ -f "$existing" ] && [ ! -L "$existing" ] || die "existing remote home has unsafe owned file: $rel"
@@ -170,10 +187,14 @@ if [ -e "$FM_HOME" ] || [ -L "$FM_HOME" ]; then
       : > "$TMP/before/$rel.present"
     fi
   done
+  if [ -f "$FM_HOME/.fm-secondmate-provisioning" ]; then
+    [ "$(cat "$FM_HOME/.fm-secondmate-provisioning")" = "$ID" ] || die "incomplete remote home belongs to another secondmate"
+    RECOVERING=1
+  fi
   EXISTING_HOME=1
   if [ -f "$FM_HOME/.fm-secondmate-home" ]; then
     [ "$(cat "$FM_HOME/.fm-secondmate-home")" = "$ID" ] || die "existing remote home belongs to another secondmate"
-  elif find "$FM_HOME/data" "$FM_HOME/state" "$FM_HOME/projects" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null | grep -q .; then
+  elif [ "$RECOVERING" -eq 0 ] && find "$FM_HOME/data" "$FM_HOME/state" "$FM_HOME/projects" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null | grep -q .; then
     die "unmarked existing remote home contains operational data"
   fi
 else
@@ -189,6 +210,7 @@ else
   # clone dies intermittently with "failed to copy file to .../objects/xx/hash".
   # --no-local uses the normal transport and writes a pack instead.
   git clone --no-local --quiet -- "$FM_ROOT" "$STAGE_HOME" || die "could not clone the remote Firstmate home"
+  printf '%s\n' "$ID" > "$STAGE_HOME/.fm-secondmate-provisioning" || die "cannot mark remote provisioning ownership"
   STAGE_SENTINEL="${STAGE_HOME##*/}.owner"
   : > "$STAGE_HOME/$STAGE_SENTINEL" || die "cannot mark the remote home staging directory"
   mv -- "$STAGE_HOME" "$FM_HOME" || die "cannot install the remote home"
@@ -200,6 +222,17 @@ else
   CREATED_HOME=1
   rm -f -- "$FM_HOME/$STAGE_SENTINEL" || die "cannot clear the remote home staging sentinel"
 fi
+# The reserved staging tree contains only unpublished clones. Never adopt an
+# existing tree without a matching in-progress marker, or follow a symlink.
+PROJECT_STAGE="$FM_HOME/.fm-provision-projects"
+if [ -e "$PROJECT_STAGE" ] || [ -L "$PROJECT_STAGE" ]; then
+  [ "$RECOVERING" -eq 1 ] && [ -d "$PROJECT_STAGE" ] && [ ! -L "$PROJECT_STAGE" ] \
+    || { PROJECT_STAGE=; die "remote project staging directory is unsafe or unowned"; }
+  rm -rf -- "$PROJECT_STAGE"
+fi
+printf '%s\n' "$ID" > "$FM_HOME/.fm-secondmate-provisioning.tmp.$$"
+mv -f -- "$FM_HOME/.fm-secondmate-provisioning.tmp.$$" "$FM_HOME/.fm-secondmate-provisioning"
+mkdir "$PROJECT_STAGE"
 for operational_dir in data state config projects; do
   operational_path="$FM_HOME/$operational_dir"
   if [ -e "$operational_path" ] || [ -L "$operational_path" ]; then
@@ -246,19 +279,38 @@ EOF
   case "$MODE" in no-mistakes|direct-PR) ;; *) die "project $NAME has unsupported remote mode: $MODE" ;; esac
   case "$REGISTRY_LINE" in "- $NAME "*) ;; *) die "project $NAME registry line is malformed" ;; esac
   DEST="$FM_HOME/projects/$NAME"
+  NEW_PROJECT=0
   if [ -e "$DEST" ] || [ -L "$DEST" ]; then
     [ -d "$DEST" ] && [ ! -L "$DEST" ] && [ -d "$DEST/.git" ] \
       || die "project destination exists but is not a safe clone: $DEST"
     EXISTING_ORIGIN=$(git -C "$DEST" remote get-url origin 2>/dev/null || true)
     [ "$EXISTING_ORIGIN" = "$ORIGIN" ] || die "project $NAME origin differs from the requested route"
   else
-    printf '%s\n' "$NAME" >> "$CREATED_PROJECTS"
-    git clone --no-local --quiet -- "$ORIGIN" "$DEST" || die "could not clone project $NAME on the remote host"
-    if [ "$MODE" = no-mistakes ]; then
-      command -v no-mistakes >/dev/null 2>&1 || die "no-mistakes is unavailable for project $NAME"
-      (cd "$DEST" && no-mistakes init >/dev/null && no-mistakes doctor >/dev/null) \
-        || die "no-mistakes initialization failed for project $NAME"
+    NEW_PROJECT=1
+    STAGED_PROJECT="$PROJECT_STAGE/$NAME"
+    printf 'cloning project %s\n' "$NAME" >&2
+    git clone --no-local --quiet -- "$ORIGIN" "$STAGED_PROJECT" || die "could not clone project $NAME on the remote host"
+    PROJECT_SENTINEL=".fm-provision-owner.$$"
+    : > "$STAGED_PROJECT/$PROJECT_SENTINEL"
+    mv -- "$STAGED_PROJECT" "$DEST" || die "cannot publish project $NAME"
+    if [ ! -f "$DEST/$PROJECT_SENTINEL" ] || [ -L "$DEST/$PROJECT_SENTINEL" ]; then
+      # mv may have nested our clone into a destination that appeared meanwhile.
+      # Remove only that owned nested clone, never the competing destination.
+      NESTED_PROJECT="$DEST/${STAGED_PROJECT##*/}"
+      if [ -d "$NESTED_PROJECT" ] && [ ! -L "$NESTED_PROJECT" ] \
+        && [ -f "$NESTED_PROJECT/$PROJECT_SENTINEL" ] && [ ! -L "$NESTED_PROJECT/$PROJECT_SENTINEL" ]; then
+        rm -rf -- "$NESTED_PROJECT"
+      fi
+      die "project $NAME destination appeared while it was being cloned"
     fi
+    printf '%s\n' "$NAME" >> "$CREATED_PROJECTS"
+    rm -f -- "$DEST/$PROJECT_SENTINEL"
+  fi
+  if [ "$MODE" = no-mistakes ] && { [ "$NEW_PROJECT" -eq 1 ] || [ "$RECOVERING" -eq 1 ]; }; then
+    command -v no-mistakes >/dev/null 2>&1 || die "no-mistakes is unavailable for project $NAME"
+    printf 'initializing project %s\n' "$NAME" >&2
+    (cd "$DEST" && no-mistakes init >/dev/null && no-mistakes doctor >/dev/null) \
+      || die "no-mistakes initialization failed for project $NAME"
   fi
   printf '%s\n' "$REGISTRY_LINE" >> "$PROJECT_REG"
 done < <(grep '^project=' "$TMP/manifest")
@@ -277,6 +329,8 @@ mv -f -- "$FM_HOME/.fm-secondmate-parent.tmp.$$" "$FM_HOME/.fm-secondmate-parent
 printf '%s\n' "$ID" > "$FM_HOME/.fm-secondmate-home.tmp.$$"
 mv -f -- "$FM_HOME/.fm-secondmate-home.tmp.$$" "$FM_HOME/.fm-secondmate-home"
 PUBLISHED=1
+rm -rf -- "$PROJECT_STAGE"
+rm -f -- "$FM_HOME/.fm-secondmate-provisioning"
 release_provision_lock
 trap - EXIT
 rm -rf -- "$TMP"

@@ -94,6 +94,14 @@ SH
 # tmux kill-window etc.: succeed silently.
 exit 0
 SH
+  cat > "$fakebin/curl" <<'SH'
+#!/usr/bin/env bash
+body=$(cat)
+[ -n "${FM_TRACE_CAPTURE_DIR:-}" ] || exit 1
+mkdir -p "$FM_TRACE_CAPTURE_DIR"
+n=$(find "$FM_TRACE_CAPTURE_DIR" -type f -name 'request-*.json' | wc -l | tr -d ' ')
+printf '%s' "$body" > "$FM_TRACE_CAPTURE_DIR/request-$((n + 1)).json"
+SH
   # Default gh-axi mock: no PR is associated with the branch, and viewing any PR
   # number fails. This keeps the landed-work check hermetic (never reaching the real
   # gh-axi) and represents the common "no GitHub PR" baseline. Tests that need a
@@ -108,6 +116,9 @@ exit 0
 SH
   cat > "$fakebin/gh" <<'SH'
 #!/usr/bin/env bash
+case "$*" in
+  'pr view '*"--json body --jq .body"*) printf 'Fixture body\n'; exit 0 ;;
+esac
 case "${1:-} ${2:-}" in
   "pr view") echo "error: pull request not found" >&2 ; exit 1 ;;
 esac
@@ -170,7 +181,7 @@ case "${1:-}" in
 esac
 exit 0
 SH
-  chmod +x "$fakebin/treehouse" "$fakebin/tmux" "$fakebin/gh-axi" "$fakebin/gh" "$fakebin/no-mistakes"
+  chmod +x "$fakebin/treehouse" "$fakebin/tmux" "$fakebin/curl" "$fakebin/gh-axi" "$fakebin/gh" "$fakebin/no-mistakes"
 
   # Bare origin so the clone has an `origin` remote and origin/HEAD.
   git init -q --bare "$case_dir/origin.git"
@@ -266,9 +277,13 @@ exit 0
 SH
   cat > "$case_dir/fakebin/gh" <<SH
 #!/usr/bin/env bash
+case "\$*" in
+  'api repos/'*'/pulls/'*'/files?per_page=100 --paginate --jq '*) printf 'README.md\n'; exit 0 ;;
+esac
 case "\${1:-} \${2:-}" in
   "pr view")
     case " \$* " in
+      *"--json body --jq .body"*) printf 'Fixture body\n' ; exit 0 ;;
       *"state,headRefOid,url"*) printf '%s\t%s\t%s\n' 'MERGED' '$head' 'https://github.com/example/repo/pull/7' ; exit 0 ;;
       *"headRefOid"*) printf '%s\n' '$head' ; exit 0 ;;
     esac
@@ -634,7 +649,22 @@ run_teardown() {
   FM_DATA_OVERRIDE="$case_dir/data" \
   FM_CONFIG_OVERRIDE="$case_dir/config" \
   PATH="$case_dir/fakebin:${FM_TEARDOWN_TEST_PATH:-$PATH}" \
+  FM_TRACE_CAPTURE_DIR="${FM_TRACE_CAPTURE_DIR:-}" \
     "$TEARDOWN" task-x1 "$@"
+}
+
+enable_trace_export() {  # <case-dir> <capture-dir>
+  local case_dir=$1 capture=$2 auth="$1/config/auth-header"
+  printf 'Authorization: Bearer synthetic-token\n' > "$auth"
+  chmod 600 "$auth"
+  jq -n --arg auth "$auth" '{enabled:true,endpoint:"http://127.0.0.1:14318/v1/traces","auth-header-file":$auth}' \
+    > "$case_dir/config/trace-export.json"
+  printf '%s\n' "$$" > "$case_dir/state/.lock"
+  printf '%s on\n' "$$" > "$case_dir/state/.trace-context-effective"
+  cat >> "$case_dir/state/task-x1.meta" <<'META'
+traceparent=00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01
+trace_started=1712345678901
+META
 }
 
 # Seed a real backlog carrying task-x1 as In flight, so a teardown in this case
@@ -699,7 +729,7 @@ test_local_only_fork_remote_allows() {
     || fail "fork-allow: post-teardown branch report was not stored"
   [ ! -e "$case_dir/state/.task-x1.branch-outcome-index" ] \
     || fail "fork-allow: post-teardown branch report recreated the retired task index"
-  [ "$(cat "$case_dir/state/.branch-outcome-index-ready")" = 1 ] \
+  [ "$(cat "$case_dir/state/.branch-outcome-index-ready")" = visible-only-v1:1 ] \
     || fail "fork-allow: post-teardown branch report did not publish its ready sequence"
   jq -e --arg id task-x1 '
     .schema == "fm-secondmate-home-summary.v1"
@@ -730,6 +760,34 @@ test_teardown_closes_the_backlog_item_itself() {
   printf '%s\n' "$out" | grep -F 'Run tasks-axi done' >/dev/null \
     && fail "teardown still asked a later turn to close the item it already closed: $out"
   pass "teardown closes its own backlog item before reporting success"
+}
+
+test_trace_root_emits_only_after_task_record_removal() {
+  local case_dir capture rc
+  case_dir=$(make_case trace-refused)
+  write_meta "$case_dir" no-mistakes ship
+  printf '%s\n' 'done [at=1712345678]: finished' > "$case_dir/state/task-x1.status"
+  enable_trace_export "$case_dir" "$case_dir/captured"
+  capture="$case_dir/captured"
+  printf '%s\n' dirty > "$case_dir/wt/uncommitted.txt"
+  rc=0
+  FM_TRACE_CAPTURE_DIR="$capture" run_teardown "$case_dir" >"$case_dir/stdout" 2>"$case_dir/stderr" || rc=$?
+  [ "$rc" -ne 0 ] || fail "trace-refused: dirty task should refuse cleanup"
+  [ "$(find "$capture" -type f -name 'request-*.json' | wc -l | tr -d ' ')" -eq 0 ] \
+    || fail "trace-refused: refused cleanup emitted a terminal root"
+
+  case_dir=$(make_case trace-success)
+  write_meta "$case_dir" local-only ship
+  printf '%s\n' 'done [at=1712345678]: finished' > "$case_dir/state/task-x1.status"
+  capture="$case_dir/captured"
+  enable_trace_export "$case_dir" "$capture"
+  FM_TRACE_CAPTURE_DIR="$capture" run_teardown "$case_dir" >"$case_dir/stdout" 2>"$case_dir/stderr" \
+    || fail "trace-success: landed cleanup failed: $(cat "$case_dir/stderr")"
+  [ "$(find "$capture" -type f -name 'request-*.json' | wc -l | tr -d ' ')" -eq 1 ] \
+    || fail "trace-success: successful cleanup did not emit exactly one root"
+  jq -e '.resourceSpans[0].scopeSpans[0].spans[0] as $s | $s.name == "firstmate.task" and $s.parentSpanId == null and $s.status.code == 1 and any($s.attributes[]; .key == "firstmate.task.outcome" and .value.stringValue == "done")' \
+    "$capture/request-1.json" >/dev/null || fail "trace-success: root span did not carry done/OK outcome"
+  pass "teardown emits its terminal root only after successful record removal"
 }
 
 test_teardown_closes_a_gerrit_task_with_its_change_url_as_a_note() {
@@ -1458,6 +1516,26 @@ test_windowless_legacy_record_tears_down_with_the_legacy_flag() {
   [ "$(backlog_row_state "$case_dir")" = "done" ] \
     || fail "windowless-flag: teardown returned success with its backlog item still open"
   pass "a windowless leftover with no spawn_gen also tears down when --legacy-record is passed"
+}
+
+test_windowless_non_tmux_legacy_record_without_endpoint_tears_down() {
+  local case_dir out
+  case_dir=$(make_case windowless-herdr-no-endpoint)
+  write_windowless_legacy_meta "$case_dir" no-mistakes ship
+  printf '%s\n' 'backend=herdr' >> "$case_dir/state/task-x1.meta"
+  seed_backlog_in_flight "$case_dir"
+  wt_commit "$case_dir" "landed windowless Herdr leftover"
+  add_fork_with_pushed_branch "$case_dir"
+
+  out=$(run_teardown "$case_dir") \
+    || fail "windowless-herdr-no-endpoint: teardown refused a landed endpoint-free Herdr leftover"
+  printf '%s\n' "$out" | grep -Fq 'legacy record accepted without spawn_gen: endpoint missing' \
+    || fail "windowless-herdr-no-endpoint: teardown did not log the accepted missing endpoint: $out"
+  [ "$(backlog_row_state "$case_dir")" = "done" ] \
+    || fail "windowless-herdr-no-endpoint: teardown returned success with its backlog item still open"
+  assert_absent "$case_dir/state/task-x1.meta" \
+    "windowless-herdr-no-endpoint: teardown left the task record"
+  pass "a landed windowless Herdr legacy record with no endpoint identity tears down"
 }
 
 test_windowless_legacy_record_still_refuses_unlanded_work() {
@@ -4505,6 +4583,7 @@ test_forced_secondmate_own_missing_adapter_sibling_refuses_before_child_cleanup
 test_retained_sources_still_reach_the_ordinary_refusal
 test_local_only_fork_remote_allows
 test_teardown_closes_the_backlog_item_itself
+test_trace_root_emits_only_after_task_record_removal
 test_teardown_closes_a_gerrit_task_with_its_change_url_as_a_note
 test_teardown_manual_backend_leaves_the_backlog_to_the_operator
 test_local_only_truly_unpushed_refuses
@@ -4553,6 +4632,7 @@ test_gh_error_and_content_absent_refuses
 test_legacy_record_without_the_flag_refuses
 test_windowless_legacy_record_with_gone_worktree_tears_down
 test_windowless_legacy_record_tears_down_with_the_legacy_flag
+test_windowless_non_tmux_legacy_record_without_endpoint_tears_down
 test_windowless_legacy_record_still_refuses_unlanded_work
 test_windowless_record_outside_the_leftover_class_still_refuses
 test_windowless_leftover_retries_its_retained_legacy_stamp_without_the_flag

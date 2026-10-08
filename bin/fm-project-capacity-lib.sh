@@ -325,7 +325,7 @@ fm_project_capacity_pending() {  # <project-lock> <first-state> <own-id>
       fm_project_capacity_release "$reservation" || return 1
       continue
     fi
-    state= id= generation=
+    state='' id='' generation=''
     while IFS= read -r line || [ -n "$line" ]; do
       case "$line" in
         state=*) state=${line#*=} ;;

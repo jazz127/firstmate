@@ -22,7 +22,8 @@
 # project:
 #   <project-name> <capacity>
 # <project-name> is the project's registered name, which is the basename of its
-# clone directory, and <capacity> is a positive integer of at most six digits.
+# clone directory, and <capacity> is a positive integer of at most six digits,
+# without leading zeros.
 # The capacity is the last whitespace-separated field, so the name before it may
 # contain spaces. Blank lines are ignored. A line is a comment when it is `#`,
 # when `#` is followed by whitespace, or when it starts with `#` and its last
@@ -63,13 +64,19 @@
 # that lock until its task metadata takes over, including while Treehouse or
 # Herdr ordering releases the project lock. Every fresh backend reserves when
 # any project is capped, including an uncapped same-origin clone and Orca.
-# Reservations name the canonical task state directory and id; a published
-# task record supersedes its reservation rather than counting twice. Successful
+# Reservations name the canonical task state directory, id, and spawn_gen; only
+# metadata with the same spawn_gen supersedes its reservation. Until then, the
+# reservation holds one place even if an older PR-ready record survives a
+# restart, and that older record is excluded so the task counts once. Successful
 # publication retires the reservation before releasing the project lock; failed
 # launches retire it in their EXIT cleanup. Counting reaps reservations whose
 # original process is proven gone using the PID-start identity lock machinery;
 # uncertain identity remains occupied. Prepared directories are renamed into
 # the counted namespace atomically so interrupted writes cannot hide a holder.
+# Retirement atomically renames a reservation out of that namespace before
+# deleting its contents. A reader ignores a reservation that disappeared
+# during its snapshot, but surviving unreadable or malformed state refuses
+# admission. tests/fm-project-capacity.test.sh pins restart handoff and retirement.
 # Freeing a place needs no lock, because removing a record or reservation, or
 # adding pr=, only ever lowers the count.
 #

@@ -1,0 +1,28 @@
+Real product driver: bin/fm-pr-check.sh with actual gh/GitHub reads.
+Oracle: PR #198 positively claims whole-word live scenarios passed; publication must demand readable, in-scope provenance.
+Captured: 2026-10-08T09:37:27.225208+00:00
+COMMAND: FM_HOME=/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4DDG5Z4N3B1WQV050146Y02/.test-evidence-guard-tmp/pr-adversarial /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4DDG5Z4N3B1WQV050146Y02/bin/fm-pr-check.sh evidence-claim https://github.com/jazz127/firstmate/pull/198
+exit=1
+stdout:
+
+stderr:
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  repair missing watcher supervision with a foreground checkpoint: bin/fm-watch-checkpoint.sh --seconds 180.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+evidence claim refused: artifact is outside the worker worktree or task temp directory: /tmp/fm-otel-task-tracing-impl/live-evidence-summary.json
+error: published intent failed evidence validation
+
+persisted task metadata:
+kind=ship
+mode=no-mistakes
+yolo=off
+worktree=/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4DDG5Z4N3B1WQV050146Y02
+project=/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4DDG5Z4N3B1WQV050146Y02
+tasktmp=/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4DDG5Z4N3B1WQV050146Y02/.test-evidence-guard-tmp/pr-adversarial
+
+state files: ['.guard-watcher-stale-banner', 'evidence-claim.meta']
+Verified: refused; original metadata unchanged; no merge poll published.

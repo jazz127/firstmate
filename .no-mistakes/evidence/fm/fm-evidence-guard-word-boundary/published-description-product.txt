@@ -1,0 +1,63 @@
+Real product driver: bin/fm-pr-check.sh with actual gh/GitHub reads.
+Only disposable local task records were created. No merge, push, PR update, fake tool, or worker launch.
+Oracle: PR #131 describes local checks; delivery inside a test filename is not a whole-word live claim.
+Captured: 2026-10-08T09:36:18.157323+00:00
+
+VERSION: baseline
+COMMAND: FM_HOME=/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4DDG5Z4N3B1WQV050146Y02/.test-evidence-guard-tmp/pr-baseline /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4DDG5Z4N3B1WQV050146Y02/.test-evidence-guard-tmp/baseline/bin/fm-pr-check.sh evidence-ordinary https://github.com/jazz127/firstmate/pull/131
+exit=1
+stdout:
+
+stderr:
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  repair missing watcher supervision with a foreground checkpoint: bin/fm-watch-checkpoint.sh --seconds 180.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+evidence claim refused: artifact is outside the worker worktree or task temp directory: /tmp/fm-hf-brief-antistall-pick/upstream-pr-6023.txt
+error: published intent failed evidence validation
+
+persisted task metadata:
+kind=ship
+mode=no-mistakes
+yolo=off
+worktree=/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4DDG5Z4N3B1WQV050146Y02
+project=/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4DDG5Z4N3B1WQV050146Y02
+tasktmp=/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4DDG5Z4N3B1WQV050146Y02/.test-evidence-guard-tmp/pr-baseline
+
+state files: [".guard-watcher-stale-banner", "evidence-ordinary.meta"]
+
+VERSION: changed
+COMMAND: FM_HOME=/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4DDG5Z4N3B1WQV050146Y02/.test-evidence-guard-tmp/pr-changed /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4DDG5Z4N3B1WQV050146Y02/bin/fm-pr-check.sh evidence-ordinary https://github.com/jazz127/firstmate/pull/131
+exit=0
+stdout:
+armed: state/evidence-ordinary.check.sh
+
+stderr:
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  repair missing watcher supervision with a foreground checkpoint: bin/fm-watch-checkpoint.sh --seconds 180.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+persisted task metadata:
+kind=ship
+mode=no-mistakes
+yolo=off
+worktree=/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4DDG5Z4N3B1WQV050146Y02
+project=/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4DDG5Z4N3B1WQV050146Y02
+tasktmp=/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4DDG5Z4N3B1WQV050146Y02/.test-evidence-guard-tmp/pr-changed
+pr=https://github.com/jazz127/firstmate/pull/131
+pr_head=0d20d689314c3ebbddd14a2b292bf864f89bbc70
+
+state files: [".guard-watcher-stale-banner", "contributions.check-trust", "contributions.check.sh", "evidence-ordinary.check.sh", "evidence-ordinary.meta", "evidence-ordinary.pr-poll", "evidence-ordinary.pr-poll-registration"]
+persisted PR identity:
+github
+https://github.com/jazz127/firstmate/pull/131
+github.com
+jazz127/firstmate
+131

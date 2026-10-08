@@ -1,0 +1,14 @@
+Worker-spawn lab prerequisite attempt
+Captured: 2026-10-08T09:39:27.023895+00:00
+Command: bash bin/fm-lab-home.sh create /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4DDG5Z4N3B1WQV050146Y02/.test-evidence-guard-tmp/fm-lab-spawn
+exit=127
+
+bash: bin/fm-lab-home.sh: No such file or directory
+
+claude on PATH: /opt/homebrew/bin/claude
+codex on PATH: /opt/homebrew/bin/codex
+The runbook requires the owned bin/fm-lab-home.sh create path to mint a marked disposable home.
+This checkout has no such helper. Its existing fm-gate-refuse-lib.sh has no lab-home exception.
+An unmarked home and clearing NO_MISTAKES_GATE cannot authorize a spawn from this gate worktree.
+No bypass, fake CLI, default fleet operation, login change, worker launch, or actual merge was attempted.
+To enable the spawn proof, supply the repository-owned lab-home helper and matching gate lab exception in the validated checkout, then rerun Test.

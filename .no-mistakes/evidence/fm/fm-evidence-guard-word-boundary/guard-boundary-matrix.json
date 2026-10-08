@@ -1,0 +1,1160 @@
+{
+  "classification": "offline library probes, not live",
+  "oracle": "author whole-word requirement and existing provenance contract",
+  "cases": [
+    {
+      "phase": "preflight",
+      "intent": "existing project delivery and merge rules",
+      "expected": "accept ordinary prose",
+      "exit": 0,
+      "stderr": "",
+      "matches_contract": true
+    },
+    {
+      "phase": "preflight",
+      "intent": "delivery test passed",
+      "expected": "accept ordinary prose",
+      "exit": 0,
+      "stderr": "",
+      "matches_contract": true
+    },
+    {
+      "phase": "preflight",
+      "intent": "deliverable validation was confirmed",
+      "expected": "accept ordinary prose",
+      "exit": 0,
+      "stderr": "",
+      "matches_contract": true
+    },
+    {
+      "phase": "preflight",
+      "intent": "olive scenario passed",
+      "expected": "accept ordinary prose",
+      "exit": 0,
+      "stderr": "",
+      "matches_contract": true
+    },
+    {
+      "phase": "preflight",
+      "intent": "realm test passed",
+      "expected": "accept ordinary prose",
+      "exit": 0,
+      "stderr": "",
+      "matches_contract": true
+    },
+    {
+      "phase": "preflight",
+      "intent": "realise validation passed",
+      "expected": "accept ordinary prose",
+      "exit": 0,
+      "stderr": "",
+      "matches_contract": true
+    },
+    {
+      "phase": "preflight",
+      "intent": "unverified test passed",
+      "expected": "accept ordinary prose",
+      "exit": 0,
+      "stderr": "",
+      "matches_contract": true
+    },
+    {
+      "phase": "preflight",
+      "intent": "verifiedness test passed",
+      "expected": "accept ordinary prose",
+      "exit": 0,
+      "stderr": "",
+      "matches_contract": true
+    },
+    {
+      "phase": "preflight",
+      "intent": "externality test passed",
+      "expected": "accept ordinary prose",
+      "exit": 0,
+      "stderr": "",
+      "matches_contract": true
+    },
+    {
+      "phase": "preflight",
+      "intent": "externalized test passed",
+      "expected": "accept ordinary prose",
+      "exit": 0,
+      "stderr": "",
+      "matches_contract": true
+    },
+    {
+      "phase": "preflight",
+      "intent": "independentlyconfirmed test passed",
+      "expected": "accept ordinary prose",
+      "exit": 0,
+      "stderr": "",
+      "matches_contract": true
+    },
+    {
+      "phase": "preflight",
+      "intent": "independentness test passed",
+      "expected": "accept ordinary prose",
+      "exit": 0,
+      "stderr": "",
+      "matches_contract": true
+    },
+    {
+      "phase": "preflight",
+      "intent": "live2 test passed",
+      "expected": "accept ordinary prose",
+      "exit": 0,
+      "stderr": "",
+      "matches_contract": true
+    },
+    {
+      "phase": "preflight",
+      "intent": "2live test passed",
+      "expected": "accept ordinary prose",
+      "exit": 0,
+      "stderr": "",
+      "matches_contract": true
+    },
+    {
+      "phase": "preflight",
+      "intent": "live_test passed",
+      "expected": "accept ordinary prose",
+      "exit": 0,
+      "stderr": "",
+      "matches_contract": true
+    },
+    {
+      "phase": "preflight",
+      "intent": "the live_status test passed",
+      "expected": "accept ordinary prose",
+      "exit": 0,
+      "stderr": "",
+      "matches_contract": true
+    },
+    {
+      "phase": "preflight",
+      "intent": "foo_verified test passed",
+      "expected": "accept ordinary prose",
+      "exit": 0,
+      "stderr": "",
+      "matches_contract": true
+    },
+    {
+      "phase": "preflight",
+      "intent": "1 of 1 delivery scenarios",
+      "expected": "accept ordinary prose",
+      "exit": 0,
+      "stderr": "",
+      "matches_contract": true
+    },
+    {
+      "phase": "preflight",
+      "intent": "delivery evidence: passed",
+      "expected": "accept ordinary prose",
+      "exit": 0,
+      "stderr": "",
+      "matches_contract": true
+    },
+    {
+      "phase": "preflight",
+      "intent": "validation was unverified",
+      "expected": "accept ordinary prose",
+      "exit": 0,
+      "stderr": "",
+      "matches_contract": true
+    },
+    {
+      "phase": "preflight",
+      "intent": "validation was unreal",
+      "expected": "accept ordinary prose",
+      "exit": 0,
+      "stderr": "",
+      "matches_contract": true
+    },
+    {
+      "phase": "preflight",
+      "intent": "scenario with delivery passed",
+      "expected": "accept ordinary prose",
+      "exit": 0,
+      "stderr": "",
+      "matches_contract": true
+    },
+    {
+      "phase": "preflight",
+      "intent": "evidence of delivery was confirmed",
+      "expected": "accept ordinary prose",
+      "exit": 0,
+      "stderr": "",
+      "matches_contract": true
+    },
+    {
+      "phase": "preflight",
+      "intent": "live test passed",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "preflight",
+      "intent": "verified test passed",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "preflight",
+      "intent": "real-account test passed",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "preflight",
+      "intent": "real account test passed",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "preflight",
+      "intent": "real test passed",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "preflight",
+      "intent": "independent test passed",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "preflight",
+      "intent": "independently test passed",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "preflight",
+      "intent": "external test passed",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "preflight",
+      "intent": "externally confirmed test passed",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "preflight",
+      "intent": "the test was live",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "preflight",
+      "intent": "the test was verified",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "preflight",
+      "intent": "the test was real-account",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "preflight",
+      "intent": "the test was real account",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "preflight",
+      "intent": "the test was real",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "preflight",
+      "intent": "the test was independent",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "preflight",
+      "intent": "the test was independently",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "preflight",
+      "intent": "the test was external",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "preflight",
+      "intent": "the test was externally confirmed",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "preflight",
+      "intent": "live passed test",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "preflight",
+      "intent": "verified passed test",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "preflight",
+      "intent": "real-account passed test",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "preflight",
+      "intent": "real account passed test",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "preflight",
+      "intent": "real passed test",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "preflight",
+      "intent": "independent passed test",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "preflight",
+      "intent": "independently passed test",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "preflight",
+      "intent": "external passed test",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "preflight",
+      "intent": "externally confirmed passed test",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "preflight",
+      "intent": "scenario with live passed",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "preflight",
+      "intent": "scenario with verified passed",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "preflight",
+      "intent": "scenario with real-account passed",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "preflight",
+      "intent": "scenario with real account passed",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "preflight",
+      "intent": "scenario with independent passed",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "preflight",
+      "intent": "scenario with independently passed",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "preflight",
+      "intent": "scenario with external passed",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "preflight",
+      "intent": "scenario with externally confirmed passed",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "preflight",
+      "intent": "real-accounting test passed",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "preflight",
+      "intent": "[live] test passed",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "preflight",
+      "intent": "`live` test passed",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "preflight",
+      "intent": "LIVE-test passed",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "preflight",
+      "intent": "validation was (verified)",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "preflight",
+      "intent": "1 of 1 scenarios driven live",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "preflight",
+      "intent": "live evidence: passed",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "preflight",
+      "intent": "live\ntest\npassed",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "preflight",
+      "intent": "independently confirmed test passed",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "publish",
+      "intent": "existing project delivery and merge rules",
+      "expected": "accept ordinary prose",
+      "exit": 0,
+      "stderr": "",
+      "matches_contract": true
+    },
+    {
+      "phase": "publish",
+      "intent": "delivery test passed",
+      "expected": "accept ordinary prose",
+      "exit": 0,
+      "stderr": "",
+      "matches_contract": true
+    },
+    {
+      "phase": "publish",
+      "intent": "deliverable validation was confirmed",
+      "expected": "accept ordinary prose",
+      "exit": 0,
+      "stderr": "",
+      "matches_contract": true
+    },
+    {
+      "phase": "publish",
+      "intent": "olive scenario passed",
+      "expected": "accept ordinary prose",
+      "exit": 0,
+      "stderr": "",
+      "matches_contract": true
+    },
+    {
+      "phase": "publish",
+      "intent": "realm test passed",
+      "expected": "accept ordinary prose",
+      "exit": 0,
+      "stderr": "",
+      "matches_contract": true
+    },
+    {
+      "phase": "publish",
+      "intent": "realise validation passed",
+      "expected": "accept ordinary prose",
+      "exit": 0,
+      "stderr": "",
+      "matches_contract": true
+    },
+    {
+      "phase": "publish",
+      "intent": "unverified test passed",
+      "expected": "accept ordinary prose",
+      "exit": 0,
+      "stderr": "",
+      "matches_contract": true
+    },
+    {
+      "phase": "publish",
+      "intent": "verifiedness test passed",
+      "expected": "accept ordinary prose",
+      "exit": 0,
+      "stderr": "",
+      "matches_contract": true
+    },
+    {
+      "phase": "publish",
+      "intent": "externality test passed",
+      "expected": "accept ordinary prose",
+      "exit": 0,
+      "stderr": "",
+      "matches_contract": true
+    },
+    {
+      "phase": "publish",
+      "intent": "externalized test passed",
+      "expected": "accept ordinary prose",
+      "exit": 0,
+      "stderr": "",
+      "matches_contract": true
+    },
+    {
+      "phase": "publish",
+      "intent": "independentlyconfirmed test passed",
+      "expected": "accept ordinary prose",
+      "exit": 0,
+      "stderr": "",
+      "matches_contract": true
+    },
+    {
+      "phase": "publish",
+      "intent": "independentness test passed",
+      "expected": "accept ordinary prose",
+      "exit": 0,
+      "stderr": "",
+      "matches_contract": true
+    },
+    {
+      "phase": "publish",
+      "intent": "live2 test passed",
+      "expected": "accept ordinary prose",
+      "exit": 0,
+      "stderr": "",
+      "matches_contract": true
+    },
+    {
+      "phase": "publish",
+      "intent": "2live test passed",
+      "expected": "accept ordinary prose",
+      "exit": 0,
+      "stderr": "",
+      "matches_contract": true
+    },
+    {
+      "phase": "publish",
+      "intent": "live_test passed",
+      "expected": "accept ordinary prose",
+      "exit": 0,
+      "stderr": "",
+      "matches_contract": true
+    },
+    {
+      "phase": "publish",
+      "intent": "the live_status test passed",
+      "expected": "accept ordinary prose",
+      "exit": 0,
+      "stderr": "",
+      "matches_contract": true
+    },
+    {
+      "phase": "publish",
+      "intent": "foo_verified test passed",
+      "expected": "accept ordinary prose",
+      "exit": 0,
+      "stderr": "",
+      "matches_contract": true
+    },
+    {
+      "phase": "publish",
+      "intent": "1 of 1 delivery scenarios",
+      "expected": "accept ordinary prose",
+      "exit": 0,
+      "stderr": "",
+      "matches_contract": true
+    },
+    {
+      "phase": "publish",
+      "intent": "delivery evidence: passed",
+      "expected": "accept ordinary prose",
+      "exit": 0,
+      "stderr": "",
+      "matches_contract": true
+    },
+    {
+      "phase": "publish",
+      "intent": "validation was unverified",
+      "expected": "accept ordinary prose",
+      "exit": 0,
+      "stderr": "",
+      "matches_contract": true
+    },
+    {
+      "phase": "publish",
+      "intent": "validation was unreal",
+      "expected": "accept ordinary prose",
+      "exit": 0,
+      "stderr": "",
+      "matches_contract": true
+    },
+    {
+      "phase": "publish",
+      "intent": "scenario with delivery passed",
+      "expected": "accept ordinary prose",
+      "exit": 0,
+      "stderr": "",
+      "matches_contract": true
+    },
+    {
+      "phase": "publish",
+      "intent": "evidence of delivery was confirmed",
+      "expected": "accept ordinary prose",
+      "exit": 0,
+      "stderr": "",
+      "matches_contract": true
+    },
+    {
+      "phase": "publish",
+      "intent": "live test passed",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "publish",
+      "intent": "verified test passed",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "publish",
+      "intent": "real-account test passed",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "publish",
+      "intent": "real account test passed",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "publish",
+      "intent": "real test passed",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "publish",
+      "intent": "independent test passed",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "publish",
+      "intent": "independently test passed",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "publish",
+      "intent": "external test passed",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "publish",
+      "intent": "externally confirmed test passed",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "publish",
+      "intent": "the test was live",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "publish",
+      "intent": "the test was verified",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "publish",
+      "intent": "the test was real-account",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "publish",
+      "intent": "the test was real account",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "publish",
+      "intent": "the test was real",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "publish",
+      "intent": "the test was independent",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "publish",
+      "intent": "the test was independently",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "publish",
+      "intent": "the test was external",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "publish",
+      "intent": "the test was externally confirmed",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "publish",
+      "intent": "live passed test",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "publish",
+      "intent": "verified passed test",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "publish",
+      "intent": "real-account passed test",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "publish",
+      "intent": "real account passed test",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "publish",
+      "intent": "real passed test",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "publish",
+      "intent": "independent passed test",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "publish",
+      "intent": "independently passed test",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "publish",
+      "intent": "external passed test",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "publish",
+      "intent": "externally confirmed passed test",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "publish",
+      "intent": "scenario with live passed",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "publish",
+      "intent": "scenario with verified passed",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "publish",
+      "intent": "scenario with real-account passed",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "publish",
+      "intent": "scenario with real account passed",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "publish",
+      "intent": "scenario with independent passed",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "publish",
+      "intent": "scenario with independently passed",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "publish",
+      "intent": "scenario with external passed",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "publish",
+      "intent": "scenario with externally confirmed passed",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "publish",
+      "intent": "real-accounting test passed",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "publish",
+      "intent": "[live] test passed",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "publish",
+      "intent": "`live` test passed",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "publish",
+      "intent": "LIVE-test passed",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "publish",
+      "intent": "validation was (verified)",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "publish",
+      "intent": "1 of 1 scenarios driven live",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "publish",
+      "intent": "live evidence: passed",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "publish",
+      "intent": "live\ntest\npassed",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "publish",
+      "intent": "independently confirmed test passed",
+      "expected": "refuse unsupported claim",
+      "exit": 1,
+      "stderr": "evidence claim refused: missing evidence-artifact: path",
+      "matches_contract": true
+    },
+    {
+      "phase": "preflight",
+      "intent": "live test passed\nevidence-artifact: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4DDG5Z4N3B1WQV050146Y02/.test-evidence-guard-tmp/matrix-proof.txt\nevidence-command: printf '%s\\n' 'captured boundary-validation output'\nevidence-captured: 2026-10-08T09:41:50+00:00\n",
+      "expected": "accept claim with readable in-scope provenance",
+      "exit": 0,
+      "stderr": "",
+      "matches_contract": true
+    },
+    {
+      "phase": "publish",
+      "intent": "live test passed\nevidence-artifact: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4DDG5Z4N3B1WQV050146Y02/.test-evidence-guard-tmp/matrix-proof.txt\nevidence-command: printf '%s\\n' 'captured boundary-validation output'\nevidence-captured: 2026-10-08T09:41:50+00:00\n",
+      "expected": "accept claim with readable in-scope provenance",
+      "exit": 0,
+      "stderr": "",
+      "matches_contract": true
+    },
+    {
+      "phase": "publish",
+      "intent": "live test passed\nevidence-artifact: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4DDG5Z4N3B1WQV050146Y02/.test-evidence-guard-tmp/matrix-proof.txt\nevidence-command: printf '%s\\n' 'captured boundary-validation output'\nevidence-captured: 2026-10-08T09:41:50+00:00\n",
+      "expected": "refuse missing published artifact",
+      "exit": 1,
+      "stderr": "evidence claim refused: artifact is missing or unreadable: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4DDG5Z4N3B1WQV050146Y02/.test-evidence-guard-tmp/matrix-proof.txt",
+      "matches_contract": true
+    }
+  ],
+  "before_after": [
+    {
+      "intent": "delivery test passed",
+      "baseline_exit": 1,
+      "baseline_stderr": "evidence claim refused: missing evidence-artifact: path",
+      "changed_exit": 0,
+      "changed_stderr": ""
+    },
+    {
+      "intent": "deliverable validation was confirmed",
+      "baseline_exit": 1,
+      "baseline_stderr": "evidence claim refused: missing evidence-artifact: path",
+      "changed_exit": 0,
+      "changed_stderr": ""
+    },
+    {
+      "intent": "olive scenario passed",
+      "baseline_exit": 1,
+      "baseline_stderr": "evidence claim refused: missing evidence-artifact: path",
+      "changed_exit": 0,
+      "changed_stderr": ""
+    },
+    {
+      "intent": "realm test passed",
+      "baseline_exit": 1,
+      "baseline_stderr": "evidence claim refused: missing evidence-artifact: path",
+      "changed_exit": 0,
+      "changed_stderr": ""
+    },
+    {
+      "intent": "realise validation passed",
+      "baseline_exit": 1,
+      "baseline_stderr": "evidence claim refused: missing evidence-artifact: path",
+      "changed_exit": 0,
+      "changed_stderr": ""
+    },
+    {
+      "intent": "unverified test passed",
+      "baseline_exit": 1,
+      "baseline_stderr": "evidence claim refused: missing evidence-artifact: path",
+      "changed_exit": 0,
+      "changed_stderr": ""
+    },
+    {
+      "intent": "externality test passed",
+      "baseline_exit": 1,
+      "baseline_stderr": "evidence claim refused: missing evidence-artifact: path",
+      "changed_exit": 0,
+      "changed_stderr": ""
+    },
+    {
+      "intent": "independentness test passed",
+      "baseline_exit": 1,
+      "baseline_stderr": "evidence claim refused: missing evidence-artifact: path",
+      "changed_exit": 0,
+      "changed_stderr": ""
+    }
+  ]
+}

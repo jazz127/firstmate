@@ -1,0 +1,16 @@
+{
+  "colon_split_probe": [
+    {
+      "library": "/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4DDG5Z4N3B1WQV050146Y02/.test-evidence-guard-tmp/baseline/bin/fm-dod-lib.sh",
+      "exit": 0,
+      "stderr": ""
+    },
+    {
+      "library": "/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4DDG5Z4N3B1WQV050146Y02/bin/fm-dod-lib.sh",
+      "exit": 0,
+      "stderr": ""
+    }
+  ],
+  "classification": "Unchanged baseline detector limitation; excluded from whole-word regression expectations.",
+  "hyphen_probe": "real-accounting includes the whole qualifier real before a hyphen; refusal is expected."
+}

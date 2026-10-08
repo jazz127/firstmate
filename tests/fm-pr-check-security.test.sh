@@ -140,6 +140,10 @@ SH
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$FM_TEST_GH_LOG"
 case "${1:-} ${2:-}" in
+  "repo view")
+    printf '%s\n' merge=true squash=true rebase=true
+    exit 0
+    ;;
   "api graphql")
     printf '%s\n' \
       "state=${FM_TEST_GH_GRAPHQL_STATE:-MERGED}" \
@@ -150,6 +154,11 @@ case "${1:-} ${2:-}" in
     ;;
   "pr view")
     case " $* " in
+      *" --json body --jq .body "*)
+        [ "${FM_TEST_GH_BODY_FAIL:-0}" = 0 ] || exit 1
+        printf '%s' "${FM_TEST_GH_BODY:-}"
+        exit 0
+        ;;
       *statusCheckRollup*)
         printf '%s\n' "{\"state\":\"OPEN\",\"isDraft\":false,\"mergeable\":\"MERGEABLE\",\"mergeStateStatus\":\"CLEAN\",\"headRefOid\":\"${FM_TEST_GH_HEAD:-0123456789abcdef0123456789abcdef01234567}\",\"baseRefName\":\"main\",\"statusCheckRollup\":[{\"__typename\":\"CheckRun\",\"name\":\"ci\",\"status\":\"COMPLETED\",\"conclusion\":\"SUCCESS\"}]}"
         exit 0
@@ -179,7 +188,7 @@ case " $* " in
   *" api repos/"*"/commits/"*"/statuses?per_page=100 "*)
     printf '%s\n' '[[]]'
     ;;
-  *" api --paginate repos/"*"/rules/branches/"*merge_queue*)
+  *" api --paginate repos/"*"/rules/branches/"*merge_queue*|*" api --paginate repos/"*"/rules/branches/"*pull_request*)
     ;;
   *" api --paginate repos/"*"/rules/branches/"*)
     printf '%s\n' '[]'
@@ -188,6 +197,15 @@ case " $* " in
     printf '%s\n' '{"name":"main","protected":false}'
     ;;
   *" api repos/"*"/pulls/"*)
+    if [ -n "${FM_TEST_GH_FILES:-}" ]; then
+      filter=.
+      while [ "$#" -gt 0 ]; do
+        [ "$1" != --jq ] || filter=$2
+        shift
+      done
+      printf '%s\n' "$FM_TEST_GH_FILES" | jq -r "$filter"
+      exit
+    fi
     printf '%s\n' "{\"state\":\"open\",\"user\":{\"login\":\"author\"},\"head\":{\"sha\":\"${FM_TEST_GH_HEAD:-0123456789abcdef0123456789abcdef01234567}\"},\"draft\":false,\"mergeable\":true,\"merged_at\":null}"
     ;;
   *" api repos/"*)
@@ -218,6 +236,33 @@ SH
   cat > "$fakebin/glab" <<'SH'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$FM_TEST_GLAB_LOG"
+case " $* " in
+  *" --jq "*)
+    printf '%s\n' 'unknown flag: --jq' >&2
+    exit 1
+    ;;
+  *" api projects/"*)
+    if [ -n "${FM_TEST_GLAB_FILES:-}" ]; then
+      printf '%s\n' "$FM_TEST_GLAB_FILES"
+      exit 0
+    fi
+    printf '%s\n' '{"changes":[]}'
+    exit 0
+    ;;
+  *" -F json "*)
+    [ "${FM_TEST_GLAB_BODY_FAIL:-0}" = 0 ] || exit 1
+    count=0
+    [ ! -f "$FM_TEST_GLAB_LOG.json-count" ] || count=$(cat "$FM_TEST_GLAB_LOG.json-count")
+    count=$((count + 1))
+    printf '%s\n' "$count" > "$FM_TEST_GLAB_LOG.json-count"
+    if [ "${FM_TEST_GLAB_BAD_STATE_AFTER_BODY:-0}" = 1 ] && [ "$count" -gt 1 ]; then
+      printf 'title:\tfixture merge request\nstate:\topened\nauthor:\tsomeone\n'
+      exit 0
+    fi
+    printf '%s\n' "${FM_TEST_GLAB_BODY_JSON:-{\"description\":\"\",\"state\":\"opened\",\"sha\":\"0123456789abcdef0123456789abcdef01234567\",\"detailed_merge_status\":\"mergeable\",\"has_conflicts\":false,\"blocking_discussions_resolved\":true,\"head_pipeline\":{\"sha\":\"0123456789abcdef0123456789abcdef01234567\",\"status\":\"success\"}}}"
+    exit 0
+    ;;
+esac
 [ "${FM_TEST_GLAB_FAIL:-0}" = 0 ] || exit 1
 [ "${FM_TEST_GLAB_SLEEP:-0}" = 0 ] || sleep "$FM_TEST_GLAB_SLEEP"
 printf 'title:\tfixture merge request\nstate:\t%s\nauthor:\tsomeone\n' "${FM_TEST_GLAB_STATE:-opened}"
@@ -236,9 +281,10 @@ if [ -n "${FM_TEST_GERRIT_RAW:-}" ]; then
   exit 0
 fi
 change=${FM_TEST_GERRIT_CHANGE:-${2:-0}}
-printf '{"ok":true,"op":"show","count":1,"missing":[],"changes":[{"change":%s,"subject":%s,"project":"p","status":"%s","wip":false,"submit":"%s","submittable":%s,"blocked_on":"%s","patch_set":1,"revision":"%s","url":"%s"}]}\n' \
+printf '{"ok":true,"op":"show","count":1,"missing":[],"changes":[{"change":%s,"subject":%s,"commit_message":%s,"project":"p","status":"%s","wip":false,"submit":"%s","submittable":%s,"blocked_on":"%s","patch_set":1,"revision":"%s","url":"%s"}]}\n' \
   "$change" \
   "${FM_TEST_GERRIT_SUBJECT:-\"fixture change\"}" \
+  "${FM_TEST_GERRIT_COMMIT_MESSAGE:-\"fixture commit message\"}" \
   "${FM_TEST_GERRIT_STATUS:-NEW}" \
   "${FM_TEST_GERRIT_SUBMIT:-NOT_READY}" \
   "${FM_TEST_GERRIT_SUBMITTABLE:-false}" \
@@ -304,7 +350,8 @@ write_poll_meta() {
 run_check_entry() {
   local dir=$1
   shift
-  FM_ROOT_OVERRIDE="$dir/root" FM_HOME="$dir/home" \
+  FM_ROOT_OVERRIDE="$dir/root" FM_HOME="$dir/home" FM_STATE_OVERRIDE="$dir/home/state" \
+    FM_CONFIG_OVERRIDE="$dir/home/config" \
     FM_TEST_GUARD_LOG="$dir/guard.log" FM_TEST_GH_LOG="$dir/gh.log" \
     FM_TEST_GH_AXI_LOG="$dir/gh-axi.log" FM_TEST_GLAB_LOG="$dir/glab.log" \
     FM_TEST_GERRIT_AXI_LOG="$dir/gerrit-axi.log" \
@@ -315,12 +362,39 @@ run_check_entry() {
 run_merge_entry() {
   local dir=$1
   shift
-  FM_ROOT_OVERRIDE="$dir/root" FM_HOME="$dir/home" \
+  FM_ROOT_OVERRIDE="$dir/root" FM_HOME="$dir/home" FM_STATE_OVERRIDE="$dir/home/state" \
+    FM_CONFIG_OVERRIDE="$dir/home/config" \
     FM_TEST_GUARD_LOG="$dir/guard.log" FM_TEST_GH_LOG="$dir/gh.log" \
     FM_TEST_GH_AXI_LOG="$dir/gh-axi.log" FM_TEST_GLAB_LOG="$dir/glab.log" \
     FM_TEST_GERRIT_AXI_LOG="$dir/gerrit-axi.log" \
     PATH="$dir/fakebin:$BASE_PATH" \
     "$PR_MERGE" "$@"
+}
+
+enable_trace_capture() {  # <case-dir>
+  local dir=$1 meta="$1/home/state/task-a.meta" capture="$1/trace.capture"
+  FM_TEST_TRACE_CAPTURE=$capture
+  export FM_TEST_TRACE_CAPTURE
+  awk -v carrier='traceparent=00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01' '
+    /^pr=/ && !added { print carrier; added=1 }
+    { print }
+    END { if (!added) print carrier }
+  ' "$meta" > "$meta.trace.tmp" && mv -f "$meta.trace.tmp" "$meta"
+  printf '4242\n' > "$dir/home/state/.lock"
+  printf '4242 on\n' > "$dir/home/state/.trace-context-effective"
+  printf 'Authorization: Bearer synthetic-test-token\n' > "$dir/home/config/trace-auth"
+  chmod 600 "$dir/home/config/trace-auth"
+  ln -s "$REAL_JQ" "$dir/fakebin/jq"
+  printf '{"enabled":true,"endpoint":"http://127.0.0.1:4318","auth-header-file":"%s/home/config/trace-auth"}\n' \
+    "$dir" > "$dir/home/config/trace-export.json"
+  cat > "$dir/fakebin/curl" <<'SH'
+#!/usr/bin/env bash
+body=$(cat)
+printf '%s\n' "$body" > "$FM_TEST_TRACE_CAPTURE"
+printf '%s\n' "$body" >> "$FM_TEST_TRACE_CAPTURE.requests"
+SH
+  chmod 700 "$dir/fakebin/curl"
+  : > "$capture.requests"
 }
 
 # shellcheck disable=SC2016 # Literal rejected URL bytes are parser test data.
@@ -735,6 +809,98 @@ test_direct_pr_unpushed_commit_refuses_registration() {
   pass "fm-pr-check refuses a direct-PR registration while a later commit is only in the copy"
 }
 
+test_published_scratch_refuses_registration() {
+  local dir
+  dir=$(make_case published-scratch-refused)
+  write_task_meta "$dir"
+  FM_TEST_GH_FILES='[{"filename":".codex-live-check/cache/node/corepack/v1/pnpm/11.1.1/package.json","status":"added"}]' \
+    run_check_entry "$dir" task-a https://github.com/o/r/pull/4 \
+    > "$dir/stdout" 2> "$dir/stderr" && fail "published scratch path was registered"
+  grep -Fq 'scratch path would be published' "$dir/stderr" \
+    || fail "published scratch refusal did not name the publication boundary"
+  [ ! -e "$dir/home/state/task-a.check.sh" ] || fail "published scratch path armed a poll"
+  pass "fm-pr-check refuses a published pipeline scratch path"
+}
+
+test_published_gitlab_scratch_refuses_registration() {
+  local dir
+  dir=$(make_case published-gitlab-scratch-refused)
+  write_task_meta "$dir"
+  FM_TEST_GLAB_FILES='{"changes":[{"new_path":".codex-live-check/cache/node/corepack/v1/pnpm/11.1.1/package.json","deleted_file":false}]}' \
+    run_check_entry "$dir" task-a https://gitlab.example/g/p/-/merge_requests/4 \
+    > "$dir/stdout" 2> "$dir/stderr" && fail "published GitLab scratch path was registered"
+  grep -Fq 'scratch path would be published' "$dir/stderr" \
+    || fail "published GitLab scratch refusal did not name the publication boundary"
+  [ ! -e "$dir/home/state/task-a.check.sh" ] || fail "published GitLab scratch path armed a poll"
+  pass "fm-pr-check refuses a published GitLab scratch path"
+}
+
+test_published_scratch_removal_is_registered() {
+  local dir
+  dir=$(make_case published-scratch-removal)
+  write_task_meta "$dir"
+  FM_TEST_GH_FILES='[{"filename":".codex-live-check/cache/node/corepack/v1/pnpm/11.1.1/package.json","status":"removed"},{"filename":"src/app.js","status":"modified"}]' \
+    run_check_entry "$dir" task-a https://github.com/o/r/pull/4 \
+    > "$dir/stdout" 2> "$dir/stderr" || fail "published scratch removal was refused: $(cat "$dir/stderr")"
+  pass "fm-pr-check registers a pull request that only removes scratch"
+}
+
+test_published_gitlab_scratch_removal_is_registered() {
+  local dir
+  dir=$(make_case published-gitlab-scratch-removal)
+  write_task_meta "$dir"
+  FM_TEST_GLAB_FILES='{"changes":[{"new_path":".codex-live-check/cache/node/corepack/v1/pnpm/11.1.1/package.json","deleted_file":true},{"new_path":"src/app.js","deleted_file":false}]}' \
+    run_check_entry "$dir" task-a https://gitlab.example/g/p/-/merge_requests/4 \
+    > "$dir/stdout" 2> "$dir/stderr" || fail "published GitLab scratch removal was refused: $(cat "$dir/stderr")"
+  pass "fm-pr-check registers a merge request that only removes scratch"
+}
+
+test_published_attestation_matches_current_head() {
+  local dir current attested out rc url steps
+  url=https://github.com/o/r/pull/4
+  current=0123456789abcdef0123456789abcdef01234567
+  attested=fedcba9876543210fedcba9876543210fedcba98
+  steps='[{"step":"review","status":"completed"},{"step":"test","status":"completed"},{"step":"document","status":"completed"}]'
+
+  dir=$(make_case matching-attestation)
+  write_task_meta "$dir"
+  ln -sf "$REAL_JQ" "$dir/fakebin/jq"
+  FM_TEST_GH_HEAD=$current \
+    FM_TEST_GH_BODY="<!-- no-mistakes-pipeline-attestation:v1 {\"head_sha\":\"$current\",\"steps\":$steps} -->" \
+    run_check_entry "$dir" task-a "$url" > "$dir/stdout" 2> "$dir/stderr" \
+    || fail "matching published attestation was refused: $(cat "$dir/stderr")"
+  [ -f "$dir/home/state/task-a.check.sh" ] || fail "matching attestation left no poll armed"
+
+  dir=$(make_case stale-attestation)
+  write_task_meta "$dir"
+  ln -sf "$REAL_JQ" "$dir/fakebin/jq"
+  set +e
+  out=$(FM_TEST_GH_HEAD=$current \
+    FM_TEST_GH_BODY="<!-- no-mistakes-pipeline-attestation:v1 {\"head_sha\":\"$attested\",\"steps\":$steps} -->" \
+    run_check_entry "$dir" task-a "$url" 2>&1)
+  rc=$?
+  set -e
+  [ "$rc" -ne 0 ] || fail "stale published attestation was accepted"
+  assert_contains "$out" "current head $current, attested head $attested" \
+    "stale-attestation refusal omitted one of the two heads"
+  assert_contains "$out" 'run the pipeline once against the current head to re-attest it' \
+    "stale-attestation refusal omitted the remedy"
+  assert_contains "$out" 'Hand-editing the attestation is not an option; use a merge, not a rebase.' \
+    "stale-attestation refusal omitted the merge and hand-edit guidance"
+  [ ! -e "$dir/home/state/task-a.check.sh" ] || fail "stale attestation armed a poll"
+
+  dir=$(make_case no-attestation)
+  fm_write_meta "$dir/home/state/task-a.meta" \
+    'window=firstmate:fm-task-a' 'endpoint_task_id=task-a' "worktree=$dir/wt" \
+    "project=$dir/project" 'kind=ship' 'mode=direct-PR'
+  current=$(git -C "$dir/wt" rev-parse HEAD)
+  FM_TEST_GH_HEAD=$current FM_TEST_GH_BODY='Ordinary published description.' \
+    run_check_entry "$dir" task-a "$url" > "$dir/stdout" 2> "$dir/stderr" \
+    || fail "description without attestation was refused: $(cat "$dir/stderr")"
+  [ -f "$dir/home/state/task-a.check.sh" ] || fail "description without attestation left no poll armed"
+  pass "published attestation accepts its current head, refuses a stale head, and leaves absent attestations unchanged"
+}
+
 test_valid_recording_and_merge_derivation() {
   local dir expected sidecar count rc
   dir=$(make_case valid-recording)
@@ -868,6 +1034,64 @@ SH
   pass "valid direct and merge flows record exact metadata and reject multiline head metadata"
 }
 
+test_pr_ready_trace_follows_successful_publication() {
+  local dir url head rc host revision
+  url=https://github.com/my-org/repo_name.with-dots/pull/39
+  head=0123456789abcdef0123456789abcdef01234567
+
+  dir=$(make_case trace-ready-rejected)
+  write_task_meta "$dir"
+  enable_trace_capture "$dir"
+  set +e
+  FM_TEST_TRACE_CAPTURE="$dir/trace.capture" FM_TEST_GH_DRAFT=true \
+    run_check_entry "$dir" task-a "$url" > "$dir/out" 2> "$dir/err"
+  rc=$?
+  set -e
+  [ "$rc" -ne 0 ] || fail "trace-ready-rejected: draft registration unexpectedly succeeded"
+  [ ! -s "$dir/trace.capture.requests" ] || fail "rejected PR registration emitted a ready span"
+
+  dir=$(make_case trace-ready-publication-failed)
+  write_task_meta "$dir"
+  enable_trace_capture "$dir"
+  mkdir "$dir/home/state/task-a.check.sh"
+  set +e
+  FM_TEST_TRACE_CAPTURE="$dir/trace.capture" run_check_entry "$dir" task-a "$url" \
+    > "$dir/out" 2> "$dir/err"
+  rc=$?
+  set -e
+  [ "$rc" -ne 0 ] || fail "trace-ready-publication-failed: unsafe poll destination was accepted"
+  [ ! -s "$dir/trace.capture.requests" ] || fail "failed poll publication emitted a ready span"
+
+  for url in \
+    https://github.com/my-org/repo_name.with-dots/pull/39 \
+    https://gitlab.internal/group/private/-/merge_requests/7 \
+    https://gerrit.example/c/group/apps/console/+/4201; do
+    host=${url#https://}
+    dir=$(make_case "trace-ready-success-${host%%/*}")
+    revision=$(git -C "$dir/wt" rev-parse HEAD)
+    write_task_meta "$dir"
+    enable_trace_capture "$dir"
+    FM_TRACE_EXPORT=on FM_TEST_TRACE_CAPTURE="$dir/trace.capture" FM_TEST_GH_HEAD=$head \
+      FM_TEST_GERRIT_REVISION=$revision run_check_entry "$dir" task-a "$url" > "$dir/out" 2> "$dir/err" \
+      || fail "trace-ready-success: valid registration failed"
+    FM_TRACE_EXPORT=on FM_TEST_TRACE_CAPTURE="$dir/trace.capture" FM_TEST_GH_HEAD=$head \
+      FM_TEST_GERRIT_REVISION=$revision run_check_entry "$dir" task-a "$url" > "$dir/out2" 2> "$dir/err2" \
+      || fail "trace-ready-success: repeated registration failed"
+    jq -es '
+      length == 2 and all(.[];
+        .resourceSpans[0] as $r
+        | $r.scopeSpans[0].spans[0] as $s
+        | $s.name == "firstmate.pr.ready" and $s.attributes == []
+          and $s.traceId == "4bf92f3577b34da6a3ce929d0e0e4736"
+          and $s.parentSpanId == "00f067aa0ba902b7"
+          and ($r.resource.attributes | map(.key) | sort) ==
+            ["firstmate.project", "firstmate.task.id", "firstmate.task.kind", "service.name"])
+    ' "$dir/trace.capture.requests" >/dev/null \
+      || fail "ready observations exported PR details or lost existing resource dimensions or trace identity"
+  done
+  pass "rejected and unpublished registrations are silent; each successful registration emits a ready observation without PR details"
+}
+
 # Runs one watcher under a hang guard that TERMs it and returns 124 once it has
 # used sixty seconds of its own time. The guard pauses while the file named by
 # FM_TEST_WATCH_BOUND_PAUSE exists, so a case that holds the watcher on work it
@@ -885,7 +1109,8 @@ run_watcher_bounded() {
   perl -MPOSIX=WNOHANG -MTime::HiRes=time,sleep -e 'my $pause=shift; my $left=60; my $pid=fork; die unless defined $pid; if (!$pid) { exec @ARGV } my $last=time; while (waitpid($pid, WNOHANG) == 0) { my $now=time; $left -= $now - $last unless length $pause && -e $pause; $last=$now; if ($left <= 0) { kill "TERM", $pid; waitpid $pid, 0; exit 124 } sleep 0.02 } exit($? >> 8)' \
     "${FM_TEST_WATCH_BOUND_PAUSE:-}" env "${check_timeout_env[@]}" \
       FM_HOME="$home" FM_ROOT_OVERRIDE="$watch_root" FM_CHECK_INTERVAL="$check_interval" \
-      FM_POLL=0.02 FM_HEARTBEAT=999999 FM_SIGNAL_GRACE=0 PATH="$fakebin:$BASE_PATH" "$WATCH" "$@"
+      FM_TEST_TRACE_CAPTURE="${FM_TEST_TRACE_CAPTURE:-}" FM_POLL=0.02 FM_HEARTBEAT=999999 \
+      FM_SIGNAL_GRACE=0 PATH="$fakebin:$BASE_PATH" "$WATCH" "$@"
 }
 
 test_rejected_metacharacter_bytes_are_inert() {
@@ -1624,6 +1849,12 @@ group/apps/console
     FM_TEST_GERRIT_URL=https://alias.example/c/group/apps/console/+/4201 run_poll "$dir")
   [ "$out" = merged ] || fail "Gerrit poll stayed silent for a merged change behind an alias host"
 
+  out=$(PATH="$dir/fakebin:$BASE_PATH" \
+    FM_TEST_GERRIT_SUBJECT='"subject must not be used as the body"' \
+    FM_TEST_GERRIT_COMMIT_MESSAGE='"commit message body"' \
+    fm_pr_gerrit_read_description gerrit.example 4201)
+  [ "$out" = 'commit message body' ] || fail "Gerrit description reader did not use commit_message"
+
   # A free-text subject carrying the merged spelling and the field separators
   # cannot forge a status, because the status is read from the structured
   # record rather than off a rendered line.
@@ -2059,21 +2290,20 @@ EOF
   [ ! -e "$state/task-b.check.sh" ] || fail "refused GitLab arming left a poll armed"
 
   # The merge path addresses the forge the URL names, and never the other one.
-  # This fixture's glab answers with the field output the poll reads, so the
-  # merge's JSON read cannot be parsed, which must refuse rather than merge on a
-  # state it could not read.
+  # The first JSON read supplies the published body; the next returns the
+  # field output the merge path cannot parse as state, which must refuse.
   write_task_meta "$dir" task-c
   : > "$dir/glab.log"
   # The merge path needs jq before it reads anything, so this case supplies it
   # and the refusal below is the unreadable state rather than a missing tool.
   ln -sf "$REAL_JQ" "$dir/fakebin/jq"
   set +e
-  run_merge_entry "$dir" task-c "$url" >/dev/null 2> "$dir/merge-c.err"
+  FM_TEST_GLAB_BAD_STATE_AFTER_BODY=1 run_merge_entry "$dir" task-c "$url" >/dev/null 2> "$dir/merge-c.err"
   rc=$?
   set -e
   [ "$rc" -ne 0 ] || fail "merge wrapper merged a GitLab merge request it could not read"
   grep -qF 'could not read the GitLab merge request state before merging' "$dir/merge-c.err" \
-    || fail "merge wrapper refused for some reason other than the state it could not read"
+    || fail "merge wrapper refused for some reason other than the state it could not read: $(cat "$dir/merge-c.err")"
   [ ! -s "$dir/gh-axi.log" ] || fail "merge wrapper reached the GitHub CLI for a GitLab URL"
   grep -qF "mr view 7 -R https://gitlab.example/group/subgroup/project" "$dir/glab.log" \
     || fail "merge wrapper did not read the merge request through glab at its own instance"
@@ -2286,13 +2516,14 @@ test_self_merge_and_poll_publish_one_outcome() {
   replies="$state/parent-replies.status"
   seed_secondmate_home "$dir"
   write_task_meta "$dir" task-a
-  run_check_entry "$dir" task-a "$url" >/dev/null 2>"$dir/seed.err" \
+  enable_trace_capture "$dir"
+  FM_TEST_TRACE_CAPTURE="$dir/trace.capture" run_check_entry "$dir" task-a "$url" >/dev/null 2>"$dir/seed.err" \
     || fail "merge-outcome-committed: could not arm merge poll"
-  run_merge_entry "$dir" task-a "$url" >"$dir/merge.out" 2>"$dir/merge.err" \
+  FM_TEST_TRACE_CAPTURE="$dir/trace.capture" run_merge_entry "$dir" task-a "$url" >"$dir/merge.out" 2>"$dir/merge.err" \
     || fail "merge-outcome-committed: merge entrypoint failed: $(cat "$dir/merge.err")"
   add_stop_custom_check "$dir"
   set +e
-  FM_TEST_GH_STATE=MERGED run_watcher_bounded "$dir/home" "$dir/fakebin" \
+  FM_TEST_TRACE_CAPTURE="$dir/trace.capture" FM_TEST_GH_STATE=MERGED run_watcher_bounded "$dir/home" "$dir/fakebin" \
     >"$dir/watch.out" 2>"$dir/watch.err"
   rc=$?
   set -e
@@ -2303,6 +2534,13 @@ test_self_merge_and_poll_publish_one_outcome() {
   assert_no_grep "check: $state/task-a.check.sh: merged" "$state/.wake-queue" \
     "merge-outcome-committed: absorbed poll published a second outcome"
   assert_poll_absent "$state" task-a
+  jq -es '
+    [ .[].resourceSpans[].scopeSpans[].spans[] | select(.name == "firstmate.pr.ready") ] as $ready
+    | [ .[].resourceSpans[].scopeSpans[].spans[] | select(.name == "firstmate.pr.merged") ] as $merged
+    | ($ready | length) == 1 and ($merged | length) == 1
+      and $ready[0].attributes == [] and $merged[0].attributes == []
+  ' "$dir/trace.capture.requests" >/dev/null \
+    || fail "self merge and its poll did not share one post-dedup PR outcome span: $(cat "$dir/trace.capture.requests" 2>/dev/null)"
 
   # Interleaving two: self publication lands but its marker commit fails. After
   # that outcome is drained, the still-armed poll must publish it again rather
@@ -2364,11 +2602,13 @@ test_merged_poll_reports_upward_from_a_secondmate_home_once() {
   replies="$state/parent-replies.status"
   seed_secondmate_home "$dir"
   write_poll_meta "$state" task-a "$url"
+  enable_trace_capture "$dir"
   seed_canonical_poll "$dir" task-a "$url"
   add_stop_custom_check "$dir"
 
   set +e
-  FM_TEST_GH_STATE=MERGED run_watcher_bounded "$dir/home" "$dir/fakebin" > "$dir/watch-1.out" 2> "$dir/watch-1.err"
+  FM_TRACE_EXPORT=on FM_TEST_TRACE_CAPTURE="$dir/trace.capture" FM_TEST_GH_STATE=MERGED \
+    run_watcher_bounded "$dir/home" "$dir/fakebin" > "$dir/watch-1.out" 2> "$dir/watch-1.err"
   rc=$?
   set -e
   [ "$rc" -eq 0 ] || fail "merged-poll-upward: watcher failed: $(cat "$dir/watch-1.err")"
@@ -2380,6 +2620,12 @@ test_merged_poll_reports_upward_from_a_secondmate_home_once() {
     "merged-poll-upward: a merge this home did not perform was never reported upward"
   [ "$(grep -c -F "$url" "$replies")" -eq 1 ] \
     || fail "merged-poll-upward: one detected merge produced more than one upward line"
+  jq -es '
+    [ .[].resourceSpans[].scopeSpans[].spans[] | select(.name == "firstmate.pr.merged") ] as $merged
+    | ($merged | length) == 1
+      and $merged[0].attributes == []
+  ' "$dir/trace.capture.requests" >/dev/null \
+    || fail "poll-detected merge did not emit a post-dedup outcome span without PR details"
   ack_watcher_cycle "$state" || fail "merged-poll-upward: acknowledgement failed"
 
   # Re-registered for the same, already-reported merge: the absorbed duplicate
@@ -2387,12 +2633,15 @@ test_merged_poll_reports_upward_from_a_secondmate_home_once() {
   seed_canonical_poll "$dir" task-a "$url"
   rm -f "$state/.last-check"
   set +e
-  FM_TEST_GH_STATE=MERGED run_watcher_bounded "$dir/home" "$dir/fakebin" > "$dir/watch-2.out" 2> "$dir/watch-2.err"
+  FM_TRACE_EXPORT=on FM_TEST_TRACE_CAPTURE="$dir/trace.capture" FM_TEST_GH_STATE=MERGED \
+    run_watcher_bounded "$dir/home" "$dir/fakebin" > "$dir/watch-2.out" 2> "$dir/watch-2.err"
   rc=$?
   set -e
   [ "$rc" -eq 0 ] || fail "merged-poll-upward: second watcher cycle failed: $(cat "$dir/watch-2.err")"
   [ "$(grep -c -F "$url" "$replies")" -eq 1 ] \
     || fail "merged-poll-upward: an absorbed duplicate detection reported the merge again"
+  [ "$(wc -l < "$dir/trace.capture.requests" | tr -d ' ')" -eq 1 ] \
+    || fail "repeat poll notification emitted another merge span"
   pass "a merge detected by the poll is reported upward from a secondmate home exactly once"
 }
 
@@ -3444,6 +3693,7 @@ test_gitlab_merge_watch
 test_gerrit_merge_watch
 test_gerrit_arming_records_no_patch_set_revision
 test_gerrit_ready_gate_reads_the_published_tree
+test_published_attestation_matches_current_head
 test_gerrit_nm_ready_gate_requires_recovered_custody
 test_merged_poll_retires_once
 test_merged_poll_reregistration_after_notification_is_absorbed
@@ -3468,7 +3718,12 @@ test_draft_pull_request_is_not_armed
 test_secondmate_record_refuses_a_pr_watch
 test_unpushed_named_head_refuses_registration
 test_direct_pr_unpushed_commit_refuses_registration
+test_published_scratch_refuses_registration
+test_published_gitlab_scratch_refuses_registration
+test_published_scratch_removal_is_registered
+test_published_gitlab_scratch_removal_is_registered
 test_valid_recording_and_merge_derivation
+test_pr_ready_trace_follows_successful_publication
 test_rejected_metacharacter_bytes_are_inert
 test_static_poll_contract
 test_atomic_interruption_leaves_no_partial_artifact

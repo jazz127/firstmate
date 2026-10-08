@@ -9,7 +9,7 @@ This document is the rationale and current-behavior guide; `docs/configuration.m
 
 Firstmate's durable operational artifacts already let a downstream observer derive logical task identity and lifecycle.
 The source capability an observer cannot reconstruct after launch is a task-scoped trace id delivered in the agent's environment before launch and recorded under the same identity in task metadata.
-This feature adds only that carrier seam.
+Carrier propagation supplies that identity; optional lifecycle export is described [below](#relationship-to-opentelemetry-and-later-increments).
 
 ## What it does
 
@@ -81,7 +81,7 @@ This is a deliberate, source-owned choice:
   Recovery reuses the task's recorded carrier byte-for-byte, flags included, so a task's sampling decision is stable across restarts.
   Firstmate chooses the flag only when it mints a *root*, which is the only way a new carrier is created.
 - **Cost and privacy consequence.**
-  `01` records a sampling *decision*, and a conforming downstream parent-based sampler will honor it - but it does not by itself guarantee that any collector stores a span, and Firstmate emits no spans of its own; it only sets the flag on the carrier.
+  `01` records a sampling *decision*, and a conforming downstream parent-based sampler will honor it - but it does not by itself guarantee that any collector stores a span; carrier propagation only sets the flag and emits no spans by itself.
   An operator who enables the capability and points sampling-respecting instrumentation at it should expect on the order of one trace per task to be recorded, at whatever cardinality and retention that instrumentation is configured for.
   An operator who wants unsampled roots or head-sampling owns that downstream or via a later, explicitly-scoped option; Firstmate does not embed a sampler.
 
@@ -90,7 +90,7 @@ This is a deliberate, source-owned choice:
 - **Default-off.**
   With no `config/trace-context` and no `FM_TRACE_CONTEXT`, a fresh spawn or actual relaunch injects nothing and writes no `traceparent=` line, so the generated meta and the launch environment are unchanged.
   Reusing an already-alive remote endpoint records any carrier that endpoint reports without injecting a new one.
-  A locked session start makes the one config-file check, and each spawn sources one extra library and reads the frozen effective-state file, so the process is not literally byte-for-byte identical, but nothing an agent, an observer, or the task meta can see differs.
+  A locked session start resolves propagation enablement, and each spawn reads the frozen effective-state file; lifecycle export requires separate opt-in configuration.
 - **What is and is not exposed.**
   A Firstmate-*minted* root uses a random id and reads no prompt, path, task prose, credential, or arbitrary environment key, so Firstmate never *originates* sensitive data in the carrier.
   Every carrier Firstmate injects is either such a mint or the same task's previously recorded carrier reused verbatim; ambient `TRACEPARENT` is never read, so no caller-controlled bytes enter a new carrier.
@@ -108,10 +108,34 @@ This is a deliberate, source-owned choice:
 
 ## Relationship to OpenTelemetry and later increments
 
-Firstmate learns nothing about OpenTelemetry, any exporter, collector, storage, or UI.
-It emits a standard W3C carrier and records the same identity; a downstream observer owns everything else and discovers active propagation from the home session's frozen decision or the `traceparent=` field.
-Native lifecycle-event emission, extra stable IDs, intake metadata, and any embedded OTLP are deliberately deferred until a running observer demonstrates a concrete fidelity gap that the derived artifacts cannot cover.
+Task, spawn, PR outcome, steer, control, and promotion tracing is an upstream-candidate house feature.
+Carrier propagation creates no spans by itself; the separate opt-in emitter is configured in [configuration.md](configuration.md#otlp-span-export-configtrace-exportjson--fm_trace_export).
+When export is enabled, a successful local spawn emits one `firstmate.spawn` child after launch delivery and backlog commit, and successful ordinary teardown emits one `firstmate.task` root with the last recognized `done` or `failed` outcome, or `unknown` when neither exists.
+Done maps to OTLP OK, failed to ERROR, and unknown leaves status unset; refused or rolled-back launches and refused teardown emit no lifecycle span.
+Informational notes preserve the terminal outcome; a later state-changing event supersedes it, so renewed work without another terminal event exports `unknown`.
+The root starts at the task's recorded first carrier mint; relaunch preserves that time while each spawn span records the new generation, and missing or invalid historical start data falls back to the current time.
+Direct local Secondmate retirement uses the same outcome mapping, including `unknown` when no terminal status exists.
+Teardown and pending-close restart recovery record the terminal outcome in task metadata before retiring status presentation, even with export disabled; retirement failure preserves metadata for retry, a failed record removal can retry with that outcome, and relaunch clears it for the new generation.
+PR outcome observations are `firstmate.pr.ready` and `firstmate.pr.merged` child spans under the task carrier, with the existing resource dimensions and no PR-specific attributes.
+Each successful ready registration emits after metadata recording and merge-poll publication, including a re-registration of the same PR; rejected registrations, failed publication, and merge-time re-recording emit no ready observation.
+A confirmed merge performed by the home or detected by its poll emits only after successful outcome publication and notification-marker commit through `bin/fm-merge-outcome-lib.sh`; an already-recorded outcome, refused merge, queued merge, or unconfirmed merge emits no merged observation.
+Successful steers emit `firstmate.steer` child spans after durable inbox delivery or confirmed typed/key delivery and any required decision-answer bookkeeping, with only `firstmate.plane=inbox|typed|key` and optional `firstmate.fire_and_forget=true`, omitting inbox sequence, correlation and decision-key identities; remote inbox events are emitted by the parent task home.
+Verified interrupt and exit postconditions emit `firstmate.control` child spans with `firstmate.control.verb=interrupt|exit` and `firstmate.control.confirmed=true|false`.
+For interrupt, `confirmed` is true only for adapter-owned cancellation acknowledgement; successful delivery with cancellation unconfirmed or no running turn still emits with false.
+For exit, `confirmed` is true after the agent is verified gone, including an already-stopped agent or a proven-gone endpoint.
+Scout promotion emits a `firstmate.promote` child span after the promoted metadata is published, with `firstmate.task.kind.prior=scout`, the selected `firstmate.task.mode`, and `firstmate.task.yolo`.
+Refused, interrupted, or unconfirmed steer delivery and refused control or promotion emit no event, relaunch's internal stop emits no separate control event, and steer message text is never an attribute.
+Exported lifecycle attributes omit pane/window identity, private PR URLs, and prior-generation linkage; pane-resource export is deferred.
+Approved untraced paths for this chunk:
+
+- remote Secondmate launches;
+- descendant cleanup during forced parent teardown; and
+- remote route retirement.
+
+The emitter is synchronous and best-effort, with no durable queue or exporter-level deduplication; if launch completion is uncertain and a successful launch is repeated, the collector may receive duplicate spawn events.
+An unconfirmed HTTP result can also mean an accepted span is absent from the sender's knowledge, so consumers should treat counts as best-effort observations.
 
 ## Verification
 
 Repeatable test evidence - the unit and spawn-path suites with exact commands and output - lives in [`verification/trace-context.md`](verification/trace-context.md).
+PR outcome regressions live in [`fm-pr-check-security.test.sh`](../tests/fm-pr-check-security.test.sh) and [`fm-pr-merge.test.sh`](../tests/fm-pr-merge.test.sh).

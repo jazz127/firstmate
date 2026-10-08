@@ -256,6 +256,8 @@ fi
 . "$SCRIPT_DIR/fm-task-inbox-lib.sh"
 # shellcheck source=bin/fm-timeout-lib.sh
 . "$SCRIPT_DIR/fm-timeout-lib.sh"
+# shellcheck source=bin/fm-trace-span-lib.sh
+. "$SCRIPT_DIR/fm-trace-span-lib.sh"
 
 FM_GUARD_CONTINUE_LINE='This is a supervision warning only; the requested message WILL still be sent.' "$SCRIPT_DIR/fm-guard.sh" || true
 
@@ -788,6 +790,7 @@ if [ "${1:-}" = "--key" ]; then
   fi
   fm_send_clear_after_interrupt "$semantic_key" || exit 1
   fm_send_record_interrupt "$semantic_key" || exit 1
+  fm_trace_span_steer "$TARGET_META" key
 else
   MESSAGE=$*
   if [ -z "${MESSAGE//[[:space:]]/}" ]; then
@@ -1000,6 +1003,7 @@ else
       fm_send_close_resolved_keys "$RESOLVE_ANSWER_TEXT" || exit 1
       fm_send_feed_resolved_holds "$RESOLVE_ANSWER_TEXT" || exit 1
     fi
+    fm_trace_span_steer "$TARGET_META" inbox "${FIRE_AND_FORGET_ID:+true}"
     exit 0
   fi
   if [ "$INBOX_PLANE" = 1 ]; then
@@ -1077,6 +1081,7 @@ else
       fm_send_close_resolved_keys "$RESOLVE_ANSWER_TEXT" || exit 1
       fm_send_feed_resolved_holds "$RESOLVE_ANSWER_TEXT" || exit 1
     fi
+    fm_trace_span_steer "$TARGET_META" inbox "${FIRE_AND_FORGET_ID:+true}"
     # Ring the doorbell, best-effort: no ring outcome changes the exit status,
     # because the watcher owns loss detection from here, either through its
     # bounded re-ring ladder or direct unavailable-endpoint recovery.
@@ -1202,6 +1207,7 @@ else
     fm_send_close_resolved_keys "$RESOLVE_ANSWER_TEXT" || exit 1
     fm_send_feed_resolved_holds "$RESOLVE_ANSWER_TEXT" || exit 1
   fi
+  fm_trace_span_steer "$TARGET_META" typed "${FIRE_AND_FORGET_ID:+true}"
   # Submit landed with exact empty. Confirmation only proves the text was
   # accepted; the harness still needs a beat to spin up the
   # turn before its busy footer shows. Pause so an immediate peek catches the

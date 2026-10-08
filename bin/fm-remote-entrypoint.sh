@@ -31,7 +31,7 @@
 set -eu
 
 PROTOCOL=1
-DOCTOR_SHA256=78efccd6cb7a0123400e49fa323292a64c8e3c7ebd3717151be69f87735302fb
+DOCTOR_SHA256=ae9d8ab8fd76bfd2cea9a3481c731552903b2fc16262804b29375f22e35bfb31
 REAL_SOURCE=$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "${BASH_SOURCE[0]}" 2>/dev/null) ||
   REAL_SOURCE=$(realpath "${BASH_SOURCE[0]}" 2>/dev/null) ||
   REAL_SOURCE=${BASH_SOURCE[0]}
@@ -187,6 +187,13 @@ JOB_COMPLETED=1
 cat "$FM_REMOTE_JOB_STDOUT"
 cat "$FM_REMOTE_JOB_STDERR" >&2
 RESULT=$FM_REMOTE_JOB_EXIT
+if [ "$COMMAND" = fm-remote-home-provision.sh ] && [ "$RESULT" -ne 0 ]; then
+  if [ "$RESULT" -gt 128 ]; then
+    printf 'error: remote command %s killed by signal %s (exit %s)\n' "$COMMAND" "$((RESULT - 128))" "$RESULT" >&2
+  else
+    printf 'error: remote command %s failed (exit %s)\n' "$COMMAND" "$RESULT" >&2
+  fi
+fi
 fm_remote_job_reap "$ACCOUNT_HOME" "$JOB_ID" || true
 trap - EXIT
 rm -rf -- "$TMP"

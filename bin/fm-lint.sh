@@ -99,6 +99,12 @@
 #
 # Optional quiet telemetry writes one bounded TSV snapshot of content and source
 # graph identity, wall/CPU/RSS, shard load, and competing ShellCheck processes.
+# Local runs serialize source-following (--external-sources) ShellCheck roots
+# across all of this user's lint processes on the host, regardless of TMPDIR,
+# because that analysis can use several GiB of resident memory; roots that do
+# not follow sources run without the lock. Set FM_LINT_HOST_LOCK=off to allow
+# concurrent roots on a larger host; CI defaults to off because its runner
+# already isolates lint concurrency.
 # source_followed_directives counts directives only for roots whose final
 # attempt followed sources, not roots that passed or failed a no-source retry.
 #
@@ -109,6 +115,7 @@
 #   fm-lint.sh --jobs <1|2> [path]...  override concurrent worker count
 #   fm-lint.sh --partition <1of2|2of2> lint one canonical CI partition (see fallback above)
 #   fm-lint.sh --telemetry <path> ...  write a quiet metrics snapshot
+#   FM_LINT_HOST_LOCK=off              allow concurrent local ShellCheck roots
 #   fm-lint.sh --required-version      print the ShellCheck pin
 #   fm-lint.sh --list-files            print the file set that would be linted
 #   fm-lint.sh --help                  print this usage
@@ -133,12 +140,99 @@ fi
 
 FM_LINT_WORKER_RUN_PID=
 FM_LINT_WORKER_ARGS=()
+FM_LINT_HOST_LOCK_HELD=0
+FM_LINT_HOST_LOCK_TOKEN=
+FM_LINT_HOST_LOCK_PATH="/tmp/fm-lint-shellcheck-${UID:-$(id -u)}.lock"
+
+# Serialize memory-heavy source-following ShellCheck processes across lint
+# invocations by this user. The lock lives at a fixed /tmp path so every invocation on the host
+# shares it whatever its TMPDIR. It is a symlink whose target is the owner
+# token, so the lock and its owner appear in one atomic step. Only the waiter
+# that publishes the reap symlink for a dead owner's token may remove that
+# owner's lock, and only while the lock still names that owner. A reap symlink
+# is itself a lock owned by its reaper, so a reaper that dies mid-reap is
+# recovered the same way. The owner validates FM_LINT_HOST_LOCK before any
+# worker reads it.
+fm_lint_host_lock_enabled() {
+  case "${FM_LINT_HOST_LOCK:-auto}" in
+    auto) [ "${CI:-}" != true ] && [ "${GITHUB_ACTIONS:-}" != true ] ;;
+    on) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+fm_lint_host_lock_owner_live() {  # <token>
+  local owner_pid=${1%%.*}
+  case "$owner_pid" in
+    ''|*[!0-9]*) return 1 ;;
+  esac
+  kill -0 "$owner_pid" 2>/dev/null
+}
+
+fm_lint_host_lock_release() {
+  [ "$FM_LINT_HOST_LOCK_HELD" -eq 1 ] || return 0
+  if [ "$(readlink "$FM_LINT_HOST_LOCK_PATH" 2>/dev/null || true)" = "$FM_LINT_HOST_LOCK_TOKEN" ]; then
+    rm -f "$FM_LINT_HOST_LOCK_PATH"
+  fi
+  FM_LINT_HOST_LOCK_HELD=0
+  FM_LINT_HOST_LOCK_TOKEN=
+}
+
+# Remove the lock symlink at <path> if its owner is dead, recovering a reap
+# symlink left by a dead reaper first.
+fm_lint_host_lock_reap() {  # <path>
+  local path=$1 owner guard
+  owner=$(readlink "$path" 2>/dev/null) || return 0
+  fm_lint_host_lock_owner_live "$owner" && return 0
+  guard="$FM_LINT_HOST_LOCK_PATH.reap.$owner"
+  if ln -s "$FM_LINT_HOST_LOCK_TOKEN" "$guard" 2>/dev/null; then
+    if [ "$(readlink "$path" 2>/dev/null || true)" = "$owner" ]; then
+      rm -f "$path"
+    fi
+    rm -f "$guard"
+  else
+    fm_lint_host_lock_reap "$guard"
+  fi
+}
+
+fm_lint_host_lock_acquire() {  # <path>
+  [ "${FM_LINT_INTERNAL_FOLLOW_SOURCES:-1}" -eq 1 ] || return 0
+  fm_lint_host_lock_enabled || return 0
+  local lock=$FM_LINT_HOST_LOCK_PATH queued=0
+  FM_LINT_HOST_LOCK_TOKEN="${BASHPID:-$$}.$RANDOM.$RANDOM"
+  while :; do
+    if ln -s "$FM_LINT_HOST_LOCK_TOKEN" "$lock" 2>/dev/null; then
+      [ "$(readlink "$lock" 2>/dev/null || true)" != "$FM_LINT_HOST_LOCK_TOKEN" ] || break
+      rm -f "$lock/$FM_LINT_HOST_LOCK_TOKEN"
+    fi
+    if [ -d "$lock" ] && [ ! -L "$lock" ]; then
+      # A directory here is an earlier mkdir-style lock with an owner file.
+      if ! fm_lint_host_lock_owner_live "$(cat "$lock/owner" 2>/dev/null || true)"; then
+        rm -f "$lock/owner"
+        rmdir "$lock" 2>/dev/null || true
+      fi
+    else
+      fm_lint_host_lock_reap "$lock"
+    fi
+    if [ -L "$lock" ] || [ -e "$lock" ]; then
+      if [ "$queued" -eq 0 ] && [ "${FM_LINT_INTERNAL_PROGRESS:-0}" = 1 ]; then
+        printf 'fm-lint: queued %s behind the host ShellCheck lock\n' "$1" >&2
+      fi
+      queued=1
+      sleep 0.1
+    fi
+  done
+  FM_LINT_HOST_LOCK_HELD=1
+}
+
 # shellcheck disable=SC2329 # Registered by the private worker's signal traps.
 fm_lint_worker_stop() {
-  [ -n "$FM_LINT_WORKER_RUN_PID" ] || return 0
-  kill "$FM_LINT_WORKER_RUN_PID" 2>/dev/null || true
-  wait "$FM_LINT_WORKER_RUN_PID" 2>/dev/null || true
-  FM_LINT_WORKER_RUN_PID=
+  if [ -n "$FM_LINT_WORKER_RUN_PID" ]; then
+    kill "$FM_LINT_WORKER_RUN_PID" 2>/dev/null || true
+    wait "$FM_LINT_WORKER_RUN_PID" 2>/dev/null || true
+    FM_LINT_WORKER_RUN_PID=
+  fi
+  fm_lint_host_lock_release
 }
 
 fm_lint_now_ms() {
@@ -278,6 +372,7 @@ fm_lint_run_root() {  # <index> <path> <output-dir> <shard-index>
   local fallback_secs
   local final_follow_sources=${FM_LINT_INTERNAL_FOLLOW_SOURCES:-1}
   local -a fallback_args
+  fm_lint_host_lock_acquire "$path"
   start_ms=$(fm_lint_now_ms)
   if [ -n "${FM_LINT_INTERNAL_ROOTS_LOG:-}" ]; then
     printf 'begin\t%s\t%s\t%s\t%s\t%s\n' \
@@ -291,6 +386,7 @@ fm_lint_run_root() {  # <index> <path> <output-dir> <shard-index>
   fm_lint_exec_root "$path" "$root_out" "$root_err" "$rss_file" \
     "$FM_LINT_INTERNAL_ROOT_SECS" "${FM_LINT_WORKER_ARGS[@]}"
   invocation_rc=$FM_LINT_LAST_RC
+  fm_lint_host_lock_release
   reason=$(fm_lint_classify_root "$invocation_rc" "$root_err")
   initial_rc=$invocation_rc
   initial_reason=$reason
@@ -773,6 +869,11 @@ case "$JOBS" in
   *) printf 'fm-lint.sh: jobs must be 1 or 2, got %s.\n' "$JOBS" >&2; exit 2 ;;
 esac
 
+case "${FM_LINT_HOST_LOCK:-auto}" in
+  auto|on|off) ;;
+  *) printf 'fm-lint.sh: FM_LINT_HOST_LOCK must be auto, on, or off.\n' >&2; exit 2 ;;
+esac
+
 case "$PARTITION" in
   '')
     if [ "$PARTITION_REQUESTED" -eq 1 ]; then
@@ -1176,6 +1277,7 @@ fm_lint_run_worker() {  # <worker-index>
     FM_LINT_INTERNAL_PROGRESS="$PROGRESS"
     FM_LINT_SHELLCHECK="$SHELLCHECK_BIN"
     FM_LINT_PERL_BIN="$PERL_BIN"
+    FM_LINT_HOST_LOCK="${FM_LINT_HOST_LOCK:-auto}"
   )
   if [ -n "$TELEMETRY" ] && [ -x /usr/bin/time ]; then
     if [ "$(uname)" = Darwin ]; then

@@ -33,6 +33,9 @@ For a Lavish review artifact firstmate owns:
 bin/fm-procevent-lavish.sh arm <artifact.html>
 ```
 
+After handling nonterminal feedback on a firstmate-owned board, re-arm it with `--agent-reply-file <path>` to post firstmate's answer in the page's Conversation panel before listening for the next round, then acknowledge the captured result through `handled` as described below.
+The adapter's header owns staging, active-listener replacement, and reply delivery limits; do not run a separate poll to answer.
+
 A worker-owned board uses `bin/fm-procevent-lavish.sh arm <artifact.html> --for <task-id>` and re-arms with its reply after each nonterminal round; the existing handled marker is the acknowledgement.
 Arm it once, then re-arm only when a round is actually waiting: arming again with nothing to acknowledge is refused.
 A terminal round is never re-armed: the board stays yours until you acknowledge it with `bin/fm-procevent.sh handled <source-id> <sequence>`, which retires it, and until then `retire` refuses the board too.
@@ -40,7 +43,7 @@ Never arm a board that a live task hosts; follow the [crew-hosted Lavish board c
 
 Registering a source is not the same fact as listening to it.
 Lavish `arm` waits until this registration's listener is confirmed running and does not report ready without that evidence; other adapters still record the source for the watcher's next reconcile.
-When an earlier registration's listener still holds the board as the confirm window ends, Lavish `arm` prints `still-listening` instead of `armed`; that listener keeps serving the board, and the new registration takes effect only after you retire the source and arm it again.
+When re-arming without a firstmate-owned reply and an earlier registration's listener still holds the board as the confirm window ends, Lavish `arm` prints `still-listening` instead of `armed`; that listener keeps serving the board, and the new registration takes effect only after you retire the source and arm it again.
 After arming by hand, confirm `bin/fm-procevent.sh list` reports that source as `live`, and run `bin/fm-procevent.sh reconcile` when it does not.
 Reconcile reports every launch that did not prove it took its claim within the confirm window as `failed=` and exits non-zero, so a source that cannot be started says so instead of looking armed, and it wakes you once per failure episode about it because the watcher discards that count; `start` does not fix that - if the source stays unowned, run `start` attached to read the runner's refusal, then check the source command and adapter binary the registration names, and if a later reconcile finds the source owned the episode closes on its own.
 A source `list` reports as `orphaned` is one reconcile will not relaunch, because something may still be polling it; reconcile wakes you once about it, and that wake's payload says which of two recoveries applies.
@@ -69,7 +72,7 @@ For a recurring mid-task quota check, arm the quota adapter:
 bin/fm-procevent-quota.sh arm [--interval <secs>] [--threshold <percent>] [--provider <provider>]
 ```
 
-It keeps polling through unknown quota and wakes when known quota drops below the configured threshold, runway becomes `exhausted_now`, or polling fails.
+[`bin/fm-procevent-quota.sh`'s header](../../../bin/fm-procevent-quota.sh) owns quota conditions, transient read retries, and terminal errors.
 
 For a "do X as soon as Y is true" request whose condition AND action are both genuinely exact and deterministic, register a condition->action watch instead of re-checking in conversational turns:
 

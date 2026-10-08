@@ -11,7 +11,7 @@ Start with the directory layout, then use the setting reference for the behavior
 | Task windows and worker tools | [Runtime backend](#runtime-backend-configbackend--fm_backend) and [harness support](#harness-support) |
 | Worker permissions, accounts, or environment | [Claude permission mode](#claude-permission-mode-configclaude-permission-mode), [worker account pin](#worker-account-pin-configclaude-account-configpi-account), [worker tool exclusions](#worker-tool-exclusions-configcrew-exclude-tools), and [worker launch environment](#worker-launch-environment-configlaunch-env-allowlist) |
 | Backlog, preferences, and memory | [Backlog backend](#backlog-backend-taskstoml--configbacklog-backend), [captain preferences](#captain-preferences-datacaptainmd--datacaptain-sharedmd), and [startup memory budget](#startup-memory-budget-configstartup-memory-budget) |
-| Supervision and presentation | [Pi supervision branch](#pi-supervision-branch), [supervision host](#supervision-host-configsupervision-host), and [Calm preference](#calm-preference-configcalm) |
+| Supervision and presentation | [Pi supervision branch](#pi-supervision-branch), [supervision host](#supervision-host-configsupervision-host), [ready-session timeout](#ready-session-timeout-configready-session-timeout), and [Calm preference](#calm-preference-configcalm) |
 | Persistent secondmates | [Secondmate routes](#secondmate-routes-datasecondmatesmd) |
 | Per-run overrides and tuning | [Environment variables](#environment-variables) |
 
@@ -104,6 +104,8 @@ Untracked files and directories whose names begin with `scratchpad` are also git
 
 - `bin/fm-contributions.sh` owns durable published-contribution records under each task, observation bounds, equivalent triage-label configuration, and the authenticated contribution check.
 
+- The Bosun route file and contribution workflow are described below and in [`bosun.md`](bosun.md).
+
 - The producing PR and Relay helpers own the fields they append, [`bin/fm-classify-lib.sh`](../bin/fm-classify-lib.sh) owns status-event vocabulary, optional emission-time syntax, and legacy unknown-time handling, and `bin/fm-crew-state.sh` owns current-state reconciliation.
 
 - The [`bin/fm-fleet-snapshot.sh` header](../bin/fm-fleet-snapshot.sh) owns the snapshot's event-time and age fields, including secondmate parent-event projections.
@@ -127,6 +129,22 @@ Untracked files and directories whose names begin with `scratchpad` are also git
 The shared orchestrator behavior lives in [`AGENTS.md`](../AGENTS.md).
 Edit it like any prompt when the fleet is empty.
 While tasks are in flight, dispatch shared-repo edits to a crewmate.
+
+## Bosun routes (config/bosun-routes.json)
+
+Each home that resolves a Bosun route reads its own gitignored `config/bosun-routes.json`.
+The file has schema `fm-bosun-routes.v1` and a `routes` array whose rows name `bosun` plus any nonempty combination of `forge`, `owner`, and either `repository` or `repository_pattern`.
+The repository pattern uses shell-style `*` and `?` matching against the repository name only.
+The [Bosun-Kun example](examples/bosun-routes.json) matches every `github` repository owned by `kunchenguid`.
+When a route names a fork owner without `fork_repository`, the fork repository defaults to the target repository name; set `fork_repository` on an exact-repository route when the fork was renamed.
+Optional `fork_owner`, `fork_repository`, and `upstream_default_branch` fields provide the Captain's fork identity and upstream base branch used when recording an order.
+Routing checks configured named Bosuns first, preferring exact repository, then repository pattern, then owner, then forge; within a level, a named owner beats an omitted owner and a named forge beats an omitted forge.
+An equal-rank tie refuses even when both entries name the same Bosun.
+When no named route matches, the resolver checks the reserved upstream-defined slot, which currently returns no match, then selects the built-in `bosun-general` fallback.
+The upstream-defined slot has no file format in this version.
+A configured named match always wins over the general fallback, and the resolver never substitutes a sole configured named Bosun.
+A matching named Bosun id must have the existing `data/secondmates.md` entry and a Bosun role record; provision `bosun-general` through the ordinary secondmate path when first needed.
+Run `bin/fm-bosun.py route --forge <forge> --owner <owner> --repository <repo>` to resolve without contacting a forge.
 
 ## Calm preference (config/calm)
 
@@ -190,14 +208,12 @@ Homes on other primary harnesses do not load the Pi branch extension; shared per
 
 ### Outcome delivery and acknowledgement
 
-While attended, a captain-facing branch outcome (verdict `captain`) is saved as one exact visible transcript entry keyed by sequence.
-It then opens one processing turn on main for that sequence.
-The turn stays open until main acknowledges the sequence through its `fm_branch_processed` tool.
-While away, the entry is saved, but processing waits until the away-posture record is archived.
+The [Pi supervision branch](pi-supervision-branch.md#processing-a-captain-outcome-on-main) owns sequence-keyed captain-outcome processing, retry visibility, and acknowledgement; its [posture contract](pi-supervision-branch.md#postures) owns processing deferral.
 The branch prompt's "Verdict: routine or captain" section owns the distinction between captain-facing, unsolicited routine, and unchanged-review outcomes.
 
 The generated [Pi supervision protocol](supervision-protocols/pi.md) owns main's event ownership, acknowledgement duty, and conversational treatment for merged outcomes, while the persisted entry itself owns captain visibility.
-A task-level routine no-change outcome or a no-change heartbeat explicitly reported with `silent=true` is delivered without a rendered note; the branch prompt owns task-level eligibility, and every other routine outcome still appends a rendered, sailboat-prefixed note.
+Routine outcomes stay hidden and turn-free by default, independently of Calm; [Pi supervision branch](pi-supervision-branch.md#two-stage-noise-filter) owns presentation, historical-message handling, and reload requirements.
+A task-level routine no-change outcome or a no-change heartbeat may carry `silent=true`, which also keeps it out of captain-return relays; the branch prompt owns the eligibility criteria.
 
 ## Pi supervision branch model and effort (config/supervision-branch-model, config/supervision-branch-effort)
 
@@ -502,7 +518,7 @@ Legacy tmux metadata remains cleanup-compatible when its exact window name is `f
 `FM_HOME` determines Herdr's home label: the primary home uses `firstmate`, and a secondmate home marked by `.fm-secondmate-home` uses `2ndmate-<secondmate-id>`.
 [`herdr-backend.md`](herdr-backend.md#watching-and-task-containers) owns launcher-bound workspace placement, the label-only fallback, collision handling, and recovery behavior.
 
-The local `config/herdr-presentation-spaces` file instead opts a home out of, or explicitly in to, Herdr's default-on disposable single-task visual projection; [Presentation spaces](herdr-backend.md#presentation-spaces) owns its accepted values, default, Herdr version floor, migration, behavior, safety limits, recovery contract, and narrow locked session-start cleanup of exact restored idle-shell children.
+The local `config/herdr-presentation-spaces` file instead opts a home out of, or explicitly in to, Herdr's default-on disposable single-task visual projection, or with `project` chooses one workspace per project instead; [Presentation spaces](herdr-backend.md#presentation-spaces) owns its accepted values, default, Herdr version floor, migration, behavior, safety limits, recovery contract, and narrow locked session-start cleanup of exact restored idle-shell children.
 The setting is inherited into secondmate homes under the primary-authoritative contract owned by [`secondmate-provisioning`](../.agents/skills/secondmate-provisioning/SKILL.md).
 
 For normal herdr operations, `HERDR_SESSION` selects the named session, but destructive test cleanup must not rely on `HERDR_SESSION` alone.
@@ -569,6 +585,24 @@ A Secondmate on a remote route is covered the same way: the primary resolves and
 The presence flag is session-scoped enablement, so it transfers at launch and is left unchanged by live convergence into a running home.
 See [`trace-context.md`](trace-context.md) for carrier semantics, supported routes, the manual fleet-restart requirement, the session boundary, and safety limits; `bin/fm-trace-context-lib.sh`'s header owns the exact mechanics, and [`verification/trace-context.md`](verification/trace-context.md) records repeatable evidence.
 
+## OTLP span export (config/trace-export.json / FM_TRACE_EXPORT)
+
+OTLP span export is off unless the local, gitignored `config/trace-export.json` is valid and sets `enabled` to `true`.
+The emitter uses the effective configuration directory selected by the [home and directory overrides](#root-and-directory-overrides) and skips metadata outside the effective state directory.
+The file must contain exactly one JSON object, accepting only `enabled`, `endpoint`, and `auth-header-file`; export requires an explicit HTTP or HTTPS endpoint without userinfo, query, fragment, whitespace, or NUL bytes, and an absolute header-file path without tabs, carriage returns, newlines, or NUL bytes.
+The header file must be readable and owned by the current user, have no group or other read permission (for example, mode `0600`), and contain exactly one `Authorization: Bearer <token>` line with an optional final newline and no trailing bytes.
+The token must contain one or more ASCII letters, digits, or characters from `._~+/-`, optionally followed by `=` padding.
+An invalid header file skips export with one stderr diagnostic while preserving caller success.
+For example: `{"enabled":true,"endpoint":"http://127.0.0.1:14318/v1/traces","auth-header-file":"/Users/me/.config/firstmate/otlp-header"}`.
+Credentials remain in the local header file, outside worker launch environments; export configuration and credentials are not inherited by remote homes.
+`FM_TRACE_EXPORT=off` disables export immediately for the current process without changing carrier propagation.
+Export does not enable carrier propagation; it requires the current session's trace-context decision to be `on` and the task metadata to contain a valid traceparent.
+Exported resource metadata omits home and metadata filesystem paths and identifies the project only by its short registered name (basename), which the private collector may use as a metric dimension.
+`bin/fm-trace-span-lib.sh` owns the wire format and request mechanics; every exporter failure leaves the caller successful.
+The emitter supports aggregate fleet-work metrics; it adds no collector, per-task trace store, or timeline viewer.
+[`tests/fm-trace-span-lib.test.sh`](../tests/fm-trace-span-lib.test.sh) exercises the export contract through a local HTTP capture server.
+See [`trace-context.md`](trace-context.md#relationship-to-opentelemetry-and-later-increments) for lifecycle emission boundaries, outcome semantics, and best-effort limits.
+
 ## Fleet activity ledger (config/fleet-ledger)
 
 See [`fleet-ledger.md`](fleet-ledger.md) for the opt-in setup, record contract, and limits.
@@ -582,7 +616,7 @@ The flag is a home-local preference and is not inherited by secondmate homes.
 
 ## No-mistakes pipeline spend (config/pipeline-spend)
 
-The optional local, gitignored `config/pipeline-spend` presence flag opts this home into recording per-task no-mistakes pipeline spend in `data/pipeline-spend.jsonl` during teardown.
+The optional local, gitignored `config/pipeline-spend` presence flag opts this home into recording ship tasks' no-mistakes pipeline spend in `data/pipeline-spend.jsonl` during teardown; [`fm-pipeline-spend.sh`](../bin/fm-pipeline-spend.sh) owns attribution, unknown usage, and the record schema.
 When the flag is absent, teardown skips recording and the recorder exits before reading task metadata, no-mistakes state, or the spend ledger.
 An existing ledger is left untouched while recording is disabled.
 
@@ -616,6 +650,33 @@ The flag is a home-local supervision-noise preference and is not inherited by se
 
 [`architecture.md`](architecture.md) owns the wait-evidence contract and which records may take the ladder away; `bin/fm-watch.sh`'s `wedge_wait_evidence` owns the exact derivation and its fail-closed boundaries.
 
+## Outside pull request review window (config/outside-pr-review-window-hours)
+
+The outside pull request review window defaults to `2` hours.
+Set the file to an integer from `0` to `87600` hours; `0` allows immediate closeout.
+The contribution observer starts a new window when it first sees each changed PR head SHA, including a return to an older SHA.
+This estimates push time within one observer poll.
+For initial observation of an already-open PR, it uses the directly available PR `updated_at` timestamp, or `created_at` when that is unavailable; with neither timestamp it uses observation time.
+Later PR timestamp updates and CI reruns do not move an existing window.
+It applies only when the PR base repository is outside this home's merge scope, regardless of whether the head and base repositories differ.
+The observer reads GitHub's structured `viewerPermission` for the PR base repository using the authenticated account.
+`ADMIN`, `MAINTAIN`, and `WRITE` permissions identify repositories in this home's merge scope; `READ` and `TRIAGE` identify outside repositories eligible for closeout.
+Registering or cloning a project does not establish ownership.
+Fork PRs into repositories with write-or-higher permission retain cleanup-after-merge.
+Unreadable, missing, or unknown permissions prevent closeout and report an unavailable observation through the existing observer error path.
+Closeout signals apply only to a live ship task whose current canonical `pr=` matches the observed URL; retained links to replaced PRs continue observing feedback without producing closeout signals.
+At expiry, the observer signals Firstmate to close out only when CI readiness is confirmed, no contribution feedback remains unacknowledged, and the task worktree is clean.
+CI readiness uses the shared [`check_readiness` rule](../bin/fm-contributions.jq); it requires at least one latest check lane, completed conclusions of `success`, `skipped`, or `neutral`, and no missing verdicts or previously observed lanes.
+Unacknowledged feedback holds closeout even after a newer push; acknowledged feedback never holds it.
+An older `CHANGES_REQUESTED` decision does not block closeout, and a clean worker checkout may precede the published PR head.
+Red, pending, or missing checks, any unacknowledged feedback, or dirty work produce a closeout hold signal and leave the task in place.
+Firstmate still owns cleanup through the guarded `bin/fm-teardown.sh` path, which verifies that work is landed or pushed; a teardown refusal leaves the task intact.
+Missing repository identity does not opt a PR into outside-repository cleanup.
+Malformed values disable closeout and wake Firstmate once for that configuration-error episode instead of using the default.
+
+The check is part of the published-contribution observer and wakes Firstmate through the authenticated watcher check.
+The observer keeps the PR linked and watched after teardown, so later upstream feedback still reaches Firstmate.
+
 ## Gate defaults (.no-mistakes.yaml)
 
 The tracked `.no-mistakes.yaml` sets `test.evidence.store_in_repo: true` and pins `commands.lint` to `bin/fm-lint.sh`, the same owner CI invokes.
@@ -628,6 +689,36 @@ The [`firstmate-coding-guidelines` skill](../.agents/skills/firstmate-coding-gui
 See [CONTRIBUTING.md](../CONTRIBUTING.md) for the firstmate-specific local test policy and entry points.
 
 Portable shard evidence and coverage rules are in [fm-test-portable-shards.md](fm-test-portable-shards.md); [herdr-backend.md](herdr-backend.md#destructive-lab-safety) owns the real-Herdr lane's isolation boundary, and [runtime-backends.md](verification/runtime-backends.md#herdr) owns active evidence.
+
+## Ready-session timeout (config/ready-session-timeout)
+
+The optional local, gitignored `config/ready-session-timeout` file opts this home into stopping the agent of a ship worker whose pull request has sat ready, waiting on a merge, for too long.
+With the file absent nothing changes: a ready worker keeps its agent running until the merge lands and the task is cleaned up.
+
+### Duration
+
+An empty file, or one holding only blank and `#` comment lines, sets the default of two hours.
+Otherwise its first line sets the duration: a whole number of seconds, or a whole number followed by `s`, `m`, or `h`, such as `90m` or `4h`.
+A value under 60 seconds, or one that does not parse, leaves the timeout off rather than stopping workers early, and the watcher notes the rejection in its triage log.
+
+### What is stopped and what is kept
+
+The watcher checks on its ordinary poll loop, with no separate daemon.
+It stops only a ship worker whose ready report names the pull request with merge monitoring armed by `bin/fm-pr-check.sh`, that has shown no activity for the duration, whose steering inbox holds no unacknowledged instruction, whose agent reads alive and exactly idle, and whose current state (`bin/fm-crew-state.sh`) reads exactly done.
+A busy agent, or one whose idle state cannot be proven, is left running.
+Scouts and secondmates are never stopped.
+
+The stop goes through `bin/fm-control.sh <id> exit`, so the worker's terminal, local copy, branch, and uncommitted changes survive.
+The task record, pull request, and merge monitoring are untouched, so a later merge is still reported and cleaned up normally.
+When the pull request needs more work, such as a merge conflict or a review change, `bin/fm-control.sh <id> relaunch` brings the worker back.
+The stop is silent, is recorded durably in `state/<id>.ready-timeout`, and is not repeated for the same worker incarnation.
+While that record stands and the worker's current state still reads done, the watcher raises no stale or dead-endpoint alarm for the worker, and `bin/fm-crew-state.sh` and the session-start digest name the stop instead of reporting a lost agent.
+The watcher rereads that current state on every poll for a stopped worker.
+The moment it reads anything other than done, such as a no-mistakes run parked at a gate on the worker, the watcher marks the record resumed and wakes firstmate once, naming the task and the `bin/fm-control.sh <id> relaunch` that brings it back.
+From then on the worker's ordinary stale, gate, and turn-end alarms apply again, and that incarnation is never stopped again.
+
+The file is home-local and is not inherited by secondmate homes.
+`bin/fm-ready-timeout-lib.sh` owns the exact eligibility rules and the record format.
 
 ## Captain Preferences (data/captain.md / data/captain-shared.md)
 
@@ -675,17 +766,16 @@ Registering it is a reason to watch on the same terms as the [watched-tool check
 Use `bin/fm-startup-growth-check.sh disarm` to remove the check and its local report record.
 
 The check evaluates at most once per day and stays silent when nothing meaningful changed.
-A due evaluation uses file metadata and byte sizes before any content inspection: it asks `bin/fm-startup-memory-budget.sh report` for the budget verdict over `data/captain.md`, `data/captain-shared.md`, and `data/learnings.md`, watches the `data/projects.md` and `data/secondmates.md` that session start also prints in full for growth without entering that budget total, and separately watches the tracked startup/instruction owner files described by the script header.
+A due evaluation measures startup surfaces through file metadata and byte sizes: it asks `bin/fm-startup-memory-budget.sh report` for the budget verdict over the [budgeted memory files](#startup-memory-budget-configstartup-memory-budget), watches the `data/projects.md` and `data/secondmates.md` that session start also prints in full for growth without entering that budget total, and separately watches the tracked startup/instruction owner files described by the script header.
 `bin/fm-startup-memory-budget.sh` remains the sole owner of the budget total and its verdict, so the check never re-derives either: when that owner annotates an overrun caused by the primary-owned `data/captain-shared.md` alone, a secondmate home is not woken about an overrun it cannot act on.
 A secondmate home is likewise not notified about per-file growth of that same primary-owned `data/captain-shared.md`, which it receives read-only; the growth is still observed and recorded, and a primary home reports it normally.
 Those tracked bytes are code and instruction-surface size, not prompt-memory cost.
 The check does not run session-start, bootstrap, network checks, model calls, repository refreshes, `/stow`, or full preference/learnings rereads.
 
-Growth is measured against a per-file baseline retained in the check's own state record, so accumulation that stays under one day's threshold is still caught once it adds up; reporting a file rebases its baseline to the reported size, so accepted growth then stays silent.
-A surface observed for the first time is baselined silently, including the first content of an optional file that did not exist yet when the check was armed, and an established baseline survives that file disappearing and coming back.
-The fixed growth thresholds are inspectable in the script header: 2048 bytes for tracked startup/instruction files and 250 estimated tokens for the printed startup-memory files.
+The [script header](../bin/fm-startup-growth-check.sh) owns the retained-baseline rules and fixed growth thresholds.
+The local `state/.startup-growth-check` record retains the daily gate, per-file baselines, and last reported finding set; removing it silently re-baselines growth and allows a standing finding such as a budget overrun to be reported again.
 Budget overrun, unsafe or unreadable inputs, missing required tracked owner files, or material growth are reported once and deduplicated until the finding changes or clears; the report line is delivered before the check advances its own record, so a state-publication failure can repeat a finding but never swallow one.
-That one line goes out through the shared per-line digest cut, so an over-long finding set carries the repo's `[truncated]` marker instead of ending mid-finding, while deduplication keeps comparing the full uncapped set.
+That one line uses the [shared per-line digest cut](../bin/fm-line-cap-lib.sh), which can cut within a finding and appends `[truncated]`; the full uncapped finding set remains in `state/.startup-growth-check` for inspection and deduplication.
 Older bulk learning files remain reference-only; this monitor neither loads nor merges them.
 A reported review need is only a recommendation, not cleanup authority.
 
@@ -701,6 +791,15 @@ The flag is per home and is not inherited by secondmate homes, because stow cade
 Only the file's presence is read, so its contents are ignored; remove it to return to the default contract on the next pass.
 
 The skill text owns the marker spelling, the tick order, and the reinforcement rule.
+
+## Context restart budget (config/context-restart-budget)
+
+The optional, gitignored `config/context-restart-budget` file enables Claude primary conversation refresh at a completed-turn context threshold.
+Absence disables refresh; bootstrap never creates this file.
+The primary-authoritative inherited-local-material path propagates the setting or its absence to secondmate homes.
+Unsafe or malformed files are reported by bootstrap and remain inert in the Stop detector.
+`bin/fm-context-restart-lib.sh` owns the exact safe file format, parsing, and transcript accounting, and `bin/fm-context-restart.sh read-budget` prints the validated value.
+[Context refresh](context-refresh.md) owns enablement, handoff, supervision, and supported-harness behavior.
 
 ## Secondmate routes (data/secondmates.md)
 
@@ -802,17 +901,23 @@ When it is absent or contains `default`, crewmates mirror the firstmate's own ha
 
 `config/secondmate-harness` is a separate local, gitignored file containing the adapter the primary uses to launch secondmate agents, optionally followed by model and effort tokens on the same line.
 The first non-empty, non-comment line is parsed as `<harness> [<model>] [<effort>]`.
+To override one mate, put the same format in `config/secondmate-harness.d/<id>`, where `<id>` is its exact secondmate ID.
+This opt-in file takes precedence over the global pin as a complete profile; omitted model or effort tokens stay unset rather than coming from the global file.
+An absent, blank, comment-only, or `default` override defers to the global pin.
 
 A bare `<harness>` preserves the previous behavior: harness only, with no model or effort launch flag.
-When the harness token is absent or `default`, secondmate launch falls back through `config/crew-harness` and then the primary's own harness, and no model or effort is read from that file.
+When the global file's harness token is absent or `default`, secondmate launch falls back through `config/crew-harness` and then the primary's own harness, and no model or effort is read from that file.
 
-`fm-harness.sh secondmate-model` and `fm-harness.sh secondmate-effort` expose only the optional tokens from `config/secondmate-harness`; `config/crew-harness` remains a bare adapter-name file.
+`fm-harness.sh secondmate [<id>]`, `secondmate-model [<id>]`, and `secondmate-effort [<id>]` expose the selected pin; omitting the ID reads the global pin.
+`config/crew-harness` remains a bare adapter-name file.
 Changing this pin affects the next secondmate spawn or control-plane relaunch; the relaunch profile rules are owned by [`docs/agent-control.md`](agent-control.md#transactional-relaunch).
 
 ### Per-launch overrides and inherited defaults
 
 An explicit harness argument to `fm-spawn.sh` still overrides either config file for that spawn only.
-An explicit `--model` or `--effort` overrides the matching token from `config/secondmate-harness`; for a local route, an explicit harness or raw launch command starts with clean model and effort defaults unless those flags are also passed.
+An explicit `--model` or `--effort` overrides the matching token from the selected pin; for a local route, an explicit harness or raw launch command starts with clean model and effort defaults unless those flags are also passed.
+Local spawns, control-plane relaunches, automatic recovery, and `/updatefirstmate` restarts resolve the mate's current pin in the primary home.
+Remote spawn and `/updatefirstmate` restart resolve the pin on the primary side; other remote relaunch paths continue to require an explicit profile.
 
 Remote secondmate routes accept verified harness adapters only and reject raw launch commands.
 When `config/crew-dispatch.json` exists, crewmate and scout spawns require an explicit resolved harness instead of automatically falling back to `config/crew-harness`.
@@ -1009,7 +1114,9 @@ SSH_AUTH_SOCK
 ### Variables retained and where values come from
 
 Firstmate retains basic home, executable search, terminal, locale, temporary-directory, and backend routing variables, plus its explicit launch assignments, its ship and scout task marker, the compact-adviser kill switch described below, and enabled task trace.
-[`fm-spawn.sh --help`](../bin/fm-spawn.sh) owns the exact retained names and parsing mechanics.
+Worker launch assignments route Go temp files, and Corepack and npm cache homes the pane has not already set, into the task temp root outside the worktree; [`tests/fm-spawn-compact-adviser-disable.test.sh`](../tests/fm-spawn-compact-adviser-disable.test.sh) exercises the emitted environment with local fixtures.
+Before publishing, the worker runs the scratch preflight (`fm-pr-body-preflight.sh --scratch`); when a GitHub or GitLab change is registered, its changed-file API provides the published scratch backstop, which Gerrit lacks; for every provider the ship `done:` gate also refuses scratch committed in an existing worker copy, including when the `done:` names the recorded change.
+[`fm-spawn.sh --help`](../bin/fm-spawn.sh) owns the exact retained names, assignments, and parsing mechanics.
 
 Other ambient names must be listed explicitly, including custom credential-store locations, proxy settings, and certificate overrides when required by the selected tools.
 The command shell and worker may still create their own variables.
@@ -1055,7 +1162,8 @@ This applies only to agents Firstmate launches; the captain's own primary Firstm
 
 The optional local, gitignored `config/keep-ai-trailers` presence flag opts this home into keeping AI co-author trailers on its launched workers.
 With the flag absent, every Claude launch's inline `--settings` JSON carries `"attribution":{"commit":"","pr":"","sessionUrl":false}`, every Devin worker config sets `"attribution": false`, and every fleet launch receives a pane-scoped `GIT_CONFIG` `core.hooksPath` pointing at `state/<id>.git-hooks`, where git's `commit-msg` hook strips known AI trailers even when a runtime injects them after the typed message.
-When the flag is present, Claude launches omit those attribution-off settings, Devin worker configs keep the user config's `attribution` setting (Devin's default is on), and fleet launches do not install or select the strip hooks, so Git uses the repository's configured hooks directly.
+When the flag is present, Claude launches omit those attribution-off settings, Devin worker configs keep the user config's `attribution` setting (Devin's default is on), and fleet launches do not install or select the pane hooks, so Git uses the repository's configured hooks directly.
+Because the upstream prior-art push guard is installed only through those pane hooks, a shipping worker in a home with the flag present also skips that guard.
 `bin/fm-git-strip-ai-trailers.sh` owns the identities, the install, and chaining the hooks of whichever repository git is running in, including when `git -c core.hooksPath` supplies the pane's hook override, so a project hook such as husky still runs when stripping is enabled.
 A repository whose config sets `core.hooksPath` to the empty string runs no project hook, as in plain git; if the wrapper otherwise cannot resolve that repository's hooks directory, the git operation fails rather than silently skipping a project hook such as a pre-push guard.
 When stripping is enabled, the hooks directory is read-only, so a hook manager run inside a fleet pane (lefthook's npm postinstall, `pre-commit install`) fails instead of displacing the strip; install a project's hooks from outside the pane, where the wrappers chain them.
@@ -1066,13 +1174,13 @@ Per-machine Cursor `cli-config.json` attribution-off is not this contract: it do
 
 `config/crew-dispatch.json` is an optional local, gitignored file containing natural-language rules that firstmate reads before dispatching a crewmate or scout.
 Firstmate chooses the best matching rule with judgment; shell scripts do not match the natural-language rules.
-Firstmate resolves the rule's profile object or array under `AGENTS.md` section 4 and `quota-array-dispatch`, then passes only concrete `--harness`, `--model`, and `--effort` flags to `fm-spawn.sh`.
+Firstmate resolves the rule's profile object or array under `AGENTS.md` section 4 and `quota-array-dispatch`, then passes concrete `--harness`, `--model`, and `--effort` flags plus an optional named `--seat` to `fm-spawn.sh`.
 
 **Spawn requirements**
 
 - When the file exists, `fm-spawn.sh` enforces that contract by refusing crewmate and scout spawns that lack an explicit harness (`--harness`, a positional adapter, or a raw launch command).
 - Batch spawns satisfy the same requirement with a shared `--harness`.
-- Secondmate spawns are exempt and still resolve through `config/secondmate-harness` and its optional model and effort tokens.
+- Secondmate spawns are exempt and resolve through their selected secondmate pin as described above.
 
 **Contract owners**
 
@@ -1088,13 +1196,13 @@ This section is the single owner of the canonical schema and its per-field seman
       "min_confidence": 0.85,
       "floor": { "scope": "<quota-axi scope>", "min_percent": 20, "provider": "<quota-axi provider>" },
       "use": [
-        { "harness": "<adapter>", "model": "<optional model>", "effort": "<low|medium|high|xhigh|max|ultra, optional>", "provider": "<optional quota-axi provider>", "floor": { "scope": "<quota-axi scope>", "min_percent": 50 } }
+        { "harness": "<adapter>", "model": "<optional model>", "effort": "<low|medium|high|xhigh|max|ultra, optional>", "seat": "<optional Codex seat name>", "provider": "<optional quota-axi provider>", "floor": { "scope": "<quota-axi scope>", "min_percent": 50 } }
       ],
       "why": "<optional rationale that helps firstmate choose>"
     }
   ],
   "default": [
-    { "harness": "<adapter>", "model": "<optional model>", "effort": "<optional effort>" }
+    { "harness": "<adapter>", "model": "<optional model>", "effort": "<optional effort>", "seat": "<optional Codex seat name>" }
   ]
 }
 ```
@@ -1108,6 +1216,9 @@ This section is the single owner of the canonical schema and its per-field seman
 | `use` and optional top-level `default` | Accept one profile object or a non-empty array of profile objects; the single-object form remains fully backward-compatible. |
 | Profile `harness` | Required in every profile. |
 | Profile `model` and `effort`; rule `why` | Optional. |
+| Profile `seat` | Optional; accepts only the strings `"luna"` or `"main"` with `"harness": "codex"`, and the launching home's [dock record](#dock-local-seat-binding-configdockjson) maps each name to this machine's credential directory. |
+
+[`quota-array-dispatch`](../.agents/skills/quota-array-dispatch/SKILL.md#1-eligibility) owns account and quota matching for named seats and ambient profiles.
 
 **Fields applied only by typed resolution**
 
@@ -1172,6 +1283,50 @@ See [`docs/examples/crew-dispatch.json`](examples/crew-dispatch.json) for a star
 
 Secondmate homes inherit this file from the primary, so a secondmate's own crewmates apply the same dispatch profile behavior.
 
+## Dock-local seat binding (config/dock.json)
+
+An optional private `config/dock.json` in the launching home binds portable dispatch seat names to this machine's credential directory.
+The effective config directory is `${FM_CONFIG_OVERRIDE:-$FM_HOME/config}`; no parent home, hostname map, or ambient `CODEX_HOME` is searched.
+Version 1 supports the named `luna` and `main` seats on Codex:
+
+```json
+{
+  "version": 1,
+  "id": "ji7",
+  "seats": {
+    "luna": {
+      "harness": "codex",
+      "credential_home": "/home/fm-manage/.codex-luna"
+    },
+    "main": {
+      "harness": "codex",
+      "credential_home": "/home/fm-manage/.codex"
+    }
+  }
+}
+```
+
+`id` is a safe single-line diagnostic label, not a host routing instruction.
+The file must be ordinary readable JSON with exactly the top-level and per-seat fields shown; `seats` may bind either supported name or both, or be `{}` to declare no available seats.
+The credential path must be absolute and free of control characters; spaces and shell punctuation remain literal, and the existing directory is resolved to its physical path.
+An invalid or present incomplete file refuses a seated launch without a fallback.
+Only when the file is absent on Darwin for OS user `jarad` with `HOME=/Users/jarad` does Luna resolve to `/Users/jarad/.codex-luna` as `legacy-mac-jarad`; the `main` seat always requires an explicit dock binding.
+On other machines, create a local record before a seated launch.
+`bin/fm-dock.sh resolve --seat main --harness codex` or `--seat luna` prints the selected binding's identity without changing configuration.
+
+A seated spawn or relaunch requires the selected directory to be readable and searchable and requires native `codex login status` to identify a stored sign-in under a cleared environment.
+This release supports Codex's file-backed CLI authentication mode for seats; a configured keyring, auto, or ephemeral mode refuses until its path selection is guarded.
+The selected home must contain an ordinary readable `auth.json` file that `jq` parses as a JSON object carrying a non-empty `OPENAI_API_KEY` or non-empty ID, access, and refresh tokens, because the CLI's status also reports placeholder files as signed in; Firstmate checks presence only and never prints or compares credential values.
+The canonical launch forces that home and the built-in OpenAI provider while removing ambient OpenAI and Codex key and endpoint overrides; seated raw commands refuse.
+The task record saves `seat`, `dock`, `seat_home`, and `seat_source` as launch provenance, while a later attempt resolves the current dock file again.
+A failed replacement preflight leaves the old worker running.
+An explicit seated remote secondmate request refuses before transport until logical-seat transport exists.
+
+`config/dock.json` and credential directories are machine-local and never inherited, seeded, synchronized, or copied to another home.
+A local secondmate agent uses the launching home's dock, while its own workers use its own dock record.
+After seeding a secondmate home, provision the credential store and create that home's dock record there before its first seated worker.
+Dispatch profiles remain inherited and contain seat names only.
+[`bin/fm-dock-lib.sh`](../bin/fm-dock-lib.sh) owns parsing and resolution; [`bin/fm-worker-account-lib.sh`](../bin/fm-worker-account-lib.sh) owns the Codex sign-in discriminator and credential override filter.
 ## Typed dispatch resolution (.env TYPESAFE_API_KEY)
 
 `bin/fm-dispatch-resolve.sh` resolves one concrete crewmate or scout profile from a written brief with typesafe.ai's System One model (Jev), so the rule match that firstmate otherwise reasons out in its own context becomes one short tool turn.
@@ -1253,7 +1408,7 @@ No qualifying option, or two equally probable qualifying options, produces `ambi
 
 - Any applicable `exhausted_now` row or known zero bound makes that candidate ineligible, and a known profile-floor shortfall does the same before unrelated quota uncertainty is considered.
 - Missing or nonnumeric `spendPriority` evidence is never ranked, and every candidate is printed beside its evidence or the reason it was not rankable, including on ambiguous and approval-gated outcomes that emit no profile.
-- On the opted-in path, duplicate concrete profiles with the same harness, model, and effort inside one rule or the default array are configuration errors rather than ties.
+- On the opted-in path, duplicate concrete profiles with the same harness, model, effort, and seat inside one rule or the default array are configuration errors rather than ties.
 
 **Outcomes and exit status**
 
@@ -1386,6 +1541,15 @@ It uses the same live secondmate discovery and propagation helper as bootstrap; 
 - The locked bootstrap inheritance pass uses the same placement-specific behavior; see `secondmate-provisioning` for the single contract owner.
 - That live discovery starts from `state/*.meta` records with `kind=secondmate`; `data/secondmates.md` only backfills `home=` for older or incomplete meta records.
 - Skipped items, such as a destination checkout that does not yet gitignore the item, are visible warnings but not hard failures.
+
+## Firstmate runtime branch (git config firstmate.runtimeBranch)
+
+`bin/fm-ff-lib.sh` and `bin/fm-tangle-lib.sh` share the runtime-branch resolver.
+When `firstmate.runtimeBranch` is unset, it preserves the historical origin/HEAD selection and local main/master fallback.
+When set, the value must be a valid Git branch name that exists locally; invalid values and missing local branches fail closed without falling back.
+`bin/fm-update.sh` follows that branch's `branch.<name>.remote` and `branch.<name>.merge` settings, then pins the resulting commit for all secondmate updates.
+Fresh ship and scout spawns without an explicit task base use the same tracking source when refreshing a pooled task worktree, so an upstream `origin` does not need to carry the fork-only runtime branch; [`fm-spawn.sh`](../bin/fm-spawn.sh) owns task-base precedence and freshness refusals.
+Project clones keep their own upstream-default resolution in `bin/fm-fleet-sync.sh`; this setting applies to the Firstmate runtime repository only.
 
 ## Watched tool updates (config/watched-tools.json)
 
@@ -1912,10 +2076,11 @@ A long-polling external process is registered as a *source* through its adapter,
 `bin/fm-procevent.sh` owns the generic contract; built-in adapters retain their tracked `bin/fm-procevent-<adapter>.sh` commands, while an explicitly bound external adapter routes through the trusted host contract above.
 
 `bin/fm-procevent-lavish.sh` is the first built-in adapter and wraps the published `lavish-axi poll` interface plus `lavish-axi reply` when the installed version supports synchronous reply acceptance.
+A board owned by firstmate can also receive firstmate's reply through its registered listener; the [handling procedure](../.agents/skills/process-event-sources/SKILL.md#arming-a-source) owns feedback handling and acknowledgement, while the adapter's header owns reply staging, listener replacement, and delivery limits.
 
 **Open the Lavish artifact first**
 
-Before arming any Lavish source, open its artifact with `lavish-axi` so the saved session identifies the board's server; reply and poll attempts derive their host and port from that session and refuse missing or invalid session evidence before posting or consuming a staged worker reply.
+Before arming any Lavish source, open its artifact with `lavish-axi` so the saved session identifies the board's server; reply and poll attempts derive their host and port from that session and refuse missing or invalid session evidence before posting or consuming a staged reply.
 
 **Retry interrupted Lavish polls**
 
@@ -1923,7 +2088,7 @@ That adapter, and only that adapter, retries the one exact transient response a 
 This start-to-start governor is a no-op after a normally blocking poll but caps an immediately returning poll under the shipped defaults independently of the owner lease and registration launch pacing.
 
 Real feedback, ended and missing sessions, any other `SERVER_ERROR`, and that same interruption still standing once the bound is spent are all captured and announced normally; `FM_LAVISH_POLL_RETRY_DELAY` is a bounded 1 to 60 second test override for the interval only, and the runner itself stays adapter-agnostic.
-An already-armed Lavish source keeps its registered listener command until it is retired and armed again, so retire the source, then arm it again to adopt this retry policy.
+To adopt this retry policy on an already-armed Lavish source, retire the source, then arm it again.
 
 ### Crew-hosted Lavish review boards
 
@@ -2041,6 +2206,7 @@ Whether a captured result ends its source is adapter knowledge, never the runner
 After capture, the runner asks the immutable captured owner whether the result is terminal.
 It uses the built-in `terminal` command or external `result.terminal` operation.
 Under the default ordering, this happens after the initial `check` publication.
+For a firstmate-owned Lavish source, terminal classification and retirement instead run within the shared capture/replacement boundary before publication, so a reply re-arm cannot restart an ended session.
 
 - Exit 0 retires the registration.
   The exception is a task-owned board, whose owner must first acknowledge the round as defined above.
@@ -2058,9 +2224,9 @@ Under the default ordering, this happens after the initial `check` publication.
 **Apply built-in results automatically**
 
 Applying a captured result through code is a built-in adapter seam, and some built-in results carry no judgement at all: they must simply be applied idempotently to this home's own durable state.
-Leaving that to a handler means it can silently not happen, so immediately after the terminal check above the runner calls `bin/fm-procevent-<adapter>.sh autohandle <source-id> <sequence> <result-file>` and lets the built-in adapter apply and acknowledge its own result.
+Leaving that to a handler means it can silently not happen, so the runner calls `bin/fm-procevent-<adapter>.sh autohandle <source-id> <sequence> <result-file>` at the adapter's announcement boundary defined below and lets the built-in adapter apply and acknowledge its own result.
 
-That call runs strictly after terminal retirement, because a handling adapter re-arms its own next source and retiring afterwards would drop that fresh registration and leave the source silently dead.
+Terminal retirement retains the registration-generation guard defined above when automatic handling re-arms a source.
 Exit 0 means the adapter fully applied and acknowledged the result; a missing command, an error, or any other exit is not a capture failure but leaves the result unacknowledged and therefore still eligible for re-announcement, so a handler receives it exactly as before and an adapter with no such command needs no change.
 
 **Adapter-controlled announcement order**
@@ -2082,12 +2248,13 @@ Some built-in sources carry the captain's answer to a captain-held task, and wha
 
 - A built-in source bound with `bin/fm-captain-hold.sh bind` therefore has each captured result passed to `bin/fm-procevent-<adapter>.sh answers <result-file>`, and whatever that prints is piped straight into that intake.
 - A binding can select one decision origin or the script's cross-origin mode; the command header owns the exact forms and key interpretation.
-- The built-in adapter reports only what the captain chose; the intake owns every rule about what happens next, so the runner names no adapter, parses no result, and carries no decision rule, and a future built-in answer source needs nothing here beyond an `answers` command and a binding.
+- The built-in adapter reports only what the captain chose; the intake owns every rule about what happens next, so the runner parses no result and carries no decision rule, and a future built-in answer source needs nothing here beyond an `answers` command and a binding.
 
 **Reconcile selections and handling boundaries**
 
 - The reserved Reconcile selection uses the parallel optional `reconciles` adapter command and binding-verified `reconcile-requests` intake rather than entering keyed answers; [`captain-hold-lifecycle.md`](captain-hold-lifecycle.md#reconcile-re-check-reality-never-a-blind-close) owns those semantics.
 - Feeding is independent of handling: it never acknowledges a result and never suppresses a wake, because recording the answer or request is transcription while acting on it is firstmate's judgement.
+- For firstmate-owned Lavish sources, normal capture and reply replacement finish both intake calls under the shared source lock before committed staging becomes ineligible for capture; republication of older pending results never feeds either intake again.
 - An unbound built-in source, a built-in adapter without the corresponding command, and a failure on either side all leave the capture untouched and still announced.
 - External binding responses never enter either authority-bearing intake.
 
@@ -2098,7 +2265,7 @@ Ownership is machine-wide per canonical source, because separate homes can share
 - Claims live under `$XDG_STATE_HOME/firstmate/procevent-claims` (override with `FM_PROCEVENT_CLAIM_ROOT`).
 - Each claim binds its caller-reported home and runner PID to a process identity, unique claim generation, exact registration-file generation, and resolved state-root identity.
 - Registration, acquisition, replacement, retirement, and generation-bound release are serialized at one machine-wide boundary per source.
-- A live identity-matched owner is never displaced, and release removes only the exact generation the caller acquired.
+- Claim acquisition never displaces a live identity-matched owner, and release removes only the exact generation the caller acquired.
 
 **Prove ownership before stopping a runner**
 
@@ -2327,11 +2494,13 @@ FM_CONFIG_OVERRIDE=      # alternate config dir, mainly for tests
 FM_PROC_ROOT_OVERRIDE=   # alternate /proc root for Linux process-identity reads in fm-wake-lib.sh and fm-teardown.sh, mainly for tests
 FM_BACKEND=             # optional runtime backend override for new spawns; tmux/herdr/zellij/orca/cmux support ship/scout spawns, codex-app is not accepted
 FM_TRACE_CONTEXT=       # optional trace-context override; see "Trace context propagation"
-FM_TASK_ID=             # internal task-worker marker fm-spawn.sh exports into ship and scout panes, never set by hand; bin/fm-test-run.sh refuses to execute in the repository primary checkout while it is set
+FM_TASK_ID=             # internal task-worker marker fm-spawn.sh exports into ship and scout panes, never set by hand; bin/fm-test-run.sh refuses to execute in the repository primary checkout and bin/fm-session-start.sh exits 2 while it is set
 FM_TASK_INBOX=          # internal: absolute path of the task's steering inbox (state/<id>.inbox) that fm-spawn.sh exports into every ship, scout, and secondmate launch, never set by hand; the steering doorbell names "$FM_TASK_INBOX"
 HERDR_SESSION=default  # herdr-only: named session for normal backend ops; not enough for destructive cleanup (docs/herdr-backend.md)
 FM_BACKEND_HERDR_SUBMIT_POLLS=6  # herdr-only: agent-state samples spread across each Enter attempt's budget when confirming a submit (docs/herdr-backend.md "Current transport behavior")
 FM_BACKEND_HERDR_SUBMIT_MIN_SLEEP=0.6  # herdr-only: minimum per-Enter confirmation budget before polling agent-state after an idle baseline
+FM_BACKEND_HERDR_PI_COMPACT=0  # herdr-only: 1 opts in to the experimental compact Pi composer layout (docs/herdr-backend.md "Pi composer states")
+FM_BACKEND_HERDR_PI_PROMPT=0   # herdr-only: 1 treats a lone first-row `>` as the Pi editor prompt, not a draft (docs/herdr-backend.md "Pi composer states")
 FM_ZELLIJ_SESSION=firstmate  # zellij-only: named session for normal backend ops and test isolation (docs/zellij-backend.md)
 CMUX_SOCKET_PASSWORD=   # cmux-only: socket password fallback when config/cmux-socket-password is absent (docs/cmux-backend.md)
 FM_SESSION_START_STATUS_TAIL=5   # state/*.status lines printed per task in the session-start digest; each line is capped by bin/fm-line-cap-lib.sh
@@ -2385,6 +2554,7 @@ FM_TEARDOWN_NM_TIMEOUT=10    # seconds allowed per no-mistakes query or abort in
 FM_CREW_STATE_RUNS_LIMIT=200  # plain runs-ledger rows scanned for fallback attribution; does not change the CLI's AXI overview window (selection owner: bin/fm-nm-run-lib.sh)
 FM_TEARDOWN_NM_RUNS_LIMIT=200  # recent no-mistakes run rows scanned to prove an unresolved-head parked run belongs to teardown's task
 FM_CREW_STATE_BIN=bin/fm-crew-state.sh   # test override for the current-state reader used by watcher triage: the working/paused classification, and the wedge timer's parked-gate wait evidence
+FM_READY_TIMEOUT_CONTROL_BIN=bin/fm-control.sh   # test override for the control plane the watcher's ready-session timeout stops an agent through; only consulted when config/ready-session-timeout is present
 FM_MAIL_USER=      # mail-plane IMAP/SMTP login, from .env or environment (docs/configuration.md "Mail plane")
 FM_MAIL_PASS=      # mail-plane IMAP/SMTP password
 FM_IMAP_HOST=      # mail-plane IMAP server hostname
@@ -2402,7 +2572,7 @@ FMX_X_THREAD_MAX=25     # maximum messages in one auto-split reply thread
 FMX_FOLLOWUP_MAX_AGE_SECS=604800   # local window for posting Relay completion follow-ups (7 days)
 FMX_FOLLOWUP_MAX_COUNT=3   # local cap on Relay completion follow-ups per linked mention
 FM_PF_RETRY_BACKOFF_SECS=900   # seconds before the next attempt after a retryable promised-public-reply delivery error
-FM_LOCK_STALE_AFTER=2   # grace seconds for missing or nonnumeric lock-owner PIDs (minimum 2s); dead numeric PIDs have no age grace
+FM_LOCK_STALE_AFTER=2   # grace seconds for missing or nonnumeric lock-owner PIDs (minimum 2s); numeric owners proven stale have no age grace (owner check: bin/fm-wake-lib.sh fm_lock_owner_alive)
 FM_GUARD_GRACE=300      # beacon freshness threshold for guard verdicts, arm health checks, and the primary turn-end guard; see docs/turnend-guard.md for model-aware exceptions
 FM_CLAUDE_AUTOARM_ATTEMPTS=2   # bounded Stop-owned arm attempts per Claude auto-arm cycle; accepted values are 1, 2, or 3
 FM_CLAUDE_AUTOARM_SYNC_WAIT_MS=800   # milliseconds the --claude turn-end guard waits for watcher health, an open Stop auto-arm generation claim, or a fresh epoch before deciding recovery ownership or failure progression
@@ -2418,7 +2588,7 @@ FM_WATCH_REARM_RETRY_MAX_MS=4000   # Pi/OpenCode adapter cap for exponential con
 FM_WATCH_REARM_RETRY_LIMIT=5   # Pi/OpenCode adapter launch-failure retries before surfacing restoration failure
 FM_WATCH_CYCLE_LOG_MAX_BYTES=262144   # size cap for the arm-owned watcher lifecycle ledger
 FM_WATCH_CYCLE_LOG_KEEP_LINES=1000   # newest complete lifecycle rows considered when the ledger is capped
-FM_WATCH_EXTENSION_LOG_KEEP_LINES=0   # opt-in Pi extension diagnostic log (state/.watch-extension.log); unset, empty, non-numeric, zero, or negative disables logging, a positive value keeps that many newest rows; logging never changes supervision behavior
+FM_WATCH_EXTENSION_LOG_KEEP_LINES=0   # opt-in Pi extension diagnostic log (state/.watch-extension.log); only a finite numeric value that floors to a positive integer enables logging and keeps that many newest rows; all other values disable logging; logging never changes supervision behavior
 FM_WATCHER_STALE_GRACE=300   # defaults to FM_GUARD_GRACE if set, else the poll-derived grace (docs/turnend-guard.md "Guard grace and the poll cadence"); seconds before a fresh arm refuses a live holder's stale beacon (attached arms: FM_WATCHER_STALL_BOUND)
 FM_WATCHER_STALL_BOUND=       # live-holder stall bound; default and arm/re-arm behavior: docs/turnend-guard.md "Guard grace and the poll cadence"
 FM_SIGNAL_GRACE=30      # seconds to coalesce nearby status and turn-end signals into one wake
@@ -2426,9 +2596,9 @@ FM_WATCHER_CLEANUP_LOCK_BOUND=   # optional watcher EXIT marker-lock wait; defau
 FM_TURNEND_CHURN_ABSORB_SECS=900   # longest one endpoint's bare turn-ends may be deferred on pane-churn evidence alone; only consulted when config/turnend-churn-absorb is present
 FM_CAPTAIN_RE='done:|needs-decision:|blocked:|failed:|PR ready|checks green|ready in branch|merged'   # captain-relevant status regex; nonterminal progress verbs remain excluded even when their prose matches
 FM_CLASSIFY_PAUSED_VERB=paused     # leading declared-wait status verb; bin/fm-classify-lib.sh owns its meaning and legacy external-wait label; excluded from FM_CAPTAIN_RE and distinct from blocked
-FM_STALE_ESCALATE_SECS=240         # idle seconds before a provably-working stale pane escalates, unless that pane's own worker declared a wait that has not elapsed, or, where config/wedge-defer-parked-gate arms it, that pane's crew is parked at a validation gate awaiting the supervisor's decision on it that the crew raised under that run's key and nobody has answered yet, either of which takes the FM_PAUSE_RESURFACE_SECS recheck below instead; stale panes whose crew is not provably working surface immediately unless admitted directly to the declared-wait cadence, while a live idle declared wait still surfaces once before that cadence bounds repeats; at that same escalation moment a recovery-grade agent-state probe (docs/architecture.md owns that dead-record contract) reports a pane whose endpoint is proven `dead` or `missing` once and stops re-escalating it while it stays that way
-FM_BUSY_TURN_MAX_SECS=3600         # maximum age without a completed turn or explicit native-harness progress (bin/fm-watch.sh owns marker selection), before the same wedge escalation used for a provably-working non-busy stale takes over; inspection-only, never an automatic interrupt or restart; a declared external wait, an attended verified captain-held transfer, or - where config/wedge-defer-parked-gate arms it - a validation gate of the crew's own awaiting the supervisor's still-unanswered decision takes the FM_PAUSE_RESURFACE_SECS recheck below instead
-FM_PAUSE_RESURFACE_SECS=14400      # four hours between bounded rechecks of a declared external wait or verified captain-held transfer, and between repeated new-hash stale alarms for an ordinary crew task with an open backlog captain call; a structured until time can make an external-wait recheck occur sooner but cannot extend this bound; this includes a live idle pane after its first inconclusive stale wake, a provably-working pane whose own unelapsed declared wait or, where config/wedge-defer-parked-gate arms it, unanswered supervisor-owed validation gate defers its FM_STALE_ESCALATE_SECS escalation, and a live busy pane past FM_BUSY_TURN_MAX_SECS, while the away-mode daemon uses the same setting and ages its window against the crew's own latest status line rather than pane busy state; a captain-held transfer is never rechecked while the away-posture record exists, while an armed validation gate awaiting the supervisor's decision keeps this recheck in either posture
+FM_STALE_ESCALATE_SECS=240         # idle seconds before a provably-working stale pane escalates, unless that pane's own worker declared a wait that has not elapsed, or, where config/wedge-defer-parked-gate arms it, that pane's crew is parked at a validation gate awaiting the supervisor's decision on it that the crew raised under that run's key and nobody has answered yet, either of which takes the FM_PAUSE_RESURFACE_SECS recheck below instead; stale panes whose crew is not provably working surface immediately unless a standing declared wait admits them to the declared-wait cadence, whatever their agent's liveness; at that same escalation moment a recovery-grade agent-state probe (docs/architecture.md owns that dead-record contract) reports a pane whose endpoint is proven `dead` or `missing` once and stops re-escalating it while it stays that way
+FM_BUSY_TURN_MAX_SECS=3600         # maximum age without a current turn start, completed turn, or explicit native-harness progress (bin/fm-watch.sh owns marker selection), before the same wedge escalation used for a provably-working non-busy stale takes over; inspection-only, never an automatic interrupt or restart; a declared external wait, an attended verified captain-held transfer, or - where config/wedge-defer-parked-gate arms it - a validation gate of the crew's own awaiting the supervisor's still-unanswered decision takes the FM_PAUSE_RESURFACE_SECS recheck below instead
+FM_PAUSE_RESURFACE_SECS=14400      # four hours between bounded rechecks of a declared external wait, verified captain-held transfer, or delivered pull request with an authenticated armed merge poll (one recheck per window for each logical wait, whichever idle, busy, or wedge route its pane takes), and between repeated busy-pane wedge escalations and new-hash stale alarms for an ordinary crew task with an open backlog captain call; a structured until time can make an external-wait recheck occur sooner but cannot extend this bound; this includes an idle pane whatever its agent's liveness, a provably-working pane whose own unelapsed declared wait or, where config/wedge-defer-parked-gate arms it, unanswered supervisor-owed validation gate defers its FM_STALE_ESCALATE_SECS escalation, and a live busy pane past FM_BUSY_TURN_MAX_SECS, while the away-mode daemon uses the same setting and ages its window against the crew's own latest status line rather than pane busy state; a captain-held transfer is never rechecked while the away-posture record exists, while an armed validation gate awaiting the supervisor's decision keeps this recheck in either posture
 FM_SECONDMATE_WAKE_STALL_SECS=180  # minimum interval with no change of the oldest actionable foreign wake-queue row (it advances as the mate drains, and a queue reprovisioned under the same task id starts a fresh interval at whatever sequence it restarts) before an endpoint-recorded local secondmate produces one durable parent wake-loop-stall notification for that no-progress episode; a mate that is provably inside an active turn (an exact busy verdict) does not escalate until that same no-progress interval reaches FM_BUSY_TURN_MAX_SECS above; a mate whose busy class is exactly idle, whose agent is alive, and whose composer is not pending is rung once so its own home can drain, and the parent notification is withheld until that same row stays frozen for another stall interval; unknown or ring-unsafe panes keep the parent alarm; declared external-wait pause rows are excluded, and zero or invalid values use 180
 FM_SECONDMATE_LIVENESS_SECS=60   # seconds between watcher probes of each registered secondmate's recorded endpoint through bin/fm-secondmate-liveness-lib.sh, which relaunches only a positively `dead` or `missing` endpoint through the ordinary guarded fm-spawn.sh --secondmate path and emits exactly one check wake per relaunch; zero or invalid values use 60
 FM_SECONDMATE_LIVENESS_TIMEOUT=120   # seconds bounding one watcher-driven relaunch, so a wedged spawn cannot stall the poll; zero or invalid values use 120
@@ -2452,7 +2622,7 @@ FM_BUSY_REGEX=          # optional override for rendered delivery guards and Gro
 FM_COMPOSER_IDLE_RE=    # optional fleet-wide idle-placeholder regex override (bin/fm-composer-lib.sh); a match alone does not prove emptiness because shape-specific position and ANSI de-emphasis safety gates still apply
 FM_COMPOSER_CAPTURE_LINES=20   # fleet-wide bound for tail-capture composer reads; it no longer bounds the adapter composer state/content reads on tmux or herdr, which supply their bounded visible pane instead, while the cmux, orca, and Zellij adapters use this small window so stale scrollback banners stay out of the candidate set; it still bounds the shared inbox composer read (bin/fm-task-inbox-lib.sh) on every backend, and on herdr it also floors how many Ctrl+U presses a refused leftover may take
 FM_COMPOSER_PI_MAX_LINES=8     # fleet-wide: maximum rows admitted between Pi's identity-corroborated separator pair; taller or ambiguous candidates stay unknown
-FM_COMPOSER_GHOST_LUMA_MAX=128   # fleet-wide: max perceived luminance (0.299R+0.587G+0.114B, 0-255) for a TRUECOLOR foreground to count as de-emphasised ghost/placeholder text and be stripped; dim/faint (SGR 2) is stripped regardless. Assumes a dark terminal theme (bin/fm-composer-lib.sh's fm_composer_strip_ghost, used by styled tmux, herdr, and Zellij reads)
+FM_COMPOSER_GHOST_LUMA_MAX=128   # fleet-wide: max perceived luminance (0.299R+0.587G+0.114B, 0-255) for a muted (channel spread under 96) TRUECOLOR foreground to count as de-emphasised ghost/placeholder text and be stripped; saturated colours such as Claude's slash-command highlight are kept; dim/faint (SGR 2) is stripped regardless. Assumes a dark terminal theme (bin/fm-composer-lib.sh's fm_composer_strip_ghost, used by styled tmux, herdr, and Zellij reads)
 GROK_HOME=              # optional Grok config home for firstmate's global grok turn-end hook; defaults to ~/.grok
 FM_SEND_RETRIES=3       # fm-send typed-plane Enter-retry attempts after typing the line once; agy typed targets use a longer per-harness default owned by bin/fm-send.sh
 FM_SEND_SLEEP=0.4       # seconds between fm-send typed-plane submit checks

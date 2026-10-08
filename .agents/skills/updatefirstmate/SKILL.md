@@ -28,7 +28,11 @@ The only live mates that do not restart are the ones whose home the update pass 
 **One-time rollout note:** the update that carries this change is still executed by the previous release, which restarts only the mates whose `AGENTS.md` or `.agents/skills/` moved on that pass. After it completes, run `bin/fm-secondmate-restart.sh <fm-id>...` once with every live second mate ID, not only the ones that release named; later updates follow the normal flow below.
 
 The primary update is fast-forward only, while each secondmate uses the same guarded convergence path plus one narrow recovery for squash-merged local history.
-For a remote route, it updates the configured Firstmate code root on that host from its own origin, then guardedly fast-forwards the persistent home to that code-root commit.
+By default, the runtime branch remains the origin/HEAD branch with the historical main/master fallback.
+Set the validated repository git config key `firstmate.runtimeBranch` to name a local runtime branch such as `house`; its configured branch remote and merge ref supply the update target.
+The updater captures the resulting primary SHA once and pins every local or remote secondmate to it.
+For remote routes, the updater first refreshes each configured host/code-root pair once from its tracking remote, then each persistent home imports and guardedly fast-forwards to the pinned primary commit.
+A dirty, diverged, or unavailable code root is skipped and reported while its homes still attempt their existing pinned sync.
 It never forces, never creates a merge commit, and never stashes.
 A clean secondmate divergence advances with `reset --keep` only when a three-way tree proof shows its complete local result is already present at the target, which recognizes squash-merged contributions without discarding unique content.
 Every other dirty, diverged, offline, or wrong-branch target is skipped and reported, and a genuine divergence leaves a durable `state/.secondmate-update-reconcile/<id>.pending` record that future bootstrap and update passes surface until convergence clears it.
@@ -41,7 +45,8 @@ This touches only the firstmate repo and its own worktrees, never anything under
    ```sh
    bin/fm-update.sh
    ```
-   It fast-forwards this firstmate repo's default branch from origin, then updates every registered local or remote secondmate home through its placement-specific guarded path.
+   It fast-forwards this firstmate repo's configured runtime branch from its tracking remote, then updates every registered local or remote secondmate home to the resulting pinned commit through its placement-specific guarded path.
+   If the primary update is skipped, propagation stops.
    It prints one status line per target (`updated <old>..<new>` / `reconciled redundant divergence <old>..<new>` / `already current` / `skipped: <reason>`), followed by three action lines that tell you exactly what to do next:
    - `reread-firstmate: yes|no`
    - `restart-secondmates: fm-<id>...|none`
@@ -66,7 +71,7 @@ This touches only the firstmate repo and its own worktrees, never anything under
    This is automatic and needs no per-mate confirmation from the captain.
    Local and remote mates go in the same list; the command owns the transport, the profile each replacement runs on, and the wait.
 
-   It asks every listed mate first to write down the open work it holds only in its conversation, and restarts one only after that mate's own answer comes back.
+   It asks every listed mate first to write down the open work it holds only in its conversation, and restarts one only after that mate's own correlated `done` answer comes back; a progress, blocked, failed, or needs-decision answer leaves it nudged, not restarted.
    A mate that is mid-turn queues the request behind that turn.
    That is the whole point of the step, so do not work around it: it is what keeps a captain call the mate had formed but never registered from being lost with the conversation.
    Its header owns the request, the bound, and the two knobs that change them.

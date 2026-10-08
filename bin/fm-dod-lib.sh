@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# shellcheck source=bin/fm-scratch-lib.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/fm-scratch-lib.sh"
+
 # Single owner of a ship task's mode-specific "Definition of done" block and of
 # the named-head reachability gate that accepts a ship `done:` claim.
 # Sourced by bin/fm-brief.sh, which renders it into a generated ship brief, and by
@@ -6,7 +9,7 @@
 # receives. Both paths must hand the worker the same contract: a promoted
 # no-mistakes worker that never received the ask-user escalation rule or the
 # `--yes` ban is the exact delivery hole this single owner exists to close.
-# fm_dod_block <no-mistakes|direct-PR|local-only> <task-id> [branch] [<forge>]
+# fm_dod_block <no-mistakes|direct-PR|local-only> <task-id> [branch] [<forge>] [<base>] [<house-feature PR base>]
 # prints the block on stdout with no trailing blank line. The caller validates the
 # mode; an unknown mode is refused rather than silently rendered as the pipeline
 # contract.
@@ -17,6 +20,8 @@
 # --base-branch; empty means the repository default. A named base is the branch
 # the worker starts from, never pushes to, and targets with its pull request, and
 # fm_base_branch_valid refuses it where no pull request carries the work.
+# The optional sixth argument to fm_dod_block adds the durable house-feature
+# integration handoff; an ordinary named base carries no such handoff.
 # Callers of the gate are bin/fm-crew-state.sh (current-state done),
 # bin/fm-pr-check.sh (PR registration), and bin/fm-inactive-reconcile.sh
 # (secondmate ledger-first publish of a child done). A ship `done:` is not
@@ -103,8 +108,8 @@
 # the Claude launch grants the skills directory that holds it.
 # fm_ship_rule_one owns the mode-specific first ship safety rule shared by an
 # ordinary ship brief and the durable contract written during scout promotion.
-# It takes the same optional trailing forge argument, because the rule that keeps
-# a worker off a remote is exactly the rule that changes when the forge does.
+# It takes the same optional forge and base arguments, because the rule must
+# protect the selected publication path and its target branch.
 
 # shellcheck source=bin/fm-pr-lib.sh
 . "$(d=${BASH_SOURCE[0]%/*}; [ "$d" != "${BASH_SOURCE[0]}" ] || d=.; cd "${d:-/}" && pwd)/fm-pr-lib.sh"
@@ -122,6 +127,8 @@ fm_brief_worker_role() {  # <state-dir> <task-id> <code-root>
 You are a crewmate: an autonomous worker agent managed by firstmate.
 This section establishes your current identity before every project or task instruction below and supersedes any conflicting role identity in those instructions.
 Do the assigned work yourself and report only to firstmate; do not adopt a firstmate or secondmate supervisor identity, delegate the task, run fleet supervision, or address the captain.
+Do not run `bin/fm-session-start.sh`, `bin/fm-bootstrap.sh`, or `bin/fm-guard.sh` from a disposable task worktree; those commands belong to the supervising firstmate.
+Ignore the expected feature-branch worktree-tangle warning those primary-only commands would emit for this task worktree.
 EOF
   printf "Your steering inbox is \`%s/%s.inbox\`; this exact path belongs to your current task even when it is outside the worktree or under the supervising firstmate home, so read and acknowledge its messages and do not reject it as another home's state.\n" "$state" "$task_id"
   cat <<'EOF'
@@ -280,6 +287,365 @@ EOF
   printf '%s\n' "$1"
 }
 
+fm_dod_path_normalize() {  # <absolute-path>
+  awk -F/ '
+    BEGIN { result = "" }
+    {
+      for (i = 1; i <= NF; i++) {
+        if ($i == "" || $i == ".") continue
+        if ($i == "..") { sub("/[^/]*$", "", result); continue }
+        result = result "/" $i
+      }
+    }
+    END { if (result == "") result = "/"; print result }
+  ' <<EOF
+$1
+EOF
+}
+
+# Refuse conflicting live-scenario summaries before the provenance check can
+# misdiagnose a generated appendix as missing metadata. Only tables with an
+# explicit Live column and fully classified rows supply a table total; a
+# count is contradictory only when no such table agrees with it. A one-row
+# table agrees with a larger count only when it is the body's sole such table,
+# so a summary row cannot mask a contradicting scenario table.
+fm_dod_validate_scenario_consistency() {  # <complete-pr-body>
+  printf '%s\n' "$1" | awk '
+    function trim(value) {
+      sub(/^[[:space:]]+/, "", value)
+      sub(/[[:space:]]+$/, "", value)
+      return value
+    }
+    function refuse(first, second) {
+      refused = 1
+      print "evidence claim refused: contradictory driven-scenario results:" > "/dev/stderr"
+      print "  " first > "/dev/stderr"
+      print "  " second > "/dev/stderr"
+      exit 1
+    }
+    function check_table() {
+      if (table_rows > 0 && table_known == table_rows) {
+        stored_tables++
+        stored_table_rows[stored_tables] = table_rows
+        stored_table_driven[stored_tables] = table_driven
+        stored_table_lines[stored_tables] = table_lines
+      }
+      table_rows = table_known = table_driven = live_column = 0
+      table_header = ""
+      table_lines = ""
+    }
+    function table_agrees(n) {
+      if (stored_tables > 1 && stored_table_rows[n] != count_total) return 0
+      return !(count_driven < stored_table_driven[n] ||
+               (count_total == stored_table_rows[n] && count_driven != stored_table_driven[n]) ||
+               (stored_table_rows[n] >= 2 && count_total != stored_table_rows[n]) ||
+               (count_driven == count_total && stored_table_driven[n] < stored_table_rows[n]))
+    }
+    function check_stored() {
+      if (stored_tables == 0 || count_line == "") return
+      cited = stored_tables
+      for (n = 1; n <= stored_tables; n++) {
+        if (table_agrees(n)) return
+        if (stored_table_rows[n] == count_total) cited = n
+      }
+      refuse(count_line, stored_table_lines[cited])
+    }
+    {
+      original = $0
+      lower = tolower(original)
+      # Require the count to describe scenarios driven live, not a second
+      # metric such as fixture tests passed or endpoints requested.
+      if (lower ~ /[0-9]+[[:space:]]+of[[:space:]]+[0-9]+[[:space:]]+scenarios?[^|]*driven[[:space:]]+live/ ||
+          lower ~ /[0-9]+[[:space:]]+of[[:space:]]+[0-9]+[[:space:]]+scenarios?[^|]*live[^|]*driven/) {
+        # Work from the first ratio on the line; appendix lines carry one.
+        count_text = lower
+        match(count_text, /[0-9]+[[:space:]]+of[[:space:]]+[0-9]+/)
+        ratio = substr(count_text, RSTART, RLENGTH)
+        split(ratio, parts, /[[:space:]]+of[[:space:]]+/)
+        driven = parts[1] + 0
+        total = parts[2] + 0
+        if (count_line != "" && (driven != count_driven || total != count_total))
+          refuse(count_line, original)
+        if (count_line == "") {
+          count_line = original
+          count_driven = driven
+          count_total = total
+        }
+      }
+      if (substr(trim(original), 1, 1) != "|") {
+        if (table_header != "") check_table()
+        next
+      }
+      columns = split(original, cells, /\|/)
+      if (table_header == "") {
+        live_column = 0
+        for (i = 2; i < columns; i++)
+          if (tolower(trim(cells[i])) == "live") live_column = i
+        if (live_column > 0 && tolower(original) ~ /scenario|result/) {
+          table_header = original
+          table_lines = original
+        }
+        next
+      }
+      if (lower ~ /^\|[[:space:]|:-]+\|[[:space:]|:-]*$/) next
+      if (columns <= live_column) { check_table(); next }
+      value = tolower(trim(cells[live_column]))
+      table_rows++
+      table_lines = table_lines "\n  " original
+      if (value ~ /^(yes|live|driven live|real account)$/) {
+        table_known++
+        table_driven++
+      } else if (value ~ /^(no|fixture|fixture-based|synthetic|offline|not driven)$/) {
+        table_known++
+      }
+    }
+    END {
+      if (refused) exit 1
+      if (table_header != "") check_table()
+      check_stored()
+    }
+  '
+}
+
+fm_dod_validate_intent_evidence() {  # <intent> <worktree> <task-temp> [preflight|publish|retired]
+  local intent=$1 worktree=$2 task_temp=$3 phase=${4:-preflight}
+  local line previous_line='' previous_previous_line='' candidate detector_input artifact command captured claim=0 normalized_artifact normalized_root resolved_artifact link_target symlink_hops
+  local timestamp_date timestamp_clock timestamp_year timestamp_month timestamp_day timestamp_hour timestamp_minute timestamp_second timestamp_zone timestamp_offset_hour timestamp_offset_minute days_in_month
+  local artifact_count=0 command_count=0 captured_count=0
+  if [ "$phase" != preflight ]; then
+    fm_dod_validate_scenario_consistency "$intent" || return 1
+  fi
+  detector_input=$(printf '%s\n' "$intent" | tr '.!?;' '\n' | sed -E 's/,[[:space:]]+(but|however|yet)[[:space:]]+/\n/g')
+  while IFS= read -r line; do
+    for candidate in "$line" "$previous_line $line" "$previous_previous_line $previous_line $line"; do
+      candidate=$(printf '%s\n' "$candidate" | tr '[:upper:]' '[:lower:]' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+      case "$candidate" in
+        please\ *|can\ you\ *|could\ you\ *|would\ you\ *|for\ example*|example:*|e.g.*|quote:*|quoted:*|do\ not\ *|don\'t\ *|never\ *|avoid\ *|must\ not\ *|should\ not\ *|investigate\ *|run\ *|check\ *|verify\ *|validate\ *|test\ *|collect\ *|report\ *|describe\ *|document\ *|ensure\ *|add\ *|include\ *|show\ *) continue ;;
+      esac
+      if printf '%s\n' "$candidate" | grep -Eiq "(^|[[:space:]])(did|does|do|was|were|is|are|has|have|had)?[[:space:]]*not[[:space:]]+|(^|[[:space:]])(didn.t|doesn.t|don.t|wasn.t|weren.t|isn.t|aren.t|hasn.t|haven.t|hadn.t|couldn.t|wouldn.t|shouldn.t|mustn.t|can.t)[[:space:]]+"; then
+        continue
+      fi
+      case "$candidate" in
+        *\"*) continue ;;
+      esac
+      if printf '%s\n' "$candidate" | grep -Eiq '((test|tests|check|checks|run|runs|probe|probes|scenario|scenarios|outcome|outcomes|result|results|measurement|measurements|account|accounts|validation|evidence|verification|confirmation)[^.!?]*[[:space:]]ran[[:space:]]+[^.!?]*(live|verified|real-account|real account|independent|independently|external|externally confirmed))|((live|verified|real-account|real account|independent|independently|external|externally confirmed)[^.!?]*(test|tests|check|checks|run|runs|probe|probes|scenario|scenarios|outcome|outcomes|result|results|measurement|measurements|account|accounts|validation|evidence|verification|confirmation)[^.!?]*[[:space:]]ran[[:space:]])'; then
+        claim=1
+        break 2
+      fi
+      if printf '%s\n' "$candidate" | grep -Eiq '((live|verified|real|real-account|real account|independent|independently|external|externally confirmed)[^.!?]*(test|tests|check|checks|run|runs|probe|probes|scenario|scenarios|outcome|outcomes|result|results|measurement|measurements|account|accounts|validation|evidence|verification|confirmation)[^.!?]*(was|were|is|are|shows?|reported|demonstrated|driven|completed|succeeded|successful|successfully|passed|failed|confirmed|verified|validated))|((live|verified|real|real-account|real account|independent|independently|external|externally confirmed)[^.!?]*(completed|succeeded|successful|successfully|passed|failed|confirmed|verified|validated)[^.!?]*(test|tests|check|checks|run|runs|probe|probes|scenario|scenarios|outcome|outcomes|result|results|measurement|measurements|account|accounts|validation|evidence|verification|confirmation))|((test|tests|check|checks|run|runs|probe|probes|scenario|scenarios|outcome|outcomes|result|results|measurement|measurements|account|accounts|validation|evidence|verification|confirmation)[^.!?]*(was|were|is|are)[^.!?]*(live|verified|real|real-account|real account|independent|independently|external|externally confirmed))'; then
+        claim=1
+        break 2
+      fi
+      if printf '%s\n' "$candidate" | grep -Eiq '((test|tests|check|checks|run|runs|probe|probes|scenario|scenarios|outcome|outcomes|result|results|measurement|measurements|account|accounts|validation|evidence|verification|confirmation)[^.!?]*(live|verified|real-account|real account|independent|independently|external|externally confirmed)[^.!?]*(was|were|is|are|shows?|reported|demonstrated|driven|completed|succeeded|successful|successfully|passed|failed|confirmed|verified))'; then
+        claim=1
+        break 2
+      fi
+      if printf '%s\n' "$candidate" | grep -Eiq '([0-9]+[[:space:]]+of[[:space:]]+[0-9]+[[:space:]]*/[[:space:]]*[0-9]+[[:space:]]+of[[:space:]]+[0-9]+)|(([0-9]+[[:space:]]*(of|/)[[:space:]]*[0-9]+)[^.!?]*(live|verified|real-account|real account|independent|independently|external|externally confirmed))|((live|verified|real-account|real account|independent|independently|external|externally confirmed)[^.!?]*([0-9]+[[:space:]]*(of|/)[[:space:]]*[0-9]+))|((live|verified|real-account|real account|independent|independently|external|externally confirmed)[^.!?]*(evidence|verification|confirmation)[[:space:]]*:)|((live|verified|real-account|real account|independent|independently|external|externally confirmed)[^.!?]*(test|tests|check|checks|run|runs|probe|probes|scenario|scenarios|outcome|outcomes|result|results|measurement|measurements|account|accounts|validation|evidence|verification|confirmation)[^.!?]*(was|were|is|are|shows?|reported|demonstrated|driven|completed|succeeded|successful|successfully|passed|failed|confirmed|verified|validated))|((test|tests|check|checks|run|runs|probe|probes|scenario|scenarios|outcome|outcomes|result|results|measurement|measurements|account|accounts|validation|evidence|verification|confirmation)[^.!?]*(live|verified|real-account|real account|independent|independently|external|externally confirmed)[^.!?]*(was|were|is|are|shows?|reported|demonstrated|driven|completed|succeeded|successful|successfully|passed|failed|confirmed|verified|validated))|((evidence|verification|confirmation)[^.!?]*(live|verified|real-account|real account|independent|independently|external|externally confirmed)[^.!?]*(was|were|is|are|shows?|reported|demonstrated|driven|completed|succeeded|successful|successfully|passed|failed|confirmed|verified|validated))'; then
+        claim=1
+        break 2
+      fi
+      if printf '%s\n' "$candidate" | grep -Eiq '((zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)[[:space:]]+of[[:space:]]+(zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)[^.!?]*(live|verified|real-account|real account|independent|independently|external|externally confirmed))|((live|verified|real-account|real account|independent|independently|external|externally confirmed)[^.!?]*(zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)[[:space:]]+of[[:space:]]+(zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve))'; then
+        claim=1
+        break 2
+      fi
+    done
+    previous_previous_line=$previous_line
+    previous_line=$line
+  done <<EOF
+$detector_input
+EOF
+  [ "$claim" -eq 1 ] || return 0
+  while IFS= read -r line; do
+    case "$line" in
+      evidence-artifact:*)
+        artifact_count=$((artifact_count + 1))
+        [ "$artifact_count" -eq 1 ] || { printf '%s\n' 'evidence claim refused: duplicate evidence-artifact metadata' >&2; return 1; }
+        artifact=$(printf '%s' "${line#evidence-artifact:}" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//') ;;
+      evidence-command:*)
+        command_count=$((command_count + 1))
+        [ "$command_count" -eq 1 ] || { printf '%s\n' 'evidence claim refused: duplicate evidence-command metadata' >&2; return 1; }
+        command=$(printf '%s' "${line#evidence-command:}" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//') ;;
+      evidence-captured:*)
+        captured_count=$((captured_count + 1))
+        [ "$captured_count" -eq 1 ] || { printf '%s\n' 'evidence claim refused: duplicate evidence-captured metadata' >&2; return 1; }
+        captured=$(printf '%s' "${line#evidence-captured:}" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//') ;;
+    esac
+  done <<EOF
+$intent
+EOF
+  if [ -z "${artifact:-}" ]; then
+    printf '%s\n' 'evidence claim refused: missing evidence-artifact: path' >&2
+    return 1
+  fi
+  if [ -z "${command:-}" ]; then
+    printf '%s\n' 'evidence claim refused: missing evidence-command: exact command' >&2
+    return 1
+  fi
+  if [ -z "${captured:-}" ]; then
+    printf '%s\n' 'evidence claim refused: missing evidence-captured: capture time' >&2
+    return 1
+  fi
+  if ! printf '%s\n' "$captured" | grep -Eq '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(Z|[+-][0-9]{2}:[0-9]{2})$'; then
+    printf '%s\n' "evidence claim refused: invalid evidence-captured timestamp: $captured" >&2
+    return 1
+  fi
+  timestamp_date=${captured%%T*}
+  timestamp_clock=${captured#*T}
+  IFS=- read -r timestamp_year timestamp_month timestamp_day <<EOF
+$timestamp_date
+EOF
+  if [[ "$timestamp_clock" == *Z ]]; then
+    timestamp_zone=Z
+    timestamp_clock=${timestamp_clock%Z}
+  else
+    timestamp_zone=${timestamp_clock: -6}
+    timestamp_clock=${timestamp_clock:0:${#timestamp_clock}-6}
+  fi
+  IFS=: read -r timestamp_hour timestamp_minute timestamp_second <<EOF
+$timestamp_clock
+EOF
+  if [ "$timestamp_zone" = Z ]; then
+    timestamp_offset_hour=0
+    timestamp_offset_minute=0
+  else
+    timestamp_offset_hour=${timestamp_zone:1:2}
+    timestamp_offset_minute=${timestamp_zone:4:2}
+  fi
+  timestamp_year=$((10#$timestamp_year))
+  timestamp_month=$((10#$timestamp_month))
+  timestamp_day=$((10#$timestamp_day))
+  timestamp_hour=$((10#$timestamp_hour))
+  timestamp_minute=$((10#$timestamp_minute))
+  timestamp_second=$((10#$timestamp_second))
+  timestamp_offset_hour=$((10#$timestamp_offset_hour))
+  timestamp_offset_minute=$((10#$timestamp_offset_minute))
+  case "$timestamp_month" in
+    1|3|5|7|8|10|12) days_in_month=31 ;;
+    4|6|9|11) days_in_month=30 ;;
+    2)
+      if { [ $((timestamp_year % 4)) -eq 0 ] && [ $((timestamp_year % 100)) -ne 0 ]; } || [ $((timestamp_year % 400)) -eq 0 ]; then
+        days_in_month=29
+      else
+        days_in_month=28
+      fi
+      ;;
+    *) days_in_month=0 ;;
+  esac
+  if [ "$days_in_month" -eq 0 ] || [ "$timestamp_day" -lt 1 ] || [ "$timestamp_day" -gt "$days_in_month" ] || [ "$timestamp_hour" -gt 23 ] || [ "$timestamp_minute" -gt 59 ] || [ "$timestamp_second" -gt 59 ] || [ "$timestamp_offset_hour" -gt 14 ] || [ "$timestamp_offset_minute" -gt 59 ] || { [ "$timestamp_offset_hour" -eq 14 ] && [ "$timestamp_offset_minute" -ne 0 ]; }; then
+    printf '%s\n' "evidence claim refused: invalid evidence-captured timestamp: $captured" >&2
+    return 1
+  fi
+  case "$artifact" in
+    /*) ;;
+    *) printf '%s\n' "evidence claim refused: artifact path must be absolute: $artifact" >&2; return 1 ;;
+  esac
+  normalized_artifact=$(fm_dod_path_normalize "$artifact") || return 1
+  for normalized_root in "$worktree" "$task_temp"; do
+    [ -n "$normalized_root" ] || continue
+    case "$normalized_root" in /*) ;; *) continue ;; esac
+    normalized_root=$(fm_dod_path_normalize "$normalized_root") || return 1
+    case "$normalized_artifact" in
+      "$normalized_root"|"$normalized_root"/*) break ;;
+    esac
+    normalized_root=
+  done
+  if [ -z "$normalized_root" ]; then
+    printf '%s\n' "evidence claim refused: artifact is outside the worker worktree or task temp directory: $artifact" >&2
+    return 1
+  fi
+  if [ "$phase" != preflight ]; then
+    # A confirmed merged PR may outlive its disposable evidence root.
+    # Metadata, claim consistency, path containment, and publication checks
+    # still apply; a missing file inside a surviving root still fails.
+    if [ "$phase" = retired ] && [ ! -e "$normalized_root" ] && [ ! -L "$normalized_root" ]; then
+      return 0
+    fi
+    if [ ! -f "$artifact" ] || [ ! -r "$artifact" ]; then
+      printf '%s\n' "evidence claim refused: artifact is missing or unreadable: $artifact" >&2
+      return 1
+    fi
+    resolved_artifact=$artifact
+    symlink_hops=0
+    while [ -L "$resolved_artifact" ]; do
+      symlink_hops=$((symlink_hops + 1))
+      if [ "$symlink_hops" -gt 40 ]; then
+        printf '%s\n' "evidence claim refused: artifact symlink chain is too deep: $artifact" >&2
+        return 1
+      fi
+      link_target=$(readlink "$resolved_artifact") || {
+        printf '%s\n' "evidence claim refused: artifact is missing or unreadable: $artifact" >&2
+        return 1
+      }
+      case "$link_target" in
+        /*) resolved_artifact=$link_target ;;
+        *) resolved_artifact=$(dirname -- "$resolved_artifact")/$link_target ;;
+      esac
+    done
+    resolved_artifact=$(cd -P "$(dirname -- "$resolved_artifact")" 2>/dev/null && printf '%s/%s' "$(pwd -P)" "$(basename -- "$resolved_artifact")") || {
+      printf '%s\n' "evidence claim refused: artifact is missing or unreadable: $artifact" >&2
+      return 1
+    }
+    if [ ! -f "$resolved_artifact" ] || [ ! -r "$resolved_artifact" ]; then
+      printf '%s\n' "evidence claim refused: artifact is missing or unreadable: $artifact" >&2
+      return 1
+    fi
+    normalized_artifact=$(fm_dod_path_normalize "$resolved_artifact") || return 1
+    for normalized_root in "$worktree" "$task_temp"; do
+      [ -n "$normalized_root" ] || continue
+      [ -d "$normalized_root" ] || continue
+      normalized_root=$(cd -P "$normalized_root" 2>/dev/null && pwd -P) || continue
+      case "$normalized_artifact" in
+        "$normalized_root"|"$normalized_root"/*) break ;;
+      esac
+      normalized_root=
+    done
+    [ -n "$normalized_root" ] || {
+      printf '%s\n' "evidence claim refused: resolved artifact is outside the allowed roots: $artifact" >&2
+      return 1
+    }
+  fi
+  return 0
+}
+
+fm_dod_validate_published_intent() {  # <intent> <worktree> <task-temp> [current-head] [pr-url] [publish|retired]
+  local body=$1 current_head=${4:-} url=${5:-} line payload attested_head count=0
+  # retired is for reconciliation after a forge-confirmed merge only.
+  case "${6:-publish}" in publish|retired) ;; *) return 1 ;; esac
+  fm_dod_validate_intent_evidence "$body" "$2" "$3" "${6:-publish}" || return 1
+  [ -z "$url" ] || fm_pr_refuse_published_scratch "$url" || return 1
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in
+      *'<!-- no-mistakes-pipeline-attestation:v1'*)
+        count=$((count + 1))
+        [ "$count" -eq 1 ] || {
+          printf '%s\n' 'error: published intent has multiple pipeline attestations' >&2
+          return 1
+        }
+        payload=${line#*'<!-- no-mistakes-pipeline-attestation:v1'}
+        payload=${payload%%'-->'*}
+        attested_head=$(printf '%s\n' "$payload" | jq -er '
+          if type == "object" and (.head_sha | type) == "string" then .head_sha
+          else error("no attested head") end' 2>/dev/null) || attested_head=
+        if ! fm_pr_head_valid "$attested_head"; then
+          printf '%s\n' 'error: published pipeline attestation has no valid head_sha' >&2
+          return 1
+        fi
+        ;;
+    esac
+  done <<< "$body"
+  [ "$count" -eq 0 ] && return 0
+  if ! fm_pr_head_valid "$current_head"; then
+    current_head=$(fm_pr_read_published_head "$url") || {
+      printf '%s\n' "error: cannot read the current head of $url to check its published attestation" >&2
+      return 1
+    }
+  fi
+  if [ "$current_head" != "$attested_head" ]; then
+    printf '%s\n' "error: published attestation head mismatch: current head $current_head, attested head $attested_head; run the pipeline once against the current head to re-attest it. Hand-editing the attestation is not an option; use a merge, not a rebase." >&2
+    return 1
+  fi
+}
+
 # Accept the current two-subsection contract only when both bodies have content;
 # briefs predating that contract remain valid when their # Task body has content.
 fm_brief_task_content_valid() {  # <file>
@@ -332,9 +698,9 @@ EOF
 fm_nm_driving_block() {  # <forge>
   local pr_return_line='' pr_reattach_clause=';' drive_block wait_cfg
   if [ "$1" != gerrit ]; then
-    pr_return_line="Only a drive call's return reports the green PR: \`no-mistakes axi status\` shows progress but never reports \`checks-passed\` while the ci step is still monitoring the PR for merge, so never wait on a status poll for the next gate or outcome.
+    pr_return_line="For a base with CI, only a drive call's return reports the green PR: \`no-mistakes axi status\` shows progress but never reports \`checks-passed\` while the ci step is still monitoring the PR for merge, so never wait on a status poll for the next gate or outcome.
 "
-    pr_reattach_clause="; once checks are green it returns \`checks-passed\` immediately, and"
+    pr_reattach_clause="; for a base with CI, once checks are green it returns \`checks-passed\` immediately, and"
   fi
   # config/wait-no-turns selects the foreground drive. Absent, the text matches
   # the backgrounded drive a home had before that flag.
@@ -355,6 +721,9 @@ ${pr_return_line}Whenever a drive call returns without a gate or an outcome - it
   cat <<EOF
 You drive no-mistakes by responding to its gates, not by implementing fixes.
 Follow the guidance no-mistakes itself provides for the mechanics: it loads when you invoke /no-mistakes, and \`no-mistakes axi run --help\` plus the \`help\` lines in each \`axi\` response are authoritative and version-matched to the installed binary.
+When a run targets a base with no configured check workflows, first verify that the base really has no checks, then start a new run with \`--skip ci\` so its CI monitor cannot wait forever.
+The fork's \`house\` base has a real check workflow; do not skip CI there or on any other base with checks.
+Reattach without flags as usual.
 When starting no-mistakes, pass \`--intent\` as only this brief's \`## Captain's intent\` subsection body, not its heading, plus any later words the captain actually said.
 Preserve the actual words without adding speaker labels or direct address; the subsection heading supplies provenance outside the pipeline input.
 For a legacy brief with no such subsection, include only words on lines marked \`[captain] \`, excluding that metadata prefix; never copy its mixed \`# Task\` wholesale.
@@ -363,7 +732,11 @@ Do not include \`## Firstmate spec\`, later Firstmate build constraints, or your
 The \`--intent\` string you pass must be self-sufficient: that string plus the codebase must let a reader reconstruct roughly the same specification, without depending on a separate report, a PR, or context that lives only in this conversation.
 When the captain's intent refers to a report, decision, or PR ("do items 1, 2, 3, and 7 of the report"), write the substance of the referenced items into \`--intent\` in the captain's terms, not only the pointer; that substance is the captain's ask by reference, while Firstmate's build instructions and your own decisions still stay out.
 This replaces the no-mistakes skill's advice to enrich \`--intent\` with decisions and tradeoffs; that advice does not apply to Firstmate-dispatched work.
-Do not hand-edit, commit, or fix findings yourself while a run is active - the pipeline applies every fix.
+Any claim in \`--intent\` of live, verified, external, independently confirmed, or real-account evidence must name the artifact read, the exact command that produced it, and when it was captured; publication refuses such a claim if any of those are missing or the artifact cannot be read.
+Keep each cited artifact at a path the supervising home can open, inside this worker's worktree or its task temp directory.
+This boundary proves that the claim is checkable, not that it is true; Firstmate must read the artifact before relaying its evidence label.
+Follow the brief's \`# Evidence provenance\` section for evidence claims, metadata format, and synthetic or offline labels in the PR body.
+Do not hand-edit code, commit, or fix pipeline findings yourself while a run is active - the pipeline applies those fixes; the published PR description correction below is limited to that description.
 
 $drive_block
 A killed or timed-out call is never evidence the daemon died: the daemon accepts your response immediately and runs the round in the background, so the call was only ever waiting for a read while the run kept working.
@@ -400,15 +773,93 @@ There is no pull request, no \`gh-axi\` call, and no forge CI result to report: 
 EOF
 }
 
-fm_dod_block() {  # <mode> <task-id> [branch] [<forge>] [<base>]
-  local mode=$1 id=$2 forge=${4:-none} base=${5:-}
-  local branch=${3:-fm/$id} pr_base='' nm_base='' base_q
+fm_pr_body_preflight_block() {  # <task-id>
+  local script_dir
+  script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd) || return 1
+  cat <<EOF
+Before publishing or editing a PR body you author, save its complete proposed text in a draft file and run \
+\`$script_dir/fm-pr-body-preflight.sh <draft-body-file> "\$(pwd -P)" "/tmp/fm-$1"\`.
+The command applies the same evidence validation used when Firstmate reads the published body; fix any refusal before sending the body, and require its \`evidence preflight ok\` result.
+If it reports \`contradictory driven-scenario results\`, keep your own honest results as the single statement and correct or remove the contradicting generated line before publication; never weaken a claim to pass.
+EOF
+}
+
+fm_scratch_preflight_block() {
+  local script_dir
+  script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd) || return 1
+  cat <<EOF
+Before committing, and again immediately before handing a commit to a pipeline or publishing it, run \`$script_dir/fm-pr-body-preflight.sh --scratch "\$(pwd -P)"\`.
+It must print \`scratch preflight ok\`; a refusal names the scratch path to remove from the deliverable.
+EOF
+}
+
+fm_nm_published_body_check_block() {  # <task-id>
+  local script_dir
+  script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd) || return 1
+  cat <<EOF
+The no-mistakes PR step generates and publishes its own body, so check its exact forge readback immediately after each publication or body update and before the CI-ready \`done:\` report:
+\`$script_dir/fm-pr-body-preflight.sh --gh-url <PR URL> "/tmp/fm-$1/pr-body-readback.md" "\$(pwd -P)" "/tmp/fm-$1"\`.
+That command uses \`gh-axi\` to read the complete published body into the task temp file and runs the same evidence validator; do not treat a passing draft-body check as proof that the published body passed.
+If it refuses, correct the description only in that file while preserving the pipeline attestation comment verbatim, preflight the corrected draft with the command above without \`--gh-url\`, then publish only the description with \`gh-axi pr edit <number> -R <owner/repo> --body-file /tmp/fm-$1/pr-body-readback.md\`.
+Read the body back with \`--gh-url\` and repeat until the published text reports \`evidence preflight ok\`.
+Do not append the CI-ready \`done:\` while the published body fails this check.
+The pipeline has no pre-publication body hook here; this readback check is required until that separate tool gains one.
+EOF
+}
+
+fm_upstream_pr_publish_block() {  # <task-id>
+  local script_dir
+  script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd) || return 1
+  cat <<EOF
+For an upstream repository the fleet does not own, do not run \
+\`gh-axi pr create\` directly. Use the guarded publisher:
+1. Set the target repository, title, one-line summary file, target base, proposed body file, and pushed head (\`OWNER:BRANCH\`).
+2. Run \`$script_dir/fm-upstream-prior-art.py scan --repo <OWNER/REPO> --title <TITLE> --summary-file <SUMMARY_FILE> --record /tmp/fm-$1/prior-art.json --base <BASE>\`.
+3. Review every recorded candidate, write one distinct/overlaps verdict and reason per candidate to a decisions JSON file, then run \`$script_dir/fm-upstream-prior-art.py decide --record /tmp/fm-$1/prior-art.json --decisions-file <DECISIONS_FILE>\`.
+4. Run \`$script_dir/fm-upstream-prior-art.py publish --repo <OWNER/REPO> --title <TITLE> --summary-file <SUMMARY_FILE> --record /tmp/fm-$1/prior-art.json --base <BASE> --body-file <BODY_FILE> --head <OWNER:BRANCH>\`; it refuses a missing, stale, incomplete, or unresolved receipt immediately before the forge write.
+For a repository the fleet owns, the ordinary \`gh-axi\` direct-PR path remains unchanged.
+EOF
+}
+
+fm_upstream_pr_preflight_block() {  # <task-id>
+  local script_dir
+  script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd) || return 1
+  cat <<EOF
+Before starting /no-mistakes for an upstream repository the fleet does not own, complete the prior-art gate. For a repository the fleet owns, skip this upstream-only preflight.
+1. Run \`$script_dir/fm-upstream-prior-art.py scan --repo <OWNER/REPO> --title <TITLE> --summary-file <SUMMARY_FILE> --record /tmp/fm-$1/prior-art.json --base <BASE>\`.
+2. Review every candidate, record one distinct/overlaps verdict and reason per candidate, and run \`$script_dir/fm-upstream-prior-art.py decide --record /tmp/fm-$1/prior-art.json --decisions-file <DECISIONS_FILE>\`.
+3. Immediately before starting /no-mistakes, run \`$script_dir/fm-upstream-prior-art.py check --repo <OWNER/REPO> --title <TITLE> --summary-file <SUMMARY_FILE> --record /tmp/fm-$1/prior-art.json --base <BASE>\`; do not start the run if it refuses.
+The later upstream PR publication must use the same current receipt at its forge-write boundary; an automatic PR creation path that cannot perform that check must not be used.
+EOF
+}
+
+fm_dod_block() {  # <mode> <task-id> [branch] [<forge>] [<base>] [<house-feature PR base>]
+  local mode=$1 id=$2 forge=${4:-none} base=${5:-} house_pr_base=${6:-}
+  local pr_base='' nm_base='' base_q
+  local branch=${3:-fm/$id}
+  local base_instruction=
+  if [ -n "$house_pr_base" ]; then
+    [ "$forge" = none ] && [ "$mode" != local-only ] || {
+      echo "error: a house-feature PR base requires GitHub PR delivery" >&2
+      return 1
+    }
+    git check-ref-format --branch "$house_pr_base" >/dev/null 2>&1 || return 1
+    if [ "$mode" = no-mistakes ]; then
+      base_instruction="Target the durable \`$house_pr_base\` branch: pass \`--base-branch $house_pr_base\` when starting a new \`no-mistakes axi run\`. Reattach without flags."
+    else
+      base_instruction="Target the durable \`$house_pr_base\` branch: pass \`--base $house_pr_base\` to \`gh-axi pr create\`."
+    fi
+    base_instruction="$base_instruction
+Every pull request into \`$house_pr_base\` lands as a merge commit (\`--merge\`), never a squash or rebase.
+After your pull request into \`$house_pr_base\` merges, firstmate steers you, in this same session and without a new pipeline run, to open the integration pull request: \`gh-axi pr create --base house --head $house_pr_base\`, ready for review rather than a draft.
+Then append \`done [at=<epoch>]: integration PR {url} open into house\` and stop; this task is not torn down until that pull request is open."
+  fi
   fm_forge_valid_for_mode "$forge" "$mode" fm_dod_block || return 1
   fm_base_branch_valid "$base" "$mode" "$forge" fm_dod_block || return 1
   if [ -n "$base" ]; then
     printf -v base_q '%q' "$base"
     pr_base=", against the base branch \`$base\` (\`--base $base_q\`), not the repository default"
-    nm_base="This task's base branch is \`$base\`, not the repository default: pass \`--base-branch $base_q\` on every \`no-mistakes axi run\` that starts a run, so the pipeline rebases onto, opens its PR against, and watches CI for that branch.
+    nm_base="This task's base branch is \`$base\`, not the repository default: pass \`--base-branch $base_q\` on every \`no-mistakes axi run\` that starts a run, so the pipeline updates against, opens its PR against, and watches CI for that branch.
 "
   fi
   case "$mode:$forge" in
@@ -422,6 +873,7 @@ Gerrit has no pull requests, so there is nothing to open; publishing creates the
 The task is complete only when committed on your branch.
 When it is implemented and committed, publish it.
 EOF
+      fm_scratch_preflight_block
       fm_gerrit_publish_block
       cat <<EOF
 Do NOT run /no-mistakes.
@@ -435,10 +887,9 @@ Ship branch: $branch
 This project's review server is Gerrit: it has no pull requests and no forge CI the pipeline can watch, so **no-mistakes runs here as a review pass that ends at a ready branch**, and you then publish that branch as one change.
 Pass \`--skip push,pr,ci\` on every \`no-mistakes axi run\` for this task, and skip nothing else: \`review\`, \`test\`, \`document\`, and \`lint\` are the whole point of the run.
 Those three are the only steps that reach a forge, and skipping them is a supported outcome, not a degraded one.
-The task is complete only when committed on your branch.
-When you believe it is complete, append \`done [at=<epoch>]: {summary}\` to the status file and stop.
-Firstmate will then instruct you to run /no-mistakes to validate.
-That first \`done:\` is the handoff that starts the pipeline; it is not a request to publish.
+Your implementation is ready for validation only when committed on your branch.
+When it is committed, append \`done [at=<epoch>]: {summary}\` to the status file as the pipeline handoff, then start /no-mistakes on that committed head immediately without waiting for firstmate.
+That first \`done:\` is the pipeline handoff; it is not a request to publish.
 
 EOF
       fm_nm_driving_block "$forge"
@@ -457,6 +908,7 @@ When the run's outcome is passed, passed-with-skips, or passed-with-override and
 The squashed change carries only the oldest commit's message, so the pipeline's own fix commits never reach the reviewer's description; your report is how they reach the captain.
 After publishing and immediately before your ready report, append one line \`note [at=<epoch>]: pipeline changes: {finding} - {fix it made}; {finding} - {fix it made}\` to the status file, one short clause per finding the run fixed, taken from the run's \`fixes\` table and the gate findings its drive calls returned (\`no-mistakes axi logs --step <step> --full\` has the detail); write \`note [at=<epoch>]: pipeline changes: none\` when it fixed nothing.
 EOF
+      fm_scratch_preflight_block
       fm_gerrit_publish_block
       ;;
     direct-PR:*)
@@ -465,8 +917,14 @@ EOF
 Delivery contract: mode=direct-PR
 Ship branch: $branch
 This task ships **direct-PR**: you raise the PR yourself, without the no-mistakes pipeline.
+$base_instruction
 The task is complete only when committed on your branch.
-When it is implemented and committed, push your branch and open a PR with \`gh-axi\` that is ready for review, not a draft$pr_base.
+When it is implemented and committed, push your branch and open a PR through the applicable publication path below; it must be ready for review, not a draft$pr_base.
+EOF
+      fm_scratch_preflight_block
+      fm_pr_body_preflight_block "$id"
+      fm_upstream_pr_publish_block "$id"
+      cat <<EOF
 Before you report done, read the PR back from the forge and confirm it is not a draft (\`gh-axi pr view <number>\` must print \`draft: no\`, where <number> is the PR number from your PR URL); if it is a draft, mark it ready with \`gh-axi pr ready <number>\`.
 A draft cannot be merged, so a done report on one leaves the merge unasked.
 Then append \`done [at=<epoch>]: PR {url}\` to the status file and stop.
@@ -487,24 +945,32 @@ Keep your branch a clean fast-forward onto the current default branch - if \`mai
 When it is implemented and committed, append \`done [at=<epoch>]: ready in branch $branch\` to the status file and stop.
 The configured merge authority approves the ready branch, then firstmate merges it into local \`main\` through the guarded fast-forward path.
 EOF
+      fm_scratch_preflight_block
       ;;
     no-mistakes:*)
       cat <<EOF
 # Definition of done
 Delivery contract: mode=no-mistakes
 Ship branch: $branch
+$base_instruction
 The task is complete only when committed on your branch.
 When you believe it is complete, append \`done [at=<epoch>]: {summary}\` to the status file and stop.
 Firstmate will then instruct you to run /no-mistakes to validate and ship a PR.
 That first \`done:\` is the handoff that starts the pipeline, which owns the push; it is not a request to push from this copy.
 ${nm_base}
 EOF
+      fm_scratch_preflight_block
       fm_nm_driving_block "$forge"
+      fm_pr_body_preflight_block "$id"
+      fm_nm_published_body_check_block "$id"
+      fm_upstream_pr_preflight_block "$id"
       cat <<EOF
 
-After /no-mistakes reports CI green (the CI-ready return point - do not wait for it to keep monitoring in the background until merge), read the PR back from the forge and confirm it is not a draft (\`gh-axi pr view <number>\` must print \`draft: no\`, where <number> is the PR number from your PR URL); if it is a draft, mark it ready with \`gh-axi pr ready <number>\`.
+For a base with checks, including \`house\`, after /no-mistakes reports CI green (the CI-ready return point - do not wait for it to keep monitoring in the background until merge), read the PR back from the forge and confirm it is not a draft (\`gh-axi pr view <number>\` must print \`draft: no\`, where <number> is the PR number from your PR URL); if it is a draft, mark it ready with \`gh-axi pr ready <number>\`.
 A draft cannot be merged, so a done report on one leaves the merge unasked.
-Then append \`done [at=<epoch>]: PR {url} checks green\` and stop. You are finished.
+For a base with checks, append \`done [at=<epoch>]: PR {url} checks green\` and stop.
+For a base verified to have no check workflows where this run used \`--skip ci\`, wait for the pipeline's passed-with-skips outcome, confirm the PR is not a draft, and append \`done [at=<epoch>]: PR {url} ready for review (CI skipped: base has no configured check workflows)\` without claiming checks are green.
+You are finished.
 That CI-ready \`done:\` is accepted only when this copy's HEAD - your latest commit - is one the /no-mistakes run pushed, so commit nothing after the run; the check tests that commit, not merely that a branch moved.
 If you deliberately keep the PR a draft, append \`paused [at=<epoch>]: {why the draft is held}\` instead of done.
 EOF
@@ -513,6 +979,14 @@ EOF
       echo "error: fm_dod_block: unknown delivery mode '$mode'" >&2
       return 1 ;;
   esac
+  cat <<'EOF'
+
+Evidence required before reporting a fix as validated:
+- Name the reproduction artifact or exact command that fails before the change and passes after it through the same path users exercise.
+- Each failure mode claimed in a before/after validation table must have a non-zero pre-change observation or be marked not exercised by the sample.
+- State how many cases scanned and how many exhibited the defect.
+- A sample that cannot exhibit the defect is not evidence for the fix; describe all-zero rows as not exercised, not as validation.
+EOF
 }
 
 # 0 when <sha> is contained in a ref under <namespace> in <repo>.
@@ -526,12 +1000,13 @@ fm_dod_ref_contains() {  # <repo> <ref-namespace> <sha>
   [ -n "$hit" ]
 }
 
-# 0 when a done: note reports the no-mistakes CI-ready PR (`PR <url> checks
-# green`, with any surrounding text). bin/fm-crew-state.sh takes its CI-ready
-# path on this same test, so every CI-ready line it acts on is gated.
+# 0 when a done: note reports a no-mistakes-ready PR (`PR <url> checks green`
+# or the explicit no-configured-checks form, with any surrounding text).
+# bin/fm-crew-state.sh takes its ready-PR path on this same test, so every
+# ready-PR line it acts on is gated.
 fm_dod_note_reports_ci_ready() {  # <note>
   case "$1" in
-    *PR*"checks green"*|*"checks green"*PR*) return 0 ;;
+    *PR*"checks green"*|*"checks green"*PR*|*PR*"ready for review (CI skipped: base has no configured check workflows)"*) return 0 ;;
   esac
   return 1
 }
@@ -577,6 +1052,48 @@ fm_dod_pr_url_from_done_note() {  # <note>
 # The last recorded <key>= value in <meta>, or empty.
 fm_dod_meta_value() {  # <meta> <key>
   grep "^$2=" "$1" 2>/dev/null | tail -1 | cut -d= -f2-
+}
+
+fm_dod_upstream_receipt_check() {  # <worktree> <url> <meta> [<published-head>]
+  local wt=$1 url=$2 meta=$3 published_head=${4:-} origin target record tasktmp head script_dir origin_path
+  fm_pr_url_parse "$url" || return 0
+  [ "$FM_PR_PROVIDER" = github ] || return 0
+  [ -d "$wt" ] || { printf '%s\n' 'upstream prior-art receipt refused: worktree is unavailable'; return 1; }
+  origin=$(git -C "$wt" remote get-url origin 2>/dev/null || true)
+  case "$origin" in
+    https://*)
+      origin_path=${origin#https://}
+      origin_path=${origin_path#*@}
+      case "$origin_path" in
+        github.com/*) origin_path=${origin_path#github.com/} ;;
+        *) origin_path= ;;
+      esac
+      ;;
+    ssh://git@github.com/*) origin_path=${origin#ssh://git@github.com/} ;;
+    git@github.com:*) origin_path=${origin#git@github.com:} ;;
+    *) origin_path= ;;
+  esac
+  origin_path=${origin_path%.git}
+  target=$(printf '%s' "$FM_PR_PATH" | tr '[:upper:]' '[:lower:]')
+  origin_path=$(printf '%s' "$origin_path" | tr '[:upper:]' '[:lower:]')
+  [ -n "$origin_path" ] || return 0
+  [ "$origin_path" = "$target" ] && return 0
+  [ -f "$meta" ] || { printf '%s\n' 'upstream prior-art receipt refused: task metadata is unavailable'; return 1; }
+  tasktmp=$(fm_dod_meta_value "$meta" tasktmp)
+  record="$tasktmp/prior-art.json"
+  [ -f "$record" ] || { printf '%s\n' "upstream prior-art receipt refused: missing $record"; return 1; }
+  head=${published_head:-$(git -C "$wt" rev-parse --verify HEAD 2>/dev/null)} || {
+    printf '%s\n' 'upstream prior-art receipt refused: worktree head is unavailable'
+    return 1
+  }
+  script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd) || return 1
+  local verify_args=(--record "$record" --repo "$FM_PR_PATH" --head "$head")
+  [ -z "$published_head" ] || verify_args+=(--published)
+  if ! (cd "$wt" && python3 "$script_dir/fm-upstream-prior-art.py" verify \
+      "${verify_args[@]}"); then
+    printf '%s\n' 'upstream prior-art receipt refused: receipt does not match the published work'
+    return 1
+  fi
 }
 
 # 0 when the forge's head for a PR is the head the done names. In no-mistakes
@@ -697,8 +1214,18 @@ fm_dod_named_head_reachable_outside_worktree() {  # <worktree> <project> <mode> 
 # pr_head=, and the merge-notified marker; <meta> may be a captured copy
 # (bin/fm-fleet-snapshot.sh), so the marker is read from <state>.
 fm_dod_accept_ship_done() {  # <kind> <mode> <worktree> <project> <line> [<state> <id> <meta>]
-  local kind=$1 mode=$2 wt=$3 project=$4 line=$5 state=${6:-} id=${7:-} meta=${8:-} url sha gerrit
+  local kind=$1 mode=$2 wt=$3 project=$4 line=$5 state=${6:-} id=${7:-} meta=${8:-} url sha gerrit scratch
   fm_dod_should_gate_ship_done "$kind" "$mode" "$line" || return 0
+  if [ -n "$wt" ] && [ -d "$wt" ] && git -C "$wt" rev-parse --git-dir >/dev/null 2>&1 \
+    && ! scratch=$(fm_scratch_refuse_worktree "$wt" 2>&1 >/dev/null); then
+    scratch=${scratch%%$'\n'*}
+    printf '%s\n' "${scratch#error: }"
+    return 1
+  fi
+  url=$(fm_dod_pr_url_from_done_note "$(status_line_note "$line")") || url=
+  if [ -n "$url" ] && ! fm_dod_upstream_receipt_check "$wt" "$url" "$meta" "$(fm_dod_meta_value "$meta" pr_head)"; then
+    return 1
+  fi
   if url=$(fm_dod_pr_url_from_done_note "$(status_line_note "$line")") \
     && fm_dod_recorded_pr_on_forge "$state" "$id" "$meta" "$mode" "$url"; then
     return 0

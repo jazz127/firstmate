@@ -4,10 +4,112 @@
 # starts the worker without waiting for readiness, kickstart -k stops the
 # tracked worker before starting a new one, bootout stops the tracked worker,
 # and print reports the pid launchd tracks.
+# shellcheck disable=SC2030,SC2031 # Each launchctl fixture intentionally has its own PATH.
 set -u
 
 # shellcheck source=tests/lib.sh
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+# Retain the house bootout refusal and timeout coverage in its own fixture.
+(
+TMP_ROOT=$(fm_test_tmproot fm-remote-job-launchagent)
+trap 'rm -rf -- "$TMP_ROOT"' EXIT
+FAKE_BIN="$TMP_ROOT/bin"
+STATE="$TMP_ROOT/state"
+ACCOUNT_HOME="$TMP_ROOT/account"
+mkdir -p "$FAKE_BIN" "$STATE" "$ACCOUNT_HOME/Library/LaunchAgents"
+export FM_FAKE_LAUNCHCTL_STATE="$STATE"
+export PATH="$FAKE_BIN:$PATH"
+cat > "$FAKE_BIN/launchctl" <<'SH'
+#!/usr/bin/env bash
+set -u
+command=${1:-}
+target=${2:-}
+printf '%s\n' "$command $target" >> "$FM_FAKE_LAUNCHCTL_STATE/calls"
+label=${target##*/}
+loaded="$FM_FAKE_LAUNCHCTL_STATE/$label.loaded"
+case "$command" in
+  bootout)
+    [ ! -f "$FM_FAKE_LAUNCHCTL_STATE/bootout-fail" ] || { printf 'Boot-out failed: operation not permitted\n' >&2; exit 6; }
+    if [ -f "$FM_FAKE_LAUNCHCTL_STATE/bootout-stays-loaded" ]; then
+      printf '%s\n' "${FM_FAKE_LAUNCHCTL_DELAY:-3}" > "$FM_FAKE_LAUNCHCTL_STATE/remaining"
+    else
+      rm -f "$loaded"
+    fi
+    ;;
+  print)
+    if [ -f "$loaded" ]; then
+      if [ -f "$FM_FAKE_LAUNCHCTL_STATE/remaining" ]; then
+        remaining=$(cat "$FM_FAKE_LAUNCHCTL_STATE/remaining")
+        if [ "$remaining" = forever ]; then
+          printf 'old job still loaded\n'
+          exit 0
+        fi
+        if [ "$remaining" -gt 0 ]; then
+          printf '%s\n' "$((remaining - 1))" > "$FM_FAKE_LAUNCHCTL_STATE/remaining"
+          printf 'old job still loaded\n'
+          exit 0
+        fi
+        rm -f "$loaded" "$FM_FAKE_LAUNCHCTL_STATE/remaining"
+      else
+        printf 'job loaded\n'
+        exit 0
+      fi
+    fi
+    exit 113
+    ;;
+  bootstrap)
+    plist=${3:-}
+    label=${plist##*/}
+    label=${label%.plist}
+    loaded="$FM_FAKE_LAUNCHCTL_STATE/$label.loaded"
+    [ ! -f "$loaded" ] || { printf 'bootstrap refused while old job is visible\n' >&2; exit 5; }
+    : > "$loaded"
+    ;;
+  kickstart)
+    ;;
+esac
+SH
+chmod +x "$FAKE_BIN/launchctl"
+
+# shellcheck source=bin/fm-remote-job-lib.sh
+. "$ROOT/bin/fm-remote-job-lib.sh"
+
+FM_REMOTE_JOB_LABEL=dev.firstmate.remote-job
+FM_REMOTE_JOB_LAUNCH_AGENT_PLIST="$ACCOUNT_HOME/Library/LaunchAgents/$FM_REMOTE_JOB_LABEL.plist"
+: > "$FM_REMOTE_JOB_LAUNCH_AGENT_PLIST"
+touch "$STATE/$FM_REMOTE_JOB_LABEL.loaded" "$STATE/bootout-stays-loaded"
+export FM_FAKE_LAUNCHCTL_DELAY=3
+fm_remote_job_reload_launchagent "$ACCOUNT_HOME" 501 || fail "reload failed while bootout was draining: $FM_REMOTE_JOB_ERROR"
+[ -f "$STATE/$FM_REMOTE_JOB_LABEL.loaded" ] || fail "reload did not bootstrap the replacement"
+[ ! -f "$STATE/remaining" ] || fail "reload bootstrapped before the old job disappeared"
+pass "reload waits for asynchronous bootout before bootstrapping"
+
+touch "$STATE/bootout-stays-loaded"
+export FM_FAKE_LAUNCHCTL_DELAY=forever
+if fm_remote_job_reload_launchagent "$ACCOUNT_HOME" 501; then
+  fail "reload succeeded while the old job remained loaded"
+fi
+assert_contains "$FM_REMOTE_JOB_ERROR" 'remained loaded after bootout' "the unload timeout was not reported"
+[ "$(grep -c '^bootstrap ' "$STATE/calls")" -eq 1 ] || fail "reload tried to bootstrap after the unload timeout"
+pass "reload reports a bounded unload timeout without bootstrapping"
+
+rm -f "$STATE/remaining" "$STATE/bootout-stays-loaded"
+: > "$STATE/calls"
+touch "$STATE/$FM_REMOTE_JOB_LABEL.loaded" "$STATE/bootout-fail"
+if fm_remote_job_reload_launchagent "$ACCOUNT_HOME" 501; then
+  fail "reload succeeded after bootout refused a loaded job"
+fi
+assert_contains "$FM_REMOTE_JOB_ERROR" 'Boot-out failed: operation not permitted' "the bootout diagnostic was not reported"
+[ "$(grep -c '^bootstrap ' "$STATE/calls")" -eq 0 ] || fail "reload tried to bootstrap after bootout was refused"
+pass "reload reports a refused bootout of a loaded job"
+
+rm -f "$STATE/$FM_REMOTE_JOB_LABEL.loaded"
+fm_remote_job_reload_launchagent "$ACCOUNT_HOME" 501 || fail "reload rejected an already-absent job: $FM_REMOTE_JOB_ERROR"
+[ -f "$STATE/$FM_REMOTE_JOB_LABEL.loaded" ] || fail "reload did not bootstrap after tolerating an absent job"
+pass "reload tolerates bootout failure for an already-absent job"
+
+) || exit 1
+
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
 TMP_ROOT=$(fm_test_tmproot fm-remote-job-launchagent)
 TMP_ROOT=$(cd "$TMP_ROOT" && pwd -P)
@@ -221,7 +323,7 @@ PROBE_WAITER=$!
 kill -0 "$PROBE_WAITER" 2>/dev/null || fail 'startup wait accepted the predecessor heartbeat'
 : > "$FM_TEST_OWNER_GATE.release"
 wait "$PROBE_WAITER" || fail 'replacement did not become ready after ownership publication'
-[ "$(fm_remote_job_read_single_line "$STATE_ROOT/worker.ready" 64)" = "$(lock_owner)" ] \
+[ "$(sed -n '1p' "$STATE_ROOT/worker.ready")" = "$(lock_owner)" ] \
   || fail 'replacement readiness did not identify its recorded lock owner'
 rm -f "$FM_TEST_OWNER_GATE" "$FM_TEST_OWNER_GATE.observed" "$FM_TEST_OWNER_GATE.release"
 launchctl bootout "gui/$(id -u)/dev.firstmate.remote-job" || fail 'could not stop the replacement'
@@ -248,11 +350,13 @@ for _ in $(seq 1 100); do
   /bin/sleep 0.05
 done
 [ -f "$STATE_ROOT/worker.ready" ] || fail 'the live worker heartbeat did not recreate missing readiness during its sweep'
-[ "$(fm_remote_job_read_single_line "$STATE_ROOT/worker.ready" 64)" = "$SWEEP_PID" ] \
+[ "$(sed -n '1p' "$STATE_ROOT/worker.ready")" = "$SWEEP_PID" ] \
   || fail 'recreated readiness did not identify the serving worker'
 [ "$(file_mode "$STATE_ROOT/worker.ready")" = 600 ] \
   || fail 'recreated readiness did not retain its private mode'
 fm_remote_job_probe "$ACCOUNT_HOME" || fail 'recreated readiness did not restore probe availability'
+[ "$(sed -n '2p' "$STATE_ROOT/worker.ready")" = "$(fm_remote_job_process_start "$SWEEP_PID")" ] \
+  || fail 'recreated readiness did not retain the serving worker start identity'
 pass 'the live worker recreates missing readiness independently of a blocked sweep'
 # Outlast the probe's 10-second freshness bound while the main loop is blocked.
 /bin/sleep 11

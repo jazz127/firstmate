@@ -14,13 +14,20 @@
 # fleet snapshot's backlog/tasks pair; --all adds rows for supervisor inspection.
 # Every URL explicitly linked by a structured backlog row or a task's pr= is
 # owned. Previously observed URLs remain in data/<task>/contributions.json after
-# endpoint teardown. Repository-wide PR discovery never establishes ownership.
+# endpoint teardown. A closed backlog row can keep ownership through its
+# structured --pr link after task metadata is removed; `tasks-axi done <id>
+# --pr <url>` backfills that link on an already-closed row. Repository-wide PR
+# discovery never establishes ownership.
 # GitHub PRs and issues are supported; other forges remain visibly unmeasured.
 #
 # This script owns fm-contributions.v1: one atomic file per durable task with
 # task and records[]. Each record contains url, kind, checked_at, error,
-# observation, verdict, seen event tokens, pending events, notified tokens, and
-# retired provenance once retired.
+# observation, verdict, seen event tokens, pending events, notified tokens, and retired provenance once retired.
+# Outside-PR closeout fields closeout_head, closeout_since, and closeout_notice
+# track the current head, window start, and last notification condition;
+# unchanged conditions do not repeat a wake.
+# The closeout wake format is:
+#   check: contributions closeout <task> <url> head=<sha> state=<ready|review|ci|workspace>
 # observation is one coherent forge read (a PR head is rechecked after fetching
 # checks/reviews). Checks are normalized by name, id, started_at, status and
 # conclusion; projection picks the newest attempt per distinct name. The last
@@ -77,6 +84,27 @@
 # FM_CONTRIBUTIONS_NOW supplies an ISO UTC clock for tests, otherwise UTC now.
 # FM_CONTRIBUTIONS_READY_LABEL selects the equivalent triage label, default
 # ready-for-pr. Labels are matched case-insensitively and exactly.
+# docs/configuration.md "Outside pull request review window" owns closeout
+# configuration, timing, and eligibility. FM_CONFIG_OVERRIDE selects its config
+# directory instead of FM_HOME/config and rides the generated check shim.
+#
+# Automated reviewers are matched on user.login (case-insensitive) from
+# FM_CONTRIBUTIONS_AUTOMATED_REVIEWERS, a comma-separated list; when unset,
+# config/contributions-automated-reviewers (commas or newlines) is read; when
+# both are unset the defaults are copilot-pull-request-reviewer[bot] and
+# greptile-apps[bot]. A set-but-empty variable, or an empty file, disables the
+# set. Their non-empty reviews, inline comments and comments (and any
+# CHANGES_REQUESTED review) persist as pending events marked automated:true,
+# regardless of author_association, and classify as fleet triage work. They
+# change no verdict bucket, grant no merge authority and cause no forge write.
+#
+# The contribution author's own comments stay excluded unless the body starts
+# (after leading whitespace, case-insensitively) with the author marker:
+# FM_CONTRIBUTIONS_AUTHOR_MARKER, else the first line of
+# config/contributions-author-marker, else the default @firstmate. A
+# set-but-empty variable or empty file disables the marker. A marked author
+# comment persists as a pending event marked directive:true and classifies as
+# fleet triage; it never grants merge authority.
 #
 # New maintainer comments/reviews (OWNER, MEMBER, COLLABORATOR, excluding the
 # contribution author) and issue transitions to ready-for-pr persist as pending
@@ -98,6 +126,7 @@ FM_ROOT="${FM_ROOT_OVERRIDE:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 FM_HOME="${FM_HOME:-$FM_ROOT}"
 STATE="${FM_STATE_OVERRIDE:-$FM_HOME/state}"
 DATA="${FM_DATA_OVERRIDE:-$FM_HOME/data}"
+CONFIG="${FM_CONFIG_OVERRIDE:-$FM_HOME/config}"
 export FM_HOME FM_STATE_OVERRIDE="$STATE"
 # shellcheck source=bin/fm-pr-lib.sh
 . "$SCRIPT_DIR/fm-pr-lib.sh"
@@ -122,6 +151,24 @@ case "$CHECK_TIMEOUT" in ''|*[!0-9]*|0) CHECK_TIMEOUT=30 ;; esac
 BUDGET_CAP=$((CHECK_TIMEOUT - 3))
 [ "$BUDGET_CAP" -ge 1 ] || BUDGET_CAP=1
 [ "$BUDGET" -le "$BUDGET_CAP" ] || BUDGET=$BUDGET_CAP
+CONFIG="${FM_CONFIG_OVERRIDE:-$FM_HOME/config}"
+if [ -n "${FM_CONTRIBUTIONS_AUTOMATED_REVIEWERS+x}" ]; then
+  REVIEWER_SPEC=$FM_CONTRIBUTIONS_AUTOMATED_REVIEWERS
+elif [ -f "$CONFIG/contributions-automated-reviewers" ] && [ ! -L "$CONFIG/contributions-automated-reviewers" ]; then
+  REVIEWER_SPEC=$(cat "$CONFIG/contributions-automated-reviewers")
+else
+  REVIEWER_SPEC='copilot-pull-request-reviewer[bot],greptile-apps[bot]'
+fi
+AUTOMATED_REVIEWERS=$(printf '%s' "$REVIEWER_SPEC" | tr ',' '\n' \
+  | jq -R 'gsub("^\\s+|\\s+$";"") | select(length > 0) | ascii_downcase' | jq -sc .) \
+  || fail 'invalid automated reviewer list'
+if [ -n "${FM_CONTRIBUTIONS_AUTHOR_MARKER+x}" ]; then
+  AUTHOR_MARKER=$FM_CONTRIBUTIONS_AUTHOR_MARKER
+elif [ -f "$CONFIG/contributions-author-marker" ] && [ ! -L "$CONFIG/contributions-author-marker" ]; then
+  AUTHOR_MARKER=$(head -n 1 "$CONFIG/contributions-author-marker")
+else
+  AUTHOR_MARKER='@firstmate'
+fi
 TMP=$(mktemp -d "${TMPDIR:-/tmp}/fm-contributions.XXXXXX")
 LOCK_HELD=0
 cleanup() {
@@ -245,7 +292,7 @@ wait_forges() { # background forge pids from one independent read wave
 }
 
 observe() { # canonical GitHub URL -> normalized JSON
-  local url=$1 part number kind endpoint head after label
+  local url=$1 part number kind endpoint head after label base_repo
   case "$url" in https://github.com/*) ;; *) return 1 ;; esac
   part=${url#https://github.com/}; number=${part##*/}; part=${part%/*}; kind=${part##*/}; part=${part%/*}
   case "$kind" in pull) endpoint="repos/$part/pulls/$number" ;; issues) endpoint="repos/$part/issues/$number" ;; *) return 1 ;; esac
@@ -255,6 +302,7 @@ observe() { # canonical GitHub URL -> normalized JSON
   jq -e '(.state == "open" or .state == "closed") and (.user.login | type == "string")' "$TMP/core.json" >/dev/null || return 1
   if [ "$kind" = pull ]; then
     head=$(jq -er '.head.sha | select(test("^[a-fA-F0-9]{40}$"))' "$TMP/core.json") || return 1
+    base_repo=$(jq -er '.base.repo.full_name | select(type == "string" and test("^[A-Za-z0-9-]+/[A-Za-z0-9._-]+$"))' "$TMP/core.json") || return 1
     FORGE_ERR="$TMP/comments.err" forge api "repos/$part/issues/$number/comments?per_page=100" --paginate --slurp > "$TMP/comments.json" &
     local comments_pid=$!
     FORGE_ERR="$TMP/reviews.err" forge api "$endpoint/reviews?per_page=100" --paginate --slurp > "$TMP/reviews.json" &
@@ -265,21 +313,29 @@ observe() { # canonical GitHub URL -> normalized JSON
     local checks_pid=$!
     FORGE_ERR="$TMP/statuses.err" forge api "repos/$part/commits/$head/statuses?per_page=100" --paginate --slurp > "$TMP/statuses.json" &
     local statuses_pid=$!
-    FORGE_ERR="$TMP/repo.err" forge api "repos/$part" > "$TMP/repo.json" &
+    # shellcheck disable=SC2016
+    FORGE_ERR="$TMP/repo.err" forge api graphql \
+      -f query='query($owner:String!,$repo:String!){repository(owner:$owner,name:$repo){viewerPermission}}' \
+      -f owner="${base_repo%%/*}" -f repo="${base_repo#*/}" > "$TMP/repo.json" &
     local repo_pid=$!
     wait_forges "$comments_pid" "$reviews_pid" "$inline_pid" "$checks_pid" "$statuses_pid" "$repo_pid" || return 1
+    jq -e '.data.repository.viewerPermission | IN("ADMIN","MAINTAIN","WRITE","TRIAGE","READ")' "$TMP/repo.json" >/dev/null || return 1
     jq -e 'type == "array" and all(.[]; type == "array")' "$TMP/comments.json" >/dev/null || return 1
     forge pr view "$url" --json headRefOid,reviewDecision > "$TMP/after.json" || return 1
     after=$(jq -er .headRefOid "$TMP/after.json")
     [ "$head" = "$after" ] || { printf 'head changed during observation\n' > "$TMP/forge.err"; return 1; }
     jq -n --slurpfile core "$TMP/core.json" --slurpfile comments "$TMP/comments.json" \
       --slurpfile reviews "$TMP/reviews.json" --slurpfile inline "$TMP/inline.json" --slurpfile after "$TMP/after.json" --slurpfile checks "$TMP/checks.json" \
-      --slurpfile statuses "$TMP/statuses.json" --slurpfile repo "$TMP/repo.json" '
+      --slurpfile statuses "$TMP/statuses.json" --slurpfile repo "$TMP/repo.json" --argjson automated "$AUTOMATED_REVIEWERS" --arg marker "$AUTHOR_MARKER" '
       $core[0] as $c
       | ($reviews[0] | add // []) as $reviews
       | {head:$c.head.sha,state:(if $c.merged_at != null then "merged" else $c.state end),
+          base_repo:($c.base.repo.full_name // null),
+          updated_at:([$c.updated_at,$c.created_at] | map(select(type == "string")
+            | select(try (fromdateiso8601 | type == "number") catch false)) | first),
           draft:$c.draft,mergeable:(if $c.mergeable == true then "mergeable" elif $c.mergeable == false then "conflicting" else "unknown" end),
-          can_merge:($repo[0].permissions.push // false),
+          viewer_permission:$repo[0].data.repository.viewerPermission,
+          can_merge:($repo[0].data.repository.viewerPermission | IN("ADMIN","MAINTAIN","WRITE")),
           review_decision:($after[0].reviewDecision // ""),
           reviews:$reviews,
           checks:([ $checks[0][] | .check_runs[] | {name,id,status,conclusion,started_at} ]
@@ -287,10 +343,15 @@ observe() { # canonical GitHub URL -> normalized JSON
               status:(if .state == "pending" then "in_progress" else "completed" end),
               conclusion:(if .state == "pending" then null else .state end)} ]),
           events:((($comments[0] | add // [] | map(. + {_signal:"comment"})) + ($reviews | map(. + {_signal:"review"})) + ($inline[0] | add // [] | map(. + {_signal:"review-comment"})))
-            | map(select(.user.login != $c.user.login and (.author_association | IN("OWNER","MEMBER","COLLABORATOR")))
+            | map(((.user.login == $c.user.login) and ($marker | length) > 0
+                  and ((.body // "") | gsub("^\\s+";"") | ascii_downcase | startswith($marker | ascii_downcase))) as $directive
+              | select(.user.login != $c.user.login or $directive)
+              | ((.user.login | ascii_downcase) as $login | ($automated | index($login)) != null) as $bot
+              | select(if $directive then true elif $bot then ((.body // "" | gsub("^\\s+|\\s+$";"") | length) > 0 or .state == "CHANGES_REQUESTED")
+                       else (.author_association | IN("OWNER","MEMBER","COLLABORATOR")) end)
               | {token:((._signal + ":") + (.id|tostring) + ":" + (.updated_at // .submitted_at // "") + ":" + (.state // "")),
                  type:._signal,source:.html_url,head:.commit_id,
-                 author:.user.login,body:(.body // "" | .[:500])}))}' > "$TMP/observation.json" || return 1
+                 author:.user.login,body:(.body // "" | .[:500])} + (if $bot then {automated:true} else {} end) + (if $directive then {directive:true} else {} end)))}' > "$TMP/observation.json" || return 1
   else
     label=${FM_CONTRIBUTIONS_READY_LABEL:-ready-for-pr}
     FORGE_ERR="$TMP/comments.err" forge api "repos/$part/issues/$number/comments?per_page=100" --paginate --slurp > "$TMP/comments.json" &
@@ -299,13 +360,18 @@ observe() { # canonical GitHub URL -> normalized JSON
     local events_pid=$!
     wait_forges "$comments_pid" "$events_pid" || return 1
     jq -e 'type == "array" and all(.[]; type == "array")' "$TMP/comments.json" >/dev/null || return 1
-    jq -n --slurpfile timeline "$TMP/issue-events.json" --arg label "$label" --slurpfile core "$TMP/core.json" --slurpfile comments "$TMP/comments.json" '
+    jq -n --slurpfile timeline "$TMP/issue-events.json" --arg label "$label" --argjson automated "$AUTOMATED_REVIEWERS" --arg marker "$AUTHOR_MARKER" --slurpfile core "$TMP/core.json" --slurpfile comments "$TMP/comments.json" '
       $core[0] as $c | {state:$c.state,head:null,
         ready:any($c.labels[]; (.name | ascii_downcase) == ($label | ascii_downcase)),
         checks:[],reviews:[],events:($comments[0] | add // []
-          | map(select(.user.login != $c.user.login and (.author_association | IN("OWNER","MEMBER","COLLABORATOR")))
+          | map(((.user.login == $c.user.login) and ($marker | length) > 0
+                and ((.body // "") | gsub("^\\s+";"") | ascii_downcase | startswith($marker | ascii_downcase))) as $directive
+            | select(.user.login != $c.user.login or $directive)
+            | ((.user.login | ascii_downcase) as $login | ($automated | index($login)) != null) as $bot
+            | select(if $directive then true elif $bot then (.body // "" | gsub("^\\s+|\\s+$";"") | length) > 0
+                     else (.author_association | IN("OWNER","MEMBER","COLLABORATOR")) end)
             | {token:("comment:" + (.id|tostring) + ":" + (.updated_at // "")),type:"comment",source:.html_url,
-               head:null,author:.user.login,body:(.body // "" | .[:500])})
+               head:null,author:.user.login,body:(.body // "" | .[:500])} + (if $bot then {automated:true} else {} end) + (if $directive then {directive:true} else {} end))
           + [$timeline[0][] | .[] | select(.event == "labeled" and (.label.name | ascii_downcase) == ($label | ascii_downcase))
              | {token:("ready-for-pr:" + (.id | tostring)),type:"ready-for-pr",source:$c.html_url,head:null,body:"filed issue reached ready-for-pr"}])}' > "$TMP/observation.json" || return 1
   fi
@@ -313,6 +379,103 @@ observe() { # canonical GitHub URL -> normalized JSON
     {schema:"fm-contributions.v1",task:"observation",records:[{url:$url,
       kind:(if $kind == "pull" then "pr" else "issue" end),pending:[],seen:[],observation:$observed[0]}]}
     | valid_record' >/dev/null
+}
+
+closeout_window() {
+  local file="$CONFIG/outside-pr-review-window-hours" marker="$STATE/.contributions-closeout-config-error" value detail='' tmp device
+  if [ -L "$file" ]; then
+    detail='invalid config/outside-pr-review-window-hours: expected a regular file'
+  elif [ ! -e "$file" ]; then
+    CLOSEOUT_HOURS=2
+    detail=
+  elif [ ! -f "$file" ]; then
+    detail='invalid config/outside-pr-review-window-hours: expected a regular file'
+  elif ! value=$(cat "$file"); then
+    detail='cannot read config/outside-pr-review-window-hours'
+  else
+    case "$value" in
+      ''|*[!0-9]*) detail='invalid config/outside-pr-review-window-hours: expected a non-negative integer' ;;
+      *)
+        if [ "${#value}" -gt 5 ] || [ "$((10#$value))" -gt 87600 ]; then
+          detail='invalid config/outside-pr-review-window-hours: expected 0..87600'
+        else
+          CLOSEOUT_HOURS=$((10#$value))
+        fi
+        ;;
+    esac
+  fi
+  if [ -z "$detail" ]; then
+    if [ -e "$marker" ] || [ -L "$marker" ]; then
+      [ -f "$marker" ] && [ ! -L "$marker" ] || fail 'unsafe closeout configuration diagnostic record'
+      rm -f -- "$marker"
+    fi
+    return 0
+  fi
+  if [ -f "$marker" ] && [ ! -L "$marker" ] && [ "$(cat "$marker" 2>/dev/null || true)" = "$detail" ]; then
+    return 1
+  fi
+  printf 'contributions: %s\n' "$detail"
+  device=$(fm_pr_file_device "$STATE") || return 1
+  fm_pr_regular_destination_on_device_or_absent "$marker" "$device" || return 1
+  tmp=$(umask 077; mktemp "$STATE/.contributions-config-error.XXXXXX") || return 1
+  printf '%s\n' "$detail" > "$tmp" || { rm -f -- "$tmp"; return 1; }
+  chmod 600 "$tmp" || { rm -f -- "$tmp"; return 1; }
+  fm_pr_regular_destination_on_device_or_absent "$marker" "$device" || { rm -f -- "$tmp"; return 1; }
+  mv -f -- "$tmp" "$marker" || { rm -f -- "$tmp"; return 1; }
+  return 1
+}
+
+closeout_signal() { # task canonical-url row-file
+  local task=$1 url=$2 row=$3 head since old_notice notice status meta wt dirty
+  local checked_seconds age seconds key
+  [ "$CLOSEOUT_ENABLED" = 1 ] || return 0
+  jq -e '.kind == "pr" and .observation.state == "open"' "$row" >/dev/null || return 0
+  head=$(jq -r '.observation.head // ""' "$row")
+  case "$(jq -r '.observation.viewer_permission // ""' "$row")" in
+    READ|TRIAGE) ;;
+    *) return 0 ;;
+  esac
+  meta="$STATE/$task.meta"
+  # The contribution record survives teardown so later feedback is still
+  # observed; a missing task record means closeout has already happened.
+  fm_pr_metadata_identity_parse "$meta" || return 0
+  [ "$FM_PR_META_URL" = "$url" ] || return 0
+  [ "$(sed -n 's/^kind=//p' "$meta" | tail -1)" = ship ] || return 0
+  since=$(jq -r '.closeout_since // ""' "$row")
+  old_notice=$(jq -r '.closeout_notice // ""' "$row")
+  checked_seconds=$(jq -nr --arg at "$since" '$at | fromdateiso8601') || return 0
+  age=$((EPOCH - checked_seconds))
+  seconds=$((CLOSEOUT_HOURS * 3600))
+  if [ "$age" -lt "$seconds" ]; then
+    jq --arg head "$head" --arg since "$since" \
+      '.closeout_head=$head | .closeout_since=$since | .closeout_notice=null' "$row" > "$TMP/closeout-row.json"
+    mv "$TMP/closeout-row.json" "$row"
+    return 0
+  fi
+  status=ready
+  if jq -e '(.pending | length) > 0' "$row" >/dev/null; then
+    status=review
+  elif ! jq_lib -e '.observation | check_readiness | .reason == null' < "$row" >/dev/null; then
+    status=ci
+  else
+    wt=$(sed -n 's/^worktree=//p' "$meta" | tail -1)
+    if [ -z "$wt" ] || [ ! -d "$wt" ] || [ -L "$wt" ]; then
+      status=workspace
+    elif ! dirty=$(git -C "$wt" status --porcelain --untracked-files=normal 2>/dev/null) \
+      || [ -n "$dirty" ]; then
+      status=workspace
+    fi
+  fi
+  notice="$head:$status"
+  jq --arg head "$head" --arg since "$since" --arg notice "$notice" \
+    '.closeout_head=$head | .closeout_since=$since | .closeout_notice=$notice' "$row" > "$TMP/closeout-row.json"
+  mv "$TMP/closeout-row.json" "$row"
+  [ "$notice" = "$old_notice" ] && return 0
+  key=$(printf '%s\n' "$task" "$head" "$status" | shasum -a 256 | awk '{print $1}')
+  fm_wake_append check "contrib-closeout-$key" \
+    "check: contributions closeout $task $url head=$head state=$status" || return 1
+  printf 'contribution-wake: check: contributions closeout %s %s head=%s state=%s\n' \
+    "$task" "$url" "$head" "$status"
 }
 
 publish_pending() { # task canonical-url record-file
@@ -364,7 +527,9 @@ settle_final() { # canonical-url task... : copy the URL's final observation to e
 poll() {
   local task url old kind error observed
   local -a row
+  CLOSEOUT_ENABLED=1
   acquire
+  closeout_window || CLOSEOUT_ENABLED=0
   get_input
   read_saved
   [ "$ERRORS" -eq 0 ] || printf 'contributions: %s unreadable durable record(s)\n' "$ERRORS"
@@ -419,11 +584,19 @@ poll() {
           | $old + {checked_at:$now,error:null,
             observation:($o + {absent_checks:((($old.observation.absent_checks // []) + [($old.observation.checks // [])[] | .name]) - [$o.checks[].name] | unique)}),
             seen:($events | map(.token)),
-            pending:(($old.pending // []) + [$events[] | select(.token as $t | ($old.seen // [] | index($t)) == null)] | unique_by(.token))}' > "$TMP/row.json"
+            pending:(($old.pending // []) + [$events[] | select(.token as $t | ($old.seen // [] | index($t)) == null)]
+              | unique_by(.token))}
+          | if .kind == "pr" then
+              .closeout_head=$o.head
+              | .closeout_since=(if $old.closeout_since == null then $o.updated_at // $now
+                  elif $old.closeout_head != $o.head then $now else $old.closeout_since end)
+              | .closeout_notice=(if $old.closeout_head == $o.head and $old.closeout_since == .closeout_since then $old.closeout_notice else null end)
+            else . end' > "$TMP/row.json"
       else
         error='forge observation unavailable or changed during read'
         jq --arg now "$NOW" --arg error "$error" '.checked_at=$now | .error=$error' "$old" > "$TMP/row.json"
       fi
+      [ "$observed" -ne 0 ] || closeout_signal "$task" "$url" "$TMP/row.json"
       write_record "$task" "$TMP/row.json"
       publish_pending "$task" "$url" "$TMP/row.json"
     done
@@ -447,7 +620,8 @@ arm() {
   shim=('#!/usr/bin/env bash'
     "export FM_HOME=$(printf '%q' "$FM_HOME")"
     "export FM_STATE_OVERRIDE=$(printf '%q' "$STATE")"
-    "export FM_DATA_OVERRIDE=$(printf '%q' "$DATA")")
+    "export FM_DATA_OVERRIDE=$(printf '%q' "$DATA")"
+    "export FM_CONFIG_OVERRIDE=$(printf '%q' "$CONFIG")")
   if [ -n "${FM_CONTRIBUTIONS_BUDGET:-}" ]; then
     shim+=("export FM_CONTRIBUTIONS_BUDGET=$(printf '%q' "$FM_CONTRIBUTIONS_BUDGET")")
   fi

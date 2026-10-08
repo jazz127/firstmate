@@ -63,6 +63,9 @@
 #     live watcher was confirmed, and never withholds the wake for it; the
 #     next Stop's foreground arm attaches to that live cycle. The supervision
 #     host owns its own successors, so its path is unchanged.
+#   - Context handoff: a wrapper successor takes over a healthy watcher whose
+#     arm belongs to its previous wrapper-owned bridge, through the existing
+#     identity-bound --take-over interface, before normal queue delivery.
 #   - Supervision host: a home that runs it (by default on this Claude
 #     primary; docs/configuration.md "Supervision host" owns the gate and its
 #     opt-out) runs bin/fm-supervision-host.sh in the arm's place, bound
@@ -339,13 +342,39 @@ trap 'handle_autoarm_signal INT' INT
 # Every non-actionable close is checked against the same identity-matched live
 # watcher and fresh-beacon predicate used by the turn-end guard before it is
 # retried or translated into an operator-visible failure.
+# A fresh wrapper successor inherits the previous transition owner's pid.
+# Take over only a healthy home-bound watcher whose arm is that owner's child;
+# ordinary Stops and every opted-out launch retain their existing path.
+CONTEXT_TAKE_OVER_ARM=
+if [ "${FM_CONTEXT_RESTART_SUCCESSOR:-0}" = 1 ]; then
+  CONTEXT_BRIDGE_PID=${FM_CONTEXT_RESTART_PREVIOUS_BRIDGE_PID:-}
+  case "$CONTEXT_BRIDGE_PID" in
+    ''|*[!0-9]*) ;;
+    *)
+      if fm_pid_alive "$CONTEXT_BRIDGE_PID" \
+        && fm_watcher_healthy "$STATE" "$SCRIPT_DIR/fm-watch.sh" "$GRACE" "$FM_HOME"; then
+        CONTEXT_ARM_PID=$(ps -o ppid= -p "$FM_WATCHER_HEALTHY_PID" 2>/dev/null | tr -d ' ')
+        if [ -n "$CONTEXT_ARM_PID" ] \
+          && [ "$(ps -o ppid= -p "$CONTEXT_ARM_PID" 2>/dev/null | tr -d ' ')" = "$CONTEXT_BRIDGE_PID" ]; then
+          CONTEXT_TAKE_OVER_ARM=$CONTEXT_ARM_PID
+        fi
+      fi
+      ;;
+  esac
+fi
+
 ARM_PID=
 CLOSED_ARM_PID=
 run_arm() {  # <output file, or empty for none>
+  local args=()
+  if [ -n "$CONTEXT_TAKE_OVER_ARM" ]; then
+    args=(--take-over "$CONTEXT_TAKE_OVER_ARM")
+    CONTEXT_TAKE_OVER_ARM=
+  fi
   if [ -n "$1" ]; then
-    FM_GUARD_GRACE="$GRACE" "$SCRIPT_DIR/fm-watch-arm.sh" >"$1" 2>&1 &
+    FM_GUARD_GRACE="$GRACE" "$SCRIPT_DIR/fm-watch-arm.sh" ${args[@]+"${args[@]}"} >"$1" 2>&1 &
   else
-    FM_GUARD_GRACE="$GRACE" "$SCRIPT_DIR/fm-watch-arm.sh" >/dev/null 2>&1 &
+    FM_GUARD_GRACE="$GRACE" "$SCRIPT_DIR/fm-watch-arm.sh" ${args[@]+"${args[@]}"} >/dev/null 2>&1 &
   fi
   ARM_PID=$!
   wait "$ARM_PID" || true
@@ -420,7 +449,9 @@ while [ "$attempt" -lt "$AUTOARM_ATTEMPTS" ]; do
     HOST_RC=0
     FM_SUPERVISION_HOST_AUTOARM_GEN=$MY_GEN FM_SUPERVISION_HOST_OWNER_PID=$$ \
       FM_SUPERVISION_HOST_PRIMARY=claude FM_GUARD_GRACE="$GRACE" \
+      FM_SUPERVISION_HOST_TAKE_OVER_ARM_PID="$CONTEXT_TAKE_OVER_ARM" \
       "$SCRIPT_DIR/fm-supervision-host.sh" park >"${OUT:-/dev/null}" 2>&1 || HOST_RC=$?
+    CONTEXT_TAKE_OVER_ARM=
   else
     run_arm "$OUT"
   fi
@@ -515,7 +546,7 @@ if [ "$ACTIONABLE" -eq 1 ]; then
     [ -z "$OUT" ] || rm -f "$OUT" 2>/dev/null || true
     exit 0
   fi
-  # The host owns its own successors and stops its cycle before handing back.
+  # The host owns its own successors (docs/supervision-host.md "Postures").
   if [ "$HOST_MODE" -eq 0 ]; then
     start_handling_successor "$CLOSED_ARM_PID" || true
   fi

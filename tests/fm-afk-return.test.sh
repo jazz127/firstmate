@@ -70,7 +70,15 @@ if [ -s "$file" ]; then
   printf 'WAKE_ACK_REQUIRED: after handling completes run bin/fm-wake-drain.sh --ack-through %s --recovery-generation fixture-generation\n' "$sequence" >&2
 fi
 SH
-  chmod +x "$dir/bin/"*.sh
+  # The cost line uses the same worker count as the spawn cap. Copy its
+  # dependencies so later cases can copy or replace helpers without touching
+  # the production scripts through fixture symlinks.
+  for f in "$ROOT/bin"/*; do
+    [ -e "$dir/bin/${f##*/}" ] || cp -R "$f" "$dir/bin/"
+  done
+  for f in "$dir/bin/"*.sh; do
+    [ -L "$f" ] || chmod +x "$f"
+  done
 }
 
 run_return() {  # <case-dir> <mode>
@@ -453,7 +461,7 @@ test_return_brief_composes_from_record_store_and_held_set() {
   assert_contains "$out" 'dead: failed: the reproduction never compiled' "the failed task was not listed"
   assert_contains "$out" '4 routine outcome(s) recorded' "the routine outcome count was not reported"
   assert_contains "$out" 'other: resent the steer; worker resumed' "the routine outcome was not listed"
-  assert_contains "$out" 'Cost: 6 supervision outcome(s) recorded (4 routine, 2 captain); 3 task(s) live at return.' "the cost line is wrong"
+  assert_contains "$out" 'Cost: 6 supervision outcome(s) recorded (4 routine, 2 captain); 0 task(s) live at return.' "the cost line counted exited workers"
   assert_contains "$out" 'firstmate-actionable blocker: other [key=dep]' "the unreached blocker did not gate"
   assert_contains "$out" 'firstmate-actionable blocker: fix-windows [key=token]' "a captain outcome incorrectly exempted an open blocker"
   grep -F "$(printf 'contract\t')" "$gate" >/dev/null || fail "the gate did not retain the posture-record window"

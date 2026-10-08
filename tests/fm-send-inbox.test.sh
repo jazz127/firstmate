@@ -120,8 +120,11 @@ record_body() { # <record>
 }
 
 test_text_steer_rides_inbox() {
-  local dir err rc rec body typed
+  local dir err rc rec body typed spans
   dir=$(setup_case rides)
+  fm_test_trace_export_enable "$dir/home" "$dir/spans.jsonl" "$dir/fakebin"
+  printf '%s\n' 'traceparent=00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01' \
+    >> "$dir/home/state/t1.meta"
   err="$dir/send.err"
   run_send "$dir" "$err" -- t1 "please rebase onto main"
   rc=$?
@@ -136,6 +139,14 @@ test_text_steer_rides_inbox() {
   case "$typed" in
   *"please rebase onto main"*) fail "the payload must never be typed:"$'\n'"$typed" ;;
   esac
+  spans=$(cat "$dir/spans.jsonl")
+  assert_contains "$spans" '"name":"firstmate.steer"' "a successful inbox enqueue should emit a steer observation"
+  assert_contains "$spans" '"firstmate.plane","value":{"stringValue":"inbox"}' \
+    "the steer observation should identify the inbox plane"
+  jq -e '[.resourceSpans[].scopeSpans[].spans[].attributes[]] ==
+    [{key:"firstmate.plane",value:{stringValue:"inbox"}}]' "$dir/spans.jsonl" >/dev/null \
+    || fail "an inbox observation must contain only aggregate steer dimensions"
+  assert_not_contains "$spans" 'please rebase onto main' "the steer observation must never contain message text"
   pass "fm-send inbox: the payload is recorded durably and only the doorbell is typed"
 }
 
@@ -296,11 +307,17 @@ test_harness_invocations_stay_typed() {
   local dir err typed
   # A slash command must reach the harness's own parser, on any harness.
   dir=$(setup_case slash)
+  fm_test_trace_export_enable "$dir/home" "$dir/spans.jsonl" "$dir/fakebin"
+  printf '%s\n' 'traceparent=00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01' \
+    >> "$dir/home/state/t1.meta"
   err="$dir/send.err"
   run_send "$dir" "$err" -- t1 "/no-mistakes" || fail "a slash send should succeed"
   typed=$(cat "$dir/send.log")
   assert_contains "$typed" "/no-mistakes" "the slash command should be typed literally"
   [ ! -d "$dir/home/state/t1.inbox" ] || fail "a slash command must not be routed to the inbox"
+  jq -e '[.resourceSpans[].scopeSpans[].spans[].attributes[]] ==
+    [{key:"firstmate.plane",value:{stringValue:"typed"}}]' "$dir/spans.jsonl" >/dev/null \
+    || fail "a typed observation must contain only aggregate steer dimensions"
   # A codex `$<skill>` invocation likewise stays typed.
   dir=$(setup_case codexskill codex)
   err="$dir/send.err"
@@ -331,11 +348,21 @@ test_explicit_target_stays_typed() {
 }
 
 test_key_path_never_touches_inbox() {
-  local dir err
+  local dir err spans
   dir=$(setup_case keypath)
+  fm_test_trace_export_enable "$dir/home" "$dir/spans.jsonl" "$dir/fakebin"
+  printf '%s\n' 'traceparent=00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01' \
+    >> "$dir/home/state/t1.meta"
   err="$dir/send.err"
   run_send "$dir" "$err" -- t1 --key Enter || fail "a --key send should succeed"
   [ ! -d "$dir/home/state/t1.inbox" ] || fail "the --key path must never write an inbox record"
+  spans=$(cat "$dir/spans.jsonl")
+  assert_contains "$spans" '"name":"firstmate.steer"' "a successful key delivery should emit a steer observation"
+  assert_contains "$spans" '"firstmate.plane","value":{"stringValue":"key"}' \
+    "the key delivery observation should identify its plane"
+  jq -e '[.resourceSpans[].scopeSpans[].spans[].attributes[]] ==
+    [{key:"firstmate.plane",value:{stringValue:"key"}}]' "$dir/spans.jsonl" >/dev/null \
+    || fail "a key observation must contain only aggregate steer dimensions"
   pass "fm-send planes: the --key lifecycle path never touches the inbox"
 }
 
@@ -480,12 +507,16 @@ test_empty_message_refused() {
   # An explicit empty-string argument is the same refusal.
   dir=$(setup_case empty-string-arg)
   err="$dir/send.err"
+  fm_test_trace_export_enable "$dir/home" "$dir/spans.jsonl" "$dir/fakebin"
+  printf '%s\n' 'traceparent=00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01' \
+    >> "$dir/home/state/t1.meta"
   run_send "$dir" "$err" -- t1 ""
   rc=$?
   [ "$rc" -ne 0 ] || fail "an explicit empty-string message should refuse"
   assert_contains "$(cat "$err")" "nonempty message" \
     "the empty-string refusal should be explicit"
   [ ! -d "$dir/home/state/t1.inbox" ] || fail "an empty-string steer still wrote an inbox record"
+  [ ! -s "$dir/spans.jsonl" ] || fail "a refused empty steer emitted an observation"
 
   # A whitespace-only message is equally contentless and refuses.
   dir=$(setup_case whitespace-only)

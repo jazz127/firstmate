@@ -273,6 +273,35 @@ test_promote_requires_and_records_the_delivery_contract() {
   pass "fm-promote: promotion requires the delivery contract and records it exactly once"
 }
 
+test_promotion_keeps_a_worker_branch_for_house_feature() {
+  local home id meta instructions out status
+  home="$TMP_ROOT/promote-house-feature/home"
+  id=alpha-r2
+  meta="$home/state/$id.meta"
+  mkdir -p "$home/state"
+  write_brief "$home" "$id"
+  printf 'window=fm-alpha-r2\nkind=scout\nworktree=/tmp/wt\n' > "$meta"
+  out=$(FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" "$PROMOTE" "$id" \
+    --mode direct-PR --yolo off --house-feature alpha 2>&1)
+  status=$?
+  [ "$status" -ne 0 ] || fail "house-feature promotion accepted no explicit branch base"
+  assert_contains "$out" 'requires --branch-base main or house' "promotion missing-base refusal"
+  assert_grep 'kind=scout' "$meta" "refused house-feature promotion changed task kind"
+
+  out=$(FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" "$PROMOTE" "$id" \
+    --mode direct-PR --yolo off --house-feature alpha --branch-base main 2>&1)
+  status=$?
+  expect_code 0 "$status" "house-feature promotion should succeed"
+  instructions="$home/data/$id/ship-instructions.md"
+  assert_grep 'branch=fm/alpha-r2' "$meta" "promotion did not keep the worker's fm/ task branch"
+  assert_grep 'fm-housefeature-start.sh alpha main fm/alpha-r2' "$instructions" \
+    "promotion did not prepare the worker from the durable branch"
+  # shellcheck disable=SC2016 # Compare a literal Markdown code span in worker instructions.
+  assert_grep 'pass `--base housefeature/alpha`' "$instructions" \
+    "promotion did not target the durable branch for its first PR"
+  pass "fm-promote: a house-feature round keeps its fm/ worker branch and durable PR base"
+}
+
 # A symlink at state/<id>.meta is the containment hazard the shared publisher
 # refuses: promotion must not rewrite the symlink target in place.
 test_promote_refuses_a_symlinked_task_record() {
@@ -308,7 +337,7 @@ test_promote_refuses_a_symlinked_task_record() {
 # prints against a capturing fm-send.sh, and asserts on the message the worker would
 # actually receive - for every supported mode.
 test_promotion_delivers_the_real_definition_of_done() {
-  local home meta out sendroot payload mode id brief_dod delivered_dod contract
+  local home meta out sendroot payload mode id brief_dod delivered_dod instructions
   home="$TMP_ROOT/promote-dod/home"
   sendroot="$TMP_ROOT/promote-dod/sendroot"
   mkdir -p "$home/state" "$sendroot/bin"
@@ -356,16 +385,23 @@ STUB
     assert_grep "## Firstmate spec" "$payload" \
       "$mode: promoted worker did not receive the Firstmate spec subsection"
 
-    # Both the delivered prompt and persisted relaunch brief are public outputs.
-    for contract in "$payload" "$home/data/$id/brief.md"; do
-      assert_grep "This replaces the scout rule limiting outside-worktree writes to the report and status file." "$contract" \
-        "$mode: $contract retained the scout-only write restriction"
-      assert_grep "Keep project edits inside this worktree; keep proof and scratch output outside it, under \`$home/data/$id/\` or a temporary directory." "$contract" \
-        "$mode: $contract omitted the ship scratch-location rule"
-      assert_grep "Outside the worktree, write only that task material and the status and steering-inbox records authorized below." "$contract" \
-        "$mode: $contract omitted the ship outside-worktree write boundary"
-      assert_grep "Leave the worktree clean before reporting done." "$contract" \
-        "$mode: $contract omitted the clean-before-done rule"
+    # Both the delivered promotion message and persisted relaunch brief are
+    # generated worker interfaces; neither may lose the actionable ship rule.
+    for instructions in "$payload" "$home/data/$id/brief.md"; do
+      assert_grep "Never end a turn on an announced next step: take it in the same turn with your tools instead of stopping on the announcement, or report \`paused:\`/\`blocked:\` with the reason." "$instructions" \
+        "$mode: $instructions omitted the same-turn action rule"
+      assert_grep "Drive your own validation and delivery path: beyond the handoff your Definition of done names, wait for no approval you did not request through \`needs-decision\`." "$instructions" \
+        "$mode: $instructions omitted handoff-qualified ship authority"
+      assert_no_grep "Your own validation and delivery path needs no such approval" "$instructions" \
+        "$mode: $instructions retained approval wording that conflicts with the handoff"
+      assert_grep "This replaces the scout rule limiting outside-worktree writes to the report and status file." "$instructions" \
+        "$mode: $instructions retained the scout-only write restriction"
+      assert_grep "Keep project edits inside this worktree; keep proof and scratch output outside it, under \`$home/data/$id/\` or a temporary directory." "$instructions" \
+        "$mode: $instructions omitted the ship scratch-location rule"
+      assert_grep "Outside the worktree, write only that task material and the status and steering-inbox records authorized below." "$instructions" \
+        "$mode: $instructions omitted the ship outside-worktree write boundary"
+      assert_grep "Leave the worktree clean before reporting done." "$instructions" \
+        "$mode: $instructions omitted the clean-before-done rule"
     done
 
     # Compare the public outputs of both real generation paths. The promoted
@@ -434,6 +470,30 @@ test_promotion_persists_the_selected_ship_branch() {
     "promotion did not deliver the selected immutable branch contract"
   assert_contains "$out" "promoted $id to ship" "branch-prefix promotion did not complete normally"
   pass "fm-promote: a selected branch prefix reaches both worker instructions and durable task state"
+}
+
+test_promotion_notices_a_ship_branch_against_the_registry_prefix() {
+  local home id meta out
+  home="$TMP_ROOT/promote-prefix-deviation/home"
+  id=promote-prefix-e2
+  meta="$home/state/$id.meta"
+  mkdir -p "$home/state" "$home/data" "$home/projects/proj"
+  printf '%s\n' '- proj [local-only branch=fix/] - fixture (added 2026-01-01)' > "$home/data/projects.md"
+  printf 'window=fm-%s\nkind=scout\nworktree=/tmp/wt\nproject=%s\n' "$id" "$home/projects/proj" > "$meta"
+  FM_HOME="$home" "$BRIEF" "$id" proj --scout >/dev/null 2>&1 \
+    || fail "promotion deviation scout brief should scaffold"
+  fill_brief_subsections "$home/data/$id/brief.md" \
+    "Promote the naming-deviation fixture." "Keep the selected task branch."
+  out=$(FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" "$PROMOTE" "$id" \
+    --mode local-only --yolo off 2>&1) \
+    || fail "promotion with the legacy branch should succeed with a notice"
+  assert_contains "$out" "ships branch=fm/$id while proj registers the ship-branch prefix 'fix/'" \
+    "promotion did not announce its branch-prefix deviation"
+  assert_contains "$out" "naming deviates from the captain's standing project preference" \
+    "promotion did not explain the naming deviation"
+  assert_not_contains "$out" "will read as firstmate-authored" \
+    "promotion made an unsupported authorship claim"
+  pass "fm-promote: a ship branch that deviates from the registered prefix is announced"
 }
 
 # The promotion instructions embed the branch in the `git checkout -b` command
@@ -981,7 +1041,7 @@ EOF
     else
       printf 'Use this project coding standard.\n' > "$proj/AGENTS.md"
     fi
-    printf '@AGENTS.md\n' > "$proj/CLAUDE.md"
+    ln -sfn AGENTS.md "$proj/CLAUDE.md"
     cp "$proj/AGENTS.md" "$proj/agents-before"
     for kind in no-mistakes direct-PR local-only scout; do
       id="roles-$project_kind-$kind"
@@ -1001,11 +1061,14 @@ EOF
       assert_grep "$home/state/$id.inbox" "$brief" "$project_kind $kind omitted its exact steering inbox"
       assert_grep 'When this task works on Firstmate itself' "$brief" "$project_kind $kind made the exception unconditional"
       assert_grep 'Project instructions still govern the work wherever they do not conflict with this worker identity' "$brief" "$project_kind $kind displaced project guidance"
+      assert_grep "Do not run \`bin/fm-session-start.sh\`, \`bin/fm-bootstrap.sh\`, or \`bin/fm-guard.sh\`" "$brief" "$project_kind $kind omitted the primary-only command boundary"
+      assert_grep 'Ignore the expected feature-branch worktree-tangle warning' "$brief" "$project_kind $kind omitted the task-worktree warning boundary"
       ! grep -q '^This section supersedes every earlier brief instruction about your role' "$brief" ||
         fail "$project_kind $kind revoked the brief's own role for a task that is not Firstmate"
       assert_no_grep '# Current worker role contract' "$home/data/$id/brief.md" "spawn rewrote the source brief"
       cmp -s "$proj/agents-before" "$proj/AGENTS.md" || fail "spawn changed project AGENTS.md"
-      [ "$(cat "$proj/CLAUDE.md")" = '@AGENTS.md' ] || fail "spawn changed the project import"
+      [ -L "$proj/CLAUDE.md" ] || fail "spawn converted the project's CLAUDE.md symlink"
+      [ "$(readlink "$proj/CLAUDE.md")" = AGENTS.md ] || fail "spawn changed the project import"
     done
   done
   role_line=$(grep -n 'A ship or scout worker launched by Firstmate into a worktree of this repository' "$ROOT/AGENTS.md" | cut -d: -f1)
@@ -1205,6 +1268,10 @@ test_forge_gerrit_changes_what_no_mistakes_means() {
   brief="$home/data/forge-dod-g1/brief.md"
   grep -qx "Delivery contract: mode=no-mistakes forge=gerrit shape=squash" "$brief" \
     || fail "the brief did not record the machine-readable forge in its delivery contract"
+  assert_grep "then start /no-mistakes on that committed head immediately without waiting for firstmate" "$brief" \
+    "the gerrit worker was not told to start validation from its committed head"
+  assert_no_grep "Firstmate will then instruct you to run /no-mistakes" "$brief" \
+    "the gerrit worker was told to wait for a validation steer"
 
   # shellcheck disable=SC2016 # Backticks are literal generated Markdown.
   assert_grep 'Pass `--skip push,pr,ci` on every `no-mistakes axi run` for this task' "$brief" \
@@ -1249,6 +1316,15 @@ test_forge_gerrit_changes_what_no_mistakes_means() {
   FM_HOME="$home" "$BRIEF" forge-dod-n1 other-project --mode no-mistakes >/dev/null \
     || fail "a default-forge no-mistakes brief should scaffold"
   plain="$home/data/forge-dod-n1/brief.md"
+  assert_grep 'base with no configured check workflows' "$plain" \
+    "a no-mistakes worker was not told when the CI skip fallback applies"
+  # shellcheck disable=SC2016 # Backticks are literal generated Markdown.
+  assert_grep 'start a new run with `--skip ci`' "$plain" \
+    "a no-mistakes worker was not given the supported no-CI fallback"
+  assert_grep 'house` base has a real check workflow; do not skip CI there' "$plain" \
+    "a no-mistakes worker could skip CI on house despite its real check workflow"
+  assert_grep 'ready for review (CI skipped: base has no configured check workflows)' "$plain" \
+    "the no-CI fallback report was not explicit about missing checks"
   awk '/^You drive no-mistakes by responding to its gates/ { emit = 1 }
        emit { print }
        emit && /hard rule violation\.$/ { exit }' "$brief" > "$TMP_ROOT/forge-dod/gerrit-middle"
@@ -1264,7 +1340,7 @@ test_forge_gerrit_changes_what_no_mistakes_means() {
     "the gerrit worker was told to wait for a checks-passed return its skipped ci step never gives"
   # shellcheck disable=SC2016 # Backticks are literal generated Markdown.
   grep -v "reports the green PR" "$TMP_ROOT/forge-dod/plain-middle" \
-    | sed 's/; once checks are green it returns `checks-passed` immediately, and if it refuses/; if it refuses/' \
+    | sed 's/; for a base with CI, once checks are green it returns `checks-passed` immediately, and if it refuses/; if it refuses/' \
     > "$TMP_ROOT/forge-dod/plain-middle-no-pr"
   cmp -s "$TMP_ROOT/forge-dod/gerrit-middle" "$TMP_ROOT/forge-dod/plain-middle-no-pr" \
     || fail "the forge changed the forge-independent half of the pipeline contract"
@@ -1368,6 +1444,17 @@ EOF
     "the refusal did not name both sides of the drift"
   assert_absent "$home/state/branch-agree-a1.meta" "the refused spawn still recorded a task"
 
+  FM_HOME="$home" "$BRIEF" branch-agree-shadow proj --mode no-mistakes --branch-prefix contrib/ >/dev/null \
+    || fail "a contrib/-prefixed brief should scaffold"
+  fill_brief_subsections "$home/data/branch-agree-shadow/brief.md" \
+    $'Preserve this literal example:\nShip branch: fix/branch-agree-shadow' "Ship the selected contrib branch."
+  out=$(run_spawn "$home" "$fakebin" branch-agree-shadow "$proj" claude --mode no-mistakes --yolo off --branch-prefix fix/)
+  status=$?
+  [ "$status" -ne 0 ] || fail "a Captain's-intent branch marker shadowed the generated delivery contract"
+  assert_contains "$out" "the brief says branch=contrib/branch-agree-shadow but this spawn selected branch=fix/branch-agree-shadow" \
+    "the spawn did not read the branch from the generated delivery contract"
+  assert_absent "$home/state/branch-agree-shadow.meta" "the shadowed branch mismatch still recorded a task"
+
   write_brief "$home" branch-agree-a2 no-mistakes
   out=$(run_spawn "$home" "$fakebin" branch-agree-a2 "$proj" claude --mode no-mistakes --yolo off --branch-prefix contrib/)
   status=$?
@@ -1437,6 +1524,15 @@ EOF
   out=$(run_spawn "$home" "$fakebin" prefix-dev-a2 "$proj" claude --mode no-mistakes --yolo off --branch-prefix fix/)
   assert_not_contains "$out" "registers the ship-branch prefix" \
     "a spawn matching the registered prefix was announced as a deviation"
+
+  FM_HOME="$home" "$BRIEF" prefix-dev-a3 proj --mode no-mistakes --branch-prefix contrib/ >/dev/null \
+    || fail "a contrib/-prefixed brief should scaffold"
+  fill_brief_subsections "$home/data/prefix-dev-a3/brief.md" "Run the review loop." "Ship it."
+  out=$(run_spawn "$home" "$fakebin" prefix-dev-a3 "$proj" claude --mode no-mistakes --yolo off --branch-prefix contrib/)
+  assert_contains "$out" "ships branch=contrib/prefix-dev-a3 while proj registers the ship-branch prefix 'fix/'" \
+    "no deviation notice for selecting one non-fm prefix over another"
+  assert_not_contains "$out" "will read as firstmate-authored" \
+    "a non-fm branch was incorrectly described as firstmate-authored"
 
   pass "fm-spawn: a ship branch that deviates from the registered prefix is announced, never blocked"
 }
@@ -1630,9 +1726,11 @@ test_spawn_refuses_a_brief_mode_mismatch
 test_spawn_notices_a_rigor_downgrade_against_the_registry
 test_scout_records_no_delivery_posture
 test_promote_requires_and_records_the_delivery_contract
+test_promotion_keeps_a_worker_branch_for_house_feature
 test_promote_refuses_a_symlinked_task_record
 test_promotion_delivers_the_real_definition_of_done
 test_promotion_persists_the_selected_ship_branch
+test_promotion_notices_a_ship_branch_against_the_registry_prefix
 test_promotion_branch_command_is_shell_safe
 test_local_merge_uses_the_recorded_ship_branch
 test_project_mode_matches_whole_multiword_names

@@ -126,11 +126,17 @@ case "${1:-} ${2:-}" in
     ;;
   "api --paginate")
     case " $* " in
-      *merge_queue*) ;;
+      *merge_queue*|*pull_request*) ;;
       *) printf '%s\n' '[]' ;;
     esac
     ;;
-  "api repos/"*) printf '%s\n' '{"name":"main","protected":false}' ;;
+  "api repos/"*)
+    case "$*" in
+      *"/pulls/"*"/files?per_page=100 "*) ;;
+      *) printf '%s\n' '{"name":"main","protected":false}' ;;
+    esac
+    ;;
+  "repo view") printf '%s\n' merge=true squash=true rebase=true ;;
 esac
 SH
   cat > "$home/fakebin/gh-axi" <<'SH'
@@ -3443,6 +3449,8 @@ test_pr_merge_entrypoint_separates_an_unreadable_record_from_an_absent_one() {
   id=sample-missing-pr-authority
   pr=https://github.com/sample/sample/pull/43
   write_origin_meta "$home" "$id" ship
+  fm_git_init_commit "$home/projects/missing-$id"
+  git -C "$home/projects/missing-$id" remote add origin https://github.com/sample/sample.git
 
   # A backlog that exists but cannot be read may hide a live captain hold, so
   # the merge must refuse without reaching the forge.

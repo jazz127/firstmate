@@ -1,18 +1,5 @@
 #!/usr/bin/env bash
 # Behavior tests for bin/fm-brief.sh.
-#
-# Regression coverage for the heredoc-in-command-substitution parse bug (issues
-# #166, #958, #1069). Building a variable with `VAR=$(cat <<EOF ... EOF)` is
-# unsafe on Bash 3.2 (macOS /bin/bash): the lexer scans for the matching `)` of
-# the command substitution textually and tracks quote state through the heredoc
-# body, so a single apostrophe, unbalanced quote, or unbalanced paren anywhere
-# in that body breaks parsing of the *entire rest of the script* - `bash -n`
-# fails, not just the generated brief. The DOD and Herdr-section builders now
-# use `IFS= read -r -d '' VAR <<EOF || true` instead, which removes the `$(...)`
-# wrapper and eliminates the whole defect class regardless of future prose.
-# test_no_heredoc_in_command_substitution guards that structure directly.
-# Ambient `bash -n` here is Bash 5 and cannot see the bug, so the real
-# cross-version enforcement lives in the macos-stock-bash CI job.
 set -u
 
 # shellcheck source=tests/lib.sh
@@ -22,152 +9,60 @@ TMP_ROOT=$(fm_test_tmproot fm-brief)
 BRIEF_HOME="$TMP_ROOT/home"
 mkdir -p "$BRIEF_HOME/data"
 
-# The script itself must always parse under the ambient bash. That is Bash 5 in
-# CI and locally, where the issue #958/#1069 parser bug does not fire, so this
-# is a weak guard on its own; test_no_heredoc_in_command_substitution and the
-# macos-stock-bash CI job carry the real cross-version enforcement.
-test_script_parses() {
-  local out rc
-  out=$(bash -n "$ROOT/bin/fm-brief.sh" 2>&1); rc=$?
-  expect_code 0 "$rc" "bash -n bin/fm-brief.sh must parse cleanly (got: $out)"
-  [ -z "$out" ] || fail "bash -n bin/fm-brief.sh emitted unexpected output: $out"
-  pass "fm-brief.sh: bash -n succeeds"
-}
-
-# Structural class guard (issues #166, #958, #1069): never build a variable by
-# wrapping a heredoc in a command substitution (`VAR=$(cat <<EOF ... EOF)`).
-# That construct is what breaks Bash 3.2 parsing, and pinning one historical
-# apostrophe phrase (as the old test did) missed the #945 reintroduction. This
-# guards the *shape* directly against the whole file, so any future DOD or
-# section builder that reintroduces the class fails here regardless of prose.
-test_no_heredoc_in_command_substitution() {
-  local unsafe safe
-  unsafe="$TMP_ROOT/heredoc-in-substitution.sh"
-  safe="$TMP_ROOT/plain-heredoc.sh"
-  # shellcheck disable=SC2016 # Literal shell fixtures must remain unexpanded.
-  printf '%s\n' 'value=$(' '  cat <<EOF' 'body' 'EOF' ')' > "$unsafe"
-  # shellcheck disable=SC2016 # Literal shell fixtures must remain unexpanded.
-  printf '%s\n' 'cat <<EOF' '$(' '  cat <<INNER' 'INNER' ')' 'EOF' > "$safe"
-  if no_heredoc_in_command_substitution "$unsafe"; then
-    fail "structural guard accepted a multiline heredoc nested in a command substitution"
+test_system_bash_generates_all_scaffolds() {
+  local home mode lab id brief out rc version
+  version=$(/bin/bash -c 'printf "%s" "$BASH_VERSION"')
+  if [ "$(uname -s)" = Darwin ]; then
+    case "$version" in
+      3.2.*) ;;
+      *) fail "expected stock macOS Bash 3.2, got $version" ;;
+    esac
   fi
-  no_heredoc_in_command_substitution "$safe" \
-    || fail "structural guard treated heredoc body prose as shell structure"
-  no_heredoc_in_command_substitution "$ROOT/bin/fm-brief.sh" \
-    || fail "fm-brief.sh wraps a heredoc in a command substitution (breaks Bash 3.2 parsing)"
-  pass "fm-brief.sh: no heredoc is nested inside a command substitution (Bash 3.2 parse-safe)"
-}
-
-no_heredoc_in_command_substitution() {
-  perl - "$1" <<'PERL'
-use strict;
-use warnings;
-
-my $path = shift;
-open my $source, '<', $path or die "$path: $!\n";
-my @frames;
-my @heredocs;
-my $quote = '';
-my $line_number = 0;
-
-while (my $line = <$source>) {
-  $line_number++;
-  if (@heredocs) {
-    my $candidate = $line;
-    $candidate =~ s/\r?\n\z//;
-    $candidate =~ s/^\t+// if $heredocs[0]{strip_tabs};
-    shift @heredocs if $candidate eq $heredocs[0]{delimiter};
-    next;
-  }
-
-  my $length = length $line;
-  for (my $i = 0; $i < $length; $i++) {
-    my $char = substr($line, $i, 1);
-    if ($quote eq "'") {
-      $quote = '' if $char eq "'";
-      next;
-    }
-    if ($char eq '\\') {
-      $i++;
-      next;
-    }
-    if ($quote eq '"' && $char eq '"') {
-      $quote = '';
-      next;
-    }
-    if ($char eq "'" && $quote eq '') {
-      $quote = "'";
-      next;
-    }
-    if ($char eq '"' && $quote eq '') {
-      $quote = '"';
-      next;
-    }
-    if ($char eq '#' && $quote eq '' && ($i == 0 || substr($line, $i - 1, 1) =~ /[\s;|&()]/)) {
-      last;
-    }
-    if ($char eq '$' && substr($line, $i + 1, 1) eq '(') {
-      push @frames, { depth => 1, quote => $quote };
-      $quote = '';
-      $i++;
-      next;
-    }
-    if (@frames && $quote eq '' && $char eq '(') {
-      $frames[-1]{depth}++;
-      next;
-    }
-    if (@frames && $quote eq '' && $char eq ')') {
-      $frames[-1]{depth}--;
-      if ($frames[-1]{depth} == 0) {
-        my $frame = pop @frames;
-        $quote = $frame->{quote};
-      }
-      next;
-    }
-    next unless $quote eq '' && $char eq '<' && substr($line, $i + 1, 1) eq '<';
-    if (@frames) {
-      print STDERR "$path:$line_number\n";
-      exit 1;
-    }
-
-    my $j = $i + 2;
-    my $strip_tabs = substr($line, $j, 1) eq '-';
-    $j++ if $strip_tabs;
-    $j++ while substr($line, $j, 1) =~ /[ \t]/;
-    my $delimiter = '';
-    my $delimiter_quote = '';
-    for (; $j < $length; $j++) {
-      my $token = substr($line, $j, 1);
-      if ($delimiter_quote) {
-        if ($token eq $delimiter_quote) {
-          $delimiter_quote = '';
-        } elsif ($token eq '\\' && $delimiter_quote eq '"') {
-          $j++;
-          $delimiter .= substr($line, $j, 1);
-        } else {
-          $delimiter .= $token;
-        }
-        next;
-      }
-      if ($token eq "'" || $token eq '"') {
-        $delimiter_quote = $token;
-        next;
-      }
-      if ($token eq '\\') {
-        $j++;
-        $delimiter .= substr($line, $j, 1);
-        next;
-      }
-      last if $token =~ /[\s;|&()<>]/;
-      $delimiter .= $token;
-    }
-    push @heredocs, { delimiter => $delimiter, strip_tabs => $strip_tabs };
-    $i = $j - 1;
-  }
-}
-
-exit 0;
-PERL
+  home="$TMP_ROOT/system-bash-home"
+  mkdir -p "$home/data"
+  for mode in no-mistakes direct-PR local-only scout secondmate; do
+    for lab in omitted isolated; do
+      [ "$mode" != secondmate ] || [ "$lab" != isolated ] || continue
+      id="system-bash-$mode-$lab"
+      case "$mode" in
+        scout) set -- "$id" some-proj --scout ;;
+        secondmate) set -- "$id" --secondmate some-proj ;;
+        *) set -- "$id" some-proj --mode "$mode" ;;
+      esac
+      [ "$lab" != isolated ] || set -- "$@" --herdr-lab
+      out=$(FM_HOME="$home" FM_SECONDMATE_CHARTER='Supervise the fixture domain.' \
+        /bin/bash "$ROOT/bin/fm-brief.sh" "$@" 2>&1); rc=$?
+      expect_code 0 "$rc" "system Bash $version failed to generate $mode: $out"
+      brief="$home/data/$id/brief.md"
+      assert_present "$brief" "$mode: system Bash did not emit a brief"
+      assert_grep "# Definition of done" "$brief" "$mode: completion instructions missing"
+      assert_grep "# Firstmate instruction inbox" "$brief" "$mode: inbox instructions missing"
+      case "$mode" in
+        secondmate)
+          assert_grep 'Supervise the fixture domain.' "$brief" 'secondmate charter missing'
+          assert_grep 'You are persistent by default.' "$brief" 'secondmate completion instructions missing'
+          ;;
+        *)
+          assert_grep "## Captain's intent" "$brief" "$mode: task instructions missing"
+          if [ "$lab" = isolated ]; then
+            assert_grep "# Herdr isolation - HARD SAFETY CONTRACT" "$brief" "$mode: Herdr instructions missing"
+          else
+            assert_grep "# Herdr lifecycle declaration - NOT ENABLED" "$brief" "$mode: Herdr declaration missing"
+          fi
+          case "$mode" in
+            scout) assert_grep "$home/data/$id/report.md" "$brief" 'scout report destination missing' ;;
+            *) assert_grep "Delivery contract: mode=$mode" "$brief" "$mode: delivery contract missing" ;;
+          esac
+          case "$mode" in
+            no-mistakes) assert_grep 'run /no-mistakes to validate and ship a PR' "$brief" 'pipeline handoff missing' ;;
+            direct-PR) assert_grep 'push your branch and open a PR' "$brief" 'PR delivery instructions missing' ;;
+            local-only) assert_grep "ready in branch fm/$id" "$brief" 'local delivery instructions missing' ;;
+          esac
+          ;;
+      esac
+    done
+  done
+  pass "fm-brief.sh: system Bash $version generates every scaffold and its instructions"
 }
 
 test_help_includes_entire_header() {
@@ -261,7 +156,7 @@ test_ship_mode_is_explicit_not_registry() {
   grep -qx "Delivery contract: mode=no-mistakes" "$brief" \
     || fail "registered direct-PR posture overrode the explicit --mode"
   assert_grep "Firstmate will then instruct you to run /no-mistakes" "$brief" \
-    "explicit no-mistakes brief did not render the pipeline definition of done"
+    "explicit no-mistakes brief did not preserve upstream's validation handoff"
 
   # An unregistered project is not a blocker either, because nothing is looked up.
   FM_HOME="$home" "$ROOT/bin/fm-brief.sh" brief-explicit-a6 never-registered --mode local-only >/dev/null 2>&1 \
@@ -404,6 +299,41 @@ test_no_mistakes_dod_wording() {
   pass "fm-brief.sh: no-mistakes DOD keeps its apostrophe prose and bans --yes outright"
 }
 
+test_pr_body_preflight_is_rendered() {
+  local home id mode brief
+  home="$TMP_ROOT/pr-body-preflight-home"
+  mkdir -p "$home/data"
+  for mode in no-mistakes direct-PR; do
+    id="brief-preflight-$mode"
+    FM_HOME="$home" "$ROOT/bin/fm-brief.sh" "$id" some-proj --mode "$mode" >/dev/null 2>&1 \
+      || fail "$mode brief failed to scaffold"
+    brief="$home/data/$id/brief.md"
+    assert_grep "fm-pr-body-preflight.sh <draft-body-file>" "$brief" \
+      "$mode brief did not give a pre-publication command"
+    assert_grep "\"/tmp/fm-$id\"" "$brief" \
+      "$mode brief did not bind preflight to its own task temp directory"
+    assert_grep "Use one metadata block for the whole body" "$brief" \
+      "$mode brief did not explain the single-block rule"
+    assert_grep "N of M scenarios driven live" "$brief" \
+      "$mode brief did not flag the generated scenario label"
+    assert_grep "keep your own honest results as the single statement" "$brief" \
+      "$mode brief did not explain how to repair a contradictory appendix"
+    assert_grep "never weaken a claim to pass" "$brief" \
+      "$mode brief did not protect the honest result"
+    assert_grep "a Markdown bullet such as \`- evidence-artifact: ...\` is not recognised" "$brief" \
+      "$mode brief did not warn that bullet-prefixed metadata is ignored"
+    if [ "$mode" = no-mistakes ]; then
+      assert_grep "fm-pr-body-preflight.sh --gh-url <PR URL>" "$brief" \
+        "no-mistakes brief did not require a published-body readback check"
+      assert_grep "correct the description only" "$brief" \
+        "no-mistakes brief did not constrain correction to the PR description"
+      assert_grep "before the CI-ready \`done:\`" "$brief" \
+        "no-mistakes brief did not gate its ready report on the readback"
+    fi
+  done
+  pass "fm-brief.sh: publishing briefs render the draft-body preflight contract"
+}
+
 # The green-PR report must not depend on a status poll: `axi status` never
 # reports `checks-passed` while the ci step monitors the PR for merge, so a
 # worker told to wait on it for the next gate or outcome never learned its PR
@@ -417,7 +347,7 @@ test_no_mistakes_dod_green_detection() {
   FM_HOME="$home" "$ROOT/bin/fm-brief.sh" "$id" some-proj --mode no-mistakes >/dev/null 2>&1
   brief="$home/data/$id/brief.md"
   assert_present "$brief" "brief was not scaffolded"
-  assert_grep "Only a drive call's return reports the green PR" "$brief" \
+  assert_grep "only a drive call's return reports the green PR" "$brief" \
     "no-mistakes DOD must make the drive call's return the green signal"
   assert_grep "never reports \`checks-passed\` while the ci step is still monitoring the PR for merge" "$brief" \
     "no-mistakes DOD must say axi status cannot show a green PR in merge monitoring"
@@ -943,12 +873,84 @@ test_ship_and_scout_teach_validation_round_pause() {
       "$kind brief did not require declaring a background-work wait"
     assert_grep 'before waiting on your own pipeline run or a long foreground command' "$brief" \
       "$kind brief did not require declaring a pipeline or foreground wait"
-    assert_grep 'Firstmate may still raise one first-sight alert' "$brief" \
-      "$kind brief incorrectly promised to suppress the first alert"
+    assert_grep 'Firstmate then leaves your idle pane alone' "$brief" \
+      "$kind brief did not promise the declared wait is honored from first sight"
     assert_grep 'Do not declare active implementation or reasoning as a wait' "$brief" \
       "$kind brief did not limit the declaration to actual waits"
   done
   pass "fm-brief.sh: ship and scout scaffolds declare a validation-round pause once, then hold it"
+}
+
+# A worker parking on a job it launched itself must declare the wait first, name
+# how long it expects, check again once that time passes, and publish `working:`
+# on resumption, so a healthy build behind an idle pane is not read as a wedge
+# and a dead job is noticed. Asserted through the generated ship, scout and
+# charter output. Adapted from https://github.com/kunchenguid/firstmate/pull/4081.
+test_pause_covers_own_background_jobs_in_every_scaffold() {
+  local home kind id brief
+  home="$TMP_ROOT/pause-own-jobs-home"
+  mkdir -p "$home/data"
+  for kind in ship scout secondmate; do
+    id="brief-pause-own-$kind"
+    case "$kind" in
+      ship) FM_HOME="$home" "$ROOT/bin/fm-brief.sh" "$id" firstmate --mode no-mistakes >/dev/null 2>&1 ;;
+      scout) FM_HOME="$home" "$ROOT/bin/fm-brief.sh" "$id" firstmate --scout >/dev/null 2>&1 ;;
+      secondmate) FM_HOME="$home" "$ROOT/bin/fm-brief.sh" "$id" --secondmate --no-projects >/dev/null 2>&1 ;;
+    esac
+    brief="$home/data/$id/brief.md"
+    assert_grep 'long job' "$brief" \
+      "$kind brief does not extend the pause verb to the worker's own long jobs"
+    assert_grep 'known external wait you expect to clear on its own' "$brief" \
+      "$kind brief dropped the external-wait case"
+    # shellcheck disable=SC2016 # Literal backticks must remain unexpanded.
+    assert_grep '`paused:` line first, naming the job and how long' "$brief" \
+      "$kind brief does not order a bounded pause line before parking"
+    # shellcheck disable=SC2016 # Literal backticks must remain unexpanded.
+    assert_grep '`working:` when you resume' "$brief" \
+      "$kind brief does not tell the worker to resume with working:"
+  done
+  brief="$home/data/brief-pause-own-ship/brief.md"
+  # shellcheck disable=SC2016 # Literal backticks must remain unexpanded.
+  assert_grep 'unless a `paused:` line declares the wait' "$brief" \
+    "ship brief's nonterminal working: rule still forbids parking behind a declared pause"
+  pass "fm-brief.sh: every scaffold lets a declared, bounded pause cover the worker's own long jobs"
+}
+
+# Issue #5545: an interactive harness ends the turn when the model emits prose,
+# so a worker that announces a next step and stops sits frozen until firstmate
+# steers it by hand. Both scaffolds must forbid ending a turn on an announced
+# next step, and must say the worker's own driving of its report or pipeline
+# needs no supervisor approval it did not request through needs-decision.
+test_ship_and_scout_forbid_ending_a_turn_on_an_announced_step() {
+  local home kind id brief
+  home="$TMP_ROOT/anti-stall-home"
+  mkdir -p "$home/data"
+
+  for kind in ship scout; do
+    id="brief-anti-stall-$kind"
+    if [ "$kind" = scout ]; then
+      FM_HOME="$home" "$ROOT/bin/fm-brief.sh" "$id" firstmate --scout >/dev/null 2>&1
+    else
+      FM_HOME="$home" "$ROOT/bin/fm-brief.sh" "$id" firstmate --mode no-mistakes >/dev/null 2>&1
+    fi
+    brief="$home/data/$id/brief.md"
+    assert_grep "take it in the same turn with your tools" "$brief" \
+      "$kind brief did not require taking the announced next step with tools in the same turn"
+    assert_grep "on the announcement, or report \`paused:\`/\`blocked:\` with the reason." "$brief" \
+      "$kind brief did not forbid ending a turn on an announced next step"
+    if [ "$kind" = ship ]; then
+      assert_grep "Drive your own validation and delivery path: beyond the handoff your Definition of done names, wait for no approval you did not request through \`needs-decision\`." "$brief" \
+        "ship brief did not preserve the defined handoff when granting standing authority"
+      assert_no_grep "Your own validation and delivery path needs no such approval" "$brief" \
+        "ship brief retained approval wording that conflicts with the defined handoff"
+    else
+      assert_grep "Your own investigation and report-writing needs no such approval" "$brief" \
+        "scout brief did not grant standing authority to drive its own report, or wrongly copied the ship pipeline wording"
+      assert_no_grep "validation and delivery path" "$brief" \
+        "scout brief copied the ship-specific validation/delivery wording instead of its own report contract"
+    fi
+  done
+  pass "fm-brief.sh: ship and scout scaffolds forbid stalling on an announced next step"
 }
 
 test_scout_and_secondmate_load_decision_hold_policy() {
@@ -1192,11 +1194,13 @@ test_base_branch_is_rendered_and_bounded() {
   base=$(fm_brief_base_branches "$brief")
   [ "$base" = feature/hub ] || fail "the direct-PR brief recorded base '$base', not feature/hub"
   # shellcheck disable=SC2016  # literal backticks in rendered prose must stay unexpanded
-  assert_grep 'open a PR with `gh-axi` that is ready for review, not a draft, against the base branch `feature/hub` (`--base feature/hub`)' "$brief" \
+  assert_grep 'ready for review, not a draft, against the base branch `feature/hub` (`--base feature/hub`)' "$brief" \
     "the direct-PR definition of done does not target the base branch"
   # shellcheck disable=SC2016
   assert_grep 'Never push to the base branch `feature/hub` or the default branch' "$brief" \
     "the direct-PR safety rule does not protect the base branch"
+  assert_no_grep 'open the integration pull request' "$brief" \
+    "an ordinary named base gained the house-feature integration handoff"
 
   FM_HOME="$home" "$ROOT/bin/fm-brief.sh" brief-base-nm-b2 some-proj --mode no-mistakes --base-branch release/1.2 >/dev/null 2>&1 \
     || fail "no-mistakes --base-branch should scaffold"
@@ -1240,7 +1244,11 @@ test_base_branch_is_rendered_and_bounded() {
   [ "$rc" -ne 0 ] || fail "an invalid base branch name should be refused"
   out=$(FM_HOME="$home" FM_SECONDMATE_CHARTER=charter "$ROOT/bin/fm-brief.sh" brief-base-sm-b7 --secondmate --no-projects --base-branch feature/hub 2>&1); rc=$?
   [ "$rc" -ne 0 ] || fail "a secondmate charter should refuse --base-branch"
-  for id in brief-base-lo-b5 brief-base-bad-b6 brief-base-sm-b7; do
+  out=$(FM_HOME="$home" "$ROOT/bin/fm-brief.sh" brief-base-house-b10 some-proj --mode direct-PR \
+    --base-branch release/1.2 --house-feature alpha --branch-base main 2>&1); rc=$?
+  [ "$rc" -ne 0 ] || fail "a house feature silently accepted a different named base"
+  assert_contains "$out" 'cannot be combined with --house-feature' "conflicting base refusal did not explain itself"
+  for id in brief-base-lo-b5 brief-base-bad-b6 brief-base-sm-b7 brief-base-house-b10; do
     [ ! -e "$home/data/$id/brief.md" ] || fail "a refused --base-branch scaffold wrote $id"
   done
   pass "fm-brief.sh: --base-branch records the base, targets the PR at it, and is refused where no PR carries it"
@@ -1331,6 +1339,165 @@ test_ship_branch_prefix_empty_override_yields_bare_task_id() {
   assert_no_grep "fm/$id" "$brief" \
     "an empty --branch-prefix left the legacy fm/ prefix in place"
   pass "fm-brief.sh: an empty --branch-prefix override resolves to a bare <task-id> branch"
+}
+
+test_housefeature_branch_base_selects_fresh_fork_ref() {
+  local case_dir home seed fork work fakebin brief command out status first_head main_head
+  case_dir="$TMP_ROOT/housefeature-base"
+  home="$case_dir/home"
+  seed="$case_dir/seed"
+  fork="$case_dir/fork.git"
+  work="$case_dir/work"
+  fakebin="$case_dir/bin"
+  mkdir -p "$home/data" "$fakebin"
+  cat > "$fakebin/gh-axi" <<'FAKE'
+#!/usr/bin/env bash
+set -eu
+[ "${1:-}" = api ] && [ "${2:-}" = POST ] && [ "${3:-}" = '/repos/jazz127/firstmate/git/refs' ] || exit 2
+shift 3
+ref= sha=
+while [ "$#" -gt 0 ]; do
+  [ "$1" = --field ] || exit 2
+  case "$2" in
+    ref=*) ref=${2#ref=} ;;
+    sha=*) sha=${2#sha=} ;;
+    *) exit 2 ;;
+  esac
+  shift 2
+done
+[ -n "$ref" ] && [ -n "$sha" ] || exit 2
+if [ "${FM_TEST_HOUSE_RACE:-0}" = 1 ]; then
+  concurrent=$(git --git-dir="$FM_TEST_HOUSE_FORK" rev-parse refs/heads/house)
+  git --git-dir="$FM_TEST_HOUSE_FORK" update-ref "$ref" "$concurrent" 0000000000000000000000000000000000000000
+fi
+git --git-dir="$FM_TEST_HOUSE_FORK" update-ref "$ref" "$sha" 0000000000000000000000000000000000000000
+FAKE
+  chmod +x "$fakebin/gh-axi"
+  git init -q -b main "$seed"
+  printf 'base\n' > "$seed/base.txt"
+  git -C "$seed" add base.txt
+  git -C "$seed" -c user.name=Test -c user.email=test@example.invalid commit -qm base
+  git clone -q --bare "$seed" "$fork"
+  git clone -q "$fork" "$work"
+  git -C "$seed" remote add origin "$fork"
+  git -C "$seed" checkout -qb house
+  printf 'house\n' > "$seed/house.txt"
+  git -C "$seed" add house.txt
+  git -C "$seed" -c user.name=Test -c user.email=test@example.invalid commit -qm house
+  git -C "$seed" push -q origin house
+  git -C "$seed" checkout -q main
+  printf 'new main\n' > "$seed/new-main.txt"
+  git -C "$seed" add new-main.txt
+  git -C "$seed" -c user.name=Test -c user.email=test@example.invalid commit -qm new-main
+  git -C "$seed" push -q origin main
+  git -C "$work" config user.name Test
+  git -C "$work" config user.email test@example.invalid
+  git -C "$work" config remote.origin.url https://github.com/jazz127/firstmate.git
+  git -C "$work" config "url.file://$fork.insteadOf" https://github.com/jazz127/firstmate.git
+
+  out=$(cd "$work" && PATH="$fakebin:$PATH" FM_TEST_HOUSE_FORK="$fork" \
+    "$ROOT/bin/fm-housefeature-start.sh" gamma main fm/gamma-r1 2>&1); status=$?
+  [ "$status" -ne 0 ] || fail "non-house fork default unexpectedly accepted"
+  assert_contains "$out" "origin's default branch must be house" "non-house fork default refusal"
+  [ -z "$(git --git-dir="$fork" for-each-ref refs/heads/housefeature/gamma)" ] || \
+    fail "non-house fork default created a durable branch"
+  git --git-dir="$fork" symbolic-ref HEAD refs/heads/house
+
+  FM_HOME="$home" "$ROOT/bin/fm-brief.sh" alpha-r1 fork-project --mode no-mistakes \
+    --house-feature alpha --branch-base main >/dev/null \
+    || fail "could not scaffold the first main-based feature round"
+  brief="$home/data/alpha-r1/brief.md"
+  assert_grep 'House feature intake: main-based' "$brief" "main-based intake was not recorded"
+  # shellcheck disable=SC2016 # Compare literal Markdown code spans in the generated brief.
+  assert_grep 'Target the durable `housefeature/alpha` branch: pass `--base-branch housefeature/alpha`' \
+    "$brief" "no-mistakes brief did not target the durable branch"
+  # shellcheck disable=SC2016 # Compare literal Markdown code spans in the generated brief.
+  assert_grep 'open the integration pull request: `gh-axi pr create --base house --head housefeature/alpha`' \
+    "$brief" "brief did not assign the integration pull request to the worker"
+  # shellcheck disable=SC2016 # Compare a literal Markdown code span in the generated brief.
+  assert_grep 'lands as a merge commit (`--merge`)' "$brief" "brief did not require a merge commit"
+  # shellcheck disable=SC2016 # Extract the generated worker command, a public brief interface.
+  command=$(sed -n 's/^1\. First action: prepare your branch: `\([^`]*\)`.*/\1/p' "$brief")
+  [ -n "$command" ] || fail "main-based feature brief omitted its branch command"
+  (cd "$work" && PATH="$fakebin:$PATH" FM_TEST_HOUSE_FORK="$fork" eval "$command") >/dev/null 2>&1 \
+    || fail "main-based feature start failed: $command"
+  main_head=$(git --git-dir="$fork" rev-parse refs/heads/main)
+  first_head=$(git --git-dir="$fork" rev-parse refs/heads/housefeature/alpha)
+  assert_equals "$main_head" "$first_head" "durable branch was not created at fresh fork main"
+  assert_equals "$first_head" "$(git -C "$work" rev-parse HEAD)" "worker did not start from the durable branch"
+  assert_equals fm/alpha-r1 "$(git -C "$work" branch --show-current)" "worker did not keep its fm/ branch"
+  [ ! -e "$work/house.txt" ] || fail "main-based feature carried house-only files"
+
+  git -C "$seed" fetch -q origin housefeature/alpha
+  git -C "$seed" checkout -qB housefeature/alpha FETCH_HEAD
+  printf 'feature change\n' > "$seed/feature.txt"
+  git -C "$seed" add feature.txt
+  git -C "$seed" -c user.name=Test -c user.email=test@example.invalid commit -qm feature
+  git -C "$seed" push -q origin housefeature/alpha
+  first_head=$(git --git-dir="$fork" rev-parse refs/heads/housefeature/alpha)
+  git -C "$seed" checkout -q main
+  printf 'main refresh\n' > "$seed/refresh.txt"
+  git -C "$seed" add refresh.txt
+  git -C "$seed" -c user.name=Test -c user.email=test@example.invalid commit -qm refresh
+  git -C "$seed" push -q origin main
+  git -C "$work" checkout -q --detach
+
+  FM_HOME="$home" "$ROOT/bin/fm-brief.sh" alpha-r2 fork-project --mode direct-PR \
+    --house-feature alpha --branch-base main >/dev/null \
+    || fail "could not scaffold the follow-up feature round"
+  brief="$home/data/alpha-r2/brief.md"
+  # shellcheck disable=SC2016 # Compare a literal Markdown code span in the generated brief.
+  assert_grep 'pass `--base housefeature/alpha`' "$brief" "direct-PR brief did not target the durable branch"
+  # shellcheck disable=SC2016 # Extract the generated worker command, a public brief interface.
+  command=$(sed -n 's/^1\. First action: prepare your branch: `\([^`]*\)`.*/\1/p' "$brief")
+  (cd "$work" && PATH="$fakebin:$PATH" FM_TEST_HOUSE_FORK="$fork" eval "$command") >/dev/null 2>&1 \
+    || fail "follow-up feature start failed: $command"
+  assert_equals fm/alpha-r2 "$(git -C "$work" branch --show-current)" "follow-up did not get a new task branch"
+  assert_grep 'feature change' "$work/feature.txt" "follow-up lost the durable feature's prior work"
+  [ ! -e "$work/refresh.txt" ] || fail "follow-up merged main without an explicit refresh"
+  assert_equals "$first_head" "$(git -C "$work" rev-parse HEAD)" "follow-up did not start at the durable head"
+  assert_equals "$first_head" "$(git --git-dir="$fork" rev-parse refs/heads/housefeature/alpha)" \
+    "follow-up preparation moved the remote durable head"
+  git -C "$work" checkout -q --detach
+
+  FM_HOME="$home" "$ROOT/bin/fm-brief.sh" beta-r1 fork-project --mode direct-PR \
+    --house-feature beta --branch-base house >/dev/null \
+    || fail "could not scaffold a house-only feature"
+  brief="$home/data/beta-r1/brief.md"
+  assert_grep 'House feature intake: house-only' "$brief" "house-only intake was not recorded"
+  # shellcheck disable=SC2016 # Compare a literal Markdown code span in the generated brief.
+  assert_grep '`house-only` label' "$brief" "house-only brief omitted the PR label"
+  # shellcheck disable=SC2016 # Extract the generated worker command, a public brief interface.
+  command=$(sed -n 's/^1\. First action: prepare your branch: `\([^`]*\)`.*/\1/p' "$brief")
+  (cd "$work" && PATH="$fakebin:$PATH" FM_TEST_HOUSE_FORK="$fork" eval "$command") >/dev/null 2>&1 \
+    || fail "house-only feature start failed: $command"
+  assert_equals "$(git --git-dir="$fork" rev-parse refs/heads/house)" \
+    "$(git --git-dir="$fork" rev-parse refs/heads/housefeature/beta)" \
+    "house-only durable branch was not cut from house"
+  assert_grep house "$work/house.txt" "house-only worker omitted the house base"
+  git -C "$work" checkout -q --detach
+
+  out=$(cd "$work" && PATH="$fakebin:$PATH" FM_TEST_HOUSE_FORK="$fork" FM_TEST_HOUSE_RACE=1 \
+    "$ROOT/bin/fm-housefeature-start.sh" gamma main fm/gamma-r1 2>&1); status=$?
+  [ "$status" -ne 0 ] || fail "concurrent durable-branch creation unexpectedly succeeded"
+  assert_contains "$out" 'could not create housefeature/gamma' "concurrent creation refusal"
+  assert_equals "$(git --git-dir="$fork" rev-parse refs/heads/house)" \
+    "$(git --git-dir="$fork" rev-parse refs/heads/housefeature/gamma)" \
+    "create-ref race moved a concurrent durable branch"
+
+  out=$(FM_HOME="$home" "$ROOT/bin/fm-brief.sh" feature-missing fork-project --mode direct-PR \
+    --house-feature missing 2>&1); status=$?
+  [ "$status" -ne 0 ] || fail "housefeature brief accepted no explicit base"
+  assert_contains "$out" 'requires --branch-base main or house' "missing base refusal"
+  out=$(FM_HOME="$home" "$ROOT/bin/fm-brief.sh" feature-other fork-project --mode direct-PR \
+    --branch-prefix fm/ --branch-base main 2>&1); status=$?
+  [ "$status" -ne 0 ] || fail "ordinary brief accepted a house-feature base"
+  assert_contains "$out" 'applies only with --house-feature' "missing feature refusal"
+  out=$(FM_HOME="$home" "$ROOT/bin/fm-brief.sh" feature-direct fork-project --mode direct-PR \
+    --branch-prefix housefeature/ 2>&1); status=$?
+  [ "$status" -ne 0 ] || fail "brief accepted direct worker delivery from the durable branch"
+  assert_contains "$out" 'worker uses its ordinary fm/ task branch' "direct durable worker refusal"
+  pass "fm-brief.sh: first and follow-up work rounds use distinct fm/ branches from one durable feature branch"
 }
 
 test_branch_prefix_is_refused_where_it_does_not_apply() {
@@ -1465,8 +1632,7 @@ test_crewmate_scaffolds_forbid_pool_administration() {
   pass "fm-brief.sh: every crewmate scaffold forbids administering the shared worktree pool"
 }
 
-test_script_parses
-test_no_heredoc_in_command_substitution
+test_system_bash_generates_all_scaffolds
 test_help_includes_entire_header
 test_ship_modes_generate_clean_briefs
 test_ship_mode_is_required_and_closed_set
@@ -1474,6 +1640,7 @@ test_ship_mode_is_explicit_not_registry
 test_delivery_flags_are_refused_where_they_do_not_apply
 test_faster_paths_use_configured_authority_without_stacked_review
 test_no_mistakes_dod_wording
+test_pr_body_preflight_is_rendered
 test_no_mistakes_dod_green_detection
 test_pr_based_dod_requires_non_draft
 test_ask_user_escalation_format
@@ -1488,6 +1655,8 @@ test_secondmate_marked_request_reporting_contract
 test_secondmate_directory_paths_are_absolute_and_output_is_stable
 test_pause_verb_override_renders_all_brief_scaffolds
 test_ship_and_scout_teach_validation_round_pause
+test_pause_covers_own_background_jobs_in_every_scaffold
+test_ship_and_scout_forbid_ending_a_turn_on_an_announced_step
 test_scout_and_secondmate_load_decision_hold_policy
 test_scout_and_secondmate_scaffold
 test_scout_lavish_line_follows_presentation_floor
@@ -1498,6 +1667,7 @@ test_base_branch_is_rendered_and_bounded
 test_ship_branch_prefix_defaults_to_legacy_fm
 test_ship_branch_prefix_override_is_consistent_across_modes
 test_ship_branch_prefix_empty_override_yields_bare_task_id
+test_housefeature_branch_base_selects_fresh_fork_ref
 test_branch_prefix_is_refused_where_it_does_not_apply
 test_branch_prefix_value_is_validated
 test_branch_prefix_command_is_shell_safe

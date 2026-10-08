@@ -1,0 +1,223 @@
+#!/usr/bin/env bash
+# Payload and filter behavior through the public house-board build and rendered page.
+set -u
+
+# shellcheck source=tests/lib.sh
+# shellcheck disable=SC1091
+. "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+
+TMP_ROOT=$(fm_test_tmproot fm-house-board)
+command -v python3 >/dev/null 2>&1 || { echo 'skip: python3 not found'; exit 0; }
+command -v node >/dev/null 2>&1 || { echo 'skip: node not found'; exit 0; }
+mkdir -p "$TMP_ROOT/data" "$TMP_ROOT/fakebin"
+cat > "$TMP_ROOT/data/house-line.md" <<'EOF'
+# House lines
+## demo
+- Fork `jazz127/demo` (default branch `house`); upstream `owner/demo`.
+- On `house` (merged; commit, pull request, branch):
+  - **Alpha feature** (`aaaaaaa1`, PR 2, `housefeature/alpha`) — Alpha description.
+  - Missing feature (`ccccccc3`, PR 3, `housefeature/missing`) — Missing description.
+- Offered upstream on `owner/demo`:
+  - `housefeature/alpha` (`aaaaaaa1`) — Alpha PR 247, still open.
+EOF
+cat > "$TMP_ROOT/fakebin/gh-axi" <<'PY'
+#!/usr/bin/env python3
+import base64, json, os, re, sys
+path = sys.argv[2]
+sha = lambda x: {"sha": x}
+calls = {
+ "repos/jazz127/demo/branches/main": sha("mainfork"),
+ "repos/owner/demo/branches/main": sha("mainupstream"),
+ "repos/jazz127/demo/branches/house": sha("housetip"),
+ "repos/jazz127/demo/branches?per_page=8&page=1": [{"name":"main","sha":"mainfork"},{"name":"house","sha":"housetip"},{"name":"fm/one","sha":"x"},{"name":"fm/two","sha":"x"},{"name":"fm/three","sha":"x"},{"name":"fm/four","sha":"x"},{"name":"fm/five","sha":"x"},{"name":"housefeature/alpha","sha":"aaaaaaa1111111111111111111111111111111111"}],
+ "repos/jazz127/demo/branches?per_page=8&page=2": [{"name":"housefeature/extra","sha":"bbbbbbb2222222222222222222222222222222"},{"name":"housefeature/alpha-house-integration","sha":"1111111222222222222222222222222222222222"},{"name":"housefeature/alpha-house-fix","sha":"2222222333333333333333333333333333333333"},{"name":"housefeature/hf-upstream-main-sync-5","sha":"3333333444444444444444444444444444444444"},{"name":"housefeature/upstream-5872-merge","sha":"4444444555555555555555555555555555555555"},{"name":"housefeature/house-test-fixes","sha":"5555555666666666666666666666666666666666"},{"name":"housefeature/odd-maintenance","sha":"6666666777777777777777777777777777777777"}],
+ "repos/jazz127/demo/pulls?state=all&per_page=8&page=1": [{"number":2,"title":"Alpha house integration","state":"closed","merged_at":"2026-09-20T00:00:00Z","created_at":"2026-09-01T00:00:00Z","head":"housefeature/alpha","base":"house","labels":[],"html_url":"https://github.com/jazz127/demo/pull/2"},{"number":3,"title":"House test fixes for missing feature","state":"closed","merged_at":"2026-09-12T00:00:00Z","created_at":"2026-09-05T00:00:00Z","head":"housefeature/missing","base":"house","labels":[],"html_url":"https://github.com/jazz127/demo/pull/3"},{"number":4,"title":"Gone","state":"closed","merged_at":None,"created_at":"2026-09-06T00:00:00Z","head":"fm/gone","base":"housefeature/gone","labels":[],"html_url":"https://github.com/jazz127/demo/pull/4"},{"number":5,"title":"Alpha house integration","state":"closed","merged_at":"2026-09-21T00:00:00Z","created_at":"2026-09-21T00:00:00Z","head":"housefeature/alpha-house-integration","base":"house","labels":[],"html_url":"https://github.com/jazz127/demo/pull/5"},{"number":6,"title":"House reconciliation for integration","state":"closed","merged_at":"2026-09-22T00:00:00Z","created_at":"2026-09-22T00:00:00Z","head":"housefeature/odd-maintenance","base":"house","labels":[],"html_url":"https://github.com/jazz127/demo/pull/6"},{"number":7,"title":"Sync upstream main for extra feature","state":"closed","merged_at":"2026-09-22T00:00:00Z","created_at":"2026-09-10T00:00:00Z","head":"housefeature/extra","base":"house","labels":[],"html_url":"https://github.com/jazz127/demo/pull/7"}],
+ "repos/jazz127/demo/compare/aaaaaaa1111111111111111111111111111111111...housetip": {"behind_by":0},
+ "repos/jazz127/demo/compare/bbbbbbb2222222222222222222222222222222...housetip": {"behind_by":1},
+ "repos/jazz127/demo/compare/6666666777777777777777777777777777777777...housetip": {"behind_by":1},
+ "repos/jazz127/demo/commits/6666666777777777777777777777777777777777": {"date":"2026-09-22T00:00:00Z"},
+ "repos/jazz127/demo/commits/aaaaaaa1111111111111111111111111111111111": {"date":"2026-09-01T00:00:00Z"},
+ "repos/jazz127/demo/commits/bbbbbbb2222222222222222222222222222222": {"date":"2026-09-10T00:00:00Z"},
+ "repos/jazz127/demo/commits/ccccccc3": {"date":"2026-09-05T00:00:00Z"},
+ "repos/jazz127/demo/commits/fffffff6": {"date":"2026-09-04T00:00:00Z"},
+ "repos/owner/demo/pulls/247": {"number":247,"state":"open","merged_at":None,"created_at":"2026-09-02T00:00:00Z","html_url":"https://github.com/owner/demo/pull/247","head":"housefeature/alpha"},
+ "repos/owner/demo/pulls?state=all&head=jazz127%3Ahousefeature/odd-maintenance&per_page=20": [],
+ "repos/owner/demo/pulls?state=all&head=jazz127%3Ahousefeature/missing&per_page=20": [],
+ "repos/owner/demo/pulls?state=all&head=jazz127%3Ahousefeature/gone&per_page=20": [],
+ "repos/owner/demo/pulls?state=all&head=jazz127%3Ahousefeature/shipped&per_page=20": [{"number":249,"state":"closed","merged_at":"2026-09-15T00:00:00Z","created_at":"2026-09-03T00:00:00Z","html_url":"https://github.com/owner/demo/pull/249","head":"housefeature/shipped"}],
+ "repos/owner/demo/pulls?state=all&head=jazz127%3Ahousefeature/extra&per_page=20": [{"number":248,"state":"open","merged_at":None,"created_at":"2026-09-11T00:00:00Z","html_url":"https://github.com/owner/demo/pull/248","head":"housefeature/extra"}],
+}
+# The house comparison pages its commit list; FAKE_AHEAD sizes it, the last
+# commit is the register's ccccccc3, the contributed fffffff6 is still on house,
+# and FAKE_SHORT drops one listed commit.
+compare = re.fullmatch(r"repos/jazz127/demo/compare/mainupstream\.\.\.housetip\?per_page=(\d+)&page=(\d+)", path)
+if compare:
+ ahead = int(os.environ.get("FAKE_AHEAD", "2"))
+ listed = ["aaaaaaa1111111111111111111111111111111111"] + ["%040x" % i for i in range(1, ahead)]
+ if ahead > 2:
+  listed[-1] = "ccccccc3333333333333333333333333333333333"
+  listed[1] = "fffffff6666666666666666666666666666666666"
+ if os.environ.get("FAKE_SHORT"):
+  listed = listed[:-1]
+ size, page = int(compare.group(1)), int(compare.group(2))
+ if size == 1:
+  calls[path] = {"status":"diverged","ahead_by":ahead,"behind_by":1,"commits":listed[:1]}
+ else:
+  calls[path] = listed[(page - 1) * size:page * size]
+  with open(os.environ["FM_HOME"] + "/compare-pages", "a") as log:
+   log.write(str(page) + "\n")
+pulls = re.fullmatch(r"repos/jazz127/demo/pulls\?state=all&per_page=(\d+)&page=(\d+)", path)
+if pulls and os.environ.get("FAKE_PULLS_TRUNCATE"):
+ size, page = int(pulls.group(1)), int(pulls.group(2))
+ with open(os.environ["FM_HOME"] + "/pull-pages", "a") as log:
+  log.write(f"{size}:{page}\n")
+ mode = os.environ["FAKE_PULLS_TRUNCATE"]
+ if mode == "overflow" or (mode == "smaller" and size == 8):
+  print("api_response:\n  truncated: true")
+  sys.exit(0)
+ original = calls["repos/jazz127/demo/pulls?state=all&per_page=8&page=1"]
+ calls[path] = original[(page - 1) * size:page * size]
+if path not in calls:
+ print("unknown endpoint: " + path, file=sys.stderr)
+ sys.exit(1)
+raw = json.dumps(calls[path], separators=(",", ":")).encode()
+print("api_response:\n  body: " + base64.b64encode(raw).decode() + "\n  truncated: false")
+PY
+chmod +x "$TMP_ROOT/fakebin/gh-axi"
+cat > "$TMP_ROOT/fakebin/lavish-axi" <<'SH'
+#!/usr/bin/env bash
+if [ "$#" -eq 0 ]; then
+  printf 'sessions[1]{file,status,url,pending_prompts}:\n  %s,open,"http://localhost/session/test",0\n' "$(cat "$FM_HOME/served-path")"
+elif [ "${1-}" = poll ]; then
+  echo 'unexpected poll' >&2
+  exit 1
+else
+  printf '%s\n' "$1" > "$FM_HOME/served-path"
+  printf 'session:\n  status: opened\n'
+fi
+SH
+chmod +x "$TMP_ROOT/fakebin/lavish-axi"
+PATH="$TMP_ROOT/fakebin:$PATH" FM_HOME="$TMP_ROOT" \
+  "$ROOT/bin/fm-house-board.sh" build > "$TMP_ROOT/build.out" || fail 'house board build failed'
+[ "$(cat "$TMP_ROOT/served-path")" = "$TMP_ROOT/.lavish/house-board.html" ] || fail 'Lavish did not open the rendered page'
+
+python3 - "$TMP_ROOT/.lavish/house-board.json" <<'PY' || fail 'payload facts differ from live fixture'
+import json,sys
+p=json.load(open(sys.argv[1]))
+assert p['schema']=='fm-house-board.v1'
+assert p['projects'][0]['mirror_equal'] is False
+assert (p['projects'][0]['ahead'],p['projects'][0]['behind'])==(2,1)
+r={row['branch']:row for row in p['features']}
+assert set(r)=={'housefeature/alpha', 'housefeature/missing', 'housefeature/extra', 'housefeature/odd-maintenance'}
+assert {row['branch'] for row in p['plumbing']} == {
+    'housefeature/alpha-house-integration', 'housefeature/alpha-house-fix',
+    'housefeature/hf-upstream-main-sync-5', 'housefeature/upstream-5872-merge',
+    'housefeature/house-test-fixes'}
+assert {row['kind'] for row in p['plumbing']} == {
+    'House integration', 'House reconciliation or fix', 'Upstream main sync',
+    'Upstream merge', 'House test fixes'}
+integration = next(row for row in p['plumbing'] if row['kind'] == 'House integration')
+assert integration['pull_request']['html_url']=='https://github.com/jazz127/demo/pull/5'
+assert r['housefeature/odd-maintenance']['presence']=='fork only'
+assert r['housefeature/odd-maintenance']['fork_pr']['html_url']=='https://github.com/jazz127/demo/pull/6'
+assert r['housefeature/alpha']['landed'] is True
+assert r['housefeature/alpha']['state']=='offered'
+assert r['housefeature/alpha']['upstream_pr']['html_url']=='https://github.com/owner/demo/pull/247'
+assert len(r['housefeature/alpha']['commits'])==1
+assert r['housefeature/missing']['presence']=='register only' and not r['housefeature/missing']['landed']
+assert r['housefeature/extra']['presence']=='fork only' and not r['housefeature/extra']['landed']
+assert r['housefeature/extra']['upstream_pr']['html_url']=='https://github.com/owner/demo/pull/248'
+assert r['housefeature/extra']['age_days'] is not None
+PY
+
+node "$ROOT/tests/assets/house-board-render-harness.mjs" "$TMP_ROOT/.lavish/house-board.html" \
+  project=demo posture=mismatch age=7 sort=age > "$TMP_ROOT/filter.json" || fail 'rendered filters failed'
+python3 - "$TMP_ROOT/filter.json" <<'PY' || fail 'combined filters differ from expected behavior'
+import json,sys
+p=json.load(open(sys.argv[1]))
+assert p['count']=='3 matching features'
+assert p['names']==['Missing feature','Extra','Odd maintenance']
+assert p['visibleProjects']==['demo']
+assert '3 / 4Showing' in p['stats']
+assert p['plumbingCount']=='Plumbing branches (5)'
+assert len(p['plumbing'])==5 and any('housefeature/alpha-house-integration' in row for row in p['plumbing'])
+assert p['empty'] is False
+PY
+
+node "$ROOT/tests/assets/house-board-render-harness.mjs" "$TMP_ROOT/.lavish/house-board.html" \
+  search=Alpha label=upstream-offered posture=offered > "$TMP_ROOT/search.json" || fail 'search filters failed'
+python3 - "$TMP_ROOT/search.json" <<'PY' || fail 'search result differs from expected behavior'
+import json,sys
+p=json.load(open(sys.argv[1]))
+assert p['names']==['Alpha feature']
+assert any('Upstream · open' in row for row in p['rows'])
+PY
+
+mkdir -p "$TMP_ROOT/deep/data"
+# shellcheck disable=SC2016 # backticks are literal Markdown in the appended register rows.
+sed '/Missing feature/a\
+  - Gone feature (`eeeeeee5`, PR 4, `housefeature/gone`) — Closed without merging.\
+  - Shipped feature (`fffffff6`, `housefeature/shipped`) — Contributed upstream.
+' "$TMP_ROOT/data/house-line.md" > "$TMP_ROOT/deep/data/house-line.md"
+PATH="$TMP_ROOT/fakebin:$PATH" FM_HOME="$TMP_ROOT/deep" FM_HOUSE_BOARD_NO_SERVE=1 FAKE_AHEAD=65 \
+  "$ROOT/bin/fm-house-board.sh" build > "$TMP_ROOT/deep.out" 2>&1 || fail "multi-page house comparison failed: $(cat "$TMP_ROOT/deep.out")"
+[ "$(sort -n "$TMP_ROOT/deep/compare-pages" | uniq | tr '\n' ' ')" = '1 2 3 ' ] || fail 'house comparison did not read every commit page'
+python3 - "$TMP_ROOT/deep/.lavish/house-board.json" <<'PY' || fail 'multi-page house comparison lost commits'
+import json,sys
+p=json.load(open(sys.argv[1]))
+assert (p['projects'][0]['ahead'],p['projects'][0]['behind'])==(65,1)
+r={row['branch']:row for row in p['features']}
+assert r['housefeature/missing']['landed'] is True, 'commit on the last page was not collected'
+assert {branch: row['on_house'] for branch, row in r.items()} == {
+    'housefeature/alpha': 'yes', 'housefeature/missing': 'yes', 'housefeature/extra': 'no',
+    'housefeature/gone': 'n/a', 'housefeature/shipped': 'n/a', 'housefeature/odd-maintenance': 'no'}
+assert r['housefeature/shipped']['state'] == 'contributed' and r['housefeature/shipped']['landed'] is True
+PY
+node "$ROOT/tests/assets/house-board-render-harness.mjs" "$TMP_ROOT/deep/.lavish/house-board.html" \
+  sort=project > "$TMP_ROOT/deep.json" || fail 'multi-page board did not render'
+python3 - "$TMP_ROOT/deep.json" <<'PY' || fail 'On house column differs from expected behavior'
+import json,sys
+p=json.load(open(sys.argv[1]))
+rows=dict(zip(p['names'],p['rows']))
+for name in ('Gone feature','Shipped feature'):
+    assert 'N/A' in rows[name], rows[name]
+assert 'N/A' not in rows['Extra'] and 'N/A' not in rows['Alpha feature']
+assert '2On house' in p['stats'], p['stats']
+PY
+node "$ROOT/tests/assets/house-board-render-harness.mjs" "$TMP_ROOT/deep/.lavish/house-board.html" \
+  posture=landed > "$TMP_ROOT/deep-landed.json" || fail 'Landed posture did not render'
+python3 - "$TMP_ROOT/deep-landed.json" <<'PY' || fail 'Landed posture differs from On house'
+import json,sys
+p=json.load(open(sys.argv[1]))
+assert sorted(p['names']) == ['Alpha feature','Missing feature'], p['names']
+assert p['count'] == '2 matching features' and '2On house' in p['stats'], p
+PY
+
+mkdir -p "$TMP_ROOT/short/data"
+cp "$TMP_ROOT/data/house-line.md" "$TMP_ROOT/short/data/"
+if PATH="$TMP_ROOT/fakebin:$PATH" FM_HOME="$TMP_ROOT/short" FM_HOUSE_BOARD_NO_SERVE=1 FAKE_AHEAD=65 FAKE_SHORT=1 \
+  "$ROOT/bin/fm-house-board.sh" build > "$TMP_ROOT/short.out" 2>&1; then
+  fail 'short house comparison rendered a partial board'
+fi
+grep -q 'listed 64 of 65 house commits' "$TMP_ROOT/short.out" || fail "short house comparison error unclear: $(cat "$TMP_ROOT/short.out")"
+[ ! -e "$TMP_ROOT/short/.lavish/house-board.json" ] || fail 'short house comparison wrote a payload'
+
+mkdir -p "$TMP_ROOT/retry/data"
+cp "$TMP_ROOT/data/house-line.md" "$TMP_ROOT/retry/data/"
+PATH="$TMP_ROOT/fakebin:$PATH" FM_HOME="$TMP_ROOT/retry" FM_HOUSE_BOARD_NO_SERVE=1 FAKE_PULLS_TRUNCATE=smaller \
+  "$ROOT/bin/fm-house-board.sh" build > "$TMP_ROOT/retry.out" 2>&1 || fail "smaller pull page did not build: $(cat "$TMP_ROOT/retry.out")"
+[ "$(cat "$TMP_ROOT/retry/pull-pages")" = $'8:1\n4:1\n4:2' ] || fail 'truncated pull page was not retried at half size'
+[ -s "$TMP_ROOT/retry/.lavish/house-board.json" ] || fail 'smaller pull page did not render a payload'
+
+mkdir -p "$TMP_ROOT/overflow/data"
+cp "$TMP_ROOT/data/house-line.md" "$TMP_ROOT/overflow/data/"
+if PATH="$TMP_ROOT/fakebin:$PATH" FM_HOME="$TMP_ROOT/overflow" FM_HOUSE_BOARD_NO_SERVE=1 FAKE_PULLS_TRUNCATE=overflow \
+  "$ROOT/bin/fm-house-board.sh" build > "$TMP_ROOT/overflow.out" 2>&1; then
+  fail 'single-item truncated pull page unexpectedly rendered'
+fi
+grep -q 'still truncated at one item; refusing to render a partial board' "$TMP_ROOT/overflow.out" \
+  || fail "single-item truncation error unclear: $(cat "$TMP_ROOT/overflow.out")"
+[ "$(tail -n 1 "$TMP_ROOT/overflow/pull-pages")" = '1:1' ] || fail 'truncation did not retry down to one item'
+[ ! -e "$TMP_ROOT/overflow/.lavish/house-board.json" ] || fail 'single-item truncation wrote a partial payload'
+
+pass 'house board payload, mismatches, and combined page filters'

@@ -107,6 +107,39 @@ fm_pid_identity() {
   printf '%s\n' "$out" | sed 's/^[[:space:]]*//'
 }
 
+fm_pid_start_identity() {  # <pid>
+  local pid=$1 identity start
+  identity=$(fm_pid_identity "$pid" 2>/dev/null) || return 1
+  case "$identity" in
+    linux-starttime=*' cmdline-hex='*|proc-starttime=*)
+      start=${identity%% *}
+      printf '%s\n' "$start"
+      return 0
+      ;;
+  esac
+  # The portable ps identity includes a command string that may legitimately
+  # change when a lock holder execs. Process start time alone remains stable.
+  identity=$(COLUMNS=10000 LC_ALL=C ps -p "$pid" -o lstart= 2>/dev/null) || return 1
+  [ -n "$identity" ] || return 1
+  printf '%s\n' "$identity" | sed 's/^[[:space:]]*//'
+}
+
+# True unless the lock's original owner is proven gone.
+# Locks predating identity recording retain the original kill -0 behavior;
+# once identity evidence exists, a read failure is uncertainty and stays held.
+fm_lock_owner_alive() {  # <lockdir> <pid>
+  local lockdir=$1 pid=$2 recorded current identity_file="$1/lock-owner-start"
+  fm_pid_alive "$pid" || return 1
+  if [ ! -e "$identity_file" ] && [ ! -L "$identity_file" ]; then
+    return 0
+  fi
+  recorded=$(cat "$identity_file" 2>/dev/null) || return 0
+  [ -n "$recorded" ] || return 0
+  current=$(fm_pid_start_identity "$pid" 2>/dev/null) || return 0
+  [ -n "$current" ] || return 0
+  [ "$current" = "$recorded" ]
+}
+
 fm_path_mtime() {
   if [ "$_FM_UNAME" = Darwin ]; then
     /usr/bin/stat -f %m "$1" 2>/dev/null
@@ -469,6 +502,7 @@ fm_lock_clean_known_files() {
     "$lockdir/pid" \
     "$lockdir/fm-home" \
     "$lockdir/pid-identity" \
+    "$lockdir/lock-owner-start" \
     "$lockdir/role" \
     "$lockdir/watcher-path" \
     2>/dev/null || true
@@ -507,11 +541,15 @@ fm_lock_owner_dir() {
 }
 
 fm_lock_prepare_owner() {
-  local ownerdir=$1 mypid back
-  fm_current_pid mypid || return 1
+  local ownerdir=$1 mypid=${2:-} back identity
+  [ -n "$mypid" ] || fm_current_pid mypid || return 1
+  identity=$(fm_pid_start_identity "$mypid" 2>/dev/null) || return 1
+  [ -n "$identity" ] || return 1
+  printf '%s\n' "$identity" > "$ownerdir/lock-owner-start" 2>/dev/null || return 1
   printf '%s\n' "$mypid" > "$ownerdir/pid" 2>/dev/null || return 1
   back=$(cat "$ownerdir/pid" 2>/dev/null || true)
-  [ "$back" = "$mypid" ]
+  [ "$back" = "$mypid" ] \
+    && [ "$(cat "$ownerdir/lock-owner-start" 2>/dev/null || true)" = "$identity" ]
 }
 
 fm_lock_link_owner() {
@@ -642,7 +680,7 @@ fm_lock_recheck_stale_owner() {
   fi
   actual_pid=$(cat "$lockdir/pid" 2>/dev/null || true)
   [ "$actual_pid" = "$expected_pid" ] || return 1
-  if fm_pid_alive "$actual_pid"; then
+  if fm_lock_owner_alive "$lockdir" "$actual_pid"; then
     return 1
   fi
   if fm_lock_mid_acquire_is_fresh "$lockdir" "$actual_pid"; then
@@ -1106,9 +1144,9 @@ fm_recovery_marker_handover_restore() {  # <marker> <snapshot-token> <snapshot-s
 }
 
 # fm_lock_reap_dead_link <lockdir>
-# Remove a link lock whose owner is dead without a nested mutex. Renaming the
-# dead owner directory to this process's tombstone elects exactly one reaper,
-# so a competing reaper that verified the same dead owner cannot remove a
+# Remove a link lock whose owner is stale without a nested mutex. Renaming the
+# stale owner directory to this process's tombstone elects exactly one reaper,
+# so a competing reaper that verified the same stale owner cannot remove a
 # successor's link. A reaper that died after winning leaves its tombstone; a
 # later reaper re-elects itself by renaming that dead reaper's tombstone, and a
 # reaper whose own election a trap interrupted resumes it from its tombstone.
@@ -1126,6 +1164,8 @@ fm_lock_reap_dead_link() {
     for tomb in "$owner".reaped.*; do
       [ -d "$tomb" ] || continue
       if [ "${tomb##*.reaped.}" != "$current" ]; then
+        # The tombstone retains the original owner's start identity, not the
+        # reaper's. Only the PID in its name identifies the elected reaper.
         fm_pid_alive "${tomb##*.reaped.}" && return 1
       fi
       token=$tomb
@@ -1143,7 +1183,7 @@ fm_lock_reap_dead_link() {
 }
 
 # Acquire the short-lived steal mutex without recursively creating another
-# steal mutex. A dead holder is reaped once; a dead nested steal marker left by
+# steal mutex. A stale holder is reaped once; a dead nested steal marker left by
 # the former recursive reclaim is reaped too so it cannot block the claim. A
 # hold abandoned by this very process (a trap interrupted its critical section)
 # is reclaimed like fm_lock_try_acquire's self-held branch.
@@ -1189,7 +1229,7 @@ fm_lock_try_acquire() {
     FM_LOCK_HELD_PID=$(cat "$lockdir/pid" 2>/dev/null || true)
     return 1
   fi
-  if fm_pid_alive "$pid"; then
+  if fm_lock_owner_alive "$lockdir" "$pid"; then
     FM_LOCK_HELD_PID=$pid
     return 1
   fi
@@ -1207,7 +1247,7 @@ fm_lock_try_acquire() {
   steal_owner=${FM_LOCK_OWNER_DIR:-}
 
   cur=$(cat "$lockdir/pid" 2>/dev/null || true)
-  if fm_pid_alive "$cur"; then
+  if fm_lock_owner_alive "$lockdir" "$cur"; then
     fm_lock_release "$steal"
     FM_LOCK_HELD_PID=$cur
     FM_LOCK_OWNER_DIR=
@@ -1282,31 +1322,33 @@ fm_lock_acquire_wait_max() {  # <lockdir> <max-seconds>
 }
 
 # Acquire in the timed helper process, then transfer the lock record to the
-# waiting caller before exiting. The lock's ordinary stale-owner recovery makes
-# every interruption safe: before transfer the helper is the owner; after
-# transfer the still-live caller is the owner.
+# waiting caller before exiting. Hold the steal mutex while replacing both
+# start identity and PID so reclaimers cannot act on a mixed ownership record.
+# Ordinary stale-owner recovery handles an interrupted transfer; once both
+# fields are transferred, the still-live caller is the owner.
 _fm_lock_acquire_wait_handoff() {  # <lockdir> <caller-pid>
-  local lockdir=$1 caller_pid=$2 ownerdir current back
+  local lockdir=$1 caller_pid=$2 ownerdir current back steal="$1.steal"
   case "$caller_pid" in ''|*[!0-9]*) return 1 ;; esac
   fm_pid_alive "$caller_pid" || return 1
-  trap 'fm_lock_release "$lockdir"; exit 143' TERM INT
+  trap 'fm_lock_release "$lockdir"; fm_lock_release "$steal"; exit 143' TERM INT
   fm_lock_acquire_wait "$lockdir" || return 1
-  if [ -L "$lockdir" ]; then
-    ownerdir=$(fm_lock_link_owner "$lockdir" 2>/dev/null) || {
-      fm_lock_release "$lockdir"
-      return 1
-    }
-  else
-    ownerdir=$lockdir
-  fi
-  fm_current_pid current || { fm_lock_release "$lockdir"; return 1; }
+  while ! fm_lock_try_acquire_steal_mutex "$steal"; do
+    sleep 0.1
+  done
+  ownerdir=$(fm_lock_link_owner "$lockdir" 2>/dev/null) || {
+    fm_lock_release "$lockdir"
+    fm_lock_release "$steal"
+    return 1
+  }
+  fm_current_pid current || { fm_lock_release "$lockdir"; fm_lock_release "$steal"; return 1; }
   back=$(cat "$ownerdir/pid" 2>/dev/null || true)
   if [ "$back" != "$current" ] \
-    || ! printf '%s\n' "$caller_pid" > "$ownerdir/pid" 2>/dev/null \
-    || [ "$(cat "$ownerdir/pid" 2>/dev/null || true)" != "$caller_pid" ]; then
+    || ! fm_lock_prepare_owner "$ownerdir" "$caller_pid"; then
     fm_lock_release "$lockdir"
+    fm_lock_release "$steal"
     return 1
   fi
+  fm_lock_release "$steal"
   trap - TERM INT
 }
 
@@ -1357,7 +1399,7 @@ fm_lock_acquire_wait_bounded() {
     case "$owner_pid" in
       ''|*[!0-9]*|0) ;;
       *)
-        if [ "$owner_pid" -gt 0 ] 2>/dev/null && fm_pid_alive "$owner_pid"; then
+        if [ "$owner_pid" -gt 0 ] 2>/dev/null && fm_lock_owner_alive "$lockdir" "$owner_pid"; then
           FM_LOCK_HELD_PID=$owner_pid
           return 124
         fi
@@ -1464,7 +1506,7 @@ fm_firstmate_root_home() {
   printf '%s\n' "$home"
 }
 
-# The one lock serializing Treehouse slot allocation and return for a project.
+# The one lock serializing Treehouse slot claims and returns for a project.
 #
 # It is anchored in the local root home's state directory so that every home on
 # this machine that can reach the same pool - the root, and each secondmate home
@@ -1656,8 +1698,7 @@ fm_failure_episode_reset() {
 #     "epoch=N owner_pid=P outcome=O updated_at=T" record. A "rewake" outcome
 #     also records "session_pid=S recovery_generation=G", binding that
 #     handling turn to its live session-lock owner and watcher recovery episode.
-#     Line 2 is the claiming process's pid-identity, the same identity every other
-#     supervision lock in this repo records (fm_pid_identity above). The
+#     Line 2 is the claiming process's pid-identity from fm_pid_identity above. The
 #     identity is MANDATORY: a claimant that cannot record it does not claim
 #     (continuity falls to the synchronous guard), and the identity is read
 #     from the ledger entry alone - never substituted from any lock - so a
@@ -2631,6 +2672,8 @@ EOF
 
 FM_WAKE_EVENT_LINE=
 FM_WAKE_UNREAD_LINES=
+# Task IDs whose annotation lines actually reached stdout in this drain.
+FM_WAKE_ANNOTATED_TASKS=
 fm_wake_status_cursor_offset() {  # <validated-status-path> -> already-presented byte offset
   local path=$1 offset
   command -v status_presentation_cursor_offset >/dev/null 2>&1 || return 1
@@ -2695,9 +2738,10 @@ fm_wake_latest_event() {  # <validated-status-path> <tail-byte-cap>
 # Print supplemental drain-time context only after the caller has committed the
 # raw queue consumption and released the append lock.
 fm_wake_print_annotations() {  # <deduped-raw-rows> [<presentation-snapshot>]
-  local rows=$1 snapshot=${2:-} manifest status_key mode path prefix line task endpoint
+  local rows=$1 snapshot=${2:-} manifest status_key mode path prefix line task endpoint printed
   local snapshot_task snapshot_endpoint _snapshot_ident offset last_event event_line
   local LC_ALL=C
+  FM_WAKE_ANNOTATED_TASKS=
 
   manifest=$(fm_wake_annotation_manifest "$rows" | awk -F '\t' '
     {
@@ -2759,6 +2803,7 @@ EOF
       continue
     fi
     last_event=$FM_WAKE_EVENT_LINE
+    printed=false
     while IFS= read -r event_line || [ -n "$event_line" ]; do
       [ -n "$event_line" ] || continue
       event_line=$(printf '%s' "$event_line" | LC_ALL=C tr '\t\r' '  ')
@@ -2771,9 +2816,13 @@ EOF
       fi
       line="$prefix: $status_key: $event_line"
       printf '%s\n' "$line" || return 1
+      printed=true
     done <<EOF
 $FM_WAKE_UNREAD_LINES
 EOF
+    if [ "$printed" = true ]; then
+      FM_WAKE_ANNOTATED_TASKS="${FM_WAKE_ANNOTATED_TASKS}${FM_WAKE_ANNOTATED_TASKS:+$'\n'}$task"
+    fi
   done <<EOF
 $manifest
 EOF

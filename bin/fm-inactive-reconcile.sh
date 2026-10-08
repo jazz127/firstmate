@@ -27,6 +27,9 @@
 # and failure outcomes from depending on the mate model appending them
 # (docs/secondmate-parent-channel.md). A main home has no parent channel and
 # skips this path: its watcher already signals every child status line.
+# Published evidence keeps its metadata, consistency, file-list, and attestation
+# checks after cleanup. Only a forge-confirmed merged PR may cite an artifact
+# beneath a removed task root without requiring that retired file to survive.
 # `report <task-id>` runs that same delivery for one child on behalf of a
 # caller that already holds the child's meta lock, which bin/fm-teardown.sh
 # does before it removes the child's record; it exits 0 when the line is
@@ -85,6 +88,12 @@
 #
 # The scan reads only durable local state and fm-crew-state.sh; it never invokes
 # gh, gh-axi, curl, fm-pr-check.sh, fm-pr-poll.sh, or a state *.check.sh.
+# A no-mistakes ship whose pre-validation done line still names a clean,
+# committed task branch and whose current state falls back to that status line
+# has no attributable run for that head. After the same 15-minute inactivity
+# bound, the scan queues one validation-handoff check for that incarnation and
+# head. The terminal-outcome receipt makes the alert durable and prevents a
+# second alert for an unchanged head after acknowledgement.
 set -u
 export LC_ALL=C
 
@@ -102,6 +111,8 @@ CREW_STATE_BIN="${FM_INACTIVE_CREW_STATE_BIN:-$SCRIPT_DIR/fm-crew-state.sh}"
 . "$SCRIPT_DIR/fm-classify-lib.sh"
 # shellcheck source=bin/fm-parent-channel-lib.sh
 . "$SCRIPT_DIR/fm-parent-channel-lib.sh"
+# shellcheck source=bin/fm-pr-lib.sh
+. "$SCRIPT_DIR/fm-pr-lib.sh"
 # shellcheck source=bin/fm-timeout-lib.sh
 . "$SCRIPT_DIR/fm-timeout-lib.sh"
 # shellcheck source=bin/fm-dod-lib.sh
@@ -340,14 +351,55 @@ pr_for_task() { # <meta> [preferred-line]
   clean_field "$value"
 }
 
+published_pr_validation_failed() { # <pr> <meta>
+  local pr=$1 meta=$2
+  fm_pr_url_parse "$pr" || return 0
+  # shellcheck disable=SC2016 # Positional parameters expand in the nested shell.
+  {
+    fm_run_timed "$FM_INACTIVE_RECONCILE_BUDGET_SECS" env \
+      FM_HOME="$FM_HOME" FM_STATE_OVERRIDE="$STATE" \
+      bash -c '
+        set -u
+        script_dir=$1 pr=$2 wt=$3 task_tmp=$4
+        . "$script_dir/fm-pr-lib.sh"
+        . "$script_dir/fm-dod-lib.sh"
+        body=$(fm_pr_read_published_body "$pr") || exit 1
+        phase=publish
+        # Cleanup may already have removed a task evidence root. Only a
+        # forge-confirmed merge permits treating that root as retired.
+        if { [ -n "$wt" ] && [ ! -e "$wt" ] && [ ! -L "$wt" ]; } \
+          || { [ -n "$task_tmp" ] && [ ! -e "$task_tmp" ] && [ ! -L "$task_tmp" ]; }; then
+          fm_pr_url_parse "$pr" || exit 1
+          case "$FM_PR_PROVIDER" in
+            github) fm_pr_github_read_record "$FM_PR_OWNER" "$FM_PR_REPO" "$FM_PR_NUMBER" ;;
+            gitlab) fm_pr_gitlab_read_record "$FM_PR_HOST" "$FM_PR_PATH" "$FM_PR_NUMBER" ;;
+            gerrit) fm_pr_gerrit_read_record "$FM_PR_HOST" "$FM_PR_NUMBER" ;;
+          esac && [ "$FM_PR_RECORD_MERGED" = true ] && phase=retired
+        fi
+        fm_dod_validate_published_intent "$body" "$wt" "$task_tmp" "" "$pr" "$phase"
+      ' _ "$SCRIPT_DIR" "$FM_PR_URL" "$(meta_field "$meta" worktree)" \
+      "$(meta_field "$meta" tasktmp)" > /dev/null
+  } 2>&1
+}
+
 home_secondmate_id() {
   fm_parent_channel_home_id "$FM_HOME"
 }
 
 report_to_parent() { # <task> <state> <outcome-key> <fingerprint> <pr>
-  local task=$1 state=$2 outcome_key=$3 fingerprint=$4 pr=$5 line
+  local task=$1 state=$2 outcome_key=$3 fingerprint=$4 pr=$5 line validation=ok meta diagnostic
+  meta="$STATE/$task.meta"
+  if [ -n "$pr" ]; then
+    if ! diagnostic=$(published_pr_validation_failed "$pr" "$meta"); then
+      validation=failed
+    fi
+  fi
   line="$state [key=$outcome_key]: inactive terminal child=$task fingerprint=$fingerprint"
   [ -z "$pr" ] || line="$line pr=$pr"
+  if [ "$validation" != ok ]; then
+    line="$line evidence-validation=failed"
+    [ -z "$diagnostic" ] || line="$line $diagnostic"
+  fi
   fm_parent_channel_report "$FM_HOME" "$STATE" "$line"
 }
 
@@ -413,7 +465,7 @@ claim_inactive_report_for_ledger() { # <task> <incarnation> <state> <ledger-fing
 # delivered, or nothing is owed, and 1 when it is owed but the parent channel
 # could not be written (the notice is queued once per record).
 report_child_ledger_locked() { # <id> <meta>
-  local id=$1 meta=$2 status last previous state note pr mode yolo data incarnation fingerprint predecessor_head outcome_key line
+  local id=$1 meta=$2 status last previous state note pr mode yolo data incarnation fingerprint predecessor_head outcome_key line validation=ok body diagnostic
   status="$STATE/$id.status"
   last=$(child_terminal_ledger_line "$status") || return 0
   state=$(status_line_verb "$last")
@@ -446,6 +498,15 @@ report_child_ledger_locked() { # <id> <meta>
   data="${FM_DATA_OVERRIDE:-$FM_HOME/data}"
   line="$state [key=$outcome_key]: child $id $state: $note"
   [ -z "$pr" ] || line="$line pr=$pr"
+  if [ -n "$pr" ]; then
+    if ! diagnostic=$(published_pr_validation_failed "$pr" "$meta"); then
+      validation=failed
+    fi
+  fi
+  if [ "$validation" != ok ]; then
+    line="$line evidence-validation=failed"
+    [ -z "$diagnostic" ] || line="$line $diagnostic"
+  fi
   [ -z "$mode" ] || line="$line mode=$mode"
   [ -z "$yolo" ] || line="$line yolo=$yolo"
   if [ -f "$data/$id/report.md" ] && [ ! -L "$data/$id/report.md" ]; then
@@ -496,7 +557,7 @@ report_child() { # <id>
 }
 
 reconcile_direct_child_locked() { # <id> <meta> <secondmate-id-or-empty> <timeout>
-  local id=$1 meta=$2 self=${3:-} timeout=$4 status turn last age state_line state pr incarnation fingerprint outcome_key payload kind state_rc=0
+  local id=$1 meta=$2 self=${3:-} timeout=$4 status turn last age state_line state pr incarnation fingerprint outcome_key payload kind state_rc=0 worktree head clean diagnostic
   [ -f "$meta" ] && [ ! -L "$meta" ] || return 0
   kind=$(meta_field "$meta" kind)
   [ "$kind" = secondmate ] && return 0
@@ -504,17 +565,60 @@ reconcile_direct_child_locked() { # <id> <meta> <secondmate-id-or-empty> <timeou
   turn="$STATE/$id.turn-ended"
   last=$(last_status_line "$status")
   status_line_verb "$last" | grep -Fx captain-held >/dev/null 2>&1 && return 0
-  # A ledger that states its own outcome is the ledger-first path's to deliver.
-  if [ -n "$self" ]; then
-    child_terminal_ledger_line "$status" >/dev/null
-    case "$?" in 0|2) return 0 ;; esac
-  fi
   age=$(last_activity_age "$meta" "$status" "$turn")
   [ "$age" -ge "$FM_INACTIVE_RECONCILE_SECS" ] || return 0
+  # A secondmate already delivered a terminal ledger line to its parent, but
+  # still owes its own validation-handoff backstop for a stopped child.
+  if [ -n "$self" ]; then
+    child_terminal_ledger_line "$status" >/dev/null
+    case "$?" in
+      2) return 0 ;;
+      0)
+        case "$(meta_field "$meta" mode)" in
+          no-mistakes|'') ;;
+          *) return 0 ;;
+        esac
+        [ "$(status_line_verb "$last")" = 'done' ] \
+          && ! fm_dod_note_reports_ci_ready "$(status_line_note "$last")" \
+          && ! fm_dod_note_reports_published_change "$(status_line_note "$last")" \
+          || return 0
+        ;;
+    esac
+  fi
   state_line=$(fm_run_timed "$timeout" env FM_HOME="$FM_HOME" FM_STATE_OVERRIDE="$STATE" FM_CREW_STATE_NO_FORGE=1 \
     "$CREW_STATE_BIN" "$id" 2>/dev/null) || state_rc=$?
   [ "$state_rc" -ne 124 ] || return 3
   last=$(last_status_line "$status")
+  case "$(meta_field "$meta" mode)" in
+    no-mistakes|'')
+      if [ "$(meta_field "$meta" kind)" = ship ] \
+        && [ "$(status_line_verb "$last")" = 'done' ] \
+        && ! fm_dod_note_reports_ci_ready "$(status_line_note "$last")" \
+        && ! fm_dod_note_reports_published_change "$(status_line_note "$last")"; then
+        case "$state_line" in
+          'state: done · source: status-log'*)
+            worktree=$(meta_field "$meta" worktree)
+            if [ -d "$worktree" ] \
+              && clean=$(git -C "$worktree" status --porcelain 2>/dev/null) \
+              && [ -z "$clean" ] \
+              && [ "$(git -C "$worktree" symbolic-ref --quiet --short HEAD 2>/dev/null)" = "fm/$id" ]; then
+              head=$(git -C "$worktree" rev-parse --verify HEAD 2>/dev/null || true)
+              if [ -n "$head" ]; then
+                incarnation=$(meta_incarnation "$meta")
+                fingerprint=$(sha256_text "validation-handoff|$incarnation|$id|$head")
+                outcome_key="validation-handoff-$id"
+                ensure_record "$fingerprint" "$id" "$incarnation" 'done' "$outcome_key" validation-handoff presentation '' "$head" || return 1
+                [ -n "$RECORD_PENDING" ] || return 0
+                payload="validation handoff overdue: child=$id committed_head=$head no attributable no-mistakes run after ${FM_INACTIVE_RECONCILE_SECS}s inactivity"
+                queue_presentation "$RECORD_PENDING" "$fingerprint" "$payload" || true
+                return 0
+              fi
+            fi
+            ;;
+        esac
+      fi
+      ;;
+  esac
   if [ -n "$self" ]; then
     child_terminal_ledger_line "$status" >/dev/null
     case "$?" in 0|2) return 0 ;; esac
@@ -549,6 +653,12 @@ reconcile_direct_child_locked() { # <id> <meta> <secondmate-id-or-empty> <timeou
   fi
   record_phase_set "$RECORD_PENDING" presentation || return 1
   payload="inactive terminal outcome awaiting captain presentation: child=$id state=$state"
+  if [ -n "$pr" ]; then
+    if ! diagnostic=$(published_pr_validation_failed "$pr" "$meta"); then
+      payload="$payload evidence-validation=failed"
+      [ -z "$diagnostic" ] || payload="$payload $diagnostic"
+    fi
+  fi
   [ -z "$pr" ] || payload="$payload pr=$pr"
   queue_presentation "$RECORD_PENDING" "$fingerprint" "$payload" || true
 }

@@ -35,6 +35,7 @@
 # validator). Both watches read every matching account row independently,
 # without combining quotas. A --provider watch restricts those rows to the
 # requested provider; details preserve each row's accountKey when present.
+# Unknown headroom alone keeps polling; exhausted_now still fires.
 set -u
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

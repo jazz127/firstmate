@@ -2,7 +2,8 @@
 # fm-worker-account-lib.sh - the single owner of the opt-in per-home worker
 # account pin: which runners can be pinned, how a pin file is parsed and
 # resolved, the launch-time sign-in check under it, and the environment
-# credentials a pinned Claude launch sheds.
+# credentials a pinned Claude launch sheds, plus the native Codex status check
+# and environment filter for an explicitly dock-bound seat.
 #
 # docs/configuration.md "Worker account pin" owns the operator-facing contract.
 # Sourced by bin/fm-spawn.sh and bin/fm-control.sh.
@@ -63,6 +64,91 @@ FM_WORKER_ACCOUNT_CHECK_SECONDS=${FM_WORKER_ACCOUNT_CHECK_SECONDS:-30}
 # Claude Platform on AWS and Bedrock Mantle switches from
 # code.claude.com/docs/en/env-vars).
 FM_WORKER_ACCOUNT_CLAUDE_SHED="CLAUDE_CODE_USE_BEDROCK CLAUDE_CODE_USE_VERTEX CLAUDE_CODE_USE_FOUNDRY CLAUDE_CODE_USE_ANTHROPIC_AWS CLAUDE_CODE_USE_MANTLE ANTHROPIC_AUTH_TOKEN ANTHROPIC_API_KEY CLAUDE_CODE_OAUTH_TOKEN ANTHROPIC_PROFILE ANTHROPIC_FEDERATION_RULE_ID"
+# A seated Codex launch selects one file-backed store and the built-in OpenAI
+# provider. Both the status check and the actual command shed overrides that
+# could otherwise choose an ambient API account or endpoint.
+FM_WORKER_ACCOUNT_CODEX_SHED="OPENAI_API_KEY CODEX_API_KEY CODEX_ACCESS_TOKEN OPENAI_BASE_URL OPENAI_ORG_ID OPENAI_ORGANIZATION OPENAI_PROJECT OPENAI_PROJECT_ID"
+
+# fm_worker_account_codex_check <credential-home> <executable>
+# Only the installed CLI's positive status discriminator passes. An explicit
+# file store is required until another native store mode has a path-scoping
+# guard; this never migrates or rewrites the selected home.
+fm_worker_account_codex_check() {
+  local root=$1 executable=$2 out rc name
+  local -a clean=(env -i "HOME=${HOME:-}" "PATH=${PATH:-}" "CODEX_HOME=$root")
+  for name in TMPDIR USER LOGNAME; do
+    [ -z "${!name:-}" ] || clean+=("$name=${!name}")
+  done
+  if [ -e "$root/config.toml" ] || [ -L "$root/config.toml" ]; then
+    if [ ! -f "$root/config.toml" ] || [ ! -r "$root/config.toml" ] || [ -L "$root/config.toml" ]; then
+      echo "error: Codex seat configuration is not an ordinary readable file at $root/config.toml; launch refused, no ambient account selected" >&2
+      return 1
+    fi
+    if ! command -v python3 >/dev/null 2>&1 || ! python3 -c 'import tomllib' >/dev/null 2>&1; then
+      echo "error: Codex seat at $root has config.toml but Python 3.11+ TOML parsing is unavailable; authentication could not be established; launch refused, no ambient account selected" >&2
+      return 1
+    fi
+    if ! python3 - "$root/config.toml" <<'PY'
+import sys
+import tomllib
+try:
+    with open(sys.argv[1], 'rb') as source:
+        config = tomllib.load(source)
+except (OSError, ValueError, tomllib.TOMLDecodeError):
+    sys.exit(1)
+if config.get('cli_auth_credentials_store', 'file') != 'file':
+    sys.exit(2)
+providers = config.get('model_providers', {})
+if not isinstance(providers, dict) or config.get('model_provider', 'openai') != 'openai' or 'openai' in providers:
+    sys.exit(3)
+PY
+    then
+      echo "error: Codex seat at $root has unreadable, unsupported storage mode, or provider-overriding configuration; only a path-scoped file store and built-in OpenAI provider are supported; launch refused, no ambient account selected" >&2
+      return 1
+    fi
+  fi
+  if [ ! -f "$root/auth.json" ] || [ ! -r "$root/auth.json" ] || [ -L "$root/auth.json" ]; then
+    echo "error: Codex seat at $root has no ordinary readable file-backed sign-in; launch refused, no ambient account selected" >&2
+    return 1
+  fi
+  if ! command -v "$executable" >/dev/null 2>&1; then
+    echo "error: Codex authentication could not be established for seat at $root (CLI unavailable); launch refused, no ambient account selected" >&2
+    return 1
+  fi
+  out=$(fm_run_timed "$FM_WORKER_ACCOUNT_CHECK_SECONDS" "${clean[@]}" "$executable" login status \
+    -c 'cli_auth_credentials_store="file"' -c 'model_provider="openai"' 2>&1 </dev/null)
+  rc=$?
+  if [ "$rc" -eq 0 ]; then
+    case "$out" in
+      'Logged in using ChatGPT'|'Logged in using an API key - '*)
+        # The CLI reports `{}` or null tokens as signed in, so also require a
+        # non-empty API key or token set. Presence only; values never print.
+        if command -v jq >/dev/null 2>&1 && jq -e '
+          def present: type == "string" and length > 0;
+          type == "object" and ((.OPENAI_API_KEY | present) or
+            ((.tokens | type) == "object" and
+              ([.tokens.id_token, .tokens.access_token, .tokens.refresh_token] | all(present))))
+        ' "$root/auth.json" >/dev/null 2>&1; then
+          return 0
+        fi
+        echo "error: Codex seat at $root has no usable sign-in in auth.json; sign in to that home, then retry; launch refused, no ambient account selected" >&2
+        return 1
+        ;;
+    esac
+  fi
+  if [ "$rc" -eq 1 ] && [ "$out" = 'Not logged in' ]; then
+    echo "error: Codex seat at $root is signed out; sign in to that home, then retry; launch refused, no ambient account selected" >&2
+  else
+    echo "error: Codex authentication could not be established for seat at $root (status $rc); launch refused, no ambient account selected" >&2
+  fi
+  return 1
+}
+
+# fm_worker_account_codex_shed prints the enforced shell statement that unsets
+# every ambient override, so it reaches every later step of a compound launch.
+fm_worker_account_codex_shed() {
+  printf 'unset %s\n' "$FM_WORKER_ACCOUNT_CODEX_SHED"
+}
 
 # fm_worker_account_file <harness>
 # Prints the pin file name for a pinnable runner; returns 1 for any other.

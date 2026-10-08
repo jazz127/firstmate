@@ -18,6 +18,8 @@ FAKE_PERL_LOG="$TMP_ROOT/perl.log"
 REAL_GIT=$(command -v git)
 OTHER_PID=
 RECOVERY_WORKER_PID=
+FRAGMENT_WORKER_PID=
+LIVE_FRAGMENT_WORKER_PID=
 REPEAT_WORKER_PID=
 RESTART_SUPERVISOR_PID=
 LOST_TERM_PID=
@@ -34,6 +36,8 @@ mkdir -p "$REMOTE_ROOT/bin" "$REMOTE_HOME" "$ACCOUNT_HOME" "$RUNTIME_BIN"
 cleanup_remote_job_fixture() {
   [ -z "$OTHER_PID" ] || kill "$OTHER_PID" 2>/dev/null || true
   [ -z "$RECOVERY_WORKER_PID" ] || kill "$RECOVERY_WORKER_PID" 2>/dev/null || true
+  [ -z "$FRAGMENT_WORKER_PID" ] || kill "$FRAGMENT_WORKER_PID" 2>/dev/null || true
+  [ -z "$LIVE_FRAGMENT_WORKER_PID" ] || kill "$LIVE_FRAGMENT_WORKER_PID" 2>/dev/null || true
   [ -z "$REPEAT_WORKER_PID" ] || kill "$REPEAT_WORKER_PID" 2>/dev/null || true
   [ -z "$RESTART_SUPERVISOR_PID" ] || kill -KILL "$RESTART_SUPERVISOR_PID" 2>/dev/null || true
   [ -z "$LOST_TERM_PID" ] || kill -KILL "$LOST_TERM_PID" 2>/dev/null || true
@@ -218,6 +222,411 @@ export FM_REMOTE_JOB_TIMEOUT=5
 # shellcheck source=bin/fm-remote-job-lib.sh
 . "$ROOT/bin/fm-remote-job-lib.sh"
 
+FRAGMENT_STATE="$TMP_ROOT/fragment-recovery-jobs"
+mkdir -p "$FRAGMENT_STATE/worker.lock"
+printf '99999999\n' > "$FRAGMENT_STATE/worker.lock/.pid.A1b2C3"
+: > "$FRAGMENT_STATE/worker.lock/.start.D4e5F6"
+: > "$FRAGMENT_STATE/worker.lock/.command.G7h8I9"
+touch -t 200001010000 "$FRAGMENT_STATE/worker.lock"
+HOME="$ACCOUNT_HOME" FM_ROOT_OVERRIDE="$REMOTE_ROOT" FM_REMOTE_JOB_STATE_ROOT="$FRAGMENT_STATE" \
+  FM_REMOTE_JOB_PLATFORM_OVERRIDE=Linux "$BASH" "$REMOTE_ROOT/bin/fm-remote-job-worker.sh" --serve \
+  > "$TMP_ROOT/fragment-recovery.out" 2> "$TMP_ROOT/fragment-recovery.err" &
+FRAGMENT_WORKER_PID=$!
+for ((i = 0; i < 200; i++)); do
+  [ -f "$FRAGMENT_STATE/worker.ready" ] && break
+  sleep 0.05
+done
+assert_present "$FRAGMENT_STATE/worker.ready" "stale lock publication fragments prevented worker startup"
+assert_absent "$FRAGMENT_STATE/worker.lock/.pid.A1b2C3" "stale lock pid fragment was not removed"
+assert_absent "$FRAGMENT_STATE/worker.lock/.start.D4e5F6" "stale lock start fragment was not removed"
+assert_absent "$FRAGMENT_STATE/worker.lock/.command.G7h8I9" "stale lock command fragment was not removed"
+kill -TERM "$FRAGMENT_WORKER_PID" 2>/dev/null || true
+wait "$FRAGMENT_WORKER_PID" 2>/dev/null || true
+pass "worker startup reclaims a dead owner's three interrupted publication fragments"
+
+UNKNOWN_FRAGMENT_STATE="$TMP_ROOT/unknown-fragment-jobs"
+mkdir -p "$UNKNOWN_FRAGMENT_STATE/worker.lock"
+printf '99999999\n' > "$UNKNOWN_FRAGMENT_STATE/worker.lock/pid"
+: > "$UNKNOWN_FRAGMENT_STATE/worker.lock/start"
+: > "$UNKNOWN_FRAGMENT_STATE/worker.lock/command"
+printf 'preserve me\n' > "$UNKNOWN_FRAGMENT_STATE/worker.lock/unrecognized"
+touch -t 200001010000 "$UNKNOWN_FRAGMENT_STATE/worker.lock"
+set +e
+HOME="$ACCOUNT_HOME" FM_ROOT_OVERRIDE="$REMOTE_ROOT" FM_REMOTE_JOB_STATE_ROOT="$UNKNOWN_FRAGMENT_STATE" \
+  FM_REMOTE_JOB_PLATFORM_OVERRIDE=Linux "$BASH" "$REMOTE_ROOT/bin/fm-remote-job-worker.sh" --serve \
+  > "$TMP_ROOT/unknown-fragment.out" 2> "$TMP_ROOT/unknown-fragment.err"
+UNKNOWN_FRAGMENT_RC=$?
+set -e
+[ "$UNKNOWN_FRAGMENT_RC" -ne 0 ] || fail "worker reclaimed a lock with an unrecognized entry"
+assert_present "$UNKNOWN_FRAGMENT_STATE/worker.lock/pid" "refused lock cleanup removed the recorded pid"
+assert_present "$UNKNOWN_FRAGMENT_STATE/worker.lock/unrecognized" "refused lock cleanup removed an unrecognized entry"
+pass "stale lock cleanup refuses unknown entries without removing recognized files"
+
+LIVE_FRAGMENT_STATE="$TMP_ROOT/live-fragment-jobs"
+HOME="$ACCOUNT_HOME" FM_ROOT_OVERRIDE="$REMOTE_ROOT" FM_REMOTE_JOB_STATE_ROOT="$LIVE_FRAGMENT_STATE" \
+  FM_REMOTE_JOB_PLATFORM_OVERRIDE=Linux "$BASH" "$REMOTE_ROOT/bin/fm-remote-job-worker.sh" --serve \
+  > "$TMP_ROOT/live-fragment-worker.out" 2> "$TMP_ROOT/live-fragment-worker.err" &
+LIVE_FRAGMENT_WORKER_PID=$!
+for ((i = 0; i < 200; i++)); do
+  [ -f "$LIVE_FRAGMENT_STATE/worker.ready" ] && break
+  sleep 0.05
+done
+assert_present "$LIVE_FRAGMENT_STATE/worker.ready" "live-fragment fixture worker did not start"
+: > "$LIVE_FRAGMENT_STATE/worker.lock/.pid.A1b2C3"
+: > "$LIVE_FRAGMENT_STATE/worker.lock/.start.D4e5F6"
+: > "$LIVE_FRAGMENT_STATE/worker.lock/.command.G7h8I9"
+LIVE_FRAGMENT_OWNER=$(cat "$LIVE_FRAGMENT_STATE/worker.lock/pid")
+set +e
+HOME="$ACCOUNT_HOME" FM_ROOT_OVERRIDE="$REMOTE_ROOT" FM_REMOTE_JOB_STATE_ROOT="$LIVE_FRAGMENT_STATE" \
+  FM_REMOTE_JOB_PLATFORM_OVERRIDE=Linux "$BASH" "$REMOTE_ROOT/bin/fm-remote-job-worker.sh" --serve \
+  > "$TMP_ROOT/live-fragment-contender.out" 2> "$TMP_ROOT/live-fragment-contender.err"
+LIVE_FRAGMENT_CONTENDER_RC=$?
+set -e
+[ "$LIVE_FRAGMENT_CONTENDER_RC" -eq 0 ] || fail "a contender did not exit cleanly when a live owner held the lock"
+[ "$(cat "$LIVE_FRAGMENT_STATE/worker.lock/pid")" = "$LIVE_FRAGMENT_OWNER" ] \
+  || fail "a contender replaced a live owner's lock identity"
+assert_present "$LIVE_FRAGMENT_STATE/worker.lock/.pid.A1b2C3" "live owner's pid fragment was removed"
+assert_present "$LIVE_FRAGMENT_STATE/worker.lock/.start.D4e5F6" "live owner's start fragment was removed"
+assert_present "$LIVE_FRAGMENT_STATE/worker.lock/.command.G7h8I9" "live owner's command fragment was removed"
+kill -TERM "$LIVE_FRAGMENT_WORKER_PID" 2>/dev/null || true
+wait "$LIVE_FRAGMENT_WORKER_PID" 2>/dev/null || true
+pass "live owner locks with publication fragments remain protected"
+
+(
+  sleep 0.05
+) & SIGNAL_RACE_PID=$!
+SIGNAL_RACE_START=$(fm_remote_job_process_start "$SIGNAL_RACE_PID")
+SIGNAL_RACE_COMMAND=$(fm_remote_job_process_command "$SIGNAL_RACE_PID")
+wait "$SIGNAL_RACE_PID"
+fm_remote_job_signal_identity "$SIGNAL_RACE_PID" TERM "$SIGNAL_RACE_START" "$SIGNAL_RACE_COMMAND" \
+  || fail "a disappeared fallback signal target was reported as a reaping failure"
+pass "disappeared worker targets are successful signal no-ops"
+
+if [ "$(uname -s 2>/dev/null || true)" != Linux ]; then
+  sleep 30 & NONLINUX_REFUSAL_PID=$!
+  NONLINUX_REFUSAL_START=$(fm_remote_job_process_start "$NONLINUX_REFUSAL_PID")
+  NONLINUX_REFUSAL_COMMAND=$(fm_remote_job_process_command "$NONLINUX_REFUSAL_PID")
+  if fm_remote_job_signal_identity \
+    "$NONLINUX_REFUSAL_PID" TERM "$NONLINUX_REFUSAL_START" "$NONLINUX_REFUSAL_COMMAND"; then
+    kill -KILL "$NONLINUX_REFUSAL_PID" 2>/dev/null || true
+    wait "$NONLINUX_REFUSAL_PID" 2>/dev/null || true
+    fail "non-Linux signaling did not refuse an unbound live target"
+  fi
+  kill -0 "$NONLINUX_REFUSAL_PID" 2>/dev/null || fail "non-Linux refusal killed the live target"
+  kill -KILL "$NONLINUX_REFUSAL_PID" 2>/dev/null || true
+  wait "$NONLINUX_REFUSAL_PID" 2>/dev/null || true
+pass "non-Linux signaling refuses unbound live targets"
+fi
+
+SINGLE_DAY_START=$(fm_remote_job_normalize_process_start 'Mon Sep  1 00:00:00 2025')
+[ "$SINGLE_DAY_START" = 'Mon Sep 1 00:00:00 2025' ] \
+  || fail "single-digit-day process identity did not normalize ps padding"
+pass "single-digit-day process identities normalize ps padding"
+
+if [ "$(uname -s 2>/dev/null || true)" = Linux ] &&
+  python3 -c 'import os; raise SystemExit(0 if hasattr(os, "pidfd_open") else 1)' 2>/dev/null; then
+PIDFD_RACE_BIN="$TMP_ROOT/pidfd-race-bin"
+mkdir -p "$PIDFD_RACE_BIN"
+PIDFD_RACE_PYTHON3=$(command -v python3)
+cat > "$PIDFD_RACE_BIN/python3" <<SH
+#!/bin/sh
+exec "$PIDFD_RACE_PYTHON3" "\$@"
+SH
+cat > "$PIDFD_RACE_BIN/subprocess.py" <<'PY'
+import importlib.util
+import os
+import signal
+import sysconfig
+
+real_path = sysconfig.get_path("stdlib") + "/subprocess.py"
+spec = importlib.util.spec_from_file_location("_real_subprocess", real_path)
+real = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(real)
+globals().update(vars(real))
+real_run = real.run
+
+def run(*args, **kwargs):
+    result = real_run(*args, **kwargs)
+    if os.environ.get("FM_PIDFD_RACE_KILLED"):
+        with open(os.environ["FM_PIDFD_RACE_KILLED"], "w", encoding="utf-8"):
+            pass
+        os.kill(int(os.environ["FM_PIDFD_RACE_PID"]), signal.SIGKILL)
+    return result
+PY
+chmod +x "$PIDFD_RACE_BIN/python3"
+sleep 30 & PIDFD_RACE_PID=$!
+PIDFD_RACE_START=$(fm_remote_job_process_start "$PIDFD_RACE_PID")
+PIDFD_RACE_COMMAND=$(fm_remote_job_process_command "$PIDFD_RACE_PID")
+# shellcheck disable=SC2031 # The cadence fixture's PATH override is confined to its subshell.
+FM_PIDFD_RACE_PID="$PIDFD_RACE_PID" FM_PIDFD_RACE_KILLED="$TMP_ROOT/pidfd-race-killed" \
+  PYTHONPATH="$PIDFD_RACE_BIN" PATH="$PIDFD_RACE_BIN:$PATH" \
+  fm_remote_job_signal_identity "$PIDFD_RACE_PID" TERM "$PIDFD_RACE_START" "$PIDFD_RACE_COMMAND" \
+  || fail "a worker disappearing during pidfd identity verification was reported as a reaping failure"
+[ -f "$TMP_ROOT/pidfd-race-killed" ] || fail "the pidfd disappearance fixture did not fire"
+wait "$PIDFD_RACE_PID" 2>/dev/null || true
+pass "pidfd identity verification treats a disappeared worker as a successful no-op"
+
+PIDFD_NO_PS_BIN="$TMP_ROOT/pidfd-no-ps-bin"
+mkdir -p "$PIDFD_NO_PS_BIN"
+PYTHON3_BIN=$(command -v python3)
+UNAME_BIN=$(command -v uname)
+cat > "$PIDFD_NO_PS_BIN/python3" <<SH
+#!/bin/sh
+exec "$PYTHON3_BIN" "\$@"
+SH
+cat > "$PIDFD_NO_PS_BIN/uname" <<SH
+#!/bin/sh
+exec "$UNAME_BIN" "\$@"
+SH
+chmod +x "$PIDFD_NO_PS_BIN/python3" "$PIDFD_NO_PS_BIN/uname"
+PIDFD_NO_PS_MARKER="$TMP_ROOT/pidfd-no-ps-marker"
+PIDFD_NO_PS_MARKER="$PIDFD_NO_PS_MARKER" \
+  sh -c 'trap '\''touch "$PIDFD_NO_PS_MARKER"; exit 0'\'' TERM; sleep 30' & PIDFD_NO_PS_PID=$!
+PIDFD_NO_PS_START=$(fm_remote_job_process_start "$PIDFD_NO_PS_PID")
+PIDFD_NO_PS_COMMAND=$(fm_remote_job_process_command "$PIDFD_NO_PS_PID")
+PIDFD_NO_PS_MARKER="$PIDFD_NO_PS_MARKER" PATH="$PIDFD_NO_PS_BIN" \
+  fm_remote_job_signal_identity \
+  "$PIDFD_NO_PS_PID" TERM "$PIDFD_NO_PS_START" "$PIDFD_NO_PS_COMMAND" \
+  || fail "pidfd signaling failed when ps was absent from PATH"
+wait "$PIDFD_NO_PS_PID" 2>/dev/null || fail "pidfd TERM did not reach the intended process"
+[ -f "$PIDFD_NO_PS_MARKER" ] || fail "pidfd TERM did not trigger the intended process handler"
+pass "pidfd signaling reaches the intended process without PATH ps"
+
+# Change the synthetic proc record after the shell check but before Python's
+# pidfd check. A reused PID or malformed stat must never receive the signal.
+PIDFD_RECHECK_BIN="$TMP_ROOT/pidfd-recheck-bin"
+PIDFD_RECHECK_PROC="$TMP_ROOT/pidfd-recheck-proc"
+mkdir -p "$PIDFD_RECHECK_BIN" "$PIDFD_RECHECK_PROC/sys/kernel/random"
+cp /proc/sys/kernel/random/boot_id "$PIDFD_RECHECK_PROC/sys/kernel/random/boot_id"
+cat > "$PIDFD_RECHECK_BIN/python3" <<SH
+#!/bin/sh
+"$PYTHON3_BIN" - "\$FM_PIDFD_STAT_PATH" "\$FM_PIDFD_REVALIDATE_MODE" <<'PY'
+import sys
+path, mode = sys.argv[1:]
+with open(path, encoding="ascii") as handle:
+    line = handle.read()
+if mode == "reuse":
+    prefix, fields = line.rsplit(") ", 1)
+    parts = fields.split()
+    parts[19] = str(int(parts[19]) + 1)
+    line = prefix + ") " + " ".join(parts) + "\n"
+else:
+    line = "malformed proc stat\n"
+with open(path, "w", encoding="ascii") as handle:
+    handle.write(line)
+PY
+exec "$PYTHON3_BIN" "\$@"
+SH
+chmod +x "$PIDFD_RECHECK_BIN/python3"
+for PIDFD_REVALIDATE_MODE in reuse malformed; do
+  sleep 30 & PIDFD_RECHECK_PID=$!
+  mkdir -p "$PIDFD_RECHECK_PROC/$PIDFD_RECHECK_PID"
+  cp "/proc/$PIDFD_RECHECK_PID/stat" "$PIDFD_RECHECK_PROC/$PIDFD_RECHECK_PID/stat"
+  PIDFD_RECHECK_START=$(fm_remote_job_process_start "$PIDFD_RECHECK_PID")
+  PIDFD_RECHECK_COMMAND=$(fm_remote_job_process_command "$PIDFD_RECHECK_PID")
+  # shellcheck disable=SC2031 # The cadence fixture's PATH override is confined to its subshell.
+  if FM_PROC_ROOT_OVERRIDE="$PIDFD_RECHECK_PROC" \
+    FM_PIDFD_STAT_PATH="$PIDFD_RECHECK_PROC/$PIDFD_RECHECK_PID/stat" \
+    FM_PIDFD_REVALIDATE_MODE="$PIDFD_REVALIDATE_MODE" \
+    PATH="$PIDFD_RECHECK_BIN:$PATH" \
+    fm_remote_job_signal_identity "$PIDFD_RECHECK_PID" TERM \
+    "$PIDFD_RECHECK_START" "$PIDFD_RECHECK_COMMAND"; then
+    kill -KILL "$PIDFD_RECHECK_PID" 2>/dev/null || true
+    wait "$PIDFD_RECHECK_PID" 2>/dev/null || true
+    fail "pidfd accepted a changed $PIDFD_REVALIDATE_MODE proc record"
+  fi
+  kill -0 "$PIDFD_RECHECK_PID" 2>/dev/null || fail "pidfd signalled a changed $PIDFD_REVALIDATE_MODE proc record"
+  kill -KILL "$PIDFD_RECHECK_PID" 2>/dev/null || true
+  wait "$PIDFD_RECHECK_PID" 2>/dev/null || true
+done
+pass "pidfd revalidation rejects PID reuse and malformed proc records"
+
+FALLBACK_RECHECK_BIN="$TMP_ROOT/fallback-recheck-bin"
+mkdir -p "$FALLBACK_RECHECK_BIN"
+cat > "$FALLBACK_RECHECK_BIN/python3" <<'SH'
+#!/bin/sh
+exit 2
+SH
+cat > "$FALLBACK_RECHECK_BIN/uname" <<SH
+#!/bin/sh
+exec "$UNAME_BIN" "\$@"
+SH
+chmod +x "$FALLBACK_RECHECK_BIN/python3" "$FALLBACK_RECHECK_BIN/uname"
+sleep 30 & FALLBACK_RECHECK_PID=$!
+FALLBACK_RECHECK_START=$(fm_remote_job_process_start "$FALLBACK_RECHECK_PID")
+FALLBACK_RECHECK_COMMAND=$(fm_remote_job_process_command "$FALLBACK_RECHECK_PID")
+FALLBACK_RECHECK_CALLS=0
+fm_remote_job_process_identity_matches() {
+  FALLBACK_RECHECK_CALLS=$((FALLBACK_RECHECK_CALLS + 1))
+  return 0
+}
+if PATH="$FALLBACK_RECHECK_BIN:/usr/bin:/bin" \
+  fm_remote_job_signal_identity "$FALLBACK_RECHECK_PID" TERM \
+  "$FALLBACK_RECHECK_START" "$FALLBACK_RECHECK_COMMAND"; then
+  kill -KILL "$FALLBACK_RECHECK_PID" 2>/dev/null || true
+  wait "$FALLBACK_RECHECK_PID" 2>/dev/null || true
+  fail "Linux fallback signaling did not refuse an unbound live target"
+fi
+kill -0 "$FALLBACK_RECHECK_PID" 2>/dev/null || fail "Linux fallback signaling killed the live target"
+kill -KILL "$FALLBACK_RECHECK_PID" 2>/dev/null || true
+wait "$FALLBACK_RECHECK_PID" 2>/dev/null || true
+pass "Linux fallback signaling refuses an unbound live target"
+. "$ROOT/bin/fm-remote-job-lib.sh"
+else
+pass "pidfd identity verification regression requires Linux pidfd support"
+fi
+
+if [ "$(uname -s 2>/dev/null || true)" = Linux ] &&
+  python3 -c 'import os; raise SystemExit(0 if hasattr(os, "pidfd_open") else 1)' 2>/dev/null; then
+LATE_ROOT="$TMP_ROOT/late-root.sh"
+LATE_CHILD="$TMP_ROOT/late-child.sh"
+LATE_MARKER="$TMP_ROOT/late-grandchild.pid"
+LATE_READY="$TMP_ROOT/late-child.ready"
+cat > "$LATE_ROOT" <<SH
+#!/bin/sh
+"$LATE_CHILD" "\$1" "\$2" &
+wait
+SH
+cat > "$LATE_CHILD" <<'SH'
+#!/bin/sh
+: > "$2"
+trap 'sleep 30 & printf "%s\n" "$!" > "$1"; sleep 30; exit 0' TERM
+while :; do sleep 1; done
+SH
+chmod +x "$LATE_ROOT" "$LATE_CHILD"
+"$LATE_ROOT" "$LATE_MARKER" "$LATE_READY" & LATE_ROOT_PID=$!
+for _ in $(seq 1 100); do
+  [ -f "$LATE_READY" ] && break
+  sleep 0.05
+done
+LATE_ROOT_START=$(fm_remote_job_process_start "$LATE_ROOT_PID")
+LATE_ROOT_COMMAND=$(fm_remote_job_process_command "$LATE_ROOT_PID")
+fm_remote_job_stop_worker_tree "$LATE_ROOT_PID" "$LATE_ROOT_START" "$LATE_ROOT_COMMAND" \
+  || fail "late descendant cleanup did not converge"
+wait "$LATE_ROOT_PID" 2>/dev/null || true
+LATE_GRANDCHILD_PID=$(cat "$LATE_MARKER" 2>/dev/null || true)
+[ -n "$LATE_GRANDCHILD_PID" ] || fail "late descendant fixture did not create a grandchild"
+kill -0 "$LATE_GRANDCHILD_PID" 2>/dev/null && fail "late reparented descendant survived cleanup"
+pass "late reparented descendants are included in cleanup convergence"
+fi
+
+# An owner record can remain visible while release removes its start record.
+# The existing publication grace must protect that incomplete identity too.
+python3 - "$ROOT/bin/fm-remote-job-lib.sh" "$TMP_ROOT/partial-start-guard" <<'PY_GUARD' || fail "an incomplete start guard was stolen during release"
+import os
+import pathlib
+import subprocess
+import sys
+
+lib, home = sys.argv[1:]
+pathlib.Path(home).mkdir()
+env = dict(os.environ, FM_REMOTE_JOB_STATE_ROOT=home + "/queue")
+subprocess.run(["bash", "-c", '. "$1"; fm_remote_job_prepare_state "$2"', "_", lib, home],
+               env=env, check=True)
+guard = pathlib.Path(home) / "queue/worker.starting"
+guard.mkdir()
+(guard / "owner").write_text(str(os.getpid()) + "\n")
+# No start record: the contender must leave this recently modified guard alone.
+script = '. "$1"; fm_remote_job_linux_start_guard_acquire "$2" && fm_remote_job_linux_start_guard_release'
+contender = subprocess.Popen(["bash", "-c", script, "_", lib, home], env=env,
+                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+try:
+    try:
+        out, err = contender.communicate(timeout=1)
+    except subprocess.TimeoutExpired:
+        pass
+    else:
+        raise SystemExit(f"contender crossed an unreleased guard: rc={contender.returncode}, {out}{err}")
+    if (guard / "owner").read_text().strip() != str(os.getpid()):
+        raise SystemExit("contender replaced the releasing owner's identity")
+    (guard / "owner").unlink()
+    guard.rmdir()
+    out, err = contender.communicate(timeout=10)
+    if contender.returncode:
+        raise SystemExit(f"contender failed after release: {out}{err}")
+finally:
+    if contender.poll() is None:
+        contender.kill()
+        contender.communicate()
+PY_GUARD
+pass "an incomplete start guard remains exclusive through release"
+
+# Model a normal release finishing after mkdir observes the held directory.
+python3 - "$ROOT/bin/fm-remote-job-lib.sh" "$TMP_ROOT/disappearing-start-guard" <<'PY_GUARD' || fail "a normally released start guard was rejected as unsafe"
+import os
+import pathlib
+import shlex
+import shutil
+import subprocess
+import sys
+
+lib, home = sys.argv[1:]
+pathlib.Path(home).mkdir()
+env = dict(os.environ, FM_REMOTE_JOB_STATE_ROOT=home + "/queue")
+subprocess.run(["bash", "-c", '. "$1"; fm_remote_job_prepare_state "$2"', "_", lib, home],
+               env=env, check=True)
+guard = pathlib.Path(home) / "queue/worker.starting"
+guard.mkdir()
+fakebin = pathlib.Path(home) / "fakebin"
+fakebin.mkdir()
+# Only the first failed mkdir for this exact fixture guard completes release.
+mkdir = fakebin / "mkdir"
+mkdir.write_text("#!/bin/bash\n" + shlex.quote(shutil.which("mkdir")) + ' "$@"\nrc=$?\n' +
+                 'if [ "$*" = "$FM_GUARD_RELEASE_TARGET" ] && [ "$rc" != 0 ] && [ ! -e "$FM_GUARD_RELEASE_TARGET.released" ]; then\n' +
+                 '  rmdir "$FM_GUARD_RELEASE_TARGET" || exit 2\n' +
+                 '  touch "$FM_GUARD_RELEASE_TARGET.released"\nfi\nexit "$rc"\n')
+mkdir.chmod(0o755)
+env.update(PATH=str(fakebin) + ":" + env["PATH"], FM_GUARD_RELEASE_TARGET=str(guard))
+script = '. "$1"; fm_remote_job_linux_start_guard_acquire "$2" && fm_remote_job_linux_start_guard_release'
+result = subprocess.run(["bash", "-c", script, "_", lib, home], env=env, capture_output=True, text=True, timeout=10)
+if result.returncode or not pathlib.Path(str(guard) + ".released").exists():
+    raise SystemExit(f"acquisition after normal release failed: rc={result.returncode}, {result.stdout}{result.stderr}")
+PY_GUARD
+pass "start guard acquisition retries after a concurrent normal release"
+
+TRAILING_ROOT="$TMP_ROOT/trailing-root.sh"
+TRAILING_MARKER="$TMP_ROOT/trailing-child.pid"
+cat > "$TRAILING_ROOT" <<'SH'
+#!/bin/sh
+sh -c 'sleep 30; : ' & printf '%s\n' "$!" > "$1"
+wait
+SH
+chmod +x "$TRAILING_ROOT"
+"$TRAILING_ROOT" "$TRAILING_MARKER" & TRAILING_ROOT_PID=$!
+TRAILING_CHILD_PID=
+TRAILING_GRANDCHILD_PID=
+for _ in $(seq 1 100); do
+  TRAILING_CHILD_PID=$(cat "$TRAILING_MARKER" 2>/dev/null || true)
+  [ -n "$TRAILING_CHILD_PID" ] &&
+    TRAILING_GRANDCHILD_PID=$(ps -A -o pid=,ppid= | awk -v p="$TRAILING_CHILD_PID" '$2 == p { print $1; exit }')
+  [ -n "$TRAILING_GRANDCHILD_PID" ] && break
+  sleep 0.05
+done
+[ -n "$TRAILING_GRANDCHILD_PID" ] || fail "trailing-whitespace fixture did not start its job"
+TRAILING_CHILD_COMMAND=$(fm_remote_job_process_command "$TRAILING_CHILD_PID")
+[ "$TRAILING_CHILD_COMMAND" = "sh -c sleep 30; : " ] || fail "trailing-whitespace fixture has unexpected command: '$TRAILING_CHILD_COMMAND'"
+TRAILING_TREE=$(fm_remote_job_process_tree_pids "$TRAILING_ROOT_PID")
+printf '%s\n' "$TRAILING_TREE" | awk -F '\t' -v p="$TRAILING_CHILD_PID" -v c="$TRAILING_CHILD_COMMAND" '$1 == p && $3 == c { found = 1 } END { exit !found }' \
+  || fail "tree enumeration dropped a descendant whose command ends in whitespace"
+printf '%s\n' "$TRAILING_TREE" | awk -F '\t' -v p="$TRAILING_GRANDCHILD_PID" '$1 == p { found = 1 } END { exit !found }' \
+  || fail "tree enumeration dropped the subtree of a trailing-whitespace descendant"
+fm_remote_job_stop_worker_tree "$TRAILING_ROOT_PID" || fail "trailing-whitespace tree cleanup did not converge"
+wait "$TRAILING_ROOT_PID" 2>/dev/null || true
+kill -0 "$TRAILING_CHILD_PID" 2>/dev/null && fail "trailing-whitespace descendant survived cleanup"
+kill -0 "$TRAILING_GRANDCHILD_PID" 2>/dev/null && fail "trailing-whitespace descendant's child survived cleanup"
+pass "tree cleanup includes descendants whose command ends in whitespace"
+
+fm_remote_job_prepare_state "$ACCOUNT_HOME" || fail "$FM_REMOTE_JOB_ERROR"
+mkdir "$STATE_ROOT/worker.starting"
+(exit 0) & STALE_GUARD_PID=$!
+wait "$STALE_GUARD_PID"
+printf '%s\n' "$STALE_GUARD_PID" > "$STATE_ROOT/worker.starting/owner"
+printf 'dead owner\n' > "$STATE_ROOT/worker.starting/start"
+touch -t 200001010000 "$STATE_ROOT/worker.starting"
+fm_remote_job_linux_start_guard_acquire "$ACCOUNT_HOME" || fail "$FM_REMOTE_JOB_ERROR"
+fm_remote_job_linux_start_guard_release || fail "the recovered start guard could not be released"
+pass "a dead Linux worker starter does not strand the start guard"
+
 LOCAL_BIN_PARENT="$ACCOUNT_HOME/.local"
 LOCAL_BIN_TARGET="$TMP_ROOT/local-bin-target"
 mkdir -p "$LOCAL_BIN_PARENT" "$LOCAL_BIN_TARGET"
@@ -286,12 +695,58 @@ pass "operator PATH orders discovered tool installs deterministically"
 HOME="$ACCOUNT_HOME" PATH="$RUNTIME_BIN:/usr/bin:/bin:/usr/sbin:/sbin" FM_FAKE_PERL_LOG="$FAKE_PERL_LOG" \
   FM_ROOT_OVERRIDE="$REMOTE_ROOT" FM_REMOTE_JOB_STATE_ROOT="$STATE_ROOT" \
   FM_REMOTE_JOB_PLATFORM_OVERRIDE=Linux FM_REMOTE_JOB_TIMEOUT=5 \
-  "$REMOTE_ROOT/bin/fm-remote-job-worker.sh" > "$TMP_ROOT/worker.out" 2> "$TMP_ROOT/worker.err" &
+  fm_remote_job_ensure_worker "$REMOTE_ROOT" "$ACCOUNT_HOME" || fail "$FM_REMOTE_JOB_ERROR"
+assert_present "$STATE_ROOT/worker.ready" "the worker did not publish its readiness heartbeat"
+fm_remote_job_lock_owner_matches_process "$ACCOUNT_HOME" \
+  || fail "the live worker's lock owner identity did not match its process"
+LIVE_WORKER_PID=$(cat "$STATE_ROOT/worker.pid")
+# Freeze the serving process and its independent heartbeat together so the
+# deliberately stale record cannot be repaired before the rejection assertion.
+LIVE_WORKER_GROUP=$(ps -p "$LIVE_WORKER_PID" -o pgid= | tr -d '[:space:]')
+CALLER_GROUP=$(ps -p "$$" -o pgid= | tr -d '[:space:]')
+case "$LIVE_WORKER_GROUP" in ''|*[!0-9]*|0|1) fail "the fixture worker has no safe process group" ;; esac
+[ "$LIVE_WORKER_GROUP" != "$CALLER_GROUP" ] || fail "the fixture worker shares the test process group"
+kill -STOP -- "-$LIVE_WORKER_GROUP"
+printf '999999\nstale incarnation\n' > "$STATE_ROOT/worker.ready"
+touch -t 200001010000 "$STATE_ROOT/worker.ready"
+if fm_remote_job_probe "$ACCOUNT_HOME"; then STALE_PROBE_REJECTED=0; else STALE_PROBE_REJECTED=1; fi
+if fm_remote_job_worker_owned_alive "$REMOTE_ROOT" "$ACCOUNT_HOME"; then STALE_OWNER_RECOGNIZED=1; else STALE_OWNER_RECOGNIZED=0; fi
+kill -CONT -- "-$LIVE_WORKER_GROUP"
+[ "$STALE_PROBE_REJECTED" -eq 1 ] || fail "a stale heartbeat still passed the readiness probe"
+[ "$STALE_OWNER_RECOGNIZED" -eq 1 ] || fail "a stale heartbeat made the running worker look unowned"
 for _ in $(seq 1 100); do
-  [ -f "$STATE_ROOT/worker.ready" ] && break
+  fm_remote_job_probe "$ACCOUNT_HOME" && break
   sleep 0.05
 done
-assert_present "$STATE_ROOT/worker.ready" "the worker did not publish its readiness heartbeat"
+fm_remote_job_probe "$ACCOUNT_HOME" \
+  || fail "the live worker did not replace its stale heartbeat with its current incarnation"
+
+worker_group_count() {
+  ps -eo pgid=,args= | awk -v worker="$REMOTE_ROOT/bin/fm-remote-job-worker.sh" \
+    '$2 == "/bin/bash" && $3 == worker { groups[$1] = 1 } END { print length(groups) + 0 }'
+}
+
+WORKER_GROUPS_BEFORE=$(worker_group_count)
+[ "$WORKER_GROUPS_BEFORE" -eq 1 ] || fail "the initial worker did not occupy exactly one process group"
+ENSURE_PIDS=()
+for _ in $(seq 1 8); do
+    HOME="$ACCOUNT_HOME" FM_ROOT_OVERRIDE="$REMOTE_ROOT" FM_REMOTE_JOB_STATE_ROOT="$STATE_ROOT" \
+    FM_REMOTE_JOB_PLATFORM_OVERRIDE=Linux bash -c '
+      . "$1"
+      fm_remote_job_ensure_worker "$2" "$3" || {
+        printf "ensure failed: %s\n" "$FM_REMOTE_JOB_ERROR" >&2
+        exit 1
+      }
+    ' _ "$ROOT/bin/fm-remote-job-lib.sh" "$REMOTE_ROOT" "$ACCOUNT_HOME" &
+  ENSURE_PIDS+=("$!")
+done
+for ensure_pid in "${ENSURE_PIDS[@]}"; do
+  wait "$ensure_pid" || fail "a concurrent worker ensure call failed"
+done
+WORKER_GROUPS_AFTER=$(worker_group_count)
+[ "$WORKER_GROUPS_AFTER" -eq 1 ] \
+  || fail "concurrent ensure calls left $WORKER_GROUPS_AFTER worker process groups"
+pass "concurrent remote entrypoints converge on one Linux worker process group"
 
 file_mode() {
   if [ "$(uname)" = Darwin ]; then
@@ -348,6 +803,9 @@ done
   || fail "the active-job readiness fixture did not begin running"
 ACTIVE_WORKER_PID=$(cat "$STATE_ROOT/worker.pid")
 touch -t 200001010000 "$STATE_ROOT/worker.ready"
+fm_remote_job_ensure_worker "$REMOTE_ROOT" "$ACCOUNT_HOME" || fail "$FM_REMOTE_JOB_ERROR"
+[ "$(cat "$STATE_ROOT/worker.pid")" = "$ACTIVE_WORKER_PID" ] \
+  || fail "ensure replaced a healthy worker with an active stale heartbeat"
 for _ in $(seq 1 40); do
   fm_remote_job_probe "$ACCOUNT_HOME" && break
   sleep 0.05
@@ -361,6 +819,11 @@ fm_remote_job_wait "$ACCOUNT_HOME" "$JOB_ID" || fail "$FM_REMOTE_JOB_ERROR"
 assert_present "$ACTIVE_SIDE_EFFECT" "the active job was interrupted by the concurrent readiness check"
 fm_remote_job_reap "$ACCOUNT_HOME" "$JOB_ID" || fail "the active readiness job could not be reaped"
 pass "active jobs keep the worker ready for concurrent requests"
+
+if [ "$(uname -s)" != Linux ]; then
+  echo 'skip: worker replacement and signal lifecycle require Linux process identity support'
+  exit 0
+fi
 
 OLD_WORKER_PID=$(cat "$STATE_ROOT/worker.pid")
 printf '\n' >> "$REMOTE_ROOT/bin/fm-remote-job-worker.sh"
@@ -418,6 +881,8 @@ fm_remote_job_stage "$ACCOUNT_HOME" "$REMOTE_ROOT" "$REMOTE_HOME" fm-timeout-job
 JOB_ID=$FM_REMOTE_JOB_ID
 fm_remote_job_wait "$ACCOUNT_HOME" "$JOB_ID" || fail "$FM_REMOTE_JOB_ERROR"
 [ "$FM_REMOTE_JOB_EXIT" -eq 124 ] || fail "the worker did not terminate an over-time job"
+assert_grep 'error: remote job exceeded its 1 s bound (fm-timeout-job.sh)' "$FM_REMOTE_JOB_STDERR" \
+  "the timeout diagnostic must name the staged command"
 fm_remote_job_reap "$ACCOUNT_HOME" "$JOB_ID" || fail "the timed-out job could not be reaped"
 pass "the worker enforces the job timeout and publishes its result"
 
@@ -437,6 +902,8 @@ printf '%s\n' "$(fm_remote_job_read_deadline "$FIRST_JOB_DIR")" > "$STATE_ROOT/j
 fm_remote_job_wait "$ACCOUNT_HOME" "$FIRST_JOB_ID" || fail "$FM_REMOTE_JOB_ERROR"
 fm_remote_job_wait "$ACCOUNT_HOME" "$JOB_ID" || fail "$FM_REMOTE_JOB_ERROR"
 [ "$FM_REMOTE_JOB_EXIT" -eq 124 ] || fail "an expired queued job did not publish a timeout result"
+assert_grep 'error: remote job queue deadline elapsed before execution (fm-touch-job.sh)' "$FM_REMOTE_JOB_STDERR" \
+  "the queue deadline diagnostic must name the staged command"
 assert_absent "$QUEUED_SIDE_EFFECT" "the worker executed a queued job after its durable deadline"
 fm_remote_job_reap "$ACCOUNT_HOME" "$FIRST_JOB_ID" || fail "the blocking job could not be reaped"
 fm_remote_job_reap "$ACCOUNT_HOME" "$JOB_ID" || fail "the expired queued job could not be reaped"

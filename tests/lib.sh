@@ -440,6 +440,30 @@ fm_fakebin() {
   printf '%s\n' "$fakebin"
 }
 
+# fm_test_fake_tmux_foreground_cwd <fakebin>
+# A synthetic foreground process and lsof cwd sourced from FM_FAKE_PANE_PATH.
+# Pair with tmux stubs that answer #{pane_tty} with /dev/pts/91.
+fm_test_fake_tmux_foreground_cwd() {
+  local fakebin=$1
+  cat > "$fakebin/ps" <<'SH'
+#!/usr/bin/env bash
+case "$*" in
+  *"-t pts/91"*) printf '%s\n' '987654321 987654321 987654321' ;;
+  *) PATH=${PATH#"$(dirname "$0")":} exec ps "$@" ;;
+esac
+SH
+  cat > "$fakebin/lsof" <<'SH'
+#!/usr/bin/env bash
+case "$*" in
+  *"-p 987654321"*"-d cwd"*"-Fn"*) ;;
+  *) PATH=${PATH#"$(dirname "$0")":} exec lsof "$@" ;;
+esac
+[ -n "${FM_FAKE_PANE_PATH:-}" ] || exit 1
+printf 'p987654321\nfcwd\nn%s\n' "$FM_FAKE_PANE_PATH"
+SH
+  chmod +x "$fakebin/ps" "$fakebin/lsof"
+}
+
 fm_fake_exit0() {
   local fakebin=$1 tool
   shift
@@ -690,6 +714,27 @@ fm_write_meta() {
   for kv in "$@"; do
     printf '%s\n' "$kv" >> "$file"
   done
+}
+
+# fm_test_trace_export_enable <home> <capture-file> [fakebin]: enable synthetic
+# OTLP export through a fake curl for lifecycle-hook tests.
+fm_test_trace_export_enable() {
+  local home=$1 capture=$2 fakebin=${3:-"$1/fakebin"} header="$1/auth-header"
+  mkdir -p "$home/state" "$home/config" "$fakebin"
+  printf '4242\n' > "$home/state/.lock"
+  printf '4242 on\n' > "$home/state/.trace-context-effective"
+  printf 'Authorization: Bearer synthetic-test-token\n' > "$header"
+  chmod 600 "$header"
+  jq -n --arg header "$header" \
+    '{enabled:true,endpoint:"http://127.0.0.1:14318/v1/traces","auth-header-file":$header}' \
+    > "$home/config/trace-export.json"
+  cat > "$fakebin/curl" <<'SH'
+#!/usr/bin/env bash
+cat >> "$FM_TRACE_CAPTURE"
+printf '\n' >> "$FM_TRACE_CAPTURE"
+SH
+  chmod +x "$fakebin/curl"
+  export FM_TRACE_CAPTURE=$capture
 }
 
 # fm_write_secondmate_meta <file> <home> [window] [projects] [harness]: write the

@@ -5232,14 +5232,14 @@ test_term_stops_a_watcher_blocked_inside_a_poll() {
 test_term_stops_a_watcher_blocked_in_tmux_queries() {
   local scenario query dir state fakebin out window key capture pid i rc stalled verdict query_pid query_live queries
   local crew_reader liveness current cfg corr capture_nth readable_nth
-  for scenario in inbox pause-new pause-cached wedge secondmate \
+  for scenario in inbox pause-new pause-recheck wedge secondmate \
     crew-plain crew-paused crew-signal crew-terminal crew-churn \
     busy-grok busy-rovo busy-agy inbox-ring inbox-retry secondmate-ring \
     secondmate-probe secondmate-close pending-observe pending-delivery; do
     queries='list-windows display-message'
     case "$scenario" in
       secondmate) queries="$queries composer-cursor composer-capture" ;;
-      crew-*) queries='crew-readable crew-capture' ;;
+      crew-*|pause-*) queries='crew-readable crew-capture' ;;
       busy-*) queries=recapture ;;
       inbox-ring|inbox-retry) queries='ring-agent composer-cursor submit-read' ;;
       secondmate-ring) queries=ring-agent ;;
@@ -5274,9 +5274,12 @@ test_term_stops_a_watcher_blocked_in_tmux_queries() {
           ;;
         pause-*)
           printf 'paused: awaiting external work\n' > "$state/stalled.status"
-          if [ "$scenario" = pause-cached ]; then
-            touch "$state/.paused-$key"
-            date +%s > "$state/.paused-rechecked-$key"
+          # Pause admission uses crew state instead of endpoint liveness.
+          # Exercise the remaining crew-state read on fresh admission and
+          # after an existing admission's bounded cache has expired.
+          if [ "$scenario" = pause-recheck ]; then
+            touch "$state/.paused-$key" "$state/.paused-rechecked-$key"
+            set_mtime "$(( $(date +%s) - 500 ))" "$state/.paused-rechecked-$key"
           fi
           ;;
         wedge)
@@ -5289,7 +5292,7 @@ test_term_stops_a_watcher_blocked_in_tmux_queries() {
           ;;
       esac
       case "$scenario" in
-        crew-*)
+        crew-*|pause-*)
           mkdir -p "$dir/worker"
           printf 'worktree=%s\n' "$dir/worker" >> "$state/stalled.meta"
           printf 'working: implementing\n' > "$state/stalled.status"
@@ -5297,7 +5300,7 @@ test_term_stops_a_watcher_blocked_in_tmux_queries() {
           printf '#!/usr/bin/env bash\nexit 0\n' > "$fakebin/no-mistakes"
           chmod +x "$fakebin/no-mistakes"
           case "$scenario" in
-            crew-paused) printf 'paused: awaiting external work\n' > "$state/stalled.status" ;;
+            crew-paused|pause-*) printf 'paused: awaiting external work\n' > "$state/stalled.status" ;;
             crew-terminal) printf 'blocked: awaiting access\n' > "$state/stalled.status" ;;
             crew-signal) touch "$state/stalled.turn-ended"; capture_nth=1 ;;
             crew-churn) touch "$state/stalled.turn-ended"; readable_nth=2 ;;

@@ -188,7 +188,22 @@
 #   The local root is whatever bin/fm-wake-lib.sh's
 #   fm_firstmate_root_home resolves, so a home seeded from another machine anchors
 #   that lock itself rather than failing to resolve one;
-#   contention refuses rather than waits.
+#   contention waits up to 30 seconds before refusing.
+#   Project capacity: when this machine declares how many workers a project
+#   admits at once (config/project-capacity; bin/fm-project-capacity-lib.sh owns
+#   the declaration, what holds a place, and the race argument), a fresh ship or
+#   scout spawn counts the places already held while holding that same
+#   project-identity lock - taken on every backend whenever the declaration caps
+#   any project, Orca included, because an uncapped clone's worker still holds a
+#   place for a capped clone of the same origin - and reserves admission until
+#   metadata publication, across the lock release windows owned by that library.
+#   A spawn that finds
+#   every place held prints one `deferred:` line and exits 75 before any brief
+#   render, endpoint, worktree, record, or backlog move exists, so the task stays
+#   exactly as queued as it was; an unreadable declaration refuses with exit 1.
+#   A batch reports such a pair as `batch: DEFERRED` and exits 75 when nothing
+#   else failed. A relaunch and a --secondmate spawn are never counted against
+#   capacity.
 #   With no harness arg, a crewmate/scout spawn resolves the CREW harness only when
 #   config/crew-dispatch.json is absent. When that file exists, crewmate/scout
 #   spawns require an explicit harness so firstmate cannot silently skip dispatch
@@ -680,6 +695,8 @@ fm_backlog_directory_present "$STATE" "state directory" || {
 . "$SCRIPT_DIR/fm-remote-readiness-lib.sh"
 # shellcheck source=bin/fm-timeout-lib.sh
 . "$SCRIPT_DIR/fm-timeout-lib.sh"
+# shellcheck source=bin/fm-project-capacity-lib.sh
+. "$SCRIPT_DIR/fm-project-capacity-lib.sh"
 # shellcheck source=bin/fm-worker-account-lib.sh
 . "$SCRIPT_DIR/fm-worker-account-lib.sh"
 # shellcheck source=bin/fm-dock-lib.sh
@@ -1304,10 +1321,15 @@ SPAWN_TASK_SET_LOCK_HELD=0
 SPAWN_TREEHOUSE_PROJECT_LOCK=
 SPAWN_TREEHOUSE_PROJECT_LOCK_HELD=0
 SPAWN_SLOT_CLAIMED=0
+SPAWN_CAPACITY_RESERVATION=
 
 fm_spawn_treehouse_project_lock_acquire() {
   if ! fm_lock_acquire_wait_max "$SPAWN_TREEHOUSE_PROJECT_LOCK" 30; then
-    echo "error: Treehouse project lock conflict for $PROJ_ABS; another slot allocation or return did not finish within 30s; refusing to race it" >&2
+    if [ "$BACKEND" = orca ]; then
+      echo "error: another spawn or cleanup holds the shared project lock for $PROJ_ABS; refusing to race its capacity admission after waiting 30s" >&2
+    else
+      echo "error: Treehouse project lock conflict for $PROJ_ABS; another slot allocation or return did not finish within 30s; refusing to race it" >&2
+    fi
     return 1
   fi
   SPAWN_TREEHOUSE_PROJECT_LOCK_HELD=1
@@ -1493,6 +1515,8 @@ spawn_abort_cleanup() {
       echo "warning: leaving task $ID's slot claim on $WT in place; the Treehouse project lock is no longer held, so the next spawn's claim replaces it" >&2
     fi
   fi
+  fm_project_capacity_release "$SPAWN_CAPACITY_RESERVATION" || status=1
+  SPAWN_CAPACITY_RESERVATION=
   if [ "$SPAWN_TREEHOUSE_PROJECT_LOCK_HELD" = 1 ]; then
     SPAWN_TREEHOUSE_PROJECT_LOCK_HELD=0
     fm_lock_release "$SPAWN_TREEHOUSE_PROJECT_LOCK" || true
@@ -1651,16 +1675,17 @@ if [ "${#POS[@]}" -gt 0 ] && [ "${POS[0]}" != "$idpart" ] && case "$idpart" in *
       echo "error: batch dispatch does not support --secondmate; spawn each secondmate explicitly" >&2
       rc=2
       continue
-    elif [ "$KIND" = scout ]; then
-      if FM_SPAWN_NO_GUARD=1 "$FM_ROOT/bin/fm-spawn.sh" "${pair%%=*}" "${pair#*=}" "${shared_args[@]+"${shared_args[@]}"}" --scout; then :; else
-        echo "batch: FAILED to spawn ${pair%%=*} (${pair#*=})" >&2
-        rc=1
-      fi
-    else
-      if FM_SPAWN_NO_GUARD=1 "$FM_ROOT/bin/fm-spawn.sh" "${pair%%=*}" "${pair#*=}" "${shared_args[@]+"${shared_args[@]}"}"; then :; else
-        echo "batch: FAILED to spawn ${pair%%=*} (${pair#*=})" >&2
-        rc=1
-      fi
+    fi
+    pair_args=("${pair%%=*}" "${pair#*=}" "${shared_args[@]+"${shared_args[@]}"}")
+    [ "$KIND" != scout ] || pair_args+=(--scout)
+    pair_rc=0
+    FM_SPAWN_NO_GUARD=1 "$FM_ROOT/bin/fm-spawn.sh" "${pair_args[@]}" || pair_rc=$?
+    if [ "$pair_rc" -eq "$FM_PROJECT_CAPACITY_DEFER_EXIT" ]; then
+      echo "batch: DEFERRED ${pair%%=*} (${pair#*=}) - its project is at capacity, so it stays queued" >&2
+      [ "$rc" -ne 0 ] || rc=$FM_PROJECT_CAPACITY_DEFER_EXIT
+    elif [ "$pair_rc" -ne 0 ]; then
+      echo "batch: FAILED to spawn ${pair%%=*} (${pair#*=})" >&2
+      rc=1
     fi
   done
   exit "$rc"
@@ -3240,7 +3265,28 @@ else
   WT=""
   BRIEF="$DATA/$ID/brief.md"
 fi
-if [ "$RELAUNCH" -eq 0 ] && [ "$KIND" != secondmate ] && [ "$BACKEND" != orca ]; then
+# Project capacity admission (bin/fm-project-capacity-lib.sh owns the
+# declaration, what holds a place, and why this is race-safe). A fresh worker
+# for a project whose declared capacity is already held is deferred here, before
+# any brief render, endpoint, worktree, record, or backlog move exists, so the
+# deferral leaves the task exactly as queued as it was. A relaunch replaces a
+# worker that already holds a place, and a secondmate is not a worker.
+SPAWN_PROJECT_CAPACITY=
+SPAWN_PROJECT_CAPACITY_ANY=
+if [ "$RELAUNCH" -eq 0 ] && [ "$KIND" != secondmate ]; then
+  SPAWN_CAPACITY_CONFIG=$(fm_project_capacity_config_dir "$FM_HOME" "$CONFIG") || {
+    echo "error: could not resolve the root Firstmate home that declares project capacity for $PROJ_ABS" >&2
+    exit 1
+  }
+  if ! fm_project_capacity_lookup "$SPAWN_CAPACITY_CONFIG" "$(basename "$PROJ_ABS")"; then
+    echo "error: spawn refused: the project capacity declaration is unreadable ($FM_PROJECT_CAPACITY_ERROR); fix it so the captain's worker limits are known (docs/configuration.md \"Project capacity\")" >&2
+    exit 1
+  fi
+  SPAWN_PROJECT_CAPACITY=$FM_PROJECT_CAPACITY
+  SPAWN_PROJECT_CAPACITY_ANY=$FM_PROJECT_CAPACITY_ANY
+fi
+if [ "$RELAUNCH" -eq 0 ] && [ "$KIND" != secondmate ] &&
+  { [ "$BACKEND" != orca ] || [ -n "$SPAWN_PROJECT_CAPACITY_ANY" ]; }; then
   SPAWN_TREEHOUSE_PROJECT_LOCK=$(fm_treehouse_project_lock_path "$PROJ_ABS") || {
     echo "error: could not resolve the shared Treehouse project lock for $PROJ_ABS" >&2
     exit 1
@@ -3248,6 +3294,23 @@ if [ "$RELAUNCH" -eq 0 ] && [ "$KIND" != secondmate ] && [ "$BACKEND" != orca ];
   if ! fm_spawn_treehouse_project_lock_acquire; then
     exit 1
   fi
+fi
+if [ -n "$SPAWN_PROJECT_CAPACITY" ]; then
+  if ! fm_project_capacity_occupants "$SPAWN_TREEHOUSE_PROJECT_LOCK" "$PROJ_ABS" "$STATE" "$ID"; then
+    echo "error: spawn refused: project $(basename "$PROJ_ABS") declares a capacity of $SPAWN_PROJECT_CAPACITY, but this machine's task records cannot all be read to count it ($FM_PROJECT_CAPACITY_ERROR)" >&2
+    exit 1
+  fi
+  if [ "$FM_PROJECT_CAPACITY_OCCUPANTS" -ge "$SPAWN_PROJECT_CAPACITY" ]; then
+    echo "deferred: project $(basename "$PROJ_ABS") admits $SPAWN_PROJECT_CAPACITY worker(s) at once on this machine ($FM_PROJECT_CAPACITY_FILE) and $FM_PROJECT_CAPACITY_OCCUPANTS already hold a place ($FM_PROJECT_CAPACITY_OCCUPANT_IDS); task $ID was not launched and its backlog item stays queued - dispatch it again once one of them records its ready PR or is cleaned up" >&2
+    exit "$FM_PROJECT_CAPACITY_DEFER_EXIT"
+  fi
+fi
+if [ -n "$SPAWN_PROJECT_CAPACITY_ANY" ]; then
+  if ! fm_project_capacity_reserve "$SPAWN_TREEHOUSE_PROJECT_LOCK" "$STATE" "$ID"; then
+    echo "error: could not reserve project capacity for task $ID" >&2
+    exit 1
+  fi
+  SPAWN_CAPACITY_RESERVATION=$FM_PROJECT_CAPACITY_RESERVATION
 fi
 [ -f "$BRIEF" ] || {
   echo "error: task $ID has no brief at inaccessible data path $BRIEF" >&2
@@ -5416,6 +5479,8 @@ fi
 # still being delivered, cannot observe or complete a fresh provisional record
 # between its state check and `tasks-axi start`, and a delivery failure cannot
 # follow a committed In-flight transition.
+fm_project_capacity_release "$SPAWN_CAPACITY_RESERVATION" || exit 1
+SPAWN_CAPACITY_RESERVATION=
 if [ "$SPAWN_TREEHOUSE_PROJECT_LOCK_HELD" = 1 ]; then
   SPAWN_TREEHOUSE_PROJECT_LOCK_HELD=0
   fm_lock_release "$SPAWN_TREEHOUSE_PROJECT_LOCK"

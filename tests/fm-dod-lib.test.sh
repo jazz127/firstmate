@@ -211,6 +211,16 @@ EOF
   assert_contains "$out" "missing evidence-artifact" "assertion after request clause refusal was unclear"
   fm_dod_validate_intent_evidence '2 of 3 requested endpoints' "$root/worktree" "$root/tmp" \
     || fail "ordinary ratio prose was refused"
+  for near_miss in \
+    'existing project delivery and merge rules' \
+    'delivery test passed' \
+    'deliverable validation was confirmed' \
+    'olive scenario passed' \
+    'realm test passed' \
+    'realise validation passed'; do
+    fm_dod_validate_intent_evidence "$near_miss" "$root/worktree" "$root/tmp" \
+      || fail "near-miss qualifier word was treated as an evidence claim: $near_miss"
+  done
   for claim in \
     'external validation passed' \
     'live test passed' \

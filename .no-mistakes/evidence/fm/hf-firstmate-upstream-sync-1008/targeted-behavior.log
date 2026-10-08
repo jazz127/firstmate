@@ -1,0 +1,46 @@
+FM_TEST_BEGIN 2026-10-08T15:10:26Z tests/fm-project-capacity.test.sh family=backend-dispatch expected_gate_skip=none
+ok - same-origin fresh spawns across local homes cannot oversubscribe during the actual unlocked get
+ok - same-origin restart spawns across local homes cannot oversubscribe during the actual unlocked get
+ok - a project with no declared capacity keeps today's uncapped dispatch
+ok - a spawn is admitted while its project still has a free place
+ok - a spawn beyond capacity is deferred before any record, brief, endpoint, worktree, or backlog move exists
+ok - a project name with spaces is declared by taking the capacity from the last field
+ok - a project name beginning with # is declared, and a # comment stays a comment
+ok - a home reached through a symlink counts each of its workers once
+ok - a recorded PR handoff or a cleanup each frees exactly one place
+ok - a restart of a task id does not count that task's own record
+ok - only this project's ship and scout records hold places
+ok - every local home shares one declared capacity per project origin, and remote homes do not count
+ok - an unreadable state directory or task record refuses admission rather than undercounting
+ok - a spawn that fails after admission leaves no record and holds no place
+ok - a failed get retires its reservation and a successor takes the place
+ok - counting reaps a proven-dead reservation without leaking capacity
+ok - a pending reservation and its metadata count once until PR handoff (system Bash)
+ok - retirement during any reservation read is absent; surviving malformed and unreadable reservations refuse admission
+ok - a root/A/B/C holder cannot be hidden by an unreadable or failed registry read
+ok - an unreadable declaration refuses every fresh spawn rather than guessing the limit
+ok - a batch reports a capacity deferral as deferred, not failed
+ok - an Orca spawn takes the shared project lock whenever a same-origin clone is capped and defers before creating anything
+FM_TEST_END 2026-10-08T15:13:19Z tests/fm-project-capacity.test.sh exit=0 duration_ms=172697 gate_skip=false
+FM_TEST_BEGIN 2026-10-08T15:13:19Z tests/fm-gate-selected-pending-reply.test.sh family=unclassified expected_gate_skip=none
+ok - another mate's echoed token cannot resolve a request
+FM_TEST_END 2026-10-08T15:13:20Z tests/fm-gate-selected-pending-reply.test.sh exit=0 duration_ms=624 gate_skip=false
+FM_TEST_BEGIN 2026-10-08T15:13:20Z tests/fm-gate-selected-watch-arm.test.sh family=unclassified expected_gate_skip=none
+ok - watch-arm: the OpenCode arm plugin decides with the shared supervision predicate
+FM_TEST_END 2026-10-08T15:13:21Z tests/fm-gate-selected-watch-arm.test.sh exit=0 duration_ms=1467 gate_skip=false
+FM_TEST_BEGIN 2026-10-08T15:13:21Z tests/fm-gate-selected-supervision-host.test.sh family=unclassified expected_gate_skip=none
+ok - host+hook: the successor a close that turns main-only at its turn leaves for main survives the hook's process group teardown
+ok - host+hook: the successor a pass-through leaves for main survives the hook's process group teardown
+FM_TEST_END 2026-10-08T15:13:35Z tests/fm-gate-selected-supervision-host.test.sh exit=0 duration_ms=14191 gate_skip=false
+FM_TEST_BEGIN 2026-10-08T15:13:35Z tests/fm-gate-selected-test-fixtures.test.sh family=unclassified expected_gate_skip=none
+ok - agent stand-in: a multicall sleep is refused, and the compiled stand-in survives a harness name
+FM_TEST_END 2026-10-08T15:13:39Z tests/fm-gate-selected-test-fixtures.test.sh exit=0 duration_ms=3624 gate_skip=false
+FM_TEST_SUMMARY total=5 failed=0 skipped_gate=0 duration_ms=192808
+FM_TEST_SUMMARY_FAMILY family=backend-dispatch count=1 duration_ms=172697 failed=0
+FM_TEST_SUMMARY_FAMILY family=unclassified count=4 duration_ms=19906 failed=0
+FM_TEST_SLOWEST rank=1 script=tests/fm-project-capacity.test.sh duration_ms=172697
+FM_TEST_SLOWEST rank=2 script=tests/fm-gate-selected-supervision-host.test.sh duration_ms=14191
+FM_TEST_SLOWEST rank=3 script=tests/fm-gate-selected-test-fixtures.test.sh duration_ms=3624
+FM_TEST_SLOWEST rank=4 script=tests/fm-gate-selected-watch-arm.test.sh duration_ms=1467
+FM_TEST_SLOWEST rank=5 script=tests/fm-gate-selected-pending-reply.test.sh duration_ms=624
+fm-test-run: wrote timing artifact: /Users/jarad/.no-mistakes/evidence/01M4DYQ68QJ02Q7B3KMRSEJ7E9/targeted-timing.json

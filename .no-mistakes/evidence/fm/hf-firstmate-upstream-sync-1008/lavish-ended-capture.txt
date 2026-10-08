@@ -1,0 +1,10 @@
+[lavish-axi] Long-polling for user feedback on /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4DYQ68QJ02Q7B3KMRSEJ7E9/.gate-validation/live-lavish-jq6z20pm/review.html. This stays silent until the user sends feedback, ends the session, or leaves every review window disconnected past the reconnect grace period - leave it running. Detected layout issues do NOT return this poll: they wait in the user's Layout issues inbox until the user queues them as ordinary feedback. If it gets killed or times out before feedback arrives, re-run `lavish-axi poll /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4DYQ68QJ02Q7B3KMRSEJ7E9/.gate-validation/live-lavish-jq6z20pm/review.html` - feedback remains queued until delivery. Poll delivery consumes the response, so read it completely.
+session:
+  file: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4DYQ68QJ02Q7B3KMRSEJ7E9/.gate-validation/live-lavish-jq6z20pm/review.html
+  status: feedback
+  session_ended: true
+  ended_by: user
+prompts[1]{uid,prompt,selector,tag,text}:
+  "",Ended board comment,"",message,Freeform message
+next_step: This was the last feedback before the user ended the session. Stop polling /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4DYQ68QJ02Q7B3KMRSEJ7E9/.gate-validation/live-lavish-jq6z20pm/review.html and do not reopen it - deliver any remaining updates directly in this conversation instead. Only run `lavish-axi /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4DYQ68QJ02Q7B3KMRSEJ7E9/.gate-validation/live-lavish-jq6z20pm/review.html --reopen` if the user explicitly asks for further review or something genuinely important needs their visual attention.
+dom_snapshot: "uid=1 body \"Disposable feedback test Testing open and ended message labels.\"\n  uid=2 h1 \"Disposable feedback test\"\n  uid=3 p \"Testing open and ended message labels.\"\n  uid=4 script"

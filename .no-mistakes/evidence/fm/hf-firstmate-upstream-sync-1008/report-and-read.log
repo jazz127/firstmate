@@ -1,0 +1,95 @@
+After beta quotes alpha: alpha.phase=awaiting_report
+done [corr=e0fbf351e96ece89] [at=1791472584]: Beta answered; alpha still owes corr=5ccb31637c6520f9 (via-helper)
+After beta reports: beta.phase=resolved
+After partial tokens: alpha.phase=awaiting_report
+After alpha reports: alpha.phase=resolved
+done xcorr=5ccb31637c6520f9: prefixed token
+done corr=5ccb31637c6520f9ff: suffixed token
+done [corr=5ccb31637c6520f9] [at=1791472585]: Alpha answered on its own channel (via-helper)
+schema=fm-pending-reply.v1
+corr_id=5ccb31637c6520f9
+task_id=alpha
+parent_home=/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4DYQ68QJ02Q7B3KMRSEJ7E9/.gate-validation/report-read.Kpthmv/parent
+parent_status=/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4DYQ68QJ02Q7B3KMRSEJ7E9/.gate-validation/report-read.Kpthmv/parent/state/alpha.status
+request_summary=Disposable report-channel check
+created_epoch=1791472584
+turn_seen_busy=0
+request_turn_completed_epoch=
+recovery_attempted_epoch=
+recovery_sender_pid=
+recovery_sender_identity=
+recovery_sent_epoch=
+recovery_delivery_outcome=
+recovery_turn_seen_busy=0
+recovery_turn_completed_epoch=
+escalated_epoch=
+wrong_home_hits=0
+wrong_home_first_sighting=
+wrong_home_sightings=
+wrong_home_scan_signature=
+grace_secs=120
+delivered_epoch=1791472584
+parent_status_scan_signature=16777231:25474347:89:1791472585:1791472585
+phase=resolved
+resolved_epoch=1791472585
+resolved_via=helper
+
+SIMULATED Lavish upstream captures; real adapter read command
+
+Captured session ended=no
+CAPTAIN MESSAGE
+CAPTAIN MESSAGE PART 1 of 3
+| first comment
+CAPTAIN MESSAGE PART 2 of 3
+| second comment
+CAPTAIN MESSAGE PART 3 of 3
+| third comment
+END CAPTAIN MESSAGE
+
+declared_items: 4
+presented_items: 4
+malformed_items: 0
+complete: yes
+lifecycle: feedback
+session_ended: (unset)
+annotation_count: 1
+captain_message_count: 3
+
+ANNOTATIONS
+ANNOTATION 1 of 1
+element_uid: el-a
+element_selector: aside.sidebar
+tag: note
+text:
+| Sidebar note
+END ANNOTATIONS
+END LAVISH RESULT (4 of 4)
+
+Captured session ended=yes
+SESSION-ENDING MESSAGE
+SESSION-ENDING MESSAGE PART 1 of 3
+| first comment
+SESSION-ENDING MESSAGE PART 2 of 3
+| second comment
+SESSION-ENDING MESSAGE PART 3 of 3
+| third comment
+END SESSION-ENDING MESSAGE
+
+declared_items: 4
+presented_items: 4
+malformed_items: 0
+complete: yes
+lifecycle: feedback
+session_ended: true
+annotation_count: 1
+session_ending_message_count: 3
+
+ANNOTATIONS
+ANNOTATION 1 of 1
+element_uid: el-a
+element_selector: aside.sidebar
+tag: note
+text:
+| Sidebar note
+END ANNOTATIONS
+END LAVISH RESULT (4 of 4)

@@ -1,0 +1,99 @@
+[
+  {
+    "command": [
+      "/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4DYQ68QJ02Q7B3KMRSEJ7E9/bin/fm-lab-home.sh",
+      "create",
+      "/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4DYQ68QJ02Q7B3KMRSEJ7E9/.gate-validation/live-lavish-jq6z20pm"
+    ],
+    "exit": 0,
+    "output": "/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4DYQ68QJ02Q7B3KMRSEJ7E9/.gate-validation/live-lavish-jq6z20pm\n"
+  },
+  {
+    "command": [
+      "lavish-axi",
+      "/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4DYQ68QJ02Q7B3KMRSEJ7E9/.gate-validation/live-lavish-jq6z20pm/review.html",
+      "--no-open"
+    ],
+    "exit": 0,
+    "output": "session:\n  file: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4DYQ68QJ02Q7B3KMRSEJ7E9/.gate-validation/live-lavish-jq6z20pm/review.html\n  url: \"http://127.0.0.1:60531/session/9e743c6482f7f484\"\n  status: opened\nnext_step: \"Do not respond to the user just yet. Now you must run `lavish-axi poll /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4DYQ68QJ02Q7B3KMRSEJ7E9/.gate-validation/live-lavish-jq6z20pm/review.html`. This command long-polls until the user sends feedback, ends the session, or leaves every review window disconnected past the reconnect grace period, and it stays silent the whole time - that is normal, never kill it. Layout issues the browser detects do not return this poll; they wait in the user's Layout issues inbox until the user queues them, then arrive as an ordinary tag \\\"layout-warnings\\\" prompt. Do not pass --timeout-ms during normal agent use. Keep the poll in the foreground by default and let it return the feedback directly to the agent. A background poll is allowed only through a harness-native tracked background-job facility whose completion result is guaranteed to resume or notify the same agent. Never use `nohup`, shell `&`, `disown`, redirected fire-and-forget processes, or a detached terminal without an explicit verified callback merely to keep polling alive. If the harness has no completion-aware background facility, use the foreground poll or first wire a verified wake callback into the surrounding supervisor. Do not tell the user the artifact is being monitored until that wake path is live. If the poll gets killed or times out before feedback arrives, re-run it - feedback remains queued until delivery. Poll delivery consumes the response, so read it completely. If it returns browser_disconnected, the review window stayed disconnected past its reconnect grace period but the session remains resumable; ask the user whether to reopen or end it, and do neither uninvited. Codex detected: completed background tasks may not resume Codex automatically, so keep the poll attached to the active turn. After applying feedback, run `lavish-axi poll /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4DYQ68QJ02Q7B3KMRSEJ7E9/.gate-validation/live-lavish-jq6z20pm/review.html --agent-reply \\\"<message for the user>\\\"` without --timeout-ms to show a concise response in Lavish Editor and keep waiting for more feedback. If instead you are handing back a result without starting another long-poll, run `lavish-axi reply /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4DYQ68QJ02Q7B3KMRSEJ7E9/.gate-validation/live-lavish-jq6z20pm/review.html --agent-reply \\\"<message for the user>\\\"` to get an acceptance receipt. Keep the reply concise. Only when a longer reply is genuinely necessary, use Markdown structure - blank-line paragraphs, `- ` / `1. ` lists, `## ` headings - so it renders scannably instead of a wall of text, and pass that body with `--agent-reply-file <path>` (`-` reads stdin) so newlines survive quoting. The Conversation panel's Markdown subset is in `lavish-axi poll --help` and README. If the user ends the session, stop polling and do not reopen it by re-running `lavish-axi /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4DYQ68QJ02Q7B3KMRSEJ7E9/.gate-validation/live-lavish-jq6z20pm/review.html` unless the user asks for further review or something genuinely important needs their visual attention - deliver routine updates directly in this conversation instead. When reopening is warranted, run `lavish-axi /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4DYQ68QJ02Q7B3KMRSEJ7E9/.gate-validation/live-lavish-jq6z20pm/review.html --reopen`.\"\n"
+  },
+  {
+    "command": [
+      "chrome-devtools-axi",
+      "open",
+      "http://127.0.0.1:60531/session/9e743c6482f7f484"
+    ],
+    "exit": 0,
+    "output": "page:\n  title: Disposable feedback test \u00b7 Lavish\n  url: \"http://127.0.0.1:60531/session/9e743c6482f7f484\"\n  refs: 23\nsnapshot:\nuid=g1:1_0 RootWebArea \"Disposable feedback test \u00b7 Lavish\" url=\"http://127.0.0.1:60531/session/9e743c6482f7f484\"\n  uid=g1:1_1 StaticText \"Lavish\"\n  uid=g1:1_2 StaticText \"EDITOR\"\n  uid=g1:1_3 button \"Annotate\" description=\"Toggle annotate/explore mode (\u2318I / Ctrl+I)\" pressed\n  uid=g1:1_4 button \"More\" expandable haspopup=\"menu\"\n  uid=g1:1_5 Iframe\n    uid=g1:1_6 RootWebArea \"Disposable feedback test\" url=\"http://127.0.0.1:60531/artifact/9e743c6482f7f484/index.html?artifact_revision=1&artifact_load_token=No40Ny-D03S75dxzcel9LYAmFfyKGEHk\"\n      uid=g1:1_7 heading \"Disposable feedback test\" level=\"1\"\n      uid=g1:1_8 StaticText \"Testing open and ended message labels.\"\n  uid=g1:1_9 complementary\n    uid=g1:1_10 heading \"Conversation\" level=\"2\"\n    uid=g1:1_11 StaticText \"Agent hasn't sent a message yet. Click an element in the artifact to annotate, or type below to start.\"\n    uid=g1:1_12 StaticText \"Your agent is not listening. If this persists, ask your agent to poll for updates from Lavish.\"\n    uid=g1:1_13 textbox \"Write a message for the agent...\" multiline\n    uid=g1:1_14 button \"Attach images\"\n    uid=g1:1_15 status atomic live=\"polite\" relevant=\"additions text\"\n    uid=g1:1_16 button \"Send & End\"\n    uid=g1:1_17 button \"Send to Agent\"\n  uid=g1:1_18 StaticText \"Checking layout.\"\n  uid=g1:1_19 LineBreak \"\n\"\n  uid=g1:1_20 StaticText \"One moment.\"\n  uid=g1:1_21 StaticText \"Lavish is waiting for fonts and final geometry before revealing this artifact.\"\n  uid=g1:1_22 button \"Show anyway\"\nhelp[4]:\n  Run `chrome-devtools-axi fill @g1:1_13 \"text\"` to fill the \"Write a message for the agent...\" field\n  Run `chrome-devtools-axi click @g1:1_3` to click the \"Annotate\" button\n  Run `chrome-devtools-axi scroll down` to scroll down\n  Use `chrome-devtools-axi eval <expr>` for JS expressions. For multi-statement code, pass a function: `eval \"() => { ...; return result }\"`\n"
+  },
+  {
+    "command": [
+      "chrome-devtools-axi",
+      "snapshot"
+    ],
+    "exit": 0,
+    "output": "page:\n  title: Disposable feedback test \u00b7 Lavish\n  refs: 23\nsnapshot:\nuid=g2:1_0 RootWebArea \"Disposable feedback test \u00b7 Lavish\" url=\"http://127.0.0.1:60531/session/9e743c6482f7f484\"\n  uid=g2:1_1 StaticText \"Lavish\"\n  uid=g2:1_2 StaticText \"EDITOR\"\n  uid=g2:1_3 button \"Annotate\" description=\"Toggle annotate/explore mode (\u2318I / Ctrl+I)\" pressed\n  uid=g2:1_4 button \"More\" expandable haspopup=\"menu\"\n  uid=g2:1_5 Iframe\n    uid=g2:1_6 RootWebArea \"Disposable feedback test\" url=\"http://127.0.0.1:60531/artifact/9e743c6482f7f484/index.html?artifact_revision=1&artifact_load_token=No40Ny-D03S75dxzcel9LYAmFfyKGEHk\"\n      uid=g2:1_7 heading \"Disposable feedback test\" level=\"1\"\n      uid=g2:1_8 StaticText \"Testing open and ended message labels.\"\n  uid=g2:1_9 complementary\n    uid=g2:1_10 heading \"Conversation\" level=\"2\"\n    uid=g2:1_11 StaticText \"Agent hasn't sent a message yet. Click an element in the artifact to annotate, or type below to start.\"\n    uid=g2:1_12 StaticText \"Your agent is not listening. If this persists, ask your agent to poll for updates from Lavish.\"\n    uid=g2:1_13 textbox \"Write a message for the agent...\" multiline\n    uid=g2:1_14 button \"Attach images\"\n    uid=g2:1_15 status atomic live=\"polite\" relevant=\"additions text\"\n    uid=g2:1_16 button \"Send & End\"\n    uid=g2:1_17 button \"Send to Agent\"\n  uid=g2:1_18 StaticText \"Checking layout.\"\n  uid=g2:1_19 LineBreak \"\n\"\n  uid=g2:1_20 StaticText \"One moment.\"\n  uid=g2:1_21 StaticText \"Lavish is waiting for fonts and final geometry before revealing this artifact.\"\n  uid=g2:1_22 button \"Show anyway\"\nhelp[4]:\n  Run `chrome-devtools-axi fill @g2:1_13 \"text\"` to fill the \"Write a message for the agent...\" field\n  Run `chrome-devtools-axi click @g2:1_3` to click the \"Annotate\" button\n  Run `chrome-devtools-axi scroll down` to scroll down\n  Use `chrome-devtools-axi eval <expr>` for JS expressions. For multi-statement code, pass a function: `eval \"() => { ...; return result }\"`\n"
+  },
+  {
+    "command": [
+      "chrome-devtools-axi",
+      "eval",
+      "(() => { const input = document.querySelector('#chatInput'); if (!input) throw new Error('composer missing'); input.value = \"Open board comment\"; input.dispatchEvent(new Event('input', {bubbles:true})); const button = document.querySelector(\"#send\"); if (!button || button.disabled) throw new Error('send button unavailable'); button.click(); return {message:\"Open board comment\", button:\"#send\"}; })()"
+    ],
+    "exit": 0,
+    "output": "result: \"{\\\"message\\\":\\\"Open board comment\\\",\\\"button\\\":\\\"#send\\\"}\"\nhelp[1]:\n  Run `chrome-devtools-axi snapshot` to see current page state\n"
+  },
+  {
+    "command": [
+      "/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4DYQ68QJ02Q7B3KMRSEJ7E9/bin/fm-procevent-lavish.sh",
+      "read",
+      "/Users/jarad/.no-mistakes/evidence/01M4DYQ68QJ02Q7B3KMRSEJ7E9/lavish-open-capture.txt"
+    ],
+    "exit": 0,
+    "output": "CAPTAIN MESSAGE\n| Open board comment\nEND CAPTAIN MESSAGE\n\ndeclared_items: 1\npresented_items: 1\nmalformed_items: 0\ncomplete: yes\nlifecycle: feedback\nsession_ended: (unset)\nannotation_count: 0\ncaptain_message_count: 1\n\nANNOTATIONS: (none)\nEND LAVISH RESULT (1 of 1)\n"
+  },
+  {
+    "command": [
+      "chrome-devtools-axi",
+      "screenshot",
+      "/Users/jarad/.no-mistakes/evidence/01M4DYQ68QJ02Q7B3KMRSEJ7E9/lavish-open.png"
+    ],
+    "exit": 0,
+    "output": "screenshot: /Users/jarad/.no-mistakes/evidence/01M4DYQ68QJ02Q7B3KMRSEJ7E9/lavish-open.png\n"
+  },
+  {
+    "command": [
+      "chrome-devtools-axi",
+      "eval",
+      "(() => { const input = document.querySelector('#chatInput'); if (!input) throw new Error('composer missing'); input.value = \"Ended board comment\"; input.dispatchEvent(new Event('input', {bubbles:true})); const button = document.querySelector(\"#sendAndEnd\"); if (!button || button.disabled) throw new Error('send button unavailable'); button.click(); return {message:\"Ended board comment\", button:\"#sendAndEnd\"}; })()"
+    ],
+    "exit": 0,
+    "output": "result: \"{\\\"message\\\":\\\"Ended board comment\\\",\\\"button\\\":\\\"#sendAndEnd\\\"}\"\nhelp[1]:\n  Run `chrome-devtools-axi snapshot` to see current page state\n"
+  },
+  {
+    "command": [
+      "/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4DYQ68QJ02Q7B3KMRSEJ7E9/bin/fm-procevent-lavish.sh",
+      "read",
+      "/Users/jarad/.no-mistakes/evidence/01M4DYQ68QJ02Q7B3KMRSEJ7E9/lavish-ended-capture.txt"
+    ],
+    "exit": 0,
+    "output": "SESSION-ENDING MESSAGE\n| Ended board comment\nEND SESSION-ENDING MESSAGE\n\ndeclared_items: 1\npresented_items: 1\nmalformed_items: 0\ncomplete: yes\nlifecycle: feedback\nsession_ended: true\nannotation_count: 0\nsession_ending_message_count: 1\n\nANNOTATIONS: (none)\nEND LAVISH RESULT (1 of 1)\n"
+  },
+  {
+    "command": [
+      "chrome-devtools-axi",
+      "screenshot",
+      "/Users/jarad/.no-mistakes/evidence/01M4DYQ68QJ02Q7B3KMRSEJ7E9/lavish-ended.png"
+    ],
+    "exit": 0,
+    "output": "screenshot: /Users/jarad/.no-mistakes/evidence/01M4DYQ68QJ02Q7B3KMRSEJ7E9/lavish-ended.png\n"
+  },
+  {
+    "command": [
+      "chrome-devtools-axi",
+      "stop"
+    ],
+    "exit": 0,
+    "output": "status: stopped\n"
+  }
+]

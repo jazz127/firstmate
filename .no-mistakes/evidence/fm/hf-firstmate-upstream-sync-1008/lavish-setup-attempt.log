@@ -1,0 +1,5 @@
+{"command": ["/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4DYQ68QJ02Q7B3KMRSEJ7E9/bin/fm-lab-home.sh", "create", "/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4DYQ68QJ02Q7B3KMRSEJ7E9/.gate-validation/live-lavish-2bcf3k9v"], "exit": 0, "output": "/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4DYQ68QJ02Q7B3KMRSEJ7E9/.gate-validation/live-lavish-2bcf3k9v\n"}
+Traceback (most recent call last):
+  File "/Users/jarad/.no-mistakes/evidence/01M4DYQ68QJ02Q7B3KMRSEJ7E9/drive-lavish.py", line 50, in <module>
+    raise RuntimeError('isolated Lavish server did not become healthy')
+RuntimeError: isolated Lavish server did not become healthy

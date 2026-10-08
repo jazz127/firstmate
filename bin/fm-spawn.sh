@@ -3273,6 +3273,7 @@ fi
 # worker that already holds a place, and a secondmate is not a worker.
 SPAWN_PROJECT_CAPACITY=
 SPAWN_PROJECT_CAPACITY_ANY=
+SPAWN_GEN="s$(date +%s).${BASHPID:-$$}.$RANDOM"
 if [ "$RELAUNCH" -eq 0 ] && [ "$KIND" != secondmate ]; then
   SPAWN_CAPACITY_CONFIG=$(fm_project_capacity_config_dir "$FM_HOME" "$CONFIG") || {
     echo "error: could not resolve the root Firstmate home that declares project capacity for $PROJ_ABS" >&2
@@ -3306,7 +3307,7 @@ if [ -n "$SPAWN_PROJECT_CAPACITY" ]; then
   fi
 fi
 if [ -n "$SPAWN_PROJECT_CAPACITY_ANY" ]; then
-  if ! fm_project_capacity_reserve "$SPAWN_TREEHOUSE_PROJECT_LOCK" "$STATE" "$ID"; then
+  if ! fm_project_capacity_reserve "$SPAWN_TREEHOUSE_PROJECT_LOCK" "$STATE" "$ID" "$SPAWN_GEN"; then
     echo "error: could not reserve project capacity for task $ID" >&2
     exit 1
   fi
@@ -5322,7 +5323,6 @@ fi
 
 META_WINDOW=$T
 [ "$BACKEND" = orca ] && META_WINDOW=$W
-SPAWN_GEN="s$(date +%s).${BASHPID:-$$}.$RANDOM"
 SPAWN_META_PATH="$STATE/$ID.meta"
 if [ "$SPAWN_META_LOCK_HELD" != 1 ]; then
   SPAWN_META_LOCK=$(fm_meta_lock_path "$STATE/$ID.meta") || exit 1

@@ -1611,56 +1611,15 @@ SH
 
 test_opencode_arm_plugin_decides_with_the_shared_predicate() {
   command -v node >/dev/null 2>&1 || { printf 'skip: node not found\n'; return 0; }
-  local driver case_name dir state config out status
+  local driver case_name dir state config out status expected
   driver="$TMP_ROOT/arm-decision-driver.mjs"
   cat > "$driver" <<'EOF'
 import { existsSync, writeFileSync } from "node:fs";
-import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 
 const state = `${process.env.FM_HOME}/state`;
-const config = `${process.env.FM_HOME}/config`;
 const armLog = process.env.FM_ARM_LOG;
-
-// The shared predicate verdict over the same state directory and the same lib
-// copy the delegation in the plugin sources.
-const probe = spawnSync(
-  "bash",
-  [
-    "-c",
-    '. "$1/bin/fm-supervision-lib.sh"; if fm_supervision_needed "$2"; then printf arm; else printf no-arm; fi',
-    "predicate-probe",
-    process.env.FM_ROOT_OVERRIDE,
-    state,
-  ],
-  { encoding: "utf8" },
-);
-const verdict = String(probe.stdout || "").trim();
-if (verdict !== "arm" && verdict !== "no-arm") {
-  console.error(`predicate probe failed (status ${probe.status}): ${probe.stderr}`);
-  process.exit(1);
-}
-
-// The two local overrides: an away record declines even when the predicate
-// reads needed, because away mode owns supervision through its daemon, and an
-// x-mode home arms before its relay poll is registered. Every other state
-// directory must match the shared verdict exactly.
-let expected;
-if (existsSync(`${state}/.afk`)) {
-  if (verdict !== "arm") {
-    console.error(`afk fixture lost its registered need: predicate said ${verdict}`);
-    process.exit(1);
-  }
-  expected = "no-arm";
-} else if (existsSync(`${config}/x-mode.env`)) {
-  if (verdict !== "no-arm") {
-    console.error(`x-mode fixture unexpectedly reads as needed: predicate said ${verdict}`);
-    process.exit(1);
-  }
-  expected = "arm";
-} else {
-  expected = verdict;
-}
+const expected = process.env.FM_ARM_EXPECTED;
 
 const mod = await import(pathToFileURL(process.env.PLUGIN).href);
 const client = { session: { promptAsync: async () => {} } };
@@ -1688,6 +1647,10 @@ if (!existsSync(armLog)) {
 process.exit(0);
 EOF
   for case_name in source registered-check empty afk-with-source task-meta x-mode; do
+    case "$case_name" in
+      source|registered-check|task-meta|x-mode) expected=arm ;;
+      empty|afk-with-source) expected=no-arm ;;
+    esac
     dir=$(make_arm_decision_fixture "opencode-arm-$case_name")
     state="$dir/home/state"
     config="$dir/home/config"
@@ -1704,7 +1667,7 @@ EOF
       x-mode) : > "$config/x-mode.env" ;;
     esac
     out=$(FM_ROOT_OVERRIDE="$dir/repo" WORKTREE="$dir/repo" FM_HOME="$dir/home" \
-      FM_ARM_LOG="$dir/arm.log" NODE_NO_WARNINGS=1 \
+      FM_ARM_LOG="$dir/arm.log" FM_ARM_EXPECTED="$expected" NODE_NO_WARNINGS=1 \
       PLUGIN="$ROOT/.opencode/plugins/fm-primary-watch-arm.js" node "$driver" 2>&1)
     status=$?
     expect_code 0 "$status" "OpenCode arm plugin must decide with the shared predicate ($case_name): $out"

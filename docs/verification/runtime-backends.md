@@ -107,6 +107,34 @@ A single-process harness has no descendant that adds a distinct verdict, which i
 The portable regression pins every half without any harness installed: `tests/fm-harness-precedence.test.sh` asserts that this two-process topology decides at comm strength, that the descent probe reaches a strength the top-of-session probe cannot, that a sibling branch answering a foreign harness contributes no verdict, that a foreign args-only verdict at the deepest vantage leaves the comm-strength identity intact, and that equal-depth ties choose the comm-strength leaf regardless of process ordering.
 The run did not reach `opencode`, `pi`, `pi-signed`, `grok`, `kimi`, or `muse`, which were not installed, and stopped at the same pre-existing liveness failure for `cursor` 3.18.9, whose resolved binary on that machine is the editor rather than `cursor-agent`; those adapters are unverified by this run.
 
+## Project admission across backend lock release windows
+
+[`bin/fm-project-capacity-lib.sh`](../../bin/fm-project-capacity-lib.sh) owns capacity admission and reservation mechanics.
+The reusable regressions exercise the production spawn entry point with synthetic/offline tmux, Treehouse, Herdr, and Orca fixtures.
+On 2026-10-08, the capacity suite passed under GNU Bash 5.3.9 on macOS 27.0; the six Herdr presentation contention cases also passed under stock macOS Bash 3.2.57.
+Refresh those results with:
+
+```sh
+bash bin/fm-test-run.sh tests/fm-project-capacity.test.sh
+/bin/bash tests/fm-spawn-worktree-settle.test.sh herdr-lock-order
+/bin/bash tests/fm-project-capacity.test.sh metadata-handoff
+```
+
+Selected exact capacity output:
+
+```text
+ok - same-origin spawns across local homes cannot oversubscribe during the actual unlocked get
+ok - a failed get retires its reservation and a successor takes the place
+ok - counting reaps a proven-dead reservation without leaking capacity
+ok - a pending reservation and its metadata count once until PR handoff (system Bash)
+ok - an Orca spawn takes the shared project lock whenever a same-origin clone is capped and defers before creating anything
+```
+
+The Herdr cases cover waiting, batch dispatch, contention refusal, creation, project spaces, and journal invalidation.
+Each case asserts that the competing presentation owner can acquire the project lock while the pending admission still occupies a place, and that no reservation survives success or refusal.
+These results are synthetic/offline built-CLI validation, with no real-account or real-backend launch claim.
+Zellij and cmux use the same common admission and metadata publication paths inspected for this guarantee; these fixtures do not execute those backends.
+
 ## tmux
 
 Foreground-process behavior was verified on 2026-07-07 with tmux 3.6a on macOS.
@@ -1815,7 +1843,7 @@ ok - real herdr: a stale registration no longer blocks relaunch, and the endpoin
 ok - real herdr: an agent that does not stop fails closed instead of being reported as stopped
 ```
 
-The registry read through `herdr pane report-agent` is the same source `fm_backend_herdr_agent_state` classifies, and since 2026-09-10 that registration counts as an agent only while `pane process-info` shows a harness process behind it, so the guard backs the registration with a real process named like a harness (a symlink to `sleep`) and then stops that process, with no real harness launched.
+The registry read through `herdr pane report-agent` is the same source `fm_backend_herdr_agent_state` classifies, and since 2026-09-10 that registration counts as an agent only while `pane process-info` shows a harness process behind it, so the guard backs the registration with a real process named like a harness (using `fm_agent_standin` from [`tests/lib.sh`](../../tests/lib.sh)) and then stops that process, with no real harness launched.
 That command is the guard that refreshes this record; run it after every Herdr upgrade rather than trusting the version above.
 
 For Pi on Herdr 0.9.0, `herdr agent get` reflects whether the agent process remains live; its registration does not persist merely because the pane and parent shell do.

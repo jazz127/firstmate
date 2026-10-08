@@ -1584,6 +1584,98 @@ test_handling_delivered_rejects_a_superseded_generation() {
   pass "watch-arm: a churned generation's handling confirmation reports a mismatch and an arm check keeps it"
 }
 
+# The OpenCode arm plugin must decide whether to arm with the shared supervision
+# predicate (bin/fm-supervision-lib.sh's fm_supervision_needed), the same
+# condition owner bin/fm-turnend-guard.sh decides with, so the plugin and the
+# guard can never disagree about whether a watcher is needed. The fixture is a
+# minimal primary root carrying the real shared predicate, a home whose state
+# directory receives each case's records, and a fake arm that records its own
+# run; the plugin is exercised through its public coordinator interface.
+make_arm_decision_fixture() {  # <name>
+  local name=$1 dir repo home
+  dir=$(make_case "$name")
+  repo="$dir/repo"
+  home="$dir/home"
+  mkdir -p "$repo/bin" "$home/state" "$home/config"
+  git init -q -b main "$repo"
+  : > "$repo/AGENTS.md"
+  cp "$ROOT/bin/fm-supervision-lib.sh" "$repo/bin/fm-supervision-lib.sh"
+  cat > "$repo/bin/fm-watch-arm.sh" <<'SH'
+#!/usr/bin/env bash
+printf 'arm\n' >> "${FM_ARM_LOG:?}"
+printf 'watcher: healthy pid=1 (beacon 0s)\n'
+SH
+  chmod +x "$repo/bin/fm-watch-arm.sh"
+  printf '%s\n' "$dir"
+}
+
+test_opencode_arm_plugin_decides_with_the_shared_predicate() {
+  command -v node >/dev/null 2>&1 || { printf 'skip: node not found\n'; return 0; }
+  local driver case_name dir state config out status expected
+  driver="$TMP_ROOT/arm-decision-driver.mjs"
+  cat > "$driver" <<'EOF'
+import { existsSync, writeFileSync } from "node:fs";
+import { pathToFileURL } from "node:url";
+
+const state = `${process.env.FM_HOME}/state`;
+const armLog = process.env.FM_ARM_LOG;
+const expected = process.env.FM_ARM_EXPECTED;
+
+const mod = await import(pathToFileURL(process.env.PLUGIN).href);
+const client = { session: { promptAsync: async () => {} } };
+await mod.FmPrimaryWatchArm({ client, directory: process.env.WORKTREE, worktree: process.env.WORKTREE });
+writeFileSync(`${state}/.lock`, `${process.pid}\n`);
+const status = await globalThis.__firstmateOpenCodeWatchArm.ensureArmed("session-test", client);
+if (expected === "no-arm") {
+  if (status !== "not-needed") {
+    console.error(`expected a not-needed decline, got ${status}`);
+    process.exit(1);
+  }
+  if (existsSync(armLog)) {
+    console.error("the plugin declined but the arm ran");
+    process.exit(1);
+  }
+  process.exit(0);
+}
+for (let i = 0; i < 250 && !existsSync(armLog); i += 1) {
+  await new Promise((resolve) => setTimeout(resolve, 20));
+}
+if (!existsSync(armLog)) {
+  console.error(`the arm never ran (ensureArmed status ${status})`);
+  process.exit(1);
+}
+process.exit(0);
+EOF
+  for case_name in source registered-check empty afk-with-source task-meta x-mode; do
+    case "$case_name" in
+      source|registered-check|task-meta|x-mode) expected=arm ;;
+      empty|afk-with-source) expected=no-arm ;;
+    esac
+    dir=$(make_arm_decision_fixture "opencode-arm-$case_name")
+    state="$dir/home/state"
+    config="$dir/home/config"
+    case "$case_name" in
+      source) mkdir -p "$state/procevent"; : > "$state/procevent/fixture.source" ;;
+      registered-check) : > "$state/fixture.check.sh"; : > "$state/fixture.check-trust" ;;
+      empty) : ;;
+      afk-with-source)
+        mkdir -p "$state/procevent"
+        : > "$state/procevent/fixture.source"
+        : > "$state/.afk"
+        ;;
+      task-meta) : > "$state/fixture.meta" ;;
+      x-mode) : > "$config/x-mode.env" ;;
+    esac
+    out=$(FM_ROOT_OVERRIDE="$dir/repo" WORKTREE="$dir/repo" FM_HOME="$dir/home" \
+      FM_ARM_LOG="$dir/arm.log" FM_ARM_EXPECTED="$expected" NODE_NO_WARNINGS=1 \
+      PLUGIN="$ROOT/.opencode/plugins/fm-primary-watch-arm.js" node "$driver" 2>&1)
+    status=$?
+    expect_code 0 "$status" "OpenCode arm plugin must decide with the shared predicate ($case_name): $out"
+    [ -z "$out" ] || fail "OpenCode arm predicate case $case_name printed output: $out"
+  done
+  pass "watch-arm: the OpenCode arm plugin decides with the shared supervision predicate"
+}
+
 test_attached_arm_reports_the_delivered_wake
 test_attached_arm_reports_the_delivered_wake_after_drain
 test_arm_refuses_an_unusable_launch_confirm_window
@@ -1614,3 +1706,4 @@ test_handling_delivered_rejects_a_superseded_generation
 test_take_over_attaches_to_a_cycle_the_named_arm_does_not_own
 test_take_over_owns_a_fresh_cycle_and_keeps_queued_work_surfacing
 test_take_over_preserves_downtime_from_watcher_self_exit
+test_opencode_arm_plugin_decides_with_the_shared_predicate

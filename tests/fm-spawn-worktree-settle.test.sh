@@ -574,10 +574,12 @@ run_presentation_lock_case() {
   cp "$SPAWN" "$code/bin/fm-spawn.sh"
   ln -s "$ROOT/.agents" "$code/.agents"
   ln -s "$ROOT/docs" "$code/docs"
-  sed "s|'/tmp/firstmate-herdr-presentation'|'$dir/presentation'|" \
+  sed "s|/tmp/firstmate-herdr-presentation-|$dir/presentation-|" \
     "$ROOT/bin/backends/herdr.sh" > "$code/bin/backends/herdr.sh"
   fm_test_spawn_home "$home1" codex
   fm_test_spawn_home "$home2" codex
+  printf 'project 1\n' > "$home1/config/project-capacity"
+  printf -- '- child - local (home: %s; scope: project; projects: project; added 2026-10-08)\n' "$home2" > "$home1/data/secondmates.md"
   mkdir -p "$home2/user-home"
   printf 'schema=fm-secondmate-parent.v1\nroute=local\nparent_home=%s\n' "$home1" \
     > "$home2/.fm-secondmate-parent"
@@ -617,6 +619,12 @@ run_presentation_lock_case() {
     [ -e "$dir/resolve-lock" ] || exit 2
     fm_lock_acquire_wait_max "$project_lock" 10 || exit 3
     : > "$dir/owner-retook-project"
+    . "$1/bin/fm-backend.sh"
+    . "$1/bin/fm-secondmate-registry-lib.sh"
+    . "$1/bin/fm-project-capacity-lib.sh"
+    fm_project_capacity_occupants "$project_lock" "$7" "$FM_HOME/state" observer || exit 5
+    [ "$FM_PROJECT_CAPACITY_OCCUPANTS" = 1 ] || exit 6
+    : > "$dir/pending-held-during-presentation"
     if [ "$mode" = changed ]; then
       printf "version=1\ntask_id=foreign-task\nprojection_id=AAAAAAAAAAAAAAAAAAAAAA\n" > "$journal"
     fi
@@ -631,7 +639,7 @@ run_presentation_lock_case() {
         [ -e "$dir/spawn-done" ] || exit 4
         ;;
     esac
-  ' _ "$ROOT" "$lock" "$presentation" "$dir" "$mode" "$journal" > "$dir/peer.out" 2>&1 &
+  ' _ "$ROOT" "$lock" "$presentation" "$dir" "$mode" "$journal" "$project" > "$dir/peer.out" 2>&1 &
   peer_pid=$!
   for _ in $(seq 1 1000); do
     [ ! -e "$dir/owner-ready" ] || break
@@ -654,6 +662,11 @@ run_presentation_lock_case() {
   wait "$peer_pid"; peer_rc=$?
   [ "$peer_rc" -eq 0 ] || fail "$mode: presentation owner could not retake project lock (exit $peer_rc)"$'\n'"$(cat "$dir/peer.out" "$dir/spawn.out")"
   [ -e "$dir/owner-retook-project" ] || fail "$mode: competing lock sequence was not exercised"
+  assert_present "$dir/pending-held-during-presentation" "$mode: admission vanished during presentation ordering"
+  local reservation
+  for reservation in "$lock".capacity.*; do
+    assert_absent "$reservation" "$mode: reservation survived launch success or refusal"
+  done
   [ ! -e "$dir/unprotected" ] || fail "$mode: recovery read protected state before retaking project lock"
   case "$mode" in
     refuse)

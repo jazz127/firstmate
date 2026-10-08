@@ -1,0 +1,7 @@
+/Users/jarad/.no-mistakes/worktrees/daaee59c4bbe/01M4BYXMSQ45VRM1V0Y30Z00VR/.nm-results
+mechanism=perl output=through status=7
+mechanism=perl deadline_status=124
+mechanism=perl stdin_output=provided status=7
+mechanism=bash output=through status=7
+mechanism=bash deadline_status=124
+mechanism=bash stdin_output=provided status=7

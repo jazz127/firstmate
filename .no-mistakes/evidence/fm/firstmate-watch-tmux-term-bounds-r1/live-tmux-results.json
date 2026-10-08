@@ -1,0 +1,35 @@
+[
+  {
+    "name": "full watcher inbox list-windows cancellation",
+    "passed": true,
+    "seconds": 0.2292969999834895
+  },
+  {
+    "name": "agent-state",
+    "passed": true
+  },
+  {
+    "name": "composer",
+    "passed": true
+  },
+  {
+    "name": "agent-alive",
+    "passed": true
+  },
+  {
+    "name": "nested-timeout-perl",
+    "passed": true
+  },
+  {
+    "name": "nested-timeout-bash",
+    "passed": true
+  },
+  {
+    "name": "healthy real backend results",
+    "passed": true
+  },
+  {
+    "name": "fresh real tmux server and pane ownership scrub",
+    "passed": true
+  }
+]

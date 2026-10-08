@@ -1,0 +1,24 @@
+jarad@JHARBOUR 01M4BYXMSQ45VRM1V0Y30Z00VR % printf 'timeout_owner=%s exec_owner=
+%s sentinel=%s\n' "${FM_TIMEOUT_OWNER_PID-unset}" "${FM_EXEC_TIMED_OWNER_PID-uns
+et}" "$FM_TEST_SENTINEL"; . '/Users/jarad/.no-mistakes/worktrees/daaee59c4bbe/01
+M4BYXMSQ45VRM1V0Y30Z00VR/bin/fm-timeout-lib.sh'; fm_run_timed 3 bash -c 'sleep 0
+.2; echo startup-complete'
+timeout_owner=unset exec_owner=unset sentinel=kept
+startup-complete
+jarad@JHARBOUR 01M4BYXMSQ45VRM1V0Y30Z00VR %
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

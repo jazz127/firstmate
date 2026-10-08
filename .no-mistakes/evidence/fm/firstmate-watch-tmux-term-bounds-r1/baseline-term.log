@@ -1,0 +1,4 @@
+Base watcher blocked on real query: [['92060', '92059', 'S', 'tmux list-windows -t primary -F #{window_name}']]
+After TERM: base watcher still alive after 2 seconds and singleton lock remains
+Resuming server releases deferred TERM; exit: -15
+Baseline lab and transient base script removed

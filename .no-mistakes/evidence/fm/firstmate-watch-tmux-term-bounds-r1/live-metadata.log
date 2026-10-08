@@ -1,0 +1,5 @@
+Real tmux server suspended; local metadata returned: backend=tmux harness=codex kind=ship in 0.238 seconds
+Actual recovery guard exit: 1 output: fm-gate-refuse: gate agent lifecycle permitted only against lab home /Users/jarad/.no-mistakes/worktrees/daaee59c4bbe/01M4BYXMSQ45VRM1V0Y30Z00VR/.nm-metadata
+error: secondmate home cannot be inside the firstmate repo: /Users/jarad/.no-mistakes/worktrees/daaee59c4bbe/01M4BYXMSQ45VRM1V0Y30Z00VR/.nm-child
+
+Lab cleaned up

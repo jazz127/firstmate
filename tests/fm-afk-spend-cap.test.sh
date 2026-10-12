@@ -792,6 +792,46 @@ SH
   done
 }
 
+test_waiting_workers_require_proven_idle() {
+  local dir verb activity count expected failures=0
+  for verb in paused captain-held needs-decision; do
+    dir="$TMP_ROOT/waiting-$verb"
+    install_tools "$dir"
+    fm_write_meta "$dir/state/task.meta" "window=fixture:worker" \
+      "kind=ship" "mode=no-mistakes" "harness=claude"
+    printf 'done: implementation complete\n%s: waiting for an answer\n' "$verb" \
+      > "$dir/state/task.status"
+    for activity in idle busy unknown missing unreadable; do
+      "$ROOT/bin/fm-busy-event.sh" arm "$dir/state" task --state idle \
+        --source claude-hook --event stop >/dev/null || fail "$verb idle arm failed"
+      expected=1
+      case "$activity" in
+        idle) expected=0 ;;
+        busy|unknown)
+          "$ROOT/bin/fm-busy-event.sh" apply "$dir/state" task "$activity" --current-gen \
+            --source claude-hook --event user-prompt-submit >/dev/null \
+            || fail "$verb $activity record failed"
+          ;;
+        missing) rm "$dir/state/task.busy-state" ;;
+        unreadable)
+          fm_write_meta "$dir/state/task.meta" "window=unreadable:worker" \
+            "kind=ship" "mode=no-mistakes" "harness=claude"
+          ;;
+      esac
+      count=$(count_workers "$dir") || fail "$verb $activity count failed"
+      if [ "$count" = "$expected" ]; then
+        pass "$verb with $activity activity counts $expected worker(s)"
+      else
+        printf 'FAIL: %s with %s activity counts %s, expected %s\n' \
+          "$verb" "$activity" "$count" "$expected" >&2
+        failures=$((failures + 1))
+      fi
+    done
+  done
+  [ "$failures" = 0 ] || fail "$failures waiting-worker cases failed"
+}
+
+test_waiting_workers_require_proven_idle
 test_completed_run_unknown_activity
 test_bounded_presence_reads
 test_exited_worker_does_not_fill_cap

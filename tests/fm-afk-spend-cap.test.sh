@@ -879,9 +879,15 @@ EOF
     waiting_count_check 1 "$verb with its wait retracted"
     printf '%s [key=wait]: waiting\nworking: resumed without resolving the old key\n' "$verb" > "$dir/state/task.status"
     waiting_count_check 1 "$verb followed by a newer working event"
-    printf 'needs-decision [key=wait]: waiting\nunknown-prefix: contradictory newer event\n' > "$dir/state/task.status"
+    printf '%s [key=wait]: waiting\nunknown-prefix: contradictory newer event\n' "$verb" > "$dir/state/task.status"
     waiting_count_check 1 "$verb fixture with a newer unrecognized event"
   done
+
+  dir="$TMP_ROOT/waiting-needs-decision-ship-plain"
+  printf 'needs-decision [key=a]: waiting\nworking: resumed\nresolved [key=b]: unrelated answer\n' > "$dir/state/task.status"
+  waiting_count_check 1 'open decision with working before an unrelated resolution'
+  printf 'needs-decision [key=a]: waiting\nneeds-decision [key=b]: waiting\nworking: resumed\nresolved [key=b]: answered\n' > "$dir/state/task.status"
+  waiting_count_check 1 'older open decision with working before the newer resolution'
 
   dir="$TMP_ROOT/waiting-paused-ship-plain"
   printf 'paused [key=wait]: waiting\nresolved [key=other]: unrelated answer\n' > "$dir/state/task.status"

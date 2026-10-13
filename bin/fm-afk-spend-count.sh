@@ -39,6 +39,28 @@ paused_verb=${FM_CLASSIFY_PAUSED_VERB:-$FM_CLASSIFY_PAUSED_VERB_DEFAULT}
 held_verb=${FM_CLASSIFY_CAPTAIN_HELD_VERB:-$FM_CLASSIFY_CAPTAIN_HELD_VERB_DEFAULT}
 resolve_verb=${FM_CLASSIFY_RESOLVE_VERB:-$FM_CLASSIFY_RESOLVE_VERB_DEFAULT}
 
+# Return the newest event preceding any trailing resolutions, using the
+# classifier's event boundary so continuation text cannot mask activity.
+spend_latest_non_resolved_verb() {
+  local line verb i=0 legacy_re
+  local -a lines=()
+  legacy_re="^[[:space:]]*(${FM_CAPTAIN_RE:-$FM_CLASSIFY_CAPTAIN_RE_DEFAULT})"
+  while IFS= read -r line || [ -n "$line" ]; do
+    lines[i]=$line
+    i=$((i + 1))
+  done
+  while [ "$i" -gt 0 ]; do
+    i=$((i - 1))
+    line=${lines[i]}
+    _fm_status_line_is_event "$line" "$legacy_re" || continue
+    status_line_verb "$line" verb
+    [ "$verb" != "$resolve_verb" ] || continue
+    printf '%s\n' "$verb"
+    return 0
+  done
+  return 1
+}
+
 live=0
 for meta in "$STATE"/*.meta; do
   [ -f "$meta" ] || continue
@@ -84,9 +106,11 @@ for meta in "$STATE"/*.meta; do
   verb=$(status_line_verb "$line")
   case "$verb" in
     "$paused_verb"|"$held_verb"|needs-decision)
-      newest_verb=$(status_line_verb "$(last_status_line "$status")")
+      newest_verb=$(tail -n "$FM_CLASSIFY_EVENT_WINDOW_LINES" "$status" 2>/dev/null \
+        | spend_latest_non_resolved_verb) \
+        || newest_verb=$(spend_latest_non_resolved_verb < "$status") || newest_verb=
       case "$newest_verb" in
-        "$paused_verb"|"$held_verb"|needs-decision|"$resolve_verb") ;;
+        "$paused_verb"|"$held_verb"|needs-decision) ;;
         *) live=$((live + 1)); continue ;;
       esac
       ;;

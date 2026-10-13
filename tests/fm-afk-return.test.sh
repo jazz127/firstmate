@@ -86,7 +86,10 @@ SH
 
 run_return() {  # <case-dir> <mode>
   local dir=$1 mode=$2
-  FM_HOME="$dir/home" FM_STATE_OVERRIDE="$dir/home/state" "$dir/bin/fm-afk-return.sh" "$mode" 2>&1
+  # The runner carries the real supervision-engine library, so pin the primary
+  # harness; otherwise running these tests under a Claude session turns on the
+  # supervision-host brief that the host-home cases below opt into explicitly.
+  FM_TEST_SEAM=1 FM_TEST_HARNESS=unknown FM_HOME="$dir/home" FM_STATE_OVERRIDE="$dir/home/state" "$dir/bin/fm-afk-return.sh" "$mode" 2>&1
 }
 
 ack_return() {  # <case-dir> <return-output>

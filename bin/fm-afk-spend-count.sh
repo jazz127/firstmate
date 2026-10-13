@@ -8,9 +8,11 @@
 # Orca, Zellij and cmux have no recovery-grade death classifier, so a failed
 # presence probe cannot exclude their recorded endpoints. Raw tmux absence is
 # also unproven: fm_control_endpoint_absence_verdict owns that proof boundary.
-# Current-turn busy activity overrides terminal deliveries and declared waits.
-# Idle waiting workers also pass fm-crew-state.sh's current-state gate, so a
-# worker paused while its validation run executes still reserves capacity.
+# Excluding a live done or waiting worker requires proven idle activity;
+# busy, unknown or unreadable activity keeps it counted.
+# Idle paused, captain-held and needs-decision workers also pass
+# fm-crew-state.sh's current-state gate, so a worker paused while its validation
+# run executes still reserves capacity.
 # A newer non-wait event prevents exclusion despite an older open decision.
 # Idle uses fm-busy-lib.sh's trusted sources: Grok's rendered-tail fallback
 # infers idle from a missing cancel footer and is weaker than semantic hooks.

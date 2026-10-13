@@ -354,12 +354,12 @@ Only a genuine store fault keeps that backstop skipped.
 ## How the branch knows what the captain said
 
 Main's captain and assistant text is mirrored into the branch as read-only `fm-main-mirror` messages.
-The mirror never carries tool calls, tool results, operational injections, or the branch's own merged notes.
+The mirror never carries tool calls, tool results, custom messages, operational injections, or the branch's own merged notes.
 
 Mirroring happens at two points:
 
 - The idle path mirrors at main's turn end.
-- At `before_agent_start`, Pi's authoritative prompt is staged verbatim before SessionManager persists that user entry.
+- At a prompt-bearing `before_agent_start`, Pi's authoritative user prompt is staged verbatim before SessionManager persists that user entry.
   The complete current captain message therefore precedes any branch wake accepted after that boundary.
   The later persisted copy is suppressed, and older dialog entries remain bounded.
 

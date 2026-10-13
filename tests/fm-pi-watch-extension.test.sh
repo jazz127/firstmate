@@ -3509,7 +3509,9 @@ printf 'signal: streaming chain wake %s\n' "$count"
 exit 0
 SH
   chmod +x "$repo/bin/fm-watch-arm.sh"
-  out=$(PLUGIN="$plugin" FM_HOME="$home" FM_ROOT_OVERRIDE="$repo" FM_ARM_LOG="$log" FM_TRIGGER_FILE="$trigger" node --input-type=module 2>&1 <<'EOF'
+  # Keep the JavaScript heredoc outside command substitution: stock Bash 3.2
+  # reparses its quotes instead of leaving the Node input opaque.
+  PLUGIN="$plugin" FM_HOME="$home" FM_ROOT_OVERRIDE="$repo" FM_ARM_LOG="$log" FM_TRIGGER_FILE="$trigger" node --input-type=module > "$TMP_ROOT/node-output" 2>&1 <<'EOF'
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
@@ -3594,8 +3596,8 @@ await waitFor(() => arms() === 4, "replacement arm");
 await waitFor(() => !existsSync(handoffPath), "consumed replay clears its handoff record");
 process.exit(0);
 EOF
-)
   status=$?
+  out=$(cat "$TMP_ROOT/node-output")
   expect_code 0 "$status" "Pi streaming-time wake delivery must keep the successor chain and replay only unconsumed wakes"
   [ -z "$out" ] || fail "Pi streaming-time delivery chain test printed output: $out"
   pass "Pi streaming-time wake delivery keeps the successor chain and replays only unconsumed wakes"

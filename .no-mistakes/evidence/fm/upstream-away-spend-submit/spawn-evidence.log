@@ -1,0 +1,331 @@
+$ bash bin/fm-lab-home.sh create <WORKTREE>/.l
+exit=0
+<WORKTREE>/.l
+
+$ git init -q -b main <WORKTREE>/.l/project
+exit=0
+
+$ git -C <WORKTREE>/.l/project -c user.name=lab -c user.email=<EMAIL> commit -q --allow-empty -m 'Initialize disposable validation project'
+exit=0
+
+$ git clone --bare <WORKTREE>/.l/project <WORKTREE>/.l/origin.git
+exit=0
+Cloning into bare repository '<WORKTREE>/.l/origin.git'...
+done.
+
+$ git -C <WORKTREE>/.l/project remote add origin <WORKTREE>/.l/origin.git
+exit=0
+
+$ git -C <WORKTREE>/.l/project fetch origin
+exit=0
+From <WORKTREE>/.l/origin
+ * [new branch]      main       -> origin/main
+
+$ git -C <WORKTREE>/.l/project remote set-head origin main
+exit=0
+
+$ treehouse init
+exit=0
+A new version of treehouse is available: v3.1.2 → v3.1.3
+Run "treehouse update" to update
+
+Created <WORKTREE>/.l/project/treehouse.toml
+
+Local real Treehouse configuration:
+max_trees = 16
+root = ""
+
+# Worktree root directory (relative to repo root or absolute path).
+# Worktrees are placed under {root}/.treehouse/. Default: $HOME
+# Override per-command with the --root flag or the TREEHOUSE_ROOT env var.
+# Use "." to keep the pool in-project at <repo>/.treehouse/, next to the
+# code and removed with the project. Example: root = "."
+
+# Branch new and recycled worktrees are cut from.
+# Unset (default) infers it from the repository: origin/HEAD, then the
+# checked-out branch, then init.defaultBranch.
+# When set, the branch must exist locally or on origin; treehouse fails
+# rather than falling back to the inferred default.
+# Override per-command with the --base flag. Example: base_branch = "develop"
+
+# Unique worktree directory names.
+# Unset (default) names every slot's directory after the repository, so
+# tooling that derives per-checkout identity from the directory name reads
+# every slot as the same checkout.
+# Set true to name new slots <repo>-<slot>; worktrees already in the pool
+# keep their paths either way.
+# Override per-command with the --unique-leaf flag or the
+# TREEHOUSE_UNIQUE_LEAF env var. Example: unique_leaf = true
+
+# Where a newly created pool slot is placed.
+# Unset (default) uses {pool}/{slot}/{repo}. Placeholders: {pool}, {slot}
+# (required), {repo}, {repo_parent}; one of {pool} or {repo} is required as
+# well, to scope the template to this repository. {repo_parent} does not count:
+# two repositories side by side expand it identically. {repo} alone can still
+# collide between two repositories whose directories share a name.
+# Worktrees already in the pool keep their recorded paths.
+# Override per-command with the --worktree-path flag or the
+# TREEHOUSE_WORKTREE_PATH env var.
+# Example: worktree_path = "{repo_parent}/{repo}-{slot}"
+
+# Opt-in tracked-file copy-on-write sharing for fresh Git slots on macOS/APFS.
+# Values: off (default), fresh. Existing slots and ignored output are untouched.
+# Requires no concurrent destination writers during setup; see README.
+# Override with --apfs-sharing or TREEHOUSE_APFS_SHARING.
+# Example: apfs_sharing = "fresh"
+
+$ bash bin/fm-afk-contract.sh enter --spend 1 --words 'Disposable actual spawn validation'
+exit=0
+Away posture recorded at 2026-10-13T19:41:44Z: hold-for-return only. No phone channel is configured; anything that needs you waits for your return. Your away instructions are recorded verbatim; the away session will carry them out where it can, and anything it is unsure of, or that needs you, waits for your return. Destructive, irreversible, and security-sensitive actions are never pre-authorizable, whatever the words say. Expected return: not given. Spend cap: 1 concurrent workers.
+Away posture (recorded):
+  entered: 2026-10-13T19:41:44Z
+  expected return: not given
+  spend cap: 1 concurrent workers
+  reach: hold-for-return only. No phone channel is configured; anything that needs you waits for your return.
+  your words (verbatim):
+    Disposable actual spawn validation
+
+$ tmux -L fm-lab -f /dev/null new-session -d -s primary -x 120 -y 40 -c <WORKTREE> 'bash --noprofile --norc'
+exit=0
+
+$ tmux -L fm-lab set-option -g default-shell /run/current-system/sw/bin/bash
+exit=0
+
+$ tmux -L fm-lab set-option -g default-command 'bash --noprofile --norc'
+exit=0
+
+$ tmux -L fm-lab display-message -p -t primary '#{socket_path},#{pid},0'
+exit=0
+<WORKTREE>/.l/t/tmux-501/fm-lab,79382,0
+
+$ tmux -L fm-lab set-environment -g FM_HOME <WORKTREE>/.l
+exit=0
+
+$ tmux -L fm-lab set-environment -g TREEHOUSE_ROOT <WORKTREE>/.l/pool
+exit=0
+
+$ tmux -L fm-lab set-environment -g NM_HOME <WORKTREE>/.l/nm
+exit=0
+
+$ tmux -L fm-lab set-environment -g DISABLE_AUTOUPDATER 1
+exit=0
+
+$ tmux -L fm-lab set-environment -g TMPDIR <WORKTREE>/.l/tmp
+exit=0
+
+$ bash bin/fm-brief.sh raw demo --scout
+exit=0
+scaffolded: <WORKTREE>/.l/data/raw/brief.md (scout; replace {TASK} and {FIRSTMATE_SPEC})
+
+$ bash bin/fm-spawn.sh raw <WORKTREE>/.l/project 'sleep 120' --scout
+exit=0
+spawned raw harness=sleep kind=scout window=primary:fm-raw worktree=<WORKTREE>/.l/pool/.treehouse/project-2e61eb/1/project
+fm-gate-refuse: gate agent lifecycle permitted only against lab home <WORKTREE>/.l
+
+$ tmux -L fm-lab capture-pane -p -t primary:fm-raw -S -25
+exit=0
+bash-5.3$ treehouse get
+A new version of treehouse is available: v3.1.2 → v3.1.3
+Run "treehouse update" to update
+
+🌳 Setting up worktree...
+🌳 Entered worktree at <WORKTREE>/.l/pool/.treehouse/project-2e61e
+b/1/project. Type 'exit' to return.
+bash-5.3$ cd -- '<WORKTREE>/.l/pool/.treehouse/project-
+2e61eb/1/project'
+bash-5.3$ export GOTMPDIR=/tmp/fm-raw/gotmp
+bash-5.3$ export COMPACT_ADVISER_DISABLE=1
+bash-5.3$ export FM_TASK_ID=raw
+bash-5.3$ . '/tmp/fm-raw+a866cce1aa9a712988a563fa4cbd250042a757c757b8ad2181ff37fd77d53536/launch.s1791920508.79684.7637.
+sh'
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Published task metadata:
+window=primary:fm-raw
+endpoint_task_id=raw
+worktree=<WORKTREE>/.l/pool/.treehouse/project-2e61eb/1/project
+project=<WORKTREE>/.l/project
+harness=sleep
+kind=scout
+tasktmp=/tmp/fm-raw
+model=default
+effort=default
+spawn_gen=s1791920508.79684.7637
+
+$ bash bin/fm-afk-spend-count.sh <WORKTREE>/.l/state
+exit=0
+1
+
+$ bash bin/fm-spawn.sh fresh <WORKTREE>/.l/no-project --mode no-mistakes --yolo off
+exit=1
+fm-gate-refuse: gate agent lifecycle permitted only against lab home <WORKTREE>/.l
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  repair missing watcher supervision with a foreground checkpoint: bin/fm-watch-checkpoint.sh --seconds 180.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+error: spawn refused - the away-posture record caps concurrent workers at 1 and 1 ordinary task(s) are live in this home; task fresh stays queued for the captain's return or for a worker to finish (spend cap: bin/fm-afk-contract.sh)
+
+Fresh admission refused at spend cap
+$ bash -c '. bin/fm-backend.sh; fm_backend_kill_confirmed tmux primary:fm-raw'
+exit=0
+
+SCENARIO: An acknowledged raw-worker close does not turn later unproven tmux absence into proof
+$ bash bin/fm-afk-spend-count.sh <WORKTREE>/.l/state
+exit=0
+1
+
+$ bash bin/fm-brief.sh cancel demo --scout
+exit=0
+scaffolded: <WORKTREE>/.l/data/cancel/brief.md (scout; replace {TASK} and {FIRSTMATE_SPEC})
+
+Delivered launch pane before rename:
+bash-5.3$ treehouse get
+A new version of treehouse is available: v3.1.2 → v3.1.3
+Run "treehouse update" to update
+
+🌳 Setting up worktree...
+🌳 Entered worktree at <WORKTREE>/.l/pool/.treehouse/project-2e61e
+b/1/project. Type 'exit' to return.
+bash-5.3$ cd -- '<WORKTREE>/.l/pool/.treehouse/project-
+2e61eb/1/project'
+bash-5.3$ export GOTMPDIR=/tmp/fm-cancel/gotmp
+bash-5.3$ export COMPACT_ADVISER_DISABLE=1
+bash-5.3$ export FM_TASK_ID=cancel
+bash-5.3$ . '/tmp/fm-cancel+a866cce1aa9a712988a563fa4cbd250042a757c757b8ad2181ff37fd77d53536/launch.s1791920514.86191.11
+703.sh'
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+SCENARIO: Fresh real spawn reserves capacity before startup acknowledgement
+$ bash bin/fm-afk-spend-count.sh <WORKTREE>/.l/state
+exit=0
+1
+
+$ tmux -L fm-lab rename-window -t primary:fm-cancel moved-cancel
+exit=0
+
+Cancelled spawn transcript:
+fm-gate-refuse: gate agent lifecycle permitted only against lab home <WORKTREE>/.l
+can't find window: fm-cancel
+error: task cancel's startup could not be cancelled; its record is retained for endpoint cleanup
+
+Retained metadata:
+window=primary:fm-cancel
+endpoint_task_id=cancel
+worktree=<WORKTREE>/.l/pool/.treehouse/project-2e61eb/1/project
+project=<WORKTREE>/.l/project
+harness=bash
+kind=scout
+tasktmp=/tmp/fm-cancel
+model=default
+effort=default
+spawn_gen=s1791920514.86191.11703
+cleanup_recovery=launch
+
+$ tmux -L fm-lab display-message -p -t primary:moved-cancel '#{pane_current_command}'
+exit=0
+bash
+
+SCENARIO: Real renamed launch survives cancellation and retains its capacity reservation
+$ bash bin/fm-afk-spend-count.sh <WORKTREE>/.l/state
+exit=0
+1
+
+$ bash bin/fm-spawn.sh fresh <WORKTREE>/.l/no-project --mode no-mistakes --yolo off
+exit=1
+fm-gate-refuse: gate agent lifecycle permitted only against lab home <WORKTREE>/.l
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  repair missing watcher supervision with a foreground checkpoint: bin/fm-watch-checkpoint.sh --seconds 180.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+error: spawn refused - the away-posture record caps concurrent workers at 1 and 1 ordinary task(s) are live in this home; task fresh stays queued for the captain's return or for a worker to finish (spend cap: bin/fm-afk-contract.sh)
+
+Fresh admission refused at spend cap
+$ bash bin/fm-afk-return.sh check
+exit=3
+=== Return brief (away 2026-10-13T19:41:44Z -> 2026-10-13T19:41:58Z, 14s) ===
+Supervisor health:
+  - GAP: the watcher beat was 999999s old at return (grace 300s)
+  - status file unreadable: <WORKTREE>/.l/state/cancel.status; catch-up stays gated
+Your instructions:
+  your words at entry:
+    Disposable actual spawn validation
+  the away session took no action under them.
+Waiting on you:
+  (nothing)
+Tried and failed, or could not be fixed:
+  (nothing)
+Landed, cleanup due:
+  (nothing)
+Handled while away:
+  0 outcome(s) handled by the away session (0 routine, 0 escalated above)
+  (no routine outcomes recorded in the store for this window)
+Cost: 0 supervision outcome(s) recorded (0 routine, 0 captain); 1 task(s) live at return.
+fm-afk-launch: away-posture record archived at <WORKTREE>/.l/state/afk-contracts/1791920504.afk-contract
+fm-afk-launch: away mode stopped; no daemon terminal was running, .afk cleared, and the posture record archived
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+fm-afk-return: catch-up must finish before the captain request
+catch-up health: GAP: the watcher beat was 999999s old at return (grace 300s)
+catch-up lifecycle: status file unreadable: <WORKTREE>/.l/state/cancel.status; catch-up stays gated
+fm-afk-return: handle each blocker now, or close it with resolved [key=...] and append a durable reclassification reason, then run bin/fm-afk-return.sh check
+
+ACTUAL SPAWN DRIVER COMPLETE
+$ tmux -L fm-lab kill-server
+exit=0
+
+Disposable local origin, Treehouse pool, lab and private server removed

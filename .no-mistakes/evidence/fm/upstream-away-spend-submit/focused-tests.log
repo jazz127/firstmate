@@ -1,4 +1,5 @@
-FM_TEST_BEGIN 2026-10-13T01:25:48Z tests/fm-afk-spend-cap.test.sh family=afk expected_gate_skip=none
+COMMAND: TMPDIR=<WORKTREE>/.test-phase/tmp bash bin/fm-test-run.sh --jobs 1 tests/fm-afk-spend-cap.test.sh tests/fm-afk-return.test.sh tests/fm-control-relaunch.test.sh tests/fm-self-repo-role.test.sh tests/fm-trace-context-spawn.test.sh tests/fm-pi-watch-extension.test.sh tests/fm-pi-branch-extension.test.sh
+FM_TEST_BEGIN 2026-10-13T19:35:34Z tests/fm-afk-spend-cap.test.sh family=afk expected_gate_skip=none
 ok - paused ship plain with idle evidence counts 0 worker(s)
 ok - paused ship plain with busy evidence counts 1 worker(s)
 ok - paused ship plain with unknown evidence counts 1 worker(s)
@@ -140,16 +141,16 @@ ok - scout cancel startup frees capacity after confirmed cancellation
 ok - ship failed startup frees capacity after confirmed cancellation
 ok - scout finished startup reserves admission after delivery; stopped workers free room
 ok - ship cleanup-refused startup frees capacity after confirmed cancellation
-fm-afk-contract: away posture already recorded at 2026-10-13T01:29:08Z; a refresh leaves it untouched
+fm-afk-contract: away posture already recorded at 2026-10-13T19:38:58Z; a refresh leaves it untouched
 fm-afk-contract: the expected return and spend cap given with this refresh were not applied; enter new words to replace the mandate
 ok - ship rename-timeout cancellation retains the surviving worker, admission reservation and return cost
-fm-afk-contract: away posture already recorded at 2026-10-13T01:29:45Z; a refresh leaves it untouched
+fm-afk-contract: away posture already recorded at 2026-10-13T19:39:34Z; a refresh leaves it untouched
 fm-afk-contract: the expected return and spend cap given with this refresh were not applied; enter new words to replace the mandate
 ok - scout move-cancel cancellation retains the surviving worker, admission reservation and return cost
-fm-afk-contract: away posture already recorded at 2026-10-13T01:29:53Z; a refresh leaves it untouched
+fm-afk-contract: away posture already recorded at 2026-10-13T19:39:41Z; a refresh leaves it untouched
 fm-afk-contract: the expected return and spend cap given with this refresh were not applied; enter new words to replace the mandate
 ok - ship socket-cancel cancellation retains the surviving worker, admission reservation and return cost
-fm-afk-contract: away posture already recorded at 2026-10-13T01:30:00Z; a refresh leaves it untouched
+fm-afk-contract: away posture already recorded at 2026-10-13T19:39:49Z; a refresh leaves it untouched
 fm-afk-contract: the expected return and spend cap given with this refresh were not applied; enter new words to replace the mandate
 ok - scout rename-raw-cancel cancellation retains the surviving worker, admission reservation and return cost
 ok - relaunches, secondmates and quiet mode keep their admission exemptions
@@ -167,8 +168,8 @@ ok - accepted terminal-ready delivery leaves the away spend count
 ok - authoritative busy state overrides an unchanged ready log for spend admission
 ok - an explicit working declaration keeps resumed work counted
 ok - direct-PR, local-only and scout deliveries are excluded; the default-mode handoff still counts
-FM_TEST_END 2026-10-13T01:30:38Z tests/fm-afk-spend-cap.test.sh exit=0 duration_ms=289475 gate_skip=false
-FM_TEST_BEGIN 2026-10-13T01:30:38Z tests/fm-afk-return.test.sh family=afk expected_gate_skip=none
+FM_TEST_END 2026-10-13T19:40:27Z tests/fm-afk-spend-cap.test.sh exit=0 duration_ms=292785 gate_skip=false
+FM_TEST_BEGIN 2026-10-13T19:40:27Z tests/fm-afk-return.test.sh family=afk expected_gate_skip=none
 ok - return catch-up owns live blocker remediation, reports itself to Bearings as content, preserves evidence once, and clears idempotently
 ok - tmux and Herdr blockers require the same explicit durable reclassification before ordinary work
 ok - needs-decision remains reportable without masquerading as a firstmate-actionable blocker
@@ -202,9 +203,503 @@ ok - a later failed probe does not change the trip-row error count
 ok - the return brief excludes prior-session latch rows
 ok - the return brief retains in-window trips and failed turns across a main restart
 ok - a return with only the legacy away flag still renders the brief and measures the window from the flag
-FM_TEST_END 2026-10-13T01:32:37Z tests/fm-afk-return.test.sh exit=0 duration_ms=119142 gate_skip=false
-FM_TEST_SUMMARY total=2 failed=0 skipped_gate=0 duration_ms=408711
-FM_TEST_SUMMARY_FAMILY family=afk count=2 duration_ms=408617 failed=0
-FM_TEST_SLOWEST rank=1 script=tests/fm-afk-spend-cap.test.sh duration_ms=289475
-FM_TEST_SLOWEST rank=2 script=tests/fm-afk-return.test.sh duration_ms=119142
-fm-test-run: wrote timing artifact: <operator-home>/.no-mistakes/evidence/01M4SDKM6WTX0CEK2C5DQ3RE1K/focused-timing.json
+FM_TEST_END 2026-10-13T19:42:14Z tests/fm-afk-return.test.sh exit=0 duration_ms=106476 gate_skip=false
+FM_TEST_BEGIN 2026-10-13T19:42:14Z tests/fm-control-relaunch.test.sh family=backend-dispatch expected_gate_skip=none
+ok - fm-control removes the dialog file after exit and after relaunch
+ok - fm-control exit removes the dialog file before it releases the control lock
+ok - fm-control relaunch: a same-harness relaunch replaces the agent in the same endpoint and worktree
+ok - fm-control relaunch: pending composer text refuses before the exit command is typed
+ok - fm-control relaunch: an unreadable composer fails safe before the exit command is typed
+ok - fm-control relaunch: a linked spawning home preserves committed and unfinished work in the recorded copy
+ok - fm-control relaunch: durable task metadata survives replacement launch publication
+ok - fm-control relaunch: delivery and concurrent task metadata publication serialize
+ok - fm-control relaunch: disabling tracing clears metadata and pane context
+ok - fm-control relaunch: progress and the Firstmate-worktree worker identity reach the replacement
+ok - fm-control relaunch: a ship task refuses without the progress note its replacement needs
+ok - fm-control relaunch: switching harness is one ordinary relaunch, and the old wiring goes with the old agent
+ok - fm-control relaunch: a harness switch resets model and effort unless they are named too
+ok - fm-control relaunch: a prefixed recorded harness can switch adapters transactionally
+ok - fm-control relaunch: a prefixed command requires an explicit replacement harness
+ok - fm-control relaunch: a same-harness relaunch keeps the profile axes it was running with
+ok - native Ultra relaunch preserves its profile and rejects an unsupported model before stopping
+ok - fm-control relaunch: a signed-out worker account pin refuses before the old agent stops
+ok - fm-control relaunch: the replacement follows the home's current worker account pin
+ok - fm-control relaunch: a Pi replacement keeps the home's tool exclusions
+ok - fm-control relaunch: exclusion-list refusals happen before the running agent stops
+ok - fm-control relaunch: explicit model and effort win over the recorded ones
+ok - fm-control relaunch: refuses to relaunch onto an adapter with no verified mechanics
+ok - fm-control relaunch: the retired incarnation's global turn-end token is revoked
+ok - fm-control relaunch: wiring cleanup failure refuses replacement arming
+ok - fm-control-lib: one owner resolves each harness's turn-end registry entry, and refuses a malformed token
+not ok - a configured secondmate harness should relaunch
+error: secondmate home cannot be inside the firstmate repo: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/smpin-23224/smhome
+error: the replacement agent for sm3 could not be launched on codex
+error: sm3's agent was stopped but the replacement did not launch; no agent is running, and its work plus the recorded progress note are preserved at <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/smpin-23224/smhome: expected exit 0, got 1
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/explicit-9149/home/state/rl7.git-hooks/pre-rebase: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/explicit-9149/home/state/rl7.git-hooks/pre-applypatch: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/explicit-9149/home/state/rl7.git-hooks/pre-auto-gc: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/explicit-9149/home/state/rl7.git-hooks/pre-merge-commit: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/explicit-9149/home/state/rl7.git-hooks/post-commit: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/explicit-9149/home/state/rl7.git-hooks/sendemail-validate: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/explicit-9149/home/state/rl7.git-hooks/applypatch-msg: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/explicit-9149/home/state/rl7.git-hooks/prepare-commit-msg: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/explicit-9149/home/state/rl7.git-hooks/post-checkout: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/explicit-9149/home/state/rl7.git-hooks/post-applypatch: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/explicit-9149/home/state/rl7.git-hooks/post-rewrite: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/explicit-9149/home/state/rl7.git-hooks/commit-msg: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/explicit-9149/home/state/rl7.git-hooks/pre-push: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/explicit-9149/home/state/rl7.git-hooks/post-merge: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/explicit-9149/home/state/rl7.git-hooks/pre-commit: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/explicit-9149/home/state/rl7.git-hooks: Directory not empty
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/explicit-9149/home/state: Directory not empty
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/explicit-9149/home: Directory not empty
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/explicit-9149: Directory not empty
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/switch-4431/home/state/rl4.git-hooks/pre-rebase: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/switch-4431/home/state/rl4.git-hooks/pre-applypatch: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/switch-4431/home/state/rl4.git-hooks/pre-auto-gc: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/switch-4431/home/state/rl4.git-hooks/pre-merge-commit: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/switch-4431/home/state/rl4.git-hooks/post-commit: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/switch-4431/home/state/rl4.git-hooks/sendemail-validate: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/switch-4431/home/state/rl4.git-hooks/applypatch-msg: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/switch-4431/home/state/rl4.git-hooks/prepare-commit-msg: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/switch-4431/home/state/rl4.git-hooks/post-checkout: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/switch-4431/home/state/rl4.git-hooks/post-applypatch: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/switch-4431/home/state/rl4.git-hooks/post-rewrite: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/switch-4431/home/state/rl4.git-hooks/commit-msg: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/switch-4431/home/state/rl4.git-hooks/pre-push: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/switch-4431/home/state/rl4.git-hooks/post-merge: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/switch-4431/home/state/rl4.git-hooks/pre-commit: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/switch-4431/home/state/rl4.git-hooks: Directory not empty
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/switch-4431/home/state: Directory not empty
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/switch-4431/home: Directory not empty
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/switch-4431: Directory not empty
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/profile-20205/home/state/rl5.git-hooks/pre-rebase: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/profile-20205/home/state/rl5.git-hooks/pre-applypatch: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/profile-20205/home/state/rl5.git-hooks/pre-auto-gc: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/profile-20205/home/state/rl5.git-hooks/pre-merge-commit: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/profile-20205/home/state/rl5.git-hooks/post-commit: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/profile-20205/home/state/rl5.git-hooks/sendemail-validate: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/profile-20205/home/state/rl5.git-hooks/applypatch-msg: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/profile-20205/home/state/rl5.git-hooks/prepare-commit-msg: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/profile-20205/home/state/rl5.git-hooks/post-checkout: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/profile-20205/home/state/rl5.git-hooks/post-applypatch: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/profile-20205/home/state/rl5.git-hooks/post-rewrite: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/profile-20205/home/state/rl5.git-hooks/commit-msg: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/profile-20205/home/state/rl5.git-hooks/pre-push: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/profile-20205/home/state/rl5.git-hooks/post-merge: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/profile-20205/home/state/rl5.git-hooks/pre-commit: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/profile-20205/home/state/rl5.git-hooks: Directory not empty
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/profile-20205/home/state: Directory not empty
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/profile-20205/home: Directory not empty
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/profile-20205: Directory not empty
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/prefixcontrol-25265/home/state/rl32.git-hooks/pre-rebase: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/prefixcontrol-25265/home/state/rl32.git-hooks/pre-applypatch: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/prefixcontrol-25265/home/state/rl32.git-hooks/pre-auto-gc: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/prefixcontrol-25265/home/state/rl32.git-hooks/pre-merge-commit: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/prefixcontrol-25265/home/state/rl32.git-hooks/post-commit: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/prefixcontrol-25265/home/state/rl32.git-hooks/sendemail-validate: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/prefixcontrol-25265/home/state/rl32.git-hooks/applypatch-msg: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/prefixcontrol-25265/home/state/rl32.git-hooks/prepare-commit-msg: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/prefixcontrol-25265/home/state/rl32.git-hooks/post-checkout: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/prefixcontrol-25265/home/state/rl32.git-hooks/post-applypatch: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/prefixcontrol-25265/home/state/rl32.git-hooks/post-rewrite: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/prefixcontrol-25265/home/state/rl32.git-hooks/commit-msg: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/prefixcontrol-25265/home/state/rl32.git-hooks/pre-push: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/prefixcontrol-25265/home/state/rl32.git-hooks/post-merge: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/prefixcontrol-25265/home/state/rl32.git-hooks/pre-commit: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/prefixcontrol-25265/home/state/rl32.git-hooks: Directory not empty
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/prefixcontrol-25265/home/state: Directory not empty
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/prefixcontrol-25265/home: Directory not empty
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/prefixcontrol-25265: Directory not empty
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/keepprofile-19103/home/state/rl6.git-hooks/pre-rebase: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/keepprofile-19103/home/state/rl6.git-hooks/pre-applypatch: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/keepprofile-19103/home/state/rl6.git-hooks/pre-auto-gc: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/keepprofile-19103/home/state/rl6.git-hooks/pre-merge-commit: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/keepprofile-19103/home/state/rl6.git-hooks/post-commit: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/keepprofile-19103/home/state/rl6.git-hooks/sendemail-validate: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/keepprofile-19103/home/state/rl6.git-hooks/applypatch-msg: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/keepprofile-19103/home/state/rl6.git-hooks/prepare-commit-msg: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/keepprofile-19103/home/state/rl6.git-hooks/post-checkout: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/keepprofile-19103/home/state/rl6.git-hooks/post-applypatch: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/keepprofile-19103/home/state/rl6.git-hooks/post-rewrite: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/keepprofile-19103/home/state/rl6.git-hooks/commit-msg: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/keepprofile-19103/home/state/rl6.git-hooks/pre-push: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/keepprofile-19103/home/state/rl6.git-hooks/post-merge: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/keepprofile-19103/home/state/rl6.git-hooks/pre-commit: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/keepprofile-19103/home/state/rl6.git-hooks: Directory not empty
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/keepprofile-19103/home/state: Directory not empty
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/keepprofile-19103/home: Directory not empty
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/keepprofile-19103: Directory not empty
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/pi-exclude-25287/home/state/rl-pi-excl.git-hooks/pre-rebase: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/pi-exclude-25287/home/state/rl-pi-excl.git-hooks/pre-applypatch: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/pi-exclude-25287/home/state/rl-pi-excl.git-hooks/pre-auto-gc: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/pi-exclude-25287/home/state/rl-pi-excl.git-hooks/pre-merge-commit: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/pi-exclude-25287/home/state/rl-pi-excl.git-hooks/post-commit: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/pi-exclude-25287/home/state/rl-pi-excl.git-hooks/sendemail-validate: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/pi-exclude-25287/home/state/rl-pi-excl.git-hooks/applypatch-msg: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/pi-exclude-25287/home/state/rl-pi-excl.git-hooks/prepare-commit-msg: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/pi-exclude-25287/home/state/rl-pi-excl.git-hooks/post-checkout: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/pi-exclude-25287/home/state/rl-pi-excl.git-hooks/post-applypatch: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/pi-exclude-25287/home/state/rl-pi-excl.git-hooks/post-rewrite: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/pi-exclude-25287/home/state/rl-pi-excl.git-hooks/commit-msg: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/pi-exclude-25287/home/state/rl-pi-excl.git-hooks/pre-push: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/pi-exclude-25287/home/state/rl-pi-excl.git-hooks/post-merge: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/pi-exclude-25287/home/state/rl-pi-excl.git-hooks/pre-commit: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/pi-exclude-25287/home/state/rl-pi-excl.git-hooks: Directory not empty
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/pi-exclude-25287/home/state: Directory not empty
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/pi-exclude-25287/home: Directory not empty
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/pi-exclude-25287: Directory not empty
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/same-20439/home/state/rl1.git-hooks/pre-rebase: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/same-20439/home/state/rl1.git-hooks/pre-applypatch: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/same-20439/home/state/rl1.git-hooks/pre-auto-gc: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/same-20439/home/state/rl1.git-hooks/pre-merge-commit: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/same-20439/home/state/rl1.git-hooks/post-commit: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/same-20439/home/state/rl1.git-hooks/sendemail-validate: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/same-20439/home/state/rl1.git-hooks/applypatch-msg: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/same-20439/home/state/rl1.git-hooks/prepare-commit-msg: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/same-20439/home/state/rl1.git-hooks/post-checkout: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/same-20439/home/state/rl1.git-hooks/post-applypatch: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/same-20439/home/state/rl1.git-hooks/post-rewrite: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/same-20439/home/state/rl1.git-hooks/commit-msg: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/same-20439/home/state/rl1.git-hooks/pre-push: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/same-20439/home/state/rl1.git-hooks/post-merge: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/same-20439/home/state/rl1.git-hooks/pre-commit: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/same-20439/home/state/rl1.git-hooks: Directory not empty
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/same-20439/home/state: Directory not empty
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/same-20439/home: Directory not empty
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/same-20439: Directory not empty
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/trace-off-12574/home/state/rl33.git-hooks/pre-rebase: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/trace-off-12574/home/state/rl33.git-hooks/pre-applypatch: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/trace-off-12574/home/state/rl33.git-hooks/pre-auto-gc: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/trace-off-12574/home/state/rl33.git-hooks/pre-merge-commit: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/trace-off-12574/home/state/rl33.git-hooks/post-commit: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/trace-off-12574/home/state/rl33.git-hooks/sendemail-validate: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/trace-off-12574/home/state/rl33.git-hooks/applypatch-msg: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/trace-off-12574/home/state/rl33.git-hooks/prepare-commit-msg: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/trace-off-12574/home/state/rl33.git-hooks/post-checkout: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/trace-off-12574/home/state/rl33.git-hooks/post-applypatch: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/trace-off-12574/home/state/rl33.git-hooks/post-rewrite: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/trace-off-12574/home/state/rl33.git-hooks/commit-msg: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/trace-off-12574/home/state/rl33.git-hooks/pre-push: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/trace-off-12574/home/state/rl33.git-hooks/post-merge: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/trace-off-12574/home/state/rl33.git-hooks/pre-commit: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/trace-off-12574/home/state/rl33.git-hooks: Directory not empty
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/trace-off-12574/home/state: Directory not empty
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/trace-off-12574/home: Directory not empty
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/trace-off-12574: Directory not empty
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/metadata-race-6676/home/state/rl28.git-hooks/pre-rebase: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/metadata-race-6676/home/state/rl28.git-hooks/pre-applypatch: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/metadata-race-6676/home/state/rl28.git-hooks/pre-auto-gc: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/metadata-race-6676/home/state/rl28.git-hooks/pre-merge-commit: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/metadata-race-6676/home/state/rl28.git-hooks/post-commit: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/metadata-race-6676/home/state/rl28.git-hooks/sendemail-validate: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/metadata-race-6676/home/state/rl28.git-hooks/applypatch-msg: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/metadata-race-6676/home/state/rl28.git-hooks/prepare-commit-msg: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/metadata-race-6676/home/state/rl28.git-hooks/post-checkout: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/metadata-race-6676/home/state/rl28.git-hooks/post-applypatch: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/metadata-race-6676/home/state/rl28.git-hooks/post-rewrite: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/metadata-race-6676/home/state/rl28.git-hooks/commit-msg: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/metadata-race-6676/home/state/rl28.git-hooks/pre-push: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/metadata-race-6676/home/state/rl28.git-hooks/post-merge: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/metadata-race-6676/home/state/rl28.git-hooks/pre-commit: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/metadata-race-6676/home/state/rl28.git-hooks: Directory not empty
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/metadata-race-6676/home/state: Directory not empty
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/metadata-race-6676/home: Directory not empty
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/metadata-race-6676: Directory not empty
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/acct-1598/home/state/rl-acct.git-hooks/pre-rebase: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/acct-1598/home/state/rl-acct.git-hooks/pre-applypatch: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/acct-1598/home/state/rl-acct.git-hooks/pre-auto-gc: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/acct-1598/home/state/rl-acct.git-hooks/pre-merge-commit: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/acct-1598/home/state/rl-acct.git-hooks/post-commit: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/acct-1598/home/state/rl-acct.git-hooks/sendemail-validate: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/acct-1598/home/state/rl-acct.git-hooks/applypatch-msg: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/acct-1598/home/state/rl-acct.git-hooks/prepare-commit-msg: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/acct-1598/home/state/rl-acct.git-hooks/post-checkout: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/acct-1598/home/state/rl-acct.git-hooks/post-applypatch: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/acct-1598/home/state/rl-acct.git-hooks/post-rewrite: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/acct-1598/home/state/rl-acct.git-hooks/commit-msg: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/acct-1598/home/state/rl-acct.git-hooks/pre-push: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/acct-1598/home/state/rl-acct.git-hooks/post-merge: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/acct-1598/home/state/rl-acct.git-hooks/pre-commit: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/acct-1598/home/state/rl-acct.git-hooks: Directory not empty
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/acct-1598/home/state: Directory not empty
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/acct-1598/home: Directory not empty
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/acct-1598: Directory not empty
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/durable-meta-31883/home/state/rl19.git-hooks/pre-rebase: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/durable-meta-31883/home/state/rl19.git-hooks/pre-applypatch: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/durable-meta-31883/home/state/rl19.git-hooks/pre-auto-gc: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/durable-meta-31883/home/state/rl19.git-hooks/pre-merge-commit: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/durable-meta-31883/home/state/rl19.git-hooks/post-commit: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/durable-meta-31883/home/state/rl19.git-hooks/sendemail-validate: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/durable-meta-31883/home/state/rl19.git-hooks/applypatch-msg: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/durable-meta-31883/home/state/rl19.git-hooks/prepare-commit-msg: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/durable-meta-31883/home/state/rl19.git-hooks/post-checkout: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/durable-meta-31883/home/state/rl19.git-hooks/post-applypatch: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/durable-meta-31883/home/state/rl19.git-hooks/post-rewrite: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/durable-meta-31883/home/state/rl19.git-hooks/commit-msg: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/durable-meta-31883/home/state/rl19.git-hooks/pre-push: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/durable-meta-31883/home/state/rl19.git-hooks/post-merge: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/durable-meta-31883/home/state/rl19.git-hooks/pre-commit: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/durable-meta-31883/home/state/rl19.git-hooks: Directory not empty
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/durable-meta-31883/home/state: Directory not empty
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/durable-meta-31883/home: Directory not empty
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/durable-meta-31883: Directory not empty
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/grokauth-6135/home/state/rl9.git-hooks/pre-rebase: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/grokauth-6135/home/state/rl9.git-hooks/pre-applypatch: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/grokauth-6135/home/state/rl9.git-hooks/pre-auto-gc: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/grokauth-6135/home/state/rl9.git-hooks/pre-merge-commit: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/grokauth-6135/home/state/rl9.git-hooks/post-commit: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/grokauth-6135/home/state/rl9.git-hooks/sendemail-validate: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/grokauth-6135/home/state/rl9.git-hooks/applypatch-msg: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/grokauth-6135/home/state/rl9.git-hooks/prepare-commit-msg: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/grokauth-6135/home/state/rl9.git-hooks/post-checkout: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/grokauth-6135/home/state/rl9.git-hooks/post-applypatch: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/grokauth-6135/home/state/rl9.git-hooks/post-rewrite: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/grokauth-6135/home/state/rl9.git-hooks/commit-msg: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/grokauth-6135/home/state/rl9.git-hooks/pre-push: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/grokauth-6135/home/state/rl9.git-hooks/post-merge: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/grokauth-6135/home/state/rl9.git-hooks/pre-commit: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/grokauth-6135/home/state/rl9.git-hooks: Directory not empty
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/grokauth-6135/home/state: Directory not empty
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/grokauth-6135/home: Directory not empty
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/grokauth-6135: Directory not empty
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/note-16727/home/state/rl2.git-hooks/pre-rebase: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/note-16727/home/state/rl2.git-hooks/pre-applypatch: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/note-16727/home/state/rl2.git-hooks/pre-auto-gc: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/note-16727/home/state/rl2.git-hooks/pre-merge-commit: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/note-16727/home/state/rl2.git-hooks/post-commit: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/note-16727/home/state/rl2.git-hooks/sendemail-validate: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/note-16727/home/state/rl2.git-hooks/applypatch-msg: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/note-16727/home/state/rl2.git-hooks/prepare-commit-msg: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/note-16727/home/state/rl2.git-hooks/post-checkout: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/note-16727/home/state/rl2.git-hooks/post-applypatch: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/note-16727/home/state/rl2.git-hooks/post-rewrite: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/note-16727/home/state/rl2.git-hooks/commit-msg: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/note-16727/home/state/rl2.git-hooks/pre-push: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/note-16727/home/state/rl2.git-hooks/post-merge: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/note-16727/home/state/rl2.git-hooks/pre-commit: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/note-16727/home/state/rl2.git-hooks: Directory not empty
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/note-16727/home/state: Directory not empty
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/note-16727/home: Directory not empty
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/note-16727: Directory not empty
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/linked-home-19251/home/state/rl42.git-hooks/pre-rebase: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/linked-home-19251/home/state/rl42.git-hooks/pre-applypatch: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/linked-home-19251/home/state/rl42.git-hooks/pre-auto-gc: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/linked-home-19251/home/state/rl42.git-hooks/pre-merge-commit: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/linked-home-19251/home/state/rl42.git-hooks/post-commit: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/linked-home-19251/home/state/rl42.git-hooks/sendemail-validate: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/linked-home-19251/home/state/rl42.git-hooks/applypatch-msg: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/linked-home-19251/home/state/rl42.git-hooks/prepare-commit-msg: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/linked-home-19251/home/state/rl42.git-hooks/post-checkout: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/linked-home-19251/home/state/rl42.git-hooks/post-applypatch: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/linked-home-19251/home/state/rl42.git-hooks/post-rewrite: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/linked-home-19251/home/state/rl42.git-hooks/commit-msg: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/linked-home-19251/home/state/rl42.git-hooks/pre-push: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/linked-home-19251/home/state/rl42.git-hooks/post-merge: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/linked-home-19251/home/state/rl42.git-hooks/pre-commit: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/linked-home-19251/home/state/rl42.git-hooks: Directory not empty
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/linked-home-19251/home/state: Directory not empty
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/linked-home-19251/home: Directory not empty
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/linked-home-19251: Directory not empty
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/native-ultra-13606/home/state/rl-ultra.git-hooks/pre-rebase: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/native-ultra-13606/home/state/rl-ultra.git-hooks/pre-applypatch: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/native-ultra-13606/home/state/rl-ultra.git-hooks/pre-auto-gc: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/native-ultra-13606/home/state/rl-ultra.git-hooks/pre-merge-commit: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/native-ultra-13606/home/state/rl-ultra.git-hooks/post-commit: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/native-ultra-13606/home/state/rl-ultra.git-hooks/sendemail-validate: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/native-ultra-13606/home/state/rl-ultra.git-hooks/applypatch-msg: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/native-ultra-13606/home/state/rl-ultra.git-hooks/prepare-commit-msg: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/native-ultra-13606/home/state/rl-ultra.git-hooks/post-checkout: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/native-ultra-13606/home/state/rl-ultra.git-hooks/post-applypatch: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/native-ultra-13606/home/state/rl-ultra.git-hooks/post-rewrite: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/native-ultra-13606/home/state/rl-ultra.git-hooks/commit-msg: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/native-ultra-13606/home/state/rl-ultra.git-hooks/pre-push: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/native-ultra-13606/home/state/rl-ultra.git-hooks/post-merge: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/native-ultra-13606/home/state/rl-ultra.git-hooks/pre-commit: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/native-ultra-13606/home/state/rl-ultra.git-hooks: Directory not empty
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/native-ultra-13606/home/state: Directory not empty
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/native-ultra-13606/home: Directory not empty
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/native-ultra-13606: Directory not empty
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/dialog-file-relaunch-8375/home/state/rl71.git-hooks/pre-rebase: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/dialog-file-relaunch-8375/home/state/rl71.git-hooks/pre-applypatch: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/dialog-file-relaunch-8375/home/state/rl71.git-hooks/pre-auto-gc: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/dialog-file-relaunch-8375/home/state/rl71.git-hooks/pre-merge-commit: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/dialog-file-relaunch-8375/home/state/rl71.git-hooks/post-commit: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/dialog-file-relaunch-8375/home/state/rl71.git-hooks/sendemail-validate: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/dialog-file-relaunch-8375/home/state/rl71.git-hooks/applypatch-msg: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/dialog-file-relaunch-8375/home/state/rl71.git-hooks/prepare-commit-msg: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/dialog-file-relaunch-8375/home/state/rl71.git-hooks/post-checkout: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/dialog-file-relaunch-8375/home/state/rl71.git-hooks/post-applypatch: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/dialog-file-relaunch-8375/home/state/rl71.git-hooks/post-rewrite: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/dialog-file-relaunch-8375/home/state/rl71.git-hooks/commit-msg: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/dialog-file-relaunch-8375/home/state/rl71.git-hooks/pre-push: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/dialog-file-relaunch-8375/home/state/rl71.git-hooks/post-merge: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/dialog-file-relaunch-8375/home/state/rl71.git-hooks/pre-commit: Permission denied
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/dialog-file-relaunch-8375/home/state/rl71.git-hooks: Directory not empty
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/dialog-file-relaunch-8375/home/state: Directory not empty
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/dialog-file-relaunch-8375/home: Directory not empty
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX/dialog-file-relaunch-8375: Directory not empty
+rm: <WORKTREE>/.test-phase/tmp/fm-control-relaunch.fSHrCX: Directory not empty
+FM_TEST_END 2026-10-13T19:43:08Z tests/fm-control-relaunch.test.sh exit=1 duration_ms=54173 gate_skip=false
+FM_TEST_BEGIN 2026-10-13T19:43:08Z tests/fm-self-repo-role.test.sh family=unclassified expected_gate_skip=none
+ok - fm-role.sh report: default, user, and maintainer directives resolve
+ok - fm-role.sh report: malformed, unknown, and unsafe input fails closed
+ok - fm-role.sh check: the default user/operator home cannot publish to firstmate upstream
+ok - fm-role.sh check: a task on an ordinary project is untouched by the boundary
+ok - fm-role.sh check: a matching maintainer scope authorizes the self-repository publication
+ok - fm-role.sh check: scope mismatch and mere upstream remote presence never authorize
+ok - fm-role.sh check: equivalent remote spellings resolve to one publication target
+ok - fm-role.sh check: repository lineage, not remotes, identifies firstmate across forks
+ok - fm-role.sh check: undeterminable lineage or publication target refuses
+ok - fm-role.sh check: recorded one-task consent authorizes its named repository only
+ok - secondmate home: a role file without an inheritance receipt grants nothing
+ok - secondmate home: inherited grants need a matching receipt; receipt-less and revoked grants are dead
+ok - secondmate home: a primary role its own resolver rejects propagates as revocation
+ok - fm_dod_block: upstream consent renders on publishing contracts and is refused on local-only
+ok - fm-brief.sh: --upstream-consent validates, scopes to ship tasks, and renders normalized
+ok - fm-brief.sh: --project applies the self-repository gate at scaffold time
+ok - fm-spawn.sh: the launch gate refuses a user/operator home and passes a matching maintainer
+ok - fm-spawn.sh: consent must agree between flag and brief, and is refused on local-only
+ok - fm-promote.sh: the self-repository gate governs promotion identically to spawn
+ok - fm-spawn.sh: --upstream-consent is refused on secondmate charters
+# all fm-self-repo-role tests passed
+FM_TEST_END 2026-10-13T19:43:16Z tests/fm-self-repo-role.test.sh exit=0 duration_ms=8310 gate_skip=false
+FM_TEST_BEGIN 2026-10-13T19:43:16Z tests/fm-trace-context-spawn.test.sh family=backend-dispatch expected_gate_skip=none
+ok - enabled: one resolved carrier is recorded in meta and the identical TRACEPARENT is exported before launch
+ok - disabled: neither traceparent= in meta nor a TRACEPARENT export is produced
+ok - failed TRACEPARENT delivery omits metadata while the source task still launches
+ok - uncleared TRACEPARENT input stops before the launch command is appended
+ok - failed traceparent metadata append removes the carrier from the launched task
+not ok - duplicate secondmate spawn should report the existing endpoint (missing: 'already exists')
+--- output ---
+error: secondmate home cannot be inside the firstmate repo: <WORKTREE>/.test-phase/tmp/fm-trace-context-spawn.wdGY7Q/duplicate-secondmate/sm
+FM_TEST_END 2026-10-13T19:43:36Z tests/fm-trace-context-spawn.test.sh exit=1 duration_ms=19988 gate_skip=false
+FM_TEST_BEGIN 2026-10-13T19:43:36Z tests/fm-pi-watch-extension.test.sh family=watcher-wake-lock expected_gate_skip=none
+ok - Pi extension reports external healthy watcher output
+ok - Pi custom tool exposes repair-only metadata and returns automatic-continuation guidance
+ok - Pi redundant tool call returns ownership guidance and spawns no second child
+ok - Pi scheduled retry remains extension-owned after another tool call
+ok - Pi actionable close starts one successor before wake delivery settles
+ok - Pi actionable output waits for predecessor close before successor restoration
+ok - Pi dispatcher branch offer owns accepted wakes and falls back to main
+ok - Pi dispatcher flags a fleet-wide heartbeat offer as branch-eligible
+ok - a co-present check row neither vetoes nor rides a heartbeat into main
+ok - every main-only check class still reaches main, never the supervision branch
+ok - a captain-held signal trigger reaches main with routine rows present
+ok - an unread pending-reply escalation keeps later stale aliases on main
+ok - a mixed batch of two distinct files - one routine, one needs-decision - routes wholly to main
+ok - a co-present needs-decision row neither vetoes nor rides a heartbeat into main
+ok - heartbeat restoration failure stays on main
+ok - watcher-failure repair stays with main even with a live, accepting branch listener
+ok - under the away-posture record every actionable row is offered to the branch while broken-queue wakes and watcher-failure alarms still reach main
+ok - Pi refused handling handshake is classified and not swallowed
+ok - Pi confirm failure retires the named arm with distinct watcher pid
+ok - Pi confirm failure for a stale successor spares the newer arm
+ok - Pi superseded handling delivery carries no rejection appendix and is logged
+ok - Pi superseded handling delivery is offered to the branch like a confirmed one
+ok - Pi extension diagnostic log stays off unless opted in
+ok - Pi repair starts a fresh arm instead of no-opping on a dead child
+ok - Pi scheduled retry starts a fresh arm instead of stalling on a dead child
+ok - Pi deferred close starts a fresh arm instead of stalling on a dead child
+ok - Pi hung successor falls back to one typed actionable wake
+ok - Pi unretired successor falls back without an overlapping retry
+ok - Pi late unretired closes resume classified supervision
+ok - Pi clean empty close triggers a bounded continuity retry
+ok - Pi established clean closes stop at the configured retry limit
+ok - Pi close handler verifies session-lock ownership before successor launch
+ok - Pi watcher arm distinguishes all session lock ownership states
+ok - Pi session transitions auto-arm through a generation owner across /new /resume /fork/reload, stale callbacks, and quit
+ok - Pi session replacement auto-arms and carries its in-flight actionable close
+ok - Pi replacement replays a streaming follow-up before consumption
+ok - Pi streaming-time wake delivery keeps the successor chain and replays only unconsumed wakes
+ok - Pi retries a verified successor that failed during wake delivery once that delivery settles
+ok - Pi replacement receives actionable closes after retirement timeout
+ok - Pi replacement handoff tokens stay unique across fresh modules
+ok - Pi replacement persistence failure keeps its predecessor until a successor commits
+ok - Pi process-exit cleanup listener remains singular across session replacement
+ok - Pi process-exit cleanup stops the attached arm child
+ok - OpenCode plugins have an explicit ESM boundary even under a typeless parent package
+ok - OpenCode watcher plugin uses the effective FM_HOME state
+ok - OpenCode watcher plugin sources the effective config
+ok - OpenCode watcher plugin requires session lock ownership
+ok - OpenCode watcher coordinator respects primary scope
+ok - OpenCode watcher plugin starts one successor before wake prompt delivery settles
+ok - OpenCode watcher plugin runs the supervision host on an opted-in home and relays every host line (away record)
+ok - OpenCode watcher plugin runs the supervision host on an opted-in home and relays every host line (quiet record)
+ok - OpenCode pre-ready actionable close preserves its successor
+ok - OpenCode hung successor falls back to one typed actionable wake
+ok - OpenCode unretired successor falls back without an overlapping retry
+ok - OpenCode late unretired closes resume classified supervision
+ok - OpenCode clean empty close triggers a bounded continuity retry
+ok - OpenCode established clean closes stop at the configured retry limit
+ok - OpenCode close handler verifies session-lock ownership before successor launch
+ok - OpenCode watcher plugin coordinates with the turn-end guard
+ok - OpenCode healthy arm output does not suppress the turn-end guard
+FM_TEST_END 2026-10-13T19:44:46Z tests/fm-pi-watch-extension.test.sh exit=0 duration_ms=69186 gate_skip=false
+FM_TEST_BEGIN 2026-10-13T19:44:46Z tests/fm-pi-branch-extension.test.sh family=standalone expected_gate_skip=none
+ok - fm_branch_outcomes and fm_branch_processed call headers match stock on Pi before and from 0.99
+skip: installed @earendil-works/pi-coding-agent package not found
+skip: installed @earendil-works/pi-coding-agent package not found
+ok - branch owns accepted wakes with a stable prefix and deterministic verdict-driven delivery
+ok - a captain outcome reaches main's model as one typed, sequence-keyed processing request while routine notes stay plain
+ok - requested and unsolicited healthy outcomes keep distinct delivery and event ownership
+ok - captain outcomes are exact and exactly once across crash, reload, busy main, compaction, and an unrelated assistant response
+ok - a captain outcome opens one sequence-keyed processing turn, survives empty and unrelated answers, is re-presented at run end and session start, and closes only on its acknowledgement
+ok - Pi: an abbreviated processing request points to the full outcome and instructs main to read it first
+ok - Pi: a marker-less >1 MiB backlog is presented oldest first in bounded requests and continues after batch acknowledgement
+ok - an unprocessed captain row the store lists without its age is reported to main, never formatted undated, and stays unprocessed until the store is healthy
+ok - scopeForUnreadWake excludes every main-only class without vetoing eligible task-local rows, and writes the eligible snapshot
+ok - second-mate signal rows route by their new span while crewmate and stale routing stay unchanged
+ok - branch prompt_cache_key is stable per home across sessions and distinct between homes
+ok - branch default-on eligibility (task-scoped, heartbeat, legacy flag ignored) binds and a broken branch rejects to watcher fallback
+ok - under the away-posture record the wake carries the verbatim read-back tail, claims every row, opens no processing turn, cancels a pending request, and presents the accumulated rows after archive
+ok - Pi branch: an unchanged held outcome reaches the captain once across cadences, and a later red check on the task still does
+ok - an accepted away-only wake rejects after archive, while a drained task-local wake stays a quiet no-op
+ok - a claimed heartbeat row on a non-heartbeat away wake lifts task scoping for the fleet report
+ok - a heartbeat review survives a check row arriving before its drain
+ok - fm_branch_report refuses a task the wake did not name, fleet included, while a heartbeat is unscoped
+ok - pre-drain eligibility re-check excludes a newly main-owned row without deferring eligible work
+ok - a co-present needs-decision row neither vetoes nor falsely settles routine branch delivery
+ok - a settled branch turn without a durable outcome falls back and releases its grant for main replay
+ok - provider-error latches cool down, re-probe once with backoff, and recover through a durable report
+ok - selection changes preserve in-flight transcript ownership and reset provider-error streaks
+ok - a stale main claim returns the durable wake to watcher delivery
+ok - pre-drain eligibility re-check no-ops an already-drained wake
+ok - dialog mirror filters tool and operational traffic, lands before wakes, and keeps a durable cursor
+ok - the dialog mirror re-anchors for each session's new branch conversation and stays incremental within it
+ok - every main session start begins a new branch conversation while one session keeps its own
+ok - the current pin state binds every branch build, and clearing it returns the branch to main's model
+ok - unpinned branches follow main model changes live while pinned branches stay fixed
+ok - supervision-model command persists the captain's pick and rebinds the live branch
+ok - supervision-model opens a bounded searchable list, follow main first, and pins the branch alone
+ok - branch model picker keeps follow main first and filters the eligible catalog
+ok - the effort pin binds every branch build, and clearing it returns the branch to main's effort
+ok - unpinned branches follow main effort changes live while pinned branches stay fixed
+ok - an extension-registered provider resolves in the isolated branch runtime
+ok - supervision-model runs an effort picker after the model picker and persists both independently
+ok - an unusable model pin rejects to watcher fallback and an unparseable one is treated as no pin
+ok - replacement activation cleans old branch leases and retries failed cleanup
+ok - branch activates on a cold start once the lock is acquired, never before
+ok - queued wakes and mirrors stop mutating branch state after lock ownership is lost
+ok - stale reports, shells, mirrors, cursors, leases, and prompts perform no side effects
+ok - a Pi session that does not own the lock accepts nothing and mutates no branch state
+ok - an extension rebind re-mirrors undelivered dialog instead of dropping it
+ok - outcome delivery keeps the event loop running and interleaved reports stay ordered and exactly once
+ok - a session replaced mid-delivery cancels cleanly and the stored outcome still arrives exactly once
+ok - a failing store script surfaces to the branch and its outcome is neither lost nor delivered twice
+ok - a failed cursor write re-delivers a routine note exactly once more while a captain outcome stays deduplicated
+FM_TEST_END 2026-10-13T19:46:14Z tests/fm-pi-branch-extension.test.sh exit=0 duration_ms=88755 gate_skip=false
+FM_TEST_SUMMARY total=7 failed=2 skipped_gate=0 duration_ms=639920
+FM_TEST_SUMMARY_FAMILY family=afk count=2 duration_ms=399261 failed=0
+FM_TEST_SUMMARY_FAMILY family=backend-dispatch count=2 duration_ms=74161 failed=2
+FM_TEST_SUMMARY_FAMILY family=standalone count=1 duration_ms=88755 failed=0
+FM_TEST_SUMMARY_FAMILY family=unclassified count=1 duration_ms=8310 failed=0
+FM_TEST_SUMMARY_FAMILY family=watcher-wake-lock count=1 duration_ms=69186 failed=0
+FM_TEST_SLOWEST rank=1 script=tests/fm-afk-spend-cap.test.sh duration_ms=292785
+FM_TEST_SLOWEST rank=2 script=tests/fm-afk-return.test.sh duration_ms=106476
+FM_TEST_SLOWEST rank=3 script=tests/fm-pi-branch-extension.test.sh duration_ms=88755
+FM_TEST_SLOWEST rank=4 script=tests/fm-pi-watch-extension.test.sh duration_ms=69186
+FM_TEST_SLOWEST rank=5 script=tests/fm-control-relaunch.test.sh duration_ms=54173
+FM_TEST_SLOWEST rank=6 script=tests/fm-trace-context-spawn.test.sh duration_ms=19988
+FM_TEST_SLOWEST rank=7 script=tests/fm-self-repo-role.test.sh duration_ms=8310
+EXIT: 1

@@ -1,0 +1,22 @@
+Validation used Bash 5.3.9, real tmux, real Treehouse with a disposable local Git origin, Claude Code 2.1.285 with the existing login, and the real Pi 0.87.1 runtime/HTML exporter. Every lab and private server was removed.
+
+Product evidence:
+- Idle native Claude Stop hooks: paused, captain-held and needs-decision each count 0; spend admission advances past the cap.
+- New working events, resolved waits, resumed busy turns and absent activity evidence count 1; fresh admission refuses.
+- Idle completed scout counts 0; positively shell-only stopped endpoint counts 0; unresolved cleanup counts 1; secondmate record counts 0.
+- A real raw sleep command launches using real Treehouse and tmux; count 1 blocks another admission.
+- Renaming a pending launch, then cancelling it, retains cleanup_recovery=launch. The live endpoint survives, count remains 1, admission refuses, and the actual return brief reports 1 live task.
+- SIGSTOP of only the lab tmux server bounds counting at 5.546s and admission at 5.956s, both conservatively reserving capacity. The server was resumed and stopped during teardown.
+- The real Pi loader and registered outcomes tool read twelve persisted outcomes. The real session.exportToHtml produced pi-outcomes.html. Session entries were disposable inputs, including a manually authored tool-call entry containing the real tool result; no LLM response was substituted for a required provider call in this local read/export path.
+
+Focused regressions:
+- Initial canonical selection ran seven suites. Spend-cap, return, role and both Pi extension suites passed. Two suites rejected secondmate fixtures placed under this repository through TMPDIR.
+- Canonical recheck with normal ephemeral TMPDIR placement passed control-relaunch and trace-context-spawn. Cleanup warnings from the existing control suite were non-fatal; no behavioral assertion failed on the corrected placement.
+- Selected existing test_outcomes_tool_uses_stock_execution_and_export_consumers passed against the installed Pi 0.87.1 (fixture SDK registration, real renderer/export consumers). The initial full extension test could not discover that package through npm root -g, so this targeted selection supplied its PATH-resolved package directory explicitly.
+
+Untested live paths:
+- Attributed completed/parked no-mistakes ships: their offline fixtures passed, but this Test phase cannot create/control another validation pipeline or access operator run data.
+- Herdr lifecycle and nested reads: synthetic/offline coverage passed, but the recorded explicit prohibition on Herdr lifecycle remains binding.
+- Pi model-turn wake flow: a real disposable Pi primary loaded the changed extensions and stopped with No API key found for anthropic. No login, credential copy or operator config access was performed. This does not establish that the operator's normal Pi login is unavailable.
+
+No source edits. Evidence text and the HTML base64 session-data payload were sanitized for operator-home paths. All worktree-local test scaffolds were removed.

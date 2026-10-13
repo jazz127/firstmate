@@ -1,0 +1,58 @@
+$ bash bin/fm-lab-home.sh create <WORKTREE>/.l
+<WORKTREE>/.l
+
+exit=0
+$ tmux -L fm-lab -f /dev/null new-session -d -s primary -x 120 -y 40 -c <WORKTREE> 'pi --offline --print --no-tools --no-extensions --extension <WORKTREE>/.pi/extensions/fm-branch-supervision.ts --extension <WORKTREE>/.pi/extensions/fm-primary-pi-watch.ts --no-skills --no-prompt-templates --no-themes --no-context-files --no-session --provider anthropic --model claude-sonnet-4-6 --thinking off '"'"'Reply exactly PI_LAB_READY without tools.'"'"''
+
+exit=0
+$ tmux -L fm-lab set-window-option -t primary remain-on-exit on
+
+exit=0
+$ tmux -L fm-lab capture-pane -p -t primary -S -50
+No API key found for anthropic.
+
+Use /login to log into a provider via OAuth or API key. See:
+  <OPERATOR_HOME>/.local/lib/node_modules/@earendil-works/pi-coding-agent/docs/providers.md
+  <OPERATOR_HOME>/.local/lib/node_modules/@earendil-works/pi-coding-agent/docs/models.md
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Pane is dead (status 1, Wed Oct 14 05:49:36 2026)
+
+exit=0
+$ tmux -L fm-lab kill-server
+
+exit=0
+Disposable Pi primary and private server removed.

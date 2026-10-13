@@ -1,0 +1,60 @@
+$ bash bin/fm-lab-home.sh create <WORKTREE>/.l
+exit=0
+<WORKTREE>/.l
+
+$ bash bin/fm-afk-contract.sh enter --spend 1
+exit=0
+Away posture recorded at 2026-10-13T19:42:57Z: hold-for-return only. No phone channel is configured; anything that needs you waits for your return. No away instructions were recorded; the away session acts on standing authority only, and anything that needs you waits for your return. Destructive, irreversible, and security-sensitive actions are never pre-authorizable, whatever the words say. Expected return: not given. Spend cap: 1 concurrent workers.
+Away posture (recorded):
+  entered: 2026-10-13T19:42:57Z
+  expected return: not given
+  spend cap: 1 concurrent workers
+  reach: hold-for-return only. No phone channel is configured; anything that needs you waits for your return.
+  your words: (none)
+
+$ tmux -L fm-lab -f /dev/null new-session -d -s primary -x 120 -y 40 -c <WORKTREE> 'bash --noprofile --norc'
+exit=0
+
+$ tmux -L fm-lab display-message -p -t primary '#{socket_path},#{pid},0'
+exit=0
+<WORKTREE>/.l/t/tmux-501/fm-lab,78379,0
+
+$ tmux -L fm-lab new-window -d -n worker 'sleep 120'
+exit=0
+
+task.status: working: actual raw command running
+SCENARIO: An unrecognized but running raw process counts
+$ bash bin/fm-afk-spend-count.sh <WORKTREE>/.l/state
+exit=0
+1
+
+SIGSTOP sent only to recorded disposable tmux server PID 78379
+SCENARIO: A hung actual tmux inventory returns a conservative count within its five-second budget
+$ bash bin/fm-afk-spend-count.sh <WORKTREE>/.l/state
+exit=0
+1
+
+Real backend inventory timeout elapsed: 5.546s
+$ bash bin/fm-spawn.sh fresh <WORKTREE>/.l/no-project --mode no-mistakes --yolo off
+exit=1
+fm-gate-refuse: gate agent lifecycle permitted only against lab home <WORKTREE>/.l
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  repair missing watcher supervision with a foreground checkpoint: bin/fm-watch-checkpoint.sh --seconds 180.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+error: spawn refused - the away-posture record caps concurrent workers at 1 and 1 ordinary task(s) are live in this home; task fresh stays queued for the captain's return or for a worker to finish (spend cap: bin/fm-afk-contract.sh)
+
+Fresh admission refused at spend cap
+Fresh away admission with hung real backend returned in 5.956s
+$ tmux -L fm-lab display-message -p -t primary:worker '#{pane_current_command}'
+exit=0
+sleep
+
+TIMEOUT DRIVER COMPLETE
+$ tmux -L fm-lab kill-server
+exit=0
+
+Disposable backend resumed, stopped and lab removed

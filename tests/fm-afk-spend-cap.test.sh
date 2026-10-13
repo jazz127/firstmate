@@ -713,19 +713,20 @@ EOF
 test_bounded_presence_reads() {
   local dir stage harness backend target count rc
   # Each fixture stalls an external read reached by a different production path.
-  for stage in inventory process activity crew-presence crew-capture herdr-presence herdr-agent herdr-process herdr-absence herdr-activity herdr-crew; do
+  for stage in inventory process activity waiting-activity crew-presence crew-capture herdr-presence herdr-agent herdr-process herdr-absence herdr-activity herdr-crew; do
     dir="$TMP_ROOT/hung-$stage"
     install_tools "$dir"
     mkdir -p "$dir/wt"
     backend=tmux
     target=fixture:worker
     harness=claude
-    [ "$stage" != activity ] || harness=grok
+    case "$stage" in activity|waiting-activity) harness=grok ;; esac
     case "$stage" in herdr-*) backend=herdr; target=fixture:w1:p2 ;; esac
     fm_write_meta "$dir/state/task.meta" "window=$target" "worktree=$dir/wt" \
       "kind=scout" "backend=$backend" "harness=$harness"
     printf 'done: report complete\n' > "$dir/state/task.status"
-    if [ "$stage" != activity ] && [ "$stage" != herdr-activity ]; then
+    [ "$stage" != waiting-activity ] || printf 'paused: waiting\n' > "$dir/state/task.status"
+    if [ "$stage" != activity ] && [ "$stage" != waiting-activity ] && [ "$stage" != herdr-activity ]; then
       "$ROOT/bin/fm-busy-event.sh" arm "$dir/state" task --state idle \
         --source claude-hook --event stop >/dev/null || fail "hang idle record failed"
     fi
@@ -734,7 +735,7 @@ test_bounded_presence_reads() {
 #!/usr/bin/env bash
 case "$FM_HANG_STAGE:$1:${*: -1}" in
   inventory:list-windows:*|process:display-message:'#{pane_current_command}'|\
-  activity:capture-pane:*|crew-presence:display-message:'#{pane_id}'|crew-capture:capture-pane:*)
+  activity:capture-pane:*|waiting-activity:capture-pane:*|crew-presence:display-message:'#{pane_id}'|crew-capture:capture-pane:*)
     touch "$FM_HOME/read-hung"
     sleep 30
     exit 1
@@ -793,41 +794,115 @@ SH
 }
 
 test_waiting_workers_require_proven_idle() {
-  local dir verb activity count expected failures=0
+  local dir verb kind form declaration activity count expected head out failures=0
+  waiting_count_check() {
+    local expected=$1 label=$2 observed
+    observed=$(count_workers "$dir") || fail "$label count failed"
+    if [ "$observed" = "$expected" ]; then
+      pass "$label counts $expected worker(s)"
+    else
+      printf 'FAIL: %s counts %s, expected %s\n' "$label" "$observed" "$expected" >&2
+      failures=$((failures + 1))
+    fi
+  }
   for verb in paused captain-held needs-decision; do
-    dir="$TMP_ROOT/waiting-$verb"
-    install_tools "$dir"
-    fm_write_meta "$dir/state/task.meta" "window=fixture:worker" \
-      "kind=ship" "mode=no-mistakes" "harness=claude"
-    printf 'done: implementation complete\n%s: waiting for an answer\n' "$verb" \
-      > "$dir/state/task.status"
-    for activity in idle busy unknown missing unreadable; do
-      "$ROOT/bin/fm-busy-event.sh" arm "$dir/state" task --state idle \
-        --source claude-hook --event stop >/dev/null || fail "$verb idle arm failed"
-      expected=1
-      case "$activity" in
-        idle) expected=0 ;;
-        busy|unknown)
-          "$ROOT/bin/fm-busy-event.sh" apply "$dir/state" task "$activity" --current-gen \
-            --source claude-hook --event user-prompt-submit >/dev/null \
-            || fail "$verb $activity record failed"
-          ;;
-        missing) rm "$dir/state/task.busy-state" ;;
-        unreadable)
-          fm_write_meta "$dir/state/task.meta" "window=unreadable:worker" \
-            "kind=ship" "mode=no-mistakes" "harness=claude"
-          ;;
-      esac
-      count=$(count_workers "$dir") || fail "$verb $activity count failed"
-      if [ "$count" = "$expected" ]; then
-        pass "$verb with $activity activity counts $expected worker(s)"
-      else
-        printf 'FAIL: %s with %s activity counts %s, expected %s\n' \
-          "$verb" "$activity" "$count" "$expected" >&2
-        failures=$((failures + 1))
-      fi
+    for kind in ship scout; do
+      for form in plain keyed; do
+        dir="$TMP_ROOT/waiting-$verb-$kind-$form"
+        install_tools "$dir"
+        git init -q -b fm/worker "$dir/wt"
+        git -C "$dir/wt" commit -q --allow-empty -m init
+        declaration=$verb
+        [ "$form" != keyed ] || declaration="$verb [key=wait]"
+        printf 'done: implementation complete\n%s: waiting for an answer\n' "$declaration" \
+          > "$dir/state/task.status"
+        for activity in idle busy unknown missing malformed gen-mismatch source-mismatch unreadable-endpoint; do
+          fm_write_meta "$dir/state/task.meta" "window=fixture:worker" "worktree=$dir/wt" \
+            "project=$dir/wt" "kind=$kind" "mode=no-mistakes" "harness=claude"
+          "$ROOT/bin/fm-busy-event.sh" arm "$dir/state" task --state idle \
+            --source claude-hook --event stop >/dev/null || fail "$verb idle arm failed"
+          expected=1
+          case "$activity" in
+            idle) expected=0 ;;
+            busy|unknown)
+              "$ROOT/bin/fm-busy-event.sh" apply "$dir/state" task "$activity" --current-gen \
+                --source claude-hook --event user-prompt-submit >/dev/null \
+                || fail "$verb $activity record failed"
+              ;;
+            missing) rm "$dir/state/task.busy-state" ;;
+            malformed) printf 'invalid record\n' > "$dir/state/task.busy-state" ;;
+            gen-mismatch) printf 'different-generation\n' > "$dir/state/task.busy-gen" ;;
+            source-mismatch)
+              fm_write_meta "$dir/state/task.meta" "window=fixture:worker" "worktree=$dir/wt" \
+                "project=$dir/wt" "kind=$kind" "mode=no-mistakes" "harness=codex"
+              ;;
+            unreadable-endpoint)
+              fm_write_meta "$dir/state/task.meta" "window=unreadable:worker" "worktree=$dir/wt" \
+                "project=$dir/wt" "kind=$kind" "mode=no-mistakes" "harness=claude"
+              ;;
+          esac
+          waiting_count_check "$expected" "$verb $kind $form with $activity evidence"
+        done
+      done
     done
+
+    dir="$TMP_ROOT/waiting-$verb-ship-plain"
+    fm_write_meta "$dir/state/task.meta" "window=fixture:worker" "worktree=$dir/wt" \
+      "project=$dir/wt" "kind=ship" "mode=no-mistakes" "harness=claude"
+    "$ROOT/bin/fm-busy-event.sh" arm "$dir/state" task --state idle \
+      --source claude-hook --event stop >/dev/null || fail "$verb run idle arm failed"
+    head=$(git -C "$dir/wt" rev-parse HEAD)
+    cat > "$dir/run.toon" <<EOF
+run:
+  id: "01RUN"
+  branch: fm/worker
+  status: running
+  head: "$head"
+  pr: ""
+  findings: none
+  steps[2]{step,status,findings,duration_ms}:
+    intent,completed,0,0
+    review,running,0,0
+EOF
+    printf '  running fm/worker %s 2026-10-13 10:00\n' "${head:0:7}" > "$dir/runs.toon"
+    out=$(read_worker "$dir" task)
+    assert_contains "$out" 'state: working' "$verb fixture did not reproduce an executing run: $out"
+    assert_contains "$out" 'source: run-step' "$verb fixture lost run attribution: $out"
+    waiting_count_check 1 "$verb with an executing validation run"
+    sed 's/review,running/review,awaiting_approval/' "$dir/run.toon" > "$dir/run.next"
+    mv "$dir/run.next" "$dir/run.toon"
+    out=$(read_worker "$dir" task)
+    assert_contains "$out" 'state: parked' "$verb fixture did not park at the gate: $out"
+    waiting_count_check 0 "$verb with an idle parked validation run"
+    rm "$dir/run.toon" "$dir/runs.toon"
+    printf '%s [key=wait]: waiting\nresolved [key=wait]: answered\n' "$verb" > "$dir/state/task.status"
+    waiting_count_check 1 "$verb with its wait retracted"
+    printf '%s [key=wait]: waiting\nworking: resumed without resolving the old key\n' "$verb" > "$dir/state/task.status"
+    waiting_count_check 1 "$verb followed by a newer working event"
+    printf 'needs-decision [key=wait]: waiting\nunknown-prefix: contradictory newer event\n' > "$dir/state/task.status"
+    waiting_count_check 1 "$verb fixture with a newer unrecognized event"
   done
+
+  dir="$TMP_ROOT/waiting-paused-ship-plain"
+  printf 'paused [key=wait]: waiting\nresolved [key=other]: unrelated answer\n' > "$dir/state/task.status"
+  waiting_count_check 0 'idle paused worker after an unrelated resolution'
+  printf 'blocked [key=block]: unresolved obstacle\npaused: waiting\n' > "$dir/state/task.status"
+  waiting_count_check 1 'idle pause with an open blocker'
+  for verb in custom-paused custom-held; do
+    printf '%s: waiting\n' "$verb" > "$dir/state/task.status"
+    count=$(FM_CLASSIFY_PAUSED_VERB=custom-paused FM_CLASSIFY_CAPTAIN_HELD_VERB=custom-held count_workers "$dir")
+    if [ "$count" = 0 ]; then
+      pass "$verb uses the configured verb name"
+    else
+      printf 'FAIL: %s counts %s, expected 0\n' "$verb" "$count" >&2
+      failures=$((failures + 1))
+    fi
+  done
+  dir="$TMP_ROOT/waiting-captain-held-ship-plain"
+  printf 'captain-held: waiting\n' > "$dir/state/task.status"
+  fm_write_meta "$dir/state/task.meta" "window=fixture:worker" "worktree=$dir/missing-wt" \
+    "kind=ship" "mode=no-mistakes" "harness=claude"
+  waiting_count_check 1 'captain-held with a missing worktree current-state source'
   [ "$failures" = 0 ] || fail "$failures waiting-worker cases failed"
 }
 

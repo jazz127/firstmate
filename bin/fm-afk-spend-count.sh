@@ -9,9 +9,13 @@
 # presence probe cannot exclude their recorded endpoints. Raw tmux absence is
 # also unproven: fm_control_endpoint_absence_verdict owns that proof boundary.
 # Current-turn busy activity overrides terminal deliveries and declared waits.
-# Only proven idle activity permits exclusion for paused, captain-held or
-# needs-decision workers. A done delivery additionally requires acceptance by
-# the DoD predicate and fm-crew-state.sh's current-state and named-head gates;
+# Idle waiting workers also pass fm-crew-state.sh's current-state gate, so a
+# worker paused while its validation run executes still reserves capacity.
+# A newer non-wait event prevents exclusion despite an older open decision.
+# Idle uses fm-busy-lib.sh's trusted sources: Grok's rendered-tail fallback
+# infers idle from a missing cancel footer and is weaker than semantic hooks.
+# A done delivery additionally requires acceptance by the DoD predicate and
+# fm-crew-state.sh's current-state and named-head gates;
 # a no-mistakes pre-validation implementation handoff remains counted.
 set -u
 
@@ -31,6 +35,9 @@ STATE=${1:-}
 [ -d "$STATE" ] || { echo "usage: fm-afk-spend-count.sh <state-dir>" >&2; exit 2; }
 # shellcheck source=bin/fm-wake-lib.sh
 FM_STATE_OVERRIDE="$STATE" . "$SCRIPT_DIR/fm-wake-lib.sh"
+paused_verb=${FM_CLASSIFY_PAUSED_VERB:-$FM_CLASSIFY_PAUSED_VERB_DEFAULT}
+held_verb=${FM_CLASSIFY_CAPTAIN_HELD_VERB:-$FM_CLASSIFY_CAPTAIN_HELD_VERB_DEFAULT}
+resolve_verb=${FM_CLASSIFY_RESOLVE_VERB:-$FM_CLASSIFY_RESOLVE_VERB_DEFAULT}
 
 live=0
 for meta in "$STATE"/*.meta; do
@@ -76,7 +83,13 @@ for meta in "$STATE"/*.meta; do
   line=$(status_current_line "$status" "$kind")
   verb=$(status_line_verb "$line")
   case "$verb" in
-    paused|captain-held|needs-decision) ;;
+    "$paused_verb"|"$held_verb"|needs-decision)
+      newest_verb=$(status_line_verb "$(last_status_line "$status")")
+      case "$newest_verb" in
+        "$paused_verb"|"$held_verb"|needs-decision|"$resolve_verb") ;;
+        *) live=$((live + 1)); continue ;;
+      esac
+      ;;
     done)
       if [ "$kind" = ship ] && ! fm_dod_should_gate_ship_done "$kind" "$(fm_meta_get "$meta" mode)" "$line"; then
         live=$((live + 1))
@@ -92,10 +105,16 @@ for meta in "$STATE"/*.meta; do
     live=$((live + 1))
     continue
   fi
-  case "$verb" in paused|captain-held|needs-decision) continue ;; esac
   current=$(fm_run_timed 5 env FM_STATE_OVERRIDE="$STATE" FM_CREW_STATE_NO_FORGE=1 \
     "$SCRIPT_DIR/fm-crew-state.sh" "$id" 2>/dev/null) || current=
-  case "$current" in "state: done "*) continue ;; esac
+  case "$verb:$current" in
+    done:"state: done "*) continue ;;
+    "$paused_verb":"state: paused "*|"$paused_verb":"state: parked "*) continue ;;
+    needs-decision:"state: parked "*|"$held_verb":"state: parked "*) continue ;;
+    # Bare held declarations have no mapped state; accept only this exact
+    # idle fallback, not a missing worktree or another unavailable source.
+    "$held_verb":"state: unknown · source: none · no current-state source available") continue ;;
+  esac
   live=$((live + 1))
 done
 printf '%s\n' "$live"

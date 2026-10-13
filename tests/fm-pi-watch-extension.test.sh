@@ -3530,7 +3530,7 @@ const pi = {
     prompts.push(message);
     if (streaming) return;
     beforeAgentStarts += 1;
-    handlers.get("before_agent_start")?.({ prompt: message }, {});
+    handlers.get("before_agent_start")?.({ type: "before_agent_start", messageType: "user", prompt: message }, {});
   },
   events: { on() {}, emit() {} },
 };
@@ -3567,6 +3567,13 @@ if (beforeAgentStarts !== 0) throw new Error(`streaming follow-ups raised before
 
 // The run reaches the first queued follow-up; the second is still queued when
 // the captain replaces the session, so only the second rides the handoff.
+// Pi's custom-start event has no prompt. Even identical custom-message text
+// does not consume the pending user wake (the SDK's messageType contract).
+handlers.get("before_agent_start")?.({
+  type: "before_agent_start",
+  messageType: "custom",
+  message: { role: "custom", customType: "fixture-custom-start", content: prompts[1], display: true },
+}, {});
 consumeQueued(prompts[0]);
 await handlers.get("session_shutdown")?.({ type: "session_shutdown", reason: "new" }, {});
 const handoffPath = `${process.env.FM_HOME}/state/extensions/pi-primary-watch/session-replacement-actionable.json`;

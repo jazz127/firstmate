@@ -1,0 +1,192 @@
+{
+  "scope": "Artifact-only independent audit; no product reruns or source changes.",
+  "retained_files_scanned": 37,
+  "supporting_prefix_substitutions_verified": 391,
+  "combined_log_redaction_markers": 381,
+  "remaining_user_home_paths": [],
+  "supporting_artifacts": [
+    {
+      "artifact": "cancel_check.py",
+      "redacted_hash_matches": true,
+      "original_hash_reconstructs": true,
+      "replacement_count_matches": true
+    },
+    {
+      "artifact": "claude-primary-trust.txt",
+      "redacted_hash_matches": true,
+      "original_hash_reconstructs": true,
+      "replacement_count_matches": true
+    },
+    {
+      "artifact": "exemptions.py",
+      "redacted_hash_matches": true,
+      "original_hash_reconstructs": true,
+      "replacement_count_matches": true
+    },
+    {
+      "artifact": "focused-tests.log",
+      "redacted_hash_matches": true,
+      "original_hash_reconstructs": true,
+      "replacement_count_matches": true
+    },
+    {
+      "artifact": "fresh_check.py",
+      "redacted_hash_matches": true,
+      "original_hash_reconstructs": true,
+      "replacement_count_matches": true
+    },
+    {
+      "artifact": "hang_check.py",
+      "redacted_hash_matches": true,
+      "original_hash_reconstructs": true,
+      "replacement_count_matches": true
+    },
+    {
+      "artifact": "lab-cleanup.log",
+      "redacted_hash_matches": true,
+      "original_hash_reconstructs": true,
+      "replacement_count_matches": true
+    },
+    {
+      "artifact": "live-cancellation-close-transcript.log",
+      "redacted_hash_matches": true,
+      "original_hash_reconstructs": true,
+      "replacement_count_matches": true
+    },
+    {
+      "artifact": "live-cancellation-transcript.log",
+      "redacted_hash_matches": true,
+      "original_hash_reconstructs": true,
+      "replacement_count_matches": true
+    },
+    {
+      "artifact": "live-exemptions-transcript.log",
+      "redacted_hash_matches": true,
+      "original_hash_reconstructs": true,
+      "replacement_count_matches": true
+    },
+    {
+      "artifact": "live-fresh-transcript.log",
+      "redacted_hash_matches": true,
+      "original_hash_reconstructs": true,
+      "replacement_count_matches": true
+    },
+    {
+      "artifact": "live-product-transcript.log",
+      "redacted_hash_matches": true,
+      "original_hash_reconstructs": true,
+      "replacement_count_matches": true
+    },
+    {
+      "artifact": "live-reservation-transcript.log",
+      "redacted_hash_matches": true,
+      "original_hash_reconstructs": true,
+      "replacement_count_matches": true
+    },
+    {
+      "artifact": "live-timeout-transcript.log",
+      "redacted_hash_matches": true,
+      "original_hash_reconstructs": true,
+      "replacement_count_matches": true
+    },
+    {
+      "artifact": "live_checks.py",
+      "redacted_hash_matches": true,
+      "original_hash_reconstructs": true,
+      "replacement_count_matches": true
+    },
+    {
+      "artifact": "native-idle-presence-proof.log",
+      "redacted_hash_matches": true,
+      "original_hash_reconstructs": true,
+      "replacement_count_matches": true
+    },
+    {
+      "artifact": "pi-render-target.sh",
+      "redacted_hash_matches": true,
+      "original_hash_reconstructs": true,
+      "replacement_count_matches": true
+    },
+    {
+      "artifact": "reservation.py",
+      "redacted_hash_matches": true,
+      "original_hash_reconstructs": true,
+      "replacement_count_matches": true
+    }
+  ],
+  "unchanged_artifacts": [
+    {
+      "artifact": "bash32-baseline-confirmed.log",
+      "hash_matches": true
+    },
+    {
+      "artifact": "bash32-baseline-return.log",
+      "hash_matches": true
+    },
+    {
+      "artifact": "bash32-target-return.log",
+      "hash_matches": true
+    },
+    {
+      "artifact": "focused-timing.json",
+      "hash_matches": true
+    },
+    {
+      "artifact": "lab-terminal-grids.txt",
+      "hash_matches": true
+    },
+    {
+      "artifact": "live-cancellation-close-results.json",
+      "hash_matches": true
+    },
+    {
+      "artifact": "live-cancellation-results.json",
+      "hash_matches": true
+    },
+    {
+      "artifact": "live-exemptions-result.json",
+      "hash_matches": true
+    },
+    {
+      "artifact": "live-fresh-result.json",
+      "hash_matches": true
+    },
+    {
+      "artifact": "live-product-results.json",
+      "hash_matches": true
+    },
+    {
+      "artifact": "live-reservation-result.json",
+      "hash_matches": true
+    },
+    {
+      "artifact": "live-timeout-result.json",
+      "hash_matches": true
+    },
+    {
+      "artifact": "pi-package-prepare.log",
+      "hash_matches": true
+    },
+    {
+      "artifact": "pi-render-target.log",
+      "hash_matches": true
+    },
+    {
+      "artifact": "product-evidence.log",
+      "hash_matches": true
+    },
+    {
+      "artifact": "product-results.json",
+      "hash_matches": true
+    },
+    {
+      "artifact": "redaction-verification.json",
+      "hash_matches": true
+    },
+    {
+      "artifact": "verification-notes.md",
+      "hash_matches": true
+    }
+  ],
+  "passed": true
+}

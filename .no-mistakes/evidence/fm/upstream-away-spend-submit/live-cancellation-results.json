@@ -1,0 +1,6 @@
+[
+  {
+    "name": "Pending raw-shell launch rename cancellation preserves the correct capacity and ownership",
+    "result": "pass"
+  }
+]

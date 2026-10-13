@@ -1,0 +1,54 @@
+[
+  {
+    "name": "Paused, held and decision-waiting native-idle workers free capacity and return reports zero",
+    "result": "pass"
+  },
+  {
+    "name": "Working and unrecognized events before an unrelated resolution keep the old waiting worker counted",
+    "result": "pass"
+  },
+  {
+    "name": "Unrelated resolution preserves an idle pause while resolving the actual wait resumes capacity use",
+    "result": "pass"
+  },
+  {
+    "name": "Missing and malformed semantic records remain counted despite a paused declaration",
+    "result": "pass"
+  },
+  {
+    "name": "A real Claude submitted turn counts while busy and frees room after its native stop hook",
+    "result": "pass"
+  },
+  {
+    "name": "Raw running operations count; renamed endpoints refuse closure proof; shell-only endpoints free room",
+    "result": "pass"
+  },
+  {
+    "name": "Unknown backends count conservatively while secondmates stay excluded",
+    "result": "pass"
+  },
+  {
+    "name": "A live lifecycle lock reserves a shell-only done endpoint through admission and return until release",
+    "result": "pass"
+  },
+  {
+    "name": "A hung real tmux presence read is bounded and retains the worker in fresh admission",
+    "result": "pass"
+  },
+  {
+    "name": "A fresh raw-command scout launches through real Treehouse, fills the cap while running, and releases it on exit",
+    "result": "pass"
+  },
+  {
+    "name": "Pending raw-shell launch close cancellation preserves the correct capacity and ownership",
+    "result": "pass"
+  },
+  {
+    "name": "Pending raw-shell launch rename cancellation preserves the correct capacity and ownership",
+    "result": "pass"
+  },
+  {
+    "name": "Relaunch and secondmate requests bypass the full away cap; quiet mode does not impose it",
+    "result": "pass"
+  }
+]

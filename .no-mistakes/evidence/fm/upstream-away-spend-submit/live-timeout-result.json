@@ -1,0 +1,4 @@
+{
+  "name": "A hung real tmux presence read is bounded and retains the worker in fresh admission",
+  "result": "pass"
+}

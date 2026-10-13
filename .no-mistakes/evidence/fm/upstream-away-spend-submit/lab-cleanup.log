@@ -1,0 +1,7 @@
+Private tmux server check after kill-server:
+no server running on <operator-home>/.no-mistakes/worktrees/a00b7db52042/01M4SDKM6WTX0CEK2C5DQ3RE1K/.lab/h/tmux/tmux-501/fm-lab
+[exit 1]
+Removed disposable workspace directory .lab
+Removed disposable workspace directory .test-tmp
+Final git status:
+[exit 0]

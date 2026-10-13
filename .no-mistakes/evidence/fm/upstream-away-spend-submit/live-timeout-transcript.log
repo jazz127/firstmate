@@ -1,0 +1,11 @@
+Private lab tmux socket: <operator-home>/.no-mistakes/worktrees/a00b7db52042/01M4SDKM6WTX0CEK2C5DQ3RE1K/.lab/h/tmux/tmux-501/fm-lab
+Suspended only the private lab tmux server; real tmux reads now hang.
+$ <operator-home>/.no-mistakes/worktrees/a00b7db52042/01M4SDKM6WTX0CEK2C5DQ3RE1K/bin/fm-afk-spend-count.sh <operator-home>/.no-mistakes/worktrees/a00b7db52042/01M4SDKM6WTX0CEK2C5DQ3RE1K/.lab/h/state
+1
+[exit 0, elapsed 5.500s]
+$ <operator-home>/.no-mistakes/worktrees/a00b7db52042/01M4SDKM6WTX0CEK2C5DQ3RE1K/bin/fm-spawn.sh candidate <operator-home>/.no-mistakes/worktrees/a00b7db52042/01M4SDKM6WTX0CEK2C5DQ3RE1K/.lab/h/absent-project --scout
+fm-gate-refuse: gate agent lifecycle permitted only against lab home <operator-home>/.no-mistakes/worktrees/a00b7db52042/01M4SDKM6WTX0CEK2C5DQ3RE1K/.lab/h
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+error: spawn refused - the away-posture record caps concurrent workers at 1 and 1 ordinary task(s) are live in this home; task candidate stays queued for the captain's return or for a worker to finish (spend cap: bin/fm-afk-contract.sh)
+[exit 1, elapsed 5.871s]
+Resumed the private tmux server.

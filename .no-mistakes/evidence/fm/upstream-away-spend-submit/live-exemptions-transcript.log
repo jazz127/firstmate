@@ -1,0 +1,54 @@
+$ <operator-home>/.no-mistakes/worktrees/a00b7db52042/01M4SDKM6WTX0CEK2C5DQ3RE1K/bin/fm-afk-return.sh check
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+=== Return brief ===
+Supervisor health:
+  - GAP: the watcher beat was 999999s old at return (grace 300s)
+Your instructions:
+  (no away-posture record for this window; legacy away flag only)
+Waiting on you:
+  (nothing)
+Tried and failed, or could not be fixed:
+  (nothing)
+Landed, cleanup due:
+  (nothing)
+Handled while away:
+  0 outcome(s) handled by the away session (0 routine, 0 escalated above)
+  (no routine outcomes recorded in the store for this window)
+Cost: 0 supervision outcome(s) recorded (0 routine, 0 captain); 0 task(s) live at return.
+catch-up health: GAP: the watcher beat was 999999s old at return (grace 300s)
+fm-afk-return: catch-up clear; ordinary captain work may proceed
+[exit 0]
+$ <operator-home>/.no-mistakes/worktrees/a00b7db52042/01M4SDKM6WTX0CEK2C5DQ3RE1K/bin/fm-afk-contract.sh enter --spend 1
+Away posture recorded at 2026-10-13T01:41:26Z: hold-for-return only. No phone channel is configured; anything that needs you waits for your return. No away instructions were recorded; the away session acts on standing authority only, and anything that needs you waits for your return. Destructive, irreversible, and security-sensitive actions are never pre-authorizable, whatever the words say. Expected return: not given. Spend cap: 1 concurrent workers.
+Away posture (recorded):
+  entered: 2026-10-13T01:41:26Z
+  expected return: not given
+  spend cap: 1 concurrent workers
+  reach: hold-for-return only. No phone channel is configured; anything that needs you waits for your return.
+  your words: (none)
+[exit 0]
+$ <operator-home>/.no-mistakes/worktrees/a00b7db52042/01M4SDKM6WTX0CEK2C5DQ3RE1K/bin/fm-spawn.sh absent --relaunch
+fm-gate-refuse: gate agent lifecycle permitted only against lab home <operator-home>/.no-mistakes/worktrees/a00b7db52042/01M4SDKM6WTX0CEK2C5DQ3RE1K/.lab/h
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+error: --relaunch needs an existing task record; no <operator-home>/.no-mistakes/worktrees/a00b7db52042/01M4SDKM6WTX0CEK2C5DQ3RE1K/.lab/h/state/absent.meta
+[exit 1]
+$ <operator-home>/.no-mistakes/worktrees/a00b7db52042/01M4SDKM6WTX0CEK2C5DQ3RE1K/bin/fm-spawn.sh mate <operator-home>/.no-mistakes/worktrees/a00b7db52042/01M4SDKM6WTX0CEK2C5DQ3RE1K/.lab/h/absent-home --secondmate
+fm-gate-refuse: gate agent lifecycle permitted only against lab home <operator-home>/.no-mistakes/worktrees/a00b7db52042/01M4SDKM6WTX0CEK2C5DQ3RE1K/.lab/h
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+error: firstmate home does not exist or is not a directory: <operator-home>/.no-mistakes/worktrees/a00b7db52042/01M4SDKM6WTX0CEK2C5DQ3RE1K/.lab/h/absent-home
+[exit 1]
+$ <operator-home>/.no-mistakes/worktrees/a00b7db52042/01M4SDKM6WTX0CEK2C5DQ3RE1K/bin/fm-afk-contract.sh archive
+<operator-home>/.no-mistakes/worktrees/a00b7db52042/01M4SDKM6WTX0CEK2C5DQ3RE1K/.lab/h/state/afk-contracts/1791855686.afk-contract
+[exit 0]
+$ <operator-home>/.no-mistakes/worktrees/a00b7db52042/01M4SDKM6WTX0CEK2C5DQ3RE1K/bin/fm-afk-contract.sh enter --spend 1
+Quiet mode recorded at 2026-10-13T01:41:27Z: you are present, so nothing waits for your return: every action you ask for, a local landing or a merge included, proceeds now under ordinary attended authority, and quiet mode changes only which updates reach this conversation. Only an explicit /quiet off ends it.
+Quiet mode (recorded):
+  entered: 2026-10-13T01:41:27Z
+  holds: none - you are present, so nothing waits for your return: every action you ask for, a local landing or a merge included, proceeds now under ordinary attended authority, and quiet mode changes only which updates reach this conversation.
+  your words: (none)
+[exit 0]
+$ <operator-home>/.no-mistakes/worktrees/a00b7db52042/01M4SDKM6WTX0CEK2C5DQ3RE1K/bin/fm-spawn.sh fresh <operator-home>/.no-mistakes/worktrees/a00b7db52042/01M4SDKM6WTX0CEK2C5DQ3RE1K/.lab/h/absent-project --scout
+fm-gate-refuse: gate agent lifecycle permitted only against lab home <operator-home>/.no-mistakes/worktrees/a00b7db52042/01M4SDKM6WTX0CEK2C5DQ3RE1K/.lab/h
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+<operator-home>/.no-mistakes/worktrees/a00b7db52042/01M4SDKM6WTX0CEK2C5DQ3RE1K/bin/fm-spawn.sh: line 3073: cd: <operator-home>/.no-mistakes/worktrees/a00b7db52042/01M4SDKM6WTX0CEK2C5DQ3RE1K/.lab/h/absent-project: No such file or directory
+[exit 1]

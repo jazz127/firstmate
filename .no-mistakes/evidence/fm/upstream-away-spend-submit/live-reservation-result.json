@@ -1,0 +1,4 @@
+{
+  "name": "A live lifecycle lock reserves a shell-only done endpoint through admission and return until release",
+  "result": "pass"
+}

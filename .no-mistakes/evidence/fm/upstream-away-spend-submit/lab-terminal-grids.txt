@@ -1,0 +1,5 @@
+primary:claude 120x40
+primary:worker 120x40
+primary:native 120x40
+primary:resumed 120x40
+primary:pending 120x40

@@ -1,0 +1,48 @@
+{
+  "scope": "Artifact-only verification; no lab, credentials, source changes, or product test reruns.",
+  "artifact": "product-evidence.log",
+  "status": "Already redacted; verified without rewriting the artifact.",
+  "original_home_prefix_occurrences": 381,
+  "redaction_markers": 381,
+  "remaining_literal_home_prefixes": 0,
+  "sha256": "8403119d69d6874c96d041bfef405881355dad9ca0d1300f2ef93303d903380a",
+  "sections": [
+    {
+      "label": "live-product-transcript.log",
+      "unchanged_except_home_prefix_and_section_separators": true
+    },
+    {
+      "label": "native-idle-presence-proof.log",
+      "unchanged_except_home_prefix_and_section_separators": true
+    },
+    {
+      "label": "live-reservation-transcript.log",
+      "unchanged_except_home_prefix_and_section_separators": true
+    },
+    {
+      "label": "live-timeout-transcript.log",
+      "unchanged_except_home_prefix_and_section_separators": true
+    },
+    {
+      "label": "live-fresh-transcript.log",
+      "unchanged_except_home_prefix_and_section_separators": true
+    },
+    {
+      "label": "live-cancellation-close-transcript.log",
+      "unchanged_except_home_prefix_and_section_separators": true
+    },
+    {
+      "label": "live-cancellation-transcript.log",
+      "unchanged_except_home_prefix_and_section_separators": true
+    },
+    {
+      "label": "live-exemptions-transcript.log",
+      "unchanged_except_home_prefix_and_section_separators": true
+    },
+    {
+      "label": "lab-terminal-grids.txt",
+      "unchanged_except_home_prefix_and_section_separators": true
+    }
+  ],
+  "preserved": "Commands, lab-relative suffixes, timestamps, measurements, scenario labels, and all substantive transcript content."
+}

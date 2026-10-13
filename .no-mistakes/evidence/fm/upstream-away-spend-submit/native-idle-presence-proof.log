@@ -1,0 +1,46 @@
+$ bash -c '. "$1"; fm_backend_worker_state tmux primary:resumed' _ <operator-home>/.no-mistakes/worktrees/a00b7db52042/01M4SDKM6WTX0CEK2C5DQ3RE1K/bin/fm-backend.sh
+alive[exit 0]
+$ bash -c '. "$1"; . "$2"; fm_busy_classify tmux primary:resumed claude worker "$3"' _ <operator-home>/.no-mistakes/worktrees/a00b7db52042/01M4SDKM6WTX0CEK2C5DQ3RE1K/bin/fm-backend.sh <operator-home>/.no-mistakes/worktrees/a00b7db52042/01M4SDKM6WTX0CEK2C5DQ3RE1K/bin/fm-busy-lib.sh <operator-home>/.no-mistakes/worktrees/a00b7db52042/01M4SDKM6WTX0CEK2C5DQ3RE1K/.lab/h/state
+idle claude-hook[exit 0]
+Actual live native-idle scout, paused:
+$ <operator-home>/.no-mistakes/worktrees/a00b7db52042/01M4SDKM6WTX0CEK2C5DQ3RE1K/bin/fm-crew-state.sh worker
+state: paused · source: status-log · waiting
+[exit 0]
+$ <operator-home>/.no-mistakes/worktrees/a00b7db52042/01M4SDKM6WTX0CEK2C5DQ3RE1K/bin/fm-afk-spend-count.sh <operator-home>/.no-mistakes/worktrees/a00b7db52042/01M4SDKM6WTX0CEK2C5DQ3RE1K/.lab/h/state
+0
+[exit 0]
+Actual live native-idle scout, captain-held:
+$ <operator-home>/.no-mistakes/worktrees/a00b7db52042/01M4SDKM6WTX0CEK2C5DQ3RE1K/bin/fm-crew-state.sh worker
+state: unknown · source: none · no current-state source available
+[exit 0]
+$ <operator-home>/.no-mistakes/worktrees/a00b7db52042/01M4SDKM6WTX0CEK2C5DQ3RE1K/bin/fm-afk-spend-count.sh <operator-home>/.no-mistakes/worktrees/a00b7db52042/01M4SDKM6WTX0CEK2C5DQ3RE1K/.lab/h/state
+0
+[exit 0]
+Actual live native-idle scout, needs-decision:
+$ <operator-home>/.no-mistakes/worktrees/a00b7db52042/01M4SDKM6WTX0CEK2C5DQ3RE1K/bin/fm-crew-state.sh worker
+state: parked · source: status-log · waiting
+[exit 0]
+$ <operator-home>/.no-mistakes/worktrees/a00b7db52042/01M4SDKM6WTX0CEK2C5DQ3RE1K/bin/fm-afk-spend-count.sh <operator-home>/.no-mistakes/worktrees/a00b7db52042/01M4SDKM6WTX0CEK2C5DQ3RE1K/.lab/h/state
+0
+[exit 0]
+Actual live native-idle ship, paused:
+$ <operator-home>/.no-mistakes/worktrees/a00b7db52042/01M4SDKM6WTX0CEK2C5DQ3RE1K/bin/fm-crew-state.sh worker
+state: paused · source: status-log · waiting
+[exit 0]
+$ <operator-home>/.no-mistakes/worktrees/a00b7db52042/01M4SDKM6WTX0CEK2C5DQ3RE1K/bin/fm-afk-spend-count.sh <operator-home>/.no-mistakes/worktrees/a00b7db52042/01M4SDKM6WTX0CEK2C5DQ3RE1K/.lab/h/state
+0
+[exit 0]
+Actual live native-idle ship, captain-held:
+$ <operator-home>/.no-mistakes/worktrees/a00b7db52042/01M4SDKM6WTX0CEK2C5DQ3RE1K/bin/fm-crew-state.sh worker
+state: unknown · source: none · no current-state source available
+[exit 0]
+$ <operator-home>/.no-mistakes/worktrees/a00b7db52042/01M4SDKM6WTX0CEK2C5DQ3RE1K/bin/fm-afk-spend-count.sh <operator-home>/.no-mistakes/worktrees/a00b7db52042/01M4SDKM6WTX0CEK2C5DQ3RE1K/.lab/h/state
+0
+[exit 0]
+Actual live native-idle ship, needs-decision:
+$ <operator-home>/.no-mistakes/worktrees/a00b7db52042/01M4SDKM6WTX0CEK2C5DQ3RE1K/bin/fm-crew-state.sh worker
+state: parked · source: status-log · waiting
+[exit 0]
+$ <operator-home>/.no-mistakes/worktrees/a00b7db52042/01M4SDKM6WTX0CEK2C5DQ3RE1K/bin/fm-afk-spend-count.sh <operator-home>/.no-mistakes/worktrees/a00b7db52042/01M4SDKM6WTX0CEK2C5DQ3RE1K/.lab/h/state
+0
+[exit 0]

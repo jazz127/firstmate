@@ -135,8 +135,8 @@ for meta in "$STATE"/*.meta; do
     "$SCRIPT_DIR/fm-crew-state.sh" "$id" 2>/dev/null) || current=
   case "$verb:$current" in
     done:"state: done "*) continue ;;
-    "$paused_verb":"state: paused "*|"$paused_verb":"state: parked "*) continue ;;
-    needs-decision:"state: parked "*|"$held_verb":"state: parked "*) continue ;;
+    "$paused_verb":"state: paused "*|"$paused_verb":"state: parked "*|"$paused_verb":"state: done "*) continue ;;
+    needs-decision:"state: parked "*|needs-decision:"state: done "*|"$held_verb":"state: parked "*|"$held_verb":"state: done "*) continue ;;
     # Bare held declarations have no mapped state; accept only this exact
     # idle fallback, not a missing worktree or another unavailable source.
     "$held_verb":"state: unknown · source: none · no current-state source available") continue ;;

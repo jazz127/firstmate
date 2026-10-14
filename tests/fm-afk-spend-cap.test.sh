@@ -874,6 +874,27 @@ EOF
     out=$(read_worker "$dir" task)
     assert_contains "$out" 'state: parked' "$verb fixture did not park at the gate: $out"
     waiting_count_check 0 "$verb with an idle parked validation run"
+    sed -e 's/status: running/status: completed/' \
+      -e 's/review,awaiting_approval/review,completed/' "$dir/run.toon" > "$dir/run.next"
+    mv "$dir/run.next" "$dir/run.toon"
+    printf '  completed fm/worker %s 2026-10-13 10:00\n' "${head:0:7}" > "$dir/runs.toon"
+    for form in plain keyed; do
+      declaration=$verb
+      [ "$form" != keyed ] || declaration="$verb [key=wait]"
+      printf 'done: implementation complete\n%s: waiting for an answer\n' "$declaration" \
+        > "$dir/state/task.status"
+      out=$(read_worker "$dir" task)
+      assert_contains "$out" 'state: done' "$verb $form fixture did not complete validation: $out"
+      assert_contains "$out" 'source: run-step' "$verb $form completed run lost attribution: $out"
+      waiting_count_check 0 "$verb $form with an idle completed validation run"
+    done
+    sed 's/status: completed/status: cancelled/' "$dir/run.toon" > "$dir/run.next"
+    mv "$dir/run.next" "$dir/run.toon"
+    printf '  cancelled fm/worker %s 2026-10-13 10:00\n' "${head:0:7}" > "$dir/runs.toon"
+    out=$(read_worker "$dir" task)
+    assert_contains "$out" 'state: unknown' "$verb fixture did not reproduce an uncertain run: $out"
+    assert_contains "$out" 'source: run-step' "$verb uncertain run lost attribution: $out"
+    waiting_count_check 1 "$verb with an idle uncertain validation run"
     rm "$dir/run.toon" "$dir/runs.toon"
     printf '%s [key=wait]: waiting\nresolved [key=wait]: answered\n' "$verb" > "$dir/state/task.status"
     waiting_count_check 1 "$verb with its wait retracted"

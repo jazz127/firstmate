@@ -289,7 +289,7 @@ fm_pending_reply_set() {  # <record-path> <key> <value>
       "${key}="*) continue ;;
     esac
     printf '%s\n' "$line" >> "$tmp" || return 1
-  done < "$rec"
+  done < "$rec" || return 1
   printf '%s=%s\n' "$key" "$value" >> "$tmp" || return 1
   mv -f "$tmp" "$rec"
 }

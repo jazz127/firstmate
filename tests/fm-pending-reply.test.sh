@@ -2171,6 +2171,26 @@ test_same_kind_escalation_reopens_after_operator_close() {
   pass "a same-kind escalation after an operator close opens the decision again"
 }
 
+test_record_update_preserves_unreadable_input() {
+  local home rec expected rc=0
+  home=$(setup_parent unreadable-record)
+  rec="$home/record"
+  expected="$home/expected"
+  printf 'phase=before\nretained=yes\n' > "$rec"
+  cp "$rec" "$expected"
+  chmod 000 "$rec"
+  if [ -r "$rec" ]; then
+    chmod 600 "$rec"
+    pass "unreadable record case skipped (this user can read mode-000 files)"
+    return 0
+  fi
+  fm_pending_reply_set "$rec" phase after 2> "$home/error" || rc=$?
+  chmod 600 "$rec"
+  [ "$rc" -ne 0 ] || fail "an unreadable record update reported success"
+  cmp -s "$expected" "$rec" || fail "an unreadable record update replaced the original bytes"
+  pass "an unreadable record update refuses without replacing the original bytes"
+}
+
 test_tick_without_metadata() (
   local home state corr phase
   home=$(setup_parent missing-meta)
@@ -2208,6 +2228,7 @@ test_record_field_framing() {
   pass "record fields preserve framing, literal bytes and final-occurrence precedence"
 }
 
+test_record_update_preserves_unreadable_input
 test_record_field_framing
 test_tick_without_metadata
 test_normal_correlated_reply_resolves_once

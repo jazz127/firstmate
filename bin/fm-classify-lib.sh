@@ -299,7 +299,7 @@ _fm_classify_matches() {  # <line> <pattern>
 status_is_terminal_verb() {
   local line=$1 verb
   [ -n "$line" ] || return 1
-  verb=$(status_line_verb "$line")
+  status_line_verb "$line" verb
   case "$verb" in
     done|needs-decision|blocked|failed) return 0 ;;
     *) return 1 ;;
@@ -344,7 +344,7 @@ status_is_captain_relevant() {
 status_is_paused() {  # <status-line>
   local line=$1 verb
   [ -n "$line" ] || return 1
-  verb=$(status_line_verb "$line")
+  status_line_verb "$line" verb
   [ "$verb" = "${FM_CLASSIFY_PAUSED_VERB:-$FM_CLASSIFY_PAUSED_VERB_DEFAULT}" ]
 }
 
@@ -357,7 +357,7 @@ status_is_paused() {  # <status-line>
 status_is_captain_held() {  # <status-line>
   local line=$1 verb
   [ -n "$line" ] || return 1
-  verb=$(status_line_verb "$line")
+  status_line_verb "$line" verb
   [ "$verb" = "${FM_CLASSIFY_CAPTAIN_HELD_VERB:-$FM_CLASSIFY_CAPTAIN_HELD_VERB_DEFAULT}" ]
 }
 
@@ -369,8 +369,14 @@ status_is_captain_held() {  # <status-line>
 # once pause_state_class has admitted the wait, which it does for every
 # agent-liveness verdict unless the crew is provably working.
 status_is_paused_or_captain_held() {  # <status-line>
-  local line=$1
-  status_is_paused "$line" || status_is_captain_held "$line"
+  local line=$1 verb
+  [ -n "$line" ] || return 1
+  status_line_verb "$line" verb
+  case "$verb" in
+    "${FM_CLASSIFY_PAUSED_VERB:-$FM_CLASSIFY_PAUSED_VERB_DEFAULT}"|\
+    "${FM_CLASSIFY_CAPTAIN_HELD_VERB:-$FM_CLASSIFY_CAPTAIN_HELD_VERB_DEFAULT}") return 0 ;;
+    *) return 1 ;;
+  esac
 }
 
 # The status line that holds a crew in a declared wait, or nothing when it is in

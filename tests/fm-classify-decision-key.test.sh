@@ -50,6 +50,25 @@ assert_fold() {  # <status-file> <expected> <label>
     || fail "$label: incremental fold diverged from the full fold: got '$incr' want '$full'"
 }
 
+test_unterminated_decision_tail_is_revisited_after_append() {
+  local dir status expected
+  dir=$(case_dir unterminated-tail)
+  status="$dir/task.status"
+  printf 'needs-decision [key=api]: choose café' > "$status"
+  expected=$(printf 'api\tneeds-decision\tchoose café')
+  assert_fold "$status" "$expected" "unterminated decision is visible"
+  assert_fold "$status" "$expected" "unchanged unterminated decision stays visible"
+  printf ' REST or RPC\n' >> "$status"
+  expected=$(printf 'api\tneeds-decision\tchoose café REST or RPC')
+  assert_fold "$status" "$expected" "appended text completes the same decision"
+  printf 'resolved [key=api]: answered' >> "$status"
+  assert_fold "$status" '' "unterminated resolution is visible"
+  printf '\nneeds-decision [key=next]: another question\n' >> "$status"
+  expected=$(printf 'next\tneeds-decision\tanother question')
+  assert_fold "$status" "$expected" "completed resolution and following opener"
+  pass "unterminated decision tails stay visible and are refolded after later appends"
+}
+
 test_stated_key_is_honored_in_both_positions() {
   local dir before after expected
   dir=$(case_dir positions)
@@ -707,3 +726,4 @@ test_recorded_line_stays_recorded_across_a_resolve() {
 }
 
 test_recorded_line_stays_recorded_across_a_resolve
+test_unterminated_decision_tail_is_revisited_after_append

@@ -416,4 +416,26 @@ test_read_failure_preserves_state_for_retry
 test_cursor_cache_read_failure_refolds_without_replaying_unread_status
 test_pre_fix_cursor_refolds_corr_tagged_decision
 test_previous_fold_cache_is_refolded_under_current_semantics
+test_split_status_writes_keep_incremental_decisions_complete() {
+  local dir state status out
+  dir=$(make_case split-status-writes)
+  state="$dir/state"; status="$state/task.status"; out="$dir/drain.out"
+  printf 'needs-deci' > "$status"
+  FM_STATE_OVERRIDE="$state" "$DRAIN" > "$out" || fail "drain of partial opener failed"
+  printf 'sion [key=api]: choose an API\n' >> "$status"
+  FM_STATE_OVERRIDE="$state" "$DRAIN" > "$out" || fail "drain of completed opener failed"
+  grep -F 'task [key=api] needs-decision: choose an API' "$out" >/dev/null \
+    || fail "a decision split across writes disappeared from OPEN DECISIONS: $(cat "$out")"
+
+  printf 'resolved [key=ap' >> "$status"
+  FM_STATE_OVERRIDE="$state" "$DRAIN" > "$out" || fail "drain of partial resolution failed"
+  printf 'i]: answered\n' >> "$status"
+  FM_STATE_OVERRIDE="$state" "$DRAIN" > "$out" || fail "drain of completed resolution failed"
+  if grep -F 'OPEN DECISIONS' "$out" >/dev/null; then
+    fail "a resolution split across writes left the decision open: $(cat "$out")"
+  fi
+  pass "split status writes neither lose a decision nor strand its resolution"
+}
+
+test_split_status_writes_keep_incremental_decisions_complete
 test_buried_decision_survives_many_growing_drains_and_resolution_clears_it

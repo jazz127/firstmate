@@ -111,21 +111,28 @@ fm_ready_timeout_record_path() {  # <state-dir> <task-id> [output-var]
 }
 
 # The last value of <key> in a record or task metadata file, or empty.
+# Binary records clear the output and return 1, distinct from an absent key.
 # Optional output-var avoids a subshell; _fm_ready_field_* names are reserved.
 fm_ready_timeout_field() {  # <file> <key> [output-var]
   local _fm_ready_field_line _fm_ready_field_value=''
+  local _fm_ready_field_contents='' _fm_ready_field_rejected=0
   if [ -f "$1" ]; then
-    while IFS= read -r _fm_ready_field_line || [ -n "$_fm_ready_field_line" ]; do
-      case "$_fm_ready_field_line" in
-        "$2="*) _fm_ready_field_value=${_fm_ready_field_line#*=} ;;
-      esac
-    done < "$1" 2>/dev/null || true
+    if IFS= read -r -d '' _fm_ready_field_contents 2>/dev/null < "$1"; then
+      _fm_ready_field_rejected=1
+    else
+      while IFS= read -r _fm_ready_field_line || [ -n "$_fm_ready_field_line" ]; do
+        case "$_fm_ready_field_line" in
+          "$2="*) _fm_ready_field_value=${_fm_ready_field_line#*=} ;;
+        esac
+      done <<< "$_fm_ready_field_contents"
+    fi
   fi
   if [ -n "${3:-}" ]; then
     printf -v "$3" '%s' "$_fm_ready_field_value"
   else
     printf '%s' "$_fm_ready_field_value"
   fi
+  return "$_fm_ready_field_rejected"
 }
 
 # Atomically replace the task's record. Returns non-zero when it cannot be
@@ -152,10 +159,10 @@ fm_ready_timeout_parked() {  # <state-dir> <task-id>
   [ -f "$record" ] || return 1
   meta="$state/$id.meta"
   [ -f "$meta" ] || return 1
-  fm_ready_timeout_field "$record" result result
+  fm_ready_timeout_field "$record" result result || return 1
   [ "$result" = stopped ] || return 1
-  fm_ready_timeout_field "$record" spawn_gen record_gen
-  fm_ready_timeout_field "$meta" spawn_gen meta_gen
+  fm_ready_timeout_field "$record" spawn_gen record_gen || return 1
+  fm_ready_timeout_field "$meta" spawn_gen meta_gen || return 1
   [ "$record_gen" = "$meta_gen" ]
 }
 

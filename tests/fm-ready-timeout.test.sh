@@ -382,6 +382,31 @@ test_record_output_assignment() {
   pass 'record output assignment preserves last-value, missing-field and incarnation semantics'
 }
 
+test_binary_records_cannot_park_a_worker() {
+  local state="$TMP_ROOT/binary-records" record value
+  mkdir -p "$state"
+  record="$state/rt.ready-timeout"
+  printf 'spawn_gen=current\n' > "$state/rt.meta"
+  printf 'result=st\000opped\nspawn_gen=current\n' > "$record"
+  if fm_ready_timeout_parked "$state" rt; then fail 'a binary result parked the worker'; fi
+  value=stale
+  if fm_ready_timeout_field "$record" result value; then fail 'binary field lookup succeeded'; fi
+  [ -z "$value" ] || fail 'binary field lookup retained an output value'
+
+  printf 'result=stopped\nspawn_gen=current\nnote=bad\000value\n' > "$record"
+  if fm_ready_timeout_parked "$state" rt; then fail 'a later NUL left the worker parked'; fi
+
+  # Empty generations are supported for legacy metadata, but a binary record
+  # cannot stand in for that absence when both lookups would otherwise be empty.
+  printf 'result=stopped\nspawn_gen=\n' > "$record"
+  printf 'window=fm:fm-rt\n' > "$state/rt.meta"
+  fm_ready_timeout_parked "$state" rt || fail 'legacy empty generations no longer match'
+  printf 'note=bad\000value\n' >> "$state/rt.meta"
+  if fm_ready_timeout_parked "$state" rt; then fail 'binary legacy metadata parked the worker'; fi
+  pass 'binary timeout records and metadata cannot suppress worker alarms'
+}
+
+test_binary_records_cannot_park_a_worker
 test_record_output_assignment
 test_activity_age_tracks_every_source
 test_knob_parsing

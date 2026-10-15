@@ -332,33 +332,40 @@ fm_backend_required_tool_available() {  # <backend> <tool>
 # fm_meta_get: the LAST value of `key=` in <meta-file>, or empty (never
 # errors) if the file or key is absent. Mirrors the ad hoc `grep '^key=' |
 # tail -1 | cut -d= -f2-` snippet every fm-*.sh script used to repeat inline.
-fm_meta_get() {  # <meta-file> <key>
-  local meta=$1 key=$2 line value=''
-  [ -f "$meta" ] || return 0
-  while IFS= read -r line || [ -n "$line" ]; do
-    case "$line" in
-      "$key="*) value=${line#*=} ;;
-    esac
-  done < "$meta" 2>/dev/null || true
-  printf '%s' "$value"
+# With an output variable, assigns it without printing or requiring a subshell.
+# The _fm_meta_ prefix is reserved for this helper's local variables.
+fm_meta_get() {  # <meta-file> <key> [<output-variable>]
+  local _fm_meta_path=$1 _fm_meta_key=$2 _fm_meta_line _fm_meta_value=''
+  if [ -f "$_fm_meta_path" ]; then
+    while IFS= read -r _fm_meta_line || [ -n "$_fm_meta_line" ]; do
+      case "$_fm_meta_line" in
+        "$_fm_meta_key="*) _fm_meta_value=${_fm_meta_line#*=} ;;
+      esac
+    done < "$_fm_meta_path" 2>/dev/null || true
+  fi
+  if [ "$#" -gt 2 ]; then
+    printf -v "$3" '%s' "$_fm_meta_value"
+  else
+    printf '%s' "$_fm_meta_value"
+  fi
 }
 
 # fm_backend_of_meta: the backend recorded in <meta-file>, defaulting to
 # `tmux` when the field is absent - the P1 compatibility contract.
 fm_backend_of_meta() {  # <meta-file>
   local v
-  v=$(fm_meta_get "$1" backend)
+  fm_meta_get "$1" backend v
   printf '%s' "${v:-tmux}"
 }
 
 fm_backend_target_of_meta() {  # <meta-file>
   local meta=$1 backend terminal window
-  backend=$(fm_backend_of_meta "$meta")
+  fm_meta_get "$meta" backend backend
   if [ "$backend" = orca ]; then
-    terminal=$(fm_meta_get "$meta" terminal)
+    fm_meta_get "$meta" terminal terminal
     [ -n "$terminal" ] && { printf '%s' "$terminal"; return 0; }
   fi
-  window=$(fm_meta_get "$meta" window)
+  fm_meta_get "$meta" window window
   [ -n "$window" ] && printf '%s' "$window"
 }
 

@@ -910,6 +910,30 @@ test_timing_report_selects_three_slowest_without_reordering_records() {
   pass "fm-startup-network: the timing report ranks only three records and preserves detail order"
 }
 
+test_invalid_timing_limits_use_the_safe_default() {
+  local cap out text expected
+  text=$(printf '%100s' '' | tr ' ' x)
+  expected=${text:0:80}
+  for cap in bogus 08 -1 1+1 999999999999999999999999; do
+    out=$(bash -c '
+      FM_TIMING_DETAIL_MAX=$2
+      . "$1"
+      fm_timing_sanitize "$3"
+    ' _ "$ROOT/bin/fm-timing-lib.sh" "$cap" "$text" 2>&1) \
+      || fail "malformed timing limit failed: $cap -> $out"
+    [ "$out" = "$expected" ] || fail "malformed timing limit did not use 80 characters: $cap -> $out"
+  done
+  for cap in 0 4 80; do
+    out=$(bash -c 'FM_TIMING_DETAIL_MAX=$2; . "$1"; fm_timing_sanitize "$3"' \
+      _ "$ROOT/bin/fm-timing-lib.sh" "$cap" "$text") || fail "valid timing limit failed: $cap"
+    [ "$out" = "${text:0:$cap}" ] || fail "valid timing limit changed: $cap"
+  done
+  out=$(bash -c 'FM_TIMING_DETAIL_MAX=4; . "$1"; fm_timing_sanitize "host secret"' _ "$ROOT/bin/fm-timing-lib.sh")
+  [ "$out" = unrecordable ] || fail "a small timing limit exposed a prefix of rejected free text"
+  pass "fm-startup-network: malformed timing limits default safely without weakening sanitization"
+}
+
+test_invalid_timing_limits_use_the_safe_default
 test_timing_report_selects_three_slowest_without_reordering_records
 test_malformed_timing_stamps_cannot_abort_the_caller
 test_wait_fails_without_a_published_stage

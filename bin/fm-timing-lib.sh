@@ -44,6 +44,8 @@
 # place.
 set -u
 
+# Optional per-field character limit: canonical nonnegative decimal, default 80.
+# Invalid values fall back to 80 when consumed, never enter shell arithmetic.
 FM_TIMING_DETAIL_MAX=${FM_TIMING_DETAIL_MAX:-80}
 
 fm_timing_enabled() {
@@ -76,7 +78,7 @@ fm_timing_now_ms() {
   printf '%s\n' "$(( sec * 1000 ))"
 }
 
-fm_timing_stamp_valid() {  # <milliseconds>
+_fm_timing_uint_valid() {  # <unsigned decimal control>
   # Canonical decimal only: leading zeroes invoke Bash's octal arithmetic, and
   # at most 16 digits keep both timestamp subtraction operands well inside the
   # signed 64-bit range. Malformed diagnostics must never abort a sweep.
@@ -94,7 +96,7 @@ fm_timing_stamp_valid() {  # <milliseconds>
 # runs in a subshell, so the lazily chosen origin would be discarded and every
 # record would recompute it, flattening every start offset to zero.
 fm_timing_epoch_ensure() {
-  if ! fm_timing_stamp_valid "${FM_TIMING_EPOCH_MS:-}"; then
+  if ! _fm_timing_uint_valid "${FM_TIMING_EPOCH_MS:-}"; then
     FM_TIMING_EPOCH_MS=$(fm_timing_now_ms)
     export FM_TIMING_EPOCH_MS
   fi
@@ -113,12 +115,13 @@ fm_timing_start() {  # <file>
 }
 
 fm_timing_sanitize() {  # <text>
-  local text=${1:-}
+  local text=${1:-} max=$FM_TIMING_DETAIL_MAX
   case "$text" in
     *[[:space:]]*) printf '%s\n' 'unrecordable'; return 0 ;;
   esac
+  _fm_timing_uint_valid "$max" || max=80
   text=${text//[!A-Za-z0-9._@:\/+-]/_}
-  printf '%s\n' "${text:0:$FM_TIMING_DETAIL_MAX}"
+  printf '%s\n' "${text:0:$max}"
 }
 
 # Record one measured step. Never fails the caller: a missing log, an unwritable
@@ -126,7 +129,7 @@ fm_timing_sanitize() {  # <text>
 fm_timing_record() {  # <scope> <name> <start-ms> [detail]
   local scope=$1 name=$2 start=$3 detail=${4:-} now offset elapsed
   fm_timing_enabled || return 0
-  fm_timing_stamp_valid "$start" || return 0
+  _fm_timing_uint_valid "$start" || return 0
   now=$(fm_timing_now_ms)
   fm_timing_epoch_ensure
   offset=$(( start - FM_TIMING_EPOCH_MS ))

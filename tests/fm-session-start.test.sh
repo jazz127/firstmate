@@ -2660,6 +2660,51 @@ SH
   pass "instruction baselines require SHA-256 and successful startup completion"
 }
 
+test_agents_baseline_hashes_contents_in_backslash_roots() {
+  local name rec root home fakebin shasum_bin expected_hash baseline compact_out startup_out
+  shasum_bin=$(command -v shasum) || {
+    printf 'skip: shasum not found for instruction-baseline path cases\n'
+    return 0
+  }
+  for name in plain backslash; do
+    rec=$(new_world "agents-content-$name")
+    IFS='|' read -r root home fakebin <<EOF
+$rec
+EOF
+    if [ "$name" = backslash ]; then
+      mv "$root" "$root-back\\slash"
+      root="$root-back\\slash"
+    fi
+    make_fake_toolchain "$fakebin"
+    make_fake_ps_harness "$fakebin" pi
+    ln -s "$shasum_bin" "$fakebin/shasum"
+    # Exercise the stock macOS provider without a second digest provider
+    # masking its filename-rendering error.
+    printf '#!/usr/bin/env bash\nexit 1\n' > "$fakebin/sha256sum"
+    chmod +x "$fakebin/sha256sum"
+    printf 'PATH_HASH_INSTRUCTION=original\n' > "$root/AGENTS.md"
+    expected_hash=$("$shasum_bin" -a 256 < "$root/AGENTS.md" | awk '{print "sha256:" $1}')
+
+    startup_out=$(FM_FAKE_HARNESS=pi run_pi_session_start "$home" "$root" "$fakebin:$BASE_PATH" --source startup)
+    assert_not_contains "$startup_out" '●  STARTUP TRUNCATED' "fixture startup did not finish: $startup_out"
+    wait_for_network_stage "$home" "$root" || fail 'fixture startup network stage did not finish'
+    assert_present "$home/state/.session-start-agents-baseline" "startup omitted the $name instruction baseline"
+    baseline=$(cat "$home/state/.session-start-agents-baseline")
+    [ "$(printf '%s\n' "$baseline" | sed -n '2p')" = "$expected_hash" ] \
+      || fail "startup did not hash instruction contents in the $name root"
+    compact_out=$(FM_FAKE_HARNESS=pi run_pi_session_start "$home" "$root" "$fakebin:$BASE_PATH" --reemit --source compact)
+    assert_not_contains "$compact_out" 'CURRENT AGENTS.md - INSTRUCTION REFRESH' \
+      "unchanged instructions in the $name root triggered a refresh"
+    printf 'PATH_HASH_INSTRUCTION=changed\n' > "$root/AGENTS.md"
+    compact_out=$(FM_FAKE_HARNESS=pi run_pi_session_start "$home" "$root" "$fakebin:$BASE_PATH" --reemit --source compact)
+    assert_contains "$compact_out" 'PATH_HASH_INSTRUCTION=changed' \
+      "changed instructions in the $name root did not refresh"
+    [ "$(cat "$home/state/.session-start-agents-baseline")" = "$baseline" ] \
+      || fail 'instruction refresh changed the original startup baseline'
+    pass "instruction baseline uses content hashes in the $name root"
+  done
+}
+
 test_reemit_keeps_repair_ownership_with_the_lock_holder() {
   local rec root home fakebin reemit readonly_out holder_pid
   rec=$(new_world reemit-tangle)
@@ -3058,6 +3103,7 @@ EOF
   pass "session start rejects Pi loaded markers from previous sessions"
 }
 
+test_agents_baseline_hashes_contents_in_backslash_roots
 test_marked_worker_cannot_start_primary_session
 test_unmarked_linked_worktree_still_gets_digest
 test_context_digest_absent_empty_present

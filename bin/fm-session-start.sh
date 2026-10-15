@@ -609,13 +609,13 @@ hash_file_sha256() {
   local file=$1 digest
   [ -f "$file" ] || return 1
   if command -v shasum >/dev/null 2>&1; then
-    digest=$(shasum -a 256 "$file" 2>/dev/null | awk '
+    digest=$(shasum -a 256 2>/dev/null < "$file" | awk '
       length($1) == 64 && $1 !~ /[^[:xdigit:]]/ { print "sha256:" $1; found=1; exit }
       END { if (!found) exit 1 }
     ') && [ -n "$digest" ] && { printf '%s\n' "$digest"; return 0; }
   fi
   if command -v sha256sum >/dev/null 2>&1; then
-    digest=$(sha256sum "$file" 2>/dev/null | awk '
+    digest=$(sha256sum 2>/dev/null < "$file" | awk '
       length($1) == 64 && $1 !~ /[^[:xdigit:]]/ { print "sha256:" $1; found=1; exit }
       END { if (!found) exit 1 }
     ') && [ -n "$digest" ] && { printf '%s\n' "$digest"; return 0; }

@@ -204,6 +204,41 @@ worktree_list() { git -C "$1/project" worktree list --porcelain; }
 
 # The reported incident's shape before any declaration: the project is already
 # busy, and nothing caps a further launch. Absent a declaration that stays true.
+test_capacity_parent_record_nul_guard() {
+  local shell round=0
+  for shell in "$(command -v bash)" /bin/bash; do
+    round=$((round + 1))
+    "$shell" -s -- "$ROOT" "$TMP_ROOT/parent-record-$round" <<'SH' || fail "parent-record byte validation failed under $shell"
+set -eu
+. "$1/bin/fm-secondmate-parent-lib.sh"
+mkdir -p "$2"
+record=$'schema=fm-secondmate-parent.v1\nroute=local\nparent_home=/fixture/parent\n'
+for ((i=0; i<=${#record}; i++)); do
+  printf '%s\0%s' "${record:0:i}" "${record:i}" > "$2/value"
+  if fm_secondmate_parent_record_parse "$2/value"; then
+    printf 'accepted NUL at byte %s\n' "$i" >&2
+    exit 1
+  fi
+done
+printf '%s' "$record" > "$2/value"
+fm_secondmate_parent_record_parse "$2/value"
+[ "$FM_SECONDMATE_PARENT_HOME" = /fixture/parent ]
+printf '%s' "${record%$'\n'}" > "$2/no-newline"
+fm_secondmate_parent_record_parse "$2/no-newline"
+cd "$2"
+printf '%s' "$record" > ./-
+fm_secondmate_parent_record_parse -
+printf '%s' "$record" > ./--record
+fm_secondmate_parent_record_parse --record
+printf '%s\0' "$record" > ./-
+if fm_secondmate_parent_record_parse -; then exit 1; fi
+ln -s value link
+if fm_secondmate_parent_record_parse link; then exit 1; fi
+SH
+  done
+  pass 'capacity parent records reject NUL at every byte boundary and retain ordinary-file parsing on both Bash generations'
+}
+
 # shellcheck disable=SC2016 # Positional arguments expand inside the selected child shell.
 test_capacity_root_home_with_literal_pipes() {
   local home="$TMP_ROOT/chain-root" middle="$TMP_ROOT/chain-middle" leaf shell out expected
@@ -923,6 +958,7 @@ if [ "${1:-}" = metadata-handoff ]; then
   exit 0
 fi
 
+test_capacity_parent_record_nul_guard
 test_capacity_root_home_with_literal_pipes
 test_capacity_names_with_literal_pipes
 test_concurrent_spawns_cannot_both_take_the_last_place fresh

@@ -660,6 +660,15 @@ test_meta_get_and_backend_of_meta() {
   [ "$(fm_backend_target_of_meta "$edge")" = current ] || fail 'Orca without a terminal did not fall back to the last window'
   [ "$(fm_backend_of_meta "$TMP_ROOT/absent.meta")" = tmux ] || fail 'an absent record did not retain the default backend'
 
+  printf 'token=before\000after\n' > "$edge"
+  [ -z "$(fm_meta_get "$edge" token)" ] || fail 'fm_meta_get accepted a NUL inside a field'
+  printf 'token=valid\nnote=bad\000value\n' > "$edge"
+  value=stale
+  fm_meta_get "$edge" token value
+  [ -z "$value" ] || fail 'fm_meta_get accepted a field preceding a NUL'
+  printf 'note=bad\000value\ntoken=valid\n' > "$edge"
+  [ -z "$(fm_meta_get "$edge" token)" ] || fail 'fm_meta_get accepted a field following a NUL'
+
   pass "fm_meta_get / fm_backend_of_meta: read last key=value and default backend to tmux"
 }
 

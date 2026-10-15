@@ -3234,6 +3234,30 @@ test_scout_skips_run_lookup() {
   pass "scout skips the run lookup"
 }
 
+test_binary_metadata_is_unknown() {
+  reset_fakes
+  local d out
+  d=$(new_case binary-meta)
+  mkdir -p "$d/wt"
+  make_fakebin "$d" >/dev/null
+  fm_write_meta "$d/state/binary.meta" "window=fm:fm-binary" "worktree=$d/wt" "kind=scout" "harness=claude"
+  arm_idle_record "$d/state" binary
+  printf 'working: fixture work remains\n' > "$d/state/binary.status"
+  out=$(run_crew_state "$d" binary)
+  assert_contains "$out" 'state: working' 'plain metadata permits the fixture status'
+
+  printf 'window=fm:fm-binary\nworktree=%s/w\000t\nkind=scout\nharness=claude\n' "$d" > "$d/state/binary.meta"
+  out=$(run_crew_state "$d" binary)
+  assert_contains "$out" 'state: unknown' 'a NUL cannot repair an invalid worktree path'
+  assert_contains "$out" 'source: none' 'binary metadata cannot select a state source'
+
+  fm_write_meta "$d/state/binary.meta" "window=fm:fm-binary" "worktree=$d/wt" "kind=scout" "harness=claude"
+  printf 'note=bad\000value\n' >> "$d/state/binary.meta"
+  out=$(run_crew_state "$d" binary)
+  assert_contains "$out" 'state: unknown' 'a later NUL invalidates preceding metadata fields'
+  pass 'binary metadata cannot produce an authoritative crew state'
+}
+
 # (j) torn-down worktree and missing meta are graceful (unknown/none, exit 0)
 test_torn_down_worktree() {
   reset_fakes
@@ -5585,6 +5609,7 @@ test_captured_completed_history() {
   pass 'captured completed status yields to synthetic subsequent development'
 }
 
+test_binary_metadata_is_unknown
 test_captured_axi_status_shapes
 test_captured_inventory_replay
 test_captured_authority_transition

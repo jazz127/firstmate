@@ -320,13 +320,6 @@ write_scan_marker() { # <cursor>
 }
 
 meta_field() {
-  # A normal Bash read can erase NULs and turn a malformed field into a valid
-  # phase or mode. Refuse binary records before using the shared text reader.
-  local binary_probe=''
-  # shellcheck disable=SC2034 # Only the NUL-delimiter status is needed.
-  if IFS= read -r -d '' binary_probe < "$1" 2>/dev/null; then
-    return 0
-  fi
   fm_meta_get "$1" "$2"
 }
 

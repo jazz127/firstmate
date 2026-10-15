@@ -330,18 +330,22 @@ fm_backend_required_tool_available() {  # <backend> <tool>
 }
 
 # fm_meta_get: the LAST value of `key=` in <meta-file>, or empty (never
-# errors) if the file or key is absent. Mirrors the ad hoc `grep '^key=' |
+# errors) if the file or key is absent or the record contains a NUL byte.
+# Mirrors the ad hoc `grep '^key=' |
 # tail -1 | cut -d= -f2-` snippet every fm-*.sh script used to repeat inline.
 # With an output variable, assigns it without printing or requiring a subshell.
 # The _fm_meta_ prefix is reserved for this helper's local variables.
 fm_meta_get() {  # <meta-file> <key> [<output-variable>]
   local _fm_meta_path=$1 _fm_meta_key=$2 _fm_meta_line _fm_meta_value=''
-  if [ -f "$_fm_meta_path" ]; then
+  local _fm_meta_contents=''
+  # A successful NUL-delimited read means binary input. Parse only the same
+  # complete text snapshot that reached EOF, before Bash can erase any NULs.
+  if [ -f "$_fm_meta_path" ] && ! IFS= read -r -d '' _fm_meta_contents 2>/dev/null < "$_fm_meta_path"; then
     while IFS= read -r _fm_meta_line || [ -n "$_fm_meta_line" ]; do
       case "$_fm_meta_line" in
         "$_fm_meta_key="*) _fm_meta_value=${_fm_meta_line#*=} ;;
       esac
-    done < "$_fm_meta_path" 2>/dev/null || true
+    done <<< "$_fm_meta_contents"
   fi
   if [ "$#" -gt 2 ]; then
     printf -v "$3" '%s' "$_fm_meta_value"

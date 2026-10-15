@@ -193,6 +193,33 @@ test_unsafe_hardlink_or_symlink_is_refused() {
   pass "hard-linked or symlinked artifacts are refused and left in place"
 }
 
+test_registration_and_snapshot_in_unusual_home() {
+  local name home
+  for name in plain 'literal\name' $'line\nbreak'; do
+    home=$(make_home "$name")
+    write_registered_check "$home" custom
+    FM_HOME="$home" bash -c '
+      set -u
+      . "$1/bin/fm-pr-lib.sh"
+      . "$1/bin/fm-check-lib.sh"
+      state=$2/state
+      fm_custom_check_registered "$state" custom || exit 1
+      fm_custom_check_snapshot_prepare "$state" custom || exit 2
+      cmp -s "$state/custom.check.sh" "$FM_CUSTOM_CHECK_SNAPSHOT" || exit 3
+      fm_custom_check_snapshot_cleanup
+      printf "# changed after registration\n" >> "$state/custom.check.sh"
+      ! fm_custom_check_registered "$state" custom || exit 4
+      ! fm_custom_check_snapshot_prepare "$state" custom || exit 5
+      [ -z "$FM_CUSTOM_CHECK_SNAPSHOT" ] || exit 6
+    ' _ "$ROOT" "$home" || fail "custom check snapshot did not bind the registered bytes"
+    FM_HOME="$home" "$UNREGISTER" custom >/dev/null || fail "unusual-home check could not be retired"
+    [ ! -e "$home/state/custom.check.sh" ] && [ ! -e "$home/state/custom.check-trust" ] \
+      || fail "unusual-home retirement left its artifacts"
+  done
+  pass "custom checks register, authenticate, reject changed bytes and retire in unusual homes"
+}
+
+test_registration_and_snapshot_in_unusual_home
 test_empty_id_and_empty_state_refuse_without_stray_rm
 test_happy_path_removes_only_check_and_trust
 test_unsafe_hardlink_or_symlink_is_refused

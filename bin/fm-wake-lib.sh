@@ -65,8 +65,8 @@ fm_pid_alive() {
   kill -0 "$pid" 2>/dev/null
 }
 
-fm_pid_identity() {
-  local pid=$1 out proc_root stat_line starttime cmdline_hex identity_key
+fm_pid_identity() {  # <pid> [start]
+  local pid=$1 identity_kind=${2:-full} out proc_root stat_line starttime cmdline_hex identity_key
   local -a stat_fields
   case "$pid" in
     ''|*[!0-9]*) return 1 ;;
@@ -91,7 +91,11 @@ fm_pid_identity() {
     [ -n "$cmdline_hex" ] || return 1
     identity_key=proc-starttime
     [ "$_FM_UNAME" != Linux ] || identity_key=linux-starttime
-    printf '%s=%s cmdline-hex=%s\n' "$identity_key" "$starttime" "$cmdline_hex"
+    if [ "$identity_kind" = start ]; then
+      printf '%s=%s\n' "$identity_key" "$starttime"
+    else
+      printf '%s=%s cmdline-hex=%s\n' "$identity_key" "$starttime" "$cmdline_hex"
+    fi
     return 0
   fi
   # Pin LC_ALL=C so lstart's date format is locale-invariant: the identity is
@@ -102,26 +106,19 @@ fm_pid_identity() {
   # narrow-COLUMNS hook, where a truncated command would likewise reject a live
   # watcher (issue #799). This mirrors fm_pending_reply_pid_identity, which pins the
   # same width for the same reason.
-  out=$(COLUMNS=10000 LC_ALL=C ps -p "$pid" -o lstart= -o command= 2>/dev/null) || return 1
+  if [ "$identity_kind" = start ]; then
+    out=$(COLUMNS=10000 LC_ALL=C ps -p "$pid" -o lstart= 2>/dev/null) || return 1
+  else
+    out=$(COLUMNS=10000 LC_ALL=C ps -p "$pid" -o lstart= -o command= 2>/dev/null) || return 1
+  fi
   [ -n "$out" ] || return 1
   printf '%s\n' "$out" | sed 's/^[[:space:]]*//'
 }
 
 fm_pid_start_identity() {  # <pid>
-  local pid=$1 identity start
-  identity=$(fm_pid_identity "$pid" 2>/dev/null) || return 1
-  case "$identity" in
-    linux-starttime=*' cmdline-hex='*|proc-starttime=*)
-      start=${identity%% *}
-      printf '%s\n' "$start"
-      return 0
-      ;;
-  esac
-  # The portable ps identity includes a command string that may legitimately
-  # change when a lock holder execs. Process start time alone remains stable.
-  identity=$(COLUMNS=10000 LC_ALL=C ps -p "$pid" -o lstart= 2>/dev/null) || return 1
-  [ -n "$identity" ] || return 1
-  printf '%s\n' "$identity" | sed 's/^[[:space:]]*//'
+  # Lock ownership survives exec, so request only the stable start identity.
+  # The shared reader retains its /proc validation and portable ps fallback.
+  fm_pid_identity "$1" start
 }
 
 # True unless the lock's original owner is proven gone.

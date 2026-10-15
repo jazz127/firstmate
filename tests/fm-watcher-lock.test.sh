@@ -1668,6 +1668,40 @@ test_proc_pid_identity_ignores_wall_clock_and_detects_pid_reuse() {
   pass "/proc process identity detects pid reuse"
 }
 
+test_proc_start_identity_retains_validation() {
+  local dir state proc_root pid identity_key before after
+  dir=$(make_case proc-start-identity)
+  state="$dir/state"
+  proc_root="$dir/proc"
+  pid=4242
+  identity_key=proc-starttime
+  [ "$(uname)" != Linux ] || identity_key=linux-starttime
+  write_fake_proc_identity "$proc_root" "$pid" 987654
+  before=$(FM_PROC_ROOT_OVERRIDE="$proc_root" FM_STATE_OVERRIDE="$state" \
+    bash -c '. "$1"; fm_pid_start_identity "$2"' _ "$LIB" "$pid") \
+    || fail "could not read fixture process start identity"
+  [ "$before" = "$identity_key=987654" ] || fail "start identity changed its stored format"
+  printf 'replacement-command\0' > "$proc_root/$pid/cmdline"
+  after=$(FM_PROC_ROOT_OVERRIDE="$proc_root" FM_STATE_OVERRIDE="$state" \
+    bash -c '. "$1"; fm_pid_start_identity "$2"' _ "$LIB" "$pid") \
+    || fail "valid command replacement lost the process start identity"
+  [ "$after" = "$before" ] || fail "command replacement changed the stable start identity"
+  : > "$proc_root/$pid/cmdline"
+  if FM_PROC_ROOT_OVERRIDE="$proc_root" FM_STATE_OVERRIDE="$state" \
+    bash -c '. "$1"; fm_pid_start_identity "$2"' _ "$LIB" "$pid" > "$dir/out"; then
+    fail "an empty command line supplied a process start identity"
+  fi
+  [ ! -s "$dir/out" ] || fail "invalid process evidence emitted an identity"
+  write_fake_proc_identity "$proc_root" "$pid" 987654
+  printf 'malformed\n' > "$proc_root/$pid/stat"
+  if FM_PROC_ROOT_OVERRIDE="$proc_root" FM_STATE_OVERRIDE="$state" \
+    bash -c '. "$1"; fm_pid_start_identity "$2"' _ "$LIB" "$pid" > "$dir/out"; then
+    fail "malformed process stat supplied a process start identity"
+  fi
+  [ ! -s "$dir/out" ] || fail "malformed process stat emitted an identity"
+  pass "process start identities survive command replacement and refuse incomplete process evidence"
+}
+
 test_stale_watch_reclaim_publishes_before_clear() {
   local dir state lockdir rc token
   dir=$(make_case stale-watch-publish-before-clear)
@@ -1736,6 +1770,7 @@ test_singleton_start
 test_pid_identity_is_locale_invariant
 test_pid_identity_is_terminal_width_invariant
 test_proc_pid_identity_ignores_wall_clock_and_detects_pid_reuse
+test_proc_start_identity_retains_validation
 test_msys_pid_identity_uses_proc
 test_stale_watch_lock_reclaimed
 test_stale_watch_reclaim_publishes_before_clear

@@ -290,6 +290,33 @@ SH
   printf '%s\n' "$home"
 }
 
+test_checkpoint_seconds_are_positive_decimal() {
+  local home shell seconds expected status
+  home=$(make_host_home decimal-seconds)
+  printf 'boundary\n' > "$home/host-kind"
+  for shell in bash /bin/bash; do
+    for seconds in 0 00 000 8 08 9 09 010; do
+      rm -f "$home/host-env"
+      status=0
+      FM_HOME="$home" "$shell" "$home/root/bin/fm-watch-checkpoint.sh" --seconds "$seconds" \
+        > "$home/out.txt" 2> "$home/err.txt" || status=$?
+      expected=$((10#$seconds))
+      if [ "$expected" -eq 0 ]; then
+        expect_code 2 "$status" "$shell checkpoint zero duration $seconds"
+        assert_absent "$home/host-env" "zero-duration checkpoint started the host"
+      else
+        expect_code 124 "$status" "$shell checkpoint duration $seconds"
+        assert_equals "checkpoint: no actionable wake within ${expected}s" "$(cat "$home/out.txt")" \
+          "checkpoint did not preserve decimal seconds"
+        assert_contains "$(cat "$home/host-env")" "park=$expected" "host received the wrong park duration"
+        assert_contains "$(cat "$home/host-env")" "limit=$((expected + 1230))" "host received the wrong total bound"
+        [ ! -s "$home/err.txt" ] || fail "checkpoint duration emitted errors: $(cat "$home/err.txt")"
+      fi
+    done
+  done
+  pass "checkpoint durations use decimal seconds and reject every spelling of zero before starting a host"
+}
+
 run_host_checkpoint() {  # <home> <kind> [checkpoint args...]; sets STATUS
   local home=$1
   printf '%s\n' "$2" > "$home/host-kind"
@@ -378,6 +405,7 @@ test_real_host_checkpoint_ends_quietly_at_its_bound() {
   pass "checkpoint: the real host ends its park at the checkpoint bound as a quiet checkpoint"
 }
 
+test_checkpoint_seconds_are_positive_decimal
 test_perl_timeout_fallback_preserves_signal_death
 test_quiet_checkpoint_exits_124_cleanly
 test_perl_timeout_fallback_honors_cleanup_bound_before_escalating

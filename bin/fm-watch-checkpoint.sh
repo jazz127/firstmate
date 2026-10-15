@@ -60,8 +60,10 @@ done
 
 case "$SECONDS_ARG" in
   ''|*[!0-9]*) echo "error: --seconds must be a positive integer" >&2; exit 2 ;;
-  0) echo "error: --seconds must be greater than zero" >&2; exit 2 ;;
 esac
+# Strip padding before both the zero check and the host's arithmetic.
+SECONDS_ARG=${SECONDS_ARG#"${SECONDS_ARG%%[!0]*}"}
+[ -n "$SECONDS_ARG" ] || { echo "error: --seconds must be greater than zero" >&2; exit 2; }
 
 # A checkpoint is neither an ordinary watcher start nor an Option B handling
 # successor. It keeps an announced recovery episode stable while preserving the

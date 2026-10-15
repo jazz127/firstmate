@@ -901,10 +901,14 @@ test_peek_conformance_old_vs_new() {
 # --- old vs new: fm-spawn.sh --------------------------------------------------
 
 make_spawn_fake_process_tools() {  # <fakebin> <worktree> [cwd-counter] [initial-path]
-  local fakebin=$1 worktree=$2 counter=${3:-} initial=${4:-}
-  cat > "$fakebin/ps" <<'SH'
+  local fakebin=$1 worktree=$2 counter=${3:-} initial=${4:-} real_ps
+  real_ps=$(command -v ps) || return 1
+  # Only the foreground pane is synthetic. Lock-owner identity must still use
+  # the system ps when the host has no compatible /proc filesystem.
+  cat > "$fakebin/ps" <<SH
 #!/usr/bin/env bash
-case "$*" in
+case "\$*" in
+  *"-o lstart="*) exec "$real_ps" "\$@" ;;
   *"-t pts/91"*) printf '%s\n' '987654321 987654321 987654321' ;;
 esac
 SH

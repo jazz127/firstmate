@@ -859,6 +859,39 @@ EOF
   pass "fm-startup-network: a held publish lock ends the worker inside its budget with a failed-rerun record"
 }
 
+test_malformed_timing_stamps_cannot_abort_the_caller() {
+  local dir stamp out log
+  dir="$TMP_ROOT/timing-invalid-stamps"
+  mkdir -p "$dir"
+  log="$dir/timings.tsv"
+  for stamp in '' bad 08 0008 -1 99999999999999999999; do
+    : > "$log"
+    out=$(bash -c '
+      . "$1"
+      FM_TIMING_LOG=$2
+      FM_TIMING_EPOCH_MS=1000
+      fm_timing_record phase invalid "$3"
+      printf "caller-survived"
+    ' _ "$ROOT/bin/fm-timing-lib.sh" "$log" "$stamp" 2>&1) \
+      || fail "malformed timing start aborted its caller: $stamp -> $out"
+    [ "$out" = caller-survived ] || fail "malformed timing start printed an error: $stamp -> $out"
+    [ ! -s "$log" ] || fail "malformed timing start wrote a record: $stamp"
+
+    out=$(bash -c '
+      . "$1"
+      FM_TIMING_LOG=$2
+      FM_TIMING_EPOCH_MS=$3
+      fm_timing_record phase valid 1000
+      printf "caller-survived"
+    ' _ "$ROOT/bin/fm-timing-lib.sh" "$log" "$stamp" 2>&1) \
+      || fail "malformed timing origin aborted its caller: $stamp -> $out"
+    [ "$out" = caller-survived ] || fail "malformed timing origin printed an error: $stamp -> $out"
+    [ "$(wc -l < "$log" | tr -d ' ')" = 1 ] || fail "invalid origin lost the valid timing record: $stamp"
+  done
+  pass "fm-startup-network: malformed timing stamps never abort their caller"
+}
+
+test_malformed_timing_stamps_cannot_abort_the_caller
 test_wait_fails_without_a_published_stage
 test_start_returns_without_holding_the_callers_stdout
 test_harvest_acknowledgement_suppresses_the_wake_and_no_claim_produces_it

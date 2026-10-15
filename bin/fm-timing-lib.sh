@@ -76,6 +76,14 @@ fm_timing_now_ms() {
   printf '%s\n' "$(( sec * 1000 ))"
 }
 
+fm_timing_stamp_valid() {  # <milliseconds>
+  # Canonical decimal only: leading zeroes invoke Bash's octal arithmetic, and
+  # at most 16 digits keep both timestamp subtraction operands well inside the
+  # signed 64-bit range. Malformed diagnostics must never abort a sweep.
+  case "$1" in ''|*[!0-9]*|0[0-9]*) return 1 ;; esac
+  [ "${#1}" -le 16 ]
+}
+
 # Ensure FM_TIMING_EPOCH_MS holds the origin every offset is measured from.
 # Callers that own a run export it up front; a process that starts recording
 # without one adopts its own first measurement so its records stay internally
@@ -86,12 +94,10 @@ fm_timing_now_ms() {
 # runs in a subshell, so the lazily chosen origin would be discarded and every
 # record would recompute it, flattening every start offset to zero.
 fm_timing_epoch_ensure() {
-  case "${FM_TIMING_EPOCH_MS:-}" in
-    ''|*[!0-9]*)
-      FM_TIMING_EPOCH_MS=$(fm_timing_now_ms)
-      export FM_TIMING_EPOCH_MS
-      ;;
-  esac
+  if ! fm_timing_stamp_valid "${FM_TIMING_EPOCH_MS:-}"; then
+    FM_TIMING_EPOCH_MS=$(fm_timing_now_ms)
+    export FM_TIMING_EPOCH_MS
+  fi
 }
 
 # Start a run: point recording at <file> and stamp the shared origin. The file is
@@ -120,7 +126,7 @@ fm_timing_sanitize() {  # <text>
 fm_timing_record() {  # <scope> <name> <start-ms> [detail]
   local scope=$1 name=$2 start=$3 detail=${4:-} now offset elapsed
   fm_timing_enabled || return 0
-  case "$start" in ''|*[!0-9]*) return 0 ;; esac
+  fm_timing_stamp_valid "$start" || return 0
   now=$(fm_timing_now_ms)
   fm_timing_epoch_ensure
   offset=$(( start - FM_TIMING_EPOCH_MS ))

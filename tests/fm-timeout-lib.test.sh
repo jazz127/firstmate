@@ -417,11 +417,26 @@ test_run_timed_passes_a_natural_exit_through_a_fired_bound() {
   pass 'fm_run_timed passes a natural exit through when the bound fired after completion'
 }
 
+test_run_timed_preserves_standard_input() {
+  local shell out rc
+  for shell in "$(command -v bash)" /bin/bash; do
+    rc=0
+    out=$(printf 'first line\nsecond line\n' | "$shell" -c '
+      . "$1/bin/fm-timeout-lib.sh"
+      PATH="$2:$PATH" fm_run_timed 5 cat
+    ' _ "$ROOT" "$RUN124") || rc=$?
+    [ "$rc" -eq 0 ] || fail "external timeout wrapper failed under $shell (rc=$rc)"
+    [ "$out" = $'first line\nsecond line' ] || fail "external timeout wrapper lost stdin under $shell: $out"
+  done
+  pass 'fm_run_timed preserves piped stdin through an external timeout runner on both Bash generations'
+}
+
 test_passes_the_command_status_and_output_through
 test_bash32_owner_check
 test_system_bash_preserves_completion_and_signal_statuses
 test_run_timed_reports_the_bound_when_the_wrapper_records_a_signal_death
 test_run_timed_passes_a_natural_exit_through_a_fired_bound
+test_run_timed_preserves_standard_input
 test_term_ends_a_cooperative_command_at_the_bound
 test_kill_ends_a_term_ignoring_command_after_the_grace
 test_the_bound_replaces_the_calling_shell

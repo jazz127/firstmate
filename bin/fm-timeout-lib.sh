@@ -163,6 +163,8 @@ fm_run_external_timeout() {
   # A shell wrapper can exit promptly on TERM while one of its descendants
   # ignores TERM; timeout then considers the command finished and does not send
   # its configured KILL. Explicitly reap that leftover group on a real timeout.
+  # Forward stdin explicitly: a noninteractive background command otherwise
+  # receives /dev/null when job control is off.
   # shellcheck disable=SC2016  # Expansion is deliberately deferred to the child shell.
   "$runner" -k 1 "$seconds" bash -c '
     status_file=$1
@@ -171,7 +173,7 @@ fm_run_external_timeout() {
     command_rc=$?
     printf "%s\n" "$command_rc" > "$status_file"
     exit "$command_rc"
-  ' _ "$status_file" "$@" &
+  ' _ "$status_file" "$@" <&0 &
   runner_pid=$!
   if wait "$runner_pid"; then
     runner_rc=0

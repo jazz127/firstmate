@@ -2811,7 +2811,9 @@ crew_worktree_written_since() {  # <id> <state> <anchor-file>
     prune+=( -name "$name" )
   done
   bound=$FM_WORKTREE_WRITE_TIMEOUT
-  case "$bound" in ''|*[!0-9]*|0) bound=10 ;; esac
+  case "$bound" in ''|*[!0-9]*) bound=10 ;; esac
+  # Every all-zero spelling disables an external/Perl timeout.
+  [ -n "${bound//0/}" ] || bound=10
   if [ "${#prune[@]}" -gt 0 ]; then
     hit=$(fm_run_timed "$bound" find "$wt" -xdev -maxdepth "$FM_WORKTREE_WRITE_MAXDEPTH" \
       \( "${prune[@]}" \) -prune -o -type f -newer "$anchor" -print -quit 2>/dev/null || true)

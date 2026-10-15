@@ -761,8 +761,8 @@ test_empty_write_prune_from_the_environment_widens_the_probe() {
 # mount. Hitting the bound must read as NO evidence, exactly like every other
 # negative outcome, so the caller's escalation schedule is untouched.
 test_worktree_write_probe_is_wall_clock_bounded() {
-  local dir state anchor wt slowbin fastbin started elapsed
-  dir=$(make_case classify-write-probe-bound); state="$dir/state"
+  local dir state anchor wt slowbin fastbin started elapsed bound=${1:-1} ceiling=${2:-10}
+  dir=$(make_case "classify-write-probe-bound-$bound"); state="$dir/state"
   anchor="$state/anchor"; wt="$dir/wt"; slowbin="$dir/slowbin"; fastbin="$dir/fastbin"
   mkdir -p "$wt/src" "$slowbin" "$fastbin"
   : > "$anchor"
@@ -788,14 +788,18 @@ SH
     "$ROOT/bin/fm-classify-lib.sh" "$state" "$anchor" \
     || fail "a walk that reported a hit inside its bound was not read as write evidence"
   started=$(date +%s)
-  PATH="$slowbin:$PATH" FM_WORKTREE_WRITE_TIMEOUT=1 \
+  PATH="$slowbin:$PATH" FM_WORKTREE_WRITE_TIMEOUT="$bound" \
     bash -c '. "$1"; crew_worktree_written_since slow "$2" "$3"' _ \
     "$ROOT/bin/fm-classify-lib.sh" "$state" "$anchor" \
     && fail "a walk that outlived its bound was reported as write evidence"
   elapsed=$(( $(date +%s) - started ))
-  [ "$elapsed" -lt 10 ] \
+  [ "$elapsed" -lt "$ceiling" ] \
     || fail "the worktree write probe was not wall-clock bounded: one walk held the caller for ${elapsed}s"
   pass "the worktree write probe is wall-clock bounded, and hitting the bound reads as no write evidence"
+}
+
+test_zero_padded_write_probe_timeout_keeps_default() {
+  test_worktree_write_probe_is_wall_clock_bounded 00 20
 }
 
 # signal_crew_provably_working: a no-verb "signal:" wake is benign ONLY when EVERY
@@ -7859,6 +7863,7 @@ test_crew_worktree_written_since_classifier
 test_empty_write_prune_widens_the_probe
 test_empty_write_prune_from_the_environment_widens_the_probe
 test_worktree_write_probe_is_wall_clock_bounded
+test_zero_padded_write_probe_timeout_keeps_default
 test_signal_crew_provably_working_classifier
 test_secondmate_status_routine_absorbed_routed_surfaced_classifier
 test_provably_working_signal_absorbed

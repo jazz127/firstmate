@@ -120,8 +120,11 @@ fm_timing_sanitize() {  # <text>
     *[[:space:]]*) printf '%s\n' 'unrecordable'; return 0 ;;
   esac
   _fm_timing_uint_valid "$max" || max=80
+  # Reject whitespace across the whole input above, then sanitize only the
+  # retained prefix. Bash 3.2 global replacement is costly on a long field.
+  text=${text:0:$max}
   text=${text//[!A-Za-z0-9._@:\/+-]/_}
-  printf '%s\n' "${text:0:$max}"
+  printf '%s\n' "$text"
 }
 
 # Record one measured step. Never fails the caller: a missing log, an unwritable

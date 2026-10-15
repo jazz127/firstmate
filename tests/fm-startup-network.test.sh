@@ -930,6 +930,12 @@ test_invalid_timing_limits_use_the_safe_default() {
   done
   out=$(bash -c 'FM_TIMING_DETAIL_MAX=4; . "$1"; fm_timing_sanitize "host secret"' _ "$ROOT/bin/fm-timing-lib.sh")
   [ "$out" = unrecordable ] || fail "a small timing limit exposed a prefix of rejected free text"
+  text=$(printf '%2000s' '' | tr ' ' '*')
+  expected=$(printf '%80s' '' | tr ' ' '_')
+  out=$(bash -c '. "$1"; fm_timing_sanitize "$2"' _ "$ROOT/bin/fm-timing-lib.sh" "$text")
+  [ "$out" = "$expected" ] || fail "a long punctuation field was not capped and sanitized"
+  out=$(bash -c '. "$1"; fm_timing_sanitize "$2"' _ "$ROOT/bin/fm-timing-lib.sh" "$text secret")
+  [ "$out" = unrecordable ] || fail "whitespace beyond the retained prefix escaped rejection"
   pass "fm-startup-network: malformed timing limits default safely without weakening sanitization"
 }
 

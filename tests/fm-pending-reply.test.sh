@@ -2169,8 +2169,21 @@ test_same_kind_escalation_reopens_after_operator_close() {
   pass "a same-kind escalation after an operator close opens the decision again"
 }
 
+test_tick_without_metadata() (
+  local home state corr phase
+  home=$(setup_parent missing-meta)
+  state="$home/state"
+  corr=$(fm_pending_reply_create "$home" "$state" missing "request without metadata")
+  fm_pending_reply_mark_delivered "$state" "$corr"
+  fm_pending_reply_tick "$state" || fail "missing metadata aborted the reply scan"
+  phase=$(phase_of "$state" "$corr")
+  [ "$phase" = awaiting_report ] || fail "unknown worker state changed the pending phase: $phase"
+  pass "missing task metadata leaves the request pending without aborting the scan"
+)
+
 # --- run --------------------------------------------------------------------
 
+test_tick_without_metadata
 test_normal_correlated_reply_resolves_once
 test_completed_turn_no_report_triggers_one_recovery
 test_recovery_waits_while_the_mate_has_an_open_decision

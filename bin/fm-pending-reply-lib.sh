@@ -1636,6 +1636,7 @@ fm_pending_reply_tick() {  # <state-dir> [watcher-beacon]
     busy=unknown
     sm_home=
     harness=
+    remote_host=
     if [ -f "$meta" ]; then
       remote_host=$(fm_meta_get "$meta" remote_host)
       backend=$(fm_backend_of_meta "$meta")

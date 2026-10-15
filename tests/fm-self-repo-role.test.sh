@@ -38,9 +38,7 @@ export FM_BACKEND=tmux
 # assumed: a checkout without an upstream/github/origin remote resolves to the
 # undeterminable path and the scope-bound cases adapt.
 PUB_TARGET=$(fm_role_publication_target "$ROOT")
-ORIGIN_URL=$(git -C "$ROOT" remote get-url upstream 2>/dev/null) \
-  || ORIGIN_URL=$(git -C "$ROOT" remote get-url github 2>/dev/null) \
-  || ORIGIN_URL=$(git -C "$ROOT" remote get-url origin 2>/dev/null) \
+ORIGIN_URL=$(git -C "$ROOT" remote get-url origin 2>/dev/null) \
   || ORIGIN_URL=
 
 # make_role_home <name> [<role-file-content>]: a bare home whose only contents
@@ -251,6 +249,33 @@ test_check_equivalent_remote_spellings_are_one_repo() {
 # their origins and git dirs differ, but they share firstmate's root commit,
 # so the task still meets the role/consent gate. A fork's maintainer scope
 # does not cover the parent; one-task consent for the parent does.
+test_check_house_destination_authority() {
+  local root home out rc grant n=0
+  root=$(make_lineage_root house-destination https://github.com/jazz127/firstmate.git)
+  git -C "$root" remote add upstream https://github.com/kunchenguid/firstmate.git
+  git -C "$root" remote add github https://github.com/unrelated/firstmate.git
+  for grant in user 'maintainer github.com/jazz127/firstmate' 'maintainer github.com/kunchenguid/firstmate'; do
+    n=$((n + 1))
+    home=$(make_role_home "house-destination-$n" "$grant")
+    out=$(check_as "$root" "$home" "$root"); rc=$?
+    if [ "$grant" = 'maintainer github.com/jazz127/firstmate' ]; then
+      expect_code 0 "$rc" "fork maintainer must authorize house delivery: $out"
+    else
+      expect_code 1 "$rc" "absent or parent authority must refuse house delivery: $out"
+    fi
+    out=$(check_as "$root" "$home" "$root" upstream-consent github.com/jazz127/firstmate); rc=$?
+    expect_code 0 "$rc" "task consent must authorize the fork without changing the role: $out"
+    [ "$(cat "$home/config/firstmate-role")" = "$grant" ] || fail "task consent modified the role"
+  done
+  home=$(make_role_home house-parent-consent)
+  out=$(check_as "$root" "$home" "$root" upstream-consent github.com/kunchenguid/firstmate); rc=$?
+  expect_code 1 "$rc" "parent consent must not authorize the fork: $out"
+  git -C "$root" remote remove origin
+  out=$(check_as "$root" "$home" "$root" upstream-consent github.com/kunchenguid/firstmate); rc=$?
+  expect_code 1 "$rc" "a sync remote must not substitute for a missing delivery destination: $out"
+  pass "house authority follows the fork destination and remains fail closed"
+}
+
 test_check_fork_lineage_reaches_the_gate() {
   local fork parent user_home fork_home out rc
   fork=$(make_lineage_root fork-root https://github.com/someone/firstmate-fork)
@@ -679,6 +704,11 @@ test_secondmate_spawn_refuses_consent_flag() {
 
 # --- run --------------------------------------------------------------------
 
+if [ "$#" -gt 0 ]; then
+  for test_case in "$@"; do "$test_case"; done
+  exit 0
+fi
+
 test_report_default_and_local_grants
 test_report_fails_closed_on_unsafe_input
 test_check_user_home_refused_on_self_repo
@@ -686,6 +716,7 @@ test_check_foreign_project_passes_through
 test_check_maintainer_scope_authorizes
 test_check_wrong_scope_and_remote_presence_do_not_authorize
 test_check_equivalent_remote_spellings_are_one_repo
+test_check_house_destination_authority
 test_check_fork_lineage_reaches_the_gate
 test_check_undeterminable_lineage_and_target_refuse
 test_check_task_consent_authorizes_one_task

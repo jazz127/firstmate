@@ -2684,6 +2684,35 @@ test_forgejo_combined_status_reads_every_page() {
   pass "fm-pr-merge reads every Forgejo combined-status page before merging"
 }
 
+test_forgejo_malformed_status_pages_refuse() {
+  local case_dir rc page payload n=0
+  for page in 1 2; do
+    for payload in '{"message":"rate limit exceeded"}' '{"state":"success"}' \
+      '{"statuses":[]}' '{"state":null,"statuses":[]}' \
+      '{"state":false,"statuses":[]}' '{"state":"unknown","statuses":[]}' \
+      '{"state":"success","statuses":null}' '{"state":"success","statuses":{}}' \
+      '{"state":"error","statuses":[]}' '{"state":"success","statuses":[]}' \
+      '{"state":"","statuses":[{"context":"ci","status":"success"}]}'; do
+      n=$((n + 1))
+      case_dir=$(make_forgejo_case "forgejo-malformed-$n")
+      if [ "$page" = 1 ]; then
+        printf '%s\n' "$payload" > "$case_dir/tea-status.json"
+      else
+        printf '%s\n' "$payload" > "$case_dir/tea-status-page2.json"
+      fi
+      set +e
+      run_pr_merge "$case_dir" task-x1 "$FJ_URL" > "$case_dir/stdout" 2> "$case_dir/stderr"
+      rc=$?
+      set -e
+      expect_code 1 "$rc" "malformed status page $page must refuse: $payload"
+      assert_grep 'the combined commit status is "unreadable", not success' "$case_dir/stderr" \
+        "malformed status must be unreadable: $payload"
+      [ -z "$(tea_merge_line "$case_dir/tea.log")" ] || fail "malformed page allowed a merge: $payload"
+    done
+  done
+  pass "Forgejo rejects malformed first and terminal pages even when tea exits zero"
+}
+
 test_forgejo_stale_recorded_head_is_reported() {
   local case_dir rc merge_line
   case_dir=$(make_forgejo_case forgejo-stale-head)
@@ -3228,6 +3257,11 @@ test_secondmate_without_parent_binding_is_loud() {
   pass "a secondmate home that cannot report upward says so instead of merging in silence"
 }
 
+if [ "$#" -gt 0 ]; then
+  for test_case in "$@"; do "$test_case"; done
+  exit 0
+fi
+
 test_github_zero_exit_queue_required_refuses_with_exact_retry
 test_github_closed_unqueued_outcome_omits_retry_flags
 test_github_agreeing_queue_rules_keep_retry_guidance
@@ -3294,6 +3328,7 @@ test_forgejo_refuses_when_login_is_ambiguous
 test_forgejo_each_condition_refuses_independently
 test_forgejo_unconfigured_ci_refuses_as_none
 test_forgejo_combined_status_reads_every_page
+test_forgejo_malformed_status_pages_refuse
 test_forgejo_stale_recorded_head_is_reported
 test_forgejo_invalid_head_refuses
 test_forgejo_missing_tool_refuses_before_recording

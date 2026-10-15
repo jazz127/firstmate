@@ -175,6 +175,13 @@ test_forge_selection_renders_correct_cli() {
   assert_no_grep 'gh-axi pr ready' "$brief" \
     "a no-mistakes --forge forgejo DOD must not send the worker to gh-axi to clear a draft"
 
+  assert_grep 'fm-pr-body-preflight.sh --forgejo-url <PR URL>' "$brief" \
+    "Forgejo generated delivery contract must require provider-correct evidence readback"
+  assert_no_grep 'fm-upstream-prior-art.py' "$brief" \
+    "Forgejo generated contract must not require the GitHub prior-art tool"
+  assert_no_grep 'fm-pr-body-preflight.sh --gh-url' "$brief" \
+    "Forgejo generated contract must not require GitHub body readback"
+
   while IFS='|' read -r label args expect; do
     [ -n "$label" ] || continue
     # shellcheck disable=SC2086 # The row's arguments must split into words.

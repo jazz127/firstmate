@@ -168,6 +168,12 @@ if [ "$CURSOR_MODE" -eq 0 ] && fm_hook_payload_is_foreign_host "$PAYLOAD"; then
   exit 0
 fi
 
+if [ "$CLAUDE_MODE" -eq 1 ]; then
+  printf '%s' "$PAYLOAD" | "$SCRIPT_DIR/fm-context-restart-claude-hook.sh"
+  context_status=$?
+  [ "$context_status" -ne 2 ] || exit 2
+fi
+
 STOP_HOOK_ACTIVE=$(printf '%s' "$PAYLOAD" | jq -r '
   if type != "object" then error("payload")
   elif has("stopHookActive") then

@@ -813,8 +813,18 @@ EOF
 }
 
 fm_nm_published_body_check_block() {  # <task-id>
-  local script_dir
+  local script_dir forge=${2:-none}
   script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd) || return 1
+  if [ "$forge" = forgejo ]; then
+    cat <<EOF
+The no-mistakes PR step generates and publishes its own body, so check its exact forge readback immediately after each publication or body update and before the CI-ready \`done:\` report:
+\`$script_dir/fm-pr-body-preflight.sh --forgejo-url <PR URL> "/tmp/fm-$1/pr-body-readback.md" "\$(pwd -P)" "/tmp/fm-$1"\`.
+That command reads the complete published body with \`tea\` and applies the same evidence validator; a passing draft-body check does not replace it.
+If it refuses, correct only the description in that file while preserving the pipeline attestation comment verbatim, preflight the corrected draft without \`--forgejo-url\`, and publish the description with \`tea pulls edit <number> --repo <owner>/<repo> --login <login> --description "\$(cat /tmp/fm-$1/pr-body-readback.md)"\` using the login for the PR URL's host.
+Read back with \`--forgejo-url\` until it reports \`evidence preflight ok\`; do not append the CI-ready \`done:\` while it fails.
+EOF
+    return
+  fi
   cat <<EOF
 The no-mistakes PR step generates and publishes its own body, so check its exact forge readback immediately after each publication or body update and before the CI-ready \`done:\` report:
 \`$script_dir/fm-pr-body-preflight.sh --gh-url <PR URL> "/tmp/fm-$1/pr-body-readback.md" "\$(pwd -P)" "/tmp/fm-$1"\`.
@@ -993,8 +1003,8 @@ EOF
       fm_scratch_preflight_block
       fm_nm_driving_block "$forge"
       fm_pr_body_preflight_block "$id"
-      fm_nm_published_body_check_block "$id"
-      fm_upstream_pr_preflight_block "$id"
+      fm_nm_published_body_check_block "$id" "$forge"
+      [ "$forge" != none ] || fm_upstream_pr_preflight_block "$id"
       cat <<EOF
 
 For a base with checks, including \`house\`, after /no-mistakes reports CI green (the CI-ready return point - do not wait for it to keep monitoring in the background until merge), read the PR back from the forge and confirm it is not a draft $draft_check

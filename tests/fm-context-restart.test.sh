@@ -54,6 +54,58 @@ record_phase() {
   ' _ "$LIB" "$1/state/.context-restart-crossing"
 }
 
+test_registered_stop_reports_context_continuation_busy() {
+  local home parent transcript gen commands out rc verdict
+  home="$TMP_ROOT/registered-stop"
+  parent="$TMP_ROOT/registered-parent"
+  transcript="$home/transcript.jsonl"
+  commands="$home/stop-commands"
+  make_primary "$home" 100
+  mkdir -p "$parent/state"
+  printf 'context-mate\n' > "$home/.fm-secondmate-home"
+  gen=$("$ROOT/bin/fm-busy-event.sh" arm "$parent/state" context-mate --state idle) || fail "could not arm parent state"
+  printf 'writer=%s\nstate=%s\nid=context-mate\ngen=%s\n' \
+    "$ROOT/bin/fm-busy-event.sh" "$parent/state" "$gen" > "$home/.fm-busy-stop"
+  jq -r '.hooks.Stop[].hooks[] | select(.asyncRewake != true) | .command' \
+    "$ROOT/.claude/settings.json" > "$commands"
+  write_transcript "$transcript" 40 30 20 10
+  rc=0
+  out=$(printf '{"session_id":"registered-session","transcript_path":"%s","stop_hook_active":false}\n' "$transcript" \
+    | FM_ROOT_OVERRIDE="$home" FM_HOME="$home" CLAUDE_PROJECT_DIR="$ROOT" STOP_COMMANDS="$commands" \
+      "$FAKE_CLAUDE" -c '
+        printf "%s\n" "$$" > "$FM_HOME/state/.lock"
+        payload=$(cat)
+        pids=""
+        while IFS= read -r command; do
+          printf "%s" "$payload" | bash -c "$command" &
+          pids="$pids $!"
+        done < "$STOP_COMMANDS"
+        result=0
+        for pid in $pids; do
+          wait "$pid"; status=$?
+          [ "$status" -ne 2 ] || result=2
+        done
+        exit "$result"
+      ' 2>&1) || rc=$?
+  expect_code 2 "$rc" "registered Stop must request context handoff: $out"
+  assert_contains "$out" 'FIRSTMATE_OP: v1 context-refresh:' "registered Stop lost the context directive"
+  verdict=$(bash -c '. "$1"; fm_busy_record_read "$2" context-mate' _ "$ROOT/bin/fm-busy-lib.sh" "$parent/state") \
+    || fail "parent busy record unreadable"
+  case "$verdict" in 'busy claude-hook stop-blocked '*) ;; *) fail "context continuation was not busy: $verdict" ;; esac
+
+  write_transcript "$transcript" 10 10 10 10
+  rc=0
+  out=$(printf '{"session_id":"registered-session","transcript_path":"%s","stop_hook_active":false}\n' "$transcript" \
+    | FM_ROOT_OVERRIDE="$home" FM_HOME="$home" "$FAKE_CLAUDE" -c '
+        printf "%s\n" "$$" > "$FM_HOME/state/.lock"
+        "$1/bin/fm-turnend-guard.sh" --claude
+      ' _ "$ROOT" 2>&1) || rc=$?
+  expect_code 0 "$rc" "a below-budget Stop with no work must settle: $out"
+  verdict=$(bash -c '. "$1"; fm_busy_record_read "$2" context-mate' _ "$ROOT/bin/fm-busy-lib.sh" "$parent/state")
+  case "$verdict" in 'idle claude-hook stop '*) ;; *) fail "ordinary Stop did not settle idle: $verdict" ;; esac
+  pass "registered synchronous Stop decisions preserve busy for context handoff and idle for ordinary completion"
+}
+
 test_budget_parser_and_opt_in() {
   local config outside out rc
   config="$TMP_ROOT/config-parser"
@@ -738,6 +790,12 @@ test_successor_baseline_prevents_restart_loops() {
   pass "context restart: over-budget successor baseline inhibits loops and a raised budget rearms it"
 }
 
+if [ "$#" -gt 0 ]; then
+  for test_case in "$@"; do "$test_case"; done
+  exit 0
+fi
+
+test_registered_stop_reports_context_continuation_busy
 test_handoff_waits_for_replacement_commit
 test_budget_parser_and_opt_in
 test_threshold_and_one_directive_per_crossing

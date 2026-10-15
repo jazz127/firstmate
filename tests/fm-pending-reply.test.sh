@@ -2171,6 +2171,20 @@ test_same_kind_escalation_reopens_after_operator_close() {
   pass "a same-kind escalation after an operator close opens the decision again"
 }
 
+test_record_update_preserves_other_fields() {
+  local home rec path
+  home=$(setup_parent record-update)
+  rec="$home/record"
+  for path in "$rec" record; do
+    printf 'phase=old\nsummary=  literal\\n=value  \nphase=duplicate\nempty=' > "$rec"
+    (cd "$home" && fm_pending_reply_set "$path" phase 'new=value') \
+      || fail "field update failed for $path"
+    printf 'summary=  literal\\n=value  \nempty=\nphase=new=value\n' > "$home/expected"
+    cmp -s "$home/expected" "$rec" || fail "field update lost bytes or retained duplicate keys"
+  done
+  pass "field updates preserve other fields and replace every old occurrence through absolute and relative paths"
+}
+
 test_record_update_preserves_unreadable_input() {
   local home rec expected rc=0
   home=$(setup_parent unreadable-record)
@@ -2228,6 +2242,7 @@ test_record_field_framing() {
   pass "record fields preserve framing, literal bytes and final-occurrence precedence"
 }
 
+test_record_update_preserves_other_fields
 test_record_update_preserves_unreadable_input
 test_record_field_framing
 test_tick_without_metadata

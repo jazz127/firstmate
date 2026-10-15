@@ -126,6 +126,8 @@
 _FM_PENDING_REPLY_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd 2>/dev/null)" || _FM_PENDING_REPLY_LIB_DIR="."
 # shellcheck source=bin/fm-marker-lib.sh
 . "$_FM_PENDING_REPLY_LIB_DIR/fm-marker-lib.sh"
+# shellcheck source=bin/fm-path-lib.sh
+. "$_FM_PENDING_REPLY_LIB_DIR/fm-path-lib.sh"
 # shellcheck source=bin/fm-backend.sh
 . "$_FM_PENDING_REPLY_LIB_DIR/fm-backend.sh"
 # Deliberately undirected: this library consumes no symbols from
@@ -280,17 +282,18 @@ fm_pending_reply_corr_reusable() {  # <state-dir> <corr_id> <task_id>
 fm_pending_reply_set() {  # <record-path> <key> <value>
   local rec=$1 key=$2 value=$3 dir base tmp line
   [ -f "$rec" ] || return 1
-  dir=$(dirname "$rec")
-  base=$(basename "$rec")
+  fm_dirname_to dir "$rec"
+  fm_basename_to base "$rec"
   tmp="$dir/.${base}.tmp.$$"
-  : > "$tmp" || return 1
-  while IFS= read -r line || [ -n "$line" ]; do
-    case "$line" in
-      "${key}="*) continue ;;
-    esac
-    printf '%s\n' "$line" >> "$tmp" || return 1
-  done < "$rec" || return 1
-  printf '%s=%s\n' "$key" "$value" >> "$tmp" || return 1
+  {
+    while IFS= read -r line || [ -n "$line" ]; do
+      case "$line" in
+        "${key}="*) continue ;;
+      esac
+      printf '%s\n' "$line" || return 1
+    done < "$rec" || return 1
+    printf '%s=%s\n' "$key" "$value" || return 1
+  } > "$tmp" || return 1
   mv -f "$tmp" "$rec"
 }
 

@@ -547,14 +547,20 @@ status_declared_wait_episode() {  # <status-file>
 # supervisor rechecks the wait when the worker said it would clear instead of on
 # the flat cadence; returns 1 when the line is not a pause or declares no time,
 # or the time is malformed, so a bad token falls back to the cadence rather than
-# silencing the wait.
+# silencing the wait. Read the whole non-whitespace token, allowing only trailing
+# sentence punctuation; a timestamp prefix followed by junk or an offset is not
+# a UTC deadline.
 status_paused_until() {  # <status-line> -> epoch on stdout
-  local line=$1 token
+  local line=$1 token until_re='.*[[:space:]][Uu][Nn][Tt][Ii][Ll][[:space:]]+([^[:space:]]+)'
   status_is_paused "$line" || return 1
-  token=$(printf '%s' "$line" \
-    | sed -n 's/.*[[:space:]][Uu][Nn][Tt][Ii][Ll][[:space:]]\{1,\}\([0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]Z\).*/\1/p; s/.*[[:space:]][Uu][Nn][Tt][Ii][Ll][[:space:]]\{1,\}\([0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]Z\).*/\1/p' \
-    | head -1)
-  [ -n "$token" ] || return 1
+  [[ "$line" =~ $until_re ]] || return 1
+  token=${BASH_REMATCH[1]}
+  while :; do
+    case "$token" in
+      *'.'|*','|*';'|*'!'|*'?'|*')'|*']'|*'}') token=${token%?} ;;
+      *) break ;;
+    esac
+  done
   fm_utc_iso_to_epoch "$token"
 }
 

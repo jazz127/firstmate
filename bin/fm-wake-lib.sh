@@ -700,16 +700,20 @@ FM_WAKE_APPEND_RECOVERY_PUBLISHED_TOKEN=
 # docs/watcher-continuity.md owns the recovery-episode contract, including the
 # once-per-generation announcement rule for unacknowledged downtime.
 fm_recovery_marker_read() {
-  local marker=$1 line extra
+  local marker=$1 line=''
   FM_RECOVERY_MARKER_TOKEN=
   [ -f "$marker" ] && [ ! -L "$marker" ] || return 1
-  # Exactly one newline byte: the first line is terminated and no second is.
-  { IFS= read -r line && ! IFS= read -r extra; } < "$marker" || return 1
+  # Capture one NUL-free snapshot. A failed second line read would also accept
+  # an unterminated suffix, while ordinary reads can silently erase NULs.
+  if IFS= read -r -d '' line 2>/dev/null < "$marker"; then return 1; fi
+  case "$line" in *$'\n') line=${line%$'\n'} ;; *) return 1 ;; esac
   case "$line" in
     pending:handling:*|pending:downtime:*|announced:handling:*|announced:downtime:*|acked:handling:*|acked:downtime:*) ;;
     *) return 1 ;;
   esac
-  case "${line##*:}" in
+  # Validate everything after the two fixed fields, including extra colons
+  # or newlines, rather than accepting just the last colon-delimited fragment.
+  case "${line#*:*:}" in
     ''|*[!A-Za-z0-9._-]*) return 1 ;;
   esac
   FM_RECOVERY_MARKER_TOKEN=$line

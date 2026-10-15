@@ -18,6 +18,49 @@ GUARD="$ROOT/bin/fm-guard.sh"
 
 TMP_ROOT=$(fm_test_tmproot fm-wake-tests)
 
+test_recovery_marker_framing() {
+  local dir state format out i=0
+  for format in \
+    'announced:downtime:g1\njunk' \
+    'announ\000ced:downtime:g1\n' \
+    'announced:downtime:g\0001\n' \
+    'announced:downtime:g1\n\000' \
+    'announced:downtime:g1\nbad\000tail' \
+    'announced:downtime:bad:g1\n' \
+    'announced:downtime:g1' \
+    'announced:downtime:g1\njunk\n'; do
+    i=$((i + 1))
+    dir=$(make_case "recovery-framing-$i")
+    state="$dir/state"
+    printf '%b' "$format" > "$state/.watcher-down"
+    cp "$state/.watcher-down" "$dir/original-marker"
+    out=$(FM_HOME="$dir" FM_STATE_OVERRIDE="$state" bash -c '
+      . "$1/bin/fm-wake-lib.sh"
+      FM_RECOVERY_MARKER_TOKEN=stale
+      fm_recovery_marker_read "$STATE/.watcher-down" && exit 11
+      [ -z "$FM_RECOVERY_MARKER_TOKEN" ] || exit 12
+      fm_recovery_marker_arm_check "$STATE/.watcher-down" || exit 13
+      [ "$FM_RECOVERY_MARKER_ACTION" = recover ] || exit 14
+      fm_recovery_marker_read "$STATE/.watcher-down" || exit 15
+      printf "%s" "$FM_RECOVERY_MARKER_TOKEN"
+    ' _ "$ROOT") || fail "malformed recovery marker $i was accepted or did not recover"
+    case "$out" in announced:downtime:*) ;; *) fail "recovery did not announce a new episode: $out" ;; esac
+    [ "$out" != announced:downtime:g1 ] || fail 'recovery reused the damaged generation'
+    set -- "$state"/.watcher-down.invalid.*/marker
+    [ "$#" -eq 1 ] || fail 'recovery did not quarantine exactly one marker'
+    cmp -s "$dir/original-marker" "$1" || fail 'recovery changed the quarantined marker bytes'
+  done
+  dir=$(make_case recovery-framing-valid)
+  printf 'announced:downtime:g1\n' > "$dir/state/.watcher-down"
+  out=$(FM_HOME="$dir" FM_STATE_OVERRIDE="$dir/state" bash -c '
+    . "$1/bin/fm-wake-lib.sh"
+    fm_recovery_marker_arm_check "$STATE/.watcher-down" || exit 1
+    printf "%s" "$FM_RECOVERY_MARKER_ACTION"
+  ' _ "$ROOT") || fail 'valid recovery marker was refused'
+  [ "$out" = wait ] || fail 'valid announced episode was incorrectly recovered'
+  pass 'malformed recovery markers are quarantined instead of suppressing recovery'
+}
+
 
 test_concurrent_append_and_drain() {
   local dir state out1 out2 pids i pid count unique malformed sequence generation
@@ -3506,6 +3549,7 @@ SH
   pass "watch liveness: an unreachable remote secondmate is probed, preserved, and never failed over"
 }
 
+test_recovery_marker_framing
 test_self_held_lock_reclaims_instead_of_deadlocking
 test_subshell_lock_ownership_without_bashpid
 test_bounded_lock_handoff_after_contention

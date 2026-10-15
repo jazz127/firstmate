@@ -1,0 +1,3 @@
+ok - read-only, foreign-host, and absent-payload Stops leave the active generation record unchanged
+ok - trusted same-session ownership can still publish a blocked Stop
+ok - registered synchronous Stop decisions preserve busy for context handoff and idle for ordinary completion

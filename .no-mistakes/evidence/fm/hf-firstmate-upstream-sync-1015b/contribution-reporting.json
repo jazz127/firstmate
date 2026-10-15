@@ -1,0 +1,69 @@
+{
+  "poll": {
+    "exit": 0,
+    "stdout": "",
+    "stderr": "",
+    "wake_created": false
+  },
+  "persisted_record": {
+    "schema": "fm-contributions.v1",
+    "task": "unsupported",
+    "records": [
+      {
+        "url": "https://gitlab.com/fixture/fixture-repo/-/merge_requests/2",
+        "kind": "pr",
+        "checked_at": "2026-09-16T08:00:00Z",
+        "error": null,
+        "observation": null,
+        "verdict": null,
+        "seen": [],
+        "pending": [],
+        "notified": [],
+        "provenance": "retained ownership"
+      }
+    ]
+  },
+  "snapshot": {
+    "known": 1,
+    "checked": 0,
+    "counts": {
+      "captain": 0,
+      "fleet": 0,
+      "maintainer": 0,
+      "nobody": 0
+    },
+    "unmeasured": 1,
+    "complete": false,
+    "proven_clear": false,
+    "stale_verdicts": 0,
+    "missing_verdicts": 0,
+    "unreadable_records": 0,
+    "valid_until": 1789546500,
+    "captain": [],
+    "captain_omitted": 0,
+    "rows": [
+      {
+        "task": "unsupported",
+        "url": "https://gitlab.com/fixture/fixture-repo/-/merge_requests/2",
+        "kind": "pr",
+        "checked_at": "2026-09-16T08:00:00Z",
+        "checked": false,
+        "final": false,
+        "head": null,
+        "verdict": null,
+        "reviews": [],
+        "distinct_checks": 0,
+        "missing_verdicts": 0,
+        "pending_checks": 0,
+        "failed_checks": 0,
+        "stale_verdicts": 0,
+        "signals": [],
+        "actor": "unmeasured",
+        "reason": "unsupported forge; coverage is unmeasured",
+        "tasks": [
+          "unsupported"
+        ]
+      }
+    ]
+  }
+}

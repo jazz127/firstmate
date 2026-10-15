@@ -1,0 +1,18 @@
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0  0    10    0     0    0     0      0      0 --:--:--  0:00:01 --:--:--     0
+HTTP/2 404 
+cache-control: max-age=0, private, must-revalidate
+content-type: text/plain; charset=utf-8
+x-content-type-options: nosniff
+x-frame-options: SAMEORIGIN
+content-length: 10
+date: Thu, 15 Oct 2026 01:02:28 GMT
+x-server-name: s_forgejo_secondary_alpspitz
+strict-transport-security: max-age=63072000; includeSubDomains; preload;
+permissions-policy: interest-cohort=()
+alt-svc: h3=":443";ma=2592000;
+x-backend-name: b_forgejo_secondary
+ratelimit-policy: "baseline";q=2000;w=600
+ratelimit: "baseline";r=1999;t=600
+

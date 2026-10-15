@@ -1,0 +1,6 @@
+/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4YFDQR9GTFBYVCE7QQNKRPE/.validation-tmp/checkpoint-home
+check: rearm-resurface
+Recorded recovery after first notification: announced:downtime:85449.1792026754.onhQzv
+checkpoint: no actionable wake within 1s
+Second checkpoint exit=124 marker=announced:downtime:85449.1792026754.onhQzv
+Retained durable notification: 1792026754	1	check	buried	check: unacknowledged durable wake

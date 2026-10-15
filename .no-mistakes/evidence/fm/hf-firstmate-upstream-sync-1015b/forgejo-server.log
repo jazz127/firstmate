@@ -1,0 +1,45 @@
+2026/10/15 11:06:50 cmd/web.go:242:runWeb() [I] Starting Forgejo on PID: 9405
+2026/10/15 11:06:50 cmd/web.go:111:showWebStartupMessage() [I] Forgejo version: development built with go1.27.1
+2026/10/15 11:06:50 cmd/web.go:112:showWebStartupMessage() [I] * RunMode: prod
+2026/10/15 11:06:50 cmd/web.go:113:showWebStartupMessage() [I] * AppPath: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4YFDQR9GTFBYVCE7QQNKRPE/.validation-tmp/tools/forgejo
+2026/10/15 11:06:50 cmd/web.go:114:showWebStartupMessage() [I] * WorkPath: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4YFDQR9GTFBYVCE7QQNKRPE/.validation-tmp/fjhome
+2026/10/15 11:06:50 cmd/web.go:115:showWebStartupMessage() [I] * CustomPath: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4YFDQR9GTFBYVCE7QQNKRPE/.validation-tmp/fjhome/custom
+2026/10/15 11:06:50 cmd/web.go:116:showWebStartupMessage() [I] * ConfigFile: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4YFDQR9GTFBYVCE7QQNKRPE/.validation-tmp/fjhome/custom/conf/app.ini
+2026/10/15 11:06:50 cmd/web.go:117:showWebStartupMessage() [I] Prepare to run web server
+2026/10/15 11:06:50 routers/init.go:114:InitWebInstalled() [I] Git version: 2.54.0, Wire Protocol Version 2 Enabled (home: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4YFDQR9GTFBYVCE7QQNKRPE/.validation-tmp/fjhome/data/home)
+2026/10/15 11:06:50 cmd/web.go:194:serveInstalled() [W] Table system_setting Column version db default is , struct default is 1
+2026/10/15 11:07:41 ...s/notifier_helper.go:159:notify() [W] Ref of event "repository" is empty, will fall back to the default branch
+2026/10/15 11:07:43 ...tomerge/automerge.go:58:addToQueue() [E] Error adding pullID: 1 to the pull requests patch checking queue already in queue
+2026/10/15 11:07:43 ...tomerge/automerge.go:58:addToQueue() [E] Error adding pullID: 1 to the pull requests patch checking queue already in queue
+2026/10/15 11:07:43 ...tomerge/automerge.go:58:addToQueue() [E] Error adding pullID: 1 to the pull requests patch checking queue already in queue
+2026/10/15 11:07:43 ...tomerge/automerge.go:58:addToQueue() [E] Error adding pullID: 1 to the pull requests patch checking queue already in queue
+2026/10/15 11:07:43 ...tomerge/automerge.go:58:addToQueue() [E] Error adding pullID: 1 to the pull requests patch checking queue already in queue
+2026/10/15 11:07:44 ...tomerge/automerge.go:58:addToQueue() [E] Error adding pullID: 1 to the pull requests patch checking queue already in queue
+2026/10/15 11:07:45 ...tomerge/automerge.go:58:addToQueue() [E] Error adding pullID: 1 to the pull requests patch checking queue already in queue
+2026/10/15 11:07:45 ...tomerge/automerge.go:58:addToQueue() [E] Error adding pullID: 1 to the pull requests patch checking queue already in queue
+2026/10/15 11:07:49 ...tomerge/automerge.go:58:addToQueue() [E] Error adding pullID: 2 to the pull requests patch checking queue already in queue
+2026/10/15 11:07:49 ...tomerge/automerge.go:58:addToQueue() [E] Error adding pullID: 2 to the pull requests patch checking queue already in queue
+2026/10/15 11:07:49 ...tomerge/automerge.go:58:addToQueue() [E] Error adding pullID: 2 to the pull requests patch checking queue already in queue
+2026/10/15 11:07:49 ...tomerge/automerge.go:58:addToQueue() [E] Error adding pullID: 2 to the pull requests patch checking queue already in queue
+2026/10/15 11:07:49 ...tomerge/automerge.go:58:addToQueue() [E] Error adding pullID: 2 to the pull requests patch checking queue already in queue
+2026/10/15 11:07:49 ...tomerge/automerge.go:58:addToQueue() [E] Error adding pullID: 2 to the pull requests patch checking queue already in queue
+2026/10/15 11:07:50 ...tomerge/automerge.go:58:addToQueue() [E] Error adding pullID: 2 to the pull requests patch checking queue already in queue
+2026/10/15 11:07:50 ...tomerge/automerge.go:58:addToQueue() [E] Error adding pullID: 2 to the pull requests patch checking queue already in queue
+2026/10/15 11:07:50 ...tomerge/automerge.go:58:addToQueue() [E] Error adding pullID: 2 to the pull requests patch checking queue already in queue
+2026/10/15 11:07:50 ...tomerge/automerge.go:58:addToQueue() [E] Error adding pullID: 2 to the pull requests patch checking queue already in queue
+2026/10/15 11:07:50 ...tomerge/automerge.go:58:addToQueue() [E] Error adding pullID: 2 to the pull requests patch checking queue already in queue
+2026/10/15 11:07:50 ...tomerge/automerge.go:58:addToQueue() [E] Error adding pullID: 2 to the pull requests patch checking queue already in queue
+2026/10/15 11:07:50 ...tomerge/automerge.go:58:addToQueue() [E] Error adding pullID: 2 to the pull requests patch checking queue already in queue
+2026/10/15 11:07:50 ...tomerge/automerge.go:58:addToQueue() [E] Error adding pullID: 2 to the pull requests patch checking queue already in queue
+2026/10/15 11:07:50 ...tomerge/automerge.go:58:addToQueue() [E] Error adding pullID: 2 to the pull requests patch checking queue already in queue
+2026/10/15 11:07:50 ...tomerge/automerge.go:58:addToQueue() [E] Error adding pullID: 2 to the pull requests patch checking queue already in queue
+2026/10/15 11:07:52 ...tomerge/automerge.go:58:addToQueue() [E] Error adding pullID: 2 to the pull requests patch checking queue already in queue
+2026/10/15 11:07:57 ...s/gitdiff/gitdiff.go:1395:GetWhitespaceFlag() [W] unknown whitespace behavior: "", default to 'show-all'
+2026/10/15 11:07:57 ...s/gitdiff/gitdiff.go:1395:GetWhitespaceFlag() [W] unknown whitespace behavior: "", default to 'show-all'
+2026/10/15 11:08:01 ...s/gitdiff/gitdiff.go:1395:GetWhitespaceFlag() [W] unknown whitespace behavior: "", default to 'show-all'
+2026/10/15 11:08:01 ...s/gitdiff/gitdiff.go:1395:GetWhitespaceFlag() [W] unknown whitespace behavior: "", default to 'show-all'
+2026/10/15 11:08:03 ...s/gitdiff/gitdiff.go:1395:GetWhitespaceFlag() [W] unknown whitespace behavior: "", default to 'show-all'
+2026/10/15 11:08:03 ...s/gitdiff/gitdiff.go:1395:GetWhitespaceFlag() [W] unknown whitespace behavior: "", default to 'show-all'
+2026/10/15 11:08:05 ...eful/manager_unix.go:144:handleSignals() [W] PID 9405. Received SIGTERM. Shutting down...
+2026/10/15 11:08:05 .../graceful/manager.go:168:doHammerTime() [W] Setting Hammer condition
+2026/10/15 11:08:06 .../graceful/manager.go:184:doTerminate() [W] Terminating

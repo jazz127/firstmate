@@ -1,0 +1,3 @@
+exit=0 record=v1 gen=g1792026409.8749.1730 seq=2 state=idle source=claude-hook event=stop ts=1792026411
+exit=0 record=v1 gen=g1792026409.8749.1730 seq=3 state=busy source=live-test event=active-generation ts=1792026412
+exit=2 record=v1 gen=g1792026409.8749.1730 seq=4 state=busy source=claude-hook event=stop-blocked ts=1792026415

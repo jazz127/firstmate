@@ -1,0 +1,7 @@
+ok - fm-pr-merge reads every Forgejo combined-status page before merging
+ok - Forgejo merges green statuses followed by documented null or compatible empty-array terminal pages
+ok - Forgejo rejects malformed first and terminal pages even when tea exits zero
+ok - Forgejo evidence reads bind the head and refuse missing bodies, malformed bodies and unsupported evidence before merging
+ok - Forgejo scratch validation reads later pages, permits removals and refuses scratch additions or malformed file lists
+ok - fm-pr-merge never trusts tea api's exit status alone; a rejected merge is caught by the confirm read
+ok - fm-pr-merge lands every pull request into housefeature/* as a merge commit

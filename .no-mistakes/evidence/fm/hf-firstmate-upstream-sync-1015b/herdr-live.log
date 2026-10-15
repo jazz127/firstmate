@@ -1,0 +1,14 @@
+{"id":"cli:workspace:create","result":{"root_pane":{"agent_status":"unknown","cwd":"/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4YFDQR9GTFBYVCE7QQNKRPE","focused":true,"foreground_cwd":"/Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4YFDQR9GTFBYVCE7QQNKRPE","pane_id":"w1:p1","revision":0,"scroll":{"max_offset_from_bottom":0,"offset_from_bottom":0,"viewport_rows":40},"tab_id":"w1:t1","terminal_id":"term_65dd6b57c872a1","workspace_id":"w1"},"tab":{"agent_status":"unknown","focused":true,"label":"1","number":1,"pane_count":1,"tab_id":"w1:t1","workspace_id":"w1"},"type":"workspace_created","workspace":{"active_tab_id":"w1:t1","agent_status":"unknown","focused":true,"label":"validation","number":1,"pane_count":1,"tab_count":1,"workspace_id":"w1"}}}
+viewer attached to fm-lab-upstream-sync-28345-1346 (pid 28548)
+Real visible capture: compinit:527: no such file or directory: /opt/homebrew/share/zsh/site-functions/_brew
+printf "HERDR_LIVE_CAPTURE_OK\n"
+compinit:527: no such file or directory: /opt/homebrew/share/zsh/site-functions/_brew
+jarad@jengine:~/.no-mistakes/worktrees/119cd7a6b9a4/01M4YFDQR9GTFBYVCE7QQNKRPE/ > printf "HER
+DR_LIVE_CAPTURE_OK\n"
+HERDR_LIVE_CAPTURE_OK
+jarad@jengine:~/.no-mistakes/worktrees/119cd7a6b9a4/01M4YFDQR9GTFBYVCE7QQNKRPE/ >
+{"session":{"default":false,"name":"fm-lab-upstream-sync-28345-1346","running":false,"session_dir":"/Users/jarad/.config/herdr/sessions/fm-lab-upstream-sync-28345-1346","socket_path":"/Users/jarad/.config/herdr/sessions/fm-lab-upstream-sync-28345-1346/herdr.sock"},"stopped":true}
+Plain capture refused the stopped session
+ANSI capture refused the stopped session
+{"client":{"version":"0.9.1","channel":"stable","protocol":22,"endpoint_protocol_generation":1,"endpoint_capabilities":["surface_interest","presentation_effects_fence","health_check"],"remote_host_bridge":true,"remote_bridge_idle_timeout":true,"binary":"/Users/jarad/.local/bin/herdr","session":"fm-lab-upstream-sync-28345-1346"},"server":{"status":"not_running","running":false,"version":null,"protocol":null,"capabilities":null,"compatible":null,"endpoint_compatible":null,"socket":"/Users/jarad/.config/herdr/sessions/fm-lab-upstream-sync-28345-1346/herdr.sock","session":"fm-lab-upstream-sync-28345-1346","restart_needed":false,"server_binary_stale":false},"update":{"restart_needed":false,"server_binary_stale":false}}
+PASS: passive captures left the real named lab server stopped

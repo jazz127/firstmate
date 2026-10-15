@@ -1,0 +1,13 @@
+{
+  "public_interface": "fm-turnend-guard.sh --claude, stdin JSON compatibility event",
+  "oracle": "R6: ignored foreign-host events cannot change an active generation record",
+  "before_fix": {
+    "exit": 0,
+    "record": "v1 gen=g1792026689.61380.11409 seq=2 state=idle source=claude-hook event=stop ts=1792026689\n"
+  },
+  "after_fix": {
+    "exit": 0,
+    "record_before": "v1 gen=g1792026689.61380.11409 seq=3 state=busy source=live-test event=active-generation ts=1792026689\n",
+    "record_after": "v1 gen=g1792026689.61380.11409 seq=3 state=busy source=live-test event=active-generation ts=1792026689\n"
+  }
+}

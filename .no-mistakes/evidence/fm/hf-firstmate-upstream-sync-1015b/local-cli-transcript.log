@@ -1,0 +1,40 @@
+$ git init -q /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4YFDQR9GTFBYVCE7QQNKRPE/.validation-tmp/local/house
+exit=0
+$ git -C /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4YFDQR9GTFBYVCE7QQNKRPE/.validation-tmp/local/house commit -q --allow-empty -m fixture
+exit=0
+$ git -C /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4YFDQR9GTFBYVCE7QQNKRPE/.validation-tmp/local/house remote add origin https://github.com/jazz127/firstmate.git
+exit=0
+$ git -C /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4YFDQR9GTFBYVCE7QQNKRPE/.validation-tmp/local/house remote add upstream https://github.com/kunchenguid/firstmate.git
+exit=0
+$ bin/fm-role.sh report
+fm-role: user (default)
+exit=0
+$ bin/fm-role.sh check /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4YFDQR9GTFBYVCE7QQNKRPE/.validation-tmp/local/house
+refused: this home runs as firstmate user/operator and holds no publication authority for github.com/jazz127/firstmate
+exit=1
+$ bin/fm-role.sh check /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4YFDQR9GTFBYVCE7QQNKRPE/.validation-tmp/local/house upstream-consent github.com/kunchenguid/firstmate
+refused: this home runs as firstmate user/operator and holds no publication authority for github.com/jazz127/firstmate
+exit=1
+$ bin/fm-role.sh check /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4YFDQR9GTFBYVCE7QQNKRPE/.validation-tmp/local/house upstream-consent github.com/jazz127/firstmate
+authorized: task consent for github.com/jazz127/firstmate
+exit=0
+$ bin/fm-role.sh check /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4YFDQR9GTFBYVCE7QQNKRPE/.validation-tmp/local/house
+authorized: maintainer scope github.com/jazz127/firstmate
+exit=0
+$ bin/fm-role.sh check /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4YFDQR9GTFBYVCE7QQNKRPE/.validation-tmp/local/house
+refused: this home runs as firstmate user/operator and holds no publication authority for github.com/jazz127/firstmate
+exit=1
+$ bin/fm-brief.sh generated-fj fixture-repo --mode no-mistakes --forge forgejo
+scaffolded: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4YFDQR9GTFBYVCE7QQNKRPE/.validation-tmp/local/home/data/generated-fj/brief.md (ship, mode=no-mistakes forge=forgejo; replace {TASK} and {FIRSTMATE_SPEC})
+exit=0
+$ bin/fm-git-strip-ai-trailers.sh install /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4YFDQR9GTFBYVCE7QQNKRPE/.validation-tmp/local/hooks /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4YFDQR9GTFBYVCE7QQNKRPE/.validation-tmp/local/house
+exit=0
+$ git -C /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4YFDQR9GTFBYVCE7QQNKRPE/.validation-tmp/local/house commit -q --allow-empty -m 'Preserve inherited Git configuration' --trailer 'Co-authored-by: Cursor <cursoragent@cursor.com>' --trailer 'Co-authored-by: Human <human@example.invalid>'
+exit=0
+$ git -C /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4YFDQR9GTFBYVCE7QQNKRPE/.validation-tmp/local/house log -1 --format=%B
+Preserve inherited Git configuration
+
+Co-authored-by: Human <human@example.invalid>
+
+exit=0
+Actual repository pre-commit observed inherited credential.helper values: '\n!fixture-helper-not-executed\n'

@@ -1,0 +1,7 @@
+2026/10/15 11:06:11 cmd/migrate.go:33:runMigrate() [I] AppPath: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4YFDQR9GTFBYVCE7QQNKRPE/.validation-tmp/tools/forgejo
+2026/10/15 11:06:11 cmd/migrate.go:34:runMigrate() [I] AppWorkPath: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4YFDQR9GTFBYVCE7QQNKRPE/.validation-tmp/fjhome
+2026/10/15 11:06:11 cmd/migrate.go:35:runMigrate() [I] Custom path: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4YFDQR9GTFBYVCE7QQNKRPE/.validation-tmp/fjhome/custom
+2026/10/15 11:06:11 cmd/migrate.go:36:runMigrate() [I] Log path: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4YFDQR9GTFBYVCE7QQNKRPE/.validation-tmp/fjhome/log
+2026/10/15 11:06:11 cmd/migrate.go:37:runMigrate() [I] Configuration file: /Users/jarad/.no-mistakes/worktrees/119cd7a6b9a4/01M4YFDQR9GTFBYVCE7QQNKRPE/.validation-tmp/fjhome/custom/conf/app.ini
+2026/10/15 11:06:11 ...2@v2.27.1/command.go:272:Run() [I] PING DATABASE sqlite3
+New user 'fixture' has been successfully created!

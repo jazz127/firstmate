@@ -1,0 +1,6 @@
+version=1
+session_id=4e9929f0-5f99-4023-8787-6f35f3c5ff83
+phase=detected
+context_tokens=852
+budget_tokens=1
+detected_at=1792026415

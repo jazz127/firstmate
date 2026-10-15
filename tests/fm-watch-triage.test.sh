@@ -7366,6 +7366,30 @@ test_procevent_marker_failure_exits_and_replays() {
 
 # --- heartbeat: no-change absorbed, backstop surfaces a missed status --------
 
+test_zero_padded_heartbeat_interval() {
+  local shell interval dir out err pid
+  for shell in bash /bin/bash; do
+    for interval in 0 8 08 09 10 010; do
+      dir=$(make_case "heartbeat-decimal-${shell//\//-}-$interval")
+      out="$dir/watch.out"; err="$dir/watch.err"
+      : > "$dir/state/.afk"
+      # Make the first heartbeat due without waiting out each interval.
+      touch -t 200001010000 "$dir/state/.last-heartbeat"
+      PATH="$dir/fakebin:$PATH" FM_HOME="$dir" FM_STATE_OVERRIDE="$dir/state" \
+        FM_POLL=1 FM_SIGNAL_GRACE=0 FM_CHECK_INTERVAL=999999 \
+        FM_HEARTBEAT="$interval" "$shell" "$WATCH" > "$out" 2> "$err" &
+      pid=$!
+      wait_for_exit "$pid" 200 \
+        || fail "$shell watcher failed with heartbeat interval $interval: $(cat "$err")"
+      assert_equals heartbeat "$(cat "$out")" "$shell heartbeat interval $interval"
+      [ ! -s "$err" ] || fail "$shell heartbeat interval $interval emitted errors: $(cat "$err")"
+      grep -F "$(printf '\theartbeat\theartbeat\theartbeat')" "$dir/state/.wake-queue" >/dev/null \
+        || fail "$shell heartbeat interval $interval did not queue its wake"
+    done
+  done
+  pass "zero-padded heartbeat intervals keep the watcher running and queue due heartbeats"
+}
+
 test_heartbeat_no_change_absorbed() {
   local dir state fakebin out pid i sig
   dir=$(make_case heartbeat-absorb); state="$dir/state"; fakebin="$dir/fakebin"; out="$dir/watch.out"
@@ -7848,6 +7872,7 @@ if [ -n "${FM_TEST_ONLY:-}" ]; then
   exit 0
 fi
 
+test_zero_padded_heartbeat_interval
 test_status_span_actionable_classifier
 test_status_span_survives_a_later_routine_append
 test_status_span_respects_decision_closure

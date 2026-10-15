@@ -891,6 +891,26 @@ test_malformed_timing_stamps_cannot_abort_the_caller() {
   pass "fm-startup-network: malformed timing stamps never abort their caller"
 }
 
+test_timing_report_selects_three_slowest_without_reordering_records() {
+  local dir out
+  dir="$TMP_ROOT/timing-top-three"
+  mkdir -p "$dir"
+  printf 'v1\tphase\tfirst\t0\t10\tone\nv1\tphase\tsecond\t10\t70\ttwo\nv1\tphase\tthird\t20\t30\tthree\nv1\tphase\tfourth\t30\t90\tfour\nv1\tphase\tfifth\t40\t50\tfive\n' > "$dir/timings.tsv"
+  out=$(bash -c '. "$1"; fm_timing_render "$2"' _ "$ROOT/bin/fm-timing-lib.sh" "$dir/timings.tsv")
+  assert_contains "$out" 'slowest: phase fourth four 90ms, phase second two 70ms, phase fifth five 50ms' \
+    'timing summary did not select the three slowest records'
+  [ "$(printf '%s\n' "$out" | awk '/start=/ { print $2 }' | tr '\n' ' ')" = 'first second third fourth fifth ' ] \
+    || fail "timing summary ranking changed the detailed record order"
+  printf 'v1\tphase\tzero\t0\t0\t\nv1\tphase\tlater\t0\t0\t\n' > "$dir/timings.tsv"
+  out=$(bash -c '. "$1"; fm_timing_render "$2"' _ "$ROOT/bin/fm-timing-lib.sh" "$dir/timings.tsv")
+  assert_contains "$out" 'slowest: phase zero 0ms, phase later 0ms' 'short zero-duration report lost a record'
+  : > "$dir/timings.tsv"
+  out=$(bash -c '. "$1"; fm_timing_render "$2"' _ "$ROOT/bin/fm-timing-lib.sh" "$dir/timings.tsv")
+  [ -z "$out" ] || fail "empty timing report emitted output"
+  pass "fm-startup-network: the timing report ranks only three records and preserves detail order"
+}
+
+test_timing_report_selects_three_slowest_without_reordering_records
 test_malformed_timing_stamps_cannot_abort_the_caller
 test_wait_fails_without_a_published_stage
 test_start_returns_without_holding_the_callers_stdout

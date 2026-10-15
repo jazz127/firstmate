@@ -161,23 +161,24 @@ fm_timing_render() {  # <file>
         if (detail[i] != "") label = label " " detail[i]
         printf "  %-11s %-42s start=+%-7d elapsed=%d\n", scope[i], label, offset[i], elapsed[i]
       }
+      # Only three rows appear in the summary. Keep their indexes instead of
+      # sorting every record, so report cost stays linear in the run size.
+      top = records < 3 ? records : 3
       for (i = 1; i <= records; i++) {
-        for (j = i + 1; j <= records; j++) {
-          if (elapsed[j] > elapsed[i]) {
-            t = scope[i]; scope[i] = scope[j]; scope[j] = t
-            t = name[i]; name[i] = name[j]; name[j] = t
-            t = offset[i]; offset[i] = offset[j]; offset[j] = t
-            t = elapsed[i]; elapsed[i] = elapsed[j]; elapsed[j] = t
-            t = detail[i]; detail[i] = detail[j]; detail[j] = t
+        for (j = 1; j <= top; j++) {
+          if (!slowest[j] || elapsed[i] > elapsed[slowest[j]]) {
+            for (k = top; k > j; k--) slowest[k] = slowest[k - 1]
+            slowest[j] = i
+            break
           }
         }
       }
-      top = records < 3 ? records : 3
       line = ""
       for (i = 1; i <= top; i++) {
-        label = name[i]
-        if (detail[i] != "") label = label " " detail[i]
-        line = line (line == "" ? "" : ", ") scope[i] " " label " " elapsed[i] "ms"
+        row = slowest[i]
+        label = name[row]
+        if (detail[row] != "") label = label " " detail[row]
+        line = line (line == "" ? "" : ", ") scope[row] " " label " " elapsed[row] "ms"
       }
       print "  slowest: " line
     }

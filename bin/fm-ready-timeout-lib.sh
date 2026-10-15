@@ -119,6 +119,22 @@ fm_ready_timeout_field() {  # <file> <key> [output-var]
   if [ -f "$1" ]; then
     if IFS= read -r -d '' _fm_ready_field_contents 2>/dev/null < "$1"; then
       _fm_ready_field_rejected=1
+    elif [ "${#_fm_ready_field_contents}" -le 512 ]; then
+      # Match the last literal key without materializing a here-string. Bound
+      # this path because longest-prefix glob matching can scale quadratically.
+      case "$2" in
+        *$'\n'*) ;;
+        *)
+          _fm_ready_field_contents=$'\n'$_fm_ready_field_contents
+          case "$_fm_ready_field_contents" in
+            *$'\n'"$2="*)
+              _fm_ready_field_line=${_fm_ready_field_contents##*$'\n'"$2="}
+              _fm_ready_field_line="$2=${_fm_ready_field_line%%$'\n'*}"
+              _fm_ready_field_value=${_fm_ready_field_line#*=}
+              ;;
+          esac
+          ;;
+      esac
     else
       while IFS= read -r _fm_ready_field_line || [ -n "$_fm_ready_field_line" ]; do
         case "$_fm_ready_field_line" in

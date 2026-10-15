@@ -382,6 +382,28 @@ test_record_output_assignment() {
   pass 'record output assignment preserves last-value, missing-field and incarnation semantics'
 }
 
+test_record_fields_preserve_literal_keys() {
+  local record="$TMP_ROOT/literal-fields" size value
+  for size in small large; do
+    {
+      printf 'literal*=star\nliteral?=question\nliteral[ab]=brackets\nliteralX=other\n'
+      [ "$size" != large ] || printf '%02000d\n' 0
+      printf '=empty-key\ntoken=part=kept\nline=one\nnext=two\n'
+      printf 'token=first\ntoken=final=value\\literal  '
+    } > "$record"
+    [ "$(fm_ready_timeout_field "$record" 'literal*')" = star ] || fail "$size literal star became a pattern"
+    [ "$(fm_ready_timeout_field "$record" 'literal?')" = question ] || fail "$size literal question mark became a pattern"
+    [ "$(fm_ready_timeout_field "$record" 'literal[ab]')" = brackets ] || fail "$size literal brackets became a pattern"
+    [ "$(fm_ready_timeout_field "$record" '')" = empty-key ] || fail "$size empty key changed"
+    [ "$(fm_ready_timeout_field "$record" 'token=part')" = part=kept ] || fail "$size equals-bearing key changed"
+    [ -z "$(fm_ready_timeout_field "$record" $'line\nnext')" ] || fail "$size key matched across record lines"
+    value=stale
+    fm_ready_timeout_field "$record" token value
+    [ "$value" = 'final=value\literal  ' ] || fail "$size field bytes or final-field precedence changed"
+  done
+  pass 'small and large records preserve literal keys, field bytes and line boundaries'
+}
+
 test_binary_records_cannot_park_a_worker() {
   local state="$TMP_ROOT/binary-records" record value
   mkdir -p "$state"
@@ -406,6 +428,7 @@ test_binary_records_cannot_park_a_worker() {
   pass 'binary timeout records and metadata cannot suppress worker alarms'
 }
 
+test_record_fields_preserve_literal_keys
 test_binary_records_cannot_park_a_worker
 test_record_output_assignment
 test_activity_age_tracks_every_source

@@ -87,9 +87,11 @@
 # `branch` resolves as it did before the forge existed, and in the mode slot it
 # is read as an unknown mode. A key one or two edits from `forge` (such as
 # `forg=` or `Forge=`) is still ignored, with one stderr warning naming the token
-# and the forge=gerrit and forge=forgejo spellings. The one refusal is a
-# malformed forge binding - a `forge=` token whose value is empty or outside the
-# closed set - which is REFUSED in the default and --forge output forms: nothing
+# and the forge=gerrit and forge=forgejo spellings. An unterminated bracket
+# annotation warns and retains the default posture in every query form; the
+# description is never interpreted as policy tokens. A malformed forge binding
+# - a `forge=` token whose value is empty or outside the closed set - is REFUSED
+# in the default and --forge output forms: nothing
 # on stdout, exit status 3, the token named. Resolving it to "no registered
 # forge" would hand a Gerrit project the pull-request contract the binding
 # exists to prevent.
@@ -159,9 +161,17 @@ parsed=$(FM_PROJECT_MODE_QUERY="$NAME" awk '
     if (after != "" && substr(after, 1, 2) != " [" && substr(after, 1, 3) != " - ") next
     mode="no-mistakes"; yolo="off"; branch="fm/"; forge="none";
     if (substr(after, 1, 2) == " [") {
-      s="";
+      s=""; closed=0;
       nk = split(after, rest, " ");
-      for (i=1; i<=nk; i++) { s = s (s==""?"":" ") rest[i]; if (rest[i] ~ /\]$/) break }
+      for (i=1; i<=nk; i++) {
+        if (rest[i] == "-") break
+        s = s (s==""?"":" ") rest[i]
+        if (rest[i] ~ /\]$/) { closed=1; break }
+      }
+      if (!closed) {
+        print "invalid-annotation";
+        print "posture", mode, yolo, forge, branch; exit
+      }
       gsub(/^\[|\]$/, "", s);           # strip the surrounding brackets
       k = split(s, a, " ");
       # Tokens are order-independent: +yolo, branch=<prefix>, and forge=<value>
@@ -200,6 +210,9 @@ fi
 posture=
 while IFS=' ' read -r kind rest; do
   case "$kind" in
+    invalid-annotation)
+      echo "warn: ignoring unterminated posture annotation registered for $NAME in $REG; defaulting to no-mistakes off" >&2
+      ;;
     near) echo "warn: ignoring \"$rest\" registered for $NAME in $REG; it is not a forge binding, and the forge binding is spelled forge=gerrit or forge=forgejo" >&2 ;;
     posture) posture=$rest ;;
   esac

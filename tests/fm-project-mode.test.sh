@@ -31,6 +31,9 @@ cat > "$DATA/projects.md" <<'EOF'
 - tools\new [local-only branch=private/] - a literal backslash-n in the name (added 2026-01-01)
 - tools\tree [local-only branch=private/] - a literal backslash-t in the name (added 2026-01-01)
 - tools\branch [direct-PR forge=forgejo +yolo] - a literal backslash-b in the name (added 2026-01-01)
+- unterminated [no-mistakes - description mentions +yolo without granting it (added 2026-01-01)
+- prose-bracket [no-mistakes - description mentions +yolo and a [label] (added 2026-01-01)
+- unfinished-policy [direct-PR +yolo branch=custom/ forge=forgejo - missing closing bracket (added 2026-01-01)
 EOF
 
 run_mode() {
@@ -95,5 +98,21 @@ done
 [ "$(run_mode 'tools\branch')" = 'direct-PR on' ] || fail "literal backslash name lost its registered posture"
 [ "$(run_forge 'tools\branch')" = forgejo ] || fail "literal backslash name lost its registered forge"
 pass "fm-project-mode: backslashes in project names remain literal across posture, prefix, and forge queries"
+
+for name in unterminated prose-bracket unfinished-policy; do
+  for flag in '' --raw --forge --branch-prefix; do
+    # shellcheck disable=SC2086 # An empty flag must expand to nothing.
+    out=$(FM_DATA_OVERRIDE="$DATA" "$PROJECT_MODE" $flag "$name" 2> "$TMP_ROOT/error") \
+      || fail "unterminated annotation no longer retains the tolerant default for $name $flag"
+    case "$flag" in
+      --forge) expected=none ;;
+      --branch-prefix) expected=fm/ ;;
+      *) expected='no-mistakes off' ;;
+    esac
+    [ "$out" = "$expected" ] || fail "unterminated annotation changed the default for $name $flag: $out"
+    assert_contains "$(cat "$TMP_ROOT/error")" 'unterminated posture annotation' 'annotation warning did not name the malformed record'
+  done
+done
+pass "fm-project-mode: an unterminated annotation never interprets description text as policy"
 
 echo "# fm-project-mode.test.sh: all assertions passed"

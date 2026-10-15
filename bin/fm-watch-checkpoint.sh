@@ -104,7 +104,7 @@ run_with_perl_timeout() {  # <seconds> <signal> <kill-after-seconds> <command...
       my $waited = waitpid $pid, WNOHANG;
       if ($waited == $pid) {
         alarm 0;
-        exit($timed_out ? 124 : ($? >> 8));
+        exit($timed_out ? 124 : (($? & 127) ? 128 + ($? & 127) : $? >> 8));
       }
       select undef, undef, undef, 0.05;
     }

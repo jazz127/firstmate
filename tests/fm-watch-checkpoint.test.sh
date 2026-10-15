@@ -41,6 +41,40 @@ test_quiet_checkpoint_exits_124_cleanly() {
   pass "quiet checkpoint exits 124 with a clean checkpoint line and no live lock"
 }
 
+test_perl_timeout_fallback_preserves_signal_death() {
+  local home fallback_bin tool shell ending expected status
+  home=$(make_home perl-signal-status)
+  fallback_bin="$home/fallback-bin"
+  mkdir -p "$home/root/bin" "$fallback_bin"
+  cp "$CHECKPOINT" "$home/root/bin/fm-watch-checkpoint.sh"
+  cp "$ROOT/bin/fm-supervision-engine-lib.sh" "$home/root/bin/fm-supervision-engine-lib.sh"
+  for tool in bash dirname mktemp rm perl grep cat; do
+    ln -s "$(command -v "$tool")" "$fallback_bin/$tool"
+  done
+  cat > "$home/root/bin/fm-watch.sh" <<'SH'
+#!/usr/bin/env bash
+printf 'watcher: preparing\n'
+case "$FM_TEST_WATCH_ENDING" in
+  KILL|TERM) kill -s "$FM_TEST_WATCH_ENDING" "$$" ;;
+  *) exit "$FM_TEST_WATCH_ENDING" ;;
+esac
+SH
+  chmod +x "$home/root/bin/fm-watch.sh"
+  for shell in bash /bin/bash; do
+    for ending in KILL TERM 0 7; do
+      case "$ending" in KILL) expected=137 ;; TERM) expected=143 ;; *) expected=$ending ;; esac
+      status=0
+      PATH="$fallback_bin" FM_HOME="$home" FM_TEST_WATCH_ENDING="$ending" \
+        "$shell" "$home/root/bin/fm-watch-checkpoint.sh" --seconds 10 \
+        > "$home/out.txt" 2> "$home/err.txt" || status=$?
+      expect_code "$expected" "$status" "$shell checkpoint after watcher $ending"
+      assert_equals 'watcher: preparing' "$(cat "$home/out.txt")" "checkpoint lost partial watcher output"
+      [ ! -s "$home/err.txt" ] || fail "checkpoint emitted unexpected errors: $(cat "$home/err.txt")"
+    done
+  done
+  pass "Perl checkpoint fallback preserves watcher signal deaths and ordinary exit statuses"
+}
+
 test_perl_timeout_fallback_honors_cleanup_bound_before_escalating() {
   local home fallback_bin tool tool_path status watcher_pid
   home=$(make_home perl-fallback)
@@ -344,6 +378,7 @@ test_real_host_checkpoint_ends_quietly_at_its_bound() {
   pass "checkpoint: the real host ends its park at the checkpoint bound as a quiet checkpoint"
 }
 
+test_perl_timeout_fallback_preserves_signal_death
 test_quiet_checkpoint_exits_124_cleanly
 test_perl_timeout_fallback_honors_cleanup_bound_before_escalating
 test_announced_recovery_is_not_reannounced_by_next_checkpoint

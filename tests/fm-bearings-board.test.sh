@@ -325,7 +325,7 @@ test_build_refuses_malformed_payloads_before_touching_the_board() {
 
 test_build_injects_binds_then_arms() {
   local home data board out sid
-  home=$(make_home build)
+  home=$(make_home "${1:-build}")
   data="$home/payload.json"
   board="$home/.lavish/bearings-board.html"
   write_valid_payload "$data"
@@ -820,6 +820,7 @@ test_build_refuses_a_nondecision_reconcile_value() {
   pass "build reserves reconcile across non-decision cards"
 }
 
+test_build_injects_binds_then_arms 'build\new'
 test_path_is_stable_and_home_scoped
 test_build_refuses_malformed_payloads_before_touching_the_board
 test_charted_kind_is_optional_and_accepts_both_values

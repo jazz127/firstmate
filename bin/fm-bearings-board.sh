@@ -252,7 +252,9 @@ lavish_status_field() {  # <lavish-axi output>
 lavish_session_listed_open() {  # <canonical-board-path>
   local listing
   listing=$(lavish-axi 2>/dev/null) || return 1
-  printf '%s\n' "$listing" | awk -v path="$1" '
+  # Environment data preserves literal backslashes that awk -v would decode.
+  printf '%s\n' "$listing" | FM_BOARD_CANONICAL_PATH="$1" awk '
+    BEGIN { path = ENVIRON["FM_BOARD_CANONICAL_PATH"] }
     { line = $0; sub(/^[[:space:]]+/, "", line) }
     index(line, path ",") == 1 {
       rest = substr(line, length(path) + 2)

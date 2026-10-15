@@ -431,12 +431,45 @@ test_run_timed_preserves_standard_input() {
   pass 'fm_run_timed preserves piped stdin through an external timeout runner on both Bash generations'
 }
 
+test_nm_checked_preserves_signal_failures() {
+  local dir shell status command out rc
+  dir="$TMP_ROOT/nm-signal"
+  mkdir -p "$dir/bin"
+  for command in bash perl; do
+    ln -s "$(command -v "$command")" "$dir/bin/$command"
+  done
+  cat > "$dir/bin/no-mistakes" <<'SH'
+#!/usr/bin/env bash
+exec bash -c "$FM_TEST_NM_COMMAND"
+SH
+  chmod +x "$dir/bin/no-mistakes"
+  for shell in "$(command -v bash)" /bin/bash; do
+    for status in 0 7 137 143 signal-137 signal-143; do
+      case "$status" in
+        signal-137) command='printf "run: partial\n"; kill -KILL $$' ;;
+        signal-143) command='printf "run: partial\n"; kill -TERM $$' ;;
+        *) command="printf 'run: partial\\n'; exit $status" ;;
+      esac
+      rc=0
+      out=$(PATH="$dir/bin" FM_TEST_NM_COMMAND="$command" "$shell" -c '
+        . "$1/bin/fm-nm-run-lib.sh"
+        fm_nm_run_checked "$2" 5 axi status
+      ' _ "$ROOT" "$dir") || rc=$?
+      [ "$rc" -eq "${status#signal-}" ] \
+        || fail "checked no-mistakes call lost $status under $shell (rc=$rc)"
+      [ "$out" = 'run: partial' ] || fail "checked no-mistakes call changed stdout: $out"
+    done
+  done
+  pass 'checked no-mistakes calls retain signal failures even after plausible partial output'
+}
+
 test_passes_the_command_status_and_output_through
 test_bash32_owner_check
 test_system_bash_preserves_completion_and_signal_statuses
 test_run_timed_reports_the_bound_when_the_wrapper_records_a_signal_death
 test_run_timed_passes_a_natural_exit_through_a_fired_bound
 test_run_timed_preserves_standard_input
+test_nm_checked_preserves_signal_failures
 test_term_ends_a_cooperative_command_at_the_bound
 test_kill_ends_a_term_ignoring_command_after_the_grace
 test_the_bound_replaces_the_calling_shell

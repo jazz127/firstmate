@@ -146,8 +146,8 @@ fm_ready_timeout_parked() {  # <state-dir> <task-id>
   [ "$(fm_ready_timeout_field "$record" spawn_gen)" = "$(fm_ready_timeout_field "$meta" spawn_gen)" ]
 }
 
-_fm_ready_timeout_mtime() {  # <path>
-  if [ "$(uname)" = Darwin ]; then
+_fm_ready_timeout_mtime() {  # <path> <platform>
+  if [ "$2" = Darwin ]; then
     /usr/bin/stat -f %m "$1" 2>/dev/null
   else
     stat -c %Y "$1" 2>/dev/null
@@ -157,12 +157,14 @@ _fm_ready_timeout_mtime() {  # <path>
 # Seconds since the task last showed any sign of life the timeout counts as
 # activity. Prints nothing and returns 1 when no activity file is readable.
 fm_ready_timeout_activity_age() {  # <state-dir> <task-id>
-  local state=$1 id=$2 f m newest='' now
+  local state=$1 id=$2 f m newest='' now platform=''
   for f in "$state/$id.status" "$state/$id.turn-ended" "$state/$id.progress" \
     "$state/$id.meta" "$state/$id.pr-poll-registration" \
     "$state/$id.inbox" "$state/$id.inbox/handled"; do
     [ -e "$f" ] || continue
-    m=$(_fm_ready_timeout_mtime "$f") || continue
+    # Resolve the stat dialect once for the whole activity scan.
+    [ -n "$platform" ] || platform=$(uname)
+    m=$(_fm_ready_timeout_mtime "$f" "$platform") || continue
     case "$m" in ''|*[!0-9]*) continue ;; esac
     if [ -z "$newest" ] || [ "$m" -gt "$newest" ]; then
       newest=$m

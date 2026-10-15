@@ -331,6 +331,33 @@ test_parked_run_after_stop_wakes_once() {
   pass "a stopped worker whose run parks on it wakes firstmate once to relaunch it and is never re-stopped"
 }
 
+test_activity_age_tracks_every_source() {
+  local state="$TMP_ROOT/activity-age" now age suffix path
+  local -a paths=()
+  mkdir -p "$state"
+  if fm_ready_timeout_activity_age "$state" rt; then
+    fail 'an absent activity record produced an age'
+  fi
+  mkdir -p "$state/rt.inbox/handled"
+  for suffix in status turn-ended progress meta pr-poll-registration inbox inbox/handled; do
+    path="$state/rt.$suffix"
+    [ -e "$path" ] || touch "$path"
+    paths+=("$path")
+  done
+  now=$(date +%s)
+  for path in "${paths[@]}"; do set_mtime "$((now - 120))" "$path"; done
+  age=$(fm_ready_timeout_activity_age "$state" rt) || fail 'activity files produced no age'
+  [ "$age" -ge 120 ] && [ "$age" -le 180 ] || fail "unexpected activity age: $age"
+  for path in "${paths[@]}"; do
+    set_mtime "$((now + 86400))" "$path"
+    age=$(fm_ready_timeout_activity_age "$state" rt) || fail "no age for $path"
+    [ "$age" = 0 ] || fail "newest activity in $path did not prevent an early timeout: $age"
+    set_mtime "$((now - 120))" "$path"
+  done
+  pass 'every activity source participates in the newest timestamp, with future timestamps clamped to zero'
+}
+
+test_activity_age_tracks_every_source
 test_knob_parsing
 test_disabled_by_default
 test_enabled_default_duration

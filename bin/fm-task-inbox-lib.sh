@@ -192,7 +192,7 @@ fm_task_inbox_lock_acquire() {  # <lock-path>
   if [ ! -e "$lock" ] && [ ! -L "$lock" ]; then
     fm_lock_try_create "$lock" && return 0
   fi
-  deadline=$(( $(date +%s) + wait ))
+  deadline=$(( $(date +%s) + 10#$wait ))
   while ! fm_lock_try_acquire "$lock"; do
     [ "$(date +%s)" -lt "$deadline" ] || return 1
     sleep 0.1

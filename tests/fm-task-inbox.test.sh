@@ -504,10 +504,10 @@ test_concurrent_writers_never_clobber() {
 }
 
 test_writer_retries_after_a_vanished_lock_collision() {
-  local state fakebin marker rec real_ln
-  state="$TMP_ROOT/vanished-lock-race/state"
-  fakebin="$TMP_ROOT/vanished-lock-race/fakebin"
-  marker="$TMP_ROOT/vanished-lock-race/first-ln-failed"
+  local state fakebin marker rec real_ln wait=${1:-5}
+  state="$TMP_ROOT/vanished-lock-race-$wait/state"
+  fakebin="$TMP_ROOT/vanished-lock-race-$wait/fakebin"
+  marker="$TMP_ROOT/vanished-lock-race-$wait/first-ln-failed"
   mkdir -p "$state" "$fakebin"
   real_ln=$(command -v ln)
   cat > "$fakebin/ln" <<'SH'
@@ -521,11 +521,11 @@ exec "$FM_REAL_LN" "$@"
 SH
   chmod +x "$fakebin/ln"
 
-  rec=$(PATH="$fakebin:$PATH" FM_REAL_LN="$real_ln" FM_FAKE_LN_MARKER="$marker" \
+  rec=$(PATH="$fakebin:$PATH" FM_REAL_LN="$real_ln" FM_FAKE_LN_MARKER="$marker" FM_TASK_INBOX_LOCK_WAIT_SECS="$wait" \
     inbox_lib "$state" fm_task_inbox_write "$state" t1 "steer after collision") \
     || fail "a writer abandoned an acquisition whose competing lock had already vanished"
   [ -f "$rec" ] || fail "the retry after a vanished lock collision did not write its record"
-  pass "inbox: a writer retries when a competing lock vanishes after its failed claim"
+  pass "inbox: a writer retries a vanished lock collision with wait=$wait"
 }
 
 test_ladder_writes_ignore_vanished_inbox() {
@@ -1181,6 +1181,8 @@ test_watcher_dead_pane_ignores_stale_busy_state() {
   pass "watcher: dead-pane recovery overrides stale busy state"
 }
 
+test_writer_retries_after_a_vanished_lock_collision 08
+test_writer_retries_after_a_vanished_lock_collision 09
 test_write_is_durable_and_exact
 test_doorbell_is_a_shell_noop
 test_doorbell_rejects_terminal_controls

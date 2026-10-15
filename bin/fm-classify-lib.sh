@@ -126,14 +126,32 @@ FM_PAUSE_RESURFACE_SECS_DEFAULT=14400
 # fm_utc_iso_to_epoch <YYYY-MM-DDTHH:MM[:SS]Z>: the one portable UTC ISO 8601
 # reader shared by the declared-wait vocabulary and the away-posture record
 # (bin/fm-afk-contract.sh). Prints epoch seconds; returns 1 on any other shape
-# so a malformed time is refused rather than read as "now".
+# so a malformed time is refused rather than read as "now" or normalized by BSD
+# date into a different calendar day.
 fm_utc_iso_to_epoch() {  # <timestamp>
-  local ts=$1
+  local ts=$1 year month day days
   case "$ts" in
     [0-9][0-9][0-9][0-9]-[0-1][0-9]-[0-3][0-9]T[0-2][0-9]:[0-5][0-9]Z) ts="${ts%Z}:00Z" ;;
     [0-9][0-9][0-9][0-9]-[0-1][0-9]-[0-3][0-9]T[0-2][0-9]:[0-5][0-9]:[0-5][0-9]Z) ;;
     *) return 1 ;;
   esac
+  # BSD date accepts e.g. February 31 and day 00 by rolling into another month.
+  # Check the Gregorian calendar before conversion so every platform refuses
+  # the same impossible deadlines, without a second date process to round-trip.
+  year=$((10#${ts:0:4}))
+  month=$((10#${ts:5:2}))
+  day=$((10#${ts:8:2}))
+  case "$month" in
+    1|3|5|7|8|10|12) days=31 ;;
+    4|6|9|11) days=30 ;;
+    2)
+      days=28
+      if ((year % 4 == 0 && (year % 100 != 0 || year % 400 == 0))); then days=29; fi
+      ;;
+    *) return 1 ;;
+  esac
+  [ "$day" -ge 1 ] && [ "$day" -le "$days" ] || return 1
+  [ "$((10#${ts:11:2}))" -le 23 ] || return 1
   date -u -j -f '%Y-%m-%dT%H:%M:%SZ' "$ts" +%s 2>/dev/null \
     || date -u -d "$ts" +%s 2>/dev/null \
     || return 1

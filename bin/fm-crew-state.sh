@@ -171,25 +171,6 @@ FM_ROOT="${FM_ROOT_OVERRIDE:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 FM_HOME="${FM_HOME:-${FM_ROOT_OVERRIDE:-$FM_ROOT}}"
 STATE="${FM_STATE_OVERRIDE:-$FM_HOME/state}"
 
-# shellcheck source=bin/fm-tmux-lib.sh
-. "$SCRIPT_DIR/fm-tmux-lib.sh"
-# shellcheck source=bin/fm-backend.sh
-. "$SCRIPT_DIR/fm-backend.sh"
-# shellcheck source=bin/fm-classify-lib.sh
-. "$SCRIPT_DIR/fm-classify-lib.sh"
-# shellcheck source=bin/fm-busy-lib.sh
-. "$SCRIPT_DIR/fm-busy-lib.sh"
-# shellcheck source=bin/fm-nm-run-lib.sh
-. "$SCRIPT_DIR/fm-nm-run-lib.sh"
-# shellcheck source=bin/fm-pr-lib.sh
-. "$SCRIPT_DIR/fm-pr-lib.sh"
-# shellcheck source=bin/fm-timeout-lib.sh
-. "$SCRIPT_DIR/fm-timeout-lib.sh"
-# shellcheck source=bin/fm-dod-lib.sh
-. "$SCRIPT_DIR/fm-dod-lib.sh"
-# shellcheck source=bin/fm-ready-timeout-lib.sh
-. "$SCRIPT_DIR/fm-ready-timeout-lib.sh"
-
 ID=${1:-}
 [ -n "$ID" ] || { echo "usage: fm-crew-state.sh <id>" >&2; exit 2; }
 
@@ -221,6 +202,9 @@ emit() {  # <state> <source> [detail]
 
 [ -f "$META" ] || emit unknown none "no metadata for $ID"
 
+# shellcheck source=bin/fm-backend.sh
+. "$SCRIPT_DIR/fm-backend.sh"
+
 meta_value() {  # <key> [output-var]
   fm_meta_get "$META" "$@"
 }
@@ -238,6 +222,24 @@ meta_value remote_host REMOTE_HOST
 if [ -z "$REMOTE_HOST" ] && { [ -z "$WT" ] || [ ! -d "$WT" ]; }; then
   emit unknown none "worktree gone (torn down?)"
 fi
+
+# Load state readers only after a task can have a current local or remote state.
+# shellcheck source=bin/fm-tmux-lib.sh
+. "$SCRIPT_DIR/fm-tmux-lib.sh"
+# shellcheck source=bin/fm-classify-lib.sh
+. "$SCRIPT_DIR/fm-classify-lib.sh"
+# shellcheck source=bin/fm-busy-lib.sh
+. "$SCRIPT_DIR/fm-busy-lib.sh"
+# shellcheck source=bin/fm-nm-run-lib.sh
+. "$SCRIPT_DIR/fm-nm-run-lib.sh"
+# shellcheck source=bin/fm-pr-lib.sh
+. "$SCRIPT_DIR/fm-pr-lib.sh"
+# shellcheck source=bin/fm-timeout-lib.sh
+. "$SCRIPT_DIR/fm-timeout-lib.sh"
+# shellcheck source=bin/fm-dod-lib.sh
+. "$SCRIPT_DIR/fm-dod-lib.sh"
+# shellcheck source=bin/fm-ready-timeout-lib.sh
+. "$SCRIPT_DIR/fm-ready-timeout-lib.sh"
 
 # --- status log ------------------------------------------------------------
 

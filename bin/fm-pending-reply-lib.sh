@@ -217,9 +217,16 @@ fm_pending_reply_summarize() {  # <text>
 }
 
 fm_pending_reply_get() {  # <record-path> <key>
-  local rec=$1 key=$2
+  local rec=$1 key=$2 line value='' found=0
   [ -f "$rec" ] || return 0
-  grep "^${key}=" "$rec" 2>/dev/null | tail -1 | cut -d= -f2- || true
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in
+      "$key="*) value=${line#*=}; found=1 ;;
+    esac
+  done < "$rec" 2>/dev/null || true
+  # Keep the stdout framing: an empty value has a newline; a missing key has
+  # no output. The final occurrence wins, including an unterminated final line.
+  [ "$found" = 0 ] || printf '%s\n' "$value"
 }
 
 fm_pending_reply_sighting_encode() {  # <path> <line-number>

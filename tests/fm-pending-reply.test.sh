@@ -2183,6 +2183,30 @@ test_tick_without_metadata() (
 
 # --- run --------------------------------------------------------------------
 
+test_record_field_framing() {
+  local home rec actual expected
+  home=$(setup_parent field-framing)
+  rec="$home/record"
+  actual="$home/actual"
+  expected="$home/expected"
+  printf 'phase=awaiting_report\nempty=\nsummary=  literal\\n=value  \nphase=resolved' > "$rec"
+  fm_pending_reply_get "$rec" phase > "$actual"
+  printf 'resolved\n' > "$expected"
+  cmp -s "$expected" "$actual" || fail "the final unterminated field did not win"
+  fm_pending_reply_get "$rec" summary > "$actual"
+  printf '  literal\\n=value  \n' > "$expected"
+  cmp -s "$expected" "$actual" || fail "field bytes were rewritten"
+  fm_pending_reply_get "$rec" empty > "$actual"
+  printf '\n' > "$expected"
+  cmp -s "$expected" "$actual" || fail "an empty field lost its newline"
+  fm_pending_reply_get "$rec" absent > "$actual"
+  [ ! -s "$actual" ] || fail "an absent field emitted output"
+  fm_pending_reply_get "$home/absent" phase > "$actual"
+  [ ! -s "$actual" ] || fail "an absent record emitted output"
+  pass "record fields preserve framing, literal bytes and final-occurrence precedence"
+}
+
+test_record_field_framing
 test_tick_without_metadata
 test_normal_correlated_reply_resolves_once
 test_completed_turn_no_report_triggers_one_recovery

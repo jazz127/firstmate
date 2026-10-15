@@ -257,6 +257,32 @@ output=$(PATH="$fakebin:$PATH" FAKE_PR_BODY="$published_fixture" "$ROOT/bin/fm-p
 [ "$output" = 'evidence preflight ok' ] || fail "corrected published body did not pass: $output"
 pass "corrected published-body readback passes the same validator"
 
+cat > "$fakebin/tea" <<'EOF'
+#!/usr/bin/env bash
+if [ "$1" = login ] && [ "$2" = list ]; then
+  printf '[{"name":"fixture","url":"https://forge.example.test"}]\n'
+else
+  [ "$*" = 'api --login fixture --repo owner/repo /repos/{owner}/{repo}/pulls/19' ] || exit 2
+  jq -n --rawfile body "$FAKE_PR_BODY" '{state:"open",merged:false,head:{sha:"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},body:$body}'
+fi
+EOF
+chmod +x "$fakebin/tea"
+printf '%s' 'External validation passed.' > "$published_fixture"
+output=$(PATH="$fakebin:$PATH" FAKE_PR_BODY="$published_fixture" "$ROOT/bin/fm-pr-body-preflight.sh" \
+  --forgejo-url https://forge.example.test/owner/repo/pulls/19 "$readback" "$worktree" "$task_tmp" 2>&1)
+rc=$?
+expect_code 1 "$rc" "Forgejo readback must apply evidence enforcement"
+assert_contains "$output" 'evidence claim refused: missing evidence-artifact: path' "Forgejo lost evidence validation"
+cmp -s "$published_fixture" "$readback" || fail "Forgejo did not save the readback for correction"
+printf 'External validation passed.\nevidence-artifact: %s\nevidence-command: cat %s\nevidence-captured: 2026-09-25T00:39:26Z' \
+  "$artifact" "$artifact" > "$published_fixture"
+output=$(PATH="$fakebin:$PATH" FAKE_PR_BODY="$published_fixture" "$ROOT/bin/fm-pr-body-preflight.sh" \
+  --forgejo-url https://forge.example.test/owner/repo/pulls/19 "$readback" "$worktree" "$task_tmp" 2>&1) \
+  || fail "valid Forgejo published evidence refused: $output"
+[ "$output" = 'evidence preflight ok' ] || fail "Forgejo evidence did not pass: $output"
+cmp -s "$published_fixture" "$readback" || fail "Forgejo valid readback differs"
+pass "Forgejo published-body readback preserves evidence validation"
+
 scratch_repo="$TMP_ROOT/scratch-repo"
 mkdir -p "$scratch_repo"
 git -C "$scratch_repo" init -q -b main || fail "could not create the synthetic scratch checkout"

@@ -3,13 +3,14 @@
 # draft PR body before publishing or editing it, or the published body readback.
 # Usage: fm-pr-body-preflight.sh <body-file> <worker-worktree> <task-temp-dir>
 #        fm-pr-body-preflight.sh --gh-url <url> <body-file> <worker-worktree> <task-temp-dir>
+#        fm-pr-body-preflight.sh --forgejo-url <url> <body-file> <worker-worktree> <task-temp-dir>
 #        fm-pr-body-preflight.sh --scratch <worker-worktree>
 # Uses the exact publish-phase evidence validator applied when Firstmate reads
 # a published PR body; it leaves that validator's refusal unchanged on stderr.
 set -uo pipefail
 
 usage() {
-  printf '%s\n' 'usage: fm-pr-body-preflight.sh [--gh-url <url>] <body-file> <worker-worktree> <task-temp-dir> | --scratch <worker-worktree>' >&2
+  printf '%s\n' 'usage: fm-pr-body-preflight.sh [--gh-url <url> | --forgejo-url <url>] <body-file> <worker-worktree> <task-temp-dir> | --scratch <worker-worktree>' >&2
   exit 2
 }
 
@@ -37,9 +38,10 @@ if [ "${1:-}" = --scratch ]; then
 fi
 
 gh_url=
-if [ "${1:-}" = --gh-url ]; then
+forgejo_url=
+if [ "${1:-}" = --gh-url ] || [ "${1:-}" = --forgejo-url ]; then
   [ "$#" -eq 5 ] || usage
-  gh_url=$2
+  if [ "$1" = --gh-url ]; then gh_url=$2; else forgejo_url=$2; fi
   shift 2
 else
   [ "$#" -eq 3 ] || usage
@@ -51,15 +53,23 @@ task_temp=$3
 # shellcheck source=bin/fm-dod-lib.sh
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/fm-dod-lib.sh"
 
-if [ -n "$gh_url" ]; then
-  if [[ ! "$gh_url" =~ ^https://([^/]+)/([^/]+)/([^/]+)/pull/([0-9]+)$ ]]; then
-    printf 'error: expected a canonical GitHub PR URL: %s\n' "$gh_url" >&2
-    exit 1
+if [ -n "$gh_url$forgejo_url" ]; then
+  if [ -n "$forgejo_url" ]; then
+    . "$(dirname "${BASH_SOURCE[0]}")/fm-pr-lib.sh"
+    fm_pr_url_parse "$forgejo_url" && [ "$FM_PR_PROVIDER" = forgejo ] || {
+      printf 'error: expected a canonical Forgejo PR URL: %s\n' "$forgejo_url" >&2
+      exit 1
+    }
+  else
+    if [[ ! "$gh_url" =~ ^https://([^/]+)/([^/]+)/([^/]+)/pull/([0-9]+)$ ]]; then
+      printf 'error: expected a canonical GitHub PR URL: %s\n' "$gh_url" >&2
+      exit 1
+    fi
+    host=${BASH_REMATCH[1]}
+    owner=${BASH_REMATCH[2]}
+    repo=${BASH_REMATCH[3]}
+    number=${BASH_REMATCH[4]}
   fi
-  host=${BASH_REMATCH[1]}
-  owner=${BASH_REMATCH[2]}
-  repo=${BASH_REMATCH[3]}
-  number=${BASH_REMATCH[4]}
   worktree_root=$(cd -P "$worktree" 2>/dev/null && pwd -P) || {
     printf 'error: worker worktree cannot be resolved: %s\n' "$worktree" >&2
     exit 1
@@ -80,11 +90,16 @@ if [ -n "$gh_url" ]; then
     printf 'error: body-file must not be a symlink: %s\n' "$body_file" >&2
     exit 1
   fi
-  response=$(gh-axi pr view "$number" -R "$owner/$repo" --hostname "$host" --full) || exit 1
-  quoted_body=$(printf '%s\n' "$response" | sed -n 's/^  body: //p')
-  if [ -z "$quoted_body" ] || [ "$(printf '%s\n' "$quoted_body" | wc -l | tr -d ' ')" -ne 1 ] || printf '%s\n' "$response" | grep -Eq '^[[:space:]]+truncated: true$'; then
-    printf 'error: gh-axi did not return one complete PR body: %s\n' "$gh_url" >&2
-    exit 1
+  if [ -n "$forgejo_url" ]; then
+    published_body=$(fm_pr_read_published_body "$forgejo_url") || exit 1
+    quoted_body=$(printf '%s' "$published_body" | jq -Rs .) || exit 1
+  else
+    response=$(gh-axi pr view "$number" -R "$owner/$repo" --hostname "$host" --full) || exit 1
+    quoted_body=$(printf '%s\n' "$response" | sed -n 's/^  body: //p')
+    if [ -z "$quoted_body" ] || [ "$(printf '%s\n' "$quoted_body" | wc -l | tr -d ' ')" -ne 1 ] || printf '%s\n' "$response" | grep -Eq '^[[:space:]]+truncated: true$'; then
+      printf 'error: gh-axi did not return one complete PR body: %s\n' "$gh_url" >&2
+      exit 1
+    fi
   fi
   body_tmp=$(mktemp "$body_file.XXXXXX") || exit 1
   if ! printf '%s\n' "$quoted_body" | jq -ej 'if type == "string" then . else error("PR body is not text") end' > "$body_tmp"; then

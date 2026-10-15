@@ -15,8 +15,7 @@
 # The session-start bootstrap reports malformed config separately.
 #
 # The hook never starts, stops, or waits on a watcher. It is synchronous only for
-# its bounded transcript read and exit-2 directive, so the turn-end guard and the
-# asyncRewake watcher auto-arm keep their existing independent ownership.
+# its bounded transcript read and exit-2 directive.
 set -u
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

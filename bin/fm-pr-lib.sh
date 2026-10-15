@@ -6,13 +6,14 @@
 # URLs before constructing task paths or performing any side effect.
 #
 # The stored identity is provider-tagged: provider, url, host, path, number.
-# "path" is the full project path, which is owner/repository on GitHub, an
-# arbitrarily nested group/subgroup/project namespace on GitLab, and an
-# arbitrarily nested project name on Gerrit, where "number" is the change
+# "path" is the full project path, which is owner/repository on GitHub and
+# Forgejo, an arbitrarily nested group/subgroup/project namespace on GitLab, and
+# an arbitrarily nested project name on Gerrit, where "number" is the change
 # number. A GitLab or Gerrit project can sit at any depth, so no
 # owner/repository pair can address one and the sidecar carries the whole path
-# instead. Both also run on self-hosted instances, and Gerrit runs nowhere else,
-# so the host is part of that identity rather than a constant. Every consumer re-derives the identity
+# instead. GitLab, Gerrit, and Forgejo all run on self-hosted instances, and
+# Gerrit runs nowhere else, so the host is part of that identity rather than a
+# constant. Every consumer re-derives the identity
 # from the stored URL and refuses any record whose parts do not reconstruct that
 # exact URL.
 #
@@ -99,7 +100,7 @@ FM_PR_RECORD_MERGED=
 FM_PR_POLL_RETIREMENT_REJECTED=
 
 fm_pr_refuse_published_scratch() {  # <canonical-pr-url>
-  local url=$1 files encoded_path json
+  local url=$1 files encoded_path json login page=1 count
   fm_pr_url_parse "$url" || return 1
   case "$FM_PR_PROVIDER" in
     github)
@@ -126,6 +127,32 @@ fm_pr_refuse_published_scratch() {  # <canonical-pr-url>
       }
       printf '%s\n' "$files" | fm_scratch_check_lines
       ;;
+    forgejo)
+      login=$(fm_pr_forgejo_login "$FM_PR_HOST") || return 1
+      while :; do
+        json=$(tea api --login "$login" --repo "$FM_PR_PATH" \
+          "/repos/{owner}/{repo}/pulls/$FM_PR_NUMBER/files?limit=100&page=$page" 2>/dev/null) || {
+          printf '%s\n' "error: cannot inspect the published file list for $url" >&2
+          return 1
+        }
+        # Forgejo serializes the nil end-of-list slice as null. An absent
+        # response or an error object still refuses rather than proving no files.
+        count=$(printf '%s' "$json" | jq -ser '
+          if length == 1 then .[0] else error("missing changed-file list") end
+          | if . == null then 0
+          elif type == "array" and all(.[]; type == "object"
+            and (.filename | type) == "string" and (.filename | length) > 0
+            and (.status | type) == "string")
+          then length else error("invalid changed-file list") end' 2>/dev/null) || {
+          printf '%s\n' "error: cannot parse the published file list for $url" >&2
+          return 1
+        }
+        [ "$count" -gt 0 ] || return 0
+        files=$(printf '%s' "$json" | jq -r '.[] | select(.status != "deleted" and .status != "removed") | .filename') || return 1
+        printf '%s\n' "$files" | fm_scratch_check_lines || return 1
+        page=$((page + 1))
+      done
+      ;;
     gerrit) return 0 ;;
     *) return 1 ;;
   esac
@@ -150,7 +177,7 @@ fm_task_id_creation_valid() {
   [ "${#id}" -le 64 ]
 }
 
-# GitLab and Gerrit both serve self-hosted instances, so the host is part of the
+# GitLab, Gerrit, and Forgejo all serve self-hosted instances, so the host is part of the
 # identity rather than a constant. It is accepted only as a lowercase DNS name
 # with no userinfo, port, or trailing dot, which keeps one canonical spelling per
 # change. github.com is refused here even though its shape is otherwise valid:
@@ -223,14 +250,26 @@ fm_pr_gerrit_path_valid() {
   done
 }
 
+# Unlike GitLab, a Forgejo/Gitea project has no subgroup nesting: it is always
+# exactly owner/repository, so each segment is validated the same way GitHub's
+# owner and repo are, minus GitHub's specific hyphen-run and length rules.
+fm_pr_forgejo_segment_valid() {
+  local segment=${1-}
+  local LC_ALL=C
+  [ "${#segment}" -ge 1 ] && [ "${#segment}" -le 100 ] || return 1
+  case "$segment" in
+    .|..|*.git|*[!A-Za-z0-9._-]*) return 1 ;;
+  esac
+}
+
 # Parse a canonical pull request, merge request, or Gerrit change URL into the
 # provider-tagged identity. Validation is strict and per provider: the GitHub
-# username and repository rules are unchanged, and GitLab and Gerrit each get
-# their own namespace rules rather than a loosened GitHub rule.
+# username and repository rules are unchanged, and GitLab, Gerrit, and Forgejo
+# each get their own namespace rules rather than a loosened GitHub rule.
 #
-# FM_PR_OWNER and FM_PR_REPO are additionally set for github because
-# bin/fm-pr-merge.sh addresses GitHub by owner/repository. A gitlab or gerrit
-# URL leaves them empty, and those paths address the project by FM_PR_HOST and
+# FM_PR_OWNER and FM_PR_REPO are additionally set for github and forgejo
+# because bin/fm-pr-merge.sh addresses both by owner/repository. A gitlab or
+# gerrit URL leaves them empty, and those paths address the project by FM_PR_HOST and
 # FM_PR_PATH instead, so a change on any instance resolves without a hardcoded
 # host.
 fm_pr_url_parse() {
@@ -282,16 +321,37 @@ fm_pr_url_parse() {
   # nested path for the same reason GitLab's does, so it is never flattened into
   # an owner/repository pair that cannot address it.
   pattern='^https://([a-z0-9.-]{1,253})/c/([A-Za-z0-9._/-]+)/\+/([1-9][0-9]*)$'
+  if [[ "$raw" =~ $pattern ]]; then
+    host=${BASH_REMATCH[1]}
+    path=${BASH_REMATCH[2]}
+    fm_pr_forge_host_valid "$host" || return 1
+    fm_pr_gerrit_path_valid "$path" || return 1
+    FM_PR_PROVIDER=gerrit
+    FM_PR_URL=$raw
+    FM_PR_HOST=$host
+    FM_PR_PATH=$path
+    FM_PR_NUMBER=${BASH_REMATCH[3]}
+    return 0
+  fi
+  # Forgejo/Gitea serve pulls at owner/repo/pulls/<n>: plural "pulls", no "/-/"
+  # route separator and no "/+/" change separator, so this shape never collides
+  # with the GitLab or Gerrit patterns above.
+  pattern='^https://([a-z0-9.-]{1,253})/([A-Za-z0-9._-]{1,100})/([A-Za-z0-9._-]{1,100})/pulls/([1-9][0-9]*)$'
   [[ "$raw" =~ $pattern ]] || return 1
   host=${BASH_REMATCH[1]}
-  path=${BASH_REMATCH[2]}
   fm_pr_forge_host_valid "$host" || return 1
-  fm_pr_gerrit_path_valid "$path" || return 1
-  FM_PR_PROVIDER=gerrit
+  fm_pr_forgejo_segment_valid "${BASH_REMATCH[2]}" || return 1
+  fm_pr_forgejo_segment_valid "${BASH_REMATCH[3]}" || return 1
+  FM_PR_PROVIDER=forgejo
   FM_PR_URL=$raw
   FM_PR_HOST=$host
-  FM_PR_PATH=$path
-  FM_PR_NUMBER=${BASH_REMATCH[3]}
+  FM_PR_PATH="${BASH_REMATCH[2]}/${BASH_REMATCH[3]}"
+  # Consumed by bin/fm-pr-merge.sh, which addresses Forgejo by owner/repository.
+  # shellcheck disable=SC2034
+  FM_PR_OWNER=${BASH_REMATCH[2]}
+  # shellcheck disable=SC2034
+  FM_PR_REPO=${BASH_REMATCH[3]}
+  FM_PR_NUMBER=${BASH_REMATCH[4]}
 }
 
 fm_pr_head_valid() {
@@ -1082,6 +1142,102 @@ FIELDS
   FM_PR_RECORD_MERGED=$merged
 }
 
+# tea addresses a repo by slug only and takes the host from a named login, so
+# the one login registered for <host> is printed by name, and zero or several
+# matches fail rather than pick one. The list is parsed as JSON with jq rather
+# than split on quotes per line, because tea's JSON is not guaranteed to put
+# each field on its own line: a login printed as one compact object would hand
+# a line-oriented split the name where it expects the url, and arming would
+# then refuse every host. A login matches when its url's host - scheme,
+# userinfo, port, and path stripped - is exactly <host>. bin/fm-pr-poll.sh keeps
+# its own copy of this filter because the watcher body sources nothing.
+# shellcheck disable=SC2016 # $h is a jq variable bound by --arg, not a shell one.
+FM_PR_FORGEJO_LOGIN_JQ='
+  if type == "array" then
+    [ .[]
+      | select(type == "object" and (.name | type) == "string" and (.name | length) > 0
+               and (.url | type) == "string")
+      | select((.url
+                | sub("^[A-Za-z][A-Za-z0-9+.-]*://"; "")
+                | sub("[/?#].*$"; "")
+                | sub("^.*@"; "")
+                | sub(":[0-9]+$"; "")) == $h)
+      | .name ]
+    | if length == 1 then .[0] else error("not exactly one matching login") end
+  else
+    error("login list is not an array")
+  end'
+fm_pr_forgejo_login() {  # <host>
+  command -v tea >/dev/null 2>&1 || return 1
+  command -v jq >/dev/null 2>&1 || return 1
+  tea login list --output json 2>/dev/null | jq -er --arg h "$1" "$FM_PR_FORGEJO_LOGIN_JQ" 2>/dev/null
+}
+
+# The state, merged flag, and head commit of one Forgejo pull request, read
+# from the REST record through "tea api" so the credential never leaves tea.
+# "tea api" exits 0 on an HTTP error and prints the error body instead, so
+# only a record whose state, merged, and head.sha fields all have the expected
+# types is accepted; anything else returns 1 for an honest unknown.
+fm_pr_forgejo_read_record() {  # <host> <path> <number>
+  local host=$1 path=$2 number=$3 login json fields line
+  local total=0 named=0 state='' merged='' head=''
+  FM_PR_RECORD_STATE=
+  FM_PR_RECORD_MERGED=
+  FM_PR_RECORD_HEAD=
+  FM_PR_RECORD_JSON=
+  command -v jq >/dev/null 2>&1 || return 1
+  case "$number" in
+    ''|*[!0-9]*) return 1 ;;
+  esac
+  login=$(fm_pr_forgejo_login "$host") || return 1
+  [ -n "$login" ] || return 1
+  if ! json=$(tea api --login "$login" --repo "$path" \
+      "/repos/{owner}/{repo}/pulls/$number" 2>/dev/null) || [ -z "$json" ]; then
+    return 1
+  fi
+  if ! fields=$(printf '%s' "$json" | jq -r '
+      if type == "object" and (.state | type) == "string" and .state != ""
+        and (.merged | type) == "boolean" and (.head.sha | type) == "string"
+      then
+        "state=" + .state,
+        "merged=" + (.merged | tostring),
+        "head=" + .head.sha
+      else
+        error("invalid pull request record")
+      end' 2>/dev/null); then
+    return 1
+  fi
+  while IFS= read -r line; do
+    total=$((total + 1))
+    case "$line" in
+      state=*) state=${line#state=} ;;
+      merged=*) merged=${line#merged=} ;;
+      head=*) head=${line#head=} ;;
+      *) continue ;;
+    esac
+    named=$((named + 1))
+  done <<FIELDS
+$fields
+FIELDS
+  if [ "$named" -ne 3 ] || [ "$total" -ne 3 ] || [ -z "$state" ] \
+    || { [ "$merged" != true ] && [ "$merged" != false ]; }; then
+    return 1
+  fi
+
+  # Consumed by bin/fm-crew-state.sh passed_pr_detail.
+  # shellcheck disable=SC2034
+  FM_PR_RECORD_STATE=$state
+  # Consumed by bin/fm-crew-state.sh passed_pr_detail and bin/fm-teardown.sh.
+  # shellcheck disable=SC2034
+  FM_PR_RECORD_MERGED=$merged
+  # Consumed by bin/fm-teardown.sh pr_is_merged.
+  # shellcheck disable=SC2034
+  FM_PR_RECORD_HEAD=$head
+  # The same validated pull record supplies the published evidence body.
+  # shellcheck disable=SC2034
+  FM_PR_RECORD_JSON=$json
+}
+
 # gerrit-axi resolves its server from the current directory's origin remote
 # first, so the host is passed explicitly from the parsed identity and a read
 # outside a clone still reaches the right server. A change number is
@@ -1165,6 +1321,18 @@ fm_pr_read_published_body() {  # <canonical-pr-url>
         return 1
       }
       ;;
+    forgejo)
+      fm_pr_forgejo_read_record "$FM_PR_HOST" "$FM_PR_PATH" "$FM_PR_NUMBER" || {
+        printf '%s\n' 'error: cannot read the published Forgejo PR body for evidence validation' >&2
+        return 1
+      }
+      body=$(printf '%s' "$FM_PR_RECORD_JSON" | jq -r '
+        if (.body | type) == "string" then .body
+        else error("no pull-request description") end' 2>/dev/null) || {
+        printf '%s\n' 'error: cannot parse the published Forgejo PR body for evidence validation' >&2
+        return 1
+      }
+      ;;
     *)
       printf '%s\n' 'error: unsupported forge for published intent validation' >&2
       return 1
@@ -1193,6 +1361,10 @@ fm_pr_read_published_head() {  # <canonical-pr-url>
     gerrit)
       fm_pr_gerrit_read_revision "$FM_PR_HOST" "$FM_PR_NUMBER" || return 1
       head=$FM_PR_RECORD_REVISION
+      ;;
+    forgejo)
+      fm_pr_forgejo_read_record "$FM_PR_HOST" "$FM_PR_PATH" "$FM_PR_NUMBER" || return 1
+      head=$FM_PR_RECORD_HEAD
       ;;
     *) return 1 ;;
   esac

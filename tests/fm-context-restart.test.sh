@@ -54,6 +54,129 @@ record_phase() {
   ' _ "$LIB" "$1/state/.context-restart-crossing"
 }
 
+test_registered_stop_reports_context_continuation_busy() {
+  local home parent transcript gen commands out rc verdict
+  home="$TMP_ROOT/registered-stop"
+  parent="$TMP_ROOT/registered-parent"
+  transcript="$home/transcript.jsonl"
+  commands="$home/stop-commands"
+  make_primary "$home" 100
+  mkdir -p "$parent/state"
+  printf 'context-mate\n' > "$home/.fm-secondmate-home"
+  gen=$("$ROOT/bin/fm-busy-event.sh" arm "$parent/state" context-mate --state idle) || fail "could not arm parent state"
+  printf 'writer=%s\nstate=%s\nid=context-mate\ngen=%s\n' \
+    "$ROOT/bin/fm-busy-event.sh" "$parent/state" "$gen" > "$home/.fm-busy-stop"
+  jq -r '.hooks.Stop[].hooks[] | select(.asyncRewake != true) | .command' \
+    "$ROOT/.claude/settings.json" > "$commands"
+  write_transcript "$transcript" 40 30 20 10
+  rc=0
+  out=$(printf '{"session_id":"registered-session","transcript_path":"%s","stop_hook_active":false}\n' "$transcript" \
+    | FM_ROOT_OVERRIDE="$home" FM_HOME="$home" CLAUDE_PROJECT_DIR="$ROOT" STOP_COMMANDS="$commands" \
+      "$FAKE_CLAUDE" -c '
+        printf "%s\n" "$$" > "$FM_HOME/state/.lock"
+        payload=$(cat)
+        pids=""
+        while IFS= read -r command; do
+          printf "%s" "$payload" | bash -c "$command" &
+          pids="$pids $!"
+        done < "$STOP_COMMANDS"
+        result=0
+        for pid in $pids; do
+          wait "$pid"; status=$?
+          [ "$status" -ne 2 ] || result=2
+        done
+        exit "$result"
+      ' 2>&1) || rc=$?
+  expect_code 2 "$rc" "registered Stop must request context handoff: $out"
+  assert_contains "$out" 'FIRSTMATE_OP: v1 context-refresh:' "registered Stop lost the context directive"
+  verdict=$(bash -c '. "$1"; fm_busy_record_read "$2" context-mate' _ "$ROOT/bin/fm-busy-lib.sh" "$parent/state") \
+    || fail "parent busy record unreadable"
+  case "$verdict" in 'busy claude-hook stop-blocked '*) ;; *) fail "context continuation was not busy: $verdict" ;; esac
+
+  write_transcript "$transcript" 10 10 10 10
+  rc=0
+  out=$(printf '{"session_id":"registered-session","transcript_path":"%s","stop_hook_active":false}\n' "$transcript" \
+    | FM_ROOT_OVERRIDE="$home" FM_HOME="$home" "$FAKE_CLAUDE" -c '
+        printf "%s\n" "$$" > "$FM_HOME/state/.lock"
+        "$1/bin/fm-turnend-guard.sh" --claude
+      ' _ "$ROOT" 2>&1) || rc=$?
+  expect_code 0 "$rc" "a below-budget Stop with no work must settle: $out"
+  verdict=$(bash -c '. "$1"; fm_busy_record_read "$2" context-mate' _ "$ROOT/bin/fm-busy-lib.sh" "$parent/state")
+  case "$verdict" in 'idle claude-hook stop '*) ;; *) fail "ordinary Stop did not settle idle: $verdict" ;; esac
+  pass "registered synchronous Stop decisions preserve busy for context handoff and idle for ordinary completion"
+}
+
+test_rejected_stops_preserve_parent_busy_state() (
+  home="$TMP_ROOT/rejected-stop"
+  parent="$TMP_ROOT/rejected-parent"
+  make_primary "$home" 100
+  mkdir -p "$parent/state"
+  printf 'context-mate\n' > "$home/.fm-secondmate-home"
+  : > "$home/state/child.meta"
+  gen=$("$ROOT/bin/fm-busy-event.sh" arm "$parent/state" context-mate) || fail "could not arm parent state"
+  printf 'writer=%s\nstate=%s\nid=context-mate\ngen=%s\n' \
+    "$ROOT/bin/fm-busy-event.sh" "$parent/state" "$gen" > "$home/.fm-busy-stop"
+  before=$(cat "$parent/state/context-mate.busy-state")
+  mkfifo "$home/owner-hold"
+  "$FAKE_CLAUDE" -c '
+    printf "%s\n" "$$" > "$1/state/.lock"
+    printf "owner-session\n" > "$1/state/.lock-session"
+    IFS= read -r release < "$1/owner-hold"
+  ' _ "$home" &
+  owner=$!
+  trap 'kill "$owner" 2>/dev/null || true; wait "$owner" 2>/dev/null || true' EXIT
+  for attempt in {1..100}; do
+    [ -f "$home/state/.lock-session" ] && break
+    sleep 0.02
+  done
+  [ -f "$home/state/.lock-session" ] || fail "fixture owner never acquired the lock"
+
+  rc=0
+  out=$(printf '{"session_id":"owner-session","stop_hook_active":false}' \
+    | FM_ROOT_OVERRIDE="$home" FM_HOME="$home" "$FAKE_CLAUDE" -c '
+        "$1/bin/fm-turnend-guard.sh" --claude
+      ' _ "$ROOT" 2>&1) || rc=$?
+  expect_code 0 "$rc" "a rejected session must be allowed to end read-only: $out"
+  assert_contains "$out" 'this read-only session' "fixture did not exercise the live foreign-owner refusal"
+  [ "$(cat "$parent/state/context-mate.busy-state")" = "$before" ] \
+    || fail "a read-only session changed the active parent busy record"
+  [ "$(cat "$home/state/.lock")" = "$owner" ] || fail "read-only Stop changed the session lock"
+
+  rc=0
+  out=$(printf '{"session_id":"owner-session","stop_hook_active":false,"cursor_version":"fixture"}' \
+    | FM_ROOT_OVERRIDE="$home" FM_HOME="$home" CLAUDE_CODE_SESSION_ID=owner-session "$FAKE_CLAUDE" -c '
+        export CLAUDE_PID=$$
+        "$1/bin/fm-turnend-guard.sh" --claude
+      ' _ "$ROOT" 2>&1) || rc=$?
+  expect_code 0 "$rc" "a foreign-host event must be ignored: $out"
+  [ -z "$out" ] || fail "ignored foreign-host Stop produced output: $out"
+  [ "$(cat "$parent/state/context-mate.busy-state")" = "$before" ] \
+    || fail "an ignored foreign-host event changed the active parent busy record"
+
+  rc=0
+  out=$(printf '' \
+    | FM_ROOT_OVERRIDE="$home" FM_HOME="$home" "$FAKE_CLAUDE" -c '
+        "$1/bin/fm-turnend-guard.sh" --claude
+      ' _ "$ROOT" 2>&1) || rc=$?
+  expect_code 0 "$rc" "an absent payload must be ignored: $out"
+  [ "$(cat "$parent/state/context-mate.busy-state")" = "$before" ] \
+    || fail "an absent Stop payload changed the active parent busy record"
+  pass "read-only, foreign-host, and absent-payload Stops leave the active generation record unchanged"
+
+  rc=0
+  out=$(printf '{"session_id":"owner-session","stop_hook_active":false}' \
+    | FM_ROOT_OVERRIDE="$home" FM_HOME="$home" CLAUDE_CODE_SESSION_ID=owner-session \
+      FM_CLAUDE_AUTOARM_SYNC_WAIT_MS=100 "$FAKE_CLAUDE" -c '
+        export CLAUDE_PID=$$
+        "$1/bin/fm-turnend-guard.sh" --claude
+      ' _ "$ROOT" 2>&1) || rc=$?
+  expect_code 2 "$rc" "a trusted owner-session continuation must still block a blind Stop: $out"
+  verdict=$(bash -c '. "$1"; fm_busy_record_read "$2" context-mate' _ "$ROOT/bin/fm-busy-lib.sh" "$parent/state") \
+    || fail "trusted owner-session record unreadable"
+  case "$verdict" in 'busy claude-hook stop-blocked '*) ;; *) fail "trusted owner-session continuation was not published: $verdict" ;; esac
+  pass "trusted same-session ownership can still publish a blocked Stop"
+)
+
 test_budget_parser_and_opt_in() {
   local config outside out rc
   config="$TMP_ROOT/config-parser"
@@ -738,6 +861,13 @@ test_successor_baseline_prevents_restart_loops() {
   pass "context restart: over-budget successor baseline inhibits loops and a raised budget rearms it"
 }
 
+if [ "$#" -gt 0 ]; then
+  for test_case in "$@"; do "$test_case"; done
+  exit 0
+fi
+
+test_rejected_stops_preserve_parent_busy_state
+test_registered_stop_reports_context_continuation_busy
 test_handoff_waits_for_replacement_commit
 test_budget_parser_and_opt_in
 test_threshold_and_one_directive_per_crossing

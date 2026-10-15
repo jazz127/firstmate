@@ -568,7 +568,7 @@ Workspace and tab ids support verification and cleanup but are not inferred from
 
 ### Named server and session routing
 
-The adapter starts and polls a named server before workspace, tab, pane, or agent calls.
+The adapter starts and polls a named server before active operations; passive visible-viewport probes require an already-running server and fail without starting one (`fm_backend_herdr_target_observable` in `bin/backends/herdr.sh`).
 Every Herdr invocation goes through `fm_backend_herdr_cli`, which sets the environment and passes an explicit trailing `--session <name>`.
 An environment variable alone is not reliable when another Herdr server is running.
 

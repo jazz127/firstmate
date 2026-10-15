@@ -180,6 +180,10 @@ fm_poll_derived_grace() {
 fm_watcher_stall_bound() {
   local poll=${1:-${FM_POLL:-15}} grace
   grace=${FM_WATCHER_STALE_GRACE:-${FM_GUARD_GRACE:-$(fm_poll_derived_grace "$poll")}}
+  case "$grace" in
+    ''|*[!0-9]*) ;;
+    *) grace=$((10#$grace)) ;;
+  esac
   printf '%s\n' "${FM_WATCHER_STALL_BOUND:-$((grace * 3))}"
 }
 

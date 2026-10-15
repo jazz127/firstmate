@@ -246,6 +246,38 @@ test_live_stalled_watch_lock_is_replaced_past_hard_bound() {
   pass "live watcher lock with a beacon past the hard bound is replaced, under it is still refused"
 }
 
+test_zero_padded_grace_does_not_evict_before_decimal_bound() {
+  local dir state fakebin holder identity status=0 kept=0
+  dir=$(make_case padded-grace-bound)
+  state="$dir/state"
+  fakebin="$dir/fakebin"
+  sleep 300 &
+  holder=$!
+  identity=$(FM_STATE_OVERRIDE="$state" bash -c '. "$1"; fm_pid_identity "$2"' _ "$LIB" "$holder") \
+    || fail "could not identify the fixture holder"
+  mkdir -p "$state/.watch.lock"
+  printf '%s\n' "$holder" > "$state/.watch.lock/pid"
+  printf '%s\n' "$dir" > "$state/.watch.lock/fm-home"
+  printf '%s\n' "$WATCH" > "$state/.watch.lock/watcher-path"
+  printf '%s\n' "$identity" > "$state/.watch.lock/pid-identity"
+  fm_touch_epoch "$(( $(date +%s) - 1500 ))" "$state/.last-watcher-beat"
+  # 1500 is below 3*600, but above the erroneous octal-derived bound of 1152.
+  # Bound the unexpected replacement too, so a failing test cannot leave it polling.
+  PATH="$fakebin:$PATH" FM_HOME="$dir" FM_STATE_OVERRIDE="$state" \
+    FM_GUARD_GRACE=0600 FM_WATCHER_STALE_GRACE='' FM_WATCHER_STALL_BOUND='' \
+    FM_POLL=5 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 \
+    bash -c '. "$1"; fm_run_timed 5 "$2"' _ "$ROOT/bin/fm-timeout-lib.sh" "$WATCH" \
+    > "$dir/out" 2> "$dir/err" || status=$?
+  is_live_non_zombie "$holder" && kept=1
+  kill "$holder" 2>/dev/null || true
+  wait "$holder" 2>/dev/null || true
+  [ "$kept" = 1 ] || fail "zero-padded grace evicted the holder before its decimal stall bound"
+  [ "$status" -ne 0 ] && [ "$status" -ne 124 ] \
+    || fail "under-bound holder did not receive the ordinary bounded refusal"
+  assert_contains "$(cat "$dir/err")" 'heartbeat is stale' "the stale holder lost its under-bound refusal"
+  pass "zero-padded grace keeps an identity-matched holder until its decimal stall bound"
+}
+
 test_guard_warnings() {
   # The guard's two operator-visible states, with resilient substrings instead of
   # four copy-coupled tests:
@@ -1765,6 +1797,7 @@ test_msys_pid_identity_uses_proc() {
   pass "MSYS process identity uses compatible /proc fields"
 }
 
+test_zero_padded_grace_does_not_evict_before_decimal_bound
 test_wait_deadline_reaps_a_stopped_child
 test_singleton_start
 test_pid_identity_is_locale_invariant

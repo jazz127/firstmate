@@ -721,6 +721,25 @@ EOF
   pass "home seeding refuses project-less conversion of a populated home"
 }
 
+test_home_seed_literal_backslash_registry_names() {
+  local home="$TMP_ROOT/backslash-registry-home" sub="$TMP_ROOT/backslash-registry-sub"
+  local name='tools\new' row i
+  row="- $name [direct-PR] - literal-name posture (added 2026-10-15)"
+  mkdir -p "$home/projects/$name" "$home/data" "$home/state"
+  fm_git_init_commit "$home/projects/$name"
+  fm_git_add_origin "$home/projects/$name" "$TMP_ROOT/remotes/seed-literal-name.git"
+  printf '%s\n' "$row" > "$home/data/projects.md"
+  for i in 1 2; do
+    FM_HOME="$home" FM_SECONDMATE_CHARTER='literal-name fixture' \
+      FM_SECONDMATE_SCOPE='literal-name fixture' \
+      "$ROOT/bin/fm-home-seed.sh" literal "$sub" "$name" >/dev/null \
+      || fail "seed $i failed for a literal backslash project name"
+    [ "$(grep -cFx -- "$row" "$sub/data/projects.md")" = 1 ] \
+      || fail "seed $i did not preserve exactly one literal-name posture row"
+  done
+  pass 'home seeding preserves literal backslash names and replaces their registry rows on reseed'
+}
+
 test_home_seed_spaced_name_registry_handling() {
   local home sub err design
   home="$TMP_ROOT/spaced-registry-home"
@@ -3121,6 +3140,7 @@ EOF
   pass "fm-backlog-handoff refuses Done items under whitespace section headings and unsafe homes"
 }
 
+test_home_seed_literal_backslash_registry_names
 test_fm_home_parameterization
 test_lock_status_is_per_home
 test_seed_allows_overlapping_clones_and_drops_owner

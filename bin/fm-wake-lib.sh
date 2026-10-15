@@ -169,7 +169,7 @@ fm_path_age() {
 fm_poll_derived_grace() {
   local poll=${1:-${FM_POLL:-15}} margin=60 derived
   case "$poll" in ''|*[!0-9]*) poll=15 ;; esac
-  derived=$((poll + margin))
+  derived=$((10#$poll + margin))
   [ "$derived" -ge 300 ] || derived=300
   printf '%s\n' "$derived"
 }

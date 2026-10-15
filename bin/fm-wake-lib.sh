@@ -1483,7 +1483,8 @@ fm_task_set_lock_path() {  # <state-dir>
 # Everything else still fails closed: an unreadable or malformed binding, an
 # unreachable local parent, a cycle, and a chain deeper than the bound.
 fm_firstmate_root_home() {
-  local home=${1:-$FM_HOME} marker parent seen="|" depth=0
+  local home=${1:-$FM_HOME} marker parent visited depth=0
+  local -a seen=()
   home=$(CDPATH='' cd -- "$home" 2>/dev/null && pwd -P) || return 1
   while [ -e "$home/.fm-secondmate-parent" ] || [ -L "$home/.fm-secondmate-parent" ]; do
     marker="$home/.fm-secondmate-parent"
@@ -1498,8 +1499,12 @@ fm_firstmate_root_home() {
       *) return 1 ;;
     esac
     parent=$(CDPATH='' cd -- "$FM_SECONDMATE_PARENT_HOME" 2>/dev/null && pwd -P) || return 1
-    case "$seen" in *"|$parent|"*) return 1 ;; esac
-    seen="$seen$home|"
+    # A path may contain punctuation such as pipes; compare complete entries
+    # rather than packing paths into a delimiter-separated cycle detector.
+    for visited in ${seen[@]+"${seen[@]}"}; do
+      [ "$visited" != "$parent" ] || return 1
+    done
+    seen+=("$home")
     home=$parent
     depth=$((depth + 1))
     [ "$depth" -le 64 ] || return 1

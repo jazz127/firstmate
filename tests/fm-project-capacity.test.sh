@@ -204,6 +204,40 @@ worktree_list() { git -C "$1/project" worktree list --porcelain; }
 
 # The reported incident's shape before any declaration: the project is already
 # busy, and nothing caps a further launch. Absent a declaration that stays true.
+# shellcheck disable=SC2016 # Positional arguments expand inside the selected child shell.
+test_capacity_root_home_with_literal_pipes() {
+  local home="$TMP_ROOT/chain-root" middle="$TMP_ROOT/chain-middle" leaf shell out expected
+  leaf="$home|$middle"
+  mkdir -p "$home" "$middle" "$leaf"
+  printf 'schema=fm-secondmate-parent.v1\nroute=local\nparent_home=%s\n' "$middle" > "$leaf/.fm-secondmate-parent"
+  for shell in "$(command -v bash)" /bin/bash; do
+    printf 'schema=fm-secondmate-parent.v1\nroute=local\nparent_home=%s\n' "$home" > "$middle/.fm-secondmate-parent"
+    out=$(FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" "$shell" -c '
+      . "$1/bin/fm-wake-lib.sh"
+      fm_firstmate_root_home "$2"
+    ' _ "$ROOT" "$leaf") || fail "literal pipe home was mistaken for a parent cycle under $shell"
+    expected=$(cd "$home" && pwd -P)
+    [ "$out" = "$expected" ] || fail "parent chain did not reach the root home under $shell"
+
+    printf 'schema=fm-secondmate-parent.v1\nroute=local\nparent_home=%s\n' "$leaf" > "$middle/.fm-secondmate-parent"
+    if FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" "$shell" -c '
+      . "$1/bin/fm-wake-lib.sh"
+      fm_firstmate_root_home "$2"
+    ' _ "$ROOT" "$leaf" >/dev/null; then
+      fail "a genuine parent cycle was accepted under $shell"
+    fi
+
+    printf 'schema=fm-secondmate-parent.v1\nroute=remote\nparent_host=fixture-host\n' > "$middle/.fm-secondmate-parent"
+    out=$(FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" "$shell" -c '
+      . "$1/bin/fm-wake-lib.sh"
+      fm_firstmate_root_home "$2"
+    ' _ "$ROOT" "$leaf") || fail "the remote parent boundary was rejected under $shell"
+    expected=$(cd "$middle" && pwd -P)
+    [ "$out" = "$expected" ] || fail "root-home resolution crossed a remote boundary under $shell"
+  done
+  pass 'capacity root resolution compares complete home paths and preserves cycle and remote-boundary guards'
+}
+
 test_capacity_names_with_literal_pipes() {
   local config="$TMP_ROOT/pipe-name-config"
   mkdir -p "$config"
@@ -889,6 +923,7 @@ if [ "${1:-}" = metadata-handoff ]; then
   exit 0
 fi
 
+test_capacity_root_home_with_literal_pipes
 test_capacity_names_with_literal_pipes
 test_concurrent_spawns_cannot_both_take_the_last_place fresh
 test_concurrent_spawns_cannot_both_take_the_last_place restart

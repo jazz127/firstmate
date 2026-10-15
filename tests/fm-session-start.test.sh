@@ -1027,7 +1027,9 @@ SH
       harness_pid=$(sh -c 'printf "%s\n" "$PPID"')
       : > "$home/state/harness-$harness_pid"
       : > "$ready/$i"
-      while [ "$(find "$ready" -type f | wc -l | tr -d ' ')" -lt 40 ]; do
+      while :; do
+        set -- "$ready"/*
+        [ "$#" -ge 40 ] && break
         sleep 0.01
       done
       if FM_HOME="$home" FM_FAKE_LOCK_STATE="$home/state" \
@@ -1036,7 +1038,9 @@ SH
         printf '%s\n' "$harness_pid" >> "$winners"
       fi
       : > "$completed/$i"
-      while [ "$(find "$completed" -type f | wc -l | tr -d ' ')" -lt 40 ]; do
+      while :; do
+        set -- "$completed"/*
+        [ "$#" -ge 40 ] && break
         sleep 0.01
       done
     ) &

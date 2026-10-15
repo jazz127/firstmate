@@ -221,14 +221,15 @@ emit() {  # <state> <source> [detail]
 
 [ -f "$META" ] || emit unknown none "no metadata for $ID"
 
-meta_value() {  # <key>
-  grep "^$1=" "$META" 2>/dev/null | tail -1 | cut -d= -f2- || true
+meta_value() {  # <key> [output-var]
+  fm_meta_get "$META" "$@"
 }
 
-WT=$(meta_value worktree)
-KIND=$(meta_value kind)
-HARNESS=$(meta_value harness)
-REMOTE_HOST=$(meta_value remote_host)
+WT='' KIND='' HARNESS='' REMOTE_HOST=''
+meta_value worktree WT
+meta_value kind KIND
+meta_value harness HARNESS
+meta_value remote_host REMOTE_HOST
 [ -n "$KIND" ] || KIND=ship
 
 # A torn-down (or never-created) worktree has no current state to read. A

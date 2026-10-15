@@ -145,6 +145,12 @@ case "${1:-} ${2:-}" in
     exit 0
     ;;
   "api graphql")
+    case "$*" in
+      *viewerPermission*)
+        printf '%s\n' '{"data":{"repository":{"viewerPermission":"READ"}}}'
+        exit 0
+        ;;
+    esac
     printf '%s\n' \
       "state=${FM_TEST_GH_GRAPHQL_STATE:-MERGED}" \
       "merged=${FM_TEST_GH_GRAPHQL_MERGED:-true}" \
@@ -206,7 +212,15 @@ case " $* " in
       printf '%s\n' "$FM_TEST_GH_FILES" | jq -r "$filter"
       exit
     fi
-    printf '%s\n' "{\"state\":\"open\",\"user\":{\"login\":\"author\"},\"head\":{\"sha\":\"${FM_TEST_GH_HEAD:-0123456789abcdef0123456789abcdef01234567}\"},\"draft\":false,\"mergeable\":true,\"merged_at\":null}"
+    base_repo=${2#repos/}
+    base_repo=${base_repo%/pulls/*}
+    core_state=open
+    merged_at=null
+    case "${FM_TEST_GH_STATE:-OPEN}" in
+      MERGED) core_state=closed; merged_at='"2026-10-15T00:00:00Z"' ;;
+      CLOSED) core_state=closed ;;
+    esac
+    printf '%s\n' "{\"state\":\"$core_state\",\"user\":{\"login\":\"author\"},\"head\":{\"sha\":\"${FM_TEST_GH_HEAD:-0123456789abcdef0123456789abcdef01234567}\"},\"base\":{\"repo\":{\"full_name\":\"$base_repo\"}},\"draft\":false,\"mergeable\":true,\"merged_at\":$merged_at}"
     ;;
   *" api repos/"*)
     printf '%s\n' '{"permissions":{"push":false}}'

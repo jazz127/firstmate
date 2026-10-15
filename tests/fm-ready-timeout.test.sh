@@ -158,12 +158,15 @@ test_knob_parsing() {
   rc=0; fm_ready_timeout_secs "$dir" >/dev/null || rc=$?
   [ "$rc" -eq 1 ] || fail "an absent knob should read disabled (rc=$rc)"
   for pair in ':7200' '# two hours by default:7200' '3600:3600' '90m:5400' '4h:14400' \
-    ' 45m :2700' '0120s:120'; do
+    ' 45m :2700' '0120s:120' '000000000060s:60' '000000001h:3600'; do
     printf '%s\n' "${pair%:*}" > "$dir/ready-session-timeout"
     v=$(fm_ready_timeout_secs "$dir") || fail "knob '${pair%:*}' was rejected"
     [ "$v" = "${pair##*:}" ] || fail "knob '${pair%:*}' read $v, want ${pair##*:}"
   done
-  for bad in 30 59s 0h abc 2d -5m 1.5h; do
+  printf '# comment\n \t\r\v\f\n \t000090m \r# inline comment' > "$dir/ready-session-timeout"
+  v=$(fm_ready_timeout_secs "$dir") || fail 'mixed whitespace and an unterminated final config line were rejected'
+  [ "$v" = 5400 ] || fail "mixed whitespace/padded duration read $v, want 5400"
+  for bad in 30 59s 0h 00000 000000000000h 1000000000s abc 2d -5m 1.5h; do
     printf '%s\n' "$bad" > "$dir/ready-session-timeout"
     rc=0; v=$(fm_ready_timeout_secs "$dir") || rc=$?
     [ "$rc" -eq 2 ] && [ -z "$v" ] || fail "knob '$bad' should be rejected, got rc=$rc value=$v"

@@ -73,7 +73,7 @@ fm_ready_timeout_secs() {  # <config-dir>
   [ -f "$file" ] && [ -r "$file" ] || return 2
   while IFS= read -r line || [ -n "$line" ]; do
     line=${line%%#*}
-    line=$(printf '%s' "$line" | tr -d '[:space:]')
+    line=${line//[[:space:]]/}
     [ -n "$line" ] || continue
     value=$line
     break
@@ -90,7 +90,7 @@ fm_ready_timeout_secs() {  # <config-dir>
     ''|*[!0-9]*) return 2 ;;
   esac
   # Strip leading zeros so bash arithmetic never reads the number as octal.
-  n=$(printf '%s' "$n" | sed 's/^0*//')
+  n=${n#"${n%%[!0]*}"}
   [ -n "$n" ] || return 2
   [ "${#n}" -le 9 ] || return 2
   case "$unit" in

@@ -1181,6 +1181,26 @@ test_watcher_dead_pane_ignores_stale_busy_state() {
   pass "watcher: dead-pane recovery overrides stale busy state"
 }
 
+test_sequence_order_crosses_padding_widths() {
+  local state dir rec oldest name
+  state="$TMP_ROOT/sequence-widths/state"
+  dir="$state/t1.inbox"
+  mkdir -p "$dir/handled"
+  for name in 999 1000 not-a-number; do
+    printf 'schema=fm-task-inbox.v1\n--\nsynthetic steer\n' > "$dir/$name.msg"
+  done
+  printf 'schema=fm-task-inbox.v1\n--\nhandled steer\n' > "$dir/handled/02000.msg"
+  oldest=$(inbox_lib "$state" fm_task_inbox_oldest_unhandled "$state" t1)
+  [ "$oldest" = "$dir/999.msg" ] || fail "oldest message followed lexical order or accepted a nonnumeric name"
+  rec=$(inbox_lib "$state" fm_task_inbox_write "$state" t1 'next steer') \
+    || fail "sequence allocation across padding widths failed"
+  [ "$rec" = "$dir/2001.msg" ] || fail "next sequence did not include the padded handled maximum"
+  [ "$(inbox_lib "$state" fm_task_inbox_body "$rec")" = 'next steer' ] \
+    || fail "sequence allocation changed the message body"
+  pass "inbox: numeric sequence order crosses padding widths and includes handled records"
+}
+
+test_sequence_order_crosses_padding_widths
 test_writer_retries_after_a_vanished_lock_collision 08
 test_writer_retries_after_a_vanished_lock_collision 09
 test_write_is_durable_and_exact

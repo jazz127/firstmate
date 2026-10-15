@@ -162,11 +162,16 @@ fm_task_inbox_handled_dir() {  # <state-dir> <task-id>
 }
 
 # Numeric sequence of one record basename, or fail for a non-record name.
-fm_task_inbox_seq_of() {  # <basename>
-  local n=${1%.msg}
-  [ "$n" != "$1" ] || return 1
-  case "$n" in ''|*[!0-9]*) return 1 ;; esac
-  printf '%s' "$((10#$n))"
+# An optional output variable avoids a subshell; _fm_inbox_seq_ locals are reserved.
+fm_task_inbox_seq_of() {  # <basename> [output-var]
+  local _fm_inbox_seq_n=${1%.msg}
+  [ "$_fm_inbox_seq_n" != "$1" ] || return 1
+  case "$_fm_inbox_seq_n" in ''|*[!0-9]*) return 1 ;; esac
+  if [ "$#" -gt 1 ]; then
+    printf -v "$2" '%s' "$((10#$_fm_inbox_seq_n))"
+  else
+    printf '%s' "$((10#$_fm_inbox_seq_n))"
+  fi
 }
 
 # Next unused sequence, scanning the inbox root AND handled/ so an
@@ -176,7 +181,7 @@ fm_task_inbox_next_seq() {  # <inbox-dir>
   for d in "$dir" "$dir/handled"; do
     for f in "$d"/*.msg; do
       [ -e "$f" ] || continue
-      n=$(fm_task_inbox_seq_of "${f##*/}") || continue
+      fm_task_inbox_seq_of "${f##*/}" n || continue
       [ "$n" -le "$max" ] || max=$n
     done
   done
@@ -416,7 +421,7 @@ fm_task_inbox_oldest_unhandled() {  # <state-dir> <task-id>
   for f in "$dir"/*.msg; do
     [ -e "$f" ] || continue
     fm_task_inbox_is_fire_and_forget "$f" && continue
-    n=$(fm_task_inbox_seq_of "${f##*/}") || continue
+    fm_task_inbox_seq_of "${f##*/}" n || continue
     if [ -z "$best" ] || [ "$n" -lt "$best_n" ]; then
       best=$f
       best_n=$n

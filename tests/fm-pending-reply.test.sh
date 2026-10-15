@@ -2239,6 +2239,12 @@ test_record_field_framing() {
   [ ! -s "$actual" ] || fail "an absent field emitted output"
   fm_pending_reply_get "$home/absent" phase > "$actual"
   [ ! -s "$actual" ] || fail "an absent record emitted output"
+  printf 'phase=re\0solved\n' > "$rec"
+  fm_pending_reply_get "$rec" phase > "$actual"
+  [ ! -s "$actual" ] || fail "a binary record produced a text phase"
+  printf 'phase=resolved\nignored=bad\0\n' > "$rec"
+  fm_pending_reply_get "$rec" phase > "$actual"
+  [ ! -s "$actual" ] || fail "a NUL after the field did not invalidate the binary record"
   pass "record fields preserve framing, literal bytes and final-occurrence precedence"
 }
 

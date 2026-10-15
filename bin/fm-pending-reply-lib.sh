@@ -219,17 +219,22 @@ fm_pending_reply_summarize() {  # <text>
 }
 
 fm_pending_reply_get() {  # <record-path> <key>
-  local rec=$1 key=$2 line value='' found=0
+  local rec=$1 key=$2 line value='' found=0 contents=''
   [ -f "$rec" ] || return 0
+  # Success means a NUL delimiter was found; EOF yields the complete text.
+  if IFS= read -r -d '' contents < "$rec" 2>/dev/null; then
+    return 0
+  fi
   while IFS= read -r line || [ -n "$line" ]; do
     case "$line" in
       "$key="*) value=${line#*=}; found=1 ;;
     esac
-  done < "$rec" 2>/dev/null || true
+  done <<< "$contents"
   # Keep the stdout framing: an empty value has a newline; a missing key has
   # no output. The final occurrence wins, including an unterminated final line.
   [ "$found" = 0 ] || printf '%s\n' "$value"
 }
+
 
 fm_pending_reply_sighting_encode() {  # <path> <line-number>
   local path=$1 line_no=$2 encoded

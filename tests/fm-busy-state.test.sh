@@ -257,6 +257,40 @@ test_record_without_sidecar_unknown() {
   pass "a record with no armed gen sidecar classifies unknown"
 }
 
+test_record_and_generation_framing() {
+  local state format out record
+  state=$(new_state_dir record-framing)
+  record='v1 gen=g1 seq=2 state=idle source=claude-hook event=stop ts=123'
+  printf 'g1\n' > "$state/t1.busy-gen"
+  for format in '' '\njunk' '\n\000' '\nbad\000tail' '\n\n'; do
+    printf '%s%b' "$record" "$format" > "$state/t1.busy-state"
+    out=$(fm_busy_classify tmux w1 claude t1 "$state")
+    [ "$out" = 'unknown malformed' ] || fail "invalid record framing $format read '$out'"
+  done
+  printf 'v1 gen=g1 seq=2 state=id\000le source=claude-hook event=stop ts=123\n' \
+    > "$state/t1.busy-state"
+  out=$(fm_busy_classify tmux w1 claude t1 "$state")
+  [ "$out" = 'unknown malformed' ] || fail "binary state field read '$out'"
+
+  printf '%s\n' "$record" > "$state/t1.busy-state"
+  cp "$state/t1.busy-state" "$state/record-before"
+  for format in 'g1' 'g1\njunk\n' 'g1\njunk' 'g\0001\n' 'g1\n\000' 'g1\n\n'; do
+    printf '%b' "$format" > "$state/t1.busy-gen"
+    cp "$state/t1.busy-gen" "$state/gen-before"
+    out=$(fm_busy_classify tmux w1 claude t1 "$state")
+    [ "$out" = 'unknown malformed' ] || fail "invalid generation framing $format read '$out'"
+    if "$EV" apply "$state" t1 busy --current-gen --source claude-hook --event start 2>/dev/null; then
+      fail "writer accepted invalid generation framing $format"
+    fi
+    cmp -s "$state/t1.busy-state" "$state/record-before" || fail 'refused apply changed the record'
+    cmp -s "$state/t1.busy-gen" "$state/gen-before" || fail 'refused apply changed the generation'
+  done
+  printf 'g1\n' > "$state/t1.busy-gen"
+  out=$(fm_busy_classify tmux w1 claude t1 "$state")
+  [ "$out" = 'idle claude-hook' ] || fail "valid restored framing read '$out'"
+  pass 'records and generations require one complete text line without binary or trailing data'
+}
+
 # --- adapter isolation ---------------------------------------------------------
 
 test_source_mismatch_cross_adapter() {
@@ -606,6 +640,7 @@ test_stale_gen_event_rejected
 test_stale_gen_record_unknown
 test_missing_record_unknown_not_idle
 test_malformed_record_unknown
+test_record_and_generation_framing
 test_record_without_sidecar_unknown
 test_source_mismatch_cross_adapter
 test_converted_adapters_ignore_footer_text

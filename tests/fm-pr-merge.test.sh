@@ -510,7 +510,7 @@ case "$endpoint" in
     elif [ -e "$log_dir/tea-status-page$page.json" ]; then
       cat "$log_dir/tea-status-page$page.json"
     else
-      printf '{"state":"","total_count":0,"statuses":[]}\n'
+      printf '{"state":"","total_count":0,"statuses":null}\n'
     fi
     ;;
   "/repos/{owner}/{repo}")
@@ -605,7 +605,7 @@ write_forgejo_status_json() {
     esac
   done
   if [ "$total" = 0 ]; then
-    printf '{"state":"","total_count":0,"statuses":[]}\n' > "$file"
+    printf '{"state":"","total_count":0,"statuses":null}\n' > "$file"
   else
     printf '{"state":"%s","total_count":%s,"statuses":[%s]}\n' "$state" "$total" \
       "$(seq "$total" | sed "s/.*/{\"context\":\"ci-&\",\"status\":\"$state\"}/" | paste -sd, -)" \
@@ -2684,6 +2684,23 @@ test_forgejo_combined_status_reads_every_page() {
   pass "fm-pr-merge reads every Forgejo combined-status page before merging"
 }
 
+test_forgejo_empty_status_page_representations() {
+  local case_dir rc representation
+  for representation in null '[]'; do
+    case_dir=$(make_forgejo_case "forgejo-terminal-$representation")
+    printf '{"state":"","total_count":0,"statuses":%s}\n' "$representation" \
+      > "$case_dir/tea-status-page2.json"
+    set +e
+    run_pr_merge "$case_dir" task-x1 "$FJ_URL" > "$case_dir/stdout" 2> "$case_dir/stderr"
+    rc=$?
+    set -e
+    expect_code 0 "$rc" "green statuses followed by a valid $representation terminal page must merge"
+    assert_grep 'page=2' "$case_dir/tea.log" "terminal page was not read"
+    [ -e "$case_dir/tea-merged" ] || fail "valid $representation terminal page blocked the merge"
+  done
+  pass "Forgejo merges green statuses followed by documented null or compatible empty-array terminal pages"
+}
+
 test_forgejo_malformed_status_pages_refuse() {
   local case_dir rc page payload n=0
   for page in 1 2; do
@@ -2692,7 +2709,12 @@ test_forgejo_malformed_status_pages_refuse() {
       '{"state":false,"statuses":[]}' '{"state":"unknown","statuses":[]}' \
       '{"state":"success","statuses":null}' '{"state":"success","statuses":{}}' \
       '{"state":"error","statuses":[]}' '{"state":"success","statuses":[]}' \
-      '{"state":"","statuses":[{"context":"ci","status":"success"}]}'; do
+      '{"state":"","statuses":[{"context":"ci","status":"success"}]}' \
+      '{"state":"","total_count":0}' '{"total_count":0,"statuses":null}' \
+      '{"state":"","statuses":null}' '{"state":"","total_count":1,"statuses":null}' \
+      '{"state":"","total_count":"0","statuses":null}' \
+      '{"state":"","total_count":false,"statuses":null}' \
+      '{"state":"success","total_count":0,"statuses":null}'; do
       n=$((n + 1))
       case_dir=$(make_forgejo_case "forgejo-malformed-$n")
       if [ "$page" = 1 ]; then
@@ -3328,6 +3350,7 @@ test_forgejo_refuses_when_login_is_ambiguous
 test_forgejo_each_condition_refuses_independently
 test_forgejo_unconfigured_ci_refuses_as_none
 test_forgejo_combined_status_reads_every_page
+test_forgejo_empty_status_page_representations
 test_forgejo_malformed_status_pages_refuse
 test_forgejo_stale_recorded_head_is_reported
 test_forgejo_invalid_head_refuses

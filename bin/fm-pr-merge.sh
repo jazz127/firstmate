@@ -710,7 +710,8 @@ FIELDS
     if ! status_json=$(tea api --login "$FORGEJO_LOGIN" --repo "$PR_OWNER/$PR_REPO" \
         "/repos/{owner}/{repo}/commits/$live_head/status?limit=50&page=$page" 2>/dev/null) \
       || ! fields=$(printf '%s' "$status_json" | jq -r '
-          if type == "object" and (.statuses | type) == "array"
+          if type == "object" and has("statuses")
+            and ((.statuses | type) == "array" or (.statuses == null and .total_count == 0))
             and (.state | type) == "string"
             and (if (.statuses | length) == 0 then .state == ""
                  else .state as $state | ["success", "pending", "failure", "error", "warning"] | index($state) != null

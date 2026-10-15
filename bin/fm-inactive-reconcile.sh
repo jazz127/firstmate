@@ -188,7 +188,7 @@ record_phase_set() {
   while IFS= read -r line || [ -n "$line" ]; do
     case "$line" in phase=*) continue ;; esac
     printf '%s\n' "$line" >> "$tmp" || { rm -f "$tmp"; return 1; }
-  done < "$record"
+  done < "$record" || { rm -f "$tmp"; return 1; }
   printf 'phase=%s\n' "$phase" >> "$tmp" || { rm -f "$tmp"; return 1; }
   chmod 600 "$tmp" 2>/dev/null || true
   mv -f "$tmp" "$record"
@@ -201,7 +201,7 @@ record_field_set() {
   while IFS= read -r line || [ -n "$line" ]; do
     case "$line" in "${key}="*) continue ;; esac
     printf '%s\n' "$line" >> "$tmp" || { rm -f "$tmp"; return 1; }
-  done < "$record"
+  done < "$record" || { rm -f "$tmp"; return 1; }
   printf '%s=%s\n' "$key" "$value" >> "$tmp" || { rm -f "$tmp"; return 1; }
   chmod 600 "$tmp" 2>/dev/null || true
   mv -f "$tmp" "$record"

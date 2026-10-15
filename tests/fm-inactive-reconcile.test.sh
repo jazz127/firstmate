@@ -1208,6 +1208,40 @@ SH
   pass "reconciliation state reads set no-forge mode"
 }
 
+test_unreadable_terminal_receipt_update() {
+  local operation=$1 record fingerprint rc=0
+  make_world "unreadable-receipt-$operation"
+  write_child "$MAIN" child 'done: PR https://example.test/owner/repo/pull/1 checks green'
+  FM_FAKE_CREW_STATE='done' run_reconcile "$MAIN" --startup \
+    || fail "could not establish the pending receipt"
+  [ "$(outcome_count "$MAIN" pending)" = 1 ] || fail "fixture did not produce one pending receipt"
+  for record in "$MAIN/state/terminal-outcomes"/*.pending; do break; done
+  fingerprint=${record##*/}
+  fingerprint=${fingerprint%.pending}
+  cp "$record" "$WORLD/expected"
+  chmod 000 "$record"
+  if [ -r "$record" ]; then
+    chmod 600 "$record"
+    pass "unreadable receipt $operation case skipped (this user can read mode-000 files)"
+    return 0
+  fi
+  case "$operation" in
+    phase)
+      FM_FAKE_CREW_STATE='done' run_reconcile "$MAIN" --startup > "$WORLD/out" 2> "$WORLD/err" || rc=$?
+      ;;
+    notice)
+      FM_HOME="$MAIN" FM_STATE_OVERRIDE="$MAIN/state" "$RECON" acknowledge-notice "$fingerprint" \
+        > "$WORLD/out" 2> "$WORLD/err" || rc=$?
+      ;;
+  esac
+  chmod 600 "$record"
+  [ "$rc" -ne 0 ] || fail "unreadable receipt $operation update reported success"
+  cmp -s "$WORLD/expected" "$record" || fail "unreadable receipt $operation update discarded fields"
+  pass "unreadable receipt $operation updates refuse and preserve the complete receipt"
+}
+
+test_unreadable_terminal_receipt_update phase
+test_unreadable_terminal_receipt_update notice
 test_main_direct_terminal_presentation_receipt
 test_validation_handoff_backstop
 test_secondmate_validation_handoff_backstop

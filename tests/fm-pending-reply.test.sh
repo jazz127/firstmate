@@ -2242,6 +2242,39 @@ test_record_field_framing() {
   pass "record fields preserve framing, literal bytes and final-occurrence precedence"
 }
 
+test_create_without_openssl() {
+  local home fallback_path mode corr rec
+  home=$(setup_parent id-fallback)
+  fallback_path=$(fm_test_base_path_sans "$PATH" openssl)
+  for mode in missing failed healthy; do
+    case "$mode" in
+      missing)
+        ! PATH="$fallback_path" command -v openssl >/dev/null 2>&1 \
+          || fail "the missing-OpenSSL fixture still resolves openssl"
+        ;;
+      failed)
+        printf '#!/bin/sh\nexit 1\n' > "$fallback_path/openssl"
+        chmod +x "$fallback_path/openssl"
+        ;;
+      healthy)
+        printf '#!/bin/sh\nprintf ABCDEF0123456789\n' > "$fallback_path/openssl"
+        ;;
+    esac
+    corr=$(PATH="$fallback_path" fm_pending_reply_create "$home" "$home/state" mate 'fixture request') \
+      || fail "pending request creation failed with $mode OpenSSL"
+    [ "${#corr}" = 16 ] || fail "correlation id has the wrong length with $mode OpenSSL"
+    case "$corr" in *[!a-f0-9]*) fail "correlation id is not lowercase hex with $mode OpenSSL" ;; esac
+    if [ "$mode" = healthy ]; then
+      [ "$corr" = abcdef0123456789 ] || fail "healthy OpenSSL output was not retained"
+    fi
+    rec="$home/state/pending-replies/$corr"
+    [ "$(fm_pending_reply_get "$rec" task_id)" = mate ] || fail "request identity was not persisted"
+    [ "$(fm_pending_reply_get "$rec" phase)" = awaiting_report ] || fail "new request has the wrong phase"
+  done
+  pass "pending request creation supports missing, failed and healthy OpenSSL"
+}
+
+test_create_without_openssl
 test_record_update_preserves_other_fields
 test_record_update_preserves_unreadable_input
 test_record_field_framing

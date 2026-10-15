@@ -1280,6 +1280,7 @@ EOF
 # ACTUALLY used in this repo: every one is created once (`>`) and only ever
 # appended to (`>>`) - never replaced, renamed, or rewritten in place. So the
 # ways a cursor can go stale are a fold-version mismatch, a shrink (truncated),
+# a captured endpoint behind an already-advanced cache,
 # or the file at this path being a different file than before
 # (replaced/rotated/recreated), which a changed device+inode makes an O(1) check
 # via a single `stat` call - no content hashing, no re-reading the consumed
@@ -1478,7 +1479,7 @@ status_open_decisions_incremental() {  # <status-file> [<captured-end-offset>]
     size=$actual_size
   fi
 
-  if [ -z "$version" ] || [ -z "$ident" ] || [ "$ident" != "$cur_ident" ] || [ "$offset" -gt "$actual_size" ]; then
+  if [ -z "$version" ] || [ -z "$ident" ] || [ "$ident" != "$cur_ident" ] || [ "$offset" -gt "$size" ]; then
     offset=0
     open=''
     trusted_open=''

@@ -39,6 +39,37 @@ last_probe_bytes() {  # <probe-file> <status-file>
   grep -F "$(printf '%s\t' "$2")" "$1" 2>/dev/null | tail -1 | cut -f2
 }
 
+test_captured_snapshot_ignores_a_newer_fold_cache() {
+  local dir state later kind expected current
+  for kind in open resolution terminal; do
+    dir=$(make_case "snapshot-newer-cache-$kind")
+    state="$dir/state"
+    printf 'kind=ship\n' > "$state/task.meta"
+    printf 'needs-decision [key=api]: choose\n' > "$state/task.status"
+    case "$kind" in
+      open) later='needs-decision [key=next]: next question' ;;
+      resolution) later='resolved [key=api]: answered' ;;
+      terminal) later='done: finished' ;;
+    esac
+    FM_STATE_OVERRIDE="$state" bash -c '
+      set -eu
+      . "$1/bin/fm-wake-lib.sh"
+      . "$1/bin/fm-classify-lib.sh"
+      snapshot=$(status_presentation_snapshot "$STATE")
+      printf "%s\n" "$2" >> "$STATE/task.status"
+      status_open_decisions_incremental "$STATE/task.status" > "$3/current"
+      scan_open_decisions_snapshot "$STATE" "$snapshot" > "$3/captured"
+      status_open_decisions_incremental "$STATE/task.status" > "$3/resumed"
+      cmp "$3/current" "$3/resumed"
+    ' _ "$ROOT" "$later" "$dir" || fail "captured snapshot exercise failed for $kind"
+    expected=$(printf 'task\tapi\tneeds-decision\tchoose')
+    current=$(cat "$dir/captured")
+    [ "$current" = "$expected" ] \
+      || fail "a cache advanced past the captured endpoint changed the $kind snapshot: <$current>"
+  done
+  pass "captured decision snapshots ignore newer caches and later reads still catch up"
+}
+
 test_buried_decision_survives_many_growing_drains_and_resolution_clears_it() {
   local dir state out probe status bootstrap_bytes total_size round increment_bytes probe_bytes
   dir=$(make_case cursor-lifecycle)
@@ -408,6 +439,7 @@ test_kind_changes_invalidate_folded_decisions() {
   pass "folded decisions are rebuilt when task-kind evidence changes"
 }
 
+test_captured_snapshot_ignores_a_newer_fold_cache
 test_terminal_supersession_reaches_cached_drains
 test_kind_changes_invalidate_folded_decisions
 test_truncated_log_falls_back_to_a_full_refold_not_a_dropped_decision

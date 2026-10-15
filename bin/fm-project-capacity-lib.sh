@@ -110,7 +110,7 @@ fm_project_capacity_config_dir() {  # <spawning-home> <spawning-config-dir>
 # FM_PROJECT_CAPACITY_ANY to 1 when the declaration caps any project at all.
 # Returns 1 with FM_PROJECT_CAPACITY_ERROR when the declaration is unreadable.
 fm_project_capacity_lookup() {  # <config-dir> <project-name>
-  local name=$2 line lineno=0 pname pcap seen='|'
+  local name=$2 line lineno=0 pname pcap seen=$'\n'
   FM_PROJECT_CAPACITY_FILE="$1/project-capacity"
   FM_PROJECT_CAPACITY=
   FM_PROJECT_CAPACITY_ANY=
@@ -160,17 +160,19 @@ fm_project_capacity_lookup() {  # <config-dir> <project-name>
       FM_PROJECT_CAPACITY=
       return 1
     fi
+    # Names can contain punctuation, including pipes. Newlines cannot occur
+    # inside a name in this line-based format, so they delimit exact entries.
     case "$seen" in
-      *"|$pname|"*)
+      *$'\n'"$pname"$'\n'*)
         FM_PROJECT_CAPACITY_ERROR="$FM_PROJECT_CAPACITY_FILE line $lineno names $pname a second time"
         FM_PROJECT_CAPACITY=
         return 1
         ;;
     esac
-    seen="$seen$pname|"
+    seen="$seen$pname"$'\n'
     [ "$pname" != "$name" ] || FM_PROJECT_CAPACITY=$pcap
   done < "$FM_PROJECT_CAPACITY_FILE"
-  [ "$seen" = '|' ] || FM_PROJECT_CAPACITY_ANY=1
+  [ "$seen" = $'\n' ] || FM_PROJECT_CAPACITY_ANY=1
   return 0
 }
 

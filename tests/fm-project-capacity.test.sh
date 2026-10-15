@@ -4,7 +4,7 @@
 # launched beyond that number (bin/fm-project-capacity-lib.sh owns the
 # contract; bin/fm-spawn.sh runs the check).
 #
-# Every case drives the real bin/fm-spawn.sh against a real project clone with
+# Admission cases drive bin/fm-spawn.sh against a project clone with
 # an origin, fake tmux and treehouse binaries that log every call, and a real
 # markdown backlog when tasks-axi is installed. A deferred spawn is judged by
 # what it left behind - no task record, no rendered launch brief, no endpoint,
@@ -204,6 +204,25 @@ worktree_list() { git -C "$1/project" worktree list --porcelain; }
 
 # The reported incident's shape before any declaration: the project is already
 # busy, and nothing caps a further launch. Absent a declaration that stays true.
+test_capacity_names_with_literal_pipes() {
+  local config="$TMP_ROOT/pipe-name-config"
+  mkdir -p "$config"
+  # shellcheck source=bin/fm-project-capacity-lib.sh
+  . "$ROOT/bin/fm-project-capacity-lib.sh"
+  printf '%s\n' 'project|other 1' 'project 2' > "$config/project-capacity"
+  fm_project_capacity_lookup "$config" project || fail "pipe-containing name aliased another project: $FM_PROJECT_CAPACITY_ERROR"
+  [ "$FM_PROJECT_CAPACITY" = 2 ] || fail 'a pipe-containing neighboring name changed the selected capacity'
+  printf '%s\n' 'project 1' 'other 2' 'project|other 3' > "$config/project-capacity"
+  fm_project_capacity_lookup "$config" 'project|other' || fail "two names aliased a pipe-containing project: $FM_PROJECT_CAPACITY_ERROR"
+  [ "$FM_PROJECT_CAPACITY" = 3 ] || fail 'the pipe-containing name did not retain its own capacity'
+  printf '%s\n' 'project|other 1' 'project|other 2' > "$config/project-capacity"
+  if fm_project_capacity_lookup "$config" 'project|other'; then
+    fail 'a genuinely duplicated pipe-containing name was accepted'
+  fi
+  assert_contains "$FM_PROJECT_CAPACITY_ERROR" 'a second time' 'duplicate pipe name did not retain the refusal'
+  pass 'capacity declarations compare whole literal project names, including pipes'
+}
+
 test_undeclared_capacity_keeps_dispatch_uncapped() {
   local case_dir home out rc=0
   case_dir=$(make_case undeclared task-c)
@@ -870,6 +889,7 @@ if [ "${1:-}" = metadata-handoff ]; then
   exit 0
 fi
 
+test_capacity_names_with_literal_pipes
 test_concurrent_spawns_cannot_both_take_the_last_place fresh
 test_concurrent_spawns_cannot_both_take_the_last_place restart
 test_undeclared_capacity_keeps_dispatch_uncapped

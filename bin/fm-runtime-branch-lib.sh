@@ -5,7 +5,12 @@
 firstmate_runtime_branch() {
   local dir=$1 configured branch
   if git -C "$dir" config --get firstmate.runtimeBranch >/dev/null 2>&1; then
-    configured=$(git -C "$dir" config --get-all firstmate.runtimeBranch 2>/dev/null) || return 1
+    # Preserve trailing empty values and newlines inside a configured value.
+    # Strip only Git's one record terminator, not command substitution's full
+    # trailing-newline run, before requiring exactly one valid branch name.
+    configured=$(git -C "$dir" config --get-all firstmate.runtimeBranch 2>/dev/null && printf '.') || return 1
+    configured=${configured%.}
+    configured=${configured%$'\n'}
     case "$configured" in ''|*$'\n'*) return 1 ;; esac
     git check-ref-format --branch "$configured" >/dev/null 2>&1 || return 1
     git -C "$dir" show-ref --verify --quiet "refs/heads/$configured" || return 1

@@ -40,7 +40,7 @@
 # the refusal of a forge on local-only.
 # Usage: fm-promote.sh <task-id> --mode <no-mistakes|direct-PR|local-only> --yolo <on|off> [--branch-prefix <prefix>] [--house-feature <name> --branch-base <main|house>] [--upstream-consent <host>/<owner>/<repo>]
 # --upstream-consent records the captain's one-off approval for this task to
-# publish to firstmate's own upstream repository; promotion applies the same
+# publish to a firstmate-lineage repository; promotion applies the same
 # self-repository publication gate as bin/fm-spawn.sh (bin/fm-role-lib.sh), so
 # a promoted scout cannot gain authority a fresh ship spawn would be refused.
 set -eu

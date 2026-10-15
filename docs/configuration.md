@@ -610,7 +610,7 @@ See [`fleet-ledger.md`](fleet-ledger.md) for the opt-in setup, record contract, 
 ## Firstmate role (config/firstmate-role)
 
 The optional local, gitignored `config/firstmate-role` declares this home's relationship to the firstmate repository itself.
-Every home defaults to **user/operator** with no firstmate-upstream publication authority: ordinary project work and `/updatefirstmate` pulls are unaffected, but without an explicit grant no ship task on the firstmate repository may carry a publishing contract.
+Every home defaults to **user/operator** with no firstmate-repository publication authority: ordinary project work and `/updatefirstmate` pulls are unaffected, but without an explicit grant no ship task on the firstmate repository may carry a publishing contract.
 For the agent's local diagnosis, workaround, and draft-only response to a firstmate bug, see [`firstmate-self-repo`](../.agents/skills/firstmate-self-repo/SKILL.md#when-a-firstmate-bug-surfaces-in-ordinary-use).
 
 The file holds exactly one directive line, with blank lines and `#` comment lines ignored:
@@ -618,7 +618,7 @@ The file holds exactly one directive line, with blank lines and `#` comment line
 | Directive | Effect |
 | --- | --- |
 | `user` | The default; identical to an absent file. |
-| `maintainer <host>/<owner>/<repo>` | This home may dispatch publishing work that targets the one named firstmate upstream. |
+| `maintainer <host>/<owner>/<repo>` | This home may dispatch publishing work that targets the one named firstmate repository. |
 
 A scope names the publication target repository (where a pull request lands), normalized to lowercase for comparison, not a push destination.
 A fork maintainer contributing to the parent repository uses per-task consent rather than a second standing scope.
@@ -1239,7 +1239,7 @@ This applies only to agents Firstmate launches; the captain's own primary Firstm
 ### Commit attribution
 
 The optional local, gitignored `config/keep-ai-trailers` presence flag opts this home into keeping AI co-author trailers on its launched workers.
-With the flag absent, every Claude launch's inline `--settings` JSON carries `"attribution":{"commit":"","pr":"","sessionUrl":false}`, every Devin worker config sets `"attribution": false`, and every fleet launch appends a pane-scoped `GIT_CONFIG` `core.hooksPath` entry pointing at `state/<id>.git-hooks`, where git's `commit-msg` hook strips known AI trailers even when a runtime injects them after the typed message.
+With the flag absent, every Claude launch's session `--settings` value carries `"attribution":{"commit":"","pr":"","sessionUrl":false}`, every Devin worker config sets `"attribution": false`, and every fleet launch appends a pane-scoped `GIT_CONFIG` `core.hooksPath` entry pointing at `state/<id>.git-hooks`, where git's `commit-msg` hook strips known AI trailers even when a runtime injects them after the typed message.
 The entry follows any `GIT_CONFIG_*` entries the worker inherits, so an inherited scoped `credential.helper` still applies to the worker and to the repository's own hooks, such as a git-lfs `pre-push`; an inherited `GIT_CONFIG_COUNT` that is not a decimal number, or that leaves no room for another entry within Git's signed int, stops the launch before the worker runs.
 When the flag is present, Claude launches omit those attribution-off settings, Devin worker configs keep the user config's `attribution` setting (Devin's default is on), and fleet launches do not install or select the strip hooks, so Git uses the repository's configured hooks directly.
 Because the upstream prior-art push guard is installed only through those pane hooks, a shipping worker in a home with the flag present also skips that guard.

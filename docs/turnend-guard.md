@@ -267,7 +267,8 @@ The registrations in detail:
 
 - Claude registers `bin/fm-turnend-guard.sh --claude` (which invokes the optional [context-refresh detector](context-refresh.md)), `bin/fm-claude-stop-autoarm.sh` with `asyncRewake: true` and `timeout: 28800`, and the dialog mirror in `.claude/settings.json`, anchored through `CLAUDE_PROJECT_DIR`.
   In a Claude secondmate home, `bin/fm-spawn.sh` writes a `.fm-busy-stop` pointer and gives the mate no `Stop` busy hook, so `--claude` is the only Stop writer of the parent home's busy record for that generation.
-  It records idle when it allows the Stop and busy when its exit 2 blocks it into a continuation, because Claude runs Stop hooks in parallel and that continuation fires no `UserPromptSubmit`.
+  Only the session that owns the home's session lock may publish that Stop outcome: it records idle when it allows the Stop and busy when its exit 2 blocks it into a continuation, because Claude runs Stop hooks in parallel and that continuation fires no `UserPromptSubmit`.
+  Rejected read-only sessions and foreign-host payloads leave the parent record untouched; `tests/fm-context-restart.test.sh` covers these exits and context-refresh continuation, while `tests/fm-busy-adapter-wiring.test.sh` covers allowed and blocked Stops in different hook orders.
   A home whose guard predates `.fm-busy-stop` cannot close the turn, so that launch keeps the ordinary `Stop` idle hook instead.
   [Runtime backend verification](verification/runtime-backends.md#secondmate-busy-contract) owns the live evidence.
 - Codex registers a `Stop` hook in `.codex/hooks.json`, anchors the executable to the hook process working directory, verifies a Firstmate-shaped hook-bearing root, and passes the original payload to the shared guard.

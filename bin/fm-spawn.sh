@@ -2337,15 +2337,9 @@ launch_template() {
   # alone disables the feature; keep both so a managed override of one still
   # leaves the other in force. Both are per-launch, scoped to this invocation only,
   # and never touch the captain's global ~/.claude/settings.json.
-  # Unless config/keep-ai-trailers is present, the same inline --settings JSON
-  # also carries the attribution policy
-  # ("attribution": {"commit": "", "pr": "", "sessionUrl": false}), which
-  # suppresses Claude Code's Co-Authored-By trailer, Claude-Session link, and
-  # generated-with line in commits and PR bodies. The captain sets that
-  # policy in the `user` settings scope, but a launched worker's settings
-  # sources are not guaranteed to load that scope, so a worker would
-  # otherwise run with attribution back on; carrying it per launch keeps the
-  # policy in force regardless of which settings scopes end up loaded.
+  # Carry attribution per launch because a worker's settings sources are not
+  # guaranteed to load the captain's user scope. docs/configuration.md
+  # "Commit attribution" owns the policy.
   # Claude Code's --settings flag takes one value, a file path or an inline
   # JSON string (https://code.claude.com/docs/en/cli-reference). A secondmate's
   # busy hooks share that value, in state/<id>.claude-settings.json, and the

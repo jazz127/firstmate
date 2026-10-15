@@ -3,7 +3,7 @@
 Empirical record for the merge watch and the merge path on Forgejo, alongside the existing GitHub and GitLab ones (`docs/gitlab-merge-watch.md`).
 Every finding here was verified against a real, disposable Forgejo instance rather than assumed from `tea --help`, because several of them contradict what the help text alone would suggest.
 All evidence below was collected on 2026-09-13.
-A project opts in with the `forge=forgejo` registry binding, which `bin/fm-project-mode.sh` owns; the watch and merge paths recorded here key off the pull request URL itself, and the binding decides only that a generated ship brief names `tea` rather than `gh-axi`.
+A project opts in with the `forge=forgejo` registry binding, which `bin/fm-project-mode.sh` owns; the watch and merge paths recorded here key off the pull request URL itself, and `bin/fm-dod-lib.sh` owns the binding's worker delivery contract.
 
 ## Versions
 
@@ -196,7 +196,7 @@ $ curl .../repos/fixture/fixture-repo/commits/<sha>/status
 {"state":"","sha":"","total_count":0,"statuses":null,...}
 ```
 
-This is read as `none`, the same way GitLab's null `head_pipeline` is read as `none` in `docs/gitlab-merge-watch.md`, and refuses the merge rather than treating an absent check as nothing to verify:
+With no preceding populated status page, this is read as `none`, the same way GitLab's null `head_pipeline` is read as `none` in `docs/gitlab-merge-watch.md`, and refuses the merge rather than treating an absent check as nothing to verify:
 
 ```
 $ fm-pr-merge.sh task-f2 https://localhost/fixture/fixture-repo/pulls/<open-mergeable-pr>
@@ -206,6 +206,7 @@ error: refusing to merge ...
 
 **Not verified here:** the shape of a populated (non-empty) combined-status response from a real Forgejo Actions run, its pagination, and the pull request `draft` field.
 Standing up a Forgejo Actions runner was out of scope for this pass; the merge gate requires the combined status's `state` field to read exactly `success`, matching GitHub's and GitLab's own state enums, and refuses on anything else including an unrecognized value - the same fail-safe-refuse posture as every other condition here.
+`tests/fm-pr-merge.test.sh` covers public merge behavior with synthetic status pages: a successful populated page followed by the explicitly present `statuses: null`, empty `state`, and `total_count: 0` terminal page preserves success, while a later API error object, missing fields, or malformed status response refuses the merge as unreadable.
 
 ## Registered `tea login`s used
 

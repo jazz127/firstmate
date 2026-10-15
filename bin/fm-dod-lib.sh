@@ -61,8 +61,9 @@
 # forge is none|gerrit|forgejo and defaults to none; bin/fm-project-mode.sh's
 # header owns what the registry binding means, and this file owns what each
 # forge changes for a WORKER (docs/gerrit-forge-integration.md is the gerrit
-# design). In the Definition of done, forgejo changes only the CLI a direct-PR
-# worker opens its pull request with: tea instead of gh-axi. A forge composes with
+# design). Forgejo uses tea for direct-PR publication, draft checks, and
+# no-mistakes published-body readback with the same evidence validator;
+# GitHub-only upstream prior-art preflight blocks are omitted. A forge composes with
 # the two modes that publish and is refused on local-only, which publishes
 # nothing. On gerrit the worker publishes one squashed change with
 # `gerrit-axi publish --squash` instead of opening a pull request: direct-PR does

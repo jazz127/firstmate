@@ -89,7 +89,7 @@
 # It defaults to squash on gerrit and is refused without it.
 # --upstream-consent <host>/<owner>/<repo> records the captain's one-off
 # approval for this one task to publish to that repository when it is
-# firstmate's own upstream. It renders as an `upstream-consent=` token on the
+# a firstmate-lineage repository. It renders as an `upstream-consent=` token on the
 # Delivery contract line, bin/fm-spawn.sh checks it against this home's role
 # authority and records it in the task record, and bin/fm-promote.sh honors it
 # the same way. Ship-only: a scout publishes nothing and a charter is not a

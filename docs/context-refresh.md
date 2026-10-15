@@ -7,7 +7,7 @@ The refresh is a deliberate durable handoff, not compaction and not restoration 
 ## Turn-boundary detection
 
 `.claude/settings.json` registers the synchronous Claude `Stop` guard with a 15-second host bound.
-The guard invokes `bin/fm-context-restart-claude-hook.sh` before deciding whether the turn can end, so a context-refresh continuation keeps a secondmate busy in its parent's record.
+The guard invokes `bin/fm-context-restart-claude-hook.sh` before deciding whether the turn can end; [turn-end guard](turnend-guard.md#harness-integrations) owns the secondmate Stop busy-state policy.
 Claude supplies a trusted payload containing the session id and transcript path after an assistant turn has completed.
 The hook streams the transcript to find the latest assistant usage, computes the current context total as the latest assistant usage's input, cache creation, cache read, and output token counts, and compares it with the validated budget.
 It never checks during a model turn, tool call, or captain input.

@@ -117,8 +117,9 @@ done
 
 # A Claude secondmate's home carries .fm-busy-stop (bin/fm-spawn.sh), and this
 # guard is then the only Stop writer of the parent home's busy record for that
-# gen: every exit records the Stop's outcome, busy when exit 2 blocks it into a
-# continuation and idle otherwise. Claude runs Stop hooks in parallel, so a
+# gen: only the session-lock owner's exit records the Stop's outcome, busy when
+# exit 2 blocks it into a continuation and idle otherwise. Rejected sessions
+# must not clear the active session's busy record. Claude runs Stop hooks in parallel, so a
 # second Stop writer could land after this one and flip the verdict.
 # shellcheck disable=SC2329 # Invoked by the EXIT trap below.
 record_parent_stop_state() {

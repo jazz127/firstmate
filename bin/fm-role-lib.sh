@@ -18,7 +18,7 @@
 # full-line # comments ignored), either
 #   user                                 - the default; may be omitted
 #   maintainer <host>/<owner>/<repo>     - this home develops firstmate for the
-#                                          named upstream
+#                                          named publication target
 # A scope names the publication target repository (where a PR lands), not a push
 # destination. In a secondmate home (marked by .fm-secondmate-home) a role file
 # authorizes nothing on its own: it is trusted only when the existing

@@ -958,6 +958,18 @@ _fm_status_kind() {
   case "$kind" in ship|scout|secondmate) printf '%s' "$kind" ;; *) printf unknown ;; esac
 }
 
+# Cheap admission shared by the whole-file and incremental readers. Routine
+# progress cannot alter the open set, so it need not fork the per-line fold.
+# An admitted line still passes every declaration/key check in that fold.
+_fm_decision_line_candidate() {  # <status-line> <resolve-verb> <held-verb>
+  local verb
+  status_line_verb "$1" verb
+  case "$verb" in
+    needs-decision|blocked|done|failed|"$2"|"$3") return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 _fm_decision_fold_line() {  # <open-set> <status-line> <resolve-verb> <held-verb> <kind>
   local open=$1 line=$2 resolve=$3 held=$4 kind=$5 verb key note unstamped
   # Both colon tests below ask where the head ends, the same question the note
@@ -1020,18 +1032,15 @@ _fm_decision_fold_line() {  # <open-set> <status-line> <resolve-verb> <held-verb
 # subprocess read, which exists for that function's much narrower payload-driven
 # path resolution rather than this directory-local glob.
 status_open_decisions() {  # <status-file> [<kind>]
-  local f=$1 kind=${2:-} line resolve held open='' verb
+  local f=$1 kind=${2:-} line resolve held open=''
   [ -f "$f" ] && [ -r "$f" ] && [ ! -L "$f" ] || return 0
   kind=$(_fm_status_kind "$f" "$kind")
   resolve=${FM_CLASSIFY_RESOLVE_VERB:-$FM_CLASSIFY_RESOLVE_VERB_DEFAULT}
   held=${FM_CLASSIFY_CAPTAIN_HELD_VERB:-$FM_CLASSIFY_CAPTAIN_HELD_VERB_DEFAULT}
   while IFS= read -r line || [ -n "$line" ]; do
-    status_line_verb "$line" verb
-    case "$verb" in
-      needs-decision|blocked|done|failed|"$resolve"|"$held")
-        open=$(_fm_decision_fold_line "$open" "$line" "$resolve" "$held" "$kind")
-        ;;
-    esac
+    if _fm_decision_line_candidate "$line" "$resolve" "$held"; then
+      open=$(_fm_decision_fold_line "$open" "$line" "$resolve" "$held" "$kind")
+    fi
   done < "$f"
   printf '%s' "$open"
 }
@@ -1495,7 +1504,9 @@ status_open_decisions_incremental() {  # <status-file> [<captured-end-offset>]
     resolve=${FM_CLASSIFY_RESOLVE_VERB:-$FM_CLASSIFY_RESOLVE_VERB_DEFAULT}
     held=${FM_CLASSIFY_CAPTAIN_HELD_VERB:-$FM_CLASSIFY_CAPTAIN_HELD_VERB_DEFAULT}
     while IFS= read -r line; do
-      open=$(_fm_decision_fold_line "$open" "$line" "$resolve" "$held" "$kind")
+      if _fm_decision_line_candidate "$line" "$resolve" "$held"; then
+        open=$(_fm_decision_fold_line "$open" "$line" "$resolve" "$held" "$kind")
+      fi
       offset=$((offset + ${#line} + 1))
     done < "$chunk_file"
     partial_line=$line

@@ -1271,6 +1271,40 @@ test_reconcile_numeric_ranges_are_decimal_and_bounded() {
   pass "inactive reconciliation accepts decimal bounds and refuses zero, overflow and out-of-range settings"
 }
 
+test_metadata_and_receipt_final_fields() {
+  local pending presented fingerprint=abcdef
+  make_world final-fields; bind_secondmate local
+  write_child "$MATE" child 'failed: final field check'
+  printf 'kind=scout\nmode=direct-PR\nmode=local-only\nyolo=on\nyolo=off' >> "$MATE/state/child.meta"
+  run_report "$MATE" child || fail "report refused metadata with an unterminated final field"
+  grep -Fq 'child child failed: final field check mode=local-only yolo=off' "$MAIN/state/mate.status" \
+    || fail "report did not use the last metadata fields"
+  ! grep -Fq ' pr=' "$MAIN/state/mate.status" || fail "earlier ship kind overrode the final scout kind"
+
+  mkdir -p "$MAIN/state/terminal-outcomes"
+  pending="$MAIN/state/terminal-outcomes/$fingerprint.pending"
+  presented="$MAIN/state/terminal-outcomes/$fingerprint.presented"
+  printf 'schema=fm-terminal-outcome.v1\nphase=presentation\nphase=upstream' > "$pending"
+  FM_HOME="$MAIN" FM_STATE_OVERRIDE="$MAIN/state" "$RECON" acknowledge "$fingerprint" \
+    || fail "acknowledgement refused a receipt outside presentation"
+  [ -f "$pending" ] && [ ! -e "$presented" ] || fail "acknowledgement selected an earlier receipt phase"
+  printf '\nphase=presentation' >> "$pending"
+  cp "$pending" "$WORLD/expected"
+  FM_HOME="$MAIN" FM_STATE_OVERRIDE="$MAIN/state" "$RECON" acknowledge "$fingerprint" \
+    || fail "acknowledgement refused an unterminated presentation phase"
+  [ ! -e "$pending" ] || fail "acknowledged receipt remained pending"
+  cmp -s "$WORLD/expected" "$presented" || fail "receipt fields changed during acknowledgement"
+  printf 'schema=fm-terminal-outcome.v1\nphase=pres\0entation\n' > "$pending"
+  cp "$pending" "$WORLD/expected-binary"
+  rm "$presented"
+  FM_HOME="$MAIN" FM_STATE_OVERRIDE="$MAIN/state" "$RECON" acknowledge "$fingerprint" \
+    || fail "binary receipt acknowledgement did not leave the receipt pending"
+  [ ! -e "$presented" ] || fail "a NUL byte was erased to accept a malformed phase"
+  cmp -s "$WORLD/expected-binary" "$pending" || fail "binary receipt was replaced"
+  pass "reports and acknowledgements use final fields, including unterminated fields"
+}
+
+test_metadata_and_receipt_final_fields
 test_reconcile_numeric_ranges_are_decimal_and_bounded
 test_unreadable_terminal_receipt_update phase
 test_unreadable_terminal_receipt_update notice

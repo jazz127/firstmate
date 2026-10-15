@@ -107,6 +107,8 @@ CREW_STATE_BIN="${FM_INACTIVE_CREW_STATE_BIN:-$SCRIPT_DIR/fm-crew-state.sh}"
 
 # shellcheck source=bin/fm-wake-lib.sh
 . "$SCRIPT_DIR/fm-wake-lib.sh"
+# shellcheck source=bin/fm-backend.sh
+. "$SCRIPT_DIR/fm-backend.sh"
 # shellcheck source=bin/fm-classify-lib.sh
 . "$SCRIPT_DIR/fm-classify-lib.sh"
 # shellcheck source=bin/fm-parent-channel-lib.sh
@@ -181,7 +183,7 @@ record_path() { printf '%s/%s.%s\n' "$OUTCOME_DIR" "$1" "$2"; }
 record_value() {
   local record=$1 key=$2
   [ -f "$record" ] && [ ! -L "$record" ] || return 0
-  grep "^${key}=" "$record" 2>/dev/null | tail -1 | cut -d= -f2- || true
+  meta_field "$record" "$key"
 }
 
 record_phase_set() {
@@ -318,7 +320,14 @@ write_scan_marker() { # <cursor>
 }
 
 meta_field() {
-  grep "^$2=" "$1" 2>/dev/null | tail -1 | cut -d= -f2- || true
+  # A normal Bash read can erase NULs and turn a malformed field into a valid
+  # phase or mode. Refuse binary records before using the shared text reader.
+  local binary_probe=''
+  # shellcheck disable=SC2034 # Only the NUL-delimiter status is needed.
+  if IFS= read -r -d '' binary_probe < "$1" 2>/dev/null; then
+    return 0
+  fi
+  fm_meta_get "$1" "$2"
 }
 
 meta_incarnation() { # <meta>

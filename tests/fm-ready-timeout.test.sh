@@ -357,6 +357,32 @@ test_activity_age_tracks_every_source() {
   pass 'every activity source participates in the newest timestamp, with future timestamps clamped to zero'
 }
 
+test_record_output_assignment() {
+  local state="$TMP_ROOT/record-assignment" record='' value=stale
+  mkdir -p "$state"
+  fm_ready_timeout_record_path "$state" rt record > "$state/output"
+  [ "$record" = "$(fm_ready_timeout_record_path "$state" rt)" ] || fail 'record path assignment differs from stdout'
+  [ ! -s "$state/output" ] || fail 'record path assignment printed output'
+  fm_ready_timeout_field "$record" result value
+  [ -z "$value" ] || fail 'missing record did not clear the output variable'
+  printf 'result=failed\nresult=stopped\nspawn_gen=old\nspawn_gen=current' > "$record"
+  fm_ready_timeout_field "$record" result value > "$state/output"
+  [ "$value" = stopped ] || fail 'field assignment did not preserve the last value'
+  [ ! -s "$state/output" ] || fail 'field assignment printed output'
+  fm_ready_timeout_field "$record" absent value
+  [ -z "$value" ] || fail 'missing field did not clear the output variable'
+  fm_ready_timeout_field "$record" spawn_gen value
+  [ "$value" = current ] || fail 'field assignment lost the unterminated last line'
+  printf 'spawn_gen=current' > "$state/rt.meta"
+  fm_ready_timeout_parked "$state" rt || fail 'matching stopped generation did not read parked'
+  printf 'spawn_gen=new' > "$state/rt.meta"
+  if fm_ready_timeout_parked "$state" rt; then fail 'a new generation remained parked'; fi
+  rm "$state/rt.meta"
+  if fm_ready_timeout_parked "$state" rt; then fail 'missing metadata read parked'; fi
+  pass 'record output assignment preserves last-value, missing-field and incarnation semantics'
+}
+
+test_record_output_assignment
 test_activity_age_tracks_every_source
 test_knob_parsing
 test_disabled_by_default

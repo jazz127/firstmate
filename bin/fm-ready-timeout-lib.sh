@@ -102,20 +102,30 @@ fm_ready_timeout_secs() {  # <config-dir>
   printf '%s' "$secs"
 }
 
-fm_ready_timeout_record_path() {  # <state-dir> <task-id>
-  printf '%s/%s.ready-timeout' "$1" "$2"
+fm_ready_timeout_record_path() {  # <state-dir> <task-id> [output-var]
+  if [ -n "${3:-}" ]; then
+    printf -v "$3" '%s/%s.ready-timeout' "$1" "$2"
+  else
+    printf '%s/%s.ready-timeout' "$1" "$2"
+  fi
 }
 
 # The last value of <key> in a record or task metadata file, or empty.
-fm_ready_timeout_field() {  # <file> <key>
-  local file=$1 key=$2 line value=''
-  [ -f "$file" ] || return 0
-  while IFS= read -r line || [ -n "$line" ]; do
-    case "$line" in
-      "$key="*) value=${line#*=} ;;
-    esac
-  done < "$file" 2>/dev/null || true
-  printf '%s' "$value"
+# Optional output-var avoids a subshell; _fm_ready_field_* names are reserved.
+fm_ready_timeout_field() {  # <file> <key> [output-var]
+  local _fm_ready_field_line _fm_ready_field_value=''
+  if [ -f "$1" ]; then
+    while IFS= read -r _fm_ready_field_line || [ -n "$_fm_ready_field_line" ]; do
+      case "$_fm_ready_field_line" in
+        "$2="*) _fm_ready_field_value=${_fm_ready_field_line#*=} ;;
+      esac
+    done < "$1" 2>/dev/null || true
+  fi
+  if [ -n "${3:-}" ]; then
+    printf -v "$3" '%s' "$_fm_ready_field_value"
+  else
+    printf '%s' "$_fm_ready_field_value"
+  fi
 }
 
 # Atomically replace the task's record. Returns non-zero when it cannot be
@@ -137,13 +147,16 @@ fm_ready_timeout_record_write() {  # <state-dir> <task-id> <result> <spawn-gen> 
 # timeout: a `stopped` record exists and names the spawn_gen its task record
 # still carries.
 fm_ready_timeout_parked() {  # <state-dir> <task-id>
-  local state=$1 id=$2 record meta
-  record=$(fm_ready_timeout_record_path "$state" "$id")
+  local state=$1 id=$2 record meta result record_gen meta_gen
+  fm_ready_timeout_record_path "$state" "$id" record
   [ -f "$record" ] || return 1
   meta="$state/$id.meta"
   [ -f "$meta" ] || return 1
-  [ "$(fm_ready_timeout_field "$record" result)" = stopped ] || return 1
-  [ "$(fm_ready_timeout_field "$record" spawn_gen)" = "$(fm_ready_timeout_field "$meta" spawn_gen)" ]
+  fm_ready_timeout_field "$record" result result
+  [ "$result" = stopped ] || return 1
+  fm_ready_timeout_field "$record" spawn_gen record_gen
+  fm_ready_timeout_field "$meta" spawn_gen meta_gen
+  [ "$record_gen" = "$meta_gen" ]
 }
 
 _fm_ready_timeout_mtime() {  # <path> <platform>

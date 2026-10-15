@@ -1329,20 +1329,21 @@ FM_OPEN_DECISIONS_FOLD_VERSION=10
 
 # Portable device:inode identity for the rotation/recreation check below.
 _fm_open_decisions_file_ident() {  # <file> -> strongest available identity
-  local f=$1 epoch birth ident
+  local f=$1 epoch birth ident record
   if [ -n "${FM_STATUS_IDENTITY_READER:-}" ]; then
     "$FM_STATUS_IDENTITY_READER" "$f"
     return
   fi
+  # Capture device, inode, and birth time together: this runs for every cursor
+  # read and three independent stats both cost forks and can straddle rotation.
   if [ "$_FM_CLASSIFY_UNAME_S" = Darwin ]; then
-    ident=$(LC_ALL=C /usr/bin/stat -f '%d:%i' "$f" 2>/dev/null) || return 1
-    epoch=$(LC_ALL=C /usr/bin/stat -f '%B' "$f" 2>/dev/null) || epoch=0
-    if [ "$epoch" != 0 ]; then birth=$(LC_ALL=C /usr/bin/stat -f '%FB' "$f" 2>/dev/null) || birth=''; else birth=''; fi
+    record=$(LC_ALL=C /usr/bin/stat -f $'%d:%i\t%B\t%FB' "$f" 2>/dev/null) || return 1
   else
-    ident=$(LC_ALL=C stat -c '%d:%i' "$f" 2>/dev/null) || return 1
-    epoch=$(LC_ALL=C stat -c '%W' "$f" 2>/dev/null) || epoch=0
-    if [ "$epoch" != 0 ]; then birth=$(LC_ALL=C stat -c '%w' "$f" 2>/dev/null) || birth=''; else birth=''; fi
+    record=$(LC_ALL=C stat -c $'%d:%i\t%W\t%w' "$f" 2>/dev/null) || return 1
   fi
+  case "$record" in *$'\n'*) return 1 ;; esac
+  IFS=$'\t' read -r ident epoch birth <<< "$record"
+  [ "$epoch" != 0 ] || birth=''
   case "$ident$birth" in *$'\t'*|*$'\n'*|'') return 1 ;; esac
   if [ -n "$birth" ]; then printf 'strong:%s:%s' "$ident" "$birth"; else printf 'weak:%s' "$ident"; fi
 }

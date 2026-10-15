@@ -546,6 +546,7 @@ run_secondmate_stop_guard() { # <sm-home>
   local fixture_claude="$1/fixture-harness/claude"
   mkdir -p "$(dirname "$fixture_claude")"
   [ -e "$fixture_claude" ] || ln -s /bin/bash "$fixture_claude"
+  # shellcheck disable=SC2016 # Expand variables in the fixture shell.
   printf '{"stop_hook_active":false,"session_id":"sm-guard"}' \
     | CLAUDECODE=1 FM_ROOT_OVERRIDE="$1" FM_CLAUDE_AUTOARM_SYNC_WAIT_MS=100 \
       "$fixture_claude" -c '

@@ -1240,6 +1240,38 @@ test_unreadable_terminal_receipt_update() {
   pass "unreadable receipt $operation updates refuse and preserve the complete receipt"
 }
 
+test_reconcile_numeric_ranges_are_decimal_and_bounded() {
+  local key value values rc
+  make_world numeric-ranges
+  for key in FM_INACTIVE_RECONCILE_BUDGET_SECS FM_INACTIVE_RECONCILE_SECS; do
+    case "$key" in
+      FM_INACTIVE_RECONCILE_BUDGET_SECS) values='1 08 30' ;;
+      *) values='60 060 1800' ;;
+    esac
+    for value in $values; do
+      env FM_HOME="$MAIN" FM_STATE_OVERRIDE="$MAIN/state" \
+        FM_INACTIVE_RECONCILE_SECS=900 FM_INACTIVE_RECONCILE_BUDGET_SECS=10 \
+        "$key=$value" "$RECON" scan --startup > "$WORLD/out" 2> "$WORLD/err" \
+        || fail "valid decimal setting $key=$value refused the scan"
+    done
+    case "$key" in
+      FM_INACTIVE_RECONCILE_BUDGET_SECS) values='00 31 184467440737095516160000' ;;
+      *) values='59 1801 184467440737095516160000' ;;
+    esac
+    for value in $values; do
+      rc=0
+      env FM_HOME="$MAIN" FM_STATE_OVERRIDE="$MAIN/state" \
+        FM_INACTIVE_RECONCILE_SECS=900 FM_INACTIVE_RECONCILE_BUDGET_SECS=10 \
+        "$key=$value" "$RECON" scan --startup > "$WORLD/out" 2> "$WORLD/err" || rc=$?
+      [ "$rc" = 2 ] || fail "invalid setting $key=$value did not return its configuration refusal"
+      assert_contains "$(cat "$WORLD/err")" "$key must be a whole number from" \
+        "invalid setting lost its range diagnostic"
+    done
+  done
+  pass "inactive reconciliation accepts decimal bounds and refuses zero, overflow and out-of-range settings"
+}
+
+test_reconcile_numeric_ranges_are_decimal_and_bounded
 test_unreadable_terminal_receipt_update phase
 test_unreadable_terminal_receipt_update notice
 test_main_direct_terminal_presentation_receipt

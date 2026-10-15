@@ -125,7 +125,8 @@ case "$FM_INACTIVE_RECONCILE_SECS" in
     exit 2
     ;;
 esac
-if [ "$FM_INACTIVE_RECONCILE_SECS" -lt 60 ] || [ "$FM_INACTIVE_RECONCILE_SECS" -gt 1800 ]; then
+if ! [ "$FM_INACTIVE_RECONCILE_SECS" -ge 60 ] 2>/dev/null \
+  || ! [ "$FM_INACTIVE_RECONCILE_SECS" -le 1800 ] 2>/dev/null; then
   printf 'fm-inactive-reconcile: FM_INACTIVE_RECONCILE_SECS must be a whole number from 60 to 1800\n' >&2
   exit 2
 fi
@@ -136,10 +137,12 @@ case "$FM_INACTIVE_RECONCILE_BUDGET_SECS" in
     exit 2
     ;;
 esac
-if [ "$FM_INACTIVE_RECONCILE_BUDGET_SECS" -gt 30 ]; then
+if ! [ "$FM_INACTIVE_RECONCILE_BUDGET_SECS" -ge 1 ] 2>/dev/null \
+  || ! [ "$FM_INACTIVE_RECONCILE_BUDGET_SECS" -le 30 ] 2>/dev/null; then
   printf 'fm-inactive-reconcile: FM_INACTIVE_RECONCILE_BUDGET_SECS must be a whole number from 1 to 30\n' >&2
   exit 2
 fi
+FM_INACTIVE_RECONCILE_BUDGET_SECS=$((10#$FM_INACTIVE_RECONCILE_BUDGET_SECS))
 
 if [ "$(uname)" = Darwin ]; then
   file_mtime() { /usr/bin/stat -f %m "$1" 2>/dev/null; }

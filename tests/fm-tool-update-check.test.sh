@@ -110,6 +110,53 @@ run_check() {
 
 # --- the regression this script exists for ----------------------------------
 
+test_positive_probe_and_sweep_durations() {
+  local shell variable value maximum expected home dir out bound rc
+  for shell in bash /bin/bash; do
+    for variable in FM_TOOL_UPDATE_BUDGET_SECS FM_TOOL_UPDATE_PROBE_SECS; do
+      case "$variable" in FM_TOOL_UPDATE_BUDGET_SECS) maximum=120 ;; *) maximum=30 ;; esac
+      for value in 0 00 000 8 08 9 09 10 010 "$maximum" "0$maximum" "$((maximum + 1))" \
+        10000000000000000000 18446744073709551616; do
+        home=$(make_home "positive-duration-${shell//\//-}-$variable-$value")
+        dir="$home/bin"
+        make_counting_copy "$dir" "$TOOL" 'fixture 1.0' "$home/probes"
+        write_config "$home" "{\"tools\":[{\"name\":\"fixture\",\"command\":\"$TOOL\"}]}"
+        cat > "$dir/date" <<'DATE'
+#!/bin/sh
+if [ "$*" = +%s ]; then printf '1800000000\n'; else exec /bin/date "$@"; fi
+DATE
+        cat > "$dir/timeout" <<'TIMEOUT'
+#!/bin/sh
+[ "$1" = -k ] && [ "$2" = 1 ] || exit 99
+printf '%s\n' "$3" >> "$BOUND_LOG"
+shift 3
+exec "$@"
+TIMEOUT
+        chmod +x "$dir/date" "$dir/timeout"
+        rc=0
+        out=$(FM_HOME="$home" PATH="$(fixture_path "$dir")" BOUND_LOG="$home/bounds" \
+          FM_CHECK_TIMEOUT=300 FM_TOOL_UPDATE_INTERVAL=0 FM_TOOL_UPDATE_BUDGET_SECS=60 \
+          FM_TOOL_UPDATE_PROBE_SECS=30 env "$variable=$value" "$shell" "$CHECK" check 2>&1) || rc=$?
+        if [ "${#value}" -gt 4 ] || [ "$value" -eq 0 ] || [ "$value" -gt "$maximum" ]; then
+          expect_code 2 "$rc" "$shell $variable=$value must refuse an out-of-range duration: $out"
+          assert_contains "$out" "$variable must be a whole number from 1 to " 'range refusal lost its reason'
+          [ ! -e "$home/bounds" ] && [ ! -e "$home/probes" ] || fail 'invalid duration started a probe'
+        else
+          expect_code 0 "$rc" "$shell $variable=$value failed: $out"
+          [ -z "$out" ] || fail "a successful current-tool probe reported a finding: $out"
+          bound=$(cat "$home/bounds")
+          case "$bound" in ''|*[!0-9]*) fail "expected exactly one numeric bound, got $bound" ;; esac
+          expected=$value
+          [ "$expected" -le 30 ] || expected=30
+          [ "$bound" -eq "$expected" ] || fail "$shell $variable=$value selected probe bound $bound"
+          assert_equals probed "$(cat "$home/probes")" 'the duration fixture did not probe exactly once'
+        fi
+      done
+    done
+  done
+  pass 'probe and sweep durations reject out-of-range values and apply positive decimal bounds'
+}
+
 test_decimal_watcher_timeout() {
   local shell value timeout home dir out expected
   for shell in bash /bin/bash; do
@@ -1080,6 +1127,7 @@ test_armed_check_wakes_the_watcher_with_the_skew_report() {
   pass "the armed check reaches the watcher as an ordinary check wake"
 }
 
+test_positive_probe_and_sweep_durations
 test_decimal_watcher_timeout
 test_path_skew_is_reported_from_every_copy
 test_newest_copy_first_on_path_is_silent

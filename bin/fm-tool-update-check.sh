@@ -133,7 +133,9 @@ case "$PROBE_SECS" in
     exit 2
     ;;
 esac
-if [ "$PROBE_SECS" -gt 30 ]; then
+PROBE_SECS=${PROBE_SECS#"${PROBE_SECS%%[!0]*}"}
+PROBE_SECS=${PROBE_SECS:-0}
+if [ "${#PROBE_SECS}" -gt 2 ] || [ "$PROBE_SECS" -lt 1 ] || [ "$PROBE_SECS" -gt 30 ]; then
   printf 'fm-tool-update-check: FM_TOOL_UPDATE_PROBE_SECS must be a whole number from 1 to 30\n' >&2
   exit 2
 fi
@@ -145,7 +147,9 @@ case "$BUDGET_SECS" in
     exit 2
     ;;
 esac
-if [ "$BUDGET_SECS" -gt 120 ]; then
+BUDGET_SECS=${BUDGET_SECS#"${BUDGET_SECS%%[!0]*}"}
+BUDGET_SECS=${BUDGET_SECS:-0}
+if [ "${#BUDGET_SECS}" -gt 3 ] || [ "$BUDGET_SECS" -lt 1 ] || [ "$BUDGET_SECS" -gt 120 ]; then
   printf 'fm-tool-update-check: FM_TOOL_UPDATE_BUDGET_SECS must be a whole number from 1 to 120\n' >&2
   exit 2
 fi

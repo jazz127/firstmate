@@ -8,6 +8,7 @@
 # exactly two words, because tests/fm-secondmate-safety.test.sh and
 # tests/fm-secondmate-lifecycle-e2e.test.sh assert that shape with strict
 # string equality.
+# Also covers literal project names when AWK would otherwise decode backslashes.
 set -u
 
 # shellcheck source=tests/lib.sh
@@ -27,6 +28,9 @@ cat > "$DATA/projects.md" <<'EOF'
 - kept [local-only forge=forgejo] - a forge on a mode that publishes nothing (added 2026-01-01)
 - colon [no-mistakes forge:forgejo] - a colon-spelled token is not a forge binding (added 2026-01-01)
 - glabbed [no-mistakes forge=gitlab] - gitlab is not a forge value (added 2026-01-01)
+- tools\new [local-only branch=private/] - a literal backslash-n in the name (added 2026-01-01)
+- tools\tree [local-only branch=private/] - a literal backslash-t in the name (added 2026-01-01)
+- tools\branch [direct-PR forge=forgejo +yolo] - a literal backslash-b in the name (added 2026-01-01)
 EOF
 
 run_mode() {
@@ -82,5 +86,14 @@ pass "fm-project-mode: a value outside none|gerrit|forgejo is refused and the re
 [ "$(FM_DATA_OVERRIDE="$TMP_ROOT/no-such-dir" "$PROJECT_MODE" --forge legacy 2>/dev/null)" = "none" ] \
   || fail "an absent registry file must default --forge to none"
 pass "fm-project-mode: a missing project or absent registry defaults --forge to none"
+
+for name in 'tools\new' 'tools\tree'; do
+  [ "$(run_mode "$name")" = 'local-only off' ] || fail "literal backslash name lost its local-only posture: $name"
+  [ "$(FM_DATA_OVERRIDE="$DATA" "$PROJECT_MODE" --branch-prefix "$name")" = private/ ] \
+    || fail "literal backslash name lost its branch prefix: $name"
+done
+[ "$(run_mode 'tools\branch')" = 'direct-PR on' ] || fail "literal backslash name lost its registered posture"
+[ "$(run_forge 'tools\branch')" = forgejo ] || fail "literal backslash name lost its registered forge"
+pass "fm-project-mode: backslashes in project names remain literal across posture, prefix, and forge queries"
 
 echo "# fm-project-mode.test.sh: all assertions passed"

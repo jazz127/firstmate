@@ -130,7 +130,10 @@ fi
 # token, so an empty value survives the split), or nothing if the project is
 # absent. Every other token beside the mode is ignored, exactly as before either
 # annotation existed.
-parsed=$(awk -v n="$NAME" '
+# Pass the name as raw environment data: awk -v decodes escapes such as \n and
+# \t, which would make a literal backslash name miss its registered posture.
+parsed=$(FM_PROJECT_MODE_QUERY="$NAME" awk '
+  BEGIN { n = ENVIRON["FM_PROJECT_MODE_QUERY"] }
   function dist(x, y,   i, j, lx, ly, d, c, v) {
     lx = length(x); ly = length(y);
     for (i=0; i<=lx; i++) d[i,0] = i;

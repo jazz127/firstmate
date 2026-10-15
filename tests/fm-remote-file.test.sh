@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Direct transfer CLI contracts, without a remote transport or worker runtime.
+# Direct transfer and receipt CLI contracts, without a remote transport or worker runtime.
 set -u
 
 # shellcheck source=tests/lib.sh
@@ -73,5 +73,46 @@ test_limit_refusals_preserve_payload() {
   pass "zero and oversized limits are refused and byte bounds preserve committed content"
 }
 
+test_receipt_hashes_use_file_contents() {
+  if ! command -v tasks-axi >/dev/null 2>&1; then
+    printf 'skip: tasks-axi not found for direct receipt cases\n'
+    return 0
+  fi
+  local name home bytes hash delivered out
+  for name in receipt-plain 'receipt-back\slash'; do
+    home="$TMP_ROOT/$name"
+    mkdir -p "$home/bin" "$home/data"
+    printf 'fixture\n' > "$home/AGENTS.md"
+    printf 'fixture\n' > "$home/.fm-secondmate-home"
+    printf '## Queued\n\n## Done\n' > "$home/data/backlog.md"
+    printf '## Queued\n- [ ] receipt-item - original (repo: fixture)\n\n## Done\n' > "$home/expected"
+    printf '## Queued\n- [ ] receipt-item - tampered (repo: fixture)\n\n## Done\n' > "$home/tampered"
+    bytes=$(LC_ALL=C wc -c < "$home/expected" | tr -d ' ')
+    hash=$(payload_hash < "$home/expected")
+    delivered="$home/state/handoff/fixture.outbox.md"
+    run_transfer "$home" put state/handoff/fixture.outbox.md 4096 "$bytes" "$hash" 1 \
+      < "$home/expected" > "$home/put.out" || fail "could not upload the receipt fixture"
+    cp "$home/tampered" "$delivered"
+    if FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" "$ROOT/bin/fm-backlog-receive.sh" \
+      state/handoff/fixture.outbox.md "$bytes" "$hash" 1 > "$home/out" 2> "$home/err"; then
+      fail "receipt accepted changed payload bytes"
+    fi
+    assert_grep 'digest does not match' "$home/err" 'changed bytes must fail the digest check'
+    cmp -s "$home/tampered" "$delivered" || fail 'refused receipt changed the delivered scratch'
+    assert_no_grep 'receipt-item' "$home/data/backlog.md" 'refused receipt changed the backlog'
+
+    run_transfer "$home" put state/handoff/fixture.outbox.md 4096 "$bytes" "$hash" 2 \
+      < "$home/expected" > "$home/put.out" || fail "could not restore the committed receipt bytes"
+    out=$(FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" "$ROOT/bin/fm-backlog-receive.sh" \
+      state/handoff/fixture.outbox.md "$bytes" "$hash" 2 2>&1) \
+      || fail "receipt rejected matching content in '$name': $out"
+    assert_contains "$out" 'received: fixture moved=1 already=0' 'receipt did not move the queued item'
+    assert_grep 'receipt-item - original' "$home/data/backlog.md" 'receipt did not preserve the item'
+    assert_absent "$delivered" 'successful receipt retained the delivered scratch'
+  done
+  pass 'receipt digests bind file contents across ordinary and backslash home paths'
+}
+
 test_decimal_limits
 test_limit_refusals_preserve_payload
+test_receipt_hashes_use_file_contents

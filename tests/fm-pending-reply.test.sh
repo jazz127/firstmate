@@ -1560,6 +1560,8 @@ test_beacon_refreshes_between_selected_remote_records() (
   seen="$home/first-observation"
   stale="$home/stale-observation"
   touch -t 200001010000 "$oldbeat" "$beat"
+  # Called by the production tick through its overridable observation helper.
+  # shellcheck disable=SC2329
   fm_pending_reply_remote_observation() {
     if [ -e "$seen" ]; then
       [ "$beat" -nt "$oldbeat" ] || : > "$stale"

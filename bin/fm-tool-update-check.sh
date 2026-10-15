@@ -168,6 +168,8 @@ CHECK_TIMEOUT=${FM_CHECK_TIMEOUT:-30}
 case "$CHECK_TIMEOUT" in
   ''|*[!0-9]*|0) CHECK_TIMEOUT=30 ;;
 esac
+CHECK_TIMEOUT=${CHECK_TIMEOUT#"${CHECK_TIMEOUT%%[!0]*}"}
+[ -n "$CHECK_TIMEOUT" ] || CHECK_TIMEOUT=30
 # The last probe of a sweep can end this far past the deadline, so that is what
 # the budget has to leave the watcher's own bound.
 BUDGET_MAX=$((CHECK_TIMEOUT - PROBE_MIN_SECS - CLOCK_ROUNDING_SECS - KILL_GRACE_SECS))

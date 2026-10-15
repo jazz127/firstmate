@@ -110,6 +110,31 @@ run_check() {
 
 # --- the regression this script exists for ----------------------------------
 
+test_decimal_watcher_timeout() {
+  local shell value timeout home dir out expected
+  for shell in bash /bin/bash; do
+    for value in 0 00 000 8 08 9 09 10 010; do
+      case "$value" in
+        0|00|000) timeout=30 ;;
+        8|08) timeout=8 ;;
+        9|09) timeout=9 ;;
+        10|010) timeout=10 ;;
+      esac
+      home=$(make_home "decimal-timeout-${shell//\//-}-$value")
+      dir="$home/bin"
+      make_counting_copy "$dir" "$TOOL" 'fixture 1.0' "$home/probes"
+      write_config "$home" "{\"tools\":[{\"name\":\"fixture\",\"command\":\"$TOOL\"}]}"
+      out=$(FM_HOME="$home" PATH="$(fixture_path "$dir")" FM_CHECK_TIMEOUT="$value" \
+        FM_TOOL_UPDATE_INTERVAL=0 FM_TOOL_UPDATE_BUDGET_SECS=60 \
+        "$shell" "$CHECK" check 2>&1) || fail "$shell rejected timeout $value: $out"
+      expected="tool updates: sweep budget 60s cut to $((timeout - 3))s to stay inside the watcher check timeout of ${timeout}s"
+      assert_equals "$expected" "$out" "$shell timeout $value chose an inconsistent budget"
+      assert_equals probed "$(cat "$home/probes")" 'the bounded check did not probe exactly once'
+    done
+  done
+  pass "watcher timeout padding preserves decimal budgets and the zero-input default"
+}
+
 test_path_skew_is_reported_from_every_copy() {
   local home stale fresh out report
   home=$(make_home skew)
@@ -1055,6 +1080,7 @@ test_armed_check_wakes_the_watcher_with_the_skew_report() {
   pass "the armed check reaches the watcher as an ordinary check wake"
 }
 
+test_decimal_watcher_timeout
 test_path_skew_is_reported_from_every_copy
 test_newest_copy_first_on_path_is_silent
 test_identical_versions_are_silent

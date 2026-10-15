@@ -543,9 +543,15 @@ test_secondmate_claude_spawn_arms_busy_for_the_stall_gate() {
 }
 
 run_secondmate_stop_guard() { # <sm-home>
+  local fixture_claude="$1/fixture-harness/claude"
+  mkdir -p "$(dirname "$fixture_claude")"
+  [ -e "$fixture_claude" ] || ln -s /bin/bash "$fixture_claude"
   printf '{"stop_hook_active":false,"session_id":"sm-guard"}' \
     | CLAUDECODE=1 FM_ROOT_OVERRIDE="$1" FM_CLAUDE_AUTOARM_SYNC_WAIT_MS=100 \
-      bash "$ROOT/bin/fm-turnend-guard.sh" --claude >/dev/null 2>&1
+      "$fixture_claude" -c '
+        printf "%s\n" "$$" > "$FM_ROOT_OVERRIDE/state/.lock"
+        "$1/bin/fm-turnend-guard.sh" --claude
+      ' _ "$ROOT" >/dev/null 2>&1
 }
 
 run_secondmate_local_stop_hooks() { # <settings-file>
@@ -833,6 +839,11 @@ test_secondmate_codex_and_grok_do_not_arm_a_parent_turnend() {
   [ "$out" = "busy grok-regex" ] || fail "grok secondmate must still classify from its tail, got '$out'"
   pass "codex and grok secondmates stay on their existing verdicts and do not emit a parent turn-end"
 }
+
+if [ "$#" -gt 0 ]; then
+  for test_case in "$@"; do "$test_case"; done
+  exit 0
+fi
 
 test_secondmate_claude_spawn_arms_busy_for_the_stall_gate
 test_raw_secondmate_launch_writes_no_busy_wiring

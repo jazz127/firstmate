@@ -123,8 +123,8 @@ done
 # shellcheck disable=SC2329 # Invoked by the EXIT trap below.
 record_parent_stop_state() {
   local status=$? pointer="$FM_ROOT/.fm-busy-stop" key value writer='' state='' id='' gen='' verdict=idle event=stop
-  [ "$CLAUDE_MODE" -eq 1 ] || return 0
   [ -f "$pointer" ] && [ ! -L "$pointer" ] || return 0
+  fm_session_lock_owned_by_self "$STATE" || return 0
   while IFS='=' read -r key value; do
     case "$key" in
       writer) writer=$value ;;
@@ -140,7 +140,6 @@ record_parent_stop_state() {
   fi
   "$writer" apply "$state" "$id" "$verdict" --gen "$gen" --source claude-hook --event "$event" >/dev/null 2>&1 || true
 }
-trap record_parent_stop_state EXIT
 
 # shellcheck source=bin/fm-supervision-lib.sh
 . "$SCRIPT_DIR/fm-supervision-lib.sh"
@@ -166,12 +165,6 @@ command -v jq >/dev/null 2>&1 || exit 0
 # continuation path (docs/turnend-guard.md "Harness integrations").
 if [ "$CURSOR_MODE" -eq 0 ] && fm_hook_payload_is_foreign_host "$PAYLOAD"; then
   exit 0
-fi
-
-if [ "$CLAUDE_MODE" -eq 1 ]; then
-  printf '%s' "$PAYLOAD" | "$SCRIPT_DIR/fm-context-restart-claude-hook.sh"
-  context_status=$?
-  [ "$context_status" -ne 2 ] || exit 2
 fi
 
 STOP_HOOK_ACTIVE=$(printf '%s' "$PAYLOAD" | jq -r '
@@ -207,6 +200,10 @@ fm_primary_scope_matches "$FM_ROOT" "$STATE" || exit 0
 if [ "$CLAUDE_MODE" -eq 1 ]; then
   # shellcheck source=bin/fm-session-lock-lib.sh
   . "$SCRIPT_DIR/fm-session-lock-lib.sh"
+  trap record_parent_stop_state EXIT
+  printf '%s' "$PAYLOAD" | "$SCRIPT_DIR/fm-context-restart-claude-hook.sh"
+  context_status=$?
+  [ "$context_status" -ne 2 ] || exit 2
 fi
 
 BUDGET_FILE="$STATE/.turnend-claude-blocks"

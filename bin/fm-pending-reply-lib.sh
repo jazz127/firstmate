@@ -1734,7 +1734,7 @@ fm_pending_reply_tick() {  # <state-dir> [watcher-beacon]
         continue
       fi
       if [ -f "$meta" ]; then
-        sm_home=$(fm_meta_get "$meta" home)
+        fm_meta_get "$meta" home sm_home
         if [ -n "$sm_home" ]; then
           fm_pending_reply_detect_wrong_home "$state" "$corr" "$sm_home" || true
           if fm_pending_reply_restatement_copy_same_basename "$state" "$corr" "$sm_home"; then
@@ -1763,11 +1763,11 @@ fm_pending_reply_tick() {  # <state-dir> [watcher-beacon]
     harness=
     remote_host=
     if [ -f "$meta" ]; then
-      remote_host=$(fm_meta_get "$meta" remote_host)
+      fm_meta_get "$meta" remote_host remote_host
       backend=$(fm_backend_of_meta "$meta")
       target=$(fm_backend_target_of_meta "$meta")
-      sm_home=$(fm_meta_get "$meta" home)
-      harness=$(fm_meta_get "$meta" harness)
+      fm_meta_get "$meta" home sm_home
+      fm_meta_get "$meta" harness harness
       if [ -n "$remote_host" ]; then
         target="remote:$task_id"
         sm_home=

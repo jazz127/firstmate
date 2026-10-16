@@ -129,6 +129,24 @@ fm_task_inbox_busy_max() {
   printf '%s' "$m"
 }
 
+# Compare nonnegative decimal strings without evaluating them as shell integers.
+_fm_task_inbox_decimal_ge() {  # <left> <right>
+  local inbox_left=${1-} inbox_right=${2-}
+  local LC_ALL=C
+  case "$inbox_left" in ''|*[!0-9]*) return 1 ;; esac
+  case "$inbox_right" in ''|*[!0-9]*) return 1 ;; esac
+  inbox_left=${inbox_left#"${inbox_left%%[!0]*}"}
+  inbox_right=${inbox_right#"${inbox_right%%[!0]*}"}
+  inbox_left=${inbox_left:-0}
+  inbox_right=${inbox_right:-0}
+  if [ "${#inbox_left}" -ne "${#inbox_right}" ]; then
+    [ "${#inbox_left}" -gt "${#inbox_right}" ]
+  else
+    # shellcheck disable=SC2071 # Equal-length decimal strings may exceed shell integers.
+    [[ "$inbox_left" = "$inbox_right" || "$inbox_left" > "$inbox_right" ]]
+  fi
+}
+
 # Saturate numeric overflow so a spent retry budget cannot start over.
 _fm_task_inbox_increment_count() {  # <stored-count> <output-variable>
   local _fm_inbox_count=${1-}
@@ -136,9 +154,7 @@ _fm_task_inbox_increment_count() {  # <stored-count> <output-variable>
   case "$_fm_inbox_count" in ''|*[!0-9]*) _fm_inbox_count=0 ;; esac
   _fm_inbox_count=${_fm_inbox_count#"${_fm_inbox_count%%[!0]*}"}
   _fm_inbox_count=${_fm_inbox_count:-0}
-  # shellcheck disable=SC2071 # Equal-length digit strings may exceed shell integers.
-  if [ "${#_fm_inbox_count}" -gt 19 ] ||
-    { [ "${#_fm_inbox_count}" -eq 19 ] && [[ "$_fm_inbox_count" > 9223372036854775806 ]]; }; then
+  if _fm_task_inbox_decimal_ge "$_fm_inbox_count" 9223372036854775807; then
     _fm_inbox_count=9223372036854775807
   else
     _fm_inbox_count=$((_fm_inbox_count + 1))
@@ -474,7 +490,7 @@ fm_task_inbox_clear_retry() {  # <state-dir> <task-id> <record-path>
 # An empty inbox also resets the ladder bookkeeping so the next message starts
 # a fresh ladder.
 fm_task_inbox_due_action() {  # <state-dir> <task-id>
-  local dir oldest base now grace max ladder rec_base count last
+  local dir oldest base now grace max ladder rec_base count last age
   dir=$(fm_task_inbox_dir "$1" "$2")
   if ! oldest=$(fm_task_inbox_oldest_unhandled "$1" "$2"); then
     rm -f "$dir/.ring-state" "$dir/.escalated" "$dir/.busy-state" 2>/dev/null || true
@@ -484,7 +500,7 @@ fm_task_inbox_due_action() {  # <state-dir> <task-id>
       base=$(cat "$dir/.retry-ring" 2>/dev/null || true)
       if ! fm_task_inbox_seq_of "$base" >/dev/null || [ ! -f "$dir/$base" ]; then
         rm -f "$dir/.retry-ring" 2>/dev/null || true
-      elif [ "$(fm_path_age "$dir/.retry-ring")" -ge "$(fm_task_inbox_grace_secs)" ]; then
+      elif _fm_task_inbox_decimal_ge "$(fm_path_age "$dir/.retry-ring")" "$(fm_task_inbox_grace_secs)"; then
         printf 'retry %s' "$dir/$base"
         return 0
       fi
@@ -494,7 +510,7 @@ fm_task_inbox_due_action() {  # <state-dir> <task-id>
   fi
   base=${oldest##*/}
   grace=$(fm_task_inbox_grace_secs)
-  if [ "$(fm_path_age "$oldest")" -lt "$grace" ]; then
+  if ! _fm_task_inbox_decimal_ge "$(fm_path_age "$oldest")" "$grace"; then
     printf 'quiet'
     return 0
   fi
@@ -515,12 +531,24 @@ EOF
     return 0
   fi
   max=$(fm_task_inbox_ring_max)
-  if [ "$count" -ge "$max" ]; then
+  if _fm_task_inbox_decimal_ge "$count" "$max"; then
     printf 'escalate %s %s' "$oldest" "$count"
     return 0
   fi
-  now=$(date +%s)
-  if [ "$((now - last))" -lt "$grace" ]; then
+  now=$(date +%s) || return 1
+  case "$now" in ''|*[!0-9]*) return 1 ;; esac
+  now=${now#"${now%%[!0]*}"}
+  now=${now:-0}
+  _fm_task_inbox_decimal_ge 9223372036854775807 "$now" || return 1
+  if ! _fm_task_inbox_decimal_ge "$now" "$last"; then
+    printf 'quiet'
+    return 0
+  fi
+  last=${last#"${last%%[!0]*}"}
+  last=${last:-0}
+  # Both operands are bounded, nonnegative decimals and now is at least last.
+  age=$((now - last))
+  if ! _fm_task_inbox_decimal_ge "$age" "$grace"; then
     printf 'quiet'
     return 0
   fi

@@ -1292,6 +1292,67 @@ test_inbox_retry_counters_are_bounded_decimal() {
   pass "inbox retry counters increment decimal padding and saturate overflow without renewing spent retry budgets"
 }
 
+test_inbox_deadlines_and_budgets_use_decimal_comparisons() {
+  local deadline_root fakebin state rec scenario now last count grace maximum clock_rc want action rc
+  deadline_root="$TMP_ROOT/decimal-deadlines"
+  fakebin="$deadline_root/fakebin"
+  mkdir -p "$fakebin"
+  cat > "$fakebin/date" <<'CLOCK'
+#!/usr/bin/env bash
+printf '%s\n' "$FM_INBOX_TEST_NOW"
+exit "$FM_INBOX_TEST_CLOCK_RC"
+CLOCK
+  chmod +x "$fakebin/date"
+  for scenario in padded-last-early padded-last-invalid-octal padded-future overflow-last overflow-count overflow-grace overflow-max padded-now expression-now overflow-now failed-clock ordinary-early ordinary-elapsed ordinary-future spent zero-grace invalid-last padded-count; do
+    case "$scenario" in
+      padded-last-early) now=1100; last=01050; count=1; grace=60; maximum=3; clock_rc=0; want=quiet ;;
+      padded-last-invalid-octal) now=2000; last=01800; count=1; grace=120; maximum=3; clock_rc=0; want=ring ;;
+      padded-future) now=2000; last=03000; count=1; grace=120; maximum=3; clock_rc=0; want=quiet ;;
+      overflow-last) now=2000; last=18446744073709551616; count=1; grace=120; maximum=3; clock_rc=0; want=quiet ;;
+      overflow-count) now=2000; last=1000; count=18446744073709551616; grace=120; maximum=3; clock_rc=0; want=escalate ;;
+      overflow-grace) now=2000; last=1000; count=1; grace=18446744073709551616; maximum=3; clock_rc=0; want=quiet ;;
+      overflow-max) now=2000; last=1000; count=1; grace=60; maximum=18446744073709551616; clock_rc=0; want=ring ;;
+      padded-now) now=02000; last=1800; count=1; grace=120; maximum=3; clock_rc=0; want=ring ;;
+      expression-now) now=2000+1; last=1000; count=1; grace=120; maximum=3; clock_rc=0; want=refuse ;;
+      overflow-now) now=18446744073709553616; last=1000; count=1; grace=120; maximum=3; clock_rc=0; want=refuse ;;
+      failed-clock) now=2000; last=1000; count=1; grace=120; maximum=3; clock_rc=1; want=refuse ;;
+      ordinary-early) now=1100; last=1050; count=1; grace=60; maximum=3; clock_rc=0; want=quiet ;;
+      ordinary-elapsed) now=2000; last=1800; count=1; grace=120; maximum=3; clock_rc=0; want=ring ;;
+      ordinary-future) now=2000; last=3000; count=1; grace=120; maximum=3; clock_rc=0; want=quiet ;;
+      spent) now=2000; last=1000; count=3; grace=120; maximum=3; clock_rc=0; want=escalate ;;
+      zero-grace) now=2000; last=2000; count=1; grace=0; maximum=3; clock_rc=0; want=ring ;;
+      invalid-last) now=2000; last=bad; count=1; grace=120; maximum=3; clock_rc=0; want=ring ;;
+      padded-count) now=2000; last=1000; count=0003; grace=120; maximum=3; clock_rc=0; want=escalate ;;
+    esac
+    state="$deadline_root/$scenario/state"
+    mkdir -p "$state"
+    rec=$(inbox_lib "$state" fm_task_inbox_write "$state" t1 'deadline fixture') || fail "deadline fixture creation failed"
+    python3 - "$rec" <<'AGE'
+import os, sys
+os.utime(sys.argv[1], (100, 100))
+AGE
+    printf '%s\t%s\t%s\n' "${rec##*/}" "$count" "$last" > "$state/t1.inbox/.ring-state"
+    cp "$state/t1.inbox/.ring-state" "$state/ladder-before"
+    rc=0
+    action=$(PATH="$fakebin:$PATH" FM_INBOX_TEST_NOW="$now" FM_INBOX_TEST_CLOCK_RC="$clock_rc" \
+      FM_TASK_INBOX_GRACE_SECS="$grace" FM_TASK_INBOX_RING_MAX="$maximum" \
+      inbox_lib "$state" fm_task_inbox_due_action "$state" t1 2> "$state/error") || rc=$?
+    if [ "$want" = refuse ]; then
+      [ "$rc" -eq 1 ] && [ -z "$action" ] || fail "$scenario clock failure supplied a retry decision"
+    else
+      case "$want" in
+        ring) want="ring $rec" ;;
+        escalate) want="escalate $rec $count" ;;
+      esac
+      [ "$rc" -eq 0 ] && [ "$action" = "$want" ] || fail "$scenario deadline or budget selected the wrong action"
+    fi
+    [ ! -s "$state/error" ] || fail "$scenario deadline or budget raised an arithmetic error"
+    cmp -s "$state/t1.inbox/.ring-state" "$state/ladder-before" || fail "reading a deadline changed its retry ladder"
+  done
+  pass "inbox deadlines and retry budgets compare decimal values without early rings or arithmetic errors"
+}
+
+test_inbox_deadlines_and_budgets_use_decimal_comparisons
 test_inbox_retry_counters_are_bounded_decimal
 test_idempotent_write_rejects_failed_body_reads
 test_sequence_order_crosses_padding_widths

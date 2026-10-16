@@ -115,6 +115,7 @@ secondmate_registry_path_key() {
   fi
 }
 
+# Only successful, nonempty resolver output can establish a local route identity.
 secondmate_registry_validate_bindings() {
   local reg=$1 resolver=$2 expected_id=${3:-} expected_home=${4:-}
   local tmp snapshot bindings line id host root home home_key duplicate_homes duplicate_ids overlaps expected_home_key
@@ -218,7 +219,7 @@ secondmate_registry_validate_bindings() {
           esac
           home_key="ssh:$host:$home"
         else
-          home_key=$("$resolver" "$home" 2>/dev/null || true)
+          home_key=$("$resolver" "$home" 2>/dev/null) || home_key=
           if [ -z "$home_key" ]; then
             rm -rf -- "$tmp"
             SECONDMATE_REGISTRY_ERROR="unresolvable secondmate home for $id: $home"
@@ -299,7 +300,7 @@ secondmate_registry_validate_bindings() {
     if [ "$SECONDMATE_REGISTRY_MATCH_REMOTE" -eq 1 ]; then
       expected_home_key="ssh:$SECONDMATE_REGISTRY_MATCH_HOST:$expected_home"
     else
-      expected_home_key=$("$resolver" "$expected_home" 2>/dev/null || true)
+      expected_home_key=$("$resolver" "$expected_home" 2>/dev/null) || expected_home_key=
       [ -z "$expected_home_key" ] || expected_home_key="local:$expected_home_key"
     fi
     if [ -z "$expected_home_key" ] || [ "$expected_home_key" != "$SECONDMATE_REGISTRY_MATCH_HOME_KEY" ]; then

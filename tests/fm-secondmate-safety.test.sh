@@ -3140,6 +3140,51 @@ EOF
   pass "fm-backlog-handoff refuses Done items under whitespace section headings and unsafe homes"
 }
 
+test_registry_refuses_failed_path_resolver_evidence() {
+  python3 - "$ROOT" "$TMP_ROOT/registry-resolver-errors" <<'PYREGISTRY' || fail "registry validation accepted failed resolver evidence"
+import json,os,pathlib,shutil,subprocess,sys,tempfile
+root=pathlib.Path(sys.argv[1]);scratch_root=pathlib.Path(sys.argv[2]);scratch_root.mkdir()
+driver=r'''
+set -u
+. "$1/bin/fm-secondmate-registry-lib.sh"
+probe_home=$2
+kind=$3
+resolver() {
+ printf '%s\n' "$1" >> "$probe_home/resolver-calls"
+ case "$kind:$1" in
+  row-partial:"$probe_home/registered"|expected-partial:"$probe_home/alias") printf '%s\n' "$probe_home/physical"; return 1;;
+  row-empty:"$probe_home/registered"|expected-empty:"$probe_home/alias") return 1;;
+  mismatch:"$probe_home/alias") printf '%s\n' "$probe_home/different";;
+  *) printf '%s\n' "$probe_home/physical";;
+ esac
+}
+expected="$probe_home/alias"
+[ "$kind" != remote ] || expected=/srv/remote-home
+rc=0
+secondmate_registry_validate_bindings "$probe_home/registry" resolver mate "$expected" || rc=$?
+printf 'rc=%s\nerror=%s\n' "$rc" "$SECONDMATE_REGISTRY_ERROR"
+'''
+rows=[]
+for shell in [shutil.which('bash')]:
+ for case in ['row-partial','row-empty','expected-partial','expected-empty','healthy','mismatch','remote']:
+  with tempfile.TemporaryDirectory(prefix='case-',dir=scratch_root) as td:
+   home=pathlib.Path(td);scratch=home/'scratch';scratch.mkdir()
+   record=f'- mate - fixture (home: {home}/registered; scope: fixture; projects: ; added 2026-01-01)\n'
+   if case=='remote':record='- mate - fixture (host: fixture; root: /srv/remote-code; home: /srv/remote-home; scope: fixture; projects: ; added 2026-01-01)\n'
+   (home/'registry').write_text(record)
+   env={**os.environ,'FM_HOME':td,'FM_ROOT_OVERRIDE':td,'TMPDIR':str(scratch)}
+   r=subprocess.run([shell,'-c',driver,'probe',str(root),td,case],env=env,capture_output=True,text=True,timeout=15);fields=dict(line.split('=',1) for line in r.stdout.splitlines() if '=' in line)
+   expected='0' if case in ['healthy','remote'] else '1'
+   bad=r.returncode!=0 or fields.get('rc')!=expected or (expected=='1' and not fields.get('error')) or (home/'registry').read_text()!=record or bool(list(scratch.iterdir()))
+   calls=(home/'resolver-calls').read_text() if (home/'resolver-calls').exists() else ''
+   if case=='remote' and calls:bad=True
+   rows.append({'shell':shell,'case':case,'rc':r.returncode,'fields':fields,'stderr':r.stderr,'calls':calls,'bad':bad})
+assert not any(r['bad'] for r in rows), json.dumps(rows,indent=2)
+PYREGISTRY
+  pass "registry validation refuses partial resolver failures for registered and expected homes"
+}
+
+test_registry_refuses_failed_path_resolver_evidence
 test_home_seed_literal_backslash_registry_names
 test_fm_home_parameterization
 test_lock_status_is_per_home

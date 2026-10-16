@@ -1377,6 +1377,117 @@ test_inbox_directory_output_variable() {
   pass "inbox directory supports silent assignment and preserves its stdout API"
 }
 
+test_retry_marker_clear_preserves_concurrent_updates() {
+  python3 - "$ROOT" "$TMP_ROOT/retry-marker-race" <<'PYRACE' || fail "retry clearing deleted a concurrent newer mark"
+import json,os,pathlib,shutil,subprocess,sys,tempfile,time
+root=pathlib.Path(sys.argv[1]);scratch=pathlib.Path(sys.argv[2]);scratch.mkdir()
+base=r'''
+set -u
+. "$1/bin/fm-task-inbox-lib.sh"
+state="$2/state"
+dir="$state/t1.inbox"
+'''
+clear=base+r'''
+# Use an explicit fixture path; positional arguments inside rm belong to rm.
+probe_home=$2
+rm() {
+ if [ "$*" = "-f $dir/.retry-ring" ]; then
+  : > "$probe_home/rm-entered"
+  while [ ! -e "$probe_home/rm-release" ]; do sleep 0.01; done
+ fi
+ command rm "$@"
+}
+if [ "$3" = clear ]; then
+ fm_task_inbox_clear_retry "$state" t1 "$dir/001.msg"
+else
+ FM_CONFIG_OVERRIDE="$probe_home/config" fm_task_inbox_due_action "$state" t1
+fi
+'''
+mark=base+r'''
+probe_home=$2
+saved=$(declare -f fm_task_inbox_lock_acquire)
+eval "${saved/fm_task_inbox_lock_acquire/probe_lock_acquire}"
+fm_task_inbox_lock_acquire() {
+ : > "$probe_home/mark-lock-attempt"
+ probe_lock_acquire "$@"
+}
+fm_task_inbox_mark_retry "$state" t1 "$dir/002.msg"
+rc=$?
+printf '%s\n' "$rc" > "$probe_home/mark-done"
+exit "$rc"
+'''
+def wait_until(fn,desc):
+ end=time.monotonic()+8
+ while time.monotonic()<end:
+  if fn():return
+  time.sleep(.01)
+ raise RuntimeError(desc)
+rows=[]
+for shell in [shutil.which('bash')]:
+ for action in ['clear','stale-cleanup']:
+  with tempfile.TemporaryDirectory(prefix='race-',dir=scratch) as td:
+   home=pathlib.Path(td);state=home/'state';inbox=state/'t1.inbox';(inbox/'handled').mkdir(parents=True);(home/'config').mkdir();(home/'config/wait-no-turns').touch()
+   record=b'schema=fm-task-inbox.v1\ndelivery=fire-and-forget\n--\nfixture\n'
+   (inbox/'handled/001.msg').write_bytes(record);(inbox/'002.msg').write_bytes(record);(inbox/'.retry-ring').write_text('001.msg\n')
+   env={**os.environ,'FM_HOME':td,'FM_ROOT_OVERRIDE':td,'FM_STATE_OVERRIDE':str(state)}
+   p=subprocess.Popen([shell,'-c',clear,'probe',str(root),td,action],env=env,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True);q=None
+   try:
+    wait_until(lambda:(home/'rm-entered').exists(),'clear did not reach removal')
+    q=subprocess.Popen([shell,'-c',mark,'probe',str(root),td],env=env,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+    wait_until(lambda:(home/'mark-done').exists() or (home/'mark-lock-attempt').exists(),'new marker did not reach update')
+    interleaving='mark completed before removal' if (home/'mark-done').exists() else 'mark waits for serialization'
+    (home/'rm-release').touch();out,err=p.communicate(timeout=15);mout,merr=q.communicate(timeout=15)
+    marker=(inbox/'.retry-ring').read_text() if (inbox/'.retry-ring').exists() else None
+    rows.append({'shell':shell,'action':action,'interleaving':interleaving,'marker':marker,'clear_rc':p.returncode,'mark_rc':q.returncode,'stdout':out+mout,'stderr':err+merr,'bad':marker!='002.msg\n' or p.returncode!=0 or q.returncode!=0})
+   finally:
+    (home/'rm-release').touch()
+    for proc in [p,q]:
+     if proc is not None and proc.poll() is None:proc.kill();proc.wait()
+assert not any(r['bad'] for r in rows), json.dumps(rows,indent=2)
+PYRACE
+  pass "retry clearing and stale cleanup preserve concurrent newer marker updates"
+}
+
+test_retry_marker_failed_write_preserves_previous_mark() {
+  python3 - "$ROOT" "$TMP_ROOT/retry-marker-write" <<'PYWRITE' || fail "retry marker write failure replaced its previous mark"
+import json,os,pathlib,shutil,subprocess,sys,tempfile
+root=pathlib.Path(sys.argv[1]);scratch=pathlib.Path(sys.argv[2]);scratch.mkdir()
+driver=r'''
+set -u
+. "$1/bin/fm-task-inbox-lib.sh"
+state="$2/state"
+if [ "$3" = partial ]; then
+ printf() {
+  if [ "$#" = 2 ] && [ "$1" = '%s\n' ] && [ "$2" = 002.msg ]; then
+   command printf '%s' '002.'
+   return 1
+  fi
+  command printf "$@"
+ }
+fi
+fm_task_inbox_mark_retry "$state" t1 "$state/t1.inbox/002.msg"
+'''
+rows=[]
+for shell in [shutil.which('bash')]:
+ for case in ['healthy','partial','directory']:
+  with tempfile.TemporaryDirectory(prefix='write-',dir=scratch) as td:
+   home=pathlib.Path(td);inbox=home/'state/t1.inbox';(inbox/'handled').mkdir(parents=True);marker=inbox/'.retry-ring'
+   if case=='directory':marker.mkdir()
+   else:marker.write_text('001.msg\n')
+   env={**os.environ,'FM_HOME':td,'FM_ROOT_OVERRIDE':td,'FM_STATE_OVERRIDE':str(home/'state')}
+   r=subprocess.run([shell,'-c',driver,'probe',str(root),td,case],env=env,capture_output=True,text=True,timeout=15)
+   value='directory' if marker.is_dir() else marker.read_text() if marker.exists() else None
+   leftovers=[p.name for p in inbox.iterdir() if p.name.startswith(('.retry-ring.','.seq.lock'))]
+   want='002.msg\n' if case=='healthy' else '001.msg\n' if case=='partial' else 'directory'
+   bad=r.returncode!=(0 if case=='healthy' else 1) or value!=want or bool(leftovers)
+   rows.append({'shell':shell,'case':case,'rc':r.returncode,'marker':value,'leftovers':leftovers,'stderr':r.stderr,'bad':bad})
+assert not any(r['bad'] for r in rows), json.dumps(rows,indent=2)
+PYWRITE
+  pass "retry marker writes preserve previous bytes on failure and release their lock"
+}
+
+test_retry_marker_clear_preserves_concurrent_updates
+test_retry_marker_failed_write_preserves_previous_mark
 test_inbox_directory_output_variable
 test_inbox_deadlines_and_budgets_use_decimal_comparisons
 test_inbox_retry_counters_are_bounded_decimal

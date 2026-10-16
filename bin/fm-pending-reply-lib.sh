@@ -786,12 +786,12 @@ _fm_pending_reply_try_resolve_locked() {  # <state-dir> <corr_id> [status-file-o
   local unconfirmed=0
   rec=$(fm_pending_reply_path "$state" "$corr")
   [ -f "$rec" ] || return 1
-  phase=$(fm_pending_reply_get "$rec" phase)
+  fm_pending_reply_get "$rec" phase phase
   if [ "$phase" = resolved ]; then
     _fm_pending_reply_close_escalation_locked "$state" "$corr" || true
     return 0
   fi
-  delivered=$(fm_pending_reply_get "$rec" delivered_epoch)
+  fm_pending_reply_get "$rec" delivered_epoch delivered
   if [ -z "$delivered" ]; then
     marker=$(fm_pending_reply_delivery_confirmation_path "$state" "$corr")
     [ -f "$marker" ] || return 1
@@ -800,7 +800,7 @@ _fm_pending_reply_try_resolve_locked() {  # <state-dir> <corr_id> [status-file-o
     case "$delivery_state" in attempted|confirmed) ;; *) return 1 ;; esac
     unconfirmed=1
   fi
-  status_file=$(fm_pending_reply_get "$rec" parent_status)
+  fm_pending_reply_get "$rec" parent_status status_file
   # Only the asked task's own status log answers its request: another mate's
   # line echoing or quoting this corr= token must leave the request open.
   if [ -n "$status_override" ]; then
@@ -809,7 +809,7 @@ _fm_pending_reply_try_resolve_locked() {  # <state-dir> <corr_id> [status-file-o
   fi
   if [ -z "$status_override" ] && [ "$unconfirmed" = 0 ]; then
     signature=$(fm_pending_reply_file_signature "$status_file") || signature=''
-    previous=$(fm_pending_reply_get "$rec" parent_status_scan_signature)
+    fm_pending_reply_get "$rec" parent_status_scan_signature previous
     if [ -n "$signature" ] && [ "$signature" = "$previous" ]; then return 1; fi
   fi
   line=$(fm_pending_reply_find_resolve_line "$status_file" "$corr") || return 1
@@ -1471,19 +1471,19 @@ fm_pending_reply_detect_wrong_home() {  # <state-dir> <corr_id> <secondmate-home
   rec=$(fm_pending_reply_path "$state" "$corr")
   [ -f "$rec" ] || return 1
   [ -n "$sm_home" ] && [ -d "$sm_home" ] || return 0
-  phase=$(fm_pending_reply_get "$rec" phase)
+  fm_pending_reply_get "$rec" phase phase
   [ "$phase" != resolved ] || return 0
-  delivered=$(fm_pending_reply_get "$rec" delivered_epoch)
+  fm_pending_reply_get "$rec" delivered_epoch delivered
   [ -n "$delivered" ] || return 0
   snapshot=$(fm_pending_reply_status_set_signature "$sm_home/state") || snapshot=''
-  previous=$(fm_pending_reply_get "$rec" wrong_home_scan_signature)
-  hits=$(fm_pending_reply_get "$rec" wrong_home_hits)
+  fm_pending_reply_get "$rec" wrong_home_scan_signature previous
+  fm_pending_reply_get "$rec" wrong_home_hits hits
   case "$hits" in ''|*[!0-9]*) hits=0 ;; esac
-  first=$(fm_pending_reply_get "$rec" wrong_home_first_sighting)
+  fm_pending_reply_get "$rec" wrong_home_first_sighting first
   if [ -n "$snapshot" ] && [ "$snapshot" = "$previous" ] && { [ "$hits" = 0 ] || [ -n "$first" ]; }; then
     return 0
   fi
-  sightings=$(fm_pending_reply_get "$rec" wrong_home_sightings)
+  fm_pending_reply_get "$rec" wrong_home_sightings sightings
   # shellcheck source=bin/fm-parent-channel-lib.sh
   . "$_FM_PENDING_REPLY_LIB_DIR/fm-parent-channel-lib.sh"
   if fm_parent_channel_destination "$sm_home" "$sm_home/state" >/dev/null 2>&1 \

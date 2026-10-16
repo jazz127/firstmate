@@ -614,8 +614,9 @@ nm_gate_findings_count() {
 # gate owed the crewmate's own answer would match just as readily as one owed a
 # human. Column order is read from the header rather than assumed, so a table
 # that grows a column keeps answering correctly. Both the header match and the
-# row scan require the BRACE, so the count, the index and the rows all come from
-# the same block: an earlier unbraced `findings[N]:` line from a resolved round
+# row scan require a complete braced header ending in a colon. The count, index
+# and rows therefore come from the same block: an earlier unbraced
+# `findings[N]:` line from a resolved round
 # must not supply the rows while the braced gate table supplies the index, which
 # would read the wrong block's rows at the right block's offset
 # (tests/fm-crew-state.test.sh's unbraced-precursor case pins it).
@@ -659,7 +660,7 @@ nm_gate_awaits_human_decision() {
   done
   [ "$idx" -gt 0 ] || return 1
   rows=$(printf '%s\n' "$RUN_OUT" \
-    | awk -v n="$count" 'f { print; if (++c >= n) exit; next } /^[[:space:]]*findings\[[0-9]+\]\{/ { f = 1 }')
+    | awk -v n="$count" 'f { print; if (++c >= n) exit; next } /^[[:space:]]*findings\[[0-9]+\]\{[^}]*\}:/ { f = 1 }')
   while IFS= read -r row; do
     case "$row" in *,*) ;; *) continue ;; esac
     rest=$row

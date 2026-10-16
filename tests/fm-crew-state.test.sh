@@ -823,6 +823,38 @@ EOF
 
 # ---------------------------------------------------------------------------
 # (a) active run-step is authoritative
+test_findings_rows_require_the_matching_header() {
+  local d out kind base header current prior
+  reset_fakes
+  d=$(new_case findings-row-header)
+  make_repo_on_branch "$d/wt" fm/findings-row-header
+  make_fakebin "$d" >/dev/null
+  fm_write_meta "$d/state/task.meta" "window=fm:fm-task" "worktree=$d/wt" "kind=ship"
+  base=$(run_parked fm/findings-row-header)
+  base=${base%%findings\[*}
+  for kind in no-close no-colon unbraced; do
+    case "$kind" in
+      no-close) header='findings[1]{id,action,description:' ;;
+      no-colon) header='findings[1]{id,action,description}' ;;
+      unbraced) header='findings[1]:' ;;
+    esac
+    for current in auto-fix ask-user; do
+      if [ "$current" = auto-fix ]; then prior=ask-user; else prior=auto-fix; fi
+      FM_FAKE_AXI_STATUS="$base$header"$'\n  prior,'"$prior"$',earlier block\nfindings[1]{id,action,description}:\n  current,'"$current"$',current block\n'
+      out=$(run_crew_state "$d" task)
+      assert_contains "$out" 'state: parked' "$kind precursor must retain the parked gate"
+      if [ "$current" = ask-user ]; then
+        assert_contains "$out" ' · ask-user: authority decision' \
+          "$kind precursor must not hide the actual human decision"
+      else
+        assert_not_contains "$out" ' · ask-user: authority decision' \
+          "$kind precursor must not invent a human decision"
+      fi
+    done
+  done
+  pass "findings rows and action columns come from the same complete table header"
+}
+
 test_findings_count_requires_a_table_header() {
   local d out kind base header notes
   reset_fakes
@@ -5835,6 +5867,7 @@ test_nm_scalar_trimming() {
   pass 'scalar trimming preserves whitespace, quotes and literal values through stdout and output variables'
 }
 
+test_findings_rows_require_the_matching_header
 test_findings_count_requires_a_table_header
 test_large_gate_marker_with_pipefail
 test_large_quiet_activity_with_pipefail

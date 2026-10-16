@@ -5609,6 +5609,37 @@ test_captured_completed_history() {
   pass 'captured completed status yields to synthetic subsequent development'
 }
 
+test_large_parked_run_with_pipefail() {
+  local shell
+  for shell in "$(command -v bash)" /bin/bash; do
+    "$shell" -s -- "$ROOT" <<'SH' || fail "$shell misclassified a large parked run under pipefail"
+set -u
+. "$1/bin/fm-nm-run-lib.sh"
+printf -v padding '%200000s' x
+for option in on off; do
+  if [ "$option" = on ]; then set -o pipefail; else set +o pipefail; fi
+  for kind in early late active terminal; do
+    expected_parked=1; expected_executing=1
+    case "$kind" in
+      early) body=$'status: running\ngate: review\nnotes: '"$padding"; expected_parked=0 ;;
+      late) body=$'status: running\nnotes: '"$padding"$'\ngate: review'; expected_parked=0 ;;
+      active) body=$'status: running\nnotes: '"$padding"; expected_executing=0 ;;
+      terminal) body=$'status: completed\nnotes: '"$padding" ;;
+    esac
+    parked=0; executing=0
+    fm_nm_run_is_parked "$body" || parked=$?
+    fm_nm_run_is_executing "$body" || executing=$?
+    if [ "$parked" -ne "$expected_parked" ] || [ "$executing" -ne "$expected_executing" ]; then
+      printf '%s pipefail=%s: parked=%s executing=%s\n' "$kind" "$option" "$parked" "$executing" >&2
+      exit 1
+    fi
+  done
+done
+SH
+  done
+  pass 'large run records preserve parked versus executing classification with pipefail enabled or disabled'
+}
+
 test_nm_scalar_trimming() {
   local shell
   for shell in "$(command -v bash)" /bin/bash; do
@@ -5635,6 +5666,7 @@ test_nm_scalar_trimming() {
   pass 'scalar trimming preserves whitespace, quotes and literal values through stdout and output variables'
 }
 
+test_large_parked_run_with_pipefail
 test_nm_scalar_trimming
 test_binary_metadata_is_unknown
 test_captured_axi_status_shapes

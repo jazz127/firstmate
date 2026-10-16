@@ -398,8 +398,8 @@ FM_NM_GATE_ROW_RE='^[[:space:]]*[^,]+,[[:space:]]*"?(awaiting_approval|fix_revie
 # leaves it at `running` while a run waits at a gate, so the word and the gate
 # markers routinely disagree.
 fm_nm_run_is_parked() {  # <toon-output>
-  printf '%s\n' "$1" | grep -Eq \
-    "$FM_NM_GATE_LINE_RE|$FM_NM_AWAITING_AGENT_RE|$FM_NM_GATE_SCALAR_RE|$FM_NM_GATE_ROW_RE"
+  grep -Eq \
+    "$FM_NM_GATE_LINE_RE|$FM_NM_AWAITING_AGENT_RE|$FM_NM_GATE_SCALAR_RE|$FM_NM_GATE_ROW_RE" <<< "$1"
 }
 
 # 0 if the run in captured `axi status` TOON $1 is EXECUTING: in flight and

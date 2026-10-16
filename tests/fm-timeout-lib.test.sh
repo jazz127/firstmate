@@ -93,6 +93,30 @@ test_perl_runners_preserve_literal_command_paths() {
   pass 'Perl runners execute literal paths with or without arguments instead of interpreting shell text'
 }
 
+test_perl_runners_report_missing_commands() {
+  local shell api command out rc
+  for shell in "$(command -v bash)" /bin/bash; do
+    for api in run exec nm; do
+      for command in fm-synthetic-command-absent "$TMP_ROOT/missing-command"; do
+        rc=0
+        out=$("$shell" -c '
+          . "$1/bin/fm-timeout-lib.sh"
+          . "$1/bin/fm-nm-run-lib.sh"
+          unset FM_TIMEOUT_OWNER_PID FM_EXEC_TIMED_OWNER_PID FM_TIMEOUT_MECHANISM_OVERRIDE
+          PATH=$2
+          case "$3" in
+            run) fm_run_timed 5 "$5" ;;
+            exec) fm_exec_timed 5 1 "$5" ;;
+            nm) fm_nm_bounded "$4" 5 "$5" ;;
+          esac
+        ' _ "$ROOT" "$PERL_ONLY" "$api" "$TMP_ROOT" "$command" 2>&1) || rc=$?
+        expect_code 127 "$rc" "$shell $api lost a missing-command failure: $out"
+      done
+    done
+  done
+  pass 'Perl runners report missing commands as 127 without entering the parent wait code'
+}
+
 test_passes_the_command_status_and_output_through() {
   local out rc=0
   out=$(exec_timed "$PERL_ONLY" 5 1 bash -c 'echo to-stdout; echo to-stderr >&2; exit 7' 2>&1) || rc=$?
@@ -501,6 +525,7 @@ SH
   pass 'checked no-mistakes calls retain signal failures even after plausible partial output'
 }
 
+test_perl_runners_report_missing_commands
 test_perl_runners_preserve_literal_command_paths
 test_passes_the_command_status_and_output_through
 test_bash32_owner_check

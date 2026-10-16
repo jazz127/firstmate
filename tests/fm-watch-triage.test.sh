@@ -2492,6 +2492,46 @@ test_nonterminal_stale_provably_working_absorbed_then_escalated() {
 # It must surface at once, never wait out the wedge timer, so these users (a
 # non-no-mistakes crew, or any crew with no running pipeline) are never left hanging.
 
+test_window_metadata_last_field_wins() {
+  local shell scenario dir state window key expected pid cycle
+  for shell in "$(command -v bash)" /bin/bash; do
+    for scenario in kind-duplicate kind-empty backend-duplicate backend-empty kind-control backend-control; do
+      dir=$(make_case "window-metadata-${shell//\//-}-$scenario"); state="$dir/state"
+      window=test:fm-metadata; key=test_fm-metadata; expected=stale
+      printf 'idle prompt, finished' > "$dir/pane.txt"
+      printf 'window=%s\n' "$window" > "$state/metadata.meta"
+      case "$scenario" in
+        kind-duplicate) printf 'kind=ship\nkind=secondmate\nbackend=tmux\n' >> "$state/metadata.meta"; expected=quiet ;;
+        kind-empty) printf 'kind=secondmate\nkind=\nbackend=tmux\n' >> "$state/metadata.meta" ;;
+        backend-duplicate) printf 'kind=ship\nbackend=invalid-fixture\nbackend=tmux\n' >> "$state/metadata.meta" ;;
+        backend-empty) printf 'kind=ship\nbackend=invalid-fixture\nbackend=\n' >> "$state/metadata.meta" ;;
+        kind-control) printf 'kind=secondmate\nbackend=tmux\n' >> "$state/metadata.meta"; expected=quiet ;;
+        backend-control) printf 'kind=ship\nbackend=tmux\n' >> "$state/metadata.meta" ;;
+      esac
+      hash_text 'idle prompt, finished' > "$state/.hash-$key"
+      printf '1\n' > "$state/.count-$key"
+      FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$dir/pane.txt" \
+        FM_FAKE_CREW_STATE='state: unknown · source: none · fixture idle' \
+        watch_bg "$state" "$dir/fakebin" "$dir/out" "$shell"
+      pid=$!
+      if [ "$expected" = quiet ]; then
+        for cycle in 1 2; do
+          wait_poll_cycle "$state" "$pid" || {
+            reap "$pid"; fail "$shell $scenario surfaced a secondmate on cycle $cycle: $(cat "$dir/out")"
+          }
+        done
+        reap "$pid"
+        [ ! -s "$dir/out" ] && [ ! -s "$state/.wake-queue" ] || fail "$scenario queued a secondmate stale wake"
+      else
+        wait_for_exit "$pid" 100 || { reap "$pid"; fail "$shell $scenario missed the idle worker"; }
+        grep -Fx "stale: $window" "$dir/out" >/dev/null || fail "$scenario lost the stopped-worker stale wake"
+        grep -F "$window" "$state/.wake-queue" >/dev/null || fail "$scenario lost the durable stale record"
+      fi
+    done
+  done
+  pass 'window classification uses the last kind/backend field, including an empty value restoring its default'
+}
+
 test_nonterminal_stale_not_working_surfaced() {
   local dir state fakebin out drain_out capture_file window key pane_hash sig pid
   dir=$(make_case nonterminal-stale-stopped); state="$dir/state"; fakebin="$dir/fakebin"
@@ -8082,6 +8122,7 @@ test_busy_pane_default_turn_age_bound_is_3600s
 test_busy_declared_pause_is_rechecked_not_wedge_escalated
 test_afk_busy_declared_pause_hands_off_plain_stale
 test_afk_busy_declared_pause_ticking_pane_hands_off_once
+test_window_metadata_last_field_wins
 test_nonterminal_stale_not_working_surfaced
 test_nonterminal_stale_paused_absorbed_then_resurfaced
 test_declared_pause_is_absorbed_for_every_agent_liveness_verdict

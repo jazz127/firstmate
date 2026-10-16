@@ -472,7 +472,7 @@ window_kind() {
   local w=$1 meta kind
   meta=$(fm_backend_meta_for_window "$w" "$STATE" 2>/dev/null || true)
   if [ -n "$meta" ]; then
-    kind=$(grep '^kind=' "$meta" | cut -d= -f2- || true)
+    fm_meta_get "$meta" kind kind
     [ -n "$kind" ] || kind=ship
     echo "$kind"
     return 0
@@ -487,7 +487,7 @@ window_backend() {
   local w=$1 meta backend
   meta=$(fm_backend_meta_for_window "$w" "$STATE" 2>/dev/null || true)
   if [ -n "$meta" ]; then
-    backend=$(grep '^backend=' "$meta" | cut -d= -f2- || true)
+    fm_meta_get "$meta" backend backend
     [ -n "$backend" ] || backend=tmux
     echo "$backend"
     return 0

@@ -269,6 +269,41 @@ test_record_prune_preserves_leading_relative_spaces() {
   pass "record pruning preserves leading relative path spaces and touches only its own inbox"
 }
 
+test_stdin_read_errors_refuse_partial_operational_input() {
+  local tmp fakebin state partial command out rc real_cat
+  tmp=$(fm_test_tmproot fm-operational-stdin-error)
+  fakebin="$tmp/fakebin"
+  state="$tmp/state"
+  mkdir -p "$fakebin"
+  real_cat=$(command -v cat)
+  cat > "$fakebin/cat" <<'CAT'
+#!/usr/bin/env bash
+if [ "$#" -eq 0 ]; then
+  printf '%s' "$FM_TEST_STDIN_PARTIAL"
+  exit 1
+fi
+exec "$FM_TEST_STDIN_REAL_CAT" "$@"
+CAT
+  chmod +x "$fakebin/cat"
+  for partial in "${FM_OPERATIONAL_PREFIX}v1 watcher: partial fixture" ''; do
+    for command in encode kind classify body record; do
+      rc=0
+      if [ "$command" = encode ] || [ "$command" = record ]; then
+        out=$(PATH="$fakebin:$PATH" FM_TEST_STDIN_PARTIAL="$partial" FM_TEST_STDIN_REAL_CAT="$real_cat" \
+          FM_STATE_OVERRIDE="$state" "$OWNER" "$command" watcher </dev/null 2>&1) || rc=$?
+      else
+        out=$(PATH="$fakebin:$PATH" FM_TEST_STDIN_PARTIAL="$partial" FM_TEST_STDIN_REAL_CAT="$real_cat" \
+          FM_STATE_OVERRIDE="$state" "$OWNER" "$command" </dev/null 2>&1) || rc=$?
+      fi
+      [ "$rc" -eq 2 ] || fail "$command did not propagate its stdin read error (exit $rc)"
+      [ -z "$out" ] || fail "$command emitted content from a failed stdin read: $out"
+      [ ! -d "$state/operational-inbox" ] || fail "a failed stdin read published an operational record"
+    done
+  done
+  pass "operational commands refuse empty and partial failed stdin reads before emitting or recording input"
+}
+
+test_stdin_read_errors_refuse_partial_operational_input
 test_record_prune_preserves_leading_relative_spaces
 test_current_generic_matrix
 test_current_from_firstmate_carrier

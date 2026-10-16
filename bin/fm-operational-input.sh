@@ -343,7 +343,7 @@ fm_operational_home_state() {
 fm_operational_read_stdin() {  # <result-var>
   local result_var=${1-} value
   [ -n "$result_var" ] || return 2
-  value=$(cat; printf x)
+  value=$(cat && printf x) || return 1
   value=${value%x}
   printf -v "$result_var" '%s' "$value"
 }

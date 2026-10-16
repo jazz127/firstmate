@@ -68,13 +68,20 @@ fm_nm_trim() {  # <value> [output-variable]
   fi
 }
 
+# Trim whitespace and one surrounding double-quote pair; optionally assign a variable.
+# The _fm_nm_quotes_ prefix is reserved for this helper's locals.
 fm_nm_strip_quotes() {
-  local s
-  fm_nm_trim "${1:-}" s
-  case "$s" in
-    \"*\") s=${s#\"}; s=${s%\"} ;;
+  local _fm_nm_quotes_value
+  fm_nm_trim "${1:-}" _fm_nm_quotes_value
+  case "$_fm_nm_quotes_value" in
+    \"*\") _fm_nm_quotes_value=${_fm_nm_quotes_value#\"}; _fm_nm_quotes_value=${_fm_nm_quotes_value%\"} ;;
   esac
-  fm_nm_trim "$s"
+  if [ "$#" -gt 1 ]; then
+    fm_nm_trim "$_fm_nm_quotes_value" _fm_nm_quotes_value
+    printf -v "$2" '%s' "$_fm_nm_quotes_value"
+  else
+    fm_nm_trim "$_fm_nm_quotes_value"
+  fi
 }
 
 # Path of no-mistakes' local state database as the CLI would see it from

@@ -433,7 +433,7 @@ change_read_record_bounded() {  # <host> <number>
 
 passed_pr_detail() {
   local provider url host path number owner repo raw_pr state_lc
-  raw_pr=$(strip_quotes "$(nm_field pr)")
+  strip_quotes "$(nm_field pr)" raw_pr
   if fm_pr_url_parse "$raw_pr"; then
     provider=$FM_PR_PROVIDER
     url=$FM_PR_URL
@@ -552,7 +552,7 @@ nm_gate_step_row() {
   trim "$row" row
   trim "${row%%,*}" step
   rest=${row#*,}
-  status=$(strip_quotes "${rest%%,*}")
+  strip_quotes "${rest%%,*}" status
   rest=${rest#*,}
   trim "${rest%%,*}" findings
   printf '%s|%s|%s' "$step" "$status" "$findings"
@@ -561,7 +561,7 @@ nm_gate_status() {
   local s row
   s=$(printf '%s\n' "$RUN_OUT" | grep -E "$FM_NM_GATE_SCALAR_RE" | head -1)
   if [ -n "$s" ]; then
-    s=$(strip_quotes "${s#*:}")
+    strip_quotes "${s#*:}" s
     printf '%s' "$s"
     return
   fi
@@ -573,10 +573,10 @@ nm_has_gate() {
 }
 nm_gate_line_name() {
   local gate step
-  gate=$(strip_quotes "$(nm_field gate)")
+  strip_quotes "$(nm_field gate)" gate
   [ -n "$gate" ] && { printf '%s' "$gate"; return; }
   step=$(printf '%s\n' "$RUN_OUT" | sed -n '/^[[:space:]]*gate:[[:space:]]*$/,/^[^[:space:]][^:]*:/s/^[[:space:]]*step:[[:space:]]*\(.*\)/\1/p' | head -1)
-  step=$(strip_quotes "$step")
+  strip_quotes "$step" step
   [ -n "$step" ] && printf '%s' "$step"
 }
 nm_gate_name() {
@@ -649,7 +649,7 @@ nm_gate_awaits_human_decision() {
   i=0
   while [ -n "$cols" ]; do
     i=$((i + 1))
-    name=$(strip_quotes "${cols%%,*}")
+    strip_quotes "${cols%%,*}" name
     if [ "$name" = action ]; then idx=$i; break; fi
     case "$name" in
       id|severity|file|line) ;;
@@ -669,7 +669,7 @@ nm_gate_awaits_human_decision() {
       i=$((i + 1))
     done
     [ -n "$rest" ] || continue
-    field=$(strip_quotes "${rest%%,*}")
+    strip_quotes "${rest%%,*}" field
     [ "$field" = ask-user ] && return 0
   done <<EOF
 $rows
@@ -773,7 +773,7 @@ nm_failed_run_is_green_held_ci() {
     row=$(trim "$row")
     step=$(trim "${row%%,*}")
     rest=${row#*,}
-    status=$(strip_quotes "${rest%%,*}")
+    strip_quotes "${rest%%,*}" status
     case "$status" in
       completed) continue ;;
       skipped)
@@ -806,7 +806,7 @@ nm_reclassify_failed_run_as_held_green() {
     *) return 1 ;;
   esac
   RUN_STATE="done"
-  pr_url=$(strip_quotes "$(nm_field pr)")
+  strip_quotes "$(nm_field pr)" pr_url
   [ -n "$pr_url" ] && RUN_DETAIL="$RUN_DETAIL: $pr_url"
   return 0
 }
@@ -902,7 +902,7 @@ nm_effective_ci_step_status() {
 # not-ready held a green PR at working for as long as main kept advancing.
 nm_ci_checks_state() {
   local run_id ci_log marker
-  run_id=$(strip_quotes "$(nm_field id)")
+  strip_quotes "$(nm_field id)" run_id
   [ -n "$run_id" ] || { printf 'unknown'; return; }
   ci_log=$(nm_run axi logs --step ci --run "$run_id" --full) || true
   [ -n "$ci_log" ] || { printf 'unknown'; return; }
@@ -948,7 +948,7 @@ CREW_BRANCH=$(git -C "$WT" symbolic-ref --quiet --short HEAD 2>/dev/null || true
 # fm_nm_head_matches_worktree in bin/fm-nm-run-lib.sh.
 nm_run_head_matches_worktree() {
   local run_head
-  run_head=$(strip_quotes "$(nm_field head)")
+  strip_quotes "$(nm_field head)" run_head
   fm_nm_head_matches_worktree "$WT" "$run_head"
 }
 
@@ -986,7 +986,7 @@ if [ "$KIND" = ship ] && [ -n "$CREW_BRANCH" ] && command -v no-mistakes >/dev/n
       unknown\|*)
         known_run_id=""
         if [ "$(strip_quotes "$(nm_field branch)")" = "$CREW_BRANCH" ]; then
-          known_run_id=$(strip_quotes "$(nm_field id)")
+          strip_quotes "$(nm_field id)" known_run_id
         fi
         emit unknown run-step "${run_choice#*|}${known_run_id:+; last reported run id: $known_run_id}"
         ;;
@@ -1027,7 +1027,7 @@ if [ "$KIND" = ship ] && [ -n "$CREW_BRANCH" ] && command -v no-mistakes >/dev/n
         ;;
     esac
     if [ "$HAVE_RUN" = 0 ] && [ -z "$SELECTED_RUN_ID" ]; then
-      run_branch=$(strip_quotes "$(nm_field branch)")
+      strip_quotes "$(nm_field branch)" run_branch
       # Head equality, the pipeline-owned parked-run exemption, or executing
       # regardless of head: a live run on this branch is current even after a
       # rebase, and while the pipeline owns this branch a parked run binds
@@ -1117,9 +1117,9 @@ if [ "$HAVE_RUN" = 1 ]; then
       *)         RUN_STATE=unknown; RUN_DETAIL="runs list status: $COARSE_STATUS" ;;
     esac
   else
-    status=$(strip_quotes "$(nm_field status)")
+    strip_quotes "$(nm_field status)" status
     RUN_STATUS=$status
-    outcome=$(strip_quotes "$(nm_field outcome)")
+    strip_quotes "$(nm_field outcome)" outcome
     awaiting=$(printf '%s\n' "$RUN_OUT" | grep -E "$FM_NM_AWAITING_AGENT_RE" | head -1 || true)
     gate_status=$(nm_gate_status)
     has_gate=0
@@ -1184,7 +1184,7 @@ if [ "$HAVE_RUN" = 1 ]; then
               RUN_DETAIL="checks green: PR ready for review (still monitoring for merge/close)"
               # The run's own PR URL makes this reading actionable even when
               # the worker never reported it and no pr= was recorded.
-              ci_pr_url=$(strip_quotes "$(nm_field pr)")
+              strip_quotes "$(nm_field pr)" ci_pr_url
               [ -z "$ci_pr_url" ] || RUN_DETAIL="$RUN_DETAIL: $ci_pr_url"
             fi
             ;;

@@ -5823,6 +5823,11 @@ test_nm_scalar_trimming() {
         [ "$value" = "${trimmed[$i]}" ] && [ ! -s "$2" ] || exit 12
         [ "$(fm_nm_trim "${inputs[$i]}")" = "${trimmed[$i]}" ] || exit 13
         [ "$(fm_nm_strip_quotes "${inputs[$i]}")" = "${stripped[$i]}" ] || exit 14
+        for target in s value _fm_nm_trim_value; do
+          printf -v "$target" %s stale
+          fm_nm_strip_quotes "${inputs[$i]}" "$target" > "$2" || exit 15
+          [ "${!target}" = "${stripped[$i]}" ] && [ ! -s "$2" ] || exit 16
+        done
         i=$((i+1))
       done
     ' _ "$ROOT" "$TMP_ROOT/trim.out" || fail "$shell changed scalar whitespace or quote parsing"

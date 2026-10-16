@@ -842,12 +842,12 @@ fm_pending_reply_observe_busy() {  # <state-dir> <corr_id> <busy_state>
   local rec phase delivered now seen completed field_seen field_completed
   rec=$(fm_pending_reply_path "$state" "$corr")
   [ -f "$rec" ] || return 1
-  phase=$(fm_pending_reply_get "$rec" phase)
+  fm_pending_reply_get "$rec" phase phase
   case "$phase" in
     awaiting_report|recovery_sent) ;;
     *) return 0 ;;
   esac
-  delivered=$(fm_pending_reply_get "$rec" delivered_epoch)
+  fm_pending_reply_get "$rec" delivered_epoch delivered
   [ -n "$delivered" ] || return 0
   if [ "$phase" = awaiting_report ]; then
     field_seen=turn_seen_busy
@@ -856,8 +856,8 @@ fm_pending_reply_observe_busy() {  # <state-dir> <corr_id> <busy_state>
     field_seen=recovery_turn_seen_busy
     field_completed=recovery_turn_completed_epoch
   fi
-  seen=$(fm_pending_reply_get "$rec" "$field_seen")
-  completed=$(fm_pending_reply_get "$rec" "$field_completed")
+  fm_pending_reply_get "$rec" "$field_seen" seen
+  fm_pending_reply_get "$rec" "$field_completed" completed
   case "$busy_state" in
     busy)
       if [ "$seen" != 1 ]; then

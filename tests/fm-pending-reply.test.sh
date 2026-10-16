@@ -3202,6 +3202,45 @@ test_failed_clock_reads_cannot_prove_elapsed_grace() {
   pass "empty or partial failed clock reads cannot prove idle, failed delivery or missed reports"
 }
 
+test_wrong_home_counts_use_bounded_decimal_values() {
+  local count_home state child corr rec scenario initial stored expected index first
+  local FM_PENDING_REPLY_NOW=2000
+  export FM_PENDING_REPLY_NOW
+  for scenario in padded-octal padded-invalid-octal overflow ordinary zero invalid; do
+    case "$scenario" in
+      padded-octal) initial=10; stored=010; expected=11 ;;
+      padded-invalid-octal) initial=18; stored=018; expected=19 ;;
+      overflow) initial=10; stored=9223372036854775807; expected=1 ;;
+      ordinary) initial=10; stored=10; expected=11 ;;
+      zero) initial=0; stored=00; expected=1 ;;
+      invalid) initial=10; stored=bad; expected=1 ;;
+    esac
+    count_home=$(setup_parent "wrong-home-decimal-$scenario")
+    state="$count_home/state"
+    child="$count_home/child"
+    mkdir -p "$child/state"
+    corr=$(fm_pending_reply_create "$count_home" "$state" mate 'count fixture request') || fail "count fixture creation failed"
+    rec=$(fm_pending_reply_path "$state" "$corr")
+    fm_pending_reply_mark_delivered "$state" "$corr" 1000 || fail "count fixture delivery failed"
+    for ((index=0;index<initial;index++)); do
+      printf 'done [corr=%s]: prior fixture %s\n' "$corr" "$index" >> "$child/state/mate.status"
+    done
+    fm_pending_reply_detect_wrong_home "$state" "$corr" "$child" || fail "initial wrong-home scan failed"
+    [ "$(fm_pending_reply_get "$rec" wrong_home_hits)" = "$initial" ] || fail "initial wrong-home count does not match fixture"
+    first=$(fm_pending_reply_get "$rec" wrong_home_first_sighting)
+    fm_pending_reply_set "$rec" wrong_home_hits "$stored" || fail "stored count fixture failed"
+    printf 'done [corr=%s]: one new fixture\n' "$corr" >> "$child/state/mate.status"
+    fm_pending_reply_detect_wrong_home "$state" "$corr" "$child" || fail "$scenario count interrupted the scan"
+    [ "$(fm_pending_reply_get "$rec" wrong_home_hits)" = "$expected" ] || fail "$scenario count did not use bounded decimal increment"
+    if [ -n "$first" ]; then
+      [ "$(fm_pending_reply_get "$rec" wrong_home_first_sighting)" = "$first" ] || fail "$scenario count replaced the original sighting"
+    fi
+    [ "$(fm_pending_reply_get "$rec" phase)" = awaiting_report ] || fail "a wrong-home count resolved the parent request"
+  done
+  pass "wrong-home scans increment padded decimal counts and recover malformed or overflowing counters"
+}
+
+test_wrong_home_counts_use_bounded_decimal_values
 test_failed_clock_reads_cannot_prove_elapsed_grace
 test_pending_grace_uses_bounded_decimal_epochs
 test_failed_record_selection_still_reconciles_pending_requests

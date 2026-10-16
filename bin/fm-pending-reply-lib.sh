@@ -1509,6 +1509,10 @@ fm_pending_reply_detect_wrong_home() {  # <state-dir> <corr_id> <secondmate-home
   fm_pending_reply_get "$rec" wrong_home_scan_signature previous
   fm_pending_reply_get "$rec" wrong_home_hits hits
   case "$hits" in ''|*[!0-9]*) hits=0 ;; esac
+  # Normalize persisted counters as decimal and keep headroom for increment.
+  hits=${hits#"${hits%%[!0]*}"}
+  hits=${hits:-0}
+  [ "${#hits}" -le 18 ] || hits=0
   fm_pending_reply_get "$rec" wrong_home_first_sighting first
   if [ -n "$snapshot" ] && [ "$snapshot" = "$previous" ] && { [ "$hits" = 0 ] || [ -n "$first" ]; }; then
     return 0

@@ -28,6 +28,31 @@ wait_for_checkpoint_lock() {
   return 1
 }
 
+test_perl_checkpoint_preserves_literal_checkout_paths() {
+  local shell name home code fallback_bin tool status
+  for shell in bash /bin/bash; do
+    for name in plain 'code root' 'code;printf injected' "quote'root"; do
+      home=$(make_home "literal-${shell//\//-}-$name")
+      code="$home/$name/bin"; fallback_bin="$home/fallback-bin"
+      mkdir -p "$code" "$fallback_bin"
+      cp "$CHECKPOINT" "$code/fm-watch-checkpoint.sh"
+      cp "$ROOT/bin/fm-supervision-engine-lib.sh" "$code/fm-supervision-engine-lib.sh"
+      for tool in bash dirname mktemp rm perl grep cat; do
+        ln -s "$(command -v "$tool")" "$fallback_bin/$tool"
+      done
+      printf '#!/bin/sh\nprintf "signal: synthetic fixture\\n"\n' > "$code/fm-watch.sh"
+      chmod +x "$code/fm-watch.sh"
+      status=0
+      PATH="$fallback_bin" FM_HOME="$home" "$shell" "$code/fm-watch-checkpoint.sh" --seconds 5 \
+        > "$home/out" 2> "$home/err" || status=$?
+      expect_code 0 "$status" "$shell checkpoint could not launch from $name: $(cat "$home/err")"
+      assert_equals 'signal: synthetic fixture' "$(cat "$home/out")" 'checkpoint reinterpreted its watcher path'
+      [ ! -s "$home/err" ] || fail "checkpoint emitted path errors: $(cat "$home/err")"
+    done
+  done
+  pass 'the Perl checkpoint launches its watcher from literal checkout paths with spaces and punctuation'
+}
+
 test_quiet_checkpoint_exits_124_cleanly() {
   local home out err status
   home=$(make_home quiet)
@@ -407,6 +432,7 @@ test_real_host_checkpoint_ends_quietly_at_its_bound() {
 
 test_checkpoint_seconds_are_positive_decimal
 test_perl_timeout_fallback_preserves_signal_death
+test_perl_checkpoint_preserves_literal_checkout_paths
 test_quiet_checkpoint_exits_124_cleanly
 test_perl_timeout_fallback_honors_cleanup_bound_before_escalating
 test_announced_recovery_is_not_reannounced_by_next_checkpoint

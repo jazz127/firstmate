@@ -55,6 +55,44 @@ wait_for_file() {  # <path>
   done
 }
 
+test_perl_runners_preserve_literal_command_paths() {
+  local shell api name mode dir command out rc expected
+  dir="$TMP_ROOT/literal-command-paths"
+  mkdir -p "$dir"
+  for name in plain 'with space' 'tool;printf injected' "quote'tool"; do
+    command="$dir/$name"
+    printf '#!/bin/sh\nprintf "fixture:%%s\\n" "$#"\n' > "$command"
+    chmod +x "$command"
+  done
+  for shell in "$(command -v bash)" /bin/bash; do
+    for api in run exec nm; do
+      for name in plain 'with space' 'tool;printf injected' "quote'tool"; do
+        for mode in no-args argument; do
+          expected=0; [ "$mode" = no-args ] || expected=1
+          rc=0
+          out=$("$shell" -c '
+            . "$1/bin/fm-timeout-lib.sh"
+            . "$1/bin/fm-nm-run-lib.sh"
+            unset FM_TIMEOUT_OWNER_PID FM_EXEC_TIMED_OWNER_PID FM_TIMEOUT_MECHANISM_OVERRIDE
+            PATH=$2
+            api=$3; command=$4; mode=$5; dir=$6
+            set -- "$command"
+            [ "$mode" = no-args ] || set -- "$@" explicit-argument
+            case "$api" in
+              run) fm_run_timed 5 "$@" ;;
+              exec) fm_exec_timed 5 1 "$@" ;;
+              nm) fm_nm_bounded "$dir" 5 "$@" ;;
+            esac
+          ' _ "$ROOT" "$PERL_ONLY" "$api" "$dir/$name" "$mode" "$dir" 2>&1) || rc=$?
+          expect_code 0 "$rc" "$shell $api could not run literal $name ($mode): $out"
+          assert_equals "fixture:$expected" "$out" "$shell $api interpreted a command path as shell text"
+        done
+      done
+    done
+  done
+  pass 'Perl runners execute literal paths with or without arguments instead of interpreting shell text'
+}
+
 test_passes_the_command_status_and_output_through() {
   local out rc=0
   out=$(exec_timed "$PERL_ONLY" 5 1 bash -c 'echo to-stdout; echo to-stderr >&2; exit 7' 2>&1) || rc=$?
@@ -463,6 +501,7 @@ SH
   pass 'checked no-mistakes calls retain signal failures even after plausible partial output'
 }
 
+test_perl_runners_preserve_literal_command_paths
 test_passes_the_command_status_and_output_through
 test_bash32_owner_check
 test_system_bash_preserves_completion_and_signal_statuses

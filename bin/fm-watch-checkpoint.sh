@@ -87,7 +87,7 @@ run_with_perl_timeout() {  # <seconds> <signal> <kill-after-seconds> <command...
     die "fork failed\n" unless defined $pid;
     if (!$pid) {
       setpgrp(0, 0);
-      exec @ARGV;
+      exec { $ARGV[0] } @ARGV;
       die "exec failed: $!\n";
     }
     my $timed_out = 0;

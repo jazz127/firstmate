@@ -895,6 +895,62 @@ test_undelivered_records_are_scan_immutable() {
   pass "undelivered records remain immutable across scan paths"
 }
 
+test_delivery_marker_requires_complete_text() {
+  (
+    local home state corr rec marker op marker_read_mode prefix rc
+    local FM_TEST_DELIVERY_MARKER='' FM_TEST_DELIVERY_READ_FAULT=none
+    # Called by the production sidecar reader; other file reads stay ordinary.
+    # shellcheck disable=SC2329
+    cat() {
+      if [ "${1:-}" = "$FM_TEST_DELIVERY_MARKER" ] && [ "$FM_TEST_DELIVERY_READ_FAULT" != none ]; then
+        [ "$FM_TEST_DELIVERY_READ_FAULT" != partial ] || command cat "$@"
+        return 1
+      fi
+      command cat "$@"
+    }
+    # The fixture clock is intentionally limited to this test subshell.
+    # shellcheck disable=SC2030,SC2031
+    export FM_PENDING_REPLY_NOW=2000
+    for op in reconcile reset resolve unresolved; do
+      for marker_read_mode in binary partial failed; do
+        home=$(setup_parent "delivery-marker-$op-$marker_read_mode")
+        state="$home/state"
+        corr=$(fm_pending_reply_create "$home" "$state" mate 'fixture request')
+        rec=$(fm_pending_reply_path "$state" "$corr")
+        marker=$(fm_pending_reply_delivery_confirmation_path "$state" "$corr")
+        prefix=attempted
+        case "$op" in reconcile|unresolved) prefix=confirmed ;; esac
+        [ "$op" != reset ] || fm_pending_reply_set "$rec" phase delivery_unknown
+        [ "$op" != resolve ] || printf 'done [corr=%s]: fixture report\n' "$corr" > "$state/mate.status"
+        cp "$rec" "$home/before"
+        printf '%s=1000\n' "$prefix" > "$marker"
+        FM_TEST_DELIVERY_MARKER=$marker
+        FM_TEST_DELIVERY_READ_FAULT=none
+        case "$marker_read_mode" in
+          binary) printf '%s=10\00000\n' "$prefix" > "$marker" ;;
+          partial) FM_TEST_DELIVERY_READ_FAULT=partial ;;
+          failed) FM_TEST_DELIVERY_READ_FAULT=empty ;;
+        esac
+        rc=0
+        case "$op" in
+          reconcile) fm_pending_reply_reconcile_delivery "$state" "$corr" || rc=$? ;;
+          reset) fm_pending_reply_reset_known_undelivered "$state" "$corr" || rc=$? ;;
+          resolve) fm_pending_reply_try_resolve "$state" "$corr" || rc=$? ;;
+          unresolved) fm_pending_reply_delivery_attempt_unresolved "$state" "$corr" || rc=$? ;;
+        esac
+        if [ "$op" = unresolved ]; then
+          expect_code 0 "$rc" "unreadable $marker_read_mode delivery evidence must keep a resend blocked"
+        else
+          expect_code 1 "$rc" "$op must refuse $marker_read_mode delivery evidence"
+        fi
+        cmp -s "$home/before" "$rec" || fail "$op changed the record after a $marker_read_mode marker read"
+        [ -f "$marker" ] || fail "$op removed the $marker_read_mode marker"
+      done
+    done
+  ) || fail "delivery marker complete-text regression failed"
+  pass "delivery markers require complete text and failed reads keep resends blocked"
+}
+
 test_delivery_confirmation_fallback_reconciles() {
   (
     local home state corr rec marker rc prepared_corr prepared_rec prepared_marker escalations
@@ -2304,6 +2360,7 @@ test_create_without_openssl() {
   pass "pending request creation supports missing, failed and healthy OpenSSL"
 }
 
+test_delivery_marker_requires_complete_text
 test_create_without_openssl
 test_record_update_preserves_other_fields
 test_record_update_preserves_unreadable_input

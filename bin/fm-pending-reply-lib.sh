@@ -424,6 +424,19 @@ fm_pending_reply_delivery_confirmation_path() {  # <state-dir> <corr_id>
   printf '%s/.delivery-confirmed-%s' "$(fm_pending_reply_dir "$1")" "$2"
 }
 
+# Read a complete NUL-free sidecar before shell capture can erase binary bytes.
+# Callers must discard output on failure, including a failed read's valid prefix.
+fm_pending_reply_delivery_confirmation_read() {  # <marker-path>
+  (
+    set -o pipefail
+    cat "$1" 2>/dev/null | {
+      local contents=''
+      if IFS= read -r -d '' contents; then exit 1; fi
+      printf '%s' "$contents"
+    }
+  )
+}
+
 fm_pending_reply_write_delivery_confirmation() {  # <state-dir> <corr_id> <state> <value>
   local pending_state=$1 corr=$2 delivery_state=$3 value=$4 marker dir tmp
   marker=$(fm_pending_reply_delivery_confirmation_path "$pending_state" "$corr")
@@ -500,7 +513,7 @@ _fm_pending_reply_reconcile_delivery_locked() {  # <state-dir> <corr_id>
     return 0
   fi
   [ -f "$marker" ] || return 1
-  entry=$(cat "$marker" 2>/dev/null || true)
+  entry=$(fm_pending_reply_delivery_confirmation_read "$marker") || return 1
   delivery_state=${entry%%=*}
   value=${entry#*=}
   case "$delivery_state" in
@@ -548,7 +561,8 @@ fm_pending_reply_delivery_attempt_unresolved() {  # <state-dir> <corr_id>
   [ -z "$delivered" ] || return 1
   marker=$(fm_pending_reply_delivery_confirmation_path "$state" "$corr")
   [ -f "$marker" ] && [ ! -L "$marker" ] || return 1
-  entry=$(cat "$marker" 2>/dev/null || true)
+  # Existing but unreadable evidence cannot prove that a resend is safe.
+  entry=$(fm_pending_reply_delivery_confirmation_read "$marker") || return 0
   case "$entry" in attempted=*) return 0 ;; esac
   return 1
 }
@@ -585,7 +599,7 @@ _fm_pending_reply_reset_known_undelivered_locked() {  # <state-dir> <corr_id>
     return $?
   }
   [ -f "$marker" ] && [ ! -L "$marker" ] || return 1
-  entry=$(cat "$marker" 2>/dev/null || true)
+  entry=$(fm_pending_reply_delivery_confirmation_read "$marker") || return 1
   case "$entry" in attempted=*) ;; *) return 1 ;; esac
   [ "$phase" = awaiting_report ] \
     || fm_pending_reply_set "$rec" phase awaiting_report || return 1
@@ -707,7 +721,7 @@ _fm_pending_reply_try_resolve_locked() {  # <state-dir> <corr_id> [status-file-o
   if [ -z "$delivered" ]; then
     marker=$(fm_pending_reply_delivery_confirmation_path "$state" "$corr")
     [ -f "$marker" ] || return 1
-    delivery_entry=$(cat "$marker" 2>/dev/null || true)
+    delivery_entry=$(fm_pending_reply_delivery_confirmation_read "$marker") || return 1
     delivery_state=${delivery_entry%%=*}
     case "$delivery_state" in attempted|confirmed) ;; *) return 1 ;; esac
     unconfirmed=1

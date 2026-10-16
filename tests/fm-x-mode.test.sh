@@ -2617,6 +2617,75 @@ test_link_carry_count_validation() {
   pass "fm-x-link rejects malformed or unpaired carry flags"
 }
 
+test_meta_rewrites_preserve_failed_filter_input() {
+  local home meta snapshot fakebin real_grep mode operation rc leftovers
+  home="$TMP_ROOT/meta-filter-failure"
+  mkdir -p "$home/state"
+  meta="$home/state/task.meta"
+  snapshot="$home/original"
+  fakebin=$(fm_fakebin "$home")
+  real_grep=$(command -v grep)
+  cat > "$fakebin/grep" <<'SH'
+#!/usr/bin/env bash
+if [ "${1:-}" = -vE ] && [ "${3:-}" = "$FM_TEST_FILTER_META" ]; then
+  printf 'called\n' > "$FM_TEST_FILTER_CALLED"
+  case "$FM_TEST_FILTER_MODE" in
+    empty-error) exit 2 ;;
+    partial-error) printf 'kind=ship\n'; exit 2 ;;
+  esac
+fi
+exec "$FM_TEST_REAL_GREP" "$@"
+SH
+  chmod +x "$fakebin/grep"
+  for mode in empty-error partial-error all-filtered; do
+    for operation in link count clear guarded-clear; do
+      printf '%s\n' 'kind=ship' 'project=retained' 'window=retained' \
+        'x_request=req-old' 'x_request_ts=1700000000' 'x_followups=1' \
+        'x_platform=x' 'x_reply_max_chars=280' > "$meta"
+      if [ "$mode" = all-filtered ]; then
+        case "$operation" in
+          count) printf 'x_followups=1\n' > "$meta" ;;
+          *) printf 'x_request=req-old\n' > "$meta" ;;
+        esac
+      fi
+      cp "$meta" "$snapshot"
+      rm -f "$home/filter-called"
+      PATH="$fakebin:$PATH" FM_HOME="$home" STATE="$home/state" ROOT="$ROOT" \
+        META="$meta" OPERATION="$operation" FM_TEST_FILTER_META="$meta" \
+        FM_TEST_FILTER_MODE="$mode" FM_TEST_FILTER_CALLED="$home/filter-called" \
+        FM_TEST_REAL_GREP="$real_grep" bash -c '
+          case "$OPERATION" in
+            link) exec "$ROOT/bin/fm-x-link.sh" task req-old --carry-count 1 \
+              --carry-ts 1700000000 --carry-platform x --carry-max 280 ;;
+            clear) exec "$ROOT/bin/fm-x-followup.sh" --clear task ;;
+          esac
+          . "$ROOT/bin/fm-x-lib.sh"
+          . "$ROOT/bin/fm-wake-lib.sh"
+          case "$OPERATION" in
+            count) fmx_meta_followups_set "$META" 2 ;;
+            guarded-clear) fmx_meta_link_clear "$META" req-old ;;
+          esac
+        ' >/dev/null 2>&1; rc=$?
+      assert_present "$home/filter-called" "$operation must exercise the metadata filter"
+      if [ "$mode" = all-filtered ]; then
+        expect_code 0 "$rc" "$operation must accept an empty filtered result"
+        case "$operation" in
+          link) printf '%s\n' 'x_request=req-old' 'x_request_ts=1700000000' \
+            'x_followups=1' 'x_platform=x' 'x_reply_max_chars=280' > "$snapshot" ;;
+          count) printf 'x_followups=2\n' > "$snapshot" ;;
+          *) : > "$snapshot" ;;
+        esac
+      else
+        [ "$rc" -ne 0 ] || fail "$operation must refuse $mode"
+      fi
+      cmp -s "$snapshot" "$meta" || fail "$operation published incorrect bytes after $mode"
+      leftovers=$(find "$home/state" -mindepth 1 ! -name task.meta -print)
+      [ -z "$leftovers" ] || fail "$operation left a lock or staging file after $mode"
+    done
+  done
+  pass "metadata rewrites preserve failed input and accept an empty successful filter"
+}
+
 test_meta_rewrites_do_not_depend_on_tmpdir() {
   local home badtmp meta out rc
   home="$TMP_ROOT/link-local-tmp"; mkdir -p "$home/state"
@@ -3256,6 +3325,7 @@ test_link_warns_loudly_when_platform_unresolvable
 test_link_carry_count_and_ts_preserve_followup_binding
 test_link_recovery_relink_carries_discord_context_after_inbox_drain
 test_link_carry_count_validation
+test_meta_rewrites_preserve_failed_filter_input
 test_meta_rewrites_do_not_depend_on_tmpdir
 test_meta_helpers_refuse_a_symlinked_task_record
 test_link_rejects_unsafe_and_missing

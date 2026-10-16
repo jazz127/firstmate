@@ -920,7 +920,7 @@ fmx_meta_link_set() {
   fm_lock_acquire_wait "$lock"
   [ -f "$meta" ] || { fm_lock_release "$lock"; return 1; }
   tmp=$(fmx_meta_tmp "$meta") || { fm_lock_release "$lock"; return 1; }
-  if ! { grep -vE '^x_request=|^x_request_ts=|^x_followups=|^x_platform=|^x_reply_max_chars=' "$meta" || true; } > "$tmp"; then
+  if ! { grep -vE '^x_request=|^x_request_ts=|^x_followups=|^x_platform=|^x_reply_max_chars=' "$meta" || [ "$?" -eq 1 ]; } > "$tmp"; then
     rm -f "$tmp"; fm_lock_release "$lock"; return 1
   fi
   printf 'x_request=%s\n' "$rid" >> "$tmp" || { rm -f "$tmp"; fm_lock_release "$lock"; return 1; }
@@ -951,7 +951,7 @@ fmx_meta_followups_set() {
   fm_lock_acquire_wait "$lock"
   [ -f "$meta" ] || { fm_lock_release "$lock"; return 1; }
   tmp=$(fmx_meta_tmp "$meta") || { fm_lock_release "$lock"; return 1; }
-  if ! { grep -vE '^x_followups=' "$meta" || true; } > "$tmp"; then
+  if ! { grep -vE '^x_followups=' "$meta" || [ "$?" -eq 1 ]; } > "$tmp"; then
     rm -f "$tmp"; fm_lock_release "$lock"; return 1
   fi
   printf 'x_followups=%s\n' "$n" >> "$tmp" || { rm -f "$tmp"; fm_lock_release "$lock"; return 1; }
@@ -1025,7 +1025,7 @@ fmx_meta_link_clear() {
     [ "$link_present" -eq 1 ] || { fm_lock_release "$lock"; return 0; }
   fi
   tmp=$(fmx_meta_tmp "$meta") || { fm_lock_release "$lock"; return 1; }
-  if ! { grep -vE '^x_request=|^x_request_ts=|^x_followups=|^x_platform=|^x_reply_max_chars=' "$meta" || true; } > "$tmp"; then
+  if ! { grep -vE '^x_request=|^x_request_ts=|^x_followups=|^x_platform=|^x_reply_max_chars=' "$meta" || [ "$?" -eq 1 ]; } > "$tmp"; then
     rm -f "$tmp"; fm_lock_release "$lock"; return 1
   fi
   # shellcheck disable=SC2153

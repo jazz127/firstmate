@@ -453,9 +453,9 @@ fm_pending_reply_delivery_confirmation_path() {  # <state-dir> <corr_id>
   printf '%s/.delivery-confirmed-%s' "$dir" "$2"
 }
 
-# Read a complete NUL-free sidecar before shell capture can erase binary bytes.
+# Read complete NUL-free evidence before shell capture can erase binary bytes.
 # Callers must discard output on failure, including a failed read's valid prefix.
-fm_pending_reply_delivery_confirmation_read() {  # <marker-path>
+fm_pending_reply_read_text() {  # <path>
   (
     set -o pipefail
     cat "$1" 2>/dev/null | {
@@ -542,7 +542,7 @@ _fm_pending_reply_reconcile_delivery_locked() {  # <state-dir> <corr_id>
     return 0
   fi
   [ -f "$marker" ] || return 1
-  entry=$(fm_pending_reply_delivery_confirmation_read "$marker") || return 1
+  entry=$(fm_pending_reply_read_text "$marker") || return 1
   delivery_state=${entry%%=*}
   value=${entry#*=}
   case "$delivery_state" in
@@ -591,7 +591,7 @@ fm_pending_reply_delivery_attempt_unresolved() {  # <state-dir> <corr_id>
   marker=$(fm_pending_reply_delivery_confirmation_path "$state" "$corr")
   [ -f "$marker" ] && [ ! -L "$marker" ] || return 1
   # Existing but unreadable evidence cannot prove that a resend is safe.
-  entry=$(fm_pending_reply_delivery_confirmation_read "$marker") || return 0
+  entry=$(fm_pending_reply_read_text "$marker") || return 0
   case "$entry" in attempted=*) return 0 ;; esac
   return 1
 }
@@ -628,7 +628,7 @@ _fm_pending_reply_reset_known_undelivered_locked() {  # <state-dir> <corr_id>
     return $?
   }
   [ -f "$marker" ] && [ ! -L "$marker" ] || return 1
-  entry=$(fm_pending_reply_delivery_confirmation_read "$marker") || return 1
+  entry=$(fm_pending_reply_read_text "$marker") || return 1
   case "$entry" in attempted=*) ;; *) return 1 ;; esac
   [ "$phase" = awaiting_report ] \
     || fm_pending_reply_set "$rec" phase awaiting_report || return 1
@@ -663,16 +663,18 @@ fm_pending_reply_line_resolves() {  # <line> <corr_id>
 }
 
 # Scan a status file for a correlated resolve. Prints the matching line or empty.
+# Binary or failed reads are incomplete evidence and return nonzero without text.
 fm_pending_reply_find_resolve_line() {  # <status-file> <corr_id>
-  local status_file=$1 corr=$2 line
+  local status_file=$1 corr=$2 line contents
   [ -f "$status_file" ] || return 0
+  contents=$(fm_pending_reply_read_text "$status_file") || return 1
   while IFS= read -r line || [ -n "$line" ]; do
     [ -n "$line" ] || continue
     if fm_pending_reply_line_resolves "$line" "$corr"; then
       printf '%s' "$line"
       return 0
     fi
-  done < "$status_file"
+  done <<< "$contents"
   return 0
 }
 
@@ -754,7 +756,7 @@ _fm_pending_reply_try_resolve_locked() {  # <state-dir> <corr_id> [status-file-o
   if [ -z "$delivered" ]; then
     marker=$(fm_pending_reply_delivery_confirmation_path "$state" "$corr")
     [ -f "$marker" ] || return 1
-    delivery_entry=$(fm_pending_reply_delivery_confirmation_read "$marker") || return 1
+    delivery_entry=$(fm_pending_reply_read_text "$marker") || return 1
     delivery_state=${delivery_entry%%=*}
     case "$delivery_state" in attempted|confirmed) ;; *) return 1 ;; esac
     unconfirmed=1
@@ -771,7 +773,7 @@ _fm_pending_reply_try_resolve_locked() {  # <state-dir> <corr_id> [status-file-o
     previous=$(fm_pending_reply_get "$rec" parent_status_scan_signature)
     if [ -n "$signature" ] && [ "$signature" = "$previous" ]; then return 1; fi
   fi
-  line=$(fm_pending_reply_find_resolve_line "$status_file" "$corr")
+  line=$(fm_pending_reply_find_resolve_line "$status_file" "$corr") || return 1
   if [ -z "$line" ]; then
     if [ -z "$status_override" ] && [ "$unconfirmed" = 0 ] && [ -n "$signature" ]; then
       fm_pending_reply_set "$rec" parent_status_scan_signature "$signature" || return 1
@@ -1425,7 +1427,7 @@ _fm_pending_reply_maybe_escalate_locked() {  # <state-dir> <corr_id>
 # parent-replies.status is its parent channel, not a stranded self-home file.
 fm_pending_reply_detect_wrong_home() {  # <state-dir> <corr_id> <secondmate-home>
   local state=$1 corr=$2 sm_home=$3
-  local rec delivered hits first sightings snapshot previous status_file line line_no sighting_base sighting_id phase changed=0
+  local rec delivered hits first sightings snapshot previous status_file contents line line_no sighting_base sighting_id phase changed=0
   local remote_parent_channel=0
   rec=$(fm_pending_reply_path "$state" "$corr")
   [ -f "$rec" ] || return 1
@@ -1456,6 +1458,7 @@ fm_pending_reply_detect_wrong_home() {  # <state-dir> <corr_id> <secondmate-home
       continue
     fi
     # An incomplete scan must not cache the file set and suppress a healthy retry.
+    contents=$(fm_pending_reply_read_text "$status_file") || return 1
     sighting_base=$(fm_pending_reply_sighting_encode "$status_file" 0) || return 1
     sighting_base=${sighting_base%:0}
     line_no=0
@@ -1474,7 +1477,7 @@ fm_pending_reply_detect_wrong_home() {  # <state-dir> <corr_id> <secondmate-home
       fi
       hits=$((hits + 1))
       changed=1
-    done < "$status_file"
+    done <<< "$contents"
   done
   if [ -n "$first" ] && [ -z "$(fm_pending_reply_get "$rec" wrong_home_first_sighting)" ]; then
     fm_pending_reply_set "$rec" wrong_home_first_sighting "$first" || return 1
@@ -1504,7 +1507,7 @@ fm_pending_reply_restatement_copy_same_basename() {  # <state-dir> <corr_id> <se
   stranded="$sm_home/state/${task_id}.status"
   [ -f "$stranded" ] && [ ! -L "$stranded" ] || return 1
   [ "$stranded" != "$parent_status" ] || return 1
-  line=$(fm_pending_reply_find_resolve_line "$stranded" "$corr")
+  line=$(fm_pending_reply_find_resolve_line "$stranded" "$corr") || return 1
   [ -n "$line" ] || return 1
   # Deliberately undirected: bin/fm-parent-channel-lib.sh is expanded once at
   # the fm_pending_reply_detect_wrong_home site; each directed site would

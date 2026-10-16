@@ -895,6 +895,86 @@ test_undelivered_records_are_scan_immutable() {
   pass "undelivered records remain immutable across scan paths"
 }
 
+test_status_evidence_requires_complete_text() {
+  (
+    local home state sm_home corr rec status_file op read_kind rc status_retry_line expected
+    local FM_TEST_STATUS_READ_PATH='' FM_TEST_STATUS_READ_FAULT=none
+    # Faults apply only to the status read, never setup or pending-record reads.
+    # shellcheck disable=SC2329
+    cat() {
+      if [ "${1:-}" = "$FM_TEST_STATUS_READ_PATH" ] && [ "$FM_TEST_STATUS_READ_FAULT" != none ]; then
+        [ "$FM_TEST_STATUS_READ_FAULT" != partial ] || command cat "$@"
+        return 1
+      fi
+      command cat "$@"
+    }
+    for op in direct parent wrong-home restatement; do
+      for read_kind in nul-name nul-id nul-before nul-after nul-later-line partial failed; do
+        home=$(setup_parent "status-evidence-$op-$read_kind")
+        state="$home/state"
+        sm_home="$home/mate"
+        mkdir -p "$sm_home/state"
+        corr=$(fm_pending_reply_create "$home" "$state" mate 'fixture request')
+        fm_pending_reply_mark_delivered "$state" "$corr"
+        rec=$(fm_pending_reply_path "$state" "$corr")
+        status_file="$state/mate.status"
+        case "$op" in wrong-home|restatement) status_file="$sm_home/state/mate.status" ;; esac
+        FM_TEST_STATUS_READ_PATH=$status_file
+        FM_TEST_STATUS_READ_FAULT=none
+        case "$read_kind" in
+          nul-name) printf 'working: cor\000r=%s ready\n' "$corr" > "$status_file" ;;
+          nul-id) printf 'working: corr=%s\000%s ready\n' "${corr:0:8}" "${corr:8}" > "$status_file" ;;
+          nul-before) printf 'working: \000corr=%s ready\n' "$corr" > "$status_file" ;;
+          nul-after) printf 'working: corr=%s ready\000\n' "$corr" > "$status_file" ;;
+          nul-later-line) printf 'working: corr=%s ready\n\000damaged\n' "$corr" > "$status_file" ;;
+          partial|failed)
+            printf 'working: corr=%s ready\n' "$corr" > "$status_file"
+            FM_TEST_STATUS_READ_FAULT=$read_kind
+            ;;
+        esac
+        cp "$rec" "$home/record-before"
+        rc=0
+        case "$op" in
+          direct) fm_pending_reply_find_resolve_line "$status_file" "$corr" > "$home/output" || rc=$? ;;
+          parent) fm_pending_reply_try_resolve "$state" "$corr" > "$home/output" || rc=$? ;;
+          wrong-home) fm_pending_reply_detect_wrong_home "$state" "$corr" "$sm_home" > "$home/output" || rc=$? ;;
+          restatement) fm_pending_reply_restatement_copy_same_basename "$state" "$corr" "$sm_home" > "$home/output" || rc=$? ;;
+        esac
+        expect_code 1 "$rc" "$op $read_kind status must be incomplete evidence"
+        [ ! -s "$home/output" ] || fail "$op $read_kind emitted partial evidence"
+        cmp -s "$home/record-before" "$rec" || fail "$op $read_kind changed the record or cached an incomplete scan"
+        if [ "$op" = restatement ]; then
+          [ ! -e "$state/mate.status" ] || fail "$read_kind evidence was copied to the parent"
+        fi
+        # A healthy read must retry even if the file bytes never changed.
+        FM_TEST_STATUS_READ_FAULT=none
+        expected="working: corr=$corr ready"
+        case "$read_kind" in partial|failed) ;; *) printf '%s' "$expected" > "$status_file" ;; esac
+        case "$op" in
+          direct)
+            status_retry_line=$(fm_pending_reply_find_resolve_line "$status_file" "$corr") || fail "healthy direct retry failed"
+            [ "$status_retry_line" = "$expected" ] || fail "healthy direct retry lost the line"
+            ;;
+          parent)
+            fm_pending_reply_try_resolve "$state" "$corr" || fail "healthy parent retry failed"
+            [ "$(fm_pending_reply_get "$rec" phase)" = resolved ] || fail "healthy report did not resolve"
+            ;;
+          wrong-home)
+            fm_pending_reply_detect_wrong_home "$state" "$corr" "$sm_home" || fail "healthy wrong-home retry failed"
+            [ "$(fm_pending_reply_get "$rec" wrong_home_hits)" = 1 ] || fail "healthy report was not counted"
+            [ "$(fm_pending_reply_get "$rec" phase)" = awaiting_report ] || fail "wrong-home evidence resolved the request"
+            ;;
+          restatement)
+            fm_pending_reply_restatement_copy_same_basename "$state" "$corr" "$sm_home" || fail "healthy restatement retry failed"
+            [ "$(command cat "$state/mate.status")" = "$expected" ] || fail "healthy restatement lost the line"
+            ;;
+        esac
+      done
+    done
+  ) || fail "complete status evidence regression failed"
+  pass "binary and failed status reads cannot resolve, copy, count, or cache partial evidence; healthy retries succeed"
+}
+
 test_summary_strips_carrier_before_filtering() {
   local home kind text expected corr rec long_text
   home=$(setup_parent summary-carrier)
@@ -2557,6 +2637,7 @@ test_create_without_openssl() {
   pass "pending request creation supports missing, failed and healthy OpenSSL"
 }
 
+test_status_evidence_requires_complete_text
 test_summary_strips_carrier_before_filtering
 test_correlation_extraction_first_match
 test_pending_directory_override_preserves_bytes

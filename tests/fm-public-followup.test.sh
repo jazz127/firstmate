@@ -1508,6 +1508,45 @@ test_relay_poll_stays_inert_and_surfaces_once() {
   pass "the relay poll stays inert without a token, silent with no commitments, and surfaces a new result once"
 }
 
+test_terminal_event_wake_retries_failed_writes() {
+  local home marker shell mode out i=0
+  poll_fixture_wake() {
+    PATH="$home/fakebin:$PATH" FM_ROOT_OVERRIDE="$ROOT" FM_HOME="$home" \
+      FM_STATE_OVERRIDE="$home/state" "$shell" "$POLL"
+  }
+  for shell in bash /bin/bash; do
+    i=$((i + 1))
+    for mode in closed-output marker-directory; do
+      home=$(make_home "surface-write-$i-$mode")
+      seed_commitment "$home" pf-surface req-surface discord main work-surface
+      emit_terminal "$home" "$home" pf-surface main work-surface >/dev/null \
+        || fail "could not emit the pending fixture result"
+      marker="$home/state/public-followup/surfaced"
+      if [ "$mode" = closed-output ]; then
+        printf 'earlier\n' > "$marker"
+        chmod 600 "$marker"
+        poll_fixture_wake >&- 2>/dev/null || true
+        [ "$(cat "$marker")" = earlier ] \
+          || fail "a failed wake write must preserve the previous surfaced signature"
+      else
+        mkdir "$marker"
+        out=$(poll_fixture_wake) || fail "poll failed: $out"
+        assert_contains "$out" "public-followup terminal results are waiting" \
+          "an unavailable dedup record must not silence an owed wake"
+        [ -d "$marker" ] || fail "poll must preserve the refused marker directory"
+        rmdir "$marker"
+      fi
+      out=$(poll_fixture_wake) || fail "retry poll failed: $out"
+      assert_contains "$out" "public-followup terminal results are waiting" \
+        "the unchanged pending set must retry after a failed write"
+      out=$(poll_fixture_wake) || fail "deduplicated poll failed: $out"
+      assert_not_contains "$out" "public-followup terminal results are waiting" \
+        "a successfully written and recorded wake must deduplicate"
+    done
+  done
+  pass "terminal event wakes survive failed output and dedup-record writes"
+}
+
 # --- 8. startup surfacing ------------------------------------------------------
 
 test_session_start_surfaces_only_when_owed() {
@@ -4092,6 +4131,7 @@ test_relay_disabled_home_pays_nothing
 test_relay_enabled_empty_state_makes_no_calls
 test_exhausted_binding_is_not_retried
 test_relay_poll_stays_inert_and_surfaces_once
+test_terminal_event_wake_retries_failed_writes
 test_session_start_surfaces_only_when_owed
 test_typed_records_exclude_raw_public_material
 test_dropped_baton_now_surfaces_open_loop

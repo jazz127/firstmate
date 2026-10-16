@@ -454,7 +454,11 @@ EOF
 # fm_pf_now_epoch: wall clock as epoch seconds. FMX_NOW_OVERRIDE pins it for
 # tests, matching bin/fm-x-lib.sh.
 fm_pf_now_epoch() {
-  printf '%s\n' "${FMX_NOW_OVERRIDE:-$(date +%s)}"
+  if [ -n "${FMX_NOW_OVERRIDE:-}" ]; then
+    printf '%s\n' "$FMX_NOW_OVERRIDE"
+  else
+    date +%s
+  fi
 }
 
 # fm_pf_now_rfc3339: UTC timestamp for delivered_at and similar stamps.
@@ -480,12 +484,20 @@ fm_pf_rfc3339_to_epoch() {
 
 # fm_pf_followup_window_class <rfc3339>: ok, closing (<48h), expired, or unknown.
 fm_pf_followup_window_class() {
-  local ts=$1 exp now
+  local ts=$1 exp now epoch_re='^[+-]?[0-9]+$'
   exp=$(fm_pf_rfc3339_to_epoch "$ts") || { printf 'unknown\n'; return 0; }
-  now=$(fm_pf_now_epoch)
+  now=$(fm_pf_now_epoch) || { printf 'unknown\n'; return 0; }
+  # test parses decimal integers and rejects signed overflow without evaluating
+  # arithmetic expressions or interpreting a padded timestamp as octal.
+  if ! [[ "$now" =~ $epoch_re ]] || ! [ "$now" -eq "$now" ] 2>/dev/null; then
+    printf 'unknown\n'
+    return 0
+  fi
   if [ "$now" -ge "$exp" ]; then
     printf 'expired\n'
-  elif [ $((exp - now)) -lt 172800 ]; then
+  # The canonical four-digit expiry year bounds this subtraction; now can span
+  # the full signed integer range without overflowing a remaining-time delta.
+  elif [ "$now" -gt "$((exp - 172800))" ]; then
     printf 'closing\n'
   else
     printf 'ok\n'

@@ -2244,6 +2244,41 @@ test_retention_creates_no_false_teardown_refusal() {
   pass "retention creates no false teardown refusal and pending no longer prunes"
 }
 
+test_window_class_validates_clock_evidence() {
+  local home shell mode now clock_rc expected out err
+  home=$(make_home window-clock)
+  err="$home/clock.err"
+  for shell in bash /bin/bash; do
+    for mode in ordinary empty-failed partial-failed empty-success padded-closing minimum maximum overflow; do
+      clock_rc=0
+      case "$mode" in
+        ordinary) now=1999; expected=closing ;;
+        empty-failed) now=; clock_rc=2; expected=unknown ;;
+        partial-failed) now=1999; clock_rc=2; expected=unknown ;;
+        empty-success) now=; expected=unknown ;;
+        padded-closing) now=01999; expected=closing ;;
+        minimum) now=-9223372036854775808; expected=ok ;;
+        maximum) now=9223372036854775807; expected=expired ;;
+        overflow) now=9223372036854775808; expected=unknown ;;
+      esac
+      # shellcheck disable=SC2016 # The selected child shell expands these variables.
+      out=$(ROOT="$ROOT" FM_HOME="$home" PROBE_NOW="$now" PROBE_NOW_RC="$clock_rc" "$shell" -c '
+        set -u
+        . "$ROOT/bin/fm-public-followup-lib.sh"
+        unset FMX_NOW_OVERRIDE
+        date() {
+          if [ "${1:-}" = +%s ]; then printf "%s" "$PROBE_NOW"; return "$PROBE_NOW_RC"; fi
+          command date "$@"
+        }
+        fm_pf_followup_window_class 1970-01-01T00:33:20Z
+      ' 2>"$err") || fail "$shell window classification failed for $mode"
+      [ "$out" = "$expected" ] || fail "$shell $mode window should be $expected, got $out"
+      [ ! -s "$err" ] || fail "$shell $mode emitted a numeric error: $(cat "$err")"
+    done
+  done
+  pass "window classification validates clock evidence and compares signed decimal epochs safely"
+}
+
 test_expiry_escalation_uses_now_override() {
   local home out exp now_closing now_expired registry tmp invalid_expiry real_tasks
   home=$(make_home expiry-window)
@@ -4036,6 +4071,7 @@ test_rechain_refuses_unclaimed_existing_destination
 test_pending_skips_concurrent_retirement
 test_retire_reason_closes_the_open_loop
 test_retention_creates_no_false_teardown_refusal
+test_window_class_validates_clock_evidence
 test_expiry_escalation_uses_now_override
 test_brief_fails_without_typed_deliverable_keys
 test_prechange_registration_is_open_and_unrechainable

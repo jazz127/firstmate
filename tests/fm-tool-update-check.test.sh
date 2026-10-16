@@ -110,6 +110,49 @@ run_check() {
 
 # --- the regression this script exists for ----------------------------------
 
+test_failed_version_output_is_not_trusted() {
+  local shell mode home primary secondary path out
+  for shell in bash /bin/bash; do
+    for mode in current skew primary-exit primary-signal primary-timeout secondary-exit secondary-timeout announcement-exit; do
+      home=$(make_home "partial-version-${shell//\//-}-$mode")
+      primary="$home/primary"; secondary="$home/secondary"
+      make_copy "$primary" "$TOOL" 'fixture 1.0'
+      path=$primary
+      case "$mode" in
+        primary-exit) printf 'exit 7\n' >> "$primary/$TOOL" ;;
+        primary-signal) printf 'kill -TERM $$\n' >> "$primary/$TOOL" ;;
+        primary-timeout) printf 'sleep 5\n' >> "$primary/$TOOL" ;;
+        announcement-exit) printf 'printf "update available: 9.0\\n"\nexit 7\n' >> "$primary/$TOOL" ;;
+        secondary-*|skew)
+          make_copy "$secondary" "$TOOL" 'fixture 2.0'
+          path="$primary:$secondary"
+          case "$mode" in
+            secondary-exit) printf 'exit 7\n' >> "$secondary/$TOOL" ;;
+            secondary-timeout) printf 'sleep 5\n' >> "$secondary/$TOOL" ;;
+          esac
+          ;;
+      esac
+      if [ "$mode" = announcement-exit ]; then
+        write_config "$home" "{\"tools\":[{\"name\":\"fixture\",\"command\":\"$TOOL\",\"announce_pattern\":\"update available: [0-9.]+\"}]}"
+      else
+        write_config "$home" "{\"tools\":[{\"name\":\"fixture\",\"command\":\"$TOOL\"}]}"
+      fi
+      out=$(FM_HOME="$home" PATH="$(fixture_path "$path")" FM_TOOL_UPDATE_INTERVAL=0 \
+        FM_TOOL_UPDATE_PROBE_SECS=1 "$shell" "$CHECK" check 2>&1) || fail "$shell $mode check failed: $out"
+      case "$mode" in
+        current) [ -z "$out" ] || fail "a successful current version was not silent: $out" ;;
+        skew) assert_contains "$out" 'fixture update not in effect:' 'successful version skew was lost' ;;
+        *)
+          assert_contains "$out" 'fixture check failed:' "$shell $mode trusted a failed version probe"
+          assert_not_contains "$out" 'update not in effect:' 'a failed copy contributed an installed version'
+          assert_not_contains "$out" 'update available:' 'a failed version probe contributed an announcement'
+          ;;
+      esac
+    done
+  done
+  pass 'failed, signaled and timed-out version probes cannot supply installed versions or announcements'
+}
+
 test_positive_probe_and_sweep_durations() {
   local shell variable value maximum expected home dir out bound rc
   for shell in bash /bin/bash; do
@@ -1127,6 +1170,7 @@ test_armed_check_wakes_the_watcher_with_the_skew_report() {
   pass "the armed check reaches the watcher as an ordinary check wake"
 }
 
+test_failed_version_output_is_not_trusted
 test_positive_probe_and_sweep_durations
 test_decimal_watcher_timeout
 test_path_skew_is_reported_from_every_copy

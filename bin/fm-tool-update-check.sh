@@ -420,7 +420,7 @@ probe_output() {
 command_findings() {
   local name=$1 command_name=$2 args_joined=$3 announce=$4 announce_args=$5
   local hit out version matched announce_out status matched_line announced_version
-  local resolved_path='' resolved_version='' resolved_out=''
+  local resolved_path='' resolved_version='' resolved_out='' resolved_failed=0
   local best_path='' best_version='' unreadable='' hits=''
 
   # This tool's announcement source is dead if its pattern cannot be used, which
@@ -442,8 +442,17 @@ command_findings() {
       emit "$name check failed: the time budget ran out before every copy answered"
       break
     fi
+    status=0
     # shellcheck disable=SC2086  # deliberate split on validated space-free tokens
-    out=$(probe_output "$hit" $args_joined)
+    out=$(probe_output "$hit" $args_joined) || status=$?
+    if [ "$status" -ne 0 ]; then
+      if [ -z "$resolved_path" ]; then
+        resolved_path=$hit
+        resolved_failed=1
+      fi
+      emit "$name check failed: $hit version probe exited $status"
+      continue
+    fi
     version=$(parse_version "$out")
     if [ -z "$resolved_path" ]; then
       resolved_path=$hit
@@ -509,7 +518,8 @@ EOF
   if [ -z "$resolved_version" ]; then
     # No copy was probed at all when the path is empty, and the budget report
     # already covers that, so do not blame a copy that was never asked.
-    [ -z "$resolved_path" ] || emit "$name check failed: $resolved_path did not report a version"
+    [ -z "$resolved_path" ] || [ "$resolved_failed" -eq 1 ] \
+      || emit "$name check failed: $resolved_path did not report a version"
     return 0
   fi
 

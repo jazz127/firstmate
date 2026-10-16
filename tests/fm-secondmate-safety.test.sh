@@ -3184,6 +3184,78 @@ PYREGISTRY
   pass "registry validation refuses partial resolver failures for registered and expected homes"
 }
 
+test_registry_rejects_binary_route_evidence() {
+  python3 - "$ROOT" "$TMP_ROOT/registry-binary" <<'PYBINARY' || fail "registry readers accepted binary route evidence"
+import json,os,pathlib,shutil,subprocess,sys,tempfile
+root=pathlib.Path(sys.argv[1]);scratch_root=pathlib.Path(sys.argv[2]);scratch_root.mkdir()
+driver=r'''
+set -u
+. "$1/bin/fm-secondmate-registry-lib.sh"
+fixture=$2
+resolver() { printf '%s\n' "$1"; }
+if [ "$3" = field ]; then
+ secondmate_registry_field "$fixture/registry" mate home
+else
+ secondmate_registry_validate_bindings "$fixture/registry" resolver mate "$fixture/subhome"
+fi
+'''
+rows=[]
+for shell in [shutil.which('bash')]:
+ for action in ['field','validate']:
+  for kind in ['id','summary','home','scope','comment','trailing','plain','unterminated']:
+   with tempfile.TemporaryDirectory(prefix='case-',dir=scratch_root) as td:
+    home=pathlib.Path(td);scratch=home/'scratch';scratch.mkdir();record=f'- mate - fixture (home: {td}/subhome; scope: fixture; projects: ; added 2026-01-01)\n'.encode()
+    if kind=='id':record=record.replace(b'mate',b'ma\x00te',1)
+    elif kind=='summary':record=record.replace(b'fixture',b'fix\x00ture',1)
+    elif kind=='home':record=record.replace(b'/subhome',b'/sub\x00home',1)
+    elif kind=='scope':record=record.replace(b'scope: fixture',b'scope: fix\x00ture')
+    elif kind=='comment':record=b'# bad\x00header\n'+record
+    elif kind=='trailing':record+=b'\x00'
+    elif kind=='unterminated':record=record.rstrip(b'\n')
+    (home/'registry').write_bytes(record)
+    env={**os.environ,'FM_HOME':td,'FM_ROOT_OVERRIDE':td,'TMPDIR':str(scratch)}
+    r=subprocess.run([shell,'-c',driver,'probe',str(root),td,action],env=env,capture_output=True,text=True,timeout=15)
+    good=kind in ['plain','unterminated'];expected=td+'/subhome\n' if action=='field' and good else ''
+    bad=r.returncode!=(0 if good else 1) or r.stdout!=expected or (home/'registry').read_bytes()!=record or bool(list(scratch.iterdir()))
+    rows.append({'shell':shell,'action':action,'case':kind,'rc':r.returncode,'stdout':r.stdout,'stderr':r.stderr,'bad':bad})
+assert not any(r['bad'] for r in rows), json.dumps([r for r in rows if r['bad']],indent=2)
+PYBINARY
+  pass "registry field lookup and binding validation reject NUL bytes throughout the input"
+}
+
+test_registry_snapshot_read_errors_do_not_supply_routes() {
+  local snapshot_root="$TMP_ROOT/registry-snapshot-errors"
+  mkdir -p "$snapshot_root/scratch"
+  TMPDIR="$snapshot_root/scratch" bash -c '
+    set -u
+    . "$1"
+    probe_fixture=$2
+    probe_registry="$probe_fixture/registry"
+    printf -- "- mate - fixture (home: %s/subhome; scope: fixture; projects: ; added 2026-01-01)\n" "$probe_fixture" > "$probe_registry"
+    cp "$probe_registry" "$probe_fixture/before"
+    resolver() { printf "%s\n" "$1"; }
+    cat() {
+      if [ "$1" = "$probe_registry" ]; then
+        [ "$kind" != partial ] || command cat "$@"
+        return 1
+      fi
+      command cat "$@"
+    }
+    for kind in empty partial; do
+      if secondmate_registry_field "$probe_registry" mate home > "$probe_fixture/output"; then exit 1; fi
+      [ ! -s "$probe_fixture/output" ] || exit 1
+      if secondmate_registry_validate_bindings "$probe_registry" resolver mate "$probe_fixture/subhome"; then exit 1; fi
+      [ -n "$SECONDMATE_REGISTRY_ERROR" ] || exit 1
+      cmp -s "$probe_registry" "$probe_fixture/before" || exit 1
+      for leftover in "$TMPDIR"/*; do [ ! -e "$leftover" ] || exit 1; done
+    done
+  ' _ "$ROOT/bin/fm-secondmate-registry-lib.sh" "$snapshot_root" \
+    || fail "failed registry snapshot read supplied a route or leaked scratch"
+  pass "registry snapshot read failures discard partial output and preserve source bytes"
+}
+
+test_registry_rejects_binary_route_evidence
+test_registry_snapshot_read_errors_do_not_supply_routes
 test_registry_refuses_failed_path_resolver_evidence
 test_home_seed_literal_backslash_registry_names
 test_fm_home_parameterization

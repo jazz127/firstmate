@@ -75,16 +75,33 @@ secondmate_registry_parse_line() {
   return 0
 }
 
+# Capture complete NUL-free text before shell line reads can discard binary bytes.
+# The output-variable interface reserves _fm_registry_contents for its local value.
+_secondmate_registry_read_text() {  # <registry> <output-variable>
+  local _fm_registry_contents
+  _fm_registry_contents=$(
+    set -o pipefail
+    cat "$1" 2>/dev/null | {
+      if IFS= read -r -d '' _fm_registry_contents; then exit 1; fi
+      printf '%s' "$_fm_registry_contents"
+    }
+  ) || return 1
+  printf -v "$2" '%s' "$_fm_registry_contents"
+}
+
 secondmate_registry_line_for_id() {
-  local reg=$1 id=$2 line count=0
+  local reg=$1 id=$2 line count=0 registry_text
   case "$id" in ''|*[!A-Za-z0-9._-]*) return 1 ;; esac
   [ -f "$reg" ] && [ ! -L "$reg" ] || return 1
+  _secondmate_registry_read_text "$reg" registry_text || return 1
   while IFS= read -r line || [ -n "$line" ]; do
     [ "$line" = "- $id" ] || case "$line" in "- $id "*) ;; *) continue ;; esac
     count=$((count + 1))
     [ "$count" -eq 1 ] || return 1
     SECONDMATE_REGISTRY_LINE=$line
-  done < "$reg"
+  done <<EOF
+$registry_text
+EOF
   [ "$count" -eq 1 ] || return 1
   secondmate_registry_parse_line "$SECONDMATE_REGISTRY_LINE"
 }
@@ -118,7 +135,7 @@ secondmate_registry_path_key() {
 # Only successful, nonempty resolver output can establish a local route identity.
 secondmate_registry_validate_bindings() {
   local reg=$1 resolver=$2 expected_id=${3:-} expected_home=${4:-}
-  local tmp snapshot bindings line id host root home home_key duplicate_homes duplicate_ids overlaps expected_home_key
+  local tmp registry_text bindings line id host root home home_key duplicate_homes duplicate_ids overlaps expected_home_key
   SECONDMATE_REGISTRY_MATCH_HOST=
   SECONDMATE_REGISTRY_MATCH_ROOT=
   SECONDMATE_REGISTRY_MATCH_HOME=
@@ -135,9 +152,8 @@ secondmate_registry_validate_bindings() {
     SECONDMATE_REGISTRY_ERROR="could not create secondmate registry validation state"
     return 1
   }
-  snapshot="$tmp/registry"
   bindings="$tmp/bindings"
-  if ! cat "$reg" > "$snapshot" 2>/dev/null || ! : > "$bindings"; then
+  if ! _secondmate_registry_read_text "$reg" registry_text || ! : > "$bindings"; then
     rm -rf -- "$tmp"
     SECONDMATE_REGISTRY_ERROR="secondmate registry is unavailable or unsafe: $reg"
     return 1
@@ -238,7 +254,9 @@ secondmate_registry_validate_bindings() {
         fi
         ;;
     esac
-  done < "$snapshot"
+  done <<EOF
+$registry_text
+EOF
   duplicate_homes=$(awk -F '\t' '
     {
       if ($1 in owner) {

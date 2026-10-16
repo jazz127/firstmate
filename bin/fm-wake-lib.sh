@@ -59,7 +59,8 @@ fi
 
 fm_pid_alive() {
   local pid=$1
-  case "$pid" in
+  # An all-zero PID names the caller's process group, never a concrete owner.
+  case "${pid//0/}" in
     ''|*[!0-9]*) return 1 ;;
   esac
   kill -0 "$pid" 2>/dev/null
@@ -666,7 +667,7 @@ fm_lock_remove_path() {
 
 fm_lock_mid_acquire_is_fresh() {
   local lockdir=$1 pid=$2 mid_acquire_stale
-  case "$pid" in
+  case "${pid//0/}" in
     ''|*[!0-9]*)
       mid_acquire_stale=$FM_LOCK_STALE_AFTER
       [ "$mid_acquire_stale" -lt 2 ] && mid_acquire_stale=2

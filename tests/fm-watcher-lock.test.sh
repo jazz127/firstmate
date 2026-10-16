@@ -51,6 +51,36 @@ drain_and_ack() {  # <state>
     --recovery-generation "$generation"
 }
 
+test_zero_pid_is_not_a_lock_owner() {
+  local shell round=0 dir
+  dir=$(make_case zero-lock-pid)
+  for shell in "$(command -v bash)" /bin/bash; do
+    round=$((round + 1))
+    FM_STATE_OVERRIDE="$dir/state" FM_LOCK_STALE_AFTER=60 "$shell" -s -- "$LIB" "$dir/locks-$round" <<'SH' \
+      || fail "$shell treated a zero PID as a lock owner or skipped malformed-record grace"
+set -eu
+. "$1"
+for pid in 0 00 000000; do
+  lock="$2/$pid"
+  mkdir -p "$lock"
+  printf '%s\n' "$pid" > "$lock/pid"
+  if fm_lock_try_acquire "$lock"; then
+    printf 'reclaimed a fresh zero-PID record before its grace\n' >&2
+    exit 11
+  fi
+  touch -t 200001010000 "$lock"
+  if ! fm_lock_try_acquire "$lock"; then
+    printf 'zero PID held an old lock forever: %s\n' "$pid" >&2
+    exit 12
+  fi
+  fm_lock_release "$lock"
+  if fm_pid_alive "$pid"; then exit 13; fi
+done
+SH
+  done
+  pass 'zero PID aliases never own locks, while fresh malformed records retain their acquisition grace'
+}
+
 test_wait_deadline_reaps_a_stopped_child() {
   # A stopped TERM-resistant child cannot finish graceful cleanup. The helper waited
   # forever after its nominal deadline. An outer process-group deadline keeps
@@ -1887,6 +1917,7 @@ test_msys_pid_identity_uses_proc() {
   pass "MSYS process identity uses compatible /proc fields"
 }
 
+test_zero_pid_is_not_a_lock_owner
 test_proc_encoding_failure_retains_lock
 test_zero_padded_grace_does_not_evict_before_decimal_bound
 test_wait_deadline_reaps_a_stopped_child

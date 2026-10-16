@@ -1006,17 +1006,18 @@ SH
 }
 
 test_kimi_session_lock_identity() {
-  local home fakebin out
+  local home fakebin out real_ps
   home="$TMP_ROOT/session-lock-home"
   fakebin=$(fm_fakebin "$TMP_ROOT/session-lock-fake")
   mkdir -p "$home/state"
-  cat > "$fakebin/ps" <<'SH'
+  real_ps=$(command -v ps) || fail "test needs ps"
+  cat > "$fakebin/ps" <<SH
 #!/usr/bin/env bash
-case "$*" in
+case "\$*" in
   *"comm="*) printf '%s\n' '/opt/kimi/bin/kimi'; exit 0 ;;
   *"args="*) printf '%s\n' 'kimi'; exit 0 ;;
 esac
-exit 1
+exec "$real_ps" "\$@"
 SH
   chmod +x "$fakebin/ps"
 

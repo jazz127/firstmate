@@ -895,6 +895,50 @@ test_undelivered_records_are_scan_immutable() {
   pass "undelivered records remain immutable across scan paths"
 }
 
+test_sighting_encoding_failure_retries() {
+  (
+    local home state sm_home corr rec status_file expected first sighting_fault rc
+    local FM_TEST_SIGHTING_ENCODER=healthy
+    # Called by the production encoder; consume its input before failing.
+    # shellcheck disable=SC2329
+    od() {
+      case "$FM_TEST_SIGHTING_ENCODER" in
+        partial) command cat >/dev/null; printf '2f 74 6d 70\n'; return 1 ;;
+        empty) command cat >/dev/null; return 1 ;;
+        healthy) command od "$@" ;;
+      esac
+    }
+    for sighting_fault in partial empty; do
+      home=$(setup_parent "sighting-encoding-$sighting_fault")
+      state="$home/state"
+      sm_home="$home/mate"
+      mkdir -p "$sm_home/state"
+      corr=$(fm_pending_reply_create "$home" "$state" mate 'fixture request')
+      fm_pending_reply_mark_delivered "$state" "$corr"
+      rec=$(fm_pending_reply_path "$state" "$corr")
+      status_file="$sm_home/state/"$'child\nphase=resolved,west.status'
+      printf 'done [corr=%s]: fixture report\n' "$corr" > "$status_file"
+      cp "$rec" "$home/before"
+      FM_TEST_SIGHTING_ENCODER=$sighting_fault
+      rc=0
+      fm_pending_reply_detect_wrong_home "$state" "$corr" "$sm_home" || rc=$?
+      expect_code 1 "$rc" "a $sighting_fault encoder failure must leave the scan incomplete"
+      cmp -s "$home/before" "$rec" || fail "failed encoding changed sighting evidence or cached the scan"
+      FM_TEST_SIGHTING_ENCODER=healthy
+      fm_pending_reply_detect_wrong_home "$state" "$corr" "$sm_home" || fail "healthy retry failed"
+      [ "$(fm_pending_reply_get "$rec" wrong_home_hits)" = 1 ] || fail "healthy retry missed the unchanged status file"
+      first=$(fm_pending_reply_get "$rec" wrong_home_first_sighting)
+      printf -v expected '%q' "$status_file"
+      [ "$(fm_pending_reply_sighting_display "$first")" = "$expected:1" ] || fail "sighting lost part of its file path"
+      [ "$(fm_pending_reply_get "$rec" phase)" = awaiting_report ] || fail "a wrong-home sighting resolved the request"
+      cp "$rec" "$home/after"
+      fm_pending_reply_detect_wrong_home "$state" "$corr" "$sm_home" || fail "repeated healthy scan failed"
+      cmp -s "$home/after" "$rec" || fail "repeated healthy scan changed the sighting"
+    done
+  ) || fail "sighting encoder recovery regression failed"
+  pass "failed sighting encoders leave evidence unchanged and retry without a status-file change"
+}
+
 test_delivery_marker_requires_complete_text() {
   (
     local home state corr rec marker op marker_read_mode prefix rc
@@ -2360,6 +2404,7 @@ test_create_without_openssl() {
   pass "pending request creation supports missing, failed and healthy OpenSSL"
 }
 
+test_sighting_encoding_failure_retries
 test_delivery_marker_requires_complete_text
 test_create_without_openssl
 test_record_update_preserves_other_fields

@@ -248,7 +248,10 @@ fm_pending_reply_get() {  # <record-path> <key> [output-variable]
 fm_pending_reply_sighting_encode() {  # <path> <line-number>
   local path=$1 line_no=$2 encoded
   case "$line_no" in ''|*[!0-9]*) return 1 ;; esac
-  encoded=$(printf '%s' "$path" | LC_ALL=C od -An -v -tx1 | tr -d ' \n') || return 1
+  encoded=$(
+    set -o pipefail
+    printf '%s' "$path" | LC_ALL=C od -An -v -tx1 | tr -d ' \n'
+  ) || return 1
   [ -n "$encoded" ] || return 1
   printf 'hex:%s:%s' "$encoded" "$line_no"
 }
@@ -1422,7 +1425,8 @@ fm_pending_reply_detect_wrong_home() {  # <state-dir> <corr_id> <secondmate-home
       && [ "$(basename "$status_file")" = parent-replies.status ]; then
       continue
     fi
-    sighting_base=$(fm_pending_reply_sighting_encode "$status_file" 0) || continue
+    # An incomplete scan must not cache the file set and suppress a healthy retry.
+    sighting_base=$(fm_pending_reply_sighting_encode "$status_file" 0) || return 1
     sighting_base=${sighting_base%:0}
     line_no=0
     while IFS= read -r line || [ -n "$line" ]; do

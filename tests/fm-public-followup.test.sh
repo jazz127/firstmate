@@ -1245,6 +1245,45 @@ test_registry_ids_accept_literal_relative_state_paths() {
   pass "registry IDs preserve literal relative paths and skip non-record entries"
 }
 
+test_delivered_stamp_preserves_invalid_source() {
+  local home registry record original shell mode rc leftovers
+  home=$(make_home stamp-source)
+  registry="$home/state/public-followup/registry"
+  mkdir -p "$registry"
+  chmod 700 "$home/state/public-followup" "$registry"
+  record="$registry/pf-stamp"
+  original="$home/original"
+  for shell in bash /bin/bash; do
+    for mode in empty-error partial-error binary; do
+      printf '%s\n' 'obligation_id=pf-stamp' 'relation_id=rel' 'work_home=main' \
+        'work_id=task' 'state=open' > "$record"
+      [ "$mode" != binary ] || printf '\000' >> "$record"
+      chmod 600 "$record"
+      cp "$record" "$original"
+      # shellcheck disable=SC2016 # The selected child shell expands these variables.
+      ROOT="$ROOT" FM_HOME="$home" RECORD="$record" FILTER_MODE="$mode" "$shell" -c '
+        . "$ROOT/bin/fm-public-followup-lib.sh"
+        grep() {
+          if { [ "${1:-}" = -v ] && [ "${2:-}" = -E ] && [ "${4:-}" = "$RECORD" ]; } \
+            || { [ "${1:-}" = -vE ] && [ "$#" -eq 2 ] && [ "$2" = "^(state|delivered_at|delivered_obligation)=" ]; }; then
+            case "$FILTER_MODE" in
+              empty-error) return 2 ;;
+              partial-error) printf "obligation_id=pf-stamp\n"; return 2 ;;
+            esac
+          fi
+          command grep "$@"
+        }
+        fm_pf_registry_stamp_delivered "$FM_HOME/state" pf-stamp 2026-08-28T01:12:00Z
+      ' >/dev/null 2>&1; rc=$?
+      [ "$rc" -ne 0 ] || fail "$shell delivered stamp accepted $mode input"
+      cmp -s "$original" "$record" || fail "failed stamping changed its retained binding"
+      leftovers=$(find "$home/state/public-followup" -mindepth 1 ! -path "$registry" ! -path "$record" -print)
+      [ -z "$leftovers" ] || fail "failed stamping leaked a lock or staging file"
+    done
+  done
+  pass "delivered stamps retain failed or binary source records"
+}
+
 test_pending_rejects_malformed_listing() {
   local home out
   home=$(make_home pending-malformed)
@@ -4045,6 +4084,7 @@ test_relay_disabled_parent_allows_marked_child_teardown
 test_secondmate_parent_binding_matches_literal_id
 test_traversal_registration_is_refused_before_delivery
 test_registry_ids_accept_literal_relative_state_paths
+test_delivered_stamp_preserves_invalid_source
 test_pending_rejects_malformed_listing
 test_private_context_survives_inbox_cleanup
 test_cleanup_refuses_while_a_public_reply_is_owed

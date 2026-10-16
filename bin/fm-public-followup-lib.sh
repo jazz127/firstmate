@@ -579,11 +579,15 @@ fm_pf_registry_stamp_delivered() {
   fm_pf_registry_lock_acquire "$state" "$id" || return 1
   file="$(fm_pf_registry_dir "$state")/$id"
   if [ -f "$file" ] && [ ! -L "$file" ]; then
-    rest=$(grep -v -E '^(state|delivered_at|delivered_obligation)=' "$file" 2>/dev/null || true)
-    printf '%s\nstate=delivered\ndelivered_at=%s\ndelivered_obligation=%s\n' \
-      "$rest" "$delivered_at" "$id" \
-      | fmx_private_artifact_publish_stdin "$(fm_pf_registry_dir "$state")" "$id" 600 \
-      || rc=$?
+    if _fmx_meta_read_text "$file" rest \
+      && rest=$(_fmx_meta_filter "$rest" '^(state|delivered_at|delivered_obligation)='); then
+      printf '%s\nstate=delivered\ndelivered_at=%s\ndelivered_obligation=%s\n' \
+        "$rest" "$delivered_at" "$id" \
+        | fmx_private_artifact_publish_stdin "$(fm_pf_registry_dir "$state")" "$id" 600 \
+        || rc=$?
+    else
+      rc=1
+    fi
   else
     rc=3
   fi

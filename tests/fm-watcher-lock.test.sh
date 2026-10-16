@@ -1734,6 +1734,65 @@ test_proc_start_identity_retains_validation() {
   pass "process start identities survive command replacement and refuse incomplete process evidence"
 }
 
+test_proc_encoding_failure_retains_lock() {
+  local dir proc_root shell fault api holder rc out identity_key lockdir expected expected_rc real_od
+  dir=$(make_case proc-encoding-failure)
+  proc_root="$dir/proc"
+  identity_key=proc-starttime
+  [ "$(uname)" != Linux ] || identity_key=linux-starttime
+  real_od=$(command -v od)
+  cat > "$dir/fakebin/od" <<'SH'
+#!/bin/sh
+case "$FM_TEST_OD_FAULT" in
+  partial) printf ' 62 61\n'; exit 7 ;;
+  empty) exit 7 ;;
+  valid) exec "$FM_TEST_REAL_OD" "$@" ;;
+esac
+SH
+  chmod +x "$dir/fakebin/od"
+  for shell in "$(command -v bash)" /bin/bash; do
+    for fault in partial empty valid; do
+      sleep 30 &
+      holder=$!
+      write_fake_proc_identity "$proc_root" "$holder" 987654
+      for api in lock full start; do
+        lockdir="$dir/state/.encode-$holder-$api.lock"
+        mkdir -p "$lockdir"
+        printf '%s\n' "$holder" > "$lockdir/pid"
+        # A mismatched start time is evidence of reuse only after the complete
+        # current process identity has been read successfully.
+        printf '%s=987653\n' "$identity_key" > "$lockdir/lock-owner-start"
+        rc=0
+        # shellcheck disable=SC2016 # The child shell expands its positional arguments.
+        out=$(PATH="$dir/fakebin:$PATH" FM_TEST_OD_FAULT="$fault" FM_TEST_REAL_OD="$real_od" \
+          FM_PROC_ROOT_OVERRIDE="$proc_root" FM_STATE_OVERRIDE="$dir/state" "$shell" -c '
+            . "$1"
+            case "$2" in
+              lock) fm_lock_try_acquire "$4" ;;
+              full) fm_pid_identity "$3" ;;
+              start) fm_pid_start_identity "$3" ;;
+            esac
+          ' _ "$LIB" "$api" "$holder" "$lockdir") || rc=$?
+        expected=; expected_rc=1
+        if [ "$fault" = valid ]; then
+          expected_rc=0
+          case "$api" in
+            full) expected="$identity_key=987654 cmdline-hex=62617368002f706174682077697468207370616365732f666d2d77617463682e7368002d2d666c616700" ;;
+            start) expected="$identity_key=987654" ;;
+          esac
+        fi
+        if [ "$rc" -ne "$expected_rc" ] || [ "$out" != "$expected" ] \
+          || { [ "$fault" != valid ] && [ "$(cat "$lockdir/pid")" != "$holder" ]; }; then
+          kill "$holder"; wait "$holder" 2>/dev/null
+          fail "$shell $api mishandled $fault encoder output (rc=$rc, out=$out)"
+        fi
+      done
+      kill "$holder"; wait "$holder" 2>/dev/null || true
+    done
+  done
+  pass 'failed process encoders emit no identity and cannot prove a live lock owner was reused'
+}
+
 test_stale_watch_reclaim_publishes_before_clear() {
   local dir state lockdir rc token
   dir=$(make_case stale-watch-publish-before-clear)
@@ -1797,6 +1856,7 @@ test_msys_pid_identity_uses_proc() {
   pass "MSYS process identity uses compatible /proc fields"
 }
 
+test_proc_encoding_failure_retains_lock
 test_zero_padded_grace_does_not_evict_before_decimal_bound
 test_wait_deadline_reaps_a_stopped_child
 test_singleton_start

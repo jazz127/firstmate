@@ -87,7 +87,10 @@ fm_pid_identity() {  # <pid> [start]
     case "$starttime" in
       ''|*[!0-9]*) return 1 ;;
     esac
-    cmdline_hex=$(od -An -v -tx1 "$proc_root/$pid/cmdline" 2>/dev/null | tr -d '[:space:]') || return 1
+    cmdline_hex=$(
+      set -o pipefail
+      od -An -v -tx1 "$proc_root/$pid/cmdline" 2>/dev/null | tr -d '[:space:]'
+    ) || return 1
     [ -n "$cmdline_hex" ] || return 1
     identity_key=proc-starttime
     [ "$_FM_UNAME" != Linux ] || identity_key=linux-starttime

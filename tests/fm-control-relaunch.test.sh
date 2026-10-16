@@ -108,12 +108,15 @@ case "${1:-}" in
       case "$a" in
         *cursor_y*) printf '1\n'; exit 0 ;;
         *pane_current_command*) cat "$D/command"; printf '\n'; exit 0 ;;
-        *pane_current_path*)
+        *pane_tty*)
+          # The endpoint check starts with this query; the foreground cwd itself
+          # comes from the ps and lsof fakes paired with /dev/pts/91.
           if [ -n "${FM_FAKE_CWD_RACE_READY:-}" ]; then
             : > "$FM_FAKE_CWD_RACE_READY"
             /bin/sleep 1
           fi
-          cat "$D/cwd"; printf '\n'; exit 0 ;;
+          printf '/dev/pts/91\n'; exit 0 ;;
+        *pane_current_path*) cat "$D/cwd"; printf '\n'; exit 0 ;;
       esac
     done
     printf 'fakepane\n'; exit 0 ;;
@@ -195,6 +198,7 @@ new_case() {
   printf '%s\n' "fm-$id" > "$dir/fake/windows"
   printf '%s' fmses > "$dir/fake/session-name"
   make_tmux_stub "$dir"
+  fm_test_fake_tmux_foreground_cwd "$dir/fakebin" "$dir/fake/cwd"
   printf '%s\n' "$dir"
 }
 

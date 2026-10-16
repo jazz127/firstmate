@@ -112,6 +112,7 @@ case "${1:-}" in
         *pane_current_command*)
           if [ -f "$D/command.$target" ]; then cat "$D/command.$target"; else cat "$D/command"; fi
           printf '\n'; exit 0 ;;
+        *pane_tty*) printf '/dev/pts/91\n'; exit 0 ;;
         *pane_current_path*) cat "$D/cwd"; printf '\n'; exit 0 ;;
       esac
       prev=$a
@@ -201,6 +202,7 @@ new_case() {
   printf 'claude' > "$dir/fake/command"
   printf 'claude' > "$dir/fake/becomes"
   make_stub "$dir"
+  fm_test_fake_tmux_foreground_cwd "$dir/fakebin" "$dir/fake/cwd"
   printf '%s\n' "$dir"
 }
 

@@ -859,6 +859,43 @@ EOF
   pass "fm-startup-network: a held publish lock ends the worker inside its budget with a failed-rerun record"
 }
 
+test_malformed_clock_values_cannot_abort_timing_start() {
+  local dir kind raw value rc expected out
+  dir="$TMP_ROOT/timing-invalid-clock"
+  mkdir -p "$dir"
+  while IFS='|' read -r kind raw value rc expected; do
+    out=$(bash -c '
+      set -eu
+      . "$1"
+      unset EPOCHREALTIME
+      EPOCHREALTIME=$3
+      clock_value=$4
+      clock_rc=$5
+      date() { printf "%s" "$clock_value"; return "$clock_rc"; }
+      fm_timing_start "$2"
+      printf "%s caller-survived" "$FM_TIMING_EPOCH_MS"
+    ' _ "$ROOT/bin/fm-timing-lib.sh" "$dir/timings.tsv" "$raw" "$value" "$rc" 2>&1) \
+      || fail "$kind clock input aborted timing startup: $out"
+    [ "$out" = "$expected caller-survived" ] \
+      || fail "$kind clock input produced invalid timing output: $out"
+  done <<'CASES'
+padded|08.123|2000|0|2000000
+octal|010.123|2000|0|2000000
+suffix|1700000000.123junk|2000|0|2000000
+separator|1700000000.123.456|2000|0|2000000
+oversized|99999999999999999999.123|2000|0|2000000
+failed-date||1700000000|1|0
+padded-date||08|0|0
+oversized-date||99999999999999999999|0|0
+dot|1700000000.123456|2000|0|1700000000123
+comma|1700000000,123456|2000|0|1700000000123
+short|1700000000.1|2000|0|1700000000100
+zero|0.0|2000|0|0
+fallback||1700000000|0|1700000000000
+CASES
+  pass "timing startup rejects malformed clock values without aborting its caller"
+}
+
 test_malformed_timing_stamps_cannot_abort_the_caller() {
   local dir stamp out log
   dir="$TMP_ROOT/timing-invalid-stamps"
@@ -941,6 +978,7 @@ test_invalid_timing_limits_use_the_safe_default() {
 
 test_invalid_timing_limits_use_the_safe_default
 test_timing_report_selects_three_slowest_without_reordering_records
+test_malformed_clock_values_cannot_abort_timing_start
 test_malformed_timing_stamps_cannot_abort_the_caller
 test_wait_fails_without_a_published_stage
 test_start_returns_without_holding_the_callers_stdout

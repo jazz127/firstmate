@@ -59,22 +59,21 @@ fm_timing_enabled() {
 # than losing the timing entirely. That is a coarser answer to "which host was
 # slow", not a missing one, because the steps being measured are seconds-scale.
 fm_timing_now_ms() {
-  local raw sec frac
+  local raw sec frac clock_re='^([0-9]+)[.,]([0-9]+)$'
   raw=${EPOCHREALTIME:-}
-  case "$raw" in
-    *[0-9][.,][0-9]*)
-      sec=${raw%%[.,]*}
-      frac=${raw#*[.,]}
-      frac="${frac}000"
-      frac=${frac:0:3}
-      case "$sec$frac" in
-        ''|*[!0-9]*) ;;
-        *) printf '%s\n' "$(( sec * 1000 + 10#$frac ))"; return 0 ;;
-      esac
-      ;;
-  esac
-  sec=$(date +%s 2>/dev/null || printf '0')
-  case "$sec" in ''|*[!0-9]*) sec=0 ;; esac
+  if [[ $raw =~ $clock_re ]]; then
+    sec=${BASH_REMATCH[1]}
+    frac=${BASH_REMATCH[2]}000
+    # Keep the resulting milliseconds within the same 16-digit contract as
+    # stored timing stamps. Validate before arithmetic, including on old Bash
+    # where EPOCHREALTIME may be an ordinary inherited environment variable.
+    if _fm_timing_uint_valid "$sec" && [ "${#sec}" -le 13 ]; then
+      printf '%s\n' "$(( sec * 1000 + 10#${frac:0:3} ))"
+      return 0
+    fi
+  fi
+  sec=$(date +%s 2>/dev/null) || sec=0
+  if ! _fm_timing_uint_valid "$sec" || [ "${#sec}" -gt 13 ]; then sec=0; fi
   printf '%s\n' "$(( sec * 1000 ))"
 }
 

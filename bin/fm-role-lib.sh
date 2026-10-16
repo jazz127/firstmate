@@ -345,18 +345,24 @@ fm_role_sha256_stdin() {
 # the recorded payload, or a recorded absent with no destination file).
 # FM_ROLE_DIAG names the narrow failure.
 fm_role_inherit_check() {
-  local role_file=$1 receipt=$2 gen bytes sha cmd have
+  local role_file=$1 receipt=$2 gen bytes sha cmd have contents='' extra=''
   if [ -L "$receipt" ] || [ ! -f "$receipt" ]; then
     FM_ROLE_DIAG="inheritance receipt is missing or unsafe"
     return 1
   fi
+  if IFS= read -r -d '' contents 2>/dev/null < "$receipt"; then
+    FM_ROLE_DIAG="inheritance receipt contains binary data"
+    return 1
+  fi
+  case "$contents" in
+    *$'\n') contents=${contents%$'\n'} ;;
+    *) FM_ROLE_DIAG="inheritance receipt is unreadable"; return 1 ;;
+  esac
   {
-    IFS= read -r gen
-    IFS= read -r bytes
-    IFS= read -r sha
-    IFS= read -r cmd
-  } <"$receipt" || {
-    FM_ROLE_DIAG="inheritance receipt is unreadable"
+    IFS= read -r gen && IFS= read -r bytes && IFS= read -r sha && IFS= read -r cmd \
+      && ! IFS= read -r extra && [ -z "$extra" ]
+  } <<< "$contents" || {
+    FM_ROLE_DIAG="inheritance receipt must contain exactly four lines"
     return 1
   }
   case $gen in

@@ -307,7 +307,7 @@ fm_task_inbox_body() {  # <record-path>
   while IFS= read -r line; do
     if [ "$line" = -- ]; then
       cat
-      return 0
+      return
     fi
   done < "$1"
   return 1

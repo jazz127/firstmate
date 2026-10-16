@@ -1200,6 +1200,56 @@ test_sequence_order_crosses_padding_widths() {
   pass "inbox: numeric sequence order crosses padding widths and includes handled records"
 }
 
+test_idempotent_write_rejects_failed_body_reads() {
+  local state location mode old rec text again
+  for location in unhandled handled; do
+    for mode in partial empty full; do
+      state="$TMP_ROOT/failed-body-$location-$mode/state"
+      mkdir -p "$state"
+      old=$(inbox_lib "$state" fm_task_inbox_write "$state" t1 'please inspect the longer request') \
+        || fail "body-read fixture write failed"
+      if [ "$location" = handled ]; then
+        mv "$old" "${old%/*}/handled/" || fail "body-read fixture acknowledgement failed"
+        old="${old%/*}/handled/${old##*/}"
+      fi
+      text='please inspect'
+      [ "$mode" != full ] || text='please inspect the longer request'
+      rec=$(FM_STATE_OVERRIDE="$state" bash -c '
+        . "$1"
+        mode=$4
+        cat() {
+          if [ "$#" -eq 0 ]; then
+            case "$mode" in
+              partial) printf "%s" "please inspect" ;;
+              full) command cat ;;
+            esac
+            return 7
+          fi
+          command cat "$@"
+        }
+        fm_task_inbox_write_idempotent "$2" t1 "$3"
+      ' _ "$ROOT/bin/fm-task-inbox-lib.sh" "$state" "$text" "$mode") \
+        || fail "idempotent enqueue failed after a $location $mode body-read error"
+      [ "$rec" = "$state/t1.inbox/002.msg" ] \
+        || fail "$location $mode body-read error must not prove a duplicate: $rec"
+      [ "$(inbox_lib "$state" fm_task_inbox_body "$rec")" = "$text" ] \
+        || fail "body-read error lost the requested message"
+      [ "$(inbox_lib "$state" fm_task_inbox_body "$old")" = 'please inspect the longer request' ] \
+        || fail "body-read error changed the existing message"
+      again=$(inbox_lib "$state" fm_task_inbox_write_idempotent "$state" t1 "$text") \
+        || fail "healthy retry after a body-read error failed"
+      case "$again" in
+        "$rec"|"$old") ;;
+        *) fail "healthy retry created another record" ;;
+      esac
+      [ "$(inbox_lib "$state" fm_task_inbox_body "$again")" = "$text" ] \
+        || fail "healthy retry did not deduplicate the complete body"
+    done
+  done
+  pass "inbox: failed body reads cannot prove an idempotent duplicate"
+}
+
+test_idempotent_write_rejects_failed_body_reads
 test_sequence_order_crosses_padding_widths
 test_writer_retries_after_a_vanished_lock_collision 08
 test_writer_retries_after_a_vanished_lock_collision 09

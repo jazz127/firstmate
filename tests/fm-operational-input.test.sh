@@ -303,6 +303,52 @@ CAT
   pass "operational commands refuse empty and partial failed stdin reads before emitting or recording input"
 }
 
+test_record_prune_preserves_filename_boundaries() {
+  local tmp kind state old collateral
+  tmp=$(fm_test_tmproot fm-operational-prune-boundaries)
+  for kind in space tab newline; do
+    state="$tmp/$kind/state"
+    mkdir -p "$state/operational-inbox"
+    case "$kind" in
+      space) old="$state/operational-inbox/.record.expired "; collateral="$state/operational-inbox/.record.expired" ;;
+      tab) old="$state/operational-inbox/.record.expired"$'\t'; collateral="$state/operational-inbox/.record.expired" ;;
+      newline) old="$state/operational-inbox/1-expired.msg"$'\nother.msg'; collateral="$state/operational-inbox/1-expired.msg" ;;
+    esac
+    printf 'expired fixture' > "$old"
+    touch -t 200001010000 "$old"
+    printf 'unrelated fresh record' > "$collateral"
+    printf 'new fixture record' | FM_STATE_OVERRIDE="$state" "$OWNER" record watcher >/dev/null \
+      || fail "$kind filename fixture record write failed"
+    [ -f "$collateral" ] || fail "$kind filename pruning deleted a different fresh record"
+    [ "$(cat "$collateral")" = 'unrelated fresh record' ] || fail "$kind filename pruning changed a different record"
+    if [ "$kind" = newline ]; then
+      [ -f "$old" ] || fail "a filename outside the line-based stat format must be skipped"
+    else
+      [ ! -e "$old" ] || fail "$kind filename was not pruned by its exact path"
+    fi
+  done
+  state="$tmp/unsafe"$'\npath'
+  mkdir -p "$state"
+  printf old > "$state/1-expired.msg"
+  touch -t 200001010000 "$state/1-expired.msg"
+  printf 'unrelated fresh file' > "$tmp/unsafe"
+  if fm_operational_record_prune "$state"; then
+    fail "a record directory outside the stat line format must be refused"
+  fi
+  [ -f "$tmp/unsafe" ] || fail "a newline in the record directory deleted an unrelated file"
+  (
+    cd "$tmp" || exit 1
+    printf 'unrelated fixture' > ./1
+    # Inject incomplete stat output through the prune helper's producer.
+    # shellcheck disable=SC2329
+    find() { printf '1\n'; return 1; }
+    fm_operational_record_prune "$tmp/inbox"
+    [ -f 1 ] || fail "an incomplete stat line was interpreted as a pathname"
+  ) || fail "incomplete stat output control failed"
+  pass "record pruning preserves exact filename boundaries and refuses unrepresentable paths"
+}
+
+test_record_prune_preserves_filename_boundaries
 test_stdin_read_errors_refuse_partial_operational_input
 test_record_prune_preserves_leading_relative_spaces
 test_current_generic_matrix

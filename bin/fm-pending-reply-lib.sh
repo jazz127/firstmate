@@ -766,19 +766,22 @@ fm_pending_reply_file_signature() {  # <path> [kernel-name]
 }
 
 fm_pending_reply_status_set_signature() {  # <status-dir>
-  local status_dir=$1 status_file signature kernel='' have_kernel=0
+  # The loop variable deliberately shares no name with the status_file local of
+  # the resolve path below: both live in this file, and ShellCheck's dataflow
+  # would otherwise read that later use as a write lost to this pipeline subshell.
+  local status_dir=$1 status_path signature kernel='' have_kernel=0
   (
     set -o pipefail
     {
-      for status_file in "$status_dir"/*.status; do
-        [ -f "$status_file" ] || continue
+      for status_path in "$status_dir"/*.status; do
+        [ -f "$status_path" ] || continue
         # The platform is constant for this batch; empty batches need no probe.
         if [ "$have_kernel" = 0 ]; then
           kernel=$(uname -s 2>/dev/null) || :
           have_kernel=1
         fi
-        signature=$(fm_pending_reply_file_signature "$status_file" "$kernel") || exit 1
-        printf '%s:%s:%s\n' "${#status_file}" "$status_file" "$signature" || exit 1
+        signature=$(fm_pending_reply_file_signature "$status_path" "$kernel") || exit 1
+        printf '%s:%s:%s\n' "${#status_path}" "$status_path" "$signature" || exit 1
       done
     } | cksum 2>/dev/null | awk '{printf "%s-%s", $1, $2}'
   )

@@ -62,6 +62,11 @@ while IFS= read -r -d '' p; do
   fm_dirname_to got "$p"
   want=$(dirname -- "$p")
   [ "$got" = "$want" ] || printf 'dirname %q: helper %q, command %q\n' "$p" "$got" "$want"
+  fm_dirname_to got "$p" literal
+  want=$(dirname -- "$p"; printf '.')
+  want=${want%.}
+  want=${want%$'\n'}
+  [ "$got" = "$want" ] || printf 'literal dirname %q: helper %q, command %q\n' "$p" "$got" "$want"
   fm_basename_to got "$p"
   want=$(basename -- "$p")
   [ "$got" = "$want" ] || printf 'basename %q: helper %q, command %q\n' "$p" "$got" "$want"

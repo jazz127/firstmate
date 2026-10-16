@@ -895,6 +895,35 @@ test_undelivered_records_are_scan_immutable() {
   pass "undelivered records remain immutable across scan paths"
 }
 
+test_pending_directory_override_preserves_bytes() {
+  local home state corr rec marker suffix dir FM_PENDING_REPLY_DIR_OVERRIDE
+  for suffix in $'\n' $'\n\n'; do
+    home=$(setup_parent directory-bytes)
+    state="$home/state"
+    export FM_PENDING_REPLY_DIR_OVERRIDE="$home/pending$suffix"
+    corr=$(fm_pending_reply_create "$home" "$state" mate 'fixture request') || fail "request creation failed"
+    rec="$FM_PENDING_REPLY_DIR_OVERRIDE/$corr"
+    [ -f "$rec" ] || fail "pending record was not created in the exact override directory"
+    [ ! -e "$home/pending" ] || fail "creation also made a directory with trimmed bytes"
+    fm_pending_reply_task_has_open "$state" mate || fail "open request was not found in the override directory"
+    fm_pending_reply_write_delivery_confirmation "$state" "$corr" attempted 1000 || fail "delivery preparation failed"
+    marker="$FM_PENDING_REPLY_DIR_OVERRIDE/.delivery-confirmed-$corr"
+    [ -f "$marker" ] || fail "delivery sidecar lost directory bytes"
+    [ ! -e "$home/pending" ] || fail "delivery preparation made a trimmed directory"
+    fm_pending_reply_confirm_delivery "$state" "$corr" || fail "delivery confirmation failed"
+    printf 'done [corr=%s]: fixture answer\n' "$corr" > "$state/mate.status"
+    fm_pending_reply_tick "$state" || fail "pending scan failed"
+    [ "$(fm_pending_reply_get "$rec" phase)" = resolved ] || fail "pending scan missed the exact directory"
+    [ ! -e "$marker" ] || fail "confirmed sidecar was not cleared"
+    if fm_pending_reply_task_has_open "$state" mate; then fail "resolved request still appears open"; fi
+    dir=stale
+    fm_pending_reply_dir "$state" dir > "$home/dir.out"
+    [ "$dir" = "$FM_PENDING_REPLY_DIR_OVERRIDE" ] || fail "direct directory assignment lost path bytes"
+    [ ! -s "$home/dir.out" ] || fail "direct directory assignment printed output"
+  done
+  pass "pending creation, delivery and scans preserve the exact override directory"
+}
+
 test_signature_failures_do_not_hide_new_reports() {
   (
     local home state sm_home corr rec status_file signature_fault scan_kind rc
@@ -2482,6 +2511,7 @@ test_create_without_openssl() {
   pass "pending request creation supports missing, failed and healthy OpenSSL"
 }
 
+test_pending_directory_override_preserves_bytes
 test_correlations_reuse_only_for_matching_open_task
 test_signature_failures_do_not_hide_new_reports
 test_sighting_encoding_failure_retries

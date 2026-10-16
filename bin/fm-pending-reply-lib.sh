@@ -160,17 +160,21 @@ fm_pending_reply_grace_secs() {
 }
 
 # Directory holding durable pending-reply records for <state-dir>.
-fm_pending_reply_dir() {  # <state-dir>
-  local state=$1
-  if [ -n "${FM_PENDING_REPLY_DIR_OVERRIDE:-}" ]; then
-    printf '%s' "$FM_PENDING_REPLY_DIR_OVERRIDE"
-    return 0
+# Direct assignment preserves trailing newlines in an override and avoids a
+# subshell. The _fm_pending_dir_ prefix is reserved for this helper's locals.
+fm_pending_reply_dir() {  # <state-dir> [output-variable]
+  local _fm_pending_dir_value=${FM_PENDING_REPLY_DIR_OVERRIDE:-$1/pending-replies}
+  if [ "$#" -gt 1 ]; then
+    printf -v "$2" '%s' "$_fm_pending_dir_value"
+  else
+    printf '%s' "$_fm_pending_dir_value"
   fi
-  printf '%s/pending-replies' "$state"
 }
 
 fm_pending_reply_path() {  # <state-dir> <corr_id>
-  printf '%s/%s' "$(fm_pending_reply_dir "$1")" "$2"
+  local dir
+  fm_pending_reply_dir "$1" dir
+  printf '%s/%s' "$dir" "$2"
 }
 
 # Privacy-safe correlation id: 16 lowercase hex chars (64 bits of entropy).
@@ -299,7 +303,7 @@ fm_pending_reply_corr_reusable() {  # <state-dir> <corr_id> <task_id>
 fm_pending_reply_set() {  # <record-path> <key> <value>
   local rec=$1 key=$2 value=$3 dir base tmp line
   [ -f "$rec" ] || return 1
-  fm_dirname_to dir "$rec"
+  fm_dirname_to dir "$rec" literal
   fm_basename_to base "$rec"
   tmp="$dir/.${base}.tmp.$$"
   {
@@ -343,7 +347,7 @@ fm_pending_reply_create() {  # <parent-home> <state-dir> <task_id> <request-text
   local parent_home=$1 state=$2 task_id=$3 request_text=$4
   local dir rec corr now summary status_path tmp
   [ -n "$parent_home" ] && [ -n "$state" ] && [ -n "$task_id" ] || return 2
-  dir=$(fm_pending_reply_dir "$state")
+  fm_pending_reply_dir "$state" dir
   mkdir -p "$dir" || return 1
   chmod 700 "$dir" 2>/dev/null || true
   corr=$(fm_pending_reply_new_id)
@@ -424,7 +428,9 @@ fm_pending_reply_mark_delivered() {  # <state-dir> <corr_id> [confirmed-epoch]
 }
 
 fm_pending_reply_delivery_confirmation_path() {  # <state-dir> <corr_id>
-  printf '%s/.delivery-confirmed-%s' "$(fm_pending_reply_dir "$1")" "$2"
+  local dir
+  fm_pending_reply_dir "$1" dir
+  printf '%s/.delivery-confirmed-%s' "$dir" "$2"
 }
 
 # Read a complete NUL-free sidecar before shell capture can erase binary bytes.
@@ -443,7 +449,7 @@ fm_pending_reply_delivery_confirmation_read() {  # <marker-path>
 fm_pending_reply_write_delivery_confirmation() {  # <state-dir> <corr_id> <state> <value>
   local pending_state=$1 corr=$2 delivery_state=$3 value=$4 marker dir tmp
   marker=$(fm_pending_reply_delivery_confirmation_path "$pending_state" "$corr")
-  dir=$(dirname "$marker")
+  fm_pending_reply_dir "$pending_state" dir
   mkdir -p "$dir" || return 1
   tmp="$marker.tmp.$$"
   printf '%s=%s\n' "$delivery_state" "$value" > "$tmp" || return 1
@@ -1603,7 +1609,7 @@ fm_pending_reply_tick() {  # <state-dir> [watcher-beacon]
   local state=$1 beacon=${2-} dir rec corr task_id phase delivered meta backend target label busy sm_home harness remote_host
   local observation observation_task found i remote_reposts=0 allow_recovery attempted_before
   local -a observation_tasks=() observation_values=() records=() selected=()
-  dir=$(fm_pending_reply_dir "$state")
+  fm_pending_reply_dir "$state" dir
   [ -d "$dir" ] || return 0
   for rec in "$dir"/*; do
     [ -f "$rec" ] || continue
@@ -1735,7 +1741,7 @@ fm_pending_reply_tick() {  # <state-dir> [watcher-beacon]
 # True when any open (non-resolved) pending reply exists for a task.
 fm_pending_reply_task_has_open() {  # <state-dir> <task_id>
   local state=$1 task_id=$2 dir rec phase tid
-  dir=$(fm_pending_reply_dir "$state")
+  fm_pending_reply_dir "$state" dir
   [ -d "$dir" ] || return 1
   for rec in "$dir"/*; do
     [ -f "$rec" ] || continue

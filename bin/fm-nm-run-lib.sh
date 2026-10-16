@@ -92,8 +92,15 @@ fm_nm_state_db() {  # <worktree>
 }
 
 # Scalar value of a TOON key in captured `axi status` output $1.
+# Stop at the first field without a producer pipe that can fail on early exit.
 fm_nm_field() {  # <toon-output> <key>
-  printf '%s\n' "$1" | sed -n "s/^[[:space:]]*$2:[[:space:]]*\(.*\)/\1/p" | head -1
+  sed -n "
+    /^[[:space:]]*$2:/ {
+      s/^[[:space:]]*$2:[[:space:]]*//
+      p
+      q
+    }
+  " <<< "$1"
 }
 
 # Full commit sha for sha-ish $2 as seen from worktree $1's own object store;

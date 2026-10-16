@@ -5609,6 +5609,43 @@ test_captured_completed_history() {
   pass 'captured completed status yields to synthetic subsequent development'
 }
 
+test_nm_field_large_records_with_pipefail() {
+  local shell
+  for shell in "$(command -v bash)" /bin/bash; do
+    "$shell" -s -- "$ROOT" "$TMP_ROOT/nm-field" <<'SH' || fail "$shell lost scalar values or statuses under pipefail"
+set -u
+. "$1/bin/fm-nm-run-lib.sh"
+printf -v duplicates 'status: running\n%.0s' {1..15000}
+printf -v padding '%200000s' x
+for option in on off; do
+  if [ "$option" = on ]; then set -o pipefail; else set +o pipefail; fi
+  for kind in small duplicates missing late empty quoted tab near; do
+    expected=running; present=1
+    case "$kind" in
+      small) body=$'status: running\noutcome: \n' ;;
+      duplicates) body=$duplicates ;;
+      missing) body="notes: $padding"; present=0 ;;
+      late) body="notes: $padding"$'\n  status:   running  \n'; expected='running  ' ;;
+      empty) body=$' status:\nstatus: running\n'; expected='' ;;
+      quoted) body=$'  status: "running"\r\n'; expected=$'"running"\r' ;;
+      tab) body=$'\tstatus:\tline\\literal\n'; expected='line\literal' ;;
+      near) body=$'status_extra: wrong\nstatus : wrong\nstatus: right\n'; expected=right ;;
+    esac
+    : > "$2.expected"
+    [ "$present" -eq 0 ] || printf '%s\n' "$expected" > "$2.expected"
+    rc=0
+    fm_nm_field "$body" status > "$2.out" || rc=$?
+    if [ "$rc" -ne 0 ] || ! cmp -s "$2.expected" "$2.out"; then
+      printf '%s pipefail=%s: rc=%s\n' "$kind" "$option" "$rc" >&2
+      exit 1
+    fi
+  done
+done
+SH
+  done
+  pass 'scalar readers preserve the first field and its exact bytes across large records and pipefail settings'
+}
+
 test_large_parked_run_with_pipefail() {
   local shell
   for shell in "$(command -v bash)" /bin/bash; do
@@ -5666,6 +5703,7 @@ test_nm_scalar_trimming() {
   pass 'scalar trimming preserves whitespace, quotes and literal values through stdout and output variables'
 }
 
+test_nm_field_large_records_with_pipefail
 test_large_parked_run_with_pipefail
 test_nm_scalar_trimming
 test_binary_metadata_is_unknown

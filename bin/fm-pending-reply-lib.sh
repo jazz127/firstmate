@@ -900,20 +900,20 @@ fm_pending_reply_observe_busy() {  # <state-dir> <corr_id> <busy_state>
 
 fm_pending_reply_fallback_idle_eligible() {  # <record-path>
   local rec=$1 phase start seen grace now
-  phase=$(fm_pending_reply_get "$rec" phase)
+  fm_pending_reply_get "$rec" phase phase
   case "$phase" in
     awaiting_report)
-      start=$(fm_pending_reply_get "$rec" delivered_epoch)
-      seen=$(fm_pending_reply_get "$rec" turn_seen_busy)
+      fm_pending_reply_get "$rec" delivered_epoch start
+      fm_pending_reply_get "$rec" turn_seen_busy seen
       ;;
     recovery_sent)
-      start=$(fm_pending_reply_get "$rec" recovery_sent_epoch)
-      seen=$(fm_pending_reply_get "$rec" recovery_turn_seen_busy)
+      fm_pending_reply_get "$rec" recovery_sent_epoch start
+      fm_pending_reply_get "$rec" recovery_turn_seen_busy seen
       ;;
     *) return 1 ;;
   esac
   [ "$seen" = 1 ] && return 0
-  grace=$(fm_pending_reply_get "$rec" grace_secs)
+  fm_pending_reply_get "$rec" grace_secs grace
   case "$start" in ''|*[!0-9]*) return 1 ;; esac
   case "$grace" in ''|*[!0-9]*) grace=$(fm_pending_reply_grace_secs) ;; esac
   now=$(fm_pending_reply_now) || return 1

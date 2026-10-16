@@ -708,6 +708,7 @@ fm_pending_reply_find_resolve_line() {  # <status-file> <corr_id>
 }
 
 # Failed metadata is unknown, not a stable signature suitable for caching.
+# Keep subsecond timestamps so same-size rewrites invalidate cached absence.
 fm_pending_reply_file_signature() {  # <path> [kernel-name]
   local path=$1 kernel
   [ -f "$path" ] || { printf 'missing'; return 0; }
@@ -717,9 +718,9 @@ fm_pending_reply_file_signature() {  # <path> [kernel-name]
     kernel=$(uname -s 2>/dev/null) || :
   fi
   if [ "$kernel" = Darwin ]; then
-    LC_ALL=C /usr/bin/stat -f '%d:%i:%z:%m:%c' "$path" 2>/dev/null
+    LC_ALL=C /usr/bin/stat -f '%d:%i:%z:%Fm:%Fc' "$path" 2>/dev/null
   else
-    LC_ALL=C stat -c '%d:%i:%s:%Y:%Z' "$path" 2>/dev/null
+    LC_ALL=C stat -c '%d:%i:%s:%y:%z' "$path" 2>/dev/null
   fi
 }
 

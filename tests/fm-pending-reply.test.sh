@@ -2610,6 +2610,66 @@ test_tick_without_metadata() (
 
 # --- run --------------------------------------------------------------------
 
+test_same_second_status_rewrite_is_rescanned() {
+  local home state corr rec report operation attempt collision rc
+  for operation in parent wrong-home; do
+    collision=0
+    for attempt in 1 2 3 4 5; do
+      home=$(setup_parent "same-second-$operation-$attempt")
+      state="$home/state"
+      mkdir -p "$home/mate/state"
+      corr=$(fm_pending_reply_create "$home" "$state" mate 'rewritten report request') \
+        || fail "rewritten report fixture creation failed"
+      fm_pending_reply_mark_delivered "$state" "$corr" 1000 \
+        || fail "rewritten report fixture delivery failed"
+      report="$state/mate.status"
+      [ "$operation" != wrong-home ] || report="$home/mate/state/child.status"
+      # Leave almost a whole second for the cache read and rewrite. If a slow
+      # runner still crosses the boundary, retry with a fresh fixture below.
+      python3 - <<'PY'
+import time
+time.sleep(1.05 - time.time() % 1)
+PY
+      printf 'working: corr=ffffffffffffffff ready\n' > "$report"
+      if [ "$operation" = parent ]; then
+        fm_pending_reply_try_resolve "$state" "$corr" && fail "unrelated report resolved the fixture"
+      else
+        fm_pending_reply_detect_wrong_home "$state" "$corr" "$home/mate" \
+          || fail "initial wrong-home scan failed"
+      fi
+      rc=0
+      python3 - "$report" "$corr" <<'PY' || rc=$?
+import pathlib, sys
+path = pathlib.Path(sys.argv[1])
+before = path.stat()
+path.write_text(f"working: corr={sys.argv[2]} ready\n")
+after = path.stat()
+def coarse(value):
+    return (value.st_dev, value.st_ino, value.st_size,
+            value.st_mtime_ns // 1_000_000_000, value.st_ctime_ns // 1_000_000_000)
+sys.exit(0 if coarse(before) == coarse(after) else 77)
+PY
+      [ "$rc" -ne 77 ] || continue
+      [ "$rc" -eq 0 ] || fail "same-second rewrite fixture failed"
+      collision=1
+      rec=$(fm_pending_reply_path "$state" "$corr")
+      if [ "$operation" = parent ]; then
+        fm_pending_reply_try_resolve "$state" "$corr" \
+          || fail "same-size same-second report must invalidate cached absence"
+        [ "$(phase_of "$state" "$corr")" = resolved ] || fail "rewritten report did not resolve"
+      else
+        fm_pending_reply_detect_wrong_home "$state" "$corr" "$home/mate" \
+          || fail "rewritten wrong-home scan failed"
+        [ "$(fm_pending_reply_get "$rec" wrong_home_hits)" = 1 ] \
+          || fail "same-size same-second rewrite must invalidate the wrong-home cache"
+      fi
+      break
+    done
+    [ "$collision" = 1 ] || fail "could not exercise a same-second $operation rewrite"
+  done
+  pass "same-size status rewrites within a second invalidate parent and wrong-home caches"
+}
+
 test_invalid_busy_regex_does_not_prove_idle() {
   local regex_home state corr rec kind harness_observation
   local FM_PENDING_REPLY_NOW=2000 FM_PENDING_REPLY_GRACE_SECS=0 FM_BUSY_REGEX=''
@@ -2911,6 +2971,7 @@ test_create_without_openssl() {
   pass "pending request creation supports missing, failed and healthy OpenSSL"
 }
 
+test_same_second_status_rewrite_is_rescanned
 test_invalid_busy_regex_does_not_prove_idle
 test_remote_watermark_requires_complete_text
 test_failed_fallback_pipeline_refuses_create

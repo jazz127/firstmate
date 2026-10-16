@@ -873,6 +873,53 @@ test_stale_blocked_superseded() {
 # immediately and runs the fix round in the background, so such a claim over a
 # run that is fixing WITH fresh activity is contradicted by the run itself: the
 # supervisor answer is to steer a reattach, not to escalate a dead pipeline.
+test_large_gate_marker_with_pipefail() {
+  reset_fakes
+  local d out kind padding prefix
+  local FM_TEST_AXI_OUTPUT_FILE FM_TEST_AXI_FALLBACK
+  d=$(new_case large-gate-marker)
+  make_repo_on_branch "$d/wt" fm/gate-fixture
+  make_fakebin "$d" >/dev/null
+  fm_write_meta "$d/state/task.meta" "window=fm:fm-task" "worktree=$d/wt" "kind=ship"
+  printf 'needs-decision: review gate\n' > "$d/state/task.status"
+  FM_TEST_AXI_OUTPUT_FILE="$d/run.toon"
+  FM_TEST_AXI_FALLBACK="$d/fakebin/no-mistakes-fixture"
+  export FM_TEST_AXI_OUTPUT_FILE FM_TEST_AXI_FALLBACK
+  mv "$d/fakebin/no-mistakes" "$FM_TEST_AXI_FALLBACK"
+  cat > "$d/fakebin/no-mistakes" <<'SHIM'
+#!/usr/bin/env bash
+case "${1:-}:${2:-}" in
+  axi:|axi:status) cat "$FM_TEST_AXI_OUTPUT_FILE" ;;
+  *) exec "$FM_TEST_AXI_FALLBACK" "$@" ;;
+esac
+SHIM
+  chmod +x "$d/fakebin/no-mistakes"
+  printf -v padding '%200000s' x
+  prefix=$(run_running fm/gate-fixture)
+  for kind in gate-early gate-late active literal; do
+    {
+      printf '%s\n' "$prefix"
+      case "$kind" in
+        gate-early) printf 'gate: review\nnotes: %s\n' "$padding" ;;
+        gate-late) printf 'notes: %s\ngate: review\n' "$padding" ;;
+        active) printf 'notes: %s\n' "$padding" ;;
+        literal) printf 'notes: gate: review %s\n' "$padding" ;;
+      esac
+    } > "$FM_TEST_AXI_OUTPUT_FILE"
+    out=$(PATH="$d/fakebin:$PATH" FM_HOME="$d" FM_ROOT_OVERRIDE="$d" FM_STATE_OVERRIDE="$d/state" \
+      bash -o pipefail "$CREW_STATE" task) || fail "$kind strict-mode crew state failed"
+    case "$kind" in
+      gate-*)
+        assert_contains "$out" 'state: parked' "$kind must retain the gate"
+        assert_contains "$out" 'parked at review' "$kind must name the review gate"
+        assert_not_contains "$out" 'superseded' "$kind must not close a waiting decision"
+        ;;
+      *) assert_contains "$out" 'state: working' "$kind must not invent a gate" ;;
+    esac
+  done
+  pass "large reports preserve early and late gate markers under pipefail without superseding a waiting decision"
+}
+
 test_large_quiet_activity_with_pipefail() {
   reset_fakes
   local d out kind count padding quiet_row fresh_row
@@ -5750,6 +5797,7 @@ test_nm_scalar_trimming() {
   pass 'scalar trimming preserves whitespace, quotes and literal values through stdout and output variables'
 }
 
+test_large_gate_marker_with_pipefail
 test_large_quiet_activity_with_pipefail
 test_nm_field_large_records_with_pipefail
 test_large_parked_run_with_pipefail

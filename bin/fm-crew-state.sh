@@ -567,7 +567,7 @@ nm_gate_status() {
   [ -n "$row" ] && { row=${row#*|}; printf '%s' "${row%%|*}"; }
 }
 nm_has_gate() {
-  printf '%s\n' "$RUN_OUT" | grep -Eq "$FM_NM_GATE_LINE_RE"
+  grep -Eq "$FM_NM_GATE_LINE_RE" <<< "$RUN_OUT"
 }
 nm_gate_line_name() {
   local gate step

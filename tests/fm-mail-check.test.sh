@@ -69,6 +69,29 @@ enter_mailbox() {
 
 FAKEBIN="$TMP_ROOT/fakebin"
 
+test_mail_budget_bounds_do_not_overflow() {
+  local shell value expected home out rc
+  home=$(make_home budget-range)
+  for shell in bash /bin/bash; do
+    for value in 5 05 8 08 25 025 0 00 4 26 \
+      9223372036854775807 9223372036854775808 18446744073709551616 \
+      999999999999999999999999999999999999; do
+      case "$value" in 5|05|8|08|25|025) expected=0 ;; *) expected=2 ;; esac
+      rc=0
+      out=$(FM_HOME="$home" FM_MAIL_CHECK_BUDGET="$value" "$shell" "$CHECK" --help 2>&1) || rc=$?
+      expect_code "$expected" "$rc" "$shell mail budget=$value violated its range: $out"
+      if [ "$expected" -eq 0 ]; then
+        assert_contains "$out" 'Usage:' 'valid mail budget prevented help output'
+      else
+        assert_contains "$out" 'FM_MAIL_CHECK_BUDGET must be a whole number from 5 to 25' \
+          'mail budget refusal lost its range diagnostic'
+      fi
+      assert_not_contains "$out" 'integer' 'mail budget validation leaked shell arithmetic errors'
+    done
+  done
+  pass 'mail-check budgets enforce their range without overflowing shell integers'
+}
+
 test_check_timeout_is_decimal_with_zero_default() {
   local tmpbin source shell value expected home rc
   tmpbin="$TMP_ROOT/decimal-timeout-bin"
@@ -490,6 +513,7 @@ test_missing_mail_plane_is_reported() {
   pass "fm-mail-check: a missing mail plane is reported, not assumed"
 }
 
+test_mail_budget_bounds_do_not_overflow
 test_check_timeout_is_decimal_with_zero_default
 test_help_and_usage
 test_arm_writes_and_binds_the_check_and_disarm_removes_it

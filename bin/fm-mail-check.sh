@@ -107,7 +107,9 @@ case "$BUDGET_SECS" in
     exit 2
     ;;
 esac
-if [ "$BUDGET_SECS" -lt 5 ] || [ "$BUDGET_SECS" -gt 25 ]; then
+BUDGET_SECS=${BUDGET_SECS#"${BUDGET_SECS%%[!0]*}"}
+BUDGET_SECS=${BUDGET_SECS:-0}
+if [ "${#BUDGET_SECS}" -gt 2 ] || [ "$BUDGET_SECS" -lt 5 ] || [ "$BUDGET_SECS" -gt 25 ]; then
   printf 'fm-mail-check: FM_MAIL_CHECK_BUDGET must be a whole number from 5 to 25\n' >&2
   exit 2
 fi

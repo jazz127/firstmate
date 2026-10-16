@@ -218,21 +218,30 @@ fm_pending_reply_summarize() {  # <text>
   printf '%s' "$cleaned"
 }
 
-fm_pending_reply_get() {  # <record-path> <key>
-  local rec=$1 key=$2 line value='' found=0 contents=''
-  [ -f "$rec" ] || return 0
+# An output variable avoids capturing stdout when the caller keeps parsing.
+# The _fm_pending_field_ prefix is reserved for this helper's locals.
+fm_pending_reply_get() {  # <record-path> <key> [output-variable]
+  local _fm_pending_field_rec=$1 _fm_pending_field_key=$2 _fm_pending_field_line
+  local _fm_pending_field_value='' _fm_pending_field_found=0 _fm_pending_field_contents=''
   # Success means a NUL delimiter was found; EOF yields the complete text.
-  if IFS= read -r -d '' contents < "$rec" 2>/dev/null; then
-    return 0
+  if [ -f "$_fm_pending_field_rec" ] &&
+    ! IFS= read -r -d '' _fm_pending_field_contents < "$_fm_pending_field_rec" 2>/dev/null; then
+    while IFS= read -r _fm_pending_field_line || [ -n "$_fm_pending_field_line" ]; do
+      case "$_fm_pending_field_line" in
+        "$_fm_pending_field_key="*)
+          _fm_pending_field_value=${_fm_pending_field_line#*=}
+          _fm_pending_field_found=1
+          ;;
+      esac
+    done <<< "$_fm_pending_field_contents"
   fi
-  while IFS= read -r line || [ -n "$line" ]; do
-    case "$line" in
-      "$key="*) value=${line#*=}; found=1 ;;
-    esac
-  done <<< "$contents"
   # Keep the stdout framing: an empty value has a newline; a missing key has
   # no output. The final occurrence wins, including an unterminated final line.
-  [ "$found" = 0 ] || printf '%s\n' "$value"
+  if [ "$#" -gt 2 ]; then
+    printf -v "$3" '%s' "$_fm_pending_field_value"
+  elif [ "$_fm_pending_field_found" = 1 ]; then
+    printf '%s\n' "$_fm_pending_field_value"
+  fi
 }
 
 
@@ -1465,8 +1474,8 @@ fm_pending_reply_tick_one() {  # <state-dir> <corr_id> <busy_state> [secondmate-
   rec=$(fm_pending_reply_path "$state" "$corr")
   [ -f "$rec" ] || return 1
   fm_pending_reply_reconcile_delivery "$state" "$corr" || true
-  phase=$(fm_pending_reply_get "$rec" phase)
-  delivered=$(fm_pending_reply_get "$rec" delivered_epoch)
+  fm_pending_reply_get "$rec" phase phase
+  fm_pending_reply_get "$rec" delivered_epoch delivered
   if [ -z "$delivered" ]; then
     case "$phase" in
       delivery_unknown) fm_pending_reply_maybe_escalate "$state" "$corr" 2>/dev/null || true ;;
@@ -1478,12 +1487,12 @@ fm_pending_reply_tick_one() {  # <state-dir> <corr_id> <busy_state> [secondmate-
   if fm_pending_reply_try_resolve "$state" "$corr"; then
     return 0
   fi
-  phase=$(fm_pending_reply_get "$rec" phase)
+  fm_pending_reply_get "$rec" phase phase
   case "$phase" in
     awaiting_report|recovery_sending)
       if [ -n "$(fm_pending_reply_get "$rec" recovery_attempted_epoch)" ]; then
         fm_pending_reply_reconcile_recovery "$state" "$corr" || true
-        phase=$(fm_pending_reply_get "$rec" phase)
+        fm_pending_reply_get "$rec" phase phase
       fi
       ;;
   esac
@@ -1516,11 +1525,11 @@ fm_pending_reply_tick_one() {  # <state-dir> <corr_id> <busy_state> [secondmate-
   if fm_pending_reply_try_resolve "$state" "$corr"; then
     return 0
   fi
-  phase=$(fm_pending_reply_get "$rec" phase)
+  fm_pending_reply_get "$rec" phase phase
   if [ "$phase" = awaiting_report ] && [ "$allow_recovery" = 1 ]; then
     fm_pending_reply_send_recovery "$state" "$corr" 2>/dev/null || true
   fi
-  phase=$(fm_pending_reply_get "$rec" phase)
+  fm_pending_reply_get "$rec" phase phase
   case "$phase" in
     recovery_sent|recovery_failed|recovery_unknown)
       fm_pending_reply_maybe_escalate "$state" "$corr" 2>/dev/null || true
@@ -1589,10 +1598,10 @@ fm_pending_reply_tick() {  # <state-dir> [watcher-beacon]
   done < <(_fm_pending_reply_select_needing_work ${records[@]+"${records[@]}"})
   for rec in ${selected[@]+"${selected[@]}"}; do
     [ -z "$beacon" ] || touch "$beacon"
-    corr=$(fm_pending_reply_get "$rec" corr_id)
+    fm_pending_reply_get "$rec" corr_id corr
     [ -n "$corr" ] || corr=$(basename "$rec")
-    task_id=$(fm_pending_reply_get "$rec" task_id)
-    phase=$(fm_pending_reply_get "$rec" phase)
+    fm_pending_reply_get "$rec" task_id task_id
+    fm_pending_reply_get "$rec" phase phase
     if [ "$phase" = resolved ]; then
       # Cheap no-op unless an escalation for this record is still open; this is
       # the retry that makes the close converge after a transient write failure.
@@ -1600,8 +1609,8 @@ fm_pending_reply_tick() {  # <state-dir> [watcher-beacon]
       continue
     fi
     fm_pending_reply_reconcile_delivery "$state" "$corr" || true
-    phase=$(fm_pending_reply_get "$rec" phase)
-    delivered=$(fm_pending_reply_get "$rec" delivered_epoch)
+    fm_pending_reply_get "$rec" phase phase
+    fm_pending_reply_get "$rec" delivered_epoch delivered
     if [ -z "$delivered" ]; then
       case "$phase" in
         delivery_unknown|escalated)
@@ -1614,7 +1623,7 @@ fm_pending_reply_tick() {  # <state-dir> [watcher-beacon]
       awaiting_report|recovery_sending)
         if [ -n "$(fm_pending_reply_get "$rec" recovery_attempted_epoch)" ]; then
           fm_pending_reply_reconcile_recovery "$state" "$corr" || true
-          phase=$(fm_pending_reply_get "$rec" phase)
+          fm_pending_reply_get "$rec" phase phase
         fi
         ;;
     esac
@@ -1688,7 +1697,7 @@ fm_pending_reply_tick() {  # <state-dir> [watcher-beacon]
     fi
     allow_recovery=1
     if [ -n "$remote_host" ] && [ "$remote_reposts" -ge 1 ]; then allow_recovery=0; fi
-    attempted_before=$(fm_pending_reply_get "$rec" recovery_attempted_epoch)
+    fm_pending_reply_get "$rec" recovery_attempted_epoch attempted_before
     fm_pending_reply_tick_one "$state" "$corr" "$busy" "$sm_home" "$allow_recovery" || true
     if [ -n "$remote_host" ] && [ -z "$attempted_before" ] &&
        [ -n "$(fm_pending_reply_get "$rec" recovery_attempted_epoch)" ]; then

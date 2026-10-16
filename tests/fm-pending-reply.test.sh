@@ -2248,6 +2248,30 @@ test_record_field_framing() {
   pass "record fields preserve framing, literal bytes and final-occurrence precedence"
 }
 
+test_record_field_output_variable() {
+  local home rec value='stale' key='stale' line='stale' contents='stale' actual
+  home=$(setup_parent field-output-variable)
+  rec="$home/record"
+  actual="$home/stdout"
+  printf 'phase=old\nempty=\nsummary=  literal\\n=value  \nphase=resolved' > "$rec"
+  fm_pending_reply_get "$rec" phase value > "$actual"
+  [ "$value" = resolved ] || fail "output variable did not receive the final field"
+  fm_pending_reply_get "$rec" summary contents >> "$actual"
+  [ "$contents" = '  literal\n=value  ' ] || fail "output variable rewrote literal field bytes"
+  fm_pending_reply_get "$rec" empty key >> "$actual"
+  [ -z "$key" ] || fail "empty field did not clear output variable"
+  fm_pending_reply_get "$rec" absent line >> "$actual"
+  [ -z "$line" ] || fail "missing field did not clear output variable"
+  fm_pending_reply_get "$home/missing" phase value >> "$actual"
+  [ -z "$value" ] || fail "missing record did not clear output variable"
+  value=stale
+  printf 'phase=resolved\nother=bad\0\n' > "$rec"
+  fm_pending_reply_get "$rec" phase value >> "$actual"
+  [ -z "$value" ] || fail "binary record did not clear output variable"
+  [ ! -s "$actual" ] || fail "output-variable reads also printed to stdout"
+  pass "record fields assign output variables without losing missing/binary clearing or field bytes"
+}
+
 test_create_without_openssl() {
   local home fallback_path mode corr rec
   home=$(setup_parent id-fallback)
@@ -2284,6 +2308,7 @@ test_create_without_openssl
 test_record_update_preserves_other_fields
 test_record_update_preserves_unreadable_input
 test_record_field_framing
+test_record_field_output_variable
 test_tick_without_metadata
 test_normal_correlated_reply_resolves_once
 test_completed_turn_no_report_triggers_one_recovery

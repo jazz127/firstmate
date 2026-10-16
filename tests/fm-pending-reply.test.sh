@@ -3283,6 +3283,33 @@ test_correlation_prefixes_preserve_literal_words() {
   pass "embedding and summaries preserve longer correlation-like words and strip only complete leading tokens"
 }
 
+test_pending_record_path_output_assignments() {
+  local path_home state shape want target rec dir path captured corr=0123456789abcdef
+  local FM_PENDING_REPLY_DIR_OVERRIDE=''
+  path_home=$(setup_parent path-output)
+  for shape in ordinary spaces trailing-newline override; do
+    FM_PENDING_REPLY_DIR_OVERRIDE=''
+    case "$shape" in
+      ordinary) state="$path_home/state" ;;
+      spaces) state="$path_home/state with spaces" ;;
+      trailing-newline) state="$path_home/state"$'\n' ;;
+      override) state="$path_home/state"; FM_PENDING_REPLY_DIR_OVERRIDE="$path_home/custom"$'\n' ;;
+    esac
+    want="${FM_PENDING_REPLY_DIR_OVERRIDE:-$state/pending-replies}/$corr"
+    captured=$(fm_pending_reply_path "$state" "$corr") || fail "$shape stdout path failed"
+    [ "$captured" = "$want" ] || fail "$shape stdout path changed bytes"
+    for target in rec dir path; do
+      rec=stale; dir=stale; path=stale
+      fm_pending_reply_path "$state" "$corr" "$target" > "$path_home/path-output" \
+        || fail "$shape $target output assignment failed"
+      [ "${!target}" = "$want" ] || fail "$shape $target path output was not assigned exactly"
+      [ ! -s "$path_home/path-output" ] || fail "$shape $target assignment emitted stdout"
+    done
+  done
+  pass "pending record paths preserve stdout compatibility and assign exact bytes without output or local-name collisions"
+}
+
+test_pending_record_path_output_assignments
 test_correlation_prefixes_preserve_literal_words
 test_correlation_embedding_strips_mixed_blank_runs
 test_wrong_home_counts_use_bounded_decimal_values

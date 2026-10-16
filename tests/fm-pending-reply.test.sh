@@ -895,6 +895,29 @@ test_undelivered_records_are_scan_immutable() {
   pass "undelivered records remain immutable across scan paths"
 }
 
+test_correlation_extraction_first_match() {
+  local home kind text expected
+  home=$(setup_parent correlation-extraction)
+  for kind in lower mixed multiple multiline unicode absent short invalid; do
+    expected=abcdef0123456789
+    case "$kind" in
+      lower) text='corr=abcdef0123456789' ;;
+      mixed) text='prefix corr=AbCdEf0123456789 suffix' ;;
+      multiple) text='corr=ABCDEF0123456789 corr=1111111111111111' ;;
+      multiline) text=$'prefix\ncorr=ABCDEF0123456789\ncorr=1111111111111111' ;;
+      unicode) text='🌊corr=ABCDEF0123456789é' ;;
+      absent) text='ordinary request'; expected='' ;;
+      short) text='corr=abcdef012345678'; expected='' ;;
+      invalid) text='corr=abcdef012345678z'; expected='' ;;
+    esac
+    fm_pending_reply_extract_corr "$text" > "$home/actual" || fail "$kind correlation extraction failed"
+    : > "$home/expected"
+    [ -z "$expected" ] || printf '%s\n' "$expected" > "$home/expected"
+    cmp -s "$home/expected" "$home/actual" || fail "$kind first correlation or stdout framing changed"
+  done
+  pass "correlation extraction preserves first-match, hex case and stdout framing"
+}
+
 test_pending_directory_override_preserves_bytes() {
   local home state corr rec marker suffix dir FM_PENDING_REPLY_DIR_OVERRIDE
   for suffix in $'\n' $'\n\n'; do
@@ -2511,6 +2534,7 @@ test_create_without_openssl() {
   pass "pending request creation supports missing, failed and healthy OpenSSL"
 }
 
+test_correlation_extraction_first_match
 test_pending_directory_override_preserves_bytes
 test_correlations_reuse_only_for_matching_open_task
 test_signature_failures_do_not_hide_new_reports

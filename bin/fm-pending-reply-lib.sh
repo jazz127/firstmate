@@ -197,8 +197,17 @@ fm_pending_reply_corr_token() {  # <corr_id>
 
 # Extract the first corr=<16hex> token from free text, or empty.
 fm_pending_reply_extract_corr() {  # <text>
-  local text=$1
-  printf '%s' "$text" | grep -oE "$FM_PENDING_REPLY_CORR_RE" 2>/dev/null | head -1 | cut -d= -f2- | tr 'A-F' 'a-f' || true
+  local text=$1 token
+  if [[ "$text" =~ $FM_PENDING_REPLY_CORR_RE ]]; then
+    token=${BASH_REMATCH[0]#corr=}
+    token=${token//A/a}
+    token=${token//B/b}
+    token=${token//C/c}
+    token=${token//D/d}
+    token=${token//E/e}
+    token=${token//F/f}
+    printf '%s\n' "$token"
+  fi
 }
 
 # 0 if <text> carries the exact correlation token for <corr_id>, as a whole

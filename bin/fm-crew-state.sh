@@ -549,12 +549,12 @@ nm_gate_step_row() {
   local row step rest status findings
   row=$(printf '%s\n' "$RUN_OUT" | grep -E "$FM_NM_GATE_ROW_RE" | head -1)
   [ -n "$row" ] || return 0
-  row=$(trim "$row")
-  step=$(trim "${row%%,*}")
+  trim "$row" row
+  trim "${row%%,*}" step
   rest=${row#*,}
-  status=$(strip_quotes "$(trim "${rest%%,*}")")
+  status=$(strip_quotes "${rest%%,*}")
   rest=${rest#*,}
-  findings=$(trim "${rest%%,*}")
+  trim "${rest%%,*}" findings
   printf '%s|%s|%s' "$step" "$status" "$findings"
 }
 nm_gate_status() {

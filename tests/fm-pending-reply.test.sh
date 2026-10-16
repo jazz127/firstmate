@@ -2971,6 +2971,60 @@ test_create_without_openssl() {
   pass "pending request creation supports missing, failed and healthy OpenSSL"
 }
 
+test_capture_filter_errors_do_not_prove_idle() {
+  local filter_home state corr rec filter_stage partial strict harness_observation
+  local FM_PENDING_REPLY_NOW=2000 FM_PENDING_REPLY_GRACE_SECS=0 FM_BUSY_REGEX=''
+  local FM_PENDING_REPLY_SEND_HOOK=filter_error_recovery_hook
+  export FM_PENDING_REPLY_NOW FM_PENDING_REPLY_GRACE_SECS FM_PENDING_REPLY_SEND_HOOK FM_BUSY_REGEX
+  (
+    fm_backend_busy_state() { printf unknown; }
+    fm_backend_capture() { printf 'esc to interrupt\nfixture footer\n'; }
+    # Invoked indirectly through FM_PENDING_REPLY_SEND_HOOK.
+    # shellcheck disable=SC2329
+    filter_error_recovery_hook() { printf '%s\n' "$1" >> "$filter_home/recoveries"; }
+    grep() {
+      if [ "${1:-}" = -v ] && [ "$filter_stage" = grep ]; then
+        command cat >/dev/null
+        [ -z "$partial" ] || printf '%s\n' "$partial"
+        return 2
+      fi
+      command grep "$@"
+    }
+    tail() {
+      if [ "${1:-}" = -6 ] && [ "$filter_stage" = tail ]; then
+        command cat >/dev/null
+        [ -z "$partial" ] || printf '%s\n' "$partial"
+        return 1
+      fi
+      command tail "$@"
+    }
+    for strict in off on; do
+      if [ "$strict" = on ]; then set -o pipefail; else set +o pipefail; fi
+      for filter_stage in grep tail; do
+        for partial in '' 'idle footer' 'esc to interrupt'; do
+          filter_home=$(setup_parent "filter-error-$strict-$filter_stage-${#partial}")
+          state="$filter_home/state"
+          corr=$(fm_pending_reply_create "$filter_home" "$state" mate 'filter error request') \
+            || fail "filter error fixture creation failed"
+          fm_pending_reply_mark_delivered "$state" "$corr" 1000 \
+            || fail "filter error fixture delivery failed"
+          fm_write_meta "$state/mate.meta" 'backend=tmux' 'window=synthetic-endpoint' 'harness=codex'
+          harness_observation=$(fm_pending_reply_backend_observation tmux synthetic-endpoint fm-mate codex)
+          [ "$harness_observation" = unknown ] \
+            || fail "$filter_stage error with pipefail $strict must be unknown, got $harness_observation"
+          fm_pending_reply_tick "$state" || fail "filter error tick failed"
+          rec=$(fm_pending_reply_path "$state" "$corr")
+          [ "$(phase_of "$state" "$corr")" = awaiting_report ] || fail "$filter_stage error triggered recovery"
+          [ -z "$(fm_pending_reply_get "$rec" request_turn_completed_epoch)" ] || fail "$filter_stage error completed the turn"
+          [ ! -e "$filter_home/recoveries" ] || fail "$filter_stage error invoked the recovery hook"
+        done
+      done
+    done
+  ) || fail "capture filter error regression failed"
+  pass "capture filter failures remain unknown without completing turns or sending recovery"
+}
+
+test_capture_filter_errors_do_not_prove_idle
 test_same_second_status_rewrite_is_rescanned
 test_invalid_busy_regex_does_not_prove_idle
 test_remote_watermark_requires_complete_text

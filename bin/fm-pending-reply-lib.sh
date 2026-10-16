@@ -925,6 +925,7 @@ fm_pending_reply_fallback_idle_eligible() {  # <record-path>
 # which the caller accepts as idle only after its grace window.
 fm_pending_reply_backend_observation() {  # <backend> <target> [expected-label] [harness]
   local backend=$1 target=$2 expected_label=${3-} harness=${4-} native tail40
+  local -a statuses
   native=$(fm_backend_busy_state "$backend" "$target" 2>/dev/null || printf 'unknown')
   case "$native" in
     busy|idle) printf '%s' "$native"; return 0 ;;
@@ -933,14 +934,22 @@ fm_pending_reply_backend_observation() {  # <backend> <target> [expected-label] 
     || { printf 'unknown'; return 0; }
   if printf '%s' "$tail40" | grep -v '^[[:space:]]*$' | tail -6 \
     | fm_busy_lines_match "$harness"; then
-    printf 'busy'
+    statuses=("${PIPESTATUS[@]}")
   else
-    # A matcher error cannot supply idle evidence or complete a pending turn.
-    case $? in
-      1) printf 'fallback-idle' ;;
-      *) printf 'unknown' ;;
-    esac
+    statuses=("${PIPESTATUS[@]}")
   fi
+  # A failed filter can still feed empty or partial text to a successful matcher.
+  # Check each stage before accepting busy or idle; grep -v status 1 only means
+  # the complete capture had no nonblank lines and remains a valid idle input.
+  if [ "${statuses[0]}" -ne 0 ] || [ "${statuses[1]}" -gt 1 ] || [ "${statuses[2]}" -ne 0 ]; then
+    printf 'unknown'
+    return 0
+  fi
+  case "${statuses[3]}" in
+    0) printf 'busy' ;;
+    1) printf 'fallback-idle' ;;
+    *) printf 'unknown' ;;
+  esac
 }
 
 fm_pending_reply_busy_state_from_observation() {  # <record-path> <observation>

@@ -24,8 +24,9 @@
 #      retryable send failure that could duplicate the durable instruction.
 #   9. An unwritable inbox is a real local failure: nonzero exit, nothing
 #      typed, and a just-created pending-reply expectation is discarded.
-#  10. An empty or whitespace-only text steer is refused before anything is
-#      marked, recorded, or typed - on the marked secondmate path that means
+#  10. A text steer with an empty or whitespace-only body after routing
+#      bytes are removed is refused before anything is marked, recorded, or
+#      typed - on the marked secondmate path that means
 #      no marker-only record and no pending-reply expectation.
 # Every case below that passes a literal `$...` message quotes it on purpose
 # (the point is sending an unexpanded `$` line), so SC2016 is disabled.
@@ -117,6 +118,54 @@ run_send() { # <case-dir> <err-file> [env...] -- <fm-send args...>
 
 record_body() { # <record>
   bash -c '. "$1"; fm_task_inbox_body "$2"' _ "$ROOT/bin/fm-task-inbox-lib.sh" "$2"
+}
+
+test_routing_only_message_refused() {
+  local dir err rc kind message target allowed n=0
+  local args=()
+  for kind in carrier carrier-space corr corr-space bare-corr bare-corr-space \
+    no-reply-carrier no-reply-space marked-body corr-body literal short-corr \
+    ship-carrier ship-corr no-reply-corr no-reply-bare-corr; do
+    n=$((n + 1))
+    dir=$(setup_case "routing-only-$n")
+    err="$dir/send.err"
+    fm_write_secondmate_meta "$dir/home/state/domain.meta" "$dir/home" "sess:fm-t1" alpha claude
+    target=fm-domain
+    allowed=0
+    args=()
+    case "$kind" in
+      carrier|no-reply-carrier|ship-carrier) message=$FM_FROMFIRST_MARK ;;
+      carrier-space|no-reply-space) message="${FM_FROMFIRST_MARK}"$' \t\r\n ' ;;
+      corr|no-reply-corr) message="${FM_FROMFIRST_MARK}corr=0123456789abcdef" ;;
+      corr-space) message="${FM_FROMFIRST_MARK}corr=ABCDEF0123456789"$' \t\r\n ' ;;
+      bare-corr|ship-corr|no-reply-bare-corr) message='corr=0123456789abcdef' ;;
+      bare-corr-space) message=$'corr=0123456789abcdef \t\n ' ;;
+      marked-body) message="${FM_FROMFIRST_MARK}inspect ledger"$'\n\n' ;;
+      corr-body) message="${FM_FROMFIRST_MARK}corr=0123456789abcdef inspect ledger"$'\n\n' ;;
+      literal) message='[fm-from-firstmate]' ;;
+      short-corr) message='corr=0123456789abcde' ;;
+    esac
+    case "$kind" in
+      no-reply-*) args=(--fire-and-forget 0123456789abcdef) ;;
+      ship-*) target=t1 ;;
+    esac
+    case "$kind" in
+      marked-body|corr-body|literal|short-corr|ship-*|no-reply-corr|no-reply-bare-corr) allowed=1 ;;
+    esac
+    run_send "$dir" "$err" -- "$target" ${args[@]+"${args[@]}"} "$message"
+    rc=$?
+    if [ "$allowed" = 1 ]; then
+      [ "$rc" -eq 0 ] || fail "$kind substantive message should succeed: $(cat "$err")"
+      [ -n "$(find "$dir/home/state" -name '*.msg' -type f)" ] || fail "$kind successful steer has no record"
+    else
+      [ "$rc" -ne 0 ] || fail "$kind routing-only message should refuse"
+      assert_contains "$(cat "$err")" "nonempty message" "$kind should name the empty-body refusal"
+      [ ! -d "$dir/home/state/domain.inbox" ] || fail "$kind routing-only message wrote an inbox record"
+      [ ! -d "$dir/home/state/pending-replies" ] || fail "$kind routing-only message minted an expectation"
+      [ ! -s "$dir/send.log" ] || fail "$kind routing-only message reached the terminal"
+    fi
+  done
+  pass "fm-send: routed text must contain a body after the routing bytes this delivery mode consumes"
 }
 
 test_remote_budget_rejects_all_zero_values() {
@@ -621,6 +670,7 @@ test_empty_message_refused() {
   pass "fm-send: an empty or whitespace-only text steer refuses before marking, recording, or typing"
 }
 
+test_routing_only_message_refused
 test_remote_budget_rejects_all_zero_values
 test_fire_and_forget_rejects_malformed_ids
 test_text_steer_rides_inbox

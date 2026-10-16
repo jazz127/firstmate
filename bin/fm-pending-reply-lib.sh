@@ -328,26 +328,36 @@ fm_pending_reply_set() {  # <record-path> <key> <value>
   mv -f "$tmp" "$rec"
 }
 
+# Remove the leading routing correlation and its following space/tab bytes.
+# Both delivery and the pre-delivery empty-body check use this interpretation.
+# The _fm_pending_body_ prefix is reserved for this helper's locals.
+fm_pending_reply_strip_leading_corr() {  # <body> <result-var>
+  local _fm_pending_body_text=$1 _fm_pending_body_result=$2 _fm_pending_body_prefix
+  [ -n "$_fm_pending_body_result" ] || return 2
+  # Strip a leading corr=<16hex> plus following blanks (space/tab only).
+  _fm_pending_body_prefix=${_fm_pending_body_text:0:21}
+  case "$_fm_pending_body_prefix" in
+    corr=[a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9])
+      _fm_pending_body_text=${_fm_pending_body_text:21}
+      while [ "${_fm_pending_body_text# }" != "$_fm_pending_body_text" ]; do _fm_pending_body_text=${_fm_pending_body_text# }; done
+      while [ "${_fm_pending_body_text#$'\t'}" != "$_fm_pending_body_text" ]; do _fm_pending_body_text=${_fm_pending_body_text#$'\t'}; done
+      ;;
+  esac
+  printf -v "$_fm_pending_body_result" '%s' "$_fm_pending_body_text"
+}
+
 # Embed or replace a correlation token after the from-firstmate marker.
 # Idempotent for the same corr; replaces a different leading corr token.
 # Result is assigned to <result-var>.
 # Trailing newlines in the request body are preserved: never strip via bare
 # $(...) on the body (command substitution removes trailing newlines).
 fm_pending_reply_embed_corr() {  # <message> <corr_id> <result-var>
-  local message=$1 corr=$2 result_var=$3 body token marked existing
+  local message=$1 corr=$2 result_var=$3 body token marked
   [ -n "$result_var" ] || return 2
   token=$(fm_pending_reply_corr_token "$corr")
   fm_message_mark_from_firstmate "$message" marked
   body=${marked#"$FM_FROMFIRST_MARK"}
-  # Strip a leading corr=<16hex> plus following blanks (space/tab only).
-  existing=${body:0:21}
-  case "$existing" in
-    corr=[a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9])
-      body=${body:21}
-      while [ "${body# }" != "$body" ]; do body=${body# }; done
-      while [ "${body#$'\t'}" != "$body" ]; do body=${body#$'\t'}; done
-      ;;
-  esac
+  fm_pending_reply_strip_leading_corr "$body" body
   printf -v "$result_var" '%s' "${FM_FROMFIRST_MARK}${token} ${body}"
 }
 

@@ -7,7 +7,8 @@
 #   target. fm-send refuses unresolved guesses rather than falling back to a
 #   tmux window search, because a "successful" send to the wrong endpoint is
 #   worse than a loud failure.
-# The text must be nonempty: an empty or whitespace-only message is refused
+# The text must be nonempty after removing the routing bytes consumed by this
+# delivery mode: an empty or whitespace-only body is refused
 # before anything is marked, recorded, or typed, because an empty marked
 # secondmate request delivers only marker and correlation bytes and leaves the
 # parent waiting on a reply to nothing.
@@ -801,7 +802,14 @@ if [ "${1:-}" = "--key" ]; then
   fm_trace_span_steer "$TARGET_META" key
 else
   MESSAGE=$*
-  if [ -z "${MESSAGE//[[:space:]]/}" ]; then
+  MESSAGE_BODY=$MESSAGE
+  if [ "$MARK_FROM_FIRSTMATE" = 1 ]; then
+    MESSAGE_BODY=${MESSAGE_BODY#"$FM_FROMFIRST_MARK"}
+    if [ -z "$FIRE_AND_FORGET_ID" ]; then
+      fm_pending_reply_strip_leading_corr "$MESSAGE_BODY" MESSAGE_BODY
+    fi
+  fi
+  if [ -z "${MESSAGE_BODY//[[:space:]]/}" ]; then
     echo "error: a text steer requires a nonempty message; nothing was sent (an empty marked request would deliver only marker and correlation bytes and leave the parent waiting on a reply to nothing)" >&2
     exit 1
   fi

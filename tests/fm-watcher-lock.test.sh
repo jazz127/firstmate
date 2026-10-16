@@ -1574,6 +1574,37 @@ test_stopped_watcher_is_live_but_stale_then_exit_is_classified() {
   pass "SIGSTOP distinguishes live PID from stale beacon and termination records the exit class"
 }
 
+test_pid_identity_preserves_multiline_format() {
+  local dir shell
+  dir=$(make_case ps-identity-format)
+  for shell in "$(command -v bash)" /bin/bash; do
+    # shellcheck disable=SC2016 # The fixture and production function run in this child shell.
+    FM_STATE_OVERRIDE="$dir/state" FM_PROC_ROOT_OVERRIDE="$dir/no-proc" "$shell" -c '
+      . "$1"
+      inputs=( "  date command  " $'\''\t\rdate command'\'' $'\''  first\n\tsecond\n \nthird  '\'' $'\''\n  first\n\n'\'' "   " "  日本語 \\literal" "" $'\''\v\fdate'\'' "  \"quoted\" : *=" )
+      expected=( "date command  " "date command" $'\''first\nsecond\n\nthird  '\'' $'\''\nfirst'\'' "" "日本語 \\literal" "" date "\"quoted\" : *=" )
+      # shellcheck disable=SC2329 # fm_pid_identity invokes this fault/format seam.
+      ps() { printf "%s" "$fixture"; return "$status"; }
+      for kind in full start; do
+        i=0
+        while [ "$i" -lt "${#inputs[@]}" ]; do
+          fixture=${inputs[$i]}; status=0; rc=0; expected_rc=0
+          [ -n "$fixture" ] || expected_rc=1
+          out=$(fm_pid_identity 4242 "$kind") || rc=$?
+          [ "$rc" -eq "$expected_rc" ] && [ "$out" = "${expected[$i]}" ] || exit 11
+          i=$((i+1))
+        done
+        for fixture in "" "partial output"; do
+          status=7; rc=0
+          out=$(fm_pid_identity 4242 "$kind") || rc=$?
+          [ "$rc" -eq 1 ] && [ -z "$out" ] || exit 12
+        done
+      done
+    ' _ "$LIB" || fail "$shell changed process identity formatting or accepted failed ps evidence"
+  done
+  pass 'portable process identity preserves multiline formatting and rejects failed process queries'
+}
+
 test_pid_identity_is_locale_invariant() {
   # The portable fallback records its process identity under one locale, then
   # arm/guard/turn-end re-read it under the machine's ambient locale. ps's lstart
@@ -1860,6 +1891,7 @@ test_proc_encoding_failure_retains_lock
 test_zero_padded_grace_does_not_evict_before_decimal_bound
 test_wait_deadline_reaps_a_stopped_child
 test_singleton_start
+test_pid_identity_preserves_multiline_format
 test_pid_identity_is_locale_invariant
 test_pid_identity_is_terminal_width_invariant
 test_proc_pid_identity_ignores_wall_clock_and_detects_pid_reuse

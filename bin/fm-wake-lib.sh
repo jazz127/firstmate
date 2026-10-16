@@ -66,7 +66,7 @@ fm_pid_alive() {
 }
 
 fm_pid_identity() {  # <pid> [start]
-  local pid=$1 identity_kind=${2:-full} out proc_root stat_line starttime cmdline_hex identity_key
+  local pid=$1 identity_kind=${2:-full} out proc_root stat_line starttime cmdline_hex identity_key line
   local -a stat_fields
   case "$pid" in
     ''|*[!0-9]*) return 1 ;;
@@ -115,7 +115,9 @@ fm_pid_identity() {  # <pid> [start]
     out=$(COLUMNS=10000 LC_ALL=C ps -p "$pid" -o lstart= -o command= 2>/dev/null) || return 1
   fi
   [ -n "$out" ] || return 1
-  printf '%s\n' "$out" | sed 's/^[[:space:]]*//'
+  while IFS= read -r line; do
+    printf '%s\n' "${line#"${line%%[![:space:]]*}"}"
+  done <<< "$out"
 }
 
 fm_pid_start_identity() {  # <pid>

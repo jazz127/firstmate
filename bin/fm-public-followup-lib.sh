@@ -185,13 +185,17 @@ fm_pf_home_id_valid() {
 }
 
 fm_pf_sha256() {
+  local digest
   if command -v shasum >/dev/null 2>&1; then
-    shasum -a 256 2>/dev/null | awk '{print $1}'
+    digest=$(set -o pipefail; shasum -a 256 2>/dev/null | awk '{print $1}') || return 1
   elif command -v sha256sum >/dev/null 2>&1; then
-    sha256sum 2>/dev/null | awk '{print $1}'
+    digest=$(set -o pipefail; sha256sum 2>/dev/null | awk '{print $1}') || return 1
   else
     return 1
   fi
+  case "$digest" in ''|*[!0-9a-f]*) return 1 ;; esac
+  [ "${#digest}" -eq 64 ] || return 1
+  printf '%s\n' "$digest"
 }
 
 # fm_pf_event_id <obligation> <relation> <source_home> <work_id> <generation>

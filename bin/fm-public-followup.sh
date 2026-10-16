@@ -72,6 +72,8 @@
 #       queues one wake for this home, which the relay poll raises
 #       (bin/fm-x-poll.sh). Silent when there is nothing to do. Duplicate events
 #       and restart replay are no-ops.
+#       A failed or malformed identity digest leaves the event pending for retry
+#       and exits non-zero; it is not evidence that the event itself is corrupt.
 #       An open loop bound to a REMOTE secondmate home is collected first: its
 #       staged results are pulled over that route into this home's own inbox and
 #       reconciled identically. The staged copy is retired only after this home
@@ -750,14 +752,18 @@ cmd_consume() {
       reject_event "$file" "$event_id" "declared event_id does not match the filename" || consume_rc=1
       continue
     fi
-    derived=$(fm_pf_event_id \
+    if ! derived=$(fm_pf_event_id \
       "$(pf_field "$payload" '.obligation_id')" \
       "$(pf_field "$payload" '.relation_id')" \
       "$(pf_field "$payload" '.source_home_id')" \
       "$(pf_field "$payload" '.work_id')" \
       "$(pf_field "$payload" '.generation')" \
       "$(pf_field "$payload" '.outcome_type')" \
-      "$(printf '%s' "$payload" | jq -Sc '.deliverables // {}' 2>/dev/null)")
+      "$(printf '%s' "$payload" | jq -Sc '.deliverables // {}' 2>/dev/null)"); then
+      printf 'unverified %s: could not derive event identity; event retained for retry\n' "$event_id"
+      consume_rc=1
+      continue
+    fi
     if [ -z "$derived" ] || [ "$derived" != "$event_id" ]; then
       reject_event "$file" "$event_id" "event id does not match its own identity fields" || consume_rc=1
       continue

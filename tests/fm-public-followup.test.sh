@@ -1284,6 +1284,43 @@ test_delivered_stamp_preserves_invalid_source() {
   pass "delivered stamps retain failed or binary source records"
 }
 
+test_event_digest_failures_leave_work_retryable() {
+  local home mode event_id out
+  for mode in failed-output malformed; do
+    home=$(make_home "digest-failure-$mode")
+    seed_commitment "$home" pf-digest req-digest discord main work-digest
+    event_id=$(emit_terminal "$home" "$home" pf-digest main work-digest) \
+      || fail "could not prepare the valid event before the hash failure"
+    cat > "$home/fakebin/shasum" <<'SH'
+#!/usr/bin/env bash
+cat >/dev/null
+if [ "$FM_DIGEST_TEST_MODE" = failed-output ]; then
+  printf '%064d  -\n' 0
+  exit 2
+fi
+printf 'not-a-digest  -\n'
+SH
+    chmod +x "$home/fakebin/shasum"
+    FM_DIGEST_TEST_MODE="$mode" PATH="$home/fakebin:$PATH" \
+      expect_failure "emit must refuse a failed or malformed digest" \
+      emit_terminal "$home" "$home" pf-digest main work-digest
+    [ "$(ls "$home/state/public-followup/events")" = "$event_id.json" ] \
+      || fail "failed hashing must not publish another event"
+    FM_DIGEST_TEST_MODE="$mode" expect_failure "consume must retain unverifiable events" \
+      run_pf "$home" consume
+    assert_present "$home/state/public-followup/events/$event_id.json" \
+      "a hashing failure must leave the valid event pending"
+    assert_absent "$home/state/public-followup/rejected/$event_id.json" \
+      "a hashing failure must not classify the valid event as corrupt"
+    assert_absent "$home/state/public-followup/consumed/$event_id" \
+      "a hashing failure must not mark the event accepted"
+    rm "$home/fakebin/shasum"
+    out=$(run_pf "$home" consume) || fail "consume must recover when hashing works: $out"
+    assert_contains "$out" "ready pf-digest" "the retained event must remain usable"
+  done
+  pass "failed or malformed digests cannot publish events or quarantine valid pending work"
+}
+
 test_pending_rejects_malformed_listing() {
   local home out
   home=$(make_home pending-malformed)
@@ -4124,6 +4161,7 @@ test_secondmate_parent_binding_matches_literal_id
 test_traversal_registration_is_refused_before_delivery
 test_registry_ids_accept_literal_relative_state_paths
 test_delivered_stamp_preserves_invalid_source
+test_event_digest_failures_leave_work_retryable
 test_pending_rejects_malformed_listing
 test_private_context_survives_inbox_cleanup
 test_cleanup_refuses_while_a_public_reply_is_owed

@@ -129,6 +129,23 @@ fm_task_inbox_busy_max() {
   printf '%s' "$m"
 }
 
+# Saturate numeric overflow so a spent retry budget cannot start over.
+_fm_task_inbox_increment_count() {  # <stored-count> <output-variable>
+  local _fm_inbox_count=${1-}
+  local LC_ALL=C
+  case "$_fm_inbox_count" in ''|*[!0-9]*) _fm_inbox_count=0 ;; esac
+  _fm_inbox_count=${_fm_inbox_count#"${_fm_inbox_count%%[!0]*}"}
+  _fm_inbox_count=${_fm_inbox_count:-0}
+  # shellcheck disable=SC2071 # Equal-length digit strings may exceed shell integers.
+  if [ "${#_fm_inbox_count}" -gt 19 ] ||
+    { [ "${#_fm_inbox_count}" -eq 19 ] && [[ "$_fm_inbox_count" > 9223372036854775806 ]]; }; then
+    _fm_inbox_count=9223372036854775807
+  else
+    _fm_inbox_count=$((_fm_inbox_count + 1))
+  fi
+  printf -v "$2" '%s' "$_fm_inbox_count"
+}
+
 # Persist before returning the new count, so a fresh watcher continues the same
 # bounded wait. A removed or acknowledged record is a quiet no-op.
 fm_task_inbox_record_busy() {  # <state-dir> <task-id> <record-path>
@@ -137,9 +154,8 @@ fm_task_inbox_record_busy() {  # <state-dir> <task-id> <record-path>
   base=${3##*/}
   { IFS=$(printf '\t') read -r previous count < "$dir/.busy-state"; } 2>/dev/null || true
   [ "${previous:-}" = "$base" ] || count=0
-  case "${count:-}" in ''|*[!0-9]*) count=0 ;; esac
   [ -f "$3" ] || { printf '0'; return 0; }
-  count=$((count + 1))
+  _fm_task_inbox_increment_count "${count:-}" count
   if ! { printf '%s\t%s\n' "$base" "$count" > "$dir/.busy-state"; } 2>/dev/null; then
     [ -f "$3" ] || { printf '0'; return 0; }
     return 1
@@ -528,9 +544,9 @@ fm_task_inbox_record_ring() {  # <state-dir> <task-id> <record-path>
 $ladder
 EOF
   [ "$rec_base" = "$base" ] || count=0
-  case "$count" in ''|*[!0-9]*) count=0 ;; esac
   [ -d "$dir" ] || return 0
-  if ! { printf '%s\t%s\t%s\n' "$base" "$((count + 1))" "$(date +%s)" > "$dir/.ring-state"; } 2>/dev/null; then
+  _fm_task_inbox_increment_count "$count" count
+  if ! { printf '%s\t%s\t%s\n' "$base" "$count" "$(date +%s)" > "$dir/.ring-state"; } 2>/dev/null; then
     [ -d "$dir" ] || return 0
     return 1
   fi

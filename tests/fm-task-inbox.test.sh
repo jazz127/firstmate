@@ -1249,6 +1249,50 @@ test_idempotent_write_rejects_failed_body_reads() {
   pass "inbox: failed body reads cannot prove an idempotent duplicate"
 }
 
+test_inbox_retry_counters_are_bounded_decimal() {
+  local state rec kind scenario count expected marker out stored_base stored_count rest action
+  for kind in busy ring; do
+    for scenario in padded-octal padded-invalid-octal overflow above-max huge near-max ordinary zero invalid successor; do
+      case "$scenario" in
+        padded-octal) count=010; expected=11 ;;
+        padded-invalid-octal) count=018; expected=19 ;;
+        overflow) count=9223372036854775807; expected=9223372036854775807 ;;
+        above-max) count=9223372036854775808; expected=9223372036854775807 ;;
+        huge) count=999999999999999999999999999999; expected=9223372036854775807 ;;
+        near-max) count=9223372036854775806; expected=9223372036854775807 ;;
+        ordinary) count=10; expected=11 ;;
+        zero) count=00; expected=1 ;;
+        invalid) count=bad; expected=1 ;;
+        successor) count=018; expected=1 ;;
+      esac
+      state="$TMP_ROOT/decimal-counter-$kind-$scenario/state"
+      mkdir -p "$state"
+      rec=$(inbox_lib "$state" fm_task_inbox_write "$state" t1 'counter fixture') || fail "counter fixture write failed"
+      stored_base=${rec##*/}
+      [ "$scenario" != successor ] || stored_base=000.msg
+      if [ "$kind" = busy ]; then
+        marker="$state/t1.inbox/.busy-state"
+        printf '%s\t%s\n' "$stored_base" "$count" > "$marker"
+        out=$(inbox_lib "$state" fm_task_inbox_record_busy "$state" t1 "$rec") || fail "$scenario busy counter failed"
+        [ "$out" = "$expected" ] || fail "$scenario busy counter returned the wrong decimal increment"
+      else
+        marker="$state/t1.inbox/.ring-state"
+        printf '%s\t%s\t1000\n' "$stored_base" "$count" > "$marker"
+        inbox_lib "$state" fm_task_inbox_record_ring "$state" t1 "$rec" || fail "$scenario ring counter failed"
+      fi
+      IFS=$'\t' read -r stored_base stored_count rest action < "$marker"
+      [ "$stored_base" = "${rec##*/}" ] || fail "$scenario $kind counter changed its record identity"
+      [ "$stored_count" = "$expected" ] || fail "$scenario $kind counter stored the wrong decimal increment"
+      if [ "$kind" = ring ] && [ "$expected" = 9223372036854775807 ]; then
+        action=$(FM_TASK_INBOX_GRACE_SECS=0 inbox_lib "$state" fm_task_inbox_due_action "$state" t1)
+        [ "$action" = "escalate $rec $expected" ] || fail "$scenario numeric overflow renewed a spent retry budget"
+      fi
+    done
+  done
+  pass "inbox retry counters increment decimal padding and saturate overflow without renewing spent retry budgets"
+}
+
+test_inbox_retry_counters_are_bounded_decimal
 test_idempotent_write_rejects_failed_body_reads
 test_sequence_order_crosses_padding_widths
 test_writer_retries_after_a_vanished_lock_collision 08

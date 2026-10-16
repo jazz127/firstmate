@@ -254,9 +254,11 @@ fmx_load_config() {
   else
     dry=$(fmx_env_get FMX_DRY_RUN "$env_file")
   fi
+  # False settings ignore letter case and trailing newlines.
+  while [[ "$dry" == *$'\n' ]]; do dry=${dry%$'\n'}; done
   # shellcheck disable=SC2034 # FMX_DRY is read by callers (fm-x-reply.sh) after sourcing.
-  case "$(printf '%s' "$dry" | tr '[:upper:]' '[:lower:]')" in
-    ''|0|false|no|off) FMX_DRY="" ;;
+  case "$dry" in
+    ''|0|[Ff][Aa][Ll][Ss][Ee]|[Nn][Oo]|[Oo][Ff][Ff]) FMX_DRY="" ;;
     *) FMX_DRY=1 ;;
   esac
 

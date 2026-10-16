@@ -348,6 +348,52 @@ test_record_prune_preserves_filename_boundaries() {
   pass "record pruning preserves exact filename boundaries and refuses unrepresentable paths"
 }
 
+test_record_rejects_failed_or_truncated_nonce_generation() {
+  local tmp fakebin state existing utility output status out rc files real_od real_tr
+  tmp=$(fm_test_tmproot fm-operational-nonce-error)
+  fakebin="$tmp/fakebin"
+  state="$tmp/state"
+  mkdir -p "$fakebin" "$state/operational-inbox"
+  existing="$state/operational-inbox/1700000000-0123456789abcdef.msg"
+  real_od=$(command -v od)
+  real_tr=$(command -v tr)
+  cat > "$fakebin/od" <<'SHIM'
+#!/usr/bin/env bash
+if [ "${0##*/}" = "$FM_TEST_NONCE_UTILITY" ]; then
+  printf used > "$FM_TEST_NONCE_HIT"
+  printf '%s' "$FM_TEST_NONCE_OUTPUT"
+  exit "$FM_TEST_NONCE_EXIT"
+fi
+case "${0##*/}" in
+  od) exec "$FM_TEST_NONCE_OD" "$@" ;;
+  tr) exec "$FM_TEST_NONCE_TR" "$@" ;;
+esac
+SHIM
+  cp "$fakebin/od" "$fakebin/tr"
+  printf '#!/usr/bin/env bash\nprintf "1700000000\\n"\n' > "$fakebin/date"
+  chmod +x "$fakebin/od" "$fakebin/tr" "$fakebin/date"
+  for utility in od tr; do
+    for status in 1 0; do
+      if [ "$status" = 1 ]; then output=0123456789abcdef; else output=0123; fi
+      printf 'pre-existing fixture record' > "$existing"
+      rm -f "$tmp/hit"
+      rc=0
+      out=$(printf 'new fixture record' | PATH="$fakebin:$PATH" FM_STATE_OVERRIDE="$state" \
+        FM_TEST_NONCE_UTILITY="$utility" FM_TEST_NONCE_OUTPUT="$output" FM_TEST_NONCE_EXIT="$status" \
+        FM_TEST_NONCE_HIT="$tmp/hit" FM_TEST_NONCE_OD="$real_od" FM_TEST_NONCE_TR="$real_tr" \
+        "$OWNER" record watcher 2>&1) || rc=$?
+      [ -f "$tmp/hit" ] || fail "$utility nonce fault was not exercised"
+      [ "$rc" -ne 0 ] || fail "$utility nonce failure or truncation was accepted"
+      [ -z "$out" ] || fail "$utility nonce failure emitted a doorbell"
+      [ "$(cat "$existing")" = 'pre-existing fixture record' ] || fail "$utility nonce failure overwrote an existing record"
+      files=$(find "$state/operational-inbox" -type f | wc -l | tr -d ' ')
+      [ "$files" = 1 ] || fail "$utility nonce failure published an extra record"
+    done
+  done
+  pass "failed or truncated nonce generation cannot publish or overwrite an operational record"
+}
+
+test_record_rejects_failed_or_truncated_nonce_generation
 test_record_prune_preserves_filename_boundaries
 test_stdin_read_errors_refuse_partial_operational_input
 test_record_prune_preserves_leading_relative_spaces

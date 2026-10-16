@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # tests/fm-fork-free-helpers.test.sh - the pure-bash stand-ins that the
 # watcher, drain, and lock paths use instead of forking small external
-# commands every cycle. Each case compares the helper with the command it
-# replaces on the same input, under every available Bash (stock macOS
+# commands every cycle. Cases pin retained command behavior or stricter record
+# validation under every available Bash (stock macOS
 # /bin/bash 3.2 included) and under both the C and a UTF-8 locale, so an edge
 # case where the two disagree fails here instead of drifting silently.
 set -u
@@ -132,6 +132,9 @@ test_recovery_marker_read_accepts_exactly_one_newline() {
   local script="$TMP_ROOT/marker.sh" cases="$TMP_ROOT/marker-cases"
   mkdir -p "$cases"
   printf 'pending:handling:g1\n' > "$cases/one"
+  printf 'announced:downtime:g.x-2\n' > "$cases/announced"
+  printf 'acked:handling:g_3\n' > "$cases/acked"
+  printf 'pending:handling:bad:extra\n' > "$cases/extra-colon"
   printf 'pending:handling:g1' > "$cases/unterminated"
   printf 'pending:handling:g1\npending:handling:g2\n' > "$cases/two"
   printf 'pending:handling:g1\ntrailing-partial' > "$cases/partial-second"
@@ -143,20 +146,19 @@ test_recovery_marker_read_accepts_exactly_one_newline() {
   cat > "$script" <<'SH'
 . "$1/bin/fm-wake-lib.sh"
 for marker in "$2"/*; do
-  # The replaced reference: one newline byte by wc -l, then the same token read.
-  want=reject
-  if [ "$(wc -l < "$marker" | tr -d '[:space:]')" = 1 ] && IFS= read -r line < "$marker"; then
-    case "$line" in
-      pending:handling:*|pending:downtime:*|announced:handling:*|announced:downtime:*|acked:handling:*|acked:downtime:*)
-        case "${line##*:}" in ''|*[!A-Za-z0-9._-]*) ;; *) want="accept:$line" ;; esac ;;
-    esac
-  fi
+  # Exact expected records: binary data and unterminated suffixes are refused.
+  case "${marker##*/}" in
+    one) want='accept:pending:handling:g1' ;;
+    announced) want='accept:announced:downtime:g.x-2' ;;
+    acked) want='accept:acked:handling:g_3' ;;
+    *) want=reject ;;
+  esac
   if fm_recovery_marker_read "$marker"; then got="accept:$FM_RECOVERY_MARKER_TOKEN"; else got=reject; fi
-  [ "$got" = "$want" ] || printf 'marker %s: helper %q, reference %q\n' "${marker##*/}" "$got" "$want"
+  [ "$got" = "$want" ] || printf 'marker %s: helper %q, expected %q\n' "${marker##*/}" "$got" "$want"
 done
 SH
   run_everywhere "recovery marker read" "$script" "$cases"
-  pass "recovery marker reads accept exactly the one-line records wc -l accepted"
+  pass "recovery marker reads accept complete text records and reject malformed bytes or framing"
 }
 
 test_window_to_task_matches_the_meta_pipeline() {

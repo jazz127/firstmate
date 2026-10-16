@@ -2605,6 +2605,58 @@ test_record_field_output_variable() {
   pass "record fields assign output variables without losing missing/binary clearing or field bytes"
 }
 
+test_failed_fallback_pipeline_refuses_create() {
+  (
+    local home corr rc failed_stage
+    # Each failing producer emits plausible text before failing. Consuming its
+    # input isolates the failure from an unrelated upstream SIGPIPE.
+    # shellcheck disable=SC2329
+    openssl() { return 1; }
+    # shellcheck disable=SC2329
+    cksum() {
+      if [ "$failed_stage" = checksum ]; then
+        command cat >/dev/null
+        printf '12345 67\n'
+        return 1
+      fi
+      command cksum "$@"
+    }
+    # shellcheck disable=SC2329
+    shasum() {
+      if [ "$failed_stage" = digest ]; then
+        command cat >/dev/null
+        printf 'fedcba98765432100123456789abcdef0123456789abcdef0123456789abcdef01  -\n'
+        return 1
+      fi
+      command shasum "$@"
+    }
+    # shellcheck disable=SC2329
+    awk() {
+      if [ "$failed_stage" = field ]; then
+        command cat >/dev/null
+        printf 'fedcba98765432100123456789abcdef0123456789abcdef0123456789abcdef01\n'
+        return 1
+      fi
+      command awk "$@"
+    }
+    for failed_stage in checksum digest field; do
+      home=$(setup_parent "fallback-failure-$failed_stage")
+      rc=0
+      corr=$(fm_pending_reply_create "$home" "$home/state" mate 'fixture request') || rc=$?
+      expect_code 1 "$rc" "a failed fallback $failed_stage must refuse creation"
+      [ -z "$corr" ] || fail "failed fallback $failed_stage returned an id"
+      [ -z "$(find "$home/state/pending-replies" -type f)" ] || fail "failed fallback $failed_stage wrote a pending record"
+    done
+    failed_stage=none
+    home=$(setup_parent healthy-fallback-after-failure)
+    corr=$(fm_pending_reply_create "$home" "$home/state" mate 'fixture request') || fail "healthy fallback failed"
+    [ "${#corr}" = 16 ] || fail "healthy fallback has the wrong length"
+    [ "$(fm_pending_reply_get "$home/state/pending-replies/$corr" phase)" = awaiting_report ] \
+      || fail "healthy fallback did not persist the request"
+  ) || fail "fallback pipeline failure regression failed"
+  pass "failed fallback checksum/digest/field pipelines cannot publish ids or pending records"
+}
+
 test_failed_openssl_output_uses_fallback() {
   (
     local home corr rec emitted
@@ -2701,6 +2753,7 @@ test_create_without_openssl() {
   pass "pending request creation supports missing, failed and healthy OpenSSL"
 }
 
+test_failed_fallback_pipeline_refuses_create
 test_failed_openssl_output_uses_fallback
 test_collision_retry_validates_generated_id
 test_status_evidence_requires_complete_text

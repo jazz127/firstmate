@@ -184,8 +184,14 @@ fm_pending_reply_new_id() {
     raw=$(openssl rand -hex 8 2>/dev/null) || raw=''
   fi
   if [ -z "$raw" ]; then
-    raw=$(printf '%s' "$$-$(date +%s%N 2>/dev/null || date +%s)-$RANDOM$RANDOM" | cksum 2>/dev/null | awk '{print $1}')
-    hex=$(printf '%s' "$raw$RANDOM$RANDOM" | shasum -a 256 2>/dev/null | awk '{print $1}')
+    raw=$(
+      set -o pipefail
+      printf '%s' "$$-$(date +%s%N 2>/dev/null || date +%s)-$RANDOM$RANDOM" | cksum 2>/dev/null | awk '{print $1}'
+    ) || return 1
+    hex=$(
+      set -o pipefail
+      printf '%s' "$raw$RANDOM$RANDOM" | shasum -a 256 2>/dev/null | awk '{print $1}'
+    ) || return 1
     raw=${hex:0:16}
   fi
   printf '%s' "$(printf '%s' "$raw" | tr 'A-F' 'a-f' | tr -cd 'a-f0-9' | cut -c1-16)"

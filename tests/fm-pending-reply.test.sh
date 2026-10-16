@@ -2607,6 +2607,56 @@ test_tick_without_metadata() (
 
 # --- run --------------------------------------------------------------------
 
+test_large_busy_capture_with_pipefail() {
+  local capture_home state corr rec kind harness padding
+  local FM_PENDING_REPLY_NOW=2000 FM_PENDING_REPLY_GRACE_SECS=0
+  local FM_PENDING_REPLY_SEND_HOOK=large_busy_recovery_hook
+  export FM_PENDING_REPLY_NOW FM_PENDING_REPLY_GRACE_SECS FM_PENDING_REPLY_SEND_HOOK
+  (
+    set -o pipefail
+    fm_backend_busy_state() { printf unknown; }
+    fm_backend_capture() { cat "$capture_home/capture"; }
+    # Invoked indirectly through FM_PENDING_REPLY_SEND_HOOK.
+    # shellcheck disable=SC2329
+    large_busy_recovery_hook() { printf '%s\n' "$1" >> "$capture_home/recoveries"; }
+    padding=$(printf '%200000s' '')
+    padding=${padding// /x}
+    for kind in early late idle foreign; do
+      capture_home=$(setup_parent "large-busy-$kind")
+      state="$capture_home/state"
+      corr=$(fm_pending_reply_create "$capture_home" "$state" mate 'large capture request') \
+        || fail "large capture fixture creation failed"
+      fm_pending_reply_mark_delivered "$state" "$corr" 1000 \
+        || fail "large capture fixture delivery failed"
+      harness=codex
+      [ "$kind" != foreign ] || harness=pi
+      fm_write_meta "$state/mate.meta" 'backend=tmux' 'window=synthetic-endpoint' "harness=$harness"
+      case "$kind" in
+        early|foreign) printf 'esc to interrupt\nnotes: %s\n' "$padding" > "$capture_home/capture" ;;
+        late) printf 'notes: %s\nesc to interrupt\n' "$padding" > "$capture_home/capture" ;;
+        idle) printf 'notes: %s\nready\n' "$padding" > "$capture_home/capture" ;;
+      esac
+      fm_pending_reply_tick "$state" || fail "large capture tick failed"
+      rec=$(fm_pending_reply_path "$state" "$corr")
+      case "$kind" in
+        early|late)
+          [ "$(phase_of "$state" "$corr")" = awaiting_report ] \
+            || fail "$kind busy marker must not trigger a recovery"
+          [ -z "$(fm_pending_reply_get "$rec" request_turn_completed_epoch)" ] \
+            || fail "$kind busy marker must not prove turn completion"
+          [ ! -e "$capture_home/recoveries" ] || fail "$kind busy capture invoked the recovery hook"
+          ;;
+        *)
+          [ "$(phase_of "$state" "$corr")" = recovery_sent ] \
+            || fail "$kind capture lost its eligible idle fallback"
+          [ -s "$capture_home/recoveries" ] || fail "$kind capture did not invoke the recovery hook"
+          ;;
+      esac
+    done
+  ) || fail "large busy capture regression failed"
+  pass "large busy captures retain their harness-scoped verdict under pipefail"
+}
+
 test_record_field_framing() {
   local home rec actual expected
   home=$(setup_parent field-framing)
@@ -2821,6 +2871,7 @@ test_signature_failures_do_not_hide_new_reports
 test_sighting_encoding_failure_retries
 test_delivery_marker_requires_complete_text
 test_create_without_openssl
+test_large_busy_capture_with_pipefail
 test_record_update_preserves_other_fields
 test_record_update_preserves_unreadable_input
 test_record_field_framing

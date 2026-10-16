@@ -110,6 +110,47 @@ run_check() {
 
 # --- the regression this script exists for ----------------------------------
 
+test_failed_separate_announcements_are_reported() {
+  local shell mode home dir out
+  for shell in bash /bin/bash; do
+    for mode in quiet update exit-empty exit-partial signal-empty signal-partial timeout-partial; do
+      home=$(make_home "separate-announce-${shell//\//-}-$mode")
+      dir="$home/bin"
+      mkdir -p "$dir"
+      cat > "$dir/$TOOL" <<'SH'
+#!/bin/sh
+if [ "${1:-}" = --version ]; then
+  printf 'fixture 1.0\n'
+  exit 0
+fi
+SH
+      case "$mode" in
+        update|*-partial) printf 'printf "update available: 9.0\\n"\n' >> "$dir/$TOOL" ;;
+      esac
+      case "$mode" in
+        exit-*) printf 'exit 7\n' >> "$dir/$TOOL" ;;
+        signal-*) printf 'kill -TERM $$\n' >> "$dir/$TOOL" ;;
+        timeout-*) printf 'sleep 5\n' >> "$dir/$TOOL" ;;
+        *) printf 'exit 0\n' >> "$dir/$TOOL" ;;
+      esac
+      chmod 0755 "$dir/$TOOL"
+      write_config "$home" "{\"tools\":[{\"name\":\"fixture\",\"command\":\"$TOOL\",\"announce_args\":[\"--help\"],\"announce_pattern\":\"update available: [0-9.]+\"}]}"
+      out=$(FM_HOME="$home" PATH="$(fixture_path "$dir")" FM_TOOL_UPDATE_INTERVAL=0 \
+        FM_TOOL_UPDATE_PROBE_SECS=1 "$shell" "$CHECK" check 2>&1) || fail "$shell $mode check failed: $out"
+      case "$mode" in
+        quiet) [ -z "$out" ] || fail "successful empty announcement was not silent: $out" ;;
+        update) assert_contains "$out" 'fixture update available:' 'successful separate announcement was lost' ;;
+        *)
+          assert_contains "$out" 'fixture check failed:' "$shell $mode source failure was ignored"
+          assert_contains "$out" 'update announcement' 'failure did not identify the announcement source'
+          assert_not_contains "$out" 'update available:' 'a failed announcement source supplied an update'
+          ;;
+      esac
+    done
+  done
+  pass 'failed separate announcement probes report their failure and discard partial output'
+}
+
 test_failed_version_output_is_not_trusted() {
   local shell mode home primary secondary path out
   for shell in bash /bin/bash; do
@@ -1170,6 +1211,7 @@ test_armed_check_wakes_the_watcher_with_the_skew_report() {
   pass "the armed check reaches the watcher as an ordinary check wake"
 }
 
+test_failed_separate_announcements_are_reported
 test_failed_version_output_is_not_trusted
 test_positive_probe_and_sweep_durations
 test_decimal_watcher_timeout

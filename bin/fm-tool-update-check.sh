@@ -492,6 +492,9 @@ EOF
           # nothing to say. The one that answers with nothing stays silent below.
           emit "$name check failed: $resolved_path did not answer when asked for its update announcement"
           announce_out=
+        elif [ "$status" -ne 0 ]; then
+          emit "$name check failed: $resolved_path update announcement probe exited $status"
+          announce_out=
         fi
       fi
     fi

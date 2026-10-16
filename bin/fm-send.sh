@@ -760,6 +760,17 @@ fm_send_feed_resolved_holds() { # <answer-text>
 # send implementation. A failed backend send is still surfaced below as a hard
 # error with the attempted resolution attached.
 
+# Both remote paths require a nonzero decimal bound: timeout/alarm zero disables
+# the deadline. Normalize padding before passing the bound to the runner.
+fm_send_remote_budget() {
+  local budget=${FM_SEND_REMOTE_BUDGET:-30}
+  if [[ ! "$budget" =~ ^0*[1-9][0-9]*$ ]]; then
+    echo "error: FM_SEND_REMOTE_BUDGET must be a positive integer: $budget" >&2
+    return 1
+  fi
+  FM_SEND_REMOTE_BUDGET=${budget#"${budget%%[!0]*}"}
+}
+
 if [ "${1:-}" = "--key" ]; then
   [ -z "$FIRE_AND_FORGET_ID" ] ||
     {
@@ -775,13 +786,7 @@ if [ "${1:-}" = "--key" ]; then
   key=$2
   semantic_key=$(fm_send_normalize_key "$key")
   if [ "$TARGET_BACKEND" = remote ]; then
-    FM_SEND_REMOTE_BUDGET=${FM_SEND_REMOTE_BUDGET:-30}
-    case "$FM_SEND_REMOTE_BUDGET" in
-    '' | *[!0-9]* | 0)
-      echo "error: FM_SEND_REMOTE_BUDGET must be a positive integer: $FM_SEND_REMOTE_BUDGET" >&2
-      exit 1
-      ;;
-    esac
+    fm_send_remote_budget || exit 1
     if ! fm_run_timed "$FM_SEND_REMOTE_BUDGET" "$SCRIPT_DIR/fm-on.sh" "$TARGET_REMOTE_ID" \
       fm-remote-secondmate-control.sh key "$TARGET_REMOTE_ID" "$key" </dev/null; then
       echo "error: key '$key' not sent to remote secondmate $TARGET_REMOTE_ID; completion may be unknown" >&2
@@ -801,13 +806,7 @@ else
     exit 1
   fi
   if [ "$TARGET_BACKEND" = remote ]; then
-    FM_SEND_REMOTE_BUDGET=${FM_SEND_REMOTE_BUDGET:-30}
-    case "$FM_SEND_REMOTE_BUDGET" in
-    '' | *[!0-9]* | 0)
-      echo "error: FM_SEND_REMOTE_BUDGET must be a positive integer: $FM_SEND_REMOTE_BUDGET" >&2
-      exit 1
-      ;;
-    esac
+    fm_send_remote_budget || exit 1
   fi
   # The pre-marker answer text, kept for the closing resolved note so the
   # durable ledger records the plain answer without marker or corr bytes.

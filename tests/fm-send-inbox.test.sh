@@ -119,6 +119,53 @@ record_body() { # <record>
   bash -c '. "$1"; fm_task_inbox_body "$2"' _ "$ROOT/bin/fm-task-inbox-lib.sh" "$2"
 }
 
+test_remote_budget_rejects_all_zero_values() {
+  local dir err rc budget mode n=0
+  local args=()
+  for budget in 00 000000 0 invalid 1 01; do
+    for mode in key reply no-reply; do
+      n=$((n + 1))
+      dir=$(setup_case "remote-budget-$n")
+      err="$dir/send.err"
+      rm -f "$dir/home/state/t1.meta"
+      mkdir -p "$dir/home/data"
+      fm_write_meta "$dir/home/state/rsm.meta" \
+        window=fm-remote:p1 endpoint_task_id=rsm harness=claude kind=secondmate mode=secondmate \
+        remote_host=fixture-host remote_root=/fixture/root remote_backend=herdr remote_target=fm-remote:p1
+      printf '%s\n' "- rsm - remote test domain (host: fixture-host; root: /fixture/root; home: $dir/remote; scope: testing; projects: alpha; added 2026-08-02)" \
+        > "$dir/home/data/secondmates.md"
+      cat > "$dir/fakebin/ssh-refuse" <<'SH'
+#!/usr/bin/env bash
+printf 'transport attempted\n' >> "$FM_TEST_TRANSPORT_LOG"
+exit 17
+SH
+      chmod +x "$dir/fakebin/ssh-refuse"
+      case "$mode" in
+        key) args=(--key Enter) ;;
+        reply) args=('reconcile fixture state') ;;
+        no-reply) args=(--fire-and-forget 0123456789abcdef 'reconcile fixture state') ;;
+      esac
+      run_send "$dir" "$err" FM_ROOT_OVERRIDE="$ROOT" FM_SEND_REMOTE_BUDGET="$budget" \
+        FM_SSH_BIN="$dir/fakebin/ssh-refuse" FM_TEST_TRANSPORT_LOG="$dir/transport.log" \
+        -- rsm "${args[@]}"
+      rc=$?
+      [ "$rc" -ne 0 ] || fail "$mode send with budget $budget unexpectedly succeeded"
+      case "$budget" in
+        1|01)
+          [ -s "$dir/transport.log" ] || fail "positive budget $budget did not reach the transport"
+          assert_not_contains "$(cat "$err")" "must be a positive integer" "positive budget refused"
+          ;;
+        *)
+          assert_contains "$(cat "$err")" "must be a positive integer" "$mode zero/invalid budget should refuse"
+          [ ! -e "$dir/transport.log" ] || fail "$mode budget $budget reached the transport"
+          [ ! -d "$dir/home/state/pending-replies" ] || fail "$mode budget $budget created a reply expectation"
+          ;;
+      esac
+    done
+  done
+  pass "fm-send: every remote send rejects all-zero budgets before transport or reply tracking"
+}
+
 test_fire_and_forget_rejects_malformed_ids() {
   local dir err rc form value n=0
   local args=()
@@ -574,6 +621,7 @@ test_empty_message_refused() {
   pass "fm-send: an empty or whitespace-only text steer refuses before marking, recording, or typing"
 }
 
+test_remote_budget_rejects_all_zero_values
 test_fire_and_forget_rejects_malformed_ids
 test_text_steer_rides_inbox
 test_deep_home_doorbell_stays_short

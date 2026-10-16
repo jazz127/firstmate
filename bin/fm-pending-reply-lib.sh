@@ -1834,9 +1834,9 @@ fm_pending_reply_task_has_open() {  # <state-dir> <task_id>
   [ -d "$dir" ] || return 1
   for rec in "$dir"/*; do
     [ -f "$rec" ] || continue
-    tid=$(fm_pending_reply_get "$rec" task_id)
+    fm_pending_reply_get "$rec" task_id tid
     [ "$tid" = "$task_id" ] || continue
-    phase=$(fm_pending_reply_get "$rec" phase)
+    fm_pending_reply_get "$rec" phase phase
     [ "$phase" != resolved ] || continue
     return 0
   done

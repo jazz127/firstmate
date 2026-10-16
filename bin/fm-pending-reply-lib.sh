@@ -191,8 +191,12 @@ fm_pending_reply_new_id() {
   printf '%s' "$(printf '%s' "$raw" | tr 'A-F' 'a-f' | tr -cd 'a-f0-9' | cut -c1-16)"
 }
 
-fm_pending_reply_corr_token() {  # <corr_id>
-  printf 'corr=%s' "$1"
+fm_pending_reply_corr_token() {  # <corr_id> [output-variable]
+  if [ "$#" -gt 1 ]; then
+    printf -v "$2" 'corr=%s' "$1"
+  else
+    printf 'corr=%s' "$1"
+  fi
 }
 
 # Extract the first corr=<16hex> token from free text, or empty.
@@ -213,8 +217,9 @@ fm_pending_reply_extract_corr() {  # <text>
 # 0 if <text> carries the exact correlation token for <corr_id>, as a whole
 # word: xcorr=<id> or corr=<id>ff is a different token, not this one.
 fm_pending_reply_text_has_corr() {  # <text> <corr_id>
-  local text=$1 corr=$2 re
-  re="(^|[^[:alnum:]_])$(fm_pending_reply_corr_token "$corr")([^[:alnum:]_]|\$)"
+  local text=$1 corr=$2 re token
+  fm_pending_reply_corr_token "$corr" token
+  re="(^|[^[:alnum:]_])${token}([^[:alnum:]_]|\$)"
   [[ $text =~ $re ]]
 }
 
@@ -354,7 +359,7 @@ fm_pending_reply_strip_leading_corr() {  # <body> <result-var>
 fm_pending_reply_embed_corr() {  # <message> <corr_id> <result-var>
   local message=$1 corr=$2 result_var=$3 body token marked
   [ -n "$result_var" ] || return 2
-  token=$(fm_pending_reply_corr_token "$corr")
+  fm_pending_reply_corr_token "$corr" token
   fm_message_mark_from_firstmate "$message" marked
   body=${marked#"$FM_FROMFIRST_MARK"}
   fm_pending_reply_strip_leading_corr "$body" body
@@ -1009,7 +1014,7 @@ fm_pending_reply_recovery_message() {  # <record-path>
   local rec=$1 corr summary token msg
   corr=$(fm_pending_reply_get "$rec" corr_id)
   summary=$(fm_pending_reply_get "$rec" request_summary)
-  token=$(fm_pending_reply_corr_token "$corr")
+  fm_pending_reply_corr_token "$corr" token
   msg="REPOST REQUIRED: previous marked request had no correlated parent report. Reply on the parent status channel including ${token}. Original request: ${summary}"
   fm_pending_reply_embed_corr "$msg" "$corr" msg
   printf '%s' "$msg"

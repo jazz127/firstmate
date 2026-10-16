@@ -379,13 +379,18 @@ make_hanging_tasks_axi "$E2E_FAKEBIN"
 # the same way tests/fm-session-start.test.sh's make_fake_ps_harness does:
 # every queried pid reports a live `claude` harness, independent of whatever
 # process tree the test itself was launched from.
-cat > "$E2E_FAKEBIN/ps" <<'SH'
+# Only the harness-identity queries are faked. Every other query, such as the
+# lock library's owner start identity on a host without /proc, reaches the
+# real ps, which is resolved here before the fake directory shadows it.
+E2E_REAL_PS=$(command -v ps) || fail "no real ps on PATH"
+cat > "$E2E_FAKEBIN/ps" <<SH
 #!/usr/bin/env bash
 set -u
-case "$*" in
-  *"comm="*) printf '%s\n' '/usr/local/bin/claude'; exit 0 ;;
-  *"args="*) printf '%s\n' 'claude'; exit 0 ;;
+case "\$*" in
+  *"comm="*) printf '%s\\n' '/usr/local/bin/claude'; exit 0 ;;
+  *"args="*) printf '%s\\n' 'claude'; exit 0 ;;
   *"ppid="*) exit 1 ;;
+  *) exec '$E2E_REAL_PS' "\$@" ;;
 esac
 exit 1
 SH

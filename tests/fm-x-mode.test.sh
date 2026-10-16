@@ -2627,7 +2627,7 @@ test_meta_rewrites_preserve_failed_filter_input() {
   real_grep=$(command -v grep)
   cat > "$fakebin/grep" <<'SH'
 #!/usr/bin/env bash
-if [ "${1:-}" = -vE ] && [ "${3:-}" = "$FM_TEST_FILTER_META" ]; then
+if [ "${1:-}" = -vE ] && { [ "$#" -eq 2 ] || [ "${3:-}" = "$FM_TEST_FILTER_META" ]; }; then
   printf 'called\n' > "$FM_TEST_FILTER_CALLED"
   case "$FM_TEST_FILTER_MODE" in
     empty-error) exit 2 ;;
@@ -2684,6 +2684,46 @@ SH
     done
   done
   pass "metadata rewrites preserve failed input and accept an empty successful filter"
+}
+
+test_meta_rewrites_refuse_binary_records() {
+  local home meta snapshot shell shape operation rc leftovers
+  home="$TMP_ROOT/meta-binary"
+  mkdir -p "$home/state"
+  meta="$home/state/task.meta"
+  snapshot="$home/original"
+  for shell in bash /bin/bash; do
+    for shape in retained-value request-key after-record; do
+      for operation in link count clear guarded-clear; do
+        printf 'kind=ship\nproject=fixture\n' > "$meta"
+        case "$shape" in
+          retained-value) printf 'extra=bad\000value\nx_request=req-old\n' >> "$meta" ;;
+          request-key) printf 'x_req\000uest=req-old\n' >> "$meta" ;;
+          after-record) printf 'x_request=req-old\n' >> "$meta" ;;
+        esac
+        printf 'x_request_ts=1700000000\nx_followups=1\n' >> "$meta"
+        [ "$shape" != after-record ] || printf '\000' >> "$meta"
+        cp "$meta" "$snapshot"
+        # shellcheck disable=SC2016 # The selected child shell expands these variables.
+        FM_HOME="$home" STATE="$home/state" ROOT="$ROOT" META="$meta" \
+          OPERATION="$operation" "$shell" -c '
+            . "$ROOT/bin/fm-x-lib.sh"
+            . "$ROOT/bin/fm-wake-lib.sh"
+            case "$OPERATION" in
+              link) fmx_meta_link_set "$META" req-new 1700000001 ;;
+              count) fmx_meta_followups_set "$META" 2 ;;
+              clear) fmx_meta_link_clear "$META" ;;
+              guarded-clear) fmx_meta_link_clear "$META" req-old ;;
+            esac
+          ' >/dev/null 2>&1; rc=$?
+        [ "$rc" -ne 0 ] || fail "$shell $operation accepted binary $shape metadata"
+        cmp -s "$snapshot" "$meta" || fail "$operation changed refused binary metadata"
+        leftovers=$(find "$home/state" -mindepth 1 ! -name task.meta -print)
+        [ -z "$leftovers" ] || fail "$operation leaked a lock or staging file on binary input"
+      done
+    done
+  done
+  pass "metadata rewrites refuse binary input without changing the record"
 }
 
 test_meta_rewrites_do_not_depend_on_tmpdir() {
@@ -3326,6 +3366,7 @@ test_link_carry_count_and_ts_preserve_followup_binding
 test_link_recovery_relink_carries_discord_context_after_inbox_drain
 test_link_carry_count_validation
 test_meta_rewrites_preserve_failed_filter_input
+test_meta_rewrites_refuse_binary_records
 test_meta_rewrites_do_not_depend_on_tmpdir
 test_meta_helpers_refuse_a_symlinked_task_record
 test_link_rejects_unsafe_and_missing

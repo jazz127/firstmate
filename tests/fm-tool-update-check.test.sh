@@ -110,6 +110,37 @@ run_check() {
 
 # --- the regression this script exists for ----------------------------------
 
+test_registry_tokens_reject_trailing_newlines() {
+  local shell field home dir out rc
+  for shell in bash /bin/bash; do
+    for field in name command version_args announce_args remote branch; do
+      home=$(make_home "registry-newline-${shell//\//-}-$field")
+      dir="$home/bin"
+      make_counting_copy "$dir" "$TOOL" 'fixture 1.0' "$home/probes"
+      jq -n --arg field "$field" --arg tool "$TOOL" --arg repo "$home/missing-repo" '
+        {name:"fixture", command:$tool}
+        | if $field == "name" then .name += "\n"
+          elif $field == "command" then .command += "\n"
+          elif $field == "version_args" then .version_args = ["--version\n"]
+          elif $field == "announce_args" then .announce_args = ["--help\n"] | .announce_pattern = "update: [0-9.]+"
+          elif $field == "remote" then .git = {repo:$repo, remote:"origin\n"}
+          else .git = {repo:$repo, branch:"main\n"} end
+        | {tools:[.]}
+      ' > "$home/config/watched-tools.json"
+      rc=0
+      out=$(FM_HOME="$home" "$shell" "$CHECK" arm 2>&1) || rc=$?
+      expect_code 1 "$rc" "$shell armed a trailing newline in $field: $out"
+      assert_absent "$home/state/tool-updates.check.sh" 'an invalid registry installed a shim'
+      assert_absent "$home/state/tool-updates.check-trust" 'an invalid registry acquired a trust binding'
+      out=$(FM_HOME="$home" PATH="$(fixture_path "$dir")" FM_TOOL_UPDATE_INTERVAL=0 \
+        "$shell" "$CHECK" check 2>&1) || fail "$shell could not report the invalid registry: $out"
+      assert_contains "$out" 'watched tool registry:' "$shell silently accepted a trailing newline in $field"
+      assert_absent "$home/probes" 'an invalid registry started a version probe'
+    done
+  done
+  pass 'registry token validation covers the complete string before arming or probing'
+}
+
 test_empty_path_entries_probe_the_current_directory() {
   local shell mode home cwd copies path out selected cwd_version copy_version expected_count
   for shell in bash /bin/bash; do
@@ -1274,6 +1305,7 @@ test_armed_check_wakes_the_watcher_with_the_skew_report() {
   pass "the armed check reaches the watcher as an ordinary check wake"
 }
 
+test_registry_tokens_reject_trailing_newlines
 test_empty_path_entries_probe_the_current_directory
 test_interval_bounds_do_not_overflow
 test_failed_separate_announcements_are_reported

@@ -332,20 +332,20 @@ config_validate() {
     def tool_problem($t):
       if ($t | type) != "object" then "every entry in tools must be an object"
       elif ($t.name | type) != "string" or ($t.name | length) == 0 then "every tool needs a non-empty name"
-      elif ($t.name | test("^[A-Za-z0-9._+-]+$") | not) then "tool name \($t.name) may use only letters, digits, dot, underscore, plus, and dash"
+      elif ($t.name | test("\\A[A-Za-z0-9._+-]+\\z") | not) then "tool name \($t.name) may use only letters, digits, dot, underscore, plus, and dash"
       elif ($t | has("command") | not) and ($t | has("git") | not) then "tool \($t.name) needs command, git, or both"
-      elif ($t | has("command")) and (($t.command | type) != "string" or ($t.command | test("^[A-Za-z0-9._+-]+$") | not)) then "tool \($t.name) command must be a bare executable name"
+      elif ($t | has("command")) and (($t.command | type) != "string" or ($t.command | test("\\A[A-Za-z0-9._+-]+\\z") | not)) then "tool \($t.name) command must be a bare executable name"
       elif ($t | has("version_args")) and (($t.version_args | type) != "array" or ($t.version_args | length) == 0) then "tool \($t.name) version_args must be a non-empty array"
-      elif ($t | has("version_args")) and ([$t.version_args[] | select((type != "string") or (test("^[A-Za-z0-9._=+/:-]+$") | not))] | length) > 0 then "tool \($t.name) version_args must be simple flag strings without spaces"
+      elif ($t | has("version_args")) and ([$t.version_args[] | select((type != "string") or (test("\\A[A-Za-z0-9._=+/:-]+\\z") | not))] | length) > 0 then "tool \($t.name) version_args must be simple flag strings without spaces"
       elif ($t | has("announce_pattern")) and (($t.announce_pattern | type) != "string" or ($t.announce_pattern | length) == 0 or ($t.announce_pattern | test("[[:cntrl:]]"))) then "tool \($t.name) announce_pattern must be a non-empty single-line string"
       elif ($t | has("announce_pattern")) and (($t | has("command")) | not) then "tool \($t.name) announce_pattern needs command"
       elif ($t | has("announce_args")) and (($t.announce_args | type) != "array" or ($t.announce_args | length) == 0) then "tool \($t.name) announce_args must be a non-empty array"
-      elif ($t | has("announce_args")) and ([$t.announce_args[] | select((type != "string") or (test("^[A-Za-z0-9._=+/:-]+$") | not))] | length) > 0 then "tool \($t.name) announce_args must be simple flag strings without spaces"
+      elif ($t | has("announce_args")) and ([$t.announce_args[] | select((type != "string") or (test("\\A[A-Za-z0-9._=+/:-]+\\z") | not))] | length) > 0 then "tool \($t.name) announce_args must be simple flag strings without spaces"
       elif ($t | has("announce_args")) and (($t | has("announce_pattern")) | not) then "tool \($t.name) announce_args needs announce_pattern"
       elif ($t | has("git")) and (($t.git | type) != "object") then "tool \($t.name) git must be an object"
       elif ($t | has("git")) and (($t.git.repo | type) != "string" or ($t.git.repo | startswith("/") | not) or ($t.git.repo | test("[[:cntrl:]]"))) then "tool \($t.name) git.repo must be an absolute path on one line"
-      elif ($t | has("git")) and ($t.git | has("remote")) and (($t.git.remote | type) != "string" or ($t.git.remote | test("^[A-Za-z0-9._-]+$") | not)) then "tool \($t.name) git.remote must be a simple remote name"
-      elif ($t | has("git")) and ($t.git | has("branch")) and (($t.git.branch | type) != "string" or ($t.git.branch | test("^[A-Za-z0-9._/-]+$") | not)) then "tool \($t.name) git.branch must be a simple branch name"
+      elif ($t | has("git")) and ($t.git | has("remote")) and (($t.git.remote | type) != "string" or ($t.git.remote | test("\\A[A-Za-z0-9._-]+\\z") | not)) then "tool \($t.name) git.remote must be a simple remote name"
+      elif ($t | has("git")) and ($t.git | has("branch")) and (($t.git.branch | type) != "string" or ($t.git.branch | test("\\A[A-Za-z0-9._/-]+\\z") | not)) then "tool \($t.name) git.branch must be a simple branch name"
       else empty
       end;
     def problems:

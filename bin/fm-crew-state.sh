@@ -539,11 +539,11 @@ passed_pr_detail() {
       ;;
   esac
 }
-# Finding count from a findings[N]{...} table header; empty when none.
+# Finding count from a findings[N]{...}: or legacy findings[N]: table header.
 nm_findings_count() {
-  local findings_re='findings\[([0-9]+)\]'
+  local findings_re=$'(^|\n)[[:space:]]*findings\\[([0-9]+)\\](\\{[^}\n]*\\})?:'
   [[ $RUN_OUT =~ $findings_re ]] || return 1
-  printf '%s\n' "${BASH_REMATCH[1]}"
+  printf '%s\n' "${BASH_REMATCH[2]}"
 }
 nm_gate_step_row() {
   local row step rest status findings

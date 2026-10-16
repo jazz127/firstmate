@@ -823,6 +823,39 @@ EOF
 
 # ---------------------------------------------------------------------------
 # (a) active run-step is authoritative
+test_findings_count_requires_a_table_header() {
+  local d out kind base header notes
+  reset_fakes
+  d=$(new_case findings-header)
+  make_repo_on_branch "$d/wt" fm/findings-header
+  make_fakebin "$d" >/dev/null
+  fm_write_meta "$d/state/task.meta" "window=fm:fm-task" "worktree=$d/wt" "kind=ship"
+  base="$(run_running fm/findings-header)"$'\ngate: review\n'
+  header=$'findings[2]{id,action}:\n  a,fix\n  b,fix\n'
+  notes=$'notes: documentation mentions findings[99]\n'
+  for kind in prefix suffix only embedded bare malformed indented legacy; do
+    case "$kind" in
+      prefix) FM_FAKE_AXI_STATUS="$base$notes$header" ;;
+      suffix) FM_FAKE_AXI_STATUS="$base$header$notes" ;;
+      only) FM_FAKE_AXI_STATUS="$base$notes" ;;
+      embedded) FM_FAKE_AXI_STATUS="$base"$'notes: legacy_findings[99] sample\n'"$header" ;;
+      bare) FM_FAKE_AXI_STATUS="$base"$'findings[99] appears in documentation\n' ;;
+      malformed) FM_FAKE_AXI_STATUS="$base"$'findings[99]{ incomplete table notation\n' ;;
+      indented) FM_FAKE_AXI_STATUS="$base  $header" ;;
+      legacy) FM_FAKE_AXI_STATUS="$base"$'findings[2]:\n  a,fix\n  b,fix\n' ;;
+    esac
+    out=$(run_crew_state "$d" task)
+    assert_contains "$out" "state: parked" "$kind report must retain its gate"
+    case "$kind" in
+      only|bare|malformed)
+        assert_not_contains "$out" 'finding(s)' "$kind prose must not supply a findings count"
+        ;;
+      *) assert_contains "$out" '2 finding(s)' "$kind report must count the actual table" ;;
+    esac
+  done
+  pass "findings counts come from table headers rather than prose mentions"
+}
+
 test_active_run_is_authoritative() {
   reset_fakes
   local d; d=$(new_case active)
@@ -5797,6 +5830,7 @@ test_nm_scalar_trimming() {
   pass 'scalar trimming preserves whitespace, quotes and literal values through stdout and output variables'
 }
 
+test_findings_count_requires_a_table_header
 test_large_gate_marker_with_pipefail
 test_large_quiet_activity_with_pipefail
 test_nm_field_large_records_with_pipefail

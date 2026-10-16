@@ -159,6 +159,21 @@ fm_pending_reply_grace_secs() {
   printf '%s' "$g"
 }
 
+# Decimal epochs and grace values must be safe before shell arithmetic.
+# Eighteen digits bound both operands so their difference fits signed 64 bits.
+_fm_pending_reply_elapsed_at_least() {  # <now> <anchor> <grace-seconds>
+  local elapsed_now=${1-} elapsed_anchor=${2-} elapsed_grace=${3-} value
+  for value in "$elapsed_now" "$elapsed_anchor" "$elapsed_grace"; do
+    case "$value" in ''|*[!0-9]*) return 1 ;; esac
+    value=${value#"${value%%[!0]*}"}
+    [ "${#value}" -le 18 ] || return 1
+  done
+  elapsed_now=${elapsed_now#"${elapsed_now%%[!0]*}"}
+  elapsed_anchor=${elapsed_anchor#"${elapsed_anchor%%[!0]*}"}
+  elapsed_grace=${elapsed_grace#"${elapsed_grace%%[!0]*}"}
+  [ "$(( ${elapsed_now:-0} - ${elapsed_anchor:-0} ))" -ge "${elapsed_grace:-0}" ]
+}
+
 # Directory holding durable pending-reply records for <state-dir>.
 # Direct assignment preserves trailing newlines in an override and avoids a
 # subshell. The _fm_pending_dir_ prefix is reserved for this helper's locals.
@@ -561,7 +576,7 @@ fm_pending_reply_mark_delivery_unknown() {  # <state-dir> <corr_id>
 
 _fm_pending_reply_reconcile_delivery_locked() {  # <state-dir> <corr_id>
   local state=$1 corr=$2 rec delivered marker entry delivery_state value epoch
-  local grace now age phase
+  local grace now phase
   rec=$(fm_pending_reply_path "$state" "$corr")
   [ -f "$rec" ] || return 1
   marker=$(fm_pending_reply_delivery_confirmation_path "$state" "$corr")
@@ -588,8 +603,7 @@ _fm_pending_reply_reconcile_delivery_locked() {  # <state-dir> <corr_id>
       grace=$(fm_pending_reply_get "$rec" grace_secs)
       case "$grace" in ''|*[!0-9]*) grace=$(fm_pending_reply_grace_secs) ;; esac
       now=$(fm_pending_reply_now)
-      age=$((now - epoch))
-      [ "$age" -ge "$grace" ] || return 1
+      _fm_pending_reply_elapsed_at_least "$now" "$epoch" "$grace" || return 1
       phase=$(fm_pending_reply_get "$rec" phase)
       [ "$phase" = awaiting_report ] || return 1
       fm_pending_reply_set "$rec" phase delivery_unknown || return 1
@@ -885,7 +899,7 @@ fm_pending_reply_observe_busy() {  # <state-dir> <corr_id> <busy_state>
 }
 
 fm_pending_reply_fallback_idle_eligible() {  # <record-path>
-  local rec=$1 phase start seen grace now age
+  local rec=$1 phase start seen grace now
   phase=$(fm_pending_reply_get "$rec" phase)
   case "$phase" in
     awaiting_report)
@@ -903,8 +917,7 @@ fm_pending_reply_fallback_idle_eligible() {  # <record-path>
   case "$start" in ''|*[!0-9]*) return 1 ;; esac
   case "$grace" in ''|*[!0-9]*) grace=$(fm_pending_reply_grace_secs) ;; esac
   now=$(fm_pending_reply_now)
-  age=$((now - start))
-  [ "$age" -ge "$grace" ]
+  _fm_pending_reply_elapsed_at_least "$now" "$start" "$grace"
 }
 
 # fm_pending_reply_backend_observation: one busy/idle observation of a
@@ -1079,7 +1092,7 @@ fm_pending_reply_recovery_message() {  # <record-path>
 # second expectation is not created.
 fm_pending_reply_send_recovery() {  # <state-dir> <corr_id>
   local state=$1 corr=$2
-  local rec phase completed delivered attempted grace now age task_id msg parent_home send_status=0
+  local rec phase completed delivered attempted grace now task_id msg parent_home send_status=0
   local sender_pid sender_identity status_file lock
   local STATE FM_WAKE_QUEUE FM_WAKE_QUEUE_LOCK
   rec=$(fm_pending_reply_path "$state" "$corr")
@@ -1101,8 +1114,7 @@ fm_pending_reply_send_recovery() {  # <state-dir> <corr_id>
   # Grace runs from the request turn's completion, not from delivery: delivery
   # only proves the request arrived, while the turn's completion is the
   # earliest moment a correlated report could exist to race against.
-  age=$((now - completed))
-  [ "$age" -ge "$grace" ] || return 1
+  _fm_pending_reply_elapsed_at_least "$now" "$completed" "$grace" || return 1
   task_id=$(fm_pending_reply_get "$rec" task_id)
   # A remote mate's report may exist and simply not have been mirrored yet.
   fm_pending_reply_missing_report_is_evidence "$state" "$task_id" "$completed" || return 1
@@ -1398,7 +1410,7 @@ fm_pending_reply_maybe_escalate() {  # <state-dir> <corr_id>
 _fm_pending_reply_maybe_escalate_locked() {  # <state-dir> <corr_id>
   local state=$1 corr=$2
   local rec phase completed now payload parent_status line kind first display
-  local delivered task_id meta sm_home remote_host grace age key new_episode
+  local delivered task_id meta sm_home remote_host grace key new_episode
   rec=$(fm_pending_reply_path "$state" "$corr")
   [ -f "$rec" ] || return 1
   phase=$(fm_pending_reply_get "$rec" phase)
@@ -1416,8 +1428,7 @@ _fm_pending_reply_maybe_escalate_locked() {  # <state-dir> <corr_id>
       grace=$(fm_pending_reply_get "$rec" grace_secs)
       case "$grace" in ''|*[!0-9]*) grace=$(fm_pending_reply_grace_secs) ;; esac
       now=$(fm_pending_reply_now)
-      age=$((now - completed))
-      [ "$age" -ge "$grace" ] || return 1
+      _fm_pending_reply_elapsed_at_least "$now" "$completed" "$grace" || return 1
       # Same reply-channel evidence rule the recovery repost obeys: a missing
       # correlated report is not a missed report until the mirror caught up.
       fm_pending_reply_missing_report_is_evidence "$state" \

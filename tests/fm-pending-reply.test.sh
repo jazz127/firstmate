@@ -3068,6 +3068,84 @@ test_failed_record_selection_still_reconciles_pending_requests() {
   pass "failed or partial record selection falls back to per-record reconciliation"
 }
 
+test_pending_grace_uses_bounded_decimal_epochs() {
+  local home state rec corr action scenario now anchor elapsed initial expected rc observation
+  local FM_PENDING_REPLY_NOW=1000 FM_PENDING_REPLY_GRACE_SECS=120 FM_PENDING_REPLY_SEND_HOOK
+  export FM_PENDING_REPLY_NOW FM_PENDING_REPLY_GRACE_SECS FM_PENDING_REPLY_SEND_HOOK
+  (
+    # The recovery path resolves this hook from its configured command string.
+    # shellcheck disable=SC2329
+    pending_decimal_recovery_hook() { printf sent > "$home/recovery"; }
+    FM_PENDING_REPLY_SEND_HOOK=pending_decimal_recovery_hook
+    for action in fallback delivery recovery escalation; do
+      for scenario in padded-early padded-late overflow expression padded-clock invalid-clock; do
+        case "$scenario" in
+          padded-early) now=1100; anchor=01000; elapsed=0 ;;
+          padded-late) now=2000; anchor=01800; elapsed=1 ;;
+          overflow) now=2000; anchor=18446744073709551616; elapsed=0 ;;
+          expression) now=2000; anchor=1+1; elapsed=0 ;;
+          padded-clock) now=02000; anchor=1800; elapsed=1 ;;
+          invalid-clock) now=2000+1; anchor=1000; elapsed=0 ;;
+        esac
+        home=$(setup_parent "decimal-$action-$scenario")
+        state="$home/state"
+        FM_PENDING_REPLY_NOW=1000
+        corr=$(fm_pending_reply_create "$home" "$state" mate 'decimal fixture request') || fail "decimal fixture creation failed"
+        rec=$(fm_pending_reply_path "$state" "$corr")
+        fm_pending_reply_set "$rec" grace_secs 120 || fail "decimal grace setup failed"
+        initial=awaiting_report
+        case "$action" in
+          delivery)
+            fm_pending_reply_write_delivery_confirmation "$state" "$corr" attempted "$anchor" || fail "decimal sidecar setup failed"
+            expected=delivery_unknown ;;
+          fallback)
+            fm_pending_reply_set "$rec" delivered_epoch "$anchor" || fail "decimal delivery setup failed"
+            expected=awaiting_report ;;
+          recovery|escalation)
+            fm_pending_reply_mark_delivered "$state" "$corr" 1000 || fail "decimal recovery delivery failed"
+            fm_pending_reply_set "$rec" request_turn_completed_epoch "$anchor" || fail "decimal completion setup failed"
+            expected=recovery_sent
+            if [ "$action" = escalation ]; then
+              initial=recovery_sent
+              expected=escalated
+              fm_pending_reply_set "$rec" phase recovery_sent || fail "decimal phase setup failed"
+              fm_pending_reply_set "$rec" recovery_turn_completed_epoch "$anchor" || fail "decimal recovery completion failed"
+            fi ;;
+        esac
+        FM_PENDING_REPLY_NOW=$now
+        rc=0
+        case "$action" in
+          delivery) fm_pending_reply_reconcile_delivery "$state" "$corr" || rc=$? ;;
+          fallback)
+            observation=$(fm_pending_reply_busy_state_from_observation "$rec" fallback-idle) || fail "decimal idle observation aborted"
+            if [ "$elapsed" = 1 ]; then
+              [ "$observation" = idle ] || fail "decimal grace did not expire for $scenario"
+            else
+              [ "$observation" = unknown ] || fail "invalid or unexpired decimal grace proved idle for $scenario"
+            fi ;;
+          recovery) fm_pending_reply_send_recovery "$state" "$corr" || rc=$? ;;
+          escalation) fm_pending_reply_maybe_escalate "$state" "$corr" || rc=$? ;;
+        esac
+        [ "$elapsed" = 1 ] || expected=$initial
+        [ "$(fm_pending_reply_get "$rec" phase)" = "$expected" ] || fail "$action used unsafe elapsed evidence for $scenario"
+        if [ "$action" != fallback ]; then
+          if [ "$elapsed" = 1 ]; then [ "$rc" -eq 0 ] || fail "$action rejected valid decimal grace for $scenario"
+          else [ "$rc" -ne 0 ] || fail "$action accepted invalid or unexpired grace for $scenario"; fi
+        fi
+        if [ "$action" = recovery ]; then
+          if [ "$elapsed" = 1 ]; then [ -f "$home/recovery" ] || fail "elapsed decimal grace did not recover"
+          else [ ! -e "$home/recovery" ] || fail "unsafe decimal evidence sent recovery"; fi
+        fi
+        if [ "$action" = escalation ] && [ "$elapsed" = 0 ]; then
+          [ ! -s "$state/mate.status" ] || fail "unsafe decimal evidence published an escalation"
+        fi
+      done
+    done
+  ) || fail "decimal grace regression failed"
+  pass "pending grace compares bounded decimal epochs without early recovery, escalation or arithmetic errors"
+}
+
+test_pending_grace_uses_bounded_decimal_epochs
 test_failed_record_selection_still_reconciles_pending_requests
 test_capture_filter_errors_do_not_prove_idle
 test_same_second_status_rewrite_is_rescanned

@@ -1751,7 +1751,7 @@ test_beacon_refreshes_between_selected_remote_records() (
 )
 
 test_correlations_reuse_only_for_matching_open_task() {
-  local dir fb log home state got corr1 corr2 corr3 rec
+  local dir fb log home state got corr1 corr2 corr3 rec malformed_corr
   dir="$TMP_ROOT/corr-reuse"; mkdir -p "$dir"
   fb=$(make_stubs "$dir"); log="$dir/send.log"
   home=$(setup_parent corr-reuse)
@@ -1761,6 +1761,17 @@ test_correlations_reuse_only_for_matching_open_task() {
   run_send "$fb" "$home" "$log" domain "first request" || fail "first marked send failed"
   got=$(latest_record_body "$home" domain)
   corr1=$(fm_pending_reply_extract_corr "$got")
+  rec=$(fm_pending_reply_path "$state" "$corr1")
+  cp "$rec" "$home/before-invalid-corr"
+  for malformed_corr in "$corr1"$'\n' "$corr1"$'\n\n' $'\n'"$corr1" \
+    "$corr1"$'\njunk' "$corr1"$'\r' ''; do
+    if FM_PENDING_REPLY_EXISTING_CORR="$malformed_corr" run_send "$fb" "$home" "$log" domain 'first request'; then
+      fail "a malformed explicit correlation must be refused"
+    fi
+    [ ! -e "$state/domain.inbox/002.msg" ] || fail "a malformed correlation enqueued a resend"
+    [ ! -s "$log" ] || fail "a malformed correlation reached the terminal"
+    cmp -s "$home/before-invalid-corr" "$rec" || fail "a malformed correlation changed its pending record"
+  done
   export FM_PENDING_REPLY_EXISTING_CORR=$corr1
   if run_send "$fb" "$home" "$log" other "forwarded request"; then
     fail "an explicit cross-task correlation must be refused"
@@ -2471,6 +2482,7 @@ test_create_without_openssl() {
   pass "pending request creation supports missing, failed and healthy OpenSSL"
 }
 
+test_correlations_reuse_only_for_matching_open_task
 test_signature_failures_do_not_hide_new_reports
 test_sighting_encoding_failure_retries
 test_delivery_marker_requires_complete_text
@@ -2517,7 +2529,6 @@ test_tick_skips_terminal_and_reuses_target_observation
 test_tick_leaves_settled_records_alone
 test_remote_reposts_are_bounded_per_tick_and_refresh_beacon
 test_beacon_refreshes_between_selected_remote_records
-test_correlations_reuse_only_for_matching_open_task
 test_tick_end_to_end_missed_then_escalate
 test_failed_send_discards_undelivered_expectation
 test_remote_repost_waits_for_the_reply_channel

@@ -119,6 +119,45 @@ record_body() { # <record>
   bash -c '. "$1"; fm_task_inbox_body "$2"' _ "$ROOT/bin/fm-task-inbox-lib.sh" "$2"
 }
 
+test_fire_and_forget_rejects_malformed_ids() {
+  local dir err rc form value n=0
+  local args=()
+  for form in separate equals; do
+    for value in '' $'\n0123456789abcdef' $'0123456789abcdef\n' \
+      $'0123456789abcdef\njunk' 0123456789ABCDEF 0123456789abcde duplicate-empty; do
+      n=$((n + 1))
+      dir=$(setup_case "faf-invalid-$n")
+      err="$dir/send.err"
+      rm -f "$dir/home/state/t1.meta"
+      fm_write_secondmate_meta "$dir/home/state/domain.meta" "$dir/home" "sess:fm-t1" alpha claude
+      args=()
+      if [ "$value" = duplicate-empty ]; then value=; args=(--fire-and-forget 0123456789abcdef); fi
+      if [ "$form" = separate ]; then
+        args=(--fire-and-forget "$value" ${args[@]+"${args[@]}"})
+      else
+        args=("--fire-and-forget=$value" ${args[@]+"${args[@]}"})
+      fi
+      run_send "$dir" "$err" -- fm-domain "${args[@]}" "reconcile fixture state"
+      rc=$?
+      expect_code 1 "$rc" "malformed delivery id $n ($form) must refuse"
+      assert_contains "$(cat "$err")" "--fire-and-forget" "refusal should identify the malformed option"
+      [ ! -d "$dir/home/state/domain.inbox" ] || fail "malformed id $n created an inbox"
+      [ ! -d "$dir/home/state/pending-replies" ] || fail "malformed id $n created a reply expectation"
+      [ ! -s "$dir/send.log" ] || fail "malformed id $n rang or typed to the target"
+    done
+  done
+  dir=$(setup_case faf-equals-valid)
+  err="$dir/send.err"
+  rm -f "$dir/home/state/t1.meta"
+  fm_write_secondmate_meta "$dir/home/state/domain.meta" "$dir/home" "sess:fm-t1" alpha claude
+  run_send "$dir" "$err" -- fm-domain --fire-and-forget=0123456789abcdef "reconcile fixture state"
+  expect_code 0 "$?" "a valid equals-form delivery id should send"
+  assert_contains "$(cat "$dir/home/state/domain.inbox/001.msg")" "delivery=fire-and-forget" \
+    "valid explicit delivery should retain its no-reply contract"
+  [ ! -d "$dir/home/state/pending-replies" ] || fail "valid no-reply delivery created a reply expectation"
+  pass "fm-send inbox: malformed delivery ids refuse without enqueue or reply tracking"
+}
+
 test_text_steer_rides_inbox() {
   local dir err rc rec body typed spans
   dir=$(setup_case rides)
@@ -535,6 +574,7 @@ test_empty_message_refused() {
   pass "fm-send: an empty or whitespace-only text steer refuses before marking, recording, or typing"
 }
 
+test_fire_and_forget_rejects_malformed_ids
 test_text_steer_rides_inbox
 test_deep_home_doorbell_stays_short
 test_multiline_steer_is_legal

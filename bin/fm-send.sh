@@ -116,7 +116,7 @@
 # Set FM_PENDING_REPLY_EXISTING_CORR=<id> when re-sending a recovery request
 # for an already-open expectation so a second record is not created. Direct
 # unmarked captain input never creates one. A marked secondmate instruction
-# sent with --fire-and-forget <16-hex-delivery-id> uses the same inbox transport
+# sent with --fire-and-forget <16-lowercase-hex-delivery-id> uses the same inbox transport
 # without creating a reply expectation; its delivery id makes uncertain retries
 # idempotent while allowing a later identical instruction to be distinct.
 #
@@ -464,6 +464,7 @@ fi
 # message exactly as before, so ordinary sends are byte-identical.
 RESOLVE_KEYS=
 FIRE_AND_FORGET_ID=
+FIRE_AND_FORGET_SET=0
 fm_send_add_resolve_key() { # <key>
   local k=$1
   case "$k" in
@@ -499,19 +500,21 @@ while :; do
       echo "error: --fire-and-forget requires a delivery id" >&2
       exit 1
     }
-    [ -z "$FIRE_AND_FORGET_ID" ] || {
+    [ "$FIRE_AND_FORGET_SET" = 0 ] || {
       echo "error: duplicate --fire-and-forget" >&2
       exit 1
     }
     FIRE_AND_FORGET_ID=$2
+    FIRE_AND_FORGET_SET=1
     shift 2
     ;;
   --fire-and-forget=*)
-    [ -z "$FIRE_AND_FORGET_ID" ] || {
+    [ "$FIRE_AND_FORGET_SET" = 0 ] || {
       echo "error: duplicate --fire-and-forget" >&2
       exit 1
     }
     FIRE_AND_FORGET_ID=${1#--fire-and-forget=}
+    FIRE_AND_FORGET_SET=1
     shift
     ;;
   *) break ;;
@@ -594,8 +597,8 @@ fm_send_resolve_close_note() { # <key> <excerpt>
   printf 'answered: %s' "$excerpt"
 }
 
-if [ -n "$FIRE_AND_FORGET_ID" ]; then
-  printf '%s' "$FIRE_AND_FORGET_ID" | grep -Eq '^[a-f0-9]{16}$' ||
+if [ "$FIRE_AND_FORGET_SET" = 1 ]; then
+  [[ "$FIRE_AND_FORGET_ID" =~ ^[a-f0-9]{16}$ ]] ||
     {
       echo "error: --fire-and-forget delivery id must be 16 lowercase hex characters" >&2
       exit 1

@@ -1997,6 +1997,61 @@ test_tick_end_to_end_missed_then_escalate() {
   pass "tick end-to-end: miss -> one recovery -> escalate -> durable"
 }
 
+test_remote_watermark_requires_complete_text() {
+  # Scope the clock/hook to this test, including its isolated command shims.
+  local FM_PENDING_REPLY_NOW=2000 FM_PENDING_REPLY_GRACE_SECS=0
+  local FM_PENDING_REPLY_SEND_HOOK=watermark_recovery_hook
+  export FM_PENDING_REPLY_NOW FM_PENDING_REPLY_GRACE_SECS FM_PENDING_REPLY_SEND_HOOK
+  (
+    local home state corr rec marker kind rc
+    local FM_TEST_WATERMARK_PATH='' FM_TEST_WATERMARK_FAULT=none FM_TEST_WATERMARK_HOOK_LOG=''
+    # shellcheck disable=SC2329
+    watermark_recovery_hook() { printf 'recovery attempted\n' >> "$FM_TEST_WATERMARK_HOOK_LOG"; }
+    # Only the watermark read fails; pending record reads stay ordinary.
+    # shellcheck disable=SC2329
+    cat() {
+      if [ "${1:-}" = "$FM_TEST_WATERMARK_PATH" ] && [ "$FM_TEST_WATERMARK_FAULT" != none ]; then
+        [ "$FM_TEST_WATERMARK_FAULT" != partial ] || command cat "$@"
+        return 1
+      fi
+      command cat "$@"
+    }
+    for kind in nul-value nul-tail nul-other-line partial failed; do
+      home=$(setup_parent "watermark-$kind")
+      state="$home/state"
+      FM_TEST_WATERMARK_HOOK_LOG="$home/hook.log"
+      FM_TEST_WATERMARK_FAULT=none
+      fm_write_meta "$state/mate.meta" kind=secondmate remote_host=fixture-host harness=claude
+      corr=$(fm_pending_reply_create "$home" "$state" mate 'fixture request')
+      fm_pending_reply_mark_delivered "$state" "$corr" 1000
+      rec=$(fm_pending_reply_path "$state" "$corr")
+      fm_pending_reply_set "$rec" request_turn_completed_epoch 1500
+      fm_pending_reply_note_remote_channel_caught_up "$state" mate 2000
+      marker=$(fm_pending_reply_remote_channel_watermark_path "$state" mate)
+      FM_TEST_WATERMARK_PATH=$marker
+      case "$kind" in
+        nul-value) printf 'caught_up_epoch=20\00000\n' > "$marker" ;;
+        nul-tail) printf 'caught_up_epoch=2000\000\n' > "$marker" ;;
+        nul-other-line) printf 'caught_up_epoch=2000\nbad\000\n' > "$marker" ;;
+        partial|failed) FM_TEST_WATERMARK_FAULT=$kind ;;
+      esac
+      cp "$rec" "$home/before"
+      rc=0
+      fm_pending_reply_send_recovery "$state" "$corr" || rc=$?
+      expect_code 1 "$rc" "$kind watermark must not license a remote recovery"
+      [ ! -e "$FM_TEST_WATERMARK_HOOK_LOG" ] || fail "$kind watermark released the recovery hook"
+      cmp -s "$home/before" "$rec" || fail "$kind watermark changed the pending request"
+      [ -z "$(fm_pending_reply_remote_channel_epoch "$state" mate)" ] || fail "$kind watermark yielded an epoch"
+      FM_TEST_WATERMARK_FAULT=none
+      fm_pending_reply_note_remote_channel_caught_up "$state" mate 2000
+      fm_pending_reply_send_recovery "$state" "$corr" || fail "healthy watermark retry failed"
+      [ -s "$FM_TEST_WATERMARK_HOOK_LOG" ] || fail "healthy watermark did not release recovery"
+      [ "$(fm_pending_reply_get "$rec" phase)" = recovery_sent ] || fail "healthy recovery did not persist its phase"
+    done
+  ) || fail "watermark complete-text regression failed"
+  pass "binary and failed caught-up watermark reads cannot license remote recovery; healthy retry succeeds"
+}
+
 test_remote_repost_waits_for_the_reply_channel() {
   local home state corr hook_log rec lines
   home=$(setup_parent remote-repost)
@@ -2753,6 +2808,7 @@ test_create_without_openssl() {
   pass "pending request creation supports missing, failed and healthy OpenSSL"
 }
 
+test_remote_watermark_requires_complete_text
 test_failed_fallback_pipeline_refuses_create
 test_failed_openssl_output_uses_fallback
 test_collision_retry_validates_generated_id

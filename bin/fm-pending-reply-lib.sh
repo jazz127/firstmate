@@ -1014,12 +1014,17 @@ fm_pending_reply_note_remote_channel_caught_up() {  # <state-dir> <task_id> [epo
 }
 
 # Print the watermark epoch, or nothing when the channel never reported itself
-# caught up. Never invents a value.
+# caught up. Binary or failed reads are unknown; never invent a value.
 fm_pending_reply_remote_channel_epoch() {  # <state-dir> <task_id>
-  local path epoch
+  local path contents line epoch=''
   path=$(fm_pending_reply_remote_channel_watermark_path "$1" "$2")
   [ -f "$path" ] && [ ! -L "$path" ] || return 0
-  epoch=$(sed -n 's/^caught_up_epoch=//p' "$path" 2>/dev/null | head -1)
+  contents=$(fm_pending_reply_read_text "$path") || return 0
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in
+      caught_up_epoch=*) epoch=${line#*=}; break ;;
+    esac
+  done <<< "$contents"
   case "$epoch" in ''|*[!0-9]*) return 0 ;; esac
   printf '%s' "$epoch"
 }

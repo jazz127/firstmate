@@ -55,16 +55,22 @@ fm_nm_run() {  # <dir> <timeout_secs> <args...>
   fm_nm_run_checked "$@" || true
 }
 
-fm_nm_trim() {
-  local s=${1:-}
-  s="${s#"${s%%[![:space:]]*}"}"
-  s="${s%"${s##*[![:space:]]}"}"
-  printf '%s' "$s"
+# An output variable avoids a subshell for callers that keep parsing the value.
+# The _fm_nm_trim_ prefix is reserved for this helper's locals.
+fm_nm_trim() {  # <value> [output-variable]
+  local _fm_nm_trim_value=${1:-}
+  _fm_nm_trim_value="${_fm_nm_trim_value#"${_fm_nm_trim_value%%[![:space:]]*}"}"
+  _fm_nm_trim_value="${_fm_nm_trim_value%"${_fm_nm_trim_value##*[![:space:]]}"}"
+  if [ "$#" -gt 1 ]; then
+    printf -v "$2" '%s' "$_fm_nm_trim_value"
+  else
+    printf '%s' "$_fm_nm_trim_value"
+  fi
 }
 
 fm_nm_strip_quotes() {
   local s
-  s=$(fm_nm_trim "${1:-}")
+  fm_nm_trim "${1:-}" s
   case "$s" in
     \"*\") s=${s#\"}; s=${s%\"} ;;
   esac

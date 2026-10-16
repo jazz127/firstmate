@@ -5609,6 +5609,33 @@ test_captured_completed_history() {
   pass 'captured completed status yields to synthetic subsequent development'
 }
 
+test_nm_scalar_trimming() {
+  local shell
+  for shell in "$(command -v bash)" /bin/bash; do
+    # shellcheck disable=SC2016 # The child shell owns these arrays and argument expansions.
+    "$shell" -c '
+      . "$1/bin/fm-nm-run-lib.sh"
+      inputs=( "" "   " word "  word " " \"  word  \" " "\"\"" "\"quote only" "only quote\"" )
+      trimmed=( "" "" word word "\"  word  \"" "\"\"" "\"quote only" "only quote\"" )
+      stripped=( "" "" word word word "" "\"quote only" "only quote\"" )
+      inputs+=( $'\''\n\r\t"line\nnext"\v\f '\'' " \"C:\\literal\\name\" " " \"日本語\" " " a\"b\"c " " \"a:b=c\" " " \"*?[abc]\" " )
+      trimmed+=( $'\''"line\nnext"'\'' "\"C:\\literal\\name\"" "\"日本語\"" "a\"b\"c" "\"a:b=c\"" "\"*?[abc]\"" )
+      stripped+=( $'\''line\nnext'\'' "C:\\literal\\name" "日本語" "a\"b\"c" "a:b=c" "*?[abc]" )
+      i=0
+      while [ "$i" -lt "${#inputs[@]}" ]; do
+        value=stale
+        fm_nm_trim "${inputs[$i]}" value > "$2" || exit 11
+        [ "$value" = "${trimmed[$i]}" ] && [ ! -s "$2" ] || exit 12
+        [ "$(fm_nm_trim "${inputs[$i]}")" = "${trimmed[$i]}" ] || exit 13
+        [ "$(fm_nm_strip_quotes "${inputs[$i]}")" = "${stripped[$i]}" ] || exit 14
+        i=$((i+1))
+      done
+    ' _ "$ROOT" "$TMP_ROOT/trim.out" || fail "$shell changed scalar whitespace or quote parsing"
+  done
+  pass 'scalar trimming preserves whitespace, quotes and literal values through stdout and output variables'
+}
+
+test_nm_scalar_trimming
 test_binary_metadata_is_unknown
 test_captured_axi_status_shapes
 test_captured_inventory_replay

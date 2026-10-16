@@ -602,7 +602,7 @@ _fm_pending_reply_reconcile_delivery_locked() {  # <state-dir> <corr_id>
       case "$epoch" in ''|*[!0-9]*) return 1 ;; esac
       grace=$(fm_pending_reply_get "$rec" grace_secs)
       case "$grace" in ''|*[!0-9]*) grace=$(fm_pending_reply_grace_secs) ;; esac
-      now=$(fm_pending_reply_now)
+      now=$(fm_pending_reply_now) || return 1
       _fm_pending_reply_elapsed_at_least "$now" "$epoch" "$grace" || return 1
       phase=$(fm_pending_reply_get "$rec" phase)
       [ "$phase" = awaiting_report ] || return 1
@@ -916,7 +916,7 @@ fm_pending_reply_fallback_idle_eligible() {  # <record-path>
   grace=$(fm_pending_reply_get "$rec" grace_secs)
   case "$start" in ''|*[!0-9]*) return 1 ;; esac
   case "$grace" in ''|*[!0-9]*) grace=$(fm_pending_reply_grace_secs) ;; esac
-  now=$(fm_pending_reply_now)
+  now=$(fm_pending_reply_now) || return 1
   _fm_pending_reply_elapsed_at_least "$now" "$start" "$grace"
 }
 
@@ -1110,7 +1110,7 @@ fm_pending_reply_send_recovery() {  # <state-dir> <corr_id>
   [ -n "$delivered" ] || return 1
   grace=$(fm_pending_reply_get "$rec" grace_secs)
   case "$grace" in ''|*[!0-9]*) grace=$(fm_pending_reply_grace_secs) ;; esac
-  now=$(fm_pending_reply_now)
+  now=$(fm_pending_reply_now) || return 1
   # Grace runs from the request turn's completion, not from delivery: delivery
   # only proves the request arrived, while the turn's completion is the
   # earliest moment a correlated report could exist to race against.
@@ -1427,7 +1427,7 @@ _fm_pending_reply_maybe_escalate_locked() {  # <state-dir> <corr_id>
       # recovery repost itself uses (never from delivery or send time).
       grace=$(fm_pending_reply_get "$rec" grace_secs)
       case "$grace" in ''|*[!0-9]*) grace=$(fm_pending_reply_grace_secs) ;; esac
-      now=$(fm_pending_reply_now)
+      now=$(fm_pending_reply_now) || return 1
       _fm_pending_reply_elapsed_at_least "$now" "$completed" "$grace" || return 1
       # Same reply-channel evidence rule the recovery repost obeys: a missing
       # correlated report is not a missed report until the mirror caught up.

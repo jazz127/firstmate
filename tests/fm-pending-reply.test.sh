@@ -3145,6 +3145,64 @@ test_pending_grace_uses_bounded_decimal_epochs() {
   pass "pending grace compares bounded decimal epochs without early recovery, escalation or arithmetic errors"
 }
 
+test_failed_clock_reads_cannot_prove_elapsed_grace() {
+  local clock_home state rec corr action fault clock_fault initial rc observation
+  local FM_PENDING_REPLY_NOW=1000 FM_PENDING_REPLY_GRACE_SECS=120 FM_PENDING_REPLY_SEND_HOOK=''
+  export FM_PENDING_REPLY_NOW FM_PENDING_REPLY_GRACE_SECS FM_PENDING_REPLY_SEND_HOOK
+  (
+    # Both hooks are invoked indirectly by the public pending-reply paths.
+    # shellcheck disable=SC2329
+    fm_pending_reply_now() {
+      if [ "$clock_fault" = healthy ]; then printf '%s' "$FM_PENDING_REPLY_NOW"; return; fi
+      [ "$clock_fault" != partial ] || printf 2000
+      return 1
+    }
+    # shellcheck disable=SC2329
+    pending_clock_recovery_hook() { printf sent > "$clock_home/recovery"; }
+    FM_PENDING_REPLY_SEND_HOOK=pending_clock_recovery_hook
+    for action in fallback delivery recovery escalation; do
+      for fault in partial empty; do
+        clock_home=$(setup_parent "clock-error-$action-$fault")
+        state="$clock_home/state"
+        clock_fault=healthy
+        corr=$(fm_pending_reply_create "$clock_home" "$state" mate 'clock failure fixture') || fail "clock fixture creation failed"
+        rec=$(fm_pending_reply_path "$state" "$corr")
+        initial=awaiting_report
+        case "$action" in
+          delivery)
+            fm_pending_reply_write_delivery_confirmation "$state" "$corr" attempted 1800 || fail "clock sidecar setup failed" ;;
+          fallback)
+            fm_pending_reply_set "$rec" delivered_epoch 1800 || fail "clock fallback setup failed" ;;
+          recovery|escalation)
+            fm_pending_reply_mark_delivered "$state" "$corr" 1000 || fail "clock delivery setup failed"
+            fm_pending_reply_set "$rec" request_turn_completed_epoch 1800 || fail "clock completion setup failed"
+            if [ "$action" = escalation ]; then
+              initial=recovery_sent
+              fm_pending_reply_set "$rec" phase recovery_sent || fail "clock phase setup failed"
+              fm_pending_reply_set "$rec" recovery_turn_completed_epoch 1800 || fail "clock recovery completion failed"
+            fi ;;
+        esac
+        clock_fault=$fault
+        rc=0
+        case "$action" in
+          delivery) fm_pending_reply_reconcile_delivery "$state" "$corr" || rc=$? ;;
+          fallback)
+            observation=$(fm_pending_reply_busy_state_from_observation "$rec" fallback-idle) || fail "clock fault aborted observation"
+            [ "$observation" = unknown ] || fail "$fault clock failure proved idle" ;;
+          recovery) fm_pending_reply_send_recovery "$state" "$corr" || rc=$? ;;
+          escalation) fm_pending_reply_maybe_escalate "$state" "$corr" || rc=$? ;;
+        esac
+        [ "$action" = fallback ] || [ "$rc" -ne 0 ] || fail "$action accepted a $fault clock failure"
+        [ "$(fm_pending_reply_get "$rec" phase)" = "$initial" ] || fail "$action changed phase after a $fault clock failure"
+        [ ! -e "$clock_home/recovery" ] || fail "a failed clock read sent recovery"
+        [ ! -s "$state/mate.status" ] || fail "a failed clock read published an escalation"
+      done
+    done
+  ) || fail "failed clock regression failed"
+  pass "empty or partial failed clock reads cannot prove idle, failed delivery or missed reports"
+}
+
+test_failed_clock_reads_cannot_prove_elapsed_grace
 test_pending_grace_uses_bounded_decimal_epochs
 test_failed_record_selection_still_reconciles_pending_requests
 test_capture_filter_errors_do_not_prove_idle

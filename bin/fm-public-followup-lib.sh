@@ -431,7 +431,7 @@ fm_pf_registry_ids() {
   [ -d "$dir" ] && [ ! -L "$dir" ] || return 0
   for entry in "$dir"/*; do
     [ -f "$entry" ] && [ ! -L "$entry" ] || continue
-    basename "$entry"
+    printf '%s\n' "${entry##*/}"
   done
 }
 

@@ -1222,6 +1222,29 @@ test_traversal_registration_is_refused_before_delivery() {
   pass "traversal-shaped registrations are rejected before path construction or posting"
 }
 
+test_registry_ids_accept_literal_relative_state_paths() {
+  local home registry state_path shell out
+  home=$(make_home literal-registry-path)
+  registry="$home/-state/public-followup/registry"
+  mkdir -p "$registry/directory"
+  printf 'first\n' > "$registry/a"
+  printf 'last\n' > "$registry/z"
+  printf 'hidden\n' > "$registry/.hidden"
+  ln -s "$registry/a" "$registry/link"
+  for shell in bash /bin/bash; do
+    for state_path in "$home/-state" -state; do
+      # shellcheck disable=SC2016 # The selected child shell expands these variables.
+      out=$(ROOT="$ROOT" FM_HOME="$home" INPUT_STATE="$state_path" "$shell" -c '
+        . "$ROOT/bin/fm-public-followup-lib.sh"
+        cd "$FM_HOME" || exit 1
+        fm_pf_registry_ids "$INPUT_STATE"
+      ') || fail "registry listing must accept literal state path $state_path"
+      [ "$out" = $'a\nz' ] || fail "registry listing changed its visible regular-file selection"
+    done
+  done
+  pass "registry IDs preserve literal relative paths and skip non-record entries"
+}
+
 test_pending_rejects_malformed_listing() {
   local home out
   home=$(make_home pending-malformed)
@@ -3971,6 +3994,7 @@ test_relay_disabled_unmarked_teardown_skips_public_path
 test_relay_disabled_parent_allows_marked_child_teardown
 test_secondmate_parent_binding_matches_literal_id
 test_traversal_registration_is_refused_before_delivery
+test_registry_ids_accept_literal_relative_state_paths
 test_pending_rejects_malformed_listing
 test_private_context_survives_inbox_cleanup
 test_cleanup_refuses_while_a_public_reply_is_owed

@@ -100,6 +100,10 @@
 # to the forge binding, so it prints even when the forge token is malformed;
 # every path that reads the forge binding (default, --forge, and spawn's
 # forge-agreement check) still refuses.
+# Repeating the same forge binding is harmless. Different forge= tokens on one
+# row are refused by default, --raw, and --forge: a later token cannot hide an
+# invalid binding or choose a different delivery contract by order. The refusal
+# names the conflicting tokens. --branch-prefix remains independent.
 # Usage: fm-project-mode.sh [--raw|--branch-prefix|--forge] <project-name>
 set -eu
 
@@ -127,10 +131,11 @@ if [ ! -f "$REG" ]; then
 fi
 
 # awk emits one "near <token>" line per keyed token whose key is a near miss of
-# `forge`, then "posture <mode> <yolo> <branch-prefix> <forge>" (branch-prefix is
+# `forge`, then "posture <mode> <yolo> <forge> <branch-prefix>" (branch-prefix is
 # the raw prefix, defaulting to "fm/"; forge is `none` or the whole `forge=<value>`
 # token, so an empty value survives the split), or nothing if the project is
-# absent. Every other token beside the mode is ignored, exactly as before either
+# absent. Differing forge tokens also emit "forge-conflict <first> <second>".
+# Every other token beside the mode is ignored, exactly as before either
 # annotation existed.
 # Pass the name as raw environment data: awk -v decodes escapes such as \n and
 # \t, which would make a literal backslash name miss its registered posture.
@@ -182,7 +187,10 @@ parsed=$(FM_PROJECT_MODE_QUERY="$NAME" awk '
       for (j=1; j<=k; j++) {
         if (a[j]=="+yolo") { yolo="on"; continue }
         if (a[j] ~ /^branch=/) { branch = substr(a[j], 8); continue }
-        if (a[j] ~ /^forge=/) { forge = a[j]; continue }
+        if (a[j] ~ /^forge=/) {
+          if (forge != "none" && forge != a[j]) print "forge-conflict", forge, a[j];
+          forge = a[j]; continue
+        }
         if (a[j] ~ /^[^=]+=/) {
           key = substr(a[j], 1, index(a[j], "=") - 1);
           e = dist(key, "forge");
@@ -208,12 +216,14 @@ if [ -z "$parsed" ]; then
 fi
 
 posture=
+forge_conflict=
 while IFS=' ' read -r kind rest; do
   case "$kind" in
     invalid-annotation)
       echo "warn: ignoring unterminated posture annotation registered for $NAME in $REG; defaulting to no-mistakes off" >&2
       ;;
     near) echo "warn: ignoring \"$rest\" registered for $NAME in $REG; it is not a forge binding, and the forge binding is spelled forge=gerrit or forge=forgejo" >&2 ;;
+    forge-conflict) forge_conflict=$rest ;;
     posture) posture=$rest ;;
   esac
 done <<EOF
@@ -233,6 +243,11 @@ case "$yolo" in on|off) ;; *) yolo=off ;; esac
 if [ "$BRANCH_PREFIX_QUERY" -eq 1 ]; then
   echo "$branch"
   exit 0
+fi
+
+if [ -n "$forge_conflict" ]; then
+  echo "refused: conflicting forge bindings \"$forge_conflict\" registered for $NAME in $REG; register one forge binding and correct the registry entry" >&2
+  exit 3
 fi
 
 case "$forge" in

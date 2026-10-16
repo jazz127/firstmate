@@ -8,7 +8,8 @@
 # exactly two words, because tests/fm-secondmate-safety.test.sh and
 # tests/fm-secondmate-lifecycle-e2e.test.sh assert that shape with strict
 # string equality.
-# Also covers literal project names when AWK would otherwise decode backslashes.
+# Also covers literal project names when AWK would otherwise decode backslashes,
+# and conflicting forge tokens that cannot resolve by token order.
 set -u
 
 # shellcheck source=tests/lib.sh
@@ -114,5 +115,33 @@ for name in unterminated prose-bracket unfinished-policy; do
   done
 done
 pass "fm-project-mode: an unterminated annotation never interprets description text as policy"
+
+cat >> "$DATA/projects.md" <<'EOF'
+- conflict-forward [direct-PR +yolo forge=gerrit forge=forgejo branch=review/] - conflicting providers
+- conflict-reverse [direct-PR +yolo forge=forgejo forge=gerrit branch=review/] - reversed providers
+- conflict-empty [direct-PR forge= forge=forgejo branch=review/] - hidden empty binding
+- conflict-unknown [direct-PR forge=other forge=forgejo branch=review/] - hidden unknown binding
+- conflict-final-empty [direct-PR forge=forgejo forge= branch=review/] - empty final binding
+- conflict-final-unknown [direct-PR forge=forgejo forge=other branch=review/] - unknown final binding
+- repeat-forgejo [direct-PR +yolo forge=forgejo forge=forgejo] - same binding repeated
+- repeat-gerrit [direct-PR +yolo forge=gerrit forge=gerrit] - same binding repeated
+EOF
+for name in conflict-forward conflict-reverse conflict-empty conflict-unknown conflict-final-empty conflict-final-unknown; do
+  for flag in '' --raw --forge; do
+    status=0
+    # shellcheck disable=SC2086 # An empty flag expands to no option.
+    out=$(FM_DATA_OVERRIDE="$DATA" "$PROJECT_MODE" $flag "$name" 2> "$TMP_ROOT/forge-conflict-error") || status=$?
+    [ "$status" -eq 3 ] && [ -z "$out" ] || fail "$name $flag resolved a conflicting forge binding"
+    assert_contains "$(cat "$TMP_ROOT/forge-conflict-error")" 'conflicting forge bindings' "forge conflict refusal did not explain the ambiguity"
+  done
+  out=$(FM_DATA_OVERRIDE="$DATA" "$PROJECT_MODE" --branch-prefix "$name" 2> "$TMP_ROOT/forge-conflict-error") \
+    || fail "a forge conflict prevented the orthogonal prefix query"
+  [ "$out" = review/ ] && [ ! -s "$TMP_ROOT/forge-conflict-error" ] || fail "a forge conflict changed the registered prefix"
+done
+[ "$(run_mode repeat-forgejo)" = 'direct-PR on' ] && [ "$(run_forge repeat-forgejo)" = forgejo ] \
+  || fail "repeating one Forgejo binding changed its meaning"
+[ "$(run_mode repeat-gerrit)" = 'direct-PR off' ] && [ "$(run_forge repeat-gerrit)" = gerrit ] \
+  || fail "repeating one Gerrit binding changed its meaning or enabled yolo"
+pass "fm-project-mode: conflicting forge bindings refuse while identical repeats and prefix queries retain their meaning"
 
 echo "# fm-project-mode.test.sh: all assertions passed"

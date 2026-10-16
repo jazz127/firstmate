@@ -148,6 +148,16 @@ fm_pending_reply_now() {
     printf '%s' "$FM_PENDING_REPLY_NOW"
     return 0
   fi
+  # Reuse the wake owner's builtin clock when that owner is already loaded.
+  # Keep date on older Bash so its read failure still reaches this caller.
+  if { [ "${BASH_VERSINFO[0]}" -gt 4 ] ||
+       { [ "${BASH_VERSINFO[0]}" -eq 4 ] && [ "${BASH_VERSINFO[1]}" -ge 2 ]; }; } &&
+    declare -F fm_epoch_seconds_to >/dev/null; then
+    local pending_now_seconds
+    fm_epoch_seconds_to pending_now_seconds || return
+    printf '%s\n' "$pending_now_seconds"
+    return
+  fi
   date +%s
 }
 

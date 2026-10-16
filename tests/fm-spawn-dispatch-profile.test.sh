@@ -2463,28 +2463,34 @@ SH
 claude_settings_json_arg() {  # <launch>
   local command
   command=$(fm_test_launch_command "$1")
-  eval "set -- $command"
-  while [ "$#" -gt 0 ]; do
-    if [ "$1" = --settings ]; then
+  # Split the argv under an empty PATH: an unrecognised launch prefix then
+  # fails here instead of running a real harness against the fixture brief.
+  (
+    PATH=/var/empty
+    eval "set -- $command" || exit 1
+    while [ "$#" -gt 0 ]; do
+      if [ "$1" = --settings ]; then
+        shift
+        # Claude Code's --settings takes inline JSON or a file path; a
+        # secondmate launch passes the path form.
+        case "$1" in
+        \{*) printf '%s' "$1" ;;
+        *) /bin/cat "$1" ;;
+        esac
+        exit 0
+      fi
       shift
-      # Claude Code's --settings takes inline JSON or a file path; a
-      # secondmate launch passes the path form.
-      case "$1" in
-      \{*) printf '%s' "$1" ;;
-      *) cat "$1" ;;
-      esac
-      return 0
-    fi
-    shift
-  done
-  return 1
+    done
+    exit 1
+  )
 }
 
 claude_launch_brief_arg() {  # <launch>
   local command
   command=$(fm_test_launch_command "$1")
   (
-    eval "set -- $command"
+    PATH=/var/empty
+    eval "set -- $command" || exit 1
     eval "printf '%s' \"\${$#}\""
   )
 }

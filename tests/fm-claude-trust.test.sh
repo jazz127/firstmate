@@ -631,7 +631,8 @@ claude_launch_doorbell() {  # <launch command>
   local command
   command=$(fm_test_launch_command "$1")
   (
-    eval "set -- $command"
+    PATH=/var/empty
+    eval "set -- $command" || exit 1
     printf '%s' "${!#}"
   )
 }

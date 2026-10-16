@@ -3260,6 +3260,30 @@ test_correlation_embedding_strips_mixed_blank_runs() {
   pass "correlation embedding consumes mixed spaces and tabs once while preserving newline boundaries and trailing bytes"
 }
 
+test_correlation_prefixes_preserve_literal_words() {
+  local suffix text embedded expected summary
+  for suffix in f F G _task 0; do
+    text="corr=0123456789abcdef${suffix} fixture payload"
+    fm_pending_reply_embed_corr "${FM_FROMFIRST_MARK}$text" fedcba9876543210 embedded \
+      || fail "literal correlation-like word could not be embedded"
+    expected="${FM_FROMFIRST_MARK}corr=fedcba9876543210 $text"
+    [ "$embedded" = "$expected" ] || fail "embedding removed the prefix of a longer correlation-like word"
+    summary=$(fm_pending_reply_summarize "${FM_FROMFIRST_MARK}$text")
+    [ "$summary" = "$text" ] || fail "summary removed the prefix of a longer correlation-like word"
+  done
+  for suffix in ': payload' '/payload' $' \t payload'; do
+    text="corr=0123456789abcdef${suffix}"
+    case "$suffix" in
+      ' '*) expected=payload ;;
+      *) expected=$suffix ;;
+    esac
+    summary=$(fm_pending_reply_summarize "${FM_FROMFIRST_MARK}$text")
+    [ "$summary" = "$expected" ] || fail "a complete correlation token no longer strips from its summary"
+  done
+  pass "embedding and summaries preserve longer correlation-like words and strip only complete leading tokens"
+}
+
+test_correlation_prefixes_preserve_literal_words
 test_correlation_embedding_strips_mixed_blank_runs
 test_wrong_home_counts_use_bounded_decimal_values
 test_failed_clock_reads_cannot_prove_elapsed_grace

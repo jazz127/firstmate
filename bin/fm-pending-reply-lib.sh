@@ -266,9 +266,10 @@ fm_pending_reply_summarize() {  # <text>
   local text=$1 cleaned
   # Remove the exact leading carrier before filtering erases its separator.
   text=${text#"$FM_FROMFIRST_MARK"}
-  # Filter and trim before removing a leading correlation, all in one pipeline.
+  # Filter and trim before applying the shared leading-token parser.
   cleaned=$(printf '%s' "$text" | tr '\t\r\n' '   ' | tr -cd '\11\12\15\40-\176' |
-    sed -E -e 's/^[[:space:]]*//;s/[[:space:]]*$//' -e 's/^corr=[A-Fa-f0-9]{16}[[:space:]]*//')
+    sed -E 's/^[[:space:]]*//;s/[[:space:]]*$//')
+  fm_pending_reply_strip_leading_corr "$cleaned" cleaned
   if [ "${#cleaned}" -gt 120 ]; then
     cleaned="${cleaned:0:117}..."
   fi
@@ -381,6 +382,13 @@ fm_pending_reply_strip_leading_corr() {  # <body> <result-var>
   _fm_pending_body_prefix=${_fm_pending_body_text:0:21}
   case "$_fm_pending_body_prefix" in
     corr=[a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9])
+      # A longer word is literal message text, not this correlation token.
+      case "${_fm_pending_body_text:21:1}" in
+        [[:alnum:]_])
+          printf -v "$_fm_pending_body_result" '%s' "$_fm_pending_body_text"
+          return
+          ;;
+      esac
       _fm_pending_body_text=${_fm_pending_body_text:21}
       while :; do
         case "$_fm_pending_body_text" in

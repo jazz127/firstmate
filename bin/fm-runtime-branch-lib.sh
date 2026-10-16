@@ -51,8 +51,13 @@ firstmate_runtime_tracking_source() {
   FIRSTMATE_RUNTIME_MERGE_REF=
   FIRSTMATE_RUNTIME_TRACKING_REF=
   FIRSTMATE_RUNTIME_FETCH_REFSPEC=
-  remote=$(git -C "$dir" config --get "branch.$branch.remote" 2>/dev/null) || return 1
-  merge_ref=$(git -C "$dir" config --get "branch.$branch.merge" 2>/dev/null) || return 1
+  # Remove only Git's record terminator so data newlines reach name validation.
+  remote=$(git -C "$dir" config --get "branch.$branch.remote" 2>/dev/null && printf '.') || return 1
+  remote=${remote%.}
+  remote=${remote%$'\n'}
+  merge_ref=$(git -C "$dir" config --get "branch.$branch.merge" 2>/dev/null && printf '.') || return 1
+  merge_ref=${merge_ref%.}
+  merge_ref=${merge_ref%$'\n'}
   case "$remote" in ''|-*|*[!A-Za-z0-9._/-]*) return 1 ;; esac
   case "$merge_ref" in refs/heads/*) merge_branch=${merge_ref#refs/heads/} ;; *) return 1 ;; esac
   git check-ref-format --branch "$merge_branch" >/dev/null 2>&1 || return 1

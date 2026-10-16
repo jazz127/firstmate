@@ -3317,6 +3317,42 @@ PYCANONICAL
   pass "resolved registry paths reject control bytes before route identity comparison"
 }
 
+test_registry_root_paths_count_as_ancestors() {
+  python3 - "$ROOT" "$TMP_ROOT/registry-root-overlap" <<'PYROOT' || fail "registry overlap validation treated root as a separate sibling"
+import json,os,pathlib,shutil,subprocess,sys,tempfile
+root=pathlib.Path(sys.argv[1]);scratch_root=pathlib.Path(sys.argv[2]);scratch_root.mkdir()
+driver=r'''
+set -u
+. "$1/bin/fm-secondmate-registry-lib.sh"
+rc=0
+secondmate_registry_validate_bindings "$2/registry" secondmate_registry_path_key || rc=$?
+printf 'rc=%s\nerror=%s\n' "$rc" "$SECONDMATE_REGISTRY_ERROR"
+'''
+rows=[]
+for shell in [shutil.which('bash')]:
+ for case in ['local-root-first','local-root-last','local-parent-first','local-parent-last','local-siblings','remote-home-root','remote-code-root','remote-parent','remote-inverse','remote-separate']:
+  with tempfile.TemporaryDirectory(prefix='case-',dir=scratch_root) as td:
+   home=pathlib.Path(td);parent=home/'parent';child=parent/'child';child.mkdir(parents=True);sibling=home/'parent-extra';sibling.mkdir();scratch=home/'scratch';scratch.mkdir()
+   def local_row(name,path):return f'- {name} - fixture (home: {path}; scope: fixture; projects: ; added 2026-01-01)\n'
+   if case.startswith('local-'):
+    paths=[pathlib.Path('/'),child] if case in ['local-root-first','local-root-last'] else [parent,child] if case in ['local-parent-first','local-parent-last'] else [parent,sibling]
+    if case.endswith('-last'):paths.reverse()
+    record=''.join(local_row(f'mate{i}',p) for i,p in enumerate(paths))
+   else:
+    code,remote_home={'remote-home-root':('/srv/code','/'),'remote-code-root':('/','/srv/home'),'remote-parent':('/srv/code','/srv/code/home'),'remote-inverse':('/srv/home/code','/srv/home'),'remote-separate':('/srv/code','/srv/code-home')}[case]
+    record=f'- mate - fixture (host: fixture; root: {code}; home: {remote_home}; scope: fixture; projects: ; added 2026-01-01)\n'
+   (home/'registry').write_text(record)
+   env={**os.environ,'FM_HOME':td,'FM_ROOT_OVERRIDE':td,'TMPDIR':str(scratch)}
+   r=subprocess.run([shell,'-c',driver,'probe',str(root),td],env=env,capture_output=True,text=True,timeout=15);fields=dict(line.split('=',1) for line in r.stdout.splitlines() if '=' in line)
+   expected='0' if case in ['local-siblings','remote-separate'] else '1'
+   bad=r.returncode!=0 or fields.get('rc')!=expected or (expected=='1' and not fields.get('error')) or bool(r.stderr) or (home/'registry').read_text()!=record or bool(list(scratch.iterdir()))
+   rows.append({'shell':shell,'case':case,'fields':fields,'stderr':r.stderr,'bad':bad})
+assert not any(r['bad'] for r in rows), json.dumps([r for r in rows if r['bad']],indent=2)
+PYROOT
+  pass "registry overlap validation recognizes filesystem roots and retains component boundaries"
+}
+
+test_registry_root_paths_count_as_ancestors
 test_registry_resolved_home_preserves_path_identity
 test_registry_expected_home_cannot_collapse_control_bytes
 test_registry_rejects_binary_route_evidence

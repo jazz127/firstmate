@@ -241,7 +241,7 @@ secondmate_registry_validate_bindings() {
             return 1
             ;;
           esac
-          if [ "$root" = "$home" ]; then
+          if [ "$root" = "$home" ] || [ "$root" = / ] || [ "$home" = / ]; then
             rm -rf -- "$tmp"
             SECONDMATE_REGISTRY_ERROR="overlapping remote root and home for $id: $root"
             return 1
@@ -313,7 +313,12 @@ EOF
     return 1
   }
   overlaps=$(awk -F '\t' '
-    function ancestor(a, b) { return a != b && index(b, a "/") == 1 }
+    function ancestor(a, b,   prefix) {
+      # A filesystem root already ends in its component separator.
+      prefix = a;
+      if (substr(a, length(a), 1) != "/") prefix = prefix "/";
+      return a != b && index(b, prefix) == 1
+    }
     {
       for (i = 1; i <= count; i++) {
         if (ancestor($1, path[i])) {

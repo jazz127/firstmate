@@ -377,7 +377,9 @@ test_working_pi_blank_composer_restarts() {
   local dir out rc
   dir=$(new_case working-pi-blank)
   add_repo_backed_mate "$dir" sm1 pi herdr
-  cp "$ROOT/bin/fm-git-strip-ai-trailers.sh" "$ROOT/bin/fm-operational-input.sh" "$dir/fmrepo/bin/"
+  # The launch also arms the busy-state contract from the mate's code root.
+  cp "$ROOT/bin/fm-git-strip-ai-trailers.sh" "$ROOT/bin/fm-operational-input.sh" \
+    "$ROOT/bin/fm-busy-event.sh" "$ROOT/bin/fm-busy-lib.sh" "$dir/fmrepo/bin/"
   arm_answer "$dir" sm1
   make_working_pi_herdr_stub "$dir"
   printf pi > "$dir/fake/command"

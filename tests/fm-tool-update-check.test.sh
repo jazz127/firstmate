@@ -110,6 +110,46 @@ run_check() {
 
 # --- the regression this script exists for ----------------------------------
 
+test_empty_path_entries_probe_the_current_directory() {
+  local shell mode home cwd copies path out selected cwd_version copy_version expected_count
+  for shell in bash /bin/bash; do
+    for mode in leading middle repeated trailing explicit-dot no-empty only-current; do
+      home=$(make_home "empty-path-${shell//\//-}-$mode")
+      cwd="$home/cwd"; copies="$home/copies"
+      cwd_version=1.0; copy_version=2.0; expected_count=2
+      case "$mode" in
+        leading) path=":$copies:$PATH" ;;
+        middle) path="$home/absent::$copies:$PATH" ;;
+        repeated) path=":.:$copies:$PATH" ;;
+        trailing) path="$copies:$PATH:"; cwd_version=2.0; copy_version=1.0 ;;
+        explicit-dot) path=".:$copies:$PATH" ;;
+        no-empty) path="$copies:$PATH"; expected_count=1 ;;
+        only-current) path="$PATH:"; expected_count=1 ;;
+      esac
+      make_counting_copy "$cwd" "$TOOL" "fixture $cwd_version" "$home/probes"
+      make_counting_copy "$copies" "$TOOL" "fixture $copy_version" "$home/probes"
+      write_config "$home" "{\"tools\":[{\"name\":\"fixture\",\"command\":\"$TOOL\"}]}"
+      # shellcheck disable=SC2016 # The child shell expands its own positional argument.
+      selected=$(cd "$cwd" && PATH="$path" "$shell" -c '"$1" --version' _ "$TOOL") \
+        || fail "$shell $mode could not resolve the fixture command"
+      case "$mode" in
+        no-empty) assert_contains "$selected" 'fixture 2.0' 'the control did not resolve its sole PATH copy' ;;
+        *) assert_contains "$selected" 'fixture 1.0' 'the shell did not resolve the expected older copy' ;;
+      esac
+      : > "$home/probes"
+      out=$(cd "$cwd" && FM_HOME="$home" PATH="$path" FM_TOOL_UPDATE_INTERVAL=0 \
+        "$shell" "$CHECK" check 2>&1) || fail "$shell $mode check failed: $out"
+      case "$mode" in
+        no-empty|only-current) [ -z "$out" ] || fail "a single current install was not silent: $out" ;;
+        *) assert_contains "$out" 'fixture update not in effect: PATH resolves 1.0' "$shell $mode skipped a PATH install" ;;
+      esac
+      assert_equals "$expected_count" "$(wc -l < "$home/probes" | tr -d '[:space:]')" \
+        "$shell $mode did not probe each distinct install exactly once"
+    done
+  done
+  pass 'empty PATH entries resolve the current directory, preserve PATH order and deduplicate dot aliases'
+}
+
 test_interval_bounds_do_not_overflow() {
   local shell value expected home out rc
   home=$(make_home interval-range)
@@ -1234,6 +1274,7 @@ test_armed_check_wakes_the_watcher_with_the_skew_report() {
   pass "the armed check reaches the watcher as an ordinary check wake"
 }
 
+test_empty_path_entries_probe_the_current_directory
 test_interval_bounds_do_not_overflow
 test_failed_separate_announcements_are_reported
 test_failed_version_output_is_not_trusted

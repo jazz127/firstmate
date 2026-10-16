@@ -399,7 +399,7 @@ config_records() {
 path_hits() {
   local command_name=$1 dir candidate identity seen=''
   while IFS= read -r dir; do
-    [ -n "$dir" ] || continue
+    [ -n "$dir" ] || dir=.
     candidate="$dir/$command_name"
     [ -f "$candidate" ] && [ -x "$candidate" ] || continue
     identity=$(fm_pr_file_identity "$candidate" 2>/dev/null) || identity=

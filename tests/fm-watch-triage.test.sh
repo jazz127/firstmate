@@ -2192,6 +2192,25 @@ test_routine_appends_after_a_classified_event_stay_absorbed() {
   pass "a routine append after an already-classified event is absorbed (no re-wake)"
 }
 
+test_status_signature_rejects_failed_encoding() (
+  local dir file mode out rc
+  dir=$(make_case signature-encoding-failure)
+  file="$dir/state/task.status"
+  printf 'blocked: pending event\n' > "$file"
+  # shellcheck disable=SC2329 # Fault injection for the signature encoder.
+  od() {
+    [ "$mode" != partial ] || printf ' 61 62\n'
+    return 7
+  }
+  for mode in empty partial; do
+    rc=0
+    out=$(status_observed_signature "$file") || rc=$?
+    expect_code 1 "$rc" "a failed $mode encoder produced a successful status signature"
+    [ -z "$out" ] || fail "failed encoding leaked a partial signature: $out"
+  done
+  pass 'status signatures preserve encoding failures even when partial hex was emitted'
+)
+
 test_binary_presentation_markers_do_not_hide_status() {
   local shell dir state out err status_file signature pid
   for shell in bash /bin/bash; do
@@ -8031,6 +8050,7 @@ test_actionable_signal_survives_a_later_routine_append
 test_keyed_decision_signal_reads_only_the_new_span
 test_release_completion_survives_a_later_routine_append
 test_routine_appends_after_a_classified_event_stay_absorbed
+test_status_signature_rejects_failed_encoding
 test_binary_presentation_markers_do_not_hide_status
 test_presentation_marker_reader_keeps_read_failures
 test_unreadable_status_reports_once_per_file_state

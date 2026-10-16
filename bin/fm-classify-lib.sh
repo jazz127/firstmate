@@ -1830,9 +1830,12 @@ status_observed_signature() {
     [ -n "$ident" ] || ident=identity-error
   fi
   if [ -r "$f" ]; then access=readable; else access=unreadable; fi
-  encoded=$(printf '%s\0%s\0%s\0%s\0%s\0%s' \
-    "$size" "$ident" "$path_state" "$link_target" "$access" "$kind" \
-    | LC_ALL=C od -An -v -tx1 | tr -d ' \n') || return 1
+  encoded=$(
+    set -o pipefail
+    printf '%s\0%s\0%s\0%s\0%s\0%s' \
+      "$size" "$ident" "$path_state" "$link_target" "$access" "$kind" \
+      | LC_ALL=C od -An -v -tx1 | tr -d ' \n'
+  ) || return 1
   printf 'r1:%s' "$encoded"
 }
 

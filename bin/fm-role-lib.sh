@@ -264,7 +264,7 @@ fm_role_self_repo() {
 # The whole file is read before any role is accepted, so a second directive
 # anywhere makes it malformed.
 fm_role_parse_file() {
-  local file=$1 line directive=
+  local file=$1 line directive='' contents=''
   FM_ROLE=
   FM_ROLE_SCOPE=
   FM_ROLE_DIAG=
@@ -280,6 +280,10 @@ fm_role_parse_file() {
     FM_ROLE_DIAG="role file is unreadable"
     return 1
   fi
+  if IFS= read -r -d '' contents 2>/dev/null < "$file"; then
+    FM_ROLE_DIAG="role file contains binary data"
+    return 1
+  fi
   while IFS= read -r line || [ -n "$line" ]; do
     line=${line#"${line%%[![:space:]]*}"}
     case $line in
@@ -290,7 +294,7 @@ fm_role_parse_file() {
       return 1
     fi
     directive=$line
-  done <"$file"
+  done <<< "$contents"
   if [ -z "$directive" ]; then
     FM_ROLE_DIAG="role file holds no directive"
     return 1

@@ -32,7 +32,7 @@ TMP_ROOT=$(fm_test_tmproot fm-spawn-worktree-settle)
 # calls, then FM_FAKE_PANE_PATH forever after - reproducing a pane that
 # transiently reports a stale cwd before settling into the real worktree.
 make_settle_fakebin() {
-  local dir=$1 fakebin
+  local dir=$1 fakebin real_ps
   fakebin=$(fm_fakebin "$dir")
   cat > "$fakebin/tmux" <<'SH'
 #!/usr/bin/env bash
@@ -63,10 +63,15 @@ esac
 exit 0
 SH
   chmod +x "$fakebin/tmux"
-  cat > "$fakebin/ps" <<'SH'
+  # Only the pane-tty query is faked. Every other query, such as the lock
+  # library's owner start identity on a host without /proc, reaches the real
+  # ps, which is resolved here before the fake directory shadows it.
+  real_ps=$(command -v ps) || fail "no real ps on PATH"
+  cat > "$fakebin/ps" <<SH
 #!/usr/bin/env bash
-case "$*" in
-  *"-t pts/91"*) printf '%s\n' '987654321 987654321 987654321' ;;
+case "\$*" in
+  *"-t pts/91"*) printf '%s\\n' '987654321 987654321 987654321' ;;
+  *) exec '$real_ps' "\$@" ;;
 esac
 SH
   cat > "$fakebin/lsof" <<'SH'

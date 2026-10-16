@@ -379,8 +379,9 @@ brief_emit_target() {
     printf '%s\n--home %s\n' "$FM_ROOT/bin/fm-public-followup-emit.sh" "$FM_HOME"
     return 0
   fi
-  root=$(secondmate_registry_field "$DATA/secondmates.md" "$sid" root 2>/dev/null) || root=
-  home=$(secondmate_registry_field "$DATA/secondmates.md" "$sid" home 2>/dev/null) || home=
+  secondmate_registry_line_for_id "$DATA/secondmates.md" "$sid" 2>/dev/null || return 1
+  root=$SECONDMATE_REGISTRY_ROOT
+  home=$SECONDMATE_REGISTRY_HOME
   case "$root" in /*) ;; *) return 1 ;; esac
   case "$home" in /*) ;; *) return 1 ;; esac
   case "$root$home" in *[!A-Za-z0-9/._+@:-]*) return 1 ;; esac

@@ -472,7 +472,7 @@ window_kind() {
   local w=$1 meta kind
   meta=$(fm_backend_meta_for_window "$w" "$STATE" 2>/dev/null || true)
   if [ -n "$meta" ]; then
-    kind=$(grep '^kind=' "$meta" | cut -d= -f2- || true)
+    fm_meta_get "$meta" kind kind
     [ -n "$kind" ] || kind=ship
     echo "$kind"
     return 0
@@ -487,7 +487,7 @@ window_backend() {
   local w=$1 meta backend
   meta=$(fm_backend_meta_for_window "$w" "$STATE" 2>/dev/null || true)
   if [ -n "$meta" ]; then
-    backend=$(grep '^backend=' "$meta" | cut -d= -f2- || true)
+    fm_meta_get "$meta" backend backend
     [ -n "$backend" ] || backend=tmux
     echo "$backend"
     return 0
@@ -1013,7 +1013,7 @@ secondmate_wake_stall_tick() {
       fi
       continue
     fi
-    IFS=$(printf '\t') read -r epoch seq _row_kind _row_key _row_payload <<EOF
+    IFS=$'\t' read -r epoch seq _row_kind _row_key _row_payload <<EOF
 $row
 EOF
     case "$epoch" in ''|*[!0-9]*) continue ;; esac
@@ -2709,7 +2709,7 @@ signal_files_actionable() {  # <status-file> ...
 # re-surfaced by the next heartbeat.
 mark_all_captain_relevant_surfaced() {
   local f endpoint ident rc=0
-  while IFS=$(printf '\t') read -r f endpoint ident; do
+  while IFS=$'\t' read -r f endpoint ident; do
     [ -n "$f" ] || continue
     if [ "$endpoint" = ERROR ]; then
       mark_surface_reported "$f" "$ident" || rc=1
@@ -3362,7 +3362,7 @@ EOF
     # path. Publication failure stays side-band.
     home_summary_refresh_detached
     files=""
-    while IFS=$(printf '\t') read -r sf sig f; do
+    while IFS=$'\t' read -r sf sig f; do
       [ -n "$sf" ] || continue
       case " $files " in *" $f "*) ;; *) files="$files $f" ;; esac
     done <<EOF
@@ -3410,7 +3410,7 @@ EOF
     # shellcheck disable=SC2086  # same space-separated status-path list
     if afk_present || [ "$signal_actionable" -eq 0 ] \
       || { ! watcher_read signal_crew_provably_working $files && ! signal_turnend_panes_churned $files; }; then
-      while IFS=$(printf '\t') read -r sf sig f; do
+      while IFS=$'\t' read -r sf sig f; do
         [ -n "$sf" ] || continue
         file_reason="$reason"
         case " $FM_SIGNAL_NEEDS_DECISION_FILES " in *" $f "*) file_reason="needs-decision:$files" ;; esac
@@ -3423,7 +3423,7 @@ EOF
       # what bounds an unreadable log to one report per distinct file state. Only
       # a SUCCESSFULLY classified log commits a classification position below, so
       # an unreadable log's content is still classified once it becomes readable.
-      while IFS=$(printf '\t') read -r sf sig f; do
+      while IFS=$'\t' read -r sf sig f; do
         [ -n "$sf" ] || continue
         case "$f" in
           *.status)
@@ -3435,7 +3435,7 @@ EOF
       done <<EOF
 $pending
 EOF
-      while IFS=$(printf '\t') read -r f surface_end surface_ident; do
+      while IFS=$'\t' read -r f surface_end surface_ident; do
         [ -n "$f" ] || continue
         fm_wake_status_seen_commit "$STATE" "$f" "$surface_end" "$surface_ident" || true
         mark_surfaced "$f" "$surface_end" "$surface_ident"
@@ -3444,14 +3444,14 @@ $FM_SIGNAL_SURFACE_ENDPOINTS
 EOF
       wake "$reason"
     else
-      while IFS=$(printf '\t') read -r sf sig f; do
+      while IFS=$'\t' read -r sf sig f; do
         [ -n "$sf" ] || continue
         case "$f" in *.status) ;; *) printf '%s' "$sig" > "$sf" ;; esac
       done <<EOF
 $pending
 EOF
       signal_commit_error=0
-      while IFS=$(printf '\t') read -r f surface_end surface_ident; do
+      while IFS=$'\t' read -r f surface_end surface_ident; do
         [ -n "$f" ] || continue
         fm_wake_status_seen_commit "$STATE" "$f" "$surface_end" "$surface_ident" \
           || signal_commit_error=1
@@ -3459,7 +3459,7 @@ EOF
 $FM_SIGNAL_SURFACE_ENDPOINTS
 EOF
       if [ "$signal_commit_error" -ne 0 ]; then
-        while IFS=$(printf '\t') read -r sf sig f; do
+        while IFS=$'\t' read -r sf sig f; do
           [ -n "$sf" ] || continue
           fm_wake_append signal "$(basename "$f")" "$reason" || exit 1
         done <<EOF
@@ -3739,9 +3739,8 @@ EOF
   # what. Time-based via .last-heartbeat mtime; interval doubles per consecutive
   # no-change heartbeat (idle fleet) up to HEARTBEAT_MAX, and resets on any
   # surfaced non-heartbeat wake.
-  streak=$(cat "$STATE/.heartbeat-streak" 2>/dev/null || echo 0)
-  [ "$streak" -gt 12 ] && streak=12
-  hb=$(( HEARTBEAT * (1 << streak) ))
+  heartbeat_streak_read
+  hb=$(( 10#$HEARTBEAT * (1 << HEARTBEAT_STREAK) ))
   [ "$hb" -gt "$HEARTBEAT_MAX" ] && hb=$HEARTBEAT_MAX
   if [ "$(age_of "$STATE/.last-heartbeat")" -ge "$hb" ]; then
     # Triage: in always-on mode a heartbeat is benign unless the cheap fleet-scan
@@ -3769,7 +3768,7 @@ EOF
         wake "heartbeat"
       fi
       touch "$STATE/.last-heartbeat"
-      echo $(( $(cat "$STATE/.heartbeat-streak" 2>/dev/null || echo 0) + 1 )) > "$STATE/.heartbeat-streak"
+      heartbeat_streak_advance
       triage_log "absorbed heartbeat (no captain-relevant change)"
     fi
   fi

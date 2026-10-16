@@ -125,6 +125,7 @@ test_rejected_stops_preserve_parent_busy_state() (
   ' _ "$home" &
   owner=$!
   trap 'kill "$owner" 2>/dev/null || true; wait "$owner" 2>/dev/null || true' EXIT
+  # shellcheck disable=SC2034 # The value only bounds fixture-owner readiness retries.
   for attempt in {1..100}; do
     [ -f "$home/state/.lock-session" ] && break
     sleep 0.02
@@ -862,11 +863,11 @@ test_successor_baseline_prevents_restart_loops() {
 }
 
 if [ "$#" -gt 0 ]; then
-  for test_case in "$@"; do "$test_case"; done
+  for test_case in "$@"; do "$test_case" || fail "$test_case failed"; done
   exit 0
 fi
 
-test_rejected_stops_preserve_parent_busy_state
+test_rejected_stops_preserve_parent_busy_state || fail "test_rejected_stops_preserve_parent_busy_state failed"
 test_registered_stop_reports_context_continuation_busy
 test_handoff_waits_for_replacement_commit
 test_budget_parser_and_opt_in

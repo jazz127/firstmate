@@ -51,6 +51,36 @@ drain_and_ack() {  # <state>
     --recovery-generation "$generation"
 }
 
+test_zero_pid_is_not_a_lock_owner() {
+  local shell round=0 dir
+  dir=$(make_case zero-lock-pid)
+  for shell in "$(command -v bash)" /bin/bash; do
+    round=$((round + 1))
+    FM_STATE_OVERRIDE="$dir/state" FM_LOCK_STALE_AFTER=60 "$shell" -s -- "$LIB" "$dir/locks-$round" <<'SH' \
+      || fail "$shell treated a zero PID as a lock owner or skipped malformed-record grace"
+set -eu
+. "$1"
+for pid in 0 00 000000; do
+  lock="$2/$pid"
+  mkdir -p "$lock"
+  printf '%s\n' "$pid" > "$lock/pid"
+  if fm_lock_try_acquire "$lock"; then
+    printf 'reclaimed a fresh zero-PID record before its grace\n' >&2
+    exit 11
+  fi
+  touch -t 200001010000 "$lock"
+  if ! fm_lock_try_acquire "$lock"; then
+    printf 'zero PID held an old lock forever: %s\n' "$pid" >&2
+    exit 12
+  fi
+  fm_lock_release "$lock"
+  if fm_pid_alive "$pid"; then exit 13; fi
+done
+SH
+  done
+  pass 'zero PID aliases never own locks, while fresh malformed records retain their acquisition grace'
+}
+
 test_wait_deadline_reaps_a_stopped_child() {
   # A stopped TERM-resistant child cannot finish graceful cleanup. The helper waited
   # forever after its nominal deadline. An outer process-group deadline keeps
@@ -244,6 +274,38 @@ test_live_stalled_watch_lock_is_replaced_past_hard_bound() {
   wait "$pid" 2>/dev/null || true
   wait "$holder" 2>/dev/null || true
   pass "live watcher lock with a beacon past the hard bound is replaced, under it is still refused"
+}
+
+test_zero_padded_grace_does_not_evict_before_decimal_bound() {
+  local dir state fakebin holder identity status=0 kept=0
+  dir=$(make_case padded-grace-bound)
+  state="$dir/state"
+  fakebin="$dir/fakebin"
+  sleep 300 &
+  holder=$!
+  identity=$(FM_STATE_OVERRIDE="$state" bash -c '. "$1"; fm_pid_identity "$2"' _ "$LIB" "$holder") \
+    || fail "could not identify the fixture holder"
+  mkdir -p "$state/.watch.lock"
+  printf '%s\n' "$holder" > "$state/.watch.lock/pid"
+  printf '%s\n' "$dir" > "$state/.watch.lock/fm-home"
+  printf '%s\n' "$WATCH" > "$state/.watch.lock/watcher-path"
+  printf '%s\n' "$identity" > "$state/.watch.lock/pid-identity"
+  fm_touch_epoch "$(( $(date +%s) - 1500 ))" "$state/.last-watcher-beat"
+  # 1500 is below 3*600, but above the erroneous octal-derived bound of 1152.
+  # Bound the unexpected replacement too, so a failing test cannot leave it polling.
+  PATH="$fakebin:$PATH" FM_HOME="$dir" FM_STATE_OVERRIDE="$state" \
+    FM_GUARD_GRACE=0600 FM_WATCHER_STALE_GRACE='' FM_WATCHER_STALL_BOUND='' \
+    FM_POLL=5 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 \
+    bash -c '. "$1"; fm_run_timed 5 "$2"' _ "$ROOT/bin/fm-timeout-lib.sh" "$WATCH" \
+    > "$dir/out" 2> "$dir/err" || status=$?
+  is_live_non_zombie "$holder" && kept=1
+  kill "$holder" 2>/dev/null || true
+  wait "$holder" 2>/dev/null || true
+  [ "$kept" = 1 ] || fail "zero-padded grace evicted the holder before its decimal stall bound"
+  [ "$status" -ne 0 ] && [ "$status" -ne 124 ] \
+    || fail "under-bound holder did not receive the ordinary bounded refusal"
+  assert_contains "$(cat "$dir/err")" 'heartbeat is stale' "the stale holder lost its under-bound refusal"
+  pass "zero-padded grace keeps an identity-matched holder until its decimal stall bound"
 }
 
 test_guard_warnings() {
@@ -1542,6 +1604,37 @@ test_stopped_watcher_is_live_but_stale_then_exit_is_classified() {
   pass "SIGSTOP distinguishes live PID from stale beacon and termination records the exit class"
 }
 
+test_pid_identity_preserves_multiline_format() {
+  local dir shell
+  dir=$(make_case ps-identity-format)
+  for shell in "$(command -v bash)" /bin/bash; do
+    # shellcheck disable=SC2016 # The fixture and production function run in this child shell.
+    FM_STATE_OVERRIDE="$dir/state" FM_PROC_ROOT_OVERRIDE="$dir/no-proc" "$shell" -c '
+      . "$1"
+      inputs=( "  date command  " $'\''\t\rdate command'\'' $'\''  first\n\tsecond\n \nthird  '\'' $'\''\n  first\n\n'\'' "   " "  日本語 \\literal" "" $'\''\v\fdate'\'' "  \"quoted\" : *=" )
+      expected=( "date command  " "date command" $'\''first\nsecond\n\nthird  '\'' $'\''\nfirst'\'' "" "日本語 \\literal" "" date "\"quoted\" : *=" )
+      # shellcheck disable=SC2329 # fm_pid_identity invokes this fault/format seam.
+      ps() { printf "%s" "$fixture"; return "$status"; }
+      for kind in full start; do
+        i=0
+        while [ "$i" -lt "${#inputs[@]}" ]; do
+          fixture=${inputs[$i]}; status=0; rc=0; expected_rc=0
+          [ -n "$fixture" ] || expected_rc=1
+          out=$(fm_pid_identity 4242 "$kind") || rc=$?
+          [ "$rc" -eq "$expected_rc" ] && [ "$out" = "${expected[$i]}" ] || exit 11
+          i=$((i+1))
+        done
+        for fixture in "" "partial output"; do
+          status=7; rc=0
+          out=$(fm_pid_identity 4242 "$kind") || rc=$?
+          [ "$rc" -eq 1 ] && [ -z "$out" ] || exit 12
+        done
+      done
+    ' _ "$LIB" || fail "$shell changed process identity formatting or accepted failed ps evidence"
+  done
+  pass 'portable process identity preserves multiline formatting and rejects failed process queries'
+}
+
 test_pid_identity_is_locale_invariant() {
   # The portable fallback records its process identity under one locale, then
   # arm/guard/turn-end re-read it under the machine's ambient locale. ps's lstart
@@ -1668,6 +1761,99 @@ test_proc_pid_identity_ignores_wall_clock_and_detects_pid_reuse() {
   pass "/proc process identity detects pid reuse"
 }
 
+test_proc_start_identity_retains_validation() {
+  local dir state proc_root pid identity_key before after
+  dir=$(make_case proc-start-identity)
+  state="$dir/state"
+  proc_root="$dir/proc"
+  pid=4242
+  identity_key=proc-starttime
+  [ "$(uname)" != Linux ] || identity_key=linux-starttime
+  write_fake_proc_identity "$proc_root" "$pid" 987654
+  before=$(FM_PROC_ROOT_OVERRIDE="$proc_root" FM_STATE_OVERRIDE="$state" \
+    bash -c '. "$1"; fm_pid_start_identity "$2"' _ "$LIB" "$pid") \
+    || fail "could not read fixture process start identity"
+  [ "$before" = "$identity_key=987654" ] || fail "start identity changed its stored format"
+  printf 'replacement-command\0' > "$proc_root/$pid/cmdline"
+  after=$(FM_PROC_ROOT_OVERRIDE="$proc_root" FM_STATE_OVERRIDE="$state" \
+    bash -c '. "$1"; fm_pid_start_identity "$2"' _ "$LIB" "$pid") \
+    || fail "valid command replacement lost the process start identity"
+  [ "$after" = "$before" ] || fail "command replacement changed the stable start identity"
+  : > "$proc_root/$pid/cmdline"
+  if FM_PROC_ROOT_OVERRIDE="$proc_root" FM_STATE_OVERRIDE="$state" \
+    bash -c '. "$1"; fm_pid_start_identity "$2"' _ "$LIB" "$pid" > "$dir/out"; then
+    fail "an empty command line supplied a process start identity"
+  fi
+  [ ! -s "$dir/out" ] || fail "invalid process evidence emitted an identity"
+  write_fake_proc_identity "$proc_root" "$pid" 987654
+  printf 'malformed\n' > "$proc_root/$pid/stat"
+  if FM_PROC_ROOT_OVERRIDE="$proc_root" FM_STATE_OVERRIDE="$state" \
+    bash -c '. "$1"; fm_pid_start_identity "$2"' _ "$LIB" "$pid" > "$dir/out"; then
+    fail "malformed process stat supplied a process start identity"
+  fi
+  [ ! -s "$dir/out" ] || fail "malformed process stat emitted an identity"
+  pass "process start identities survive command replacement and refuse incomplete process evidence"
+}
+
+test_proc_encoding_failure_retains_lock() {
+  local dir proc_root shell fault api holder rc out identity_key lockdir expected expected_rc real_od
+  dir=$(make_case proc-encoding-failure)
+  proc_root="$dir/proc"
+  identity_key=proc-starttime
+  [ "$(uname)" != Linux ] || identity_key=linux-starttime
+  real_od=$(command -v od)
+  cat > "$dir/fakebin/od" <<'SH'
+#!/bin/sh
+case "$FM_TEST_OD_FAULT" in
+  partial) printf ' 62 61\n'; exit 7 ;;
+  empty) exit 7 ;;
+  valid) exec "$FM_TEST_REAL_OD" "$@" ;;
+esac
+SH
+  chmod +x "$dir/fakebin/od"
+  for shell in "$(command -v bash)" /bin/bash; do
+    for fault in partial empty valid; do
+      sleep 30 &
+      holder=$!
+      write_fake_proc_identity "$proc_root" "$holder" 987654
+      for api in lock full start; do
+        lockdir="$dir/state/.encode-$holder-$api.lock"
+        mkdir -p "$lockdir"
+        printf '%s\n' "$holder" > "$lockdir/pid"
+        # A mismatched start time is evidence of reuse only after the complete
+        # current process identity has been read successfully.
+        printf '%s=987653\n' "$identity_key" > "$lockdir/lock-owner-start"
+        rc=0
+        # shellcheck disable=SC2016 # The child shell expands its positional arguments.
+        out=$(PATH="$dir/fakebin:$PATH" FM_TEST_OD_FAULT="$fault" FM_TEST_REAL_OD="$real_od" \
+          FM_PROC_ROOT_OVERRIDE="$proc_root" FM_STATE_OVERRIDE="$dir/state" "$shell" -c '
+            . "$1"
+            case "$2" in
+              lock) fm_lock_try_acquire "$4" ;;
+              full) fm_pid_identity "$3" ;;
+              start) fm_pid_start_identity "$3" ;;
+            esac
+          ' _ "$LIB" "$api" "$holder" "$lockdir") || rc=$?
+        expected=; expected_rc=1
+        if [ "$fault" = valid ]; then
+          expected_rc=0
+          case "$api" in
+            full) expected="$identity_key=987654 cmdline-hex=62617368002f706174682077697468207370616365732f666d2d77617463682e7368002d2d666c616700" ;;
+            start) expected="$identity_key=987654" ;;
+          esac
+        fi
+        if [ "$rc" -ne "$expected_rc" ] || [ "$out" != "$expected" ] \
+          || { [ "$fault" != valid ] && [ "$(cat "$lockdir/pid")" != "$holder" ]; }; then
+          kill "$holder"; wait "$holder" 2>/dev/null
+          fail "$shell $api mishandled $fault encoder output (rc=$rc, out=$out)"
+        fi
+      done
+      kill "$holder"; wait "$holder" 2>/dev/null || true
+    done
+  done
+  pass 'failed process encoders emit no identity and cannot prove a live lock owner was reused'
+}
+
 test_stale_watch_reclaim_publishes_before_clear() {
   local dir state lockdir rc token
   dir=$(make_case stale-watch-publish-before-clear)
@@ -1731,11 +1917,16 @@ test_msys_pid_identity_uses_proc() {
   pass "MSYS process identity uses compatible /proc fields"
 }
 
+test_zero_pid_is_not_a_lock_owner
+test_proc_encoding_failure_retains_lock
+test_zero_padded_grace_does_not_evict_before_decimal_bound
 test_wait_deadline_reaps_a_stopped_child
 test_singleton_start
+test_pid_identity_preserves_multiline_format
 test_pid_identity_is_locale_invariant
 test_pid_identity_is_terminal_width_invariant
 test_proc_pid_identity_ignores_wall_clock_and_detects_pid_reuse
+test_proc_start_identity_retains_validation
 test_msys_pid_identity_uses_proc
 test_stale_watch_lock_reclaimed
 test_stale_watch_reclaim_publishes_before_clear

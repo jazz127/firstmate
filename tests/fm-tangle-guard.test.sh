@@ -62,7 +62,7 @@ ROWS
 }
 
 test_configured_runtime_branch() {
-  local repo out
+  local repo out invalid
   repo=$(make_repo "$TMP_ROOT/house-repo")
   git -C "$repo" checkout -q -b house
   git -C "$repo" config firstmate.runtimeBranch house
@@ -73,6 +73,15 @@ test_configured_runtime_branch() {
   [ "$out" = main ] || fail "main should be tangled when house is configured; got '$out'"
   git -C "$repo" config firstmate.runtimeBranch missing-house
   firstmate_runtime_branch "$repo" >/dev/null 2>&1 && fail "missing configured branch unexpectedly resolved"
+  for invalid in '' $'house\n' $'house\n\n'; do
+    git -C "$repo" config --replace-all firstmate.runtimeBranch "$invalid"
+    firstmate_runtime_branch "$repo" >/dev/null 2>&1 && fail "empty or newline-terminated configured branch unexpectedly resolved"
+  done
+  for invalid in '' house main; do
+    git -C "$repo" config --replace-all firstmate.runtimeBranch house
+    git -C "$repo" config --add firstmate.runtimeBranch "$invalid"
+    firstmate_runtime_branch "$repo" >/dev/null 2>&1 && fail "duplicate configured branch unexpectedly resolved"
+  done
   pass "configured runtime branch controls tangle detection and missing configured branches fail closed"
 }
 

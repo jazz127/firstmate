@@ -483,7 +483,8 @@ fm_busy_lines_match() {  # [harness]
         ;;
     esac
   fi
-  [ -n "$regex" ] && printf '%s' "$lines" | grep -qiE "$regex"
+  # An early grep match must not become a producer SIGPIPE under pipefail.
+  [ -n "$regex" ] && grep -qiE "$regex" <<< "$lines"
 }
 
 # The prompt glyphs, each declared exactly once (see THE SAFETY RULE above).

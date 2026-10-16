@@ -24,8 +24,9 @@
 #      retryable send failure that could duplicate the durable instruction.
 #   9. An unwritable inbox is a real local failure: nonzero exit, nothing
 #      typed, and a just-created pending-reply expectation is discarded.
-#  10. An empty or whitespace-only text steer is refused before anything is
-#      marked, recorded, or typed - on the marked secondmate path that means
+#  10. A text steer with an empty or whitespace-only body after routing
+#      bytes are removed is refused before anything is marked, recorded, or
+#      typed - on the marked secondmate path that means
 #      no marker-only record and no pending-reply expectation.
 # Every case below that passes a literal `$...` message quotes it on purpose
 # (the point is sending an unexpanded `$` line), so SC2016 is disabled.
@@ -117,6 +118,140 @@ run_send() { # <case-dir> <err-file> [env...] -- <fm-send args...>
 
 record_body() { # <record>
   bash -c '. "$1"; fm_task_inbox_body "$2"' _ "$ROOT/bin/fm-task-inbox-lib.sh" "$2"
+}
+
+test_routing_only_message_refused() {
+  local dir err rc kind message target allowed n=0
+  local args=()
+  for kind in carrier carrier-space corr corr-space bare-corr bare-corr-space \
+    no-reply-carrier no-reply-space marked-body corr-body literal short-corr \
+    ship-carrier ship-corr no-reply-corr no-reply-bare-corr; do
+    n=$((n + 1))
+    dir=$(setup_case "routing-only-$n")
+    err="$dir/send.err"
+    fm_write_secondmate_meta "$dir/home/state/domain.meta" "$dir/home" "sess:fm-t1" alpha claude
+    target=fm-domain
+    allowed=0
+    args=()
+    case "$kind" in
+      carrier|no-reply-carrier|ship-carrier) message=$FM_FROMFIRST_MARK ;;
+      carrier-space|no-reply-space) message="${FM_FROMFIRST_MARK}"$' \t\r\n ' ;;
+      corr|no-reply-corr) message="${FM_FROMFIRST_MARK}corr=0123456789abcdef" ;;
+      corr-space) message="${FM_FROMFIRST_MARK}corr=ABCDEF0123456789"$' \t\r\n ' ;;
+      bare-corr|ship-corr|no-reply-bare-corr) message='corr=0123456789abcdef' ;;
+      bare-corr-space) message=$'corr=0123456789abcdef \t\n ' ;;
+      marked-body) message="${FM_FROMFIRST_MARK}inspect ledger"$'\n\n' ;;
+      corr-body) message="${FM_FROMFIRST_MARK}corr=0123456789abcdef inspect ledger"$'\n\n' ;;
+      literal) message='[fm-from-firstmate]' ;;
+      short-corr) message='corr=0123456789abcde' ;;
+    esac
+    case "$kind" in
+      no-reply-*) args=(--fire-and-forget 0123456789abcdef) ;;
+      ship-*) target=t1 ;;
+    esac
+    case "$kind" in
+      marked-body|corr-body|literal|short-corr|ship-*|no-reply-corr|no-reply-bare-corr) allowed=1 ;;
+    esac
+    run_send "$dir" "$err" -- "$target" ${args[@]+"${args[@]}"} "$message"
+    rc=$?
+    if [ "$allowed" = 1 ]; then
+      [ "$rc" -eq 0 ] || fail "$kind substantive message should succeed: $(cat "$err")"
+      [ -n "$(find "$dir/home/state" -name '*.msg' -type f)" ] || fail "$kind successful steer has no record"
+    else
+      [ "$rc" -ne 0 ] || fail "$kind routing-only message should refuse"
+      assert_contains "$(cat "$err")" "nonempty message" "$kind should name the empty-body refusal"
+      [ ! -d "$dir/home/state/domain.inbox" ] || fail "$kind routing-only message wrote an inbox record"
+      [ ! -d "$dir/home/state/pending-replies" ] || fail "$kind routing-only message minted an expectation"
+      [ ! -s "$dir/send.log" ] || fail "$kind routing-only message reached the terminal"
+    fi
+  done
+  pass "fm-send: routed text must contain a body after the routing bytes this delivery mode consumes"
+}
+
+test_remote_budget_rejects_all_zero_values() {
+  local dir err rc budget mode n=0
+  local args=()
+  for budget in 00 000000 0 invalid 1 01; do
+    for mode in key reply no-reply; do
+      n=$((n + 1))
+      dir=$(setup_case "remote-budget-$n")
+      err="$dir/send.err"
+      rm -f "$dir/home/state/t1.meta"
+      mkdir -p "$dir/home/data"
+      fm_write_meta "$dir/home/state/rsm.meta" \
+        window=fm-remote:p1 endpoint_task_id=rsm harness=claude kind=secondmate mode=secondmate \
+        remote_host=fixture-host remote_root=/fixture/root remote_backend=herdr remote_target=fm-remote:p1
+      printf '%s\n' "- rsm - remote test domain (host: fixture-host; root: /fixture/root; home: $dir/remote; scope: testing; projects: alpha; added 2026-08-02)" \
+        > "$dir/home/data/secondmates.md"
+      cat > "$dir/fakebin/ssh-refuse" <<'SH'
+#!/usr/bin/env bash
+printf 'transport attempted\n' >> "$FM_TEST_TRANSPORT_LOG"
+exit 17
+SH
+      chmod +x "$dir/fakebin/ssh-refuse"
+      case "$mode" in
+        key) args=(--key Enter) ;;
+        reply) args=('reconcile fixture state') ;;
+        no-reply) args=(--fire-and-forget 0123456789abcdef 'reconcile fixture state') ;;
+      esac
+      run_send "$dir" "$err" FM_ROOT_OVERRIDE="$ROOT" FM_SEND_REMOTE_BUDGET="$budget" \
+        FM_SSH_BIN="$dir/fakebin/ssh-refuse" FM_TEST_TRANSPORT_LOG="$dir/transport.log" \
+        -- rsm "${args[@]}"
+      rc=$?
+      [ "$rc" -ne 0 ] || fail "$mode send with budget $budget unexpectedly succeeded"
+      case "$budget" in
+        1|01)
+          [ -s "$dir/transport.log" ] || fail "positive budget $budget did not reach the transport"
+          assert_not_contains "$(cat "$err")" "must be a positive integer" "positive budget refused"
+          ;;
+        *)
+          assert_contains "$(cat "$err")" "must be a positive integer" "$mode zero/invalid budget should refuse"
+          [ ! -e "$dir/transport.log" ] || fail "$mode budget $budget reached the transport"
+          [ ! -d "$dir/home/state/pending-replies" ] || fail "$mode budget $budget created a reply expectation"
+          ;;
+      esac
+    done
+  done
+  pass "fm-send: every remote send rejects all-zero budgets before transport or reply tracking"
+}
+
+test_fire_and_forget_rejects_malformed_ids() {
+  local dir err rc form value n=0
+  local args=()
+  for form in separate equals; do
+    for value in '' $'\n0123456789abcdef' $'0123456789abcdef\n' \
+      $'0123456789abcdef\njunk' 0123456789ABCDEF 0123456789abcde duplicate-empty; do
+      n=$((n + 1))
+      dir=$(setup_case "faf-invalid-$n")
+      err="$dir/send.err"
+      rm -f "$dir/home/state/t1.meta"
+      fm_write_secondmate_meta "$dir/home/state/domain.meta" "$dir/home" "sess:fm-t1" alpha claude
+      args=()
+      if [ "$value" = duplicate-empty ]; then value=; args=(--fire-and-forget 0123456789abcdef); fi
+      if [ "$form" = separate ]; then
+        args=(--fire-and-forget "$value" ${args[@]+"${args[@]}"})
+      else
+        args=("--fire-and-forget=$value" ${args[@]+"${args[@]}"})
+      fi
+      run_send "$dir" "$err" -- fm-domain "${args[@]}" "reconcile fixture state"
+      rc=$?
+      expect_code 1 "$rc" "malformed delivery id $n ($form) must refuse"
+      assert_contains "$(cat "$err")" "--fire-and-forget" "refusal should identify the malformed option"
+      [ ! -d "$dir/home/state/domain.inbox" ] || fail "malformed id $n created an inbox"
+      [ ! -d "$dir/home/state/pending-replies" ] || fail "malformed id $n created a reply expectation"
+      [ ! -s "$dir/send.log" ] || fail "malformed id $n rang or typed to the target"
+    done
+  done
+  dir=$(setup_case faf-equals-valid)
+  err="$dir/send.err"
+  rm -f "$dir/home/state/t1.meta"
+  fm_write_secondmate_meta "$dir/home/state/domain.meta" "$dir/home" "sess:fm-t1" alpha claude
+  run_send "$dir" "$err" -- fm-domain --fire-and-forget=0123456789abcdef "reconcile fixture state"
+  expect_code 0 "$?" "a valid equals-form delivery id should send"
+  assert_contains "$(cat "$dir/home/state/domain.inbox/001.msg")" "delivery=fire-and-forget" \
+    "valid explicit delivery should retain its no-reply contract"
+  [ ! -d "$dir/home/state/pending-replies" ] || fail "valid no-reply delivery created a reply expectation"
+  pass "fm-send inbox: malformed delivery ids refuse without enqueue or reply tracking"
 }
 
 test_text_steer_rides_inbox() {
@@ -535,6 +670,9 @@ test_empty_message_refused() {
   pass "fm-send: an empty or whitespace-only text steer refuses before marking, recording, or typing"
 }
 
+test_routing_only_message_refused
+test_remote_budget_rejects_all_zero_values
+test_fire_and_forget_rejects_malformed_ids
 test_text_steer_rides_inbox
 test_deep_home_doorbell_stays_short
 test_multiline_steer_is_legal

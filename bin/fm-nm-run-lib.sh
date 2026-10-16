@@ -36,7 +36,7 @@ fm_nm_bounded() {  # <dir> <timeout_secs> <command> <args...>
   case "$have_timeout" in
     timeout)  ( cd "$dir" && timeout "$timeout_secs" "$@" ) ;;
     gtimeout) ( cd "$dir" && gtimeout "$timeout_secs" "$@" ) ;;
-    perl)     ( cd "$dir" && perl -e 'my $t = shift; my $pid = fork; die "fork failed" unless defined $pid; if (!$pid) { setpgrp(0, 0); exec @ARGV } local $SIG{ALRM} = sub { kill "TERM", -$pid; select undef, undef, undef, 0.2; kill "KILL", -$pid; exit 124 }; alarm $t; waitpid $pid, 0; exit($? >> 8)' "$timeout_secs" "$@" ) ;;
+    perl)     ( cd "$dir" && perl -e 'my $t = shift; my $pid = fork; die "fork failed" unless defined $pid; if (!$pid) { setpgrp(0, 0); exec { $ARGV[0] } @ARGV; exit 127 } local $SIG{ALRM} = sub { kill "TERM", -$pid; select undef, undef, undef, 0.2; kill "KILL", -$pid; exit 124 }; alarm $t; waitpid $pid, 0; exit(($? & 127) ? 128 + ($? & 127) : $? >> 8)' "$timeout_secs" "$@" ) ;;
     *)        return 1 ;;
   esac
 }
@@ -55,20 +55,33 @@ fm_nm_run() {  # <dir> <timeout_secs> <args...>
   fm_nm_run_checked "$@" || true
 }
 
-fm_nm_trim() {
-  local s=${1:-}
-  s="${s#"${s%%[![:space:]]*}"}"
-  s="${s%"${s##*[![:space:]]}"}"
-  printf '%s' "$s"
+# An output variable avoids a subshell for callers that keep parsing the value.
+# The _fm_nm_trim_ prefix is reserved for this helper's locals.
+fm_nm_trim() {  # <value> [output-variable]
+  local _fm_nm_trim_value=${1:-}
+  _fm_nm_trim_value="${_fm_nm_trim_value#"${_fm_nm_trim_value%%[![:space:]]*}"}"
+  _fm_nm_trim_value="${_fm_nm_trim_value%"${_fm_nm_trim_value##*[![:space:]]}"}"
+  if [ "$#" -gt 1 ]; then
+    printf -v "$2" '%s' "$_fm_nm_trim_value"
+  else
+    printf '%s' "$_fm_nm_trim_value"
+  fi
 }
 
+# Trim whitespace and one surrounding double-quote pair; optionally assign a variable.
+# The _fm_nm_quotes_ prefix is reserved for this helper's locals.
 fm_nm_strip_quotes() {
-  local s
-  s=$(fm_nm_trim "${1:-}")
-  case "$s" in
-    \"*\") s=${s#\"}; s=${s%\"} ;;
+  local _fm_nm_quotes_value
+  fm_nm_trim "${1:-}" _fm_nm_quotes_value
+  case "$_fm_nm_quotes_value" in
+    \"*\") _fm_nm_quotes_value=${_fm_nm_quotes_value#\"}; _fm_nm_quotes_value=${_fm_nm_quotes_value%\"} ;;
   esac
-  fm_nm_trim "$s"
+  if [ "$#" -gt 1 ]; then
+    fm_nm_trim "$_fm_nm_quotes_value" _fm_nm_quotes_value
+    printf -v "$2" '%s' "$_fm_nm_quotes_value"
+  else
+    fm_nm_trim "$_fm_nm_quotes_value"
+  fi
 }
 
 # Path of no-mistakes' local state database as the CLI would see it from
@@ -86,8 +99,15 @@ fm_nm_state_db() {  # <worktree>
 }
 
 # Scalar value of a TOON key in captured `axi status` output $1.
+# Stop at the first field without a producer pipe that can fail on early exit.
 fm_nm_field() {  # <toon-output> <key>
-  printf '%s\n' "$1" | sed -n "s/^[[:space:]]*$2:[[:space:]]*\(.*\)/\1/p" | head -1
+  sed -n "
+    /^[[:space:]]*$2:/ {
+      s/^[[:space:]]*$2:[[:space:]]*//
+      p
+      q
+    }
+  " <<< "$1"
 }
 
 # Full commit sha for sha-ish $2 as seen from worktree $1's own object store;
@@ -392,8 +412,8 @@ FM_NM_GATE_ROW_RE='^[[:space:]]*[^,]+,[[:space:]]*"?(awaiting_approval|fix_revie
 # leaves it at `running` while a run waits at a gate, so the word and the gate
 # markers routinely disagree.
 fm_nm_run_is_parked() {  # <toon-output>
-  printf '%s\n' "$1" | grep -Eq \
-    "$FM_NM_GATE_LINE_RE|$FM_NM_AWAITING_AGENT_RE|$FM_NM_GATE_SCALAR_RE|$FM_NM_GATE_ROW_RE"
+  grep -Eq \
+    "$FM_NM_GATE_LINE_RE|$FM_NM_AWAITING_AGENT_RE|$FM_NM_GATE_SCALAR_RE|$FM_NM_GATE_ROW_RE" <<< "$1"
 }
 
 # 0 if the run in captured `axi status` TOON $1 is EXECUTING: in flight and

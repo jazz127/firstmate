@@ -247,6 +247,156 @@ test_record_prune_outgrows_one_argument_list() {
   pass "record pruning: expired records past one argument list are all pruned on a write"
 }
 
+test_record_prune_preserves_leading_relative_spaces() {
+  local tmp prefix state old collateral
+  tmp=$(fm_test_tmproot fm-operational-relative-prune)
+  for prefix in ' home' '  home'; do
+    state="$tmp/$prefix/state"
+    mkdir -p "$state/operational-inbox" "$tmp/home/state/operational-inbox"
+    old="$state/operational-inbox/1-expired.msg"
+    collateral="$tmp/home/state/operational-inbox/1-expired.msg"
+    printf old > "$old"
+    touch -t 200001010000 "$old"
+    printf 'unrelated fresh record' > "$collateral"
+    (
+      cd "$tmp" || exit 1
+      printf 'new fixture record' | FM_STATE_OVERRIDE="$prefix/state" "$OWNER" record watcher >/dev/null
+    ) || fail "record write failed for a relative path with leading spaces"
+    [ -f "$collateral" ] || fail "pruning stripped path spaces and deleted another directory's record"
+    [ ! -e "$old" ] || fail "the intended expired record survived pruning"
+    [ "$(cat "$collateral")" = 'unrelated fresh record' ] || fail "pruning changed another directory's record"
+  done
+  pass "record pruning preserves leading relative path spaces and touches only its own inbox"
+}
+
+test_stdin_read_errors_refuse_partial_operational_input() {
+  local tmp fakebin state partial command out rc real_cat
+  tmp=$(fm_test_tmproot fm-operational-stdin-error)
+  fakebin="$tmp/fakebin"
+  state="$tmp/state"
+  mkdir -p "$fakebin"
+  real_cat=$(command -v cat)
+  cat > "$fakebin/cat" <<'CAT'
+#!/usr/bin/env bash
+if [ "$#" -eq 0 ]; then
+  printf '%s' "$FM_TEST_STDIN_PARTIAL"
+  exit 1
+fi
+exec "$FM_TEST_STDIN_REAL_CAT" "$@"
+CAT
+  chmod +x "$fakebin/cat"
+  for partial in "${FM_OPERATIONAL_PREFIX}v1 watcher: partial fixture" ''; do
+    for command in encode kind classify body record; do
+      rc=0
+      if [ "$command" = encode ] || [ "$command" = record ]; then
+        out=$(PATH="$fakebin:$PATH" FM_TEST_STDIN_PARTIAL="$partial" FM_TEST_STDIN_REAL_CAT="$real_cat" \
+          FM_STATE_OVERRIDE="$state" "$OWNER" "$command" watcher </dev/null 2>&1) || rc=$?
+      else
+        out=$(PATH="$fakebin:$PATH" FM_TEST_STDIN_PARTIAL="$partial" FM_TEST_STDIN_REAL_CAT="$real_cat" \
+          FM_STATE_OVERRIDE="$state" "$OWNER" "$command" </dev/null 2>&1) || rc=$?
+      fi
+      [ "$rc" -eq 2 ] || fail "$command did not propagate its stdin read error (exit $rc)"
+      [ -z "$out" ] || fail "$command emitted content from a failed stdin read: $out"
+      [ ! -d "$state/operational-inbox" ] || fail "a failed stdin read published an operational record"
+    done
+  done
+  pass "operational commands refuse empty and partial failed stdin reads before emitting or recording input"
+}
+
+test_record_prune_preserves_filename_boundaries() {
+  local tmp kind state old collateral
+  tmp=$(fm_test_tmproot fm-operational-prune-boundaries)
+  for kind in space tab newline; do
+    state="$tmp/$kind/state"
+    mkdir -p "$state/operational-inbox"
+    case "$kind" in
+      space) old="$state/operational-inbox/.record.expired "; collateral="$state/operational-inbox/.record.expired" ;;
+      tab) old="$state/operational-inbox/.record.expired"$'\t'; collateral="$state/operational-inbox/.record.expired" ;;
+      newline) old="$state/operational-inbox/1-expired.msg"$'\nother.msg'; collateral="$state/operational-inbox/1-expired.msg" ;;
+    esac
+    printf 'expired fixture' > "$old"
+    touch -t 200001010000 "$old"
+    printf 'unrelated fresh record' > "$collateral"
+    printf 'new fixture record' | FM_STATE_OVERRIDE="$state" "$OWNER" record watcher >/dev/null \
+      || fail "$kind filename fixture record write failed"
+    [ -f "$collateral" ] || fail "$kind filename pruning deleted a different fresh record"
+    [ "$(cat "$collateral")" = 'unrelated fresh record' ] || fail "$kind filename pruning changed a different record"
+    if [ "$kind" = newline ]; then
+      [ -f "$old" ] || fail "a filename outside the line-based stat format must be skipped"
+    else
+      [ ! -e "$old" ] || fail "$kind filename was not pruned by its exact path"
+    fi
+  done
+  state="$tmp/unsafe"$'\npath'
+  mkdir -p "$state"
+  printf old > "$state/1-expired.msg"
+  touch -t 200001010000 "$state/1-expired.msg"
+  printf 'unrelated fresh file' > "$tmp/unsafe"
+  if fm_operational_record_prune "$state"; then
+    fail "a record directory outside the stat line format must be refused"
+  fi
+  [ -f "$tmp/unsafe" ] || fail "a newline in the record directory deleted an unrelated file"
+  (
+    cd "$tmp" || exit 1
+    printf 'unrelated fixture' > ./1
+    # Inject incomplete stat output through the prune helper's producer.
+    # shellcheck disable=SC2329
+    find() { printf '1\n'; return 1; }
+    fm_operational_record_prune "$tmp/inbox"
+    [ -f 1 ] || fail "an incomplete stat line was interpreted as a pathname"
+  ) || fail "incomplete stat output control failed"
+  pass "record pruning preserves exact filename boundaries and refuses unrepresentable paths"
+}
+
+test_record_rejects_failed_or_truncated_nonce_generation() {
+  local tmp fakebin state existing utility output status out rc files real_od real_tr
+  tmp=$(fm_test_tmproot fm-operational-nonce-error)
+  fakebin="$tmp/fakebin"
+  state="$tmp/state"
+  mkdir -p "$fakebin" "$state/operational-inbox"
+  existing="$state/operational-inbox/1700000000-0123456789abcdef.msg"
+  real_od=$(command -v od)
+  real_tr=$(command -v tr)
+  cat > "$fakebin/od" <<'SHIM'
+#!/usr/bin/env bash
+if [ "${0##*/}" = "$FM_TEST_NONCE_UTILITY" ]; then
+  printf used > "$FM_TEST_NONCE_HIT"
+  printf '%s' "$FM_TEST_NONCE_OUTPUT"
+  exit "$FM_TEST_NONCE_EXIT"
+fi
+case "${0##*/}" in
+  od) exec "$FM_TEST_NONCE_OD" "$@" ;;
+  tr) exec "$FM_TEST_NONCE_TR" "$@" ;;
+esac
+SHIM
+  cp "$fakebin/od" "$fakebin/tr"
+  printf '#!/usr/bin/env bash\nprintf "1700000000\\n"\n' > "$fakebin/date"
+  chmod +x "$fakebin/od" "$fakebin/tr" "$fakebin/date"
+  for utility in od tr; do
+    for status in 1 0; do
+      if [ "$status" = 1 ]; then output=0123456789abcdef; else output=0123; fi
+      printf 'pre-existing fixture record' > "$existing"
+      rm -f "$tmp/hit"
+      rc=0
+      out=$(printf 'new fixture record' | PATH="$fakebin:$PATH" FM_STATE_OVERRIDE="$state" \
+        FM_TEST_NONCE_UTILITY="$utility" FM_TEST_NONCE_OUTPUT="$output" FM_TEST_NONCE_EXIT="$status" \
+        FM_TEST_NONCE_HIT="$tmp/hit" FM_TEST_NONCE_OD="$real_od" FM_TEST_NONCE_TR="$real_tr" \
+        "$OWNER" record watcher 2>&1) || rc=$?
+      [ -f "$tmp/hit" ] || fail "$utility nonce fault was not exercised"
+      [ "$rc" -ne 0 ] || fail "$utility nonce failure or truncation was accepted"
+      [ -z "$out" ] || fail "$utility nonce failure emitted a doorbell"
+      [ "$(cat "$existing")" = 'pre-existing fixture record' ] || fail "$utility nonce failure overwrote an existing record"
+      files=$(find "$state/operational-inbox" -type f | wc -l | tr -d ' ')
+      [ "$files" = 1 ] || fail "$utility nonce failure published an extra record"
+    done
+  done
+  pass "failed or truncated nonce generation cannot publish or overwrite an operational record"
+}
+
+test_record_rejects_failed_or_truncated_nonce_generation
+test_record_prune_preserves_filename_boundaries
+test_stdin_read_errors_refuse_partial_operational_input
+test_record_prune_preserves_leading_relative_spaces
 test_current_generic_matrix
 test_current_from_firstmate_carrier
 test_landed_untyped_prefix_is_explicitly_legacy

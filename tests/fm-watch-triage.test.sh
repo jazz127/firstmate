@@ -761,8 +761,8 @@ test_empty_write_prune_from_the_environment_widens_the_probe() {
 # mount. Hitting the bound must read as NO evidence, exactly like every other
 # negative outcome, so the caller's escalation schedule is untouched.
 test_worktree_write_probe_is_wall_clock_bounded() {
-  local dir state anchor wt slowbin fastbin started elapsed
-  dir=$(make_case classify-write-probe-bound); state="$dir/state"
+  local dir state anchor wt slowbin fastbin started elapsed bound=${1:-1} ceiling=${2:-10}
+  dir=$(make_case "classify-write-probe-bound-$bound"); state="$dir/state"
   anchor="$state/anchor"; wt="$dir/wt"; slowbin="$dir/slowbin"; fastbin="$dir/fastbin"
   mkdir -p "$wt/src" "$slowbin" "$fastbin"
   : > "$anchor"
@@ -788,14 +788,18 @@ SH
     "$ROOT/bin/fm-classify-lib.sh" "$state" "$anchor" \
     || fail "a walk that reported a hit inside its bound was not read as write evidence"
   started=$(date +%s)
-  PATH="$slowbin:$PATH" FM_WORKTREE_WRITE_TIMEOUT=1 \
+  PATH="$slowbin:$PATH" FM_WORKTREE_WRITE_TIMEOUT="$bound" \
     bash -c '. "$1"; crew_worktree_written_since slow "$2" "$3"' _ \
     "$ROOT/bin/fm-classify-lib.sh" "$state" "$anchor" \
     && fail "a walk that outlived its bound was reported as write evidence"
   elapsed=$(( $(date +%s) - started ))
-  [ "$elapsed" -lt 10 ] \
+  [ "$elapsed" -lt "$ceiling" ] \
     || fail "the worktree write probe was not wall-clock bounded: one walk held the caller for ${elapsed}s"
   pass "the worktree write probe is wall-clock bounded, and hitting the bound reads as no write evidence"
+}
+
+test_zero_padded_write_probe_timeout_keeps_default() {
+  test_worktree_write_probe_is_wall_clock_bounded 00 20
 }
 
 # signal_crew_provably_working: a no-verb "signal:" wake is benign ONLY when EVERY
@@ -2188,6 +2192,71 @@ test_routine_appends_after_a_classified_event_stay_absorbed() {
   pass "a routine append after an already-classified event is absorbed (no re-wake)"
 }
 
+test_status_signature_rejects_failed_encoding() (
+  local dir file mode out rc
+  dir=$(make_case signature-encoding-failure)
+  file="$dir/state/task.status"
+  printf 'blocked: pending event\n' > "$file"
+  # shellcheck disable=SC2329 # Fault injection for the signature encoder.
+  od() {
+    [ "$mode" != partial ] || printf ' 61 62\n'
+    return 7
+  }
+  for mode in empty partial; do
+    rc=0
+    out=$(status_observed_signature "$file") || rc=$?
+    expect_code 1 "$rc" "a failed $mode encoder produced a successful status signature"
+    [ -z "$out" ] || fail "failed encoding leaked a partial signature: $out"
+  done
+  pass 'status signatures preserve encoding failures even when partial hex was emitted'
+)
+
+test_binary_presentation_markers_do_not_hide_status() {
+  local shell dir state out err status_file signature pid
+  for shell in bash /bin/bash; do
+    dir=$(make_case "binary-presentation-${shell//\//-}")
+    state="$dir/state"; out="$dir/watch.out"; err="$dir/watch.err"
+    status_file="$state/task.status"
+    printf 'needs-decision: retained event\n' > "$status_file"
+    signature=$(seen_sig "$status_file")
+    printf '%s\000' "$signature" > "$state/.seen-task_status"
+    printf '%s\000' "$signature" > "$state/.hb-surfaced-task"
+    watch_bg "$state" "$dir/fakebin" "$out" "$shell" 2> "$err"
+    pid=$!
+    wait_for_exit "$pid" 100 \
+      || { reap "$pid"; fail "$shell binary markers hid an actionable status: $(cat "$err")"; }
+    assert_contains "$(cat "$out")" "signal: $status_file" 'binary marker recovery lost its signal'
+    assert_contains "$(cat "$state/.wake-queue")" 'needs-decision:' 'binary marker recovery did not queue the decision'
+    [ ! -s "$err" ] || fail "binary marker recovery emitted errors: $(cat "$err")"
+  done
+  pass "binary presentation markers cannot suppress an actionable status on either Bash version"
+}
+
+test_presentation_marker_reader_keeps_read_failures() (
+  local dir file marker ident reported size offset
+  dir=$(make_case marker-read-failure)
+  file="$dir/state/task.status"; marker="$dir/state/.seen-task_status"
+  printf 'blocked: pending event\n' > "$file"
+  ident=$(_fm_open_decisions_file_ident "$file")
+  size=$(size_of "$file")
+  reported=$(status_observed_signature "$file")
+  status_presentation_marker_commit "$marker" "$file" "$size" "$ident" \
+    || fail 'could not initialize marker read-failure fixture'
+  # A reader that returns valid-looking partial bytes and fails still failed.
+  # shellcheck disable=SC2329 # Called indirectly by the production marker reader.
+  cat() { command cat "$@"; return 7; }
+  if status_presentation_marker_reported_matches "$marker" "$reported"; then
+    fail 'a failed marker read matched its partial output'
+  fi
+  offset=$(status_presentation_marker_offset "$marker" "$file")
+  assert_equals 0 "$offset" 'a failed marker read supplied a classified offset'
+  status_presentation_marker_report "$marker" "$reported" || fail 'could not replace the failed marker'
+  unset -f cat
+  offset=$(status_presentation_marker_offset "$marker" "$file")
+  assert_equals 0 "$offset" 'reporting preserved classification from a failed marker read'
+  pass "failed marker reads cannot match or preserve a classified position from partial output"
+)
+
 test_unreadable_status_reports_once_per_file_state() {
   local dir state fakebin out status_file target marker sig pid
   dir=$(make_case unreadable-status); state="$dir/state"; fakebin="$dir/fakebin"
@@ -2422,6 +2491,46 @@ test_nonterminal_stale_provably_working_absorbed_then_escalated() {
 # not busy) has stopped - it may be done via interactive menus, waiting, or wedged.
 # It must surface at once, never wait out the wedge timer, so these users (a
 # non-no-mistakes crew, or any crew with no running pipeline) are never left hanging.
+
+test_window_metadata_last_field_wins() {
+  local shell scenario dir state window key expected pid cycle
+  for shell in "$(command -v bash)" /bin/bash; do
+    for scenario in kind-duplicate kind-empty backend-duplicate backend-empty kind-control backend-control; do
+      dir=$(make_case "window-metadata-${shell//\//-}-$scenario"); state="$dir/state"
+      window=test:fm-metadata; key=test_fm-metadata; expected=stale
+      printf 'idle prompt, finished' > "$dir/pane.txt"
+      printf 'window=%s\n' "$window" > "$state/metadata.meta"
+      case "$scenario" in
+        kind-duplicate) printf 'kind=ship\nkind=secondmate\nbackend=tmux\n' >> "$state/metadata.meta"; expected=quiet ;;
+        kind-empty) printf 'kind=secondmate\nkind=\nbackend=tmux\n' >> "$state/metadata.meta" ;;
+        backend-duplicate) printf 'kind=ship\nbackend=invalid-fixture\nbackend=tmux\n' >> "$state/metadata.meta" ;;
+        backend-empty) printf 'kind=ship\nbackend=invalid-fixture\nbackend=\n' >> "$state/metadata.meta" ;;
+        kind-control) printf 'kind=secondmate\nbackend=tmux\n' >> "$state/metadata.meta"; expected=quiet ;;
+        backend-control) printf 'kind=ship\nbackend=tmux\n' >> "$state/metadata.meta" ;;
+      esac
+      hash_text 'idle prompt, finished' > "$state/.hash-$key"
+      printf '1\n' > "$state/.count-$key"
+      FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$dir/pane.txt" \
+        FM_FAKE_CREW_STATE='state: unknown · source: none · fixture idle' \
+        watch_bg "$state" "$dir/fakebin" "$dir/out" "$shell"
+      pid=$!
+      if [ "$expected" = quiet ]; then
+        for cycle in 1 2; do
+          wait_poll_cycle "$state" "$pid" || {
+            reap "$pid"; fail "$shell $scenario surfaced a secondmate on cycle $cycle: $(cat "$dir/out")"
+          }
+        done
+        reap "$pid"
+        [ ! -s "$dir/out" ] && [ ! -s "$state/.wake-queue" ] || fail "$scenario queued a secondmate stale wake"
+      else
+        wait_for_exit "$pid" 100 || { reap "$pid"; fail "$shell $scenario missed the idle worker"; }
+        grep -Fx "stale: $window" "$dir/out" >/dev/null || fail "$scenario lost the stopped-worker stale wake"
+        grep -F "$window" "$state/.wake-queue" >/dev/null || fail "$scenario lost the durable stale record"
+      fi
+    done
+  done
+  pass 'window classification uses the last kind/backend field, including an empty value restoring its default'
+}
 
 test_nonterminal_stale_not_working_surfaced() {
   local dir state fakebin out drain_out capture_file window key pane_hash sig pid
@@ -7362,6 +7471,79 @@ test_procevent_marker_failure_exits_and_replays() {
 
 # --- heartbeat: no-change absorbed, backstop surfaces a missed status --------
 
+test_heartbeat_streak_recovers_malformed_counter() {
+  local shell mode sample body expected dir state out err pid i
+  for shell in bash /bin/bash; do
+    for mode in handoff absorb; do
+      for sample in zero padded8 padded10 text binary overflow; do
+        case "$sample" in
+          zero) body='0\n'; expected=1 ;;
+          padded8) body='08\n'; expected=9 ;;
+          padded10) body='010\n'; expected=11 ;;
+          text) body='broken\n'; expected=1 ;;
+          binary) body='0\0008\n'; expected=1 ;;
+          overflow) body='99999999999999999999999999999999\n'; expected=13 ;;
+        esac
+        dir=$(make_case "heartbeat-streak-${shell//\//-}-$mode-$sample")
+        state="$dir/state"; out="$dir/watch.out"; err="$dir/watch.err"
+        printf '%b' "$body" > "$state/.heartbeat-streak"
+        printf '%s\n' "$expected" > "$dir/expected"
+        [ "$mode" != handoff ] || : > "$state/.afk"
+        PATH="$dir/fakebin:$PATH" FM_HOME="$dir" FM_STATE_OVERRIDE="$state" \
+          FM_POLL=1 FM_SIGNAL_GRACE=0 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=0 \
+          "$shell" "$WATCH" > "$out" 2> "$err" &
+        pid=$!
+        if [ "$mode" = handoff ]; then
+          wait_for_exit "$pid" 200 \
+            || fail "$shell heartbeat $sample failed during handoff: $(cat "$err")"
+          assert_equals heartbeat "$(cat "$out")" "$shell heartbeat $sample handoff output"
+          grep -F "$(printf '\theartbeat\theartbeat\theartbeat')" "$state/.wake-queue" >/dev/null \
+            || fail "$shell heartbeat $sample did not queue its wake"
+        else
+          i=0
+          while [ "$i" -lt 200 ]; do
+            cmp -s "$dir/expected" "$state/.heartbeat-streak" && break
+            kill -0 "$pid" 2>/dev/null || break
+            sleep 0.1
+            i=$((i + 1))
+          done
+          reap "$pid"
+          [ ! -s "$out" ] || fail "$shell heartbeat $sample surfaced an idle fleet"
+          [ ! -s "$state/.wake-queue" ] || fail "$shell heartbeat $sample queued an idle fleet wake"
+        fi
+        cmp -s "$dir/expected" "$state/.heartbeat-streak" \
+          || fail "$shell heartbeat $sample/$mode recorded the wrong backoff counter"
+        [ ! -s "$err" ] || fail "$shell heartbeat $sample/$mode emitted errors: $(cat "$err")"
+      done
+    done
+  done
+  pass "heartbeat counters recover from malformed bytes and use capped decimal backoff in both triage paths"
+}
+
+test_zero_padded_heartbeat_interval() {
+  local shell interval dir out err pid
+  for shell in bash /bin/bash; do
+    for interval in 0 8 08 09 10 010; do
+      dir=$(make_case "heartbeat-decimal-${shell//\//-}-$interval")
+      out="$dir/watch.out"; err="$dir/watch.err"
+      : > "$dir/state/.afk"
+      # Make the first heartbeat due without waiting out each interval.
+      touch -t 200001010000 "$dir/state/.last-heartbeat"
+      PATH="$dir/fakebin:$PATH" FM_HOME="$dir" FM_STATE_OVERRIDE="$dir/state" \
+        FM_POLL=1 FM_SIGNAL_GRACE=0 FM_CHECK_INTERVAL=999999 \
+        FM_HEARTBEAT="$interval" "$shell" "$WATCH" > "$out" 2> "$err" &
+      pid=$!
+      wait_for_exit "$pid" 200 \
+        || fail "$shell watcher failed with heartbeat interval $interval: $(cat "$err")"
+      assert_equals heartbeat "$(cat "$out")" "$shell heartbeat interval $interval"
+      [ ! -s "$err" ] || fail "$shell heartbeat interval $interval emitted errors: $(cat "$err")"
+      grep -F "$(printf '\theartbeat\theartbeat\theartbeat')" "$dir/state/.wake-queue" >/dev/null \
+        || fail "$shell heartbeat interval $interval did not queue its wake"
+    done
+  done
+  pass "zero-padded heartbeat intervals keep the watcher running and queue due heartbeats"
+}
+
 test_heartbeat_no_change_absorbed() {
   local dir state fakebin out pid i sig
   dir=$(make_case heartbeat-absorb); state="$dir/state"; fakebin="$dir/fakebin"; out="$dir/watch.out"
@@ -7844,6 +8026,8 @@ if [ -n "${FM_TEST_ONLY:-}" ]; then
   exit 0
 fi
 
+test_heartbeat_streak_recovers_malformed_counter
+test_zero_padded_heartbeat_interval
 test_status_span_actionable_classifier
 test_status_span_survives_a_later_routine_append
 test_status_span_respects_decision_closure
@@ -7859,6 +8043,7 @@ test_crew_worktree_written_since_classifier
 test_empty_write_prune_widens_the_probe
 test_empty_write_prune_from_the_environment_widens_the_probe
 test_worktree_write_probe_is_wall_clock_bounded
+test_zero_padded_write_probe_timeout_keeps_default
 test_signal_crew_provably_working_classifier
 test_secondmate_status_routine_absorbed_routed_surfaced_classifier
 test_provably_working_signal_absorbed
@@ -7905,6 +8090,9 @@ test_actionable_signal_survives_a_later_routine_append
 test_keyed_decision_signal_reads_only_the_new_span
 test_release_completion_survives_a_later_routine_append
 test_routine_appends_after_a_classified_event_stay_absorbed
+test_status_signature_rejects_failed_encoding || fail "test_status_signature_rejects_failed_encoding failed"
+test_binary_presentation_markers_do_not_hide_status
+test_presentation_marker_reader_keeps_read_failures || fail "test_presentation_marker_reader_keeps_read_failures failed"
 test_unreadable_status_reports_once_per_file_state
 test_permission_recovery_surfaces_preserved_status
 test_terminal_stale_surfaced
@@ -7934,6 +8122,7 @@ test_busy_pane_default_turn_age_bound_is_3600s
 test_busy_declared_pause_is_rechecked_not_wedge_escalated
 test_afk_busy_declared_pause_hands_off_plain_stale
 test_afk_busy_declared_pause_ticking_pane_hands_off_once
+test_window_metadata_last_field_wins
 test_nonterminal_stale_not_working_surfaced
 test_nonterminal_stale_paused_absorbed_then_resurfaced
 test_declared_pause_is_absorbed_for_every_agent_liveness_verdict

@@ -158,12 +158,15 @@ test_knob_parsing() {
   rc=0; fm_ready_timeout_secs "$dir" >/dev/null || rc=$?
   [ "$rc" -eq 1 ] || fail "an absent knob should read disabled (rc=$rc)"
   for pair in ':7200' '# two hours by default:7200' '3600:3600' '90m:5400' '4h:14400' \
-    ' 45m :2700' '0120s:120'; do
+    ' 45m :2700' '0120s:120' '000000000060s:60' '000000001h:3600'; do
     printf '%s\n' "${pair%:*}" > "$dir/ready-session-timeout"
     v=$(fm_ready_timeout_secs "$dir") || fail "knob '${pair%:*}' was rejected"
     [ "$v" = "${pair##*:}" ] || fail "knob '${pair%:*}' read $v, want ${pair##*:}"
   done
-  for bad in 30 59s 0h abc 2d -5m 1.5h; do
+  printf '# comment\n \t\r\v\f\n \t000090m \r# inline comment' > "$dir/ready-session-timeout"
+  v=$(fm_ready_timeout_secs "$dir") || fail 'mixed whitespace and an unterminated final config line were rejected'
+  [ "$v" = 5400 ] || fail "mixed whitespace/padded duration read $v, want 5400"
+  for bad in 30 59s 0h 00000 000000000000h 1000000000s abc 2d -5m 1.5h; do
     printf '%s\n' "$bad" > "$dir/ready-session-timeout"
     rc=0; v=$(fm_ready_timeout_secs "$dir") || rc=$?
     [ "$rc" -eq 2 ] && [ -z "$v" ] || fail "knob '$bad' should be rejected, got rc=$rc value=$v"
@@ -328,6 +331,107 @@ test_parked_run_after_stop_wakes_once() {
   pass "a stopped worker whose run parks on it wakes firstmate once to relaunch it and is never re-stopped"
 }
 
+test_activity_age_tracks_every_source() {
+  local state="$TMP_ROOT/activity-age" now age suffix path
+  local -a paths=()
+  mkdir -p "$state"
+  if fm_ready_timeout_activity_age "$state" rt; then
+    fail 'an absent activity record produced an age'
+  fi
+  mkdir -p "$state/rt.inbox/handled"
+  for suffix in status turn-ended progress meta pr-poll-registration inbox inbox/handled; do
+    path="$state/rt.$suffix"
+    [ -e "$path" ] || touch "$path"
+    paths+=("$path")
+  done
+  now=$(date +%s)
+  for path in "${paths[@]}"; do set_mtime "$((now - 120))" "$path"; done
+  age=$(fm_ready_timeout_activity_age "$state" rt) || fail 'activity files produced no age'
+  [ "$age" -ge 120 ] && [ "$age" -le 180 ] || fail "unexpected activity age: $age"
+  for path in "${paths[@]}"; do
+    set_mtime "$((now + 86400))" "$path"
+    age=$(fm_ready_timeout_activity_age "$state" rt) || fail "no age for $path"
+    [ "$age" = 0 ] || fail "newest activity in $path did not prevent an early timeout: $age"
+    set_mtime "$((now - 120))" "$path"
+  done
+  pass 'every activity source participates in the newest timestamp, with future timestamps clamped to zero'
+}
+
+test_record_output_assignment() {
+  local state="$TMP_ROOT/record-assignment" record='' value=stale
+  mkdir -p "$state"
+  fm_ready_timeout_record_path "$state" rt record > "$state/output"
+  [ "$record" = "$(fm_ready_timeout_record_path "$state" rt)" ] || fail 'record path assignment differs from stdout'
+  [ ! -s "$state/output" ] || fail 'record path assignment printed output'
+  fm_ready_timeout_field "$record" result value
+  [ -z "$value" ] || fail 'missing record did not clear the output variable'
+  printf 'result=failed\nresult=stopped\nspawn_gen=old\nspawn_gen=current' > "$record"
+  fm_ready_timeout_field "$record" result value > "$state/output"
+  [ "$value" = stopped ] || fail 'field assignment did not preserve the last value'
+  [ ! -s "$state/output" ] || fail 'field assignment printed output'
+  fm_ready_timeout_field "$record" absent value
+  [ -z "$value" ] || fail 'missing field did not clear the output variable'
+  fm_ready_timeout_field "$record" spawn_gen value
+  [ "$value" = current ] || fail 'field assignment lost the unterminated last line'
+  printf 'spawn_gen=current' > "$state/rt.meta"
+  fm_ready_timeout_parked "$state" rt || fail 'matching stopped generation did not read parked'
+  printf 'spawn_gen=new' > "$state/rt.meta"
+  if fm_ready_timeout_parked "$state" rt; then fail 'a new generation remained parked'; fi
+  rm "$state/rt.meta"
+  if fm_ready_timeout_parked "$state" rt; then fail 'missing metadata read parked'; fi
+  pass 'record output assignment preserves last-value, missing-field and incarnation semantics'
+}
+
+test_record_fields_preserve_literal_keys() {
+  local record="$TMP_ROOT/literal-fields" size value
+  for size in small large; do
+    {
+      printf 'literal*=star\nliteral?=question\nliteral[ab]=brackets\nliteralX=other\n'
+      [ "$size" != large ] || printf '%02000d\n' 0
+      printf '=empty-key\ntoken=part=kept\nline=one\nnext=two\n'
+      printf 'token=first\ntoken=final=value\\literal  '
+    } > "$record"
+    [ "$(fm_ready_timeout_field "$record" 'literal*')" = star ] || fail "$size literal star became a pattern"
+    [ "$(fm_ready_timeout_field "$record" 'literal?')" = question ] || fail "$size literal question mark became a pattern"
+    [ "$(fm_ready_timeout_field "$record" 'literal[ab]')" = brackets ] || fail "$size literal brackets became a pattern"
+    [ "$(fm_ready_timeout_field "$record" '')" = empty-key ] || fail "$size empty key changed"
+    [ "$(fm_ready_timeout_field "$record" 'token=part')" = part=kept ] || fail "$size equals-bearing key changed"
+    [ -z "$(fm_ready_timeout_field "$record" $'line\nnext')" ] || fail "$size key matched across record lines"
+    value=stale
+    fm_ready_timeout_field "$record" token value
+    [ "$value" = 'final=value\literal  ' ] || fail "$size field bytes or final-field precedence changed"
+  done
+  pass 'small and large records preserve literal keys, field bytes and line boundaries'
+}
+
+test_binary_records_cannot_park_a_worker() {
+  local state="$TMP_ROOT/binary-records" record value
+  mkdir -p "$state"
+  record="$state/rt.ready-timeout"
+  printf 'spawn_gen=current\n' > "$state/rt.meta"
+  printf 'result=st\000opped\nspawn_gen=current\n' > "$record"
+  if fm_ready_timeout_parked "$state" rt; then fail 'a binary result parked the worker'; fi
+  value=stale
+  if fm_ready_timeout_field "$record" result value; then fail 'binary field lookup succeeded'; fi
+  [ -z "$value" ] || fail 'binary field lookup retained an output value'
+
+  printf 'result=stopped\nspawn_gen=current\nnote=bad\000value\n' > "$record"
+  if fm_ready_timeout_parked "$state" rt; then fail 'a later NUL left the worker parked'; fi
+
+  # Empty generations are supported for legacy metadata, but a binary record
+  # cannot stand in for that absence when both lookups would otherwise be empty.
+  printf 'result=stopped\nspawn_gen=\n' > "$record"
+  printf 'window=fm:fm-rt\n' > "$state/rt.meta"
+  fm_ready_timeout_parked "$state" rt || fail 'legacy empty generations no longer match'
+  printf 'note=bad\000value\n' >> "$state/rt.meta"
+  if fm_ready_timeout_parked "$state" rt; then fail 'binary legacy metadata parked the worker'; fi
+  pass 'binary timeout records and metadata cannot suppress worker alarms'
+}
+
+test_record_fields_preserve_literal_keys
+test_binary_records_cannot_park_a_worker
+test_record_output_assignment
+test_activity_age_tracks_every_source
 test_knob_parsing
 test_disabled_by_default
 test_enabled_default_duration

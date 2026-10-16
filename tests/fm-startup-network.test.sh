@@ -859,6 +859,127 @@ EOF
   pass "fm-startup-network: a held publish lock ends the worker inside its budget with a failed-rerun record"
 }
 
+test_malformed_clock_values_cannot_abort_timing_start() {
+  local dir kind raw value rc expected out
+  dir="$TMP_ROOT/timing-invalid-clock"
+  mkdir -p "$dir"
+  while IFS='|' read -r kind raw value rc expected; do
+    out=$(bash -c '
+      set -eu
+      . "$1"
+      unset EPOCHREALTIME
+      EPOCHREALTIME=$3
+      clock_value=$4
+      clock_rc=$5
+      date() { printf "%s" "$clock_value"; return "$clock_rc"; }
+      fm_timing_start "$2"
+      printf "%s caller-survived" "$FM_TIMING_EPOCH_MS"
+    ' _ "$ROOT/bin/fm-timing-lib.sh" "$dir/timings.tsv" "$raw" "$value" "$rc" 2>&1) \
+      || fail "$kind clock input aborted timing startup: $out"
+    [ "$out" = "$expected caller-survived" ] \
+      || fail "$kind clock input produced invalid timing output: $out"
+  done <<'CASES'
+padded|08.123|2000|0|2000000
+octal|010.123|2000|0|2000000
+suffix|1700000000.123junk|2000|0|2000000
+separator|1700000000.123.456|2000|0|2000000
+oversized|99999999999999999999.123|2000|0|2000000
+failed-date||1700000000|1|0
+padded-date||08|0|0
+oversized-date||99999999999999999999|0|0
+dot|1700000000.123456|2000|0|1700000000123
+comma|1700000000,123456|2000|0|1700000000123
+short|1700000000.1|2000|0|1700000000100
+zero|0.0|2000|0|0
+fallback||1700000000|0|1700000000000
+CASES
+  pass "timing startup rejects malformed clock values without aborting its caller"
+}
+
+test_malformed_timing_stamps_cannot_abort_the_caller() {
+  local dir stamp out log
+  dir="$TMP_ROOT/timing-invalid-stamps"
+  mkdir -p "$dir"
+  log="$dir/timings.tsv"
+  for stamp in '' bad 08 0008 -1 99999999999999999999; do
+    : > "$log"
+    out=$(bash -c '
+      . "$1"
+      FM_TIMING_LOG=$2
+      FM_TIMING_EPOCH_MS=1000
+      fm_timing_record phase invalid "$3"
+      printf "caller-survived"
+    ' _ "$ROOT/bin/fm-timing-lib.sh" "$log" "$stamp" 2>&1) \
+      || fail "malformed timing start aborted its caller: $stamp -> $out"
+    [ "$out" = caller-survived ] || fail "malformed timing start printed an error: $stamp -> $out"
+    [ ! -s "$log" ] || fail "malformed timing start wrote a record: $stamp"
+
+    out=$(bash -c '
+      . "$1"
+      FM_TIMING_LOG=$2
+      FM_TIMING_EPOCH_MS=$3
+      fm_timing_record phase valid 1000
+      printf "caller-survived"
+    ' _ "$ROOT/bin/fm-timing-lib.sh" "$log" "$stamp" 2>&1) \
+      || fail "malformed timing origin aborted its caller: $stamp -> $out"
+    [ "$out" = caller-survived ] || fail "malformed timing origin printed an error: $stamp -> $out"
+    [ "$(wc -l < "$log" | tr -d ' ')" = 1 ] || fail "invalid origin lost the valid timing record: $stamp"
+  done
+  pass "fm-startup-network: malformed timing stamps never abort their caller"
+}
+
+test_timing_report_selects_three_slowest_without_reordering_records() {
+  local dir out
+  dir="$TMP_ROOT/timing-top-three"
+  mkdir -p "$dir"
+  printf 'v1\tphase\tfirst\t0\t10\tone\nv1\tphase\tsecond\t10\t70\ttwo\nv1\tphase\tthird\t20\t30\tthree\nv1\tphase\tfourth\t30\t90\tfour\nv1\tphase\tfifth\t40\t50\tfive\n' > "$dir/timings.tsv"
+  out=$(bash -c '. "$1"; fm_timing_render "$2"' _ "$ROOT/bin/fm-timing-lib.sh" "$dir/timings.tsv")
+  assert_contains "$out" 'slowest: phase fourth four 90ms, phase second two 70ms, phase fifth five 50ms' \
+    'timing summary did not select the three slowest records'
+  [ "$(printf '%s\n' "$out" | awk '/start=/ { print $2 }' | tr '\n' ' ')" = 'first second third fourth fifth ' ] \
+    || fail "timing summary ranking changed the detailed record order"
+  printf 'v1\tphase\tzero\t0\t0\t\nv1\tphase\tlater\t0\t0\t\n' > "$dir/timings.tsv"
+  out=$(bash -c '. "$1"; fm_timing_render "$2"' _ "$ROOT/bin/fm-timing-lib.sh" "$dir/timings.tsv")
+  assert_contains "$out" 'slowest: phase zero 0ms, phase later 0ms' 'short zero-duration report lost a record'
+  : > "$dir/timings.tsv"
+  out=$(bash -c '. "$1"; fm_timing_render "$2"' _ "$ROOT/bin/fm-timing-lib.sh" "$dir/timings.tsv")
+  [ -z "$out" ] || fail "empty timing report emitted output"
+  pass "fm-startup-network: the timing report ranks only three records and preserves detail order"
+}
+
+test_invalid_timing_limits_use_the_safe_default() {
+  local cap out text expected
+  text=$(printf '%100s' '' | tr ' ' x)
+  expected=${text:0:80}
+  for cap in bogus 08 -1 1+1 999999999999999999999999; do
+    out=$(bash -c '
+      FM_TIMING_DETAIL_MAX=$2
+      . "$1"
+      fm_timing_sanitize "$3"
+    ' _ "$ROOT/bin/fm-timing-lib.sh" "$cap" "$text" 2>&1) \
+      || fail "malformed timing limit failed: $cap -> $out"
+    [ "$out" = "$expected" ] || fail "malformed timing limit did not use 80 characters: $cap -> $out"
+  done
+  for cap in 0 4 80; do
+    out=$(bash -c 'FM_TIMING_DETAIL_MAX=$2; . "$1"; fm_timing_sanitize "$3"' \
+      _ "$ROOT/bin/fm-timing-lib.sh" "$cap" "$text") || fail "valid timing limit failed: $cap"
+    [ "$out" = "${text:0:$cap}" ] || fail "valid timing limit changed: $cap"
+  done
+  out=$(bash -c 'FM_TIMING_DETAIL_MAX=4; . "$1"; fm_timing_sanitize "host secret"' _ "$ROOT/bin/fm-timing-lib.sh")
+  [ "$out" = unrecordable ] || fail "a small timing limit exposed a prefix of rejected free text"
+  text=$(printf '%2000s' '' | tr ' ' '*')
+  expected=$(printf '%80s' '' | tr ' ' '_')
+  out=$(bash -c '. "$1"; fm_timing_sanitize "$2"' _ "$ROOT/bin/fm-timing-lib.sh" "$text")
+  [ "$out" = "$expected" ] || fail "a long punctuation field was not capped and sanitized"
+  out=$(bash -c '. "$1"; fm_timing_sanitize "$2"' _ "$ROOT/bin/fm-timing-lib.sh" "$text secret")
+  [ "$out" = unrecordable ] || fail "whitespace beyond the retained prefix escaped rejection"
+  pass "fm-startup-network: malformed timing limits default safely without weakening sanitization"
+}
+
+test_invalid_timing_limits_use_the_safe_default
+test_timing_report_selects_three_slowest_without_reordering_records
+test_malformed_clock_values_cannot_abort_timing_start
+test_malformed_timing_stamps_cannot_abort_the_caller
 test_wait_fails_without_a_published_stage
 test_start_returns_without_holding_the_callers_stdout
 test_harvest_acknowledgement_suppresses_the_wake_and_no_claim_produces_it

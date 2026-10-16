@@ -31,7 +31,7 @@
 # writing that `#` immediately against the rest of the name and ending the line
 # with the capacity, for example `#repo 2`. A name that is `#`, or that begins
 # with `#` followed by a space, is the same spelling as a comment and cannot be
-# declared. Any other shape, a project named twice, or an unreadable file makes
+# declared. Any other shape, a project named twice, NUL bytes, or an unreadable file makes
 # the whole declaration unreadable, and bin/fm-spawn.sh then refuses every fresh
 # ship or scout spawn from this machine's homes rather than guessing which limit
 # was meant.
@@ -110,7 +110,7 @@ fm_project_capacity_config_dir() {  # <spawning-home> <spawning-config-dir>
 # FM_PROJECT_CAPACITY_ANY to 1 when the declaration caps any project at all.
 # Returns 1 with FM_PROJECT_CAPACITY_ERROR when the declaration is unreadable.
 fm_project_capacity_lookup() {  # <config-dir> <project-name>
-  local name=$2 line lineno=0 pname pcap seen='|'
+  local name=$2 line lineno=0 pname pcap seen=$'\n' contents
   FM_PROJECT_CAPACITY_FILE="$1/project-capacity"
   FM_PROJECT_CAPACITY=
   FM_PROJECT_CAPACITY_ANY=
@@ -120,6 +120,19 @@ fm_project_capacity_lookup() {  # <config-dir> <project-name>
   fi
   if [ ! -f "$FM_PROJECT_CAPACITY_FILE" ] || [ ! -r "$FM_PROJECT_CAPACITY_FILE" ]; then
     FM_PROJECT_CAPACITY_ERROR="$FM_PROJECT_CAPACITY_FILE is not a readable regular file"
+    return 1
+  fi
+  # Validate and parse one text snapshot before Bash can erase embedded NULs.
+  # A failed read must not turn an unreadable declaration into an empty one.
+  if ! contents=$(
+    set -o pipefail
+    cat "$FM_PROJECT_CAPACITY_FILE" 2>/dev/null | {
+      local text=''
+      if IFS= read -r -d '' text; then exit 1; fi
+      printf '%s' "$text"
+    }
+  ); then
+    FM_PROJECT_CAPACITY_ERROR="$FM_PROJECT_CAPACITY_FILE is not readable text"
     return 1
   fi
   while IFS= read -r line || [ -n "$line" ]; do
@@ -160,17 +173,19 @@ fm_project_capacity_lookup() {  # <config-dir> <project-name>
       FM_PROJECT_CAPACITY=
       return 1
     fi
+    # Names can contain punctuation, including pipes. Newlines cannot occur
+    # inside a name in this line-based format, so they delimit exact entries.
     case "$seen" in
-      *"|$pname|"*)
+      *$'\n'"$pname"$'\n'*)
         FM_PROJECT_CAPACITY_ERROR="$FM_PROJECT_CAPACITY_FILE line $lineno names $pname a second time"
         FM_PROJECT_CAPACITY=
         return 1
         ;;
     esac
-    seen="$seen$pname|"
+    seen="$seen$pname"$'\n'
     [ "$pname" != "$name" ] || FM_PROJECT_CAPACITY=$pcap
-  done < "$FM_PROJECT_CAPACITY_FILE"
-  [ "$seen" = '|' ] || FM_PROJECT_CAPACITY_ANY=1
+  done <<< "$contents"
+  [ "$seen" = $'\n' ] || FM_PROJECT_CAPACITY_ANY=1
   return 0
 }
 

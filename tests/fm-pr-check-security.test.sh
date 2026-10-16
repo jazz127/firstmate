@@ -145,6 +145,12 @@ case "${1:-} ${2:-}" in
     exit 0
     ;;
   "api graphql")
+    case "$*" in
+      *viewerPermission*)
+        printf '%s\n' '{"data":{"repository":{"viewerPermission":"READ"}}}'
+        exit 0
+        ;;
+    esac
     printf '%s\n' \
       "state=${FM_TEST_GH_GRAPHQL_STATE:-MERGED}" \
       "merged=${FM_TEST_GH_GRAPHQL_MERGED:-true}" \
@@ -206,7 +212,15 @@ case " $* " in
       printf '%s\n' "$FM_TEST_GH_FILES" | jq -r "$filter"
       exit
     fi
-    printf '%s\n' "{\"state\":\"open\",\"user\":{\"login\":\"author\"},\"head\":{\"sha\":\"${FM_TEST_GH_HEAD:-0123456789abcdef0123456789abcdef01234567}\"},\"draft\":false,\"mergeable\":true,\"merged_at\":null}"
+    base_repo=${2#repos/}
+    base_repo=${base_repo%/pulls/*}
+    core_state=open
+    merged_at=null
+    case "${FM_TEST_GH_STATE:-OPEN}" in
+      MERGED) core_state=closed; merged_at='"2026-10-15T00:00:00Z"' ;;
+      CLOSED) core_state=closed ;;
+    esac
+    printf '%s\n' "{\"state\":\"$core_state\",\"user\":{\"login\":\"author\"},\"head\":{\"sha\":\"${FM_TEST_GH_HEAD:-0123456789abcdef0123456789abcdef01234567}\"},\"base\":{\"repo\":{\"full_name\":\"$base_repo\"}},\"draft\":false,\"mergeable\":true,\"merged_at\":$merged_at}"
     ;;
   *" api repos/"*)
     printf '%s\n' '{"permissions":{"push":false}}'
@@ -3851,6 +3865,32 @@ SH
   pass "device re-record publication waits without rewriting its registration"
 }
 
+test_poll_registration_in_unusual_state_paths() {
+  local dir state name
+  dir=$(make_case checksum-paths)
+  for name in plain 'literal\state' $'line\nbreak'; do
+    state="$dir/home/$name"
+    mkdir -p "$state"
+    printf 'pr=https://github.com/o/r/pull/1\n' > "$state/task-a.meta"
+    FM_HOME="$dir/home" FM_STATE_OVERRIDE="$state" bash -c '
+      set -u
+      . "$1/bin/fm-wake-lib.sh"
+      . "$1/bin/fm-pr-lib.sh"
+      state=$2
+      lock=$state/.pr-poll-publish-task-a.lock
+      fm_lock_acquire_wait "$lock" || exit 1
+      trap '\''fm_pr_poll_cleanup; fm_lock_release "$lock"'\'' EXIT
+      fm_pr_poll_prepare "$state" task-a github https://github.com/o/r/pull/1 github.com o/r 1 "$1/bin/fm-pr-poll.sh" || exit 2
+      fm_pr_poll_publish_prepared || exit 3
+      fm_pr_poll_artifacts_valid "$state" task-a "$1/bin/fm-pr-poll.sh" || exit 4
+      printf "# changed bytes\n" >> "$state/task-a.check.sh"
+      ! fm_pr_poll_artifacts_valid "$state" task-a "$1/bin/fm-pr-poll.sh" || exit 5
+    ' _ "$ROOT" "$state" || fail "unusual-path poll artifacts did not preserve content authentication (exit $?)"
+  done
+  pass "poll registration authenticates unusual state paths and refuses changed bytes"
+}
+
+test_poll_registration_in_unusual_state_paths
 test_parser_matrix
 test_gitlab_merge_watch
 test_forgejo_merge_watch

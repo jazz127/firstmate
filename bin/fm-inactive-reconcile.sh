@@ -107,6 +107,8 @@ CREW_STATE_BIN="${FM_INACTIVE_CREW_STATE_BIN:-$SCRIPT_DIR/fm-crew-state.sh}"
 
 # shellcheck source=bin/fm-wake-lib.sh
 . "$SCRIPT_DIR/fm-wake-lib.sh"
+# shellcheck source=bin/fm-backend.sh
+. "$SCRIPT_DIR/fm-backend.sh"
 # shellcheck source=bin/fm-classify-lib.sh
 . "$SCRIPT_DIR/fm-classify-lib.sh"
 # shellcheck source=bin/fm-parent-channel-lib.sh
@@ -125,7 +127,8 @@ case "$FM_INACTIVE_RECONCILE_SECS" in
     exit 2
     ;;
 esac
-if [ "$FM_INACTIVE_RECONCILE_SECS" -lt 60 ] || [ "$FM_INACTIVE_RECONCILE_SECS" -gt 1800 ]; then
+if ! [ "$FM_INACTIVE_RECONCILE_SECS" -ge 60 ] 2>/dev/null \
+  || ! [ "$FM_INACTIVE_RECONCILE_SECS" -le 1800 ] 2>/dev/null; then
   printf 'fm-inactive-reconcile: FM_INACTIVE_RECONCILE_SECS must be a whole number from 60 to 1800\n' >&2
   exit 2
 fi
@@ -136,10 +139,12 @@ case "$FM_INACTIVE_RECONCILE_BUDGET_SECS" in
     exit 2
     ;;
 esac
-if [ "$FM_INACTIVE_RECONCILE_BUDGET_SECS" -gt 30 ]; then
+if ! [ "$FM_INACTIVE_RECONCILE_BUDGET_SECS" -ge 1 ] 2>/dev/null \
+  || ! [ "$FM_INACTIVE_RECONCILE_BUDGET_SECS" -le 30 ] 2>/dev/null; then
   printf 'fm-inactive-reconcile: FM_INACTIVE_RECONCILE_BUDGET_SECS must be a whole number from 1 to 30\n' >&2
   exit 2
 fi
+FM_INACTIVE_RECONCILE_BUDGET_SECS=$((10#$FM_INACTIVE_RECONCILE_BUDGET_SECS))
 
 if [ "$(uname)" = Darwin ]; then
   file_mtime() { /usr/bin/stat -f %m "$1" 2>/dev/null; }
@@ -178,7 +183,7 @@ record_path() { printf '%s/%s.%s\n' "$OUTCOME_DIR" "$1" "$2"; }
 record_value() {
   local record=$1 key=$2
   [ -f "$record" ] && [ ! -L "$record" ] || return 0
-  grep "^${key}=" "$record" 2>/dev/null | tail -1 | cut -d= -f2- || true
+  meta_field "$record" "$key"
 }
 
 record_phase_set() {
@@ -188,7 +193,7 @@ record_phase_set() {
   while IFS= read -r line || [ -n "$line" ]; do
     case "$line" in phase=*) continue ;; esac
     printf '%s\n' "$line" >> "$tmp" || { rm -f "$tmp"; return 1; }
-  done < "$record"
+  done < "$record" || { rm -f "$tmp"; return 1; }
   printf 'phase=%s\n' "$phase" >> "$tmp" || { rm -f "$tmp"; return 1; }
   chmod 600 "$tmp" 2>/dev/null || true
   mv -f "$tmp" "$record"
@@ -201,7 +206,7 @@ record_field_set() {
   while IFS= read -r line || [ -n "$line" ]; do
     case "$line" in "${key}="*) continue ;; esac
     printf '%s\n' "$line" >> "$tmp" || { rm -f "$tmp"; return 1; }
-  done < "$record"
+  done < "$record" || { rm -f "$tmp"; return 1; }
   printf '%s=%s\n' "$key" "$value" >> "$tmp" || { rm -f "$tmp"; return 1; }
   chmod 600 "$tmp" 2>/dev/null || true
   mv -f "$tmp" "$record"
@@ -315,7 +320,7 @@ write_scan_marker() { # <cursor>
 }
 
 meta_field() {
-  grep "^$2=" "$1" 2>/dev/null | tail -1 | cut -d= -f2- || true
+  fm_meta_get "$1" "$2"
 }
 
 meta_incarnation() { # <meta>

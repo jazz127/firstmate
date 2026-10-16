@@ -1208,6 +1208,106 @@ SH
   pass "reconciliation state reads set no-forge mode"
 }
 
+test_unreadable_terminal_receipt_update() {
+  local operation=$1 record fingerprint rc=0
+  make_world "unreadable-receipt-$operation"
+  write_child "$MAIN" child 'done: PR https://example.test/owner/repo/pull/1 checks green'
+  FM_FAKE_CREW_STATE='done' run_reconcile "$MAIN" --startup \
+    || fail "could not establish the pending receipt"
+  [ "$(outcome_count "$MAIN" pending)" = 1 ] || fail "fixture did not produce one pending receipt"
+  for record in "$MAIN/state/terminal-outcomes"/*.pending; do break; done
+  fingerprint=${record##*/}
+  fingerprint=${fingerprint%.pending}
+  cp "$record" "$WORLD/expected"
+  chmod 000 "$record"
+  if [ -r "$record" ]; then
+    chmod 600 "$record"
+    pass "unreadable receipt $operation case skipped (this user can read mode-000 files)"
+    return 0
+  fi
+  case "$operation" in
+    phase)
+      FM_FAKE_CREW_STATE='done' run_reconcile "$MAIN" --startup > "$WORLD/out" 2> "$WORLD/err" || rc=$?
+      ;;
+    notice)
+      FM_HOME="$MAIN" FM_STATE_OVERRIDE="$MAIN/state" "$RECON" acknowledge-notice "$fingerprint" \
+        > "$WORLD/out" 2> "$WORLD/err" || rc=$?
+      ;;
+  esac
+  chmod 600 "$record"
+  [ "$rc" -ne 0 ] || fail "unreadable receipt $operation update reported success"
+  cmp -s "$WORLD/expected" "$record" || fail "unreadable receipt $operation update discarded fields"
+  pass "unreadable receipt $operation updates refuse and preserve the complete receipt"
+}
+
+test_reconcile_numeric_ranges_are_decimal_and_bounded() {
+  local key value values rc
+  make_world numeric-ranges
+  for key in FM_INACTIVE_RECONCILE_BUDGET_SECS FM_INACTIVE_RECONCILE_SECS; do
+    case "$key" in
+      FM_INACTIVE_RECONCILE_BUDGET_SECS) values='1 08 30' ;;
+      *) values='60 060 1800' ;;
+    esac
+    for value in $values; do
+      env FM_HOME="$MAIN" FM_STATE_OVERRIDE="$MAIN/state" \
+        FM_INACTIVE_RECONCILE_SECS=900 FM_INACTIVE_RECONCILE_BUDGET_SECS=10 \
+        "$key=$value" "$RECON" scan --startup > "$WORLD/out" 2> "$WORLD/err" \
+        || fail "valid decimal setting $key=$value refused the scan"
+    done
+    case "$key" in
+      FM_INACTIVE_RECONCILE_BUDGET_SECS) values='00 31 184467440737095516160000' ;;
+      *) values='59 1801 184467440737095516160000' ;;
+    esac
+    for value in $values; do
+      rc=0
+      env FM_HOME="$MAIN" FM_STATE_OVERRIDE="$MAIN/state" \
+        FM_INACTIVE_RECONCILE_SECS=900 FM_INACTIVE_RECONCILE_BUDGET_SECS=10 \
+        "$key=$value" "$RECON" scan --startup > "$WORLD/out" 2> "$WORLD/err" || rc=$?
+      [ "$rc" = 2 ] || fail "invalid setting $key=$value did not return its configuration refusal"
+      assert_contains "$(cat "$WORLD/err")" "$key must be a whole number from" \
+        "invalid setting lost its range diagnostic"
+    done
+  done
+  pass "inactive reconciliation accepts decimal bounds and refuses zero, overflow and out-of-range settings"
+}
+
+test_metadata_and_receipt_final_fields() {
+  local pending presented fingerprint=abcdef
+  make_world final-fields; bind_secondmate local
+  write_child "$MATE" child 'failed: final field check'
+  printf 'kind=scout\nmode=direct-PR\nmode=local-only\nyolo=on\nyolo=off' >> "$MATE/state/child.meta"
+  run_report "$MATE" child || fail "report refused metadata with an unterminated final field"
+  grep -Fq 'child child failed: final field check mode=local-only yolo=off' "$MAIN/state/mate.status" \
+    || fail "report did not use the last metadata fields"
+  ! grep -Fq ' pr=' "$MAIN/state/mate.status" || fail "earlier ship kind overrode the final scout kind"
+
+  mkdir -p "$MAIN/state/terminal-outcomes"
+  pending="$MAIN/state/terminal-outcomes/$fingerprint.pending"
+  presented="$MAIN/state/terminal-outcomes/$fingerprint.presented"
+  printf 'schema=fm-terminal-outcome.v1\nphase=presentation\nphase=upstream' > "$pending"
+  FM_HOME="$MAIN" FM_STATE_OVERRIDE="$MAIN/state" "$RECON" acknowledge "$fingerprint" \
+    || fail "acknowledgement refused a receipt outside presentation"
+  [ -f "$pending" ] && [ ! -e "$presented" ] || fail "acknowledgement selected an earlier receipt phase"
+  printf '\nphase=presentation' >> "$pending"
+  cp "$pending" "$WORLD/expected"
+  FM_HOME="$MAIN" FM_STATE_OVERRIDE="$MAIN/state" "$RECON" acknowledge "$fingerprint" \
+    || fail "acknowledgement refused an unterminated presentation phase"
+  [ ! -e "$pending" ] || fail "acknowledged receipt remained pending"
+  cmp -s "$WORLD/expected" "$presented" || fail "receipt fields changed during acknowledgement"
+  printf 'schema=fm-terminal-outcome.v1\nphase=pres\0entation\n' > "$pending"
+  cp "$pending" "$WORLD/expected-binary"
+  rm "$presented"
+  FM_HOME="$MAIN" FM_STATE_OVERRIDE="$MAIN/state" "$RECON" acknowledge "$fingerprint" \
+    || fail "binary receipt acknowledgement did not leave the receipt pending"
+  [ ! -e "$presented" ] || fail "a NUL byte was erased to accept a malformed phase"
+  cmp -s "$WORLD/expected-binary" "$pending" || fail "binary receipt was replaced"
+  pass "reports and acknowledgements use final fields, including unterminated fields"
+}
+
+test_metadata_and_receipt_final_fields
+test_reconcile_numeric_ranges_are_decimal_and_bounded
+test_unreadable_terminal_receipt_update phase
+test_unreadable_terminal_receipt_update notice
 test_main_direct_terminal_presentation_receipt
 test_validation_handoff_backstop
 test_secondmate_validation_handoff_backstop

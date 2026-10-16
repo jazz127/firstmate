@@ -325,7 +325,7 @@ test_build_refuses_malformed_payloads_before_touching_the_board() {
 
 test_build_injects_binds_then_arms() {
   local home data board out sid
-  home=$(make_home build)
+  home=$(make_home "${1:-build}")
   data="$home/payload.json"
   board="$home/.lavish/bearings-board.html"
   write_valid_payload "$data"
@@ -737,15 +737,21 @@ EOF
 # --- part 3: every decision card offers reconcile ---------------------------
 
 test_build_fails_when_reconcile_cannot_establish_a_listener() {
-  local home data out rc sid
+  local home data out rc sid listener_pid real_ps
   home=$(make_home no-listener)
   data="$home/payload.json"
   write_valid_payload "$data"
   run_board "$home" build "$data" >/dev/null || fail "could not establish the listener fixture"
   sid=$(run_lavish_source_id "$home" "$home/.lavish/bearings-board.html")
-  cat > "$home/fakebin/ps" <<'SH'
+  listener_pid=$(sed -n '2p' "$home/procevent-claims/$sid.claim")
+  case "$listener_pid" in ''|*[!0-9]*) fail "fixture has no listener pid" ;; esac
+  real_ps=$(command -v ps) || fail "ps is required"
+  # Hide only the listener's identity. Lock owners still need their process
+  # identities, otherwise lock acquisition waits forever on hosts without /proc.
+  cat > "$home/fakebin/ps" <<SH
 #!/usr/bin/env bash
-exit 1
+case " \$* " in *" -p $listener_pid "*) exit 1 ;; esac
+exec "$real_ps" "\$@"
 SH
   chmod +x "$home/fakebin/ps"
   set +e
@@ -814,6 +820,7 @@ test_build_refuses_a_nondecision_reconcile_value() {
   pass "build reserves reconcile across non-decision cards"
 }
 
+test_build_injects_binds_then_arms 'build\new'
 test_path_is_stable_and_home_scoped
 test_build_refuses_malformed_payloads_before_touching_the_board
 test_charted_kind_is_optional_and_accepts_both_values

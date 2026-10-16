@@ -418,9 +418,9 @@ fm_pr_file_identity() {
 
 fm_pr_sha256() {
   if command -v shasum >/dev/null 2>&1; then
-    shasum -a 256 "$1" 2>/dev/null | awk '{print $1}'
+    shasum -a 256 2>/dev/null < "$1" | awk '{print $1}'
   elif command -v sha256sum >/dev/null 2>&1; then
-    sha256sum "$1" 2>/dev/null | awk '{print $1}'
+    sha256sum 2>/dev/null < "$1" | awk '{print $1}'
   else
     return 1
   fi

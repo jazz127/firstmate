@@ -823,6 +823,71 @@ EOF
 
 # ---------------------------------------------------------------------------
 # (a) active run-step is authoritative
+test_findings_rows_require_the_matching_header() {
+  local d out kind base header current prior
+  reset_fakes
+  d=$(new_case findings-row-header)
+  make_repo_on_branch "$d/wt" fm/findings-row-header
+  make_fakebin "$d" >/dev/null
+  fm_write_meta "$d/state/task.meta" "window=fm:fm-task" "worktree=$d/wt" "kind=ship"
+  base=$(run_parked fm/findings-row-header)
+  base=${base%%findings\[*}
+  for kind in no-close no-colon unbraced; do
+    case "$kind" in
+      no-close) header='findings[1]{id,action,description:' ;;
+      no-colon) header='findings[1]{id,action,description}' ;;
+      unbraced) header='findings[1]:' ;;
+    esac
+    for current in auto-fix ask-user; do
+      if [ "$current" = auto-fix ]; then prior=ask-user; else prior=auto-fix; fi
+      FM_FAKE_AXI_STATUS="$base$header"$'\n  prior,'"$prior"$',earlier block\nfindings[1]{id,action,description}:\n  current,'"$current"$',current block\n'
+      out=$(run_crew_state "$d" task)
+      assert_contains "$out" 'state: parked' "$kind precursor must retain the parked gate"
+      if [ "$current" = ask-user ]; then
+        assert_contains "$out" ' · ask-user: authority decision' \
+          "$kind precursor must not hide the actual human decision"
+      else
+        assert_not_contains "$out" ' · ask-user: authority decision' \
+          "$kind precursor must not invent a human decision"
+      fi
+    done
+  done
+  pass "findings rows and action columns come from the same complete table header"
+}
+
+test_findings_count_requires_a_table_header() {
+  local d out kind base header notes
+  reset_fakes
+  d=$(new_case findings-header)
+  make_repo_on_branch "$d/wt" fm/findings-header
+  make_fakebin "$d" >/dev/null
+  fm_write_meta "$d/state/task.meta" "window=fm:fm-task" "worktree=$d/wt" "kind=ship"
+  base="$(run_running fm/findings-header)"$'\ngate: review\n'
+  header=$'findings[2]{id,action}:\n  a,fix\n  b,fix\n'
+  notes=$'notes: documentation mentions findings[99]\n'
+  for kind in prefix suffix only embedded bare malformed indented legacy; do
+    case "$kind" in
+      prefix) FM_FAKE_AXI_STATUS="$base$notes$header" ;;
+      suffix) FM_FAKE_AXI_STATUS="$base$header$notes" ;;
+      only) FM_FAKE_AXI_STATUS="$base$notes" ;;
+      embedded) FM_FAKE_AXI_STATUS="$base"$'notes: legacy_findings[99] sample\n'"$header" ;;
+      bare) FM_FAKE_AXI_STATUS="$base"$'findings[99] appears in documentation\n' ;;
+      malformed) FM_FAKE_AXI_STATUS="$base"$'findings[99]{ incomplete table notation\n' ;;
+      indented) FM_FAKE_AXI_STATUS="$base  $header" ;;
+      legacy) FM_FAKE_AXI_STATUS="$base"$'findings[2]:\n  a,fix\n  b,fix\n' ;;
+    esac
+    out=$(run_crew_state "$d" task)
+    assert_contains "$out" "state: parked" "$kind report must retain its gate"
+    case "$kind" in
+      only|bare|malformed)
+        assert_not_contains "$out" 'finding(s)' "$kind prose must not supply a findings count"
+        ;;
+      *) assert_contains "$out" '2 finding(s)' "$kind report must count the actual table" ;;
+    esac
+  done
+  pass "findings counts come from table headers rather than prose mentions"
+}
+
 test_active_run_is_authoritative() {
   reset_fakes
   local d; d=$(new_case active)
@@ -873,6 +938,100 @@ test_stale_blocked_superseded() {
 # immediately and runs the fix round in the background, so such a claim over a
 # run that is fixing WITH fresh activity is contradicted by the run itself: the
 # supervisor answer is to steer a reattach, not to escalate a dead pipeline.
+test_large_gate_marker_with_pipefail() {
+  reset_fakes
+  local d out kind padding prefix
+  local FM_TEST_AXI_OUTPUT_FILE FM_TEST_AXI_FALLBACK
+  d=$(new_case large-gate-marker)
+  make_repo_on_branch "$d/wt" fm/gate-fixture
+  make_fakebin "$d" >/dev/null
+  fm_write_meta "$d/state/task.meta" "window=fm:fm-task" "worktree=$d/wt" "kind=ship"
+  printf 'needs-decision: review gate\n' > "$d/state/task.status"
+  FM_TEST_AXI_OUTPUT_FILE="$d/run.toon"
+  FM_TEST_AXI_FALLBACK="$d/fakebin/no-mistakes-fixture"
+  export FM_TEST_AXI_OUTPUT_FILE FM_TEST_AXI_FALLBACK
+  mv "$d/fakebin/no-mistakes" "$FM_TEST_AXI_FALLBACK"
+  cat > "$d/fakebin/no-mistakes" <<'SHIM'
+#!/usr/bin/env bash
+case "${1:-}:${2:-}" in
+  axi:|axi:status) cat "$FM_TEST_AXI_OUTPUT_FILE" ;;
+  *) exec "$FM_TEST_AXI_FALLBACK" "$@" ;;
+esac
+SHIM
+  chmod +x "$d/fakebin/no-mistakes"
+  printf -v padding '%200000s' x
+  prefix=$(run_running fm/gate-fixture)
+  for kind in gate-early gate-late active literal; do
+    {
+      printf '%s\n' "$prefix"
+      case "$kind" in
+        gate-early) printf 'gate: review\nnotes: %s\n' "$padding" ;;
+        gate-late) printf 'notes: %s\ngate: review\n' "$padding" ;;
+        active) printf 'notes: %s\n' "$padding" ;;
+        literal) printf 'notes: gate: review %s\n' "$padding" ;;
+      esac
+    } > "$FM_TEST_AXI_OUTPUT_FILE"
+    out=$(PATH="$d/fakebin:$PATH" FM_HOME="$d" FM_ROOT_OVERRIDE="$d" FM_STATE_OVERRIDE="$d/state" \
+      bash -o pipefail "$CREW_STATE" task) || fail "$kind strict-mode crew state failed"
+    case "$kind" in
+      gate-*)
+        assert_contains "$out" 'state: parked' "$kind must retain the gate"
+        assert_contains "$out" 'parked at review' "$kind must name the review gate"
+        assert_not_contains "$out" 'superseded' "$kind must not close a waiting decision"
+        ;;
+      *) assert_contains "$out" 'state: working' "$kind must not invent a gate" ;;
+    esac
+  done
+  pass "large reports preserve early and late gate markers under pipefail without superseding a waiting decision"
+}
+
+test_large_quiet_activity_with_pipefail() {
+  reset_fakes
+  local d out kind count padding quiet_row fresh_row
+  local FM_TEST_AXI_OUTPUT_FILE FM_TEST_AXI_FALLBACK
+  d=$(new_case large-quiet-activity)
+  make_repo_on_branch "$d/wt" fm/quiet-fixture
+  make_fakebin "$d" >/dev/null
+  fm_write_meta "$d/state/task.meta" "window=fm:fm-task" "worktree=$d/wt" "kind=ship"
+  printf 'blocked: no-mistakes daemon unreachable, drive run: read response: i/o timeout\n' > "$d/state/task.status"
+  FM_TEST_AXI_OUTPUT_FILE="$d/run.toon"
+  FM_TEST_AXI_FALLBACK="$d/fakebin/no-mistakes-fixture"
+  export FM_TEST_AXI_OUTPUT_FILE FM_TEST_AXI_FALLBACK
+  mv "$d/fakebin/no-mistakes" "$FM_TEST_AXI_FALLBACK"
+  cat > "$d/fakebin/no-mistakes" <<'SH'
+#!/usr/bin/env bash
+case "${1:-}:${2:-}" in
+  axi:|axi:status) cat "$FM_TEST_AXI_OUTPUT_FILE" ;;
+  *) exec "$FM_TEST_AXI_FALLBACK" "$@" ;;
+esac
+SH
+  chmod +x "$d/fakebin/no-mistakes"
+  printf -v padding '%200000s' x
+  quiet_row='    review,42m8s,"quiet 31m2s",44121,"auto-fix 1/3"'
+  fresh_row="    tests,12m3s,8s,44122,\"auto-fix $padding\""
+  for kind in quiet-early quiet-late recent empty; do
+    case "$kind" in recent) count=1 ;; empty) count=0 ;; *) count=2 ;; esac
+    {
+      printf 'run:\n  id: "01RUN"\n  branch: fm/quiet-fixture\n  status: fixing\n  head: "%s"\n  pr: ""\n  findings: none\n' "$FM_FAKE_RUN_HEAD"
+      printf '  active_steps[%s]{step,active_for,last_activity,agent_pid,round}:\n' "$count"
+      case "$kind" in
+        quiet-early) printf '%s\n%s\n' "$quiet_row" "$fresh_row" ;;
+        quiet-late) printf '%s\n%s\n' "$fresh_row" "$quiet_row" ;;
+        recent) printf '%s\n' "$fresh_row" ;;
+      esac
+    } > "$FM_TEST_AXI_OUTPUT_FILE"
+    out=$(PATH="$d/fakebin:$PATH" FM_HOME="$d" FM_ROOT_OVERRIDE="$d" FM_STATE_OVERRIDE="$d/state" \
+      bash -o pipefail "$CREW_STATE" task) || fail "$kind strict-mode crew state failed"
+    assert_contains "$out" 'state: working' "$kind should retain the active run state"
+    if [ "$kind" = recent ]; then
+      assert_contains "$out" 'run alive' "fresh activity should support the reattach reading"
+    else
+      assert_not_contains "$out" 'run alive' "$kind must not claim positive recent activity"
+    fi
+  done
+  pass "large quiet reports cannot turn an early grep exit into positive recent activity under pipefail"
+}
+
 test_daemon_claim_over_live_run_reads_run_alive() {
   reset_fakes
   local d; d=$(new_case daemon-claim-live)
@@ -3234,6 +3393,30 @@ test_scout_skips_run_lookup() {
   pass "scout skips the run lookup"
 }
 
+test_binary_metadata_is_unknown() {
+  reset_fakes
+  local d out
+  d=$(new_case binary-meta)
+  mkdir -p "$d/wt"
+  make_fakebin "$d" >/dev/null
+  fm_write_meta "$d/state/binary.meta" "window=fm:fm-binary" "worktree=$d/wt" "kind=scout" "harness=claude"
+  arm_idle_record "$d/state" binary
+  printf 'working: fixture work remains\n' > "$d/state/binary.status"
+  out=$(run_crew_state "$d" binary)
+  assert_contains "$out" 'state: working' 'plain metadata permits the fixture status'
+
+  printf 'window=fm:fm-binary\nworktree=%s/w\000t\nkind=scout\nharness=claude\n' "$d" > "$d/state/binary.meta"
+  out=$(run_crew_state "$d" binary)
+  assert_contains "$out" 'state: unknown' 'a NUL cannot repair an invalid worktree path'
+  assert_contains "$out" 'source: none' 'binary metadata cannot select a state source'
+
+  fm_write_meta "$d/state/binary.meta" "window=fm:fm-binary" "worktree=$d/wt" "kind=scout" "harness=claude"
+  printf 'note=bad\000value\n' >> "$d/state/binary.meta"
+  out=$(run_crew_state "$d" binary)
+  assert_contains "$out" 'state: unknown' 'a later NUL invalidates preceding metadata fields'
+  pass 'binary metadata cannot produce an authoritative crew state'
+}
+
 # (j) torn-down worktree and missing meta are graceful (unknown/none, exit 0)
 test_torn_down_worktree() {
   reset_fakes
@@ -5585,6 +5768,113 @@ test_captured_completed_history() {
   pass 'captured completed status yields to synthetic subsequent development'
 }
 
+test_nm_field_large_records_with_pipefail() {
+  local shell
+  for shell in "$(command -v bash)" /bin/bash; do
+    "$shell" -s -- "$ROOT" "$TMP_ROOT/nm-field" <<'SH' || fail "$shell lost scalar values or statuses under pipefail"
+set -u
+. "$1/bin/fm-nm-run-lib.sh"
+printf -v duplicates 'status: running\n%.0s' {1..15000}
+printf -v padding '%200000s' x
+for option in on off; do
+  if [ "$option" = on ]; then set -o pipefail; else set +o pipefail; fi
+  for kind in small duplicates missing late empty quoted tab near; do
+    expected=running; present=1
+    case "$kind" in
+      small) body=$'status: running\noutcome: \n' ;;
+      duplicates) body=$duplicates ;;
+      missing) body="notes: $padding"; present=0 ;;
+      late) body="notes: $padding"$'\n  status:   running  \n'; expected='running  ' ;;
+      empty) body=$' status:\nstatus: running\n'; expected='' ;;
+      quoted) body=$'  status: "running"\r\n'; expected=$'"running"\r' ;;
+      tab) body=$'\tstatus:\tline\\literal\n'; expected='line\literal' ;;
+      near) body=$'status_extra: wrong\nstatus : wrong\nstatus: right\n'; expected=right ;;
+    esac
+    : > "$2.expected"
+    [ "$present" -eq 0 ] || printf '%s\n' "$expected" > "$2.expected"
+    rc=0
+    fm_nm_field "$body" status > "$2.out" || rc=$?
+    if [ "$rc" -ne 0 ] || ! cmp -s "$2.expected" "$2.out"; then
+      printf '%s pipefail=%s: rc=%s\n' "$kind" "$option" "$rc" >&2
+      exit 1
+    fi
+  done
+done
+SH
+  done
+  pass 'scalar readers preserve the first field and its exact bytes across large records and pipefail settings'
+}
+
+test_large_parked_run_with_pipefail() {
+  local shell
+  for shell in "$(command -v bash)" /bin/bash; do
+    "$shell" -s -- "$ROOT" <<'SH' || fail "$shell misclassified a large parked run under pipefail"
+set -u
+. "$1/bin/fm-nm-run-lib.sh"
+printf -v padding '%200000s' x
+for option in on off; do
+  if [ "$option" = on ]; then set -o pipefail; else set +o pipefail; fi
+  for kind in early late active terminal; do
+    expected_parked=1; expected_executing=1
+    case "$kind" in
+      early) body=$'status: running\ngate: review\nnotes: '"$padding"; expected_parked=0 ;;
+      late) body=$'status: running\nnotes: '"$padding"$'\ngate: review'; expected_parked=0 ;;
+      active) body=$'status: running\nnotes: '"$padding"; expected_executing=0 ;;
+      terminal) body=$'status: completed\nnotes: '"$padding" ;;
+    esac
+    parked=0; executing=0
+    fm_nm_run_is_parked "$body" || parked=$?
+    fm_nm_run_is_executing "$body" || executing=$?
+    if [ "$parked" -ne "$expected_parked" ] || [ "$executing" -ne "$expected_executing" ]; then
+      printf '%s pipefail=%s: parked=%s executing=%s\n' "$kind" "$option" "$parked" "$executing" >&2
+      exit 1
+    fi
+  done
+done
+SH
+  done
+  pass 'large run records preserve parked versus executing classification with pipefail enabled or disabled'
+}
+
+test_nm_scalar_trimming() {
+  local shell
+  for shell in "$(command -v bash)" /bin/bash; do
+    # shellcheck disable=SC2016 # The child shell owns these arrays and argument expansions.
+    "$shell" -c '
+      . "$1/bin/fm-nm-run-lib.sh"
+      inputs=( "" "   " word "  word " " \"  word  \" " "\"\"" "\"quote only" "only quote\"" )
+      trimmed=( "" "" word word "\"  word  \"" "\"\"" "\"quote only" "only quote\"" )
+      stripped=( "" "" word word word "" "\"quote only" "only quote\"" )
+      inputs+=( $'\''\n\r\t"line\nnext"\v\f '\'' " \"C:\\literal\\name\" " " \"日本語\" " " a\"b\"c " " \"a:b=c\" " " \"*?[abc]\" " )
+      trimmed+=( $'\''"line\nnext"'\'' "\"C:\\literal\\name\"" "\"日本語\"" "a\"b\"c" "\"a:b=c\"" "\"*?[abc]\"" )
+      stripped+=( $'\''line\nnext'\'' "C:\\literal\\name" "日本語" "a\"b\"c" "a:b=c" "*?[abc]" )
+      i=0
+      while [ "$i" -lt "${#inputs[@]}" ]; do
+        value=stale
+        fm_nm_trim "${inputs[$i]}" value > "$2" || exit 11
+        [ "$value" = "${trimmed[$i]}" ] && [ ! -s "$2" ] || exit 12
+        [ "$(fm_nm_trim "${inputs[$i]}")" = "${trimmed[$i]}" ] || exit 13
+        [ "$(fm_nm_strip_quotes "${inputs[$i]}")" = "${stripped[$i]}" ] || exit 14
+        for target in s value _fm_nm_trim_value; do
+          printf -v "$target" %s stale
+          fm_nm_strip_quotes "${inputs[$i]}" "$target" > "$2" || exit 15
+          [ "${!target}" = "${stripped[$i]}" ] && [ ! -s "$2" ] || exit 16
+        done
+        i=$((i+1))
+      done
+    ' _ "$ROOT" "$TMP_ROOT/trim.out" || fail "$shell changed scalar whitespace or quote parsing"
+  done
+  pass 'scalar trimming preserves whitespace, quotes and literal values through stdout and output variables'
+}
+
+test_findings_rows_require_the_matching_header
+test_findings_count_requires_a_table_header
+test_large_gate_marker_with_pipefail
+test_large_quiet_activity_with_pipefail
+test_nm_field_large_records_with_pipefail
+test_large_parked_run_with_pipefail
+test_nm_scalar_trimming
+test_binary_metadata_is_unknown
 test_captured_axi_status_shapes
 test_captured_inventory_replay
 test_captured_authority_transition

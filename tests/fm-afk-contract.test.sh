@@ -390,6 +390,36 @@ test_archive_moves_the_record_aside_and_is_idempotent() {
   pass "archive keys the record by its entry time, empties the posture, and is idempotent"
 }
 
+test_impossible_return_dates_are_refused() {
+  local home ts out rc
+  # The away-entry CLI and declared-wait reader share the same UTC parser.
+  # shellcheck source=bin/fm-classify-lib.sh
+  . "$ROOT/bin/fm-classify-lib.sh"
+  home=$(make_home calendar-inputs)
+  for ts in 2026-02-29T10:30Z 2026-02-31T10:30:15Z 2026-04-31T10:30Z \
+    1900-02-29T10:30Z 2100-02-29T10:30Z 2026-00-15T10:30Z \
+    2026-13-15T10:30Z 2026-01-00T10:30Z 2026-01-32T10:30Z \
+    2026-01-15T24:00Z 2026-01-15T10:60Z 2026-01-15T10:30:60Z; do
+    rc=0
+    out=$(contract "$home" enter --words 'keep working' --expected-return "$ts" 2>&1) || rc=$?
+    [ "$rc" -eq 2 ] || fail "an impossible expected return was accepted: $ts (rc=$rc): $out"
+    [ ! -e "$home/state/.afk-contract" ] || fail "an impossible return wrote an away record: $ts"
+    if status_paused_until "paused: checking until $ts" >/dev/null; then
+      fail "an impossible declared-wait deadline was accepted: $ts"
+    fi
+  done
+  for ts in 2024-02-29T10:30Z 2000-02-29T10:30:15Z 2026-02-28T10:30Z \
+    2026-04-30T10:30Z 2026-08-31T23:59:59Z; do
+    contract "$home" enter --words 'keep working' --expected-return "$ts" >/dev/null 2>&1 \
+      || fail "a valid expected return was refused: $ts"
+    [ "$(contract "$home" field expected_return)" = "$ts" ] \
+      || fail "a valid expected return changed: $ts"
+    status_paused_until "paused: checking until $ts" >/dev/null \
+      || fail "a valid declared-wait deadline was refused: $ts"
+  done
+  pass "expected returns reject impossible calendar dates and accept Gregorian leap days"
+}
+
 test_inputs_are_validated() {
   local home out rc
   home=$(make_home inputs)
@@ -636,6 +666,7 @@ test_validation_rejects_damaged_words_blocks
 test_a_damaged_words_line_never_truncates_the_mandate
 test_archive_moves_the_record_aside_and_is_idempotent
 test_inputs_are_validated
+test_impossible_return_dates_are_refused
 test_retired_clause_and_grant_inputs_are_usage_errors_by_name
 test_version_1_record_still_validates_reads_and_archives
 test_version_1_record_is_replaced_by_a_version_2_record

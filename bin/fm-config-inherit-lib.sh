@@ -165,11 +165,12 @@ fm_inherit_file_link_count() {
 }
 
 fm_inherit_sha256() {
+  # Hash contents without filename-escaping markers from checksum output.
   local digest
   if command -v shasum >/dev/null 2>&1; then
-    digest=$(shasum -a 256 "$1" 2>/dev/null | awk '{print $1}')
+    digest=$(shasum -a 256 2>/dev/null < "$1" | awk '{print $1}')
   elif command -v sha256sum >/dev/null 2>&1; then
-    digest=$(sha256sum "$1" 2>/dev/null | awk '{print $1}')
+    digest=$(sha256sum 2>/dev/null < "$1" | awk '{print $1}')
   else
     return 1
   fi

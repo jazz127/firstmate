@@ -337,6 +337,41 @@ test_non_default_branch_is_stuck_untouched() {
   pass "non-default named branch is reported STUCK and left untouched"
 }
 
+test_runtime_tracking_rejects_multiline_values() {
+  local shell field variant home clone value before out
+  for shell in "$(command -v bash)" /bin/bash; do
+    for field in remote merge; do
+      for variant in plain lf double-lf cr internal-lf; do
+        home="$TMP_ROOT/tracking-${shell//\//-}-$field-$variant"
+        mkdir -p "$home/projects"
+        clone=$(build_pair "$home" tracking)
+        git -C "$clone" config firstmate.runtimeBranch main
+        value=origin; [ "$field" != merge ] || value=refs/heads/main
+        case "$variant" in
+          plain) ;;
+          lf) value="$value"$'\n' ;;
+          double-lf) value="$value"$'\n\n' ;;
+          cr) value="$value"$'\r' ;;
+          internal-lf) value="$value"$'\nextra' ;;
+        esac
+        git -C "$clone" config "branch.main.$field" "$value"
+        before=$(head_sha "$clone")
+        advance_origin "$home" tracking C1
+        out=$(FM_HOME="$home" FM_ROOT_OVERRIDE="$clone" "$shell" "$ROOT/bin/fm-fleet-sync.sh" "$clone" 2>/dev/null)
+        if [ "$variant" = plain ]; then
+          assert_contains "$out" 'tracking: synced' 'ordinary tracking configuration stopped syncing'
+          [ "$(head_sha "$clone")" != "$before" ] || fail 'valid tracking configuration did not advance'
+        else
+          assert_contains "$out" 'invalid tracking source for runtime branch' "$shell accepted $field $variant"
+          [ "$(head_sha "$clone")" = "$before" ] || fail 'malformed tracking configuration moved HEAD'
+          [ "$(git -C "$clone" rev-parse origin/main)" = "$before" ] || fail 'malformed tracking configuration fetched a guessed source'
+        fi
+      done
+    done
+  done
+  pass 'runtime tracking refuses multiline remote/merge values before fetching or moving the local branch'
+}
+
 test_firstmate_runtime_branch_and_tracking_remote_sync() {
   local home clone out
   home=$(new_home)
@@ -782,6 +817,7 @@ test_non_signature_fetch_failure_is_not_retried() {
   pass "a non-packed-refs.lock fetch failure keeps today's behavior (no retry)"
 }
 
+test_runtime_tracking_rejects_multiline_values
 test_detached_clean_ancestor_recovers
 test_detached_unique_commit_is_stuck_untouched
 test_detached_clean_ancestor_with_diverged_local_default_is_stuck_untouched

@@ -67,9 +67,9 @@ while ! curl -fsSL "$URL" -o "$TMP/$ARCHIVE"; do
 done
 
 if command -v sha256sum >/dev/null 2>&1; then
-  ACTUAL_SHA256=$(sha256sum "$TMP/$ARCHIVE" | awk '{print $1}')
+  ACTUAL_SHA256=$(sha256sum < "$TMP/$ARCHIVE" | awk '{print $1}')
 elif command -v shasum >/dev/null 2>&1; then
-  ACTUAL_SHA256=$(shasum -a 256 "$TMP/$ARCHIVE" | awk '{print $1}')
+  ACTUAL_SHA256=$(shasum -a 256 < "$TMP/$ARCHIVE" | awk '{print $1}')
 else
   die "need sha256sum or shasum to verify the actionlint archive"
 fi

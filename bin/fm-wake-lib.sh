@@ -59,14 +59,15 @@ fi
 
 fm_pid_alive() {
   local pid=$1
-  case "$pid" in
+  # An all-zero PID names the caller's process group, never a concrete owner.
+  case "${pid//0/}" in
     ''|*[!0-9]*) return 1 ;;
   esac
   kill -0 "$pid" 2>/dev/null
 }
 
-fm_pid_identity() {
-  local pid=$1 out proc_root stat_line starttime cmdline_hex identity_key
+fm_pid_identity() {  # <pid> [start]
+  local pid=$1 identity_kind=${2:-full} out proc_root stat_line starttime cmdline_hex identity_key line
   local -a stat_fields
   case "$pid" in
     ''|*[!0-9]*) return 1 ;;
@@ -87,11 +88,18 @@ fm_pid_identity() {
     case "$starttime" in
       ''|*[!0-9]*) return 1 ;;
     esac
-    cmdline_hex=$(od -An -v -tx1 "$proc_root/$pid/cmdline" 2>/dev/null | tr -d '[:space:]') || return 1
+    cmdline_hex=$(
+      set -o pipefail
+      od -An -v -tx1 "$proc_root/$pid/cmdline" 2>/dev/null | tr -d '[:space:]'
+    ) || return 1
     [ -n "$cmdline_hex" ] || return 1
     identity_key=proc-starttime
     [ "$_FM_UNAME" != Linux ] || identity_key=linux-starttime
-    printf '%s=%s cmdline-hex=%s\n' "$identity_key" "$starttime" "$cmdline_hex"
+    if [ "$identity_kind" = start ]; then
+      printf '%s=%s\n' "$identity_key" "$starttime"
+    else
+      printf '%s=%s cmdline-hex=%s\n' "$identity_key" "$starttime" "$cmdline_hex"
+    fi
     return 0
   fi
   # Pin LC_ALL=C so lstart's date format is locale-invariant: the identity is
@@ -102,26 +110,21 @@ fm_pid_identity() {
   # narrow-COLUMNS hook, where a truncated command would likewise reject a live
   # watcher (issue #799). This mirrors fm_pending_reply_pid_identity, which pins the
   # same width for the same reason.
-  out=$(COLUMNS=10000 LC_ALL=C ps -p "$pid" -o lstart= -o command= 2>/dev/null) || return 1
+  if [ "$identity_kind" = start ]; then
+    out=$(COLUMNS=10000 LC_ALL=C ps -p "$pid" -o lstart= 2>/dev/null) || return 1
+  else
+    out=$(COLUMNS=10000 LC_ALL=C ps -p "$pid" -o lstart= -o command= 2>/dev/null) || return 1
+  fi
   [ -n "$out" ] || return 1
-  printf '%s\n' "$out" | sed 's/^[[:space:]]*//'
+  while IFS= read -r line; do
+    printf '%s\n' "${line#"${line%%[![:space:]]*}"}"
+  done <<< "$out"
 }
 
 fm_pid_start_identity() {  # <pid>
-  local pid=$1 identity start
-  identity=$(fm_pid_identity "$pid" 2>/dev/null) || return 1
-  case "$identity" in
-    linux-starttime=*' cmdline-hex='*|proc-starttime=*)
-      start=${identity%% *}
-      printf '%s\n' "$start"
-      return 0
-      ;;
-  esac
-  # The portable ps identity includes a command string that may legitimately
-  # change when a lock holder execs. Process start time alone remains stable.
-  identity=$(COLUMNS=10000 LC_ALL=C ps -p "$pid" -o lstart= 2>/dev/null) || return 1
-  [ -n "$identity" ] || return 1
-  printf '%s\n' "$identity" | sed 's/^[[:space:]]*//'
+  # Lock ownership survives exec, so request only the stable start identity.
+  # The shared reader retains its /proc validation and portable ps fallback.
+  fm_pid_identity "$1" start
 }
 
 # True unless the lock's original owner is proven gone.
@@ -169,7 +172,7 @@ fm_path_age() {
 fm_poll_derived_grace() {
   local poll=${1:-${FM_POLL:-15}} margin=60 derived
   case "$poll" in ''|*[!0-9]*) poll=15 ;; esac
-  derived=$((poll + margin))
+  derived=$((10#$poll + margin))
   [ "$derived" -ge 300 ] || derived=300
   printf '%s\n' "$derived"
 }
@@ -183,6 +186,10 @@ fm_poll_derived_grace() {
 fm_watcher_stall_bound() {
   local poll=${1:-${FM_POLL:-15}} grace
   grace=${FM_WATCHER_STALE_GRACE:-${FM_GUARD_GRACE:-$(fm_poll_derived_grace "$poll")}}
+  case "$grace" in
+    ''|*[!0-9]*) ;;
+    *) grace=$((10#$grace)) ;;
+  esac
   printf '%s\n' "${FM_WATCHER_STALL_BOUND:-$((grace * 3))}"
 }
 
@@ -293,9 +300,9 @@ fm_pi_extension_version() {
   local file=$1
   [ -f "$file" ] || return 1
   if command -v shasum >/dev/null 2>&1; then
-    shasum -a 256 "$file" | awk '{print "sha256:" $1}'
+    shasum -a 256 < "$file" | awk '{print "sha256:" $1}'
   elif command -v sha256sum >/dev/null 2>&1; then
-    sha256sum "$file" | awk '{print "sha256:" $1}'
+    sha256sum < "$file" | awk '{print "sha256:" $1}'
   else
     cksum "$file" | awk '{print "cksum:" $1 ":" $2}'
   fi
@@ -660,7 +667,7 @@ fm_lock_remove_path() {
 
 fm_lock_mid_acquire_is_fresh() {
   local lockdir=$1 pid=$2 mid_acquire_stale
-  case "$pid" in
+  case "${pid//0/}" in
     ''|*[!0-9]*)
       mid_acquire_stale=$FM_LOCK_STALE_AFTER
       [ "$mid_acquire_stale" -lt 2 ] && mid_acquire_stale=2
@@ -699,16 +706,20 @@ FM_WAKE_APPEND_RECOVERY_PUBLISHED_TOKEN=
 # docs/watcher-continuity.md owns the recovery-episode contract, including the
 # once-per-generation announcement rule for unacknowledged downtime.
 fm_recovery_marker_read() {
-  local marker=$1 line extra
+  local marker=$1 line=''
   FM_RECOVERY_MARKER_TOKEN=
   [ -f "$marker" ] && [ ! -L "$marker" ] || return 1
-  # Exactly one newline byte: the first line is terminated and no second is.
-  { IFS= read -r line && ! IFS= read -r extra; } < "$marker" || return 1
+  # Capture one NUL-free snapshot. A failed second line read would also accept
+  # an unterminated suffix, while ordinary reads can silently erase NULs.
+  if IFS= read -r -d '' line 2>/dev/null < "$marker"; then return 1; fi
+  case "$line" in *$'\n') line=${line%$'\n'} ;; *) return 1 ;; esac
   case "$line" in
     pending:handling:*|pending:downtime:*|announced:handling:*|announced:downtime:*|acked:handling:*|acked:downtime:*) ;;
     *) return 1 ;;
   esac
-  case "${line##*:}" in
+  # Validate everything after the two fixed fields, including extra colons
+  # or newlines, rather than accepting just the last colon-delimited fragment.
+  case "${line#*:*:}" in
     ''|*[!A-Za-z0-9._-]*) return 1 ;;
   esac
   FM_RECOVERY_MARKER_TOKEN=$line
@@ -1483,7 +1494,8 @@ fm_task_set_lock_path() {  # <state-dir>
 # Everything else still fails closed: an unreadable or malformed binding, an
 # unreachable local parent, a cycle, and a chain deeper than the bound.
 fm_firstmate_root_home() {
-  local home=${1:-$FM_HOME} marker parent seen="|" depth=0
+  local home=${1:-$FM_HOME} marker parent visited depth=0
+  local -a seen=()
   home=$(CDPATH='' cd -- "$home" 2>/dev/null && pwd -P) || return 1
   while [ -e "$home/.fm-secondmate-parent" ] || [ -L "$home/.fm-secondmate-parent" ]; do
     marker="$home/.fm-secondmate-parent"
@@ -1498,8 +1510,12 @@ fm_firstmate_root_home() {
       *) return 1 ;;
     esac
     parent=$(CDPATH='' cd -- "$FM_SECONDMATE_PARENT_HOME" 2>/dev/null && pwd -P) || return 1
-    case "$seen" in *"|$parent|"*) return 1 ;; esac
-    seen="$seen$home|"
+    # A path may contain punctuation such as pipes; compare complete entries
+    # rather than packing paths into a delimiter-separated cycle detector.
+    for visited in ${seen[@]+"${seen[@]}"}; do
+      [ "$visited" != "$parent" ] || return 1
+    done
+    seen+=("$home")
     home=$parent
     depth=$((depth + 1))
     [ "$depth" -le 64 ] || return 1
@@ -2729,7 +2745,7 @@ fm_wake_status_key_map() {  # <queue-key>
 
 fm_wake_annotation_manifest() {  # <deduped-raw-rows>
   local rows=$1 epoch seq kind key payload
-  while IFS=$(printf '\t') read -r epoch seq kind key payload; do
+  while IFS=$'\t' read -r epoch seq kind key payload; do
     [ "$kind" = signal ] || continue
     fm_wake_status_key_map "$key" || continue
     if [ "$FM_WAKE_STATUS_HISTORICAL" = true ]; then
@@ -2839,7 +2855,7 @@ fm_wake_print_annotations() {  # <deduped-raw-rows> [<presentation-snapshot>]
     *) sleep "$FM_WAKE_ENRICH_TEST_DELAY" ;;
   esac
 
-  while IFS=$(printf '\t') read -r status_key mode; do
+  while IFS=$'\t' read -r status_key mode; do
     [ -n "$status_key" ] || continue
     path="$STATE/$status_key"
     # A turn-ended-only (historical) row's annotation would show unread status
@@ -2859,7 +2875,7 @@ fm_wake_print_annotations() {  # <deduped-raw-rows> [<presentation-snapshot>]
     endpoint=
     if [ -n "$snapshot" ]; then
       task=${status_key%.status}
-      while IFS=$(printf '\t') read -r snapshot_task snapshot_endpoint _snapshot_ident; do
+      while IFS=$'\t' read -r snapshot_task snapshot_endpoint _snapshot_ident; do
         if [ "$snapshot_task" = "$task" ]; then endpoint=$snapshot_endpoint; break; fi
       done <<EOF
 $snapshot

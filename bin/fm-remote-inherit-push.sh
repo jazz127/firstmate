@@ -23,9 +23,6 @@ DATA="${FM_DATA_OVERRIDE:-$FM_HOME/data}"
 . "$SCRIPT_DIR/fm-config-inherit-lib.sh"
 
 die() { printf 'error: %s\n' "$1" >&2; exit 1; }
-sha256_file() {
-  if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | awk '{print $1}'; else sha256sum "$1" | awk '{print $1}'; fi
-}
 file_link_count() {
   if [ "$(uname)" = Darwin ]; then /usr/bin/stat -f %l "$1" 2>/dev/null; else stat -c %h "$1" 2>/dev/null; fi
 }
@@ -41,7 +38,7 @@ TMP=$(mktemp -d "${TMPDIR:-/tmp}/fm-remote-inherit-push.XXXXXX") || die "cannot 
 trap 'rm -rf -- "$TMP"' EXIT
 EMPTY="$TMP/empty"
 : > "$EMPTY"
-EMPTY_HASH=$(sha256_file "$EMPTY") || die "cannot hash empty inheritance payload"
+EMPTY_HASH=$(fm_inherit_sha256 "$EMPTY") || die "cannot hash empty inheritance payload"
 
 ITEMS=$(fm_config_inherit_items)
 while IFS= read -r rel; do
@@ -79,7 +76,7 @@ while IFS= read -r rel; do
     cp -p -- "$source" "$snapshot" || die "cannot snapshot inherited source: $source"
     [ -f "$snapshot" ] && [ ! -L "$snapshot" ] || die "inherited source snapshot is unsafe: $source"
     bytes=$(LC_ALL=C wc -c < "$snapshot" | tr -d ' ')
-    hash=$(sha256_file "$snapshot") || die "cannot hash inherited source: $source"
+    hash=$(fm_inherit_sha256 "$snapshot") || die "cannot hash inherited source: $source"
     "$SCRIPT_DIR/fm-on.sh" --stdin "$ID" fm-remote-inherit.sh put "$rel" "$bytes" "$hash" "$GENERATION" < "$snapshot"
   else
     # This loop's heredoc is its control stream, not remote command input.

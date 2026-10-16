@@ -121,7 +121,10 @@ case "$INTERVAL" in
     exit 2
     ;;
 esac
-if [ "$INTERVAL" -ne 0 ] && { [ "$INTERVAL" -lt 60 ] || [ "$INTERVAL" -gt 86400 ]; }; then
+INTERVAL=${INTERVAL#"${INTERVAL%%[!0]*}"}
+INTERVAL=${INTERVAL:-0}
+if [ "${#INTERVAL}" -gt 5 ] \
+  || { [ "$INTERVAL" -ne 0 ] && { [ "$INTERVAL" -lt 60 ] || [ "$INTERVAL" -gt 86400 ]; }; }; then
   printf 'fm-tool-update-check: FM_TOOL_UPDATE_INTERVAL must be 0 or a whole number from 60 to 86400\n' >&2
   exit 2
 fi
@@ -133,7 +136,9 @@ case "$PROBE_SECS" in
     exit 2
     ;;
 esac
-if [ "$PROBE_SECS" -gt 30 ]; then
+PROBE_SECS=${PROBE_SECS#"${PROBE_SECS%%[!0]*}"}
+PROBE_SECS=${PROBE_SECS:-0}
+if [ "${#PROBE_SECS}" -gt 2 ] || [ "$PROBE_SECS" -lt 1 ] || [ "$PROBE_SECS" -gt 30 ]; then
   printf 'fm-tool-update-check: FM_TOOL_UPDATE_PROBE_SECS must be a whole number from 1 to 30\n' >&2
   exit 2
 fi
@@ -145,7 +150,9 @@ case "$BUDGET_SECS" in
     exit 2
     ;;
 esac
-if [ "$BUDGET_SECS" -gt 120 ]; then
+BUDGET_SECS=${BUDGET_SECS#"${BUDGET_SECS%%[!0]*}"}
+BUDGET_SECS=${BUDGET_SECS:-0}
+if [ "${#BUDGET_SECS}" -gt 3 ] || [ "$BUDGET_SECS" -lt 1 ] || [ "$BUDGET_SECS" -gt 120 ]; then
   printf 'fm-tool-update-check: FM_TOOL_UPDATE_BUDGET_SECS must be a whole number from 1 to 120\n' >&2
   exit 2
 fi
@@ -168,6 +175,8 @@ CHECK_TIMEOUT=${FM_CHECK_TIMEOUT:-30}
 case "$CHECK_TIMEOUT" in
   ''|*[!0-9]*|0) CHECK_TIMEOUT=30 ;;
 esac
+CHECK_TIMEOUT=${CHECK_TIMEOUT#"${CHECK_TIMEOUT%%[!0]*}"}
+[ -n "$CHECK_TIMEOUT" ] || CHECK_TIMEOUT=30
 # The last probe of a sweep can end this far past the deadline, so that is what
 # the budget has to leave the watcher's own bound.
 BUDGET_MAX=$((CHECK_TIMEOUT - PROBE_MIN_SECS - CLOCK_ROUNDING_SECS - KILL_GRACE_SECS))
@@ -323,20 +332,20 @@ config_validate() {
     def tool_problem($t):
       if ($t | type) != "object" then "every entry in tools must be an object"
       elif ($t.name | type) != "string" or ($t.name | length) == 0 then "every tool needs a non-empty name"
-      elif ($t.name | test("^[A-Za-z0-9._+-]+$") | not) then "tool name \($t.name) may use only letters, digits, dot, underscore, plus, and dash"
+      elif ($t.name | test("\\A[A-Za-z0-9._+-]+\\z") | not) then "tool name \($t.name) may use only letters, digits, dot, underscore, plus, and dash"
       elif ($t | has("command") | not) and ($t | has("git") | not) then "tool \($t.name) needs command, git, or both"
-      elif ($t | has("command")) and (($t.command | type) != "string" or ($t.command | test("^[A-Za-z0-9._+-]+$") | not)) then "tool \($t.name) command must be a bare executable name"
+      elif ($t | has("command")) and (($t.command | type) != "string" or ($t.command | test("\\A[A-Za-z0-9._+-]+\\z") | not)) then "tool \($t.name) command must be a bare executable name"
       elif ($t | has("version_args")) and (($t.version_args | type) != "array" or ($t.version_args | length) == 0) then "tool \($t.name) version_args must be a non-empty array"
-      elif ($t | has("version_args")) and ([$t.version_args[] | select((type != "string") or (test("^[A-Za-z0-9._=+/:-]+$") | not))] | length) > 0 then "tool \($t.name) version_args must be simple flag strings without spaces"
+      elif ($t | has("version_args")) and ([$t.version_args[] | select((type != "string") or (test("\\A[A-Za-z0-9._=+/:-]+\\z") | not))] | length) > 0 then "tool \($t.name) version_args must be simple flag strings without spaces"
       elif ($t | has("announce_pattern")) and (($t.announce_pattern | type) != "string" or ($t.announce_pattern | length) == 0 or ($t.announce_pattern | test("[[:cntrl:]]"))) then "tool \($t.name) announce_pattern must be a non-empty single-line string"
       elif ($t | has("announce_pattern")) and (($t | has("command")) | not) then "tool \($t.name) announce_pattern needs command"
       elif ($t | has("announce_args")) and (($t.announce_args | type) != "array" or ($t.announce_args | length) == 0) then "tool \($t.name) announce_args must be a non-empty array"
-      elif ($t | has("announce_args")) and ([$t.announce_args[] | select((type != "string") or (test("^[A-Za-z0-9._=+/:-]+$") | not))] | length) > 0 then "tool \($t.name) announce_args must be simple flag strings without spaces"
+      elif ($t | has("announce_args")) and ([$t.announce_args[] | select((type != "string") or (test("\\A[A-Za-z0-9._=+/:-]+\\z") | not))] | length) > 0 then "tool \($t.name) announce_args must be simple flag strings without spaces"
       elif ($t | has("announce_args")) and (($t | has("announce_pattern")) | not) then "tool \($t.name) announce_args needs announce_pattern"
       elif ($t | has("git")) and (($t.git | type) != "object") then "tool \($t.name) git must be an object"
       elif ($t | has("git")) and (($t.git.repo | type) != "string" or ($t.git.repo | startswith("/") | not) or ($t.git.repo | test("[[:cntrl:]]"))) then "tool \($t.name) git.repo must be an absolute path on one line"
-      elif ($t | has("git")) and ($t.git | has("remote")) and (($t.git.remote | type) != "string" or ($t.git.remote | test("^[A-Za-z0-9._-]+$") | not)) then "tool \($t.name) git.remote must be a simple remote name"
-      elif ($t | has("git")) and ($t.git | has("branch")) and (($t.git.branch | type) != "string" or ($t.git.branch | test("^[A-Za-z0-9._/-]+$") | not)) then "tool \($t.name) git.branch must be a simple branch name"
+      elif ($t | has("git")) and ($t.git | has("remote")) and (($t.git.remote | type) != "string" or ($t.git.remote | test("\\A[A-Za-z0-9._-]+\\z") | not)) then "tool \($t.name) git.remote must be a simple remote name"
+      elif ($t | has("git")) and ($t.git | has("branch")) and (($t.git.branch | type) != "string" or ($t.git.branch | test("\\A[A-Za-z0-9._/-]+\\z") | not)) then "tool \($t.name) git.branch must be a simple branch name"
       else empty
       end;
     def problems:
@@ -390,7 +399,7 @@ config_records() {
 path_hits() {
   local command_name=$1 dir candidate identity seen=''
   while IFS= read -r dir; do
-    [ -n "$dir" ] || continue
+    [ -n "$dir" ] || dir=.
     candidate="$dir/$command_name"
     [ -f "$candidate" ] && [ -x "$candidate" ] || continue
     identity=$(fm_pr_file_identity "$candidate" 2>/dev/null) || identity=
@@ -414,7 +423,7 @@ probe_output() {
 command_findings() {
   local name=$1 command_name=$2 args_joined=$3 announce=$4 announce_args=$5
   local hit out version matched announce_out status matched_line announced_version
-  local resolved_path='' resolved_version='' resolved_out=''
+  local resolved_path='' resolved_version='' resolved_out='' resolved_failed=0
   local best_path='' best_version='' unreadable='' hits=''
 
   # This tool's announcement source is dead if its pattern cannot be used, which
@@ -436,8 +445,17 @@ command_findings() {
       emit "$name check failed: the time budget ran out before every copy answered"
       break
     fi
+    status=0
     # shellcheck disable=SC2086  # deliberate split on validated space-free tokens
-    out=$(probe_output "$hit" $args_joined)
+    out=$(probe_output "$hit" $args_joined) || status=$?
+    if [ "$status" -ne 0 ]; then
+      if [ -z "$resolved_path" ]; then
+        resolved_path=$hit
+        resolved_failed=1
+      fi
+      emit "$name check failed: $hit version probe exited $status"
+      continue
+    fi
     version=$(parse_version "$out")
     if [ -z "$resolved_path" ]; then
       resolved_path=$hit
@@ -477,6 +495,9 @@ EOF
           # nothing to say. The one that answers with nothing stays silent below.
           emit "$name check failed: $resolved_path did not answer when asked for its update announcement"
           announce_out=
+        elif [ "$status" -ne 0 ]; then
+          emit "$name check failed: $resolved_path update announcement probe exited $status"
+          announce_out=
         fi
       fi
     fi
@@ -503,7 +524,8 @@ EOF
   if [ -z "$resolved_version" ]; then
     # No copy was probed at all when the path is empty, and the budget report
     # already covers that, so do not blame a copy that was never asked.
-    [ -z "$resolved_path" ] || emit "$name check failed: $resolved_path did not report a version"
+    [ -z "$resolved_path" ] || [ "$resolved_failed" -eq 1 ] \
+      || emit "$name check failed: $resolved_path did not report a version"
     return 0
   fi
 

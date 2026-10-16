@@ -626,7 +626,7 @@ test_backend_validate_spawn_accepts_orca() {
 }
 
 test_meta_get_and_backend_of_meta() {
-  local meta=$TMP_ROOT/meta-get.meta edge=$TMP_ROOT/meta-get-edge.meta
+  local meta=$TMP_ROOT/meta-get.meta edge=$TMP_ROOT/meta-get-edge.meta value backend expected
   fm_write_meta "$meta" "window=firstmate:fm-x1" "harness=claude"
   [ "$(fm_meta_get "$meta" window)" = "firstmate:fm-x1" ] || fail "fm_meta_get did not read window="
   [ "$(fm_meta_get "$meta" missing)" = "" ] || fail "fm_meta_get should print nothing for an absent key"
@@ -638,6 +638,36 @@ test_meta_get_and_backend_of_meta() {
   printf 'token=first\ntoken=last=value' > "$edge"
   [ "$(fm_meta_get "$edge" token)" = "last=value" ] \
     || fail "fm_meta_get did not preserve last-value or no-final-newline semantics"
+
+  value=stale
+  fm_meta_get "$edge" token value > "$TMP_ROOT/meta-get.out"
+  [ "$value" = 'last=value' ] || fail 'fm_meta_get output variable lost the last unterminated value'
+  [ ! -s "$TMP_ROOT/meta-get.out" ] || fail 'fm_meta_get printed while assigning an output variable'
+  fm_meta_get "$edge" missing value
+  [ -z "$value" ] || fail 'fm_meta_get did not clear an absent output key'
+  value=stale
+  fm_meta_get "$TMP_ROOT/absent.meta" token value
+  [ -z "$value" ] || fail 'fm_meta_get did not clear output for an absent file'
+
+  for backend in '' tmux herdr zellij orca cmux; do
+    printf 'backend=%s\nwindow=old\nwindow=current\nterminal=old-terminal\nterminal=current-terminal' "$backend" > "$edge"
+    expected=current
+    [ "$backend" != orca ] || expected=current-terminal
+    [ "$(fm_backend_target_of_meta "$edge")" = "$expected" ] || fail "target selection changed for backend '$backend'"
+  done
+  printf '\nterminal=' >> "$edge"
+  printf '\nbackend=orca' >> "$edge"
+  [ "$(fm_backend_target_of_meta "$edge")" = current ] || fail 'Orca without a terminal did not fall back to the last window'
+  [ "$(fm_backend_of_meta "$TMP_ROOT/absent.meta")" = tmux ] || fail 'an absent record did not retain the default backend'
+
+  printf 'token=before\000after\n' > "$edge"
+  [ -z "$(fm_meta_get "$edge" token)" ] || fail 'fm_meta_get accepted a NUL inside a field'
+  printf 'token=valid\nnote=bad\000value\n' > "$edge"
+  value=stale
+  fm_meta_get "$edge" token value
+  [ -z "$value" ] || fail 'fm_meta_get accepted a field preceding a NUL'
+  printf 'note=bad\000value\ntoken=valid\n' > "$edge"
+  [ -z "$(fm_meta_get "$edge" token)" ] || fail 'fm_meta_get accepted a field following a NUL'
 
   pass "fm_meta_get / fm_backend_of_meta: read last key=value and default backend to tmux"
 }
@@ -880,10 +910,14 @@ test_peek_conformance_old_vs_new() {
 # --- old vs new: fm-spawn.sh --------------------------------------------------
 
 make_spawn_fake_process_tools() {  # <fakebin> <worktree> [cwd-counter] [initial-path]
-  local fakebin=$1 worktree=$2 counter=${3:-} initial=${4:-}
-  cat > "$fakebin/ps" <<'SH'
+  local fakebin=$1 worktree=$2 counter=${3:-} initial=${4:-} real_ps
+  real_ps=$(command -v ps) || return 1
+  # Only the foreground pane is synthetic. Lock-owner identity must still use
+  # the system ps when the host has no compatible /proc filesystem.
+  cat > "$fakebin/ps" <<SH
 #!/usr/bin/env bash
-case "$*" in
+case "\$*" in
+  *"-o lstart="*) exec "$real_ps" "\$@" ;;
   *"-t pts/91"*) printf '%s\n' '987654321 987654321 987654321' ;;
 esac
 SH

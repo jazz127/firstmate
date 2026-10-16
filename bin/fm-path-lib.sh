@@ -5,8 +5,10 @@
 # Each assigns <output-variable> exactly what `$(dirname -- <path>)` or
 # `$(basename -- <path>)` would: POSIX component rules, and the command
 # substitution's removal of trailing newlines.
+# fm_dirname_to accepts a third argument, literal, to retain those data newlines
+# when its result will be used for filesystem operations.
 
-fm_dirname_to() {  # <output-variable> <path>
+fm_dirname_to() {  # <output-variable> <path> [literal]
   local fm_path=$2
   case "$fm_path" in
     '') fm_path=. ;;
@@ -23,7 +25,9 @@ fm_dirname_to() {  # <output-variable> <path>
       ;;
     *) fm_path=/ ;;
   esac
-  while [ "${fm_path%$'\n'}" != "$fm_path" ]; do fm_path=${fm_path%$'\n'}; done
+  if [ "${3:-}" != literal ]; then
+    while [ "${fm_path%$'\n'}" != "$fm_path" ]; do fm_path=${fm_path%$'\n'}; done
+  fi
   printf -v "$1" '%s' "$fm_path"
 }
 

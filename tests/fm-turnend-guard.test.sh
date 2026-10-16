@@ -184,6 +184,8 @@ install_guard_scripts() {
   local dir=$1
   mkdir -p "$dir/bin"
   cp "$ROOT/bin/fm-turnend-guard.sh" "$dir/bin/fm-turnend-guard.sh"
+  cp "$ROOT/bin/fm-context-restart-claude-hook.sh" "$dir/bin/fm-context-restart-claude-hook.sh"
+  cp "$ROOT/bin/fm-context-restart-lib.sh" "$dir/bin/fm-context-restart-lib.sh"
   cp "$ROOT/bin/fm-turnend-guard-grok.sh" "$dir/bin/fm-turnend-guard-grok.sh"
   cp "$ROOT/bin/fm-operational-input.sh" "$dir/bin/fm-operational-input.sh"
   cp "$ROOT/bin/fm-supervision-instructions.sh" "$dir/bin/fm-supervision-instructions.sh"
@@ -198,7 +200,7 @@ install_guard_scripts() {
   cp "$ROOT/bin/fm-cursor-lib.sh" "$dir/bin/fm-cursor-lib.sh"
   mkdir -p "$dir/docs"
   cp -R "$ROOT/docs/supervision-protocols" "$dir/docs/supervision-protocols"
-  chmod +x "$dir/bin/fm-turnend-guard.sh" "$dir/bin/fm-turnend-guard-grok.sh" "$dir/bin/fm-operational-input.sh" "$dir/bin/fm-supervision-instructions.sh" "$dir/bin/fm-harness.sh"
+  chmod +x "$dir/bin/fm-turnend-guard.sh" "$dir/bin/fm-context-restart-claude-hook.sh" "$dir/bin/fm-turnend-guard-grok.sh" "$dir/bin/fm-operational-input.sh" "$dir/bin/fm-supervision-instructions.sh" "$dir/bin/fm-harness.sh"
 }
 
 mark_codex_hook_root() {
@@ -891,7 +893,7 @@ test_tracked_claude_entries_inert_under_grok() {
   command -v jq >/dev/null 2>&1 || fail "test host must provide jq"
   dir="$TMP_ROOT/claude-entries-grok-inert"
   mkdir -p "$dir/bin"
-  for script in fm-context-restart-claude-hook.sh fm-turnend-guard.sh fm-claude-stop-autoarm.sh fm-sessionstart-run.sh \
+  for script in fm-turnend-guard.sh fm-claude-stop-autoarm.sh fm-sessionstart-run.sh \
     fm-arm-pretool-check.sh fm-cd-pretool-check.sh fm-subagent-pretool-check.sh fm-host-mirror.sh; do
     printf '#!/usr/bin/env bash\nprintf ran >> %q\n' "$dir/invoked" > "$dir/bin/$script"
     chmod +x "$dir/bin/$script"
@@ -933,7 +935,7 @@ test_tracked_claude_entries_inert_under_grok() {
       || fail "tracked entry for $target ran under a legacy GROK_AGENT environment"
   done < <(jq -r '.hooks[][].hooks[].command' "$ROOT/.claude/settings.json")
 
-  [ "$guarded" -eq 8 ] || fail "expected 8 grok-guarded tracked entries, saw $guarded"
+  [ "$guarded" -eq 7 ] || fail "expected 7 grok-guarded tracked entries, saw $guarded"
   [ "$unguarded" -eq 1 ] || fail "expected 1 documented unguarded tracked entry, saw $unguarded"
   pass "tracked .claude/settings.json entries: $guarded inert under grok, the documented subagent exception still armed, all live under Claude"
 }
@@ -2114,9 +2116,24 @@ test_hook_daemon_lock_is_ignored_without_away_mode() {
 # must accept a live daemon there once FM_POLL justifies the wider window, but
 # must still block a dead daemon or a beacon older than that wider grace.
 
+test_poll_derived_grace_uses_decimal_seconds() (
+  local poll grace
+  # shellcheck source=/dev/null
+  FM_STATE_OVERRIDE="$TMP_ROOT/poll-grace-state" . "$ROOT/bin/fm-wake-lib.sh"
+  for poll in 0 000 8 08 invalid; do
+    grace=$(fm_poll_derived_grace "$poll") || fail "cannot derive grace for $poll"
+    [ "$grace" = 300 ] || fail "wrong grace floor for $poll: $grace"
+  done
+  for poll in 600 0600; do
+    grace=$(fm_poll_derived_grace "$poll") || fail "cannot derive grace for $poll"
+    [ "$grace" = 660 ] || fail "poll seconds were not decimal for $poll: $grace"
+  done
+  pass "poll-derived grace reads seconds as decimal and retains its floor"
+)
+
 test_hook_away_daemon_allows_beacon_within_poll_derived_grace() {
-  local dir pid out status beat
-  dir=$(make_away_home_between_cycles "$TMP_ROOT/hook-afk-poll-grace-healthy")
+  local dir pid out status beat poll=${1:-600}
+  dir=$(make_away_home_between_cycles "$TMP_ROOT/hook-afk-poll-grace-healthy-$poll")
   sleep 60 &
   pid=$!
   record_daemon_lock "$dir" "$pid" || {
@@ -2124,12 +2141,12 @@ test_hook_away_daemon_allows_beacon_within_poll_derived_grace() {
     wait "$pid" 2>/dev/null || true
     fail "could not identify live away-mode daemon holder"
   }
-  # 400s is stale under the flat 300s default, but not under the poll-derived
+  # 500s is stale under the flat 300s default, but not under the poll-derived
   # grace (max(300, FM_POLL + 60) = 660 at FM_POLL=600) - a live daemon that
   # simply has not finished restarting its watcher yet.
-  beat=$(( $(date +%s) - 400 ))
+  beat=$(( $(date +%s) - 500 ))
   fm_touch_epoch "$beat" "$dir/state/.last-watcher-beat"
-  out=$(FM_GUARD_GRACE='' FM_POLL=600 run_hook "$dir" false); status=$?
+  out=$(FM_GUARD_GRACE='' FM_POLL="$poll" run_hook "$dir" false); status=$?
   kill "$pid" 2>/dev/null || true
   wait "$pid" 2>/dev/null || true
   expect_code 0 "$status" "a live daemon with a beacon within the poll-derived grace must not block"
@@ -2279,7 +2296,9 @@ test_hook_away_mode_blocks_on_dead_daemon
 test_hook_away_mode_blocks_on_pid_reused_daemon
 test_hook_away_mode_blocks_on_stale_beacon
 test_hook_daemon_lock_is_ignored_without_away_mode
+test_poll_derived_grace_uses_decimal_seconds || fail "test_poll_derived_grace_uses_decimal_seconds failed"
 test_hook_away_daemon_allows_beacon_within_poll_derived_grace
+test_hook_away_daemon_allows_beacon_within_poll_derived_grace 0600
 test_hook_away_daemon_blocks_dead_daemon_despite_poll_derived_grace
 test_hook_away_daemon_blocks_beacon_older_than_poll_derived_grace
 test_hook_no_afk_ignores_poll_derived_grace

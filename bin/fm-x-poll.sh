@@ -19,7 +19,8 @@
 #   an already offered request_id                -> print nothing, exit 0
 #   a new set of unreconciled public-followup terminal results -> print one
 #       "public-followup ..." line BEFORE the relay call, so a promised final
-#       reply is surfaced through this same wake path
+#       reply is surfaced through this same wake path; failed output or signature
+#       recording leaves the unchanged set eligible for another wake
 #   a terminal result bin/fm-public-followup.sh consume refused -> print its
 #       "public-followup rejected <event-id> ..." line, with the specific
 #       reason, at least once
@@ -53,16 +54,18 @@ fmx_load_config
 
 # Unreconciled terminal results for a public commitment are actionable even when
 # the relay has no new mention, and they outlive any session, so surface them
-# first. The signature compare keeps this to one wake per new result set instead
-# of one per cycle; bin/fm-public-followup.sh consume clears it.
+# first. Record the signature only after writing the wake, so failed output can
+# retry. A recorded signature suppresses later polls of the same result set;
+# bin/fm-public-followup.sh consume clears the events.
 if fm_pf_has_events "$STATE"; then
   PF_ROOT=$(fm_pf_root "$STATE")
   PF_SIG=$(fm_pf_events_signature "$STATE" 2>/dev/null) || PF_SIG=
   if [ -n "$PF_SIG" ] \
     && [ "$(cat "$PF_ROOT/$FM_PF_SURFACED_BASENAME" 2>/dev/null || true)" != "$PF_SIG" ]; then
-    if printf '%s\n' "$PF_SIG" \
-      | fmx_private_artifact_publish_stdin "$PF_ROOT" "$FM_PF_SURFACED_BASENAME" 600 2>/dev/null; then
-      printf 'public-followup terminal results are waiting to be reconciled\n'
+    if printf 'public-followup terminal results are waiting to be reconciled\n'; then
+      printf '%s\n' "$PF_SIG" \
+        | fmx_private_artifact_publish_stdin "$PF_ROOT" "$FM_PF_SURFACED_BASENAME" 600 2>/dev/null \
+        || true
     fi
   fi
 fi

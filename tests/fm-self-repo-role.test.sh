@@ -103,6 +103,35 @@ run_role() {
 
 # --- report -----------------------------------------------------------------
 
+test_binary_role_files_refused() {
+  local root home shell body out rc
+  root=$(make_lineage_root binary-role-root 'https://example.invalid/group/repo')
+  home=$(make_role_home binary-role)
+  for shell in bash /bin/bash; do
+    for body in \
+      'main\000tainer example.invalid/group/repo\n' \
+      'maintainer example.invalid/gr\000oup/repo\n' \
+      '\000maintainer example.invalid/group/repo\n' \
+      'maintainer example.invalid/group/repo\n\000' \
+      '# bin\000ary\nmaintainer example.invalid/group/repo\n'; do
+      printf '%b' "$body" > "$home/config/firstmate-role"
+      rc=0
+      out=$(FM_HOME="$home" FM_CONFIG_OVERRIDE="$home/config" FM_ROOT_OVERRIDE="$root" \
+        "$shell" "$ROLE" check "$root" 2>&1) || rc=$?
+      expect_code 1 "$rc" "$shell must refuse a binary role file: $out"
+      out=$(FM_HOME="$home" FM_CONFIG_OVERRIDE="$home/config" FM_ROOT_OVERRIDE="$root" \
+        "$shell" "$ROLE" report 2>&1) || fail "$shell could not report the refused role: $out"
+      assert_contains "$out" 'role file contains binary data' "binary refusal must name the damaged input"
+    done
+    printf '# text comment\n\nmaintainer example.invalid/group/repo' > "$home/config/firstmate-role"
+    out=$(FM_HOME="$home" FM_CONFIG_OVERRIDE="$home/config" FM_ROOT_OVERRIDE="$root" \
+      "$shell" "$ROLE" check "$root" 2>&1) \
+      || fail "$shell rejected a valid role without a final newline: $out"
+    assert_contains "$out" 'authorized: maintainer scope' "valid text role lost its authority"
+  done
+  pass "binary role files cannot authorize publication, while valid commented text still can"
+}
+
 test_report_default_and_local_grants() {
   local home out
   home=$(make_role_home report-default)
@@ -344,6 +373,53 @@ test_check_task_consent_authorizes_one_task() {
 
 # In a secondmate home (its .fm-secondmate-home marker) a role file without a
 # propagation receipt resolves to user.
+test_malformed_inheritance_receipts_refused() {
+  local root parent home receipt valid gen bytes sha operation shell damage out rc
+  root=$(make_lineage_root receipt-framing-root 'https://example.invalid/group/repo')
+  parent=$(make_role_home receipt-parent 'maintainer example.invalid/group/repo')
+  home=$(make_role_home receipt-child)
+  : > "$home/.fm-secondmate-home"
+  FM_INHERITABLE_CONFIG=firstmate-role propagate_inheritable_config "$parent/config" "$home/config" \
+    || fail "could not create the inherited-role fixture"
+  receipt="$home/config/.fm-inherit-firstmate-role.generation"
+  valid="$home/valid-receipt"
+  cp "$receipt" "$valid"
+  {
+    IFS= read -r gen
+    IFS= read -r bytes
+    IFS= read -r sha
+    IFS= read -r operation
+  } < "$valid"
+  for shell in bash /bin/bash; do
+    for damage in tail partial-tail blank-tail binary-tail gen bytes sha operation; do
+      cp "$valid" "$receipt"
+      case "$damage" in
+        tail) printf 'extra\n' >> "$receipt" ;;
+        partial-tail) printf 'extra' >> "$receipt" ;;
+        blank-tail) printf '\n' >> "$receipt" ;;
+        binary-tail) printf '\000' >> "$receipt" ;;
+        gen) printf '%s\000\n%s\n%s\n%s\n' "$gen" "$bytes" "$sha" "$operation" > "$receipt" ;;
+        bytes) printf '%s\n%s\000\n%s\n%s\n' "$gen" "$bytes" "$sha" "$operation" > "$receipt" ;;
+        sha) printf '%s\n%s\n%s\000\n%s\n' "$gen" "$bytes" "$sha" "$operation" > "$receipt" ;;
+        operation) printf '%s\n%s\n%s\n%s\000\n' "$gen" "$bytes" "$sha" "$operation" > "$receipt" ;;
+      esac
+      rc=0
+      out=$(FM_HOME="$home" FM_CONFIG_OVERRIDE="$home/config" FM_ROOT_OVERRIDE="$root" \
+        "$shell" "$ROLE" check "$root" 2>&1) || rc=$?
+      expect_code 1 "$rc" "$shell must refuse a damaged $damage receipt: $out"
+      out=$(FM_HOME="$home" FM_CONFIG_OVERRIDE="$home/config" FM_ROOT_OVERRIDE="$root" \
+        "$shell" "$ROLE" report 2>&1) || fail "$shell could not report the refused role: $out"
+      assert_contains "$out" 'unverified inherited grant' "receipt refusal lost its reason"
+    done
+    cp "$valid" "$receipt"
+    out=$(FM_HOME="$home" FM_CONFIG_OVERRIDE="$home/config" FM_ROOT_OVERRIDE="$root" \
+      "$shell" "$ROLE" check "$root" 2>&1) \
+      || fail "$shell rejected the original propagation receipt: $out"
+    assert_contains "$out" 'authorized: maintainer scope' "valid inherited role lost its authority"
+  done
+  pass "binary or trailing receipt data cannot authorize an inherited role; the original receipt still can"
+}
+
 test_secondmate_cannot_self_grant() {
   local home out rc
   home=$(make_role_home sm-selfgrant "maintainer ${PUB_TARGET:-github.com/a/b}")
@@ -441,7 +517,7 @@ test_secondmate_inherits_only_resolved_primary_role() {
   : > "$sm_home/.fm-secondmate-home"
   receipt="$dst_config/.fm-inherit-firstmate-role.generation"
 
-  for bad in symlink two-directives; do
+  for bad in symlink two-directives binary; do
     rm -f "$src/firstmate-role"
     printf '# operator note\nmaintainer %s\n' "$scope" > "$src/firstmate-role"
     FM_INHERITABLE_CONFIG=firstmate-role propagate_inheritable_config "$src" "$dst_config" \
@@ -457,6 +533,9 @@ test_secondmate_inherits_only_resolved_primary_role() {
       ;;
     two-directives)
       printf 'maintainer %s\nuser\n' "$scope" > "$src/firstmate-role"
+      ;;
+    binary)
+      printf 'main\000tainer %s\n' "$scope" > "$src/firstmate-role"
       ;;
     esac
     out=$(FM_HOME="$TMP_ROOT/resolved-src-home" FM_CONFIG_OVERRIDE="$src" "$ROLE" report 2>&1)
@@ -709,6 +788,8 @@ if [ "$#" -gt 0 ]; then
   exit 0
 fi
 
+test_malformed_inheritance_receipts_refused
+test_binary_role_files_refused
 test_report_default_and_local_grants
 test_report_fails_closed_on_unsafe_input
 test_check_user_home_refused_on_self_repo

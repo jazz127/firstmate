@@ -881,7 +881,10 @@ test_undelivered_records_are_scan_immutable() {
       || fail "undelivered wrong-home check should be inert"
     fm_pending_reply_tick_one "$state" "$corr" busy "$sm_home" \
       || fail "undelivered direct tick should be inert"
+    # Deliberate guards: either indirect call would fail this fixture.
+    # shellcheck disable=SC2329
     fm_backend_busy_state() { fail "undelivered watcher tick must not probe the backend"; }
+    # shellcheck disable=SC2329
     fm_backend_capture() { fail "undelivered watcher tick must not capture the backend"; }
     fm_pending_reply_tick "$state" || fail "undelivered watcher tick should succeed"
     after=$(cat "$rec")
@@ -893,6 +896,328 @@ test_undelivered_records_are_scan_immutable() {
       || fail "correlated parent status should resolve after delivery"
   ) || fail "undelivered scan immutability regression failed"
   pass "undelivered records remain immutable across scan paths"
+}
+
+test_status_evidence_requires_complete_text() {
+  (
+    local home state sm_home corr rec status_file op read_kind rc status_retry_line expected
+    local FM_TEST_STATUS_READ_PATH='' FM_TEST_STATUS_READ_FAULT=none
+    # Faults apply only to the status read, never setup or pending-record reads.
+    # shellcheck disable=SC2329
+    cat() {
+      if [ "${1:-}" = "$FM_TEST_STATUS_READ_PATH" ] && [ "$FM_TEST_STATUS_READ_FAULT" != none ]; then
+        [ "$FM_TEST_STATUS_READ_FAULT" != partial ] || command cat "$@"
+        return 1
+      fi
+      command cat "$@"
+    }
+    for op in direct parent wrong-home restatement; do
+      for read_kind in nul-name nul-id nul-before nul-after nul-later-line partial failed; do
+        home=$(setup_parent "status-evidence-$op-$read_kind")
+        state="$home/state"
+        sm_home="$home/mate"
+        mkdir -p "$sm_home/state"
+        corr=$(fm_pending_reply_create "$home" "$state" mate 'fixture request')
+        fm_pending_reply_mark_delivered "$state" "$corr"
+        rec=$(fm_pending_reply_path "$state" "$corr")
+        status_file="$state/mate.status"
+        case "$op" in wrong-home|restatement) status_file="$sm_home/state/mate.status" ;; esac
+        FM_TEST_STATUS_READ_PATH=$status_file
+        FM_TEST_STATUS_READ_FAULT=none
+        case "$read_kind" in
+          nul-name) printf 'working: cor\000r=%s ready\n' "$corr" > "$status_file" ;;
+          nul-id) printf 'working: corr=%s\000%s ready\n' "${corr:0:8}" "${corr:8}" > "$status_file" ;;
+          nul-before) printf 'working: \000corr=%s ready\n' "$corr" > "$status_file" ;;
+          nul-after) printf 'working: corr=%s ready\000\n' "$corr" > "$status_file" ;;
+          nul-later-line) printf 'working: corr=%s ready\n\000damaged\n' "$corr" > "$status_file" ;;
+          partial|failed)
+            printf 'working: corr=%s ready\n' "$corr" > "$status_file"
+            FM_TEST_STATUS_READ_FAULT=$read_kind
+            ;;
+        esac
+        cp "$rec" "$home/record-before"
+        rc=0
+        case "$op" in
+          direct) fm_pending_reply_find_resolve_line "$status_file" "$corr" > "$home/output" || rc=$? ;;
+          parent) fm_pending_reply_try_resolve "$state" "$corr" > "$home/output" || rc=$? ;;
+          wrong-home) fm_pending_reply_detect_wrong_home "$state" "$corr" "$sm_home" > "$home/output" || rc=$? ;;
+          restatement) fm_pending_reply_restatement_copy_same_basename "$state" "$corr" "$sm_home" > "$home/output" || rc=$? ;;
+        esac
+        expect_code 1 "$rc" "$op $read_kind status must be incomplete evidence"
+        [ ! -s "$home/output" ] || fail "$op $read_kind emitted partial evidence"
+        cmp -s "$home/record-before" "$rec" || fail "$op $read_kind changed the record or cached an incomplete scan"
+        if [ "$op" = restatement ]; then
+          [ ! -e "$state/mate.status" ] || fail "$read_kind evidence was copied to the parent"
+        fi
+        # A healthy read must retry even if the file bytes never changed.
+        FM_TEST_STATUS_READ_FAULT=none
+        expected="working: corr=$corr ready"
+        case "$read_kind" in partial|failed) ;; *) printf '%s' "$expected" > "$status_file" ;; esac
+        case "$op" in
+          direct)
+            status_retry_line=$(fm_pending_reply_find_resolve_line "$status_file" "$corr") || fail "healthy direct retry failed"
+            [ "$status_retry_line" = "$expected" ] || fail "healthy direct retry lost the line"
+            ;;
+          parent)
+            fm_pending_reply_try_resolve "$state" "$corr" || fail "healthy parent retry failed"
+            [ "$(fm_pending_reply_get "$rec" phase)" = resolved ] || fail "healthy report did not resolve"
+            ;;
+          wrong-home)
+            fm_pending_reply_detect_wrong_home "$state" "$corr" "$sm_home" || fail "healthy wrong-home retry failed"
+            [ "$(fm_pending_reply_get "$rec" wrong_home_hits)" = 1 ] || fail "healthy report was not counted"
+            [ "$(fm_pending_reply_get "$rec" phase)" = awaiting_report ] || fail "wrong-home evidence resolved the request"
+            ;;
+          restatement)
+            fm_pending_reply_restatement_copy_same_basename "$state" "$corr" "$sm_home" || fail "healthy restatement retry failed"
+            [ "$(command cat "$state/mate.status")" = "$expected" ] || fail "healthy restatement lost the line"
+            ;;
+        esac
+      done
+    done
+  ) || fail "complete status evidence regression failed"
+  pass "binary and failed status reads cannot resolve, copy, count, or cache partial evidence; healthy retries succeed"
+}
+
+test_summary_strips_carrier_before_filtering() {
+  local home kind text expected corr rec long_text
+  home=$(setup_parent summary-carrier)
+  printf -v long_text 'x%.0s' {1..140}
+  for kind in marked marked-corr multiline long literal indented plain-corr; do
+    expected='inspect ledger'
+    case "$kind" in
+      marked) text="${FM_FROMFIRST_MARK}inspect ledger" ;;
+      marked-corr) text="${FM_FROMFIRST_MARK}corr=ABCDEF0123456789 inspect ledger" ;;
+      multiline) text="${FM_FROMFIRST_MARK}corr=0123456789abcdef inspect"$'\nledger' ;;
+      long) text="${FM_FROMFIRST_MARK}corr=0123456789abcdef $long_text"; expected="${long_text:0:117}..." ;;
+      literal) text='[fm-from-firstmate]inspect ledger'; expected=$text ;;
+      indented) text="  ${FM_FROMFIRST_MARK}inspect ledger"; expected='[fm-from-firstmate]inspect ledger' ;;
+      plain-corr) text='corr=0123456789abcdef inspect ledger' ;;
+    esac
+    [ "$(fm_pending_reply_summarize "$text")" = "$expected" ] || fail "$kind summary retained routing noise or removed literal text"
+    corr=$(fm_pending_reply_create "$home" "$home/state" mate "$text") || fail "$kind request creation failed"
+    rec=$(fm_pending_reply_path "$home/state" "$corr")
+    [ "$(fm_pending_reply_get "$rec" request_summary)" = "$expected" ] || fail "$kind persisted summary differs"
+  done
+  pass "request summaries strip the exact leading carrier before ASCII filtering and length limiting"
+}
+
+test_correlation_extraction_first_match() {
+  local home kind text expected
+  home=$(setup_parent correlation-extraction)
+  for kind in lower mixed multiple multiline unicode absent short invalid; do
+    expected=abcdef0123456789
+    case "$kind" in
+      lower) text='corr=abcdef0123456789' ;;
+      mixed) text='prefix corr=AbCdEf0123456789 suffix' ;;
+      multiple) text='corr=ABCDEF0123456789 corr=1111111111111111' ;;
+      multiline) text=$'prefix\ncorr=ABCDEF0123456789\ncorr=1111111111111111' ;;
+      unicode) text='🌊corr=ABCDEF0123456789é' ;;
+      absent) text='ordinary request'; expected='' ;;
+      short) text='corr=abcdef012345678'; expected='' ;;
+      invalid) text='corr=abcdef012345678z'; expected='' ;;
+    esac
+    fm_pending_reply_extract_corr "$text" > "$home/actual" || fail "$kind correlation extraction failed"
+    : > "$home/expected"
+    [ -z "$expected" ] || printf '%s\n' "$expected" > "$home/expected"
+    cmp -s "$home/expected" "$home/actual" || fail "$kind first correlation or stdout framing changed"
+  done
+  pass "correlation extraction preserves first-match, hex case and stdout framing"
+}
+
+test_pending_directory_override_preserves_bytes() {
+  local home state corr rec marker suffix dir FM_PENDING_REPLY_DIR_OVERRIDE
+  for suffix in $'\n' $'\n\n'; do
+    home=$(setup_parent directory-bytes)
+    state="$home/state"
+    export FM_PENDING_REPLY_DIR_OVERRIDE="$home/pending$suffix"
+    corr=$(fm_pending_reply_create "$home" "$state" mate 'fixture request') || fail "request creation failed"
+    rec="$FM_PENDING_REPLY_DIR_OVERRIDE/$corr"
+    [ -f "$rec" ] || fail "pending record was not created in the exact override directory"
+    [ ! -e "$home/pending" ] || fail "creation also made a directory with trimmed bytes"
+    fm_pending_reply_task_has_open "$state" mate || fail "open request was not found in the override directory"
+    fm_pending_reply_write_delivery_confirmation "$state" "$corr" attempted 1000 || fail "delivery preparation failed"
+    marker="$FM_PENDING_REPLY_DIR_OVERRIDE/.delivery-confirmed-$corr"
+    [ -f "$marker" ] || fail "delivery sidecar lost directory bytes"
+    [ ! -e "$home/pending" ] || fail "delivery preparation made a trimmed directory"
+    fm_pending_reply_confirm_delivery "$state" "$corr" || fail "delivery confirmation failed"
+    printf 'done [corr=%s]: fixture answer\n' "$corr" > "$state/mate.status"
+    fm_pending_reply_tick "$state" || fail "pending scan failed"
+    [ "$(fm_pending_reply_get "$rec" phase)" = resolved ] || fail "pending scan missed the exact directory"
+    [ ! -e "$marker" ] || fail "confirmed sidecar was not cleared"
+    if fm_pending_reply_task_has_open "$state" mate; then fail "resolved request still appears open"; fi
+    dir=stale
+    fm_pending_reply_dir "$state" dir > "$home/dir.out"
+    [ "$dir" = "$FM_PENDING_REPLY_DIR_OVERRIDE" ] || fail "direct directory assignment lost path bytes"
+    [ ! -s "$home/dir.out" ] || fail "direct directory assignment printed output"
+  done
+  pass "pending creation, delivery and scans preserve the exact override directory"
+}
+
+test_signature_failures_do_not_hide_new_reports() {
+  (
+    local home state sm_home corr rec status_file signature_fault scan_kind rc
+    local FM_TEST_SIGNATURE_FAULT=healthy FM_TEST_SIGNATURE_PLATFORM
+    FM_TEST_SIGNATURE_PLATFORM=$(command uname -s)
+    # Exercise the portable stat interface without replacing Darwin's system tool.
+    # shellcheck disable=SC2329
+    uname() {
+      if [ "${1:-}" = -s ]; then printf 'Linux\n'; else command uname "$@"; fi
+    }
+    # shellcheck disable=SC2329
+    stat() {
+      case "$FM_TEST_SIGNATURE_FAULT" in
+        stat-empty) return 1 ;;
+        stat-partial) printf 'partial'; return 1 ;;
+      esac
+      if [ "$FM_TEST_SIGNATURE_PLATFORM" = Darwin ]; then
+        /usr/bin/stat -f '%d:%i:%z:%m:%c' "$3"
+      else
+        command stat "$@"
+      fi
+    }
+    # shellcheck disable=SC2329
+    cksum() {
+      case "$FM_TEST_SIGNATURE_FAULT" in
+        checksum-empty) command cat >/dev/null; return 1 ;;
+        checksum-partial) command cat >/dev/null; printf '123 456\n'; return 1 ;;
+      esac
+      command cksum "$@"
+    }
+    for scan_kind in parent wrong-home; do
+      for signature_fault in stat-empty stat-partial checksum-empty checksum-partial; do
+        case "$scan_kind:$signature_fault" in parent:checksum-*) continue ;; esac
+        FM_TEST_SIGNATURE_FAULT=healthy
+        home=$(setup_parent "signature-$scan_kind-$signature_fault")
+        state="$home/state"
+        sm_home="$home/mate"
+        mkdir -p "$sm_home/state"
+        corr=$(fm_pending_reply_create "$home" "$state" mate 'fixture request')
+        fm_pending_reply_mark_delivered "$state" "$corr"
+        rec=$(fm_pending_reply_path "$state" "$corr")
+        status_file="$state/mate.status"
+        [ "$scan_kind" != wrong-home ] || status_file="$sm_home/state/child.status"
+        printf 'working: fixture waiting\n' > "$status_file"
+        FM_TEST_SIGNATURE_FAULT=$signature_fault
+        if [ "$scan_kind" = parent ]; then
+          rc=0
+          fm_pending_reply_try_resolve "$state" "$corr" || rc=$?
+          expect_code 1 "$rc" "a routine status must not resolve the request"
+        else
+          fm_pending_reply_detect_wrong_home "$state" "$corr" "$sm_home" || fail "first wrong-home scan failed"
+        fi
+        printf 'done [corr=%s]: fixture answer\n' "$corr" >> "$status_file"
+        if [ "$scan_kind" = parent ]; then
+          fm_pending_reply_try_resolve "$state" "$corr" || fail "$signature_fault hid the appended parent report"
+          [ "$(fm_pending_reply_get "$rec" phase)" = resolved ] || fail "parent report did not resolve"
+        else
+          fm_pending_reply_detect_wrong_home "$state" "$corr" "$sm_home" || fail "second wrong-home scan failed"
+          [ "$(fm_pending_reply_get "$rec" wrong_home_hits)" = 1 ] || fail "$signature_fault hid the appended wrong-home report"
+          [ "$(fm_pending_reply_get "$rec" phase)" = awaiting_report ] || fail "wrong-home report resolved the request"
+        fi
+      done
+    done
+  ) || fail "signature failure fallback regression failed"
+  pass "failed stat/checksum signatures still read newly appended parent and wrong-home reports"
+}
+
+test_sighting_encoding_failure_retries() {
+  (
+    local home state sm_home corr rec status_file expected first sighting_fault rc
+    local FM_TEST_SIGHTING_ENCODER=healthy
+    # Called by the production encoder; consume its input before failing.
+    # shellcheck disable=SC2329
+    od() {
+      case "$FM_TEST_SIGHTING_ENCODER" in
+        partial) command cat >/dev/null; printf '2f 74 6d 70\n'; return 1 ;;
+        empty) command cat >/dev/null; return 1 ;;
+        healthy) command od "$@" ;;
+      esac
+    }
+    for sighting_fault in partial empty; do
+      home=$(setup_parent "sighting-encoding-$sighting_fault")
+      state="$home/state"
+      sm_home="$home/mate"
+      mkdir -p "$sm_home/state"
+      corr=$(fm_pending_reply_create "$home" "$state" mate 'fixture request')
+      fm_pending_reply_mark_delivered "$state" "$corr"
+      rec=$(fm_pending_reply_path "$state" "$corr")
+      status_file="$sm_home/state/"$'child\nphase=resolved,west.status'
+      printf 'done [corr=%s]: fixture report\n' "$corr" > "$status_file"
+      cp "$rec" "$home/before"
+      FM_TEST_SIGHTING_ENCODER=$sighting_fault
+      rc=0
+      fm_pending_reply_detect_wrong_home "$state" "$corr" "$sm_home" || rc=$?
+      expect_code 1 "$rc" "a $sighting_fault encoder failure must leave the scan incomplete"
+      cmp -s "$home/before" "$rec" || fail "failed encoding changed sighting evidence or cached the scan"
+      FM_TEST_SIGHTING_ENCODER=healthy
+      fm_pending_reply_detect_wrong_home "$state" "$corr" "$sm_home" || fail "healthy retry failed"
+      [ "$(fm_pending_reply_get "$rec" wrong_home_hits)" = 1 ] || fail "healthy retry missed the unchanged status file"
+      first=$(fm_pending_reply_get "$rec" wrong_home_first_sighting)
+      printf -v expected '%q' "$status_file"
+      [ "$(fm_pending_reply_sighting_display "$first")" = "$expected:1" ] || fail "sighting lost part of its file path"
+      [ "$(fm_pending_reply_get "$rec" phase)" = awaiting_report ] || fail "a wrong-home sighting resolved the request"
+      cp "$rec" "$home/after"
+      fm_pending_reply_detect_wrong_home "$state" "$corr" "$sm_home" || fail "repeated healthy scan failed"
+      cmp -s "$home/after" "$rec" || fail "repeated healthy scan changed the sighting"
+    done
+  ) || fail "sighting encoder recovery regression failed"
+  pass "failed sighting encoders leave evidence unchanged and retry without a status-file change"
+}
+
+test_delivery_marker_requires_complete_text() {
+  (
+    local home state corr rec marker op marker_read_mode prefix rc
+    local FM_TEST_DELIVERY_MARKER='' FM_TEST_DELIVERY_READ_FAULT=none
+    # Called by the production sidecar reader; other file reads stay ordinary.
+    # shellcheck disable=SC2329
+    cat() {
+      if [ "${1:-}" = "$FM_TEST_DELIVERY_MARKER" ] && [ "$FM_TEST_DELIVERY_READ_FAULT" != none ]; then
+        [ "$FM_TEST_DELIVERY_READ_FAULT" != partial ] || command cat "$@"
+        return 1
+      fi
+      command cat "$@"
+    }
+    # The fixture clock is intentionally limited to this test subshell.
+    # shellcheck disable=SC2030,SC2031
+    export FM_PENDING_REPLY_NOW=2000
+    for op in reconcile reset resolve unresolved; do
+      for marker_read_mode in binary partial failed; do
+        home=$(setup_parent "delivery-marker-$op-$marker_read_mode")
+        state="$home/state"
+        corr=$(fm_pending_reply_create "$home" "$state" mate 'fixture request')
+        rec=$(fm_pending_reply_path "$state" "$corr")
+        marker=$(fm_pending_reply_delivery_confirmation_path "$state" "$corr")
+        prefix=attempted
+        case "$op" in reconcile|unresolved) prefix=confirmed ;; esac
+        [ "$op" != reset ] || fm_pending_reply_set "$rec" phase delivery_unknown
+        [ "$op" != resolve ] || printf 'done [corr=%s]: fixture report\n' "$corr" > "$state/mate.status"
+        cp "$rec" "$home/before"
+        printf '%s=1000\n' "$prefix" > "$marker"
+        FM_TEST_DELIVERY_MARKER=$marker
+        FM_TEST_DELIVERY_READ_FAULT=none
+        case "$marker_read_mode" in
+          binary) printf '%s=10\00000\n' "$prefix" > "$marker" ;;
+          partial) FM_TEST_DELIVERY_READ_FAULT=partial ;;
+          failed) FM_TEST_DELIVERY_READ_FAULT=empty ;;
+        esac
+        rc=0
+        case "$op" in
+          reconcile) fm_pending_reply_reconcile_delivery "$state" "$corr" || rc=$? ;;
+          reset) fm_pending_reply_reset_known_undelivered "$state" "$corr" || rc=$? ;;
+          resolve) fm_pending_reply_try_resolve "$state" "$corr" || rc=$? ;;
+          unresolved) fm_pending_reply_delivery_attempt_unresolved "$state" "$corr" || rc=$? ;;
+        esac
+        if [ "$op" = unresolved ]; then
+          expect_code 0 "$rc" "unreadable $marker_read_mode delivery evidence must keep a resend blocked"
+        else
+          expect_code 1 "$rc" "$op must refuse $marker_read_mode delivery evidence"
+        fi
+        cmp -s "$home/before" "$rec" || fail "$op changed the record after a $marker_read_mode marker read"
+        [ -f "$marker" ] || fail "$op removed the $marker_read_mode marker"
+      done
+    done
+  ) || fail "delivery marker complete-text regression failed"
+  pass "delivery markers require complete text and failed reads keep resends blocked"
 }
 
 test_delivery_confirmation_fallback_reconciles() {
@@ -1560,6 +1885,8 @@ test_beacon_refreshes_between_selected_remote_records() (
   seen="$home/first-observation"
   stale="$home/stale-observation"
   touch -t 200001010000 "$oldbeat" "$beat"
+  # Called by the production tick through its overridable observation helper.
+  # shellcheck disable=SC2329
   fm_pending_reply_remote_observation() {
     if [ -e "$seen" ]; then
       [ "$beat" -nt "$oldbeat" ] || : > "$stale"
@@ -1582,7 +1909,7 @@ test_beacon_refreshes_between_selected_remote_records() (
 )
 
 test_correlations_reuse_only_for_matching_open_task() {
-  local dir fb log home state got corr1 corr2 corr3 rec
+  local dir fb log home state got corr1 corr2 corr3 rec malformed_corr
   dir="$TMP_ROOT/corr-reuse"; mkdir -p "$dir"
   fb=$(make_stubs "$dir"); log="$dir/send.log"
   home=$(setup_parent corr-reuse)
@@ -1592,6 +1919,17 @@ test_correlations_reuse_only_for_matching_open_task() {
   run_send "$fb" "$home" "$log" domain "first request" || fail "first marked send failed"
   got=$(latest_record_body "$home" domain)
   corr1=$(fm_pending_reply_extract_corr "$got")
+  rec=$(fm_pending_reply_path "$state" "$corr1")
+  cp "$rec" "$home/before-invalid-corr"
+  for malformed_corr in "$corr1"$'\n' "$corr1"$'\n\n' $'\n'"$corr1" \
+    "$corr1"$'\njunk' "$corr1"$'\r' ''; do
+    if FM_PENDING_REPLY_EXISTING_CORR="$malformed_corr" run_send "$fb" "$home" "$log" domain 'first request'; then
+      fail "a malformed explicit correlation must be refused"
+    fi
+    [ ! -e "$state/domain.inbox/002.msg" ] || fail "a malformed correlation enqueued a resend"
+    [ ! -s "$log" ] || fail "a malformed correlation reached the terminal"
+    cmp -s "$home/before-invalid-corr" "$rec" || fail "a malformed correlation changed its pending record"
+  done
   export FM_PENDING_REPLY_EXISTING_CORR=$corr1
   if run_send "$fb" "$home" "$log" other "forwarded request"; then
     fail "an explicit cross-task correlation must be refused"
@@ -1660,6 +1998,61 @@ test_tick_end_to_end_missed_then_escalate() {
     || fail "expiration must never silently erase an unresolved reply"
   [ "$(phase_of "$state" "$corr")" = escalated ] || fail "must stay escalated"
   pass "tick end-to-end: miss -> one recovery -> escalate -> durable"
+}
+
+test_remote_watermark_requires_complete_text() {
+  # Scope the clock/hook to this test, including its isolated command shims.
+  local FM_PENDING_REPLY_NOW=2000 FM_PENDING_REPLY_GRACE_SECS=0
+  local FM_PENDING_REPLY_SEND_HOOK=watermark_recovery_hook
+  export FM_PENDING_REPLY_NOW FM_PENDING_REPLY_GRACE_SECS FM_PENDING_REPLY_SEND_HOOK
+  (
+    local home state corr rec marker kind rc
+    local FM_TEST_WATERMARK_PATH='' FM_TEST_WATERMARK_FAULT=none FM_TEST_WATERMARK_HOOK_LOG=''
+    # shellcheck disable=SC2329
+    watermark_recovery_hook() { printf 'recovery attempted\n' >> "$FM_TEST_WATERMARK_HOOK_LOG"; }
+    # Only the watermark read fails; pending record reads stay ordinary.
+    # shellcheck disable=SC2329
+    cat() {
+      if [ "${1:-}" = "$FM_TEST_WATERMARK_PATH" ] && [ "$FM_TEST_WATERMARK_FAULT" != none ]; then
+        [ "$FM_TEST_WATERMARK_FAULT" != partial ] || command cat "$@"
+        return 1
+      fi
+      command cat "$@"
+    }
+    for kind in nul-value nul-tail nul-other-line partial failed; do
+      home=$(setup_parent "watermark-$kind")
+      state="$home/state"
+      FM_TEST_WATERMARK_HOOK_LOG="$home/hook.log"
+      FM_TEST_WATERMARK_FAULT=none
+      fm_write_meta "$state/mate.meta" kind=secondmate remote_host=fixture-host harness=claude
+      corr=$(fm_pending_reply_create "$home" "$state" mate 'fixture request')
+      fm_pending_reply_mark_delivered "$state" "$corr" 1000
+      rec=$(fm_pending_reply_path "$state" "$corr")
+      fm_pending_reply_set "$rec" request_turn_completed_epoch 1500
+      fm_pending_reply_note_remote_channel_caught_up "$state" mate 2000
+      marker=$(fm_pending_reply_remote_channel_watermark_path "$state" mate)
+      FM_TEST_WATERMARK_PATH=$marker
+      case "$kind" in
+        nul-value) printf 'caught_up_epoch=20\00000\n' > "$marker" ;;
+        nul-tail) printf 'caught_up_epoch=2000\000\n' > "$marker" ;;
+        nul-other-line) printf 'caught_up_epoch=2000\nbad\000\n' > "$marker" ;;
+        partial|failed) FM_TEST_WATERMARK_FAULT=$kind ;;
+      esac
+      cp "$rec" "$home/before"
+      rc=0
+      fm_pending_reply_send_recovery "$state" "$corr" || rc=$?
+      expect_code 1 "$rc" "$kind watermark must not license a remote recovery"
+      [ ! -e "$FM_TEST_WATERMARK_HOOK_LOG" ] || fail "$kind watermark released the recovery hook"
+      cmp -s "$home/before" "$rec" || fail "$kind watermark changed the pending request"
+      [ -z "$(fm_pending_reply_remote_channel_epoch "$state" mate)" ] || fail "$kind watermark yielded an epoch"
+      FM_TEST_WATERMARK_FAULT=none
+      fm_pending_reply_note_remote_channel_caught_up "$state" mate 2000
+      fm_pending_reply_send_recovery "$state" "$corr" || fail "healthy watermark retry failed"
+      [ -s "$FM_TEST_WATERMARK_HOOK_LOG" ] || fail "healthy watermark did not release recovery"
+      [ "$(fm_pending_reply_get "$rec" phase)" = recovery_sent ] || fail "healthy recovery did not persist its phase"
+    done
+  ) || fail "watermark complete-text regression failed"
+  pass "binary and failed caught-up watermark reads cannot license remote recovery; healthy retry succeeds"
 }
 
 test_remote_repost_waits_for_the_reply_channel() {
@@ -2169,8 +2562,782 @@ test_same_kind_escalation_reopens_after_operator_close() {
   pass "a same-kind escalation after an operator close opens the decision again"
 }
 
+test_record_update_preserves_other_fields() {
+  local home rec path
+  home=$(setup_parent record-update)
+  rec="$home/record"
+  for path in "$rec" record; do
+    printf 'phase=old\nsummary=  literal\\n=value  \nphase=duplicate\nempty=' > "$rec"
+    (cd "$home" && fm_pending_reply_set "$path" phase 'new=value') \
+      || fail "field update failed for $path"
+    printf 'summary=  literal\\n=value  \nempty=\nphase=new=value\n' > "$home/expected"
+    cmp -s "$home/expected" "$rec" || fail "field update lost bytes or retained duplicate keys"
+  done
+  pass "field updates preserve other fields and replace every old occurrence through absolute and relative paths"
+}
+
+test_record_update_preserves_unreadable_input() {
+  local home rec expected rc=0
+  home=$(setup_parent unreadable-record)
+  rec="$home/record"
+  expected="$home/expected"
+  printf 'phase=before\nretained=yes\n' > "$rec"
+  cp "$rec" "$expected"
+  chmod 000 "$rec"
+  if [ -r "$rec" ]; then
+    chmod 600 "$rec"
+    pass "unreadable record case skipped (this user can read mode-000 files)"
+    return 0
+  fi
+  fm_pending_reply_set "$rec" phase after 2> "$home/error" || rc=$?
+  chmod 600 "$rec"
+  [ "$rc" -ne 0 ] || fail "an unreadable record update reported success"
+  cmp -s "$expected" "$rec" || fail "an unreadable record update replaced the original bytes"
+  pass "an unreadable record update refuses without replacing the original bytes"
+}
+
+test_tick_without_metadata() (
+  local home state corr phase
+  home=$(setup_parent missing-meta)
+  state="$home/state"
+  corr=$(fm_pending_reply_create "$home" "$state" missing "request without metadata")
+  fm_pending_reply_mark_delivered "$state" "$corr"
+  fm_pending_reply_tick "$state" || fail "missing metadata aborted the reply scan"
+  phase=$(phase_of "$state" "$corr")
+  [ "$phase" = awaiting_report ] || fail "unknown worker state changed the pending phase: $phase"
+  pass "missing task metadata leaves the request pending without aborting the scan"
+)
+
 # --- run --------------------------------------------------------------------
 
+test_same_second_status_rewrite_is_rescanned() {
+  local home state corr rec report operation attempt collision rc
+  for operation in parent wrong-home; do
+    collision=0
+    for attempt in 1 2 3 4 5; do
+      home=$(setup_parent "same-second-$operation-$attempt")
+      state="$home/state"
+      mkdir -p "$home/mate/state"
+      corr=$(fm_pending_reply_create "$home" "$state" mate 'rewritten report request') \
+        || fail "rewritten report fixture creation failed"
+      fm_pending_reply_mark_delivered "$state" "$corr" 1000 \
+        || fail "rewritten report fixture delivery failed"
+      report="$state/mate.status"
+      [ "$operation" != wrong-home ] || report="$home/mate/state/child.status"
+      # Leave almost a whole second for the cache read and rewrite. If a slow
+      # runner still crosses the boundary, retry with a fresh fixture below.
+      python3 - <<'PY'
+import time
+time.sleep(1.05 - time.time() % 1)
+PY
+      printf 'working: corr=ffffffffffffffff ready\n' > "$report"
+      if [ "$operation" = parent ]; then
+        fm_pending_reply_try_resolve "$state" "$corr" && fail "unrelated report resolved the fixture"
+      else
+        fm_pending_reply_detect_wrong_home "$state" "$corr" "$home/mate" \
+          || fail "initial wrong-home scan failed"
+      fi
+      rc=0
+      python3 - "$report" "$corr" <<'PY' || rc=$?
+import pathlib, sys
+path = pathlib.Path(sys.argv[1])
+before = path.stat()
+path.write_text(f"working: corr={sys.argv[2]} ready\n")
+after = path.stat()
+def coarse(value):
+    return (value.st_dev, value.st_ino, value.st_size,
+            value.st_mtime_ns // 1_000_000_000, value.st_ctime_ns // 1_000_000_000)
+sys.exit(0 if coarse(before) == coarse(after) else 77)
+PY
+      [ "$rc" -ne 77 ] || continue
+      [ "$rc" -eq 0 ] || fail "same-second rewrite fixture failed"
+      collision=1
+      rec=$(fm_pending_reply_path "$state" "$corr")
+      if [ "$operation" = parent ]; then
+        fm_pending_reply_try_resolve "$state" "$corr" \
+          || fail "same-size same-second report must invalidate cached absence"
+        [ "$(phase_of "$state" "$corr")" = resolved ] || fail "rewritten report did not resolve"
+      else
+        fm_pending_reply_detect_wrong_home "$state" "$corr" "$home/mate" \
+          || fail "rewritten wrong-home scan failed"
+        [ "$(fm_pending_reply_get "$rec" wrong_home_hits)" = 1 ] \
+          || fail "same-size same-second rewrite must invalidate the wrong-home cache"
+      fi
+      break
+    done
+    [ "$collision" = 1 ] || fail "could not exercise a same-second $operation rewrite"
+  done
+  pass "same-size status rewrites within a second invalidate parent and wrong-home caches"
+}
+
+test_invalid_busy_regex_does_not_prove_idle() {
+  local regex_home state corr rec kind harness_observation
+  local FM_PENDING_REPLY_NOW=2000 FM_PENDING_REPLY_GRACE_SECS=0 FM_BUSY_REGEX=''
+  local FM_PENDING_REPLY_SEND_HOOK=invalid_regex_recovery_hook
+  export FM_PENDING_REPLY_NOW FM_PENDING_REPLY_GRACE_SECS FM_PENDING_REPLY_SEND_HOOK FM_BUSY_REGEX
+  (
+    fm_backend_busy_state() { printf unknown; }
+    fm_backend_capture() { printf 'esc to interrupt\nfixture footer\n'; }
+    # Invoked indirectly through FM_PENDING_REPLY_SEND_HOOK.
+    # shellcheck disable=SC2329
+    invalid_regex_recovery_hook() { printf '%s\n' "$1" >> "$regex_home/recoveries"; }
+    for kind in bracket paren custom-busy custom-idle default; do
+      regex_home=$(setup_parent "invalid-busy-regex-$kind")
+      state="$regex_home/state"
+      corr=$(fm_pending_reply_create "$regex_home" "$state" mate 'custom regex request') \
+        || fail "custom regex fixture creation failed"
+      fm_pending_reply_mark_delivered "$state" "$corr" 1000 \
+        || fail "custom regex fixture delivery failed"
+      fm_write_meta "$state/mate.meta" 'backend=tmux' 'window=synthetic-endpoint' 'harness=codex'
+      case "$kind" in
+        bracket) FM_BUSY_REGEX='[' ;;
+        paren) FM_BUSY_REGEX='(' ;;
+        custom-busy) FM_BUSY_REGEX='esc to interrupt' ;;
+        custom-idle) FM_BUSY_REGEX='never matches' ;;
+        default) FM_BUSY_REGEX='' ;;
+      esac
+      harness_observation=$(fm_pending_reply_backend_observation tmux synthetic-endpoint fm-mate codex 2>/dev/null)
+      case "$kind" in
+        bracket|paren) [ "$harness_observation" = unknown ] || fail "$kind regex error must be unknown" ;;
+        custom-idle) [ "$harness_observation" = fallback-idle ] || fail "a valid regex miss lost idle fallback" ;;
+        *) [ "$harness_observation" = busy ] || fail "a valid busy regex lost its match" ;;
+      esac
+      fm_pending_reply_tick "$state" 2>/dev/null || fail "custom regex tick failed"
+      rec=$(fm_pending_reply_path "$state" "$corr")
+      if [ "$kind" = custom-idle ]; then
+        [ "$(phase_of "$state" "$corr")" = recovery_sent ] || fail "valid idle evidence lost recovery"
+        [ -s "$regex_home/recoveries" ] || fail "valid idle evidence did not invoke the recovery hook"
+      else
+        [ "$(phase_of "$state" "$corr")" = awaiting_report ] || fail "$kind regex must not trigger recovery"
+        [ -z "$(fm_pending_reply_get "$rec" request_turn_completed_epoch)" ] || fail "$kind regex falsely completed the turn"
+        [ ! -e "$regex_home/recoveries" ] || fail "$kind regex invoked the recovery hook"
+      fi
+    done
+  ) || fail "invalid busy regex regression failed"
+  pass "invalid busy regexes remain unknown without completing turns or sending recovery"
+}
+
+test_large_busy_capture_with_pipefail() {
+  local capture_home state corr rec kind harness padding
+  local FM_PENDING_REPLY_NOW=2000 FM_PENDING_REPLY_GRACE_SECS=0
+  local FM_PENDING_REPLY_SEND_HOOK=large_busy_recovery_hook
+  export FM_PENDING_REPLY_NOW FM_PENDING_REPLY_GRACE_SECS FM_PENDING_REPLY_SEND_HOOK
+  (
+    set -o pipefail
+    # Backend hooks are invoked indirectly by the pending-reply poll.
+    # shellcheck disable=SC2329
+    fm_backend_busy_state() { printf unknown; }
+    # shellcheck disable=SC2329
+    fm_backend_capture() { cat "$capture_home/capture"; }
+    # Invoked indirectly through FM_PENDING_REPLY_SEND_HOOK.
+    # shellcheck disable=SC2329
+    large_busy_recovery_hook() { printf '%s\n' "$1" >> "$capture_home/recoveries"; }
+    padding=$(printf '%200000s' '')
+    padding=${padding// /x}
+    for kind in early late idle foreign; do
+      capture_home=$(setup_parent "large-busy-$kind")
+      state="$capture_home/state"
+      corr=$(fm_pending_reply_create "$capture_home" "$state" mate 'large capture request') \
+        || fail "large capture fixture creation failed"
+      fm_pending_reply_mark_delivered "$state" "$corr" 1000 \
+        || fail "large capture fixture delivery failed"
+      harness=codex
+      [ "$kind" != foreign ] || harness=pi
+      fm_write_meta "$state/mate.meta" 'backend=tmux' 'window=synthetic-endpoint' "harness=$harness"
+      case "$kind" in
+        early|foreign) printf 'esc to interrupt\nnotes: %s\n' "$padding" > "$capture_home/capture" ;;
+        late) printf 'notes: %s\nesc to interrupt\n' "$padding" > "$capture_home/capture" ;;
+        idle) printf 'notes: %s\nready\n' "$padding" > "$capture_home/capture" ;;
+      esac
+      fm_pending_reply_tick "$state" || fail "large capture tick failed"
+      rec=$(fm_pending_reply_path "$state" "$corr")
+      case "$kind" in
+        early|late)
+          [ "$(phase_of "$state" "$corr")" = awaiting_report ] \
+            || fail "$kind busy marker must not trigger a recovery"
+          [ -z "$(fm_pending_reply_get "$rec" request_turn_completed_epoch)" ] \
+            || fail "$kind busy marker must not prove turn completion"
+          [ ! -e "$capture_home/recoveries" ] || fail "$kind busy capture invoked the recovery hook"
+          ;;
+        *)
+          [ "$(phase_of "$state" "$corr")" = recovery_sent ] \
+            || fail "$kind capture lost its eligible idle fallback"
+          [ -s "$capture_home/recoveries" ] || fail "$kind capture did not invoke the recovery hook"
+          ;;
+      esac
+    done
+  ) || fail "large busy capture regression failed"
+  pass "large busy captures retain their harness-scoped verdict under pipefail"
+}
+
+test_record_field_framing() {
+  local home rec actual expected
+  home=$(setup_parent field-framing)
+  rec="$home/record"
+  actual="$home/actual"
+  expected="$home/expected"
+  printf 'phase=awaiting_report\nempty=\nsummary=  literal\\n=value  \nphase=resolved' > "$rec"
+  fm_pending_reply_get "$rec" phase > "$actual"
+  printf 'resolved\n' > "$expected"
+  cmp -s "$expected" "$actual" || fail "the final unterminated field did not win"
+  fm_pending_reply_get "$rec" summary > "$actual"
+  printf '  literal\\n=value  \n' > "$expected"
+  cmp -s "$expected" "$actual" || fail "field bytes were rewritten"
+  fm_pending_reply_get "$rec" empty > "$actual"
+  printf '\n' > "$expected"
+  cmp -s "$expected" "$actual" || fail "an empty field lost its newline"
+  fm_pending_reply_get "$rec" absent > "$actual"
+  [ ! -s "$actual" ] || fail "an absent field emitted output"
+  fm_pending_reply_get "$home/absent" phase > "$actual"
+  [ ! -s "$actual" ] || fail "an absent record emitted output"
+  printf 'phase=re\0solved\n' > "$rec"
+  fm_pending_reply_get "$rec" phase > "$actual"
+  [ ! -s "$actual" ] || fail "a binary record produced a text phase"
+  printf 'phase=resolved\nignored=bad\0\n' > "$rec"
+  fm_pending_reply_get "$rec" phase > "$actual"
+  [ ! -s "$actual" ] || fail "a NUL after the field did not invalidate the binary record"
+  pass "record fields preserve framing, literal bytes and final-occurrence precedence"
+}
+
+test_record_field_output_variable() {
+  local home rec value='stale' key='stale' line='stale' contents='stale' actual
+  home=$(setup_parent field-output-variable)
+  rec="$home/record"
+  actual="$home/stdout"
+  printf 'phase=old\nempty=\nsummary=  literal\\n=value  \nphase=resolved' > "$rec"
+  fm_pending_reply_get "$rec" phase value > "$actual"
+  [ "$value" = resolved ] || fail "output variable did not receive the final field"
+  fm_pending_reply_get "$rec" summary contents >> "$actual"
+  [ "$contents" = '  literal\n=value  ' ] || fail "output variable rewrote literal field bytes"
+  fm_pending_reply_get "$rec" empty key >> "$actual"
+  [ -z "$key" ] || fail "empty field did not clear output variable"
+  fm_pending_reply_get "$rec" absent line >> "$actual"
+  [ -z "$line" ] || fail "missing field did not clear output variable"
+  fm_pending_reply_get "$home/missing" phase value >> "$actual"
+  [ -z "$value" ] || fail "missing record did not clear output variable"
+  value=stale
+  printf 'phase=resolved\nother=bad\0\n' > "$rec"
+  fm_pending_reply_get "$rec" phase value >> "$actual"
+  [ -z "$value" ] || fail "binary record did not clear output variable"
+  [ ! -s "$actual" ] || fail "output-variable reads also printed to stdout"
+  pass "record fields assign output variables without losing missing/binary clearing or field bytes"
+}
+
+test_failed_fallback_pipeline_refuses_create() {
+  (
+    local home corr rc failed_stage
+    # Each failing producer emits plausible text before failing. Consuming its
+    # input isolates the failure from an unrelated upstream SIGPIPE.
+    # shellcheck disable=SC2329
+    openssl() { return 1; }
+    # shellcheck disable=SC2329
+    cksum() {
+      if [ "$failed_stage" = checksum ]; then
+        command cat >/dev/null
+        printf '12345 67\n'
+        return 1
+      fi
+      command cksum "$@"
+    }
+    # shellcheck disable=SC2329
+    shasum() {
+      if [ "$failed_stage" = digest ]; then
+        command cat >/dev/null
+        printf 'fedcba98765432100123456789abcdef0123456789abcdef0123456789abcdef01  -\n'
+        return 1
+      fi
+      command shasum "$@"
+    }
+    # shellcheck disable=SC2329
+    awk() {
+      if [ "$failed_stage" = field ]; then
+        command cat >/dev/null
+        printf 'fedcba98765432100123456789abcdef0123456789abcdef0123456789abcdef01\n'
+        return 1
+      fi
+      command awk "$@"
+    }
+    for failed_stage in checksum digest field; do
+      home=$(setup_parent "fallback-failure-$failed_stage")
+      rc=0
+      corr=$(fm_pending_reply_create "$home" "$home/state" mate 'fixture request') || rc=$?
+      expect_code 1 "$rc" "a failed fallback $failed_stage must refuse creation"
+      [ -z "$corr" ] || fail "failed fallback $failed_stage returned an id"
+      [ -z "$(find "$home/state/pending-replies" -type f)" ] || fail "failed fallback $failed_stage wrote a pending record"
+    done
+    failed_stage=none
+    home=$(setup_parent healthy-fallback-after-failure)
+    corr=$(fm_pending_reply_create "$home" "$home/state" mate 'fixture request') || fail "healthy fallback failed"
+    [ "${#corr}" = 16 ] || fail "healthy fallback has the wrong length"
+    [ "$(fm_pending_reply_get "$home/state/pending-replies/$corr" phase)" = awaiting_report ] \
+      || fail "healthy fallback did not persist the request"
+  ) || fail "fallback pipeline failure regression failed"
+  pass "failed fallback checksum/digest/field pipelines cannot publish ids or pending records"
+}
+
+test_failed_openssl_output_uses_fallback() {
+  (
+    local home corr rec emitted
+    local FM_TEST_FAILED_RANDOM_OUTPUT='' FM_TEST_FALLBACK_LOG=''
+    # Synthetic failed generator and deterministic healthy fallback digest.
+    # shellcheck disable=SC2329
+    openssl() { printf '%s' "$FM_TEST_FAILED_RANDOM_OUTPUT"; return 1; }
+    # shellcheck disable=SC2329
+    shasum() {
+      command cat >/dev/null
+      printf 'fallback\n' >> "$FM_TEST_FALLBACK_LOG"
+      printf 'fedcba98765432100123456789abcdef0123456789abcdef0123456789abcdef01  -\n'
+    }
+    for emitted in 0123456789abcdef ABCDEF0123456789 deadbeef zzzz 0123456789abcdefabcd ''; do
+      home=$(setup_parent failed-random-prefix)
+      FM_TEST_FAILED_RANDOM_OUTPUT=$emitted
+      FM_TEST_FALLBACK_LOG="$home/fallback.log"
+      corr=$(fm_pending_reply_create "$home" "$home/state" mate 'fixture request') \
+        || fail "failed generator output prevented the healthy fallback"
+      [ -s "$FM_TEST_FALLBACK_LOG" ] || fail "failed generator output bypassed the fallback"
+      [ "$corr" = fedcba9876543210 ] || fail "failed generator bytes were used as the correlation id"
+      rec=$(fm_pending_reply_path "$home/state" "$corr")
+      [ "$(fm_pending_reply_get "$rec" phase)" = awaiting_report ] || fail "fallback did not persist the request"
+    done
+  ) || fail "failed generator fallback regression failed"
+  pass "failed OpenSSL output is discarded before the fallback generates a correlation"
+}
+
+test_collision_retry_validates_generated_id() {
+  local home state rec next corr rc
+  for next in a deadbeef abcdef012345678 '???deadbeef???' zzzz ABCDEF0123456789 0123456789abcdef; do
+    home=$(setup_parent collision-id)
+    state="$home/state"
+    mkdir -p "$state/pending-replies" "$home/fakebin"
+    rec="$state/pending-replies/0123456789abcdef"
+    printf 'sentinel existing request\n' > "$rec"
+    cp "$rec" "$home/original"
+    cat > "$home/fakebin/openssl" <<'SH'
+#!/bin/sh
+if [ ! -e "$FM_TEST_ID_ATTEMPT" ]; then
+  : > "$FM_TEST_ID_ATTEMPT"
+  printf '0123456789abcdef\n'
+else
+  printf '%s' "$FM_TEST_ID_NEXT"
+fi
+SH
+    chmod +x "$home/fakebin/openssl"
+    rc=0
+    corr=$(PATH="$home/fakebin:$PATH" FM_TEST_ID_ATTEMPT="$home/attempt" FM_TEST_ID_NEXT="$next" \
+      fm_pending_reply_create "$home" "$state" mate 'fixture request') || rc=$?
+    cmp -s "$home/original" "$rec" || fail "collision retry overwrote the original record"
+    if [ "$next" = ABCDEF0123456789 ]; then
+      expect_code 0 "$rc" "valid collision retry should succeed"
+      [ "$corr" = abcdef0123456789 ] || fail "valid retry returned a different id"
+      [ "$(fm_pending_reply_get "$state/pending-replies/$corr" task_id)" = mate ] || fail "valid retry did not persist the request"
+    else
+      expect_code 1 "$rc" "invalid or repeated collision id $next must refuse"
+      [ -z "$corr" ] || fail "failed retry returned an id"
+      [ "$(find "$state/pending-replies" -type f)" = "$rec" ] || fail "failed retry wrote another pending record"
+    fi
+  done
+  pass "a regenerated correlation must pass the same length check before any record is written"
+}
+
+test_create_without_openssl() {
+  local home fallback_path mode corr rec
+  home=$(setup_parent id-fallback)
+  fallback_path=$(fm_test_base_path_sans "$PATH" openssl)
+  for mode in missing failed healthy; do
+    case "$mode" in
+      missing)
+        ! PATH="$fallback_path" command -v openssl >/dev/null 2>&1 \
+          || fail "the missing-OpenSSL fixture still resolves openssl"
+        ;;
+      failed)
+        printf '#!/bin/sh\nexit 1\n' > "$fallback_path/openssl"
+        chmod +x "$fallback_path/openssl"
+        ;;
+      healthy)
+        printf '#!/bin/sh\nprintf ABCDEF0123456789\n' > "$fallback_path/openssl"
+        ;;
+    esac
+    corr=$(PATH="$fallback_path" fm_pending_reply_create "$home" "$home/state" mate 'fixture request') \
+      || fail "pending request creation failed with $mode OpenSSL"
+    [ "${#corr}" = 16 ] || fail "correlation id has the wrong length with $mode OpenSSL"
+    case "$corr" in *[!a-f0-9]*) fail "correlation id is not lowercase hex with $mode OpenSSL" ;; esac
+    if [ "$mode" = healthy ]; then
+      [ "$corr" = abcdef0123456789 ] || fail "healthy OpenSSL output was not retained"
+    fi
+    rec="$home/state/pending-replies/$corr"
+    [ "$(fm_pending_reply_get "$rec" task_id)" = mate ] || fail "request identity was not persisted"
+    [ "$(fm_pending_reply_get "$rec" phase)" = awaiting_report ] || fail "new request has the wrong phase"
+  done
+  pass "pending request creation supports missing, failed and healthy OpenSSL"
+}
+
+test_capture_filter_errors_do_not_prove_idle() {
+  local filter_home state corr rec filter_stage partial strict harness_observation
+  local FM_PENDING_REPLY_NOW=2000 FM_PENDING_REPLY_GRACE_SECS=0 FM_BUSY_REGEX=''
+  local FM_PENDING_REPLY_SEND_HOOK=filter_error_recovery_hook
+  export FM_PENDING_REPLY_NOW FM_PENDING_REPLY_GRACE_SECS FM_PENDING_REPLY_SEND_HOOK FM_BUSY_REGEX
+  (
+    fm_backend_busy_state() { printf unknown; }
+    fm_backend_capture() { printf 'esc to interrupt\nfixture footer\n'; }
+    # Invoked indirectly through FM_PENDING_REPLY_SEND_HOOK.
+    # shellcheck disable=SC2329
+    filter_error_recovery_hook() { printf '%s\n' "$1" >> "$filter_home/recoveries"; }
+    grep() {
+      if [ "${1:-}" = -v ] && [ "$filter_stage" = grep ]; then
+        command cat >/dev/null
+        [ -z "$partial" ] || printf '%s\n' "$partial"
+        return 2
+      fi
+      command grep "$@"
+    }
+    tail() {
+      if [ "${1:-}" = -6 ] && [ "$filter_stage" = tail ]; then
+        command cat >/dev/null
+        [ -z "$partial" ] || printf '%s\n' "$partial"
+        return 1
+      fi
+      command tail "$@"
+    }
+    for strict in off on; do
+      if [ "$strict" = on ]; then set -o pipefail; else set +o pipefail; fi
+      for filter_stage in grep tail; do
+        for partial in '' 'idle footer' 'esc to interrupt'; do
+          filter_home=$(setup_parent "filter-error-$strict-$filter_stage-${#partial}")
+          state="$filter_home/state"
+          corr=$(fm_pending_reply_create "$filter_home" "$state" mate 'filter error request') \
+            || fail "filter error fixture creation failed"
+          fm_pending_reply_mark_delivered "$state" "$corr" 1000 \
+            || fail "filter error fixture delivery failed"
+          fm_write_meta "$state/mate.meta" 'backend=tmux' 'window=synthetic-endpoint' 'harness=codex'
+          harness_observation=$(fm_pending_reply_backend_observation tmux synthetic-endpoint fm-mate codex)
+          [ "$harness_observation" = unknown ] \
+            || fail "$filter_stage error with pipefail $strict must be unknown, got $harness_observation"
+          fm_pending_reply_tick "$state" || fail "filter error tick failed"
+          rec=$(fm_pending_reply_path "$state" "$corr")
+          [ "$(phase_of "$state" "$corr")" = awaiting_report ] || fail "$filter_stage error triggered recovery"
+          [ -z "$(fm_pending_reply_get "$rec" request_turn_completed_epoch)" ] || fail "$filter_stage error completed the turn"
+          [ ! -e "$filter_home/recoveries" ] || fail "$filter_stage error invoked the recovery hook"
+        done
+      done
+    done
+  ) || fail "capture filter error regression failed"
+  pass "capture filter failures remain unknown without completing turns or sending recovery"
+}
+
+test_failed_record_selection_still_reconciles_pending_requests() {
+  local selector_home state selector_mode index corr rec
+  local FM_PENDING_REPLY_NOW=2000 FM_PENDING_REPLY_GRACE_SECS=0
+  local -a correlations=()
+  export FM_PENDING_REPLY_NOW FM_PENDING_REPLY_GRACE_SECS
+  (
+    # Both hooks are called indirectly by the pending-reply poll.
+    # shellcheck disable=SC2329
+    fm_backend_busy_state() { printf '%s\n' "$2" >> "$selector_home/observations"; printf busy; }
+    # shellcheck disable=SC2329
+    _fm_pending_reply_select_needing_work() {
+      printf '%s\n' "$selector_mode" > "$selector_home/selection-failed"
+      [ "$selector_mode" != partial ] || printf '%s\n' "$1"
+      return 1
+    }
+    for selector_mode in empty partial; do
+      selector_home=$(setup_parent "selection-failed-$selector_mode")
+      state="$selector_home/state"
+      correlations=()
+      for index in 1 2 3; do
+        corr=$(fm_pending_reply_create "$selector_home" "$state" "mate$index" 'selection failure request') \
+          || fail "selection failure fixture creation failed"
+        correlations+=("$corr")
+        fm_pending_reply_mark_delivered "$state" "$corr" 1000 || fail "selection fixture delivery failed"
+        fm_write_meta "$state/mate$index.meta" 'backend=tmux' "window=fixture-$index" 'harness=codex'
+      done
+      rec=$(fm_pending_reply_path "$state" "${correlations[2]}")
+      fm_pending_reply_set "$rec" phase resolved || fail "resolved selector fixture failed"
+      fm_pending_reply_tick "$state" || fail "failed selection aborted polling"
+      [ -s "$selector_home/selection-failed" ] || fail "selector failure was not exercised"
+      for index in 0 1; do
+        rec=$(fm_pending_reply_path "$state" "${correlations[$index]}")
+        [ "$(fm_pending_reply_get "$rec" turn_seen_busy)" = 1 ] \
+          || fail "$selector_mode selection failure skipped a pending request"
+        [ "$(fm_pending_reply_get "$rec" phase)" = awaiting_report ] || fail "selection fallback changed an active phase"
+      done
+      rec=$(fm_pending_reply_path "$state" "${correlations[2]}")
+      [ "$(fm_pending_reply_get "$rec" phase)" = resolved ] || fail "selection fallback reopened a resolved request"
+      [ "$(wc -l < "$selector_home/observations" | tr -d ' ')" = 2 ] || fail "selection fallback polled the wrong endpoints"
+    done
+  ) || fail "record selection failure regression failed"
+  pass "failed or partial record selection falls back to per-record reconciliation"
+}
+
+test_pending_grace_uses_bounded_decimal_epochs() {
+  local home state rec corr action scenario now anchor elapsed initial expected rc observation
+  local FM_PENDING_REPLY_NOW=1000 FM_PENDING_REPLY_GRACE_SECS=120 FM_PENDING_REPLY_SEND_HOOK
+  export FM_PENDING_REPLY_NOW FM_PENDING_REPLY_GRACE_SECS FM_PENDING_REPLY_SEND_HOOK
+  (
+    # The recovery path resolves this hook from its configured command string.
+    # shellcheck disable=SC2329
+    pending_decimal_recovery_hook() { printf sent > "$home/recovery"; }
+    FM_PENDING_REPLY_SEND_HOOK=pending_decimal_recovery_hook
+    for action in fallback delivery recovery escalation; do
+      for scenario in padded-early padded-late overflow expression padded-clock invalid-clock; do
+        case "$scenario" in
+          padded-early) now=1100; anchor=01000; elapsed=0 ;;
+          padded-late) now=2000; anchor=01800; elapsed=1 ;;
+          overflow) now=2000; anchor=18446744073709551616; elapsed=0 ;;
+          expression) now=2000; anchor=1+1; elapsed=0 ;;
+          padded-clock) now=02000; anchor=1800; elapsed=1 ;;
+          invalid-clock) now=2000+1; anchor=1000; elapsed=0 ;;
+        esac
+        home=$(setup_parent "decimal-$action-$scenario")
+        state="$home/state"
+        FM_PENDING_REPLY_NOW=1000
+        corr=$(fm_pending_reply_create "$home" "$state" mate 'decimal fixture request') || fail "decimal fixture creation failed"
+        rec=$(fm_pending_reply_path "$state" "$corr")
+        fm_pending_reply_set "$rec" grace_secs 120 || fail "decimal grace setup failed"
+        initial=awaiting_report
+        case "$action" in
+          delivery)
+            fm_pending_reply_write_delivery_confirmation "$state" "$corr" attempted "$anchor" || fail "decimal sidecar setup failed"
+            expected=delivery_unknown ;;
+          fallback)
+            fm_pending_reply_set "$rec" delivered_epoch "$anchor" || fail "decimal delivery setup failed"
+            expected=awaiting_report ;;
+          recovery|escalation)
+            fm_pending_reply_mark_delivered "$state" "$corr" 1000 || fail "decimal recovery delivery failed"
+            fm_pending_reply_set "$rec" request_turn_completed_epoch "$anchor" || fail "decimal completion setup failed"
+            expected=recovery_sent
+            if [ "$action" = escalation ]; then
+              initial=recovery_sent
+              expected=escalated
+              fm_pending_reply_set "$rec" phase recovery_sent || fail "decimal phase setup failed"
+              fm_pending_reply_set "$rec" recovery_turn_completed_epoch "$anchor" || fail "decimal recovery completion failed"
+            fi ;;
+        esac
+        FM_PENDING_REPLY_NOW=$now
+        rc=0
+        case "$action" in
+          delivery) fm_pending_reply_reconcile_delivery "$state" "$corr" || rc=$? ;;
+          fallback)
+            observation=$(fm_pending_reply_busy_state_from_observation "$rec" fallback-idle) || fail "decimal idle observation aborted"
+            if [ "$elapsed" = 1 ]; then
+              [ "$observation" = idle ] || fail "decimal grace did not expire for $scenario"
+            else
+              [ "$observation" = unknown ] || fail "invalid or unexpired decimal grace proved idle for $scenario"
+            fi ;;
+          recovery) fm_pending_reply_send_recovery "$state" "$corr" || rc=$? ;;
+          escalation) fm_pending_reply_maybe_escalate "$state" "$corr" || rc=$? ;;
+        esac
+        [ "$elapsed" = 1 ] || expected=$initial
+        [ "$(fm_pending_reply_get "$rec" phase)" = "$expected" ] || fail "$action used unsafe elapsed evidence for $scenario"
+        if [ "$action" != fallback ]; then
+          if [ "$elapsed" = 1 ]; then [ "$rc" -eq 0 ] || fail "$action rejected valid decimal grace for $scenario"
+          else [ "$rc" -ne 0 ] || fail "$action accepted invalid or unexpired grace for $scenario"; fi
+        fi
+        if [ "$action" = recovery ]; then
+          if [ "$elapsed" = 1 ]; then [ -f "$home/recovery" ] || fail "elapsed decimal grace did not recover"
+          else [ ! -e "$home/recovery" ] || fail "unsafe decimal evidence sent recovery"; fi
+        fi
+        if [ "$action" = escalation ] && [ "$elapsed" = 0 ]; then
+          [ ! -s "$state/mate.status" ] || fail "unsafe decimal evidence published an escalation"
+        fi
+      done
+    done
+  ) || fail "decimal grace regression failed"
+  pass "pending grace compares bounded decimal epochs without early recovery, escalation or arithmetic errors"
+}
+
+test_failed_clock_reads_cannot_prove_elapsed_grace() {
+  local clock_home state rec corr action fault clock_fault initial rc observation
+  local FM_PENDING_REPLY_NOW=1000 FM_PENDING_REPLY_GRACE_SECS=120 FM_PENDING_REPLY_SEND_HOOK=''
+  export FM_PENDING_REPLY_NOW FM_PENDING_REPLY_GRACE_SECS FM_PENDING_REPLY_SEND_HOOK
+  (
+    # Both hooks are invoked indirectly by the public pending-reply paths.
+    # shellcheck disable=SC2329
+    fm_pending_reply_now() {
+      if [ "$clock_fault" = healthy ]; then printf '%s' "$FM_PENDING_REPLY_NOW"; return; fi
+      [ "$clock_fault" != partial ] || printf 2000
+      return 1
+    }
+    # shellcheck disable=SC2329
+    pending_clock_recovery_hook() { printf sent > "$clock_home/recovery"; }
+    FM_PENDING_REPLY_SEND_HOOK=pending_clock_recovery_hook
+    for action in fallback delivery recovery escalation; do
+      for fault in partial empty; do
+        clock_home=$(setup_parent "clock-error-$action-$fault")
+        state="$clock_home/state"
+        clock_fault=healthy
+        corr=$(fm_pending_reply_create "$clock_home" "$state" mate 'clock failure fixture') || fail "clock fixture creation failed"
+        rec=$(fm_pending_reply_path "$state" "$corr")
+        initial=awaiting_report
+        case "$action" in
+          delivery)
+            fm_pending_reply_write_delivery_confirmation "$state" "$corr" attempted 1800 || fail "clock sidecar setup failed" ;;
+          fallback)
+            fm_pending_reply_set "$rec" delivered_epoch 1800 || fail "clock fallback setup failed" ;;
+          recovery|escalation)
+            fm_pending_reply_mark_delivered "$state" "$corr" 1000 || fail "clock delivery setup failed"
+            fm_pending_reply_set "$rec" request_turn_completed_epoch 1800 || fail "clock completion setup failed"
+            if [ "$action" = escalation ]; then
+              initial=recovery_sent
+              fm_pending_reply_set "$rec" phase recovery_sent || fail "clock phase setup failed"
+              fm_pending_reply_set "$rec" recovery_turn_completed_epoch 1800 || fail "clock recovery completion failed"
+            fi ;;
+        esac
+        clock_fault=$fault
+        rc=0
+        case "$action" in
+          delivery) fm_pending_reply_reconcile_delivery "$state" "$corr" || rc=$? ;;
+          fallback)
+            observation=$(fm_pending_reply_busy_state_from_observation "$rec" fallback-idle) || fail "clock fault aborted observation"
+            [ "$observation" = unknown ] || fail "$fault clock failure proved idle" ;;
+          recovery) fm_pending_reply_send_recovery "$state" "$corr" || rc=$? ;;
+          escalation) fm_pending_reply_maybe_escalate "$state" "$corr" || rc=$? ;;
+        esac
+        [ "$action" = fallback ] || [ "$rc" -ne 0 ] || fail "$action accepted a $fault clock failure"
+        [ "$(fm_pending_reply_get "$rec" phase)" = "$initial" ] || fail "$action changed phase after a $fault clock failure"
+        [ ! -e "$clock_home/recovery" ] || fail "a failed clock read sent recovery"
+        [ ! -s "$state/mate.status" ] || fail "a failed clock read published an escalation"
+      done
+    done
+  ) || fail "failed clock regression failed"
+  pass "empty or partial failed clock reads cannot prove idle, failed delivery or missed reports"
+}
+
+test_wrong_home_counts_use_bounded_decimal_values() {
+  local count_home state child corr rec scenario initial stored expected index first
+  local FM_PENDING_REPLY_NOW=2000
+  export FM_PENDING_REPLY_NOW
+  for scenario in padded-octal padded-invalid-octal overflow ordinary zero invalid; do
+    case "$scenario" in
+      padded-octal) initial=10; stored=010; expected=11 ;;
+      padded-invalid-octal) initial=18; stored=018; expected=19 ;;
+      overflow) initial=10; stored=9223372036854775807; expected=1 ;;
+      ordinary) initial=10; stored=10; expected=11 ;;
+      zero) initial=0; stored=00; expected=1 ;;
+      invalid) initial=10; stored=bad; expected=1 ;;
+    esac
+    count_home=$(setup_parent "wrong-home-decimal-$scenario")
+    state="$count_home/state"
+    child="$count_home/child"
+    mkdir -p "$child/state"
+    corr=$(fm_pending_reply_create "$count_home" "$state" mate 'count fixture request') || fail "count fixture creation failed"
+    rec=$(fm_pending_reply_path "$state" "$corr")
+    fm_pending_reply_mark_delivered "$state" "$corr" 1000 || fail "count fixture delivery failed"
+    for ((index=0;index<initial;index++)); do
+      printf 'done [corr=%s]: prior fixture %s\n' "$corr" "$index" >> "$child/state/mate.status"
+    done
+    fm_pending_reply_detect_wrong_home "$state" "$corr" "$child" || fail "initial wrong-home scan failed"
+    [ "$(fm_pending_reply_get "$rec" wrong_home_hits)" = "$initial" ] || fail "initial wrong-home count does not match fixture"
+    first=$(fm_pending_reply_get "$rec" wrong_home_first_sighting)
+    fm_pending_reply_set "$rec" wrong_home_hits "$stored" || fail "stored count fixture failed"
+    printf 'done [corr=%s]: one new fixture\n' "$corr" >> "$child/state/mate.status"
+    fm_pending_reply_detect_wrong_home "$state" "$corr" "$child" || fail "$scenario count interrupted the scan"
+    [ "$(fm_pending_reply_get "$rec" wrong_home_hits)" = "$expected" ] || fail "$scenario count did not use bounded decimal increment"
+    if [ -n "$first" ]; then
+      [ "$(fm_pending_reply_get "$rec" wrong_home_first_sighting)" = "$first" ] || fail "$scenario count replaced the original sighting"
+    fi
+    [ "$(fm_pending_reply_get "$rec" phase)" = awaiting_report ] || fail "a wrong-home count resolved the parent request"
+  done
+  pass "wrong-home scans increment padded decimal counts and recover malformed or overflowing counters"
+}
+
+test_correlation_embedding_strips_mixed_blank_runs() {
+  local blanks message first second replacement expected payload corr=0123456789abcdef
+  payload=$'fixture payload\n\n'
+  for blanks in $'\t  ' $' \t \t ' $'\t \n' '   ' $'\t\t' $'  \t\t' $' \t\n \t'; do
+    message="${FM_FROMFIRST_MARK}corr=$corr${blanks}${payload}"
+    case "$blanks" in
+      *$'\n'*) expected="${FM_FROMFIRST_MARK}corr=$corr "$'\n'"${blanks#*$'\n'}$payload" ;;
+      *) expected="${FM_FROMFIRST_MARK}corr=$corr $payload" ;;
+    esac
+    fm_pending_reply_embed_corr "$message" "$corr" first || fail "mixed blank correlation embedding failed"
+    [ "$first" = "$expected" ] || fail "correlation embedding left part of a mixed blank run"
+    fm_pending_reply_embed_corr "$first" "$corr" second || fail "second correlation embedding failed"
+    [ "$second" = "$first" ] || fail "embedding the same correlation changed its message twice"
+    fm_pending_reply_embed_corr "$message" fedcba9876543210 replacement || fail "correlation replacement failed"
+    expected=${expected/"corr=$corr"/corr=fedcba9876543210}
+    [ "$replacement" = "$expected" ] || fail "replacement correlation retained mixed routing blanks or changed body bytes"
+  done
+  pass "correlation embedding consumes mixed spaces and tabs once while preserving newline boundaries and trailing bytes"
+}
+
+test_correlation_prefixes_preserve_literal_words() {
+  local suffix text embedded expected summary
+  for suffix in f F G _task 0; do
+    text="corr=0123456789abcdef${suffix} fixture payload"
+    fm_pending_reply_embed_corr "${FM_FROMFIRST_MARK}$text" fedcba9876543210 embedded \
+      || fail "literal correlation-like word could not be embedded"
+    expected="${FM_FROMFIRST_MARK}corr=fedcba9876543210 $text"
+    [ "$embedded" = "$expected" ] || fail "embedding removed the prefix of a longer correlation-like word"
+    summary=$(fm_pending_reply_summarize "${FM_FROMFIRST_MARK}$text")
+    [ "$summary" = "$text" ] || fail "summary removed the prefix of a longer correlation-like word"
+  done
+  for suffix in ': payload' '/payload' $' \t payload'; do
+    text="corr=0123456789abcdef${suffix}"
+    case "$suffix" in
+      ' '*) expected=payload ;;
+      *) expected=$suffix ;;
+    esac
+    summary=$(fm_pending_reply_summarize "${FM_FROMFIRST_MARK}$text")
+    [ "$summary" = "$expected" ] || fail "a complete correlation token no longer strips from its summary"
+  done
+  pass "embedding and summaries preserve longer correlation-like words and strip only complete leading tokens"
+}
+
+test_pending_record_path_output_assignments() {
+  local path_home state shape want target rec dir path captured corr=0123456789abcdef
+  local FM_PENDING_REPLY_DIR_OVERRIDE=''
+  path_home=$(setup_parent path-output)
+  for shape in ordinary spaces trailing-newline override; do
+    FM_PENDING_REPLY_DIR_OVERRIDE=''
+    case "$shape" in
+      ordinary) state="$path_home/state" ;;
+      spaces) state="$path_home/state with spaces" ;;
+      trailing-newline) state="$path_home/state"$'\n' ;;
+      override) state="$path_home/state"; FM_PENDING_REPLY_DIR_OVERRIDE="$path_home/custom"$'\n' ;;
+    esac
+    want="${FM_PENDING_REPLY_DIR_OVERRIDE:-$state/pending-replies}/$corr"
+    captured=$(fm_pending_reply_path "$state" "$corr") || fail "$shape stdout path failed"
+    [ "$captured" = "$want" ] || fail "$shape stdout path changed bytes"
+    for target in rec dir path; do
+      rec=stale; dir=stale; path=stale
+      fm_pending_reply_path "$state" "$corr" "$target" > "$path_home/path-output" \
+        || fail "$shape $target output assignment failed"
+      [ "${!target}" = "$want" ] || fail "$shape $target path output was not assigned exactly"
+      [ ! -s "$path_home/path-output" ] || fail "$shape $target assignment emitted stdout"
+    done
+  done
+  pass "pending record paths preserve stdout compatibility and assign exact bytes without output or local-name collisions"
+}
+
+test_pending_record_path_output_assignments
+test_correlation_prefixes_preserve_literal_words
+test_correlation_embedding_strips_mixed_blank_runs
+test_wrong_home_counts_use_bounded_decimal_values
+test_failed_clock_reads_cannot_prove_elapsed_grace
+test_pending_grace_uses_bounded_decimal_epochs
+test_failed_record_selection_still_reconciles_pending_requests
+test_capture_filter_errors_do_not_prove_idle
+test_same_second_status_rewrite_is_rescanned
+test_invalid_busy_regex_does_not_prove_idle
+test_remote_watermark_requires_complete_text
+test_failed_fallback_pipeline_refuses_create
+test_failed_openssl_output_uses_fallback
+test_collision_retry_validates_generated_id
+test_status_evidence_requires_complete_text
+test_summary_strips_carrier_before_filtering
+test_correlation_extraction_first_match
+test_pending_directory_override_preserves_bytes
+test_correlations_reuse_only_for_matching_open_task
+test_signature_failures_do_not_hide_new_reports
+test_sighting_encoding_failure_retries
+test_delivery_marker_requires_complete_text
+test_create_without_openssl
+test_large_busy_capture_with_pipefail
+test_record_update_preserves_other_fields
+test_record_update_preserves_unreadable_input
+test_record_field_framing
+test_record_field_output_variable
+test_tick_without_metadata || fail "test_tick_without_metadata failed"
 test_normal_correlated_reply_resolves_once
 test_completed_turn_no_report_triggers_one_recovery
 test_recovery_waits_while_the_mate_has_an_open_decision
@@ -2203,12 +3370,11 @@ test_document_pointer_resolves
 test_helper_report_resolves
 test_busy_idle_observation_via_backend_abstraction
 test_unknown_backend_state_uses_capture_fallback
-test_kimi_capture_fallback_uses_recorded_harness
+test_kimi_capture_fallback_uses_recorded_harness || fail "test_kimi_capture_fallback_uses_recorded_harness failed"
 test_tick_skips_terminal_and_reuses_target_observation
 test_tick_leaves_settled_records_alone
-test_remote_reposts_are_bounded_per_tick_and_refresh_beacon
-test_beacon_refreshes_between_selected_remote_records
-test_correlations_reuse_only_for_matching_open_task
+test_remote_reposts_are_bounded_per_tick_and_refresh_beacon || fail "test_remote_reposts_are_bounded_per_tick_and_refresh_beacon failed"
+test_beacon_refreshes_between_selected_remote_records || fail "test_beacon_refreshes_between_selected_remote_records failed"
 test_tick_end_to_end_missed_then_escalate
 test_failed_send_discards_undelivered_expectation
 test_remote_repost_waits_for_the_reply_channel

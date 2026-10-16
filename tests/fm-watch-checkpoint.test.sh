@@ -28,6 +28,31 @@ wait_for_checkpoint_lock() {
   return 1
 }
 
+test_perl_checkpoint_preserves_literal_checkout_paths() {
+  local shell name home code fallback_bin tool status
+  for shell in bash /bin/bash; do
+    for name in plain 'code root' 'code;printf injected' "quote'root"; do
+      home=$(make_home "literal-${shell//\//-}-$name")
+      code="$home/$name/bin"; fallback_bin="$home/fallback-bin"
+      mkdir -p "$code" "$fallback_bin"
+      cp "$CHECKPOINT" "$code/fm-watch-checkpoint.sh"
+      cp "$ROOT/bin/fm-supervision-engine-lib.sh" "$code/fm-supervision-engine-lib.sh"
+      for tool in bash dirname mktemp rm perl grep cat; do
+        ln -s "$(command -v "$tool")" "$fallback_bin/$tool"
+      done
+      printf '#!/bin/sh\nprintf "signal: synthetic fixture\\n"\n' > "$code/fm-watch.sh"
+      chmod +x "$code/fm-watch.sh"
+      status=0
+      PATH="$fallback_bin" FM_HOME="$home" "$shell" "$code/fm-watch-checkpoint.sh" --seconds 5 \
+        > "$home/out" 2> "$home/err" || status=$?
+      expect_code 0 "$status" "$shell checkpoint could not launch from $name: $(cat "$home/err")"
+      assert_equals 'signal: synthetic fixture' "$(cat "$home/out")" 'checkpoint reinterpreted its watcher path'
+      [ ! -s "$home/err" ] || fail "checkpoint emitted path errors: $(cat "$home/err")"
+    done
+  done
+  pass 'the Perl checkpoint launches its watcher from literal checkout paths with spaces and punctuation'
+}
+
 test_quiet_checkpoint_exits_124_cleanly() {
   local home out err status
   home=$(make_home quiet)
@@ -39,6 +64,40 @@ test_quiet_checkpoint_exits_124_cleanly() {
   assert_contains "$(cat "$out")" "checkpoint: no actionable wake within 1s" "quiet checkpoint line missing"
   assert_absent "$home/state/.watch.lock/pid" "watch lock pid survived quiet checkpoint timeout"
   pass "quiet checkpoint exits 124 with a clean checkpoint line and no live lock"
+}
+
+test_perl_timeout_fallback_preserves_signal_death() {
+  local home fallback_bin tool shell ending expected status
+  home=$(make_home perl-signal-status)
+  fallback_bin="$home/fallback-bin"
+  mkdir -p "$home/root/bin" "$fallback_bin"
+  cp "$CHECKPOINT" "$home/root/bin/fm-watch-checkpoint.sh"
+  cp "$ROOT/bin/fm-supervision-engine-lib.sh" "$home/root/bin/fm-supervision-engine-lib.sh"
+  for tool in bash dirname mktemp rm perl grep cat; do
+    ln -s "$(command -v "$tool")" "$fallback_bin/$tool"
+  done
+  cat > "$home/root/bin/fm-watch.sh" <<'SH'
+#!/usr/bin/env bash
+printf 'watcher: preparing\n'
+case "$FM_TEST_WATCH_ENDING" in
+  KILL|TERM) kill -s "$FM_TEST_WATCH_ENDING" "$$" ;;
+  *) exit "$FM_TEST_WATCH_ENDING" ;;
+esac
+SH
+  chmod +x "$home/root/bin/fm-watch.sh"
+  for shell in bash /bin/bash; do
+    for ending in KILL TERM 0 7; do
+      case "$ending" in KILL) expected=137 ;; TERM) expected=143 ;; *) expected=$ending ;; esac
+      status=0
+      PATH="$fallback_bin" FM_HOME="$home" FM_TEST_WATCH_ENDING="$ending" \
+        "$shell" "$home/root/bin/fm-watch-checkpoint.sh" --seconds 10 \
+        > "$home/out.txt" 2> "$home/err.txt" || status=$?
+      expect_code "$expected" "$status" "$shell checkpoint after watcher $ending"
+      assert_equals 'watcher: preparing' "$(cat "$home/out.txt")" "checkpoint lost partial watcher output"
+      [ ! -s "$home/err.txt" ] || fail "checkpoint emitted unexpected errors: $(cat "$home/err.txt")"
+    done
+  done
+  pass "Perl checkpoint fallback preserves watcher signal deaths and ordinary exit statuses"
 }
 
 test_perl_timeout_fallback_honors_cleanup_bound_before_escalating() {
@@ -256,6 +315,33 @@ SH
   printf '%s\n' "$home"
 }
 
+test_checkpoint_seconds_are_positive_decimal() {
+  local home shell seconds expected status
+  home=$(make_host_home decimal-seconds)
+  printf 'boundary\n' > "$home/host-kind"
+  for shell in bash /bin/bash; do
+    for seconds in 0 00 000 8 08 9 09 010; do
+      rm -f "$home/host-env"
+      status=0
+      FM_HOME="$home" "$shell" "$home/root/bin/fm-watch-checkpoint.sh" --seconds "$seconds" \
+        > "$home/out.txt" 2> "$home/err.txt" || status=$?
+      expected=$((10#$seconds))
+      if [ "$expected" -eq 0 ]; then
+        expect_code 2 "$status" "$shell checkpoint zero duration $seconds"
+        assert_absent "$home/host-env" "zero-duration checkpoint started the host"
+      else
+        expect_code 124 "$status" "$shell checkpoint duration $seconds"
+        assert_equals "checkpoint: no actionable wake within ${expected}s" "$(cat "$home/out.txt")" \
+          "checkpoint did not preserve decimal seconds"
+        assert_contains "$(cat "$home/host-env")" "park=$expected" "host received the wrong park duration"
+        assert_contains "$(cat "$home/host-env")" "limit=$((expected + 1230))" "host received the wrong total bound"
+        [ ! -s "$home/err.txt" ] || fail "checkpoint duration emitted errors: $(cat "$home/err.txt")"
+      fi
+    done
+  done
+  pass "checkpoint durations use decimal seconds and reject every spelling of zero before starting a host"
+}
+
 run_host_checkpoint() {  # <home> <kind> [checkpoint args...]; sets STATUS
   local home=$1
   printf '%s\n' "$2" > "$home/host-kind"
@@ -344,6 +430,9 @@ test_real_host_checkpoint_ends_quietly_at_its_bound() {
   pass "checkpoint: the real host ends its park at the checkpoint bound as a quiet checkpoint"
 }
 
+test_checkpoint_seconds_are_positive_decimal
+test_perl_timeout_fallback_preserves_signal_death
+test_perl_checkpoint_preserves_literal_checkout_paths
 test_quiet_checkpoint_exits_124_cleanly
 test_perl_timeout_fallback_honors_cleanup_bound_before_escalating
 test_announced_recovery_is_not_reannounced_by_next_checkpoint

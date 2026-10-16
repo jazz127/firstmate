@@ -73,7 +73,7 @@ fm_ready_timeout_secs() {  # <config-dir>
   [ -f "$file" ] && [ -r "$file" ] || return 2
   while IFS= read -r line || [ -n "$line" ]; do
     line=${line%%#*}
-    line=$(printf '%s' "$line" | tr -d '[:space:]')
+    line=${line//[[:space:]]/}
     [ -n "$line" ] || continue
     value=$line
     break
@@ -90,7 +90,7 @@ fm_ready_timeout_secs() {  # <config-dir>
     ''|*[!0-9]*) return 2 ;;
   esac
   # Strip leading zeros so bash arithmetic never reads the number as octal.
-  n=$(printf '%s' "$n" | sed 's/^0*//')
+  n=${n#"${n%%[!0]*}"}
   [ -n "$n" ] || return 2
   [ "${#n}" -le 9 ] || return 2
   case "$unit" in
@@ -102,20 +102,53 @@ fm_ready_timeout_secs() {  # <config-dir>
   printf '%s' "$secs"
 }
 
-fm_ready_timeout_record_path() {  # <state-dir> <task-id>
-  printf '%s/%s.ready-timeout' "$1" "$2"
+fm_ready_timeout_record_path() {  # <state-dir> <task-id> [output-var]
+  if [ -n "${3:-}" ]; then
+    printf -v "$3" '%s/%s.ready-timeout' "$1" "$2"
+  else
+    printf '%s/%s.ready-timeout' "$1" "$2"
+  fi
 }
 
 # The last value of <key> in a record or task metadata file, or empty.
-fm_ready_timeout_field() {  # <file> <key>
-  local file=$1 key=$2 line value=''
-  [ -f "$file" ] || return 0
-  while IFS= read -r line || [ -n "$line" ]; do
-    case "$line" in
-      "$key="*) value=${line#*=} ;;
-    esac
-  done < "$file" 2>/dev/null || true
-  printf '%s' "$value"
+# Binary records clear the output and return 1, distinct from an absent key.
+# Optional output-var avoids a subshell; _fm_ready_field_* names are reserved.
+fm_ready_timeout_field() {  # <file> <key> [output-var]
+  local _fm_ready_field_line _fm_ready_field_value=''
+  local _fm_ready_field_contents='' _fm_ready_field_rejected=0
+  if [ -f "$1" ]; then
+    if IFS= read -r -d '' _fm_ready_field_contents 2>/dev/null < "$1"; then
+      _fm_ready_field_rejected=1
+    elif [ "${#_fm_ready_field_contents}" -le 512 ]; then
+      # Match the last literal key without materializing a here-string. Bound
+      # this path because longest-prefix glob matching can scale quadratically.
+      case "$2" in
+        *$'\n'*) ;;
+        *)
+          _fm_ready_field_contents=$'\n'$_fm_ready_field_contents
+          case "$_fm_ready_field_contents" in
+            *$'\n'"$2="*)
+              _fm_ready_field_line=${_fm_ready_field_contents##*$'\n'"$2="}
+              _fm_ready_field_line="$2=${_fm_ready_field_line%%$'\n'*}"
+              _fm_ready_field_value=${_fm_ready_field_line#*=}
+              ;;
+          esac
+          ;;
+      esac
+    else
+      while IFS= read -r _fm_ready_field_line || [ -n "$_fm_ready_field_line" ]; do
+        case "$_fm_ready_field_line" in
+          "$2="*) _fm_ready_field_value=${_fm_ready_field_line#*=} ;;
+        esac
+      done <<< "$_fm_ready_field_contents"
+    fi
+  fi
+  if [ -n "${3:-}" ]; then
+    printf -v "$3" '%s' "$_fm_ready_field_value"
+  else
+    printf '%s' "$_fm_ready_field_value"
+  fi
+  return "$_fm_ready_field_rejected"
 }
 
 # Atomically replace the task's record. Returns non-zero when it cannot be
@@ -137,17 +170,20 @@ fm_ready_timeout_record_write() {  # <state-dir> <task-id> <result> <spawn-gen> 
 # timeout: a `stopped` record exists and names the spawn_gen its task record
 # still carries.
 fm_ready_timeout_parked() {  # <state-dir> <task-id>
-  local state=$1 id=$2 record meta
-  record=$(fm_ready_timeout_record_path "$state" "$id")
+  local state=$1 id=$2 record meta result record_gen meta_gen
+  fm_ready_timeout_record_path "$state" "$id" record
   [ -f "$record" ] || return 1
   meta="$state/$id.meta"
   [ -f "$meta" ] || return 1
-  [ "$(fm_ready_timeout_field "$record" result)" = stopped ] || return 1
-  [ "$(fm_ready_timeout_field "$record" spawn_gen)" = "$(fm_ready_timeout_field "$meta" spawn_gen)" ]
+  fm_ready_timeout_field "$record" result result || return 1
+  [ "$result" = stopped ] || return 1
+  fm_ready_timeout_field "$record" spawn_gen record_gen || return 1
+  fm_ready_timeout_field "$meta" spawn_gen meta_gen || return 1
+  [ "$record_gen" = "$meta_gen" ]
 }
 
-_fm_ready_timeout_mtime() {  # <path>
-  if [ "$(uname)" = Darwin ]; then
+_fm_ready_timeout_mtime() {  # <path> <platform>
+  if [ "$2" = Darwin ]; then
     /usr/bin/stat -f %m "$1" 2>/dev/null
   else
     stat -c %Y "$1" 2>/dev/null
@@ -157,12 +193,14 @@ _fm_ready_timeout_mtime() {  # <path>
 # Seconds since the task last showed any sign of life the timeout counts as
 # activity. Prints nothing and returns 1 when no activity file is readable.
 fm_ready_timeout_activity_age() {  # <state-dir> <task-id>
-  local state=$1 id=$2 f m newest='' now
+  local state=$1 id=$2 f m newest='' now platform=''
   for f in "$state/$id.status" "$state/$id.turn-ended" "$state/$id.progress" \
     "$state/$id.meta" "$state/$id.pr-poll-registration" \
     "$state/$id.inbox" "$state/$id.inbox/handled"; do
     [ -e "$f" ] || continue
-    m=$(_fm_ready_timeout_mtime "$f") || continue
+    # Resolve the stat dialect once for the whole activity scan.
+    [ -n "$platform" ] || platform=$(uname)
+    m=$(_fm_ready_timeout_mtime "$f" "$platform") || continue
     case "$m" in ''|*[!0-9]*) continue ;; esac
     if [ -z "$newest" ] || [ "$m" -gt "$newest" ]; then
       newest=$m

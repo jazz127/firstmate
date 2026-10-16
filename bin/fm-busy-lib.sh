@@ -205,10 +205,13 @@ fm_busy_token_valid() {  # <value>
 # fm_busy_current_gen: the task's armed gen token, or failure when the busy
 # contract has never been armed for this task.
 fm_busy_current_gen() {  # <state-dir> <id>
-  local gen_file gen
+  local gen_file gen=''
   gen_file=$(fm_busy_gen_path "$1" "$2")
   [ -f "$gen_file" ] || return 1
-  IFS= read -r gen < "$gen_file" 2>/dev/null || gen=
+  # Capture one text snapshot; ordinary read silently discards NULs on newer
+  # Bash and reading only the first line would ignore a damaged suffix.
+  if IFS= read -r -d '' gen 2>/dev/null < "$gen_file"; then return 1; fi
+  case "$gen" in *$'\n') gen=${gen%$'\n'} ;; *) return 1 ;; esac
   fm_busy_token_valid "$gen" || return 1
   printf '%s' "$gen"
 }
@@ -260,7 +263,7 @@ fm_busy_source_trusted() {  # <harness> <source>
 #                existing record
 #   gen-mismatch a record from a stale incarnation
 fm_busy_record_read() {  # <state-dir> <id>
-  local state=$1 id=$2 rec gen line extra ver f
+  local state=$1 id=$2 rec gen line='' ver f
   local r_gen='' r_seq='' r_state='' r_source='' r_event='' r_ts=''
   rec=$(fm_busy_record_path "$state" "$id")
   if [ ! -f "$rec" ]; then
@@ -272,11 +275,17 @@ fm_busy_record_read() {  # <state-dir> <id>
     printf 'malformed'
     return 1
   fi
-  # shellcheck disable=SC2034 # extra exists only to prove the record is one line
-  { IFS= read -r line && ! IFS= read -r extra; } < "$rec" 2>/dev/null || {
+  # Require exactly one newline-terminated, NUL-free line. A failed second
+  # line read alone would also accept an unterminated trailing fragment.
+  if IFS= read -r -d '' line 2>/dev/null < "$rec"; then
     printf 'malformed'
     return 1
-  }
+  fi
+  case "$line" in
+    *$'\n') line=${line%$'\n'} ;;
+    *) printf 'malformed'; return 1 ;;
+  esac
+  case "$line" in *$'\n'*) printf 'malformed'; return 1 ;; esac
   # `read -a` rather than `set --`: it never glob-expands a field and never
   # touches the caller's positional parameters or shell options.
   local -a fields

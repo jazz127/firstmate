@@ -126,6 +126,8 @@
 _FM_PENDING_REPLY_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd 2>/dev/null)" || _FM_PENDING_REPLY_LIB_DIR="."
 # shellcheck source=bin/fm-marker-lib.sh
 . "$_FM_PENDING_REPLY_LIB_DIR/fm-marker-lib.sh"
+# shellcheck source=bin/fm-path-lib.sh
+. "$_FM_PENDING_REPLY_LIB_DIR/fm-path-lib.sh"
 # shellcheck source=bin/fm-backend.sh
 . "$_FM_PENDING_REPLY_LIB_DIR/fm-backend.sh"
 # Deliberately undirected: this library consumes no symbols from
@@ -146,6 +148,16 @@ fm_pending_reply_now() {
     printf '%s' "$FM_PENDING_REPLY_NOW"
     return 0
   fi
+  # Reuse the wake owner's builtin clock when that owner is already loaded.
+  # Keep date on older Bash so its read failure still reaches this caller.
+  if { [ "${BASH_VERSINFO[0]}" -gt 4 ] ||
+       { [ "${BASH_VERSINFO[0]}" -eq 4 ] && [ "${BASH_VERSINFO[1]}" -ge 2 ]; }; } &&
+    declare -F fm_epoch_seconds_to >/dev/null; then
+    local pending_now_seconds
+    fm_epoch_seconds_to pending_now_seconds || return
+    printf '%s\n' "$pending_now_seconds"
+    return
+  fi
   date +%s
 }
 
@@ -157,75 +169,162 @@ fm_pending_reply_grace_secs() {
   printf '%s' "$g"
 }
 
-# Directory holding durable pending-reply records for <state-dir>.
-fm_pending_reply_dir() {  # <state-dir>
-  local state=$1
-  if [ -n "${FM_PENDING_REPLY_DIR_OVERRIDE:-}" ]; then
-    printf '%s' "$FM_PENDING_REPLY_DIR_OVERRIDE"
-    return 0
-  fi
-  printf '%s/pending-replies' "$state"
+# Decimal epochs and grace values must be safe before shell arithmetic.
+# Eighteen digits bound both operands so their difference fits signed 64 bits.
+_fm_pending_reply_elapsed_at_least() {  # <now> <anchor> <grace-seconds>
+  local elapsed_now=${1-} elapsed_anchor=${2-} elapsed_grace=${3-} value
+  for value in "$elapsed_now" "$elapsed_anchor" "$elapsed_grace"; do
+    case "$value" in ''|*[!0-9]*) return 1 ;; esac
+    value=${value#"${value%%[!0]*}"}
+    [ "${#value}" -le 18 ] || return 1
+  done
+  elapsed_now=${elapsed_now#"${elapsed_now%%[!0]*}"}
+  elapsed_anchor=${elapsed_anchor#"${elapsed_anchor%%[!0]*}"}
+  elapsed_grace=${elapsed_grace#"${elapsed_grace%%[!0]*}"}
+  [ "$(( ${elapsed_now:-0} - ${elapsed_anchor:-0} ))" -ge "${elapsed_grace:-0}" ]
 }
 
-fm_pending_reply_path() {  # <state-dir> <corr_id>
-  printf '%s/%s' "$(fm_pending_reply_dir "$1")" "$2"
+# Directory holding durable pending-reply records for <state-dir>.
+# Direct assignment preserves trailing newlines in an override and avoids a
+# subshell. The _fm_pending_dir_ prefix is reserved for this helper's locals.
+fm_pending_reply_dir() {  # <state-dir> [output-variable]
+  local _fm_pending_dir_value=${FM_PENDING_REPLY_DIR_OVERRIDE:-$1/pending-replies}
+  if [ "$#" -gt 1 ]; then
+    printf -v "$2" '%s' "$_fm_pending_dir_value"
+  else
+    printf '%s' "$_fm_pending_dir_value"
+  fi
+}
+
+# The _fm_pending_path_ prefix is reserved for this helper's locals.
+fm_pending_reply_path() {  # <state-dir> <corr_id> [output-variable]
+  local _fm_pending_path_dir
+  fm_pending_reply_dir "$1" _fm_pending_path_dir
+  if [ "$#" -gt 2 ]; then
+    printf -v "$3" '%s/%s' "$_fm_pending_path_dir" "$2"
+  else
+    printf '%s/%s' "$_fm_pending_path_dir" "$2"
+  fi
 }
 
 # Privacy-safe correlation id: 16 lowercase hex chars (64 bits of entropy).
 fm_pending_reply_new_id() {
-  local raw hex
+  local raw='' hex
   if command -v openssl >/dev/null 2>&1; then
-    raw=$(openssl rand -hex 8 2>/dev/null || true)
+    raw=$(openssl rand -hex 8 2>/dev/null) || raw=''
   fi
   if [ -z "$raw" ]; then
-    raw=$(printf '%s' "$$-$(date +%s%N 2>/dev/null || date +%s)-$RANDOM$RANDOM" | cksum 2>/dev/null | awk '{print $1}')
-    hex=$(printf '%s' "$raw$RANDOM$RANDOM" | shasum -a 256 2>/dev/null | awk '{print $1}')
+    raw=$(
+      set -o pipefail
+      printf '%s' "$$-$(date +%s%N 2>/dev/null || date +%s)-$RANDOM$RANDOM" | cksum 2>/dev/null | awk '{print $1}'
+    ) || return 1
+    hex=$(
+      set -o pipefail
+      printf '%s' "$raw$RANDOM$RANDOM" | shasum -a 256 2>/dev/null | awk '{print $1}'
+    ) || return 1
     raw=${hex:0:16}
+  fi
+  # Healthy generators already emit exactly 16 hex bytes. Keep malformed-output
+  # normalization on its existing path, and format the ordinary result in shell.
+  if [ "${#raw}" -eq 16 ]; then
+    case "$raw" in
+      *[!0123456789abcdefABCDEF]*) ;;
+      *)
+        raw=${raw//A/a}
+        raw=${raw//B/b}
+        raw=${raw//C/c}
+        raw=${raw//D/d}
+        raw=${raw//E/e}
+        raw=${raw//F/f}
+        printf '%s' "$raw"
+        return
+        ;;
+    esac
   fi
   printf '%s' "$(printf '%s' "$raw" | tr 'A-F' 'a-f' | tr -cd 'a-f0-9' | cut -c1-16)"
 }
 
-fm_pending_reply_corr_token() {  # <corr_id>
-  printf 'corr=%s' "$1"
+fm_pending_reply_corr_token() {  # <corr_id> [output-variable]
+  if [ "$#" -gt 1 ]; then
+    printf -v "$2" 'corr=%s' "$1"
+  else
+    printf 'corr=%s' "$1"
+  fi
 }
 
 # Extract the first corr=<16hex> token from free text, or empty.
 fm_pending_reply_extract_corr() {  # <text>
-  local text=$1
-  printf '%s' "$text" | grep -oE "$FM_PENDING_REPLY_CORR_RE" 2>/dev/null | head -1 | cut -d= -f2- | tr 'A-F' 'a-f' || true
+  local text=$1 token
+  if [[ "$text" =~ $FM_PENDING_REPLY_CORR_RE ]]; then
+    token=${BASH_REMATCH[0]#corr=}
+    token=${token//A/a}
+    token=${token//B/b}
+    token=${token//C/c}
+    token=${token//D/d}
+    token=${token//E/e}
+    token=${token//F/f}
+    printf '%s\n' "$token"
+  fi
 }
 
 # 0 if <text> carries the exact correlation token for <corr_id>, as a whole
 # word: xcorr=<id> or corr=<id>ff is a different token, not this one.
 fm_pending_reply_text_has_corr() {  # <text> <corr_id>
-  local text=$1 corr=$2 re
-  re="(^|[^[:alnum:]_])$(fm_pending_reply_corr_token "$corr")([^[:alnum:]_]|\$)"
+  local text=$1 corr=$2 re token
+  fm_pending_reply_corr_token "$corr" token
+  re="(^|[^[:alnum:]_])${token}([^[:alnum:]_]|\$)"
   [[ $text =~ $re ]]
 }
 
 # Sanitize a short request summary: single line, bounded, no control chars.
 fm_pending_reply_summarize() {  # <text>
   local text=$1 cleaned
-  cleaned=$(printf '%s' "$text" | tr '\t\r\n' '   ' | tr -cd '\11\12\15\40-\176' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-  # Drop an already-present marker/corr prefix so the durable summary stays short.
-  cleaned=${cleaned#"$FM_FROMFIRST_MARK"}
-  cleaned=$(printf '%s' "$cleaned" | sed -E "s/^corr=[A-Fa-f0-9]{16}[[:space:]]*//")
+  # Remove the exact leading carrier before filtering erases its separator.
+  text=${text#"$FM_FROMFIRST_MARK"}
+  # Filter and trim before applying the shared leading-token parser.
+  cleaned=$(printf '%s' "$text" | tr '\t\r\n' '   ' | tr -cd '\11\12\15\40-\176' |
+    sed -E 's/^[[:space:]]*//;s/[[:space:]]*$//')
+  fm_pending_reply_strip_leading_corr "$cleaned" cleaned
   if [ "${#cleaned}" -gt 120 ]; then
     cleaned="${cleaned:0:117}..."
   fi
   printf '%s' "$cleaned"
 }
 
-fm_pending_reply_get() {  # <record-path> <key>
-  local rec=$1 key=$2
-  [ -f "$rec" ] || return 0
-  grep "^${key}=" "$rec" 2>/dev/null | tail -1 | cut -d= -f2- || true
+# An output variable avoids capturing stdout when the caller keeps parsing.
+# The _fm_pending_field_ prefix is reserved for this helper's locals.
+fm_pending_reply_get() {  # <record-path> <key> [output-variable]
+  local _fm_pending_field_rec=$1 _fm_pending_field_key=$2 _fm_pending_field_line
+  local _fm_pending_field_value='' _fm_pending_field_found=0 _fm_pending_field_contents=''
+  # Success means a NUL delimiter was found; EOF yields the complete text.
+  if [ -f "$_fm_pending_field_rec" ] &&
+    ! IFS= read -r -d '' _fm_pending_field_contents < "$_fm_pending_field_rec" 2>/dev/null; then
+    while IFS= read -r _fm_pending_field_line || [ -n "$_fm_pending_field_line" ]; do
+      case "$_fm_pending_field_line" in
+        "$_fm_pending_field_key="*)
+          _fm_pending_field_value=${_fm_pending_field_line#*=}
+          _fm_pending_field_found=1
+          ;;
+      esac
+    done <<< "$_fm_pending_field_contents"
+  fi
+  # Keep the stdout framing: an empty value has a newline; a missing key has
+  # no output. The final occurrence wins, including an unterminated final line.
+  if [ "$#" -gt 2 ]; then
+    printf -v "$3" '%s' "$_fm_pending_field_value"
+  elif [ "$_fm_pending_field_found" = 1 ]; then
+    printf '%s\n' "$_fm_pending_field_value"
+  fi
 }
+
 
 fm_pending_reply_sighting_encode() {  # <path> <line-number>
   local path=$1 line_no=$2 encoded
   case "$line_no" in ''|*[!0-9]*) return 1 ;; esac
-  encoded=$(printf '%s' "$path" | LC_ALL=C od -An -v -tx1 | tr -d ' \n') || return 1
+  encoded=$(
+    set -o pipefail
+    printf '%s' "$path" | LC_ALL=C od -An -v -tx1 | tr -d ' \n'
+  ) || return 1
   [ -n "$encoded" ] || return 1
   printf 'hex:%s:%s' "$encoded" "$line_no"
 }
@@ -251,8 +350,8 @@ fm_pending_reply_sighting_display() {  # <encoded-sighting>
 
 fm_pending_reply_corr_reusable() {  # <state-dir> <corr_id> <task_id>
   local state=$1 corr=$2 task_id=$3 rec phase delivered
-  printf '%s' "$corr" | grep -Eq '^[A-Fa-f0-9]{16}$' || return 1
-  rec=$(fm_pending_reply_path "$state" "$corr")
+  [[ "$corr" =~ ^[A-Fa-f0-9]{16}$ ]] || return 1
+  fm_pending_reply_path "$state" "$corr" rec
   [ -f "$rec" ] || return 1
   [ "$(fm_pending_reply_get "$rec" task_id)" = "$task_id" ] || return 1
   phase=$(fm_pending_reply_get "$rec" phase)
@@ -273,18 +372,48 @@ fm_pending_reply_corr_reusable() {  # <state-dir> <corr_id> <task_id>
 fm_pending_reply_set() {  # <record-path> <key> <value>
   local rec=$1 key=$2 value=$3 dir base tmp line
   [ -f "$rec" ] || return 1
-  dir=$(dirname "$rec")
-  base=$(basename "$rec")
+  fm_dirname_to dir "$rec" literal
+  fm_basename_to base "$rec"
   tmp="$dir/.${base}.tmp.$$"
-  : > "$tmp" || return 1
-  while IFS= read -r line || [ -n "$line" ]; do
-    case "$line" in
-      "${key}="*) continue ;;
-    esac
-    printf '%s\n' "$line" >> "$tmp" || return 1
-  done < "$rec"
-  printf '%s=%s\n' "$key" "$value" >> "$tmp" || return 1
+  {
+    while IFS= read -r line || [ -n "$line" ]; do
+      case "$line" in
+        "${key}="*) continue ;;
+      esac
+      printf '%s\n' "$line" || return 1
+    done < "$rec" || return 1
+    printf '%s=%s\n' "$key" "$value" || return 1
+  } > "$tmp" || return 1
   mv -f "$tmp" "$rec"
+}
+
+# Remove the leading routing correlation and its following space/tab bytes.
+# Both delivery and the pre-delivery empty-body check use this interpretation.
+# The _fm_pending_body_ prefix is reserved for this helper's locals.
+fm_pending_reply_strip_leading_corr() {  # <body> <result-var>
+  local _fm_pending_body_text=$1 _fm_pending_body_result=$2 _fm_pending_body_prefix
+  [ -n "$_fm_pending_body_result" ] || return 2
+  # Strip a leading corr=<16hex> plus following blanks (space/tab only).
+  _fm_pending_body_prefix=${_fm_pending_body_text:0:21}
+  case "$_fm_pending_body_prefix" in
+    corr=[a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9])
+      # A longer word is literal message text, not this correlation token.
+      case "${_fm_pending_body_text:21:1}" in
+        [[:alnum:]_])
+          printf -v "$_fm_pending_body_result" '%s' "$_fm_pending_body_text"
+          return
+          ;;
+      esac
+      _fm_pending_body_text=${_fm_pending_body_text:21}
+      while :; do
+        case "$_fm_pending_body_text" in
+          ' '*|$'\t'*) _fm_pending_body_text=${_fm_pending_body_text:1} ;;
+          *) break ;;
+        esac
+      done
+      ;;
+  esac
+  printf -v "$_fm_pending_body_result" '%s' "$_fm_pending_body_text"
 }
 
 # Embed or replace a correlation token after the from-firstmate marker.
@@ -293,20 +422,12 @@ fm_pending_reply_set() {  # <record-path> <key> <value>
 # Trailing newlines in the request body are preserved: never strip via bare
 # $(...) on the body (command substitution removes trailing newlines).
 fm_pending_reply_embed_corr() {  # <message> <corr_id> <result-var>
-  local message=$1 corr=$2 result_var=$3 body token marked existing
+  local message=$1 corr=$2 result_var=$3 body token marked
   [ -n "$result_var" ] || return 2
-  token=$(fm_pending_reply_corr_token "$corr")
+  fm_pending_reply_corr_token "$corr" token
   fm_message_mark_from_firstmate "$message" marked
   body=${marked#"$FM_FROMFIRST_MARK"}
-  # Strip a leading corr=<16hex> plus following blanks (space/tab only).
-  existing=${body:0:21}
-  case "$existing" in
-    corr=[a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9])
-      body=${body:21}
-      while [ "${body# }" != "$body" ]; do body=${body# }; done
-      while [ "${body#$'\t'}" != "$body" ]; do body=${body#$'\t'}; done
-      ;;
-  esac
+  fm_pending_reply_strip_leading_corr "$body" body
   printf -v "$result_var" '%s' "${FM_FROMFIRST_MARK}${token} ${body}"
 }
 
@@ -316,16 +437,17 @@ fm_pending_reply_create() {  # <parent-home> <state-dir> <task_id> <request-text
   local parent_home=$1 state=$2 task_id=$3 request_text=$4
   local dir rec corr now summary status_path tmp
   [ -n "$parent_home" ] && [ -n "$state" ] && [ -n "$task_id" ] || return 2
-  dir=$(fm_pending_reply_dir "$state")
+  fm_pending_reply_dir "$state" dir
   mkdir -p "$dir" || return 1
   chmod 700 "$dir" 2>/dev/null || true
   corr=$(fm_pending_reply_new_id)
   [ "${#corr}" -eq 16 ] || return 1
-  rec=$(fm_pending_reply_path "$state" "$corr")
+  fm_pending_reply_path "$state" "$corr" rec
   # Extremely unlikely collision; regenerate once.
   if [ -e "$rec" ]; then
     corr=$(fm_pending_reply_new_id)
-    rec=$(fm_pending_reply_path "$state" "$corr")
+    [ "${#corr}" -eq 16 ] || return 1
+    fm_pending_reply_path "$state" "$corr" rec
     [ ! -e "$rec" ] || return 1
   fi
   now=$(fm_pending_reply_now)
@@ -378,7 +500,7 @@ EOF
 # Mark delivery success for an existing expectation. Never resolves.
 fm_pending_reply_mark_delivered() {  # <state-dir> <corr_id> [confirmed-epoch]
   local state=$1 corr=$2 confirmed_epoch=${3-} rec phase delivered now
-  rec=$(fm_pending_reply_path "$state" "$corr")
+  fm_pending_reply_path "$state" "$corr" rec
   [ -f "$rec" ] || return 1
   phase=$(fm_pending_reply_get "$rec" phase)
   case "$phase" in
@@ -397,13 +519,28 @@ fm_pending_reply_mark_delivered() {  # <state-dir> <corr_id> [confirmed-epoch]
 }
 
 fm_pending_reply_delivery_confirmation_path() {  # <state-dir> <corr_id>
-  printf '%s/.delivery-confirmed-%s' "$(fm_pending_reply_dir "$1")" "$2"
+  local dir
+  fm_pending_reply_dir "$1" dir
+  printf '%s/.delivery-confirmed-%s' "$dir" "$2"
+}
+
+# Read complete NUL-free evidence before shell capture can erase binary bytes.
+# Callers must discard output on failure, including a failed read's valid prefix.
+fm_pending_reply_read_text() {  # <path>
+  (
+    set -o pipefail
+    cat "$1" 2>/dev/null | {
+      local contents=''
+      if IFS= read -r -d '' contents; then exit 1; fi
+      printf '%s' "$contents"
+    }
+  )
 }
 
 fm_pending_reply_write_delivery_confirmation() {  # <state-dir> <corr_id> <state> <value>
   local pending_state=$1 corr=$2 delivery_state=$3 value=$4 marker dir tmp
   marker=$(fm_pending_reply_delivery_confirmation_path "$pending_state" "$corr")
-  dir=$(dirname "$marker")
+  fm_pending_reply_dir "$pending_state" dir
   mkdir -p "$dir" || return 1
   tmp="$marker.tmp.$$"
   printf '%s=%s\n' "$delivery_state" "$value" > "$tmp" || return 1
@@ -413,7 +550,7 @@ fm_pending_reply_write_delivery_confirmation() {  # <state-dir> <corr_id> <state
 
 fm_pending_reply_prepare_delivery() {  # <state-dir> <corr_id>
   local state=$1 corr=$2 rec delivered marker now
-  rec=$(fm_pending_reply_path "$state" "$corr")
+  fm_pending_reply_path "$state" "$corr" rec
   [ -f "$rec" ] || return 1
   delivered=$(fm_pending_reply_get "$rec" delivered_epoch)
   [ -z "$delivered" ] || return 0
@@ -455,7 +592,7 @@ _fm_pending_reply_confirm_delivery_locked() {  # <state-dir> <corr_id>
 # the existing prepared record to the owner's explicit unknown-delivery path.
 fm_pending_reply_mark_delivery_unknown() {  # <state-dir> <corr_id>
   local state=$1 corr=$2 rec phase
-  rec=$(fm_pending_reply_path "$state" "$corr")
+  fm_pending_reply_path "$state" "$corr" rec
   [ -f "$rec" ] || return 1
   phase=$(fm_pending_reply_get "$rec" phase)
   case "$phase" in awaiting_report|delivery_unknown) ;;
@@ -466,8 +603,8 @@ fm_pending_reply_mark_delivery_unknown() {  # <state-dir> <corr_id>
 
 _fm_pending_reply_reconcile_delivery_locked() {  # <state-dir> <corr_id>
   local state=$1 corr=$2 rec delivered marker entry delivery_state value epoch
-  local grace now age phase
-  rec=$(fm_pending_reply_path "$state" "$corr")
+  local grace now phase
+  fm_pending_reply_path "$state" "$corr" rec
   [ -f "$rec" ] || return 1
   marker=$(fm_pending_reply_delivery_confirmation_path "$state" "$corr")
   delivered=$(fm_pending_reply_get "$rec" delivered_epoch)
@@ -476,7 +613,7 @@ _fm_pending_reply_reconcile_delivery_locked() {  # <state-dir> <corr_id>
     return 0
   fi
   [ -f "$marker" ] || return 1
-  entry=$(cat "$marker" 2>/dev/null || true)
+  entry=$(fm_pending_reply_read_text "$marker") || return 1
   delivery_state=${entry%%=*}
   value=${entry#*=}
   case "$delivery_state" in
@@ -492,9 +629,8 @@ _fm_pending_reply_reconcile_delivery_locked() {  # <state-dir> <corr_id>
       case "$epoch" in ''|*[!0-9]*) return 1 ;; esac
       grace=$(fm_pending_reply_get "$rec" grace_secs)
       case "$grace" in ''|*[!0-9]*) grace=$(fm_pending_reply_grace_secs) ;; esac
-      now=$(fm_pending_reply_now)
-      age=$((now - epoch))
-      [ "$age" -ge "$grace" ] || return 1
+      now=$(fm_pending_reply_now) || return 1
+      _fm_pending_reply_elapsed_at_least "$now" "$epoch" "$grace" || return 1
       phase=$(fm_pending_reply_get "$rec" phase)
       [ "$phase" = awaiting_report ] || return 1
       fm_pending_reply_set "$rec" phase delivery_unknown || return 1
@@ -518,13 +654,14 @@ fm_pending_reply_reconcile_delivery() {  # <state-dir> <corr_id>
 
 fm_pending_reply_delivery_attempt_unresolved() {  # <state-dir> <corr_id>
   local state=$1 corr=$2 rec delivered marker entry
-  rec=$(fm_pending_reply_path "$state" "$corr")
+  fm_pending_reply_path "$state" "$corr" rec
   [ -f "$rec" ] && [ ! -L "$rec" ] || return 1
   delivered=$(fm_pending_reply_get "$rec" delivered_epoch)
   [ -z "$delivered" ] || return 1
   marker=$(fm_pending_reply_delivery_confirmation_path "$state" "$corr")
   [ -f "$marker" ] && [ ! -L "$marker" ] || return 1
-  entry=$(cat "$marker" 2>/dev/null || true)
+  # Existing but unreadable evidence cannot prove that a resend is safe.
+  entry=$(fm_pending_reply_read_text "$marker") || return 0
   case "$entry" in attempted=*) return 0 ;; esac
   return 1
 }
@@ -549,7 +686,7 @@ fm_pending_reply_reset_known_undelivered() {  # <state-dir> <corr_id>
 
 _fm_pending_reply_reset_known_undelivered_locked() {  # <state-dir> <corr_id>
   local state=$1 corr=$2 rec delivered phase marker entry
-  rec=$(fm_pending_reply_path "$state" "$corr")
+  fm_pending_reply_path "$state" "$corr" rec
   [ -f "$rec" ] && [ ! -L "$rec" ] || return 1
   delivered=$(fm_pending_reply_get "$rec" delivered_epoch)
   [ -z "$delivered" ] || return 1
@@ -561,7 +698,7 @@ _fm_pending_reply_reset_known_undelivered_locked() {  # <state-dir> <corr_id>
     return $?
   }
   [ -f "$marker" ] && [ ! -L "$marker" ] || return 1
-  entry=$(cat "$marker" 2>/dev/null || true)
+  entry=$(fm_pending_reply_read_text "$marker") || return 1
   case "$entry" in attempted=*) ;; *) return 1 ;; esac
   [ "$phase" = awaiting_report ] \
     || fm_pending_reply_set "$rec" phase awaiting_report || return 1
@@ -572,7 +709,7 @@ _fm_pending_reply_reset_known_undelivered_locked() {  # <state-dir> <corr_id>
 # not masquerade as a missed report later.
 fm_pending_reply_discard_undelivered() {  # <state-dir> <corr_id>
   local state=$1 corr=$2 rec delivered marker
-  rec=$(fm_pending_reply_path "$state" "$corr")
+  fm_pending_reply_path "$state" "$corr" rec
   [ -f "$rec" ] || return 0
   delivered=$(fm_pending_reply_get "$rec" delivered_epoch)
   [ -z "$delivered" ] || return 1
@@ -596,38 +733,55 @@ fm_pending_reply_line_resolves() {  # <line> <corr_id>
 }
 
 # Scan a status file for a correlated resolve. Prints the matching line or empty.
+# Binary or failed reads are incomplete evidence and return nonzero without text.
 fm_pending_reply_find_resolve_line() {  # <status-file> <corr_id>
-  local status_file=$1 corr=$2 line
+  local status_file=$1 corr=$2 line contents
   [ -f "$status_file" ] || return 0
+  contents=$(fm_pending_reply_read_text "$status_file") || return 1
   while IFS= read -r line || [ -n "$line" ]; do
     [ -n "$line" ] || continue
     if fm_pending_reply_line_resolves "$line" "$corr"; then
       printf '%s' "$line"
       return 0
     fi
-  done < "$status_file"
+  done <<< "$contents"
   return 0
 }
 
-fm_pending_reply_file_signature() {  # <path>
-  local path=$1
+# Failed metadata is unknown, not a stable signature suitable for caching.
+# Keep subsecond timestamps so same-size rewrites invalidate cached absence.
+fm_pending_reply_file_signature() {  # <path> [kernel-name]
+  local path=$1 kernel
   [ -f "$path" ] || { printf 'missing'; return 0; }
-  if [ "$(uname -s 2>/dev/null)" = Darwin ]; then
-    LC_ALL=C /usr/bin/stat -f '%d:%i:%z:%m:%c' "$path" 2>/dev/null || printf 'unreadable'
+  if [ "$#" -gt 1 ]; then
+    kernel=$2
   else
-    LC_ALL=C stat -c '%d:%i:%s:%Y:%Z' "$path" 2>/dev/null || printf 'unreadable'
+    kernel=$(uname -s 2>/dev/null) || :
+  fi
+  if [ "$kernel" = Darwin ]; then
+    LC_ALL=C /usr/bin/stat -f '%d:%i:%z:%Fm:%Fc' "$path" 2>/dev/null
+  else
+    LC_ALL=C stat -c '%d:%i:%s:%y:%z' "$path" 2>/dev/null
   fi
 }
 
 fm_pending_reply_status_set_signature() {  # <status-dir>
-  local status_dir=$1 status_file signature
-  {
-    for status_file in "$status_dir"/*.status; do
-      [ -f "$status_file" ] || continue
-      signature=$(fm_pending_reply_file_signature "$status_file")
-      printf '%s:%s:%s\n' "${#status_file}" "$status_file" "$signature"
-    done
-  } | cksum 2>/dev/null | awk '{printf "%s-%s", $1, $2}'
+  local status_dir=$1 status_file signature kernel='' have_kernel=0
+  (
+    set -o pipefail
+    {
+      for status_file in "$status_dir"/*.status; do
+        [ -f "$status_file" ] || continue
+        # The platform is constant for this batch; empty batches need no probe.
+        if [ "$have_kernel" = 0 ]; then
+          kernel=$(uname -s 2>/dev/null) || :
+          have_kernel=1
+        fi
+        signature=$(fm_pending_reply_file_signature "$status_file" "$kernel") || exit 1
+        printf '%s:%s:%s\n' "${#status_file}" "$status_file" "$signature" || exit 1
+      done
+    } | cksum 2>/dev/null | awk '{printf "%s-%s", $1, $2}'
+  )
 }
 
 # Classify how a resolving line acknowledged the request.
@@ -672,23 +826,23 @@ _fm_pending_reply_try_resolve_locked() {  # <state-dir> <corr_id> [status-file-o
   local state=$1 corr=$2 status_override=${3-}
   local rec phase delivered marker delivery_entry delivery_state status_file signature previous line via now
   local unconfirmed=0
-  rec=$(fm_pending_reply_path "$state" "$corr")
+  fm_pending_reply_path "$state" "$corr" rec
   [ -f "$rec" ] || return 1
-  phase=$(fm_pending_reply_get "$rec" phase)
+  fm_pending_reply_get "$rec" phase phase
   if [ "$phase" = resolved ]; then
     _fm_pending_reply_close_escalation_locked "$state" "$corr" || true
     return 0
   fi
-  delivered=$(fm_pending_reply_get "$rec" delivered_epoch)
+  fm_pending_reply_get "$rec" delivered_epoch delivered
   if [ -z "$delivered" ]; then
     marker=$(fm_pending_reply_delivery_confirmation_path "$state" "$corr")
     [ -f "$marker" ] || return 1
-    delivery_entry=$(cat "$marker" 2>/dev/null || true)
+    delivery_entry=$(fm_pending_reply_read_text "$marker") || return 1
     delivery_state=${delivery_entry%%=*}
     case "$delivery_state" in attempted|confirmed) ;; *) return 1 ;; esac
     unconfirmed=1
   fi
-  status_file=$(fm_pending_reply_get "$rec" parent_status)
+  fm_pending_reply_get "$rec" parent_status status_file
   # Only the asked task's own status log answers its request: another mate's
   # line echoing or quoting this corr= token must leave the request open.
   if [ -n "$status_override" ]; then
@@ -696,13 +850,13 @@ _fm_pending_reply_try_resolve_locked() {  # <state-dir> <corr_id> [status-file-o
     status_file=$status_override
   fi
   if [ -z "$status_override" ] && [ "$unconfirmed" = 0 ]; then
-    signature=$(fm_pending_reply_file_signature "$status_file")
-    previous=$(fm_pending_reply_get "$rec" parent_status_scan_signature)
-    [ "$signature" != "$previous" ] || return 1
+    signature=$(fm_pending_reply_file_signature "$status_file") || signature=''
+    fm_pending_reply_get "$rec" parent_status_scan_signature previous
+    if [ -n "$signature" ] && [ "$signature" = "$previous" ]; then return 1; fi
   fi
-  line=$(fm_pending_reply_find_resolve_line "$status_file" "$corr")
+  line=$(fm_pending_reply_find_resolve_line "$status_file" "$corr") || return 1
   if [ -z "$line" ]; then
-    if [ -z "$status_override" ] && [ "$unconfirmed" = 0 ]; then
+    if [ -z "$status_override" ] && [ "$unconfirmed" = 0 ] && [ -n "$signature" ]; then
       fm_pending_reply_set "$rec" parent_status_scan_signature "$signature" || return 1
     fi
     return 1
@@ -727,14 +881,14 @@ _fm_pending_reply_try_resolve_locked() {  # <state-dir> <corr_id> [status-file-o
 fm_pending_reply_observe_busy() {  # <state-dir> <corr_id> <busy_state>
   local state=$1 corr=$2 busy_state=$3
   local rec phase delivered now seen completed field_seen field_completed
-  rec=$(fm_pending_reply_path "$state" "$corr")
+  fm_pending_reply_path "$state" "$corr" rec
   [ -f "$rec" ] || return 1
-  phase=$(fm_pending_reply_get "$rec" phase)
+  fm_pending_reply_get "$rec" phase phase
   case "$phase" in
     awaiting_report|recovery_sent) ;;
     *) return 0 ;;
   esac
-  delivered=$(fm_pending_reply_get "$rec" delivered_epoch)
+  fm_pending_reply_get "$rec" delivered_epoch delivered
   [ -n "$delivered" ] || return 0
   if [ "$phase" = awaiting_report ]; then
     field_seen=turn_seen_busy
@@ -743,8 +897,8 @@ fm_pending_reply_observe_busy() {  # <state-dir> <corr_id> <busy_state>
     field_seen=recovery_turn_seen_busy
     field_completed=recovery_turn_completed_epoch
   fi
-  seen=$(fm_pending_reply_get "$rec" "$field_seen")
-  completed=$(fm_pending_reply_get "$rec" "$field_completed")
+  fm_pending_reply_get "$rec" "$field_seen" seen
+  fm_pending_reply_get "$rec" "$field_completed" completed
   case "$busy_state" in
     busy)
       if [ "$seen" != 1 ]; then
@@ -772,26 +926,25 @@ fm_pending_reply_observe_busy() {  # <state-dir> <corr_id> <busy_state>
 }
 
 fm_pending_reply_fallback_idle_eligible() {  # <record-path>
-  local rec=$1 phase start seen grace now age
-  phase=$(fm_pending_reply_get "$rec" phase)
+  local rec=$1 phase start seen grace now
+  fm_pending_reply_get "$rec" phase phase
   case "$phase" in
     awaiting_report)
-      start=$(fm_pending_reply_get "$rec" delivered_epoch)
-      seen=$(fm_pending_reply_get "$rec" turn_seen_busy)
+      fm_pending_reply_get "$rec" delivered_epoch start
+      fm_pending_reply_get "$rec" turn_seen_busy seen
       ;;
     recovery_sent)
-      start=$(fm_pending_reply_get "$rec" recovery_sent_epoch)
-      seen=$(fm_pending_reply_get "$rec" recovery_turn_seen_busy)
+      fm_pending_reply_get "$rec" recovery_sent_epoch start
+      fm_pending_reply_get "$rec" recovery_turn_seen_busy seen
       ;;
     *) return 1 ;;
   esac
   [ "$seen" = 1 ] && return 0
-  grace=$(fm_pending_reply_get "$rec" grace_secs)
+  fm_pending_reply_get "$rec" grace_secs grace
   case "$start" in ''|*[!0-9]*) return 1 ;; esac
   case "$grace" in ''|*[!0-9]*) grace=$(fm_pending_reply_grace_secs) ;; esac
-  now=$(fm_pending_reply_now)
-  age=$((now - start))
-  [ "$age" -ge "$grace" ]
+  now=$(fm_pending_reply_now) || return 1
+  _fm_pending_reply_elapsed_at_least "$now" "$start" "$grace"
 }
 
 # fm_pending_reply_backend_observation: one busy/idle observation of a
@@ -812,6 +965,7 @@ fm_pending_reply_fallback_idle_eligible() {  # <record-path>
 # which the caller accepts as idle only after its grace window.
 fm_pending_reply_backend_observation() {  # <backend> <target> [expected-label] [harness]
   local backend=$1 target=$2 expected_label=${3-} harness=${4-} native tail40
+  local -a statuses
   native=$(fm_backend_busy_state "$backend" "$target" 2>/dev/null || printf 'unknown')
   case "$native" in
     busy|idle) printf '%s' "$native"; return 0 ;;
@@ -820,10 +974,22 @@ fm_pending_reply_backend_observation() {  # <backend> <target> [expected-label] 
     || { printf 'unknown'; return 0; }
   if printf '%s' "$tail40" | grep -v '^[[:space:]]*$' | tail -6 \
     | fm_busy_lines_match "$harness"; then
-    printf 'busy'
+    statuses=("${PIPESTATUS[@]}")
   else
-    printf 'fallback-idle'
+    statuses=("${PIPESTATUS[@]}")
   fi
+  # A failed filter can still feed empty or partial text to a successful matcher.
+  # Check each stage before accepting busy or idle; grep -v status 1 only means
+  # the complete capture had no nonblank lines and remains a valid idle input.
+  if [ "${statuses[0]}" -ne 0 ] || [ "${statuses[1]}" -gt 1 ] || [ "${statuses[2]}" -ne 0 ]; then
+    printf 'unknown'
+    return 0
+  fi
+  case "${statuses[3]}" in
+    0) printf 'busy' ;;
+    1) printf 'fallback-idle' ;;
+    *) printf 'unknown' ;;
+  esac
 }
 
 fm_pending_reply_busy_state_from_observation() {  # <record-path> <observation>
@@ -846,7 +1012,7 @@ fm_pending_reply_busy_state_from_observation() {  # <record-path> <observation>
 fm_pending_reply_mark_turn_completed() {  # <state-dir> <corr_id> [which: request|recovery]
   local state=$1 corr=$2 which=${3:-request}
   local rec phase field now
-  rec=$(fm_pending_reply_path "$state" "$corr")
+  fm_pending_reply_path "$state" "$corr" rec
   [ -f "$rec" ] || return 1
   phase=$(fm_pending_reply_get "$rec" phase)
   case "$which" in
@@ -902,12 +1068,17 @@ fm_pending_reply_note_remote_channel_caught_up() {  # <state-dir> <task_id> [epo
 }
 
 # Print the watermark epoch, or nothing when the channel never reported itself
-# caught up. Never invents a value.
+# caught up. Binary or failed reads are unknown; never invent a value.
 fm_pending_reply_remote_channel_epoch() {  # <state-dir> <task_id>
-  local path epoch
+  local path contents line epoch=''
   path=$(fm_pending_reply_remote_channel_watermark_path "$1" "$2")
   [ -f "$path" ] && [ ! -L "$path" ] || return 0
-  epoch=$(sed -n 's/^caught_up_epoch=//p' "$path" 2>/dev/null | head -1)
+  contents=$(fm_pending_reply_read_text "$path") || return 0
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in
+      caught_up_epoch=*) epoch=${line#*=}; break ;;
+    esac
+  done <<< "$contents"
   case "$epoch" in ''|*[!0-9]*) return 0 ;; esac
   printf '%s' "$epoch"
 }
@@ -936,7 +1107,7 @@ fm_pending_reply_recovery_message() {  # <record-path>
   local rec=$1 corr summary token msg
   corr=$(fm_pending_reply_get "$rec" corr_id)
   summary=$(fm_pending_reply_get "$rec" request_summary)
-  token=$(fm_pending_reply_corr_token "$corr")
+  fm_pending_reply_corr_token "$corr" token
   msg="REPOST REQUIRED: previous marked request had no correlated parent report. Reply on the parent status channel including ${token}. Original request: ${summary}"
   fm_pending_reply_embed_corr "$msg" "$corr" msg
   printf '%s' "$msg"
@@ -948,10 +1119,10 @@ fm_pending_reply_recovery_message() {  # <record-path>
 # second expectation is not created.
 fm_pending_reply_send_recovery() {  # <state-dir> <corr_id>
   local state=$1 corr=$2
-  local rec phase completed delivered attempted grace now age task_id msg parent_home send_status=0
+  local rec phase completed delivered attempted grace now task_id msg parent_home send_status=0
   local sender_pid sender_identity status_file lock
   local STATE FM_WAKE_QUEUE FM_WAKE_QUEUE_LOCK
-  rec=$(fm_pending_reply_path "$state" "$corr")
+  fm_pending_reply_path "$state" "$corr" rec
   [ -f "$rec" ] || return 1
   phase=$(fm_pending_reply_get "$rec" phase)
   [ "$phase" = awaiting_report ] || return 1
@@ -966,12 +1137,11 @@ fm_pending_reply_send_recovery() {  # <state-dir> <corr_id>
   [ -n "$delivered" ] || return 1
   grace=$(fm_pending_reply_get "$rec" grace_secs)
   case "$grace" in ''|*[!0-9]*) grace=$(fm_pending_reply_grace_secs) ;; esac
-  now=$(fm_pending_reply_now)
+  now=$(fm_pending_reply_now) || return 1
   # Grace runs from the request turn's completion, not from delivery: delivery
   # only proves the request arrived, while the turn's completion is the
   # earliest moment a correlated report could exist to race against.
-  age=$((now - completed))
-  [ "$age" -ge "$grace" ] || return 1
+  _fm_pending_reply_elapsed_at_least "$now" "$completed" "$grace" || return 1
   task_id=$(fm_pending_reply_get "$rec" task_id)
   # A remote mate's report may exist and simply not have been mirrored yet.
   fm_pending_reply_missing_report_is_evidence "$state" "$task_id" "$completed" || return 1
@@ -1049,7 +1219,7 @@ fm_pending_reply_sender_alive() {  # <record-path>
 
 fm_pending_reply_finish_recovery() {  # <state-dir> <corr_id> <confirmed|failed>
   local state=$1 corr=$2 outcome=$3 rec phase now sent
-  rec=$(fm_pending_reply_path "$state" "$corr")
+  fm_pending_reply_path "$state" "$corr" rec
   [ -f "$rec" ] || return 1
   phase=$(fm_pending_reply_get "$rec" phase)
   [ "$phase" = recovery_sending ] || return 1
@@ -1071,7 +1241,7 @@ fm_pending_reply_finish_recovery() {  # <state-dir> <corr_id> <confirmed|failed>
 
 fm_pending_reply_reconcile_recovery() {  # <state-dir> <corr_id>
   local state=$1 corr=$2 rec phase attempted outcome
-  rec=$(fm_pending_reply_path "$state" "$corr")
+  fm_pending_reply_path "$state" "$corr" rec
   [ -f "$rec" ] || return 1
   phase=$(fm_pending_reply_get "$rec" phase)
   case "$phase" in awaiting_report|recovery_sending) ;; *) return 1 ;; esac
@@ -1199,7 +1369,7 @@ fm_pending_reply_close_escalation() {  # <state-dir> <corr_id>
 _fm_pending_reply_close_escalation_locked() {  # <state-dir> <corr_id>
   local state=$1 corr=$2 rec escalated closed parent_status escalation key note
   local open_line open_key open_note now close_line close_rc _task _via
-  rec=$(fm_pending_reply_path "$state" "$corr")
+  fm_pending_reply_path "$state" "$corr" rec
   [ -f "$rec" ] || return 1
   [ "$(fm_pending_reply_get "$rec" phase)" = resolved ] || return 0
   escalated=$(fm_pending_reply_get "$rec" escalated_epoch)
@@ -1267,8 +1437,8 @@ fm_pending_reply_maybe_escalate() {  # <state-dir> <corr_id>
 _fm_pending_reply_maybe_escalate_locked() {  # <state-dir> <corr_id>
   local state=$1 corr=$2
   local rec phase completed now payload parent_status line kind first display
-  local delivered task_id meta sm_home remote_host grace age key new_episode
-  rec=$(fm_pending_reply_path "$state" "$corr")
+  local delivered task_id meta sm_home remote_host grace key new_episode
+  fm_pending_reply_path "$state" "$corr" rec
   [ -f "$rec" ] || return 1
   phase=$(fm_pending_reply_get "$rec" phase)
   if [ "$phase" = delivery_unknown ]; then
@@ -1284,9 +1454,8 @@ _fm_pending_reply_maybe_escalate_locked() {  # <state-dir> <corr_id>
       # recovery repost itself uses (never from delivery or send time).
       grace=$(fm_pending_reply_get "$rec" grace_secs)
       case "$grace" in ''|*[!0-9]*) grace=$(fm_pending_reply_grace_secs) ;; esac
-      now=$(fm_pending_reply_now)
-      age=$((now - completed))
-      [ "$age" -ge "$grace" ] || return 1
+      now=$(fm_pending_reply_now) || return 1
+      _fm_pending_reply_elapsed_at_least "$now" "$completed" "$grace" || return 1
       # Same reply-channel evidence rule the recovery repost obeys: a missing
       # correlated report is not a missed report until the mirror caught up.
       fm_pending_reply_missing_report_is_evidence "$state" \
@@ -1354,24 +1523,28 @@ _fm_pending_reply_maybe_escalate_locked() {  # <state-dir> <corr_id>
 # parent-replies.status is its parent channel, not a stranded self-home file.
 fm_pending_reply_detect_wrong_home() {  # <state-dir> <corr_id> <secondmate-home>
   local state=$1 corr=$2 sm_home=$3
-  local rec delivered hits first sightings snapshot previous status_file line line_no sighting_base sighting_id phase changed=0
+  local rec delivered hits first sightings snapshot previous status_file contents line line_no sighting_base sighting_id phase changed=0
   local remote_parent_channel=0
-  rec=$(fm_pending_reply_path "$state" "$corr")
+  fm_pending_reply_path "$state" "$corr" rec
   [ -f "$rec" ] || return 1
   [ -n "$sm_home" ] && [ -d "$sm_home" ] || return 0
-  phase=$(fm_pending_reply_get "$rec" phase)
+  fm_pending_reply_get "$rec" phase phase
   [ "$phase" != resolved ] || return 0
-  delivered=$(fm_pending_reply_get "$rec" delivered_epoch)
+  fm_pending_reply_get "$rec" delivered_epoch delivered
   [ -n "$delivered" ] || return 0
-  snapshot=$(fm_pending_reply_status_set_signature "$sm_home/state")
-  previous=$(fm_pending_reply_get "$rec" wrong_home_scan_signature)
-  hits=$(fm_pending_reply_get "$rec" wrong_home_hits)
+  snapshot=$(fm_pending_reply_status_set_signature "$sm_home/state") || snapshot=''
+  fm_pending_reply_get "$rec" wrong_home_scan_signature previous
+  fm_pending_reply_get "$rec" wrong_home_hits hits
   case "$hits" in ''|*[!0-9]*) hits=0 ;; esac
-  first=$(fm_pending_reply_get "$rec" wrong_home_first_sighting)
-  if [ "$snapshot" = "$previous" ] && { [ "$hits" = 0 ] || [ -n "$first" ]; }; then
+  # Normalize persisted counters as decimal and keep headroom for increment.
+  hits=${hits#"${hits%%[!0]*}"}
+  hits=${hits:-0}
+  [ "${#hits}" -le 18 ] || hits=0
+  fm_pending_reply_get "$rec" wrong_home_first_sighting first
+  if [ -n "$snapshot" ] && [ "$snapshot" = "$previous" ] && { [ "$hits" = 0 ] || [ -n "$first" ]; }; then
     return 0
   fi
-  sightings=$(fm_pending_reply_get "$rec" wrong_home_sightings)
+  fm_pending_reply_get "$rec" wrong_home_sightings sightings
   # shellcheck source=bin/fm-parent-channel-lib.sh
   . "$_FM_PENDING_REPLY_LIB_DIR/fm-parent-channel-lib.sh"
   if fm_parent_channel_destination "$sm_home" "$sm_home/state" >/dev/null 2>&1 \
@@ -1384,7 +1557,9 @@ fm_pending_reply_detect_wrong_home() {  # <state-dir> <corr_id> <secondmate-home
       && [ "$(basename "$status_file")" = parent-replies.status ]; then
       continue
     fi
-    sighting_base=$(fm_pending_reply_sighting_encode "$status_file" 0) || continue
+    # An incomplete scan must not cache the file set and suppress a healthy retry.
+    contents=$(fm_pending_reply_read_text "$status_file") || return 1
+    sighting_base=$(fm_pending_reply_sighting_encode "$status_file" 0) || return 1
     sighting_base=${sighting_base%:0}
     line_no=0
     while IFS= read -r line || [ -n "$line" ]; do
@@ -1402,7 +1577,7 @@ fm_pending_reply_detect_wrong_home() {  # <state-dir> <corr_id> <secondmate-home
       fi
       hits=$((hits + 1))
       changed=1
-    done < "$status_file"
+    done <<< "$contents"
   done
   if [ -n "$first" ] && [ -z "$(fm_pending_reply_get "$rec" wrong_home_first_sighting)" ]; then
     fm_pending_reply_set "$rec" wrong_home_first_sighting "$first" || return 1
@@ -1411,7 +1586,9 @@ fm_pending_reply_detect_wrong_home() {  # <state-dir> <corr_id> <secondmate-home
     fm_pending_reply_set "$rec" wrong_home_sightings "$sightings" || return 1
     fm_pending_reply_set "$rec" wrong_home_hits "$hits" || return 1
   fi
-  fm_pending_reply_set "$rec" wrong_home_scan_signature "$snapshot" || return 1
+  if [ -n "$snapshot" ]; then
+    fm_pending_reply_set "$rec" wrong_home_scan_signature "$snapshot" || return 1
+  fi
   return 0
 }
 
@@ -1421,7 +1598,7 @@ fm_pending_reply_detect_wrong_home() {  # <state-dir> <corr_id> <secondmate-home
 fm_pending_reply_restatement_copy_same_basename() {  # <state-dir> <corr_id> <secondmate-home>
   local state=$1 corr=$2 sm_home=$3
   local rec task_id parent_status stranded line
-  rec=$(fm_pending_reply_path "$state" "$corr")
+  fm_pending_reply_path "$state" "$corr" rec
   [ -f "$rec" ] || return 1
   [ -n "$sm_home" ] && [ -d "$sm_home" ] || return 1
   task_id=$(fm_pending_reply_get "$rec" task_id)
@@ -1430,7 +1607,7 @@ fm_pending_reply_restatement_copy_same_basename() {  # <state-dir> <corr_id> <se
   stranded="$sm_home/state/${task_id}.status"
   [ -f "$stranded" ] && [ ! -L "$stranded" ] || return 1
   [ "$stranded" != "$parent_status" ] || return 1
-  line=$(fm_pending_reply_find_resolve_line "$stranded" "$corr")
+  line=$(fm_pending_reply_find_resolve_line "$stranded" "$corr") || return 1
   [ -n "$line" ] || return 1
   # Deliberately undirected: bin/fm-parent-channel-lib.sh is expanded once at
   # the fm_pending_reply_detect_wrong_home site; each directed site would
@@ -1447,11 +1624,11 @@ fm_pending_reply_restatement_copy_same_basename() {  # <state-dir> <corr_id> <se
 fm_pending_reply_tick_one() {  # <state-dir> <corr_id> <busy_state> [secondmate-home] [allow-recovery]
   local state=$1 corr=$2 busy_state=$3 sm_home=${4-} allow_recovery=${5:-1}
   local rec phase delivered
-  rec=$(fm_pending_reply_path "$state" "$corr")
+  fm_pending_reply_path "$state" "$corr" rec
   [ -f "$rec" ] || return 1
   fm_pending_reply_reconcile_delivery "$state" "$corr" || true
-  phase=$(fm_pending_reply_get "$rec" phase)
-  delivered=$(fm_pending_reply_get "$rec" delivered_epoch)
+  fm_pending_reply_get "$rec" phase phase
+  fm_pending_reply_get "$rec" delivered_epoch delivered
   if [ -z "$delivered" ]; then
     case "$phase" in
       delivery_unknown) fm_pending_reply_maybe_escalate "$state" "$corr" 2>/dev/null || true ;;
@@ -1463,12 +1640,12 @@ fm_pending_reply_tick_one() {  # <state-dir> <corr_id> <busy_state> [secondmate-
   if fm_pending_reply_try_resolve "$state" "$corr"; then
     return 0
   fi
-  phase=$(fm_pending_reply_get "$rec" phase)
+  fm_pending_reply_get "$rec" phase phase
   case "$phase" in
     awaiting_report|recovery_sending)
       if [ -n "$(fm_pending_reply_get "$rec" recovery_attempted_epoch)" ]; then
         fm_pending_reply_reconcile_recovery "$state" "$corr" || true
-        phase=$(fm_pending_reply_get "$rec" phase)
+        fm_pending_reply_get "$rec" phase phase
       fi
       ;;
   esac
@@ -1501,11 +1678,11 @@ fm_pending_reply_tick_one() {  # <state-dir> <corr_id> <busy_state> [secondmate-
   if fm_pending_reply_try_resolve "$state" "$corr"; then
     return 0
   fi
-  phase=$(fm_pending_reply_get "$rec" phase)
+  fm_pending_reply_get "$rec" phase phase
   if [ "$phase" = awaiting_report ] && [ "$allow_recovery" = 1 ]; then
     fm_pending_reply_send_recovery "$state" "$corr" 2>/dev/null || true
   fi
-  phase=$(fm_pending_reply_get "$rec" phase)
+  fm_pending_reply_get "$rec" phase phase
   case "$phase" in
     recovery_sent|recovery_failed|recovery_unknown)
       fm_pending_reply_maybe_escalate "$state" "$corr" 2>/dev/null || true
@@ -1553,9 +1730,9 @@ fm_pending_reply_remote_observation() {  # <task-id>
 
 fm_pending_reply_tick() {  # <state-dir> [watcher-beacon]
   local state=$1 beacon=${2-} dir rec corr task_id phase delivered meta backend target label busy sm_home harness remote_host
-  local observation observation_task found i remote_reposts=0 allow_recovery attempted_before
+  local observation observation_task found i remote_reposts=0 allow_recovery attempted_before selection
   local -a observation_tasks=() observation_values=() records=() selected=()
-  dir=$(fm_pending_reply_dir "$state")
+  fm_pending_reply_dir "$state" dir
   [ -d "$dir" ] || return 0
   for rec in "$dir"/*; do
     [ -f "$rec" ] || continue
@@ -1569,15 +1746,23 @@ fm_pending_reply_tick() {  # <state-dir> [watcher-beacon]
       *) records+=("$rec") ;;
     esac
   done
-  while IFS= read -r rec; do
-    selected+=("$rec")
-  done < <(_fm_pending_reply_select_needing_work ${records[@]+"${records[@]}"})
+  if selection=$(_fm_pending_reply_select_needing_work ${records[@]+"${records[@]}"}); then
+    if [ -n "$selection" ]; then
+      while IFS= read -r rec; do
+        selected+=("$rec")
+      done <<< "$selection"
+    fi
+  else
+    # Failed or partial selection cannot prove any record has no work. The
+    # per-record path retains the authoritative phase and reconciliation checks.
+    selected+=(${records[@]+"${records[@]}"})
+  fi
   for rec in ${selected[@]+"${selected[@]}"}; do
     [ -z "$beacon" ] || touch "$beacon"
-    corr=$(fm_pending_reply_get "$rec" corr_id)
+    fm_pending_reply_get "$rec" corr_id corr
     [ -n "$corr" ] || corr=$(basename "$rec")
-    task_id=$(fm_pending_reply_get "$rec" task_id)
-    phase=$(fm_pending_reply_get "$rec" phase)
+    fm_pending_reply_get "$rec" task_id task_id
+    fm_pending_reply_get "$rec" phase phase
     if [ "$phase" = resolved ]; then
       # Cheap no-op unless an escalation for this record is still open; this is
       # the retry that makes the close converge after a transient write failure.
@@ -1585,8 +1770,8 @@ fm_pending_reply_tick() {  # <state-dir> [watcher-beacon]
       continue
     fi
     fm_pending_reply_reconcile_delivery "$state" "$corr" || true
-    phase=$(fm_pending_reply_get "$rec" phase)
-    delivered=$(fm_pending_reply_get "$rec" delivered_epoch)
+    fm_pending_reply_get "$rec" phase phase
+    fm_pending_reply_get "$rec" delivered_epoch delivered
     if [ -z "$delivered" ]; then
       case "$phase" in
         delivery_unknown|escalated)
@@ -1599,7 +1784,7 @@ fm_pending_reply_tick() {  # <state-dir> [watcher-beacon]
       awaiting_report|recovery_sending)
         if [ -n "$(fm_pending_reply_get "$rec" recovery_attempted_epoch)" ]; then
           fm_pending_reply_reconcile_recovery "$state" "$corr" || true
-          phase=$(fm_pending_reply_get "$rec" phase)
+          fm_pending_reply_get "$rec" phase phase
         fi
         ;;
     esac
@@ -1609,7 +1794,7 @@ fm_pending_reply_tick() {  # <state-dir> [watcher-beacon]
         continue
       fi
       if [ -f "$meta" ]; then
-        sm_home=$(fm_meta_get "$meta" home)
+        fm_meta_get "$meta" home sm_home
         if [ -n "$sm_home" ]; then
           fm_pending_reply_detect_wrong_home "$state" "$corr" "$sm_home" || true
           if fm_pending_reply_restatement_copy_same_basename "$state" "$corr" "$sm_home"; then
@@ -1636,12 +1821,13 @@ fm_pending_reply_tick() {  # <state-dir> [watcher-beacon]
     busy=unknown
     sm_home=
     harness=
+    remote_host=
     if [ -f "$meta" ]; then
-      remote_host=$(fm_meta_get "$meta" remote_host)
+      fm_meta_get "$meta" remote_host remote_host
       backend=$(fm_backend_of_meta "$meta")
       target=$(fm_backend_target_of_meta "$meta")
-      sm_home=$(fm_meta_get "$meta" home)
-      harness=$(fm_meta_get "$meta" harness)
+      fm_meta_get "$meta" home sm_home
+      fm_meta_get "$meta" harness harness
       if [ -n "$remote_host" ]; then
         target="remote:$task_id"
         sm_home=
@@ -1672,7 +1858,7 @@ fm_pending_reply_tick() {  # <state-dir> [watcher-beacon]
     fi
     allow_recovery=1
     if [ -n "$remote_host" ] && [ "$remote_reposts" -ge 1 ]; then allow_recovery=0; fi
-    attempted_before=$(fm_pending_reply_get "$rec" recovery_attempted_epoch)
+    fm_pending_reply_get "$rec" recovery_attempted_epoch attempted_before
     fm_pending_reply_tick_one "$state" "$corr" "$busy" "$sm_home" "$allow_recovery" || true
     if [ -n "$remote_host" ] && [ -z "$attempted_before" ] &&
        [ -n "$(fm_pending_reply_get "$rec" recovery_attempted_epoch)" ]; then
@@ -1686,13 +1872,13 @@ fm_pending_reply_tick() {  # <state-dir> [watcher-beacon]
 # True when any open (non-resolved) pending reply exists for a task.
 fm_pending_reply_task_has_open() {  # <state-dir> <task_id>
   local state=$1 task_id=$2 dir rec phase tid
-  dir=$(fm_pending_reply_dir "$state")
+  fm_pending_reply_dir "$state" dir
   [ -d "$dir" ] || return 1
   for rec in "$dir"/*; do
     [ -f "$rec" ] || continue
-    tid=$(fm_pending_reply_get "$rec" task_id)
+    fm_pending_reply_get "$rec" task_id tid
     [ "$tid" = "$task_id" ] || continue
-    phase=$(fm_pending_reply_get "$rec" phase)
+    fm_pending_reply_get "$rec" phase phase
     [ "$phase" != resolved ] || continue
     return 0
   done

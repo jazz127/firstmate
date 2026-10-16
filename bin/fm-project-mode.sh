@@ -87,9 +87,11 @@
 # `branch` resolves as it did before the forge existed, and in the mode slot it
 # is read as an unknown mode. A key one or two edits from `forge` (such as
 # `forg=` or `Forge=`) is still ignored, with one stderr warning naming the token
-# and the forge=gerrit and forge=forgejo spellings. The one refusal is a
-# malformed forge binding - a `forge=` token whose value is empty or outside the
-# closed set - which is REFUSED in the default and --forge output forms: nothing
+# and the forge=gerrit and forge=forgejo spellings. An unterminated bracket
+# annotation warns and retains the default posture in every query form; the
+# description is never interpreted as policy tokens. A malformed forge binding
+# - a `forge=` token whose value is empty or outside the closed set - is REFUSED
+# in the default and --forge output forms: nothing
 # on stdout, exit status 3, the token named. Resolving it to "no registered
 # forge" would hand a Gerrit project the pull-request contract the binding
 # exists to prevent.
@@ -98,6 +100,10 @@
 # to the forge binding, so it prints even when the forge token is malformed;
 # every path that reads the forge binding (default, --forge, and spawn's
 # forge-agreement check) still refuses.
+# Repeating the same forge binding is harmless. Different forge= tokens on one
+# row are refused by default, --raw, and --forge: a later token cannot hide an
+# invalid binding or choose a different delivery contract by order. The refusal
+# names the conflicting tokens. --branch-prefix remains independent.
 # Usage: fm-project-mode.sh [--raw|--branch-prefix|--forge] <project-name>
 set -eu
 
@@ -125,12 +131,16 @@ if [ ! -f "$REG" ]; then
 fi
 
 # awk emits one "near <token>" line per keyed token whose key is a near miss of
-# `forge`, then "posture <mode> <yolo> <branch-prefix> <forge>" (branch-prefix is
+# `forge`, then "posture <mode> <yolo> <forge> <branch-prefix>" (branch-prefix is
 # the raw prefix, defaulting to "fm/"; forge is `none` or the whole `forge=<value>`
 # token, so an empty value survives the split), or nothing if the project is
-# absent. Every other token beside the mode is ignored, exactly as before either
+# absent. Differing forge tokens also emit "forge-conflict <first> <second>".
+# Every other token beside the mode is ignored, exactly as before either
 # annotation existed.
-parsed=$(awk -v n="$NAME" '
+# Pass the name as raw environment data: awk -v decodes escapes such as \n and
+# \t, which would make a literal backslash name miss its registered posture.
+parsed=$(FM_PROJECT_MODE_QUERY="$NAME" awk '
+  BEGIN { n = ENVIRON["FM_PROJECT_MODE_QUERY"] }
   function dist(x, y,   i, j, lx, ly, d, c, v) {
     lx = length(x); ly = length(y);
     for (i=0; i<=lx; i++) d[i,0] = i;
@@ -156,9 +166,17 @@ parsed=$(awk -v n="$NAME" '
     if (after != "" && substr(after, 1, 2) != " [" && substr(after, 1, 3) != " - ") next
     mode="no-mistakes"; yolo="off"; branch="fm/"; forge="none";
     if (substr(after, 1, 2) == " [") {
-      s="";
+      s=""; closed=0;
       nk = split(after, rest, " ");
-      for (i=1; i<=nk; i++) { s = s (s==""?"":" ") rest[i]; if (rest[i] ~ /\]$/) break }
+      for (i=1; i<=nk; i++) {
+        if (rest[i] == "-") break
+        s = s (s==""?"":" ") rest[i]
+        if (rest[i] ~ /\]$/) { closed=1; break }
+      }
+      if (!closed) {
+        print "invalid-annotation";
+        print "posture", mode, yolo, forge, branch; exit
+      }
       gsub(/^\[|\]$/, "", s);           # strip the surrounding brackets
       k = split(s, a, " ");
       # Tokens are order-independent: +yolo, branch=<prefix>, and forge=<value>
@@ -169,7 +187,10 @@ parsed=$(awk -v n="$NAME" '
       for (j=1; j<=k; j++) {
         if (a[j]=="+yolo") { yolo="on"; continue }
         if (a[j] ~ /^branch=/) { branch = substr(a[j], 8); continue }
-        if (a[j] ~ /^forge=/) { forge = a[j]; continue }
+        if (a[j] ~ /^forge=/) {
+          if (forge != "none" && forge != a[j]) print "forge-conflict", forge, a[j];
+          forge = a[j]; continue
+        }
         if (a[j] ~ /^[^=]+=/) {
           key = substr(a[j], 1, index(a[j], "=") - 1);
           e = dist(key, "forge");
@@ -195,9 +216,14 @@ if [ -z "$parsed" ]; then
 fi
 
 posture=
+forge_conflict=
 while IFS=' ' read -r kind rest; do
   case "$kind" in
+    invalid-annotation)
+      echo "warn: ignoring unterminated posture annotation registered for $NAME in $REG; defaulting to no-mistakes off" >&2
+      ;;
     near) echo "warn: ignoring \"$rest\" registered for $NAME in $REG; it is not a forge binding, and the forge binding is spelled forge=gerrit or forge=forgejo" >&2 ;;
+    forge-conflict) forge_conflict=$rest ;;
     posture) posture=$rest ;;
   esac
 done <<EOF
@@ -217,6 +243,11 @@ case "$yolo" in on|off) ;; *) yolo=off ;; esac
 if [ "$BRANCH_PREFIX_QUERY" -eq 1 ]; then
   echo "$branch"
   exit 0
+fi
+
+if [ -n "$forge_conflict" ]; then
+  echo "refused: conflicting forge bindings \"$forge_conflict\" registered for $NAME in $REG; register one forge binding and correct the registry entry" >&2
+  exit 3
 fi
 
 case "$forge" in

@@ -4,7 +4,7 @@
 # launched beyond that number (bin/fm-project-capacity-lib.sh owns the
 # contract; bin/fm-spawn.sh runs the check).
 #
-# Every case drives the real bin/fm-spawn.sh against a real project clone with
+# Admission cases drive bin/fm-spawn.sh against a project clone with
 # an origin, fake tmux and treehouse binaries that log every call, and a real
 # markdown backlog when tasks-axi is installed. A deferred spawn is judged by
 # what it left behind - no task record, no rendered launch brief, no endpoint,
@@ -204,6 +204,126 @@ worktree_list() { git -C "$1/project" worktree list --porcelain; }
 
 # The reported incident's shape before any declaration: the project is already
 # busy, and nothing caps a further launch. Absent a declaration that stays true.
+test_capacity_declaration_nul_guard() {
+  local shell round=0
+  for shell in "$(command -v bash)" /bin/bash; do
+    round=$((round + 1))
+    "$shell" -s -- "$ROOT" "$TMP_ROOT/declaration-bytes-$round" <<'SH' || fail "capacity declaration byte validation failed under $shell"
+set -eu
+. "$1/bin/fm-project-capacity-lib.sh"
+mkdir -p "$2"
+record=$'project 2\n'
+for ((i=0; i<=${#record}; i++)); do
+  printf '%s\0%s' "${record:0:i}" "${record:i}" > "$2/project-capacity"
+  if fm_project_capacity_lookup "$2" project; then
+    printf 'accepted NUL at byte %s\n' "$i" >&2
+    exit 1
+  fi
+  [ -z "$FM_PROJECT_CAPACITY" ] && [ -z "$FM_PROJECT_CAPACITY_ANY" ] && [ -n "$FM_PROJECT_CAPACITY_ERROR" ]
+done
+for record in $'project 2\n' 'project 2' $'project 2\r\n'; do
+  printf '%s' "$record" > "$2/project-capacity"
+  fm_project_capacity_lookup "$2" project
+  [ "$FM_PROJECT_CAPACITY" = 2 ] && [ "$FM_PROJECT_CAPACITY_ANY" = 1 ]
+done
+for record in '' '# comment'; do
+  printf '%s' "$record" > "$2/project-capacity"
+  fm_project_capacity_lookup "$2" project
+  [ -z "$FM_PROJECT_CAPACITY" ] && [ -z "$FM_PROJECT_CAPACITY_ANY" ]
+done
+SH
+  done
+  pass 'capacity declarations reject NUL at every byte boundary while retaining ordinary text and empty declarations'
+}
+
+test_capacity_parent_record_nul_guard() {
+  local shell round=0
+  for shell in "$(command -v bash)" /bin/bash; do
+    round=$((round + 1))
+    "$shell" -s -- "$ROOT" "$TMP_ROOT/parent-record-$round" <<'SH' || fail "parent-record byte validation failed under $shell"
+set -eu
+. "$1/bin/fm-secondmate-parent-lib.sh"
+mkdir -p "$2"
+record=$'schema=fm-secondmate-parent.v1\nroute=local\nparent_home=/fixture/parent\n'
+for ((i=0; i<=${#record}; i++)); do
+  printf '%s\0%s' "${record:0:i}" "${record:i}" > "$2/value"
+  if fm_secondmate_parent_record_parse "$2/value"; then
+    printf 'accepted NUL at byte %s\n' "$i" >&2
+    exit 1
+  fi
+done
+printf '%s' "$record" > "$2/value"
+fm_secondmate_parent_record_parse "$2/value"
+[ "$FM_SECONDMATE_PARENT_HOME" = /fixture/parent ]
+printf '%s' "${record%$'\n'}" > "$2/no-newline"
+fm_secondmate_parent_record_parse "$2/no-newline"
+cd "$2"
+printf '%s' "$record" > ./-
+fm_secondmate_parent_record_parse -
+printf '%s' "$record" > ./--record
+fm_secondmate_parent_record_parse --record
+printf '%s\0' "$record" > ./-
+if fm_secondmate_parent_record_parse -; then exit 1; fi
+ln -s value link
+if fm_secondmate_parent_record_parse link; then exit 1; fi
+SH
+  done
+  pass 'capacity parent records reject NUL at every byte boundary and retain ordinary-file parsing on both Bash generations'
+}
+
+# shellcheck disable=SC2016 # Positional arguments expand inside the selected child shell.
+test_capacity_root_home_with_literal_pipes() {
+  local home="$TMP_ROOT/chain-root" middle="$TMP_ROOT/chain-middle" leaf shell out expected
+  leaf="$home|$middle"
+  mkdir -p "$home" "$middle" "$leaf"
+  printf 'schema=fm-secondmate-parent.v1\nroute=local\nparent_home=%s\n' "$middle" > "$leaf/.fm-secondmate-parent"
+  for shell in "$(command -v bash)" /bin/bash; do
+    printf 'schema=fm-secondmate-parent.v1\nroute=local\nparent_home=%s\n' "$home" > "$middle/.fm-secondmate-parent"
+    out=$(FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" "$shell" -c '
+      . "$1/bin/fm-wake-lib.sh"
+      fm_firstmate_root_home "$2"
+    ' _ "$ROOT" "$leaf") || fail "literal pipe home was mistaken for a parent cycle under $shell"
+    expected=$(cd "$home" && pwd -P)
+    [ "$out" = "$expected" ] || fail "parent chain did not reach the root home under $shell"
+
+    printf 'schema=fm-secondmate-parent.v1\nroute=local\nparent_home=%s\n' "$leaf" > "$middle/.fm-secondmate-parent"
+    if FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" "$shell" -c '
+      . "$1/bin/fm-wake-lib.sh"
+      fm_firstmate_root_home "$2"
+    ' _ "$ROOT" "$leaf" >/dev/null; then
+      fail "a genuine parent cycle was accepted under $shell"
+    fi
+
+    printf 'schema=fm-secondmate-parent.v1\nroute=remote\nparent_host=fixture-host\n' > "$middle/.fm-secondmate-parent"
+    out=$(FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" "$shell" -c '
+      . "$1/bin/fm-wake-lib.sh"
+      fm_firstmate_root_home "$2"
+    ' _ "$ROOT" "$leaf") || fail "the remote parent boundary was rejected under $shell"
+    expected=$(cd "$middle" && pwd -P)
+    [ "$out" = "$expected" ] || fail "root-home resolution crossed a remote boundary under $shell"
+  done
+  pass 'capacity root resolution compares complete home paths and preserves cycle and remote-boundary guards'
+}
+
+test_capacity_names_with_literal_pipes() {
+  local config="$TMP_ROOT/pipe-name-config"
+  mkdir -p "$config"
+  # shellcheck source=bin/fm-project-capacity-lib.sh
+  . "$ROOT/bin/fm-project-capacity-lib.sh"
+  printf '%s\n' 'project|other 1' 'project 2' > "$config/project-capacity"
+  fm_project_capacity_lookup "$config" project || fail "pipe-containing name aliased another project: $FM_PROJECT_CAPACITY_ERROR"
+  [ "$FM_PROJECT_CAPACITY" = 2 ] || fail 'a pipe-containing neighboring name changed the selected capacity'
+  printf '%s\n' 'project 1' 'other 2' 'project|other 3' > "$config/project-capacity"
+  fm_project_capacity_lookup "$config" 'project|other' || fail "two names aliased a pipe-containing project: $FM_PROJECT_CAPACITY_ERROR"
+  [ "$FM_PROJECT_CAPACITY" = 3 ] || fail 'the pipe-containing name did not retain its own capacity'
+  printf '%s\n' 'project|other 1' 'project|other 2' > "$config/project-capacity"
+  if fm_project_capacity_lookup "$config" 'project|other'; then
+    fail 'a genuinely duplicated pipe-containing name was accepted'
+  fi
+  assert_contains "$FM_PROJECT_CAPACITY_ERROR" 'a second time' 'duplicate pipe name did not retain the refusal'
+  pass 'capacity declarations compare whole literal project names, including pipes'
+}
+
 test_undeclared_capacity_keeps_dispatch_uncapped() {
   local case_dir home out rc=0
   case_dir=$(make_case undeclared task-c)
@@ -774,6 +894,9 @@ zero capacity|project 0\n
 non-numeric capacity|other-project two\n
 trailing text|project 2 # suite\n
 named twice|project 2\nproject 3\n
+NUL in name|pro\000ject 2\n
+NUL in capacity|project 2\0000\n
+NUL in comment|# note\000\nproject 2\n
 ROWS
   rm -f "$home/config/project-capacity"
   mkdir "$home/config/project-capacity"
@@ -870,6 +993,10 @@ if [ "${1:-}" = metadata-handoff ]; then
   exit 0
 fi
 
+test_capacity_declaration_nul_guard
+test_capacity_parent_record_nul_guard
+test_capacity_root_home_with_literal_pipes
+test_capacity_names_with_literal_pipes
 test_concurrent_spawns_cannot_both_take_the_last_place fresh
 test_concurrent_spawns_cannot_both_take_the_last_place restart
 test_undeclared_capacity_keeps_dispatch_uncapped

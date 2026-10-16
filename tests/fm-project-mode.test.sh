@@ -8,6 +8,8 @@
 # exactly two words, because tests/fm-secondmate-safety.test.sh and
 # tests/fm-secondmate-lifecycle-e2e.test.sh assert that shape with strict
 # string equality.
+# Also covers literal project names when AWK would otherwise decode backslashes,
+# and conflicting forge tokens that cannot resolve by token order.
 set -u
 
 # shellcheck source=tests/lib.sh
@@ -27,6 +29,12 @@ cat > "$DATA/projects.md" <<'EOF'
 - kept [local-only forge=forgejo] - a forge on a mode that publishes nothing (added 2026-01-01)
 - colon [no-mistakes forge:forgejo] - a colon-spelled token is not a forge binding (added 2026-01-01)
 - glabbed [no-mistakes forge=gitlab] - gitlab is not a forge value (added 2026-01-01)
+- tools\new [local-only branch=private/] - a literal backslash-n in the name (added 2026-01-01)
+- tools\tree [local-only branch=private/] - a literal backslash-t in the name (added 2026-01-01)
+- tools\branch [direct-PR forge=forgejo +yolo] - a literal backslash-b in the name (added 2026-01-01)
+- unterminated [no-mistakes - description mentions +yolo without granting it (added 2026-01-01)
+- prose-bracket [no-mistakes - description mentions +yolo and a [label] (added 2026-01-01)
+- unfinished-policy [direct-PR +yolo branch=custom/ forge=forgejo - missing closing bracket (added 2026-01-01)
 EOF
 
 run_mode() {
@@ -82,5 +90,58 @@ pass "fm-project-mode: a value outside none|gerrit|forgejo is refused and the re
 [ "$(FM_DATA_OVERRIDE="$TMP_ROOT/no-such-dir" "$PROJECT_MODE" --forge legacy 2>/dev/null)" = "none" ] \
   || fail "an absent registry file must default --forge to none"
 pass "fm-project-mode: a missing project or absent registry defaults --forge to none"
+
+for name in 'tools\new' 'tools\tree'; do
+  [ "$(run_mode "$name")" = 'local-only off' ] || fail "literal backslash name lost its local-only posture: $name"
+  [ "$(FM_DATA_OVERRIDE="$DATA" "$PROJECT_MODE" --branch-prefix "$name")" = private/ ] \
+    || fail "literal backslash name lost its branch prefix: $name"
+done
+[ "$(run_mode 'tools\branch')" = 'direct-PR on' ] || fail "literal backslash name lost its registered posture"
+[ "$(run_forge 'tools\branch')" = forgejo ] || fail "literal backslash name lost its registered forge"
+pass "fm-project-mode: backslashes in project names remain literal across posture, prefix, and forge queries"
+
+for name in unterminated prose-bracket unfinished-policy; do
+  for flag in '' --raw --forge --branch-prefix; do
+    # shellcheck disable=SC2086 # An empty flag must expand to nothing.
+    out=$(FM_DATA_OVERRIDE="$DATA" "$PROJECT_MODE" $flag "$name" 2> "$TMP_ROOT/error") \
+      || fail "unterminated annotation no longer retains the tolerant default for $name $flag"
+    case "$flag" in
+      --forge) expected=none ;;
+      --branch-prefix) expected=fm/ ;;
+      *) expected='no-mistakes off' ;;
+    esac
+    [ "$out" = "$expected" ] || fail "unterminated annotation changed the default for $name $flag: $out"
+    assert_contains "$(cat "$TMP_ROOT/error")" 'unterminated posture annotation' 'annotation warning did not name the malformed record'
+  done
+done
+pass "fm-project-mode: an unterminated annotation never interprets description text as policy"
+
+cat >> "$DATA/projects.md" <<'EOF'
+- conflict-forward [direct-PR +yolo forge=gerrit forge=forgejo branch=review/] - conflicting providers
+- conflict-reverse [direct-PR +yolo forge=forgejo forge=gerrit branch=review/] - reversed providers
+- conflict-empty [direct-PR forge= forge=forgejo branch=review/] - hidden empty binding
+- conflict-unknown [direct-PR forge=other forge=forgejo branch=review/] - hidden unknown binding
+- conflict-final-empty [direct-PR forge=forgejo forge= branch=review/] - empty final binding
+- conflict-final-unknown [direct-PR forge=forgejo forge=other branch=review/] - unknown final binding
+- repeat-forgejo [direct-PR +yolo forge=forgejo forge=forgejo] - same binding repeated
+- repeat-gerrit [direct-PR +yolo forge=gerrit forge=gerrit] - same binding repeated
+EOF
+for name in conflict-forward conflict-reverse conflict-empty conflict-unknown conflict-final-empty conflict-final-unknown; do
+  for flag in '' --raw --forge; do
+    status=0
+    # shellcheck disable=SC2086 # An empty flag expands to no option.
+    out=$(FM_DATA_OVERRIDE="$DATA" "$PROJECT_MODE" $flag "$name" 2> "$TMP_ROOT/forge-conflict-error") || status=$?
+    [ "$status" -eq 3 ] && [ -z "$out" ] || fail "$name $flag resolved a conflicting forge binding"
+    assert_contains "$(cat "$TMP_ROOT/forge-conflict-error")" 'conflicting forge bindings' "forge conflict refusal did not explain the ambiguity"
+  done
+  out=$(FM_DATA_OVERRIDE="$DATA" "$PROJECT_MODE" --branch-prefix "$name" 2> "$TMP_ROOT/forge-conflict-error") \
+    || fail "a forge conflict prevented the orthogonal prefix query"
+  [ "$out" = review/ ] && [ ! -s "$TMP_ROOT/forge-conflict-error" ] || fail "a forge conflict changed the registered prefix"
+done
+[ "$(run_mode repeat-forgejo)" = 'direct-PR on' ] && [ "$(run_forge repeat-forgejo)" = forgejo ] \
+  || fail "repeating one Forgejo binding changed its meaning"
+[ "$(run_mode repeat-gerrit)" = 'direct-PR off' ] && [ "$(run_forge repeat-gerrit)" = gerrit ] \
+  || fail "repeating one Gerrit binding changed its meaning or enabled yolo"
+pass "fm-project-mode: conflicting forge bindings refuse while identical repeats and prefix queries retain their meaning"
 
 echo "# fm-project-mode.test.sh: all assertions passed"

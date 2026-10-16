@@ -749,7 +749,7 @@ nm_run_activity_is_recent() {
   local rows
   rows=$(nm_active_steps_rows)
   [ -n "$rows" ] || return 1
-  ! printf '%s\n' "$rows" | grep -q 'quiet'
+  [[ $rows != *quiet* ]]
 }
 
 # 0 when a terminal failed or cancelled run ended at the ci monitor and the

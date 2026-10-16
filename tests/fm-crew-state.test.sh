@@ -873,6 +873,53 @@ test_stale_blocked_superseded() {
 # immediately and runs the fix round in the background, so such a claim over a
 # run that is fixing WITH fresh activity is contradicted by the run itself: the
 # supervisor answer is to steer a reattach, not to escalate a dead pipeline.
+test_large_quiet_activity_with_pipefail() {
+  reset_fakes
+  local d out kind count padding quiet_row fresh_row
+  local FM_TEST_AXI_OUTPUT_FILE FM_TEST_AXI_FALLBACK
+  d=$(new_case large-quiet-activity)
+  make_repo_on_branch "$d/wt" fm/quiet-fixture
+  make_fakebin "$d" >/dev/null
+  fm_write_meta "$d/state/task.meta" "window=fm:fm-task" "worktree=$d/wt" "kind=ship"
+  printf 'blocked: no-mistakes daemon unreachable, drive run: read response: i/o timeout\n' > "$d/state/task.status"
+  FM_TEST_AXI_OUTPUT_FILE="$d/run.toon"
+  FM_TEST_AXI_FALLBACK="$d/fakebin/no-mistakes-fixture"
+  export FM_TEST_AXI_OUTPUT_FILE FM_TEST_AXI_FALLBACK
+  mv "$d/fakebin/no-mistakes" "$FM_TEST_AXI_FALLBACK"
+  cat > "$d/fakebin/no-mistakes" <<'SH'
+#!/usr/bin/env bash
+case "${1:-}:${2:-}" in
+  axi:|axi:status) cat "$FM_TEST_AXI_OUTPUT_FILE" ;;
+  *) exec "$FM_TEST_AXI_FALLBACK" "$@" ;;
+esac
+SH
+  chmod +x "$d/fakebin/no-mistakes"
+  printf -v padding '%200000s' x
+  quiet_row='    review,42m8s,"quiet 31m2s",44121,"auto-fix 1/3"'
+  fresh_row="    tests,12m3s,8s,44122,\"auto-fix $padding\""
+  for kind in quiet-early quiet-late recent empty; do
+    case "$kind" in recent) count=1 ;; empty) count=0 ;; *) count=2 ;; esac
+    {
+      printf 'run:\n  id: "01RUN"\n  branch: fm/quiet-fixture\n  status: fixing\n  head: "%s"\n  pr: ""\n  findings: none\n' "$FM_FAKE_RUN_HEAD"
+      printf '  active_steps[%s]{step,active_for,last_activity,agent_pid,round}:\n' "$count"
+      case "$kind" in
+        quiet-early) printf '%s\n%s\n' "$quiet_row" "$fresh_row" ;;
+        quiet-late) printf '%s\n%s\n' "$fresh_row" "$quiet_row" ;;
+        recent) printf '%s\n' "$fresh_row" ;;
+      esac
+    } > "$FM_TEST_AXI_OUTPUT_FILE"
+    out=$(PATH="$d/fakebin:$PATH" FM_HOME="$d" FM_ROOT_OVERRIDE="$d" FM_STATE_OVERRIDE="$d/state" \
+      bash -o pipefail "$CREW_STATE" task) || fail "$kind strict-mode crew state failed"
+    assert_contains "$out" 'state: working' "$kind should retain the active run state"
+    if [ "$kind" = recent ]; then
+      assert_contains "$out" 'run alive' "fresh activity should support the reattach reading"
+    else
+      assert_not_contains "$out" 'run alive' "$kind must not claim positive recent activity"
+    fi
+  done
+  pass "large quiet reports cannot turn an early grep exit into positive recent activity under pipefail"
+}
+
 test_daemon_claim_over_live_run_reads_run_alive() {
   reset_fakes
   local d; d=$(new_case daemon-claim-live)
@@ -5703,6 +5750,7 @@ test_nm_scalar_trimming() {
   pass 'scalar trimming preserves whitespace, quotes and literal values through stdout and output variables'
 }
 
+test_large_quiet_activity_with_pipefail
 test_nm_field_large_records_with_pipefail
 test_large_parked_run_with_pipefail
 test_nm_scalar_trimming

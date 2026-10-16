@@ -223,9 +223,9 @@ fm_pending_reply_summarize() {  # <text>
   local text=$1 cleaned
   # Remove the exact leading carrier before filtering erases its separator.
   text=${text#"$FM_FROMFIRST_MARK"}
-  cleaned=$(printf '%s' "$text" | tr '\t\r\n' '   ' | tr -cd '\11\12\15\40-\176' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-  # Drop an already-present correlation prefix so the durable summary stays short.
-  cleaned=$(printf '%s' "$cleaned" | sed -E "s/^corr=[A-Fa-f0-9]{16}[[:space:]]*//")
+  # Filter and trim before removing a leading correlation, all in one pipeline.
+  cleaned=$(printf '%s' "$text" | tr '\t\r\n' '   ' | tr -cd '\11\12\15\40-\176' |
+    sed -E -e 's/^[[:space:]]*//;s/[[:space:]]*$//' -e 's/^corr=[A-Fa-f0-9]{16}[[:space:]]*//')
   if [ "${#cleaned}" -gt 120 ]; then
     cleaned="${cleaned:0:117}..."
   fi

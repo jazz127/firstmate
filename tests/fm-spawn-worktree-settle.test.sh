@@ -577,6 +577,10 @@ run_presentation_lock_case() {
   chmod 700 "$dir/presentation"
   cp -R "$ROOT/bin" "$code/bin"
   cp "$SPAWN" "$code/bin/fm-spawn.sh"
+  # The publication gate (bin/fm-role-lib.sh) must be able to decide whether the
+  # project shares this code root's history; a copied tree with no repository
+  # cannot answer, so give the fixture code root its own unrelated history.
+  fm_git_init_commit "$code"
   ln -s "$ROOT/.agents" "$code/.agents"
   ln -s "$ROOT/docs" "$code/docs"
   sed "s|/tmp/firstmate-herdr-presentation-|$dir/presentation-|" \

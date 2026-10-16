@@ -110,6 +110,29 @@ run_check() {
 
 # --- the regression this script exists for ----------------------------------
 
+test_interval_bounds_do_not_overflow() {
+  local shell value expected home out rc
+  home=$(make_home interval-range)
+  for shell in bash /bin/bash; do
+    for value in 0 000 60 060 86400 086400 59 00059 86401 \
+      9223372036854775807 9223372036854775808 18446744073709551616 \
+      999999999999999999999999999999999999; do
+      case "$value" in 0|000|60|060|86400|086400) expected=0 ;; *) expected=2 ;; esac
+      rc=0
+      out=$(FM_HOME="$home" FM_TOOL_UPDATE_INTERVAL="$value" "$shell" "$CHECK" --help 2>&1) || rc=$?
+      expect_code "$expected" "$rc" "$shell interval=$value violated its range: $out"
+      if [ "$expected" -eq 0 ]; then
+        assert_contains "$out" 'Usage:' 'valid interval prevented help output'
+      else
+        assert_contains "$out" 'FM_TOOL_UPDATE_INTERVAL must be 0 or a whole number from 60 to 86400' \
+          'interval refusal lost its range diagnostic'
+      fi
+      assert_not_contains "$out" 'integer' 'interval validation leaked shell arithmetic errors'
+    done
+  done
+  pass 'tool-check intervals enforce their range without overflowing shell integers'
+}
+
 test_failed_separate_announcements_are_reported() {
   local shell mode home dir out
   for shell in bash /bin/bash; do
@@ -1211,6 +1234,7 @@ test_armed_check_wakes_the_watcher_with_the_skew_report() {
   pass "the armed check reaches the watcher as an ordinary check wake"
 }
 
+test_interval_bounds_do_not_overflow
 test_failed_separate_announcements_are_reported
 test_failed_version_output_is_not_trusted
 test_positive_probe_and_sweep_durations

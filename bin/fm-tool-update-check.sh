@@ -121,7 +121,10 @@ case "$INTERVAL" in
     exit 2
     ;;
 esac
-if [ "$INTERVAL" -ne 0 ] && { [ "$INTERVAL" -lt 60 ] || [ "$INTERVAL" -gt 86400 ]; }; then
+INTERVAL=${INTERVAL#"${INTERVAL%%[!0]*}"}
+INTERVAL=${INTERVAL:-0}
+if [ "${#INTERVAL}" -gt 5 ] \
+  || { [ "$INTERVAL" -ne 0 ] && { [ "$INTERVAL" -lt 60 ] || [ "$INTERVAL" -gt 86400 ]; }; }; then
   printf 'fm-tool-update-check: FM_TOOL_UPDATE_INTERVAL must be 0 or a whole number from 60 to 86400\n' >&2
   exit 2
 fi

@@ -378,6 +378,12 @@ OWNER_RACE_RM=$(command -v rm) || fail "reply cleanup requires rm"
 OWNER_RACE_BASH=$(command -v bash) || fail "reply publication races require bash"
 OWNER_RACE_LN=$(command -v ln) || fail "reply intake races require ln"
 export OWNER_RACE_CAT OWNER_RACE_MKTEMP OWNER_RACE_RM OWNER_RACE_BASH OWNER_RACE_LN
+# The wrapper binaries above turn every cat, rm, ln, mktemp, and bash call
+# into an extra interpreter launch, and on a slow-spawn platform (macOS) an
+# arm then needs 2-5 seconds to show its listener's claim. The default
+# launch-confirm window is 3 seconds; this fixture exercises reply replacement,
+# not that window, so widen it here as the drain fixture below already does.
+export FM_PROCEVENT_LAUNCH_CONFIRM_SECONDS=10
 for owner_race_case in legacy-staged synchronous-staged legacy-capture synchronous-capture diagnostic-capture legacy-cleanup synchronous-cleanup legacy-postcommit synchronous-postcommit synchronous-reclaim legacy-bound-staged synchronous-bound-staged legacy-bound-postcommit synchronous-bound-postcommit synchronous-bound-reclaim legacy-terminal-staged synchronous-terminal-staged legacy-terminal-postcommit synchronous-terminal-postcommit; do
   OWNER_RACE="$TMP_ROOT/owner-race-$owner_race_case"
   export OWNER_RACE
@@ -745,6 +751,7 @@ EOF
   PATH="$OWNER_RACE/bin:$PATH" pe "$OWNER_RACE/home" retire "$OWNER_RACE_ID" >/dev/null
   pass "firstmate $owner_race_case preserves locally received output during reply replacement"
 done
+unset FM_PROCEVENT_LAUNCH_CONFIRM_SECONDS
 
 OWNER_CLEANUP="$TMP_ROOT/owner-normal-cleanup"
 export OWNER_CLEANUP

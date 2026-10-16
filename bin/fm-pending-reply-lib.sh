@@ -181,7 +181,7 @@ fm_pending_reply_path() {  # <state-dir> <corr_id>
 fm_pending_reply_new_id() {
   local raw='' hex
   if command -v openssl >/dev/null 2>&1; then
-    raw=$(openssl rand -hex 8 2>/dev/null || true)
+    raw=$(openssl rand -hex 8 2>/dev/null) || raw=''
   fi
   if [ -z "$raw" ]; then
     raw=$(printf '%s' "$$-$(date +%s%N 2>/dev/null || date +%s)-$RANDOM$RANDOM" | cksum 2>/dev/null | awk '{print $1}')

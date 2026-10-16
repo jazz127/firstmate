@@ -2605,6 +2605,34 @@ test_record_field_output_variable() {
   pass "record fields assign output variables without losing missing/binary clearing or field bytes"
 }
 
+test_failed_openssl_output_uses_fallback() {
+  (
+    local home corr rec emitted
+    local FM_TEST_FAILED_RANDOM_OUTPUT='' FM_TEST_FALLBACK_LOG=''
+    # Synthetic failed generator and deterministic healthy fallback digest.
+    # shellcheck disable=SC2329
+    openssl() { printf '%s' "$FM_TEST_FAILED_RANDOM_OUTPUT"; return 1; }
+    # shellcheck disable=SC2329
+    shasum() {
+      command cat >/dev/null
+      printf 'fallback\n' >> "$FM_TEST_FALLBACK_LOG"
+      printf 'fedcba98765432100123456789abcdef0123456789abcdef0123456789abcdef01  -\n'
+    }
+    for emitted in 0123456789abcdef ABCDEF0123456789 deadbeef zzzz 0123456789abcdefabcd ''; do
+      home=$(setup_parent failed-random-prefix)
+      FM_TEST_FAILED_RANDOM_OUTPUT=$emitted
+      FM_TEST_FALLBACK_LOG="$home/fallback.log"
+      corr=$(fm_pending_reply_create "$home" "$home/state" mate 'fixture request') \
+        || fail "failed generator output prevented the healthy fallback"
+      [ -s "$FM_TEST_FALLBACK_LOG" ] || fail "failed generator output bypassed the fallback"
+      [ "$corr" = fedcba9876543210 ] || fail "failed generator bytes were used as the correlation id"
+      rec=$(fm_pending_reply_path "$home/state" "$corr")
+      [ "$(fm_pending_reply_get "$rec" phase)" = awaiting_report ] || fail "fallback did not persist the request"
+    done
+  ) || fail "failed generator fallback regression failed"
+  pass "failed OpenSSL output is discarded before the fallback generates a correlation"
+}
+
 test_collision_retry_validates_generated_id() {
   local home state rec next corr rc
   for next in a deadbeef abcdef012345678 '???deadbeef???' zzzz ABCDEF0123456789 0123456789abcdef; do
@@ -2673,6 +2701,7 @@ test_create_without_openssl() {
   pass "pending request creation supports missing, failed and healthy OpenSSL"
 }
 
+test_failed_openssl_output_uses_fallback
 test_collision_retry_validates_generated_id
 test_status_evidence_requires_complete_text
 test_summary_strips_carrier_before_filtering

@@ -1352,6 +1352,32 @@ AGE
   pass "inbox deadlines and retry budgets compare decimal values without early rings or arithmetic errors"
 }
 
+test_inbox_directory_output_variable() {
+  local api_output="$TMP_ROOT/inbox-directory-api-output"
+  bash -c '
+    set -u
+    . "$1"
+    output=$2
+    for shape in ordinary spaces newlines empty; do
+      case "$shape" in
+        ordinary) state=/tmp/example/state; task=task1 ;;
+        spaces) state="/tmp/example home/state"; task="task 1" ;;
+        newlines) state=$(printf "state\n\nx"); state=${state%x}; task=$(printf "task\nx"); task=${task%x} ;;
+        empty) state=; task= ;;
+      esac
+      expected="$state/$task.inbox"
+      [ "$(fm_task_inbox_dir "$state" "$task")" = "$expected" ] || exit 1
+      for variable in dir path rec; do
+        dir=sentinel; path=sentinel; rec=sentinel
+        fm_task_inbox_dir "$state" "$task" "$variable" > "$output" || exit
+        [ "${!variable}" = "$expected" ] && [ ! -s "$output" ] || exit 1
+      done
+    done
+  ' _ "$ROOT/bin/fm-task-inbox-lib.sh" "$api_output" || fail "inbox directory output-variable contract failed"
+  pass "inbox directory supports silent assignment and preserves its stdout API"
+}
+
+test_inbox_directory_output_variable
 test_inbox_deadlines_and_budgets_use_decimal_comparisons
 test_inbox_retry_counters_are_bounded_decimal
 test_idempotent_write_rejects_failed_body_reads

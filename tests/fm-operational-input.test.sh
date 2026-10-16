@@ -247,6 +247,29 @@ test_record_prune_outgrows_one_argument_list() {
   pass "record pruning: expired records past one argument list are all pruned on a write"
 }
 
+test_record_prune_preserves_leading_relative_spaces() {
+  local tmp prefix state old collateral
+  tmp=$(fm_test_tmproot fm-operational-relative-prune)
+  for prefix in ' home' '  home'; do
+    state="$tmp/$prefix/state"
+    mkdir -p "$state/operational-inbox" "$tmp/home/state/operational-inbox"
+    old="$state/operational-inbox/1-expired.msg"
+    collateral="$tmp/home/state/operational-inbox/1-expired.msg"
+    printf old > "$old"
+    touch -t 200001010000 "$old"
+    printf 'unrelated fresh record' > "$collateral"
+    (
+      cd "$tmp" || exit 1
+      printf 'new fixture record' | FM_STATE_OVERRIDE="$prefix/state" "$OWNER" record watcher >/dev/null
+    ) || fail "record write failed for a relative path with leading spaces"
+    [ -f "$collateral" ] || fail "pruning stripped path spaces and deleted another directory's record"
+    [ ! -e "$old" ] || fail "the intended expired record survived pruning"
+    [ "$(cat "$collateral")" = 'unrelated fresh record' ] || fail "pruning changed another directory's record"
+  done
+  pass "record pruning preserves leading relative path spaces and touches only its own inbox"
+}
+
+test_record_prune_preserves_leading_relative_spaces
 test_current_generic_matrix
 test_current_from_firstmate_carrier
 test_landed_untyped_prefix_is_explicitly_legacy

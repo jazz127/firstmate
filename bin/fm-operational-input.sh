@@ -267,7 +267,7 @@ fm_operational_record_write() {  # <state-dir> <kind> <body> <doorbell-var>
     rm -f "$tmp"
     return 1
   fi
-  fm_operational_record_prune "$dir"
+  fm_operational_record_prune "$abs"
   printf -v "$result_var" '%s%s/%s%s' "$FM_OPERATIONAL_DOORBELL_PREFIX" "$abs" "$name" \
     "$FM_OPERATIONAL_DOORBELL_SUFFIX"
 }

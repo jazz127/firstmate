@@ -561,7 +561,7 @@ nm_gate_status() {
   local s row
   s=$(printf '%s\n' "$RUN_OUT" | grep -E "$FM_NM_GATE_SCALAR_RE" | head -1)
   if [ -n "$s" ]; then
-    s=$(strip_quotes "$(trim "${s#*:}")")
+    s=$(strip_quotes "${s#*:}")
     printf '%s' "$s"
     return
   fi
@@ -649,7 +649,7 @@ nm_gate_awaits_human_decision() {
   i=0
   while [ -n "$cols" ]; do
     i=$((i + 1))
-    name=$(strip_quotes "$(trim "${cols%%,*}")")
+    name=$(strip_quotes "${cols%%,*}")
     if [ "$name" = action ]; then idx=$i; break; fi
     case "$name" in
       id|severity|file|line) ;;
@@ -669,7 +669,7 @@ nm_gate_awaits_human_decision() {
       i=$((i + 1))
     done
     [ -n "$rest" ] || continue
-    field=$(strip_quotes "$(trim "${rest%%,*}")")
+    field=$(strip_quotes "${rest%%,*}")
     [ "$field" = ask-user ] && return 0
   done <<EOF
 $rows
@@ -773,7 +773,7 @@ nm_failed_run_is_green_held_ci() {
     row=$(trim "$row")
     step=$(trim "${row%%,*}")
     rest=${row#*,}
-    status=$(strip_quotes "$(trim "${rest%%,*}")")
+    status=$(strip_quotes "${rest%%,*}")
     case "$status" in
       completed) continue ;;
       skipped)
@@ -860,7 +860,7 @@ nm_ci_step_status() {
   [ -n "$row" ] || return 0
   row=$(trim "$row")
   rest=${row#*,}
-  strip_quotes "$(trim "${rest%%,*}")"
+  strip_quotes "${rest%%,*}"
 }
 
 nm_effective_ci_step_status() {

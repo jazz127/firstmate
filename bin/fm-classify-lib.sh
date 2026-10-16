@@ -124,8 +124,8 @@ FM_CLASSIFY_PAUSED_VERB_DEFAULT='paused'
 FM_PAUSE_RESURFACE_SECS_DEFAULT=14400
 
 # fm_utc_iso_to_epoch <YYYY-MM-DDTHH:MM[:SS]Z>: the one portable UTC ISO 8601
-# reader shared by the declared-wait vocabulary and the away-posture record
-# (bin/fm-afk-contract.sh). Prints epoch seconds; returns 1 on any other shape
+# reader shared by declared waits, away-posture records (bin/fm-afk-contract.sh),
+# and public-followup deadlines. Prints epoch seconds; returns 1 on any other shape
 # so a malformed time is refused rather than read as "now" or normalized by BSD
 # date into a different calendar day.
 fm_utc_iso_to_epoch() {  # <timestamp>

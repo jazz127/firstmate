@@ -466,13 +466,16 @@ fm_pf_now_rfc3339() {
     || date -u +%Y-%m-%dT%H:%M:%SZ
 }
 
-# fm_pf_rfc3339_to_epoch <rfc3339>: parse a Zulu timestamp. Empty on failure.
+# fm_pf_rfc3339_to_epoch <rfc3339>: parse a canonical Zulu timestamp with seconds.
+# Empty on failure; the shared UTC reader owns calendar and clock validation.
 fm_pf_rfc3339_to_epoch() {
   local ts=$1
-  [ -n "$ts" ] || return 1
-  date -u -j -f '%Y-%m-%dT%H:%M:%SZ' "$ts" +%s 2>/dev/null \
-    || date -u -d "$ts" +%s 2>/dev/null \
-    || return 1
+  case "$ts" in ????-??-??T??:??:??Z) ;; *) return 1 ;; esac
+  if ! command -v fm_utc_iso_to_epoch >/dev/null 2>&1; then
+    # shellcheck source=bin/fm-classify-lib.sh
+    . "$_FM_PF_LIB_DIR/fm-classify-lib.sh" || return 1
+  fi
+  fm_utc_iso_to_epoch "$ts"
 }
 
 # fm_pf_followup_window_class <rfc3339>: ok, closing (<48h), expired, or unknown.

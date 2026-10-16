@@ -2245,7 +2245,7 @@ test_retention_creates_no_false_teardown_refusal() {
 }
 
 test_expiry_escalation_uses_now_override() {
-  local home out exp now_closing now_expired registry tmp
+  local home out exp now_closing now_expired registry tmp invalid_expiry real_tasks
   home=$(make_home expiry-window)
   seed_repro_commitment "$home" pf-exp req-exp main work-exp
   exp=$(date -u -j -f '%Y-%m-%dT%H:%M:%SZ' '2026-08-28T01:12:00Z' +%s 2>/dev/null) \
@@ -2276,16 +2276,31 @@ test_expiry_escalation_uses_now_override() {
   assert_contains "$EXPECT_OUT" "can no longer be reached" "rechain must name the closed window"
   registry="$home/state/public-followup/registry/pf-exp"
   tmp="$registry.tmp"
-  awk '
-    /^followup_expires_at=/ { print "followup_expires_at=not-a-time"; next }
-    { print }
-  ' "$registry" > "$tmp"
-  chmod 600 "$tmp"
-  mv "$tmp" "$registry"
-  expect_failure "rechain with an unknown expiry window must refuse" \
-    run_pf "$home" rechain pf-exp-next --from pf-exp --work-home main --work-id work-next --expected pr-merged
-  assert_contains "$EXPECT_OUT" "thread window cannot be checked" \
-    "rechain must fail closed when its retained expiry cannot be parsed"
+  real_tasks=$(command -v tasks-axi)
+  cat > "$home/fakebin/tasks-axi" <<'SH'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$FM_INVALID_EXPIRY_LOG"
+exec "$FM_INVALID_EXPIRY_REAL" "$@"
+SH
+  chmod +x "$home/fakebin/tasks-axi"
+  for invalid_expiry in not-a-time 2026-09-31T01:12:00Z 2026-08-32T01:12:00Z 2026-08-28T24:00:00Z 2026-08-28T01:12:00Zjunk; do
+    awk -v expiry="$invalid_expiry" '
+      /^followup_expires_at=/ { print "followup_expires_at=" expiry; next }
+      { print }
+    ' "$registry" > "$tmp"
+    chmod 600 "$tmp"
+    mv "$tmp" "$registry"
+    : > "$home/invalid-expiry-tasks.log"
+    FM_INVALID_EXPIRY_LOG="$home/invalid-expiry-tasks.log" FM_INVALID_EXPIRY_REAL="$real_tasks" \
+      expect_failure "rechain with invalid expiry $invalid_expiry must refuse" \
+      run_pf "$home" rechain pf-exp-next --from pf-exp --work-home main --work-id work-next --expected pr-merged
+    assert_no_grep 'public-followup add' "$home/invalid-expiry-tasks.log" \
+      "an invalid deadline must refuse before attempting to create an obligation"
+    assert_contains "$EXPECT_OUT" "thread window cannot be checked" \
+      "rechain must fail closed when its retained expiry cannot be parsed"
+    assert_absent "$home/state/public-followup/registry/pf-exp-next" \
+      "an invalid deadline must not publish a successor registration"
+  done
   pass "expiry escalation is pinned by FMX_NOW_OVERRIDE"
 }
 

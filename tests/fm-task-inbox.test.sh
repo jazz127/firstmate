@@ -1486,6 +1486,49 @@ PYWRITE
   pass "retry marker writes preserve previous bytes on failure and release their lock"
 }
 
+test_ring_bookkeeping_rejects_failed_clock_evidence() {
+  local clock_root fakebin scenario state rec value clock_rc wanted_rc expected_epoch rc
+  clock_root="$TMP_ROOT/ring-clock"
+  fakebin="$clock_root/fakebin"
+  mkdir -p "$fakebin"
+  cat > "$fakebin/date" <<'CLOCK'
+#!/usr/bin/env bash
+printf '%s' "$FM_INBOX_TEST_NOW"
+exit "$FM_INBOX_TEST_CLOCK_RC"
+CLOCK
+  chmod +x "$fakebin/date"
+  for scenario in healthy partial-failure empty-failure malformed empty-success oversized padded zero; do
+    wanted_rc=1; expected_epoch=1000
+    case "$scenario" in
+      healthy) value=2000; clock_rc=0; wanted_rc=0; expected_epoch=2000 ;;
+      partial-failure) value=2000; clock_rc=1 ;;
+      empty-failure) value=; clock_rc=1 ;;
+      malformed) value=2000+1; clock_rc=0 ;;
+      empty-success) value=; clock_rc=0 ;;
+      oversized) value=18446744073709553616; clock_rc=0 ;;
+      padded) value=02000; clock_rc=0; wanted_rc=0; expected_epoch=2000 ;;
+      zero) value=0; clock_rc=0; wanted_rc=0; expected_epoch=0 ;;
+    esac
+    state="$clock_root/$scenario/state"
+    mkdir -p "$state"
+    rec=$(inbox_lib "$state" fm_task_inbox_write "$state" t1 'clock fixture') || fail "clock fixture enqueue failed"
+    printf '%s\t1\t1000\n' "${rec##*/}" > "$state/t1.inbox/.ring-state"
+    if [ "$wanted_rc" -eq 0 ]; then
+      printf '%s\t2\t%s\n' "${rec##*/}" "$expected_epoch" > "$state/expected"
+    else
+      cp "$state/t1.inbox/.ring-state" "$state/expected"
+    fi
+    rc=0
+    PATH="$fakebin:$PATH" FM_INBOX_TEST_NOW="$value" FM_INBOX_TEST_CLOCK_RC="$clock_rc" \
+      inbox_lib "$state" fm_task_inbox_record_ring "$state" t1 "$rec" > "$state/output" 2> "$state/error" || rc=$?
+    [ "$rc" -eq "$wanted_rc" ] || fail "$scenario ring clock returned the wrong recording status"
+    cmp -s "$state/expected" "$state/t1.inbox/.ring-state" || fail "$scenario ring clock damaged or misrecorded the retry ladder"
+    [ ! -s "$state/output" ] && [ ! -s "$state/error" ] || fail "$scenario clock recording emitted output or an arithmetic error"
+  done
+  pass "ring bookkeeping preserves its previous ladder when clock evidence fails"
+}
+
+test_ring_bookkeeping_rejects_failed_clock_evidence
 test_retry_marker_clear_preserves_concurrent_updates
 test_retry_marker_failed_write_preserves_previous_mark
 test_inbox_directory_output_variable

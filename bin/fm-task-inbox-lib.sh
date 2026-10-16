@@ -147,6 +147,18 @@ _fm_task_inbox_decimal_ge() {  # <left> <right>
   fi
 }
 
+# Read usable epoch seconds without treating partial or malformed clock output as evidence.
+# _fm_inbox_now is reserved so the caller can receive the value without a subshell.
+_fm_task_inbox_now_to() {  # <output-variable>
+  local _fm_inbox_now
+  _fm_inbox_now=$(date +%s) || return 1
+  case "$_fm_inbox_now" in ''|*[!0-9]*) return 1 ;; esac
+  _fm_inbox_now=${_fm_inbox_now#"${_fm_inbox_now%%[!0]*}"}
+  _fm_inbox_now=${_fm_inbox_now:-0}
+  _fm_task_inbox_decimal_ge 9223372036854775807 "$_fm_inbox_now" || return 1
+  printf -v "$1" '%s' "$_fm_inbox_now"
+}
+
 # Saturate numeric overflow so a spent retry budget cannot start over.
 _fm_task_inbox_increment_count() {  # <stored-count> <output-variable>
   local _fm_inbox_count=${1-}
@@ -573,11 +585,7 @@ EOF
     printf 'escalate %s %s' "$oldest" "$count"
     return 0
   fi
-  now=$(date +%s) || return 1
-  case "$now" in ''|*[!0-9]*) return 1 ;; esac
-  now=${now#"${now%%[!0]*}"}
-  now=${now:-0}
-  _fm_task_inbox_decimal_ge 9223372036854775807 "$now" || return 1
+  _fm_task_inbox_now_to now || return 1
   if ! _fm_task_inbox_decimal_ge "$now" "$last"; then
     printf 'quiet'
     return 0
@@ -601,7 +609,7 @@ EOF
 # the caller must surface the unwritable ladder while the record remains
 # unhandled.
 fm_task_inbox_record_ring() {  # <state-dir> <task-id> <record-path>
-  local dir base ladder rec_base count last
+  local dir base ladder rec_base count last now
   fm_task_inbox_dir "$1" "$2" dir
   base=${3##*/}
   count=0
@@ -612,7 +620,8 @@ EOF
   [ "$rec_base" = "$base" ] || count=0
   [ -d "$dir" ] || return 0
   _fm_task_inbox_increment_count "$count" count
-  if ! { printf '%s\t%s\t%s\n' "$base" "$count" "$(date +%s)" > "$dir/.ring-state"; } 2>/dev/null; then
+  _fm_task_inbox_now_to now || return 1
+  if ! { printf '%s\t%s\t%s\n' "$base" "$count" "$now" > "$dir/.ring-state"; } 2>/dev/null; then
     [ -d "$dir" ] || return 0
     return 1
   fi

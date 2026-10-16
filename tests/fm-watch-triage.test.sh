@@ -7366,6 +7366,55 @@ test_procevent_marker_failure_exits_and_replays() {
 
 # --- heartbeat: no-change absorbed, backstop surfaces a missed status --------
 
+test_heartbeat_streak_recovers_malformed_counter() {
+  local shell mode sample body expected dir state out err pid i
+  for shell in bash /bin/bash; do
+    for mode in handoff absorb; do
+      for sample in zero padded8 padded10 text binary overflow; do
+        case "$sample" in
+          zero) body='0\n'; expected=1 ;;
+          padded8) body='08\n'; expected=9 ;;
+          padded10) body='010\n'; expected=11 ;;
+          text) body='broken\n'; expected=1 ;;
+          binary) body='0\0008\n'; expected=1 ;;
+          overflow) body='99999999999999999999999999999999\n'; expected=13 ;;
+        esac
+        dir=$(make_case "heartbeat-streak-${shell//\//-}-$mode-$sample")
+        state="$dir/state"; out="$dir/watch.out"; err="$dir/watch.err"
+        printf '%b' "$body" > "$state/.heartbeat-streak"
+        printf '%s\n' "$expected" > "$dir/expected"
+        [ "$mode" != handoff ] || : > "$state/.afk"
+        PATH="$dir/fakebin:$PATH" FM_HOME="$dir" FM_STATE_OVERRIDE="$state" \
+          FM_POLL=1 FM_SIGNAL_GRACE=0 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=0 \
+          "$shell" "$WATCH" > "$out" 2> "$err" &
+        pid=$!
+        if [ "$mode" = handoff ]; then
+          wait_for_exit "$pid" 200 \
+            || fail "$shell heartbeat $sample failed during handoff: $(cat "$err")"
+          assert_equals heartbeat "$(cat "$out")" "$shell heartbeat $sample handoff output"
+          grep -F "$(printf '\theartbeat\theartbeat\theartbeat')" "$state/.wake-queue" >/dev/null \
+            || fail "$shell heartbeat $sample did not queue its wake"
+        else
+          i=0
+          while [ "$i" -lt 200 ]; do
+            cmp -s "$dir/expected" "$state/.heartbeat-streak" && break
+            kill -0 "$pid" 2>/dev/null || break
+            sleep 0.1
+            i=$((i + 1))
+          done
+          reap "$pid"
+          [ ! -s "$out" ] || fail "$shell heartbeat $sample surfaced an idle fleet"
+          [ ! -s "$state/.wake-queue" ] || fail "$shell heartbeat $sample queued an idle fleet wake"
+        fi
+        cmp -s "$dir/expected" "$state/.heartbeat-streak" \
+          || fail "$shell heartbeat $sample/$mode recorded the wrong backoff counter"
+        [ ! -s "$err" ] || fail "$shell heartbeat $sample/$mode emitted errors: $(cat "$err")"
+      done
+    done
+  done
+  pass "heartbeat counters recover from malformed bytes and use capped decimal backoff in both triage paths"
+}
+
 test_zero_padded_heartbeat_interval() {
   local shell interval dir out err pid
   for shell in bash /bin/bash; do
@@ -7872,6 +7921,7 @@ if [ -n "${FM_TEST_ONLY:-}" ]; then
   exit 0
 fi
 
+test_heartbeat_streak_recovers_malformed_counter
 test_zero_padded_heartbeat_interval
 test_status_span_actionable_classifier
 test_status_span_survives_a_later_routine_append

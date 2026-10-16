@@ -3739,9 +3739,8 @@ EOF
   # what. Time-based via .last-heartbeat mtime; interval doubles per consecutive
   # no-change heartbeat (idle fleet) up to HEARTBEAT_MAX, and resets on any
   # surfaced non-heartbeat wake.
-  streak=$(cat "$STATE/.heartbeat-streak" 2>/dev/null || echo 0)
-  [ "$streak" -gt 12 ] && streak=12
-  hb=$(( 10#$HEARTBEAT * (1 << streak) ))
+  heartbeat_streak_read
+  hb=$(( 10#$HEARTBEAT * (1 << HEARTBEAT_STREAK) ))
   [ "$hb" -gt "$HEARTBEAT_MAX" ] && hb=$HEARTBEAT_MAX
   if [ "$(age_of "$STATE/.last-heartbeat")" -ge "$hb" ]; then
     # Triage: in always-on mode a heartbeat is benign unless the cheap fleet-scan
@@ -3769,7 +3768,7 @@ EOF
         wake "heartbeat"
       fi
       touch "$STATE/.last-heartbeat"
-      echo $(( $(cat "$STATE/.heartbeat-streak" 2>/dev/null || echo 0) + 1 )) > "$STATE/.heartbeat-streak"
+      heartbeat_streak_advance
       triage_log "absorbed heartbeat (no captain-relevant change)"
     fi
   fi

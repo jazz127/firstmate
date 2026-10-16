@@ -1737,15 +1737,21 @@ EOF
 }
 
 status_signal_seen_marker_path() {  # <state> <task-id>
-  printf '%s/.seen-%s' "$1" "$(printf '%s.status' "$2" | tr '.' '_')"
+  local task=${2//./_}
+  printf '%s/.seen-%s_status' "$1" "$task"
 }
 
 status_heartbeat_seen_marker_path() {  # <state> <task-id>
-  printf '%s/.hb-surfaced-%s' "$1" "$(printf '%s' "$2" | tr ':/.' '___')"
+  local task=${2//[:\/.]/_}
+  # Preserve the trailing-newline trimming of the former command substitution.
+  task=${task%"${task##*[!$'\n']}"}
+  printf '%s/.hb-surfaced-%s' "$1" "$task"
 }
 
 status_daemon_seen_marker_path() {  # <state> <task-id>
-  printf '%s/.subsuper-seen-status-%s' "$1" "$(printf '%s' "$2" | tr ':/.' '___')"
+  local task=${2//[:\/.]/_}
+  task=${task%"${task##*[!$'\n']}"}
+  printf '%s/.subsuper-seen-status-%s' "$1" "$task"
 }
 
 _status_presentation_signature_valid() {

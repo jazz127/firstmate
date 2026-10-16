@@ -895,6 +895,29 @@ test_undelivered_records_are_scan_immutable() {
   pass "undelivered records remain immutable across scan paths"
 }
 
+test_summary_strips_carrier_before_filtering() {
+  local home kind text expected corr rec long_text
+  home=$(setup_parent summary-carrier)
+  printf -v long_text 'x%.0s' {1..140}
+  for kind in marked marked-corr multiline long literal indented plain-corr; do
+    expected='inspect ledger'
+    case "$kind" in
+      marked) text="${FM_FROMFIRST_MARK}inspect ledger" ;;
+      marked-corr) text="${FM_FROMFIRST_MARK}corr=ABCDEF0123456789 inspect ledger" ;;
+      multiline) text="${FM_FROMFIRST_MARK}corr=0123456789abcdef inspect"$'\nledger' ;;
+      long) text="${FM_FROMFIRST_MARK}corr=0123456789abcdef $long_text"; expected="${long_text:0:117}..." ;;
+      literal) text='[fm-from-firstmate]inspect ledger'; expected=$text ;;
+      indented) text="  ${FM_FROMFIRST_MARK}inspect ledger"; expected='[fm-from-firstmate]inspect ledger' ;;
+      plain-corr) text='corr=0123456789abcdef inspect ledger' ;;
+    esac
+    [ "$(fm_pending_reply_summarize "$text")" = "$expected" ] || fail "$kind summary retained routing noise or removed literal text"
+    corr=$(fm_pending_reply_create "$home" "$home/state" mate "$text") || fail "$kind request creation failed"
+    rec=$(fm_pending_reply_path "$home/state" "$corr")
+    [ "$(fm_pending_reply_get "$rec" request_summary)" = "$expected" ] || fail "$kind persisted summary differs"
+  done
+  pass "request summaries strip the exact leading carrier before ASCII filtering and length limiting"
+}
+
 test_correlation_extraction_first_match() {
   local home kind text expected
   home=$(setup_parent correlation-extraction)
@@ -2534,6 +2557,7 @@ test_create_without_openssl() {
   pass "pending request creation supports missing, failed and healthy OpenSSL"
 }
 
+test_summary_strips_carrier_before_filtering
 test_correlation_extraction_first_match
 test_pending_directory_override_preserves_bytes
 test_correlations_reuse_only_for_matching_open_task

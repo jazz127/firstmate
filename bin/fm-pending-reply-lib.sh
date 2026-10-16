@@ -382,8 +382,12 @@ fm_pending_reply_strip_leading_corr() {  # <body> <result-var>
   case "$_fm_pending_body_prefix" in
     corr=[a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9])
       _fm_pending_body_text=${_fm_pending_body_text:21}
-      while [ "${_fm_pending_body_text# }" != "$_fm_pending_body_text" ]; do _fm_pending_body_text=${_fm_pending_body_text# }; done
-      while [ "${_fm_pending_body_text#$'\t'}" != "$_fm_pending_body_text" ]; do _fm_pending_body_text=${_fm_pending_body_text#$'\t'}; done
+      while :; do
+        case "$_fm_pending_body_text" in
+          ' '*|$'\t'*) _fm_pending_body_text=${_fm_pending_body_text:1} ;;
+          *) break ;;
+        esac
+      done
       ;;
   esac
   printf -v "$_fm_pending_body_result" '%s' "$_fm_pending_body_text"

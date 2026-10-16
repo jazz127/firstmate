@@ -3240,6 +3240,27 @@ test_wrong_home_counts_use_bounded_decimal_values() {
   pass "wrong-home scans increment padded decimal counts and recover malformed or overflowing counters"
 }
 
+test_correlation_embedding_strips_mixed_blank_runs() {
+  local blanks message first second replacement expected payload corr=0123456789abcdef
+  payload=$'fixture payload\n\n'
+  for blanks in $'\t  ' $' \t \t ' $'\t \n' '   ' $'\t\t' $'  \t\t' $' \t\n \t'; do
+    message="${FM_FROMFIRST_MARK}corr=$corr${blanks}${payload}"
+    case "$blanks" in
+      *$'\n'*) expected="${FM_FROMFIRST_MARK}corr=$corr "$'\n'"${blanks#*$'\n'}$payload" ;;
+      *) expected="${FM_FROMFIRST_MARK}corr=$corr $payload" ;;
+    esac
+    fm_pending_reply_embed_corr "$message" "$corr" first || fail "mixed blank correlation embedding failed"
+    [ "$first" = "$expected" ] || fail "correlation embedding left part of a mixed blank run"
+    fm_pending_reply_embed_corr "$first" "$corr" second || fail "second correlation embedding failed"
+    [ "$second" = "$first" ] || fail "embedding the same correlation changed its message twice"
+    fm_pending_reply_embed_corr "$message" fedcba9876543210 replacement || fail "correlation replacement failed"
+    expected=${expected/"corr=$corr"/corr=fedcba9876543210}
+    [ "$replacement" = "$expected" ] || fail "replacement correlation retained mixed routing blanks or changed body bytes"
+  done
+  pass "correlation embedding consumes mixed spaces and tabs once while preserving newline boundaries and trailing bytes"
+}
+
+test_correlation_embedding_strips_mixed_blank_runs
 test_wrong_home_counts_use_bounded_decimal_values
 test_failed_clock_reads_cannot_prove_elapsed_grace
 test_pending_grace_uses_bounded_decimal_epochs

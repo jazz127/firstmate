@@ -934,7 +934,11 @@ fm_pending_reply_backend_observation() {  # <backend> <target> [expected-label] 
     | fm_busy_lines_match "$harness"; then
     printf 'busy'
   else
-    printf 'fallback-idle'
+    # A matcher error cannot supply idle evidence or complete a pending turn.
+    case $? in
+      1) printf 'fallback-idle' ;;
+      *) printf 'unknown' ;;
+    esac
   fi
 }
 

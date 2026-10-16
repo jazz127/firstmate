@@ -881,7 +881,10 @@ test_undelivered_records_are_scan_immutable() {
       || fail "undelivered wrong-home check should be inert"
     fm_pending_reply_tick_one "$state" "$corr" busy "$sm_home" \
       || fail "undelivered direct tick should be inert"
+    # Deliberate guards: either indirect call would fail this fixture.
+    # shellcheck disable=SC2329
     fm_backend_busy_state() { fail "undelivered watcher tick must not probe the backend"; }
+    # shellcheck disable=SC2329
     fm_backend_capture() { fail "undelivered watcher tick must not capture the backend"; }
     fm_pending_reply_tick "$state" || fail "undelivered watcher tick should succeed"
     after=$(cat "$rec")
@@ -2607,6 +2610,53 @@ test_tick_without_metadata() (
 
 # --- run --------------------------------------------------------------------
 
+test_invalid_busy_regex_does_not_prove_idle() {
+  local regex_home state corr rec kind harness_observation
+  local FM_PENDING_REPLY_NOW=2000 FM_PENDING_REPLY_GRACE_SECS=0 FM_BUSY_REGEX=''
+  local FM_PENDING_REPLY_SEND_HOOK=invalid_regex_recovery_hook
+  export FM_PENDING_REPLY_NOW FM_PENDING_REPLY_GRACE_SECS FM_PENDING_REPLY_SEND_HOOK FM_BUSY_REGEX
+  (
+    fm_backend_busy_state() { printf unknown; }
+    fm_backend_capture() { printf 'esc to interrupt\nfixture footer\n'; }
+    # Invoked indirectly through FM_PENDING_REPLY_SEND_HOOK.
+    # shellcheck disable=SC2329
+    invalid_regex_recovery_hook() { printf '%s\n' "$1" >> "$regex_home/recoveries"; }
+    for kind in bracket paren custom-busy custom-idle default; do
+      regex_home=$(setup_parent "invalid-busy-regex-$kind")
+      state="$regex_home/state"
+      corr=$(fm_pending_reply_create "$regex_home" "$state" mate 'custom regex request') \
+        || fail "custom regex fixture creation failed"
+      fm_pending_reply_mark_delivered "$state" "$corr" 1000 \
+        || fail "custom regex fixture delivery failed"
+      fm_write_meta "$state/mate.meta" 'backend=tmux' 'window=synthetic-endpoint' 'harness=codex'
+      case "$kind" in
+        bracket) FM_BUSY_REGEX='[' ;;
+        paren) FM_BUSY_REGEX='(' ;;
+        custom-busy) FM_BUSY_REGEX='esc to interrupt' ;;
+        custom-idle) FM_BUSY_REGEX='never matches' ;;
+        default) FM_BUSY_REGEX='' ;;
+      esac
+      harness_observation=$(fm_pending_reply_backend_observation tmux synthetic-endpoint fm-mate codex 2>/dev/null)
+      case "$kind" in
+        bracket|paren) [ "$harness_observation" = unknown ] || fail "$kind regex error must be unknown" ;;
+        custom-idle) [ "$harness_observation" = fallback-idle ] || fail "a valid regex miss lost idle fallback" ;;
+        *) [ "$harness_observation" = busy ] || fail "a valid busy regex lost its match" ;;
+      esac
+      fm_pending_reply_tick "$state" 2>/dev/null || fail "custom regex tick failed"
+      rec=$(fm_pending_reply_path "$state" "$corr")
+      if [ "$kind" = custom-idle ]; then
+        [ "$(phase_of "$state" "$corr")" = recovery_sent ] || fail "valid idle evidence lost recovery"
+        [ -s "$regex_home/recoveries" ] || fail "valid idle evidence did not invoke the recovery hook"
+      else
+        [ "$(phase_of "$state" "$corr")" = awaiting_report ] || fail "$kind regex must not trigger recovery"
+        [ -z "$(fm_pending_reply_get "$rec" request_turn_completed_epoch)" ] || fail "$kind regex falsely completed the turn"
+        [ ! -e "$regex_home/recoveries" ] || fail "$kind regex invoked the recovery hook"
+      fi
+    done
+  ) || fail "invalid busy regex regression failed"
+  pass "invalid busy regexes remain unknown without completing turns or sending recovery"
+}
+
 test_large_busy_capture_with_pipefail() {
   local capture_home state corr rec kind harness padding
   local FM_PENDING_REPLY_NOW=2000 FM_PENDING_REPLY_GRACE_SECS=0
@@ -2614,7 +2664,10 @@ test_large_busy_capture_with_pipefail() {
   export FM_PENDING_REPLY_NOW FM_PENDING_REPLY_GRACE_SECS FM_PENDING_REPLY_SEND_HOOK
   (
     set -o pipefail
+    # Backend hooks are invoked indirectly by the pending-reply poll.
+    # shellcheck disable=SC2329
     fm_backend_busy_state() { printf unknown; }
+    # shellcheck disable=SC2329
     fm_backend_capture() { cat "$capture_home/capture"; }
     # Invoked indirectly through FM_PENDING_REPLY_SEND_HOOK.
     # shellcheck disable=SC2329
@@ -2858,6 +2911,7 @@ test_create_without_openssl() {
   pass "pending request creation supports missing, failed and healthy OpenSSL"
 }
 
+test_invalid_busy_regex_does_not_prove_idle
 test_remote_watermark_requires_complete_text
 test_failed_fallback_pipeline_refuses_create
 test_failed_openssl_output_uses_fallback

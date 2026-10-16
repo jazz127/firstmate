@@ -194,6 +194,23 @@ fm_pending_reply_new_id() {
     ) || return 1
     raw=${hex:0:16}
   fi
+  # Healthy generators already emit exactly 16 hex bytes. Keep malformed-output
+  # normalization on its existing path, and format the ordinary result in shell.
+  if [ "${#raw}" -eq 16 ]; then
+    case "$raw" in
+      *[!0123456789abcdefABCDEF]*) ;;
+      *)
+        raw=${raw//A/a}
+        raw=${raw//B/b}
+        raw=${raw//C/c}
+        raw=${raw//D/d}
+        raw=${raw//E/e}
+        raw=${raw//F/f}
+        printf '%s' "$raw"
+        return
+        ;;
+    esac
+  fi
   printf '%s' "$(printf '%s' "$raw" | tr 'A-F' 'a-f' | tr -cd 'a-f0-9' | cut -c1-16)"
 }
 

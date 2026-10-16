@@ -981,7 +981,8 @@ public_followup_secondmate_home() {
     [ "$include_absent" = include-absent ] && printf '%s\n' "$home"
     return 3
   fi
-  home=$(CDPATH='' cd -- "$home" 2>/dev/null && pwd -P) || return 2
+  # Canonical identity must survive capture without trimming path data bytes.
+  CDPATH='' _secondmate_registry_resolve_home secondmate_registry_path_key "$home" home 2>/dev/null || return 2
   [ -f "$home/.fm-secondmate-home" ] && [ ! -L "$home/.fm-secondmate-home" ] || return 2
   marker=$(sed -n '1p' "$home/.fm-secondmate-home" 2>/dev/null)
   [ "$marker" = "$id" ] || return 2

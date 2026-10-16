@@ -1956,6 +1956,36 @@ test_retire_refuses_unbound_existing_secondmate() {
   pass "retire fails closed for an unbound existing secondmate"
 }
 
+test_brief_refuses_secondmate_alias_identity_loss() {
+  local home original replacement alias_path snapshot out runner
+  for runner in run_pf run_pf_sysbash; do
+    home=$(make_home "brief-alias-identity-$runner")
+    original="$home/original-mate"
+    replacement="$original"$'\n'
+    alias_path="$home/mate-alias"
+    mkdir -p "$original/state" "$replacement/state"
+    [ ! "$original" -ef "$replacement" ] || fail "fixture homes must be distinct"
+    printf 'mate\n' > "$original/.fm-secondmate-home"
+    printf 'mate\n' > "$replacement/.fm-secondmate-home"
+    ln -s "$original" "$alias_path"
+    fm_write_meta "$home/state/mate.meta" "kind=secondmate" "home=$alias_path"
+    seed_repro_commitment "$home" pf-alias-identity req-alias-identity secondmate:mate scout-alias
+    out=$("$runner" "$home" brief pf-alias-identity) || fail "original alias must be briefable: $out"
+    snapshot="$home/registry-before"
+    cp "$home/state/public-followup/registry/pf-alias-identity" "$snapshot"
+
+    rm "$alias_path"
+    ln -s "$replacement" "$alias_path"
+    expect_failure "a different newline-suffixed home must not match the original binding" \
+      "$runner" "$home" brief pf-alias-identity
+    assert_contains "$EXPECT_OUT" "no usable code root and home" \
+      "an alias whose canonical identity cannot be retained must use the route refusal"
+    cmp -s "$snapshot" "$home/state/public-followup/registry/pf-alias-identity" \
+      || fail "a refused brief must preserve its registration"
+  done
+  pass "brief refuses a secondmate alias whose canonical identity loses bytes"
+}
+
 test_retire_refuses_reassigned_secondmate_home() {
   local home original replacement log
   home=$(make_home retire-reassigned-secondmate)
@@ -3961,6 +3991,7 @@ test_registration_replay_preserves_delivery_and_retirement
 test_redelivery_does_not_report_retired_loop_open
 test_retire_after_secondmate_home_removal
 test_retire_refuses_unbound_existing_secondmate
+test_brief_refuses_secondmate_alias_identity_loss
 test_retire_refuses_reassigned_secondmate_home
 test_rechain_refuses_unclaimed_existing_destination
 test_pending_skips_concurrent_retirement

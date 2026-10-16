@@ -204,6 +204,38 @@ worktree_list() { git -C "$1/project" worktree list --porcelain; }
 
 # The reported incident's shape before any declaration: the project is already
 # busy, and nothing caps a further launch. Absent a declaration that stays true.
+test_capacity_declaration_nul_guard() {
+  local shell round=0
+  for shell in "$(command -v bash)" /bin/bash; do
+    round=$((round + 1))
+    "$shell" -s -- "$ROOT" "$TMP_ROOT/declaration-bytes-$round" <<'SH' || fail "capacity declaration byte validation failed under $shell"
+set -eu
+. "$1/bin/fm-project-capacity-lib.sh"
+mkdir -p "$2"
+record=$'project 2\n'
+for ((i=0; i<=${#record}; i++)); do
+  printf '%s\0%s' "${record:0:i}" "${record:i}" > "$2/project-capacity"
+  if fm_project_capacity_lookup "$2" project; then
+    printf 'accepted NUL at byte %s\n' "$i" >&2
+    exit 1
+  fi
+  [ -z "$FM_PROJECT_CAPACITY" ] && [ -z "$FM_PROJECT_CAPACITY_ANY" ] && [ -n "$FM_PROJECT_CAPACITY_ERROR" ]
+done
+for record in $'project 2\n' 'project 2' $'project 2\r\n'; do
+  printf '%s' "$record" > "$2/project-capacity"
+  fm_project_capacity_lookup "$2" project
+  [ "$FM_PROJECT_CAPACITY" = 2 ] && [ "$FM_PROJECT_CAPACITY_ANY" = 1 ]
+done
+for record in '' '# comment'; do
+  printf '%s' "$record" > "$2/project-capacity"
+  fm_project_capacity_lookup "$2" project
+  [ -z "$FM_PROJECT_CAPACITY" ] && [ -z "$FM_PROJECT_CAPACITY_ANY" ]
+done
+SH
+  done
+  pass 'capacity declarations reject NUL at every byte boundary while retaining ordinary text and empty declarations'
+}
+
 test_capacity_parent_record_nul_guard() {
   local shell round=0
   for shell in "$(command -v bash)" /bin/bash; do
@@ -862,6 +894,9 @@ zero capacity|project 0\n
 non-numeric capacity|other-project two\n
 trailing text|project 2 # suite\n
 named twice|project 2\nproject 3\n
+NUL in name|pro\000ject 2\n
+NUL in capacity|project 2\0000\n
+NUL in comment|# note\000\nproject 2\n
 ROWS
   rm -f "$home/config/project-capacity"
   mkdir "$home/config/project-capacity"
@@ -958,6 +993,7 @@ if [ "${1:-}" = metadata-handoff ]; then
   exit 0
 fi
 
+test_capacity_declaration_nul_guard
 test_capacity_parent_record_nul_guard
 test_capacity_root_home_with_literal_pipes
 test_capacity_names_with_literal_pipes

@@ -1836,17 +1836,29 @@ status_observed_signature() {
   printf 'r1:%s' "$encoded"
 }
 
-status_presentation_marker_reported_matches() {
+_status_presentation_marker_read() {
   local raw
-  raw=$(cat "$1" 2>/dev/null) || return 1
-  status_presentation_marker_parse "$raw" || return 1
+  # Command substitution erases NUL bytes. Reject them before capturing text,
+  # and retain cat's status even when a failed read produced a valid prefix.
+  raw=$(
+    set -o pipefail
+    cat "$1" 2>/dev/null | {
+      local contents=''
+      if IFS= read -r -d '' contents; then exit 1; fi
+      printf '%s' "$contents"
+    }
+  ) || return 1
+  status_presentation_marker_parse "$raw"
+}
+
+status_presentation_marker_reported_matches() {
+  _status_presentation_marker_read "$1" || return 1
   [ "$STATUS_PRESENTATION_REPORTED" = "$2" ]
 }
 
 status_presentation_marker_offset() {
-  local raw classified offset ident current
-  raw=$(cat "$1" 2>/dev/null) || { printf '0'; return 0; }
-  status_presentation_marker_parse "$raw" || { printf '0'; return 0; }
+  local classified offset ident current
+  _status_presentation_marker_read "$1" || { printf '0'; return 0; }
   classified=$STATUS_PRESENTATION_CLASSIFIED
   [ "$classified" != - ] || { printf '0'; return 0; }
   offset=${classified%%@*}; ident=${classified#*@}
@@ -1856,9 +1868,9 @@ status_presentation_marker_offset() {
 }
 
 status_presentation_marker_report() {
-  local marker=$1 reported=$2 raw classified=-
+  local marker=$1 reported=$2 classified=-
   _status_presentation_signature_valid "$reported" || return 1
-  if raw=$(cat "$marker" 2>/dev/null) && status_presentation_marker_parse "$raw"; then
+  if _status_presentation_marker_read "$marker"; then
     classified=$STATUS_PRESENTATION_CLASSIFIED
   fi
   printf 'v2\t%s\t%s' "$reported" "$classified" > "$marker"

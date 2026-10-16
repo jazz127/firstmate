@@ -2192,6 +2192,52 @@ test_routine_appends_after_a_classified_event_stay_absorbed() {
   pass "a routine append after an already-classified event is absorbed (no re-wake)"
 }
 
+test_binary_presentation_markers_do_not_hide_status() {
+  local shell dir state out err status_file signature pid
+  for shell in bash /bin/bash; do
+    dir=$(make_case "binary-presentation-${shell//\//-}")
+    state="$dir/state"; out="$dir/watch.out"; err="$dir/watch.err"
+    status_file="$state/task.status"
+    printf 'needs-decision: retained event\n' > "$status_file"
+    signature=$(seen_sig "$status_file")
+    printf '%s\000' "$signature" > "$state/.seen-task_status"
+    printf '%s\000' "$signature" > "$state/.hb-surfaced-task"
+    watch_bg "$state" "$dir/fakebin" "$out" "$shell" 2> "$err"
+    pid=$!
+    wait_for_exit "$pid" 100 \
+      || { reap "$pid"; fail "$shell binary markers hid an actionable status: $(cat "$err")"; }
+    assert_contains "$(cat "$out")" "signal: $status_file" 'binary marker recovery lost its signal'
+    assert_contains "$(cat "$state/.wake-queue")" 'needs-decision:' 'binary marker recovery did not queue the decision'
+    [ ! -s "$err" ] || fail "binary marker recovery emitted errors: $(cat "$err")"
+  done
+  pass "binary presentation markers cannot suppress an actionable status on either Bash version"
+}
+
+test_presentation_marker_reader_keeps_read_failures() (
+  local dir file marker ident reported size offset
+  dir=$(make_case marker-read-failure)
+  file="$dir/state/task.status"; marker="$dir/state/.seen-task_status"
+  printf 'blocked: pending event\n' > "$file"
+  ident=$(_fm_open_decisions_file_ident "$file")
+  size=$(size_of "$file")
+  reported=$(status_observed_signature "$file")
+  status_presentation_marker_commit "$marker" "$file" "$size" "$ident" \
+    || fail 'could not initialize marker read-failure fixture'
+  # A reader that returns valid-looking partial bytes and fails still failed.
+  # shellcheck disable=SC2329 # Called indirectly by the production marker reader.
+  cat() { command cat "$@"; return 7; }
+  if status_presentation_marker_reported_matches "$marker" "$reported"; then
+    fail 'a failed marker read matched its partial output'
+  fi
+  offset=$(status_presentation_marker_offset "$marker" "$file")
+  assert_equals 0 "$offset" 'a failed marker read supplied a classified offset'
+  status_presentation_marker_report "$marker" "$reported" || fail 'could not replace the failed marker'
+  unset -f cat
+  offset=$(status_presentation_marker_offset "$marker" "$file")
+  assert_equals 0 "$offset" 'reporting preserved classification from a failed marker read'
+  pass "failed marker reads cannot match or preserve a classified position from partial output"
+)
+
 test_unreadable_status_reports_once_per_file_state() {
   local dir state fakebin out status_file target marker sig pid
   dir=$(make_case unreadable-status); state="$dir/state"; fakebin="$dir/fakebin"
@@ -7985,6 +8031,8 @@ test_actionable_signal_survives_a_later_routine_append
 test_keyed_decision_signal_reads_only_the_new_span
 test_release_completion_survives_a_later_routine_append
 test_routine_appends_after_a_classified_event_stay_absorbed
+test_binary_presentation_markers_do_not_hide_status
+test_presentation_marker_reader_keeps_read_failures
 test_unreadable_status_reports_once_per_file_state
 test_permission_recovery_surfaces_preserved_status
 test_terminal_stale_surfaced

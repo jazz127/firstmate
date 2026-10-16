@@ -541,7 +541,9 @@ passed_pr_detail() {
 }
 # Finding count from a findings[N]{...} table header; empty when none.
 nm_findings_count() {
-  printf '%s\n' "$RUN_OUT" | grep -oE 'findings\[[0-9]+\]' | head -1 | grep -oE '[0-9]+'
+  local findings_re='findings\[([0-9]+)\]'
+  [[ $RUN_OUT =~ $findings_re ]] || return 1
+  printf '%s\n' "${BASH_REMATCH[1]}"
 }
 nm_gate_step_row() {
   local row step rest status findings

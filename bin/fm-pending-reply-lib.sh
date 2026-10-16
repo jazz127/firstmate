@@ -381,6 +381,7 @@ fm_pending_reply_create() {  # <parent-home> <state-dir> <task_id> <request-text
   # Extremely unlikely collision; regenerate once.
   if [ -e "$rec" ]; then
     corr=$(fm_pending_reply_new_id)
+    [ "${#corr}" -eq 16 ] || return 1
     rec=$(fm_pending_reply_path "$state" "$corr")
     [ ! -e "$rec" ] || return 1
   fi

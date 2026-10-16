@@ -2605,6 +2605,42 @@ test_record_field_output_variable() {
   pass "record fields assign output variables without losing missing/binary clearing or field bytes"
 }
 
+test_collision_retry_validates_generated_id() {
+  local home state rec next corr rc
+  for next in a deadbeef abcdef012345678 '???deadbeef???' zzzz ABCDEF0123456789 0123456789abcdef; do
+    home=$(setup_parent collision-id)
+    state="$home/state"
+    mkdir -p "$state/pending-replies" "$home/fakebin"
+    rec="$state/pending-replies/0123456789abcdef"
+    printf 'sentinel existing request\n' > "$rec"
+    cp "$rec" "$home/original"
+    cat > "$home/fakebin/openssl" <<'SH'
+#!/bin/sh
+if [ ! -e "$FM_TEST_ID_ATTEMPT" ]; then
+  : > "$FM_TEST_ID_ATTEMPT"
+  printf '0123456789abcdef\n'
+else
+  printf '%s' "$FM_TEST_ID_NEXT"
+fi
+SH
+    chmod +x "$home/fakebin/openssl"
+    rc=0
+    corr=$(PATH="$home/fakebin:$PATH" FM_TEST_ID_ATTEMPT="$home/attempt" FM_TEST_ID_NEXT="$next" \
+      fm_pending_reply_create "$home" "$state" mate 'fixture request') || rc=$?
+    cmp -s "$home/original" "$rec" || fail "collision retry overwrote the original record"
+    if [ "$next" = ABCDEF0123456789 ]; then
+      expect_code 0 "$rc" "valid collision retry should succeed"
+      [ "$corr" = abcdef0123456789 ] || fail "valid retry returned a different id"
+      [ "$(fm_pending_reply_get "$state/pending-replies/$corr" task_id)" = mate ] || fail "valid retry did not persist the request"
+    else
+      expect_code 1 "$rc" "invalid or repeated collision id $next must refuse"
+      [ -z "$corr" ] || fail "failed retry returned an id"
+      [ "$(find "$state/pending-replies" -type f)" = "$rec" ] || fail "failed retry wrote another pending record"
+    fi
+  done
+  pass "a regenerated correlation must pass the same length check before any record is written"
+}
+
 test_create_without_openssl() {
   local home fallback_path mode corr rec
   home=$(setup_parent id-fallback)
@@ -2637,6 +2673,7 @@ test_create_without_openssl() {
   pass "pending request creation supports missing, failed and healthy OpenSSL"
 }
 
+test_collision_retry_validates_generated_id
 test_status_evidence_requires_complete_text
 test_summary_strips_carrier_before_filtering
 test_correlation_extraction_first_match

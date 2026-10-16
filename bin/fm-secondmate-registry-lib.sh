@@ -132,7 +132,25 @@ secondmate_registry_path_key() {
   fi
 }
 
-# Only successful, nonempty resolver output can establish a local route identity.
+# A resolver emits one path with an optional formatting newline. Validate the
+# complete output before command substitution can erase trailing data newlines.
+_secondmate_registry_resolve_home() {  # <resolver> <home> <output-variable>
+  local _fm_registry_key
+  _fm_registry_key=$(
+    set -o pipefail
+    "$1" "$2" | {
+      if IFS= read -r -d '' _fm_registry_key; then exit 1; fi
+      _fm_registry_key=${_fm_registry_key%$'\n'}
+      case "$_fm_registry_key" in
+        (''|*$'\t'*|*$'\n'*|*$'\r'*) exit 1 ;;
+      esac
+      printf '%s' "$_fm_registry_key"
+    }
+  ) || return 1
+  printf -v "$3" '%s' "$_fm_registry_key"
+}
+
+# Only successful, control-free resolver output can establish a local route identity.
 secondmate_registry_validate_bindings() {
   local reg=$1 resolver=$2 expected_id=${3:-} expected_home=${4:-}
   local tmp registry_text bindings line id host root home home_key duplicate_homes duplicate_ids overlaps expected_home_key
@@ -144,6 +162,13 @@ secondmate_registry_validate_bindings() {
   SECONDMATE_REGISTRY_MATCH_REMOTE=0
   SECONDMATE_REGISTRY_ERROR=
   case "$expected_id" in *[!A-Za-z0-9._-]*) SECONDMATE_REGISTRY_ERROR="invalid secondmate id: $expected_id"; return 1 ;; esac
+  # Apply the registered-route byte constraint before command capture can trim it.
+  case "$expected_home" in
+    *$'\t'*|*$'\n'*|*$'\r'*)
+      SECONDMATE_REGISTRY_ERROR="expected secondmate home contains a tab, newline, or carriage return"
+      return 1
+      ;;
+  esac
   if [ ! -f "$reg" ] || [ -L "$reg" ]; then
     SECONDMATE_REGISTRY_ERROR="secondmate registry is unavailable or unsafe: $reg"
     return 1
@@ -235,7 +260,7 @@ secondmate_registry_validate_bindings() {
           esac
           home_key="ssh:$host:$home"
         else
-          home_key=$("$resolver" "$home" 2>/dev/null) || home_key=
+          _secondmate_registry_resolve_home "$resolver" "$home" home_key 2>/dev/null || home_key=
           if [ -z "$home_key" ]; then
             rm -rf -- "$tmp"
             SECONDMATE_REGISTRY_ERROR="unresolvable secondmate home for $id: $home"
@@ -318,7 +343,7 @@ EOF
     if [ "$SECONDMATE_REGISTRY_MATCH_REMOTE" -eq 1 ]; then
       expected_home_key="ssh:$SECONDMATE_REGISTRY_MATCH_HOST:$expected_home"
     else
-      expected_home_key=$("$resolver" "$expected_home" 2>/dev/null) || expected_home_key=
+      _secondmate_registry_resolve_home "$resolver" "$expected_home" expected_home_key 2>/dev/null || expected_home_key=
       [ -z "$expected_home_key" ] || expected_home_key="local:$expected_home_key"
     fi
     if [ -z "$expected_home_key" ] || [ "$expected_home_key" != "$SECONDMATE_REGISTRY_MATCH_HOME_KEY" ]; then

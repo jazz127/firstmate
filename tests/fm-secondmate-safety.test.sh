@@ -3254,6 +3254,71 @@ test_registry_snapshot_read_errors_do_not_supply_routes() {
   pass "registry snapshot read failures discard partial output and preserve source bytes"
 }
 
+test_registry_expected_home_cannot_collapse_control_bytes() {
+  python3 - "$ROOT" "$TMP_ROOT/registry-expected-home" <<'PYHOME' || fail "registry validation matched an unsafe expected home"
+import json,os,pathlib,shutil,subprocess,sys,tempfile
+root=pathlib.Path(sys.argv[1]);scratch_root=pathlib.Path(sys.argv[2]);scratch_root.mkdir()
+driver=r'''
+set -u
+. "$1/bin/fm-secondmate-registry-lib.sh"
+rc=0
+secondmate_registry_validate_bindings "$2/registry" secondmate_registry_path_key mate "$3" || rc=$?
+printf 'rc=%s\nerror=%s\n' "$rc" "$SECONDMATE_REGISTRY_ERROR"
+'''
+rows=[]
+for shell in [shutil.which('bash')]:
+ for case in ['same','alias','newline-existing','newline-missing','tab','carriage-return','remote-same','remote-newline']:
+  with tempfile.TemporaryDirectory(prefix='case-',dir=scratch_root) as td:
+   home=pathlib.Path(td);registered=home/'registered';registered.mkdir();expected=registered;scratch=home/'scratch';scratch.mkdir()
+   if case=='alias':expected=home/'alias';expected.symlink_to(registered,target_is_directory=True)
+   elif case in ['newline-existing','newline-missing','tab','carriage-return']:
+    suffix='\n' if case.startswith('newline-') else '\t' if case=='tab' else '\r';expected=pathlib.Path(str(registered)+suffix)
+    if case!='newline-missing':expected.mkdir();assert not os.path.samefile(registered,expected)
+   record=f'- mate - fixture (home: {registered}; scope: fixture; projects: ; added 2026-01-01)\n'
+   if case.startswith('remote-'):
+    record='- mate - fixture (host: fixture; root: /srv/code; home: /srv/home; scope: fixture; projects: ; added 2026-01-01)\n';expected=pathlib.Path('/srv/home'+('\n' if case=='remote-newline' else ''))
+   (home/'registry').write_text(record);before=sorted(str(p.relative_to(home)) for p in home.iterdir())
+   env={**os.environ,'FM_HOME':td,'FM_ROOT_OVERRIDE':td,'TMPDIR':str(scratch)}
+   r=subprocess.run([shell,'-c',driver,'probe',str(root),td,str(expected)],env=env,capture_output=True,text=True,timeout=15);fields=dict(line.split('=',1) for line in r.stdout.splitlines() if '=' in line)
+   rc='0' if case in ['same','alias','remote-same'] else '1'
+   bad=r.returncode!=0 or fields.get('rc')!=rc or (rc=='1' and not fields.get('error')) or (home/'registry').read_text()!=record or bool(list(scratch.iterdir())) or sorted(str(p.relative_to(home)) for p in home.iterdir())!=before
+   rows.append({'shell':shell,'case':case,'process_rc':r.returncode,'fields':fields,'stderr':r.stderr,'bad':bad})
+assert not any(r['bad'] for r in rows), json.dumps([r for r in rows if r['bad']],indent=2)
+PYHOME
+  pass "expected home validation preserves route identity before path capture"
+}
+
+test_registry_resolved_home_preserves_path_identity() {
+  python3 - "$ROOT" "$TMP_ROOT/registry-resolved-home" <<'PYCANONICAL' || fail "registry resolution collapsed unsafe canonical path bytes"
+import json,os,pathlib,shutil,subprocess,sys,tempfile
+root=pathlib.Path(sys.argv[1]);scratch_root=pathlib.Path(sys.argv[2]);scratch_root.mkdir()
+driver=r'''
+set -u
+. "$1/bin/fm-secondmate-registry-lib.sh"
+rc=0
+secondmate_registry_validate_bindings "$2/registry" secondmate_registry_path_key mate "$3" || rc=$?
+printf 'rc=%s\nerror=%s\n' "$rc" "$SECONDMATE_REGISTRY_ERROR"
+'''
+rows=[]
+for shell in [shutil.which('bash')]:
+ for case in ['row-newline-collision','expected-newline-collision','row-newline-same','row-tab-same','row-cr-same','safe-alias','safe-mismatch']:
+  with tempfile.TemporaryDirectory(prefix='case-',dir=scratch_root) as td:
+   home=pathlib.Path(td);safe=home/'home';safe.mkdir();suffix='\t' if case=='row-tab-same' else '\r' if case=='row-cr-same' else '\n';unsafe=pathlib.Path(str(safe)+suffix);unsafe.mkdir();alias=home/'alias';alias.symlink_to(safe if case=='safe-alias' else unsafe,target_is_directory=True);registered=alias;expected=alias
+   if case=='row-newline-collision':expected=safe
+   elif case=='expected-newline-collision':registered=safe
+   elif case=='safe-mismatch':registered=safe;expected=home/'different';expected.mkdir()
+   record=f'- mate - fixture (home: {registered}; scope: fixture; projects: ; added 2026-01-01)\n';(home/'registry').write_text(record);scratch=home/'scratch';scratch.mkdir()
+   env={**os.environ,'FM_HOME':td,'FM_ROOT_OVERRIDE':td,'TMPDIR':str(scratch)}
+   r=subprocess.run([shell,'-c',driver,'probe',str(root),td,str(expected)],env=env,capture_output=True,text=True,timeout=15);fields=dict(line.split('=',1) for line in r.stdout.splitlines() if '=' in line)
+   rc='0' if case=='safe-alias' else '1';bad=bool(r.stderr) or r.returncode!=0 or fields.get('rc')!=rc or (home/'registry').read_text()!=record or bool(list(scratch.iterdir()))
+   rows.append({'shell':shell,'case':case,'fields':fields,'stderr':r.stderr,'bad':bad})
+assert not any(r['bad'] for r in rows), json.dumps([r for r in rows if r['bad']],indent=2)
+PYCANONICAL
+  pass "resolved registry paths reject control bytes before route identity comparison"
+}
+
+test_registry_resolved_home_preserves_path_identity
+test_registry_expected_home_cannot_collapse_control_bytes
 test_registry_rejects_binary_route_evidence
 test_registry_snapshot_read_errors_do_not_supply_routes
 test_registry_refuses_failed_path_resolver_evidence

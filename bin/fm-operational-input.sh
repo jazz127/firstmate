@@ -230,7 +230,7 @@ fm_operational_harness_needs_record() {  # <harness>
 }
 
 fm_operational_record_prune() {  # <record-dir>
-  local stat_cmd path mtime cutoff line
+  local stat_cmd path mtime cutoff stat_line
   # Newlines cannot be represented in the stat record format.
   case "$1" in *$'\n'*) return 1 ;; esac
   if [ "$(uname)" = Darwin ]; then
@@ -240,10 +240,10 @@ fm_operational_record_prune() {  # <record-dir>
   fi
   cutoff=$(( $(date +%s) - FM_OPERATIONAL_RECORD_RETENTION_DAYS * 86400 ))
   find "$1" -maxdepth 1 -type f \( -name '*.msg' -o -name '.record.*' \) \
-    ! -name $'*\n*' -exec "${stat_cmd[@]}" {} + 2>/dev/null | while IFS= read -r line; do
-    case "$line" in *' '*) ;; *) continue ;; esac
-    mtime=${line%% *}
-    path=${line#* }
+    ! -name $'*\n*' -exec "${stat_cmd[@]}" {} + 2>/dev/null | while IFS= read -r stat_line; do
+    case "$stat_line" in *' '*) ;; *) continue ;; esac
+    mtime=${stat_line%% *}
+    path=${stat_line#* }
     case "$mtime" in ''|*[!0-9]*) continue ;; esac
     if [ "$mtime" -lt "$cutoff" ]; then printf '%s\0' "$path"; fi
   done | xargs -0 rm -f

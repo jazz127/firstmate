@@ -650,25 +650,29 @@ fm_pending_reply_find_resolve_line() {  # <status-file> <corr_id>
   return 0
 }
 
+# Failed metadata is unknown, not a stable signature suitable for caching.
 fm_pending_reply_file_signature() {  # <path>
   local path=$1
   [ -f "$path" ] || { printf 'missing'; return 0; }
   if [ "$(uname -s 2>/dev/null)" = Darwin ]; then
-    LC_ALL=C /usr/bin/stat -f '%d:%i:%z:%m:%c' "$path" 2>/dev/null || printf 'unreadable'
+    LC_ALL=C /usr/bin/stat -f '%d:%i:%z:%m:%c' "$path" 2>/dev/null
   else
-    LC_ALL=C stat -c '%d:%i:%s:%Y:%Z' "$path" 2>/dev/null || printf 'unreadable'
+    LC_ALL=C stat -c '%d:%i:%s:%Y:%Z' "$path" 2>/dev/null
   fi
 }
 
 fm_pending_reply_status_set_signature() {  # <status-dir>
   local status_dir=$1 status_file signature
-  {
-    for status_file in "$status_dir"/*.status; do
-      [ -f "$status_file" ] || continue
-      signature=$(fm_pending_reply_file_signature "$status_file")
-      printf '%s:%s:%s\n' "${#status_file}" "$status_file" "$signature"
-    done
-  } | cksum 2>/dev/null | awk '{printf "%s-%s", $1, $2}'
+  (
+    set -o pipefail
+    {
+      for status_file in "$status_dir"/*.status; do
+        [ -f "$status_file" ] || continue
+        signature=$(fm_pending_reply_file_signature "$status_file") || exit 1
+        printf '%s:%s:%s\n' "${#status_file}" "$status_file" "$signature" || exit 1
+      done
+    } | cksum 2>/dev/null | awk '{printf "%s-%s", $1, $2}'
+  )
 }
 
 # Classify how a resolving line acknowledged the request.
@@ -737,13 +741,13 @@ _fm_pending_reply_try_resolve_locked() {  # <state-dir> <corr_id> [status-file-o
     status_file=$status_override
   fi
   if [ -z "$status_override" ] && [ "$unconfirmed" = 0 ]; then
-    signature=$(fm_pending_reply_file_signature "$status_file")
+    signature=$(fm_pending_reply_file_signature "$status_file") || signature=''
     previous=$(fm_pending_reply_get "$rec" parent_status_scan_signature)
-    [ "$signature" != "$previous" ] || return 1
+    if [ -n "$signature" ] && [ "$signature" = "$previous" ]; then return 1; fi
   fi
   line=$(fm_pending_reply_find_resolve_line "$status_file" "$corr")
   if [ -z "$line" ]; then
-    if [ -z "$status_override" ] && [ "$unconfirmed" = 0 ]; then
+    if [ -z "$status_override" ] && [ "$unconfirmed" = 0 ] && [ -n "$signature" ]; then
       fm_pending_reply_set "$rec" parent_status_scan_signature "$signature" || return 1
     fi
     return 1
@@ -1404,12 +1408,12 @@ fm_pending_reply_detect_wrong_home() {  # <state-dir> <corr_id> <secondmate-home
   [ "$phase" != resolved ] || return 0
   delivered=$(fm_pending_reply_get "$rec" delivered_epoch)
   [ -n "$delivered" ] || return 0
-  snapshot=$(fm_pending_reply_status_set_signature "$sm_home/state")
+  snapshot=$(fm_pending_reply_status_set_signature "$sm_home/state") || snapshot=''
   previous=$(fm_pending_reply_get "$rec" wrong_home_scan_signature)
   hits=$(fm_pending_reply_get "$rec" wrong_home_hits)
   case "$hits" in ''|*[!0-9]*) hits=0 ;; esac
   first=$(fm_pending_reply_get "$rec" wrong_home_first_sighting)
-  if [ "$snapshot" = "$previous" ] && { [ "$hits" = 0 ] || [ -n "$first" ]; }; then
+  if [ -n "$snapshot" ] && [ "$snapshot" = "$previous" ] && { [ "$hits" = 0 ] || [ -n "$first" ]; }; then
     return 0
   fi
   sightings=$(fm_pending_reply_get "$rec" wrong_home_sightings)
@@ -1453,7 +1457,9 @@ fm_pending_reply_detect_wrong_home() {  # <state-dir> <corr_id> <secondmate-home
     fm_pending_reply_set "$rec" wrong_home_sightings "$sightings" || return 1
     fm_pending_reply_set "$rec" wrong_home_hits "$hits" || return 1
   fi
-  fm_pending_reply_set "$rec" wrong_home_scan_signature "$snapshot" || return 1
+  if [ -n "$snapshot" ]; then
+    fm_pending_reply_set "$rec" wrong_home_scan_signature "$snapshot" || return 1
+  fi
   return 0
 }
 

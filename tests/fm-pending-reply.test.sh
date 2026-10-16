@@ -895,6 +895,73 @@ test_undelivered_records_are_scan_immutable() {
   pass "undelivered records remain immutable across scan paths"
 }
 
+test_signature_failures_do_not_hide_new_reports() {
+  (
+    local home state sm_home corr rec status_file signature_fault scan_kind rc
+    local FM_TEST_SIGNATURE_FAULT=healthy FM_TEST_SIGNATURE_PLATFORM
+    FM_TEST_SIGNATURE_PLATFORM=$(command uname -s)
+    # Exercise the portable stat interface without replacing Darwin's system tool.
+    # shellcheck disable=SC2329
+    uname() {
+      if [ "${1:-}" = -s ]; then printf 'Linux\n'; else command uname "$@"; fi
+    }
+    # shellcheck disable=SC2329
+    stat() {
+      case "$FM_TEST_SIGNATURE_FAULT" in
+        stat-empty) return 1 ;;
+        stat-partial) printf 'partial'; return 1 ;;
+      esac
+      if [ "$FM_TEST_SIGNATURE_PLATFORM" = Darwin ]; then
+        /usr/bin/stat -f '%d:%i:%z:%m:%c' "$3"
+      else
+        command stat "$@"
+      fi
+    }
+    # shellcheck disable=SC2329
+    cksum() {
+      case "$FM_TEST_SIGNATURE_FAULT" in
+        checksum-empty) command cat >/dev/null; return 1 ;;
+        checksum-partial) command cat >/dev/null; printf '123 456\n'; return 1 ;;
+      esac
+      command cksum "$@"
+    }
+    for scan_kind in parent wrong-home; do
+      for signature_fault in stat-empty stat-partial checksum-empty checksum-partial; do
+        case "$scan_kind:$signature_fault" in parent:checksum-*) continue ;; esac
+        FM_TEST_SIGNATURE_FAULT=healthy
+        home=$(setup_parent "signature-$scan_kind-$signature_fault")
+        state="$home/state"
+        sm_home="$home/mate"
+        mkdir -p "$sm_home/state"
+        corr=$(fm_pending_reply_create "$home" "$state" mate 'fixture request')
+        fm_pending_reply_mark_delivered "$state" "$corr"
+        rec=$(fm_pending_reply_path "$state" "$corr")
+        status_file="$state/mate.status"
+        [ "$scan_kind" != wrong-home ] || status_file="$sm_home/state/child.status"
+        printf 'working: fixture waiting\n' > "$status_file"
+        FM_TEST_SIGNATURE_FAULT=$signature_fault
+        if [ "$scan_kind" = parent ]; then
+          rc=0
+          fm_pending_reply_try_resolve "$state" "$corr" || rc=$?
+          expect_code 1 "$rc" "a routine status must not resolve the request"
+        else
+          fm_pending_reply_detect_wrong_home "$state" "$corr" "$sm_home" || fail "first wrong-home scan failed"
+        fi
+        printf 'done [corr=%s]: fixture answer\n' "$corr" >> "$status_file"
+        if [ "$scan_kind" = parent ]; then
+          fm_pending_reply_try_resolve "$state" "$corr" || fail "$signature_fault hid the appended parent report"
+          [ "$(fm_pending_reply_get "$rec" phase)" = resolved ] || fail "parent report did not resolve"
+        else
+          fm_pending_reply_detect_wrong_home "$state" "$corr" "$sm_home" || fail "second wrong-home scan failed"
+          [ "$(fm_pending_reply_get "$rec" wrong_home_hits)" = 1 ] || fail "$signature_fault hid the appended wrong-home report"
+          [ "$(fm_pending_reply_get "$rec" phase)" = awaiting_report ] || fail "wrong-home report resolved the request"
+        fi
+      done
+    done
+  ) || fail "signature failure fallback regression failed"
+  pass "failed stat/checksum signatures still read newly appended parent and wrong-home reports"
+}
+
 test_sighting_encoding_failure_retries() {
   (
     local home state sm_home corr rec status_file expected first sighting_fault rc
@@ -2404,6 +2471,7 @@ test_create_without_openssl() {
   pass "pending request creation supports missing, failed and healthy OpenSSL"
 }
 
+test_signature_failures_do_not_hide_new_reports
 test_sighting_encoding_failure_retries
 test_delivery_marker_requires_complete_text
 test_create_without_openssl

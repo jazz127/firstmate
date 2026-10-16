@@ -1688,7 +1688,7 @@ fm_pending_reply_remote_observation() {  # <task-id>
 
 fm_pending_reply_tick() {  # <state-dir> [watcher-beacon]
   local state=$1 beacon=${2-} dir rec corr task_id phase delivered meta backend target label busy sm_home harness remote_host
-  local observation observation_task found i remote_reposts=0 allow_recovery attempted_before
+  local observation observation_task found i remote_reposts=0 allow_recovery attempted_before selection
   local -a observation_tasks=() observation_values=() records=() selected=()
   fm_pending_reply_dir "$state" dir
   [ -d "$dir" ] || return 0
@@ -1704,9 +1704,17 @@ fm_pending_reply_tick() {  # <state-dir> [watcher-beacon]
       *) records+=("$rec") ;;
     esac
   done
-  while IFS= read -r rec; do
-    selected+=("$rec")
-  done < <(_fm_pending_reply_select_needing_work ${records[@]+"${records[@]}"})
+  if selection=$(_fm_pending_reply_select_needing_work ${records[@]+"${records[@]}"}); then
+    if [ -n "$selection" ]; then
+      while IFS= read -r rec; do
+        selected+=("$rec")
+      done <<< "$selection"
+    fi
+  else
+    # Failed or partial selection cannot prove any record has no work. The
+    # per-record path retains the authoritative phase and reconciliation checks.
+    selected+=(${records[@]+"${records[@]}"})
+  fi
   for rec in ${selected[@]+"${selected[@]}"}; do
     [ -z "$beacon" ] || touch "$beacon"
     fm_pending_reply_get "$rec" corr_id corr

@@ -3024,6 +3024,51 @@ test_capture_filter_errors_do_not_prove_idle() {
   pass "capture filter failures remain unknown without completing turns or sending recovery"
 }
 
+test_failed_record_selection_still_reconciles_pending_requests() {
+  local selector_home state selector_mode index corr rec
+  local FM_PENDING_REPLY_NOW=2000 FM_PENDING_REPLY_GRACE_SECS=0
+  local -a correlations=()
+  export FM_PENDING_REPLY_NOW FM_PENDING_REPLY_GRACE_SECS
+  (
+    # Both hooks are called indirectly by the pending-reply poll.
+    # shellcheck disable=SC2329
+    fm_backend_busy_state() { printf '%s\n' "$2" >> "$selector_home/observations"; printf busy; }
+    # shellcheck disable=SC2329
+    _fm_pending_reply_select_needing_work() {
+      printf '%s\n' "$selector_mode" > "$selector_home/selection-failed"
+      [ "$selector_mode" != partial ] || printf '%s\n' "$1"
+      return 1
+    }
+    for selector_mode in empty partial; do
+      selector_home=$(setup_parent "selection-failed-$selector_mode")
+      state="$selector_home/state"
+      correlations=()
+      for index in 1 2 3; do
+        corr=$(fm_pending_reply_create "$selector_home" "$state" "mate$index" 'selection failure request') \
+          || fail "selection failure fixture creation failed"
+        correlations+=("$corr")
+        fm_pending_reply_mark_delivered "$state" "$corr" 1000 || fail "selection fixture delivery failed"
+        fm_write_meta "$state/mate$index.meta" 'backend=tmux' "window=fixture-$index" 'harness=codex'
+      done
+      rec=$(fm_pending_reply_path "$state" "${correlations[2]}")
+      fm_pending_reply_set "$rec" phase resolved || fail "resolved selector fixture failed"
+      fm_pending_reply_tick "$state" || fail "failed selection aborted polling"
+      [ -s "$selector_home/selection-failed" ] || fail "selector failure was not exercised"
+      for index in 0 1; do
+        rec=$(fm_pending_reply_path "$state" "${correlations[$index]}")
+        [ "$(fm_pending_reply_get "$rec" turn_seen_busy)" = 1 ] \
+          || fail "$selector_mode selection failure skipped a pending request"
+        [ "$(fm_pending_reply_get "$rec" phase)" = awaiting_report ] || fail "selection fallback changed an active phase"
+      done
+      rec=$(fm_pending_reply_path "$state" "${correlations[2]}")
+      [ "$(fm_pending_reply_get "$rec" phase)" = resolved ] || fail "selection fallback reopened a resolved request"
+      [ "$(wc -l < "$selector_home/observations" | tr -d ' ')" = 2 ] || fail "selection fallback polled the wrong endpoints"
+    done
+  ) || fail "record selection failure regression failed"
+  pass "failed or partial record selection falls back to per-record reconciliation"
+}
+
+test_failed_record_selection_still_reconciles_pending_requests
 test_capture_filter_errors_do_not_prove_idle
 test_same_second_status_rewrite_is_rescanned
 test_invalid_busy_regex_does_not_prove_idle

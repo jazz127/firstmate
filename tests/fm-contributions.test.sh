@@ -860,6 +860,46 @@ SH
   chmod +x "$home/fakebin/gh" "$home/fakebin/date"
 }
 
+test_decimal_poll_bounds() {
+  local shell home setting variable value budget out rc expected
+  for shell in bash /bin/bash; do
+    home=$(new_home "decimal-bounds-${shell//\//-}")
+    forge_home "$home"
+    wrap_forge "$home"
+    cp "$home/data/delivery/contributions.json" "$home/prior.json"
+    printf 'down\n' > "$home/forge/fault"
+    printf '1800000000\n' > "$home/forge/clock"
+    for setting in \
+      FM_CHECK_TIMEOUT:0:20 FM_CHECK_TIMEOUT:00:20 FM_CHECK_TIMEOUT:000:20 \
+      FM_CHECK_TIMEOUT:8:5 FM_CHECK_TIMEOUT:08:5 FM_CHECK_TIMEOUT:9:6 \
+      FM_CHECK_TIMEOUT:09:6 FM_CHECK_TIMEOUT:10:7 FM_CHECK_TIMEOUT:010:7 \
+      FM_CONTRIBUTIONS_BUDGET:8:8 FM_CONTRIBUTIONS_BUDGET:08:8 \
+      FM_CONTRIBUTIONS_BUDGET:9:9 FM_CONTRIBUTIONS_BUDGET:09:9 \
+      FM_CONTRIBUTIONS_BUDGET:10:10 FM_CONTRIBUTIONS_BUDGET:010:10 \
+      FM_CONTRIBUTIONS_BUDGET:0:refuse FM_CONTRIBUTIONS_BUDGET:00:refuse \
+      FM_CONTRIBUTIONS_BUDGET:26:refuse; do
+      IFS=: read -r variable value budget <<< "$setting"
+      cp "$home/prior.json" "$home/data/delivery/contributions.json"
+      : > "$home/forge/calls"
+      rc=0
+      out=$(with_home "$home" env FM_CHECK_TIMEOUT=30 FM_CONTRIBUTIONS_BUDGET=20 \
+        "$variable=$value" "$shell" "$ROOT/bin/fm-contributions.sh" poll 2>&1) || rc=$?
+      if [ "$budget" = refuse ]; then
+        expect_code 1 "$rc" "$shell $variable=$value must refuse an out-of-range budget"
+        assert_contains "$out" 'poll budget must be 1..25 seconds' 'budget refusal lost its reason'
+        [ ! -s "$home/forge/calls" ] || fail 'invalid budget started a forge read'
+      else
+        expect_code 0 "$rc" "$shell $variable=$value failed: $out"
+        expected="contributions: observation unavailable for https://github.com/o/r/pull/8 - core read exited 1 with ${budget}s of budget left: HTTP 502"
+        assert_equals "$expected" "$out" "$shell $variable=$value used the wrong decimal budget"
+        [ "$(cat "$home/forge/calls")" = 'api repos/o/r/pulls/8' ] \
+          || fail 'budget fixture did not make exactly one core read'
+      fi
+    done
+  done
+  pass 'poll bounds interpret decimal padding consistently and retain range refusals'
+}
+
 test_budget_exhaustion_keeps_prior_record() { # exhaust|hang
   local mode=$1 home out
   home=$(new_home "budget-$mode")
@@ -1913,6 +1953,8 @@ test_retire_is_idempotent_and_refuses_unknown_pairs() {
   jq -e '.records[0].retired == null' "$home/data/queued/contributions.json" >/dev/null || fail 'a refused retire changed the record'
   pass 'retire is idempotent and refuses non-captain, unknown, malformed and signal-bearing pairs'
 }
+
+test_decimal_poll_bounds
 
 failures=0
 for test_name in test_actor_coverage test_stale_verdict test_unchecked_is_not_silence test_newest_check_has_no_verdict test_comment_wake test_review_wake test_inline_wake test_ready_issue_wake test_fresh_issue_requires_maintainer test_missing_lane_remains_missing test_partial_freshness_keeps_measured_rows test_malformed_record_cannot_prove_silence test_issue_timeline_and_exact_ack test_verdict_retains_judged_head test_verdict_actor_values_are_discoverable test_observed_replacement_refreshes_verdict test_unobserved_head_leaves_verdict_unknown test_away_yolo_is_fleet_work test_away_yolo_cross_home_is_fleet_work test_retired_and_unsupported_coverage test_unsupported_forge_is_not_fleet_work test_held_unsupported_forge_is_not_captain_work test_unsupported_poll_is_silent_and_clears_legacy_errors test_legacy_cleanup_preserves_supported_failure test_shared_contribution_signal_wakes_once test_watcher_keeps_diagnostics_separate_from_contribution_wakes test_expired_child_unsupported_forge_stays_unmeasured test_watcher_surfaces_new_contribution_once test_home_summary_coverage test_unreadable_pending_is_not_empty test_record_task_identity_matches_dirname_basename test_read_only_views_create_no_state test_budget_refusal_between_calls test_budget_bounded_call_timeout test_genuine_failure_near_deadline_is_unavailable test_shared_url_observed_once test_terminal_contribution_settles test_late_owner_inherits_terminal_observation test_interrupted_multi_owner_poll_settles_every_owner test_done_task_open_pr_still_observed test_reservation_defers_later_url_when_fifteen_seconds_do_not_remain test_three_second_pr_reads_complete_fresh_in_one_cycle test_slow_read_deadline_kill_is_budget_refusal test_unmeasured_url_does_not_starve_the_tail test_budget_is_cut_down_to_the_watcher_check_bound test_arm_plumbs_a_configured_budget_into_the_check_shim test_unavailable_forge_records_error_and_wakes_once_per_episode test_late_owner_keeps_failure_episode_suppressed test_outside_pr_closeout_window_and_green_ci test_own_repository_pr_is_unchanged test_red_ci_holds_closeout test_new_push_restarts_closeout_window test_zero_and_malformed_closeout_window test_unanswered_feedback_and_dirty_worktree_hold_closeout test_initial_observation_uses_forge_timestamp test_missing_forge_timestamp_falls_back_to_observation test_worker_head_can_precede_published_head test_returned_head_restarts_closeout_window test_unacknowledged_feedback_with_observation_fallback test_registered_clones_do_not_establish_ownership test_unreadable_permission_blocks_closeout test_replaced_pr_cannot_closeout_current_task test_closeout_requires_current_ship_metadata test_closeout_accepts_supported_metadata_tails test_ci_lane_disappearing_after_ready_holds_closeout test_permission_lookup_failure_after_readable_observation test_retire_ends_observation_of_a_gone_contribution test_late_owner_of_a_retired_final_contribution_is_not_retired test_retire_is_idempotent_and_refuses_unknown_pairs; do

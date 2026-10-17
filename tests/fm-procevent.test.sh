@@ -2078,7 +2078,9 @@ cat > "$LAVISH_SCRIPTED_BIN/lavish-axi" <<'SH'
 # Stand-in for `lavish-axi poll <file>`, scripted per scenario: LAVISH_SCRIPT
 # names the response for each successive poll, one word per poll, and its last
 # word repeats forever. `interrupt` is the exact transient response the server
-# returns while the board's marks stay available.
+# returns while the board's marks stay available, and `interrupt-help` is the
+# same response as lavish-axi 0.1.83 prints it when its server restarts, help
+# line and all, byte for byte.
 [ "${1-}" != --version ] || { printf '0.1.79\n'; exit 0; }
 n=$(cat "$LAVISH_COUNT" 2>/dev/null || echo 0)
 n=$((n + 1))
@@ -2101,6 +2103,10 @@ i=$((n - 1))
 case "${plan[$i]}" in
   interrupt)
     printf 'error: Lavish Editor poll response was interrupted\ncode: SERVER_ERROR\n'; exit 1 ;;
+  interrupt-help)
+    printf 'error: Lavish Editor poll response was interrupted\ncode: SERVER_ERROR\nhelp[2]: Run `lavish-axi server --verbose` or inspect `~/.lavish-axi/server.log` (`LAVISH_AXI_STATE_DIR/server.log` when set) for server startup or crash diagnostics,Re-run the last `lavish-axi poll <html-file>` command after the server is healthy\n'; exit 1 ;;
+  interrupt-help-extra)
+    printf 'error: Lavish Editor poll response was interrupted\ncode: SERVER_ERROR\nhelp[1]: Re-run the poll\nsession:\n  status: feedback\n'; exit 1 ;;
   near-interrupt)
     printf 'error: Lavish Editor poll response was interrupted \ncode: SERVER_ERROR\n'; exit 1 ;;
   other-server-error)
@@ -2163,6 +2169,31 @@ assert_contains "$(wake_payloads "$HRETRY")" "procevent lavish $retry_id 1" \
 assert_grep 'ship it' "$(first_result "$HRETRY" "$retry_id")" \
   "the announced result is the captain's feedback, not the interruption"
 pass "a transient Lavish poll interruption is retried quietly and never announced"
+
+# The dogfood defect behind the help line: lavish-axi 0.1.83 follows the same two
+# lines with its advice, so restarting the Lavish server captured that response
+# for every watched board and woke the fleet once per board. The advice does not
+# change what the error is, so it is retried quietly exactly like the bare form.
+HHELP="$TMP_ROOT/hhelp"; new_home "$HHELP"
+HELP_ART="$TMP_ROOT/help-board.html"
+printf '<h1>help</h1>\n' > "$HELP_ART"
+lavish_session "$HELP_ART"
+help_id=$("$ROOT/bin/fm-procevent-lavish.sh" source-id "$HELP_ART")
+fm_test_track_procevent_home "$HHELP"
+LAVISH_COUNT="$TMP_ROOT/help-count"; LAVISH_SCRIPT="interrupt-help interrupt-help feedback"
+PATH="$LAVISH_SCRIPTED_BIN:$PATH" FM_HOME="$HHELP" \
+  "$ROOT/bin/fm-procevent-lavish.sh" arm "$HELP_ART" >/dev/null
+PATH="$LAVISH_SCRIPTED_BIN:$PATH" pe "$HHELP" reconcile >/dev/null
+wait_for "$HHELP/state/.wake-queue" || fail "feedback after interrupted polls with help produced no wake"
+[ "$(cat "$LAVISH_COUNT")" = 3 ] \
+  || fail "the listener interrupted with help was polled $(cat "$LAVISH_COUNT") times, not the two quiet retries plus the delivering poll"
+[ "$(count_results "$HHELP" "$help_id")" = 1 ] \
+  || fail "an interruption with help produced $(count_results "$HHELP" "$help_id") captured results instead of one"
+[ "$(wake_payloads "$HHELP" | sort -u | grep -c .)" = 1 ] \
+  || fail "an interruption with help woke the fleet: $(wake_payloads "$HHELP" | sort -u)"
+assert_grep 'ship it' "$(first_result "$HHELP" "$help_id")" \
+  "the announced result after interruptions with help is the captain's feedback"
+pass "the interruption lavish-axi prints with its help line is retried quietly too"
 
 # --- end-user-aligned regression: a retried poll does not resubmit the reply ---
 # The worker hands its round reply to the adapter once. When the first poll of
@@ -2321,7 +2352,30 @@ assert_contains "$(wake_payloads "$HNEAR")" "procevent lavish $near_id 1" \
   "a whitespace variant of the interruption is captured and announced immediately"
 PATH="$LAVISH_SCRIPTED_BIN:$PATH" FM_HOME="$HNEAR" \
   "$ROOT/bin/fm-procevent-lavish.sh" retire "$NEAR_ART" >/dev/null
-pass "only the literal two-line interruption enters the quiet retry policy"
+pass "a whitespace variant of the interruption stays out of the quiet retry policy"
+
+# A help line admits only itself: an interruption whose output continues past
+# its one help line is not the transient response and surfaces on the first poll.
+HEXTRA="$TMP_ROOT/hextra"; new_home "$HEXTRA"
+EXTRA_ART="$TMP_ROOT/extra-board.html"
+printf '<h1>extra</h1>\n' > "$EXTRA_ART"
+lavish_session "$EXTRA_ART"
+extra_id=$("$ROOT/bin/fm-procevent-lavish.sh" source-id "$EXTRA_ART")
+fm_test_track_procevent_home "$HEXTRA"
+LAVISH_COUNT="$TMP_ROOT/extra-count"; LAVISH_SCRIPT="interrupt-help-extra feedback"
+PATH="$LAVISH_SCRIPTED_BIN:$PATH" FM_HOME="$HEXTRA" FM_LAVISH_POLL_RETRY_DELAY=1 \
+  "$ROOT/bin/fm-procevent-lavish.sh" arm "$EXTRA_ART" >/dev/null
+wait_for "$HEXTRA/state/.wake-queue" \
+  || fail "an interruption with more output after its help line is captured and announced immediately"
+[ "$(cat "$LAVISH_COUNT")" = 1 ] \
+  || fail "an interruption with more output after its help line was retried instead of surfacing on its first poll"
+assert_contains "$(wake_payloads "$HEXTRA")" "procevent lavish $extra_id 1" \
+  "an interruption with more output after its help line is captured and announced immediately"
+assert_grep '  status: feedback' "$(first_result "$HEXTRA" "$extra_id")" \
+  "the announced result keeps every byte past the help line"
+PATH="$LAVISH_SCRIPTED_BIN:$PATH" FM_HOME="$HEXTRA" \
+  "$ROOT/bin/fm-procevent-lavish.sh" retire "$EXTRA_ART" >/dev/null
+pass "an interruption that continues past its help line stays out of the quiet retry policy"
 
 # The public arm boundary refuses invalid retry intervals before it publishes a
 # source registration, rather than arming a listener that can only fail later.

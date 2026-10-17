@@ -133,10 +133,10 @@
 #   code: SERVER_ERROR
 #   help[2]: Run `lavish-axi server --verbose` or inspect ...
 #
-# The help line is the advice lavish-axi prints under its errors (0.1.83 does;
-# older releases ended at the code line). That is an internal retry, not news,
-# so registering the raw poll made the generic runner capture it and wake the
-# whole fleet. `poll` therefore re-runs the published poll up to
+# The help line is the advice lavish-axi prints under its errors (verified on
+# 0.1.83); the bare two-line form stays accepted. That is an internal retry,
+# not news, so registering the raw poll made the generic runner capture it and
+# wake the whole fleet. `poll` therefore re-runs the published poll up to
 # POLL_RETRY_LIMIT times for that response, with attempt starts at least
 # POLL_RETRY_DELAY_DEFAULT seconds apart. The match is exact and deliberately
 # narrow: the first two lines must be those exact bytes, and the only thing
@@ -144,9 +144,9 @@
 # whose wording is never read. Real feedback, ended and missing sessions,
 # whitespace variants, any further line, any other SERVER_ERROR, and the same
 # interruption still standing after the bound is spent are all printed straight
-# through and captured normally. The retry is a
-# Lavish fact, so the generic runner in bin/fm-procevent.sh stays
-# adapter-agnostic and learns nothing about it.
+# through and captured normally. The retry is a Lavish fact, so the generic
+# runner in bin/fm-procevent.sh stays adapter-agnostic and learns nothing about
+# it.
 #
 # LOSS LIMITATION, stated plainly. The published poll destructively clears
 # feedback before returning it. A result lost after that clearing and before the
@@ -329,10 +329,10 @@ POLL_RETRY_DELAY_MIN=1
 POLL_RETRY_DELAY_MAX=60
 
 # Exit 10 only for the exact interruption, and nothing else. The response must
-# open with those two lines with those exact bytes and may then carry at most one
-# column-zero `help[N]: ...` line ending the output, the advice newer lavish-axi
-# releases print under every error; that advice never decides what the error
-# is. Whitespace variants, any other line or a second help line, and any other
+# open with those two lines with those exact bytes and may then carry at most
+# one column-zero `help[N]: ...` line ending the output, the advice lavish-axi
+# prints under its errors; that advice never decides what the error is.
+# Whitespace variants, any other line or a second help line, and any other
 # SERVER_ERROR are genuine errors this adapter must never swallow.
 poll_response_filter() {  # <response-file>
   perl -e '

@@ -1,0 +1,3 @@
+ok - record task identity is the directory dirname/basename named
+ok - batched saved-record reads keep every per-file accept and reject verdict
+ok - snapshot and pending create nothing in a home without state

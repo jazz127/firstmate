@@ -1,0 +1,1965 @@
+{
+  "schema": "fm-fleet-snapshot.v1",
+  "generated": "2026-10-17T01:00:00Z",
+  "fm_home": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load",
+  "roots": {
+    "fm_root": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8",
+    "state": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/state",
+    "data": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/data",
+    "config": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/config",
+    "projects": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/projects"
+  },
+  "backlog": {
+    "present": true,
+    "records": [],
+    "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/data/backlog.md"
+  },
+  "tasks": [
+    {
+      "id": "worker01",
+      "kind": "ship",
+      "harness": "claude",
+      "mode": "ship",
+      "yolo": "",
+      "branch": null,
+      "project": "sample",
+      "spawn_gen": null,
+      "backend": "tmux",
+      "remote": null,
+      "paths": {
+        "meta": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/state/worker01.meta",
+          "present": true
+        },
+        "status_log": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/state/worker01.status",
+          "present": true,
+          "kind": "event_history",
+          "last_event": {
+            "state": "needs-decision",
+            "note": "choose route 1",
+            "raw": "needs-decision [key=route-1]: choose route 1",
+            "age_seconds": null
+          }
+        },
+        "worktree": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/projects/worker01",
+          "present": true
+        },
+        "home": {
+          "path": null,
+          "present": false
+        },
+        "report": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/data/worker01/report.md",
+          "present": false
+        }
+      },
+      "secondmate_projects": [],
+      "current_state": {
+        "state": "unknown",
+        "source": "none",
+        "detail": "backend unreachable (tmux endpoint state: unreadable)",
+        "raw": "state: unknown · source: none · backend unreachable (tmux endpoint state: unreadable)",
+        "observed_at": "2026-10-17T01:00:00Z",
+        "freshness": "fresh"
+      },
+      "endpoint": {
+        "target": "fm-lab-snapshot:fm-worker01",
+        "exists": false,
+        "agent_alive": "not_checked",
+        "status": "absent",
+        "observed_at": "2026-10-17T01:00:00Z",
+        "freshness": "fresh"
+      },
+      "pr": {
+        "url": null,
+        "source": "absent",
+        "head": null
+      },
+      "hints": {
+        "pending_decision": true,
+        "blocked_event": false,
+        "open_decisions": [
+          {
+            "key": "route-1",
+            "verb": "needs-decision",
+            "summary": "choose route 1"
+          }
+        ],
+        "scout_report_present": false,
+        "last_event_text": "needs-decision [key=route-1]: choose route 1"
+      },
+      "actions": {
+        "watch": "bin/fm-peek.sh fm-worker01",
+        "steer": "bin/fm-send.sh fm-worker01 '<instruction>'",
+        "return_channel_note": null
+      },
+      "backlog": null
+    },
+    {
+      "id": "worker02",
+      "kind": "ship",
+      "harness": "claude",
+      "mode": "ship",
+      "yolo": "",
+      "branch": null,
+      "project": "sample",
+      "spawn_gen": null,
+      "backend": "tmux",
+      "remote": null,
+      "paths": {
+        "meta": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/state/worker02.meta",
+          "present": true
+        },
+        "status_log": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/state/worker02.status",
+          "present": true,
+          "kind": "event_history",
+          "last_event": {
+            "state": "needs-decision",
+            "note": "choose route 2",
+            "raw": "needs-decision [key=route-2]: choose route 2",
+            "age_seconds": null
+          }
+        },
+        "worktree": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/projects/worker02",
+          "present": true
+        },
+        "home": {
+          "path": null,
+          "present": false
+        },
+        "report": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/data/worker02/report.md",
+          "present": false
+        }
+      },
+      "secondmate_projects": [],
+      "current_state": {
+        "state": "unknown",
+        "source": "none",
+        "detail": "backend unreachable (tmux endpoint state: unreadable)",
+        "raw": "state: unknown · source: none · backend unreachable (tmux endpoint state: unreadable)",
+        "observed_at": "2026-10-17T01:00:00Z",
+        "freshness": "fresh"
+      },
+      "endpoint": {
+        "target": "fm-lab-snapshot:fm-worker02",
+        "exists": false,
+        "agent_alive": "not_checked",
+        "status": "absent",
+        "observed_at": "2026-10-17T01:00:00Z",
+        "freshness": "fresh"
+      },
+      "pr": {
+        "url": null,
+        "source": "absent",
+        "head": null
+      },
+      "hints": {
+        "pending_decision": true,
+        "blocked_event": false,
+        "open_decisions": [
+          {
+            "key": "route-2",
+            "verb": "needs-decision",
+            "summary": "choose route 2"
+          }
+        ],
+        "scout_report_present": false,
+        "last_event_text": "needs-decision [key=route-2]: choose route 2"
+      },
+      "actions": {
+        "watch": "bin/fm-peek.sh fm-worker02",
+        "steer": "bin/fm-send.sh fm-worker02 '<instruction>'",
+        "return_channel_note": null
+      },
+      "backlog": null
+    },
+    {
+      "id": "worker03",
+      "kind": "ship",
+      "harness": "claude",
+      "mode": "ship",
+      "yolo": "",
+      "branch": null,
+      "project": "sample",
+      "spawn_gen": null,
+      "backend": "tmux",
+      "remote": null,
+      "paths": {
+        "meta": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/state/worker03.meta",
+          "present": true
+        },
+        "status_log": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/state/worker03.status",
+          "present": true,
+          "kind": "event_history",
+          "last_event": {
+            "state": "needs-decision",
+            "note": "choose route 3",
+            "raw": "needs-decision [key=route-3]: choose route 3",
+            "age_seconds": null
+          }
+        },
+        "worktree": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/projects/worker03",
+          "present": true
+        },
+        "home": {
+          "path": null,
+          "present": false
+        },
+        "report": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/data/worker03/report.md",
+          "present": false
+        }
+      },
+      "secondmate_projects": [],
+      "current_state": {
+        "state": "unknown",
+        "source": "none",
+        "detail": "backend unreachable (tmux endpoint state: unreadable)",
+        "raw": "state: unknown · source: none · backend unreachable (tmux endpoint state: unreadable)",
+        "observed_at": "2026-10-17T01:00:00Z",
+        "freshness": "fresh"
+      },
+      "endpoint": {
+        "target": "fm-lab-snapshot:fm-worker03",
+        "exists": false,
+        "agent_alive": "not_checked",
+        "status": "absent",
+        "observed_at": "2026-10-17T01:00:00Z",
+        "freshness": "fresh"
+      },
+      "pr": {
+        "url": null,
+        "source": "absent",
+        "head": null
+      },
+      "hints": {
+        "pending_decision": true,
+        "blocked_event": false,
+        "open_decisions": [
+          {
+            "key": "route-3",
+            "verb": "needs-decision",
+            "summary": "choose route 3"
+          }
+        ],
+        "scout_report_present": false,
+        "last_event_text": "needs-decision [key=route-3]: choose route 3"
+      },
+      "actions": {
+        "watch": "bin/fm-peek.sh fm-worker03",
+        "steer": "bin/fm-send.sh fm-worker03 '<instruction>'",
+        "return_channel_note": null
+      },
+      "backlog": null
+    },
+    {
+      "id": "worker04",
+      "kind": "ship",
+      "harness": "claude",
+      "mode": "ship",
+      "yolo": "",
+      "branch": null,
+      "project": "sample",
+      "spawn_gen": null,
+      "backend": "tmux",
+      "remote": null,
+      "paths": {
+        "meta": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/state/worker04.meta",
+          "present": true
+        },
+        "status_log": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/state/worker04.status",
+          "present": true,
+          "kind": "event_history",
+          "last_event": {
+            "state": "needs-decision",
+            "note": "choose route 4",
+            "raw": "needs-decision [key=route-4]: choose route 4",
+            "age_seconds": null
+          }
+        },
+        "worktree": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/projects/worker04",
+          "present": true
+        },
+        "home": {
+          "path": null,
+          "present": false
+        },
+        "report": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/data/worker04/report.md",
+          "present": false
+        }
+      },
+      "secondmate_projects": [],
+      "current_state": {
+        "state": "unknown",
+        "source": "none",
+        "detail": "backend unreachable (tmux endpoint state: unreadable)",
+        "raw": "state: unknown · source: none · backend unreachable (tmux endpoint state: unreadable)",
+        "observed_at": "2026-10-17T01:00:00Z",
+        "freshness": "fresh"
+      },
+      "endpoint": {
+        "target": "fm-lab-snapshot:fm-worker04",
+        "exists": false,
+        "agent_alive": "not_checked",
+        "status": "absent",
+        "observed_at": "2026-10-17T01:00:00Z",
+        "freshness": "fresh"
+      },
+      "pr": {
+        "url": null,
+        "source": "absent",
+        "head": null
+      },
+      "hints": {
+        "pending_decision": true,
+        "blocked_event": false,
+        "open_decisions": [
+          {
+            "key": "route-4",
+            "verb": "needs-decision",
+            "summary": "choose route 4"
+          }
+        ],
+        "scout_report_present": false,
+        "last_event_text": "needs-decision [key=route-4]: choose route 4"
+      },
+      "actions": {
+        "watch": "bin/fm-peek.sh fm-worker04",
+        "steer": "bin/fm-send.sh fm-worker04 '<instruction>'",
+        "return_channel_note": null
+      },
+      "backlog": null
+    },
+    {
+      "id": "worker05",
+      "kind": "ship",
+      "harness": "claude",
+      "mode": "ship",
+      "yolo": "",
+      "branch": null,
+      "project": "sample",
+      "spawn_gen": null,
+      "backend": "tmux",
+      "remote": null,
+      "paths": {
+        "meta": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/state/worker05.meta",
+          "present": true
+        },
+        "status_log": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/state/worker05.status",
+          "present": true,
+          "kind": "event_history",
+          "last_event": {
+            "state": "needs-decision",
+            "note": "choose route 5",
+            "raw": "needs-decision [key=route-5]: choose route 5",
+            "age_seconds": null
+          }
+        },
+        "worktree": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/projects/worker05",
+          "present": true
+        },
+        "home": {
+          "path": null,
+          "present": false
+        },
+        "report": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/data/worker05/report.md",
+          "present": false
+        }
+      },
+      "secondmate_projects": [],
+      "current_state": {
+        "state": "unknown",
+        "source": "none",
+        "detail": "backend unreachable (tmux endpoint state: unreadable)",
+        "raw": "state: unknown · source: none · backend unreachable (tmux endpoint state: unreadable)",
+        "observed_at": "2026-10-17T01:00:00Z",
+        "freshness": "fresh"
+      },
+      "endpoint": {
+        "target": "fm-lab-snapshot:fm-worker05",
+        "exists": false,
+        "agent_alive": "not_checked",
+        "status": "absent",
+        "observed_at": "2026-10-17T01:00:00Z",
+        "freshness": "fresh"
+      },
+      "pr": {
+        "url": null,
+        "source": "absent",
+        "head": null
+      },
+      "hints": {
+        "pending_decision": true,
+        "blocked_event": false,
+        "open_decisions": [
+          {
+            "key": "route-5",
+            "verb": "needs-decision",
+            "summary": "choose route 5"
+          }
+        ],
+        "scout_report_present": false,
+        "last_event_text": "needs-decision [key=route-5]: choose route 5"
+      },
+      "actions": {
+        "watch": "bin/fm-peek.sh fm-worker05",
+        "steer": "bin/fm-send.sh fm-worker05 '<instruction>'",
+        "return_channel_note": null
+      },
+      "backlog": null
+    },
+    {
+      "id": "worker06",
+      "kind": "ship",
+      "harness": "claude",
+      "mode": "ship",
+      "yolo": "",
+      "branch": null,
+      "project": "sample",
+      "spawn_gen": null,
+      "backend": "tmux",
+      "remote": null,
+      "paths": {
+        "meta": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/state/worker06.meta",
+          "present": true
+        },
+        "status_log": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/state/worker06.status",
+          "present": true,
+          "kind": "event_history",
+          "last_event": {
+            "state": "needs-decision",
+            "note": "choose route 6",
+            "raw": "needs-decision [key=route-6]: choose route 6",
+            "age_seconds": null
+          }
+        },
+        "worktree": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/projects/worker06",
+          "present": true
+        },
+        "home": {
+          "path": null,
+          "present": false
+        },
+        "report": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/data/worker06/report.md",
+          "present": false
+        }
+      },
+      "secondmate_projects": [],
+      "current_state": {
+        "state": "unknown",
+        "source": "none",
+        "detail": "backend unreachable (tmux endpoint state: unreadable)",
+        "raw": "state: unknown · source: none · backend unreachable (tmux endpoint state: unreadable)",
+        "observed_at": "2026-10-17T01:00:00Z",
+        "freshness": "fresh"
+      },
+      "endpoint": {
+        "target": "fm-lab-snapshot:fm-worker06",
+        "exists": false,
+        "agent_alive": "not_checked",
+        "status": "absent",
+        "observed_at": "2026-10-17T01:00:00Z",
+        "freshness": "fresh"
+      },
+      "pr": {
+        "url": null,
+        "source": "absent",
+        "head": null
+      },
+      "hints": {
+        "pending_decision": true,
+        "blocked_event": false,
+        "open_decisions": [
+          {
+            "key": "route-6",
+            "verb": "needs-decision",
+            "summary": "choose route 6"
+          }
+        ],
+        "scout_report_present": false,
+        "last_event_text": "needs-decision [key=route-6]: choose route 6"
+      },
+      "actions": {
+        "watch": "bin/fm-peek.sh fm-worker06",
+        "steer": "bin/fm-send.sh fm-worker06 '<instruction>'",
+        "return_channel_note": null
+      },
+      "backlog": null
+    },
+    {
+      "id": "worker07",
+      "kind": "ship",
+      "harness": "claude",
+      "mode": "ship",
+      "yolo": "",
+      "branch": null,
+      "project": "sample",
+      "spawn_gen": null,
+      "backend": "tmux",
+      "remote": null,
+      "paths": {
+        "meta": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/state/worker07.meta",
+          "present": true
+        },
+        "status_log": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/state/worker07.status",
+          "present": true,
+          "kind": "event_history",
+          "last_event": {
+            "state": "needs-decision",
+            "note": "choose route 7",
+            "raw": "needs-decision [key=route-7]: choose route 7",
+            "age_seconds": null
+          }
+        },
+        "worktree": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/projects/worker07",
+          "present": true
+        },
+        "home": {
+          "path": null,
+          "present": false
+        },
+        "report": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/data/worker07/report.md",
+          "present": false
+        }
+      },
+      "secondmate_projects": [],
+      "current_state": {
+        "state": "unknown",
+        "source": "none",
+        "detail": "backend unreachable (tmux endpoint state: unreadable)",
+        "raw": "state: unknown · source: none · backend unreachable (tmux endpoint state: unreadable)",
+        "observed_at": "2026-10-17T01:00:00Z",
+        "freshness": "fresh"
+      },
+      "endpoint": {
+        "target": "fm-lab-snapshot:fm-worker07",
+        "exists": false,
+        "agent_alive": "not_checked",
+        "status": "absent",
+        "observed_at": "2026-10-17T01:00:00Z",
+        "freshness": "fresh"
+      },
+      "pr": {
+        "url": null,
+        "source": "absent",
+        "head": null
+      },
+      "hints": {
+        "pending_decision": true,
+        "blocked_event": false,
+        "open_decisions": [
+          {
+            "key": "route-7",
+            "verb": "needs-decision",
+            "summary": "choose route 7"
+          }
+        ],
+        "scout_report_present": false,
+        "last_event_text": "needs-decision [key=route-7]: choose route 7"
+      },
+      "actions": {
+        "watch": "bin/fm-peek.sh fm-worker07",
+        "steer": "bin/fm-send.sh fm-worker07 '<instruction>'",
+        "return_channel_note": null
+      },
+      "backlog": null
+    },
+    {
+      "id": "worker08",
+      "kind": "ship",
+      "harness": "claude",
+      "mode": "ship",
+      "yolo": "",
+      "branch": null,
+      "project": "sample",
+      "spawn_gen": null,
+      "backend": "tmux",
+      "remote": null,
+      "paths": {
+        "meta": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/state/worker08.meta",
+          "present": true
+        },
+        "status_log": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/state/worker08.status",
+          "present": true,
+          "kind": "event_history",
+          "last_event": {
+            "state": "needs-decision",
+            "note": "choose route 8",
+            "raw": "needs-decision [key=route-8]: choose route 8",
+            "age_seconds": null
+          }
+        },
+        "worktree": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/projects/worker08",
+          "present": true
+        },
+        "home": {
+          "path": null,
+          "present": false
+        },
+        "report": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/data/worker08/report.md",
+          "present": false
+        }
+      },
+      "secondmate_projects": [],
+      "current_state": {
+        "state": "unknown",
+        "source": "none",
+        "detail": "backend unreachable (tmux endpoint state: unreadable)",
+        "raw": "state: unknown · source: none · backend unreachable (tmux endpoint state: unreadable)",
+        "observed_at": "2026-10-17T01:00:00Z",
+        "freshness": "fresh"
+      },
+      "endpoint": {
+        "target": "fm-lab-snapshot:fm-worker08",
+        "exists": false,
+        "agent_alive": "not_checked",
+        "status": "absent",
+        "observed_at": "2026-10-17T01:00:00Z",
+        "freshness": "fresh"
+      },
+      "pr": {
+        "url": null,
+        "source": "absent",
+        "head": null
+      },
+      "hints": {
+        "pending_decision": true,
+        "blocked_event": false,
+        "open_decisions": [
+          {
+            "key": "route-8",
+            "verb": "needs-decision",
+            "summary": "choose route 8"
+          }
+        ],
+        "scout_report_present": false,
+        "last_event_text": "needs-decision [key=route-8]: choose route 8"
+      },
+      "actions": {
+        "watch": "bin/fm-peek.sh fm-worker08",
+        "steer": "bin/fm-send.sh fm-worker08 '<instruction>'",
+        "return_channel_note": null
+      },
+      "backlog": null
+    },
+    {
+      "id": "worker09",
+      "kind": "ship",
+      "harness": "claude",
+      "mode": "ship",
+      "yolo": "",
+      "branch": null,
+      "project": "sample",
+      "spawn_gen": null,
+      "backend": "tmux",
+      "remote": null,
+      "paths": {
+        "meta": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/state/worker09.meta",
+          "present": true
+        },
+        "status_log": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/state/worker09.status",
+          "present": true,
+          "kind": "event_history",
+          "last_event": {
+            "state": "needs-decision",
+            "note": "choose route 9",
+            "raw": "needs-decision [key=route-9]: choose route 9",
+            "age_seconds": null
+          }
+        },
+        "worktree": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/projects/worker09",
+          "present": true
+        },
+        "home": {
+          "path": null,
+          "present": false
+        },
+        "report": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/data/worker09/report.md",
+          "present": false
+        }
+      },
+      "secondmate_projects": [],
+      "current_state": {
+        "state": "unknown",
+        "source": "none",
+        "detail": "backend unreachable (tmux endpoint state: unreadable)",
+        "raw": "state: unknown · source: none · backend unreachable (tmux endpoint state: unreadable)",
+        "observed_at": "2026-10-17T01:00:00Z",
+        "freshness": "fresh"
+      },
+      "endpoint": {
+        "target": "fm-lab-snapshot:fm-worker09",
+        "exists": false,
+        "agent_alive": "not_checked",
+        "status": "absent",
+        "observed_at": "2026-10-17T01:00:00Z",
+        "freshness": "fresh"
+      },
+      "pr": {
+        "url": null,
+        "source": "absent",
+        "head": null
+      },
+      "hints": {
+        "pending_decision": true,
+        "blocked_event": false,
+        "open_decisions": [
+          {
+            "key": "route-9",
+            "verb": "needs-decision",
+            "summary": "choose route 9"
+          }
+        ],
+        "scout_report_present": false,
+        "last_event_text": "needs-decision [key=route-9]: choose route 9"
+      },
+      "actions": {
+        "watch": "bin/fm-peek.sh fm-worker09",
+        "steer": "bin/fm-send.sh fm-worker09 '<instruction>'",
+        "return_channel_note": null
+      },
+      "backlog": null
+    },
+    {
+      "id": "worker10",
+      "kind": "ship",
+      "harness": "claude",
+      "mode": "ship",
+      "yolo": "",
+      "branch": null,
+      "project": "sample",
+      "spawn_gen": null,
+      "backend": "tmux",
+      "remote": null,
+      "paths": {
+        "meta": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/state/worker10.meta",
+          "present": true
+        },
+        "status_log": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/state/worker10.status",
+          "present": true,
+          "kind": "event_history",
+          "last_event": {
+            "state": "needs-decision",
+            "note": "choose route 10",
+            "raw": "needs-decision [key=route-10]: choose route 10",
+            "age_seconds": null
+          }
+        },
+        "worktree": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/projects/worker10",
+          "present": true
+        },
+        "home": {
+          "path": null,
+          "present": false
+        },
+        "report": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/data/worker10/report.md",
+          "present": false
+        }
+      },
+      "secondmate_projects": [],
+      "current_state": {
+        "state": "unknown",
+        "source": "none",
+        "detail": "backend unreachable (tmux endpoint state: unreadable)",
+        "raw": "state: unknown · source: none · backend unreachable (tmux endpoint state: unreadable)",
+        "observed_at": "2026-10-17T01:00:00Z",
+        "freshness": "fresh"
+      },
+      "endpoint": {
+        "target": "fm-lab-snapshot:fm-worker10",
+        "exists": false,
+        "agent_alive": "not_checked",
+        "status": "absent",
+        "observed_at": "2026-10-17T01:00:00Z",
+        "freshness": "fresh"
+      },
+      "pr": {
+        "url": null,
+        "source": "absent",
+        "head": null
+      },
+      "hints": {
+        "pending_decision": true,
+        "blocked_event": false,
+        "open_decisions": [
+          {
+            "key": "route-10",
+            "verb": "needs-decision",
+            "summary": "choose route 10"
+          }
+        ],
+        "scout_report_present": false,
+        "last_event_text": "needs-decision [key=route-10]: choose route 10"
+      },
+      "actions": {
+        "watch": "bin/fm-peek.sh fm-worker10",
+        "steer": "bin/fm-send.sh fm-worker10 '<instruction>'",
+        "return_channel_note": null
+      },
+      "backlog": null
+    },
+    {
+      "id": "worker11",
+      "kind": "ship",
+      "harness": "claude",
+      "mode": "ship",
+      "yolo": "",
+      "branch": null,
+      "project": "sample",
+      "spawn_gen": null,
+      "backend": "tmux",
+      "remote": null,
+      "paths": {
+        "meta": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/state/worker11.meta",
+          "present": true
+        },
+        "status_log": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/state/worker11.status",
+          "present": true,
+          "kind": "event_history",
+          "last_event": {
+            "state": "needs-decision",
+            "note": "choose route 11",
+            "raw": "needs-decision [key=route-11]: choose route 11",
+            "age_seconds": null
+          }
+        },
+        "worktree": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/projects/worker11",
+          "present": true
+        },
+        "home": {
+          "path": null,
+          "present": false
+        },
+        "report": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/data/worker11/report.md",
+          "present": false
+        }
+      },
+      "secondmate_projects": [],
+      "current_state": {
+        "state": "unknown",
+        "source": "none",
+        "detail": "backend unreachable (tmux endpoint state: unreadable)",
+        "raw": "state: unknown · source: none · backend unreachable (tmux endpoint state: unreadable)",
+        "observed_at": "2026-10-17T01:00:00Z",
+        "freshness": "fresh"
+      },
+      "endpoint": {
+        "target": "fm-lab-snapshot:fm-worker11",
+        "exists": false,
+        "agent_alive": "not_checked",
+        "status": "absent",
+        "observed_at": "2026-10-17T01:00:00Z",
+        "freshness": "fresh"
+      },
+      "pr": {
+        "url": null,
+        "source": "absent",
+        "head": null
+      },
+      "hints": {
+        "pending_decision": true,
+        "blocked_event": false,
+        "open_decisions": [
+          {
+            "key": "route-11",
+            "verb": "needs-decision",
+            "summary": "choose route 11"
+          }
+        ],
+        "scout_report_present": false,
+        "last_event_text": "needs-decision [key=route-11]: choose route 11"
+      },
+      "actions": {
+        "watch": "bin/fm-peek.sh fm-worker11",
+        "steer": "bin/fm-send.sh fm-worker11 '<instruction>'",
+        "return_channel_note": null
+      },
+      "backlog": null
+    },
+    {
+      "id": "worker12",
+      "kind": "ship",
+      "harness": "claude",
+      "mode": "ship",
+      "yolo": "",
+      "branch": null,
+      "project": "sample",
+      "spawn_gen": null,
+      "backend": "tmux",
+      "remote": null,
+      "paths": {
+        "meta": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/state/worker12.meta",
+          "present": true
+        },
+        "status_log": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/state/worker12.status",
+          "present": true,
+          "kind": "event_history",
+          "last_event": {
+            "state": "needs-decision",
+            "note": "choose route 12",
+            "raw": "needs-decision [key=route-12]: choose route 12",
+            "age_seconds": null
+          }
+        },
+        "worktree": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/projects/worker12",
+          "present": true
+        },
+        "home": {
+          "path": null,
+          "present": false
+        },
+        "report": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/data/worker12/report.md",
+          "present": false
+        }
+      },
+      "secondmate_projects": [],
+      "current_state": {
+        "state": "unknown",
+        "source": "none",
+        "detail": "backend unreachable (tmux endpoint state: unreadable)",
+        "raw": "state: unknown · source: none · backend unreachable (tmux endpoint state: unreadable)",
+        "observed_at": "2026-10-17T01:00:00Z",
+        "freshness": "fresh"
+      },
+      "endpoint": {
+        "target": "fm-lab-snapshot:fm-worker12",
+        "exists": false,
+        "agent_alive": "not_checked",
+        "status": "absent",
+        "observed_at": "2026-10-17T01:00:00Z",
+        "freshness": "fresh"
+      },
+      "pr": {
+        "url": null,
+        "source": "absent",
+        "head": null
+      },
+      "hints": {
+        "pending_decision": true,
+        "blocked_event": false,
+        "open_decisions": [
+          {
+            "key": "route-12",
+            "verb": "needs-decision",
+            "summary": "choose route 12"
+          }
+        ],
+        "scout_report_present": false,
+        "last_event_text": "needs-decision [key=route-12]: choose route 12"
+      },
+      "actions": {
+        "watch": "bin/fm-peek.sh fm-worker12",
+        "steer": "bin/fm-send.sh fm-worker12 '<instruction>'",
+        "return_channel_note": null
+      },
+      "backlog": null
+    },
+    {
+      "id": "worker13",
+      "kind": "ship",
+      "harness": "claude",
+      "mode": "ship",
+      "yolo": "",
+      "branch": null,
+      "project": "sample",
+      "spawn_gen": null,
+      "backend": "tmux",
+      "remote": null,
+      "paths": {
+        "meta": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/state/worker13.meta",
+          "present": true
+        },
+        "status_log": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/state/worker13.status",
+          "present": true,
+          "kind": "event_history",
+          "last_event": {
+            "state": "needs-decision",
+            "note": "choose route 13",
+            "raw": "needs-decision [key=route-13]: choose route 13",
+            "age_seconds": null
+          }
+        },
+        "worktree": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/projects/worker13",
+          "present": true
+        },
+        "home": {
+          "path": null,
+          "present": false
+        },
+        "report": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/data/worker13/report.md",
+          "present": false
+        }
+      },
+      "secondmate_projects": [],
+      "current_state": {
+        "state": "unknown",
+        "source": "none",
+        "detail": "backend unreachable (tmux endpoint state: unreadable)",
+        "raw": "state: unknown · source: none · backend unreachable (tmux endpoint state: unreadable)",
+        "observed_at": "2026-10-17T01:00:00Z",
+        "freshness": "fresh"
+      },
+      "endpoint": {
+        "target": "fm-lab-snapshot:fm-worker13",
+        "exists": false,
+        "agent_alive": "not_checked",
+        "status": "absent",
+        "observed_at": "2026-10-17T01:00:00Z",
+        "freshness": "fresh"
+      },
+      "pr": {
+        "url": null,
+        "source": "absent",
+        "head": null
+      },
+      "hints": {
+        "pending_decision": true,
+        "blocked_event": false,
+        "open_decisions": [
+          {
+            "key": "route-13",
+            "verb": "needs-decision",
+            "summary": "choose route 13"
+          }
+        ],
+        "scout_report_present": false,
+        "last_event_text": "needs-decision [key=route-13]: choose route 13"
+      },
+      "actions": {
+        "watch": "bin/fm-peek.sh fm-worker13",
+        "steer": "bin/fm-send.sh fm-worker13 '<instruction>'",
+        "return_channel_note": null
+      },
+      "backlog": null
+    },
+    {
+      "id": "worker14",
+      "kind": "ship",
+      "harness": "claude",
+      "mode": "ship",
+      "yolo": "",
+      "branch": null,
+      "project": "sample",
+      "spawn_gen": null,
+      "backend": "tmux",
+      "remote": null,
+      "paths": {
+        "meta": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/state/worker14.meta",
+          "present": true
+        },
+        "status_log": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/state/worker14.status",
+          "present": true,
+          "kind": "event_history",
+          "last_event": {
+            "state": "needs-decision",
+            "note": "choose route 14",
+            "raw": "needs-decision [key=route-14]: choose route 14",
+            "age_seconds": null
+          }
+        },
+        "worktree": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/projects/worker14",
+          "present": true
+        },
+        "home": {
+          "path": null,
+          "present": false
+        },
+        "report": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/data/worker14/report.md",
+          "present": false
+        }
+      },
+      "secondmate_projects": [],
+      "current_state": {
+        "state": "unknown",
+        "source": "none",
+        "detail": "backend unreachable (tmux endpoint state: unreadable)",
+        "raw": "state: unknown · source: none · backend unreachable (tmux endpoint state: unreadable)",
+        "observed_at": "2026-10-17T01:00:00Z",
+        "freshness": "fresh"
+      },
+      "endpoint": {
+        "target": "fm-lab-snapshot:fm-worker14",
+        "exists": false,
+        "agent_alive": "not_checked",
+        "status": "absent",
+        "observed_at": "2026-10-17T01:00:00Z",
+        "freshness": "fresh"
+      },
+      "pr": {
+        "url": null,
+        "source": "absent",
+        "head": null
+      },
+      "hints": {
+        "pending_decision": true,
+        "blocked_event": false,
+        "open_decisions": [
+          {
+            "key": "route-14",
+            "verb": "needs-decision",
+            "summary": "choose route 14"
+          }
+        ],
+        "scout_report_present": false,
+        "last_event_text": "needs-decision [key=route-14]: choose route 14"
+      },
+      "actions": {
+        "watch": "bin/fm-peek.sh fm-worker14",
+        "steer": "bin/fm-send.sh fm-worker14 '<instruction>'",
+        "return_channel_note": null
+      },
+      "backlog": null
+    },
+    {
+      "id": "worker15",
+      "kind": "ship",
+      "harness": "claude",
+      "mode": "ship",
+      "yolo": "",
+      "branch": null,
+      "project": "sample",
+      "spawn_gen": null,
+      "backend": "tmux",
+      "remote": null,
+      "paths": {
+        "meta": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/state/worker15.meta",
+          "present": true
+        },
+        "status_log": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/state/worker15.status",
+          "present": true,
+          "kind": "event_history",
+          "last_event": {
+            "state": "needs-decision",
+            "note": "choose route 15",
+            "raw": "needs-decision [key=route-15]: choose route 15",
+            "age_seconds": null
+          }
+        },
+        "worktree": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/projects/worker15",
+          "present": true
+        },
+        "home": {
+          "path": null,
+          "present": false
+        },
+        "report": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/data/worker15/report.md",
+          "present": false
+        }
+      },
+      "secondmate_projects": [],
+      "current_state": {
+        "state": "unknown",
+        "source": "none",
+        "detail": "backend unreachable (tmux endpoint state: unreadable)",
+        "raw": "state: unknown · source: none · backend unreachable (tmux endpoint state: unreadable)",
+        "observed_at": "2026-10-17T01:00:00Z",
+        "freshness": "fresh"
+      },
+      "endpoint": {
+        "target": "fm-lab-snapshot:fm-worker15",
+        "exists": false,
+        "agent_alive": "not_checked",
+        "status": "absent",
+        "observed_at": "2026-10-17T01:00:00Z",
+        "freshness": "fresh"
+      },
+      "pr": {
+        "url": null,
+        "source": "absent",
+        "head": null
+      },
+      "hints": {
+        "pending_decision": true,
+        "blocked_event": false,
+        "open_decisions": [
+          {
+            "key": "route-15",
+            "verb": "needs-decision",
+            "summary": "choose route 15"
+          }
+        ],
+        "scout_report_present": false,
+        "last_event_text": "needs-decision [key=route-15]: choose route 15"
+      },
+      "actions": {
+        "watch": "bin/fm-peek.sh fm-worker15",
+        "steer": "bin/fm-send.sh fm-worker15 '<instruction>'",
+        "return_channel_note": null
+      },
+      "backlog": null
+    },
+    {
+      "id": "worker16",
+      "kind": "ship",
+      "harness": "claude",
+      "mode": "ship",
+      "yolo": "",
+      "branch": null,
+      "project": "sample",
+      "spawn_gen": null,
+      "backend": "tmux",
+      "remote": null,
+      "paths": {
+        "meta": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/state/worker16.meta",
+          "present": true
+        },
+        "status_log": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/state/worker16.status",
+          "present": true,
+          "kind": "event_history",
+          "last_event": {
+            "state": "needs-decision",
+            "note": "choose route 16",
+            "raw": "needs-decision [key=route-16]: choose route 16",
+            "age_seconds": null
+          }
+        },
+        "worktree": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/projects/worker16",
+          "present": true
+        },
+        "home": {
+          "path": null,
+          "present": false
+        },
+        "report": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/data/worker16/report.md",
+          "present": false
+        }
+      },
+      "secondmate_projects": [],
+      "current_state": {
+        "state": "unknown",
+        "source": "none",
+        "detail": "backend unreachable (tmux endpoint state: unreadable)",
+        "raw": "state: unknown · source: none · backend unreachable (tmux endpoint state: unreadable)",
+        "observed_at": "2026-10-17T01:00:00Z",
+        "freshness": "fresh"
+      },
+      "endpoint": {
+        "target": "fm-lab-snapshot:fm-worker16",
+        "exists": false,
+        "agent_alive": "not_checked",
+        "status": "absent",
+        "observed_at": "2026-10-17T01:00:00Z",
+        "freshness": "fresh"
+      },
+      "pr": {
+        "url": null,
+        "source": "absent",
+        "head": null
+      },
+      "hints": {
+        "pending_decision": true,
+        "blocked_event": false,
+        "open_decisions": [
+          {
+            "key": "route-16",
+            "verb": "needs-decision",
+            "summary": "choose route 16"
+          }
+        ],
+        "scout_report_present": false,
+        "last_event_text": "needs-decision [key=route-16]: choose route 16"
+      },
+      "actions": {
+        "watch": "bin/fm-peek.sh fm-worker16",
+        "steer": "bin/fm-send.sh fm-worker16 '<instruction>'",
+        "return_channel_note": null
+      },
+      "backlog": null
+    },
+    {
+      "id": "worker17",
+      "kind": "ship",
+      "harness": "claude",
+      "mode": "ship",
+      "yolo": "",
+      "branch": null,
+      "project": "sample",
+      "spawn_gen": null,
+      "backend": "tmux",
+      "remote": null,
+      "paths": {
+        "meta": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/state/worker17.meta",
+          "present": true
+        },
+        "status_log": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/state/worker17.status",
+          "present": true,
+          "kind": "event_history",
+          "last_event": {
+            "state": "needs-decision",
+            "note": "choose route 17",
+            "raw": "needs-decision [key=route-17]: choose route 17",
+            "age_seconds": null
+          }
+        },
+        "worktree": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/projects/worker17",
+          "present": true
+        },
+        "home": {
+          "path": null,
+          "present": false
+        },
+        "report": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/data/worker17/report.md",
+          "present": false
+        }
+      },
+      "secondmate_projects": [],
+      "current_state": {
+        "state": "unknown",
+        "source": "none",
+        "detail": "backend unreachable (tmux endpoint state: unreadable)",
+        "raw": "state: unknown · source: none · backend unreachable (tmux endpoint state: unreadable)",
+        "observed_at": "2026-10-17T01:00:00Z",
+        "freshness": "fresh"
+      },
+      "endpoint": {
+        "target": "fm-lab-snapshot:fm-worker17",
+        "exists": false,
+        "agent_alive": "not_checked",
+        "status": "absent",
+        "observed_at": "2026-10-17T01:00:00Z",
+        "freshness": "fresh"
+      },
+      "pr": {
+        "url": null,
+        "source": "absent",
+        "head": null
+      },
+      "hints": {
+        "pending_decision": true,
+        "blocked_event": false,
+        "open_decisions": [
+          {
+            "key": "route-17",
+            "verb": "needs-decision",
+            "summary": "choose route 17"
+          }
+        ],
+        "scout_report_present": false,
+        "last_event_text": "needs-decision [key=route-17]: choose route 17"
+      },
+      "actions": {
+        "watch": "bin/fm-peek.sh fm-worker17",
+        "steer": "bin/fm-send.sh fm-worker17 '<instruction>'",
+        "return_channel_note": null
+      },
+      "backlog": null
+    },
+    {
+      "id": "worker18",
+      "kind": "ship",
+      "harness": "claude",
+      "mode": "ship",
+      "yolo": "",
+      "branch": null,
+      "project": "sample",
+      "spawn_gen": null,
+      "backend": "tmux",
+      "remote": null,
+      "paths": {
+        "meta": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/state/worker18.meta",
+          "present": true
+        },
+        "status_log": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/state/worker18.status",
+          "present": true,
+          "kind": "event_history",
+          "last_event": {
+            "state": "needs-decision",
+            "note": "choose route 18",
+            "raw": "needs-decision [key=route-18]: choose route 18",
+            "age_seconds": null
+          }
+        },
+        "worktree": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/projects/worker18",
+          "present": true
+        },
+        "home": {
+          "path": null,
+          "present": false
+        },
+        "report": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/data/worker18/report.md",
+          "present": false
+        }
+      },
+      "secondmate_projects": [],
+      "current_state": {
+        "state": "unknown",
+        "source": "none",
+        "detail": "backend unreachable (tmux endpoint state: unreadable)",
+        "raw": "state: unknown · source: none · backend unreachable (tmux endpoint state: unreadable)",
+        "observed_at": "2026-10-17T01:00:00Z",
+        "freshness": "fresh"
+      },
+      "endpoint": {
+        "target": "fm-lab-snapshot:fm-worker18",
+        "exists": false,
+        "agent_alive": "not_checked",
+        "status": "absent",
+        "observed_at": "2026-10-17T01:00:00Z",
+        "freshness": "fresh"
+      },
+      "pr": {
+        "url": null,
+        "source": "absent",
+        "head": null
+      },
+      "hints": {
+        "pending_decision": true,
+        "blocked_event": false,
+        "open_decisions": [
+          {
+            "key": "route-18",
+            "verb": "needs-decision",
+            "summary": "choose route 18"
+          }
+        ],
+        "scout_report_present": false,
+        "last_event_text": "needs-decision [key=route-18]: choose route 18"
+      },
+      "actions": {
+        "watch": "bin/fm-peek.sh fm-worker18",
+        "steer": "bin/fm-send.sh fm-worker18 '<instruction>'",
+        "return_channel_note": null
+      },
+      "backlog": null
+    },
+    {
+      "id": "worker19",
+      "kind": "ship",
+      "harness": "claude",
+      "mode": "ship",
+      "yolo": "",
+      "branch": null,
+      "project": "sample",
+      "spawn_gen": null,
+      "backend": "tmux",
+      "remote": null,
+      "paths": {
+        "meta": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/state/worker19.meta",
+          "present": true
+        },
+        "status_log": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/state/worker19.status",
+          "present": true,
+          "kind": "event_history",
+          "last_event": {
+            "state": "needs-decision",
+            "note": "choose route 19",
+            "raw": "needs-decision [key=route-19]: choose route 19",
+            "age_seconds": null
+          }
+        },
+        "worktree": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/projects/worker19",
+          "present": true
+        },
+        "home": {
+          "path": null,
+          "present": false
+        },
+        "report": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/data/worker19/report.md",
+          "present": false
+        }
+      },
+      "secondmate_projects": [],
+      "current_state": {
+        "state": "unknown",
+        "source": "none",
+        "detail": "backend unreachable (tmux endpoint state: unreadable)",
+        "raw": "state: unknown · source: none · backend unreachable (tmux endpoint state: unreadable)",
+        "observed_at": "2026-10-17T01:00:00Z",
+        "freshness": "fresh"
+      },
+      "endpoint": {
+        "target": "fm-lab-snapshot:fm-worker19",
+        "exists": false,
+        "agent_alive": "not_checked",
+        "status": "absent",
+        "observed_at": "2026-10-17T01:00:00Z",
+        "freshness": "fresh"
+      },
+      "pr": {
+        "url": null,
+        "source": "absent",
+        "head": null
+      },
+      "hints": {
+        "pending_decision": true,
+        "blocked_event": false,
+        "open_decisions": [
+          {
+            "key": "route-19",
+            "verb": "needs-decision",
+            "summary": "choose route 19"
+          }
+        ],
+        "scout_report_present": false,
+        "last_event_text": "needs-decision [key=route-19]: choose route 19"
+      },
+      "actions": {
+        "watch": "bin/fm-peek.sh fm-worker19",
+        "steer": "bin/fm-send.sh fm-worker19 '<instruction>'",
+        "return_channel_note": null
+      },
+      "backlog": null
+    },
+    {
+      "id": "worker20",
+      "kind": "ship",
+      "harness": "claude",
+      "mode": "ship",
+      "yolo": "",
+      "branch": null,
+      "project": "sample",
+      "spawn_gen": null,
+      "backend": "tmux",
+      "remote": null,
+      "paths": {
+        "meta": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/state/worker20.meta",
+          "present": true
+        },
+        "status_log": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/state/worker20.status",
+          "present": true,
+          "kind": "event_history",
+          "last_event": {
+            "state": "needs-decision",
+            "note": "choose route 20",
+            "raw": "needs-decision [key=route-20]: choose route 20",
+            "age_seconds": null
+          }
+        },
+        "worktree": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/projects/worker20",
+          "present": true
+        },
+        "home": {
+          "path": null,
+          "present": false
+        },
+        "report": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/data/worker20/report.md",
+          "present": false
+        }
+      },
+      "secondmate_projects": [],
+      "current_state": {
+        "state": "unknown",
+        "source": "none",
+        "detail": "backend unreachable (tmux endpoint state: unreadable)",
+        "raw": "state: unknown · source: none · backend unreachable (tmux endpoint state: unreadable)",
+        "observed_at": "2026-10-17T01:00:00Z",
+        "freshness": "fresh"
+      },
+      "endpoint": {
+        "target": "fm-lab-snapshot:fm-worker20",
+        "exists": false,
+        "agent_alive": "not_checked",
+        "status": "absent",
+        "observed_at": "2026-10-17T01:00:00Z",
+        "freshness": "fresh"
+      },
+      "pr": {
+        "url": null,
+        "source": "absent",
+        "head": null
+      },
+      "hints": {
+        "pending_decision": true,
+        "blocked_event": false,
+        "open_decisions": [
+          {
+            "key": "route-20",
+            "verb": "needs-decision",
+            "summary": "choose route 20"
+          }
+        ],
+        "scout_report_present": false,
+        "last_event_text": "needs-decision [key=route-20]: choose route 20"
+      },
+      "actions": {
+        "watch": "bin/fm-peek.sh fm-worker20",
+        "steer": "bin/fm-send.sh fm-worker20 '<instruction>'",
+        "return_channel_note": null
+      },
+      "backlog": null
+    },
+    {
+      "id": "worker21",
+      "kind": "ship",
+      "harness": "claude",
+      "mode": "ship",
+      "yolo": "",
+      "branch": null,
+      "project": "sample",
+      "spawn_gen": null,
+      "backend": "tmux",
+      "remote": null,
+      "paths": {
+        "meta": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/state/worker21.meta",
+          "present": true
+        },
+        "status_log": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/state/worker21.status",
+          "present": true,
+          "kind": "event_history",
+          "last_event": {
+            "state": "needs-decision",
+            "note": "choose route 21",
+            "raw": "needs-decision [key=route-21]: choose route 21",
+            "age_seconds": null
+          }
+        },
+        "worktree": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/projects/worker21",
+          "present": true
+        },
+        "home": {
+          "path": null,
+          "present": false
+        },
+        "report": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/data/worker21/report.md",
+          "present": false
+        }
+      },
+      "secondmate_projects": [],
+      "current_state": {
+        "state": "unknown",
+        "source": "none",
+        "detail": "backend unreachable (tmux endpoint state: unreadable)",
+        "raw": "state: unknown · source: none · backend unreachable (tmux endpoint state: unreadable)",
+        "observed_at": "2026-10-17T01:00:00Z",
+        "freshness": "fresh"
+      },
+      "endpoint": {
+        "target": "fm-lab-snapshot:fm-worker21",
+        "exists": false,
+        "agent_alive": "not_checked",
+        "status": "absent",
+        "observed_at": "2026-10-17T01:00:00Z",
+        "freshness": "fresh"
+      },
+      "pr": {
+        "url": null,
+        "source": "absent",
+        "head": null
+      },
+      "hints": {
+        "pending_decision": true,
+        "blocked_event": false,
+        "open_decisions": [
+          {
+            "key": "route-21",
+            "verb": "needs-decision",
+            "summary": "choose route 21"
+          }
+        ],
+        "scout_report_present": false,
+        "last_event_text": "needs-decision [key=route-21]: choose route 21"
+      },
+      "actions": {
+        "watch": "bin/fm-peek.sh fm-worker21",
+        "steer": "bin/fm-send.sh fm-worker21 '<instruction>'",
+        "return_channel_note": null
+      },
+      "backlog": null
+    },
+    {
+      "id": "worker22",
+      "kind": "ship",
+      "harness": "claude",
+      "mode": "ship",
+      "yolo": "",
+      "branch": null,
+      "project": "sample",
+      "spawn_gen": null,
+      "backend": "tmux",
+      "remote": null,
+      "paths": {
+        "meta": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/state/worker22.meta",
+          "present": true
+        },
+        "status_log": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/state/worker22.status",
+          "present": true,
+          "kind": "event_history",
+          "last_event": {
+            "state": "needs-decision",
+            "note": "choose route 22",
+            "raw": "needs-decision [key=route-22]: choose route 22",
+            "age_seconds": null
+          }
+        },
+        "worktree": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/projects/worker22",
+          "present": true
+        },
+        "home": {
+          "path": null,
+          "present": false
+        },
+        "report": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/data/worker22/report.md",
+          "present": false
+        }
+      },
+      "secondmate_projects": [],
+      "current_state": {
+        "state": "unknown",
+        "source": "none",
+        "detail": "backend unreachable (tmux endpoint state: unreadable)",
+        "raw": "state: unknown · source: none · backend unreachable (tmux endpoint state: unreadable)",
+        "observed_at": "2026-10-17T01:00:00Z",
+        "freshness": "fresh"
+      },
+      "endpoint": {
+        "target": "fm-lab-snapshot:fm-worker22",
+        "exists": false,
+        "agent_alive": "not_checked",
+        "status": "absent",
+        "observed_at": "2026-10-17T01:00:00Z",
+        "freshness": "fresh"
+      },
+      "pr": {
+        "url": null,
+        "source": "absent",
+        "head": null
+      },
+      "hints": {
+        "pending_decision": true,
+        "blocked_event": false,
+        "open_decisions": [
+          {
+            "key": "route-22",
+            "verb": "needs-decision",
+            "summary": "choose route 22"
+          }
+        ],
+        "scout_report_present": false,
+        "last_event_text": "needs-decision [key=route-22]: choose route 22"
+      },
+      "actions": {
+        "watch": "bin/fm-peek.sh fm-worker22",
+        "steer": "bin/fm-send.sh fm-worker22 '<instruction>'",
+        "return_channel_note": null
+      },
+      "backlog": null
+    },
+    {
+      "id": "worker23",
+      "kind": "ship",
+      "harness": "claude",
+      "mode": "ship",
+      "yolo": "",
+      "branch": null,
+      "project": "sample",
+      "spawn_gen": null,
+      "backend": "tmux",
+      "remote": null,
+      "paths": {
+        "meta": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/state/worker23.meta",
+          "present": true
+        },
+        "status_log": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/state/worker23.status",
+          "present": true,
+          "kind": "event_history",
+          "last_event": {
+            "state": "needs-decision",
+            "note": "choose route 23",
+            "raw": "needs-decision [key=route-23]: choose route 23",
+            "age_seconds": null
+          }
+        },
+        "worktree": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/projects/worker23",
+          "present": true
+        },
+        "home": {
+          "path": null,
+          "present": false
+        },
+        "report": {
+          "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/data/worker23/report.md",
+          "present": false
+        }
+      },
+      "secondmate_projects": [],
+      "current_state": {
+        "state": "unknown",
+        "source": "none",
+        "detail": "backend unreachable (tmux endpoint state: unreadable)",
+        "raw": "state: unknown · source: none · backend unreachable (tmux endpoint state: unreadable)",
+        "observed_at": "2026-10-17T01:00:00Z",
+        "freshness": "fresh"
+      },
+      "endpoint": {
+        "target": "fm-lab-snapshot:fm-worker23",
+        "exists": false,
+        "agent_alive": "not_checked",
+        "status": "absent",
+        "observed_at": "2026-10-17T01:00:00Z",
+        "freshness": "fresh"
+      },
+      "pr": {
+        "url": null,
+        "source": "absent",
+        "head": null
+      },
+      "hints": {
+        "pending_decision": true,
+        "blocked_event": false,
+        "open_decisions": [
+          {
+            "key": "route-23",
+            "verb": "needs-decision",
+            "summary": "choose route 23"
+          }
+        ],
+        "scout_report_present": false,
+        "last_event_text": "needs-decision [key=route-23]: choose route 23"
+      },
+      "actions": {
+        "watch": "bin/fm-peek.sh fm-worker23",
+        "steer": "bin/fm-send.sh fm-worker23 '<instruction>'",
+        "return_channel_note": null
+      },
+      "backlog": null
+    }
+  ],
+  "main_inventory": {
+    "valid": true,
+    "reason": null,
+    "orphan_in_flight": [],
+    "unstructured_current_count": 0
+  },
+  "contributions": {
+    "known": 523,
+    "checked": 523,
+    "counts": {
+      "captain": 0,
+      "fleet": 0,
+      "maintainer": 0,
+      "nobody": 523
+    },
+    "unmeasured": 0,
+    "complete": true,
+    "proven_clear": true,
+    "stale_verdicts": 0,
+    "missing_verdicts": 0,
+    "unreadable_records": 0,
+    "valid_until": 1792199700,
+    "captain": [],
+    "captain_omitted": 0
+  },
+  "scout_reports": [],
+  "secondmate_current": {
+    "registry": {
+      "present": false,
+      "available": true,
+      "complete": true,
+      "reason": null,
+      "provenance": "registered-table",
+      "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M53SN5VBX95AZ3PSX0JPQRR8/.local-validation/load/data/secondmates.md",
+      "freshness": {
+        "status": "fresh",
+        "observed_at": "2026-10-17T01:00:00Z"
+      },
+      "records": [],
+      "input_truncated": false,
+      "records_truncated": false,
+      "reasons": [],
+      "lines_in_window": 0,
+      "records_in_window": 0
+    },
+    "records": [],
+    "total_registered": 0,
+    "total": 0,
+    "shown": 0,
+    "truncated": 0
+  },
+  "secondmate_landed": {
+    "records": [],
+    "truncated": [],
+    "unreadable": [],
+    "partial": []
+  },
+  "secondmate_guidance": {
+    "note": "For kind=secondmate, bearings selects validated structured state from that registered home; parent events and bounded terminal evidence are fallback-only supplements and never current-state authority."
+  }
+}

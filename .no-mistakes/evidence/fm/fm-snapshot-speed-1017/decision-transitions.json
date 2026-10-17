@@ -1,0 +1,128 @@
+[
+  {
+    "step": "cold",
+    "open_decisions": [
+      {
+        "key": "a",
+        "verb": "needs-decision",
+        "summary": "choose A"
+      }
+    ],
+    "seconds": 0.43050512485206127
+  },
+  {
+    "step": "warm",
+    "open_decisions": [
+      {
+        "key": "a",
+        "verb": "needs-decision",
+        "summary": "choose A"
+      }
+    ],
+    "seconds": 0.3566562910564244
+  },
+  {
+    "step": "appended",
+    "open_decisions": [
+      {
+        "key": "b",
+        "verb": "needs-decision",
+        "summary": "choose B"
+      }
+    ],
+    "seconds": 0.3742276669945568
+  },
+  {
+    "step": "partial",
+    "open_decisions": [
+      {
+        "key": "a",
+        "verb": "needs-decision",
+        "summary": "choose again"
+      }
+    ],
+    "seconds": 0.3713291250169277
+  },
+  {
+    "step": "completed",
+    "open_decisions": [
+      {
+        "key": "a",
+        "verb": "needs-decision",
+        "summary": "choose again"
+      },
+      {
+        "key": "c",
+        "verb": "blocked",
+        "summary": "need access"
+      }
+    ],
+    "seconds": 0.3803238340187818
+  },
+  {
+    "step": "captain-held",
+    "open_decisions": [
+      {
+        "key": "c",
+        "verb": "blocked",
+        "summary": "need access"
+      }
+    ],
+    "seconds": 0.372575500048697
+  },
+  {
+    "step": "rewritten",
+    "open_decisions": [
+      {
+        "key": "d",
+        "verb": "needs-decision",
+        "summary": "replaced history"
+      }
+    ],
+    "seconds": 0.3576610409654677
+  },
+  {
+    "step": "same-size-edit",
+    "open_decisions": [
+      {
+        "key": "e",
+        "verb": "needs-decision",
+        "summary": "replaced history"
+      }
+    ],
+    "seconds": 0.3363454579375684
+  },
+  {
+    "step": "truncated",
+    "open_decisions": [
+      {
+        "key": "f",
+        "verb": "needs-decision",
+        "summary": "after truncation"
+      }
+    ],
+    "seconds": 0.3316172498743981
+  },
+  {
+    "step": "new-inode",
+    "open_decisions": [
+      {
+        "key": "g",
+        "verb": "needs-decision",
+        "summary": "new inode"
+      }
+    ],
+    "seconds": 0.3377251250203699
+  },
+  {
+    "step": "corrupt-cache",
+    "open_decisions": [
+      {
+        "key": "g",
+        "verb": "needs-decision",
+        "summary": "new inode"
+      }
+    ],
+    "seconds": 0.3751226661261171
+  }
+]

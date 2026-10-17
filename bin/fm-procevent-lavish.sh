@@ -340,7 +340,7 @@ poll_response_filter() {  # <response-file>
     use warnings;
     my ($stage) = @ARGV;
     my $expected = "error: Lavish Editor poll response was interrupted\ncode: SERVER_ERROR\n";
-    my $help_max = 4096;
+    my $help_max = 1024;
     # Whether $candidate can still grow into the interruption, and whether it
     # already is the whole interruption.
     sub viable {
@@ -386,12 +386,13 @@ poll_response_filter() {  # <response-file>
       my $take = length($chunk) < $room ? length($chunk) : $room;
       my $prefix = substr($chunk, 0, $take);
       $candidate .= $prefix;
-      write_all($staged, $prefix);
       if (!viable($candidate)) {
         write_all(*STDOUT, $candidate);
         write_all(*STDOUT, substr($chunk, $take));
         $streaming = 1;
+        next;
       }
+      write_all($staged, $prefix);
     }
     exit 10 if !$streaming && complete($candidate);
     write_all(*STDOUT, $candidate) unless $streaming;

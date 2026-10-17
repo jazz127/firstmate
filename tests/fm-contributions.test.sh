@@ -796,6 +796,78 @@ test_record_task_identity_matches_dirname_basename() {
   pass 'record task identity is the directory dirname/basename named'
 }
 
+# Saved records are read in batches; each file is still accepted or rejected
+# exactly as the per-file reference rules decide, in directory order, with its
+# bytes re-serialized by jq just as `jq -c .` per file then `jq -s .` would.
+saved_fixture() { # home task url-number [jq-extra]
+  mkdir -p "$1/data/$2"
+  jq -n --arg task "$2" --arg url "https://github.com/o/r/pull/$3" --arg token "t$3" "
+    {schema:\"fm-contributions.v1\",task:\$task,records:[{url:\$url,kind:\"pr\",checked_at:null,error:null,
+      pending:[{token:\$token}],seen:[],verdict:null,observation:null}]} ${4:-}" > "$1/data/$2/contributions.json"
+}
+
+pad_to_bytes() { # file bytes: pad with trailing JSON whitespace to an exact size
+  local have
+  have=$(wc -c < "$1")
+  head -c "$(($2 - have))" /dev/zero | tr '\0' ' ' >> "$1"
+  [ "$(wc -c < "$1" | tr -d ' ')" = "$2" ] || fail "fixture $1 is not $2 bytes"
+}
+
+test_batched_saved_read_keeps_reference_verdicts() {
+  local home i accepted=() expected actual reference input
+  home=$(new_home batched-read)
+  # More files than one batch holds, so the read crosses batch boundaries.
+  for i in $(seq 1 300); do
+    saved_fixture "$home" "$(printf 'task%03d' "$i")" "$i"
+    accepted+=("$(printf 'task%03d' "$i")")
+  done
+  # Number literals and escapes must survive exactly as the reference wrote them.
+  printf '%s\n' '{"schema":"fm-contributions.v1","task":"literals","records":[{"url":"https://github.com/o/r/pull/900","kind":"pr","checked_at":null,"error":null,"pending":[{"token":"lit","n":1.000,"big":100000000000000000000001,"e":1E3,"s":"é\t"}],"seen":[],"verdict":null,"observation":null}]}' > "$home/data/literals.json.tmp"
+  mkdir -p "$home/data/literals"; mv "$home/data/literals.json.tmp" "$home/data/literals/contributions.json"
+  accepted+=(literals)
+  saved_fixture "$home" boundary 901
+  pad_to_bytes "$home/data/boundary/contributions.json" 1048576
+  accepted+=(boundary)
+  with_home "$home" "$ROOT/bin/fm-fleet-snapshot.sh" --contribution-input > "$home/input.json" \
+    || fail 'could not collect contribution input'
+  # Reference: the per-file accept path over the same directory-ordered glob,
+  # `jq -c .` per file, then `jq -s .`; every file is valid at this point.
+  reference=$(for i in "$home/data"/*/contributions.json; do jq -c . "$i"; done | jq -s . \
+    | jq '[.[] | .task as $task | .records[] | .url as $url | .pending[] | . + {task:$task,url:$url}]')
+  actual=$(with_home "$home" "$ROOT/bin/fm-contributions.sh" pending) || fail 'pending refused an all-valid home'
+  [ "$actual" = "$reference" ] || fail 'batched read changed the saved records it collected'
+
+  # Each rejected shape counts once and never displaces an accepted file.
+  saved_fixture "$home" oversized 902
+  pad_to_bytes "$home/data/oversized/contributions.json" 1048577
+  saved_fixture "$home" mismatch 903 '| .task = "other"'
+  saved_fixture "$home" invalid 904 '| .records[0].kind = "commit"'
+  mkdir -p "$home/data/malformed" "$home/data/empty" "$home/data/two" "$home/data/dirfile/contributions.json" \
+    "$home/data/symfile" "$home/outside"
+  printf '{"schema":' > "$home/data/malformed/contributions.json"
+  : > "$home/data/empty/contributions.json"
+  saved_fixture "$home" two 905
+  cat "$home/data/two/contributions.json" "$home/data/two/contributions.json" > "$home/data/two/x"
+  mv "$home/data/two/x" "$home/data/two/contributions.json"
+  ln -s "$home/data/task001/contributions.json" "$home/data/symfile/contributions.json"
+  saved_fixture "$home" outside-real 906
+  mv "$home/data/outside-real" "$home/outside/symdir"
+  ln -s "$home/outside/symdir" "$home/data/symdir"
+  expected=$(printf '%s\n' "${accepted[@]}" | jq -Rs 'split("\n")[:-1] | sort')
+  actual=$(with_home "$home" "$ROOT/bin/fm-contributions.sh" snapshot "$home/input.json" --all) \
+    || fail 'snapshot refused a home with rejected records'
+  printf '%s' "$actual" | jq -e --argjson want "$expected" '
+    .unreadable_records == 9 and ([.rows[].task] | unique) == $want' >/dev/null \
+    || fail "rejected records changed the verdicts: $(printf '%s' "$actual" | jq -c '{unreadable_records,tasks:([.rows[].task] | unique | length)}')"
+  # A malformed file forces its batch onto the per-file path; the outcome is the same.
+  rm -rf "${home:?}/data/malformed" "${home:?}/data/empty" "${home:?}/data/two"
+  actual=$(with_home "$home" "$ROOT/bin/fm-contributions.sh" snapshot "$home/input.json" --all) || fail 'snapshot failed'
+  printf '%s' "$actual" | jq -e --argjson want "$expected" '
+    .unreadable_records == 6 and ([.rows[].task] | unique) == $want' >/dev/null \
+    || fail 'removing parse failures changed the accepted records'
+  pass 'batched saved-record reads keep every per-file accept and reject verdict'
+}
+
 # snapshot and pending are read-only: reading saved records never creates the
 # state directory or anything else, even in a home that has none.
 test_read_only_views_create_no_state() {
@@ -1957,7 +2029,7 @@ test_retire_is_idempotent_and_refuses_unknown_pairs() {
 test_decimal_poll_bounds
 
 failures=0
-for test_name in test_actor_coverage test_stale_verdict test_unchecked_is_not_silence test_newest_check_has_no_verdict test_comment_wake test_review_wake test_inline_wake test_ready_issue_wake test_fresh_issue_requires_maintainer test_missing_lane_remains_missing test_partial_freshness_keeps_measured_rows test_malformed_record_cannot_prove_silence test_issue_timeline_and_exact_ack test_verdict_retains_judged_head test_verdict_actor_values_are_discoverable test_observed_replacement_refreshes_verdict test_unobserved_head_leaves_verdict_unknown test_away_yolo_is_fleet_work test_away_yolo_cross_home_is_fleet_work test_retired_and_unsupported_coverage test_unsupported_forge_is_not_fleet_work test_held_unsupported_forge_is_not_captain_work test_unsupported_poll_is_silent_and_clears_legacy_errors test_legacy_cleanup_preserves_supported_failure test_shared_contribution_signal_wakes_once test_watcher_keeps_diagnostics_separate_from_contribution_wakes test_expired_child_unsupported_forge_stays_unmeasured test_watcher_surfaces_new_contribution_once test_home_summary_coverage test_unreadable_pending_is_not_empty test_record_task_identity_matches_dirname_basename test_read_only_views_create_no_state test_budget_refusal_between_calls test_budget_bounded_call_timeout test_genuine_failure_near_deadline_is_unavailable test_shared_url_observed_once test_terminal_contribution_settles test_late_owner_inherits_terminal_observation test_interrupted_multi_owner_poll_settles_every_owner test_done_task_open_pr_still_observed test_reservation_defers_later_url_when_fifteen_seconds_do_not_remain test_three_second_pr_reads_complete_fresh_in_one_cycle test_slow_read_deadline_kill_is_budget_refusal test_unmeasured_url_does_not_starve_the_tail test_budget_is_cut_down_to_the_watcher_check_bound test_arm_plumbs_a_configured_budget_into_the_check_shim test_unavailable_forge_records_error_and_wakes_once_per_episode test_late_owner_keeps_failure_episode_suppressed test_outside_pr_closeout_window_and_green_ci test_own_repository_pr_is_unchanged test_red_ci_holds_closeout test_new_push_restarts_closeout_window test_zero_and_malformed_closeout_window test_unanswered_feedback_and_dirty_worktree_hold_closeout test_initial_observation_uses_forge_timestamp test_missing_forge_timestamp_falls_back_to_observation test_worker_head_can_precede_published_head test_returned_head_restarts_closeout_window test_unacknowledged_feedback_with_observation_fallback test_registered_clones_do_not_establish_ownership test_unreadable_permission_blocks_closeout test_replaced_pr_cannot_closeout_current_task test_closeout_requires_current_ship_metadata test_closeout_accepts_supported_metadata_tails test_ci_lane_disappearing_after_ready_holds_closeout test_permission_lookup_failure_after_readable_observation test_retire_ends_observation_of_a_gone_contribution test_late_owner_of_a_retired_final_contribution_is_not_retired test_retire_is_idempotent_and_refuses_unknown_pairs; do
+for test_name in test_actor_coverage test_stale_verdict test_unchecked_is_not_silence test_newest_check_has_no_verdict test_comment_wake test_review_wake test_inline_wake test_ready_issue_wake test_fresh_issue_requires_maintainer test_missing_lane_remains_missing test_partial_freshness_keeps_measured_rows test_malformed_record_cannot_prove_silence test_issue_timeline_and_exact_ack test_verdict_retains_judged_head test_verdict_actor_values_are_discoverable test_observed_replacement_refreshes_verdict test_unobserved_head_leaves_verdict_unknown test_away_yolo_is_fleet_work test_away_yolo_cross_home_is_fleet_work test_retired_and_unsupported_coverage test_unsupported_forge_is_not_fleet_work test_held_unsupported_forge_is_not_captain_work test_unsupported_poll_is_silent_and_clears_legacy_errors test_legacy_cleanup_preserves_supported_failure test_shared_contribution_signal_wakes_once test_watcher_keeps_diagnostics_separate_from_contribution_wakes test_expired_child_unsupported_forge_stays_unmeasured test_watcher_surfaces_new_contribution_once test_home_summary_coverage test_unreadable_pending_is_not_empty test_record_task_identity_matches_dirname_basename test_batched_saved_read_keeps_reference_verdicts test_read_only_views_create_no_state test_budget_refusal_between_calls test_budget_bounded_call_timeout test_genuine_failure_near_deadline_is_unavailable test_shared_url_observed_once test_terminal_contribution_settles test_late_owner_inherits_terminal_observation test_interrupted_multi_owner_poll_settles_every_owner test_done_task_open_pr_still_observed test_reservation_defers_later_url_when_fifteen_seconds_do_not_remain test_three_second_pr_reads_complete_fresh_in_one_cycle test_slow_read_deadline_kill_is_budget_refusal test_unmeasured_url_does_not_starve_the_tail test_budget_is_cut_down_to_the_watcher_check_bound test_arm_plumbs_a_configured_budget_into_the_check_shim test_unavailable_forge_records_error_and_wakes_once_per_episode test_late_owner_keeps_failure_episode_suppressed test_outside_pr_closeout_window_and_green_ci test_own_repository_pr_is_unchanged test_red_ci_holds_closeout test_new_push_restarts_closeout_window test_zero_and_malformed_closeout_window test_unanswered_feedback_and_dirty_worktree_hold_closeout test_initial_observation_uses_forge_timestamp test_missing_forge_timestamp_falls_back_to_observation test_worker_head_can_precede_published_head test_returned_head_restarts_closeout_window test_unacknowledged_feedback_with_observation_fallback test_registered_clones_do_not_establish_ownership test_unreadable_permission_blocks_closeout test_replaced_pr_cannot_closeout_current_task test_closeout_requires_current_ship_metadata test_closeout_accepts_supported_metadata_tails test_ci_lane_disappearing_after_ready_holds_closeout test_permission_lookup_failure_after_readable_observation test_retire_ends_observation_of_a_gone_contribution test_late_owner_of_a_retired_final_contribution_is_not_retired test_retire_is_idempotent_and_refuses_unknown_pairs; do
   ( "$test_name" ) || failures=$((failures + 1))
 done
 [ "$failures" -eq 0 ] || fail "$failures contribution regressions"

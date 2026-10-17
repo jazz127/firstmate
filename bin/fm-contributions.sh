@@ -197,28 +197,105 @@ jq_lib() { # jq options/program via final argument
   jq -L "$SCRIPT_DIR" "$@" "include \"fm-contributions\"; $program"
 }
 
+READ_SAVED_MAX_BYTES=1048576
+READ_SAVED_BATCH=256
+
+# The per-file reference check: size, one parsed valid record, task identity.
+read_saved_one() { # file task
+  if [ "$(wc -c < "$1")" -gt "$READ_SAVED_MAX_BYTES" ] \
+    || ! jq_lib -ne --slurpfile record "$1" '($record | length) == 1 and ($record[0] | valid_record)' >/dev/null 2>&1; then
+    ERRORS=$((ERRORS + 1))
+    return 0
+  fi
+  # A file's task identity must match its durable directory, not arbitrary JSON.
+  if ! jq -e --arg task "$2" '.task == $task' "$1" >/dev/null; then
+    ERRORS=$((ERRORS + 1)); return 0
+  fi
+  jq -c . "$1" >> "$TMP/saved.jsonl"
+}
+
+# Apply read_saved_one's checks to a batch of files in one jq process. Each
+# --slurpfile parses its file independently, exactly as the per-file check does,
+# and the -e verdicts are mirrored as "last output is neither false nor null".
+# Any failure of the batch itself - a malformed file, a missing file, or an
+# evaluation error - replays the whole batch through read_saved_one, so every
+# rejection keeps the reference path's exact outcome.
+read_saved_batch() { # start count
+  local i rejected
+  local -a args=()
+  for ((i = 0; i < $2; i++)); do
+    args+=(--slurpfile "f$i" "${SAVED_FILES[$1 + i]}" --arg "t$i" "${SAVED_TASKS[$1 + i]}")
+  done
+  if jq_lib -nc --argjson n "$2" "${args[@]}" '
+    [range(0; $n) as $i
+     | if ($ARGS.named | has("f\($i)")) then . else error("batch file missing") end
+     | $ARGS.named["f\($i)"] as $record | $ARGS.named["t\($i)"] as $task
+     | ([($record | length) == 1 and ($record[0] | valid_record)] | last) as $valid
+     | if $valid == null or $valid == false then null
+       else ([$record[0].task == $task] | last) as $owned
+         | if $owned == null or $owned == false then null else $record[0] end
+       end]
+    | (map(select(. == null)) | length), (.[] | select(. != null))' \
+    > "$TMP/batch.jsonl" 2>/dev/null && IFS= read -r rejected < "$TMP/batch.jsonl"; then
+    case "$rejected" in
+      ''|*[!0-9]*) ;;
+      *)
+        tail -n +2 "$TMP/batch.jsonl" >> "$TMP/saved.jsonl" || fail 'contribution records could not be collected'
+        ERRORS=$((ERRORS + rejected))
+        return 0
+        ;;
+    esac
+  fi
+  for ((i = 0; i < $2; i++)); do
+    read_saved_one "${SAVED_FILES[$1 + i]}" "${SAVED_TASKS[$1 + i]}"
+  done
+}
+
 read_saved() {
-  local file dir task
+  local file dir task path start count
+  local -a candidates=()
   : > "$TMP/saved.jsonl"
   ERRORS=0
+  SAVED_FILES=()
+  SAVED_TASKS=()
   if [ -L "$DATA" ]; then
     ERRORS=1; printf '[]\n' > "$TMP/saved.json"; return 0
   fi
   for file in "$DATA"/*/contributions.json; do
     [ -e "$file" ] || [ -L "$file" ] || continue
     fm_dirname_to dir "$file"
-    fm_basename_to task "$dir"
-    if [ -L "$file" ] || [ -L "$dir" ] || [ ! -f "$file" ] \
-      || [ "$(wc -c < "$file")" -gt 1048576 ] \
-      || ! jq_lib -ne --slurpfile record "$file" '($record | length) == 1 and ($record[0] | valid_record)' >/dev/null 2>&1; then
+    if [ -L "$file" ] || [ -L "$dir" ] || [ ! -f "$file" ]; then
       ERRORS=$((ERRORS + 1))
       continue
     fi
-    # A file's task identity must match its durable directory, not arbitrary JSON.
-    if ! jq -e --arg task "$task" '.task == $task' "$file" >/dev/null; then
-      ERRORS=$((ERRORS + 1)); continue
-    fi
-    jq -c . "$file" >> "$TMP/saved.jsonl"
+    # A path find could read as an operand never starts with a dash.
+    case "$file" in /*) candidates+=("$file") ;; *) candidates+=("./$file") ;; esac
+  done
+  # One find pass, in place of a wc per file, prints every file within the size
+  # bound in operand order; each unprinted file is oversized. If find cannot
+  # answer for every file, each one takes the reference check instead.
+  if [ "${#candidates[@]}" -gt 0 ] \
+    && find "${candidates[@]}" -prune ! -size +"$READ_SAVED_MAX_BYTES"c -print0 > "$TMP/sized" 2>/dev/null; then
+    while IFS= read -r -d '' path; do
+      fm_dirname_to dir "$path"
+      fm_basename_to task "$dir"
+      SAVED_FILES+=("$path")
+      SAVED_TASKS+=("$task")
+    done < "$TMP/sized"
+    ERRORS=$((ERRORS + ${#candidates[@]} - ${#SAVED_FILES[@]}))
+  else
+    for path in ${candidates[@]+"${candidates[@]}"}; do
+      fm_dirname_to dir "$path"
+      fm_basename_to task "$dir"
+      read_saved_one "$path" "$task"
+    done
+  fi
+  start=0
+  while [ "$start" -lt "${#SAVED_FILES[@]}" ]; do
+    count=$(( ${#SAVED_FILES[@]} - start ))
+    [ "$count" -le "$READ_SAVED_BATCH" ] || count=$READ_SAVED_BATCH
+    read_saved_batch "$start" "$count"
+    start=$((start + count))
   done
   jq -s . "$TMP/saved.jsonl" > "$TMP/saved.json"
 }

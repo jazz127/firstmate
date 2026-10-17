@@ -1072,6 +1072,42 @@ SH
   pass "snapshot open-decision fold matches the whole-stream fold byte for byte"
 }
 
+test_snapshot_preserves_unread_status_before_first_drain() {
+  local home fakebin snapshot out
+  home=$(make_home snapshot-before-first-drain)
+  mkdir -p "$home/projects/task1"
+  : > "$home/config/supervision-host-off"
+  fm_write_meta "$home/state/task1.meta" \
+    "window=firstmate:fm-task1" \
+    "worktree=$home/projects/task1" \
+    "project=alpha" \
+    "harness=claude" \
+    "kind=ship" \
+    "mode=ship"
+  printf 'note: captain said use REST not RPC\n' > "$home/state/task1.status"
+  fakebin=$(make_fakebin "$home")
+  [ ! -e "$home/state/.status-presentation-cursor" ] \
+    || fail "fresh home already has a status presentation cursor"
+
+  snapshot=$(PATH="$fakebin:$PATH" FM_HOME="$home" "$SNAPSHOT" --json) \
+    || fail "snapshot before the first drain failed"
+  printf '%s' "$snapshot" | jq -e '.tasks | map(.id) == ["task1"]' >/dev/null \
+    || fail "snapshot did not observe the ship task: $snapshot"
+  [ ! -e "$home/state/.status-presentation-cursor" ] \
+    || fail "snapshot marked status as presented before the first drain"
+
+  out=$(PATH="$fakebin:$PATH" FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" \
+    FM_CONFIG_OVERRIDE="$home/config" "$ROOT/bin/fm-wake-drain.sh") \
+    || fail "first drain after the snapshot failed"
+  printf '%s\n' "$out" | awk '
+    /^UNREAD STATUS / { unread = 1; next }
+    unread && $0 == "task1 note: captain said use REST not RPC" { found = 1 }
+    { unread = 0 }
+    END { exit !found }
+  ' || fail "snapshot hid the note from the first UNREAD STATUS presentation: $out"
+  pass "snapshot preserves unread notes for a fresh home's first drain"
+}
+
 # A COMPLETED scout report must never be read as a pending decision. A scout that
 # raised a needs-decision and then finished (done) - its report delivered, its
 # decision either answered or captured in the report for the captain - must surface
@@ -1296,6 +1332,7 @@ test_open_decision_transfers_to_captain_hold
 test_open_decision_clears_on_keyed_resolution
 test_open_decisions_cursor_across_successive_snapshots
 test_snapshot_open_decisions_fold_matches_whole_fold
+test_snapshot_preserves_unread_status_before_first_drain
 test_completed_scout_report_is_pointer_not_pending
 test_parked_scout_decision_stays_pending
 test_scout_reports_include_teardown_reports

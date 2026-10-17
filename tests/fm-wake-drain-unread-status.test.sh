@@ -302,12 +302,14 @@ test_retired_task_id_starts_new_status_unread() {
     [ -f "$ledger" ] || exit 1
     mkdir -p "$ledger.lock" || exit 1
     printf "%s\n" 2147483646 > "$ledger.lock/pid" || exit 1
+    snapshot_cursor=$(_fm_snapshot_open_decisions_cursor_path "$STATE/reused.status")
+    printf "version=old\n" > "$snapshot_cursor" || exit 1
     status_retire_presentation_task "$STATE" reused || exit 1
     for marker in \
       "$(status_signal_seen_marker_path "$STATE" reused)" \
       "$(status_heartbeat_seen_marker_path "$STATE" reused)" \
       "$(status_daemon_seen_marker_path "$STATE" reused)" \
-      "$ledger" "$ledger.lock"; do
+      "$ledger" "$ledger.lock" "$snapshot_cursor"; do
       [ ! -e "$marker" ] && [ ! -L "$marker" ] || exit 1
     done
   ' _ "$ROOT" "$dir/old-ident" || fail "retiring the reused task presentation state failed"

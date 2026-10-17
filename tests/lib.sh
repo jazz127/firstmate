@@ -117,11 +117,13 @@ fm_test_launch_git_prefix() {  # <launch>
 }
 
 # The command a pane runs after the launch's Git configuration prefix and its
-# leading export statements, for suites that split it into arguments.
+# leading export and unset statements, for suites that split it into
+# arguments. Callers that eval the result must do so under an empty PATH: a
+# prefix this function does not recognise would otherwise run the harness.
 fm_test_launch_command() {  # <launch>
   local command=$1 end=' || return 1 2>/dev/null || exit 1; '
   case "$command" in *"$end"*) command=${command#*"$end"} ;; esac
-  while [[ "$command" == export\ *\;* ]]; do
+  while [[ "$command" == export\ *\;* || "$command" == unset\ *\;* ]]; do
     command=${command#*; }
   done
   printf '%s' "$command"
@@ -483,11 +485,13 @@ fm_fakebin() {
   printf '%s\n' "$fakebin"
 }
 
-# fm_test_fake_tmux_foreground_cwd <fakebin>
-# A synthetic foreground process and lsof cwd sourced from FM_FAKE_PANE_PATH.
+# fm_test_fake_tmux_foreground_cwd <fakebin> [cwd-file]
+# A synthetic foreground process and lsof cwd sourced from FM_FAKE_PANE_PATH,
+# or read from <cwd-file> at each call when one is given, so a fixture that
+# moves its pane's cwd mid-case keeps one file current instead of re-exporting.
 # Pair with tmux stubs that answer #{pane_tty} with /dev/pts/91.
 fm_test_fake_tmux_foreground_cwd() {
-  local fakebin=$1
+  local fakebin=$1 cwd_file=${2:-}
   cat > "$fakebin/ps" <<'SH'
 #!/usr/bin/env bash
 case "$*" in
@@ -495,7 +499,19 @@ case "$*" in
   *) PATH=${PATH#"$(dirname "$0")":} exec ps "$@" ;;
 esac
 SH
-  cat > "$fakebin/lsof" <<'SH'
+  if [ -n "$cwd_file" ]; then
+    cat > "$fakebin/lsof" <<SH
+#!/usr/bin/env bash
+case "\$*" in
+  *"-p 987654321"*"-d cwd"*"-Fn"*) ;;
+  *) PATH=\${PATH#"\$(dirname "\$0")":} exec lsof "\$@" ;;
+esac
+cwd=\$(cat '$cwd_file' 2>/dev/null) || exit 1
+[ -n "\$cwd" ] || exit 1
+printf 'p987654321\\nfcwd\\nn%s\\n' "\$cwd"
+SH
+  else
+    cat > "$fakebin/lsof" <<'SH'
 #!/usr/bin/env bash
 case "$*" in
   *"-p 987654321"*"-d cwd"*"-Fn"*) ;;
@@ -504,6 +520,7 @@ esac
 [ -n "${FM_FAKE_PANE_PATH:-}" ] || exit 1
 printf 'p987654321\nfcwd\nn%s\n' "$FM_FAKE_PANE_PATH"
 SH
+  fi
   chmod +x "$fakebin/ps" "$fakebin/lsof"
 }
 

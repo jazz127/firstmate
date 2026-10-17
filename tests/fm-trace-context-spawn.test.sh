@@ -480,7 +480,10 @@ test_failed_metadata_append_unsets_carrier_and_still_launches() {
 
   ! grep -q '^traceparent=' "$meta" \
     || fail "failed metadata append must not leave a traceparent= claim in meta"
-  grep -q '^unset TRACEPARENT; .*claude' "$LAUNCH_LOG" \
+  # The launch command carries other leading unsets (bin/fm-spawn.sh scrubs
+  # watcher ownership last), so assert the carrier unset precedes the harness
+  # rather than anchoring it to the start of the line.
+  grep -q 'unset TRACEPARENT; .*claude' "$LAUNCH_LOG" \
     || fail "failed metadata append must unset TRACEPARENT in the launch command"
   pass "failed traceparent metadata append removes the carrier from the launched task"
 }

@@ -330,6 +330,7 @@ case "${1:-}" in
       case "$a" in
         *cursor_y*) printf '1\n'; exit 0 ;;
         *pane_current_command*) cat "$D/command"; printf '\n'; exit 0 ;;
+        *pane_tty*) printf '/dev/pts/91\n'; exit 0 ;;
         *pane_current_path*) cat "$D/cwd"; printf '\n'; exit 0 ;;
       esac
     done
@@ -340,6 +341,7 @@ esac
 exit 0
 SH
   chmod +x "$fb/tmux"
+  fm_test_fake_tmux_foreground_cwd "$fb" "$1/fake/cwd"
   cat > "$fb/sleep" <<'SH'
 #!/usr/bin/env bash
 exit 0

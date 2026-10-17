@@ -112,6 +112,7 @@ case "${1:-}" in
         *pane_current_command*)
           if [ -f "$D/command.$target" ]; then cat "$D/command.$target"; else cat "$D/command"; fi
           printf '\n'; exit 0 ;;
+        *pane_tty*) printf '/dev/pts/91\n'; exit 0 ;;
         *pane_current_path*) cat "$D/cwd"; printf '\n'; exit 0 ;;
       esac
       prev=$a
@@ -201,6 +202,7 @@ new_case() {
   printf 'claude' > "$dir/fake/command"
   printf 'claude' > "$dir/fake/becomes"
   make_stub "$dir"
+  fm_test_fake_tmux_foreground_cwd "$dir/fakebin" "$dir/fake/cwd"
   printf '%s\n' "$dir"
 }
 
@@ -375,7 +377,9 @@ test_working_pi_blank_composer_restarts() {
   local dir out rc
   dir=$(new_case working-pi-blank)
   add_repo_backed_mate "$dir" sm1 pi herdr
-  cp "$ROOT/bin/fm-git-strip-ai-trailers.sh" "$ROOT/bin/fm-operational-input.sh" "$dir/fmrepo/bin/"
+  # The launch also arms the busy-state contract from the mate's code root.
+  cp "$ROOT/bin/fm-git-strip-ai-trailers.sh" "$ROOT/bin/fm-operational-input.sh" \
+    "$ROOT/bin/fm-busy-event.sh" "$ROOT/bin/fm-busy-lib.sh" "$dir/fmrepo/bin/"
   arm_answer "$dir" sm1
   make_working_pi_herdr_stub "$dir"
   printf pi > "$dir/fake/command"

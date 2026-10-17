@@ -378,6 +378,12 @@ OWNER_RACE_RM=$(command -v rm) || fail "reply cleanup requires rm"
 OWNER_RACE_BASH=$(command -v bash) || fail "reply publication races require bash"
 OWNER_RACE_LN=$(command -v ln) || fail "reply intake races require ln"
 export OWNER_RACE_CAT OWNER_RACE_MKTEMP OWNER_RACE_RM OWNER_RACE_BASH OWNER_RACE_LN
+# The wrapper binaries above turn every cat, rm, ln, mktemp, and bash call
+# into an extra interpreter launch, and on a slow-spawn platform (macOS) an
+# arm then needs 2-5 seconds to show its listener's claim. The default
+# launch-confirm window is 3 seconds; this fixture exercises reply replacement,
+# not that window, so widen it here as the drain fixture below already does.
+export FM_PROCEVENT_LAUNCH_CONFIRM_SECONDS=10
 for owner_race_case in legacy-staged synchronous-staged legacy-capture synchronous-capture diagnostic-capture legacy-cleanup synchronous-cleanup legacy-postcommit synchronous-postcommit synchronous-reclaim legacy-bound-staged synchronous-bound-staged legacy-bound-postcommit synchronous-bound-postcommit synchronous-bound-reclaim legacy-terminal-staged synchronous-terminal-staged legacy-terminal-postcommit synchronous-terminal-postcommit; do
   OWNER_RACE="$TMP_ROOT/owner-race-$owner_race_case"
   export OWNER_RACE
@@ -745,6 +751,7 @@ EOF
   PATH="$OWNER_RACE/bin:$PATH" pe "$OWNER_RACE/home" retire "$OWNER_RACE_ID" >/dev/null
   pass "firstmate $owner_race_case preserves locally received output during reply replacement"
 done
+unset FM_PROCEVENT_LAUNCH_CONFIRM_SECONDS
 
 OWNER_CLEANUP="$TMP_ROOT/owner-normal-cleanup"
 export OWNER_CLEANUP
@@ -3286,13 +3293,20 @@ pe "$HL" reconcile >/dev/null
 wait_for "$FM_PROCEVENT_CLAIM_ROOT/identity-src.claim" || fail "identity fixture runner did not claim its source"
 identity_pid=$(sed -n '2p' "$FM_PROCEVENT_CLAIM_ROOT/identity-src.claim")
 IDENTITY_FAKEBIN=$(fm_fakebin "$TMP_ROOT/identity-tools")
-cat > "$IDENTITY_FAKEBIN/ps" <<'SH'
+IDENTITY_REAL_PS=$(command -v ps) || fail "identity fixture requires ps"
+# Fail only the identity read of the pid named by IDENTITY_FAIL_PID. The
+# retiring or sweeping process also reads its own start identity for the
+# source lock, and without /proc that read goes through ps too, so a ps that
+# fails for every pid would block the lock forever instead of reaching the
+# ownership check these cases exercise.
+cat > "$IDENTITY_FAKEBIN/ps" <<SH
 #!/usr/bin/env bash
-exit 1
+for arg in "\$@"; do [ "\$arg" != "\${IDENTITY_FAIL_PID-}" ] || exit 1; done
+exec '$IDENTITY_REAL_PS' "\$@"
 SH
 chmod +x "$IDENTITY_FAKEBIN/ps"
 identity_status=0
-identity_out=$(PATH="$IDENTITY_FAKEBIN:$PATH" FM_PROC_ROOT_OVERRIDE="$TMP_ROOT/no-proc" \
+identity_out=$(PATH="$IDENTITY_FAKEBIN:$PATH" IDENTITY_FAIL_PID="$identity_pid" FM_PROC_ROOT_OVERRIDE="$TMP_ROOT/no-proc" \
   pe "$HL" retire identity-src 2>&1) || identity_status=$?
 [ "$identity_status" -ne 0 ] || fail "retirement succeeded despite uncertain live identity"
 assert_contains "$identity_out" "source remains registered" "uncertain retirement reports preserved state"
@@ -3364,7 +3378,7 @@ pe "$HU" reconcile >/dev/null
 wait_for "$FM_PROCEVENT_CLAIM_ROOT/sweep-uncertain.claim" || fail "uncertain sweep fixture did not start"
 sweep_uncertain_pid=$(sed -n '2p' "$FM_PROCEVENT_CLAIM_ROOT/sweep-uncertain.claim")
 sweep_status=0
-sweep_out=$(PATH="$IDENTITY_FAKEBIN:$PATH" FM_PROC_ROOT_OVERRIDE="$TMP_ROOT/no-sweep-proc" \
+sweep_out=$(PATH="$IDENTITY_FAKEBIN:$PATH" IDENTITY_FAIL_PID="$sweep_uncertain_pid" FM_PROC_ROOT_OVERRIDE="$TMP_ROOT/no-sweep-proc" \
   pe "$HU" sweep-home 2>&1) || sweep_status=$?
 [ "$sweep_status" -ne 0 ] || fail "home sweep succeeded with an uncertain runner identity"
 assert_contains "$sweep_out" "home sweep preflight failed" "uncertain home sweep reports a retryable refusal"

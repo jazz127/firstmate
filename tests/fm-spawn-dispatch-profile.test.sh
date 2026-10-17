@@ -2466,6 +2466,7 @@ claude_settings_json_arg() {  # <launch>
   # Split the argv under an empty PATH: an unrecognised launch prefix then
   # fails here instead of running a real harness against the fixture brief.
   (
+    # shellcheck disable=SC2123  # emptied on purpose so the eval below can only word-split
     PATH=/var/empty
     eval "set -- $command" || exit 1
     while [ "$#" -gt 0 ]; do
@@ -2489,6 +2490,7 @@ claude_launch_brief_arg() {  # <launch>
   local command
   command=$(fm_test_launch_command "$1")
   (
+    # shellcheck disable=SC2123  # emptied on purpose so the eval below can only word-split
     PATH=/var/empty
     eval "set -- $command" || exit 1
     eval "printf '%s' \"\${$#}\""

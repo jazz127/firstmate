@@ -631,6 +631,7 @@ claude_launch_doorbell() {  # <launch command>
   local command
   command=$(fm_test_launch_command "$1")
   (
+    # shellcheck disable=SC2123  # emptied on purpose so the eval below can only word-split
     PATH=/var/empty
     eval "set -- $command" || exit 1
     printf '%s' "${!#}"

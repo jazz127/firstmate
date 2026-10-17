@@ -105,6 +105,25 @@ So the last useful response of an ended review is a `feedback` response, and eve
 That is why the adapter's terminal verdict covers a `feedback` response carrying `session_ended`, not only `status: ended` and a missing session: without it, one human `Send & End` leaves the source armed and each later cycle captures another empty ended result.
 `session_ended` is a session-level field emitted beside `status` in the response's leading `session:` block, which is why the adapter reads it there and ignores identical text appearing in prompt payloads.
 
+## The interrupted-poll response
+
+Verified on 2026-10-17 on macOS (Darwin 27.0.0) with `lavish-axi` 0.1.83, against a scratch server on its own port and state directory.
+Stopping the server under a waiting poll is what a Lavish restart does to every armed listener:
+
+```text
+$ lavish-axi board.html --no-open >/dev/null
+$ lavish-axi poll board.html 2>/dev/null > poll.out &
+$ lavish-axi stop
+$ cat poll.out
+error: Lavish Editor poll response was interrupted
+code: SERVER_ERROR
+help[2]: Run `lavish-axi server --verbose` or inspect `~/.lavish-axi/server.log` (`LAVISH_AXI_STATE_DIR/server.log` when set) for server startup or crash diagnostics,Re-run the last `lavish-axi poll <html-file>` command after the server is healthy
+```
+
+The poll exits 1, and the help line is advice `lavish-axi` prints under its errors rather than part of what the error is.
+The adapter's quiet retry therefore admits that one trailing help line, and its header owns the exact match.
+The portable regression in `tests/fm-procevent.test.sh` replays these exact bytes, and its case "the interruption lavish-axi prints with its help line is retried quietly too" fails if the retry stops admitting them.
+
 ## Why an empty ordinary board close or disconnected browser is silent
 
 The generic `silent` verdict covers two positively identified no-answer shapes for an ordinary firstmate-owned source.

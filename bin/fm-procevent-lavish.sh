@@ -126,21 +126,27 @@
 # legacy poll-with-reply path, without the synchronous handoff guarantee.
 #
 # BOUNDED QUIET RETRY, owned here and nowhere else. A live listener can be cut
-# short by the server with exactly this two-line response while the session's
-# marks remain available:
+# short by the server with this response while the session's marks remain
+# available, for example when the Lavish server restarts:
 #
 #   error: Lavish Editor poll response was interrupted
 #   code: SERVER_ERROR
+#   help[2]: Run `lavish-axi server --verbose` or inspect ...
 #
-# That is an internal retry, not news, so registering the raw poll made the
-# generic runner capture it and wake the whole fleet. `poll` therefore re-runs
-# the published poll up to POLL_RETRY_LIMIT times for that exact response, with
-# attempt starts at least POLL_RETRY_DELAY_DEFAULT seconds apart. The match is exact and
-# deliberately narrow: real feedback, ended and missing sessions, any other
-# SERVER_ERROR, and the same interruption still standing after the bound is
-# spent are all printed straight through and captured normally. The retry is a
-# Lavish fact, so the generic runner in bin/fm-procevent.sh stays
-# adapter-agnostic and learns nothing about it.
+# The help line is the advice lavish-axi prints under its errors (verified on
+# 0.1.83); the bare two-line form stays accepted. That is an internal retry,
+# not news, so registering the raw poll made the generic runner capture it and
+# wake the whole fleet. `poll` therefore re-runs the published poll up to
+# POLL_RETRY_LIMIT times for that response, with attempt starts at least
+# POLL_RETRY_DELAY_DEFAULT seconds apart. The match is exact and deliberately
+# narrow: the first two lines must be those exact bytes, and the only thing
+# allowed after them is one column-zero `help[N]: ...` line ending the output,
+# whose wording is never read. Real feedback, ended and missing sessions,
+# whitespace variants, any further line, any other SERVER_ERROR, and the same
+# interruption still standing after the bound is spent are all printed straight
+# through and captured normally. The retry is a Lavish fact, so the generic
+# runner in bin/fm-procevent.sh stays adapter-agnostic and learns nothing about
+# it.
 #
 # LOSS LIMITATION, stated plainly. The published poll destructively clears
 # feedback before returning it. A result lost after that clearing and before the
@@ -322,16 +328,38 @@ POLL_RETRY_DELAY_DEFAULT=5
 POLL_RETRY_DELAY_MIN=1
 POLL_RETRY_DELAY_MAX=60
 
-# Exit 0 only for the exact two-line interruption, and nothing else. The whole
-# response must be those two lines with those exact bytes: whitespace variants,
-# a longer response that merely opens with them, and any other SERVER_ERROR are
-# genuine errors this adapter must never swallow.
+# Exit 10 only for the exact interruption, and nothing else. The response must
+# open with those two lines with those exact bytes and may then carry at most
+# one column-zero `help[N]: ...` line ending the output, the advice lavish-axi
+# prints under its errors; that advice never decides what the error is.
+# Whitespace variants, any other line or a second help line, and any other
+# SERVER_ERROR are genuine errors this adapter must never swallow.
 poll_response_filter() {  # <response-file>
   perl -e '
     use strict;
     use warnings;
     my ($stage) = @ARGV;
     my $expected = "error: Lavish Editor poll response was interrupted\ncode: SERVER_ERROR\n";
+    my $help_max = 1024;
+    # Whether $candidate can still grow into the interruption, and whether it
+    # already is the whole interruption.
+    sub viable {
+      my ($candidate) = @_;
+      return substr($expected, 0, length $candidate) eq $candidate
+        if length($candidate) <= length($expected);
+      return 0 unless substr($candidate, 0, length $expected) eq $expected;
+      my $help = substr($candidate, length $expected);
+      return 0 if length($help) > $help_max;
+      return 1 if index("help[", $help) == 0;
+      return $help =~ /\Ahelp\[[1-9][0-9]*(?:\](?::(?: (?:[^\n]+\n?)?)?)?)?\z/;
+    }
+    sub complete {
+      my ($candidate) = @_;
+      return 1 if $candidate eq $expected;
+      return 0 unless length($candidate) > length($expected)
+        && substr($candidate, 0, length $expected) eq $expected;
+      return substr($candidate, length $expected) =~ /\Ahelp\[[1-9][0-9]*\]: [^\n]+\n\z/;
+    }
     open my $staged, ">", $stage or exit 2;
     binmode STDIN;
     binmode STDOUT;
@@ -354,20 +382,19 @@ poll_response_filter() {  # <response-file>
         write_all(*STDOUT, $chunk);
         next;
       }
-      my $room = length($expected) + 1 - length($candidate);
+      my $room = length($expected) + $help_max + 1 - length($candidate);
       my $take = length($chunk) < $room ? length($chunk) : $room;
       my $prefix = substr($chunk, 0, $take);
       $candidate .= $prefix;
-      write_all($staged, $prefix);
-      my $matches_prefix = length($candidate) <= length($expected)
-        && substr($expected, 0, length($candidate)) eq $candidate;
-      if (!$matches_prefix) {
+      if (!viable($candidate)) {
         write_all(*STDOUT, $candidate);
         write_all(*STDOUT, substr($chunk, $take));
         $streaming = 1;
+        next;
       }
+      write_all($staged, $prefix);
     }
-    exit 10 if !$streaming && $candidate eq $expected;
+    exit 10 if !$streaming && complete($candidate);
     write_all(*STDOUT, $candidate) unless $streaming;
   ' "$1"
 }

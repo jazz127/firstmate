@@ -6,7 +6,9 @@
 # The command does not acquire the session lock, drain wakes, arm watchers,
 # mutate backlog state, or write reports. Its default ledger collector may
 # atomically refresh parent-side cached copies of remote home summaries under
-# state/secondmate-summary-cache; those observational cache writes are its only
+# state/secondmate-summary-cache, and its open-decision read refreshes each
+# task's state/.<id>.snapshot-open-decisions-cursor (fm-classify-lib.sh's
+# status_open_decisions_snapshot); those observational cache writes are its only
 # fleet-state mutation.
 #
 # Top-level fields:
@@ -239,7 +241,8 @@ usage: fm-fleet-snapshot.sh --json
 
 Print a structured snapshot of the firstmate fleet.
 JSON is the stable machine-readable output contract. The default snapshot
-refreshes only its parent-side remote-summary cache as an observational side effect.
+refreshes its parent-side remote-summary cache and per-task snapshot decision
+cursors as observational side effects.
 
 --contribution-input emits the canonical local backlog/tasks ownership pair only,
 without worker observations or cross-home collection.
@@ -815,8 +818,9 @@ task_json_lines() {
     # multiplex many concerns onto one stream, so activity on one concern must
     # never clear another concern's keyed decision. A parked/blocked state, or a
     # non-authoritative status-log/none read on a still-live task, keeps the fold's
-    # open decision surfacing.
-    open_decisions_tsv=$(status_open_decisions "$status_log" "$kind")
+    # open decision surfacing. The digest-checked cursor keyed to the real log
+    # returns that whole-stream fold's exact result while folding only new lines.
+    open_decisions_tsv=$(status_open_decisions_snapshot "$status_log" "$kind" "$STATE/$id.status")
     if [ "$kind" != secondmate ] && \
        { { { [ "$current_source" = run-step ] || [ "$current_source" = pane ]; } \
            && [ "$current_state" != parked ] && [ "$current_state" != blocked ]; } \

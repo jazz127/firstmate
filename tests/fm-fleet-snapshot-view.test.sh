@@ -942,6 +942,172 @@ test_open_decision_clears_on_keyed_resolution() {
   pass "durable fold clears a decision only on a keyed resolution"
 }
 
+# Successive snapshots fold only new status bytes through the snapshot's own
+# cursor, yet every snapshot reports exactly what the whole-stream fold reports:
+# open, resolved, and re-opened keys, a partial final line, and a log truncated
+# or rewritten in place all match, and the wake path's cursor is never touched.
+test_open_decisions_cursor_across_successive_snapshots() {
+  local home fakebin status wake_cursor snapshot_cursor sentinel out step=0
+  home=$(make_home snapshot-cursor)
+  mkdir -p "$home/secondmate-home"
+  fm_write_meta "$home/state/cursor-mate.meta" \
+    "window=firstmate:fm-cursor-mate" \
+    "worktree=$home/secondmate-home" \
+    "project=$home/secondmate-home" \
+    "harness=codex" \
+    "kind=secondmate" \
+    "mode=secondmate" \
+    "home=$home/secondmate-home" \
+    "projects=alpha"
+  status="$home/state/cursor-mate.status"
+  wake_cursor="$home/state/.cursor-mate.open-decisions-cursor"
+  snapshot_cursor="$home/state/.cursor-mate.snapshot-open-decisions-cursor"
+  fakebin=$(make_fakebin "$home")
+  sentinel=$'version=sentinel\noffset=0\nident=sentinel\n'
+  printf '%s' "$sentinel" > "$wake_cursor"
+
+  expect_keys() {  # <want-json> <label>
+    local reference
+    step=$((step + 1))
+    out=$(PATH="$fakebin:$PATH" FM_HOME="$home" "$SNAPSHOT" --json) || fail "snapshot $step failed"
+    reference=$(bash -c '. "$1/bin/fm-classify-lib.sh"; status_open_decisions "$2" secondmate' _ "$ROOT" "$status" \
+      | jq -R -s '[splits("\n") | select(length > 0)
+        | (capture("^(?<key>[^\t]*)\t(?<verb>[^\t]*)\t(?<summary>.*)$")?) | select(. != null)]')
+    printf '%s' "$out" | jq -e --argjson want "$1" --argjson reference "$reference" '
+      .tasks[] | select(.id == "cursor-mate")
+      | (.hints.open_decisions | map(.key)) == $want and .hints.open_decisions == $reference
+    ' >/dev/null || fail "snapshot $step ($2) diverged from the whole-stream fold: $(printf '%s' "$out" \
+      | jq -c '.tasks[] | select(.id == "cursor-mate") | .hints.open_decisions'), reference $reference"
+    [ -f "$snapshot_cursor" ] || fail "snapshot $step ($2) kept no cursor of its own"
+    [ "$(cat "$wake_cursor"; printf x)" = "${sentinel}x" ] || fail "snapshot $step ($2) touched the wake path's cursor"
+  }
+
+  printf 'needs-decision [key=a]: pick a\n' > "$status"
+  expect_keys '["a"]' 'opened'
+  printf 'working: unrelated progress\nresolved [key=a]: chose a\nneeds-decision [key=b]: pick b\n' >> "$status"
+  expect_keys '["b"]' 'resolved and opened'
+  printf 'needs-decision [key=a]: pick a again\n' >> "$status"
+  expect_keys '["b","a"]' 're-opened'
+  printf 'resolved [key=b]: cho' >> "$status"
+  expect_keys '["a"]' 'partial final line'
+  printf 'se b\nblocked [key=c]: waiting on c\n' >> "$status"
+  expect_keys '["a","c"]' 'completed final line'
+  # Same inode, rewritten in place to a longer log with a different prefix.
+  printf 'needs-decision [key=d]: a rewritten history line that is long enough\nworking: more\nworking: more\nworking: more\nworking: more\nworking: more\nworking: more\n' > "$status"
+  expect_keys '["d"]' 'rewritten in place'
+  # Same size, edited in place.
+  sed 's/key=d/key=e/' "$status" > "$home/rewrite" && cat "$home/rewrite" > "$status"
+  expect_keys '["e"]' 'edited in place at the same size'
+  : > "$status"
+  printf 'needs-decision [key=f]: after truncation\n' >> "$status"
+  expect_keys '["f"]' 'truncated'
+  pass "snapshot open decisions match the whole-stream fold across successive snapshots"
+}
+
+# The snapshot's cursor-backed fold returns the whole-stream fold's exact bytes
+# for every append, partial line, truncation, rewrite, replacement, and kind.
+test_snapshot_open_decisions_fold_matches_whole_fold() {
+  local work
+  work="$TMP_ROOT/snapshot-fold-equivalence"
+  mkdir -p "$work/state" "$work/capture"
+  bash -s "$ROOT" "$work" <<'SH' || fail "snapshot fold diverged from the whole-stream fold"
+set -u
+. "$1/bin/fm-classify-lib.sh"
+work=$2
+real="$work/state/task.status"
+capture="$work/capture/task.status"
+: > "$real"
+lines=(
+  'needs-decision [key=a]: pick a'
+  'needs-decision [at=1700000000] [key=b]: pick b'
+  'needs-decision: [key=c] pick c'
+  'needs-decision: default one'
+  'blocked [key=a]: blocked a'
+  'blocked: generic block'
+  'resolved [key=a]: done a'
+  'resolved [key=b]: done b'
+  'resolved: default resolved'
+  'captain-held [key=c]: held'
+  'done: finished'
+  'failed: broke'
+  'working: still going'
+  'bare prose without colon'
+  'needs-decision [key=pending-reply-x]: pending-reply-missed: y'
+  ''
+)
+kinds=(ship scout secondmate '')
+compare() {
+  local kind=${kinds[RANDOM % ${#kinds[@]}]} whole cached
+  cp "$real" "$capture"
+  whole=$(status_open_decisions "$capture" "$kind"; printf x)
+  cached=$(status_open_decisions_snapshot "$capture" "$kind" "$real"; printf x)
+  [ "$whole" = "$cached" ] && return 0
+  printf 'iteration %s kind %s:\nwhole  %q\ncached %q\n' "$1" "$kind" "$whole" "$cached" >&2
+  exit 1
+}
+RANDOM=1017
+for ((iteration = 0; iteration < 160; iteration++)); do
+  roll=$((RANDOM % 100))
+  if [ "$roll" -lt 4 ]; then
+    : > "$real"
+  elif [ "$roll" -lt 8 ]; then
+    head -c "$(( $(wc -c < "$real") / 2 ))" "$real" > "$work/half" && cat "$work/half" > "$real"
+  elif [ "$roll" -lt 11 ]; then
+    sed 's/key=a/key=z/' "$real" > "$work/edit" && cat "$work/edit" > "$real"
+  elif [ "$roll" -lt 14 ]; then
+    rm -f "$real" && printf '%s\n' "${lines[RANDOM % ${#lines[@]}]}" > "$real"
+  else
+    line=${lines[RANDOM % ${#lines[@]}]}
+    if [ $((RANDOM % 6)) -eq 0 ]; then
+      printf '%s' "${line:0:$(( ${#line} / 2 ))}" >> "$real"
+      compare "$iteration"
+      printf '%s\n' "${line:$(( ${#line} / 2 ))}" >> "$real"
+    else
+      printf '%s\n' "$line" >> "$real"
+    fi
+  fi
+  compare "$iteration"
+done
+SH
+  pass "snapshot open-decision fold matches the whole-stream fold byte for byte"
+}
+
+test_snapshot_preserves_unread_status_before_first_drain() {
+  local home fakebin snapshot out
+  home=$(make_home snapshot-before-first-drain)
+  mkdir -p "$home/projects/task1"
+  : > "$home/config/supervision-host-off"
+  fm_write_meta "$home/state/task1.meta" \
+    "window=firstmate:fm-task1" \
+    "worktree=$home/projects/task1" \
+    "project=alpha" \
+    "harness=claude" \
+    "kind=ship" \
+    "mode=ship"
+  printf 'note: captain said use REST not RPC\n' > "$home/state/task1.status"
+  fakebin=$(make_fakebin "$home")
+  [ ! -e "$home/state/.status-presentation-cursor" ] \
+    || fail "fresh home already has a status presentation cursor"
+
+  snapshot=$(PATH="$fakebin:$PATH" FM_HOME="$home" "$SNAPSHOT" --json) \
+    || fail "snapshot before the first drain failed"
+  printf '%s' "$snapshot" | jq -e '.tasks | map(.id) == ["task1"]' >/dev/null \
+    || fail "snapshot did not observe the ship task: $snapshot"
+  [ ! -e "$home/state/.status-presentation-cursor" ] \
+    || fail "snapshot marked status as presented before the first drain"
+
+  out=$(PATH="$fakebin:$PATH" FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" \
+    FM_CONFIG_OVERRIDE="$home/config" "$ROOT/bin/fm-wake-drain.sh") \
+    || fail "first drain after the snapshot failed"
+  printf '%s\n' "$out" | awk '
+    /^UNREAD STATUS / { unread = 1; next }
+    unread && $0 == "task1 note: captain said use REST not RPC" { found = 1 }
+    { unread = 0 }
+    END { exit !found }
+  ' || fail "snapshot hid the note from the first UNREAD STATUS presentation: $out"
+  pass "snapshot preserves unread notes for a fresh home's first drain"
+}
+
 # A COMPLETED scout report must never be read as a pending decision. A scout that
 # raised a needs-decision and then finished (done) - its report delivered, its
 # decision either answered or captured in the report for the captain - must surface
@@ -1164,6 +1330,9 @@ test_open_decision_survives_later_unrelated_event
 test_secondmate_open_decision_survives_live_endpoint
 test_open_decision_transfers_to_captain_hold
 test_open_decision_clears_on_keyed_resolution
+test_open_decisions_cursor_across_successive_snapshots
+test_snapshot_open_decisions_fold_matches_whole_fold
+test_snapshot_preserves_unread_status_before_first_drain
 test_completed_scout_report_is_pointer_not_pending
 test_parked_scout_decision_stays_pending
 test_scout_reports_include_teardown_reports

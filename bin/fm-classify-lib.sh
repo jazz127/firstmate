@@ -27,7 +27,7 @@
 # A missing, malformed, identity-mismatched, or past-end classified position reads
 # from byte 0, preferring a bounded duplicate over a lost event.
 #
-# There are four documented exceptions. The absorb classification
+# There are five documented exceptions. The absorb classification
 # (crew_absorb_class and its working/paused wrappers) is NOT a pure status-file
 # read: it reuses bin/fm-crew-state.sh, which may make a bounded no-mistakes call,
 # to decide whether a crew that just stopped its turn or went stale is working,
@@ -37,9 +37,11 @@
 # open-decisions fold" below) also writes: it persists a per-status-file byte
 # cursor and folded open-set as a side effect, so a per-drain fleet-wide scan
 # stays bounded by new appends instead of re-reading each task's whole lifetime
-# log every time. status_home_appends_record writes the per-task home-owned
-# append ledger (see "home-owned status-append ledger" below) so the wake scan
-# can treat this home's own bookkeeping bytes as already owned.
+# log every time. status_open_decisions_snapshot (see "snapshot (digest-checked)
+# open-decisions fold" below) persists the fleet snapshot's own cursor the same
+# way, in a separate namespace. status_home_appends_record writes the per-task
+# home-owned append ledger (see "home-owned status-append ledger" below) so the
+# wake scan can treat this home's own bookkeeping bytes as already owned.
 # crew_worktree_written_since reads the task's meta file and walks a bounded slice
 # of its worktree instead of a status file, so callers run it only at the moment
 # they would otherwise escalate.
@@ -772,10 +774,9 @@ EOF
 # Fold ONE status line into an existing "<key>\t<verb>\t<note>\n"-per-line open
 # set, applying the same needs-decision/blocked-opens, resolved/captain-held-closes
 # rule status_open_decisions documents above. Pure text transform, no file I/O.
-# This is the ONE place the per-line open/resolved rule is written; both the
-# whole-file fold (status_open_decisions) and the incremental cursor-backed fold
-# (status_open_decisions_incremental) below call this instead of re-deriving the
-# rule, so the two consumption strategies can never drift apart on semantics.
+# This is the ONE place the per-line open/resolved rule is written; the
+# whole-file and both cursor-backed readers below use it instead of re-deriving
+# the rule, so the consumption strategies cannot drift apart on semantics.
 # Reserved decision-key namespaces, and the rule that makes them mean something.
 #
 # A key like `pending-reply-<id>` names a decision that one library raises and is
@@ -894,20 +895,31 @@ _fm_decision_fold_line() {  # <open-set> <status-line> <resolve-verb> <held-verb
 # subprocess read, which exists for that function's much narrower payload-driven
 # path resolution rather than this directory-local glob.
 status_open_decisions() {  # <status-file> [<kind>]
-  local f=$1 kind=${2:-} line resolve held open='' verb
+  local f=$1 kind=${2:-} resolve held
   [ -f "$f" ] && [ -r "$f" ] && [ ! -L "$f" ] || return 0
   kind=$(_fm_status_kind "$f" "$kind")
   resolve=${FM_CLASSIFY_RESOLVE_VERB:-$FM_CLASSIFY_RESOLVE_VERB_DEFAULT}
   held=${FM_CLASSIFY_CAPTAIN_HELD_VERB:-$FM_CLASSIFY_CAPTAIN_HELD_VERB_DEFAULT}
+  _fm_decision_fold_file "$f" '' "$resolve" "$held" "$kind"
+  printf '%s' "$_FM_DECISION_FOLD_OPEN"
+}
+
+# Fold every line of <file>, starting from <seed-open>, into
+# _FM_DECISION_FOLD_OPEN. Lines whose verb cannot move the set skip the
+# per-line fold subshell; _fm_decision_fold_line leaves the set unchanged for
+# them anyway. A global result keeps the set's exact bytes, which command
+# substitution would trim.
+_fm_decision_fold_file() {  # <file> <seed-open> <resolve-verb> <held-verb> <kind>
+  local line verb open=$2
   while IFS= read -r line || [ -n "$line" ]; do
     status_line_verb "$line" verb
     case "$verb" in
-      needs-decision|blocked|done|failed|"$resolve"|"$held")
-        open=$(_fm_decision_fold_line "$open" "$line" "$resolve" "$held" "$kind")
+      needs-decision|blocked|done|failed|"$3"|"$4")
+        open=$(_fm_decision_fold_line "$open" "$line" "$3" "$4" "$5")
         ;;
     esac
-  done < "$f"
-  printf '%s' "$open"
+  done < "$1"
+  _FM_DECISION_FOLD_OPEN=$open
 }
 
 # Resolve the log's current declaration at one boundary for crew-state consumers.
@@ -1406,6 +1418,115 @@ EOF
   return 0
 }
 
+# --- snapshot (digest-checked) open-decisions fold --------------------------
+#
+# status_open_decisions_snapshot is the fleet snapshot's bounded-cost sibling of
+# status_open_decisions. The snapshot folds a private capture of each status
+# log, a fresh file every run, so the wake path's device+inode cursor cannot
+# apply, and that cursor carries the wake path's own progress, so the snapshot
+# never reads or writes it. Its own cursor sits beside the real status log, in
+# a separate state/.<task>.snapshot-open-decisions-cursor namespace, and records
+# `version`, `offset`, `digest` (SHA-256 of the capture's first <offset> bytes),
+# then the folded open set. A cursor is reused only when its version matches
+# and the new capture's first <offset> bytes hash to its digest, so a truncated,
+# rewritten, replaced, or edited log refolds from byte 0. The version carries
+# FM_OPEN_DECISIONS_FOLD_VERSION, the task kind, and every fold override in
+# force. The cursor stops at the capture's last newline, so a partial final
+# line is folded into this result and folded again once it is complete.
+# Every failure to read, digest, or split the capture returns
+# status_open_decisions' own answer, and a cursor write failure only costs the
+# next run a full fold, so the result is always status_open_decisions' exact
+# output for the same capture and kind.
+_fm_snapshot_open_decisions_cursor_path() {  # <status-file>
+  local f=$1 dir base
+  dir=$(dirname "$f")
+  base=$(basename "$f")
+  printf '%s/.%s.snapshot-open-decisions-cursor' "$dir" "${base%.status}"
+}
+
+# Split <file> at its last newline: write [start, boundary) to <chunk-out> and
+# [boundary, end) to <tail-out>, and print "<start>\t<boundary>\t<digest>",
+# where start is <offset> when the first <offset> bytes hash to <digest-in>
+# and 0 otherwise, and digest hashes the first <boundary> bytes.
+_fm_status_split_at_digest() {  # <file> <offset> <digest-in> <chunk-out> <tail-out>
+  perl -MDigest::SHA=sha256_hex -e '
+    my ($path, $offset, $want, $chunk, $tail) = @ARGV;
+    open(my $in, "<:raw", $path) or exit 1;
+    my $data = do { local $/; <$in> };
+    defined($data) or $data = "";
+    close($in) or exit 1;
+    my $end = rindex($data, "\n") + 1;
+    my $start = 0;
+    $start = $offset if $want ne "" && $offset =~ /\A[0-9]+\z/ && $offset <= $end
+      && sha256_hex(substr($data, 0, $offset)) eq $want;
+    open(my $c, ">:raw", $chunk) or exit 1;
+    print {$c} substr($data, $start, $end - $start) or exit 1;
+    close($c) or exit 1;
+    open(my $t, ">:raw", $tail) or exit 1;
+    print {$t} substr($data, $end) or exit 1;
+    close($t) or exit 1;
+    print "$start\t$end\t", sha256_hex(substr($data, 0, $end)), "\n" or exit 1;
+  ' "$@"
+}
+
+status_open_decisions_snapshot() {  # <captured-status-file> <kind> <status-file>
+  local f=$1 kind cf resolve held version cursor_data rest offset='' digest='' open=''
+  local split start boundary new_digest chunk="$1.fold-chunk" tail="$1.fold-tail"
+  [ -f "$f" ] && [ -r "$f" ] && [ ! -L "$f" ] || return 0
+  kind=$(_fm_status_kind "$f" "${2:-}")
+  resolve=${FM_CLASSIFY_RESOLVE_VERB:-$FM_CLASSIFY_RESOLVE_VERB_DEFAULT}
+  held=${FM_CLASSIFY_CAPTAIN_HELD_VERB:-$FM_CLASSIFY_CAPTAIN_HELD_VERB_DEFAULT}
+  version="$FM_OPEN_DECISIONS_FOLD_VERSION:$kind:$resolve:$held:${FM_CLASSIFY_RESERVED_KEY_PREFIXES:-$FM_CLASSIFY_RESERVED_KEY_PREFIXES_DEFAULT}"
+  cf=$(_fm_snapshot_open_decisions_cursor_path "$3")
+  if [ -f "$cf" ] && [ -r "$cf" ] && [ ! -L "$cf" ] \
+    && cursor_data=$(LC_ALL=C command cat "$cf" 2>/dev/null && printf x); then
+    cursor_data=${cursor_data%x}
+    case "$cursor_data" in
+      "version=$version"$'\n'offset=*$'\n'digest=*$'\n'*)
+        rest=${cursor_data#*$'\n'}
+        offset=${rest%%$'\n'*}
+        offset=${offset#offset=}
+        rest=${rest#*$'\n'}
+        digest=${rest%%$'\n'*}
+        digest=${digest#digest=}
+        open=${rest#*$'\n'}
+        ;;
+    esac
+  fi
+  case "$offset" in ''|*[!0-9]*) offset=0; digest=''; open='' ;; esac
+  if ! split=$(_fm_status_split_at_digest "$f" "$offset" "$digest" "$chunk" "$tail" 2>/dev/null); then
+    rm -f -- "$chunk" "$tail"
+    status_open_decisions "$f" "$kind"
+    return 0
+  fi
+  IFS=$'\t' read -r start boundary new_digest <<EOF
+$split
+EOF
+  case "$start:$boundary:$new_digest" in
+    *[!0-9a-f:]*|:*|*::*|*:)
+      rm -f -- "$chunk" "$tail"
+      status_open_decisions "$f" "$kind"
+      return 0
+      ;;
+  esac
+  [ "$start" -gt 0 ] && [ "$start" = "$offset" ] || open=''
+  _fm_decision_fold_file "$chunk" "$open" "$resolve" "$held" "$kind"
+  open=$_FM_DECISION_FOLD_OPEN
+  if [ -e "$3" ] && { [ "$start" != "$offset" ] || [ "$boundary" != "$offset" ]; }; then
+    if ! {
+      printf 'version=%s\n' "$version"
+      printf 'offset=%s\n' "$boundary"
+      printf 'digest=%s\n' "$new_digest"
+      printf '%s' "$open"
+    } > "$cf.tmp.$$" 2>/dev/null || ! mv -f -- "$cf.tmp.$$" "$cf" 2>/dev/null; then
+      rm -f -- "$cf.tmp.$$" 2>/dev/null
+    fi
+  fi
+  _fm_decision_fold_file "$tail" "$open" "$resolve" "$held" "$kind"
+  rm -f -- "$chunk" "$tail"
+  printf '%s' "$_FM_DECISION_FOLD_OPEN"
+}
+
 status_presentation_snapshot() {  # <state>
   local state=$1 f task size ident exclude
   exclude=$(status_scan_parent_channel_exclude "$state")
@@ -1725,6 +1846,8 @@ status_retire_presentation_task() {  # <state> <task-id>
   if [ ! -e "$state/$task.status" ] && [ ! -L "$state/$task.status" ] \
     && [ ! -e "$state/.$task.open-decisions-cursor" ] \
     && [ ! -L "$state/.$task.open-decisions-cursor" ] \
+    && [ ! -e "$state/.$task.snapshot-open-decisions-cursor" ] \
+    && [ ! -L "$state/.$task.snapshot-open-decisions-cursor" ] \
     && [ ! -e "$home_appends" ] && [ ! -L "$home_appends" ] \
     && [ ! -e "$home_appends_lock" ] && [ ! -L "$home_appends_lock" ] \
     && [ ! -e "$signal_marker" ] && [ ! -L "$signal_marker" ] \
@@ -1776,7 +1899,7 @@ EOF
   fi
   if [ "$rc" -eq 0 ]; then
     rm -f -- "$state/$task.status" "$state/.$task.open-decisions-cursor" \
-      "$home_appends" "$signal_marker" "$heartbeat_marker" "$daemon_marker" || rc=1
+      "$state/.$task.snapshot-open-decisions-cursor" "$home_appends" "$signal_marker" "$heartbeat_marker" "$daemon_marker" || rc=1
     fm_lock_remove_path "$home_appends_lock" 2>/dev/null || true
   fi
   fm_lock_release "$lock" || rc=1

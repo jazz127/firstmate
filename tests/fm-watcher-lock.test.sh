@@ -989,6 +989,98 @@ test_lock_paused_mid_acquire_claim_fails_during_steal() {
   pass "paused mid-acquire claimant backs off to active stealer"
 }
 
+# Bug fixed here: tests/fm-procevent.test.sh's owner-reply race cases failed on
+# a loaded host because an arm's readiness poll and the runner it had just started
+# kept defeating each other for one source lock, for up to a minute. Each saw the
+# other release between its failed create and its pid read, took the steal path
+# for a lock that was simply free, and its steal mutex made the other's fresh
+# claim back off. This holds the contender at that read while the holder
+# releases, then asks a fresh claimant for the lock: it must win the free lock or
+# lose to a holder it can name, never to a steal of a lock nobody holds.
+test_lock_released_mid_acquire_is_not_stolen() {
+  local dir state lockdir wrap real_cat holder contender i out contender_pid contender_result
+  dir=$(make_case lock-released-mid-acquire)
+  state="$dir/state"
+  lockdir="$state/.contend.lock"
+  wrap="$dir/pause-bin"
+  mkdir -p "$wrap"
+  real_cat=$(command -v cat) || fail "lock release race requires cat"
+  cat > "$wrap/cat" <<'SH'
+#!/usr/bin/env bash
+# Pause at each of the first two reads of the contended lock's pid.
+if [ "$#" -eq 1 ] && [ "$1" = "$PAUSE_LOCK/pid" ]; then
+  for n in 1 2; do
+    mkdir "$PAUSE_DIR/read-$n" 2>/dev/null || continue
+    : > "$PAUSE_DIR/paused-$n"
+    while [ ! -e "$PAUSE_DIR/resume-$n" ]; do sleep 0.02; done
+    break
+  done
+fi
+exec "$REAL_CAT" "$@"
+SH
+  chmod +x "$wrap/cat"
+  FM_STATE_OVERRIDE="$state" bash -c '
+    . "$1"
+    fm_lock_try_acquire "$2" || exit 7
+    : > "$3/held"
+    while [ ! -e "$3/release-holder" ]; do sleep 0.02; done
+    fm_lock_release "$2"
+    : > "$3/holder-released"
+  ' _ "$LIB" "$lockdir" "$dir" &
+  holder=$!
+  i=0
+  while [ "$i" -lt 100 ] && [ ! -e "$dir/held" ]; do sleep 0.05; i=$((i + 1)); done
+  [ -e "$dir/held" ] || fail "lock release race holder did not take the lock"
+  PATH="$wrap:$PATH" PAUSE_LOCK="$lockdir" PAUSE_DIR="$dir" REAL_CAT="$real_cat" \
+    FM_STATE_OVERRIDE="$state" bash -c '
+    . "$1"
+    printf "%s\n" "${BASHPID:-$$}" > "$3/contender-pid"
+    if fm_lock_try_acquire "$2"; then
+      printf "won\n" > "$3/contender-result"
+      while [ ! -e "$3/finish" ]; do sleep 0.02; done
+      fm_lock_release "$2"
+    else
+      printf "lost held=%s\n" "${FM_LOCK_HELD_PID:-}" > "$3/contender-result"
+    fi
+  ' _ "$LIB" "$lockdir" "$dir" &
+  contender=$!
+  i=0
+  while [ "$i" -lt 100 ] && [ ! -e "$dir/paused-1" ]; do sleep 0.05; i=$((i + 1)); done
+  [ -e "$dir/paused-1" ] || fail "contender never read the held lock's pid"
+  : > "$dir/release-holder"
+  wait "$holder" || fail "lock release race holder failed"
+  [ -e "$dir/holder-released" ] && [ ! -e "$lockdir" ] && [ ! -L "$lockdir" ] \
+    || fail "holder did not leave the lock free"
+  : > "$dir/resume-1"
+  i=0
+  while [ "$i" -lt 100 ] && [ ! -e "$dir/contender-result" ] && [ ! -e "$dir/paused-2" ]; do
+    sleep 0.05
+    i=$((i + 1))
+  done
+  [ -e "$dir/contender-result" ] || [ -e "$dir/paused-2" ] \
+    || fail "contender neither finished nor read the lock pid again"
+  out=$(FM_STATE_OVERRIDE="$state" bash -c '
+    . "$1"
+    if fm_lock_try_acquire "$2"; then
+      fm_lock_release "$2"
+      printf "won\n"
+    else
+      printf "lost held=%s\n" "${FM_LOCK_HELD_PID:-}"
+    fi
+  ' _ "$LIB" "$lockdir")
+  : > "$dir/resume-2"
+  : > "$dir/finish"
+  wait "$contender" || fail "lock release race contender failed"
+  contender_pid=$(cat "$dir/contender-pid")
+  contender_result=$(cat "$dir/contender-result")
+  case "$out" in
+    won|"lost held=$contender_pid") ;;
+    *) fail "a fresh claimant was refused a released lock nobody held: $out (contender: $contender_result)" ;;
+  esac
+  [ "$contender_result" = won ] || fail "contender did not take the lock its holder released: $contender_result"
+  pass "a lock released mid-acquire goes to a claimant, not to a steal of a free lock"
+}
+
 test_watch_restart_rejects_reused_pid() {
   local dir state fakebin out live pid i
   dir=$(make_case restart-reused-pid)
@@ -1951,6 +2043,7 @@ test_lock_does_not_steal_live_lock
 test_lock_empty_pid_uses_minimum_grace
 test_lock_late_claim_loses_after_recreate
 test_lock_paused_mid_acquire_claim_fails_during_steal
+test_lock_released_mid_acquire_is_not_stolen
 test_watch_restart_rejects_reused_pid
 test_watch_restart_attaches_to_healthy_peer
 test_watcher_self_evicts_on_lock_takeover

@@ -37,6 +37,7 @@ make_settle_fakebin() {
   cat > "$fakebin/tmux" <<'SH'
 #!/usr/bin/env bash
 set -u
+window_file="${FM_FAKE_PANE_COUNTFILE:?FM_FAKE_PANE_COUNTFILE unset}.window"
 case "$*" in
   *"#{pane_tty}"*) printf '%s\n' '/dev/pts/91'; exit 0 ;;
   *"#{pane_current_path}"*)
@@ -45,8 +46,18 @@ case "$*" in
 esac
 case "${1:-}" in
   display-message) printf 'firstmate\n'; exit 0 ;;
-  list-windows) exit 0 ;;
-  has-session|new-session|new-window|kill-window) exit 0 ;;
+  list-windows) [ ! -s "$window_file" ] || cat "$window_file"; exit 0 ;;
+  new-window)
+    name=
+    previous=
+    for arg in "$@"; do
+      [ "$previous" = -n ] && name=$arg
+      previous=$arg
+    done
+    printf '%s\n' "$name" > "$window_file"
+    exit 0 ;;
+  kill-window) : > "$window_file"; exit 0 ;;
+  has-session|new-session) exit 0 ;;
   send-keys)
     for arg in "$@"; do
       if [ "$arg" = 'treehouse get' ] && [ -n "${FM_FAKE_LOCK_PATH:-}" ]; then
@@ -261,16 +272,29 @@ make_concurrent_fakebin() {
   cat > "$fakebin/tmux" <<'SH'
 #!/usr/bin/env bash
 set -u
+window_file="${FM_HOME:?}/state/.fake-window"
 case "$*" in
   *"#{pane_tty}"*) printf '%s\n' '/dev/pts/91'; exit 0 ;;
   *"#{pane_current_path}"*) printf '%s\n' "${FM_FAKE_PANE_PATH:-}"; exit 0 ;;
-  *"#{window_id}"*) printf '%s\n' "${FM_FAKE_WINDOW_ID:-@fake}"; exit 0 ;;
+  *"#{window_id}"*)
+    if [ "${1:-}" != new-window ]; then printf '%s\n' "${FM_FAKE_WINDOW_ID:-@fake}"; exit 0; fi ;;
 esac
 case "${1:-}" in
   display-message)
     for arg in "$@"; do case "$arg" in *pane_tty*) printf '%s\n' '/dev/pts/91'; exit 0 ;; esac; done
     printf 'firstmate\n'; exit 0 ;;
-  list-windows) exit 0 ;;
+  list-windows) [ ! -s "$window_file" ] || cat "$window_file"; exit 0 ;;
+  new-window)
+    name=
+    previous=
+    for arg in "$@"; do
+      [ "$previous" = -n ] && name=$arg
+      previous=$arg
+    done
+    printf '%s\n' "$name" > "$window_file"
+    printf '%s\n' "${FM_FAKE_WINDOW_ID:-@fake}"
+    exit 0 ;;
+  kill-window) : > "$window_file"; exit 0 ;;
   send-keys)
     for arg in "$@"; do
       if [ "$arg" = 'treehouse get' ]; then
@@ -287,7 +311,7 @@ case "${1:-}" in
     done
     exit 0
     ;;
-  has-session|new-session|new-window|kill-window|set-window-option) exit 0 ;;
+  has-session|new-session|set-window-option) exit 0 ;;
 esac
 exit 0
 SH
@@ -357,11 +381,25 @@ make_returned_slot_fakebin() {
   cat > "$fakebin/tmux" <<'SH'
 #!/usr/bin/env bash
 set -u
+window_file="${FM_HOME:?}/state/.fake-window"
 case "$*" in
   *"#{pane_tty}"*) printf '%s\n' '/dev/pts/91'; exit 0 ;;
-  *"#{window_id}"*) printf '%s\n' '@returned'; exit 0 ;;
+  *"#{window_id}"*)
+    if [ "${1:-}" != new-window ]; then printf '%s\n' '@returned'; exit 0; fi ;;
 esac
 case "${1:-}" in
+  list-windows) [ ! -s "$window_file" ] || cat "$window_file"; exit 0 ;;
+  new-window)
+    name=
+    previous=
+    for arg in "$@"; do
+      [ "$previous" = -n ] && name=$arg
+      previous=$arg
+    done
+    printf '%s\n' "$name" > "$window_file"
+    printf '%s\n' '@returned'
+    exit 0 ;;
+  kill-window) : > "$window_file"; exit 0 ;;
   display-message) printf 'firstmate\n'; exit 0 ;;
   send-keys)
     for arg in "$@"; do

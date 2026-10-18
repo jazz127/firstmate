@@ -349,49 +349,76 @@ make_wiring_case() {  # <name>
   printf '%s\n' "$case_dir"
 }
 
+polytoken_config_json() {
+  ruby -ryaml -rjson -e 'puts JSON.generate(YAML.safe_load(File.read(ARGV.fetch(0)), aliases: true))' "$1"
+}
+
+assert_polytoken_worker_config() {
+  local config
+  config=$(polytoken_config_json "$1") || fail "worker config must be valid YAML"
+  printf '%s\n' "$config" | jq -e --arg matcher "$2" '
+    .version == 4 and .default_permission_matcher == $matcher
+    and .providers == {zai: {auth: {type: "static_key", key: "k"}}}
+    and .models == {"zai/glm-5.3-flash": {enabled: true}}
+  ' >/dev/null || fail "worker config must preserve providers, credentials and models with matcher $2"
+}
+
 test_polytoken_write_config_enforces_the_unattended_posture() {
-  local rec case_dir home cfgdir mirrored out rc
+  local rec case_dir home cfgdir base source declaration expected original mirrored out rc
   rec=$(make_wiring_case config)
   case_dir=$rec
   home="$case_dir/home"
   cfgdir="$case_dir/state/task.polytoken-config"
-  printf 'version: 4\nproviders:\n  zai:\n    auth:\n      type: static_key\n      key: k\nmodels:\n  zai/glm-5.3-flash:\n    enabled: true\ndefault_permission_matcher: standard\n' \
-    > "$home/.config/polytoken/config.yaml"
-  XDG_CONFIG_HOME="$home/.config" HOME="$home" fm_polytoken_write_config "$cfgdir" \
-    || fail "a mirrorable global config must be mirrored"
-  mirrored=$(cat "$cfgdir/config.yaml")
-  assert_contains "$mirrored" "default_permission_matcher: bypass" \
-    "a standard global posture must be enforced to bypass for the worker"
-  assert_contains "$mirrored" "type: static_key" "the mirrored providers must survive"
-  # bypass_plus is the one strictly-safer value that is preserved.
-  printf 'version: 4\ndefault_permission_matcher: bypass_plus\n' > "$home/.config/polytoken/config.yaml"
-  rm -rf "$cfgdir"
-  XDG_CONFIG_HOME="$home/.config" HOME="$home" fm_polytoken_write_config "$cfgdir" \
-    || fail "a bypass_plus global config must be mirrored"
-  mirrored=$(cat "$cfgdir/config.yaml")
-  assert_contains "$mirrored" "default_permission_matcher: bypass_plus" \
-    "the bypass_plus posture must be preserved, not flattened to bypass"
-  # Quoted and commented YAML spellings of bypass_plus are the same value.
-  for spelling in '"bypass_plus"' "'bypass_plus'" 'bypass_plus # keep deny rules'; do
-    printf 'version: 4\ndefault_permission_matcher: %s\n' "$spelling" > "$home/.config/polytoken/config.yaml"
-    rm -rf "$cfgdir"
-    XDG_CONFIG_HOME="$home/.config" HOME="$home" fm_polytoken_write_config "$cfgdir" \
-      || fail "a bypass_plus global config spelled $spelling must be mirrored"
-    mirrored=$(cat "$cfgdir/config.yaml")
-    assert_contains "$mirrored" "default_permission_matcher: $spelling" \
-      "the bypass_plus posture spelled $spelling must be preserved, not flattened to bypass"
+  source="$home/.config/polytoken/config.yaml"
+  base="$case_dir/operator-base.yaml"
+  printf 'version: 4\nproviders:\n  zai:\n    auth:\n      type: static_key\n      key: k\nmodels:\n  zai/glm-5.3-flash:\n    enabled: true\n' > "$base"
+  for expected in bypass_plus bypass; do
+    for declaration in \
+      "default_permission_matcher: $expected" \
+      "default_permission_matcher: \"$expected\"" \
+      "default_permission_matcher: '$expected'" \
+      "default_permission_matcher: $expected # keep deny rules" \
+      "default_permission_matcher: &policy $expected" \
+      "policy: &policy $expected"$'\n''default_permission_matcher: *policy' \
+      "\"default_permission_matcher\": $expected" \
+      "<<: {default_permission_matcher: $expected}" \
+      $'default_permission_matcher: >-\n  '"$expected"; do
+      cat "$base" > "$source"
+      printf '%s\n' "$declaration" >> "$source"
+      XDG_CONFIG_HOME="$home/.config" HOME="$home" fm_polytoken_write_config "$cfgdir" \
+        || fail "config with $declaration must be mirrored"
+      assert_polytoken_worker_config "$cfgdir/config.yaml" "$expected"
+      original=$(polytoken_config_json "$source" | jq -cS 'del(.default_permission_matcher)')
+      mirrored=$(polytoken_config_json "$cfgdir/config.yaml" | jq -cS 'del(.default_permission_matcher)')
+      assert_equals "$original" "$mirrored" "all non-policy operator settings must survive"
+    done
   done
-  # An absent key is appended, not silently inherited: the project layer
-  # fully replaces the global config, so nothing can be inherited.
-  printf 'version: 4\n' > "$home/.config/polytoken/config.yaml"
-  rm -rf "$cfgdir"
-  XDG_CONFIG_HOME="$home/.config" HOME="$home" fm_polytoken_write_config "$cfgdir" \
-    || fail "a global config without the matcher key must still be mirrored"
-  mirrored=$(cat "$cfgdir/config.yaml")
-  assert_contains "$mirrored" "default_permission_matcher: bypass" \
-    "an absent matcher key must be appended as bypass"
-  # A missing global config refuses rather than launching a worker with no
-  # providers or credentials.
+  for declaration in \
+    'default_permission_matcher: standard' \
+    'default_permission_matcher: &policy standard' \
+    $'policy: &policy standard\ndefault_permission_matcher: *policy' \
+    '"default_permission_matcher": standard' \
+    '<<: {default_permission_matcher: standard}' \
+    $'default_permission_matcher: >-\n  standard' \
+    'default_permission_matcher: "bypass_plus # not the policy name"' \
+    '# default_permission_matcher: bypass_plus' \
+    'other: {default_permission_matcher: bypass_plus}' \
+    ''; do
+    cat "$base" > "$source"
+    printf '%s\n' "$declaration" >> "$source"
+    XDG_CONFIG_HOME="$home/.config" HOME="$home" fm_polytoken_write_config "$cfgdir" \
+      || fail "config with $declaration must be mirrored"
+    assert_polytoken_worker_config "$cfgdir/config.yaml" bypass
+    original=$(polytoken_config_json "$source" | jq -cS 'del(.default_permission_matcher)')
+    mirrored=$(polytoken_config_json "$cfgdir/config.yaml" | jq -cS 'del(.default_permission_matcher)')
+    assert_equals "$original" "$mirrored" "enforcing bypass must preserve non-policy operator settings"
+  done
+  for declaration in 'version: [' '[version, 4]'; do
+    printf '%s\n' "$declaration" > "$source"
+    if XDG_CONFIG_HOME="$home/.config" HOME="$home" fm_polytoken_write_config "$cfgdir" 2>"$case_dir/error"; then
+      fail "invalid or non-mapping YAML must refuse the mirror"
+    fi
+  done
   rm -rf "$home/.config/polytoken" "$cfgdir"
   out=$(XDG_CONFIG_HOME="$home/.config" HOME="$home" fm_polytoken_write_config "$cfgdir" 2>&1)
   rc=$?
@@ -401,7 +428,7 @@ test_polytoken_write_config_enforces_the_unattended_posture() {
 }
 
 test_polytoken_write_facet_carries_the_role_contract_without_a_model_pin() {
-  local rec case_dir facet body
+  local rec case_dir facet body metadata
   rec=$(make_wiring_case facet)
   case_dir=$rec
   fm_polytoken_write_facet "$case_dir/wt" "$case_dir/state/task.inbox" \
@@ -409,9 +436,20 @@ test_polytoken_write_facet_carries_the_role_contract_without_a_model_pin() {
   facet="$case_dir/wt/.polytoken/facets/firstmate-worker.md"
   [ -f "$facet" ] || fail "the facet must exist at the project facet layer path"
   body=$(cat "$facet")
-  assert_contains "$body" "name: firstmate-worker" "the facet must be the firstmate-worker facet"
-  assert_contains "$body" "tools_deny: [switch_facet, handoff_plan, subagent, message_subagent]" \
-    "the facet must deny facet switching and delegation at the tool-registry level"
+  metadata=$(ruby -ryaml -rjson - "$facet" <<'RUBY'
+lines = File.readlines(ARGV.fetch(0))
+raise "missing frontmatter" unless lines.shift.strip == "---"
+boundary = lines.index { |line| line.strip == "---" }
+raise "unterminated frontmatter" unless boundary
+puts JSON.generate(YAML.safe_load(lines.take(boundary).join, aliases: true))
+RUBY
+  ) || fail "the worker facet must have valid YAML frontmatter"
+  printf '%s\n' "$metadata" | jq -e '
+    .name == "firstmate-worker"
+    and .polytoken.tools == ["tag!ALL", "tag!ALL_MCP"]
+    and (.polytoken.tools_deny | sort) == (["switch_facet", "handoff_plan", "subagent", "message_subagent"] | sort)
+    and (has("model") | not) and (.polytoken | has("model") | not)
+  ' >/dev/null || fail "facet metadata must select the worker tools, deny delegation and omit a model pin"
   assert_contains "$body" 'transclude("polytoken://system_prompts/facet.md")' \
     "the facet must transclude the shipped base prompt to keep the tool-use framing"
   assert_contains "$body" "You are a crewmate" "the facet must carry the crewmate identity"
@@ -423,11 +461,6 @@ test_polytoken_write_facet_carries_the_role_contract_without_a_model_pin() {
     "the facet must name this task's instruction inbox path"
   assert_contains "$body" "does not grant merge, destructive, security-sensitive" \
     "the facet must carry the task-channel trust statement's authority boundary"
-  # A facet model pin outranks the launch --model, so the worker facet must
-  # never carry one.
-  if printf '%s\n' "$body" | grep -qE '^  model:'; then
-    fail "the worker facet must not pin a model"
-  fi
   pass "fm-polytoken-lib: the worker facet carries the role contract and no model pin"
 }
 
@@ -905,7 +938,7 @@ run_polytoken_spawn() {
 }
 
 test_polytoken_launch_carries_the_hybrid_contract() {
-  local id rec out rc launch raw meta cfg envlog
+  local id rec out rc launch raw meta envlog
   id="pt-launch-z1-$$"
   rec=$(make_polytoken_spawn_case launch "$id")
   read_polytoken_spawn_record "$rec"
@@ -976,9 +1009,7 @@ test_polytoken_launch_carries_the_hybrid_contract() {
   [ -f "$WT_DIR/.polytoken/hooks.json" ] || fail "the worktree hook layer was not written"
   [ -f "$WT_DIR/.polytoken/facets/firstmate-worker.md" ] || fail "the worker facet was not written"
   [ -f "$HOME_DIR/state/$id.polytoken-busy.sh" ] || fail "the busy writer was not written"
-  cfg=$(cat "$HOME_DIR/state/$id.polytoken-config/config.yaml")
-  assert_contains "$cfg" "default_permission_matcher: bypass" \
-    "the mirrored worker config must enforce the unattended posture"
+  assert_polytoken_worker_config "$HOME_DIR/state/$id.polytoken-config/config.yaml" bypass
   pass "fm-spawn: the polytoken launch carries the hybrid contract end to end"
 }
 

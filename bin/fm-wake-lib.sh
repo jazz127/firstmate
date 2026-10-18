@@ -1241,6 +1241,17 @@ fm_lock_try_acquire() {
     FM_LOCK_HELD_PID=$(cat "$lockdir/pid" 2>/dev/null || true)
     return 1
   fi
+  # No pid and no lock path means the holder released between the failed create
+  # and the read above: the lock is free, not stale, so the steal path does not
+  # apply. Taking it anyway let two pollers of one lock defeat each other round
+  # after round - the steal mutex made the other's fresh claim back off, and
+  # this stealer's recheck then refused that claim's new link. Retry the
+  # ordinary create once; losing it means another claimant holds the lock now.
+  if [ -z "$pid" ] && [ ! -e "$lockdir" ] && [ ! -L "$lockdir" ]; then
+    fm_lock_try_create "$lockdir" && return 0
+    FM_LOCK_HELD_PID=$(cat "$lockdir/pid" 2>/dev/null || true)
+    return 1
+  fi
   if fm_lock_owner_alive "$lockdir" "$pid"; then
     FM_LOCK_HELD_PID=$pid
     return 1

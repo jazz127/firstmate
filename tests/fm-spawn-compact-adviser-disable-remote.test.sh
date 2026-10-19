@@ -99,6 +99,10 @@ printf '## In flight\n\n## Queued\n\n## Done\n' > "$PARENT/data/backlog.md"
 printf '%s\n' "$$" > "$PARENT/state/.lock"
 
 remote_env() {
+  # This local SSH fixture has no network round trips to overlap. Keep its
+  # worker submissions serial, as in the remote lifecycle fixture; the
+  # bootstrap-network-parallel suite exercises inheritance overlap itself.
+  FM_REMOTE_INHERIT_PUSH_JOBS=1 \
   FM_HOME="$PARENT" \
   FM_ROOT_OVERRIDE="$REMOTE_ROOT" \
   FM_PROCEVENT_CLAIM_ROOT="$CLAIMS" \
@@ -138,11 +142,11 @@ FM_SECONDMATE_CHARTER='Own iOS delivery on the build Mac.' \
   || fail "remote seed did not provision the route under test"
 
 run_remote_launch() {  # <label>
-  local label=$1
+  local label=$1 out
   reset_remote_herdr_fixture "$HERDR_STATE"
   : > "$HERDR_LOG"
-  remote_env "$ROOT/bin/fm-spawn.sh" ios --secondmate >/dev/null 2>&1 \
-    || fail "$label: the remote second-mate launch failed"
+  out=$(remote_env "$ROOT/bin/fm-spawn.sh" ios --secondmate 2>&1) \
+    || fail "$label: the remote second-mate launch failed: $out"
 }
 
 # Replay what the remote pane received, in the order it received it, under a

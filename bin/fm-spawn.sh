@@ -221,7 +221,7 @@
 #   profile consultation. A --secondmate spawn is exempt and resolves the SECONDMATE
 #   harness (config/secondmate-harness -> config/crew-harness -> own), so the
 #   secondmate-vs-crewmate split is DURABLE across every respawn (recovery,
-#   /updatefirstmate, restart). A bare adapter name (claude|codex|opencode|pi|pi-signed|grok|kimi|cursor|gemini|muse|rovo|omp|agy|devin|commandcode)
+#   /updatefirstmate, restart). A bare adapter name from fm_control_harnesses
 #   overrides it for this spawn (either kind). A non-flag string containing
 #   whitespace is treated as a RAW launch command - the escape hatch for verifying
 #   new adapters. For pi and pi-signed, fm-spawn resolves the selected executable
@@ -559,7 +559,7 @@
 # polytoken (the captain-approved TUI-pane-plus-REST hybrid) is the one harness
 # whose worker's unattended permission posture cannot ride a launch flag: a
 # per-task config dir is generated under state/ mirroring the operator's global
-# config with `default_permission_matcher` enforced to `bypass` (a project
+# config under fm_polytoken_write_config's permission policy (a project
 # config.yaml fully replaces the global config and no `new` flag reaches the
 # permission matcher, verified live). Its brief rides `--prompt` (auto-submitted
 # after the TUI attaches), its busy wiring is the worktree `.polytoken/hooks.json`
@@ -5930,9 +5930,8 @@ EOF
     # response - verified mid-turn, between tool phases - so closing on it
     # would flap the record idle while a long tool call still runs. The
     # worktree files stay out of git's view so they never block teardown's
-    # dirty check or leak into a commit; an existing `.polytoken/hooks.json`
-    # refused the spawn above, before any wiring or relaunch cleanup was armed,
-    # rather than clobbering a project's own hook layer.
+    # dirty check or leak into a commit; the shared wiring collision check
+    # above enforces the adapter reference's worker lifecycle limits.
     # Gated on the canonical template like gemini and devin, because a raw
     # launch command never carries this wiring's flags or cwd contract.
     if [ "$RAW_LAUNCH" -eq 0 ]; then

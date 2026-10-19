@@ -1004,8 +1004,8 @@ resolve_relaunch_profile() {
     "$account_model" "$TARGET_HARNESS" "" "$account_mate" >/dev/null || return 1
   # Likewise polytoken's launch profile and wiring refusals
   # (bin/fm-polytoken-lib.sh owns them). The launch owner retires the prior
-  # incarnation's own generated hook layer, so only one it did not generate
-  # refuses here.
+  # incarnation's own generated hooks and facet; the shared collision check
+  # enforces the adapter reference's worker lifecycle limits before stopping it.
   if [ "$TARGET_HARNESS" = polytoken ]; then
     local polytoken_bin polytoken_state
     polytoken_bin=$(fm_polytoken_binary) || return 1

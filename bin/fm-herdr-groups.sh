@@ -27,9 +27,9 @@
 # sync reads each recorded session's workspace and pane lists once, reports
 # only the tokens whose live value differs from the planned value through
 # `herdr pane|workspace report-metadata --source firstmate`, and sets the
-# agents view through bin/backends/herdr-agent-view.py whenever it reported a
-# pane token, so a Herdr restart that dropped every token and the view is
-# repaired by the next sync. Workspace tokens are reported only for a task's
+# agents view independently of token differences; docs/herdr-backend.md's
+# "Project groups" section owns reconciliation behavior and retry guarantees.
+# Workspace tokens are reported only for a task's
 # own projected workspace: an exact version 2 presentation journal binding the
 # task's recorded session, workspace, and pane, whose live workspace holds that
 # one pane. A pane missing from the live list is skipped.

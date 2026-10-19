@@ -40,4 +40,4 @@ The delivery busy signals are `esc to interrupt` and the bullet-framed elapsed c
 
 No primary Stop guard, watcher protocol, pre-tool protection, or session-start contract was verified for Command Code.
 Do not launch a primary or secondmate with this adapter.
-Quota-provider mapping and typed dispatch resolution remain separate follow-ups.
+Typed dispatch and quota-provider requirements follow the [provider declaration policy](../../../../../docs/configuration.md#crew-dispatch-profiles-configcrew-dispatchjson).

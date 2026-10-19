@@ -260,10 +260,8 @@ EOF
   chmod 700 "$script" || return 1
 }
 
-# fm_polytoken_write_hooks: the worktree hook layer. Hooks are self-contained
-# (a project hook that negates a global hook by name fails daemon startup -
-# verified by the scout), so this file only registers firstmate's own three
-# events and negates nothing.
+# The shared wiring ownership and collision checks follow the worker lifecycle
+# limits in .agents/skills/harness-adapters/references/harness/polytoken.md.
 fm_polytoken_require_path_free() {
   local path=$1
   if [ -e "$path" ] || [ -L "$path" ]; then
@@ -316,6 +314,10 @@ fm_polytoken_require_handler_path() {  # <busy-script>
   esac
 }
 
+# fm_polytoken_write_hooks: the worktree hook layer. Hooks are self-contained
+# (a project hook that negates a global hook by name fails daemon startup -
+# verified by the scout), so this file only registers firstmate's own three
+# events and negates nothing.
 fm_polytoken_write_hooks() {  # <worktree> <busy-script>
   local wt=$1 script=$2 hooks
   [ ! -L "$wt/.polytoken" ] && [ ! -L "$wt/.polytoken/facets" ] || return 1
@@ -524,6 +526,9 @@ fm_polytoken_interrupt() {  # <port> <credential-token> [wait-secs]
 # prompt queued behind the cancelled turn submitted at the pause), while the
 # cancelled turn's own mid-turn pre_model_turn rewrites still close. GET /sync
 # is re-read right before the write, and a running turn skips the close.
+# The final apply compares the captured gen and the last observed seq under the
+# busy-state writer lock; any intervening hook or replacement rejects the close,
+# so an idle daemon read can never overwrite a newer semantic busy record.
 # Prints the fm_polytoken_interrupt outcome; returns nonzero as it does.
 fm_polytoken_interrupt_task() {  # <bin-dir> <state-dir> <id> <port> <credential-token> [wait-secs]
   local bin=$1 state=$2 id=$3 port=$4 token=$5 wait=${6:-10}

@@ -968,6 +968,7 @@ Its busy-state wiring is a tracked mod loaded per process with `--mod`, so no us
 Polytoken is verified for crewmate and scout launches only; [its adapter reference](../.agents/skills/harness-adapters/references/harness/polytoken.md) owns the operating contract and [verification record](verification/polytoken.md) owns the live evidence.
 It has no primary or secondmate supervision protocol.
 The launch generates a private per-task config directory that mirrors the operator's provider/model configuration and enforces unattended permissions without modifying global configuration.
+The config mirror requires `ruby` with its standard YAML library and refuses malformed or non-mapping operator configuration.
 The first-start license dialog requires an operator decision and is never accepted automatically.
 
 ### Verification and primary supervision

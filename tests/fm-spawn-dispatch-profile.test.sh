@@ -970,6 +970,9 @@ SH
   status=$?
   expect_code 0 "$status" "seated local secondmate should launch: $out"
   assert_grep 'seat=luna' "$HOME_DIR/state/$id.meta" "initial local secondmate seat was lost"
+  # Recovery starts after the prior endpoint is gone. The shared tmux fixture
+  # now records windows, so retire that endpoint before testing the respawn.
+  "$FAKEBIN_DIR/tmux" kill-window -t "firstmate:fm-$id"
   : > "$LAUNCH_LOG"
   out=$(run_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$sm" --secondmate)
   status=$?

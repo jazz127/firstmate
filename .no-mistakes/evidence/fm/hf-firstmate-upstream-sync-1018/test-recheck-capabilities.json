@@ -1,0 +1,12 @@
+{
+  "polytoken": null,
+  "commandcode": null,
+  "command-code": null,
+  "cursor-agent": null,
+  "opencode": "~/.local/bin/opencode",
+  "tmux": "/opt/homebrew/bin/tmux",
+  "herdr": "~/.local/bin/herdr",
+  "python3": "/opt/homebrew/bin/python3",
+  "ruby": "/usr/bin/ruby",
+  "jq": "/opt/homebrew/bin/jq"
+}

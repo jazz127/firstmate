@@ -1,0 +1,41 @@
+[
+  {
+    "ancestor": "69a6c4e6f523a28d93275e1a35b9dd391aad7836",
+    "target": "HEAD",
+    "exit": 0,
+    "stderr": ""
+  },
+  {
+    "ancestor": "07912680c1cdedc91018a8df1c798e86fbe1cac5",
+    "target": "HEAD",
+    "exit": 0,
+    "stderr": ""
+  },
+  {
+    "ancestor": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681",
+    "target": "HEAD",
+    "exit": 0,
+    "stderr": ""
+  },
+  {
+    "ancestor": "8b8f5f6f",
+    "target": "HEAD",
+    "exit": 0,
+    "stderr": ""
+  },
+  {
+    "ancestor": "0439615a",
+    "target": "HEAD",
+    "exit": 0,
+    "stderr": ""
+  },
+  {
+    "ancestor": "921b178b",
+    "target": "HEAD",
+    "exit": 0,
+    "stderr": ""
+  },
+  {
+    "merge_commits": "921b178b chore: merge latest upstream main\n0439615a chore: merge current house lock fix\n8b8f5f6f chore: merge upstream main into house\n"
+  }
+]

@@ -1,0 +1,130 @@
+FM_TEST_BEGIN 2026-10-19T00:33:21Z tests/fm-polytoken-harness.test.sh family=pure-contract-unit expected_gate_skip=none
+ok - fm-harness.sh: ancestry detects a natively-named polytoken command
+ok - fm-harness.sh: ancestry rejects unrelated polytoken mentions
+ok - fm-harness.sh: no inherited launcher marker claims the polytoken identity
+ok - fm-control-lib: polytoken mechanics are REST interrupt, /quit exit, no secondmates
+ok - fm-control-lib: polytoken wiring tables name every generated artifact and no project file
+ok - bin/fm-agent-process-lib.sh: polytoken is an agent, fragments are not
+ok - fm-busy-lib: the polytoken-hook source is scoped to polytoken tasks
+ok - fm-composer-lib: only the pinned Running-for row carries the polytoken busy verdict
+ok - fm-composer-lib: the polytoken separated shape reads empty, pending, and unknown exactly
+ok - fm-composer-lib: the queued-Enter conversion covers polytoken's verified queue behavior
+ok - fm-tmux-lib: only a polytoken-identity pane confirms a submit from its Running-for row
+ok - fm-polytoken-lib: the config mirror enforces the unattended posture
+ok - fm-polytoken-lib: the worker facet carries the role contract and no model pin
+ok - fm-polytoken-lib: preflight and writers preserve existing project artifacts
+ok - fm-polytoken-lib: the no-argv busy writer opens, closes, and never fails
+ok - fm-polytoken-lib: the hook layer binds the three events and refuses to clobber
+ok - fm-polytoken-lib: the model ref composes the effort axis and refuses unlisted models
+ok - fm-polytoken-lib: an unreachable listing refuses an unprovable pin
+ok - fm-polytoken-lib: the REST interrupt reports cancelled, not-running, and refuses unauthorized
+ok - fm-polytoken-lib: the interrupt close lands after mid-turn rewrites and spares a reopened or running turn
+ok - fm-polytoken-lib: interrupt closes preserve newer sequences and generations
+ok - fm-polytoken-lib: the typed settle postcondition follows GET /sync
+ok - fm-spawn: the polytoken launch carries the hybrid contract end to end
+ok - fm-spawn: polytoken maps an unlisted effort and retains the requested axis
+ok - fm-spawn: polytoken requires explicit model and effort axes
+ok - fm-spawn: an unlisted polytoken model refuses before pane creation
+ok - fm-spawn: polytoken cannot be launched as a secondmate
+ok - fm-spawn: a project's own polytoken hook layer is refused, not clobbered
+ok - fm-spawn: tracked and untracked project facets survive refused launch
+ok - fm-spawn: project hooks and facets survive pool refresh collisions
+ok - fm-spawn: a whitespace-bearing state dir refuses polytoken wiring before writing any
+ok - fm-spawn: a failed readiness gate fails loudly, reaps, and retires its wiring
+ok - fm-spawn: a gate failure after publication drops the slot claim with the record
+ok - fm-spawn: the polytoken busy contract arms and advances through the generated writer
+FM_TEST_END 2026-10-19T00:34:44Z tests/fm-polytoken-harness.test.sh exit=0 duration_ms=82305 gate_skip=false
+FM_TEST_BEGIN 2026-10-19T00:34:44Z tests/fm-busy-state.test.sh family=standalone expected_gate_skip=none
+ok - native progress is generation-bound, separately recorded, and cleared on arm and retire
+ok - the turn-ended notification rides the apply generation check
+ok - arm mints a gen sidecar and seeds busy fm-spawn at seq=1
+ok - apply advances seq under the armed gen and attributes the writing source
+ok - conditional busy writes compare under the lock and preserve timestamps
+ok - firstmate-owned interrupt and recovery events bind to the current gen
+ok - apply is refused for a task whose busy contract was never armed
+ok - retire waits for the writer lock and cannot remove a new incarnation
+ok - retire treats only an absent sidecar as already retired
+ok - the writer breaks a stale lock instead of dying on GNU stat output
+ok - a late event from a previous incarnation is rejected, record unchanged
+ok - a record from a stale incarnation classifies unknown, never idle
+ok - a converted adapter with no record classifies unknown, never idle
+ok - malformed records classify unknown malformed, never busy or idle
+ok - records and generations require one complete text line without binary or trailing data
+ok - a record with no armed gen sidecar classifies unknown
+ok - a record is trusted only by the adapter whose source wrote it
+ok - converted adapters never classify busy from rendered footer text
+ok - a Claude launch parked on its trust or external-imports dialog classifies unknown launch-prompt
+ok - a Pi-family launch (pi, pi-signed, omp) parked on the project-trust dialog classifies unknown launch-prompt
+ok - the Pi signature requires both the dialog heading and its decline option, not the bare word trust
+ok - a Gemini launch parked on its trust, auth-picker, or API-key dialog classifies unknown launch-prompt
+ok - the launch-prompt backstop never reclassifies a genuinely working launch
+ok - the launch-prompt backstop is scoped to harnesses with a verified signature
+ok - the launch-prompt backstop only ever touches the untouched fm-spawn seed
+ok - the launch-prompt backstop never runs without a captured tail
+ok - the grok fallback is regex-scoped to grok and classifies only grok tasks
+ok - codex classifies unknown until a semantic source passes its verification gate
+ok - standalone kimi classifies unknown until the live verification gate opens
+ok - cursor classifies only from its transcript fold, never rendered text or native state
+ok - endpoint death is the only process-level override and yields dead, never busy
+ok - herdr's native verdict is trusted for busy only, and records outrank it
+ok - record parsing never clobbers the caller's positional parameters, glob setting, or fields
+ok - the boolean view reports busy only on an exact busy verdict
+all fm-busy-state tests passed
+FM_TEST_END 2026-10-19T00:34:52Z tests/fm-busy-state.test.sh exit=0 duration_ms=8721 gate_skip=false
+FM_TEST_BEGIN 2026-10-19T00:34:52Z tests/fm-control-relaunch.test.sh family=backend-dispatch expected_gate_skip=none
+ok - fm-spawn --relaunch: tracked opencode wiring is retired as on main
+ok - fm-control removes the dialog file after exit and after relaunch
+ok - fm-control exit removes the dialog file before it releases the control lock
+ok - fm-control relaunch: a same-harness relaunch replaces the agent in the same endpoint and worktree
+ok - fm-control relaunch: an armed PR poll remains authenticated after metadata replacement
+ok - fm-control relaunch: pending composer text refuses before the exit command is typed
+ok - fm-control relaunch: an unreadable composer fails safe before the exit command is typed
+ok - fm-control relaunch: a linked spawning home preserves committed and unfinished work in the recorded copy
+ok - fm-control relaunch: durable task metadata survives replacement launch publication
+ok - fm-control relaunch: delivery and concurrent task metadata publication serialize
+ok - fm-control relaunch: disabling tracing clears metadata and pane context
+ok - fm-control relaunch: progress and the Firstmate-worktree worker identity reach the replacement
+ok - fm-control relaunch: the progress note's inbox listing is silent on an empty inbox
+ok - fm-control relaunch: a ship task refuses without the progress note its replacement needs
+ok - fm-control relaunch: switching harness is one ordinary relaunch, and the old wiring goes with the old agent
+ok - fm-control and fm-spawn relaunch: project facets and hooks survive before stop or wiring retirement
+ok - fm-control relaunch: a refused polytoken profile leaves the running agent untouched
+ok - fm-spawn --relaunch: retiring a raw polytoken launch's wiring keeps the project's own layers
+ok - fm-spawn relaunch: proven task-owned Polytoken wiring is retired on a successful replacement
+ok - fm-control relaunch: a harness switch resets model and effort unless they are named too
+ok - fm-control relaunch: a prefixed recorded harness can switch adapters transactionally
+ok - fm-control relaunch: a prefixed command requires an explicit replacement harness
+ok - fm-control relaunch: a same-harness relaunch keeps the profile axes it was running with
+ok - native Ultra relaunch preserves its profile and rejects an unsupported model before stopping
+ok - fm-control relaunch: a signed-out worker account pin refuses before the old agent stops
+ok - fm-control preflights the current seat before stop and re-resolves its path on replacement
+ok - fm-control relaunch: the replacement follows the home's current worker account pin
+not ok - the secondmate should relaunch on its claude pin: error: secondmate home cannot be inside the firstmate repo: ~/.no-mistakes/worktrees/119cd7a6b9a4/01M58R1EZXH295XPPYJMZP2JTS/.test-runtime/tmp/fm-control-relaunch.wmB6ig/sm-account-claude-6863/wt
+error: the replacement agent for rl-sm-acct could not be launched on claude
+error: rl-sm-acct's agent was stopped but the replacement did not launch; no agent is running, and its work plus the recorded progress note are preserved at ~/.no-mistakes/worktrees/119cd7a6b9a4/01M58R1EZXH295XPPYJMZP2JTS/.test-runtime/tmp/fm-control-relaunch.wmB6ig/sm-account-claude-6863/wt: expected exit 0, got 1
+FM_TEST_END 2026-10-19T00:36:29Z tests/fm-control-relaunch.test.sh exit=1 duration_ms=96915 gate_skip=false
+FM_TEST_BEGIN 2026-10-19T00:36:29Z tests/fm-herdr-groups.test.sh family=unclassified expected_gate_skip=none
+ok - absent or off setting: no plan, no key, and not a single Herdr call
+ok - on with zero tasks: plan and sync stay quiet and exit 0
+ok - on: one group per project, status order needs-captain, problem, running, done
+ok - rules: line order sets group order; task prefix beats repo beats catch-all; bad rules warn
+ok - all-invalid rules: empty RULE_GROUP still plans via project fallback
+ok - sync: reports only drifted tokens, workspace tokens only on the exact projection, view reconciled independently of token changes
+ok - sync: a failed view update is retried after pane and workspace tokens converge
+ok - sync: an older Herdr protocol warns once and stays inactive
+ok - clear: removes this home's tokens and the agents view after the feature is turned off
+ok - sidebar-config: prints rows; --apply backs up, appends once, never reloads Herdr
+not ok - agent view helper set failed (2):  Traceback (most recent call last):
+  File "<stdin>", line 4, in <module>
+OSError: AF_UNIX path too long
+FM_TEST_END 2026-10-19T00:36:37Z tests/fm-herdr-groups.test.sh exit=1 duration_ms=7484 gate_skip=false
+FM_TEST_SUMMARY total=4 failed=2 skipped_gate=0 duration_ms=196380
+FM_TEST_SUMMARY_FAMILY family=backend-dispatch count=1 duration_ms=96915 failed=1
+FM_TEST_SUMMARY_FAMILY family=pure-contract-unit count=1 duration_ms=82305 failed=0
+FM_TEST_SUMMARY_FAMILY family=standalone count=1 duration_ms=8721 failed=0
+FM_TEST_SUMMARY_FAMILY family=unclassified count=1 duration_ms=7484 failed=1
+FM_TEST_SLOWEST rank=1 script=tests/fm-control-relaunch.test.sh duration_ms=96915
+FM_TEST_SLOWEST rank=2 script=tests/fm-polytoken-harness.test.sh duration_ms=82305
+FM_TEST_SLOWEST rank=3 script=tests/fm-busy-state.test.sh duration_ms=8721
+FM_TEST_SLOWEST rank=4 script=tests/fm-herdr-groups.test.sh duration_ms=7484
+fm-test-run: wrote timing artifact: ~/.no-mistakes/evidence/01M58R1EZXH295XPPYJMZP2JTS/polytoken-safety.json

@@ -1,0 +1,26 @@
+[
+  {
+    "case": "absent inbox directory",
+    "inbox_exists": false,
+    "command": [
+      "bash",
+      "bin/fm-inbox.sh",
+      "list"
+    ],
+    "exit": 0,
+    "stdout": "(inbox empty)\n",
+    "stderr": ""
+  },
+  {
+    "case": "empty inbox directory",
+    "inbox_exists": true,
+    "command": [
+      "bash",
+      "bin/fm-inbox.sh",
+      "list"
+    ],
+    "exit": 0,
+    "stdout": "(inbox empty)\n",
+    "stderr": ""
+  }
+]

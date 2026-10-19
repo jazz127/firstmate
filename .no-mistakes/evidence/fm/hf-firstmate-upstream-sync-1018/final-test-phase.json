@@ -1,0 +1,84 @@
+{
+  "tested_head_sha": "c2f98cc272c9ca77472a6e5fcfd50c9558238009",
+  "verdict": "no-go",
+  "classification": "validation prerequisites and authorization, not a reproduced product failure",
+  "source_changes": [],
+  "focused_scripts": [
+    {
+      "duration_ms": 79621,
+      "exit": 0,
+      "expected_gate_skip": "none",
+      "family": "pure-contract-unit",
+      "gate_skip": false,
+      "gate_skip_reason": "",
+      "path": "tests/fm-polytoken-harness.test.sh"
+    },
+    {
+      "duration_ms": 8381,
+      "exit": 0,
+      "expected_gate_skip": "none",
+      "family": "standalone",
+      "gate_skip": false,
+      "gate_skip_reason": "",
+      "path": "tests/fm-busy-state.test.sh"
+    },
+    {
+      "duration_ms": 369233,
+      "exit": 0,
+      "expected_gate_skip": "none",
+      "family": "backend-dispatch",
+      "gate_skip": false,
+      "gate_skip_reason": "",
+      "path": "tests/fm-control-relaunch.test.sh"
+    },
+    {
+      "duration_ms": 9385,
+      "exit": 0,
+      "expected_gate_skip": "none",
+      "family": "unclassified",
+      "gate_skip": false,
+      "gate_skip_reason": "",
+      "path": "tests/fm-herdr-groups.test.sh"
+    }
+  ],
+  "local_product_driver_exit": 0,
+  "local_product_evidence": "~/.no-mistakes/evidence/01M58R1EZXH295XPPYJMZP2JTS/final-local-product.json",
+  "setup_failures": {
+    "cause": "Worktree-local TMPDIR placed a secondmate home inside the source repository and exceeded the Unix socket path limit.",
+    "correction": "Reran only the two affected scripts with TMPDIR=/tmp; both completed with exit 0.",
+    "before": "~/.no-mistakes/evidence/01M58R1EZXH295XPPYJMZP2JTS/final-focused-safety.json",
+    "after": "~/.no-mistakes/evidence/01M58R1EZXH295XPPYJMZP2JTS/final-setup-corrected.json"
+  },
+  "unresolved_finding": {
+    "id": "test-2",
+    "description": "Only four of eleven previously defined scenarios have direct local product evidence; seven remain without required live evidence.",
+    "reason": "Synthetic-only authorization forbids live vendor, fleet, forge, and Herdr lifecycle checks. Missing vendor CLIs additionally prevent those checks. Synthetic fixtures cannot establish their live outcomes.",
+    "missing_tools": [
+      "polytoken",
+      "command-code",
+      "commandcode",
+      "cursor-agent"
+    ],
+    "capabilities": {
+      "polytoken": null,
+      "command-code": null,
+      "commandcode": null,
+      "cursor-agent": null
+    },
+    "action": "No source or test change can establish missing live evidence under the recorded constraints."
+  },
+  "supervision_timeout": "Prior exit 124 after 900 seconds remains incomplete; not selected for repair and not retried.",
+  "baseline_failures": "Preserved unchanged: remote-secondmate lifecycle and strict-lint warning; neither rerun.",
+  "cleanup": {
+    "worktree_clean": true,
+    "scratch_absent": true,
+    "fixture_processes_remaining": []
+  },
+  "constraints": {
+    "synthetic_only": true,
+    "linters_run": false,
+    "full_suite_run": false,
+    "pipeline_control_invoked": false,
+    "commits_created": false
+  }
+}

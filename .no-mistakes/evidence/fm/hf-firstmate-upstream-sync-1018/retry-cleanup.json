@@ -1,0 +1,27 @@
+{
+  "signals": [
+    {
+      "pid": 5163,
+      "signal": "SIGTERM",
+      "command": "bash /private/tmp/fm-supervision-host.XfoERU/hook-successor-close/bin/fm-watch-arm.sh"
+    },
+    {
+      "pid": 5252,
+      "signal": "SIGTERM",
+      "command": "bash /private/tmp/fm-supervision-host.XfoERU/hook-successor-close/bin/fm-watch.sh"
+    },
+    {
+      "pid": 27963,
+      "signal": "SIGTERM",
+      "command": "bash /private/tmp/fm-supervision-host.XfoERU/hook-default-on/bin/fm-watch-arm.sh"
+    },
+    {
+      "pid": 28018,
+      "signal": "SIGTERM",
+      "command": "bash /private/tmp/fm-supervision-host.XfoERU/hook-default-on/bin/fm-watch.sh"
+    }
+  ],
+  "remaining_fixture_processes": {},
+  "git_status": "",
+  "scratch_exists": false
+}

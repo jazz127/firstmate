@@ -1,0 +1,403 @@
+FM_TEST_BEGIN 2026-10-19T00:44:20Z tests/fm-pr-merge.test.sh family=pr-forge expected_gate_skip=none
+ok - fm-pr-merge reports exact queue retry flags after a zero-exit false success
+ok - fm-pr-merge omits merge-queue retry guidance for a closed GitHub PR
+ok - fm-pr-merge aggregates agreeing merge-queue rules
+ok - fm-pr-merge reports ambiguity for conflicting merge-queue rules
+ok - fm-pr-merge records pr= and pr_head= for a verified GitHub merge
+ok - fm-pr-merge records pr= before the forge call can land the merge
+ok - fm-pr-merge propagates a real merge failure without silently succeeding
+ok - fm-pr-merge refuses a GitHub merge call that leaves the PR open and unqueued
+ok - fm-pr-merge retries a bounded number of times when mergeable is UNKNOWN and merges once it resolves
+ok - fm-pr-merge reports mergeability still pending after its bounded UNKNOWN retry is spent
+ok - fm-pr-merge refuses on the UNKNOWN re-check when a check turned red between reads
+ok - fm-pr-merge refuses a genuine mergeable conflict immediately, without retrying
+ok - fm-pr-merge keeps PR bookkeeping when it cannot read a successful merge call's outcome
+ok - fm-pr-merge refuses with the forge's own output quoted apart from its verdict
+ok - fm-pr-merge quotes the forge output when it cannot read the outcome either
+ok - fm-pr-merge does not echo back queue flags the caller already used
+ok - fm-pr-merge still names retry flags when the caller used a different method
+ok - fm-pr-merge names the queue requirement even when its method is unrecognised
+ok - fm-pr-merge distinguishes unreadable branch rules from a base with no merge queue
+ok - fm-pr-merge reads a plan-gated 403 on branch rules as no merge queue, not unreadable
+ok - fm-pr-merge says nothing about a merge queue when the base branch has no queue rule
+ok - fm-pr-merge accepts only a proved merge from the gh-axi fallback
+ok - fm-pr-merge explains an armed auto-merge that landed nothing on a queue-less base
+ok - fm-pr-merge never reports auto-merge as armed when the merge command failed
+ok - fm-pr-merge claims no acceptance for a failed merge command carrying queue flags
+ok - fm-pr-merge falls back to the gh-axi view when gh's read fails
+ok - fm-pr-merge names a landed state hiding behind a failed GitHub merge command
+ok - fm-pr-merge refuses a GitHub merge when gh is missing, before recording
+ok - fm-pr-merge refuses a GitHub merge when gh is missing rather than merging blind
+ok - fm-pr-merge verifies a genuinely merged GitHub pull request
+ok - fm-pr-merge refuses to claim a merge when poll recording fails
+ok - fm-pr-merge accepts and accurately reports a GitHub merge-queue entry
+ok - fm-pr-merge explains how to retry with the required GitHub merge queue method
+ok - fm-pr-merge refuses branch deletion unless --attended-override is passed
+ok - fm-pr-merge refuses before merging when task meta is missing
+ok - fm-pr-merge refuses malformed PR URLs before calling gh-axi
+ok - fm-pr-merge refuses unsafe PR URL segments before recording state
+ok - fm-pr-merge refuses repo override args before recording state
+ok - fm-pr-merge refuses a bundled short-option repo override and refuses -d unless attended
+ok - fm-pr-merge does not add default --squash when the caller passes an explicit merge method
+ok - fm-pr-merge picks squash where the base branch allows it and merge where merge is the only allowed method
+ok - fm-pr-merge refuses a default merge method when the allowed set is ambiguous or unreadable
+ok - fm-pr-merge passes an explicit caller method through and leaves GitHub to judge it
+ok - fm-pr-merge lands every pull request into housefeature/* as a merge commit
+ok - fm-pr-merge respects --method=<value> as an explicit merge method
+ok - fm-pr-merge parses a GitHub PR URL into gh-axi number and --repo arguments
+ok - fm-pr-merge refuses a caller --sha on GitHub because the head comes from the live read
+ok - fm-pr-merge merges a GitLab merge request through glab instead of refusing it
+ok - fm-pr-merge takes the GitLab instance from the URL rather than assuming one
+ok - fm-pr-merge imposes no merge method on GitLab, leaving the project's own one
+ok - fm-pr-merge refuses GitLab source-branch deletion unless --attended-override is passed
+ok - fm-pr-merge propagates a real glab merge failure without silently succeeding
+ok - fm-pr-merge refuses on each GitLab pre-merge condition independently
+ok - fm-pr-merge reports every failing GitLab condition, not only the first
+ok - fm-pr-merge reports a stale recorded head and verifies the live one
+ok - fm-pr-merge refuses an unreadable GitLab merge request state rather than merging blind
+ok - fm-pr-merge refuses a GitLab head commit it cannot validate
+ok - fm-pr-merge refuses before recording anything when glab or jq is absent
+ok - Forgejo evidence reads bind the head and refuse missing bodies, malformed bodies and unsupported evidence before merging
+ok - Forgejo scratch validation reads later pages, permits removals and refuses scratch additions or malformed file lists
+ok - fm-pr-merge merges a Forgejo pull request through tea api instead of refusing it
+ok - fm-pr-merge resolves the tea login by matching the PR's host against every registered login
+ok - fm-pr-merge refuses when zero or more than one tea login matches the pull request's host
+ok - fm-pr-merge refuses on each Forgejo pre-merge condition independently
+ok - fm-pr-merge treats an unconfigured Forgejo combined status as none, refusing rather than skipping the check
+ok - fm-pr-merge reads every Forgejo combined-status page before merging
+ok - Forgejo merges green statuses followed by documented null or compatible empty-array terminal pages
+ok - Forgejo rejects malformed first and terminal pages even when tea exits zero
+ok - fm-pr-merge reports a stale recorded head and binds the merge to the live one instead
+ok - fm-pr-merge refuses a Forgejo head commit it cannot validate
+ok - fm-pr-merge refuses before recording anything when tea or jq is absent
+ok - fm-pr-merge never trusts tea api's exit status alone; a rejected merge is caught by the confirm read
+ok - fm-pr-merge retries a failed Forgejo confirmation read and persists the merge authority
+ok - fm-pr-merge maps --squash/--rebase to Forgejo's Do field, defaults to the repository's default merge style, and refuses any other extra argument
+ok - fm-pr-merge refuses a GitLab head override before recording state
+ok - a merge a secondmate home performs itself is reported upward exactly once
+ok - a locally routed secondmate home reports the landed PR into its parent's own channel
+ok - a landed GitLab merge request is reported upward on the same channel
+ok - a queued GitLab merge stays silent and leaves confirmation to the armed poll
+ok - a refused or failed merge reports no outcome
+ok - a GitLab merge refused before the forge call reports no outcome
+ok - a merge a main home performs itself leaves one durable wake naming the PR
+ok - a queued GitHub merge stays silent and leaves confirmation to the armed poll
+ok - distinct merged PRs for one task retain distinct captain-facing wakes
+ok - an uncommitted marker retry preserves at least one durable outcome
+ok - a secondmate home that cannot report upward says so instead of merging in silence
+ok - fm-pr-merge proceeds when the home carries no backlog at all
+ok - fm-pr-merge refuses when the backlog exists but cannot be read
+ok - fm-pr-merge refuses when its configured backend cannot be read
+ok - fm-pr-merge refuses when its user backend configuration cannot be read
+ok - fm-pr-merge refuses when its user backend configuration directory cannot be traversed
+ok - fm-pr-merge proceeds once when its user configuration directory and backlog are genuinely absent
+ok - fm-pr-merge honors a backend override over an unreadable user configuration
+ok - fm-pr-merge updates a green behind branch and merges only after the new head is green
+ok - fm-pr-merge refuses red GitHub checks and waives only a named --allow-red check
+ok - fm-pr-merge refuses a draft pull request and one with no boolean draft state
+ok - fm-pr-merge merges when a failed check run was replaced by a passing re-run
+ok - fm-pr-merge never lets a check run supersede a legacy status context
+ok - fm-pr-merge still refuses when a check's current run failed after an earlier pass
+ok - fm-pr-merge uses start order when the old success finishes last
+ok - fm-pr-merge supersedes an old cancellation that finishes last
+ok - fm-pr-merge keeps a check red while its re-run is still in flight
+ok - fm-pr-merge never lets one check's pass clear another check's failure
+ok - fm-pr-merge clears a failure only on a proven later pass of the same check
+ok - fm-pr-merge keeps --allow-red scoped to its named check beside a superseded failure
+ok - fm-pr-merge rechecks away presence before an attended red merge
+ok - fm-pr-merge keeps a quiet-mode home's merges attended, the named red-check waiver included
+ok - fm-pr-merge accepts exactly one separately named red-check waiver
+ok - while the away-posture record exists any green merge lands under away authority, yolo or not, and attended merges stay untagged
+ok - under the away-posture record the branch merges a green task, is refused on a red check with or without --allow-red, and is refused at the partition while attended
+ok - a branch merge refuses under the lock when the away record is archived during preflight
+ok - away posture permits immediate merges but refuses every asynchronous path
+ok - away merge proceeds on a plan-gated 403 because that repository cannot have a merge queue
+ok - the away record does not bypass red checks, and a recorded pr= must match the URL
+ok - an unreadable away-posture record refuses the merge instead of skipping the record
+ok - no away-record archive or replacement lands between the authority read and the merge
+ok - a record made unreadable before the merge's own authority read refuses the merge
+ok - a merge that cannot lock the away record refuses instead of merging unlocked
+ok - fm-pr-merge refuses --allow-red on GitLab
+ok - fm-pr-merge refuses when a required check from branch protection or a ruleset never reported
+ok - fm-pr-merge merges when every required check reported and is green
+ok - fm-pr-merge reports a red check and an unreported required check together with every other failure
+ok - fm-pr-merge refuses when the required checks cannot be read, and tells a plan without rules apart
+ok - fm-pr-merge --allow-missing waives only its named unreported check
+ok - fm-pr-merge --allow-missing is single use, attended-only, and GitHub-only like --allow-red
+ok - fm-pr-merge enforces required producer identity and named waivers
+ok - fm-pr-merge matches an app-bound required commit status by name
+ok - fm-pr-merge reports known missing checks and all independent read errors
+ok - fm-pr-merge refuses --allow-red on Forgejo
+ok - fm-pr-merge refuses --allow-missing on Forgejo
+ok - fm-pr-merge --allow-no-pipeline waives only a null GitLab head pipeline and keeps every other condition
+ok - fm-pr-merge --allow-no-pipeline is attended-only, takes no value, and applies only to GitLab
+FM_TEST_END 2026-10-19T00:58:09Z tests/fm-pr-merge.test.sh exit=0 duration_ms=829251 gate_skip=false
+FM_TEST_BEGIN 2026-10-19T00:58:09Z tests/fm-session-lock-ancestry.test.sh family=watcher-wake-lock expected_gate_skip=none
+ok - session-lock: a version-named Claude Code session is identified from its install path and argv[0]
+ok - session-lock: a harness that is pid 1 of its own namespace is examined, not skipped
+ok - session-lock: ordinary script paths under a harness directory are not harness processes
+ok - session-lock: ownership stops at the first non-harness gap above the contiguous run
+ok - session-lock: a live version-named session holding the lock is not mistaken for a stale owner
+ok - session-lock: a trusted same-session id keeps owning a recycled background chain, and nothing weaker does
+ok - session-lock: a trusted id anchors the lock on the model-loop process, anything else on the outermost pid
+ok - session-lock e2e: a version-named session claims the home and arms supervision
+ok - session-lock e2e: a session parented by a harness-named daemon claims the home and arms supervision
+ok - session-lock e2e: a version-named session under a harness-named daemon keeps its own lock
+ok - session-lock e2e: a background session keeps its lock and its supervision across a recycled helper chain and a same-process session-id change
+ok - session-lock: a same-session confirmation waits for the claim lock and refreshes a re-keyed id
+ok - session-lock: a waiting confirmation does not steal another session's lock
+ok - session-lock: a failed lock write restores the previous sidecar
+ok - session-lock: a failed lock write removes a newly created sidecar
+ok - session-lock: a verified reclaim keeps the new sidecar beside the new pid
+ok - session-lock: a re-anchor keeps both supervision actors' task leases live
+ok - session-lock: a re-anchor during a rewake turn keeps the mid-turn auto-arm proof healthy
+FM_TEST_END 2026-10-19T00:58:45Z tests/fm-session-lock-ancestry.test.sh exit=0 duration_ms=35288 gate_skip=false
+FM_TEST_BEGIN 2026-10-19T00:58:45Z tests/fm-commandcode-harness.test.sh family=pure-contract-unit expected_gate_skip=none
+ok - Command Code native identity; anchored liveness
+ok - worker-only resolution, single-press interrupt, rewind-picker hazard, and lifecycle capabilities
+ok - composer placeholder, draft safety, identity-scoped ceiling, and independent delivery signals
+ok - busy mod: run_start busy, run_end and session end idle, stale and unconfigured writes refused
+ok - scout launch carries model, verified effort only, autonomy, typed brief, and the per-process mod
+ok - Command Code launches are refused on zellij, cmux, and orca
+FM_TEST_END 2026-10-19T00:59:06Z tests/fm-commandcode-harness.test.sh exit=0 duration_ms=21176 gate_skip=false
+FM_TEST_BEGIN 2026-10-19T00:59:06Z tests/fm-secondmate-sync.test.sh family=secondmate expected_gate_skip=none
+ok - T1 updated: a behind home fast-forwards to the primary's local HEAD
+ok - T2 current: an already-current home is a no-op and reports no instruction change
+ok - T3 dirty: an uncommitted home is skipped, its edit preserved
+ok - scratchpad2/ does not mark a secondmate home dirty for the sync guard
+ok - T4 diverged: a home that is not an ancestor of the primary's HEAD is skipped
+ok - T5 in-flight: a home on a feature branch is skipped, its work preserved
+ok - T6 no fetch: the local-HEAD sync never invokes git fetch
+ok - T7 sweep nudges on a real instruction change only, but still fast-forwards
+ok - T8 bootstrap sweeps live homes and sends exactly one marked nudge for the instruction change
+ok - T8a bootstrap nudge send respects FM_STATE_OVERRIDE
+ok - T8f bootstrap nudge retry rejects malformed marker ids
+ok - T8c failed bootstrap nudge is surfaced and recorded for retry
+ok - T8d bootstrap nudge retry is idempotent after success
+ok - T8e bootstrap nudge retry refuses a changed home instead of guessing
+ok - T8b a stale herdr endpoint cannot lose a durably enqueued nudge, and fm-<id> resolves through post-respawn metadata
+ok - T9 bootstrap surfaces a skipped dirty live secondmate home
+ok - T10 spawn fast-forwards a secondmate worktree to the primary's local HEAD before launch
+ok - T11 spawn warns when pre-launch sync is skipped
+ok - T12 gitignored marker: a freshly seeded home reads clean to fleet-sync and the ff sweep
+ok - T13 gitignored marker: an existing marker-only-dirty home converges, then reads clean
+ok - T14 marker tolerance does not mask a genuinely dirty home
+ok - R1 a remote home ahead of the host's Firstmate copy still advances to the primary's commit
+ok - R1b a remote sync names exactly which instruction paths its advance changed
+ok - R2 a missing target is imported from the host's Firstmate copy without moving it
+ok - R3 a target neither side holds is imported from the home's own origin
+ok - R4 an already-present target advances the home with no fetch available
+ok - R5 a target neither the host copy nor the origin holds skips with an actionable reason
+ok - R6 dirty, diverged, and feature-branch remote homes skip and are left untouched
+ok - R7 a sync with no target still follows the host's own refreshed Firstmate copy
+ok - R8 session start converges a remote home on the primary's default-branch commit
+ok - R10 a host too old for a parent-targeted sync is reported with the command that fixes it
+ok - R11 a remote home is nudged only for an owed reread or a real instruction change, never for a cut-off attempt that changed nothing
+ok - R9 a remote launch leaves the home on the parent's commit while an ordinary spawn follows its own checkout
+# all fm-secondmate-sync tests passed
+FM_TEST_END 2026-10-19T01:00:42Z tests/fm-secondmate-sync.test.sh exit=0 duration_ms=95392 gate_skip=false
+FM_TEST_BEGIN 2026-10-19T01:00:42Z tests/fm-cursor-harness.test.sh family=standalone expected_gate_skip=none
+ok - fm_cursor_process_matches: cursor's real shapes identify; real node/agent lookalikes do not
+ok - fm_cursor_process_matches: name and install-tree signals each carry a verdict alone
+ok - fm_cursor_verify_executable: the legacy alias is accepted only with cursor evidence
+ok - fm_cursor_resolve_binary: a broken cursor-agent is skipped for a working agent
+ok - fm_cursor_resolve_binary: bash timeout fallback still skips a broken cursor-agent
+ok - fm_cursor_verify_executable: structural success reuses one probe exit
+ok - fm_cursor_verify_executable: IDE-shim refusal text is never launchable
+ok - fm_cursor_verify_executable: basename outside the tree needs non-empty successful probe
+ok - fm_cursor_run_timed: isolated fixtures keep process identity silent and probe only with the timeout sibling
+ok - fm_cursor_resolve_binary: prints the stable launcher, not the versioned target
+ok - tmux liveness: a cursor pane is agent; an unrelated node/agent is other, never dead
+ok - fm-harness.sh: cursor's marker outranks an inherited CLAUDECODE when ancestry is silent
+ok - fm-harness.sh: cursor-like node script names do not establish ancestry identity
+ok - cursor transcript fold: role:user opens a turn, turn_ended closes it, aborts included
+ok - cursor transcript fold: malformed closes cannot settle through either parser
+ok - cursor transcript fold: partial appends never make an active turn idle
+ok - cursor transcript fold: an unresolvable binding is unknown, never idle
+ok - cursor transcript binding: exact recorded workspacePath only, never a prefix or rebuilt slug
+ok - cursor transcript fold: a prior conversation is excluded so a relaunch folds its own turn
+FM_TEST_END 2026-10-19T01:00:48Z tests/fm-cursor-harness.test.sh exit=0 duration_ms=5916 gate_skip=false
+FM_TEST_BEGIN 2026-10-19T01:00:48Z tests/fm-contributions.test.sh family=snapshot-bearings expected_gate_skip=optional-binary
+ok - poll bounds interpret decimal padding consistently and retain range refusals
+ok - only required-captain contributions are rows; other actors are counted
+ok - replaced-head verdict is stale and cannot create a captain requirement
+ok - unchecked ownership is disclosed and cannot prove silence
+ok - newest check with no verdict is distinct from passing and pending
+ok - new maintainer comment wakes once and stays pending until acknowledged
+ok - new maintainer review wakes once and stays pending until acknowledged
+ok - new maintainer inline wakes once and stays pending until acknowledged
+ok - ready-for-pr on a filed issue becomes a planning wake
+ok - a fresh open issue remains measured maintainer triage
+ok - absent CI lanes hold closeout until every latest lane reports a passing verdict
+ok - mixed freshness retains measured captain work and discloses the gap
+ok - malformed durable evidence cannot prove silence
+ok - a transient ready-for-pr label wakes and its exact acknowledgement survives replay
+ok - recorded judgment keeps its exact head and is stale immediately on a published replacement
+ok - verdict help and refusal name exactly the actors the command accepts
+ok - a current forge observation refreshes a verdict after a replacement
+ok - an unavailable current head leaves verdict freshness unknown
+ok - away yolo delivery is fleet work without granting merge authority
+actionable: PR https://github.com/o/r/pull/8 is registered but its ready line did not reach the parent channel (rc=3)
+ok - cross-home away yolo delivery is fleet work
+ok - retired ownership persists and unsupported forge remains visibly unmeasured
+ok - unsupported forge coverage is disclosed without inventing fleet work
+ok - held unsupported forge coverage remains unmeasured
+ok - unsupported ownership stays silent and unmeasured; legacy errors clear without fabricated evidence
+ok - legacy cleanup preserves unsupported ownership and supported missing-evidence failure in the same file
+ok - shared contribution signal wakes once while retaining both acknowledgements
+ok - watcher keeps observer diagnostics separate from contribution wakes
+ok - expired child unsupported-forge coverage remains unmeasured
+ok - watcher surfaces one newly durable contribution signal without re-ringing it
+ok - parent consumes measured child coverage and refuses expired child silence
+ok - unreadable pending signals refuse an empty-inbox claim
+ok - record task identity is the directory dirname/basename named
+ok - batched saved-record reads keep every per-file accept and reject verdict
+ok - snapshot and pending create nothing in a home without state
+ok - budget exhausted mid-observation (exhaust) keeps the prior record and stays silent
+ok - budget exhausted mid-observation (hang) keeps the prior record and stays silent
+ok - a genuine forge failure inside the budget still records the error, its cause and wakes
+jq: error (at /tmp/fm-contributions.aIcxLS/after.json:1): null (null) cannot be matched, as it is not a string
+ok - a URL owned by two tasks is observed once and every owner receives the result
+ok - a merged or closed contribution settles once, is not re-read, and never wakes again
+ok - a late owner inherits a terminal observation without a forge read or wake
+ok - a retry converges every owner whose saved row is not terminal, keeping its own acknowledgement state
+ok - an open PR linked from a done task keeps being observed
+ok - a later URL waits when fewer than fifteen seconds remain for its observation
+ok - eight 3-second PR reads complete fresh within one 20-second poll cycle
+ok - a read killed at the five-second bound is budget refusal and stays silent
+ok - rotation preserves timed-out records and refreshes every slow PR on successive cycles
+ok - the effective budget is cut down to the watcher per-check bound with margin
+ok - generated checks enforce configured and inherited budgets at runtime
+ok - a genuinely unavailable forge records an error and wakes once per failure episode
+ok - a late owner does not restart a shared forge failure episode
+ok - outside PR closeout waits two hours, then signals once for green clean work
+ok - write-or-higher forge permissions retain merge-based cleanup across PR topologies
+ok - red CI notifies firstmate and holds the task in place
+ok - a changed PR head restarts the closeout window
+ok - zero means immediate closeout and malformed configuration fails visibly
+ok - unanswered review feedback and dirty worktrees hold closeout
+ok - initial observation uses an available PR timestamp and later updates preserve the window
+ok - missing forge timestamps use the first observation without extending its window
+ok - a clean pushed worker checkout behind the PR head remains eligible for guarded teardown
+ok - A to B to A starts a new window for every observed head change
+ok - observation fallback never dismisses unacknowledged feedback
+ok - registered third-party clones remain outside according to forge permissions
+ok - unreadable permissions report once and never authorize closeout before recovery
+ok - replaced PRs retain feedback observation while only the current PR can close out a ship
+ok - closeout requires a ship with one valid current canonical PR
+ok - relaunch and trace metadata tails preserve current ship closeout eligibility
+ok - a disappearing CI lane revokes closeout readiness and keeps the task held
+ok - an unreadable permission lookup cannot reuse prior outside cleanup authority
+ok - retire stops the unavailable check, leaves rotation and restores complete coverage
+ok - a late owner settled beside a retired final record stays unretired and known
+ok - retire is idempotent and refuses non-captain, unknown, malformed and signal-bearing pairs
+ok - one HTTP 500 is retried once and a successful retry stays healthy
+ok - two transient failures wake once and name the failed read in the record
+ok - an HTTP 404 is reported without retrying
+ok - real gh error shapes drive the intended retry decision and keep their error
+ok - a URL never inherits the previous URL read diagnostic
+ok - a many-review PR stores only classified review fields and stays readable
+ok - closed structured backlog PR link owns verdict and acknowledgement after task metadata cleanup
+ok - a configured automated reviewer wakes as fleet triage and an unconfigured bot does not
+ok - the automated reviewer set is configurable and can be disabled
+ok - an author comment is an event only with the configured marker
+FM_TEST_END 2026-10-19T01:07:49Z tests/fm-contributions.test.sh exit=0 duration_ms=421143 gate_skip=false
+FM_TEST_BEGIN 2026-10-19T01:07:49Z tests/fm-spawn-worktree-settle.test.sh family=backend-dispatch expected_gate_skip=none
+ok - a single transient stale foreground-cwd read is not accepted as the worktree
+ok - an already-settled pane confirms on the next read, not a whole extra cycle
+ok - a transient primary-checkout pane read is not accepted as the worktree
+ok - a pane stuck on the primary checkout fails loudly at the deadline
+ok - concurrent spawns reach treehouse get without holding the project lock
+ok - a slot an exited task's teardown returns during get is abandoned, not claimed
+ok - an inspected unreserved pool slot is not recorded, claimed, or reset
+ok - treehouse get runs outside the project lock and spawn reacquires it
+ok - herdr wait releases the project lock during presentation contention and revalidates before provisioning
+ok - herdr batch releases the project lock during presentation contention and revalidates before provisioning
+ok - herdr refuse releases the project lock during presentation contention and revalidates before provisioning
+ok - herdr create releases the project lock during presentation contention and revalidates before provisioning
+ok - herdr project releases the project lock during presentation contention and revalidates before provisioning
+ok - herdr changed releases the project lock during presentation contention and revalidates before provisioning
+ok - a project with an unborn HEAD is refused at once with its cause named
+# all fm-spawn-worktree-settle tests passed
+FM_TEST_END 2026-10-19T01:09:40Z tests/fm-spawn-worktree-settle.test.sh exit=0 duration_ms=110668 gate_skip=false
+FM_TEST_BEGIN 2026-10-19T01:09:40Z tests/fm-supervision-host.test.sh family=afk expected_gate_skip=none
+ok - host+hook: a successor closed before exit_to_main does not suppress the branch-outcome rewake
+ok - host+hook: a successor that closes during a held engine turn does not suppress the branch-outcome rewake
+ok - host+hook: a refused hand-back becomes a delivered failure notice
+ok - host+hook: a refused hand-back on an announced handling marker becomes a delivered failure notice
+ok - host: parked child-exit sampling uses ordinary half-second sleeps
+ok - report surface: only the branch actor's current turn and exact wake row may report
+ok - report surface: concurrent claims on one wake row serialize through the receipt lock
+ok - report surface: visible late outcomes queue a relay, while silent outcomes remain stored without a wake or note
+ok - dispatch entry: the host reads branch eligibility, the offer rule, and the wake prompt from the Pi branch's own owner
+ok - drain: BRANCH OUTCOMES runs on a Claude home by default and on another primary with the file, never with off, and never on Pi
+ok - drain: captain outcomes come first, and routine overflow collapses into a count one drain clears
+ok - drain: repeated captain outcomes collapse per task, and the byte cap presents only the run its acknowledgement covers
+ok - drain: a long away window costs one short drain, captain outcomes collapsed per task and routine overflow counted, and nothing from it is shown again
+ok - drain: the BRANCH OUTCOMES budgets count bytes, cutting multibyte summaries by whole characters in any locale
+ok - drain: branch outcomes stay unread when a projection of the store fails
+ok - drain: branch outcomes stay unread and the drain fails when jq is missing
+ok - drain: branch outcomes stay unread when the drain cannot print them
+ok - drain: a legacy backlog is presented with each outcome's age and a check-first instruction, never adopted
+ok - drain: a keyed decision survives acknowledgement through a newer outcome for its task
+ok - drain: an outcome carried across a switch off Pi comes back with its age, never adopted
+ok - drain: an outcome nothing has shown is presented until acknowledged, and a repeated acknowledgement changes nothing
+ok - drain: an outcome the host drain presented but main never acknowledged stays unprocessed across a switch to Pi
+ok - drain: an outcome the host drain presented but main never acknowledged survives an outcome index repair
+ok - host: an attended wake the branch may take is handled on the engine, and its routine outcome never wakes main
+ok - host: an attended captain outcome wakes main once and stays in its drain until main acknowledges it
+ok - host: a captain outcome recorded after the captain left waits for the return, then reaches main's drain
+ok - host: a quiet record without its daemon is a present captain, so outcomes and decisions reach main
+ok - host: an attended decision close stays main's exactly as the plain arm delivers it
+ok - host: an off written while the host is parked sends the next attended close to main, naming the opt-out
+ok - host: a main-only pass-through leaves the successor watcher running and the close undelivered for main
+ok - host: an attended close whose main session cannot be identified reaches main and runs no engine turn
+ok - host: a decision close accepted away whose turn starts attended still reaches main unchanged
+ok - host: an attended close whose task turns main-only before its turn still reaches main unchanged
+ok - host+hook: an attended main-only pass-through rewakes main and keeps its successor watcher
+ok - host+hook: a captain outcome beside a quiet record rewakes the present captain with no away note
+ok - host+hook: a Claude home without config/supervision-host runs the host at the default engine, and an off file restores the plain arm
+ok - host+hook: a close that turns main-only at its turn rewakes main and keeps its successor watcher
+ok - host+hook: the successor a close that turns main-only at its turn leaves for main survives the hook's process group teardown
+ok - host+hook: failed at-turn downtime write notifies main despite a healthy successor
+ok - host+hook: a successor close that lands during main's turn is delivered at the next turn end
+ok - host+hook: the successor a pass-through leaves for main survives the hook's process group teardown
+ok - host+hook: the next park takes over the cycle a main-only pass-through left, so one arm owns it
+ok - host+hook: a park stopped mid take-over leaves the take-over to the next park
+ok - host+hook: a successor that cannot be recorded is stopped, and main's next turn end arms a fresh cycle
+ok - host: a primary with no verified dialog mirror keeps every attended close on main, and its away posture still runs
+ok - host: each wake carries the captain's dialog since the last wake, without operational input
+ok - host: the dialog mirror, its feed, and the wake file are owner-only
+ok - host: dialog a turn never completed with its report (a park boundary, a stopped turn, no report) reaches the next turn
+ok - host: an attended wake whose mirror is missing, cannot be read (at the feed or at the prompt), or holds a malformed entry reaches main before any engine turn, and the cursor stays put
+ok - host: an away wake is handled on the engine through the branch contract and never reaches main
+ok - host: an engine turn that records no outcome hands its durable wake to main
+ok - host: a captain return during an engine turn hands that turn's outcomes to main
+ok - host: silent outcomes are excluded from both captain-return handoff paths
+ok - host: an early visible outcome survives more than 1,000 same-turn receipts
+ok - host: an outcome lookup failure forces a visible main handoff
+ok - host: an outcome recorded after the return reaches main even when its host dies at the turn's end
+ok - host: a killed predecessor's engine is reaped and the next host removes its turn files
+ok - host: a turn that reports but leaves its granted rows queued hands the wake to main
+ok - host: a captain return during a failed engine turn still hands that turn's outcomes to main
+ok - host: an engine turn whose result is incomplete hands its wake to main
+not ok - tests/fm-supervision-host.test.sh exceeded the per-script bound of 900s and was terminated
+FM_TEST_END 2026-10-19T01:24:40Z tests/fm-supervision-host.test.sh exit=124 duration_ms=900505 gate_skip=false
+FM_TEST_SUMMARY total=8 failed=1 skipped_gate=0 duration_ms=2420479
+FM_TEST_SUMMARY_FAMILY family=afk count=1 duration_ms=900505 failed=1
+FM_TEST_SUMMARY_FAMILY family=backend-dispatch count=1 duration_ms=110668 failed=0
+FM_TEST_SUMMARY_FAMILY family=pr-forge count=1 duration_ms=829251 failed=0
+FM_TEST_SUMMARY_FAMILY family=pure-contract-unit count=1 duration_ms=21176 failed=0
+FM_TEST_SUMMARY_FAMILY family=secondmate count=1 duration_ms=95392 failed=0
+FM_TEST_SUMMARY_FAMILY family=snapshot-bearings count=1 duration_ms=421143 failed=0
+FM_TEST_SUMMARY_FAMILY family=standalone count=1 duration_ms=5916 failed=0
+FM_TEST_SUMMARY_FAMILY family=watcher-wake-lock count=1 duration_ms=35288 failed=0
+FM_TEST_SLOWEST rank=1 script=tests/fm-supervision-host.test.sh duration_ms=900505
+FM_TEST_SLOWEST rank=2 script=tests/fm-pr-merge.test.sh duration_ms=829251
+FM_TEST_SLOWEST rank=3 script=tests/fm-contributions.test.sh duration_ms=421143
+FM_TEST_SLOWEST rank=4 script=tests/fm-spawn-worktree-settle.test.sh duration_ms=110668
+FM_TEST_SLOWEST rank=5 script=tests/fm-secondmate-sync.test.sh duration_ms=95392
+FM_TEST_SLOWEST rank=6 script=tests/fm-session-lock-ancestry.test.sh duration_ms=35288
+FM_TEST_SLOWEST rank=7 script=tests/fm-commandcode-harness.test.sh duration_ms=21176
+FM_TEST_SLOWEST rank=8 script=tests/fm-cursor-harness.test.sh duration_ms=5916
+fm-test-run: wrote timing artifact: ~/.no-mistakes/evidence/01M58R1EZXH295XPPYJMZP2JTS/merge-behaviors.json

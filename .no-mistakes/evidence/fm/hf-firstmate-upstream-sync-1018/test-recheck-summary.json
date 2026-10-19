@@ -1,0 +1,58 @@
+{
+  "head": "c2f98cc272c9ca77472a6e5fcfd50c9558238009",
+  "focused_runner_exit": 0,
+  "focused_scripts": [
+    {
+      "duration_ms": 80621,
+      "exit": 0,
+      "expected_gate_skip": "none",
+      "family": "pure-contract-unit",
+      "gate_skip": false,
+      "gate_skip_reason": "",
+      "path": "tests/fm-polytoken-harness.test.sh"
+    },
+    {
+      "duration_ms": 8208,
+      "exit": 0,
+      "expected_gate_skip": "none",
+      "family": "standalone",
+      "gate_skip": false,
+      "gate_skip_reason": "",
+      "path": "tests/fm-busy-state.test.sh"
+    },
+    {
+      "duration_ms": 329872,
+      "exit": 0,
+      "expected_gate_skip": "none",
+      "family": "backend-dispatch",
+      "gate_skip": false,
+      "gate_skip_reason": "",
+      "path": "tests/fm-control-relaunch.test.sh"
+    },
+    {
+      "duration_ms": 8104,
+      "exit": 0,
+      "expected_gate_skip": "none",
+      "family": "unclassified",
+      "gate_skip": false,
+      "gate_skip_reason": "",
+      "path": "tests/fm-herdr-groups.test.sh"
+    }
+  ],
+  "local_driver_exit": 0,
+  "lock_driver_exit": 0,
+  "empty_inbox_driver_exit": 0,
+  "pi_resume_selected_exit": 0,
+  "setup_correction": "The complete relaunch suite emitted two BSD sed -i errors from an unchanged baseline fixture. A disposable copy ran only test_herdr_relaunch_resumes_only_the_registered_pi_session with a portable rewrite and an explicit harness=pi precondition; it passed. No permanent source or test changes.",
+  "prior_supervision_timeout": "Prior 900-second exit 124 remains unresolved; not rerun.",
+  "baseline_failures": "Remote-secondmate lifecycle failure and strict-lint warning preserved unchanged; neither rerun.",
+  "unavailable_live_scope": "Recorded synthetic-only authorization excludes vendor/upstream and real Herdr or shared-daemon lifecycle checks. polytoken, commandcode, command-code, and cursor-agent are absent from PATH; repository-local adapter sources are not vendor binaries.",
+  "visual_evidence": "No rendered UI: real Herdr lifecycle is forbidden and relevant vendor CLIs are absent; local CLI output retained.",
+  "cleanup": {
+    "worktree_clean": true,
+    "scratch_absent": true,
+    "scratch_processes": []
+  },
+  "verdict": "inconclusive",
+  "source_changes": []
+}

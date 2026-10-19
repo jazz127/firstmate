@@ -1,0 +1,352 @@
+[
+  {
+    "command": [
+      "bash",
+      "~/.no-mistakes/worktrees/119cd7a6b9a4/01M58R1EZXH295XPPYJMZP2JTS/bin/fm-busy-event.sh",
+      "arm",
+      "~/.no-mistakes/worktrees/119cd7a6b9a4/01M58R1EZXH295XPPYJMZP2JTS/.test-runtime/local/home/state",
+      "task"
+    ],
+    "exit": 0,
+    "stdout": "g1792370299.2435.22932\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "bash",
+      "~/.no-mistakes/worktrees/119cd7a6b9a4/01M58R1EZXH295XPPYJMZP2JTS/bin/fm-busy-event.sh",
+      "apply",
+      "~/.no-mistakes/worktrees/119cd7a6b9a4/01M58R1EZXH295XPPYJMZP2JTS/.test-runtime/local/home/state",
+      "task",
+      "busy",
+      "--gen",
+      "g1792370299.2435.22932",
+      "--source",
+      "polytoken-hook",
+      "--event",
+      "pre-user-prompt"
+    ],
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "bash",
+      "~/.no-mistakes/worktrees/119cd7a6b9a4/01M58R1EZXH295XPPYJMZP2JTS/bin/fm-busy-event.sh",
+      "apply",
+      "~/.no-mistakes/worktrees/119cd7a6b9a4/01M58R1EZXH295XPPYJMZP2JTS/.test-runtime/local/home/state",
+      "task",
+      "idle",
+      "--gen",
+      "g1792370299.2435.22932",
+      "--if-seq",
+      "1",
+      "--source",
+      "fm-interrupt",
+      "--event",
+      "interrupt",
+      "--turn-ended"
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": "error: stale busy-state sequence for task (event rejected)\n"
+  },
+  {
+    "command": [
+      "bash",
+      "~/.no-mistakes/worktrees/119cd7a6b9a4/01M58R1EZXH295XPPYJMZP2JTS/bin/fm-busy-event.sh",
+      "apply",
+      "~/.no-mistakes/worktrees/119cd7a6b9a4/01M58R1EZXH295XPPYJMZP2JTS/.test-runtime/local/home/state",
+      "task",
+      "idle",
+      "--gen",
+      "g1792370299.2435.22932",
+      "--if-seq",
+      "2",
+      "--source",
+      "fm-interrupt",
+      "--event",
+      "interrupt",
+      "--turn-ended"
+    ],
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "bash",
+      "~/.no-mistakes/worktrees/119cd7a6b9a4/01M58R1EZXH295XPPYJMZP2JTS/bin/fm-busy-event.sh",
+      "arm",
+      "~/.no-mistakes/worktrees/119cd7a6b9a4/01M58R1EZXH295XPPYJMZP2JTS/.test-runtime/local/home/state",
+      "task"
+    ],
+    "exit": 0,
+    "stdout": "g1792370300.2571.1217\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "bash",
+      "~/.no-mistakes/worktrees/119cd7a6b9a4/01M58R1EZXH295XPPYJMZP2JTS/bin/fm-busy-event.sh",
+      "apply",
+      "~/.no-mistakes/worktrees/119cd7a6b9a4/01M58R1EZXH295XPPYJMZP2JTS/.test-runtime/local/home/state",
+      "task",
+      "idle",
+      "--gen",
+      "g1792370299.2435.22932",
+      "--if-seq",
+      "1",
+      "--source",
+      "fm-interrupt",
+      "--event",
+      "interrupt"
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": "error: stale busy-state gen for task (event rejected)\n"
+  },
+  {
+    "scenario": "Conditional close preserves newer sequence and generation; matching close advances sequence and house timestamp",
+    "before": "v1 gen=g1792370299.2435.22932 seq=2 state=busy source=polytoken-hook event=pre-user-prompt ts=1792370300\n",
+    "closed": "v1 gen=g1792370299.2435.22932 seq=3 state=idle source=fm-interrupt event=interrupt ts=1792370300\n",
+    "rearmed": "v1 gen=g1792370300.2571.1217 seq=1 state=busy source=fm-spawn event=launch-brief ts=1792370300\n"
+  },
+  {
+    "command": [
+      "bash",
+      "-c",
+      ". \"$1\"; fm_polytoken_write_config \"$2\"",
+      "_",
+      "~/.no-mistakes/worktrees/119cd7a6b9a4/01M58R1EZXH295XPPYJMZP2JTS/bin/fm-polytoken-lib.sh",
+      "~/.no-mistakes/worktrees/119cd7a6b9a4/01M58R1EZXH295XPPYJMZP2JTS/.test-runtime/local/anchored"
+    ],
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "ruby",
+      "-ryaml",
+      "-rjson",
+      "-e",
+      "puts JSON.generate(YAML.safe_load(File.read(ARGV[0]), aliases: true))",
+      "~/.no-mistakes/worktrees/119cd7a6b9a4/01M58R1EZXH295XPPYJMZP2JTS/.test-runtime/local/anchored/config.yaml"
+    ],
+    "exit": 0,
+    "stdout": "{\"version\":4,\"providers\":{\"fixture\":{\"api_key\":\"disposable-config-value\"}},\"default_permission_matcher\":\"bypass_plus\"}\n",
+    "stderr": ""
+  },
+  {
+    "scenario": "Mirror permission policy and provider configuration",
+    "case": "anchored",
+    "generated": {
+      "version": 4,
+      "providers": {
+        "fixture": {
+          "api_key": "disposable-config-value"
+        }
+      },
+      "default_permission_matcher": "bypass_plus"
+    }
+  },
+  {
+    "command": [
+      "bash",
+      "-c",
+      ". \"$1\"; fm_polytoken_write_config \"$2\"",
+      "_",
+      "~/.no-mistakes/worktrees/119cd7a6b9a4/01M58R1EZXH295XPPYJMZP2JTS/bin/fm-polytoken-lib.sh",
+      "~/.no-mistakes/worktrees/119cd7a6b9a4/01M58R1EZXH295XPPYJMZP2JTS/.test-runtime/local/alias"
+    ],
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "ruby",
+      "-ryaml",
+      "-rjson",
+      "-e",
+      "puts JSON.generate(YAML.safe_load(File.read(ARGV[0]), aliases: true))",
+      "~/.no-mistakes/worktrees/119cd7a6b9a4/01M58R1EZXH295XPPYJMZP2JTS/.test-runtime/local/alias/config.yaml"
+    ],
+    "exit": 0,
+    "stdout": "{\"version\":4,\"providers\":{\"fixture\":{\"api_key\":\"disposable-config-value\"}},\"policy\":\"bypass_plus\",\"default_permission_matcher\":\"bypass_plus\"}\n",
+    "stderr": ""
+  },
+  {
+    "scenario": "Mirror permission policy and provider configuration",
+    "case": "alias",
+    "generated": {
+      "version": 4,
+      "providers": {
+        "fixture": {
+          "api_key": "disposable-config-value"
+        }
+      },
+      "policy": "bypass_plus",
+      "default_permission_matcher": "bypass_plus"
+    }
+  },
+  {
+    "command": [
+      "bash",
+      "-c",
+      ". \"$1\"; fm_polytoken_write_config \"$2\"",
+      "_",
+      "~/.no-mistakes/worktrees/119cd7a6b9a4/01M58R1EZXH295XPPYJMZP2JTS/bin/fm-polytoken-lib.sh",
+      "~/.no-mistakes/worktrees/119cd7a6b9a4/01M58R1EZXH295XPPYJMZP2JTS/.test-runtime/local/prompt"
+    ],
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "ruby",
+      "-ryaml",
+      "-rjson",
+      "-e",
+      "puts JSON.generate(YAML.safe_load(File.read(ARGV[0]), aliases: true))",
+      "~/.no-mistakes/worktrees/119cd7a6b9a4/01M58R1EZXH295XPPYJMZP2JTS/.test-runtime/local/prompt/config.yaml"
+    ],
+    "exit": 0,
+    "stdout": "{\"version\":4,\"providers\":{\"fixture\":{\"api_key\":\"disposable-config-value\"}},\"default_permission_matcher\":\"bypass\"}\n",
+    "stderr": ""
+  },
+  {
+    "scenario": "Mirror permission policy and provider configuration",
+    "case": "prompt",
+    "generated": {
+      "version": 4,
+      "providers": {
+        "fixture": {
+          "api_key": "disposable-config-value"
+        }
+      },
+      "default_permission_matcher": "bypass"
+    }
+  },
+  {
+    "command": [
+      "bash",
+      "~/.no-mistakes/worktrees/119cd7a6b9a4/01M58R1EZXH295XPPYJMZP2JTS/bin/fm-herdr-groups.sh",
+      "sidebar-config",
+      "--apply",
+      "~/.no-mistakes/worktrees/119cd7a6b9a4/01M58R1EZXH295XPPYJMZP2JTS/.test-runtime/local/herdr-config.toml"
+    ],
+    "exit": 0,
+    "stdout": "appended the project-group sidebar rows to ~/.no-mistakes/worktrees/119cd7a6b9a4/01M58R1EZXH295XPPYJMZP2JTS/.test-runtime/local/herdr-config.toml (backup: ~/.no-mistakes/worktrees/119cd7a6b9a4/01M58R1EZXH295XPPYJMZP2JTS/.test-runtime/local/herdr-config.toml.bak-1792370301); run `herdr server reload-config` to apply them\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "bash",
+      "~/.no-mistakes/worktrees/119cd7a6b9a4/01M58R1EZXH295XPPYJMZP2JTS/bin/fm-herdr-groups.sh",
+      "sidebar-config",
+      "--apply",
+      "~/.no-mistakes/worktrees/119cd7a6b9a4/01M58R1EZXH295XPPYJMZP2JTS/.test-runtime/local/herdr-config.toml"
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": "fm-herdr-groups: ~/.no-mistakes/worktrees/119cd7a6b9a4/01M58R1EZXH295XPPYJMZP2JTS/.test-runtime/local/herdr-config.toml already defines Herdr sidebar rows; merge the suggested rows by hand (fm-herdr-groups.sh sidebar-config prints them)\n"
+  },
+  {
+    "scenario": "Apply sidebar configuration once, preserving exact backup bytes",
+    "generated": {
+      "ui": {
+        "agent_panel_sort": "spaces",
+        "sidebar": {
+          "spaces": {
+            "rows": [
+              [
+                "state_icon",
+                "workspace"
+              ],
+              [
+                {
+                  "token": "$fm_group",
+                  "bold": true
+                },
+                "$fm_state"
+              ]
+            ]
+          },
+          "agents": {
+            "rows": [
+              [
+                "state_icon",
+                {
+                  "token": "$fm_group",
+                  "bold": true
+                },
+                "$fm_state",
+                "$fm_task"
+              ]
+            ]
+          }
+        }
+      }
+    }
+  },
+  {
+    "command": [
+      "bash",
+      "~/.no-mistakes/worktrees/119cd7a6b9a4/01M58R1EZXH295XPPYJMZP2JTS/bin/fm-herdr-groups.sh",
+      "plan"
+    ],
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "bash",
+      "~/.no-mistakes/worktrees/119cd7a6b9a4/01M58R1EZXH295XPPYJMZP2JTS/bin/fm-herdr-groups.sh",
+      "plan"
+    ],
+    "exit": 0,
+    "stdout": "api-done\tWeb\tdone\t001.Web.4.api-done\t001.Web\nother-fail\tOther\tproblem\t002.Other.2.other-fail\t002.Other\nshop-ask\tWeb\tneeds-captain\t001.Web.1.shop-ask\t001.Web\nshop-run\tWeb\trunning\t001.Web.3.shop-run\t001.Web\n",
+    "stderr": ""
+  },
+  {
+    "scenario": "Opt-in group plan sorts decisions before running and completed tasks, preserving rule order",
+    "plan": "api-done\tWeb\tdone\t001.Web.4.api-done\t001.Web\nother-fail\tOther\tproblem\t002.Other.2.other-fail\t002.Other\nshop-ask\tWeb\tneeds-captain\t001.Web.1.shop-ask\t001.Web\nshop-run\tWeb\trunning\t001.Web.3.shop-run\t001.Web\n"
+  },
+  {
+    "command": [
+      "bash",
+      "-c",
+      ". \"$1\"; fm_polytoken_write_facet \"$2\" \"$3\"",
+      "_",
+      "~/.no-mistakes/worktrees/119cd7a6b9a4/01M58R1EZXH295XPPYJMZP2JTS/bin/fm-polytoken-lib.sh",
+      "~/.no-mistakes/worktrees/119cd7a6b9a4/01M58R1EZXH295XPPYJMZP2JTS/.test-runtime/local/project",
+      "~/.no-mistakes/worktrees/119cd7a6b9a4/01M58R1EZXH295XPPYJMZP2JTS/.test-runtime/local/home/state/task.inbox"
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": "error: ~/.no-mistakes/worktrees/119cd7a6b9a4/01M58R1EZXH295XPPYJMZP2JTS/.test-runtime/local/project/.polytoken/facets/firstmate-worker.md already exists; project-owned polytoken wiring is not firstmate's to clobber. Select another harness for this task.\n"
+  },
+  {
+    "command": [
+      "bash",
+      "-c",
+      ". \"$1\"; fm_polytoken_write_facet \"$2\" \"$3\"",
+      "_",
+      "~/.no-mistakes/worktrees/119cd7a6b9a4/01M58R1EZXH295XPPYJMZP2JTS/bin/fm-polytoken-lib.sh",
+      "~/.no-mistakes/worktrees/119cd7a6b9a4/01M58R1EZXH295XPPYJMZP2JTS/.test-runtime/local/project",
+      "~/.no-mistakes/worktrees/119cd7a6b9a4/01M58R1EZXH295XPPYJMZP2JTS/.test-runtime/local/home/state/task.inbox"
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": "error: ~/.no-mistakes/worktrees/119cd7a6b9a4/01M58R1EZXH295XPPYJMZP2JTS/.test-runtime/local/project/.polytoken/facets/firstmate-worker.md already exists; project-owned polytoken wiring is not firstmate's to clobber. Select another harness for this task.\n"
+  },
+  {
+    "scenario": "Facet writer refuses existing files and symlinks while preserving exact project-owned bytes",
+    "bytes": "project-owned facet\n\n"
+  }
+]

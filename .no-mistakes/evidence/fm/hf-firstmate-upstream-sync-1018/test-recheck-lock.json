@@ -1,0 +1,44 @@
+{
+  "driver": "real fm-lock.sh with isolated FM_HOME; actual existing agent ancestry, no process or upstream stubs",
+  "commands": [
+    {
+      "command": [
+        "bash",
+        "bin/fm-lock.sh",
+        "status"
+      ],
+      "exit": 0,
+      "stdout": "lock: free\n",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "bash",
+        "bin/fm-lock.sh"
+      ],
+      "exit": 0,
+      "stdout": "lock acquired: harness pid 41017\n",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "bash",
+        "bin/fm-lock.sh"
+      ],
+      "exit": 0,
+      "stdout": "lock acquired: harness pid 41017\n",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "bash",
+        "bin/fm-lock.sh",
+        "status"
+      ],
+      "exit": 0,
+      "stdout": "lock: held by live harness pid 41017\n",
+      "stderr": ""
+    }
+  ],
+  "lock": "41017\n"
+}

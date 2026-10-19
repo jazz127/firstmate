@@ -1,0 +1,16 @@
+{
+  "head": "c2f98cc272c9ca77472a6e5fcfd50c9558238009",
+  "ancestors": {
+    "69a6c4e6f523a28d93275e1a35b9dd391aad7836": true,
+    "07912680c1cdedc91018a8df1c798e86fbe1cac5": true,
+    "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681": true,
+    "8b8f5f6f": true,
+    "0439615a": true,
+    "921b178b": true
+  },
+  "merges": [
+    "921b178b67c22af01a7ceef58ba886e4686df815 0439615a4a8253c9eaffcc2c86a28a033669c5fd 45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681 chore: merge latest upstream main",
+    "0439615a4a8253c9eaffcc2c86a28a033669c5fd 8b8f5f6f942a8ba12f5ddda551db2e66b1b9a4d3 69a6c4e6f523a28d93275e1a35b9dd391aad7836 chore: merge current house lock fix",
+    "8b8f5f6f942a8ba12f5ddda551db2e66b1b9a4d3 978f5a7ac473fe3ba4f3a1ed68b972d1af76fe65 07912680c1cdedc91018a8df1c798e86fbe1cac5 chore: merge upstream main into house"
+  ]
+}

@@ -605,6 +605,8 @@ test_a_git_probe_that_does_not_answer_is_not_an_update() {
   head_before=$(git -C "$work" rev-parse HEAD)
 
   # A git that answers everything except the object query, which never answers.
+  # The real git's path is quoted because it can hold a space, as the path of a
+  # git inside an application bundle does.
   dir="$TMP_ROOT/git-mute/bin"
   mkdir -p "$dir"
   cat > "$dir/git" <<SH
@@ -615,7 +617,7 @@ for arg in "\$@"; do
     exit 0
   fi
 done
-exec $(command -v git) "\$@"
+exec $(printf '%q' "$(command -v git)") "\$@"
 SH
   chmod 0755 "$dir/git"
 
@@ -652,7 +654,7 @@ for arg in "\$@"; do
     exit 0
   fi
 done
-exec $(command -v git) "\$@"
+exec $(printf '%q' "$(command -v git)") "\$@"
 SH
   chmod 0755 "$dir/git"
 

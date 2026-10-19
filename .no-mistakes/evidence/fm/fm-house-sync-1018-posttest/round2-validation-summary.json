@@ -1,0 +1,41 @@
+{
+  "target_commit": "097834fcdcd0a9267669279393430c1dfdd484ce",
+  "surface": "synthetic fixture validation only; test-only diff has no changed runtime surface",
+  "final_targeted_results": [
+    {
+      "duration_ms": 607678,
+      "exit": 0,
+      "expected_gate_skip": "none",
+      "family": "backend-dispatch",
+      "gate_skip": false,
+      "gate_skip_reason": "",
+      "path": "tests/fm-spawn-dispatch-profile.test.sh"
+    },
+    {
+      "duration_ms": 206989,
+      "exit": 0,
+      "expected_gate_skip": "none",
+      "family": "session-bootstrap",
+      "gate_skip": false,
+      "gate_skip_reason": "",
+      "path": "tests/fm-bootstrap-network-parallel.test.sh"
+    },
+    {
+      "duration_ms": 177675,
+      "exit": 0,
+      "expected_gate_skip": "none",
+      "family": "backend-dispatch",
+      "gate_skip": false,
+      "gate_skip_reason": "",
+      "path": "tests/fm-spawn-compact-adviser-disable-remote.test.sh"
+    }
+  ],
+  "setup_attempts": [
+    "round2-targeted-results.json: in-repository fixture homes refused; remote fake-SSH cwd discovered enclosing gate",
+    "round2-isolated-results.json: dispatch and scheduler passed; remote fake-SSH cwd still discovered enclosing gate"
+  ],
+  "final_remote_setup": "Own Git boundary for fake-SSH cwd; tests/lib.sh used its incidental /tmp fallback because TMPDIR contains .git",
+  "suite_scope": "Three targeted scripts only; full repository suite was not rerun in this test phase",
+  "source_changes": "none",
+  "observation_limit": "Initial metadata monitor stopped at its 600-second bound after retaining both recovery generations; subsequent observer completed with no staged commands captured"
+}

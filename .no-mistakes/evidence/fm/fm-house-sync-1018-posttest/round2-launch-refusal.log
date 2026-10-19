@@ -1,0 +1,5 @@
+Synthetic negative check: remote fixture nested in the gate worktree, before correcting fixture layout.
+The launch failure includes the underlying gate diagnostic. This is setup evidence, not a production launch failure.
+
+not ok - allowlist absent: the remote second-mate launch failed: error: refusing fleet lifecycle from inside a no-mistakes gate worktree (~/.no-mistakes/repos/119cd7a6b9a4.git)
+error: remote host-local secondmate launch failed

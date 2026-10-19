@@ -1,0 +1,55 @@
+{
+  "families": [
+    {
+      "count": 2,
+      "duration_ms": 114102,
+      "failed": 2,
+      "name": "backend-dispatch"
+    },
+    {
+      "count": 1,
+      "duration_ms": 184086,
+      "failed": 0,
+      "name": "session-bootstrap"
+    }
+  ],
+  "finished_at": "2026-10-19T13:29:15Z",
+  "run_id": "fm-test-run-1792416256754-31922",
+  "scripts": [
+    {
+      "duration_ms": 22707,
+      "exit": 1,
+      "expected_gate_skip": "none",
+      "family": "backend-dispatch",
+      "gate_skip": false,
+      "gate_skip_reason": "",
+      "path": "tests/fm-spawn-dispatch-profile.test.sh"
+    },
+    {
+      "duration_ms": 91395,
+      "exit": 1,
+      "expected_gate_skip": "none",
+      "family": "backend-dispatch",
+      "gate_skip": false,
+      "gate_skip_reason": "",
+      "path": "tests/fm-spawn-compact-adviser-disable-remote.test.sh"
+    },
+    {
+      "duration_ms": 184086,
+      "exit": 0,
+      "expected_gate_skip": "none",
+      "family": "session-bootstrap",
+      "gate_skip": false,
+      "gate_skip_reason": "",
+      "path": "tests/fm-bootstrap-network-parallel.test.sh"
+    }
+  ],
+  "selection": "scripts;jobs=1",
+  "started_at": "2026-10-19T13:24:16Z",
+  "summary": {
+    "duration_ms": 298493,
+    "failed": 2,
+    "skipped_gate": 0,
+    "total": 3
+  }
+}

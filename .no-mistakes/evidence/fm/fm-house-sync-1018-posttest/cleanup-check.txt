@@ -1,0 +1,3 @@
+The remote suite exited 0 with both launch assertions passing and no permission-denied output.
+Immediate post-run snapshot: no fixture entries; 3 worker processes still present.
+Follow-up after shutdown: remaining fixture entries=[]; worker processes=0.

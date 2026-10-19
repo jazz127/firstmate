@@ -1,0 +1,12 @@
+{
+  "surface": "simulated; actual scripts with fake SSH, Herdr and Codex probe",
+  "note": "tests/lib.sh fell back to /tmp because supplied TMPDIR contains .git; these are incidental toolchain fixture writes",
+  "observations": [
+    {
+      "fixture": "/tmp/fm-remote-compact-adviser.07iD5m",
+      "herdr_transcript": "pane get w1:p3 --session fm-remote\nstatus --json\nstatus --json --session fm-remote\nworkspace list --session fm-remote\nworkspace create --cwd /private/tmp/fm-remote-compact-adviser.07iD5m/remote-home --label 2ndmate-ios --no-focus --session fm-remote\ntab list --workspace w1 --session fm-remote\ntab create --workspace w1 --cwd /private/tmp/fm-remote-compact-adviser.07iD5m/remote-home --label fm-ios --no-focus --session fm-remote\ntab list --workspace w1 --session fm-remote\npane list --workspace w1 --session fm-remote\nagent get w1:p2 --session fm-remote\npane close w1:p2 --session fm-remote\npane get w1:p3 --session fm-remote\npane get w1:p3 --session fm-remote\nagent get w1:p3 --session fm-remote\nstatus --json --session fm-remote\npane read w1:p3 --source recent --lines 200 --session fm-remote\n",
+      "launches": [],
+      "hook_modes": {}
+    }
+  ]
+}

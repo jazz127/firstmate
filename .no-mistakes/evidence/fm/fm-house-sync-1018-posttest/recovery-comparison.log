@@ -1,0 +1,52 @@
+=== before fixture repair: 350afd57916bd3a14d9935da178d8a95f3385da5 (fake tmux and fake Codex login) ===
+ok - allowlist=absent preserves the operational floor and filters only when opted in
+ok - allowlist=missing-config preserves the operational floor and filters only when opted in
+ok - allowlist=enabled preserves the operational floor and filters only when opted in
+ok - allowlist=empty preserves the operational floor and filters only when opted in
+ok - invalid allowlist names refuse before launch or task publication
+ok - inaccessible config with present allowlist refuses before launch or task publication
+ok - inaccessible config with absent allowlist refuses before launch or task publication
+ok - inaccessible ancestor with present allowlist refuses before launch or task publication
+ok - inaccessible ancestor with absent allowlist refuses before launch or task publication
+ok - secondmate launch inherits the allowlist for subsequent worker launches
+ok - local inheritance preserves the allowlist on source errors and mirrors proven absence
+ok - remote inheritance preserves the allowlist on source errors and mirrors proven absence
+not ok - local secondmate recovery should preserve seat: warning: secondmate profile-local-seat-recovery-z4c sync skipped before launch: primary default-branch commit cannot be resolved
+error: window firstmate:fm-profile-local-seat-recovery-z4c already exists: expected exit 0, got 1
+actual exit=1; expected exit=1
+=== after fixture repair: 23e127c1c130c72a4ffbc960ef6c68b8df9f0d2b (fake tmux and fake Codex login) ===
+ok - allowlist=absent preserves the operational floor and filters only when opted in
+ok - allowlist=missing-config preserves the operational floor and filters only when opted in
+ok - allowlist=enabled preserves the operational floor and filters only when opted in
+ok - allowlist=empty preserves the operational floor and filters only when opted in
+ok - invalid allowlist names refuse before launch or task publication
+ok - inaccessible config with present allowlist refuses before launch or task publication
+ok - inaccessible config with absent allowlist refuses before launch or task publication
+ok - inaccessible ancestor with present allowlist refuses before launch or task publication
+ok - inaccessible ancestor with absent allowlist refuses before launch or task publication
+ok - secondmate launch inherits the allowlist for subsequent worker launches
+ok - local inheritance preserves the allowlist on source errors and mirrors proven absence
+ok - remote inheritance preserves the allowlist on source errors and mirrors proven absence
+ok - local secondmate recovery restores its recorded logical seat
+Persisted recovered metadata:
+window=firstmate:fm-profile-local-seat-recovery-z4c
+endpoint_task_id=profile-local-seat-recovery-z4c
+worktree=/private/tmp/fm-spawn-dispatch-profile.ejaGAT/profile-local-seat-recovery/secondmate-home
+project=/private/tmp/fm-spawn-dispatch-profile.ejaGAT/profile-local-seat-recovery/secondmate-home
+harness=codex
+kind=secondmate
+mode=secondmate
+yolo=off
+tasktmp=/tmp/fm-profile-local-seat-recovery-z4c
+model=default
+effort=default
+seat=luna
+dock=local-dock
+seat_home=/private/tmp/fm-spawn-dispatch-profile.ejaGAT/profile-local-seat-recovery/seat
+seat_source=dock.json
+spawn_gen=s1792415662.87879.3800
+home=/private/tmp/fm-spawn-dispatch-profile.ejaGAT/profile-local-seat-recovery/secondmate-home
+projects=
+Recovered launch command (synthetic credentials):
+unset FM_TIMEOUT_OWNER_PID FM_EXEC_TIMED_OWNER_PID; export COMPACT_ADVISER_DISABLE=1; export FM_TASK_INBOX='/private/tmp/fm-spawn-dispatch-profile.ejaGAT/profile-local-seat-recovery/home/state/profile-local-seat-recovery-z4c.inbox'; unset OPENAI_API_KEY CODEX_API_KEY CODEX_ACCESS_TOKEN OPENAI_BASE_URL OPENAI_ORG_ID OPENAI_ORGANIZATION OPENAI_PROJECT OPENAI_PROJECT_ID; export CODEX_HOME='/private/tmp/fm-spawn-dispatch-profile.ejaGAT/profile-local-seat-recovery/seat'; '~/.no-mistakes/worktrees/119cd7a6b9a4/01M5A3J0Z19TY21ZHBQEYSDSAM/bin/fm-git-strip-ai-trailers.sh' env-file '/private/tmp/fm-spawn-dispatch-profile.ejaGAT/profile-local-seat-recovery/home/state/profile-local-seat-recovery-z4c.git-hooks' '/tmp/fm-profile-local-seat-recovery-z4c+3ed6ca547ec0715c8e81678d6c3154e0b382766b793716af3d1af7d78ff32562/git-config.s1792415662.87879.3800.sh' && . '/tmp/fm-profile-local-seat-recovery-z4c+3ed6ca547ec0715c8e81678d6c3154e0b382766b793716af3d1af7d78ff32562/git-config.s1792415662.87879.3800.sh' || return 1 2>/dev/null || exit 1; env -u FM_STATE_OVERRIDE FM_ROOT_OVERRIDE= FM_DATA_OVERRIDE= FM_PROJECTS_OVERRIDE= FM_CONFIG_OVERRIDE= FM_PUBLIC_FOLLOWUP_PRIMARY_HOME='/private/tmp/fm-spawn-dispatch-profile.ejaGAT/profile-local-seat-recovery/home' FM_HOME='/private/tmp/fm-spawn-dispatch-profile.ejaGAT/profile-local-seat-recovery/secondmate-home' FM_TRACE_CONTEXT=off FM_SUPERVISION_MODEL=persistent env -u CURSOR_AGENT -u CURSOR_INVOKED_AS -u GEMINI_CLI '/private/tmp/fm-spawn-dispatch-profile.ejaGAT/profile-local-seat-recovery/fake/fakebin/codex' -c 'cli_auth_credentials_store="file"' -c 'model_provider="openai"' --dangerously-bypass-approvals-and-sandbox '⁣FIRSTMATE_OP: v1 launch-brief: Read and follow the complete Firstmate launch brief at /private/tmp/fm-spawn-dispatch-profile.ejaGAT/profile-local-seat-recovery/secondmate-home/data/charter.md before doing any other work.'
+actual exit=0; expected exit=0

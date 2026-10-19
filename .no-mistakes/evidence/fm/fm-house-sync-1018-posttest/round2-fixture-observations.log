@@ -1,0 +1,51 @@
+Synthetic observations only: fake tmux/Codex and fake SSH/Herdr; no upstream accounts exercised.
+
+=== fm-spawn-dispatch-profile.29gJJv/profile-local-seat-recovery/home/state/profile-local-seat-recovery-z4c.meta elapsed=172.43s ===
+window=firstmate:fm-profile-local-seat-recovery-z4c
+endpoint_task_id=profile-local-seat-recovery-z4c
+worktree=~/.no-mistakes/worktrees/119cd7a6b9a4/01M5A3J0Z19TY21ZHBQEYSDSAM/.no-mistakes/test-phase-fixtures/fm-spawn-dispatch-profile.29gJJv/profile-local-seat-recovery/secondmate-home
+project=~/.no-mistakes/worktrees/119cd7a6b9a4/01M5A3J0Z19TY21ZHBQEYSDSAM/.no-mistakes/test-phase-fixtures/fm-spawn-dispatch-profile.29gJJv/profile-local-seat-recovery/secondmate-home
+harness=codex
+kind=secondmate
+mode=secondmate
+yolo=off
+tasktmp=/tmp/fm-profile-local-seat-recovery-z4c
+model=default
+effort=default
+seat=luna
+dock=local-dock
+seat_home=~/.no-mistakes/worktrees/119cd7a6b9a4/01M5A3J0Z19TY21ZHBQEYSDSAM/.no-mistakes/test-phase-fixtures/fm-spawn-dispatch-profile.29gJJv/profile-local-seat-recovery/seat
+seat_source=dock.json
+spawn_gen=s1792416530.78559.15547
+home=~/.no-mistakes/worktrees/119cd7a6b9a4/01M5A3J0Z19TY21ZHBQEYSDSAM/.no-mistakes/test-phase-fixtures/fm-spawn-dispatch-profile.29gJJv/profile-local-seat-recovery/secondmate-home
+projects=
+
+
+=== fm-spawn-dispatch-profile.29gJJv/profile-local-seat-recovery/launch.log elapsed=173.51s ===
+unset FM_TIMEOUT_OWNER_PID FM_EXEC_TIMED_OWNER_PID; export COMPACT_ADVISER_DISABLE=1; export FM_TASK_INBOX='~/.no-mistakes/worktrees/119cd7a6b9a4/01M5A3J0Z19TY21ZHBQEYSDSAM/.no-mistakes/test-phase-fixtures/fm-spawn-dispatch-profile.29gJJv/profile-local-seat-recovery/home/state/profile-local-seat-recovery-z4c.inbox'; unset OPENAI_API_KEY CODEX_API_KEY CODEX_ACCESS_TOKEN OPENAI_BASE_URL OPENAI_ORG_ID OPENAI_ORGANIZATION OPENAI_PROJECT OPENAI_PROJECT_ID; export CODEX_HOME='~/.no-mistakes/worktrees/119cd7a6b9a4/01M5A3J0Z19TY21ZHBQEYSDSAM/.no-mistakes/test-phase-fixtures/fm-spawn-dispatch-profile.29gJJv/profile-local-seat-recovery/seat'; '~/.no-mistakes/worktrees/119cd7a6b9a4/01M5A3J0Z19TY21ZHBQEYSDSAM/.no-mistakes/test-phase-code/bin/fm-git-strip-ai-trailers.sh' env-file '~/.no-mistakes/worktrees/119cd7a6b9a4/01M5A3J0Z19TY21ZHBQEYSDSAM/.no-mistakes/test-phase-fixtures/fm-spawn-dispatch-profile.29gJJv/profile-local-seat-recovery/home/state/profile-local-seat-recovery-z4c.git-hooks' '/tmp/fm-profile-local-seat-recovery-z4c+d90aa8b0990dc38ca41be28f0515390f7ce9b8ac93fbb1444bca1e5443c20bdd/git-config.s1792416530.78559.15547.sh' && . '/tmp/fm-profile-local-seat-recovery-z4c+d90aa8b0990dc38ca41be28f0515390f7ce9b8ac93fbb1444bca1e5443c20bdd/git-config.s1792416530.78559.15547.sh' || return 1 2>/dev/null || exit 1; env -u FM_STATE_OVERRIDE FM_ROOT_OVERRIDE= FM_DATA_OVERRIDE= FM_PROJECTS_OVERRIDE= FM_CONFIG_OVERRIDE= FM_PUBLIC_FOLLOWUP_PRIMARY_HOME='~/.no-mistakes/worktrees/119cd7a6b9a4/01M5A3J0Z19TY21ZHBQEYSDSAM/.no-mistakes/test-phase-fixtures/fm-spawn-dispatch-profile.29gJJv/profile-local-seat-recovery/home' FM_HOME='~/.no-mistakes/worktrees/119cd7a6b9a4/01M5A3J0Z19TY21ZHBQEYSDSAM/.no-mistakes/test-phase-fixtures/fm-spawn-dispatch-profile.29gJJv/profile-local-seat-recovery/secondmate-home' FM_TRACE_CONTEXT=off FM_SUPERVISION_MODEL=persistent env -u CURSOR_AGENT -u CURSOR_INVOKED_AS -u GEMINI_CLI '~/.no-mistakes/worktrees/119cd7a6b9a4/01M5A3J0Z19TY21ZHBQEYSDSAM/.no-mistakes/test-phase-fixtures/fm-spawn-dispatch-profile.29gJJv/profile-local-seat-recovery/fake/fakebin/codex' -c 'cli_auth_credentials_store="file"' -c 'model_provider="openai"' --dangerously-bypass-approvals-and-sandbox '⁣FIRSTMATE_OP: v1 launch-brief: Read and follow the complete Firstmate launch brief at ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5A3J0Z19TY21ZHBQEYSDSAM/.no-mistakes/test-phase-fixtures/fm-spawn-dispatch-profile.29gJJv/profile-local-seat-recovery/secondmate-home/data/charter.md before doing any other work.'
+
+
+=== fm-spawn-dispatch-profile.29gJJv/profile-local-seat-recovery/home/state/profile-local-seat-recovery-z4c.meta elapsed=175.47s ===
+window=firstmate:fm-profile-local-seat-recovery-z4c
+endpoint_task_id=profile-local-seat-recovery-z4c
+worktree=~/.no-mistakes/worktrees/119cd7a6b9a4/01M5A3J0Z19TY21ZHBQEYSDSAM/.no-mistakes/test-phase-fixtures/fm-spawn-dispatch-profile.29gJJv/profile-local-seat-recovery/secondmate-home
+project=~/.no-mistakes/worktrees/119cd7a6b9a4/01M5A3J0Z19TY21ZHBQEYSDSAM/.no-mistakes/test-phase-fixtures/fm-spawn-dispatch-profile.29gJJv/profile-local-seat-recovery/secondmate-home
+harness=codex
+kind=secondmate
+mode=secondmate
+yolo=off
+tasktmp=/tmp/fm-profile-local-seat-recovery-z4c
+model=default
+effort=default
+seat=luna
+dock=local-dock
+seat_home=~/.no-mistakes/worktrees/119cd7a6b9a4/01M5A3J0Z19TY21ZHBQEYSDSAM/.no-mistakes/test-phase-fixtures/fm-spawn-dispatch-profile.29gJJv/profile-local-seat-recovery/seat
+seat_source=dock.json
+spawn_gen=s1792416533.82554.26293
+home=~/.no-mistakes/worktrees/119cd7a6b9a4/01M5A3J0Z19TY21ZHBQEYSDSAM/.no-mistakes/test-phase-fixtures/fm-spawn-dispatch-profile.29gJJv/profile-local-seat-recovery/secondmate-home
+projects=
+
+
+=== fm-spawn-dispatch-profile.29gJJv/profile-local-seat-recovery/launch.log elapsed=176.90s ===
+unset FM_TIMEOUT_OWNER_PID FM_EXEC_TIMED_OWNER_PID; export COMPACT_ADVISER_DISABLE=1; export FM_TASK_INBOX='~/.no-mistakes/worktrees/119cd7a6b9a4/01M5A3J0Z19TY21ZHBQEYSDSAM/.no-mistakes/test-phase-fixtures/fm-spawn-dispatch-profile.29gJJv/profile-local-seat-recovery/home/state/profile-local-seat-recovery-z4c.inbox'; unset OPENAI_API_KEY CODEX_API_KEY CODEX_ACCESS_TOKEN OPENAI_BASE_URL OPENAI_ORG_ID OPENAI_ORGANIZATION OPENAI_PROJECT OPENAI_PROJECT_ID; export CODEX_HOME='~/.no-mistakes/worktrees/119cd7a6b9a4/01M5A3J0Z19TY21ZHBQEYSDSAM/.no-mistakes/test-phase-fixtures/fm-spawn-dispatch-profile.29gJJv/profile-local-seat-recovery/seat'; '~/.no-mistakes/worktrees/119cd7a6b9a4/01M5A3J0Z19TY21ZHBQEYSDSAM/.no-mistakes/test-phase-code/bin/fm-git-strip-ai-trailers.sh' env-file '~/.no-mistakes/worktrees/119cd7a6b9a4/01M5A3J0Z19TY21ZHBQEYSDSAM/.no-mistakes/test-phase-fixtures/fm-spawn-dispatch-profile.29gJJv/profile-local-seat-recovery/home/state/profile-local-seat-recovery-z4c.git-hooks' '/tmp/fm-profile-local-seat-recovery-z4c+d90aa8b0990dc38ca41be28f0515390f7ce9b8ac93fbb1444bca1e5443c20bdd/git-config.s1792416533.82554.26293.sh' && . '/tmp/fm-profile-local-seat-recovery-z4c+d90aa8b0990dc38ca41be28f0515390f7ce9b8ac93fbb1444bca1e5443c20bdd/git-config.s1792416533.82554.26293.sh' || return 1 2>/dev/null || exit 1; env -u FM_STATE_OVERRIDE FM_ROOT_OVERRIDE= FM_DATA_OVERRIDE= FM_PROJECTS_OVERRIDE= FM_CONFIG_OVERRIDE= FM_PUBLIC_FOLLOWUP_PRIMARY_HOME='~/.no-mistakes/worktrees/119cd7a6b9a4/01M5A3J0Z19TY21ZHBQEYSDSAM/.no-mistakes/test-phase-fixtures/fm-spawn-dispatch-profile.29gJJv/profile-local-seat-recovery/home' FM_HOME='~/.no-mistakes/worktrees/119cd7a6b9a4/01M5A3J0Z19TY21ZHBQEYSDSAM/.no-mistakes/test-phase-fixtures/fm-spawn-dispatch-profile.29gJJv/profile-local-seat-recovery/secondmate-home' FM_TRACE_CONTEXT=off FM_SUPERVISION_MODEL=persistent env -u CURSOR_AGENT -u CURSOR_INVOKED_AS -u GEMINI_CLI '~/.no-mistakes/worktrees/119cd7a6b9a4/01M5A3J0Z19TY21ZHBQEYSDSAM/.no-mistakes/test-phase-fixtures/fm-spawn-dispatch-profile.29gJJv/profile-local-seat-recovery/fake/fakebin/codex' -c 'cli_auth_credentials_store="file"' -c 'model_provider="openai"' --dangerously-bypass-approvals-and-sandbox '⁣FIRSTMATE_OP: v1 launch-brief: Read and follow the complete Firstmate launch brief at ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5A3J0Z19TY21ZHBQEYSDSAM/.no-mistakes/test-phase-fixtures/fm-spawn-dispatch-profile.29gJJv/profile-local-seat-recovery/secondmate-home/data/charter.md before doing any other work.'
+

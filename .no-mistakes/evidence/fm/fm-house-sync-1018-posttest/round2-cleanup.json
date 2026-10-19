@@ -1,0 +1,22 @@
+{
+  "remote_fixture_exists_after_teardown": {
+    "/tmp/fm-remote-compact-adviser.07iD5m": false
+  },
+  "scoped_processes_after_teardown": [],
+  "worktree_fixture_entries": {
+    "~/.no-mistakes/worktrees/119cd7a6b9a4/01M5A3J0Z19TY21ZHBQEYSDSAM/.no-mistakes/test-phase-tmp": [
+      "fm-bootstrap-fleet.ppqqM6",
+      "fm-fleet-sync.wGvOb2"
+    ],
+    "~/.no-mistakes/worktrees/119cd7a6b9a4/01M5A3J0Z19TY21ZHBQEYSDSAM/.no-mistakes/test-phase-fixtures": [
+      "fm-bootstrap-fleet.XEDzGR"
+    ]
+  },
+  "all_test_children_before_source_copy_removal": [],
+  "disposable_worktree_paths_removed": {
+    "~/.no-mistakes/worktrees/119cd7a6b9a4/01M5A3J0Z19TY21ZHBQEYSDSAM/.no-mistakes/test-phase-tmp": true,
+    "~/.no-mistakes/worktrees/119cd7a6b9a4/01M5A3J0Z19TY21ZHBQEYSDSAM/.no-mistakes/test-phase-fixtures": true,
+    "~/.no-mistakes/worktrees/119cd7a6b9a4/01M5A3J0Z19TY21ZHBQEYSDSAM/.no-mistakes/test-phase-code": true,
+    "~/.no-mistakes/worktrees/119cd7a6b9a4/01M5A3J0Z19TY21ZHBQEYSDSAM/.no-mistakes/test-phase-remote": true
+  }
+}

@@ -1857,11 +1857,6 @@ clear_relaunch_harness_wiring() {
   fi
   while IFS= read -r path; do
     [ -n "$path" ] || continue
-    if [ "$harness" = polytoken ]; then
-      case "$path" in
-        "$wt"/*) git -C "$wt" ls-files --error-unmatch -- "$path" >/dev/null 2>&1 && continue ;;
-      esac
-    fi
     rm -f -- "$path" || return 1
   done <<EOF
 $(fm_control_harness_wiring_paths "$harness" "$wt" "$state" "$id" "$kind")
@@ -5421,6 +5416,14 @@ exclude_path() {
   mkdir -p "$(dirname "$EXCL")"
   grep -qxF "$rel" "$EXCL" 2>/dev/null || echo "$rel" >>"$EXCL"
 }
+if [ "$HARNESS" = polytoken ] && [ "$RAW_LAUNCH" -eq 0 ]; then
+  if [ "$RELAUNCH" -eq 1 ] && [ "$RELAUNCH_PRIOR_HARNESS" = polytoken ]; then
+    fm_polytoken_require_wiring_free "$WT" "$STATE_REAL" "$ID" || exit 1
+  else
+    fm_polytoken_require_wiring_free "$WT" || exit 1
+  fi
+  fm_polytoken_require_handler_path "$(fm_polytoken_busy_script "$STATE_REAL" "$ID")" || exit 1
+fi
 if [ "$RELAUNCH" -eq 1 ]; then
   # Retire the previous incarnation's per-task harness wiring before arming the
   # new one. Without this, a harness switch would leave the old adapter's hook
@@ -5431,10 +5434,6 @@ if [ "$RELAUNCH" -eq 1 ]; then
     echo "error: could not retire $RELAUNCH_PRIOR_HARNESS wiring for task $ID; refusing to arm the replacement" >&2
     exit 1
   }
-fi
-if [ "$HARNESS" = polytoken ] && [ "$RAW_LAUNCH" -eq 0 ]; then
-  fm_polytoken_require_hooks_free "$WT" || exit 1
-  fm_polytoken_require_handler_path "$(fm_polytoken_busy_script "$STATE_REAL" "$ID")" || exit 1
 fi
 [ "$RELAUNCH" -eq 1 ] || [ "$HARNESS" != polytoken ] || SPAWN_FRESH_WIRING_PENDING=1
 if [ "$RELAUNCH" -eq 1 ]; then

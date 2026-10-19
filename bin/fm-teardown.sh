@@ -1411,7 +1411,6 @@ remove_harness_worktree_wiring() {  # <worktree>
   [ "$(meta_value "$META" harness)" = polytoken ] || return 0
   while IFS= read -r path; do
     case "$path" in "$wt"/*) ;; *) continue ;; esac
-    git -C "$wt" ls-files --error-unmatch -- "$path" >/dev/null 2>&1 && continue
     rm -f "$path"
   done <<EOF
 $(fm_control_harness_wiring_paths "$(meta_value "$META" harness)" "$wt" "$STATE" "$ID")

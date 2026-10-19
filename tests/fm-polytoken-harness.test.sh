@@ -170,6 +170,7 @@ test_polytoken_wiring_tables_cover_every_generated_artifact() {
   local wt="$TMP_ROOT/wiring-wt" state="$TMP_ROOT/wiring-state" id=polytoken-wiring
   local files dirs
   mkdir -p "$wt" "$state"
+  fm_git_init_commit "$wt"
   fm_polytoken_write_facet "$wt" "$state/$id.inbox" || fail "the facet writer should succeed"
   fm_polytoken_write_hooks "$wt" "$(fm_polytoken_busy_script "$state" "$id")" \
     || fail "the hook writer should succeed"
@@ -181,9 +182,21 @@ test_polytoken_wiring_tables_cover_every_generated_artifact() {
   assert_contains "$dirs" "$state/$id.polytoken-config" "the per-task config dir must be retired on relaunch"
   assert_contains "$dirs" "$state/$id.polytoken-sessions" "the per-task sessions root must be retired on relaunch"
   assert_contains "$dirs" "$state/$id.polytoken-sessions-v1" "the versioned sessions sibling must be retired on relaunch"
-  printf '[{"name":"project-own","event":"stop","handler":{"bash":"/bin/true"}}]\n' \
+  fm_polytoken_require_wiring_free "$wt" "$state" "$id" || fail "proven task wiring must permit relaunch"
+  if fm_polytoken_require_wiring_free "$wt" 2>/dev/null; then
+    fail "fresh launch must not adopt prior task wiring"
+  fi
+  git -C "$wt" add .polytoken
+  files=$(fm_control_harness_wiring_paths polytoken "$wt" "$state" "$id")
+  assert_not_contains "$files" "$wt/.polytoken/hooks.json" "tracked hooks must not be retired even when their bytes match"
+  assert_not_contains "$files" "$wt/.polytoken/facets/firstmate-worker.md" "tracked facets must not be retired even when their bytes match"
+  if fm_polytoken_require_wiring_free "$wt" "$state" "$id" 2>/dev/null; then
+    fail "tracked task-shaped wiring must refuse relaunch"
+  fi
+  git -C "$wt" reset -q HEAD -- .polytoken
+  printf '[{"name":"project-own","event":"stop","handler":{"bash":"%s/%s.polytoken-busy.sh"}}]\n' "$state" "$id" \
     > "$wt/.polytoken/hooks.json"
-  printf -- '---\nname: firstmate-worker\n---\nproject facet\n' \
+  printf -- '---\nname: firstmate-worker\n---\nproject facet mentioning %s/%s.inbox\n' "$state" "$id" \
     > "$wt/.polytoken/facets/firstmate-worker.md"
   files=$(fm_control_harness_wiring_paths polytoken "$wt" "$state" "$id")
   assert_not_contains "$files" "$wt/.polytoken/hooks.json" \
@@ -191,6 +204,9 @@ test_polytoken_wiring_tables_cover_every_generated_artifact() {
   assert_not_contains "$files" "$wt/.polytoken/facets/firstmate-worker.md" \
     "a facet firstmate did not generate for this task must never be named for retirement"
   assert_contains "$files" "$state/$id.polytoken-busy.sh" "the busy writer stays retirable"
+  if fm_polytoken_require_wiring_free "$wt" "$state" "$id" 2>/dev/null; then
+    fail "project content mentioning task paths must still refuse relaunch"
+  fi
   pass "fm-control-lib: polytoken wiring tables name every generated artifact and no project file"
 }
 
@@ -462,6 +478,50 @@ RUBY
   assert_contains "$body" "does not grant merge, destructive, security-sensitive" \
     "the facet must carry the task-channel trust statement's authority boundary"
   pass "fm-polytoken-lib: the worker facet carries the role contract and no model pin"
+}
+
+test_polytoken_writers_preserve_colliding_project_artifacts() {
+  local case_dir artifact kind path target
+  for artifact in facet hooks; do
+    for kind in regular symlink dangling directory; do
+      case_dir=$(make_wiring_case "collision-$artifact-$kind")
+      mkdir -p "$case_dir/wt/.polytoken/facets"
+      if [ "$artifact" = facet ]; then
+        path=$(fm_polytoken_facet_file "$case_dir/wt")
+      else
+        path=$(fm_polytoken_hooks_file "$case_dir/wt")
+      fi
+      target="$case_dir/project-original"
+      printf 'project-owned %s bytes\n\n' "$artifact" > "$case_dir/expected"
+      case "$kind" in
+        regular) cp "$case_dir/expected" "$path" ;;
+        symlink) cp "$case_dir/expected" "$target"; ln -s "$target" "$path" ;;
+        dangling) ln -s "$target" "$path" ;;
+        directory) mkdir "$path"; cp "$case_dir/expected" "$path/keep" ;;
+      esac
+      if fm_polytoken_require_wiring_free "$case_dir/wt" 2>"$case_dir/error"; then
+        fail "$kind $artifact must refuse preflight"
+      fi
+      if [ "$artifact" = facet ]; then
+        if fm_polytoken_write_facet "$case_dir/wt" "$case_dir/state/task.inbox" 2>"$case_dir/error"; then
+          fail "$kind facet must not be overwritten by its writer"
+        fi
+      else
+        if fm_polytoken_write_hooks "$case_dir/wt" "$case_dir/state/task.polytoken-busy.sh" 2>"$case_dir/error"; then
+          fail "$kind hooks must not be overwritten by its writer"
+        fi
+      fi
+      case "$kind" in
+        regular|symlink) cmp -s "$case_dir/expected" "$path" || fail "project artifact bytes changed" ;;
+        dangling) [ ! -e "$target" ] || fail "dangling symlink target was created" ;;
+        directory) cmp -s "$case_dir/expected" "$path/keep" || fail "project directory changed" ;;
+      esac
+      case "$kind" in
+        symlink|dangling) assert_equals "$target" "$(readlink "$path")" "project symlink must survive" ;;
+      esac
+    done
+  done
+  pass "fm-polytoken-lib: preflight and writers preserve existing project artifacts"
 }
 
 test_polytoken_busy_writer_dispatches_without_argv_and_never_fails() {
@@ -1120,6 +1180,40 @@ test_polytoken_existing_project_hook_layer_refuses() {
   pass "fm-spawn: a project's own polytoken hook layer is refused, not clobbered"
 }
 
+test_polytoken_existing_project_facet_refuses() {
+  local id rec out kind facet exclude
+  for kind in tracked untracked; do
+    id="pt-ownfacet-$kind-$$"
+    rec=$(make_polytoken_spawn_case "ownfacet-$kind" "$id")
+    read_polytoken_spawn_record "$rec"
+    printf 'project facet bytes\n\n' > "$CASE_DIR/expected-facet"
+    if [ "$kind" = tracked ]; then
+      mkdir -p "$PROJ_DIR/.polytoken/facets"
+      cp "$CASE_DIR/expected-facet" "$PROJ_DIR/.polytoken/facets/firstmate-worker.md"
+      git -C "$PROJ_DIR" add .polytoken/facets/firstmate-worker.md
+      git -C "$PROJ_DIR" -c user.email=fixture@firstmate.test -c user.name=fixture commit -q -m "fixture: project facet"
+      git -C "$PROJ_DIR" push -q origin main
+    else
+      mkdir -p "$WT_DIR/.polytoken/facets"
+      cp "$CASE_DIR/expected-facet" "$WT_DIR/.polytoken/facets/firstmate-worker.md"
+      exclude=$(git -C "$WT_DIR" rev-parse --git-path info/exclude)
+      printf '.polytoken/\n' >> "$exclude"
+    fi
+    if out=$(run_polytoken_spawn "$CASE_DIR" "$HOME_DIR" "$PROJ_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$id"); then
+      fail "a $kind project facet must refuse launch"
+    fi
+    assert_contains "$out" "not firstmate's to clobber" "facet collision diagnostic"
+    facet=$(fm_polytoken_facet_file "$WT_DIR")
+    cmp -s "$CASE_DIR/expected-facet" "$facet" || fail "$kind facet bytes changed"
+    assert_absent "$WT_DIR/.polytoken/hooks.json" "facet refusal must not generate hooks"
+    assert_absent "$HOME_DIR/state/$id.polytoken-busy.sh" "facet refusal must not generate a busy writer"
+    assert_absent "$HOME_DIR/state/$id.polytoken-config" "facet refusal must not generate config"
+    assert_absent "$HOME_DIR/state/$id.meta" "facet refusal must not publish a task"
+    [ ! -s "$CASE_DIR/launch-line.log" ] || fail "facet refusal launched the worker"
+  done
+  pass "fm-spawn: tracked and untracked project facets survive refused launch"
+}
+
 test_polytoken_whitespace_state_dir_refuses() {
   local id rec out rc spaced
   id="pt-wsstate-z8-$$"
@@ -1237,6 +1331,7 @@ test_polytoken_busy_queued_enter_converts_like_opencode
 test_polytoken_tmux_submit_is_acknowledged_by_its_running_row
 test_polytoken_write_config_enforces_the_unattended_posture
 test_polytoken_write_facet_carries_the_role_contract_without_a_model_pin
+test_polytoken_writers_preserve_colliding_project_artifacts
 test_polytoken_busy_writer_dispatches_without_argv_and_never_fails
 test_polytoken_write_hooks_binds_the_three_events
 test_polytoken_model_ref_composes_and_refuses
@@ -1250,6 +1345,7 @@ test_polytoken_missing_axes_refuse_before_pane_creation
 test_polytoken_unlisted_model_refuses_before_pane_creation
 test_polytoken_secondmate_is_refused
 test_polytoken_existing_project_hook_layer_refuses
+test_polytoken_existing_project_facet_refuses
 test_polytoken_whitespace_state_dir_refuses
 test_polytoken_readiness_failure_fails_loudly_and_cleans_up
 test_polytoken_post_launch_failure_drops_its_slot_claim

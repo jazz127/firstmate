@@ -467,12 +467,14 @@ fm_control_harness_wiring_paths() {  # <harness> <worktree> <state-dir> <id> [ki
     # inbox); a project's own hook layer or facet is never firstmate's to
     # retire.
     polytoken)
-      if grep -qsF "/$id.polytoken-busy.sh" "$wt/.polytoken/hooks.json"; then
-        printf '%s\n' "$wt/.polytoken/hooks.json"
-      fi
-      if grep -qsF "/$id.inbox" "$wt/.polytoken/facets/firstmate-worker.md"; then
-        printf '%s\n' "$wt/.polytoken/facets/firstmate-worker.md"
-      fi
+      # shellcheck source=bin/fm-polytoken-lib.sh
+      . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/fm-polytoken-lib.sh" || return 1
+      local path
+      for path in "$(fm_polytoken_hooks_file "$wt")" "$(fm_polytoken_facet_file "$wt")"; do
+        if fm_polytoken_wiring_owned "$wt" "$state" "$id" "$path"; then
+          printf '%s\n' "$path"
+        fi
+      done
       printf '%s\n' "$state/$id.polytoken-busy.sh"
       ;;
   esac

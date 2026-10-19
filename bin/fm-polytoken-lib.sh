@@ -192,9 +192,16 @@ RUBY
 # tools are absent from GET /tools/effective), not a call-time fence.
 fm_polytoken_write_facet() {  # <worktree> <inbox-path>
   local wt=$1 inbox=$2 facet
+  [ ! -L "$wt/.polytoken" ] && [ ! -L "$wt/.polytoken/facets" ] || return 1
   facet=$(fm_polytoken_facet_file "$wt") || return 1
+  fm_polytoken_require_path_free "$facet" || return 1
   mkdir -p "$(dirname "$facet")" || return 1
-  cat >"$facet" <<EOF
+  (set -C; fm_polytoken_facet_content "$inbox" >"$facet")
+}
+
+fm_polytoken_facet_content() {
+  local inbox=$1
+  cat <<EOF
 ---
 name: $FM_POLYTOKEN_WORKER_FACET
 description: Firstmate worker role contract for crewmate and scout task workers.
@@ -257,18 +264,43 @@ EOF
 # (a project hook that negates a global hook by name fails daemon startup -
 # verified by the scout), so this file only registers firstmate's own three
 # events and negates nothing.
-# fm_polytoken_require_hooks_free: refuse a worktree that already carries a
-# `.polytoken/hooks.json` - a project's own hook layer is never firstmate's to
-# clobber. fm-spawn runs this before writing any wiring or arming a relaunch's
-# abort cleanup, and fm-control runs it before stopping a relaunch's running
-# agent, so a refusal leaves the worktree, state, and agent untouched.
-fm_polytoken_require_hooks_free() {  # <worktree>
-  local hooks
-  hooks=$(fm_polytoken_hooks_file "$1") || return 1
-  if [ -e "$hooks" ] || [ -L "$hooks" ]; then
-    echo "error: $hooks already exists; a project's own polytoken hook layer is not firstmate's to clobber, so this task cannot be launched on polytoken into this worktree. Select another harness for this task." >&2
+fm_polytoken_require_path_free() {
+  local path=$1
+  if [ -e "$path" ] || [ -L "$path" ]; then
+    echo "error: $path already exists; project-owned polytoken wiring is not firstmate's to clobber. Select another harness for this task." >&2
     return 1
   fi
+}
+
+fm_polytoken_wiring_owned() {
+  local wt=$1 state=$2 id=$3 path=$4 tracked
+  [ ! -L "$wt/.polytoken" ] && [ ! -L "$wt/.polytoken/facets" ] || return 1
+  [ -f "$path" ] && [ ! -L "$path" ] || return 1
+  tracked=$(git -C "$wt" ls-files -- "$path" 2>/dev/null) || return 1
+  [ -z "$tracked" ] || return 1
+  state=$(cd "$state" && pwd -P) || return 1
+  case "$path" in
+    "$(fm_polytoken_hooks_file "$wt")")
+      cmp -s "$path" <(fm_polytoken_hooks_content "$(fm_polytoken_busy_script "$state" "$id")")
+      ;;
+    "$(fm_polytoken_facet_file "$wt")")
+      cmp -s "$path" <(fm_polytoken_facet_content "$state/$id.inbox")
+      ;;
+    *) return 1 ;;
+  esac
+}
+
+fm_polytoken_require_wiring_free() {
+  local wt=$1 state=${2:-} id=${3:-} path
+  for path in "$wt/.polytoken" "$wt/.polytoken/facets"; do
+    [ ! -L "$path" ] || { fm_polytoken_require_path_free "$path"; return 1; }
+  done
+  for path in "$(fm_polytoken_hooks_file "$wt")" "$(fm_polytoken_facet_file "$wt")"; do
+    if [ -n "$state" ] && [ -n "$id" ] && fm_polytoken_wiring_owned "$wt" "$state" "$id" "$path"; then
+      continue
+    fi
+    fm_polytoken_require_path_free "$path" || return 1
+  done
 }
 
 # fm_polytoken_require_handler_path: refuse a busy-script path carrying
@@ -286,13 +318,18 @@ fm_polytoken_require_handler_path() {  # <busy-script>
 
 fm_polytoken_write_hooks() {  # <worktree> <busy-script>
   local wt=$1 script=$2 hooks
-  fm_polytoken_require_hooks_free "$wt" || return 1
+  [ ! -L "$wt/.polytoken" ] && [ ! -L "$wt/.polytoken/facets" ] || return 1
   fm_polytoken_require_handler_path "$script" || return 1
   hooks=$(fm_polytoken_hooks_file "$wt") || return 1
+  fm_polytoken_require_path_free "$hooks" || return 1
   mkdir -p "$(dirname "$hooks")" || return 1
+  (set -C; fm_polytoken_hooks_content "$script" >"$hooks")
+}
+
+fm_polytoken_hooks_content() {
   local jscript
-  jscript=$(fm_polytoken_json_escape "$script")
-  cat >"$hooks" <<EOF
+  jscript=$(fm_polytoken_json_escape "$1")
+  cat <<EOF
 [
   {"name": "fm-busy-pre-user-prompt", "event": "pre_user_prompt", "handler": {"bash": "$jscript"}},
   {"name": "fm-busy-pre-model-turn", "event": "pre_model_turn", "handler": {"bash": "$jscript"}},

@@ -1012,9 +1012,11 @@ resolve_relaunch_profile() {
     fm_polytoken_launch_ref "$polytoken_bin" "$TARGET_MODEL" "$TARGET_EFFORT" >/dev/null || return 1
     polytoken_state=$(cd "$STATE" && pwd -P) || return 1
     fm_polytoken_require_handler_path "$(fm_polytoken_busy_script "$polytoken_state" "$ID")" || return 1
-    fm_control_harness_wiring_paths "$PRIOR_HARNESS" "$WT" "$STATE" "$ID" "$KIND" \
-        | grep -qxF "$(fm_polytoken_hooks_file "$WT")" \
-      || fm_polytoken_require_hooks_free "$WT" || return 1
+    if [ "$PRIOR_HARNESS" = polytoken ]; then
+      fm_polytoken_require_wiring_free "$WT" "$polytoken_state" "$ID" || return 1
+    else
+      fm_polytoken_require_wiring_free "$WT" || return 1
+    fi
   fi
   # Likewise config/crew-exclude-tools: a malformed file, or a replacement
   # runtime that cannot hide the listed tools, refuses here, before the old

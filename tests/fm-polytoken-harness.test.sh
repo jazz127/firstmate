@@ -869,6 +869,61 @@ test_polytoken_turn_settled_reads_the_typed_sync_verdict() {
   pass "fm-polytoken-lib: the typed settle postcondition follows GET /sync"
 }
 
+test_polytoken_interrupt_close_preserves_newer_records() {
+  local mode dir state port pid out hook
+  for mode in prompt model rearm during-cancel; do
+    dir=$(make_wiring_case "interrupt-race-$mode")
+    state="$dir/state"
+    mkdir "$dir/bin"
+    "$ROOT/bin/fm-busy-event.sh" arm "$state" task >/dev/null || fail "arm failed"
+    "$ROOT/bin/fm-busy-event.sh" apply "$state" task busy --current-gen \
+      --source polytoken-hook --event pre-model-turn || fail "open failed"
+    cat > "$dir/update.sh" <<'SH'
+#!/usr/bin/env bash
+set -eu
+case "$PTFAKE_INTERRUPT_RACE" in
+  rearm|during-cancel)
+    "$PTFAKE_REAL_EVENT" arm "$PTFAKE_RACE_STATE" task >/dev/null
+    ;;
+  *)
+    "$PTFAKE_REAL_EVENT" apply "$PTFAKE_RACE_STATE" task busy --current-gen \
+      --source polytoken-hook --event pre-user-prompt
+    ;;
+esac
+if [ "$PTFAKE_INTERRUPT_RACE" != prompt ]; then
+  "$PTFAKE_REAL_EVENT" apply "$PTFAKE_RACE_STATE" task busy --current-gen \
+    --source polytoken-hook --event pre-model-turn
+fi
+cp "$PTFAKE_RACE_STATE/task.busy-state" "$PTFAKE_RACE_STATE/expected"
+SH
+    cat > "$dir/bin/fm-busy-event.sh" <<'SH'
+#!/usr/bin/env bash
+set -eu
+if [ "$PTFAKE_INTERRUPT_RACE" != during-cancel ]; then
+  bash "$PTFAKE_RACE_STATE/../update.sh"
+fi
+exec "$PTFAKE_REAL_EVENT" "$@"
+SH
+    chmod +x "$dir/bin/fm-busy-event.sh"
+    hook=
+    [ "$mode" != during-cancel ] || printf -v hook 'bash %q' "$dir/update.sh"
+    PTFAKE_INTERRUPT_RACE="$mode" PTFAKE_REAL_EVENT="$ROOT/bin/fm-busy-event.sh" \
+      PTFAKE_RACE_STATE="$state" PTFAKE_STUB_ON_CANCEL="$hook" \
+      rest_stub_start "$dir" > "$dir/handle" || fail "REST stub must start"
+    read -r port pid < "$dir/handle"
+    out=$(PTFAKE_INTERRUPT_RACE="$mode" PTFAKE_REAL_EVENT="$ROOT/bin/fm-busy-event.sh" \
+      PTFAKE_RACE_STATE="$state" \
+      fm_polytoken_interrupt_task "$dir/bin" "$state" task "$port" stub-token 8)
+    kill "$pid" 2>/dev/null || true
+    [ "$out" = cancelled ] || fail "$mode interrupt must remain acknowledged"
+    cmp -s "$state/expected" "$state/task.busy-state" \
+      || fail "$mode interrupt overwrote the newer busy record or its timestamp"
+    [ "$(fm_busy_classify tmux w1 polytoken task "$state")" = 'busy polytoken-hook' ] \
+      || fail "$mode replacement turn must stay busy"
+  done
+  pass "fm-polytoken-lib: interrupt closes preserve newer sequences and generations"
+}
+
 # ---------------------------------------------------------------------------
 # The spawn flow through the real fm-spawn.sh with a fake backend
 
@@ -1147,11 +1202,6 @@ test_polytoken_existing_project_hook_layer_refuses() {
   id="pt-ownhooks-z5-$$"
   rec=$(make_polytoken_spawn_case ownhooks "$id")
   read_polytoken_spawn_record "$rec"
-  # A project's own hook layer is tracked content on the project's default
-  # branch: the spawn freshens the pooled worktree to origin's default before
-  # arming, so the layer must ride that base to be present at arm time (an
-  # uncommitted or branch-local file is wiped by the refresh for every
-  # harness, which is the pooled-worktree contract, not a polytoken fact).
   mkdir -p "$PROJ_DIR/.polytoken"
   printf '[{"name":"project-own","event":"stop","handler":{"bash":"/bin/true"}}]\n' \
     > "$PROJ_DIR/.polytoken/hooks.json"
@@ -1212,6 +1262,46 @@ test_polytoken_existing_project_facet_refuses() {
     [ ! -s "$CASE_DIR/launch-line.log" ] || fail "facet refusal launched the worker"
   done
   pass "fm-spawn: tracked and untracked project facets survive refused launch"
+}
+
+test_polytoken_pool_refresh_preserves_project_wiring() {
+  local artifact kind rel id rec out exclude before
+  for artifact in hooks facet; do
+    case "$artifact" in
+      hooks) rel=.polytoken/hooks.json ;;
+      facet) rel=.polytoken/facets/firstmate-worker.md ;;
+    esac
+    for kind in ignored untracked; do
+      id="pt-refresh-$artifact-$kind-$$"
+      rec=$(make_polytoken_spawn_case "refresh-$artifact-$kind" "$id")
+      read_polytoken_spawn_record "$rec"
+      before=$(git -C "$WT_DIR" rev-parse HEAD)
+      mkdir -p "$(dirname "$WT_DIR/$rel")" "$(dirname "$PROJ_DIR/$rel")"
+      printf 'local project %s bytes\n\n' "$artifact" > "$CASE_DIR/expected"
+      cp "$CASE_DIR/expected" "$WT_DIR/$rel"
+      if [ "$kind" = ignored ]; then
+        exclude=$(git -C "$WT_DIR" rev-parse --git-path info/exclude)
+        printf '.polytoken/\n' >> "$exclude"
+        git -C "$WT_DIR" check-ignore -q "$rel" || fail "fixture wiring must be ignored"
+      fi
+      [ -z "$(git -C "$WT_DIR" ls-files -- "$rel")" ] || fail "fixture wiring must be untracked"
+      printf 'incoming tracked %s bytes\n' "$artifact" > "$PROJ_DIR/$rel"
+      git -C "$PROJ_DIR" add -f "$rel"
+      git -C "$PROJ_DIR" -c user.email=fixture@firstmate.test -c user.name=fixture \
+        commit -q -m "fixture: upstream now tracks $artifact"
+      git -C "$PROJ_DIR" push -q origin main
+      if out=$(run_polytoken_spawn "$CASE_DIR" "$HOME_DIR" "$PROJ_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$id"); then
+        fail "$kind project $artifact must refuse launch before refresh"
+      fi
+      assert_contains "$out" "not firstmate's to clobber" "$kind $artifact collision diagnostic"
+      cmp -s "$CASE_DIR/expected" "$WT_DIR/$rel" || fail "refresh overwrote $kind project $artifact"
+      [ "$(git -C "$WT_DIR" rev-parse HEAD)" = "$before" ] || fail "collision refusal refreshed HEAD"
+      assert_absent "$HOME_DIR/state/$id.busy-state" "collision must not arm the task"
+      assert_absent "$HOME_DIR/state/$id.meta" "collision must not publish the task"
+      [ ! -s "$CASE_DIR/launch-line.log" ] || fail "collision launched the worker"
+    done
+  done
+  pass "fm-spawn: project hooks and facets survive pool refresh collisions"
 }
 
 test_polytoken_whitespace_state_dir_refuses() {
@@ -1338,6 +1428,7 @@ test_polytoken_model_ref_composes_and_refuses
 test_polytoken_model_ref_unreachable_listing_refuses
 test_polytoken_rest_interrupt_settles_the_turn
 test_polytoken_interrupt_close_spares_a_reopened_turn
+test_polytoken_interrupt_close_preserves_newer_records
 test_polytoken_turn_settled_reads_the_typed_sync_verdict
 test_polytoken_launch_carries_the_hybrid_contract
 test_polytoken_effort_maps_to_nearest_listed_level
@@ -1346,6 +1437,7 @@ test_polytoken_unlisted_model_refuses_before_pane_creation
 test_polytoken_secondmate_is_refused
 test_polytoken_existing_project_hook_layer_refuses
 test_polytoken_existing_project_facet_refuses
+test_polytoken_pool_refresh_preserves_project_wiring
 test_polytoken_whitespace_state_dir_refuses
 test_polytoken_readiness_failure_fails_loudly_and_cleans_up
 test_polytoken_post_launch_failure_drops_its_slot_claim

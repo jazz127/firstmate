@@ -56,6 +56,47 @@ test_apply_advances_seq_and_source() {
   pass "apply advances seq under the armed gen and attributes the writing source"
 }
 
+test_apply_sequence_condition_is_checked_under_lock() {
+  local state gen fakebin real_mkdir out ts_before ts_after busy_state busy_source busy_event busy_seq busy_ts
+  state=$(new_state_dir conditional-apply)
+  gen=$("$EV" arm "$state" t1) || fail "arm failed"
+  real_mkdir=$(command -v mkdir)
+  fakebin=$(fm_fakebin "$TMP_ROOT/conditional-lock")
+  touch "$state/pending"
+  cat > "$fakebin/mkdir" <<'SH'
+#!/usr/bin/env bash
+set -eu
+if [ "${1:-}" = "$PTFAKE_RACE_STATE/t1.busy-state.lock" ] && [ -f "$PTFAKE_RACE_STATE/pending" ]; then
+  rm "$PTFAKE_RACE_STATE/pending"
+  "$PTFAKE_REAL_EVENT" apply "$PTFAKE_RACE_STATE" t1 busy --current-gen \
+    --source polytoken-hook --event pre-user-prompt
+  cp "$PTFAKE_RACE_STATE/t1.busy-state" "$PTFAKE_RACE_STATE/expected"
+fi
+exec "$PTFAKE_REAL_MKDIR" "$@"
+SH
+  chmod +x "$fakebin/mkdir"
+  if PTFAKE_RACE_STATE="$state" PTFAKE_REAL_EVENT="$EV" PTFAKE_REAL_MKDIR="$real_mkdir" \
+    PATH="$fakebin:$PATH" "$EV" apply "$state" t1 idle --gen "$gen" --if-seq 1 \
+      --source fm-interrupt --event interrupt --turn-ended 2>/dev/null; then
+    fail "a sequence changed before lock acquisition must refuse the close"
+  fi
+  cmp -s "$state/expected" "$state/t1.busy-state" \
+    || fail "a conditional refusal must preserve the newer record and timestamp"
+  assert_absent "$state/t1.turn-ended" "a conditional refusal must not notify turn end"
+  ts_before=$(date +%s)
+  "$EV" apply "$state" t1 idle --gen "$gen" --if-seq 2 \
+    --source fm-interrupt --event interrupt --turn-ended || fail "matching sequence must close"
+  ts_after=$(date +%s)
+  out=$(fm_busy_record_read "$state" t1) || fail "conditional close must leave a valid record"
+  read -r busy_state busy_source busy_event busy_seq busy_ts <<< "$out"
+  [ "$busy_state $busy_source $busy_event $busy_seq" = 'idle fm-interrupt interrupt 3' ] \
+    || fail "matching close must advance sequence and record idle"
+  [ "$busy_ts" -ge "$ts_before" ] && [ "$busy_ts" -le "$ts_after" ] \
+    || fail "matching close must retain the house timestamp contract"
+  [ -f "$state/t1.turn-ended" ] || fail "matching close must notify turn end"
+  pass "conditional busy writes compare under the lock and preserve timestamps"
+}
+
 test_apply_current_gen_reset() {
   local state out
   state=$(new_state_dir apply-current)
@@ -652,6 +693,7 @@ test_turn_ended_notification_is_generation_bound
 
 test_arm_seeds_busy_spawn
 test_apply_advances_seq_and_source
+test_apply_sequence_condition_is_checked_under_lock
 test_apply_current_gen_reset
 test_apply_unarmed_refused
 test_retire_serializes_and_rejects_stale_gen

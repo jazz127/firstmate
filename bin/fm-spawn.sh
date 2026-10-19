@@ -5315,6 +5315,9 @@ elif [ "$KIND" != secondmate ] && [ "$BACKEND" != orca ]; then
   fi
 fi
 if [ "$RELAUNCH" -eq 0 ] && [ "$KIND" != secondmate ]; then
+  if [ "$HARNESS" = polytoken ] && [ "$RAW_LAUNCH" -eq 0 ]; then
+    fm_polytoken_require_wiring_free "$WT" || exit 1
+  fi
   freshen_spawn_worktree_base "$WT" "$BASE_BRANCH" || exit 1
 fi
 

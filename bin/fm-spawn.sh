@@ -6371,7 +6371,7 @@ if [ "$ORCA_LAUNCH_ENV_ENABLED" = 1 ]; then
   LAUNCH="command rm -- $(shell_quote "$LAUNCH_FILE") || { echo 'error: cannot remove private launch file; refusing worker launch' >&2; return 1 2>/dev/null || exit 1; }; $LAUNCH"
 fi
 if [ "$SPAWN_AWAY_ADMISSION" = 1 ] && fm_control_backend_state_verified "$BACKEND"; then
-  LAUNCH="$LAUNCH"$'\n'"printf '%s\n' "\$?" > $(shell_quote "$LAUNCH_STAGE") && mv -f -- $(shell_quote "$LAUNCH_STAGE") $(shell_quote "$LAUNCH_EXIT_FILE")"
+  LAUNCH="$LAUNCH"$'\n'"printf '%s\n' \"\$?\" > $(shell_quote "$LAUNCH_STAGE") && mv -f -- $(shell_quote "$LAUNCH_STAGE") $(shell_quote "$LAUNCH_EXIT_FILE")"
 fi
 if [ -e "$LAUNCH_FILE" ] || [ -L "$LAUNCH_FILE" ]; then
   echo "error: task launch file $LAUNCH_FILE already exists; refusing to replace it" >&2

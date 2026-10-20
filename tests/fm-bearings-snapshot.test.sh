@@ -3158,6 +3158,57 @@ SH
   pass "reused live state is discarded when task generation changes"
 }
 
+test_secondmate_assembly_overlaps_reads_and_preserves_inventory() {
+  local home fakebin mate i json
+  home=$(make_home secondmate-assembly)
+  fakebin=$(make_fakebin "$home")
+  mkdir "$home/captures"
+  printf '## In flight\n\n## Queued\n\n## Done\n' > "$home/data/backlog.md"
+  for i in 1 2 3 4; do
+    mate="$TMP_ROOT/assembly-home-$i"
+    make_valid_secondmate_home "assembly-$i" "$mate"
+    append_secondmate_registry "$home" "assembly-$i" "$mate"
+    write_parent_secondmate_event "$home" "assembly-$i" "$mate" 'assembly note'
+  done
+  append_secondmate_registry "$home" assembly-invalid "$TMP_ROOT/assembly-home-1"
+  # The backend boundary holds each capture until four real callers overlap.
+  # This rejects serialized assembly without timing the host's total runtime.
+  cat > "$fakebin/tmux" <<'SH'
+#!/usr/bin/env bash
+case "${1:-}" in
+  display-message) printf '%%1\n' ;;
+  list-windows) sed -n 's/^window=[^:]*://p' "${FM_HOME:?}"/state/*.meta ;;
+  capture-pane)
+    : > "$ASSEMBLY_CAPTURES/active-$$"
+    trap 'rm -f "$ASSEMBLY_CAPTURES/active-$$"' EXIT
+    attempts=0
+    while [ ! -e "$ASSEMBLY_CAPTURES/overlapped" ] && [ "$attempts" -lt 500 ]; do
+      set -- "$ASSEMBLY_CAPTURES"/active-*
+      if [ "$#" -ge 4 ]; then : > "$ASSEMBLY_CAPTURES/overlapped"; fi
+      sleep 0.01
+      attempts=$((attempts + 1))
+    done
+    printf 'assembly note\n'
+    ;;
+esac
+SH
+  chmod +x "$fakebin/tmux"
+  json=$(PATH="$fakebin:$PATH" FM_HOME="$home" ASSEMBLY_CAPTURES="$home/captures" \
+    FM_SNAPSHOT_LOCAL_READ_CONCURRENCY=4 FM_SNAPSHOT_TERMINAL_TIMEOUT=10 \
+    "$ROOT/bin/fm-fleet-snapshot.sh" --json) || fail "secondmate assembly failed"
+  [ -e "$home/captures/overlapped" ] || fail "secondmate evidence reads did not overlap"
+  # Inventory order and invalid-home disclosure survive out-of-order completion.
+  printf '%s' "$json" | jq -e '
+    (.secondmate_current.records | map(.id)) ==
+      ["assembly-1","assembly-2","assembly-3","assembly-4","assembly-invalid"]
+    and all(.secondmate_current.records[:4][];
+      .provenance.selected == "parent-event-fallback"
+      and .terminal_evidence.captured == true and .terminal_evidence.event_note_seen == true)
+    and (.secondmate_current.records[4].current.reason | contains("marked for secondmate assembly-1, expected assembly-invalid"))
+  ' >/dev/null || fail "concurrent assembly lost evidence or invalid-home disclosure: $json"
+  pass "secondmate assembly overlaps evidence reads and preserves inventory"
+}
+
 test_large_local_snapshot_overlaps_local_reads_without_projection_drift() {
   local home fakebin worktree serial parallel parallel_file snapshot_pid i
   local serial_started serial_elapsed parallel_started parallel_elapsed saved
@@ -3459,6 +3510,7 @@ test_a_remote_home_without_any_ledger_is_explicitly_unreadable_without_remote_co
 test_task_teardown_during_metadata_capture_does_not_abort_snapshot
 test_current_state_uses_captured_status_observation
 test_relaunched_task_does_not_inherit_reused_endpoint_state
+test_secondmate_assembly_overlaps_reads_and_preserves_inventory
 test_large_local_snapshot_overlaps_local_reads_without_projection_drift
 test_remote_ledgers_share_one_concurrent_budget_and_fall_back_to_cache
 test_a_remote_home_without_any_ledger_is_explicitly_unreadable_without_remote_compute

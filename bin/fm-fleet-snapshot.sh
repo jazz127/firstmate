@@ -273,7 +273,8 @@ reported unreadable with the reason; collection never computes a summary in
 that home.
 Each local per-task current-state read is bounded by FM_SNAPSHOT_CREW_STATE_TIMEOUT
 (default 10 seconds); a read that hits the bound reports state unknown. Local task
-observations run concurrently, up to FM_SNAPSHOT_LOCAL_READ_CONCURRENCY (default 8).
+observations and secondmate assembly each run concurrently, up to
+FM_SNAPSHOT_LOCAL_READ_CONCURRENCY (default 8).
 Remote collection overlaps those reads and local assembly under its shared budget.
 Remote secondmate endpoint liveness is not probed by this command.
 Terminal contradiction evidence uses
@@ -1784,7 +1785,8 @@ secondmate_current_json() {  # <parent-tasks-json-file> <output-file>
   local row id home host remote registered registry_error task sampled_spawn_gen status_file status_observation_file event_raw event_note event_age observed_epoch observed_age
   local activity_scan activities decisions reconciliation provenance freshness reason summary_file summary_sampled summary_valid summary_invalidity state terminal terminal_contradiction contradiction
   local summary_source summary_age summary_observed summary_freshness cache_path collection_status collection_slot summary_index=0
-  local seen_homes=''
+  local seen_homes='' active=0 rc=0 record_file
+  local -a pids=() record_files=()
   registry_file="$JSON_TRANSPORT_DIR/secondmate-registry.json"
   union_file="$JSON_TRANSPORT_DIR/secondmate-union.json"
   records_file="$JSON_TRANSPORT_DIR/secondmate-records.jsonl"
@@ -1822,24 +1824,10 @@ secondmate_current_json() {  # <parent-tasks-json-file> <output-file>
       (.parent_task.paths.status_log.last_event.note // ""),
       (.parent_task.hints.open_decisions // []),
       (.parent_task.paths.status_log.last_event.age_seconds // "null")]
-      | .[] | tostring, "\u0000"') || return 1
-    status_observation_file=
-    if [ -n "$status_file" ]; then status_observation_file="$SNAPSHOT_TASK_DIR/$id.status"; fi
-    activity_scan=$(bounded_parent_activities_json "$status_observation_file")
-    activities=$(printf '%s' "$activity_scan" | jq -c '.records')
-    observed_epoch=$(file_mtime_epoch "$status_observation_file")
-    observed_age=null
-    if [ -n "$observed_epoch" ]; then
-      observed_age=$((SNAPSHOT_EPOCH - observed_epoch))
-      [ "$observed_age" -lt 0 ] && observed_age=0
-    fi
-
+      | .[] | tostring, "\u0000"') || { rc=1; break; }
+    # Validate routes in inventory order before starting independent reads, so
+    # duplicate ownership cannot depend on which observation finishes first.
     reason=$registry_error
-    summary_index=$((summary_index + 1))
-    summary_file="$SNAPSHOT_COLLECT_DIR/selected-summary-$summary_index.json"
-    printf '{}\n' > "$summary_file" || return 1
-    summary_sampled=false
-    summary_valid=false
     if [ -z "$reason" ] && [ -z "$home" ]; then reason="no recorded secondmate home"; fi
     if [ -z "$reason" ]; then
       case "$home" in
@@ -1864,6 +1852,25 @@ secondmate_current_json() {  # <parent-tasks-json-file> <output-file>
         esac
       fi
     fi
+    summary_index=$((summary_index + 1))
+    record_file="$JSON_TRANSPORT_DIR/secondmate-record-$summary_index.json"
+    record_files[summary_index-1]=$record_file
+    (
+    records_file=$record_file
+    status_observation_file=
+    if [ -n "$status_file" ]; then status_observation_file="$SNAPSHOT_TASK_DIR/$id.status"; fi
+    activity_scan=$(bounded_parent_activities_json "$status_observation_file")
+    activities=$(printf '%s' "$activity_scan" | jq -c '.records')
+    observed_epoch=$(file_mtime_epoch "$status_observation_file")
+    observed_age=null
+    if [ -n "$observed_epoch" ]; then
+      observed_age=$((SNAPSHOT_EPOCH - observed_epoch))
+      [ "$observed_age" -lt 0 ] && observed_age=0
+    fi
+    summary_file="$SNAPSHOT_COLLECT_DIR/selected-summary-$summary_index.json"
+    printf '{}\n' > "$summary_file" || return 1
+    summary_sampled=false
+    summary_valid=false
     summary_source=
     summary_age=0
     summary_observed=$SNAPSHOT_NOW
@@ -1978,9 +1985,24 @@ secondmate_current_json() {  # <parent-tasks-json-file> <output-file>
          parent_event:{raw:$event_raw,note:$event_note,age_seconds:$event_age,open_activities:$activities,open_decisions:$decisions,activity_scan:$activity_scan},
          terminal_evidence:$terminal,contradiction:false}' >> "$records_file" || return 1
     fi
+    ) &
+    pids[active]=$!
+    active=$((active + 1))
+    if [ "$active" -ge "$FM_SNAPSHOT_LOCAL_READ_CONCURRENCY" ]; then
+      snapshot_wait_current_reads "${pids[@]}" || rc=1
+      pids=()
+      active=0
+    fi
   done <<EOF
 $rows
 EOF
+  if [ "$active" -gt 0 ]; then
+    snapshot_wait_current_reads "${pids[@]}" || rc=1
+  fi
+  [ "$rc" -eq 0 ] || return 1
+  for record_file in ${record_files[@]+"${record_files[@]}"}; do
+    cat -- "$record_file" >> "$records_file" || return 1
+  done
   snapshot_collection_cleanup
   jq -s \
     --slurpfile registry "$registry_file" \

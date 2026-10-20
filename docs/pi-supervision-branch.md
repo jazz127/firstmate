@@ -362,8 +362,9 @@ The mirror never carries tool calls, tool results, custom messages, operational 
 Mirroring happens at two points:
 
 - The idle path mirrors at main's turn end.
-| `bin/fm-pr-merge.sh` | Merges any pull request green at its live head, synchronously, under the record lock, and refuses `--allow-red`, `--allow-missing`, and `--allow-no-pipeline` while away, so the green gate is absolute in this posture; which pull request the words meant is the branch's reading. |
-| `bin/fm-spawn.sh` | Dispatches only queued work whose blockers cleared - already queued, or filed by the branch because the words explicitly call for it; its spend-cap admission gate calls the shared `live-workers` count, which also sets the entry cap. |
+- At a prompt-bearing `before_agent_start`, Pi's authoritative prompt is staged verbatim before SessionManager persists that user entry.
+  Pi 1.1's prompt-only event and Pi 1.2's user event both take this path; no-prompt custom events are never staged as captain dialog.
+  The complete current captain message therefore precedes any branch wake accepted after the prompt-bearing boundary.
   The later persisted copy is suppressed, and older dialog entries remain bounded.
 
 The mirror cursor is durable (`state/.branch-mirror-cursor`), so within one main session only not-yet-mirrored dialog is replayed.

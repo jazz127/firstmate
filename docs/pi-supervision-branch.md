@@ -616,7 +616,7 @@ Each relocated script keeps its own gate, enforcing exactly what a script can ch
 | `bin/fm-send.sh --resolve-key` | Answers a decision the words pre-answer, or one `ask-user-authority`'s judgment (carried verbatim in the branch prompt) lets firstmate decide. |
 | `bin/fm-merge-local.sh` | Never relocated. |
 
-[`bin/fm-afk-spend-count.sh`](../bin/fm-afk-spend-count.sh) owns the shared count's classification, declared-wait idle proof, current-state gates and conservative backend limits; [`tests/fm-afk-spend-cap.test.sh`](../tests/fm-afk-spend-cap.test.sh) exercises it through the production backend and delivery classifiers.
+[`bin/fm-afk-contract.sh live-workers`](../bin/fm-afk-contract.sh) owns the shared count's launch grace, bounded backend probe, declared-wait idle proof, current-state gates and conservative backend limits; [`tests/fm-afk-spend-cap.test.sh`](../tests/fm-afk-spend-cap.test.sh) exercises it through the production backend and delivery classifiers.
 
 The merge-authority record and the outcome row's summary are the audit trail.
 The return brief renders the words verbatim beside that account.

@@ -114,7 +114,7 @@ SH
       PATH="$home/fakebin:$PATH" bash -c '. "$1"; fm_backend_agent_state tmux "$2"' \
       _ "$ROOT/bin/fm-backend.sh" "firstmate:fm-$id")
     [ "$endpoint_state" = dead ] || fail "paused endpoint did not reproduce shell-only death: $endpoint_state"
-    count=$(FM_RESERVATION_ID="$id" FM_RESERVATION_WT="$dir/wt" count_workers "$home")
+    count=$(FM_SPAWN_CAP_LAUNCH_GRACE=0 FM_RESERVATION_ID="$id" FM_RESERVATION_WT="$dir/wt" count_workers "$home")
     [ "$count" = 1 ] || fail "published shell-only $kind launch lost its reservation: $count"
     rc=0
     out=$(FM_RESERVATION_ID="$id" FM_RESERVATION_WT="$dir/wt" \
@@ -130,7 +130,7 @@ SH
     done
     [ -f "$home/delivered" ] || fail "launch key was not delivered: $(cat "$home/launch.log")"
     kill -0 "$SPAWN_PID" 2>/dev/null || fail "spawn exited before establishing delayed startup"
-    count=$(FM_RESERVATION_ID="$id" FM_RESERVATION_WT="$dir/wt" count_workers "$home")
+    count=$(FM_SPAWN_CAP_LAUNCH_GRACE=0 FM_RESERVATION_ID="$id" FM_RESERVATION_WT="$dir/wt" count_workers "$home")
     [ "$count" = 1 ] || fail "successfully delivered $kind launch lost its reservation: $count"
     rc=0
     out=$(FM_RESERVATION_ID="$id" FM_RESERVATION_WT="$dir/wt" \
@@ -141,7 +141,7 @@ SH
     case "$scenario" in
       delayed|raw)
         touch "$home/unreadable"
-        count=$(FM_RESERVATION_ID="$id" FM_RESERVATION_WT="$dir/wt" count_workers "$home")
+        count=$(FM_SPAWN_CAP_LAUNCH_GRACE=0 FM_RESERVATION_ID="$id" FM_RESERVATION_WT="$dir/wt" count_workers "$home")
         [ "$count" = 1 ] || fail "uncertain startup lost its reservation"
         rm "$home/unreadable"
         rc=0
@@ -208,19 +208,19 @@ SH
         [ ! -f "$staged" ] || fail "cancelled startup left a runnable staged launch"
         if [ "$scenario" = cleanup-refused ]; then
           [ -f "$home/state/$id.meta" ] || fail "uncertain cleanup discarded the endpoint record"
-          count=$(FM_RESERVATION_ID="$id" FM_RESERVATION_WT="$dir/wt" count_workers "$home")
+          count=$(FM_SPAWN_CAP_LAUNCH_GRACE=0 FM_RESERVATION_ID="$id" FM_RESERVATION_WT="$dir/wt" count_workers "$home")
           [ "$count" = 1 ] || fail "uncancelled startup stopped reserving spending capacity"
           out=$(FM_RESERVATION_ID="$id" FM_RESERVATION_WT="$dir/wt" \
             FM_SUPERVISION_ACTOR=main fm_test_run_spawn "$home" "$dir/wt" "$home/fakebin" \
             "$id" --relaunch) || fail "recovery relaunch failed: $out"
           assert_contains "$out" "spawned $id" "recovery relaunch did not report success"
-          count=$(FM_RESERVATION_ID="$id" FM_RESERVATION_WT="$dir/wt" count_workers "$home")
+          count=$(FM_SPAWN_CAP_LAUNCH_GRACE=0 FM_RESERVATION_ID="$id" FM_RESERVATION_WT="$dir/wt" count_workers "$home")
           [ "$count" = 0 ] || fail "successful recovery retained the previous cleanup reservation"
         else
           [ ! -e "$home/state/$id.meta" ] || fail "cancelled startup retained its record"
           [ ! -e "$home/endpoint" ] || fail "cancelled startup retained its endpoint"
         fi
-        count=$(FM_RESERVATION_ID="$id" FM_RESERVATION_WT="$dir/wt" count_workers "$home")
+        count=$(FM_SPAWN_CAP_LAUNCH_GRACE=0 FM_RESERVATION_ID="$id" FM_RESERVATION_WT="$dir/wt" count_workers "$home")
         [ "$count" = 0 ] || fail "cancelled startup left a permanent reservation: $count"
         pass "$kind $scenario startup frees capacity after confirmed cancellation"
         continue
@@ -228,7 +228,7 @@ SH
     esac
     [ "$rc" -eq 0 ] || fail "reserved launch failed: $(cat "$home/launch.log")"
     [ ! -e "$home/state/.meta-$id.lock" ] || fail "successful launch left its lifecycle lock"
-    count=$(FM_RESERVATION_ID="$id" FM_RESERVATION_WT="$dir/wt" count_workers "$home")
+    count=$(FM_SPAWN_CAP_LAUNCH_GRACE=0 FM_RESERVATION_ID="$id" FM_RESERVATION_WT="$dir/wt" count_workers "$home")
     if [ "$scenario" = finished ]; then
       [ "$count" = 0 ] || fail "a command that finished between probes retained its reservation"
     else
@@ -238,7 +238,7 @@ SH
       fi
       rm "$home/started"
     fi
-    count=$(FM_RESERVATION_ID="$id" FM_RESERVATION_WT="$dir/wt" count_workers "$home")
+    count=$(FM_SPAWN_CAP_LAUNCH_GRACE=0 FM_RESERVATION_ID="$id" FM_RESERVATION_WT="$dir/wt" count_workers "$home")
     [ "$count" = 0 ] || fail "stopped worker retained its launch reservation: $count"
     pass "$kind $scenario startup reserves admission after delivery; stopped workers free room"
   done
@@ -287,7 +287,7 @@ test_reservation_precedes_exclusions() (
     [ "$count" = 1 ] || fail "live lock did not reserve endpoint '$target': $count"
     fm_lock_release "$lock"
     count=$(count_workers "$dir") || fail "unreserved count failed"
-    if [ "$target" = missing:worker ]; then
+    if [ "$target" = missing:worker ] || [ -z "$target" ]; then
       [ "$count" = 1 ] || fail "unproven missing endpoint lost its reservation: $count"
     else
       [ "$count" = 0 ] || fail "released endpoint '$target' still counted: $count"
@@ -513,7 +513,31 @@ EOF
 
 count_workers() {  # <case-dir>
   PATH="$1/fakebin:$PATH" NM_HOME="$1/unused-nm-home" \
-    FM_HOME="$1" "$ROOT/bin/fm-afk-spend-count.sh" "$1/state"
+    FM_HOME="$1" FM_STATE_OVERRIDE="$1/state" "$ROOT/bin/fm-afk-contract.sh" live-workers
+}
+
+test_recent_spawn_generation_skips_endpoint_probe() {
+  local home now out
+  home="$TMP_ROOT/recent-spawn-gen"
+  install_tools "$home"
+  cat > "$home/fakebin/tmux" <<'SH'
+#!/usr/bin/env bash
+touch "$FM_HOME/probed"
+exit 1
+SH
+  chmod +x "$home/fakebin/tmux"
+  now=$(date +%s)
+  fm_write_meta "$home/state/task.meta" \
+    "window=firstmate:fm-task" "kind=ship" "spawn_gen=s${now}.1"
+  out=$(count_workers "$home") || fail "recent launch count failed: $out"
+  [ "$out" = 1 ] || fail "recent launch did not reserve one slot: $out"
+  [ ! -e "$home/probed" ] || fail "recent launch did not skip the backend probe"
+  fm_write_meta "$home/state/task.meta" \
+    "window=firstmate:fm-task" "kind=ship" "spawn_gen=s$((now - 180)).1"
+  out=$(count_workers "$home") || fail "aged launch count failed: $out"
+  [ "$out" = 1 ] || fail "unproven aged endpoint did not reserve one slot: $out"
+  [ -e "$home/probed" ] || fail "aged launch did not probe its endpoint"
+  pass "recent spawn generations reserve capacity without probing; aged generations use the endpoint probe"
 }
 
 read_worker() {  # <case-dir> <id>
@@ -560,8 +584,8 @@ test_unreadable_and_unverified_backends_still_count() {
   fm_write_meta "$dir/state/no-target.meta" "kind=ship"
   fm_write_meta "$dir/state/mate.meta" "kind=secondmate" "window=unreadable:worker"
   count=$(count_workers "$dir") || fail "backend count failed"
-  [ "$count" = 5 ] || fail "unreadable/unverified backend count=$count, expected 5 (one per supported backend)"
-  pass "five unreadable/unverified backends count; stopped endpoints, absent targets and secondmates do not"
+  [ "$count" = 6 ] || fail "unreadable/unverified backend count=$count, expected 6 (five supported backends and one absent target)"
+  pass "unreadable/unverified backends and an absent target count; stopped endpoints and secondmates do not"
 }
 
 test_handoff_and_ready_use_production_crew_state() {
@@ -713,7 +737,7 @@ EOF
 test_bounded_presence_reads() {
   local dir stage harness backend target count rc
   # Each fixture stalls an external read reached by a different production path.
-  for stage in inventory process activity waiting-activity crew-presence crew-capture herdr-presence herdr-agent herdr-process herdr-absence herdr-activity herdr-crew; do
+  for stage in inventory process activity waiting-activity crew-capture herdr-presence herdr-agent herdr-process herdr-absence herdr-activity herdr-crew; do
     dir="$TMP_ROOT/hung-$stage"
     install_tools "$dir"
     mkdir -p "$dir/wt"
@@ -784,7 +808,7 @@ SH
     rc=0
     count=$(PATH="$dir/fakebin:$PATH" FM_HOME="$dir" FM_HANG_STAGE="$stage" \
       NM_HOME="$dir/unused-nm-home" bash -c \
-      '. "$1/bin/fm-timeout-lib.sh"; fm_run_timed 12 "$1/bin/fm-afk-spend-count.sh" "$2"' \
+      '. "$1/bin/fm-timeout-lib.sh"; fm_run_timed 12 env FM_STATE_OVERRIDE="$2" "$1/bin/fm-afk-contract.sh" live-workers' \
       _ "$ROOT" "$dir/state") || rc=$?
     [ -f "$dir/read-hung" ] || fail "$stage never reached the stalled CLI read"
     [ "$rc" -eq 0 ] || fail "$stage stalled the counter (exit $rc)"
@@ -926,3 +950,4 @@ test_tmux_unproven_absence
 test_completed_run_busy_turn
 test_handoff_and_ready_use_production_crew_state
 test_other_delivery_modes_and_scout
+test_recent_spawn_generation_skips_endpoint_probe

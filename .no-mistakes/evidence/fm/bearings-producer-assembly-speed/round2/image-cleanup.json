@@ -1,0 +1,12 @@
+[
+  {
+    "image": "fm-bearings-gate-round2",
+    "exit": 0,
+    "output": "Untagged: fm-bearings-gate-round2:latest\nDeleted: sha256:94ee43764a8edea590c862340a9ef35f1d7b16773c17ce7d106da85d49a9f3be\nDeleted: sha256:f7fe335f2f26c5c6e7a06b14667b8b4b1f3525318cc95924162f3de3094f5556\nDeleted: sha256:324fa6e0b9aff85f9fe9c0f2237e70b65d9893f7e148f3e6238e43a9b8461e3a\nDeleted: sha256:403ceb6d61aaca4898c4198cccabc7ec088bc03ccd5ae5500072944d7080045b\n"
+  },
+  {
+    "image": "75f98ce122e5",
+    "exit": 0,
+    "output": "Deleted: sha256:75f98ce122e5f35bb98d6598006d5ce5d658232d12ab4eab1275d2e9579fdcc9\nDeleted: sha256:fafafb416eddb8dffb4a87c22eb30f068bbadf319065070920a7a8ff6f14d78e\nDeleted: sha256:1dff1d136fef6debc665ac887447344861b1b424483faeb5db35fd5a16da0e38\nDeleted: sha256:37b633c3d1bb8035646cb642f50bde2aada5701510ee4b95a3ef52182c8875b5\n"
+  }
+]

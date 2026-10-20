@@ -1,0 +1,19 @@
+{
+  "prepare": 0,
+  "ssh_image_build": 0,
+  "home_summary_cli": 0,
+  "decision_key_tests": 0,
+  "initial_bearings_tests": {
+    "exit": 1,
+    "cause": "nested disposable fixtures discovered the enclosing run-worktree Git remote; six repos instead of the intended five"
+  },
+  "isolated_bearings_tests": {
+    "exit": 0,
+    "correction": "GIT_CEILING_DIRECTORIES set to the disposable .gate-test directory"
+  },
+  "decision_live": 0,
+  "contribution_holds_live": 0,
+  "first_ssh_validation": 0,
+  "repeat_ssh_validation": 0,
+  "performance_threshold_met": false
+}

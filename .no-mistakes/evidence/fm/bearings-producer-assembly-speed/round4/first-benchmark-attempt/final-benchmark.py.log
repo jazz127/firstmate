@@ -1,0 +1,8 @@
+{"label": "benchmark-base", "seconds": 19.221, "exit": 0}
+{"label": "benchmark-target-cold", "seconds": 4.587, "exit": 0}
+{"label": "benchmark-target-warm-1", "seconds": 4.272, "exit": 0}
+Traceback (most recent call last):
+  File "~/.no-mistakes/evidence/01M5CVZDD40VPEDMN80Z4GV4J8/round4/replay/final-benchmark.py", line 13, in <module>
+    assert len(obj['secondmates'])==9 and all(r['freshness']=='fresh' and r['provenance']=='structured-home' for r in obj['secondmates'])
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError

@@ -1,0 +1,9 @@
+{
+  "driver": "real fm-bearings-snapshot.sh --json, isolated durable backlog and saved contributions; default cache-only product contract requires no upstream calls",
+  "oracle": "live captain holds match saved contribution by task identity or explicit URL; future and blocked holds remain gates and never produce captain contribution rows",
+  "captain_tasks": [
+    "by-url",
+    "same-id"
+  ],
+  "fleet_count": 3
+}

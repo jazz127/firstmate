@@ -1,0 +1,5 @@
+{"label": "decision-cold", "seconds": 1.274, "exit": 0}
+{"label": "decision-warm-append", "seconds": 0.578, "exit": 0}
+{"label": "decision-rewrite", "seconds": 0.789, "exit": 0}
+{"label": "decision-ship-terminal", "seconds": 0.516, "exit": 0}
+Decision cursor, terminal behavior and special-character report ids verified.

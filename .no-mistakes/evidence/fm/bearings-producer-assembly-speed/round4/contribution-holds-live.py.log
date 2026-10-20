@@ -1,0 +1,4 @@
+{"label": "contribution-holds", "seconds": 0.233, "exit": 0}
+{"label": "contribution-holds-input", "seconds": 0.078, "exit": 0}
+{"label": "contribution-holds-all", "seconds": 0.052, "exit": 0}
+Live same-id and explicit-URL hold matching passed; dated, blocked, and unrelated records do not create captain contribution rows.

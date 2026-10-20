@@ -1,0 +1,398 @@
+{
+  "driver": "real bin/fm-bearings-snapshot.sh --json -> fm-on.sh -> real /usr/bin/ssh -> disposable Linux OpenSSH server -> real fm-remote-entrypoint.sh and remote job worker -> fm-remote-file.sh; no substitutes",
+  "results": [
+    {
+      "label": "remote-fresh",
+      "seconds": 5.982667499920353,
+      "ssh_reads": 3,
+      "secondmates": [
+        {
+          "id": "mate-1",
+          "state": "no_active_work",
+          "doing": "No active child work",
+          "provenance": "structured-home",
+          "freshness": "fresh",
+          "age_seconds": 0,
+          "contradiction": true,
+          "reason": "-"
+        },
+        {
+          "id": "mate-2",
+          "state": "no_active_work",
+          "doing": "No active child work",
+          "provenance": "structured-home",
+          "freshness": "fresh",
+          "age_seconds": 0,
+          "contradiction": true,
+          "reason": "-"
+        },
+        {
+          "id": "mate-3",
+          "state": "no_active_work",
+          "doing": "No active child work",
+          "provenance": "structured-home",
+          "freshness": "fresh",
+          "age_seconds": 0,
+          "contradiction": true,
+          "reason": "-"
+        },
+        {
+          "id": "mate-4",
+          "state": "no_active_work",
+          "doing": "No active child work",
+          "provenance": "structured-home",
+          "freshness": "fresh",
+          "age_seconds": 0,
+          "contradiction": true,
+          "reason": "-"
+        },
+        {
+          "id": "mate-5",
+          "state": "no_active_work",
+          "doing": "No active child work",
+          "provenance": "structured-home",
+          "freshness": "fresh",
+          "age_seconds": 0,
+          "contradiction": true,
+          "reason": "-"
+        },
+        {
+          "id": "mate-6",
+          "state": "no_active_work",
+          "doing": "No active child work",
+          "provenance": "structured-home",
+          "freshness": "fresh",
+          "age_seconds": 0,
+          "contradiction": true,
+          "reason": "-"
+        },
+        {
+          "id": "mate-7",
+          "state": "no_active_work",
+          "doing": "No active child work",
+          "provenance": "structured-home",
+          "freshness": "fresh",
+          "age_seconds": 0,
+          "contradiction": true,
+          "reason": "-"
+        },
+        {
+          "id": "mate-8",
+          "state": "no_active_work",
+          "doing": "No active child work",
+          "provenance": "structured-home",
+          "freshness": "fresh",
+          "age_seconds": 0,
+          "contradiction": true,
+          "reason": "-"
+        },
+        {
+          "id": "mate-9",
+          "state": "no_active_work",
+          "doing": "No active child work",
+          "provenance": "structured-home",
+          "freshness": "fresh",
+          "age_seconds": 0,
+          "contradiction": true,
+          "reason": "-"
+        }
+      ]
+    },
+    {
+      "label": "remote-frozen-cache",
+      "seconds": 5.390870500123128,
+      "ssh_reads": 3,
+      "secondmates": [
+        {
+          "id": "mate-1",
+          "state": "no_active_work",
+          "doing": "No active child work",
+          "provenance": "structured-home",
+          "freshness": "fresh",
+          "age_seconds": 0,
+          "contradiction": true,
+          "reason": "-"
+        },
+        {
+          "id": "mate-2",
+          "state": "no_active_work",
+          "doing": "No active child work",
+          "provenance": "structured-home",
+          "freshness": "fresh",
+          "age_seconds": 0,
+          "contradiction": true,
+          "reason": "-"
+        },
+        {
+          "id": "mate-3",
+          "state": "no_active_work",
+          "doing": "No active child work",
+          "provenance": "structured-home",
+          "freshness": "fresh",
+          "age_seconds": 0,
+          "contradiction": true,
+          "reason": "-"
+        },
+        {
+          "id": "mate-4",
+          "state": "no_active_work",
+          "doing": "No active child work",
+          "provenance": "structured-home",
+          "freshness": "fresh",
+          "age_seconds": 0,
+          "contradiction": true,
+          "reason": "-"
+        },
+        {
+          "id": "mate-5",
+          "state": "no_active_work",
+          "doing": "No active child work",
+          "provenance": "structured-home",
+          "freshness": "fresh",
+          "age_seconds": 0,
+          "contradiction": true,
+          "reason": "-"
+        },
+        {
+          "id": "mate-6",
+          "state": "no_active_work",
+          "doing": "No active child work",
+          "provenance": "structured-home",
+          "freshness": "fresh",
+          "age_seconds": 0,
+          "contradiction": true,
+          "reason": "-"
+        },
+        {
+          "id": "mate-7",
+          "state": "no_active_work",
+          "doing": "No active child work",
+          "provenance": "structured-home-cache",
+          "freshness": "cached",
+          "age_seconds": 0,
+          "contradiction": true,
+          "reason": "-"
+        },
+        {
+          "id": "mate-8",
+          "state": "no_active_work",
+          "doing": "No active child work",
+          "provenance": "structured-home-cache",
+          "freshness": "cached",
+          "age_seconds": 0,
+          "contradiction": true,
+          "reason": "-"
+        },
+        {
+          "id": "mate-9",
+          "state": "no_active_work",
+          "doing": "No active child work",
+          "provenance": "structured-home-cache",
+          "freshness": "cached",
+          "age_seconds": 0,
+          "contradiction": true,
+          "reason": "-"
+        }
+      ]
+    },
+    {
+      "label": "remote-missing-ledger",
+      "seconds": 6.6180598749779165,
+      "ssh_reads": 3,
+      "secondmates": [
+        {
+          "id": "mate-1",
+          "state": "no_active_work",
+          "doing": "No active child work",
+          "provenance": "structured-home",
+          "freshness": "fresh",
+          "age_seconds": 0,
+          "contradiction": true,
+          "reason": "-"
+        },
+        {
+          "id": "mate-2",
+          "state": "no_active_work",
+          "doing": "No active child work",
+          "provenance": "structured-home",
+          "freshness": "fresh",
+          "age_seconds": 0,
+          "contradiction": true,
+          "reason": "-"
+        },
+        {
+          "id": "mate-3",
+          "state": "no_active_work",
+          "doing": "No active child work",
+          "provenance": "structured-home",
+          "freshness": "fresh",
+          "age_seconds": 0,
+          "contradiction": true,
+          "reason": "-"
+        },
+        {
+          "id": "mate-4",
+          "state": "no_active_work",
+          "doing": "No active child work",
+          "provenance": "structured-home",
+          "freshness": "fresh",
+          "age_seconds": 0,
+          "contradiction": true,
+          "reason": "-"
+        },
+        {
+          "id": "mate-5",
+          "state": "no_active_work",
+          "doing": "No active child work",
+          "provenance": "structured-home",
+          "freshness": "fresh",
+          "age_seconds": 0,
+          "contradiction": true,
+          "reason": "-"
+        },
+        {
+          "id": "mate-6",
+          "state": "no_active_work",
+          "doing": "No active child work",
+          "provenance": "structured-home",
+          "freshness": "fresh",
+          "age_seconds": 0,
+          "contradiction": true,
+          "reason": "-"
+        },
+        {
+          "id": "mate-7",
+          "state": "unknown",
+          "doing": "structured home ledger is missing, unreadable, or invalid and no valid cached copy is available",
+          "provenance": "parent-event-fallback",
+          "freshness": "historical-event",
+          "age_seconds": 33343,
+          "contradiction": false,
+          "reason": "structured home ledger is missing, unreadable, or invalid and no valid cached copy is available"
+        },
+        {
+          "id": "mate-8",
+          "state": "no_active_work",
+          "doing": "No active child work",
+          "provenance": "structured-home",
+          "freshness": "fresh",
+          "age_seconds": 0,
+          "contradiction": true,
+          "reason": "-"
+        },
+        {
+          "id": "mate-9",
+          "state": "no_active_work",
+          "doing": "No active child work",
+          "provenance": "structured-home",
+          "freshness": "fresh",
+          "age_seconds": 0,
+          "contradiction": true,
+          "reason": "-"
+        }
+      ]
+    },
+    {
+      "label": "remote-invalid-ledger",
+      "seconds": 6.932115250034258,
+      "ssh_reads": 3,
+      "secondmates": [
+        {
+          "id": "mate-1",
+          "state": "no_active_work",
+          "doing": "No active child work",
+          "provenance": "structured-home",
+          "freshness": "fresh",
+          "age_seconds": 0,
+          "contradiction": true,
+          "reason": "-"
+        },
+        {
+          "id": "mate-2",
+          "state": "no_active_work",
+          "doing": "No active child work",
+          "provenance": "structured-home",
+          "freshness": "fresh",
+          "age_seconds": 0,
+          "contradiction": true,
+          "reason": "-"
+        },
+        {
+          "id": "mate-3",
+          "state": "no_active_work",
+          "doing": "No active child work",
+          "provenance": "structured-home",
+          "freshness": "fresh",
+          "age_seconds": 0,
+          "contradiction": true,
+          "reason": "-"
+        },
+        {
+          "id": "mate-4",
+          "state": "no_active_work",
+          "doing": "No active child work",
+          "provenance": "structured-home",
+          "freshness": "fresh",
+          "age_seconds": 0,
+          "contradiction": true,
+          "reason": "-"
+        },
+        {
+          "id": "mate-5",
+          "state": "no_active_work",
+          "doing": "No active child work",
+          "provenance": "structured-home",
+          "freshness": "fresh",
+          "age_seconds": 0,
+          "contradiction": true,
+          "reason": "-"
+        },
+        {
+          "id": "mate-6",
+          "state": "no_active_work",
+          "doing": "No active child work",
+          "provenance": "structured-home",
+          "freshness": "fresh",
+          "age_seconds": 0,
+          "contradiction": true,
+          "reason": "-"
+        },
+        {
+          "id": "mate-7",
+          "state": "unknown",
+          "doing": "structured home ledger is missing, unreadable, or invalid and no valid cached copy is available",
+          "provenance": "parent-event-fallback",
+          "freshness": "historical-event",
+          "age_seconds": 33343,
+          "contradiction": false,
+          "reason": "structured home ledger is missing, unreadable, or invalid and no valid cached copy is available"
+        },
+        {
+          "id": "mate-8",
+          "state": "no_active_work",
+          "doing": "No active child work",
+          "provenance": "structured-home",
+          "freshness": "fresh",
+          "age_seconds": 0,
+          "contradiction": true,
+          "reason": "-"
+        },
+        {
+          "id": "mate-9",
+          "state": "no_active_work",
+          "doing": "No active child work",
+          "provenance": "structured-home",
+          "freshness": "fresh",
+          "age_seconds": 0,
+          "contradiction": true,
+          "reason": "-"
+        }
+      ]
+    },
+    {
+      "label": "remote-cap",
+      "seconds": 5.429749333066866,
+      "ssh_reads": 0
+    }
+  ]
+}

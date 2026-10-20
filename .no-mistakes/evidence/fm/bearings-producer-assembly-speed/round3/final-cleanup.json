@@ -1,0 +1,12 @@
+{
+  "worktree_clean": true,
+  "disposable_directory_removed": true,
+  "disposable_containers_remaining": [],
+  "test_image_removal_exit": 0,
+  "first_batch_collectors": {
+    "remaining_ssh_collectors": []
+  },
+  "repeat_batch_collectors": {
+    "remaining_ssh_collectors": []
+  }
+}

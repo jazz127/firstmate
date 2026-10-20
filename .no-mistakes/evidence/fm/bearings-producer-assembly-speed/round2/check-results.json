@@ -1,0 +1,12 @@
+{
+  "decision_key_test_exit": 0,
+  "bearings_test_exit": 0,
+  "home_summary_generation_exit": 0,
+  "direct_decision_cli_exit": 0,
+  "ssh_functional_and_benchmark_driver_exit": 0,
+  "confirmed_image_build_exit": 0,
+  "functional_assertions_passed": true,
+  "performance_threshold_met": false,
+  "remaining_ssh_collectors": [],
+  "disposable_data_removed": true
+}

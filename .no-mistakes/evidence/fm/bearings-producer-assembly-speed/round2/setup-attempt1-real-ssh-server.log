@@ -1,0 +1,37 @@
+Server listening on 0.0.0.0 port 22.
+Connection from 172.17.0.1 port 54352 on 172.17.0.2 port 22 rdomain ""
+Accepted key ED25519 SHA256:bhGlh+J4GRUjFiDIVyhN7EpLKwuIHzNLa9ZdzJZ+F20 found at /lab/authorized_keys:1
+Postponed publickey for root from 172.17.0.1 port 54352 ssh2 [preauth]
+Accepted key ED25519 SHA256:bhGlh+J4GRUjFiDIVyhN7EpLKwuIHzNLa9ZdzJZ+F20 found at /lab/authorized_keys:1
+Accepted publickey for root from 172.17.0.1 port 54352 ssh2: ED25519 SHA256:bhGlh+J4GRUjFiDIVyhN7EpLKwuIHzNLa9ZdzJZ+F20
+User child is on pid 9
+Starting session: command for root from 172.17.0.1 port 54352 id 0
+Received disconnect from 172.17.0.1 port 54352:11: disconnected by user
+Disconnected from user root 172.17.0.1 port 54352
+Connection from 172.17.0.1 port 54368 on 172.17.0.2 port 22 rdomain ""
+Connection from 172.17.0.1 port 54372 on 172.17.0.2 port 22 rdomain ""
+Connection from 172.17.0.1 port 54384 on 172.17.0.2 port 22 rdomain ""
+Accepted key ED25519 SHA256:bhGlh+J4GRUjFiDIVyhN7EpLKwuIHzNLa9ZdzJZ+F20 found at /lab/authorized_keys:1
+Accepted key ED25519 SHA256:bhGlh+J4GRUjFiDIVyhN7EpLKwuIHzNLa9ZdzJZ+F20 found at /lab/authorized_keys:1
+Postponed publickey for root from 172.17.0.1 port 54372 ssh2 [preauth]
+Accepted key ED25519 SHA256:bhGlh+J4GRUjFiDIVyhN7EpLKwuIHzNLa9ZdzJZ+F20 found at /lab/authorized_keys:1
+Accepted publickey for root from 172.17.0.1 port 54372 ssh2: ED25519 SHA256:bhGlh+J4GRUjFiDIVyhN7EpLKwuIHzNLa9ZdzJZ+F20
+Accepted key ED25519 SHA256:bhGlh+J4GRUjFiDIVyhN7EpLKwuIHzNLa9ZdzJZ+F20 found at /lab/authorized_keys:1
+Postponed publickey for root from 172.17.0.1 port 54368 ssh2 [preauth]
+Accepted key ED25519 SHA256:bhGlh+J4GRUjFiDIVyhN7EpLKwuIHzNLa9ZdzJZ+F20 found at /lab/authorized_keys:1
+Accepted publickey for root from 172.17.0.1 port 54368 ssh2: ED25519 SHA256:bhGlh+J4GRUjFiDIVyhN7EpLKwuIHzNLa9ZdzJZ+F20
+Postponed publickey for root from 172.17.0.1 port 54384 ssh2 [preauth]
+User child is on pid 17
+Accepted key ED25519 SHA256:bhGlh+J4GRUjFiDIVyhN7EpLKwuIHzNLa9ZdzJZ+F20 found at /lab/authorized_keys:1
+Starting session: command for root from 172.17.0.1 port 54372 id 0
+User child is on pid 19
+Accepted publickey for root from 172.17.0.1 port 54384 ssh2: ED25519 SHA256:bhGlh+J4GRUjFiDIVyhN7EpLKwuIHzNLa9ZdzJZ+F20
+Starting session: command for root from 172.17.0.1 port 54368 id 0
+User child is on pid 21
+Starting session: command for root from 172.17.0.1 port 54384 id 0
+Received disconnect from 172.17.0.1 port 54368:11: disconnected by user
+Disconnected from user root 172.17.0.1 port 54368
+Received disconnect from 172.17.0.1 port 54384:11: disconnected by user
+Disconnected from user root 172.17.0.1 port 54384
+Received disconnect from 172.17.0.1 port 54372:11: disconnected by user
+Disconnected from user root 172.17.0.1 port 54372

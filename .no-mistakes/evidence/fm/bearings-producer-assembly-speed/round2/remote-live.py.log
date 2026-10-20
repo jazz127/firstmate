@@ -1,0 +1,6 @@
+{"label": "remote-fresh", "seconds": 7.533, "exit": 0}
+{"label": "remote-frozen-cache", "seconds": 9.414, "exit": 0}
+{"label": "remote-missing-ledger", "seconds": 7.491, "exit": 0}
+{"label": "remote-invalid-ledger", "seconds": 6.941, "exit": 0}
+{"label": "remote-cap", "seconds": 3.068, "exit": 0}
+Real SSH freshness, shared deadline/cache, missing/invalid ledger and cap behavior verified.

@@ -1,0 +1,6 @@
+{"label": "remote-fresh", "seconds": 6.836, "exit": 0}
+Traceback (most recent call last):
+  File "~/.no-mistakes/evidence/01M5CVZDD40VPEDMN80Z4GV4J8/round2/replay/remote-live.py", line 12, in <module>
+    assert all(x['freshness']=='fresh' for x in fresh['secondmates'])
+           ~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError

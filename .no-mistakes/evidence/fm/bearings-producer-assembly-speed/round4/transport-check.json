@@ -1,0 +1,9 @@
+{
+  "completed_retry_ssh_calls": 34,
+  "all_exit_zero": true,
+  "errors": [],
+  "first_batch": "Freshness assertion interrupted after one properly disclosed cached read; original transport error unavailable; full fresh-read retry did not reproduce it.",
+  "first_batch_cached_ids": [
+    "mate-7"
+  ]
+}

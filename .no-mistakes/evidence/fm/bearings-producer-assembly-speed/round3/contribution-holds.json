@@ -1,0 +1,131 @@
+{
+  "schema": "fm-bearings.v1",
+  "home": ".gate-test/hold-home",
+  "generated": "2026-10-21T00:00:00Z",
+  "prs": "not_requested (run: /bearings include PRs)",
+  "contributions": {
+    "scope": "owned contributions per home",
+    "known": 5,
+    "checked": 0,
+    "counts": {
+      "captain": 2,
+      "fleet": 3,
+      "maintainer": 0,
+      "nobody": 0
+    },
+    "complete": false,
+    "proven_clear": false,
+    "unmeasured_homes": 0,
+    "unreadable_records": 0,
+    "unmeasured": 0,
+    "stale_verdicts": 0,
+    "missing_verdicts": 0,
+    "captain_omitted": 0,
+    "captain": [
+      {
+        "task": "same-id",
+        "url": "https://github.com/example/disposable/pull/1",
+        "kind": "pr",
+        "head": null,
+        "reason": "choose scope",
+        "hold": "same-id",
+        "verdict_freshness": null,
+        "verdict_head": null,
+        "verdict_source": null,
+        "checked_at": null,
+        "owner": "(main)"
+      },
+      {
+        "task": "by-url",
+        "url": "https://github.com/example/disposable/pull/2",
+        "kind": "pr",
+        "head": null,
+        "reason": "choose route",
+        "hold": "by-url",
+        "verdict_freshness": null,
+        "verdict_head": null,
+        "verdict_source": null,
+        "checked_at": null,
+        "owner": "(main)"
+      }
+    ]
+  },
+  "in_flight": [],
+  "secondmates": [],
+  "secondmate_reconcile": [],
+  "decisions_open": [
+    {
+      "id": "same-id",
+      "key": "same-id",
+      "verb": "captain-hold",
+      "summary": "Saved contribution hold: choose scope",
+      "owner": "(main)"
+    },
+    {
+      "id": "by-url",
+      "key": "by-url",
+      "verb": "captain-hold",
+      "summary": "Link to saved contribution: choose route",
+      "owner": "(main)"
+    }
+  ],
+  "landed": [],
+  "gates": [
+    {
+      "id": "deferred",
+      "title": "Future call",
+      "blocked_by": "-",
+      "reason": "until 2099-01-01: revisit later",
+      "owner": "(main)",
+      "filed": null
+    },
+    {
+      "id": "blocked",
+      "title": "Blocked call",
+      "blocked_by": "missing-work",
+      "reason": "blocked-by missing-work: wait",
+      "owner": "(main)",
+      "filed": null
+    },
+    {
+      "id": "unrelated",
+      "title": "Ordinary queued work",
+      "blocked_by": "-",
+      "reason": "-",
+      "owner": "(main)",
+      "filed": null
+    }
+  ],
+  "reports": [],
+  "recorded_prs": [],
+  "omitted": [
+    {
+      "surface": "backlog item bodies",
+      "reveal": "--fields bodies"
+    },
+    {
+      "surface": "task paths",
+      "reveal": "--fields paths"
+    },
+    {
+      "surface": "watch/steer actions",
+      "reveal": "--fields actions"
+    },
+    {
+      "surface": "healthy endpoint detail",
+      "reveal": "--fields endpoints"
+    },
+    {
+      "surface": "full scout-report inventory",
+      "reveal": "--all-reports"
+    },
+    {
+      "surface": "captain holds bucketed blocked, dated, or aged: 2",
+      "reveal": "--all-decisions"
+    },
+    {
+      "surface": "live PR discovery + checks",
+      "reveal": "--include-prs"
+    }
+  ]
+}

@@ -1,0 +1,40 @@
+{
+  "threshold_seconds": 5,
+  "source_of_threshold": "author acceptance intent: target under 5 seconds",
+  "dataset": {
+    "secondmates": 9,
+    "local_secondmates": 6,
+    "real_ssh_secondmates": 3,
+    "saved_contribution_records_in_primary": 813,
+    "report_pointers_in_primary": 813,
+    "status_lines_per_parent_secondmate": 84
+  },
+  "metrics": [
+    {
+      "command": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M5CVZDD40VPEDMN80Z4GV4J8/.gate-test/base/bin/fm-bearings-snapshot.sh --json",
+      "label": "benchmark-base",
+      "seconds": 18.802
+    },
+    {
+      "command": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M5CVZDD40VPEDMN80Z4GV4J8/bin/fm-bearings-snapshot.sh --json",
+      "label": "benchmark-target-cold",
+      "seconds": 6.844
+    },
+    {
+      "command": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M5CVZDD40VPEDMN80Z4GV4J8/bin/fm-bearings-snapshot.sh --json",
+      "label": "benchmark-target-warm-1",
+      "seconds": 6.369
+    },
+    {
+      "command": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M5CVZDD40VPEDMN80Z4GV4J8/bin/fm-bearings-snapshot.sh --json",
+      "label": "benchmark-target-warm-2",
+      "seconds": 7.082
+    }
+  ],
+  "minimum_target_seconds": 6.369,
+  "median_target_seconds": 6.844,
+  "threshold_met": false,
+  "projection_equal_to_base": true,
+  "canonical_oracle": "813 explicit report ids and nine surviving keep decisions from generated durable records; independently verified valid structured-home provenance",
+  "speedup_from_base_percent": 63.6
+}

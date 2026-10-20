@@ -1,0 +1,20 @@
+{
+  "metrics": [
+    {
+      "label": "local-base",
+      "seconds": 20.504403917118907
+    },
+    {
+      "label": "local-target",
+      "seconds": 6.400901250075549
+    },
+    {
+      "label": "local-target-repeat",
+      "seconds": 5.974971708841622
+    }
+  ],
+  "byte_equivalent_projection": true,
+  "reports_verified": 813,
+  "decision_keys_verified": 9,
+  "oracle": "generated durable records: 813 report ids, one surviving keep key per secondmate; baseline comparison supplemental"
+}

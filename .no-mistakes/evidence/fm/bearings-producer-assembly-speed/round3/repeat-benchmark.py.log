@@ -1,0 +1,6 @@
+{"label": "repeat-target-1", "seconds": 6.168, "exit": 0}
+{"label": "repeat-target-2", "seconds": 5.666, "exit": 0}
+{"label": "repeat-target-3", "seconds": 5.512, "exit": 0}
+{"label": "repeat-target-4", "seconds": 4.175, "exit": 0}
+{"label": "repeat-target-5", "seconds": 4.501, "exit": 0}
+{"driver": "real bin/fm-bearings-snapshot.sh --json; six local homes and three real SSH homes; no substitutes", "threshold_seconds": 5, "metrics": [{"label": "repeat-target-1", "seconds": 6.168, "exit": 0}, {"label": "repeat-target-2", "seconds": 5.666, "exit": 0}, {"label": "repeat-target-3", "seconds": 5.512, "exit": 0}, {"label": "repeat-target-4", "seconds": 4.175, "exit": 0}, {"label": "repeat-target-5", "seconds": 4.501, "exit": 0}], "threshold_met": false, "projection_equal_to_base": true}

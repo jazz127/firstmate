@@ -1,0 +1,16 @@
+{
+  "disposable_containers_remaining": [],
+  "remaining_ssh_collectors": [],
+  "disposable_worktree_data_removed": true,
+  "test_image_removed": true,
+  "source_changes": false,
+  "check_exit_statuses": {
+    "decision_key_tests": 0,
+    "bearings_tests": 0,
+    "local_live_drivers": 0,
+    "initial_ssh_validation": 1,
+    "fresh_retry_ssh_validation": 0,
+    "docker_image_cleanup": 0
+  },
+  "initial_failure": "strict freshness assertion encountered a correctly disclosed cached read; full retained retry succeeded"
+}

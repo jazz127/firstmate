@@ -1,0 +1,56 @@
+{
+  "target_commit": "cbca96e5c3f3750fb0b732ad1e292ebcfbebbdb7",
+  "base_seconds": 19.909,
+  "target_metrics": [
+    {
+      "command": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M5CVZDD40VPEDMN80Z4GV4J8/bin/fm-bearings-snapshot.sh --json",
+      "label": "benchmark-target-cold",
+      "seconds": 4.289
+    },
+    {
+      "command": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M5CVZDD40VPEDMN80Z4GV4J8/bin/fm-bearings-snapshot.sh --json",
+      "label": "benchmark-target-warm-1",
+      "seconds": 5.19
+    },
+    {
+      "command": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M5CVZDD40VPEDMN80Z4GV4J8/bin/fm-bearings-snapshot.sh --json",
+      "label": "benchmark-target-warm-2",
+      "seconds": 4.076
+    },
+    {
+      "label": "repeat-target-1",
+      "seconds": 6.168,
+      "exit": 0
+    },
+    {
+      "label": "repeat-target-2",
+      "seconds": 5.666,
+      "exit": 0
+    },
+    {
+      "label": "repeat-target-3",
+      "seconds": 5.512,
+      "exit": 0
+    },
+    {
+      "label": "repeat-target-4",
+      "seconds": 4.175,
+      "exit": 0
+    },
+    {
+      "label": "repeat-target-5",
+      "seconds": 4.501,
+      "exit": 0
+    }
+  ],
+  "target_range_seconds": [
+    4.076,
+    6.168
+  ],
+  "runs_above_five_seconds": 4,
+  "projection_equal_to_base": true,
+  "durable_primary_data_unchanged": true,
+  "first_benchmark_concurrent_tests": false,
+  "repeat_benchmark_concurrent_tests": false,
+  "verdict": "no-go"
+}

@@ -1,0 +1,19 @@
+{
+  "checks": [
+    {
+      "command": "env TMPDIR=\"$PWD/.gate-test/tmp\" GIT_CEILING_DIRECTORIES=\"$PWD/.gate-test\" FM_TEST_SKIP_ORPHAN_REAP=1 bash tests/fm-classify-decision-key.test.sh",
+      "exit": 0,
+      "log": "decision-key-tests.log"
+    },
+    {
+      "command": "env TMPDIR=\"$PWD/.gate-test/tmp\" GIT_CEILING_DIRECTORIES=\"$PWD/.gate-test\" FM_TEST_SKIP_ORPHAN_REAP=1 bash tests/fm-bearings-snapshot.test.sh",
+      "exit": 0,
+      "log": "bearings-tests.log"
+    },
+    {
+      "command": "docker build -t fm-bearings-gate-round4 -f evidence/round4/replay/Dockerfile .gate-test",
+      "exit": 0,
+      "log": "ssh-image-build.log"
+    }
+  ]
+}

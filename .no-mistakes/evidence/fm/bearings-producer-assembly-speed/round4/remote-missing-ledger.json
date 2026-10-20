@@ -1,0 +1,306 @@
+{
+  "schema": "fm-bearings.v1",
+  "home": ".gate-test/fleet",
+  "generated": "2026-10-21T00:00:00Z",
+  "prs": "not_requested (run: /bearings include PRs)",
+  "contributions": {
+    "scope": "owned contributions per home",
+    "known": 813,
+    "checked": 0,
+    "counts": {
+      "captain": 0,
+      "fleet": 813,
+      "maintainer": 0,
+      "nobody": 0
+    },
+    "complete": false,
+    "proven_clear": false,
+    "unmeasured_homes": 1,
+    "unreadable_records": 0,
+    "unmeasured": 0,
+    "stale_verdicts": 0,
+    "missing_verdicts": 0,
+    "captain_omitted": 0,
+    "captain": []
+  },
+  "in_flight": [],
+  "secondmates": [
+    {
+      "id": "mate-1",
+      "state": "no_active_work",
+      "doing": "No active child work",
+      "provenance": "structured-home",
+      "freshness": "fresh",
+      "age_seconds": 0,
+      "contradiction": true,
+      "reason": "-"
+    },
+    {
+      "id": "mate-2",
+      "state": "no_active_work",
+      "doing": "No active child work",
+      "provenance": "structured-home",
+      "freshness": "fresh",
+      "age_seconds": 0,
+      "contradiction": true,
+      "reason": "-"
+    },
+    {
+      "id": "mate-3",
+      "state": "no_active_work",
+      "doing": "No active child work",
+      "provenance": "structured-home",
+      "freshness": "fresh",
+      "age_seconds": 0,
+      "contradiction": true,
+      "reason": "-"
+    },
+    {
+      "id": "mate-4",
+      "state": "no_active_work",
+      "doing": "No active child work",
+      "provenance": "structured-home",
+      "freshness": "fresh",
+      "age_seconds": 0,
+      "contradiction": true,
+      "reason": "-"
+    },
+    {
+      "id": "mate-5",
+      "state": "no_active_work",
+      "doing": "No active child work",
+      "provenance": "structured-home",
+      "freshness": "fresh",
+      "age_seconds": 0,
+      "contradiction": true,
+      "reason": "-"
+    },
+    {
+      "id": "mate-6",
+      "state": "no_active_work",
+      "doing": "No active child work",
+      "provenance": "structured-home",
+      "freshness": "fresh",
+      "age_seconds": 0,
+      "contradiction": true,
+      "reason": "-"
+    },
+    {
+      "id": "mate-7",
+      "state": "unknown",
+      "doing": "structured home ledger is missing, unreadable, or invalid and no valid cached copy is available",
+      "provenance": "parent-event-fallback",
+      "freshness": "historical-event",
+      "age_seconds": 29763,
+      "contradiction": false,
+      "reason": "structured home ledger is missing, unreadable, or invalid and no valid cached copy is available"
+    },
+    {
+      "id": "mate-8",
+      "state": "no_active_work",
+      "doing": "No active child work",
+      "provenance": "structured-home",
+      "freshness": "fresh",
+      "age_seconds": 0,
+      "contradiction": true,
+      "reason": "-"
+    },
+    {
+      "id": "mate-9",
+      "state": "no_active_work",
+      "doing": "No active child work",
+      "provenance": "structured-home",
+      "freshness": "fresh",
+      "age_seconds": 0,
+      "contradiction": true,
+      "reason": "-"
+    }
+  ],
+  "secondmate_reconcile": [
+    {
+      "id": "mate-1",
+      "spawn_gen": null,
+      "host": null,
+      "kind": null,
+      "ids": []
+    },
+    {
+      "id": "mate-2",
+      "spawn_gen": null,
+      "host": null,
+      "kind": null,
+      "ids": []
+    },
+    {
+      "id": "mate-3",
+      "spawn_gen": null,
+      "host": null,
+      "kind": null,
+      "ids": []
+    },
+    {
+      "id": "mate-4",
+      "spawn_gen": null,
+      "host": null,
+      "kind": null,
+      "ids": []
+    },
+    {
+      "id": "mate-5",
+      "spawn_gen": null,
+      "host": null,
+      "kind": null,
+      "ids": []
+    },
+    {
+      "id": "mate-6",
+      "spawn_gen": null,
+      "host": null,
+      "kind": null,
+      "ids": []
+    },
+    {
+      "id": "mate-8",
+      "spawn_gen": null,
+      "host": "fm-gate-remote",
+      "kind": null,
+      "ids": []
+    },
+    {
+      "id": "mate-9",
+      "spawn_gen": null,
+      "host": "fm-gate-remote",
+      "kind": null,
+      "ids": []
+    }
+  ],
+  "decisions_open": [],
+  "landed": [
+    {
+      "id": "contribution-0813",
+      "what": "Completed investigation 813",
+      "artifact": "data/contribution-0813/report.md",
+      "owner": "(main)"
+    },
+    {
+      "id": "landed-1",
+      "what": "Domain 1 investigation",
+      "artifact": "data/landed-1/report.md",
+      "owner": "mate-1"
+    },
+    {
+      "id": "landed-2",
+      "what": "Domain 2 investigation",
+      "artifact": "data/landed-2/report.md",
+      "owner": "mate-2"
+    },
+    {
+      "id": "landed-3",
+      "what": "Domain 3 investigation",
+      "artifact": "data/landed-3/report.md",
+      "owner": "mate-3"
+    },
+    {
+      "id": "landed-4",
+      "what": "Domain 4 investigation",
+      "artifact": "data/landed-4/report.md",
+      "owner": "mate-4"
+    },
+    {
+      "id": "landed-5",
+      "what": "Domain 5 investigation",
+      "artifact": "data/landed-5/report.md",
+      "owner": "mate-5"
+    }
+  ],
+  "gates": [],
+  "reports": [
+    {
+      "id": "contribution-0813",
+      "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M5CVZDD40VPEDMN80Z4GV4J8/.gate-test/fleet/data/contribution-0813/report.md"
+    }
+  ],
+  "recorded_prs": [],
+  "unhealthy_endpoints": [
+    {
+      "id": "mate-1",
+      "backend": "tmux",
+      "target": "unstarted:mate-1",
+      "exists": false,
+      "agent": "dead"
+    },
+    {
+      "id": "mate-2",
+      "backend": "tmux",
+      "target": "unstarted:mate-2",
+      "exists": false,
+      "agent": "dead"
+    },
+    {
+      "id": "mate-3",
+      "backend": "tmux",
+      "target": "unstarted:mate-3",
+      "exists": false,
+      "agent": "dead"
+    },
+    {
+      "id": "mate-4",
+      "backend": "tmux",
+      "target": "unstarted:mate-4",
+      "exists": false,
+      "agent": "dead"
+    },
+    {
+      "id": "mate-5",
+      "backend": "tmux",
+      "target": "unstarted:mate-5",
+      "exists": false,
+      "agent": "dead"
+    },
+    {
+      "id": "mate-6",
+      "backend": "tmux",
+      "target": "unstarted:mate-6",
+      "exists": false,
+      "agent": "dead"
+    }
+  ],
+  "omitted": [
+    {
+      "surface": "backlog item bodies",
+      "reveal": "--fields bodies"
+    },
+    {
+      "surface": "task paths",
+      "reveal": "--fields paths"
+    },
+    {
+      "surface": "watch/steer actions",
+      "reveal": "--fields actions"
+    },
+    {
+      "surface": "healthy endpoint detail",
+      "reveal": "--fields endpoints"
+    },
+    {
+      "surface": "full scout-report inventory",
+      "reveal": "--all-reports"
+    },
+    {
+      "surface": "landed showing 6 of 14 (incl. 5 secondmate home(s))",
+      "reveal": "--all-landed"
+    },
+    {
+      "surface": "landed per-home capped at 6 for 1 home(s)",
+      "reveal": "--all-landed"
+    },
+    {
+      "surface": "secondmate home(s) with unreadable structured state: 1",
+      "reveal": "inspect the listed secondmate home ledgers"
+    },
+    {
+      "surface": "live PR discovery + checks",
+      "reveal": "--include-prs"
+    }
+  ]
+}

@@ -1,0 +1,286 @@
+{
+  "schema": "fm-bearings.v1",
+  "home": ".gate-test/fleet",
+  "generated": "2026-10-21T00:00:00Z",
+  "prs": "not_requested (run: /bearings include PRs)",
+  "contributions": {
+    "scope": "owned contributions per home",
+    "known": 813,
+    "checked": 0,
+    "counts": {
+      "captain": 0,
+      "fleet": 813,
+      "maintainer": 0,
+      "nobody": 0
+    },
+    "complete": false,
+    "proven_clear": false,
+    "unmeasured_homes": 9,
+    "unreadable_records": 0,
+    "unmeasured": 0,
+    "stale_verdicts": 0,
+    "missing_verdicts": 0,
+    "captain_omitted": 0,
+    "captain": []
+  },
+  "in_flight": [],
+  "secondmates": [
+    {
+      "id": "mate-1",
+      "state": "unknown",
+      "doing": "invalid home: marked for secondmate mate, expected mate-1",
+      "provenance": "parent-event-fallback",
+      "freshness": "historical-event",
+      "age_seconds": 33343,
+      "contradiction": false,
+      "reason": "invalid home: marked for secondmate mate, expected mate-1"
+    },
+    {
+      "id": "mate-2",
+      "state": "unknown",
+      "doing": "invalid home: marked for secondmate mate, expected mate-2",
+      "provenance": "parent-event-fallback",
+      "freshness": "historical-event",
+      "age_seconds": 33343,
+      "contradiction": false,
+      "reason": "invalid home: marked for secondmate mate, expected mate-2"
+    },
+    {
+      "id": "mate-3",
+      "state": "unknown",
+      "doing": "invalid home: marked for secondmate mate, expected mate-3",
+      "provenance": "parent-event-fallback",
+      "freshness": "historical-event",
+      "age_seconds": 33343,
+      "contradiction": false,
+      "reason": "invalid home: marked for secondmate mate, expected mate-3"
+    },
+    {
+      "id": "mate-4",
+      "state": "unknown",
+      "doing": "invalid home: marked for secondmate mate, expected mate-4",
+      "provenance": "parent-event-fallback",
+      "freshness": "historical-event",
+      "age_seconds": 33343,
+      "contradiction": false,
+      "reason": "invalid home: marked for secondmate mate, expected mate-4"
+    },
+    {
+      "id": "mate-5",
+      "state": "unknown",
+      "doing": "invalid home: marked for secondmate mate, expected mate-5",
+      "provenance": "parent-event-fallback",
+      "freshness": "historical-event",
+      "age_seconds": 33343,
+      "contradiction": false,
+      "reason": "invalid home: marked for secondmate mate, expected mate-5"
+    },
+    {
+      "id": "mate-6",
+      "state": "unknown",
+      "doing": "invalid home: marked for secondmate mate, expected mate-6",
+      "provenance": "parent-event-fallback",
+      "freshness": "historical-event",
+      "age_seconds": 33343,
+      "contradiction": false,
+      "reason": "invalid home: marked for secondmate mate, expected mate-6"
+    },
+    {
+      "id": "mate-7",
+      "state": "unknown",
+      "doing": "invalid home: marked for secondmate mate, expected mate-7",
+      "provenance": "parent-event-fallback",
+      "freshness": "historical-event",
+      "age_seconds": 33343,
+      "contradiction": false,
+      "reason": "invalid home: marked for secondmate mate, expected mate-7"
+    },
+    {
+      "id": "mate-8",
+      "state": "unknown",
+      "doing": "invalid home: marked for secondmate mate, expected mate-8",
+      "provenance": "parent-event-fallback",
+      "freshness": "historical-event",
+      "age_seconds": 33343,
+      "contradiction": false,
+      "reason": "invalid home: marked for secondmate mate, expected mate-8"
+    },
+    {
+      "id": "mate-9",
+      "state": "unknown",
+      "doing": "invalid home: marked for secondmate mate, expected mate-9",
+      "provenance": "parent-event-fallback",
+      "freshness": "historical-event",
+      "age_seconds": 33343,
+      "contradiction": false,
+      "reason": "invalid home: marked for secondmate mate, expected mate-9"
+    }
+  ],
+  "secondmate_reconcile": [],
+  "decisions_open": [],
+  "landed": [
+    {
+      "id": "contribution-0813",
+      "what": "Completed investigation 813",
+      "artifact": "data/contribution-0813/report.md",
+      "owner": "(main)"
+    },
+    {
+      "id": "contribution-0812",
+      "what": "Completed investigation 812",
+      "artifact": "data/contribution-0812/report.md",
+      "owner": "(main)"
+    },
+    {
+      "id": "contribution-0811",
+      "what": "Completed investigation 811",
+      "artifact": "data/contribution-0811/report.md",
+      "owner": "(main)"
+    },
+    {
+      "id": "contribution-0810",
+      "what": "Completed investigation 810",
+      "artifact": "data/contribution-0810/report.md",
+      "owner": "(main)"
+    },
+    {
+      "id": "contribution-0809",
+      "what": "Completed investigation 809",
+      "artifact": "data/contribution-0809/report.md",
+      "owner": "(main)"
+    },
+    {
+      "id": "contribution-0808",
+      "what": "Completed investigation 808",
+      "artifact": "data/contribution-0808/report.md",
+      "owner": "(main)"
+    }
+  ],
+  "gates": [],
+  "reports": [
+    {
+      "id": "contribution-0808",
+      "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M5CVZDD40VPEDMN80Z4GV4J8/.gate-test/fleet/data/contribution-0808/report.md"
+    },
+    {
+      "id": "contribution-0809",
+      "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M5CVZDD40VPEDMN80Z4GV4J8/.gate-test/fleet/data/contribution-0809/report.md"
+    },
+    {
+      "id": "contribution-0810",
+      "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M5CVZDD40VPEDMN80Z4GV4J8/.gate-test/fleet/data/contribution-0810/report.md"
+    },
+    {
+      "id": "contribution-0811",
+      "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M5CVZDD40VPEDMN80Z4GV4J8/.gate-test/fleet/data/contribution-0811/report.md"
+    },
+    {
+      "id": "contribution-0812",
+      "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M5CVZDD40VPEDMN80Z4GV4J8/.gate-test/fleet/data/contribution-0812/report.md"
+    },
+    {
+      "id": "contribution-0813",
+      "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M5CVZDD40VPEDMN80Z4GV4J8/.gate-test/fleet/data/contribution-0813/report.md"
+    }
+  ],
+  "recorded_prs": [],
+  "unhealthy_endpoints": [
+    {
+      "id": "mate-1",
+      "backend": "tmux",
+      "target": "unstarted:mate-1",
+      "exists": false,
+      "agent": "dead"
+    },
+    {
+      "id": "mate-2",
+      "backend": "tmux",
+      "target": "unstarted:mate-2",
+      "exists": false,
+      "agent": "dead"
+    },
+    {
+      "id": "mate-3",
+      "backend": "tmux",
+      "target": "unstarted:mate-3",
+      "exists": false,
+      "agent": "dead"
+    },
+    {
+      "id": "mate-4",
+      "backend": "tmux",
+      "target": "unstarted:mate-4",
+      "exists": false,
+      "agent": "dead"
+    },
+    {
+      "id": "mate-5",
+      "backend": "tmux",
+      "target": "unstarted:mate-5",
+      "exists": false,
+      "agent": "dead"
+    },
+    {
+      "id": "mate-6",
+      "backend": "tmux",
+      "target": "unstarted:mate-6",
+      "exists": false,
+      "agent": "dead"
+    },
+    {
+      "id": "mate-7",
+      "backend": "tmux",
+      "target": "unstarted:mate-7",
+      "exists": false,
+      "agent": "dead"
+    },
+    {
+      "id": "mate-8",
+      "backend": "tmux",
+      "target": "unstarted:mate-8",
+      "exists": false,
+      "agent": "dead"
+    },
+    {
+      "id": "mate-9",
+      "backend": "tmux",
+      "target": "unstarted:mate-9",
+      "exists": false,
+      "agent": "dead"
+    }
+  ],
+  "omitted": [
+    {
+      "surface": "backlog item bodies",
+      "reveal": "--fields bodies"
+    },
+    {
+      "surface": "task paths",
+      "reveal": "--fields paths"
+    },
+    {
+      "surface": "watch/steer actions",
+      "reveal": "--fields actions"
+    },
+    {
+      "surface": "healthy endpoint detail",
+      "reveal": "--fields endpoints"
+    },
+    {
+      "surface": "full scout-report inventory",
+      "reveal": "--all-reports"
+    },
+    {
+      "surface": "landed per-home capped at 6 for 1 home(s)",
+      "reveal": "--all-landed"
+    },
+    {
+      "surface": "secondmate home(s) with unreadable structured state: 9",
+      "reveal": "inspect the listed secondmate home ledgers"
+    },
+    {
+      "surface": "live PR discovery + checks",
+      "reveal": "--include-prs"
+    }
+  ]
+}

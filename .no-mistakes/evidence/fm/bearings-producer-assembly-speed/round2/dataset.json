@@ -1,0 +1,10 @@
+{
+  "homes": 9,
+  "local_secondmates": 6,
+  "remote_secondmates": 3,
+  "owned_contribution_records": 813,
+  "report_pointers": 813,
+  "parent_status_lines": 756,
+  "data": "disposable records generated in worktree; no operator fleet read",
+  "remote_transport": "OpenSSH in disposable Linux Docker container"
+}

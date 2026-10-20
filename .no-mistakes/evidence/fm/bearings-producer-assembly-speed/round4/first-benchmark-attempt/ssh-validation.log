@@ -1,0 +1,11 @@
+{"label": "remote-preflight-7", "seconds": 2.429, "exit": 0}
+{"label": "remote-preflight-8", "seconds": 1.276, "exit": 0}
+{"label": "remote-preflight-9", "seconds": 1.286, "exit": 0}
+Traceback (most recent call last):
+  File "~/.no-mistakes/evidence/01M5CVZDD40VPEDMN80Z4GV4J8/round4/replay/ssh-validation.py", line 20, in <module>
+    subprocess.run(["python3",str(E/"replay"/script)],stdout=out,stderr=subprocess.STDOUT,check=True)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.8/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 578, in run
+    raise CalledProcessError(retcode, process.args,
+                             output=stdout, stderr=stderr)
+subprocess.CalledProcessError: Command '['python3', '~/.no-mistakes/evidence/01M5CVZDD40VPEDMN80Z4GV4J8/round4/replay/final-benchmark.py']' returned non-zero exit status 1.

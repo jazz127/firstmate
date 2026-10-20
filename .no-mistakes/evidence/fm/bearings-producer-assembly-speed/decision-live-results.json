@@ -1,0 +1,12 @@
+{
+  "cold": "one api key preserved across unrelated secondmate done; malformed key rejected; café, tabs and trailing spaces preserved",
+  "warm_append": "captain-held closes api",
+  "rewrite": "same-key-width prefix rewrite reopens sql rather than stale cached api",
+  "ship_terminal": "ship done clears decisions",
+  "report_ids": [
+    "z-last",
+    "café notes",
+    "a\\b"
+  ],
+  "driver": "real bin/fm-fleet-snapshot.sh --json with isolated durable data; real tmux directed to absent private socket; no substitutes"
+}

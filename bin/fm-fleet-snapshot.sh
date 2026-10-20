@@ -1873,7 +1873,6 @@ secondmate_current_json() {  # <parent-tasks-json-file> <output-file>
     record_file="$JSON_TRANSPORT_DIR/secondmate-record-$summary_index.json"
     record_files[summary_index-1]=$record_file
     (
-    records_file=$record_file
     status_observation_file=
     if [ -n "$status_file" ]; then status_observation_file="$SNAPSHOT_TASK_DIR/$id.status"; fi
     activity_scan=$(bounded_parent_activities_json "$status_observation_file")
@@ -1969,7 +1968,7 @@ secondmate_current_json() {  # <parent-tasks-json-file> <output-file>
          contributions:($summary.contributions // null),
          landed:$summary.landed,endpoints:$summary.endpoints,counts:$summary.counts,omitted:$summary.omitted,
          parent_event:{raw:$event_raw,note:$event_note,age_seconds:$event_age,open_activities:$activities,open_decisions:$decisions,activity_scan:$activity_scan,reconciliation:$reconciliation},
-         terminal_evidence:$terminal,contradiction:$contradiction}' >> "$records_file" || return 1
+         terminal_evidence:$terminal,contradiction:$contradiction}' >> "$record_file" || return 1
     else
       if [ -n "$event_raw" ]; then
         provenance='parent-event-fallback'
@@ -2000,7 +1999,7 @@ secondmate_current_json() {  # <parent-tasks-json-file> <output-file>
          freshness:{status:$freshness,observed_at:$observed,age_seconds:$observed_age},
          active_children:[],decisions_open:[],holds:[],queued:[],landed:[],endpoints:[],counts:{active_children:0,decisions_open:0,holds:0,queued:0,landed:0,endpoints:0},omitted:[],
          parent_event:{raw:$event_raw,note:$event_note,age_seconds:$event_age,open_activities:$activities,open_decisions:$decisions,activity_scan:$activity_scan},
-         terminal_evidence:$terminal,contradiction:false}' >> "$records_file" || return 1
+         terminal_evidence:$terminal,contradiction:false}' >> "$record_file" || return 1
     fi
     ) &
     pids[active]=$!

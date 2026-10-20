@@ -61,11 +61,10 @@ def check_readiness:
       else null end)};
 def projected($input; $saved; $now; $max_age):
   known($input; $saved) as $known
+  | [$input.backlog.records[]? | select(.structured and .hold_bucket == "live")] as $holds
   | [$known[] as $k
     | ([$saved[] | select(.task == $k.task) | .records[] | select(.url == $k.url)] | first) as $record
-    | ([$input.backlog.records[]? | select(.structured and
-         (.id == $k.task or ((.links // []) | index($k.url)) != null))
-         | select(.hold_bucket == "live")] | first) as $hold
+    | ([$holds[] | select(.id == $k.task or ((.links // []) | index($k.url)) != null)] | first) as $hold
     | ([$input.tasks[]? | select(.id == $k.task and .pr.url == $k.url)
        | {head:(.pr.head | select(. != null and . != "")), merge_authority:(.merge_authority // "unknown")}] | first) as $task
     | ($task.head // null) as $recorded_head

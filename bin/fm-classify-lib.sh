@@ -980,7 +980,7 @@ _fm_status_kind() {
 }
 
 # Cheap admission shared by the whole-file and incremental readers. Routine
-# progress cannot alter the open set, so it need not fork the per-line fold.
+# progress cannot alter the open set, so it need not enter the per-line fold.
 # An admitted line still passes every declaration/key check in that fold.
 _fm_decision_line_candidate() {  # <status-line> <resolve-verb> <held-verb>
   local verb

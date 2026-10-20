@@ -11,7 +11,7 @@
 # status_open_decisions_snapshot); those observational cache writes are its only
 # fleet-state mutation.
 # Remote collection starts after task metadata capture and overlaps local reads
-# and assembly; its single shared collection budget and cache selection are unchanged.
+# and assembly under one shared collection budget.
 #
 # Top-level fields:
 #   schema: stable schema id.

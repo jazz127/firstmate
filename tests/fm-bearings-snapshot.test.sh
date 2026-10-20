@@ -2982,6 +2982,67 @@ EOF
   pass "main and secondmate captain actionability use the same blocker readiness"
 }
 
+test_task_assembly_overlaps_decision_reads_without_projection_drift() {
+  local home fakebin real_perl i serial parallel
+  home=$(make_home task-assembly)
+  fakebin=$(make_fakebin "$home")
+  real_perl=$(command -v perl)
+  mkdir "$home/decision-reads"
+  printf '## In flight\n\n## Queued\n\n## Done\n' > "$home/data/backlog.md"
+  for i in 1 2 3 4 5; do
+    fm_write_meta "$home/state/assembly-$i.meta" \
+      'kind=secondmate' 'harness=codex' "spawn_gen=generation-$i"
+    printf 'needs-decision [key=keep]: choice %s café\nresolved [key=other]: unrelated\n' "$i" \
+      > "$home/state/assembly-$i.status"
+  done
+  serial=$(PATH="$fakebin:$PATH" FM_HOME="$home" FM_SNAPSHOT_NOW=2026-07-11T18:00:00Z \
+    FM_SNAPSHOT_LOCAL_READ_CONCURRENCY=1 "$ROOT/bin/fm-fleet-snapshot.sh" --json) \
+    || fail "serial task assembly failed"
+  # The digest reader is an external boundary that still executes the real
+  # reader. Four independent task decisions must reach it together. The fifth
+  # task exercises a second batch; the oracle is the five explicit fixture
+  # choices, plus equality to the serial public snapshot.
+  cat > "$fakebin/perl" <<'SH'
+#!/usr/bin/env bash
+if [ "${1:-}" = '-MDigest::SHA=sha256_hex' ]; then
+  case "$4" in
+    */assembly-[1-4].status)
+      : > "$ASSEMBLY_READS/active-$$"
+      trap 'rm -f "$ASSEMBLY_READS/active-$$"' EXIT
+      attempts=0
+      while [ ! -e "$ASSEMBLY_READS/overlapped" ] && [ "$attempts" -lt 200 ]; do
+        active=("$ASSEMBLY_READS"/active-*)
+        if [ "${#active[@]}" -ge 4 ]; then : > "$ASSEMBLY_READS/overlapped"; fi
+        sleep 0.01
+        attempts=$((attempts + 1))
+      done
+      "$REAL_PERL" "$@"
+      exit $?
+      ;;
+  esac
+fi
+exec "$REAL_PERL" "$@"
+SH
+  chmod +x "$fakebin/perl"
+  parallel=$(PATH="$fakebin:$PATH" FM_HOME="$home" FM_SNAPSHOT_NOW=2026-07-11T18:00:00Z \
+    REAL_PERL="$real_perl" ASSEMBLY_READS="$home/decision-reads" \
+    FM_SNAPSHOT_LOCAL_READ_CONCURRENCY=4 "$ROOT/bin/fm-fleet-snapshot.sh" --json) \
+    || fail "parallel task assembly failed"
+  [ -e "$home/decision-reads/overlapped" ] || fail "task decision reads remained serialized"
+  serial=$(printf '%s' "$serial" | jq -S .)
+  parallel=$(printf '%s' "$parallel" | jq -S .)
+  if [ "$parallel" != "$serial" ]; then
+    diff -u <(printf '%s\n' "$serial") <(printf '%s\n' "$parallel") >&2
+    fail "parallel task assembly changed the canonical snapshot"
+  fi
+  printf '%s' "$parallel" | jq -e '
+    (.tasks | map(.id)) == ["assembly-1","assembly-2","assembly-3","assembly-4","assembly-5"]
+    and all(.tasks[]; .hints.open_decisions ==
+      [{key:"keep",verb:"needs-decision",summary:("choice " + (.id | ltrimstr("assembly-")) + " café")}])
+  ' >/dev/null || fail "parallel task assembly lost a keyed decision or task"
+  pass "task assembly overlaps decision reads and preserves the canonical snapshot"
+}
+
 test_task_teardown_during_metadata_capture_does_not_abort_snapshot() {
   local home fakebin real_cp output snapshot_pid i
   home=$(make_home metadata-teardown-race)
@@ -3507,6 +3568,7 @@ test_a_remote_home_without_any_ledger_is_explicitly_unreadable_without_remote_co
   pass "a missing remote ledger stays explicitly unreadable without remote summary computation"
 }
 
+test_task_assembly_overlaps_decision_reads_without_projection_drift
 test_task_teardown_during_metadata_capture_does_not_abort_snapshot
 test_current_state_uses_captured_status_observation
 test_relaunched_task_does_not_inherit_reused_endpoint_state

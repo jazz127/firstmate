@@ -273,7 +273,7 @@ reported unreadable with the reason; collection never computes a summary in
 that home.
 Each local per-task current-state read is bounded by FM_SNAPSHOT_CREW_STATE_TIMEOUT
 (default 10 seconds); a read that hits the bound reports state unknown. Local task
-observations and secondmate assembly each run concurrently, up to
+observations, task assembly, and secondmate assembly each run concurrently, up to
 FM_SNAPSHOT_LOCAL_READ_CONCURRENCY (default 8).
 Remote collection overlaps those reads and local assembly under its shared budget.
 Remote secondmate endpoint liveness is not probed by this command.
@@ -444,8 +444,11 @@ backlog_json() (  # [<backlog-path>] - defaults to this home's $BACKLOG
     def wrapped_url_pattern: "<?" + url_pattern + ">?";
     def links($rest): [$rest | scan(url_pattern)];
     def strip_trailing_metadata:
-      reduce range(0; 20) as $_ (.;
-        sub("[[:space:]]*\\([[:space:]]*(?:(?:repo|kind|priority|hold|hold-kind|hold-until):[[:space:]]*[^)]*|(?:since|merged|reported|done)[[:space:]]+[^)]*)[[:space:]]*\\)[[:space:]]*$"; ""));
+      def strip($remaining):
+        . as $before
+        | sub("[[:space:]]*\\([[:space:]]*(?:(?:repo|kind|priority|hold|hold-kind|hold-until):[[:space:]]*[^)]*|(?:since|merged|reported|done)[[:space:]]+[^)]*)[[:space:]]*\\)[[:space:]]*$"; "")
+        | if . != $before and $remaining > 1 then strip($remaining - 1) else . end;
+      strip(20);
     def strip_title_artifacts:
       sub("[[:space:]]+-[[:space:]]+data/[^[:space:])]+/report\\.md$"; "")
       | sub("[[:space:]]+data/[^[:space:])]+/report\\.md$"; "")
@@ -758,10 +761,17 @@ task_json_lines() {
   local pr pr_source event_json current_json endpoint_exists agent_alive meta_json status_json report_json worktree_json home_json
   local current_state current_source report_present=0 pr_from_status
   local open_decisions_tsv open_decisions_json
+  local active=0 rc=0 record_file
+  local -a pids=() record_files=()
 
   while [ "$index" -lt "$SNAPSHOT_TASK_META_COUNT" ]; do
     meta=${SNAPSHOT_TASK_METAS[index]}
+    record_file="$JSON_TRANSPORT_DIR/task-record-$index.json"
+    record_files[index]=$record_file
     index=$((index + 1))
+    # Each captured task owns its observations and decision cursor. Assemble
+    # independent rows under the same bound as their current-state reads.
+    (
     id=$(basename "$meta" .meta)
     original_meta="$STATE/$id.meta"
     kind=$(meta_value "$meta" kind)
@@ -799,10 +809,7 @@ task_json_lines() {
     fi
 
     current_file="$SNAPSHOT_TASK_DIR/$id.json"
-    current_json=$(<"$current_file") || {
-      snapshot_task_cleanup
-      return 1
-    }
+    current_json=$(<"$current_file") || return 1
     event_json=$(status_event_json "$status_log" "$STATE/$id.status")
     read -r current_state current_source < <(
       printf '%s' "$current_json" | jq -r '[.state // "", .source // ""] | @tsv'
@@ -846,10 +853,7 @@ task_json_lines() {
         endpoint_exists=*) endpoint_exists=${observation_line#*=} ;;
         agent_alive=*) agent_alive=${observation_line#*=} ;;
       esac
-    done < "$endpoint_file" || {
-      snapshot_task_cleanup
-      return 1
-    }
+    done < "$endpoint_file" || return 1
     [ -f "$report_path" ] && report_present=1 || report_present=0
     meta_json=$(path_present_json "$original_meta" "$meta")
     status_json=$event_json
@@ -936,8 +940,21 @@ task_json_lines() {
              steer:"bin/fm-send.sh fm-\($id) \u0027<instruction>\u0027",
              return_channel_note:null}
           end)
-      }'
-  done | jq -s 'sort_by(.id)'
+      }' > "$record_file"
+    ) &
+    pids[active]=$!
+    active=$((active + 1))
+    if [ "$active" -ge "$FM_SNAPSHOT_LOCAL_READ_CONCURRENCY" ]; then
+      snapshot_wait_current_reads "${pids[@]}" || rc=1
+      pids=()
+      active=0
+    fi
+  done
+  if [ "$active" -gt 0 ]; then
+    snapshot_wait_current_reads "${pids[@]}" || rc=1
+  fi
+  [ "$rc" -eq 0 ] || return 1
+  jq -s 'sort_by(.id)' ${record_files[@]+"${record_files[@]}"} < /dev/null
 }
 
 # Main-home current-inventory validity: same orphan / unstructured-current checks
@@ -2138,8 +2155,11 @@ jq -n \
    | ($scout_reports[0]) as $scout_reports
    | ($secondmate_current[0]) as $secondmate_current
    | ($secondmate_landed[0]) as $secondmate_landed
-   | def backlog_by_id($id): ($backlog.records[]? | select(.structured == true and .id == $id) | .) // null;
-   def task_by_id($id): ($tasks[]? | select(.id == $id) | .) // null;
+   | (reduce ($backlog.records[]? | select(.structured == true)) as $row
+        ({}; .[$row.id] += [$row])) as $backlog_index
+   | (reduce $tasks[] as $row ({}; .[$row.id] = $row)) as $task_index
+   | def backlog_by_id($id): ($backlog_index[$id][]?) // null;
+   def task_by_id($id): $task_index[$id] // null;
    def report_kind($id): (task_by_id($id).kind // backlog_by_id($id).kind // "scout");
    {
      schema:"fm-fleet-snapshot.v1",

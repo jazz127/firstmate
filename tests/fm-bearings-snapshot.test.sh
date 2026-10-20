@@ -3245,6 +3245,41 @@ SH
       and ([.in_flight[].id] | sort) == ["local-1","local-2","local-3","local-4","local-5"]
       and ([.in_flight[] | select(.id == "local-1" and .kind == "ship")] | length) == 1
   ' >/dev/null || fail "large local snapshot lost a worker row: $parallel"
+  # A slow local observation must not postpone the remote collector's start.
+  # The handshake fails under the former local-then-remote scheduling without
+  # depending on an absolute whole-snapshot wall-clock deadline.
+  home=$(make_home local-remote-overlap)
+  make_remote_ledger_fleet "$home" 1
+  fakebin=$(make_fakebin "$home/remote-ssh")
+  make_remote_ledger_ssh "$home/remote-ssh" >/dev/null
+  worktree="$home/projects/local"
+  fm_git_init_commit "$worktree"
+  git -C "$worktree" checkout -qb fm/local-overlap
+  fm_write_meta "$home/state/local.meta" \
+    "window=fixture:local" "worktree=$worktree" "project=firstmate" \
+    "harness=claude" "kind=ship" "mode=no-mistakes"
+  printf 'working: synthetic overlap fixture\n' > "$home/state/local.status"
+  : > "$home/ledger-calls.log"
+  cat > "$fakebin/no-mistakes" <<'SH'
+#!/usr/bin/env bash
+if [ "$*" = "axi status" ]; then
+  i=0
+  while [ ! -s "$FM_TEST_LEDGER_CALL_LOG" ] && [ "$i" -lt 100 ]; do
+    sleep 0.05
+    i=$((i + 1))
+  done
+  [ -s "$FM_TEST_LEDGER_CALL_LOG" ] || : > "$FM_HOME/remote-started-too-late"
+fi
+exit 0
+SH
+  chmod +x "$fakebin/no-mistakes"
+  PATH="$fakebin:$PATH" run_remote_ledger_bearings "$home" "$fakebin" 1100 > "$home/overlap.json" \
+    || fail "overlapping local and remote collection failed"
+  [ ! -e "$home/remote-started-too-late" ] || fail "remote collection waited for local observations"
+  [ "$(wc -l < "$home/ledger-calls.log" | tr -d ' ')" -eq 1 ] \
+    || fail "overlap changed the number of remote ledger reads"
+  jq -e '.secondmates | any(.id == "ledger-1" and .freshness == "fresh" and .age_seconds == 100)' \
+    "$home/overlap.json" >/dev/null || fail "overlap changed remote ledger provenance or age"
   pass "large local snapshot overlaps local reads with byte-identical serial and concurrent projections"
 }
 

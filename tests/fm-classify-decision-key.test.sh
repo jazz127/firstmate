@@ -727,3 +727,29 @@ test_recorded_line_stays_recorded_across_a_resolve() {
 
 test_recorded_line_stays_recorded_across_a_resolve
 test_unterminated_decision_tail_is_revisited_after_append
+
+# Count actual shell processes through Bash's inherited DEBUG trap rather than
+# asserting a particular implementation or a machine-dependent wall deadline.
+# The same public fold over a longer log must not create a shell per input line.
+test_activity_fold_has_bounded_shell_fanout() {
+  local dir i forks expected
+  dir=$(case_dir activity-fanout)
+  for ((i = 0; i < 40; i++)); do
+    printf 'working [at=1700000000] [key=task-%s]: step %s\n' "$i" "$i"
+    printf 'paused: [key=task-%s] waiting %s\n' "$i" "$i"
+    printf 'resolved [key=task-%s]: resumed\n' "$i"
+  done > "$dir/task.status"
+  printf 'working [key=last]: café with tabs\tand spaces  \n' >> "$dir/task.status"
+  (
+    set -T
+    trap 'printf "%s\\n" "$BASH_SUBSHELL" >> "$dir/processes"' DEBUG
+    status_open_activities "$dir/task.status" > "$dir/activities"
+  )
+  expected=$(printf 'last\tworking\tcafé with tabs\tand spaces  ')
+  [ "$(cat "$dir/activities")" = "$expected" ] || fail 'activity fold changed notes or ordering'
+  forks=$(awk '$1 > 1 {n++} END {print n+0}' "$dir/processes")
+  [ "$forks" -eq 0 ] || fail "activity fold executed $forks commands in per-line subshells for 121 status lines"
+  pass 'activity folding preserves output without per-line shell fan-out'
+}
+
+test_activity_fold_has_bounded_shell_fanout

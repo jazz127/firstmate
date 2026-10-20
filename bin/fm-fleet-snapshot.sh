@@ -10,6 +10,8 @@
 # task's state/.<id>.snapshot-open-decisions-cursor (fm-classify-lib.sh's
 # status_open_decisions_snapshot); those observational cache writes are its only
 # fleet-state mutation.
+# Remote collection starts after task metadata capture and overlaps local reads
+# and assembly; its single shared collection budget and cache selection are unchanged.
 #
 # Top-level fields:
 #   schema: stable schema id.
@@ -272,6 +274,7 @@ that home.
 Each local per-task current-state read is bounded by FM_SNAPSHOT_CREW_STATE_TIMEOUT
 (default 10 seconds); a read that hits the bound reports state unknown. Local task
 observations run concurrently, up to FM_SNAPSHOT_LOCAL_READ_CONCURRENCY (default 8).
+Remote collection overlaps those reads and local assembly under its shared budget.
 Remote secondmate endpoint liveness is not probed by this command.
 Terminal contradiction evidence uses
 FM_SNAPSHOT_TERMINAL_LINES, FM_SNAPSHOT_TERMINAL_BYTES, and
@@ -723,6 +726,9 @@ prefetch_task_current_states() {
     SNAPSHOT_TASK_METAS[SNAPSHOT_TASK_META_COUNT]=$captured_meta
     SNAPSHOT_TASK_META_COUNT=$((SNAPSHOT_TASK_META_COUNT + 1))
   done
+  if [ "$OUTPUT_MODE" = json ]; then
+    snapshot_start_remote_collection || return 1
+  fi
   while [ "$index" -lt "$SNAPSHOT_TASK_META_COUNT" ]; do
     meta=${SNAPSHOT_TASK_METAS[index]}
     id=$(basename "$meta" .meta)
@@ -749,7 +755,7 @@ task_json_lines() {
   local meta original_meta id kind harness mode yolo project worktree home projects spawn_gen backend target status_log report_path
   local remote_host remote_root current_file endpoint_file observation_line index=0
   local pr pr_source event_json current_json endpoint_exists agent_alive meta_json status_json report_json worktree_json home_json
-  local last_event_raw current_state current_source pending_decision blocked_event report_present=0 pr_from_status
+  local current_state current_source report_present=0 pr_from_status
   local open_decisions_tsv open_decisions_json
 
   while [ "$index" -lt "$SNAPSHOT_TASK_META_COUNT" ]; do
@@ -797,7 +803,6 @@ task_json_lines() {
       return 1
     }
     event_json=$(status_event_json "$status_log" "$STATE/$id.status")
-    last_event_raw=$(printf '%s' "$event_json" | jq -r '.last_event.raw // ""')
     read -r current_state current_source < <(
       printf '%s' "$current_json" | jq -r '[.state // "", .source // ""] | @tsv'
     )
@@ -831,8 +836,6 @@ task_json_lines() {
       [ splits("\n") | select(length > 0)
         | (capture("^(?<key>[^\t]*)\t(?<verb>[^\t]*)\t(?<summary>.*)$")?)
         | select(. != null) ]')
-    pending_decision=$(printf '%s' "$open_decisions_json" | jq 'if any(.[]; .verb == "needs-decision") then 1 else 0 end')
-    blocked_event=$(printf '%s' "$open_decisions_json" | jq 'if any(.[]; .verb == "blocked") then 1 else 0 end')
 
     endpoint_exists=null
     agent_alive=not_checked
@@ -880,7 +883,6 @@ task_json_lines() {
       --arg pr_head "$(meta_value "$meta" pr_head)" \
       --arg agent_alive "$agent_alive" \
       --arg observed_at "$SNAPSHOT_NOW" \
-      --arg last_event_raw "$last_event_raw" \
       --argjson current_state "$current_json" \
       --argjson meta_path "$meta_json" \
       --argjson status_log "$status_json" \
@@ -889,8 +891,6 @@ task_json_lines() {
       --argjson home_path "$home_json" \
       --argjson endpoint_exists "$endpoint_exists" \
       --argjson open_decisions "$open_decisions_json" \
-      --argjson pending_decision "$(bool_json "$pending_decision")" \
-      --argjson blocked_event "$(bool_json "$blocked_event")" \
       --argjson report_present "$(bool_json "$report_present")" \
       '{
         id:$id,
@@ -919,11 +919,11 @@ task_json_lines() {
           observed_at:$observed_at,freshness:"fresh"},
         pr:{url:($pr | if . == "" then null else . end),source:$pr_source,head:($pr_head | if . == "" then null else . end)},
         hints:{
-          pending_decision:$pending_decision,
-          blocked_event:$blocked_event,
+          pending_decision:any($open_decisions[]; .verb == "needs-decision"),
+          blocked_event:any($open_decisions[]; .verb == "blocked"),
           open_decisions:$open_decisions,
           scout_report_present:$report_present,
-          last_event_text:$last_event_raw
+          last_event_text:($status_log.last_event.raw // "")
         },
         actions:(
           if $kind == "secondmate" then
@@ -1290,6 +1290,7 @@ JQ
 # all sampled homes together, and places the whole collector process group under
 # fm-timeout-lib's single fleet-wide deadline. A timed-out child therefore cannot
 # survive the snapshot and convoy a later read.
+SNAPSHOT_COLLECT_PID=
 SNAPSHOT_COLLECT_DIR=
 SNAPSHOT_SUMMARY_FILTER=
 SNAPSHOT_CACHE_AVAILABLE=0
@@ -1474,15 +1475,14 @@ done < "$manifest"
 wait
 BASH
   chmod 700 "$collector"
-  SNAPSHOT_COLLECTION_TIMED_OUT=0
-  if fm_run_timed "$FM_SNAPSHOT_BUDGET" bash "$collector" \
+  (
+    rc=0
+    fm_run_timed "$FM_SNAPSHOT_BUDGET" bash "$collector" \
       "$SCRIPT_DIR" "$manifest" "$SNAPSHOT_COLLECT_DIR" "$SNAPSHOT_SUMMARY_FILTER" \
-      "$FM_SNAPSHOT_SECONDMATE_MAX_BYTES"; then
-    :
-  else
-    rc=$?
-    [ "$rc" -eq 124 ] && SNAPSHOT_COLLECTION_TIMED_OUT=1
-  fi
+      "$FM_SNAPSHOT_SECONDMATE_MAX_BYTES" || rc=$?
+    printf '%s\n' "$rc" > "$SNAPSHOT_COLLECT_DIR/result"
+  ) &
+  SNAPSHOT_COLLECT_PID=$!
   return 0
 }
 
@@ -1495,7 +1495,19 @@ snapshot_summary_age() {  # <summary-json-file>
   printf '%s\n' "$age"
 }
 
+snapshot_wait_remote_collection() {
+  local rc=''
+  [ -n "$SNAPSHOT_COLLECT_PID" ] || return 0
+  wait "$SNAPSHOT_COLLECT_PID" || true
+  SNAPSHOT_COLLECT_PID=
+  if [ -f "$SNAPSHOT_COLLECT_DIR/result" ]; then
+    IFS= read -r rc < "$SNAPSHOT_COLLECT_DIR/result" || true
+  fi
+  [ "$rc" != 124 ] || SNAPSHOT_COLLECTION_TIMED_OUT=1
+}
+
 snapshot_collection_cleanup() {
+  snapshot_wait_remote_collection
   [ -z "$SNAPSHOT_COLLECT_DIR" ] || rm -rf -- "$SNAPSHOT_COLLECT_DIR"
   SNAPSHOT_COLLECT_DIR=
   SNAPSHOT_SUMMARY_FILTER=
@@ -1721,17 +1733,8 @@ parent_evidence_reconciliation_json() {  # <summary-json-file> <activities-json>
        inconclusive:any(($activity_results + $decision_results)[]; .verdict == "inconclusive")}'
 }
 
-secondmate_current_json() {  # <parent-tasks-json-file> <output-file>
-  local tasks_file=$1 output_file=$2 registry_file union_file records_file rows total_registered total shown truncated
-  local row id home host remote registered registry_error task sampled_spawn_gen status_file status_observation_file event_raw event_note event_age observed_epoch observed_age
-  local activity_scan activities decisions reconciliation provenance freshness reason summary_file summary_sampled summary_valid summary_invalidity state terminal terminal_contradiction contradiction
-  local summary_source summary_age summary_observed summary_freshness cache_path collection_status collection_slot summary_index=0
-  local seen_homes=''
-  registry_file="$JSON_TRANSPORT_DIR/secondmate-registry.json"
-  union_file="$JSON_TRANSPORT_DIR/secondmate-union.json"
-  records_file="$JSON_TRANSPORT_DIR/secondmate-records.jsonl"
-  registry_secondmates_json > "$registry_file" || return 1
-  jq -n --slurpfile registry "$registry_file" --slurpfile tasks "$tasks_file" '
+secondmate_union_json() {  # <registry-json-file> <tasks-json-file>
+  jq -n --slurpfile registry "$1" --slurpfile tasks "$2" '
     ($registry[0]) as $registry
     |
     ($tasks[0]) as $tasks
@@ -1749,36 +1752,81 @@ secondmate_current_json() {  # <parent-tasks-json-file> <output-file>
                               else "secondmate registration is unknown because the registry read is incomplete or unavailable" end),
               parent_task:$t} ])
     | sort_by(.id)
-    | {registry:$registry,records:.}' > "$union_file" || return 1
+    | {registry:$registry,records:.}'
+}
+
+# Select remote routes from the same captured metadata/registry union that final
+# composition uses. No local liveness or report observation is needed to begin
+# the existing bounded collector, and the selected row cap stays unchanged.
+snapshot_start_remote_collection() {
+  local meta id kind rows
+  registry_secondmates_json > "$JSON_TRANSPORT_DIR/secondmate-registry.json" || return 1
+  {
+    for meta in ${SNAPSHOT_TASK_METAS[@]+"${SNAPSHOT_TASK_METAS[@]}"}; do
+      id=${meta##*/}
+      id=${id%.meta}
+      kind=$(meta_value "$meta" kind)
+      printf '%s\0%s\0' "$id" "${kind:-ship}"
+    done
+  } | jq -Rs 'split("\u0000") | .[:-1]
+      | [range(0; length; 2) as $i | {id:.[$i],kind:.[$i+1]}]' \
+    > "$JSON_TRANSPORT_DIR/task-selection.json" || return 1
+  secondmate_union_json "$JSON_TRANSPORT_DIR/secondmate-registry.json" \
+    "$JSON_TRANSPORT_DIR/task-selection.json" > "$JSON_TRANSPORT_DIR/secondmate-selection.json" || return 1
+  rows=$(jq -c --argjson cap "$FM_SNAPSHOT_SECONDMATES" \
+    '(if $cap == 0 then .records else .records[:$cap] end)[]' \
+    "$JSON_TRANSPORT_DIR/secondmate-selection.json") || return 1
+  [ -z "$rows" ] || prepare_remote_summary_collection "$rows"
+}
+
+secondmate_current_json() {  # <parent-tasks-json-file> <output-file>
+  local tasks_file=$1 output_file=$2 registry_file union_file records_file rows total_registered total shown truncated
+  local row id home host remote registered registry_error task sampled_spawn_gen status_file status_observation_file event_raw event_note event_age observed_epoch observed_age
+  local activity_scan activities decisions reconciliation provenance freshness reason summary_file summary_sampled summary_valid summary_invalidity state terminal terminal_contradiction contradiction
+  local summary_source summary_age summary_observed summary_freshness cache_path collection_status collection_slot summary_index=0
+  local seen_homes=''
+  registry_file="$JSON_TRANSPORT_DIR/secondmate-registry.json"
+  union_file="$JSON_TRANSPORT_DIR/secondmate-union.json"
+  records_file="$JSON_TRANSPORT_DIR/secondmate-records.jsonl"
+  secondmate_union_json "$registry_file" "$tasks_file" > "$union_file" || return 1
   total_registered=$(jq '[.records[] | select(.registered)] | length' "$union_file")
   total=$(jq '.records | length' "$union_file")
   rows=$(jq -c --argjson cap "$FM_SNAPSHOT_SECONDMATES" '(if $cap == 0 then .records else .records[:$cap] end)[]' "$union_file")
   shown=$(printf '%s\n' "$rows" | grep -c . || true)
   truncated=$((total - shown))
   : > "$records_file"
-  if [ -n "$rows" ]; then
-    prepare_remote_summary_collection "$rows" || return 1
-  fi
+  snapshot_wait_remote_collection
 
   while IFS= read -r row; do
     [ -n "$row" ] || continue
-    id=$(printf '%s' "$row" | jq -r '.id')
-    home=$(printf '%s' "$row" | jq -r '.home // ""')
-    host=$(printf '%s' "$row" | jq -r '.host // ""')
-    remote=$(printf '%s' "$row" | jq -r '.remote // false')
-    registered=$(printf '%s' "$row" | jq -r '.registered')
-    registry_error=$(printf '%s' "$row" | jq -r '.registry_error // ""')
-    task=$(printf '%s' "$row" | jq -c '.parent_task // {}')
-    sampled_spawn_gen=$(printf '%s' "$task" | jq -r '.spawn_gen // ""')
-    status_file=$(printf '%s' "$task" | jq -r '.paths.status_log.path // ""')
+    # One parse per row; NUL-separated values retain empty strings, tabs and
+    # multiline notes without shell quoting, evaluation or TSV field collapse.
+    {
+      IFS= read -r -d '' id &&
+      IFS= read -r -d '' home &&
+      IFS= read -r -d '' host &&
+      IFS= read -r -d '' remote &&
+      IFS= read -r -d '' registered &&
+      IFS= read -r -d '' registry_error &&
+      IFS= read -r -d '' task &&
+      IFS= read -r -d '' sampled_spawn_gen &&
+      IFS= read -r -d '' status_file &&
+      IFS= read -r -d '' event_raw &&
+      IFS= read -r -d '' event_note &&
+      IFS= read -r -d '' decisions &&
+      IFS= read -r -d '' event_age
+    } < <(printf '%s' "$row" | jq -j '[.id, (.home // ""), (.host // ""),
+      (.remote // false), .registered, (.registry_error // ""), (.parent_task // {}),
+      (.parent_task.spawn_gen // ""), (.parent_task.paths.status_log.path // ""),
+      (.parent_task.paths.status_log.last_event.raw // ""),
+      (.parent_task.paths.status_log.last_event.note // ""),
+      (.parent_task.hints.open_decisions // []),
+      (.parent_task.paths.status_log.last_event.age_seconds // "null")]
+      | .[] | tostring, "\u0000"') || return 1
     status_observation_file=
     if [ -n "$status_file" ]; then status_observation_file="$SNAPSHOT_TASK_DIR/$id.status"; fi
-    event_raw=$(printf '%s' "$task" | jq -r '.paths.status_log.last_event.raw // ""')
-    event_note=$(printf '%s' "$task" | jq -r '.paths.status_log.last_event.note // ""')
     activity_scan=$(bounded_parent_activities_json "$status_observation_file")
     activities=$(printf '%s' "$activity_scan" | jq -c '.records')
-    decisions=$(printf '%s' "$task" | jq -c '.hints.open_decisions // []')
-    event_age=$(printf '%s' "$task" | jq -r '.paths.status_log.last_event.age_seconds // "null"')
     observed_epoch=$(file_mtime_epoch "$status_observation_file")
     observed_age=null
     if [ -n "$observed_epoch" ]; then
@@ -1965,18 +2013,15 @@ secondmate_landed_from_current_json() {  # <secondmate-current-json-file> <outpu
 }
 
 scout_report_lines() {
-  local report id
   if [ ! -d "$DATA" ]; then
     jq -n '[]'
     return 0
   fi
+  # One JSON reader handles the inventory, rather than three processes per
+  # report. Keep find's file/depth semantics and the existing path/id ordering.
   LC_ALL=C find "$DATA" -mindepth 2 -maxdepth 2 -type f -name report.md -print \
     | sort \
-    | while IFS= read -r report; do
-      id=$(basename "$(dirname "$report")")
-      jq -n --arg id "$id" --arg path "$report" '{id:$id,path:$path}'
-    done \
-    | jq -s 'sort_by(.id)'
+    | jq -Rn '[inputs | {id:(split("/") | .[-2]),path:.}] | sort_by(.id)'
 }
 
 BACKLOG_JSON=$(backlog_json) || { echo "fm-fleet-snapshot: backlog read failed" >&2; exit 1; }
@@ -2008,11 +2053,11 @@ if [ "$OUTPUT_MODE" = contribution-input ]; then
   jq -n --slurpfile backlog "$contribution_input_dir/backlog.json" --slurpfile tasks "$contribution_input_dir/tasks.json" '{backlog:$backlog[0],tasks:$tasks[0]}'
   exit 0
 fi
+JSON_TRANSPORT_DIR=$(mktemp -d "${TMPDIR:-/tmp}/fm-fleet-snapshot.XXXXXX") \
+  || { echo "fm-fleet-snapshot: temporary transport directory creation failed" >&2; exit 1; }
 prefetch_task_current_states || { echo "fm-fleet-snapshot: task observation failed" >&2; exit 1; }
 TASKS_JSON=$(task_json_lines) || { echo "fm-fleet-snapshot: task snapshot failed" >&2; exit 1; }
 
-JSON_TRANSPORT_DIR=$(mktemp -d "${TMPDIR:-/tmp}/fm-fleet-snapshot.XXXXXX") \
-  || { echo "fm-fleet-snapshot: temporary transport directory creation failed" >&2; exit 1; }
 BACKLOG_JSON_FILE="$JSON_TRANSPORT_DIR/backlog.json"
 TASKS_JSON_FILE="$JSON_TRANSPORT_DIR/tasks.json"
 MAIN_INVENTORY_JSON_FILE="$JSON_TRANSPORT_DIR/main-inventory.json"

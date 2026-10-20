@@ -1,0 +1,98 @@
+$ bash bin/fm-lab-home.sh create $WORKTREE/.l
+$WORKTREE/.l
+exit=0
+$ git -C $WORKTREE/.l/project init -q -b main
+
+exit=0
+$ git -C $WORKTREE/.l/project -c user.name=Lab -c user.email=lab@example.invalid -c commit.gpgsign=false commit -q --allow-empty -m Initial disposable project
+
+exit=0
+$ tmux -L fm-lab new-session -d -s primary -x 120 -y 40 -c $WORKTREE -e FM_HOME=$WORKTREE/.l codex --no-alt-screen
+
+exit=0
+$ tmux -L fm-lab display-message -p -t primary #{socket_path},#{pid},0
+$WORKTREE/.l/tmux/tmux-501/fm-lab,24271,0
+exit=0
+$ bash bin/fm-afk-contract.sh enter --spend 1 --words Disposable raw launch
+Away posture recorded at 2026-10-20T22:44:00Z: hold-for-return only. No phone channel is configured; anything that needs you waits for your return. Your away instructions are recorded verbatim; the away session will carry them out where it can, and anything it is unsure of, or that needs you, waits for your return. Destructive, irreversible, and security-sensitive actions are never pre-authorizable, whatever the words say. Expected return: not given. Spend cap: 1 concurrent workers.
+Away posture (recorded):
+  entered: 2026-10-20T22:44:00Z
+  expected return: not given
+  spend cap: 1 concurrent workers
+  reach: hold-for-return only. No phone channel is configured; anything that needs you waits for your return.
+  your words (verbatim):
+    Disposable raw launch
+exit=0
+$ bash bin/fm-spawn.sh raw-launch $WORKTREE/.l/project sleep 20 --scout
+fm-gate-refuse: gate agent lifecycle permitted only against lab home $WORKTREE/.l
+spawned raw-launch harness=sleep kind=scout window=primary:fm-raw-launch worktree=$WORKTREE/.l/pool/.treehouse/project-066430/1/project
+exit=0
+$ tmux -L fm-lab capture-pane -p -t primary:fm-raw-launch
+treehouse get
+
+The default interactive shell is now zsh.
+To update your account to use zsh, please run `chsh -s /bin/zsh`.
+For more details, please visit https://support.apple.com/kb/HT208050.
+-bash-3.2$ treehouse get
+A new version of treehouse is available: v3.1.2 → v3.1.4
+Run "treehouse update" to update
+
+🌳 Setting up worktree...
+🌳 Entered worktree at ~/.no-mistakes/worktrees/a00b7db52042/01M5DQ26HZWXEJB16JZMXDXM6V/.l/pool/.treehouse/project-06643
+0/1/project. Type 'exit' to return.
+
+The default interactive shell is now zsh.
+To update your account to use zsh, please run `chsh -s /bin/zsh`.
+For more details, please visit https://support.apple.com/kb/HT208050.
+bash-3.2$ cd -- '$WORKTREE/.l/pool/.treehouse/project-
+066430/1/project'
+bash-3.2$ export GOTMPDIR=/tmp/fm-raw-launch/gotmp
+bash-3.2$ export COMPACT_ADVISER_DISABLE=1
+bash-3.2$ export FM_TASK_ID=raw-launch
+bash-3.2$ . '/tmp/fm-raw-launch+3cba457f01a63b947c60dde9b75cbc7d93b4774d836d43ee0425ac712bf16ffd/launch.s1792536245.2461
+6.29255.sh'
+exit=0
+$ bash bin/fm-afk-contract.sh live-workers
+1
+exit=0
+OBSERVED fresh raw launch reserves capacity with real Treehouse and tmux: 1
+$ bash bin/fm-spawn.sh next $WORKTREE/.l/project sleep 1 --scout
+fm-gate-refuse: gate agent lifecycle permitted only against lab home $WORKTREE/.l
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  repair missing watcher supervision with a foreground checkpoint: bin/fm-watch-checkpoint.sh --seconds 180.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+error: spawn refused - the away-posture record caps concurrent workers at 1 and 1 ordinary task(s) are live in this home; task next stays queued for the captain's return or for a worker to finish (spend cap: bin/fm-afk-contract.sh)
+exit=1
+OBSERVED concurrent raw launch refused at cap=1
+$ bash bin/fm-afk-contract.sh live-workers
+0
+exit=0
+OBSERVED actually exited raw worker frees capacity after grace: 0
+LIVE RAW SPAWN DRIVER COMPLETED
+$ tmux -L fm-lab kill-server
+
+exit=0
+Traceback (most recent call last):
+  File "$WORKTREE/.live-spawn.py", line 47, in <module>
+    shutil.rmtree(lab)
+    ~~~~~~~~~~~~~^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.8/Frameworks/Python.framework/Versions/3.14/lib/python3.14/shutil.py", line 852, in rmtree
+    _rmtree_impl(path, dir_fd, onexc)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.8/Frameworks/Python.framework/Versions/3.14/lib/python3.14/shutil.py", line 721, in _rmtree_safe_fd
+    _rmtree_safe_fd_step(stack, onexc)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.8/Frameworks/Python.framework/Versions/3.14/lib/python3.14/shutil.py", line 802, in _rmtree_safe_fd_step
+    onexc(func, path, err)
+    ~~~~~^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.8/Frameworks/Python.framework/Versions/3.14/lib/python3.14/shutil.py", line 795, in _rmtree_safe_fd_step
+    onexc(os.unlink, fullname, err)
+    ~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.8/Frameworks/Python.framework/Versions/3.14/lib/python3.14/shutil.py", line 791, in _rmtree_safe_fd_step
+    os.unlink(entry.name, dir_fd=topfd)
+    ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+PermissionError: [Errno 13] Permission denied: '$WORKTREE/.l/state/raw-launch.git-hooks'

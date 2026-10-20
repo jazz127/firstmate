@@ -1,0 +1,271 @@
+$ bash bin/fm-lab-home.sh create $WORKTREE/.l
+$WORKTREE/.l
+exit=0
+$ git -C $WORKTREE/.l/project init -q -b main
+
+exit=0
+$ git -C $WORKTREE/.l/project -c user.name=Lab -c user.email=lab@example.invalid -c commit.gpgsign=false commit -q --allow-empty -m Initial disposable project
+
+exit=0
+$ tmux -L fm-lab new-session -d -s primary -x 120 -y 40 -c $WORKTREE -e FM_HOME=$WORKTREE/.l codex --no-alt-screen
+
+exit=0
+$ tmux -L fm-lab display-message -p -t primary #{socket_path},#{pid},0
+$WORKTREE/.l/tmux/tmux-501/fm-lab,14309,0
+exit=0
+$ tmux -L fm-lab display-message -p -t primary #{socket_path} #{pane_width}x#{pane_height}
+$WORKTREE/.l/tmux/tmux-501/fm-lab 120x40
+exit=0
+$ tmux -L fm-lab capture-pane -p -t primary
+
+  Background server has incompatible feature settings
+  This session requires api_key_model_discovery to be disabled
+  Restart will use these shared feature settings:
+    api_key_model_discovery = false
+    auth_elicitation = true
+    code_mode_host = true
+    mcp_oauth_refresh_coordination = false
+  These settings persist and can disable functionality for other clients. Restart may interrupt active or queued work.
+
+
+  1. Run without daemon this time
+  2. Restart with these settings
+› 3. Cancel
+exit=0
+$ bash bin/fm-afk-contract.sh live-workers
+0
+exit=0
+OBSERVED empty ordinary fleet: 0
+$ tmux -L fm-lab new-window -d -t primary: -n stopped -c $WORKTREE/.l/project bash --noprofile --norc
+
+exit=0
+$ bash bin/fm-afk-contract.sh live-workers
+0
+exit=0
+OBSERVED positively shell-only stopped worker frees capacity: 0
+$ bash bin/fm-afk-contract.sh live-workers
+1
+exit=0
+OBSERVED default 120-second grace reserves stopped-looking fresh launch: 1
+$ bash bin/fm-afk-contract.sh live-workers
+0
+exit=0
+OBSERVED expired launch grace permits positive death exclusion: 0
+$ tmux -L fm-lab new-window -d -t primary: -n raw -c $WORKTREE/.l/project sleep 240
+
+exit=0
+$ bash bin/fm-afk-contract.sh live-workers
+1
+exit=0
+OBSERVED actual raw long-running worker remains counted: 1
+$ tmux -L fm-lab display-message -p -t primary #{pid}
+14309
+exit=0
+$ bash bin/fm-afk-contract.sh live-workers
+1
+exit=0
+OBSERVED real stopped tmux server times out and conservatively counts worker: 1
+OBSERVED real tmux probe bound elapsed_seconds=1.488
+$ bash bin/fm-afk-contract.sh enter --spend 1 --words Disposable admission verification
+Away posture recorded at 2026-10-20T22:42:01Z: hold-for-return only. No phone channel is configured; anything that needs you waits for your return. Your away instructions are recorded verbatim; the away session will carry them out where it can, and anything it is unsure of, or that needs you, waits for your return. Destructive, irreversible, and security-sensitive actions are never pre-authorizable, whatever the words say. Expected return: not given. Spend cap: 1 concurrent workers.
+Away posture (recorded):
+  entered: 2026-10-20T22:42:01Z
+  expected return: not given
+  spend cap: 1 concurrent workers
+  reach: hold-for-return only. No phone channel is configured; anything that needs you waits for your return.
+  your words (verbatim):
+    Disposable admission verification
+exit=0
+$ bash bin/fm-spawn.sh fresh $WORKTREE/.l/project --scout
+fm-gate-refuse: gate agent lifecycle permitted only against lab home $WORKTREE/.l
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  repair missing watcher supervision with a foreground checkpoint: bin/fm-watch-checkpoint.sh --seconds 180.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+error: spawn refused - the away-posture record caps concurrent workers at 1 and 1 ordinary task(s) are live in this home; task fresh stays queued for the captain's return or for a worker to finish (spend cap: bin/fm-afk-contract.sh)
+exit=1
+$ bash bin/fm-afk-contract.sh archive
+$WORKTREE/.l/state/afk-contracts/1792536121.afk-contract
+exit=0
+$ bash bin/fm-afk-contract.sh enter --words Disposable default cap verification
+Away posture recorded at 2026-10-20T22:42:05Z: hold-for-return only. No phone channel is configured; anything that needs you waits for your return. Your away instructions are recorded verbatim; the away session will carry them out where it can, and anything it is unsure of, or that needs you, waits for your return. Destructive, irreversible, and security-sensitive actions are never pre-authorizable, whatever the words say. Expected return: not given. Spend cap: 5 concurrent workers.
+Away posture (recorded):
+  entered: 2026-10-20T22:42:05Z
+  expected return: not given
+  spend cap: 5 concurrent workers
+  reach: hold-for-return only. No phone channel is configured; anything that needs you waits for your return.
+  your words (verbatim):
+    Disposable default cap verification
+exit=0
+OBSERVED entry default cap=5 for five eligible workers
+$ bash bin/fm-afk-return.sh check
+fm-afk-launch: away-posture record archived at $WORKTREE/.l/state/afk-contracts/1792536125.afk-contract
+fm-afk-launch: away mode stopped; no daemon terminal was running, .afk cleared, and the posture record archived
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+=== Return brief (away 2026-10-20T22:42:05Z -> 2026-10-20T22:42:07Z, 2s) ===
+Supervisor health:
+  - GAP: the watcher beat was 999999s old at return (grace 300s)
+  - status file unreadable: $WORKTREE/.l/state/raw0.status; catch-up stays gated
+Your instructions:
+  your words at entry:
+    Disposable default cap verification
+  the away session took no action under them.
+Waiting on you:
+  (nothing)
+Tried and failed, or could not be fixed:
+  (nothing)
+Landed, cleanup due:
+  (nothing)
+Handled while away:
+  0 outcome(s) handled by the away session (0 routine, 0 escalated above)
+  (no routine outcomes recorded in the store for this window)
+Cost: 0 supervision outcome(s) recorded (0 routine, 0 captain); 5 task(s) live at return.
+fm-afk-return: catch-up must finish before the captain request
+catch-up health: GAP: the watcher beat was 999999s old at return (grace 300s)
+catch-up lifecycle: status file unreadable: $WORKTREE/.l/state/raw0.status; catch-up stays gated
+fm-afk-return: handle each blocker now, or close it with resolved [key=...] and append a durable reclassification reason, then run bin/fm-afk-return.sh check
+exit=3
+$ tmux -L fm-lab rename-window -t primary:raw relocated
+
+exit=0
+$ bash bin/fm-afk-contract.sh live-workers
+1
+exit=0
+OBSERVED renamed endpoint absence is unproven and reserves capacity: 1
+$ bash -c . bin/fm-backend.sh; fm_backend_kill_confirmed tmux primary:raw
+
+exit=1
+OBSERVED renamed target cannot positively acknowledge kill
+$ bash bin/fm-afk-contract.sh live-workers
+1
+exit=0
+OBSERVED unconfirmed cleanup reservation counts surviving raw worker: 1
+$ tmux -L fm-lab kill-window -t primary:relocated
+
+exit=0
+$ bash bin/fm-afk-contract.sh live-workers
+0
+exit=0
+OBSERVED known shell-only endpoint frees final reservation: 0
+$ tmux -L fm-lab new-session -d -s waiting -n agent -x 120 -y 40 -c $WORKTREE -e FM_HOME=$WORKTREE/.l claude --setting-sources '' --strict-mcp-config --tools ''
+
+exit=0
+$ tmux -L fm-lab capture-pane -p -t waiting:agent
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ Accessing workspace:
+
+ $WORKTREE
+
+ Quick safety check: Is this a project you created or one you trust? (Like your own code, a well-known open source
+ project, or work from your team). If not, take a moment to review what's in this folder first.
+
+ Claude Code'll be able to read, edit, and execute files here.
+
+ Security guide
+
+ ❯ No, exit
+   Yes, I trust this folder
+
+ Enter to confirm · Esc to cancel
+exit=0
+$ bash bin/fm-busy-event.sh arm $WORKTREE/.l/state waiting --state idle --source fm-recovery --event recovery-reset
+g1792536132.37739.5759
+exit=0
+SETUP disposable scout status and recovery activity data; actual Claude process, no vendor lifecycle claim
+$ bash bin/fm-afk-contract.sh live-workers
+0
+exit=0
+OBSERVED actual Claude endpoint with trusted idle recovery record and paused declaration: 0
+$ bash bin/fm-busy-event.sh apply $WORKTREE/.l/state waiting busy --current-gen --source fm-recovery --event recovery-reset
+
+exit=0
+$ bash bin/fm-afk-contract.sh live-workers
+1
+exit=0
+OBSERVED busy trusted activity overrides paused declaration: 1
+$ bash bin/fm-busy-event.sh apply $WORKTREE/.l/state waiting unknown --current-gen --source fm-recovery --event recovery-reset
+
+exit=0
+$ bash bin/fm-afk-contract.sh live-workers
+1
+exit=0
+OBSERVED unknown trusted activity overrides paused declaration: 1
+$ bash bin/fm-busy-event.sh apply $WORKTREE/.l/state waiting idle --current-gen --source fm-recovery --event recovery-reset
+
+exit=0
+$ bash bin/fm-afk-contract.sh live-workers
+0
+exit=0
+OBSERVED actual Claude endpoint with trusted idle recovery record and needs-decision declaration: 0
+$ bash bin/fm-busy-event.sh apply $WORKTREE/.l/state waiting busy --current-gen --source fm-recovery --event recovery-reset
+
+exit=0
+$ bash bin/fm-afk-contract.sh live-workers
+1
+exit=0
+OBSERVED busy trusted activity overrides needs-decision declaration: 1
+$ bash bin/fm-busy-event.sh apply $WORKTREE/.l/state waiting unknown --current-gen --source fm-recovery --event recovery-reset
+
+exit=0
+$ bash bin/fm-afk-contract.sh live-workers
+1
+exit=0
+OBSERVED unknown trusted activity overrides needs-decision declaration: 1
+$ bash bin/fm-busy-event.sh apply $WORKTREE/.l/state waiting idle --current-gen --source fm-recovery --event recovery-reset
+
+exit=0
+$ bash bin/fm-afk-contract.sh live-workers
+0
+exit=0
+OBSERVED actual Claude endpoint with trusted idle recovery record and captain-held declaration: 0
+$ bash bin/fm-busy-event.sh apply $WORKTREE/.l/state waiting busy --current-gen --source fm-recovery --event recovery-reset
+
+exit=0
+$ bash bin/fm-afk-contract.sh live-workers
+1
+exit=0
+OBSERVED busy trusted activity overrides captain-held declaration: 1
+$ bash bin/fm-busy-event.sh apply $WORKTREE/.l/state waiting unknown --current-gen --source fm-recovery --event recovery-reset
+
+exit=0
+$ bash bin/fm-afk-contract.sh live-workers
+1
+exit=0
+OBSERVED unknown trusted activity overrides captain-held declaration: 1
+$ bash bin/fm-busy-event.sh apply $WORKTREE/.l/state waiting idle --current-gen --source fm-recovery --event recovery-reset
+
+exit=0
+$ bash bin/fm-afk-contract.sh live-workers
+0
+exit=0
+OBSERVED actual Claude endpoint with trusted idle recovery record and done declaration: 0
+$ bash bin/fm-busy-event.sh apply $WORKTREE/.l/state waiting busy --current-gen --source fm-recovery --event recovery-reset
+
+exit=0
+$ bash bin/fm-afk-contract.sh live-workers
+1
+exit=0
+OBSERVED busy trusted activity overrides done declaration: 1
+$ bash bin/fm-busy-event.sh apply $WORKTREE/.l/state waiting unknown --current-gen --source fm-recovery --event recovery-reset
+
+exit=0
+$ bash bin/fm-afk-contract.sh live-workers
+1
+exit=0
+OBSERVED unknown trusted activity overrides done declaration: 1
+$ bash bin/fm-busy-event.sh apply $WORKTREE/.l/state waiting idle --current-gen --source fm-recovery --event recovery-reset
+
+exit=0
+$ bash bin/fm-afk-contract.sh live-workers
+1
+exit=0
+OBSERVED newer working event supersedes old waiting status: 1
+LIVE DRIVER COMPLETED
+$ tmux -L fm-lab kill-server
+
+exit=0
+TEARDOWN disposable home and private tmux server removed

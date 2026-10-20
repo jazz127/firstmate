@@ -1,0 +1,44 @@
+{
+  "bash_version": "5.3.9",
+  "commands": [
+    {
+      "command": "bash tests/fm-afk-spend-cap.test.sh",
+      "exit_code": 0,
+      "surface": "synthetic/offline built CLI"
+    },
+    {
+      "command": "bash tests/fm-afk-return.test.sh",
+      "exit_code": 0,
+      "surface": "synthetic/offline built CLI"
+    },
+    {
+      "command": "bash tests/fm-pi-watch-extension.test.sh",
+      "exit_code": 0,
+      "surface": "offline extension fixtures"
+    },
+    {
+      "command": "bash tests/fm-pi-branch-extension.test.sh",
+      "exit_code": 0,
+      "surface": "offline extension fixtures"
+    },
+    {
+      "command": "python3 .live-test.py",
+      "exit_code": 0,
+      "surface": "real tmux and local product; disposable records; actual Codex and Claude CLIs; no model turns"
+    },
+    {
+      "command": "FM_TEST_EVIDENCE=$EVIDENCE python3 .live-spawn.py",
+      "exit_code": 0,
+      "surface": "real Treehouse, tmux, fm-spawn, live-workers; actual local sleep process"
+    }
+  ],
+  "setup_notes": [
+    "Shortened lab path to .l to meet macOS Unix socket path limit.",
+    "Set external product driver TMUX to the private server socket; retained actual 120x40 primary dimensions.",
+    "Initial raw-launch checks passed but cleanup exited 1 on a lab-owned read-only Git-hook directory. Corrected cleanup permissions and reran the complete raw-launch driver successfully; initial transcript retained.",
+    "Claude stopped at workspace trust; no trust-setting or credential changes and no model-turn evidence claimed.",
+    "Codex primary stopped at shared-daemon feature-settings conflict; did not restart or modify the shared daemon.",
+    "No Herdr lifecycle invoked, no additional no-mistakes pipeline created, and no other gate phase executed."
+  ],
+  "teardown": "Both live drivers killed their private fm-lab server and removed their marked lab homes. All four regression children and final live drivers exited 0."
+}

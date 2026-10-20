@@ -1,50 +1,49 @@
-import os,subprocess,pathlib,time,shutil,json,hashlib
-ROOT=pathlib.Path.cwd(); LAB=ROOT/'.l'; EVID=pathlib.Path('/Users/jarad/.no-mistakes/evidence/01M472BY3F7ZBVXN1MGABMMSVX'); assert not LAB.exists()
-env=os.environ.copy()
-for k in ('NO_MISTAKES_GATE','FM_GATE_REFUSE_BYPASS','FM_ROOT_OVERRIDE','FM_STATE_OVERRIDE','FM_DATA_OVERRIDE','FM_CONFIG_OVERRIDE','FM_PROJECTS_OVERRIDE','FM_TASK_ID','TASKS_AXI_FILE','TASKS_AXI_BACKEND','TMUX'):
- env.pop(k,None)
-env.update(FM_HOME=str(LAB),TMUX_TMPDIR=str(LAB/'tmux'),FM_SUPERVISION_ACTOR='main',TMPDIR=str(ROOT/'.test-phase-tmp'),GIT_CONFIG_GLOBAL='/dev/null',GIT_CONFIG_NOSYSTEM='1',GIT_AUTHOR_NAME='Disposable test',GIT_AUTHOR_EMAIL='test@example.invalid',GIT_COMMITTER_NAME='Disposable test',GIT_COMMITTER_EMAIL='test@example.invalid',TREEHOUSE_ROOT=str(LAB/'pool'))
-log=open(EVID/'live-spawn.log','w',buffering=1)
-ID='fm-lab-raw-'+str(os.getpid()); proc=None; results=[]
-def run(args,timeout=90,allow=False,cwd=ROOT):
- p=subprocess.run([str(a) for a in args],cwd=cwd,env=env,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,timeout=timeout)
- log.write('$ '+' '.join(str(a) for a in args)+'\n'+p.stdout+f'[exit={p.returncode}]\n')
- if p.returncode and not allow: raise RuntimeError(p.stdout)
- return p
+import os, pathlib, subprocess, shutil, time, json
+root=pathlib.Path.cwd(); lab=root/'.l'; ev=pathlib.Path(os.environ['FM_TEST_EVIDENCE'])
+lab.mkdir(); env=dict(os.environ)
+for k in list(env):
+ if k.endswith('_OVERRIDE') or k in ['NO_MISTAKES_GATE','FM_GATE_REFUSE_BYPASS','FM_TEST_SEAM','FM_TASK_ID','TASKS_AXI_FILE','TASKS_AXI_BACKEND']: env.pop(k,None)
+env.update(FM_HOME=str(lab),TMUX_TMPDIR=str(lab/'tmux'),FM_SUPERVISION_ACTOR='main',NM_HOME=str(lab/'nm'))
+def run(args,check=True,**kw):
+ r=subprocess.run(args,env=env,cwd=root,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,**kw)
+ out=r.stdout.replace(str(root),'$WORKTREE').replace(str(pathlib.Path.home()),'$HOME')
+ print('$ '+' '.join(args).replace(str(root),'$WORKTREE')); print(out.rstrip()); print('exit='+str(r.returncode),flush=True)
+ if check and r.returncode: raise RuntimeError(out)
+ return r
+
 def tm(*args,**kw):return run(['tmux','-L','fm-lab',*args],**kw)
+def count(want,label):
+ r=run(['bash','bin/fm-afk-contract.sh','live-workers']); assert r.stdout.strip()==str(want),(label,r.stdout,want)
+ print('OBSERVED '+label+': '+str(want),flush=True)
+def meta(id,window,kind='scout',extra=''):
+ (lab/'state'/f'{id}.meta').write_text(f'window=primary:{window}\nkind={kind}\nworktree={lab}/project\nproject={lab}/project\nharness=codex\n'+extra)
 try:
- run([ROOT/'bin/fm-lab-home.sh','create',LAB]);(LAB/'tmux').mkdir();(LAB/'config/supervision-host').touch();(LAB/'config/backlog-backend').write_text('manual\n')
- proj=LAB/'projects/demo';proj.mkdir()
- run(['git','init','-q','-b','main',proj]);run(['git','-C',proj,'commit','-q','--allow-empty','-m','Disposable test seed'])
- run(['treehouse','init'],cwd=proj)
- run([ROOT/'bin/fm-brief.sh',ID,'demo','--scout'])
- brief=LAB/'data'/ID/'brief.md';brief.write_text(brief.read_text().replace('{TASK}','Verify a disposable raw command launch.').replace('{FIRSTMATE_SPEC}','Run the supplied raw command only; this is isolated test data.'))
- tm('new-session','-d','-s','primary','-n','probe','-x','120','-y','40','-c',ROOT,'-e',f'FM_HOME={LAB}','codex --disable hooks')
- tm('set-window-option','-t','primary:probe','automatic-rename','off')
- socket=tm('display-message','-p','-t','primary:probe','#{socket_path}').stdout.strip();pid=tm('display-message','-p','-t','primary:probe','#{pid}').stdout.strip();env['TMUX']=f'{socket},{pid},0'
- run([ROOT/'bin/fm-afk-contract.sh','enter','--spend','1'])
- p=run([ROOT/'bin/fm-spawn.sh',ID,proj,'sleep 120','--scout'],allow=True)
- if p.returncode:
-  results.append(dict(name='fresh raw command startup',result='blocked',output=p.stdout))
-  tm('capture-pane','-p','-t',f'primary:fm-{ID}','-S','-100',allow=True)
- else:
-  assert f'spawned {ID}' in p.stdout
-  p=run([ROOT/'bin/fm-afk-spend-count.sh',LAB/'state']);assert p.stdout.strip()=='1',p.stdout
-  p=run([ROOT/'bin/fm-spawn.sh','second',proj,'sleep 120','--scout'],allow=True);assert p.returncode==1 and 'caps concurrent workers' in p.stdout,p.stdout
-  tm('capture-pane','-p','-t',f'primary:fm-{ID}','-S','-100')
-  results.append(dict(name='Fresh raw command starts through real tmux and Treehouse and reserves cap against a second fresh spawn',result='pass'))
-except Exception as e:
- log.write('SETUP/DRIVER ERROR: '+str(e)+'\n');results.append(dict(name='fresh raw command startup',result='blocked',reason=str(e)))
+ run(['bash','bin/fm-lab-home.sh','create',str(lab)])
+ (lab/'tmux').mkdir(); (lab/'config'/'supervision-host').touch()
+ (lab/'config'/'crew-harness').write_text('codex\n')
+ env['TREEHOUSE_ROOT']=str(lab/'pool')
+ env['SHELL']='/bin/bash'
+ (lab/'project').mkdir()
+ run(['git','-C',str(lab/'project'),'init','-q','-b','main'])
+ run(['git','-C',str(lab/'project'),'-c','user.name=Lab','-c','user.email=lab@example.invalid','-c','commit.gpgsign=false','commit','-q','--allow-empty','-m','Initial disposable project'])
+ (lab/'data'/'raw-launch').mkdir()
+ (lab/'data'/'raw-launch'/'brief.md').write_text("# Task\n## Captain's intent\nExercise raw launch reservation with a local process.\n\n## Firstmate spec\nRun only the supplied raw local command.\n")
+ tm('new-session','-d','-s','primary','-x','120','-y','40','-c',str(root),'-e','FM_HOME='+str(lab),'codex --no-alt-screen')
+ env['TMUX']=tm('display-message','-p','-t','primary','#{socket_path},#{pid},0').stdout.strip()
+ run(['bash','bin/fm-afk-contract.sh','enter','--spend','1','--words','Disposable raw launch'])
+ r=run(['bash','bin/fm-spawn.sh','raw-launch',str(lab/'project'),'sleep 20','--scout'],check=False,timeout=80)
+ tm('capture-pane','-p','-t','primary:fm-raw-launch',check=False)
+ assert r.returncode==0,'real raw spawn setup must succeed'
+ count(1,'fresh raw launch reserves capacity with real Treehouse and tmux')
+ r=run(['bash','bin/fm-spawn.sh','next',str(lab/'project'),'sleep 1','--scout'],check=False,timeout=15)
+ assert r.returncode==1 and 'caps concurrent workers' in r.stdout
+ print('OBSERVED concurrent raw launch refused at cap=1')
+ time.sleep(22)
+ env['FM_SPAWN_CAP_LAUNCH_GRACE']='0'
+ count(0,'actually exited raw worker frees capacity after grace')
+ print('LIVE RAW SPAWN DRIVER COMPLETED')
 finally:
- tm('kill-server',allow=True)
- # The production launch's per-task build temp is an incidental toolchain temp.
- # Remove exactly this disposable task's path, never any other task temp.
- tasktmp=pathlib.Path('/tmp')/('fm-'+ID)
- if tasktmp.exists(): shutil.rmtree(tasktmp)
- namespace=pathlib.Path('/tmp')/('fm-'+ID+'+'+hashlib.sha256(str(LAB).encode()).hexdigest())
- if namespace.exists(): shutil.rmtree(namespace)
- hooks=LAB/'state'/(ID+'.git-hooks')
- if hooks.exists(): hooks.chmod(0o700)
- shutil.rmtree(LAB)
- log.write('Private fm-lab server stopped; disposable lab and launch temp removed.\n')
- (EVID/'live-spawn-results.json').write_text(json.dumps(results,indent=2)+'\n');log.close()
+ tm('kill-server',check=False)
+ for d,dirs,files in os.walk(lab):os.chmod(d,0o700)
+ shutil.rmtree(lab)
+ print('TEARDOWN disposable home and private tmux server removed',flush=True)

@@ -333,8 +333,8 @@ fm_afk_contract_live_ordinary_workers() {  # [state-dir]
       "$FM_AFK_CONTRACT_DIR/fm-crew-state.sh" "$id" 2>/dev/null) || current=
     case "$verb:$current" in
       done:"state: done "*) continue ;;
-      "$paused_verb":"state: paused "*|"$paused_verb":"state: parked "*) continue ;;
-      needs-decision:"state: parked "*|"$held_verb":"state: parked "*) continue ;;
+      "$paused_verb":"state: paused "*|"$paused_verb":"state: parked "*|"$paused_verb":"state: done "*) continue ;;
+      needs-decision:"state: parked "*|needs-decision:"state: done "*|"$held_verb":"state: parked "*|"$held_verb":"state: done "*) continue ;;
       "$held_verb":"state: unknown · source: none · no current-state source available") continue ;;
     esac
     live=$((live + 1))

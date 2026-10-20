@@ -52,10 +52,7 @@
 #   expected_return: <UTC ISO 8601> | -
 #   reach_channels: none
 #   reach_announced: <the one-sentence reach announcement>
-#   spend_max_concurrent_workers: <n>   without --spend, the ordinary worker
-#                                  records this home already holds at entry,
-#                                  and never fewer than the default
-#                                  (SPEND CAP below)
+#   spend_max_concurrent_workers: <n>   concurrent-worker cap (SPEND CAP below)
 #   confirmed: <UTC ISO 8601>       when this mandate was recorded; /afk itself
 #   confirmed_epoch: <seconds>        is the go, so no later human step stamps it
 #   mode: quiet                    only on a quiet entry (FM_AFK_MODE=quiet); absent
@@ -132,6 +129,7 @@
 # away record stands; bin/fm-spawn.sh enforces it by refusing a fresh ordinary
 # spawn once the home already holds that many. `live-workers` is this script's
 # one count implementation, read by entry, spawn admission and return reporting.
+# This estimates eligible worker concurrency; it does not meter token spend.
 # It counts ordinary workers still able to spend: launch-grace and unproven
 # endpoints reserve capacity, while proven-dead endpoints and proven-idle
 # accepted deliveries or waiting workers free it. A spawn_gen younger than

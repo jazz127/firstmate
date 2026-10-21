@@ -1,189 +1,202 @@
-$ bash bin/fm-lab-home.sh create <WORKTREE>/.l
+$ bin/fm-lab-home.sh create <WORKTREE>/.test-phase-tmp/spawn-lz39uq3y/home
+<WORKTREE>/.test-phase-tmp/spawn-lz39uq3y/home
 exit=0
-<WORKTREE>/.l
-
-$ git init -q -b main <WORKTREE>/.l/project
+$ bin/fm-lab-home.sh tmux-dir <WORKTREE>/.test-phase-tmp/spawn-lz39uq3y/home
+/tmp/fml.AuGVQB
 exit=0
+$ tmux -L fm-lab -f /dev/null new-session -d -s primary -x 120 -y 35 -c <WORKTREE> 'bash --noprofile --norc'
 
-$ git -C <WORKTREE>/.l/project -c user.name=lab -c user.email=<EMAIL> commit -q --allow-empty -m 'Initialize disposable validation project'
 exit=0
-
-$ git clone --bare <WORKTREE>/.l/project <WORKTREE>/.l/origin.git
+$ tmux -L fm-lab display-message -p -t primary '#{socket_path},#{pid},0'
+/private/tmp/fml.AuGVQB/tmux-501/fm-lab,61674,0
 exit=0
-Cloning into bare repository '<WORKTREE>/.l/origin.git'...
-done.
+$ tmux -L fm-lab set-option -g default-shell /bin/bash
 
-$ git -C <WORKTREE>/.l/project remote add origin <WORKTREE>/.l/origin.git
 exit=0
+$ tmux -L fm-lab set-option -g default-command 'bash --noprofile --norc'
 
-$ git -C <WORKTREE>/.l/project fetch origin
 exit=0
-From <WORKTREE>/.l/origin
- * [new branch]      main       -> origin/main
+$ git init -q -b main <WORKTREE>/.test-phase-tmp/spawn-lz39uq3y/project
 
-$ git -C <WORKTREE>/.l/project remote set-head origin main
 exit=0
+$ git -C <WORKTREE>/.test-phase-tmp/spawn-lz39uq3y/project config user.name Test
 
-$ treehouse init
 exit=0
-A new version of treehouse is available: v3.1.2 → v3.1.3
-Run "treehouse update" to update
+$ git -C <WORKTREE>/.test-phase-tmp/spawn-lz39uq3y/project config user.email test@example.invalid
 
-Created <WORKTREE>/.l/project/treehouse.toml
-
-Local real Treehouse configuration:
-max_trees = 16
-root = ""
-
-# Worktree root directory (relative to repo root or absolute path).
-# Worktrees are placed under {root}/.treehouse/. Default: $HOME
-# Override per-command with the --root flag or the TREEHOUSE_ROOT env var.
-# Use "." to keep the pool in-project at <repo>/.treehouse/, next to the
-# code and removed with the project. Example: root = "."
-
-# Branch new and recycled worktrees are cut from.
-# Unset (default) infers it from the repository: origin/HEAD, then the
-# checked-out branch, then init.defaultBranch.
-# When set, the branch must exist locally or on origin; treehouse fails
-# rather than falling back to the inferred default.
-# Override per-command with the --base flag. Example: base_branch = "develop"
-
-# Unique worktree directory names.
-# Unset (default) names every slot's directory after the repository, so
-# tooling that derives per-checkout identity from the directory name reads
-# every slot as the same checkout.
-# Set true to name new slots <repo>-<slot>; worktrees already in the pool
-# keep their paths either way.
-# Override per-command with the --unique-leaf flag or the
-# TREEHOUSE_UNIQUE_LEAF env var. Example: unique_leaf = true
-
-# Where a newly created pool slot is placed.
-# Unset (default) uses {pool}/{slot}/{repo}. Placeholders: {pool}, {slot}
-# (required), {repo}, {repo_parent}; one of {pool} or {repo} is required as
-# well, to scope the template to this repository. {repo_parent} does not count:
-# two repositories side by side expand it identically. {repo} alone can still
-# collide between two repositories whose directories share a name.
-# Worktrees already in the pool keep their recorded paths.
-# Override per-command with the --worktree-path flag or the
-# TREEHOUSE_WORKTREE_PATH env var.
-# Example: worktree_path = "{repo_parent}/{repo}-{slot}"
-
-# Opt-in tracked-file copy-on-write sharing for fresh Git slots on macOS/APFS.
-# Values: off (default), fresh. Existing slots and ignored output are untouched.
-# Requires no concurrent destination writers during setup; see README.
-# Override with --apfs-sharing or TREEHOUSE_APFS_SHARING.
-# Example: apfs_sharing = "fresh"
-
-$ bash bin/fm-afk-contract.sh enter --spend 1 --words 'Disposable actual spawn validation'
 exit=0
-Away posture recorded at 2026-10-13T19:41:44Z: hold-for-return only. No phone channel is configured; anything that needs you waits for your return. Your away instructions are recorded verbatim; the away session will carry them out where it can, and anything it is unsure of, or that needs you, waits for your return. Destructive, irreversible, and security-sensitive actions are never pre-authorizable, whatever the words say. Expected return: not given. Spend cap: 1 concurrent workers.
+$ git -C <WORKTREE>/.test-phase-tmp/spawn-lz39uq3y/project add sample.txt
+
+exit=0
+$ git -C <WORKTREE>/.test-phase-tmp/spawn-lz39uq3y/project commit -qm seed
+
+exit=0
+$ git clone -q --bare <WORKTREE>/.test-phase-tmp/spawn-lz39uq3y/project <WORKTREE>/.test-phase-tmp/spawn-lz39uq3y/origin.git
+
+exit=0
+$ git -C <WORKTREE>/.test-phase-tmp/spawn-lz39uq3y/project remote add origin <WORKTREE>/.test-phase-tmp/spawn-lz39uq3y/origin.git
+
+exit=0
+$ git -C <WORKTREE>/.test-phase-tmp/spawn-lz39uq3y/project fetch -q origin
+
+exit=0
+$ git -C <WORKTREE>/.test-phase-tmp/spawn-lz39uq3y/project remote set-head origin main
+
+exit=0
+$ bin/fm-afk-contract.sh enter --spend 1 --words 'Validate the isolated raw worker.'
+Away posture recorded at 2026-10-21T13:16:36Z: hold-for-return only. No phone channel is configured; anything that needs you waits for your return. Your away instructions are recorded verbatim; the away session will carry them out where it can, and anything it is unsure of, or that needs you, waits for your return. Destructive, irreversible, and security-sensitive actions are never pre-authorizable, whatever the words say. Expected return: not given. Spend cap: 1 concurrent workers.
 Away posture (recorded):
-  entered: 2026-10-13T19:41:44Z
+  entered: 2026-10-21T13:16:36Z
   expected return: not given
   spend cap: 1 concurrent workers
   reach: hold-for-return only. No phone channel is configured; anything that needs you waits for your return.
   your words (verbatim):
-    Disposable actual spawn validation
-
-$ tmux -L fm-lab -f /dev/null new-session -d -s primary -x 120 -y 40 -c <WORKTREE> 'bash --noprofile --norc'
+    Validate the isolated raw worker.
 exit=0
-
-$ tmux -L fm-lab set-option -g default-shell /run/current-system/sw/bin/bash
+$ bin/fm-brief.sh labraw61633 project --scout
+scaffolded: <WORKTREE>/.test-phase-tmp/spawn-lz39uq3y/home/data/labraw61633/brief.md (scout; replace {TASK} and {FIRSTMATE_SPEC})
 exit=0
-
-$ tmux -L fm-lab set-option -g default-command 'bash --noprofile --norc'
+SCENARIO: real raw scout launch with a >5KB command enters a real Treehouse worktree and reserves away capacity
+$ bin/fm-spawn.sh labraw61633 <WORKTREE>/.test-phase-tmp/spawn-lz39uq3y/project --scout --backend tmux 'padding=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx; printf "%s\n" "${#padding}" > <WORKTREE>/.test-phase-tmp/spawn-lz39uq3y/home/raw-started; sleep 120'
+fm-gate-refuse: gate agent lifecycle permitted only against lab home <WORKTREE>/.test-phase-tmp/spawn-lz39uq3y/home
+spawned labraw61633 harness=printf kind=scout window=primary:fm-labraw61633 worktree=<WORKTREE>/.test-phase-tmp/spawn-lz39uq3y/pool/.treehouse/project-3de78b/1/project
 exit=0
+published task metadata: window=primary:fm-labraw61633
+endpoint_task_id=labraw61633
+worktree=<WORKTREE>/.test-phase-tmp/spawn-lz39uq3y/pool/.treehouse/project-3de78b/1/project
+project=<WORKTREE>/.test-phase-tmp/spawn-lz39uq3y/project
+harness=printf
+kind=scout
+tasktmp=/tmp/fm-labraw61633
+model=default
+effort=default
+spawn_gen=s1792588601.62933.24955
 
+$ bin/fm-afk-contract.sh live-workers
+1
+exit=0
+$ bin/fm-spawn.sh secondraw <WORKTREE>/.test-phase-tmp/spawn-lz39uq3y/project --scout --backend tmux 'sleep 10'
+fm-gate-refuse: gate agent lifecycle permitted only against lab home <WORKTREE>/.test-phase-tmp/spawn-lz39uq3y/home
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  repair missing watcher supervision with a foreground checkpoint: bin/fm-watch-checkpoint.sh --seconds 180.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+error: spawn refused - the away-posture record caps concurrent workers at 1 and 1 ordinary task(s) are live in this home; task secondraw stays queued for the captain's return or for a worker to finish (spend cap: bin/fm-afk-contract.sh)
+exit=1
+$ tmux -L fm-lab capture-pane -p -t primary:fm-labraw61633 -S -20
+bash-5.3$ treehouse get
+🌳 Setting up worktree...
+🌳 Entered worktree at <WORKTREE>/.test-phase-tmp/spawn
+-lz39uq3y/pool/.treehouse/project-3de78b/1/project. Type 'exit' to return.
+
+The default interactive shell is now zsh.
+To update your account to use zsh, please run `chsh -s /bin/zsh`.
+For more details, please visit https://support.apple.com/kb/HT208050.
+bash-3.2$ cd -- '<WORKTREE>/.test-phase-tmp/spawn-lz39u
+q3y/pool/.treehouse/project-3de78b/1/project'
+bash-3.2$ export GOTMPDIR=/tmp/fm-labraw61633/gotmp
+bash-3.2$ export COMPACT_ADVISER_DISABLE=1
+bash-3.2$ export FM_TASK_ID=labraw61633
+bash-3.2$ . '/tmp/fm-labraw61633+91dab45308159f71cd3a08737c7ce64b20f1be42ff78740f2566887b57be3fb5/launch.s1792588601.629
+33.24955.sh'
+exit=0
+PASS: 5000-byte payload ran in an isolated worktree; spawn returned success; second fresh launch was refused
+SCENARIO: confirmed closure of the actual worker frees the same count
+$ bash -c '. "$1/bin/fm-backend.sh"; fm_backend_kill_confirmed tmux "$2"' _ <WORKTREE> primary:fm-labraw61633
+
+exit=0
+$ tmux -L fm-lab new-window -d -t primary: -n fm-labraw61633 'bash --noprofile --norc'
+
+exit=0
+$ bin/fm-afk-contract.sh live-workers
+0
+exit=0
+PASS: acknowledged close succeeded and a proven shell endpoint frees capacity
+private tmux kill-server exit=0
+tmux-dir teardown exit=0 
+First product run passed; Python cleanup initially encountered intentionally read-only task hooks. Made only disposable directories owner-writable and removed the lab. Private server had already stopped. Repeating with cleanup corrected and cancellation proof added.
+$ bin/fm-lab-home.sh create <WORKTREE>/.test-phase-tmp/spawn-qr_eotw_/home
+<WORKTREE>/.test-phase-tmp/spawn-qr_eotw_/home
+exit=0
+$ bin/fm-lab-home.sh tmux-dir <WORKTREE>/.test-phase-tmp/spawn-qr_eotw_/home
+/tmp/fml.8sDzKt
+exit=0
+$ tmux -L fm-lab -f /dev/null new-session -d -s primary -x 120 -y 35 -c <WORKTREE> 'bash --noprofile --norc'
+
+exit=0
 $ tmux -L fm-lab display-message -p -t primary '#{socket_path},#{pid},0'
+/private/tmp/fml.8sDzKt/tmux-501/fm-lab,49687,0
 exit=0
-<WORKTREE>/.l/t/tmux-501/fm-lab,79382,0
+$ tmux -L fm-lab set-option -g default-shell /bin/bash
 
-$ tmux -L fm-lab set-environment -g FM_HOME <WORKTREE>/.l
 exit=0
+$ tmux -L fm-lab set-option -g default-command 'bash --noprofile --norc'
 
-$ tmux -L fm-lab set-environment -g TREEHOUSE_ROOT <WORKTREE>/.l/pool
 exit=0
+$ git init -q -b main <WORKTREE>/.test-phase-tmp/spawn-qr_eotw_/project
 
-$ tmux -L fm-lab set-environment -g NM_HOME <WORKTREE>/.l/nm
 exit=0
+$ git -C <WORKTREE>/.test-phase-tmp/spawn-qr_eotw_/project config user.name Test
 
-$ tmux -L fm-lab set-environment -g DISABLE_AUTOUPDATER 1
 exit=0
+$ git -C <WORKTREE>/.test-phase-tmp/spawn-qr_eotw_/project config user.email test@example.invalid
 
-$ tmux -L fm-lab set-environment -g TMPDIR <WORKTREE>/.l/tmp
 exit=0
+$ git -C <WORKTREE>/.test-phase-tmp/spawn-qr_eotw_/project add sample.txt
 
-$ bash bin/fm-brief.sh raw demo --scout
 exit=0
-scaffolded: <WORKTREE>/.l/data/raw/brief.md (scout; replace {TASK} and {FIRSTMATE_SPEC})
+$ git -C <WORKTREE>/.test-phase-tmp/spawn-qr_eotw_/project commit -qm seed
 
-$ bash bin/fm-spawn.sh raw <WORKTREE>/.l/project 'sleep 120' --scout
 exit=0
-spawned raw harness=sleep kind=scout window=primary:fm-raw worktree=<WORKTREE>/.l/pool/.treehouse/project-2e61eb/1/project
-fm-gate-refuse: gate agent lifecycle permitted only against lab home <WORKTREE>/.l
+$ git clone -q --bare <WORKTREE>/.test-phase-tmp/spawn-qr_eotw_/project <WORKTREE>/.test-phase-tmp/spawn-qr_eotw_/origin.git
 
-$ tmux -L fm-lab capture-pane -p -t primary:fm-raw -S -25
 exit=0
-bash-5.3$ treehouse get
-A new version of treehouse is available: v3.1.2 → v3.1.3
-Run "treehouse update" to update
+$ git -C <WORKTREE>/.test-phase-tmp/spawn-qr_eotw_/project remote add origin <WORKTREE>/.test-phase-tmp/spawn-qr_eotw_/origin.git
 
-🌳 Setting up worktree...
-🌳 Entered worktree at <WORKTREE>/.l/pool/.treehouse/project-2e61e
-b/1/project. Type 'exit' to return.
-bash-5.3$ cd -- '<WORKTREE>/.l/pool/.treehouse/project-
-2e61eb/1/project'
-bash-5.3$ export GOTMPDIR=/tmp/fm-raw/gotmp
-bash-5.3$ export COMPACT_ADVISER_DISABLE=1
-bash-5.3$ export FM_TASK_ID=raw
-bash-5.3$ . '/tmp/fm-raw+a866cce1aa9a712988a563fa4cbd250042a757c757b8ad2181ff37fd77d53536/launch.s1791920508.79684.7637.
-sh'
+exit=0
+$ git -C <WORKTREE>/.test-phase-tmp/spawn-qr_eotw_/project fetch -q origin
 
+exit=0
+$ git -C <WORKTREE>/.test-phase-tmp/spawn-qr_eotw_/project remote set-head origin main
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-Published task metadata:
-window=primary:fm-raw
-endpoint_task_id=raw
-worktree=<WORKTREE>/.l/pool/.treehouse/project-2e61eb/1/project
-project=<WORKTREE>/.l/project
-harness=sleep
+exit=0
+$ bin/fm-afk-contract.sh enter --spend 1 --words 'Validate the isolated raw worker.'
+Away posture recorded at 2026-10-21T13:18:49Z: hold-for-return only. No phone channel is configured; anything that needs you waits for your return. Your away instructions are recorded verbatim; the away session will carry them out where it can, and anything it is unsure of, or that needs you, waits for your return. Destructive, irreversible, and security-sensitive actions are never pre-authorizable, whatever the words say. Expected return: not given. Spend cap: 1 concurrent workers.
+Away posture (recorded):
+  entered: 2026-10-21T13:18:49Z
+  expected return: not given
+  spend cap: 1 concurrent workers
+  reach: hold-for-return only. No phone channel is configured; anything that needs you waits for your return.
+  your words (verbatim):
+    Validate the isolated raw worker.
+exit=0
+$ bin/fm-brief.sh labraw49579 project --scout
+scaffolded: <WORKTREE>/.test-phase-tmp/spawn-qr_eotw_/home/data/labraw49579/brief.md (scout; replace {TASK} and {FIRSTMATE_SPEC})
+exit=0
+SCENARIO: real raw scout launch with a >5KB command enters a real Treehouse worktree and reserves away capacity
+$ bin/fm-spawn.sh labraw49579 <WORKTREE>/.test-phase-tmp/spawn-qr_eotw_/project --scout --backend tmux 'padding=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx; printf "%s\n" "${#padding}" > <WORKTREE>/.test-phase-tmp/spawn-qr_eotw_/home/raw-started; sleep 120'
+fm-gate-refuse: gate agent lifecycle permitted only against lab home <WORKTREE>/.test-phase-tmp/spawn-qr_eotw_/home
+spawned labraw49579 harness=printf kind=scout window=primary:fm-labraw49579 worktree=<WORKTREE>/.test-phase-tmp/spawn-qr_eotw_/pool/.treehouse/project-80bfe4/1/project
+exit=0
+published task metadata: window=primary:fm-labraw49579
+endpoint_task_id=labraw49579
+worktree=<WORKTREE>/.test-phase-tmp/spawn-qr_eotw_/pool/.treehouse/project-80bfe4/1/project
+project=<WORKTREE>/.test-phase-tmp/spawn-qr_eotw_/project
+harness=printf
 kind=scout
-tasktmp=/tmp/fm-raw
+tasktmp=/tmp/fm-labraw49579
 model=default
 effort=default
-spawn_gen=s1791920508.79684.7637
+spawn_gen=s1792588735.50446.31778
 
-$ bash bin/fm-afk-spend-count.sh <WORKTREE>/.l/state
-exit=0
+$ bin/fm-afk-contract.sh live-workers
 1
-
-$ bash bin/fm-spawn.sh fresh <WORKTREE>/.l/no-project --mode no-mistakes --yolo off
-exit=1
-fm-gate-refuse: gate agent lifecycle permitted only against lab home <WORKTREE>/.l
+exit=0
+$ bin/fm-spawn.sh secondraw <WORKTREE>/.test-phase-tmp/spawn-qr_eotw_/project --scout --backend tmux 'sleep 10'
+fm-gate-refuse: gate agent lifecycle permitted only against lab home <WORKTREE>/.test-phase-tmp/spawn-qr_eotw_/home
 ●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ●  WATCHER DOWN - SUPERVISION IS OFF
 ●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
@@ -191,101 +204,124 @@ fm-gate-refuse: gate agent lifecycle permitted only against lab home <WORKTREE>/
 ●  This is a supervision warning only; the guarded operation WILL still run.
 ●  repair missing watcher supervision with a foreground checkpoint: bin/fm-watch-checkpoint.sh --seconds 180.
 ●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-error: spawn refused - the away-posture record caps concurrent workers at 1 and 1 ordinary task(s) are live in this home; task fresh stays queued for the captain's return or for a worker to finish (spend cap: bin/fm-afk-contract.sh)
-
-Fresh admission refused at spend cap
-$ bash -c '. bin/fm-backend.sh; fm_backend_kill_confirmed tmux primary:fm-raw'
-exit=0
-
-SCENARIO: An acknowledged raw-worker close does not turn later unproven tmux absence into proof
-$ bash bin/fm-afk-spend-count.sh <WORKTREE>/.l/state
-exit=0
-1
-
-$ bash bin/fm-brief.sh cancel demo --scout
-exit=0
-scaffolded: <WORKTREE>/.l/data/cancel/brief.md (scout; replace {TASK} and {FIRSTMATE_SPEC})
-
-Delivered launch pane before rename:
+error: spawn refused - the away-posture record caps concurrent workers at 1 and 1 ordinary task(s) are live in this home; task secondraw stays queued for the captain's return or for a worker to finish (spend cap: bin/fm-afk-contract.sh)
+exit=1
+$ tmux -L fm-lab capture-pane -p -t primary:fm-labraw49579 -S -20
 bash-5.3$ treehouse get
-A new version of treehouse is available: v3.1.2 → v3.1.3
-Run "treehouse update" to update
-
 🌳 Setting up worktree...
-🌳 Entered worktree at <WORKTREE>/.l/pool/.treehouse/project-2e61e
-b/1/project. Type 'exit' to return.
-bash-5.3$ cd -- '<WORKTREE>/.l/pool/.treehouse/project-
-2e61eb/1/project'
-bash-5.3$ export GOTMPDIR=/tmp/fm-cancel/gotmp
-bash-5.3$ export COMPACT_ADVISER_DISABLE=1
-bash-5.3$ export FM_TASK_ID=cancel
-bash-5.3$ . '/tmp/fm-cancel+a866cce1aa9a712988a563fa4cbd250042a757c757b8ad2181ff37fd77d53536/launch.s1791920514.86191.11
-703.sh'
+🌳 Entered worktree at <WORKTREE>/.test-phase-tmp/spawn
+-qr_eotw_/pool/.treehouse/project-80bfe4/1/project. Type 'exit' to return.
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-SCENARIO: Fresh real spawn reserves capacity before startup acknowledgement
-$ bash bin/fm-afk-spend-count.sh <WORKTREE>/.l/state
+The default interactive shell is now zsh.
+To update your account to use zsh, please run `chsh -s /bin/zsh`.
+For more details, please visit https://support.apple.com/kb/HT208050.
+bash-3.2$ cd -- '<WORKTREE>/.test-phase-tmp/spawn-qr_eo
+tw_/pool/.treehouse/project-80bfe4/1/project'
+bash-3.2$ export GOTMPDIR=/tmp/fm-labraw49579/gotmp
+bash-3.2$ export COMPACT_ADVISER_DISABLE=1
+bash-3.2$ export FM_TASK_ID=labraw49579
+bash-3.2$ . '/tmp/fm-labraw49579+31b2998f310aab25224978da5edaa63bb535f17a221cd4b2dae48118d3a3b869/launch.s1792588735.504
+46.31778.sh'
 exit=0
-1
+PASS: 5000-byte payload ran in an isolated worktree; spawn returned success; second fresh launch was refused
+SCENARIO: confirmed closure of the actual worker frees the same count
+$ bash -c '. "$1/bin/fm-backend.sh"; fm_backend_kill_confirmed tmux "$2"' _ <WORKTREE> primary:fm-labraw49579
 
-$ tmux -L fm-lab rename-window -t primary:fm-cancel moved-cancel
 exit=0
+$ tmux -L fm-lab new-window -d -t primary: -n fm-labraw49579 'bash --noprofile --norc'
 
-Cancelled spawn transcript:
-fm-gate-refuse: gate agent lifecycle permitted only against lab home <WORKTREE>/.l
-can't find window: fm-cancel
-error: task cancel's startup could not be cancelled; its record is retained for endpoint cleanup
+exit=0
+$ bin/fm-afk-contract.sh live-workers
+0
+exit=0
+PASS: acknowledged close succeeded and a proven shell endpoint frees capacity
+SCENARIO: renaming a real pending raw launch defeats closure acknowledgement and retains metadata, fresh admission and return cost
+$ bin/fm-brief.sh labcancel49579 project --scout
+scaffolded: <WORKTREE>/.test-phase-tmp/spawn-qr_eotw_/home/data/labcancel49579/brief.md (scout; replace {TASK} and {FIRSTMATE_SPEC})
+exit=0
+$ bin/fm-spawn.sh labcancel49579 <WORKTREE>/.test-phase-tmp/spawn-qr_eotw_/project --scout --backend tmux 'printf started > <WORKTREE>/.test-phase-tmp/spawn-qr_eotw_/home/pending-started; read -t 120 lab_input'
+private tmux kill-server exit=0
+tmux-dir teardown exit=0 
+Disposable lab removed; all server/worker processes stopped
+$ bin/fm-lab-home.sh create <WORKTREE>/.test-phase-tmp/spawn-gyqb26rs/home
+<WORKTREE>/.test-phase-tmp/spawn-gyqb26rs/home
+exit=0
+$ bin/fm-lab-home.sh tmux-dir <WORKTREE>/.test-phase-tmp/spawn-gyqb26rs/home
+/tmp/fml.aXwS8B
+exit=0
+$ tmux -L fm-lab -f /dev/null new-session -d -s primary -x 120 -y 35 -c <WORKTREE> 'bash --noprofile --norc'
 
-Retained metadata:
-window=primary:fm-cancel
-endpoint_task_id=cancel
-worktree=<WORKTREE>/.l/pool/.treehouse/project-2e61eb/1/project
-project=<WORKTREE>/.l/project
-harness=bash
+exit=0
+$ tmux -L fm-lab display-message -p -t primary '#{socket_path},#{pid},0'
+/private/tmp/fml.aXwS8B/tmux-501/fm-lab,82731,0
+exit=0
+$ tmux -L fm-lab set-option -g default-shell /bin/bash
+
+exit=0
+$ tmux -L fm-lab set-option -g default-command 'bash --noprofile --norc'
+
+exit=0
+$ git init -q -b main <WORKTREE>/.test-phase-tmp/spawn-gyqb26rs/project
+
+exit=0
+$ git -C <WORKTREE>/.test-phase-tmp/spawn-gyqb26rs/project config user.name Test
+
+exit=0
+$ git -C <WORKTREE>/.test-phase-tmp/spawn-gyqb26rs/project config user.email test@example.invalid
+
+exit=0
+$ git -C <WORKTREE>/.test-phase-tmp/spawn-gyqb26rs/project add sample.txt
+
+exit=0
+$ git -C <WORKTREE>/.test-phase-tmp/spawn-gyqb26rs/project commit -qm seed
+
+exit=0
+$ git clone -q --bare <WORKTREE>/.test-phase-tmp/spawn-gyqb26rs/project <WORKTREE>/.test-phase-tmp/spawn-gyqb26rs/origin.git
+
+exit=0
+$ git -C <WORKTREE>/.test-phase-tmp/spawn-gyqb26rs/project remote add origin <WORKTREE>/.test-phase-tmp/spawn-gyqb26rs/origin.git
+
+exit=0
+$ git -C <WORKTREE>/.test-phase-tmp/spawn-gyqb26rs/project fetch -q origin
+
+exit=0
+$ git -C <WORKTREE>/.test-phase-tmp/spawn-gyqb26rs/project remote set-head origin main
+
+exit=0
+$ bin/fm-afk-contract.sh enter --spend 1 --words 'Validate the isolated raw worker.'
+Away posture recorded at 2026-10-21T13:19:42Z: hold-for-return only. No phone channel is configured; anything that needs you waits for your return. Your away instructions are recorded verbatim; the away session will carry them out where it can, and anything it is unsure of, or that needs you, waits for your return. Destructive, irreversible, and security-sensitive actions are never pre-authorizable, whatever the words say. Expected return: not given. Spend cap: 1 concurrent workers.
+Away posture (recorded):
+  entered: 2026-10-21T13:19:42Z
+  expected return: not given
+  spend cap: 1 concurrent workers
+  reach: hold-for-return only. No phone channel is configured; anything that needs you waits for your return.
+  your words (verbatim):
+    Validate the isolated raw worker.
+exit=0
+$ bin/fm-brief.sh labraw82614 project --scout
+scaffolded: <WORKTREE>/.test-phase-tmp/spawn-gyqb26rs/home/data/labraw82614/brief.md (scout; replace {TASK} and {FIRSTMATE_SPEC})
+exit=0
+SCENARIO: real raw scout launch with a >5KB command enters a real Treehouse worktree and reserves away capacity
+$ bin/fm-spawn.sh labraw82614 <WORKTREE>/.test-phase-tmp/spawn-gyqb26rs/project --scout --backend tmux 'padding=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx; printf "%s\n" "${#padding}" > <WORKTREE>/.test-phase-tmp/spawn-gyqb26rs/home/raw-started; sleep 120'
+fm-gate-refuse: gate agent lifecycle permitted only against lab home <WORKTREE>/.test-phase-tmp/spawn-gyqb26rs/home
+spawned labraw82614 harness=printf kind=scout window=primary:fm-labraw82614 worktree=<WORKTREE>/.test-phase-tmp/spawn-gyqb26rs/pool/.treehouse/project-a5f859/1/project
+exit=0
+published task metadata: window=primary:fm-labraw82614
+endpoint_task_id=labraw82614
+worktree=<WORKTREE>/.test-phase-tmp/spawn-gyqb26rs/pool/.treehouse/project-a5f859/1/project
+project=<WORKTREE>/.test-phase-tmp/spawn-gyqb26rs/project
+harness=printf
 kind=scout
-tasktmp=/tmp/fm-cancel
+tasktmp=/tmp/fm-labraw82614
 model=default
 effort=default
-spawn_gen=s1791920514.86191.11703
-cleanup_recovery=launch
+spawn_gen=s1792588787.83364.17892
 
-$ tmux -L fm-lab display-message -p -t primary:moved-cancel '#{pane_current_command}'
-exit=0
-bash
-
-SCENARIO: Real renamed launch survives cancellation and retains its capacity reservation
-$ bash bin/fm-afk-spend-count.sh <WORKTREE>/.l/state
-exit=0
+$ bin/fm-afk-contract.sh live-workers
 1
-
-$ bash bin/fm-spawn.sh fresh <WORKTREE>/.l/no-project --mode no-mistakes --yolo off
-exit=1
-fm-gate-refuse: gate agent lifecycle permitted only against lab home <WORKTREE>/.l
+exit=0
+$ bin/fm-spawn.sh secondraw <WORKTREE>/.test-phase-tmp/spawn-gyqb26rs/project --scout --backend tmux 'sleep 10'
+fm-gate-refuse: gate agent lifecycle permitted only against lab home <WORKTREE>/.test-phase-tmp/spawn-gyqb26rs/home
 ●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ●  WATCHER DOWN - SUPERVISION IS OFF
 ●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
@@ -293,18 +329,238 @@ fm-gate-refuse: gate agent lifecycle permitted only against lab home <WORKTREE>/
 ●  This is a supervision warning only; the guarded operation WILL still run.
 ●  repair missing watcher supervision with a foreground checkpoint: bin/fm-watch-checkpoint.sh --seconds 180.
 ●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-error: spawn refused - the away-posture record caps concurrent workers at 1 and 1 ordinary task(s) are live in this home; task fresh stays queued for the captain's return or for a worker to finish (spend cap: bin/fm-afk-contract.sh)
+error: spawn refused - the away-posture record caps concurrent workers at 1 and 1 ordinary task(s) are live in this home; task secondraw stays queued for the captain's return or for a worker to finish (spend cap: bin/fm-afk-contract.sh)
+exit=1
+$ tmux -L fm-lab capture-pane -p -t primary:fm-labraw82614 -S -20
+bash-5.3$ treehouse get
+🌳 Setting up worktree...
+🌳 Entered worktree at <WORKTREE>/.test-phase-tmp/spawn
+-gyqb26rs/pool/.treehouse/project-a5f859/1/project. Type 'exit' to return.
 
-Fresh admission refused at spend cap
-$ bash bin/fm-afk-return.sh check
-exit=3
-=== Return brief (away 2026-10-13T19:41:44Z -> 2026-10-13T19:41:58Z, 14s) ===
+The default interactive shell is now zsh.
+To update your account to use zsh, please run `chsh -s /bin/zsh`.
+For more details, please visit https://support.apple.com/kb/HT208050.
+bash-3.2$ cd -- '<WORKTREE>/.test-phase-tmp/spawn-gyqb2
+6rs/pool/.treehouse/project-a5f859/1/project'
+bash-3.2$ export GOTMPDIR=/tmp/fm-labraw82614/gotmp
+bash-3.2$ export COMPACT_ADVISER_DISABLE=1
+bash-3.2$ export FM_TASK_ID=labraw82614
+bash-3.2$ . '/tmp/fm-labraw82614+f6f70231f1ed830167507ce55243f123fcdcb9c8f43c371f05baa7e29fdaa6d1/launch.s1792588787.833
+64.17892.sh'
+exit=0
+PASS: 5000-byte payload ran in an isolated worktree; spawn returned success; second fresh launch was refused
+SCENARIO: confirmed closure of the actual worker frees the same count
+$ bash -c '. "$1/bin/fm-backend.sh"; fm_backend_kill_confirmed tmux "$2"' _ <WORKTREE> primary:fm-labraw82614
+
+exit=0
+$ tmux -L fm-lab new-window -d -t primary: -n fm-labraw82614 'bash --noprofile --norc'
+
+exit=0
+$ bin/fm-afk-contract.sh live-workers
+0
+exit=0
+PASS: acknowledged close succeeded and a proven shell endpoint frees capacity
+SCENARIO: renaming a real pending raw launch defeats closure acknowledgement and retains metadata, fresh admission and return cost
+$ git clone -q <WORKTREE>/.test-phase-tmp/spawn-gyqb26rs/origin.git <WORKTREE>/.test-phase-tmp/spawn-gyqb26rs/project2
+
+exit=0
+$ bin/fm-brief.sh labcancel82614 project2 --scout
+scaffolded: <WORKTREE>/.test-phase-tmp/spawn-gyqb26rs/home/data/labcancel82614/brief.md (scout; replace {TASK} and {FIRSTMATE_SPEC})
+exit=0
+$ bin/fm-spawn.sh labcancel82614 <WORKTREE>/.test-phase-tmp/spawn-gyqb26rs/project2 --scout --backend tmux 'printf started > <WORKTREE>/.test-phase-tmp/spawn-gyqb26rs/home/pending-started; read -t 120 lab_input'
+fm-gate-refuse: gate agent lifecycle permitted only against lab home <WORKTREE>/.test-phase-tmp/spawn-gyqb26rs/home
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+error: spawn refused - the away-posture record caps concurrent workers at 1 and 1 ordinary task(s) are live in this home; task labcancel82614 stays queued for the captain's return or for a worker to finish (spend cap: bin/fm-afk-contract.sh)
+
+early spawn exit=1
+private tmux kill-server exit=0
+tmux-dir teardown exit=0 
+Disposable lab removed; all server/worker processes stopped
+Cancellation setup retry: second launch was correctly refused by the first record's default 120-second launch grace. The earlier count used grace=0 only for its positive-death check. Next attempt disposes that already-closed task record before the independent cancellation scenario.
+$ bin/fm-lab-home.sh create <WORKTREE>/.test-phase-tmp/spawn-ob7zhvcl/home
+<WORKTREE>/.test-phase-tmp/spawn-ob7zhvcl/home
+exit=0
+$ bin/fm-lab-home.sh tmux-dir <WORKTREE>/.test-phase-tmp/spawn-ob7zhvcl/home
+/tmp/fml.w8bKNb
+exit=0
+$ tmux -L fm-lab -f /dev/null new-session -d -s primary -x 120 -y 35 -c <WORKTREE> 'bash --noprofile --norc'
+
+exit=0
+$ tmux -L fm-lab display-message -p -t primary '#{socket_path},#{pid},0'
+/private/tmp/fml.w8bKNb/tmux-501/fm-lab,22987,0
+exit=0
+$ tmux -L fm-lab set-option -g default-shell /bin/bash
+
+exit=0
+$ tmux -L fm-lab set-option -g default-command 'bash --noprofile --norc'
+
+exit=0
+$ git init -q -b main <WORKTREE>/.test-phase-tmp/spawn-ob7zhvcl/project
+
+exit=0
+$ git -C <WORKTREE>/.test-phase-tmp/spawn-ob7zhvcl/project config user.name Test
+
+exit=0
+$ git -C <WORKTREE>/.test-phase-tmp/spawn-ob7zhvcl/project config user.email test@example.invalid
+
+exit=0
+$ git -C <WORKTREE>/.test-phase-tmp/spawn-ob7zhvcl/project add sample.txt
+
+exit=0
+$ git -C <WORKTREE>/.test-phase-tmp/spawn-ob7zhvcl/project commit -qm seed
+
+exit=0
+$ git clone -q --bare <WORKTREE>/.test-phase-tmp/spawn-ob7zhvcl/project <WORKTREE>/.test-phase-tmp/spawn-ob7zhvcl/origin.git
+
+exit=0
+$ git -C <WORKTREE>/.test-phase-tmp/spawn-ob7zhvcl/project remote add origin <WORKTREE>/.test-phase-tmp/spawn-ob7zhvcl/origin.git
+
+exit=0
+$ git -C <WORKTREE>/.test-phase-tmp/spawn-ob7zhvcl/project fetch -q origin
+
+exit=0
+$ git -C <WORKTREE>/.test-phase-tmp/spawn-ob7zhvcl/project remote set-head origin main
+
+exit=0
+$ bin/fm-afk-contract.sh enter --spend 1 --words 'Validate the isolated raw worker.'
+Away posture recorded at 2026-10-21T13:20:42Z: hold-for-return only. No phone channel is configured; anything that needs you waits for your return. Your away instructions are recorded verbatim; the away session will carry them out where it can, and anything it is unsure of, or that needs you, waits for your return. Destructive, irreversible, and security-sensitive actions are never pre-authorizable, whatever the words say. Expected return: not given. Spend cap: 1 concurrent workers.
+Away posture (recorded):
+  entered: 2026-10-21T13:20:42Z
+  expected return: not given
+  spend cap: 1 concurrent workers
+  reach: hold-for-return only. No phone channel is configured; anything that needs you waits for your return.
+  your words (verbatim):
+    Validate the isolated raw worker.
+exit=0
+$ bin/fm-brief.sh labraw22878 project --scout
+scaffolded: <WORKTREE>/.test-phase-tmp/spawn-ob7zhvcl/home/data/labraw22878/brief.md (scout; replace {TASK} and {FIRSTMATE_SPEC})
+exit=0
+SCENARIO: real raw scout launch with a >5KB command enters a real Treehouse worktree and reserves away capacity
+$ bin/fm-spawn.sh labraw22878 <WORKTREE>/.test-phase-tmp/spawn-ob7zhvcl/project --scout --backend tmux 'padding=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx; printf "%s\n" "${#padding}" > <WORKTREE>/.test-phase-tmp/spawn-ob7zhvcl/home/raw-started; sleep 120'
+fm-gate-refuse: gate agent lifecycle permitted only against lab home <WORKTREE>/.test-phase-tmp/spawn-ob7zhvcl/home
+spawned labraw22878 harness=printf kind=scout window=primary:fm-labraw22878 worktree=<WORKTREE>/.test-phase-tmp/spawn-ob7zhvcl/pool/.treehouse/project-258fc8/1/project
+exit=0
+published task metadata: window=primary:fm-labraw22878
+endpoint_task_id=labraw22878
+worktree=<WORKTREE>/.test-phase-tmp/spawn-ob7zhvcl/pool/.treehouse/project-258fc8/1/project
+project=<WORKTREE>/.test-phase-tmp/spawn-ob7zhvcl/project
+harness=printf
+kind=scout
+tasktmp=/tmp/fm-labraw22878
+model=default
+effort=default
+spawn_gen=s1792588847.24050.32738
+
+$ bin/fm-afk-contract.sh live-workers
+1
+exit=0
+$ bin/fm-spawn.sh secondraw <WORKTREE>/.test-phase-tmp/spawn-ob7zhvcl/project --scout --backend tmux 'sleep 10'
+fm-gate-refuse: gate agent lifecycle permitted only against lab home <WORKTREE>/.test-phase-tmp/spawn-ob7zhvcl/home
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  repair missing watcher supervision with a foreground checkpoint: bin/fm-watch-checkpoint.sh --seconds 180.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+error: spawn refused - the away-posture record caps concurrent workers at 1 and 1 ordinary task(s) are live in this home; task secondraw stays queued for the captain's return or for a worker to finish (spend cap: bin/fm-afk-contract.sh)
+exit=1
+$ tmux -L fm-lab capture-pane -p -t primary:fm-labraw22878 -S -20
+bash-5.3$ treehouse get
+🌳 Setting up worktree...
+🌳 Entered worktree at <WORKTREE>/.test-phase-tmp/spawn
+-ob7zhvcl/pool/.treehouse/project-258fc8/1/project. Type 'exit' to return.
+
+The default interactive shell is now zsh.
+To update your account to use zsh, please run `chsh -s /bin/zsh`.
+For more details, please visit https://support.apple.com/kb/HT208050.
+bash-3.2$ cd -- '<WORKTREE>/.test-phase-tmp/spawn-ob7zh
+vcl/pool/.treehouse/project-258fc8/1/project'
+bash-3.2$ export GOTMPDIR=/tmp/fm-labraw22878/gotmp
+bash-3.2$ export COMPACT_ADVISER_DISABLE=1
+bash-3.2$ export FM_TASK_ID=labraw22878
+bash-3.2$ . '/tmp/fm-labraw22878+ce0ebd73c0181e58dc3a3bc56d070cdf80d8fd443b2c4c21ca86cc4093694753/launch.s1792588847.240
+50.32738.sh'
+exit=0
+PASS: 5000-byte payload ran in an isolated worktree; spawn returned success; second fresh launch was refused
+SCENARIO: confirmed closure of the actual worker frees the same count
+$ bash -c '. "$1/bin/fm-backend.sh"; fm_backend_kill_confirmed tmux "$2"' _ <WORKTREE> primary:fm-labraw22878
+
+exit=0
+$ tmux -L fm-lab new-window -d -t primary: -n fm-labraw22878 'bash --noprofile --norc'
+
+exit=0
+$ bin/fm-afk-contract.sh live-workers
+0
+exit=0
+PASS: acknowledged close succeeded and a proven shell endpoint frees capacity
+SCENARIO: renaming a real pending raw launch defeats closure acknowledgement and retains metadata, fresh admission and return cost
+Disposed the first task record after its acknowledged close; otherwise its default 120-second launch grace intentionally still reserves a slot for admission.
+$ git clone -q <WORKTREE>/.test-phase-tmp/spawn-ob7zhvcl/origin.git <WORKTREE>/.test-phase-tmp/spawn-ob7zhvcl/project2
+
+exit=0
+$ bin/fm-brief.sh labcancel22878 project2 --scout
+scaffolded: <WORKTREE>/.test-phase-tmp/spawn-ob7zhvcl/home/data/labcancel22878/brief.md (scout; replace {TASK} and {FIRSTMATE_SPEC})
+exit=0
+$ bin/fm-spawn.sh labcancel22878 <WORKTREE>/.test-phase-tmp/spawn-ob7zhvcl/project2 --scout --backend tmux 'printf started > <WORKTREE>/.test-phase-tmp/spawn-ob7zhvcl/home/pending-started; read -t 120 lab_input'
+$ tmux -L fm-lab display-message -p -t primary:fm-labcancel22878 '#{pane_pid}'
+33530
+exit=0
+$ tmux -L fm-lab rename-window -t primary:fm-labcancel22878 renamed-pending
+
+exit=0
+fm-gate-refuse: gate agent lifecycle permitted only against lab home <WORKTREE>/.test-phase-tmp/spawn-ob7zhvcl/home
+error: task labcancel22878's startup could not be cancelled; its record is retained for endpoint cleanup
+
+cancelled spawn exit=143
+$ ps -p 33530 -o pid=,comm=
+33530 bash
+exit=0
+$ tmux -L fm-lab capture-pane -p -t primary:renamed-pending -S -12
+bash-5.3$ treehouse get
+A new version of treehouse is available: v3.1.2 → v3.1.5
+Run "treehouse update" to update
+
+🌳 Setting up worktree...
+🌳 Entered worktree at <WORKTREE>/.test-phase-tmp/spawn
+-ob7zhvcl/pool/.treehouse/project2-258fc8/1/project2. Type 'exit' to return.
+
+The default interactive shell is now zsh.
+To update your account to use zsh, please run `chsh -s /bin/zsh`.
+For more details, please visit https://support.apple.com/kb/HT208050.
+bash-3.2$ cd -- '<WORKTREE>/.test-phase-tmp/spawn-ob7zh
+vcl/pool/.treehouse/project2-258fc8/1/project2'
+bash-3.2$ export GOTMPDIR=/tmp/fm-labcancel22878/gotmp
+bash-3.2$ export COMPACT_ADVISER_DISABLE=1
+bash-3.2$ export FM_TASK_ID=labcancel22878
+bash-3.2$ . '/tmp/fm-labcancel22878+ce0ebd73c0181e58dc3a3bc56d070cdf80d8fd443b2c4c21ca86cc4093694753/launch.s1792588856.
+32317.29942.sh'
+exit=0
+$ bin/fm-afk-contract.sh live-workers
+1
+exit=0
+$ bin/fm-spawn.sh aftercancel <WORKTREE>/.test-phase-tmp/spawn-ob7zhvcl/project --scout --backend tmux 'sleep 10'
+fm-gate-refuse: gate agent lifecycle permitted only against lab home <WORKTREE>/.test-phase-tmp/spawn-ob7zhvcl/home
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  repair missing watcher supervision with a foreground checkpoint: bin/fm-watch-checkpoint.sh --seconds 180.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+error: spawn refused - the away-posture record caps concurrent workers at 1 and 1 ordinary task(s) are live in this home; task aftercancel stays queued for the captain's return or for a worker to finish (spend cap: bin/fm-afk-contract.sh)
+exit=1
+$ bin/fm-afk-return.sh begin
+fm-afk-launch: away-posture record archived at <WORKTREE>/.test-phase-tmp/spawn-ob7zhvcl/home/state/afk-contracts/1792588842.afk-contract
+fm-afk-launch: away mode stopped; no daemon terminal was running, .afk cleared, and the posture record archived
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+=== Return brief (away 2026-10-21T13:20:42Z -> 2026-10-21T13:21:02Z, 20s) ===
 Supervisor health:
   - GAP: the watcher beat was 999999s old at return (grace 300s)
-  - status file unreadable: <WORKTREE>/.l/state/cancel.status; catch-up stays gated
+  - status file unreadable: <WORKTREE>/.test-phase-tmp/spawn-ob7zhvcl/home/state/labcancel22878.status; catch-up stays gated
 Your instructions:
   your words at entry:
-    Disposable actual spawn validation
+    Validate the isolated raw worker.
   the away session took no action under them.
 Waiting on you:
   (nothing)
@@ -316,16 +572,12 @@ Handled while away:
   0 outcome(s) handled by the away session (0 routine, 0 escalated above)
   (no routine outcomes recorded in the store for this window)
 Cost: 0 supervision outcome(s) recorded (0 routine, 0 captain); 1 task(s) live at return.
-fm-afk-launch: away-posture record archived at <WORKTREE>/.l/state/afk-contracts/1791920504.afk-contract
-fm-afk-launch: away mode stopped; no daemon terminal was running, .afk cleared, and the posture record archived
-WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
 fm-afk-return: catch-up must finish before the captain request
 catch-up health: GAP: the watcher beat was 999999s old at return (grace 300s)
-catch-up lifecycle: status file unreadable: <WORKTREE>/.l/state/cancel.status; catch-up stays gated
+catch-up lifecycle: status file unreadable: <WORKTREE>/.test-phase-tmp/spawn-ob7zhvcl/home/state/labcancel22878.status; catch-up stays gated
 fm-afk-return: handle each blocker now, or close it with resolved [key=...] and append a durable reclassification reason, then run bin/fm-afk-return.sh check
-
-ACTUAL SPAWN DRIVER COMPLETE
-$ tmux -L fm-lab kill-server
-exit=0
-
-Disposable local origin, Treehouse pool, lab and private server removed
+exit=3
+PASS: pending raw launch survived rename/cancel; cleanup recovery metadata, live count, fresh admission and return cost retained one reservation
+private tmux kill-server exit=0
+tmux-dir teardown exit=0 
+Disposable lab removed; all server/worker processes stopped

@@ -1,114 +1,365 @@
-$ bash bin/fm-lab-home.sh create <WORKTREE>/.l
-exit=0
-<WORKTREE>/.l
+SCENARIO: missing-home readers preserve absent state
+$ bin/fm-pr-merge.sh task-probe https://github.com/example/unused/pull/1
+error: PR merge refused: state directory is not a real directory at <WORKTREE>/.test-phase-tmp/product-0suc2prn/absent/state
+exit=1 elapsed=0.48s
+$ bin/fm-fleet-snapshot.sh --json
+exit=0 elapsed=1.12s
+{"schema": "fm-fleet-snapshot.v1", "roots": {"fm_root": "<WORKTREE>", "state": "<WORKTREE>/.test-phase-tmp/product-0suc2prn/absent/state", "data": "<WORKTREE>/.test-phase-tmp/product-0suc2prn/absent/data", "config": "<WORKTREE>/.test-phase-tmp/product-0suc2prn/absent/config", "projects": "<WORKTREE>/.test-phase-tmp/product-0suc2prn/absent/projects"}, "tasks": [], "backlog_present": false}
+$ bin/fm-afk-contract.sh live-workers
+0
+exit=0 elapsed=0.09s
+PASS: merge refused missing state; snapshot and empty count left the home absent
+SCENARIO: sourced event fold preserves a caller scalar and recognizes unresolved event
+$ bash -c 'set -eu; lines=17; . "$1/bin/fm-afk-contract.sh"; verb=$(printf "needs-decision [key=a]: wait\n  continuation\nresolved [key=b]: answered\n" | fm_afk_contract_latest_non_resolved_verb); test "$lines" = 17; test "$verb" = needs-decision; printf "caller lines=%s; latest verb=%s\n" "$lines" "$verb"' _ <WORKTREE>
+caller lines=17; latest verb=needs-decision
+exit=0 elapsed=0.07s
+$ <WORKTREE>/.test-phase-tmp/product-0suc2prn/before/bin/fm-afk-contract.sh live-workers
+0
+exit=0 elapsed=0.58s
+BEFORE/AFTER: pre-fix live-workers created state; target returned 0 without creating the home
+$ bin/fm-lab-home.sh create <WORKTREE>/.test-phase-tmp/product-0suc2prn/home
+<WORKTREE>/.test-phase-tmp/product-0suc2prn/home
+exit=0 elapsed=0.34s
+$ bin/fm-lab-home.sh tmux-dir <WORKTREE>/.test-phase-tmp/product-0suc2prn/home
+/tmp/fml.eJMORE
+exit=0 elapsed=0.05s
+$ tmux -L fm-lab -f /dev/null new-session -d -s primary -x 120 -y 35 -c <WORKTREE> 'bash --noprofile --norc'
 
-$ git init -q -b lab-task <WORKTREE>/.l/worker
-exit=0
+exit=0 elapsed=0.11s
+SCENARIO: active raw worker counts; proven idle waits free capacity; resumed or uncertain activity retains it
+$ tmux -L fm-lab new-window -d -t primary: -n worker -c <WORKTREE> 'sleep 300'
 
-$ git -C <WORKTREE>/.l/worker -c user.name=lab -c user.email=<EMAIL> commit -q --allow-empty -m 'Initialize disposable validation project'
-exit=0
+exit=0 elapsed=0.02s
+$ bin/fm-afk-contract.sh live-workers
+1
+exit=0 elapsed=0.19s
+$ bin/fm-busy-event.sh arm <WORKTREE>/.test-phase-tmp/product-0suc2prn/home/state task --state idle --source claude-hook --event stop
+g1792588405.49804.27817
+exit=0 elapsed=0.06s
+$ bin/fm-busy-event.sh apply <WORKTREE>/.test-phase-tmp/product-0suc2prn/home/state task idle --current-gen --source claude-hook --event stop
 
-$ bash bin/fm-afk-contract.sh enter --spend 1 --words 'Disposable live spend-cap validation'
-exit=0
-Away posture recorded at 2026-10-13T19:38:57Z: hold-for-return only. No phone channel is configured; anything that needs you waits for your return. Your away instructions are recorded verbatim; the away session will carry them out where it can, and anything it is unsure of, or that needs you, waits for your return. Destructive, irreversible, and security-sensitive actions are never pre-authorizable, whatever the words say. Expected return: not given. Spend cap: 1 concurrent workers.
+exit=0 elapsed=0.20s
+$ bin/fm-afk-contract.sh live-workers
+1
+exit=0 elapsed=0.18s
+private tmux teardown exit=0 
+Disposable lab removed; no product children remain
+SCENARIO: missing-home readers preserve absent state
+$ bin/fm-pr-merge.sh task-probe https://github.com/example/unused/pull/1
+error: PR merge refused: state directory is not a real directory at <WORKTREE>/.test-phase-tmp/product-ypbos_je/absent/state
+exit=1 elapsed=0.21s
+$ bin/fm-fleet-snapshot.sh --json
+exit=0 elapsed=0.33s
+{"schema": "fm-fleet-snapshot.v1", "roots": {"fm_root": "<WORKTREE>", "state": "<WORKTREE>/.test-phase-tmp/product-ypbos_je/absent/state", "data": "<WORKTREE>/.test-phase-tmp/product-ypbos_je/absent/data", "config": "<WORKTREE>/.test-phase-tmp/product-ypbos_je/absent/config", "projects": "<WORKTREE>/.test-phase-tmp/product-ypbos_je/absent/projects"}, "tasks": [], "backlog_present": false}
+$ bin/fm-afk-contract.sh live-workers
+0
+exit=0 elapsed=0.09s
+PASS: merge refused missing state; snapshot and empty count left the home absent
+SCENARIO: sourced event fold preserves a caller scalar and recognizes unresolved event
+$ bash -c 'set -eu; lines=17; . "$1/bin/fm-afk-contract.sh"; verb=$(printf "needs-decision [key=a]: wait\n  continuation\nresolved [key=b]: answered\n" | fm_afk_contract_latest_non_resolved_verb); test "$lines" = 17; test "$verb" = needs-decision; printf "caller lines=%s; latest verb=%s\n" "$lines" "$verb"' _ <WORKTREE>
+caller lines=17; latest verb=needs-decision
+exit=0 elapsed=0.08s
+$ <WORKTREE>/.test-phase-tmp/product-ypbos_je/before/bin/fm-afk-contract.sh live-workers
+0
+exit=0 elapsed=0.31s
+BEFORE/AFTER: pre-fix live-workers created state; target returned 0 without creating the home
+$ bin/fm-lab-home.sh create <WORKTREE>/.test-phase-tmp/product-ypbos_je/home
+<WORKTREE>/.test-phase-tmp/product-ypbos_je/home
+exit=0 elapsed=0.19s
+$ bin/fm-lab-home.sh tmux-dir <WORKTREE>/.test-phase-tmp/product-ypbos_je/home
+/tmp/fml.wgoya8
+exit=0 elapsed=0.07s
+$ tmux -L fm-lab -f /dev/null new-session -d -s primary -x 120 -y 35 -c <WORKTREE> 'bash --noprofile --norc'
+
+exit=0 elapsed=0.49s
+$ tmux -L fm-lab display-message -p -t primary '#{socket_path},#{pid},0'
+/private/tmp/fml.wgoya8/tmux-501/fm-lab,70965,0
+exit=0 elapsed=0.02s
+$ git init -q -b main <WORKTREE>/.test-phase-tmp/product-ypbos_je/project
+
+exit=0 elapsed=0.04s
+$ git -C <WORKTREE>/.test-phase-tmp/product-ypbos_je/project -c user.name=Test -c user.email=test@example.invalid commit -q --allow-empty -m seed
+
+exit=0 elapsed=0.05s
+SCENARIO: active raw worker counts; proven idle waits free capacity; resumed or uncertain activity retains it
+$ tmux -L fm-lab new-window -d -t primary: -n worker -c <WORKTREE> 'sleep 300'
+
+exit=0 elapsed=0.01s
+$ bin/fm-afk-contract.sh live-workers
+1
+exit=0 elapsed=0.53s
+$ bin/fm-busy-event.sh arm <WORKTREE>/.test-phase-tmp/product-ypbos_je/home/state task --state idle --source claude-hook --event stop
+g1792588446.71398.480
+exit=0 elapsed=0.12s
+$ bin/fm-busy-event.sh apply <WORKTREE>/.test-phase-tmp/product-ypbos_je/home/state task idle --current-gen --source claude-hook --event stop
+
+exit=0 elapsed=0.07s
+$ bin/fm-afk-contract.sh live-workers
+0
+exit=0 elapsed=1.05s
+$ bin/fm-busy-event.sh apply <WORKTREE>/.test-phase-tmp/product-ypbos_je/home/state task busy --current-gen --source claude-hook --event user-prompt-submit
+
+exit=0 elapsed=0.08s
+$ bin/fm-afk-contract.sh live-workers
+1
+exit=0 elapsed=0.57s
+$ bin/fm-busy-event.sh apply <WORKTREE>/.test-phase-tmp/product-ypbos_je/home/state task unknown --current-gen --source claude-hook --event user-prompt-submit
+
+exit=0 elapsed=0.05s
+$ bin/fm-afk-contract.sh live-workers
+1
+exit=0 elapsed=0.43s
+$ bin/fm-busy-event.sh apply <WORKTREE>/.test-phase-tmp/product-ypbos_je/home/state task idle --current-gen --source claude-hook --event stop
+
+exit=0 elapsed=0.09s
+$ bin/fm-afk-contract.sh live-workers
+0
+exit=0 elapsed=0.67s
+$ bin/fm-busy-event.sh apply <WORKTREE>/.test-phase-tmp/product-ypbos_je/home/state task busy --current-gen --source claude-hook --event user-prompt-submit
+
+exit=0 elapsed=0.06s
+$ bin/fm-afk-contract.sh live-workers
+1
+exit=0 elapsed=0.47s
+$ bin/fm-busy-event.sh apply <WORKTREE>/.test-phase-tmp/product-ypbos_je/home/state task unknown --current-gen --source claude-hook --event user-prompt-submit
+
+exit=0 elapsed=0.07s
+$ bin/fm-afk-contract.sh live-workers
+1
+exit=0 elapsed=0.42s
+$ bin/fm-busy-event.sh apply <WORKTREE>/.test-phase-tmp/product-ypbos_je/home/state task idle --current-gen --source claude-hook --event stop
+
+exit=0 elapsed=0.05s
+$ bin/fm-afk-contract.sh live-workers
+1
+exit=0 elapsed=1.02s
+private tmux teardown exit=0 
+Disposable lab removed; no product children remain
+SCENARIO: missing-home readers preserve absent state
+$ bin/fm-pr-merge.sh task-probe https://github.com/example/unused/pull/1
+error: PR merge refused: state directory is not a real directory at <WORKTREE>/.test-phase-tmp/product-no9p3cq5/absent/state
+exit=1 elapsed=0.56s
+$ bin/fm-fleet-snapshot.sh --json
+exit=0 elapsed=0.58s
+{"schema": "fm-fleet-snapshot.v1", "roots": {"fm_root": "<WORKTREE>", "state": "<WORKTREE>/.test-phase-tmp/product-no9p3cq5/absent/state", "data": "<WORKTREE>/.test-phase-tmp/product-no9p3cq5/absent/data", "config": "<WORKTREE>/.test-phase-tmp/product-no9p3cq5/absent/config", "projects": "<WORKTREE>/.test-phase-tmp/product-no9p3cq5/absent/projects"}, "tasks": [], "backlog_present": false}
+$ bin/fm-afk-contract.sh live-workers
+0
+exit=0 elapsed=0.13s
+PASS: merge refused missing state; snapshot and empty count left the home absent
+SCENARIO: sourced event fold preserves a caller scalar and recognizes unresolved event
+$ bash -c 'set -eu; lines=17; . "$1/bin/fm-afk-contract.sh"; verb=$(printf "needs-decision [key=a]: wait\n  continuation\nresolved [key=b]: answered\n" | fm_afk_contract_latest_non_resolved_verb); test "$lines" = 17; test "$verb" = needs-decision; printf "caller lines=%s; latest verb=%s\n" "$lines" "$verb"' _ <WORKTREE>
+caller lines=17; latest verb=needs-decision
+exit=0 elapsed=0.23s
+$ <WORKTREE>/.test-phase-tmp/product-no9p3cq5/before/bin/fm-afk-contract.sh live-workers
+0
+exit=0 elapsed=0.15s
+BEFORE/AFTER: pre-fix live-workers created state; target returned 0 without creating the home
+$ bin/fm-lab-home.sh create <WORKTREE>/.test-phase-tmp/product-no9p3cq5/home
+<WORKTREE>/.test-phase-tmp/product-no9p3cq5/home
+exit=0 elapsed=0.02s
+$ bin/fm-lab-home.sh tmux-dir <WORKTREE>/.test-phase-tmp/product-no9p3cq5/home
+/tmp/fml.JcLJfF
+exit=0 elapsed=0.06s
+$ tmux -L fm-lab -f /dev/null new-session -d -s primary -x 120 -y 35 -c <WORKTREE> 'bash --noprofile --norc'
+
+exit=0 elapsed=0.04s
+$ tmux -L fm-lab display-message -p -t primary '#{socket_path},#{pid},0'
+/private/tmp/fml.JcLJfF/tmux-501/fm-lab,93785,0
+exit=0 elapsed=0.01s
+$ git init -q -b main <WORKTREE>/.test-phase-tmp/product-no9p3cq5/project
+
+exit=0 elapsed=0.04s
+$ git -C <WORKTREE>/.test-phase-tmp/product-no9p3cq5/project -c user.name=Test -c user.email=test@example.invalid commit -q --allow-empty -m seed
+
+exit=0 elapsed=0.09s
+SCENARIO: active raw worker counts; proven idle waits free capacity; resumed or uncertain activity retains it
+$ tmux -L fm-lab new-window -d -t primary: -n worker -c <WORKTREE> 'sleep 300'
+
+exit=0 elapsed=0.05s
+$ bin/fm-afk-contract.sh live-workers
+1
+exit=0 elapsed=0.99s
+$ bin/fm-busy-event.sh arm <WORKTREE>/.test-phase-tmp/product-no9p3cq5/home/state task --state idle --source claude-hook --event stop
+g1792588489.94459.23414
+exit=0 elapsed=0.05s
+waiting verb=paused
+$ bin/fm-busy-event.sh apply <WORKTREE>/.test-phase-tmp/product-no9p3cq5/home/state task idle --current-gen --source claude-hook --event stop
+
+exit=0 elapsed=0.04s
+$ bin/fm-afk-contract.sh live-workers
+0
+exit=0 elapsed=1.08s
+$ bin/fm-busy-event.sh apply <WORKTREE>/.test-phase-tmp/product-no9p3cq5/home/state task busy --current-gen --source claude-hook --event user-prompt-submit
+
+exit=0 elapsed=0.16s
+$ bin/fm-afk-contract.sh live-workers
+1
+exit=0 elapsed=0.96s
+$ bin/fm-busy-event.sh apply <WORKTREE>/.test-phase-tmp/product-no9p3cq5/home/state task unknown --current-gen --source claude-hook --event user-prompt-submit
+
+exit=0 elapsed=0.05s
+$ bin/fm-afk-contract.sh live-workers
+1
+exit=0 elapsed=0.64s
+waiting verb=needs-decision
+$ bin/fm-busy-event.sh apply <WORKTREE>/.test-phase-tmp/product-no9p3cq5/home/state task idle --current-gen --source claude-hook --event stop
+
+exit=0 elapsed=0.07s
+$ bin/fm-afk-contract.sh live-workers
+0
+exit=0 elapsed=0.74s
+$ bin/fm-busy-event.sh apply <WORKTREE>/.test-phase-tmp/product-no9p3cq5/home/state task busy --current-gen --source claude-hook --event user-prompt-submit
+
+exit=0 elapsed=0.08s
+$ bin/fm-afk-contract.sh live-workers
+1
+exit=0 elapsed=0.70s
+$ bin/fm-busy-event.sh apply <WORKTREE>/.test-phase-tmp/product-no9p3cq5/home/state task unknown --current-gen --source claude-hook --event user-prompt-submit
+
+exit=0 elapsed=0.08s
+$ bin/fm-afk-contract.sh live-workers
+1
+exit=0 elapsed=0.51s
+waiting verb=captain-held
+$ bin/fm-busy-event.sh apply <WORKTREE>/.test-phase-tmp/product-no9p3cq5/home/state task idle --current-gen --source claude-hook --event stop
+
+exit=0 elapsed=0.17s
+$ bin/fm-afk-contract.sh live-workers
+1
+exit=0 elapsed=0.42s
+$ bin/fm-crew-state.sh task
+state: unknown · source: none · no current-state source available
+exit=0 elapsed=0.51s
+$ bash -c '. "$1/bin/fm-backend.sh"; . "$1/bin/fm-busy-lib.sh"; fm_busy_classify_meta "$2/state/task.meta" task "$2/state"' _ <WORKTREE> <WORKTREE>/.test-phase-tmp/product-no9p3cq5/home
+idle claude-hook
+exit=0 elapsed=0.07s
+private tmux teardown exit=0 
+Disposable lab removed; no product children remain
+Fresh attempt: private TMUX is propagated; held-declaration oracle requires it to be the latest event (fm-classify-lib.sh public wait contract). Earlier failed attempts were lab setup/oracle issues and cleaned up.
+SCENARIO: missing-home readers preserve absent state
+$ bin/fm-pr-merge.sh task-probe https://github.com/example/unused/pull/1
+error: PR merge refused: state directory is not a real directory at <WORKTREE>/.test-phase-tmp/product-pvbsbsql/absent/state
+exit=1 elapsed=0.22s
+$ bin/fm-fleet-snapshot.sh --json
+exit=0 elapsed=0.35s
+{"schema": "fm-fleet-snapshot.v1", "roots": {"fm_root": "<WORKTREE>", "state": "<WORKTREE>/.test-phase-tmp/product-pvbsbsql/absent/state", "data": "<WORKTREE>/.test-phase-tmp/product-pvbsbsql/absent/data", "config": "<WORKTREE>/.test-phase-tmp/product-pvbsbsql/absent/config", "projects": "<WORKTREE>/.test-phase-tmp/product-pvbsbsql/absent/projects"}, "tasks": [], "backlog_present": false}
+$ bin/fm-afk-contract.sh live-workers
+0
+exit=0 elapsed=0.07s
+PASS: merge refused missing state; snapshot and empty count left the home absent
+SCENARIO: sourced event fold preserves a caller scalar and recognizes unresolved event
+$ bash -c 'set -eu; lines=17; . "$1/bin/fm-afk-contract.sh"; verb=$(printf "needs-decision [key=a]: wait\n  continuation\nresolved [key=b]: answered\n" | fm_afk_contract_latest_non_resolved_verb); test "$lines" = 17; test "$verb" = needs-decision; printf "caller lines=%s; latest verb=%s\n" "$lines" "$verb"' _ <WORKTREE>
+caller lines=17; latest verb=needs-decision
+exit=0 elapsed=0.12s
+$ <WORKTREE>/.test-phase-tmp/product-pvbsbsql/before/bin/fm-afk-contract.sh live-workers
+0
+exit=0 elapsed=0.15s
+BEFORE/AFTER: pre-fix live-workers created state; target returned 0 without creating the home
+$ bin/fm-lab-home.sh create <WORKTREE>/.test-phase-tmp/product-pvbsbsql/home
+<WORKTREE>/.test-phase-tmp/product-pvbsbsql/home
+exit=0 elapsed=0.06s
+$ bin/fm-lab-home.sh tmux-dir <WORKTREE>/.test-phase-tmp/product-pvbsbsql/home
+/tmp/fml.NpZ0RR
+exit=0 elapsed=0.04s
+$ tmux -L fm-lab -f /dev/null new-session -d -s primary -x 120 -y 35 -c <WORKTREE> 'bash --noprofile --norc'
+
+exit=0 elapsed=0.03s
+$ tmux -L fm-lab display-message -p -t primary '#{socket_path},#{pid},0'
+/private/tmp/fml.NpZ0RR/tmux-501/fm-lab,17822,0
+exit=0 elapsed=0.01s
+$ git init -q -b main <WORKTREE>/.test-phase-tmp/product-pvbsbsql/project
+
+exit=0 elapsed=0.04s
+$ git -C <WORKTREE>/.test-phase-tmp/product-pvbsbsql/project -c user.name=Test -c user.email=test@example.invalid commit -q --allow-empty -m seed
+
+exit=0 elapsed=0.03s
+SCENARIO: active raw worker counts; proven idle waits free capacity; resumed or uncertain activity retains it
+$ tmux -L fm-lab new-window -d -t primary: -n worker -c <WORKTREE> 'sleep 300'
+
+exit=0 elapsed=0.01s
+$ bin/fm-afk-contract.sh live-workers
+1
+exit=0 elapsed=0.50s
+$ bin/fm-busy-event.sh arm <WORKTREE>/.test-phase-tmp/product-pvbsbsql/home/state task --state idle --source claude-hook --event stop
+g1792588527.18294.8405
+exit=0 elapsed=0.08s
+waiting verb=paused
+$ bin/fm-busy-event.sh apply <WORKTREE>/.test-phase-tmp/product-pvbsbsql/home/state task idle --current-gen --source claude-hook --event stop
+
+exit=0 elapsed=0.07s
+$ bin/fm-afk-contract.sh live-workers
+0
+exit=0 elapsed=0.80s
+$ bin/fm-busy-event.sh apply <WORKTREE>/.test-phase-tmp/product-pvbsbsql/home/state task busy --current-gen --source claude-hook --event user-prompt-submit
+
+exit=0 elapsed=0.05s
+$ bin/fm-afk-contract.sh live-workers
+1
+exit=0 elapsed=0.55s
+$ bin/fm-busy-event.sh apply <WORKTREE>/.test-phase-tmp/product-pvbsbsql/home/state task unknown --current-gen --source claude-hook --event user-prompt-submit
+
+exit=0 elapsed=0.08s
+$ bin/fm-afk-contract.sh live-workers
+1
+exit=0 elapsed=0.43s
+waiting verb=needs-decision
+$ bin/fm-busy-event.sh apply <WORKTREE>/.test-phase-tmp/product-pvbsbsql/home/state task idle --current-gen --source claude-hook --event stop
+
+exit=0 elapsed=0.04s
+$ bin/fm-afk-contract.sh live-workers
+0
+exit=0 elapsed=0.55s
+$ bin/fm-busy-event.sh apply <WORKTREE>/.test-phase-tmp/product-pvbsbsql/home/state task busy --current-gen --source claude-hook --event user-prompt-submit
+
+exit=0 elapsed=0.08s
+$ bin/fm-afk-contract.sh live-workers
+1
+exit=0 elapsed=0.56s
+$ bin/fm-busy-event.sh apply <WORKTREE>/.test-phase-tmp/product-pvbsbsql/home/state task unknown --current-gen --source claude-hook --event user-prompt-submit
+
+exit=0 elapsed=0.11s
+$ bin/fm-afk-contract.sh live-workers
+1
+exit=0 elapsed=0.40s
+waiting verb=captain-held
+$ bin/fm-busy-event.sh apply <WORKTREE>/.test-phase-tmp/product-pvbsbsql/home/state task idle --current-gen --source claude-hook --event stop
+
+exit=0 elapsed=0.06s
+$ bin/fm-afk-contract.sh live-workers
+0
+exit=0 elapsed=0.52s
+$ bin/fm-busy-event.sh apply <WORKTREE>/.test-phase-tmp/product-pvbsbsql/home/state task busy --current-gen --source claude-hook --event user-prompt-submit
+
+exit=0 elapsed=0.13s
+$ bin/fm-afk-contract.sh live-workers
+1
+exit=0 elapsed=0.44s
+$ bin/fm-busy-event.sh apply <WORKTREE>/.test-phase-tmp/product-pvbsbsql/home/state task unknown --current-gen --source claude-hook --event user-prompt-submit
+
+exit=0 elapsed=0.04s
+$ bin/fm-afk-contract.sh live-workers
+1
+exit=0 elapsed=0.44s
+$ bin/fm-busy-event.sh apply <WORKTREE>/.test-phase-tmp/product-pvbsbsql/home/state task idle --current-gen --source claude-hook --event stop
+
+exit=0 elapsed=0.04s
+$ bin/fm-afk-contract.sh live-workers
+1
+exit=0 elapsed=0.35s
+PASS: all three waits require proven idle and a current waiting event
+SCENARIO: away cap rejects fresh work and return brief uses the same count
+$ bin/fm-afk-contract.sh enter --spend 1 --words 'Run no new work above one worker.'
+Away posture recorded at 2026-10-21T13:15:33Z: hold-for-return only. No phone channel is configured; anything that needs you waits for your return. Your away instructions are recorded verbatim; the away session will carry them out where it can, and anything it is unsure of, or that needs you, waits for your return. Destructive, irreversible, and security-sensitive actions are never pre-authorizable, whatever the words say. Expected return: not given. Spend cap: 1 concurrent workers.
 Away posture (recorded):
-  entered: 2026-10-13T19:38:57Z
+  entered: 2026-10-21T13:15:33Z
   expected return: not given
   spend cap: 1 concurrent workers
   reach: hold-for-return only. No phone channel is configured; anything that needs you waits for your return.
   your words (verbatim):
-    Disposable live spend-cap validation
-
-$ tmux -L fm-lab -f /dev/null new-session -d -s primary -x 120 -y 40 -c <WORKTREE> 'bash --noprofile --norc'
-exit=0
-
-$ tmux -L fm-lab set-option -g default-command 'bash --noprofile --norc'
-exit=0
-
-$ tmux -L fm-lab display-message -p -t primary '#{socket_path},#{pid},0'
-exit=0
-<WORKTREE>/.l/t/tmux-501/fm-lab,11049,0
-
-All production CLI calls use this lab TMUX socket identity: <WORKTREE>/.l/t/tmux-501/fm-lab,11049,0
-$ bash bin/fm-busy-event.sh arm <WORKTREE>/.l/state task --state unknown --source claude-hook --event lab-start
-exit=0
-g1791920338.11095.4180
-
-$ tmux -L fm-lab new-window -d -n worker -c <WORKTREE>/.l/worker 'exec 3<> <WORKTREE>/.l/input; claude -p --input-format stream-json --output-format stream-json --verbose --no-session-persistence --setting-sources project,local --settings <WORKTREE>/.l/settings.json --strict-mcp-config --mcp-config '"'"'{"mcpServers":{}}'"'"' --tools '"'"''"'"' <&3'
-exit=0
-
-$ tmux -L fm-lab set-window-option -t primary:worker automatic-rename off
-exit=0
-
-Actual Claude stream request: {"type": "user", "message": {"role": "user", "content": "Reply exactly SPEND_LAB_READY. Do not use tools or read any file."}}
-$ tmux -L fm-lab capture-pane -p -t primary:worker -S -100
-exit=0
-{"type":"system","subtype":"init","cwd":"<WORKTREE>/.l/
-worker","session_id":"20f0d644-b823-45eb-904c-b4db916b5349","tools":[],"mcp_servers":[],"model":"claude-opus-5-5","permi
-ssionMode":"default","slash_commands":["deep-research","design","design-sync","dataviz","update-config","verify","debug"
-,"code-review","simplify","batch","fewer-permission-prompts","doctor","loop","schedule","claude-api","workflow-authoring
-","run","run-skill-generator","advisor","agents","auto-mode-setup","autocompact","clear","color","compact","config","out
-put-style","context","effort","fast","focus","heapdump","init","mcp","import","model","__remote-workflow","workflow-laun
-ch-exec","reload-plugins","reload-skills","rename","ultrareview","security-review","usage-credits","extra-usage","usage"
-,"insights","recap","skill-doctor","goal","design-consent","design-revoke","list-agents","team-onboarding"],"terminal_sl
-ash_commands":["doctor","color","focus","reload-plugins"],"apiKeySource":"none","claude_code_version":"2.1.285","output_
-style":"default","agents":["claude","Explore","general-purpose","Plan","statusline-setup"],"skills":["deep-research","de
-sign","design-sync","dataviz","update-config","verify","debug","code-review","simplify","batch","fewer-permission-prompt
-s","doctor","loop","schedule","claude-api","workflow-authoring","run","run-skill-generator"],"plugins":[{"name":"cc-plug
-in-agents-md","path":"builtin","source":"cc-plugin-agents-md@builtin"},{"name":"cc-plugin-telemetry","path":"builtin","s
-ource":"cc-plugin-telemetry@builtin"}],"capabilities":["interrupt_receipt_v1","interrupt_cancel_queued_v1","msg_lifecycl
-e_v1","mcp_read_resource_v1","mcp_tool_ui_meta_v1"],"analytics_disabled":false,"product_feedback_disabled":false,"uuid":
-"7c405c87-4cee-4809-84fc-46dc1604b442","memory_paths":{"auto":"<OPERATOR_HOME>/.claude/projects/-OPERATOR_HOME--no-mistakes-w
-orktrees-a00b7db52042-01M4VBZATMR5NT4HZ89RA5H00N--l-worker/memory/"},"messaging_socket_path":"/tmp/cc-socks/11136.sock",
-"fast_mode_state":"off","fast_mode_disabled_reason":"sdk_opt_in_required","per_turn_effort_active":true,"view_mode":"def
-ault"}
-{"type":"assistant","message":{"model":"claude-opus-5-5","id":"msg_011CfzoVbeKTntqq4ksKiUFo","type":"message","role":"as
-sistant","content":[{"type":"text","text":"SPEND_LAB_READY"}],"container":null,"stop_reason":null,"stop_sequence":null,"
-stop_details":null,"usage":{"input_tokens":2,"cache_creation_input_tokens":2374,"cache_read_input_tokens":535,"cache_cre
-ation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":2374},"output_tokens":8,"service_tier":"standard","inf
-erence_geo":"global"},"input_transformations":[],"diagnostics":null,"context_management":null},"parent_tool_use_id":null
-,"session_id":"20f0d644-b823-45eb-904c-b4db916b5349","uuid":"16619225-5ebb-4b06-9057-95f7c34afaca","timestamp":"2026-10-
-13T19:39:00.626Z","request_id":"req_011CfzoVbG1FiGadBfWdtSxf"}
-{"type":"rate_limit_event","rate_limit_info":{"status":"allowed","resetsAt":1791925200,"rateLimitType":"five_hour","over
-ageStatus":"rejected","overageDisabledReason":"out_of_credits","isUsingOverage":false,"unifiedWindows":{"five_hour":{"ut
-ilization":0.01,"resetsAt":1791925200},"seven_day":{"utilization":0.14,"resetsAt":1792112400}}},"uuid":"4096d698-28e8-40
-37-8365-c328b05b1251","session_id":"20f0d644-b823-45eb-904c-b4db916b5349"}
-{"duration_api_ms":1762,"stop_reason":"end_turn","session_id":"20f0d644-b823-45eb-904c-b4db916b5349","total_cost_usd":0.
-019367,"usage":{"input_tokens":2,"cache_creation_input_tokens":2374,"cache_read_input_tokens":535,"output_tokens":13,"ou
-tput_tokens_details":{"thinking_tokens":0},"server_tool_use":{"web_search_requests":0,"web_fetch_requests":0},"service_t
-ier":"standard","cache_creation":{"ephemeral_1h_input_tokens":2374,"ephemeral_5m_input_tokens":0},"inference_geo":"globa
-l","iterations":[{"input_tokens":2,"output_tokens":13,"cache_read_input_tokens":535,"cache_creation_input_tokens":2374,"
-cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":2374},"type":"message"}],"speed":"standard","
-fallback_credit":null},"modelUsage":{"claude-opus-5-5":{"inputTokens":2,"outputTokens":13,"cacheReadInputTokens":535,"ca
-cheCreationInputTokens":2374,"webSearchRequests":0,"costUSD":0.019367,"contextWindow":1000000,"maxOutputTokens":128000,"
-thinkingTokens":0,"canonicalModel":"claude-opus-5-5","provider":"firstParty","costBasis":"list"}},"permission_denials":[
-],"terminal_reason":"completed","fast_mode_state":"off","fast_mode_disabled_reason":"sdk_opt_in_required","subagent_stat
-s":{"spawned":0,"requested":{"background":0,"foreground":0,"unset":0},"started_in_background":0,"max_depth":0,"spawned_b
-y_subagents":0,"completed":0,"failed":0,"killed":{"parent":0,"user":0,"system":0},"refused":{"depth_limit":0,"concurrenc
-y_limit":0,"budget":0},"by_type":{}},"is_error":false,"num_turns":1,"subtype":"success","api_error_status":null,"result"
-:"SPEND_LAB_READY","ttft_ms":1844,"type":"result","duration_ms":1890,"uuid":"137ea742-b18e-4152-94cf-1bc0fd65139b","ttft
-_stream_ms":1802,"time_to_request_ms":98,"first_content_frame_ms":1802,"queued_turn_count":0,"result_index":0}
-
-
-Persisted native-hook record:
-v1 gen=g1791920338.11095.4180 seq=3 state=idle source=claude-hook event=stop ts=1791920340
-
-$ bash -c '. bin/fm-backend.sh; . bin/fm-busy-lib.sh; fm_busy_classify_meta "$1" task "$2"' _ <WORKTREE>/.l/state/task.meta <WORKTREE>/.l/state
-exit=0
-idle claude-hook
-task.status: paused: waiting for an answer
-$ bash bin/fm-crew-state.sh task
-exit=0
-state: paused · source: status-log · waiting for an answer
-
-SCENARIO: Proven idle paused worker frees away capacity
-$ bash bin/fm-afk-spend-count.sh <WORKTREE>/.l/state
-exit=0
-0
-
-$ bash bin/fm-spawn.sh fresh <WORKTREE>/.l/no-project --mode no-mistakes --yolo off
-exit=1
-fm-gate-refuse: gate agent lifecycle permitted only against lab home <WORKTREE>/.l
+    Run no new work above one worker.
+exit=0 elapsed=0.59s
+$ bin/fm-spawn.sh blocked-fresh <WORKTREE>/.test-phase-tmp/product-pvbsbsql/absent-project --mode no-mistakes --yolo off
+fm-gate-refuse: gate agent lifecycle permitted only against lab home <WORKTREE>/.test-phase-tmp/product-pvbsbsql/home
 ●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ●  WATCHER DOWN - SUPERVISION IS OFF
 ●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
@@ -116,125 +367,266 @@ fm-gate-refuse: gate agent lifecycle permitted only against lab home <WORKTREE>/
 ●  This is a supervision warning only; the guarded operation WILL still run.
 ●  repair missing watcher supervision with a foreground checkpoint: bin/fm-watch-checkpoint.sh --seconds 180.
 ●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-bin/fm-spawn.sh: line 3217: cd: <WORKTREE>/.l/no-project: No such file or directory
-
-Fresh admission passed spend cap and reached independent missing-project check
-task.status: captain-held: waiting for an answer
-$ bash bin/fm-crew-state.sh task
-exit=0
-state: unknown · source: none · no current-state source available
-
-SCENARIO: Proven idle captain-held worker frees away capacity
-$ bash bin/fm-afk-spend-count.sh <WORKTREE>/.l/state
-exit=0
-0
-
-$ bash bin/fm-spawn.sh fresh <WORKTREE>/.l/no-project --mode no-mistakes --yolo off
-exit=1
-fm-gate-refuse: gate agent lifecycle permitted only against lab home <WORKTREE>/.l
+error: spawn refused - the away-posture record caps concurrent workers at 1 and 1 ordinary task(s) are live in this home; task blocked-fresh stays queued for the captain's return or for a worker to finish (spend cap: bin/fm-afk-contract.sh)
+exit=1 elapsed=1.83s
+$ bin/fm-afk-return.sh begin
+fm-afk-launch: away-posture record archived at <WORKTREE>/.test-phase-tmp/product-pvbsbsql/home/state/afk-contracts/1792588533.afk-contract
+fm-afk-launch: away mode stopped; no daemon terminal was running, .afk cleared, and the posture record archived
 WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
-bin/fm-spawn.sh: line 3217: cd: <WORKTREE>/.l/no-project: No such file or directory
-
-Fresh admission passed spend cap and reached independent missing-project check
-task.status: needs-decision [key=answer]: waiting for an answer
-$ bash bin/fm-crew-state.sh task
-exit=0
-state: parked · source: status-log · waiting for an answer
-
-SCENARIO: Proven idle needs-decision [key=answer] worker frees away capacity
-$ bash bin/fm-afk-spend-count.sh <WORKTREE>/.l/state
-exit=0
-0
-
-$ bash bin/fm-spawn.sh fresh <WORKTREE>/.l/no-project --mode no-mistakes --yolo off
-exit=1
-fm-gate-refuse: gate agent lifecycle permitted only against lab home <WORKTREE>/.l
-WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
-bin/fm-spawn.sh: line 3217: cd: <WORKTREE>/.l/no-project: No such file or directory
-
-Fresh admission passed spend cap and reached independent missing-project check
-task.status: paused [key=answer]: waiting
-working: resumed without resolving answer
-SCENARIO: New working event overrides an older unresolved wait
-$ bash bin/fm-afk-spend-count.sh <WORKTREE>/.l/state
-exit=0
-1
-
-$ bash bin/fm-spawn.sh fresh <WORKTREE>/.l/no-project --mode no-mistakes --yolo off
-exit=1
-fm-gate-refuse: gate agent lifecycle permitted only against lab home <WORKTREE>/.l
-WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
-error: spawn refused - the away-posture record caps concurrent workers at 1 and 1 ordinary task(s) are live in this home; task fresh stays queued for the captain's return or for a worker to finish (spend cap: bin/fm-afk-contract.sh)
-
-Fresh admission refused at spend cap
-task.status: needs-decision [key=answer]: waiting
-resolved [key=answer]: answered
-SCENARIO: Resolved wait restores capacity reservation
-$ bash bin/fm-afk-spend-count.sh <WORKTREE>/.l/state
-exit=0
-1
-
-task.status: done: report complete
-SCENARIO: An idle completed scout frees capacity
-$ bash bin/fm-afk-spend-count.sh <WORKTREE>/.l/state
-exit=0
-0
-
-Actual Claude stream request: {"type": "user", "message": {"role": "user", "content": "Write a detailed explanation of the numbers one through one hundred, then conclude SPEND_LAB_RESUMED. Do not use tools."}}
-Resumed native-hook activity: busy claude-hook
-SCENARIO: A resumed busy worker with stale done remains counted
-$ bash bin/fm-afk-spend-count.sh <WORKTREE>/.l/state
-exit=0
-1
-
-$ bash bin/fm-spawn.sh fresh <WORKTREE>/.l/no-project --mode no-mistakes --yolo off
-exit=1
-fm-gate-refuse: gate agent lifecycle permitted only against lab home <WORKTREE>/.l
-WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
-error: spawn refused - the away-posture record caps concurrent workers at 1 and 1 ordinary task(s) are live in this home; task fresh stays queued for the captain's return or for a worker to finish (spend cap: bin/fm-afk-contract.sh)
-
-Fresh admission refused at spend cap
-SCENARIO: A resumed worker with unreadable activity remains counted
-$ bash bin/fm-afk-spend-count.sh <WORKTREE>/.l/state
-exit=0
-1
-
-$ tmux -L fm-lab rename-window -t primary:worker relocated
-exit=0
-
-SCENARIO: A renamed real worker is conservatively counted despite old-target absence
-$ bash bin/fm-afk-spend-count.sh <WORKTREE>/.l/state
-exit=0
-1
-
-$ bash bin/fm-spawn.sh fresh <WORKTREE>/.l/no-project --mode no-mistakes --yolo off
-exit=1
-fm-gate-refuse: gate agent lifecycle permitted only against lab home <WORKTREE>/.l
-WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
-error: spawn refused - the away-posture record caps concurrent workers at 1 and 1 ordinary task(s) are live in this home; task fresh stays queued for the captain's return or for a worker to finish (spend cap: bin/fm-afk-contract.sh)
-
-Fresh admission refused at spend cap
-$ bash -c '. bin/fm-backend.sh; fm_backend_kill_confirmed tmux primary:worker'
-exit=1
-
-$ tmux -L fm-lab display-message -p -t primary:relocated '#{pane_current_command}'
-exit=0
-claude
-
-Confirmed close refused for absent old target; relocated endpoint survived
-SCENARIO: Cleanup recovery reservation survives an unproven close
-$ bash bin/fm-afk-spend-count.sh <WORKTREE>/.l/state
-exit=0
-1
-
-$ bash bin/fm-afk-return.sh check
-exit=0
-=== Return brief (away 2026-10-13T19:38:57Z -> 2026-10-13T19:39:08Z, 11s) ===
+=== Return brief (away 2026-10-21T13:15:33Z -> 2026-10-21T13:15:39Z, 6s) ===
 Supervisor health:
   - GAP: the watcher beat was 999999s old at return (grace 300s)
 Your instructions:
   your words at entry:
-    Disposable live spend-cap validation
+    Run no new work above one worker.
+  the away session took no action under them.
+Waiting on you:
+  - task [key=a] needs your decision: waiting
+Tried and failed, or could not be fixed:
+  (nothing)
+Landed, cleanup due:
+  (nothing)
+Handled while away:
+  0 outcome(s) handled by the away session (0 routine, 0 escalated above)
+  (no routine outcomes recorded in the store for this window)
+Cost: 0 supervision outcome(s) recorded (0 routine, 0 captain); 1 task(s) live at return.
+catch-up health: GAP: the watcher beat was 999999s old at return (grace 300s)
+catch-up wake: OPEN DECISIONS (still open, folded from the durable status logs - not just the latest line):
+catch-up wake: task [key=a] needs-decision: waiting
+catch-up wake: OPEN DECISIONS: close one by answering it: bin/fm-send.sh <task> --resolve-key <key> '<answer>'
+fm-afk-return: catch-up clear; ordinary captain work may proceed
+exit=0 elapsed=6.44s
+PASS: count=1 blocks fresh admission before project/endpoint creation and return reports one live task
+SCENARIO: renamed worker survives an unacknowledged close and keeps its reservation
+$ tmux -L fm-lab rename-window -t primary:worker relocated
+
+exit=0 elapsed=0.01s
+$ bash -c '. "$1/bin/fm-backend.sh"; fm_backend_kill_confirmed tmux primary:worker' _ <WORKTREE>
+
+exit=1 elapsed=0.05s
+$ tmux -L fm-lab display-message -p -t primary:relocated '#{pane_current_command}'
+sleep
+exit=0 elapsed=0.01s
+$ bin/fm-afk-contract.sh live-workers
+1
+exit=0 elapsed=0.53s
+$ tmux -L fm-lab kill-window -t primary:relocated
+
+exit=0 elapsed=0.02s
+$ bin/fm-afk-contract.sh live-workers
+1
+exit=0 elapsed=0.24s
+PASS: missing recorded name is not a close acknowledgement or proof of death
+SCENARIO: positively exited worker frees capacity; unknown backend reserves capacity; secondmates are exempt
+$ tmux -L fm-lab new-window -d -t primary: -n exited 'bash --noprofile --norc'
+
+exit=0 elapsed=0.02s
+$ bin/fm-afk-contract.sh live-workers
+0
+exit=0 elapsed=0.42s
+$ bin/fm-afk-contract.sh live-workers
+1
+exit=0 elapsed=0.20s
+$ bin/fm-afk-contract.sh live-workers
+0
+exit=0 elapsed=0.05s
+PASS: positive shell endpoint frees room, unknown backend counts, secondmate does not count
+SCENARIO: recent launch and live metadata lock reserve capacity
+$ bin/fm-afk-contract.sh live-workers
+1
+exit=0 elapsed=0.12s
+$ bin/fm-afk-contract.sh live-workers
+1
+exit=0 elapsed=0.18s
+PASS: a fresh metadata-only launch reserves its slot
+COMPLETE: all executed product checks passed
+private tmux teardown exit=0 
+Disposable lab removed; no product children remain
+Fresh attempt: private TMUX is propagated; held-declaration oracle requires it to be the latest event (fm-classify-lib.sh public wait contract). Earlier failed attempts were lab setup/oracle issues and cleaned up.
+SCENARIO: missing-home readers preserve absent state
+$ bin/fm-pr-merge.sh task-probe https://github.com/example/unused/pull/1
+error: PR merge refused: state directory is not a real directory at <WORKTREE>/.test-phase-tmp/product-779zz0w3/absent/state
+exit=1 elapsed=0.25s
+$ bin/fm-fleet-snapshot.sh --json
+exit=0 elapsed=0.33s
+{"schema": "fm-fleet-snapshot.v1", "roots": {"fm_root": "<WORKTREE>", "state": "<WORKTREE>/.test-phase-tmp/product-779zz0w3/absent/state", "data": "<WORKTREE>/.test-phase-tmp/product-779zz0w3/absent/data", "config": "<WORKTREE>/.test-phase-tmp/product-779zz0w3/absent/config", "projects": "<WORKTREE>/.test-phase-tmp/product-779zz0w3/absent/projects"}, "tasks": [], "backlog_present": false}
+$ bin/fm-afk-contract.sh live-workers
+0
+exit=0 elapsed=0.08s
+PASS: merge refused missing state; snapshot and empty count left the home absent
+SCENARIO: sourced event fold preserves a caller scalar and recognizes unresolved event
+$ bash -c 'set -eu; lines=17; . "$1/bin/fm-afk-contract.sh"; verb=$(printf "needs-decision [key=a]: wait\n  continuation\nresolved [key=b]: answered\n" | fm_afk_contract_latest_non_resolved_verb); test "$lines" = 17; test "$verb" = needs-decision; printf "caller lines=%s; latest verb=%s\n" "$lines" "$verb"' _ <WORKTREE>
+caller lines=17; latest verb=needs-decision
+exit=0 elapsed=0.08s
+$ <WORKTREE>/.test-phase-tmp/product-779zz0w3/before/bin/fm-afk-contract.sh live-workers
+0
+exit=0 elapsed=0.76s
+BEFORE/AFTER: pre-fix live-workers created state; target returned 0 without creating the home
+$ bin/fm-lab-home.sh create <WORKTREE>/.test-phase-tmp/product-779zz0w3/home
+<WORKTREE>/.test-phase-tmp/product-779zz0w3/home
+exit=0 elapsed=0.06s
+$ bin/fm-lab-home.sh tmux-dir <WORKTREE>/.test-phase-tmp/product-779zz0w3/home
+/tmp/fml.VJfz7G
+exit=0 elapsed=0.14s
+$ tmux -L fm-lab -f /dev/null new-session -d -s primary -x 120 -y 35 -c <WORKTREE> 'bash --noprofile --norc'
+
+exit=0 elapsed=0.06s
+$ tmux -L fm-lab display-message -p -t primary '#{socket_path},#{pid},0'
+/private/tmp/fml.VJfz7G/tmux-501/fm-lab,72667,0
+exit=0 elapsed=0.02s
+$ git init -q -b main <WORKTREE>/.test-phase-tmp/product-779zz0w3/project
+
+exit=0 elapsed=0.04s
+$ git -C <WORKTREE>/.test-phase-tmp/product-779zz0w3/project -c user.name=Test -c user.email=test@example.invalid commit -q --allow-empty -m seed
+
+exit=0 elapsed=0.04s
+SCENARIO: active raw worker counts; proven idle waits free capacity; resumed or uncertain activity retains it
+$ tmux -L fm-lab new-window -d -t primary: -n worker -c <WORKTREE> 'sleep 300'
+
+exit=0 elapsed=0.01s
+$ bin/fm-afk-contract.sh live-workers
+1
+exit=0 elapsed=0.27s
+$ bin/fm-busy-event.sh arm <WORKTREE>/.test-phase-tmp/product-779zz0w3/home/state task --state idle --source claude-hook --event stop
+g1792588906.73119.3891
+exit=0 elapsed=0.05s
+waiting verb=paused
+$ bin/fm-busy-event.sh apply <WORKTREE>/.test-phase-tmp/product-779zz0w3/home/state task idle --current-gen --source claude-hook --event stop
+
+exit=0 elapsed=0.04s
+$ bin/fm-afk-contract.sh live-workers
+0
+exit=0 elapsed=0.60s
+$ bin/fm-busy-event.sh apply <WORKTREE>/.test-phase-tmp/product-779zz0w3/home/state task busy --current-gen --source claude-hook --event user-prompt-submit
+
+exit=0 elapsed=0.05s
+$ bin/fm-afk-contract.sh live-workers
+1
+exit=0 elapsed=0.50s
+$ bin/fm-busy-event.sh apply <WORKTREE>/.test-phase-tmp/product-779zz0w3/home/state task unknown --current-gen --source claude-hook --event user-prompt-submit
+
+exit=0 elapsed=0.06s
+$ bin/fm-afk-contract.sh live-workers
+1
+exit=0 elapsed=0.55s
+waiting verb=needs-decision
+$ bin/fm-busy-event.sh apply <WORKTREE>/.test-phase-tmp/product-779zz0w3/home/state task idle --current-gen --source claude-hook --event stop
+
+exit=0 elapsed=0.04s
+$ bin/fm-afk-contract.sh live-workers
+0
+exit=0 elapsed=0.48s
+$ bin/fm-busy-event.sh apply <WORKTREE>/.test-phase-tmp/product-779zz0w3/home/state task busy --current-gen --source claude-hook --event user-prompt-submit
+
+exit=0 elapsed=0.08s
+$ bin/fm-afk-contract.sh live-workers
+1
+exit=0 elapsed=0.35s
+$ bin/fm-busy-event.sh apply <WORKTREE>/.test-phase-tmp/product-779zz0w3/home/state task unknown --current-gen --source claude-hook --event user-prompt-submit
+
+exit=0 elapsed=0.04s
+$ bin/fm-afk-contract.sh live-workers
+1
+exit=0 elapsed=1.18s
+waiting verb=captain-held
+$ bin/fm-busy-event.sh apply <WORKTREE>/.test-phase-tmp/product-779zz0w3/home/state task idle --current-gen --source claude-hook --event stop
+
+exit=0 elapsed=0.03s
+$ bin/fm-afk-contract.sh live-workers
+0
+exit=0 elapsed=0.43s
+$ bin/fm-busy-event.sh apply <WORKTREE>/.test-phase-tmp/product-779zz0w3/home/state task busy --current-gen --source claude-hook --event user-prompt-submit
+
+exit=0 elapsed=0.05s
+$ bin/fm-afk-contract.sh live-workers
+1
+exit=0 elapsed=0.25s
+$ bin/fm-busy-event.sh apply <WORKTREE>/.test-phase-tmp/product-779zz0w3/home/state task unknown --current-gen --source claude-hook --event user-prompt-submit
+
+exit=0 elapsed=0.11s
+$ bin/fm-afk-contract.sh live-workers
+1
+exit=0 elapsed=0.56s
+$ bin/fm-busy-event.sh apply <WORKTREE>/.test-phase-tmp/product-779zz0w3/home/state task idle --current-gen --source claude-hook --event stop
+
+exit=0 elapsed=0.11s
+$ bin/fm-afk-contract.sh live-workers
+1
+exit=0 elapsed=0.30s
+PASS: all three waits require proven idle and a current waiting event
+SCENARIO: accepted local-only ship and scout deliveries free capacity only with proven idle activity
+$ git clone -q <WORKTREE>/.test-phase-tmp/product-779zz0w3/project <WORKTREE>/.test-phase-tmp/product-779zz0w3/accepted-project
+
+exit=0 elapsed=0.14s
+$ bin/fm-busy-event.sh apply <WORKTREE>/.test-phase-tmp/product-779zz0w3/home/state task idle --current-gen --source claude-hook --event stop
+
+exit=0 elapsed=0.05s
+$ bin/fm-afk-contract.sh live-workers
+0
+exit=0 elapsed=1.07s
+$ bin/fm-busy-event.sh apply <WORKTREE>/.test-phase-tmp/product-779zz0w3/home/state task busy --current-gen --source claude-hook --event user-prompt-submit
+
+exit=0 elapsed=0.06s
+$ bin/fm-afk-contract.sh live-workers
+1
+exit=0 elapsed=0.39s
+$ bin/fm-busy-event.sh apply <WORKTREE>/.test-phase-tmp/product-779zz0w3/home/state task unknown --current-gen --source claude-hook --event user-prompt-submit
+
+exit=0 elapsed=0.05s
+$ bin/fm-afk-contract.sh live-workers
+1
+exit=0 elapsed=0.25s
+$ bin/fm-busy-event.sh apply <WORKTREE>/.test-phase-tmp/product-779zz0w3/home/state task idle --current-gen --source claude-hook --event stop
+
+exit=0 elapsed=0.03s
+$ bin/fm-afk-contract.sh live-workers
+0
+exit=0 elapsed=1.01s
+$ bin/fm-busy-event.sh apply <WORKTREE>/.test-phase-tmp/product-779zz0w3/home/state task busy --current-gen --source claude-hook --event user-prompt-submit
+
+exit=0 elapsed=0.10s
+$ bin/fm-afk-contract.sh live-workers
+1
+exit=0 elapsed=0.40s
+$ bin/fm-busy-event.sh apply <WORKTREE>/.test-phase-tmp/product-779zz0w3/home/state task unknown --current-gen --source claude-hook --event user-prompt-submit
+
+exit=0 elapsed=0.05s
+$ bin/fm-afk-contract.sh live-workers
+1
+exit=0 elapsed=0.22s
+PASS: actual local Git reachability and idle activity allow delivery exclusion; busy/unknown retains capacity
+SCENARIO: away cap rejects fresh work and return brief uses the same count
+$ bin/fm-afk-contract.sh enter --spend 1 --words 'Run no new work above one worker.'
+Away posture recorded at 2026-10-21T13:21:55Z: hold-for-return only. No phone channel is configured; anything that needs you waits for your return. Your away instructions are recorded verbatim; the away session will carry them out where it can, and anything it is unsure of, or that needs you, waits for your return. Destructive, irreversible, and security-sensitive actions are never pre-authorizable, whatever the words say. Expected return: not given. Spend cap: 1 concurrent workers.
+Away posture (recorded):
+  entered: 2026-10-21T13:21:55Z
+  expected return: not given
+  spend cap: 1 concurrent workers
+  reach: hold-for-return only. No phone channel is configured; anything that needs you waits for your return.
+  your words (verbatim):
+    Run no new work above one worker.
+exit=0 elapsed=0.49s
+$ bin/fm-spawn.sh blocked-fresh <WORKTREE>/.test-phase-tmp/product-779zz0w3/absent-project --mode no-mistakes --yolo off
+fm-gate-refuse: gate agent lifecycle permitted only against lab home <WORKTREE>/.test-phase-tmp/product-779zz0w3/home
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  repair missing watcher supervision with a foreground checkpoint: bin/fm-watch-checkpoint.sh --seconds 180.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+error: spawn refused - the away-posture record caps concurrent workers at 1 and 1 ordinary task(s) are live in this home; task blocked-fresh stays queued for the captain's return or for a worker to finish (spend cap: bin/fm-afk-contract.sh)
+exit=1 elapsed=1.91s
+$ bin/fm-afk-return.sh begin
+fm-afk-launch: away-posture record archived at <WORKTREE>/.test-phase-tmp/product-779zz0w3/home/state/afk-contracts/1792588915.afk-contract
+fm-afk-launch: away mode stopped; no daemon terminal was running, .afk cleared, and the posture record archived
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+=== Return brief (away 2026-10-21T13:21:55Z -> 2026-10-21T13:22:03Z, 8s) ===
+Supervisor health:
+  - GAP: the watcher beat was 999999s old at return (grace 300s)
+Your instructions:
+  your words at entry:
+    Run no new work above one worker.
   the away session took no action under them.
 Waiting on you:
   (nothing)
@@ -247,43 +639,363 @@ Handled while away:
   (no routine outcomes recorded in the store for this window)
 Cost: 0 supervision outcome(s) recorded (0 routine, 0 captain); 1 task(s) live at return.
 catch-up health: GAP: the watcher beat was 999999s old at return (grace 300s)
-catch-up wake: STATUS OUTCOME BACKSTOP (newest captain-facing task event has no covering branch outcome):
-catch-up wake: task done: report complete
 fm-afk-return: catch-up clear; ordinary captain work may proceed
-fm-afk-launch: away-posture record archived at <WORKTREE>/.l/state/afk-contracts/1791920337.afk-contract
+exit=0 elapsed=7.46s
+PASS: count=1 blocks fresh admission before project/endpoint creation and return reports one live task
+SCENARIO: renamed worker survives an unacknowledged close and keeps its reservation
+$ tmux -L fm-lab rename-window -t primary:worker relocated
+
+exit=0 elapsed=0.01s
+$ bash -c '. "$1/bin/fm-backend.sh"; fm_backend_kill_confirmed tmux primary:worker' _ <WORKTREE>
+
+exit=1 elapsed=0.08s
+$ tmux -L fm-lab display-message -p -t primary:relocated '#{pane_current_command}'
+sleep
+exit=0 elapsed=0.01s
+$ bin/fm-afk-contract.sh live-workers
+1
+exit=0 elapsed=0.20s
+$ tmux -L fm-lab kill-window -t primary:relocated
+
+exit=0 elapsed=0.01s
+$ bin/fm-afk-contract.sh live-workers
+1
+exit=0 elapsed=0.35s
+PASS: missing recorded name is not a close acknowledgement or proof of death
+SCENARIO: positively exited worker frees capacity; unknown backend reserves capacity; secondmates are exempt
+$ tmux -L fm-lab new-window -d -t primary: -n exited 'bash --noprofile --norc'
+
+exit=0 elapsed=0.01s
+$ bin/fm-afk-contract.sh live-workers
+0
+exit=0 elapsed=0.48s
+$ bin/fm-afk-contract.sh live-workers
+1
+exit=0 elapsed=0.32s
+$ bin/fm-afk-contract.sh live-workers
+0
+exit=0 elapsed=0.11s
+PASS: positive shell endpoint frees room, unknown backend counts, secondmate does not count
+SCENARIO: recent launch and live metadata lock reserve capacity
+$ bin/fm-afk-contract.sh live-workers
+1
+exit=0 elapsed=0.09s
+$ bin/fm-afk-contract.sh live-workers
+1
+exit=0 elapsed=0.08s
+$ bin/fm-afk-contract.sh live-workers
+0
+exit=0 elapsed=0.33s
+PASS: fresh generation reserves a proven-shell slot until the launch-grace boundary
+$ bin/fm-afk-contract.sh live-workers
+1
+exit=0 elapsed=0.11s
+metadata lock holder exit=0 
+$ bin/fm-afk-contract.sh live-workers
+0
+exit=0 elapsed=0.44s
+PASS: a live metadata lock reserves capacity and releasing it restores the proven-dead count
+COMPLETE: all executed product checks passed
+private tmux teardown exit=0 
+Disposable lab removed; no product children remain
+Fresh attempt: private TMUX is propagated; held-declaration oracle requires it to be the latest event (fm-classify-lib.sh public wait contract). Earlier failed attempts were lab setup/oracle issues and cleaned up.
+SCENARIO: missing-home readers preserve absent state
+$ bin/fm-pr-merge.sh task-probe https://github.com/example/unused/pull/1
+error: PR merge refused: state directory is not a real directory at <WORKTREE>/.test-phase-tmp/product-hkpvefav/absent/state
+exit=1 elapsed=0.22s
+$ bin/fm-fleet-snapshot.sh --json
+exit=0 elapsed=0.28s
+{"schema": "fm-fleet-snapshot.v1", "roots": {"fm_root": "<WORKTREE>", "state": "<WORKTREE>/.test-phase-tmp/product-hkpvefav/absent/state", "data": "<WORKTREE>/.test-phase-tmp/product-hkpvefav/absent/data", "config": "<WORKTREE>/.test-phase-tmp/product-hkpvefav/absent/config", "projects": "<WORKTREE>/.test-phase-tmp/product-hkpvefav/absent/projects"}, "tasks": [], "backlog_present": false}
+$ bin/fm-afk-contract.sh live-workers
+0
+exit=0 elapsed=0.07s
+PASS: merge refused missing state; snapshot and empty count left the home absent
+SCENARIO: sourced event fold preserves a caller scalar and recognizes unresolved event
+$ bash -c 'set -eu; lines=17; . "$1/bin/fm-afk-contract.sh"; verb=$(printf "needs-decision [key=a]: wait\n  continuation\nresolved [key=b]: answered\n" | fm_afk_contract_latest_non_resolved_verb); test "$lines" = 17; test "$verb" = needs-decision; printf "caller lines=%s; latest verb=%s\n" "$lines" "$verb"' _ <WORKTREE>
+caller lines=17; latest verb=needs-decision
+exit=0 elapsed=0.05s
+$ <WORKTREE>/.test-phase-tmp/product-hkpvefav/before/bin/fm-afk-contract.sh live-workers
+0
+exit=0 elapsed=0.12s
+BEFORE/AFTER: pre-fix live-workers created state; target returned 0 without creating the home
+$ <WORKTREE>/.test-phase-tmp/product-hkpvefav/before/bin/fm-pr-merge.sh task-probe https://github.com/example/unused/pull/1
+error: task metadata is unavailable
+exit=1 elapsed=0.26s
+BEFORE/AFTER: fm-pr-merge.sh created missing state with the pre-fix contract; target did not
+$ <WORKTREE>/.test-phase-tmp/product-hkpvefav/before/bin/fm-fleet-snapshot.sh --json
+exit=0 elapsed=0.32s
+BEFORE/AFTER: fm-fleet-snapshot.sh created missing state with the pre-fix contract; target did not
+$ bin/fm-lab-home.sh create <WORKTREE>/.test-phase-tmp/product-hkpvefav/home
+<WORKTREE>/.test-phase-tmp/product-hkpvefav/home
+exit=0 elapsed=0.02s
+$ bin/fm-lab-home.sh tmux-dir <WORKTREE>/.test-phase-tmp/product-hkpvefav/home
+/tmp/fml.mmUadN
+exit=0 elapsed=0.04s
+$ tmux -L fm-lab -f /dev/null new-session -d -s primary -x 120 -y 35 -c <WORKTREE> 'bash --noprofile --norc'
+
+exit=0 elapsed=0.02s
+$ tmux -L fm-lab display-message -p -t primary '#{socket_path},#{pid},0'
+/private/tmp/fml.mmUadN/tmux-501/fm-lab,58421,0
+exit=0 elapsed=0.01s
+$ git init -q -b main <WORKTREE>/.test-phase-tmp/product-hkpvefav/project
+
+exit=0 elapsed=0.02s
+$ git -C <WORKTREE>/.test-phase-tmp/product-hkpvefav/project -c user.name=Test -c user.email=test@example.invalid commit -q --allow-empty -m seed
+
+exit=0 elapsed=0.02s
+SCENARIO: active raw worker counts; proven idle waits free capacity; resumed or uncertain activity retains it
+$ tmux -L fm-lab new-window -d -t primary: -n worker -c <WORKTREE> 'sleep 300'
+
+exit=0 elapsed=0.01s
+$ bin/fm-afk-contract.sh live-workers
+1
+exit=0 elapsed=0.22s
+$ bin/fm-busy-event.sh arm <WORKTREE>/.test-phase-tmp/product-hkpvefav/home/state task --state idle --source claude-hook --event stop
+g1792589015.58734.12136
+exit=0 elapsed=0.03s
+waiting verb=paused
+$ bin/fm-busy-event.sh apply <WORKTREE>/.test-phase-tmp/product-hkpvefav/home/state task idle --current-gen --source claude-hook --event stop
+
+exit=0 elapsed=0.05s
+$ bin/fm-afk-contract.sh live-workers
+0
+exit=0 elapsed=0.43s
+$ bin/fm-busy-event.sh apply <WORKTREE>/.test-phase-tmp/product-hkpvefav/home/state task busy --current-gen --source claude-hook --event user-prompt-submit
+
+exit=0 elapsed=0.16s
+$ bin/fm-afk-contract.sh live-workers
+1
+exit=0 elapsed=0.35s
+$ bin/fm-busy-event.sh apply <WORKTREE>/.test-phase-tmp/product-hkpvefav/home/state task unknown --current-gen --source claude-hook --event user-prompt-submit
+
+exit=0 elapsed=0.24s
+$ bin/fm-afk-contract.sh live-workers
+1
+exit=0 elapsed=0.41s
+waiting verb=needs-decision
+$ bin/fm-busy-event.sh apply <WORKTREE>/.test-phase-tmp/product-hkpvefav/home/state task idle --current-gen --source claude-hook --event stop
+
+exit=0 elapsed=0.03s
+$ bin/fm-afk-contract.sh live-workers
+0
+exit=0 elapsed=0.47s
+$ bin/fm-busy-event.sh apply <WORKTREE>/.test-phase-tmp/product-hkpvefav/home/state task busy --current-gen --source claude-hook --event user-prompt-submit
+
+exit=0 elapsed=0.07s
+$ bin/fm-afk-contract.sh live-workers
+1
+exit=0 elapsed=0.25s
+$ bin/fm-busy-event.sh apply <WORKTREE>/.test-phase-tmp/product-hkpvefav/home/state task unknown --current-gen --source claude-hook --event user-prompt-submit
+
+exit=0 elapsed=0.05s
+$ bin/fm-afk-contract.sh live-workers
+1
+exit=0 elapsed=0.44s
+waiting verb=captain-held
+$ bin/fm-busy-event.sh apply <WORKTREE>/.test-phase-tmp/product-hkpvefav/home/state task idle --current-gen --source claude-hook --event stop
+
+exit=0 elapsed=0.03s
+$ bin/fm-afk-contract.sh live-workers
+0
+exit=0 elapsed=0.42s
+$ bin/fm-busy-event.sh apply <WORKTREE>/.test-phase-tmp/product-hkpvefav/home/state task busy --current-gen --source claude-hook --event user-prompt-submit
+
+exit=0 elapsed=0.04s
+$ bin/fm-afk-contract.sh live-workers
+1
+exit=0 elapsed=0.34s
+$ bin/fm-busy-event.sh apply <WORKTREE>/.test-phase-tmp/product-hkpvefav/home/state task unknown --current-gen --source claude-hook --event user-prompt-submit
+
+exit=0 elapsed=0.03s
+$ bin/fm-afk-contract.sh live-workers
+1
+exit=0 elapsed=0.29s
+$ bin/fm-busy-event.sh apply <WORKTREE>/.test-phase-tmp/product-hkpvefav/home/state task idle --current-gen --source claude-hook --event stop
+
+exit=0 elapsed=0.03s
+$ bin/fm-afk-contract.sh live-workers
+1
+exit=0 elapsed=0.21s
+PASS: all three waits require proven idle and a current waiting event
+SCENARIO: accepted local-only ship and scout deliveries free capacity only with proven idle activity
+$ git clone -q <WORKTREE>/.test-phase-tmp/product-hkpvefav/project <WORKTREE>/.test-phase-tmp/product-hkpvefav/accepted-project
+
+exit=0 elapsed=0.09s
+$ bin/fm-busy-event.sh apply <WORKTREE>/.test-phase-tmp/product-hkpvefav/home/state task idle --current-gen --source claude-hook --event stop
+
+exit=0 elapsed=0.03s
+$ bin/fm-afk-contract.sh live-workers
+0
+exit=0 elapsed=0.57s
+$ bin/fm-busy-event.sh apply <WORKTREE>/.test-phase-tmp/product-hkpvefav/home/state task busy --current-gen --source claude-hook --event user-prompt-submit
+
+exit=0 elapsed=0.04s
+$ bin/fm-afk-contract.sh live-workers
+1
+exit=0 elapsed=0.21s
+$ bin/fm-busy-event.sh apply <WORKTREE>/.test-phase-tmp/product-hkpvefav/home/state task unknown --current-gen --source claude-hook --event user-prompt-submit
+
+exit=0 elapsed=0.04s
+$ bin/fm-afk-contract.sh live-workers
+1
+exit=0 elapsed=0.30s
+$ bin/fm-busy-event.sh apply <WORKTREE>/.test-phase-tmp/product-hkpvefav/home/state task idle --current-gen --source claude-hook --event stop
+
+exit=0 elapsed=0.05s
+$ bin/fm-afk-contract.sh live-workers
+0
+exit=0 elapsed=0.44s
+$ bin/fm-busy-event.sh apply <WORKTREE>/.test-phase-tmp/product-hkpvefav/home/state task busy --current-gen --source claude-hook --event user-prompt-submit
+
+exit=0 elapsed=0.04s
+$ bin/fm-afk-contract.sh live-workers
+1
+exit=0 elapsed=0.26s
+$ bin/fm-busy-event.sh apply <WORKTREE>/.test-phase-tmp/product-hkpvefav/home/state task unknown --current-gen --source claude-hook --event user-prompt-submit
+
+exit=0 elapsed=0.03s
+$ bin/fm-afk-contract.sh live-workers
+1
+exit=0 elapsed=0.22s
+PASS: actual local Git reachability and idle activity allow delivery exclusion; busy/unknown retains capacity
+SCENARIO: away cap rejects fresh work and return brief uses the same count
+$ bin/fm-afk-contract.sh enter --spend 1 --words 'Run no new work above one worker.'
+Away posture recorded at 2026-10-21T13:23:42Z: hold-for-return only. No phone channel is configured; anything that needs you waits for your return. Your away instructions are recorded verbatim; the away session will carry them out where it can, and anything it is unsure of, or that needs you, waits for your return. Destructive, irreversible, and security-sensitive actions are never pre-authorizable, whatever the words say. Expected return: not given. Spend cap: 1 concurrent workers.
+Away posture (recorded):
+  entered: 2026-10-21T13:23:42Z
+  expected return: not given
+  spend cap: 1 concurrent workers
+  reach: hold-for-return only. No phone channel is configured; anything that needs you waits for your return.
+  your words (verbatim):
+    Run no new work above one worker.
+exit=0 elapsed=0.68s
+$ bin/fm-spawn.sh blocked-fresh <WORKTREE>/.test-phase-tmp/product-hkpvefav/absent-project --mode no-mistakes --yolo off
+fm-gate-refuse: gate agent lifecycle permitted only against lab home <WORKTREE>/.test-phase-tmp/product-hkpvefav/home
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  repair missing watcher supervision with a foreground checkpoint: bin/fm-watch-checkpoint.sh --seconds 180.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+error: spawn refused - the away-posture record caps concurrent workers at 1 and 1 ordinary task(s) are live in this home; task blocked-fresh stays queued for the captain's return or for a worker to finish (spend cap: bin/fm-afk-contract.sh)
+exit=1 elapsed=2.72s
+$ bin/fm-afk-return.sh begin
+fm-afk-launch: away-posture record archived at <WORKTREE>/.test-phase-tmp/product-hkpvefav/home/state/afk-contracts/1792589022.afk-contract
 fm-afk-launch: away mode stopped; no daemon terminal was running, .afk cleared, and the posture record archived
 WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+=== Return brief (away 2026-10-21T13:23:42Z -> 2026-10-21T13:23:49Z, 7s) ===
+Supervisor health:
+  - GAP: the watcher beat was 999999s old at return (grace 300s)
+Your instructions:
+  your words at entry:
+    Run no new work above one worker.
+  the away session took no action under them.
+Waiting on you:
+  (nothing)
+Tried and failed, or could not be fixed:
+  (nothing)
+Landed, cleanup due:
+  (nothing)
+Handled while away:
+  0 outcome(s) handled by the away session (0 routine, 0 escalated above)
+  (no routine outcomes recorded in the store for this window)
+Cost: 0 supervision outcome(s) recorded (0 routine, 0 captain); 1 task(s) live at return.
+catch-up health: GAP: the watcher beat was 999999s old at return (grace 300s)
+fm-afk-return: catch-up clear; ordinary captain work may proceed
+exit=0 elapsed=4.98s
+PASS: count=1 blocks fresh admission before project/endpoint creation and return reports one live task
+SCENARIO: renamed worker survives an unacknowledged close and keeps its reservation
+$ tmux -L fm-lab rename-window -t primary:worker relocated
 
-$ tmux -L fm-lab kill-window -t primary:relocated
-exit=0
+exit=0 elapsed=0.02s
+$ bash -c '. "$1/bin/fm-backend.sh"; fm_backend_kill_confirmed tmux primary:worker' _ <WORKTREE>
 
-$ tmux -L fm-lab new-window -d -n worker -c <WORKTREE>/.l/worker 'bash --noprofile --norc'
-exit=0
-
-SCENARIO: Unresolved launch cleanup reserves a shell-only endpoint
-$ bash bin/fm-afk-spend-count.sh <WORKTREE>/.l/state
-exit=0
+exit=1 elapsed=0.25s
+$ tmux -L fm-lab display-message -p -t primary:relocated '#{pane_current_command}'
+sleep
+exit=0 elapsed=0.03s
+$ bin/fm-afk-contract.sh live-workers
 1
+exit=0 elapsed=0.58s
+$ tmux -L fm-lab kill-window -t primary:relocated
 
-SCENARIO: A positively exited shell-only worker frees away capacity
-$ bash bin/fm-afk-spend-count.sh <WORKTREE>/.l/state
-exit=0
+exit=0 elapsed=0.01s
+$ bin/fm-afk-contract.sh live-workers
+1
+exit=0 elapsed=0.33s
+PASS: missing recorded name is not a close acknowledgement or proof of death
+SCENARIO: positively exited worker frees capacity; unknown backend reserves capacity; secondmates are exempt
+$ tmux -L fm-lab new-window -d -t primary: -n exited 'bash --noprofile --norc'
+
+exit=0 elapsed=0.02s
+$ bin/fm-afk-contract.sh live-workers
 0
-
-$ bash bin/fm-spawn.sh fresh <WORKTREE>/.l/no-project --mode no-mistakes --yolo off
-exit=1
-fm-gate-refuse: gate agent lifecycle permitted only against lab home <WORKTREE>/.l
+exit=0 elapsed=0.25s
+$ bin/fm-afk-contract.sh live-workers
+1
+exit=0 elapsed=0.21s
+$ bin/fm-afk-contract.sh live-workers
+0
+exit=0 elapsed=0.07s
+PASS: positive shell endpoint frees room, unknown backend counts, secondmate does not count
+SCENARIO: recent launch and live metadata lock reserve capacity
+$ bin/fm-afk-contract.sh live-workers
+1
+exit=0 elapsed=0.11s
+$ bin/fm-afk-contract.sh live-workers
+1
+exit=0 elapsed=0.24s
+$ bin/fm-afk-contract.sh live-workers
+0
+exit=0 elapsed=0.45s
+PASS: fresh generation reserves a proven-shell slot until the launch-grace boundary
+$ bin/fm-afk-contract.sh live-workers
+1
+exit=0 elapsed=0.09s
+metadata lock holder exit=0 
+$ bin/fm-afk-contract.sh live-workers
+0
+exit=0 elapsed=0.20s
+PASS: a live metadata lock reserves capacity and releasing it restores the proven-dead count
+SCENARIO: relaunch, secondmate and quiet admission keep their own checks instead of applying the away fresh-worker cap
+$ bin/fm-afk-contract.sh enter --spend 1 --words 'Keep the isolated cap at one.'
+Away posture recorded at 2026-10-21T13:23:53Z: hold-for-return only. No phone channel is configured; anything that needs you waits for your return. Your away instructions are recorded verbatim; the away session will carry them out where it can, and anything it is unsure of, or that needs you, waits for your return. Destructive, irreversible, and security-sensitive actions are never pre-authorizable, whatever the words say. Expected return: not given. Spend cap: 1 concurrent workers.
+Away posture (recorded):
+  entered: 2026-10-21T13:23:53Z
+  expected return: not given
+  spend cap: 1 concurrent workers
+  reach: hold-for-return only. No phone channel is configured; anything that needs you waits for your return.
+  your words (verbatim):
+    Keep the isolated cap at one.
+exit=0 elapsed=0.30s
+$ bin/fm-spawn.sh absent --relaunch
+fm-gate-refuse: gate agent lifecycle permitted only against lab home <WORKTREE>/.test-phase-tmp/product-hkpvefav/home
 WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
-bin/fm-spawn.sh: line 3217: cd: <WORKTREE>/.l/no-project: No such file or directory
-
-Fresh admission passed spend cap and reached independent missing-project check
-SCENARIO: Persistent secondmate records are excluded from ordinary spend
-$ bash bin/fm-afk-spend-count.sh <WORKTREE>/.l/state
-exit=0
-0
-
-LIVE DRIVER COMPLETE
-$ tmux -L fm-lab kill-server
-exit=0
-
-Disposable lab and private server removed
+error: --relaunch needs an existing task record; no <WORKTREE>/.test-phase-tmp/product-hkpvefav/home/state/absent.meta
+exit=1 elapsed=0.83s
+$ bin/fm-spawn.sh mate <WORKTREE>/.test-phase-tmp/product-hkpvefav/absent-mate --secondmate
+fm-gate-refuse: gate agent lifecycle permitted only against lab home <WORKTREE>/.test-phase-tmp/product-hkpvefav/home
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+error: firstmate home does not exist or is not a directory: <WORKTREE>/.test-phase-tmp/product-hkpvefav/absent-mate
+exit=1 elapsed=1.25s
+$ bin/fm-afk-contract.sh archive
+<WORKTREE>/.test-phase-tmp/product-hkpvefav/home/state/afk-contracts/1792589033.afk-contract
+exit=0 elapsed=0.17s
+$ bin/fm-afk-contract.sh enter --spend 1 --words 'Remain quietly present.'
+Quiet mode recorded at 2026-10-21T13:23:56Z: you are present, so nothing waits for your return: every action you ask for, a local landing or a merge included, proceeds now under ordinary attended authority, and quiet mode changes only which updates reach this conversation. Only an explicit /quiet off ends it.
+Quiet mode (recorded):
+  entered: 2026-10-21T13:23:56Z
+  holds: none - you are present, so nothing waits for your return: every action you ask for, a local landing or a merge included, proceeds now under ordinary attended authority, and quiet mode changes only which updates reach this conversation.
+  your words (verbatim):
+    Remain quietly present.
+exit=0 elapsed=0.37s
+$ bin/fm-spawn.sh quiet-fresh <WORKTREE>/.test-phase-tmp/product-hkpvefav/absent-project --mode no-mistakes --yolo off
+fm-gate-refuse: gate agent lifecycle permitted only against lab home <WORKTREE>/.test-phase-tmp/product-hkpvefav/home
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+bin/fm-spawn.sh: line 3533: cd: <WORKTREE>/.test-phase-tmp/product-hkpvefav/absent-project: No such file or directory
+exit=1 elapsed=1.33s
+PASS: exempt calls reached their own missing-record/home/project checks without away-cap refusal
+COMPLETE: all executed product checks passed
+private tmux teardown exit=0 
+Disposable lab removed; no product children remain

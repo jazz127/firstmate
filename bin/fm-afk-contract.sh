@@ -167,8 +167,6 @@ FM_AFK_CONTRACT_STATE="${FM_STATE_OVERRIDE:-$FM_HOME/state}"
 . "$FM_AFK_CONTRACT_DIR/fm-timeout-lib.sh"
 # shellcheck source=bin/fm-busy-lib.sh
 . "$FM_AFK_CONTRACT_DIR/fm-busy-lib.sh"
-# shellcheck source=bin/fm-wake-lib.sh
-FM_STATE_OVERRIDE="$FM_AFK_CONTRACT_STATE" . "$FM_AFK_CONTRACT_DIR/fm-wake-lib.sh"
 
 FM_AFK_CONTRACT_VERSION=2
 # Older record versions this script still reads (never writes).
@@ -234,6 +232,8 @@ fm_afk_contract_live_ordinary_workers() {  # [state-dir]
   for meta in "$state"/*.meta; do
     [ -f "$meta" ] || continue
     [ "$(fm_meta_get "$meta" kind)" != secondmate ] || continue
+    # Sourcing the wake library creates state; defer it until worker metadata exists.
+    FM_STATE_OVERRIDE="$state" fm_afk_contract_lock_helpers || return 1
     meta_lock=$(fm_meta_lock_path "$meta") || { live=$((live + 1)); continue; }
     if fm_pid_alive "$(cat "$meta_lock/pid" 2>/dev/null)"; then
       live=$((live + 1))

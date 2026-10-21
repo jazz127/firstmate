@@ -203,15 +203,15 @@ fm_afk_contract_present() {  # [state-dir]
 # classifier's event boundary so continuation text cannot mask activity.
 fm_afk_contract_latest_non_resolved_verb() {
   local line verb i=0 legacy_re
-  local -a lines=()
+  local -a event_lines=()
   legacy_re="^[[:space:]]*(${FM_CAPTAIN_RE:-$FM_CLASSIFY_CAPTAIN_RE_DEFAULT})"
   while IFS= read -r line || [ -n "$line" ]; do
-    lines[i]=$line
+    event_lines[i]=$line
     i=$((i + 1))
   done
   while [ "$i" -gt 0 ]; do
     i=$((i - 1))
-    line=${lines[i]}
+    line=${event_lines[i]}
     _fm_status_line_is_event "$line" "$legacy_re" || continue
     status_line_verb "$line" verb
     [ "$verb" != "${FM_CLASSIFY_RESOLVE_VERB:-$FM_CLASSIFY_RESOLVE_VERB_DEFAULT}" ] || continue

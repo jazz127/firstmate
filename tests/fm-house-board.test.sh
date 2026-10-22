@@ -77,6 +77,12 @@ if pulls and os.environ.get("FAKE_PULLS_TRUNCATE"):
   sys.exit(0)
  original = calls["repos/jazz127/demo/pulls?state=all&per_page=8&page=1"]
  calls[path] = original[(page - 1) * size:page * size]
+# FAKE_MERGE_GONE gives PR 3 a merge commit that GitHub no longer has.
+if os.environ.get("FAKE_MERGE_GONE"):
+ calls["repos/jazz127/demo/pulls?state=all&per_page=8&page=1"][1]["merge_commit_sha"] = "9999999888888888888888888888888888888888"
+ if path == "repos/jazz127/demo/compare/9999999888888888888888888888888888888888...housetip":
+  print('error: "gh: Not Found (HTTP 404)"\ncode: NOT_FOUND')
+  sys.exit(1)
 if path not in calls:
  print("unknown endpoint: " + path, file=sys.stderr)
  sys.exit(1)
@@ -219,5 +225,19 @@ grep -q 'still truncated at one item; refusing to render a partial board' "$TMP_
   || fail "single-item truncation error unclear: $(cat "$TMP_ROOT/overflow.out")"
 [ "$(tail -n 1 "$TMP_ROOT/overflow/pull-pages")" = '1:1' ] || fail 'truncation did not retry down to one item'
 [ ! -e "$TMP_ROOT/overflow/.lavish/house-board.json" ] || fail 'single-item truncation wrote a partial payload'
+
+mkdir -p "$TMP_ROOT/gone/data"
+cp "$TMP_ROOT/data/house-line.md" "$TMP_ROOT/gone/data/"
+PATH="$TMP_ROOT/fakebin:$PATH" FM_HOME="$TMP_ROOT/gone" FM_HOUSE_BOARD_NO_SERVE=1 FAKE_MERGE_GONE=1 \
+  "$ROOT/bin/fm-house-board.sh" build > "$TMP_ROOT/gone.out" 2>&1 || fail "missing merge commit aborted the build: $(cat "$TMP_ROOT/gone.out")"
+grep -q 'merge commit 9999999888888888888888888888888888888888 of https://github.com/jazz127/demo/pull/3 no longer exists' "$TMP_ROOT/gone.out" \
+  || fail "missing merge commit was not reported: $(cat "$TMP_ROOT/gone.out")"
+python3 - "$TMP_ROOT/gone/.lavish/house-board.json" <<'PY' || fail 'missing merge commit was not treated as not landed'
+import json,sys
+p=json.load(open(sys.argv[1]))
+r={row['branch']:row for row in p['features']}
+assert r['housefeature/missing']['landed'] is False and r['housefeature/missing']['on_house'] == 'no', r['housefeature/missing']
+assert r['housefeature/alpha']['landed'] is True
+PY
 
 pass 'house board payload, mismatches, and combined page filters'

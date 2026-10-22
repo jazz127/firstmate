@@ -106,6 +106,7 @@ Recognized plumbing appears in a separate expandable ledger, outside the feature
 Each project card compares the current fork `house` tip with upstream `main`, reports the ahead and behind counts, and flags a fork `main` tip that differs from upstream.
 Each feature row shows its durable branch, commits, current house membership, label, pull request states, and age.
 House membership comes from live commit ancestry or a fork pull request merge commit still reachable from today's `house` tip, never from the register's merged heading alone.
+If GitHub returns 404 while checking a fork pull request's merge commit, the build warns and continues without treating that commit as landed; other live ancestry evidence can still prove house membership.
 House membership reads N/A for a feature contributed upstream, a historical one, or one whose fork pull request closed without merging and never landed.
 Rows marked `register only` or `fork only` expose a disagreement between the two sources for reconciliation.
 The board is a snapshot until the next build; filters do not make network requests.

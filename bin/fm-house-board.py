@@ -30,6 +30,10 @@ class TruncatedResponse(RuntimeError):
     """A gh-axi response hit its body limit and can be retried smaller."""
 
 
+class NotFound(RuntimeError):
+    """GitHub answered 404, such as a compare naming a commit that no longer exists."""
+
+
 def api(path, selector="."):
     """gh-axi presents a bounded YAML envelope; base64 keeps selected JSON unambiguous."""
     run = subprocess.run(
@@ -37,6 +41,8 @@ def api(path, selector="."):
         text=True, capture_output=True, check=False,
     )
     if run.returncode:
+        if re.search(r"^code: NOT_FOUND$", run.stdout, re.M):
+            raise NotFound(f"GitHub found nothing at {path}")
         raise RuntimeError(f"GitHub read failed for {path}: {run.stderr.strip() or run.stdout.strip()}")
     if re.search(r"^  truncated: true$", run.stdout, re.M):
         raise TruncatedResponse(f"GitHub response was truncated for {path}")
@@ -255,8 +261,13 @@ def compose(projects):
                 if merge_sha in house_commits:
                     merge_landed = True
                 elif not branch_landed and not known_on_house:
-                    ancestry = api(f"repos/{project['fork']}/compare/{merge_sha}...{live['house_tip']}", "{behind_by}")
-                    merge_landed = ancestry["behind_by"] == 0
+                    # A fork history rewrite can delete a merge commit; it is then not on house.
+                    try:
+                        ancestry = api(f"repos/{project['fork']}/compare/{merge_sha}...{live['house_tip']}", "{behind_by}")
+                        merge_landed = ancestry["behind_by"] == 0
+                    except NotFound:
+                        print(f"warning: merge commit {merge_sha} of {fork_pr['html_url']} no longer exists; treating it as not landed",
+                              file=sys.stderr)
             landed = branch_landed or merge_landed or bool(known_on_house)
             commit_date = None
             if branch_sha:

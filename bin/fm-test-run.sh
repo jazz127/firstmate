@@ -1501,7 +1501,8 @@ families_for_changed_path() {
     bin/fm-stow-cascade.sh)
       printf '%s\n' secondmate
       ;;
-    bin/fm-precompact-stow.sh|.pi/extensions/fm-precompact-stow.ts|.pi/extensions/lib/fm-precompact-stow.ts)
+    bin/fm-precompact-stow.sh|bin/fm-context-stow-nudge.sh|.pi/extensions/fm-precompact-stow.ts|\
+    .pi/extensions/lib/fm-precompact-stow.ts|.pi/extensions/lib/fm-pi-stow-worker.ts|.pi/extensions/lib/fm-context-stow-nudge.ts)
       printf '%s\n' "__script__:fm-precompact-stow.test.sh" "__script__:fm-precompact-stow-live-e2e.test.sh"
       ;;
     bin/fm-session-start.sh|bin/fm-fleet-sync.sh|\

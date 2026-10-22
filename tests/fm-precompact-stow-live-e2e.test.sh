@@ -78,7 +78,7 @@ START
       ;;
     pi)
       mkdir -p "$home/.pi/extensions/lib"
-      cp "$ROOT/.pi/extensions/lib/fm-precompact-stow.ts" "$home/.pi/extensions/lib/"
+      cp "$ROOT/.pi/extensions/lib/fm-precompact-stow.ts" "$ROOT/.pi/extensions/lib/fm-pi-stow-worker.ts" "$ROOT/.pi/extensions/lib/fm-context-stow-nudge.ts" "$home/.pi/extensions/lib/"
       cp "$ROOT/.pi/extensions/fm-precompact-stow.ts" "$home/.pi/extensions/"
       cat > "$home/.pi/extensions/live-start.ts" <<'START'
 import { writeFileSync } from "node:fs";

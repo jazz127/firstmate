@@ -2,11 +2,13 @@
 # Best-effort, synchronous persistence before native context compaction.
 # Usage: fm-precompact-stow.sh --harness claude|pi
 # Reads a PreCompact JSON payload on stdin (session_id, transcript_path,
-# trigger); Pi additionally supplies branch_entries and provider/model.
+# trigger); Pi additionally supplies branch_entries. Its first input line is
+# the payload, followed by a worker receipt ({status, output}) on the next line.
 # The whole pass has a 60s deadline including input, ownership, and cleanup.
 # FM_PRECOMPACT_STOW_TIMEOUT may shorten it to a positive integer <=60s.
 # Hook registrations reserve 90s so the runner can terminate its process group.
-# Always exits 0, prints no stdout, and never asks for input or blocks compact.
+# Always exits 0 and never asks for input or blocks compact. Claude has no
+# stdout; Pi uses a private JSON-lines request/receipt channel with its extension.
 # Only a lock-owning primary/secondmate may run; workers, gates, foreign hosts,
 # missing transcripts, recursion, and concurrent passes stand down.
 # Reuses the internal stow skill's automatic persistence mode; no memory writer
@@ -22,13 +24,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 if [ "${1:-}" != --bounded ]; then
   case "${1:-}" in
-    -h|--help) sed -n '2,16{s/^# \{0,1\}//;p;}' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,18{s/^# \{0,1\}//;p;}' "$0"; exit 0 ;;
   esac
   bound=${FM_PRECOMPACT_STOW_TIMEOUT:-60}
   case "$bound" in ''|*[!0-9]*|0|0*) bound=60 ;; esac
   [ "${#bound}" -le 2 ] && [ "$bound" -le 60 ] || bound=60
   rc=0
-  fm_run_timed "$bound" bash "$0" --bounded "$@" >/dev/null 2>/dev/null || rc=$?
+  fm_run_timed "$bound" bash "$0" --bounded "$@" 2>/dev/null || rc=$?
   if [ "$rc" -ne 0 ]; then
     printf 'precompact-stow: pass incomplete (exit %s); compaction continues\n' "$rc" >&2
   fi
@@ -56,7 +58,10 @@ fm_is_gate_agent "$FM_ROOT" && exit 0
 fm_primary_scope_matches "$FM_ROOT" "$STATE" || exit 0
 fm_session_lock_owned_by_self "$STATE" || exit 0
 command -v jq >/dev/null 2>&1 || exit 0
-payload=$(cat) || exit 0
+case "$harness" in
+  pi) IFS= read -r payload || exit 0 ;;
+  *) payload=$(cat) || exit 0 ;;
+esac
 fm_hook_payload_is_foreign_host "$payload" && exit 0
 printf '%s' "$payload" | jq -e '
   type == "object" and .hook_event_name == "PreCompact" and
@@ -69,7 +74,7 @@ transcript=$(printf '%s' "$payload" | jq -r '.transcript_path') || exit 0
 [ -f "$transcript" ] && [ -r "$transcript" ] && [ ! -L "$transcript" ] || exit 0
 skill="$FM_ROOT/.agents/skills/stow/SKILL.md"
 [ -f "$skill" ] && [ -r "$skill" ] || exit 0
-command -v "$harness" >/dev/null 2>&1 || exit 0
+if [ "$harness" = claude ]; then command -v claude >/dev/null 2>&1 || exit 0; fi
 # shellcheck source=bin/fm-wake-lib.sh
 . "$SCRIPT_DIR/fm-wake-lib.sh"
 lock="$STATE/.precompact-stow.lock"
@@ -114,11 +119,10 @@ case "$harness" in
       --append-system-prompt "$role" "$prompt" >> "$log" 2>&1 || rc=$?
     ;;
   pi)
-    model=$(printf '%s' "$payload" | jq -er '.model | strings | select(length > 0)') || exit 0
-    provider=$(printf '%s' "$payload" | jq -er '.provider | strings | select(length > 0)') || exit 0
-    pi -p --no-session --no-extensions --no-skills --no-prompt-templates --no-context-files \
-      --tools read,edit,write,bash --model "$provider/$model" --append-system-prompt "$role" \
-      "$prompt" >> "$log" 2>&1 || rc=$?
+    jq -nc --arg role "$role" --arg prompt "$prompt" --arg home "$FM_HOME" '{role:$role,prompt:$prompt,home:$home}'
+    IFS= read -r receipt || exit 0
+    printf '%s' "$receipt" | jq -er '.output | strings' >> "$log" 2>&1 || true
+    rc=$(printf '%s' "$receipt" | jq -er '.status | numbers') || rc=2
     ;;
 esac
 printf '\nprecompact-stow: agent exit=%s (receipt above; not reset-safe proof)\n' "$rc" >> "$log"

@@ -18,6 +18,7 @@ TMP_ROOT=$(fm_test_tmproot fm-precompact-stow)
 HOOK="$ROOT/bin/fm-precompact-stow.sh"
 export FM_GATE_REFUSE_BYPASS=0
 export FM_PRECOMPACT_STOW_TIMEOUT=10
+REAL_PI=$(command -v pi 2>/dev/null || true)
 export FM_TEST_AGENT_TRACE="$TMP_ROOT/agent.trace"
 export FM_TEST_AGENT_BIN="$TMP_ROOT/tools"
 mkdir -p "$FM_TEST_AGENT_BIN"
@@ -40,7 +41,6 @@ fi
 exit "${FM_TEST_AGENT_EXIT:-0}"
 MOCK
 chmod +x "$FM_TEST_AGENT_BIN/claude"
-cp "$FM_TEST_AGENT_BIN/claude" "$FM_TEST_AGENT_BIN/pi"
 export PATH="$FM_TEST_AGENT_BIN:$PATH"
 make_primary() {
   home="$TMP_ROOT/$1"
@@ -58,7 +58,24 @@ make_primary() {
 }
 run_hook() {
   local out status=0
-  out=$("$HOOK" --harness "${1:-claude}" < "$home/payload.json") || status=$?
+  if [ "${1:-claude}" = pi ]; then
+    out=$(python3 - "$HOOK" "$home/payload.json" "$FM_TEST_AGENT_TRACE" <<'PYPI'
+import json, pathlib, subprocess, sys
+proc = subprocess.Popen([sys.argv[1], "--harness", "pi"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+proc.stdin.write(pathlib.Path(sys.argv[2]).read_text().replace("\n", "") + "\n")
+proc.stdin.flush()
+request = json.loads(proc.stdout.readline())
+snapshot = request["prompt"].split("session captured in ", 1)[1].split(". The active home", 1)[0]
+pathlib.Path(sys.argv[3]).write_text("call pi-sdk\n" + pathlib.Path(snapshot).read_text())
+proc.stdin.write(json.dumps({"status": 0, "output": "sdk receipt"}) + "\n")
+proc.stdin.close()
+assert not proc.stdout.read()
+assert proc.wait() == 0
+PYPI
+) || status=$?
+  else
+    out=$("$HOOK" --harness "${1:-claude}" < "$home/payload.json") || status=$?
+  fi
   expect_code 0 "$status" "hook always succeeds"
   [ -z "$out" ] || fail "agent output reached hook stdout: $out"
 }
@@ -75,10 +92,11 @@ cleaned
 pass "PreCompact snapshots the session, dispatches existing stow, and suppresses blocking output"
 for harness in claude pi; do
   make_primary "adapter-$harness"
-  jq '.trigger="auto" | .provider="synthetic" | .model="model" | .branch_entries=[{type:"message",message:{content:"active branch"}}]' "$home/payload.json" > "$home/changed.json"
+  jq '.trigger="auto" | .branch_entries=[{type:"message",message:{content:"active branch"}}]' "$home/payload.json" > "$home/changed.json"
   mv "$home/changed.json" "$home/payload.json"
   run_hook "$harness"
-  grep -q "call .*tools/$harness" "$FM_TEST_AGENT_TRACE" || fail "wrong harness"
+  if [ "$harness" = pi ]; then expected="call pi-sdk"; else expected="call .*tools/claude"; fi
+  grep -q "$expected" "$FM_TEST_AGENT_TRACE" || fail "wrong harness"
   if [ "$harness" = pi ]; then
     grep -q 'active branch' "$FM_TEST_AGENT_TRACE" || fail "missing active branch"
     ! grep -q 'An established pending preference' "$FM_TEST_AGENT_TRACE" || fail "read off-branch history"
@@ -168,44 +186,247 @@ expect_code 0 "$status" "blocked input cannot block compaction"
 grep -q 'exit 124' "$home/stderr" || fail "stdin outside deadline"
 no_agent "blocked input"
 pass "the whole-pass deadline includes a hook payload that never reaches EOF"
+make_primary stdin-preservation
+. "$ROOT/bin/fm-timeout-lib.sh"
+cat > "$home/timeout" <<'TIMEOUT'
+#!/usr/bin/env bash
+shift 3
+exec "$@"
+TIMEOUT
+chmod +x "$home/timeout"
+for runner in external bash default; do
+  case "$runner" in
+    external) actual=$(printf 'payload from caller' | fm_run_external_timeout "$home/timeout" 5 cat) ;;
+    bash) actual=$(printf 'payload from caller' | fm_run_bash_timeout 5 cat) ;;
+    default) actual=$(printf 'payload from caller' | fm_run_timed 5 cat) ;;
+  esac
+  [ "$actual" = 'payload from caller' ] || fail "$runner discarded caller stdin"
+done
+pass "every timed runner preserves the caller's stdin (external boundary regression)"
+
+make_primary context-threshold
+NUDGE="$ROOT/bin/fm-context-stow-nudge.sh"
+mkdir -p "$home/config"
+observe() { jq -nc --argjson percent "$1" '{session_id:"context-session",percent:$percent}' | "$NUDGE" --pi; }
+[ -z "$(observe 69)" ] || fail "nudged below default threshold"
+nudge=$(observe 70)
+[ "$(printf '%s' "$nudge" | "$ROOT/bin/fm-operational-input.sh" kind)" = context-stow ] || fail "missing operational threshold nudge"
+case "$nudge" in *'Run /stow now'*) ;; *) fail "nudge did not request stow" ;; esac
+[ -z "$(observe 70)$(observe 90)" ] || fail "repeated nudge above threshold"
+[ -z "$(observe 69)" ] || fail "nudged on downward crossing"
+[ -n "$(observe 71)" ] || fail "did not rearm after downward crossing"
+printf '85\n' > "$home/config/context-stow-threshold"
+[ -z "$(observe 84)" ] || fail "ignored configured threshold"
+[ -n "$(observe 85)" ] || fail "configured threshold crossing missed"
+for setting in 0 invalid 101; do
+  printf '%s\n' "$setting" > "$home/config/context-stow-threshold"
+  [ -z "$(observe 0)$(observe 100)" ] || fail "disabled/invalid threshold emitted nudge"
+done
+rm "$home/config/context-stow-threshold"
+[ -z "$(observe null)" ] || fail "unknown usage emitted nudge"
+pass "threshold default, configuration, disablement, and once-per-crossing behavior"
+
+status_command=$(jq -r '.statusLine.command' "$ROOT/.claude/settings.json")
+prompt_command=$(jq -r '.hooks.UserPromptSubmit[-1].hooks[0].command' "$ROOT/.claude/settings.json")
+tool_command=$(jq -r '.hooks.PreToolUse[-1].hooks[0].command' "$ROOT/.claude/settings.json")
+export CLAUDE_PROJECT_DIR="$ROOT"
+status_sample() { jq -nc --arg project "$ROOT" --argjson percent "$1" '{session_id:"claude-session",workspace:{project_dir:$project},context_window:{used_percentage:$percent}}' | env -u CLAUDE_PROJECT_DIR bash -c "$status_command"; }
+claude_delivery() { jq -nc --arg event "$1" --arg session "${2:-claude-session}" '{session_id:$session,hook_event_name:$event}' | bash -c "$3"; }
+status_sample 72 >/dev/null
+[ -z "$(claude_delivery UserPromptSubmit other-session "$prompt_command")" ] || fail "nudge leaked to another session"
+out=$(claude_delivery PreToolUse claude-session "$tool_command")
+[ "$(printf '%s' "$out" | jq -r '.hookSpecificOutput.hookEventName')" = PreToolUse ] || fail "wrong hook response"
+[ "$(printf '%s' "$out" | jq -r '.hookSpecificOutput.additionalContext' | "$ROOT/bin/fm-operational-input.sh" kind)" = context-stow ] || fail "Claude did not deliver operational context"
+status_sample 80 >/dev/null
+[ -z "$(claude_delivery UserPromptSubmit claude-session "$prompt_command")" ] || fail "Claude repeated above threshold"
+status_sample 20 >/dev/null
+status_sample 70 >/dev/null
+[ -n "$(claude_delivery UserPromptSubmit claude-session "$prompt_command")" ] || fail "Claude did not rearm"
+pass "tracked Claude statusLine and hook commands deliver one session-scoped context nudge"
+for mode in gate foreign-owner recursion subagent foreign-host; do
+  make_primary "nudge-$mode"
+  input='{"session_id":"nudge-session","percent":90}'
+  case "$mode" in
+    gate) export NO_MISTAKES_GATE=1 ;;
+    foreign-owner) printf '1\n' > "$home/state/.lock" ;;
+    recursion) export FM_PRECOMPACT_STOW_ACTIVE=1 ;;
+    subagent) input=$(printf '%s' "$input" | jq '.agent_id="subagent"') ;;
+    foreign-host) input=$(printf '%s' "$input" | jq '.cursor_version="synthetic"') ;;
+  esac
+  [ -z "$(printf '%s' "$input" | "$NUDGE" --pi)" ] || fail "$mode received threshold nudge"
+  unset NO_MISTAKES_GATE FM_PRECOMPACT_STOW_ACTIVE
+done
+pass "threshold nudge retains primary ownership and harness exclusions"
+
 if command -v node >/dev/null 2>&1; then
   make_primary extension
   mkdir -p "$home/.pi/extensions/lib"
   cp "$ROOT/.pi/extensions/lib/fm-precompact-stow.ts" "$home/.pi/extensions/lib/"
-  cp "$ROOT/.pi/extensions/fm-precompact-stow.ts" "$home/.pi/extensions/"
+  cp "$ROOT/.pi/extensions/lib/fm-pi-stow-worker.ts" "$home/.pi/extensions/lib/"
+  cp "$ROOT/.pi/extensions/lib/fm-context-stow-nudge.ts" "$home/.pi/extensions/lib/"
   cat > "$home/bin/fm-precompact-stow.sh" <<'RECORDER'
 #!/usr/bin/env bash
-cat > "$FM_HOME/extension-payload.json"
-printf '{"cancel":true}\n'
+IFS= read -r payload
+printf '%s' "$payload" > "$FM_HOME/extension-payload.json"
+printf '{"role":"bounded worker","prompt":"stow snapshot","home":"%s"}\n' "$FM_HOME"
+IFS= read -r receipt
+printf '%s' "$receipt" > "$FM_HOME/extension-receipt.json"
 exit 2
 RECORDER
   chmod +x "$home/bin/fm-precompact-stow.sh"
+  cp "$NUDGE" "$home/bin/"
+  # The production script resolves its shared libraries from its own directory.
+  for file in fm-gate-refuse-lib.sh fm-primary-scope-lib.sh fm-session-lock-lib.sh fm-hook-host-lib.sh fm-operational-input.sh fm-wake-lib.sh fm-cursor-lib.sh fm-path-lib.sh; do
+    cp "$ROOT/bin/$file" "$home/bin/"
+  done
   cat > "$home/extension-test.mjs" <<'JS'
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-{
-  const { default: register } = await import("./.pi/extensions/fm-precompact-stow.ts");
-  let callback;
-  register({on(event, handler) { assert.equal(event, "session_before_compact"); callback = handler; }});
-  for (const reason of ["manual", "threshold", "overflow"]) {
-    const result = await callback({reason}, {
-      sessionManager: {
-        getSessionId: () => "native-session",
-        getSessionFile: () => `${process.env.FM_HOME}/transcript.jsonl`,
-        getBranch: () => [{id:"active-entry"}],
-      }, model: {provider:"synthetic",id:"model"},
-    });
-    assert.equal(result, undefined, "extension must not return a compaction decision");
-    const payload = JSON.parse(readFileSync(`${process.env.FM_HOME}/extension-payload.json`));
-    assert.equal(payload.trigger, reason === "manual" ? "manual" : "auto");
-    assert.equal(payload.session_id, "native-session");
-    assert.deepEqual(payload.branch_entries, [{id:"active-entry"}]);
-    assert.equal(payload.provider, "synthetic");
-  }
+import { registerPrecompactStow } from "./.pi/extensions/lib/fm-precompact-stow.ts";
+import { createPiStowWorker } from "./.pi/extensions/lib/fm-pi-stow-worker.ts";
+import { registerContextStowNudge } from "./.pi/extensions/lib/fm-context-stow-nudge.ts";
+const home = process.env.FM_HOME;
+let callback;
+const ctx = {
+  sessionManager: {
+    getSessionId: () => "native-session",
+    getSessionFile: () => `${home}/transcript.jsonl`,
+    getBranch: () => [{id:"active-entry"}],
+  }, model: {provider:"extension-only",id:"model"},
+};
+let workerCalls = 0;
+registerPrecompactStow({on(event, handler) { assert.equal(event, "session_before_compact"); callback = handler; }}, async (request, context) => {
+  assert.equal(request.prompt, "stow snapshot");
+  assert.equal(context, ctx);
+  workerCalls++;
+  return "worker receipt";
+});
+for (const reason of ["manual", "threshold", "overflow"]) {
+  assert.equal(await callback({reason}, ctx), undefined, "never veto compaction");
+  const payload = JSON.parse(readFileSync(`${home}/extension-payload.json`));
+  assert.equal(payload.trigger, reason === "manual" ? "manual" : "auto");
+  assert.deepEqual(payload.branch_entries, [{id:"active-entry"}]);
+  assert.deepEqual(JSON.parse(readFileSync(`${home}/extension-receipt.json`)), {status:0,output:"worker receipt"});
 }
+assert.equal(workerCalls, 3);
+
+let streamed = 0, disposed = 0, registered, options, loaderOptions;
+const provider = {streamSimple() { streamed++; return "custom provider receipt"; }};
+const model = ctx.model;
+ctx.modelRegistry = {getRegisteredProviderConfig(id) { assert.equal(id, "extension-only"); return provider; }};
+const runtime = {
+  registerProvider(id, config) { assert.equal(id, "extension-only"); registered = config; },
+  async refresh(options) { assert.deepEqual(options, {providers:["extension-only"],allowNetwork:false}); },
+  getModel(providerId, modelId) { assert.equal(providerId, "extension-only"); assert.equal(modelId, "model"); return model; },
+};
+const sdk = {
+  getAgentDir() { return `${home}/pi-config`; },
+  ModelRuntime: {async create() { return runtime; }},
+  DefaultResourceLoader: class { constructor(o) { loaderOptions = o; } async reload() {} },
+  SessionManager: {inMemory(cwd) { assert.equal(cwd, home); return {kind:"ephemeral"}; }},
+  SettingsManager: {inMemory(settings) { assert.equal(settings.compaction.enabled, false); return settings; }},
+  createBashToolDefinition(cwd, options) {
+    const environment = options.spawnHook({env:{}}).env;
+    assert.equal(environment.FM_PRECOMPACT_STOW_ACTIVE, "1");
+    assert.equal(environment.NO_MISTAKES_GATE, "1");
+    return {};
+  },
+  async createAgentSession(o) {
+    options = o;
+    return {session:{
+      messages: [],
+      async prompt(text) { assert.equal(text, "persist snapshot"); this.messages.push({content:registered.streamSimple()}); },
+      dispose() { disposed++; },
+    }};
+  },
+};
+const output = await createPiStowWorker(sdk)({home,role:"bounded stow",prompt:"persist snapshot"}, ctx, new AbortController().signal);
+assert.deepEqual(JSON.parse(output), [{content:"custom provider receipt"}]);
+assert.equal(registered, provider, "provider functions must be retained by reference");
+assert.equal(streamed, 1);
+assert.equal(disposed, 1);
+assert.equal(options.model, model);
+assert.equal(options.modelRuntime, runtime);
+assert.equal(loaderOptions.noExtensions, true);
+assert.equal(loaderOptions.noContextFiles, true);
+assert.equal(loaderOptions.agentDir, `${home}/pi-config`);
+assert.equal(loaderOptions.settingsManager, options.settingsManager);
+assert.equal(process.env.FM_PRECOMPACT_STOW_ACTIVE, undefined, "must not mutate main session environment");
+await assert.rejects(createPiStowWorker(sdk)({home}, ctx, AbortSignal.abort()));
+
+let usage = 69;
+const events = new Map(), delivered = [];
+ctx.getContextUsage = () => ({percent:usage});
+registerContextStowNudge({on(event, fn) { events.set(event, fn); }, sendMessage(message, options) { delivered.push({message,options}); }});
+assert.equal(await events.get("before_agent_start")({}, ctx), undefined);
+usage = 70;
+await events.get("turn_end")({}, ctx);
+assert.equal(delivered.length, 1);
+assert.equal(delivered[0].options.triggerTurn, true);
+assert.match(delivered[0].message.content, /FIRSTMATE_OP: v1 context-stow:/);
+await events.get("turn_end")({}, ctx);
+assert.equal(delivered.length, 1);
+usage = 90;
+await events.get("session_compact")({}, ctx);
+assert.equal(await events.get("before_agent_start")({}, ctx), undefined, "compaction alone is not a downward crossing");
+usage = 20;
+await events.get("session_compact")({}, ctx);
+usage = 71;
+assert.ok((await events.get("before_agent_start")({}, ctx)).message.content);
+assert.equal(await events.get("before_agent_start")({}, ctx), undefined);
+ctx.sessionManager.getSessionId = () => "replacement-session";
+assert.ok((await events.get("before_agent_start")({}, ctx)).message.content, "new sessions have independent crossings");
 JS
-  node --experimental-strip-types "$home/extension-test.mjs" || fail "native extension transport"
-  pass "Pi native extension transport preserves the branch and never returns a compaction veto"
+  node --experimental-strip-types "$home/extension-test.mjs" || fail "Pi extension behavior"
+  pass "Pi transport, provider function preservation, isolation, and usage events"
 else
-  printf '# node absent: Pi extension transport case not exercised\n'
+  printf '# node absent: Pi extension cases not exercised\n'
+fi
+
+if [ -n "$REAL_PI" ]; then
+  make_primary native-provider
+  cp "$ROOT/bin/"*.sh "$home/bin/"
+  mkdir -p "$home/.pi/extensions/lib" "$home/pi-config"
+  cp "$ROOT/.pi/extensions/lib/fm-precompact-stow.ts" "$ROOT/.pi/extensions/lib/fm-pi-stow-worker.ts" "$home/.pi/extensions/lib/"
+  cat > "$home/.pi/extensions/offline-provider.ts" <<'TS'
+import * as sdk from "@earendil-works/pi-coding-agent";
+import { createAssistantMessageEventStream } from "@earendil-works/pi-ai";
+import { appendFileSync, writeFileSync, readFileSync } from "node:fs";
+import { registerPrecompactStow } from "./lib/fm-precompact-stow.ts";
+import { createPiStowWorker } from "./lib/fm-pi-stow-worker.ts";
+export default function(pi: sdk.ExtensionAPI) {
+  pi.registerProvider("stow-offline", {
+    baseUrl: "http://127.0.0.1/unused", apiKey: "offline-only", api: "stow-offline-api" as any,
+    models: [{id:"model", name:"Offline stow", reasoning:false, input:["text"], cost:{input:0,output:0,cacheRead:0,cacheWrite:0}, contextWindow:16384,maxTokens:128}],
+    streamSimple(model) {
+      appendFileSync(`${process.env.FM_HOME}/provider-calls`, "custom stream invoked\n");
+      const stream = createAssistantMessageEventStream();
+      const output: any = {role:"assistant",content:[{type:"text",text:"offline stow receipt"}],api:model.api,provider:model.provider,model:model.id,
+        usage:{input:0,output:0,cacheRead:0,cacheWrite:0,totalTokens:0,cost:{input:0,output:0,cacheRead:0,cacheWrite:0,total:0}},stopReason:"stop",timestamp:Date.now()};
+      queueMicrotask(() => {stream.push({type:"done",reason:"stop",message:output});stream.end();});
+      return stream;
+    },
+  });
+  pi.on("session_start", async (_event, ctx) => {
+    const home = process.env.FM_HOME!;
+    writeFileSync(`${home}/state/.lock`, `${process.pid}\n`);
+    let compact: any;
+    registerPrecompactStow({on(_name: any, fn: any) { compact = fn; }} as any, createPiStowWorker(sdk));
+    await compact({reason:"manual"}, {...ctx, sessionManager:{
+      getSessionFile: () => `${home}/transcript.jsonl`, getSessionId: () => "native-provider",
+      getBranch: () => [{type:"message",message:{role:"user",content:"already established fact"}}],
+    }});
+    const log = readFileSync(`${home}/state/.precompact-stow-last.log`, "utf8");
+    if (!log.includes("agent exit=0") || !log.includes("offline stow receipt")) throw new Error(`isolated provider failed: ${log}`);
+    writeFileSync(`${home}/native-provider-ok`, "passed");
+  });
+}
+TS
+  PI_CODING_AGENT_DIR="$home/pi-config" PI_OFFLINE=1 "$REAL_PI" --approve --no-extensions     -e "$home/.pi/extensions/offline-provider.ts" --no-session --no-context-files --no-skills --no-prompt-templates     --model stow-offline/model -p 'offline control' > "$home/native-output" 2>&1 || { cat "$home/native-output" >&2; fail "native Pi offline provider"; }
+  [ -f "$home/native-provider-ok" ] || { cat "$home/native-output" >&2; fail "native Pi did not finish isolated stow"; }
+  [ "$(wc -l < "$home/provider-calls" | tr -d ' ')" -eq 2 ] || fail "expected isolated worker and main to each call registered provider"
+  cleaned
+  pass "installed Pi retains extension provider functions through the bounded isolated stow worker"
+else
+  printf '# Pi absent: offline native provider case not exercised\n'
 fi

@@ -234,6 +234,8 @@ The tracked Claude `PreCompact` registration and the Pi/pi-signed `session_befor
 They run only in the lock-owning primary or secondmate home.
 The script's header owns the deadline, diagnostics, serialization, payload, and invocation mechanics; the internal [stow skill](../.agents/skills/stow/SKILL.md#automatic-pre-compaction-persistence) owns the bounded persistence mode and all memory/backlog write rules.
 The pass uses a temporary transcript snapshot and a fresh non-interactive agent of the same harness, never resumes the active session, and does not run startup or supervision.
+Pi creates an isolated in-memory SDK session, copies the selected provider registration by reference, and loads no extensions or context files.
+The shell retains the ownership checks, writer mutex, snapshot lifetime, and deadline; closing its private request channel aborts the Pi worker.
 Pi/pi-signed supplies the native active branch and the current provider/model so abandoned branches do not become persistence inputs.
 Every attempt may consume model tokens.
 Failures, unavailable credentials, unsafe scope, and timeouts let compaction continue; the pass is best-effort and never promises the session is reset-safe.
@@ -241,8 +243,25 @@ Use explicit `/stow` when a complete memory curation pass and secondmate cascade
 Other primary harnesses currently have no tracked pre-compaction transport, and runtime session backends do not add one.
 Codex is unsupported: its project hooks run only after the project is trusted, and no supported way to trust a disposable folder for the native guard was found, so no unproven Codex hook is registered.
 omp is unsupported until its native compaction event is exercised by the guard.
-This feature adds no usage-threshold nudge and leaves existing post-compaction session-start delivery unchanged.
-Portable behavior checks are in `tests/fm-precompact-stow.test.sh`; the token-spending native guard is `tests/fm-precompact-stow-live-e2e.test.sh`.
+Existing post-compaction session-start delivery is unchanged.
+
+### Context-usage threshold nudge
+
+Claude and Pi/pi-signed also deliver one operational `context-stow` nudge asking Firstmate to run `/stow` when context usage reaches the configured threshold.
+The default is 70 percent.
+Set `config/context-stow-threshold` in the active home to an integer from 1 through 100, or `0` to disable it; `FM_CONFIG_OVERRIDE` selects an alternate config directory.
+Malformed settings suppress the nudge.
+Usage must fall below the threshold before another upward crossing can emit a nudge, and each native session has independent crossing state.
+The nudge asks the current session to use the existing stow skill; it adds no memory or backlog writer.
+
+[`bin/fm-context-stow-nudge.sh`](../bin/fm-context-stow-nudge.sh) owns configuration reading, crossing state, eligibility, and operational encoding.
+Claude's tracked status line captures `context_window.used_percentage` and displays the current percentage; the next `UserPromptSubmit` or `PreToolUse` hook delivers a pending nudge as `additionalContext`.
+A custom status line must also invoke that script with `--claude-status` and forward its native JSON input, or the Claude usage nudge has no observations.
+Unknown usage is ignored.
+Pi samples `getContextUsage()` before agent start, after each turn, and after compaction, and delivers through its native context-message transport.
+Both transports use the same operational envelope as session-start nudges and require the current session to own the home lock.
+Other harnesses have no tracked usage-threshold transport.
+Portable behavior checks and the installed-Pi offline provider regression are in `tests/fm-precompact-stow.test.sh`; the token-spending native compaction guard is `tests/fm-precompact-stow-live-e2e.test.sh`.
 
 ## Harness transports
 

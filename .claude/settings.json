@@ -97,9 +97,5 @@
         ]
       }
     ]
-  },
-  "statusLine": {
-    "type": "command",
-    "command": "[ -z \"${GROK_AGENT:-}${GROK_HOOK_EVENT:-}\" ] || exit 0; payload=$(cat); project=$(printf '%s' \"$payload\" | jq -er '.workspace.project_dir | strings | select(startswith(\"/\"))') || exit 0; printf '%s' \"$payload\" | \"$project/bin/fm-context-stow-nudge.sh\" --claude-status"
   }
 }

@@ -214,6 +214,13 @@ nudge=$(observe 70)
 case "$nudge" in *'Run /stow now'*) ;; *) fail "nudge did not request stow" ;; esac
 [ -z "$(observe 70)$(observe 90)" ] || fail "repeated nudge above threshold"
 [ -z "$(observe 69)" ] || fail "nudged on downward crossing"
+[ -n "$(observe 105)" ] || fail "overflow jump missed threshold crossing"
+[ -z "$(observe 106)" ] || fail "overflow repeated above threshold"
+[ -z "$(observe 69)" ] || fail "overflow did not rearm below threshold"
+[ -n "$(observe 100.5)" ] || fail "fractional overflow missed threshold crossing"
+[ -z "$(observe -1)$(observe null)$(observe '"105"')" ] || fail "invalid usage emitted nudge"
+[ -z "$(observe 110)" ] || fail "invalid usage rearmed threshold"
+[ -z "$(observe 69)" ] || fail "nudged on downward crossing"
 [ -n "$(observe 71)" ] || fail "did not rearm after downward crossing"
 printf '85\n' > "$home/config/context-stow-threshold"
 [ -z "$(observe 84)" ] || fail "ignored configured threshold"
@@ -226,23 +233,61 @@ rm "$home/config/context-stow-threshold"
 [ -z "$(observe null)" ] || fail "unknown usage emitted nudge"
 pass "threshold default, configuration, disablement, and once-per-crossing behavior"
 
-status_command=$(jq -r '.statusLine.command' "$ROOT/.claude/settings.json")
+jq -e 'has("statusLine") | not' "$ROOT/.claude/settings.json" >/dev/null || fail "project settings override the operator status line"
 prompt_command=$(jq -r '.hooks.UserPromptSubmit[-1].hooks[0].command' "$ROOT/.claude/settings.json")
 tool_command=$(jq -r '.hooks.PreToolUse[-1].hooks[0].command' "$ROOT/.claude/settings.json")
 export CLAUDE_PROJECT_DIR="$ROOT"
-status_sample() { jq -nc --arg project "$ROOT" --argjson percent "$1" '{session_id:"claude-session",workspace:{project_dir:$project},context_window:{used_percentage:$percent}}' | env -u CLAUDE_PROJECT_DIR bash -c "$status_command"; }
-claude_delivery() { jq -nc --arg event "$1" --arg session "${2:-claude-session}" '{session_id:$session,hook_event_name:$event}' | bash -c "$3"; }
-status_sample 72 >/dev/null
-[ -z "$(claude_delivery UserPromptSubmit other-session "$prompt_command")" ] || fail "nudge leaked to another session"
+claude_transcript="$home/context-transcript.jsonl"
+: > "$claude_transcript"
+assistant_usage() {
+  jq -nc --arg session "${5:-claude-session}" --argjson input "$1" --argjson creation "${2:-0}" --argjson cache "${3:-0}" --argjson output "${4:-0}" \
+    '{type:"assistant",sessionId:$session,isSidechain:false,message:{role:"assistant",usage:{input_tokens:$input,cache_creation_input_tokens:$creation,cache_read_input_tokens:$cache,output_tokens:$output}}}' >> "$claude_transcript"
+}
+claude_delivery() {
+  jq -nc --arg event "$1" --arg session "${2:-claude-session}" --arg file "$claude_transcript" \
+    '{session_id:$session,hook_event_name:$event,transcript_path:$file}' | bash -c "$3"
+}
+[ -z "$(claude_delivery UserPromptSubmit claude-session "$prompt_command")" ] || fail "empty transcript emitted nudge"
+assistant_usage 138000
+[ -z "$(claude_delivery UserPromptSubmit claude-session "$prompt_command")" ] || fail "nudged below default threshold"
+assistant_usage 190000 0 0 0 other-session
+printf '%s\n' '{"type":"assistant","sessionId":"claude-session","isSidechain":true,"message":{"usage":{"input_tokens":190000}}}' >> "$claude_transcript"
+[ -z "$(claude_delivery PreToolUse claude-session "$tool_command")" ] || fail "sidechain or foreign-session usage emitted nudge"
+assistant_usage 2000 3000 134000 1000
+[ -z "$(claude_delivery UserPromptSubmit missing-session "$prompt_command")" ] || fail "nudge leaked to another session"
+printf '{"type":' >> "$claude_transcript"
 out=$(claude_delivery PreToolUse claude-session "$tool_command")
+printf '\n' >> "$claude_transcript"
 [ "$(printf '%s' "$out" | jq -r '.hookSpecificOutput.hookEventName')" = PreToolUse ] || fail "wrong hook response"
-[ "$(printf '%s' "$out" | jq -r '.hookSpecificOutput.additionalContext' | "$ROOT/bin/fm-operational-input.sh" kind)" = context-stow ] || fail "Claude did not deliver operational context"
-status_sample 80 >/dev/null
+[ "$(printf '%s' "$out" | jq -r '.hookSpecificOutput.additionalContext' | "$ROOT/bin/fm-operational-input.sh" kind)" = context-stow ] || fail "Claude ignored the 140000-token response including cached input and output"
+assistant_usage 160000
 [ -z "$(claude_delivery UserPromptSubmit claude-session "$prompt_command")" ] || fail "Claude repeated above threshold"
-status_sample 20 >/dev/null
-status_sample 70 >/dev/null
+assistant_usage null
+[ -z "$(claude_delivery UserPromptSubmit claude-session "$prompt_command")" ] || fail "unknown assistant usage emitted nudge"
+assistant_usage 160000
+[ -z "$(claude_delivery PreToolUse claude-session "$tool_command")" ] || fail "unknown usage rearmed threshold"
+printf '%s\n' '{"type":"system","subtype":"compact_boundary","sessionId":"claude-session"}' >> "$claude_transcript"
+[ -z "$(claude_delivery UserPromptSubmit claude-session "$prompt_command")" ] || fail "reused pre-compaction usage"
+assistant_usage 40000
+[ -z "$(claude_delivery PreToolUse claude-session "$tool_command")" ] || fail "Claude nudged after downward crossing"
+assistant_usage 140000
 [ -n "$(claude_delivery UserPromptSubmit claude-session "$prompt_command")" ] || fail "Claude did not rearm"
-pass "tracked Claude statusLine and hook commands deliver one session-scoped context nudge"
+printf '1000000\n' > "$home/config/context-stow-window-tokens"
+assistant_usage 699999
+[ -z "$(claude_delivery UserPromptSubmit claude-session "$prompt_command")" ] || fail "ignored larger context capacity"
+assistant_usage 700000
+[ -n "$(claude_delivery PreToolUse claude-session "$tool_command")" ] || fail "missed configured 1M window crossing"
+for window in 0 invalid; do
+  printf '%s\n' "$window" > "$home/config/context-stow-window-tokens"
+  assistant_usage 1000000
+  [ -z "$(claude_delivery UserPromptSubmit claude-session "$prompt_command")" ] || fail "invalid context capacity emitted nudge"
+done
+rm "$home/config/context-stow-window-tokens"
+assistant_usage -1
+[ -z "$(claude_delivery PreToolUse claude-session "$tool_command")" ] || fail "negative usage emitted nudge"
+rm "$claude_transcript"
+[ -z "$(claude_delivery UserPromptSubmit claude-session "$prompt_command")" ] || fail "missing transcript emitted nudge"
+pass "tracked Claude hooks sample transcript usage once per crossing without a status line"
 for mode in gate foreign-owner recursion subagent foreign-host; do
   make_primary "nudge-$mode"
   input='{"session_id":"nudge-session","percent":90}'
@@ -359,7 +404,7 @@ const events = new Map(), delivered = [];
 ctx.getContextUsage = () => ({percent:usage});
 registerContextStowNudge({on(event, fn) { events.set(event, fn); }, sendMessage(message, options) { delivered.push({message,options}); }});
 assert.equal(await events.get("before_agent_start")({}, ctx), undefined);
-usage = 70;
+usage = 105;
 await events.get("turn_end")({}, ctx);
 assert.equal(delivered.length, 1);
 assert.equal(delivered[0].options.triggerTurn, true);

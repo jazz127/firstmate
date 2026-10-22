@@ -255,10 +255,15 @@ Usage must fall below the threshold before another upward crossing can emit a nu
 The nudge asks the current session to use the existing stow skill; it adds no memory or backlog writer.
 
 [`bin/fm-context-stow-nudge.sh`](../bin/fm-context-stow-nudge.sh) owns configuration reading, crossing state, eligibility, and operational encoding.
-Claude's tracked status line captures `context_window.used_percentage` and displays the current percentage; the next `UserPromptSubmit` or `PreToolUse` hook delivers a pending nudge as `additionalContext`.
-A custom status line must also invoke that script with `--claude-status` and forward its native JSON input, or the Claude usage nudge has no observations.
-Unknown usage is ignored.
+Claude's `UserPromptSubmit` and `PreToolUse` hooks read the latest main-session assistant usage from the supplied transcript and deliver a crossing as `additionalContext`.
+The estimate includes input, cache-creation, cache-read, and output tokens from that response, rather than summing usage across the session.
+It ignores sidechain and other-session entries, and does not reuse usage from before a compaction boundary.
+Set `config/context-stow-window-tokens` to Claude's active context capacity in tokens; the default is 200000, so a 1M session needs `1000000`.
+The same `FM_CONFIG_OVERRIDE` directory applies, and an invalid capacity suppresses Claude sampling.
+The feature has no project-level status-line registration or percentage display.
+Missing transcripts and unknown usage are ignored.
 Pi samples `getContextUsage()` before agent start, after each turn, and after compaction, and delivers through its native context-message transport.
+Pi percentages above 100 remain valid observations and can trigger a crossing.
 Both transports use the same operational envelope as session-start nudges and require the current session to own the home lock.
 Other harnesses have no tracked usage-threshold transport.
 Portable behavior checks and the installed-Pi offline provider regression are in `tests/fm-precompact-stow.test.sh`; the token-spending native compaction guard is `tests/fm-precompact-stow-live-e2e.test.sh`.

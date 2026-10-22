@@ -1,13 +1,17 @@
 #!/usr/bin/env bash
-# Context-threshold nudge owner. Usage: --claude-status | --claude-hook | --pi
-# Claude statusLine supplies session_id and context_window.used_percentage;
-# its hooks consume the pending nudge as additionalContext. Pi supplies
-# session_id and percent and receives the operational envelope directly.
+# Context-threshold nudge owner. Usage: --claude-hook | --pi
+# Claude UserPromptSubmit/PreToolUse supply session_id and transcript_path;
+# the latest main-session assistant usage after the last compact boundary is
+# sampled and a crossing is delivered as additionalContext. Pi supplies
+# session_id and a nonnegative, uncapped percent and receives the envelope.
 # config/context-stow-threshold (FM_CONFIG_OVERRIDE supported) is an integer
 # 1..100, default 70; 0 disables nudges. Invalid configuration stands down.
-# state/.context-stow-<session_id>.json stores above/pending, under the shared
-# wake mutex. A below-threshold observation rearms the next upward crossing.
-# Only the lock-owning primary/secondmate may observe or consume. Always exits 0.
+# Claude's config/context-stow-window-tokens is the positive token capacity
+# used for the transcript estimate, default 200000; set it for a larger window.
+# Usage counts input, cache creation, cache reads, and output of one response.
+# state/.context-stow-<session_id>.json stores above, under the shared wake
+# mutex. A below-threshold observation rearms the next upward crossing.
+# Only the lock-owning primary/secondmate may observe. Always exits 0.
 set -u
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FM_ROOT="${FM_ROOT_OVERRIDE:-$(cd "$SCRIPT_DIR/.." && pwd)}"
@@ -23,7 +27,7 @@ STATE="${FM_STATE_OVERRIDE:-$FM_HOME/state}"
 . "$SCRIPT_DIR/fm-hook-host-lib.sh"
 # shellcheck source=bin/fm-operational-input.sh
 . "$SCRIPT_DIR/fm-operational-input.sh"
-case "${1:-}" in --claude-status|--claude-hook|--pi) mode=$1 ;; *) exit 0 ;; esac
+case "${1:-}" in --claude-hook|--pi) mode=$1 ;; *) exit 0 ;; esac
 [ "${FM_PRECOMPACT_STOW_ACTIVE:-0}" != 1 ] || exit 0
 [ -z "${GROK_AGENT:-}${GROK_HOOK_EVENT:-}" ] || exit 0
 fm_is_gate_agent "$FM_ROOT" && exit 0
@@ -47,41 +51,55 @@ record="$STATE/.context-stow-$session.json"
 lock="$STATE/.context-stow-nudge.lock"
 fm_lock_try_acquire "$lock" || exit 0
 trap 'fm_lock_release "$lock"' EXIT
+case "$mode" in
+  --claude-hook)
+    event=$(printf '%s' "$payload" | jq -er '.hook_event_name') || exit 0
+    case "$event" in UserPromptSubmit|PreToolUse) ;; *) exit 0 ;; esac
+    transcript=$(printf '%s' "$payload" | jq -er '.transcript_path | strings | select(startswith("/") and (contains("\n") | not))') || exit 0
+    [ -f "$transcript" ] && [ -r "$transcript" ] && [ ! -L "$transcript" ] || exit 0
+    window=200000
+    config="${FM_CONFIG_OVERRIDE:-$FM_HOME/config}/context-stow-window-tokens"
+    if [ -f "$config" ]; then window=$(cat "$config") || exit 0; fi
+    case "$window" in ''|0*|*[!0-9]*) exit 0 ;; esac
+    percent=$(jq -Rne --arg session "$session" --argjson window "$window" '
+      reduce inputs as $line (null;
+        (try ($line | fromjson) catch null) as $entry |
+        if ($entry | type) != "object" then .
+        elif $entry.sessionId != $session or $entry.isSidechain == true then .
+        elif $entry.type == "system" and $entry.subtype == "compact_boundary" then null
+        elif $entry.type == "assistant" then $entry.message.usage
+        else . end) |
+      select(type == "object") |
+      select(.input_tokens | type == "number") |
+      [.input_tokens, (.cache_creation_input_tokens // 0), (.cache_read_input_tokens // 0), (.output_tokens // 0)] |
+      select(all(.[]; type == "number" and . >= 0)) |
+      add * 100 / $window
+    ' "$transcript" 2>/dev/null) || exit 0
+    ;;
+  --pi)
+    percent=$(printf '%s' "$payload" | jq -er '.percent | numbers | select(. >= 0)') || exit 0
+    ;;
+esac
 above=false
-pending=false
 if [ -f "$record" ]; then
   above=$(jq -r '.above == true' "$record") || exit 0
-  pending=$(jq -r '.pending == true' "$record") || exit 0
 fi
-if [ "$mode" != --claude-hook ]; then
-  percent=$(printf '%s' "$payload" | jq -er --arg mode "$mode" '
-    (if $mode == "--pi" then .percent else .context_window.used_percentage end)
-    | numbers | select(. >= 0 and . <= 100)') || exit 0
-  high=$(jq -n --argjson percent "$percent" --argjson threshold "$threshold" '$percent >= $threshold') || exit 0
-  if [ "$high" = true ] && [ "$above" = false ]; then pending=true; fi
-  if [ "$high" = false ]; then pending=false; fi
-  above=$high
-else
-  event=$(printf '%s' "$payload" | jq -er '.hook_event_name') || exit 0
-  case "$event" in UserPromptSubmit|PreToolUse) ;; *) exit 0 ;; esac
-fi
+high=$(jq -n --argjson percent "$percent" --argjson threshold "$threshold" '$percent >= $threshold') || exit 0
 nudge=
-if [ "$mode" != --claude-status ] && [ "$pending" = true ]; then
+if [ "$high" = true ] && [ "$above" = false ]; then
   fm_operational_input_encode context-stow 'Context usage crossed the configured stow threshold. Run /stow now to persist established knowledge and open work before compaction.' nudge || exit 0
-  pending=false
 fi
 umask 077
 tmp=$(mktemp "$STATE/.context-stow.XXXXXX") || exit 0
-if ! jq -n --argjson above "$above" --argjson pending "$pending" '{above:$above,pending:$pending}' > "$tmp" || ! mv -f "$tmp" "$record"; then
+if ! jq -n --argjson above "$high" '{above:$above}' > "$tmp" || ! mv -f "$tmp" "$record"; then
   rm -f "$tmp"
   exit 0
 fi
+[ -n "$nudge" ] || exit 0
 case "$mode" in
-  --claude-status) printf 'Context: %s%%\n' "$percent" ;;
   --claude-hook)
-    [ -n "$nudge" ] || exit 0
     jq -n --arg event "$event" --arg content "$nudge" '{hookSpecificOutput:{hookEventName:$event,additionalContext:$content}}'
     ;;
-  --pi) [ -z "$nudge" ] || printf '%s\n' "$nudge" ;;
+  --pi) printf '%s\n' "$nudge" ;;
 esac
 exit 0

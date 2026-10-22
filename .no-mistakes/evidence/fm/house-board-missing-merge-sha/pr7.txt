@@ -1,0 +1,8 @@
+$ gh-axi api repos/jazz127/firstmate/pulls/7 --jq {number,html_url,merged_at,merge_commit_sha,head:.head.ref,base:.base.ref}
+exit: 0
+base: main
+head: fm/firstmate-done-wait-luna6-r1
+html_url: "https://github.com/jazz127/firstmate/pull/7"
+merge_commit_sha: 99789c3130c35ade2559d3c9d1fd603dbd9421ad
+merged_at: "2026-09-24T10:23:08Z"
+number: 7

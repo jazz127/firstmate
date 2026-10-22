@@ -1,0 +1,4 @@
+$ python3 <base-commit-board-builder> build # same disposable register, real gh-axi/GitHub
+exit: 1
+fm-house-board: GitHub read failed for repos/jazz127/firstmate/compare/99789c3130c35ade2559d3c9d1fd603dbd9421ad...7be45250723b416926ed285732cb1491fa688c2c: error: "gh: Not Found (HTTP 404)"
+code: NOT_FOUND

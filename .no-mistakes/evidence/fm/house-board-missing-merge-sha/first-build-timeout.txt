@@ -1,0 +1,1 @@
+Initial full live build exceeded the validation driver's 240-second deadline and was stopped by subprocess.run. The fork has many feature branches; no successful build result was inferred. Re-driven with a 900-second deadline and streaming evidence in live-build.txt.

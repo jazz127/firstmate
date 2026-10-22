@@ -1,0 +1,5 @@
+result: "{\"title\":\"House lines - Firstmate\",\"count\":\"1 matching features\",\"row\":\"Missing merge regression\\nMerge commit removed by fork history rewrite\\n\\t\\nfirstmate\\nhousefeature/firstmate-done-wait-luna6-r1\\nregister only\\n\\tUnknown\\tN/A\\thistorical\\nhistorical · fork PR\\n\\t\\nFork · merged\\n29d\",\"pr\":\"https://github.com/jazz127/firstmate/pull/7\"}"
+help[1]:
+  Run `chrome-devtools-axi snapshot` to see current page state
+
+exit: 0

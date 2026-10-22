@@ -1,0 +1,3 @@
+$ gh-axi api repos/jazz127/firstmate/pulls/7 --jq {labels:[.labels[].name]}
+exit: 0
+labels[1]: historical

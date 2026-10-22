@@ -1,0 +1,4 @@
+$ gh-axi api repos/jazz127/firstmate/compare/99789c3130c35ade2559d3c9d1fd603dbd9421ad...house --jq {behind_by}
+exit: 1
+error: "gh: Not Found (HTTP 404)"
+code: NOT_FOUND

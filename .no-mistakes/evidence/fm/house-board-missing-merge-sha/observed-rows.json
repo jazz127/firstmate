@@ -1,0 +1,46 @@
+{
+  "missing_merge": {
+    "project": "firstmate",
+    "name": "Missing merge regression",
+    "description": "Merge commit removed by fork history rewrite",
+    "branch": "housefeature/firstmate-done-wait-luna6-r1",
+    "branch_tip": null,
+    "branch_url": null,
+    "commits": [],
+    "landed": false,
+    "presence": "register only",
+    "label": "historical",
+    "label_source": "fork PR",
+    "state": "historical",
+    "on_house": "n/a",
+    "fork_pr": {
+      "html_url": "https://github.com/jazz127/firstmate/pull/7",
+      "state": "closed",
+      "merged_at": "2026-09-24T10:23:08Z"
+    },
+    "upstream_pr": null,
+    "age_days": 29,
+    "age_since": "2026-09-23T11:22:32Z"
+  },
+  "valid_ancestry": {
+    "project": "firstmate",
+    "name": "Afk return sc2031",
+    "description": "Branch exists on the fork but is absent from the house register.",
+    "branch": "housefeature/afk-return-sc2031",
+    "branch_tip": "db425f21b6b1afdf2cf714a412e86a4455a70bcb",
+    "branch_url": "https://github.com/jazz127/firstmate/tree/housefeature/afk-return-sc2031",
+    "commits": [
+      "db425f21b6b1afdf2cf714a412e86a4455a70bcb"
+    ],
+    "landed": true,
+    "presence": "fork only",
+    "label": "house-only",
+    "label_source": "register",
+    "state": "landed",
+    "on_house": "yes",
+    "fork_pr": null,
+    "upstream_pr": null,
+    "age_days": 23,
+    "age_since": "2026-09-28T23:55:49Z"
+  }
+}

@@ -1,0 +1,5 @@
+$ FM_HOME=<isolated-home-with-nonexistent-upstream> FM_HOUSE_BOARD_NO_SERVE=1 bin/fm-house-board.sh build
+exit: 1
+fm-house-board: GitHub found nothing at repos/kunchenguid/fm-house-board-nonexistent-regression-01M5JR5Q2T5Z3GDGZNKBXAJ8T2/branches/main
+
+Existing published JSON/HTML preserved byte-for-byte: True

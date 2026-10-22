@@ -1,0 +1,5 @@
+result: "{\"title\":\"House lines - Firstmate\",\"count\":\"1 matching features\",\"row\":\"Afk return sc2031\\nBranch exists on the fork but is absent from the house register.\\n\\t\\nfirstmate\\nhousefeature/afk-return-sc2031\\nfork only\\n\\t\\ndb425f21\\n\\tYes\\thouse-only\\nlanded · register\\n\\t\\n-\\n23d\"}"
+help[1]:
+  Run `chrome-devtools-axi snapshot` to see current page state
+
+exit: 0

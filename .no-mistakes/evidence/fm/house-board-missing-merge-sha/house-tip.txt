@@ -1,0 +1,3 @@
+$ gh-axi api repos/jazz127/firstmate/branches/house --jq {sha:.commit.sha}
+exit: 0
+sha: 7be45250723b416926ed285732cb1491fa688c2c

@@ -1,0 +1,8 @@
+$ FM_HOME=<disposable-worktree-home> FM_HOUSE_BOARD_NO_SERVE=1 bin/fm-house-board.sh build
+Driver deadline: 900 seconds
+warning: merge commit 99789c3130c35ade2559d3c9d1fd603dbd9421ad of https://github.com/jazz127/firstmate/pull/7 no longer exists; treating it as not landed
+board: ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5JR5Q2T5Z3GDGZNKBXAJ8T2/.house-board-live/.lavish/house-board.html
+payload: ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5JR5Q2T5Z3GDGZNKBXAJ8T2/.house-board-live/.lavish/house-board.json
+
+exit: 0
+elapsed: 478.5s

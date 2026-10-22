@@ -1,0 +1,6 @@
+$ gh-axi api repos/jazz127/firstmate/compare/housefeature/afk-return-sc2031...house --jq {status,behind_by,base_commit:.base_commit.sha,merge_base_commit:.merge_base_commit.sha}
+exit: 0
+base_commit: db425f21b6b1afdf2cf714a412e86a4455a70bcb
+behind_by: 0
+merge_base_commit: db425f21b6b1afdf2cf714a412e86a4455a70bcb
+status: ahead

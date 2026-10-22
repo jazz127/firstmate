@@ -1,0 +1,3 @@
+PASS: missing merge is landed=false; PR 7 historical label remains historical with house membership N/A, per docs/fork-house-branch.md.
+PASS: independently confirmed existing house ancestor remains landed=true, on_house=yes.
+The initial post-build driver assertion incorrectly expected state=unlanded/on_house=no for the historical PR. Corrected above using the real GitHub label and documented display contract; product build exited 0.

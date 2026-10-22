@@ -113,10 +113,13 @@ rc=0
 cd "$FM_HOME" || exit 0
 case "$harness" in
   claude)
+    # An explicit wait is interrupted by TERM immediately; a foreground command
+    # defers our cleanup trap until the worker exits, possibly after group KILL.
     claude -p --no-session-persistence --permission-mode dontAsk \
       --tools 'Read,Edit,Write,Bash' --allowedTools 'Read,Edit,Write,Bash' \
       --settings '{"disableAllHooks":true}' --strict-mcp-config \
-      --append-system-prompt "$role" "$prompt" >> "$log" 2>&1 || rc=$?
+      --append-system-prompt "$role" "$prompt" >> "$log" 2>&1 <&0 &
+    wait "$!" || rc=$?
     ;;
   pi)
     jq -nc --arg role "$role" --arg prompt "$prompt" --arg home "$FM_HOME" '{role:$role,prompt:$prompt,home:$home}'

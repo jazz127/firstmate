@@ -33,7 +33,11 @@ snapshot=${prompt#*session captured in }
 snapshot=${snapshot%%. The active home*}
 cat "$snapshot" >> "$FM_TEST_AGENT_TRACE"
 printf '%s\n' '{"decision":"block","continue":false}'
-if [ "${FM_TEST_AGENT_SLOW:-0}" = 1 ]; then
+if [ "${FM_TEST_AGENT_SLOW:-0}" != 0 ]; then
+  if [ "$FM_TEST_AGENT_SLOW" = 2 ]; then
+    # Model a native worker that needs longer than the watchdog grace to stop.
+    trap 'sleep 2; exit 0' TERM
+  fi
   sleep 30 &
   printf '%s\n' "$!" > "$FM_TEST_AGENT_TRACE.child"
   wait
@@ -144,24 +148,27 @@ run_hook
 [ "$(grep -c '^call ' "$FM_TEST_AGENT_TRACE")" -eq 2 ] || fail "failure prevented retry"
 cleaned
 pass "agent failures never block compaction and retry on the next event"
-make_primary deadline
-export FM_TEST_AGENT_SLOW=1 FM_PRECOMPACT_STOW_TIMEOUT=3
-run_hook 2> "$home/timeout.stderr"
-grep -q 'exit 124' "$home/timeout.stderr" || fail "timeout not diagnosed"
-child=$(cat "$FM_TEST_AGENT_TRACE.child")
-for _ in 1 2 3 4 5 6 7 8 9 10; do
-  kill -0 "$child" 2>/dev/null || break
-  sleep 0.1
+for shutdown in 1 2; do
+  make_primary "deadline-$shutdown"
+  export FM_TEST_AGENT_SLOW=$shutdown FM_PRECOMPACT_STOW_TIMEOUT=3
+  run_hook 2> "$home/timeout.stderr"
+  grep -q 'exit 124' "$home/timeout.stderr" || fail "timeout not diagnosed"
+  child=$(cat "$FM_TEST_AGENT_TRACE.child")
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    kill -0 "$child" 2>/dev/null || break
+    sleep 0.1
+  done
+  if kill -0 "$child" 2>/dev/null; then
+    [ "$(ps -o stat= -p "$child" | tr -d ' ')" = Z ] || fail "timeout leaked descendant $child"
+  fi
+  cleaned
+  unset FM_TEST_AGENT_SLOW
+  export FM_PRECOMPACT_STOW_TIMEOUT=10
+  run_hook
+  [ "$(grep -c '^call ' "$FM_TEST_AGENT_TRACE")" -eq 2 ] || fail "timeout blocked retry"
+  cleaned
+  pass "deadline kills the pass process group and permits the next attempt"
 done
-if kill -0 "$child" 2>/dev/null; then
-  [ "$(ps -o stat= -p "$child" | tr -d ' ')" = Z ] || fail "timeout leaked descendant $child"
-fi
-unset FM_TEST_AGENT_SLOW
-export FM_PRECOMPACT_STOW_TIMEOUT=10
-run_hook
-[ "$(grep -c '^call ' "$FM_TEST_AGENT_TRACE")" -eq 2 ] || fail "timeout blocked retry"
-cleaned
-pass "deadline kills the pass process group and permits the next attempt"
 make_primary concurrent
 export FM_TEST_AGENT_SLOW=1 FM_PRECOMPACT_STOW_TIMEOUT=3
 "$HOOK" --harness claude < "$home/payload.json" > "$home/first.out" 2> "$home/first.err" &

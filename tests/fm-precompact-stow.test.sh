@@ -5,6 +5,7 @@ set -u
 if [ "${FM_PRECOMPACT_TEST_HARNESS:-0}" != 1 ]; then
   fixture=$(mktemp -d "${TMPDIR:-/tmp}/fm-precompact-harness.XXXXXX") || exit 1
   ln -s /bin/bash "$fixture/pi"
+  # shellcheck disable=SC2016 # Expand variables in the inner Bash process.
   FM_PRECOMPACT_TEST_HARNESS=1 "$fixture/pi" -c \
     'export FM_TEST_OWNER_PID=$$; "$@"; rc=$?; :; exit "$rc"' _ bash "$0" "$@"
   rc=$?

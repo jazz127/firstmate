@@ -1,0 +1,55 @@
+{
+  "families": [
+    {
+      "count": 2,
+      "duration_ms": 16735,
+      "failed": 0,
+      "name": "backend-dispatch"
+    },
+    {
+      "count": 1,
+      "duration_ms": 20613,
+      "failed": 0,
+      "name": "standalone"
+    }
+  ],
+  "finished_at": "2026-10-22T15:01:31Z",
+  "run_id": "fm-test-run-1792681254311-92617",
+  "scripts": [
+    {
+      "duration_ms": 2259,
+      "exit": 0,
+      "expected_gate_skip": "none",
+      "family": "backend-dispatch",
+      "gate_skip": false,
+      "gate_skip_reason": "",
+      "path": "tests/fm-dock.test.sh"
+    },
+    {
+      "duration_ms": 14476,
+      "exit": 0,
+      "expected_gate_skip": "none",
+      "family": "backend-dispatch",
+      "gate_skip": false,
+      "gate_skip_reason": "",
+      "path": "tests/fm-spawn-codex-seat-launch.test.sh"
+    },
+    {
+      "duration_ms": 20613,
+      "exit": 0,
+      "expected_gate_skip": "none",
+      "family": "standalone",
+      "gate_skip": false,
+      "gate_skip_reason": "",
+      "path": "tests/fm-dispatch-resolve.test.sh"
+    }
+  ],
+  "selection": "scripts;jobs=1",
+  "started_at": "2026-10-22T15:00:54Z",
+  "summary": {
+    "duration_ms": 37495,
+    "failed": 0,
+    "skipped_gate": 0,
+    "total": 3
+  }
+}

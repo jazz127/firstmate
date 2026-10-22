@@ -1,0 +1,252 @@
+$ bash bin/fm-lab-home.sh create ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5J2004G7W3164824QGJGPGV/.seat-validation-vin50pg4/home
+~/.no-mistakes/worktrees/119cd7a6b9a4/01M5J2004G7W3164824QGJGPGV/.seat-validation-vin50pg4/home
+[exit 0]
+
+$ bash bin/fm-dock.sh resolve --seat before-name --harness codex
+seat=before-name
+dock=disposable-dock
+credential_home=~/.no-mistakes/worktrees/119cd7a6b9a4/01M5J2004G7W3164824QGJGPGV/.seat-validation-vin50pg4/credentials one
+source=dock.json
+[exit 0]
+
+$ bash bin/fm-dock.sh resolve --seat renamed-27 --harness codex
+seat=renamed-27
+dock=disposable-dock
+credential_home=~/.no-mistakes/worktrees/119cd7a6b9a4/01M5J2004G7W3164824QGJGPGV/.seat-validation-vin50pg4/credentials one
+source=dock.json
+[exit 0]
+
+$ bash bin/fm-dock.sh resolve --seat build-3 --harness codex
+seat=build-3
+dock=disposable-dock
+credential_home=~/.no-mistakes/worktrees/119cd7a6b9a4/01M5J2004G7W3164824QGJGPGV/.seat-validation-vin50pg4/credentials $(literal) 'two'
+source=dock.json
+[exit 0]
+
+$ bash bin/fm-dock.sh resolve --seat 9 --harness codex
+seat=9
+dock=disposable-dock
+credential_home=~/.no-mistakes/worktrees/119cd7a6b9a4/01M5J2004G7W3164824QGJGPGV/.seat-validation-vin50pg4/credentials three
+source=dock.json
+[exit 0]
+
+$ bash bin/fm-dock.sh resolve --seat before-name --harness codex
+error: dock record ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5J2004G7W3164824QGJGPGV/.seat-validation-vin50pg4/home/config/dock.json is malformed, unsupported, or does not bind seat before-name to codex; launch refused, no ambient account selected
+[exit 1]
+
+OBSERVED: editing only private dock.json renamed one seat and added two independently resolved seats.
+
+$ bash ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5J2004G7W3164824QGJGPGV/.seat-validation-vin50pg4/base/fm-dock.sh resolve --seat renamed-27 --harness codex
+error: unknown or unsupported dock seat 'renamed-27' for harness 'codex' (supported seats: luna, main on codex); launch refused, no ambient account selected
+[exit 1]
+
+OBSERVED: unchanged base CLI rejects renamed-27; target CLI resolves it with the same private record.
+
+$ bash bin/fm-dock.sh resolve --seat a --harness codex
+seat=a
+dock=disposable-dock
+credential_home=~/.no-mistakes/worktrees/119cd7a6b9a4/01M5J2004G7W3164824QGJGPGV/.seat-validation-vin50pg4/credentials one
+source=dock.json
+[exit 0]
+
+$ bash bin/fm-dock.sh resolve --seat 0 --harness codex
+seat=0
+dock=disposable-dock
+credential_home=~/.no-mistakes/worktrees/119cd7a6b9a4/01M5J2004G7W3164824QGJGPGV/.seat-validation-vin50pg4/credentials one
+source=dock.json
+[exit 0]
+
+$ bash bin/fm-dock.sh resolve --seat a-b --harness codex
+seat=a-b
+dock=disposable-dock
+credential_home=~/.no-mistakes/worktrees/119cd7a6b9a4/01M5J2004G7W3164824QGJGPGV/.seat-validation-vin50pg4/credentials one
+source=dock.json
+[exit 0]
+
+$ bash bin/fm-dock.sh resolve --seat aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --harness codex
+seat=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+dock=disposable-dock
+credential_home=~/.no-mistakes/worktrees/119cd7a6b9a4/01M5J2004G7W3164824QGJGPGV/.seat-validation-vin50pg4/credentials one
+source=dock.json
+[exit 0]
+
+$ bash bin/fm-dock.sh resolve --seat '' --harness codex
+error: unknown or unsupported dock seat '' for harness 'codex' (expected a safe name on codex); launch refused, no ambient account selected
+[exit 1]
+
+$ bash bin/fm-dock.sh resolve --seat valid --harness codex
+error: dock record ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5J2004G7W3164824QGJGPGV/.seat-validation-vin50pg4/home/config/dock.json is malformed, unsupported, or does not bind seat valid to codex; launch refused, no ambient account selected
+[exit 1]
+
+$ bash bin/fm-dock.sh resolve --seat -start --harness codex
+error: unknown or unsupported dock seat '-start' for harness 'codex' (expected a safe name on codex); launch refused, no ambient account selected
+[exit 1]
+
+$ bash bin/fm-dock.sh resolve --seat valid --harness codex
+error: dock record ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5J2004G7W3164824QGJGPGV/.seat-validation-vin50pg4/home/config/dock.json is malformed, unsupported, or does not bind seat valid to codex; launch refused, no ambient account selected
+[exit 1]
+
+$ bash bin/fm-dock.sh resolve --seat Upper --harness codex
+error: unknown or unsupported dock seat 'Upper' for harness 'codex' (expected a safe name on codex); launch refused, no ambient account selected
+[exit 1]
+
+$ bash bin/fm-dock.sh resolve --seat valid --harness codex
+error: dock record ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5J2004G7W3164824QGJGPGV/.seat-validation-vin50pg4/home/config/dock.json is malformed, unsupported, or does not bind seat valid to codex; launch refused, no ambient account selected
+[exit 1]
+
+$ bash bin/fm-dock.sh resolve --seat under_score --harness codex
+error: unknown or unsupported dock seat 'under_score' for harness 'codex' (expected a safe name on codex); launch refused, no ambient account selected
+[exit 1]
+
+$ bash bin/fm-dock.sh resolve --seat valid --harness codex
+error: dock record ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5J2004G7W3164824QGJGPGV/.seat-validation-vin50pg4/home/config/dock.json is malformed, unsupported, or does not bind seat valid to codex; launch refused, no ambient account selected
+[exit 1]
+
+$ bash bin/fm-dock.sh resolve --seat dot.name --harness codex
+error: unknown or unsupported dock seat 'dot.name' for harness 'codex' (expected a safe name on codex); launch refused, no ambient account selected
+[exit 1]
+
+$ bash bin/fm-dock.sh resolve --seat valid --harness codex
+error: dock record ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5J2004G7W3164824QGJGPGV/.seat-validation-vin50pg4/home/config/dock.json is malformed, unsupported, or does not bind seat valid to codex; launch refused, no ambient account selected
+[exit 1]
+
+$ bash bin/fm-dock.sh resolve --seat slash/name --harness codex
+error: unknown or unsupported dock seat 'slash/name' for harness 'codex' (expected a safe name on codex); launch refused, no ambient account selected
+[exit 1]
+
+$ bash bin/fm-dock.sh resolve --seat valid --harness codex
+error: dock record ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5J2004G7W3164824QGJGPGV/.seat-validation-vin50pg4/home/config/dock.json is malformed, unsupported, or does not bind seat valid to codex; launch refused, no ambient account selected
+[exit 1]
+
+$ bash bin/fm-dock.sh resolve --seat 'space name' --harness codex
+error: unknown or unsupported dock seat 'space name' for harness 'codex' (expected a safe name on codex); launch refused, no ambient account selected
+[exit 1]
+
+$ bash bin/fm-dock.sh resolve --seat valid --harness codex
+error: dock record ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5J2004G7W3164824QGJGPGV/.seat-validation-vin50pg4/home/config/dock.json is malformed, unsupported, or does not bind seat valid to codex; launch refused, no ambient account selected
+[exit 1]
+
+$ bash bin/fm-dock.sh resolve --seat aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --harness codex
+error: unknown or unsupported dock seat 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' for harness 'codex' (expected a safe name on codex); launch refused, no ambient account selected
+[exit 1]
+
+$ bash bin/fm-dock.sh resolve --seat valid --harness codex
+error: dock record ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5J2004G7W3164824QGJGPGV/.seat-validation-vin50pg4/home/config/dock.json is malformed, unsupported, or does not bind seat valid to codex; launch refused, no ambient account selected
+[exit 1]
+
+$ bash bin/fm-dock.sh resolve --seat 'line
+' --harness codex
+error: unknown or unsupported dock seat 'line
+' for harness 'codex' (expected a safe name on codex); launch refused, no ambient account selected
+[exit 1]
+
+$ bash bin/fm-dock.sh resolve --seat valid --harness codex
+error: dock record ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5J2004G7W3164824QGJGPGV/.seat-validation-vin50pg4/home/config/dock.json is malformed, unsupported, or does not bind seat valid to codex; launch refused, no ambient account selected
+[exit 1]
+
+$ bash bin/fm-dock.sh resolve --seat valid --harness codex
+error: dock record ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5J2004G7W3164824QGJGPGV/.seat-validation-vin50pg4/home/config/dock.json is malformed, unsupported, or does not bind seat valid to codex; launch refused, no ambient account selected
+[exit 1]
+
+$ bash bin/fm-dock.sh resolve --seat valid --harness claude
+error: unknown or unsupported dock seat 'valid' for harness 'claude' (expected a safe name on codex); launch refused, no ambient account selected
+[exit 1]
+
+$ bash bin/fm-dock.sh resolve --seat valid --harness codex
+seat=valid
+dock=disposable-dock
+credential_home=~/.no-mistakes/worktrees/119cd7a6b9a4/01M5J2004G7W3164824QGJGPGV/.seat-validation-vin50pg4/credentials three
+source=dock.json
+[exit 0]
+
+$ bash bin/fm-dock.sh resolve --seat valid --harness codex
+seat=valid
+dock=disposable-dock
+credential_home=~/.no-mistakes/worktrees/119cd7a6b9a4/01M5J2004G7W3164824QGJGPGV/.seat-validation-vin50pg4/credentials one
+source=dock.json
+[exit 0]
+
+$ bash bin/fm-dock.sh resolve --seat valid --harness codex
+error: dock record ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5J2004G7W3164824QGJGPGV/.seat-validation-vin50pg4/home/config/dock.json is absent; configure seat valid on this host; launch refused, no ambient account selected
+[exit 1]
+
+$ bash bin/fm-dock.sh resolve --seat luna --harness codex
+error: dock record ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5J2004G7W3164824QGJGPGV/.seat-validation-vin50pg4/home/config/dock.json is absent; configure seat luna on this host; launch refused, no ambient account selected
+[exit 1]
+
+$ bash bin/fm-dock.sh resolve --seat main --harness codex
+error: dock record ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5J2004G7W3164824QGJGPGV/.seat-validation-vin50pg4/home/config/dock.json is absent; configure seat main on this host; launch refused, no ambient account selected
+[exit 1]
+
+$ bash bin/fm-dock.sh resolve --seat unconfigured --harness codex
+error: dock record ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5J2004G7W3164824QGJGPGV/.seat-validation-vin50pg4/home/config/dock.json is malformed, unsupported, or does not bind seat unconfigured to codex; launch refused, no ambient account selected
+[exit 1]
+
+OBSERVED: unsafe selected and unselected keys, unsupported harness, absent records, and absent bindings all refuse; per-home paths remain independent.
+
+$ bash bin/fm-bootstrap.sh
+BOOTSTRAP_INFO: crew dispatch active config/crew-dispatch.json
+BOOTSTRAP_INFO: crew dispatch default: quota-balanced[codex, codex]
+BOOTSTRAP_INFO: tasks-axi available
+[exit 0]
+
+$ bash bin/fm-dispatch-resolve.sh ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5J2004G7W3164824QGJGPGV/.seat-validation-vin50pg4/home/brief.md
+dispatch-resolve:
+  status: escalate
+  reason: no rules to match
+[exit 0]
+
+$ bash bin/fm-bootstrap.sh
+CREW_DISPATCH: invalid config/crew-dispatch.json - unsupported default profile seat (safe name on codex): bad_name
+BOOTSTRAP_INFO: tasks-axi available
+[exit 0]
+
+$ bash bin/fm-dispatch-resolve.sh ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5J2004G7W3164824QGJGPGV/.seat-validation-vin50pg4/home/brief.md
+error: malformed rules file: ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5J2004G7W3164824QGJGPGV/.seat-validation-vin50pg4/home/config/crew-dispatch.json - unsupported default profile seat (safe name on codex): bad_name
+[exit 2]
+
+$ bash bin/fm-bootstrap.sh
+CREW_DISPATCH: invalid config/crew-dispatch.json - unsupported default profile seat (safe name on codex): aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+BOOTSTRAP_INFO: tasks-axi available
+[exit 0]
+
+$ bash bin/fm-dispatch-resolve.sh ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5J2004G7W3164824QGJGPGV/.seat-validation-vin50pg4/home/brief.md
+error: malformed rules file: ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5J2004G7W3164824QGJGPGV/.seat-validation-vin50pg4/home/config/crew-dispatch.json - unsupported default profile seat (safe name on codex): aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+[exit 2]
+
+$ bash bin/fm-bootstrap.sh
+CREW_DISPATCH: invalid config/crew-dispatch.json - unsupported default profile seat (safe name on codex): line
+BOOTSTRAP_INFO: tasks-axi available
+[exit 0]
+
+$ bash bin/fm-dispatch-resolve.sh ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5J2004G7W3164824QGJGPGV/.seat-validation-vin50pg4/home/brief.md
+error: malformed rules file: ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5J2004G7W3164824QGJGPGV/.seat-validation-vin50pg4/home/config/crew-dispatch.json - unsupported default profile seat (safe name on codex): line
+[exit 2]
+
+$ bash bin/fm-dispatch-resolve.sh ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5J2004G7W3164824QGJGPGV/.seat-validation-vin50pg4/home/brief.md
+error: dock record ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5J2004G7W3164824QGJGPGV/.seat-validation-vin50pg4/home/config/dock.json is malformed, unsupported, or does not bind seat unconfigured to codex; launch refused, no ambient account selected
+[exit 2]
+
+OBSERVED: startup and resolver preflight accept private names, reject unsafe names, and resolver rejects undeclared bindings before network. No Typesafe service response was supplied or simulated.
+
+$ codex --version
+codex-cli 0.163.0
+[exit 0]
+
+$ codex login status -c 'cli_auth_credentials_store="file"' -c 'model_provider="openai"'
+Not logged in
+[exit 1]
+
+$ bash bin/fm-spawn.sh seat-auth-probe ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5J2004G7W3164824QGJGPGV --scout --harness codex --seat valid
+fm-gate-refuse: gate agent lifecycle permitted only against lab home ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5J2004G7W3164824QGJGPGV/.seat-validation-vin50pg4/home
+error: Codex seat at ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5J2004G7W3164824QGJGPGV/.seat-validation-vin50pg4/credentials one has no ordinary readable file-backed sign-in; launch refused, no ambient account selected
+[exit 1]
+
+$ bash bin/fm-spawn.sh seat-auth-probe ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5J2004G7W3164824QGJGPGV --scout --harness codex --seat bad_name
+fm-gate-refuse: gate agent lifecycle permitted only against lab home ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5J2004G7W3164824QGJGPGV/.seat-validation-vin50pg4/home
+error: invalid --seat 'bad_name' (expected 1-64 lowercase letters, digits, or dashes, starting with a letter or digit)
+[exit 1]
+
+OBSERVED: real fm-spawn accepts the configured label through dock resolution, then refuses the empty login before publishing task metadata. An authenticated worker/model request was not possible with this disposable empty credential home.
+
+CLEANUP: removed the entire disposable lab; no backend session was started.

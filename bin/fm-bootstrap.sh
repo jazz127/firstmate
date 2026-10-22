@@ -182,6 +182,8 @@ DATA="${FM_DATA_OVERRIDE:-$FM_HOME/data}"
 . "$SCRIPT_DIR/fm-backlog-transition-lib.sh"
 # shellcheck source=bin/fm-quota-axi-lib.sh disable=SC1091
 . "$SCRIPT_DIR/fm-quota-axi-lib.sh"
+# shellcheck source=bin/fm-dock-lib.sh disable=SC1091
+. "$SCRIPT_DIR/fm-dock-lib.sh"
 # shellcheck source=bin/fm-control-lib.sh disable=SC1091
 . "$SCRIPT_DIR/fm-control-lib.sh"
 # shellcheck source=bin/fm-env-lib.sh disable=SC1091
@@ -1121,7 +1123,8 @@ crew_dispatch_validate() {
   else
     verified_harnesses='["claude","codex","opencode","pi","pi-signed","grok","kimi","cursor","agy","muse","rovo","omp","devin","commandcode","polytoken"]'
   fi
-  err=$(jq -r --argjson typed "$typed_active" --argjson verified_harnesses "$verified_harnesses" --arg provider_re "$FM_QUOTA_PROVIDER_ID_RE" '
+  err=$(jq -r --argjson typed "$typed_active" --argjson verified_harnesses "$verified_harnesses" --arg provider_re "$FM_QUOTA_PROVIDER_ID_RE" --arg seat_re "^${FM_DOCK_SEAT_NAME_RE}\\z" '
+    def seat_ok($s): ($s | type) == "string" and ($s | test($seat_re));
     def verified($h): $verified_harnesses | index($h);
     def provider_id($p): ($p | type) == "string" and ($p | test($provider_re));
     def effort_ok($h; $m; $e):
@@ -1147,7 +1150,7 @@ crew_dispatch_validate() {
       ([(.rules // [])[]? | profiles(.use?)[]?]
         + (if has("default") then [profiles(.default)[]?] else [] end));
     def invalid_seats($items):
-      [$items[] | select(has("seat") and ((.seat != "luna" and .seat != "main") or .harness != "codex")) | (.seat | tostring)] | unique;
+      [$items[] | select(has("seat") and ((seat_ok(.seat) | not) or .harness != "codex")) | (.seat | tostring)] | unique;
     def malformed_optional_fields($items):
       ($items | any(has("model") and (((.model | type) != "string") or (.model | length) == 0)))
       or ($items | any(has("effort") and (((.effort | type) != "string") or (.effort | length) == 0)))
@@ -1182,7 +1185,7 @@ crew_dispatch_validate() {
     elif [(.rules // [])[]? | profiles(.use?)[]? | select(type != "object")] | length > 0 then "each use profile must be an object"
     elif [(.rules // [])[]? | profiles(.use?)[]? | select((.harness? | type) != "string" or (.harness | length) == 0)] | length > 0 then "each use profile needs harness"
     elif (invalid_seats([(.rules // [])[]? | profiles(.use?)[]?]) | length) > 0 then
-      "unsupported use profile seat (only luna or main on codex): " + (invalid_seats([(.rules // [])[]? | profiles(.use?)[]?]) | join(", "))
+      "unsupported use profile seat (safe name on codex): " + (invalid_seats([(.rules // [])[]? | profiles(.use?)[]?]) | join(", "))
     elif malformed_optional_fields([(.rules // [])[]? | profiles(.use?)[]?]) then
       if $typed then "use profile model and effort must be non-empty strings, and provider must match ^[a-z0-9]+(-[a-z0-9]+)*\\z when present"
       else "use profile model and effort must be non-empty strings when present"
@@ -1199,7 +1202,7 @@ crew_dispatch_validate() {
     elif has("default") and ([profiles(.default)[]? | select(type != "object")] | length) > 0 then "each default profile must be an object"
     elif has("default") and ([profiles(.default)[]? | select((.harness? | type) != "string" or (.harness | length) == 0)] | length) > 0 then "each default profile needs harness"
     elif has("default") and (invalid_seats([profiles(.default)[]?]) | length) > 0 then
-      "unsupported default profile seat (only luna or main on codex): " + (invalid_seats([profiles(.default)[]?]) | join(", "))
+      "unsupported default profile seat (safe name on codex): " + (invalid_seats([profiles(.default)[]?]) | join(", "))
     elif has("default") and malformed_optional_fields([profiles(.default)[]?]) then
       if $typed then "default profile model and effort must be non-empty strings, and provider must match ^[a-z0-9]+(-[a-z0-9]+)*\\z when present"
       else "default profile model and effort must be non-empty strings when present"

@@ -1388,7 +1388,7 @@ This section is the single owner of the canonical schema and its per-field seman
 | `use` and optional top-level `default` | Accept one profile object or a non-empty array of profile objects; the single-object form remains fully backward-compatible. |
 | Profile `harness` | Required in every profile. |
 | Profile `model` and `effort`; rule `why` | Optional. |
-| Profile `seat` | Optional; accepts only the strings `"luna"` or `"main"` with `"harness": "codex"`, and the launching home's [dock record](#dock-local-seat-binding-configdockjson) maps each name to this machine's credential directory. |
+| Profile `seat` | Optional; accepts a safe seat name with `"harness": "codex"`, and the launching home's [dock record](#dock-local-seat-binding-configdockjson) maps each name to this machine's credential directory. |
 
 [`quota-array-dispatch`](../.agents/skills/quota-array-dispatch/SKILL.md#1-eligibility) owns account and quota matching for named seats and ambient profiles.
 
@@ -1459,32 +1459,32 @@ Secondmate homes inherit this file from the primary, so a secondmate's own crewm
 
 An optional private `config/dock.json` in the launching home binds portable dispatch seat names to this machine's credential directory.
 The effective config directory is `${FM_CONFIG_OVERRIDE:-$FM_HOME/config}`; no parent home, hostname map, or ambient `CODEX_HOME` is searched.
-Version 1 supports the named `luna` and `main` seats on Codex:
+Version 1 supports operator-defined seat names on Codex:
 
 ```json
 {
   "version": 1,
-  "id": "ji7",
+  "id": "local-dock",
   "seats": {
-    "luna": {
+    "primary": {
       "harness": "codex",
-      "credential_home": "/home/fm-manage/.codex-luna"
+      "credential_home": "/home/operator/.codex-primary"
     },
-    "main": {
+    "secondary": {
       "harness": "codex",
-      "credential_home": "/home/fm-manage/.codex"
+      "credential_home": "/home/operator/.codex-secondary"
     }
   }
 }
 ```
 
 `id` is a safe single-line diagnostic label, not a host routing instruction.
-The file must be ordinary readable JSON with exactly the top-level and per-seat fields shown; `seats` may bind either supported name or both, or be `{}` to declare no available seats.
+The file must be ordinary readable JSON with exactly the top-level and per-seat fields shown; `seats` may bind any number of names, or be `{}` to declare no available seats.
+Each name must contain 1-64 lowercase ASCII letters, digits, or dashes and start with a letter or digit.
 The credential path must be absolute and free of control characters; spaces and shell punctuation remain literal, and the existing directory is resolved to its physical path.
 An invalid or present incomplete file refuses a seated launch without a fallback.
-Only when the file is absent on Darwin for OS user `jarad` with `HOME=/Users/jarad` does Luna resolve to `/Users/jarad/.codex-luna` as `legacy-mac-jarad`; the `main` seat always requires an explicit dock binding.
-On other machines, create a local record before a seated launch.
-`bin/fm-dock.sh resolve --seat main --harness codex` or `--seat luna` prints the selected binding's identity without changing configuration.
+An absent file refuses a seated launch; create a local record before selecting a seat.
+`bin/fm-dock.sh resolve --seat primary --harness codex` prints the selected binding's identity without changing configuration.
 
 A seated spawn or relaunch requires the selected directory to be readable and searchable and requires native `codex login status` to identify a stored sign-in under a cleared environment.
 This release supports Codex's file-backed CLI authentication mode for seats; a configured keyring, auto, or ephemeral mode refuses until its path selection is guarded.

@@ -1015,9 +1015,9 @@ test_seated_codex_relaunch_preflights_current_dock_before_stop() {
   seat_home="$dir/current-seat"
   mkdir -p "$seat_home"
   printf '%s\n' '{"OPENAI_API_KEY":"sk-fm-synthetic"}' > "$seat_home/auth.json"
-  jq -n --arg home "$seat_home" '{version:1,id:"control-dock",seats:{luna:{harness:"codex",credential_home:$home}}}' \
+  jq -n --arg home "$seat_home" '{version:1,id:"control-dock",seats:{primary:{harness:"codex",credential_home:$home}}}' \
     > "$dir/home/config/dock.json"
-  printf '%s\n' 'seat=luna' 'dock=old-dock' 'seat_home=/old/seat' >> "$dir/home/state/$id.meta"
+  printf '%s\n' 'seat=primary' 'dock=old-dock' 'seat_home=/old/seat' >> "$dir/home/state/$id.meta"
   cat > "$dir/fakebin/codex" <<'SH'
 #!/usr/bin/env bash
 if [ "${1:-}" = login ] && [ "${2:-}" = status ]; then
@@ -1043,7 +1043,7 @@ SH
   printf '%s\n' "$dir/home/config/dock.json" > "$seat_home/dock-path"
   out=$(run_control "$dir" "$id" relaunch --harness claude --note "wrong harness"); rc=$?
   expect_code 1 "$rc" "incompatible harness must refuse before stop"
-  assert_contains "$out" "unsupported dock seat 'luna' for harness 'claude'" "harness mismatch should name seat contract"
+  assert_contains "$out" "unsupported dock seat 'primary' for harness 'claude'" "harness mismatch should name seat contract"
   [ "$(cat "$dir/fake/command")" = codex ] || fail "harness mismatch stopped the old worker"
   [ ! -s "$dir/fake/literal" ] || fail "harness mismatch sent lifecycle input"
 
@@ -1052,7 +1052,7 @@ SH
   expect_code 0 "$rc" "signed-in current dock should relaunch: $out"
   [ "$(meta_field "$dir" "$id" seat_home)" = "$seat_home" ] || fail "replacement did not re-resolve the current dock"
   [ "$(meta_field "$dir" "$id" dock)" = control-dock ] || fail "replacement retained a stale dock id"
-  jq -n --arg home "$seat_home" '{version:1,id:"control-dock",seats:{luna:{harness:"codex",credential_home:$home}}}' \
+  jq -n --arg home "$seat_home" '{version:1,id:"control-dock",seats:{primary:{harness:"codex",credential_home:$home}}}' \
     > "$dir/home/config/dock.json"
   pass "fm-control preflights the current seat before stop and re-resolves its path on replacement"
 }

@@ -29,7 +29,7 @@ cp "$ROOT/bin/fm-quota-tab.sh" "$HOME_FIXTURE/bin/"
 cat > "$FAKEBIN/quota-axi" <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' "$*" > "$QUOTA_ARGS"
-printf 'Codex home card: $72 credit\nCodex Luna card: weekly headroom 41%%\n'
+printf 'Codex home card: $72 credit\nCodex secondary card: weekly headroom 41%%\n'
 EOF
 chmod +x "$FAKEBIN/quota-axi"
 
@@ -43,7 +43,7 @@ assert_contains "$OUTPUT" 'House tip: ' 'house tip is missing'
 assert_contains "$OUTPUT" 'Quota house line' 'house subject is missing'
 assert_contains "$OUTPUT" "quota-axi executable: $FAKEBIN/quota-axi" 'executable path is missing'
 assert_contains "$OUTPUT" "Codex home card: \$72 credit" 'first Codex seat card is missing'
-assert_contains "$OUTPUT" 'Codex Luna card: weekly headroom 41%' 'second Codex seat card is missing'
+assert_contains "$OUTPUT" 'Codex secondary card: weekly headroom 41%' 'second Codex seat card is missing'
 assert_contains "$OUTPUT" 'interval: 17 seconds' 'refresh interval is missing'
 title_line=$(printf '%s\n' "$OUTPUT" | rg -n 'quota-axi view of the fleet house line' | head -n1 | cut -d: -f1)
 report_line=$(printf '%s\n' "$OUTPUT" | rg -n 'Codex home card' | head -n1 | cut -d: -f1)

@@ -1,0 +1,26 @@
+precompact-stow: started harness=claude
+## Automatic Pre-Compaction Persistence Mode Receipt
+
+**Budget:**
+- Effective startup-memory budget: 7,500 tokens
+- Before: 14 tokens (within budget)
+- After: 28 tokens (within budget)
+
+**Memory File Actions:**
+- `data/captain.md`: `added` — UTC timestamps in status reports (captain preference, pinned tier)
+- `data/captain-shared.md`: `unchanged` (absent)
+- `data/learnings.md`: `unchanged` (absent)
+
+**Durable Findings Persisted:**
+- Finding: "Use UTC timestamps in status reports"
+  - Source: Established standing preference from session snapshot (2026-10-22T22:04:24Z)
+  - Destination: `data/captain.md` (primary owner)
+  - Evidence: Explicit statement in snapshot message; no revalidation required for stated preference
+
+**Exceptions:** None
+
+**Unresolved Work:** None in snapshot
+
+**Status:** Automatic persistence complete. One established captain preference captured from snapshot. No open records or additional findings identified in precompaction context. Ready for session compaction to proceed.
+
+precompact-stow: agent exit=0 (receipt above; not reset-safe proof)

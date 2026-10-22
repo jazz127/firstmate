@@ -1,0 +1,4 @@
+{"usage":{"tokens":4036,"contextWindow":100000,"percent":4.036},"model":"grok-4.5"}
+{"usage":{"tokens":4939,"contextWindow":100000,"percent":4.939},"model":"grok-4.5"}
+{"usage":{"tokens":6126,"contextWindow":100000,"percent":6.126},"model":"grok-4.5"}
+{"usage":{"tokens":6455,"contextWindow":100000,"percent":6.455},"model":"grok-4.5"}

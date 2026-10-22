@@ -1,0 +1,64 @@
+claude launched
+reached native session initialized
+reached initial response
+reached threshold delivery response
+reached READY_BELOW
+reached READY_RECROSS
+reached READY_DISABLED
+reached native precompact hook
+reached bounded stow receipt
+precompact-stow: started harness=claude
+## Automatic Pre-Compaction Persistence Receipt
+
+**Session ID**: 5a7b46b1-73a0-46ff-b158-f4ce0e03a259  
+**Mode**: Automatic pre-compaction persistence (bounded, non-interactive)  
+**Home**: ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5JR0P9RS91BMGMF9ADS3SJ6/.test-local/live-rich
+
+### Memory Budget
+
+| Stage | Total Tokens | Status |
+|-------|-------------|--------|
+| Before | 14 | within-budget |
+| After | 69 | within-budget |
+| Effective Budget | 7500 | — |
+
+### Per-File Actions
+
+- **data/captain.md**: `added` — Captain standing preference for UTC timestamps in status reports (pinned tier, no marker)
+- **data/captain-shared.md**: `unchanged` — File absent; no shared preferences discovered
+- **data/learnings.md**: `added` — Operational learning: RFC3339 timestamps in exported reports (aging tier, dated <!--a:2026-10-23-->)
+
+### Session Findings Filed
+
+1. **Captain preference** (data/captain.md): Status reports must use UTC timestamps.
+   - **Authority**: data/captain.md (pinned default)
+   - **Evidence**: Session explicitly stated as standing preference
+   
+2. **Operational learning** (data/learnings.md): This home uses RFC3339 timestamps in exported reports.
+   - **Authority**: data/learnings.md (aging tier)
+   - **Evidence**: Session explicitly stated as established operational learning
+   - **Reinforced**: 2026-10-23
+
+### Open Records
+
+- **Daily incident summary**: Drafting in progress. Agreed implementation note: retain a UTC audit column. Status filed in this receipt only; execution and task tracking belong to external work-management system.
+
+### Exceptions and Decisions
+
+None. All durable findings from the snapshot have been captured in appropriate memory files with independent session evidence.
+
+### Reset-Safeness
+
+**Not reset-safe**: Automatic pre-compaction mode is bounded and deadline-driven. Open work (daily incident summary) remains unfinished; the compaction hook will proceed regardless.
+
+---
+
+**Automatic completion timestamp**: 2026-10-23T22:04:22Z  
+**Budget relief**: 0 tokens (no archival, offload, or eviction in automatic mode)  
+**Next action**: System will proceed with context compaction.
+
+precompact-stow: agent exit=0 (receipt above; not reset-safe proof)
+
+UTC_PERSISTED=True
+cleanup claude: 
+[{"harness": "claude", "persisted": true, "exit0": true}]

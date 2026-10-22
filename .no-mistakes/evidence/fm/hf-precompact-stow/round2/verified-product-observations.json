@@ -1,0 +1,19 @@
+{
+  "Claude preference in captain owner": true,
+  "Claude operational learning in learnings owner": true,
+  "Existing backlog note updated": true,
+  "Pi preference in captain owner": true,
+  "Native provider function used with real API": true,
+  "Foreign owner emits no reminder": true,
+  "Exactly two Claude threshold crossings": true,
+  "live-claude-rich-faithful completed compaction": true,
+  "live-claude-rich-faithful snapshot/mutex cleanup": true,
+  "live-claude-backlog-complete completed compaction": true,
+  "live-claude-backlog-complete snapshot/mutex cleanup": true,
+  "live-pi-provider-low completed compaction": true,
+  "live-pi-provider-low snapshot/mutex cleanup": true,
+  "live-claude-deadline-repeat completed compaction": true,
+  "live-claude-deadline-repeat snapshot/mutex cleanup": true,
+  "Exactly one native Pi threshold message": true,
+  "Deadline diagnosed while compaction continued": true
+}

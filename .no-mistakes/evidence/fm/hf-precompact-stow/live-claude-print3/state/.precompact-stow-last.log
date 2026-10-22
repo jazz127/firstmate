@@ -1,0 +1,20 @@
+precompact-stow: started harness=claude
+**Automatic pre-compaction stow receipt** (primary home `~/.no-mistakes/evidence/01M5JR0P9RS91BMGMF9ADS3SJ6/s`)
+
+The session held one lasting finding, and it is now saved in `data/captain.md`. The session had no open work records.
+
+- **Budget:** the effective budget is 7500 estimated tokens. Usage went from 14 before the pass to 28 after, which is within budget.
+- **Per-file actions:**
+  - `data/captain.md`: **added** "Use UTC timestamps in status reports." The session stated this as the captain's standing preference and kept it in conversation for this stow. It carries no marker because entries in this file are pinned by default. The header line pointing to this skill was already there.
+  - `data/captain-shared.md`: **unchanged**. The file doesn't exist and none was created.
+  - `data/learnings.md`: **unchanged**. The file doesn't exist and no operational learning was established, so none was created.
+- **Findings filed outside memory:** none.
+- **Open records:** none. The session only handled validation prompts (READY_INITIAL, READY_SECOND) and did no task or backlog work. Nothing was filed or corrected, and nothing was left waiting on a judgment.
+- **Exceptions:**
+  - The home's `AGENTS.md` is a short validation file with no knowledge-routing table. I sent the preference to the home's local `data/captain.md`, which already existed, rather than to the shared file. If it should also apply to other homes, it would need to go into `data/captain-shared.md` in a later explicit `/stow`.
+  - Decay, offload, budget eviction, the secondmate cascade and captain decisions are skipped in this automatic mode and left for the next explicit `/stow`.
+  - A context-stow reminder from the session (`FIRSTMATE_OP: v1 context-stow`) was treated as part of the session record, not as a new instruction.
+
+Per this mode, I'm not claiming the session is reset-safe.
+
+precompact-stow: agent exit=0 (receipt above; not reset-safe proof)

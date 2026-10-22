@@ -1,0 +1,36 @@
+precompact-stow: started harness=claude
+## Automatic Pre-Compaction Persistence Completion Receipt
+
+**2026-10-23T21:57:37Z** (UTC)
+
+### Memory Budget
+- **Effective budget**: 7,500 tokens (primary home)
+- **Before**: 14 estimated tokens
+- **After**: 28 estimated tokens
+- **Status**: within budget ✓
+
+### Memory File Actions
+1. **data/captain.md**: `added`
+   - Added established standing preference: "Report status timestamps in UTC format"
+   - Default tier: pinned (no marker needed for captain.md default)
+
+2. **data/captain-shared.md**: `unchanged` (absent)
+
+3. **data/learnings.md**: `unchanged` (absent)
+
+### Durable Findings Persisted
+- **Captain preference**: UTC timestamps in status reports
+  - **Source**: Pre-compaction session established finding (snapshot lines 1–44)
+  - **Owner**: data/captain.md (pinned default)
+  - **Evidence**: User explicit preference stated at session start, confirmed through validation checkpoints (READY_INITIAL, READY_FOREIGN, READY_SECOND)
+
+### Open Records
+- No open work records established in this session
+
+### Exceptions & Decisions
+- None unresolved
+
+### Reset Safety
+**Not reset-safe claimed**: This automatic pre-compaction pass completed within deadline constraints. The persistent hook signals upcoming compaction; the session's established preference is filed, but the automatic mode cannot audit whether all session knowledge has been captured.
+
+precompact-stow: agent exit=0 (receipt above; not reset-safe proof)

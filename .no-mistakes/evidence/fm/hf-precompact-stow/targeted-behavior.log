@@ -1,0 +1,14 @@
+ok - PreCompact snapshots the session, dispatches existing stow, and suppresses blocking output
+ok - manual/auto events retain their harness; Pi uses the native active branch
+ok - ineligible, foreign, recursive, malformed, and missing-input hooks stand down
+ok - worker-shaped checkout is excluded; a marked lock-owning secondmate is included
+ok - agent failures never block compaction and retry on the next event
+ok - deadline kills the pass process group and permits the next attempt
+ok - concurrent native events do not stack stow writers
+ok - the whole-pass deadline includes a hook payload that never reaches EOF
+ok - every timed runner preserves the caller's stdin (external boundary regression)
+ok - threshold default, configuration, disablement, and once-per-crossing behavior
+ok - tracked Claude hooks sample transcript usage once per crossing without a status line
+ok - threshold nudge retains primary ownership and harness exclusions
+ok - Pi transport, provider function preservation, isolation, and usage events
+ok - installed Pi retains extension provider functions through the bounded isolated stow worker

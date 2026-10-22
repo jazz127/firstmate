@@ -1,0 +1,8 @@
+[
+  {
+    "harness": "claude",
+    "compacted_after_deadline": true,
+    "diagnosed_timeout": true,
+    "mutex_released": true
+  }
+]

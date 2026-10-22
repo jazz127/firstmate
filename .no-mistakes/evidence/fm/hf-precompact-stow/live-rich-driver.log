@@ -1,0 +1,35 @@
+claude launched
+reached native session initialized
+reached initial response
+reached threshold delivery response
+reached READY_BELOW
+reached READY_RECROSS
+reached READY_DISABLED
+reached native precompact hook
+reached bounded stow receipt
+precompact-stow: started harness=claude
+**Automatic Pre-Compaction Persistence Complete**
+
+I've executed the automatic pre-compaction persistence pass for session `a9e7edf3-41c2-440e-a5dd-781ec8b25e78`. The originating session held three established facts requiring persistence:
+
+**Durable findings persisted:**
+
+1. **Standing preference** → `data/captain.md` (pinned)
+   - "Use UTC timestamps in status reports."
+
+2. **Operational learning** → `data/learnings.md` (aging, reinforced 2026-10-23)
+   - "This home uses RFC3339 timestamps in exported reports."
+
+**Budget:** 7500 token effective budget; now using 73 tokens (captain.md 33 + learnings.md 40). Status: within budget.
+
+**Open record acknowledged:** Drafting the daily incident summary with agreed implementation note to retain a UTC audit column—held in originating session but not persisted to durable task owner in this automatic pass (deadline prevents broader task system interaction).
+
+**Not reset-safe:** Open work record persists only in session context. Recommend explicit `/stow` invocation to complete open-record persistence through task/backlog owner when session resumes.
+
+Receipt retained in diagnostic log per spec.
+
+precompact-stow: agent exit=0 (receipt above; not reset-safe proof)
+
+UTC_PERSISTED=True
+cleanup claude: 
+[{"harness": "claude", "persisted": true, "exit0": true}]

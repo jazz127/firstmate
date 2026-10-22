@@ -1,0 +1,17 @@
+# Product validation
+
+Verdict: go. Eight live scenarios passed against real Claude Code and Pi with actual upstream models. No source changes were needed.
+
+- Claude native `/compact` saved a conversation-only UTC preference in `data/captain.md` and an RFC3339 learning in `data/learnings.md`. The faithful lab included the actual repository ownership instructions. The stow receipt and completed native compact boundary are in `live-claude-rich-faithful/`.
+- The existing `incident-summary` backlog item changed from “Implementation note pending.” to the UTC audit-column note through the real tasks-axi owner. The bounded pass and compaction completed: `live-claude-backlog-complete/`.
+- Claude delivered exactly two context-stow additionalContext envelopes across crossing, repeated high observations, rearming, recrossing, and disabling. Native hooks sampled real transcript usage. See `live-claude-rich-faithful/crossing-state.jsonl` and `stream.log`.
+- Pi native getContextUsage sampling delivered exactly one operational context-stow message. Native compaction persisted the preference and completed: `live-pi-provider-low/transcript.jsonl`, `state/observations.jsonl`, and `data/captain.md`.
+- A Pi extension registered xai/grok-4.5 with a custom stream function delegating to the actual https://api.x.ai/v1 service. It made 12 API calls, including the isolated stow pass. No response or provider was faked. A conservative local 100000-token window and 1% threshold made the reminder reachable. See `live-pi-provider-low/state/provider-calls.jsonl` and `.precompact-stow-last.log`.
+- A native Claude prompt under a foreign lock emitted neither a reminder nor crossing state; restoring the true owner allowed delivery: `live-claude-ownership/foreign-owner-observation.json`.
+- A one-second stow deadline produced exit 124 while native compaction completed. The snapshot and mutex were absent five seconds later: `live-claude-deadline-repeat/state/hook.stderr`, `transcript.jsonl`, and `verified-product-observations.json`.
+
+The focused precompact-stow, timeout-lib, and operational-input suites all exited 0. Their synthetic harness/provider cases are supplemental regression evidence, not live API evidence. They cover overflow percentages above 100, delayed termination, stdin preservation, exclusions, encoding, and concurrency. No timeout binary is installed; the external boundary used a focused substitute, while the native deadline used the real Perl watchdog. No broad suite, linter, formatter, or static analyzer ran.
+
+Setup corrections: The first backlog attempt saved its note but reached the allowed deadline before a receipt; a smaller repeat completed. Early drivers stopped after stow; corrected drivers awaited native compaction boundaries. A shortened lab AGENTS.md omitted the routing table and produced a misplaced preference in one repeat; the faithful lab copied actual instructions and saved records to the proper owners. The first custom-provider setup requested unsupported reasoning_effort=none; a fresh low-reasoning run completed. These attempts remain in the evidence.
+
+Pi's real exporter generated `native-pi-provider.html`. CLI transcripts, persisted records, receipts, and cleanup checks are retained. Every primary used a 180x45 terminal on its lab's private named fm-lab socket. All lab primaries and private sockets were stopped and removed. No default fleet session or production credential store was modified.

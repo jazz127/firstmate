@@ -1,0 +1,10 @@
+[
+  {
+    "harness": "claude",
+    "error": "native startup did not complete"
+  },
+  {
+    "harness": "pi",
+    "error": "initial response did not complete"
+  }
+]

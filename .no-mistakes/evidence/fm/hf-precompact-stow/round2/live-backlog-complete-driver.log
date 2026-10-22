@@ -1,0 +1,44 @@
+claude launched
+reached native session initialized
+reached initial response
+reached threshold delivery response
+reached native precompact hook
+reached bounded stow receipt
+precompact-stow: started harness=claude
+## Automatic Pre-Compaction Persistence Receipt
+
+**Session ID:** 38fd6716-4b7c-4da8-9e5c-23bb3a01c69d
+
+### Startup Memory Budget
+- **Effective budget:** 7500 tokens
+- **Before:** 29 tokens (captain.md only)
+- **After:** 29 tokens
+- **Status:** within budget
+
+### Memory File Actions
+- `data/captain.md` — **unchanged** (contains: "Prefer UTC timestamps in status reports.")
+- `data/captain-shared.md` — absent
+- `data/learnings.md` — absent
+
+### Open Records Filed
+- **Task incident-summary** (owned by `bin/fm-tasks-axi.sh`): implementation note persisted
+  - Content: "Retain a UTC audit column."
+  - Update completed successfully at 2026-10-23
+
+### Durable Findings
+- None held beyond this session.
+
+### Exceptions
+- None.
+
+### Result
+All established findings from the originating session have been persisted through their existing owners. No unfinished findings remain pending. Memory total is within budget. No exceptions or outstanding decisions.
+
+**Session is safe to reset:** Nothing this session knew has been lost. All open work records have been filed, all durable findings persisted, no budget excess or unresolved exceptions.
+
+precompact-stow: agent exit=0 (receipt above; not reset-safe proof)
+
+UTC_PERSISTED=True
+reached completed native compaction
+cleanup claude: 
+[{"harness": "claude", "persisted": true, "exit0": true}]

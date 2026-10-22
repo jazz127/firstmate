@@ -1,0 +1,6 @@
+{
+  "hookSpecificOutput": {
+    "hookEventName": "UserPromptSubmit",
+    "additionalContext": "⁣FIRSTMATE_OP: v1 context-stow: Context usage crossed the configured stow threshold. Run /stow now to persist established knowledge and open work before compaction."
+  }
+}

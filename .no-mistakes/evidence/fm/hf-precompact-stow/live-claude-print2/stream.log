@@ -1,0 +1,3 @@
+{"type":"system","subtype":"hook_started","hook_id":"2d8642a0-0b87-485a-9abc-a1b54acd9b40","hook_name":"SessionStart:startup","hook_event":"SessionStart","uuid":"9dc55c4d-cccc-46a5-b35b-015e010b1a1d","session_id":"ddaf33b8-32a9-4c83-b7ce-b3954253b5dd"}
+{"type":"system","subtype":"hook_response","hook_id":"2d8642a0-0b87-485a-9abc-a1b54acd9b40","hook_name":"SessionStart:startup","hook_event":"SessionStart","output":"","stdout":"","stderr":"","exit_code":0,"outcome":"success","uuid":"c44c016e-fb80-4723-bf1b-d2845c773574","session_id":"ddaf33b8-32a9-4c83-b7ce-b3954253b5dd"}
+Error: Input must be provided either through stdin or as a prompt argument when using --print

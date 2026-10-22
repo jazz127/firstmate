@@ -1,0 +1,44 @@
+claude launched
+reached native session initialized
+reached initial response
+reached threshold delivery response
+reached native precompact hook
+reached bounded stow receipt
+precompact-stow: started harness=claude
+## Automatic Pre-Compaction Persistence Receipt
+
+**Session:** adab8a9c-df51-4f38-b684-49a95ea7205e  
+**Timestamp (UTC):** 2026-10-23T00:00:00Z  
+**Mode:** Automatic pre-compaction persistence
+
+### Budget Status
+- **Effective budget:** 7500 tokens
+- **Before:** 14 tokens
+- **After:** 39 tokens
+- **Status:** Within budget
+
+### Memory File Actions
+- `data/captain.md`: **rewritten** — added established captain preference
+- `data/captain-shared.md`: **unchanged** (absent)
+- `data/learnings.md`: **unchanged** (absent)
+
+### Durable Findings Filed
+- **Finding:** Standing preference for UTC timestamps in status reports
+- **Owner:** data/captain.md (captain preference, pinned tier)
+- **Source:** Originating session explicit statement
+- **Evidence:** Session user message — "my established standing preference is UTC timestamps in status reports"
+
+### Open Records
+- No open work records held by originating session requiring filing or correction.
+
+### Exceptions
+- None
+
+### Reset-Safe Status
+**Not claimed.** Automatic pre-compaction mode completes persistence within its deadline window but cannot confirm all session context has been captured beyond the snapshot boundaries.
+
+precompact-stow: agent exit=0 (receipt above; not reset-safe proof)
+
+UTC_PERSISTED=True
+cleanup claude: 
+[{"harness": "claude", "persisted": true, "exit0": true}]

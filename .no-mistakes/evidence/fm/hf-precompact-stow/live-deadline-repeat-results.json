@@ -1,0 +1,6 @@
+[
+  {
+    "harness": "claude",
+    "error": "deadline retained writer mutex"
+  }
+]

@@ -1,0 +1,52 @@
+[
+  {
+    "lab": "live-pi-provider",
+    "private_socket_directory_removed": true,
+    "primary_stopped": true
+  },
+  {
+    "lab": "live-claude-rich-complete",
+    "private_socket_directory_removed": true,
+    "primary_stopped": true
+  },
+  {
+    "lab": "live-claude-rich-faithful",
+    "private_socket_directory_removed": true,
+    "primary_stopped": true
+  },
+  {
+    "lab": "live-pi-provider-low",
+    "private_socket_directory_removed": true,
+    "primary_stopped": true
+  },
+  {
+    "lab": "live-claude-rich",
+    "private_socket_directory_removed": true,
+    "primary_stopped": true
+  },
+  {
+    "lab": "live-claude-backlog",
+    "private_socket_directory_removed": true,
+    "primary_stopped": true
+  },
+  {
+    "lab": "live-claude-ownership",
+    "private_socket_directory_removed": true,
+    "primary_stopped": true
+  },
+  {
+    "lab": "live-pi-grok",
+    "private_socket_directory_removed": true,
+    "primary_stopped": true
+  },
+  {
+    "lab": "live-claude-backlog-complete",
+    "private_socket_directory_removed": true,
+    "primary_stopped": true
+  },
+  {
+    "lab": "live-claude-deadline-repeat",
+    "private_socket_directory_removed": true,
+    "primary_stopped": true
+  }
+]

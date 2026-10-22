@@ -1,0 +1,10 @@
+claude launched
+reached native session initialized
+reached initial response
+reached threshold delivery response
+reached compaction boundary despite stow deadline
+HOOK_STDERR=precompact-stow: pass incomplete (exit 124); compaction continues
+
+TIMEOUT_STATE=[".precompact-stow-last.log"]
+cleanup claude: 
+[{"harness": "claude", "compacted_after_deadline": true, "diagnosed_timeout": true, "mutex_released": true}]

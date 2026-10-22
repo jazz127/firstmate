@@ -1,0 +1,11 @@
+claude launched
+reached native session initialized
+reached initial response
+reached threshold delivery response
+reached compaction boundary despite stow deadline
+HOOK_STDERR=precompact-stow: pass incomplete (exit 124); compaction continues
+
+TIMEOUT_STATE=[".precompact-stow-transcript.YGur6g", ".precompact-stow.lock.owner.JzkZRH", ".precompact-stow-last.log", ".precompact-stow.lock"]
+claude ERROR deadline retained writer mutex
+cleanup claude: 
+[{"harness": "claude", "error": "deadline retained writer mutex"}]

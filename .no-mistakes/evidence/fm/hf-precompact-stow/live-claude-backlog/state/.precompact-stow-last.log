@@ -1,0 +1,25 @@
+precompact-stow: started harness=claude
+## Automatic Pre-Compaction Persistence — Completion Receipt
+
+**Session processed**: Validation primary session with two established facts requiring persistence.
+
+**Budget accounting**:
+- Effective startup-memory budget: 7,500 tokens
+- Before: 14 estimated tokens (captain.md header only)
+- After: 44 estimated tokens (captain.md with preference added)
+- Status: within-budget ✓
+
+**Memory file actions**:
+- `data/captain.md`: **rewritten** — added standing preference entry (1 line)
+- `data/captain-shared.md`: absent (no write required)
+- `data/learnings.md`: absent (no write required)
+
+**Durable findings filed**:
+1. Standing preference: **UTC timestamps in status reports** — persisted to captain.md (tier: pinned, no age marker)
+2. Open work record: **incident-summary task** updated through bin/fm-tasks-axi.sh with implementation note "Retain UTC audit column"
+
+**Exceptions**: None.
+
+**Result**: Session is safe to reset. Both established facts from the validation session have been durably captured: the standing preference in memory and the agreed task implementation note in its authoritative owner.
+
+precompact-stow: agent exit=0 (receipt above; not reset-safe proof)

@@ -1,0 +1,26 @@
+precompact-stow: started harness=claude
+## Automatic Pre-Compaction Persistence Receipt
+
+**Budget Summary:**
+- Effective startup-memory budget: 7500 tokens
+- Before: 14 tokens (captain.md header only)
+- After: 122 tokens (captain.md + learnings.md with 3 entries)
+- Status: within-budget
+
+**Memory File Actions:**
+- `data/captain.md`: unchanged
+- `data/captain-shared.md`: absent
+- `data/learnings.md`: added
+
+**Durable Findings Persisted:**
+- Standing preference: UTC timestamps in status reports <!--a:2026-10-23-->
+- Operational learning: RFC3339 timestamps in exported reports <!--a:2026-10-23-->
+- Open work: Daily incident summary in progress with UTC audit column retention note <!--a:2026-10-23-->
+
+All three findings were established in the session snapshot and recorded as `aging` entries (default tier for learnings.md) with today's reinforcement date 2026-10-23.
+
+**Exceptions:** None
+
+**Reset-Safe Status:** Not claimed — automatic pre-compaction deadline may leave work unfinished; hook must permit compaction to continue.
+
+precompact-stow: agent exit=0 (receipt above; not reset-safe proof)

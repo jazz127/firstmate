@@ -1,0 +1,8 @@
+claude launched
+reached native session initialized
+reached initial response
+reached threshold delivery response
+reached compaction boundary despite stow deadline
+claude ERROR deadline diagnostic not retained
+cleanup claude: 
+[{"harness": "claude", "error": "deadline diagnostic not retained"}]

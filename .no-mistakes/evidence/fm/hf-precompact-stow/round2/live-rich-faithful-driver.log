@@ -1,0 +1,49 @@
+claude launched
+reached native session initialized
+reached initial response
+reached threshold delivery response
+reached READY_BELOW
+reached READY_RECROSS
+reached READY_DISABLED
+reached native precompact hook
+reached bounded stow receipt
+precompact-stow: started harness=claude
+## Automatic Pre-Compaction Persistence Receipt
+
+**Budget Summary:**
+- Effective budget: 7500 tokens
+- Estimated tokens before persistence: 14
+- Estimated tokens after persistence: 63
+- Budget status: within-budget ✓
+
+**Memory File Actions:**
+
+| File | Action | Details |
+|------|--------|---------|
+| `data/captain.md` | **rewritten** | Added standing preference entry: "Status reports use UTC timestamps." (pinned tier, unmarked per file default) |
+| `data/captain-shared.md` | **unchanged** | Absent file remains absent |
+| `data/learnings.md` | **added** | Created file with operational learning: "Exported reports use RFC3339 timestamps." (aging tier, reinforced today: 2026-10-23) |
+
+**Established Findings Persisted:**
+- Standing preference (captain domain): UTC timestamps required for status reports → `data/captain.md`
+- Operational learning (fleet-local fact): This home exports reports in RFC3339 format → `data/learnings.md`
+
+**Open Records:**
+- Daily incident summary draft with UTC audit column retention: Held in session conversation; no durable record entry created (no backlog item specified in snapshot)
+
+**Exceptions:**
+None. All writes completed within budget.
+
+**Session Reset Safe Status:**
+**No** — do not claim reset-safe. Per automatic pre-compaction mode: deadline can leave work unfinished. The daily incident summary remains in conversation context only; the hook must let compaction continue.
+
+---
+
+**AUTOMATIC COMPLETION RECEIPT DELIVERED**
+
+precompact-stow: agent exit=0 (receipt above; not reset-safe proof)
+
+UTC_PERSISTED=True
+reached completed native compaction
+cleanup claude: 
+[{"harness": "claude", "persisted": true, "exit0": true}]

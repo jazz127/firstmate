@@ -228,6 +228,22 @@ These conditions therefore surface as follows:
 
 None of these becomes a refusal to open the session.
 
+## Persistence before compaction
+
+The tracked Claude `PreCompact` registration and the Pi/pi-signed `session_before_compact` extension invoke [`bin/fm-precompact-stow.sh`](../bin/fm-precompact-stow.sh) before manual or automatic compaction.
+They run only in the lock-owning primary or secondmate home.
+The script's header owns the deadline, diagnostics, serialization, payload, and invocation mechanics; the internal [stow skill](../.agents/skills/stow/SKILL.md#automatic-pre-compaction-persistence) owns the bounded persistence mode and all memory/backlog write rules.
+The pass uses a temporary transcript snapshot and a fresh non-interactive agent of the same harness, never resumes the active session, and does not run startup or supervision.
+Pi/pi-signed supplies the native active branch and the current provider/model so abandoned branches do not become persistence inputs.
+Every attempt may consume model tokens.
+Failures, unavailable credentials, unsafe scope, and timeouts let compaction continue; the pass is best-effort and never promises the session is reset-safe.
+Use explicit `/stow` when a complete memory curation pass and secondmate cascade are needed.
+Other primary harnesses currently have no tracked pre-compaction transport, and runtime session backends do not add one.
+Codex is unsupported: its project hooks run only after the project is trusted, and no supported way to trust a disposable folder for the native guard was found, so no unproven Codex hook is registered.
+omp is unsupported until its native compaction event is exercised by the guard.
+This feature adds no usage-threshold nudge and leaves existing post-compaction session-start delivery unchanged.
+Portable behavior checks are in `tests/fm-precompact-stow.test.sh`; the token-spending native guard is `tests/fm-precompact-stow-live-e2e.test.sh`.
+
 ## Harness transports
 
 Each subsection below gives one harness surface's tier, its tracked transport, and its current compatibility.

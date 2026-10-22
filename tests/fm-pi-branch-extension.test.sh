@@ -557,6 +557,7 @@ const mainUserMessages = [];
 const mainTools = [];
 const renderers = new Map();
 const entryRenderers = new Map();
+const markdownTransformers = [];
 const mainEntries = [];
 const mainSessionManager = {
   getSessionFile: () => `${home}/main.jsonl`,
@@ -580,6 +581,9 @@ const pi = {
   },
   registerEntryRenderer(customType, renderer) {
     entryRenderers.set(customType, renderer);
+  },
+  registerMarkdownTransformer(transformer) {
+    markdownTransformers.push(transformer);
   },
   appendEntry(customType, data) {
     activeMainSession.getEntries().push({ type: "custom", customType, data });
@@ -766,10 +770,10 @@ if (typeof sentToMain[0].message.content !== "string" || !sentToMain[0].message.
 if (/branch merged|\[routine\]|\[captain\]/.test(sentToMain[0].message.content)) {
   throw new Error(`routine note still has boilerplate: ${sentToMain[0].message.content}`);
 }
-// A routine note is rendered as a custom message. A captain outcome is a
+// A routine note is hidden as a custom message. A captain outcome is a
 // versioned custom session entry whose exact store summary is its payload.
-if (sentToMain[0].message.display !== true) {
-  throw new Error(`routine note must render: display=${sentToMain[0].message.display}`);
+if (sentToMain[0].message.display !== false) {
+  throw new Error(`routine note must stay hidden: display=${sentToMain[0].message.display}`);
 }
 writeFileSync(`${home}/state/delivered-routine-note`, sentToMain[0].message.content);
 const captainEntries = mainEntries.filter((entry) => entry.customType === "fm-branch-visible-outcome");
@@ -881,16 +885,15 @@ const assertRenderedNote = (note, glyph) => {
       `renderer padding should match real Pi messages (outputPad, 0), got ${rendered.paddingX},${rendered.paddingY}`,
     );
   }
-  const glyphCalls = fgCalls.filter((call) => call.text === glyph);
-  if (glyphCalls.length !== 1 || glyphCalls[0].color === "dim") {
-    throw new Error(`icon ${glyph} must carry color, not dim: ${JSON.stringify(fgCalls)}`);
-  }
-  const restCalls = fgCalls.filter((call) => call.text !== glyph);
-  if (restCalls.length === 0 || restCalls.some((call) => call.color !== "dim")) {
-    throw new Error(`note remainder must be dim: ${JSON.stringify(fgCalls)}`);
-  }
+  if (fgCalls.some((call) => call.color !== "dim")) throw new Error("legacy note must retain dim rendering");
 };
-assertRenderedNote(sentToMain[0].message.content, "⛵");
+for (const expanded of [false, true]) {
+  const historical = renderers.get("fm-branch-merge")(sentToMain[0].message, { expanded }, renderTheme);
+  if (historical.render(120).length !== 0) throw new Error("historical routine note remained visible");
+}
+assertRenderedNote("⚓ task: approval needed", "⚓");
+assertRenderedNote("ordinary unrecognized message", "ordinary");
+assertRenderedNote("⛵ unrecognized message: keep visible", "unrecognized");
 const captainRendered = entryRenderers.get("fm-branch-visible-outcome")(
   captainEntries[0],
   { expanded: false },
@@ -899,6 +902,36 @@ const captainRendered = entryRenderers.get("fm-branch-visible-outcome")(
 if (captainRendered.text !== "⚓ [seq 3] task-9: PR https://example.com/pr/9 checks green, ready for review") {
   throw new Error(`captain renderer changed the exact visible outcome: ${captainRendered.text}`);
 }
+// Representative delivered reports: event generation and verdict are distinct
+// from display. Repeating a handled routine event must not create chat or turns.
+const quietSummaries = [
+  "worker completed a turn",
+  "preview stopped; work remains preserved",
+  "publication blocker already reported, unchanged",
+  "publication blocker already reported, unchanged",
+  "fleet reviewed, nothing changed",
+];
+const beforeQuiet = sentToMain.length;
+for (const [index, summary] of quietSummaries.entries()) {
+  const fleet = index === quietSummaries.length - 1;
+  const result = await report.execute(`quiet-${index}`, {
+    task: fleet ? "fleet" : "task-9", verdict: "routine", summary,
+    ...(fleet ? { silent: true } : {}),
+  }, undefined, undefined, {});
+  if (result.isError) throw new Error(`quiet report failed: ${JSON.stringify(result)}`);
+}
+const quietMessages = sentToMain.slice(beforeQuiet);
+if (quietMessages.length !== quietSummaries.length || quietMessages.some(({ message, options }) => message.display !== false || options.triggerTurn)) {
+  throw new Error(`routine repetition created visible messages or turns: ${JSON.stringify(quietMessages)}`);
+}
+const retained = await outcomesTool.execute("read-quiet", { recent: quietSummaries.length }, undefined, undefined, {});
+const retainedRows = retained.content[0].text.trim().split("\n").map(JSON.parse);
+if (JSON.stringify(retainedRows.map((row) => row.summary)) !== JSON.stringify(quietSummaries)) throw new Error("on-demand retrieval lost routine evidence");
+// Counterfactual: identical text but a captain verdict must still be visible.
+await report.execute("quiet-counterfactual", { task: "task-9", verdict: "captain", summary: quietSummaries[2] }, undefined, undefined, {});
+const laterEntry = mainEntries.filter((entry) => entry.customType === "fm-branch-visible-outcome").at(-1);
+if (laterEntry.data.seq !== 9 || laterEntry.data.summary !== quietSummaries[2]) throw new Error("routine repetition swallowed a later captain outcome");
+if (!entryRenderers.get("fm-branch-visible-outcome")(laterEntry, { expanded: false }, renderTheme).text.includes(quietSummaries[2])) throw new Error("captain counterfactual was filtered by text");
 process.exit(0);
 EOF
   status=$?
@@ -914,7 +947,7 @@ EOF
   # real protocol executable: it is typed branch-outcome input whose body names
   # the sequence, the exact outcome, the acknowledgement tool, and the fact
   # that nothing but that acknowledgement closes it. Routine notes remain
-  # plain rendered text rather than typed operational input.
+  # plain hidden text rather than typed operational input.
   local kind body
   kind=$(./bin/fm-operational-input.sh kind < "$home/state/delivered-processing-request") \
     || fail "the processing request reaches main's model as unattributed text"
@@ -943,7 +976,7 @@ EOF
     *) fail "the processing request body lost the event-ownership boundary or the sequence-bound acknowledgement duty: $body" ;;
   esac
   if ./bin/fm-operational-input.sh kind < "$home/state/delivered-routine-note" >/dev/null 2>&1; then
-    fail "routine note must stay plain rendered text, not typed operational input"
+    fail "routine note must stay plain hidden text, not typed operational input"
   fi
   pass "a captain outcome reaches main's model as one typed, sequence-keyed processing request while routine notes stay plain"
 }
@@ -1055,15 +1088,30 @@ const operational = spawnSync(
   { encoding: "utf8", input: "operational watcher injection" },
 );
 if (operational.status !== 0) throw new Error(`could not create operational input: ${operational.stderr}`);
-await fire("before_agent_start", { prompt: operational.stdout }, mainCtx);
+await fire("before_agent_start", { messageType: "user", prompt: operational.stdout }, mainCtx);
 entries.push({ type: "message", message: { role: "user", content: operational.stdout } });
 const unsolicitedPrompt = "Please keep responses concise while monitoring the fleet.";
-await fire("before_agent_start", { prompt: unsolicitedPrompt }, mainCtx);
+await fire("before_agent_start", { messageType: "user", prompt: unsolicitedPrompt }, mainCtx);
+await fire("before_agent_start", {
+  messageType: "custom",
+  message: { role: "custom", customType: "fixture", content: "custom content must not become captain dialog", display: true },
+}, mainCtx);
 entries.push({ type: "message", message: { role: "user", content: unsolicitedPrompt } });
+// Pi 1.2's idle sendMessage trigger carries a CustomMessage, not a prompt.
+// Even report-request wording in it must never become captain dialog.
+await fire("before_agent_start", {
+  type: "before_agent_start",
+  messageType: "custom",
+  message: {
+    role: "custom", customType: "fixture", content: explicitRequest,
+    display: false, timestamp: Date.now(),
+  },
+  systemPrompt: "fixture", systemPromptOptions: {},
+}, mainCtx);
 await fire("agent_start", {}, mainCtx);
 await fire("agent_end", {}, mainCtx);
 const legacyOperational = "⁣FIRSTMATE_OP: give me a fresh system-resource report.";
-await fire("before_agent_start", { prompt: legacyOperational }, mainCtx);
+await fire("before_agent_start", { messageType: "user", prompt: legacyOperational }, mainCtx);
 entries.push({ type: "message", message: { role: "user", content: legacyOperational } });
 await fire("agent_start", {}, mainCtx);
 const unsolicited = dispatch("signal: healthy resource result");
@@ -1073,8 +1121,8 @@ if (sentToMain.length !== 1 || sentToMain[0].options.triggerTurn) {
   throw new Error(`unsolicited healthy result opened a main turn: ${JSON.stringify(sentToMain)}`);
 }
 const sailboat = sentToMain[0];
-if (sailboat.message.display !== true || !sailboat.message.content.startsWith("⛵ branch-driver:")) {
-  throw new Error(`unsolicited healthy result was not a rendered sailboat note: ${JSON.stringify(sailboat)}`);
+if (sailboat.message.display !== false || !sailboat.message.content.startsWith("⛵ branch-driver:")) {
+  throw new Error(`unsolicited healthy result was not a hidden durable note: ${JSON.stringify(sailboat)}`);
 }
 
 const outcomes = mainTools.find((tool) => tool.name === "fm_branch_outcomes");
@@ -1091,7 +1139,7 @@ for (let index = 0; index < requestedPrompts.length; index += 1) {
   if (index < longRequests.length && content.length <= 4000) {
     throw new Error(`request fixture ${index} did not exceed the mirror bound`);
   }
-  await fire("before_agent_start", { prompt: content }, mainCtx);
+  await fire("before_agent_start", { messageType: "user", prompt: content }, mainCtx);
   // Pi persists this only after every before_agent_start handler has returned.
   entries.push({ type: "message", message: { role: "user", content } });
   await fire("agent_start", {}, mainCtx);
@@ -1117,7 +1165,9 @@ for (const content of [unsolicitedPrompt, ...requestedPrompts]) {
   if (copies !== 1) throw new Error(`current captain prompt was mirrored ${copies} times instead of once`);
 }
 if (mirroredCaptainText.some((text) =>
-  text.includes("operational watcher injection") || text.includes("FIRSTMATE_OP: give me a fresh system-resource report")
+  text === `[captain] ${explicitRequest}` ||
+  text.includes("operational watcher injection") || text.includes("FIRSTMATE_OP: give me a fresh system-resource report") ||
+  text.includes("custom content must not become captain dialog")
 )) {
   throw new Error("canonical current or legacy operational input entered captain mirror context");
 }
@@ -1263,14 +1313,47 @@ test_captain_outcome_processing_turn_is_sequence_keyed_and_re_presented() {
   PLUGIN="$repo/.pi/extensions/fm-branch-supervision.ts" FM_HOME="$home" FM_ROOT_OVERRIDE="$ROOT" \
     DRIVER_PRELUDE="$DRIVER_PRELUDE" node --input-type=module > "$TMP_ROOT/node-output" 2>&1 <<'EOF'
 const prelude = process.env.DRIVER_PRELUDE;
-await eval(`(async () => { ${prelude}; globalThis.__t = { fire, dispatch, settle, sentToMain, mainEntries, mainTools, outcomeScript, defaultSessionCtx, home, bus }; })()`);
-const { fire, dispatch, settle, sentToMain, mainEntries, mainTools, outcomeScript, defaultSessionCtx, home, bus } = globalThis.__t;
+await eval(`(async () => { ${prelude}; globalThis.__t = { fire, dispatch, settle, sentToMain, mainEntries, mainTools, outcomeScript, defaultSessionCtx, home, bus, markdownTransformers }; })()`);
+const { fire, dispatch, settle, sentToMain, mainEntries, mainTools, outcomeScript, defaultSessionCtx, home, bus, markdownTransformers } = globalThis.__t;
 import { writeFileSync } from "node:fs";
 
 let requestsFloor = 0;
 const requests = () => sentToMain.filter((sent) => sent.message.customType === "fm-branch-process").slice(requestsFloor);
 const unprocessedSeqs = () => outcomeScript(["unprocessed"]).split("\n").filter(Boolean).map((line) => JSON.parse(line).seq);
-const runOf = async (fn) => { await fire("agent_start", {}); await fn?.(); await fire("agent_end", {}); await fire("agent_settled", {}); };
+let consumedRequests = 0;
+const consumeRequest = async (userFirst = false) => {
+  const pending = requests().at(-1);
+  if (!pending || consumedRequests === requests().length) return;
+  consumedRequests = requests().length;
+  if (userFirst || pending.options.deliverAs === "nextTurn") {
+    await fire("message_start", { message: { role: "user", content: "A new question" } });
+  }
+  await fire("message_start", { message: { role: "custom", ...pending.message } });
+};
+const runOf = async (fn) => {
+  await fire("agent_start", {});
+  await fire("turn_start", {});
+  await consumeRequest();
+  await fn?.();
+  await fire("agent_end", {});
+  await fire("agent_settled", {});
+};
+const render = (text, isStreaming = true, messageType = "assistant") => markdownTransformers.reduce(
+  (value, transform) => transform(value, { messageType, isStreaming, availableWidth: 80 }), text,
+);
+const finish = async (text, extra = []) => {
+  const message = { role: "assistant", content: [...(text ? [{ type: "text", text }] : []), ...extra], usage: { totalTokens: 7 }, stopReason: "stop" };
+  await fire("message_start", { message });
+  const replacement = await fire("message_end", { message });
+  const stored = replacement?.message ?? message;
+  mainEntries.push({ type: "message", message: stored });
+  if (stored.usage !== message.usage) throw new Error("suppression lost usage accounting");
+  return stored;
+};
+const visibleFinals = () => mainEntries.filter((entry) => entry.type === "message" && entry.message.role === "assistant")
+  .flatMap((entry) => entry.message.content.filter((part) => part.type === "text").map((part) => part.text));
+const priorResult = "Completed the requested work. The checks passed and the result is ready for review.";
+await finish(priorResult);
 
 // A home with a delivered captain row and no processed marker (upgraded from
 // before the marker existed, or switched from the supervision host, whose
@@ -1320,20 +1403,41 @@ if (request.options.triggerTurn !== true || request.options.deliverAs !== "follo
 if (!request.message.content.includes(`[seq ${seq}, recorded 0m ago] task-d: ${decision}`)) throw new Error(`the request lost its key or summary: ${request.message.content}`);
 if (JSON.stringify(unprocessedSeqs()) !== JSON.stringify([seq])) throw new Error(`delivery did not leave seq ${seq} unprocessed: ${unprocessedSeqs()}`);
 
-// Case A (timeline report 2026-08-31): the turn returns an EMPTY assistant
-// message. The processed marker must not move, and the same sequence is
-// presented again at the run boundary.
-await runOf(() => mainEntries.push({ type: "message", message: { role: "assistant", content: [] } }));
-if (JSON.stringify(unprocessedSeqs()) !== JSON.stringify([seq])) throw new Error("an empty answer advanced the processed marker");
-if (requests().length !== 2) throw new Error(`an empty answer did not re-present the outcome: ${requests().length} requests`);
-if (requests()[1].options.triggerTurn !== true) throw new Error("the first re-presentation must open its own turn");
+// The first presentation carries the one visible response for this outcome,
+// even when it forgets to acknowledge.
+await runOf(async () => {
+  if (render("Captain, task-d needs your call.") !== "Captain, task-d needs your call.") {
+    throw new Error("the first processing presentation hid its response while streaming");
+  }
+  await finish("Captain, task-d needs your call.");
+});
+if (visibleFinals().at(-1) !== "Captain, task-d needs your call.") throw new Error("the first processing presentation lost its final");
+if (JSON.stringify(unprocessedSeqs()) !== JSON.stringify([seq])) throw new Error("an unacknowledged answer advanced the processed marker");
+if (requests().length !== 2 || requests()[1].options.triggerTurn !== true) throw new Error("the first re-presentation must open its own turn");
 if (!requests()[1].message.content.includes(`[seq ${seq}, recorded 0m ago] task-d: ${decision}`)) throw new Error("the re-presentation changed the outcome");
-
-// Case B: the turn repeats an unrelated prior answer. Same result: the marker
-// holds, and the request is presented again - now riding the captain's next
-// prompt because the triggered budget for this sequence set is spent.
-await runOf(() => mainEntries.push({ type: "message", message: { role: "assistant", content: "The retry safe-stopped; diagnosis is underway." } }));
-if (JSON.stringify(unprocessedSeqs()) !== JSON.stringify([seq])) throw new Error("an unrelated answer advanced the processed marker");
+// The hidden retry repeats this set's prior reply instead of acknowledging.
+// Exercise Pi's public message replacement and Markdown transformer surfaces:
+// buffer streaming until the complete reply can be compared, then keep every
+// differing reply, even one already visible outside this processing set.
+await runOf(async () => {
+  if (render("Captain, task-d needs your call.") !== "" || render("prior reasoning", true, "assistant-thinking") !== "") {
+    throw new Error("a processing retry reply leaked while streaming");
+  }
+  if (render(priorResult, false) !== priorResult || render("A question", true, "user") !== "A question") {
+    throw new Error("silencing a retry hid an earlier final or a user message");
+  }
+  const repeated = await finish(" \nCaptain, task-d needs your call. \n");
+  if (repeated.content.length) throw new Error("the exact trimmed repeat retained visible content");
+  await finish(priorResult);
+  await finish("Captain, task-d needs your call!");
+  const empty = await finish("");
+  const whitespace = await finish(" \n\t");
+  if (empty.content.length || whitespace.content.length) throw new Error("an empty retry retained visible content");
+});
+if (JSON.stringify(visibleFinals()) !== JSON.stringify([priorResult, "Captain, task-d needs your call.", priorResult, "Captain, task-d needs your call!"])) {
+  throw new Error(`retry comparison hid new prose or exposed a repeat: ${JSON.stringify(visibleFinals())}`);
+}
+if (JSON.stringify(unprocessedSeqs()) !== JSON.stringify([seq])) throw new Error("a repeated or empty answer advanced the processed marker");
 if (requests().length !== 3) throw new Error(`an unrelated answer did not re-present the outcome: ${requests().length} requests`);
 if (requests()[2].options.deliverAs !== "nextTurn" || requests()[2].options.triggerTurn) {
   throw new Error(`after the triggered budget the request must ride the next prompt: ${JSON.stringify(requests()[2].options)}`);
@@ -1342,7 +1446,11 @@ if (requests()[2].options.deliverAs !== "nextTurn" || requests()[2].options.trig
 await fire("agent_settled", {});
 if (requests().length !== 3) throw new Error("a duplicate next-turn copy was queued");
 // The captain's next prompt consumes that copy; settling unacknowledged queues one more.
-await runOf(() => mainEntries.push({ type: "message", message: { role: "assistant", content: "Captain, shipshape." } }));
+await runOf(async () => {
+  if (render("The new answer") !== "The new answer") throw new Error("a nextTurn request hid the user response");
+  await finish("The new answer");
+});
+if (visibleFinals().at(-1) !== "The new answer") throw new Error("a nextTurn request removed the user final");
 if (requests().length !== 4 || requests()[3].options.deliverAs !== "nextTurn") throw new Error("the outcome stopped being re-presented on later prompts");
 if (JSON.stringify(unprocessedSeqs()) !== JSON.stringify([seq])) throw new Error("a paraphrase advanced the processed marker");
 
@@ -1353,6 +1461,32 @@ if (requests().length !== 5 || requests()[4].options.triggerTurn !== true) throw
 if (mainEntries.filter((entry) => entry.customType === "fm-branch-visible-outcome" && entry.data.seq === seq).length !== 1) {
   throw new Error("re-presentation duplicated the visible entry");
 }
+
+const call = { type: "toolCall", id: "ack-call", name: "fm_branch_processed", arguments: { through: seq } };
+const thinking = { type: "thinking", thinking: "reasoning for the tool", thinkingSignature: "provider-signature" };
+// The replacement's first presentation keeps prose sent alongside the
+// acknowledgement call; this run's call is left unexecuted.
+await runOf(async () => {
+  const firstWithTool = await finish("Captain, task-d still needs your call.", [thinking, call]);
+  if (firstWithTool.content.length !== 3 || firstWithTool.content[0].text !== "Captain, task-d still needs your call.") {
+    throw new Error("the first presentation dropped prose sent alongside its acknowledgement");
+  }
+});
+if (visibleFinals().at(-1) !== "Captain, task-d still needs your call.") throw new Error("the first presentation after replacement lost its final");
+if (requests().length !== 6 || requests()[5].options.triggerTurn !== true) throw new Error("the replacement did not retry the unacknowledged outcome");
+await fire("agent_start", {});
+await fire("turn_start", {});
+await consumeRequest();
+await finish("stale after reload");
+if (visibleFinals().at(-1) !== "stale after reload") throw new Error("session replacement hid differing retry prose");
+const repeatedAfterReload = await finish("stale after reload");
+if (repeatedAfterReload.content.length) throw new Error("session replacement lost retry comparison");
+const withTool = await finish("stale after reload", [thinking, call]);
+if (withTool.content.length !== 3 || withTool.content[0].text !== "stale after reload" || withTool.content[1] !== thinking || withTool.content[2] !== call) {
+  throw new Error("retry comparison dropped prose, signed reasoning, or the acknowledgement call");
+}
+await fire("turn_start", {});
+if (render("still unacknowledged") !== "") throw new Error("a tool continuation released suppression before acknowledgement");
 
 // Only the sequence-bound acknowledgement closes it.
 const nativeTools = new Map();
@@ -1376,9 +1510,13 @@ if (JSON.stringify(unprocessedSeqs()) !== JSON.stringify([seq])) throw new Error
 const tooFar = await processed.execute("ack-too-far", { through: seq + 100 }, undefined, undefined, {});
 if (!tooFar.isError) throw new Error("an acknowledgement beyond the read cursor was accepted");
 if (JSON.stringify(unprocessedSeqs()) !== JSON.stringify([seq])) throw new Error("a refused acknowledgement moved the marker");
+if (render("still refused") !== "") throw new Error("a refused acknowledgement released suppression");
 const ack = await processed.execute("ack", { through: seq }, undefined, undefined, {});
 if (ack.isError) throw new Error(`acknowledgement failed: ${JSON.stringify(ack)}`);
 if (unprocessedSeqs().length !== 0) throw new Error("the acknowledgement did not close the sequence");
+if (render("A newly processed response") !== "A newly processed response") throw new Error("successful acknowledgement did not release the response");
+await finish("A newly processed response");
+if (visibleFinals().at(-1) !== "A newly processed response") throw new Error("the acknowledged outcome lost its response");
 const before = requests().length;
 await runOf();
 if (requests().length !== before) throw new Error("an acknowledged outcome was presented again");
@@ -1431,9 +1569,13 @@ await runOf();
 if (requests().length !== beforePairRepeat + 1 || requests().at(-1).options.triggerTurn !== true) {
   throw new Error("the second presentation of the widened sequence set did not open its own turn");
 }
+await fire("agent_start", {});
+await fire("turn_start", {});
+await consumeRequest();
 const partial = await processed.execute("ack-partial", { through: seqE }, undefined, undefined, {});
 if (partial.isError) throw new Error(`partial acknowledgement failed: ${JSON.stringify(partial)}`);
 if (JSON.stringify(unprocessedSeqs()) !== JSON.stringify([seqF])) throw new Error(`a partial acknowledgement did not keep the newer sequence open: ${unprocessedSeqs()}`);
+if (render("partial response") !== "") throw new Error("partial acknowledgement released the remaining outcome's retry");
 const beforeF = requests().length;
 await runOf();
 if (
@@ -1446,6 +1588,62 @@ if (
 }
 const done = await processed.execute("ack-final", { through: seqF }, undefined, undefined, {});
 if (done.isError || unprocessedSeqs().length !== 0) throw new Error("the final acknowledgement did not close the newer sequence");
+
+// A follow-up queued while main is busy must not hide the answer already
+// underway. Suppression starts only when Pi consumes the custom message.
+await fire("agent_start", {});
+await fire("turn_start", {});
+await fire("message_start", { message: { role: "user", content: "An active user request" } });
+await report2.execute("busy-report", { task: "task-g", verdict: "captain", summary: "A new decision" }, undefined, undefined, {});
+await finish("The busy user answer");
+if (visibleFinals().at(-1) !== "The busy user answer") throw new Error("queueing a retry hid an in-flight user answer");
+await fire("turn_start", {});
+await consumeRequest();
+await finish("Captain, task-g needs your call.");
+if (visibleFinals().at(-1) !== "Captain, task-g needs your call.") throw new Error("a consumed busy follow-up hid its first presentation");
+// User steering in that same turn must immediately recover ordinary output.
+await fire("message_start", { message: { role: "user", content: "A steering question" } });
+await finish("The steering answer");
+if (visibleFinals().at(-1) !== "The steering answer") throw new Error("processing suppression hid a steering response");
+await fire("agent_end", {});
+await fire("agent_settled", {});
+// Pi can also batch the user before the custom follow-up in one turn.
+await fire("agent_start", {});
+await fire("turn_start", {});
+await consumeRequest(true);
+await finish("The batched user answer");
+if (visibleFinals().at(-1) !== "The batched user answer") throw new Error("processing suppression hid a user batched before the custom message");
+const latestSeq = unprocessedSeqs().at(-1);
+await processed.execute("ack-busy", { through: latestSeq }, undefined, undefined, {});
+await fire("agent_end", {});
+await fire("agent_settled", {});
+
+// A first reply can be empty or unrelated: a retry that finally handles the
+// outcome must stay visible. Reusing the same response across new sequence
+// sets must not make it a duplicate, and only the tool closes each outcome.
+for (const initial of ["", "Unrelated prior acknowledgment"]) {
+  await report2.execute("new-set", { task: "task-new", verdict: "captain", summary: "Another decision" }, undefined, undefined, {});
+  const newSeq = unprocessedSeqs().at(-1);
+  const startCount = visibleFinals().length;
+  await runOf(async () => {
+    const firstReply = await finish(initial);
+    if ((firstReply.content[0]?.text ?? "") !== initial) throw new Error("first presentation changed its output");
+  });
+  const newAnswer = "Handled the new outcome.";
+  await runOf(async () => {
+    await finish(newAnswer);
+    if (visibleFinals().at(-1) !== newAnswer) throw new Error("the first real handling on a retry was hidden");
+    const repeat = await finish(newAnswer);
+    if (repeat.content.length) throw new Error("a repeated retry final was retained");
+  });
+  if (visibleFinals().length !== startCount + (initial ? 2 : 1)) throw new Error("sequence comparison lost or duplicated a final");
+  if (!unprocessedSeqs().includes(newSeq) || requests().at(-1).options.deliverAs !== "nextTurn") {
+    throw new Error("an empty, unrelated, or differing reply closed the durable obligation");
+  }
+  await processed.execute("ack-new-set", { through: newSeq }, undefined, undefined, {});
+  if (unprocessedSeqs().length) throw new Error("acknowledgement did not close the new set");
+  await fire("agent_settled", {});
+}
 
 // A session that does not own the fleet lock cannot acknowledge anything.
 writeFileSync(`${home}/state/.lock`, "1\n");
@@ -1708,12 +1906,27 @@ await heartbeatReport.execute(
   {},
 );
 const fleetRoutineMerge = sentToMain[sentToMain.length - 1];
-if (fleetRoutineMerge.message.display !== true) throw new Error("a fleet routine action must render");
+if (fleetRoutineMerge.message.display !== false) throw new Error("a fleet routine action must stay hidden");
+if (fleetRoutineMerge.options.triggerTurn) throw new Error("a fleet routine action opened a main turn");
+const storedFleetAction = outcomeScript(["list", "--recent", "100"]).split("\n").filter(Boolean)
+  .map(JSON.parse).find((row) => row.summary === "reconciled the backlog after completed work");
+if (!storedFleetAction || storedFleetAction.silent !== false) throw new Error("a fleet routine action was lost or recorded as silent");
 if (!fleetRoutineMerge.message.content.startsWith("⛵ fleet: reconciled the backlog after completed work")) {
   throw new Error(`fleet routine action note changed: ${fleetRoutineMerge.message.content}`);
 }
 writeFileSync(`${home}/state/task-9.status`, "working: check 1 worker still building\n");
+await heartbeatReport.execute(
+  "task-visible-outcome",
+  { task: "task-9", verdict: "routine", summary: "visible task outcome before silent no-change" },
+  undefined,
+  undefined,
+  {},
+);
+const visibleTaskIndexPath = `${home}/state/.task-9.branch-outcome-index`;
+if (!existsSync(visibleTaskIndexPath)) throw new Error("a visible task outcome did not update its status-coverage index");
+const visibleTaskIndex = readFileSync(visibleTaskIndexPath, "utf8");
 const taskNoChangeSummary = "The check 1 worker is still building. Nothing new has happened.";
+writeFileSync(`${home}/state/task-9.status`, "done: completion arrived before the no-change report\n");
 const sentBeforeSilentTask = sentToMain.length;
 const silentTaskResult = await heartbeatReport.execute(
   "task-no-change",
@@ -1732,8 +1945,12 @@ const storedTaskNoChange = outcomeScript(["list", "--recent", "100"]).split("\n"
 if (!storedTaskNoChange || storedTaskNoChange.verdict !== "routine" || storedTaskNoChange.silent !== true) {
   throw new Error("the silent task no-change outcome was not stored durably");
 }
-if (!existsSync(`${home}/state/.task-9.branch-outcome-index`)) {
-  throw new Error("the silent task outcome was omitted from the status-outcome backstop index");
+if (readFileSync(visibleTaskIndexPath, "utf8") !== visibleTaskIndex) {
+  throw new Error("the silent task outcome changed status coverage and could hide a lost wake");
+}
+outcomeScript(["processed-init"]);
+if (readFileSync(visibleTaskIndexPath, "utf8") !== visibleTaskIndex) {
+  throw new Error("rebuilding gave the silent task outcome status coverage");
 }
 const outcomesTool = mainTools.find((tool) => tool.name === "fm_branch_outcomes");
 const listedTaskNoChange = await outcomesTool.execute("read-silent-task", { recent: 100 }, undefined, undefined, {});
@@ -1762,10 +1979,65 @@ await heartbeatReport.execute(
   {},
 );
 const taskRoutineMerge = sentToMain[sentToMain.length - 1];
-if (taskRoutineMerge.message.display !== true) throw new Error("a task-scoped routine outcome must render");
+if (taskRoutineMerge.message.display !== false) throw new Error("a task-scoped routine outcome must stay hidden");
 if (!taskRoutineMerge.message.content.startsWith("⛵ task-9: worker healthy, no action needed")) {
   throw new Error(`task-scoped routine note changed: ${taskRoutineMerge.message.content}`);
 }
+// A still-busy no-change outcome is silent for any task: stored, no rendered
+// note, no main turn. A state change stays hidden, and a captain outcome can
+// never be silent.
+await heartbeatReport.execute(
+  "still-busy",
+  { task: "task-9", verdict: "routine", summary: "worker still busy, nothing new, no action taken", silent: true },
+  undefined,
+  undefined,
+  {},
+);
+const stillBusy = sentToMain[sentToMain.length - 1];
+if (stillBusy.options.triggerTurn) throw new Error("a silent no-change outcome must not open a main turn");
+if (stillBusy.message.display !== false) throw new Error("a silent no-change outcome must not render a note");
+const storedStillBusy = readFileSync(`${home}/state/branch-outcomes.jsonl`, "utf8")
+  .trim().split("\n").map((line) => JSON.parse(line))
+  .find((row) => row.task === "task-9" && row.summary === "worker still busy, nothing new, no action taken");
+if (!storedStillBusy || storedStillBusy.silent !== true || storedStillBusy.verdict !== "routine") {
+  throw new Error("the silent no-change outcome was not stored durably");
+}
+await heartbeatReport.execute(
+  "pause-cleared",
+  { task: "task-9", verdict: "routine", summary: "the pause cleared and the worker resumed" },
+  undefined,
+  undefined,
+  {},
+);
+if (sentToMain[sentToMain.length - 1].message.display !== false) throw new Error("a pause state change must remain hidden");
+const pauseMerge = sentToMain[sentToMain.length - 1];
+if (pauseMerge.options.triggerTurn || !pauseMerge.message.content.includes("the pause cleared and the worker resumed")) {
+  throw new Error("the pause change did not reach main as a turn-free routine note");
+}
+const storedPause = outcomeScript(["list", "--recent", "100"]).split("\n").filter(Boolean)
+  .map(JSON.parse).find((row) => row.summary === "the pause cleared and the worker resumed");
+if (!storedPause || storedPause.silent !== false) throw new Error("the pause change was lost or recorded as silent");
+const replaySummary = "worker recovered after the last recorded pause";
+outcomeScript(["append", "--task", "task-9", "--verdict", "routine", "--summary", replaySummary]);
+outcomeScript(["append", "--task", "task-9", "--verdict", "routine", "--summary", "open hold still unchanged", "--silent", "true"]);
+const beforeRoutineReplay = sentToMain.length;
+await fire("turn_end", {}, defaultSessionCtx);
+const replayedRoutine = sentToMain.slice(beforeRoutineReplay);
+if (replayedRoutine.length !== 2 || replayedRoutine.some(({ message, options }) => message.display !== false || options.triggerTurn)) {
+  throw new Error("routine recovery replay became visible, opened a turn, or lost a report");
+}
+if (!replayedRoutine.some(({ message }) => message.content.includes(replaySummary))) {
+  throw new Error("the non-silent recovery report did not reach main on replay");
+}
+if (outcomeScript(["unread"]) !== "") throw new Error("routine replay did not acknowledge the recorded reports");
+const silentCaptain = await heartbeatReport.execute(
+  "silent-captain",
+  { task: "task-9", verdict: "captain", summary: "needs a decision", silent: true },
+  undefined,
+  undefined,
+  {},
+);
+if (!silentCaptain.isError) throw new Error("a silent captain outcome was accepted");
 await heartbeatReport.execute(
   "heartbeat-finding",
   { task: "fleet", verdict: "captain", summary: "task-2 has been stuck for an hour" },
@@ -1914,10 +2186,25 @@ if (pending.options.triggerTurn !== true || pending.options.deliverAs !== "follo
 if (!pending.message.content.includes(`[seq ${seq1}, recorded 0m ago] `)) {
   throw new Error(`the first queued request lost seq ${seq1}: ${pending.message.content}`);
 }
-contract(["enter", "--words", "merge task-d when green, then cut the prerelease\n\n"]);
 const processingMsg = { role: "custom", customType: pending.message.customType, content: pending.message.content, display: false };
 let aborted = false;
 const abortCtx = { ...defaultSessionCtx, abort() { aborted = true; } };
+await fire("agent_end", {});
+await fire("before_agent_start", { messageType: "custom", message: processingMsg }, abortCtx);
+await fire("agent_start", {}, defaultSessionCtx);
+const attendedProcessing = await fire("context", { messages: [processingMsg] }, abortCtx);
+if (aborted || attendedProcessing !== undefined) throw new Error("attended custom processing was aborted or filtered");
+await fire("agent_end", {});
+contract(["enter", "--words", "merge task-d when green, then cut the prerelease\n\n"]);
+for (const message of [
+  { ...processingMsg, customType: "unrelated" },
+  { ...processingMsg, content: "unrelated processing content" },
+]) {
+  await fire("before_agent_start", { messageType: "custom", message }, abortCtx);
+  const unrelated = await fire("context", { messages: [message, processingMsg] }, abortCtx);
+  if (aborted) throw new Error("unrelated custom trigger was treated as a dedicated processing run");
+  if (unrelated?.messages?.some((item) => item === processingMsg)) throw new Error("away processing was not stripped");
+}
 const streamingResult = await fire("context", {
   messages: [
     { role: "user", content: "captain still in this turn" },
@@ -1954,7 +2241,7 @@ if (openedByCaptain?.messages?.some((message) => message.customType === "fm-bran
   throw new Error(`captain-opened processing was not stripped: ${JSON.stringify(openedByCaptain)}`);
 }
 aborted = false;
-await fire("before_agent_start", { prompt: "captain typed this now" }, abortCtx);
+await fire("before_agent_start", { messageType: "user", prompt: "captain typed this now" }, abortCtx);
 const stolen = await fire("context", {
   messages: [{ role: "user", content: "captain typed this now" }, processingMsg],
 }, abortCtx);
@@ -1963,13 +2250,62 @@ if (stolen?.messages?.some((message) => message.customType === "fm-branch-proces
   throw new Error(`joined processing was not stripped from the captain-opened run: ${JSON.stringify(stolen)}`);
 }
 await fire("agent_end", {});
+for (const event of [
+  { prompt: pending.message.content },
+  { messageType: "user", prompt: pending.message.content },
+  { messageType: "custom", message: processingMsg },
+]) {
+  contract(["archive"]);
+  aborted = false;
+  await fire("before_agent_start", event, abortCtx);
+  contract(["enter", "--words", "merge task-d when green, then cut the prerelease\n\n"]);
+  await fire("agent_start", {}, defaultSessionCtx);
+  const openedByRequest = await fire("context", { messages: [...history, processingMsg] }, abortCtx);
+  if (!aborted) throw new Error(`a dedicated ${event.messageType ?? "legacy"} processing turn with history was not aborted under the record`);
+  if (openedByRequest?.messages?.some((message) => message.customType === "fm-branch-process")) {
+    throw new Error(`dedicated processing with history was not stripped: ${JSON.stringify(openedByRequest)}`);
+  }
+  await fire("agent_end", {});
+}
+for (const message of [
+  { ...processingMsg, customType: "fixture" },
+  { ...processingMsg, content: "different processing request" },
+]) {
+  aborted = false;
+  await fire("before_agent_start", {
+    type: "before_agent_start", messageType: "custom", message,
+    systemPrompt: "fixture", systemPromptOptions: {},
+  }, abortCtx);
+  const unrelated = await fire("context", { messages: [...history, message, processingMsg] }, abortCtx);
+  if (aborted) throw new Error("an unrelated custom run was aborted after a processing request joined it");
+  if (unrelated?.messages?.some((item) => item.customType === "fm-branch-process")) {
+    throw new Error(`joined processing was not stripped from a custom run: ${JSON.stringify(unrelated)}`);
+  }
+}
 aborted = false;
-await fire("before_agent_start", { prompt: pending.message.content }, abortCtx);
+await fire("before_agent_start", { messageType: "custom", message: processingMsg }, abortCtx);
 await fire("agent_start", {}, defaultSessionCtx);
 const openedByRequest = await fire("context", { messages: [...history, processingMsg] }, abortCtx);
 if (!aborted) throw new Error("a dedicated processing turn with history was not aborted under the record");
 if (openedByRequest?.messages?.some((message) => message.customType === "fm-branch-process")) {
   throw new Error(`dedicated processing with history was not stripped: ${JSON.stringify(openedByRequest)}`);
+}
+await fire("agent_end", {});
+contract(["archive"]);
+aborted = false;
+await fire("before_agent_start", {
+  type: "before_agent_start", messageType: "custom",
+  message: { ...processingMsg, timestamp: Date.now() },
+  systemPrompt: "fixture", systemPromptOptions: {},
+}, abortCtx);
+await fire("agent_start", {}, defaultSessionCtx);
+await fire("turn_start", {});
+await fire("message_start", { message: processingMsg }, abortCtx);
+contract(["enter", "--words", "merge task-d when green, then cut the prerelease\n\n"]);
+const openedByCustomRequest = await fire("context", { messages: [...history, processingMsg] }, abortCtx);
+if (!aborted) throw new Error("a custom processing turn with history was not aborted when the record appeared");
+if (openedByCustomRequest?.messages?.some((message) => message.customType === "fm-branch-process")) {
+  throw new Error(`custom processing with history was not stripped: ${JSON.stringify(openedByCustomRequest)}`);
 }
 await fire("agent_end", {});
 await fire("agent_settled", {});
@@ -2627,8 +2963,8 @@ test_post_construction_provider_error_falls_back_latches_and_recovers_on_cooldow
   PLUGIN="$repo/.pi/extensions/fm-branch-supervision.ts" FM_HOME="$home" FM_ROOT_OVERRIDE="$ROOT" \
     DRIVER_PRELUDE="$DRIVER_PRELUDE" node --input-type=module > "$TMP_ROOT/node-output" 2>&1 <<'EOF'
 const prelude = process.env.DRIVER_PRELUDE;
-await eval(`(async () => { ${prelude}; globalThis.__t = { pi, makeOffer, dispatch, fire, settle, home, mainUserMessages, sentToMain }; })()`);
-const { pi, makeOffer, dispatch, fire, settle, home, mainUserMessages, sentToMain } = globalThis.__t;
+await eval(`(async () => { ${prelude}; globalThis.__t = { pi, makeOffer, dispatch, fire, settle, home, mainUserMessages, sentToMain, renderers }; })()`);
+const { pi, makeOffer, dispatch, fire, settle, home, mainUserMessages, sentToMain, renderers } = globalThis.__t;
 import { existsSync } from "node:fs";
 
 let now = 1_000_000;
@@ -2735,6 +3071,16 @@ const pauseNotes = sentToMain.filter((sent) => sent.message.content.includes("Su
 if (pauseNotes.length !== 1 || pauseNotes[0].message.content.includes("\n")) {
   throw new Error(`the first latch must surface exactly one one-line note: ${JSON.stringify(pauseNotes)}`);
 }
+const assertHealthNoteVisible = ({ message }) => {
+  if (message.display !== true) throw new Error("health note was delivered hidden");
+  for (const expanded of [false, true]) {
+    const rendered = renderers.get(message.customType)(message, { expanded }, { fg: (_color, text) => text });
+    if (rendered.text !== message.content) {
+      throw new Error(`health renderer hid or changed the notification: ${message.content}`);
+    }
+  }
+};
+assertHealthNoteVisible(pauseNotes[0]);
 
 // No provider attempt occurs inside the first five-minute cooldown. Exactly
 // one probe is accepted when it elapses, and all other wakes remain on main
@@ -2781,6 +3127,7 @@ const recoveryNotes = sentToMain.filter((sent) => sent.message.content.includes(
 if (recoveryNotes.length !== 1 || recoveryNotes[0].message.content.includes("\n")) {
   throw new Error(`recovery must surface exactly one one-line note: ${JSON.stringify(recoveryNotes)}`);
 }
+assertHealthNoteVisible(recoveryNotes[0]);
 
 // The durable report cleared both the latch and the old streak: one new
 // provider error falls back but does not latch, so a following wake still
@@ -3033,6 +3380,19 @@ if (mirrored[2].content !== `[captain] ${entries[6].message.content}`) {
 }
 if (mirrored.some((m) => m.content.includes("operational injection") || m.content.includes("tool output") || m.content.includes("merged note"))) {
   throw new Error("mirror leaked operational, tool, or merge-note traffic");
+}
+
+// A run that pi.sendCustomMessage starts carries a custom message and no
+// prompt, so reading the prompt here threw and every such run surfaced the
+// failure instead of starting. It is not captain input either, so nothing of
+// it reaches the mirror.
+const mirroredBeforeCustomRun = session.ops.filter((op) => op.kind === "custom").length;
+await fire("before_agent_start", {
+  messageType: "custom",
+  message: { role: "custom", customType: "fm-branch-merge", content: "merge note that starts its own run" },
+}, ctx);
+if (session.ops.filter((op) => op.kind === "custom").length !== mirroredBeforeCustomRun) {
+  throw new Error("a custom-message run was mirrored as captain dialog");
 }
 
 // The durable cursor advances: a second turn_end mirrors only NEW dialog.
@@ -4787,6 +5147,150 @@ EOF
   pass "scopeForUnreadWake excludes every main-only class without vetoing eligible task-local rows, and writes the eligible snapshot"
 }
 
+# An Orca task's stale rows are keyed by its terminal handle, not a window
+# (bin/fm-watch.sh keys Orca endpoints by terminal=). The dispatcher must
+# resolve that terminal key to its task, so a terminal-keyed stale row queued
+# alongside another eligible row stays branch-owned instead of sending the
+# whole wake to main.
+test_branch_dispatch_resolves_terminal_keyed_orca_stale_row() {
+  local repo home out status
+  repo="$TMP_ROOT/dispatch-terminal-root"
+  home="$TMP_ROOT/dispatch-terminal-home"
+  mkdir -p "$repo/.pi/extensions/lib" "$home/state" "$home/projects/approved"
+  cp "$ROOT/.pi/extensions/lib/fm-branch-dispatch.ts" "$repo/.pi/extensions/lib/fm-branch-dispatch.ts"
+  cp "$ROOT/.pi/extensions/lib/fm-native-contract.ts" "$repo/.pi/extensions/lib/fm-native-contract.ts"
+  cp "$ROOT/.pi/extensions/lib/fm-async-exec.ts" "$repo/.pi/extensions/lib/fm-async-exec.ts"
+  cp "$ROOT/.pi/extensions/lib/fm-branch-model-picker.ts" "$repo/.pi/extensions/lib/fm-branch-model-picker.ts"
+  printf 'project=%s/projects/approved\nterminal=orca-term-1\n' "$home" > "$home/state/orca-task.meta"
+  LIB="$repo/.pi/extensions/lib/fm-branch-dispatch.ts" FM_HOME="$home" \
+    node --input-type=module > "$TMP_ROOT/node-output" 2>&1 <<'EOF'
+import { pathToFileURL } from "node:url";
+import { writeFileSync } from "node:fs";
+
+const { scopeForUnreadWake } = await import(pathToFileURL(process.env.LIB).href);
+const state = `${process.env.FM_HOME}/state`;
+const project = `${process.env.FM_HOME}/projects/approved`;
+
+for (const heartbeat of [false, true]) {
+  const queue = heartbeat
+    ? ["1\t1\theartbeat\theartbeat\theartbeat", "1\t2\tstale\torca-term-1\tstale: orca-term-1"]
+    : ["1\t1\tsignal\torca-task.status\tsignal: orca-task.status", "1\t2\tstale\torca-term-1\tstale: orca-term-1"];
+  writeFileSync(`${state}/.wake-queue`, queue.join("\n"));
+  const scope = scopeForUnreadWake(state, heartbeat);
+  if (!scope.eligible || scope.corrupted || scope.eligibleSeqs.slice().sort().join(",") !== "1,2") {
+    throw new Error(`a terminal-keyed stale row was not branch-owned (heartbeat=${heartbeat}): ${JSON.stringify(scope)}`);
+  }
+  if (scope.taskByWakeKey["orca-term-1"] !== "orca-task") {
+    throw new Error(`the terminal key did not resolve to its task: ${JSON.stringify(scope)}`);
+  }
+  if (!scope.projects.includes(project)) {
+    throw new Error(`the terminal-keyed task lost its project context: ${JSON.stringify(scope.projects)}`);
+  }
+}
+// A terminal must never silently change owners, including collisions with
+// another task's window or canonical task key. Exercise both record orders.
+for (const owner of ["a-owner", "z-owner"]) {
+  for (const field of ["terminal", "window", "task"]) {
+    for (const ownerProject of [`project=${project}\n`, "", "project=\n"]) {
+      const terminal = field === "task" ? owner : "orca-term-1";
+      writeFileSync(`${state}/orca-task.meta`, `project=${project}\nterminal=${terminal}\n`);
+      writeFileSync(`${state}/${owner}.meta`, `${ownerProject}${field === "task" ? "" : `${field}=${terminal}\n`}`);
+      writeFileSync(`${state}/${owner}.status`, "needs-decision: choose owner\n");
+      writeFileSync(`${state}/.wake-queue`, `1\t1\tsignal\torca-task.status\tsignal: orca-task.status\n1\t2\tstale\t${terminal}\tstale: ${terminal}`);
+      const scope = scopeForUnreadWake(state, false);
+      if (scope.eligible || !scope.corrupted || scope.eligibleSeqs.length !== 0) {
+        throw new Error(`conflicting ${field} ownership must leave the whole wake to MAIN (${owner}, project=${JSON.stringify(ownerProject)}): ${JSON.stringify(scope)}`);
+      }
+      // The empty record retains its task key but no endpoint claim.
+      writeFileSync(`${state}/${owner}.meta`, "");
+    }
+  }
+}
+for (const projectField of ["", "project=\n"]) {
+  writeFileSync(`${state}/orca-task.meta`, `${projectField}terminal=orca-term-1\n`);
+  writeFileSync(`${state}/orca-task.status`, "needs-decision: choose owner\n");
+  writeFileSync(`${state}/.wake-queue`, "1\t1\tstale\torca-term-1\tstale: orca-term-1");
+  const scope = scopeForUnreadWake(state, false);
+  if (scope.eligible || !scope.corrupted) {
+    throw new Error(`a unique projectless owner must remain unmappable: ${JSON.stringify(scope)}`);
+  }
+}
+process.exit(0);
+EOF
+  status=$?
+  out=$(cat "$TMP_ROOT/node-output")
+  expect_code 0 "$status" "a terminal-keyed Orca stale row must resolve to its task: $out"
+  pass "scopeForUnreadWake resolves unique Orca terminal owners and refuses conflicting aliases alongside another eligible row"
+}
+
+
+test_branch_dispatch_keeps_project_with_canonical_owner() {
+  local out status
+  ROOT="$ROOT" CASE_ROOT="$TMP_ROOT/canonical-owner" node --input-type=module > "$TMP_ROOT/node-output" 2>&1 <<'EOF'
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import { syncBuiltinESMExports } from "node:module";
+import { spawnSync } from "node:child_process";
+import { pathToFileURL } from "node:url";
+
+const { scopeForUnreadWake, branchOfferForWake } = await import(pathToFileURL(`${process.env.ROOT}/.pi/extensions/lib/fm-branch-dispatch.ts`).href);
+const originalReaddir = fs.readdirSync;
+let fixture = 0;
+for (const reverse of [false, true]) {
+  const preload = `import fs from "node:fs"; import { syncBuiltinESMExports } from "node:module";
+    const original = fs.readdirSync;
+    fs.readdirSync = (...args) => { const names = original(...args).sort(); return ${reverse} ? names.reverse() : names; };
+    syncBuiltinESMExports();`;
+  fs.readdirSync = (...args) => {
+    const names = originalReaddir(...args).sort();
+    return reverse ? names.reverse() : names;
+  };
+  syncBuiltinESMExports();
+  for (const field of ["window", "terminal"]) {
+    for (const project of ["", "project=\n", "project=/owner\n"]) {
+      for (const key of ["fm-window", "fm-fm-window"]) {
+        const state = `${process.env.CASE_ROOT}/${fixture++}`;
+        fs.mkdirSync(state, { recursive: true });
+        fs.writeFileSync(`${state}/a.meta`, `${project}${field}=fm-window\n`);
+        fs.writeFileSync(`${state}/window.meta`, "project=/approved\n");
+        fs.writeFileSync(`${state}/window.status`, "needs-decision: choose owner\n");
+        fs.writeFileSync(`${state}/.wake-queue`, `1\t1\tstale\t${key}\tstale: ${key}\n`);
+        const check = (eligible, corrupted) => {
+          for (const afk of [false, true]) {
+            const scope = scopeForUnreadWake(state, false, afk);
+            assert.equal(scope.eligible, eligible, JSON.stringify({ reverse, field, project, key, scope }));
+            assert.equal(scope.corrupted, corrupted);
+            if (eligible) {
+              assert.deepEqual(scope.eligibleTasks, ["a"]);
+              assert.deepEqual(scope.projects, ["/owner"]);
+            }
+            assert.equal(branchOfferForWake(state, `stale: ${key}`, afk).eligible, eligible);
+            const cli = spawnSync(process.execPath, ["--import", `data:text/javascript,${encodeURIComponent(preload)}`,
+              `${process.env.ROOT}/bin/fm-branch-dispatch.mjs`, "offer", ...(afk ? ["--afk"] : [])], {
+              env: { ...process.env, FM_STATE_OVERRIDE: state }, input: `stale: ${key}\n`, encoding: "utf8",
+            });
+            assert.equal(cli.status, 0, cli.stderr);
+            const result = Object.fromEntries(cli.stdout.trim().split("\n").map((line) => line.split("=")));
+            assert.equal(result.eligible, eligible ? "1" : "0", cli.stdout);
+            assert.equal(result.corrupted, corrupted ? "1" : "0", cli.stdout);
+          }
+        };
+        check(Boolean(project.includes("/owner")), !project.includes("/owner"));
+        fs.writeFileSync(`${state}/window.meta`, `project=/approved\n${field}=fm-window\n`);
+        check(false, true);
+      }
+    }
+  }
+}
+fs.readdirSync = originalReaddir;
+syncBuiltinESMExports();
+EOF
+  status=$?
+  out=$(cat "$TMP_ROOT/node-output")
+  expect_code 0 "$status" "canonical ownership must govern scope and CLI offers: $out"
+  pass "scope and CLI keep projects with canonical owners in both discovery orders"
+}
+
 # A second mate's status log is one shared channel for many independently keyed
 # decisions, so its signal rows are judged by the span presented since the last
 # drain (bounded by bin/fm-classify-lib.sh's own presentation-cursor writer),
@@ -5808,6 +6312,8 @@ test_abbreviated_processing_request_points_to_full_outcome
 test_large_unprocessed_backlog_replays_in_batches
 test_undated_unprocessed_outcome_surfaces_and_stays_unprocessed
 test_branch_dispatch_classifies_main_only_rows_and_writes_the_eligible_snapshot
+test_branch_dispatch_resolves_terminal_keyed_orca_stale_row
+test_branch_dispatch_keeps_project_with_canonical_owner
 test_branch_dispatch_routes_secondmate_signal_by_new_span
 test_branch_cache_key_is_per_home_stable
 test_branch_default_on_heartbeat_afk_and_fallback

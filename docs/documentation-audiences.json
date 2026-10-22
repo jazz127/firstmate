@@ -67,6 +67,10 @@
       "target": "docs/verification/supervision.md"
     },
     {
+      "source": "docs/context-refresh.md",
+      "target": "docs/verification/supervision.md"
+    },
+    {
       "source": "docs/turnend-guard.md",
       "target": "docs/verification/supervision.md"
     },
@@ -125,6 +129,10 @@
       "audience": "agent-runtime"
     },
     {
+      "path": ".agents/skills/bosun/SKILL.md",
+      "audience": "agent-runtime"
+    },
+    {
       "path": ".agents/skills/bootstrap-diagnostics/SKILL.md",
       "audience": "agent-runtime"
     },
@@ -150,6 +158,10 @@
     },
     {
       "path": ".agents/skills/firstmate-orca/SKILL.md",
+      "audience": "agent-runtime"
+    },
+    {
+      "path": ".agents/skills/firstmate-self-repo/SKILL.md",
       "audience": "agent-runtime"
     },
     {
@@ -189,6 +201,10 @@
       "audience": "agent-runtime"
     },
     {
+      "path": ".agents/skills/harness-adapters/references/harness/commandcode.md",
+      "audience": "agent-runtime"
+    },
+    {
       "path": ".agents/skills/harness-adapters/references/harness/cursor.md",
       "audience": "agent-runtime"
     },
@@ -222,6 +238,10 @@
     },
     {
       "path": ".agents/skills/harness-adapters/references/harness/pi.md",
+      "audience": "agent-runtime"
+    },
+    {
+      "path": ".agents/skills/harness-adapters/references/harness/polytoken.md",
       "audience": "agent-runtime"
     },
     {
@@ -301,6 +321,10 @@
       "audience": "maintainer-architecture"
     },
     {
+      "path": "docs/bosun.md",
+      "audience": "operator-current"
+    },
+    {
       "path": "docs/calm-mode-feasibility.md",
       "audience": "maintainer-verification"
     },
@@ -325,6 +349,10 @@
       "audience": "operator-current"
     },
     {
+      "path": "docs/context-refresh.md",
+      "audience": "operator-current"
+    },
+    {
       "path": "docs/captain-hold-lifecycle.md",
       "audience": "maintainer-architecture"
     },
@@ -335,6 +363,10 @@
     {
       "path": "docs/extension-bindings.md",
       "audience": "maintainer-architecture"
+    },
+    {
+      "path": "docs/examples/bosun-routes.json",
+      "audience": "operator-example"
     },
     {
       "path": "docs/examples/crew-dispatch.json",
@@ -365,8 +397,16 @@
       "audience": "maintainer-verification"
     },
     {
+      "path": "docs/forgejo-tea-integration.md",
+      "audience": "maintainer-verification"
+    },
+    {
       "path": "docs/gerrit-change-watch.md",
       "audience": "maintainer-verification"
+    },
+    {
+      "path": "docs/external-review-forge.md",
+      "audience": "maintainer-architecture"
     },
     {
       "path": "docs/gerrit-forge-integration.md",
@@ -381,6 +421,10 @@
       "audience": "operator-current"
     },
     {
+      "path": "docs/fork-house-branch.md",
+      "audience": "operator-current"
+    },
+    {
       "path": "docs/herdr-backend.md",
       "audience": "operator-current"
     },
@@ -391,6 +435,10 @@
     {
       "path": "docs/orca-backend.md",
       "audience": "operator-current"
+    },
+    {
+      "path": "docs/pi-composer-provenance.md",
+      "audience": "maintainer-architecture"
     },
     {
       "path": "docs/pi-supervision-branch.md",
@@ -473,6 +521,10 @@
       "audience": "maintainer-verification"
     },
     {
+      "path": "docs/verification/commandcode.md",
+      "audience": "maintainer-verification"
+    },
+    {
       "path": "docs/verification/devin.md",
       "audience": "maintainer-verification"
     },
@@ -494,6 +546,10 @@
     },
     {
       "path": "docs/verification/process-event-sources.md",
+      "audience": "maintainer-verification"
+    },
+    {
+      "path": "docs/verification/polytoken.md",
       "audience": "maintainer-verification"
     },
     {

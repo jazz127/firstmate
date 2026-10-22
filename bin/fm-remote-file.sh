@@ -175,6 +175,10 @@ REL=$2
 MAX=${3:-$MAX_DEFAULT}
 case "$MAX" in ''|*[!0-9]*|0) die "max-bytes must be a positive integer" ;; esac
 [ "$MAX" -le 1048576 ] || die "max-bytes exceeds the 1048576-byte safety bound"
+# Normalize only after bounding the input; arithmetic must not read zero-padded
+# byte counts as octal, and every spelling of zero remains invalid.
+MAX=$((10#$MAX))
+[ "$MAX" -gt 0 ] || die "max-bytes must be a positive integer"
 case "$COMMAND" in
   get)
     [ "$#" -le 3 ] || usage

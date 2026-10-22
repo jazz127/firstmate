@@ -85,8 +85,9 @@ cat > "$LAB/probe.mjs" <<'JS'
 // the work it is measuring. An expectation that never appears is a failure,
 // never a fast verdict.
 import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 
-const [tmux, socket, session, trigger, expect] = process.argv.slice(2);
+const [tmux, socket, session, trigger, expect, cursorPath] = process.argv.slice(2);
 const MARKER_TAIL = 20;
 const MARKER_CAP = 140;
 const capture = () => {
@@ -99,6 +100,10 @@ const capture = () => {
 const key = (name) => execFileSync(tmux, ["-L", socket, "send-keys", "-t", session, name]);
 const send = (literal) => execFileSync(tmux, ["-L", socket, "send-keys", "-t", session, "-l", literal]);
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const reached = (screen) => {
+  if (!cursorPath) return !expect || screen.includes(expect);
+  try { return Number(readFileSync(cursorPath, "utf8").trim()) >= 2; } catch { return false; }
+};
 
 // Two characters per marker, so no marker can be spelled by two neighbours
 // running together in the composer.
@@ -109,7 +114,7 @@ for (const letter of "abcdefghijklmnopqrstuvwxyz") {
 
 key("C-u");
 await sleep(300);
-if (expect && capture().includes(expect)) {
+if (reached(capture())) {
   console.log(`ERROR the pane already showed ${JSON.stringify(expect)} before the trigger`);
   process.exit(1);
 }
@@ -135,7 +140,7 @@ for (const marker of markers.slice(0, MARKER_CAP)) {
     process.exit(1);
   }
   delays.push(delayMs);
-  if (!seenExpected && (!expect || echoed.includes(expect))) seenExpected = true;
+  if (!seenExpected && reached(echoed)) seenExpected = true;
   if (seenExpected) {
     tail += 1;
     if (tail > MARKER_TAIL) break;
@@ -169,7 +174,7 @@ wait_for_pane_text() {
 # One arm: launch Pi, let it settle, optionally seed outcomes that the
 # trigger will deliver, then measure. Prints the probe's own key=value lines.
 run_arm() {
-  local label=$1 load_extension=$2 seed_rows=$3 expect=$4 out=""
+  local label=$1 load_extension=$2 seed_rows=$3 expect=$4 cursor_path=${5:-} out=""
   "$TMUX" -L "$SOCKET" kill-session -t "$SESSION" 2>/dev/null || true
   rm -f "$HOME_DIR/state/.lock"
   local -a pi_args
@@ -196,7 +201,7 @@ run_arm() {
     done
   fi
 
-  out=$(node "$LAB/probe.mjs" "$TMUX" "$SOCKET" "$SESSION" "/new" "$expect" 2>&1) \
+  out=$(node "$LAB/probe.mjs" "$TMUX" "$SOCKET" "$SESSION" "/new" "$expect" "$cursor_path" 2>&1) \
     || { printf '%s\n' "$out" >&2; "$TMUX" -L "$SOCKET" capture-pane -p -t "$SESSION" -S -200 >&2; fail "the keystroke probe failed in the $label arm against Pi $PI_VERSION"; }
   printf '%s\n' "$out"
 }
@@ -208,7 +213,10 @@ arm_value() {
 DELIVERED_MARK="synthetic responsiveness outcome 2"
 FLOOR_OUT=$(run_arm floor no 0 "New session started")
 IDLE_OUT=$(run_arm idle yes 0 "New session started")
-DELIVERY_OUT=$(run_arm delivery yes 2 "$DELIVERED_MARK")
+DELIVERY_OUT=$(run_arm delivery yes 2 "$DELIVERED_MARK" "$HOME_DIR/state/.branch-outcomes-cursor")
+if "$TMUX" -L "$SOCKET" capture-pane -p -S -200 -t "$SESSION" | grep -Fq "$DELIVERED_MARK"; then
+  fail "a routine outcome appeared in the captain pane during the delivery arm"
+fi
 
 FLOOR_WORST=$(arm_value WORST_MS "$FLOOR_OUT")
 IDLE_WORST=$(arm_value WORST_MS "$IDLE_OUT")

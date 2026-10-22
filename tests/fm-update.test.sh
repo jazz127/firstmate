@@ -265,7 +265,7 @@ decode() { printf '%s' "$1" | base64 --decode 2>/dev/null || printf '%s' "$1" | 
 rargs=()
 while IFS= read -r -d '' a; do rargs+=("$a"); done < <(decode "$argv_b64")
 case "${rargs[1]:-}" in
-  update) printf 'synced: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n' ;;
+  sync) printf 'synced: %s\n' "${rargs[3]:-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}" ;;
   state) printf 'alive\n' ;;
   *) exit 91 ;;
 esac
@@ -294,6 +294,184 @@ EOF
   assert_contains "$out" "nudge-secondmates: none" \
     "a restarted remote mate must not also be steered"
   pass "T3e a legacy remote advance still restarts the live remote mate"
+}
+
+# Synthetic SSH boundary: execute the guarded root refresh and decode fm-on's
+# argv for remote sync against separate Git clones. No remote account is exercised.
+new_remote_refresh_world() {
+  local w=$1 id
+  cp -R "$ROOT/bin/." "$w/seed/bin/"
+  git -C "$w/seed" add bin
+  git -C "$w/seed" commit -qm 'seed update and sync commands'
+  git -C "$w/seed" push -q origin main main:release
+  git -C "$w/main" pull -q --ff-only
+  git clone -q "$w/origin.git" "$w/remote-root"
+  git -C "$w/remote-root" remote rename origin fork
+  git -C "$w/remote-root" checkout -qb house
+  git -C "$w/remote-root" config firstmate.runtimeBranch house
+  git -C "$w/remote-root" config branch.house.remote fork
+  git -C "$w/remote-root" config branch.house.merge refs/heads/release
+  for id in sm1 sm2; do
+    git clone -q -b house "$w/remote-root" "$w/$id"
+    git -C "$w/$id" config firstmate.runtimeBranch house
+    printf '%s\n' "$id" > "$w/$id/.fm-secondmate-home"
+    printf '.fm-secondmate-home\n' >> "$w/$id/.git/info/exclude"
+    printf -- '- %s - remote domain (host: fixture-host; root: %s/remote-root; home: %s/%s; scope: things; projects: p; added 2026-09-03)\n' \
+      "$id" "$w" "$w" "$id" >> "$w/home/data/secondmates.md"
+  done
+  # The root-only refresh must not update this code root's own registered home.
+  git clone -q -b house "$w/remote-root" "$w/unrelated"
+  printf 'unrelated\n' > "$w/unrelated/.fm-secondmate-home"
+  printf '.fm-secondmate-home\n' >> "$w/unrelated/.git/info/exclude"
+  mkdir -p "$w/remote-root/data"
+  printf 'data/\n' >> "$w/remote-root/.git/info/exclude"
+  printf -- '- unrelated - separate domain (home: %s/unrelated; scope: things; projects: p; added 2026-09-03)\n' \
+    "$w" > "$w/remote-root/data/secondmates.md"
+  cat > "$w/fakebin/refresh-ssh" <<'SH'
+#!/usr/bin/env bash
+set -eu
+while [ "$#" -gt 0 ]; do
+  case "$1" in -o) shift 2 ;; --) shift; break ;; *) exit 90 ;; esac
+done
+decode() { printf '%s' "$1" | base64 --decode 2>/dev/null || printf '%s' "$1" | base64 -D; }
+if [ "$2" = bash ]; then
+  printf 'code-root-refresh\n' >> "$FM_FAKE_DIR/remote-calls"
+  printf "Warning: Permanently added 'fixture-host' to the list of known hosts.\n" >&2
+  printf '** WARNING: connection is not using a post-quantum key exchange algorithm.\n' >&2
+  shift
+  exec "$@"
+fi
+shift 2
+remote_root=$(decode "$2")
+remote_home=$(decode "$3")
+rargs=()
+while IFS= read -r -d '' arg; do rargs+=("$arg"); done < <(decode "$4")
+printf '%s\n' "${rargs[*]}" >> "$FM_FAKE_DIR/remote-calls"
+FM_ROOT_OVERRIDE="$remote_root" FM_HOME="$remote_home" \
+  "$remote_root/bin/${rargs[0]}" "${rargs[@]:1}"
+SH
+  chmod +x "$w/fakebin/refresh-ssh"
+}
+
+test_remote_code_root_refresh() {
+  local mode w out target before status_before id refresh_count first_call unrelated_before
+  for mode in behind legacy dirty diverged; do
+    w=$(new_world "remote-refresh-$mode")
+    new_remote_refresh_world "$w"
+    if [ "$mode" = legacy ]; then
+      # A root installed before runtime branches: plain origin clone whose
+      # library treats any base mode except origin as a local commit-ish.
+      cat > "$w/seed/bin/fm-ff-lib.sh" <<'SH'
+ff_target() {
+  local dir=$1 label=$2 base_mode=$3 base
+  if [ "$base_mode" = origin ]; then
+    git -C "$dir" fetch -q origin || { echo "$label: skipped: fetch failed"; return 0; }
+    base=origin/$(git -C "$dir" symbolic-ref --short HEAD)
+  else
+    base=$base_mode
+  fi
+  git -C "$dir" rev-parse --verify --quiet "$base^{commit}" >/dev/null \
+    || { echo "$label: skipped: $base does not exist"; return 0; }
+  git -C "$dir" merge -q --ff-only "$base" >/dev/null 2>&1 \
+    || { echo "$label: skipped: diverged"; return 0; }
+  echo "$label: updated to $(git -C "$dir" rev-parse --short HEAD)"
+}
+SH
+      git -C "$w/seed" commit -qam 'legacy ff library'
+      git -C "$w/seed" push -q origin main
+      git -C "$w/remote-root" remote rename fork origin
+      git -C "$w/remote-root" config --unset firstmate.runtimeBranch
+      git -C "$w/remote-root" checkout -q main
+      git -C "$w/remote-root" pull -q --ff-only
+      git -C "$w/seed" checkout -q HEAD~1 -- bin/fm-ff-lib.sh
+      git -C "$w/seed" commit -qm 'current ff library'
+      git -C "$w/seed" push -q origin main
+    fi
+    unrelated_before=$(git -C "$w/unrelated" rev-parse HEAD)
+    case "$mode" in
+      dirty) printf 'uncommitted root edit\n' >> "$w/remote-root/README.md" ;;
+      diverged)
+        printf 'unique root commit\n' > "$w/remote-root/local-only"
+        git -C "$w/remote-root" add local-only
+        git -C "$w/remote-root" commit -qm 'unlanded root change'
+        ;;
+    esac
+    before=$(git -C "$w/remote-root" rev-parse HEAD)
+    status_before=$(git -C "$w/remote-root" status --porcelain)
+    bump_origin "$w" readme
+    git -C "$w/seed" push -q origin main:release
+    target=$(git -C "$w/seed" rev-parse HEAD)
+    for id in sm1 sm2; do
+      git -C "$w/$id" cat-file -e "$target^{commit}" 2>/dev/null \
+        && fail "home unexpectedly already holds the pinned commit"
+      if [ "$mode" != behind ] && [ "$mode" != legacy ]; then
+        # Preserve the existing forge-backed-origin fallback after a root skip.
+        git -C "$w/$id" remote set-url origin "$w/origin.git"
+      fi
+    done
+    out=$(FM_TEST_SSH_BIN="$w/fakebin/refresh-ssh" run_update "$w")
+    refresh_count=$(awk '$0 == "code-root-refresh" {n++} END {print n+0}' "$w/fake/remote-calls")
+    assert_equals 1 "$refresh_count" "$mode: two homes refresh their shared code root once"
+    first_call=$(head -1 "$w/fake/remote-calls")
+    assert_equals 'code-root-refresh' "$first_call" "$mode: refresh precedes home sync"
+    assert_equals 3 "$(wc -l < "$w/fake/remote-calls" | tr -d ' ')" "$mode: both homes still attempt sync"
+    assert_equals "$unrelated_before" "$(git -C "$w/unrelated" rev-parse HEAD)" 'root refresh leaves its own registered home untouched'
+    if [ "$mode" = legacy ]; then
+      assert_equals "$(git -C "$w/remote-root" rev-parse HEAD)" "$target" 'legacy root follows origin before importing to homes'
+      assert_contains "$out" "remote code root fixture-host ($w/remote-root): updated " 'legacy root advance reported by name'
+    elif [ "$mode" = behind ]; then
+      assert_equals "$(git -C "$w/remote-root" rev-parse HEAD)" "$target" 'root follows fork/release before importing to homes'
+      assert_contains "$out" "remote code root fixture-host ($w/remote-root): updated " 'root advance reported by name'
+      assert_equals "$(git -C "$w/remote-root" symbolic-ref --short HEAD)" house 'root remains on runtime branch'
+      assert_equals "$(git -C "$w/remote-root" rev-list --parents -n1 HEAD | wc -w | tr -d ' ')" 2 'root update creates no merge commit'
+    else
+      assert_equals "$(git -C "$w/remote-root" rev-parse HEAD)" "$before" "$mode root HEAD is untouched"
+      assert_equals "$(git -C "$w/remote-root" status --porcelain)" "$status_before" "$mode root working tree is untouched"
+      if [ "$mode" = dirty ]; then
+        assert_contains "$out" "remote code root fixture-host ($w/remote-root): skipped: dirty working tree" 'dirty root reported by name'
+        assert_contains "$(cat "$w/remote-root/README.md")" 'uncommitted root edit' 'dirty root edit survives'
+      else
+        assert_contains "$out" "remote code root fixture-host ($w/remote-root): skipped: diverged" 'diverged root reported by name'
+        assert_equals "$(cat "$w/remote-root/local-only")" 'unique root commit' 'unlanded root content survives'
+      fi
+    fi
+    for id in sm1 sm2; do
+      assert_equals "$(git -C "$w/$id" rev-parse HEAD)" "$target" "$mode: $id imports and syncs to primary commit"
+      assert_contains "$out" "remote secondmate $id: updated on fixture-host ($target" "$mode: $id update reported"
+    done
+    pass "remote code-root refresh $mode: guarded tracking update, one refresh, then both pinned syncs"
+  done
+}
+
+# --- T3f: remote failure reasons prefer the actual error over guard output --
+test_remote_skip_reason_prefers_error_line() {
+  local w fake_ssh out
+  w=$(new_world t3f)
+  fake_ssh="$w/fakebin/fake-ssh"
+  cat > "$fake_ssh" <<'SH'
+#!/usr/bin/env bash
+set -u
+cat > /dev/null
+while [ "$#" -gt 0 ]; do
+  case "$1" in -o) shift 2 ;; --) shift; break ;; *) exit 90 ;; esac
+done
+printf 'WARNING: watcher still down (same stale episode) - full banner already printed this episode.\n' >&2
+printf 'error: Firstmate code root diverged from origin/main\n' >&2
+exit 1
+SH
+  chmod +x "$fake_ssh"
+  printf -- '- sm1 - remote domain (host: remote-mac; root: /srv/fm; home: /srv/sm1; scope: things; projects: p; added 2026-09-03)\n' \
+    > "$w/home/data/secondmates.md"
+
+  out=$(PATH="$w/fakebin:$PATH" FM_SSH_BIN="$fake_ssh" \
+    FM_ROOT_OVERRIDE="$w/main" FM_HOME="$w/home" "$UPDATE" 2>&1)
+
+  assert_contains "$out" \
+    "remote secondmate sm1: skipped on remote-mac: error: Firstmate code root diverged from origin/main" \
+    "remote failure reason should select the actionable error line"
+  assert_not_contains "$out" "skipped on remote-mac: WARNING:" \
+    "remote guard banner should not replace the actionable failure reason"
+  pass "T3f a remote skip reports its error instead of the guard banner"
 }
 
 # --- T4: dirty secondmate is skipped, its edit preserved -------------------
@@ -327,7 +505,7 @@ test_diverged_secondmate_skipped() {
 
   out=$(run_update "$w")
 
-  assert_contains "$out" "secondmate sm1: skipped: diverged from origin/main" "diverged home skipped"
+  assert_contains "$out" "secondmate sm1: skipped: diverged from " "diverged home skipped"
   assert_contains "$out" "reconciliation required (record:" "diverged skip is actionable"
   assert_not_contains "$out" "fm-sm1" "diverged secondmate is not nudged"
   [ "$(git -C "$w/sm1" rev-parse HEAD)" = "$before" ] \
@@ -360,7 +538,7 @@ test_squash_merged_divergence_reconciles() {
   bump_origin "$w" readme
   out=$(run_update "$w")
   marker="$w/home/state/.secondmate-update-reconcile/sm1.pending"
-  assert_contains "$out" "secondmate sm1: skipped: diverged from origin/main" \
+  assert_contains "$out" "secondmate sm1: skipped: diverged from " \
     "unique local work was not initially protected"
   assert_present "$marker" "initial divergence did not leave its durable record"
 
@@ -468,6 +646,7 @@ test_registry_backstop_dedup_and_self_exclusion() {
 test_firstmate_wrong_branch_skipped() {
   local w out before
   w=$(new_world t9)
+  add_sm "$w" sm1
   bump_origin "$w" instr
   # Simulate firstmate mid-shipping its own change: not on the default branch.
   git -C "$w/main" checkout -q -b feature/wip
@@ -479,6 +658,9 @@ test_firstmate_wrong_branch_skipped() {
   assert_contains "$out" "reread-firstmate: no" "no reread when firstmate was skipped"
   [ "$(git -C "$w/main" rev-parse HEAD)" = "$before" ] \
     || fail "skipped firstmate HEAD moved"
+  [ "$(git -C "$w/sm1" rev-parse HEAD)" = "$before" ] \
+    || fail "secondmate advanced after the primary update was skipped"
+  assert_not_contains "$out" "secondmate sm1: updated" "a skipped primary must stop propagation"
   pass "T9 firstmate off its default branch is skipped, not forced"
 }
 
@@ -496,6 +678,44 @@ test_firstmate_detached_head_skipped() {
   [ "$(git -C "$w/main" rev-parse HEAD)" = "$before" ] \
     || fail "detached firstmate HEAD moved"
   pass "T10 firstmate detached HEAD is skipped"
+}
+
+test_house_tracks_fork_only_target_and_pins_secondmate() {
+  local w fork before out target
+  w=$(new_world house)
+  fork="$w/fork.git"
+  git init -q --bare "$fork"
+  add_sm "$w" sm1
+  git -C "$w/main" remote add jazz127 "$fork"
+  git -C "$w/main" checkout -q -b house
+  git -C "$w/main" push -q jazz127 HEAD:refs/heads/house
+  git -C "$w/main" config firstmate.runtimeBranch house
+  git -C "$w/main" config branch.house.remote jazz127
+  git -C "$w/main" config branch.house.merge refs/heads/house
+  git -C "$w/seed" checkout -q -b house
+  printf 'fork-only\n' >> "$w/seed/README.md"
+  git -C "$w/seed" commit -qam fork-only
+  git -C "$w/seed" push -q "$fork" HEAD:refs/heads/house
+  before=$(git -C "$w/main" rev-parse HEAD)
+  out=$(run_update "$w")
+  assert_contains "$out" "firstmate: updated " "runtime branch follows its configured fork remote"
+  target=$(git -C "$fork" rev-parse house)
+  [ "$(git -C "$w/main" rev-parse HEAD)" = "$target" ] || fail "primary did not advance to fork-only house SHA"
+  [ "$(git -C "$w/sm1" rev-parse HEAD)" = "$target" ] || fail "secondmate did not receive the primary's pinned SHA"
+  [ "$(git -C "$w/origin.git" rev-parse main)" = "$before" ] || fail "upstream main moved during fork-only update"
+  pass "configured house follows fork-only target and hands the resulting SHA to secondmates"
+}
+
+test_missing_runtime_branch_fails_closed() {
+  local w out before
+  w=$(new_world missing-house)
+  git -C "$w/main" config firstmate.runtimeBranch house
+  before=$(git -C "$w/main" rev-parse HEAD)
+  out=$(run_update "$w")
+  assert_contains "$out" "firstmate: skipped: cannot determine default branch" "missing configured branch refuses update"
+  assert_contains "$out" "restart-secondmates: none" "skipped primary stops propagation"
+  [ "$(git -C "$w/main" rev-parse HEAD)" = "$before" ] || fail "missing branch moved primary"
+  pass "missing configured runtime branch fails closed and stops secondmate propagation"
 }
 
 test_unsafe_secondmate_home_skipped_before_git_update() {
@@ -562,6 +782,8 @@ test_bin_only_advance_restarts
 test_unprovable_runtime_gets_fallback_nudge
 test_dead_secondmate_gets_no_action
 test_legacy_remote_advance_restarts
+test_remote_code_root_refresh
+test_remote_skip_reason_prefers_error_line
 test_dirty_secondmate_skipped
 test_diverged_secondmate_skipped
 test_squash_merged_divergence_reconciles
@@ -570,6 +792,8 @@ test_already_current_unprovable_mate_is_nudged
 test_registry_backstop_dedup_and_self_exclusion
 test_firstmate_wrong_branch_skipped
 test_firstmate_detached_head_skipped
+test_house_tracks_fork_only_target_and_pins_secondmate
+test_missing_runtime_branch_fails_closed
 test_unsafe_secondmate_home_skipped_before_git_update
 test_primary_update_rebinds_local_watch
 

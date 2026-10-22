@@ -30,7 +30,7 @@ LOCK_STALE_SECS=30
 die() { printf 'error: %s\n' "$1" >&2; exit 1; }
 usage() { sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 sha256_file() {
-  if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | awk '{print $1}'; else sha256sum "$1" | awk '{print $1}'; fi
+  if command -v shasum >/dev/null 2>&1; then shasum -a 256 < "$1" | awk '{print $1}'; else sha256sum < "$1" | awk '{print $1}'; fi
 }
 
 backlog_key_section() { # <file> <key>
@@ -79,7 +79,8 @@ remove_dead_stale_lock() { # <lock-path>
 }
 
 run_move() { # <keys...>
-  tasks-axi mv "$@" --file "$DELIVERED" --to "$DEST"
+  # Pin the markdown backend so a .tasks.toml in the caller's directory cannot redirect the move.
+  tasks-axi mv "$@" --file "$DELIVERED" --to "$DEST" --backend markdown
 }
 
 [ "$#" -eq 4 ] || usage

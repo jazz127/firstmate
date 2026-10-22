@@ -24,6 +24,7 @@
 #   - composition: the script invokes the real fm-lock.sh/fm-bootstrap.sh/
 #     fm-wake-drain.sh (their real, distinctive output appears verbatim), it
 #     does not reimplement their logic
+#   - a marked task worker is refused before the home lock or bootstrap runs
 #   - the deferred startup stage: slow network and inactive current-state reads
 #     do not delay the digest, the work still runs and lands durable findings, a
 #     network result surfaces exactly once (inline or as a wake, never both), a
@@ -231,6 +232,7 @@ for argument in "$@"; do
   previous=$argument
 done
 case "$*" in
+  *"lstart="*) exec /bin/ps "$@" ;;
   *"comm="*)
     if [ -z "${FM_FAKE_HARNESS_PID:-}" ] || [ "$pid" = "$FM_FAKE_HARNESS_PID" ] \
       || [ "$pid" = "${FM_FAKE_LIVE_HOLDER_PID:-}" ]; then
@@ -272,6 +274,7 @@ for arg in "\$@"; do
   prev="\$arg"
 done
 case "\$*" in
+  *"lstart="*) exec /bin/ps "\$@" ;;
   *"comm="*)
     if [ "\$pid" = "$holder_pid" ]; then
       printf '/usr/local/bin/$harness\n'
@@ -295,11 +298,10 @@ SH
   chmod +x "$fakebin/ps"
 }
 
-# make_fake_tmux <fakebin> <live-target>: display-message succeeds only for
-# the given "session:window" target - the exact primitive
-# fm_backend_target_exists uses for a tmux endpoint liveness read.
+# make_fake_tmux <fakebin> <live-target>: the window inventory contains only
+# the given live target's window.
 make_fake_tmux() {
-  local fakebin=$1 live=$2
+  local fakebin=$1 live=$2 live_window=${2#*:}
   cat > "$fakebin/tmux" <<SH
 #!/usr/bin/env bash
 set -u
@@ -313,6 +315,10 @@ case "\${1:-}" in
     done
     [ "\$target" = "$live" ] && { printf '%%1\n'; exit 0; }
     exit 1
+    ;;
+  list-windows)
+    printf '%s\n' "$live_window"
+    exit 0
     ;;
 esac
 exit 1
@@ -575,6 +581,44 @@ run_session_start() {
   fi
 }
 
+test_marked_worker_cannot_start_primary_session() {
+  local rec root home fakebin out rc
+  rec=$(new_world marked-worker)
+  IFS='|' read -r root home fakebin <<EOF
+$rec
+EOF
+
+  rc=0
+  out=$(FM_TASK_ID=worker-task FM_HOME="$home" FM_ROOT_OVERRIDE="$root" \
+    "$SESSION_START" 2>&1) || rc=$?
+  [ "$rc" -eq 2 ] || fail "marked worker session start exited $rc: $out"
+  assert_contains "$out" 'refusing task worker FM_TASK_ID=worker-task' \
+    "marked worker was not given a clear refusal"
+  assert_absent "$home/state/.lock" "marked worker took the home lock"
+  assert_absent "$home/state/.session-start-complete" "marked worker completed startup"
+  pass "session start refuses a marked task worker before touching the home"
+}
+
+test_unmarked_linked_worktree_still_gets_digest() {
+  local rec root home fakebin linked out rc
+  rec=$(new_world linked-home)
+  IFS='|' read -r root home fakebin <<EOF
+$rec
+EOF
+  make_fake_toolchain "$fakebin"
+  make_fake_ps_claude "$fakebin"
+  linked="${root%/root}/linked"
+  git -C "$root" worktree add -q -b fm/linked-home "$linked"
+  printf '%s\n' '- demo [no-mistakes] - linked home project' > "$home/data/projects.md"
+
+  rc=0
+  out=$(run_session_start "$home" "$linked" "$fakebin:$BASE_PATH" 2>&1) || rc=$?
+  [ "$rc" -eq 0 ] || fail "unmarked linked worktree session start exited $rc: $out"
+  assert_contains "$out" "- demo [no-mistakes] - linked home project" \
+    "unmarked linked worktree session start did not print the digest"
+  pass "session start still runs for an unmarked linked worktree home"
+}
+
 run_pi_session_start() {  # <home> <root> <path> [fm-session-start args...]
   local home=$1 root=$2 path=$3
   shift 3
@@ -794,6 +838,7 @@ EOF
     || fail "a locked session start did not publish the home summary ledger"
   assert_contains "$out" "data/projects.md" "digest did not label the projects.md section"
   assert_contains "$out" "- demo [no-mistakes] - a demo project (added 2026-07-01)" "digest did not print projects.md content"
+  assert_contains "$out" "fm-role: user (default)" "digest did not report the home's firstmate-repository role"
 
   assert_contains "$out" "data/captain.md" "digest did not label the captain.md section"
   assert_contains "$out" "data/captain-shared.md (shared, main-authoritative, read-only in secondmate homes)" \
@@ -957,6 +1002,7 @@ for argument in "$@"; do
   previous=$argument
 done
 case "$*" in
+  *"lstart="*) exec /bin/ps "$@" ;;
   *"comm="*)
     if [ -f "$FM_FAKE_LOCK_STATE/harness-$pid" ]; then
       printf '%s\n' /usr/local/bin/claude
@@ -984,7 +1030,9 @@ SH
       harness_pid=$(sh -c 'printf "%s\n" "$PPID"')
       : > "$home/state/harness-$harness_pid"
       : > "$ready/$i"
-      while [ "$(find "$ready" -type f | wc -l | tr -d ' ')" -lt 40 ]; do
+      while :; do
+        set -- "$ready"/*
+        [ "$#" -ge 40 ] && break
         sleep 0.01
       done
       if FM_HOME="$home" FM_FAKE_LOCK_STATE="$home/state" \
@@ -993,7 +1041,9 @@ SH
         printf '%s\n' "$harness_pid" >> "$winners"
       fi
       : > "$completed/$i"
-      while [ "$(find "$completed" -type f | wc -l | tr -d ' ')" -lt 40 ]; do
+      while :; do
+        set -- "$completed"/*
+        [ "$#" -ge 40 ] && break
         sleep 0.01
       done
     ) &
@@ -2342,6 +2392,7 @@ for argument in "$@"; do
   previous=$argument
 done
 case "$*" in
+  *"lstart="*) exec /bin/ps "$@" ;;
   *"comm="*)
     if [ "$pid" = "${FM_FAKE_HARNESS_PID:-}" ]; then printf '%s\n' /usr/local/bin/claude
     else printf '%s\n' /bin/bash; fi
@@ -2385,6 +2436,31 @@ SH
 }
 
 # --- context re-emit (--reemit) ----------------------------------------------
+
+test_reemit_cue_survives_the_hook_output_preview() {
+  local rec root home fakebin reemit normal head2k
+  rec=$(new_world reemit-cue)
+  IFS='|' read -r root home fakebin <<FIXTURE
+$rec
+FIXTURE
+  make_fake_toolchain "$fakebin"
+  make_fake_ps_claude "$fakebin"
+  mkdir -p "$home/data"
+  awk 'BEGIN { for (i = 0; i < 400; i++) printf "preference line %04d padding padding padding\n", i }' > "$home/data/captain.md"
+
+  normal=$(FM_FAKE_HARNESS_PID=$$ run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
+  assert_not_contains "$normal" "RE-EMIT CUE" "a normal start printed the re-emit cue"
+
+  reemit=$(FM_HOME="$home" FM_ROOT_OVERRIDE="$root" FM_FAKE_HARNESS_PID=$$ PATH="$fakebin:$BASE_PATH" \
+    env -u CLAUDECODE -u PI_CODING_AGENT -u FM_PI_HARNESS -u GROK_AGENT \
+    "$SESSION_START" --reemit)
+  [ "${#reemit}" -gt 10000 ] || fail "re-emit fixture did not exceed the hook output limit"
+  head2k=$(printf '%s' "$reemit" | head -c 2000)
+  assert_contains "$head2k" "RE-EMIT CUE" "the re-emit cue is not inside the first 2000 characters"
+  assert_contains "$head2k" "Full output saved to" "the re-emit cue does not point at the saved output"
+
+  pass "--reemit puts its read cue in the first 2000 characters and a normal start omits it"
+}
 
 test_reemit_skips_startup_sweeps_but_keeps_the_wake_drain() {
   local rec root home fakebin network_report reemit sequence generation
@@ -2614,6 +2690,51 @@ SH
     "startup recorded an instruction baseline after completion publication failed"
 
   pass "instruction baselines require SHA-256 and successful startup completion"
+}
+
+test_agents_baseline_hashes_contents_in_backslash_roots() {
+  local name rec root home fakebin shasum_bin expected_hash baseline compact_out startup_out
+  shasum_bin=$(command -v shasum) || {
+    printf 'skip: shasum not found for instruction-baseline path cases\n'
+    return 0
+  }
+  for name in plain backslash; do
+    rec=$(new_world "agents-content-$name")
+    IFS='|' read -r root home fakebin <<EOF
+$rec
+EOF
+    if [ "$name" = backslash ]; then
+      mv "$root" "$root-back\\slash"
+      root="$root-back\\slash"
+    fi
+    make_fake_toolchain "$fakebin"
+    make_fake_ps_harness "$fakebin" pi
+    ln -s "$shasum_bin" "$fakebin/shasum"
+    # Exercise the stock macOS provider without a second digest provider
+    # masking its filename-rendering error.
+    printf '#!/usr/bin/env bash\nexit 1\n' > "$fakebin/sha256sum"
+    chmod +x "$fakebin/sha256sum"
+    printf 'PATH_HASH_INSTRUCTION=original\n' > "$root/AGENTS.md"
+    expected_hash=$("$shasum_bin" -a 256 < "$root/AGENTS.md" | awk '{print "sha256:" $1}')
+
+    startup_out=$(FM_FAKE_HARNESS=pi run_pi_session_start "$home" "$root" "$fakebin:$BASE_PATH" --source startup)
+    assert_not_contains "$startup_out" '●  STARTUP TRUNCATED' "fixture startup did not finish: $startup_out"
+    wait_for_network_stage "$home" "$root" || fail 'fixture startup network stage did not finish'
+    assert_present "$home/state/.session-start-agents-baseline" "startup omitted the $name instruction baseline"
+    baseline=$(cat "$home/state/.session-start-agents-baseline")
+    [ "$(printf '%s\n' "$baseline" | sed -n '2p')" = "$expected_hash" ] \
+      || fail "startup did not hash instruction contents in the $name root"
+    compact_out=$(FM_FAKE_HARNESS=pi run_pi_session_start "$home" "$root" "$fakebin:$BASE_PATH" --reemit --source compact)
+    assert_not_contains "$compact_out" 'CURRENT AGENTS.md - INSTRUCTION REFRESH' \
+      "unchanged instructions in the $name root triggered a refresh"
+    printf 'PATH_HASH_INSTRUCTION=changed\n' > "$root/AGENTS.md"
+    compact_out=$(FM_FAKE_HARNESS=pi run_pi_session_start "$home" "$root" "$fakebin:$BASE_PATH" --reemit --source compact)
+    assert_contains "$compact_out" 'PATH_HASH_INSTRUCTION=changed' \
+      "changed instructions in the $name root did not refresh"
+    [ "$(cat "$home/state/.session-start-agents-baseline")" = "$baseline" ] \
+      || fail 'instruction refresh changed the original startup baseline'
+    pass "instruction baseline uses content hashes in the $name root"
+  done
 }
 
 test_reemit_keeps_repair_ownership_with_the_lock_holder() {
@@ -3014,6 +3135,9 @@ EOF
   pass "session start rejects Pi loaded markers from previous sessions"
 }
 
+test_agents_baseline_hashes_contents_in_backslash_roots
+test_marked_worker_cannot_start_primary_session
+test_unmarked_linked_worktree_still_gets_digest
 test_context_digest_absent_empty_present
 test_lock_refusal_read_only_path
 test_lock_write_failure_read_only_path
@@ -3071,6 +3195,7 @@ test_portable_timeout_escalates_term_resistant_process
 test_runtime_bound_leaves_a_healthy_digest_untouched
 test_runtime_bound_leaves_harness_ancestry_headroom
 test_reemit_skips_startup_sweeps_but_keeps_the_wake_drain
+test_reemit_cue_survives_the_hook_output_preview
 test_agents_baseline_stays_at_true_start_and_reemits_on_every_drifted_pi_compact
 test_read_only_pi_compact_refreshes_against_its_own_session_identity
 test_codex_unreachable_reset_sources_do_not_claim_instruction_refresh

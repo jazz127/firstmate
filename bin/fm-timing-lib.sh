@@ -44,6 +44,8 @@
 # place.
 set -u
 
+# Optional per-field character limit: canonical nonnegative decimal, default 80.
+# Invalid values fall back to 80 when consumed, never enter shell arithmetic.
 FM_TIMING_DETAIL_MAX=${FM_TIMING_DETAIL_MAX:-80}
 
 fm_timing_enabled() {
@@ -57,23 +59,30 @@ fm_timing_enabled() {
 # than losing the timing entirely. That is a coarser answer to "which host was
 # slow", not a missing one, because the steps being measured are seconds-scale.
 fm_timing_now_ms() {
-  local raw sec frac
+  local raw sec frac clock_re='^([0-9]+)[.,]([0-9]+)$'
   raw=${EPOCHREALTIME:-}
-  case "$raw" in
-    *[0-9][.,][0-9]*)
-      sec=${raw%%[.,]*}
-      frac=${raw#*[.,]}
-      frac="${frac}000"
-      frac=${frac:0:3}
-      case "$sec$frac" in
-        ''|*[!0-9]*) ;;
-        *) printf '%s\n' "$(( sec * 1000 + 10#$frac ))"; return 0 ;;
-      esac
-      ;;
-  esac
-  sec=$(date +%s 2>/dev/null || printf '0')
-  case "$sec" in ''|*[!0-9]*) sec=0 ;; esac
+  if [[ $raw =~ $clock_re ]]; then
+    sec=${BASH_REMATCH[1]}
+    frac=${BASH_REMATCH[2]}000
+    # Keep the resulting milliseconds within the same 16-digit contract as
+    # stored timing stamps. Validate before arithmetic, including on old Bash
+    # where EPOCHREALTIME may be an ordinary inherited environment variable.
+    if _fm_timing_uint_valid "$sec" && [ "${#sec}" -le 13 ]; then
+      printf '%s\n' "$(( sec * 1000 + 10#${frac:0:3} ))"
+      return 0
+    fi
+  fi
+  sec=$(date +%s 2>/dev/null) || sec=0
+  if ! _fm_timing_uint_valid "$sec" || [ "${#sec}" -gt 13 ]; then sec=0; fi
   printf '%s\n' "$(( sec * 1000 ))"
+}
+
+_fm_timing_uint_valid() {  # <unsigned decimal control>
+  # Canonical decimal only: leading zeroes invoke Bash's octal arithmetic, and
+  # at most 16 digits keep both timestamp subtraction operands well inside the
+  # signed 64-bit range. Malformed diagnostics must never abort a sweep.
+  case "$1" in ''|*[!0-9]*|0[0-9]*) return 1 ;; esac
+  [ "${#1}" -le 16 ]
 }
 
 # Ensure FM_TIMING_EPOCH_MS holds the origin every offset is measured from.
@@ -86,12 +95,10 @@ fm_timing_now_ms() {
 # runs in a subshell, so the lazily chosen origin would be discarded and every
 # record would recompute it, flattening every start offset to zero.
 fm_timing_epoch_ensure() {
-  case "${FM_TIMING_EPOCH_MS:-}" in
-    ''|*[!0-9]*)
-      FM_TIMING_EPOCH_MS=$(fm_timing_now_ms)
-      export FM_TIMING_EPOCH_MS
-      ;;
-  esac
+  if ! _fm_timing_uint_valid "${FM_TIMING_EPOCH_MS:-}"; then
+    FM_TIMING_EPOCH_MS=$(fm_timing_now_ms)
+    export FM_TIMING_EPOCH_MS
+  fi
 }
 
 # Start a run: point recording at <file> and stamp the shared origin. The file is
@@ -107,12 +114,16 @@ fm_timing_start() {  # <file>
 }
 
 fm_timing_sanitize() {  # <text>
-  local text=${1:-}
+  local text=${1:-} max=$FM_TIMING_DETAIL_MAX
   case "$text" in
     *[[:space:]]*) printf '%s\n' 'unrecordable'; return 0 ;;
   esac
+  _fm_timing_uint_valid "$max" || max=80
+  # Reject whitespace across the whole input above, then sanitize only the
+  # retained prefix. Bash 3.2 global replacement is costly on a long field.
+  text=${text:0:$max}
   text=${text//[!A-Za-z0-9._@:\/+-]/_}
-  printf '%s\n' "${text:0:$FM_TIMING_DETAIL_MAX}"
+  printf '%s\n' "$text"
 }
 
 # Record one measured step. Never fails the caller: a missing log, an unwritable
@@ -120,7 +131,7 @@ fm_timing_sanitize() {  # <text>
 fm_timing_record() {  # <scope> <name> <start-ms> [detail]
   local scope=$1 name=$2 start=$3 detail=${4:-} now offset elapsed
   fm_timing_enabled || return 0
-  case "$start" in ''|*[!0-9]*) return 0 ;; esac
+  _fm_timing_uint_valid "$start" || return 0
   now=$(fm_timing_now_ms)
   fm_timing_epoch_ensure
   offset=$(( start - FM_TIMING_EPOCH_MS ))
@@ -155,23 +166,24 @@ fm_timing_render() {  # <file>
         if (detail[i] != "") label = label " " detail[i]
         printf "  %-11s %-42s start=+%-7d elapsed=%d\n", scope[i], label, offset[i], elapsed[i]
       }
+      # Only three rows appear in the summary. Keep their indexes instead of
+      # sorting every record, so report cost stays linear in the run size.
+      top = records < 3 ? records : 3
       for (i = 1; i <= records; i++) {
-        for (j = i + 1; j <= records; j++) {
-          if (elapsed[j] > elapsed[i]) {
-            t = scope[i]; scope[i] = scope[j]; scope[j] = t
-            t = name[i]; name[i] = name[j]; name[j] = t
-            t = offset[i]; offset[i] = offset[j]; offset[j] = t
-            t = elapsed[i]; elapsed[i] = elapsed[j]; elapsed[j] = t
-            t = detail[i]; detail[i] = detail[j]; detail[j] = t
+        for (j = 1; j <= top; j++) {
+          if (!slowest[j] || elapsed[i] > elapsed[slowest[j]]) {
+            for (k = top; k > j; k--) slowest[k] = slowest[k - 1]
+            slowest[j] = i
+            break
           }
         }
       }
-      top = records < 3 ? records : 3
       line = ""
       for (i = 1; i <= top; i++) {
-        label = name[i]
-        if (detail[i] != "") label = label " " detail[i]
-        line = line (line == "" ? "" : ", ") scope[i] " " label " " elapsed[i] "ms"
+        row = slowest[i]
+        label = name[row]
+        if (detail[row] != "") label = label " " detail[row]
+        line = line (line == "" ? "" : ", ") scope[row] " " label " " elapsed[row] "ms"
       }
       print "  slowest: " line
     }

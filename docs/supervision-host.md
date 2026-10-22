@@ -52,7 +52,7 @@ Until they land, their current behavior stays as described in their own owners.
 | Row eligibility and the offer rule | `bin/fm-branch-dispatch.mjs` | The command entry to `.pi/extensions/lib/fm-branch-dispatch.ts`, so the host and the Pi extension compute branch-claimable rows, their task scope, and whether the branch may take a close (`branchOfferForWake`) from one owner; it also renders the wake message with the same away-posture tail, or the dialog mirror at its head. |
 | The grant and the drain | `bin/fm-wake-grant.sh` | Publishes the branch's rows bound to the host's own process; [watcher-continuity.md](watcher-continuity.md#per-actor-acknowledgement) owns the per-actor drain and acknowledgement the engine runs. |
 | The prompt | `bin/fm-branch-prompt.sh` | Emits the same byte-stable prompt the Pi branch runs; each wake names its host's report surface. |
-| The report surface | `bin/fm-branch-report.sh` | The command twin of the Pi branch's `fm_branch_report` tool, with the same task scoping; see [The report surface](#the-report-surface). |
+| The report surface | `bin/fm-branch-report.sh` | The command twin of the Pi branch's `fm_branch_report` tool, with the same task scoping plus an exact claimed-row binding; see [The report surface](#the-report-surface). |
 | Leases and authority | `bin/fm-lease-lib.sh` | Owns the per-task leases, the main-owned role partition, and the away relocation; see [Leases and authority](#leases-and-authority). |
 | The dialog mirror | `bin/fm-host-mirror.sh` | Owns the mirror files, writers, verified-writer list, and feed; see [The dialog mirror](#the-dialog-mirror). |
 | The captain-outcome drain | `bin/fm-wake-drain.sh` | Presents visible new and unprocessed outcomes in its `BRANCH OUTCOMES` section; `bin/fm-branch-outcome.sh mark-processed` is main's acknowledgement; see [Captain outcomes](#captain-outcomes). |
@@ -84,6 +84,9 @@ The other owners read the file at every arm.
 ### The report surface
 
 `bin/fm-branch-report.sh` appends to the outcome store (`bin/fm-branch-outcome.sh`) plus a per-turn receipt the host requires.
+Each command report names its claimed queue sequence with `--row`, and the receipt binds that row to the report's outcome sequence.
+The report surface holds the receipt lock across the duplicate check, outcome append, and receipt write so concurrent reports cannot claim the same row.
+The host requires a report for every claimed row before it counts the turn handled.
 A non-silent row an away turn records after the captain returned is also queued for main as a durable check wake.
 Silent outcomes remain in the store but are not queued or relayed as notes.
 An attended turn queues nothing: its captain rows reach main through the host's `branch-outcome` exit and the drain, and its routine rows stay in the store.
@@ -108,8 +111,11 @@ Only an away record is away: no record, or the record daemon-backed quiet mode w
 The host asks the Pi branch's offer rule (`branchOfferForWake`, through `bin/fm-branch-dispatch.mjs offer`) whether the branch may take the close.
 So a close reaches main off Pi exactly when it would on Pi: a check trigger, a decision-owned signal or stale trigger, and a scan that is unsafe or holds nothing for the branch stay main's.
 On that main-only pass-through the host starts the successor watcher cycle and leaves it running, then prints the close unchanged.
-It leaves the watcher's recovery marker reading downtime, confirming no handling handoff, because the re-arm owner delivers a close to main only while that marker reads downtime.
-The watcher's singleton lock makes the session's next arm attach to that cycle instead of starting a second one.
+That successor, like one a turn hands back at its start (see [Away](#away)), runs in a process group of its own, so the harness tearing down the hook's group after the rewake does not stop it.
+The host leaves the watcher's recovery marker reading downtime, confirming no handling handoff, because the re-arm owner delivers a close to main only while that marker reads downtime.
+The session's next park without `--restart` requests a take-over to restore a single host-owned arm; the [host header](../bin/fm-supervision-host.sh) owns successor persistence and cleanup, and the [arm header](../bin/fm-watch-arm.sh) owns take-over eligibility and fallback.
+OpenCode and omp still launch the host with `--restart`, which takes precedence over recorded take-over and lacks its acknowledgement-preserving handover; changing that first-cycle path remains a follow-up.
+The host-off Claude Stop hook's detached handling successor is also unchanged; see [Claude handling successor](watcher-continuity.md#claude-handling-successor).
 It also passes the close through unchanged, with no added line, when any of these holds (`fm_supervision_host_attended_ready` in `bin/fm-supervision-engine-lib.sh` owns the list):
 
 - The home names no usable engine.
@@ -169,7 +175,7 @@ On each actionable close the engine takes, the host runs these steps:
 The host counts the wake handled only when all three hold:
 
 - The turn exited cleanly.
-- The turn recorded at least one report.
+- The turn recorded a report for every granted wake row.
 - The turn left none of its granted rows in the wake queue.
 
 ### Where a handled wake's outcome goes
@@ -225,7 +231,10 @@ The captain row is still durable, and the next drain presents it until it is ack
 ## Failure direction
 
 Every path that cannot finish a wake the engine took hands that wake to main, with one `supervision-host: <why>` line after the close.
-Before handing it back, the host stops its successor cycle.
+Before handing it back, the host stops its successor cycle, and whenever a successor generation was recorded (confirmed or not), it explicitly republishes downtime for that generation.
+That publication is required even when the successor already exited, because no watcher cleanup remains to make the close deliverable to the arm owner.
+If that publication fails, the hand-back adds a `supervision-host: watcher downtime could not be restored` line and the host exits nonzero.
+On Claude, a Stop hook whose rewake is refused while the recovery marker is still `pending:handling` and no watcher is live commits the auto-arm failure notice once per failure episode (`failed-suppressed` after that) and still exits 2, so the hand-back reaches main; every other refused rewake stays silent as before.
 So the owner's next arm starts from the same state as without the host, and the wake stays durable in the queue.
 
 ### Paths that hand the wake back

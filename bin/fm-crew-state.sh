@@ -157,6 +157,10 @@
 #      unreachable, and an alive endpoint whose scrollback read failed is still
 #      classified by step 4. Backends with no classifier keep reading a failed
 #      capture as gone. The fallback's own comment owns the per-verdict rules.
+#      Steps 4 and 5 share one exception: for an agent the opt-in ready-session
+#      timeout stopped on purpose (bin/fm-ready-timeout-lib.sh), its `done`
+#      delivery still answers, with the stop named in the detail, whether its
+#      pane shell remains readable or not.
 #
 # Read-only and side-effect free. Always exits 0 on a successful read regardless
 # of state; exit 2 only on a usage error (no id).
@@ -167,30 +171,24 @@ FM_ROOT="${FM_ROOT_OVERRIDE:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 FM_HOME="${FM_HOME:-${FM_ROOT_OVERRIDE:-$FM_ROOT}}"
 STATE="${FM_STATE_OVERRIDE:-$FM_HOME/state}"
 
-# shellcheck source=bin/fm-tmux-lib.sh
-. "$SCRIPT_DIR/fm-tmux-lib.sh"
-# shellcheck source=bin/fm-backend.sh
-. "$SCRIPT_DIR/fm-backend.sh"
-# shellcheck source=bin/fm-classify-lib.sh
-. "$SCRIPT_DIR/fm-classify-lib.sh"
-# shellcheck source=bin/fm-busy-lib.sh
-. "$SCRIPT_DIR/fm-busy-lib.sh"
-# shellcheck source=bin/fm-nm-run-lib.sh
-. "$SCRIPT_DIR/fm-nm-run-lib.sh"
-# shellcheck source=bin/fm-pr-lib.sh
-. "$SCRIPT_DIR/fm-pr-lib.sh"
-# shellcheck source=bin/fm-timeout-lib.sh
-. "$SCRIPT_DIR/fm-timeout-lib.sh"
-# shellcheck source=bin/fm-dod-lib.sh
-. "$SCRIPT_DIR/fm-dod-lib.sh"
-
 ID=${1:-}
 [ -n "$ID" ] || { echo "usage: fm-crew-state.sh <id>" >&2; exit 2; }
 
 # Fleet snapshot composition supplies its captured metadata path here so every
 # state read resolves the same task generation selected by that snapshot.
-META=${FM_CREW_STATE_META_OVERRIDE:-"$STATE/$ID.meta"}
-LOG=${FM_CREW_STATE_STATUS_OVERRIDE:-"$STATE/$ID.status"}
+# An override is honoured only when its basename is this task's own file name.
+# An override inherited from another task's environment, for example through a
+# long-lived server started inside that task's snapshot child, names a different
+# task and must fall through to $STATE/$ID.* instead of reading another task's
+# captured generation.
+case ${FM_CREW_STATE_META_OVERRIDE:-} in
+  "$ID.meta"|*/"$ID.meta") META=$FM_CREW_STATE_META_OVERRIDE ;;
+  *) META=$STATE/$ID.meta ;;
+esac
+case ${FM_CREW_STATE_STATUS_OVERRIDE:-} in
+  "$ID.status"|*/"$ID.status") LOG=$FM_CREW_STATE_STATUS_OVERRIDE ;;
+  *) LOG=$STATE/$ID.status ;;
+esac
 NM_TIMEOUT=${FM_CREW_STATE_NM_TIMEOUT:-10}
 case "$NM_TIMEOUT" in ''|*[!0-9]*) NM_TIMEOUT=10 ;; esac
 # How many of the most recent `no-mistakes runs` rows each ledger read
@@ -215,14 +213,18 @@ emit() {  # <state> <source> [detail]
 
 [ -f "$META" ] || emit unknown none "no metadata for $ID"
 
-meta_value() {  # <key>
-  grep "^$1=" "$META" 2>/dev/null | tail -1 | cut -d= -f2- || true
+# shellcheck source=bin/fm-backend.sh
+. "$SCRIPT_DIR/fm-backend.sh"
+
+meta_value() {  # <key> [output-var]
+  fm_meta_get "$META" "$@"
 }
 
-WT=$(meta_value worktree)
-KIND=$(meta_value kind)
-HARNESS=$(meta_value harness)
-REMOTE_HOST=$(meta_value remote_host)
+WT='' KIND='' HARNESS='' REMOTE_HOST=''
+meta_value worktree WT
+meta_value kind KIND
+meta_value harness HARNESS
+meta_value remote_host REMOTE_HOST
 [ -n "$KIND" ] || KIND=ship
 
 # A torn-down (or never-created) worktree has no current state to read. A
@@ -231,6 +233,17 @@ REMOTE_HOST=$(meta_value remote_host)
 if [ -z "$REMOTE_HOST" ] && { [ -z "$WT" ] || [ ! -d "$WT" ]; }; then
   emit unknown none "worktree gone (torn down?)"
 fi
+
+# Load state readers only after a task can have a current local or remote state.
+# shellcheck source=bin/fm-tmux-lib.sh
+. "$SCRIPT_DIR/fm-tmux-lib.sh"
+# shellcheck source=bin/fm-busy-lib.sh
+. "$SCRIPT_DIR/fm-busy-lib.sh"
+# The done gate also loads the shared PR, status, run and timeout readers.
+# shellcheck source=bin/fm-dod-lib.sh
+. "$SCRIPT_DIR/fm-dod-lib.sh"
+# shellcheck source=bin/fm-ready-timeout-lib.sh
+. "$SCRIPT_DIR/fm-ready-timeout-lib.sh"
 
 # --- status log ------------------------------------------------------------
 
@@ -312,13 +325,14 @@ fi
 # shell - so a finished crew whose endpoint has closed still reports its run-step
 # state (e.g. done) instead of being masked as unknown. Backend-aware
 # (fm_backend_of_meta defaults absent backend= to tmux, the P1 contract): a
-# herdr task is read through fm_backend_capture instead of a bare tmux probe.
+# herdr task is read through fm_backend_capture while tmux uses the shared
+# endpoint-existence predicate.
 TASK_BACKEND=$(fm_backend_of_meta "$META")
 BACKEND_TARGET=$(fm_backend_target_of_meta "$META")
 EXPECTED_LABEL="fm-$ID"
 pane_readable() {  # <target>
   case "$TASK_BACKEND" in
-    tmux) tmux display-message -p -t "$1" '#{pane_id}' >/dev/null 2>&1 ;;
+    tmux) fm_backend_target_exists tmux "$1" ;;
     *) fm_backend_capture "$TASK_BACKEND" "$1" 1 "$EXPECTED_LABEL" >/dev/null 2>&1 ;;
   esac
 }
@@ -393,6 +407,24 @@ mr_read_record_bounded() {  # <host> <path> <number>
   FM_PR_RECORD_MERGED=$merged
 }
 
+forgejo_read_record_bounded() {  # <host> <path> <number>
+  local record state merged
+  # shellcheck disable=SC2016  # The inner script expands after bash -c receives positional args.
+  if ! record=$(fm_run_timed 5 bash -c '
+    . "$1"
+    fm_pr_forgejo_read_record "$2" "$3" "$4" || exit 1
+    printf "state=%s\nmerged=%s\n" "$FM_PR_RECORD_STATE" "$FM_PR_RECORD_MERGED"
+  ' _ "$SCRIPT_DIR/fm-pr-lib.sh" "$1" "$2" "$3" 2>/dev/null); then
+    return 1
+  fi
+  state=$(printf '%s\n' "$record" | sed -n 's/^state=//p' | head -1)
+  merged=$(printf '%s\n' "$record" | sed -n 's/^merged=//p' | head -1)
+  [ -n "$state" ] || return 1
+  [ "$merged" = true ] || [ "$merged" = false ] || return 1
+  FM_PR_RECORD_STATE=$state
+  FM_PR_RECORD_MERGED=$merged
+}
+
 change_read_record_bounded() {  # <host> <number>
   local record state merged
   # shellcheck disable=SC2016  # The inner script expands after bash -c receives positional args.
@@ -413,7 +445,7 @@ change_read_record_bounded() {  # <host> <number>
 
 passed_pr_detail() {
   local provider url host path number owner repo raw_pr state_lc
-  raw_pr=$(strip_quotes "$(nm_field pr)")
+  strip_quotes "$(nm_field pr)" raw_pr
   if fm_pr_url_parse "$raw_pr"; then
     provider=$FM_PR_PROVIDER
     url=$FM_PR_URL
@@ -479,6 +511,24 @@ passed_pr_detail() {
         *)           printf 'run passed: PR state %s' "$state_lc" ;;
       esac
       ;;
+    forgejo)
+      if ! forgejo_read_record_bounded "$host" "$path" "$number"; then
+        printf 'run passed: PR state unknown (unreadable)'
+        return
+      fi
+      if [ "$FM_PR_RECORD_MERGED" = true ]; then
+        printf 'run passed: PR merged'
+        return
+      fi
+      # Forgejo reports a merged pull request as closed with merged true, so
+      # an unmerged one is its own open or closed state.
+      state_lc=$(printf '%s' "$FM_PR_RECORD_STATE" | tr '[:upper:]' '[:lower:]')
+      case "$state_lc" in
+        open)   printf 'run passed: PR open' ;;
+        closed) printf 'run passed: PR closed' ;;
+        *)      printf 'run passed: PR state %s' "$state_lc" ;;
+      esac
+      ;;
     gerrit)
       if ! change_read_record_bounded "$host" "$number"; then
         printf 'run passed: PR state unknown (unreadable)'
@@ -501,27 +551,29 @@ passed_pr_detail() {
       ;;
   esac
 }
-# Finding count from a findings[N]{...} table header; empty when none.
+# Finding count from a findings[N]{...}: or legacy findings[N]: table header.
 nm_findings_count() {
-  printf '%s\n' "$RUN_OUT" | grep -oE 'findings\[[0-9]+\]' | head -1 | grep -oE '[0-9]+'
+  local findings_re=$'(^|\n)[[:space:]]*findings\\[([0-9]+)\\](\\{[^}\n]*\\})?:'
+  [[ $RUN_OUT =~ $findings_re ]] || return 1
+  printf '%s\n' "${BASH_REMATCH[2]}"
 }
 nm_gate_step_row() {
   local row step rest status findings
   row=$(printf '%s\n' "$RUN_OUT" | grep -E "$FM_NM_GATE_ROW_RE" | head -1)
   [ -n "$row" ] || return 0
-  row=$(trim "$row")
-  step=$(trim "${row%%,*}")
+  trim "$row" row
+  trim "${row%%,*}" step
   rest=${row#*,}
-  status=$(strip_quotes "$(trim "${rest%%,*}")")
+  strip_quotes "${rest%%,*}" status
   rest=${rest#*,}
-  findings=$(trim "${rest%%,*}")
+  trim "${rest%%,*}" findings
   printf '%s|%s|%s' "$step" "$status" "$findings"
 }
 nm_gate_status() {
   local s row
   s=$(printf '%s\n' "$RUN_OUT" | grep -E "$FM_NM_GATE_SCALAR_RE" | head -1)
   if [ -n "$s" ]; then
-    s=$(strip_quotes "$(trim "${s#*:}")")
+    strip_quotes "${s#*:}" s
     printf '%s' "$s"
     return
   fi
@@ -529,14 +581,14 @@ nm_gate_status() {
   [ -n "$row" ] && { row=${row#*|}; printf '%s' "${row%%|*}"; }
 }
 nm_has_gate() {
-  printf '%s\n' "$RUN_OUT" | grep -Eq "$FM_NM_GATE_LINE_RE"
+  grep -Eq "$FM_NM_GATE_LINE_RE" <<< "$RUN_OUT"
 }
 nm_gate_line_name() {
   local gate step
-  gate=$(strip_quotes "$(nm_field gate)")
+  strip_quotes "$(nm_field gate)" gate
   [ -n "$gate" ] && { printf '%s' "$gate"; return; }
   step=$(printf '%s\n' "$RUN_OUT" | sed -n '/^[[:space:]]*gate:[[:space:]]*$/,/^[^[:space:]][^:]*:/s/^[[:space:]]*step:[[:space:]]*\(.*\)/\1/p' | head -1)
-  step=$(strip_quotes "$step")
+  strip_quotes "$step" step
   [ -n "$step" ] && printf '%s' "$step"
 }
 nm_gate_name() {
@@ -574,8 +626,9 @@ nm_gate_findings_count() {
 # gate owed the crewmate's own answer would match just as readily as one owed a
 # human. Column order is read from the header rather than assumed, so a table
 # that grows a column keeps answering correctly. Both the header match and the
-# row scan require the BRACE, so the count, the index and the rows all come from
-# the same block: an earlier unbraced `findings[N]:` line from a resolved round
+# row scan require a complete braced header ending in a colon. The count, index
+# and rows therefore come from the same block: an earlier unbraced
+# `findings[N]:` line from a resolved round
 # must not supply the rows while the braced gate table supplies the index, which
 # would read the wrong block's rows at the right block's offset
 # (tests/fm-crew-state.test.sh's unbraced-precursor case pins it).
@@ -609,7 +662,7 @@ nm_gate_awaits_human_decision() {
   i=0
   while [ -n "$cols" ]; do
     i=$((i + 1))
-    name=$(strip_quotes "$(trim "${cols%%,*}")")
+    strip_quotes "${cols%%,*}" name
     if [ "$name" = action ]; then idx=$i; break; fi
     case "$name" in
       id|severity|file|line) ;;
@@ -619,7 +672,7 @@ nm_gate_awaits_human_decision() {
   done
   [ "$idx" -gt 0 ] || return 1
   rows=$(printf '%s\n' "$RUN_OUT" \
-    | awk -v n="$count" 'f { print; if (++c >= n) exit; next } /^[[:space:]]*findings\[[0-9]+\]\{/ { f = 1 }')
+    | awk -v n="$count" 'f { print; if (++c >= n) exit; next } /^[[:space:]]*findings\[[0-9]+\]\{[^}]*\}:/ { f = 1 }')
   while IFS= read -r row; do
     case "$row" in *,*) ;; *) continue ;; esac
     rest=$row
@@ -629,7 +682,7 @@ nm_gate_awaits_human_decision() {
       i=$((i + 1))
     done
     [ -n "$rest" ] || continue
-    field=$(strip_quotes "$(trim "${rest%%,*}")")
+    strip_quotes "${rest%%,*}" field
     [ "$field" = ask-user ] && return 0
   done <<EOF
 $rows
@@ -711,7 +764,7 @@ nm_run_activity_is_recent() {
   local rows
   rows=$(nm_active_steps_rows)
   [ -n "$rows" ] || return 1
-  ! printf '%s\n' "$rows" | grep -q 'quiet'
+  [[ $rows != *quiet* ]]
 }
 
 # 0 when a terminal failed or cancelled run ended at the ci monitor and the
@@ -733,7 +786,7 @@ nm_failed_run_is_green_held_ci() {
     row=$(trim "$row")
     step=$(trim "${row%%,*}")
     rest=${row#*,}
-    status=$(strip_quotes "$(trim "${rest%%,*}")")
+    strip_quotes "${rest%%,*}" status
     case "$status" in
       completed) continue ;;
       skipped)
@@ -766,7 +819,7 @@ nm_reclassify_failed_run_as_held_green() {
     *) return 1 ;;
   esac
   RUN_STATE="done"
-  pr_url=$(strip_quotes "$(nm_field pr)")
+  strip_quotes "$(nm_field pr)" pr_url
   [ -n "$pr_url" ] && RUN_DETAIL="$RUN_DETAIL: $pr_url"
   return 0
 }
@@ -804,11 +857,17 @@ nm_daemon_answered_down() {
 # daemon each probe burns the full timeout inside the supervisor's per-crew
 # polling loop.
 nm_daemon_probe() {
-  local rc=0
+  local rc=0 daemon_status
   [ -n "$NM_DAEMON_ANSWER" ] && return 0
-  fm_nm_run_checked "$WT" "$NM_TIMEOUT" daemon status >/dev/null || rc=$?
+  daemon_status=$(fm_nm_run_checked "$WT" "$NM_TIMEOUT" daemon status) || rc=$?
   case "$rc" in
-    0)   NM_DAEMON_ANSWER=up ;;
+    0)
+      # A clean stop also exits 0, with "○ daemon not running".
+      if printf '%s\n' "$daemon_status" | grep -Eq '(^|[[:space:]])daemon running([[:space:]]|$)'; then
+        NM_DAEMON_ANSWER=up
+      else
+        NM_DAEMON_ANSWER=down
+      fi ;;
     124) NM_DAEMON_ANSWER=unanswered ;;
     *)   NM_DAEMON_ANSWER=down ;;
   esac
@@ -820,7 +879,7 @@ nm_ci_step_status() {
   [ -n "$row" ] || return 0
   row=$(trim "$row")
   rest=${row#*,}
-  strip_quotes "$(trim "${rest%%,*}")"
+  strip_quotes "${rest%%,*}"
 }
 
 nm_effective_ci_step_status() {
@@ -862,7 +921,7 @@ nm_effective_ci_step_status() {
 # not-ready held a green PR at working for as long as main kept advancing.
 nm_ci_checks_state() {
   local run_id ci_log marker
-  run_id=$(strip_quotes "$(nm_field id)")
+  strip_quotes "$(nm_field id)" run_id
   [ -n "$run_id" ] || { printf 'unknown'; return; }
   ci_log=$(nm_run axi logs --step ci --run "$run_id" --full) || true
   [ -n "$ci_log" ] || { printf 'unknown'; return; }
@@ -908,7 +967,7 @@ CREW_BRANCH=$(git -C "$WT" symbolic-ref --quiet --short HEAD 2>/dev/null || true
 # fm_nm_head_matches_worktree in bin/fm-nm-run-lib.sh.
 nm_run_head_matches_worktree() {
   local run_head
-  run_head=$(strip_quotes "$(nm_field head)")
+  strip_quotes "$(nm_field head)" run_head
   fm_nm_head_matches_worktree "$WT" "$run_head"
 }
 
@@ -946,7 +1005,7 @@ if [ "$KIND" = ship ] && [ -n "$CREW_BRANCH" ] && command -v no-mistakes >/dev/n
       unknown\|*)
         known_run_id=""
         if [ "$(strip_quotes "$(nm_field branch)")" = "$CREW_BRANCH" ]; then
-          known_run_id=$(strip_quotes "$(nm_field id)")
+          strip_quotes "$(nm_field id)" known_run_id
         fi
         emit unknown run-step "${run_choice#*|}${known_run_id:+; last reported run id: $known_run_id}"
         ;;
@@ -987,7 +1046,7 @@ if [ "$KIND" = ship ] && [ -n "$CREW_BRANCH" ] && command -v no-mistakes >/dev/n
         ;;
     esac
     if [ "$HAVE_RUN" = 0 ] && [ -z "$SELECTED_RUN_ID" ]; then
-      run_branch=$(strip_quotes "$(nm_field branch)")
+      strip_quotes "$(nm_field branch)" run_branch
       # Head equality, the pipeline-owned parked-run exemption, or executing
       # regardless of head: a live run on this branch is current even after a
       # rebase, and while the pipeline owns this branch a parked run binds
@@ -1077,9 +1136,9 @@ if [ "$HAVE_RUN" = 1 ]; then
       *)         RUN_STATE=unknown; RUN_DETAIL="runs list status: $COARSE_STATUS" ;;
     esac
   else
-    status=$(strip_quotes "$(nm_field status)")
+    strip_quotes "$(nm_field status)" status
     RUN_STATUS=$status
-    outcome=$(strip_quotes "$(nm_field outcome)")
+    strip_quotes "$(nm_field outcome)" outcome
     awaiting=$(printf '%s\n' "$RUN_OUT" | grep -E "$FM_NM_AWAITING_AGENT_RE" | head -1 || true)
     gate_status=$(nm_gate_status)
     has_gate=0
@@ -1144,7 +1203,7 @@ if [ "$HAVE_RUN" = 1 ]; then
               RUN_DETAIL="checks green: PR ready for review (still monitoring for merge/close)"
               # The run's own PR URL makes this reading actionable even when
               # the worker never reported it and no pr= was recorded.
-              ci_pr_url=$(strip_quotes "$(nm_field pr)")
+              strip_quotes "$(nm_field pr)" ci_pr_url
               [ -z "$ci_pr_url" ] || RUN_DETAIL="$RUN_DETAIL: $ci_pr_url"
             fi
             ;;
@@ -1234,6 +1293,12 @@ fi
 # verdict reports unknown rather than trusting a possibly-stale status log as
 # the current state.
 [ -n "$BACKEND_TARGET" ] || emit unknown none "no backend target recorded"
+# An agent the ready-session timeout stopped on purpose while its pull request
+# waited on a merge keeps its delivered outcome, named as such, whether its pane
+# shell still answers or not (bin/fm-ready-timeout-lib.sh owns the record).
+if [ "$LOG_VERB" = "done" ] && fm_ready_timeout_parked "$STATE" "$ID"; then
+  emit_ship_status_done "agent stopped by the ready-session timeout; relaunch to resume work"
+fi
 if ! pane_readable "$BACKEND_TARGET"; then
   # A failed probe is not itself evidence the pane is gone: the herdr CLI can
   # error or stall under load, and tmux can fail to be executed at all (a

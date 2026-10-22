@@ -56,7 +56,7 @@ FM_OPERATIONAL_MARK=$'\xE2\x81\xA3'
 FM_OPERATIONAL_PREFIX="${FM_OPERATIONAL_MARK}FIRSTMATE_OP: "
 FM_OPERATIONAL_VERSION=v1
 FM_OPERATIONAL_HEADER_PREFIX="${FM_OPERATIONAL_PREFIX}${FM_OPERATIONAL_VERSION} "
-FM_OPERATIONAL_KINDS='context-stow session-start watcher turn-end-guard away-supervisor launch-brief branch-outcome'
+FM_OPERATIONAL_KINDS='context-stow session-start watcher turn-end-guard away-supervisor context-refresh launch-brief branch-outcome'
 
 # Compatibility name retained for the away-mode owner and its tests.
 # shellcheck disable=SC2034 # Public source-library variable used by callers.
@@ -230,7 +230,9 @@ fm_operational_harness_needs_record() {  # <harness>
 }
 
 fm_operational_record_prune() {  # <record-dir>
-  local stat_cmd path mtime cutoff
+  local stat_cmd path mtime cutoff stat_line
+  # Newlines cannot be represented in the stat record format.
+  case "$1" in *$'\n'*) return 1 ;; esac
   if [ "$(uname)" = Darwin ]; then
     stat_cmd=(/usr/bin/stat -f '%m %N')
   else
@@ -238,7 +240,10 @@ fm_operational_record_prune() {  # <record-dir>
   fi
   cutoff=$(( $(date +%s) - FM_OPERATIONAL_RECORD_RETENTION_DAYS * 86400 ))
   find "$1" -maxdepth 1 -type f \( -name '*.msg' -o -name '.record.*' \) \
-    -exec "${stat_cmd[@]}" {} + 2>/dev/null | while read -r mtime path; do
+    ! -name $'*\n*' -exec "${stat_cmd[@]}" {} + 2>/dev/null | while IFS= read -r stat_line; do
+    case "$stat_line" in *' '*) ;; *) continue ;; esac
+    mtime=${stat_line%% *}
+    path=${stat_line#* }
     case "$mtime" in ''|*[!0-9]*) continue ;; esac
     if [ "$mtime" -lt "$cutoff" ]; then printf '%s\0' "$path"; fi
   done | xargs -0 rm -f
@@ -259,7 +264,11 @@ fm_operational_record_write() {  # <state-dir> <kind> <body> <doorbell-var>
   case "$abs" in
     *"'"*|*[![:print:]]*) return 1 ;;
   esac
-  nonce=$(od -An -N8 -tx1 /dev/urandom 2>/dev/null | tr -d ' \n')
+  nonce=$(
+    set -o pipefail
+    od -An -N8 -tx1 /dev/urandom 2>/dev/null | tr -d ' \n'
+  ) || return 1
+  [ "${#nonce}" -eq 16 ] || return 1
   case "$nonce" in ''|*[!0-9a-f]*) return 1 ;; esac
   name="$(date +%s)-$nonce.msg"
   tmp=$(mktemp "$dir/.record.XXXXXX" 2>/dev/null) || return 1
@@ -267,7 +276,7 @@ fm_operational_record_write() {  # <state-dir> <kind> <body> <doorbell-var>
     rm -f "$tmp"
     return 1
   fi
-  fm_operational_record_prune "$dir"
+  fm_operational_record_prune "$abs"
   printf -v "$result_var" '%s%s/%s%s' "$FM_OPERATIONAL_DOORBELL_PREFIX" "$abs" "$name" \
     "$FM_OPERATIONAL_DOORBELL_SUFFIX"
 }
@@ -343,7 +352,7 @@ fm_operational_home_state() {
 fm_operational_read_stdin() {  # <result-var>
   local result_var=${1-} value
   [ -n "$result_var" ] || return 2
-  value=$(cat; printf x)
+  value=$(cat && printf x) || return 1
   value=${value%x}
   printf -v "$result_var" '%s' "$value"
 }

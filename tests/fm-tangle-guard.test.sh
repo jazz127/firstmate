@@ -61,6 +61,30 @@ ROWS
   pass "fm_primary_tangle_branch: feature branch alarms; default/detached/non-git stay silent"
 }
 
+test_configured_runtime_branch() {
+  local repo out invalid
+  repo=$(make_repo "$TMP_ROOT/house-repo")
+  git -C "$repo" checkout -q -b house
+  git -C "$repo" config firstmate.runtimeBranch house
+  out=$(fm_primary_tangle_branch "$repo" || true)
+  [ -z "$out" ] || fail "configured house branch was classified as tangled: $out"
+  git -C "$repo" checkout -q main
+  out=$(fm_primary_tangle_branch "$repo" || true)
+  [ "$out" = main ] || fail "main should be tangled when house is configured; got '$out'"
+  git -C "$repo" config firstmate.runtimeBranch missing-house
+  firstmate_runtime_branch "$repo" >/dev/null 2>&1 && fail "missing configured branch unexpectedly resolved"
+  for invalid in '' $'house\n' $'house\n\n'; do
+    git -C "$repo" config --replace-all firstmate.runtimeBranch "$invalid"
+    firstmate_runtime_branch "$repo" >/dev/null 2>&1 && fail "empty or newline-terminated configured branch unexpectedly resolved"
+  done
+  for invalid in '' house main; do
+    git -C "$repo" config --replace-all firstmate.runtimeBranch house
+    git -C "$repo" config --add firstmate.runtimeBranch "$invalid"
+    firstmate_runtime_branch "$repo" >/dev/null 2>&1 && fail "duplicate configured branch unexpectedly resolved"
+  done
+  pass "configured runtime branch controls tangle detection and missing configured branches fail closed"
+}
+
 # --- GUARD 2a: fm-guard banner ----------------------------------------------
 
 run_guard() {
@@ -227,18 +251,35 @@ make_spawn_record_fakebin() {
 #!/usr/bin/env bash
 set -u
 [ -n "${FM_TMUX_REC:-}" ] && printf 'tmux %s\n' "$*" >> "$FM_TMUX_REC"
+window_file="$(dirname "$0")/.spawn-window"
 case "$*" in
+  *"#{pane_tty}"*) printf '%s\n' '/dev/pts/91'; exit 0 ;;
   *"#{pane_current_path}"*) printf '%s\n' "${FM_FAKE_PANE_PATH:-}"; exit 0 ;;
 esac
 case "${1:-}" in
   display-message) printf 'firstmate\n'; exit 0 ;;
-  new-window) printf '%s\n' "@spawnwid"; exit 0 ;;
-  list-windows) exit 0 ;;
+  new-window)
+    name=
+    previous=
+    for arg in "$@"; do
+      [ "$previous" = -n ] && name=$arg
+      previous=$arg
+    done
+    printf '%s\n' "$name" > "$window_file"
+    printf '%s\n' "@spawnwid"
+    exit 0 ;;
+  list-windows)
+    case "$*" in
+      *'#{window_id}'*) printf '%s\n' '@spawnwid' ;;
+      *) [ ! -s "$window_file" ] || cat "$window_file" ;;
+    esac
+    exit 0 ;;
   has-session|new-session|send-keys|set-window-option) exit 0 ;;
 esac
 exit 0
 SH
   chmod +x "$fakebin/tmux"
+  fm_test_fake_tmux_foreground_cwd "$fakebin"
   fm_fake_exit0 "$fakebin" treehouse
   printf '%s\n' "$fakebin"
 }
@@ -281,13 +322,14 @@ test_spawn_tmux_window_construction() {
   # Bug 2 fix (b): treehouse-get and the worktree wait loop target the stable id.
   assert_grep "send-keys -t @spawnwid treehouse get Enter" "$rec" \
     "treehouse get must be sent to the stable window id"
-  assert_grep "display-message -p -t @spawnwid #{pane_current_path}" "$rec" \
-    "the worktree wait loop must query the stable window id, not the name"
+  assert_grep "display-message -p -t @spawnwid #{pane_tty}" "$rec" \
+    "the foreground-cwd probe must query the stable window id, not the name"
 
   pass "fm-spawn: appends windows by session-colon, pins the name, and targets the window id"
 }
 
 test_lib_classification
+test_configured_runtime_branch
 test_guard_banner
 test_bootstrap_line
 test_brief_assertion_precedes_branch

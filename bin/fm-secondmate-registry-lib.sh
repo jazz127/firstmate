@@ -75,16 +75,33 @@ secondmate_registry_parse_line() {
   return 0
 }
 
+# Capture complete NUL-free text before shell line reads can discard binary bytes.
+# The output-variable interface reserves _fm_registry_contents for its local value.
+_secondmate_registry_read_text() {  # <registry> <output-variable>
+  local _fm_registry_contents
+  _fm_registry_contents=$(
+    set -o pipefail
+    cat "$1" 2>/dev/null | {
+      if IFS= read -r -d '' _fm_registry_contents; then exit 1; fi
+      printf '%s' "$_fm_registry_contents"
+    }
+  ) || return 1
+  printf -v "$2" '%s' "$_fm_registry_contents"
+}
+
 secondmate_registry_line_for_id() {
-  local reg=$1 id=$2 line count=0
+  local reg=$1 id=$2 line count=0 registry_text
   case "$id" in ''|*[!A-Za-z0-9._-]*) return 1 ;; esac
   [ -f "$reg" ] && [ ! -L "$reg" ] || return 1
+  _secondmate_registry_read_text "$reg" registry_text || return 1
   while IFS= read -r line || [ -n "$line" ]; do
     [ "$line" = "- $id" ] || case "$line" in "- $id "*) ;; *) continue ;; esac
     count=$((count + 1))
     [ "$count" -eq 1 ] || return 1
     SECONDMATE_REGISTRY_LINE=$line
-  done < "$reg"
+  done <<EOF
+$registry_text
+EOF
   [ "$count" -eq 1 ] || return 1
   secondmate_registry_parse_line "$SECONDMATE_REGISTRY_LINE"
 }
@@ -115,9 +132,28 @@ secondmate_registry_path_key() {
   fi
 }
 
+# A resolver emits one path with an optional formatting newline. Validate the
+# complete output before command substitution can erase trailing data newlines.
+_secondmate_registry_resolve_home() {  # <resolver> <home> <output-variable>
+  local _fm_registry_key
+  _fm_registry_key=$(
+    set -o pipefail
+    "$1" "$2" | {
+      if IFS= read -r -d '' _fm_registry_key; then exit 1; fi
+      _fm_registry_key=${_fm_registry_key%$'\n'}
+      case "$_fm_registry_key" in
+        (''|*$'\t'*|*$'\n'*|*$'\r'*) exit 1 ;;
+      esac
+      printf '%s' "$_fm_registry_key"
+    }
+  ) || return 1
+  printf -v "$3" '%s' "$_fm_registry_key"
+}
+
+# Only successful, control-free resolver output can establish a local route identity.
 secondmate_registry_validate_bindings() {
   local reg=$1 resolver=$2 expected_id=${3:-} expected_home=${4:-}
-  local tmp snapshot bindings line id host root home home_key duplicate_homes duplicate_ids overlaps expected_home_key
+  local tmp registry_text bindings line id host root home home_key duplicate_homes duplicate_ids overlaps expected_home_key
   SECONDMATE_REGISTRY_MATCH_HOST=
   SECONDMATE_REGISTRY_MATCH_ROOT=
   SECONDMATE_REGISTRY_MATCH_HOME=
@@ -126,6 +162,13 @@ secondmate_registry_validate_bindings() {
   SECONDMATE_REGISTRY_MATCH_REMOTE=0
   SECONDMATE_REGISTRY_ERROR=
   case "$expected_id" in *[!A-Za-z0-9._-]*) SECONDMATE_REGISTRY_ERROR="invalid secondmate id: $expected_id"; return 1 ;; esac
+  # Apply the registered-route byte constraint before command capture can trim it.
+  case "$expected_home" in
+    *$'\t'*|*$'\n'*|*$'\r'*)
+      SECONDMATE_REGISTRY_ERROR="expected secondmate home contains a tab, newline, or carriage return"
+      return 1
+      ;;
+  esac
   if [ ! -f "$reg" ] || [ -L "$reg" ]; then
     SECONDMATE_REGISTRY_ERROR="secondmate registry is unavailable or unsafe: $reg"
     return 1
@@ -134,9 +177,8 @@ secondmate_registry_validate_bindings() {
     SECONDMATE_REGISTRY_ERROR="could not create secondmate registry validation state"
     return 1
   }
-  snapshot="$tmp/registry"
   bindings="$tmp/bindings"
-  if ! cat "$reg" > "$snapshot" 2>/dev/null || ! : > "$bindings"; then
+  if ! _secondmate_registry_read_text "$reg" registry_text || ! : > "$bindings"; then
     rm -rf -- "$tmp"
     SECONDMATE_REGISTRY_ERROR="secondmate registry is unavailable or unsafe: $reg"
     return 1
@@ -199,7 +241,7 @@ secondmate_registry_validate_bindings() {
             return 1
             ;;
           esac
-          if [ "$root" = "$home" ]; then
+          if [ "$root" = "$home" ] || [ "$root" = / ] || [ "$home" = / ]; then
             rm -rf -- "$tmp"
             SECONDMATE_REGISTRY_ERROR="overlapping remote root and home for $id: $root"
             return 1
@@ -218,7 +260,7 @@ secondmate_registry_validate_bindings() {
           esac
           home_key="ssh:$host:$home"
         else
-          home_key=$("$resolver" "$home" 2>/dev/null || true)
+          _secondmate_registry_resolve_home "$resolver" "$home" home_key 2>/dev/null || home_key=
           if [ -z "$home_key" ]; then
             rm -rf -- "$tmp"
             SECONDMATE_REGISTRY_ERROR="unresolvable secondmate home for $id: $home"
@@ -237,7 +279,9 @@ secondmate_registry_validate_bindings() {
         fi
         ;;
     esac
-  done < "$snapshot"
+  done <<EOF
+$registry_text
+EOF
   duplicate_homes=$(awk -F '\t' '
     {
       if ($1 in owner) {
@@ -269,7 +313,12 @@ secondmate_registry_validate_bindings() {
     return 1
   }
   overlaps=$(awk -F '\t' '
-    function ancestor(a, b) { return a != b && index(b, a "/") == 1 }
+    function ancestor(a, b,   prefix) {
+      # A filesystem root already ends in its component separator.
+      prefix = a;
+      if (substr(a, length(a), 1) != "/") prefix = prefix "/";
+      return a != b && index(b, prefix) == 1
+    }
     {
       for (i = 1; i <= count; i++) {
         if (ancestor($1, path[i])) {
@@ -299,7 +348,7 @@ secondmate_registry_validate_bindings() {
     if [ "$SECONDMATE_REGISTRY_MATCH_REMOTE" -eq 1 ]; then
       expected_home_key="ssh:$SECONDMATE_REGISTRY_MATCH_HOST:$expected_home"
     else
-      expected_home_key=$("$resolver" "$expected_home" 2>/dev/null || true)
+      _secondmate_registry_resolve_home "$resolver" "$expected_home" expected_home_key 2>/dev/null || expected_home_key=
       [ -z "$expected_home_key" ] || expected_home_key="local:$expected_home_key"
     fi
     if [ -z "$expected_home_key" ] || [ "$expected_home_key" != "$SECONDMATE_REGISTRY_MATCH_HOME_KEY" ]; then

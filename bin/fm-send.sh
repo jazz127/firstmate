@@ -7,7 +7,8 @@
 #   target. fm-send refuses unresolved guesses rather than falling back to a
 #   tmux window search, because a "successful" send to the wrong endpoint is
 #   worse than a loud failure.
-# The text must be nonempty: an empty or whitespace-only message is refused
+# The text must be nonempty after removing the routing bytes consumed by this
+# delivery mode: an empty or whitespace-only body is refused
 # before anything is marked, recorded, or typed, because an empty marked
 # secondmate request delivers only marker and correlation bytes and leaves the
 # parent waiting on a reply to nothing.
@@ -47,15 +48,10 @@
 # instruction. There is no delivered-unconfirmed
 # outcome on this plane: "did the doorbell land" is no longer the question -
 # "was the message acted on" is, and that is answered asynchronously for an
-# ordinary record by the worker's acknowledgement move into handled/. The
-# watcher re-rings an unacknowledged message while its endpoint remains
-# available, escalates after the bounded ladder, and instead routes a positively
-# dead or missing endpoint directly to recovery without typing. An explicit
-# fire-and-forget record is excluded from that ladder; when config/wait-no-turns
-# is present and its ring here was skipped or failed, the watcher rings it
-# exactly once more.
-# bin/fm-task-inbox-lib.sh owns the record format, the doorbell line, and the
-# re-ring ladder. The composer pre-check before the ring is ADVISORY only: when
+# ordinary record by the worker's acknowledgement move into handled/.
+# bin/fm-task-inbox-lib.sh owns the record format, doorbell line, and retry and
+# escalation policy for ordinary and fire-and-forget records.
+# The composer pre-check before the ring is ADVISORY only: when
 # the composer visibly holds pending text the ring is skipped with a notice and
 # the watcher re-rings an ordinary record later; no composer verdict is
 # delivery proof on this plane, and a failed ring never fails the send.
@@ -121,7 +117,7 @@
 # Set FM_PENDING_REPLY_EXISTING_CORR=<id> when re-sending a recovery request
 # for an already-open expectation so a second record is not created. Direct
 # unmarked captain input never creates one. A marked secondmate instruction
-# sent with --fire-and-forget <16-hex-delivery-id> uses the same inbox transport
+# sent with --fire-and-forget <16-lowercase-hex-delivery-id> uses the same inbox transport
 # without creating a reply expectation; its delivery id makes uncertain retries
 # idempotent while allowing a later identical instruction to be distinct.
 #
@@ -261,6 +257,8 @@ fi
 . "$SCRIPT_DIR/fm-task-inbox-lib.sh"
 # shellcheck source=bin/fm-timeout-lib.sh
 . "$SCRIPT_DIR/fm-timeout-lib.sh"
+# shellcheck source=bin/fm-trace-span-lib.sh
+. "$SCRIPT_DIR/fm-trace-span-lib.sh"
 
 FM_GUARD_CONTINUE_LINE='This is a supervision warning only; the requested message WILL still be sent.' "$SCRIPT_DIR/fm-guard.sh" || true
 
@@ -467,6 +465,7 @@ fi
 # message exactly as before, so ordinary sends are byte-identical.
 RESOLVE_KEYS=
 FIRE_AND_FORGET_ID=
+FIRE_AND_FORGET_SET=0
 fm_send_add_resolve_key() { # <key>
   local k=$1
   case "$k" in
@@ -502,19 +501,21 @@ while :; do
       echo "error: --fire-and-forget requires a delivery id" >&2
       exit 1
     }
-    [ -z "$FIRE_AND_FORGET_ID" ] || {
+    [ "$FIRE_AND_FORGET_SET" = 0 ] || {
       echo "error: duplicate --fire-and-forget" >&2
       exit 1
     }
     FIRE_AND_FORGET_ID=$2
+    FIRE_AND_FORGET_SET=1
     shift 2
     ;;
   --fire-and-forget=*)
-    [ -z "$FIRE_AND_FORGET_ID" ] || {
+    [ "$FIRE_AND_FORGET_SET" = 0 ] || {
       echo "error: duplicate --fire-and-forget" >&2
       exit 1
     }
     FIRE_AND_FORGET_ID=${1#--fire-and-forget=}
+    FIRE_AND_FORGET_SET=1
     shift
     ;;
   *) break ;;
@@ -597,8 +598,8 @@ fm_send_resolve_close_note() { # <key> <excerpt>
   printf 'answered: %s' "$excerpt"
 }
 
-if [ -n "$FIRE_AND_FORGET_ID" ]; then
-  printf '%s' "$FIRE_AND_FORGET_ID" | grep -Eq '^[a-f0-9]{16}$' ||
+if [ "$FIRE_AND_FORGET_SET" = 1 ]; then
+  [[ "$FIRE_AND_FORGET_ID" =~ ^[a-f0-9]{16}$ ]] ||
     {
       echo "error: --fire-and-forget delivery id must be 16 lowercase hex characters" >&2
       exit 1
@@ -760,6 +761,17 @@ fm_send_feed_resolved_holds() { # <answer-text>
 # send implementation. A failed backend send is still surfaced below as a hard
 # error with the attempted resolution attached.
 
+# Both remote paths require a nonzero decimal bound: timeout/alarm zero disables
+# the deadline. Normalize padding before passing the bound to the runner.
+fm_send_remote_budget() {
+  local budget=${FM_SEND_REMOTE_BUDGET:-30}
+  if [[ ! "$budget" =~ ^0*[1-9][0-9]*$ ]]; then
+    echo "error: FM_SEND_REMOTE_BUDGET must be a positive integer: $budget" >&2
+    return 1
+  fi
+  FM_SEND_REMOTE_BUDGET=${budget#"${budget%%[!0]*}"}
+}
+
 if [ "${1:-}" = "--key" ]; then
   [ -z "$FIRE_AND_FORGET_ID" ] ||
     {
@@ -775,13 +787,7 @@ if [ "${1:-}" = "--key" ]; then
   key=$2
   semantic_key=$(fm_send_normalize_key "$key")
   if [ "$TARGET_BACKEND" = remote ]; then
-    FM_SEND_REMOTE_BUDGET=${FM_SEND_REMOTE_BUDGET:-30}
-    case "$FM_SEND_REMOTE_BUDGET" in
-    '' | *[!0-9]* | 0)
-      echo "error: FM_SEND_REMOTE_BUDGET must be a positive integer: $FM_SEND_REMOTE_BUDGET" >&2
-      exit 1
-      ;;
-    esac
+    fm_send_remote_budget || exit 1
     if ! fm_run_timed "$FM_SEND_REMOTE_BUDGET" "$SCRIPT_DIR/fm-on.sh" "$TARGET_REMOTE_ID" \
       fm-remote-secondmate-control.sh key "$TARGET_REMOTE_ID" "$key" </dev/null; then
       echo "error: key '$key' not sent to remote secondmate $TARGET_REMOTE_ID; completion may be unknown" >&2
@@ -793,20 +799,22 @@ if [ "${1:-}" = "--key" ]; then
   fi
   fm_send_clear_after_interrupt "$semantic_key" || exit 1
   fm_send_record_interrupt "$semantic_key" || exit 1
+  fm_trace_span_steer "$TARGET_META" key
 else
   MESSAGE=$*
-  if [ -z "${MESSAGE//[[:space:]]/}" ]; then
+  MESSAGE_BODY=$MESSAGE
+  if [ "$MARK_FROM_FIRSTMATE" = 1 ]; then
+    MESSAGE_BODY=${MESSAGE_BODY#"$FM_FROMFIRST_MARK"}
+    if [ -z "$FIRE_AND_FORGET_ID" ]; then
+      fm_pending_reply_strip_leading_corr "$MESSAGE_BODY" MESSAGE_BODY
+    fi
+  fi
+  if [ -z "${MESSAGE_BODY//[[:space:]]/}" ]; then
     echo "error: a text steer requires a nonempty message; nothing was sent (an empty marked request would deliver only marker and correlation bytes and leave the parent waiting on a reply to nothing)" >&2
     exit 1
   fi
   if [ "$TARGET_BACKEND" = remote ]; then
-    FM_SEND_REMOTE_BUDGET=${FM_SEND_REMOTE_BUDGET:-30}
-    case "$FM_SEND_REMOTE_BUDGET" in
-    '' | *[!0-9]* | 0)
-      echo "error: FM_SEND_REMOTE_BUDGET must be a positive integer: $FM_SEND_REMOTE_BUDGET" >&2
-      exit 1
-      ;;
-    esac
+    fm_send_remote_budget || exit 1
   fi
   # The pre-marker answer text, kept for the closing resolved note so the
   # durable ledger records the plain answer without marker or corr bytes.
@@ -1005,6 +1013,7 @@ else
       fm_send_close_resolved_keys "$RESOLVE_ANSWER_TEXT" || exit 1
       fm_send_feed_resolved_holds "$RESOLVE_ANSWER_TEXT" || exit 1
     fi
+    fm_trace_span_steer "$TARGET_META" inbox "${FIRE_AND_FORGET_ID:+true}"
     exit 0
   fi
   if [ "$INBOX_PLANE" = 1 ]; then
@@ -1082,6 +1091,7 @@ else
       fm_send_close_resolved_keys "$RESOLVE_ANSWER_TEXT" || exit 1
       fm_send_feed_resolved_holds "$RESOLVE_ANSWER_TEXT" || exit 1
     fi
+    fm_trace_span_steer "$TARGET_META" inbox "${FIRE_AND_FORGET_ID:+true}"
     # Ring the doorbell, best-effort: no ring outcome changes the exit status,
     # because the watcher owns loss detection from here, either through its
     # bounded re-ring ladder or direct unavailable-endpoint recovery.
@@ -1207,6 +1217,7 @@ else
     fm_send_close_resolved_keys "$RESOLVE_ANSWER_TEXT" || exit 1
     fm_send_feed_resolved_holds "$RESOLVE_ANSWER_TEXT" || exit 1
   fi
+  fm_trace_span_steer "$TARGET_META" typed "${FIRE_AND_FORGET_ID:+true}"
   # Submit landed with exact empty. Confirmation only proves the text was
   # accepted; the harness still needs a beat to spin up the
   # turn before its busy footer shows. Pause so an immediate peek catches the

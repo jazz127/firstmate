@@ -68,6 +68,22 @@ unset FM_TASK_ID
 # against an ambient override sets TASKS_AXI_FILE itself.
 unset TASKS_AXI_FILE TASKS_AXI_BACKEND
 
+# Write the tracked default backlog configuration into a fixture home. Never copy
+# "$ROOT/.tasks.toml": an operator's primary checkout keeps a gitignored override
+# there (for example a beads backend at its live backlog), so a copy points the
+# fixture at the operator's queue and produces false failures. This mirrors the
+# tracked .tasks.toml defaults.
+fm_test_tasks_toml() {  # <destination-file>
+  cat > "$1" <<'TOML'
+backend = "markdown"
+
+[markdown]
+path = "data/backlog.md"
+archive = "data/done-archive.md"
+done_keep = 10
+TOML
+}
+
 # Resolve the repo root from this library's own location. Consumed by sourcing
 # test files, not by this library, so it reads as "unused" here.
 # shellcheck disable=SC2034
@@ -82,6 +98,35 @@ fail() {
 
 pass() {
   printf 'ok - %s\n' "$1"
+}
+
+# Harness argument assertions reuse the emitted prefix rather than duplicating
+# its per-spawn env-file path. The dispatch suite executes it separately to prove
+# credential preservation, hooks-path selection and invalid-count refusal.
+fm_test_launch_git_prefix() {  # <launch>
+  local launch=$1 helper tail end=' || return 1 2>/dev/null || exit 1; '
+  case "$launch" in
+    *' env-file '*"$end"*) ;;
+    *) fail "launch has no complete Git configuration prefix" ;;
+  esac
+  helper=${launch%%' env-file '*}
+  helper=${helper##*; }
+  tail=${launch#*' env-file '}
+  tail=${tail%%"$end"*}
+  printf '%s env-file %s%s' "$helper" "$tail" "$end"
+}
+
+# The command a pane runs after the launch's Git configuration prefix and its
+# leading export and unset statements, for suites that split it into
+# arguments. Callers that eval the result must do so under an empty PATH: a
+# prefix this function does not recognise would otherwise run the harness.
+fm_test_launch_command() {  # <launch>
+  local command=$1 end=' || return 1 2>/dev/null || exit 1; '
+  case "$command" in *"$end"*) command=${command#*"$end"} ;; esac
+  while [[ "$command" == export\ *\;* || "$command" == unset\ *\;* ]]; do
+    command=${command#*; }
+  done
+  printf '%s' "$command"
 }
 
 # --- self-cleaning temp root ------------------------------------------------
@@ -102,12 +147,45 @@ pass() {
 # that file is armed once, here, at source time - which always runs in the
 # real caller, never a subshell.
 
+# fm_test_tmpdir: directory used for registries and fixture roots.
+# Resolves absolute or relative TMPDIR to an existing physical directory,
+# falling back to /tmp if resolution fails or the directory contains .git.
+# Keep registries out of git worktree roots so concurrent git add -A cannot
+# accidentally stage live test state.
+fm_test_tmpdir() {
+  local base=${TMPDIR:-/tmp} physical
+  base=${base%/}
+  [ -n "$base" ] || base=/tmp
+  case "$base" in
+    /*) ;;
+    *)
+      if physical=$(CDPATH='' cd -- "$base" 2>/dev/null && pwd -P); then
+        base=$physical
+      else
+        base=/tmp
+      fi
+      ;;
+  esac
+  if physical=$(CDPATH='' cd -- "$base" 2>/dev/null && pwd -P); then
+    base=$physical
+  else
+    base=/tmp
+  fi
+  if [ -e "$base/.git" ]; then
+    printf '%s\n' /tmp
+    return 0
+  fi
+  printf '%s\n' "$base"
+}
+
+FM_TEST_TMPDIR=$(fm_test_tmpdir) || return 1
+
 FM_TEST_CLEANUP_DIRS=()
-FM_TEST_CLEANUP_REGISTRY=$(mktemp "${TMPDIR:-/tmp}/.fm-test-cleanup.$$.XXXXXX") || return 1
+FM_TEST_CLEANUP_REGISTRY=$(mktemp "$FM_TEST_TMPDIR/.fm-test-cleanup.$$.XXXXXX") || return 1
 
 fm_test_pid_identity() {
   local pid=$1
-  FM_STATE_OVERRIDE="${TMPDIR:-/tmp}" bash -c \
+  FM_STATE_OVERRIDE="$FM_TEST_TMPDIR" bash -c \
     '. "$1"; fm_pid_identity "$2"' _ "$ROOT/bin/fm-wake-lib.sh" "$pid"
 }
 
@@ -130,7 +208,7 @@ FM_TEST_OWNER_IDENTITY=$(fm_test_pid_identity "$$") || {
 # private one). It never matches on a script or process name, which would reach
 # into another home's live runners.
 
-FM_TEST_PROCEVENT_REGISTRY=$(mktemp "${TMPDIR:-/tmp}/.fm-test-procevent.$$.XXXXXX") || return 1
+FM_TEST_PROCEVENT_REGISTRY=$(mktemp "$FM_TEST_TMPDIR/.fm-test-procevent.$$.XXXXXX") || return 1
 
 fm_test_track_procevent_home() {  # <home> [claim-root]
   [ -n "${1:-}" ] || return 1
@@ -169,7 +247,7 @@ fm_test_reap_procevent_homes() {
 # deleted has no lock and is skipped; that watcher exits on its own home-gone
 # check within one poll.
 
-FM_TEST_WATCHER_REGISTRY=$(mktemp "${TMPDIR:-/tmp}/.fm-test-watcher.$$.XXXXXX") || return 1
+FM_TEST_WATCHER_REGISTRY=$(mktemp "$FM_TEST_TMPDIR/.fm-test-watcher.$$.XXXXXX") || return 1
 
 fm_test_track_watcher_state() {  # <state-dir>
   [ -n "${1:-}" ] || return 1
@@ -234,7 +312,7 @@ fm_test_cleanup() {
 
 fm_test_tmproot() {
   local prefix=${1:-fm-test} root tmp_base
-  tmp_base=${TMPDIR:-/tmp}
+  tmp_base=$(fm_test_tmpdir)
   tmp_base=${tmp_base%/}
   root=$(mktemp -d "$tmp_base/${prefix}.XXXXXX") || return 1
   root=$(cd -P -- "$root" && pwd -P) || return 1
@@ -264,7 +342,7 @@ FM_TEST_ORPHAN_MAX_AGE_SECONDS=${FM_TEST_ORPHAN_MAX_AGE_SECONDS:-3600}
 fm_test_reap_orphans() {
   local marker dir mtime now owner_pid owner_identity current_identity
   now=$(date +%s)
-  for marker in "${TMPDIR:-/tmp}"/fm-*/.fm-test-fixture; do
+  for marker in "$FM_TEST_TMPDIR"/fm-*/.fm-test-fixture; do
     [ -e "$marker" ] || continue
     owner_pid=$(sed -n '1p' "$marker" 2>/dev/null) || owner_pid=
     owner_identity=$(sed -n '2,$p' "$marker" 2>/dev/null) || owner_identity=
@@ -405,6 +483,45 @@ fm_fakebin() {
   local dir=$1 fakebin="$1/fakebin"
   mkdir -p "$fakebin"
   printf '%s\n' "$fakebin"
+}
+
+# fm_test_fake_tmux_foreground_cwd <fakebin> [cwd-file]
+# A synthetic foreground process and lsof cwd sourced from FM_FAKE_PANE_PATH,
+# or read from <cwd-file> at each call when one is given, so a fixture that
+# moves its pane's cwd mid-case keeps one file current instead of re-exporting.
+# Pair with tmux stubs that answer #{pane_tty} with /dev/pts/91.
+fm_test_fake_tmux_foreground_cwd() {
+  local fakebin=$1 cwd_file=${2:-}
+  cat > "$fakebin/ps" <<'SH'
+#!/usr/bin/env bash
+case "$*" in
+  *"-t pts/91"*) printf '%s\n' '987654321 987654321 987654321' ;;
+  *) PATH=${PATH#"$(dirname "$0")":} exec ps "$@" ;;
+esac
+SH
+  if [ -n "$cwd_file" ]; then
+    cat > "$fakebin/lsof" <<SH
+#!/usr/bin/env bash
+case "\$*" in
+  *"-p 987654321"*"-d cwd"*"-Fn"*) ;;
+  *) PATH=\${PATH#"\$(dirname "\$0")":} exec lsof "\$@" ;;
+esac
+cwd=\$(cat '$cwd_file' 2>/dev/null) || exit 1
+[ -n "\$cwd" ] || exit 1
+printf 'p987654321\\nfcwd\\nn%s\\n' "\$cwd"
+SH
+  else
+    cat > "$fakebin/lsof" <<'SH'
+#!/usr/bin/env bash
+case "$*" in
+  *"-p 987654321"*"-d cwd"*"-Fn"*) ;;
+  *) PATH=${PATH#"$(dirname "$0")":} exec lsof "$@" ;;
+esac
+[ -n "${FM_FAKE_PANE_PATH:-}" ] || exit 1
+printf 'p987654321\nfcwd\nn%s\n' "$FM_FAKE_PANE_PATH"
+SH
+  fi
+  chmod +x "$fakebin/ps" "$fakebin/lsof"
 }
 
 fm_fake_exit0() {
@@ -580,6 +697,54 @@ fm_eval_launch() {
   (cd "$pane" && env "$@" PATH="$fakebin:${FM_TEST_BASE_PATH:-/usr/bin:/bin:/usr/sbin:/sbin}" bash -c "$launch")
 }
 
+# --- agent-named process stand-ins ------------------------------------------
+#
+# fm_agent_standin <dir> echoes the path of a long-running native executable
+# that a liveness case symlinks under a harness name (`ln -s "$standin"
+# "$bin/pi"`), so the kernel records the harness name as the process identity
+# while a real process runs. Symlink it, never copy it: a copied platform binary
+# fails code-signing validation and is killed on macOS arm64.
+#
+# The target must not dispatch on its own invoked name. A multicall coreutils
+# (uutils, the Ubuntu 26.04 default, or busybox) resolves the applet from that
+# name: a host `sleep` invoked through a symlink named `pi` refuses or runs the
+# wrong applet and exits at once, so the agent-named process never exists. The
+# helper compiles a dedicated spinner when a C compiler exists, falls back to the
+# host `sleep` only when it demonstrably survives a foreign name, and otherwise
+# returns nonzero so the caller can skip with a reason rather than fail.
+# fm_agent_standin_alive <path> is that survival check: it starts <path> and
+# succeeds only if it is still running a moment later.
+fm_agent_standin_alive() {  # <path>
+  local pid
+  "$1" 60 >/dev/null 2>&1 &
+  pid=$!
+  sleep 0.2
+  kill -0 "$pid" 2>/dev/null || { wait "$pid" 2>/dev/null; return 1; }
+  kill "$pid" 2>/dev/null || true
+  wait "$pid" 2>/dev/null || true
+}
+
+fm_agent_standin() {  # <dir> -> echoes the stand-in path; nonzero when none survives a foreign name
+  local dir=$1 cc_bin sleep_bin
+  mkdir -p "$dir" || return 1
+  cc_bin=$(command -v cc 2>/dev/null || command -v gcc 2>/dev/null || true)
+  if [ -n "$cc_bin" ] &&
+    printf '%s\n' '#include <unistd.h>' 'int main(void){int i;for(i=0;i<600;i++)sleep(1);return 0;}' > "$dir/standin.c" &&
+    "$cc_bin" -o "$dir/standin" "$dir/standin.c" 2>/dev/null &&
+    fm_agent_standin_alive "$dir/standin"; then
+    printf '%s\n' "$dir/standin"
+    return 0
+  fi
+  rm -f "$dir/standin"
+  sleep_bin=$(command -v sleep) || return 1
+  ln -s "$sleep_bin" "$dir/standin" 2>/dev/null || return 1
+  if ! fm_agent_standin_alive "$dir/standin"; then
+    rm -f "$dir/standin"
+    return 1
+  fi
+  printf '%s\n' "$dir/standin"
+}
+
 # --- portable file timestamps -----------------------------------------------
 
 # fm_touch_epoch <epoch> <path> [path...]: set each path's modification time to
@@ -657,6 +822,27 @@ fm_write_meta() {
   for kv in "$@"; do
     printf '%s\n' "$kv" >> "$file"
   done
+}
+
+# fm_test_trace_export_enable <home> <capture-file> [fakebin]: enable synthetic
+# OTLP export through a fake curl for lifecycle-hook tests.
+fm_test_trace_export_enable() {
+  local home=$1 capture=$2 fakebin=${3:-"$1/fakebin"} header="$1/auth-header"
+  mkdir -p "$home/state" "$home/config" "$fakebin"
+  printf '4242\n' > "$home/state/.lock"
+  printf '4242 on\n' > "$home/state/.trace-context-effective"
+  printf 'Authorization: Bearer synthetic-test-token\n' > "$header"
+  chmod 600 "$header"
+  jq -n --arg header "$header" \
+    '{enabled:true,endpoint:"http://127.0.0.1:14318/v1/traces","auth-header-file":$header}' \
+    > "$home/config/trace-export.json"
+  cat > "$fakebin/curl" <<'SH'
+#!/usr/bin/env bash
+cat >> "$FM_TRACE_CAPTURE"
+printf '\n' >> "$FM_TRACE_CAPTURE"
+SH
+  chmod +x "$fakebin/curl"
+  export FM_TRACE_CAPTURE=$capture
 }
 
 # fm_write_secondmate_meta <file> <home> [window] [projects] [harness]: write the

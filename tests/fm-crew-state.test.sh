@@ -41,6 +41,8 @@
 #       provably down (explicit daemon-status probe fails) reads unknown -
 #       "unverified", never failed; the same record with the daemon up stays
 #       failed.
+#   (m) FM_CREW_STATE_*_OVERRIDE guard: a mismatched-basename override is
+#       ignored, a matching one is honoured.
 set -u
 
 # shellcheck source=tests/lib.sh
@@ -121,14 +123,17 @@ case "${1:-}" in
   runs)
     printf '%s\n' "${FM_FAKE_RUNS_LIST:-}" ;;
   daemon)
-    # FM_FAKE_DAEMON_DOWN: the explicit down-probe fails, as the real
-    # `no-mistakes daemon status` does when the daemon is not running.
+    # FM_FAKE_DAEMON_DOWN: a missing/refused socket makes the probe fail.
+    # A clean stop instead exits 0 and prints "○ daemon not running".
     # FM_FAKE_DAEMON_TIMEOUT: the probe does not answer at all, which is what
     # the bounded call reports as 124 when `timeout` kills a slow daemon status.
     [ -z "${FM_FAKE_DAEMON_PROBE_LOG:-}" ] || printf 'probe\n' >> "$FM_FAKE_DAEMON_PROBE_LOG"
     [ "${FM_FAKE_DAEMON_TIMEOUT:-0}" = 1 ] && exit 124
-    [ "${FM_FAKE_DAEMON_DOWN:-0}" = 1 ] && exit 1
-    printf '%s\n' 'daemon running (pid 4242)'
+    if [ "${FM_FAKE_DAEMON_DOWN:-0}" = 1 ]; then
+      printf '%s\n' "${FM_FAKE_DAEMON_OUTPUT-connection refused}" >&2
+      exit 1
+    fi
+    printf '%s\n' "${FM_FAKE_DAEMON_OUTPUT-  ● daemon running (pid 4242)}"
     exit 0 ;;
 esac
 exit 0
@@ -180,6 +185,25 @@ case "${1:-} ${2:-}" in
 esac
 exit 1
 SH
+  # tea answers its login list with one login for git.example.org and a pull
+  # request read through "tea api" with the configured state; a read failure
+  # prints the error body with exit 0, as the real tea api does.
+  cat > "$fb/tea" <<'SH'
+#!/usr/bin/env bash
+set -u
+if [ "${1:-} ${2:-}" = "login list" ]; then
+  printf '[\n  {\n    "name": "fj",\n    "url": "https://git.example.org"\n  }\n]\n'
+  exit 0
+fi
+[ "${1:-}" = api ] || exit 1
+[ -z "${FM_FAKE_TEA_READ_LOG:-}" ] || printf '%s\n' "$*" >> "$FM_FAKE_TEA_READ_LOG"
+if [ "${FM_FAKE_TEA_READ_FAIL:-0}" = 1 ]; then
+  printf '{"message":"not found"}\n'
+  exit 0
+fi
+printf '{"state":"%s","merged":%s,"head":{"sha":"abc"}}\n' \
+  "${FM_FAKE_TEA_STATE:-closed}" "${FM_FAKE_TEA_MERGED:-true}"
+SH
   cat > "$fb/gerrit-axi" <<'SH'
 #!/usr/bin/env bash
 set -u
@@ -209,10 +233,11 @@ set -u
 [ "${FM_FAKE_TMUX_UNREADABLE:-0}" = 1 ] && { printf 'no current client\n' >&2; exit 1; }
 case "${1:-}" in
   list-windows)
-    # A successful but empty inventory: it omits the crew's window, so absence
-    # is proved by the answer rather than by an addressed call failing. Only
-    # reached once display-message has already failed.
-    ;;
+    if [ "${FM_FAKE_TMUX_MISSING:-0}" = 1 ] || [ "${FM_FAKE_TMUX_WINDOW_GONE:-0}" = 1 ]; then
+      printf 'other-window\n'
+    else
+      sed -n 's/^window=[^:]*://p' "${FM_STATE_OVERRIDE:?}"/*.meta 2>/dev/null
+    fi ;;
   display-message)
     [ "${FM_FAKE_TMUX_MISSING:-0}" = 1 ] && exit 1
     printf '%%1\n' ;;
@@ -276,7 +301,7 @@ case "${1:-}" in
 esac
 exit 0
 SH
-  chmod +x "$fb/no-mistakes" "$fb/gh" "$fb/gh-axi" "$fb/glab" "$fb/gerrit-axi" "$fb/tmux" "$fb/herdr"
+  chmod +x "$fb/no-mistakes" "$fb/gh" "$fb/gh-axi" "$fb/glab" "$fb/tea" "$fb/gerrit-axi" "$fb/tmux" "$fb/herdr"
   printf '%s\n' "$fb"
 }
 
@@ -326,6 +351,7 @@ reset_fakes() {
   FM_FAKE_BUSY=0
   FM_FAKE_BUSY_TEXT=
   FM_FAKE_TMUX_MISSING=0
+  FM_FAKE_TMUX_WINDOW_GONE=0
   FM_FAKE_TMUX_UNREADABLE=0
   FM_FAKE_HERDR_BUSY=0
   FM_FAKE_HERDR_MISSING=0
@@ -337,6 +363,7 @@ reset_fakes() {
   FM_FAKE_CI_LOGS=""
   FM_FAKE_DAEMON_DOWN=0
   FM_FAKE_DAEMON_TIMEOUT=0
+  FM_FAKE_DAEMON_OUTPUT='  ● daemon running (pid 4242)'
   FM_FAKE_DAEMON_PROBE_LOG=
   FM_FAKE_PR_STATE=MERGED
   FM_FAKE_PR_MERGED=true
@@ -346,18 +373,24 @@ reset_fakes() {
   FM_FAKE_GLAB_STATE=merged
   FM_FAKE_GLAB_READ_FAIL=0
   FM_FAKE_GLAB_READ_LOG=
+  FM_FAKE_TEA_STATE=closed
+  FM_FAKE_TEA_MERGED=true
+  FM_FAKE_TEA_READ_FAIL=0
+  FM_FAKE_TEA_READ_LOG=
   FM_FAKE_GERRIT_STATUS=MERGED
   FM_FAKE_GERRIT_CHANGE=
   FM_FAKE_GERRIT_URL_JSON=
   FM_FAKE_GERRIT_READ_FAIL=0
   FM_FAKE_GERRIT_READ_LOG=
   unset FM_FAKE_PR_47_STATE FM_FAKE_PR_47_MERGED FM_FAKE_PR_48_STATE FM_FAKE_PR_48_MERGED
-  export FM_FAKE_AXI_STATUS FM_FAKE_AXI_STATUS_RUN FM_FAKE_RUNS_LIST FM_FAKE_BUSY FM_FAKE_BUSY_TEXT FM_FAKE_TMUX_MISSING FM_FAKE_TMUX_UNREADABLE
+  export FM_FAKE_AXI_STATUS FM_FAKE_AXI_STATUS_RUN FM_FAKE_RUNS_LIST FM_FAKE_BUSY FM_FAKE_BUSY_TEXT FM_FAKE_TMUX_MISSING FM_FAKE_TMUX_WINDOW_GONE FM_FAKE_TMUX_UNREADABLE
   export FM_FAKE_HERDR_BUSY FM_FAKE_HERDR_MISSING FM_FAKE_HERDR_READ_FAIL FM_FAKE_HERDR_HUSK FM_FAKE_HERDR_AGENT_STATUS FM_FAKE_HERDR_PROCESS FM_FAKE_HERDR_SHELL_PID FM_FAKE_CI_LOGS
   export FM_FAKE_DAEMON_DOWN FM_FAKE_DAEMON_TIMEOUT FM_FAKE_DAEMON_PROBE_LOG FM_FAKE_AXI_HOME
+  export FM_FAKE_DAEMON_OUTPUT
   export FM_FAKE_AXI_HOME_ERROR FM_FAKE_AXI_STATUS_RUN_ERROR FM_FAKE_AXI_STATUS_ERROR
   export FM_FAKE_PR_STATE FM_FAKE_PR_MERGED FM_FAKE_PR_READ_FAIL FM_FAKE_PR_READ_LOG FM_FAKE_PR_STATE_AXI
   export FM_FAKE_GLAB_STATE FM_FAKE_GLAB_READ_FAIL FM_FAKE_GLAB_READ_LOG
+  export FM_FAKE_TEA_STATE FM_FAKE_TEA_MERGED FM_FAKE_TEA_READ_FAIL FM_FAKE_TEA_READ_LOG
   export FM_FAKE_GERRIT_STATUS FM_FAKE_GERRIT_CHANGE FM_FAKE_GERRIT_URL_JSON
   export FM_FAKE_GERRIT_READ_FAIL FM_FAKE_GERRIT_READ_LOG
   export FM_FAKE_PR_47_STATE FM_FAKE_PR_47_MERGED FM_FAKE_PR_48_STATE FM_FAKE_PR_48_MERGED
@@ -799,6 +832,71 @@ EOF
 
 # ---------------------------------------------------------------------------
 # (a) active run-step is authoritative
+test_findings_rows_require_the_matching_header() {
+  local d out kind base header current prior
+  reset_fakes
+  d=$(new_case findings-row-header)
+  make_repo_on_branch "$d/wt" fm/findings-row-header
+  make_fakebin "$d" >/dev/null
+  fm_write_meta "$d/state/task.meta" "window=fm:fm-task" "worktree=$d/wt" "kind=ship"
+  base=$(run_parked fm/findings-row-header)
+  base=${base%%findings\[*}
+  for kind in no-close no-colon unbraced; do
+    case "$kind" in
+      no-close) header='findings[1]{id,action,description:' ;;
+      no-colon) header='findings[1]{id,action,description}' ;;
+      unbraced) header='findings[1]:' ;;
+    esac
+    for current in auto-fix ask-user; do
+      if [ "$current" = auto-fix ]; then prior=ask-user; else prior=auto-fix; fi
+      FM_FAKE_AXI_STATUS="$base$header"$'\n  prior,'"$prior"$',earlier block\nfindings[1]{id,action,description}:\n  current,'"$current"$',current block\n'
+      out=$(run_crew_state "$d" task)
+      assert_contains "$out" 'state: parked' "$kind precursor must retain the parked gate"
+      if [ "$current" = ask-user ]; then
+        assert_contains "$out" ' · ask-user: authority decision' \
+          "$kind precursor must not hide the actual human decision"
+      else
+        assert_not_contains "$out" ' · ask-user: authority decision' \
+          "$kind precursor must not invent a human decision"
+      fi
+    done
+  done
+  pass "findings rows and action columns come from the same complete table header"
+}
+
+test_findings_count_requires_a_table_header() {
+  local d out kind base header notes
+  reset_fakes
+  d=$(new_case findings-header)
+  make_repo_on_branch "$d/wt" fm/findings-header
+  make_fakebin "$d" >/dev/null
+  fm_write_meta "$d/state/task.meta" "window=fm:fm-task" "worktree=$d/wt" "kind=ship"
+  base="$(run_running fm/findings-header)"$'\ngate: review\n'
+  header=$'findings[2]{id,action}:\n  a,fix\n  b,fix\n'
+  notes=$'notes: documentation mentions findings[99]\n'
+  for kind in prefix suffix only embedded bare malformed indented legacy; do
+    case "$kind" in
+      prefix) FM_FAKE_AXI_STATUS="$base$notes$header" ;;
+      suffix) FM_FAKE_AXI_STATUS="$base$header$notes" ;;
+      only) FM_FAKE_AXI_STATUS="$base$notes" ;;
+      embedded) FM_FAKE_AXI_STATUS="$base"$'notes: legacy_findings[99] sample\n'"$header" ;;
+      bare) FM_FAKE_AXI_STATUS="$base"$'findings[99] appears in documentation\n' ;;
+      malformed) FM_FAKE_AXI_STATUS="$base"$'findings[99]{ incomplete table notation\n' ;;
+      indented) FM_FAKE_AXI_STATUS="$base  $header" ;;
+      legacy) FM_FAKE_AXI_STATUS="$base"$'findings[2]:\n  a,fix\n  b,fix\n' ;;
+    esac
+    out=$(run_crew_state "$d" task)
+    assert_contains "$out" "state: parked" "$kind report must retain its gate"
+    case "$kind" in
+      only|bare|malformed)
+        assert_not_contains "$out" 'finding(s)' "$kind prose must not supply a findings count"
+        ;;
+      *) assert_contains "$out" '2 finding(s)' "$kind report must count the actual table" ;;
+    esac
+  done
+  pass "findings counts come from table headers rather than prose mentions"
+}
+
 test_active_run_is_authoritative() {
   reset_fakes
   local d; d=$(new_case active)
@@ -849,6 +947,100 @@ test_stale_blocked_superseded() {
 # immediately and runs the fix round in the background, so such a claim over a
 # run that is fixing WITH fresh activity is contradicted by the run itself: the
 # supervisor answer is to steer a reattach, not to escalate a dead pipeline.
+test_large_gate_marker_with_pipefail() {
+  reset_fakes
+  local d out kind padding prefix
+  local FM_TEST_AXI_OUTPUT_FILE FM_TEST_AXI_FALLBACK
+  d=$(new_case large-gate-marker)
+  make_repo_on_branch "$d/wt" fm/gate-fixture
+  make_fakebin "$d" >/dev/null
+  fm_write_meta "$d/state/task.meta" "window=fm:fm-task" "worktree=$d/wt" "kind=ship"
+  printf 'needs-decision: review gate\n' > "$d/state/task.status"
+  FM_TEST_AXI_OUTPUT_FILE="$d/run.toon"
+  FM_TEST_AXI_FALLBACK="$d/fakebin/no-mistakes-fixture"
+  export FM_TEST_AXI_OUTPUT_FILE FM_TEST_AXI_FALLBACK
+  mv "$d/fakebin/no-mistakes" "$FM_TEST_AXI_FALLBACK"
+  cat > "$d/fakebin/no-mistakes" <<'SHIM'
+#!/usr/bin/env bash
+case "${1:-}:${2:-}" in
+  axi:|axi:status) cat "$FM_TEST_AXI_OUTPUT_FILE" ;;
+  *) exec "$FM_TEST_AXI_FALLBACK" "$@" ;;
+esac
+SHIM
+  chmod +x "$d/fakebin/no-mistakes"
+  printf -v padding '%200000s' x
+  prefix=$(run_running fm/gate-fixture)
+  for kind in gate-early gate-late active literal; do
+    {
+      printf '%s\n' "$prefix"
+      case "$kind" in
+        gate-early) printf 'gate: review\nnotes: %s\n' "$padding" ;;
+        gate-late) printf 'notes: %s\ngate: review\n' "$padding" ;;
+        active) printf 'notes: %s\n' "$padding" ;;
+        literal) printf 'notes: gate: review %s\n' "$padding" ;;
+      esac
+    } > "$FM_TEST_AXI_OUTPUT_FILE"
+    out=$(PATH="$d/fakebin:$PATH" FM_HOME="$d" FM_ROOT_OVERRIDE="$d" FM_STATE_OVERRIDE="$d/state" \
+      bash -o pipefail "$CREW_STATE" task) || fail "$kind strict-mode crew state failed"
+    case "$kind" in
+      gate-*)
+        assert_contains "$out" 'state: parked' "$kind must retain the gate"
+        assert_contains "$out" 'parked at review' "$kind must name the review gate"
+        assert_not_contains "$out" 'superseded' "$kind must not close a waiting decision"
+        ;;
+      *) assert_contains "$out" 'state: working' "$kind must not invent a gate" ;;
+    esac
+  done
+  pass "large reports preserve early and late gate markers under pipefail without superseding a waiting decision"
+}
+
+test_large_quiet_activity_with_pipefail() {
+  reset_fakes
+  local d out kind count padding quiet_row fresh_row
+  local FM_TEST_AXI_OUTPUT_FILE FM_TEST_AXI_FALLBACK
+  d=$(new_case large-quiet-activity)
+  make_repo_on_branch "$d/wt" fm/quiet-fixture
+  make_fakebin "$d" >/dev/null
+  fm_write_meta "$d/state/task.meta" "window=fm:fm-task" "worktree=$d/wt" "kind=ship"
+  printf 'blocked: no-mistakes daemon unreachable, drive run: read response: i/o timeout\n' > "$d/state/task.status"
+  FM_TEST_AXI_OUTPUT_FILE="$d/run.toon"
+  FM_TEST_AXI_FALLBACK="$d/fakebin/no-mistakes-fixture"
+  export FM_TEST_AXI_OUTPUT_FILE FM_TEST_AXI_FALLBACK
+  mv "$d/fakebin/no-mistakes" "$FM_TEST_AXI_FALLBACK"
+  cat > "$d/fakebin/no-mistakes" <<'SH'
+#!/usr/bin/env bash
+case "${1:-}:${2:-}" in
+  axi:|axi:status) cat "$FM_TEST_AXI_OUTPUT_FILE" ;;
+  *) exec "$FM_TEST_AXI_FALLBACK" "$@" ;;
+esac
+SH
+  chmod +x "$d/fakebin/no-mistakes"
+  printf -v padding '%200000s' x
+  quiet_row='    review,42m8s,"quiet 31m2s",44121,"auto-fix 1/3"'
+  fresh_row="    tests,12m3s,8s,44122,\"auto-fix $padding\""
+  for kind in quiet-early quiet-late recent empty; do
+    case "$kind" in recent) count=1 ;; empty) count=0 ;; *) count=2 ;; esac
+    {
+      printf 'run:\n  id: "01RUN"\n  branch: fm/quiet-fixture\n  status: fixing\n  head: "%s"\n  pr: ""\n  findings: none\n' "$FM_FAKE_RUN_HEAD"
+      printf '  active_steps[%s]{step,active_for,last_activity,agent_pid,round}:\n' "$count"
+      case "$kind" in
+        quiet-early) printf '%s\n%s\n' "$quiet_row" "$fresh_row" ;;
+        quiet-late) printf '%s\n%s\n' "$fresh_row" "$quiet_row" ;;
+        recent) printf '%s\n' "$fresh_row" ;;
+      esac
+    } > "$FM_TEST_AXI_OUTPUT_FILE"
+    out=$(PATH="$d/fakebin:$PATH" FM_HOME="$d" FM_ROOT_OVERRIDE="$d" FM_STATE_OVERRIDE="$d/state" \
+      bash -o pipefail "$CREW_STATE" task) || fail "$kind strict-mode crew state failed"
+    assert_contains "$out" 'state: working' "$kind should retain the active run state"
+    if [ "$kind" = recent ]; then
+      assert_contains "$out" 'run alive' "fresh activity should support the reattach reading"
+    else
+      assert_not_contains "$out" 'run alive' "$kind must not claim positive recent activity"
+    fi
+  done
+  pass "large quiet reports cannot turn an early grep exit into positive recent activity under pipefail"
+}
+
 test_daemon_claim_over_live_run_reads_run_alive() {
   reset_fakes
   local d; d=$(new_case daemon-claim-live)
@@ -1598,6 +1790,35 @@ test_terminal_passed_with_failed_gitlab_read_reports_unknown() {
   assert_contains "$out" "run passed: PR state unknown (unreadable)" "failed GitLab read is honest unknown"
   assert_not_contains "$out" "PR merged" "failed GitLab read must not be reported merged"
   pass "terminal passed run handles failed GitLab read"
+}
+
+test_terminal_passed_with_forgejo_pull_reports_its_state() {
+  reset_fakes
+  local d read_log out spec state merged fail expected name
+  for spec in "open|open|false|0|run passed: PR open" \
+    "merged|closed|true|0|run passed: PR merged" \
+    "closed|closed|false|0|run passed: PR closed" \
+    "unreadable|open|false|1|run passed: PR state unknown (unreadable)"; do
+    IFS='|' read -r name state merged fail expected <<<"$spec"
+    d=$(new_case "passed-forgejo-$name")
+    make_repo_on_branch "$d/wt" "fm/feat-dforgejo$name"
+    make_fakebin "$d" >/dev/null
+    fm_write_meta "$d/state/feat-dforgejo$name.meta" "window=fm:fm-feat-dforgejo$name" \
+      "worktree=$d/wt" "kind=ship" "pr=https://git.example.org/team/repo/pulls/12"
+    read_log="$d/tea-read.log"
+    : > "$read_log"
+    FM_FAKE_TEA_READ_LOG=$read_log
+    FM_FAKE_TEA_STATE=$state
+    FM_FAKE_TEA_MERGED=$merged
+    FM_FAKE_TEA_READ_FAIL=$fail
+    FM_FAKE_AXI_STATUS="$(run_passed_with_pr "fm/feat-dforgejo$name" https://git.example.org/team/repo/pulls/12)"
+    out=$(run_crew_state "$d" "feat-dforgejo$name")
+    assert_contains "$out" "$expected" "Forgejo pull request reading $name is reported"
+    [ "$name" = merged ] || assert_not_contains "$out" "PR merged" "Forgejo $name pull request must not be reported merged"
+    assert_grep 'api --login fj --repo team/repo /repos/{owner}/{repo}/pulls/12' "$read_log" \
+      "Forgejo read uses the host's tea login and the parsed project path"
+  done
+  pass "terminal passed run reads Forgejo pull request state through tea api"
 }
 
 test_terminal_passed_with_open_gerrit_change_does_not_claim_merged() {
@@ -2446,6 +2667,34 @@ test_moved_remote_branch_without_named_head_is_blocked() {
   pass "moved remote branch without the named head is current-state blocked"
 }
 
+# forge=external: a review tool uploads its own snapshot, so the review ready
+# report is current-state done with HEAD only in the worker copy, and a PR
+# report on that project is blocked with the gate's reason.
+test_external_review_done_reads_ready() {
+  reset_fakes
+  local d out
+  d=$(new_case external-review)
+  make_repo_on_branch "$d/wt" fm/ext
+  git -C "$d/wt" commit -q --allow-empty -m 'change only in the copy'
+  make_fakebin "$d" >/dev/null
+  mkdir -p "$d/config"
+  fm_write_meta "$d/state/ext.meta" \
+    "window=fm:fm-ext" "worktree=$d/wt" "project=$d/wt" \
+    "kind=ship" "mode=direct-PR" "forge=external" "harness=claude"
+  printf 'done: review https://review.example.test/r/5 uploaded for review\n' > "$d/state/ext.status"
+  FM_FAKE_AXI_STATUS=""
+  FM_FAKE_RUNS_LIST=""
+  FM_FAKE_BUSY=0
+  arm_idle_record "$d/state" ext
+  out=$(FM_CONFIG_OVERRIDE="$d/config" run_crew_state "$d" ext)
+  assert_contains "$out" "state: done" "an uploaded external review must read as done"
+  printf 'done: PR https://github.com/o/r/pull/9\n' > "$d/state/ext.status"
+  out=$(FM_CONFIG_OVERRIDE="$d/config" run_crew_state "$d" ext)
+  assert_contains "$out" "state: blocked" "a PR report on an external project must read as blocked"
+  assert_contains "$out" "never a PR" "the blocked read must carry the gate's reason"
+  pass "forge=external: an uploaded review reads done, and a PR report reads blocked with the gate's reason"
+}
+
 # (f) no run for this crew + a busy pane -> working via pane
 test_no_run_busy_pane() {
   reset_fakes
@@ -2695,6 +2944,40 @@ test_no_run_herdr_husk_dead_still_reads_gone() {
   assert_contains "$out" "agent gone, pane shell remains" "the husk verdict names what actually died"
   assert_not_contains "$out" "backend unreachable" "a husk pane is not an unreachable backend"
   pass "a husk pane (agent gone) still reads gone for reclaim"
+}
+
+# An agent the opt-in ready-session timeout stopped on purpose, while its pull
+# request waited on a merge, leaves a readable shell pane and a retired busy
+# record. It keeps its delivered outcome instead of an unknown reading, and
+# names the stop. The same pane without a matching record (another
+# incarnation's stop) keeps the ordinary unknown reading.
+test_no_run_ready_timeout_stopped_agent_keeps_its_delivery() {
+  command -v jq >/dev/null 2>&1 || { pass "ready-session timeout crew-state test skipped without jq"; return; }
+  reset_fakes
+  local d out; d=$(new_case ready-timeout-husk)
+  make_repo_on_branch "$d/wt" fm/feat-ready-timeout
+  make_fakebin "$d" >/dev/null
+  fm_write_meta "$d/state/feat-ready-timeout.meta" "window=default:w1:p2" "worktree=$d/wt" "kind=ship" \
+    "backend=herdr" "harness=claude" "mode=no-mistakes" "spawn_gen=gen-2"
+  printf 'done [at=1]: PR https://github.com/o/r/pull/9\n' > "$d/state/feat-ready-timeout.status"
+  printf 'v=1\nresult=stopped\nspawn_gen=gen-2\nat=1\ntimeout=7200\npr=https://github.com/o/r/pull/9\ndetail=stopped\n' \
+    > "$d/state/feat-ready-timeout.ready-timeout"
+  FM_FAKE_AXI_STATUS=""
+  FM_FAKE_RUNS_LIST=""
+  FM_FAKE_TMUX_MISSING=1
+  FM_FAKE_HERDR_HUSK=1
+  FM_FAKE_HERDR_PROCESS=shell
+  [ ! -e "$d/state/feat-ready-timeout.busy-gen" ] || fail "the stopped agent's busy record was not retired"
+  out=$(run_crew_state "$d" feat-ready-timeout)
+  assert_contains "$out" "state: done" "a deliberately stopped ready worker keeps its delivered outcome"
+  assert_contains "$out" "ready-session timeout" "the stopped agent's reading names the timeout"
+  assert_not_contains "$out" "state: unknown" "a deliberate stop is not reported as an unknown agent"
+  printf 'v=1\nresult=stopped\nspawn_gen=gen-1\nat=1\ntimeout=7200\npr=https://github.com/o/r/pull/9\ndetail=stopped\n' \
+    > "$d/state/feat-ready-timeout.ready-timeout"
+  out=$(run_crew_state "$d" feat-ready-timeout)
+  assert_contains "$out" "state: unknown" "a stop recorded for an earlier incarnation does not explain this agent-less pane"
+  assert_not_contains "$out" "ready-session timeout" "an earlier incarnation's stop is not named"
+  pass "a ready-session timeout stop keeps the delivered outcome only for its own incarnation"
 }
 
 # Regression (2026-07 herdr false-surface incident, now solved semantically):
@@ -3029,6 +3312,24 @@ test_dead_window_ignores_stale_status_log() {
   pass "dead window ignores stale status log"
 }
 
+test_gone_window_in_live_session_ignores_stale_status_log() {
+  reset_fakes
+  local d; d=$(new_case gone-window-live-session)
+  make_repo_on_branch "$d/wt" fm/feat-gone
+  make_fakebin "$d" >/dev/null
+  fm_write_meta "$d/state/feat-gone.meta" "window=fm:fm-feat-gone" "worktree=$d/wt" "kind=ship"
+  printf 'working: implementing the widget\n' > "$d/state/feat-gone.status"
+  FM_FAKE_AXI_STATUS=""
+  FM_FAKE_RUNS_LIST=""
+  FM_FAKE_TMUX_WINDOW_GONE=1
+  local out; out=$(run_crew_state "$d" feat-gone)
+  assert_contains "$out" "state: unknown" "gone window in a live session -> unknown"
+  assert_contains "$out" "source: none" "gone window in a live session -> none source"
+  assert_contains "$out" "backend target gone" "gone window in a live session reports the dead endpoint"
+  assert_not_contains "$out" "source: status-log" "a gone window must not let the stale log read as current"
+  pass "a gone window of a live session ignores the stale status log"
+}
+
 # Regression (2026-09 G7 stale-claim incident, tmux half): the default backend
 # reached the same false-death path as herdr. A tmux that cannot answer at all
 # - a trimmed PATH, or any non-definitive error - made every live crew report
@@ -3145,6 +3446,30 @@ test_scout_skips_run_lookup() {
   assert_not_contains "$out" "source: run-step" "scout ignores no-mistakes run-step"
   assert_contains "$out" "source: pane" "scout reads its semantic busy state"
   pass "scout skips the run lookup"
+}
+
+test_binary_metadata_is_unknown() {
+  reset_fakes
+  local d out
+  d=$(new_case binary-meta)
+  mkdir -p "$d/wt"
+  make_fakebin "$d" >/dev/null
+  fm_write_meta "$d/state/binary.meta" "window=fm:fm-binary" "worktree=$d/wt" "kind=scout" "harness=claude"
+  arm_idle_record "$d/state" binary
+  printf 'working: fixture work remains\n' > "$d/state/binary.status"
+  out=$(run_crew_state "$d" binary)
+  assert_contains "$out" 'state: working' 'plain metadata permits the fixture status'
+
+  printf 'window=fm:fm-binary\nworktree=%s/w\000t\nkind=scout\nharness=claude\n' "$d" > "$d/state/binary.meta"
+  out=$(run_crew_state "$d" binary)
+  assert_contains "$out" 'state: unknown' 'a NUL cannot repair an invalid worktree path'
+  assert_contains "$out" 'source: none' 'binary metadata cannot select a state source'
+
+  fm_write_meta "$d/state/binary.meta" "window=fm:fm-binary" "worktree=$d/wt" "kind=scout" "harness=claude"
+  printf 'note=bad\000value\n' >> "$d/state/binary.meta"
+  out=$(run_crew_state "$d" binary)
+  assert_contains "$out" 'state: unknown' 'a later NUL invalidates preceding metadata fields'
+  pass 'binary metadata cannot produce an authoritative crew state'
 }
 
 # (j) torn-down worktree and missing meta are graceful (unknown/none, exit 0)
@@ -3270,6 +3595,59 @@ test_missing_meta() {
   assert_contains "$out" "state: unknown" "missing meta -> unknown"
   assert_contains "$out" "source: none" "missing meta -> none source"
   pass "missing meta is handled gracefully"
+}
+
+# (m) override guard: FM_CREW_STATE_*_OVERRIDE is honoured only when its
+# basename is the asked task's own file name. A mismatched override inherited
+# from another task's environment must fall through to $STATE/$ID.*, while the
+# snapshot's own matching-name override keeps steering the read at the captured
+# generation.
+test_mismatched_state_override_is_ignored() {
+  reset_fakes
+  local d out
+  d=$(new_case override-mismatch)
+  make_repo_on_branch "$d/wt" fm/feat-ovr
+  make_fakebin "$d" >/dev/null
+  fm_write_meta "$d/state/feat-ovr.meta" "window=fm:fm-feat-ovr" "worktree=$d/wt" "kind=ship" "harness=claude"
+  printf 'working: real task log line\n' > "$d/state/feat-ovr.status"
+  # Another task's snapshot capture, under snapshot-style names.
+  fm_write_meta "$d/state/feat-other.meta" "window=fm:fm-feat-other" "worktree=$d/foreign-missing-wt" "kind=ship" "harness=claude"
+  printf 'blocked: other task log line\n' > "$d/state/feat-other.status"
+  FM_FAKE_AXI_STATUS=""
+  FM_FAKE_BUSY=0
+  arm_idle_record "$d/state" feat-ovr
+  out=$(FM_CREW_STATE_META_OVERRIDE="$d/state/feat-other.meta" \
+    FM_CREW_STATE_STATUS_OVERRIDE="$d/state/feat-other.status" \
+    run_crew_state "$d" feat-ovr)
+  assert_contains "$out" "state: working" "a mismatched override must be ignored: the task's own working log line wins"
+  assert_contains "$out" "source: status-log" "a mismatched override must fall through to the task's own status log"
+  assert_not_contains "$out" "worktree gone" "a mismatched metadata override must fall through to the task's live worktree"
+  assert_not_contains "$out" "other task log line" "a mismatched override must never surface the other task's status"
+  pass "override guard: a foreign-named override is ignored and the task's own state files are read"
+}
+
+test_matched_state_override_is_honoured() {
+  reset_fakes
+  local d out
+  d=$(new_case override-match)
+  make_repo_on_branch "$d/wt" fm/feat-ovr2
+  make_fakebin "$d" >/dev/null
+  fm_write_meta "$d/state/feat-ovr2.meta" "window=fm:fm-feat-ovr2" "worktree=$d/live-missing-wt" "kind=ship" "harness=claude"
+  printf 'working: live log line\n' > "$d/state/feat-ovr2.status"
+  # The fleet snapshot's captured generation for THIS task: matching names.
+  mkdir -p "$d/snapshot"
+  fm_write_meta "$d/snapshot/feat-ovr2.meta" "window=fm:fm-feat-ovr2" "worktree=$d/wt" "kind=ship" "harness=claude"
+  printf 'paused: snapshot captured status\n' > "$d/snapshot/feat-ovr2.status"
+  FM_FAKE_AXI_STATUS=""
+  FM_FAKE_BUSY=0
+  arm_idle_record "$d/state" feat-ovr2
+  out=$(FM_CREW_STATE_META_OVERRIDE="$d/snapshot/feat-ovr2.meta" \
+    FM_CREW_STATE_STATUS_OVERRIDE="$d/snapshot/feat-ovr2.status" \
+    run_crew_state "$d" feat-ovr2)
+  assert_contains "$out" "state: paused" "a matched-name override must be honoured over the live status log"
+  assert_contains "$out" "source: status-log" "a matched-name override reads the captured log through the normal source"
+  assert_not_contains "$out" "worktree gone" "a matched-name metadata override must use the captured worktree"
+  pass "override guard: a matching-name override still steers the read at the captured generation"
 }
 
 # (k) crew_is_provably_working end-to-end over the REAL fm-crew-state.sh (not a
@@ -5181,6 +5559,46 @@ EOF
   pass "a coarse failed record with a dead daemon reads unknown"
 }
 
+# Exit 0 alone does not prove a live daemon: only a positive running answer
+# licenses head-free attribution. A timeout remains unanswered rather than down.
+test_daemon_probe_requires_positive_running_answer() {
+  local probe d rebased out expected
+  for probe in running stopped empty unexpected absent refused timeout; do
+    reset_fakes
+    d=$(new_case "probe-answer-$probe")
+    make_repo_on_branch "$d/wt" fm/feat-probeanswer
+    rebased=$(make_rebased_head "$d/wt")
+    make_fakebin "$d" >/dev/null
+    fm_write_meta "$d/state/feat-probeanswer.meta" "window=fm:fm-feat-probeanswer" "worktree=$d/wt" "kind=ship" "harness=claude"
+    printf 'failed: earlier run failed\n' > "$d/state/feat-probeanswer.status"
+    FM_FAKE_RUN_HEAD=$rebased
+    FM_FAKE_AXI_STATUS="$(run_running fm/feat-probeanswer)
+branch_sync:
+  state: synced"
+    expected=failed
+    case "$probe" in
+      running) expected=working ;;
+      stopped) FM_FAKE_DAEMON_OUTPUT='  ○ daemon not running' ;;
+      empty) FM_FAKE_DAEMON_OUTPUT='' ;;
+      unexpected) FM_FAKE_DAEMON_OUTPUT='unknown daemon status' ;;
+      absent|refused)
+        FM_FAKE_DAEMON_DOWN=1
+        FM_FAKE_DAEMON_OUTPUT="socket $probe"
+        ;;
+      timeout) FM_FAKE_DAEMON_TIMEOUT=1; expected=working ;;
+    esac
+    arm_idle_record "$d/state" feat-probeanswer
+    out=$(run_crew_state "$d" feat-probeanswer)
+    assert_contains "$out" "state: $expected" "$probe: daemon answer controls live-run attribution"
+    if [ "$expected" = working ]; then
+      assert_contains "$out" 'source: run-step' "$probe: live run stays bound"
+    else
+      assert_contains "$out" 'source: status-log' "$probe: stale run cannot override the crew log"
+    fi
+    pass "daemon probe classifies $probe"
+  done
+}
+
 # A probe that does not ANSWER proves nothing about the daemon, so it must not
 # suppress a live rebased run: otherwise a slow `daemon status` on a busy fleet
 # drops the crew back to a stale `failed:` log line, and the crew flaps between
@@ -5498,6 +5916,113 @@ test_captured_completed_history() {
   pass 'captured completed status yields to synthetic subsequent development'
 }
 
+test_nm_field_large_records_with_pipefail() {
+  local shell
+  for shell in "$(command -v bash)" /bin/bash; do
+    "$shell" -s -- "$ROOT" "$TMP_ROOT/nm-field" <<'SH' || fail "$shell lost scalar values or statuses under pipefail"
+set -u
+. "$1/bin/fm-nm-run-lib.sh"
+printf -v duplicates 'status: running\n%.0s' {1..15000}
+printf -v padding '%200000s' x
+for option in on off; do
+  if [ "$option" = on ]; then set -o pipefail; else set +o pipefail; fi
+  for kind in small duplicates missing late empty quoted tab near; do
+    expected=running; present=1
+    case "$kind" in
+      small) body=$'status: running\noutcome: \n' ;;
+      duplicates) body=$duplicates ;;
+      missing) body="notes: $padding"; present=0 ;;
+      late) body="notes: $padding"$'\n  status:   running  \n'; expected='running  ' ;;
+      empty) body=$' status:\nstatus: running\n'; expected='' ;;
+      quoted) body=$'  status: "running"\r\n'; expected=$'"running"\r' ;;
+      tab) body=$'\tstatus:\tline\\literal\n'; expected='line\literal' ;;
+      near) body=$'status_extra: wrong\nstatus : wrong\nstatus: right\n'; expected=right ;;
+    esac
+    : > "$2.expected"
+    [ "$present" -eq 0 ] || printf '%s\n' "$expected" > "$2.expected"
+    rc=0
+    fm_nm_field "$body" status > "$2.out" || rc=$?
+    if [ "$rc" -ne 0 ] || ! cmp -s "$2.expected" "$2.out"; then
+      printf '%s pipefail=%s: rc=%s\n' "$kind" "$option" "$rc" >&2
+      exit 1
+    fi
+  done
+done
+SH
+  done
+  pass 'scalar readers preserve the first field and its exact bytes across large records and pipefail settings'
+}
+
+test_large_parked_run_with_pipefail() {
+  local shell
+  for shell in "$(command -v bash)" /bin/bash; do
+    "$shell" -s -- "$ROOT" <<'SH' || fail "$shell misclassified a large parked run under pipefail"
+set -u
+. "$1/bin/fm-nm-run-lib.sh"
+printf -v padding '%200000s' x
+for option in on off; do
+  if [ "$option" = on ]; then set -o pipefail; else set +o pipefail; fi
+  for kind in early late active terminal; do
+    expected_parked=1; expected_executing=1
+    case "$kind" in
+      early) body=$'status: running\ngate: review\nnotes: '"$padding"; expected_parked=0 ;;
+      late) body=$'status: running\nnotes: '"$padding"$'\ngate: review'; expected_parked=0 ;;
+      active) body=$'status: running\nnotes: '"$padding"; expected_executing=0 ;;
+      terminal) body=$'status: completed\nnotes: '"$padding" ;;
+    esac
+    parked=0; executing=0
+    fm_nm_run_is_parked "$body" || parked=$?
+    fm_nm_run_is_executing "$body" || executing=$?
+    if [ "$parked" -ne "$expected_parked" ] || [ "$executing" -ne "$expected_executing" ]; then
+      printf '%s pipefail=%s: parked=%s executing=%s\n' "$kind" "$option" "$parked" "$executing" >&2
+      exit 1
+    fi
+  done
+done
+SH
+  done
+  pass 'large run records preserve parked versus executing classification with pipefail enabled or disabled'
+}
+
+test_nm_scalar_trimming() {
+  local shell
+  for shell in "$(command -v bash)" /bin/bash; do
+    # shellcheck disable=SC2016 # The child shell owns these arrays and argument expansions.
+    "$shell" -c '
+      . "$1/bin/fm-nm-run-lib.sh"
+      inputs=( "" "   " word "  word " " \"  word  \" " "\"\"" "\"quote only" "only quote\"" )
+      trimmed=( "" "" word word "\"  word  \"" "\"\"" "\"quote only" "only quote\"" )
+      stripped=( "" "" word word word "" "\"quote only" "only quote\"" )
+      inputs+=( $'\''\n\r\t"line\nnext"\v\f '\'' " \"C:\\literal\\name\" " " \"日本語\" " " a\"b\"c " " \"a:b=c\" " " \"*?[abc]\" " )
+      trimmed+=( $'\''"line\nnext"'\'' "\"C:\\literal\\name\"" "\"日本語\"" "a\"b\"c" "\"a:b=c\"" "\"*?[abc]\"" )
+      stripped+=( $'\''line\nnext'\'' "C:\\literal\\name" "日本語" "a\"b\"c" "a:b=c" "*?[abc]" )
+      i=0
+      while [ "$i" -lt "${#inputs[@]}" ]; do
+        value=stale
+        fm_nm_trim "${inputs[$i]}" value > "$2" || exit 11
+        [ "$value" = "${trimmed[$i]}" ] && [ ! -s "$2" ] || exit 12
+        [ "$(fm_nm_trim "${inputs[$i]}")" = "${trimmed[$i]}" ] || exit 13
+        [ "$(fm_nm_strip_quotes "${inputs[$i]}")" = "${stripped[$i]}" ] || exit 14
+        for target in s value _fm_nm_trim_value; do
+          printf -v "$target" %s stale
+          fm_nm_strip_quotes "${inputs[$i]}" "$target" > "$2" || exit 15
+          [ "${!target}" = "${stripped[$i]}" ] && [ ! -s "$2" ] || exit 16
+        done
+        i=$((i+1))
+      done
+    ' _ "$ROOT" "$TMP_ROOT/trim.out" || fail "$shell changed scalar whitespace or quote parsing"
+  done
+  pass 'scalar trimming preserves whitespace, quotes and literal values through stdout and output variables'
+}
+
+test_findings_rows_require_the_matching_header
+test_findings_count_requires_a_table_header
+test_large_gate_marker_with_pipefail
+test_large_quiet_activity_with_pipefail
+test_nm_field_large_records_with_pipefail
+test_large_parked_run_with_pipefail
+test_nm_scalar_trimming
+test_binary_metadata_is_unknown
 test_captured_axi_status_shapes
 test_captured_inventory_replay
 test_captured_authority_transition
@@ -5552,6 +6077,7 @@ test_terminal_passed_with_open_pr_does_not_claim_merged
 test_terminal_passed_run_pr_overrides_stale_metadata
 test_terminal_passed_without_readable_pr_identity_reports_unknown
 test_terminal_passed_with_open_gitlab_mr_does_not_claim_merged
+test_terminal_passed_with_forgejo_pull_reports_its_state
 test_terminal_passed_with_merged_gitlab_mr_reports_merged
 test_terminal_passed_with_failed_gitlab_read_reports_unknown
 test_terminal_passed_with_open_gerrit_change_does_not_claim_merged
@@ -5578,6 +6104,7 @@ test_unpushed_ship_done_is_blocked
 test_merged_pr_reads_done_under_captured_meta
 test_no_mistakes_prevalidation_done_stays_done
 test_moved_remote_branch_without_named_head_is_blocked
+test_external_review_done_reads_ready
 test_no_run_busy_pane
 test_no_run_launch_prompt_parked_is_not_working
 test_no_run_footer_text_alone_is_not_working
@@ -5594,6 +6121,7 @@ test_no_run_idle_pane_paused
 test_no_run_idle_pane_custom_paused_verb
 test_no_run_idle_secondmate_resolved_event_not_state
 test_dead_window_ignores_stale_status_log
+test_gone_window_in_live_session_ignores_stale_status_log
 test_no_run_tmux_unreadable_reads_unreachable_not_gone
 test_dead_window_still_reports_terminal_run_step
 test_dead_window_still_reports_active_run_step
@@ -5605,6 +6133,8 @@ test_remote_alive_idle_is_healthy_not_gone
 test_remote_unreachable_is_unknown_remote_not_dead
 test_remote_dead_reports_remote_verdict
 test_missing_meta
+test_mismatched_state_override_is_ignored
+test_matched_state_override_is_honoured
 test_provably_working_via_runs_list_fallback
 test_not_provably_working_when_stopped
 test_usage_error
@@ -5677,6 +6207,7 @@ test_selected_route_dead_daemon_names_the_run_once
 test_head_tied_row_reads_the_same_whichever_run_axi_names
 test_coarse_head_tied_row_is_exempt_even_when_the_record_head_diverged
 test_unrecognised_ledger_word_keeps_the_ordinary_supersede_note
+test_daemon_probe_requires_positive_running_answer
 test_unanswered_daemon_probe_does_not_suppress_live_run
 test_coarse_live_row_is_exempt_from_the_dead_daemon_verdict
 test_coarse_live_row_keeps_the_original_supersede_note
@@ -5686,5 +6217,6 @@ test_competing_live_runs_report_unknown_with_both_ids
 test_newer_failed_run_is_not_hidden_by_older_live_run
 test_unverifiable_run_selection_reports_unknown
 test_legacy_conflicting_run_records_report_unknown
+test_no_run_ready_timeout_stopped_agent_keeps_its_delivery
 
 echo "all fm-crew-state tests passed"

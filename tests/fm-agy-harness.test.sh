@@ -479,13 +479,25 @@ fake_path_trusted() {
     "$FM_FAKE_AGY_SETTINGS" "$FM_FAKE_PANE_PATH"
 }
 case "$*" in
+  *"#{pane_tty}"*) printf '%s\n' '/dev/pts/91'; exit 0 ;;
   *"#{pane_current_path}"*) printf '%s\n' "$FM_FAKE_PANE_PATH"; exit 0 ;;
   *"#{cursor_y}"*) printf '1\n'; exit 0 ;;
 esac
 case "${1:-}" in
   display-message) printf 'firstmate\n'; exit 0 ;;
-  list-windows) exit 0 ;;
-  has-session|new-session|new-window|kill-window) exit 0 ;;
+  list-windows)
+    [ ! -s "$FM_FAKE_AGY_STATE.window" ] || cat "$FM_FAKE_AGY_STATE.window"
+    exit 0 ;;
+  new-window)
+    name=
+    previous=
+    for arg in "$@"; do
+      [ "$previous" = -n ] && name=$arg
+      previous=$arg
+    done
+    printf '%s\n' "$name" > "$FM_FAKE_AGY_STATE.window"
+    exit 0 ;;
+  has-session|new-session|kill-window) exit 0 ;;
   send-keys)
     literal=
     prev=
@@ -532,6 +544,7 @@ esac
 exit 0
 SH
   chmod +x "$fakebin/tmux"
+  fm_test_fake_tmux_foreground_cwd "$fakebin"
   cat > "$fakebin/agy" <<'SH'
 #!/usr/bin/env bash
 set -u

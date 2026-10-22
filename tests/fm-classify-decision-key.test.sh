@@ -11,7 +11,9 @@
 # verb, regardless of order or count. These tests drive the REAL
 # status_line_verb / status_open_decisions / status_open_decisions_incremental
 # functions over crafted status files and assert their folded output, never the
-# fold's own source text. Also covers status_key_closing_verb, which reports how
+# fold's own source text. Also covers status_event_recorded: a recorded line
+# stays recorded across a later resolved line for its key. Also covers
+# status_key_closing_verb, which reports how
 # the status side currently reads one key so a consumer can tell a settled key
 # from one handed to a durable captain-held task (bin/fm-captain-hold.sh
 # diverged). Cross-drain cursor persistence and the incremental
@@ -46,6 +48,25 @@ assert_fold() {  # <status-file> <expected> <label>
     || fail "$label: full fold mismatch: got '$full' want '$expected'"
   [ "$incr" = "$full" ] \
     || fail "$label: incremental fold diverged from the full fold: got '$incr' want '$full'"
+}
+
+test_unterminated_decision_tail_is_revisited_after_append() {
+  local dir status expected
+  dir=$(case_dir unterminated-tail)
+  status="$dir/task.status"
+  printf 'needs-decision [key=api]: choose café' > "$status"
+  expected=$(printf 'api\tneeds-decision\tchoose café')
+  assert_fold "$status" "$expected" "unterminated decision is visible"
+  assert_fold "$status" "$expected" "unchanged unterminated decision stays visible"
+  printf ' REST or RPC\n' >> "$status"
+  expected=$(printf 'api\tneeds-decision\tchoose café REST or RPC')
+  assert_fold "$status" "$expected" "appended text completes the same decision"
+  printf 'resolved [key=api]: answered' >> "$status"
+  assert_fold "$status" '' "unterminated resolution is visible"
+  printf '\nneeds-decision [key=next]: another question\n' >> "$status"
+  expected=$(printf 'next\tneeds-decision\tanother question')
+  assert_fold "$status" "$expected" "completed resolution and following opener"
+  pass "unterminated decision tails stay visible and are refolded after later appends"
 }
 
 test_stated_key_is_honored_in_both_positions() {
@@ -558,6 +579,177 @@ test_declared_wait_survives_answers_past_the_event_window() {
   pass "a declared wait outlives answers for other keys beyond the event window, and its own resolved line retracts it"
 }
 
+# A note: is informational: it neither leaves a declared wait nor declares one,
+# so the supervisors' declared-wait read looks through it (and through its
+# continuation prose) for a paused or a captain-held line, while any other event
+# still ends the wait and last_status_line keeps the note as the latest event.
+# Adapted from https://github.com/kunchenguid/firstmate/pull/4818.
+test_declared_wait_reads_through_notes() {
+  local dir f i
+  dir=$(case_dir declared-wait-notes)
+  f="$dir/noted.status"
+  printf 'paused: waiting on the release\nnote: slipped a day\nThe new date is Friday.\n' > "$f"
+  [ "$(status_declared_wait_line "$f")" = 'paused: waiting on the release' ] \
+    || fail "a note: under a pause ended it: '$(status_declared_wait_line "$f")'"
+  [ "$(last_status_line "$f")" = 'note: slipped a day' ] || fail "the note: stopped being the latest event"
+  printf 'captain-held [key=r]: awaiting the call\nnote corr=0123456789abcdef [key=fyi]: context\n' > "$f"
+  [ "$(status_declared_wait_line "$f")" = 'captain-held [key=r]: awaiting the call' ] \
+    || fail "a keyed, correlated note: under a hold ended it: '$(status_declared_wait_line "$f")'"
+  printf 'captain-held [key=r]: awaiting the call\nresolved [key=other]: answered\n' > "$f"
+  [ -z "$(status_declared_wait_line "$f")" ] \
+    || fail "a captain-held line behind a resolved line still read as current"
+  printf 'paused: waiting on the release\nnote: context\nresolved [key=other]: answered\nnote: more\n' > "$f"
+  [ "$(status_declared_wait_line "$f")" = 'paused: waiting on the release' ] \
+    || fail "notes mixed with an unrelated answer ended the wait: '$(status_declared_wait_line "$f")'"
+  printf 'paused: waiting on the release\nresolved: the release shipped\nnote: follow-up\n' > "$f"
+  [ -z "$(status_declared_wait_line "$f")" ] || fail "a note: after the wait's own resolution revived it"
+  printf 'paused: waiting on the release\nnote: context\nworking: resumed\n' > "$f"
+  [ -z "$(status_declared_wait_line "$f")" ] || fail "a non-note event did not end the wait"
+  printf 'note: only notes\nnote: still only notes\n' > "$f"
+  [ -z "$(status_declared_wait_line "$f")" ] || fail "a notes-only log read as a declared wait"
+  printf 'paused: waiting past a long note tail\n' > "$f"
+  i=0
+  while [ "$i" -le "$FM_CLASSIFY_EVENT_WINDOW_LINES" ]; do
+    printf 'note: tick %s\n' "$i" >> "$f"
+    i=$((i + 1))
+  done
+  [ "$(status_declared_wait_line "$f")" = 'paused: waiting past a long note tail' ] \
+    || fail "a pause buried past the bounded window of notes was lost"
+  pass "the declared-wait read keeps a wait under note: events and continuation prose only"
+}
+
+# One field of the episode record: 1 start offset, 2 stamp epoch, 3 declaration.
+episode_field() {  # <status-file> <field>
+  local record
+  record=$(status_declared_wait_episode "$1") || return 1
+  printf '%s\n' "$record" | cut -f "$2"
+}
+
+# The logical episode of a declared wait: the run of that same declaration read
+# back through notes, continuation, identical (including restamped)
+# re-declarations and answers for other keys. Leaving the wait and declaring the
+# same text again starts a new episode at the new line even when no supervisor
+# poll saw the interlude, and a changed reason, key, or deadline is a new
+# episode too. Offsets are absolute bytes and stay correct past the bounded
+# read window.
+test_declared_wait_episode_identity() {
+  local dir f off i first stamp
+  dir=$(case_dir declared-wait-episode)
+  f="$dir/episode.status"
+  printf 'working: building\n' > "$f"
+  first=$(wc -c < "$f" | tr -d ' ')
+  printf 'paused: waiting on the release\n' >> "$f"
+  [ "$(episode_field "$f" 1)" = "$first" ] || fail "the episode did not start at the declaration: $(status_declared_wait_episode "$f")"
+  [ -z "$(episode_field "$f" 2)" ] || fail "an unstamped declaration reported a stamp"
+  [ "$(episode_field "$f" 3)" = 'paused: waiting on the release' ] || fail "the episode named the wrong declaration"
+  printf 'note: slipped\ncontinuation prose\npaused: waiting on the release\n' >> "$f"
+  stamp=$(( $(date +%s) - 30 ))
+  printf 'paused [at=%s]: waiting on the release\nresolved [key=other]: unrelated\n' "$stamp" >> "$f"
+  [ "$(episode_field "$f" 1)" = "$first" ] \
+    || fail "a note, prose, an identical or restamped re-declaration, or an unrelated answer started a new episode"
+  off=$(wc -c < "$f" | tr -d ' ')
+  printf 'working: back on it\npaused: waiting on the release\n' >> "$f"
+  off=$(( off + $(printf 'working: back on it\n' | wc -c | tr -d ' ') ))
+  [ "$(episode_field "$f" 1)" = "$off" ] \
+    || fail "leaving and re-entering the same wait between polls kept the old episode: $(status_declared_wait_episode "$f")"
+  off=$(wc -c < "$f" | tr -d ' ')
+  printf 'resolved: it shipped\npaused: waiting on the release\n' >> "$f"
+  off=$(( off + $(printf 'resolved: it shipped\n' | wc -c | tr -d ' ') ))
+  [ "$(episode_field "$f" 1)" = "$off" ] \
+    || fail "the wait's own resolution did not end the episode"
+  off=$(wc -c < "$f" | tr -d ' ')
+  printf 'paused: waiting on the release until 2031-01-01T00:00Z\n' >> "$f"
+  [ "$(episode_field "$f" 1)" = "$off" ] || fail "a changed deadline kept the old episode"
+  off=$(wc -c < "$f" | tr -d ' ')
+  stamp=$(( $(date +%s) - 90 ))
+  printf 'paused [key=legal] [at=%s]: waiting on the release until 2031-01-01T00:00Z\n' "$stamp" >> "$f"
+  [ "$(episode_field "$f" 1)" = "$off" ] || fail "a changed key kept the old episode"
+  [ "$(episode_field "$f" 2)" = "$stamp" ] || fail "the episode's first-line stamp was not reported"
+  # A long run of the same wait past the bounded window keeps its first offset.
+  off=$(wc -c < "$f" | tr -d ' ')
+  printf 'paused: a long wait\n' >> "$f"
+  i=0
+  while [ "$i" -lt 800 ]; do
+    printf 'note: still waiting on the long job, tick %s of many\n' "$i" >> "$f"
+    i=$((i + 1))
+  done
+  [ "$(episode_field "$f" 1)" = "$off" ] \
+    || fail "an episode longer than the read window lost its start: $(status_declared_wait_episode "$f" | cut -f1) != $off"
+  printf 'working: done waiting\n' >> "$f"
+  status_declared_wait_episode "$f" >/dev/null && fail "an ended wait still reported an episode"
+  pass "a declared wait's episode survives notes and re-declarations, and restarts on leaving, answering, or changing it"
+}
+
 test_keyless_wait_survives_stated_default_retraction
 test_declared_wait_survives_answers_past_the_event_window
 test_bare_prose_cannot_open_or_close_a_decision
+test_declared_wait_reads_through_notes
+test_declared_wait_episode_identity
+
+# status_event_recorded is an idempotent retry check: a stamped retry matches,
+# and no later resolved line - for another key, outside the reserved-key
+# vocabulary, or the real close of that key - makes a recorded line new again.
+# The same holds for a note and a done line.
+test_recorded_line_stays_recorded_across_a_resolve() {
+  local dir f line
+  dir=$(case_dir episode)
+  f="$dir/task.status"
+  line='blocked [key=pending-reply-abc]: pending-reply-delivery-unknown: task=mate pending-reply-id=abc request=wake'
+  printf '%s\n' "$line" > "$f"
+  status_event_recorded "$f" "$line" \
+    || fail "the open blocker was not recorded"
+  status_event_recorded "$f" \
+    "blocked [key=pending-reply-abc] [at=1700000000]: pending-reply-delivery-unknown: task=mate pending-reply-id=abc request=wake" \
+    || fail "a stamp made the recorded blocker look new"
+  printf '%s\n' 'resolved [key=other]: answered elsewhere' >> "$f"
+  status_event_recorded "$f" "$line" \
+    || fail "another key's resolve made the blocker look new"
+  printf '%s\n' 'resolved [key=pending-reply-abc]: answered: not this library' >> "$f"
+  status_event_recorded "$f" "$line" \
+    || fail "a reserved-key resolve outside the vocabulary made the blocker look new"
+  printf '%s\n' 'resolved [key=pending-reply-abc] [at=1700000001]: pending-reply-resolved: task=mate pending-reply-id=abc via=operator-resolve-key dismiss' >> "$f"
+  [ -z "$(status_open_decisions "$f")" ] \
+    || fail "the resolve did not close the decision: $(status_open_decisions "$f")"
+  status_event_recorded "$f" "$line" \
+    || fail "the resolve of its own key made the blocker look new"
+  printf '%s\n' 'note: remote document did not transfer for ios: data/reply/missing.md - absent' \
+    > "$dir/note.status"
+  printf '%s\n' 'resolved: closed the default decision' >> "$dir/note.status"
+  status_event_recorded "$dir/note.status" \
+    'note: remote document did not transfer for ios: data/reply/missing.md - absent' \
+    || fail "a resolve made a note look new"
+  printf '%s\n' 'done [corr=abcd]: shipped' > "$dir/done.status"
+  printf '%s\n' 'resolved [key=default]: closed' >> "$dir/done.status"
+  status_event_recorded "$dir/done.status" 'done [corr=abcd]: shipped' \
+    || fail "a resolve made a done line look new"
+  pass "a recorded line stays recorded across a later resolve"
+}
+
+test_recorded_line_stays_recorded_across_a_resolve
+test_unterminated_decision_tail_is_revisited_after_append
+
+# Count actual shell processes through Bash's inherited DEBUG trap rather than
+# asserting a particular implementation or a machine-dependent wall deadline.
+# The same public fold over a longer log must not create a shell per input line.
+test_activity_fold_has_bounded_shell_fanout() {
+  local dir i forks expected
+  dir=$(case_dir activity-fanout)
+  for ((i = 0; i < 40; i++)); do
+    printf 'working [at=1700000000] [key=task-%s]: step %s\n' "$i" "$i"
+    printf 'paused: [key=task-%s] waiting %s\n' "$i" "$i"
+    printf 'resolved [key=task-%s]: resumed\n' "$i"
+  done > "$dir/task.status"
+  printf 'working [key=last]: café with tabs\tand spaces  \n' >> "$dir/task.status"
+  (
+    set -T
+    trap 'printf "%s\\n" "$BASH_SUBSHELL" >> "$dir/processes"' DEBUG
+    status_open_activities "$dir/task.status" > "$dir/activities"
+  )
+  expected=$(printf 'last\tworking\tcafé with tabs\tand spaces  ')
+  [ "$(cat "$dir/activities")" = "$expected" ] || fail 'activity fold changed notes or ordering'
+  forks=$(awk '$1 > 1 {n++} END {print n+0}' "$dir/processes")
+  [ "$forks" -eq 0 ] || fail "activity fold executed $forks commands in per-line subshells for 121 status lines"
+  pass 'activity folding preserves output without per-line shell fan-out'
+}
+
+test_activity_fold_has_bounded_shell_fanout

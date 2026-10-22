@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
-# Self-update a running firstmate and its secondmates to the latest origin.
+# Self-update a running firstmate and its secondmates from its tracking remote.
 #
 # Mechanical half of the /updatefirstmate skill. Fast-forwards the running
-# firstmate repo's default branch from origin, then fast-forwards every
+# firstmate repo's runtime branch from its tracking remote, then advances every
 # registered secondmate home. Local homes are treehouse worktrees or standalone
-# clones; remote routes update their configured code root on that host and then
-# fast-forward the persistent home to that root. FAST-FORWARD ONLY, exactly like
-# fm-fleet-sync.sh: never force, never create a merge commit, never stash.
+# clones; remote routes refresh each host/code-root pair once from that root's
+# tracking remote before syncing its homes to the pinned primary commit. A skipped
+# root is reported but does not prevent the homes from attempting their own sync.
+# FAST-FORWARD ONLY, exactly like fm-fleet-sync.sh: never force, never create a merge commit, never stash.
 # A secondmate divergence whose complete local tree result is already present at
 # the target is reconciled with reset --keep; every other unsafe target is
 # skipped and reported, with divergence recorded durably by fm-ff-lib.sh.
@@ -18,7 +19,7 @@
 # default branch, so a fast-forward there advances HEAD only and never touches
 # any other worktree's checkout or the shared `main` branch.
 #
-# The fast-forward mechanics live in bin/fm-ff-lib.sh (base_mode "origin" here);
+# The fast-forward mechanics live in bin/fm-ff-lib.sh (base_mode "tracking" here);
 # the same library drives local and remote parent-targeted secondmate sync, so
 # there is one ff implementation, not several.
 #
@@ -88,7 +89,7 @@ fi
 # --- main firstmate repo ---------------------------------------------------
 
 reread_firstmate="no"
-ff_target "$FM_ROOT" "firstmate" origin no no
+ff_target "$FM_ROOT" "firstmate" tracking no no
 if [ "$FF_STATUS" = "updated" ]; then
   if [ -n "$FF_INSTR" ]; then
     reread_firstmate="yes"
@@ -103,6 +104,16 @@ if [ "$FF_STATUS" = "updated" ]; then
   # this test suite uses to point fm-update.sh at a fixture checkout).
   FM_HOME="$FM_HOME" FM_ROOT_OVERRIDE="$FM_ROOT" "$SCRIPT_DIR/fm-procevent-when.sh" rebind-all || true
 fi
+
+# Pin every local and remote secondmate leg to the exact primary result. A
+# skipped primary halts propagation, so mates cannot independently move ahead.
+if [ "$FF_STATUS" = skipped ]; then
+  echo "reread-firstmate: no"
+  echo "restart-secondmates: none"
+  echo "nudge-secondmates: none"
+  exit 0
+fi
+runtime_commit=$(git -C "$FM_ROOT" rev-parse --verify 'HEAD^{commit}')
 
 # --- secondmates -----------------------------------------------------------
 # Every live secondmate this pass leaves on origin's tip is restarted, whether it
@@ -173,7 +184,70 @@ fm_ff_after_secondmate_settled() {  # <id> <home> <window> <status> <instr>
 
 # Live direct reports first: state/<id>.meta with kind=secondmate carries the
 # authoritative home= path.
-sweep_live_secondmate_metas "$STATE" origin yes
+sweep_live_secondmate_metas "$STATE" "$runtime_commit" yes
+
+# Refresh only the configured code root, never its own fleet. Keep failures in
+# the per-pass set too: subsequent homes must not retry an uncertain transport.
+REFRESHED_REMOTE_ROOTS=()
+refresh_remote_code_root() {  # <host> <root>
+  local host=$1 root=$2 key seen out ok=yes root_b64 interval count
+  key="$host:$root"
+  for seen in "${REFRESHED_REMOTE_ROOTS[@]+"${REFRESHED_REMOTE_ROOTS[@]}"}"; do
+    [ "$seen" != "$key" ] || return 0
+  done
+  REFRESHED_REMOTE_ROOTS+=("$key")
+  # Bootstrap with the library already on the host: a new command or updater
+  # flag cannot refresh an older code root that does not yet implement it, and a
+  # library predating runtime branches only knows the origin base mode.
+  case "$host" in
+    ''|-*|*[!A-Za-z0-9._-]*) printf 'remote code root: skipped: unsafe SSH alias\n' >&2; return 0 ;;
+  esac
+  case "$root" in
+    /*) ;;
+    *) printf 'remote code root %s: skipped: root is not absolute\n' "$host" >&2; return 0 ;;
+  esac
+  case "/$root/" in
+    */../*|*/./*) printf 'remote code root %s: skipped: unsafe root path\n' "$host" >&2; return 0 ;;
+  esac
+  case "$root" in
+    *'//'*|*$'\n'*|*$'\r'*|*$'\t'*) printf 'remote code root %s: skipped: unsafe root path\n' "$host" >&2; return 0 ;;
+  esac
+  interval=${FM_SSH_ALIVE_INTERVAL:-15}
+  count=${FM_SSH_ALIVE_COUNT_MAX:-3}
+  case "$interval:$count" in
+    *[!0-9:]*|:*|*:) printf 'remote code root %s: skipped: invalid SSH keepalive\n' "$host" >&2; return 0 ;;
+  esac
+  if [ "$interval" -le 0 ] || [ "$count" -le 0 ]; then
+    printf 'remote code root %s: skipped: invalid SSH keepalive\n' "$host" >&2
+    return 0
+  fi
+  root_b64=$(printf '%s' "$root" | base64 | tr -d '\n')
+  out=$("${FM_SSH_BIN:-ssh}" -o ForwardAgent=no -o ClearAllForwardings=yes \
+    -o 'SendEnv=-*' -o "ServerAliveInterval=$interval" -o "ServerAliveCountMax=$count" \
+    -- "$host" bash -s -- "$root_b64" 2>&1 <<'SH'
+set -eu
+FM_ROOT=$(printf '%s' "$1" | base64 --decode 2>/dev/null) \
+  || FM_ROOT=$(printf '%s' "$1" | base64 -D)
+FM_HOME=$FM_ROOT
+# shellcheck source=bin/fm-ff-lib.sh
+. "$FM_ROOT/bin/fm-ff-lib.sh"
+mode=origin
+! declare -F firstmate_runtime_branch >/dev/null || mode=tracking
+ff_target "$FM_ROOT" firstmate "$mode" no no
+SH
+  ) || ok=no
+  out=$(printf '%s\n' "$out" | awk 'NF { last = $0 } END { print last }')
+  if [ "$ok" = yes ]; then
+    case "$out" in
+      'firstmate: updated '*|'firstmate: already current'*|'firstmate: skipped: '*)
+        printf 'remote code root %s (%s): %s\n' "$host" "$root" "${out#firstmate: }"
+        ;;
+      *) printf 'remote code root %s (%s): skipped: malformed refresh result\n' "$host" "$root" >&2 ;;
+    esac
+  else
+    printf 'remote code root %s (%s): skipped: %s\n' "$host" "$root" "$out" >&2
+  fi
+}
 
 # Registry backstop: a secondmate registered in data/secondmates.md but without
 # a live meta (e.g. between restarts) is still its persistent on-disk home.
@@ -190,7 +264,8 @@ if [ -f "$SECONDMATES_MD" ]; then
     id=$SECONDMATE_REGISTRY_ID
     home=$SECONDMATE_REGISTRY_HOME
     if [ "$SECONDMATE_REGISTRY_REMOTE" -eq 1 ]; then
-      if remote_out=$("$SCRIPT_DIR/fm-on.sh" "$id" fm-remote-secondmate-control.sh update "$id" < /dev/null 2>&1); then
+      refresh_remote_code_root "$SECONDMATE_REGISTRY_HOST" "$SECONDMATE_REGISTRY_ROOT"
+      if remote_out=$("$SCRIPT_DIR/fm-on.sh" "$id" fm-remote-secondmate-control.sh sync "$id" "$runtime_commit" < /dev/null 2>&1); then
         remote_result=$(printf '%s\n' "$remote_out" | tail -1)
         case "$remote_result" in
           synced:*)
@@ -227,10 +302,10 @@ if [ -f "$SECONDMATES_MD" ]; then
           *) echo "remote secondmate $id: skipped on $SECONDMATE_REGISTRY_HOST: malformed update result" >&2 ;;
         esac
       else
-        echo "remote secondmate $id: skipped on $SECONDMATE_REGISTRY_HOST: ${remote_out%%$'\n'*}" >&2
+        echo "remote secondmate $id: skipped on $SECONDMATE_REGISTRY_HOST: $(remote_inherit_failure_reason "$remote_out")" >&2
       fi
     else
-      process_secondmate "$id" "$home" "" origin yes
+      process_secondmate "$id" "$home" "" "$runtime_commit" yes
     fi
   done < "$SECONDMATES_MD"
 fi

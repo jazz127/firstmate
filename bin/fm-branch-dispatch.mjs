@@ -15,6 +15,7 @@
 //       status=safe|empty|unsafe
 //       corrupted=0|1   1 only when the scan itself is untrustworthy
 //       rows=<seq> ...  the exact sequence numbers the branch may claim
+//       row_tasks=<seq>=<task|fleet> ...  each claimed event's task identity
 //       tasks=<id> ...  the task ids those rows resolve to
 //       unscoped=0|1    1 when the claim names no task (a heartbeat review, or
 //                       a claimed heartbeat or check row), so a report on any
@@ -24,7 +25,7 @@
 //   fm-branch-dispatch.mjs offer [--afk]
 //     Read one actionable close's reason line from stdin and print
 //     branchOfferForWake's verdict: eligible=0|1 (whether the branch may take
-//     this close at all, trigger class included), then the same five lines
+//     this close at all, trigger class included), then the same scope lines
 //     `scope` prints for the scan it judged. --afk judges it under the away
 //     posture.
 //   fm-branch-dispatch.mjs wake-prompt --report <surface> [--mirror-file <path>] [--away [--readback-file <path>]]
@@ -66,6 +67,7 @@ function scopeLines(scope, heartbeat) {
     `status=${scope.status}\n` +
     `corrupted=${scope.corrupted ? 1 : 0}\n` +
     `rows=${scope.eligibleSeqs.join(" ")}\n` +
+    `row_tasks=${scope.eligibleSeqs.map((seq) => `${seq}=${scope.taskByEligibleSeq[seq]}`).join(" ")}\n` +
     `tasks=${scope.eligibleTasks.join(" ")}\n` +
     `unscoped=${unscoped ? 1 : 0}\n`
   );

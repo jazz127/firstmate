@@ -32,6 +32,7 @@ Streaming text and the genuine reply that ends a response remain visible.
 
 While Calm is active and an agent run is under way, Calm hides Pi's built-in `Working...` row and shows a small two-row animated boat in its place.
 No separate Calm status row is added.
+The boat claims the same Pi working-row widget slot as the standalone Pi Calm extension, so a session that loads both Calms shows one boat rather than two, and turning Firstmate Calm off does not clear the standalone boat.
 While Calm is off, Pi's stock working row is left exactly as Pi renders it.
 
 The boat looks like this:
@@ -250,7 +251,7 @@ Tool rows, tool result blocks, and folded tool groups draw at zero height, so a 
 
 A user row draws at zero height when the canonical operational-input parser recognizes its text as one of these:
 
-- A current generic Firstmate envelope; [`fm-operational-input.sh`](../bin/fm-operational-input.sh) owns the supported kinds.
+- A generic Firstmate operational envelope; [`bin/fm-operational-input.sh`](../bin/fm-operational-input.sh) owns the current kinds.
 - A from-firstmate routed message.
 - One of the narrow pre-protocol shapes kept for old transcripts.
 

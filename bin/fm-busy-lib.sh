@@ -34,8 +34,13 @@
 #   claude-hook      Claude lifecycle hooks (UserPromptSubmit/Stop/StopFailure/SessionEnd)
 #   devin-hook       Devin UserPromptSubmit / Stop / SessionEnd hooks; manual
 #                    cancellation emits no Stop, so control invalidates to unknown.
+#   commandcode-mod  Command Code per-task mod (run_start opens; run_end, including
+#                    an Escape interrupt, and session end close)
 #   gemini-hook      Gemini agent hooks (BeforeAgent opens; AfterAgent and
 #                    SessionEnd close)
+#   polytoken-hook   Polytoken pre_user_prompt / pre_model_turn open and stop
+#                    closes; a REST turn cancel emits no stop (verified live),
+#                    so the control plane writes the close itself
 #   codex-hook, codex-appserver  reserved: Codex, gated by
 #                    fm_busy_codex_semantic_source
 #   kimi-wire, kimi-hook  reserved: standalone Kimi, gated by fm_busy_kimi_verified
@@ -205,10 +210,13 @@ fm_busy_token_valid() {  # <value>
 # fm_busy_current_gen: the task's armed gen token, or failure when the busy
 # contract has never been armed for this task.
 fm_busy_current_gen() {  # <state-dir> <id>
-  local gen_file gen
+  local gen_file gen=''
   gen_file=$(fm_busy_gen_path "$1" "$2")
   [ -f "$gen_file" ] || return 1
-  IFS= read -r gen < "$gen_file" 2>/dev/null || gen=
+  # Capture one text snapshot; ordinary read silently discards NULs on newer
+  # Bash and reading only the first line would ignore a damaged suffix.
+  if IFS= read -r -d '' gen 2>/dev/null < "$gen_file"; then return 1; fi
+  case "$gen" in *$'\n') gen=${gen%$'\n'} ;; *) return 1 ;; esac
   fm_busy_token_valid "$gen" || return 1
   printf '%s' "$gen"
 }
@@ -232,6 +240,8 @@ fm_busy_sources_for_harness() {  # <harness>
     opencode*) adapter=opencode-plugin ;;
     gemini*) adapter=gemini-hook ;;
     devin) adapter=devin-hook ;;
+    commandcode) adapter=commandcode-mod ;;
+    polytoken) adapter=polytoken-hook ;;
     pi|pi-signed) adapter=pi-ext ;;
     omp) adapter=omp-ext ;;
     kimi*)
@@ -253,14 +263,14 @@ fm_busy_source_trusted() {  # <harness> <source>
 }
 
 # fm_busy_record_read: parse and validate state/<id>.busy-state against the
-# armed gen. Prints "<state> <source> <event> <seq>" for a valid record.
+# armed gen. Prints "<state> <source> <event> <seq> <ts>" for a valid record.
 # Non-zero returns name the reason on stdout instead:
 #   missing      no record file (or no armed gen and no record)
 #   malformed    unparseable line, bad tokens, or a missing armed gen for an
 #                existing record
 #   gen-mismatch a record from a stale incarnation
 fm_busy_record_read() {  # <state-dir> <id>
-  local state=$1 id=$2 rec gen line extra ver f
+  local state=$1 id=$2 rec gen line='' ver f
   local r_gen='' r_seq='' r_state='' r_source='' r_event='' r_ts=''
   rec=$(fm_busy_record_path "$state" "$id")
   if [ ! -f "$rec" ]; then
@@ -272,11 +282,17 @@ fm_busy_record_read() {  # <state-dir> <id>
     printf 'malformed'
     return 1
   fi
-  # shellcheck disable=SC2034 # extra exists only to prove the record is one line
-  { IFS= read -r line && ! IFS= read -r extra; } < "$rec" 2>/dev/null || {
+  # Require exactly one newline-terminated, NUL-free line. A failed second
+  # line read alone would also accept an unterminated trailing fragment.
+  if IFS= read -r -d '' line 2>/dev/null < "$rec"; then
     printf 'malformed'
     return 1
-  }
+  fi
+  case "$line" in
+    *$'\n') line=${line%$'\n'} ;;
+    *) printf 'malformed'; return 1 ;;
+  esac
+  case "$line" in *$'\n'*) printf 'malformed'; return 1 ;; esac
   # `read -a` rather than `set --`: it never glob-expands a field and never
   # touches the caller's positional parameters or shell options.
   local -a fields
@@ -304,7 +320,7 @@ fm_busy_record_read() {  # <state-dir> <id>
     printf 'gen-mismatch'
     return 1
   fi
-  printf '%s %s %s %s' "$r_state" "$r_source" "$r_event" "$r_seq"
+  printf '%s %s %s %s %s' "$r_state" "$r_source" "$r_event" "$r_seq" "$r_ts"
 }
 
 # ---------------------------------------------------------------------------

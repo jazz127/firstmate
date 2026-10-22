@@ -27,7 +27,7 @@
 # A missing, malformed, identity-mismatched, or past-end classified position reads
 # from byte 0, preferring a bounded duplicate over a lost event.
 #
-# There are four documented exceptions. The absorb classification
+# There are five documented exceptions. The absorb classification
 # (crew_absorb_class and its working/paused wrappers) is NOT a pure status-file
 # read: it reuses bin/fm-crew-state.sh, which may make a bounded no-mistakes call,
 # to decide whether a crew that just stopped its turn or went stale is working,
@@ -37,9 +37,11 @@
 # open-decisions fold" below) also writes: it persists a per-status-file byte
 # cursor and folded open-set as a side effect, so a per-drain fleet-wide scan
 # stays bounded by new appends instead of re-reading each task's whole lifetime
-# log every time. status_home_appends_record writes the per-task home-owned
-# append ledger (see "home-owned status-append ledger" below) so the wake scan
-# can treat this home's own bookkeeping bytes as already owned.
+# log every time. status_open_decisions_snapshot (see "snapshot (digest-checked)
+# open-decisions fold" below) persists the fleet snapshot's own cursor the same
+# way, in a separate namespace. status_home_appends_record writes the per-task
+# home-owned append ledger (see "home-owned status-append ledger" below) so the
+# wake scan can treat this home's own bookkeeping bytes as already owned.
 # crew_worktree_written_since reads the task's meta file and walks a bounded slice
 # of its worktree instead of a status file, so callers run it only at the moment
 # they would otherwise escalate.
@@ -99,8 +101,8 @@ FM_CLASSIFY_CAPTAIN_RE_DEFAULT='done:|needs-decision:|blocked:|failed:|PR ready|
 # they do not identify a separate classification or liveness source.
 # bin/fm-brief.sh owns worker-facing declaration and resolution instructions.
 # Unlike `blocked:` (stuck, firstmate must help), an idle `paused:` pane is EXPECTED, so
-# the stale path bounds repeats instead of escalating a possible wedge; a live
-# idle worker can still surface a first-sight stale alert. It is
+# the stale path absorbs it from first sight, whatever the agent's liveness,
+# instead of escalating a possible wedge. It is
 # deliberately NOT in the captain-relevant set above: a pause is a "stop
 # wedge-nagging this idle pane" signal, not work to keep surfacing. This constant
 # is the ONE definition of the verb; both the watcher and the daemon read it here
@@ -124,16 +126,34 @@ FM_CLASSIFY_PAUSED_VERB_DEFAULT='paused'
 FM_PAUSE_RESURFACE_SECS_DEFAULT=14400
 
 # fm_utc_iso_to_epoch <YYYY-MM-DDTHH:MM[:SS]Z>: the one portable UTC ISO 8601
-# reader shared by the declared-wait vocabulary and the away-posture record
-# (bin/fm-afk-contract.sh). Prints epoch seconds; returns 1 on any other shape
-# so a malformed time is refused rather than read as "now".
+# reader shared by declared waits, away-posture records (bin/fm-afk-contract.sh),
+# and public-followup deadlines. Prints epoch seconds; returns 1 on any other shape
+# so a malformed time is refused rather than read as "now" or normalized by BSD
+# date into a different calendar day.
 fm_utc_iso_to_epoch() {  # <timestamp>
-  local ts=$1
+  local ts=$1 year month day days
   case "$ts" in
     [0-9][0-9][0-9][0-9]-[0-1][0-9]-[0-3][0-9]T[0-2][0-9]:[0-5][0-9]Z) ts="${ts%Z}:00Z" ;;
     [0-9][0-9][0-9][0-9]-[0-1][0-9]-[0-3][0-9]T[0-2][0-9]:[0-5][0-9]:[0-5][0-9]Z) ;;
     *) return 1 ;;
   esac
+  # BSD date accepts e.g. February 31 and day 00 by rolling into another month.
+  # Check the Gregorian calendar before conversion so every platform refuses
+  # the same impossible deadlines, without a second date process to round-trip.
+  year=$((10#${ts:0:4}))
+  month=$((10#${ts:5:2}))
+  day=$((10#${ts:8:2}))
+  case "$month" in
+    1|3|5|7|8|10|12) days=31 ;;
+    4|6|9|11) days=30 ;;
+    2)
+      days=28
+      if ((year % 4 == 0 && (year % 100 != 0 || year % 400 == 0))); then days=29; fi
+      ;;
+    *) return 1 ;;
+  esac
+  [ "$day" -ge 1 ] && [ "$day" -le "$days" ] || return 1
+  [ "$((10#${ts:11:2}))" -le 23 ] || return 1
   date -u -j -f '%Y-%m-%dT%H:%M:%SZ' "$ts" +%s 2>/dev/null \
     || date -u -d "$ts" +%s 2>/dev/null \
     || return 1
@@ -281,7 +301,7 @@ _fm_classify_matches() {  # <line> <pattern>
 status_is_terminal_verb() {
   local line=$1 verb
   [ -n "$line" ] || return 1
-  verb=$(status_line_verb "$line")
+  status_line_verb "$line" verb
   case "$verb" in
     done|needs-decision|blocked|failed) return 0 ;;
     *) return 1 ;;
@@ -326,7 +346,7 @@ status_is_captain_relevant() {
 status_is_paused() {  # <status-line>
   local line=$1 verb
   [ -n "$line" ] || return 1
-  verb=$(status_line_verb "$line")
+  status_line_verb "$line" verb
   [ "$verb" = "${FM_CLASSIFY_PAUSED_VERB:-$FM_CLASSIFY_PAUSED_VERB_DEFAULT}" ]
 }
 
@@ -339,7 +359,7 @@ status_is_paused() {  # <status-line>
 status_is_captain_held() {  # <status-line>
   local line=$1 verb
   [ -n "$line" ] || return 1
-  verb=$(status_line_verb "$line")
+  status_line_verb "$line" verb
   [ "$verb" = "${FM_CLASSIFY_CAPTAIN_HELD_VERB:-$FM_CLASSIFY_CAPTAIN_HELD_VERB_DEFAULT}" ]
 }
 
@@ -348,11 +368,17 @@ status_is_captain_held() {  # <status-line>
 # Both declarations can intentionally leave a crew's endpoint idle, so both
 # supervisors give them one cadence: the away-mode daemon defers the wedge and
 # ages a pause marker instead, and the watcher applies its bounded pause cadence
-# once pause_state_class has admitted the wait (fm-watch.sh owns which liveness
-# evidence each kind of crew must supply for that).
+# once pause_state_class has admitted the wait, which it does for every
+# agent-liveness verdict unless the crew is provably working.
 status_is_paused_or_captain_held() {  # <status-line>
-  local line=$1
-  status_is_paused "$line" || status_is_captain_held "$line"
+  local line=$1 verb
+  [ -n "$line" ] || return 1
+  status_line_verb "$line" verb
+  case "$verb" in
+    "${FM_CLASSIFY_PAUSED_VERB:-$FM_CLASSIFY_PAUSED_VERB_DEFAULT}"|\
+    "${FM_CLASSIFY_CAPTAIN_HELD_VERB:-$FM_CLASSIFY_CAPTAIN_HELD_VERB_DEFAULT}") return 0 ;;
+    *) return 1 ;;
+  esac
 }
 
 # The status line that holds a crew in a declared wait, or nothing when it is in
@@ -362,9 +388,12 @@ status_is_paused_or_captain_held() {  # <status-line>
 # including the stated default key a keyless decision shares - does not end the
 # pause. Only a resolved line for the pause's own phase key (the keyed
 # activity fold's key, where a keyless line is its own phase) retracts it, as
-# does any other later event. A captain-held line counts only while it is the
-# latest event. Bounded like last_status_line: only a tail window made wholly of
-# resolved events widens the read to the whole file.
+# does any other later event. A `note:` is informational: it neither leaves a
+# declared wait nor declares one, so a note written under a standing wait is
+# read through, for a paused or a captain-held line alike. A captain-held line
+# otherwise counts only while it is the latest event apart from such notes.
+# Bounded like last_status_line: only a tail window made wholly of resolved and
+# note events widens the read to the whole file.
 status_declared_wait_line() {  # <status-file>
   local f=$1 last verb resolve legacy_re
   last=$(last_status_line "$f")
@@ -374,19 +403,20 @@ status_declared_wait_line() {  # <status-file>
   fi
   resolve=${FM_CLASSIFY_RESOLVE_VERB:-$FM_CLASSIFY_RESOLVE_VERB_DEFAULT}
   status_line_verb "$last" verb
-  [ "$verb" = "$resolve" ] || return 0
+  case "$verb" in "$resolve"|note) ;; *) return 0 ;; esac
   legacy_re="^[[:space:]]*(${FM_CAPTAIN_RE:-$FM_CLASSIFY_CAPTAIN_RE_DEFAULT})"
   tail -n "$FM_CLASSIFY_EVENT_WINDOW_LINES" "$f" 2>/dev/null \
     | _fm_status_declared_wait_scan "$resolve" "$legacy_re" \
     || _fm_status_declared_wait_scan "$resolve" "$legacy_re" < "$f" || :
 }
 
-# Walk the status lines on stdin back from the newest event past resolved lines
-# to the first other event, and print it when it is a pause none of those
-# resolved lines share a phase key with. Returns 1 when every event is a
-# resolved line, so a caller reading a bounded window knows to widen it.
+# Walk the status lines on stdin back from the newest event past resolved and
+# note lines to the first other event, and print it when it is a pause none of
+# those resolved lines share a phase key with, or a captain-held line that only
+# notes follow. Returns 1 when every event is a resolved or note line, so a
+# caller reading a bounded window knows to widen it.
 _fm_status_declared_wait_scan() {  # <resolve-verb> <legacy-captain-re>
-  local resolve=$1 legacy_re=$2 line verb key keys=$'\n' i=0
+  local resolve=$1 legacy_re=$2 line verb key keys=$'\n' i=0 resolved=0
   local -a lines=()
   while IFS= read -r line || [ -n "$line" ]; do
     lines[i]=$line
@@ -399,13 +429,19 @@ _fm_status_declared_wait_scan() {  # <resolve-verb> <legacy-captain-re>
     _fm_status_line_is_event "$line" "$legacy_re" || continue
     status_line_verb "$line" verb
     case "$verb" in
+      note) continue ;;
       "$resolve") ;;
       "${FM_CLASSIFY_PAUSED_VERB:-$FM_CLASSIFY_PAUSED_VERB_DEFAULT}") ;;
+      "${FM_CLASSIFY_CAPTAIN_HELD_VERB:-$FM_CLASSIFY_CAPTAIN_HELD_VERB_DEFAULT}")
+        [ "$resolved" -eq 0 ] && printf '%s\n' "$line"
+        return 0
+        ;;
       *) return 0 ;;
     esac
     key=$(_fm_decision_key "$line" "$_FM_CLASSIFY_KEYLESS_PHASE") || key=
     if [ "$verb" = "$resolve" ]; then
       keys="$keys$key"$'\n'
+      resolved=1
       continue
     fi
     case "$keys" in *$'\n'"$key"$'\n'*) return 0 ;; esac
@@ -415,20 +451,118 @@ _fm_status_declared_wait_scan() {  # <resolve-verb> <legacy-captain-re>
   return 1
 }
 
+# The logical episode of the declared wait status_declared_wait_line reads: the
+# uninterrupted run of that same declaration, read back from its latest copy
+# through `note:` lines, continuation prose, identical re-declarations, and
+# resolved lines for other phase keys. Identity compares the line with its
+# well-formed `[at=...]` stamp removed, so a stamped re-declaration of the same
+# wait keeps the episode. Any other event, a resolved line for the wait's own
+# phase key, or a changed reason, key, or deadline ends the run, so leaving the
+# wait and declaring the identical text again - even between two supervisor
+# polls - starts a new episode at the new line.
+# Prints "<start-offset>\t<at-epoch>\t<declaration>": the absolute byte offset
+# of the episode's first line, that line's stamp epoch or empty when it carries
+# no well-formed stamp, and the declaration exactly as status_declared_wait_line
+# returns it. Returns 1 when no declared wait stands or the log is unreadable.
+# Reads a bounded tail window and widens to the whole file only when the run
+# reaches the window's first whole line. The caller owns the file identity,
+# incarnation, and age fallback that make the offset a durable identity.
+status_declared_wait_episode() {  # <status-file>
+  local f=$1 decl semantic size start line verb key rkey untimed legacy_re n pos i first d begin stop at
+  local LC_ALL=C
+  local -a lines offsets
+  decl=$(status_declared_wait_line "$f")
+  status_is_paused_or_captain_held "$decl" || return 1
+  _fm_status_untimed "$decl" semantic
+  key=$(_fm_decision_key "$decl" "$_FM_CLASSIFY_KEYLESS_PHASE") || key=
+  legacy_re="^[[:space:]]*(${FM_CAPTAIN_RE:-$FM_CLASSIFY_CAPTAIN_RE_DEFAULT})"
+  size=$(_fm_status_file_size "$f") || return 1
+  size=${size//[[:space:]]/}
+  case "$size" in ''|*[!0-9]*) return 1 ;; esac
+  start=0
+  [ "$size" -le 16384 ] || start=$((size - 16384))
+  while :; do
+    lines=(); offsets=(); n=0; pos=$start
+    while IFS= read -r line || [ -n "$line" ]; do
+      lines[n]=$line
+      offsets[n]=$pos
+      pos=$((pos + ${#line} + 1))
+      n=$((n + 1))
+    done < <(_fm_status_read_span "$f" "$start" "$((size - start))")
+    # A window that starts mid-file begins with a partial line.
+    first=0
+    [ "$start" -eq 0 ] || first=1
+    d=-1
+    i=$((n - 1))
+    while [ "$i" -ge "$first" ]; do
+      line=${lines[i]}
+      _fm_status_untimed "$line" untimed
+      if [ "$untimed" = "$semantic" ] && _fm_status_line_is_event "$line" "$legacy_re"; then
+        d=$i
+        break
+      fi
+      i=$((i - 1))
+    done
+    if [ "$d" -lt 0 ]; then
+      [ "$start" -gt 0 ] || return 1
+      start=0
+      continue
+    fi
+    begin=$d
+    stop=0
+    i=$((d - 1))
+    while [ "$i" -ge "$first" ]; do
+      line=${lines[i]}
+      i=$((i - 1))
+      case "$line" in *[![:space:]]*) ;; *) continue ;; esac
+      _fm_status_line_is_event "$line" "$legacy_re" || continue
+      status_line_verb "$line" verb
+      case "$verb" in
+        note) continue ;;
+        "${FM_CLASSIFY_RESOLVE_VERB:-$FM_CLASSIFY_RESOLVE_VERB_DEFAULT}")
+          rkey=$(_fm_decision_key "$line" "$_FM_CLASSIFY_KEYLESS_PHASE") || rkey=
+          [ "$rkey" != "$key" ] || { stop=1; break; }
+          continue
+          ;;
+      esac
+      _fm_status_untimed "$line" untimed
+      if [ "$untimed" = "$semantic" ]; then
+        begin=$((i + 1))
+        continue
+      fi
+      stop=1
+      break
+    done
+    if [ "$stop" -eq 0 ] && [ "$start" -gt 0 ]; then
+      start=0
+      continue
+    fi
+    break
+  done
+  _fm_status_at_epoch "${lines[begin]}" at || at=
+  printf '%s\t%s\t%s\n' "${offsets[begin]}" "$at" "$decl"
+}
+
 # A condition-aware declared wait: a `paused:` line may say WHEN it expects to
 # clear with `until <YYYY-MM-DDTHH:MM[:SS]Z>` anywhere in its text (UTC only, so
 # no local-zone guess is ever recorded). Prints that time as epoch seconds so a
 # supervisor rechecks the wait when the worker said it would clear instead of on
 # the flat cadence; returns 1 when the line is not a pause or declares no time,
 # or the time is malformed, so a bad token falls back to the cadence rather than
-# silencing the wait.
+# silencing the wait. Read the whole non-whitespace token, allowing only trailing
+# sentence punctuation; a timestamp prefix followed by junk or an offset is not
+# a UTC deadline.
 status_paused_until() {  # <status-line> -> epoch on stdout
-  local line=$1 token
+  local line=$1 token until_re='.*[[:space:]][Uu][Nn][Tt][Ii][Ll][[:space:]]+([^[:space:]]+)'
   status_is_paused "$line" || return 1
-  token=$(printf '%s' "$line" \
-    | sed -n 's/.*[[:space:]][Uu][Nn][Tt][Ii][Ll][[:space:]]\{1,\}\([0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]Z\).*/\1/p; s/.*[[:space:]][Uu][Nn][Tt][Ii][Ll][[:space:]]\{1,\}\([0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]Z\).*/\1/p' \
-    | head -1)
-  [ -n "$token" ] || return 1
+  [[ "$line" =~ $until_re ]] || return 1
+  token=${BASH_REMATCH[1]}
+  while :; do
+    case "$token" in
+      *'.'|*','|*';'|*'!'|*'?'|*')'|*']'|*'}') token=${token%?} ;;
+      *) break ;;
+    esac
+  done
   fm_utc_iso_to_epoch "$token"
 }
 
@@ -550,6 +684,12 @@ _fm_status_unstamped() {  # <status-line> <out-var> -> line with its stamp remov
 # all other bytes, including correlation metadata, still identify the event.
 # Both sides normalize through _fm_status_untimed, so a stamped retry of an
 # already-recorded event can never read as a new one.
+# A match stays recorded for the life of the file, whatever follows it: a
+# later resolved line for the same key does not make the line new again, so a
+# caller that re-reads an unchanged source after an operator resolve (the
+# continuity break in bin/fm-procevent-remote-reply.sh, which does not advance
+# its cursor) appends nothing. A caller that owns evidence of a new episode
+# decides that itself, as bin/fm-pending-reply-lib.sh's escalation does.
 status_event_recorded() {  # <status-file> <new-status-line>
   local wanted line untimed
   [ -f "$1" ] || return 1
@@ -695,7 +835,7 @@ _fm_key_before_colon() {  # <status-line>
 # the line has no colon or no complete token there; slug charset validity is
 # the caller's check via _fm_decision_slug_ok, exactly as for the before-colon
 # position.
-_fm_key_at_note_head() {  # <status-line> -> raw slug
+_fm_key_at_note_head() {  # <status-line> [<out-var>] -> raw slug
   local rest
   case "$1" in
     *:*) rest=${1#*:} ;;
@@ -703,7 +843,10 @@ _fm_key_at_note_head() {  # <status-line> -> raw slug
   esac
   rest=${rest#"${rest%%[![:space:]]*}"}
   case "$rest" in
-    \[key=*\]*) rest=${rest#\[key=}; printf '%s' "${rest%%\]*}" ;;
+    \[key=*\]*)
+      rest=${rest#\[key=}
+      if [ "$#" -gt 1 ]; then printf -v "$2" '%s' "${rest%%\]*}"; else printf '%s' "${rest%%\]*}"; fi
+      ;;
     *) return 1 ;;
   esac
 }
@@ -718,24 +861,27 @@ _fm_decision_slug_ok() {  # <slug>
 # worker-written stamp cannot move it: a readable time like [at=10:30] carries
 # colons that would otherwise end the head mid-tag and hand the caller a note
 # and a key sliced out of the timestamp. The line's own bytes are never altered.
-status_line_note() {  # <status-line> -> text after the first colon, trimmed
+status_line_note() {  # <status-line> [<out-var>] -> text after the first colon, trimmed
   local n k unstamped
   _fm_status_unstamped "$1" unstamped
   case "$unstamped" in
     *:*) n=${unstamped#*:}; n=${n#"${n%%[![:space:]]*}"} ;;
-    *) printf '%s' "$unstamped"; return 0 ;;
+    *)
+      if [ "$#" -gt 1 ]; then printf -v "$2" '%s' "$unstamped"; else printf '%s' "$unstamped"; fi
+      return 0
+      ;;
   esac
   # A note-head token that states this line's key (no before-colon token, valid
   # slug) is key metadata, not note text: strip it so both stated-key positions
   # yield the same note.
-  if ! _fm_key_before_colon "$unstamped" && k=$(_fm_key_at_note_head "$unstamped") \
+  if ! _fm_key_before_colon "$unstamped" && _fm_key_at_note_head "$unstamped" k \
     && _fm_decision_slug_ok "$k"; then
     n=${n#"[key=$k]"}
     n=${n#"${n%%[![:space:]]*}"}
   fi
-  printf '%s' "$n"
+  if [ "$#" -gt 1 ]; then printf -v "$2" '%s' "$n"; else printf '%s' "$n"; fi
 }
-_fm_decision_key() {  # <status-line> [<keyless>] -> key slug, or <keyless> (default "default") when no token
+_fm_decision_key() {  # <status-line> [<keyless>] [<out-var>] -> key slug, or <keyless> (default "default") when no token
   local k unstamped
   _fm_status_unstamped "$1" unstamped
   if _fm_key_before_colon "$unstamped"; then
@@ -743,14 +889,17 @@ _fm_decision_key() {  # <status-line> [<keyless>] -> key slug, or <keyless> (def
     k=${k#*\[key=}
     k=${k%%\]*}
   else
-    k=$(_fm_key_at_note_head "$unstamped") || { printf '%s' "${2-default}"; return 0; }
+    _fm_key_at_note_head "$unstamped" k || {
+      if [ "$#" -gt 2 ]; then printf -v "$3" '%s' "${2-default}"; else printf '%s' "${2-default}"; fi
+      return 0
+    }
   fi
   _fm_decision_slug_ok "$k" || return 1
-  printf '%s' "$k"
+  if [ "$#" -gt 2 ]; then printf -v "$3" '%s' "$k"; else printf '%s' "$k"; fi
 }
 # Drop the record for <key> from a newline-terminated "<key>\t<verb>\t<note>" set.
 # Portable (no associative arrays) so the fold runs on bash 3.2 as well as 4+.
-_fm_decision_drop() {  # <open-set> <key>
+_fm_decision_drop() {  # <open-set> <key> [<out-var>]
   local set=$1 key=$2 line out=''
   while IFS= read -r line; do
     [ -n "$line" ] || continue
@@ -761,15 +910,19 @@ _fm_decision_drop() {  # <open-set> <key>
   done <<EOF
 $set
 EOF
-  printf '%s' "$out"
+  if [ "$#" -gt 2 ]; then
+    # Match command substitution's trailing-newline removal for in-process folds.
+    printf -v "$3" '%s' "${out%$'\n'}"
+  else
+    printf '%s' "$out"
+  fi
 }
 # Fold ONE status line into an existing "<key>\t<verb>\t<note>\n"-per-line open
 # set, applying the same needs-decision/blocked-opens, resolved/captain-held-closes
 # rule status_open_decisions documents above. Pure text transform, no file I/O.
-# This is the ONE place the per-line open/resolved rule is written; both the
-# whole-file fold (status_open_decisions) and the incremental cursor-backed fold
-# (status_open_decisions_incremental) below call this instead of re-deriving the
-# rule, so the two consumption strategies can never drift apart on semantics.
+# This is the ONE place the per-line open/resolved rule is written; the
+# whole-file and both cursor-backed readers below use it instead of re-deriving
+# the rule, so the consumption strategies cannot drift apart on semantics.
 # Reserved decision-key namespaces, and the rule that makes them mean something.
 #
 # A key like `pending-reply-<id>` names a decision that one library raises and is
@@ -826,8 +979,22 @@ _fm_status_kind() {
   case "$kind" in ship|scout|secondmate) printf '%s' "$kind" ;; *) printf unknown ;; esac
 }
 
-_fm_decision_fold_line() {  # <open-set> <status-line> <resolve-verb> <held-verb> <kind>
+# Cheap admission shared by the whole-file and incremental readers. Routine
+# progress cannot alter the open set, so it need not enter the per-line fold.
+# An admitted line still passes every declaration/key check in that fold.
+_fm_decision_line_candidate() {  # <status-line> <resolve-verb> <held-verb>
+  local verb
+  status_line_verb "$1" verb
+  case "$verb" in
+    needs-decision|blocked|done|failed|"$2"|"$3") return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# In-process result: _FM_DECISION_LINE_OPEN, preserving the stdout wrapper below.
+_fm_decision_fold_line_to() {  # <open-set> <status-line> <resolve-verb> <held-verb> <kind>
   local open=$1 line=$2 resolve=$3 held=$4 kind=$5 verb key note unstamped
+  _FM_DECISION_LINE_OPEN=$open
   # Both colon tests below ask where the head ends, the same question the note
   # and key readers ask, so they read the same unstamped copy those readers do.
   # A worker-written time tag must never decide whether a decision opens or
@@ -845,32 +1012,38 @@ _fm_decision_fold_line() {  # <open-set> <status-line> <resolve-verb> <held-verb
   # both folds on a status log of ordinary width. Same verdict, bounded cost.
   case "$unstamped" in
     *:*|*\[key=*\]*) ;;
-    *) printf '%s' "$open"; return 0 ;;
+    *) return 0 ;;
   esac
   status_line_verb "$line" verb
   case "$unstamped" in
-    *:*) case "$verb:$kind" in done:ship|done:scout|failed:ship|failed:scout) return 0 ;; esac ;;
+    *:*) case "$verb:$kind" in done:ship|done:scout|failed:ship|failed:scout) _FM_DECISION_LINE_OPEN=''; return 0 ;; esac ;;
   esac
   case "$verb" in
     needs-decision|blocked|"$resolve"|"$held") ;;
-    *) printf '%s' "$open"; return 0 ;;
+    *) return 0 ;;
   esac
-  key=$(_fm_decision_key "$line") || { printf '%s' "$open"; return 0; }
-  _fm_decision_key_transition_allowed "$key" "$(status_line_note "$line")" \
-    || { printf '%s' "$open"; return 0; }
+  _fm_decision_key "$line" default key || return 0
+  status_line_note "$line" note
+  _fm_decision_key_transition_allowed "$key" "$note" \
+    || return 0
   case "$verb" in
     needs-decision|blocked)
-      note=$(status_line_note "$line")
-      open=$(_fm_decision_drop "$open" "$key")
+      _fm_decision_drop "$open" "$key" open
       [ -n "$open" ] && open="${open}"$'\n'
       open="${open}${key}"$'\t'"${verb}"$'\t'"${note}"$'\n'
       ;;
     "$resolve"|"$held")
-      open=$(_fm_decision_drop "$open" "$key")
+      _fm_decision_drop "$open" "$key" open
       [ -n "$open" ] && open="${open}"$'\n'
       ;;
   esac
-  printf '%s' "$open"
+  _FM_DECISION_LINE_OPEN=$open
+}
+
+# Stdout compatibility for cursor consumers; rules remain in the in-process fold.
+_fm_decision_fold_line() {  # <open-set> <status-line> <resolve-verb> <held-verb> <kind>
+  _fm_decision_fold_line_to "$@"
+  printf '%s' "$_FM_DECISION_LINE_OPEN"
 }
 
 # Fold the WHOLE status stream into the set of decisions still open. Prints one
@@ -888,20 +1061,29 @@ _fm_decision_fold_line() {  # <open-set> <status-line> <resolve-verb> <held-verb
 # subprocess read, which exists for that function's much narrower payload-driven
 # path resolution rather than this directory-local glob.
 status_open_decisions() {  # <status-file> [<kind>]
-  local f=$1 kind=${2:-} line resolve held open='' verb
+  local f=$1 kind=${2:-} resolve held
   [ -f "$f" ] && [ -r "$f" ] && [ ! -L "$f" ] || return 0
   kind=$(_fm_status_kind "$f" "$kind")
   resolve=${FM_CLASSIFY_RESOLVE_VERB:-$FM_CLASSIFY_RESOLVE_VERB_DEFAULT}
   held=${FM_CLASSIFY_CAPTAIN_HELD_VERB:-$FM_CLASSIFY_CAPTAIN_HELD_VERB_DEFAULT}
+  _fm_decision_fold_file "$f" '' "$resolve" "$held" "$kind"
+  printf '%s' "$_FM_DECISION_FOLD_OPEN"
+}
+
+# Fold every line of <file>, starting from <seed-open>, into
+# _FM_DECISION_FOLD_OPEN, admitting lines through _fm_decision_line_candidate.
+# A global result keeps the set's exact bytes, which command substitution would
+# trim.
+_fm_decision_fold_file() {  # <file> <seed-open> <resolve-verb> <held-verb> <kind>
+  local line open=$2
   while IFS= read -r line || [ -n "$line" ]; do
-    status_line_verb "$line" verb
-    case "$verb" in
-      needs-decision|blocked|done|failed|"$resolve"|"$held")
-        open=$(_fm_decision_fold_line "$open" "$line" "$resolve" "$held" "$kind")
-        ;;
-    esac
-  done < "$f"
-  printf '%s' "$open"
+    if _fm_decision_line_candidate "$line" "$3" "$4"; then
+      _fm_decision_fold_line_to "$open" "$line" "$3" "$4" "$5"
+      open=$_FM_DECISION_LINE_OPEN
+      while [[ $open == *$'\n' ]]; do open=${open%$'\n'}; done
+    fi
+  done < "$1"
+  _FM_DECISION_FOLD_OPEN=$open
 }
 
 # Resolve the log's current declaration at one boundary for crew-state consumers.
@@ -1117,8 +1299,10 @@ EOF
 # persisted per-file byte cursor) and folds just those new lines into a
 # persisted running open-set, via the exact same _fm_decision_fold_line rule
 # status_open_decisions uses - so the two strategies can never disagree on what
-# is open. Cost is bounded by NEW appends since the last drain, not by the
-# status file's total lifetime size.
+# is open. Only newline-terminated records advance the persisted cursor; an
+# unterminated tail is folded into the returned view but reread on the next call
+# so a reader between two writes cannot lose the rest of a decision or resolution.
+# Cost is bounded by new appends and that pending tail, not by total log size.
 #
 # Correctness invariant (unchanged from the whole-file fold): cursor advancement,
 # age, and being buried under later appends never drop an open decision - the
@@ -1137,6 +1321,7 @@ EOF
 # ACTUALLY used in this repo: every one is created once (`>`) and only ever
 # appended to (`>>`) - never replaced, renamed, or rewritten in place. So the
 # ways a cursor can go stale are a fold-version mismatch, a shrink (truncated),
+# a captured endpoint behind an already-advanced cache,
 # or the file at this path being a different file than before
 # (replaced/rotated/recreated), which a changed device+inode makes an O(1) check
 # via a single `stat` call - no content hashing, no re-reading the consumed
@@ -1186,27 +1371,30 @@ _fm_open_decisions_cursor_path() {  # <status-file>
 # malformed worker stamp whose colons used to pose as the head/note separator
 # no longer opens or closes anything; cursors folded under that reading are
 # discarded.
+# 10: cursors stop at complete lines, with an unterminated tail folded only into
+# the returned view; older cursors may have consumed a partial transition.
 # Version 4 was already spent on the bracketed-tag parser change above, and a
 # cursor persisted under that reading predates this one, so it must still be
 # discarded and rebuilt from byte 0 under the new reading.
-FM_OPEN_DECISIONS_FOLD_VERSION=9
+FM_OPEN_DECISIONS_FOLD_VERSION=10
 
 # Portable device:inode identity for the rotation/recreation check below.
 _fm_open_decisions_file_ident() {  # <file> -> strongest available identity
-  local f=$1 epoch birth ident
+  local f=$1 epoch birth ident record
   if [ -n "${FM_STATUS_IDENTITY_READER:-}" ]; then
     "$FM_STATUS_IDENTITY_READER" "$f"
     return
   fi
+  # Capture device, inode, and birth time together: this runs for every cursor
+  # read and three independent stats both cost forks and can straddle rotation.
   if [ "$_FM_CLASSIFY_UNAME_S" = Darwin ]; then
-    ident=$(LC_ALL=C /usr/bin/stat -f '%d:%i' "$f" 2>/dev/null) || return 1
-    epoch=$(LC_ALL=C /usr/bin/stat -f '%B' "$f" 2>/dev/null) || epoch=0
-    if [ "$epoch" != 0 ]; then birth=$(LC_ALL=C /usr/bin/stat -f '%FB' "$f" 2>/dev/null) || birth=''; else birth=''; fi
+    record=$(LC_ALL=C /usr/bin/stat -f $'%d:%i\t%B\t%FB' "$f" 2>/dev/null) || return 1
   else
-    ident=$(LC_ALL=C stat -c '%d:%i' "$f" 2>/dev/null) || return 1
-    epoch=$(LC_ALL=C stat -c '%W' "$f" 2>/dev/null) || epoch=0
-    if [ "$epoch" != 0 ]; then birth=$(LC_ALL=C stat -c '%w' "$f" 2>/dev/null) || birth=''; else birth=''; fi
+    record=$(LC_ALL=C stat -c $'%d:%i\t%W\t%w' "$f" 2>/dev/null) || return 1
   fi
+  case "$record" in *$'\n'*) return 1 ;; esac
+  IFS=$'\t' read -r ident epoch birth <<< "$record"
+  [ "$epoch" != 0 ] || birth=''
   case "$ident$birth" in *$'\t'*|*$'\n'*|'') return 1 ;; esac
   if [ -n "$birth" ]; then printf 'strong:%s:%s' "$ident" "$birth"; else printf 'weak:%s' "$ident"; fi
 }
@@ -1264,7 +1452,8 @@ _fm_status_read_span() {  # <status-file> <start-offset> <byte-length>
 status_open_decisions_incremental() {  # <status-file> [<captured-end-offset>]
   local f=$1 captured_end=${2:-} cf offset ident open='' trusted_open='' cursor_data first rest offset_line ident_line
   local version='' size actual_size cur_ident resolve held chunk_file chunk_size line cursor_dirty=0
-  local target_cursor kind fold_version
+  local target_cursor kind fold_version partial_line=''
+  local LC_ALL=C
   [ -f "$f" ] && [ -r "$f" ] && [ ! -L "$f" ] || return 0
   kind=$(_fm_status_kind "$f")
   fold_version="$FM_OPEN_DECISIONS_FOLD_VERSION:$kind"
@@ -1331,7 +1520,7 @@ status_open_decisions_incremental() {  # <status-file> [<captured-end-offset>]
     size=$actual_size
   fi
 
-  if [ -z "$version" ] || [ -z "$ident" ] || [ "$ident" != "$cur_ident" ] || [ "$offset" -gt "$actual_size" ]; then
+  if [ -z "$version" ] || [ -z "$ident" ] || [ "$ident" != "$cur_ident" ] || [ "$offset" -gt "$size" ]; then
     offset=0
     open=''
     trusted_open=''
@@ -1356,11 +1545,14 @@ status_open_decisions_incremental() {  # <status-file> [<captured-end-offset>]
       && printf '%s\t%s\n' "$f" "$chunk_size" >> "$FM_OPEN_DECISIONS_READ_PROBE"
     resolve=${FM_CLASSIFY_RESOLVE_VERB:-$FM_CLASSIFY_RESOLVE_VERB_DEFAULT}
     held=${FM_CLASSIFY_CAPTAIN_HELD_VERB:-$FM_CLASSIFY_CAPTAIN_HELD_VERB_DEFAULT}
-    while IFS= read -r line || [ -n "$line" ]; do
-      open=$(_fm_decision_fold_line "$open" "$line" "$resolve" "$held" "$kind")
+    while IFS= read -r line; do
+      if _fm_decision_line_candidate "$line" "$resolve" "$held"; then
+        open=$(_fm_decision_fold_line "$open" "$line" "$resolve" "$held" "$kind")
+      fi
+      offset=$((offset + ${#line} + 1))
     done < "$chunk_file"
+    partial_line=$line
     rm -f "$chunk_file"
-    offset=$size
     cursor_dirty=1
   fi
   if [ "$cursor_dirty" -eq 1 ]; then
@@ -1372,6 +1564,9 @@ status_open_decisions_incremental() {  # <status-file> [<captured-end-offset>]
       if [ -n "$open" ]; then printf '%s' "$open"; fi
     } > "$target_cursor" || return 1
     mv -f "$target_cursor" "$cf" || return 1
+  fi
+  if [ -n "$partial_line" ]; then
+    open=$(_fm_decision_fold_line "$open" "$partial_line" "$resolve" "$held" "$kind")
   fi
   printf '%s' "$open"
 }
@@ -1398,6 +1593,115 @@ $open
 EOF
   done
   return 0
+}
+
+# --- snapshot (digest-checked) open-decisions fold --------------------------
+#
+# status_open_decisions_snapshot is the fleet snapshot's bounded-cost sibling of
+# status_open_decisions. The snapshot folds a private capture of each status
+# log, a fresh file every run, so the wake path's device+inode cursor cannot
+# apply, and that cursor carries the wake path's own progress, so the snapshot
+# never reads or writes it. Its own cursor sits beside the real status log, in
+# a separate state/.<task>.snapshot-open-decisions-cursor namespace, and records
+# `version`, `offset`, `digest` (SHA-256 of the capture's first <offset> bytes),
+# then the folded open set. A cursor is reused only when its version matches
+# and the new capture's first <offset> bytes hash to its digest, so a truncated,
+# rewritten, replaced, or edited log refolds from byte 0. The version carries
+# FM_OPEN_DECISIONS_FOLD_VERSION, the task kind, and every fold override in
+# force. The cursor stops at the capture's last newline, so a partial final
+# line is folded into this result and folded again once it is complete.
+# Every failure to read, digest, or split the capture returns
+# status_open_decisions' own answer, and a cursor write failure only costs the
+# next run a full fold, so the result is always status_open_decisions' exact
+# output for the same capture and kind.
+_fm_snapshot_open_decisions_cursor_path() {  # <status-file>
+  local f=$1 dir base
+  dir=$(dirname "$f")
+  base=$(basename "$f")
+  printf '%s/.%s.snapshot-open-decisions-cursor' "$dir" "${base%.status}"
+}
+
+# Split <file> at its last newline: write [start, boundary) to <chunk-out> and
+# [boundary, end) to <tail-out>, and print "<start>\t<boundary>\t<digest>",
+# where start is <offset> when the first <offset> bytes hash to <digest-in>
+# and 0 otherwise, and digest hashes the first <boundary> bytes.
+_fm_status_split_at_digest() {  # <file> <offset> <digest-in> <chunk-out> <tail-out>
+  perl -MDigest::SHA=sha256_hex -e '
+    my ($path, $offset, $want, $chunk, $tail) = @ARGV;
+    open(my $in, "<:raw", $path) or exit 1;
+    my $data = do { local $/; <$in> };
+    defined($data) or $data = "";
+    close($in) or exit 1;
+    my $end = rindex($data, "\n") + 1;
+    my $start = 0;
+    $start = $offset if $want ne "" && $offset =~ /\A[0-9]+\z/ && $offset <= $end
+      && sha256_hex(substr($data, 0, $offset)) eq $want;
+    open(my $c, ">:raw", $chunk) or exit 1;
+    print {$c} substr($data, $start, $end - $start) or exit 1;
+    close($c) or exit 1;
+    open(my $t, ">:raw", $tail) or exit 1;
+    print {$t} substr($data, $end) or exit 1;
+    close($t) or exit 1;
+    print "$start\t$end\t", sha256_hex(substr($data, 0, $end)), "\n" or exit 1;
+  ' "$@"
+}
+
+status_open_decisions_snapshot() {  # <captured-status-file> <kind> <status-file>
+  local f=$1 kind cf resolve held version cursor_data rest offset='' digest='' open=''
+  local split start boundary new_digest chunk="$1.fold-chunk" tail="$1.fold-tail"
+  [ -f "$f" ] && [ -r "$f" ] && [ ! -L "$f" ] || return 0
+  kind=$(_fm_status_kind "$f" "${2:-}")
+  resolve=${FM_CLASSIFY_RESOLVE_VERB:-$FM_CLASSIFY_RESOLVE_VERB_DEFAULT}
+  held=${FM_CLASSIFY_CAPTAIN_HELD_VERB:-$FM_CLASSIFY_CAPTAIN_HELD_VERB_DEFAULT}
+  version="$FM_OPEN_DECISIONS_FOLD_VERSION:$kind:$resolve:$held:${FM_CLASSIFY_RESERVED_KEY_PREFIXES:-$FM_CLASSIFY_RESERVED_KEY_PREFIXES_DEFAULT}"
+  cf=$(_fm_snapshot_open_decisions_cursor_path "$3")
+  if [ -f "$cf" ] && [ -r "$cf" ] && [ ! -L "$cf" ] \
+    && cursor_data=$(LC_ALL=C command cat "$cf" 2>/dev/null && printf x); then
+    cursor_data=${cursor_data%x}
+    case "$cursor_data" in
+      "version=$version"$'\n'offset=*$'\n'digest=*$'\n'*)
+        rest=${cursor_data#*$'\n'}
+        offset=${rest%%$'\n'*}
+        offset=${offset#offset=}
+        rest=${rest#*$'\n'}
+        digest=${rest%%$'\n'*}
+        digest=${digest#digest=}
+        open=${rest#*$'\n'}
+        ;;
+    esac
+  fi
+  case "$offset" in ''|*[!0-9]*) offset=0; digest=''; open='' ;; esac
+  if ! split=$(_fm_status_split_at_digest "$f" "$offset" "$digest" "$chunk" "$tail" 2>/dev/null); then
+    rm -f -- "$chunk" "$tail"
+    status_open_decisions "$f" "$kind"
+    return 0
+  fi
+  IFS=$'\t' read -r start boundary new_digest <<EOF
+$split
+EOF
+  case "$start:$boundary:$new_digest" in
+    *[!0-9a-f:]*|:*|*::*|*:)
+      rm -f -- "$chunk" "$tail"
+      status_open_decisions "$f" "$kind"
+      return 0
+      ;;
+  esac
+  [ "$start" -gt 0 ] && [ "$start" = "$offset" ] || open=''
+  _fm_decision_fold_file "$chunk" "$open" "$resolve" "$held" "$kind"
+  open=$_FM_DECISION_FOLD_OPEN
+  if [ -e "$3" ] && { [ "$start" != "$offset" ] || [ "$boundary" != "$offset" ]; }; then
+    if ! {
+      printf 'version=%s\n' "$version"
+      printf 'offset=%s\n' "$boundary"
+      printf 'digest=%s\n' "$new_digest"
+      printf '%s' "$open"
+    } > "$cf.tmp.$$" 2>/dev/null || ! mv -f -- "$cf.tmp.$$" "$cf" 2>/dev/null; then
+      rm -f -- "$cf.tmp.$$" 2>/dev/null
+    fi
+  fi
+  _fm_decision_fold_file "$tail" "$open" "$resolve" "$held" "$kind"
+  rm -f -- "$chunk" "$tail"
+  printf '%s' "$_FM_DECISION_FOLD_OPEN"
 }
 
 status_presentation_snapshot() {  # <state>
@@ -1500,7 +1804,7 @@ status_presentation_cursor_offset() {  # <status-file>
     [ -f "$manifest" ] && [ -r "$manifest" ] && [ ! -L "$manifest" ] || return 1
     data=$(LC_ALL=C command cat "$manifest" 2>/dev/null) || return 1
     offset=
-    while IFS=$(printf '\t') read -r row_task ident legacy backstop extra; do
+    while IFS=$'\t' read -r row_task ident legacy backstop extra; do
       [ -n "$row_task" ] || continue
       [ -z "$extra" ] || return 1
       case "$legacy:$backstop" in *[!0-9:]*) return 1 ;; esac
@@ -1535,6 +1839,15 @@ EOF
   printf '%s' "$offset"
 }
 
+fm_branch_outcome_index_ready_ok() {
+  local marker seq
+  [ -f "$1" ] && [ -r "$1" ] && [ ! -L "$1" ] || return 1
+  marker=$(LC_ALL=C command cat "$1" 2>/dev/null) || return 1
+  case "$marker" in visible-only-v1:*) seq=${marker#visible-only-v1:} ;; *) return 1 ;; esac
+  case "$seq" in ''|*[!0-9]*|0[0-9]*) return 1 ;; esac
+  [ "${#seq}" -le 16 ] && [ "$seq" -le 9007199254740991 ]
+}
+
 status_outcome_backstop_cursor_offset() {  # <status-file>
   local f=$1 state task manifest data row_task ident presented row_backstop backstop extra current size
   [ -f "$f" ] && [ -r "$f" ] && [ ! -L "$f" ] || return 1
@@ -1545,7 +1858,7 @@ status_outcome_backstop_cursor_offset() {  # <status-file>
   [ -f "$manifest" ] && [ -r "$manifest" ] && [ ! -L "$manifest" ] || return 1
   data=$(LC_ALL=C command cat "$manifest" 2>/dev/null) || return 1
   backstop=0
-  while IFS=$(printf '\t') read -r row_task ident presented row_backstop extra; do
+  while IFS=$'\t' read -r row_task ident presented row_backstop extra; do
     [ -n "$row_task" ] || continue
     [ -z "$extra" ] || return 1
     case "$presented:$row_backstop" in *[!0-9:]*) return 1 ;; esac
@@ -1568,15 +1881,21 @@ EOF
 }
 
 status_signal_seen_marker_path() {  # <state> <task-id>
-  printf '%s/.seen-%s' "$1" "$(printf '%s.status' "$2" | tr '.' '_')"
+  local task=${2//./_}
+  printf '%s/.seen-%s_status' "$1" "$task"
 }
 
 status_heartbeat_seen_marker_path() {  # <state> <task-id>
-  printf '%s/.hb-surfaced-%s' "$1" "$(printf '%s' "$2" | tr ':/.' '___')"
+  local task=${2//[:\/.]/_}
+  # Preserve the trailing-newline trimming of the former command substitution.
+  task=${task%"${task##*[!$'\n']}"}
+  printf '%s/.hb-surfaced-%s' "$1" "$task"
 }
 
 status_daemon_seen_marker_path() {  # <state> <task-id>
-  printf '%s/.subsuper-seen-status-%s' "$1" "$(printf '%s' "$2" | tr ':/.' '___')"
+  local task=${2//[:\/.]/_}
+  task=${task%"${task##*[!$'\n']}"}
+  printf '%s/.subsuper-seen-status-%s' "$1" "$task"
 }
 
 _status_presentation_signature_valid() {
@@ -1655,23 +1974,38 @@ status_observed_signature() {
     [ -n "$ident" ] || ident=identity-error
   fi
   if [ -r "$f" ]; then access=readable; else access=unreadable; fi
-  encoded=$(printf '%s\0%s\0%s\0%s\0%s\0%s' \
-    "$size" "$ident" "$path_state" "$link_target" "$access" "$kind" \
-    | LC_ALL=C od -An -v -tx1 | tr -d ' \n') || return 1
+  encoded=$(
+    set -o pipefail
+    printf '%s\0%s\0%s\0%s\0%s\0%s' \
+      "$size" "$ident" "$path_state" "$link_target" "$access" "$kind" \
+      | LC_ALL=C od -An -v -tx1 | tr -d ' \n'
+  ) || return 1
   printf 'r1:%s' "$encoded"
 }
 
-status_presentation_marker_reported_matches() {
+_status_presentation_marker_read() {
   local raw
-  raw=$(cat "$1" 2>/dev/null) || return 1
-  status_presentation_marker_parse "$raw" || return 1
+  # Command substitution erases NUL bytes. Reject them before capturing text,
+  # and retain cat's status even when a failed read produced a valid prefix.
+  raw=$(
+    set -o pipefail
+    cat "$1" 2>/dev/null | {
+      local contents=''
+      if IFS= read -r -d '' contents; then exit 1; fi
+      printf '%s' "$contents"
+    }
+  ) || return 1
+  status_presentation_marker_parse "$raw"
+}
+
+status_presentation_marker_reported_matches() {
+  _status_presentation_marker_read "$1" || return 1
   [ "$STATUS_PRESENTATION_REPORTED" = "$2" ]
 }
 
 status_presentation_marker_offset() {
-  local raw classified offset ident current
-  raw=$(cat "$1" 2>/dev/null) || { printf '0'; return 0; }
-  status_presentation_marker_parse "$raw" || { printf '0'; return 0; }
+  local classified offset ident current
+  _status_presentation_marker_read "$1" || { printf '0'; return 0; }
   classified=$STATUS_PRESENTATION_CLASSIFIED
   [ "$classified" != - ] || { printf '0'; return 0; }
   offset=${classified%%@*}; ident=${classified#*@}
@@ -1681,9 +2015,9 @@ status_presentation_marker_offset() {
 }
 
 status_presentation_marker_report() {
-  local marker=$1 reported=$2 raw classified=-
+  local marker=$1 reported=$2 classified=-
   _status_presentation_signature_valid "$reported" || return 1
-  if raw=$(cat "$marker" 2>/dev/null) && status_presentation_marker_parse "$raw"; then
+  if _status_presentation_marker_read "$marker"; then
     classified=$STATUS_PRESENTATION_CLASSIFIED
   fi
   printf 'v2\t%s\t%s' "$reported" "$classified" > "$marker"
@@ -1719,6 +2053,8 @@ status_retire_presentation_task() {  # <state> <task-id>
   if [ ! -e "$state/$task.status" ] && [ ! -L "$state/$task.status" ] \
     && [ ! -e "$state/.$task.open-decisions-cursor" ] \
     && [ ! -L "$state/.$task.open-decisions-cursor" ] \
+    && [ ! -e "$state/.$task.snapshot-open-decisions-cursor" ] \
+    && [ ! -L "$state/.$task.snapshot-open-decisions-cursor" ] \
     && [ ! -e "$home_appends" ] && [ ! -L "$home_appends" ] \
     && [ ! -e "$home_appends_lock" ] && [ ! -L "$home_appends_lock" ] \
     && [ ! -e "$signal_marker" ] && [ ! -L "$signal_marker" ] \
@@ -1729,7 +2065,7 @@ status_retire_presentation_task() {  # <state> <task-id>
     fi
     if [ -f "$manifest" ] && [ -r "$manifest" ] && [ ! -L "$manifest" ] \
       && data=$(LC_ALL=C command cat "$manifest" 2>/dev/null); then
-      while IFS=$(printf '\t') read -r row_task ident offset backstop extra; do
+      while IFS=$'\t' read -r row_task ident offset backstop extra; do
         [ -n "$row_task" ] || continue
         if [ -n "$extra" ] || [ -z "$ident" ]; then rc=1; break; fi
         case "$offset:$backstop" in *[!0-9:]*) rc=1; break ;; esac
@@ -1752,7 +2088,7 @@ EOF
     elif ! : > "$tmp"; then
       rc=1
     else
-      while IFS=$(printf '\t') read -r row_task ident offset backstop extra; do
+      while IFS=$'\t' read -r row_task ident offset backstop extra; do
         [ -n "$row_task" ] || continue
         if [ -n "$extra" ] || [ -z "$ident" ]; then rc=1; break; fi
         case "$offset:$backstop" in *[!0-9:]*) rc=1; break ;; esac
@@ -1770,7 +2106,7 @@ EOF
   fi
   if [ "$rc" -eq 0 ]; then
     rm -f -- "$state/$task.status" "$state/.$task.open-decisions-cursor" \
-      "$home_appends" "$signal_marker" "$heartbeat_marker" "$daemon_marker" || rc=1
+      "$state/.$task.snapshot-open-decisions-cursor" "$home_appends" "$signal_marker" "$heartbeat_marker" "$daemon_marker" || rc=1
     fm_lock_remove_path "$home_appends_lock" 2>/dev/null || true
   fi
   fm_lock_release "$lock" || rc=1
@@ -1779,7 +2115,7 @@ EOF
 
 status_acknowledge_presented_snapshot() {  # <state> <snapshot> [<fully-presented-task-ids>]
   local state=$1 snapshot=$2 fully_presented=${3:-} task endpoint ident f offset lines line safe
-  while IFS=$(printf '\t') read -r task endpoint ident; do
+  while IFS=$'\t' read -r task endpoint ident; do
     [ -n "$task" ] || continue
     safe=false
     case "
@@ -1815,7 +2151,7 @@ status_commit_presentation_snapshot() {  # <state> <snapshot>
   local state=$1 snapshot=$2 task endpoint ident f cur_ident size tmp backstop acknowledged_task acknowledged_endpoint
   tmp="$state/.status-presentation-cursor.tmp.$$"
   : > "$tmp" || return 1
-  while IFS=$(printf '\t') read -r task endpoint ident; do
+  while IFS=$'\t' read -r task endpoint ident; do
     [ -n "$task" ] || continue
     case "$endpoint" in ''|*[!0-9]*) rm -f "$tmp"; return 1 ;; esac
     [ -n "$ident" ] || { rm -f "$tmp"; return 1; }
@@ -1828,7 +2164,7 @@ status_commit_presentation_snapshot() {  # <state> <snapshot>
     [ "$cur_ident" = "$ident" ] && [ "$endpoint" -le "$size" ] \
       || { rm -f "$tmp"; return 1; }
     backstop=$(status_outcome_backstop_cursor_offset "$f") || { rm -f "$tmp"; return 1; }
-    while IFS=$(printf '\t') read -r acknowledged_task acknowledged_endpoint; do
+    while IFS=$'\t' read -r acknowledged_task acknowledged_endpoint; do
       if [ "$acknowledged_task" = "$task" ]; then backstop=$acknowledged_endpoint; fi
     done <<EOF
 ${STATUS_OUTCOME_BACKSTOP_ACKNOWLEDGED:-}
@@ -1845,7 +2181,7 @@ EOF
 
 scan_open_decisions_snapshot() {  # <state> <task-and-endpoint-snapshot>
   local state=$1 snapshot=$2 task endpoint ident f open line
-  while IFS=$(printf '\t') read -r task endpoint ident; do
+  while IFS=$'\t' read -r task endpoint ident; do
     [ -n "$task" ] || continue
     f="$state/$task.status"
     open=$(status_open_decisions_incremental "$f" "$endpoint") || return 1
@@ -2038,7 +2374,7 @@ EOF
 
 scan_unread_surface_snapshot() {  # <state> <task-and-endpoint-snapshot>
   local state=$1 snapshot=$2 task endpoint ident f lines line
-  while IFS=$(printf '\t') read -r task endpoint ident; do
+  while IFS=$'\t' read -r task endpoint ident; do
     [ -n "$task" ] || continue
     f="$state/$task.status"
     lines=$(status_new_lines_since_cursor "$f" "$endpoint") || return 1
@@ -2098,17 +2434,17 @@ _fm_status_open_activities_stream() {
       *[![:space:]]*) ;;
       *) continue ;;
     esac
-    verb=$(status_line_verb "$line")
-    key=$(_fm_decision_key "$line" "$_FM_CLASSIFY_KEYLESS_PHASE") || continue
+    status_line_verb "$line" verb
+    _fm_decision_key "$line" "$_FM_CLASSIFY_KEYLESS_PHASE" key || continue
     case "$verb" in
       working|"$pause")
-        note=$(status_line_note "$line")
-        open=$(_fm_decision_drop "$open" "$key")
+        status_line_note "$line" note
+        _fm_decision_drop "$open" "$key" open
         [ -n "$open" ] && open="${open}"$'\n'
         open="${open}${key}"$'\t'"${verb}"$'\t'"${note}"$'\n'
         ;;
       done|failed|needs-decision|blocked|"$resolve"|"$held")
-        open=$(_fm_decision_drop "$open" "$key")
+        _fm_decision_drop "$open" "$key" open
         [ -n "$open" ] && open="${open}"$'\n'
         ;;
     esac
@@ -2214,7 +2550,7 @@ status_home_appends_ranges() {  # <status-file> -> start<TAB>end lines
     *$'\n'*) rest=${rest#*$'\n'} ;;
     *) return 0 ;;
   esac
-  while IFS=$(printf '\t') read -r start end extra || [ -n "$start" ]; do
+  while IFS=$'\t' read -r start end extra || [ -n "$start" ]; do
     [ -n "$start" ] || continue
     [ -z "$extra" ] || continue
     case "$start:$end" in *[!0-9:]*) continue ;; esac
@@ -2229,7 +2565,7 @@ status_home_appends_covers() {  # <status-file> <start> <end>
   local start=$2 end=$3 range_start range_end
   case "$start:$end" in *[!0-9:]*) return 1 ;; esac
   [ "$end" -ge "$start" ] || return 1
-  while IFS=$(printf '\t') read -r range_start range_end; do
+  while IFS=$'\t' read -r range_start range_end; do
     [ -n "$range_start" ] || continue
     case "$range_start:$range_end" in *[!0-9:]*) continue ;; esac
     [ "$range_start" -le "$start" ] || continue
@@ -2416,7 +2752,7 @@ status_span_first_actionable_record() {  # <status-file> <start-offset> [record-
           origins=$(_fm_status_open_decision_origins "$chunk_file" "$(_fm_status_kind "$f")") || { failed=1; break; }
           folded=1
         fi
-        live_line=$(while IFS=$(printf '\t') read -r _key _line; do
+        live_line=$(while IFS=$'\t' read -r _key _line; do
           [ "$_key" = "$key" ] && { printf '%s' "$_line"; break; }
         done <<EOF
 $origins
@@ -2642,7 +2978,9 @@ crew_worktree_written_since() {  # <id> <state> <anchor-file>
     prune+=( -name "$name" )
   done
   bound=$FM_WORKTREE_WRITE_TIMEOUT
-  case "$bound" in ''|*[!0-9]*|0) bound=10 ;; esac
+  case "$bound" in ''|*[!0-9]*) bound=10 ;; esac
+  # Every all-zero spelling disables an external/Perl timeout.
+  [ -n "${bound//0/}" ] || bound=10
   if [ "${#prune[@]}" -gt 0 ]; then
     hit=$(fm_run_timed "$bound" find "$wt" -xdev -maxdepth "$FM_WORKTREE_WRITE_MAXDEPTH" \
       \( "${prune[@]}" \) -prune -o -type f -newer "$anchor" -print -quit 2>/dev/null || true)
@@ -2729,8 +3067,13 @@ signal_crew_provably_working() {  # <file> ...
 # captain-relevant; 1 otherwise, including the no-status case. A 1 only means
 # "non-terminal"; the always-on watcher then applies crew_is_provably_working,
 # while the away-mode daemon applies its persistence recheck.
+# A standing declared wait read through a later note: is not terminal either, so
+# a note that happens to mention a legacy token such as `merged` cannot take the
+# terminal path the wait would otherwise hold.
 stale_is_terminal() {  # <window> <state>
-  local win=$1 state=$2 last
-  last=$(last_status_line "$state/$(window_to_task "$win" "$state").status")
+  local win=$1 state=$2 statusf last
+  statusf="$state/$(window_to_task "$win" "$state").status"
+  status_is_paused_or_captain_held "$(status_declared_wait_line "$statusf")" && return 1
+  last=$(last_status_line "$statusf")
   [ -n "$last" ] && status_is_captain_relevant "$last"
 }

@@ -17,6 +17,8 @@
 # draft state does not refuse, matching how the head read below is optional.
 # bin/fm-pr-merge.sh records through this script with FM_PR_CHECK_MERGE=1 and
 # skips this refusal, because its own merge-time draft refusal is authoritative.
+# The recorded pr= also frees the task's place in a declared project capacity
+# (bin/fm-project-capacity-lib.sh).
 # Usage: fm-pr-check.sh <task-id> <pr-url>
 set -eu
 
@@ -33,6 +35,8 @@ STATE="${FM_STATE_OVERRIDE:-$FM_HOME/state}"
 . "$SCRIPT_DIR/fm-parent-channel-lib.sh"
 # shellcheck source=bin/fm-dod-lib.sh
 . "$SCRIPT_DIR/fm-dod-lib.sh"
+# shellcheck source=bin/fm-trace-span-lib.sh
+. "$SCRIPT_DIR/fm-trace-span-lib.sh"
 
 if [ "$#" -ne 2 ]; then
   echo "error: invalid PR check request" >&2
@@ -49,6 +53,29 @@ PROVIDER=$FM_PR_PROVIDER
 HOST=$FM_PR_HOST
 PROJECT_PATH=$FM_PR_PATH
 NUMBER=$FM_PR_NUMBER
+
+# A Bosun home registers only a PR backed by its one named captain order.
+# Ordinary firstmate and secondmate homes have no Bosun role marker.
+IS_BOSUN=0
+if [ -f "$FM_HOME/data/bosun-role.json" ] || [ -L "$FM_HOME/data/bosun-role.json" ]; then
+  IS_BOSUN=1
+  if [ "$PROVIDER" != github ] || ! command -v gh >/dev/null 2>&1 || ! command -v jq >/dev/null 2>&1; then
+    echo "error: Bosun PR registration requires the supported GitHub forge read path" >&2
+    exit 1
+  fi
+  BOSUN_PR_JSON=$(gh pr view "$URL" --json headRepositoryOwner,headRepository,baseRepository,baseRefName,headRefName 2>/dev/null) || {
+    echo "error: Bosun PR forge response was unreadable" >&2
+    exit 1
+  }
+  BOSUN_HEAD=$(printf '%s' "$BOSUN_PR_JSON" | jq -er '(.headRepositoryOwner.login // "") + "/" + (.headRepository.name // "")') || exit 1
+  BOSUN_BASE_REPOSITORY=$(printf '%s' "$BOSUN_PR_JSON" | jq -er '.baseRepository.nameWithOwner // ""') || exit 1
+  BOSUN_BRANCH=$(printf '%s' "$BOSUN_PR_JSON" | jq -er '.baseRefName // ""') || exit 1
+  BOSUN_HEAD_BRANCH=$(printf '%s' "$BOSUN_PR_JSON" | jq -er '.headRefName // ""') || exit 1
+  [ "$BOSUN_HEAD" != / ] && [ "$BOSUN_BASE_REPOSITORY" != "" ] && [ "$BOSUN_BRANCH" != "" ] && [ "$BOSUN_HEAD_BRANCH" != "" ] || {
+    echo "error: Bosun PR forge response was incomplete" >&2
+    exit 1
+  }
+fi
 
 # Task-derived paths are constructed only after the canonical ID validation.
 META="$STATE/$ID.meta"
@@ -98,6 +125,26 @@ if [ "$PROVIDER" = gerrit ]; then
   fi
 fi
 
+# Refuse to arm a Forgejo watch with no tea or jq on PATH, for the same reason
+# as the GitLab and Gerrit cases above. tea also addresses a repo by slug only, resolving the
+# host from a named "tea login" rather than from the URL the way gh and glab
+# do, so a poll can only ever succeed when exactly one registered login
+# matches this host; refuse now rather than watch something that can never
+# resolve. This duplicates bin/fm-pr-poll.sh's own login match deliberately:
+# that script is a static, standalone watcher body with no sourced
+# dependency, so it re-derives the same match at every poll instead of
+# trusting a name recorded here.
+if [ "$PROVIDER" = forgejo ]; then
+  if ! command -v tea >/dev/null 2>&1 || ! command -v jq >/dev/null 2>&1; then
+    echo "error: watching a Forgejo pull request requires tea and jq on PATH" >&2
+    exit 1
+  fi
+  fm_pr_forgejo_login "$HOST" >/dev/null || {
+    echo "error: watching a Forgejo pull request at $HOST requires exactly one 'tea login' registered for that host (see 'tea login list')" >&2
+    exit 1
+  }
+fi
+
 # The draft state is read before anything is recorded or armed. Only a positive
 # draft reading refuses, because an unreadable one must not block arming.
 if [ "$PROVIDER" = github ] && [ "${FM_PR_CHECK_MERGE:-}" != 1 ] && command -v gh >/dev/null 2>&1 && command -v jq >/dev/null 2>&1; then
@@ -112,19 +159,22 @@ fi
 
 # pr_head is recorded only when the forge's CLI can supply it. gh exposes the
 # head commit as a selectable field; plain glab exposes it only inside its JSON
-# output, which would need a JSON processor firstmate does not require, so a
-# GitLab task records no pr_head, and neither does a Gerrit task: a Gerrit
-# revision names one patch set, every amend or rebase is a new patch set, and
-# bin/fm-review-diff.sh has no Gerrit path to resolve a current head with, so a
-# recorded revision would silently become the reviewed content. Both consumers
-# already treat it as optional:
+# output, which would need a JSON processor firstmate does not require, and
+# tea's single-PR view ignores field selection entirely, so neither a GitLab
+# nor a Forgejo task records a pr_head here, and neither does a Gerrit task: a
+# Gerrit revision names one patch set, every amend or rebase is a new patch set,
+# and bin/fm-review-diff.sh has no Gerrit path to resolve a current head with,
+# so a recorded revision would silently become the reviewed content. Both
+# consumers already treat it as optional:
 # bin/fm-teardown.sh reads the head from the forge at teardown rather than from
 # metadata and falls back to its provider-agnostic content check, and
 # bin/fm-review-diff.sh fetches a pull request head from the remote when none is
 # recorded and otherwise diffs the local branch, which is the current content.
-# bin/fm-pr-merge.sh reads a GitLab head live at merge time for the same reason,
-# and treats a recorded value that disagrees as stale rather than authoritative.
+# bin/fm-pr-merge.sh reads a GitLab or Forgejo head live at merge time for the
+# same reason, and treats a recorded value that disagrees as stale rather than
+# authoritative.
 WT=$(grep '^worktree=' "$META" | tail -1 | cut -d= -f2- || true)
+PR_BODY=$(fm_pr_read_published_body "$URL") || exit 1
 PR_HEAD=
 if [ "$PROVIDER" = github ] && [ -n "$WT" ] && [ -d "$WT" ] && command -v gh >/dev/null 2>&1; then
   if REMOTE_HEAD=$(cd "$WT" && gh pr view "$URL" --json headRefOid -q .headRefOid 2>/dev/null) \
@@ -133,8 +183,18 @@ if [ "$PROVIDER" = github ] && [ -n "$WT" ] && [ -d "$WT" ] && command -v gh >/d
   fi
 fi
 
+if ! fm_dod_upstream_receipt_check "$WT" "$URL" "$META" "$PR_HEAD"; then
+  echo "error: upstream PR registration requires a current prior-art receipt" >&2
+  exit 1
+fi
+
 MODE=$(grep '^mode=' "$META" | tail -1 | cut -d= -f2- || true)
 PROJECT=$(grep '^project=' "$META" | tail -1 | cut -d= -f2- || true)
+TASK_TMP=$(grep '^tasktmp=' "$META" | tail -1 | cut -d= -f2- || true)
+if ! fm_dod_validate_published_intent "$PR_BODY" "$WT" "$TASK_TMP" "$PR_HEAD" "$URL"; then
+  echo "error: published intent validation failed" >&2
+  exit 1
+fi
 # The gate is asked about the ready report this task's worker was told to give;
 # on a Gerrit change both publishing modes report the same published line.
 case "$PROVIDER:$MODE" in
@@ -146,6 +206,77 @@ if { [ -z "$PR_HEAD" ] || ! fm_dod_forge_head_is_named_head "$MODE"; } \
   && ! GATE_REASON=$(fm_dod_accept_ship_done "${KIND:-ship}" "$MODE" "$WT" "$PROJECT" "$DONE_LINE" "$STATE" "$ID" "$META"); then
   echo "error: $GATE_REASON" >&2
   exit 1
+fi
+
+bosun_refresh_upstream_base() {
+  BOSUN_UPSTREAM_OWNER=${BOSUN_BASE_REPOSITORY%%/*}
+  BOSUN_UPSTREAM_REPOSITORY=${BOSUN_BASE_REPOSITORY#*/}
+  BOSUN_BASE_REF=$(python3 "$SCRIPT_DIR/fm-bosun.py" upstream-ref --worktree "$WT" \
+    --owner "$BOSUN_UPSTREAM_OWNER" --repository "$BOSUN_UPSTREAM_REPOSITORY" \
+    --branch "$BOSUN_BRANCH") || return 1
+  BOSUN_UPSTREAM_BASE=$BOSUN_BASE_REF
+}
+
+if [ "$IS_BOSUN" = 1 ]; then
+  [ -n "$PR_HEAD" ] || { echo "error: Bosun registration requires the exact forge PR head" >&2; exit 1; }
+  [ -n "$WT" ] && [ -d "$WT" ] || { echo "error: Bosun upstream worktree is unavailable" >&2; exit 1; }
+  bosun_refresh_upstream_base || {
+    echo "error: Bosun upstream default branch is unavailable" >&2
+    exit 1
+  }
+  BOSUN_CHANGED_PATHS=$(git -C "$WT" diff --name-only "$BOSUN_UPSTREAM_BASE"...HEAD) || {
+    echo "error: Bosun upstream change could not be inspected" >&2
+    exit 1
+  }
+  BOSUN_PATH_ARGS=()
+  while IFS= read -r BOSUN_PATH; do
+    [ -n "$BOSUN_PATH" ] && BOSUN_PATH_ARGS+=(--changed-path "$BOSUN_PATH")
+  done <<EOF
+$BOSUN_CHANGED_PATHS
+EOF
+  bosun_registration_check() {
+    local check_only=$1
+    local -a registration_args
+    registration_args=(registration-check --task "$ID" --url "$URL" --forge "$PROVIDER"
+      --head "$BOSUN_HEAD" --base "$BOSUN_BASE_REPOSITORY" --branch "$BOSUN_BRANCH" --head-branch "$BOSUN_HEAD_BRANCH"
+      --pr-head "$PR_HEAD" --validation-head "$PR_HEAD" --validation-mode "${MODE:-direct-PR}" --worktree "$WT"
+      --upstream-base "$BOSUN_UPSTREAM_BASE" "${BOSUN_PATH_ARGS[@]}")
+    [ "$check_only" = 1 ] && registration_args+=(--check-only)
+    [ "$check_only" = 0 ] && registration_args+=(--forge-verify)
+    python3 "$SCRIPT_DIR/fm-bosun.py" "${registration_args[@]}"
+  }
+  bosun_registration_check 1 || exit 1
+fi
+
+if [ "$IS_BOSUN" = 1 ]; then
+  BOSUN_PR_JSON=$(gh pr view "$URL" --json headRepositoryOwner,headRepository,baseRepository,baseRefName,headRefName,headRefOid 2>/dev/null) || {
+    echo "error: Bosun PR forge response was unreadable" >&2
+    exit 1
+  }
+  BOSUN_HEAD=$(printf '%s' "$BOSUN_PR_JSON" | jq -er '(.headRepositoryOwner.login // "") + "/" + (.headRepository.name // "")') || exit 1
+  BOSUN_BASE_REPOSITORY=$(printf '%s' "$BOSUN_PR_JSON" | jq -er '.baseRepository.nameWithOwner // ""') || exit 1
+  BOSUN_BRANCH=$(printf '%s' "$BOSUN_PR_JSON" | jq -er '.baseRefName // ""') || exit 1
+  BOSUN_HEAD_BRANCH=$(printf '%s' "$BOSUN_PR_JSON" | jq -er '.headRefName // ""') || exit 1
+  PR_HEAD=$(printf '%s' "$BOSUN_PR_JSON" | jq -er '.headRefOid // ""') || exit 1
+  if ! { [ "$BOSUN_HEAD" != / ] && [ "$BOSUN_BASE_REPOSITORY" != "" ] && [ "$BOSUN_BRANCH" != "" ] && [ "$BOSUN_HEAD_BRANCH" != "" ] && fm_pr_head_valid "$PR_HEAD"; }; then
+    echo "error: Bosun PR forge response was incomplete" >&2
+    exit 1
+  fi
+  bosun_refresh_upstream_base || {
+    echo "error: Bosun upstream default branch is unavailable" >&2
+    exit 1
+  }
+  BOSUN_CHANGED_PATHS=$(git -C "$WT" diff --name-only "$BOSUN_UPSTREAM_BASE"...HEAD) || {
+    echo "error: Bosun upstream change could not be inspected" >&2
+    exit 1
+  }
+  BOSUN_PATH_ARGS=()
+  while IFS= read -r BOSUN_PATH; do
+    [ -n "$BOSUN_PATH" ] && BOSUN_PATH_ARGS+=(--changed-path "$BOSUN_PATH")
+  done <<EOF
+$BOSUN_CHANGED_PATHS
+EOF
+  bosun_registration_check 0 || exit 1
 fi
 
 META_TMP=
@@ -215,6 +346,11 @@ else
   PR_POLL_PUBLISH_LOCK_HELD=0
   echo "error: could not publish PR poll" >&2
   exit 1
+fi
+# Export only after poll publication succeeds; repeated successful registrations
+# intentionally produce another observation rather than an exactly-once event.
+if [ "${FM_PR_CHECK_MERGE:-}" != 1 ]; then
+  fm_trace_span_pr_ready "$META"
 fi
 # Opt-in fleet activity ledger (docs/fleet-ledger.md); off costs one file test.
 # The merge-time re-record is not a new review-ready PR, so it writes nothing.

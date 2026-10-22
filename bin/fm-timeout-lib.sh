@@ -6,9 +6,10 @@
 # repo agrees on what "the bound was hit" means.
 #
 #   fm_timeout_mechanism
-#       Prints the mechanism fm_run_timed will use on this host: "timeout",
+#       Prints the default mechanism for this host: "timeout",
 #       "gtimeout", "perl", or "bash". Set FM_TIMEOUT_MECHANISM_OVERRIDE=bash
-#       to force the dependency-free fallback.
+#       to force the dependency-free fallback. Watcher-owned calls use the
+#       owner-aware selection described under fm_run_timed instead.
 #
 #   fm_run_timed <seconds> <command> [args...]
 #       Runs the command with a hard bound. Exit status is the command's own,
@@ -22,6 +23,13 @@
 #       own KILL escalation, with no status recorded by the bounded command,
 #       also collapses into 124: there it means the bound fired, not that the
 #       command chose to die.
+#       With FM_TIMEOUT_OWNER_PID set by the watcher, use fm_exec_timed's
+#       owner-aware Perl runner with a one-second grace, or the Bash fallback
+#       when forced or Perl is absent. The Bash watchdog checks both the watcher
+#       and its nested supervisor, then terminates and reaps the child group
+#       after either owner disappears or the deadline expires. These owner
+#       variables belong only to transient operations, never persistent servers
+#       or worker launches; fm-spawn.sh owns the launch-boundary exclusion.
 #
 #   fm_exec_timed <seconds> <grace-seconds> <command> [args...]
 #       Replaces the calling shell with the bounded command, so it must be the
@@ -88,10 +96,12 @@ fm_timeout_mechanism() {
 }
 
 fm_run_bash_timeout() {
-  local seconds=$1 command_status deadline_status child_pid watchdog_pid command_rc recorded_rc monitor_was_on=0
+  local seconds=$1 command_status deadline_status child_pid watchdog_pid command_rc recorded_rc monitor_was_on=0 timeout_parent timer_pid
   shift
   command_status=$(mktemp "${TMPDIR:-/tmp}/fm-bash-timeout-command.XXXXXX" 2>/dev/null) || return 124
   deadline_status="${command_status}.deadline"
+  timeout_parent=
+  [ -z "${FM_TIMEOUT_OWNER_PID:-}" ] || timeout_parent=${FM_EXEC_TIMED_OWNER_PID:-$FM_TIMEOUT_OWNER_PID}
   case $- in *m*) monitor_was_on=1 ;; esac
   set -m
   (
@@ -104,7 +114,19 @@ fm_run_bash_timeout() {
   child_pid=$!
   (
     set +m
-    sleep "$seconds"
+    if [ -n "${FM_TIMEOUT_OWNER_PID:-}" ]; then
+      sleep "$seconds" &
+      timer_pid=$!
+      while kill -0 "$timer_pid" 2>/dev/null \
+        && kill -0 "$FM_TIMEOUT_OWNER_PID" 2>/dev/null \
+        && kill -0 "$timeout_parent" 2>/dev/null; do
+        sleep 0.05
+      done
+      kill "$timer_pid" 2>/dev/null || true
+      wait "$timer_pid" 2>/dev/null || true
+    else
+      sleep "$seconds"
+    fi
     printf 'expired\n' > "$deadline_status"
     kill -TERM -- "-$child_pid" 2>/dev/null || true
     sleep 0.2
@@ -141,6 +163,8 @@ fm_run_external_timeout() {
   # A shell wrapper can exit promptly on TERM while one of its descendants
   # ignores TERM; timeout then considers the command finished and does not send
   # its configured KILL. Explicitly reap that leftover group on a real timeout.
+  # Forward stdin explicitly: a noninteractive background command otherwise
+  # receives /dev/null when job control is off.
   # shellcheck disable=SC2016  # Expansion is deliberately deferred to the child shell.
   "$runner" -k 1 "$seconds" bash -c '
     status_file=$1
@@ -181,11 +205,29 @@ fm_run_external_timeout() {
 fm_run_timed() {  # <seconds> <command...>
   local seconds=$1
   shift
+  if [ -n "${FM_TIMEOUT_OWNER_PID:-}" ]; then
+    while [ "${seconds#0}" != "$seconds" ] && [ "$seconds" != 0 ]; do seconds=${seconds#0}; done
+    if [ "${FM_TIMEOUT_MECHANISM_OVERRIDE:-}" != bash ] && command -v perl >/dev/null 2>&1; then
+      ( FM_EXEC_TIMED_OWNER_PID=$FM_TIMEOUT_OWNER_PID fm_exec_timed "$seconds" 1 "$@" )
+    else
+      (
+        # This owner belongs only to the nested Bash supervisor.
+        # shellcheck disable=SC2030
+        FM_EXEC_TIMED_OWNER_PID=$(exec bash -c 'printf "%s\n" "$PPID"')
+        export FM_EXEC_TIMED_OWNER_PID
+        set -m
+        ( set +m; fm_run_bash_timeout "$seconds" "$@" ) <&0 &
+        set +m
+        wait "$!"
+      )
+    fi
+    return "$?"
+  fi
   case "$(fm_timeout_mechanism)" in
     timeout) fm_run_external_timeout timeout "$seconds" "$@" ;;
     gtimeout) fm_run_external_timeout gtimeout "$seconds" "$@" ;;
     perl)
-      perl -e 'my $t = shift; my $pid = fork; die "fork failed" unless defined $pid; if (!$pid) { setpgrp(0, 0); exec @ARGV } local $SIG{ALRM} = sub { kill "TERM", -$pid; select undef, undef, undef, 0.2; kill "KILL", -$pid; exit 124 }; alarm $t; waitpid $pid, 0; exit(($? & 127) ? 128 + ($? & 127) : $? >> 8)' \
+      perl -e 'my $t = shift; my $pid = fork; die "fork failed" unless defined $pid; if (!$pid) { setpgrp(0, 0); exec { $ARGV[0] } @ARGV; exit 127 } local $SIG{ALRM} = sub { kill "TERM", -$pid; select undef, undef, undef, 0.2; kill "KILL", -$pid; exit 124 }; alarm $t; waitpid $pid, 0; exit(($? & 127) ? 128 + ($? & 127) : $? >> 8)' \
         "$seconds" "$@"
       ;;
     bash) fm_run_bash_timeout "$seconds" "$@" ;;
@@ -220,12 +262,17 @@ fm_exec_timed() {  # <seconds> <grace-seconds> <command...>
     echo "fm_exec_timed: usage: fm_exec_timed <positive-seconds> <positive-grace-seconds> <command> [args...]" >&2
     exit 125
   fi
+  # This invocation receives its owner's value from its caller, not a sibling subshell.
+  # shellcheck disable=SC2031
   owner=${FM_EXEC_TIMED_OWNER_PID:-$$}
-  [ "$owner" != "$BASHPID" ] || owner=$PPID
   unset FM_EXEC_TIMED_OWNER_PID
   if command -v perl >/dev/null 2>&1; then
     exec perl -MPOSIX=WNOHANG,setpgid -MTime::HiRes=time -e '
-      my ($bound, $grace, $owner) = (shift, shift, shift);
+      my ($bound, $grace, $owner, $shell_parent) = (shift, shift, shift, shift);
+      # exec preserves the shell PID, including in Bash 3.2 subshells where
+      # BASHPID is unavailable. Keep the pre-exec parent for startup races.
+      $owner = $shell_parent if $owner == $$;
+      setpgid(0, 0) if $ENV{FM_TIMEOUT_OWNER_PID};
       my $parent = getppid();
       my ($pid, $pending, $kill_at, $timed_out) = (0, "", 0, 0);
       for my $sig (qw(TERM INT HUP)) {
@@ -239,7 +286,7 @@ fm_exec_timed() {  # <seconds> <grace-seconds> <command...>
       if ($child == 0) {
         $SIG{$_} = "DEFAULT" for qw(TERM INT HUP);
         setpgid(0, 0);
-        exec @ARGV;
+        exec { $ARGV[0] } @ARGV;
         exit 127;
       }
       setpgid($child, $child);
@@ -272,7 +319,7 @@ fm_exec_timed() {  # <seconds> <grace-seconds> <command...>
         }
         select undef, undef, undef, 0.05;
       }
-    ' -- "$seconds" "$grace" "$owner" "$@"
+    ' -- "$seconds" "$grace" "$owner" "$PPID" "$@"
   elif command -v timeout >/dev/null 2>&1; then
     exec timeout -k "$grace" "$seconds" "$@"
   elif command -v gtimeout >/dev/null 2>&1; then

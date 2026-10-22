@@ -56,6 +56,47 @@ test_apply_advances_seq_and_source() {
   pass "apply advances seq under the armed gen and attributes the writing source"
 }
 
+test_apply_sequence_condition_is_checked_under_lock() {
+  local state gen fakebin real_mkdir out ts_before ts_after busy_state busy_source busy_event busy_seq busy_ts
+  state=$(new_state_dir conditional-apply)
+  gen=$("$EV" arm "$state" t1) || fail "arm failed"
+  real_mkdir=$(command -v mkdir)
+  fakebin=$(fm_fakebin "$TMP_ROOT/conditional-lock")
+  touch "$state/pending"
+  cat > "$fakebin/mkdir" <<'SH'
+#!/usr/bin/env bash
+set -eu
+if [ "${1:-}" = "$PTFAKE_RACE_STATE/t1.busy-state.lock" ] && [ -f "$PTFAKE_RACE_STATE/pending" ]; then
+  rm "$PTFAKE_RACE_STATE/pending"
+  "$PTFAKE_REAL_EVENT" apply "$PTFAKE_RACE_STATE" t1 busy --current-gen \
+    --source polytoken-hook --event pre-user-prompt
+  cp "$PTFAKE_RACE_STATE/t1.busy-state" "$PTFAKE_RACE_STATE/expected"
+fi
+exec "$PTFAKE_REAL_MKDIR" "$@"
+SH
+  chmod +x "$fakebin/mkdir"
+  if PTFAKE_RACE_STATE="$state" PTFAKE_REAL_EVENT="$EV" PTFAKE_REAL_MKDIR="$real_mkdir" \
+    PATH="$fakebin:$PATH" "$EV" apply "$state" t1 idle --gen "$gen" --if-seq 1 \
+      --source fm-interrupt --event interrupt --turn-ended 2>/dev/null; then
+    fail "a sequence changed before lock acquisition must refuse the close"
+  fi
+  cmp -s "$state/expected" "$state/t1.busy-state" \
+    || fail "a conditional refusal must preserve the newer record and timestamp"
+  assert_absent "$state/t1.turn-ended" "a conditional refusal must not notify turn end"
+  ts_before=$(date +%s)
+  "$EV" apply "$state" t1 idle --gen "$gen" --if-seq 2 \
+    --source fm-interrupt --event interrupt --turn-ended || fail "matching sequence must close"
+  ts_after=$(date +%s)
+  out=$(fm_busy_record_read "$state" t1) || fail "conditional close must leave a valid record"
+  read -r busy_state busy_source busy_event busy_seq busy_ts <<< "$out"
+  [ "$busy_state $busy_source $busy_event $busy_seq" = 'idle fm-interrupt interrupt 3' ] \
+    || fail "matching close must advance sequence and record idle"
+  [ "$busy_ts" -ge "$ts_before" ] && [ "$busy_ts" -le "$ts_after" ] \
+    || fail "matching close must retain the house timestamp contract"
+  [ -f "$state/t1.turn-ended" ] || fail "matching close must notify turn end"
+  pass "conditional busy writes compare under the lock and preserve timestamps"
+}
+
 test_apply_current_gen_reset() {
   local state out
   state=$(new_state_dir apply-current)
@@ -255,6 +296,40 @@ test_record_without_sidecar_unknown() {
   out=$(fm_busy_classify tmux w1 claude t1 "$state")
   [ "$out" = "unknown malformed" ] || fail "record without an armed gen must be unknown, got '$out'"
   pass "a record with no armed gen sidecar classifies unknown"
+}
+
+test_record_and_generation_framing() {
+  local state format out record
+  state=$(new_state_dir record-framing)
+  record='v1 gen=g1 seq=2 state=idle source=claude-hook event=stop ts=123'
+  printf 'g1\n' > "$state/t1.busy-gen"
+  for format in '' '\njunk' '\n\000' '\nbad\000tail' '\n\n'; do
+    printf '%s%b' "$record" "$format" > "$state/t1.busy-state"
+    out=$(fm_busy_classify tmux w1 claude t1 "$state")
+    [ "$out" = 'unknown malformed' ] || fail "invalid record framing $format read '$out'"
+  done
+  printf 'v1 gen=g1 seq=2 state=id\000le source=claude-hook event=stop ts=123\n' \
+    > "$state/t1.busy-state"
+  out=$(fm_busy_classify tmux w1 claude t1 "$state")
+  [ "$out" = 'unknown malformed' ] || fail "binary state field read '$out'"
+
+  printf '%s\n' "$record" > "$state/t1.busy-state"
+  cp "$state/t1.busy-state" "$state/record-before"
+  for format in 'g1' 'g1\njunk\n' 'g1\njunk' 'g\0001\n' 'g1\n\000' 'g1\n\n'; do
+    printf '%b' "$format" > "$state/t1.busy-gen"
+    cp "$state/t1.busy-gen" "$state/gen-before"
+    out=$(fm_busy_classify tmux w1 claude t1 "$state")
+    [ "$out" = 'unknown malformed' ] || fail "invalid generation framing $format read '$out'"
+    if "$EV" apply "$state" t1 busy --current-gen --source claude-hook --event start 2>/dev/null; then
+      fail "writer accepted invalid generation framing $format"
+    fi
+    cmp -s "$state/t1.busy-state" "$state/record-before" || fail 'refused apply changed the record'
+    cmp -s "$state/t1.busy-gen" "$state/gen-before" || fail 'refused apply changed the generation'
+  done
+  printf 'g1\n' > "$state/t1.busy-gen"
+  out=$(fm_busy_classify tmux w1 claude t1 "$state")
+  [ "$out" = 'idle claude-hook' ] || fail "valid restored framing read '$out'"
+  pass 'records and generations require one complete text line without binary or trailing data'
 }
 
 # --- adapter isolation ---------------------------------------------------------
@@ -593,10 +668,32 @@ test_progress_is_generation_bound_and_not_semantic_state() {
   pass "native progress is generation-bound, separately recorded, and cleared on arm and retire"
 }
 
+test_turn_ended_notification_is_generation_bound() {
+  local state gen
+  state=$(new_state_dir turn-ended)
+  gen=$("$EV" arm "$state" t1)
+  "$EV" apply "$state" t1 idle --gen "$gen" --source commandcode-mod --event run-end \
+    || fail "current idle event was refused"
+  [ ! -e "$state/t1.turn-ended" ] || fail "an idle event without --turn-ended notified"
+  "$EV" apply "$state" t1 idle --gen "$gen" --source commandcode-mod --event run-end --turn-ended \
+    || fail "current turn-ended event was refused"
+  [ -f "$state/t1.turn-ended" ] || fail "turn-ended notification missing"
+  rm "$state/t1.turn-ended"
+  "$EV" arm "$state" t1 >/dev/null
+  if "$EV" apply "$state" t1 idle --gen "$gen" --source commandcode-mod --event run-end --turn-ended 2>/dev/null; then
+    fail "stale turn-ended event was accepted"
+  fi
+  [ ! -e "$state/t1.turn-ended" ] || fail "stale turn-ended event woke the replacement"
+  if "$EV" progress "$state" t1 --gen "$gen" --turn-ended 2>/dev/null; then fail "--turn-ended accepted outside apply"; fi
+  pass "the turn-ended notification rides the apply generation check"
+}
+
 test_progress_is_generation_bound_and_not_semantic_state
+test_turn_ended_notification_is_generation_bound
 
 test_arm_seeds_busy_spawn
 test_apply_advances_seq_and_source
+test_apply_sequence_condition_is_checked_under_lock
 test_apply_current_gen_reset
 test_apply_unarmed_refused
 test_retire_serializes_and_rejects_stale_gen
@@ -606,6 +703,7 @@ test_stale_gen_event_rejected
 test_stale_gen_record_unknown
 test_missing_record_unknown_not_idle
 test_malformed_record_unknown
+test_record_and_generation_framing
 test_record_without_sidecar_unknown
 test_source_mismatch_cross_adapter
 test_converted_adapters_ignore_footer_text

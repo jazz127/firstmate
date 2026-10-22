@@ -29,11 +29,6 @@ task_inbox_export() {  # <home> <id>
   printf "export FM_TASK_INBOX='%s'; " "$state/$2.inbox"
 }
 
-ai_trailer_hooks_prefix() {  # <home> <id>
-  local state
-  state=$(CDPATH='' cd -- "$1/state" && pwd -P) || fail "cannot resolve state dir $1/state"
-  printf "export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0='%s'; " "$state/$2.git-hooks"
-}
 
 cleanup_kimi_harness() {
   [ -z "$KIMI_RUNTIME_TASK_TMP" ] || fm_test_remove_tree "$KIMI_RUNTIME_TASK_TMP"
@@ -100,13 +95,26 @@ fake_cursor_y() {
   esac
 }
 case "$*" in
+  *"#{pane_tty}"*) printf '%s\n' '/dev/pts/91'; exit 0 ;;
   *"#{pane_current_path}"*) printf '%s\n' "$FM_FAKE_PANE_PATH"; exit 0 ;;
   *"#{cursor_y}"*) fake_cursor_y; exit 0 ;;
 esac
 case "${1:-}" in
   display-message) printf 'firstmate\n'; exit 0 ;;
-  list-windows) exit 0 ;;
-  has-session|new-session|new-window|kill-window) exit 0 ;;
+  list-windows)
+    [ ! -s "$FM_FAKE_KIMI_STATE.window" ] || cat "$FM_FAKE_KIMI_STATE.window"
+    exit 0 ;;
+  new-window)
+    name=
+    previous=
+    for arg in "$@"; do
+      [ "$previous" = -n ] && name=$arg
+      previous=$arg
+    done
+    printf '%s\n' "$name" > "$FM_FAKE_KIMI_STATE.window"
+    exit 0 ;;
+  kill-window) : > "$FM_FAKE_KIMI_STATE.window"; exit 0 ;;
+  has-session|new-session) exit 0 ;;
   send-keys)
     prev=
     literal=
@@ -219,6 +227,7 @@ esac
 exit 0
 SH
   chmod +x "$fakebin/tmux"
+  fm_test_fake_tmux_foreground_cwd "$fakebin"
   fm_fake_exit0 "$fakebin" treehouse gh-axi gh
   fm_fake_exit0 "$fakebin" kimi
   ln -s "$JQ_BIN" "$fakebin/jq"
@@ -306,7 +315,7 @@ test_kimi_launch_then_send_is_verified() {
   assert_contains "$out" "spawned $id harness=kimi" "kimi spawn did not report success"
 
   launch=$(cat "$CASE_DIR/launch.log")
-  [ "$launch" = "export COMPACT_ADVISER_DISABLE=1; $(task_inbox_export "$HOME_DIR" "$id")$(ai_trailer_hooks_prefix "$HOME_DIR" "$id")env -u CURSOR_AGENT -u CURSOR_INVOKED_AS -u GEMINI_CLI '$FAKEBIN_DIR/kimi' --model 'kimi-code/k3' --auto" ] \
+  [ "$launch" = "unset FM_TIMEOUT_OWNER_PID FM_EXEC_TIMED_OWNER_PID; export COMPACT_ADVISER_DISABLE=1; $(task_inbox_export "$HOME_DIR" "$id")$(fm_test_launch_git_prefix "$launch")env -u CURSOR_AGENT -u CURSOR_INVOKED_AS -u GEMINI_CLI '$FAKEBIN_DIR/kimi' --model 'kimi-code/k3' --auto" ] \
     || fail "kimi launch did not use the absolute binary, model, and --auto only: $launch"
   assert_not_contains "$launch" "--effort" "kimi launch emitted a nonexistent effort flag"
   assert_not_contains "$launch" "turn-ended" "kimi launch embedded a turn-end path"
@@ -682,7 +691,7 @@ test_kimi_falls_back_to_expanded_home_binary() {
   rc=$?
   expect_code 0 "$rc" "Kimi HOME fallback spawn should succeed"
   launch=$(cat "$CASE_DIR/launch.log")
-  [ "$launch" = "export COMPACT_ADVISER_DISABLE=1; $(task_inbox_export "$HOME_DIR" "$id")$(ai_trailer_hooks_prefix "$HOME_DIR" "$id")env -u CURSOR_AGENT -u CURSOR_INVOKED_AS -u GEMINI_CLI '$fallback' --auto" ] \
+  [ "$launch" = "unset FM_TIMEOUT_OWNER_PID FM_EXEC_TIMED_OWNER_PID; export COMPACT_ADVISER_DISABLE=1; $(task_inbox_export "$HOME_DIR" "$id")$(fm_test_launch_git_prefix "$launch")env -u CURSOR_AGENT -u CURSOR_INVOKED_AS -u GEMINI_CLI '$fallback' --auto" ] \
     || fail "Kimi fallback did not expand HOME into an absolute executable: $launch"
   pass "fm-spawn: Kimi fallback expands the active HOME"
 }
@@ -1009,17 +1018,18 @@ SH
 }
 
 test_kimi_session_lock_identity() {
-  local home fakebin out
+  local home fakebin out real_ps
   home="$TMP_ROOT/session-lock-home"
   fakebin=$(fm_fakebin "$TMP_ROOT/session-lock-fake")
   mkdir -p "$home/state"
-  cat > "$fakebin/ps" <<'SH'
+  real_ps=$(command -v ps) || fail "test needs ps"
+  cat > "$fakebin/ps" <<SH
 #!/usr/bin/env bash
-case "$*" in
+case "\$*" in
   *"comm="*) printf '%s\n' '/opt/kimi/bin/kimi'; exit 0 ;;
   *"args="*) printf '%s\n' 'kimi'; exit 0 ;;
 esac
-exit 1
+exec "$real_ps" "\$@"
 SH
   chmod +x "$fakebin/ps"
 
@@ -1155,5 +1165,5 @@ test_kimi_trust_detection_requires_the_complete_dialog
 test_kimi_detection_uses_ancestry_after_markers
 test_kimi_session_lock_identity
 test_kimi_busy_signature_is_scoped_to_spinner_lines
-test_watcher_never_classifies_kimi_from_its_spinner
+test_watcher_never_classifies_kimi_from_its_spinner || fail "test_watcher_never_classifies_kimi_from_its_spinner failed"
 test_kimi_bordered_prompt_needs_no_override

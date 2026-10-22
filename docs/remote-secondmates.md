@@ -82,8 +82,18 @@ On macOS the worker is `dev.firstmate.remote-job`, an Aqua-scoped LaunchAgent at
 After that bootstrap, every non-doctor `fm-on.sh` target runs through that worker in the remote account's GUI session.
 It never runs in the SSH process or a Herdr pane.
 Linux uses the same queue and worker protocol without the Aqua-session requirement.
-The [`fm-remote-job-worker.sh` header](../bin/fm-remote-job-worker.sh) owns dispatch cadence and the quiet-scan latency for work arriving after its post-activity burst.
+The [`fm-remote-job-worker.sh` header](../bin/fm-remote-job-worker.sh) owns lock-publication cleanup and its safety guards, dispatch cadence, and the quiet-scan latency for work arriving after its post-activity burst.
 Active-command and result waits use a separate sampling interval; the [`fm-remote-job-lib.sh` header](../bin/fm-remote-job-lib.sh) owns its defaults, overrides, and completion, cancellation, and timeout latency contract.
+
+On macOS, worker repair serializes the replacement decision and LaunchAgent reload with other callers, including its bounded startup wait.
+A live process tracked by launchd gets time to publish readiness even if the caller that started it disconnected before publication.
+Reload waits for launchd to finish removing the old service before bootstrap; a timeout fails the repair instead of bootstrapping during removal.
+[`fm_remote_job_bootout_launchagent`](../bin/fm-remote-job-lib.sh) owns the removal wait bound.
+A verified lock owner running stale code or no longer tracked by launchd is stopped identity-safely before launchd starts the current worker.
+If readiness remains stale while a verified current, launchd-tracked lock owner is alive, the command fails with `remote-job: ready heartbeat stale while verified worker lock owner is alive` rather than reloading that worker merely for the stale heartbeat.
+The repair invariant is implemented in [`fm_remote_job_repair_launchagent`](../bin/fm-remote-job-lib.sh); heartbeat ownership and cadence are documented in the worker header above.
+
+The independent heartbeat and live-owner check build on [Diabl0570's contribution](https://github.com/kunchenguid/firstmate/pull/6217), alongside [gearhead924's supervisor-multiplication work](https://github.com/kunchenguid/firstmate/pull/5851), addressing [remote reply reliability](https://github.com/kunchenguid/firstmate/issues/2921).
 
 ### Job lanes and preemption
 
@@ -229,9 +239,10 @@ Each gap carries one of two tags:
 | --- | --- |
 | `fixable:` | `--fix` can close the gap. |
 | `human:` | Only a person at that machine can close the gap. |
+| `notice:` | A non-blocking condition that only an operator repairs. |
 
-Every gap is followed by an `action:` line naming the exact step.
-Any remaining gap exits non-zero.
+Every gap and notice is followed by an `action:` line naming the exact step.
+Any remaining gap exits non-zero; a notice does not.
 The script's own header owns the full line protocol.
 
 ### Repair with --fix
@@ -271,12 +282,47 @@ It acts on whichever server owns the `fm-remote` socket:
 
 | Socket owner | Guard action |
 | --- | --- |
-| Nothing | Execs the server in the foreground under launchd. |
-| An Aqua-born server | Exits 0. |
+| Nothing | Starts the server through [`bin/fm-remote-herdr-supervisor.pl`](../bin/fm-remote-herdr-supervisor.pl), which stays the launchd-supervised foreground process while the server leads its own POSIX session. |
+| An Aqua-born server | Exits 0, leaving the server and its panes alone. |
 | Any other (foreign) server | Stops the foreign server and takes the session over, closing its panes so the parent firstmate relaunches its mates into the Aqua-born server. |
 
 `KeepAlive={SuccessfulExit=false}` lets that exit 0 rest instead of respawning against a held socket.
-The guard's header owns the decision table, and [`bin/fm-remote-herdr-owner-lib.sh`](../bin/fm-remote-herdr-owner-lib.sh) owns the birth markers it reads.
+The guard's header owns the decision table, the supervisor's header owns the supervision contract, and [`bin/fm-remote-herdr-owner-lib.sh`](../bin/fm-remote-herdr-owner-lib.sh) owns the birth markers it reads.
+That library also renders the launch agent contract for the doctor and for the lab in [`bin/fm-herdr-lab.sh`](../bin/fm-herdr-lab.sh), so the two cannot drift.
+
+The supervisor needs a `perl` that can compile it on the launch agent's PATH, which macOS ships at `/usr/bin/perl`.
+Without one the guard starts no server and stops none, exiting 1 with the prerequisite named in `~/Library/Logs/dev.firstmate.herdr.fm-remote.log` so launchd retries once `perl` resolves.
+The doctor asks the same resolved login shell, bounded, whether a `perl` on its PATH compiles the supervisor before it offers `--fix` for a server the launch agent would have to start or replace.
+When none does, that server gap is reported `human:` with the interpreter named, so the readiness gate that spawn and sync run carries the real blocker instead of recommending another `--fix`.
+A login shell that does not answer within the bound is reported the same way but as unverified, with its startup to inspect rather than a `perl` to install.
+
+### Add the remote machines to the local Herdr window
+
+Herdr 0.9.1 saved machines refuse an `fm-remote` server that is not a POSIX session leader.
+A server the launch agent started before the supervisor existed keeps running as the launchd job itself and does not lead its own session.
+That server is all a remote second mate needs, so the doctor reports it `ok:` and names the one thing it cannot do: `herdr machine add` refuses it as a saved SSH machine until it is restarted.
+Neither updating the Firstmate code root nor `--fix` restarts a running Aqua-born server, because the restart closes every pane in the `fm-remote` session; the guard leaves an Aqua-born server alone whenever launchd runs it, and the readiness gate that spawn and sync run sees no gap.
+When closing those panes is acceptable, restart it yourself on that account:
+
+```sh
+herdr server stop --session fm-remote && launchctl kickstart -k gui/<uid>/dev.firstmate.herdr.fm-remote
+```
+
+The guard then starts a supervised server that leads its own session, and the parent firstmate's secondmate liveness sweep relaunches its mates into it.
+
+On Linux, `--fix` starts a stopped `fm-remote` server as the leader of its own session.
+A running Linux server that Herdr reports is not a session leader is a `check herdr-server=notice:`, which does not block readiness.
+Its action names `herdr server stop --session fm-remote` followed by another `--fix`; `--fix` never runs that stop itself, because the restart closes the session's panes.
+
+Then run these one-time commands on the local Mac, using the SSH aliases configured there:
+
+```sh
+herdr machine add '<JI7-ssh-alias>' --label JI7 --remote-session fm-remote
+herdr machine add '<Jharbour-ssh-alias>' --label Jharbour --remote-session fm-remote
+```
+
+`herdr machine list` shows the saved profile IDs and labels.
+Open Herdr to see both remote machines and their agents in the sidebar.
 
 ### Other repairs and limits
 
@@ -312,7 +358,7 @@ A file at `~/.local/bin/fm-remote-entrypoint.sh` that is not Firstmate's own sym
 | --- | --- |
 | Always required | `git`, `jq`, `herdr`, compatible `tasks-axi`, and `treehouse` |
 | At least one of | `claude`, `codex`, `opencode`, `pi`, `pi-signed`, `grok`, or `kimi` |
-| Additionally required on macOS | `lsof`, so the doctor and guard can prove which process owns the session socket |
+| Additionally required on macOS | `lsof`, so the doctor and guard can prove which process owns the session socket, and a `perl` on the launch agent's PATH, so the guard can start the server as the leader of its own session |
 
 ## Provision a route
 
@@ -384,7 +430,13 @@ When a host stays red, the seed prints the doctor's remaining gaps and their ope
 
 ### Failure and rollback
 
-A known provisioning failure rolls back the new route.
+A known provisioning failure rolls back the new route and prints the remote command's failure reason.
+Provisioning has its own longer execution window, selected by the parent through argv rather than forwarded environment; [`fm-remote-home-seed.sh`](../bin/fm-remote-home-seed.sh) owns the timeout override and bounds.
+A timeout reports its bound alongside the last project clone or initialization progress.
+Before cloning projects, the home records the provisioning id in `.fm-secondmate-provisioning`.
+A retry for that same id discards unpublished project staging and resumes from completed clones, while a different id and an unmarked home containing operational data remain refused.
+The marker is removed after the complete home identity is published.
+Homes left unmarked by older versions still require operator reconciliation; they are not automatically adopted.
 A new remote home is published only after its checkout is complete, so removing the public path during cloning cannot interrupt the clone.
 If a competing home appears before publication, provisioning fails and leaves that home intact.
 SSH exit 255 preserves the route, because remote completion is unknown and must be reconciled on the same host.
@@ -565,12 +617,15 @@ An SSH exit status of 255 while fetching a referenced document leaves the delta 
 
 The process-event runner applies each captured delta through this adapter as soon as it is captured.
 So a mirrored reply reaches the primary status channel without depending on the wake handler running the adapter itself.
-A mirrored line that carries a correlation token settles its pending-reply record and closes that request's own open escalation decision.
+A mirrored line that carries a correlation token settles the pending-reply record only when the mate it came from is the task that request was sent to.
+Another mate echoing the token leaves it open.
+A settled record also closes that request's own open escalation decision.
 
 A remote reply reaches the primary only through this asynchronous mirror.
 Because of that, the primary treats a missing correlated report as a missed report only once the mirror has been read through the end of the remote log after that turn ended.
 A remote mate that did answer is therefore never asked to repost while its answer is still in flight.
 A genuinely missing answer still gets exactly one repost once the mirror is known to be current.
+Each watcher poll sends at most one such remote repost; other remote records stay due and are retried on later polls, so a slow remote endpoint cannot hold the watcher's liveness beacon stale.
 
 The [process-to-event operating contract](configuration.md#process-to-event-sources-stateprocevent) owns automatic application, one-announcement replay deduplication, and the unhandled fallback path.
 
@@ -578,6 +633,12 @@ The [process-to-event operating contract](configuration.md#process-to-event-sour
 
 The source log is never truncated or consumed.
 A shortened or changed prefix stops the relay and surfaces a continuity failure instead of silently resetting the cursor.
+
+The failure appends one `blocked` line to the parent status stream, which opens a decision.
+The line records the reason, the reader position (the cursor offset and the first 12 characters of the prefix hash), and the retirement count (how many times the route has been retired).
+Reading the same break again, with the cursor where it was and the count unchanged, appends nothing.
+A later break at a different reader position, or after another retirement, appends a new `blocked` line and opens the decision again.
+A line written before that position was recorded does not match, so the next break appends the new line once.
 
 ### SSH exit 255 and unavailable homes
 
@@ -613,10 +674,7 @@ There is no two-phase journal and no additional tasks-axi release requirement.
 ### Inherited-material transfer
 
 Locked startup convergence and `bin/fm-config-push.sh` transfer only the declared inherited-material allowlist.
-Changed live routes receive a marked instruction to re-read the transferred files.
-The primary records that remote nudge before delivery and retries it during locked startup convergence after a failed send.
-Local secondmates retain their generation-specific local pointer contract.
-Remote transfers do not copy those primary-local instruction paths.
+The [`secondmate-provisioning` skill](../.agents/skills/secondmate-provisioning/SKILL.md#charter-and-seed) owns the placement-specific re-read contract, including changed transfers, unchanged retries, and partial or unknown completion.
 
 ### Relaunch a live remote second mate
 
@@ -677,6 +735,7 @@ The portable tests use these pieces:
 - A stateful host-local Herdr CLI fixture.
 - A controlled account fixture for the readiness gate.
 
+[`fm-remote-job-launchagent.test.sh`](../tests/fm-remote-job-launchagent.test.sh) exercises the real worker with stubbed asynchronous `launchctl`, covering slow claim sweeps, missing readiness recovery during a sweep, stale readiness without reload, concurrent repair, untracked owners, interrupted repairs, and asynchronous service removal before bootstrap.
 The lifecycle test covers seeding a registered project that this machine has never cloned.
 It asserts that the local project tree is unchanged afterwards.
 It carries Bitbucket, self-hosted, and scp-like origins through to the remote clone.
@@ -689,6 +748,9 @@ bin/fm-test-run.sh tests/fm-secondmate-reconcile.test.sh
 bin/fm-test-run.sh tests/fm-peek-remote.test.sh
 bin/fm-test-run.sh tests/fm-crew-state.test.sh
 bin/fm-test-run.sh tests/fm-remote-job.test.sh
+bin/fm-test-run.sh tests/fm-remote-job-claim-reap.test.sh
+bin/fm-test-run.sh tests/fm-remote-job-claim-retention.test.sh
+bin/fm-test-run.sh tests/fm-remote-job-launchagent.test.sh
 bin/fm-test-run.sh tests/fm-remote-transport-lanes.test.sh
 bin/fm-test-run.sh tests/fm-remote-doctor.test.sh
 bin/fm-test-run.sh tests/fm-remote-herdr-guard.test.sh
@@ -710,6 +772,40 @@ The doctor performs these account-level checks, and they are only ever exercised
 
 So the readiness gate's behavior on a genuine Mac remains an operator-run smoke test.
 The audit-session facts the guard relies on are recorded with their commands in [runtime backend verification](verification/runtime-backends.md#fm-remote-server-birth-and-login-keychain-access).
+The session-leader shape the supervisor gives that server under real launchd, with its attach, stop, restart, and SIGKILL behavior, is recorded in [the session-leader record](verification/runtime-backends.md#session-leader-fm-remote-server-under-launchd).
+
+### Read-only post-deploy turnover check
+
+After the updated worker has started through an independently authorized deployment, observe it on the remote Mac under normal traffic for at least two hours.
+Use a console shell or plain SSH as the worker account, not `fm-on.sh` or the remote entrypoint: those paths can repair the worker and invalidate a read-only observation.
+Do not run doctor `--fix`, signal a process, change the queue or readiness timestamps, or invoke any mutating `launchctl` verb during this check.
+Run this Bash sampling loop on that Mac; it only reads service and process records and the existing state files:
+
+```bash
+label=dev.firstmate.remote-job
+state="$HOME/.firstmate/remote-job"
+for ((sample=0; sample<=120; sample++)); do
+  date -u '+%Y-%m-%dT%H:%M:%SZ'
+  service=$(launchctl print "gui/$(id -u)/$label") || break
+  printf '%s\n' "$service" | awk '
+    $1 == "pid" || $1 == "runs" || ($1 == "last" && $2 == "exit")
+  '
+  pid=$(printf '%s\n' "$service" | awk '$1 == "pid" && $2 == "=" {print $3; exit}')
+  case "$pid" in ''|*[!0-9]*) printf 'No tracked worker PID\n'; break ;; esac
+  ps -p "$pid" -o pid= -o lstart= -o command=
+  printf 'lock PID: '; cat "$state/worker.lock/pid"
+  printf 'ready PID: '; cat "$state/worker.ready"
+  mtime=$(stat -f %m "$state/worker.ready") || break
+  printf 'ready age: %ss\n' "$(( $(date +%s) - mtime ))"
+  [ "$sample" -eq 120 ] || sleep 60
+done
+```
+
+Confirm the timestamps span at least two hours, every sample has the same tracked PID and process start time, and both recorded PIDs match that tracked worker.
+Confirm launchd's `runs` count does not increase and readiness stays within the freshness bound implemented by [`fm_remote_job_probe`](../bin/fm-remote-job-lib.sh).
+A PID/start-time change or increased run count is turnover; a missing service, failed read, stale heartbeat, host reboot, or missing run counter prevents a clean no-turnover verdict.
+Minute samples alone cannot prove that readiness never stalled between samples, so retain the existing service logs and any stale-ready diagnostics alongside the observations.
+Keep dated output, the deployed commit, and the result in deployment or PR evidence rather than claiming a measured result from the portable fixtures.
 
 ### Real-host smoke test
 

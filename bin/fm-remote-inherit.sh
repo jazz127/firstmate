@@ -24,9 +24,6 @@ usage() { sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 file_link_count() {
   if [ "$(uname)" = Darwin ]; then /usr/bin/stat -f %l "$1" 2>/dev/null; else stat -c %h "$1" 2>/dev/null; fi
 }
-sha256_file() {
-  if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | awk '{print $1}'; else sha256sum "$1" | awk '{print $1}'; fi
-}
 # Writable set, derived from the ONE declared inherited-material owner
 # (FM_INHERITABLE_CONFIG in bin/fm-config-inherit-lib.sh), so this code root's
 # receiver and sender cannot drift silently. This runs under the remote
@@ -131,7 +128,7 @@ commit_generation() {
 dest_matches_last_published() {
   local actual
   [ -n "$LAST_PUBLISHED_HASH" ] && [ -f "$DEST" ] || return 1
-  actual=$(sha256_file "$DEST") || return 1
+  actual=$(fm_inherit_sha256 "$DEST") || return 1
   [ "$actual" = "$LAST_PUBLISHED_HASH" ]
 }
 
@@ -157,7 +154,7 @@ case "$COMMAND" in
     BYTES=$(LC_ALL=C wc -c < "$TMP" | tr -d ' ')
     [ "$BYTES" -le "$MAX_BYTES" ] || die "inherited material exceeds the byte bound"
     [ "$BYTES" -eq "$EXPECTED_BYTES" ] || die "inherited material length does not match its commitment"
-    ACTUAL_HASH=$(sha256_file "$TMP") || die "cannot hash inherited material"
+    ACTUAL_HASH=$(fm_inherit_sha256 "$TMP") || die "cannot hash inherited material"
     [ "$ACTUAL_HASH" = "$EXPECTED_HASH" ] || die "inherited material digest does not match its commitment"
     commit_generation
     if [ -f "$DEST" ] && cmp -s "$TMP" "$DEST"; then
@@ -176,7 +173,7 @@ case "$COMMAND" in
     [ "$EXPECTED_BYTES" -eq 0 ] || die "absent inheritance has a nonzero payload commitment"
     EMPTY=$(umask 077; mktemp "$PARENT_REAL/.inherit-empty.XXXXXX") || die "cannot stage empty inheritance commitment"
     : > "$EMPTY"
-    EMPTY_HASH=$(sha256_file "$EMPTY") || die "cannot hash empty inheritance payload"
+    EMPTY_HASH=$(fm_inherit_sha256 "$EMPTY") || die "cannot hash empty inheritance payload"
     rm -f -- "$EMPTY"
     [ "$EMPTY_HASH" = "$EXPECTED_HASH" ] || die "absent inheritance digest is not the empty payload"
     commit_generation

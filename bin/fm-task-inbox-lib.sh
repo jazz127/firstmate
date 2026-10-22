@@ -25,9 +25,10 @@
 # Layout under <state-dir>:
 #   <task>.inbox/NNN.msg       one durable steer, numeric sequence, atomic rename
 #   <task>.inbox/handled/      the worker's `mv` here IS the acknowledgement
-#   <task>.inbox/.seq.lock     serializes sequence allocation across writers
-#                              (the session and the away daemon)
+#   <task>.inbox/.seq.lock     serializes sequence allocation and retry-marker
+#                              updates across writers and the watcher
 #   <task>.inbox/.ring-state   watcher re-ring ladder: "<msg>\t<count>\t<epoch>"
+#   <task>.inbox/.busy-state   consecutive busy deferrals: "<msg>\t<count>"
 #   <task>.inbox/.escalated    oldest-message name already surfaced as stale,
 #                              so later polls suppress another escalation
 #   <task>.inbox/.retry-ring   name of a fire-and-forget record still owed its
@@ -52,10 +53,14 @@
 # attempt may ring or be skipped to protect another draft in a proven pending
 # composer; an unsubmitted copy of this doorbell is retried. After
 # FM_TASK_INBOX_RING_MAX attempts without an acknowledgement it escalates. The
-# caller owns the busy and recovery-grade endpoint checks: a busy pane waits,
-# while a positively dead or missing endpoint skips delivery and the ladder and
-# escalates directly. This library owns only the schedule and escalation marker.
-# If attempt bookkeeping cannot be persisted while the record remains unhandled,
+# caller owns the busy and recovery-grade endpoint checks: due actions deferred
+# by a busy pane consume a separate durable consecutive-poll budget,
+# FM_TASK_INBOX_BUSY_MAX. At that bound the same escalation path surfaces a
+# stuck-busy reason without typing. A non-busy due check or acknowledgement resets
+# this budget. Fire-and-forget retries remain outside escalation. A positively
+# dead or missing endpoint skips delivery and the ladder and escalates directly.
+# This library owns the schedule, durable budgets, and escalation marker.
+# If delivery-attempt or busy-deferral bookkeeping fails while the record remains unhandled,
 # the caller surfaces that failure instead of retrying silently; a concurrently
 # removed inbox is a quiet no-op. Escalation deliberately queues the wake before
 # writing the deduplication marker: normal polls surface a message once, while a
@@ -85,6 +90,7 @@
 # Tunables (env):
 #   FM_TASK_INBOX_GRACE_SECS   default 90; delivery-attempt grace and spacing
 #   FM_TASK_INBOX_RING_MAX     default 3; delivery attempts before escalation
+#   FM_TASK_INBOX_BUSY_MAX     default 2; consecutive busy-deferred due polls before escalation
 
 _FM_TASK_INBOX_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Both dependencies are canonical lint roots in their own right. Keep them as
@@ -98,6 +104,7 @@ _FM_TASK_INBOX_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FM_TASK_INBOX_SCHEMA='fm-task-inbox.v1'
 FM_TASK_INBOX_GRACE_DEFAULT=90
 FM_TASK_INBOX_RING_MAX_DEFAULT=3
+FM_TASK_INBOX_BUSY_MAX_DEFAULT=2
 FM_TASK_INBOX_LOCK_WAIT_DEFAULT=5
 
 fm_task_inbox_grace_secs() {
@@ -112,8 +119,90 @@ fm_task_inbox_ring_max() {
   printf '%s' "$m"
 }
 
-fm_task_inbox_dir() {  # <state-dir> <task-id>
-  printf '%s/%s.inbox' "$1" "$2"
+fm_task_inbox_busy_max() {
+  local m=${FM_TASK_INBOX_BUSY_MAX:-$FM_TASK_INBOX_BUSY_MAX_DEFAULT}
+  case "$m" in ''|*[!0-9]*) m=$FM_TASK_INBOX_BUSY_MAX_DEFAULT ;; esac
+  # Check the length before numeric comparison so oversized input cannot overflow.
+  if [ "${#m}" -gt 9 ] || [ "$m" -eq 0 ]; then
+    m=$FM_TASK_INBOX_BUSY_MAX_DEFAULT
+  fi
+  printf '%s' "$m"
+}
+
+# Compare nonnegative decimal strings without evaluating them as shell integers.
+_fm_task_inbox_decimal_ge() {  # <left> <right>
+  local inbox_left=${1-} inbox_right=${2-}
+  local LC_ALL=C
+  case "$inbox_left" in ''|*[!0-9]*) return 1 ;; esac
+  case "$inbox_right" in ''|*[!0-9]*) return 1 ;; esac
+  inbox_left=${inbox_left#"${inbox_left%%[!0]*}"}
+  inbox_right=${inbox_right#"${inbox_right%%[!0]*}"}
+  inbox_left=${inbox_left:-0}
+  inbox_right=${inbox_right:-0}
+  if [ "${#inbox_left}" -ne "${#inbox_right}" ]; then
+    [ "${#inbox_left}" -gt "${#inbox_right}" ]
+  else
+    # shellcheck disable=SC2071 # Equal-length decimal strings may exceed shell integers.
+    [[ "$inbox_left" = "$inbox_right" || "$inbox_left" > "$inbox_right" ]]
+  fi
+}
+
+# Read usable epoch seconds without treating partial or malformed clock output as evidence.
+# _fm_inbox_now is reserved so the caller can receive the value without a subshell.
+_fm_task_inbox_now_to() {  # <output-variable>
+  local _fm_inbox_now
+  _fm_inbox_now=$(date +%s) || return 1
+  case "$_fm_inbox_now" in ''|*[!0-9]*) return 1 ;; esac
+  _fm_inbox_now=${_fm_inbox_now#"${_fm_inbox_now%%[!0]*}"}
+  _fm_inbox_now=${_fm_inbox_now:-0}
+  _fm_task_inbox_decimal_ge 9223372036854775807 "$_fm_inbox_now" || return 1
+  printf -v "$1" '%s' "$_fm_inbox_now"
+}
+
+# Saturate numeric overflow so a spent retry budget cannot start over.
+_fm_task_inbox_increment_count() {  # <stored-count> <output-variable>
+  local _fm_inbox_count=${1-}
+  local LC_ALL=C
+  case "$_fm_inbox_count" in ''|*[!0-9]*) _fm_inbox_count=0 ;; esac
+  _fm_inbox_count=${_fm_inbox_count#"${_fm_inbox_count%%[!0]*}"}
+  _fm_inbox_count=${_fm_inbox_count:-0}
+  if _fm_task_inbox_decimal_ge "$_fm_inbox_count" 9223372036854775807; then
+    _fm_inbox_count=9223372036854775807
+  else
+    _fm_inbox_count=$((_fm_inbox_count + 1))
+  fi
+  printf -v "$2" '%s' "$_fm_inbox_count"
+}
+
+# Persist before returning the new count, so a fresh watcher continues the same
+# bounded wait. A removed or acknowledged record is a quiet no-op.
+fm_task_inbox_record_busy() {  # <state-dir> <task-id> <record-path>
+  local dir base previous count
+  fm_task_inbox_dir "$1" "$2" dir
+  base=${3##*/}
+  { IFS=$'\t' read -r previous count < "$dir/.busy-state"; } 2>/dev/null || true
+  [ "${previous:-}" = "$base" ] || count=0
+  [ -f "$3" ] || { printf '0'; return 0; }
+  _fm_task_inbox_increment_count "${count:-}" count
+  if ! { printf '%s\t%s\n' "$base" "$count" > "$dir/.busy-state"; } 2>/dev/null; then
+    [ -f "$3" ] || { printf '0'; return 0; }
+    return 1
+  fi
+  printf '%s' "$count"
+}
+
+fm_task_inbox_clear_busy() {  # <state-dir> <task-id>
+  local dir
+  fm_task_inbox_dir "$1" "$2" dir
+  rm -f "$dir/.busy-state" 2>/dev/null
+}
+
+fm_task_inbox_dir() {  # <state-dir> <task-id> [output-var]
+  if [ "$#" -gt 2 ]; then
+    printf -v "$3" '%s/%s.inbox' "$1" "$2"
+  else
+    printf '%s/%s.inbox' "$1" "$2"
+  fi
 }
 
 fm_task_inbox_handled_dir() {  # <state-dir> <task-id>
@@ -121,11 +210,16 @@ fm_task_inbox_handled_dir() {  # <state-dir> <task-id>
 }
 
 # Numeric sequence of one record basename, or fail for a non-record name.
-fm_task_inbox_seq_of() {  # <basename>
-  local n=${1%.msg}
-  [ "$n" != "$1" ] || return 1
-  case "$n" in ''|*[!0-9]*) return 1 ;; esac
-  printf '%s' "$((10#$n))"
+# An optional output variable avoids a subshell; _fm_inbox_seq_ locals are reserved.
+fm_task_inbox_seq_of() {  # <basename> [output-var]
+  local _fm_inbox_seq_n=${1%.msg}
+  [ "$_fm_inbox_seq_n" != "$1" ] || return 1
+  case "$_fm_inbox_seq_n" in ''|*[!0-9]*) return 1 ;; esac
+  if [ "$#" -gt 1 ]; then
+    printf -v "$2" '%s' "$((10#$_fm_inbox_seq_n))"
+  else
+    printf '%s' "$((10#$_fm_inbox_seq_n))"
+  fi
 }
 
 # Next unused sequence, scanning the inbox root AND handled/ so an
@@ -135,7 +229,7 @@ fm_task_inbox_next_seq() {  # <inbox-dir>
   for d in "$dir" "$dir/handled"; do
     for f in "$d"/*.msg; do
       [ -e "$f" ] || continue
-      n=$(fm_task_inbox_seq_of "${f##*/}") || continue
+      fm_task_inbox_seq_of "${f##*/}" n || continue
       [ "$n" -le "$max" ] || max=$n
     done
   done
@@ -151,7 +245,7 @@ fm_task_inbox_lock_acquire() {  # <lock-path>
   if [ ! -e "$lock" ] && [ ! -L "$lock" ]; then
     fm_lock_try_create "$lock" && return 0
   fi
-  deadline=$(( $(date +%s) + wait ))
+  deadline=$(( $(date +%s) + 10#$wait ))
   while ! fm_lock_try_acquire "$lock"; do
     [ "$(date +%s)" -lt "$deadline" ] || return 1
     sleep 0.1
@@ -180,7 +274,7 @@ _fm_task_inbox_write_record_locked() {  # <inbox-dir> <text> [delivery-mode]
 # sequence slot. Prints the record path. Fails without a partial record.
 fm_task_inbox_write() {  # <state-dir> <task-id> <text> [delivery-mode]
   local state=$1 task=$2 text=$3 delivery_mode=${4:-} dir lock rec status=0
-  dir=$(fm_task_inbox_dir "$state" "$task")
+  fm_task_inbox_dir "$state" "$task" dir
   mkdir -p "$dir/handled" || return 1
   lock="$dir/.seq.lock"
   fm_task_inbox_lock_acquire "$lock" || return 1
@@ -203,7 +297,7 @@ fm_task_inbox_write() {  # <state-dir> <task-id> <text> [delivery-mode]
 # a repeated identical local steer is a deliberate new instruction.
 fm_task_inbox_write_idempotent() {  # <state-dir> <task-id> <text> [delivery-mode]
   local state=$1 task=$2 text=$3 delivery_mode=${4:-} dir lock want have f rec='' status=0
-  dir=$(fm_task_inbox_dir "$state" "$task")
+  fm_task_inbox_dir "$state" "$task" dir
   mkdir -p "$dir/handled" || return 1
   lock="$dir/.seq.lock"
   fm_task_inbox_lock_acquire "$lock" || return 1
@@ -261,7 +355,7 @@ fm_task_inbox_body() {  # <record-path>
   while IFS= read -r line; do
     if [ "$line" = -- ]; then
       cat
-      return 0
+      return
     fi
   done < "$1"
   return 1
@@ -289,7 +383,7 @@ fm_task_inbox_doorbell_line() {  # <record-path>
   case "$name" in
     ''|*[![:print:]]*) return 1 ;;
   esac
-  quoted=$(printf '%s' "$name" | sed "s/'/'\\\\''/g")
+  quoted=${name//\'/\'\\\'\'}
   printf ": Firstmate instruction waiting: list \"\$FM_TASK_INBOX\"/*.msg in your '%s' steering inbox, read and act on each in numeric order, then mv each into its handled/." \
     "$quoted"
 }
@@ -371,11 +465,11 @@ fm_task_inbox_is_fire_and_forget() {  # <record-path>
 # Oldest escalation-tracked unhandled record, or fail when none is due.
 fm_task_inbox_oldest_unhandled() {  # <state-dir> <task-id>
   local dir best='' best_n=0 f n
-  dir=$(fm_task_inbox_dir "$1" "$2")
+  fm_task_inbox_dir "$1" "$2" dir
   for f in "$dir"/*.msg; do
     [ -e "$f" ] || continue
     fm_task_inbox_is_fire_and_forget "$f" && continue
-    n=$(fm_task_inbox_seq_of "${f##*/}") || continue
+    fm_task_inbox_seq_of "${f##*/}" n || continue
     if [ -z "$best" ] || [ "$n" -lt "$best_n" ]; then
       best=$f
       best_n=$n
@@ -387,20 +481,54 @@ fm_task_inbox_oldest_unhandled() {  # <state-dir> <task-id>
 
 # Owe a fire-and-forget record its one retry ring (see the header). A newer
 # mark replaces an older one: a ring names the whole inbox, not one record.
+# Publish atomically under the sequence lock so clearing cannot lose a newer mark
+# and a failed write preserves the previous retry.
 fm_task_inbox_mark_retry() {  # <state-dir> <task-id> <record-path>
-  local dir
-  dir=$(fm_task_inbox_dir "$1" "$2")
-  { printf '%s\n' "${3##*/}" > "$dir/.retry-ring"; } 2>/dev/null
+  local dir lock tmp status=0
+  fm_task_inbox_dir "$1" "$2" dir
+  lock="$dir/.seq.lock"
+  fm_task_inbox_lock_acquire "$lock" || return 1
+  if tmp=$(mktemp "$dir/.retry-ring.XXXXXX"); then
+    { printf '%s\n' "${3##*/}" > "$tmp"; } 2>/dev/null &&
+      [ ! -d "$dir/.retry-ring" ] &&
+      mv "$tmp" "$dir/.retry-ring" 2>/dev/null || status=1
+    [ "$status" -eq 0 ] || rm -f "$tmp" 2>/dev/null || true
+  else
+    status=1
+  fi
+  fm_lock_release "$lock"
+  return "$status"
+}
+
+# Serialize the compare-and-remove with marker publication. The first read
+# avoids acquiring a lock when no matching mark needs to be spent.
+_fm_task_inbox_clear_retry_mark() {  # <inbox-dir> <expected-mark>
+  local dir=$1 expected=$2 current lock status=0
+  if ! current=$(cat "$dir/.retry-ring" 2>/dev/null); then
+    [ ! -e "$dir/.retry-ring" ]
+    return
+  fi
+  [ "$current" = "$expected" ] || return 0
+  lock="$dir/.seq.lock"
+  fm_task_inbox_lock_acquire "$lock" || return 1
+  if current=$(cat "$dir/.retry-ring" 2>/dev/null); then
+    if [ "$current" = "$expected" ]; then
+      rm -f "$dir/.retry-ring" 2>/dev/null || status=1
+    fi
+  elif [ -e "$dir/.retry-ring" ]; then
+    status=1
+  fi
+  fm_lock_release "$lock"
+  return "$status"
 }
 
 # Spend the retry mark after its ring, only while it still names that record:
-# a newer mark written meanwhile is owed its own retry and survives. Fails only
-# when the processed record's mark stays behind.
+# a newer mark written meanwhile is owed its own retry and survives. Failure to
+# read, lock, or remove a matching mark leaves it for the caller to surface.
 fm_task_inbox_clear_retry() {  # <state-dir> <task-id> <record-path>
   local dir
-  dir=$(fm_task_inbox_dir "$1" "$2")
-  [ "$(cat "$dir/.retry-ring" 2>/dev/null)" = "${3##*/}" ] || return 0
-  rm -f "$dir/.retry-ring" 2>/dev/null
+  fm_task_inbox_dir "$1" "$2" dir
+  _fm_task_inbox_clear_retry_mark "$dir" "${3##*/}"
 }
 
 # The re-ring ladder decision for one task. Prints exactly one of:
@@ -412,17 +540,17 @@ fm_task_inbox_clear_retry() {  # <state-dir> <task-id> <record-path>
 # An empty inbox also resets the ladder bookkeeping so the next message starts
 # a fresh ladder.
 fm_task_inbox_due_action() {  # <state-dir> <task-id>
-  local dir oldest base now grace max ladder rec_base count last
-  dir=$(fm_task_inbox_dir "$1" "$2")
+  local dir oldest base now grace max ladder rec_base count last age
+  fm_task_inbox_dir "$1" "$2" dir
   if ! oldest=$(fm_task_inbox_oldest_unhandled "$1" "$2"); then
-    rm -f "$dir/.ring-state" "$dir/.escalated" 2>/dev/null || true
+    rm -f "$dir/.ring-state" "$dir/.escalated" "$dir/.busy-state" 2>/dev/null || true
     # The one retry ring exists only while config/wait-no-turns is present.
     # Absent, a mark is left untouched and the inbox stays quiet, as before.
     if [ -e "${FM_CONFIG_OVERRIDE:-${FM_HOME:-}/config}/wait-no-turns" ]; then
       base=$(cat "$dir/.retry-ring" 2>/dev/null || true)
       if ! fm_task_inbox_seq_of "$base" >/dev/null || [ ! -f "$dir/$base" ]; then
-        rm -f "$dir/.retry-ring" 2>/dev/null || true
-      elif [ "$(fm_path_age "$dir/.retry-ring")" -ge "$(fm_task_inbox_grace_secs)" ]; then
+        _fm_task_inbox_clear_retry_mark "$dir" "$base" || true
+      elif _fm_task_inbox_decimal_ge "$(fm_path_age "$dir/.retry-ring")" "$(fm_task_inbox_grace_secs)"; then
         printf 'retry %s' "$dir/$base"
         return 0
       fi
@@ -432,24 +560,19 @@ fm_task_inbox_due_action() {  # <state-dir> <task-id>
   fi
   base=${oldest##*/}
   grace=$(fm_task_inbox_grace_secs)
-  if [ "$(fm_path_age "$oldest")" -lt "$grace" ]; then
+  if ! _fm_task_inbox_decimal_ge "$(fm_path_age "$oldest")" "$grace"; then
     printf 'quiet'
     return 0
   fi
   count=0
   last=0
   ladder=$(cat "$dir/.ring-state" 2>/dev/null || true)
-  IFS=$(printf '\t') read -r rec_base count last <<EOF
+  IFS=$'\t' read -r rec_base count last <<EOF
 $ladder
 EOF
   if [ -n "$rec_base" ] && [ "$rec_base" != "$base" ]; then
-    # A different oldest message: the previous ladder is stale. An absent
-    # ladder is left alone so a dead-pane escalation, which never rings and so
-    # never writes one, keeps its marker (the marker check below still ignores
-    # a marker naming some other message).
     count=0
     last=0
-    rm -f "$dir/.escalated" 2>/dev/null || true
   fi
   case "$count" in ''|*[!0-9]*) count=0 ;; esac
   case "$last" in ''|*[!0-9]*) last=0 ;; esac
@@ -458,12 +581,20 @@ EOF
     return 0
   fi
   max=$(fm_task_inbox_ring_max)
-  if [ "$count" -ge "$max" ]; then
+  if _fm_task_inbox_decimal_ge "$count" "$max"; then
     printf 'escalate %s %s' "$oldest" "$count"
     return 0
   fi
-  now=$(date +%s)
-  if [ "$((now - last))" -lt "$grace" ]; then
+  _fm_task_inbox_now_to now || return 1
+  if ! _fm_task_inbox_decimal_ge "$now" "$last"; then
+    printf 'quiet'
+    return 0
+  fi
+  last=${last#"${last%%[!0]*}"}
+  last=${last:-0}
+  # Both operands are bounded, nonnegative decimals and now is at least last.
+  age=$((now - last))
+  if ! _fm_task_inbox_decimal_ge "$age" "$grace"; then
     printf 'quiet'
     return 0
   fi
@@ -478,18 +609,19 @@ EOF
 # the caller must surface the unwritable ladder while the record remains
 # unhandled.
 fm_task_inbox_record_ring() {  # <state-dir> <task-id> <record-path>
-  local dir base ladder rec_base count last
-  dir=$(fm_task_inbox_dir "$1" "$2")
+  local dir base ladder rec_base count last now
+  fm_task_inbox_dir "$1" "$2" dir
   base=${3##*/}
   count=0
   ladder=$(cat "$dir/.ring-state" 2>/dev/null || true)
-  IFS=$(printf '\t') read -r rec_base count last <<EOF
+  IFS=$'\t' read -r rec_base count last <<EOF
 $ladder
 EOF
   [ "$rec_base" = "$base" ] || count=0
-  case "$count" in ''|*[!0-9]*) count=0 ;; esac
   [ -d "$dir" ] || return 0
-  if ! { printf '%s\t%s\t%s\n' "$base" "$((count + 1))" "$(date +%s)" > "$dir/.ring-state"; } 2>/dev/null; then
+  _fm_task_inbox_increment_count "$count" count
+  _fm_task_inbox_now_to now || return 1
+  if ! { printf '%s\t%s\t%s\n' "$base" "$count" "$now" > "$dir/.ring-state"; } 2>/dev/null; then
     [ -d "$dir" ] || return 0
     return 1
   fi
@@ -501,7 +633,7 @@ EOF
 # stuck-crewmate-recovery owns the message from here.
 fm_task_inbox_record_escalated() {  # <state-dir> <task-id> <record-path>
   local dir
-  dir=$(fm_task_inbox_dir "$1" "$2")
+  fm_task_inbox_dir "$1" "$2" dir
   [ -d "$dir" ] || return 0
   if ! { printf '%s\n' "${3##*/}" > "$dir/.escalated"; } 2>/dev/null; then
     [ -d "$dir" ] || return 0

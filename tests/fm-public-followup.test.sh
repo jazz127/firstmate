@@ -115,7 +115,7 @@ SH
 make_home() {  # <name> [relay-on|relay-off]
   local home="$TMP_ROOT/$1" relay=${2:-relay-on}
   mkdir -p "$home/data" "$home/state" "$home/config" "$home/projects"
-  cp "$ROOT/.tasks.toml" "$home/.tasks.toml"
+  fm_test_tasks_toml "$home/.tasks.toml"
   cat > "$home/data/backlog.md" <<'EOF'
 ## In flight
 
@@ -1222,6 +1222,105 @@ test_traversal_registration_is_refused_before_delivery() {
   pass "traversal-shaped registrations are rejected before path construction or posting"
 }
 
+test_registry_ids_accept_literal_relative_state_paths() {
+  local home registry state_path shell out
+  home=$(make_home literal-registry-path)
+  registry="$home/-state/public-followup/registry"
+  mkdir -p "$registry/directory"
+  printf 'first\n' > "$registry/a"
+  printf 'last\n' > "$registry/z"
+  printf 'hidden\n' > "$registry/.hidden"
+  ln -s "$registry/a" "$registry/link"
+  for shell in bash /bin/bash; do
+    for state_path in "$home/-state" -state; do
+      # shellcheck disable=SC2016 # The selected child shell expands these variables.
+      out=$(ROOT="$ROOT" FM_HOME="$home" INPUT_STATE="$state_path" "$shell" -c '
+        . "$ROOT/bin/fm-public-followup-lib.sh"
+        cd "$FM_HOME" || exit 1
+        fm_pf_registry_ids "$INPUT_STATE"
+      ') || fail "registry listing must accept literal state path $state_path"
+      [ "$out" = $'a\nz' ] || fail "registry listing changed its visible regular-file selection"
+    done
+  done
+  pass "registry IDs preserve literal relative paths and skip non-record entries"
+}
+
+test_delivered_stamp_preserves_invalid_source() {
+  local home registry record original shell mode rc leftovers
+  home=$(make_home stamp-source)
+  registry="$home/state/public-followup/registry"
+  mkdir -p "$registry"
+  chmod 700 "$home/state/public-followup" "$registry"
+  record="$registry/pf-stamp"
+  original="$home/original"
+  for shell in bash /bin/bash; do
+    for mode in empty-error partial-error binary; do
+      printf '%s\n' 'obligation_id=pf-stamp' 'relation_id=rel' 'work_home=main' \
+        'work_id=task' 'state=open' > "$record"
+      [ "$mode" != binary ] || printf '\000' >> "$record"
+      chmod 600 "$record"
+      cp "$record" "$original"
+      # shellcheck disable=SC2016 # The selected child shell expands these variables.
+      ROOT="$ROOT" FM_HOME="$home" RECORD="$record" FILTER_MODE="$mode" "$shell" -c '
+        . "$ROOT/bin/fm-public-followup-lib.sh"
+        grep() {
+          if { [ "${1:-}" = -v ] && [ "${2:-}" = -E ] && [ "${4:-}" = "$RECORD" ]; } \
+            || { [ "${1:-}" = -vE ] && [ "$#" -eq 2 ] && [ "$2" = "^(state|delivered_at|delivered_obligation)=" ]; }; then
+            case "$FILTER_MODE" in
+              empty-error) return 2 ;;
+              partial-error) printf "obligation_id=pf-stamp\n"; return 2 ;;
+            esac
+          fi
+          command grep "$@"
+        }
+        fm_pf_registry_stamp_delivered "$FM_HOME/state" pf-stamp 2026-08-28T01:12:00Z
+      ' >/dev/null 2>&1; rc=$?
+      [ "$rc" -ne 0 ] || fail "$shell delivered stamp accepted $mode input"
+      cmp -s "$original" "$record" || fail "failed stamping changed its retained binding"
+      leftovers=$(find "$home/state/public-followup" -mindepth 1 ! -path "$registry" ! -path "$record" -print)
+      [ -z "$leftovers" ] || fail "failed stamping leaked a lock or staging file"
+    done
+  done
+  pass "delivered stamps retain failed or binary source records"
+}
+
+test_event_digest_failures_leave_work_retryable() {
+  local home mode event_id out
+  for mode in failed-output malformed; do
+    home=$(make_home "digest-failure-$mode")
+    seed_commitment "$home" pf-digest req-digest discord main work-digest
+    event_id=$(emit_terminal "$home" "$home" pf-digest main work-digest) \
+      || fail "could not prepare the valid event before the hash failure"
+    cat > "$home/fakebin/shasum" <<'SH'
+#!/usr/bin/env bash
+cat >/dev/null
+if [ "$FM_DIGEST_TEST_MODE" = failed-output ]; then
+  printf '%064d  -\n' 0
+  exit 2
+fi
+printf 'not-a-digest  -\n'
+SH
+    chmod +x "$home/fakebin/shasum"
+    FM_DIGEST_TEST_MODE="$mode" PATH="$home/fakebin:$PATH" \
+      expect_failure "emit must refuse a failed or malformed digest" \
+      emit_terminal "$home" "$home" pf-digest main work-digest
+    [ "$(ls "$home/state/public-followup/events")" = "$event_id.json" ] \
+      || fail "failed hashing must not publish another event"
+    FM_DIGEST_TEST_MODE="$mode" expect_failure "consume must retain unverifiable events" \
+      run_pf "$home" consume
+    assert_present "$home/state/public-followup/events/$event_id.json" \
+      "a hashing failure must leave the valid event pending"
+    assert_absent "$home/state/public-followup/rejected/$event_id.json" \
+      "a hashing failure must not classify the valid event as corrupt"
+    assert_absent "$home/state/public-followup/consumed/$event_id" \
+      "a hashing failure must not mark the event accepted"
+    rm "$home/fakebin/shasum"
+    out=$(run_pf "$home" consume) || fail "consume must recover when hashing works: $out"
+    assert_contains "$out" "ready pf-digest" "the retained event must remain usable"
+  done
+  pass "failed or malformed digests cannot publish events or quarantine valid pending work"
+}
+
 test_pending_rejects_malformed_listing() {
   local home out
   home=$(make_home pending-malformed)
@@ -1444,6 +1543,45 @@ test_relay_poll_stays_inert_and_surfaces_once() {
   assert_not_contains "$second" "public-followup" \
     "an unchanged pending set must not wake firstmate again every cycle"
   pass "the relay poll stays inert without a token, silent with no commitments, and surfaces a new result once"
+}
+
+test_terminal_event_wake_retries_failed_writes() {
+  local home marker shell mode out i=0
+  poll_fixture_wake() {
+    PATH="$home/fakebin:$PATH" FM_ROOT_OVERRIDE="$ROOT" FM_HOME="$home" \
+      FM_STATE_OVERRIDE="$home/state" "$shell" "$POLL"
+  }
+  for shell in bash /bin/bash; do
+    i=$((i + 1))
+    for mode in closed-output marker-directory; do
+      home=$(make_home "surface-write-$i-$mode")
+      seed_commitment "$home" pf-surface req-surface discord main work-surface
+      emit_terminal "$home" "$home" pf-surface main work-surface >/dev/null \
+        || fail "could not emit the pending fixture result"
+      marker="$home/state/public-followup/surfaced"
+      if [ "$mode" = closed-output ]; then
+        printf 'earlier\n' > "$marker"
+        chmod 600 "$marker"
+        poll_fixture_wake >&- 2>/dev/null || true
+        [ "$(cat "$marker")" = earlier ] \
+          || fail "a failed wake write must preserve the previous surfaced signature"
+      else
+        mkdir "$marker"
+        out=$(poll_fixture_wake) || fail "poll failed: $out"
+        assert_contains "$out" "public-followup terminal results are waiting" \
+          "an unavailable dedup record must not silence an owed wake"
+        [ -d "$marker" ] || fail "poll must preserve the refused marker directory"
+        rmdir "$marker"
+      fi
+      out=$(poll_fixture_wake) || fail "retry poll failed: $out"
+      assert_contains "$out" "public-followup terminal results are waiting" \
+        "the unchanged pending set must retry after a failed write"
+      out=$(poll_fixture_wake) || fail "deduplicated poll failed: $out"
+      assert_not_contains "$out" "public-followup terminal results are waiting" \
+        "a successfully written and recorded wake must deduplicate"
+    done
+  done
+  pass "terminal event wakes survive failed output and dedup-record writes"
 }
 
 # --- 8. startup surfacing ------------------------------------------------------
@@ -1956,6 +2094,36 @@ test_retire_refuses_unbound_existing_secondmate() {
   pass "retire fails closed for an unbound existing secondmate"
 }
 
+test_brief_refuses_secondmate_alias_identity_loss() {
+  local home original replacement alias_path snapshot out runner
+  for runner in run_pf run_pf_sysbash; do
+    home=$(make_home "brief-alias-identity-$runner")
+    original="$home/original-mate"
+    replacement="$original"$'\n'
+    alias_path="$home/mate-alias"
+    mkdir -p "$original/state" "$replacement/state"
+    [ ! "$original" -ef "$replacement" ] || fail "fixture homes must be distinct"
+    printf 'mate\n' > "$original/.fm-secondmate-home"
+    printf 'mate\n' > "$replacement/.fm-secondmate-home"
+    ln -s "$original" "$alias_path"
+    fm_write_meta "$home/state/mate.meta" "kind=secondmate" "home=$alias_path"
+    seed_repro_commitment "$home" pf-alias-identity req-alias-identity secondmate:mate scout-alias
+    out=$("$runner" "$home" brief pf-alias-identity) || fail "original alias must be briefable: $out"
+    snapshot="$home/registry-before"
+    cp "$home/state/public-followup/registry/pf-alias-identity" "$snapshot"
+
+    rm "$alias_path"
+    ln -s "$replacement" "$alias_path"
+    expect_failure "a different newline-suffixed home must not match the original binding" \
+      "$runner" "$home" brief pf-alias-identity
+    assert_contains "$EXPECT_OUT" "no usable code root and home" \
+      "an alias whose canonical identity cannot be retained must use the route refusal"
+    cmp -s "$snapshot" "$home/state/public-followup/registry/pf-alias-identity" \
+      || fail "a refused brief must preserve its registration"
+  done
+  pass "brief refuses a secondmate alias whose canonical identity loses bytes"
+}
+
 test_retire_refuses_reassigned_secondmate_home() {
   local home original replacement log
   home=$(make_home retire-reassigned-secondmate)
@@ -2191,8 +2359,43 @@ test_retention_creates_no_false_teardown_refusal() {
   pass "retention creates no false teardown refusal and pending no longer prunes"
 }
 
+test_window_class_validates_clock_evidence() {
+  local home shell mode now clock_rc expected out err
+  home=$(make_home window-clock)
+  err="$home/clock.err"
+  for shell in bash /bin/bash; do
+    for mode in ordinary empty-failed partial-failed empty-success padded-closing minimum maximum overflow; do
+      clock_rc=0
+      case "$mode" in
+        ordinary) now=1999; expected=closing ;;
+        empty-failed) now=; clock_rc=2; expected=unknown ;;
+        partial-failed) now=1999; clock_rc=2; expected=unknown ;;
+        empty-success) now=; expected=unknown ;;
+        padded-closing) now=01999; expected=closing ;;
+        minimum) now=-9223372036854775808; expected=ok ;;
+        maximum) now=9223372036854775807; expected=expired ;;
+        overflow) now=9223372036854775808; expected=unknown ;;
+      esac
+      # shellcheck disable=SC2016 # The selected child shell expands these variables.
+      out=$(ROOT="$ROOT" FM_HOME="$home" PROBE_NOW="$now" PROBE_NOW_RC="$clock_rc" "$shell" -c '
+        set -u
+        . "$ROOT/bin/fm-public-followup-lib.sh"
+        unset FMX_NOW_OVERRIDE
+        date() {
+          if [ "${1:-}" = +%s ]; then printf "%s" "$PROBE_NOW"; return "$PROBE_NOW_RC"; fi
+          command date "$@"
+        }
+        fm_pf_followup_window_class 1970-01-01T00:33:20Z
+      ' 2>"$err") || fail "$shell window classification failed for $mode"
+      [ "$out" = "$expected" ] || fail "$shell $mode window should be $expected, got $out"
+      [ ! -s "$err" ] || fail "$shell $mode emitted a numeric error: $(cat "$err")"
+    done
+  done
+  pass "window classification validates clock evidence and compares signed decimal epochs safely"
+}
+
 test_expiry_escalation_uses_now_override() {
-  local home out exp now_closing now_expired registry tmp
+  local home out exp now_closing now_expired registry tmp invalid_expiry real_tasks
   home=$(make_home expiry-window)
   seed_repro_commitment "$home" pf-exp req-exp main work-exp
   exp=$(date -u -j -f '%Y-%m-%dT%H:%M:%SZ' '2026-08-28T01:12:00Z' +%s 2>/dev/null) \
@@ -2223,16 +2426,31 @@ test_expiry_escalation_uses_now_override() {
   assert_contains "$EXPECT_OUT" "can no longer be reached" "rechain must name the closed window"
   registry="$home/state/public-followup/registry/pf-exp"
   tmp="$registry.tmp"
-  awk '
-    /^followup_expires_at=/ { print "followup_expires_at=not-a-time"; next }
-    { print }
-  ' "$registry" > "$tmp"
-  chmod 600 "$tmp"
-  mv "$tmp" "$registry"
-  expect_failure "rechain with an unknown expiry window must refuse" \
-    run_pf "$home" rechain pf-exp-next --from pf-exp --work-home main --work-id work-next --expected pr-merged
-  assert_contains "$EXPECT_OUT" "thread window cannot be checked" \
-    "rechain must fail closed when its retained expiry cannot be parsed"
+  real_tasks=$(command -v tasks-axi)
+  cat > "$home/fakebin/tasks-axi" <<'SH'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$FM_INVALID_EXPIRY_LOG"
+exec "$FM_INVALID_EXPIRY_REAL" "$@"
+SH
+  chmod +x "$home/fakebin/tasks-axi"
+  for invalid_expiry in not-a-time 2026-09-31T01:12:00Z 2026-08-32T01:12:00Z 2026-08-28T24:00:00Z 2026-08-28T01:12:00Zjunk; do
+    awk -v expiry="$invalid_expiry" '
+      /^followup_expires_at=/ { print "followup_expires_at=" expiry; next }
+      { print }
+    ' "$registry" > "$tmp"
+    chmod 600 "$tmp"
+    mv "$tmp" "$registry"
+    : > "$home/invalid-expiry-tasks.log"
+    FM_INVALID_EXPIRY_LOG="$home/invalid-expiry-tasks.log" FM_INVALID_EXPIRY_REAL="$real_tasks" \
+      expect_failure "rechain with invalid expiry $invalid_expiry must refuse" \
+      run_pf "$home" rechain pf-exp-next --from pf-exp --work-home main --work-id work-next --expected pr-merged
+    assert_no_grep 'public-followup add' "$home/invalid-expiry-tasks.log" \
+      "an invalid deadline must refuse before attempting to create an obligation"
+    assert_contains "$EXPECT_OUT" "thread window cannot be checked" \
+      "rechain must fail closed when its retained expiry cannot be parsed"
+    assert_absent "$home/state/public-followup/registry/pf-exp-next" \
+      "an invalid deadline must not publish a successor registration"
+  done
   pass "expiry escalation is pinned by FMX_NOW_OVERRIDE"
 }
 
@@ -3941,6 +4159,9 @@ test_relay_disabled_unmarked_teardown_skips_public_path
 test_relay_disabled_parent_allows_marked_child_teardown
 test_secondmate_parent_binding_matches_literal_id
 test_traversal_registration_is_refused_before_delivery
+test_registry_ids_accept_literal_relative_state_paths
+test_delivered_stamp_preserves_invalid_source
+test_event_digest_failures_leave_work_retryable
 test_pending_rejects_malformed_listing
 test_private_context_survives_inbox_cleanup
 test_cleanup_refuses_while_a_public_reply_is_owed
@@ -3948,6 +4169,7 @@ test_relay_disabled_home_pays_nothing
 test_relay_enabled_empty_state_makes_no_calls
 test_exhausted_binding_is_not_retried
 test_relay_poll_stays_inert_and_surfaces_once
+test_terminal_event_wake_retries_failed_writes
 test_session_start_surfaces_only_when_owed
 test_typed_records_exclude_raw_public_material
 test_dropped_baton_now_surfaces_open_loop
@@ -3961,11 +4183,13 @@ test_registration_replay_preserves_delivery_and_retirement
 test_redelivery_does_not_report_retired_loop_open
 test_retire_after_secondmate_home_removal
 test_retire_refuses_unbound_existing_secondmate
+test_brief_refuses_secondmate_alias_identity_loss
 test_retire_refuses_reassigned_secondmate_home
 test_rechain_refuses_unclaimed_existing_destination
 test_pending_skips_concurrent_retirement
 test_retire_reason_closes_the_open_loop
 test_retention_creates_no_false_teardown_refusal
+test_window_class_validates_clock_evidence
 test_expiry_escalation_uses_now_override
 test_brief_fails_without_typed_deliverable_keys
 test_prechange_registration_is_open_and_unrechainable

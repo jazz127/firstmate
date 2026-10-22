@@ -110,6 +110,256 @@ run_check() {
 
 # --- the regression this script exists for ----------------------------------
 
+test_registry_tokens_reject_trailing_newlines() {
+  local shell field home dir out rc
+  for shell in bash /bin/bash; do
+    for field in name command version_args announce_args remote branch; do
+      home=$(make_home "registry-newline-${shell//\//-}-$field")
+      dir="$home/bin"
+      make_counting_copy "$dir" "$TOOL" 'fixture 1.0' "$home/probes"
+      jq -n --arg field "$field" --arg tool "$TOOL" --arg repo "$home/missing-repo" '
+        {name:"fixture", command:$tool}
+        | if $field == "name" then .name += "\n"
+          elif $field == "command" then .command += "\n"
+          elif $field == "version_args" then .version_args = ["--version\n"]
+          elif $field == "announce_args" then .announce_args = ["--help\n"] | .announce_pattern = "update: [0-9.]+"
+          elif $field == "remote" then .git = {repo:$repo, remote:"origin\n"}
+          else .git = {repo:$repo, branch:"main\n"} end
+        | {tools:[.]}
+      ' > "$home/config/watched-tools.json"
+      rc=0
+      out=$(FM_HOME="$home" "$shell" "$CHECK" arm 2>&1) || rc=$?
+      expect_code 1 "$rc" "$shell armed a trailing newline in $field: $out"
+      assert_absent "$home/state/tool-updates.check.sh" 'an invalid registry installed a shim'
+      assert_absent "$home/state/tool-updates.check-trust" 'an invalid registry acquired a trust binding'
+      out=$(FM_HOME="$home" PATH="$(fixture_path "$dir")" FM_TOOL_UPDATE_INTERVAL=0 \
+        "$shell" "$CHECK" check 2>&1) || fail "$shell could not report the invalid registry: $out"
+      assert_contains "$out" 'watched tool registry:' "$shell silently accepted a trailing newline in $field"
+      assert_absent "$home/probes" 'an invalid registry started a version probe'
+    done
+  done
+  pass 'registry token validation covers the complete string before arming or probing'
+}
+
+test_empty_path_entries_probe_the_current_directory() {
+  local shell mode home cwd copies path out selected cwd_version copy_version expected_count
+  for shell in bash /bin/bash; do
+    for mode in leading middle repeated trailing explicit-dot no-empty only-current; do
+      home=$(make_home "empty-path-${shell//\//-}-$mode")
+      cwd="$home/cwd"; copies="$home/copies"
+      cwd_version=1.0; copy_version=2.0; expected_count=2
+      case "$mode" in
+        leading) path=":$copies:$PATH" ;;
+        middle) path="$home/absent::$copies:$PATH" ;;
+        repeated) path=":.:$copies:$PATH" ;;
+        trailing) path="$copies:$PATH:"; cwd_version=2.0; copy_version=1.0 ;;
+        explicit-dot) path=".:$copies:$PATH" ;;
+        no-empty) path="$copies:$PATH"; expected_count=1 ;;
+        only-current) path="$PATH:"; expected_count=1 ;;
+      esac
+      make_counting_copy "$cwd" "$TOOL" "fixture $cwd_version" "$home/probes"
+      make_counting_copy "$copies" "$TOOL" "fixture $copy_version" "$home/probes"
+      write_config "$home" "{\"tools\":[{\"name\":\"fixture\",\"command\":\"$TOOL\"}]}"
+      # shellcheck disable=SC2016 # The child shell expands its own positional argument.
+      selected=$(cd "$cwd" && PATH="$path" "$shell" -c '"$1" --version' _ "$TOOL") \
+        || fail "$shell $mode could not resolve the fixture command"
+      case "$mode" in
+        no-empty) assert_contains "$selected" 'fixture 2.0' 'the control did not resolve its sole PATH copy' ;;
+        *) assert_contains "$selected" 'fixture 1.0' 'the shell did not resolve the expected older copy' ;;
+      esac
+      : > "$home/probes"
+      out=$(cd "$cwd" && FM_HOME="$home" PATH="$path" FM_TOOL_UPDATE_INTERVAL=0 \
+        "$shell" "$CHECK" check 2>&1) || fail "$shell $mode check failed: $out"
+      case "$mode" in
+        no-empty|only-current) [ -z "$out" ] || fail "a single current install was not silent: $out" ;;
+        *) assert_contains "$out" 'fixture update not in effect: PATH resolves 1.0' "$shell $mode skipped a PATH install" ;;
+      esac
+      assert_equals "$expected_count" "$(wc -l < "$home/probes" | tr -d '[:space:]')" \
+        "$shell $mode did not probe each distinct install exactly once"
+    done
+  done
+  pass 'empty PATH entries resolve the current directory, preserve PATH order and deduplicate dot aliases'
+}
+
+test_interval_bounds_do_not_overflow() {
+  local shell value expected home out rc
+  home=$(make_home interval-range)
+  for shell in bash /bin/bash; do
+    for value in 0 000 60 060 86400 086400 59 00059 86401 \
+      9223372036854775807 9223372036854775808 18446744073709551616 \
+      999999999999999999999999999999999999; do
+      case "$value" in 0|000|60|060|86400|086400) expected=0 ;; *) expected=2 ;; esac
+      rc=0
+      out=$(FM_HOME="$home" FM_TOOL_UPDATE_INTERVAL="$value" "$shell" "$CHECK" --help 2>&1) || rc=$?
+      expect_code "$expected" "$rc" "$shell interval=$value violated its range: $out"
+      if [ "$expected" -eq 0 ]; then
+        assert_contains "$out" 'Usage:' 'valid interval prevented help output'
+      else
+        assert_contains "$out" 'FM_TOOL_UPDATE_INTERVAL must be 0 or a whole number from 60 to 86400' \
+          'interval refusal lost its range diagnostic'
+      fi
+      assert_not_contains "$out" 'integer' 'interval validation leaked shell arithmetic errors'
+    done
+  done
+  pass 'tool-check intervals enforce their range without overflowing shell integers'
+}
+
+test_failed_separate_announcements_are_reported() {
+  local shell mode home dir out
+  for shell in bash /bin/bash; do
+    for mode in quiet update exit-empty exit-partial signal-empty signal-partial timeout-partial; do
+      home=$(make_home "separate-announce-${shell//\//-}-$mode")
+      dir="$home/bin"
+      mkdir -p "$dir"
+      cat > "$dir/$TOOL" <<'SH'
+#!/bin/sh
+if [ "${1:-}" = --version ]; then
+  printf 'fixture 1.0\n'
+  exit 0
+fi
+SH
+      case "$mode" in
+        update|*-partial) printf 'printf "update available: 9.0\\n"\n' >> "$dir/$TOOL" ;;
+      esac
+      case "$mode" in
+        exit-*) printf 'exit 7\n' >> "$dir/$TOOL" ;;
+        signal-*) printf 'kill -TERM $$\n' >> "$dir/$TOOL" ;;
+        timeout-*) printf 'sleep 5\n' >> "$dir/$TOOL" ;;
+        *) printf 'exit 0\n' >> "$dir/$TOOL" ;;
+      esac
+      chmod 0755 "$dir/$TOOL"
+      write_config "$home" "{\"tools\":[{\"name\":\"fixture\",\"command\":\"$TOOL\",\"announce_args\":[\"--help\"],\"announce_pattern\":\"update available: [0-9.]+\"}]}"
+      out=$(FM_HOME="$home" PATH="$(fixture_path "$dir")" FM_TOOL_UPDATE_INTERVAL=0 \
+        FM_TOOL_UPDATE_PROBE_SECS=1 "$shell" "$CHECK" check 2>&1) || fail "$shell $mode check failed: $out"
+      case "$mode" in
+        quiet) [ -z "$out" ] || fail "successful empty announcement was not silent: $out" ;;
+        update) assert_contains "$out" 'fixture update available:' 'successful separate announcement was lost' ;;
+        *)
+          assert_contains "$out" 'fixture check failed:' "$shell $mode source failure was ignored"
+          assert_contains "$out" 'update announcement' 'failure did not identify the announcement source'
+          assert_not_contains "$out" 'update available:' 'a failed announcement source supplied an update'
+          ;;
+      esac
+    done
+  done
+  pass 'failed separate announcement probes report their failure and discard partial output'
+}
+
+test_failed_version_output_is_not_trusted() {
+  local shell mode home primary secondary path out
+  for shell in bash /bin/bash; do
+    for mode in current skew primary-exit primary-signal primary-timeout secondary-exit secondary-timeout announcement-exit; do
+      home=$(make_home "partial-version-${shell//\//-}-$mode")
+      primary="$home/primary"; secondary="$home/secondary"
+      make_copy "$primary" "$TOOL" 'fixture 1.0'
+      path=$primary
+      case "$mode" in
+        primary-exit) printf 'exit 7\n' >> "$primary/$TOOL" ;;
+        primary-signal) printf 'kill -TERM $$\n' >> "$primary/$TOOL" ;;
+        primary-timeout) printf 'sleep 5\n' >> "$primary/$TOOL" ;;
+        announcement-exit) printf 'printf "update available: 9.0\\n"\nexit 7\n' >> "$primary/$TOOL" ;;
+        secondary-*|skew)
+          make_copy "$secondary" "$TOOL" 'fixture 2.0'
+          path="$primary:$secondary"
+          case "$mode" in
+            secondary-exit) printf 'exit 7\n' >> "$secondary/$TOOL" ;;
+            secondary-timeout) printf 'sleep 5\n' >> "$secondary/$TOOL" ;;
+          esac
+          ;;
+      esac
+      if [ "$mode" = announcement-exit ]; then
+        write_config "$home" "{\"tools\":[{\"name\":\"fixture\",\"command\":\"$TOOL\",\"announce_pattern\":\"update available: [0-9.]+\"}]}"
+      else
+        write_config "$home" "{\"tools\":[{\"name\":\"fixture\",\"command\":\"$TOOL\"}]}"
+      fi
+      out=$(FM_HOME="$home" PATH="$(fixture_path "$path")" FM_TOOL_UPDATE_INTERVAL=0 \
+        FM_TOOL_UPDATE_PROBE_SECS=1 "$shell" "$CHECK" check 2>&1) || fail "$shell $mode check failed: $out"
+      case "$mode" in
+        current) [ -z "$out" ] || fail "a successful current version was not silent: $out" ;;
+        skew) assert_contains "$out" 'fixture update not in effect:' 'successful version skew was lost' ;;
+        *)
+          assert_contains "$out" 'fixture check failed:' "$shell $mode trusted a failed version probe"
+          assert_not_contains "$out" 'update not in effect:' 'a failed copy contributed an installed version'
+          assert_not_contains "$out" 'update available:' 'a failed version probe contributed an announcement'
+          ;;
+      esac
+    done
+  done
+  pass 'failed, signaled and timed-out version probes cannot supply installed versions or announcements'
+}
+
+test_positive_probe_and_sweep_durations() {
+  local shell variable value maximum expected home dir out bound rc
+  for shell in bash /bin/bash; do
+    for variable in FM_TOOL_UPDATE_BUDGET_SECS FM_TOOL_UPDATE_PROBE_SECS; do
+      case "$variable" in FM_TOOL_UPDATE_BUDGET_SECS) maximum=120 ;; *) maximum=30 ;; esac
+      for value in 0 00 000 8 08 9 09 10 010 "$maximum" "0$maximum" "$((maximum + 1))" \
+        10000000000000000000 18446744073709551616; do
+        home=$(make_home "positive-duration-${shell//\//-}-$variable-$value")
+        dir="$home/bin"
+        make_counting_copy "$dir" "$TOOL" 'fixture 1.0' "$home/probes"
+        write_config "$home" "{\"tools\":[{\"name\":\"fixture\",\"command\":\"$TOOL\"}]}"
+        cat > "$dir/date" <<'DATE'
+#!/bin/sh
+if [ "$*" = +%s ]; then printf '1800000000\n'; else exec /bin/date "$@"; fi
+DATE
+        cat > "$dir/timeout" <<'TIMEOUT'
+#!/bin/sh
+[ "$1" = -k ] && [ "$2" = 1 ] || exit 99
+printf '%s\n' "$3" >> "$BOUND_LOG"
+shift 3
+exec "$@"
+TIMEOUT
+        chmod +x "$dir/date" "$dir/timeout"
+        rc=0
+        out=$(FM_HOME="$home" PATH="$(fixture_path "$dir")" BOUND_LOG="$home/bounds" \
+          FM_CHECK_TIMEOUT=300 FM_TOOL_UPDATE_INTERVAL=0 FM_TOOL_UPDATE_BUDGET_SECS=60 \
+          FM_TOOL_UPDATE_PROBE_SECS=30 env "$variable=$value" "$shell" "$CHECK" check 2>&1) || rc=$?
+        if [ "${#value}" -gt 4 ] || [ "$value" -eq 0 ] || [ "$value" -gt "$maximum" ]; then
+          expect_code 2 "$rc" "$shell $variable=$value must refuse an out-of-range duration: $out"
+          assert_contains "$out" "$variable must be a whole number from 1 to " 'range refusal lost its reason'
+          [ ! -e "$home/bounds" ] && [ ! -e "$home/probes" ] || fail 'invalid duration started a probe'
+        else
+          expect_code 0 "$rc" "$shell $variable=$value failed: $out"
+          [ -z "$out" ] || fail "a successful current-tool probe reported a finding: $out"
+          bound=$(cat "$home/bounds")
+          case "$bound" in ''|*[!0-9]*) fail "expected exactly one numeric bound, got $bound" ;; esac
+          expected=$value
+          [ "$expected" -le 30 ] || expected=30
+          [ "$bound" -eq "$expected" ] || fail "$shell $variable=$value selected probe bound $bound"
+          assert_equals probed "$(cat "$home/probes")" 'the duration fixture did not probe exactly once'
+        fi
+      done
+    done
+  done
+  pass 'probe and sweep durations reject out-of-range values and apply positive decimal bounds'
+}
+
+test_decimal_watcher_timeout() {
+  local shell value timeout home dir out expected
+  for shell in bash /bin/bash; do
+    for value in 0 00 000 8 08 9 09 10 010; do
+      case "$value" in
+        0|00|000) timeout=30 ;;
+        8|08) timeout=8 ;;
+        9|09) timeout=9 ;;
+        10|010) timeout=10 ;;
+      esac
+      home=$(make_home "decimal-timeout-${shell//\//-}-$value")
+      dir="$home/bin"
+      make_counting_copy "$dir" "$TOOL" 'fixture 1.0' "$home/probes"
+      write_config "$home" "{\"tools\":[{\"name\":\"fixture\",\"command\":\"$TOOL\"}]}"
+      out=$(FM_HOME="$home" PATH="$(fixture_path "$dir")" FM_CHECK_TIMEOUT="$value" \
+        FM_TOOL_UPDATE_INTERVAL=0 FM_TOOL_UPDATE_BUDGET_SECS=60 \
+        "$shell" "$CHECK" check 2>&1) || fail "$shell rejected timeout $value: $out"
+      expected="tool updates: sweep budget 60s cut to $((timeout - 3))s to stay inside the watcher check timeout of ${timeout}s"
+      assert_equals "$expected" "$out" "$shell timeout $value chose an inconsistent budget"
+      assert_equals probed "$(cat "$home/probes")" 'the bounded check did not probe exactly once'
+    done
+  done
+  pass "watcher timeout padding preserves decimal budgets and the zero-input default"
+}
+
 test_path_skew_is_reported_from_every_copy() {
   local home stale fresh out report
   home=$(make_home skew)
@@ -437,6 +687,147 @@ test_quiet_tool_with_announce_pattern_is_silent() {
   pass "a tool that announces nothing stays silent"
 }
 
+# --- published version documents --------------------------------------------
+
+# A fixture curl in the probe PATH answers every fetch with one canned body (or
+# the given failure status), so no case reaches the network. The check must use
+# whatever curl PATH resolves, which is how the fixture takes the real one's
+# place without touching it.
+make_curl_fixture() {
+  local dir=$1 body=$2 status=${3:-0}
+  mkdir -p "$dir"
+  cat > "$dir/curl" <<SH
+#!/usr/bin/env bash
+[ "$status" -eq 0 ] || exit "$status"
+printf '%s\n' '$body'
+SH
+  chmod 0755 "$dir/curl"
+}
+
+test_published_version_newer_than_installed_is_reported() {
+  local home dir fresh out report
+  home=$(make_home version-url)
+  dir="$TMP_ROOT/version-url/bin"
+  make_copy "$dir" claude-fixture '2.1.271 (Claude Code)'
+  make_curl_fixture "$dir" '2.1.273'
+  write_config "$home" '{"tools":[{"name":"claude","command":"claude-fixture","version_url":"https://downloads.example.invalid/latest"}]}'
+  out="$home/out.txt"
+  run_check "$home" "$(fixture_path "$dir")" "$out"
+  report=$(cat "$out")
+  assert_contains "$report" "claude update available: 2.1.273 published at https://downloads.example.invalid/latest, PATH resolves 2.1.271" "a newer published version was not reported against the version PATH resolves"
+  assert_not_contains "$report" "not in effect" "a published update must not be reported as PATH skew"
+
+  fresh="$TMP_ROOT/version-url/new/bin"
+  make_copy "$fresh" claude-fixture '2.1.272 (Claude Code)'
+  run_check "$home" "$(fixture_path "$dir:$fresh")" "$out"
+  report=$(cat "$out")
+  assert_contains "$report" "claude update available: 2.1.273 published at https://downloads.example.invalid/latest, PATH resolves 2.1.271" "a published version newer than every installed copy was not reported"
+  assert_contains "$report" "claude update not in effect: PATH resolves 2.1.271 at $dir/claude-fixture but 2.1.272 is installed at $fresh/claude-fixture" "a published update suppressed the installed PATH skew"
+  pass "a version_url newer than every installed copy is reported as an available update"
+}
+
+test_published_version_already_installed_is_not_double_reported() {
+  local home stale fresh installed out report
+  home=$(make_home version-url-installed)
+  stale="$TMP_ROOT/version-url-installed/old/bin"
+  fresh="$TMP_ROOT/version-url-installed/new/bin"
+  make_copy "$stale" claude-fixture '2.1.271 (Claude Code)'
+  make_curl_fixture "$stale" '2.1.273'
+  write_config "$home" '{"tools":[{"name":"claude","command":"claude-fixture","version_url":"https://downloads.example.invalid/latest"}]}'
+  out="$home/out.txt"
+
+  for installed in 2.1.273 2.1.274; do
+    make_copy "$fresh" claude-fixture "$installed (Claude Code)"
+    run_check "$home" "$(fixture_path "$stale:$fresh")" "$out"
+    report=$(cat "$out")
+    assert_contains "$report" "claude update not in effect: PATH resolves 2.1.271 at $stale/claude-fixture but $installed is installed at $fresh/claude-fixture" "a published version already installed was not reported as PATH skew"
+    assert_not_contains "$report" "update available" "a published version no newer than an installed copy was reported as available"
+    assert_not_contains "$report" "check failed" "readable installed and published versions produced a check failure"
+
+    run_check "$home" "$(fixture_path "$fresh:$stale")" "$out"
+    [ ! -s "$out" ] || fail "a version_url no newer than the active copy must be silent, got: $(cat "$out")"
+  done
+  pass "a version_url no newer than an installed copy reports only PATH skew when needed"
+}
+
+test_published_version_equal_to_path_is_silent() {
+  local home dir out
+  home=$(make_home version-url-current)
+  dir="$TMP_ROOT/version-url-current/bin"
+  make_copy "$dir" claude-fixture '2.1.273 (Claude Code)'
+  make_curl_fixture "$dir" '2.1.273'
+  write_config "$home" '{"tools":[{"name":"claude","command":"claude-fixture","version_url":"https://downloads.example.invalid/latest"}]}'
+  out="$home/out.txt"
+  run_check "$home" "$(fixture_path "$dir")" "$out"
+  [ ! -s "$out" ] || fail "a current tool with version_url must be silent, got: $(cat "$out")"
+  pass "a version_url that matches the PATH version is silent"
+}
+
+test_unreadable_version_url_is_a_failure_not_a_pass() {
+  local home dir out
+  home=$(make_home version-url-dead)
+  dir="$TMP_ROOT/version-url-dead/bin"
+  make_copy "$dir" claude-fixture '2.1.271 (Claude Code)'
+  make_curl_fixture "$dir" '' 22
+  write_config "$home" '{"tools":[{"name":"claude","command":"claude-fixture","version_url":"https://downloads.example.invalid/latest"}]}'
+  out="$home/out.txt"
+  run_check "$home" "$(fixture_path "$dir")" "$out"
+  assert_contains "$(cat "$out")" "claude check failed: https://downloads.example.invalid/latest did not report a version" "a version_url that could not be read was taken for current"
+
+  make_curl_fixture "$dir" 'no version here'
+  rm -f "$home/state/.tool-updates"
+  run_check "$home" "$(fixture_path "$dir")" "$out"
+  assert_contains "$(cat "$out")" "claude check failed: https://downloads.example.invalid/latest did not report a version" "a version_url body with no version was taken for current"
+  pass "a version_url that does not answer with a version is a check failure"
+}
+
+# A probe PATH with every ambient binary except curl, so the version_url probe
+# has no reader while the check's other tools (jq, git, date, grep, timeout)
+# keep working. Built from symlinks, so the host's binaries are never moved.
+make_path_without_curl() {
+  local dir=$1 path_entry entry base
+  mkdir -p "$dir"
+  while IFS= read -r path_entry; do
+    [ -n "$path_entry" ] && [ -d "$path_entry" ] || continue
+    for entry in "$path_entry"/*; do
+      base=${entry##*/}
+      [ "$base" = curl ] && continue
+      [ -e "$dir/$base" ] && continue
+      [ -x "$entry" ] && [ ! -d "$entry" ] || continue
+      ln -s "$entry" "$dir/$base" 2>/dev/null || true
+    done
+  done < <(printf '%s\n' "$PATH" | tr ':' '\n')
+}
+
+test_missing_curl_is_a_failure_not_a_pass() {
+  local home dir nobin out
+  home=$(make_home version-url-nocurl)
+  dir="$TMP_ROOT/version-url-nocurl/bin"
+  make_copy "$dir" claude-fixture '2.1.271 (Claude Code)'
+  nobin="$TMP_ROOT/version-url-nocurl/nobin"
+  make_path_without_curl "$nobin"
+  write_config "$home" '{"tools":[{"name":"claude","command":"claude-fixture","version_url":"https://downloads.example.invalid/latest"}]}'
+  out="$home/out.txt"
+  run_check "$home" "$dir:$nobin" "$out"
+  assert_contains "$(cat "$out")" "claude check failed: curl is required to read https://downloads.example.invalid/latest" "a host without curl took the tool for current"
+  pass "a missing curl is a check failure"
+}
+
+test_version_url_must_be_https_with_a_command() {
+  local home out
+  home=$(make_home version-url-schema)
+  out="$home/out.txt"
+  write_config "$home" '{"tools":[{"name":"claude","command":"claude","version_url":"http://downloads.example.invalid/latest"}]}'
+  run_check "$home" "$PATH" "$out"
+  assert_contains "$(cat "$out")" "tool claude version_url must be one https URL" "a plain-http version_url was accepted"
+
+  write_config "$home" '{"tools":[{"name":"claude","git":{"repo":"/tmp"},"version_url":"https://downloads.example.invalid/latest"}]}'
+  rm -f "$home/state/.tool-updates"
+  run_check "$home" "$PATH" "$out"
+  assert_contains "$(cat "$out")" "tool claude version_url needs command" "a version_url with no command to compare against was accepted"
+  pass "version_url is validated as one https URL beside a command"
+}
+
 # --- git sources ------------------------------------------------------------
 
 # git_fixture <name>: a work repo whose origin branch is two commits ahead,
@@ -605,6 +996,8 @@ test_a_git_probe_that_does_not_answer_is_not_an_update() {
   head_before=$(git -C "$work" rev-parse HEAD)
 
   # A git that answers everything except the object query, which never answers.
+  # The real git's path is quoted because it can hold a space, as the path of a
+  # git inside an application bundle does.
   dir="$TMP_ROOT/git-mute/bin"
   mkdir -p "$dir"
   cat > "$dir/git" <<SH
@@ -615,7 +1008,7 @@ for arg in "\$@"; do
     exit 0
   fi
 done
-exec $(command -v git) "\$@"
+exec $(printf '%q' "$(command -v git)") "\$@"
 SH
   chmod 0755 "$dir/git"
 
@@ -652,7 +1045,7 @@ for arg in "\$@"; do
     exit 0
   fi
 done
-exec $(command -v git) "\$@"
+exec $(printf '%q' "$(command -v git)") "\$@"
 SH
   chmod 0755 "$dir/git"
 
@@ -1055,6 +1448,13 @@ test_armed_check_wakes_the_watcher_with_the_skew_report() {
   pass "the armed check reaches the watcher as an ordinary check wake"
 }
 
+test_registry_tokens_reject_trailing_newlines
+test_empty_path_entries_probe_the_current_directory
+test_interval_bounds_do_not_overflow
+test_failed_separate_announcements_are_reported
+test_failed_version_output_is_not_trusted
+test_positive_probe_and_sweep_durations
+test_decimal_watcher_timeout
 test_path_skew_is_reported_from_every_copy
 test_newest_copy_first_on_path_is_silent
 test_identical_versions_are_silent
@@ -1070,6 +1470,12 @@ test_one_broken_pattern_does_not_blind_the_rest_of_the_sweep
 test_an_unchecked_announcement_source_is_not_read_as_current
 test_an_announcement_probe_that_does_not_answer_is_reported
 test_quiet_tool_with_announce_pattern_is_silent
+test_published_version_newer_than_installed_is_reported
+test_published_version_already_installed_is_not_double_reported
+test_published_version_equal_to_path_is_silent
+test_unreadable_version_url_is_a_failure_not_a_pass
+test_missing_curl_is_a_failure_not_a_pass
+test_version_url_must_be_https_with_a_command
 test_commits_behind_origin_are_reported
 test_default_branch_is_detected_when_branch_is_omitted
 test_default_branch_is_asked_of_the_remote_when_the_clone_has_no_record

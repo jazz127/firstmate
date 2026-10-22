@@ -2054,11 +2054,22 @@ async function claimInheritedLifecycleLock(home) {
   return mode;
 }
 
+// The owner directory holds the lock metadata bin/fm-wake-lib.sh writes
+// (fm_lock_clean_known_files owns this file list); every known file must go
+// before the directory can be removed, and an unknown file still blocks it.
+const LIFECYCLE_LOCK_OWNER_FILES = ["pid", "fm-home", "pid-identity", "lock-owner-start", "role", "watcher-path"];
+
 async function releaseLifecycleLock() {
   await assertLifecycleLockOwned();
   const { lockPath, ownerPath } = activeLifecycleLock;
   await unlink(lockPath);
-  await unlink(path.join(ownerPath, "pid"));
+  for (const name of LIFECYCLE_LOCK_OWNER_FILES) {
+    try {
+      await unlink(path.join(ownerPath, name));
+    } catch (error) {
+      if (error?.code !== "ENOENT") throw error;
+    }
+  }
   await rmdir(ownerPath);
   activeLifecycleLock = null;
 }

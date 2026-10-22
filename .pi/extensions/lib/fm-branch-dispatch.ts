@@ -99,6 +99,8 @@ export interface UnreadWakeScope {
    * `eligible` is false.
    */
   eligibleSeqs: string[];
+  /** Task bound to each eligible row; unscoped check and heartbeat rows name fleet. */
+  taskByEligibleSeq: Record<string, string>;
   /**
    * The exact task ids the eligible signal/stale rows name (a signal row by
    * its status-log key, a stale row through the task metadata recording that
@@ -110,8 +112,9 @@ export interface UnreadWakeScope {
   eligibleTasks: string[];
   /**
    * True only when this scan itself is untrustworthy: the queue or its
-   * metadata could not be read, a line fails the structural tab-field check,
-   * or an unresolvable signal/stale row was found. False whenever the scan
+   * metadata could not be read, a metadata alias has conflicting task owners,
+   * a line fails the structural tab-field check, or an unresolvable
+   * signal/stale row was found. False whenever the scan
    * completed cleanly and simply found nothing (or nothing further) eligible
    * for the branch right now: status "unsafe" with corrupted false is the
    * ordinary "ordinary main-only content, nothing here for the branch" case,
@@ -149,6 +152,7 @@ const EMPTY_SCOPE: UnreadWakeScope = {
   eligible: false,
   projects: [],
   eligibleSeqs: [],
+  taskByEligibleSeq: {},
   eligibleTasks: [],
   corrupted: false,
   needsDecisionKeys: [],
@@ -161,6 +165,7 @@ const UNSAFE_SCOPE: UnreadWakeScope = {
   eligible: false,
   projects: [],
   eligibleSeqs: [],
+  taskByEligibleSeq: {},
   eligibleTasks: [],
   corrupted: true,
   needsDecisionKeys: [],
@@ -394,22 +399,26 @@ export function scopeForUnreadWake(state: string, heartbeat: boolean, afk = fals
       const project = fields.find((line) => line.startsWith("project="))?.slice(8) ?? "";
       const window = fields.find((line) => line.startsWith("window="))?.slice(7) ?? "";
       if (fields.includes("kind=secondmate")) secondmates.add(task);
-      if (project) {
-        metadata.set(task, project);
-        taskByKey.set(task, task);
-        taskByKey.set(`${task}.status`, task);
-        taskByKey.set(`${task}.turn-ended`, task);
-        if (window) {
-          metadata.set(window, project);
-          taskByKey.set(window, task);
-        }
+      // An Orca task's stale rows name its terminal handle, not its window
+      // (bin/fm-watch.sh keys Orca endpoints by terminal=), so index both.
+      const terminal = fields.find((line) => line.startsWith("terminal="))?.slice(9) ?? "";
+      const aliases = [task, `${task}.status`, `${task}.turn-ended`, window, terminal];
+      for (const key of aliases) {
+        if (!key) continue;
+        const owner = taskByKey.get(key);
+        // Even an incomplete record claims its endpoint. Ambiguous ownership
+        // must not inherit another record's decision state or project context.
+        if (owner !== undefined && owner !== task) return UNSAFE_SCOPE;
+        taskByKey.set(key, task);
       }
+      if (project) metadata.set(task, project);
     }
   } catch {
     return UNSAFE_SCOPE;
   }
 
   const eligibleSeqs: string[] = [];
+  const taskByEligibleSeq: Record<string, string> = {};
   const eligibleTasks = new Set<string>();
   const needsDecisionKeys: string[] = [];
   const checkSeqs: string[] = [];
@@ -433,6 +442,7 @@ export function scopeForUnreadWake(state: string, heartbeat: boolean, afk = fals
       // no main drain will ever take it, so any wake claims it.
       if (heartbeat || afk) {
         eligibleSeqs.push(seq);
+        taskByEligibleSeq[seq] = "fleet";
         heartbeatSeqs.push(seq);
       }
       continue;
@@ -444,6 +454,7 @@ export function scopeForUnreadWake(state: string, heartbeat: boolean, afk = fals
       // is the only actor, so the row is claimed unscoped.
       if (afk) {
         eligibleSeqs.push(seq);
+        taskByEligibleSeq[seq] = "fleet";
         checkSeqs.push(seq);
       }
       continue;
@@ -466,12 +477,14 @@ export function scopeForUnreadWake(state: string, heartbeat: boolean, afk = fals
       project = metadata.get(task) ?? "";
     } else if (kind === "stale") {
       task = taskByKey.get(key) ?? taskByKey.get(key.replace(/^fm-/, "")) ?? "";
-      project = metadata.get(key) ?? metadata.get(key.replace(/^fm-/, "")) ?? "";
+      project = metadata.get(task) ?? "";
     } else {
       // A kind fm_wake_append never emits: structural corruption, not an
       // ordinary main-only row.
       return UNSAFE_SCOPE;
     }
+    // Projectless records may establish ambiguity, never routing authority.
+    if (!project || !task) return UNSAFE_SCOPE;
     // A second mate's signal is judged by its new span on both paths. For a
     // single-task log, an attended host can have accepted a routine signal
     // before its task gained a main-owned decision, so it checks the whole
@@ -541,10 +554,10 @@ export function scopeForUnreadWake(state: string, heartbeat: boolean, afk = fals
         if (!afk) continue;
       }
     }
-    if (!project || !task) return UNSAFE_SCOPE;
     projects.add(project);
     eligibleTasks.add(task);
     eligibleSeqs.push(seq);
+    taskByEligibleSeq[seq] = task;
   }
   const eligible = eligibleSeqs.length > 0;
   // Reached only after every row passed classification without a veto. A scan
@@ -559,6 +572,7 @@ export function scopeForUnreadWake(state: string, heartbeat: boolean, afk = fals
     eligible,
     projects: [...projects],
     eligibleSeqs,
+    taskByEligibleSeq,
     eligibleTasks: [...eligibleTasks],
     corrupted: false,
     needsDecisionKeys,

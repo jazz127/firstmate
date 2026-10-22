@@ -23,6 +23,12 @@
 fm_nm_bounded() {  # <dir> <timeout_secs> <command> <args...>
   local dir=$1 timeout_secs=$2 have_timeout=none
   shift 2
+  if [ -n "${FM_TIMEOUT_OWNER_PID:-}" ]; then
+    # shellcheck source=bin/fm-timeout-lib.sh
+    . "${BASH_SOURCE[0]%/*}/fm-timeout-lib.sh"
+    ( cd "$dir" && fm_run_timed "$timeout_secs" "$@" )
+    return "$?"
+  fi
   if command -v timeout >/dev/null 2>&1; then have_timeout=timeout
   elif command -v gtimeout >/dev/null 2>&1; then have_timeout=gtimeout
   elif command -v perl >/dev/null 2>&1; then have_timeout=perl
@@ -30,7 +36,7 @@ fm_nm_bounded() {  # <dir> <timeout_secs> <command> <args...>
   case "$have_timeout" in
     timeout)  ( cd "$dir" && timeout "$timeout_secs" "$@" ) ;;
     gtimeout) ( cd "$dir" && gtimeout "$timeout_secs" "$@" ) ;;
-    perl)     ( cd "$dir" && perl -e 'my $t = shift; my $pid = fork; die "fork failed" unless defined $pid; if (!$pid) { setpgrp(0, 0); exec @ARGV } local $SIG{ALRM} = sub { kill "TERM", -$pid; select undef, undef, undef, 0.2; kill "KILL", -$pid; exit 124 }; alarm $t; waitpid $pid, 0; exit($? >> 8)' "$timeout_secs" "$@" ) ;;
+    perl)     ( cd "$dir" && perl -e 'my $t = shift; my $pid = fork; die "fork failed" unless defined $pid; if (!$pid) { setpgrp(0, 0); exec { $ARGV[0] } @ARGV; exit 127 } local $SIG{ALRM} = sub { kill "TERM", -$pid; select undef, undef, undef, 0.2; kill "KILL", -$pid; exit 124 }; alarm $t; waitpid $pid, 0; exit(($? & 127) ? 128 + ($? & 127) : $? >> 8)' "$timeout_secs" "$@" ) ;;
     *)        return 1 ;;
   esac
 }
@@ -49,25 +55,59 @@ fm_nm_run() {  # <dir> <timeout_secs> <args...>
   fm_nm_run_checked "$@" || true
 }
 
-fm_nm_trim() {
-  local s=${1:-}
-  s="${s#"${s%%[![:space:]]*}"}"
-  s="${s%"${s##*[![:space:]]}"}"
-  printf '%s' "$s"
+# An output variable avoids a subshell for callers that keep parsing the value.
+# The _fm_nm_trim_ prefix is reserved for this helper's locals.
+fm_nm_trim() {  # <value> [output-variable]
+  local _fm_nm_trim_value=${1:-}
+  _fm_nm_trim_value="${_fm_nm_trim_value#"${_fm_nm_trim_value%%[![:space:]]*}"}"
+  _fm_nm_trim_value="${_fm_nm_trim_value%"${_fm_nm_trim_value##*[![:space:]]}"}"
+  if [ "$#" -gt 1 ]; then
+    printf -v "$2" '%s' "$_fm_nm_trim_value"
+  else
+    printf '%s' "$_fm_nm_trim_value"
+  fi
 }
 
+# Trim whitespace and one surrounding double-quote pair; optionally assign a variable.
+# The _fm_nm_quotes_ prefix is reserved for this helper's locals.
 fm_nm_strip_quotes() {
-  local s
-  s=$(fm_nm_trim "${1:-}")
-  case "$s" in
-    \"*\") s=${s#\"}; s=${s%\"} ;;
+  local _fm_nm_quotes_value
+  fm_nm_trim "${1:-}" _fm_nm_quotes_value
+  case "$_fm_nm_quotes_value" in
+    \"*\") _fm_nm_quotes_value=${_fm_nm_quotes_value#\"}; _fm_nm_quotes_value=${_fm_nm_quotes_value%\"} ;;
   esac
-  fm_nm_trim "$s"
+  if [ "$#" -gt 1 ]; then
+    fm_nm_trim "$_fm_nm_quotes_value" _fm_nm_quotes_value
+    printf -v "$2" '%s' "$_fm_nm_quotes_value"
+  else
+    fm_nm_trim "$_fm_nm_quotes_value"
+  fi
+}
+
+# Path of no-mistakes' local state database as the CLI would see it from
+# worktree $1: <NM_HOME>/state.sqlite, with NM_HOME defaulting to
+# ~/.no-mistakes and a relative NM_HOME resolving from that worktree. Readers
+# open it with SQLite's mode=ro, so a missing database is never created.
+fm_nm_state_db() {  # <worktree>
+  local root=${NM_HOME:-}
+  [ -n "$root" ] || root=~/.no-mistakes
+  case "$root" in
+    /*) ;;
+    *) root="$1/$root" ;;
+  esac
+  printf '%s/state.sqlite\n' "$root"
 }
 
 # Scalar value of a TOON key in captured `axi status` output $1.
+# Stop at the first field without a producer pipe that can fail on early exit.
 fm_nm_field() {  # <toon-output> <key>
-  printf '%s\n' "$1" | sed -n "s/^[[:space:]]*$2:[[:space:]]*\(.*\)/\1/p" | head -1
+  sed -n "
+    /^[[:space:]]*$2:/ {
+      s/^[[:space:]]*$2:[[:space:]]*//
+      p
+      q
+    }
+  " <<< "$1"
 }
 
 # Full commit sha for sha-ish $2 as seen from worktree $1's own object store;
@@ -126,8 +166,8 @@ fm_nm_run_status_class() {  # <status_word>
 
 # Select from a complete `no-mistakes axi` overview with the existing awk
 # toolchain. A capped overview requires an optional Python 3 sqlite3 reader
-# for a read-only same-branch query of NM_HOME/state.sqlite (default:
-# ~/.no-mistakes/state.sqlite; relative NM_HOME resolves from the worktree).
+# for a read-only same-branch query of the state database fm_nm_state_db
+# locates for the worktree.
 # Repo identity is the overview's own top-level `repo:` line, which every axi
 # release emits: it is the `working_path` the CLI itself resolved for the
 # queried worktree. That is NOT the task worktree path in general - a linked
@@ -235,7 +275,7 @@ fm_nm_select_run() {  # <branch> <axi-overview> <worktree> [timeout_secs]
     incomplete\|*) available_ids=${selection#*|} ;;
     *) printf '%s\n' "$selection"; return ;;
   esac
-  if ! inventory=$(fm_nm_bounded "$3" "$timeout_secs" python3 - "$1" "$2" "$3" "$available_ids" 2>/dev/null <<'PY'
+  if ! inventory=$(fm_nm_bounded "$3" "$timeout_secs" python3 - "$1" "$2" "$available_ids" "$(fm_nm_state_db "$3")" 2>/dev/null <<'PY'
 import json
 import os
 import re
@@ -244,7 +284,7 @@ import sys
 from contextlib import closing
 from pathlib import Path
 
-branch, overview, worktree, available_ids = sys.argv[1:]
+branch, overview, available_ids, database = sys.argv[1:]
 ids = available_ids.split(", ") if available_ids else []
 try:
     repos = [line[6:].strip() for line in overview.splitlines() if line.startswith("repo: ")]
@@ -253,10 +293,7 @@ try:
     repo_path = json.loads(repos[0]) if repos[0].startswith('"') else repos[0]
     if not isinstance(repo_path, str) or not os.path.isabs(repo_path):
         raise ValueError
-    root = Path(os.environ.get("NM_HOME") or Path.home() / ".no-mistakes")
-    if not root.is_absolute():
-        root = Path(worktree) / root
-    with closing(sqlite3.connect((root / "state.sqlite").as_uri() + "?mode=ro", uri=True, timeout=30)) as db:
+    with closing(sqlite3.connect(Path(database).as_uri() + "?mode=ro", uri=True, timeout=30)) as db:
         db.execute("BEGIN")
         repo = db.execute("SELECT id FROM repos WHERE working_path = ?", (repo_path,)).fetchall()
         if len(repo) != 1:
@@ -375,8 +412,8 @@ FM_NM_GATE_ROW_RE='^[[:space:]]*[^,]+,[[:space:]]*"?(awaiting_approval|fix_revie
 # leaves it at `running` while a run waits at a gate, so the word and the gate
 # markers routinely disagree.
 fm_nm_run_is_parked() {  # <toon-output>
-  printf '%s\n' "$1" | grep -Eq \
-    "$FM_NM_GATE_LINE_RE|$FM_NM_AWAITING_AGENT_RE|$FM_NM_GATE_SCALAR_RE|$FM_NM_GATE_ROW_RE"
+  grep -Eq \
+    "$FM_NM_GATE_LINE_RE|$FM_NM_AWAITING_AGENT_RE|$FM_NM_GATE_SCALAR_RE|$FM_NM_GATE_ROW_RE" <<< "$1"
 }
 
 # 0 if the run in captured `axi status` TOON $1 is EXECUTING: in flight and

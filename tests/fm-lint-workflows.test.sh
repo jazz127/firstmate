@@ -75,6 +75,14 @@ fm_install_stub_hasher() {
   cat > "$fakebin/$name" <<'SH'
 #!/usr/bin/env bash
 self=${0##*/}
+if [ -n "${FM_INSTALL_REAL_HASHER:-}" ]; then
+  # The fake download is empty. Preserve the real provider's filename framing,
+  # substituting only its empty-content digest for the selected release pin.
+  result=$("$FM_INSTALL_REAL_HASHER" "$@") || exit 1
+  empty=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+  printf '%s\n' "${result//$empty/${SHA256_STUB_HASH:?}}"
+  exit 0
+fi
 if [ -n "${HASHER_LOG:-}" ]; then
   printf '%s\n' "$self $*" >> "$HASHER_LOG"
 fi
@@ -292,6 +300,33 @@ SH
   pass "fm-lint-workflows.sh refuses to lint under a non-pinned actionlint version"
 }
 
+test_installer_hashes_contents_in_unusual_temp_paths() {
+  local provider hasher tmp fakebin tool leaf scratch destination out
+  for provider in sha256sum shasum; do
+    hasher=$(command -v "$provider") || { pass "SKIP: $provider unavailable for installer path test"; continue; }
+    tmp=$(fm_test_tmproot fm-installer-content-hash)
+    fakebin=$(fm_fakebin "$tmp")
+    for tool in bash dirname mktemp rm awk mkdir install cat chmod; do
+      ln -s "$(command -v "$tool")" "$fakebin/$tool"
+    done
+    fm_install_stub_uname "$fakebin"
+    fm_install_stub_curl "$fakebin"
+    fm_install_stub_hasher "$fakebin" "$provider"
+    fm_install_stub_tar_actionlint "$fakebin"
+    for leaf in plain $'back\\slash' $'new\nline'; do
+      scratch="$tmp/$leaf"; destination="$scratch/installed"
+      mkdir -p "$scratch"
+      out=$(RUNNER_TEMP="$scratch" FM_INSTALL_REAL_HASHER="$hasher" \
+        SHA256_STUB_HASH="$ACTIONLINT_SHA_LINUX_AMD64" \
+        FM_TEST_UNAME_S=Linux FM_TEST_UNAME_M=x86_64 PATH="$fakebin" \
+        "$INSTALLER" "$destination" 2>&1) \
+        || fail "$provider rejected the synthetic archive under $leaf: $out"
+      [ -x "$destination/actionlint" ] || fail "$provider did not install under $leaf"
+    done
+  done
+  pass "actionlint installer hashes archive contents independently of temporary path rendering"
+}
+
 test_installer_retries_transient_download_failure() {
   local tmp fakebin destination out
   tmp=$(fm_test_tmproot fm-actionlint-download)
@@ -504,7 +539,7 @@ SH
   : > "$diff_file"
 
   rc=0
-  out=$(PATH="$fakebin:$PATH" GITHUB_ACTIONS='' CI='' FM_LINT_JOBS=1 \
+  out=$(PATH="$fakebin:$PATH" GITHUB_ACTIONS='' CI='' FM_LINT_JOBS=1 FM_LINT_HOST_LOCK=off \
     FM_TEST_GIT_DIFF_FILE="$diff_file" "$tmp/bin/fm-lint.sh" 2>&1) || rc=$?
   [ "$rc" -ne 0 ] || fail "fm-lint.sh default path missed a broken ci.yml"$'\n'"$out"
   assert_contains "$out" "could not parse as YAML" \
@@ -514,6 +549,7 @@ SH
   pass "fm-lint.sh default path catches a self-broken ci.yml"
 }
 
+test_installer_hashes_contents_in_unusual_temp_paths
 test_pins_an_explicit_version
 test_current_workflows_pass
 test_col0_heredoc_fails_with_clear_error

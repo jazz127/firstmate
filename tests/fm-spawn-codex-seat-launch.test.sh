@@ -38,7 +38,7 @@ test_seated_codex_agent_sees_seat_home_and_no_ambient_credentials() {
     seat_home="$case_dir/seat home"
     mkdir -p "$seat_home"
     printf '%s\n' '{"OPENAI_API_KEY":"sk-fm-synthetic"}' > "$seat_home/auth.json"
-    jq -n --arg home "$seat_home" '{version:1,id:"seat-launch-dock",seats:{luna:{harness:"codex",credential_home:$home}}}' \
+    jq -n --arg home "$seat_home" '{version:1,id:"seat-launch-dock",seats:{primary:{harness:"codex",credential_home:$home}}}' \
       > "$home/config/dock.json"
     # The enabled posture grants every ambient name through the cleared
     # environment, so only the launch's own shed and home can keep them out.
@@ -62,7 +62,7 @@ SH
     : > "$launchlog"
     : > "$panelog"
     out=$(FM_FAKE_LAUNCH_LOG="$launchlog" FM_FAKE_PANE_LOG="$panelog" \
-      fm_test_run_spawn "$home" "$wt" "$fakebin" "$id" "$proj" --harness codex --seat luna \
+      fm_test_run_spawn "$home" "$wt" "$fakebin" "$id" "$proj" --harness codex --seat primary \
       --mode no-mistakes --yolo off)
     status=$?
     expect_code 0 "$status" "seated Codex spawn with allowlist=$setting should succeed: $out"

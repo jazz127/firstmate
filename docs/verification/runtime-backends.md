@@ -752,15 +752,26 @@ Its output was:
 ok - codex-cli 0.156.1: native status distinguishes synthetic file stores from empty and keyring selections, and the helper rejects ambient credentials
 ```
 
-At `2026-09-25T15:43:11Z`, the installed CLI's native status also returned `Logged in using ChatGPT` with exit 0 for the existing Luna home under a cleared environment:
+The operator contract and supported storage mode are in [`configuration.md`](../configuration.md#dock-local-seat-binding-configdockjson); rerun the guard after a Codex upgrade.
+
+### Codex private seat names
+
+On 2026-10-22 UTC, offline synthetic fixtures exercised the dock CLI with Bash 5.3.9 and jq 1.8.2:
 
 ```sh
-env -i HOME=/Users/jarad PATH="$PATH" USER=jarad LOGNAME=jarad CODEX_HOME=/Users/jarad/.codex-luna codex login status -c 'cli_auth_credentials_store="file"' -c 'model_provider="openai"'
+bash bin/fm-test-run.sh tests/fm-dock.test.sh
 ```
 
-The same command saw `Not logged in` with exit 1 for an empty temporary home.
-That local status check did not send a model request or inspect credential contents.
-The operator contract and supported storage mode are in [`configuration.md`](../configuration.md#dock-local-seat-binding-configdockjson); rerun the guard after a Codex upgrade.
+The relevant output was:
+
+```text
+ok - arbitrary safe seat names resolve, including digits, dashes, and the length limit
+ok - invalid seat names refuse both as selections and as unselected dock keys
+ok - unconfigured names cannot borrow another seat
+ok - missing and unreadable homes refuse without host-specific fallback
+```
+
+These fixtures exercise local configuration parsing and resolution; they do not establish real-account sign-in or model access.
 
 ## Secondmate busy contract
 

@@ -12,10 +12,10 @@ SEAT="$TMP_ROOT/seat with spaces and \$(literal) 'quotes'"
 mkdir -p "$CONFIG" "$SEAT"
 
 resolve() {
-  FM_CONFIG_OVERRIDE="$CONFIG" "$ROOT/bin/fm-dock.sh" resolve --seat "${1:-luna}" --harness codex 2>&1
+  FM_CONFIG_OVERRIDE="$CONFIG" "$ROOT/bin/fm-dock.sh" resolve --seat "${1-primary}" --harness codex 2>&1
 }
 write_record() {
-  jq -n --arg home "$1" --arg seat "${2:-luna}" '{version:1,id:"test-dock",seats:{($seat):{harness:"codex",credential_home:$home}}}' > "$CONFIG/dock.json"
+  jq -n --arg home "$1" --arg seat "${2-primary}" '{version:1,id:"test-dock",seats:{($seat):{harness:"codex",credential_home:$home}}}' > "$CONFIG/dock.json"
 }
 write_record "$SEAT"
 out=$(resolve); rc=$?
@@ -25,14 +25,41 @@ assert_contains "$out" 'dock=test-dock' "dock id must be visible"
 assert_absent "$TMP_ROOT/literal" "path punctuation must not execute shell text"
 pass "valid dock record resolves a literal credential path"
 
-MAIN_SEAT="$TMP_ROOT/main-seat"
-mkdir -p "$MAIN_SEAT"
-write_record "$MAIN_SEAT" main
-out=$(resolve main); rc=$?
-expect_code 0 "$rc" "valid main dock seat should resolve: $out"
-assert_contains "$out" "seat=main" "main seat identity should be visible"
-assert_contains "$out" "credential_home=$MAIN_SEAT" "main seat must resolve its own credential directory"
-pass "main Codex seat resolves independently by name"
+SECONDARY_SEAT="$TMP_ROOT/secondary-seat"
+mkdir -p "$SECONDARY_SEAT"
+write_record "$SECONDARY_SEAT" secondary
+out=$(resolve secondary); rc=$?
+expect_code 0 "$rc" "valid secondary dock seat should resolve: $out"
+assert_contains "$out" "seat=secondary" "secondary seat identity should be visible"
+assert_contains "$out" "credential_home=$SECONDARY_SEAT" "secondary seat must resolve its own credential directory"
+pass "secondary Codex seat resolves independently by name"
+
+long_name=$(printf '%064d' 0)
+for name in a 7 build-2 primary secondary "$long_name"; do
+  write_record "$SEAT" "$name"
+  out=$(resolve "$name"); rc=$?
+  expect_code 0 "$rc" "valid private seat $name should resolve: $out"
+  assert_contains "$out" "seat=$name" "resolved seat identity must match configuration"
+done
+pass "arbitrary safe seat names resolve, including digits, dashes, and the length limit"
+
+for name in '' '-leading' 'Upper' 'under_score' 'dot.name' 'slash/name' 'space name' "$long_name"0 $'line\n' $'tab\tname'; do
+  write_record "$SEAT" "$name"
+  out=$(resolve "$name"); rc=$?
+  expect_code 1 "$rc" "invalid selected seat name must refuse: $name"
+  assert_contains "$out" 'no ambient account selected' "unsafe selected name must not fall back"
+  jq --arg home "$SEAT" '.seats.primary = {harness:"codex",credential_home:$home}' "$CONFIG/dock.json" > "$CONFIG/updated.json"
+  mv "$CONFIG/updated.json" "$CONFIG/dock.json"
+  out=$(resolve primary); rc=$?
+  expect_code 1 "$rc" "an invalid unselected dock key must also refuse: $name"
+done
+pass "invalid seat names refuse both as selections and as unselected dock keys"
+
+write_record "$SEAT"
+out=$(resolve unconfigured); rc=$?
+expect_code 1 "$rc" "a safe name absent from the dock must refuse"
+assert_contains "$out" 'does not bind seat unconfigured to codex' "unknown seat should identify the missing binding"
+pass "unconfigured names cannot borrow another seat"
 
 ln -s "$SEAT" "$TMP_ROOT/seat-link"
 write_record "$TMP_ROOT/seat-link"
@@ -47,16 +74,16 @@ for fixture in \
   '{"version":1,"id":"test","extra":1,"seats":{}}' \
   '{"version":1,"id":"test","seats":{}}' \
   '{"version":1,"id":"test","seats":{"other":{"harness":"codex","credential_home":"/tmp"}}}' \
-  '{"version":1,"id":"test","seats":{"luna":{"harness":"claude","credential_home":"/tmp"}}}' \
-  '{"version":1,"id":"test","seats":{"luna":{"harness":"codex","credential_home":"relative"}}}' \
-  '{"version":1,"id":"test","seats":{"luna":{"harness":"codex","credential_home":"/tmp/line\nfeed"}}}' \
+  '{"version":1,"id":"test","seats":{"primary":{"harness":"claude","credential_home":"/tmp"}}}' \
+  '{"version":1,"id":"test","seats":{"primary":{"harness":"codex","credential_home":"relative"}}}' \
+  '{"version":1,"id":"test","seats":{"primary":{"harness":"codex","credential_home":"/tmp/line\nfeed"}}}' \
   'not json'; do
   printf '%s\n' "$fixture" > "$CONFIG/dock.json"
   out=$(resolve); rc=$?
   expect_code 1 "$rc" "invalid dock record must refuse: $fixture"
   assert_contains "$out" 'no ambient account selected' "invalid record must not fall back"
 done
-printf '%s\n' '{"version":1,"id":"test","seats":{"luna":{"harness":"codex","credential_home":"/tmp/line\nfeed"}}}' > "$CONFIG/dock.json"
+printf '%s\n' '{"version":1,"id":"test","seats":{"primary":{"harness":"codex","credential_home":"/tmp/line\nfeed"}}}' > "$CONFIG/dock.json"
 out=$(resolve); rc=$?
 expect_code 1 "$rc" "control-character path must refuse"
 assert_contains "$out" 'malformed' "control-character path must fail schema validation"
@@ -70,17 +97,15 @@ rm "$CONFIG/dock.json"
 ln -s "$TMP_ROOT/no-record" "$CONFIG/dock.json"
 out=$(resolve); rc=$?
 expect_code 1 "$rc" "broken symlink is a present invalid record"
-assert_contains "$out" 'ordinary readable JSON file' "broken symlink must not use legacy mapping"
+assert_contains "$out" 'ordinary readable JSON file' "broken symlink must refuse without fallback"
 rm "$CONFIG/dock.json"
-if [ "$(uname -s)" = Darwin ] && [ "$(id -un)" = jarad ] && [ -d /Users/jarad/.codex-luna ]; then
-  out=$(HOME=/Users/jarad resolve); rc=$?
-  expect_code 0 "$rc" "the exact legacy Mac identity should resolve"
-  assert_contains "$out" 'source=legacy-mac-jarad' "the compatibility source should be visible"
-fi
+out=$(resolve); rc=$?
+expect_code 1 "$rc" "an absent record must refuse for the current host and HOME"
+assert_contains "$out" 'is absent' "missing binding should name the absent record"
 out=$(HOME="$TMP_ROOT/other-home" resolve); rc=$?
-expect_code 1 "$rc" "another HOME must not use the legacy mapping"
-assert_contains "$out" 'dock record' "missing binding should name the record"
-pass "missing and unreadable homes refuse, and legacy fallback is tightly gated"
+expect_code 1 "$rc" "another HOME must also refuse without a record"
+assert_contains "$out" 'is absent' "missing binding should name the absent record"
+pass "missing and unreadable homes refuse without host-specific fallback"
 
 primary="$TMP_ROOT/primary"
 second="$TMP_ROOT/second"

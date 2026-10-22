@@ -118,7 +118,7 @@ Untracked files and directories whose names begin with `scratchpad` are also git
 
 - `bin/fm-startup-network.sh`'s header owns the deferred startup stage that keeps every external-network call and the potentially slow inactive-outcome scan off that digest's blocking path, including its state files and the safety argument for running them later.
 
-- `docs/sessionstart-nudge.md` owns the native session-open adapter tiers that run or nudge the digest command, and the source routing between them.
+- `docs/sessionstart-nudge.md` owns the native session-open adapter tiers that run or nudge the digest command, the source routing between them, and [context-usage stow nudges](sessionstart-nudge.md#context-usage-threshold-nudge).
 
 - `AGENTS.md` retains the run-once and read-once operator rules, lock-refusal safety, installation consent, and direct-report recovery boundaries because those facts apply at every session start.
 

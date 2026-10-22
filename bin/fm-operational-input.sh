@@ -56,7 +56,7 @@ FM_OPERATIONAL_MARK=$'\xE2\x81\xA3'
 FM_OPERATIONAL_PREFIX="${FM_OPERATIONAL_MARK}FIRSTMATE_OP: "
 FM_OPERATIONAL_VERSION=v1
 FM_OPERATIONAL_HEADER_PREFIX="${FM_OPERATIONAL_PREFIX}${FM_OPERATIONAL_VERSION} "
-FM_OPERATIONAL_KINDS='session-start watcher turn-end-guard away-supervisor context-refresh launch-brief branch-outcome'
+FM_OPERATIONAL_KINDS='context-stow session-start watcher turn-end-guard away-supervisor context-refresh launch-brief branch-outcome'
 
 # Compatibility name retained for the away-mode owner and its tests.
 # shellcheck disable=SC2034 # Public source-library variable used by callers.
@@ -369,8 +369,9 @@ Usage:
   bin/fm-operational-input.sh open <path>    # this home's record; prints its body
 
 Current construction kinds:
-  session-start watcher turn-end-guard away-supervisor context-refresh from-firstmate launch-brief
-  branch-outcome
+EOF
+  printf '  %s from-firstmate\n' "$FM_OPERATIONAL_KINDS"
+  cat <<'EOF'
 
 The from-firstmate kind uses its established live-charter-compatible carrier.
 A record-backed doorbell counts as operational input only when the record it

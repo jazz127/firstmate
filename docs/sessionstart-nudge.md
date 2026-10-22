@@ -2,7 +2,7 @@
 
 This doc is for operators who need to know which harnesses run `bin/fm-session-start.sh` when a session opens, which only nudge the agent to run it, and how clear, compaction, and resume are handled.
 AGENTS.md section 3 is the authoritative behavioral contract for session start.
-This file owns how the tracked native session-open adapters deliver it, and the compatibility limits that force two tiers rather than one.
+This file owns how the tracked native session-open adapters deliver it, the compatibility limits that force two tiers rather than one, and the native transports for persistence before compaction and context-usage nudges.
 
 One term recurs throughout:
 
@@ -16,6 +16,7 @@ One term recurs throughout:
 | What each session-open source triggers | [Source routing](#source-routing) |
 | How long the digest may block and what happens when it runs out of time | [Runtime bound](#runtime-bound) |
 | When the wrappers stay silent and which exit codes they use | [Shared wrapper and safety](#shared-wrapper-and-safety) |
+| Which harnesses persist before compaction and nudge for `/stow` as context fills | [Persistence before compaction](#persistence-before-compaction) |
 | How one harness wires its session-open hook | [Harness transports](#harness-transports) |
 | Which tests prove each guarantee | [Regression coverage](#regression-coverage) |
 

@@ -52,7 +52,7 @@ Marking rules:
   The required receipt action for that file is `routed`, not `unchanged`; name the ownership exception and do not declare the session reset-safe.
 - A pre-existing missing or hand-dropped marker is never grounds for destructive treatment: it means the file's default tier; an unmarked entry in a default-pinned file is simply pinned, while an unmarked entry in a file whose default tier carries a clock follows the migration rule below.
 
-Decay advances only when a pass runs, so a home stowed less often than a clock experiences that clock at its stow interval.
+Decay advances only during the required startup-memory pass, so a home explicitly stowed less often than a clock experiences that clock at its stow interval.
 
 ### Optional pass horizon (config/stow-pass-horizon)
 
@@ -234,7 +234,7 @@ A local skill exists only in this home, so offloading an entry out of `data/capt
    AGENTS.md section 6 is the source of truth for destinations.
    Do not re-derive or duplicate that mapping here.
 3. **Write within the existing boundaries.**
-   - Captain preferences and fleet-local operational facts belong in the destination selected by AGENTS.md after the required whole-file curation pass.
+   - Captain preferences and fleet-local operational facts belong in the destination selected by AGENTS.md after the applicable memory pass: [required startup-memory curation](#required-startup-memory-pass) for explicit `/stow`, or [automatic pre-compaction persistence](#automatic-pre-compaction-persistence) for a native hook.
      Create `data/learnings.md` only for a genuinely new local learning with no stronger owner.
    - In a primary home, curate shared captain preferences only under the existing primary-authoritative shared-preference contract.
      In a secondmate home, route a newly discovered shared preference to the main firstmate through marked status or a document pointer instead of editing the inherited file.
@@ -275,7 +275,7 @@ The first pass after adoption performs a one-time revalidation sweep of editable
 
 ## Completion receipt
 
-Report the outcome in plain captain-facing language with all of these facts:
+For explicit `/stow`, report the outcome in plain captain-facing language with all of these facts:
 
 - effective startup-memory budget and total estimated tokens before and after;
 - one or more actions for each of `data/captain.md`, `data/captain-shared.md`, and `data/learnings.md`, using only `unchanged`, `added`, `rewritten`, `pruned`, `routed`, `archived`, or `proposed-offload`; adding or replacing a migration marker is `rewritten`, never a new action verb such as `migrated`;

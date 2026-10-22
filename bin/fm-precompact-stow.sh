@@ -6,7 +6,7 @@
 # the payload, followed by a worker receipt ({status, output}) on the next line.
 # The whole pass has a 60s deadline including input, ownership, and cleanup.
 # FM_PRECOMPACT_STOW_TIMEOUT may shorten it to a positive integer <=60s.
-# Hook registrations reserve 90s so the runner can terminate its process group.
+# Claude's hook reserves 90s; Pi's transport fallback allows 75s.
 # Always exits 0 and never asks for input or blocks compact. Claude has no
 # stdout; Pi uses a private JSON-lines request/receipt channel with its extension.
 # Only a lock-owning primary/secondmate may run; workers, gates, foreign hosts,

@@ -554,7 +554,8 @@ fm_nm_ci_checks_state() {
     | grep -E 'CI checks passed|no CI checks reported - still monitoring|no CI checks reported yet|checks failed|issues detected|CI checks running' \
     | tail -1)
   case "$marker" in
-    *"checks passed"*|*"no CI checks reported - still monitoring"*) printf 'green' ;;
+    *"checks passed"*) printf 'green' ;;
+    *"no CI checks reported - still monitoring"*) printf 'no-checks' ;;
     *"no CI checks reported yet"*|*"checks failed"*|*"issues detected"*|*"CI checks running"*) printf 'not-ready' ;;
     *) printf 'unknown' ;;
   esac

@@ -473,7 +473,7 @@ gate:
         head = 'b' * 40
         custody = 'branch_sync:\n  state: pipeline_owned\n'
         steps = 'steps[1]{step,status,findings,duration_ms}:\n  ci,running,0,0\n'
-        ready = 'no CI checks reported - still monitoring until merged or closed\n'
+        ready = 'all CI checks passed - still monitoring until merged or closed\n'
         pending = 'no CI checks reported yet, waiting for checks to register...\n'
         self.data[f'repos/o/r/commits/{head}/check-runs'] = {'check_runs': []}
         self.data[f'repos/o/r/commits/{head}/status'] = {'statuses': []}
@@ -600,7 +600,7 @@ gate:
         monitoring = text.replace('  pr: ""', f'  pr: "{URL}"') + (
             'steps[1]{step,status,findings,duration_ms}:\n  ci,running,0,0\n')
         self.nm.write_text(monitoring)
-        ready = 'no CI checks reported - still monitoring until merged or closed\n'
+        ready = 'all CI checks passed - still monitoring until merged or closed\n'
         pending = 'no CI checks reported yet, waiting for checks to register...\n'
         self.assertEqual(self.poll(), '')
         self.ci_log.unlink()

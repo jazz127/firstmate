@@ -360,8 +360,9 @@ Usage:
   bin/fm-operational-input.sh open <path>    # this home's record; prints its body
 
 Current construction kinds:
-  session-start watcher turn-end-guard away-supervisor from-firstmate launch-brief
-  branch-outcome
+EOF
+  printf '  %s from-firstmate\n' "$FM_OPERATIONAL_KINDS"
+  cat <<'EOF'
 
 The from-firstmate kind uses its established live-charter-compatible carrier.
 A record-backed doorbell counts as operational input only when the record it

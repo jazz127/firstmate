@@ -911,7 +911,13 @@ nm_effective_ci_step_status() {
 # monitoring until merged or closed" or "no CI checks reported - still
 # monitoring until merged or closed" (verified against 360+ real run logs under
 # ~/.no-mistakes/logs/*/ci.log on the installed v1.32.2 binary, including the
-# actual PR #252 run). Reads the ci step's log via `axi logs --full` and scans
+# actual PR #252 run), or, for a repository whose config declares no_ci: true,
+# "repository declares no CI (no_ci: true) - treating as all checks passed -
+# still monitoring until merged or closed" (pinned from no-mistakes v1.84.0).
+# That no_ci sentence reads as no-checks, like the zero-checks marker: no check
+# ever verified the PR, so it stays working and never promotes a worker's own
+# "checks green" claim, even though its text says "all checks passed". Reads
+# the ci step's log via `axi logs --full` and scans
 # it for the MOST RECENT recognized marker (the log is append-only/chronological,
 # so the last match is current): green with nothing red after it means CI is
 # green right now, still only waiting on merge/close.
@@ -1196,7 +1202,7 @@ if [ "$HAVE_RUN" = 1 ]; then
               strip_quotes "$(nm_field pr)" ci_pr_url
               [ -z "$ci_pr_url" ] || RUN_DETAIL="$RUN_DETAIL: $ci_pr_url"
             elif [ "$CI_LOG_STATE" = no-checks ]; then
-              RUN_DETAIL="no CI checks reported: nothing has verified the PR (still monitoring for merge/close)"
+              RUN_DETAIL="no CI checks reported (or repository declares no CI): nothing has verified the PR (still monitoring for merge/close)"
             fi
             ;;
           fixing)

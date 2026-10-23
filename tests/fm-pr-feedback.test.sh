@@ -595,6 +595,23 @@ gate:
         self.assertNotIn('No-mistakes outcome event:', self.messages()[0])
         self.assertFalse(self.api_log.exists())
 
+    def test_no_checks_markers_never_emit_green_feedback(self):
+        # Accepted PR contract: an absent check is unverified, even when a
+        # previous marker was green or the no_ci sentence says checks passed.
+        text, head = self.pipeline_task()
+        self.nm.write_text(text + 'steps[1]{step,status,findings,duration_ms}:\n  ci,running,0,0\n')
+        green = 'all CI checks passed - still monitoring until merged or closed\n'
+        for marker in ('no CI checks reported - still monitoring until merged or closed\n',
+                       'repository declares no CI (no_ci: true) - treating as all checks passed - '
+                       'still monitoring until merged or closed\n'):
+            with self.subTest(marker=marker):
+                self.ci_log.write_text(green + marker)
+                self.assertEqual(self.poll(), '')
+                self.assertEqual(self.messages(), [])
+        self.ci_log.write_text(marker + green)
+        self.assertIn('tasks=t1', self.poll())
+        self.assertIn(f'GitHub PR CI event: {URL} head={head} state=green', self.messages()[0])
+
     def test_no_checks_readiness_requires_current_attributed_pipeline_evidence(self):
         text, head = self.pipeline_task(pr='')
         monitoring = text.replace('  pr: ""', f'  pr: "{URL}"') + (

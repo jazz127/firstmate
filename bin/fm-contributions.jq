@@ -95,6 +95,7 @@ def projected($input; $saved; $now; $max_age):
        elif $stale then {actor:"fleet",reason:"STALE maintainer verdict; reassess the current head"}
        elif ($record.pending | length) > 0 then
          {actor:"fleet",reason:(if all($record.pending[]; .directive == true) then "author directive needs triage"
+           elif all($record.pending[]; .review_bot == true) then "incoming review-bot finding needs triage"
            elif all($record.pending[]; .automated == true)
            then "automated review finding needs triage" else "incoming maintainer signal needs triage" end)}
        elif $record.kind == "issue" then

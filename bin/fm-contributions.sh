@@ -122,6 +122,16 @@
 # comment persists as a pending event marked directive:true and classifies as
 # fleet triage; it never grants merge authority.
 #
+# config/contribution-review-bots adds exact GitHub logins for PR comments,
+# reviews and inline comments (one login per line; blank and # lines ignored).
+# Its absent or empty file adds no bots; house automated-reviewer and author-
+# directive policies above continue independently. These events are marked
+# review_bot:true and remain third-party fleet-triage data, never instructions,
+# maintainer verdicts or merge authority. The generated check embeds the
+# absolute effective config directory so a relative override remains stable.
+# seen retains every observed token so an acknowledged event is not replayed
+# after allowlist changes; growth is bounded by the durable record size cap.
+#
 # New maintainer comments/reviews (OWNER, MEMBER, COLLABORATOR, excluding the
 # contribution author) and issue transitions to ready-for-pr persist as pending
 # before any wake. poll appends ordinary durable check wakes through fm-wake-lib
@@ -143,6 +153,7 @@ FM_HOME="${FM_HOME:-$FM_ROOT}"
 STATE="${FM_STATE_OVERRIDE:-$FM_HOME/state}"
 DATA="${FM_DATA_OVERRIDE:-$FM_HOME/data}"
 CONFIG="${FM_CONFIG_OVERRIDE:-$FM_HOME/config}"
+case "$CONFIG" in /*) ;; *) CONFIG="$(pwd -P)/$CONFIG" ;; esac
 export FM_HOME FM_STATE_OVERRIDE="$STATE"
 # shellcheck source=bin/fm-pr-lib.sh
 . "$SCRIPT_DIR/fm-pr-lib.sh"
@@ -169,9 +180,12 @@ case "$CHECK_TIMEOUT" in ''|*[!0-9]*) CHECK_TIMEOUT=30 ;; esac
 CHECK_TIMEOUT=${CHECK_TIMEOUT#"${CHECK_TIMEOUT%%[!0]*}"}
 CHECK_TIMEOUT=${CHECK_TIMEOUT:-30}
 BUDGET_CAP=$((CHECK_TIMEOUT - 3))
+review_bots() { # config/contribution-review-bots -> JSON array of logins
+  [ -f "$CONFIG/contribution-review-bots" ] || { printf '[]\n'; return 0; }
+  jq -Rn '[inputs | gsub("^\\s+|\\s+$"; "") | select(length > 0 and (startswith("#") | not))]' "$CONFIG/contribution-review-bots"
+}
 [ "$BUDGET_CAP" -ge 1 ] || BUDGET_CAP=1
 [ "$BUDGET" -le "$BUDGET_CAP" ] || BUDGET=$BUDGET_CAP
-CONFIG="${FM_CONFIG_OVERRIDE:-$FM_HOME/config}"
 if [ -n "${FM_CONTRIBUTIONS_AUTOMATED_REVIEWERS+x}" ]; then
   REVIEWER_SPEC=$FM_CONTRIBUTIONS_AUTOMATED_REVIEWERS
 elif [ -f "$CONFIG/contributions-automated-reviewers" ] && [ ! -L "$CONFIG/contributions-automated-reviewers" ]; then
@@ -505,7 +519,7 @@ observe() { # canonical GitHub URL -> normalized JSON
     [ "$head" = "$after" ] || unobserved 'head changed during observation' || return 1
     jq -n --slurpfile core "$TMP/core.json" --slurpfile comments "$TMP/comments.json" \
       --slurpfile reviews "$TMP/reviews.json" --slurpfile inline "$TMP/inline.json" --slurpfile after "$TMP/after.json" --slurpfile checks "$TMP/checks.json" \
-      --slurpfile statuses "$TMP/statuses.json" --slurpfile repo "$TMP/repo.json" --argjson automated "$AUTOMATED_REVIEWERS" --arg marker "$AUTHOR_MARKER" '
+      --slurpfile statuses "$TMP/statuses.json" --slurpfile repo "$TMP/repo.json" --argjson automated "$AUTOMATED_REVIEWERS" --arg marker "$AUTHOR_MARKER" --argjson bots "$(review_bots)" '
       $core[0] as $c
       | ($reviews[0] | add // []) as $reviews
       | {head:$c.head.sha,state:(if $c.merged_at != null then "merged" else $c.state end),
@@ -526,11 +540,12 @@ observe() { # canonical GitHub URL -> normalized JSON
                   and ((.body // "") | gsub("^\\s+";"") | ascii_downcase | startswith($marker | ascii_downcase))) as $directive
               | select(.user.login != $c.user.login or $directive)
               | ((.user.login | ascii_downcase) as $login | ($automated | index($login)) != null) as $bot
-              | select(if $directive then true elif $bot then ((.body // "" | gsub("^\\s+|\\s+$";"") | length) > 0 or .state == "CHANGES_REQUESTED")
+              | (.user.login | IN($bots[])) as $review_bot
+              | select(if $directive or $review_bot then true elif $bot then ((.body // "" | gsub("^\\s+|\\s+$";"") | length) > 0 or .state == "CHANGES_REQUESTED")
                        else (.author_association | IN("OWNER","MEMBER","COLLABORATOR")) end)
               | {token:((._signal + ":") + (.id|tostring) + ":" + (.updated_at // .submitted_at // "") + ":" + (.state // "")),
                  type:._signal,source:.html_url,head:.commit_id,
-                 author:.user.login,body:(.body // "" | .[:500])} + (if $bot then {automated:true} else {} end) + (if $directive then {directive:true} else {} end)))}' > "$TMP/observation.json" \
+                 author:.user.login,body:(.body // "" | .[:500])} + (if $bot then {automated:true} else {} end) + (if $directive then {directive:true} else {} end) + (if $review_bot then {review_bot:true} else {} end)))}' > "$TMP/observation.json" \
       || unobserved 'observation could not be assembled' || return 1
   else
     label=${FM_CONTRIBUTIONS_READY_LABEL:-ready-for-pr}
@@ -782,7 +797,7 @@ poll() {
               else [] end)) as $events
           | $old + {checked_at:$now,error:null,
             observation:($o + {absent_checks:((($old.observation.absent_checks // []) + [($old.observation.checks // [])[] | .name]) - [$o.checks[].name] | unique)}),
-            seen:($events | map(.token)),
+            seen:((($old.seen // []) + ($events | map(.token))) | unique),
             pending:(($old.pending // []) + [$events[] | select(.token as $t | ($old.seen // [] | index($t)) == null)]
               | unique_by(.token))}
           | if .kind == "pr" then

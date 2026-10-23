@@ -150,7 +150,7 @@ The shared no-mistakes gate lifecycle boundary is summarized in [architecture.md
 | `fm-usage-warner.sh`     | Opt-in macOS threshold warner that notifies once when a configured Claude usage window crosses its percentage |
 | `fm-pr-lib.sh`           | Own canonical task and PR validation, published-body reads across supported forges, and private atomic PR-poll publication, merge-notification identity, and retirement |
 | `fm-pr-poll.sh`          | Provide the byte-static watcher program for validated pull-request, merge-request, and Gerrit-change poll sidecars |
-| `fm-contributions.sh`    | Observe owned publications, retain exact-head judgments, measure required actors, and wake on maintainer signals |
+| `fm-contributions.sh`    | Observe owned publications, retain exact-head judgments, measure required actors, and wake on maintainer or configured review-bot signals |
 | `fm-pr-check.sh`         | Validate a task-owned published PR body, record validated `pr=` and `pr_head=` values, then atomically arm a static merge poll; inactive reconciliation validates reported PR bodies, including taskless reports; refuses GitHub drafts and persistent secondmate records (see [architecture.md](architecture.md)) |
 | `fm-review-check.sh`    | Record a forge=external task's validated `review=` and `review_head=` without arming a merge watch ([design](external-review-forge.md)) |
 | `fm-external-review-lib.sh` | Shared readers for the forge=external review tool adapter, ready-URL pattern, backup remote, and remote URLs |

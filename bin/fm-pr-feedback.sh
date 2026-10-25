@@ -20,7 +20,7 @@
 # check timeout kills its group; size FM_CHECK_TIMEOUT for the home's API load.
 #
 # Internal bridge operations used by fm-pr-feedback.py:
-#   pipeline <task>             attributed read-only axi status, or empty
+#   pipeline <task> <observed-run-ids>  attributed read-only axi status, or empty
 #   deliver <task> <meta-hash> <message>  idempotent existing-inbox enqueue/ring
 #   github <url>                canonical GitHub path and PR number
 # They revalidate task identity; forge prose is never an instruction payload.
@@ -48,7 +48,7 @@ die() { printf 'pr-feedback: %s\n' "$*" >&2; exit 1; }
 case "${1:---help}" in
   --help|-h) usage; exit 0 ;;
   arm|disarm|poll|enabled) [ "$#" -eq 1 ] || die "expected one operation" ;;
-  pipeline) [ "$#" -eq 2 ] || die "expected a task" ;;
+  pipeline) [ "$#" -eq 3 ] || die "expected a task and observed run IDs" ;;
   github) [ "$#" -eq 2 ] || die "expected a PR URL" ;;
   deliver) [ "$#" -eq 4 ] || die "expected a task, metadata hash and message" ;;
   *) die "unknown operation" ;;
@@ -125,8 +125,12 @@ case "$1" in
       [ -n "$head" ] || head=$(fm_nm_strip_quotes "$(fm_nm_field "$out" head)")
       if ! fm_nm_head_matches_worktree "$wt" "$head" \
         && ! fm_nm_run_is_pipeline_owned_active "$out"; then
-        fm_nm_run_is_executing "$out" || exit 0
-        fm_nm_run_checked "$wt" 3 daemon status >/dev/null || exit 1
+        if [ "$run_class" = terminal ]; then
+          case ",$3," in *,"$run_id",*) ;; *) exit 0 ;; esac
+        else
+          fm_nm_run_is_executing "$out" || exit 0
+          fm_nm_run_checked "$wt" 3 daemon status >/dev/null || exit 1
+        fi
       fi
       printf '%s\n' "$out"
       status=$(fm_nm_strip_quotes "$(fm_nm_field "$out" status)")

@@ -15,7 +15,8 @@ TOKEN = re.compile(r"[A-Za-z0-9_-]+\Z")
 SHA = re.compile(r"[a-f0-9]{40}\Z")
 STAMP = re.compile(r"[0-9]{4}-[0-9T:.+Z-]+\Z")
 EVENT_PREFIXES = ("GitHub PR feedback event:", "GitHub PR CI event:",
-                  "No-mistakes gate event:", "No-mistakes outcome event:")
+                  "No-mistakes gate event:", "No-mistakes outcome event:",
+                  "No-mistakes run binding:")
 
 
 def run(argv, *, timeout=12):
@@ -229,11 +230,23 @@ def poll(state, bridge):
             if meta.get("kind") != "ship" or meta.get("remote_host"):
                 continue
             events = []
+            seen = history(state, task)
+            binding, pipeline_id = "", ""
             url = meta.get("pr", "")
             run_pr, ready_head = "", ""
             if meta.get("mode") == "no-mistakes":
                 try:
-                    text = run([bridge, "pipeline", task])
+                    local_head = run(["git", "-C", meta.get("worktree", ""), "rev-parse", "HEAD"]).strip()
+                    binding = hashlib.sha256(json.dumps([task, meta.get("worktree", ""),
+                                                         meta.get("branch", ""), local_head]).encode()).hexdigest()
+                    observed = []
+                    for event in seen:
+                        match = re.fullmatch(r"No-mistakes run binding: run=([A-Za-z0-9_-]+) receipt="
+                                             + binding, event)
+                        if match:
+                            observed.append(match[1])
+                    text = run([bridge, "pipeline", task, ",".join(sorted(observed))])
+                    pipeline_id = scalar(block(text, "run"), "id")
                     pipeline, run_pr, ready_head = pipeline_events(text)
                     events.extend(pipeline)
                     if not url:
@@ -256,9 +269,10 @@ def poll(state, bridge):
                                                 and head.startswith(ready_head)))
                 except (OSError, ValueError, KeyError, TypeError, subprocess.TimeoutExpired):
                     errors.add(task)
-            seen = history(state, task)
             fresh = list(dict.fromkeys(event for event in events if event not in seen))
             if fresh:
+                if pipeline_id and TOKEN.fullmatch(pipeline_id):
+                    fresh.append(f"No-mistakes run binding: run={pipeline_id} receipt={binding}")
                 message = "Firstmate event batch:\n" + "\n".join(fresh) + (
                     "\nRead the linked feedback and reattach once to any existing no-mistakes run "
                     "for its current gate or CI-ready return. Follow your brief; ask-user findings "

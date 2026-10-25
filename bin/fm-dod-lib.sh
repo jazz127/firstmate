@@ -342,7 +342,7 @@ EOF
 # Written once; only the two sentences about a green PR depend on the forge,
 # because on gerrit the ci step is skipped and there is no PR to report.
 fm_nm_driving_block() {  # <forge>
-  local pr_return_line='' pr_reattach_clause=';' drive_block wait_cfg
+  local pr_return_line='' pr_reattach_clause=';' drive_block event_block wait_cfg
   if [ "$1" != gerrit ]; then
     pr_return_line="Only a drive call's return reports the green PR: \`no-mistakes axi status\` shows progress but never reports \`checks-passed\` while the ci step is still monitoring the PR for merge, so never wait on a status poll for the next gate or outcome.
 "
@@ -351,17 +351,7 @@ fm_nm_driving_block() {  # <forge>
   # config/wait-no-turns selects the foreground drive. Absent, the text matches
   # the backgrounded drive a home had before that flag.
   wait_cfg=${CONFIG:-${FM_CONFIG_OVERRIDE:-${FM_HOME:-}/config}}
-  if fm_custom_check_registered "${STATE:-${FM_STATE_OVERRIDE:-${FM_HOME:-}/state}}" pr-feedback; then
-    drive_block="Drive the run with one bounded \`no-mistakes axi run\` or \`respond\` call and read its return.
-${pr_return_line}If that call's wait elapses without a gate or outcome, read \`no-mistakes axi status\` once to identify the active run.
-Before ending your turn, confirm the shared event watcher remains armed with \`FM_HOME=$(printf '%q' "${FM_HOME:-}") FM_STATE_OVERRIDE=$(printf '%q' "${STATE:-${FM_STATE_OVERRIDE:-${FM_HOME:-}/state}}") $(printf '%q' "$SCRIPT_DIR/fm-pr-feedback.sh") enabled\`.
-This read-only check of \`${STATE:-${FM_STATE_OVERRIDE:-${FM_HOME:-}/state}}/pr-feedback.check.sh\` and its \`pr-feedback.check-trust\` binding is authorized for your task's event wait.
-When it is armed and your run is still active, append one \`paused:\` line naming the run and the event you are waiting for, then end your turn.
-The watcher delivers CI green, CI red and pipeline gates through your steering inbox; do not reattach, check status or inspect the PR on a timer.
-This event wait takes precedence over the generic Waiting section for your pipeline run, including while it monitors CI.
-When the inbox event arrives, reattach once with \`no-mistakes axi run\` without flags to read the current gate or CI-ready return; never repeat a \`respond\` whose answer was already sent.
-If the watcher is no longer armed, declare the missing event source to firstmate and retain one bounded blocking drive call instead of timer polls."
-  elif [ -e "$wait_cfg/wait-no-turns" ]; then
+  if [ -e "$wait_cfg/wait-no-turns" ]; then
     drive_block="Drive the run with ONE foreground \`no-mistakes axi run\` and let it block.
 It bounds its own hold for you: \`--wait\` (default 8m) exists precisely so a harness with a ten-minute command cap gets a structured return instead of being killed mid-hold.
 Declare that wait using the brief's status-reporting rule before the foreground drive call.
@@ -373,6 +363,27 @@ So background the drive call instead of sitting in one blocking hold your harnes
 Declare that wait using the brief's status-reporting rule before waiting on the backgrounded drive call.
 Where a harness's own command limit is not established, assume it bounds commands and use that same backgrounded shape.
 ${pr_return_line}Whenever a drive call returns without a gate or an outcome - its own wait elapsed, or it was killed or timed out - reattach at once by re-running \`no-mistakes axi run\` without flags, backgrounded the same way${pr_reattach_clause} if it refuses because no run is active, read the finished outcome from \`no-mistakes axi status\`."
+  fi
+  if fm_custom_check_registered "${STATE:-${FM_STATE_OVERRIDE:-${FM_HOME:-}/state}}" pr-feedback; then
+    event_block="Drive the run with one bounded \`no-mistakes axi run\` or \`respond\` call and read its return.
+${pr_return_line}If that call's wait elapses without a gate or outcome, read \`no-mistakes axi status\` once to identify the active run.
+Before ending your turn, confirm the shared event watcher remains armed with \`FM_HOME=$(printf '%q' "${FM_HOME:-}") FM_STATE_OVERRIDE=$(printf '%q' "${STATE:-${FM_STATE_OVERRIDE:-${FM_HOME:-}/state}}") $(printf '%q' "$SCRIPT_DIR/fm-pr-feedback.sh") enabled\`.
+This read-only check of \`${STATE:-${FM_STATE_OVERRIDE:-${FM_HOME:-}/state}}/pr-feedback.check.sh\` and its \`pr-feedback.check-trust\` binding is authorized for your task's event wait.
+When it is armed and your run is still active, append one \`paused:\` line naming the run and the event you are waiting for, then end your turn.
+The watcher delivers CI green, CI red and pipeline gates through your steering inbox; do not reattach, check status or inspect the PR on a timer.
+This event wait takes precedence over the generic Waiting section for your pipeline run, including while it monitors CI.
+When the inbox event arrives, reattach once with \`no-mistakes axi run\` without flags to read the current gate or CI-ready return; never repeat a \`respond\` whose answer was already sent.
+If the watcher is no longer armed, declare the missing event source to firstmate and retain one bounded blocking drive call instead of timer polls."
+
+    if [ "$1" = gerrit ]; then
+      drive_block=$event_block
+    else
+      drive_block="Use the following event wait only when this run's PR URL is on https://github.com/. Otherwise skip it and follow the drive contract below.
+$event_block
+
+For GitLab and any other PR forge, or until a GitHub PR URL is known, use this drive contract:
+$drive_block"
+    fi
   fi
   cat <<EOF
 You drive no-mistakes by responding to its gates, not by implementing fixes.

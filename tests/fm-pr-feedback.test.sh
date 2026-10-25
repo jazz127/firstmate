@@ -522,6 +522,79 @@ gate:
         self.nm.write_text(text.replace('outcome: passed', 'outcome: passed_with_skips'))
         self.assertEqual(self.poll(), '')
 
+    def test_observed_unfetched_run_outcomes_survive_acknowledgement_and_relaunch(self):
+        text, local_head = self.pipeline_task(pr='https://review.example/c/o/r/+/7')
+        next_head = 'b' * 40
+        for field, head in (('head_sha', next_head), ('head', next_head[:12])):
+            with self.subTest(field=field):
+                current = text.replace('head_sha:', f'{field}:').replace(local_head, head)
+                self.nm.write_text(current + 'branch_sync:\n  state: pipeline_owned\ngate: review\n')
+                self.assertIn('tasks=t1 relaunch=none errors=none', self.poll())
+                self.assertIn('No-mistakes gate event: run=run1', self.messages()[0])
+                if field == 'head':
+                    for record in (self.state / 't1.inbox').glob('*.msg'):
+                        record.rename(record.parent / 'handled' / record.name)
+                meta = self.state / 't1.meta'
+                meta.write_text(meta.read_text() + f'spawn_gen=after-{field}\n')
+                for outcome in ('passed', 'passed-with-skips', 'passed-with-override',
+                                'checks-passed', 'failed', 'cancelled'):
+                    with self.subTest(outcome=outcome):
+                        status = outcome if outcome in ('failed', 'cancelled') else 'completed'
+                        self.overview.write_text('count: 1 of 1 total\nruns[1]{id,branch,status,head,pr}:\n'
+                                                 f'  run1,fm/t1,{status},{head},\n')
+                        self.nm.write_text(current.replace('status: running', f'status: {status}') +
+                                           f'outcome: {outcome}\n')
+                        self.assertIn('tasks=t1 relaunch=none errors=none', self.poll())
+                        self.assertIn(f'No-mistakes outcome event: run=run1 outcome={outcome}',
+                                      '\n'.join(self.messages()))
+                        self.assertEqual(self.poll(), '')
+                absent = subprocess.run(['git', '-C', str(self.home / 'work'), 'cat-file', '-e', next_head],
+                                        env=self.env, capture_output=True)
+                self.assertNotEqual(absent.returncode, 0)
+                self.assertFalse(self.api_log.exists())
+                for record in (self.state / 't1.inbox').rglob('*.msg'):
+                    record.unlink()
+                self.overview.write_text('count: 1 of 1 total\nruns[1]{id,branch,status,head,pr}:\n'
+                                         f'  run1,fm/t1,running,{head},\n')
+
+    def test_terminal_receipts_do_not_bind_unseen_runs_or_reused_work(self):
+        text, local_head = self.pipeline_task(pr='https://review.example/c/o/r/+/7')
+        next_head = 'b' * 40
+        current = text.replace(local_head, next_head)
+        terminal = current.replace('status: running', 'status: completed') + 'outcome: passed-with-skips\n'
+        completed = ('count: 1 of 1 total\nruns[1]{id,branch,status,head,pr}:\n'
+                     f'  run1,fm/t1,completed,{next_head},\n')
+        self.overview.write_text(completed)
+        self.nm.write_text(terminal)
+        self.assertEqual(self.poll(), '')
+        self.overview.write_text(completed.replace('completed,', 'running,'))
+        self.nm.write_text(current + 'branch_sync:\n  state: pipeline_owned\ngate: review\n')
+        self.assertIn('tasks=t1', self.poll())
+        self.nm.write_text(terminal)
+        self.overview.write_text(completed.replace('run1,', 'run2,'))
+        (self.home / 'other.toon').write_text(terminal.replace('run1', 'run2'))
+        self.assertEqual(self.poll(), '')
+        self.overview.write_text(completed.replace('fm/t1', 'fm/reused'))
+        self.nm.write_text(terminal.replace('fm/t1', 'fm/reused'))
+        meta = self.state / 't1.meta'
+        original = meta.read_text()
+        meta.write_text(original.replace('branch=fm/t1', 'branch=fm/reused'))
+        self.assertEqual(self.poll(), '')
+        self.overview.write_text(completed)
+        self.nm.write_text(terminal)
+        other = self.home / 'other-work'
+        subprocess.run(['git', 'clone', '-q', str(self.home / 'work'), str(other)], check=True, env=self.env)
+        meta.write_text(original.replace(f'worktree={self.home / "work"}', f'worktree={other}'))
+        self.assertEqual(self.poll(), '')
+        meta.write_text(original)
+        subprocess.run(['git', '-C', str(self.home / 'work'), '-c', 'user.name=Fixture',
+                        '-c', 'user.email=f@example.test', 'commit', '-q', '--allow-empty', '-m', 'new work'],
+                       check=True, env=self.env)
+        self.assertEqual(self.poll(), '')
+        self.assertEqual(len(self.messages()), 1)
+        self.assertNotIn('No-mistakes outcome event:', self.messages()[0])
+        self.assertFalse(self.api_log.exists())
+
     def test_no_checks_readiness_requires_current_attributed_pipeline_evidence(self):
         text, head = self.pipeline_task(pr='')
         monitoring = text.replace('  pr: ""', f'  pr: "{URL}"') + (

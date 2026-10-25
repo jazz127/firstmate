@@ -1118,7 +1118,28 @@ test_pr_feedback_wait_contract() {
     'armed CI waits need inbox events'
   assert_grep 'then end your turn' "$brief" 'armed CI waits must end the turn'
   assert_grep 'confirm the shared event watcher remains armed' "$brief" 'event waits must verify their source'
-  assert_no_grep 'reattach at once' "$brief" 'the event path must not retain a timer reattach rule'
+  assert_grep "Use the following event wait only when this run's PR URL is on https://github.com/" "$brief" \
+    'event waits must be conditional on a supported PR URL'
+  local gitlab_drive
+  gitlab_drive=$(sed -n '/^For GitLab and any other PR forge, or until a GitHub PR URL is known, use this drive contract:/,$p' "$brief")
+  assert_contains "$gitlab_drive" 'background the drive call' 'GitLab must retain the background drive contract'
+  assert_contains "$gitlab_drive" 'reattach at once' 'GitLab must keep driving after a bounded return'
+  assert_not_contains "$gitlab_drive" 'then end your turn' 'GitLab must not park for unsupported forge events'
+  mkdir -p "$home/config"
+  : > "$home/config/wait-no-turns"
+  FM_HOME="$home" "$ROOT/bin/fm-brief.sh" feedback-gitlab-foreground some-proj --mode no-mistakes >/dev/null \
+    || fail 'GitLab foreground brief generation failed'
+  gitlab_drive=$(sed -n '/^For GitLab and any other PR forge, or until a GitHub PR URL is known, use this drive contract:/,$p' \
+    "$home/data/feedback-gitlab-foreground/brief.md")
+  assert_contains "$gitlab_drive" 'ONE foreground' 'GitLab must retain the configured foreground contract'
+  assert_contains "$gitlab_drive" 'issue the same foreground call again' 'GitLab must retain foreground reattachment'
+  assert_not_contains "$gitlab_drive" 'then end your turn' 'GitLab foreground waits must not become event-only'
+  FM_HOME="$home" "$ROOT/bin/fm-brief.sh" feedback-gerrit some-proj --mode no-mistakes --forge gerrit >/dev/null \
+    || fail 'Gerrit event brief generation failed'
+  assert_grep 'confirm the shared event watcher remains armed' "$home/data/feedback-gerrit/brief.md" \
+    'Gerrit must retain pipeline event waits'
+  assert_no_grep 'For GitLab and any other PR forge' "$home/data/feedback-gerrit/brief.md" \
+    'Gerrit pipeline waits must not depend on a GitHub PR URL'
   assert_grep 'ask-user findings are never yours to answer' "$brief" 'event waits must preserve finding authority'
   pass 'fm-brief: delivered PRs stop polling and an armed watcher supplies pipeline event waits'
 }

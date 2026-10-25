@@ -615,10 +615,19 @@ test_crew_absorb_class_classifier() {
   [ "$(crew_absorb_class a)" = working ] || fail "active run-step not classed working"
   FM_FAKE_CREW_STATE='state: working · source: pane · harness busy'
   [ "$(crew_absorb_class a)" = working ] || fail "busy pane not classed working"
+  crew_needs_stuck_detection a || fail "busy pane lost stuck detection"
+  FM_FAKE_CREW_STATE='state: parked · source: run-step · parked at review · run: gate-run'
+  [ "$(crew_absorb_class a)" = parked ] || fail "pipeline gate not classed parked"
+  crew_needs_stuck_detection a || fail "pipeline gate lost stuck detection"
+  ! crew_is_provably_working a || fail "pipeline gate became signal-absorption evidence"
+  FM_FAKE_CREW_STATE='state: parked · source: status-log · needs-decision: choose an option'
+  [ "$(crew_absorb_class a)" = none ] || fail "status-log decision became an active pipeline gate"
+  ! crew_needs_stuck_detection a || fail "status-log decision started stuck detection"
   FM_FAKE_CREW_STATE='state: paused · source: status-log · awaiting upstream'
   [ "$(crew_absorb_class a)" = paused ] || fail "declared pause not classed paused"
   crew_is_paused a || fail "crew_is_paused did not recognize a paused verdict"
   ! crew_is_provably_working a || fail "a paused crew was treated as provably working"
+  ! crew_needs_stuck_detection a || fail "a paused crew started stuck detection"
   FM_FAKE_CREW_STATE='state: working · source: status-log · working: compiling'
   [ "$(crew_absorb_class a)" = none ] || fail "stale working: status-log classed absorbable"
   FM_FAKE_CREW_STATE='state: unknown · source: none · worktree gone'
@@ -626,7 +635,7 @@ test_crew_absorb_class_classifier() {
   ! crew_is_paused a || fail "unknown crew classed paused"
   [ "$(crew_absorb_class "")" = none ] || fail "empty id not classed none"
   unset FM_FAKE_CREW_STATE
-  pass "crew_absorb_class: working/paused/none from one read; crew_is_paused and crew_is_provably_working agree"
+  pass "crew classification separates execution, pipeline gates, declared pauses and idle work"
 }
 
 # The wedge detector's third liveness input: writes inside the crew's own recorded
@@ -2833,7 +2842,7 @@ run_malformed_wait_record_round() {  # <name> <evidence-body>
       # deferral keeps the unchanged ladder rather than reading a backend this
       # child shell has none of.
       fm_backend_agent_state() { printf alive; }
-      crew_is_provably_working() { return 0; }
+      crew_needs_stuck_detection() { return 0; }
       eval "wedge_wait_evidence() { $2 ; }"
       wedge_timer_check "test:fm-wedge" "$FM_STATE_OVERRIDE/.stale-since-test_fm-wedge" \
         "non-terminal stale" "$FM_STATE_OVERRIDE/.wedge-escalations-test_fm-wedge" wedge \
@@ -6348,13 +6357,105 @@ test_paused_worker_dead_endpoint_still_wakes() {
   pass "endpoint loss still wakes for a paused scout even when capture fails"
 }
 
+test_worker_gate_retains_stuck_detection() {
+  local kind phase dir state fakebin out pane window key hash pid status
+  for kind in ship scout; do
+    for phase in first inherited paused; do
+      dir=$(make_case "worker-gate-$kind-$phase"); state="$dir/state"; fakebin="$dir/fakebin"
+      out="$dir/watch.out"; pane="$dir/pane.txt"; window=test:fm-gate; key=test_fm-gate
+      printf 'window=%s\nkind=%s\nharness=grok\n' "$window" "$kind" > "$state/gate.meta"
+      status='working: validation under way'
+      [ "$phase" != paused ] || status='paused: awaiting external input'
+      printf '%s\n' "$status" > "$state/gate.status"
+      prime_status_seen "$state" "$state/gate.status"
+      printf 'waiting at a pipeline gate' > "$pane"
+      hash=$(hash_text 'waiting at a pipeline gate')
+      printf '%s' "$hash" > "$state/.hash-$key"
+      printf '1\n' > "$state/.count-$key"
+      if [ "$phase" != first ]; then
+        printf '%s' "$hash" > "$state/.stale-$key"
+        printf '%s\n' "$(( $(date +%s) - 500 ))" > "$state/.stale-since-$key"
+      fi
+      FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$pane" FM_FAKE_TMUX_CURRENT_COMMAND=grok \
+        FM_FAKE_CREW_STATE='state: parked · source: run-step · parked at review · run: unanswered-worker-gate' \
+        watch_bg "$state" "$fakebin" "$out" env FM_STALE_ESCALATE_SECS=60
+      pid=$!
+      if [ "$phase" = paused ]; then
+        wait_poll_cycle "$state" "$pid" || { reap "$pid"; fail "$kind declared wait raised a wedge: $(cat "$out")"; }
+        reap "$pid"
+        [ ! -e "$state/.stale-since-$key" ] || fail "$kind declared wait retained its execution timer"
+        [ ! -s "$state/.wake-queue" ] || fail "$kind declared wait queued an idle check-in"
+        continue
+      fi
+      if [ "$phase" = first ]; then
+        wait_numeric_file "$state/.stale-since-$key" 100 \
+          || { reap "$pid"; fail "$kind pipeline gate did not start a first-sighting timer"; }
+        [ ! -s "$state/.wake-queue" ] || { reap "$pid"; fail "$kind pipeline gate escalated before its timer matured"; }
+        printf '%s\n' "$(( $(date +%s) - 500 ))" > "$state/.stale-since-$key"
+      fi
+      wait_for_exit "$pid" 100 || { reap "$pid"; fail "$kind $phase pipeline gate lost stuck detection"; }
+      grep -F 'possible wedge, escalation 1' "$out" >/dev/null \
+        || fail "$kind $phase gate did not produce a stuck-run alarm: $(cat "$out")"
+      [ "$(wedge_stale_wakes "$state" "$window")" -eq 1 ] || fail "$kind $phase gate did not queue one alarm"
+    done
+  done
+  pass "silent workers at pipeline gates keep first-sighting and inherited timers; declared waits stay silent"
+}
+
+test_endpoint_reports_once_per_spawn_generation() {
+  local harness dir state fakebin out pane window key pid redraw
+  for harness in grok codex; do
+    dir=$(make_case "spawn-death-$harness"); state="$dir/state"; fakebin="$dir/fakebin"
+    out="$dir/watch.out"; pane="$dir/pane.txt"; window=test:fm-deadspawn; key=test_fm-deadspawn
+    printf 'window=%s\nkind=ship\nharness=%s\nspawn_gen=spawn-first\n' "$window" "$harness" > "$state/deadspawn.meta"
+    printf 'failed: agent exited\n' > "$state/deadspawn.status"
+    prime_status_seen "$state" "$state/deadspawn.status"
+    printf 'shell after agent exit' > "$pane"
+    if [ "$harness" = codex ]; then
+      printf '%s' "$(hash_text 'earlier active display')" > "$state/.hash-$key"
+    fi
+    FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$pane" FM_FAKE_TMUX_CURRENT_COMMAND=zsh \
+      FM_FAKE_CREW_STATE='state: failed · source: run-step · agent exited' \
+      watch_bg "$state" "$fakebin" "$out"
+    pid=$!
+    wait_for_exit "$pid" 100 || { reap "$pid"; fail "$harness first death was not reported"; }
+    grep -F 'agent dead' "$out" >/dev/null || fail "$harness first death lost its reason"
+    [ ! -e "$state/deadspawn.busy-gen" ] || fail "$harness fixture unexpectedly had a busy generation"
+    ack_stopped_cycle "$state" || fail "could not acknowledge $harness first death"
+    set_mtime "$(( $(date +%s) - 500 ))" "$state/.endpoint-checked-$key"
+    FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$pane" FM_FAKE_TMUX_CURRENT_COMMAND=zsh \
+      FM_FAKE_CREW_STATE='state: failed · source: run-step · agent exited' \
+      watch_bg "$state" "$fakebin" "$out"
+    pid=$!
+    for redraw in one two; do
+      wait_poll_cycle "$state" "$pid" || { reap "$pid"; fail "$harness repeated one incarnation's death: $(cat "$out")"; }
+      printf 'idle shell redraw %s' "$redraw" > "$pane"
+      set_mtime "$(( $(date +%s) - 500 ))" "$state/.endpoint-checked-$key"
+    done
+    wait_poll_cycle "$state" "$pid" || { reap "$pid"; fail "$harness shell redraw repeated its death"; }
+    reap "$pid"
+    [ ! -s "$out" ] && [ ! -s "$state/.wake-queue" ] || fail "$harness same incarnation queued another death"
+    ack_stopped_cycle "$state" || fail "could not acknowledge $harness intentional watcher stop"
+    printf 'window=%s\nkind=ship\nharness=%s\nspawn_gen=spawn-second\n' "$window" "$harness" > "$state/deadspawn.meta"
+    set_mtime "$(( $(date +%s) - 500 ))" "$state/.endpoint-checked-$key"
+    FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$pane" FM_FAKE_TMUX_CURRENT_COMMAND=zsh \
+      FM_FAKE_CREW_STATE='state: failed · source: run-step · agent exited' \
+      watch_bg "$state" "$fakebin" "$out"
+    pid=$!
+    wait_for_exit "$pid" 100 || { reap "$pid"; fail "$harness successor death was swallowed"; }
+    grep -F 'agent dead' "$out" >/dev/null || fail "$harness successor death lost its reason"
+    [ "$(wedge_stale_wakes "$state" "$window")" -eq 1 ] || fail "$harness successor did not queue one death"
+  done
+  pass "spawn generations suppress repeated deaths across shell redraws and rearm replacement deaths"
+}
+
 test_finished_run_drops_its_wedge_timer() {
   local dir state fakebin out pane window key hash pid verdict
-  for verdict in 'done' parked; do
+  for verdict in done paused; do
     dir=$(make_case "idle-finished-run-$verdict"); state="$dir/state"; fakebin="$dir/fakebin"
     out="$dir/watch.out"; pane="$dir/pane.txt"; window=test:fm-finished; key=test_fm-finished
     printf 'window=%s\nkind=ship\nharness=grok\n' "$window" > "$state/finished.meta"
-    printf 'done: branch ready\n' > "$state/finished.status"
+    printf '%s: branch ready or declared wait\n' "$verdict" > "$state/finished.status"
     prime_status_seen "$state" "$state/finished.status"
     printf 'idle after run\n' > "$pane"
     hash=$(hash_text 'idle after run')
@@ -6371,7 +6472,7 @@ test_finished_run_drops_its_wedge_timer() {
     [ ! -e "$state/.stale-since-$key" ] || fail "$verdict retained its old execution timer"
     [ ! -s "$out" ] && [ ! -s "$state/.wake-queue" ] || fail "$verdict queued a stale check-in"
   done
-  pass "completed and parked runs cannot inherit an active phase's wedge alarm"
+  pass "completed and declared-paused runs cannot inherit an active phase's wedge alarm"
 }
 
 test_pr_check_event_still_wakes() {
@@ -6403,6 +6504,8 @@ test_idle_policy_regressions() {
   test_nonterminal_stale_provably_working_absorbed_then_escalated
   test_actionable_signal_surfaced
   test_pr_check_event_still_wakes
+  test_worker_gate_retains_stuck_detection
+  test_endpoint_reports_once_per_spawn_generation
   test_finished_run_drops_its_wedge_timer
 }
 
@@ -6581,4 +6684,6 @@ test_paused_worker_dead_endpoint_still_wakes
 
 test_pr_check_event_still_wakes
 
+test_worker_gate_retains_stuck_detection
+test_endpoint_reports_once_per_spawn_generation
 test_finished_run_drops_its_wedge_timer

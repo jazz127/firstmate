@@ -1266,7 +1266,7 @@ housekeeping() {  # <state>
     fi
     age=$(( now - $(cat "$marker" 2>/dev/null || echo "$now") ))
     [ "$age" -ge "${FM_STALE_ESCALATE_SECS:-$STALE_ESCALATE_SECS_DEFAULT}" ] || continue
-    if ! idle_checkins_enabled "$task" "$state" && ! crew_is_provably_working "$task"; then
+    if ! idle_checkins_enabled "$task" "$state" && ! crew_needs_stuck_detection "$task"; then
       stale_marker_remove "$win" "$state"
       continue
     fi

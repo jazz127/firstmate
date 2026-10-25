@@ -3306,6 +3306,38 @@ test_daemon_idle_checkin_policy() {
   pass "daemon pause housekeeping applies the same ordinary-worker ban and secondmate opt-in"
 }
 
+test_daemon_worker_gate_retains_persistence() {
+  local kind wait dir state fakebin win pane key status
+  for kind in ship scout; do
+    for wait in gate paused; do
+      dir=$(make_supercase "worker-gate-$kind-$wait"); state="$dir/state"; fakebin="$dir/fakebin"
+      win=sess:fm-worker-gate; key=worker-gate; pane="$dir/pane.txt"
+      printf 'window=%s\nkind=%s\nharness=grok\n' "$win" "$kind" > "$state/worker-gate.meta"
+      status='working: validation under way'
+      [ "$wait" != paused ] || status='paused: awaiting external input'
+      printf '%s\n' "$status" > "$state/worker-gate.status"
+      printf 'waiting at a pipeline gate' > "$pane"
+      FM_STATE_OVERRIDE="$state" handle_wake "stale: $win" "$state"
+      if [ "$wait" = gate ]; then
+        [ -s "$state/.subsuper-stale-$key" ] || fail "$kind gate did not get a persistence marker"
+      fi
+      printf '%s\n' "$(( $(date +%s) - 500 ))" > "$state/.subsuper-stale-$key"
+      PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$win" FM_FAKE_TMUX_CAPTURE="$pane" \
+        FM_CREW_STATE_BIN="$(make_fake_crew_state "$fakebin")" \
+        FM_FAKE_CREW_STATE='state: parked · source: run-step · parked at review · run: unanswered-worker-gate' \
+        FM_STATE_OVERRIDE="$state" FM_STALE_ESCALATE_SECS=1 housekeeping "$state"
+      if [ "$wait" = paused ]; then
+        [ ! -s "$state/.subsuper-escalations" ] || fail "$kind declared wait emitted a persistence alarm"
+      else
+        grep -F 'possible wedge' "$state/.subsuper-escalations" >/dev/null \
+          || fail "$kind gate awaiting its worker lost its persistence alarm"
+      fi
+      [ ! -e "$state/.subsuper-stale-$key" ] || fail "$kind $wait retained its handled persistence marker"
+    done
+  done
+  pass "daemon preserves worker-gate persistence while silencing declared waits"
+}
+
 test_daemon_drops_ordinary_idle_stale_marker() {
   local dir state task win key
   dir=$(make_supercase idle-legacy-marker); state="$dir/state"; task=policy-idle
@@ -3345,6 +3377,7 @@ test_daemon_expired_wait_keeps_frozen_run_event() {
 
 test_daemon_idle_policy_regressions() {
   test_daemon_idle_checkin_policy
+  test_daemon_worker_gate_retains_persistence
   test_daemon_drops_ordinary_idle_stale_marker
   test_daemon_dead_paused_worker_still_escalates
   test_daemon_expired_wait_keeps_frozen_run_event
@@ -3623,6 +3656,7 @@ test_dialog_name_joins_unseen_status_escalation
 test_dialog_name_after_demand_deep_inspection_still_escalates
 
 test_daemon_idle_checkin_policy
+test_daemon_worker_gate_retains_persistence
 test_daemon_drops_ordinary_idle_stale_marker
 test_daemon_dead_paused_worker_still_escalates
 

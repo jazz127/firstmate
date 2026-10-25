@@ -2809,7 +2809,8 @@ status_span_has_actionable() {  # <status-file> <start-offset>
 #             (e.g. waiting on CI);
 #   paused  - the crew's authoritative current state is a declared external-wait
 #             pause (paused:), which is EXPECTED to idle;
-#   none    - neither (stopped/finished/parked/failed/torn-down/unknown, or an
+#   parked  - a no-mistakes run waiting at a gate;
+#   none    - neither (stopped/finished/failed/torn-down/unknown, or an
 #             unreadable verdict); no-verb signal handling still surfaces it.
 # One fm-crew-state.sh read serves BOTH absorb reasons at once. Reading the state
 # authoritatively (not the status log) is what keeps run-step precedence: a crew
@@ -2825,9 +2826,11 @@ crew_absorb_class() {  # <id>
   case "$line" in state:*) ;; *) printf 'none'; return ;; esac
   state=${line#state: }; state=${state%% *}
   if [ "$state" = paused ]; then printf 'paused'; return; fi
+  src=${line#*source: }; src=${src%% *}
   if [ "$state" = working ]; then
-    src=${line#*source: }; src=${src%% *}
     case "$src" in run-step|pane) printf 'working'; return ;; esac
+  elif [ "$state" = parked ] && [ "$src" = run-step ]; then
+    printf 'parked'; return
   fi
   printf 'none'
 }
@@ -2840,11 +2843,14 @@ crew_idle_checkins_enabled() {  # <kind> <id> <config-dir>
     && grep -Fxq -- "$id" "$config/secondmate-idle-checkins" 2>/dev/null
 }
 
-# Positive execution evidence shared by no-verb signal triage and frozen-run
-# protection. Idle check-ins have their own policy above; lack of execution
-# evidence does not itself license a periodic idle alarm.
+# Positive execution evidence for no-verb signal triage.
 crew_is_provably_working() {  # <id>
   [ "$(crew_absorb_class "$1")" = working ]
+}
+
+crew_needs_stuck_detection() {
+  case "$(crew_absorb_class "$1")" in working|parked) return 0 ;; esac
+  return 1
 }
 
 # 0 if crew <id>'s authoritative current state is a declared external-wait pause.

@@ -1474,8 +1474,8 @@ clear_write_tracking() {  # <window-key>
 # that stops being gone still drops it, and no other reset site has to know this
 # file exists. The incarnation half re-arms a relaunch: a successor's own later
 # death is reported in full even when its dead display hashes identically to the
-# reported one. Only when no incarnation token is readable for the task does the
-# pane hash stands in as the discriminator, preserving recovery for a
+# reported one. The recorded spawn_gen is the fallback incarnation token.
+# Only when neither token is readable does the pane hash stand in as the discriminator, preserving recovery for a
 # record-less replacement whose display changed without an intervening live
 # probe. A record-less successor with an identical display remains absorbed.
 # Returns 0 when it has handled the window, 1 to escalate on the unchanged path.
@@ -1495,6 +1495,8 @@ wedge_dead_record() {  # <window> <since-file> <triage-label> <idle-age> <pane-h
   date +%s > "$since_file"
   id=$hash
   if gen=$(fm_busy_current_gen "$STATE" "$task"); then
+    id=$gen
+  elif gen=$(fm_meta_get "$STATE/$task.meta" spawn_gen) && [ -n "$gen" ]; then
     id=$gen
   fi
   if [ "$(cat "$marker" 2>/dev/null || true)" = "$agent_state $id" ]; then
@@ -1649,7 +1651,7 @@ wedge_timer_check() {  # <window> <since-file> <triage-label> <escalation-count-
       if [ "$(cat "$escalation_file" 2>/dev/null || echo 0)" -gt 0 ]; then interval=$repeat_secs; fi
       if [ "$age" -ge "$interval" ]; then
         # Busy-bound callers already proved execution on this poll.
-        if [ "$busy_proven" -ne 1 ] && ! watcher_read crew_is_provably_working "$task"; then
+        if [ "$busy_proven" -ne 1 ] && ! watcher_read crew_needs_stuck_detection "$task"; then
           rm -f "$since_file" "$escalation_file"
           clear_write_tracking "$(window_key "$win")"
           triage_log "absorbed $label (no longer provably working): $win"
@@ -3514,18 +3516,16 @@ EOF
                     clear_stale_hash_tracking "$key" ;;
           esac
         else
-          # Idle workers stay silent in attended and away modes alike. Only
-          # positive execution evidence starts the existing frozen-run timer.
           if [ "$(cat "$sf" 2>/dev/null || true)" != "$h" ] \
             || { [ "$worker_recheck" -eq 1 ] && [ ! -e "$ssf" ]; }; then
             pause_state_class "$w" "$task"
             case "$PAUSE_STATE_CLASS" in
-              working)
+              working|parked)
                 clear_pause_mode "$key"
                 printf '%s' "$h" > "$sf"
                 date +%s > "$ssf"
                 clear_write_tracking "$key"
-                triage_log "absorbed stale (provably working): $w"
+                triage_log "absorbed stale (active $PAUSE_STATE_CLASS): $w"
                 ;;
               paused) handle_paused_stale "$w" "$task" "$h" ;;
               *)
@@ -3539,7 +3539,7 @@ EOF
             pause_state_class "$w" "$task"
             case "$PAUSE_STATE_CLASS" in
               paused) handle_paused_stale "$w" "$task" "$h" ;;
-              working)
+              working|parked)
                 clear_pause_mode "$key"
                 wedge_timer_check "$w" "$ssf" "stale (working after a declared pause)" "$ewf" "$task" "$h" "$dialog"
                 ;;

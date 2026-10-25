@@ -18,8 +18,9 @@ Secondmates are also silent by default; [configuration.md](configuration.md#seco
 A listed secondmate retains the existing declared-wait cadence, including `until` handling, declaration-scoped throttles that survive pane churn, and suppression of captain-held rechecks while the away-posture record exists.
 An idle secondmate without a declared wait remains healthy and silent even when listed.
 
-Frozen active work remains an exception: a stale pane with positive execution evidence starts the existing `FM_STALE_ESCALATE_SECS` wedge timer.
-At the threshold the watcher rechecks execution evidence so a completed run does not inherit an active run's alarm.
+Frozen active work remains an exception: a stale pane with positive execution evidence or an authoritative pipeline gate awaiting its worker starts the existing `FM_STALE_ESCALATE_SECS` wedge timer.
+At the threshold the watcher rechecks whether work still needs stuck detection, so a completed run does not inherit an active run's alarm while a gate awaiting its worker retains protection.
+The legacy away daemon applies the same classification to its persistence markers.
 A worker's declared wait, backlog captain hold, or - when `config/wedge-defer-parked-gate` is enabled - a validation gate awaiting an unanswered supervisor decision defers the escalation silently.
 Writes to the task's own worktree also defer it; the depth, prune, and timeout bounds remain owned by `bin/fm-classify-lib.sh`.
 A secondmate's provisioned home is excluded from write evidence because routine supervision writes there.
@@ -30,7 +31,7 @@ Busy panes retain `FM_BUSY_TURN_MAX_SECS` protection, with declared waits absorb
 Endpoint loss is independent of idle check-ins and pane capture.
 Independent endpoint probes run on the `FM_STALE_ESCALATE_SECS` cadence, including while a worker is paused or its endpoint cannot be captured; wedge escalation retains its own endpoint probe.
 Only the backend's recovery-grade `dead` and `missing` verdicts report loss; uncertain verdicts do not establish a death.
-The report remains once per verdict and agent incarnation, rearming after a live probe or replacement; without a readable busy generation the last captured pane hash provides the existing fallback identity.
+The report remains once per verdict and agent incarnation, rearming after a live probe or replacement; without a readable busy generation, the recorded `spawn_gen` identifies the incarnation, falling back to the last captured pane hash only when neither token is readable.
 Unlanded work still requires the supervisor's guarded recovery and teardown paths.
 The existing secondmate liveness and wake-loop guards remain independent of the idle opt-in.
 

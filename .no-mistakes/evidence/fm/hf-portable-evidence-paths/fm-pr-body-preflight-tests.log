@@ -1,0 +1,33 @@
+ok - valid draft body passes preflight
+ok - missing artifact: preflight preserves the evidence validator refusal
+ok - bullet-prefixed metadata: preflight preserves the evidence validator refusal
+ok - mocked fetch labelled live without provenance: preflight preserves the evidence validator refusal
+ok - non-ISO capture time: preflight preserves the evidence validator refusal
+ok - artifact outside allowed roots: preflight preserves the evidence validator refusal
+ok - duplicate metadata blocks: preflight preserves the evidence validator refusal
+ok - pipeline-shaped body can mechanically pass with one metadata block
+ok - one consistent driven-scenario statement passes
+ok - split appendix count is refused with both conflicting lines
+ok - contradiction takes precedence over a generic missing-metadata refusal
+ok - corrected scenario body passes
+ok - table and count contradiction is refused
+ok - corrected table and count pass
+ok - table and incompatible driven-scenario total is refused
+ok - table and incompatible total-only mismatch is refused
+ok - fully classified fixture table rejects an incompatible total
+ok - passed verdict with a driven scenario remains consistent
+ok - unrelated passed validation beside a fixture-only table is accepted
+ok - published-body readback refuses a bad body and saves it for correction
+ok - corrected published-body readback passes the same validator
+ok - Forgejo published-body readback preserves evidence validation
+ok - scratch preflight refuses staged and committed cache bundles by path
+ok - publication refuses raw task, user-home and configured-home paths in ordinary prose
+ok - portable artifacts resolve to readable worktree/task files and commands cannot leak raw paths
+ok - relative paths containing worker-root names stay repository-relative in every body field
+ok - descriptor suffixes containing worker-root names stay portable in every body field
+ok - custom roots are refused before punctuation with consistent prose, artifact and command boundaries
+ok - normalization refuses earlier worker-path bypasses across prose and evidence fields
+ok - normalization accepts portable references and decodes percent escapes only once in file URLs
+ok - descriptors preserve missing-file, unknown-descriptor, traversal and symlink refusals
+ok - project-scoped home prefixes allow host docs, with component boundaries and no scratch exemption
+all fm-pr-body-preflight tests passed

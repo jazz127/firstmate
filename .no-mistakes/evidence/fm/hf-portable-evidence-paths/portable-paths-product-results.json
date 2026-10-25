@@ -1,0 +1,380 @@
+[
+  {
+    "name": "Portable artifact resolves: proof.txt",
+    "passed": true,
+    "expected_exit": 0,
+    "exit": 0
+  },
+  {
+    "name": "Portable artifact resolves: <task-output>/proof.txt",
+    "passed": true,
+    "expected_exit": 0,
+    "exit": 0
+  },
+  {
+    "name": "Portable artifact resolves: <firstmate-home>/../task-output/proof.txt",
+    "passed": true,
+    "expected_exit": 0,
+    "exit": 0
+  },
+  {
+    "name": "Descriptor suffix remains portable",
+    "passed": true,
+    "expected_exit": 0,
+    "exit": 0
+  },
+  {
+    "name": "Portable command is accepted: rg -g '**/home/**'",
+    "passed": true,
+    "expected_exit": 0,
+    "exit": 0
+  },
+  {
+    "name": "Portable command is accepted: rg -g '**/Users/**'",
+    "passed": true,
+    "expected_exit": 0,
+    "exit": 0
+  },
+  {
+    "name": "Portable command is accepted: rg -g '**/tmp/fm-*/**'",
+    "passed": true,
+    "expected_exit": 0,
+    "exit": 0
+  },
+  {
+    "name": "Portable command is accepted: `cat fixtures/home/firstmate/proof.txt`",
+    "passed": true,
+    "expected_exit": 0,
+    "exit": 0
+  },
+  {
+    "name": "Portable command is accepted: cat <task-output>~/proof.txt",
+    "passed": true,
+    "expected_exit": 0,
+    "exit": 0
+  },
+  {
+    "name": "Portable command is accepted: cat %2Fhome%2Ffirstmate/config",
+    "passed": true,
+    "expected_exit": 0,
+    "exit": 0
+  },
+  {
+    "name": "Portable command is accepted: cat file:///%2568ome/firstmate/config",
+    "passed": true,
+    "expected_exit": 0,
+    "exit": 0
+  },
+  {
+    "name": "Refuse worker path in prose: /tmp/fm-task/proof.txt",
+    "passed": true,
+    "expected_exit": 1,
+    "exit": 1
+  },
+  {
+    "name": "Refuse worker path in prose: ~/proof.txt",
+    "passed": true,
+    "expected_exit": 1,
+    "exit": 1
+  },
+  {
+    "name": "Refuse worker path in prose: ~",
+    "passed": true,
+    "expected_exit": 1,
+    "exit": 1
+  },
+  {
+    "name": "Refuse worker path in prose: ~",
+    "passed": true,
+    "expected_exit": 1,
+    "exit": 1
+  },
+  {
+    "name": "Refuse worker path in prose: **~/**",
+    "passed": true,
+    "expected_exit": 1,
+    "exit": 1
+  },
+  {
+    "name": "Refuse worker path in prose: **/tmp/fm-task/**",
+    "passed": true,
+    "expected_exit": 1,
+    "exit": 1
+  },
+  {
+    "name": "Refuse worker path in prose: **~/proof.txt *contains output***",
+    "passed": true,
+    "expected_exit": 1,
+    "exit": 1
+  },
+  {
+    "name": "Refuse worker path in prose: ***~/proof.txt** contains output*",
+    "passed": true,
+    "expected_exit": 1,
+    "exit": 1
+  },
+  {
+    "name": "Refuse worker path in prose: **/tmp/fm-task/proof.txt\ncontains output**",
+    "passed": true,
+    "expected_exit": 1,
+    "exit": 1
+  },
+  {
+    "name": "Refuse worker path in prose: @~/headers",
+    "passed": true,
+    "expected_exit": 1,
+    "exit": 1
+  },
+  {
+    "name": "Refuse worker path in prose: tar -czf/tmp/fm-task/proof.tgz result.json",
+    "passed": true,
+    "expected_exit": 1,
+    "exit": 1
+  },
+  {
+    "name": "Refuse worker path in prose: cc -isystem/home/firstmate/include main.c",
+    "passed": true,
+    "expected_exit": 1,
+    "exit": 1
+  },
+  {
+    "name": "Refuse worker path in prose: file:///%68ome/firstmate/config",
+    "passed": true,
+    "expected_exit": 1,
+    "exit": 1
+  },
+  {
+    "name": "Refuse worker path in prose: \"~/.no-mistakes/worktrees/119cd7a6b9a4/01M5SEVNGRN2MRFNS682WZY649/.phase-test-tmp/portable-paths-vyceb5ie/home/config\"",
+    "passed": true,
+    "expected_exit": 1,
+    "exit": 1
+  },
+  {
+    "name": "Refuse worker path in prose: ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5SEVNGRN2MRFNS682WZY649/.phase-test-tmp/portable-paths-vyceb5ie/repo/proof.txt",
+    "passed": true,
+    "expected_exit": 1,
+    "exit": 1
+  },
+  {
+    "name": "Refuse worker path in prose: ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5SEVNGRN2MRFNS682WZY649/.phase-test-tmp/portable-paths-vyceb5ie/task-output/proof.txt",
+    "passed": true,
+    "expected_exit": 1,
+    "exit": 1
+  },
+  {
+    "name": "Refuse worker path in prose: ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5SEVNGRN2MRFNS682WZY649/.phase-test-tmp/portable-paths-vyceb5ie/user-home/config",
+    "passed": true,
+    "expected_exit": 1,
+    "exit": 1
+  },
+  {
+    "name": "Refuse worker path in prose: evidence-artifact:/tmp/fm-task/proof.txt",
+    "passed": true,
+    "expected_exit": 1,
+    "exit": 1
+  },
+  {
+    "name": "Refuse evidence-artifact worker path: ~",
+    "passed": true,
+    "expected_exit": 1,
+    "exit": 1
+  },
+  {
+    "name": "Refuse evidence-artifact worker path: ~",
+    "passed": true,
+    "expected_exit": 1,
+    "exit": 1
+  },
+  {
+    "name": "Refuse evidence-artifact worker path: @~/headers",
+    "passed": true,
+    "expected_exit": 1,
+    "exit": 1
+  },
+  {
+    "name": "Refuse evidence-artifact worker path: tar -czf/tmp/fm-task/proof.tgz result.json",
+    "passed": true,
+    "expected_exit": 1,
+    "exit": 1
+  },
+  {
+    "name": "Refuse evidence-artifact worker path: **/tmp/fm-task/**",
+    "passed": true,
+    "expected_exit": 1,
+    "exit": 1
+  },
+  {
+    "name": "Refuse evidence-command worker path: ~",
+    "passed": true,
+    "expected_exit": 1,
+    "exit": 1
+  },
+  {
+    "name": "Refuse evidence-command worker path: ~",
+    "passed": true,
+    "expected_exit": 1,
+    "exit": 1
+  },
+  {
+    "name": "Refuse evidence-command worker path: @~/headers",
+    "passed": true,
+    "expected_exit": 1,
+    "exit": 1
+  },
+  {
+    "name": "Refuse evidence-command worker path: tar -czf/tmp/fm-task/proof.tgz result.json",
+    "passed": true,
+    "expected_exit": 1,
+    "exit": 1
+  },
+  {
+    "name": "Refuse evidence-command worker path: **/tmp/fm-task/**",
+    "passed": true,
+    "expected_exit": 1,
+    "exit": 1
+  },
+  {
+    "name": "Refuse shell-escaped configured home with spaces",
+    "passed": true,
+    "expected_exit": 1,
+    "exit": 1
+  },
+  {
+    "name": "Artifact guard: <task-output>/missing.txt",
+    "passed": true,
+    "expected_exit": 1,
+    "exit": 1
+  },
+  {
+    "name": "Artifact guard: <task-output>/../outside/proof.txt",
+    "passed": true,
+    "expected_exit": 1,
+    "exit": 1
+  },
+  {
+    "name": "Artifact guard: <firstmate-home>/config/proof.txt",
+    "passed": true,
+    "expected_exit": 1,
+    "exit": 1
+  },
+  {
+    "name": "Artifact guard: <unknown>/proof.txt",
+    "passed": true,
+    "expected_exit": 1,
+    "exit": 1
+  },
+  {
+    "name": "Symlink guard: <task-output>/escape.txt",
+    "passed": true,
+    "expected_exit": 1,
+    "exit": 1
+  },
+  {
+    "name": "Symlink guard: <task-output>/nested/proof.txt",
+    "passed": true,
+    "expected_exit": 1,
+    "exit": 1
+  },
+  {
+    "name": "Evidence claim still requires provenance",
+    "passed": true,
+    "expected_exit": 1,
+    "exit": 1
+  },
+  {
+    "name": "Home documentation requires an opt-in",
+    "passed": true,
+    "expected_exit": 1,
+    "exit": 1
+  },
+  {
+    "name": "Exact configured prefix is accepted: ~/host_config",
+    "passed": true,
+    "expected_exit": 0,
+    "exit": 0
+  },
+  {
+    "name": "Exact configured prefix is accepted: ~/host_config/private",
+    "passed": true,
+    "expected_exit": 0,
+    "exit": 0
+  },
+  {
+    "name": "Exact configured prefix is accepted: ~/host%5fconfig/private",
+    "passed": true,
+    "expected_exit": 0,
+    "exit": 0
+  },
+  {
+    "name": "Override does not permit: ~/hostconfig/private",
+    "passed": true,
+    "expected_exit": 1,
+    "exit": 1
+  },
+  {
+    "name": "Override does not permit: ~/host_config_other/private",
+    "passed": true,
+    "expected_exit": 1,
+    "exit": 1
+  },
+  {
+    "name": "Override does not permit: ~/host_config/../secret",
+    "passed": true,
+    "expected_exit": 1,
+    "exit": 1
+  },
+  {
+    "name": "Override does not permit: /tmp/fm-task/proof.txt",
+    "passed": true,
+    "expected_exit": 1,
+    "exit": 1
+  },
+  {
+    "name": "Override does not permit: ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5SEVNGRN2MRFNS682WZY649/.phase-test-tmp/portable-paths-vyceb5ie/task-output/proof.txt",
+    "passed": true,
+    "expected_exit": 1,
+    "exit": 1
+  },
+  {
+    "name": "Override does not apply to another project",
+    "passed": true,
+    "expected_exit": 1,
+    "exit": 1
+  },
+  {
+    "name": "Linked worktree shares project override",
+    "passed": true,
+    "expected_exit": 0,
+    "exit": 0
+  },
+  {
+    "name": "Override does not broaden artifact containment",
+    "passed": true,
+    "expected_exit": 1,
+    "exit": 1
+  },
+  {
+    "name": "Retired validation uses recorded project after worktree removal",
+    "passed": true,
+    "expected_exit": 0,
+    "exit": 0
+  },
+  {
+    "name": "Retired validation still rejects leaked home paths",
+    "passed": true,
+    "expected_exit": 1,
+    "exit": 1
+  },
+  {
+    "name": "Private intent retains real artifact path",
+    "passed": true,
+    "expected_exit": 0,
+    "exit": 0
+  },
+  {
+    "name": "Publication rejects the same private path",
+    "passed": true,
+    "expected_exit": 1,
+    "exit": 1
+  }
+]

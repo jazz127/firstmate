@@ -1,0 +1,31 @@
+$ git -C ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5SEVNGRN2MRFNS682WZY649/.phase-test-tmp/brief-scratch-f5h2epdb/repo init -q -b main
+exit=0; expected=0
+
+$ git -C ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5SEVNGRN2MRFNS682WZY649/.phase-test-tmp/brief-scratch-f5h2epdb/repo add README.txt
+exit=0; expected=0
+
+$ git -C ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5SEVNGRN2MRFNS682WZY649/.phase-test-tmp/brief-scratch-f5h2epdb/repo commit -q -m Initial
+exit=0; expected=0
+
+$ ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5SEVNGRN2MRFNS682WZY649/bin/fm-brief.sh portable-evidence demo --mode direct-PR --project ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5SEVNGRN2MRFNS682WZY649/.phase-test-tmp/brief-scratch-f5h2epdb/repo
+scaffolded: ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5SEVNGRN2MRFNS682WZY649/.phase-test-tmp/brief-scratch-f5h2epdb/home/data/portable-evidence/brief.md (ship, mode=direct-PR; replace {TASK} and {FIRSTMATE_SPEC})
+exit=0; expected=0
+
+$ ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5SEVNGRN2MRFNS682WZY649/bin/fm-pr-body-preflight.sh --scratch ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5SEVNGRN2MRFNS682WZY649/.phase-test-tmp/brief-scratch-f5h2epdb/repo
+scratch preflight ok
+exit=0; expected=0
+
+$ git -C ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5SEVNGRN2MRFNS682WZY649/.phase-test-tmp/brief-scratch-f5h2epdb/repo add .npm/cache.txt
+exit=0; expected=0
+
+$ ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5SEVNGRN2MRFNS682WZY649/bin/fm-pr-body-preflight.sh --scratch ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5SEVNGRN2MRFNS682WZY649/.phase-test-tmp/brief-scratch-f5h2epdb/repo
+error: scratch path would be published: .npm/cache.txt
+error: scratch check failed
+exit=1; expected=1
+
+$ git -C ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5SEVNGRN2MRFNS682WZY649/.phase-test-tmp/brief-scratch-f5h2epdb/repo reset -q -- .npm/cache.txt
+exit=0; expected=0
+
+$ ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5SEVNGRN2MRFNS682WZY649/bin/fm-pr-body-preflight.sh --scratch ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5SEVNGRN2MRFNS682WZY649/.phase-test-tmp/brief-scratch-f5h2epdb/repo
+scratch preflight ok
+exit=0; expected=0

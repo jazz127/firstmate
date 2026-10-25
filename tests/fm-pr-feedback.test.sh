@@ -473,7 +473,7 @@ gate:
         head = 'b' * 40
         custody = 'branch_sync:\n  state: pipeline_owned\n'
         steps = 'steps[1]{step,status,findings,duration_ms}:\n  ci,running,0,0\n'
-        ready = 'no CI checks reported - still monitoring until merged or closed\n'
+        ready = 'all CI checks passed - still monitoring until merged or closed\n'
         pending = 'no CI checks reported yet, waiting for checks to register...\n'
         self.data[f'repos/o/r/commits/{head}/check-runs'] = {'check_runs': []}
         self.data[f'repos/o/r/commits/{head}/status'] = {'statuses': []}
@@ -595,12 +595,29 @@ gate:
         self.assertNotIn('No-mistakes outcome event:', self.messages()[0])
         self.assertFalse(self.api_log.exists())
 
+    def test_no_checks_markers_never_emit_green_feedback(self):
+        # Accepted PR contract: an absent check is unverified, even when a
+        # previous marker was green or the no_ci sentence says checks passed.
+        text, head = self.pipeline_task()
+        self.nm.write_text(text + 'steps[1]{step,status,findings,duration_ms}:\n  ci,running,0,0\n')
+        green = 'all CI checks passed - still monitoring until merged or closed\n'
+        for marker in ('no CI checks reported - still monitoring until merged or closed\n',
+                       'repository declares no CI (no_ci: true) - treating as all checks passed - '
+                       'still monitoring until merged or closed\n'):
+            with self.subTest(marker=marker):
+                self.ci_log.write_text(green + marker)
+                self.assertEqual(self.poll(), '')
+                self.assertEqual(self.messages(), [])
+        self.ci_log.write_text(marker + green)
+        self.assertIn('tasks=t1', self.poll())
+        self.assertIn(f'GitHub PR CI event: {URL} head={head} state=green', self.messages()[0])
+
     def test_no_checks_readiness_requires_current_attributed_pipeline_evidence(self):
         text, head = self.pipeline_task(pr='')
         monitoring = text.replace('  pr: ""', f'  pr: "{URL}"') + (
             'steps[1]{step,status,findings,duration_ms}:\n  ci,running,0,0\n')
         self.nm.write_text(monitoring)
-        ready = 'no CI checks reported - still monitoring until merged or closed\n'
+        ready = 'all CI checks passed - still monitoring until merged or closed\n'
         pending = 'no CI checks reported yet, waiting for checks to register...\n'
         self.assertEqual(self.poll(), '')
         self.ci_log.unlink()

@@ -1,0 +1,8 @@
+# config/usage-warner - opt-in thresholds for the local Claude usage warner
+# (bin/fm-usage-warner.sh). Copy this into a local, gitignored
+# config/usage-warner and edit.
+#
+# Schema and opt-in requirements: docs/configuration.md, "Local Claude usage
+# warner". Notification behaviour and supported limits: docs/usage-warner.md.
+five_hour:80
+seven_day:90

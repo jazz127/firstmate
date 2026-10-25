@@ -260,6 +260,134 @@ test_comment_wake() { test_incoming_signal comment; }
 test_review_wake() { test_incoming_signal review; }
 test_inline_wake() { test_incoming_signal inline; }
 
+test_review_bot_inline_wake() {
+  local home out token
+  home=$(new_home review-bot)
+  forge_home "$home"
+  mkdir -p "$home/config"
+  printf 'additional-review[bot]\n' > "$home/config/contribution-review-bots"
+  with_home "$home" "$ROOT/bin/fm-pr-check.sh" delivery https://github.com/o/r/pull/8 >/dev/null \
+    || fail 'could not register the owned delivery'
+  registered_checks "$home" >/dev/null
+  jq -n --arg head "$HEAD_A" '[
+    {id:21,user:{login:"additional-review[bot]"},author_association:"COLLABORATOR",commit_id:$head,
+      body:"P1: unchecked error",html_url:"https://github.com/o/r/pull/8#discussion_r21",
+      created_at:"2026-09-16T08:01:00Z",updated_at:"2026-09-16T08:01:00Z"},
+    {id:22,user:{login:"passerby"},author_association:"NONE",commit_id:$head,
+      body:"drive-by",html_url:"https://github.com/o/r/pull/8#discussion_r22",updated_at:"2026-09-16T08:02:00Z"}]' \
+    > "$home/forge/inline.json"
+  registered_checks "$home" >/dev/null
+  out=$(with_home "$home" "$ROOT/bin/fm-contributions.sh" pending)
+  printf '%s' "$out" | jq -e 'length == 1 and .[0].author == "additional-review[bot]" and .[0].review_bot == true' >/dev/null \
+    || fail "a listed inline comment must be the only pending signal: $out"
+  [ "$(awk 'END { print NR }' "$home/state/.wake-queue")" = 1 ] || fail 'a review-bot finding must enqueue exactly one wake'
+  with_home "$home" "$ROOT/bin/fm-fleet-snapshot.sh" --contribution-input > "$home/input.json" \
+    || fail 'could not collect review-bot contribution input'
+  with_home "$home" "$ROOT/bin/fm-contributions.sh" snapshot "$home/input.json" --all \
+    | jq -e '.rows[0].actor == "fleet" and .rows[0].reason == "incoming review-bot finding needs triage"' >/dev/null \
+    || fail 'a review-bot finding must route to the fleet'
+  token=$(printf '%s' "$out" | jq -er '.[0].token') || fail 'the review-bot signal had no token'
+  with_home "$home" "$ROOT/bin/fm-contributions.sh" ack delivery https://github.com/o/r/pull/8 "$token" >/dev/null \
+    || fail 'the review-bot signal could not be acknowledged'
+  registered_checks "$home" >/dev/null
+  out=$(with_home "$home" "$ROOT/bin/fm-contributions.sh" pending)
+  printf '%s' "$out" | jq -e 'length == 0' >/dev/null \
+    || fail "an acknowledged review-bot finding returned: $out"
+  pass 'a listed collaborator bot remains an acknowledged review-bot fleet signal'
+}
+
+test_review_bot_empty_approval_is_not_a_finding() {
+  local home out
+  home=$(new_home review-bot-approval)
+  forge_home "$home"
+  printf 'additional-review[bot]\ncopilot-pull-request-reviewer[bot]\n' > "$home/config/contribution-review-bots"
+  with_home "$home" "$ROOT/bin/fm-pr-check.sh" delivery https://github.com/o/r/pull/8 >/dev/null \
+    || fail 'could not register the owned delivery'
+  registered_checks "$home" >/dev/null
+  jq -n --arg head "$HEAD_A" '[
+    {id:51,user:{login:"additional-review[bot]"},author_association:"COLLABORATOR",state:"APPROVED",body:"",
+      commit_id:$head,html_url:"https://github.com/o/r/pull/8#pullrequestreview-51",submitted_at:"2026-09-16T08:01:00Z"},
+    {id:52,user:{login:"copilot-pull-request-reviewer[bot]"},author_association:"NONE",state:"APPROVED",body:" \n\t ",
+      commit_id:$head,html_url:"https://github.com/o/r/pull/8#pullrequestreview-52",submitted_at:"2026-09-16T08:02:00Z"}]' \
+    > "$home/forge/reviews.json"
+  registered_checks "$home" >/dev/null
+  out=$(with_home "$home" "$ROOT/bin/fm-contributions.sh" pending)
+  printf '%s' "$out" | jq -e 'length == 0' >/dev/null \
+    || fail "empty allowlisted approvals must create no findings: $out"
+  [ ! -s "$home/state/.wake-queue" ] || fail 'empty allowlisted approvals must create no wake'
+  jq -e '.records[0].observation.reviews | length == 2 and all(.[]; .state == "APPROVED")' \
+    "$home/data/delivery/contributions.json" >/dev/null || fail 'approval evidence must remain recorded'
+
+  jq -n --arg head "$HEAD_A" '[
+    {id:53,user:{login:"additional-review[bot]"},author_association:"NONE",state:"APPROVED",body:"Please check this edge case",
+      commit_id:$head,html_url:"https://github.com/o/r/pull/8#pullrequestreview-53",submitted_at:"2026-09-16T08:03:00Z"},
+    {id:54,user:{login:"additional-review[bot]"},author_association:"NONE",state:"CHANGES_REQUESTED",body:"",
+      commit_id:$head,html_url:"https://github.com/o/r/pull/8#pullrequestreview-54",submitted_at:"2026-09-16T08:04:00Z"}]' \
+    > "$home/forge/reviews.json"
+  jq -n --arg head "$HEAD_A" '[{id:55,user:{login:"additional-review[bot]"},author_association:"NONE",body:"P1: unchecked error",
+    pull_request_review_id:51,commit_id:$head,html_url:"https://github.com/o/r/pull/8#discussion_r55",updated_at:"2026-09-16T08:05:00Z"}]' \
+    > "$home/forge/inline.json"
+  registered_checks "$home" >/dev/null
+  out=$(with_home "$home" "$ROOT/bin/fm-contributions.sh" pending)
+  printf '%s' "$out" | jq -e 'length == 3 and all(.[]; .review_bot == true)
+    and any(.[]; .source | endswith("review-53"))
+    and any(.[]; .source | endswith("review-54"))
+    and any(.[]; .source | endswith("discussion_r55"))' >/dev/null \
+    || fail "substantive reviews, change requests, and inline findings must remain signals: $out"
+  pass 'empty allowlisted approvals retain review evidence without becoming findings'
+}
+
+test_review_bot_watching_is_opt_in() {
+  local home out
+  home=$(new_home review-bot-off)
+  forge_home "$home"
+  rm -f "$home/config/contribution-review-bots"
+  with_home "$home" "$ROOT/bin/fm-pr-check.sh" delivery https://github.com/o/r/pull/8 >/dev/null \
+    || fail 'could not register the owned delivery'
+  registered_checks "$home" >/dev/null
+  jq -n '[{id:41,user:{login:"additional-review[bot]"},author_association:"NONE",body:"P1: finding",
+    html_url:"https://github.com/o/r/pull/8#issuecomment-41",updated_at:"2026-09-16T08:01:00Z"}]' > "$home/forge/comments.json"
+  registered_checks "$home" >/dev/null
+  out=$(with_home "$home" "$ROOT/bin/fm-contributions.sh" pending)
+  printf '%s' "$out" | jq -e 'length == 0' >/dev/null \
+    || fail "a home with no review-bot file must admit no bot: $out"
+  pass 'review-bot watching is off until a home lists a bot'
+}
+
+test_review_bot_allowlist_is_configurable() {
+  local home config out token
+  home=$(new_home review-bot-config)
+  config=review-config
+  forge_home "$home"
+  mkdir -p "$home/$config"
+  printf 'custom-review[bot]\n' > "$home/$config/contribution-review-bots"
+  with_home "$home" "$ROOT/bin/fm-pr-check.sh" delivery https://github.com/o/r/pull/8 >/dev/null \
+    || fail 'could not register the owned delivery'
+  (cd "$home" && with_home "$home" env FM_CONFIG_OVERRIDE="$config" "$ROOT/bin/fm-contributions.sh" arm >/dev/null) \
+    || fail 'could not arm the contribution check with its relative review-bot config'
+  registered_checks "$home" >/dev/null
+  jq -n '[
+    {id:31,user:{login:"custom-review[bot]"},author_association:"NONE",body:"configured",
+      html_url:"https://github.com/o/r/pull/8#issuecomment-31",updated_at:"2026-09-16T08:01:00Z"},
+    {id:32,user:{login:"additional-review[bot]"},author_association:"NONE",body:"not configured",
+      html_url:"https://github.com/o/r/pull/8#issuecomment-32",updated_at:"2026-09-16T08:02:00Z"}]' > "$home/forge/comments.json"
+  registered_checks "$home" >/dev/null
+  out=$(with_home "$home" "$ROOT/bin/fm-contributions.sh" pending)
+  printf '%s' "$out" | jq -e 'length == 1 and .[0].author == "custom-review[bot]"' >/dev/null \
+    || fail "the armed check did not retain its configured review-bot allowlist: $out"
+  token=$(printf '%s' "$out" | jq -er '.[0].token') || fail 'the configured review-bot signal had no token'
+  with_home "$home" "$ROOT/bin/fm-contributions.sh" ack delivery https://github.com/o/r/pull/8 "$token" >/dev/null \
+    || fail 'the configured review-bot signal could not be acknowledged'
+  : > "$home/$config/contribution-review-bots"
+  registered_checks "$home" >/dev/null
+  printf 'custom-review[bot]\n' > "$home/$config/contribution-review-bots"
+  registered_checks "$home" >/dev/null
+  out=$(with_home "$home" "$ROOT/bin/fm-contributions.sh" pending)
+  printf '%s' "$out" | jq -e 'length == 0' >/dev/null \
+    || fail "an acknowledged review-bot signal returned after an allowlist toggle: $out"
+  pass 'the armed allowlist is stable across working directories and policy toggles'
+}
+
 test_missing_lane_remains_missing() {
   local home out
   home=$(new_home absent-lane)
@@ -2456,3 +2584,8 @@ test_closed_backlog_pr_owns_landed_contribution
 test_automated_reviewer_signal
 test_automated_reviewer_configuration
 test_author_marker_directive
+
+test_review_bot_inline_wake
+test_review_bot_empty_approval_is_not_a_finding
+test_review_bot_watching_is_opt_in
+test_review_bot_allowlist_is_configurable

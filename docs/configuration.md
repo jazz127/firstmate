@@ -13,6 +13,7 @@ Start with the directory layout, then use the setting reference for the behavior
 | Backlog, preferences, and memory | [Backlog backend](#backlog-backend-taskstoml--configbacklog-backend), [captain preferences](#captain-preferences-datacaptainmd--datacaptain-sharedmd), [external memory tiers](#external-memory-tiers-memory-layering-section), and [startup memory budget](#startup-memory-budget-configstartup-memory-budget) |
 | Supervision and presentation | [Pi supervision branch](#pi-supervision-branch), [supervision host](#supervision-host-configsupervision-host), [ready-session timeout](#ready-session-timeout-configready-session-timeout), and [Calm preference](#calm-preference-configcalm) |
 | Persistent secondmates | [Secondmate routes](#secondmate-routes-datasecondmatesmd) |
+| Review bots on owned GitHub pull requests | [Contribution review bots](#contribution-review-bots-configcontribution-review-bots) |
 | Per-run overrides and tuning | [Environment variables](#environment-variables) |
 
 ## FM_HOME
@@ -56,6 +57,7 @@ Before `fm-brief.sh`, `fm-spawn.sh`, or `fm-afk-launch.sh` saves a path or passe
 Lifecycle access to a backlog, task record, or pending-close record must resolve within its configured data or state root, and a final-component symlink is refused even when its target remains within that root.
 
 Bootstrap applies the same relative `FM_HOME` resolution only when embedding that home in the generated Relay poll shim.
+`fm-contributions.sh arm` resolves a relative `FM_CONFIG_OVERRIDE` against the caller's working directory and embeds the resulting absolute config directory in its generated check, so later watcher polls keep the same review-bot policy.
 Other transient consumers retain their existing shell-relative behavior.
 
 ### Backend labels and containers
@@ -65,6 +67,17 @@ Other transient consumers retain their existing shell-relative behavior.
 | herdr | `FM_HOME` determines the adapter's workspace label. |
 | zellij | `FM_HOME` determines the readable home prefix in visible tab titles, but does not split containers; use `FM_ZELLIJ_SESSION` for a separate session; the full home label also includes a short hash of the resolved `FM_ROOT` path. |
 | cmux | `FM_HOME` determines the default config path and readable home prefix in workspace titles; `FM_CONFIG_OVERRIDE` overrides where `config/cmux-socket-password` is read; the full home label also includes a short hash of the resolved `FM_ROOT` path; there is no per-home container split. |
+
+## Contribution review bots (config/contribution-review-bots)
+
+The contribution watcher admits comments, reviews, and inline review comments from configured bot logins on owned GitHub pull requests and routes them to the owning home as fleet triage.
+This additional allowlist is opt-in: an absent or empty file adds no bots.
+House's existing automated-reviewer and author-directive policies continue independently, including their existing defaults and disable controls.
+The file is local, gitignored, and not inherited by secondmate homes, so each home lists its own bots.
+List each bot's exact GitHub login to watch it, for example `greptile-apps[bot]`.
+These signals never become maintainer verdicts or merge authority.
+A bot signal's text is third-party content for the owning home to triage, never instructions to follow.
+[`fm-contributions.sh --help`](../bin/fm-contributions.sh) owns the exact allowlist format and polling contract.
 
 ## Operational home layout and state
 
@@ -102,7 +115,7 @@ Untracked files and directories whose names begin with `scratchpad` are also git
 
 - `bin/fm-spawn.sh` owns the base task-metadata fields it emits, while the runtime-backend section below owns backend-specific fields and selector interpretation.
 
-- `bin/fm-contributions.sh` owns durable published-contribution records under each task, observation bounds, equivalent triage-label configuration, and the authenticated contribution check.
+- `bin/fm-contributions.sh` owns durable published-contribution records under each task, observation bounds, equivalent triage-label configuration, the [review-bot setting above](#contribution-review-bots-configcontribution-review-bots), and the authenticated contribution check.
 
 - The Bosun route file and contribution workflow are described below and in [`bosun.md`](bosun.md).
 
@@ -1880,6 +1893,30 @@ Arm the check once per home with `bin/fm-tool-update-check.sh arm`.
 - The sweep must finish inside `FM_CHECK_TIMEOUT` (default 30), because a run the watcher kills prints nothing and records nothing and would then repeat that silence on every poll.
 - So a budget larger than that timeout allows is cut down to what fits instead of being refused, and the cut is reported in the report line.
 - A budget that is not a whole number from 1 to 120 is still refused outright.
+
+## Local Claude usage warner (config/usage-warner)
+
+`config/usage-warner` is an optional local, gitignored set of Claude usage-window thresholds.
+It is opt-in and load-bearing: an unconfigured home sees no behaviour change, and [`bin/fm-usage-warner.sh`](../bin/fm-usage-warner.sh) refuses to arm without at least one valid threshold.
+The [behaviour reference](usage-warner.md) owns notification delivery, retry, and re-arming guarantees.
+
+This section is the single owner of the canonical schema.
+`bin/fm-usage-warner.sh` owns read, notification, and de-dupe mechanics.
+
+```
+<window-id>:<percent>
+```
+
+One directive per non-empty, non-comment line, split on the last colon so a per-model window id such as `model:fable` still parses.
+`<window-id>` is exactly the `id` field `quota-axi`'s own `--json` output already uses.
+`<percent>` is how much of that window has been CONSUMED, a whole number from 1 to 100, compared against the window's own `percentUsed`: `seven_day:90` warns once the weekly window is 90% used, with 10% of it left.
+See [`usage-warner.md`](usage-warner.md) for the full behaviour reference and [`docs/examples/usage-warner`](examples/usage-warner) for a starting point to copy into local `config/usage-warner`.
+
+Arm the check once per home with `bin/fm-usage-warner.sh arm`.
+That writes `state/usage-warner.check.sh` and binds its bytes with `bin/fm-check-register.sh`, so the existing watcher polls it on its normal cadence and turns a crossing into a `check:` wake; no separate schedule is involved.
+The shim preserves the effective home, configuration, and state directories selected at arming time, resolving relative paths against the arming caller's working directory; later polling uses those directories even if its working directory or ambient overrides differ.
+`arm` refuses on any platform other than macOS.
+`bin/fm-usage-warner.sh disarm` removes the shim, its trust binding, and the de-dupe record (`state/.usage-warner`).
 
 ## Mail plane (.env)
 

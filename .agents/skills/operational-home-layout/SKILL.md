@@ -44,6 +44,7 @@ config/brief-include.md  optional standing worker instructions appended verbatim
 config/fleet-ledger  optional presence flag opting this home in to the default-off fleet activity ledger state/fleet-ledger.jsonl that outside tools can follow; LOCAL, gitignored, and not inherited; see docs/fleet-ledger.md
 config/firstmate-role  optional LOCAL, gitignored firstmate-repository publication role; see docs/configuration.md "Firstmate role" for operator opt-in and secondmate inheritance
 config/wait-no-turns  optional presence flag opting this home into default-off waiting-worker behavior (brief waiting section, foreground pipeline drive, pending-reply hold, one fire-and-forget retry ring); LOCAL, gitignored, and not inherited; see docs/configuration.md "Waiting worker spends no turns"
+config/contribution-review-bots  optional exact GitHub-login allowlist for additional review-bot signals on owned pull requests; LOCAL, gitignored, and not inherited; see docs/configuration.md "Contribution review bots"
 config/pipeline-spend  optional presence flag opting this home in to default-off per-task no-mistakes spend recording in data/pipeline-spend.jsonl; LOCAL, gitignored, and not inherited; see docs/configuration.md "No-mistakes pipeline spend"
 config/turnend-churn-absorb  optional presence flag opting this home into the default-off absorb of bare turn-end wakes on pane churn; LOCAL, gitignored, and not inherited; see docs/configuration.md "Turn-end pane-churn absorb"
 config/ready-session-timeout  optional opt-in to stopping the idle agent of a ship worker whose PR has sat ready awaiting merge for the configured duration (empty = 2 hours), keeping its local copy, branch, PR, and merge monitoring for an on-demand relaunch; LOCAL, gitignored, and not inherited; see docs/configuration.md "Ready-session timeout"
@@ -52,6 +53,7 @@ config/wedge-evidence-guards  optional list of absolute operator guard executabl
 config/cmux-socket-password  optional cmux control-socket password; LOCAL, gitignored; read fresh on every cmux CLI call and passed through without ever overriding an operator's own ambient CMUX_SOCKET_PASSWORD when absent (docs/cmux-backend.md "Setup")
 config/wedge-alarm  optional away-mode wedge-alarm active-alert directives; LOCAL, gitignored; absent means auto (macOS Notification Center when available); see docs/wedge-alarm.md
 config/watched-tools.json  optional list of the tools this home depends on, read by the update check armed with bin/fm-tool-update-check.sh; LOCAL, gitignored, firstmate-maintained but human-editable, and NOT inherited by secondmate homes; see docs/configuration.md "Watched tool updates"
+config/usage-warner  optional Claude usage-window thresholds for the opt-in macOS threshold warner armed with bin/fm-usage-warner.sh; LOCAL, gitignored, and NOT inherited by secondmate homes; see docs/configuration.md "Local Claude usage warner"
 config/x-mode.env    generated Relay watcher cadence; LOCAL, gitignored; source before arming watcher when present
 data/                personal fleet records; LOCAL, gitignored as a whole
   backlog.md         task queue, dependencies, history
@@ -98,6 +100,7 @@ state/               runtime records and signals; gitignored
   x-watch.check.sh   generated Relay poll shim; present only when opted in (section 14)
   tool-updates.check.sh  generated watched-tool update poll shim and its .check-trust binding; present only after bin/fm-tool-update-check.sh arm; its report record .tool-updates is what keeps one pending update from being reported on every poll
   mail.check.sh      generated received-mail poll shim and its .check-trust binding; present only after bin/fm-mail-check.sh arm; report record .mail-check (mail schema: docs/configuration.md "Mail plane")
+  usage-warner.check.sh  generated Claude usage threshold poll shim and its .check-trust binding; present only after bin/fm-usage-warner.sh arm; its de-dupe record .usage-warner is what keeps one threshold crossing from warning on every poll, and .usage-warner.lock serializes overlapping checks
   .mail-seen .mail-woken .mail-retry .mail-retry-pos .mail-turn .mail-seen.lock  mail-plane poll cursor, emission journal, transient-fetch retry set, retry-scan position, contended-slot turn flag, and overlapping-poll lock; written only by bin/fm-mail.sh (mail schema: docs/configuration.md "Mail plane")
   startup-growth.check.sh  generated daily startup-growth poll shim with its .check-trust binding and .startup-growth-check report record; see docs/configuration.md "Daily startup growth check" for lifecycle and record-reset consequences
   pending-replies/   parent-owned secondmate pending-reply records (correlation id, delivery vs reply, recovery, escalation); fm-pending-reply-lib.sh

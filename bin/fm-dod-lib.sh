@@ -339,8 +339,8 @@ EOF
 
 # The forge-independent middle of the no-mistakes contract: how a worker drives
 # the pipeline, what `--intent` may carry, and the two firstmate-specific rules.
-# Written once; only the two sentences about a green PR depend on the forge,
-# because on gerrit the ci step is skipped and there is no PR to report.
+# Event waits must not park unsupported PR forges without a feedback source.
+# Gerrit can wait on pipeline events because its forge-facing CI step is skipped.
 fm_nm_driving_block() {  # <forge>
   local pr_return_line='' pr_reattach_clause=';' drive_block event_block wait_cfg
   if [ "$1" != gerrit ]; then

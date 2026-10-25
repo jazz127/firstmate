@@ -7,9 +7,11 @@
 # and FM_CHECK_TIMEOUT apply. No scheduler, forge writes, or model calls run.
 # poll scans recorded GitHub pr= values and attributed no-mistakes runs (whose
 # PR may not be registered yet), including delivered tasks awaiting merge.
-# GitLab, Gerrit, remote secondmates and retired task metadata are out of scope.
-# New reviews, inline and conversation comments, terminal CI states, and parked
-# pipeline gates become concise task-inbox pointers, batched into one message
+# Forge feedback is GitHub-only; attributed pipeline gates and outcomes are
+# observed for any forge, including Gerrit. Remote secondmates and retired task
+# metadata are out of scope.
+# New reviews, inline and conversation comments, terminal CI states, pipeline
+# gates and outcomes become concise task-inbox pointers, batched into one message
 # and one doorbell per task per sweep. The authenticated GitHub
 # login's own feedback is excluded; bots are included. Existing feedback is
 # delivered on the first sweep. Inbox root and handled/ records are the only
@@ -18,6 +20,10 @@
 # relaunch=<ids> when a worker has exited; only firstmate controls relaunch.
 # An interrupted sweep flushes its unfinished task names before the shared
 # check timeout kills its group; size FM_CHECK_TIMEOUT for the home's API load.
+# An empty CI check list proves readiness only with the attributed pipeline's
+# green CI-log evidence for the same PR and head, never from absence alone.
+# Inbox run-binding receipts preserve terminal attribution for unfetched pipeline
+# heads only while the task, worktree, branch and local HEAD remain unchanged.
 #
 # Internal bridge operations used by fm-pr-feedback.py:
 #   pipeline <task> <observed-run-ids>  attributed read-only axi status, or empty

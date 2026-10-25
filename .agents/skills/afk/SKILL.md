@@ -55,7 +55,7 @@ Hold-for-return is the default and the only reach profile this release records: 
 ## While away
 
 - The record exists, so the watcher never rechecks an item held for the captain, in either supervision shape; the return brief lists it instead.
-  Declared external waits keep their condition-aware, hours-long recheck cadence (`bin/fm-watch.sh`, `bin/fm-classify-lib.sh`).
+  [Event-driven supervision](../../../docs/architecture.md#event-driven-supervision) owns idle check-in eligibility in every posture.
 - The away session acts on the captain's words.
   It reads them at the tail of every wake, decides by its own judgment whether the event in front of it is the moment they name, acts on them only through the guarded scripts under standing authority, never by analogy, holds with verdict captain on doubt, and opens every outcome summary for an action taken under the words with "per your away instructions:" (`bin/fm-branch-prompt.sh` "Postures" owns the execution rules).
   Destructive, irreversible, and security-sensitive actions are never pre-authorizable whatever the words say, and ask-user findings keep the `ask-user-authority` policy unless the words pre-answer the exact decision; anything else that needs the captain holds for their return.
@@ -176,19 +176,20 @@ Classify each wake this way, applying the steering-inbox exception before status
   A nonterminal progress verb remains nonterminal even when its prose contains a legacy free-text token such as `PR ready`, `checks green`, `ready in branch`, or `merged`; only a bare legacy line with such a token escalates.
   Other signals with no captain-relevant event in the span -> self-handle.
 - `signal` or `stale` whose latest status declares a wait, either a `paused:` external wait or a verified `captain-held` transfer, tracks the pause rather than a wedge whether its pane reads idle or busy.
-  An unreported captain-relevant event in the newly classified span still escalates immediately while the current declaration independently keeps the pause cadence.
-  With no unreported actionable event, the wake self-handles, and the current declaration outranks an enriched possible-wedge reason so it never escalates on the `FM_STALE_ESCALATE_SECS` cadence.
-  If a declared external wait is still declared past `FM_PAUSE_RESURFACE_SECS` (default four hours), housekeeping sends one recheck and resets the pause window; a captain-held transfer is never rechecked while the posture record exists.
+  An unreported captain-relevant event in the newly classified span still escalates immediately.
+  With no unreported actionable event, the wake self-handles; an enriched possible-wedge reason outranks a `paused:` declaration only when its explicit `until` time has passed.
+  A recovery-grade endpoint-loss reason escalates even under a declared wait.
+  Housekeeping rechecks only waits eligible under the [idle check-in policy](../../../docs/architecture.md#event-driven-supervision).
   The window ages against the crew's own latest status line, so only a status append that stops declaring the wait ends this routing and restores wedge detection.
 - `check` -> always escalate. Check scripts print only when firstmate should wake.
 - `stale` with a terminal status, a bare legacy captain-relevant line, or an unrecognized status prefix such as `parked:` -> escalate.
-  Nonterminal progress remains transient even when its prose contains a legacy free-text token or its seen-status marker already matches, so record a marker and self-handle.
-  If the pane is still idle past `FM_STALE_ESCALATE_SECS` (default 240s), housekeeping escalates it as a possible wedge.
-  This bounds wedge-detection latency to the threshold plus a tick: a delay, never a loss.
+  Nonterminal progress remains transient even when its prose contains a legacy free-text token or its seen-status marker already matches, so self-handle it.
+  Create persistence tracking only on authoritative working or parked-run evidence, preserve existing tracking through an uncertain read, and clear it on confirmed inactivity or a declared wait.
+  Housekeeping rechecks existing tracking past `FM_STALE_ESCALATE_SECS` (default 240s); an exact busy verdict clears the marker, while an idle or unreadable pane remains eligible to escalate if current-state classification has not confirmed inactivity or a declared wait.
   A stale detail that ends with `blocked-on-prompt:` and a dialog name means the pane shows that dialog, so the worker cannot continue until someone answers it.
   An escalation this path already sends keeps that name, whether it comes from the status log or from housekeeping.
-  A terminal status that was already reported still clears the persistence marker, the same as a stale with no dialog name.
-  A declared wait keeps the pause cadence and does not carry the name.
+  A terminal status that was already reported does not override current execution evidence when reconciling persistence tracking.
+  A declared-wait recheck does not carry the name.
   Healthy crewmates are autonomous and do not wait on firstmate mid-task.
 - `heartbeat` -> self-handle.
   The daemon runs its own cheap bash fleet scan every `FM_HEARTBEAT_SCAN_SECS` (default 300s) as the catch-all for captain-relevant events still unread by the per-wake classifier.
@@ -267,7 +268,7 @@ These properties must hold:
 - Nothing is lost after queue publication.
   The daemon leaves every presented wake durable until routing completes and post-handling acknowledgement succeeds, so interruption replays the same work to the daemon or its successor.
 - Wedge detection is bounded-latency, not lossy.
-- Declared external waits are rechecked on a separate, bounded, condition-aware cadence rather than being mislabeled as wedges; items held for the captain are not rechecked while the posture record exists.
+- Declared external waits follow the [idle check-in policy](../../../docs/architecture.md#event-driven-supervision) rather than being mislabeled as wedges; items held for the captain are not rechecked while the posture record exists.
 - The catch-all scan backs up the keyword classifier.
 - The daemon preserves a single-instance portable lock, crash-loop backoff,
   a pane-gone guard, and a signal-trapped shutdown that flushes buffered

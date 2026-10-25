@@ -1597,8 +1597,9 @@ Exit reports that the worker is blocked on the Claude background-task exit picke
 A submit can return before any read sees the picker, so exit reads the screen once more when its wait for the agent to stop times out, and names the picker there too.
 Exit does not report a stopped agent whose pane still shows the picker text as blocked on a prompt.
 The watcher reads the picker with the same matcher on the stale-path capture it already takes for a worker.
-A worker pane parked on it keeps the ordinary stale triage and schedule, and its plain stale reason and its final wedge escalation reason name the picker after `blocked-on-prompt:`; the deferral, dead-record, and declared-wait recheck reasons do not.
-A second mate stays off that path, and a finished worker in away mode is handled as before.
+A worker pane parked on it follows the [event-driven supervision policy](../architecture.md#event-driven-supervision); when frozen-run protection produces a wedge escalation, its reason names the picker after `blocked-on-prompt:`.
+The deferral, dead-record, and declared-wait recheck reasons do not carry the name.
+A secondmate stays off the worker pane-staleness path.
 That watcher and away-daemon reporting is covered by fakes in `tests/fm-watch-triage.test.sh` and `tests/fm-daemon.test.sh`, not by a live measurement.
 No recorded screen was available for a model-downgrade confirmation, an MCP approval, or a Claude exit confirmation other than this picker, so those dialogs are not covered.
 Refusing an Enter that would confirm a dialog restores an existing safety path, so it is not gated behind a flag.

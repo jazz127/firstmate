@@ -183,8 +183,8 @@ IFS= read -r -d '' CREWMATE_PAUSE_INSTRUCTIONS <<EOF || true
    Name what you are waiting for and what will let you resume; do not repeat the declaration on every poll.
    For a long job you launched yourself, append the \`$PAUSED_VERB:\` line first, naming the job and how long you expect it to take, check on it again once that time has passed, and append \`working:\` when you resume.
    Do not declare active implementation or reasoning as a wait.
-   Firstmate then leaves your idle pane alone and rechecks it on a long cadence instead of treating it as a possible wedge.
-   When you know when the wait clears, include \`until <YYYY-MM-DDTHH:MMZ>\` (UTC) for a recheck at that time; for your own background job or command with a timeout, that time is its start plus its timeout, rounded up to the minute.
+   Firstmate leaves your idle pane alone without periodic check-ins; status, inbox, PR, and endpoint-loss events still wake it.
+   When you know when the wait clears, include \`until <YYYY-MM-DDTHH:MMZ>\` (UTC) to document the expected clearing time; for your own background job or command with a timeout, that time is its start plus its timeout, rounded up to the minute.
    Follow the resolution rule below when the wait clears, then resume the task.
    Use \`blocked:\` when you are stuck and need help.
 EOF

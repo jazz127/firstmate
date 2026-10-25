@@ -110,18 +110,9 @@ FM_CLASSIFY_CAPTAIN_RE_DEFAULT='done:|needs-decision:|blocked:|failed:|PR ready|
 # drift between the two consumers. FM_CLASSIFY_PAUSED_VERB overrides it.
 FM_CLASSIFY_PAUSED_VERB_DEFAULT='paused'
 
-# Bounded re-surface cadence for a declared external-wait pause.
-# Far longer than the wedge threshold (FM_STALE_ESCALATE_SECS, default 240s), it
-# avoids nagging a deliberate wait while ensuring a forgotten wait cannot rot
-# invisibly - it re-surfaces once for a recheck every window. Four hours by
-# default: a declared wait is by definition expected to clear on its own, so a
-# recheck is a backstop, not progress, and an hourly one only produced nagging
-# (the 2026-09-07 away-window audit). A worker that knows when its wait clears
-# names it with `until` (status_paused_until below) and is rechecked at that
-# time or this cadence bound, whichever comes first. Both consumers read
-# FM_PAUSE_RESURFACE_SECS with this default so
-# the cadence has one owner. An item held for the captain is not rechecked at all
-# while the away-posture record exists (bin/fm-watch.sh owns that rule).
+# Shared default for eligible declared-wait rechecks and repeated busy-pane
+# wedge escalations. docs/architecture.md "Event-driven supervision" owns idle
+# eligibility; declaring an `until` time does not opt a worker into rechecks.
 # shellcheck disable=SC2034 # Read by the watcher and daemon (fm-watch.sh, fm-supervise-daemon.sh), not this lib.
 FM_PAUSE_RESURFACE_SECS_DEFAULT=14400
 
@@ -352,8 +343,8 @@ status_is_paused() {  # <status-line>
 
 # 0 if a status line's leading verb is the verified captain-held transfer verb.
 # The same pure verb read as status_is_paused, and the discriminator a supervisor
-# needs once a declared wait has already been recognized: the two declarations get
-# the same bounded cadence, but they block on DIFFERENT humans, so a recheck that
+# needs once a declared wait has already been recognized: the declarations
+# block on DIFFERENT humans, so an eligible recheck that
 # names an external dependency for a hold points the captain away from the fact
 # that they are the one who can clear it.
 status_is_captain_held() {  # <status-line>
@@ -365,11 +356,9 @@ status_is_captain_held() {  # <status-line>
 
 # 0 if a status line declares either an external-wait pause or a verified
 # captain-held transfer.
-# Both declarations can intentionally leave a crew's endpoint idle, so both
-# supervisors give them one cadence: the away-mode daemon defers the wedge and
-# ages a pause marker instead, and the watcher applies its bounded pause cadence
-# once pause_state_class has admitted the wait, which it does for every
-# agent-liveness verdict unless the crew is provably working.
+# Both declarations can intentionally leave a crew's endpoint idle.
+# Consumers apply the idle and frozen-run policy in docs/architecture.md
+# "Event-driven supervision"; this predicate grants no recheck eligibility.
 status_is_paused_or_captain_held() {  # <status-line>
   local line=$1 verb
   [ -n "$line" ] || return 1
@@ -2801,7 +2790,7 @@ status_span_has_actionable() {  # <status-file> <start-offset>
   status_span_first_actionable_record "$1" "${2:-0}" > /dev/null
 }
 
-# Classify WHY an idle/stale crew MIGHT be safely absorbed instead of surfaced,
+# Classify execution and declared-wait evidence; callers apply idle policy separately,
 # from bin/fm-crew-state.sh's one authoritative current-state line
 # ("state: <s> · source: <src> · <detail>"). Prints exactly one token:
 #   working - an actively-running no-mistakes step (running/fixing/ci) or a busy
@@ -2809,45 +2798,48 @@ status_span_has_actionable() {  # <status-file> <start-offset>
 #             (e.g. waiting on CI);
 #   paused  - the crew's authoritative current state is a declared external-wait
 #             pause (paused:), which is EXPECTED to idle;
-#   none    - neither, so the wake must surface (a stopped/finished/parked/failed/
-#             torn-down/unknown crew, or an unreadable verdict).
+#   parked  - a no-mistakes run waiting at a gate;
+#   uncertain - an inconclusive, failed, or unreadable current-state verdict;
+#   none    - confirmed inactive work; no-verb signal handling still surfaces it.
 # One fm-crew-state.sh read serves BOTH absorb reasons at once. Reading the state
 # authoritatively (not the status log) is what keeps run-step precedence: a crew
 # that appended paused: but then STARTED a run reports working, never paused.
 # NOT a pure read: fm-crew-state.sh may make a bounded no-mistakes call, so callers
-# run it only on no-verb signal and first-sighting stale paths, never every wake.
+# run it on no-verb signals, first stale sightings, and frozen-run thresholds,
+# never on every poll.
 # FM_CREW_STATE_BIN lets tests stub the verdict.
 crew_absorb_class() {  # <id>
   local id=$1 line state src
   [ -n "$id" ] || { printf 'none'; return; }
-  line=$("$FM_CREW_STATE_BIN" "$id" 2>/dev/null) || true
-  case "$line" in state:*) ;; *) printf 'none'; return ;; esac
+  line=$("$FM_CREW_STATE_BIN" "$id" 2>/dev/null) || { printf 'uncertain'; return; }
+  case "$line" in state:*) ;; *) printf 'uncertain'; return ;; esac
   state=${line#state: }; state=${state%% *}
   if [ "$state" = paused ]; then printf 'paused'; return; fi
+  src=${line#*source: }; src=${src%% *}
   if [ "$state" = working ]; then
-    src=${line#*source: }; src=${src%% *}
     case "$src" in run-step|pane) printf 'working'; return ;; esac
+  elif [ "$state" = parked ] && [ "$src" = run-step ]; then
+    printf 'parked'; return
   fi
-  printf 'none'
+  case "$state" in done|failed|blocked|parked) printf 'none' ;; *) printf 'uncertain' ;; esac
 }
 
-# 0 if crew <id> shows POSITIVE evidence it is still working (crew_absorb_class
-# reports `working`). This is the "provably working" predicate at the heart of
-# absorb-only-on-positive-evidence. This is the sole proof for stale wakes and the
-# shared authoritative proof for no-verb signals. Where a home opts in, fm-watch.sh
-# may additionally absorb a bare turn-end on bounded pane churn, while every other
-# failed verdict surfaces
-# because the crew may be done, waiting on a decision, or wedged. For stale panes
-# it is checked before trusting the status log so a pre-validation captain-relevant
-# line does not override an active run. See crew_absorb_class for the exact
-# working/paused/none decision.
+# Idle rechecks are opt-in for exact secondmate IDs only. Both watcher and
+# legacy away-daemon housekeeping use this policy; callers supply task kind.
+crew_idle_checkins_enabled() {  # <kind> <id> <config-dir>
+  local kind=$1 id=$2 config=$3
+  [ "$kind" = secondmate ] && [ -n "$id" ] \
+    && grep -Fxq -- "$id" "$config/secondmate-idle-checkins" 2>/dev/null
+}
+
+# Positive execution evidence for no-verb signal triage.
 crew_is_provably_working() {  # <id>
   [ "$(crew_absorb_class "$1")" = working ]
 }
 
 # 0 if crew <id>'s authoritative current state is a declared external-wait pause.
-# The stale path absorbs such a crew (on a long re-surface cadence) instead of
-# escalating a possible wedge.
+# Such a wait is absorbed instead of wedge-escalated; only opted-in mates
+# retain periodic rechecks.
 crew_is_paused() {  # <id>
   [ "$(crew_absorb_class "$1")" = paused ]
 }

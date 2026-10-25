@@ -110,7 +110,7 @@ test_evidence_claim_enforces_mechanical_provenance() {
   printf '%s\n' captured output > "$artifact"
   intent=$(cat <<EOF
 2 of 3 scenarios driven live
-evidence-artifact: $artifact
+evidence-artifact: evidence.txt
 evidence-command: ./run-scenarios --live
 evidence-captured: 2026-09-25T10:00:00+10:00
 EOF
@@ -130,7 +130,7 @@ EOF
     || fail "publication refused a mechanically valid evidence artifact"
   mkdir -p "$root/outside"
   printf '%s\n' captured > "$root/outside/evidence.txt"
-  intent=${intent/$artifact/$root\/worktree\/..\/outside\/evidence.txt}
+  intent=${intent/evidence.txt/..\/outside\/evidence.txt}
   set +e
   out=$(fm_dod_validate_published_intent "$intent" "$root/worktree" "$root/tmp" 2>&1)
   rc=$?
@@ -140,7 +140,7 @@ EOF
   printf '%s\n' captured > "$root/tmp-other/evidence.txt"
   intent=$(cat <<EOF
 2 of 3 scenarios driven live
-evidence-artifact: $root/tmp-other/evidence.txt
+evidence-artifact: <task-output>/../tmp-other/evidence.txt
 evidence-command: ./run-scenarios --live
 evidence-captured: 2026-09-25T10:00:00+10:00
 EOF
@@ -153,7 +153,7 @@ EOF
   ln -s "$root/outside/secret.txt" "$root/worktree/linked-evidence.txt"
   intent=$(cat <<EOF
 2 of 3 scenarios driven live
-evidence-artifact: $root/worktree/linked-evidence.txt
+evidence-artifact: linked-evidence.txt
 evidence-command: ./run-scenarios --live
 evidence-captured: 2026-09-25T10:00:00+10:00
 EOF
@@ -253,7 +253,7 @@ EOF
   assert_contains "$out" "missing evidence-artifact" "compact multi-ratio refusal was unclear"
   intent=$(cat <<EOF
 external validation passed
-evidence-artifact: $root/worktree/evidence.txt
+evidence-artifact: evidence.txt
 evidence-command: ./run-scenarios
 evidence-captured: tomorrow
 EOF
@@ -269,8 +269,8 @@ EOF
   assert_contains "$out" "invalid evidence-captured timestamp" "impossible timestamp refusal was unclear"
   intent=$(cat <<EOF
 external validation passed
-evidence-artifact: $root/worktree/evidence.txt
-evidence-artifact: $root/worktree/evidence.txt
+evidence-artifact: evidence.txt
+evidence-artifact: evidence.txt
 evidence-command: ./run-scenarios
 evidence-captured: 2026-09-25T10:00:00+10:00
 EOF
@@ -281,7 +281,7 @@ EOF
   assert_contains "$out" "duplicate evidence-artifact" "duplicate artifact metadata refusal was unclear"
   intent=$(cat <<EOF
 2 of 3 scenarios driven live
-evidence-artifact: $root/worktree
+evidence-artifact: .
 evidence-command: ./run-scenarios --live
 evidence-captured: 2026-09-25T10:00:00+10:00
 EOF
@@ -291,6 +291,127 @@ EOF
   [ "$rc" -ne 0 ] || fail "directory evidence artifact was accepted"
   assert_contains "$out" "missing or unreadable" "directory artifact refusal was unclear"
   pass "evidence claims accept readable provenance and spare ordinary prose"
+}
+
+test_portable_published_evidence() {
+  local root body portable out
+  root="$TMP_ROOT/portable-evidence"
+  mkdir -p "$root/worktree" "$root/tmp"
+  printf '%s\n' 'synthetic captured output' > "$root/tmp/proof.txt"
+  for portable in '<task-output>/proof.txt' '<firstmate-home>/tmp/proof.txt'; do
+    body=$(printf 'External validation passed.\nevidence-artifact: %s\nevidence-command: ./collect > %s\nevidence-captured: 2026-09-25T10:00:00+10:00\n' "$portable" "$portable")
+    FM_HOME="$root" fm_dod_validate_published_intent "$body" "$root/worktree" "$root/tmp" \
+      || fail "published-intent merge guard refused descriptor: $portable"
+  done
+  # Private intent still accepts the actual local path, before publication.
+  body=$(printf 'External validation passed.\nevidence-artifact: %s/tmp/proof.txt\nevidence-command: ./collect\nevidence-captured: 2026-09-25T10:00:00+10:00\n' "$root")
+  fm_dod_validate_intent_evidence "$body" "$root/worktree" "$root/tmp" \
+    || fail 'private intent no longer accepts local artifact paths'
+  out=$(fm_dod_validate_published_intent "$body" "$root/worktree" "$root/tmp" 2>&1)
+  expect_code 1 "$?" 'published-intent merge guard accepted a raw local path'
+  assert_contains "$out" 'worker-local absolute path' 'merge guard lost the path refusal'
+  pass 'published-intent merge guard resolves descriptors while private intent retains local paths'
+}
+
+test_published_path_boundaries_and_normalized_roots() {
+  local root body text out phase
+  root="$TMP_ROOT/path-boundaries"
+  mkdir -p "$root/worktree" "$root/tmp"
+  printf '%s\n' 'synthetic captured output' > "$root/worktree/proof.txt"
+  body=$(printf 'External validation passed.\nevidence-artifact: proof.txt\nevidence-command: ./collect\nevidence-captured: 2026-09-25T10:00:00+10:00\n')
+  for phase in publish retired; do
+    for text in 'Synthetic output: file:///tmp/fm-task/proof.txt' \
+      'Synthetic output: file://localhost/home/firstmate/proof.txt' \
+      'evidence-command: cc -I/home/firstmate/include' \
+      'evidence-command: cc -L/Users/worker/lib' \
+      'evidence-artifact:/tmp/fm-task/proof.txt' \
+      'Synthetic output: /srv/firstmate/config' \
+      "Synthetic output: $root/worktree/proof.txt" \
+      "Synthetic output: $root/tmp/proof.txt" \
+      'Synthetic output: /srv/user-home/config'; do
+      out=$(HOME=/srv/user-home/ FM_HOME=/srv/firstmate/./ \
+        fm_dod_validate_published_intent "$body
+$text" "$root/worktree//" "$root/tmp/../tmp/" '' '' "$phase" 2>&1)
+      expect_code 1 "$?" "worker path boundary passed in $phase: $text"
+      assert_contains "$out" 'worker-local absolute path' 'path boundary refusal was unclear'
+    done
+    HOME=/srv/user-home/ FM_HOME=/srv/firstmate/./ \
+      fm_dod_validate_published_intent "$body" "$root/worktree//" "$root/tmp/../tmp/" '' '' "$phase" \
+      || fail "normalized roots refused portable evidence in $phase"
+  done
+  pass 'publication and retired validation refuse command, file-URL and metadata paths with normalized roots'
+}
+
+test_published_path_normalization() {
+  local root body text out phase
+  root="$TMP_ROOT/normalized-paths"
+  mkdir -p "$root/worker copy" "$root/task output"
+  printf '%s\n' 'synthetic captured output' > "$root/worker copy/proof.txt"
+  body=$(printf 'External validation passed.\nevidence-artifact: proof.txt\nevidence-command: ./collect\nevidence-captured: 2026-09-25T10:00:00+10:00\n')
+  for phase in publish retired; do
+    for text in '**/home/firstmate/proof.txt**' '_/home/firstmate/proof.txt_' \
+      'curl -H @/home/firstmate/headers' '"/srv/Firstmate Home/config"' \
+      '**/home/firstmate/proof.txt contains output**' \
+      $'**/tmp/fm-task/proof.txt\ncontains output**' \
+      '**/home/firstmate/proof.txt *contains output***' \
+      '***/home/firstmate/proof.txt** contains output*' \
+      'tar -czf/tmp/fm-task/proof.tgz result.json' \
+      'cc -isystem/home/firstmate/include main.c' \
+      'cat /srv/Firstmate\ Home/proof.txt' 'file:///srv/Firstmate%20Home/proof.txt' \
+      'cat /srv/User_Home/config' '**/home/firstmate/**' '**/tmp/fm-task/**' \
+      "rg --files -g '**/srv/Firstmate Home/**'" 'file:///%68ome/firstmate/config' \
+      'Worker home: /home/firstmate' 'Worker home: /Users/worker'; do
+      out=$(HOME=/srv/User_Home/ FM_HOME='/srv/Firstmate Home/' fm_dod_validate_published_intent "$body
+Synthetic output: $text" "$root/worker copy" "$root/task output" '' '' "$phase" 2>&1)
+      expect_code 1 "$?" "normalized worker path passed in $phase: $text"
+      assert_contains "$out" 'worker-local absolute path' 'normalized path refusal was unclear'
+    done
+    # shellcheck disable=SC2016 # Markdown command backticks must stay literal in fixture input.
+    for text in 'rg --files -g **/home/**' 'rg --files -g **/Users/**' \
+      'rg --files -g **/tmp/fm-*/**' \
+      '`rg --files -g **/home/**`' 'cat fixtures/home/firstmate/proof.txt' \
+      'cat fixtures_/home/firstmate/proof.txt' \
+      'cat <task-output>/tmp/fm-task/proof.txt' 'cat <firstmate-home>/home/proof.txt' \
+      'cat /srv/Firstmate Home.backup/proof.txt' 'cat fixtures/srv/Firstmate Home/config' \
+      '%2Fhome%2Ffirstmate/config' 'file:///%2568ome/firstmate/config' \
+      '/srv/Firstmate%20Home/config' 'file:///srv/Firstmate%2520Home/config'; do
+      HOME=/srv/User_Home/ FM_HOME='/srv/Firstmate Home/' fm_dod_validate_published_intent "$body
+Synthetic output: $text" "$root/worker copy" "$root/task output" '' '' "$phase" \
+        || fail "portable path refused in $phase: $text"
+    done
+  done
+  pass 'normalized publication accepts portable references and refuses worker roots regardless of syntax'
+}
+
+test_published_overrides_survive_worktree_removal() {
+  local root repo wt other body common phase out
+  root="$TMP_ROOT/retired-overrides"
+  repo="$root/project"
+  wt="$root/worktree"
+  other="$root/other-project"
+  mkdir -p "$root/home/config" "$root/tmp"
+  fm_git_worktree "$repo" "$wt" fm/override
+  fm_git_init_commit "$other"
+  common=$(cd "$repo/.git" && pwd -P)
+  printf '%s /home/ops/estate /home/ops/host_config\n' "$common" > "$root/home/config/published-path-prefixes"
+  body='Host config: /home/ops/estate/config.toml.'
+  FM_HOME="$root/home" fm_dod_validate_published_intent "$body" "$wt" "$root/tmp" '' '' publish "$other" \
+    || fail 'live worktree did not take precedence over the fallback project'
+  git -C "$repo" worktree remove "$wt" || fail 'could not remove the synthetic task worktree'
+  for phase in publish retired; do
+    FM_HOME="$root/home" fm_dod_validate_published_intent 'Host config: /home/ops/host_config/private' "$wt" "$root/tmp" '' '' "$phase" "$repo" \
+      || fail "exact underscore prefix was refused in $phase"
+    out=$(FM_HOME="$root/home" fm_dod_validate_published_intent 'Host config: /home/ops/hostconfig/private' "$wt" "$root/tmp" '' '' "$phase" "$repo" 2>&1)
+    expect_code 1 "$?" "override collapsed distinct underscore paths in $phase"
+    FM_HOME="$root/home" fm_dod_validate_published_intent "$body" "$wt" "$root/tmp" '' '' "$phase" "$repo" \
+      || fail "project override was lost after worktree removal in $phase"
+    out=$(FM_HOME="$root/home" fm_dod_validate_published_intent "$body" "$wt" "$root/tmp" '' '' "$phase" "$other" 2>&1)
+    expect_code 1 "$?" "another project inherited a removed worktree override in $phase"
+    assert_contains "$out" 'worker-local absolute path' 'project mismatch refusal was unclear'
+    out=$(FM_HOME="$root/home" fm_dod_validate_published_intent "$body" "$wt" "$root/tmp" '' '' "$phase" 2>&1)
+    expect_code 1 "$?" "absent project inherited a removed worktree override in $phase"
+  done
+  pass 'published overrides retain their project scope after task worktree removal'
 }
 
 test_scenario_consistency_is_publication_only() {
@@ -898,6 +1019,11 @@ EOF
 test_scout_done_is_not_gated
 test_evidence_claim_requires_provenance
 test_evidence_claim_enforces_mechanical_provenance
+test_portable_published_evidence
+test_published_path_boundaries_and_normalized_roots
+test_published_path_normalization
+test_published_overrides_survive_worktree_removal
+
 test_scenario_consistency_is_publication_only
 test_scenario_count_agreeing_with_any_complete_table_is_accepted
 test_scenario_count_refusal_cites_matching_table

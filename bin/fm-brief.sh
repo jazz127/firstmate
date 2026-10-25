@@ -710,10 +710,12 @@ When a task requires live, verified, external, or independently confirmed eviden
 A synthetic or local probe of our own code, including a self-authored scenario, must be labelled synthetic and may never be presented as live or external verification.
 The words live, verified, real, or independent must never describe results produced by our own code, a fixture, a synthetic scenario, an offline replay, or a closed proxy; call that work synthetic/offline built-CLI validation and state any real-account limitation beside it.
 An affirmative result, measurement, scenario, validation, test, account, confirmation, or evidence claim described as live, verified, real, independent, or external is an evidence claim; a line such as `N of M scenarios driven live` counts even when N is zero.
-For the entire PR body, write exactly one line of each form: `evidence-artifact: /absolute/path`, `evidence-command: exact command`, and `evidence-captured: YYYY-MM-DDTHH:MM:SSZ` (or an ISO 8601 offset such as `+10:00`).
+For the entire PR body, write exactly one line of each form: `evidence-artifact: <task-output>/evidence.txt`, `evidence-command: exact command with portable paths`, and `evidence-captured: YYYY-MM-DDTHH:MM:SSZ` (or an ISO 8601 offset such as `+10:00`).
+In anything committed or published (including PR/MR prose and evidence commands), use repository-relative paths for worktree files, `<task-output>/…` for this task's scratch directory, and `<firstmate-home>/…` for Firstmate home paths instead of worker-local absolute paths; retain the real paths only in local commands and private records, except home prefixes explicitly allowed for this project by `config/published-path-prefixes` (see Firstmate's `docs/configuration.md`); task scratch paths are never exempt.
 Start each metadata line at the beginning of the line; a Markdown bullet such as `- evidence-artifact: ...` is not recognised.
 Use one metadata block for the whole body, even when it contains several claims; a separate block per claim is refused.
-The artifact must be a readable file inside this worker's worktree or `/tmp/fm-<task-id>`, not another task's directory; an escaping symlink is refused.
+The artifact descriptor resolves locally against the recorded task scratch directory or Firstmate home (`FM_HOME`, defaulting to the Firstmate code root); a repository-relative artifact resolves against this worker's worktree.
+The resolved artifact must be a readable file inside this worker's worktree or task scratch directory, not another task's directory; an escaping symlink is refused.
 If the required external artifact cannot be obtained, stop and report `blocked:` or `paused:` instead of completing with a green result.
 EOF
 EVIDENCE_SECTION=${EVIDENCE_SECTION%$'\n'}

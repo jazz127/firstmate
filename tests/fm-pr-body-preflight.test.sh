@@ -11,9 +11,9 @@ worktree="$TMP_ROOT/worktree"
 task_tmp="$TMP_ROOT/task-temp"
 outside="$TMP_ROOT/outside"
 draft="$worktree/draft.md"
-artifact="$worktree/evidence.txt"
+artifact=evidence.txt
 mkdir -p "$worktree" "$task_tmp" "$outside"
-printf '%s\n' 'captured output' > "$artifact"
+printf '%s\n' 'captured output' > "$worktree/$artifact"
 printf '%s\n' 'outside output' > "$outside/evidence.txt"
 
 preflight() {
@@ -65,11 +65,11 @@ refuses 'non-ISO capture time' 'evidence claim refused: invalid evidence-capture
 
 cat > "$draft" <<EOF
 External validation passed.
-evidence-artifact: $outside/evidence.txt
-evidence-command: cat $outside/evidence.txt
+evidence-artifact: ../outside/evidence.txt
+evidence-command: cat ../outside/evidence.txt
 evidence-captured: 2026-09-25T00:39:26Z
 EOF
-refuses 'artifact outside allowed roots' "evidence claim refused: artifact is outside the worker worktree or task temp directory: $outside/evidence.txt"
+refuses 'artifact outside allowed roots' "evidence claim refused: artifact is outside the worker worktree or task temp directory: $worktree/../outside/evidence.txt"
 
 cat > "$draft" <<EOF
 External validation passed.
@@ -332,5 +332,204 @@ rm -rf "$scratch_repo/feature"
 output=$(scratch_preflight) || fail "cleaned synthetic checkout was refused: $output"
 [ "$output" = 'scratch preflight ok' ] || fail "cleaned synthetic checkout did not pass"
 pass "scratch preflight refuses staged and committed cache bundles by path"
+
+# These are synthetic publication fixtures, not external verification claims.
+for raw in '/tmp/fm-other/proof.txt' '/private/tmp/fm-other/proof.txt' \
+  '/home/worker/proof.txt' '/Users/worker/proof.txt' "$worktree/proof.txt" "$task_tmp/proof.txt"; do
+  # shellcheck disable=SC2016 # Literal Markdown backticks in a synthetic body.
+  printf 'Synthetic output: `%s`\n' "$raw" > "$draft"
+  output=$(preflight)
+  expect_code 1 "$?" "raw path without an evidence claim passed: $raw"
+  assert_contains "$output" '<task-output>/' 'raw-path refusal omitted the scratch convention'
+  assert_contains "$output" '<firstmate-home>/' 'raw-path refusal omitted the home convention'
+  assert_contains "$output" 'config/published-path-prefixes' 'refusal omitted the host-doc override'
+done
+printf 'Synthetic output: %s\n' "$outside/result.txt" > "$draft"
+output=$(FM_HOME="$outside" preflight)
+expect_code 1 "$?" 'nonstandard Firstmate home path passed'
+pass 'publication refuses raw task, user-home and configured-home paths in ordinary prose'
+
+printf '%s\n' 'captured task output' > "$task_tmp/proof.txt"
+for portable in '<task-output>/proof.txt' '<firstmate-home>/task-temp/proof.txt' evidence.txt; do
+  cat > "$draft" <<EOF
+External validation passed.
+evidence-artifact: $portable
+evidence-command: cat '$portable'
+evidence-captured: 2026-09-25T10:00:00+10:00
+EOF
+  output=$(FM_HOME="$TMP_ROOT" preflight) || fail "portable artifact refused: $portable: $output"
+  assert_equals 'evidence preflight ok' "$output" 'descriptor round trip did not pass'
+done
+# Commands are publication text too, even when the artifact uses a descriptor.
+printf 'evidence-command: cat %s\n' "$task_tmp/proof.txt" > "$draft"
+output=$(preflight)
+expect_code 1 "$?" 'raw command path passed without a claim'
+assert_contains "$output" 'worker-local absolute path' 'raw command refusal was unclear'
+pass 'portable artifacts resolve to readable worktree/task files and commands cannot leak raw paths'
+
+for portable in fixtures/home/proof.txt fixtures/Users/proof.txt fixtures/tmp/fm-task/proof.txt \
+  fixtures_/home/firstmate/proof.txt \
+  fixtures/private/tmp/fm-task/proof.txt fixtures/srv/firstmate/proof.txt \
+  ./fixtures/home/proof.txt _/fixtures/home/proof.txt '**/fixtures/home/proof.txt' \
+  '*/fixtures/home/proof.txt' '__/fixtures/home/proof.txt' '~~/fixtures/home/proof.txt'; do
+  mkdir -p "$worktree/$(dirname "$portable")"
+  printf '%s\n' 'synthetic fixture output' > "$worktree/$portable"
+  cat > "$draft" <<EOF
+Synthetic output: $portable.
+Example: **repository-relative paths *remain portable***
+External validation passed.
+evidence-artifact: $portable
+evidence-command: cat '$portable'
+evidence-captured: 2026-09-25T10:00:00+10:00
+EOF
+  output=$(FM_HOME=/srv/firstmate preflight) || fail "relative path was misclassified: $portable: $output"
+  assert_equals 'evidence preflight ok' "$output" 'relative artifact, command and prose did not pass'
+done
+pass 'relative paths containing worker-root names stay repository-relative in every body field'
+
+mkdir -p "$task_tmp/home" "$task_tmp/tmp/fm-fixture"
+printf '%s\n' 'synthetic fixture output' > "$task_tmp/home/proof.txt"
+printf '%s\n' 'synthetic fixture output' > "$task_tmp/tmp/fm-fixture/proof.txt"
+for portable in '<task-output>/home/proof.txt' '<task-output>/tmp/fm-fixture/proof.txt' \
+  '<firstmate-home>/task-temp/home/proof.txt'; do
+  cat > "$draft" <<EOF
+Synthetic output: $portable.
+External validation passed.
+evidence-artifact: $portable
+evidence-command: cat '$portable'
+evidence-captured: 2026-09-25T10:00:00+10:00
+EOF
+  output=$(FM_HOME="$TMP_ROOT" preflight) || fail "descriptor suffix was misclassified: $portable: $output"
+done
+pass 'descriptor suffixes containing worker-root names stay portable in every body field'
+
+for raw in /srv/firstmate /srv/worktree /srv/task-output /srv/user-home /home/firstmate /Users/worker; do
+  for suffix in '' . '!' '?' : ',' ';' ')' ']' '}'; do
+    for field in 'Synthetic output' evidence-artifact evidence-command; do
+      printf '%s: %s%s\n' "$field" "$raw" "$suffix" > "$draft"
+      output=$(HOME=/srv/user-home FM_HOME=/srv/firstmate "$ROOT/bin/fm-pr-body-preflight.sh" \
+        "$draft" /srv/worktree /srv/task-output 2>&1)
+      expect_code 1 "$?" "punctuated worker root passed: $field: $raw$suffix"
+      assert_contains "$output" 'worker-local absolute path' 'punctuated root refusal was unclear'
+    done
+  done
+done
+printf '%s\n' 'Synthetic output: /srv/firstmate-other.' > "$draft"
+output=$(FM_HOME=/srv/firstmate preflight) || fail "custom home matched an unrelated path: $output"
+pass 'custom roots are refused before punctuation with consistent prose, artifact and command boundaries'
+
+for raw in '**/tmp/fm-task/proof.txt**' '_/home/firstmate/proof.txt_' \
+  '@/home/firstmate/headers' '"/srv/Firstmate Home/config"' \
+  '**/home/firstmate/proof.txt contains output**' \
+  $'**/tmp/fm-task/proof.txt\ncontains output**' \
+  '**/home/firstmate/proof.txt *contains output***' \
+  '***/home/firstmate/proof.txt** contains output*' \
+  'tar -czf/tmp/fm-task/proof.tgz result.json' \
+  'cc -isystem/home/firstmate/include main.c' \
+  'cat /srv/Firstmate\ Home/proof.txt' 'file:///srv/Firstmate%20Home/proof.txt' \
+  '**/home/firstmate/**' '**/tmp/fm-task/**' "rg -g '**/srv/Firstmate Home/**'" \
+  'file:///%68ome/firstmate/config' \
+  'evidence-artifact:/tmp/fm-task/proof.txt'; do
+  for field in 'Synthetic output' evidence-artifact evidence-command; do
+    printf '%s: %s\n' "$field" "$raw" > "$draft"
+    output=$(FM_HOME='/srv/Firstmate Home/' "$ROOT/bin/fm-pr-body-preflight.sh" \
+      "$draft" /srv/worktree /srv/task-output 2>&1)
+    expect_code 1 "$?" "normalized worker path passed in $field: $raw"
+    assert_contains "$output" 'worker-local absolute path' 'normalized path bypassed the publication guard'
+  done
+done
+pass 'normalization refuses earlier worker-path bypasses across prose and evidence fields'
+
+# shellcheck disable=SC2016 # Markdown command backticks must stay literal in fixture input.
+for command in "rg --files -g '**/home/**'" "rg --files -g '**/Users/**'" \
+  "rg --files -g '**/tmp/fm-*/**'" \
+  '`rg --files -g **/home/**`' 'cat fixtures/home/firstmate/proof.txt' \
+  'cc -Ifixtures/home -L./fixtures/Users' \
+  'cat <task-output>/home/proof.txt <firstmate-home>/tmp/fm-task/proof.txt' \
+  'cat https://example.test/home/firstmate/proof.txt' \
+  'cat %2Fhome%2Ffirstmate/config' 'cat file:///%2568ome/firstmate/config' \
+  'cat /srv/Firstmate%20Home/config' 'cat file:///srv/Firstmate%2520Home/config'; do
+  cat > "$draft" <<EOF
+External validation passed.
+evidence-artifact: evidence.txt
+evidence-command: $command
+evidence-captured: 2026-09-25T10:00:00+10:00
+EOF
+  output=$(FM_HOME='/srv/Firstmate Home/' preflight) || fail "portable reference was refused: $command: $output"
+  assert_equals 'evidence preflight ok' "$output" 'portable command did not pass'
+done
+pass 'normalization accepts portable references and decodes percent escapes only once in file URLs'
+
+for portable in '<task-output>/../outside/evidence.txt' '<firstmate-home>/outside/evidence.txt' \
+  '<task-output>/missing.txt' '<unknown>/proof.txt' '<task-output>/escape.txt' '<task-output>/nested/evidence.txt'; do
+  ln -sf "$outside/evidence.txt" "$task_tmp/escape.txt"
+  [ -L "$task_tmp/nested" ] || ln -s "$outside" "$task_tmp/nested"
+  cat > "$draft" <<EOF
+External validation passed.
+evidence-artifact: $portable
+evidence-command: ./collect
+evidence-captured: 2026-09-25T10:00:00+10:00
+EOF
+  output=$(FM_HOME="$TMP_ROOT" preflight)
+  expect_code 1 "$?" "descriptor bypassed evidence integrity: $portable"
+  case "$portable" in
+    *../*|'<firstmate-home>/outside/'*) expected='outside the worker worktree or task temp directory' ;;
+    *missing*) expected='missing or unreadable' ;;
+    '<unknown>'*) expected='unknown artifact descriptor' ;;
+    *) expected='resolved artifact is outside the allowed roots' ;;
+  esac
+  assert_contains "$output" "$expected" 'descriptor lost the expected evidence integrity guard'
+done
+pass 'descriptors preserve missing-file, unknown-descriptor, traversal and symlink refusals'
+
+# A project key is the Git common directory, shared with linked worktrees.
+policy_repo="$TMP_ROOT/policy-repo"
+policy_home="$TMP_ROOT/policy-home"
+mkdir -p "$policy_repo" "$policy_home/config"
+git -C "$policy_repo" init -q -b main || fail 'policy project fixture init failed'
+common=$(cd "$policy_repo/.git" && pwd -P)
+policy_preflight() {
+  FM_HOME="$policy_home" "$ROOT/bin/fm-pr-body-preflight.sh" "$draft" "$policy_repo" "$task_tmp" 2>&1
+}
+printf '%s\n' 'Host config: /home/ops/estate/config.toml' > "$draft"
+output=$(policy_preflight)
+expect_code 1 "$?" 'absent override allowed a home path'
+printf '%s %s %s %s' "$common" /home/ops/host-config /home/ops/estate /home/ops/host_config > "$policy_home/config/published-path-prefixes"
+for raw in '/home/ops/estate/config.toml' '/home/ops/host-config' "'/home/ops/estate'" \
+  'file:///home/ops/estate/config.toml' '-I/home/ops/estate/include' \
+  'paths:/home/ops/estate:/home/ops/host-config' \
+  '**/home/ops/estate/config.toml**' '_/home/ops/host-config/config_' '@/home/ops/estate/config' \
+  '/home/ops/host_config' '/home/ops/host_config/private' 'file:///home/ops/host%5fconfig/private' \
+  '"/home/ops/estate/config file"'; do
+  printf 'Host config: %s\n' "$raw" > "$draft"
+  output=$(policy_preflight) || fail "allowed host prefix refused: $raw: $output"
+done
+for raw in '/home/ops/estate-other/config.toml' '/home/ops/estate/../secret' \
+  '/home/ops/unlisted' '/tmp/fm-other/proof.txt' '/home/ops/estate/tmp/fm-other/proof.txt' \
+  'file:///home/ops/unlisted' '-I/home/ops/unlisted' \
+  'paths:/home/ops/estate/config:/home/ops/unlisted' '"/home/ops/estate other/config"' \
+  '/home/ops/hostconfig/private' '/home/ops/host_config_other/private' \
+  'file:///home/ops/hostconfig/private'; do
+  printf 'Host config: %s\n' "$raw" > "$draft"
+  output=$(policy_preflight)
+  expect_code 1 "$?" "override allowed an unapproved path: $raw"
+done
+printf '\n%s %s\n' "$common" "$task_tmp" >> "$policy_home/config/published-path-prefixes"
+printf 'Output: %s/proof.txt\n' "$task_tmp" > "$draft"
+output=$(policy_preflight)
+expect_code 1 "$?" 'override allowed the recorded scratch root'
+printf 'Output: file://%s\n' "$task_tmp" > "$draft"
+output=$(FM_HOME="$policy_home/./" "$ROOT/bin/fm-pr-body-preflight.sh" \
+  "$draft" "$policy_repo//" "$task_tmp/./" 2>&1)
+expect_code 1 "$?" 'override allowed the normalized recorded scratch root'
+assert_contains "$output" 'worker-local absolute path' 'normalized scratch root refusal was unclear'
+printf '%s %s\n' "$TMP_ROOT/another-project/.git" /home/ops/estate > "$policy_home/config/published-path-prefixes"
+printf '%s\n' 'Host config: /home/ops/estate/config.toml' > "$draft"
+output=$(policy_preflight)
+expect_code 1 "$?" 'override escaped its project key'
+printf '%s /\n' "$common" > "$policy_home/config/published-path-prefixes"
+output=$(policy_preflight)
+expect_code 1 "$?" 'root override did not fail closed'
+pass 'project-scoped home prefixes allow host docs, with component boundaries and no scratch exemption'
 
 printf '%s\n' 'all fm-pr-body-preflight tests passed'

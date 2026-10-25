@@ -363,6 +363,181 @@ $1
 EOF
 }
 
+# Publication uses portable paths; private intent may retain local paths.
+# <task-output> resolves against the recorded task temp root, <firstmate-home>
+# against FM_HOME (or the standard code-root fallback), and relative artifacts
+# against the worker worktree. Resolution never expands shell expressions.
+# The evidence validator still owns containment, readability and symlink checks.
+fm_dod_evidence_home() {
+  local code_root
+  code_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd) || return 1
+  printf '%s\n' "${FM_HOME:-${FM_ROOT_OVERRIDE:-$code_root}}"
+}
+
+fm_dod_resolve_evidence_path() {  # <published-path> <worktree> <task-temp>
+  local path=$1 root suffix
+  case "$path" in
+    '<task-output>/'*) root=$3; suffix=${path#'<task-output>/'} ;;
+    '<firstmate-home>/'*) root=$(fm_dod_evidence_home) || return 1; suffix=${path#'<firstmate-home>/'} ;;
+    '<'*) printf 'evidence claim refused: unknown artifact descriptor: %s\n' "$path" >&2; return 1 ;;
+    /*) printf '%s\n' "$path"; return 0 ;;
+    *) root=$2; suffix=$path ;;
+  esac
+  case "$root" in
+    /*) printf '%s/%s\n' "${root%/}" "$suffix" ;;
+    *) printf 'evidence claim refused: artifact root must be absolute: %s\n' "$root" >&2; return 1 ;;
+  esac
+}
+
+# config/published-path-prefixes is private and project-scoped by canonical Git
+# common directory, so isolated worktrees share the same entry without relying
+# on task names or remote URLs. docs/configuration.md owns the file format.
+fm_dod_allowed_path_prefixes() {  # <worktree> [project]
+  local home config common project prefix rest lookup
+  local -a row_prefixes
+  home=$(fm_dod_evidence_home) || return 1
+  config=${FM_CONFIG_OVERRIDE:-$home/config}/published-path-prefixes
+  [ -e "$config" ] || return 0
+  [ -f "$config" ] && [ -r "$config" ] || {
+    printf 'publication refused: unreadable override: %s\n' "$config" >&2; return 1;
+  }
+  common=
+  for lookup in "$1" "${2:-}"; do
+    [ -n "$lookup" ] || continue
+    common=$(git -C "$lookup" rev-parse --git-common-dir 2>/dev/null) || { common=; continue; }
+    case "$common" in /*) ;; *) common=$lookup/$common ;; esac
+    common=$(cd -P "$common" 2>/dev/null && pwd -P) && break
+    common=
+  done
+  while read -r project rest || [ -n "$project$rest" ]; do
+    case "$project" in ''|'#'*) continue ;; esac
+    [ -n "$rest" ] || { printf 'publication refused: invalid override row in %s\n' "$config" >&2; return 1; }
+    case "$project" in /*) ;; *) printf 'publication refused: project key must be an absolute Git common directory in %s\n' "$config" >&2; return 1 ;; esac
+    read -r -a row_prefixes <<EOF
+$rest
+EOF
+    for prefix in "${row_prefixes[@]}"; do
+      case "$prefix" in
+        /*) ;;
+        *) printf 'publication refused: override prefixes must be absolute in %s\n' "$config" >&2; return 1 ;;
+      esac
+      prefix=$(fm_dod_path_normalize "$prefix") || return 1
+      [ "$prefix" != / ] || { printf 'publication refused: root override is forbidden in %s\n' "$config" >&2; return 1; }
+      if [ -n "$common" ] && [ "$project" = "$common" ]; then printf '%s\n' "$prefix"; fi
+    done
+  done < "$config"
+}
+
+fm_dod_normalize_published_text() {
+  awk '
+    { text = text $0 "\n" }
+    END {
+      while (match(text, /[Ff][Ii][Ll][Ee]:[^[:space:]<>`"()|,;\047{}]+/)) {
+        start = RSTART; extent = RLENGTH
+        url = substr(text, start, extent)
+        sub(/^[Ff][Ii][Ll][Ee]:/, "", url)
+        sub(/^\/\/[^\/]*/, "", url)
+        decoded = ""
+        while (match(url, /%[[:xdigit:]][[:xdigit:]]/)) {
+          code = substr(url, RSTART + 1, 2)
+          byte = 16 * (index("0123456789abcdef", tolower(substr(code, 1, 1))) - 1) + index("0123456789abcdef", tolower(substr(code, 2, 1))) - 1
+          decoded = decoded substr(url, 1, RSTART - 1) sprintf("%c", byte)
+          url = substr(url, RSTART + 3)
+        }
+        result = result substr(text, 1, start - 1) decoded url
+        text = substr(text, start + extent)
+      }
+      text = result text
+      gsub(/\\/, "", text)
+      gsub(/<(task-output|firstmate-home)>/, "fmportable", text)
+      gsub(/[*`~]/, "", text)
+      printf "%s", text
+    }
+  ' <<EOF
+$1
+EOF
+}
+
+# Check commands and prose even without an evidence claim. Known roots catch
+# nonstandard home/worktree layouts; generic patterns catch other workers.
+# Task scratch paths cannot be allowed by the home-path override.
+fm_dod_refuse_worker_paths() {  # <published-text> <worktree> <task-temp> [project]
+  local home paths path prefixes prefix normalized allowed root text task_root=$3
+  local -a roots=()
+  home=$(fm_dod_evidence_home) || return 1
+  prefixes=$(fm_dod_allowed_path_prefixes "$2" "${4:-}") || return 1
+  text=$(fm_dod_normalize_published_text "$1") || return 1
+  case "$task_root" in /*) task_root=$(fm_dod_path_normalize "$task_root") || return 1 ;; esac
+  for root in "$home" "$2" "$task_root" "${HOME:-}"; do
+    case "$root" in /*) ;; *) continue ;; esac
+    root=$(fm_dod_path_normalize "$root") || return 1
+    [ "$root" != / ] && roots+=("$root")
+  done
+  paths=$(FM_DOD_KNOWN_ROOTS="$(printf '%s\n' "${roots[@]:-}")" awk '
+    function emit(text, start, extent, prefix, tail, path, rest, root, quote, finish) {
+      prefix = substr(text, 1, start - 1)
+      if (prefix !~ /(^|[][[:space:]<>`"()|,;\047{}=:@])(_+|-+[[:alnum:]-]+)?$/) return
+      tail = substr(text, start + extent, 1)
+      path = substr(text, start, extent)
+      root = path
+      if (substr(path, length(path), 1) != "/" && tail != "" && tail !~ /[][\/[:space:]<>`"()|,;\047{}=:.!?]/) return
+      rest = substr(text, start + extent)
+      quote = substr(prefix, length(prefix), 1)
+      if (quote ~ /^["\047]$/ && (finish = index(rest, quote)) > 0) {
+        path = path substr(rest, 1, finish - 1)
+      } else if (match(rest, /^[^][[:space:]<>`"()|,;\047{}=:]+/)) path = path substr(rest, 1, RLENGTH)
+      sub(/[.!?]+$/, "", path)
+      sub(/[.!?]+$/, "", root)
+      if (substr(root, length(root), 1) != "/" && path != root && index(path, root "/") != 1) return
+      print path
+    }
+    BEGIN { count = split(ENVIRON["FM_DOD_KNOWN_ROOTS"], roots, "\n") }
+    {
+      scan = $0
+      while (match(scan, /\/(private\/)?tmp\/fm-[[:alnum:]_.-]+\/?|\/(home|Users)\/[[:alnum:]_.-]+\/?/)) {
+        start = RSTART; extent = RLENGTH
+        emit(scan, start, extent)
+        scan = substr(scan, start + extent)
+      }
+      for (i = 1; i <= count; i++) {
+        if (roots[i] == "") continue
+        scan = $0
+        while ((start = index(scan, roots[i])) > 0) {
+          emit(scan, start, length(roots[i]))
+          scan = substr(scan, start + length(roots[i]))
+        }
+      }
+    }
+  ' <<EOF
+$text
+EOF
+) || return 1
+  while IFS= read -r path; do
+    [ -n "$path" ] || continue
+    normalized=$(fm_dod_path_normalize "$path") || return 1
+    allowed=0
+    case "$path:$normalized" in *'/tmp/fm-'*) ;; *)
+      case "$normalized" in
+        "$task_root"|"${task_root%/}"/*) ;;
+        *)
+          while IFS= read -r prefix; do
+            [ -n "$prefix" ] || continue
+            prefix=$(fm_dod_path_normalize "$prefix") || return 1
+            case "$normalized" in "$prefix"|"$prefix"/*) allowed=1; break ;; esac
+          done <<EOF
+$prefixes
+EOF
+          ;;
+      esac ;;
+    esac
+    [ "$allowed" -eq 0 ] || continue
+    printf '%s\n' 'publication refused: worker-local absolute path; use <task-output>/… for task scratch, <firstmate-home>/… for home paths, or repository-relative paths; host documentation may allow specific home prefixes in config/published-path-prefixes (task scratch is never allowed)' >&2
+    return 1
+  done <<EOF
+$paths
+EOF
+}
+
 # Refuse conflicting live-scenario summaries before the provenance check can
 # misdiagnose a generated appendix as missing metadata. Only tables with an
 # explicit Live column and fully classified rows supply a table total; a
@@ -467,7 +642,7 @@ fm_dod_validate_scenario_consistency() {  # <complete-pr-body>
   '
 }
 
-fm_dod_validate_intent_evidence() {  # <intent> <worktree> <task-temp> [preflight|publish|retired]
+fm_dod_validate_intent_evidence() {  # <intent> <worktree> <task-temp> [preflight|publish|retired] [project]
   local intent=$1 worktree=$2 task_temp=$3 phase=${4:-preflight}
   local line previous_line='' previous_previous_line='' candidate detector_candidate detector_input artifact command captured claim=0 normalized_artifact normalized_root resolved_artifact link_target symlink_hops
   # Mark whole-word qualifiers before applying the current house detection paths.
@@ -477,6 +652,7 @@ fm_dod_validate_intent_evidence() {  # <intent> <worktree> <task-temp> [prefligh
   local artifact_count=0 command_count=0 captured_count=0
   if [ "$phase" != preflight ]; then
     fm_dod_validate_scenario_consistency "$intent" || return 1
+    fm_dod_refuse_worker_paths "$intent" "$worktree" "$task_temp" "${5:-}" || return 1
   fi
   detector_input=$(printf '%s\n' "$intent" | tr '.!?;' '\n' | sed -E 's/,[[:space:]]+(but|however|yet)[[:space:]]+/\n/g')
   while IFS= read -r line; do
@@ -606,10 +782,7 @@ EOF
     printf '%s\n' "evidence claim refused: invalid evidence-captured timestamp: $captured" >&2
     return 1
   fi
-  case "$artifact" in
-    /*) ;;
-    *) printf '%s\n' "evidence claim refused: artifact path must be absolute: $artifact" >&2; return 1 ;;
-  esac
+  artifact=$(fm_dod_resolve_evidence_path "$artifact" "$worktree" "$task_temp") || return 1
   normalized_artifact=$(fm_dod_path_normalize "$artifact") || return 1
   for normalized_root in "$worktree" "$task_temp"; do
     [ -n "$normalized_root" ] || continue
@@ -678,11 +851,11 @@ EOF
   return 0
 }
 
-fm_dod_validate_published_intent() {  # <intent> <worktree> <task-temp> [current-head] [pr-url] [publish|retired]
+fm_dod_validate_published_intent() {  # <intent> <worktree> <task-temp> [current-head] [pr-url] [publish|retired] [project]
   local body=$1 current_head=${4:-} url=${5:-} line payload attested_head count=0
   # retired is for reconciliation after a forge-confirmed merge only.
   case "${6:-publish}" in publish|retired) ;; *) return 1 ;; esac
-  fm_dod_validate_intent_evidence "$body" "$2" "$3" "${6:-publish}" || return 1
+  fm_dod_validate_intent_evidence "$body" "$2" "$3" "${6:-publish}" "${7:-}" || return 1
   [ -z "$url" ] || fm_pr_refuse_published_scratch "$url" || return 1
   while IFS= read -r line || [ -n "$line" ]; do
     case "$line" in
@@ -826,7 +999,7 @@ The \`--intent\` string you pass must be self-sufficient: that string plus the c
 When the captain's intent refers to a report, decision, or PR ("do items 1, 2, 3, and 7 of the report"), write the substance of the referenced items into \`--intent\` in the captain's terms, not only the pointer; that substance is the captain's ask by reference, while Firstmate's build instructions and your own decisions still stay out.
 This replaces the no-mistakes skill's advice to enrich \`--intent\` with decisions and tradeoffs; that advice does not apply to Firstmate-dispatched work.
 Any claim in \`--intent\` of live, verified, external, independently confirmed, or real-account evidence must name the artifact read, the exact command that produced it, and when it was captured; publication refuses such a claim if any of those are missing or the artifact cannot be read.
-Keep each cited artifact at a path the supervising home can open, inside this worker's worktree or its task temp directory.
+Keep each cited artifact locally readable by the supervising home, inside this worker's worktree or its task temp directory; use the brief's portable evidence paths in published text.
 This boundary proves that the claim is checkable, not that it is true; Firstmate must read the artifact before relaying its evidence label.
 Follow the brief's \`# Evidence provenance\` section for evidence claims, metadata format, and synthetic or offline labels in the PR body.
 Do not hand-edit code, commit, or fix pipeline findings yourself while a run is active - the pipeline applies those fixes; the published PR description correction below is limited to that description.

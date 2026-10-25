@@ -285,7 +285,7 @@ STALE_ESCALATE_SECS=${FM_STALE_ESCALATE_SECS:-240}  # idle secs before a provabl
 # escalates via the existing stale reason, escalation
 # counter, and demand-deep-inspection marker for human inspection only, never an
 # automatic interrupt, signal, or restart - unless the crew declared the wait
-# itself, which takes the long pause cadence instead. Set generously above
+# itself, which follows the idle policy in docs/architecture.md instead. Set generously above
 # any legitimate interval without observable progress, including silent long
 # tool calls, builds, or test runs.
 BUSY_TURN_MAX_SECS=${FM_BUSY_TURN_MAX_SECS:-3600}
@@ -315,18 +315,10 @@ SECONDMATE_LIVENESS_MAX_ATTEMPTS=${FM_SECONDMATE_LIVENESS_MAX_ATTEMPTS:-}
 case "$SECONDMATE_LIVENESS_MAX_ATTEMPTS" in ''|*[!0-9]*|0) SECONDMATE_LIVENESS_MAX_ATTEMPTS=3 ;; esac
 SECONDMATE_LIVENESS_WINDOW_SECS=${FM_SECONDMATE_LIVENESS_WINDOW_SECS:-}
 case "$SECONDMATE_LIVENESS_WINDOW_SECS" in ''|*[!0-9]*|0) SECONDMATE_LIVENESS_WINDOW_SECS=3600 ;; esac
-# A crew that declared a pause is idling on a known external wait, so its stale
-# pane is absorbed rather than wedge-escalated.
-# A captain-held or paused crew uses that same bounded cadence whatever the
-# backend reports about its agent - alive, ambiguous, unreadable or dead - and a
-# secondmate earns it on its declaration alone too; only a provably working crew
-# outranks the declaration (pause_state_class owns that rule).
-# These cases re-surface once for a recheck every PAUSE_RESURFACE_SECS - far
-# longer than the wedge threshold, but finite so a forgotten wait cannot rot
-# invisibly - except an item held for the captain while the away-posture record
-# exists, which is never rechecked (away_record_present below).
+# docs/architecture.md "Event-driven supervision" owns idle eligibility.
+# This cadence serves opted-in secondmate waits and repeated busy-pane wedges.
 PAUSE_RESURFACE_SECS=${FM_PAUSE_RESURFACE_SECS:-$FM_PAUSE_RESURFACE_SECS_DEFAULT}
-# A declared wait that names WHEN it clears (`paused: ... until <UTC ISO 8601>`,
+# An eligible secondmate wait that names WHEN it clears (`paused: ... until <UTC ISO 8601>`,
 # status_paused_until in fm-classify-lib.sh) is condition-aware: it is not
 # rechecked before that time, and it is rechecked once as soon as that time
 # passes even when the flat cadence has not elapsed, then held to the cadence.
@@ -802,7 +794,7 @@ recorded_windows() {
 # Print the oldest structurally valid ACTIONABLE row in a local secondmate's
 # foreign queue. A stale recheck that explicitly identifies itself as a declared
 # external-wait pause is not evidence that the mate's wake loop is stuck: the
-# pause cadence already owns that bounded visibility, and blocked waits remain
+# wait declaration accounts for its quiet, and blocked waits remain
 # actionable because they do not carry this declaration. This is a read-only
 # observation: the receiving home owns acknowledgement and this parent never
 # changes the row or the foreign queue.
@@ -1166,11 +1158,9 @@ resurface_absorbed() {  # <window> <throttle-marker> <age> <reason> [scope] [min
 # the worktree says otherwise, and files appearing in it is the harder signal to
 # fake, so the escalation is deferred rather than fired. Deliberately a DEFERRAL,
 # not a cancellation: the idle timer restarts, so the next window probes again,
-# and a .writing-since-<key> marker ages the whole deferral chain so the pane
-# still re-surfaces once every PAUSE_RESURFACE_SECS through the shared
-# resurface_absorbed above - literally the same bounded cadence a declared pause
-# uses, throttled by its own .writing-resurfaced-<key> marker - and a crew whose
-# worktree churns without real progress cannot stay invisible. The escalation
+# and a .writing-since-<key> marker ages the whole deferral chain for
+# resurface_absorbed, which applies idle eligibility before any recheck.
+# Ordinary worker writes therefore defer silently. The escalation
 # counter is left alone: it is neither advanced (this is not an escalation) nor
 # reset (a later genuine escalation must still carry the demand-deep-inspection
 # history it had already earned).
@@ -1236,9 +1226,7 @@ wait_record() {  # <kind> <subject> <whom> <action> <age-record>
 # the silence, and the pane is judged by the records below as if it had declared
 # nothing - the unchanged schedule unless one of them holds. The records are read in
 # this order rather than pooled because the routing already guarantees it is the
-# right one: a pane whose last line is `paused:` or `captain-held:` reaches this
-# timer only through pause_state_class answering `working`, so its crew state is
-# a running step, never a parked gate.
+# right one; explicit declared waits are handled before inferred pipeline waits.
 #
 # The second record is OFF unless the home creates config/wedge-defer-parked-gate,
 # and that one guard is what makes an unconfigured home's behaviour identical to
@@ -1335,8 +1323,8 @@ wedge_wait_evidence() {  # <task> -> one wait_record on stdout
 # A wait with a written record is the worker's own declaration, so it is handed
 # whole to declared_wait_resurface, the re-surface handle_paused_stale uses: the
 # same episode age and scope, the same .paused-resurfaced-<key> throttle, the
-# same open-captain-call precedence and away-posture silence, and the same
-# declared_wait_stale_reason wording, so a wait that moves between the idle
+# same away-posture silence, and the same
+# declared_wait_stale_reason wording. For eligible secondmates, a wait that moves between the idle
 # cadence and this wedge route publishes one recheck per cadence window, not one
 # per route. It is anchored there rather than on a per-window marker for the
 # same reason handle_paused_stale is: an idle pane churns its display (a clock,
@@ -1346,8 +1334,8 @@ wedge_wait_evidence() {  # <task> -> one wait_record on stdout
 # .waiting-resurfaced-<key> throttle. A wait with NO written record publishes no age at all: the
 # quiet window is the only clock in hand and this deferral resets it on every
 # pass, so a number read from it would never grow and would tell a supervisor
-# that a day-old gate opened four minutes ago. The bounded re-surface still
-# fires, governed by its own throttle instead of by a wait age.
+# that a day-old gate opened four minutes ago. Any eligible re-surface uses
+# its own throttle instead of a wait age.
 # A CAPTAIN-facing wait is not rechecked at all while the away-posture record
 # exists: the one human who can answer it is away, the return brief already lists
 # it, and every other captain-facing path in this file absorbs it silently for
@@ -1462,17 +1450,18 @@ clear_write_tracking() {  # <window-key>
 #
 # Deliberately NOT a deferral like the two above it. They restart the idle timer
 # because the pane might still be working; this is terminal for as long as the
-# endpoint stays gone, because there is nothing left to re-probe on a cadence and a
-# repeat is exactly the noise it exists to stop. WHICH verdict fired is named for
+# endpoint stays gone in the same incarnation; probes continue so proven
+# liveness or a replacement can rearm reporting. WHICH verdict fired is named for
 # the same reason wedge_wait_evidence names its kind of wait: the two ask the supervisor
 # for different things.
 #
 # The marker is owned entirely by this function and records the verdict together
 # with the agent incarnation it was reported for: the task's per-incarnation busy
 # gen (bin/fm-busy-lib.sh, state/<id>.busy-gen), which changes exactly when the
-# agent is replaced, so a repeat is absorbed only while BOTH still match, a read
-# that stops being gone still drops it, and no other reset site has to know this
-# file exists. The incarnation half re-arms a relaunch: a successor's own later
+# agent is replaced, so a repeat is absorbed only while BOTH still match.
+# Proven liveness drops the receipt, while uncertain probes preserve it.
+# No other reset site has to know this file exists.
+# The incarnation half re-arms a relaunch: a successor's own later
 # death is reported in full even when its dead display hashes identically to the
 # reported one. The recorded spawn_gen is the fallback incarnation token.
 # Only when neither token is readable does the pane hash stand in as the discriminator, preserving recovery for a
@@ -1616,16 +1605,15 @@ wedge_defer_guard() {  # <window> <since-file> <triage-label> <idle-age> <guard-
 # absorbed as provably-working - repairs a missing/corrupt timer (self-heals a
 # watcher restart between recording the hash and recording the timer), or
 # escalates once STALE_ESCALATE_SECS have elapsed. Shared by both places a hash
-# can be absorbed this way: the plain non-terminal path, and the
-# stale_is_terminal-overridden path (a captain-relevant status-log line that an
-# active run/busy pane outranked).
+# can establish execution evidence: stale classification and the busy-turn bound.
 # This threshold consults wait evidence, worktree writes, and endpoint loss
 # before escalating. Its probes run at most once each per window per
 # STALE_ESCALATE_SECS, never on an ordinary poll. The crew-state read
 # wedge_wait_evidence may take under config/wedge-defer-parked-gate keeps that
 # same bound however long the wait lasts, because the deferral it feeds restarts
-# the idle timer like every other deferral below; an unconfigured home never
-# reaches that read at all. The wait consult runs first, because a pane that can
+# the idle timer like every other deferral below. The threshold's shared
+# classification read runs regardless of that flag to retire completed work
+# and preserve established tracking through uncertainty. The wait consult runs first, because a pane that can
 # account for its own quiet has nothing to prove through its worktree. The dead-record probe
 # runs last of the three, so the two cheaper deferrals keep the panes they
 # already own on their existing bounded cadences and only a pane that would
@@ -1985,9 +1973,8 @@ declared_wait_stale_reason() {  # <kind> <age>
   esac
 }
 
-# Absorb a stale pane under a declared external-wait pause (paused:) or a
-# dead-agent captain-held transfer, and re-surface it once every
-# PAUSE_RESURFACE_SECS for a recheck so it cannot rot invisibly. Called on any
+# Absorb a stale pane under a declared wait or inferred PR-delivery wait.
+# Only opted-in secondmates reach the bounded recheck below. Called on any
 # stale poll once pause_state_class permits the bounded cadence, so it must be
 # cheap: it NEVER re-reads crew state. The re-surface age and throttle scope are
 # the declaration's own episode (declared_wait_episode above), not a per-hash
@@ -2100,14 +2087,14 @@ declared_wait_resurface() {  # <window> <task> <window-key> <last> <age> <declar
 # the expected external wait. The caller has already confirmed liveness through
 # the busy verdict, so this exception does not suppress undeclared wedges or
 # alter the separate non-busy classification. handle_paused_stale keeps the
-# exception bounded by re-surfacing it once per PAUSE_RESURFACE_SECS.
+# exception subject to idle_checkins_enabled before any recheck.
 # A pane that declared nothing falls through to the shared wedge timer, which,
 # in a home that armed config/wedge-defer-parked-gate, applies the same rule to
 # the one wait a busy pane cannot declare: a validation gate of its own awaiting
-# a supervisor decision that is still open also takes the bounded recheck rather
-# than the ladder, because who owes that answer does not depend on what the pane
+# a supervisor decision that is still open also defers the ladder, because
+# who owes that answer does not depend on what the pane
 # is rendering, and the recheck names that supervisor and the action that clears
-# it. An unconfigured home keeps the unchanged ladder there.
+# it when idle policy permits a recheck. An unconfigured home keeps the unchanged ladder there.
 # Away mode remains daemon-owned and receives the undecorated wake identity for
 # its own classification, which is why the declaration is read before the afk
 # branch rather than after it.
@@ -2221,8 +2208,7 @@ clear_dialog_suffix() {  # <task>
   rm -f "$STATE/.subsuper-dialog-$key"
 }
 
-# Name a blocking dialog on a plain stale reason or the final wedge escalation,
-# the only two reasons that carry it. The name stays inside the one
+# Name a blocking dialog on the final wedge escalation. The name stays inside the one
 # parenthetical, after every clause already there, because the away daemon
 # matches "idle *s, possible wedge, escalation *" as a prefix. A reason with no
 # parenthetical gains one.
@@ -2243,10 +2229,10 @@ clear_pause_tracking() {  # <window-key>
 
 # Reconcile a declared pause, captain-held status, or authenticated delivered
 # pull request wait (delivered_pr_wait) with authoritative crew state.
-# A standing declaration is admitted for every endpoint-liveness verdict - alive,
-# ambiguous, unreadable or dead - because being alive is not a new task event and
-# the declaration is what the worker said about its own silence. Only a `working`
-# crew-state class outranks it. A cached admission is re-read
+# Endpoint liveness is independent of this admission. A `working` crew-state
+# class outranks a standing declaration; `parked` and `uncertain` also outrank
+# an inferred delivery wait, preserving recovery at an unanswered worker gate.
+# A cached admission is re-read
 # against crew state once per STALE_ESCALATE_SECS, so a later task-state change is
 # still noticed. A secondmate takes the same rule; its endpoint liveness is never
 # read here either.
@@ -2282,36 +2268,17 @@ pause_state_class() {  # <window> <task>
   # Recover paused classification for a declared wait that authoritative crew state
   # could not name, including a stopped or unknown crew and a mate's
   # status-declared `captain-held` transfer, which has no current-state mapping.
-  # Without this recovery that wait would be silenced by every caller rather than
-  # taking the bounded re-surface cadence, and a forgotten declaration would rot
-  # invisibly.
+  # Keep the declaration distinct from an unexplained idle; callers apply the
+  # idle opt-in separately from this classification.
   date +%s > "$recheck_file"
   PAUSE_STATE_CLASS=paused
 }
 
-# The two records of one ordinary crew wait, and why its stale alarm reads both.
-#
-# status_is_paused_or_captain_held reads the status LINE a worker wrote, which is
-# the only record when the worker itself is waiting. It is not the only record
-# there is: once firstmate hands work to the captain, the wait is written into the
-# BACKLOG by bin/fm-captain-hold.sh, and the worker's last line stays whatever it
-# was - routinely `done` after a PR delivery, which no line predicate can
-# read as a wait. An alarm bounded only by the line therefore re-fires for the
-# captain's whole thinking time, on exactly the work they already have in hand.
-#
-# `open` is that record's own read-only predicate and owns its semantics: exit 0
-# still an open captain call, 1 not, 2 could not be established. Only a 0 bounds
-# an alarm here, so an unreadable backlog, an incompatible or absent tasks-axi,
-# and a row this home does not carry all keep alarming exactly as they do today -
-# a wait this watcher cannot prove is not a wait.
-#
-# The read costs one subprocess and runs only where the watcher is about to
-# alarm, so at most once per distinct stale hash per window, or once per
-# STALE_ESCALATE_SECS at the wedge threshold (wedge_wait_evidence), beside the
-# crew-state read the same paths already pay. The secondmate stale gate deliberately runs
-# before this bound and admits only status-declared waits: a backlog-only hold
-# whose mate still says `working:` or `done:` does not reach this read. Reaching
-# it would put backlog reads into windows deliberately skipped on ordinary polls.
+# The backlog is the captain-hold record after firstmate hands over work;
+# the worker's last status may still be `done:` and cannot prove that hold.
+# Only a proven open hold may defer a wedge or change an eligible wait's owner.
+# bin/fm-captain-hold.sh owns the predicate and lifecycle identity; an unreadable
+# or absent record grants no deferral. Idle policy is applied separately.
 CAPTAIN_CALL_IDENTITY=
 
 task_captain_call_open() {  # <task>

@@ -110,18 +110,9 @@ FM_CLASSIFY_CAPTAIN_RE_DEFAULT='done:|needs-decision:|blocked:|failed:|PR ready|
 # drift between the two consumers. FM_CLASSIFY_PAUSED_VERB overrides it.
 FM_CLASSIFY_PAUSED_VERB_DEFAULT='paused'
 
-# Bounded re-surface cadence for a declared external-wait pause.
-# Far longer than the wedge threshold (FM_STALE_ESCALATE_SECS, default 240s), it
-# avoids nagging a deliberate wait while ensuring a forgotten wait cannot rot
-# invisibly - it re-surfaces once for a recheck every window. Four hours by
-# default: a declared wait is by definition expected to clear on its own, so a
-# recheck is a backstop, not progress, and an hourly one only produced nagging
-# (the 2026-09-07 away-window audit). A worker that knows when its wait clears
-# names it with `until` (status_paused_until below) and is rechecked at that
-# time or this cadence bound, whichever comes first. Both consumers read
-# FM_PAUSE_RESURFACE_SECS with this default so
-# the cadence has one owner. An item held for the captain is not rechecked at all
-# while the away-posture record exists (bin/fm-watch.sh owns that rule).
+# Shared default for eligible declared-wait rechecks and repeated busy-pane
+# wedge escalations. docs/architecture.md "Event-driven supervision" owns idle
+# eligibility; declaring an `until` time does not opt a worker into rechecks.
 # shellcheck disable=SC2034 # Read by the watcher and daemon (fm-watch.sh, fm-supervise-daemon.sh), not this lib.
 FM_PAUSE_RESURFACE_SECS_DEFAULT=14400
 
@@ -352,8 +343,8 @@ status_is_paused() {  # <status-line>
 
 # 0 if a status line's leading verb is the verified captain-held transfer verb.
 # The same pure verb read as status_is_paused, and the discriminator a supervisor
-# needs once a declared wait has already been recognized: the two declarations get
-# the same bounded cadence, but they block on DIFFERENT humans, so a recheck that
+# needs once a declared wait has already been recognized: the declarations
+# block on DIFFERENT humans, so an eligible recheck that
 # names an external dependency for a hold points the captain away from the fact
 # that they are the one who can clear it.
 status_is_captain_held() {  # <status-line>
@@ -365,11 +356,9 @@ status_is_captain_held() {  # <status-line>
 
 # 0 if a status line declares either an external-wait pause or a verified
 # captain-held transfer.
-# Both declarations can intentionally leave a crew's endpoint idle, so both
-# supervisors give them one cadence: the away-mode daemon defers the wedge and
-# ages a pause marker instead, and the watcher applies its bounded pause cadence
-# once pause_state_class has admitted the wait, which it does for every
-# agent-liveness verdict unless the crew is provably working.
+# Both declarations can intentionally leave a crew's endpoint idle.
+# Consumers apply the idle and frozen-run policy in docs/architecture.md
+# "Event-driven supervision"; this predicate grants no recheck eligibility.
 status_is_paused_or_captain_held() {  # <status-line>
   local line=$1 verb
   [ -n "$line" ] || return 1

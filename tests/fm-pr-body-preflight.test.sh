@@ -369,7 +369,7 @@ pass 'portable artifacts resolve to readable worktree/task files and commands ca
 
 for portable in fixtures/home/proof.txt fixtures/Users/proof.txt fixtures/tmp/fm-task/proof.txt \
   fixtures/private/tmp/fm-task/proof.txt fixtures/srv/firstmate/proof.txt \
-  ./fixtures/home/proof.txt; do
+  ./fixtures/home/proof.txt _/home/proof.txt '**/home/proof.txt'; do
   mkdir -p "$worktree/$(dirname "$portable")"
   printf '%s\n' 'synthetic fixture output' > "$worktree/$portable"
   cat > "$draft" <<EOF
@@ -456,6 +456,48 @@ output=$(preflight) || fail "portable command or URL was refused: $output"
 assert_equals 'evidence preflight ok' "$output" 'compact portable metadata did not pass'
 pass 'relative flag arguments, descriptor suffixes, web URLs and compact portable metadata remain accepted'
 
+for raw in '**/tmp/fm-task/proof.txt**' '_/home/firstmate/proof.txt_' \
+  '__/Users/worker/proof.txt__' '~~/tmp/fm-task/proof.txt~~' \
+  '**_/home/firstmate/proof.txt_**' '@/home/firstmate/headers' \
+  '"/srv/Firstmate Home/config"' "'/srv/Firstmate Home/config'" \
+  '`/srv/Firstmate Home/config`' '@"/srv/Firstmate Home/headers"' \
+  '"/srv/Worker Copy/proof.txt"' "'/srv/Task Output/proof.txt'" \
+  '`/srv/User Home/config`'; do
+  for field in 'Synthetic output' evidence-artifact evidence-command; do
+    printf '%s: %s\n' "$field" "$raw" > "$draft"
+    output=$(HOME='/srv/User Home/' FM_HOME='/srv/Firstmate Home/' \
+      "$ROOT/bin/fm-pr-body-preflight.sh" "$draft" '/srv/Worker Copy/./' '/srv/Task Output//' 2>&1)
+    expect_code 1 "$?" "wrapped or quoted path passed in $field: $raw"
+    assert_contains "$output" 'worker-local absolute path' 'wrapped or quoted path bypassed the publication guard'
+  done
+done
+for command in 'curl -H @/home/firstmate/headers' \
+  'curl --data @"/srv/Firstmate Home/payload"'; do
+  cat > "$draft" <<EOF
+External validation passed.
+evidence-artifact: evidence.txt
+evidence-command: $command
+evidence-captured: 2026-09-25T10:00:00+10:00
+EOF
+  output=$(FM_HOME='/srv/Firstmate Home/' preflight)
+  expect_code 1 "$?" "curl path passed with otherwise valid provenance: $command"
+  assert_contains "$output" 'worker-local absolute path' 'curl path bypassed the publication guard'
+done
+pass 'Markdown emphasis, curl file arguments and quoted spaced roots are refused across body fields'
+
+printf '%s\n' 'synthetic fixture output' > "$worktree/fixtures/home/proof with spaces.txt"
+cat > "$draft" <<'EOF'
+Synthetic output: **fixtures/home/proof.txt** _<task-output>/home/proof.txt_ ~~<firstmate-home>/task-temp/home/proof.txt~~
+Synthetic output: **"fixtures/home/proof with spaces.txt"**
+External validation passed.
+evidence-artifact: fixtures/home/proof with spaces.txt
+evidence-command: curl -H @"fixtures/home/proof with spaces.txt" --data @'<task-output>/home/proof.txt'
+evidence-captured: 2026-09-25T10:00:00+10:00
+EOF
+output=$(FM_HOME="$TMP_ROOT" preflight) || fail "wrapped portable paths were refused: $output"
+assert_equals 'evidence preflight ok' "$output" 'wrapped relative paths and descriptor suffixes did not pass'
+pass 'Markdown, curl and quoting preserve relative paths and descriptor suffixes'
+
 for portable in '<task-output>/../outside/evidence.txt' '<firstmate-home>/outside/evidence.txt' \
   '<task-output>/missing.txt' '<unknown>/proof.txt' '<task-output>/escape.txt' '<task-output>/nested/evidence.txt'; do
   ln -sf "$outside/evidence.txt" "$task_tmp/escape.txt"
@@ -493,14 +535,16 @@ expect_code 1 "$?" 'absent override allowed a home path'
 printf '%s %s %s' "$common" /home/ops/host-config /home/ops/estate > "$policy_home/config/published-path-prefixes"
 for raw in '/home/ops/estate/config.toml' '/home/ops/host-config' "'/home/ops/estate'" \
   'file:///home/ops/estate/config.toml' '-I/home/ops/estate/include' \
-  'paths:/home/ops/estate:/home/ops/host-config'; do
+  'paths:/home/ops/estate:/home/ops/host-config' \
+  '**/home/ops/estate/config.toml**' '_/home/ops/host-config_' '@/home/ops/estate/config' \
+  '"/home/ops/estate/config file"'; do
   printf 'Host config: %s\n' "$raw" > "$draft"
   output=$(policy_preflight) || fail "allowed host prefix refused: $raw: $output"
 done
 for raw in '/home/ops/estate-other/config.toml' '/home/ops/estate/../secret' \
   '/home/ops/unlisted' '/tmp/fm-other/proof.txt' '/home/ops/estate/tmp/fm-other/proof.txt' \
   'file:///home/ops/unlisted' '-I/home/ops/unlisted' \
-  'paths:/home/ops/estate/config:/home/ops/unlisted'; do
+  'paths:/home/ops/estate/config:/home/ops/unlisted' '"/home/ops/estate other/config"'; do
   printf 'Host config: %s\n' "$raw" > "$draft"
   output=$(policy_preflight)
   expect_code 1 "$?" "override allowed an unapproved path: $raw"

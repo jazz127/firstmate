@@ -431,12 +431,26 @@ fm_dod_refuse_worker_paths() {  # <published-text> <worktree> <task-temp> [proje
     [ "$root" != / ] && roots+=("$root")
   done
   paths=$(awk '
-    {
-      scan = $0
-      gsub(/<(task-output|firstmate-home)>/, "fmportable", scan)
-      while (match(scan, /[^][[:space:]<>`"()|,;\047{}=]+/)) {
-        token = substr(scan, RSTART, RLENGTH)
-        scan = substr(scan, RSTART + RLENGTH)
+    function unwrap(value, marker) {
+      sub(/[.!?]+$/, "", value)
+      while (match(value, /^([*]+|_+|~+|@)/)) {
+        marker = substr(value, 1, RLENGTH)
+        if (marker != "@" && (length(value) < 2 * length(marker) || substr(value, length(value) - length(marker) + 1) != marker)) break
+        value = substr(value, RLENGTH + 1)
+        if (marker != "@")
+          value = substr(value, 1, length(value) - length(marker))
+      }
+      return value
+    }
+    function scan_text(text, token, count, parts, i, path) {
+      while (match(text, /"[^"]*"|\047[^\047]*\047|`[^`]*`|[^][[:space:]<>`"()|,;\047{}=]+/)) {
+        token = substr(text, RSTART, RLENGTH)
+        text = substr(text, RSTART + RLENGTH)
+        if (token ~ /^["\047`]/) {
+          token = substr(token, 2, length(token) - 2)
+          if (token ~ /[[:space:]]/) scan_text(token)
+        }
+        token = unwrap(token)
         count = split(token, parts, ":")
         for (i = 1; i <= count; i++) {
           path = parts[i]
@@ -447,11 +461,16 @@ fm_dod_refuse_worker_paths() {  # <published-text> <worktree> <task-temp> [proje
             i++
             continue
           }
+          path = unwrap(path)
           sub(/^-[[:alpha:]]\//, "/", path)
-          sub(/[.!?]+$/, "", path)
           if (path ~ /^\//) print path
         }
       }
+    }
+    {
+      text = $0
+      gsub(/<(task-output|firstmate-home)>/, "fmportable", text)
+      scan_text(text)
     }
   ' <<EOF
 $1

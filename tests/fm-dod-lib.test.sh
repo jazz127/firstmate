@@ -342,6 +342,33 @@ $text" "$root/worktree//" "$root/tmp/../tmp/" '' '' "$phase" 2>&1)
   pass 'publication and retired validation refuse command, file-URL and metadata paths with normalized roots'
 }
 
+test_published_markdown_curl_and_quoted_paths() {
+  local root body text out phase
+  root="$TMP_ROOT/quoted-paths"
+  mkdir -p "$root/worker copy" "$root/task output"
+  printf '%s\n' 'synthetic captured output' > "$root/worker copy/proof.txt"
+  body=$(printf 'External validation passed.\nevidence-artifact: proof.txt\nevidence-command: ./collect\nevidence-captured: 2026-09-25T10:00:00+10:00\n')
+  for phase in publish retired; do
+    for text in '**/tmp/fm-task/proof.txt**' '_/home/firstmate/proof.txt_' \
+      'evidence-artifact: __/Users/worker/proof.txt__' \
+      'evidence-command: curl -H @/home/firstmate/headers' \
+      'Synthetic output: "/srv/Firstmate Home/config"' \
+      "evidence-artifact: '$root/worker copy/proof.txt'" \
+      "evidence-command: curl --data @\"$root/task output/proof.txt\"" \
+      'Synthetic output: `/srv/User Home/config`'; do
+      out=$(HOME='/srv/User Home/' FM_HOME='/srv/Firstmate Home/' \
+        fm_dod_validate_published_intent "$body
+$text" "$root/worker copy/./" "$root/task output//" '' '' "$phase" 2>&1)
+      expect_code 1 "$?" "wrapped or quoted worker path passed in $phase: $text"
+      assert_contains "$out" 'worker-local absolute path' 'wrapped or quoted path refusal was unclear'
+    done
+    HOME='/srv/User Home/' FM_HOME='/srv/Firstmate Home/' \
+      fm_dod_validate_published_intent "$body" "$root/worker copy/./" "$root/task output//" '' '' "$phase" \
+      || fail "portable evidence with spaced roots was refused in $phase"
+  done
+  pass 'publication and retired validation refuse Markdown, curl and quoted worker paths with spaced roots'
+}
+
 test_published_overrides_survive_worktree_removal() {
   local root repo wt other body common phase out
   root="$TMP_ROOT/retired-overrides"
@@ -976,6 +1003,7 @@ test_evidence_claim_requires_provenance
 test_evidence_claim_enforces_mechanical_provenance
 test_portable_published_evidence
 test_published_path_boundaries_and_normalized_roots
+test_published_markdown_curl_and_quoted_paths
 test_published_overrides_survive_worktree_removal
 
 test_scenario_consistency_is_publication_only

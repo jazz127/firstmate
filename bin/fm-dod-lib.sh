@@ -767,7 +767,7 @@ EOF
 # Event waits must not park unsupported PR forges without a feedback source.
 # Gerrit can wait on pipeline events because its forge-facing CI step is skipped.
 fm_nm_driving_block() {  # <forge>
-  local pr_return_line='' pr_reattach_clause=';' drive_block event_block wait_cfg
+  local pr_return_line='' pr_reattach_clause=';' drive_block event_block wait_cfg script_dir
   if [ "$1" != gerrit ]; then
     pr_return_line="For a base with CI, only a drive call's return reports the green PR: \`no-mistakes axi status\` shows progress but never reports \`checks-passed\` while the ci step is still monitoring the PR for merge, so never wait on a status poll for the next gate or outcome.
 "
@@ -790,9 +790,10 @@ Where a harness's own command limit is not established, assume it bounds command
 ${pr_return_line}Whenever a drive call returns without a gate or an outcome - its own wait elapsed, or it was killed or timed out - reattach at once by re-running \`no-mistakes axi run\` without flags, backgrounded the same way${pr_reattach_clause} if it refuses because no run is active, read the finished outcome from \`no-mistakes axi status\`."
   fi
   if fm_custom_check_registered "${STATE:-${FM_STATE_OVERRIDE:-${FM_HOME:-}/state}}" pr-feedback; then
+    script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd) || return 1
     event_block="Drive the run with one bounded \`no-mistakes axi run\` or \`respond\` call and read its return.
 ${pr_return_line}If that call's wait elapses without a gate or outcome, read \`no-mistakes axi status\` once to identify the active run.
-Before ending your turn, confirm the shared event watcher remains armed with \`FM_HOME=$(printf '%q' "${FM_HOME:-}") FM_STATE_OVERRIDE=$(printf '%q' "${STATE:-${FM_STATE_OVERRIDE:-${FM_HOME:-}/state}}") $(printf '%q' "$SCRIPT_DIR/fm-pr-feedback.sh") enabled\`.
+Before ending your turn, confirm the shared event watcher remains armed with \`FM_HOME=$(printf '%q' "${FM_HOME:-}") FM_STATE_OVERRIDE=$(printf '%q' "${STATE:-${FM_STATE_OVERRIDE:-${FM_HOME:-}/state}}") $(printf '%q' "$script_dir/fm-pr-feedback.sh") enabled\`.
 This read-only check of \`${STATE:-${FM_STATE_OVERRIDE:-${FM_HOME:-}/state}}/pr-feedback.check.sh\` and its \`pr-feedback.check-trust\` binding is authorized for your task's event wait.
 When it is armed and your run is still active, append one \`paused:\` line naming the run and the event you are waiting for, then end your turn.
 The watcher delivers CI green, CI red and pipeline gates through your steering inbox; do not reattach, check status or inspect the PR on a timer.

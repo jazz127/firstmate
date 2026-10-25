@@ -350,6 +350,12 @@ test_published_markdown_curl_and_quoted_paths() {
   body=$(printf 'External validation passed.\nevidence-artifact: proof.txt\nevidence-command: ./collect\nevidence-captured: 2026-09-25T10:00:00+10:00\n')
   for phase in publish retired; do
     for text in '**/tmp/fm-task/proof.txt**' '_/home/firstmate/proof.txt_' \
+      '**/tmp/fm-task/proof.txt contains the output**' \
+      '_/home/firstmate/proof.txt contains the output_' \
+      '**"/srv/Firstmate Home/config" contains the output**' \
+      $'**/tmp/fm-task/proof.txt\ncontains the output**' \
+      $'evidence-artifact: __/home/firstmate/proof.txt\ncontains the output__' \
+      $'evidence-command: **"/srv/Firstmate Home/config"\ncontains the output**' \
       'evidence-artifact: __/Users/worker/proof.txt__' \
       'evidence-command: curl -H @/home/firstmate/headers' \
       'Synthetic output: "/srv/Firstmate Home/config"' \
@@ -365,6 +371,12 @@ $text" "$root/worker copy/./" "$root/task output//" '' '' "$phase" 2>&1)
     HOME='/srv/User Home/' FM_HOME='/srv/Firstmate Home/' \
       fm_dod_validate_published_intent "$body" "$root/worker copy/./" "$root/task output//" '' '' "$phase" \
       || fail "portable evidence with spaced roots was refused in $phase"
+    for text in '**/srv/firstmate/config contains the output**' \
+      $'**/srv/firstmate/config\ncontains the output**'; do
+      out=$(FM_HOME=/srv/firstmate fm_dod_validate_published_intent "$text" /srv/worktree /srv/task-output '' '' "$phase" 2>&1)
+      expect_code 1 "$?" "emphasized configured root passed in $phase"
+      assert_contains "$out" 'worker-local absolute path' 'emphasized configured root refusal was unclear'
+    done
   done
   pass 'publication and retired validation refuse Markdown, curl and quoted worker paths with spaced roots'
 }

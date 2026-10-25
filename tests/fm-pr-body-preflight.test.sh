@@ -374,6 +374,7 @@ for portable in fixtures/home/proof.txt fixtures/Users/proof.txt fixtures/tmp/fm
   printf '%s\n' 'synthetic fixture output' > "$worktree/$portable"
   cat > "$draft" <<EOF
 Synthetic output: $portable.
+Example: **repository-relative paths remain portable**
 External validation passed.
 evidence-artifact: $portable
 evidence-command: cat '$portable'
@@ -457,6 +458,15 @@ assert_equals 'evidence preflight ok' "$output" 'compact portable metadata did n
 pass 'relative flag arguments, descriptor suffixes, web URLs and compact portable metadata remain accepted'
 
 for raw in '**/tmp/fm-task/proof.txt**' '_/home/firstmate/proof.txt_' \
+  '**/tmp/fm-task/proof.txt contains the output**' \
+  '_/home/firstmate/proof.txt contains the output_' \
+  '__/Users/worker/proof.txt contains the output__' \
+  '~~"/srv/Firstmate Home/config" contains the output~~' \
+  '**"/srv/Worker Copy/proof.txt" contains the output**' \
+  $'**/tmp/fm-task/proof.txt\ncontains the output**' \
+  $'_/home/firstmate/proof.txt\ncontains the output_' \
+  $'**"/srv/Firstmate Home/config"\ncontains the output**' \
+  $'**"/srv/Task Output/proof.txt"\ncontains the output**' \
   '__/Users/worker/proof.txt__' '~~/tmp/fm-task/proof.txt~~' \
   '**_/home/firstmate/proof.txt_**' '@/home/firstmate/headers' \
   '"/srv/Firstmate Home/config"' "'/srv/Firstmate Home/config'" \
@@ -489,6 +499,10 @@ printf '%s\n' 'synthetic fixture output' > "$worktree/fixtures/home/proof with s
 cat > "$draft" <<'EOF'
 Synthetic output: **fixtures/home/proof.txt** _<task-output>/home/proof.txt_ ~~<firstmate-home>/task-temp/home/proof.txt~~
 Synthetic output: **"fixtures/home/proof with spaces.txt"**
+Synthetic output: **fixtures/home/proof.txt contains the output**
+Synthetic output: _<task-output>/home/proof.txt
+contains the output_
+Synthetic output: ~~<firstmate-home>/task-temp/home/proof.txt contains the output~~
 External validation passed.
 evidence-artifact: fixtures/home/proof with spaces.txt
 evidence-command: curl -H @"fixtures/home/proof with spaces.txt" --data @'<task-output>/home/proof.txt'

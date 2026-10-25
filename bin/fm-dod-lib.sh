@@ -431,15 +431,43 @@ fm_dod_refuse_worker_paths() {  # <published-text> <worktree> <task-temp> [proje
     [ "$root" != / ] && roots+=("$root")
   done
   paths=$(awk '
-    function unwrap(value, marker) {
-      sub(/[.!?]+$/, "", value)
-      while (match(value, /^([*]+|_+|~+|@)/)) {
-        marker = substr(value, 1, RLENGTH)
-        if (marker != "@" && (length(value) < 2 * length(marker) || substr(value, length(value) - length(marker) + 1) != marker)) break
-        value = substr(value, RLENGTH + 1)
-        if (marker != "@")
-          value = substr(value, 1, length(value) - length(marker))
+    function strip_emphasis(text, result, start, marker, suffix, finish, probe, before, after) {
+      while (match(text, /[*]+|_+|~+/)) {
+        start = RSTART
+        marker = substr(text, start, RLENGTH)
+        suffix = substr(text, start + RLENGTH)
+        before = substr(result substr(text, 1, start - 1), length(result) + start - 1, 1)
+        finish = 0
+        if (before !~ /[[:alnum:]_\/.~-]/ && substr(suffix, 1, 1) !~ /[[:space:]]/)
+          finish = index(suffix, marker)
+        while (finish > 0) {
+          before = substr(suffix, finish - 1, 1)
+          after = substr(suffix, finish + length(marker), 1)
+          if (after != "" && after !~ /[[:space:]]/ && after != substr(marker, 1, 1) &&
+              (before ~ /[[:space:]]/ || (after == "/" && before ~ /["\047`]/))) {
+            finish = 0
+            break
+          }
+          if (finish > 1 && before !~ /[[:space:]]/ &&
+              before != substr(marker, 1, 1) && after != substr(marker, 1, 1) &&
+              !(after == "/" && before ~ /["\047`]/) &&
+              (substr(marker, 1, 1) != "_" || after !~ /[[:alnum:]]/)) break
+          probe = index(substr(suffix, finish + length(marker)), marker)
+          finish = probe > 0 ? finish + length(marker) + probe - 1 : 0
+        }
+        result = result substr(text, 1, start - 1)
+        if (finish > 0) {
+          text = substr(suffix, 1, finish - 1) substr(suffix, finish + length(marker))
+        } else {
+          result = result marker
+          text = suffix
+        }
       }
+      return result text
+    }
+    function unwrap(value) {
+      sub(/[.!?]+$/, "", value)
+      sub(/^@+/, "", value)
       return value
     }
     function scan_text(text, token, count, parts, i, path) {
@@ -467,10 +495,10 @@ fm_dod_refuse_worker_paths() {  # <published-text> <worktree> <task-temp> [proje
         }
       }
     }
-    {
-      text = $0
+    { text = text $0 "\n" }
+    END {
       gsub(/<(task-output|firstmate-home)>/, "fmportable", text)
-      scan_text(text)
+      scan_text(strip_emphasis(text))
     }
   ' <<EOF
 $1

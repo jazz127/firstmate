@@ -369,12 +369,13 @@ pass 'portable artifacts resolve to readable worktree/task files and commands ca
 
 for portable in fixtures/home/proof.txt fixtures/Users/proof.txt fixtures/tmp/fm-task/proof.txt \
   fixtures/private/tmp/fm-task/proof.txt fixtures/srv/firstmate/proof.txt \
-  ./fixtures/home/proof.txt _/home/proof.txt '**/home/proof.txt'; do
+  ./fixtures/home/proof.txt _/home/proof.txt '**/home/proof.txt' \
+  '*/home/proof.txt' '__/home/proof.txt' '~~/home/proof.txt'; do
   mkdir -p "$worktree/$(dirname "$portable")"
   printf '%s\n' 'synthetic fixture output' > "$worktree/$portable"
   cat > "$draft" <<EOF
 Synthetic output: $portable.
-Example: **repository-relative paths remain portable**
+Example: **repository-relative paths *remain portable***
 External validation passed.
 evidence-artifact: $portable
 evidence-command: cat '$portable'
@@ -459,6 +460,15 @@ pass 'relative flag arguments, descriptor suffixes, web URLs and compact portabl
 
 for raw in '**/tmp/fm-task/proof.txt**' '_/home/firstmate/proof.txt_' \
   '**/tmp/fm-task/proof.txt contains the output**' \
+  '**/tmp/fm-task/proof.txt *contains output***' \
+  '*/home/firstmate/proof.txt **contains output***' \
+  '__/Users/worker/proof.txt _contains output___' \
+  '_/home/firstmate/proof.txt __contains output___' \
+  '**"/srv/Firstmate Home/config" _contains output_**' \
+  '~~"/srv/Task Output/proof.txt" **contains output**~~' \
+  $'**/tmp/fm-task/proof.txt *contains\noutput***' \
+  $'__/home/firstmate/proof.txt _contains\noutput___' \
+  $'**"/srv/Firstmate Home/config" *contains\noutput***' \
   '_/home/firstmate/proof.txt contains the output_' \
   '__/Users/worker/proof.txt contains the output__' \
   '~~"/srv/Firstmate Home/config" contains the output~~' \
@@ -503,6 +513,10 @@ Synthetic output: **fixtures/home/proof.txt contains the output**
 Synthetic output: _<task-output>/home/proof.txt
 contains the output_
 Synthetic output: ~~<firstmate-home>/task-temp/home/proof.txt contains the output~~
+Synthetic output: **fixtures/home/proof.txt *contains output***
+Synthetic output: __<task-output>/home/proof.txt _contains
+output___
+Synthetic output: ~~<firstmate-home>/task-temp/home/proof.txt **contains output**~~
 External validation passed.
 evidence-artifact: fixtures/home/proof with spaces.txt
 evidence-command: curl -H @"fixtures/home/proof with spaces.txt" --data @'<task-output>/home/proof.txt'

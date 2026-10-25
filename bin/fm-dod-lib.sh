@@ -449,7 +449,7 @@ fm_dod_refuse_worker_paths() {  # <published-text> <worktree> <task-temp> [proje
             break
           }
           if (finish > 1 && before !~ /[[:space:]]/ &&
-              before != substr(marker, 1, 1) && after != substr(marker, 1, 1) &&
+              before != substr(marker, 1, 1) &&
               !(after == "/" && before ~ /["\047`]/) &&
               (substr(marker, 1, 1) != "_" || after !~ /[[:alnum:]]/)) break
           probe = index(substr(suffix, finish + length(marker)), marker)

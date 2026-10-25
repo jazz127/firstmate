@@ -15,6 +15,9 @@ All artifact records were cross-checked against the corresponding job's markers.
 This covers all 24 parallel and 201 serial members; an existing live-capability skip is a portable-runner measurement, not a timing claim for the unavailable live integration.
 Observed maxima provide conservative packing weights, not an upper bound on future durations.
 
+The serial hints for `tests/fm-housefeature-cut.test.sh` (623 ms) and `tests/fm-spawn-codex-seat-launch.test.sh` (6883 ms) come from successful `FM_TEST_END` markers in the Ubuntu House checks [job 121298570451](https://github.com/jazz127/firstmate/actions/runs/40236320430/job/121298570451) on 2026-10-25.
+All six scripts in that job passed; its later inventory coverage guard failed because too many serial scripts lacked measured hints.
+
 Two serial-5 jobs were cancelled at their 30-minute cap and uploaded no artifact.
 Their completed log markers supplement the complete runs, but a cancelled job's wall time is only a lower bound and its unfinished or never-started scripts have no completed sample.
 A failed script's duration is excluded even when its lane uploaded an artifact.

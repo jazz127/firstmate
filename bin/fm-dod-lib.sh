@@ -420,28 +420,36 @@ EOF
 # nonstandard home/worktree layouts; generic patterns catch other workers.
 # Task scratch paths cannot be allowed by the home-path override.
 fm_dod_refuse_worker_paths() {  # <published-text> <worktree> <task-temp> [project]
-  local home paths path prefixes prefix normalized allowed
+  local home paths path prefixes prefix normalized allowed root task_root=$3
+  local -a roots=()
   home=$(fm_dod_evidence_home) || return 1
   prefixes=$(fm_dod_allowed_path_prefixes "$2" "${4:-}") || return 1
-  paths=$(awk -v home="$home" -v worktree="$2" -v task="$3" -v user_home="${HOME:-}" '
+  case "$task_root" in /*) task_root=$(fm_dod_path_normalize "$task_root") || return 1 ;; esac
+  for root in "$home" "$2" "$task_root" "${HOME:-}"; do
+    case "$root" in /*) ;; *) continue ;; esac
+    root=$(fm_dod_path_normalize "$root") || return 1
+    [ "$root" != / ] && roots+=("$root")
+  done
+  paths=$(awk '
     {
-      roots[1] = home; roots[2] = worktree; roots[3] = task; roots[4] = user_home
       scan = $0
       gsub(/<(task-output|firstmate-home)>/, "fmportable", scan)
       while (match(scan, /[^][[:space:]<>`"()|,;\047{}=]+/)) {
-        path = substr(scan, RSTART, RLENGTH)
+        token = substr(scan, RSTART, RLENGTH)
         scan = substr(scan, RSTART + RLENGTH)
-        sub(/[.!?:]+$/, "", path)
-        if (path ~ /^\// && path ~ /\/(private\/)?tmp\/fm-|\/(home|Users)\//) {
-          print path
-          continue
-        }
-        for (i = 1; i <= 4; i++) {
-          if (roots[i] !~ /^\// || roots[i] == "/") continue
-          if (path == roots[i] || index(path, roots[i] "/") == 1) {
-            print path
-            break
+        count = split(token, parts, ":")
+        for (i = 1; i <= count; i++) {
+          path = parts[i]
+          if (tolower(path) == "file" && i < count) {
+            path = parts[++i]
+            sub(/^\/\/[^\/]*/, "", path)
+          } else if (path ~ /^[[:alpha:]][[:alnum:]+.-]*$/ && i < count && parts[i + 1] ~ /^\/\//) {
+            i++
+            continue
           }
+          sub(/^-[[:alpha:]]\//, "/", path)
+          sub(/[.!?]+$/, "", path)
+          if (path ~ /^\//) print path
         }
       }
     }
@@ -452,10 +460,21 @@ EOF
   while IFS= read -r path; do
     [ -n "$path" ] || continue
     normalized=$(fm_dod_path_normalize "$path") || return 1
+    allowed=1
+    case "$path:$normalized" in
+      *'/tmp/fm-'*|*'/home/'*|*'/Users/'*) allowed=0 ;;
+      *)
+        for root in "${roots[@]:-}"; do
+          [ -n "$root" ] || continue
+          case "$normalized" in "$root"|"$root"/*) allowed=0; break ;; esac
+        done
+        ;;
+    esac
+    [ "$allowed" -eq 0 ] || continue
     allowed=0
-    case "$path" in *'/tmp/fm-'*) ;; *)
+    case "$path:$normalized" in *'/tmp/fm-'*) ;; *)
       case "$normalized" in
-        "$3"|"${3%/}"/*) ;;
+        "$task_root"|"${task_root%/}"/*) ;;
         *)
           while IFS= read -r prefix; do
             [ -n "$prefix" ] || continue

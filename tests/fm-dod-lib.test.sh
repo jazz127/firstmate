@@ -313,6 +313,35 @@ test_portable_published_evidence() {
   pass 'published-intent merge guard resolves descriptors while private intent retains local paths'
 }
 
+test_published_path_boundaries_and_normalized_roots() {
+  local root body text out phase
+  root="$TMP_ROOT/path-boundaries"
+  mkdir -p "$root/worktree" "$root/tmp"
+  printf '%s\n' 'synthetic captured output' > "$root/worktree/proof.txt"
+  body=$(printf 'External validation passed.\nevidence-artifact: proof.txt\nevidence-command: ./collect\nevidence-captured: 2026-09-25T10:00:00+10:00\n')
+  for phase in publish retired; do
+    for text in 'Synthetic output: file:///tmp/fm-task/proof.txt' \
+      'Synthetic output: file://localhost/home/firstmate/proof.txt' \
+      'evidence-command: cc -I/home/firstmate/include' \
+      'evidence-command: cc -L/Users/worker/lib' \
+      'evidence-artifact:/tmp/fm-task/proof.txt' \
+      'Synthetic output: /srv/firstmate/config' \
+      "Synthetic output: $root/worktree/proof.txt" \
+      "Synthetic output: $root/tmp/proof.txt" \
+      'Synthetic output: /srv/user-home/config'; do
+      out=$(HOME=/srv/user-home/ FM_HOME=/srv/firstmate/./ \
+        fm_dod_validate_published_intent "$body
+$text" "$root/worktree//" "$root/tmp/../tmp/" '' '' "$phase" 2>&1)
+      expect_code 1 "$?" "worker path boundary passed in $phase: $text"
+      assert_contains "$out" 'worker-local absolute path' 'path boundary refusal was unclear'
+    done
+    HOME=/srv/user-home/ FM_HOME=/srv/firstmate/./ \
+      fm_dod_validate_published_intent "$body" "$root/worktree//" "$root/tmp/../tmp/" '' '' "$phase" \
+      || fail "normalized roots refused portable evidence in $phase"
+  done
+  pass 'publication and retired validation refuse command, file-URL and metadata paths with normalized roots'
+}
+
 test_published_overrides_survive_worktree_removal() {
   local root repo wt other body common phase out
   root="$TMP_ROOT/retired-overrides"
@@ -946,6 +975,7 @@ test_scout_done_is_not_gated
 test_evidence_claim_requires_provenance
 test_evidence_claim_enforces_mechanical_provenance
 test_portable_published_evidence
+test_published_path_boundaries_and_normalized_roots
 test_published_overrides_survive_worktree_removal
 
 test_scenario_consistency_is_publication_only

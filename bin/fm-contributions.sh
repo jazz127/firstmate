@@ -541,7 +541,9 @@ observe() { # canonical GitHub URL -> normalized JSON
               | select(.user.login != $c.user.login or $directive)
               | ((.user.login | ascii_downcase) as $login | ($automated | index($login)) != null) as $bot
               | (.user.login | IN($bots[])) as $review_bot
-              | select(if $directive or $review_bot then true elif $bot then ((.body // "" | gsub("^\\s+|\\s+$";"") | length) > 0 or .state == "CHANGES_REQUESTED")
+              | select(if $directive then true
+                       elif $review_bot then (.state != "APPROVED" or ((.body // "") | test("\\S")))
+                       elif $bot then ((.body // "" | gsub("^\\s+|\\s+$";"") | length) > 0 or .state == "CHANGES_REQUESTED")
                        else (.author_association | IN("OWNER","MEMBER","COLLABORATOR")) end)
               | {token:((._signal + ":") + (.id|tostring) + ":" + (.updated_at // .submitted_at // "") + ":" + (.state // "")),
                  type:._signal,source:.html_url,head:.commit_id,

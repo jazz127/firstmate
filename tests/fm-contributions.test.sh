@@ -296,6 +296,47 @@ test_review_bot_inline_wake() {
   pass 'a listed collaborator bot remains an acknowledged review-bot fleet signal'
 }
 
+test_review_bot_empty_approval_is_not_a_finding() {
+  local home out
+  home=$(new_home review-bot-approval)
+  forge_home "$home"
+  printf 'additional-review[bot]\ncopilot-pull-request-reviewer[bot]\n' > "$home/config/contribution-review-bots"
+  with_home "$home" "$ROOT/bin/fm-pr-check.sh" delivery https://github.com/o/r/pull/8 >/dev/null \
+    || fail 'could not register the owned delivery'
+  registered_checks "$home" >/dev/null
+  jq -n --arg head "$HEAD_A" '[
+    {id:51,user:{login:"additional-review[bot]"},author_association:"COLLABORATOR",state:"APPROVED",body:"",
+      commit_id:$head,html_url:"https://github.com/o/r/pull/8#pullrequestreview-51",submitted_at:"2026-09-16T08:01:00Z"},
+    {id:52,user:{login:"copilot-pull-request-reviewer[bot]"},author_association:"NONE",state:"APPROVED",body:" \n\t ",
+      commit_id:$head,html_url:"https://github.com/o/r/pull/8#pullrequestreview-52",submitted_at:"2026-09-16T08:02:00Z"}]' \
+    > "$home/forge/reviews.json"
+  registered_checks "$home" >/dev/null
+  out=$(with_home "$home" "$ROOT/bin/fm-contributions.sh" pending)
+  printf '%s' "$out" | jq -e 'length == 0' >/dev/null \
+    || fail "empty allowlisted approvals must create no findings: $out"
+  [ ! -s "$home/state/.wake-queue" ] || fail 'empty allowlisted approvals must create no wake'
+  jq -e '.records[0].observation.reviews | length == 2 and all(.[]; .state == "APPROVED")' \
+    "$home/data/delivery/contributions.json" >/dev/null || fail 'approval evidence must remain recorded'
+
+  jq -n --arg head "$HEAD_A" '[
+    {id:53,user:{login:"additional-review[bot]"},author_association:"NONE",state:"APPROVED",body:"Please check this edge case",
+      commit_id:$head,html_url:"https://github.com/o/r/pull/8#pullrequestreview-53",submitted_at:"2026-09-16T08:03:00Z"},
+    {id:54,user:{login:"additional-review[bot]"},author_association:"NONE",state:"CHANGES_REQUESTED",body:"",
+      commit_id:$head,html_url:"https://github.com/o/r/pull/8#pullrequestreview-54",submitted_at:"2026-09-16T08:04:00Z"}]' \
+    > "$home/forge/reviews.json"
+  jq -n --arg head "$HEAD_A" '[{id:55,user:{login:"additional-review[bot]"},author_association:"NONE",body:"P1: unchecked error",
+    pull_request_review_id:51,commit_id:$head,html_url:"https://github.com/o/r/pull/8#discussion_r55",updated_at:"2026-09-16T08:05:00Z"}]' \
+    > "$home/forge/inline.json"
+  registered_checks "$home" >/dev/null
+  out=$(with_home "$home" "$ROOT/bin/fm-contributions.sh" pending)
+  printf '%s' "$out" | jq -e 'length == 3 and all(.[]; .review_bot == true)
+    and any(.[]; .source | endswith("review-53"))
+    and any(.[]; .source | endswith("review-54"))
+    and any(.[]; .source | endswith("discussion_r55"))' >/dev/null \
+    || fail "substantive reviews, change requests, and inline findings must remain signals: $out"
+  pass 'empty allowlisted approvals retain review evidence without becoming findings'
+}
+
 test_review_bot_watching_is_opt_in() {
   local home out
   home=$(new_home review-bot-off)
@@ -2545,5 +2586,6 @@ test_automated_reviewer_configuration
 test_author_marker_directive
 
 test_review_bot_inline_wake
+test_review_bot_empty_approval_is_not_a_finding
 test_review_bot_watching_is_opt_in
 test_review_bot_allowlist_is_configurable

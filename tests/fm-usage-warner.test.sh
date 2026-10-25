@@ -189,6 +189,49 @@ test_check_crosses_notifies_stays_quiet_then_rearms() {
   pass "fm-usage-warner: edge-triggered de-dupe crosses once, stays quiet, and re-arms on drop"
 }
 
+test_failed_notification_keeps_crossings_undelivered() {
+  local home fakebin notify_log out
+  home=$(make_home notification-failure)
+  fakebin="$home/fakebin"
+  notify_log="$home/notify.log"
+  printf 'five_hour:80\nfive_hour:95\nseven_day:90\n' > "$home/config/usage-warner"
+  fake_quota_axi "$fakebin" '{"id":"five_hour","percentUsed":90}' '{"id":"seven_day","percentUsed":97}'
+  fake_osascript_recorder "$fakebin" "$notify_log"
+  printf 'exit 1\n' >> "$fakebin/osascript"
+  out=$(run_check "$home" "$fakebin")
+  assert_contains "$out" "five_hour at 90% (>=80%)" "the first delivery attempt reports the crossing"
+  [ "$(wc -l < "$notify_log")" -eq 1 ] || fail "the failing notifier must have been invoked"
+
+  : > "$notify_log"
+  fake_osascript_recorder "$fakebin" "$notify_log"
+  fake_quota_axi "$fakebin" '{"id":"five_hour","percentUsed":92}' '{"id":"seven_day","percentUsed":98}'
+  out=$(run_check "$home" "$fakebin")
+  assert_contains "$out" "five_hour at 92% (>=80%)" "an undelivered crossing must be retried while still above threshold"
+  assert_contains "$out" "seven_day at 98% (>=90%)" "every crossing in the failed batch must be retried"
+  [ "$(wc -l < "$notify_log")" -eq 1 ] || fail "the retry must deliver one batched notification"
+  : > "$notify_log"
+  out=$(run_check "$home" "$fakebin")
+  [ -z "$out" ] && [ ! -s "$notify_log" ] || fail "successfully delivered crossings must stay quiet"
+
+  printf 'exit 1\n' >> "$fakebin/osascript"
+  fake_quota_axi "$fakebin" '{"id":"five_hour","percentUsed":96}'
+  out=$(run_check "$home" "$fakebin")
+  assert_contains "$out" "five_hour at 96% (>=95%)" "the later higher tier attempts its own delivery"
+  assert_not_contains "$out" ">=80%" "the delivered lower tier remains suppressed during a failure"
+  : > "$notify_log"
+  fake_osascript_recorder "$fakebin" "$notify_log"
+  fake_quota_axi "$fakebin" '{"id":"five_hour","percentUsed":97}' '{"id":"seven_day","percentUsed":99}'
+  out=$(run_check "$home" "$fakebin")
+  assert_contains "$out" "five_hour at 97% (>=95%)" "the failed higher-tier crossing remains undelivered"
+  assert_not_contains "$out" ">=80%" "retrying a higher tier must not repeat the delivered lower tier"
+  assert_not_contains "$out" "seven_day" "a missing delivered window must retain its suppression"
+  [ "$(wc -l < "$notify_log")" -eq 1 ] || fail "the higher-tier retry must notify once"
+  : > "$notify_log"
+  out=$(run_check "$home" "$fakebin")
+  [ -z "$out" ] && [ ! -s "$notify_log" ] || fail "a delivered higher tier must stay quiet"
+  pass "fm-usage-warner: failed notifications preserve undelivered crossings and existing delivery state"
+}
+
 test_check_tiered_thresholds_on_one_window_each_warn() {
   local home fakebin notify_log out
   home=$(make_home tiered)
@@ -513,6 +556,43 @@ test_armed_shim_runs_a_real_check() {
   pass "fm-usage-warner: the armed shim is exactly what the watcher would dispatch"
 }
 
+test_armed_shim_preserves_effective_directories() {
+  local mode home fakebin notify_log config state out
+  for mode in absolute relative; do
+    home=$(make_home "arm-overrides-$mode")
+    fakebin="$home/fakebin"
+    notify_log="$home/notify.log"
+    config="custom config's"
+    state="custom state's"
+    mkdir -p "$home/$config"
+    printf 'five_hour:80\n' > "$home/$config/usage-warner"
+    if [ "$mode" = absolute ]; then
+      config="$home/$config"
+      state="$home/$state"
+    fi
+    out=$(cd "$home" && FM_HOME=. FM_CONFIG_OVERRIDE="$config" FM_STATE_OVERRIDE="$state" "$WARNER" arm 2>&1) \
+      || fail "arm with $mode overrides must succeed: $out"
+    state="$home/custom state's"
+    assert_present "$state/usage-warner.check-trust" "the overridden state directory holds the trust binding"
+    fake_osascript_recorder "$fakebin" "$notify_log"
+    fake_quota_axi "$fakebin" '{"id":"five_hour","percentUsed":92}'
+    out=$(cd "$TMP_ROOT" && env -u FM_HOME -u FM_CONFIG_OVERRIDE -u FM_STATE_OVERRIDE \
+      PATH="$fakebin:$PATH" QUOTA_AXI_ARGV_LOG="$fakebin/.argv-log" \
+      bash "$state/usage-warner.check.sh" </dev/null)
+    assert_contains "$out" "five_hour at 92% (>=80%)" "the shim retains its $mode configuration from another directory"
+    [ "$(wc -l < "$notify_log")" -eq 1 ] || fail "the overridden configuration must cause one notification"
+    assert_present "$state/.usage-warner" "the shim persists delivery state in its armed state directory"
+    assert_absent "$home/state/.usage-warner" "the shim must not write to the default state directory"
+    : > "$notify_log"
+    out=$(cd "$TMP_ROOT" && FM_HOME="$TMP_ROOT" FM_CONFIG_OVERRIDE="$TMP_ROOT" FM_STATE_OVERRIDE="$TMP_ROOT" \
+      PATH="$fakebin:$PATH" QUOTA_AXI_ARGV_LOG="$fakebin/.argv-log" \
+      bash "$state/usage-warner.check.sh" </dev/null)
+    [ -z "$out" ] && [ ! -s "$notify_log" ] || fail "the shim must retain delivery state despite conflicting ambient overrides"
+    [ "$(wc -l < "$fakebin/.argv-log")" -eq 2 ] || fail "the shim must keep checking its armed configuration despite ambient overrides"
+  done
+  pass "fm-usage-warner: armed shims retain effective absolute and relative configuration and state directories"
+}
+
 test_check_repeated_directive_reports_once() {
   local home fakebin notify_log out
   home=$(make_home repeated-directive)
@@ -570,6 +650,7 @@ test_help_and_usage
 test_unconfigured_home_stays_silent
 test_config_parses_comments_whitespace_and_model_ids
 test_check_crosses_notifies_stays_quiet_then_rearms
+test_failed_notification_keeps_crossings_undelivered
 test_check_tiered_thresholds_on_one_window_each_warn
 test_check_reads_a_v1_record_without_rewarning
 test_check_batches_multiple_crossings_into_one_notification
@@ -592,6 +673,7 @@ if [ "$(uname)" = Darwin ]; then
   test_arm_writes_and_binds_the_check_and_disarm_removes_it
   test_arm_refuses_a_symlink_at_the_shim_path
   test_armed_shim_runs_a_real_check
+  test_armed_shim_preserves_effective_directories
 else
   printf 'ok - fm-usage-warner: shim-writing arm cases are macOS-only; skipping on %s\n' "$(uname)"
 fi

@@ -406,7 +406,7 @@ Only the watcher process touches `state/.last-watcher-beat`.
 No helper process can make a wedged watcher appear healthy.
 An arm whose own script path sits under a disposable no-mistakes validation checkout (`.no-mistakes/worktrees/`) refuses with the typed failure line before touching any state, because a watcher started there outlives the validation step and keeps writing the real home's state from a checkout about to be deleted.
 Once per poll the watcher checks that its home, its state directory, and its own code root still exist, and exits with a logged reason when one is gone, scoped to itself alone, so a torn-down temporary home or a discarded checkout never leaves an orphan watcher behind.
-The watcher uses bash's native fatal handling for HUP and TERM during blocked checks, pane captures, and compound backend reads, so its EXIT cleanup can stop the operation without waiting for a wedged query to finish.
+The watcher uses bash's native fatal handling for HUP and TERM during blocked checks, pane captures, compound backend reads, and backend event waits, so its EXIT cleanup can stop the operation without waiting for a wedged query to finish.
 `watcher_stop_signals` in `bin/fm-watch.sh` owns the signal-handling rationale.
 Nested timeout cancellation is owned by [`fm-timeout-lib.sh`](../bin/fm-timeout-lib.sh).
 Pane captures additionally bound tmux reads to two seconds through `watcher_capture_read`.
@@ -461,7 +461,7 @@ They also prove that a legacy or handoff-phase watcher marker from an absent rep
 - The self-healing moved-generation acknowledgement that consumes its handled rows and names its remedy.
 - The already-acknowledged confirmation no-op for a matching generation, with its mismatched-generation, dead-pid, and lock-mismatch rejections preserved.
 - The manual-restart generation churn that makes a confirmation for the churned generation report a mismatch, which an arm check without a reopen leaves in place.
-- A take-over that stays quiet after a confirmed TERM, still surfaces queued work and self-exit downtime, and attaches without stopping a cycle the named arm does not own.
+- A take-over that stays quiet after a confirmed TERM, including one that lands inside a herdr event wait, still surfaces queued work and self-exit downtime, and attaches without stopping a cycle the named arm does not own.
 - The disposable-checkout arm refusal.
 - The home-gone and state-gone watcher exits.
 - The test reaper that stops a watcher armed for a temporary home.

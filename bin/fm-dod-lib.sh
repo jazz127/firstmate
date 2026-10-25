@@ -114,6 +114,18 @@
 . "$(d=${BASH_SOURCE[0]%/*}; [ "$d" != "${BASH_SOURCE[0]}" ] || d=.; cd "${d:-/}" && pwd)/fm-nm-run-lib.sh"
 # shellcheck source=bin/fm-brief-heading-lib.sh
 . "$(d=${BASH_SOURCE[0]%/*}; [ "$d" != "${BASH_SOURCE[0]}" ] || d=.; cd "${d:-/}" && pwd)/fm-brief-heading-lib.sh"
+# shellcheck source=bin/fm-check-lib.sh
+. "$(d=${BASH_SOURCE[0]%/*}; [ "$d" != "${BASH_SOURCE[0]}" ] || d=.; cd "${d:-/}" && pwd)/fm-check-lib.sh"
+
+# Shared by ordinary and promoted ships. Delivery history and opt-in mechanics
+# belong to bin/fm-pr-feedback.sh; the worker's waiting contract belongs here.
+fm_ship_pr_feedback_block() {
+  cat <<'EOF'
+Once your PR is green and you have reported done, end your turn.
+Do not poll the PR, its comments, reviews or CI on a timer after that report.
+Review feedback reaches you through your steering inbox; read and acknowledge it when its doorbell rings, then continue under this brief.
+EOF
+}
 
 fm_brief_worker_role() {  # <state-dir> <task-id> <code-root>
   local state=$1 task_id=$2 root=$3
@@ -339,7 +351,17 @@ fm_nm_driving_block() {  # <forge>
   # config/wait-no-turns selects the foreground drive. Absent, the text matches
   # the backgrounded drive a home had before that flag.
   wait_cfg=${CONFIG:-${FM_CONFIG_OVERRIDE:-${FM_HOME:-}/config}}
-  if [ -e "$wait_cfg/wait-no-turns" ]; then
+  if fm_custom_check_registered "${STATE:-${FM_STATE_OVERRIDE:-${FM_HOME:-}/state}}" pr-feedback; then
+    drive_block="Drive the run with one bounded \`no-mistakes axi run\` or \`respond\` call and read its return.
+${pr_return_line}If that call's wait elapses without a gate or outcome, read \`no-mistakes axi status\` once to identify the active run.
+Before ending your turn, confirm the shared event watcher remains armed with \`FM_HOME=$(printf '%q' "${FM_HOME:-}") FM_STATE_OVERRIDE=$(printf '%q' "${STATE:-${FM_STATE_OVERRIDE:-${FM_HOME:-}/state}}") $(printf '%q' "$SCRIPT_DIR/fm-pr-feedback.sh") enabled\`.
+This read-only check of \`${STATE:-${FM_STATE_OVERRIDE:-${FM_HOME:-}/state}}/pr-feedback.check.sh\` and its \`pr-feedback.check-trust\` binding is authorized for your task's event wait.
+When it is armed and your run is still active, append one \`paused:\` line naming the run and the event you are waiting for, then end your turn.
+The watcher delivers CI green, CI red and pipeline gates through your steering inbox; do not reattach, check status or inspect the PR on a timer.
+This event wait takes precedence over the generic Waiting section for your pipeline run, including while it monitors CI.
+When the inbox event arrives, reattach once with \`no-mistakes axi run\` without flags to read the current gate or CI-ready return; never repeat a \`respond\` whose answer was already sent.
+If the watcher is no longer armed, declare the missing event source to firstmate and retain one bounded blocking drive call instead of timer polls."
+  elif [ -e "$wait_cfg/wait-no-turns" ]; then
     drive_block="Drive the run with ONE foreground \`no-mistakes axi run\` and let it block.
 It bounds its own hold for you: \`--wait\` (default 8m) exists precisely so a harness with a ten-minute command cap gets a structured return instead of being killed mid-hold.
 Declare that wait using the brief's status-reporting rule before the foreground drive call.
@@ -474,6 +496,7 @@ That \`done:\` is accepted only when this copy's HEAD - your latest commit - is 
 If you deliberately keep the PR a draft, append \`paused [at=<epoch>]: {why the draft is held}\` instead of done.
 Do NOT run /no-mistakes. The configured merge authority decides whether to merge the PR; firstmate relays the outcome.
 EOF
+      fm_ship_pr_feedback_block
       ;;
     local-only:*)
       cat <<EOF
@@ -508,6 +531,7 @@ Then append \`done [at=<epoch>]: PR {url} checks green\` and stop. You are finis
 That CI-ready \`done:\` is accepted only when this copy's HEAD - your latest commit - is one the /no-mistakes run pushed, so commit nothing after the run; the check tests that commit, not merely that a branch moved.
 If you deliberately keep the PR a draft, append \`paused [at=<epoch>]: {why the draft is held}\` instead of done.
 EOF
+      fm_ship_pr_feedback_block
       ;;
     *)
       echo "error: fm_dod_block: unknown delivery mode '$mode'" >&2

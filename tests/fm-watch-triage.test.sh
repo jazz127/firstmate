@@ -6359,7 +6359,7 @@ test_paused_worker_dead_endpoint_still_wakes() {
 # Real busy-state and crew-state readers run against the tmux boundary fixture.
 test_busy_timer_survives_missing_state_before_stability() {
   local mode dir state fakebin out pane window key pid original verdict
-  for mode in warming changed done paused; do
+  for mode in warming changed 'done' paused; do
     dir=$(make_case "busy-state-lost-$mode"); state="$dir/state"; fakebin="$dir/fakebin"
     out="$dir/watch.out"; pane="$dir/pane.txt"
     window=test:fm-native; key=test_fm-native
@@ -6415,7 +6415,7 @@ test_busy_timer_survives_missing_state_before_stability() {
 
 test_established_timer_survives_inconclusive_state() {
   local mode dir state fakebin out pane verdict window key pid pr
-  for mode in unknown failed malformed reclassify delivered escalated done paused unproven; do
+  for mode in unknown failed malformed reclassify delivered escalated 'done' paused unproven; do
     dir=$(make_case "uncertain-state-$mode"); state="$dir/state"; fakebin="$dir/fakebin"
     out="$dir/watch.out"; pane="$dir/pane.txt"; verdict="$dir/verdict.txt"
     window=test:fm-uncertain; key=test_fm-uncertain
@@ -6424,8 +6424,10 @@ test_established_timer_survives_inconclusive_state() {
     if [ "$mode" = delivered ]; then
       pr=https://github.com/o/r/pull/3
       printf 'pr=%s\n' "$pr" >> "$state/uncertain.meta"
-      fm_pr_poll_prepare "$state" uncertain github "$pr" github.com o/r 3 "$ROOT/bin/fm-pr-poll.sh" \
-        && fm_pr_poll_publish_prepared || fail "could not arm the historical delivery"
+      if ! { fm_pr_poll_prepare "$state" uncertain github "$pr" github.com o/r 3 "$ROOT/bin/fm-pr-poll.sh" \
+        && fm_pr_poll_publish_prepared; }; then
+        fail "could not arm the historical delivery"
+      fi
       printf 'done: PR %s ready for review\n' "$pr" > "$state/uncertain.status"
       touch "$state/.last-check"
     fi
@@ -6549,8 +6551,10 @@ test_delivered_worker_gate_keeps_recovery() {
     harness=grok
     case "$mode" in busy*) harness=pi ;; esac
     printf 'window=%s\nkind=%s\nharness=%s\npr=%s\n' "$window" "$kind" "$harness" "$pr" > "$state/delivered.meta"
-    fm_pr_poll_prepare "$state" delivered github "$pr" github.com o/r 3 "$ROOT/bin/fm-pr-poll.sh" \
-      && fm_pr_poll_publish_prepared || fail "could not arm the delivered worker's authenticated merge poll"
+    if ! { fm_pr_poll_prepare "$state" delivered github "$pr" github.com o/r 3 "$ROOT/bin/fm-pr-poll.sh" \
+      && fm_pr_poll_publish_prepared; }; then
+      fail "could not arm the delivered worker's authenticated merge poll"
+    fi
     fm_pr_poll_artifacts_valid "$state" delivered "$ROOT/bin/fm-pr-poll.sh" \
       || fail "delivery fixture has no valid merge-poll evidence"
     printf 'done: PR %s ready for review\n' "$pr" > "$state/delivered.status"
@@ -6695,7 +6699,7 @@ test_endpoint_reports_once_per_spawn_generation() {
 
 test_finished_run_drops_its_wedge_timer() {
   local dir state fakebin out pane window key hash pid verdict
-  for verdict in done paused; do
+  for verdict in 'done' paused; do
     dir=$(make_case "idle-finished-run-$verdict"); state="$dir/state"; fakebin="$dir/fakebin"
     out="$dir/watch.out"; pane="$dir/pane.txt"; window=test:fm-finished; key=test_fm-finished
     printf 'window=%s\nkind=ship\nharness=grok\n' "$window" > "$state/finished.meta"

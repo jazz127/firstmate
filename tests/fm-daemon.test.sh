@@ -3308,7 +3308,7 @@ test_daemon_idle_checkin_policy() {
 
 test_daemon_preserves_established_marker_through_uncertainty() {
   local mode dir state fakebin pane verdict win key reader
-  for mode in unknown failed malformed historical capture-failed done paused unproven; do
+  for mode in unknown failed malformed historical capture-failed 'done' paused unproven; do
     dir=$(make_supercase "uncertain-marker-$mode"); state="$dir/state"; fakebin="$dir/fakebin"
     pane="$dir/pane.txt"; verdict="$dir/verdict.txt"; win=sess:fm-uncertain; key=uncertain
     reader="$fakebin/fm-crew-state.sh"

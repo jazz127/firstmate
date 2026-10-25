@@ -3356,7 +3356,6 @@ EOF
       # shellcheck disable=SC2086
       if watcher_read signal_crew_provably_working $files; then
         signal_execution=working
-      # shellcheck disable=SC2086
       elif signal_turnend_panes_churned $files; then
         signal_execution=churn
       fi

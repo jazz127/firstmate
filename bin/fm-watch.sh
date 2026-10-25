@@ -1701,6 +1701,18 @@ wedge_timer_check() {  # <window> <since-file> <triage-label> <escalation-count-
   esac
 }
 
+# A missing native busy record can arrive before the pane has two stable
+# captures, or alongside a redraw. Neither observation disproves an established
+# execution window. Keep that window through uncertainty, without creating one
+# for an unproven idle worker or retaining it after a confirmed stop/wait.
+wedge_preserve_uncertain() {  # <window> <since-file> <escalation-file> <task> <hash> [dialog-name]
+  [ -e "$2" ] || [ -s "$3" ] || return 1
+  pause_state_class "$1" "$4"
+  [ "$PAUSE_STATE_CLASS" = uncertain ] || return 1
+  wedge_timer_check "$1" "$2" "stale (execution state uncertain)" "$3" "$4" "$5" "${6-}"
+  return 0
+}
+
 # busy_turn_over_age: 0 iff the current semantic turn start, last completed
 # turn, or explicit native-harness progress is at least BUSY_TURN_MAX_SECS old.
 # Only a valid, gen-matching busy record from the task's trusted source supplies
@@ -3555,13 +3567,15 @@ EOF
           fi
         fi
       else
-        # Pane busy or not yet stably stale: reset pending escalation bookkeeping,
-        # unless a genuinely busy pane has gone too long with no completed turn -
-        # then route it through busy_turn_bound_check, which hands the crossed
-        # bound to the same wedge timer unless the crew declared the wait itself.
+        # Pane busy or not yet stably stale: normally reset pending escalation
+        # bookkeeping. Retain established execution proof through uncertain state;
+        # route an over-age busy turn through busy_turn_bound_check, which hands
+        # the bound to the same wedge timer unless the crew declared the wait.
         paused_bound=1
         if [ "$busy_now" -eq 0 ] && busy_turn_over_age "$task"; then
           busy_turn_bound_check "$w" "$task" "$h" "$ssf" "$ewf" "$dialog" && paused_bound=0
+        elif [ "$busy_now" -ne 0 ] && wedge_preserve_uncertain "$w" "$ssf" "$ewf" "$task" "$h" "$dialog"; then
+          paused_bound=0
         else
           rm -f "$ssf" "$ewf"
           clear_write_tracking "$key"
@@ -3585,6 +3599,8 @@ EOF
       paused_bound=1
       if [ "$busy_now" -eq 0 ] && busy_turn_over_age "$task"; then
         busy_turn_bound_check "$w" "$task" "$h" "$ssf" "$ewf" "$dialog" && paused_bound=0
+      elif [ "$busy_now" -ne 0 ] && wedge_preserve_uncertain "$w" "$ssf" "$ewf" "$task" "$h" "$dialog"; then
+        paused_bound=0
       else
         rm -f "$ssf" "$ewf"
         clear_write_tracking "$key"

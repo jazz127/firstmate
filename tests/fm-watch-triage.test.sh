@@ -6353,6 +6353,66 @@ test_paused_worker_dead_endpoint_still_wakes() {
   pass "endpoint loss still wakes for a paused scout even when capture fails"
 }
 
+# Oracle: stuck-run protection retains established execution proof through missing
+# native state, even before two identical captures. Losing a timer here must
+# neither erase recovery nor let a pane redraw restart its escalation window.
+# Real busy-state and crew-state readers run against the tmux boundary fixture.
+test_busy_timer_survives_missing_state_before_stability() {
+  local mode dir state fakebin out pane window key pid original verdict
+  for mode in warming changed done paused; do
+    dir=$(make_case "busy-state-lost-$mode"); state="$dir/state"; fakebin="$dir/fakebin"
+    out="$dir/watch.out"; pane="$dir/pane.txt"
+    window=test:fm-native; key=test_fm-native
+    mkdir "$dir/project"
+    printf 'window=%s\nkind=scout\nharness=pi\nworktree=%s\n' "$window" "$dir/project" > "$state/native.meta"
+    printf 'working: executing\n' > "$state/native.status"
+    prime_status_seen "$state" "$state/native.status"
+    printf 'frozen worker' > "$pane"
+    record_pi_busy "$state" native
+    backdate_pi_turn_start "$state" native 500
+    touch -t 200001010000 "$state/native.meta"
+    FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$pane" FM_FAKE_TMUX_CURRENT_COMMAND=pi \
+      watch_bg "$state" "$fakebin" "$out" env FM_POLL=3 FM_BUSY_TURN_MAX_SECS=1 \
+        FM_STALE_ESCALATE_SECS=60 FM_CREW_STATE_BIN="$ROOT/bin/fm-crew-state.sh"
+    pid=$!
+    wait_numeric_file "$state/.stale-since-$key" 100 || { reap "$pid"; fail "native busy state did not establish recovery"; }
+    original=$(cat "$state/.stale-since-$key")
+    [ "$(cat "$state/.count-$key")" = 0 ] || { reap "$pid"; fail "fixture missed the first busy capture"; }
+    rm "$state/native.busy-state"
+    if [ "$mode" != warming ]; then printf 'frozen worker redrawn' > "$pane"; fi
+    case "$mode" in
+      done|paused)
+        "$ROOT/bin/fm-busy-event.sh" apply "$state" native idle --current-gen --source pi-ext --event agent-end
+        printf '%s: awaiting external input or completed\n' "$mode" >> "$state/native.status"
+        prime_status_seen "$state" "$state/native.status"
+        ;;
+    esac
+    verdict=$(PATH="$fakebin:$PATH" FM_STATE_OVERRIDE="$state" FM_FAKE_TMUX_WINDOW="$window" \
+      FM_FAKE_TMUX_CAPTURE="$pane" FM_FAKE_TMUX_CURRENT_COMMAND=pi bash "$ROOT/bin/fm-crew-state.sh" native)
+    case "$mode:$verdict" in
+      'warming:state: unknown · source: pane · '*|'changed:state: unknown · source: pane · '* \
+        |'done:state: done · source: status-log · '*|'paused:state: paused · source: status-log · '*) ;;
+      *) reap "$pid"; fail "unexpected native-state transition: $mode: $verdict" ;;
+    esac
+    wait_poll_cycle "$state" "$pid" || { reap "$pid"; fail "missing state raised a premature recovery wake: $(cat "$out")"; }
+    case "$mode" in
+      done|paused)
+        reap "$pid"
+        [ ! -e "$state/.stale-since-$key" ] && [ ! -s "$state/.wake-queue" ] \
+          || fail "$mode retained recovery or raised an idle wake before stable captures"
+        continue
+        ;;
+    esac
+    [ "$(cat "$state/.stale-since-$key" 2>/dev/null)" = "$original" ] \
+      || { reap "$pid"; fail "$mode capture lost or restarted established execution proof"; }
+    printf '%s\n' "$(( $(date +%s) - 500 ))" > "$state/.stale-since-$key"
+    wait_for_exit "$pid" 150 || { reap "$pid"; fail "$mode worker with missing state never escalated"; }
+    grep -F 'possible wedge' "$out" >/dev/null || fail "$mode worker emitted no recovery alarm: $(cat "$out")"
+    [ "$(wedge_stale_wakes "$state" "$window")" -eq 1 ] || fail "$mode worker did not queue exactly one recovery alarm"
+  done
+  pass "busy-state loss preserves early recovery and redraws; completion and declared waits clear it"
+}
+
 test_established_timer_survives_inconclusive_state() {
   local mode dir state fakebin out pane verdict window key pid pr
   for mode in unknown failed malformed reclassify delivered escalated done paused unproven; do
@@ -6688,6 +6748,7 @@ test_idle_policy_regressions() {
   test_nonterminal_stale_provably_working_absorbed_then_escalated
   test_actionable_signal_surfaced
   test_pr_check_event_still_wakes
+  test_busy_timer_survives_missing_state_before_stability
   test_established_timer_survives_inconclusive_state
   test_worker_gate_retains_stuck_detection
   test_delivered_worker_gate_keeps_recovery
@@ -6871,6 +6932,7 @@ test_paused_worker_dead_endpoint_still_wakes
 
 test_pr_check_event_still_wakes
 
+test_busy_timer_survives_missing_state_before_stability
 test_established_timer_survives_inconclusive_state
 test_worker_gate_retains_stuck_detection
 test_delivered_worker_gate_keeps_recovery

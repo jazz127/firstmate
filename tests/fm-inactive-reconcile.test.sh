@@ -687,10 +687,19 @@ SH
 
 # Synthetic cleanup replay: registration validates a task-temp proof, cleanup
 # removes it, and the terminal report must still describe the landed task.
-evidence_cleanup_report_case() { # <case> <forge-state> <removal> <expected>
-  local key body task_tmp name=$1 forge_state=$2 removal=$3 expected=$4
+evidence_cleanup_report_case() { # <case> <forge-state> <removal> <expected> [override]
+  local key body task_tmp worktree common name=$1 forge_state=$2 removal=$3 expected=$4 override=${5:-}
   make_world "evidence-cleanup-$name"; bind_secondmate local
   write_child "$MATE" child 'done: PR https://github.com/owner/repo/pull/1 checks green'
+  worktree="$MATE/projects/child"
+  if [ -n "$override" ]; then
+    worktree="$WORLD/child-worktree"
+    git -C "$MATE/projects/child" worktree add -q -b fm/cleanup "$worktree" \
+      || fail 'could not create the disposable override worktree'
+    printf 'worktree=%s\n' "$worktree" >> "$MATE/state/child.meta"
+    common=$(cd "$MATE/projects/child/.git" && pwd -P)
+    printf '%s /home/ops/estate\n' "$common" > "$MATE/config/published-path-prefixes"
+  fi
   sed -i.bak 's#https://example.test/owner/repo/pull/1#https://github.com/owner/repo/pull/1#g' "$MATE/state/child.meta"
   rm -f "$MATE/state/child.meta.bak"
   task_tmp="$WORLD/tasktmp"
@@ -704,6 +713,9 @@ evidence-artifact: <task-output>/proof.txt
 evidence-command: synthetic fixture
 evidence-captured: 2026-09-29T00:00:00Z
 EOF
+  if [ -n "$override" ]; then
+    printf 'Host config: /home/ops/estate/config.toml.\n' >> "$body"
+  fi
   cat > "$WORLD/fakebin/gh" <<SH
 #!/usr/bin/env bash
 case "\$*" in
@@ -714,22 +726,27 @@ case "\$*" in
 esac
 SH
   chmod +x "$WORLD/fakebin/gh"
-  PATH="$WORLD/fakebin:$PATH" bash -c '
+  PATH="$WORLD/fakebin:$PATH" FM_HOME="$MATE" FM_CONFIG_OVERRIDE="$MATE/config" bash -c '
     . "$1/bin/fm-pr-lib.sh"
     . "$1/bin/fm-dod-lib.sh"
     fm_dod_validate_published_intent "$(cat "$2")" "$3" "$4" "" https://github.com/owner/repo/pull/1
-  ' _ "$ROOT" "$body" "$MATE/projects/child" "$task_tmp" \
+  ' _ "$ROOT" "$body" "$worktree" "$task_tmp" \
     || fail "synthetic registration evidence did not pass before cleanup"
   cp "$MATE/.fm-secondmate-parent" "$WORLD/parent-binding"
   printf 'schema=fm-secondmate-parent.v1\nroute=invalid\n' > "$MATE/.fm-secondmate-parent"
   run_report "$MATE" child || true
   [ "$(outcome_count "$MATE" pending)" = 1 ] || fail "synthetic task did not leave a pending outcome"
   case "$removal" in
-    roots) rm -rf "$task_tmp" "$MATE/projects/child" ;;
+    roots) rm -rf "$task_tmp" "$worktree" ;;
     tasktmp) rm -rf "$task_tmp" ;;
-    file) rm -f "$task_tmp/proof.txt"; rm -rf "$MATE/projects/child" ;;
-    metadata) rm -rf "$task_tmp" "$MATE/projects/child"; sed -i.bak '/^evidence-command:/d' "$body" ;;
+    file) rm -f "$task_tmp/proof.txt"; rm -rf "$worktree" ;;
+    metadata) rm -rf "$task_tmp" "$worktree"; sed -i.bak '/^evidence-command:/d' "$body" ;;
   esac
+  if [ "$override" = other-project ]; then
+    git -C "$MATE/projects" init -q other || fail 'could not create the unrelated override project'
+    common=$(cd "$MATE/projects/other/.git" && pwd -P)
+    printf '%s /home/ops/estate\n' "$common" > "$MATE/config/published-path-prefixes"
+  fi
   cp "$WORLD/parent-binding" "$MATE/.fm-secondmate-parent"
   # Keep the delivered-head record so the terminal event remains attributable.
   run_report "$MATE" child || fail "cleaned merged task was not reported"
@@ -753,6 +770,9 @@ test_merged_report_after_evidence_cleanup() {
   evidence_cleanup_report_case surviving-root MERGED file failed
   evidence_cleanup_report_case malformed MERGED metadata failed
   evidence_cleanup_report_case unavailable '' roots failed
+  evidence_cleanup_report_case override MERGED roots ok project
+  evidence_cleanup_report_case override-tasktmp MERGED tasktmp ok project
+  evidence_cleanup_report_case override-scope MERGED roots failed other-project
 }
 
 test_parent_report_bounds_published_read() {

@@ -313,6 +313,33 @@ test_portable_published_evidence() {
   pass 'published-intent merge guard resolves descriptors while private intent retains local paths'
 }
 
+test_published_overrides_survive_worktree_removal() {
+  local root repo wt other body common phase out
+  root="$TMP_ROOT/retired-overrides"
+  repo="$root/project"
+  wt="$root/worktree"
+  other="$root/other-project"
+  mkdir -p "$root/home/config" "$root/tmp"
+  fm_git_worktree "$repo" "$wt" fm/override
+  fm_git_init_commit "$other"
+  common=$(cd "$repo/.git" && pwd -P)
+  printf '%s /home/ops/estate\n' "$common" > "$root/home/config/published-path-prefixes"
+  body='Host config: /home/ops/estate/config.toml.'
+  FM_HOME="$root/home" fm_dod_validate_published_intent "$body" "$wt" "$root/tmp" '' '' publish "$other" \
+    || fail 'live worktree did not take precedence over the fallback project'
+  git -C "$repo" worktree remove "$wt" || fail 'could not remove the synthetic task worktree'
+  for phase in publish retired; do
+    FM_HOME="$root/home" fm_dod_validate_published_intent "$body" "$wt" "$root/tmp" '' '' "$phase" "$repo" \
+      || fail "project override was lost after worktree removal in $phase"
+    out=$(FM_HOME="$root/home" fm_dod_validate_published_intent "$body" "$wt" "$root/tmp" '' '' "$phase" "$other" 2>&1)
+    expect_code 1 "$?" "another project inherited a removed worktree override in $phase"
+    assert_contains "$out" 'worker-local absolute path' 'project mismatch refusal was unclear'
+    out=$(FM_HOME="$root/home" fm_dod_validate_published_intent "$body" "$wt" "$root/tmp" '' '' "$phase" 2>&1)
+    expect_code 1 "$?" "absent project inherited a removed worktree override in $phase"
+  done
+  pass 'published overrides retain their project scope after task worktree removal'
+}
+
 test_scenario_consistency_is_publication_only() {
   local root artifact intent out rc
   root="$TMP_ROOT/scenario-publication-only"
@@ -919,6 +946,7 @@ test_scout_done_is_not_gated
 test_evidence_claim_requires_provenance
 test_evidence_claim_enforces_mechanical_provenance
 test_portable_published_evidence
+test_published_overrides_survive_worktree_removal
 
 test_scenario_consistency_is_publication_only
 test_scenario_count_agreeing_with_any_complete_table_is_accepted

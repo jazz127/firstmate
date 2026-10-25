@@ -191,7 +191,7 @@ fi
 MODE=$(grep '^mode=' "$META" | tail -1 | cut -d= -f2- || true)
 PROJECT=$(grep '^project=' "$META" | tail -1 | cut -d= -f2- || true)
 TASK_TMP=$(grep '^tasktmp=' "$META" | tail -1 | cut -d= -f2- || true)
-if ! fm_dod_validate_published_intent "$PR_BODY" "$WT" "$TASK_TMP" "$PR_HEAD" "$URL"; then
+if ! fm_dod_validate_published_intent "$PR_BODY" "$WT" "$TASK_TMP" "$PR_HEAD" "$URL" publish "$PROJECT"; then
   echo "error: published intent validation failed" >&2
   exit 1
 fi

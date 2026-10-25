@@ -367,6 +367,54 @@ expect_code 1 "$?" 'raw command path passed without a claim'
 assert_contains "$output" 'worker-local absolute path' 'raw command refusal was unclear'
 pass 'portable artifacts resolve to readable worktree/task files and commands cannot leak raw paths'
 
+for portable in fixtures/home/proof.txt fixtures/Users/proof.txt fixtures/tmp/fm-task/proof.txt \
+  fixtures/private/tmp/fm-task/proof.txt fixtures/srv/firstmate/proof.txt \
+  ./fixtures/home/proof.txt; do
+  mkdir -p "$worktree/$(dirname "$portable")"
+  printf '%s\n' 'synthetic fixture output' > "$worktree/$portable"
+  cat > "$draft" <<EOF
+Synthetic output: $portable.
+External validation passed.
+evidence-artifact: $portable
+evidence-command: cat '$portable'
+evidence-captured: 2026-09-25T10:00:00+10:00
+EOF
+  output=$(FM_HOME=/srv/firstmate preflight) || fail "relative path was misclassified: $portable: $output"
+  assert_equals 'evidence preflight ok' "$output" 'relative artifact, command and prose did not pass'
+done
+pass 'relative paths containing worker-root names stay repository-relative in every body field'
+
+mkdir -p "$task_tmp/home" "$task_tmp/tmp/fm-fixture"
+printf '%s\n' 'synthetic fixture output' > "$task_tmp/home/proof.txt"
+printf '%s\n' 'synthetic fixture output' > "$task_tmp/tmp/fm-fixture/proof.txt"
+for portable in '<task-output>/home/proof.txt' '<task-output>/tmp/fm-fixture/proof.txt' \
+  '<firstmate-home>/task-temp/home/proof.txt'; do
+  cat > "$draft" <<EOF
+Synthetic output: $portable.
+External validation passed.
+evidence-artifact: $portable
+evidence-command: cat '$portable'
+evidence-captured: 2026-09-25T10:00:00+10:00
+EOF
+  output=$(FM_HOME="$TMP_ROOT" preflight) || fail "descriptor suffix was misclassified: $portable: $output"
+done
+pass 'descriptor suffixes containing worker-root names stay portable in every body field'
+
+for raw in /srv/firstmate /srv/worktree /srv/task-output /srv/user-home; do
+  for suffix in '' . '!' '?' : , ';' ')' ']' '}'; do
+    for field in 'Synthetic output' evidence-artifact evidence-command; do
+      printf '%s: %s%s\n' "$field" "$raw" "$suffix" > "$draft"
+      output=$(HOME=/srv/user-home FM_HOME=/srv/firstmate "$ROOT/bin/fm-pr-body-preflight.sh" \
+        "$draft" /srv/worktree /srv/task-output 2>&1)
+      expect_code 1 "$?" "punctuated worker root passed: $field: $raw$suffix"
+      assert_contains "$output" 'worker-local absolute path' 'punctuated root refusal was unclear'
+    done
+  done
+done
+printf '%s\n' 'Synthetic output: /srv/firstmate-other.' > "$draft"
+output=$(FM_HOME=/srv/firstmate preflight) || fail "custom home matched an unrelated path: $output"
+pass 'custom roots are refused before punctuation with consistent prose, artifact and command boundaries'
+
 for portable in '<task-output>/../outside/evidence.txt' '<firstmate-home>/outside/evidence.txt' \
   '<task-output>/missing.txt' '<unknown>/proof.txt' '<task-output>/escape.txt' '<task-output>/nested/evidence.txt'; do
   ln -sf "$outside/evidence.txt" "$task_tmp/escape.txt"

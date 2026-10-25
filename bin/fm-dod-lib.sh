@@ -380,8 +380,8 @@ fm_dod_resolve_evidence_path() {  # <published-path> <worktree> <task-temp>
 # config/published-path-prefixes is private and project-scoped by canonical Git
 # common directory, so isolated worktrees share the same entry without relying
 # on task names or remote URLs. docs/configuration.md owns the file format.
-fm_dod_allowed_path_prefixes() {  # <worktree>
-  local home config common project prefix rest
+fm_dod_allowed_path_prefixes() {  # <worktree> [project]
+  local home config common project prefix rest lookup
   local -a row_prefixes
   home=$(fm_dod_evidence_home) || return 1
   config=${FM_CONFIG_OVERRIDE:-$home/config}/published-path-prefixes
@@ -389,11 +389,14 @@ fm_dod_allowed_path_prefixes() {  # <worktree>
   [ -f "$config" ] && [ -r "$config" ] || {
     printf 'publication refused: unreadable override: %s\n' "$config" >&2; return 1;
   }
-  common=$(git -C "$1" rev-parse --git-common-dir 2>/dev/null) || common=
-  case "$common" in /*) ;; '') ;; *) common=$1/$common ;; esac
-  if [ -n "$common" ]; then
-    common=$(cd -P "$common" 2>/dev/null && pwd -P) || common=
-  fi
+  common=
+  for lookup in "$1" "${2:-}"; do
+    [ -n "$lookup" ] || continue
+    common=$(git -C "$lookup" rev-parse --git-common-dir 2>/dev/null) || { common=; continue; }
+    case "$common" in /*) ;; *) common=$lookup/$common ;; esac
+    common=$(cd -P "$common" 2>/dev/null && pwd -P) && break
+    common=
+  done
   while read -r project rest || [ -n "$project$rest" ]; do
     case "$project" in ''|'#'*) continue ;; esac
     [ -n "$rest" ] || { printf 'publication refused: invalid override row in %s\n' "$config" >&2; return 1; }
@@ -416,32 +419,29 @@ EOF
 # Check commands and prose even without an evidence claim. Known roots catch
 # nonstandard home/worktree layouts; generic patterns catch other workers.
 # Task scratch paths cannot be allowed by the home-path override.
-fm_dod_refuse_worker_paths() {  # <published-text> <worktree> <task-temp>
+fm_dod_refuse_worker_paths() {  # <published-text> <worktree> <task-temp> [project]
   local home paths path prefixes prefix normalized allowed
   home=$(fm_dod_evidence_home) || return 1
-  prefixes=$(fm_dod_allowed_path_prefixes "$2") || return 1
+  prefixes=$(fm_dod_allowed_path_prefixes "$2" "${4:-}") || return 1
   paths=$(awk -v home="$home" -v worktree="$2" -v task="$3" -v user_home="${HOME:-}" '
-    function emit(scan, path) {
-      if (match(scan, /^[^[:space:]<>`"()|,;\047]+/)) {
-        path = substr(scan, 1, RLENGTH)
-        sub(/[]}]+$/, "", path)
-        print path
-      }
-    }
     {
-      scan = $0
-      while (match(scan, /\/(private\/)?tmp\/fm-|\/(home|Users)\//)) {
-        emit(substr(scan, RSTART))
-        scan = substr(scan, RSTART + RLENGTH)
-      }
       roots[1] = home; roots[2] = worktree; roots[3] = task; roots[4] = user_home
-      for (i = 1; i <= 4; i++) {
-        if (roots[i] !~ /^\// || roots[i] == "/") continue
-        scan = $0
-        while ((pos = index(scan, roots[i])) > 0) {
-          tail = substr(scan, pos + length(roots[i]), 1)
-          if (tail == "/" || tail == "" || tail ~ /[[:space:]<>`"()|,;\047]/) emit(substr(scan, pos))
-          scan = substr(scan, pos + length(roots[i]))
+      scan = $0
+      gsub(/<(task-output|firstmate-home)>/, "fmportable", scan)
+      while (match(scan, /[^][[:space:]<>`"()|,;\047{}=]+/)) {
+        path = substr(scan, RSTART, RLENGTH)
+        scan = substr(scan, RSTART + RLENGTH)
+        sub(/[.!?:]+$/, "", path)
+        if (path ~ /^\// && path ~ /\/(private\/)?tmp\/fm-|\/(home|Users)\//) {
+          print path
+          continue
+        }
+        for (i = 1; i <= 4; i++) {
+          if (roots[i] !~ /^\// || roots[i] == "/") continue
+          if (path == roots[i] || index(path, roots[i] "/") == 1) {
+            print path
+            break
+          }
         }
       }
     }
@@ -578,7 +578,7 @@ fm_dod_validate_scenario_consistency() {  # <complete-pr-body>
   '
 }
 
-fm_dod_validate_intent_evidence() {  # <intent> <worktree> <task-temp> [preflight|publish|retired]
+fm_dod_validate_intent_evidence() {  # <intent> <worktree> <task-temp> [preflight|publish|retired] [project]
   local intent=$1 worktree=$2 task_temp=$3 phase=${4:-preflight}
   local line previous_line='' previous_previous_line='' candidate detector_candidate detector_input artifact command captured claim=0 normalized_artifact normalized_root resolved_artifact link_target symlink_hops
   # Mark whole-word qualifiers before applying the current house detection paths.
@@ -588,7 +588,7 @@ fm_dod_validate_intent_evidence() {  # <intent> <worktree> <task-temp> [prefligh
   local artifact_count=0 command_count=0 captured_count=0
   if [ "$phase" != preflight ]; then
     fm_dod_validate_scenario_consistency "$intent" || return 1
-    fm_dod_refuse_worker_paths "$intent" "$worktree" "$task_temp" || return 1
+    fm_dod_refuse_worker_paths "$intent" "$worktree" "$task_temp" "${5:-}" || return 1
   fi
   detector_input=$(printf '%s\n' "$intent" | tr '.!?;' '\n' | sed -E 's/,[[:space:]]+(but|however|yet)[[:space:]]+/\n/g')
   while IFS= read -r line; do
@@ -787,11 +787,11 @@ EOF
   return 0
 }
 
-fm_dod_validate_published_intent() {  # <intent> <worktree> <task-temp> [current-head] [pr-url] [publish|retired]
+fm_dod_validate_published_intent() {  # <intent> <worktree> <task-temp> [current-head] [pr-url] [publish|retired] [project]
   local body=$1 current_head=${4:-} url=${5:-} line payload attested_head count=0
   # retired is for reconciliation after a forge-confirmed merge only.
   case "${6:-publish}" in publish|retired) ;; *) return 1 ;; esac
-  fm_dod_validate_intent_evidence "$body" "$2" "$3" "${6:-publish}" || return 1
+  fm_dod_validate_intent_evidence "$body" "$2" "$3" "${6:-publish}" "${7:-}" || return 1
   [ -z "$url" ] || fm_pr_refuse_published_scratch "$url" || return 1
   while IFS= read -r line || [ -n "$line" ]; do
     case "$line" in

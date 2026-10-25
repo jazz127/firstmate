@@ -365,7 +365,7 @@ published_pr_validation_failed() { # <pr> <meta>
       FM_HOME="$FM_HOME" FM_STATE_OVERRIDE="$STATE" \
       bash -c '
         set -u
-        script_dir=$1 pr=$2 wt=$3 task_tmp=$4
+        script_dir=$1 pr=$2 wt=$3 task_tmp=$4 project=$5
         . "$script_dir/fm-pr-lib.sh"
         . "$script_dir/fm-dod-lib.sh"
         body=$(fm_pr_read_published_body "$pr") || exit 1
@@ -381,9 +381,9 @@ published_pr_validation_failed() { # <pr> <meta>
             gerrit) fm_pr_gerrit_read_record "$FM_PR_HOST" "$FM_PR_NUMBER" ;;
           esac && [ "$FM_PR_RECORD_MERGED" = true ] && phase=retired
         fi
-        fm_dod_validate_published_intent "$body" "$wt" "$task_tmp" "" "$pr" "$phase"
+        fm_dod_validate_published_intent "$body" "$wt" "$task_tmp" "" "$pr" "$phase" "$project"
       ' _ "$SCRIPT_DIR" "$FM_PR_URL" "$(meta_field "$meta" worktree)" \
-      "$(meta_field "$meta" tasktmp)" > /dev/null
+      "$(meta_field "$meta" tasktmp)" "$(meta_field "$meta" project)" > /dev/null
   } 2>&1
 }
 

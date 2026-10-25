@@ -368,9 +368,10 @@ assert_contains "$output" 'worker-local absolute path' 'raw command refusal was 
 pass 'portable artifacts resolve to readable worktree/task files and commands cannot leak raw paths'
 
 for portable in fixtures/home/proof.txt fixtures/Users/proof.txt fixtures/tmp/fm-task/proof.txt \
+  fixtures_/home/firstmate/proof.txt \
   fixtures/private/tmp/fm-task/proof.txt fixtures/srv/firstmate/proof.txt \
-  ./fixtures/home/proof.txt _/home/proof.txt '**/home/proof.txt' \
-  '*/home/proof.txt' '__/home/proof.txt' '~~/home/proof.txt'; do
+  ./fixtures/home/proof.txt _/fixtures/home/proof.txt '**/fixtures/home/proof.txt' \
+  '*/fixtures/home/proof.txt' '__/fixtures/home/proof.txt' '~~/fixtures/home/proof.txt'; do
   mkdir -p "$worktree/$(dirname "$portable")"
   printf '%s\n' 'synthetic fixture output' > "$worktree/$portable"
   cat > "$draft" <<EOF
@@ -402,7 +403,7 @@ EOF
 done
 pass 'descriptor suffixes containing worker-root names stay portable in every body field'
 
-for raw in /srv/firstmate /srv/worktree /srv/task-output /srv/user-home; do
+for raw in /srv/firstmate /srv/worktree /srv/task-output /srv/user-home /home/firstmate /Users/worker; do
   for suffix in '' . '!' '?' : , ';' ')' ']' '}'; do
     for field in 'Synthetic output' evidence-artifact evidence-command; do
       printf '%s: %s%s\n' "$field" "$raw" "$suffix" > "$draft"
@@ -426,6 +427,8 @@ for raw in '**/tmp/fm-task/proof.txt**' '_/home/firstmate/proof.txt_' \
   'tar -czf/tmp/fm-task/proof.tgz result.json' \
   'cc -isystem/home/firstmate/include main.c' \
   'cat /srv/Firstmate\ Home/proof.txt' 'file:///srv/Firstmate%20Home/proof.txt' \
+  '**/home/firstmate/**' '**/tmp/fm-task/**' "rg -g '**/srv/Firstmate Home/**'" \
+  'file:///%68ome/firstmate/config' \
   'evidence-artifact:/tmp/fm-task/proof.txt'; do
   for field in 'Synthetic output' evidence-artifact evidence-command; do
     printf '%s: %s\n' "$field" "$raw" > "$draft"
@@ -438,11 +441,13 @@ done
 pass 'normalization refuses earlier worker-path bypasses across prose and evidence fields'
 
 for command in "rg --files -g '**/home/**'" "rg --files -g '**/Users/**'" \
-  "rg --files -g '**/tmp/fm-*/**'" "rg --files -g '**/srv/Firstmate Home/**'" \
+  "rg --files -g '**/tmp/fm-*/**'" \
   '`rg --files -g **/home/**`' 'cat fixtures/home/firstmate/proof.txt' \
   'cc -Ifixtures/home -L./fixtures/Users' \
   'cat <task-output>/home/proof.txt <firstmate-home>/tmp/fm-task/proof.txt' \
-  'cat https://example.test/home/firstmate/proof.txt'; do
+  'cat https://example.test/home/firstmate/proof.txt' \
+  'cat %2Fhome%2Ffirstmate/config' 'cat file:///%2568ome/firstmate/config' \
+  'cat /srv/Firstmate%20Home/config' 'cat file:///srv/Firstmate%2520Home/config'; do
   cat > "$draft" <<EOF
 External validation passed.
 evidence-artifact: evidence.txt
@@ -452,7 +457,7 @@ EOF
   output=$(FM_HOME='/srv/Firstmate Home/' preflight) || fail "portable reference was refused: $command: $output"
   assert_equals 'evidence preflight ok' "$output" 'portable command did not pass'
 done
-pass 'normalization accepts relative globs, paths, code spans, descriptors and public URLs'
+pass 'normalization accepts portable references and decodes percent escapes only once in file URLs'
 
 for portable in '<task-output>/../outside/evidence.txt' '<firstmate-home>/outside/evidence.txt' \
   '<task-output>/missing.txt' '<unknown>/proof.txt' '<task-output>/escape.txt' '<task-output>/nested/evidence.txt'; do
@@ -488,11 +493,12 @@ policy_preflight() {
 printf '%s\n' 'Host config: /home/ops/estate/config.toml' > "$draft"
 output=$(policy_preflight)
 expect_code 1 "$?" 'absent override allowed a home path'
-printf '%s %s %s' "$common" /home/ops/host-config /home/ops/estate > "$policy_home/config/published-path-prefixes"
+printf '%s %s %s %s' "$common" /home/ops/host-config /home/ops/estate /home/ops/host_config > "$policy_home/config/published-path-prefixes"
 for raw in '/home/ops/estate/config.toml' '/home/ops/host-config' "'/home/ops/estate'" \
   'file:///home/ops/estate/config.toml' '-I/home/ops/estate/include' \
   'paths:/home/ops/estate:/home/ops/host-config' \
-  '**/home/ops/estate/config.toml**' '_/home/ops/host-config_' '@/home/ops/estate/config' \
+  '**/home/ops/estate/config.toml**' '_/home/ops/host-config/config_' '@/home/ops/estate/config' \
+  '/home/ops/host_config' '/home/ops/host_config/private' 'file:///home/ops/host%5fconfig/private' \
   '"/home/ops/estate/config file"'; do
   printf 'Host config: %s\n' "$raw" > "$draft"
   output=$(policy_preflight) || fail "allowed host prefix refused: $raw: $output"
@@ -500,7 +506,9 @@ done
 for raw in '/home/ops/estate-other/config.toml' '/home/ops/estate/../secret' \
   '/home/ops/unlisted' '/tmp/fm-other/proof.txt' '/home/ops/estate/tmp/fm-other/proof.txt' \
   'file:///home/ops/unlisted' '-I/home/ops/unlisted' \
-  'paths:/home/ops/estate/config:/home/ops/unlisted' '"/home/ops/estate other/config"'; do
+  'paths:/home/ops/estate/config:/home/ops/unlisted' '"/home/ops/estate other/config"' \
+  '/home/ops/hostconfig/private' '/home/ops/host_config_other/private' \
+  'file:///home/ops/hostconfig/private'; do
   printf 'Host config: %s\n' "$raw" > "$draft"
   output=$(policy_preflight)
   expect_code 1 "$?" "override allowed an unapproved path: $raw"

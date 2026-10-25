@@ -420,17 +420,25 @@ fm_dod_normalize_published_text() {
   awk '
     { text = text $0 "\n" }
     END {
-      while (match(text, /%[[:xdigit:]][[:xdigit:]]/)) {
-        code = substr(text, RSTART + 1, 2)
-        byte = 16 * (index("0123456789abcdef", tolower(substr(code, 1, 1))) - 1) + index("0123456789abcdef", tolower(substr(code, 2, 1))) - 1
-        text = substr(text, 1, RSTART - 1) sprintf("%c", byte) substr(text, RSTART + 3)
+      while (match(text, /[Ff][Ii][Ll][Ee]:[^[:space:]<>`"()|,;\047{}]+/)) {
+        start = RSTART; extent = RLENGTH
+        url = substr(text, start, extent)
+        sub(/^[Ff][Ii][Ll][Ee]:/, "", url)
+        sub(/^\/\/[^\/]*/, "", url)
+        decoded = ""
+        while (match(url, /%[[:xdigit:]][[:xdigit:]]/)) {
+          code = substr(url, RSTART + 1, 2)
+          byte = 16 * (index("0123456789abcdef", tolower(substr(code, 1, 1))) - 1) + index("0123456789abcdef", tolower(substr(code, 2, 1))) - 1
+          decoded = decoded substr(url, 1, RSTART - 1) sprintf("%c", byte)
+          url = substr(url, RSTART + 3)
+        }
+        result = result substr(text, 1, start - 1) decoded url
+        text = substr(text, start + extent)
       }
+      text = result text
       gsub(/\\/, "", text)
-      gsub(/["\047]\*\*\/[^\n"\047]*\/[*?]+["\047]/, "fmrelative", text)
-      gsub(/\*\*\/[^[:space:]<>`"()|,;\047{}=]*\/[*?]+/, "fmrelative", text)
       gsub(/<(task-output|firstmate-home)>/, "fmportable", text)
-      gsub(/[*_`~]/, "", text)
-      gsub(/[Ff][Ii][Ll][Ee]:\/\/[^\/[:space:]]*/, "", text)
+      gsub(/[*`~]/, "", text)
       printf "%s", text
     }
   ' <<EOF
@@ -447,18 +455,16 @@ fm_dod_refuse_worker_paths() {  # <published-text> <worktree> <task-temp> [proje
   home=$(fm_dod_evidence_home) || return 1
   prefixes=$(fm_dod_allowed_path_prefixes "$2" "${4:-}") || return 1
   text=$(fm_dod_normalize_published_text "$1") || return 1
-  task_root=$(fm_dod_normalize_published_text "$task_root") || return 1
   case "$task_root" in /*) task_root=$(fm_dod_path_normalize "$task_root") || return 1 ;; esac
   for root in "$home" "$2" "$task_root" "${HOME:-}"; do
     case "$root" in /*) ;; *) continue ;; esac
-    root=$(fm_dod_normalize_published_text "$root") || return 1
     root=$(fm_dod_path_normalize "$root") || return 1
     [ "$root" != / ] && roots+=("$root")
   done
   paths=$(FM_DOD_KNOWN_ROOTS="$(printf '%s\n' "${roots[@]:-}")" awk '
     function emit(text, start, extent, prefix, tail, path, rest, root, quote, finish) {
       prefix = substr(text, 1, start - 1)
-      if (prefix !~ /(^|[][[:space:]<>`"()|,;\047{}=:@])(-+[[:alnum:]-]+)?$/) return
+      if (prefix !~ /(^|[][[:space:]<>`"()|,;\047{}=:@])(_+|-+[[:alnum:]-]+)?$/) return
       tail = substr(text, start + extent, 1)
       path = substr(text, start, extent)
       root = path
@@ -476,7 +482,7 @@ fm_dod_refuse_worker_paths() {  # <published-text> <worktree> <task-temp> [proje
     BEGIN { count = split(ENVIRON["FM_DOD_KNOWN_ROOTS"], roots, "\n") }
     {
       scan = $0
-      while (match(scan, /\/(private\/)?tmp\/fm-[[:alnum:].-]+\/?|\/(home|Users)\/[[:alnum:].-]+\//)) {
+      while (match(scan, /\/(private\/)?tmp\/fm-[[:alnum:]_.-]+\/?|\/(home|Users)\/[[:alnum:]_.-]+\/?/)) {
         start = RSTART; extent = RLENGTH
         emit(scan, start, extent)
         scan = substr(scan, start + extent)
@@ -504,7 +510,6 @@ EOF
         *)
           while IFS= read -r prefix; do
             [ -n "$prefix" ] || continue
-            prefix=$(fm_dod_normalize_published_text "$prefix") || return 1
             prefix=$(fm_dod_path_normalize "$prefix") || return 1
             case "$normalized" in "$prefix"|"$prefix"/*) allowed=1; break ;; esac
           done <<EOF

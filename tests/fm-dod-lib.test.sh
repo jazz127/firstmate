@@ -358,17 +358,22 @@ test_published_path_normalization() {
       'tar -czf/tmp/fm-task/proof.tgz result.json' \
       'cc -isystem/home/firstmate/include main.c' \
       'cat /srv/Firstmate\ Home/proof.txt' 'file:///srv/Firstmate%20Home/proof.txt' \
-      'cat /srv/User_Home/config'; do
+      'cat /srv/User_Home/config' '**/home/firstmate/**' '**/tmp/fm-task/**' \
+      "rg --files -g '**/srv/Firstmate Home/**'" 'file:///%68ome/firstmate/config' \
+      'Worker home: /home/firstmate' 'Worker home: /Users/worker'; do
       out=$(HOME=/srv/User_Home/ FM_HOME='/srv/Firstmate Home/' fm_dod_validate_published_intent "$body
 Synthetic output: $text" "$root/worker copy" "$root/task output" '' '' "$phase" 2>&1)
       expect_code 1 "$?" "normalized worker path passed in $phase: $text"
       assert_contains "$out" 'worker-local absolute path' 'normalized path refusal was unclear'
     done
     for text in 'rg --files -g **/home/**' 'rg --files -g **/Users/**' \
-      'rg --files -g **/tmp/fm-*/**' "rg --files -g '**/srv/Firstmate Home/**'" \
+      'rg --files -g **/tmp/fm-*/**' \
       '`rg --files -g **/home/**`' 'cat fixtures/home/firstmate/proof.txt' \
+      'cat fixtures_/home/firstmate/proof.txt' \
       'cat <task-output>/tmp/fm-task/proof.txt' 'cat <firstmate-home>/home/proof.txt' \
-      'cat /srv/Firstmate Home.backup/proof.txt' 'cat fixtures/srv/Firstmate Home/config'; do
+      'cat /srv/Firstmate Home.backup/proof.txt' 'cat fixtures/srv/Firstmate Home/config' \
+      '%2Fhome%2Ffirstmate/config' 'file:///%2568ome/firstmate/config' \
+      '/srv/Firstmate%20Home/config' 'file:///srv/Firstmate%2520Home/config'; do
       HOME=/srv/User_Home/ FM_HOME='/srv/Firstmate Home/' fm_dod_validate_published_intent "$body
 Synthetic output: $text" "$root/worker copy" "$root/task output" '' '' "$phase" \
         || fail "portable path refused in $phase: $text"
@@ -387,12 +392,16 @@ test_published_overrides_survive_worktree_removal() {
   fm_git_worktree "$repo" "$wt" fm/override
   fm_git_init_commit "$other"
   common=$(cd "$repo/.git" && pwd -P)
-  printf '%s /home/ops/estate\n' "$common" > "$root/home/config/published-path-prefixes"
+  printf '%s /home/ops/estate /home/ops/host_config\n' "$common" > "$root/home/config/published-path-prefixes"
   body='Host config: /home/ops/estate/config.toml.'
   FM_HOME="$root/home" fm_dod_validate_published_intent "$body" "$wt" "$root/tmp" '' '' publish "$other" \
     || fail 'live worktree did not take precedence over the fallback project'
   git -C "$repo" worktree remove "$wt" || fail 'could not remove the synthetic task worktree'
   for phase in publish retired; do
+    FM_HOME="$root/home" fm_dod_validate_published_intent 'Host config: /home/ops/host_config/private' "$wt" "$root/tmp" '' '' "$phase" "$repo" \
+      || fail "exact underscore prefix was refused in $phase"
+    out=$(FM_HOME="$root/home" fm_dod_validate_published_intent 'Host config: /home/ops/hostconfig/private' "$wt" "$root/tmp" '' '' "$phase" "$repo" 2>&1)
+    expect_code 1 "$?" "override collapsed distinct underscore paths in $phase"
     FM_HOME="$root/home" fm_dod_validate_published_intent "$body" "$wt" "$root/tmp" '' '' "$phase" "$repo" \
       || fail "project override was lost after worktree removal in $phase"
     out=$(FM_HOME="$root/home" fm_dod_validate_published_intent "$body" "$wt" "$root/tmp" '' '' "$phase" "$other" 2>&1)

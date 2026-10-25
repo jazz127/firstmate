@@ -1,0 +1,9 @@
+{
+  ".wedge-escalations-primary_fm-worker": "1\n",
+  ".watch-triage.log": "[2026-10-26T01:15:32+1000] absorbed busy (no completed turn) timer reset: primary:fm-worker\n",
+  ".count-primary_fm-worker": "1\n",
+  "worker.busy-state": "v1 gen=g1792941324.262.386 seq=4 state=busy source=claude-hook event=UserPromptSubmit ts=1792941328\n",
+  "worker.busy-gen": "g1792941324.262.386\n",
+  "worker.meta": "window=primary:fm-worker\nbackend=tmux\nkind=ship\nharness=claude\nspawn_gen=lab-one\nworktree=~/.no-mistakes/worktrees/119cd7a6b9a4/01M5SM9R5JFPRS1AS5R994DY0S/.l/projects/worker\n",
+  ".hash-primary_fm-worker": "8c72cf0b49a4c394eb0c853879a4930f"
+}

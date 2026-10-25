@@ -1,0 +1,2 @@
+All seven live drivers exited 0. All three focused regression commands exited 0.
+No processes reference the disposable lab paths; .l, .d, .c and .test-tmp removed.

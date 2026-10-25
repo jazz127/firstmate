@@ -1,0 +1,20 @@
+CLI: claude -p --input-format stream-json --output-format stream-json --verbose --no-session-persistence --setting-sources '' --settings ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5SM9R5JFPRS1AS5R994DY0S/.d/claude-settings.json --strict-mcp-config --mcp-config '{"mcpServers":{}}' --system-prompt 'You are a disposable watcher validation endpoint. Only repeat the requested token. No tools or file actions.' --tools '' --disable-slash-commands
+Version: 2.1.304 (Claude Code)
+Private grid: 120x40
+Actual Claude upstream turn completed: LAB_READY_ONE
+Actual Claude process frozen during a genuine UserPromptSubmit turn; v1 gen=g1792942573.39392.24302 seq=4 state=busy source=claude-hook event=UserPromptSubmit ts=1792942577
+Frozen endpoint probe: alive
+Execution proof: state: working · source: pane · harness busy (claude-hook)
+Real daemon established persistence marker from queued stale event: 1792942580
+After busy-state loss: state: unknown · source: pane · harness state unavailable (unknown missing)
+Daemon retained and matured persistence: stale persisted 6s (possible wedge): primary:fm-worker
+Daemon reaped: exit=0 ●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no live watcher process holds this home lock (last beat: 1s ago).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  After draining queued wakes, repair missing watcher supervision according to the session-start block for this harness; do not use shell &.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+WARNING: queued wakes pending - drain them with bin/fm-wake-drain.sh before anything else.
+LIVE DAEMON UNCERTAIN-STATE CHECK PASSED
+Private tmux server stopped and disposable lab removed

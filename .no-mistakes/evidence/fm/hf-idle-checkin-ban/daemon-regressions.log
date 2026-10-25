@@ -1,0 +1,11 @@
+ok - daemon pause housekeeping applies the same ordinary-worker ban and secondmate opt-in
+ok - daemon preserves established tracking through uncertain reads while completion, declared waits and unproven idle remain silent
+ok - daemon preserves worker-gate persistence while silencing declared waits
+ok - daemon retires legacy ordinary idle timers without an execution proof
+ok - daemon escalates endpoint loss even for a paused ordinary worker
+ok - an elapsed declared deadline cannot absorb a watcher frozen-run event
+ok - persistent stale escalates after threshold and clears its marker
+ok - housekeeping re-surfaces a stale declared pause on the long cadence and resets its window
+ok - housekeeping re-surfaces a forgotten captain hold on the long cadence and resets its window
+ok - housekeeping matures a busy pane's declared-wait window into exactly one recheck per window
+ok - housekeeping bounds a distant declared time, defers to a near one, and rechecks a passed one at once

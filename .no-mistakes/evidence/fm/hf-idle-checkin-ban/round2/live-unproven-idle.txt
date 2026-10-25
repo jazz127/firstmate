@@ -1,0 +1,9 @@
+CLI: claude -p --input-format stream-json --output-format stream-json --verbose --no-session-persistence --setting-sources '' --settings ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5SM9R5JFPRS1AS5R994DY0S/.l/claude-settings.json --strict-mcp-config --mcp-config '{"mcpServers":{}}' --system-prompt 'You are a disposable watcher validation endpoint. Only repeat the requested token. No tools or file actions.' --tools '' --disable-slash-commands
+Version: 2.1.304 (Claude Code)
+Private grid: 120x40
+Actual Claude upstream turn completed: LAB_READY_ONE
+Real current state without execution proof: state: unknown · source: pane · harness state unavailable (unknown missing)
+unproven-unknown-state: no wake across 5 beacon timestamps; pause cadence=2s, endpoint interval=3s
+Watcher reaped: exit=-15
+LIVE UNPROVEN IDLE CHECK PASSED: no timer or wake from unknown state alone
+Private tmux server stopped and disposable lab removed

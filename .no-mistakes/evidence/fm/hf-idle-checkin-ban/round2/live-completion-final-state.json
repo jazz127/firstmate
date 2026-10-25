@@ -1,0 +1,9 @@
+{
+  ".watch-triage.log": "[2026-10-26T01:38:48+1000] absorbed busy (no completed turn) timer reset: primary:fm-worker\n[2026-10-26T01:38:55+1000] absorbed stale (worker idle check-ins disabled): primary:fm-worker\n",
+  ".count-primary_fm-worker": "4\n",
+  "worker.busy-state": "v1 gen=g1792942724.88172.12866 seq=5 state=idle source=claude-hook event=Stop ts=1792942728\n",
+  "worker.busy-gen": "g1792942724.88172.12866\n",
+  "worker.meta": "window=primary:fm-worker\nbackend=tmux\nkind=ship\nharness=claude\nspawn_gen=lab-one\nworktree=~/.no-mistakes/worktrees/119cd7a6b9a4/01M5SM9R5JFPRS1AS5R994DY0S/.c/projects/worker\n",
+  ".stale-primary_fm-worker": "3692ac324dc88ceaab9cef13afbcfda7",
+  ".hash-primary_fm-worker": "3692ac324dc88ceaab9cef13afbcfda7"
+}

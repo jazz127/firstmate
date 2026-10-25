@@ -1,0 +1,3 @@
+[2026-10-26T01:33:39+1000] absorbed stale (worker idle check-ins disabled): primary:fm-worker
+[2026-10-26T01:33:43+1000] absorbed stale (worker idle check-ins disabled): primary:fm-worker
+[2026-10-26T01:33:49+1000] absorbed benign signal: ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5SM9R5JFPRS1AS5R994DY0S/.l/state/worker.turn-ended

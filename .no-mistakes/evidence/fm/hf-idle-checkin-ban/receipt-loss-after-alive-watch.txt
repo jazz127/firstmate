@@ -1,0 +1,1 @@
+stale: primary:fm-worker (idle 0s, agent missing - the recorded endpoint is gone, so this is not a wedge; reported once and not re-escalated while it stays that way - reconcile this record, and check for unlanded work before any cleanup)

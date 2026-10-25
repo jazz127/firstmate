@@ -1,0 +1,5 @@
+[2026-10-26T01:36:17+1000] daemon starting (pid 43994); target=primary:fm-worker; target_source=FM_SUPERVISOR_TARGET; backend=tmux; backend_source=FM_SUPERVISOR_BACKEND; afk=off; inject_skip='heartbeat'; stale_escalate=6s; batch=999999s
+[2026-10-26T01:36:19+1000] wake: check: rearm-resurface
+[2026-10-26T01:36:20+1000] self-handle: stale: primary:fm-worker -> transient stale (primary:fm-worker): working: awaiting actual Claude model response
+[2026-10-26T01:36:27+1000] inject deferred: afk inactive
+[2026-10-26T01:36:27+1000] daemon shutting down

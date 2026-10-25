@@ -1,0 +1,1 @@
+signal: ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5SM9R5JFPRS1AS5R994DY0S/.l/state/worker.status

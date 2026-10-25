@@ -1,0 +1,13 @@
+synthetic idle policy: cases=9 cases_with_idle_wakes=0
+ok - ships and scouts stay silent across expired waits, completion, away mode and repeated pane changes
+ok - secondmate check-ins require an exact ID in this home's opt-in file
+ok - endpoint loss still wakes for a paused scout even when capture fails
+ok - provably-working non-terminal stale is absorbed on first sight, then wedge-escalated past the threshold
+ok - captain-relevant signal is surfaced (queue + exit) and marked surfaced
+ok - authenticated PR/check output still queues and wakes firstmate
+ok - inconclusive reads preserve established recovery without creating idle timers; completion and declared waits clear it
+ok - silent workers at pipeline gates keep first-sighting and inherited timers; declared waits stay silent
+ok - current pipeline gates outrank prior PR delivery across initial, inherited, cached and busy paths
+ok - uncertain probes preserve death receipts; proven liveness and replacement rearm reporting
+ok - spawn generations suppress repeated deaths across shell redraws and rearm replacement deaths
+ok - completed and declared-paused runs cannot inherit an active phase's wedge alarm

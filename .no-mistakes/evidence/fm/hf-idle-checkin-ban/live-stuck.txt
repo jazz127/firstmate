@@ -1,0 +1,12 @@
+CLI: claude -p --input-format stream-json --output-format stream-json --verbose --no-session-persistence --setting-sources '' --settings ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5SM9R5JFPRS1AS5R994DY0S/.l/claude-settings.json --strict-mcp-config --mcp-config '{"mcpServers":{}}' --system-prompt 'You are a disposable watcher validation endpoint. Only repeat the requested token. No tools or file actions.' --tools '' --disable-slash-commands
+Version: 2.1.304 (Claude Code)
+Private grid: 120x40
+Actual Claude upstream turn completed: LAB_READY_ONE
+Actual Claude process frozen during a genuine UserPromptSubmit turn; v1 gen=g1792941259.45775.4641 seq=4 state=busy source=claude-hook event=UserPromptSubmit ts=1792941261
+Frozen endpoint probe: alive
+Execution proof: state: working · source: pane · harness busy (claude-hook)
+Watcher established its own stuck timer: 1792941263
+After state record becomes unavailable: state: unknown · source: pane · harness state unavailable (unknown missing)
+LIVE DRIVER BLOCKED OR FAILED: TimeoutExpired(['bash', 'bin/fm-watch.sh'], 25)
+Watcher reaped: exit=-15
+Private tmux server stopped and disposable lab removed

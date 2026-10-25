@@ -1,0 +1,11 @@
+pull_request:
+  number: 242
+  title: "fix: prevent worker-local paths in published PR text"
+  state: merged
+  author: jazz127
+  draft: no
+  merged: "2026-10-25T14:43:48Z"
+  checks: "2 passed, 0 failed, 2 total"
+  body: "Worker-local evidence paths in published PR/MR text are unreadable after task cleanup and expose machine-specific directories.\nThis change uses `<task-output>/…`, `<firstmate-home>/…`, and repository-relative paths in published evidence while resolving them locally for validation.\n\nThe shared publication check refuses worker home, task scratch, and worktree roots throughout the body, including prose and commands.\nArtifact readability, containment, symlink, capture-time, scenario, and attestation\n... (truncated, 2332 chars total - use --full to see complete body)"
+  comment_count: 0 — use --comments to see full comments
+  review_count: 0 — use --reviews to see full reviews

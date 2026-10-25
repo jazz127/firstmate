@@ -1,0 +1,8 @@
+{
+  ".count-primary_fm-worker": "2\n",
+  "worker.busy-state": "v1 gen=g1792942573.39392.24302 seq=4 state=busy source=claude-hook event=UserPromptSubmit ts=1792942577\n",
+  "worker.busy-gen": "g1792942573.39392.24302\n",
+  "worker.meta": "window=primary:fm-worker\nbackend=tmux\nkind=ship\nharness=claude\nspawn_gen=lab-one\nworktree=~/.no-mistakes/worktrees/119cd7a6b9a4/01M5SM9R5JFPRS1AS5R994DY0S/.d/projects/worker\n",
+  ".stale-primary_fm-worker": "d6e7c5d755d18e481bd2ec0df2cda169",
+  ".hash-primary_fm-worker": "d6e7c5d755d18e481bd2ec0df2cda169"
+}

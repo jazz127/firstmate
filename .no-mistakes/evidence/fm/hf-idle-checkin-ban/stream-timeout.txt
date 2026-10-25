@@ -1,0 +1,41 @@
+{"type": "user", "message": {"role": "user", "content": "Reply with only LAB_READY_ONE. Do not use tools."}}
+Error: Input must be provided either through stdin or as a prompt argument when using --print
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Pane is dead (status 1, Mon Oct 26 01:07:11 2026)

@@ -366,6 +366,7 @@ Synthetic output: $text" "$root/worker copy" "$root/task output" '' '' "$phase" 
       expect_code 1 "$?" "normalized worker path passed in $phase: $text"
       assert_contains "$out" 'worker-local absolute path' 'normalized path refusal was unclear'
     done
+    # shellcheck disable=SC2016 # Markdown command backticks must stay literal in fixture input.
     for text in 'rg --files -g **/home/**' 'rg --files -g **/Users/**' \
       'rg --files -g **/tmp/fm-*/**' \
       '`rg --files -g **/home/**`' 'cat fixtures/home/firstmate/proof.txt' \

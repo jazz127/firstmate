@@ -404,7 +404,7 @@ done
 pass 'descriptor suffixes containing worker-root names stay portable in every body field'
 
 for raw in /srv/firstmate /srv/worktree /srv/task-output /srv/user-home /home/firstmate /Users/worker; do
-  for suffix in '' . '!' '?' : , ';' ')' ']' '}'; do
+  for suffix in '' . '!' '?' : ',' ';' ')' ']' '}'; do
     for field in 'Synthetic output' evidence-artifact evidence-command; do
       printf '%s: %s%s\n' "$field" "$raw" "$suffix" > "$draft"
       output=$(HOME=/srv/user-home FM_HOME=/srv/firstmate "$ROOT/bin/fm-pr-body-preflight.sh" \
@@ -440,6 +440,7 @@ for raw in '**/tmp/fm-task/proof.txt**' '_/home/firstmate/proof.txt_' \
 done
 pass 'normalization refuses earlier worker-path bypasses across prose and evidence fields'
 
+# shellcheck disable=SC2016 # Markdown command backticks must stay literal in fixture input.
 for command in "rg --files -g '**/home/**'" "rg --files -g '**/Users/**'" \
   "rg --files -g '**/tmp/fm-*/**'" \
   '`rg --files -g **/home/**`' 'cat fixtures/home/firstmate/proof.txt' \

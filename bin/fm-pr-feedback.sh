@@ -105,7 +105,21 @@ case "$1" in
       [ -d "$wt" ] || exit 0
       branch=$(fm_meta_get "$meta" branch)
       [ -n "$branch" ] || branch=$(git -C "$wt" symbolic-ref --short HEAD 2>/dev/null) || exit 0
-      out=$(fm_nm_run_checked "$wt" 3 axi status) || exit 1
+      overview=$(fm_nm_run_checked "$wt" 3 axi) || exit 1
+      selection=$(fm_nm_select_run "$branch" "$overview" "$wt" 3)
+      case "$selection" in
+        selected\|*) IFS='|' read -r _ run_id selected_status _ <<< "$selection" ;;
+        absent) exit 0 ;;
+        *) exit 1 ;;
+      esac
+      out=$(fm_nm_run_checked "$wt" 3 axi status --run "$run_id") || exit 1
+      [ "$(fm_nm_strip_quotes "$(fm_nm_field "$out" id)")" = "$run_id" ] || exit 1
+      case "$(fm_nm_strip_quotes "$(fm_nm_field "$out" status)")" in
+        pending|running|fixing|ci|awaiting_approval|fix_review|completed|failed|cancelled) ;;
+        *) exit 1 ;;
+      esac
+      if fm_nm_run_is_active "$out"; then run_class=live; else run_class=terminal; fi
+      [ "$(fm_nm_run_status_class "$selected_status")" = "$run_class" ] || exit 1
       [ "$(fm_nm_strip_quotes "$(fm_nm_field "$out" branch)")" = "$branch" ] || exit 0
       head=$(fm_nm_strip_quotes "$(fm_nm_field "$out" head_sha)")
       [ -n "$head" ] || head=$(fm_nm_strip_quotes "$(fm_nm_field "$out" head)")
@@ -115,6 +129,16 @@ case "$1" in
         fm_nm_run_checked "$wt" 3 daemon status >/dev/null || exit 1
       fi
       printf '%s\n' "$out"
+      status=$(fm_nm_strip_quotes "$(fm_nm_field "$out" status)")
+      if ! fm_nm_run_is_parked "$out" && fm_nm_run_is_active "$out" \
+        && ! printf '%s\n' "$out" | grep -Eq '^[[:space:]]*ci,[[:space:]]*"?fixing"?[[:space:]]*,' \
+        && { [ "$status" = ci ] || { [ "$status" = running ] \
+          && printf '%s\n' "$out" | grep -Eq '^[[:space:]]*ci,[[:space:]]*"?running"?[[:space:]]*,'; }; }; then
+        if [ "$(fm_nm_ci_checks_state "$wt" "$run_id" 3)" = green ]; then
+          ci_head=$(fm_nm_resolve_commit "$wt" "$head")
+          printf 'feedback_ci_head: %s\n' "${ci_head:-$head}"
+        fi
+      fi
     else
       lock=$(fm_meta_lock_path "$meta")
       fm_task_inbox_lock_acquire "$lock" || die "cannot lock task metadata"

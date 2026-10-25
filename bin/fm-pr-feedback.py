@@ -92,24 +92,43 @@ def scalar(block, key):
     return json.loads(value) if value.startswith('"') else value
 
 
+def block(text, name):
+    match = re.search(rf"^{name}:\n((?:[ \t].*\n|\n)*)", text + "\n", re.M)
+    return match[1] if match else ""
+
+
 def pipeline_events(text):
-    run_id = scalar(text, "id")
+    record = block(text, "run")
+    run_id = scalar(record, "id")
     if not run_id or not TOKEN.fullmatch(run_id):
-        return [], ""
-    pr = scalar(text, "pr")
-    # Only a structural gate, not elapsed/awaiting-agent text, wakes the worker.
-    gate = re.search(r"^gate:\n((?:[ \t].*\n|\n)*)", text + "\n", re.M)
+        return [], "", ""
+    pr = scalar(record, "pr")
+    gate = block(text, "gate")
+    gate_name = re.search(r'^gate: (.+)$', text, re.M)
+    step = scalar(gate, "step") if gate else ""
+    if gate_name:
+        step = gate_name[1].strip().strip('"')
     events = []
-    if gate:
-        step = scalar(gate[1], "step")
-        status = scalar(gate[1], "status")
-        if TOKEN.fullmatch(step) and status in ("awaiting_approval", "fix_review"):
-            digest = hashlib.sha256(gate[1].encode()).hexdigest()
-            events.append(f"No-mistakes gate event: run={run_id} step={step} receipt={digest}")
+    if TOKEN.fullmatch(step):
+        status = scalar(gate, "status") or scalar(record, "status")
+        findings = []
+        for source in (record, gate):
+            lines = source.splitlines()
+            for i, line in enumerate(lines):
+                table = re.fullmatch(r"\s*findings\[(\d+)\]\{[^}]*\}:", line)
+                if table:
+                    findings.append([line.strip(), *[row.strip() for row in
+                                     lines[i + 1:i + 1 + int(table[1])]]])
+        identity = [step, status, scalar(gate, "summary"), findings,
+                    scalar(record, "round"), scalar(gate, "round")]
+        digest = hashlib.sha256(json.dumps(identity).encode()).hexdigest()
+        events.append(f"No-mistakes gate event: run={run_id} step={step} receipt={digest}")
     outcome = re.search(r"^outcome: ([A-Za-z_-]+)$", text, re.M)
-    if outcome and outcome[1] in ("passed", "passed_with_skips", "failed", "cancelled"):
+    if outcome and outcome[1] in ("passed", "checks-passed", "passed-with-skips",
+                                  "passed-with-override", "failed", "cancelled"):
         events.append(f"No-mistakes outcome event: run={run_id} outcome={outcome[1]}")
-    return events, pr
+    ready = re.search(r"^feedback_ci_head: ([a-f0-9]{40})$", text, re.M)
+    return events, pr, ready[1] if ready else ""
 
 
 def feedback(url, login, bridge):
@@ -147,7 +166,7 @@ def feedback(url, login, bridge):
     return events, head, root
 
 
-def ci_events(url, head, root):
+def ci_events(url, head, root, no_checks_ready=False):
     checks = pages(f"{root}/commits/{head}/check-runs?filter=latest",
                    '{id,status,conclusion}', ".check_runs")
     statuses = pages(f"{root}/commits/{head}/status", '{id,state}', ".statuses")
@@ -161,7 +180,8 @@ def ci_events(url, head, root):
     if any(value in ("failure", "error", "cancelled", "timed_out", "action_required", "startup_failure")
            for value in conclusions):
         state = "red"
-    elif conclusions and all(value in ("success", "neutral", "skipped") for value in conclusions):
+    elif (conclusions and all(value in ("success", "neutral", "skipped") for value in conclusions)
+          or not conclusions and no_checks_ready):
         state = "green"
     else:
         return []
@@ -209,10 +229,11 @@ def poll(state, bridge):
                 continue
             events = []
             url = meta.get("pr", "")
+            run_pr, ready_head = "", ""
             if meta.get("mode") == "no-mistakes":
                 try:
                     text = run([bridge, "pipeline", task])
-                    pipeline, run_pr = pipeline_events(text)
+                    pipeline, run_pr, ready_head = pipeline_events(text)
                     events.extend(pipeline)
                     if not url:
                         url = run_pr
@@ -229,7 +250,7 @@ def poll(state, bridge):
                     comments, head, root = feedback(url, login, bridge)
                     events.extend(comments)
                     if head:
-                        events.extend(ci_events(url, head, root))
+                        events.extend(ci_events(url, head, root, run_pr == url and ready_head == head))
                 except (OSError, ValueError, KeyError, TypeError, subprocess.TimeoutExpired):
                     errors.add(task)
             seen = history(state, task)

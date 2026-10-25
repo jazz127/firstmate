@@ -25,6 +25,11 @@ URL = 'https://github.com/o/r/pull/7'
 
 
 class Feedback(unittest.TestCase):
+    """Inbox behavior oracle: delivery outcomes and crew-state protocol fixtures.
+
+    Fixtures follow fm-crew-state.test.sh's gates and chronological CI markers;
+    Gerrit passing outcomes follow fm-dod-lib.sh's publication contract.
+    """
     def setUp(self):
         self.home = TEMP / self._testMethodName
         self.state = self.home / 'state'
@@ -36,6 +41,10 @@ class Feedback(unittest.TestCase):
         self.api_log = self.home / 'api-log'
         self.nm = self.home / 'pipeline.toon'
         self.nm.write_text('setup: uninitialized\n')
+        self.overview = self.home / 'overview.toon'
+        self.overview.write_text('count: 0 of 0 total\nruns[0]{id,branch,status,head,pr}:\n')
+        self.ci_log = self.home / 'ci.log'
+        self.ci_log.write_text('')
         self.env = dict(os.environ, FM_HOME=str(self.home), FM_ROOT_OVERRIDE=str(self.home),
                         FM_STATE_OVERRIDE=str(self.state), FM_TEST_FORGE=str(self.payload),
                         FM_TEST_RINGS=str(self.log), FM_TEST_API_LOG=str(self.api_log),
@@ -80,7 +89,14 @@ esac
 ''')
         self.tool('no-mistakes', '''#!/usr/bin/env bash
 case "$*" in
-  'axi status') [ "${FM_TEST_NM_FAIL:-0}" != 1 ] || exit 1; cat "$FM_TEST_NM" ;;
+  axi) [ "${FM_TEST_NM_FAIL:-0}" != 1 ] || exit 1; cat "${FM_TEST_NM%/*}/overview.toon" ;;
+  'axi status')
+    [ "${FM_TEST_NM_FAIL:-0}" != 1 ] || exit 1
+    if [ -f "${FM_TEST_NM%/*}/bare.toon" ]; then cat "${FM_TEST_NM%/*}/bare.toon"
+    else cat "$FM_TEST_NM"; fi ;;
+  'axi status --run run1') cat "$FM_TEST_NM" ;;
+  'axi status --run run2') cat "${FM_TEST_NM%/*}/other.toon" ;;
+  'axi logs --step ci --run run1 --full') cat "${FM_TEST_NM%/*}/ci.log" ;;
   'daemon status') exit 0 ;;
   *) exit 92 ;;
 esac
@@ -136,6 +152,26 @@ esac
 
     def check(self, status='completed', conclusion='success', n=5):
         return dict(id=n, status=status, conclusion=conclusion)
+
+    def pipeline_task(self, pr=URL, outcome=''):
+        wt = self.home / 'work'
+        subprocess.run(['git', 'init', '-q', str(wt)], check=True, env=self.env)
+        subprocess.run(['git', '-C', str(wt), '-c', 'user.name=Fixture', '-c', 'user.email=f@example.test',
+                        'commit', '-q', '--allow-empty', '-m', 'fixture'], check=True, env=self.env)
+        subprocess.run(['git', '-C', str(wt), 'checkout', '-qb', 'fm/t1'], check=True, env=self.env)
+        head = subprocess.check_output(['git', '-C', str(wt), 'rev-parse', 'HEAD'], text=True).strip()
+        self.task('t1', f'pr={pr}\nworktree={wt}\nbranch=fm/t1\n', mode='no-mistakes')
+        status = 'completed' if outcome else 'running'
+        self.overview.write_text(f'count: 1 of 1 total\nruns[1]{{id,branch,status,head,pr}}:\n'
+                                 f'  run1,fm/t1,{status},{head},{pr}\n')
+        text = f'run:\n  id: "run1"\n  branch: fm/t1\n  status: {status}\n  head_sha: {head}\n  pr: "{pr}"\n'
+        if outcome:
+            text += f'outcome: {outcome}\n'
+        self.nm.write_text(text)
+        self.data['repos/o/r/pulls/7']['head']['sha'] = head
+        self.data[f'repos/o/r/commits/{head}/check-runs'] = {'check_runs': []}
+        self.data[f'repos/o/r/commits/{head}/status'] = {'statuses': []}
+        return text, head
 
     def test_feedback_bots_pagination_self_filter_and_handled_replay(self):
         self.data['repos/o/r/pulls/7/reviews'] = [self.row(1, state='APPROVED'),
@@ -307,13 +343,8 @@ esac
                 process.communicate(timeout=10)
 
     def test_attributed_pipeline_gate_without_registered_pr(self):
+        _, head = self.pipeline_task(pr='')
         wt = self.home / 'work'
-        subprocess.run(['git', 'init', '-q', str(wt)], check=True, env=self.env)
-        subprocess.run(['git', '-C', str(wt), '-c', 'user.name=Fixture', '-c', 'user.email=f@example.test',
-                        'commit', '-q', '--allow-empty', '-m', 'fixture'], check=True, env=self.env)
-        subprocess.run(['git', '-C', str(wt), 'checkout', '-qb', 'fm/t1'], check=True, env=self.env)
-        head = subprocess.check_output(['git', '-C', str(wt), 'rev-parse', 'HEAD'], text=True).strip()
-        self.task('t1', f'pr=\nworktree={wt}\nbranch=fm/t1\n', mode='no-mistakes')
         text = f'''run:
   id: "run1"
   branch: fm/t1
@@ -346,6 +377,134 @@ gate:
         self.data['fail'] = ['user']
         self.assertIn('tasks=t1 relaunch=none errors=t1', self.poll())
         self.assertEqual(len(self.messages()), 3)
+
+    def test_repository_overview_selects_task_run_and_discovers_its_pr(self):
+        text, head = self.pipeline_task(pr='')
+        self.overview.write_text(f'count: 2 of 2 total\nruns[2]{{id,branch,status,head,pr}}:\n'
+                                 f'  run2,fm/other,running,{head},\n  run1,fm/t1,running,{head},\n')
+        (self.home / 'bare.toon').write_text(text.replace('run1', 'run2').replace('fm/t1', 'fm/other'))
+        self.nm.write_text(text.replace('  pr: ""', f'  pr: "{URL}"') +
+                           'gate: review\n')
+        self.data['repos/o/r/issues/7/comments'] = [self.row(31)]
+        self.assertIn('tasks=t1 relaunch=none errors=none', self.poll())
+        message = self.messages()[0]
+        self.assertIn('run=run1 step=review', message)
+        self.assertIn('#issuecomment-31', message)
+        self.assertNotIn('run=run2', message)
+        self.assertEqual(self.poll(), '')
+
+    def test_ambiguous_inventory_and_mismatched_selected_id_are_rejected(self):
+        text, head = self.pipeline_task(pr='')
+        self.overview.write_text(f'count: 2 of 2 total\nruns[2]{{id,branch,status,head,pr}}:\n'
+                                 f'  run2,fm/t1,running,{head},\n  run1,fm/t1,running,{head},\n')
+        self.nm.write_text(text + 'gate: review\n')
+        self.assertIn('tasks=none relaunch=none errors=t1', self.poll())
+        self.assertEqual(self.messages(), [])
+        self.overview.write_text(f'count: 1 of 1 total\nruns[1]{{id,branch,status,head,pr}}:\n'
+                                 f'  run1,fm/t1,running,{head},\n')
+        self.nm.write_text(text.replace('run1', 'run2') + 'gate: review\n')
+        self.assertIn('errors=t1', self.poll())
+        self.assertEqual(self.messages(), [])
+
+    def test_scalar_and_mapping_gate_run_findings_rounds_and_handled_replay(self):
+        text, _ = self.pipeline_task(pr='')
+        round_one = '  findings[1]{id,severity,file,line,action,description}:\n    R1,error,a.py,1,ask-user,first\n'
+        round_two = round_one.replace('R1,', 'R2,')
+        shapes = [('gate: review\n', 'awaiting_approval'),
+                  ('gate: review\n', 'fix_review'),
+                  ('gate: review\n', 'running'),
+                  ('gate:\n  step: review\n  status: fix_review\n', 'running')]
+        for gate, status in shapes:
+            with self.subTest(gate=gate, status=status):
+                current = text.replace('status: running', f'status: {status}')
+                self.nm.write_text(current + round_one + gate)
+                before = len(self.messages(handled=True))
+                self.assertIn('tasks=t1', self.poll())
+                self.assertIn('run=run1 step=review', self.messages()[0])
+                for p in (self.state / 't1.inbox').glob('*.msg'):
+                    p.rename(p.parent / 'handled' / p.name)
+                self.nm.write_text(current.replace('  pr:', '  awaiting_agent: parked 20m\n  pr:') + round_one + gate)
+                self.assertEqual(self.poll(), '')
+                self.nm.write_text(current + round_two + gate)
+                self.assertIn('tasks=t1', self.poll())
+                self.assertEqual(len(self.messages(handled=True)), before + 1)
+                self.assertEqual(len(self.messages()), 1)
+                self.assertEqual(self.poll(), '')
+                self.nm.write_text(current + '  round: 2\n' + round_two + gate)
+                self.assertIn('tasks=t1', self.poll())
+                self.assertEqual(len(self.messages()), 2)
+                self.assertEqual(self.poll(), '')
+                for p in (self.state / 't1.inbox').rglob('*.msg'):
+                    p.unlink()
+
+    def test_passing_outcomes_wake_gerrit_workers_without_forge_polling(self):
+        text, _ = self.pipeline_task(pr='https://review.example/c/o/r/+/7', outcome='passed')
+        for outcome in ('passed', 'passed-with-skips', 'passed-with-override',
+                        'checks-passed', 'failed', 'cancelled'):
+            with self.subTest(outcome=outcome):
+                self.nm.write_text(text.replace('outcome: passed', f'outcome: {outcome}'))
+                self.assertIn('tasks=t1', self.poll())
+                self.assertIn(f'outcome={outcome}', '\n'.join(self.messages()))
+                self.assertEqual(self.poll(), '')
+        self.assertFalse(self.api_log.exists())
+        self.nm.write_text(text.replace('outcome: passed', 'outcome: passed_with_skips'))
+        self.assertEqual(self.poll(), '')
+
+    def test_no_checks_readiness_requires_current_attributed_pipeline_evidence(self):
+        text, head = self.pipeline_task(pr='')
+        monitoring = text.replace('  pr: ""', f'  pr: "{URL}"') + (
+            'steps[1]{step,status,findings,duration_ms}:\n  ci,running,0,0\n')
+        self.nm.write_text(monitoring)
+        ready = 'no CI checks reported - still monitoring until merged or closed\n'
+        pending = 'no CI checks reported yet, waiting for checks to register...\n'
+        self.assertEqual(self.poll(), '')
+        self.ci_log.unlink()
+        self.assertEqual(self.poll(), '')
+        self.ci_log.write_text(pending)
+        self.assertEqual(self.poll(), '')
+        self.ci_log.write_text(ready + pending)
+        self.assertEqual(self.poll(), '')
+        self.ci_log.write_text(pending + ready + 'base branch advanced, re-arming CI monitor timeout\n')
+        self.nm.write_text(monitoring.replace(head, 'b' * 40))
+        self.assertEqual(self.poll(), '')
+        self.nm.write_text(monitoring)
+        self.task('t1', f'worktree={self.home / "work"}\nbranch=fm/t1\n', mode='no-mistakes')
+        self.nm.write_text(monitoring.replace(URL, 'https://github.com/o/r/pull/8'))
+        self.assertEqual(self.poll(), '')
+        self.nm.write_text(monitoring.replace('ci,running', 'ci,fixing'))
+        self.assertEqual(self.poll(), '')
+        self.nm.write_text(monitoring.replace('status: running', 'status: ci').replace('ci,running', 'ci,fixing'))
+        self.assertEqual(self.poll(), '')
+        self.nm.write_text(monitoring.replace('status: running', 'status: fixing'))
+        self.assertEqual(self.poll(), '')
+        self.nm.write_text(monitoring.replace(head, head[:12]))
+        self.assertIn('tasks=t1', self.poll())
+        self.assertIn(f'GitHub PR CI event: {URL} head={head} state=green', self.messages()[0])
+        for p in (self.state / 't1.inbox').glob('*.msg'):
+            p.rename(p.parent / 'handled' / p.name)
+        self.assertEqual(self.poll(), '')
+        self.ci_log.write_text(ready + 'issues detected, fixing\n')
+        self.assertEqual(self.poll(), '')
+
+    def test_pipeline_no_checks_evidence_never_overrides_pending_or_failed_checks(self):
+        text, head = self.pipeline_task()
+        self.nm.write_text(text.replace('status: running', 'status: ci'))
+        self.ci_log.write_text('all CI checks passed - still monitoring until merged or closed\n')
+        self.data[f'repos/o/r/commits/{head}/check-runs']['check_runs'] = [self.check('queued', None)]
+        self.assertEqual(self.poll(), '')
+        self.data[f'repos/o/r/commits/{head}/check-runs']['check_runs'] = [self.check(conclusion='failure')]
+        self.assertIn('tasks=t1', self.poll())
+        self.assertIn('state=red', self.messages()[0])
+        self.assertNotIn('state=green', self.messages()[0])
+        self.data[f'repos/o/r/commits/{head}/check-runs']['check_runs'] = []
+        self.data[f'repos/o/r/commits/{head}/status']['statuses'] = [{'id': 9, 'state': 'pending'}]
+        self.assertEqual(self.poll(), '')
+        self.data[f'repos/o/r/commits/{head}/status']['statuses'] = [{'id': 10, 'state': 'failure'}]
+        self.assertIn('tasks=t1', self.poll())
+        self.assertNotIn('state=green', '\n'.join(self.messages()))
+        self.data[f'repos/o/r/commits/{head}/status']['statuses'] = []
+        self.assertIn('tasks=t1', self.poll())
+        self.assertIn('state=green', '\n'.join(self.messages()))
 
 
 unittest.main(argv=[sys.argv[0]], verbosity=2)

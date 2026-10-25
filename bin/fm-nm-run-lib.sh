@@ -518,3 +518,18 @@ fm_nm_runs_status_for_worktree() {  # <worktree> <branch> <runs-list-output> [ex
   printf '%s' "$decided"
   return 0
 }
+
+fm_nm_ci_checks_state() {
+  local wt=$1 run_id=$2 timeout_secs=${3:-10} ci_log marker
+  [ -n "$run_id" ] || { printf 'unknown'; return; }
+  ci_log=$(fm_nm_run "$wt" "$timeout_secs" axi logs --step ci --run "$run_id" --full) || true
+  [ -n "$ci_log" ] || { printf 'unknown'; return; }
+  marker=$(printf '%s\n' "$ci_log" \
+    | grep -E 'CI checks passed|no CI checks reported - still monitoring|no CI checks reported yet|checks failed|issues detected|CI checks running' \
+    | tail -1)
+  case "$marker" in
+    *"checks passed"*|*"no CI checks reported - still monitoring"*) printf 'green' ;;
+    *"no CI checks reported yet"*|*"checks failed"*|*"issues detected"*|*"CI checks running"*) printf 'not-ready' ;;
+    *) printf 'unknown' ;;
+  esac
+}

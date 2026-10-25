@@ -416,108 +416,87 @@ EOF
   done < "$config"
 }
 
+fm_dod_normalize_published_text() {
+  awk '
+    { text = text $0 "\n" }
+    END {
+      while (match(text, /%[[:xdigit:]][[:xdigit:]]/)) {
+        code = substr(text, RSTART + 1, 2)
+        byte = 16 * (index("0123456789abcdef", tolower(substr(code, 1, 1))) - 1) + index("0123456789abcdef", tolower(substr(code, 2, 1))) - 1
+        text = substr(text, 1, RSTART - 1) sprintf("%c", byte) substr(text, RSTART + 3)
+      }
+      gsub(/\\/, "", text)
+      gsub(/["\047]\*\*\/[^\n"\047]*\/[*?]+["\047]/, "fmrelative", text)
+      gsub(/\*\*\/[^[:space:]<>`"()|,;\047{}=]*\/[*?]+/, "fmrelative", text)
+      gsub(/<(task-output|firstmate-home)>/, "fmportable", text)
+      gsub(/[*_`~]/, "", text)
+      gsub(/[Ff][Ii][Ll][Ee]:\/\/[^\/[:space:]]*/, "", text)
+      printf "%s", text
+    }
+  ' <<EOF
+$1
+EOF
+}
+
 # Check commands and prose even without an evidence claim. Known roots catch
 # nonstandard home/worktree layouts; generic patterns catch other workers.
 # Task scratch paths cannot be allowed by the home-path override.
 fm_dod_refuse_worker_paths() {  # <published-text> <worktree> <task-temp> [project]
-  local home paths path prefixes prefix normalized allowed root task_root=$3
+  local home paths path prefixes prefix normalized allowed root text task_root=$3
   local -a roots=()
   home=$(fm_dod_evidence_home) || return 1
   prefixes=$(fm_dod_allowed_path_prefixes "$2" "${4:-}") || return 1
+  text=$(fm_dod_normalize_published_text "$1") || return 1
+  task_root=$(fm_dod_normalize_published_text "$task_root") || return 1
   case "$task_root" in /*) task_root=$(fm_dod_path_normalize "$task_root") || return 1 ;; esac
   for root in "$home" "$2" "$task_root" "${HOME:-}"; do
     case "$root" in /*) ;; *) continue ;; esac
+    root=$(fm_dod_normalize_published_text "$root") || return 1
     root=$(fm_dod_path_normalize "$root") || return 1
     [ "$root" != / ] && roots+=("$root")
   done
-  paths=$(awk '
-    function strip_emphasis(text, result, start, marker, suffix, finish, probe, before, after) {
-      while (match(text, /[*]+|_+|~+/)) {
-        start = RSTART
-        marker = substr(text, start, RLENGTH)
-        suffix = substr(text, start + RLENGTH)
-        before = substr(result substr(text, 1, start - 1), length(result) + start - 1, 1)
-        finish = 0
-        if (before !~ /[[:alnum:]_\/.~-]/ && substr(suffix, 1, 1) !~ /[[:space:]]/)
-          finish = index(suffix, marker)
-        while (finish > 0) {
-          before = substr(suffix, finish - 1, 1)
-          after = substr(suffix, finish + length(marker), 1)
-          if (after != "" && after !~ /[[:space:]]/ && after != substr(marker, 1, 1) &&
-              (before ~ /[[:space:]]/ || (after == "/" && before ~ /["\047`]/))) {
-            finish = 0
-            break
-          }
-          if (finish > 1 && before !~ /[[:space:]]/ &&
-              before != substr(marker, 1, 1) &&
-              !(after == "/" && before ~ /["\047`]/) &&
-              (substr(marker, 1, 1) != "_" || after !~ /[[:alnum:]]/)) break
-          probe = index(substr(suffix, finish + length(marker)), marker)
-          finish = probe > 0 ? finish + length(marker) + probe - 1 : 0
-        }
-        result = result substr(text, 1, start - 1)
-        if (finish > 0) {
-          text = substr(suffix, 1, finish - 1) substr(suffix, finish + length(marker))
-        } else {
-          result = result marker
-          text = suffix
+  paths=$(FM_DOD_KNOWN_ROOTS="$(printf '%s\n' "${roots[@]:-}")" awk '
+    function emit(text, start, extent, prefix, tail, path, rest, root, quote, finish) {
+      prefix = substr(text, 1, start - 1)
+      if (prefix !~ /(^|[][[:space:]<>`"()|,;\047{}=:@])(-+[[:alnum:]-]+)?$/) return
+      tail = substr(text, start + extent, 1)
+      path = substr(text, start, extent)
+      root = path
+      if (substr(path, length(path), 1) != "/" && tail != "" && tail !~ /[][\/[:space:]<>`"()|,;\047{}=:.!?]/) return
+      rest = substr(text, start + extent)
+      quote = substr(prefix, length(prefix), 1)
+      if (quote ~ /^["\047]$/ && (finish = index(rest, quote)) > 0) {
+        path = path substr(rest, 1, finish - 1)
+      } else if (match(rest, /^[^][[:space:]<>`"()|,;\047{}=:]+/)) path = path substr(rest, 1, RLENGTH)
+      sub(/[.!?]+$/, "", path)
+      sub(/[.!?]+$/, "", root)
+      if (substr(root, length(root), 1) != "/" && path != root && index(path, root "/") != 1) return
+      print path
+    }
+    BEGIN { count = split(ENVIRON["FM_DOD_KNOWN_ROOTS"], roots, "\n") }
+    {
+      scan = $0
+      while (match(scan, /\/(private\/)?tmp\/fm-[[:alnum:].-]+\/?|\/(home|Users)\/[[:alnum:].-]+\//)) {
+        start = RSTART; extent = RLENGTH
+        emit(scan, start, extent)
+        scan = substr(scan, start + extent)
+      }
+      for (i = 1; i <= count; i++) {
+        if (roots[i] == "") continue
+        scan = $0
+        while ((start = index(scan, roots[i])) > 0) {
+          emit(scan, start, length(roots[i]))
+          scan = substr(scan, start + length(roots[i]))
         }
       }
-      return result text
-    }
-    function unwrap(value) {
-      sub(/[.!?]+$/, "", value)
-      sub(/^@+/, "", value)
-      return value
-    }
-    function scan_text(text, token, count, parts, i, path) {
-      while (match(text, /"[^"]*"|\047[^\047]*\047|`[^`]*`|[^][[:space:]<>`"()|,;\047{}=]+/)) {
-        token = substr(text, RSTART, RLENGTH)
-        text = substr(text, RSTART + RLENGTH)
-        if (token ~ /^["\047`]/) {
-          token = substr(token, 2, length(token) - 2)
-          if (token ~ /[[:space:]]/) scan_text(token)
-        }
-        token = unwrap(token)
-        count = split(token, parts, ":")
-        for (i = 1; i <= count; i++) {
-          path = parts[i]
-          if (tolower(path) == "file" && i < count) {
-            path = parts[++i]
-            sub(/^\/\/[^\/]*/, "", path)
-          } else if (path ~ /^[[:alpha:]][[:alnum:]+.-]*$/ && i < count && parts[i + 1] ~ /^\/\//) {
-            i++
-            continue
-          }
-          path = unwrap(path)
-          sub(/^-[[:alpha:]]\//, "/", path)
-          if (path ~ /^\//) print path
-        }
-      }
-    }
-    { text = text $0 "\n" }
-    END {
-      gsub(/<(task-output|firstmate-home)>/, "fmportable", text)
-      scan_text(strip_emphasis(text))
     }
   ' <<EOF
-$1
+$text
 EOF
 ) || return 1
   while IFS= read -r path; do
     [ -n "$path" ] || continue
     normalized=$(fm_dod_path_normalize "$path") || return 1
-    allowed=1
-    case "$path:$normalized" in
-      *'/tmp/fm-'*|*'/home/'*|*'/Users/'*) allowed=0 ;;
-      *)
-        for root in "${roots[@]:-}"; do
-          [ -n "$root" ] || continue
-          case "$normalized" in "$root"|"$root"/*) allowed=0; break ;; esac
-        done
-        ;;
-    esac
-    [ "$allowed" -eq 0 ] || continue
     allowed=0
     case "$path:$normalized" in *'/tmp/fm-'*) ;; *)
       case "$normalized" in
@@ -525,6 +504,8 @@ EOF
         *)
           while IFS= read -r prefix; do
             [ -n "$prefix" ] || continue
+            prefix=$(fm_dod_normalize_published_text "$prefix") || return 1
+            prefix=$(fm_dod_path_normalize "$prefix") || return 1
             case "$normalized" in "$prefix"|"$prefix"/*) allowed=1; break ;; esac
           done <<EOF
 $prefixes

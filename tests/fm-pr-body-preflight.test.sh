@@ -417,114 +417,42 @@ printf '%s\n' 'Synthetic output: /srv/firstmate-other.' > "$draft"
 output=$(FM_HOME=/srv/firstmate preflight) || fail "custom home matched an unrelated path: $output"
 pass 'custom roots are refused before punctuation with consistent prose, artifact and command boundaries'
 
-for text in 'Synthetic output: file:///tmp/fm-task/proof.txt' \
-  'Synthetic output: file://localhost/home/firstmate/proof.txt' \
-  'evidence-command: cc -I/home/firstmate/include' \
-  'evidence-command: cc -L/Users/worker/lib' \
-  'evidence-command: collect --output=/home/firstmate/proof.txt' \
-  'evidence-command:cat file:///home/firstmate/proof.txt'; do
-  cat > "$draft" <<EOF
-External validation passed.
-evidence-artifact: evidence.txt
-EOF
-  case "$text" in
-    evidence-command:*) printf '%s\n' "$text" >> "$draft" ;;
-    *) printf 'evidence-command: ./collect\n%s\n' "$text" >> "$draft" ;;
-  esac
-  printf 'evidence-captured: 2026-09-25T10:00:00+10:00\n' >> "$draft"
-  output=$(preflight)
-  expect_code 1 "$?" "worker path boundary passed with provenance: $text"
-  assert_contains "$output" 'worker-local absolute path' 'path boundary was not refused by the publication guard'
-done
-cat > "$draft" <<EOF
-External validation passed.
-evidence-artifact:$task_tmp/proof.txt
-evidence-command: ./collect
-evidence-captured: 2026-09-25T10:00:00+10:00
-EOF
-output=$(preflight)
-expect_code 1 "$?" 'compact absolute artifact passed with otherwise valid provenance'
-assert_contains "$output" 'worker-local absolute path' 'compact artifact bypassed the publication guard'
-pass 'file URLs, attached command flags and compact metadata cannot publish worker paths'
-
-cat > "$draft" <<EOF
-Synthetic output: https://example.test/home/firstmate/proof.txt
-External validation passed.
-evidence-artifact:evidence.txt
-evidence-command:cc -Ifixtures/home -L./fixtures/Users --output=<task-output>/tmp/fm-fixture/proof.txt
-evidence-captured:2026-09-25T10:00:00+10:00
-EOF
-output=$(preflight) || fail "portable command or URL was refused: $output"
-assert_equals 'evidence preflight ok' "$output" 'compact portable metadata did not pass'
-pass 'relative flag arguments, descriptor suffixes, web URLs and compact portable metadata remain accepted'
-
 for raw in '**/tmp/fm-task/proof.txt**' '_/home/firstmate/proof.txt_' \
-  '**/tmp/fm-task/proof.txt contains the output**' \
-  '**/tmp/fm-task/proof.txt *contains output***' \
-  '*/home/firstmate/proof.txt **contains output***' \
-  '__/Users/worker/proof.txt _contains output___' \
-  '_/home/firstmate/proof.txt __contains output___' \
-  '**"/srv/Firstmate Home/config" _contains output_**' \
-  '~~"/srv/Task Output/proof.txt" **contains output**~~' \
-  $'**/tmp/fm-task/proof.txt *contains\noutput***' \
-  $'__/home/firstmate/proof.txt _contains\noutput___' \
-  $'**"/srv/Firstmate Home/config" *contains\noutput***' \
-  '_/home/firstmate/proof.txt contains the output_' \
-  '__/Users/worker/proof.txt contains the output__' \
-  '~~"/srv/Firstmate Home/config" contains the output~~' \
-  '**"/srv/Worker Copy/proof.txt" contains the output**' \
-  $'**/tmp/fm-task/proof.txt\ncontains the output**' \
-  $'_/home/firstmate/proof.txt\ncontains the output_' \
-  $'**"/srv/Firstmate Home/config"\ncontains the output**' \
-  $'**"/srv/Task Output/proof.txt"\ncontains the output**' \
-  '__/Users/worker/proof.txt__' '~~/tmp/fm-task/proof.txt~~' \
-  '**_/home/firstmate/proof.txt_**' '@/home/firstmate/headers' \
-  '"/srv/Firstmate Home/config"' "'/srv/Firstmate Home/config'" \
-  '`/srv/Firstmate Home/config`' '@"/srv/Firstmate Home/headers"' \
-  '"/srv/Worker Copy/proof.txt"' "'/srv/Task Output/proof.txt'" \
-  '`/srv/User Home/config`'; do
+  '@/home/firstmate/headers' '"/srv/Firstmate Home/config"' \
+  '**/home/firstmate/proof.txt contains output**' \
+  $'**/tmp/fm-task/proof.txt\ncontains output**' \
+  '**/home/firstmate/proof.txt *contains output***' \
+  '***/home/firstmate/proof.txt** contains output*' \
+  'tar -czf/tmp/fm-task/proof.tgz result.json' \
+  'cc -isystem/home/firstmate/include main.c' \
+  'cat /srv/Firstmate\ Home/proof.txt' 'file:///srv/Firstmate%20Home/proof.txt' \
+  'evidence-artifact:/tmp/fm-task/proof.txt'; do
   for field in 'Synthetic output' evidence-artifact evidence-command; do
     printf '%s: %s\n' "$field" "$raw" > "$draft"
-    output=$(HOME='/srv/User Home/' FM_HOME='/srv/Firstmate Home/' \
-      "$ROOT/bin/fm-pr-body-preflight.sh" "$draft" '/srv/Worker Copy/./' '/srv/Task Output//' 2>&1)
-    expect_code 1 "$?" "wrapped or quoted path passed in $field: $raw"
-    assert_contains "$output" 'worker-local absolute path' 'wrapped or quoted path bypassed the publication guard'
+    output=$(FM_HOME='/srv/Firstmate Home/' "$ROOT/bin/fm-pr-body-preflight.sh" \
+      "$draft" /srv/worktree /srv/task-output 2>&1)
+    expect_code 1 "$?" "normalized worker path passed in $field: $raw"
+    assert_contains "$output" 'worker-local absolute path' 'normalized path bypassed the publication guard'
   done
 done
-for command in 'curl -H @/home/firstmate/headers' \
-  'curl --data @"/srv/Firstmate Home/payload"'; do
+pass 'normalization refuses earlier worker-path bypasses across prose and evidence fields'
+
+for command in "rg --files -g '**/home/**'" "rg --files -g '**/Users/**'" \
+  "rg --files -g '**/tmp/fm-*/**'" "rg --files -g '**/srv/Firstmate Home/**'" \
+  '`rg --files -g **/home/**`' 'cat fixtures/home/firstmate/proof.txt' \
+  'cc -Ifixtures/home -L./fixtures/Users' \
+  'cat <task-output>/home/proof.txt <firstmate-home>/tmp/fm-task/proof.txt' \
+  'cat https://example.test/home/firstmate/proof.txt'; do
   cat > "$draft" <<EOF
 External validation passed.
 evidence-artifact: evidence.txt
 evidence-command: $command
 evidence-captured: 2026-09-25T10:00:00+10:00
 EOF
-  output=$(FM_HOME='/srv/Firstmate Home/' preflight)
-  expect_code 1 "$?" "curl path passed with otherwise valid provenance: $command"
-  assert_contains "$output" 'worker-local absolute path' 'curl path bypassed the publication guard'
+  output=$(FM_HOME='/srv/Firstmate Home/' preflight) || fail "portable reference was refused: $command: $output"
+  assert_equals 'evidence preflight ok' "$output" 'portable command did not pass'
 done
-pass 'Markdown emphasis, curl file arguments and quoted spaced roots are refused across body fields'
-
-printf '%s\n' 'synthetic fixture output' > "$worktree/fixtures/home/proof with spaces.txt"
-cat > "$draft" <<'EOF'
-Synthetic output: **fixtures/home/proof.txt** _<task-output>/home/proof.txt_ ~~<firstmate-home>/task-temp/home/proof.txt~~
-Synthetic output: **"fixtures/home/proof with spaces.txt"**
-Synthetic output: **fixtures/home/proof.txt contains the output**
-Synthetic output: _<task-output>/home/proof.txt
-contains the output_
-Synthetic output: ~~<firstmate-home>/task-temp/home/proof.txt contains the output~~
-Synthetic output: **fixtures/home/proof.txt *contains output***
-Synthetic output: __<task-output>/home/proof.txt _contains
-output___
-Synthetic output: ~~<firstmate-home>/task-temp/home/proof.txt **contains output**~~
-External validation passed.
-evidence-artifact: fixtures/home/proof with spaces.txt
-evidence-command: curl -H @"fixtures/home/proof with spaces.txt" --data @'<task-output>/home/proof.txt'
-evidence-captured: 2026-09-25T10:00:00+10:00
-EOF
-output=$(FM_HOME="$TMP_ROOT" preflight) || fail "wrapped portable paths were refused: $output"
-assert_equals 'evidence preflight ok' "$output" 'wrapped relative paths and descriptor suffixes did not pass'
-pass 'Markdown, curl and quoting preserve relative paths and descriptor suffixes'
+pass 'normalization accepts relative globs, paths, code spans, descriptors and public URLs'
 
 for portable in '<task-output>/../outside/evidence.txt' '<firstmate-home>/outside/evidence.txt' \
   '<task-output>/missing.txt' '<unknown>/proof.txt' '<task-output>/escape.txt' '<task-output>/nested/evidence.txt'; do

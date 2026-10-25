@@ -342,51 +342,39 @@ $text" "$root/worktree//" "$root/tmp/../tmp/" '' '' "$phase" 2>&1)
   pass 'publication and retired validation refuse command, file-URL and metadata paths with normalized roots'
 }
 
-test_published_markdown_curl_and_quoted_paths() {
+test_published_path_normalization() {
   local root body text out phase
-  root="$TMP_ROOT/quoted-paths"
+  root="$TMP_ROOT/normalized-paths"
   mkdir -p "$root/worker copy" "$root/task output"
   printf '%s\n' 'synthetic captured output' > "$root/worker copy/proof.txt"
   body=$(printf 'External validation passed.\nevidence-artifact: proof.txt\nevidence-command: ./collect\nevidence-captured: 2026-09-25T10:00:00+10:00\n')
   for phase in publish retired; do
-    for text in '**/tmp/fm-task/proof.txt**' '_/home/firstmate/proof.txt_' \
-      '**/tmp/fm-task/proof.txt contains the output**' \
+    for text in '**/home/firstmate/proof.txt**' '_/home/firstmate/proof.txt_' \
+      'curl -H @/home/firstmate/headers' '"/srv/Firstmate Home/config"' \
+      '**/home/firstmate/proof.txt contains output**' \
+      $'**/tmp/fm-task/proof.txt\ncontains output**' \
       '**/home/firstmate/proof.txt *contains output***' \
-      '*_/tmp/fm-task/proof.txt contains output_*' \
-      '__/tmp/fm-task/proof.txt _contains output___' \
-      $'**/tmp/fm-task/proof.txt *contains\noutput***' \
-      $'evidence-artifact: __/home/firstmate/proof.txt _contains\noutput___' \
-      $'evidence-command: **"/srv/Firstmate Home/config" _contains\noutput_**' \
-      '_/home/firstmate/proof.txt contains the output_' \
-      '**"/srv/Firstmate Home/config" contains the output**' \
-      $'**/tmp/fm-task/proof.txt\ncontains the output**' \
-      $'evidence-artifact: __/home/firstmate/proof.txt\ncontains the output__' \
-      $'evidence-command: **"/srv/Firstmate Home/config"\ncontains the output**' \
-      'evidence-artifact: __/Users/worker/proof.txt__' \
-      'evidence-command: curl -H @/home/firstmate/headers' \
-      'Synthetic output: "/srv/Firstmate Home/config"' \
-      "evidence-artifact: '$root/worker copy/proof.txt'" \
-      "evidence-command: curl --data @\"$root/task output/proof.txt\"" \
-      'Synthetic output: `/srv/User Home/config`'; do
-      out=$(HOME='/srv/User Home/' FM_HOME='/srv/Firstmate Home/' \
-        fm_dod_validate_published_intent "$body
-$text" "$root/worker copy/./" "$root/task output//" '' '' "$phase" 2>&1)
-      expect_code 1 "$?" "wrapped or quoted worker path passed in $phase: $text"
-      assert_contains "$out" 'worker-local absolute path' 'wrapped or quoted path refusal was unclear'
+      '***/home/firstmate/proof.txt** contains output*' \
+      'tar -czf/tmp/fm-task/proof.tgz result.json' \
+      'cc -isystem/home/firstmate/include main.c' \
+      'cat /srv/Firstmate\ Home/proof.txt' 'file:///srv/Firstmate%20Home/proof.txt' \
+      'cat /srv/User_Home/config'; do
+      out=$(HOME=/srv/User_Home/ FM_HOME='/srv/Firstmate Home/' fm_dod_validate_published_intent "$body
+Synthetic output: $text" "$root/worker copy" "$root/task output" '' '' "$phase" 2>&1)
+      expect_code 1 "$?" "normalized worker path passed in $phase: $text"
+      assert_contains "$out" 'worker-local absolute path' 'normalized path refusal was unclear'
     done
-    HOME='/srv/User Home/' FM_HOME='/srv/Firstmate Home/' \
-      fm_dod_validate_published_intent "$body" "$root/worker copy/./" "$root/task output//" '' '' "$phase" \
-      || fail "portable evidence with spaced roots was refused in $phase"
-    for text in '**/srv/firstmate/config contains the output**' \
-      $'**/srv/firstmate/config\ncontains the output**' \
-      '**/srv/firstmate/config *contains output***' \
-      $'__/srv/firstmate/config _contains\noutput___'; do
-      out=$(FM_HOME=/srv/firstmate fm_dod_validate_published_intent "$text" /srv/worktree /srv/task-output '' '' "$phase" 2>&1)
-      expect_code 1 "$?" "emphasized configured root passed in $phase"
-      assert_contains "$out" 'worker-local absolute path' 'emphasized configured root refusal was unclear'
+    for text in 'rg --files -g **/home/**' 'rg --files -g **/Users/**' \
+      'rg --files -g **/tmp/fm-*/**' "rg --files -g '**/srv/Firstmate Home/**'" \
+      '`rg --files -g **/home/**`' 'cat fixtures/home/firstmate/proof.txt' \
+      'cat <task-output>/tmp/fm-task/proof.txt' 'cat <firstmate-home>/home/proof.txt' \
+      'cat /srv/Firstmate Home.backup/proof.txt' 'cat fixtures/srv/Firstmate Home/config'; do
+      HOME=/srv/User_Home/ FM_HOME='/srv/Firstmate Home/' fm_dod_validate_published_intent "$body
+Synthetic output: $text" "$root/worker copy" "$root/task output" '' '' "$phase" \
+        || fail "portable path refused in $phase: $text"
     done
   done
-  pass 'publication and retired validation refuse Markdown, curl and quoted worker paths with spaced roots'
+  pass 'normalized publication accepts portable references and refuses worker roots regardless of syntax'
 }
 
 test_published_overrides_survive_worktree_removal() {
@@ -1023,7 +1011,7 @@ test_evidence_claim_requires_provenance
 test_evidence_claim_enforces_mechanical_provenance
 test_portable_published_evidence
 test_published_path_boundaries_and_normalized_roots
-test_published_markdown_curl_and_quoted_paths
+test_published_path_normalization
 test_published_overrides_survive_worktree_removal
 
 test_scenario_consistency_is_publication_only

@@ -1004,6 +1004,87 @@ test_turn_ended_churning_pane_absorbed() {
   pass "a bare turn-end from a pane that churned since the previous poll is absorbed"
 }
 
+test_turn_ended_churn_pending_delivery() {
+  local spec kind mode dir state fakebin out pane window key pid signature
+  for spec in ship:static scout:static ship:restart ship:bounded ship:working; do
+    kind=${spec%%:*}; mode=${spec#*:}
+    dir=$(make_case "churn-pending-$kind-$mode"); state="$dir/state"; fakebin="$dir/fakebin"
+    out="$dir/watch.out"; pane="$dir/pane.txt"; window=test:fm-pending; key=test_fm-pending
+    : > "$state/pending.turn-ended"
+    signature=$(seen_sig "$state/pending.turn-ended")
+    printf 'window=%s\nkind=%s\nharness=codex\n' "$window" "$kind" > "$state/pending.meta"
+    printf 'final output' > "$pane"
+    printf '%s' "$(hash_text 'previous output')" > "$state/.hash-$key"
+    printf '0\n' > "$state/.count-$key"
+    if [ "$mode" = bounded ]; then
+      mv "$fakebin/tmux" "$fakebin/tmux-fixture"
+      cat > "$fakebin/tmux" <<'SH'
+#!/usr/bin/env bash
+if [ "$1" = capture-pane ]; then
+  frame=$(cat "$FM_FAKE_TMUX_CAPTURE" 2>/dev/null)
+  printf '%s.' "$frame" > "$FM_FAKE_TMUX_CAPTURE"
+  printf '%s.' "$frame"
+  exit 0
+fi
+exec "$(dirname "$0")/tmux-fixture" "$@"
+SH
+      chmod +x "$fakebin/tmux"
+    fi
+    export FM_FAKE_CREW_STATE='state: unknown · source: pane · harness state unavailable (unknown codex-unverified)'
+    FM_CONFIG_OVERRIDE="$(churn_config "$dir")" watch_bg "$state" "$fakebin" "$out" env \
+      FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$pane" FM_POLL=3
+    pid=$!
+    wait_for_absorbed "$state" "$pid" "absorbed benign signal:" \
+      || { reap "$pid"; fail "$spec turn-end was not initially deferred"; }
+    case "$mode" in
+      restart)
+        reap "$pid"
+        ack_stopped_cycle "$state" || fail "could not acknowledge the intentional restart"
+        FM_CONFIG_OVERRIDE="$(churn_config "$dir")" watch_bg "$state" "$fakebin" "$out" env \
+          FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$pane"
+        pid=$!
+        ;;
+      bounded) printf '%s' "$(( $(date +%s) - 3600 ))" > "$state/.churn-since-$key" ;;
+      working)
+        reap "$pid"
+        ack_stopped_cycle "$state" || fail "could not acknowledge the execution-proof restart"
+        export FM_FAKE_CREW_STATE='state: working · source: run-step · running'
+        FM_CONFIG_OVERRIDE="$(churn_config "$dir")" watch_bg "$state" "$fakebin" "$out" env \
+          FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$pane"
+        pid=$!
+        wait_poll_cycle "$state" "$pid" || { reap "$pid"; fail "authoritative execution did not absorb the pending event"; }
+        reap "$pid"
+        ack_stopped_cycle "$state" || fail "could not acknowledge the authoritative-working stop"
+        unset FM_FAKE_CREW_STATE
+        watch_bg "$state" "$fakebin" "$out" env \
+          FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$pane"
+        pid=$!
+        wait_poll_cycle "$state" "$pid" || { reap "$pid"; fail "authoritatively absorbed turn-end replayed"; }
+        reap "$pid"
+        [ ! -s "$state/.wake-queue" ] || fail "authoritatively absorbed turn-end queued a wake"
+        continue
+        ;;
+    esac
+    wait_for_exit "$pid" 200 || { reap "$pid"; fail "$spec deferred turn-end was lost without another signal"; }
+    grep -F "signal: $state/pending.turn-ended" "$out" >/dev/null \
+      || fail "$spec did not surface as a signal: $(cat "$out")"
+    [ "$(awk -F '\t' '$3 == "signal" && $4 == "pending.turn-ended" {n++} END {print n+0}' "$state/.wake-queue")" -eq 1 ] \
+      || fail "$spec did not queue exactly one turn-end event"
+    [ "$(seen_sig "$state/pending.turn-ended")" = "$signature" ] || fail "the fixture emitted another turn-end"
+    ack_stopped_cycle "$state" || fail "$spec event acknowledgement failed"
+    printf 'later idle display' > "$pane"
+    watch_bg "$state" "$fakebin" "$out" env \
+      FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$pane"
+    pid=$!
+    wait_poll_cycle "$state" "$pid" || { reap "$pid"; fail "$spec delivered event repeated"; }
+    wait_poll_cycle "$state" "$pid" || { reap "$pid"; fail "$spec idle pane woke"; }
+    reap "$pid"
+    [ ! -s "$out" ] && [ ! -s "$state/.wake-queue" ] || fail "$spec queued an idle check-in"
+  done
+  unset FM_FAKE_CREW_STATE
+  pass "deferred turn-ends survive silence, restart, and churn bounds without idle check-ins"
+}
+
 test_turn_ended_churn_resets_prior_stale_classification() {
   local dir state fakebin out capture_file window key old_hash active_hash pid i
   dir=$(make_case turn-ended-churn-resets-stale); state="$dir/state"; fakebin="$dir/fakebin"
@@ -1036,16 +1117,21 @@ test_turn_ended_churn_resets_prior_stale_classification() {
   [ "$(cat "$state/.hash-$key" 2>/dev/null || true)" = "$active_hash" ] \
     || { reap "$pid"; fail "watcher did not record the active pane after absorbing its turn-end"; }
 
-  # Returning to an earlier idle render must clear the old active timer
-  # without producing a new idle check-in.
   printf 'idle prompt from an earlier turn' > "$capture_file"
-  wait_poll_cycle "$state" "$pid" || { reap "$pid"; fail "returned idle render woke: $(cat "$out")"; }
-  wait_poll_cycle "$state" "$pid" || { reap "$pid"; fail "returned idle render woke: $(cat "$out")"; }
+  wait_for_exit "$pid" 200 || { reap "$pid"; fail "deferred turn-end was lost on an earlier idle render"; }
+  grep -F "signal: $state/codexreturned.turn-ended" "$out" >/dev/null \
+    || fail "returned idle render did not deliver its pending turn-end"
+  ack_stopped_cycle "$state" || fail "could not acknowledge the deferred turn-end"
+  watch_bg "$state" "$fakebin" "$out" env \
+    FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file"
+  pid=$!
+  wait_poll_cycle "$state" "$pid" || { reap "$pid"; fail "delivered turn-end woke again"; }
+  wait_poll_cycle "$state" "$pid" || { reap "$pid"; fail "returned idle render queued a check-in"; }
   reap "$pid"
   [ ! -s "$out" ] && [ ! -s "$state/.wake-queue" ] || fail "returned idle render queued a check-in"
   [ ! -e "$state/.stale-since-$key" ] || fail "returned idle render inherited the old wedge timer"
   unset FM_FAKE_CREW_STATE
-  pass "pane churn clears earlier wedge state and a stopped render stays silent"
+  pass "a deferred turn-end survives an earlier idle render and is delivered once"
 
 }
 
@@ -1328,9 +1414,11 @@ test_turn_ended_mixed_positive_evidence_batch_absorbed() {
     || fail "an authoritatively working task opened a pane-churn deadline"
   [ -s "$state/.churn-since-$second_key" ] \
     || fail "the churn-proven task did not open its bounded deferral window"
-  reap "$pid"
+  wait_for_exit "$pid" 200 || { reap "$pid"; fail "mixed batch lost its deferred turn-end"; }
+  grep -F "$state/second.turn-ended" "$out" >/dev/null \
+    || fail "the mixed batch did not deliver its deferred task"
   unset FM_FAKE_CREW_STATE_first FM_FAKE_CREW_STATE_second
-  pass "a batch may satisfy positive evidence independently per task"
+  pass "a mixed-evidence batch defers and then delivers its turn-ends"
 }
 
 test_turn_ended_mixed_positive_evidence_batch_default_off() {
@@ -6374,6 +6462,7 @@ test_provably_working_signal_absorbed
 test_turn_ended_provably_working_absorbed
 test_turn_ended_not_working_surfaced
 test_turn_ended_churning_pane_absorbed
+test_turn_ended_churn_pending_delivery
 test_turn_ended_churn_resets_prior_stale_classification
 test_turn_ended_churn_resets_wedge_state_before_stale_poll
 test_turn_ended_churn_existing_marker_absorbed

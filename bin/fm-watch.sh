@@ -621,11 +621,6 @@ inbox_steer_check() {  # <window> <task>
 # bound a worker that had genuinely stopped behind such a renderer would be
 # deferred here forever with no fallback path left to surface it. Churn and
 # staleness read the same pane, so neither can be the other's only backstop.
-# Within the bound, an ordinary crew that stops renders nothing more, its pane
-# hash stops moving, and the staleness backbone surfaces it within a couple of
-# polls; any captain-relevant status verb still surfaces immediately through
-# signal_files_actionable. That is why this widens the proof instead of
-# bounding the wake rate, which would have suppressed genuinely stopped workers.
 #
 # Every negative outcome returns 1, so absence of evidence surfaces exactly as
 # before: any batch that references a secondmate, an unresolvable task, a task
@@ -3351,12 +3346,6 @@ EOF
     # busy state has no verified semantic source, bounded so it cannot defer that
     # task's turn-ends forever. Absorb stays evidence-driven: with neither proof the
     # wake surfaces exactly as before.
-    # Actionable -> enqueue, advance .seen-* markers, exit. Benign (a no-verb wake
-    # whose crew is still executing) in always-on mode -> advance the markers so it
-    # will not re-fire, log, and keep blocking without enqueuing. Both evidence
-    # checks are costly (a bounded no-mistakes call, then a pane capture), so the ||
-    # ordering evaluates them ONLY for a non-afk signal with no captain-relevant
-    # status span, and the capture only once the authoritative verdict comes up short.
     FM_SIGNAL_SURFACE_ENDPOINTS=''
     FM_SIGNAL_NEEDS_DECISION_FILES=''
     # shellcheck disable=SC2086  # $files is a space-separated status-path list (ids carry no spaces)
@@ -3372,17 +3361,22 @@ EOF
     # fm-primary-pi-watch.ts), and the away daemon, whose handle_durable_wakes
     # passes it to handle_wake (see the comment above handle_wake in
     # bin/fm-supervise-daemon.sh).
-    # shellcheck disable=SC2086  # same space-separated status-path list
-    if afk_present || [ "$signal_actionable" -eq 0 ] \
-      || { ! watcher_read signal_crew_provably_working $files && ! signal_turnend_panes_churned $files; }; then
-      while IFS=$'\t' read -r sf sig f; do
-        [ -n "$sf" ] || continue
+    signal_execution=none
+    if ! afk_present && [ "$signal_actionable" -ne 0 ]; then
+      # shellcheck disable=SC2086
+      if watcher_read signal_crew_provably_working $files; then
+        signal_execution=working
+      # shellcheck disable=SC2086
+      elif signal_turnend_panes_churned $files; then
+        signal_execution=churn
+      fi
+    fi
+    if [ "$signal_execution" = none ]; then
+      for f in $files; do
         file_reason="$reason"
         case " $FM_SIGNAL_NEEDS_DECISION_FILES " in *" $f "*) file_reason="needs-decision:$files" ;; esac
         fm_wake_append signal "$(basename "$f")" "$file_reason" || exit 1
-      done <<EOF
-$pending
-EOF
+      done
       # The wake signature advances for every file in this batch, including one
       # whose span could not be classified: it has now been reported, and this is
       # what bounds an unreadable log to one report per distinct file state. Only
@@ -3411,7 +3405,10 @@ EOF
     else
       while IFS=$'\t' read -r sf sig f; do
         [ -n "$sf" ] || continue
-        case "$f" in *.status) ;; *) printf '%s' "$sig" > "$sf" ;; esac
+        case "$f" in
+          *.status) ;;
+          *) [ "$signal_execution" = churn ] || printf '%s' "$sig" > "$sf" ;;
+        esac
       done <<EOF
 $pending
 EOF
@@ -3424,12 +3421,9 @@ EOF
 $FM_SIGNAL_SURFACE_ENDPOINTS
 EOF
       if [ "$signal_commit_error" -ne 0 ]; then
-        while IFS=$'\t' read -r sf sig f; do
-          [ -n "$sf" ] || continue
+        for f in $files; do
           fm_wake_append signal "$(basename "$f")" "$reason" || exit 1
-        done <<EOF
-$pending
-EOF
+        done
         wake "$reason"
       fi
       triage_log "absorbed benign $reason"

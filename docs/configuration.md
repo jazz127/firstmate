@@ -848,6 +848,12 @@ The internal [`/stow` skill](../.agents/skills/stow/SKILL.md) owns curation and 
 
 The helper's header owns exact parsing, publication, and report output mechanics.
 
+### GitHub task feedback check
+
+Arm the optional shared GitHub feedback check with `bin/fm-pr-feedback.sh arm`; retire it with `bin/fm-pr-feedback.sh disarm`.
+The [script header](../bin/fm-pr-feedback.sh) owns observation, inbox delivery, deduplication, dependencies and supported limits; the [ship contract renderer](../bin/fm-dod-lib.sh) owns event-driven worker waits.
+On a batch wake naming `relaunch=<ids>`, inspect those tasks' pending inbox records and use the existing guarded worker recovery path to resume them.
+
 ### Daily startup growth check
 
 A home can arm a lightweight daily growth monitor with `bin/fm-startup-growth-check.sh arm`.

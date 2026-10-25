@@ -1268,6 +1268,55 @@ test_wait_no_turns_absent_keeps_the_previous_brief() {
   pass "fm-brief: without config/wait-no-turns the brief and drive text stay as they were"
 }
 
+test_pr_feedback_wait_contract() {
+  local home mode brief
+  home="$TMP_ROOT/pr-feedback-home"
+  mkdir -p "$home/data" "$home/state"
+  for mode in no-mistakes direct-PR; do
+    FM_HOME="$home" "$ROOT/bin/fm-brief.sh" "feedback-$mode" some-proj --mode "$mode" >/dev/null \
+      || fail "feedback brief generation failed"
+    brief="$home/data/feedback-$mode/brief.md"
+    assert_grep 'Do not poll the PR, its comments, reviews or CI on a timer after that report.' "$brief" \
+      "$mode: a delivered worker must stop timer polling"
+    assert_grep 'Review feedback reaches you through your steering inbox' "$brief" \
+      "$mode: feedback must name its event transport"
+  done
+  printf '#!/usr/bin/env bash\nexit 0\n' > "$home/state/pr-feedback.check.sh"
+  chmod 0700 "$home/state/pr-feedback.check.sh"
+  FM_HOME="$home" "$ROOT/bin/fm-check-register.sh" pr-feedback >/dev/null || fail "check registration failed"
+  FM_HOME="$home" "$ROOT/bin/fm-brief.sh" feedback-armed some-proj --mode no-mistakes >/dev/null \
+    || fail "armed brief generation failed"
+  brief="$home/data/feedback-armed/brief.md"
+  assert_grep 'The watcher delivers CI green, CI red and pipeline gates through your steering inbox' "$brief" \
+    'armed CI waits need inbox events'
+  assert_grep 'then end your turn' "$brief" 'armed CI waits must end the turn'
+  assert_grep 'confirm the shared event watcher remains armed' "$brief" 'event waits must verify their source'
+  assert_grep "Use the following event wait only when this run's PR URL is on https://github.com/" "$brief" \
+    'event waits must be conditional on a supported PR URL'
+  local gitlab_drive
+  gitlab_drive=$(sed -n '/^For GitLab and any other PR forge, or until a GitHub PR URL is known, use this drive contract:/,$p' "$brief")
+  assert_contains "$gitlab_drive" 'background the drive call' 'GitLab must retain the background drive contract'
+  assert_contains "$gitlab_drive" 'reattach at once' 'GitLab must keep driving after a bounded return'
+  assert_not_contains "$gitlab_drive" 'then end your turn' 'GitLab must not park for unsupported forge events'
+  mkdir -p "$home/config"
+  : > "$home/config/wait-no-turns"
+  FM_HOME="$home" "$ROOT/bin/fm-brief.sh" feedback-gitlab-foreground some-proj --mode no-mistakes >/dev/null \
+    || fail 'GitLab foreground brief generation failed'
+  gitlab_drive=$(sed -n '/^For GitLab and any other PR forge, or until a GitHub PR URL is known, use this drive contract:/,$p' \
+    "$home/data/feedback-gitlab-foreground/brief.md")
+  assert_contains "$gitlab_drive" 'ONE foreground' 'GitLab must retain the configured foreground contract'
+  assert_contains "$gitlab_drive" 'issue the same foreground call again' 'GitLab must retain foreground reattachment'
+  assert_not_contains "$gitlab_drive" 'then end your turn' 'GitLab foreground waits must not become event-only'
+  FM_HOME="$home" "$ROOT/bin/fm-brief.sh" feedback-gerrit some-proj --mode no-mistakes --forge gerrit >/dev/null \
+    || fail 'Gerrit event brief generation failed'
+  assert_grep 'confirm the shared event watcher remains armed' "$home/data/feedback-gerrit/brief.md" \
+    'Gerrit must retain pipeline event waits'
+  assert_no_grep 'For GitLab and any other PR forge' "$home/data/feedback-gerrit/brief.md" \
+    'Gerrit pipeline waits must not depend on a GitHub PR URL'
+  assert_grep 'ask-user findings are never yours to answer' "$brief" 'event waits must preserve finding authority'
+  pass 'fm-brief: delivered PRs stop polling and an armed watcher supplies pipeline event waits'
+}
+
 test_worker_role_scope() {
   local kind home brief
   home="$TMP_ROOT/worker-role"
@@ -1836,6 +1885,7 @@ test_scout_lavish_line_follows_presentation_floor
 test_inbox_listing_command_is_safe_on_empty_inbox
 test_workers_wait_without_spending_turns
 test_wait_no_turns_absent_keeps_the_previous_brief
+test_pr_feedback_wait_contract
 test_home_brief_include_is_appended_last
 test_base_branch_is_rendered_and_bounded
 test_ship_branch_prefix_defaults_to_legacy_fm

@@ -137,8 +137,20 @@
 . "$(d=${BASH_SOURCE[0]%/*}; [ "$d" != "${BASH_SOURCE[0]}" ] || d=.; cd "${d:-/}" && pwd)/fm-nm-run-lib.sh"
 # shellcheck source=bin/fm-brief-heading-lib.sh
 . "$(d=${BASH_SOURCE[0]%/*}; [ "$d" != "${BASH_SOURCE[0]}" ] || d=.; cd "${d:-/}" && pwd)/fm-brief-heading-lib.sh"
+# shellcheck source=bin/fm-check-lib.sh
+. "$(d=${BASH_SOURCE[0]%/*}; [ "$d" != "${BASH_SOURCE[0]}" ] || d=.; cd "${d:-/}" && pwd)/fm-check-lib.sh"
 # shellcheck source=bin/fm-external-review-lib.sh
 . "$(d=${BASH_SOURCE[0]%/*}; [ "$d" != "${BASH_SOURCE[0]}" ] || d=.; cd "${d:-/}" && pwd)/fm-external-review-lib.sh"
+
+# Shared by ordinary and promoted ships. Delivery history and opt-in mechanics
+# belong to bin/fm-pr-feedback.sh; the worker's waiting contract belongs here.
+fm_ship_pr_feedback_block() {
+  cat <<'EOF'
+Once your PR is green and you have reported done, end your turn.
+Do not poll the PR, its comments, reviews or CI on a timer after that report.
+Review feedback reaches you through your steering inbox; read and acknowledge it when its doorbell rings, then continue under this brief.
+EOF
+}
 
 fm_brief_worker_role() {  # <state-dir> <task-id> <code-root>
   local state=$1 task_id=$2 root=$3
@@ -752,10 +764,10 @@ EOF
 
 # The forge-independent middle of the no-mistakes contract: how a worker drives
 # the pipeline, what `--intent` may carry, and the two firstmate-specific rules.
-# Written once; only the two sentences about a green PR depend on the forge,
-# because on gerrit the ci step is skipped and there is no PR to report.
+# Event waits must not park unsupported PR forges without a feedback source.
+# Gerrit can wait on pipeline events because its forge-facing CI step is skipped.
 fm_nm_driving_block() {  # <forge>
-  local pr_return_line='' pr_reattach_clause=';' drive_block wait_cfg
+  local pr_return_line='' pr_reattach_clause=';' drive_block event_block wait_cfg script_dir
   if [ "$1" != gerrit ]; then
     pr_return_line="For a base with CI, only a drive call's return reports the green PR: \`no-mistakes axi status\` shows progress but never reports \`checks-passed\` while the ci step is still monitoring the PR for merge, so never wait on a status poll for the next gate or outcome.
 "
@@ -776,6 +788,28 @@ So background the drive call instead of sitting in one blocking hold your harnes
 Declare that wait using the brief's status-reporting rule before waiting on the backgrounded drive call.
 Where a harness's own command limit is not established, assume it bounds commands and use that same backgrounded shape.
 ${pr_return_line}Whenever a drive call returns without a gate or an outcome - its own wait elapsed, or it was killed or timed out - reattach at once by re-running \`no-mistakes axi run\` without flags, backgrounded the same way${pr_reattach_clause} if it refuses because no run is active, read the finished outcome from \`no-mistakes axi status\`."
+  fi
+  if fm_custom_check_registered "${STATE:-${FM_STATE_OVERRIDE:-${FM_HOME:-}/state}}" pr-feedback; then
+    script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd) || return 1
+    event_block="Drive the run with one bounded \`no-mistakes axi run\` or \`respond\` call and read its return.
+${pr_return_line}If that call's wait elapses without a gate or outcome, read \`no-mistakes axi status\` once to identify the active run.
+Before ending your turn, confirm the shared event watcher remains armed with \`FM_HOME=$(printf '%q' "${FM_HOME:-}") FM_STATE_OVERRIDE=$(printf '%q' "${STATE:-${FM_STATE_OVERRIDE:-${FM_HOME:-}/state}}") $(printf '%q' "$script_dir/fm-pr-feedback.sh") enabled\`.
+This read-only check of \`${STATE:-${FM_STATE_OVERRIDE:-${FM_HOME:-}/state}}/pr-feedback.check.sh\` and its \`pr-feedback.check-trust\` binding is authorized for your task's event wait.
+When it is armed and your run is still active, append one \`paused:\` line naming the run and the event you are waiting for, then end your turn.
+The watcher delivers CI green, CI red and pipeline gates through your steering inbox; do not reattach, check status or inspect the PR on a timer.
+This event wait takes precedence over the generic Waiting section for your pipeline run, including while it monitors CI.
+When the inbox event arrives, reattach once with \`no-mistakes axi run\` without flags to read the current gate or CI-ready return; never repeat a \`respond\` whose answer was already sent.
+If the watcher is no longer armed, declare the missing event source to firstmate and retain one bounded blocking drive call instead of timer polls."
+
+    if [ "$1" = gerrit ]; then
+      drive_block=$event_block
+    else
+      drive_block="Use the following event wait only when this run's PR URL is on https://github.com/. Otherwise skip it and follow the drive contract below.
+$event_block
+
+For GitLab and any other PR forge, or until a GitHub PR URL is known, use this drive contract:
+$drive_block"
+    fi
   fi
   cat <<EOF
 You drive no-mistakes by responding to its gates, not by implementing fixes.
@@ -1043,6 +1077,7 @@ That \`done:\` is accepted only when this copy's HEAD - your latest commit - is 
 If you deliberately keep the PR a draft, append \`paused [at=<epoch>]: {why the draft is held}\` instead of done.
 Do NOT run /no-mistakes. The configured merge authority decides whether to merge the PR; firstmate relays the outcome.
 EOF
+      fm_ship_pr_feedback_block
       ;;
     local-only:*)
       cat <<EOF
@@ -1085,6 +1120,7 @@ You are finished.
 That CI-ready \`done:\` is accepted only when this copy's HEAD - your latest commit - is one the /no-mistakes run pushed, so commit nothing after the run; the check tests that commit, not merely that a branch moved.
 If you deliberately keep the PR a draft, append \`paused [at=<epoch>]: {why the draft is held}\` instead of done.
 EOF
+      fm_ship_pr_feedback_block
       ;;
     *)
       echo "error: fm_dod_block: unknown delivery mode '$mode'" >&2

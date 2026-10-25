@@ -920,19 +920,7 @@ nm_effective_ci_step_status() {
 # ignores the line the same way, v1.32.2 through v1.79.0). Reading it as
 # not-ready held a green PR at working for as long as main kept advancing.
 nm_ci_checks_state() {
-  local run_id ci_log marker
-  strip_quotes "$(nm_field id)" run_id
-  [ -n "$run_id" ] || { printf 'unknown'; return; }
-  ci_log=$(nm_run axi logs --step ci --run "$run_id" --full) || true
-  [ -n "$ci_log" ] || { printf 'unknown'; return; }
-  marker=$(printf '%s\n' "$ci_log" \
-    | grep -E 'CI checks passed|no CI checks reported - still monitoring|no CI checks reported yet|checks failed|issues detected|CI checks running' \
-    | tail -1)
-  case "$marker" in
-    *"checks passed"*|*"no CI checks reported - still monitoring"*) printf 'green' ;;
-    *"no CI checks reported yet"*|*"checks failed"*|*"issues detected"*|*"CI checks running"*) printf 'not-ready' ;;
-    *) printf 'unknown' ;;
-  esac
+  fm_nm_ci_checks_state "$WT" "$(strip_quotes "$(nm_field id)")" "$NM_TIMEOUT"
 }
 # Coarse fallback when the bare `axi status` answer is not this branch's own
 # matching run: either it names another branch (routine once several crews

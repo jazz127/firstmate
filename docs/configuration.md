@@ -1737,13 +1737,17 @@ A project whose reviews are created by a review tool that uploads its own snapsh
 
 ## Published home paths (config/published-path-prefixes)
 
-Committed and published evidence normally uses `<task-output>/…` for task scratch, `<firstmate-home>/…` for Firstmate home paths, and repository-relative paths for worktree files.
+Committed documentation and published PR/MR text, including evidence commands, normally use `<task-output>/…` for task scratch, `<firstmate-home>/…` for Firstmate home paths, and repository-relative paths for worktree files.
+The publication check covers the entire body even without an evidence claim, refusing task scratch, worker home directories (`/home/<user>` and `/Users/<user>`), and configured home and worktree roots, including the directories themselves and their descendants.
+Formatting, quoting, command flags, and glob patterns do not exempt forbidden roots; repository-relative paths and globs without a forbidden absolute root remain portable.
+File URLs are percent-decoded once for this check; ordinary text is not percent-decoded.
 The local evidence validator resolves descriptors before applying its existing artifact containment, readability, and symlink guards.
 `FM_HOME` selects the descriptor's home, with `FM_ROOT_OVERRIDE` as the legacy fallback and the Firstmate code root as the default.
 For projects whose documentation describes actual hosts or home configuration, the optional, gitignored `config/published-path-prefixes` permits specific absolute home-path prefixes in published PR/MR text.
 An absent file means no overrides.
 Each whitespace-separated row contains the project's canonical absolute Git common directory followed by one or more allowed absolute path prefixes; blank lines and whole-line `#` comments are ignored, and paths containing whitespace are unsupported.
 Obtain the project key with `git -C <project-clone> rev-parse --path-format=absolute --git-common-dir`; linked task worktrees resolve to the same key.
+Publication and post-merge reconciliation fall back to the recorded project when the task worktree no longer resolves to a Git common directory.
 For example:
 
 ```text
@@ -1752,7 +1756,7 @@ For example:
 ```
 
 Prefixes match complete path components, so `/home/ops/estate` does not allow `/home/ops/estate-other`.
-Matching uses normalized paths, and `/` cannot be allowed.
+Matching uses normalized paths without changing prefix identity, so an allowance for `/home/ops/host_config` never permits `/home/ops/hostconfig`; `/` cannot be allowed.
 Task scratch paths, including `/tmp/fm-<task>/…` and the recorded task temp root, remain refused even beneath an allowed prefix.
 There are no per-file exemptions, per-line exemptions, or repository marker files.
 An override does not expand the permitted evidence artifact roots or bypass any evidence or merge guard.

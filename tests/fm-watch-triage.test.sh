@@ -2842,7 +2842,7 @@ run_malformed_wait_record_round() {  # <name> <evidence-body>
       # deferral keeps the unchanged ladder rather than reading a backend this
       # child shell has none of.
       fm_backend_agent_state() { printf alive; }
-      crew_needs_stuck_detection() { return 0; }
+      crew_absorb_class() { printf working; }
       eval "wedge_wait_evidence() { $2 ; }"
       wedge_timer_check "test:fm-wedge" "$FM_STATE_OVERRIDE/.stale-since-test_fm-wedge" \
         "non-terminal stale" "$FM_STATE_OVERRIDE/.wedge-escalations-test_fm-wedge" wedge \
@@ -6402,6 +6402,113 @@ test_worker_gate_retains_stuck_detection() {
   pass "silent workers at pipeline gates keep first-sighting and inherited timers; declared waits stay silent"
 }
 
+test_delivered_worker_gate_keeps_recovery() {
+  local spec kind mode dir state fakebin out pane window key hash harness verdict pid pr
+  pr=https://github.com/o/r/pull/3
+  for spec in ship:first scout:inherited ship:cached ship:busy ship:paused ship:done ship:busy-done; do
+    kind=${spec%%:*}; mode=${spec#*:}
+    dir=$(make_case "delivered-gate-$kind-$mode"); state="$dir/state"; fakebin="$dir/fakebin"
+    out="$dir/watch.out"; pane="$dir/pane.txt"; window=test:fm-delivered; key=test_fm-delivered
+    harness=grok
+    case "$mode" in busy*) harness=pi ;; esac
+    printf 'window=%s\nkind=%s\nharness=%s\npr=%s\n' "$window" "$kind" "$harness" "$pr" > "$state/delivered.meta"
+    fm_pr_poll_prepare "$state" delivered github "$pr" github.com o/r 3 "$ROOT/bin/fm-pr-poll.sh" \
+      && fm_pr_poll_publish_prepared || fail "could not arm the delivered worker's authenticated merge poll"
+    fm_pr_poll_artifacts_valid "$state" delivered "$ROOT/bin/fm-pr-poll.sh" \
+      || fail "delivery fixture has no valid merge-poll evidence"
+    printf 'done: PR %s ready for review\n' "$pr" > "$state/delivered.status"
+    [ "$mode" != paused ] || printf 'paused: awaiting external input\n' >> "$state/delivered.status"
+    prime_status_seen "$state" "$state/delivered.status"
+    touch "$state/.last-check"
+    printf 'waiting at a pipeline gate' > "$pane"
+    hash=$(hash_text 'waiting at a pipeline gate')
+    printf '%s' "$hash" > "$state/.hash-$key"
+    printf '1\n' > "$state/.count-$key"
+    if [ "$mode" != first ]; then
+      printf '%s' "$hash" > "$state/.stale-$key"
+      if [ "$mode" = cached ]; then
+        : > "$state/.paused-$key"
+        date +%s > "$state/.paused-rechecked-$key"
+      else
+        printf '%s\n' "$(( $(date +%s) - 500 ))" > "$state/.stale-since-$key"
+      fi
+    fi
+    case "$mode" in
+      busy*)
+        record_pi_busy "$state" delivered
+        backdate_pi_turn_start "$state" delivered 500
+        : > "$state/.paused-$key"
+        ;;
+    esac
+    verdict='state: parked · source: run-step · parked at review · run: post-delivery-gate'
+    case "$mode" in done|busy-done) verdict='state: done · source: run-step · checks green' ;; esac
+    FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$pane" FM_FAKE_TMUX_CURRENT_COMMAND="$harness" \
+      FM_FAKE_CREW_STATE="$verdict" \
+      watch_bg "$state" "$fakebin" "$out" env FM_STALE_ESCALATE_SECS=5 FM_BUSY_TURN_MAX_SECS=1
+    pid=$!
+    case "$mode" in
+      paused|done|busy-done)
+        wait_poll_cycle "$state" "$pid" || { reap "$pid"; fail "$mode delivery raised an alarm: $(cat "$out")"; }
+        wait_poll_cycle "$state" "$pid" || { reap "$pid"; fail "$mode delivery raised an idle check-in"; }
+        reap "$pid"
+        [ ! -s "$out" ] && [ ! -s "$state/.wake-queue" ] || fail "$mode delivery queued an idle check-in"
+        ;;
+      *)
+        case "$mode" in
+          first|cached)
+            wait_numeric_file "$state/.stale-since-$key" 150 \
+              || { reap "$pid"; fail "$kind $mode delivered gate lost its first-sighting timer"; }
+            printf '%s\n' "$(( $(date +%s) - 500 ))" > "$state/.stale-since-$key"
+            ;;
+        esac
+        wait_for_exit "$pid" 150 || { reap "$pid"; fail "$kind $mode delivered gate lost stuck detection"; }
+        grep -F 'possible wedge, escalation 1' "$out" >/dev/null \
+          || fail "$kind $mode delivered gate emitted no recovery alarm: $(cat "$out")"
+        [ "$(wedge_stale_wakes "$state" "$window")" -eq 1 ] || fail "$kind $mode delivered gate did not queue one alarm"
+        ;;
+    esac
+  done
+  pass "current pipeline gates outrank prior PR delivery across initial, inherited, cached and busy paths"
+}
+
+test_endpoint_receipt_survives_uncertain_probes() {
+  local death dir state out
+  for death in dead missing; do
+    dir=$(make_case "uncertain-after-$death"); state="$dir/state"; out="$dir/result.out"
+    printf 'window=test:fm-receipt\nkind=ship\nspawn_gen=spawn-first\n' > "$state/receipt.meta"
+    FM_STATE_OVERRIDE="$state" FM_CONFIG_OVERRIDE="$dir/config" bash -c '
+      . "$1"
+      death=$2
+      probe=$death
+      fm_backend_agent_state() {
+        [ "$probe" != failed ] || return 1
+        printf "%s" "$probe"
+      }
+      wake() { :; }
+      marker="$STATE/.dead-reported-test_fm-receipt"
+      wedge_dead_record test:fm-receipt "$STATE/probe-since" "endpoint check" 0 same-pane receipt
+      receipt=$(cat "$marker")
+      for probe in unreadable ambiguous unverified failed; do
+        wedge_dead_record test:fm-receipt "$STATE/probe-since" "endpoint check" 0 same-pane receipt || true
+        [ "$(cat "$marker" 2>/dev/null)" = "$receipt" ] || { echo "uncertain $probe erased the death receipt"; exit 1; }
+        probe=$death
+        wedge_dead_record test:fm-receipt "$STATE/probe-since" "endpoint check" 0 same-pane receipt
+        [ "$(wc -l < "$STATE/.wake-queue")" -eq 1 ] || { echo "uncertainty repeated an unchanged death"; exit 1; }
+      done
+      probe=alive
+      wedge_dead_record test:fm-receipt "$STATE/probe-since" "endpoint check" 0 same-pane receipt || true
+      [ ! -e "$marker" ] || { echo "proven liveness did not rearm reporting"; exit 1; }
+      probe=$death
+      wedge_dead_record test:fm-receipt "$STATE/probe-since" "endpoint check" 0 same-pane receipt
+      [ "$(wc -l < "$STATE/.wake-queue")" -eq 2 ] || { echo "a new death after liveness was swallowed"; exit 1; }
+      printf "window=test:fm-receipt\nkind=ship\nspawn_gen=spawn-second\n" > "$STATE/receipt.meta"
+      wedge_dead_record test:fm-receipt "$STATE/probe-since" "endpoint check" 0 same-pane receipt
+      [ "$(wc -l < "$STATE/.wake-queue")" -eq 3 ] || { echo "a replacement death was swallowed"; exit 1; }
+    ' _ "$WATCH" "$death" > "$out" 2>&1 || fail "$death receipt regression: $(cat "$out")"
+  done
+  pass "uncertain probes preserve death receipts; proven liveness and replacement rearm reporting"
+}
+
 test_endpoint_reports_once_per_spawn_generation() {
   local harness dir state fakebin out pane window key pid redraw
   for harness in grok codex; do
@@ -6505,6 +6612,8 @@ test_idle_policy_regressions() {
   test_actionable_signal_surfaced
   test_pr_check_event_still_wakes
   test_worker_gate_retains_stuck_detection
+  test_delivered_worker_gate_keeps_recovery
+  test_endpoint_receipt_survives_uncertain_probes
   test_endpoint_reports_once_per_spawn_generation
   test_finished_run_drops_its_wedge_timer
 }
@@ -6685,5 +6794,7 @@ test_paused_worker_dead_endpoint_still_wakes
 test_pr_check_event_still_wakes
 
 test_worker_gate_retains_stuck_detection
+test_delivered_worker_gate_keeps_recovery
+test_endpoint_receipt_survives_uncertain_probes
 test_endpoint_reports_once_per_spawn_generation
 test_finished_run_drops_its_wedge_timer

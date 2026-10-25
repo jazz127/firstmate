@@ -1488,7 +1488,8 @@ wedge_dead_record() {  # <window> <since-file> <triage-label> <idle-age> <pane-h
   case "$agent_state" in
     dead) detail='the endpoint is still there with no agent running in it' ;;
     missing) detail='the recorded endpoint is gone' ;;
-    *) rm -f "$marker"; return 1 ;;
+    alive) rm -f "$marker"; return 1 ;;
+    *) return 1 ;;
   esac
   # Re-arm the idle timer on BOTH paths below, so the backend probe above stays on
   # its once-per-STALE_ESCALATE_SECS budget instead of running on every poll.
@@ -1650,13 +1651,22 @@ wedge_timer_check() {  # <window> <since-file> <triage-label> <escalation-count-
       interval=$STALE_ESCALATE_SECS
       if [ "$(cat "$escalation_file" 2>/dev/null || echo 0)" -gt 0 ]; then interval=$repeat_secs; fi
       if [ "$age" -ge "$interval" ]; then
-        # Busy-bound callers already proved execution on this poll.
-        if [ "$busy_proven" -ne 1 ] && ! watcher_read crew_needs_stuck_detection "$task"; then
-          rm -f "$since_file" "$escalation_file"
-          clear_write_tracking "$(window_key "$win")"
-          triage_log "absorbed $label (no longer provably working): $win"
-          return 0
-        fi
+        pause_state_class "$win" "$task"
+        case "$PAUSE_STATE_CLASS" in
+          paused)
+            handle_paused_stale "$win" "$task" "$hash"
+            return 0
+            ;;
+          working|parked) ;;
+          *)
+            if [ "$busy_proven" -ne 1 ]; then
+              rm -f "$since_file" "$escalation_file"
+              clear_write_tracking "$(window_key "$win")"
+              triage_log "absorbed $label (no active work): $win"
+              return 0
+            fi
+            ;;
+        esac
         if watcher_query wedge_wait_evidence "$task" &&
            wedge_defer_wait "$win" "$since_file" "$label" "$age" "$WATCHER_QUERY"; then
           return 0
@@ -2137,12 +2147,7 @@ busy_turn_bound_check() {  # <window> <task> <hash> <since-file> <escalation-fil
     handle_paused_stale "$win" "$task" "$h"
     return 0
   fi
-  # An attended delivered wait takes the same bounded recheck; under the legacy
-  # away daemon it keeps the unchanged wedge route, which the daemon classifies.
-  if ! afk_present && delivered_pr_wait "$task"; then
-    handle_paused_stale "$win" "$task" "$h"
-    return 0
-  fi
+  clear_pause_mode "$(window_key "$win")"
   wedge_timer_check "$win" "$since_file" "busy (no completed turn)" "$escalation_file" "$task" "$h" "$dialog" "$PAUSE_RESURFACE_SECS" 1
   return 1
 }
@@ -2253,9 +2258,10 @@ pause_state_class() {  # <window> <task>
   fi
   watcher_query crew_absorb_class "$task" || WATCHER_QUERY=none
   class=$WATCHER_QUERY
-  if [ "$class" = working ]; then
+  if [ "$class" = working ] \
+    || { [ "$class" = parked ] && ! status_is_paused_or_captain_held "$last"; }; then
     rm -f "$recheck_file"
-    PAUSE_STATE_CLASS=working
+    PAUSE_STATE_CLASS=$class
     return
   fi
   # Recover paused classification for a declared wait that authoritative crew state
@@ -3533,15 +3539,6 @@ EOF
                 rm -f "$ssf" "$ewf"
                 clear_write_tracking "$key"
                 triage_log "absorbed stale (worker idle check-ins disabled): $w"
-                ;;
-            esac
-          elif status_is_paused_or_captain_held "$last" || delivered_pr_wait "$task"; then
-            pause_state_class "$w" "$task"
-            case "$PAUSE_STATE_CLASS" in
-              paused) handle_paused_stale "$w" "$task" "$h" ;;
-              working|parked)
-                clear_pause_mode "$key"
-                wedge_timer_check "$w" "$ssf" "stale (working after a declared pause)" "$ewf" "$task" "$h" "$dialog"
                 ;;
             esac
           elif [ -e "$ssf" ]; then

@@ -69,6 +69,63 @@ enter_mailbox() {
 
 FAKEBIN="$TMP_ROOT/fakebin"
 
+test_mail_budget_bounds_do_not_overflow() {
+  local shell value expected home out rc
+  home=$(make_home budget-range)
+  for shell in bash /bin/bash; do
+    for value in 5 05 8 08 25 025 0 00 4 26 \
+      9223372036854775807 9223372036854775808 18446744073709551616 \
+      999999999999999999999999999999999999; do
+      case "$value" in 5|05|8|08|25|025) expected=0 ;; *) expected=2 ;; esac
+      rc=0
+      out=$(FM_HOME="$home" FM_MAIL_CHECK_BUDGET="$value" "$shell" "$CHECK" --help 2>&1) || rc=$?
+      expect_code "$expected" "$rc" "$shell mail budget=$value violated its range: $out"
+      if [ "$expected" -eq 0 ]; then
+        assert_contains "$out" 'Usage:' 'valid mail budget prevented help output'
+      else
+        assert_contains "$out" 'FM_MAIL_CHECK_BUDGET must be a whole number from 5 to 25' \
+          'mail budget refusal lost its range diagnostic'
+      fi
+      assert_not_contains "$out" 'integer' 'mail budget validation leaked shell arithmetic errors'
+    done
+  done
+  pass 'mail-check budgets enforce their range without overflowing shell integers'
+}
+
+test_check_timeout_is_decimal_with_zero_default() {
+  local tmpbin source shell value expected home rc
+  tmpbin="$TMP_ROOT/decimal-timeout-bin"
+  mkdir -p "$tmpbin"
+  for source in "$ROOT"/bin/*; do
+    case "${source##*/}" in fm-mail-check.sh|fm-mail.sh) continue ;; esac
+    ln -s "$source" "$tmpbin/${source##*/}"
+  done
+  cp "$CHECK" "$tmpbin/fm-mail-check.sh"
+  # A synthetic timeout result exposes the chosen budget without sleeping.
+  # Existing timeout tests below exercise the actual elapsed-time boundary.
+  printf '#!/usr/bin/env bash\nexit 124\n' > "$tmpbin/fm-mail.sh"
+  chmod +x "$tmpbin/fm-mail.sh"
+  for shell in bash /bin/bash; do
+    for value in 0 00 000 8 08 9 09 10 010; do
+      case "$value" in
+        0|00|000) expected=15 ;;
+        8|08) expected=5 ;;
+        9|09) expected=6 ;;
+        10|010) expected=7 ;;
+      esac
+      home=$(make_home "decimal-${shell//\//-}-$value")
+      rc=0
+      FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" FM_CHECK_TIMEOUT="$value" FM_MAIL_CHECK_BUDGET=15 \
+        "$shell" "$tmpbin/fm-mail-check.sh" check > "$home/out" 2> "$home/err" || rc=$?
+      expect_code 0 "$rc" "$shell mail check with timeout $value"
+      assert_equals "mail: poll did not finish within the ${expected}s budget" "$(cat "$home/out")" \
+        "mail check chose the wrong decimal budget for $value"
+      [ ! -s "$home/err" ] || fail "mail check emitted errors: $(cat "$home/err")"
+    done
+  done
+  pass "mail check timeout uses decimal seconds and retains the default for padded zero"
+}
+
 test_help_and_usage() {
   local out rc=0
   out=$("$CHECK" --help 2>&1) || rc=$?
@@ -137,7 +194,7 @@ test_arm_refuses_without_the_mail_plane() {
   home="$TMP_ROOT/plane/home"
   mkdir -p "$tmpbin" "$home/state"
   cp "$ROOT/bin/fm-mail-check.sh" "$tmpbin/"
-  for lib in fm-timeout-lib.sh fm-pr-lib.sh fm-line-cap-lib.sh fm-check-lib.sh; do
+  for lib in fm-timeout-lib.sh fm-pr-lib.sh fm-scratch-lib.sh fm-tangle-lib.sh fm-runtime-branch-lib.sh fm-line-cap-lib.sh fm-check-lib.sh; do
     [ -e "$tmpbin/$lib" ] || ln -s "$ROOT/bin/$lib" "$tmpbin/$lib"
   done
   out=$(FM_HOME="$home" "$tmpbin/fm-mail-check.sh" arm 2>&1) || rc=$?
@@ -239,7 +296,7 @@ test_repeated_failure_that_queued_new_mail_still_wakes() {
   mkdir -p "$tmpbin" "$home/state"
   check_bin="$tmpbin/fm-mail-check.sh"
   cp "$ROOT/bin/fm-mail-check.sh" "$tmpbin/"
-  for lib in fm-timeout-lib.sh fm-pr-lib.sh fm-line-cap-lib.sh fm-check-lib.sh; do
+  for lib in fm-timeout-lib.sh fm-pr-lib.sh fm-scratch-lib.sh fm-tangle-lib.sh fm-runtime-branch-lib.sh fm-line-cap-lib.sh fm-check-lib.sh; do
     [ -e "$tmpbin/$lib" ] || ln -s "$ROOT/bin/$lib" "$tmpbin/$lib"
   done
   printf '%s\n' '#!/usr/bin/env bash' 'echo "fm-mail: woke for 42"' 'echo "fm-mail: connection refused" >&2' 'exit 1' > "$tmpbin/fm-mail.sh"
@@ -266,7 +323,7 @@ test_large_poll_output_is_drained() {
   tmpbin="$TMP_ROOT/large-poll/bin"
   mkdir -p "$tmpbin"
   cp "$CHECK" "$tmpbin/"
-  for lib in fm-timeout-lib.sh fm-pr-lib.sh fm-line-cap-lib.sh fm-check-lib.sh; do
+  for lib in fm-timeout-lib.sh fm-pr-lib.sh fm-scratch-lib.sh fm-tangle-lib.sh fm-runtime-branch-lib.sh fm-line-cap-lib.sh fm-check-lib.sh; do
     ln -s "$ROOT/bin/$lib" "$tmpbin/$lib"
   done
   cat > "$tmpbin/fm-mail.sh" <<'SH'
@@ -317,7 +374,7 @@ test_repeated_timeout_still_wakes() {
   mkdir -p "$tmpbin" "$home/state"
   check_bin="$tmpbin/fm-mail-check.sh"
   cp "$ROOT/bin/fm-mail-check.sh" "$tmpbin/"
-  for lib in fm-timeout-lib.sh fm-pr-lib.sh fm-line-cap-lib.sh fm-check-lib.sh; do
+  for lib in fm-timeout-lib.sh fm-pr-lib.sh fm-scratch-lib.sh fm-tangle-lib.sh fm-runtime-branch-lib.sh fm-line-cap-lib.sh fm-check-lib.sh; do
     [ -e "$tmpbin/$lib" ] || ln -s "$ROOT/bin/$lib" "$tmpbin/$lib"
   done
   printf '%s\n' '#!/usr/bin/env bash' 'exit 124' > "$tmpbin/fm-mail.sh"
@@ -394,7 +451,7 @@ test_repeated_status2_stays_queued_still_wakes() {
   mkdir -p "$tmpbin" "$home/state"
   check_bin="$tmpbin/fm-mail-check.sh"
   cp "$ROOT/bin/fm-mail-check.sh" "$tmpbin/"
-  for lib in fm-timeout-lib.sh fm-pr-lib.sh fm-line-cap-lib.sh fm-check-lib.sh; do
+  for lib in fm-timeout-lib.sh fm-pr-lib.sh fm-scratch-lib.sh fm-tangle-lib.sh fm-runtime-branch-lib.sh fm-line-cap-lib.sh fm-check-lib.sh; do
     [ -e "$tmpbin/$lib" ] || ln -s "$ROOT/bin/$lib" "$tmpbin/$lib"
   done
   cat > "$tmpbin/fm-mail.sh" <<EOF
@@ -447,7 +504,7 @@ test_missing_mail_plane_is_reported() {
   mkdir -p "$tmpbin" "$home/state"
   check_bin="$tmpbin/fm-mail-check.sh"
   cp "$ROOT/bin/fm-mail-check.sh" "$tmpbin/"
-  for lib in fm-timeout-lib.sh fm-pr-lib.sh fm-line-cap-lib.sh fm-check-lib.sh; do
+  for lib in fm-timeout-lib.sh fm-pr-lib.sh fm-scratch-lib.sh fm-tangle-lib.sh fm-runtime-branch-lib.sh fm-line-cap-lib.sh fm-check-lib.sh; do
     [ -e "$tmpbin/$lib" ] || ln -s "$ROOT/bin/$lib" "$tmpbin/$lib"
   done
   out="$home/out.txt"
@@ -456,6 +513,8 @@ test_missing_mail_plane_is_reported() {
   pass "fm-mail-check: a missing mail plane is reported, not assumed"
 }
 
+test_mail_budget_bounds_do_not_overflow
+test_check_timeout_is_decimal_with_zero_default
 test_help_and_usage
 test_arm_writes_and_binds_the_check_and_disarm_removes_it
 test_arm_resolves_a_relative_home_into_the_shim

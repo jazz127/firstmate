@@ -9,8 +9,8 @@
 # data/pipeline-spend.jsonl, at most once per task incarnation (task id plus
 # the record's spawn_gen): repeating it for an incarnation already in the
 # ledger appends nothing, so a retried cleanup never counts a task twice.
-# Recording is disabled unless config/pipeline-spend is present; in that case
-# this command exits before reading task metadata, no-mistakes state, or ledger.
+# When config/pipeline-spend is absent, recording is disabled and this command
+# exits before reading task metadata, no-mistakes state, or ledger.
 # When enabled, bin/fm-teardown.sh calls record for every ship task whose
 # local copy it cleans up, before it deletes the task branch this script
 # attributes runs by and before it removes state/<id>.meta. The ledger is
@@ -149,7 +149,7 @@ else
 fi
 
 [ -d "$DATA" ] || fail "data directory $DATA is missing"
-LEDGER="$DATA/pipeline-spend.jsonl"
+LEDGER="$(CDPATH='' cd -- "$DATA" && pwd -P)/pipeline-spend.jsonl"
 
 RUN_DIR=$WT
 [ -n "$RUN_DIR" ] && [ -d "$RUN_DIR" ] || RUN_DIR=$STATE

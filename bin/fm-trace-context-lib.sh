@@ -68,7 +68,7 @@
 # with the trace id and span id never all-zero (W3C rejects both). New roots use
 # RANDOM ids from /dev/urandom. The root's `01` (sampled) flag records a
 # sampling DECISION that downstream parent-based samplers honor; it does not
-# guarantee any collector stores a span, and firstmate emits no spans itself.
+# guarantee any collector stores a span; this propagation library emits no spans.
 #
 # Security / trust boundary. This feature adds no OTEL_* variables, no
 # tracestate, no arbitrary environment injection, and no configurable or
@@ -97,6 +97,9 @@
 # Strict W3C traceparent validator: version 00, 32-hex trace id, 16-hex span id,
 # 2-hex flags, with neither id all-zero. The regex lives in a variable because
 # bash 3.2 only honors an unquoted right-hand side for =~.
+# shellcheck source=bin/fm-timing-lib.sh
+. "$(CDPATH='' cd -- "$(dirname "${BASH_SOURCE[0]}")" && pwd)/fm-timing-lib.sh"
+
 fm_trace_context_valid() {  # <traceparent>
   local tp=$1
   local re='^00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$'
@@ -198,6 +201,22 @@ fm_trace_context_recorded() {  # <meta-file>
   [ -f "$meta" ] || return 0
   line=$(grep '^traceparent=' "$meta" 2>/dev/null | head -n1) || return 0
   printf '%s' "${line#traceparent=}"
+}
+
+# Echo the task's first-mint epoch-ms, or the current time when no valid start
+# is recorded. Call only after a carrier has been resolved; this helper is
+# independent of export enablement.
+fm_trace_context_started_resolve() {  # <meta-file>
+  local meta=$1 existing started
+  existing=$(fm_trace_context_recorded "$meta")
+  if fm_trace_context_valid "$existing"; then
+    started=$(sed -n 's/^trace_started=//p' "$meta" 2>/dev/null | head -n 1)
+    case "$started" in
+      ''|*[!0-9]*) ;;
+      *) printf '%s\n' "$started"; return 0 ;;
+    esac
+  fi
+  fm_timing_now_ms
 }
 
 # Mint a fresh sampled root traceparent. Echo nothing and return 1 on entropy

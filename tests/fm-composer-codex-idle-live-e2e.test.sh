@@ -71,7 +71,7 @@ PATH="$SHIM_DIR:$PATH"
 VERSION=$(codex --version 2>/dev/null | head -1)
 [ -n "$VERSION" ] || VERSION='version-unknown'
 
-tmux -L "$SOCKET" new-session -d -s "$SESSION" -x 160 -y 45 -c "$ROOT"
+tmux -L "$SOCKET" new-session -d -s "$SESSION" -x 160 -y 20 -c "$ROOT"
 tmux -L "$SOCKET" new-window -d -t "$SESSION:" -n "$WIN" -c "$ROOT" -- codex \
   || fail "codex ($VERSION): could not launch in the isolated tmux server"
 
@@ -96,7 +96,17 @@ tmux_verdict=''
 cursorless_verdict=''
 styled=''
 dismissed=0
+hooks_dismissed=0
 while [ "$i" -lt "$budget" ]; do
+  # A hook review is distinct from repository trust. Continue with hooks
+  # disabled so the idle composer can be read without approving new code.
+  if [ "$hooks_dismissed" -eq 0 ] && tmux capture-pane -p -t "$SESSION:$WIN" 2>/dev/null \
+    | grep -Fq 'Continue without trusting (hooks won'"'"'t run)'; then
+    tmux send-keys -t "$SESSION:$WIN" 3 Enter 2>/dev/null || true
+    hooks_dismissed=1
+    sleep 1
+    continue
+  fi
   tmux_verdict=$(fm_tmux_composer_state "$SESSION:$WIN")
   styled=$(tmux capture-pane -e -p -t "$SESSION:$WIN" 2>/dev/null | tail -n "$FM_COMPOSER_CAPTURE_LINES")
   cursorless_verdict=$(classify_cursorless "$styled")

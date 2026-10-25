@@ -68,6 +68,22 @@ unset FM_TASK_ID
 # against an ambient override sets TASKS_AXI_FILE itself.
 unset TASKS_AXI_FILE TASKS_AXI_BACKEND
 
+# Write the tracked default backlog configuration into a fixture home. Never copy
+# "$ROOT/.tasks.toml": an operator's primary checkout keeps a gitignored override
+# there (for example a beads backend at its live backlog), so a copy points the
+# fixture at the operator's queue and produces false failures. This mirrors the
+# tracked .tasks.toml defaults.
+fm_test_tasks_toml() {  # <destination-file>
+  cat > "$1" <<'TOML'
+backend = "markdown"
+
+[markdown]
+path = "data/backlog.md"
+archive = "data/done-archive.md"
+done_keep = 10
+TOML
+}
+
 # Resolve the repo root from this library's own location. Consumed by sourcing
 # test files, not by this library, so it reads as "unused" here.
 # shellcheck disable=SC2034
@@ -82,6 +98,35 @@ fail() {
 
 pass() {
   printf 'ok - %s\n' "$1"
+}
+
+# Harness argument assertions reuse the emitted prefix rather than duplicating
+# its per-spawn env-file path. The dispatch suite executes it separately to prove
+# credential preservation, hooks-path selection and invalid-count refusal.
+fm_test_launch_git_prefix() {  # <launch>
+  local launch=$1 helper tail end=' || return 1 2>/dev/null || exit 1; '
+  case "$launch" in
+    *' env-file '*"$end"*) ;;
+    *) fail "launch has no complete Git configuration prefix" ;;
+  esac
+  helper=${launch%%' env-file '*}
+  helper=${helper##*; }
+  tail=${launch#*' env-file '}
+  tail=${tail%%"$end"*}
+  printf '%s env-file %s%s' "$helper" "$tail" "$end"
+}
+
+# The command a pane runs after the launch's Git configuration prefix and its
+# leading export and unset statements, for suites that split it into
+# arguments. Callers that eval the result must do so under an empty PATH: a
+# prefix this function does not recognise would otherwise run the harness.
+fm_test_launch_command() {  # <launch>
+  local command=$1 end=' || return 1 2>/dev/null || exit 1; '
+  case "$command" in *"$end"*) command=${command#*"$end"} ;; esac
+  while [[ "$command" == export\ *\;* || "$command" == unset\ *\;* ]]; do
+    command=${command#*; }
+  done
+  printf '%s' "$command"
 }
 
 # --- self-cleaning temp root ------------------------------------------------
@@ -440,6 +485,45 @@ fm_fakebin() {
   printf '%s\n' "$fakebin"
 }
 
+# fm_test_fake_tmux_foreground_cwd <fakebin> [cwd-file]
+# A synthetic foreground process and lsof cwd sourced from FM_FAKE_PANE_PATH,
+# or read from <cwd-file> at each call when one is given, so a fixture that
+# moves its pane's cwd mid-case keeps one file current instead of re-exporting.
+# Pair with tmux stubs that answer #{pane_tty} with /dev/pts/91.
+fm_test_fake_tmux_foreground_cwd() {
+  local fakebin=$1 cwd_file=${2:-}
+  cat > "$fakebin/ps" <<'SH'
+#!/usr/bin/env bash
+case "$*" in
+  *"-t pts/91"*) printf '%s\n' '987654321 987654321 987654321' ;;
+  *) PATH=${PATH#"$(dirname "$0")":} exec ps "$@" ;;
+esac
+SH
+  if [ -n "$cwd_file" ]; then
+    cat > "$fakebin/lsof" <<SH
+#!/usr/bin/env bash
+case "\$*" in
+  *"-p 987654321"*"-d cwd"*"-Fn"*) ;;
+  *) PATH=\${PATH#"\$(dirname "\$0")":} exec lsof "\$@" ;;
+esac
+cwd=\$(cat '$cwd_file' 2>/dev/null) || exit 1
+[ -n "\$cwd" ] || exit 1
+printf 'p987654321\\nfcwd\\nn%s\\n' "\$cwd"
+SH
+  else
+    cat > "$fakebin/lsof" <<'SH'
+#!/usr/bin/env bash
+case "$*" in
+  *"-p 987654321"*"-d cwd"*"-Fn"*) ;;
+  *) PATH=${PATH#"$(dirname "$0")":} exec lsof "$@" ;;
+esac
+[ -n "${FM_FAKE_PANE_PATH:-}" ] || exit 1
+printf 'p987654321\nfcwd\nn%s\n' "$FM_FAKE_PANE_PATH"
+SH
+  fi
+  chmod +x "$fakebin/ps" "$fakebin/lsof"
+}
+
 fm_fake_exit0() {
   local fakebin=$1 tool
   shift
@@ -738,6 +822,27 @@ fm_write_meta() {
   for kv in "$@"; do
     printf '%s\n' "$kv" >> "$file"
   done
+}
+
+# fm_test_trace_export_enable <home> <capture-file> [fakebin]: enable synthetic
+# OTLP export through a fake curl for lifecycle-hook tests.
+fm_test_trace_export_enable() {
+  local home=$1 capture=$2 fakebin=${3:-"$1/fakebin"} header="$1/auth-header"
+  mkdir -p "$home/state" "$home/config" "$fakebin"
+  printf '4242\n' > "$home/state/.lock"
+  printf '4242 on\n' > "$home/state/.trace-context-effective"
+  printf 'Authorization: Bearer synthetic-test-token\n' > "$header"
+  chmod 600 "$header"
+  jq -n --arg header "$header" \
+    '{enabled:true,endpoint:"http://127.0.0.1:14318/v1/traces","auth-header-file":$header}' \
+    > "$home/config/trace-export.json"
+  cat > "$fakebin/curl" <<'SH'
+#!/usr/bin/env bash
+cat >> "$FM_TRACE_CAPTURE"
+printf '\n' >> "$FM_TRACE_CAPTURE"
+SH
+  chmod +x "$fakebin/curl"
+  export FM_TRACE_CAPTURE=$capture
 }
 
 # fm_write_secondmate_meta <file> <home> [window] [projects] [harness]: write the

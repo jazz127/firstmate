@@ -97,6 +97,8 @@ CHECK_TIMEOUT=${FM_CHECK_TIMEOUT:-30}
 case "$CHECK_TIMEOUT" in
   ''|*[!0-9]*|0) CHECK_TIMEOUT=30 ;;
 esac
+CHECK_TIMEOUT=${CHECK_TIMEOUT#"${CHECK_TIMEOUT%%[!0]*}"}
+[ -n "$CHECK_TIMEOUT" ] || CHECK_TIMEOUT=30
 
 BUDGET_SECS=${FM_MAIL_CHECK_BUDGET:-15}
 case "$BUDGET_SECS" in
@@ -105,7 +107,9 @@ case "$BUDGET_SECS" in
     exit 2
     ;;
 esac
-if [ "$BUDGET_SECS" -lt 5 ] || [ "$BUDGET_SECS" -gt 25 ]; then
+BUDGET_SECS=${BUDGET_SECS#"${BUDGET_SECS%%[!0]*}"}
+BUDGET_SECS=${BUDGET_SECS:-0}
+if [ "${#BUDGET_SECS}" -gt 2 ] || [ "$BUDGET_SECS" -lt 5 ] || [ "$BUDGET_SECS" -gt 25 ]; then
   printf 'fm-mail-check: FM_MAIL_CHECK_BUDGET must be a whole number from 5 to 25\n' >&2
   exit 2
 fi

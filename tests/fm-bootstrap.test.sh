@@ -834,6 +834,7 @@ make_routine_bootstrap_fixture() {
     printf '%s\n' 'config/crew-harness'
     printf '%s\n' 'config/crew-dispatch.json'
     printf '%s\n' 'config/startup-memory-budget'
+    printf '%s\n' 'config/context-restart-budget'
   } > "$root/.gitignore"
   printf '%s\n' 'instructions' > "$root/AGENTS.md"
   mkdir -p "$root/bin" "$root/.agents/skills"
@@ -1135,6 +1136,20 @@ test_crew_dispatch_validation() {
 malformed dispatch config is flagged^{"rules":[^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - malformed JSON
 unverified dispatch harness is flagged^{"rules":[{"when":"anything","use":{"harness":"spaceship"}}],"default":{"harness":"codex"}}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - unverified harness: spaceship
 codex Luna max effort is accepted^{"rules":[{"when":"big feature","use":{"harness":"codex","model":"gpt-5.6-luna","effort":"max"}}]}^empty^
+codex Primary and secondary seats are accepted in use and default^{"rules":[{"when":"big feature","use":{"harness":"codex","model":"gpt-5.6-luna","seat":"primary"}}],"default":{"harness":"codex","seat":"secondary"}}^empty^
+invalid use seat is refused^{"rules":[{"when":"big feature","use":{"harness":"codex","seat":"bad_name"}}]}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - unsupported use profile seat (safe name on codex): bad_name
+invalid default seat is refused^{"default":{"harness":"codex","seat":"-bad"}}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - unsupported default profile seat (safe name on codex): -bad
+array Primary seat in use object is refused^{"rules":[{"when":"big feature","use":{"harness":"codex","seat":["primary"]}}]}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - unsupported use profile seat (safe name on codex): ["primary"]
+array secondary seat in use array is refused^{"rules":[{"when":"big feature","use":[{"harness":"codex","seat":["secondary"]}]}]}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - unsupported use profile seat (safe name on codex): ["secondary"]
+array secondary seat in default object is refused^{"default":{"harness":"codex","seat":["secondary"]}}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - unsupported default profile seat (safe name on codex): ["secondary"]
+array Primary seat in default array is refused^{"default":[{"harness":"codex","seat":["primary"]}]}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - unsupported default profile seat (safe name on codex): ["primary"]
+empty seat array is refused^{"default":{"harness":"codex","seat":[]}}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - unsupported default profile seat (safe name on codex): []
+both seats as an array are refused^{"rules":[{"when":"big feature","use":{"harness":"codex","seat":["primary","secondary"]}}]}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - unsupported use profile seat (safe name on codex): ["primary","secondary"]
+null seat is refused^{"default":{"harness":"codex","seat":null}}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - unsupported default profile seat (safe name on codex): null
+object seat is refused^{"default":{"harness":"codex","seat":{}}}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - unsupported default profile seat (safe name on codex): {}
+boolean seat is refused^{"default":{"harness":"codex","seat":false}}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - unsupported default profile seat (safe name on codex): false
+numeric seat is refused^{"default":{"harness":"codex","seat":0}}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - unsupported default profile seat (safe name on codex): 0
+Primary seat on another harness is refused^{"default":{"harness":"claude","seat":"primary"}}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - unsupported default profile seat (safe name on codex): primary
 codex unsupported model max effort is flagged^{"rules":[{"when":"big feature","use":{"harness":"codex","model":"gpt-5","effort":"max"}}]}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - invalid effort: codex:max
 unsupported grok max effort is flagged^{"rules":[{"when":"deep current work","use":{"harness":"grok","model":"grok-4","effort":"max"}}]}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - invalid effort: grok:max
 unsupported grok xhigh effort is flagged^{"rules":[{"when":"deep current work","use":{"harness":"grok","model":"grok-4","effort":"xhigh"}}]}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - invalid effort: grok:xhigh
@@ -1222,6 +1237,10 @@ ROWS
   out=$(PATH="$fakebin:$BASE_PATH" FM_HOME="$case_dir/home" FM_ROOT_OVERRIDE="$case_dir/home" \
     FM_FAKE_TREEHOUSE_LEASE_HELP=1 "$ROOT/bin/fm-bootstrap.sh")
   [ -z "$out" ] || fail "no-key bootstrap must accept the verified devin worker adapter, got: $out"
+  printf '%s\n' '{"rules":[{"when":"small clear task","use":{"harness":"commandcode","model":"deepseek/deepseek-v4.1-flash","effort":"low"}}]}' > "$case_dir/home/config/crew-dispatch.json"
+  out=$(PATH="$fakebin:$BASE_PATH" FM_HOME="$case_dir/home" FM_ROOT_OVERRIDE="$case_dir/home" \
+    FM_FAKE_TREEHOUSE_LEASE_HELP=1 "$ROOT/bin/fm-bootstrap.sh")
+  [ -z "$out" ] || fail "no-key bootstrap must accept the verified commandcode worker adapter, got: $out"
   printf '%s\n' '{"rules":[{"when":"gemini work","use":{"harness":"gemini","model":"gemini-3.8-flash-high","provider":"google"}}]}' > "$case_dir/home/config/crew-dispatch.json"
   out=$(PATH="$fakebin:$BASE_PATH" FM_HOME="$case_dir/home" FM_ROOT_OVERRIDE="$case_dir/home" \
     FM_FAKE_TREEHOUSE_LEASE_HELP=1 "$ROOT/bin/fm-bootstrap.sh")

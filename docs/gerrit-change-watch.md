@@ -53,6 +53,9 @@ A watch built on any of the first three reports a merge for an approved change n
 Nothing in this adapter reads readiness, but the distinction is recorded here because the next thing built on this record will want it.
 A new patch set drops both blocking votes, and a rebase is a new patch set, so a readiness reading is only ever true of the patch set it was taken from.
 
+The no-mistakes publication check reads the change's `commit_message` field as the published description when it validates evidence claims.
+It never substitutes the free-text `subject`, because the subject is only the first line and cannot represent the complete body that was published.
+
 ## The change number is the whole match, and the server's own URL is not
 
 `gerrit-axi` reports a change's `url` straight from `gerrit query` (`src/core/changes.js`, `url: row?.url ?? null`), and Gerrit composes that field from `gerrit.canonicalWebUrl`, omitting it when the setting is unset.
@@ -120,6 +123,7 @@ The server permitting self-approval is what makes this a policy boundary rather 
 - A record naming another change never wakes the watch, and neither does a doctored sidecar.
 - A merged record whose `url` is null, absent, or on an alias host still wakes the watch, because the change number is the whole match.
 - A merged spelling inside a change's free-text subject cannot forge a status.
+- Published evidence validation reads the Gerrit `commit_message` field rather than the change subject, so the complete description is checked.
 - An absent `gerrit-axi` or `jq` produces no wake, and arming reports the missing tool instead.
 - Arming records no `pr_head`: a Gerrit revision names one patch set, and `bin/fm-review-diff.sh` has no Gerrit path to resolve a current head with, so a recorded revision would quietly become the reviewed content after the next amend.
 - The merge path refuses a Gerrit change.

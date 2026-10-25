@@ -254,9 +254,11 @@ fmx_load_config() {
   else
     dry=$(fmx_env_get FMX_DRY_RUN "$env_file")
   fi
+  # False settings ignore letter case and trailing newlines.
+  while [[ "$dry" == *$'\n' ]]; do dry=${dry%$'\n'}; done
   # shellcheck disable=SC2034 # FMX_DRY is read by callers (fm-x-reply.sh) after sourcing.
-  case "$(printf '%s' "$dry" | tr '[:upper:]' '[:lower:]')" in
-    ''|0|false|no|off) FMX_DRY="" ;;
+  case "$dry" in
+    ''|0|[Ff][Aa][Ll][Ss][Ee]|[Nn][Oo]|[Oo][Ff][Ff]) FMX_DRY="" ;;
     *) FMX_DRY=1 ;;
   esac
 
@@ -906,6 +908,26 @@ fmx_meta_tmp() {
   mktemp "$dir/.${base}.fm-x.XXXXXX"
 }
 
+# Capture one complete NUL-free snapshot, preserving its trailing newlines.
+# The output-variable interface reserves _fmx_meta_text for its local value.
+_fmx_meta_read_text() {  # <meta> <output-variable>
+  local _fmx_meta_text
+  _fmx_meta_text=$(
+    set -o pipefail
+    cat "$1" | {
+      if IFS= read -r -d '' _fmx_meta_text; then exit 1; fi
+      printf '%s.' "$_fmx_meta_text"
+    }
+  ) || return 1
+  printf -v "$2" '%s' "${_fmx_meta_text%.}"
+}
+
+# Filter a validated snapshot; grep exit 1 means no retained fields.
+_fmx_meta_filter() (  # <contents> <excluded-pattern>
+  set -o pipefail
+  printf '%s' "$1" | { grep -vE "$2" || [ "$?" -eq 1 ]; }
+)
+
 # fmx_meta_link_set <meta> <request_id> <epoch> [followups] [platform] [max]:
 # atomically (re)write the x_request/x_request_ts/x_followups lines plus optional
 # reply-platform context, dropping any prior link and preserving every other meta
@@ -914,13 +936,14 @@ fmx_meta_tmp() {
 # budget against a binding the relay already knows about. Returns non-zero if
 # <meta> is missing or the rewrite fails.
 fmx_meta_link_set() {
-  local meta=$1 rid=$2 ts=$3 followups=${4:-0} platform=${5:-} reply_max=${6:-} tmp lock
+  local meta=$1 rid=$2 ts=$3 followups=${4:-0} platform=${5:-} reply_max=${6:-} tmp lock contents
   [ -f "$meta" ] || return 1
   lock=$(fm_meta_lock_path "$meta") || return 1
   fm_lock_acquire_wait "$lock"
   [ -f "$meta" ] || { fm_lock_release "$lock"; return 1; }
+  _fmx_meta_read_text "$meta" contents || { fm_lock_release "$lock"; return 1; }
   tmp=$(fmx_meta_tmp "$meta") || { fm_lock_release "$lock"; return 1; }
-  if ! { grep -vE '^x_request=|^x_request_ts=|^x_followups=|^x_platform=|^x_reply_max_chars=' "$meta" || true; } > "$tmp"; then
+  if ! _fmx_meta_filter "$contents" '^x_request=|^x_request_ts=|^x_followups=|^x_platform=|^x_reply_max_chars=' > "$tmp"; then
     rm -f "$tmp"; fm_lock_release "$lock"; return 1
   fi
   printf 'x_request=%s\n' "$rid" >> "$tmp" || { rm -f "$tmp"; fm_lock_release "$lock"; return 1; }
@@ -945,13 +968,14 @@ fmx_meta_link_set() {
 # line, preserving every other meta line including link and reply context.
 # Returns non-zero if <meta> is missing or the rewrite fails.
 fmx_meta_followups_set() {
-  local meta=$1 n=$2 tmp lock
+  local meta=$1 n=$2 tmp lock contents
   [ -f "$meta" ] || return 1
   lock=$(fm_meta_lock_path "$meta") || return 1
   fm_lock_acquire_wait "$lock"
   [ -f "$meta" ] || { fm_lock_release "$lock"; return 1; }
+  _fmx_meta_read_text "$meta" contents || { fm_lock_release "$lock"; return 1; }
   tmp=$(fmx_meta_tmp "$meta") || { fm_lock_release "$lock"; return 1; }
-  if ! { grep -vE '^x_followups=' "$meta" || true; } > "$tmp"; then
+  if ! _fmx_meta_filter "$contents" '^x_followups=' > "$tmp"; then
     rm -f "$tmp"; fm_lock_release "$lock"; return 1
   fi
   printf 'x_followups=%s\n' "$n" >> "$tmp" || { rm -f "$tmp"; fm_lock_release "$lock"; return 1; }
@@ -972,7 +996,7 @@ fmx_meta_followups_set() {
 # idempotent when <meta> is missing and keep the ordinary unbounded wait.
 fmx_meta_link_clear() {
   local meta=$1 expected_set=0 expected='' tmp lock line rid='' link_present=0 parent
-  local lock_timeout
+  local lock_timeout contents
   if [ "$#" -ge 2 ]; then
     expected_set=1
     expected=$2
@@ -985,11 +1009,14 @@ fmx_meta_link_clear() {
   [ ! -L "$meta" ] || return 1
   [ -f "$meta" ] || return 0
   if [ "$expected_set" -eq 1 ]; then
+    _fmx_meta_read_text "$meta" contents || return 1
     while IFS= read -r line || [ -n "$line" ]; do
       case "$line" in
         x_request=*) link_present=1; rid=${line#*=} ;;
       esac
-    done < "$meta" || return 1
+    done <<EOF || return 1
+$contents
+EOF
     [ "$link_present" -eq 1 ] || return 0
     [ -n "$expected" ] && [ -n "$rid" ] && [ "$rid" = "$expected" ] || return 1
     [ -w "$parent" ] || return 1
@@ -1010,6 +1037,7 @@ fmx_meta_link_clear() {
   fi
   [ ! -L "$meta" ] || { fm_lock_release "$lock"; return 1; }
   [ -f "$meta" ] || { fm_lock_release "$lock"; return 0; }
+  _fmx_meta_read_text "$meta" contents || { fm_lock_release "$lock"; return 1; }
   if [ "$expected_set" -eq 1 ]; then
     link_present=0
     rid=
@@ -1017,7 +1045,9 @@ fmx_meta_link_clear() {
       case "$line" in
         x_request=*) link_present=1; rid=${line#*=} ;;
       esac
-    done < "$meta" || { fm_lock_release "$lock"; return 1; }
+    done <<EOF || { fm_lock_release "$lock"; return 1; }
+$contents
+EOF
     [ "$link_present" -eq 0 ] || {
       [ -n "$expected" ] && [ -n "$rid" ] && [ "$rid" = "$expected" ] \
         || { fm_lock_release "$lock"; return 1; }
@@ -1025,7 +1055,7 @@ fmx_meta_link_clear() {
     [ "$link_present" -eq 1 ] || { fm_lock_release "$lock"; return 0; }
   fi
   tmp=$(fmx_meta_tmp "$meta") || { fm_lock_release "$lock"; return 1; }
-  if ! { grep -vE '^x_request=|^x_request_ts=|^x_followups=|^x_platform=|^x_reply_max_chars=' "$meta" || true; } > "$tmp"; then
+  if ! _fmx_meta_filter "$contents" '^x_request=|^x_request_ts=|^x_followups=|^x_platform=|^x_reply_max_chars=' > "$tmp"; then
     rm -f "$tmp"; fm_lock_release "$lock"; return 1
   fi
   # shellcheck disable=SC2153

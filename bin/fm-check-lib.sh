@@ -6,9 +6,9 @@ FM_CUSTOM_CHECK_SNAPSHOT=
 fm_custom_check_sha256() {
   local file=$1
   if command -v shasum >/dev/null 2>&1; then
-    shasum -a 256 "$file" 2>/dev/null | awk '{print $1}'
+    shasum -a 256 2>/dev/null < "$file" | awk '{print $1}'
   elif command -v sha256sum >/dev/null 2>&1; then
-    sha256sum "$file" 2>/dev/null | awk '{print $1}'
+    sha256sum 2>/dev/null < "$file" | awk '{print $1}'
   else
     return 1
   fi

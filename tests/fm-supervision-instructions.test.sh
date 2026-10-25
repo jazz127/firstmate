@@ -188,7 +188,9 @@ test_cross_harness_ordinary_continuation_and_repair_matrix() {
   local ordinary out
 
   out=$("$RENDER" --harness pi)
-  assert_contains "$out" "task-level routine outcome that says the worker is still busy" "Pi instructions omitted task-level silent no-change behavior"
+  # Routine silence eligibility has one owner, bin/fm-branch-prompt.sh; the Pi
+  # instructions point at it rather than restating which outcomes may be silent.
+  assert_contains "$out" "owns routine silence eligibility" "Pi instructions lost the owner of task-level silent no-change behavior"
   assert_contains "$out" "captain outcomes are never silent" "Pi instructions allowed silent captain outcomes"
   ordinary=$(printf '%s\n' "$out" | grep -F -- '- Ordinary wake:')
   assert_contains "$ordinary" "Pi extension already owns watcher continuity" "pi ordinary-wake line does not leave continuity to the extension"
@@ -297,7 +299,12 @@ test_pi_snippet_uses_effective_extension_path() {
   assert_contains "$out" "The turn-end guard extension lives at \`$turnend\`" "pi snippet did not render the turn-end guard extension path"
   assert_contains "$out" "The watcher extension lives at \`$watch\`" "pi snippet did not render the watcher extension path"
   assert_contains "$out" "MAIN must not re-drain, re-run, or acknowledge it" "pi snippet lost merged-event ownership"
-  assert_contains "$out" "MAIN applies judgment about whether and how to surface, summarize, reference, or incorporate a merged sailboat outcome" "pi snippet imposed a mechanical sailboat treatment"
+  # This is the generated instruction interface delivered to the primary agent.
+  assert_contains "$out" "remains invisible and turn-free in captain chat" "pi snippet lost quiet routine delivery"
+  assert_contains "$out" "Do not turn routine outcomes into unsolicited chat updates or shipshape replies" "pi snippet invited routine follow-up spam"
+  assert_contains "$out" "MAIN may use routine outcomes to answer an explicit captain status request" "pi snippet lost requested status answers"
+  assert_contains "$out" "answer or escalate a decision, act on a blocker or failure" "pi snippet lost actionable outcome handling"
+  assert_contains "$out" "every watcher-failure alarm regardless" "pi snippet lost watcher-failure delivery"
   assert_not_contains "$out" "__FM_PI_EXT__" "renderer leaked the Pi extension path placeholder"
   assert_not_contains "$out" "__FM_PI_TURNEND_EXT__" "renderer leaked the Pi turn-end extension path placeholder"
   assert_not_contains "$out" "state/fm-primary-pi-watch.ts" "pi snippet kept the old generated state-relative extension path"

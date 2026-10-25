@@ -21,6 +21,8 @@
 # bin/fm-project-mode.sh refuses, is refused rather than provisioned.
 # Seeding writes nothing under projects/ and needs no fleet sync first.
 #
+# FM_REMOTE_PROVISION_TIMEOUT selects the provisioning execution bound (default
+# 21600 seconds, maximum 86400) through argv, independently of ordinary jobs.
 # Known provisioning failure rolls the registry back. SSH status 255 preserves
 # the route and any newly scaffolded brief because completion is unknown and a same-route rerun converges.
 set -eu
@@ -255,7 +257,7 @@ if [ "$PREFLIGHT_RC" -ne 0 ]; then
 fi
 
 set +e
-PROVISION_OUT=$("$SCRIPT_DIR/fm-on.sh" --stdin "$ID" fm-remote-home-provision.sh < "$TMP/manifest" 2>&1)
+PROVISION_OUT=$("$SCRIPT_DIR/fm-on.sh" --stdin "$ID" fm-remote-home-provision.sh --timeout "${FM_REMOTE_PROVISION_TIMEOUT:-21600}" < "$TMP/manifest" 2>&1)
 PROVISION_RC=$?
 set -e
 if [ "$PROVISION_RC" -ne 0 ]; then

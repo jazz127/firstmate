@@ -4021,7 +4021,7 @@ SH
   then
     fail "render_export_dom accepted a Chrome that never finished the DOM"
   fi
-  [ "$(wc -l <"$dir/attempts-hang")" -eq 3 ] \
+  [ "$(wc -l <"$TMP_ROOT/chrome-render-report.txt")" -eq 3 ] \
     || fail "render_export_dom did not exhaust its bounded retries on a Chrome that never finished"
   report=$(cat "$dir/report-hang")
   assert_contains "$report" "timed_out=yes" \
@@ -4217,6 +4217,7 @@ export default function (pi: ExtensionAPI): void {
         ["watcher", "CURRENT_WATCHER_E2E /tmp/active-probe.status"],
         ["turn-end-guard", "CURRENT_TURN_END_E2E"],
         ["away-supervisor", "CURRENT_AWAY_E2E"],
+        ["context-refresh", "CURRENT_CONTEXT_REFRESH_E2E"],
         ["from-firstmate", "corr=0123456789abcdef CURRENT_FROM_FIRSTMATE_E2E"],
         ["launch-brief", "CURRENT_LAUNCH_BRIEF_E2E"],
       ] as const);
@@ -4376,6 +4377,7 @@ JSON
     "watcher|CURRENT_WATCHER_E2E" \
     "turn-end-guard|CURRENT_TURN_END_E2E" \
     "away-supervisor|CURRENT_AWAY_E2E" \
+    "context-refresh|CURRENT_CONTEXT_REFRESH_E2E" \
     "from-firstmate|CURRENT_FROM_FIRSTMATE_E2E" \
     "launch-brief|CURRENT_LAUNCH_BRIEF_E2E"
   do
@@ -4413,6 +4415,7 @@ const expected = new Map([
   ["CURRENT_WATCHER_E2E", "watcher"],
   ["CURRENT_TURN_END_E2E", "turn-end-guard"],
   ["CURRENT_AWAY_E2E", "away-supervisor"],
+  ["CURRENT_CONTEXT_REFRESH_E2E", "context-refresh"],
   ["CURRENT_FROM_FIRSTMATE_E2E", "from-firstmate"],
   ["CURRENT_LAUNCH_BRIEF_E2E", "launch-brief"],
 ]);

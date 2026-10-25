@@ -86,6 +86,8 @@ Claude's `.claude/settings.json` Stop `asyncRewake` hook (`bin/fm-claude-stop-au
 Do not run the hook as a manual arm from a tool turn: a short-lived tool process cannot own its park; its header and help own the invocation contract.
 The hook fires on every Stop.
 On each Stop, an eligible primary with supervision need admits one home-scoped owner, which foregrounds `bin/fm-watch-arm.sh` inside the hook-owned process tree.
+If a session exits mid-cycle and leaves an orphaned Stop hook, the replacement session's first eligible Stop supersedes its claim, attaches to the running watcher through `bin/fm-watch-arm.sh`, and delivers the cycle's close.
+[`turnend-guard.md`](turnend-guard.md#auto-arm-generation-claim) owns the open-claim definition.
 While supervision is still needed and away mode remains inactive, an actionable close wakes the idle session through exit 2.
 
 ### Claude session-lock ownership
@@ -144,9 +146,9 @@ If the handoff confirmation fails, the adapter retries it once: Pi against that 
 A failed confirmation is a restoration failure: the adapter classifies the error and surfaces exactly one typed message.
 Pi retires the current successor only when the failed token names its exact watcher pid and generation and that pid is no longer alive, while omp and OpenCode retire the current successor whenever the restoration's watcher pid is no longer alive.
 On Pi a generation mismatch means a newer pipeline superseded this delivery mid-restore, so the wake routes like a confirmed delivery, with no failure appendix, and nothing is retired.
-An already-acknowledged episode confirms as a no-op when the confirmation names its generation, because the drain acknowledged it after the successor started but before the confirmation ran.
-The Pi extension diagnostic log is opt-in and off by default: only a positive FM_WATCH_EXTENSION_LOG_KEEP_LINES value appends restore attempts, readiness timeouts, and confirmation targets and results to state/.watch-extension.log, a bounded record that never changes supervision behavior.
-docs/configuration.md owns the knob's default and accepted values.
+An already-acknowledged episode confirms as a no-op only when the confirmation names the marker's current generation and the named watcher is alive and holds this home's identity-matched watcher lock, because the drain may acknowledge it after the successor starts but before the confirmation runs.
+The Pi extension diagnostic log records restore attempts, readiness timeouts, confirmation targets and results, and retirement or exhausted-restoration decisions without affecting supervision behavior.
+[`configuration.md`](configuration.md#environment-variables) owns the log's path, opt-in knob, default, and accepted values.
 A failed confirmation is never swallowed.
 
 ### Readiness timeout and retry
@@ -222,6 +224,8 @@ The first recovery marks that generation announced, and later empty-queue arms l
 A non-successor watcher start checks the durable queue and recovery marker under their locks.
 If an announced-but-unacknowledged episode has an empty queue, the arm leaves that generation announced, making repeated empty-queue arms idempotent while a long-poll source is merely alive.
 If a durable row arrived after the announcement, the arm opens a fresh pending downtime generation so buried work still resurfaces once.
+A Codex foreground checkpoint skips the announced-episode reopen transition, so an already-announced generation stays announced while the checkpoint continues its bounded supervision.
+Its ordinary arm check still announces a never-announced generation, including one made pending by a durable queue append during the checkpoint.
 
 ### Generation reuse
 
@@ -402,8 +406,10 @@ Only the watcher process touches `state/.last-watcher-beat`.
 No helper process can make a wedged watcher appear healthy.
 An arm whose own script path sits under a disposable no-mistakes validation checkout (`.no-mistakes/worktrees/`) refuses with the typed failure line before touching any state, because a watcher started there outlives the validation step and keeps writing the real home's state from a checkout about to be deleted.
 Once per poll the watcher checks that its home, its state directory, and its own code root still exist, and exits with a logged reason when one is gone, scoped to itself alone, so a torn-down temporary home or a discarded checkout never leaves an orphan watcher behind.
-The watcher uses bash's native fatal handling for HUP and TERM, including during a blocked check or a blocked `fm_backend_capture` pane read, so both run its EXIT cleanup and stop that read.
+The watcher uses bash's native fatal handling for HUP and TERM during blocked checks, pane captures, and compound backend reads, so its EXIT cleanup can stop the operation without waiting for a wedged query to finish.
 `watcher_stop_signals` in `bin/fm-watch.sh` owns the signal-handling rationale.
+Nested timeout cancellation is owned by [`fm-timeout-lib.sh`](../bin/fm-timeout-lib.sh).
+Pane captures additionally bound tmux reads to two seconds through `watcher_capture_read`.
 The EXIT cleanup bounds its wait for `state/.watcher-down.lock` while persisting recovery state with `FM_WATCHER_CLEANUP_LOCK_BOUND` (default 2 seconds).
 Only positive decimal integers are accepted, including leading-zero forms such as `08`; empty, non-numeric, and zero values (including `00`) fall back to 2 seconds.
 A live foreign holder therefore cannot strand a TERM'd watcher in this marker-lock wait: on timeout the recovery transition fails without releasing the singleton, leaving dead-pid stale evidence for the next arm to republish and clear.
@@ -465,7 +471,8 @@ They also prove that a legacy or handoff-phase watcher marker from an absent rep
 - The once-per-generation announcement bound with the real Pi extension against a refused handling handshake.
 - A handling successor that must surface a real crew event instead of going blind.
 
-`tests/fm-watch-triage.test.sh` proves TERM stops a watcher blocked inside a poll's pane capture and still releases its lock and records an acknowledgeable stop.
+`tests/fm-watch-triage.test.sh` covers stopped pane captures, compound tmux queries, and nested timeout groups, plus successful recovery whose worker startup continues after the watcher exits.
+The focused query, timeout, and recovery entry points and synthetic evidence are in [runtime backend verification](verification/runtime-backends.md#watcher-stops-during-stalled-queries).
 It also exercises a single TERM with a live foreign downtime-marker lock holder, retained stale singleton and subsequent arm-style recovery, including decimal `08` and zero `00` cleanup bounds.
 It checks that a newly appended keyed decision is classified without rereading earlier status bytes, so signal handling can return to the watcher's beacon refresh even when the status history is long.
 `tests/fm-wake-queue.test.sh` proves TERM likewise stops a watcher blocked in the drain-ring idle check's pane capture.
@@ -474,6 +481,8 @@ It checks that a newly appended keyed decision is classified without rereading e
 
 - Verified-successor attach.
 - Recovery publication before stale-lock removal.
+- Generic lock PID reuse, matched live owners, unreadable identity, and legacy locks without identity evidence.
+- Bounded ownership handoff and reaper exclusion of competing successors.
 - The typed self-eviction failure.
 - Bounded and successor-linked lifecycle rows.
 - A SIGSTOP counterfactual that distinguishes a live PID from a stale beacon before classifying termination.
@@ -488,6 +497,8 @@ It checks that a newly appended keyed decision is classified without rereading e
 - Stale and live session owners.
 - Unchanged AFK and need boundaries.
 - Single-flight.
+- Supersession of a dead session's orphaned claim by the replacement session's first Stop, including a resumed session that carries the dead one's conversation id, and a claim with no readable session lock.
+- A recycled background bridge keeping its live claim on the trusted session id pinned to the lock holder's recorded pid-identity.
 - Bounded failure retries.
 - Benign live-watcher cycle ends.
 - One-notice failure episodes.

@@ -88,11 +88,37 @@ triage_log() {
   fi
 }
 
+# Read the disposable backoff counter without evaluating file contents as shell
+# arithmetic. A damaged counter restarts the cadence; twelve is the existing
+# maximum exponent, so larger valid counters need no integer conversion.
+heartbeat_streak_read() {
+  local value=''
+  HEARTBEAT_STREAK=0
+  [ -f "$STATE/.heartbeat-streak" ] || return 0
+  if IFS= read -r -d '' value 2>/dev/null < "$STATE/.heartbeat-streak"; then
+    return 0
+  fi
+  value=${value%$'\n'}
+  case "$value" in ''|*[!0-9]*) return 0 ;; esac
+  value=${value#"${value%%[!0]*}"}
+  [ -n "$value" ] || return 0
+  if [ "${#value}" -gt 2 ] || [ "$value" -gt 12 ]; then
+    HEARTBEAT_STREAK=12
+  else
+    HEARTBEAT_STREAK=$((10#$value))
+  fi
+}
+
+heartbeat_streak_advance() {
+  heartbeat_streak_read
+  printf '%s\n' "$((HEARTBEAT_STREAK + 1))" > "$STATE/.heartbeat-streak"
+}
+
 # Exit after reporting one actionable wake. Tests override this callback.
 wake() {
   local output_status=0
   case "$1" in
-    heartbeat*) echo $(( $(cat "$STATE/.heartbeat-streak" 2>/dev/null || echo 0) + 1 )) > "$STATE/.heartbeat-streak" ;;
+    heartbeat*) heartbeat_streak_advance ;;
     *) echo 0 > "$STATE/.heartbeat-streak" ;;
   esac
   trap '' HUP INT TERM

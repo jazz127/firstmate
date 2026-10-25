@@ -50,7 +50,7 @@ test_branch_prompt_is_byte_stable_and_above_cache_floor() {
     *) fail "branch prompt lost the inlined recovery playbook" ;;
   esac
   case "$out_a" in
-    *"Report verdict captain for the finished result of work the captain requested, even when that result is healthy."*"A start or still-working update on requested work that brings no new artifact, finding, or decision is verdict routine."*"Set silent true for a task-level routine outcome only when it says the worker is still busy, nothing new has happened since the last outcome, and no action was taken."*"Any routine outcome reporting an action, state change, or new result stays rendered; captain outcomes are never silent."*"Keep an unsolicited routine outcome as verdict routine"*"Keep an unchanged fleet review silent"*) ;;
+    *"Report verdict captain for the finished result of work the captain requested, even when that result is healthy."*"A start or still-working update on requested work that brings no new artifact, finding, or decision is verdict routine."*"Set silent true for a task-level routine outcome only when it says the worker is still busy, nothing new has happened since the last outcome, and no action was taken."*"Also set it for a routine outcome that only echoes a pause or status record you just wrote or steered, rechecks an already-registered pause whose task state has not changed, or re-confirms a declared pause or open captain hold that still holds on the same terms."*"Any routine outcome reporting an action, state change, or new result stays rendered; captain outcomes are never silent."*"Keep an unsolicited routine outcome as verdict routine"*"Keep an unchanged fleet review silent"*) ;;
     *) fail "branch prompt lost the requested-result, progress-routine, or routine-silence rules" ;;
   esac
   case "$out_a" in
@@ -70,6 +70,43 @@ test_branch_prompt_is_byte_stable_and_above_cache_floor() {
     *) fail "branch prompt lost the second-mate relay, signal-span, or stale-liveness rule" ;;
   esac
   pass "branch prompt is byte-stable across homes, cwd, timezone, and time, above the cache floor"
+}
+
+test_branch_prompt_routes_completed_scouts_through_guarded_cleanup() {
+  local prompt skill
+  prompt=$(bash "$ROOT/bin/fm-branch-prompt.sh") || fail "branch prompt generator failed"
+
+  # The emitted system prompt is the contract, not the generator's source or
+  # proof that a model will obey it. No live agent or endpoint is involved.
+  case "$prompt" in
+    *"For a completed scout, follow the scout-completion and captain-hold-lifecycle policies included below in both postures."*"After their completion gate passes, retain the report, claim the task's lease, and run \`bin/fm-teardown.sh <task>\` with no flags."*"Report the findings and cleanup result in that event's outcome; a refusal is reported with its exact reason and never forced, worked around, or repaired by hand."*) ;;
+    *) fail "branch prompt omits the completed-scout cleanup sequence or refusal reporting" ;;
+  esac
+  assert_contains "$prompt" \
+    "Reporting a scout as finished and idle is not a substitute for that cleanup." \
+    "branch prompt permits stopping after an idle assessment of a completed scout"
+  assert_contains "$prompt" \
+    "Missing or incomplete reports, an unreviewed decision inventory or unrecorded captain calls, WIP ships, deliberate external waits, and idle or exited agents are not proof of task completion." \
+    "branch prompt lost the incomplete-work and agent-lifetime boundaries"
+  assert_contains "$prompt" \
+    "Ordinary teardown of a confirmed-landed ship or a completed scout, steering, lifecycle control, PR checks, and backlog status moves are yours, under the task's lease." \
+    "branch role limits still exclude completed-scout cleanup"
+
+  # This checks delivery of the per-task result contract, not model adherence.
+  assert_contains "$prompt" \
+    "Run each task's cleanup in a separate tool call and use that call's exit status and output for its outcome." \
+    "branch prompt omits per-task cleanup result attribution"
+  assert_contains "$prompt" \
+    "An allowance diagnostic is not a refusal; report a refusal only when that task's cleanup actually refuses, quoting its reason." \
+    "branch prompt does not distinguish cleanup permission from refusal"
+
+  # Verbatim policy inclusion is an owned output contract. These owners must
+  # reach hosts that disable automatic skill loading, without a policy copy.
+  for skill in scout-completion captain-hold-lifecycle; do
+    assert_contains "$prompt" "$(cat "$ROOT/.agents/skills/$skill/SKILL.md")" \
+      "branch prompt does not include the complete $skill policy"
+  done
+  pass "emitted branch prompt routes completed scouts through existing policies and leased cleanup, preserving unfinished work"
 }
 
 # --- append-only outcome store ------------------------------------------------
@@ -260,7 +297,7 @@ PY
 }
 
 test_outcome_startup_replay_preserves_silence() {
-  local home replay out status store
+  local home replay out status store visible_index index_after_silent
   home="$TMP_ROOT/store-silent-home"
   mkdir -p "$home/state"
   store="$home/state/branch-outcomes.jsonl"
@@ -276,10 +313,19 @@ test_outcome_startup_replay_preserves_silence() {
   FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" append \
     --task task-a --verdict routine --summary 'worker still busy, nothing new, no action taken' --silent true >/dev/null \
     || fail "silent task-scoped routine append failed"
-  [ -s "$home/state/.task-a.branch-outcome-index" ] \
-    || fail "silent task outcome was omitted from the status-outcome backstop index"
-  assert_contains "$(cat "$home/state/.task-a.branch-outcome-index")" \
-    "$(printf 'fm-branch-outcome-index-v1\t1\t')" "status-outcome backstop index lost the silent task outcome"
+  [ ! -e "$home/state/.task-a.branch-outcome-index" ] \
+    || fail "silent task outcome created a status-outcome backstop index"
+  FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" append \
+    --task task-a --verdict routine --summary 'worker recovered automatically' >/dev/null \
+    || fail "visible task outcome append failed"
+  visible_index=$(cut -f2 "$home/state/.task-a.branch-outcome-index")
+  [ "$visible_index" = 2 ] || fail "visible task outcome did not become the coverage index: $visible_index"
+  FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" append \
+    --task task-a --verdict routine --summary 'pause still holds' --silent true >/dev/null \
+    || fail "second silent task outcome append failed"
+  index_after_silent=$(cut -f2 "$home/state/.task-a.branch-outcome-index")
+  [ "$index_after_silent" = "$visible_index" ] \
+    || fail "silent outcome replaced the visible status-coverage index: $index_after_silent"
   FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" append \
     --task fleet --verdict routine --summary 'fleet reviewed, nothing changed' --silent true >/dev/null \
     || fail "silent heartbeat append failed"
@@ -294,14 +340,14 @@ test_outcome_startup_replay_preserves_silence() {
   [ -z "$(FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" unread)" ] \
     || fail "startup replay did not mark the silent and visible rows read"
 
-  printf '%s\n' '{"seq":4,"epoch":1,"task":"task-legacy","wake":"","verdict":"routine","summary":"legacy visible outcome"}' \
+  printf '%s\n' '{"seq":6,"epoch":1,"task":"task-legacy","wake":"","verdict":"routine","summary":"legacy visible outcome"}' \
     >> "$home/state/branch-outcomes.jsonl"
   replay=$(FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" startup-replay) || fail "legacy startup replay failed"
   assert_contains "$replay" "legacy visible outcome" "startup replay hid a legacy row with no silent field"
   [ -z "$(FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" unread)" ] \
     || fail "startup replay did not mark the legacy row read"
 
-  printf '%s\n' '{"seq":5,"epoch":1,"task":"task-bad","wake":"","verdict":"captain","summary":"poisoned","silent":true}' >> "$store"
+  printf '%s\n' '{"seq":7,"epoch":1,"task":"task-bad","wake":"","verdict":"captain","summary":"poisoned","silent":true}' >> "$store"
   out=$(FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" unread 2>&1)
   status=$?
   [ "$status" -ne 0 ] || fail "unread accepted a stored silent captain outcome"
@@ -1073,6 +1119,40 @@ test_lease_liveness_binds_to_the_session_lock() {
   pass "lease liveness requires an exact valid session-lock pid"
 }
 
+test_claim_with_a_holder_pinned_before_a_reanchor_records_the_lock_holder() {
+  local home out status
+  local -x PI_CODING_AGENT=true
+  home="$TMP_ROOT/pinned-reanchor-home"
+  mkdir -p "$home/state"
+
+  # The branch turn pinned $PPID, then a same-session re-anchor moved line 1 to
+  # $$ while $PPID stayed alive: a new claim and a refresh record line 1.
+  printf '%s\n' "$$" > "$home/state/.lock"
+  FM_HOME="$home" FM_SUPERVISION_ACTOR=branch FM_LEASE_HOLDER_PID=$PPID "$ROOT/bin/fm-lease.sh" claim task-1 --actor branch \
+    || fail "branch claim with the pinned pre-re-anchor holder failed"
+  FM_HOME="$home" FM_SUPERVISION_ACTOR=branch FM_LEASE_HOLDER_PID=$PPID "$ROOT/bin/fm-lease.sh" claim task-1 --actor branch \
+    || fail "branch refresh with the pinned pre-re-anchor holder failed"
+  out=$(FM_HOME="$home" "$ROOT/bin/fm-lease.sh" check task-1)
+  case "$out" in
+    "branch $$ "*" live") ;;
+    *) fail "a claim pinned before the re-anchor did not record the live lock holder: $out" ;;
+  esac
+  out=$(FM_HOME="$home" FM_SUPERVISION_ACTOR=main "$ROOT/bin/fm-lease.sh" claim task-1 2>&1)
+  status=$?
+  [ "$status" -eq 6 ] || fail "main claimed the branch's task after the re-anchor: $status: $out"
+
+  # A dead pinned holder means another session took the lock: the claim keeps
+  # the dead pid, so the lease stays stale.
+  FM_HOME="$home" FM_SUPERVISION_ACTOR=branch FM_LEASE_HOLDER_PID=999999 "$ROOT/bin/fm-lease.sh" claim task-2 --actor branch \
+    || fail "branch claim with a dead pinned holder failed"
+  out=$(FM_HOME="$home" "$ROOT/bin/fm-lease.sh" check task-2)
+  case "$out" in
+    "branch 999999 "*" stale") ;;
+    *) fail "a dead pinned holder was replaced by the lock holder: $out" ;;
+  esac
+  pass "a claim pinned before a re-anchor records the live lock holder; a dead pin stays stale"
+}
+
 test_concurrent_stale_lease_claims_have_one_winner() {
   local home fakebin real_mv branch_pid main_pid branch_status main_status
   local -x PI_CODING_AGENT=true
@@ -1391,7 +1471,7 @@ test_away_branch_spawn_requires_queued_dispatchable_work() {
   git init -q -b main "$root"
   git -C "$root" commit -q --allow-empty -m init
   ln -s "$ROOT/bin" "$root/bin"
-  cp "$ROOT/.tasks.toml" "$home/.tasks.toml"
+  fm_test_tasks_toml "$home/.tasks.toml"
   printf 'manual\n' > "$home/config/backlog-backend"
   cat > "$home/data/backlog.md" <<'EOF'
 ## In flight
@@ -1541,6 +1621,7 @@ WRAPPER
 }
 
 test_branch_prompt_is_byte_stable_and_above_cache_floor
+test_branch_prompt_routes_completed_scouts_through_guarded_cleanup
 test_outcome_store_is_append_only_with_cursor_reads
 test_outcome_append_keeps_a_bounded_display_tail
 test_outcome_tail_keeps_whole_newest_rows_within_its_byte_budget
@@ -1564,6 +1645,7 @@ test_unmarked_main_honors_a_live_branch_lease
 test_unmarked_guard_with_a_lease_file_holds_exclusivity_through_mutation
 test_host_home_unmarked_guard_excludes_the_first_claim
 test_lease_liveness_binds_to_the_session_lock
+test_claim_with_a_holder_pinned_before_a_reanchor_records_the_lock_holder
 test_concurrent_stale_lease_claims_have_one_winner
 test_guard_stale_clear_cannot_delete_a_new_claim
 test_guard_holds_exclusivity_through_mutation

@@ -22,7 +22,7 @@ command -v tasks-axi >/dev/null 2>&1 || { echo "skip: tasks-axi not found"; exit
 make_home() {  # <name>
   local home="$TMP_ROOT/$1" fakebin
   mkdir -p "$home/data" "$home/state" "$home/config" "$home/projects"
-  cp "$ROOT/.tasks.toml" "$home/.tasks.toml"
+  fm_test_tasks_toml "$home/.tasks.toml"
   cat > "$home/data/backlog.md" <<'EOF'
 ## In flight
 
@@ -126,11 +126,17 @@ case "${1:-} ${2:-}" in
     ;;
   "api --paginate")
     case " $* " in
-      *merge_queue*) ;;
+      *merge_queue*|*pull_request*) ;;
       *) printf '%s\n' '[]' ;;
     esac
     ;;
-  "api repos/"*) printf '%s\n' '{"name":"main","protected":false}' ;;
+  "api repos/"*)
+    case "$*" in
+      *"/pulls/"*"/files?per_page=100 "*) ;;
+      *) printf '%s\n' '{"name":"main","protected":false}' ;;
+    esac
+    ;;
+  "repo view") printf '%s\n' merge=true squash=true rebase=true ;;
 esac
 SH
   cat > "$home/fakebin/gh-axi" <<'SH'
@@ -1333,7 +1339,7 @@ test_secondmate_hold_stays_in_authoritative_home() {
   parent=$(make_home main-routing)
   mate="$TMP_ROOT/sample-mate-home"
   mkdir -p "$mate/data" "$mate/state" "$mate/config" "$mate/projects" "$mate/bin"
-  cp "$ROOT/.tasks.toml" "$mate/.tasks.toml"
+  fm_test_tasks_toml "$mate/.tasks.toml"
   printf '# Synthetic secondmate home\n' > "$mate/AGENTS.md"
   printf 'sample-mate\n' > "$mate/.fm-secondmate-home"
   # A seeded home always carries its parent binding; teardown delivers the
@@ -1392,7 +1398,7 @@ test_secondmate_home_publishes_holds_and_answers() {
   parent=$(make_home parent-channel)
   mate="$TMP_ROOT/channel-mate-home"
   mkdir -p "$mate/data" "$mate/state" "$mate/config" "$mate/projects"
-  cp "$ROOT/.tasks.toml" "$mate/.tasks.toml"
+  fm_test_tasks_toml "$mate/.tasks.toml"
   printf '# Synthetic secondmate home\n' > "$mate/AGENTS.md"
   printf 'channel-mate\n' > "$mate/.fm-secondmate-home"
   printf 'schema=fm-secondmate-parent.v1\nroute=local\nparent_home=%s\n' "$parent" \
@@ -3443,6 +3449,8 @@ test_pr_merge_entrypoint_separates_an_unreadable_record_from_an_absent_one() {
   id=sample-missing-pr-authority
   pr=https://github.com/sample/sample/pull/43
   write_origin_meta "$home" "$id" ship
+  fm_git_init_commit "$home/projects/missing-$id"
+  git -C "$home/projects/missing-$id" remote add origin https://github.com/sample/sample.git
 
   # A backlog that exists but cannot be read may hide a live captain hold, so
   # the merge must refuse without reaching the forge.

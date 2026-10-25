@@ -2,7 +2,7 @@
 
 This doc is for operators who need to know which harnesses run `bin/fm-session-start.sh` when a session opens, which only nudge the agent to run it, and how clear, compaction, and resume are handled.
 AGENTS.md section 3 is the authoritative behavioral contract for session start.
-This file owns how the tracked native session-open adapters deliver it, and the compatibility limits that force two tiers rather than one.
+This file owns how the tracked native session-open adapters deliver it, the compatibility limits that force two tiers rather than one, and the native transports for persistence before compaction and context-usage nudges.
 
 One term recurs throughout:
 
@@ -16,6 +16,7 @@ One term recurs throughout:
 | What each session-open source triggers | [Source routing](#source-routing) |
 | How long the digest may block and what happens when it runs out of time | [Runtime bound](#runtime-bound) |
 | When the wrappers stay silent and which exit codes they use | [Shared wrapper and safety](#shared-wrapper-and-safety) |
+| Which harnesses persist before compaction and nudge for `/stow` as context fills | [Persistence before compaction](#persistence-before-compaction) |
 | How one harness wires its session-open hook | [Harness transports](#harness-transports) |
 | Which tests prove each guarantee | [Regression coverage](#regression-coverage) |
 
@@ -228,6 +229,46 @@ These conditions therefore surface as follows:
 
 None of these becomes a refusal to open the session.
 
+## Persistence before compaction
+
+The tracked Claude `PreCompact` registration and the Pi/pi-signed `session_before_compact` extension invoke [`bin/fm-precompact-stow.sh`](../bin/fm-precompact-stow.sh) before manual or automatic compaction.
+They run only in the lock-owning primary or secondmate home.
+The script's header owns the deadline, diagnostics, serialization, payload, and invocation mechanics; the internal [stow skill](../.agents/skills/stow/SKILL.md#automatic-pre-compaction-persistence) owns the bounded persistence mode and all memory/backlog write rules.
+The pass uses a temporary transcript snapshot and a fresh non-interactive agent of the same harness, never resumes the active session, and does not run startup or supervision.
+Pi creates an isolated in-memory SDK session, copies the selected provider registration by reference, and loads no extensions or context files.
+The shell retains the ownership checks, writer mutex, snapshot lifetime, and deadline; closing its private request channel aborts the Pi worker.
+Pi/pi-signed supplies the native active branch and the current provider/model so abandoned branches do not become persistence inputs.
+Every attempt may consume model tokens.
+Failures, unavailable credentials, unsafe scope, and timeouts let compaction continue; the pass is best-effort and never promises the session is reset-safe.
+Use explicit `/stow` when a complete memory curation pass and secondmate cascade are needed.
+Other primary harnesses currently have no tracked pre-compaction transport, and runtime session backends do not add one.
+Codex is unsupported: its project hooks run only after the project is trusted, and no supported way to trust a disposable folder for the native guard was found, so no unproven Codex hook is registered.
+omp is unsupported until its native compaction event is exercised by the guard.
+Existing post-compaction session-start delivery is unchanged.
+
+### Context-usage threshold nudge
+
+Claude and Pi/pi-signed also deliver one operational `context-stow` nudge asking Firstmate to run `/stow` when context usage reaches the configured threshold.
+The default is 70 percent.
+Set `config/context-stow-threshold` in the active home to an integer from 1 through 100, or `0` to disable it; `FM_CONFIG_OVERRIDE` selects an alternate config directory.
+Malformed settings suppress the nudge.
+Usage must fall below the threshold before another upward crossing can emit a nudge, and each native session has independent crossing state.
+The nudge asks the current session to use the existing stow skill; it adds no memory or backlog writer.
+
+[`bin/fm-context-stow-nudge.sh`](../bin/fm-context-stow-nudge.sh) owns configuration reading, crossing state, eligibility, and operational encoding.
+Claude's `UserPromptSubmit` and `PreToolUse` hooks read the latest main-session assistant usage from the supplied transcript and deliver a crossing as `additionalContext`.
+The estimate includes input, cache-creation, cache-read, and output tokens from that response, rather than summing usage across the session.
+It ignores sidechain and other-session entries, and does not reuse usage from before a compaction boundary.
+Set `config/context-stow-window-tokens` to Claude's active context capacity in tokens; the default is 200000, so a 1M session needs `1000000`.
+The same `FM_CONFIG_OVERRIDE` directory applies, and an invalid capacity suppresses Claude sampling.
+The feature has no project-level status-line registration or percentage display.
+Missing transcripts and unknown usage are ignored.
+Pi samples `getContextUsage()` before agent start, after each turn, and after compaction, and delivers through its native context-message transport.
+Pi percentages above 100 remain valid observations and can trigger a crossing.
+Both transports use the same operational envelope as session-start nudges and require the current session to own the home lock.
+Other harnesses have no tracked usage-threshold transport.
+Portable behavior checks and the installed-Pi offline provider regression are in `tests/fm-precompact-stow.test.sh`; the token-spending native compaction guard is `tests/fm-precompact-stow-live-e2e.test.sh`.
+
 ## Harness transports
 
 Each subsection below gives one harness surface's tier, its tracked transport, and its current compatibility.
@@ -238,6 +279,9 @@ Claude is a run-tier harness.
 `.claude/settings.json` registers one unmatched `SessionStart` hook, invoked through `CLAUDE_PROJECT_DIR` with a 180s timeout.
 The wrapper reads `source` from the hook payload.
 Native stdout context injection is supported.
+Claude caps one hook output string at 10,000 characters.
+Above the cap the model receives a preview of the first 2,000 characters plus the path of a saved file, and is not asked to read that file.
+A context re-emit therefore prints a short `RE-EMIT CUE` first, which tells the model to read the saved file.
 
 ### Codex exec
 

@@ -4,7 +4,7 @@
 # launched beyond that number (bin/fm-project-capacity-lib.sh owns the
 # contract; bin/fm-spawn.sh runs the check).
 #
-# Every case drives the real bin/fm-spawn.sh against a real project clone with
+# Admission cases drive bin/fm-spawn.sh against a project clone with
 # an origin, fake tmux and treehouse binaries that log every call, and a real
 # markdown backlog when tasks-axi is installed. A deferred spawn is judged by
 # what it left behind - no task record, no rendered launch brief, no endpoint,
@@ -77,24 +77,55 @@ make_case() {  # <name> [task-id...]
   cat > "$fakebin/tmux" <<'SH'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$FM_FAKE_CALL_LOG"
+window_file="$FM_FAKE_CALL_LOG.window"
 case "$*" in
+  *"#{pane_tty}"*) printf '%s\n' /dev/pts/91; exit 0 ;;
   *"#{pane_current_path}"*)
-    # A spawn that is told to hold waits here, after its capacity check and
-    # while it still holds the project lock, until the test releases it.
-    if [ -n "${FM_FAKE_HOLD:-}" ]; then
-      : > "$FM_FAKE_HOLD.reached"
-      i=0
-      while [ ! -f "$FM_FAKE_HOLD.release" ]; do
-        i=$((i + 1))
-        [ "$i" -lt 400 ] || exit 1
-        sleep 0.05
-      done
-    fi
     printf '%s\n' "${FM_FAKE_PANE_PATH:-}"
     exit 0
     ;;
 esac
-case "${1:-}" in display-message) printf 'firstmate\n' ;; esac
+if [ "${1:-}" = send-keys ]; then
+  for arg in "$@"; do
+    if [ "$arg" = 'treehouse get' ] && [ -n "${FM_FAKE_HOLD:-}" ]; then
+      # This is the production post-admission release window, rather than an
+      # early pane probe made while the project lock is still held.
+      [ ! -e "${FM_FAKE_PROJECT_LOCK:?}" ] && [ ! -L "$FM_FAKE_PROJECT_LOCK" ] || exit 1
+      : > "$FM_FAKE_HOLD.reached"
+      for _ in $(seq 1 400); do
+        [ ! -f "$FM_FAKE_HOLD.release" ] || break
+        sleep 0.05
+      done
+      [ -f "$FM_FAKE_HOLD.release" ] || exit 1
+      [ "${FM_FAKE_GET_FAIL:-0}" = 0 ] || exit 1
+    fi
+  done
+fi
+case "${1:-}" in
+  display-message) printf 'firstmate\n' ;;
+  list-windows) [ ! -s "$window_file" ] || cat "$window_file" ;;
+  new-window)
+    name=
+    previous=
+    for arg in "$@"; do
+      [ "$previous" = -n ] && name=$arg
+      previous=$arg
+    done
+    grep -Fqx -- "$name" "$window_file" 2>/dev/null || printf '%s\n' "$name" >> "$window_file"
+    ;;
+  kill-window)
+    target=
+    previous=
+    for arg in "$@"; do
+      [ "$previous" = -t ] && target=$arg
+      previous=$arg
+    done
+    target=${target##*:}
+    target=${target#=}
+    grep -Fvx -- "$target" "$window_file" 2>/dev/null > "$window_file.tmp" || true
+    mv "$window_file.tmp" "$window_file"
+    ;;
+esac
 exit 0
 SH
   cat > "$fakebin/treehouse" <<'SH'
@@ -103,6 +134,7 @@ printf 'treehouse %s\n' "$*" >> "$FM_FAKE_CALL_LOG"
 exit 0
 SH
   chmod +x "$fakebin/tmux" "$fakebin/treehouse"
+  fm_test_fake_tmux_foreground_cwd "$fakebin"
   fm_fake_exit0 "$fakebin" gh gh-axi no-mistakes
   fm_git_init_commit "$case_dir/project"
   fm_git_add_origin "$case_dir/project" "$case_dir/project.origin.git"
@@ -197,6 +229,126 @@ worktree_list() { git -C "$1/project" worktree list --porcelain; }
 
 # The reported incident's shape before any declaration: the project is already
 # busy, and nothing caps a further launch. Absent a declaration that stays true.
+test_capacity_declaration_nul_guard() {
+  local shell round=0
+  for shell in "$(command -v bash)" /bin/bash; do
+    round=$((round + 1))
+    "$shell" -s -- "$ROOT" "$TMP_ROOT/declaration-bytes-$round" <<'SH' || fail "capacity declaration byte validation failed under $shell"
+set -eu
+. "$1/bin/fm-project-capacity-lib.sh"
+mkdir -p "$2"
+record=$'project 2\n'
+for ((i=0; i<=${#record}; i++)); do
+  printf '%s\0%s' "${record:0:i}" "${record:i}" > "$2/project-capacity"
+  if fm_project_capacity_lookup "$2" project; then
+    printf 'accepted NUL at byte %s\n' "$i" >&2
+    exit 1
+  fi
+  [ -z "$FM_PROJECT_CAPACITY" ] && [ -z "$FM_PROJECT_CAPACITY_ANY" ] && [ -n "$FM_PROJECT_CAPACITY_ERROR" ]
+done
+for record in $'project 2\n' 'project 2' $'project 2\r\n'; do
+  printf '%s' "$record" > "$2/project-capacity"
+  fm_project_capacity_lookup "$2" project
+  [ "$FM_PROJECT_CAPACITY" = 2 ] && [ "$FM_PROJECT_CAPACITY_ANY" = 1 ]
+done
+for record in '' '# comment'; do
+  printf '%s' "$record" > "$2/project-capacity"
+  fm_project_capacity_lookup "$2" project
+  [ -z "$FM_PROJECT_CAPACITY" ] && [ -z "$FM_PROJECT_CAPACITY_ANY" ]
+done
+SH
+  done
+  pass 'capacity declarations reject NUL at every byte boundary while retaining ordinary text and empty declarations'
+}
+
+test_capacity_parent_record_nul_guard() {
+  local shell round=0
+  for shell in "$(command -v bash)" /bin/bash; do
+    round=$((round + 1))
+    "$shell" -s -- "$ROOT" "$TMP_ROOT/parent-record-$round" <<'SH' || fail "parent-record byte validation failed under $shell"
+set -eu
+. "$1/bin/fm-secondmate-parent-lib.sh"
+mkdir -p "$2"
+record=$'schema=fm-secondmate-parent.v1\nroute=local\nparent_home=/fixture/parent\n'
+for ((i=0; i<=${#record}; i++)); do
+  printf '%s\0%s' "${record:0:i}" "${record:i}" > "$2/value"
+  if fm_secondmate_parent_record_parse "$2/value"; then
+    printf 'accepted NUL at byte %s\n' "$i" >&2
+    exit 1
+  fi
+done
+printf '%s' "$record" > "$2/value"
+fm_secondmate_parent_record_parse "$2/value"
+[ "$FM_SECONDMATE_PARENT_HOME" = /fixture/parent ]
+printf '%s' "${record%$'\n'}" > "$2/no-newline"
+fm_secondmate_parent_record_parse "$2/no-newline"
+cd "$2"
+printf '%s' "$record" > ./-
+fm_secondmate_parent_record_parse -
+printf '%s' "$record" > ./--record
+fm_secondmate_parent_record_parse --record
+printf '%s\0' "$record" > ./-
+if fm_secondmate_parent_record_parse -; then exit 1; fi
+ln -s value link
+if fm_secondmate_parent_record_parse link; then exit 1; fi
+SH
+  done
+  pass 'capacity parent records reject NUL at every byte boundary and retain ordinary-file parsing on both Bash generations'
+}
+
+# shellcheck disable=SC2016 # Positional arguments expand inside the selected child shell.
+test_capacity_root_home_with_literal_pipes() {
+  local home="$TMP_ROOT/chain-root" middle="$TMP_ROOT/chain-middle" leaf shell out expected
+  leaf="$home|$middle"
+  mkdir -p "$home" "$middle" "$leaf"
+  printf 'schema=fm-secondmate-parent.v1\nroute=local\nparent_home=%s\n' "$middle" > "$leaf/.fm-secondmate-parent"
+  for shell in "$(command -v bash)" /bin/bash; do
+    printf 'schema=fm-secondmate-parent.v1\nroute=local\nparent_home=%s\n' "$home" > "$middle/.fm-secondmate-parent"
+    out=$(FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" "$shell" -c '
+      . "$1/bin/fm-wake-lib.sh"
+      fm_firstmate_root_home "$2"
+    ' _ "$ROOT" "$leaf") || fail "literal pipe home was mistaken for a parent cycle under $shell"
+    expected=$(cd "$home" && pwd -P)
+    [ "$out" = "$expected" ] || fail "parent chain did not reach the root home under $shell"
+
+    printf 'schema=fm-secondmate-parent.v1\nroute=local\nparent_home=%s\n' "$leaf" > "$middle/.fm-secondmate-parent"
+    if FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" "$shell" -c '
+      . "$1/bin/fm-wake-lib.sh"
+      fm_firstmate_root_home "$2"
+    ' _ "$ROOT" "$leaf" >/dev/null; then
+      fail "a genuine parent cycle was accepted under $shell"
+    fi
+
+    printf 'schema=fm-secondmate-parent.v1\nroute=remote\nparent_host=fixture-host\n' > "$middle/.fm-secondmate-parent"
+    out=$(FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" "$shell" -c '
+      . "$1/bin/fm-wake-lib.sh"
+      fm_firstmate_root_home "$2"
+    ' _ "$ROOT" "$leaf") || fail "the remote parent boundary was rejected under $shell"
+    expected=$(cd "$middle" && pwd -P)
+    [ "$out" = "$expected" ] || fail "root-home resolution crossed a remote boundary under $shell"
+  done
+  pass 'capacity root resolution compares complete home paths and preserves cycle and remote-boundary guards'
+}
+
+test_capacity_names_with_literal_pipes() {
+  local config="$TMP_ROOT/pipe-name-config"
+  mkdir -p "$config"
+  # shellcheck source=bin/fm-project-capacity-lib.sh
+  . "$ROOT/bin/fm-project-capacity-lib.sh"
+  printf '%s\n' 'project|other 1' 'project 2' > "$config/project-capacity"
+  fm_project_capacity_lookup "$config" project || fail "pipe-containing name aliased another project: $FM_PROJECT_CAPACITY_ERROR"
+  [ "$FM_PROJECT_CAPACITY" = 2 ] || fail 'a pipe-containing neighboring name changed the selected capacity'
+  printf '%s\n' 'project 1' 'other 2' 'project|other 3' > "$config/project-capacity"
+  fm_project_capacity_lookup "$config" 'project|other' || fail "two names aliased a pipe-containing project: $FM_PROJECT_CAPACITY_ERROR"
+  [ "$FM_PROJECT_CAPACITY" = 3 ] || fail 'the pipe-containing name did not retain its own capacity'
+  printf '%s\n' 'project|other 1' 'project|other 2' > "$config/project-capacity"
+  if fm_project_capacity_lookup "$config" 'project|other'; then
+    fail 'a genuinely duplicated pipe-containing name was accepted'
+  fi
+  assert_contains "$FM_PROJECT_CAPACITY_ERROR" 'a second time' 'duplicate pipe name did not retain the refusal'
+  pass 'capacity declarations compare whole literal project names, including pipes'
+}
+
 test_undeclared_capacity_keeps_dispatch_uncapped() {
   local case_dir home out rc=0
   case_dir=$(make_case undeclared task-c)
@@ -466,33 +618,113 @@ test_unreadable_holders_refuse_admission() {
   pass "an unreadable state directory or task record refuses admission rather than undercounting"
 }
 
-# Two spawns racing for the last place: the one holding the project lock
-# publishes, the other cannot publish while it waits and is deferred afterwards.
+# Synthetic/offline: drive the production entry point with two local homes
+# and separate same-origin clones. Hold A at the actual Treehouse get delivery,
+# after project unlocking and before metadata publication. B must defer before
+# creating anything, then A must publish and retire its pending reservation.
 test_concurrent_spawns_cannot_both_take_the_last_place() {
-  local case_dir home out rc=0 hold i wt
-  case_dir=$(make_case concurrent task-a task-b)
+  local case_dir home mate project wt hold lock i out rc=0 pid arc before after worktrees worktrees_after mode=${1:-fresh}
+  case_dir=$(make_case "concurrent-$mode" task-a)
   home="$case_dir/home"
+  mate="$case_dir/mate"
+  make_home "$mate" task-b
+  project="$mate/projects/project"
+  git clone -q "$(git -C "$case_dir/project" remote get-url origin)" "$project"
+  printf 'schema=fm-secondmate-parent.v1\nroute=local\nparent_home=%s\n' "$home" > "$mate/.fm-secondmate-parent"
+  printf -- '- mate - local (home: %s; scope: project work; projects: project; added 2026-10-08)\n' "$mate" > "$home/data/secondmates.md"
   declare_capacity "$home" "project 1"
+  lock=$(FM_HOME="$home" bash -c '. "$1/bin/fm-wake-lib.sh"; fm_treehouse_project_lock_path "$2"' _ "$ROOT" "$case_dir/project") || fail "no project lock"
   hold="$case_dir/hold"
   wt=$(new_worktree "$case_dir" task-a)
-  FM_FAKE_HOLD="$hold" spawn_ship "$case_dir" task-a "$wt" > "$case_dir/a.out" 2>&1 &
-  i=0
-  while [ ! -f "$hold.reached" ]; do
-    i=$((i + 1))
-    [ "$i" -lt 400 ] || fail "the first spawn never reached its launch: $(cat "$case_dir/a.out")"
+  if [ "$mode" = restart ]; then
+    write_live "$home" task-a "$case_dir/project" "pr=https://github.com/o/r/pull/7"
+    cp "$home/state/task-a.meta" "$case_dir/prior.meta"
+  fi
+  FM_FAKE_HOLD="$hold" FM_FAKE_PROJECT_LOCK="$lock" spawn_ship "$case_dir" task-a "$wt" > "$case_dir/a.out" 2>&1 &
+  pid=$!
+  for i in $(seq 1 400); do
+    [ ! -f "$hold.reached" ] || break
     sleep 0.05
   done
-  out=$(spawn_ship "$case_dir" task-b "$case_dir/unused") || rc=$?
-  [ "$rc" -ne 0 ] || fail "a concurrent spawn launched while the last place was being taken: $out"
-  assert_absent "$home/state/task-b.meta" "a concurrent spawn published past the last place"
+  [ -f "$hold.reached" ] || fail "A never reached the unlocked get: $(cat "$case_dir/a.out")"
+  if [ "$mode" = restart ]; then
+    cmp -s "$case_dir/prior.meta" "$home/state/task-a.meta" || fail "A did not retain its old PR-ready record during get"
+  else
+    assert_absent "$home/state/task-a.meta" "A already published before the overlap"
+  fi
+  git -C "$project" worktree add --quiet -b wt-b "$case_dir/wt-b"
+  before=$(call_count "$case_dir")
+  worktrees=$(worktree_list "$case_dir")
+  out=$(run_spawn "$case_dir" "$mate" "$case_dir/wt-b" task-b "$project" --mode no-mistakes --yolo off) || rc=$?
+  after=$(call_count "$case_dir")
+  worktrees_after=$(worktree_list "$case_dir")
   : > "$hold.release"
-  wait || true
-  assert_contains "$(cat "$case_dir/a.out")" "spawned task-a" "the lock-holding spawn did not finish"
+  wait "$pid"; arc=$?
+  expect_code "$DEFER_EXIT" "$rc" "B was not deferred during A's unlocked get: $out"
+  assert_equals "$before" "$after" "B touched the terminal or pool during deferral"
+  assert_equals "$worktrees" "$worktrees_after" "B changed the worktree inventory"
+  assert_absent "$mate/state/task-b.meta" "B published past the last place"
+  assert_absent "$mate/data/task-b/launch-brief.md" "B rendered a deferred launch brief"
+  if [ "$HAVE_TASKS_AXI" = 1 ]; then
+    assert_equals queued "$(row_state "$mate" task-b)" "B's backlog item moved"
+  fi
+  assert_contains "$out" 'task-a in' "B did not name A's pending admission"
+  assert_contains "$out" '(pending)' "B did not count the pending reservation"
+  expect_code 0 "$arc" "A did not finish: $(cat "$case_dir/a.out")"
+  ! grep -q '^pr=' "$home/state/task-a.meta" || fail "A kept its old PR handoff after publishing"
+  assert_no_reservations "$lock"
+  pass "same-origin $mode spawns across local homes cannot oversubscribe during the actual unlocked get"
+}
+
+assert_no_reservations() {
+  local reservation
+  for reservation in "$1".capacity.*; do
+    [ ! -e "$reservation" ] && [ ! -L "$reservation" ] || fail "reservation leaked: $reservation"
+  done
+}
+
+# Failure after the lock release must retire its admission too. The successor
+# gets the sole place through the same fm-spawn interface.
+test_failed_get_retires_reservation() {
+  local case_dir home hold lock wt out rc=0
+  case_dir=$(make_case failed-get task-a task-b)
+  home="$case_dir/home"
+  declare_capacity "$home" "project 1"
+  lock=$(FM_HOME="$home" bash -c '. "$1/bin/fm-wake-lib.sh"; fm_treehouse_project_lock_path "$2"' _ "$ROOT" "$case_dir/project") || fail "no project lock"
+  hold="$case_dir/hold"
+  : > "$hold.release"
+  wt=$(new_worktree "$case_dir" task-a)
+  out=$(FM_FAKE_HOLD="$hold" FM_FAKE_PROJECT_LOCK="$lock" FM_FAKE_GET_FAIL=1 spawn_ship "$case_dir" task-a "$wt") || rc=$?
+  [ "$rc" -ne 0 ] || fail "get failure was ignored: $out"
+  assert_present "$hold.reached" "failure did not exercise the release window"
+  assert_absent "$home/state/task-a.meta" "failed get published metadata"
+  assert_no_reservations "$lock"
   rc=0
-  out=$(spawn_ship "$case_dir" task-b "$case_dir/unused") || rc=$?
-  expect_code "$DEFER_EXIT" "$rc" "the retried spawn was not deferred once the place was taken: $out"
-  assert_absent "$home/state/task-b.meta" "the retried spawn published past capacity"
-  pass "concurrent spawns can never both take the last place"
+  out=$(spawn_ship "$case_dir" task-b) || rc=$?
+  expect_code 0 "$rc" "failed get kept the sole place: $out"
+  assert_no_reservations "$lock"
+  pass "a failed get retires its reservation and a successor takes the place"
+}
+
+# Synthetic interrupted-launch lease: exit a reserving process without its
+# release call, then let production counting reap its proven-dead lease.
+test_dead_reservation_is_reaped() {
+  local case_dir home lock out rc=0
+  case_dir=$(make_case dead-reservation task-b)
+  home="$case_dir/home"
+  declare_capacity "$home" "project 1"
+  lock=$(FM_HOME="$home" bash -c '. "$1/bin/fm-wake-lib.sh"; fm_treehouse_project_lock_path "$2"' _ "$ROOT" "$case_dir/project") || fail "no project lock"
+  FM_HOME="$home" bash -c '
+    . "$1/bin/fm-wake-lib.sh"
+    . "$1/bin/fm-project-capacity-lib.sh"
+    fm_lock_try_acquire "$2" || exit 1
+    fm_project_capacity_reserve "$2" "$3/state" task-a s-interrupted || exit 1
+    fm_lock_release "$2"
+  ' _ "$ROOT" "$lock" "$home" || fail "could not prepare interrupted-launch lease"
+  out=$(spawn_ship "$case_dir" task-b) || rc=$?
+  expect_code 0 "$rc" "a proven-dead reservation held capacity: $out"
+  assert_no_reservations "$lock"
+  pass "counting reaps a proven-dead reservation without leaking capacity"
 }
 
 # A spawn that fails after admission removes nothing it did not create and
@@ -511,6 +743,160 @@ test_failed_spawn_after_admission_holds_no_place() {
   out=$(spawn_ship "$case_dir" task-b) || rc=$?
   expect_code 0 "$rc" "a failed spawn kept holding the only place: $out"
   pass "a spawn that fails after admission leaves no record and holds no place"
+}
+
+# Public-library handoff under the stock system Bash: a live reservation and
+# its published metadata are one occupant; PR handoff frees that occupant even
+# if the publishing process has not yet retired its reservation.
+test_reservation_and_metadata_count_once() {
+  local case_dir home lock
+  case_dir=$(make_case metadata-handoff)
+  home="$case_dir/home"
+  lock=$(FM_HOME="$home" bash -c '. "$1/bin/fm-wake-lib.sh"; fm_treehouse_project_lock_path "$2"' _ "$ROOT" "$case_dir/project") || fail "no project lock"
+  FM_HOME="$home" /bin/bash -c '
+    set -eu
+    . "$1/bin/fm-wake-lib.sh"
+    . "$1/bin/fm-backend.sh"
+    . "$1/bin/fm-secondmate-registry-lib.sh"
+    . "$1/bin/fm-project-capacity-lib.sh"
+    project_lock=$2
+    fm_lock_try_acquire "$project_lock"
+    fm_project_capacity_reserve "$project_lock" "$3/state" task-a s-new
+    cleanup_handoff() {
+      fm_project_capacity_release "$FM_PROJECT_CAPACITY_RESERVATION"
+      fm_lock_release "$project_lock"
+    }
+    trap cleanup_handoff EXIT
+    fm_project_capacity_occupants "$2" "$4" "$3/state" observer
+    [ "$FM_PROJECT_CAPACITY_OCCUPANTS" = 1 ]
+    printf "project=%s\nkind=ship\nspawn_gen=s-old\npr=https://github.com/o/r/pull/8\n" "$4" > "$3/state/task-a.meta"
+    fm_project_capacity_occupants "$2" "$4" "$3/state" observer
+    [ "$FM_PROJECT_CAPACITY_OCCUPANTS" = 1 ]
+    printf "project=%s\nkind=ship\nspawn_gen=s-old\n" "$4" > "$3/state/task-a.meta"
+    fm_project_capacity_occupants "$2" "$4" "$3/state" observer
+    [ "$FM_PROJECT_CAPACITY_OCCUPANTS" = 1 ]
+    printf "project=%s\nkind=ship\nspawn_gen=s-new\n" "$4" > "$3/state/task-a.meta"
+    fm_project_capacity_occupants "$2" "$4" "$3/state" observer
+    [ "$FM_PROJECT_CAPACITY_OCCUPANTS" = 1 ]
+    printf "pr=https://github.com/o/r/pull/9\n" >> "$3/state/task-a.meta"
+    fm_project_capacity_occupants "$2" "$4" "$3/state" observer
+    [ "$FM_PROJECT_CAPACITY_OCCUPANTS" = 0 ]
+  ' _ "$ROOT" "$lock" "$home" "$case_dir/project" || fail "reservation/metadata handoff counted incorrectly"
+  assert_no_reservations "$lock"
+  pass "a pending reservation and its metadata count once until PR handoff (system Bash)"
+}
+
+test_retirement_during_reservation_reads_is_not_corruption() {
+  local case_dir home lock
+  case_dir=$(make_case retirement-read)
+  home="$case_dir/home"
+  make_home "$case_dir/observer"
+  lock=$(FM_HOME="$home" bash -c '. "$1/bin/fm-wake-lib.sh"; fm_treehouse_project_lock_path "$2"' _ "$ROOT" "$case_dir/project") || fail "no project lock"
+  FM_HOME="$home" /bin/bash -c '
+    set -eu
+    . "$1/bin/fm-wake-lib.sh"
+    . "$1/bin/fm-backend.sh"
+    . "$1/bin/fm-secondmate-registry-lib.sh"
+    . "$1/bin/fm-project-capacity-lib.sh"
+    project_lock=$2
+    fm_lock_try_acquire "$project_lock"
+    cleanup_retirement() {
+      fm_project_capacity_release "${FM_PROJECT_CAPACITY_RESERVATION:-}"
+      fm_lock_release "$project_lock"
+    }
+    trap cleanup_retirement EXIT
+    cat() {
+      if [ "${1:-}" = "$FM_PROJECT_CAPACITY_RESERVATION/$retire_field" ]; then
+        fm_project_capacity_release "$FM_PROJECT_CAPACITY_RESERVATION" || exit 1
+      fi
+      command cat "$@"
+    }
+    for retire_field in pid lock-owner-start task; do
+      fm_project_capacity_reserve "$2" "$3/state" task-a s-retiring
+      fm_project_capacity_occupants "$2" "$4" "$5/state" observer
+      [ "$FM_PROJECT_CAPACITY_OCCUPANTS" = 0 ]
+      [ ! -e "$FM_PROJECT_CAPACITY_RESERVATION" ]
+    done
+    unset -f cat
+    for malformed in pid lock-owner-start task; do
+      fm_project_capacity_reserve "$2" "$3/state" task-a s-malformed
+      case "$malformed" in
+        pid) printf "0\n" > "$FM_PROJECT_CAPACITY_RESERVATION/pid" ;;
+        lock-owner-start) : > "$FM_PROJECT_CAPACITY_RESERVATION/lock-owner-start" ;;
+        task) printf "state=%s/state\nid=task-a\n" "$3" > "$FM_PROJECT_CAPACITY_RESERVATION/task" ;;
+      esac
+      if fm_project_capacity_occupants "$2" "$4" "$5/state" observer; then
+        exit 1
+      fi
+      [ -n "$FM_PROJECT_CAPACITY_ERROR" ]
+      fm_project_capacity_release "$FM_PROJECT_CAPACITY_RESERVATION"
+    done
+    if [ "$(id -u)" != 0 ]; then
+      for unreadable in pid lock-owner-start task; do
+        fm_project_capacity_reserve "$2" "$3/state" task-a s-unreadable
+        chmod 000 "$FM_PROJECT_CAPACITY_RESERVATION/$unreadable"
+        if fm_project_capacity_occupants "$2" "$4" "$5/state" observer; then
+          exit 1
+        fi
+        [ -n "$FM_PROJECT_CAPACITY_ERROR" ]
+        chmod 600 "$FM_PROJECT_CAPACITY_RESERVATION/$unreadable"
+        fm_project_capacity_release "$FM_PROJECT_CAPACITY_RESERVATION"
+      done
+    fi
+  ' _ "$ROOT" "$lock" "$home" "$case_dir/project" "$case_dir/observer" || fail "retirement was confused with surviving corrupt reservation state"
+  assert_no_reservations "$lock"
+  pass "retirement during any reservation read is absent; surviving malformed and unreadable reservations refuse admission"
+}
+
+test_nested_registry_failure_cannot_hide_a_holder() {
+  local case_dir home a b c child parent out rc=0 before worktrees real_cat
+  case_dir=$(make_case nested-registry task-c)
+  home="$case_dir/home"
+  a="$case_dir/a"
+  b="$case_dir/b"
+  c="$case_dir/c"
+  for child in "$a" "$b" "$c"; do
+    make_home "$child"
+    parent=$home
+    [ "$child" != "$c" ] || parent=$a
+    printf 'schema=fm-secondmate-parent.v1\nroute=local\nparent_home=%s\n' "$parent" > "$child/.fm-secondmate-parent"
+  done
+  printf -- '- a - local (home: %s; scope: work; projects: project; added 2026-10-08)\n- b - local (home: %s; scope: work; projects: project; added 2026-10-08)\n' "$a" "$b" > "$home/data/secondmates.md"
+  printf -- '- c - local (home: %s; scope: work; projects: project; added 2026-10-08)\n' "$c" > "$a/data/secondmates.md"
+  : > "$b/data/secondmates.md"
+  declare_capacity "$home" "project 1"
+  write_live "$c" live-c "$case_dir/project"
+  before=$(call_count "$case_dir")
+  worktrees=$(worktree_list "$case_dir")
+  out=$(spawn_ship "$case_dir" task-c "$case_dir/unused") || rc=$?
+  expect_code "$DEFER_EXIT" "$rc" "the readable nested holder was omitted: $out"
+  assert_contains "$out" "live-c in $c" "the nested holder was not counted"
+  assert_nothing_created "$case_dir" "$home" task-c "$before" "$worktrees"
+  if [ "$(id -u)" != 0 ]; then
+    chmod 000 "$a/data/secondmates.md"
+    rc=0
+    out=$(spawn_ship "$case_dir" task-c "$case_dir/unused") || rc=$?
+    chmod 600 "$a/data/secondmates.md"
+    expect_code 1 "$rc" "a later sibling masked an unreadable registry: $out"
+    assert_contains "$out" "registry cannot be read at $a/data/secondmates.md" "the unreadable registry was not named"
+    assert_nothing_created "$case_dir" "$home" task-c "$before" "$worktrees"
+  fi
+  real_cat=$(command -v cat)
+  cat > "$case_dir/fakebin/cat" <<'SH'
+#!/usr/bin/env bash
+if [ "${1:-}" = "${FM_FAIL_REGISTRY_READ:-}" ]; then
+  exit 1
+fi
+exec "$FM_REAL_CAT" "$@"
+SH
+  chmod +x "$case_dir/fakebin/cat"
+  rc=0
+  out=$(FM_FAIL_REGISTRY_READ="$a/data/secondmates.md" FM_REAL_CAT="$real_cat" spawn_ship "$case_dir" task-c "$case_dir/unused") || rc=$?
+  rm "$case_dir/fakebin/cat"
+  expect_code 1 "$rc" "a later sibling masked a registry read failure: $out"
+  assert_contains "$out" "registry cannot be read at $a/data/secondmates.md" "the failed registry read was not named"
+  assert_nothing_created "$case_dir" "$home" task-c "$before" "$worktrees"
+  pass "a root/A/B/C holder cannot be hidden by an unreadable or failed registry read"
 }
 
 test_unreadable_declaration_refuses_every_spawn() {
@@ -533,6 +919,9 @@ zero capacity|project 0\n
 non-numeric capacity|other-project two\n
 trailing text|project 2 # suite\n
 named twice|project 2\nproject 3\n
+NUL in name|pro\000ject 2\n
+NUL in capacity|project 2\0000\n
+NUL in comment|# note\000\nproject 2\n
 ROWS
   rm -f "$home/config/project-capacity"
   mkdir "$home/config/project-capacity"
@@ -624,6 +1013,17 @@ SH
   pass "an Orca spawn takes the shared project lock whenever a same-origin clone is capped and defers before creating anything"
 }
 
+if [ "${1:-}" = metadata-handoff ]; then
+  test_reservation_and_metadata_count_once
+  exit 0
+fi
+
+test_capacity_declaration_nul_guard
+test_capacity_parent_record_nul_guard
+test_capacity_root_home_with_literal_pipes
+test_capacity_names_with_literal_pipes
+test_concurrent_spawns_cannot_both_take_the_last_place fresh
+test_concurrent_spawns_cannot_both_take_the_last_place restart
 test_undeclared_capacity_keeps_dispatch_uncapped
 test_available_capacity_admits_the_worker
 test_exhausted_capacity_defers_without_leaving_anything_behind
@@ -635,8 +1035,12 @@ test_restart_does_not_count_its_own_record
 test_occupancy_counts_only_this_projects_workers
 test_capacity_is_shared_by_every_local_home
 test_unreadable_holders_refuse_admission
-test_concurrent_spawns_cannot_both_take_the_last_place
 test_failed_spawn_after_admission_holds_no_place
+test_failed_get_retires_reservation
+test_dead_reservation_is_reaped
+test_reservation_and_metadata_count_once
+test_retirement_during_reservation_reads_is_not_corruption
+test_nested_registry_failure_cannot_hide_a_holder
 test_unreadable_declaration_refuses_every_spawn
 test_batch_reports_a_deferred_pair
 test_orca_spawn_is_admitted_under_the_shared_project_lock

@@ -15,10 +15,13 @@ Herdr provides the terminal session while Treehouse continues to provide task wo
 
 | What you want to know | Start here |
 | --- | --- |
+| Answer one Captain's Call decision in a pane | [Captain's Call pane](#captains-call-pane) |
 | Install Herdr and select it | [Setup](#setup) |
 | Why a command ran on a different `herdr` client | [Client selection](#client-selection) |
 | Where task tabs appear and how to watch them | [Watching and task containers](#watching-and-task-containers) |
 | The one-task workspaces, their setting, and their cleanup | [Presentation spaces](#presentation-spaces) |
+| One workspace per project instead of one per task | [Project spaces](#project-spaces) |
+| Grouping tasks by project with status tags and a sorted agents list | [Project groups](#project-groups) |
 | Why a seeded default tab is or is not closed | [Default-tab prune safety](#default-tab-prune-safety) |
 | What task metadata records for a Herdr endpoint | [Endpoint metadata](#endpoint-metadata) |
 | How text and keys reach a worker and how delivery is confirmed | [Current transport behavior](#current-transport-behavior) and [Composer and injection safety](#composer-and-injection-safety) |
@@ -27,6 +30,15 @@ Herdr provides the terminal session while Treehouse continues to provide task wo
 | Where the away daemon runs and how it stops | [Away-mode supervisor support](#away-mode-supervisor-support) |
 | Stopping or deleting Herdr sessions during verification | [Destructive lab safety](#destructive-lab-safety) |
 | Known limits and the test suite | [Active limits](#active-limits) and [Regression entry points](#regression-entry-points) |
+
+## Captain's Call pane
+
+Run `FM_HOME=/path/to/firstmate-home /path/to/firstmate/bin/fm-captain-pane.py` in a Herdr shell pane, or run the same command in a plain SSH terminal.
+Run `/bearings` in Firstmate to refresh the queue at `state/captains-call.json` before opening it; `/bearings lavish` refreshes that same queue while building the browser board.
+The pane shows one card at a time in Bearings order, wraps at the current terminal width, and redraws on resize.
+Click an option or press its number; `p`, `n`, `s`, and `q` go back, go forward, skip, and quit.
+Arrow keys and mouse wheel scroll a long card.
+An answer wakes Firstmate through the durable inbox path; a merge selection waits for Firstmate's fresh PR and CI checks before any merge.
 
 ## Setup
 
@@ -37,7 +49,7 @@ Prerequisites:
 - Herdr protocol 14 or newer, installed from [herdr.dev](https://herdr.dev).
 - `jq` for JSON responses.
 - The universal harness and toolchain requirements in [`configuration.md`](configuration.md#toolchain).
-- `python3` only for optional protocol-16 presentation-space ordering and native event subscription.
+- `python3` only for optional protocol-16 presentation-space ordering, native event subscription, and opt-in [project groups](#project-groups) agent-view transport.
 
 Herdr is dual-licensed AGPL-3.0-or-later or commercial.
 Firstmate invokes its CLI as a separate process.
@@ -125,7 +137,7 @@ Herdr 0.7.5 exports `HERDR_ENV`, `HERDR_PANE_ID`, `HERDR_SESSION`, `HERDR_SOCKET
 A Firstmate or secondmate agent's own commands inherit them.
 Older injection shapes are unverified, so a claimed launcher pane without the injected socket identity cannot be trusted.
 
-With presentation spaces disabled, a crewmate or scout is created in the exact workspace that identity currently resolves to.
+With neither a presentation space nor a [project space](#project-spaces), a crewmate or scout is created in the exact workspace that identity currently resolves to.
 That workspace is read live from Herdr rather than from the injected snapshot, so the worker always appears beside the agent that launched it.
 Duplicate labels elsewhere in the session are irrelevant, and the globally focused workspace is never the target.
 A `--secondmate` launch is the deliberate exception: it stands up that secondmate home's own workspace instead of joining the launcher's.
@@ -178,10 +190,12 @@ The local gitignored `config/herdr-presentation-spaces` file controls the projec
 | Absent | Leaves the choice to the version floor below (the unconfigured default). |
 | `off` | Opts the home out. |
 | `on` | Forces the projection on, as a deliberate opt-in. |
+| `project` | Replaces the projection with one workspace per project, described under [Project spaces](#project-spaces). |
 | Empty | A deliberate opt-in, the same as `on`. |
 | Any other value | Warns and follows the unconfigured default rather than failing a spawn over a purely visual setting. |
 
 Values are compared with whitespace stripped and case ignored.
+The rest of this section describes the one-task projection, except [Project spaces](#project-spaces).
 
 The empty file is the historical presence-based opt-in form.
 So every home that had already enabled the projection stays enabled with no migration step.
@@ -241,6 +255,39 @@ Only an explicit primary `off` propagates the opt-out.
 
 A secondmate agent itself always stays in its ordinary parent workspace; only children launched by that home are eligible.
 An unconverged opt-out keeps the default projection in that home until convergence.
+An inherited `project` value keeps that home's children as ordinary tabs in its own workspace, as [Project spaces](#project-spaces) describes.
+
+### Project spaces
+
+The `project` value replaces the one-task projection with one workspace per project.
+Each fresh crewmate or scout of the primary home becomes an ordinary `fm-<id>` task tab in a workspace labelled `▸ <project>`, where `<project>` is the basename of the task's project directory.
+The prefix keeps that label distinct from the `firstmate` home label, even for a project named `firstmate`, and from the projection's `└ ... · p:<token>` grammar.
+
+Placement works like this:
+
+- The first task of a project creates the workspace with `--no-focus`, prunes Herdr's seeded default tab, and records the workspace's exact id in this home's `state/.herdr-project-space-<key>` record.
+- A later task of the same project reuses that workspace only when the recorded id still names exactly one workspace in the same named session, for this physical home, carrying the expected label, and holding at least one `fm-` task tab.
+- Otherwise the task gets a fresh workspace and the record is replaced.
+- A workspace is never found or adopted by its label, so a captain workspace wearing the same label is left alone.
+- The reuse decision, any create, and the record update run under the named session's presentation lock, so concurrent spawns and cleanups cannot race.
+
+Removal needs no separate path:
+
+- A project-space task tab is an ordinary endpoint with no presentation journal.
+- Its cleanup closes the exact task pane through the focus-safe plan under [Ordinary removal and cleanup locking](#ordinary-removal-and-cleanup-locking).
+- Closing a task that is not its project's last leaves the workspace in place.
+- Closing the last one empties the workspace, which Herdr removes, and the next task of that project opens a fresh workspace.
+
+Fallbacks and limits:
+
+- A missing session server, a contended session lock, or a failed workspace create warns and uses the ordinary flat layout.
+- A failure after Herdr created something stops the spawn like a failed flat create, and a just-created workspace left holding only its seeded tab is closed.
+- Only a fresh task with neither metadata nor a presentation journal is eligible, so a resumed or reclaimed task uses the ordinary flat layout.
+- The value is a deliberate choice, so it is honored at every release like `on`.
+  Below the [0.8.0 floor](#why-the-default-needs-herdr-080), removing a project's last task can briefly move focus when the focus-safe plan falls back to a plain close, before the exact-tab restore pulls it back.
+- A secondmate home keeps every child as a tab in its own `2ndmate-<id>` workspace, and a `--secondmate` launch still stands up that workspace.
+- Project spaces are not ordered beside their home workspace, and already-running workers are not moved when the value changes.
+- Recovery and list-live scan only the home workspace, so, as with projections, they do not see project-space tabs.
 
 ### Presentation journal
 
@@ -479,6 +526,7 @@ Any of these preserves the candidate and lets session startup continue with at m
 
 | Test | What it covers |
 | --- | --- |
+| `tests/fm-backend-herdr-project-spaces-e2e.test.sh` | Per-project reuse, separation across projects, removal only with the last task, a fresh space afterward, no adoption of a same-labelled captain workspace, and preserved focus through the guarded lab path. |
 | `tests/fm-backend-herdr-presentation-e2e.test.sh` | Multi-home ordering, concurrency, lock contention, legacy coexistence, focus preservation, exact same-identity restart replacement, ambiguous bindings and tokens, and exact-pane cleanup through the guarded lab path. |
 | `tests/fm-herdr-session-cleanup.test.sh` | Every discovery, ownership, topology, process, locking, revalidation, focus, retirement, and continue-on-error boundary. |
 | `tests/fm-herdr-session-cleanup-e2e.test.sh` | The restored-shell cleanup in a guarded non-default named lab. |
@@ -488,6 +536,127 @@ Any of these preserves the candidate and lets session startup continue with at m
 
 [`verification/runtime-backends.md`](verification/runtime-backends.md#workspace-removal-focus-safety) owns the active versioned evidence for the focus-flash test.
 [`verification/runtime-backends.md`](verification/runtime-backends.md#attached-foreground-viewer) owns the active versioned evidence and the re-run trigger for the attached-viewer test.
+
+## Project groups
+
+Project groups are an opt-in display layer that shows each task's project group and status in Herdr's sidebar and sorts Herdr's agents list by group and then by status.
+They are off by default, and without the setting nothing in this page's other sections changes.
+They are display-only: no tag or view is task, endpoint, ownership, or cleanup authority.
+
+### Turning project groups on
+
+The local gitignored `config/herdr-project-groups` file controls them.
+It is inherited into secondmate homes, because the agents view is one per Herdr server and every home's tasks share it.
+
+| File content | Result |
+| --- | --- |
+| Absent | Off. No producer runs and no Herdr call is made. |
+| `off` | Off, the same as absent. |
+| `on`, or empty | On, with one group per project, named after the task's project directory. |
+| Rule lines | On, with the groups and group order the rules define. |
+
+Blank lines and lines starting with `#` are ignored.
+
+### Group rules
+
+Each rule line is a group name followed by selectors, separated by whitespace.
+The order in which a group name first appears is that group's display order, and a group may span several lines.
+Group names use letters, digits, `.`, `_`, `+`, and `-`, at most 32 characters.
+
+| Selector | Matches |
+| --- | --- |
+| `task:<prefix>` | A task id equal to `<prefix>` or starting with `<prefix>-`. |
+| `repo:<name>` | A task whose project directory is named `<name>`. |
+| `*` | Every task. |
+
+Task-id selectors win over repository selectors, which win over `*`, across all lines; within one selector kind the first matching line wins.
+A task that no rule matches is grouped by its project directory and listed after every rule group.
+An invalid group name or an unknown selector is ignored with a warning.
+
+Example, grouping by area of work and keeping a catch-all last:
+
+```text
+# config/herdr-project-groups
+Web       task:web task:shop repo:storefront
+Backend   task:api repo:api-server
+Ops       task:deploy task:infra
+Other     *
+```
+
+### Tags and status order
+
+For each ship and scout task recorded in the home with Herdr endpoint metadata, Firstmate reports display-only metadata tokens under the source `firstmate`:
+
+| Token | On | Value |
+| --- | --- | --- |
+| `fm_group` | pane and projected workspace | The group name. |
+| `fm_state` | pane and projected workspace | The display status. |
+| `fm_task` | pane | The task id. |
+| `fm_sort` | pane | `<group order>.<group>.<status rank>.<task>`, at most 80 characters. |
+| `fm_group_order` | projected workspace | `<group order>.<group>`, the key that [placement](#placement-inside-the-group) compares. |
+
+Workspace tokens go only to the task's own projected workspace: an exact version 2 [presentation journal](#presentation-journal) binding the task's recorded session, workspace, and pane, whose live workspace holds that single pane.
+A flat-layout task tab shares its workspace with other tasks, so it gets pane tokens only.
+
+The display status comes from the task's status log through the shared classifier that `bin/fm-classify-lib.sh` owns, in this rank order:
+
+| Rank | `fm_state` | Status log |
+| --- | --- | --- |
+| 1 | `needs-captain` | An open decision, or a captain-held transfer. |
+| 2 | `problem` | `blocked` or `failed`. |
+| 3 | `running` | Anything else, including `working`, `paused`, and no status yet. |
+| 4 | `done` | `done`. |
+
+It is the worker's latest declaration, not the reconciled current state that `bin/fm-crew-state.sh` owns, and it can lag one watcher poll behind the log.
+Herdr's own agent status dot stays live beside it.
+
+The watcher reconciles every task once per poll cycle, and a spawn tags its new task at once.
+A reconcile reads each session's workspace and pane lists once and reports only tokens whose live value differs.
+After each supported session's lists are read successfully, reconciliation also sets the agents view independently of token differences: `agent.view.set` with source `firstmate`, label `projects`, and sort by the `fm_sort` token, then workspace order.
+If a view update fails after tags succeed, the next reconciliation retries it even when every token already matches.
+Herdr keeps neither tokens nor the agents view across a server restart, so the next reconcile after a restart reports them again.
+Agents without an `fm_sort` token, such as Firstmate itself or another tool's agents, sort after the tagged ones.
+Herdr exposes no CLI for the agents view, so `bin/backends/herdr-agent-view.py` sends only those two whitelisted requests over the named session socket.
+
+Tags and the agents view need Herdr protocol 22, verified with Herdr 0.9.5; the wire schema comes from Herdr 0.9.3, which speaks the same protocol.
+An older client warns once per protocol and the feature stays inactive.
+
+`bin/fm-herdr-groups.sh` owns the commands, including `plan` to preview groups and statuses without touching Herdr and `clear` to remove this home's tags and the agents view after turning the feature off.
+
+### Sidebar rows
+
+Herdr shows custom tokens only where its own configuration names them.
+Firstmate never edits Herdr's configuration on its own.
+`bin/fm-herdr-groups.sh sidebar-config` prints these suggested rows, and `sidebar-config --apply <path>` appends them to that Herdr configuration file after copying it to `<path>.bak-<epoch>`, refusing when the file already defines sidebar rows:
+
+```toml
+[ui.sidebar.spaces]
+rows = [
+  ["state_icon", "workspace"],
+  [{ token = "$fm_group", bold = true }, "$fm_state"],
+]
+
+[ui.sidebar.agents]
+rows = [
+  ["state_icon", { token = "$fm_group", bold = true }, "$fm_state", "$fm_task"],
+]
+```
+
+Run `herdr server reload-config` afterwards to apply them.
+Colors can be added with Herdr's inline token styles.
+
+### Placement inside the group
+
+With project groups on, a new projected task is placed inside its owning parent's child block right after the last child whose `fm_group_order` token sorts at or before its own, instead of at the block end.
+A child without that token counts as sorting before it, so untagged children never move behind a new task.
+Everything else is [Ordering](#ordering) unchanged: one verified move of the new workspace only, never an existing child, a parent, or a foreign workspace, and every ambiguity leaves the new task where Herdr created it.
+A task whose group changes later keeps its position until it ends.
+
+### Verification status
+
+The tags, the agents view, and the placement are covered by offline tests against a scripted Herdr CLI and socket helper (`tests/fm-herdr-groups.test.sh` and the ordering cases in `tests/fm-backend-herdr.test.sh`).
+They were also exercised against a real Herdr 0.9.5 server (protocol 22) in a guarded lab session: after one watcher poll `herdr pane list` showed the `fm_*` tokens on each task pane, the agents list header read `projects` with tasks ordered by group and then status, a newly spawned projected task landed after the other tasks of its group with only that workspace moving and no focus change, and `fm-herdr-groups.sh clear` removed the tokens and the view.
+To repeat the check on a live session, turn the feature on, wait one watcher poll, and confirm the same four results.
 
 ## Default-tab prune safety
 
@@ -521,7 +690,7 @@ Workspace and tab ids support verification and cleanup but are not inferred from
 
 ### Named server and session routing
 
-The adapter starts and polls a named server before workspace, tab, pane, or agent calls.
+The adapter starts and polls a named server before active operations; passive visible-viewport probes require an already-running server and fail without starting one (`fm_backend_herdr_target_observable` in `bin/backends/herdr.sh`).
 Every Herdr invocation goes through `fm_backend_herdr_cli`, which sets the environment and passes an explicit trailing `--session <name>`.
 An environment variable alone is not reliable when another Herdr server is running.
 
@@ -530,8 +699,9 @@ When the selected named server is not running, the adapter launches it without t
 - Firstmate home and directory overrides.
 - Harness identity markers.
 - The supervision-model override.
+- Transient watcher timeout ownership defined by [`fm-timeout-lib.sh`](../bin/fm-timeout-lib.sh).
 
-Herdr passes its server startup environment to every later pane, so retaining those values could misroute panes for another Firstmate home or harness.
+Herdr passes its server startup environment to every later pane, so retaining those values could misroute panes for another Firstmate home or harness, or tie a worker's timeout calls to a watcher that has exited.
 An already-running server is reused without restart or environment changes.
 Explicit named-session routing and unrelated launch environment remain intact.
 
@@ -631,14 +801,22 @@ It hands the visible pane's ANSI viewport plus Herdr's capability facts to the f
 - Bordered boxes.
 - Bare agent-glyph rows, including muse's `⟩`, which the adapter's retired local pattern silently omitted.
 - opencode's left bar.
-- The Pi separator region this adapter pioneered, admitted only when native `agent get` identity is exactly Pi and state is idle or done.
+- The Pi separator region this adapter pioneered, admitted only when native `agent get` identity is exactly Pi and state is idle, done, or working.
+- Claude's rule-framed composer under Herdr: a titled opening rule (`──── Title ──`) and a plain closing rule around a bare `❯` row.
 
 ### Pi composer states
 
 A blocked Pi is parked on an interactive prompt, so its blank composer region is a menu's and not a free composer's.
 That state defers instead of proving emptiness.
-A working Pi, pending middle row, missing identity, incomplete separator pair, or over-tall candidate remains unknown or pending.
-Identity stays a lazy second read, consulted only when a separator pair could change the verdict.
+A working Pi with a structurally blank separator composer is empty, including its spinner-labelled top rule, because native status distinguishes it from a blocked Pi.
+A pending middle row, missing identity, incomplete separator pair, a pair enclosing no row, or an over-tall candidate remains unknown or pending.
+A `>` on the pair's first row is input by default, because stock Pi 0.87.1 draws no editor prompt there, and a user's lone `>` must never have `/quit` typed onto it.
+Setting `FM_BACKEND_HERDR_PI_PROMPT=1` opts in to Pi editors that do draw one: a lone leading `>` on the first row is then the editor's own prompt, while text beside it, a `>` on a later row, and any other glyph remain input.
+Pi's cost-first stats row (`$0.000 (sub) 0.0%/272k (auto)`) is footer furniture only as Pi's complete stats tuple, first in the row run directly below the pair, and only when the pair itself proves the verdict; a truncated tuple, a repeat, or any other `$` row still refuses.
+Pi's compact layout - a rounded status header, one unboxed input row, and one lower solid rule with nothing but blank rows below - is experimental and off by default, because no real Pi build has been captured drawing it.
+Setting `FM_BACKEND_HERDR_PI_COMPACT=1` lets that layout prove an empty composer, and only when the styled input row is exactly one reverse-video blank cursor cell and native identity is an idle or done Pi.
+That compact row is never ghost-stripped: dim placeholder text on it both classifies pending and extracts as its visible plain text.
+Identity stays a lazy second read, consulted only when a separator pair or an opted-in compact layout could change the verdict.
 
 ### Placeholder and ghost text
 
@@ -824,6 +1002,7 @@ The helper:
 - Supplies an explicit `--session` Herdr option before any `--` delimiter in allowed task commands.
 - Refuses caller-supplied session flags and server/session lifecycle subcommands.
 - Performs destructive stop/delete only through its guarded lifecycle actions.
+- Runs a lab server under a temporary `gui/<uid>` launch agent confined to that lab session's own label through its `launchagent` commands, so isolated verification can observe launchd supervision, and boots that agent out at teardown before any other destructive step.
 
 Immediately before every destructive call it re-queries the named session and refuses empty, missing, literal `default`, or `default:true` identities.
 Its before/after tripwire requires the live default-session snapshot to remain byte-identical.
@@ -834,6 +1013,7 @@ Tests use thin compatibility wrappers in `tests/herdr-test-safety.sh` and never 
 ## Active limits
 
 - Presentation ordering needs protocol 16 and Python and is best-effort only.
+- Project groups need protocol 22 and Python, are tested offline, and were checked live once against Herdr 0.9.5 on protocol 22.
 - Mutable labels can collide; they are never placement or destructive authority.
 - A Firstmate outside Herdr cannot resolve a launcher workspace, so a colliding home label refuses new spawns until the collision is cleared.
 - Ghost and placeholder recognition uses ANSI de-emphasis when available; an unstyled glyph row carrying trailing non-idle text fails safely to `unknown`.
@@ -851,12 +1031,14 @@ tests/fm-backend-herdr-respawn-idem-e2e.test.sh
 tests/fm-backend-herdr-workspace-per-home-e2e.test.sh
 tests/fm-backend-herdr-launcher-workspace-e2e.test.sh
 tests/fm-backend-herdr-presentation-e2e.test.sh
+tests/fm-backend-herdr-project-spaces-e2e.test.sh
 tests/fm-backend-herdr-agent-exit-shell-e2e.test.sh
 tests/fm-herdr-pi-stale-registration-live-e2e.test.sh
 tests/fm-backend-herdr-eventwait-smoke.test.sh
 tests/fm-control-herdr-smoke.test.sh
 tests/fm-herdr-session-cleanup.test.sh
 tests/fm-herdr-session-cleanup-e2e.test.sh
+tests/fm-herdr-groups.test.sh
 tests/fm-herdr-attached-viewer-live-e2e.test.sh
 tests/fm-afk-inject-herdr-e2e.test.sh
 tests/fm-afk-pi-herdr-return-e2e.test.sh

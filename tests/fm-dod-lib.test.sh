@@ -21,6 +21,40 @@ write_merge_marker() {  # <state> <id> <provider> <host> <path> <number>
   chmod 600 "$1/$2.pr-poll-merge-notified"
 }
 
+test_external_pr_receipt_boundary() {
+  local repo wt state reason
+  repo="$TMP_ROOT/upstream-receipt-repo"
+  wt="$TMP_ROOT/upstream-receipt-wt"
+  state="$TMP_ROOT/upstream-receipt-state"
+  mkdir -p "$state"
+  fm_git_worktree "$repo" "$wt" fm/receipt
+  git -C "$wt" remote set-url origin https://github.com/fork/demo.git
+  reason=$(accept_done ship direct-PR "$wt" "$repo" \
+    'done: PR https://github.com/upstream/demo/pull/1' "$state" receipt-id '') \
+    && fail 'direct upstream PR passed without a receipt'
+  assert_contains "$reason" 'upstream prior-art receipt refused' \
+    'direct upstream refusal did not name the receipt boundary'
+  reason=$(accept_done ship no-mistakes "$wt" "$repo" \
+    'done: PR https://github.com/upstream/demo/pull/1 checks green' "$state" receipt-id '') \
+    && fail 'no-mistakes upstream PR passed without a receipt'
+  assert_contains "$reason" 'upstream prior-art receipt refused' \
+    'no-mistakes upstream refusal did not name the receipt boundary'
+  git -C "$wt" remote set-url origin https://token@github.com/fork/demo.git
+  reason=$(accept_done ship direct-PR "$wt" "$repo" \
+    'done: PR https://github.com/upstream/demo/pull/1' "$state" receipt-id '') \
+    && fail 'credentialed external PR passed without a receipt'
+  assert_contains "$reason" 'upstream prior-art receipt refused' \
+    'credentialed-origin refusal did not name the receipt boundary'
+  git -C "$wt" remote set-url origin https://github.com/owner/demo.git
+  git -C "$wt" update-ref refs/remotes/origin/fm/receipt "$(git -C "$wt" rev-parse HEAD)"
+  accept_done ship direct-PR "$wt" "$repo" \
+    'done: PR https://github.com/owner/demo/pull/1' "$state" receipt-id '' \
+    || fail 'owned PR was affected by the upstream receipt boundary'
+  pass 'external PR ready signals require receipts while owned PRs remain unaffected'
+}
+
+test_external_pr_receipt_boundary
+
 test_scout_done_is_not_gated() {
   local repo wt
   repo="$TMP_ROOT/scout-repo"
@@ -30,6 +64,342 @@ test_scout_done_is_not_gated() {
   accept_done scout no-mistakes "$wt" "$repo" 'done: report written' \
     || fail "scout done: must not require named-head reachability outside the copy"
   pass "scout done: is not gated"
+}
+
+test_evidence_claim_requires_provenance() {
+  local root intent out rc artifact
+  root="$TMP_ROOT/evidence-claim"
+  artifact="$root/worktree/evidence.txt"
+  mkdir -p "$root/home" "$root/worktree" "$root/tmp"
+  printf '%s\n' captured output > "$artifact"
+  intent='2 of 3 scenarios driven live'
+  set +e
+  out=$(fm_dod_validate_intent_evidence "$intent" "$root/worktree" "$root/tmp" 2>&1)
+  rc=$?
+  [ "$rc" -ne 0 ] || fail "evidence claim without provenance was accepted"
+  assert_contains "$out" "missing evidence-artifact" "missing artifact refusal was unclear"
+  intent=$(printf '2 of 3 scenarios driven live\nevidence-artifact: %s\n' "$artifact")
+  set +e
+  out=$(fm_dod_validate_intent_evidence "$intent" "$root/worktree" "$root/tmp" 2>&1)
+  rc=$?
+  [ "$rc" -ne 0 ] || fail "evidence claim without command and time was accepted"
+  assert_contains "$out" "missing evidence-command" "missing command refusal was unclear"
+  intent=$(printf '2 of 3 scenarios\ndriven live\nevidence-artifact: %s\n' "$artifact")
+  out=$(fm_dod_validate_intent_evidence "$intent" "$root/worktree" "$root/tmp" 2>&1)
+  rc=$?
+  [ "$rc" -ne 0 ] || fail "line-split evidence claim without provenance was accepted"
+  assert_contains "$out" "missing evidence-command" "line-split claim refusal was unclear"
+  intent=$(printf '2 of 3\nscenarios\ndriven live\nevidence-artifact: %s\n' "$artifact")
+  out=$(fm_dod_validate_intent_evidence "$intent" "$root/worktree" "$root/tmp" 2>&1)
+  rc=$?
+  [ "$rc" -ne 0 ] || fail "three-line evidence claim without provenance was accepted"
+  assert_contains "$out" "missing evidence-command" "three-line claim refusal was unclear"
+  intent=$(printf '2 of 3 scenarios driven live\nevidence-artifact: %s\nevidence-command:   \nevidence-captured:   \n' "$artifact")
+  out=$(fm_dod_validate_intent_evidence "$intent" "$root/worktree" "$root/tmp" 2>&1)
+  rc=$?
+  [ "$rc" -ne 0 ] || fail "whitespace-only evidence metadata was accepted"
+  assert_contains "$out" "missing evidence-command" "whitespace-only command refusal was unclear"
+  pass "evidence claims require artifact provenance"
+}
+
+test_evidence_claim_enforces_mechanical_provenance() {
+  local root artifact intent out rc
+  root="$TMP_ROOT/evidence-claim-valid"
+  artifact="$root/worktree/evidence.txt"
+  mkdir -p "$root/home" "$root/worktree" "$root/tmp"
+  printf '%s\n' captured output > "$artifact"
+  intent=$(cat <<EOF
+2 of 3 scenarios driven live
+evidence-artifact: $artifact
+evidence-command: ./run-scenarios --live
+evidence-captured: 2026-09-25T10:00:00+10:00
+EOF
+)
+  fm_dod_validate_intent_evidence "$intent" "$root/worktree" "$root/tmp" \
+    || fail "mechanically valid evidence provenance was refused"
+  rm -f "$artifact"
+  fm_dod_validate_intent_evidence "$intent" "$root/worktree" "$root/tmp" \
+    || fail "valid evidence provenance was rejected before its artifact existed"
+  set +e
+  out=$(fm_dod_validate_published_intent "$intent" "$root/worktree" "$root/tmp" 2>&1)
+  rc=$?
+  [ "$rc" -ne 0 ] || fail "publication accepted a missing evidence artifact"
+  assert_contains "$out" "missing or unreadable" "missing artifact publication refusal was unclear"
+  printf '%s\n' captured output > "$artifact"
+  fm_dod_validate_published_intent "$intent" "$root/worktree" "$root/tmp" \
+    || fail "publication refused a mechanically valid evidence artifact"
+  mkdir -p "$root/outside"
+  printf '%s\n' captured > "$root/outside/evidence.txt"
+  intent=${intent/$artifact/$root\/worktree\/..\/outside\/evidence.txt}
+  set +e
+  out=$(fm_dod_validate_published_intent "$intent" "$root/worktree" "$root/tmp" 2>&1)
+  rc=$?
+  [ "$rc" -ne 0 ] || fail "publication accepted an artifact escaping the worktree"
+  assert_contains "$out" "outside the" "path traversal refusal was unclear"
+  mkdir -p "$root/tmp-other"
+  printf '%s\n' captured > "$root/tmp-other/evidence.txt"
+  intent=$(cat <<EOF
+2 of 3 scenarios driven live
+evidence-artifact: $root/tmp-other/evidence.txt
+evidence-command: ./run-scenarios --live
+evidence-captured: 2026-09-25T10:00:00+10:00
+EOF
+)
+  out=$(fm_dod_validate_published_intent "$intent" "$root/worktree" "$root/tmp" 2>&1)
+  rc=$?
+  [ "$rc" -ne 0 ] || fail "publication accepted an artifact from another task temp root"
+  assert_contains "$out" "outside the" "task temp root refusal was unclear"
+  printf '%s\n' outside > "$root/outside/secret.txt"
+  ln -s "$root/outside/secret.txt" "$root/worktree/linked-evidence.txt"
+  intent=$(cat <<EOF
+2 of 3 scenarios driven live
+evidence-artifact: $root/worktree/linked-evidence.txt
+evidence-command: ./run-scenarios --live
+evidence-captured: 2026-09-25T10:00:00+10:00
+EOF
+)
+  out=$(fm_dod_validate_published_intent "$intent" "$root/worktree" "$root/tmp" 2>&1)
+  rc=$?
+  [ "$rc" -ne 0 ] || fail "publication accepted an artifact symlink escaping the worktree"
+  assert_contains "$out" "outside the allowed roots" "escaping symlink refusal was unclear"
+  fm_dod_validate_intent_evidence 'Improve live reload wording' "$root/worktree" "$root/tmp" \
+    || fail "ordinary prose containing live was refused"
+  fm_dod_validate_intent_evidence 'Improve live reload test wording' "$root/worktree" "$root/tmp" \
+    || fail "ordinary prose containing live and test was refused"
+  fm_dod_validate_intent_evidence 'Improve live reload test result wording' "$root/worktree" "$root/tmp" \
+    || fail "ordinary prose containing live and result was refused"
+  fm_dod_validate_intent_evidence 'Investigate external test evidence' "$root/worktree" "$root/tmp" \
+    || fail "request prose containing evidence was refused"
+  fm_dod_validate_intent_evidence 'Do not claim live validation' "$root/worktree" "$root/tmp" \
+    || fail "negated prose containing evidence vocabulary was refused"
+  fm_dod_validate_intent_evidence 'Do not claim live test passed' "$root/worktree" "$root/tmp" \
+    || fail "negated affirmative claim was refused"
+  fm_dod_validate_intent_evidence 'Example: external validation passed' "$root/worktree" "$root/tmp" \
+    || fail "example prose containing an evidence claim was refused"
+  fm_dod_validate_intent_evidence 'Please verify external validation passed' "$root/worktree" "$root/tmp" \
+    || fail "request prose containing an evidence claim was refused"
+  fm_dod_validate_intent_evidence 'For example, external validation passed' "$root/worktree" "$root/tmp" \
+    || fail "example prose with a lead-in was refused"
+  fm_dod_validate_intent_evidence 'Can you verify external validation passed?' "$root/worktree" "$root/tmp" \
+    || fail "question prose containing an evidence claim was refused"
+  fm_dod_validate_intent_evidence 'external validation did not pass' "$root/worktree" "$root/tmp" \
+    || fail "negative result prose was refused"
+  fm_dod_validate_intent_evidence 'not externally confirmed' "$root/worktree" "$root/tmp" \
+    || fail "short negative result prose was refused"
+  fm_dod_validate_intent_evidence 'external validation was not confirmed' "$root/worktree" "$root/tmp" \
+    || fail "auxiliary negative result prose was refused"
+  fm_dod_validate_intent_evidence "external validation wasn't confirmed" "$root/worktree" "$root/tmp" \
+    || fail "contracted negative result prose was refused"
+  intent='offline validation did not pass, but external validation passed'
+  out=$(fm_dod_validate_intent_evidence "$intent" "$root/worktree" "$root/tmp" 2>&1)
+  rc=$?
+  [ "$rc" -ne 0 ] || fail "later affirmative assertion after a negation was erased"
+  assert_contains "$out" "missing evidence-artifact" "later assertion after negation refusal was unclear"
+  intent=$(cat <<'EOF'
+Please verify external validation passed
+external validation passed
+EOF
+)
+  out=$(fm_dod_validate_intent_evidence "$intent" "$root/worktree" "$root/tmp" 2>&1)
+  rc=$?
+  [ "$rc" -ne 0 ] || fail "real assertion after a request was erased"
+  assert_contains "$out" "missing evidence-artifact" "assertion after request refusal was unclear"
+  intent='Please verify external validation passed; external validation passed'
+  out=$(fm_dod_validate_intent_evidence "$intent" "$root/worktree" "$root/tmp" 2>&1)
+  rc=$?
+  [ "$rc" -ne 0 ] || fail "affirmative assertion after a request clause was erased"
+  assert_contains "$out" "missing evidence-artifact" "assertion after request clause refusal was unclear"
+  fm_dod_validate_intent_evidence '2 of 3 requested endpoints' "$root/worktree" "$root/tmp" \
+    || fail "ordinary ratio prose was refused"
+  for near_miss in \
+    'existing project delivery and merge rules' \
+    'delivery test passed' \
+    'deliverable validation was confirmed' \
+    'olive scenario passed' \
+    'realm test passed' \
+    'realise validation passed'; do
+    fm_dod_validate_intent_evidence "$near_miss" "$root/worktree" "$root/tmp" \
+      || fail "near-miss qualifier word was treated as an evidence claim: $near_miss"
+  done
+  for claim in \
+    'external validation passed' \
+    'live test passed' \
+    'independent scenario completed' \
+    'live scenarios driven' \
+    'live check passed' \
+    'external run succeeded' \
+    'independent probe completed successfully' \
+    'real account test passed' \
+    'The scenarios were run against a real account' \
+    'The scenarios ran live against the product' \
+    'external result passed' \
+    'live measurement completed' \
+    'independent account confirmed' \
+    'The scenarios were independently confirmed' \
+    'real result passed' \
+    'validation was verified' \
+    'results were live' \
+    'external scenarios were validated' \
+    'independently validated results'; do
+    out=$(fm_dod_validate_intent_evidence "$claim" "$root/worktree" "$root/tmp" 2>&1)
+    rc=$?
+    [ "$rc" -ne 0 ] || fail "affirmative evidence claim was accepted without provenance: $claim"
+    assert_contains "$out" "missing evidence-artifact" "affirmative claim refusal was unclear: $claim"
+  done
+  intent='0 of 5 / 2 of 3'
+  out=$(fm_dod_validate_intent_evidence "$intent" "$root/worktree" "$root/tmp" 2>&1)
+  rc=$?
+  [ "$rc" -ne 0 ] || fail "compact multi-ratio evidence label was accepted without provenance"
+  assert_contains "$out" "missing evidence-artifact" "compact multi-ratio refusal was unclear"
+  intent=$(cat <<EOF
+external validation passed
+evidence-artifact: $root/worktree/evidence.txt
+evidence-command: ./run-scenarios
+evidence-captured: tomorrow
+EOF
+)
+  out=$(fm_dod_validate_intent_evidence "$intent" "$root/worktree" "$root/tmp" 2>&1)
+  rc=$?
+  [ "$rc" -ne 0 ] || fail "invalid evidence-captured timestamp was accepted"
+  assert_contains "$out" "invalid evidence-captured timestamp" "invalid timestamp refusal was unclear"
+  intent=${intent/tomorrow/2026-99-99T99:99:99+99:99}
+  out=$(fm_dod_validate_intent_evidence "$intent" "$root/worktree" "$root/tmp" 2>&1)
+  rc=$?
+  [ "$rc" -ne 0 ] || fail "impossible evidence-captured timestamp was accepted"
+  assert_contains "$out" "invalid evidence-captured timestamp" "impossible timestamp refusal was unclear"
+  intent=$(cat <<EOF
+external validation passed
+evidence-artifact: $root/worktree/evidence.txt
+evidence-artifact: $root/worktree/evidence.txt
+evidence-command: ./run-scenarios
+evidence-captured: 2026-09-25T10:00:00+10:00
+EOF
+)
+  out=$(fm_dod_validate_intent_evidence "$intent" "$root/worktree" "$root/tmp" 2>&1)
+  rc=$?
+  [ "$rc" -ne 0 ] || fail "duplicate evidence metadata was accepted"
+  assert_contains "$out" "duplicate evidence-artifact" "duplicate artifact metadata refusal was unclear"
+  intent=$(cat <<EOF
+2 of 3 scenarios driven live
+evidence-artifact: $root/worktree
+evidence-command: ./run-scenarios --live
+evidence-captured: 2026-09-25T10:00:00+10:00
+EOF
+)
+  out=$(fm_dod_validate_published_intent "$intent" "$root/worktree" "$root/tmp" 2>&1)
+  rc=$?
+  [ "$rc" -ne 0 ] || fail "directory evidence artifact was accepted"
+  assert_contains "$out" "missing or unreadable" "directory artifact refusal was unclear"
+  pass "evidence claims accept readable provenance and spare ordinary prose"
+}
+
+test_scenario_consistency_is_publication_only() {
+  local root artifact intent out rc
+  root="$TMP_ROOT/scenario-publication-only"
+  artifact="$root/worktree/evidence.txt"
+  mkdir -p "$root/worktree" "$root/tmp"
+  printf '%s\n' captured > "$artifact"
+  intent=$(cat <<EOF
+| Scenario | Result | Live | Evidence |
+| --- | --- | --- | --- |
+| Account A | pass | yes | captured |
+| Account B | pass | fixture-based | local fixture |
+
+0 of 2 scenarios driven live against the product.
+evidence-artifact: $artifact
+evidence-command: cat $artifact
+evidence-captured: 2026-09-25T10:00:00+10:00
+EOF
+)
+  fm_dod_validate_intent_evidence "$intent" "$root/worktree" "$root/tmp" \
+    || fail "brief intent quoting a contradictory PR body was refused"
+  out=$(fm_dod_validate_published_intent "$intent" "$root/worktree" "$root/tmp" 2>&1)
+  rc=$?
+  [ "$rc" -eq 1 ] || fail "contradictory PR body was accepted at publication"
+  assert_contains "$out" "contradictory driven-scenario results" \
+    "publication refusal did not identify the contradiction"
+  pass "scenario consistency is enforced only for PR-body publication"
+}
+
+test_scenario_count_agreeing_with_any_complete_table_is_accepted() {
+  local body
+  body=$(cat <<'EOF'
+| Scenario | Result | Live |
+| --- | --- | --- |
+| Account A | pass | yes |
+| Account B | pass | no |
+| Account C | pass | no |
+| Account D | pass | no |
+
+1 of 4 scenarios driven live against the product.
+
+| Check | Result | Live |
+| --- | --- | --- |
+| Lint | pass | no |
+| Unit tests | pass | no |
+EOF
+)
+  fm_dod_validate_scenario_consistency "$body" \
+    || fail "count agreeing with the scenario table was refused because of a later table"
+  pass "scenario count agreeing with any complete table is accepted"
+}
+
+test_scenario_count_refusal_cites_matching_table() {
+  local body reason
+  body=$(cat <<'EOF'
+| Scenario | Result | Live |
+| --- | --- | --- |
+| Account A | pass | yes |
+| Account B | pass | no |
+| Account C | pass | no |
+| Account D | pass | no |
+
+2 of 4 scenarios driven live against the product.
+
+| Check | Result | Live |
+| --- | --- | --- |
+| Lint | pass | no |
+| Unit tests | pass | no |
+EOF
+)
+  if reason=$(fm_dod_validate_scenario_consistency "$body" 2>&1); then
+    fail "contradictory scenario count was accepted"
+  fi
+  case "$reason" in
+    *"Account A"*) ;;
+    *) fail "refusal did not cite the scenario table: $reason" ;;
+  esac
+  case "$reason" in
+    *"Unit tests"*) fail "refusal cited the unrelated check table: $reason" ;;
+  esac
+  pass "scenario count refusal cites the table matching the claimed total"
+}
+
+test_one_row_table_cannot_mask_scenario_contradiction() {
+  local body reason
+  body=$(cat <<'EOF'
+| Scenario | Result | Live |
+| --- | --- | --- |
+| Unrelated check | pass | no |
+
+| Scenario | Result | Live |
+| --- | --- | --- |
+| Account A | pass | yes |
+| Account B | pass | yes |
+| Account C | pass | yes |
+| Account D | pass | no |
+
+1 of 4 scenarios driven live against the product.
+EOF
+)
+  if reason=$(fm_dod_validate_scenario_consistency "$body" 2>&1); then
+    fail "one-row table masked a contradictory scenario count"
+  fi
+  case "$reason" in
+    *"Account A"*) ;;
+    *) fail "refusal did not cite the four-row scenario table: $reason" ;;
+  esac
+  pass "one-row table cannot mask a contradictory scenario count"
 }
 
 test_unpushed_ship_done_is_refused() {
@@ -47,6 +417,59 @@ test_unpushed_ship_done_is_refused() {
     *) fail "unpushed refusal did not name the commit: $reason" ;;
   esac
   pass "unpushed ship done: is refused"
+}
+
+test_committed_scratch_ship_done_names_path() {
+  local repo wt sha reason rc
+  repo="$TMP_ROOT/scratch-repo"
+  wt="$TMP_ROOT/scratch-wt"
+  fm_git_worktree "$repo" "$wt" fm/scratch
+  mkdir -p "$wt/.codex-live-check/cache/node/corepack/v1/pnpm/11.1.1"
+  printf '%s\n' bundle > "$wt/.codex-live-check/cache/node/corepack/v1/pnpm/11.1.1/package.json"
+  git -C "$wt" add -f .codex-live-check
+  git -C "$wt" commit -q -m 'pipeline scratch bundle'
+  sha=$(git -C "$wt" rev-parse HEAD)
+  git -C "$wt" update-ref refs/remotes/origin/fm/scratch "$sha"
+  reason=$(accept_done ship no-mistakes "$wt" "$repo" "done: PR https://example.test/o/r/pull/9 checks green" 2>/dev/null)
+  rc=$?
+  [ "$rc" -eq 1 ] || fail "ship done: with a committed scratch bundle was accepted (exit $rc)"
+  [ "$reason" = 'scratch path would be published: .codex-live-check/cache/node/corepack/v1/pnpm/11.1.1/package.json' ] \
+    || fail "scratch refusal did not name the path on stdout: $reason"
+  pass "ship done: with a committed scratch bundle is refused with the path as its reason"
+}
+
+test_recorded_gerrit_ship_done_with_scratch_is_refused() {
+  local repo wt meta state reason rc url
+  repo="$TMP_ROOT/gerrit-scratch-repo"
+  wt="$TMP_ROOT/gerrit-scratch-wt"
+  state="$TMP_ROOT/gerrit-scratch-state"
+  url=https://review.example.test/c/o/r/+/42
+  mkdir -p "$state"
+  fm_git_worktree "$repo" "$wt" fm/gerrit-scratch
+  mkdir -p "$wt/.codex-live-check/cache"
+  printf '%s\n' bundle > "$wt/.codex-live-check/cache/package.json"
+  git -C "$wt" add -f .codex-live-check
+  git -C "$wt" commit -q -m 'fix-round push with scratch'
+  meta="$state/gerrit-scratch.meta"
+  printf 'kind=ship\nmode=direct-PR\nworktree=%s\nproject=%s\npr=%s\n' "$wt" "$repo" "$url" > "$meta"
+  reason=$(accept_done ship direct-PR "$wt" "$repo" "done: PR $url published" "$state" gerrit-scratch "$meta" 2>/dev/null)
+  rc=$?
+  [ "$rc" -eq 1 ] || fail "recorded Gerrit ship done: with committed scratch was accepted (exit $rc)"
+  [ "$reason" = 'scratch path would be published: .codex-live-check/cache/package.json' ] \
+    || fail "recorded Gerrit scratch refusal did not name the path on stdout: $reason"
+  pass "a recorded Gerrit ship done: with committed scratch is refused"
+}
+
+test_recorded_pr_with_missing_worktree_is_accepted() {
+  local meta state
+  state="$TMP_ROOT/missing-wt-state"
+  mkdir -p "$state"
+  meta="$state/missing-wt.meta"
+  printf 'kind=ship\nmode=no-mistakes\npr=https://review.example.test/c/o/r/+/5\n' > "$meta"
+  accept_done ship no-mistakes "$TMP_ROOT/missing-wt" "$TMP_ROOT/missing-wt-repo" \
+    "done: PR https://review.example.test/c/o/r/+/5 checks green" "$state" missing-wt "$meta" \
+    || fail "recorded PR was refused because its worktree is missing"
+  pass "a recorded PR with a missing worktree is still accepted"
 }
 
 test_remote_containing_named_head_is_accepted() {
@@ -253,6 +676,30 @@ test_direct_pr_recorded_head_does_not_cover_unpushed_commit() {
   pass "a direct-PR recorded head does not cover a later unpushed commit"
 }
 
+test_ci_ready_requires_pr_reference() {
+  local note
+  for note in \
+    'paused: PROD deploy watch, checks green on TEST' \
+    'paused: checks green on TEST, PROPERTIES watch' \
+    'PR checks green' \
+    'PR #12 checks pending'; do
+    if fm_dod_note_reports_ci_ready "$note"; then
+      fail "non-CI-ready note accepted: $note"
+    fi
+  done
+  for note in \
+    'PR https://github.com/o/r/pull/5 checks green' \
+    'checks green: https://github.com/o/r/pull/5' \
+    'PR #12 checks green' \
+    'checks green: PR#12' \
+    'https://gitlab.com/o/r/-/merge_requests/5 checks green' \
+    'https://git.example.org/team/repo/pulls/12 checks green'; do
+    fm_dod_note_reports_ci_ready "$note" \
+      || fail "CI-ready PR reference rejected: $note"
+  done
+  pass "CI-ready notes require checks green and an actual PR reference"
+}
+
 test_ci_ready_variants_are_gated() {
   local repo wt line rc
   repo="$TMP_ROOT/variant-repo"
@@ -263,12 +710,13 @@ test_ci_ready_variants_are_gated() {
     'done: PR https://github.com/o/r/pull/5 checks green, risk low' \
     'done: PR https://github.com/o/r/pull/5 - checks green' \
     'done: PR https://github.com/o/r/pull/5 checks green.' \
-    'done: PR https://github.com/o/r/pull/5 (checks green)'; do
+    'done: PR https://github.com/o/r/pull/5 (checks green)' \
+    'done: PR https://github.com/o/r/pull/5 ready for review (CI skipped: base has no configured check workflows)'; do
     rc=0
     accept_done ship no-mistakes "$wt" "$repo" "$line" >/dev/null || rc=$?
     [ "$rc" -eq 1 ] || fail "no-mistakes CI-ready variant skipped the gate: $line"
   done
-  pass "no-mistakes CI-ready done: with extra text is gated"
+  pass "no-mistakes ready-PR done: with extra text or an explicit CI skip is gated"
 }
 
 test_keyed_and_spaced_done_lines_are_gated() {
@@ -382,6 +830,23 @@ test_pr_based_dod_draft_check_uses_gh_axi() {
   pass "PR-based DoD draft check uses gh-axi"
 }
 
+test_ship_dod_requires_defect_exercising_evidence() {
+  local mode out
+  for mode in no-mistakes direct-PR local-only; do
+    out="$TMP_ROOT/dod-evidence-$mode.md"
+    fm_dod_block "$mode" dod-evidence-task > "$out"
+    assert_grep 'fails before the change and passes after it through the same path users exercise' "$out" \
+      "$mode: a fix claim must require a before/after reproduction on the user path"
+    assert_grep 'non-zero pre-change observation or be marked not exercised' "$out" \
+      "$mode: an all-zero failure mode must not be presented as exercised"
+    assert_grep 'cases scanned and how many exhibited the defect' "$out" \
+      "$mode: validation must report sample size and defect prevalence"
+    assert_grep 'cannot exhibit the defect is not evidence for the fix' "$out" \
+      "$mode: a sample unable to reproduce the defect must not validate it"
+  done
+  pass "ship DoD requires evidence that exercises each claimed failure mode"
+}
+
 # A scout spawned on a named base keeps that base through promotion: the ship
 # instructions start from it and the PR targets it; local-only cannot carry it.
 test_promotion_keeps_the_recorded_base_branch() {
@@ -421,11 +886,26 @@ EOF
       assert_grep 'kind=scout' "$meta" "a refused promotion changed the task record"
     fi
   done
+  out=$(FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" "$ROOT/bin/fm-promote.sh" "$id" \
+    --mode direct-PR --yolo off --house-feature alpha --branch-base main 2>&1)
+  status=$?
+  [ "$status" -ne 0 ] || fail "promotion replaced a recorded named base with a house feature"
+  assert_contains "$out" 'cannot be promoted with --house-feature' "conflicting promotion base refusal did not explain itself"
+  assert_grep 'kind=scout' "$meta" "a refused house-feature promotion changed the task record"
   pass "promotion keeps a scout's recorded base branch and refuses local-only for it"
 }
 
 test_scout_done_is_not_gated
+test_evidence_claim_requires_provenance
+test_evidence_claim_enforces_mechanical_provenance
+test_scenario_consistency_is_publication_only
+test_scenario_count_agreeing_with_any_complete_table_is_accepted
+test_scenario_count_refusal_cites_matching_table
+test_one_row_table_cannot_mask_scenario_contradiction
 test_unpushed_ship_done_is_refused
+test_committed_scratch_ship_done_names_path
+test_recorded_gerrit_ship_done_with_scratch_is_refused
+test_recorded_pr_with_missing_worktree_is_accepted
 test_no_mistakes_prevalidation_done_is_not_gated
 test_remote_containing_named_head_is_accepted
 test_moved_branch_without_named_head_is_refused
@@ -434,6 +914,7 @@ test_recorded_merged_pr_is_landed_after_prune
 test_merge_marker_binds_to_the_named_pr
 test_forge_recorded_head_is_accepted_without_local_object
 test_direct_pr_recorded_head_does_not_cover_unpushed_commit
+test_ci_ready_requires_pr_reference
 test_ci_ready_variants_are_gated
 test_keyed_and_spaced_done_lines_are_gated
 test_local_only_linked_branch_is_accepted
@@ -442,6 +923,7 @@ test_standalone_local_only_needs_project_ref
 test_non_done_lines_are_not_gated
 test_fenced_and_indented_captain_lines_are_not_intent
 test_pr_based_dod_draft_check_uses_gh_axi
+test_ship_dod_requires_defect_exercising_evidence
 test_promotion_keeps_the_recorded_base_branch
 
 # The launch role is the generated text a worker receives. It must keep the
@@ -462,6 +944,115 @@ test_worker_role_names_skill_and_fallback_file() {
     "worker role claims the Skill tool never resolves the skill"
   pass "worker role names the skill and its fallback skill file"
 }
+
+# forge=external: a review tool uploads its own snapshot, so nothing is pushed.
+# The fixtures name an invented tool and an RFC 6761 reserved host only.
+EXT_CFG="$TMP_ROOT/external-config"
+mkdir -p "$EXT_CFG"
+# shellcheck disable=SC2016 # Backticks are literal adapter text.
+printf '%s\n' 'Run `review-tool upload --draft` and stop at a draft with checks green.' > "$EXT_CFG/external-review.md"
+
+test_external_forge_is_direct_pr_only() {
+  local out
+  fm_forge_valid_for_mode external direct-PR test 2>/dev/null || fail "forge=external direct-PR was refused"
+  out=$(fm_forge_valid_for_mode external no-mistakes test 2>&1) && fail "forge=external no-mistakes was accepted"
+  assert_contains "$out" "ships direct-PR only for now" "the no-mistakes refusal did not say why"
+  out=$(fm_forge_valid_for_mode external local-only test 2>&1) && fail "forge=external local-only was accepted"
+  assert_contains "$out" "cannot ship mode=local-only" "the local-only refusal did not say why"
+  out=$(fm_base_branch_valid release direct-PR external test 2>&1) && fail "a base branch was accepted on forge=external"
+  pass "forge=external composes with direct-PR only and refuses a base branch"
+}
+
+test_external_rule_one_forbids_every_task_push() {
+  local rule
+  rule=$(CONFIG=$EXT_CFG fm_ship_rule_one direct-PR t1 fm/t1 external) || fail "external rule one did not render"
+  assert_contains "$rule" "Never push to \`origin\`" "external rule one does not forbid the origin push"
+  assert_contains "$rule" "never push your \`fm/t1\` branch or any \`fm/\`-prefixed branch to any remote" \
+    "external rule one does not forbid the task-prefixed push"
+  assert_not_contains "$rule" "push only your" "external rule one still invites a branch push"
+  assert_not_contains "$rule" "personal backup remote" "external rule one offers a backup nobody configured"
+  printf 'backup\n' > "$EXT_CFG/external-review-backup"
+  rule=$(CONFIG=$EXT_CFG fm_ship_rule_one direct-PR t1 fm/t1 external) || fail "external rule one with a backup did not render"
+  rm -f "$EXT_CFG/external-review-backup"
+  assert_contains "$rule" "\`git push backup HEAD:refs/heads/backup/t1\`" "external rule one does not name the backup copy"
+  pass "external rule one forbids origin and task-prefixed pushes and names only the backup copy"
+}
+
+test_external_dod_renders_the_adapter() {
+  local dod out
+  dod=$(CONFIG=$EXT_CFG fm_dod_block direct-PR t1 fm/t1 external) || fail "external DoD did not render"
+  assert_contains "$dod" "Delivery contract: mode=direct-PR forge=external" "external DoD lacks its contract line"
+  assert_contains "$dod" "done [at=<epoch>]: review {url} uploaded for review" "external DoD lacks the ready grammar"
+  assert_contains "$dod" "## Review tool instructions (home configuration)" "external DoD lacks the adapter section"
+  assert_contains "$dod" "review-tool upload --draft" "external DoD lacks the adapter body"
+  assert_not_contains "$dod" "push your branch and open a PR" "external DoD still asks for a pushed PR"
+  out=$(CONFIG="$TMP_ROOT/no-such-config" fm_dod_block direct-PR t1 fm/t1 external 2>&1) \
+    && fail "external DoD rendered with no adapter"
+  assert_contains "$out" "external-review.md" "the missing-adapter refusal did not name the file"
+  pass "external DoD renders the contract, the review grammar, and the adapter, and refuses without one"
+}
+
+# A review-tool fixture: a worker copy, its meta recording forge=external, and
+# optionally a backup remote. Sets EXT_WT, EXT_REPO, EXT_META.
+external_fixture() {  # <name> [backup]
+  local name=$1 backup=${2:-}
+  EXT_REPO="$TMP_ROOT/$name-repo"
+  EXT_WT="$TMP_ROOT/$name-wt"
+  fm_git_worktree "$EXT_REPO" "$EXT_WT" "fm/$name"
+  git -C "$EXT_WT" commit -q --allow-empty -m 'change only in the copy'
+  EXT_META="$TMP_ROOT/$name.meta"
+  if [ -n "$backup" ]; then
+    fm_write_meta "$EXT_META" kind=ship mode=direct-PR forge=external backup_remote=backup backup_prefix=backup/
+  else
+    fm_write_meta "$EXT_META" kind=ship mode=direct-PR forge=external
+  fi
+}
+
+ext_accept() {  # <line>
+  CONFIG=$EXT_CFG fm_dod_accept_ship_done ship direct-PR "$EXT_WT" "$EXT_REPO" "$1" "$TMP_ROOT" ext "$EXT_META"
+}
+
+test_external_review_done_without_backup_is_accepted_on_the_url() {
+  local reason
+  external_fixture ext-nobackup
+  ext_accept 'done [at=1]: review https://review.example.test/r/123 uploaded for review' \
+    || fail "an external review done with HEAD only in the copy was refused with no backup recorded"
+  reason=$(ext_accept 'done [at=1]: PR https://github.com/o/r/pull/1') && fail "a PR done on an external project was accepted"
+  assert_contains "$reason" "never a PR" "the PR refusal did not point at the review grammar"
+  for bad in 'http://review.example.test/r/1' 'https://review.example.test/r/1?x=1' \
+    'https://review.example.test/r/1#c' 'https://github.com/o/r/pull/1'; do
+    reason=$(ext_accept "done [at=1]: review $bad uploaded for review") && fail "review URL $bad was accepted"
+  done
+  printf '%s\n' '^https://review\.example\.test/r/[1-9][0-9]*$' > "$EXT_CFG/external-review-url"
+  reason=$(ext_accept 'done [at=1]: review https://other.example.test/r/1 uploaded for review') \
+    && fail "a review URL outside config/external-review-url was accepted"
+  ext_accept 'done [at=1]: review https://review.example.test/r/7 uploaded for review' \
+    || fail "a review URL matching config/external-review-url was refused"
+  rm -f "$EXT_CFG/external-review-url"
+  pass "external review done: accepted on a canonical URL alone without a backup; PR, non-https, query, fragment, forge, and pattern mismatches refused"
+}
+
+test_external_review_done_with_backup_needs_the_copy() {
+  local reason sha
+  external_fixture ext-backup backup
+  sha=$(git -C "$EXT_WT" rev-parse HEAD)
+  reason=$(ext_accept 'done [at=1]: review https://review.example.test/r/9 uploaded for review') \
+    && fail "a backed-up external done was accepted before the copy existed"
+  assert_contains "$reason" "not on the backup remote backup" "the backup refusal did not name the remote"
+  git -C "$EXT_WT" update-ref refs/remotes/backup/fm/ext-backup "$sha"
+  reason=$(ext_accept 'done [at=1]: review https://review.example.test/r/9 uploaded for review') \
+    && fail "a copy outside the backup prefix satisfied the backup gate"
+  git -C "$EXT_WT" update-ref refs/remotes/backup/backup/ext-backup "$sha"
+  ext_accept 'done [at=1]: review https://review.example.test/r/9 uploaded for review' \
+    || fail "a backed-up external done was refused once HEAD was on the backup namespace"
+  pass "external review done with a backup: refused until HEAD is under refs/remotes/backup/backup/, then accepted"
+}
+
+test_external_forge_is_direct_pr_only
+test_external_rule_one_forbids_every_task_push
+test_external_dod_renders_the_adapter
+test_external_review_done_without_backup_is_accepted_on_the_url
+test_external_review_done_with_backup_needs_the_copy
 
 test_worker_role_names_skill_and_fallback_file
 

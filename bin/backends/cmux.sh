@@ -271,7 +271,7 @@ fm_backend_cmux_ensure_running() {
       return 1
       ;;
   esac
-  open -a cmux >/dev/null 2>&1 || { echo "error: failed to launch cmux ('open -a cmux' failed)" >&2; return 1; }
+  env -u FM_TIMEOUT_OWNER_PID -u FM_EXEC_TIMED_OWNER_PID open -a cmux >/dev/null 2>&1 || { echo "error: failed to launch cmux ('open -a cmux' failed)" >&2; return 1; }
   for i in $(seq 1 20); do
     state=$(fm_backend_cmux_ping_state)
     case "$state" in

@@ -58,13 +58,26 @@ fake_cursor_y() {
   esac
 }
 case "$*" in
+  *"#{pane_tty}"*) printf '%s\n' '/dev/pts/91'; exit 0 ;;
   *"#{pane_current_path}"*) printf '%s\n' "$FM_FAKE_PANE_PATH"; exit 0 ;;
   *"#{cursor_y}"*) fake_cursor_y; exit 0 ;;
 esac
 case "${1:-}" in
   display-message) printf 'firstmate\n'; exit 0 ;;
-  list-windows) exit 0 ;;
-  has-session|new-session|new-window|kill-window) exit 0 ;;
+  list-windows)
+    [ ! -s "$FM_FAKE_ROVO_STATE.window" ] || cat "$FM_FAKE_ROVO_STATE.window"
+    exit 0 ;;
+  new-window)
+    name=
+    previous=
+    for arg in "$@"; do
+      [ "$previous" = -n ] && name=$arg
+      previous=$arg
+    done
+    printf '%s\n' "$name" > "$FM_FAKE_ROVO_STATE.window"
+    exit 0 ;;
+  kill-window) : > "$FM_FAKE_ROVO_STATE.window"; exit 0 ;;
+  has-session|new-session) exit 0 ;;
   send-keys)
     prev=
     literal=
@@ -128,6 +141,7 @@ esac
 exit 0
 SH
   chmod +x "$fakebin/tmux"
+  fm_test_fake_tmux_foreground_cwd "$fakebin"
   fm_fake_exit0 "$fakebin" treehouse gh-axi gh
   fm_fake_exit0 "$fakebin" rovo
   printf '%s\n' "$fakebin"

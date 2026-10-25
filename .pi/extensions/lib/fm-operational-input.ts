@@ -8,9 +8,11 @@ const operationalInputScript =
 
 export const FIRSTMATE_CURRENT_OPERATIONAL_KINDS = [
   "session-start",
+  "context-stow",
   "watcher",
   "turn-end-guard",
   "away-supervisor",
+  "context-refresh",
   "from-firstmate",
   "launch-brief",
   "branch-outcome",

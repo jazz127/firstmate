@@ -72,6 +72,8 @@
 #       queues one wake for this home, which the relay poll raises
 #       (bin/fm-x-poll.sh). Silent when there is nothing to do. Duplicate events
 #       and restart replay are no-ops.
+#       A failed or malformed identity digest leaves the event pending for retry
+#       and exits non-zero; it is not evidence that the event itself is corrupt.
 #       An open loop bound to a REMOTE secondmate home is collected first: its
 #       staged results are pulled over that route into this home's own inbox and
 #       reconciled identically. The staged copy is retired only after this home
@@ -379,8 +381,9 @@ brief_emit_target() {
     printf '%s\n--home %s\n' "$FM_ROOT/bin/fm-public-followup-emit.sh" "$FM_HOME"
     return 0
   fi
-  root=$(secondmate_registry_field "$DATA/secondmates.md" "$sid" root 2>/dev/null) || root=
-  home=$(secondmate_registry_field "$DATA/secondmates.md" "$sid" home 2>/dev/null) || home=
+  secondmate_registry_line_for_id "$DATA/secondmates.md" "$sid" 2>/dev/null || return 1
+  root=$SECONDMATE_REGISTRY_ROOT
+  home=$SECONDMATE_REGISTRY_HOME
   case "$root" in /*) ;; *) return 1 ;; esac
   case "$home" in /*) ;; *) return 1 ;; esac
   case "$root$home" in *[!A-Za-z0-9/._+@:-]*) return 1 ;; esac
@@ -749,14 +752,18 @@ cmd_consume() {
       reject_event "$file" "$event_id" "declared event_id does not match the filename" || consume_rc=1
       continue
     fi
-    derived=$(fm_pf_event_id \
+    if ! derived=$(fm_pf_event_id \
       "$(pf_field "$payload" '.obligation_id')" \
       "$(pf_field "$payload" '.relation_id')" \
       "$(pf_field "$payload" '.source_home_id')" \
       "$(pf_field "$payload" '.work_id')" \
       "$(pf_field "$payload" '.generation')" \
       "$(pf_field "$payload" '.outcome_type')" \
-      "$(printf '%s' "$payload" | jq -Sc '.deliverables // {}' 2>/dev/null)")
+      "$(printf '%s' "$payload" | jq -Sc '.deliverables // {}' 2>/dev/null)"); then
+      printf 'unverified %s: could not derive event identity; event retained for retry\n' "$event_id"
+      consume_rc=1
+      continue
+    fi
     if [ -z "$derived" ] || [ "$derived" != "$event_id" ]; then
       reject_event "$file" "$event_id" "event id does not match its own identity fields" || consume_rc=1
       continue
@@ -980,7 +987,8 @@ public_followup_secondmate_home() {
     [ "$include_absent" = include-absent ] && printf '%s\n' "$home"
     return 3
   fi
-  home=$(CDPATH='' cd -- "$home" 2>/dev/null && pwd -P) || return 2
+  # Canonical identity must survive capture without trimming path data bytes.
+  CDPATH='' _secondmate_registry_resolve_home secondmate_registry_path_key "$home" home 2>/dev/null || return 2
   [ -f "$home/.fm-secondmate-home" ] && [ ! -L "$home/.fm-secondmate-home" ] || return 2
   marker=$(sed -n '1p' "$home/.fm-secondmate-home" 2>/dev/null)
   [ "$marker" = "$id" ] || return 2

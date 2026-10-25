@@ -18,6 +18,49 @@ GUARD="$ROOT/bin/fm-guard.sh"
 
 TMP_ROOT=$(fm_test_tmproot fm-wake-tests)
 
+test_recovery_marker_framing() {
+  local dir state format out i=0
+  for format in \
+    'announced:downtime:g1\njunk' \
+    'announ\000ced:downtime:g1\n' \
+    'announced:downtime:g\0001\n' \
+    'announced:downtime:g1\n\000' \
+    'announced:downtime:g1\nbad\000tail' \
+    'announced:downtime:bad:g1\n' \
+    'announced:downtime:g1' \
+    'announced:downtime:g1\njunk\n'; do
+    i=$((i + 1))
+    dir=$(make_case "recovery-framing-$i")
+    state="$dir/state"
+    printf '%b' "$format" > "$state/.watcher-down"
+    cp "$state/.watcher-down" "$dir/original-marker"
+    out=$(FM_HOME="$dir" FM_STATE_OVERRIDE="$state" bash -c '
+      . "$1/bin/fm-wake-lib.sh"
+      FM_RECOVERY_MARKER_TOKEN=stale
+      fm_recovery_marker_read "$STATE/.watcher-down" && exit 11
+      [ -z "$FM_RECOVERY_MARKER_TOKEN" ] || exit 12
+      fm_recovery_marker_arm_check "$STATE/.watcher-down" || exit 13
+      [ "$FM_RECOVERY_MARKER_ACTION" = recover ] || exit 14
+      fm_recovery_marker_read "$STATE/.watcher-down" || exit 15
+      printf "%s" "$FM_RECOVERY_MARKER_TOKEN"
+    ' _ "$ROOT") || fail "malformed recovery marker $i was accepted or did not recover"
+    case "$out" in announced:downtime:*) ;; *) fail "recovery did not announce a new episode: $out" ;; esac
+    [ "$out" != announced:downtime:g1 ] || fail 'recovery reused the damaged generation'
+    set -- "$state"/.watcher-down.invalid.*/marker
+    [ "$#" -eq 1 ] || fail 'recovery did not quarantine exactly one marker'
+    cmp -s "$dir/original-marker" "$1" || fail 'recovery changed the quarantined marker bytes'
+  done
+  dir=$(make_case recovery-framing-valid)
+  printf 'announced:downtime:g1\n' > "$dir/state/.watcher-down"
+  out=$(FM_HOME="$dir" FM_STATE_OVERRIDE="$dir/state" bash -c '
+    . "$1/bin/fm-wake-lib.sh"
+    fm_recovery_marker_arm_check "$STATE/.watcher-down" || exit 1
+    printf "%s" "$FM_RECOVERY_MARKER_ACTION"
+  ' _ "$ROOT") || fail 'valid recovery marker was refused'
+  [ "$out" = wait ] || fail 'valid announced episode was incorrectly recovered'
+  pass 'malformed recovery markers are quarantined instead of suppressing recovery'
+}
+
 
 test_concurrent_append_and_drain() {
   local dir state out1 out2 pids i pid count unique malformed sequence generation
@@ -739,14 +782,10 @@ SH
 # so a mate stuck busy forever still alarms.
 #
 # Scope, so this case is not read as more coverage than it is: the fixture arms
-# the busy contract by hand through fm-busy-event.sh. A real --secondmate spawn
-# never does - bin/fm-spawn.sh arms the contract inside its `[ "$KIND" !=
-# secondmate ]` guard, so both arm calls are skipped for a mate - and with no
-# record fm_busy_classify_meta answers "unknown missing" for a tmux-backed
-# claude, pi, opencode, or omp mate, which is not a busy verdict. Hand-arming is
-# what isolates the launch-aging defect this case pins, and the launch-aging
-# defect is all it pins: on tmux the stall alarm is still reachable through that
-# missing busy record, tracked upstream as issue 4268.
+# the busy contract by hand through fm-busy-event.sh and backdates the launch
+# record afterwards. That isolates the launch-aging defect this case pins.
+# A real --secondmate spawn of claude, opencode, pi, or omp arms the same
+# contract itself; tests/fm-busy-adapter-wiring.test.sh owns that path.
 test_secondmate_long_lived_mate_mid_turn_is_not_a_stall() {
   local dir state sub fakebin stall_count row_epoch
   dir=$(make_case secondmate-long-lived-active-turn)
@@ -1782,17 +1821,22 @@ test_actor_filter_precedes_same_key_deduplication() {
   state="$dir/state"
 
   append_wake "$state" signal "task-a.status" "signal: branch version" || fail "branch row append failed"
+  append_wake "$state" signal "task-a.status" "signal: newer branch version" || fail "second branch row append failed"
   FM_STATE_OVERRIDE="$state" "$GRANT" activate "$$" actor-dedup || fail "branch owner activation failed"
-  FM_STATE_OVERRIDE="$state" "$GRANT" publish actor-dedup 1 || fail "branch grant publication failed"
+  FM_STATE_OVERRIDE="$state" "$GRANT" publish actor-dedup 1 2 || fail "branch grant publication failed"
   append_wake "$state" signal "task-a.status" "signal: main version" || fail "main row append failed"
 
   FM_STATE_OVERRIDE="$state" "$DRAIN" > "$dir/main.out" 2> "$dir/main.err" || fail "main drain failed"
-  [ "$(awk -F '\t' '$3 == "signal" { print $2 }' "$dir/main.out")" = 2 ] \
+  [ "$(awk -F '\t' '$3 == "signal" { print $2 }' "$dir/main.out")" = 3 ] \
     || fail "main did not present its same-key claimed row"
   FM_STATE_OVERRIDE="$state" FM_SUPERVISION_ACTOR=branch "$DRAIN" > "$dir/branch.out" 2> "$dir/branch.err" \
     || fail "branch drain failed"
-  [ "$(awk -F '\t' '$3 == "signal" { print $2 }' "$dir/branch.out")" = 1 ] \
-    || fail "global deduplication hid the branch's older same-key row"
+  [ "$(awk -F '\t' '$3 == "signal" { print $2 }' "$dir/branch.out")" = 2 ] \
+    || fail "Pi branch drain did not deduplicate its own granted rows"
+  FM_STATE_OVERRIDE="$state" FM_SUPERVISION_ACTOR=branch FM_BRANCH_EVENT_RECEIPTS=1 \
+    "$DRAIN" > "$dir/host.out" 2> "$dir/host.err" || fail "host branch drain failed"
+  [ "$(awk -F '\t' '$3 == "signal" { print $2 }' "$dir/host.out")" = "$(printf '1\n2')" ] \
+    || fail "host branch drain did not preserve every granted event"
 
   main_sequence=$(sed -n 's/^WAKE_ACK_REQUIRED:.*--ack-through \([0-9][0-9]*\) --recovery-generation [A-Za-z0-9._-][A-Za-z0-9._-]*$/\1/p' "$dir/main.err")
   main_generation=$(sed -n 's/^WAKE_ACK_REQUIRED:.*--ack-through [0-9][0-9]* --recovery-generation \([A-Za-z0-9._-][A-Za-z0-9._-]*\)$/\1/p' "$dir/main.err")
@@ -3052,16 +3096,29 @@ case "${1:-}" in
     done
     exit 0 ;;
   list-windows)
-    if [ "${FM_FAKE_WINDOW_GONE:-0}" = 1 ] || { [ -f "$probe.killed" ] && [ ! -f "$probe.spawned" ]; }; then
+    if { [ "${FM_FAKE_WINDOW_GONE:-0}" = 1 ] || [ -f "$probe.killed" ]; } \
+      && [ ! -f "$probe.spawned" ]; then
       printf 'main\n'
     else
-      printf 'main\nfm-sm1\n'
+      printf 'main\n'
+      if [ -s "$probe.windows" ]; then
+        cat "$probe.windows"
+      else
+        printf 'fm-sm1\n'
+      fi
     fi
     exit 0 ;;
   capture-pane) [ -z "${FM_FAKE_TMUX_CAPTURE:-}" ] || cat "$FM_FAKE_TMUX_CAPTURE"; exit 0 ;;
   new-window)
     printf '%s\n' "$*" >> "$log"
     [ "${FM_TEST_FAIL_NEW_WINDOW:-0}" = 1 ] && exit 1
+    name=
+    previous=
+    for arg in "$@"; do
+      [ "$previous" = -n ] && name=$arg
+      previous=$arg
+    done
+    grep -Fqx -- "$name" "$probe.windows" 2>/dev/null || printf '%s\n' "$name" >> "$probe.windows"
     : > "$probe.spawned"
     printf '@1\n'
     exit 0 ;;
@@ -3505,6 +3562,7 @@ SH
   pass "watch liveness: an unreachable remote secondmate is probed, preserved, and never failed over"
 }
 
+test_recovery_marker_framing
 test_self_held_lock_reclaims_instead_of_deadlocking
 test_subshell_lock_ownership_without_bashpid
 test_bounded_lock_handoff_after_contention

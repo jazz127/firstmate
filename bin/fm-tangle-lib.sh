@@ -17,22 +17,13 @@
 # default branch. Detached HEAD on the default is fine; a feature branch in a
 # primary checkout is the alarm.
 
-# Resolve the default branch name of the git repo at <dir>: prefer origin/HEAD,
-# then fall back to a local main/master. Echoes the name, or returns 1.
+# shellcheck source=bin/fm-runtime-branch-lib.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/fm-runtime-branch-lib.sh"
+
+# Resolve the runtime branch name through the shared resolver. Echoes the name,
+# or returns 1 when configuration is invalid or its local branch is missing.
 fm_default_branch() {
-  local dir=$1 ref branch
-  ref=$(git -C "$dir" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || true)
-  if [ -n "$ref" ]; then
-    printf '%s\n' "${ref#origin/}"
-    return 0
-  fi
-  for branch in main master; do
-    if git -C "$dir" show-ref --verify --quiet "refs/heads/$branch"; then
-      printf '%s\n' "$branch"
-      return 0
-    fi
-  done
-  return 1
+  firstmate_runtime_branch "$1"
 }
 
 # If the git checkout at <root> is tangled - on a NAMED branch that is not its

@@ -16,15 +16,29 @@ make_fakebin() {  # <dir>
   fakebin=$(fm_fakebin "$1")
   cat > "$fakebin/tmux" <<'SH'
 #!/usr/bin/env bash
+window_file="$(dirname "$0")/.spawn-window"
 case "$*" in
+  *"#{pane_tty}"*) printf '%s\n' '/dev/pts/91'; exit 0 ;;
   *"#{pane_current_path}"*) printf '%s\n' "${FM_FAKE_PANE_PATH:-}"; exit 0 ;;
 esac
 case "${1:-}" in
   display-message) printf 'firstmate\n' ;;
+  list-windows) [ ! -s "$window_file" ] || cat "$window_file" ;;
+  new-window)
+    name=
+    previous=
+    for arg in "$@"; do
+      [ "$previous" = -n ] && name=$arg
+      previous=$arg
+    done
+    printf '%s\n' "$name" > "$window_file"
+    ;;
+  kill-window) : > "$window_file" ;;
 esac
 exit 0
 SH
   chmod +x "$fakebin/tmux"
+  fm_test_fake_tmux_foreground_cwd "$fakebin"
   fm_fake_exit0 "$fakebin" treehouse no-mistakes
   printf '%s\n' "$fakebin"
 }
@@ -142,7 +156,14 @@ test_flag_on_records_a_pr_registration() {
   local pr_url=https://github.com/acme/sample/pull/9 rows out
   make_case on-pr-ready on
   # An unreadable forge answer: no draft refusal and no recorded head.
-  printf '#!/usr/bin/env bash\nexit 1\n' > "$FAKEBIN/gh"
+  cat > "$FAKEBIN/gh" <<'SH'
+#!/usr/bin/env bash
+case "$*" in
+  'pr view '*"--json body --jq .body"*) printf 'Fixture body\n' ;;
+  'api repos/'*'/pulls/'*'/files?per_page=100 --paginate --jq '*) printf 'README.md\n' ;;
+  *) exit 1 ;;
+esac
+SH
   chmod +x "$FAKEBIN/gh"
   out=$(in_home "$ROOT/bin/fm-spawn.sh" "$TASK" "$PROJ_DIR" --mode direct-PR --yolo off 2>&1) \
     || fail "spawn failed: $out"

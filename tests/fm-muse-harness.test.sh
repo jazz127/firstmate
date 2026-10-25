@@ -73,8 +73,10 @@ make_spawn_fakebin() {
 #!/usr/bin/env bash
 set -u
 case "$*" in
+  *"#{pane_tty}"*) printf '%s\n' '/dev/pts/91'; exit 0 ;;
   *"#{pane_current_path}"*) printf '%s\n' "${FM_FAKE_PANE_PATH:-}"; exit 0 ;;
 esac
+window_file="$(dirname "$0")/.spawn-window"
 case "${1:-}" in
   show-environment)
     [ "${FM_FAKE_WORKER_META_KEY:-}" = present ] || exit 1
@@ -82,8 +84,18 @@ case "${1:-}" in
     exit 0
     ;;
   display-message) printf 'firstmate\n'; exit 0 ;;
-  list-windows) exit 0 ;;
-  has-session|new-session|new-window|kill-window) exit 0 ;;
+  list-windows) [ ! -s "$window_file" ] || cat "$window_file"; exit 0 ;;
+  new-window)
+    name=
+    previous=
+    for arg in "$@"; do
+      [ "$previous" = -n ] && name=$arg
+      previous=$arg
+    done
+    printf '%s\n' "$name" > "$window_file"
+    exit 0 ;;
+  kill-window) : > "$window_file"; exit 0 ;;
+  has-session|new-session) exit 0 ;;
   send-keys)
     prev=
     for arg in "$@"; do
@@ -111,7 +123,8 @@ esac
 exit 0
 SH
   chmod +x "$fakebin/tmux"
-  cp "$(command -v bash)" "$fakebin/muse-bin-test-version"
+  fm_test_fake_tmux_foreground_cwd "$fakebin"
+  ln -s "$(command -v bash)" "$fakebin/muse-bin-test-version"
   cat > "$fakebin/muse" <<'SH'
 #!/usr/bin/env bash
 set -u
@@ -188,7 +201,7 @@ test_detects_versioned_process_ancestor() {
   dir="$TMP_ROOT/detect"
   mkdir -p "$dir"
   for bin in muse-bin-0.1.0-R708.1 muse-bin-9.9.9-RZZZ.9 muse; do
-    cp "$(command -v bash)" "$dir/$bin"
+    ln -s "$(command -v bash)" "$dir/$bin"
     out=$(env -u CLAUDECODE -u PI_CODING_AGENT -u FM_PI_HARNESS -u GROK_AGENT \
       -u CURSOR_AGENT -u CURSOR_INVOKED_AS -u GEMINI_CLI \
       "$dir/$bin" -c "r=\$(\"$HARNESS\"); printf '%s' \"\$r\"")
@@ -204,7 +217,7 @@ test_detection_is_anchored() {
   dir="$TMP_ROOT/detect-neg"
   mkdir -p "$dir"
   for bin in musescore amuse notmuse-bin muse-binary muse-bind; do
-    cp "$(command -v bash)" "$dir/$bin"
+    ln -s "$(command -v bash)" "$dir/$bin"
     out=$(env -u CLAUDECODE -u PI_CODING_AGENT -u FM_PI_HARNESS -u GROK_AGENT \
       -u CURSOR_AGENT -u CURSOR_INVOKED_AS -u GEMINI_CLI \
       "$dir/$bin" -c "r=\$(\"$HARNESS\"); printf '%s' \"\$r\"")
@@ -265,7 +278,7 @@ EOF
     "muse launch did not forward its non-secret data root"
   assert_not_contains "$launch" 'META_API_KEY' "muse launch exposed META_API_KEY in worker argv"
   assert_not_contains "$launch" 'test-key' "muse launch exposed the credential value in worker argv"
-  assert_contains "$launch" 'encode launch-brief' "muse launch did not deliver the brief positionally"
+  assert_contains "$launch" 'launch-brief: Read and follow' "muse launch did not deliver the brief pointer positionally"
   assert_grep 'harness=muse' "$home/state/$id.meta" "muse harness was not recorded in meta"
   pass "muse spawn launches with autonomy, privacy control, and a positional brief"
 }
@@ -460,7 +473,13 @@ set -u
 case "${1:-}" in
   display-message) printf 'fakepane\n'; exit 0 ;;
   has-session) exit 0 ;;
-  list-panes|list-windows) printf 'fm-send:0\n'; exit 0 ;;
+  list-windows)
+    case "$*" in
+      *'#{window_id}'*'#{window_index}'*'#{window_name}'*) printf '@0|0|muse\n' ;;
+      *) printf '0\n' ;;
+    esac
+    exit 0 ;;
+  list-panes) printf '%%0\n'; exit 0 ;;
   send-keys)
     shift
     printf '%s\n' "$*" >> "$FM_FAKE_KEY_LOG"

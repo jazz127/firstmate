@@ -1855,8 +1855,7 @@ Arm the check once per home with `bin/fm-tool-update-check.sh arm`.
 
 `config/usage-warner` is an optional local, gitignored set of Claude usage-window thresholds.
 It is opt-in and load-bearing: an unconfigured home sees no behaviour change, and [`bin/fm-usage-warner.sh`](../bin/fm-usage-warner.sh) refuses to arm without at least one valid threshold.
-This is a threshold warner, not a usage viewer - it runs the existing `quota-axi` read (`--no-credential-refresh`, never a credential-refreshing flag) and speaks only once when a configured window crosses a configured percentage, batching several crossings from the same read into one notification and re-arming once a window reads back below its threshold.
-Warnings post through macOS Notification Center, the same OS-level path the away-mode wedge alarm resolves to on this platform, without sourcing or coupling to that daemon's away-mode-specific config or rate limiting.
+The [behaviour reference](usage-warner.md) owns notification delivery, retry, and re-arming guarantees.
 
 This section is the single owner of the canonical schema.
 `bin/fm-usage-warner.sh` owns read, notification, and de-dupe mechanics.
@@ -1872,6 +1871,7 @@ See [`usage-warner.md`](usage-warner.md) for the full behaviour reference and [`
 
 Arm the check once per home with `bin/fm-usage-warner.sh arm`.
 That writes `state/usage-warner.check.sh` and binds its bytes with `bin/fm-check-register.sh`, so the existing watcher polls it on its normal cadence and turns a crossing into a `check:` wake; no separate schedule is involved.
+The shim preserves the effective home, configuration, and state directories selected at arming time, resolving relative paths against the arming caller's working directory; later polling uses those directories even if its working directory or ambient overrides differ.
 `arm` refuses on any platform other than macOS.
 `bin/fm-usage-warner.sh disarm` removes the shim, its trust binding, and the de-dupe record (`state/.usage-warner`).
 

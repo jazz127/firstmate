@@ -48,8 +48,10 @@
 # registering a check that can never speak.
 #
 # Edge-triggered with a de-dupe record (state/.usage-warner): a window that
-# crosses a threshold notifies once, stays quiet while it remains at or above
-# it, and re-arms the moment it next reads back below. A window missing from
+# crosses a threshold is recorded only after notification succeeds, stays quiet
+# while it remains at or above it, and re-arms the moment it next reads back
+# below. A failed notification leaves its keys eligible for retry without
+# clearing previously delivered keys. A window missing from
 # an otherwise good read is not a below reading, so its entry is kept. The
 # record keys each entry on the "<window-id>:<percent>" directive, so tiered
 # thresholds on one window each warn on their own crossing. A v1 record keyed
@@ -372,9 +374,9 @@ check_locked() {
 }
 
 # --- arm / disarm -----------------------------------------------------------
-# The home is embedded already resolved, because the watcher runs the shim from
-# its own working directory and a relative spelling would send the check to a
-# different home, or to none at all.
+# The effective home, config, and state directories are embedded already
+# resolved, because the watcher runs the shim from its own working directory
+# and may carry different overrides. Polls must keep the armed directories.
 shim_content() {
   local home=$1
   printf '%s\n' \

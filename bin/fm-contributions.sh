@@ -124,6 +124,8 @@
 #
 # config/contribution-review-bots adds exact GitHub logins for PR comments,
 # reviews and inline comments (one login per line; blank and # lines ignored).
+# APPROVED reviews with no non-whitespace body remain observation evidence
+# without becoming pending findings; inline comments are admitted separately.
 # Its absent or empty file adds no bots; house automated-reviewer and author-
 # directive policies above continue independently. These events are marked
 # review_bot:true and remain third-party fleet-triage data, never instructions,

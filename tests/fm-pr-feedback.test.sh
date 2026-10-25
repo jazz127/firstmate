@@ -437,6 +437,78 @@ gate:
                 for p in (self.state / 't1.inbox').rglob('*.msg'):
                     p.unlink()
 
+    def test_identical_gate_findings_at_new_attributed_heads_notify_once(self):
+        text, head = self.pipeline_task(pr='')
+        next_head = 'b' * 40
+        absent = subprocess.run(['git', '-C', str(self.home / 'work'), 'cat-file', '-e', next_head],
+                                env=self.env, capture_output=True)
+        self.assertNotEqual(absent.returncode, 0)
+        findings = '  findings[1]{id,severity,action}:\n    R1,error,auto-fix\n'
+        custody = 'branch_sync:\n  state: pipeline_owned\n'
+        for field, changed in (('head_sha', next_head), ('head', next_head[:12])):
+            for gate in ('gate: review\n', 'gate:\n  step: review\n  status: fix_review\n'):
+                with self.subTest(field=field, gate=gate):
+                    current = (text.replace('head_sha:', f'{field}:')
+                               .replace('status: running', 'status: fix_review') + findings + custody + gate)
+                    self.nm.write_text(current)
+                    self.assertIn('tasks=t1 relaunch=none errors=none', self.poll())
+                    for record in (self.state / 't1.inbox').glob('*.msg'):
+                        record.rename(record.parent / 'handled' / record.name)
+                    self.assertEqual(self.poll(), '')
+                    self.nm.write_text(current.replace(head, changed))
+                    self.assertIn('tasks=t1 relaunch=none errors=none', self.poll())
+                    self.assertEqual(len(self.messages()), 1)
+                    self.assertEqual(len(self.messages(handled=True)), 1)
+                    self.assertIn('run=run1 step=review', self.messages()[0])
+                    self.assertNotEqual(self.messages()[0], self.messages(handled=True)[0])
+                    self.assertEqual(self.poll(), '')
+                    for record in (self.state / 't1.inbox').glob('*.msg'):
+                        record.rename(record.parent / 'handled' / record.name)
+                    self.assertEqual(self.poll(), '')
+                    for record in (self.state / 't1.inbox').rglob('*.msg'):
+                        record.unlink()
+
+    def test_unfetched_pipeline_heads_match_forge_readiness_without_local_objects(self):
+        text, local_head = self.pipeline_task()
+        head = 'b' * 40
+        custody = 'branch_sync:\n  state: pipeline_owned\n'
+        steps = 'steps[1]{step,status,findings,duration_ms}:\n  ci,running,0,0\n'
+        ready = 'no CI checks reported - still monitoring until merged or closed\n'
+        pending = 'no CI checks reported yet, waiting for checks to register...\n'
+        self.data[f'repos/o/r/commits/{head}/check-runs'] = {'check_runs': []}
+        self.data[f'repos/o/r/commits/{head}/status'] = {'statuses': []}
+        for field, value in (('head_sha', head), ('head', head[:7]),
+                             ('head', head[:12].upper()), ('head', head)):
+            with self.subTest(field=field, value=value):
+                current = text.replace('head_sha:', f'{field}:').replace(local_head, value) + custody + steps
+                self.nm.write_text(current)
+                self.ci_log.write_text(ready)
+                self.assertEqual(self.poll(), '')
+                self.data['repos/o/r/pulls/7']['head']['sha'] = head
+                self.ci_log.write_text(ready + pending)
+                self.assertEqual(self.poll(), '')
+                self.ci_log.write_text(pending + ready)
+                self.assertIn('tasks=t1 relaunch=none errors=none', self.poll())
+                self.assertEqual(len(self.messages()), 1)
+                self.assertIn(f'GitHub PR CI event: {URL} head={head} state=green', self.messages()[0])
+                self.assertEqual(self.poll(), '')
+                for record in (self.state / 't1.inbox').glob('*.msg'):
+                    record.rename(record.parent / 'handled' / record.name)
+                self.assertEqual(self.poll(), '')
+                absent = subprocess.run(['git', '-C', str(self.home / 'work'), 'cat-file', '-e', head],
+                                        env=self.env, capture_output=True)
+                self.assertNotEqual(absent.returncode, 0)
+                for record in (self.state / 't1.inbox').rglob('*.msg'):
+                    record.unlink()
+                self.data['repos/o/r/pulls/7']['head']['sha'] = local_head
+        for value in (head[:6], head + 'b', 'not-a-head'):
+            with self.subTest(invalid_head=value):
+                self.nm.write_text(text.replace('head_sha:', 'head:').replace(local_head, value) + custody + steps)
+                self.data['repos/o/r/pulls/7']['head']['sha'] = head
+                self.ci_log.write_text(ready)
+                self.assertEqual(self.poll(), '')
+                self.assertEqual(self.messages(), [])
+
     def test_passing_outcomes_wake_gerrit_workers_without_forge_polling(self):
         text, _ = self.pipeline_task(pr='https://review.example/c/o/r/+/7', outcome='passed')
         for outcome in ('passed', 'passed-with-skips', 'passed-with-override',

@@ -120,15 +120,16 @@ def pipeline_events(text):
                     findings.append([line.strip(), *[row.strip() for row in
                                      lines[i + 1:i + 1 + int(table[1])]]])
         identity = [step, status, scalar(gate, "summary"), findings,
-                    scalar(record, "round"), scalar(gate, "round")]
+                    scalar(record, "round"), scalar(gate, "round"),
+                    scalar(record, "head_sha") or scalar(record, "head")]
         digest = hashlib.sha256(json.dumps(identity).encode()).hexdigest()
         events.append(f"No-mistakes gate event: run={run_id} step={step} receipt={digest}")
     outcome = re.search(r"^outcome: ([A-Za-z_-]+)$", text, re.M)
     if outcome and outcome[1] in ("passed", "checks-passed", "passed-with-skips",
                                   "passed-with-override", "failed", "cancelled"):
         events.append(f"No-mistakes outcome event: run={run_id} outcome={outcome[1]}")
-    ready = re.search(r"^feedback_ci_head: ([a-f0-9]{40})$", text, re.M)
-    return events, pr, ready[1] if ready else ""
+    ready = re.search(r"^feedback_ci_head: ([a-fA-F0-9]{7,40})$", text, re.M)
+    return events, pr, ready[1].lower() if ready else ""
 
 
 def feedback(url, login, bridge):
@@ -250,7 +251,9 @@ def poll(state, bridge):
                     comments, head, root = feedback(url, login, bridge)
                     events.extend(comments)
                     if head:
-                        events.extend(ci_events(url, head, root, run_pr == url and ready_head == head))
+                        events.extend(ci_events(url, head, root,
+                                                bool(ready_head) and run_pr == url
+                                                and head.startswith(ready_head)))
                 except (OSError, ValueError, KeyError, TypeError, subprocess.TimeoutExpired):
                     errors.add(task)
             seen = history(state, task)

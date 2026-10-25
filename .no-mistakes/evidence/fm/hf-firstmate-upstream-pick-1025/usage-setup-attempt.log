@@ -1,0 +1,32 @@
+
+Unconfigured check stays silent
+$ bash ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5S8ZXPT30MGED94KBF964X7/bin/fm-usage-warner.sh check
+exit=0
+
+Arm with relative effective directories
+$ bash ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5S8ZXPT30MGED94KBF964X7/bin/fm-usage-warner.sh arm
+armed: state/usage-warner.check.sh
+exit=0
+
+Run armed shim from another directory with conflicting ambient overrides
+$ bash ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5S8ZXPT30MGED94KBF964X7/.gate-test-tmp/usage-live-e4tprv5j/alternate-state/usage-warner.check.sh
+usage-warner: seven_day at 30% (>=1%); seven_day at 30% (>=2%)
+exit=0
+Persisted notification record:
+fm-usage-warner-v2
+reported=usage-warner: seven_day at 30% (>=1%); seven_day at 30% (>=2%)
+notified-begin
+seven_day:1
+seven_day:2
+notified-end
+
+Repeat above threshold is silent
+$ bash ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5S8ZXPT30MGED94KBF964X7/.gate-test-tmp/usage-live-e4tprv5j/alternate-state/usage-warner.check.sh
+exit=0
+
+Actual notifier unavailable: already delivered keys remain, new key stays pending
+$ bash ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5S8ZXPT30MGED94KBF964X7/.gate-test-tmp/usage-live-e4tprv5j/alternate-state/usage-warner.check.sh
+~/.no-mistakes/worktrees/119cd7a6b9a4/01M5S8ZXPT30MGED94KBF964X7/bin/fm-wake-lib.sh: line 596: basename: command not found
+~/.no-mistakes/worktrees/119cd7a6b9a4/01M5S8ZXPT30MGED94KBF964X7/bin/fm-wake-lib.sh: line 596: basename: command not found
+exit=0
+Disposable home removed.

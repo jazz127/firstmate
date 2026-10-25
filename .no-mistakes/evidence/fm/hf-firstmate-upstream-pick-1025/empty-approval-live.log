@@ -1,0 +1,51 @@
+Actual public GitHub data: two human empty approvals plus a substantive Copilot review. All three logins explicitly configured in the disposable exact-login allowlist.
+$ bash ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5S8ZXPT30MGED94KBF964X7/bin/fm-contributions.sh poll
+contribution-wake: check: contributions empty-approval d889bf92e90061fa0e98445d4193ded8076419066d39012aebd18aa1c17cc8d4
+exit=0
+$ bash ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5S8ZXPT30MGED94KBF964X7/bin/fm-contributions.sh pending
+[
+  {
+    "token": "review:5640910245:2026-10-25T01:18:32Z:COMMENTED",
+    "type": "review",
+    "source": "https://github.com/microsoft/vscode/pull/344090#pullrequestreview-5640910245",
+    "head": "43c2972e150040d25b6d108d74c2adb14ca62c8c",
+    "author": "copilot-pull-request-reviewer[bot]",
+    "body": "<!-- ccr-overview-v2 -->\n\n### 🟢 Approval recommended\n\nThe focused changes match the intended behavior, include regression coverage for both affected paths, and have no unresolved findings.\n\n**No open issues** 🎉\n\n<details>\n<summary><strong>What changed in this PR</strong></summary>\n\nThis PR corrects provider identity in chat session hovers so dynamically registered providers no longer appear as Local.\n\n**Changes:**\n- Uses session-supplied labels and dynamic-provider icons in both the rich header ",
+    "review_bot": true,
+    "task": "empty-approval",
+    "url": "https://github.com/microsoft/vscode/pull/344090"
+  }
+]
+exit=0
+Persisted review evidence:
+[
+  {
+    "id": 5640910245,
+    "state": "COMMENTED",
+    "submitted_at": "2026-10-25T01:18:32Z",
+    "commit_id": "43c2972e150040d25b6d108d74c2adb14ca62c8c",
+    "user": {
+      "login": "copilot-pull-request-reviewer[bot]"
+    }
+  },
+  {
+    "id": 5641956941,
+    "state": "APPROVED",
+    "submitted_at": "2026-10-25T06:57:47Z",
+    "commit_id": "43c2972e150040d25b6d108d74c2adb14ca62c8c",
+    "user": {
+      "login": "dmitrivMS"
+    }
+  },
+  {
+    "id": 5642724582,
+    "state": "APPROVED",
+    "submitted_at": "2026-10-25T10:23:19Z",
+    "commit_id": "43c2972e150040d25b6d108d74c2adb14ca62c8c",
+    "user": {
+      "login": "alexdima"
+    }
+  }
+]
+Empty approvals retained as reviews; no approval finding or wake. Substantive Copilot review remains a pending finding. Real github.com API; no synthetic reviews and no GitHub writes.
+Disposable home removed.

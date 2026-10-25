@@ -1,0 +1,7 @@
+ok - a listed collaborator bot remains an acknowledged review-bot fleet signal
+ok - empty allowlisted approvals retain review evidence without becoming findings
+ok - review-bot watching is off until a home lists a bot
+ok - the armed allowlist is stable across working directories and policy toggles
+ok - a configured automated reviewer wakes as fleet triage and an unconfigured bot does not
+ok - the automated reviewer set is configurable and can be disabled
+ok - an author comment is an event only with the configured marker

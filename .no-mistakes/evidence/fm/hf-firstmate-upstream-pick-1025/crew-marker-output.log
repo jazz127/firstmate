@@ -1,0 +1,12 @@
+
+Simulated upstream CI marker: no CI checks reported - still monitoring until merged or closed
+Worker claims checks green. Actual fm-crew-state output:
+state: working · source: run-step · no CI checks reported (or repository declares no CI): nothing has verified the PR (still monitoring for merge/close)
+
+Simulated upstream CI marker: repository declares no CI (no_ci: true) - treating as all checks passed - still monitoring until merged or closed
+Worker claims checks green. Actual fm-crew-state output:
+state: working · source: run-step · no CI checks reported (or repository declares no CI): nothing has verified the PR (still monitoring for merge/close)
+
+Simulated upstream CI marker: all CI checks passed - still monitoring until merged or closed
+Worker claims checks green. Actual fm-crew-state output:
+state: done · source: run-step · checks green: PR ready for review (still monitoring for merge/close): https://github.com/o/r/pull/2

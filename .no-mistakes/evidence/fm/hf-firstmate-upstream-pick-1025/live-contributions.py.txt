@@ -1,0 +1,55 @@
+import os,pathlib,subprocess,tempfile,shutil,json
+root=pathlib.Path.cwd();evidence=pathlib.Path('~/.no-mistakes/evidence/01M5S8ZXPT30MGED94KBF964X7')
+home=pathlib.Path(tempfile.mkdtemp(prefix='bots-live-',dir=root/'.gate-test-tmp'))
+log=open(evidence/'contributions-live.log','w',buffering=1)
+env=os.environ.copy()
+for key in list(env):
+    if key.startswith('FM_'):env.pop(key,None)
+env.update(FM_HOME=str(home),FM_STATE_OVERRIDE=str(home/'state'),FM_DATA_OVERRIDE=str(home/'data'),FM_CONFIG_OVERRIDE=str(home/'config'),TMPDIR=str(root/'.gate-test-tmp'),FM_CONTRIBUTIONS_BUDGET='25',FM_CHECK_TIMEOUT='30',FM_CONTRIBUTIONS_AUTOMATED_REVIEWERS='')
+url='https://github.com/basecamp/omarchy/pull/13212'
+def run(label,args,env=env):
+    log.write('\n'+label+'\n$ '+' '.join(map(str,args))+'\n')
+    cp=subprocess.run(list(map(str,args)),env=env,cwd=root,text=True,capture_output=True,timeout=40)
+    log.write(cp.stdout+cp.stderr+'exit='+str(cp.returncode)+'\n');assert cp.returncode==0,label
+    return cp.stdout
+script=root/'bin/fm-contributions.sh'
+def pending():return json.loads(run('Read durable pending findings',['bash',script,'pending']))
+try:
+    for d in ['config','state','data','projects','alternate-config']:(home/d).mkdir()
+    (home/'data/backlog.md').write_text('# Backlog\n\n## Queued\n- [ ] live-review - Review bot read-only proof '+url+' (repo: omarchy) (kind: ship)\n')
+    run('Without opt-in, observe actual GitHub PR',['bash',script,'poll'])
+    record=home/'data/live-review/contributions.json'
+    assert record.exists(),'real upstream observation was not recorded'
+    saved=json.loads(record.read_text())['records'][0]
+    assert saved['error'] is None and saved['observation']['state']=='open',saved
+    assert not any(p['author']=='greptile-apps[bot]' for p in pending()),'bot unexpectedly admitted without config'
+    # Independent upstream oracle: the PR's public inline comment from the author intent.
+    # It must be admitted as data once greptile is explicitly configured.
+    (home/'alternate-config/contribution-review-bots').write_text('# Opted-in exact login\ngreptile-apps[bot]\n')
+    armed=env|{'FM_CONFIG_OVERRIDE':'.gate-test-tmp/'+home.name+'/alternate-config'}
+    run('Arm contributions with a relative opt-in directory',['bash',script,'arm'],armed)
+    shim=home/'state/contributions.check.sh'
+    run('Run generated check with a conflicting ambient configuration',['bash',shim])
+    events=pending()
+    assert any(p['author']=='greptile-apps[bot]' and p.get('review_bot') is True and p['source'].endswith('discussion_r4308149471') for p in events),'documented actual inline finding was not surfaced'
+    saved=json.loads(record.read_text())['records'][0]
+    assert saved['verdict'] is None,'bot granted a verdict'
+    run('Get canonical local contribution projection input',['bash',root/'bin/fm-fleet-snapshot.sh','--contribution-input'])
+    cp=subprocess.run(['bash',str(root/'bin/fm-fleet-snapshot.sh'),'--contribution-input'],env=env,text=True,capture_output=True,timeout=30)
+    assert cp.returncode==0
+    inputfile=home/'input.json';inputfile.write_text(cp.stdout)
+    view=json.loads(run('Project triage ownership',['bash',script,'snapshot',inputfile,'--all']))
+    assert view['rows'][0]['actor']=='fleet' and 'review-bot' in view['rows'][0]['reason'],view
+    for event in events:
+        run('Acknowledge exact observed signal',['bash',script,'ack','live-review',url,event['token']])
+    assert pending()==[]
+    (home/'alternate-config/contribution-review-bots').write_text('')
+    run('Disable the allowlist and re-poll',['bash',shim])
+    (home/'alternate-config/contribution-review-bots').write_text('greptile-apps[bot]\n')
+    run('Restore the allowlist and re-poll',['bash',shim])
+    assert pending()==[],'acknowledged findings replayed after allowlist toggle'
+    saved=json.loads(record.read_text())
+    (evidence/'contributions-live-state.json').write_text(json.dumps(saved,indent=2)+'\n')
+    log.write('\nLive review-bot opt-in, persisted inline finding, fleet-only triage, exact acknowledgement and no replay passed; real gh API to github.com, no substitute. No GitHub writes.\n')
+finally:
+    shutil.rmtree(home);log.write('Disposable home removed.\n');log.close()

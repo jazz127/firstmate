@@ -1,0 +1,58 @@
+import os, pathlib, subprocess, tempfile, shutil, json
+root=pathlib.Path.cwd()
+evidence=pathlib.Path('~/.no-mistakes/evidence/01M5S8ZXPT30MGED94KBF964X7')
+home=pathlib.Path(tempfile.mkdtemp(prefix='usage-live-',dir=root/'.gate-test-tmp'))
+log=open(evidence/'usage-live.log','w',buffering=1)
+base=os.environ.copy()
+for key in list(base):
+    if key.startswith('FM_') or key in ['QUOTA_AXI_SNAPSHOT','QUOTA_AXI_MAX_AGE','QUOTA_AXI_CLAUDE_PROFILES','QUOTA_AXI_CLAUDE_SWAP']:
+        base.pop(key,None)
+base.update(FM_HOME=str(home),TMPDIR=str(root/'.gate-test-tmp'))
+def run(label,args,env=None,cwd=root):
+    log.write('\n'+label+'\n$ '+ ' '.join(map(str,args))+'\n')
+    cp=subprocess.run(list(map(str,args)),env=env or base,cwd=cwd,text=True,capture_output=True,timeout=25)
+    log.write(cp.stdout+cp.stderr+'exit='+str(cp.returncode)+'\n')
+    assert cp.returncode==0, label
+    return cp.stdout
+try:
+    for d in ['config','state','alternate-config','alternate-state']:(home/d).mkdir()
+    script=root/'bin/fm-usage-warner.sh'
+    assert run('Unconfigured check stays silent',['bash',script,'check'])==''
+    assert not (home/'state/.usage-warner').exists()
+    config=home/'alternate-config/usage-warner'
+    config.write_text('seven_day:1\nseven_day:2\n')
+    armed=base|{'FM_CONFIG_OVERRIDE':'alternate-config','FM_STATE_OVERRIDE':'alternate-state'}
+    run('Arm with relative effective directories',['bash',script,'arm'],armed,home)
+    shim=home/'alternate-state/usage-warner.check.sh'
+    conflict=base|{'FM_HOME':str(root/'.gate-test-tmp'),'FM_CONFIG_OVERRIDE':str(home/'config'),'FM_STATE_OVERRIDE':str(home/'state')}
+    first=run('Run armed shim from another directory with conflicting ambient overrides',['bash',shim],conflict)
+    assert 'seven_day at ' in first and '(>=1%)' in first and '(>=2%)' in first
+    state=home/'alternate-state/.usage-warner'
+    record=state.read_text();log.write('Persisted notification record:\n'+record)
+    assert 'seven_day:1\n' in record and 'seven_day:2\n' in record, 'real Notification Center delivery did not succeed'
+    assert not (home/'state/.usage-warner').exists()
+    assert run('Repeat above threshold is silent',['bash',shim],conflict)==''
+    # Force an actual missing notifier without replacing any executable or upstream.
+    # Every tool exposed below is a symlink to the installed real executable.
+    toolbin=home/'no-notifier';toolbin.mkdir()
+    for name in ['bash','env','node','quota-axi','jq','ln','dirname','basename','touch','uname','stat','ps','awk','grep','sed','cat','mkdir','rmdir','mktemp','chmod','mv','rm','sleep','date','perl','sh','head','tail','wc','tr','cut','readlink','security','curl','timeout','gtimeout','kill','shasum','sort','which']:
+        target=shutil.which(name)
+        if target:(toolbin/name).symlink_to(target)
+    config.write_text('seven_day:1\nseven_day:2\nseven_day:3\n')
+    no_notifier=conflict|{'PATH':str(toolbin)}
+    failed=run('Actual notifier unavailable: already delivered keys remain, new key stays pending',['bash',shim],no_notifier)
+    assert '(>=3%)' in failed
+    record=state.read_text();log.write('After failed notification:\n'+record)
+    assert 'seven_day:1\n' in record and 'seven_day:2\n' in record and 'seven_day:3\n' not in record
+    retried=run('Restore actual osascript and retry only the undelivered threshold',['bash',shim],conflict)
+    assert '(>=3%)' in retried and '(>=1%)' not in retried and '(>=2%)' not in retried
+    record=state.read_text();log.write('After successful retry:\n'+record)
+    assert 'seven_day:3\n' in record
+    assert run('Delivered retry is deduplicated',['bash',shim],conflict)==''
+    run('Disarm effective state',['bash',script,'disarm'],armed,home)
+    assert not state.exists() and not shim.exists() and not (home/'alternate-state/usage-warner.check-trust').exists()
+    log.write('\nAll live usage assertions passed. Actual quota-axi/Claude and actual macOS osascript; no synthetic responses.\n')
+finally:
+    shutil.rmtree(home)
+    log.write('Disposable home removed.\n')
+    log.close()

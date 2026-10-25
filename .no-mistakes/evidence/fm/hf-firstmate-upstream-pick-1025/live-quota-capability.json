@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 5,
+  "providers": [
+    {
+      "provider": "claude",
+      "status": null,
+      "error": null,
+      "windows": [
+        {
+          "id": "five_hour",
+          "percentUsed": 2
+        },
+        {
+          "id": "seven_day",
+          "percentUsed": 30
+        },
+        {
+          "id": "model:fable",
+          "percentUsed": 17
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+import os,pathlib,subprocess,tempfile,shutil,json
+root=pathlib.Path.cwd();evidence=pathlib.Path('~/.no-mistakes/evidence/01M5S8ZXPT30MGED94KBF964X7')
+home=pathlib.Path(tempfile.mkdtemp(prefix='approval-live-',dir=root/'.gate-test-tmp'))
+log=open(evidence/'empty-approval-live.log','w',buffering=1)
+env={k:v for k,v in os.environ.items() if not k.startswith('FM_')}
+env.update(FM_HOME=str(home),FM_STATE_OVERRIDE=str(home/'state'),FM_DATA_OVERRIDE=str(home/'data'),FM_CONFIG_OVERRIDE=str(home/'config'),TMPDIR=str(root/'.gate-test-tmp'),FM_CONTRIBUTIONS_BUDGET='25',FM_CONTRIBUTIONS_AUTOMATED_REVIEWERS='')
+script=root/'bin/fm-contributions.sh'
+def run(args):
+    log.write('$ '+' '.join(map(str,args))+'\n')
+    p=subprocess.run(list(map(str,args)),env=env,text=True,capture_output=True,timeout=40)
+    log.write(p.stdout+p.stderr+'exit='+str(p.returncode)+'\n');assert p.returncode==0
+    return p.stdout
+try:
+    for d in ['config','data','state','projects']:(home/d).mkdir()
+    (home/'data/backlog.md').write_text('# Backlog\n\n## Queued\n- [ ] empty-approval - Read public review records https://github.com/microsoft/vscode/pull/344090 (repo: vscode) (kind: ship)\n')
+    # The exact-login config accepts logins, not GitHub account types. Existing
+    # public human approvals exercise the same empty-approval boundary without
+    # manufacturing a review or writing anything to GitHub.
+    (home/'config/contribution-review-bots').write_text('copilot-pull-request-reviewer[bot]\ndmitrivMS\nalexdima\n')
+    log.write('Actual public GitHub data: two human empty approvals plus a substantive Copilot review. All three logins explicitly configured in the disposable exact-login allowlist.\n')
+    run(['bash',script,'poll'])
+    pending=json.loads(run(['bash',script,'pending']))
+    record=json.loads((home/'data/empty-approval/contributions.json').read_text())
+    row=record['records'][0];assert row['error'] is None,row
+    approvals=[r for r in row['observation']['reviews'] if r['state']=='APPROVED']
+    assert {r['user']['login'] for r in approvals}=={'dmitrivMS','alexdima'},approvals
+    assert len(pending)==1 and pending[0]['author']=='copilot-pull-request-reviewer[bot]' and pending[0]['review_bot'] is True,pending
+    assert not any(p['author'] in ['dmitrivMS','alexdima'] for p in pending)
+    log.write('Persisted review evidence:\n'+json.dumps(row['observation']['reviews'],indent=2)+'\n')
+    log.write('Empty approvals retained as reviews; no approval finding or wake. Substantive Copilot review remains a pending finding. Real github.com API; no synthetic reviews and no GitHub writes.\n')
+finally:
+    shutil.rmtree(home);log.write('Disposable home removed.\n');log.close()

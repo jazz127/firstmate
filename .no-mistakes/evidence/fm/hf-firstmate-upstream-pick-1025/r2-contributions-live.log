@@ -1,0 +1,397 @@
+
+Without opt-in, observe actual GitHub PR
+$ bash ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5S8ZXPT30MGED94KBF964X7/bin/fm-contributions.sh poll
+exit=0
+
+Read durable pending findings
+$ bash ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5S8ZXPT30MGED94KBF964X7/bin/fm-contributions.sh pending
+[]
+exit=0
+
+Arm contributions with a relative opt-in directory
+$ bash ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5S8ZXPT30MGED94KBF964X7/bin/fm-contributions.sh arm
+registered: state/contributions.check.sh
+exit=0
+
+Run generated check with a conflicting ambient configuration
+$ bash ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5S8ZXPT30MGED94KBF964X7/.gate-test-tmp/bots-live-unrxmuc1/state/contributions.check.sh
+contribution-wake: check: contributions live-review 89eb24fad5ca137a114c0ce300e76a64bd6f31a521e62d11a1110d37e6eedaab
+contribution-wake: check: contributions live-review ad83e0456c996609d76eae929aca11504aae16441137a93bd6bf19cd8dc371ee
+contribution-wake: check: contributions live-review 06d4f56756a89996f490b5d46cb905cc9b2cecf9a194d9037ba041aa43339407
+contribution-wake: check: contributions live-review f6ca98fc5a57a362b5f394581840dd3570ca6635a3d1595b3221297954774c08
+contribution-wake: check: contributions live-review d3b3818018b760d1cea8c7996f36137b74c0ff77124f58a91ae48340d06484f5
+contribution-wake: check: contributions live-review f85265a211648729b4487327584c94e5614808808447ced5cbb1aaa5bd0748aa
+contribution-wake: check: contributions live-review 3394c8285888e725f7506d6827b60b51f9ff4c98ce463d7e2228827c12cb95d6
+contribution-wake: check: contributions live-review 857f86eb8cc41452a48381846a3d350d32ca38690453c99bf5d5ac18fe01f018
+contribution-wake: check: contributions live-review 3b3b9302dc70b0ff4bcab9390650707ec865a32474b9e1d5c72e7f6cd8d2f53b
+contribution-wake: check: contributions live-review 3359f405302506c8336f1b05928350ae60a740bf273f23b34ef8d73f4b8a9117
+exit=0
+
+Read durable pending findings
+$ bash ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5S8ZXPT30MGED94KBF964X7/bin/fm-contributions.sh pending
+[
+  {
+    "token": "comment:6213462706:2026-10-24T17:15:53Z:",
+    "type": "comment",
+    "source": "https://github.com/omacom/omarchy/pull/13212#issuecomment-6213462706",
+    "head": null,
+    "author": "greptile-apps[bot]",
+    "body": "<!-- greptile_summary -->\n\n<h2><a href=\"https://app.greptile.com/api/retrigger?id=80384870\"><picture><source media=\"(prefers-color-scheme: dark)\" srcset=\"https://greptile-static-assets.s3.amazonaws.com/badges/RetriggerDark.svg?v=2\"><source media=\"(prefers-color-scheme: light)\" srcset=\"https://greptile-static-assets.s3.amazonaws.com/badges/Retrigger.svg?v=2\"><img alt=\"Retrigger\" src=\"https://greptile-static-assets.s3.amazonaws.com/badges/Retrigger.svg?v=2\" align=\"right\"></picture></a><a href=\"htt",
+    "review_bot": true,
+    "task": "live-review",
+    "url": "https://github.com/basecamp/omarchy/pull/13212"
+  },
+  {
+    "token": "review-comment:4293595796:2026-10-16T10:27:49Z:",
+    "type": "review-comment",
+    "source": "https://github.com/omacom/omarchy/pull/13212#discussion_r4293595796",
+    "head": "a661e450e81c71ee8d60f1f6a246ad8e3a37e513",
+    "author": "greptile-apps[bot]",
+    "body": "<a href=\"#\"><img alt=\"P2\" src=\"https://greptile-static-assets.s3.amazonaws.com/badges/p2.svg?v=9\" align=\"top\"></a> **Unnamed controls pass the lint**\n\nThe naming lint accepts properties that never reach `Accessible.name`. For example, `PanelSlider` and `ToggleSwitch` only use `accessibleName`, but this table also accepts `tooltipText` and `label`. A caller can therefore pass the check while leaving its control unnamed. Match each entry to the component's actual name fallback, and add negative fi",
+    "review_bot": true,
+    "task": "live-review",
+    "url": "https://github.com/basecamp/omarchy/pull/13212"
+  },
+  {
+    "token": "review-comment:4306824940:2026-10-18T11:23:38Z:",
+    "type": "review-comment",
+    "source": "https://github.com/omacom/omarchy/pull/13212#discussion_r4306824940",
+    "head": "4c66862157bad42a3a71ebba1f1af2d6911c21b3",
+    "author": "greptile-apps[bot]",
+    "body": "<a href=\"#\"><img alt=\"P2\" src=\"https://greptile-static-assets.s3.amazonaws.com/badges/p2.svg?v=9\" align=\"top\"></a> **Escaped icons pass as names**\n\nThe naming lint accepts `BarIconButton { accessibleName: \"\\ue900\" }` even though its name is only an icon. `tokens()` keeps the escape as ASCII characters, so `glyph_string()` returns false and the name passes. This leaves screen reader users with an unreadable name despite a passing test.\n\nDecode QML Unicode escapes before checking glyphs, and add a",
+    "review_bot": true,
+    "task": "live-review",
+    "url": "https://github.com/basecamp/omarchy/pull/13212"
+  },
+  {
+    "token": "review-comment:4308149471:2026-10-18T18:17:59Z:",
+    "type": "review-comment",
+    "source": "https://github.com/omacom/omarchy/pull/13212#discussion_r4308149471",
+    "head": "fbaecdd2aaf2f946c691ffd928ccb304aa32cdb7",
+    "author": "greptile-apps[bot]",
+    "body": "<a href=\"#\"><img alt=\"P2\" src=\"https://greptile-static-assets.s3.amazonaws.com/badges/p2.svg?v=9\" align=\"top\"></a> **Unnamed buttons pass the check**\n\nThe naming lint skips any `Button` whose explicit `text` is not a glyph, including `text: \"\"`. Thus `Button { iconText: \"\\ue900\"; text: \"\" }` passes without a name, even though `Button.accessibleName` resolves to an empty string. This leaves a gap in the check meant to catch unnamed controls for screen-reader users.\n\nOnly skip buttons with non-emp",
+    "review_bot": true,
+    "task": "live-review",
+    "url": "https://github.com/basecamp/omarchy/pull/13212"
+  },
+  {
+    "token": "review-comment:4328450278:2026-10-20T18:03:47Z:",
+    "type": "review-comment",
+    "source": "https://github.com/omacom/omarchy/pull/13212#discussion_r4328450278",
+    "head": "4c66862157bad42a3a71ebba1f1af2d6911c21b3",
+    "author": "greptile-apps[bot]",
+    "body": "<a href=\"#\"><img alt=\"P2\" src=\"https://greptile-static-assets.s3.amazonaws.com/badges/p2.svg?v=9\" align=\"top\"></a> **Actions report false selection**\n\n`CursorSurface` marks every named row as selectable and uses `current` as its selected state. This includes ordinary actions such as Dropbox login and file opening. In Tailscale's copy menu, moving the keyboard cursor also reports a selection before anything is copied. Screen-reader users therefore hear highlighting described as a completed choice",
+    "review_bot": true,
+    "task": "live-review",
+    "url": "https://github.com/basecamp/omarchy/pull/13212"
+  },
+  {
+    "token": "review-comment:4328450293:2026-10-20T18:03:47Z:",
+    "type": "review-comment",
+    "source": "https://github.com/omacom/omarchy/pull/13212#discussion_r4328450293",
+    "head": "4c66862157bad42a3a71ebba1f1af2d6911c21b3",
+    "author": "greptile-apps[bot]",
+    "body": "<a href=\"#\"><img alt=\"P2\" src=\"https://greptile-static-assets.s3.amazonaws.com/badges/p2.svg?v=9\" align=\"top\"></a> **Two bands report selected**\n\n`BandPill` opts into `Button` selection, which reports `selected || active`. When the user changes bands, `bandEffective` immediately becomes the requested band while `bandCurrent` still names the old band during reconnect. Screen-reader users therefore hear both pills announced as selected.\n\nOverride `Accessible.selected` here to follow only `selected",
+    "review_bot": true,
+    "task": "live-review",
+    "url": "https://github.com/basecamp/omarchy/pull/13212"
+  },
+  {
+    "token": "review:5546437841:2026-10-16T10:27:49Z:COMMENTED",
+    "type": "review",
+    "source": "https://github.com/omacom/omarchy/pull/13212#pullrequestreview-5546437841",
+    "head": "a661e450e81c71ee8d60f1f6a246ad8e3a37e513",
+    "author": "greptile-apps[bot]",
+    "body": "",
+    "review_bot": true,
+    "task": "live-review",
+    "url": "https://github.com/basecamp/omarchy/pull/13212"
+  },
+  {
+    "token": "review:5562718855:2026-10-18T11:23:38Z:COMMENTED",
+    "type": "review",
+    "source": "https://github.com/omacom/omarchy/pull/13212#pullrequestreview-5562718855",
+    "head": "5e87f34c238cced9f155a74fe13daf1c065b292b",
+    "author": "greptile-apps[bot]",
+    "body": "",
+    "review_bot": true,
+    "task": "live-review",
+    "url": "https://github.com/basecamp/omarchy/pull/13212"
+  },
+  {
+    "token": "review:5564242212:2026-10-18T18:17:59Z:COMMENTED",
+    "type": "review",
+    "source": "https://github.com/omacom/omarchy/pull/13212#pullrequestreview-5564242212",
+    "head": "fbaecdd2aaf2f946c691ffd928ccb304aa32cdb7",
+    "author": "greptile-apps[bot]",
+    "body": "",
+    "review_bot": true,
+    "task": "live-review",
+    "url": "https://github.com/basecamp/omarchy/pull/13212"
+  },
+  {
+    "token": "review:5589428548:2026-10-20T18:03:47Z:COMMENTED",
+    "type": "review",
+    "source": "https://github.com/omacom/omarchy/pull/13212#pullrequestreview-5589428548",
+    "head": "bd4437ae809bb492d7cd43d50c0220c4f3537545",
+    "author": "greptile-apps[bot]",
+    "body": "",
+    "review_bot": true,
+    "task": "live-review",
+    "url": "https://github.com/basecamp/omarchy/pull/13212"
+  }
+]
+exit=0
+
+Get canonical local contribution projection input
+$ bash ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5S8ZXPT30MGED94KBF964X7/bin/fm-fleet-snapshot.sh --contribution-input
+{
+  "backlog": {
+    "present": true,
+    "records": [
+      {
+        "completion": {
+          "date": null,
+          "verb": null
+        },
+        "local_note": null,
+        "blocked_reason": null,
+        "checked": false,
+        "priority": null,
+        "body_lines": [],
+        "hold_bucket": null,
+        "state": "queued",
+        "links": [
+          "https://github.com/basecamp/omarchy/pull/13212"
+        ],
+        "done": null,
+        "title": "Review bot read-only proof",
+        "since": null,
+        "id": "live-review",
+        "order": 1,
+        "current_role": "queued",
+        "hold_set": null,
+        "raw": "- [ ] live-review - Review bot read-only proof https://github.com/basecamp/omarchy/pull/13212 (repo: omarchy) (kind: ship)",
+        "body_excerpt": null,
+        "reported": null,
+        "hold_until": null,
+        "hold_reason": null,
+        "hold_kind": null,
+        "pr_url": "https://github.com/basecamp/omarchy/pull/13212",
+        "repo": "omarchy",
+        "captain_actionable": false,
+        "requires_child_metadata": false,
+        "merged": null,
+        "blocked_by_ids": [],
+        "hold_age_days": null,
+        "structured": true,
+        "unresolved_blocker_ids": [],
+        "blocked_by": null,
+        "kind": "ship",
+        "report_path": null
+      }
+    ],
+    "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M5S8ZXPT30MGED94KBF964X7/.gate-test-tmp/bots-live-unrxmuc1/data/backlog.md"
+  },
+  "tasks": []
+}
+exit=0
+
+Project triage ownership
+$ bash ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5S8ZXPT30MGED94KBF964X7/bin/fm-contributions.sh snapshot ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5S8ZXPT30MGED94KBF964X7/.gate-test-tmp/bots-live-unrxmuc1/input.json --all
+{
+  "known": 1,
+  "checked": 1,
+  "counts": {
+    "captain": 0,
+    "fleet": 1,
+    "maintainer": 0,
+    "nobody": 0
+  },
+  "unmeasured": 0,
+  "complete": true,
+  "proven_clear": true,
+  "stale_verdicts": 0,
+  "missing_verdicts": 0,
+  "unreadable_records": 0,
+  "valid_until": 1792931726,
+  "captain": [],
+  "captain_omitted": 0,
+  "rows": [
+    {
+      "task": "live-review",
+      "url": "https://github.com/basecamp/omarchy/pull/13212",
+      "kind": "pr",
+      "checked_at": "2026-10-25T12:20:26Z",
+      "checked": true,
+      "final": false,
+      "head": "4c66862157bad42a3a71ebba1f1af2d6911c21b3",
+      "verdict": null,
+      "reviews": [],
+      "distinct_checks": 1,
+      "missing_verdicts": 0,
+      "pending_checks": 0,
+      "failed_checks": 0,
+      "stale_verdicts": 0,
+      "signals": [
+        {
+          "token": "comment:6213462706:2026-10-24T17:15:53Z:",
+          "type": "comment",
+          "source": "https://github.com/omacom/omarchy/pull/13212#issuecomment-6213462706",
+          "head": null,
+          "author": "greptile-apps[bot]",
+          "body": "<!-- greptile_summary -->\n\n<h2><a href=\"https://app.greptile.com/api/retrigger?id=80384870\"><picture><source media=\"(prefers-color-scheme: dark)\" srcset=\"https://greptile-static-assets.s3.amazonaws.com/badges/RetriggerDark.svg?v=2\"><source media=\"(prefers-color-scheme: light)\" srcset=\"https://greptile-static-assets.s3.amazonaws.com/badges/Retrigger.svg?v=2\"><img alt=\"Retrigger\" src=\"https://greptile-static-assets.s3.amazonaws.com/badges/Retrigger.svg?v=2\" align=\"right\"></picture></a><a href=\"htt",
+          "review_bot": true
+        },
+        {
+          "token": "review-comment:4293595796:2026-10-16T10:27:49Z:",
+          "type": "review-comment",
+          "source": "https://github.com/omacom/omarchy/pull/13212#discussion_r4293595796",
+          "head": "a661e450e81c71ee8d60f1f6a246ad8e3a37e513",
+          "author": "greptile-apps[bot]",
+          "body": "<a href=\"#\"><img alt=\"P2\" src=\"https://greptile-static-assets.s3.amazonaws.com/badges/p2.svg?v=9\" align=\"top\"></a> **Unnamed controls pass the lint**\n\nThe naming lint accepts properties that never reach `Accessible.name`. For example, `PanelSlider` and `ToggleSwitch` only use `accessibleName`, but this table also accepts `tooltipText` and `label`. A caller can therefore pass the check while leaving its control unnamed. Match each entry to the component's actual name fallback, and add negative fi",
+          "review_bot": true
+        },
+        {
+          "token": "review-comment:4306824940:2026-10-18T11:23:38Z:",
+          "type": "review-comment",
+          "source": "https://github.com/omacom/omarchy/pull/13212#discussion_r4306824940",
+          "head": "4c66862157bad42a3a71ebba1f1af2d6911c21b3",
+          "author": "greptile-apps[bot]",
+          "body": "<a href=\"#\"><img alt=\"P2\" src=\"https://greptile-static-assets.s3.amazonaws.com/badges/p2.svg?v=9\" align=\"top\"></a> **Escaped icons pass as names**\n\nThe naming lint accepts `BarIconButton { accessibleName: \"\\ue900\" }` even though its name is only an icon. `tokens()` keeps the escape as ASCII characters, so `glyph_string()` returns false and the name passes. This leaves screen reader users with an unreadable name despite a passing test.\n\nDecode QML Unicode escapes before checking glyphs, and add a",
+          "review_bot": true
+        },
+        {
+          "token": "review-comment:4308149471:2026-10-18T18:17:59Z:",
+          "type": "review-comment",
+          "source": "https://github.com/omacom/omarchy/pull/13212#discussion_r4308149471",
+          "head": "fbaecdd2aaf2f946c691ffd928ccb304aa32cdb7",
+          "author": "greptile-apps[bot]",
+          "body": "<a href=\"#\"><img alt=\"P2\" src=\"https://greptile-static-assets.s3.amazonaws.com/badges/p2.svg?v=9\" align=\"top\"></a> **Unnamed buttons pass the check**\n\nThe naming lint skips any `Button` whose explicit `text` is not a glyph, including `text: \"\"`. Thus `Button { iconText: \"\\ue900\"; text: \"\" }` passes without a name, even though `Button.accessibleName` resolves to an empty string. This leaves a gap in the check meant to catch unnamed controls for screen-reader users.\n\nOnly skip buttons with non-emp",
+          "review_bot": true
+        },
+        {
+          "token": "review-comment:4328450278:2026-10-20T18:03:47Z:",
+          "type": "review-comment",
+          "source": "https://github.com/omacom/omarchy/pull/13212#discussion_r4328450278",
+          "head": "4c66862157bad42a3a71ebba1f1af2d6911c21b3",
+          "author": "greptile-apps[bot]",
+          "body": "<a href=\"#\"><img alt=\"P2\" src=\"https://greptile-static-assets.s3.amazonaws.com/badges/p2.svg?v=9\" align=\"top\"></a> **Actions report false selection**\n\n`CursorSurface` marks every named row as selectable and uses `current` as its selected state. This includes ordinary actions such as Dropbox login and file opening. In Tailscale's copy menu, moving the keyboard cursor also reports a selection before anything is copied. Screen-reader users therefore hear highlighting described as a completed choice",
+          "review_bot": true
+        },
+        {
+          "token": "review-comment:4328450293:2026-10-20T18:03:47Z:",
+          "type": "review-comment",
+          "source": "https://github.com/omacom/omarchy/pull/13212#discussion_r4328450293",
+          "head": "4c66862157bad42a3a71ebba1f1af2d6911c21b3",
+          "author": "greptile-apps[bot]",
+          "body": "<a href=\"#\"><img alt=\"P2\" src=\"https://greptile-static-assets.s3.amazonaws.com/badges/p2.svg?v=9\" align=\"top\"></a> **Two bands report selected**\n\n`BandPill` opts into `Button` selection, which reports `selected || active`. When the user changes bands, `bandEffective` immediately becomes the requested band while `bandCurrent` still names the old band during reconnect. Screen-reader users therefore hear both pills announced as selected.\n\nOverride `Accessible.selected` here to follow only `selected",
+          "review_bot": true
+        },
+        {
+          "token": "review:5546437841:2026-10-16T10:27:49Z:COMMENTED",
+          "type": "review",
+          "source": "https://github.com/omacom/omarchy/pull/13212#pullrequestreview-5546437841",
+          "head": "a661e450e81c71ee8d60f1f6a246ad8e3a37e513",
+          "author": "greptile-apps[bot]",
+          "body": "",
+          "review_bot": true
+        },
+        {
+          "token": "review:5562718855:2026-10-18T11:23:38Z:COMMENTED",
+          "type": "review",
+          "source": "https://github.com/omacom/omarchy/pull/13212#pullrequestreview-5562718855",
+          "head": "5e87f34c238cced9f155a74fe13daf1c065b292b",
+          "author": "greptile-apps[bot]",
+          "body": "",
+          "review_bot": true
+        },
+        {
+          "token": "review:5564242212:2026-10-18T18:17:59Z:COMMENTED",
+          "type": "review",
+          "source": "https://github.com/omacom/omarchy/pull/13212#pullrequestreview-5564242212",
+          "head": "fbaecdd2aaf2f946c691ffd928ccb304aa32cdb7",
+          "author": "greptile-apps[bot]",
+          "body": "",
+          "review_bot": true
+        },
+        {
+          "token": "review:5589428548:2026-10-20T18:03:47Z:COMMENTED",
+          "type": "review",
+          "source": "https://github.com/omacom/omarchy/pull/13212#pullrequestreview-5589428548",
+          "head": "bd4437ae809bb492d7cd43d50c0220c4f3537545",
+          "author": "greptile-apps[bot]",
+          "body": "",
+          "review_bot": true
+        }
+      ],
+      "actor": "fleet",
+      "reason": "incoming review-bot finding needs triage",
+      "tasks": [
+        "live-review"
+      ]
+    }
+  ]
+}
+exit=0
+
+Acknowledge exact observed signal
+$ bash ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5S8ZXPT30MGED94KBF964X7/bin/fm-contributions.sh ack live-review https://github.com/basecamp/omarchy/pull/13212 comment:6213462706:2026-10-24T17:15:53Z:
+exit=0
+
+Acknowledge exact observed signal
+$ bash ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5S8ZXPT30MGED94KBF964X7/bin/fm-contributions.sh ack live-review https://github.com/basecamp/omarchy/pull/13212 review-comment:4293595796:2026-10-16T10:27:49Z:
+exit=0
+
+Acknowledge exact observed signal
+$ bash ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5S8ZXPT30MGED94KBF964X7/bin/fm-contributions.sh ack live-review https://github.com/basecamp/omarchy/pull/13212 review-comment:4306824940:2026-10-18T11:23:38Z:
+exit=0
+
+Acknowledge exact observed signal
+$ bash ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5S8ZXPT30MGED94KBF964X7/bin/fm-contributions.sh ack live-review https://github.com/basecamp/omarchy/pull/13212 review-comment:4308149471:2026-10-18T18:17:59Z:
+exit=0
+
+Acknowledge exact observed signal
+$ bash ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5S8ZXPT30MGED94KBF964X7/bin/fm-contributions.sh ack live-review https://github.com/basecamp/omarchy/pull/13212 review-comment:4328450278:2026-10-20T18:03:47Z:
+exit=0
+
+Acknowledge exact observed signal
+$ bash ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5S8ZXPT30MGED94KBF964X7/bin/fm-contributions.sh ack live-review https://github.com/basecamp/omarchy/pull/13212 review-comment:4328450293:2026-10-20T18:03:47Z:
+exit=0
+
+Acknowledge exact observed signal
+$ bash ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5S8ZXPT30MGED94KBF964X7/bin/fm-contributions.sh ack live-review https://github.com/basecamp/omarchy/pull/13212 review:5546437841:2026-10-16T10:27:49Z:COMMENTED
+exit=0
+
+Acknowledge exact observed signal
+$ bash ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5S8ZXPT30MGED94KBF964X7/bin/fm-contributions.sh ack live-review https://github.com/basecamp/omarchy/pull/13212 review:5562718855:2026-10-18T11:23:38Z:COMMENTED
+exit=0
+
+Acknowledge exact observed signal
+$ bash ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5S8ZXPT30MGED94KBF964X7/bin/fm-contributions.sh ack live-review https://github.com/basecamp/omarchy/pull/13212 review:5564242212:2026-10-18T18:17:59Z:COMMENTED
+exit=0
+
+Acknowledge exact observed signal
+$ bash ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5S8ZXPT30MGED94KBF964X7/bin/fm-contributions.sh ack live-review https://github.com/basecamp/omarchy/pull/13212 review:5589428548:2026-10-20T18:03:47Z:COMMENTED
+exit=0
+
+Read durable pending findings
+$ bash ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5S8ZXPT30MGED94KBF964X7/bin/fm-contributions.sh pending
+[]
+exit=0
+
+Disable the allowlist and re-poll
+$ bash ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5S8ZXPT30MGED94KBF964X7/.gate-test-tmp/bots-live-unrxmuc1/state/contributions.check.sh
+exit=0
+
+Restore the allowlist and re-poll
+$ bash ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5S8ZXPT30MGED94KBF964X7/.gate-test-tmp/bots-live-unrxmuc1/state/contributions.check.sh
+exit=0
+
+Read durable pending findings
+$ bash ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5S8ZXPT30MGED94KBF964X7/bin/fm-contributions.sh pending
+[]
+exit=0
+
+Live review-bot opt-in, persisted inline finding, fleet-only triage, exact acknowledgement and no replay passed; real gh API to github.com, no substitute. No GitHub writes.
+Disposable home removed.

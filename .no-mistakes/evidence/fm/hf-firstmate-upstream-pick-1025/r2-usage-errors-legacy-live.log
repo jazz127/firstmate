@@ -1,0 +1,22 @@
+Hide quota-axi from the child PATH
+$ bash bin/fm-usage-warner.sh check
+usage-warner: quota-axi is not installed
+exit=0
+Unchanged unavailable dependency is reported only once
+$ bash bin/fm-usage-warner.sh check
+exit=0
+Restore actual quota-axi and read real Claude usage
+$ bash bin/fm-usage-warner.sh check
+exit=0
+Read v1 delivery record against actual above-threshold Claude windows
+$ bash bin/fm-usage-warner.sh check
+exit=0
+Migrated serialized record:
+fm-usage-warner-v2
+reported=
+notified-begin
+seven_day:1
+seven_day:2
+notified-end
+Standing read failure deduplicated and cleared on recovery; retained v1 compatibility avoided repeat notification. No substitute for quota or Notification Center.
+Disposable home removed.

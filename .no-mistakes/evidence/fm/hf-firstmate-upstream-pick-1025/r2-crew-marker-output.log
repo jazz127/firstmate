@@ -1,0 +1,25 @@
+Simulated integration: actual fm-crew-state CLI; fake no-mistakes, tmux and forge boundaries.
+scenario=feat-cinochecks
+state: working · source: run-step · no CI checks reported (or repository declares no CI): nothing has verified the PR (still monitoring for merge/close)
+exit=0
+ok - a PR with no CI checks reported is not read as checks green
+scenario=feat-cinocheckssl
+state: working · source: run-step · no CI checks reported (or repository declares no CI): nothing has verified the PR (still monitoring for merge/close)
+exit=0
+ok - status-log override refuses a PR with no CI checks
+scenario=feat-cinoci
+state: working · source: run-step · no CI checks reported (or repository declares no CI): nothing has verified the PR (still monitoring for merge/close)
+exit=0
+ok - a no_ci ci-monitor marker reads as unverified, not validating
+scenario=feat-cinocisl
+state: working · source: run-step · no CI checks reported (or repository declares no CI): nothing has verified the PR (still monitoring for merge/close)
+exit=0
+ok - status-log override refuses a no_ci repository
+scenario=feat-cinocired
+state: working · source: run-step · validating (running)
+exit=0
+ok - a red marker after the no_ci sentence reads not ready
+scenario=feat-cigreen
+state: done · source: run-step · checks green: PR ready for review (still monitoring for merge/close): https://github.com/o/r/pull/2
+exit=0
+ok - ci-monitoring run with checks already green surfaces done

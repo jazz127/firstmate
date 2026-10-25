@@ -1,0 +1,7 @@
+ok - a PR with no CI checks reported is not read as checks green
+ok - status-log override refuses a PR with no CI checks
+ok - a no_ci ci-monitor marker reads as unverified, not validating
+ok - status-log override refuses a no_ci repository
+ok - a red marker after the no_ci sentence reads not ready
+ok - ci-monitoring run with checks already green surfaces done
+ok - a fresh issue after an earlier green reading is not masked

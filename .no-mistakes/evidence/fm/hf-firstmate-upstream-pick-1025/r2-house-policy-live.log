@@ -1,0 +1,164 @@
+$ bash ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5S8ZXPT30MGED94KBF964X7/bin/fm-contributions.sh poll
+contribution-wake: check: contributions house-policy 89eb24fad5ca137a114c0ce300e76a64bd6f31a521e62d11a1110d37e6eedaab
+contribution-wake: check: contributions house-policy ad83e0456c996609d76eae929aca11504aae16441137a93bd6bf19cd8dc371ee
+contribution-wake: check: contributions house-policy 06d4f56756a89996f490b5d46cb905cc9b2cecf9a194d9037ba041aa43339407
+contribution-wake: check: contributions house-policy f6ca98fc5a57a362b5f394581840dd3570ca6635a3d1595b3221297954774c08
+contribution-wake: check: contributions house-policy d3b3818018b760d1cea8c7996f36137b74c0ff77124f58a91ae48340d06484f5
+contribution-wake: check: contributions house-policy f85265a211648729b4487327584c94e5614808808447ced5cbb1aaa5bd0748aa
+exit=0
+$ bash ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5S8ZXPT30MGED94KBF964X7/bin/fm-contributions.sh pending
+[
+  {
+    "token": "comment:6213462706:2026-10-24T17:15:53Z:",
+    "type": "comment",
+    "source": "https://github.com/omacom/omarchy/pull/13212#issuecomment-6213462706",
+    "head": null,
+    "author": "greptile-apps[bot]",
+    "body": "<!-- greptile_summary -->\n\n<h2><a href=\"https://app.greptile.com/api/retrigger?id=80384870\"><picture><source media=\"(prefers-color-scheme: dark)\" srcset=\"https://greptile-static-assets.s3.amazonaws.com/badges/RetriggerDark.svg?v=2\"><source media=\"(prefers-color-scheme: light)\" srcset=\"https://greptile-static-assets.s3.amazonaws.com/badges/Retrigger.svg?v=2\"><img alt=\"Retrigger\" src=\"https://greptile-static-assets.s3.amazonaws.com/badges/Retrigger.svg?v=2\" align=\"right\"></picture></a><a href=\"htt",
+    "automated": true,
+    "task": "house-policy",
+    "url": "https://github.com/basecamp/omarchy/pull/13212"
+  },
+  {
+    "token": "review-comment:4293595796:2026-10-16T10:27:49Z:",
+    "type": "review-comment",
+    "source": "https://github.com/omacom/omarchy/pull/13212#discussion_r4293595796",
+    "head": "a661e450e81c71ee8d60f1f6a246ad8e3a37e513",
+    "author": "greptile-apps[bot]",
+    "body": "<a href=\"#\"><img alt=\"P2\" src=\"https://greptile-static-assets.s3.amazonaws.com/badges/p2.svg?v=9\" align=\"top\"></a> **Unnamed controls pass the lint**\n\nThe naming lint accepts properties that never reach `Accessible.name`. For example, `PanelSlider` and `ToggleSwitch` only use `accessibleName`, but this table also accepts `tooltipText` and `label`. A caller can therefore pass the check while leaving its control unnamed. Match each entry to the component's actual name fallback, and add negative fi",
+    "automated": true,
+    "task": "house-policy",
+    "url": "https://github.com/basecamp/omarchy/pull/13212"
+  },
+  {
+    "token": "review-comment:4306824940:2026-10-18T11:23:38Z:",
+    "type": "review-comment",
+    "source": "https://github.com/omacom/omarchy/pull/13212#discussion_r4306824940",
+    "head": "4c66862157bad42a3a71ebba1f1af2d6911c21b3",
+    "author": "greptile-apps[bot]",
+    "body": "<a href=\"#\"><img alt=\"P2\" src=\"https://greptile-static-assets.s3.amazonaws.com/badges/p2.svg?v=9\" align=\"top\"></a> **Escaped icons pass as names**\n\nThe naming lint accepts `BarIconButton { accessibleName: \"\\ue900\" }` even though its name is only an icon. `tokens()` keeps the escape as ASCII characters, so `glyph_string()` returns false and the name passes. This leaves screen reader users with an unreadable name despite a passing test.\n\nDecode QML Unicode escapes before checking glyphs, and add a",
+    "automated": true,
+    "task": "house-policy",
+    "url": "https://github.com/basecamp/omarchy/pull/13212"
+  },
+  {
+    "token": "review-comment:4308149471:2026-10-18T18:17:59Z:",
+    "type": "review-comment",
+    "source": "https://github.com/omacom/omarchy/pull/13212#discussion_r4308149471",
+    "head": "fbaecdd2aaf2f946c691ffd928ccb304aa32cdb7",
+    "author": "greptile-apps[bot]",
+    "body": "<a href=\"#\"><img alt=\"P2\" src=\"https://greptile-static-assets.s3.amazonaws.com/badges/p2.svg?v=9\" align=\"top\"></a> **Unnamed buttons pass the check**\n\nThe naming lint skips any `Button` whose explicit `text` is not a glyph, including `text: \"\"`. Thus `Button { iconText: \"\\ue900\"; text: \"\" }` passes without a name, even though `Button.accessibleName` resolves to an empty string. This leaves a gap in the check meant to catch unnamed controls for screen-reader users.\n\nOnly skip buttons with non-emp",
+    "automated": true,
+    "task": "house-policy",
+    "url": "https://github.com/basecamp/omarchy/pull/13212"
+  },
+  {
+    "token": "review-comment:4328450278:2026-10-20T18:03:47Z:",
+    "type": "review-comment",
+    "source": "https://github.com/omacom/omarchy/pull/13212#discussion_r4328450278",
+    "head": "4c66862157bad42a3a71ebba1f1af2d6911c21b3",
+    "author": "greptile-apps[bot]",
+    "body": "<a href=\"#\"><img alt=\"P2\" src=\"https://greptile-static-assets.s3.amazonaws.com/badges/p2.svg?v=9\" align=\"top\"></a> **Actions report false selection**\n\n`CursorSurface` marks every named row as selectable and uses `current` as its selected state. This includes ordinary actions such as Dropbox login and file opening. In Tailscale's copy menu, moving the keyboard cursor also reports a selection before anything is copied. Screen-reader users therefore hear highlighting described as a completed choice",
+    "automated": true,
+    "task": "house-policy",
+    "url": "https://github.com/basecamp/omarchy/pull/13212"
+  },
+  {
+    "token": "review-comment:4328450293:2026-10-20T18:03:47Z:",
+    "type": "review-comment",
+    "source": "https://github.com/omacom/omarchy/pull/13212#discussion_r4328450293",
+    "head": "4c66862157bad42a3a71ebba1f1af2d6911c21b3",
+    "author": "greptile-apps[bot]",
+    "body": "<a href=\"#\"><img alt=\"P2\" src=\"https://greptile-static-assets.s3.amazonaws.com/badges/p2.svg?v=9\" align=\"top\"></a> **Two bands report selected**\n\n`BandPill` opts into `Button` selection, which reports `selected || active`. When the user changes bands, `bandEffective` immediately becomes the requested band while `bandCurrent` still names the old band during reconnect. Screen-reader users therefore hear both pills announced as selected.\n\nOverride `Accessible.selected` here to follow only `selected",
+    "automated": true,
+    "task": "house-policy",
+    "url": "https://github.com/basecamp/omarchy/pull/13212"
+  }
+]
+exit=0
+$ bash ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5S8ZXPT30MGED94KBF964X7/bin/fm-contributions.sh poll
+contribution-wake: check: contributions house-policy 93a86b1df088345e8466c1b7173c927046573abc2b203de8930becf04ada890a
+exit=0
+$ bash ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5S8ZXPT30MGED94KBF964X7/bin/fm-contributions.sh pending
+[
+  {
+    "token": "comment:6213462706:2026-10-24T17:15:53Z:",
+    "type": "comment",
+    "source": "https://github.com/omacom/omarchy/pull/13212#issuecomment-6213462706",
+    "head": null,
+    "author": "greptile-apps[bot]",
+    "body": "<!-- greptile_summary -->\n\n<h2><a href=\"https://app.greptile.com/api/retrigger?id=80384870\"><picture><source media=\"(prefers-color-scheme: dark)\" srcset=\"https://greptile-static-assets.s3.amazonaws.com/badges/RetriggerDark.svg?v=2\"><source media=\"(prefers-color-scheme: light)\" srcset=\"https://greptile-static-assets.s3.amazonaws.com/badges/Retrigger.svg?v=2\"><img alt=\"Retrigger\" src=\"https://greptile-static-assets.s3.amazonaws.com/badges/Retrigger.svg?v=2\" align=\"right\"></picture></a><a href=\"htt",
+    "automated": true,
+    "task": "house-policy",
+    "url": "https://github.com/basecamp/omarchy/pull/13212"
+  },
+  {
+    "token": "review-comment:4293595796:2026-10-16T10:27:49Z:",
+    "type": "review-comment",
+    "source": "https://github.com/omacom/omarchy/pull/13212#discussion_r4293595796",
+    "head": "a661e450e81c71ee8d60f1f6a246ad8e3a37e513",
+    "author": "greptile-apps[bot]",
+    "body": "<a href=\"#\"><img alt=\"P2\" src=\"https://greptile-static-assets.s3.amazonaws.com/badges/p2.svg?v=9\" align=\"top\"></a> **Unnamed controls pass the lint**\n\nThe naming lint accepts properties that never reach `Accessible.name`. For example, `PanelSlider` and `ToggleSwitch` only use `accessibleName`, but this table also accepts `tooltipText` and `label`. A caller can therefore pass the check while leaving its control unnamed. Match each entry to the component's actual name fallback, and add negative fi",
+    "automated": true,
+    "task": "house-policy",
+    "url": "https://github.com/basecamp/omarchy/pull/13212"
+  },
+  {
+    "token": "review-comment:4306824940:2026-10-18T11:23:38Z:",
+    "type": "review-comment",
+    "source": "https://github.com/omacom/omarchy/pull/13212#discussion_r4306824940",
+    "head": "4c66862157bad42a3a71ebba1f1af2d6911c21b3",
+    "author": "greptile-apps[bot]",
+    "body": "<a href=\"#\"><img alt=\"P2\" src=\"https://greptile-static-assets.s3.amazonaws.com/badges/p2.svg?v=9\" align=\"top\"></a> **Escaped icons pass as names**\n\nThe naming lint accepts `BarIconButton { accessibleName: \"\\ue900\" }` even though its name is only an icon. `tokens()` keeps the escape as ASCII characters, so `glyph_string()` returns false and the name passes. This leaves screen reader users with an unreadable name despite a passing test.\n\nDecode QML Unicode escapes before checking glyphs, and add a",
+    "automated": true,
+    "task": "house-policy",
+    "url": "https://github.com/basecamp/omarchy/pull/13212"
+  },
+  {
+    "token": "review-comment:4308149471:2026-10-18T18:17:59Z:",
+    "type": "review-comment",
+    "source": "https://github.com/omacom/omarchy/pull/13212#discussion_r4308149471",
+    "head": "fbaecdd2aaf2f946c691ffd928ccb304aa32cdb7",
+    "author": "greptile-apps[bot]",
+    "body": "<a href=\"#\"><img alt=\"P2\" src=\"https://greptile-static-assets.s3.amazonaws.com/badges/p2.svg?v=9\" align=\"top\"></a> **Unnamed buttons pass the check**\n\nThe naming lint skips any `Button` whose explicit `text` is not a glyph, including `text: \"\"`. Thus `Button { iconText: \"\\ue900\"; text: \"\" }` passes without a name, even though `Button.accessibleName` resolves to an empty string. This leaves a gap in the check meant to catch unnamed controls for screen-reader users.\n\nOnly skip buttons with non-emp",
+    "automated": true,
+    "task": "house-policy",
+    "url": "https://github.com/basecamp/omarchy/pull/13212"
+  },
+  {
+    "token": "review-comment:4328450278:2026-10-20T18:03:47Z:",
+    "type": "review-comment",
+    "source": "https://github.com/omacom/omarchy/pull/13212#discussion_r4328450278",
+    "head": "4c66862157bad42a3a71ebba1f1af2d6911c21b3",
+    "author": "greptile-apps[bot]",
+    "body": "<a href=\"#\"><img alt=\"P2\" src=\"https://greptile-static-assets.s3.amazonaws.com/badges/p2.svg?v=9\" align=\"top\"></a> **Actions report false selection**\n\n`CursorSurface` marks every named row as selectable and uses `current` as its selected state. This includes ordinary actions such as Dropbox login and file opening. In Tailscale's copy menu, moving the keyboard cursor also reports a selection before anything is copied. Screen-reader users therefore hear highlighting described as a completed choice",
+    "automated": true,
+    "task": "house-policy",
+    "url": "https://github.com/basecamp/omarchy/pull/13212"
+  },
+  {
+    "token": "review-comment:4328450293:2026-10-20T18:03:47Z:",
+    "type": "review-comment",
+    "source": "https://github.com/omacom/omarchy/pull/13212#discussion_r4328450293",
+    "head": "4c66862157bad42a3a71ebba1f1af2d6911c21b3",
+    "author": "greptile-apps[bot]",
+    "body": "<a href=\"#\"><img alt=\"P2\" src=\"https://greptile-static-assets.s3.amazonaws.com/badges/p2.svg?v=9\" align=\"top\"></a> **Two bands report selected**\n\n`BandPill` opts into `Button` selection, which reports `selected || active`. When the user changes bands, `bandEffective` immediately becomes the requested band while `bandCurrent` still names the old band during reconnect. Screen-reader users therefore hear both pills announced as selected.\n\nOverride `Accessible.selected` here to follow only `selected",
+    "automated": true,
+    "task": "house-policy",
+    "url": "https://github.com/basecamp/omarchy/pull/13212"
+  },
+  {
+    "token": "review-comment:4330295179:2026-10-20T21:03:49Z:",
+    "type": "review-comment",
+    "source": "https://github.com/omacom/omarchy/pull/13212#discussion_r4330295179",
+    "head": "4c66862157bad42a3a71ebba1f1af2d6911c21b3",
+    "author": "calebl",
+    "body": "Agreed, `CursorSurface` should only report selection for rows that are a real choice. That means a `selectable` opt-in on the kit row, with each panel opting in its choice rows, which is a kit API change across first-party and third-party plugins. I'm leaving it for a separate follow-up so this PR stays focused on exposing the controls. `Button` already follows this rule here, and `ConfirmDialog`'s actions no longer report selection.\n",
+    "directive": true,
+    "task": "house-policy",
+    "url": "https://github.com/basecamp/omarchy/pull/13212"
+  }
+]
+exit=0
+Existing automated reviewer and author-marker policies remained independent; no verdict or merge authority. Real GitHub API reads; no fake services.
+Disposable home removed.

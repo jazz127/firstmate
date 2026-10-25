@@ -1,0 +1,19 @@
+Disposable persisted delivery state seeded as allowed user data. Actual quota-axi reads actual Claude usage; no response substitution.
+Initial record:
+fm-usage-warner-v2
+reported=
+notified-begin
+seven_day:100
+model:unavailable-live-test:1
+notified-end
+
+$ bash ~/.no-mistakes/worktrees/119cd7a6b9a4/01M5S8ZXPT30MGED94KBF964X7/bin/fm-usage-warner.sh check
+exit=0
+Resulting record:
+fm-usage-warner-v2
+reported=
+notified-begin
+model:unavailable-live-test:1
+notified-end
+Below-threshold window re-armed; unavailable window retained previous delivery suppression.
+Disposable home removed.

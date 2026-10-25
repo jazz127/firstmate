@@ -1,0 +1,10 @@
+test_no_checks_markers_never_emit_green_feedback (__main__.Feedback.test_no_checks_markers_never_emit_green_feedback) ... ok
+test_no_checks_readiness_requires_current_attributed_pipeline_evidence (__main__.Feedback.test_no_checks_readiness_requires_current_attributed_pipeline_evidence) ... ok
+test_pipeline_no_checks_evidence_never_overrides_pending_or_failed_checks (__main__.Feedback.test_pipeline_no_checks_evidence_never_overrides_pending_or_failed_checks) ... ok
+test_unknown_no_checks_and_status_contexts_never_false_green (__main__.Feedback.test_unknown_no_checks_and_status_contexts_never_false_green) ... ok
+
+----------------------------------------------------------------------
+Ran 4 tests in 31.194s
+
+OK
+ok - PR feedback CLI: offline forge projection, delivery, CI and pipeline gates

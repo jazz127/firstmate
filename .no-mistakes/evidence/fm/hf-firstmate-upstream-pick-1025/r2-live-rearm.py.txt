@@ -1,0 +1,21 @@
+import os,pathlib,tempfile,shutil,subprocess
+root=pathlib.Path.cwd();home=pathlib.Path(tempfile.mkdtemp(prefix='rearm-live-',dir=root/'.gate-test-tmp'))
+evidence=pathlib.Path('~/.no-mistakes/evidence/01M5S8ZXPT30MGED94KBF964X7')
+env={k:v for k,v in os.environ.items() if not k.startswith('FM_') and k not in ['QUOTA_AXI_SNAPSHOT','QUOTA_AXI_MAX_AGE','QUOTA_AXI_CLAUDE_PROFILES','QUOTA_AXI_CLAUDE_SWAP']}
+env.update(FM_HOME=str(home),TMPDIR=str(root/'.gate-test-tmp'))
+try:
+    (home/'config').mkdir();(home/'state').mkdir()
+    (home/'config/usage-warner').write_text('seven_day:100\nmodel:unavailable-live-test:1\n')
+    record=home/'state/.usage-warner'
+    record.write_text('fm-usage-warner-v2\nreported=\nnotified-begin\nseven_day:100\nmodel:unavailable-live-test:1\nnotified-end\n')
+    before=record.read_text()
+    args=['bash',str(root/'bin/fm-usage-warner.sh'),'check']
+    p=subprocess.run(args,env=env,text=True,capture_output=True,timeout=25)
+    after=record.read_text()
+    with open(evidence/'r2-usage-rearm-live.log','w') as log:
+        log.write('Disposable persisted delivery state seeded as allowed user data. Actual quota-axi reads actual Claude usage; no response substitution.\nInitial record:\n'+before+'\n$ '+' '.join(args)+'\n'+p.stdout+p.stderr+'exit='+str(p.returncode)+'\nResulting record:\n'+after)
+        assert p.returncode==0 and not p.stdout and not p.stderr
+        assert '\nseven_day:100\n' not in after,'below-threshold real window did not re-arm'
+        assert '\nmodel:unavailable-live-test:1\n' in after,'missing window was incorrectly treated as a reset'
+        log.write('Below-threshold window re-armed; unavailable window retained previous delivery suppression.\nDisposable home removed.\n')
+finally:shutil.rmtree(home)

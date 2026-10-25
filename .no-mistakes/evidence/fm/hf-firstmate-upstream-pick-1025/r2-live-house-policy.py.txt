@@ -1,0 +1,29 @@
+import os,pathlib,subprocess,tempfile,shutil,json
+root=pathlib.Path.cwd(); evidence=pathlib.Path('~/.no-mistakes/evidence/01M5S8ZXPT30MGED94KBF964X7')
+home=pathlib.Path(tempfile.mkdtemp(prefix='house-live-',dir=root/'.gate-test-tmp'))
+env={k:v for k,v in os.environ.items() if not k.startswith('FM_') and k not in ['TASKS_AXI_FILE','TASKS_AXI_BACKEND']}
+env.update(FM_HOME=str(home),FM_STATE_OVERRIDE=str(home/'state'),FM_CONFIG_OVERRIDE=str(home/'config'),FM_DATA_OVERRIDE=str(home/'data'),FM_PROJECTS_OVERRIDE=str(home/'projects'),TMPDIR=str(root/'.gate-test-tmp'),FM_CONTRIBUTIONS_BUDGET='25')
+url='https://github.com/basecamp/omarchy/pull/13212';script=root/'bin/fm-contributions.sh'
+log=open(evidence/'r2-house-policy-live.log','w',buffering=1)
+def run(args):
+    log.write('$ '+' '.join(map(str,args))+'\n')
+    p=subprocess.run(list(map(str,args)),env=env,text=True,capture_output=True,timeout=40)
+    log.write(p.stdout+p.stderr+'exit='+str(p.returncode)+'\n');assert p.returncode==0
+    return p.stdout
+try:
+    for d in ['config','state','data','projects']:(home/d).mkdir()
+    (home/'data/backlog.md').write_text('# Backlog\n\n## Queued\n- [ ] house-policy - House review policy '+url+' (repo: omarchy) (kind: ship)\n')
+    run(['bash',script,'poll'])
+    events=json.loads(run(['bash',script,'pending']))
+    assert any(p['author']=='greptile-apps[bot]' and p.get('automated') is True and not p.get('review_bot') for p in events),events
+    assert not any(p['author']=='tuli-labs' for p in events)
+    (home/'config/contributions-author-marker').write_text('Agreed\n')
+    run(['bash',script,'poll'])
+    marked=json.loads(run(['bash',script,'pending']))
+    directives=[p for p in marked if p.get('directive')]
+    assert directives and any('Agreed' in p['body'] for p in directives),directives
+    record=json.loads((home/'data/house-policy/contributions.json').read_text())['records'][0]
+    assert record['verdict'] is None
+    log.write('Existing automated reviewer and author-marker policies remained independent; no verdict or merge authority. Real GitHub API reads; no fake services.\n')
+finally:
+    shutil.rmtree(home);log.write('Disposable home removed.\n');log.close()

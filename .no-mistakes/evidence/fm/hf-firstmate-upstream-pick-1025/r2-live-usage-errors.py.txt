@@ -1,0 +1,32 @@
+import os,pathlib,subprocess,tempfile,shutil
+root=pathlib.Path.cwd();home=pathlib.Path(tempfile.mkdtemp(prefix='usage-errors-live-',dir=root/'.gate-test-tmp'))
+evidence=pathlib.Path('~/.no-mistakes/evidence/01M5S8ZXPT30MGED94KBF964X7')
+env={k:v for k,v in os.environ.items() if not k.startswith('FM_') and k not in ['QUOTA_AXI_SNAPSHOT','QUOTA_AXI_MAX_AGE','QUOTA_AXI_CLAUDE_PROFILES','QUOTA_AXI_CLAUDE_SWAP']}
+env.update(FM_HOME=str(home),TMPDIR=str(root/'.gate-test-tmp'))
+log=open(evidence/'r2-usage-errors-legacy-live.log','w',buffering=1)
+def check(label,overrides={}):
+    log.write(label+'\n$ bash bin/fm-usage-warner.sh check\n')
+    p=subprocess.run(['bash',str(root/'bin/fm-usage-warner.sh'),'check'],env=env|overrides,text=True,capture_output=True,timeout=25)
+    log.write(p.stdout+p.stderr+'exit='+str(p.returncode)+'\n');assert p.returncode==0
+    return p.stdout
+try:
+    for d in ['config','state','tools']:(home/d).mkdir()
+    (home/'config/usage-warner').write_text('seven_day:100\n')
+    # Missing installed command is the actual product condition, no fake reader.
+    for name in ['bash','env','dirname','basename','ln','touch','uname','stat','ps','awk','grep','sed','cat','mkdir','rmdir','mktemp','chmod','mv','rm','sleep','date','perl','sh','head','tail','wc','tr','cut','readlink','kill','sort']:
+        target=shutil.which(name)
+        if target:(home/'tools'/name).symlink_to(target)
+    missing={'PATH':str(home/'tools')}
+    assert 'quota-axi is not installed' in check('Hide quota-axi from the child PATH',missing)
+    assert check('Unchanged unavailable dependency is reported only once',missing)==''
+    assert check('Restore actual quota-axi and read real Claude usage')==''
+    assert 'reported=\n' in (home/'state/.usage-warner').read_text()
+    (home/'config/usage-warner').write_text('seven_day:1\nseven_day:2\n')
+    record=home/'state/.usage-warner'
+    record.write_text('fm-usage-warner-v1\nreported=\nnotified-begin\nseven_day\nnotified-end\n')
+    assert check('Read v1 delivery record against actual above-threshold Claude windows')==''
+    after=record.read_text();log.write('Migrated serialized record:\n'+after)
+    assert 'fm-usage-warner-v2\n' in after and 'seven_day:1\n' in after and 'seven_day:2\n' in after
+    log.write('Standing read failure deduplicated and cleared on recovery; retained v1 compatibility avoided repeat notification. No substitute for quota or Notification Center.\n')
+finally:
+    shutil.rmtree(home);log.write('Disposable home removed.\n');log.close()

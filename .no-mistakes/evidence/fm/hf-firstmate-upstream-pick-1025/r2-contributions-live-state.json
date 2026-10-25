@@ -1,0 +1,210 @@
+{
+  "schema": "fm-contributions.v1",
+  "task": "live-review",
+  "records": [
+    {
+      "url": "https://github.com/basecamp/omarchy/pull/13212",
+      "kind": "pr",
+      "checked_at": "2026-10-25T12:20:38Z",
+      "observation": {
+        "head": "4c66862157bad42a3a71ebba1f1af2d6911c21b3",
+        "state": "open",
+        "base_repo": "omacom/omarchy",
+        "updated_at": "2026-10-25T11:58:57Z",
+        "draft": true,
+        "mergeable": "mergeable",
+        "viewer_permission": "READ",
+        "can_merge": false,
+        "review_decision": "",
+        "reviews": [
+          {
+            "id": 5546437841,
+            "state": "COMMENTED",
+            "submitted_at": "2026-10-16T10:27:49Z",
+            "commit_id": "a661e450e81c71ee8d60f1f6a246ad8e3a37e513",
+            "user": {
+              "login": "greptile-apps[bot]"
+            }
+          },
+          {
+            "id": 5562718855,
+            "state": "COMMENTED",
+            "submitted_at": "2026-10-18T11:23:38Z",
+            "commit_id": "5e87f34c238cced9f155a74fe13daf1c065b292b",
+            "user": {
+              "login": "greptile-apps[bot]"
+            }
+          },
+          {
+            "id": 5564242212,
+            "state": "COMMENTED",
+            "submitted_at": "2026-10-18T18:17:59Z",
+            "commit_id": "fbaecdd2aaf2f946c691ffd928ccb304aa32cdb7",
+            "user": {
+              "login": "greptile-apps[bot]"
+            }
+          },
+          {
+            "id": 5589428548,
+            "state": "COMMENTED",
+            "submitted_at": "2026-10-20T18:03:47Z",
+            "commit_id": "bd4437ae809bb492d7cd43d50c0220c4f3537545",
+            "user": {
+              "login": "greptile-apps[bot]"
+            }
+          },
+          {
+            "id": 5591710282,
+            "state": "COMMENTED",
+            "submitted_at": "2026-10-20T21:03:49Z",
+            "commit_id": "13125398460f897217651f522b2194fa3937b026",
+            "user": {
+              "login": "calebl"
+            }
+          },
+          {
+            "id": 5591710652,
+            "state": "COMMENTED",
+            "submitted_at": "2026-10-20T21:03:51Z",
+            "commit_id": "13125398460f897217651f522b2194fa3937b026",
+            "user": {
+              "login": "calebl"
+            }
+          }
+        ],
+        "checks": [
+          {
+            "name": "Greptile Review",
+            "id": 120934330919,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-24T17:11:33Z"
+          }
+        ],
+        "events": [
+          {
+            "token": "comment:6213462706:2026-10-24T17:15:53Z:",
+            "type": "comment",
+            "source": "https://github.com/omacom/omarchy/pull/13212#issuecomment-6213462706",
+            "head": null,
+            "author": "greptile-apps[bot]",
+            "body": "<!-- greptile_summary -->\n\n<h2><a href=\"https://app.greptile.com/api/retrigger?id=80384870\"><picture><source media=\"(prefers-color-scheme: dark)\" srcset=\"https://greptile-static-assets.s3.amazonaws.com/badges/RetriggerDark.svg?v=2\"><source media=\"(prefers-color-scheme: light)\" srcset=\"https://greptile-static-assets.s3.amazonaws.com/badges/Retrigger.svg?v=2\"><img alt=\"Retrigger\" src=\"https://greptile-static-assets.s3.amazonaws.com/badges/Retrigger.svg?v=2\" align=\"right\"></picture></a><a href=\"htt",
+            "review_bot": true
+          },
+          {
+            "token": "review:5546437841:2026-10-16T10:27:49Z:COMMENTED",
+            "type": "review",
+            "source": "https://github.com/omacom/omarchy/pull/13212#pullrequestreview-5546437841",
+            "head": "a661e450e81c71ee8d60f1f6a246ad8e3a37e513",
+            "author": "greptile-apps[bot]",
+            "body": "",
+            "review_bot": true
+          },
+          {
+            "token": "review:5562718855:2026-10-18T11:23:38Z:COMMENTED",
+            "type": "review",
+            "source": "https://github.com/omacom/omarchy/pull/13212#pullrequestreview-5562718855",
+            "head": "5e87f34c238cced9f155a74fe13daf1c065b292b",
+            "author": "greptile-apps[bot]",
+            "body": "",
+            "review_bot": true
+          },
+          {
+            "token": "review:5564242212:2026-10-18T18:17:59Z:COMMENTED",
+            "type": "review",
+            "source": "https://github.com/omacom/omarchy/pull/13212#pullrequestreview-5564242212",
+            "head": "fbaecdd2aaf2f946c691ffd928ccb304aa32cdb7",
+            "author": "greptile-apps[bot]",
+            "body": "",
+            "review_bot": true
+          },
+          {
+            "token": "review:5589428548:2026-10-20T18:03:47Z:COMMENTED",
+            "type": "review",
+            "source": "https://github.com/omacom/omarchy/pull/13212#pullrequestreview-5589428548",
+            "head": "bd4437ae809bb492d7cd43d50c0220c4f3537545",
+            "author": "greptile-apps[bot]",
+            "body": "",
+            "review_bot": true
+          },
+          {
+            "token": "review-comment:4293595796:2026-10-16T10:27:49Z:",
+            "type": "review-comment",
+            "source": "https://github.com/omacom/omarchy/pull/13212#discussion_r4293595796",
+            "head": "a661e450e81c71ee8d60f1f6a246ad8e3a37e513",
+            "author": "greptile-apps[bot]",
+            "body": "<a href=\"#\"><img alt=\"P2\" src=\"https://greptile-static-assets.s3.amazonaws.com/badges/p2.svg?v=9\" align=\"top\"></a> **Unnamed controls pass the lint**\n\nThe naming lint accepts properties that never reach `Accessible.name`. For example, `PanelSlider` and `ToggleSwitch` only use `accessibleName`, but this table also accepts `tooltipText` and `label`. A caller can therefore pass the check while leaving its control unnamed. Match each entry to the component's actual name fallback, and add negative fi",
+            "review_bot": true
+          },
+          {
+            "token": "review-comment:4306824940:2026-10-18T11:23:38Z:",
+            "type": "review-comment",
+            "source": "https://github.com/omacom/omarchy/pull/13212#discussion_r4306824940",
+            "head": "4c66862157bad42a3a71ebba1f1af2d6911c21b3",
+            "author": "greptile-apps[bot]",
+            "body": "<a href=\"#\"><img alt=\"P2\" src=\"https://greptile-static-assets.s3.amazonaws.com/badges/p2.svg?v=9\" align=\"top\"></a> **Escaped icons pass as names**\n\nThe naming lint accepts `BarIconButton { accessibleName: \"\\ue900\" }` even though its name is only an icon. `tokens()` keeps the escape as ASCII characters, so `glyph_string()` returns false and the name passes. This leaves screen reader users with an unreadable name despite a passing test.\n\nDecode QML Unicode escapes before checking glyphs, and add a",
+            "review_bot": true
+          },
+          {
+            "token": "review-comment:4308149471:2026-10-18T18:17:59Z:",
+            "type": "review-comment",
+            "source": "https://github.com/omacom/omarchy/pull/13212#discussion_r4308149471",
+            "head": "fbaecdd2aaf2f946c691ffd928ccb304aa32cdb7",
+            "author": "greptile-apps[bot]",
+            "body": "<a href=\"#\"><img alt=\"P2\" src=\"https://greptile-static-assets.s3.amazonaws.com/badges/p2.svg?v=9\" align=\"top\"></a> **Unnamed buttons pass the check**\n\nThe naming lint skips any `Button` whose explicit `text` is not a glyph, including `text: \"\"`. Thus `Button { iconText: \"\\ue900\"; text: \"\" }` passes without a name, even though `Button.accessibleName` resolves to an empty string. This leaves a gap in the check meant to catch unnamed controls for screen-reader users.\n\nOnly skip buttons with non-emp",
+            "review_bot": true
+          },
+          {
+            "token": "review-comment:4328450278:2026-10-20T18:03:47Z:",
+            "type": "review-comment",
+            "source": "https://github.com/omacom/omarchy/pull/13212#discussion_r4328450278",
+            "head": "4c66862157bad42a3a71ebba1f1af2d6911c21b3",
+            "author": "greptile-apps[bot]",
+            "body": "<a href=\"#\"><img alt=\"P2\" src=\"https://greptile-static-assets.s3.amazonaws.com/badges/p2.svg?v=9\" align=\"top\"></a> **Actions report false selection**\n\n`CursorSurface` marks every named row as selectable and uses `current` as its selected state. This includes ordinary actions such as Dropbox login and file opening. In Tailscale's copy menu, moving the keyboard cursor also reports a selection before anything is copied. Screen-reader users therefore hear highlighting described as a completed choice",
+            "review_bot": true
+          },
+          {
+            "token": "review-comment:4328450293:2026-10-20T18:03:47Z:",
+            "type": "review-comment",
+            "source": "https://github.com/omacom/omarchy/pull/13212#discussion_r4328450293",
+            "head": "4c66862157bad42a3a71ebba1f1af2d6911c21b3",
+            "author": "greptile-apps[bot]",
+            "body": "<a href=\"#\"><img alt=\"P2\" src=\"https://greptile-static-assets.s3.amazonaws.com/badges/p2.svg?v=9\" align=\"top\"></a> **Two bands report selected**\n\n`BandPill` opts into `Button` selection, which reports `selected || active`. When the user changes bands, `bandEffective` immediately becomes the requested band while `bandCurrent` still names the old band during reconnect. Screen-reader users therefore hear both pills announced as selected.\n\nOverride `Accessible.selected` here to follow only `selected",
+            "review_bot": true
+          }
+        ],
+        "absent_checks": []
+      },
+      "verdict": null,
+      "seen": [
+        "comment:6213462706:2026-10-24T17:15:53Z:",
+        "review-comment:4293595796:2026-10-16T10:27:49Z:",
+        "review-comment:4306824940:2026-10-18T11:23:38Z:",
+        "review-comment:4308149471:2026-10-18T18:17:59Z:",
+        "review-comment:4328450278:2026-10-20T18:03:47Z:",
+        "review-comment:4328450293:2026-10-20T18:03:47Z:",
+        "review:5546437841:2026-10-16T10:27:49Z:COMMENTED",
+        "review:5562718855:2026-10-18T11:23:38Z:COMMENTED",
+        "review:5564242212:2026-10-18T18:17:59Z:COMMENTED",
+        "review:5589428548:2026-10-20T18:03:47Z:COMMENTED"
+      ],
+      "pending": [],
+      "notified": [
+        "comment:6213462706:2026-10-24T17:15:53Z:",
+        "review-comment:4293595796:2026-10-16T10:27:49Z:",
+        "review-comment:4306824940:2026-10-18T11:23:38Z:",
+        "review-comment:4308149471:2026-10-18T18:17:59Z:",
+        "review-comment:4328450278:2026-10-20T18:03:47Z:",
+        "review-comment:4328450293:2026-10-20T18:03:47Z:",
+        "review:5546437841:2026-10-16T10:27:49Z:COMMENTED",
+        "review:5562718855:2026-10-18T11:23:38Z:COMMENTED",
+        "review:5564242212:2026-10-18T18:17:59Z:COMMENTED",
+        "review:5589428548:2026-10-20T18:03:47Z:COMMENTED"
+      ],
+      "error": null,
+      "closeout_head": "4c66862157bad42a3a71ebba1f1af2d6911c21b3",
+      "closeout_since": "2026-10-25T11:58:57Z",
+      "closeout_notice": null
+    }
+  ]
+}

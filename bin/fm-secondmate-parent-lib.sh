@@ -27,7 +27,11 @@ fm_secondmate_parent_record_parse() {
   # bytes together), so a NUL-bearing parent_home can resolve to a home the
   # record's bytes never name contiguously. Reject the whole record as corrupt
   # before any field parsing instead of letting the interpreter pick a home.
-  [ "$(wc -c < "$file")" -eq "$(LC_ALL=C tr -d '\0' < "$file" | wc -c)" ] || return 1
+  # Compare the filtered stream directly, avoiding two byte-count processes.
+  # Prefix relative paths so a file named '-' is not read as cmp's stdin.
+  case "$file" in /*) ;; *) file="./$file" ;; esac
+  # shellcheck disable=SC2094 # Both processes only read the record.
+  LC_ALL=C tr -d '\0' < "$file" | cmp -s "$file" - || return 1
   while IFS= read -r line || [ -n "$line" ]; do
     case "$line" in
       schema=*)

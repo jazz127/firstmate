@@ -1,18 +1,17 @@
 #!/usr/bin/env bash
 # Detect the agent harness this process tree runs on.
-# Usage: fm-harness.sh                  print own harness: claude|codex|opencode|pi|pi-signed|grok|kimi|cursor|gemini|muse|rovo|omp|agy|devin|unknown
+# Usage: fm-harness.sh                  print own harness: claude|codex|opencode|pi|pi-signed|grok|kimi|cursor|gemini|muse|rovo|omp|agy|devin|commandcode|polytoken|unknown
 #        fm-harness.sh crew             print the effective CREWMATE harness
 #                                        (config/crew-harness; "default" resolves to own)
-#        fm-harness.sh secondmate       print the harness the PRIMARY uses to launch
-#                                        SECONDMATE agents: config/secondmate-harness ->
+#        fm-harness.sh secondmate [<id>] print the harness the PRIMARY uses to launch
+#                                        SECONDMATE agents: mate override -> config/secondmate-harness ->
 #                                        config/crew-harness -> own. "default" or absent
 #                                        defers to the crew resolution, so an unset
 #                                        secondmate-harness behaves exactly as the crew
 #                                        harness did before this knob existed.
-#        fm-harness.sh secondmate-model    print the optional MODEL token from
-#                                        config/secondmate-harness, or empty when absent.
-#        fm-harness.sh secondmate-effort   print the optional EFFORT token from
-#                                        config/secondmate-harness, or empty when absent.
+#        fm-harness.sh secondmate-model [<id>]
+#        fm-harness.sh secondmate-effort [<id>]
+#                                        print optional profile tokens for that mate.
 #        fm-harness.sh validate-native-effort <harness> <model> <effort>
 #                                        Refuse ultra unless the harness is pi or
 #                                        pi-signed and the model explicitly names
@@ -39,10 +38,10 @@
 #                                        so a caller that knows the terminal's foreground
 #                                        process group can keep a backgrounded process out
 #                                        of the selection.
-# config/secondmate-harness format: a single line "<harness> [<model>] [<effort>]",
+# config/secondmate-harness and config/secondmate-harness.d/<id> format: a single line "<harness> [<model>] [<effort>]",
 # whitespace-separated. A bare "<harness>" (today's format) behaves exactly as before:
 # harness only, no model/effort. Only the first non-empty, non-comment line is parsed.
-# Model/effort come ONLY from this file - config/crew-harness stays a bare adapter
+# Model/effort come ONLY from the selected secondmate file - config/crew-harness stays a bare adapter
 # name and is never parsed for a model.
 # Detection evidence and precedence:
 #   Markers  - verified environment variables a harness publishes about itself.
@@ -143,7 +142,7 @@ harness_marker() {
   # identified, and any rule that must be RELIABLE under grok has to test the hook
   # markers too (see .claude/settings.json Stop entries, docs/turnend-guard.md).
   [ "${GROK_AGENT:-}" = "1" ] && { echo grok; return; }
-  # codex, opencode, kimi, muse, agy, and devin publish no harness-identity marker at all, so
+  # codex, opencode, kimi, muse, agy, devin, commandcode, and polytoken publish no harness-identity marker at all, so
   # they are never named here and are identified by ancestry alone. That is the
   # whole reason a foreign marker must not outrank ancestry: with markers winning
   # unconditionally, any retained CLAUDECODE would silently rename one of them.
@@ -238,7 +237,25 @@ harness_process_verdict() {  # <pid>
     # inherited launcher value, not an agy identity), so like muse it is
     # detected by ancestry alone.
     agy) echo "comm agy"; return ;;
+    # polytoken (Polytoken CLI) is a daemon-plus-TUI whose per-session daemon
+    # process name is exactly `polytoken` (verified live on 0.8.19: a TUI
+    # session's daemon runs as comm `polytoken` at ppid 1, and a shell tool
+    # subprocess's parent IS the daemon, so the walk from any real tool
+    # subprocess reaches it at hop one). Anchored, never *polytoken*, so
+    # unrelated commands containing that fragment cannot be misread as this
+    # harness. polytoken publishes no harness-identity marker of its own and
+    # does not clear inherited foreign markers (verified: AGENT=1,
+    # ORCA_AGENT_HOOK_ENV, and ORCA_OPENCODE_AGENT from the launching session
+    # reached a worker tool subprocess), so like kimi, muse, agy, and devin it
+    # is detected by ancestry alone, and bin/fm-spawn.sh clears the foreign
+    # markers at its launch boundary as defense in depth.
+    polytoken) echo "comm polytoken"; return ;;
     devin) echo "comm devin"; return ;;
+    # Command Code runs as a node bundle that sets its own process title, so
+    # the kernel process name is exactly `command-code` (verified, Command Code
+    # 1.74.1: comm=command-code and the rewritten argv is the same word).
+    # Anchored, so an unrelated command containing that fragment never matches.
+    command-code) echo "comm commandcode"; return ;;
     node*|python*)
       # Bare interpreter: match the harness name in its script path.
       args=$(ps -o args= -p "$pid" 2>/dev/null)
@@ -397,7 +414,7 @@ supervision_primary_pin() {
   local pin=${FM_SUPERVISION_PRIMARY_HARNESS:-}
   [ "${FM_SUPERVISION_ACTOR:-}" = branch ] && [ -n "$pin" ] || return 0
   case "$pin" in
-    claude|codex|opencode|pi|pi-signed|grok|kimi|cursor|gemini|muse|rovo|omp|agy|devin)
+    claude|codex|opencode|pi|pi-signed|grok|kimi|cursor|gemini|muse|rovo|omp|agy|devin|commandcode|polytoken)
       printf '%s\n' "$pin"
       ;;
     *)
@@ -451,12 +468,12 @@ resolve_crew() {
   if [ -z "$crew" ] || [ "$crew" = "default" ]; then detect_own; else echo "$crew"; fi
 }
 
-# Print the first non-empty, non-comment line of config/secondmate-harness
+# Print the first non-empty, non-comment line of one secondmate pin file
 # (leading/trailing whitespace trimmed), or nothing when the file is absent or
 # holds only blank/comment lines.
-secondmate_line() {
-  local line
-  [ -f "$CONFIG/secondmate-harness" ] || return 0
+secondmate_file_line() {
+  local file=$1 line
+  [ -f "$file" ] || return 0
   while IFS= read -r line || [ -n "$line" ]; do
     line="${line#"${line%%[![:space:]]*}"}"
     line="${line%"${line##*[![:space:]]}"}"
@@ -466,14 +483,33 @@ secondmate_line() {
     esac
     printf '%s\n' "$line"
     return 0
-  done < "$CONFIG/secondmate-harness"
+  done < "$file"
+}
+
+# A present, concrete per-mate profile replaces the global profile as a unit.
+# A blank or "default" override defers to the global file; omitted model and
+# effort never leak across profiles with different harnesses.
+secondmate_line() {
+  local id=${1:-} line token
+  if [ -n "$id" ]; then
+    case "$id" in
+      .|..|*[!a-zA-Z0-9._-]*) echo "error: invalid secondmate id '$id'" >&2; return 2 ;;
+    esac
+    line=$(secondmate_file_line "$CONFIG/secondmate-harness.d/$id")
+    token=${line%%[[:space:]]*}
+    if [ -n "$token" ] && [ "$token" != default ]; then
+      printf '%s\n' "$line"
+      return 0
+    fi
+  fi
+  secondmate_file_line "$CONFIG/secondmate-harness"
 }
 
 # Print the 1-based whitespace-separated token (1=harness, 2=model, 3=effort) of
 # the resolved secondmate_line, or nothing if the line or that field is absent.
 secondmate_field() {
-  local idx=$1 line
-  line=$(secondmate_line)
+  local idx=$1 id=${2:-} line
+  line=$(secondmate_line "$id") || return
   [ -n "$line" ] || return 0
   # shellcheck disable=SC2086  # deliberate word-splitting: tokenizing the line into fields
   set -- $line
@@ -485,35 +521,35 @@ secondmate_field() {
 }
 
 # Resolve the harness the PRIMARY uses to launch SECONDMATE agents: a fallback
-# chain config/secondmate-harness -> config/crew-harness -> own. An absent or
-# "default" secondmate-harness token defers to the crew resolution, so an unset
+# chain mate override -> config/secondmate-harness -> config/crew-harness -> own.
+# An absent or "default" global secondmate-harness token defers to the crew resolution, so an unset
 # secondmate-harness behaves exactly as before this knob existed (a secondmate
 # launched on the crew harness). config/secondmate-harness is the PRIMARY's own
 # setting and is never inherited downstream - secondmates do not spawn secondmates.
 resolve_secondmate() {
   local sm
-  sm=$(secondmate_field 1)
+  sm=$(secondmate_field 1 "${1:-}") || return
   if [ -z "$sm" ] || [ "$sm" = "default" ]; then sm=$(resolve_crew) || exit; fi
   echo "$sm"
 }
 
-# Print the optional model token (2nd field) from config/secondmate-harness, or
+# Print the optional model token (2nd field) from the selected secondmate pin, or
 # empty when the harness token is absent/"default" (harness-only file, same as
 # today) or when no model token is present.
 resolve_secondmate_model() {
   local sm
-  sm=$(secondmate_field 1)
+  sm=$(secondmate_field 1 "${1:-}") || return
   [ -n "$sm" ] && [ "$sm" != "default" ] || return 0
-  secondmate_field 2
+  secondmate_field 2 "${1:-}"
 }
 
-# Print the optional effort token (3rd field) from config/secondmate-harness,
+# Print the optional effort token (3rd field) from the selected secondmate pin,
 # the same way.
 resolve_secondmate_effort() {
   local sm
-  sm=$(secondmate_field 1)
+  sm=$(secondmate_field 1 "${1:-}") || return
   [ -n "$sm" ] && [ "$sm" != "default" ] || return 0
-  secondmate_field 3
+  secondmate_field 3 "${1:-}"
 }
 
 validate_native_effort() {
@@ -548,8 +584,8 @@ case "${1:-}" in
     harness_ancestry_descent "$descent_pid" ${1+"$@"}
     ;;
   crew) resolve_crew ;;
-  secondmate) resolve_secondmate ;;
-  secondmate-model) resolve_secondmate_model ;;
-  secondmate-effort) resolve_secondmate_effort ;;
+  secondmate) resolve_secondmate "${2:-}" ;;
+  secondmate-model) resolve_secondmate_model "${2:-}" ;;
+  secondmate-effort) resolve_secondmate_effort "${2:-}" ;;
   *) detect_own ;;
 esac

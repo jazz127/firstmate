@@ -787,6 +787,51 @@ test_malformed_event_time_never_moves_the_decision_fold() {
   pass "malformed event times never open or close a decision"
 }
 
+test_wait_predicates_honor_custom_verbs_without_output() {
+  local FM_CLASSIFY_PAUSED_VERB=waiting FM_CLASSIFY_CAPTAIN_HELD_VERB=held
+  local line output predicate
+  for line in 'waiting: reset' "waiting corr=$CORR [key=reset]: reset" \
+    'held [at=1700000000] [key=review]: tracked'; do
+    output=$(status_is_paused_or_captain_held "$line") || fail "custom wait was not classified: $line"
+    [ -z "$output" ] || fail "wait predicate printed output: $output"
+  done
+  for line in 'paused: default verb is overridden' 'captain-held: overridden' \
+    'working: waiting for a held lock' "waiting corr=bad: invalid token" \
+    "corr=$CORR waiting: token first" ''; do
+    for predicate in status_is_paused status_is_captain_held status_is_paused_or_captain_held; do
+      output=$($predicate "$line") && fail "$predicate accepted a non-wait: $line"
+      [ -z "$output" ] || fail "$predicate printed output on refusal: $output"
+    done
+  done
+  status_is_paused 'waiting: reset' || fail "custom pause verb was ignored"
+  status_is_captain_held 'held: tracked' || fail "custom hold verb was ignored"
+  pass "wait predicates honor custom verbs, reject misleading prose, and remain silent"
+}
+
+test_paused_deadline_requires_a_complete_utc_token() {
+  local token output
+  for token in 2026-10-15T09:00ZZ 2026-10-15T09:00Zjunk \
+    2026-10-15T09:00Z+10:00 2026-10-15T09:00Z-01:00 \
+    2026-10-15T09:00Z_oops 2026-10-15T09:00Z/junk \
+    2026-10-15T09:00:15Zjunk 2026-10-15T09:00:15Z+10:00; do
+    output=$(status_paused_until "paused: waiting until $token") \
+      && fail "malformed deadline was truncated into a valid UTC time: $token"
+    [ -z "$output" ] || fail "malformed deadline printed an epoch: $token -> $output"
+  done
+  for token in 2026-10-15T09:00Z 2026-10-15T09:00Z. '2026-10-15T09:00Z,' \
+    2026-10-15T09:00Z';' 2026-10-15T09:00Z')'; do
+    output=$(status_paused_until "paused: waiting UNTIL $token next check") \
+      || fail "valid deadline or sentence punctuation was refused: $token"
+    [ "$output" = 1792054800 ] || fail "valid deadline changed: $token -> $output"
+  done
+  output=$(status_paused_until $'paused: waiting until\t2026-10-15T09:00:15Z') \
+    || fail "a tab-separated seconds deadline was refused"
+  [ "$output" = 1792054815 ] || fail "seconds precision was lost: $output"
+  pass "pause deadlines require a whole UTC token and allow ordinary sentence punctuation"
+}
+
+test_paused_deadline_requires_a_complete_utc_token
+test_wait_predicates_honor_custom_verbs_without_output
 test_captain_override_ignores_event_time
 test_malformed_event_time_is_ordinary_bytes
 test_malformed_event_time_never_moves_the_decision_fold

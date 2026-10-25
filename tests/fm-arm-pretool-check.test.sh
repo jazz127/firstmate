@@ -459,7 +459,7 @@ test_allow_is_silent_both_modes() {
 test_shellcheck_clean() {
   local out
   command -v shellcheck >/dev/null 2>&1 || { pass "shellcheck not installed, skipping"; return; }
-  out=$("$ROOT/bin/fm-lint.sh" "$CHECK" 2>&1)     || fail "bin/fm-arm-pretool-check.sh is not lint-clean under the pinned definition: $out"
+  out=$(FM_LINT_HOST_LOCK=off "$ROOT/bin/fm-lint.sh" "$CHECK" 2>&1)     || fail "bin/fm-arm-pretool-check.sh is not lint-clean under the pinned definition: $out"
   pass "bin/fm-arm-pretool-check.sh is clean under bin/fm-lint.sh"
 }
 

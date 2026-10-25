@@ -55,7 +55,8 @@ cp "$ROOT/bin/fm-remote-job-lib.sh" "$ROOT/bin/fm-remote-job-worker.sh" \
   "$ROOT/bin/fm-operational-input.sh" "$ROOT/bin/fm-tmux-lib.sh" \
   "$ROOT/bin/fm-composer-lib.sh" "$ROOT/bin/fm-cursor-lib.sh" \
   "$ROOT/bin/fm-classify-lib.sh" "$ROOT/bin/fm-timeout-lib.sh" \
-  "$ROOT/bin/fm-ff-lib.sh" "$ROOT/bin/fm-secondmate-registry-lib.sh" \
+  "$ROOT/bin/fm-ff-lib.sh" "$ROOT/bin/fm-runtime-branch-lib.sh" \
+  "$ROOT/bin/fm-secondmate-registry-lib.sh" \
   "$REMOTE_ROOT/bin/"
 mkdir -p "$REMOTE_ROOT/bin/backends"
 cp "$ROOT/bin/backends/herdr.sh" "$REMOTE_ROOT/bin/backends/herdr.sh"
@@ -119,6 +120,40 @@ export FM_REMOTE_JOB_STAGE_REAP_SECONDS=1
 . "$ROOT/bin/fm-remote-job-lib.sh"
 
 fm_remote_job_prepare_state "$ACCOUNT_HOME" || fail "$FM_REMOTE_JOB_ERROR"
+
+# A lock written by a launchd worker uses ps's C-locale start time. An SSH
+# checker may inherit a different LANG, so its lstart read must still match.
+LOCALE_PS="$FAKEBIN/locale-ps"
+cat > "$LOCALE_PS" <<'SH'
+#!/usr/bin/env bash
+if [ "${3-}" = -o ] && [ "${4-}" = lstart= ]; then
+  case "${LC_ALL:-${LANG:-C}}" in
+    C|POSIX) printf 'Mon Sep 28 15:23:44 2026\n' ;;
+    en_AU.UTF-8) printf 'Mon 28 Sep 15:23:44 2026\n' ;;
+    *) exit 91 ;;
+  esac
+  exit 0
+fi
+exit 92
+SH
+chmod +x "$LOCALE_PS"
+(
+  fm_remote_job_ps_bin() { printf '%s\n' "$LOCALE_PS"; }
+  uname() { if [ "${1-}" = -s ]; then printf 'Darwin\n'; else command uname "$@"; fi; }
+  unset LC_ALL
+  export LANG=en_AU.UTF-8
+  locale_lock=$(fm_remote_job_worker_lock_path)
+  mkdir -p "$locale_lock"
+  printf '%s\n' "$$" > "$locale_lock/pid"
+  printf 'Mon Sep 28 15:23:44 2026\n' > "$locale_lock/start"
+  fm_remote_job_process_command "$$" > "$locale_lock/command" \
+    || fail "the locale fixture could not record its process command"
+  fm_remote_job_lock_owner_matches_process "$ACCOUNT_HOME" \
+    || fail "a C-locale worker lock did not match under LANG=en_AU.UTF-8"
+) || fail "locale-independent remote worker identity check failed"
+rm -rf -- "$STATE_ROOT/worker.lock"
+pass "remote worker lock identity is stable under a non-C locale"
+
 rm -f -- "$STATE_ROOT/seq"
 SEQ_PIDS=()
 for i in $(seq 1 20); do

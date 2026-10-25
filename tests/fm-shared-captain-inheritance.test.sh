@@ -182,14 +182,19 @@ remote_put_shared() {
 }
 
 remote_quarantine_count() {
-  find "$1/data" -name 'captain-shared.md.remote-quarantine-*' | wc -l | tr -d ' '
+  local file count=0
+  for file in "$1/data"/captain-shared.md.remote-quarantine-*; do
+    [ -f "$file" ] || continue
+    count=$((count + 1))
+  done
+  printf '%s\n' "$count"
 }
 
 test_remote_receiver_accepts_source_only_edit_without_quarantine() {
-  local home source out qpath
-  home="$TMP_ROOT/remote-receiver/home"
-  source="$TMP_ROOT/remote-receiver/source.md"
-  mkdir -p "$home/data" "$home/config" "$TMP_ROOT/remote-receiver"
+  local name=${1:-remote-receiver} home source out qpath
+  home="$TMP_ROOT/$name/home"
+  source="$TMP_ROOT/$name/source.md"
+  mkdir -p "$home/data" "$home/config"
 
   write_shared "$source" "shared v1"
   out=$(remote_put_shared "$home" "$source" 1) || fail "remote first inherit failed: $out"
@@ -220,6 +225,45 @@ test_remote_receiver_accepts_source_only_edit_without_quarantine() {
     || fail "remote divergent inherit did not install the primary bytes"
   assert_shared_readonly "$home/data/captain-shared.md"
   pass "remote receiver accepts a source-only edit quietly and still quarantines real drift"
+}
+
+test_remote_push_preserves_literal_staging_paths() {
+  local dir="$TMP_ROOT/remote-push-path" code primary second staging out
+  code="$dir/code"; primary="$dir/primary"; second="$dir/second"
+  staging="$dir/literal\\new"
+  mkdir -p "$code" "$primary/data" "$primary/config" "$second" "$staging"
+  cp -R "$ROOT/bin" "$code/bin"
+  # Exercise sender and receiver CLIs with a direct fixture transport. The
+  # remote job runtime and its platform-specific lifecycle are not involved.
+  cat > "$code/bin/fm-on.sh" <<'SH'
+#!/usr/bin/env bash
+set -eu
+[ "$1" != --stdin ] || shift
+[ "$1" = ios ]; shift
+[ "$1" = fm-remote-inherit.sh ]; shift
+FM_HOME="$FM_TEST_INHERIT_DEST" exec "$FM_TEST_INHERIT_RECEIVER" "$@"
+SH
+  chmod +x "$code/bin/fm-on.sh"
+  printf -- '- ios - fixture (host: fixture-host; root: %s; home: %s; scope: fixture; projects: sample; added 2026-10-15)\n' \
+    "$code" "$second" > "$primary/data/secondmates.md"
+  printf 'codex\n' > "$primary/config/crew-harness"
+  write_shared "$primary/data/captain-shared.md" 'remote staging path fixture'
+  out=$(FM_HOME="$primary" FM_ROOT_OVERRIDE="$code" TMPDIR="$staging" \
+    FM_INHERITABLE_CONFIG=crew-harness FM_TEST_INHERIT_DEST="$second" \
+    FM_TEST_INHERIT_RECEIVER="$ROOT/bin/fm-remote-inherit.sh" \
+    "$code/bin/fm-remote-inherit-push.sh" ios 1 2>&1) || fail "literal-path inheritance push failed: $out"
+  cmp -s "$primary/config/crew-harness" "$second/config/crew-harness" || fail 'remote push lost config bytes'
+  cmp -s "$primary/data/captain-shared.md" "$second/data/captain-shared.md" || fail 'remote push lost shared bytes'
+  assert_shared_readonly "$second/data/captain-shared.md"
+  rm "$primary/config/crew-harness" "$primary/data/captain-shared.md"
+  out=$(FM_HOME="$primary" FM_ROOT_OVERRIDE="$code" TMPDIR="$staging" \
+    FM_INHERITABLE_CONFIG=crew-harness FM_TEST_INHERIT_DEST="$second" \
+    FM_TEST_INHERIT_RECEIVER="$ROOT/bin/fm-remote-inherit.sh" \
+    "$code/bin/fm-remote-inherit-push.sh" ios 2 2>&1) || fail "literal-path absence push failed: $out"
+  assert_absent "$second/config/crew-harness" 'remote push did not mirror config absence'
+  assert_absent "$second/data/captain-shared.md" 'remote push did not mirror shared absence'
+  [ "$(remote_quarantine_count "$second")" -eq 1 ] || fail 'remote absence lost the shared recovery copy'
+  pass 'remote push retains put and absence commitments with literal backslashes in its staging path'
 }
 
 test_drift_quarantine_collision_and_repeated_convergence() {
@@ -593,6 +637,9 @@ EOF
   pass "session-start digest renders data/captain-shared.md with the shared read-only label"
 }
 
+test_remote_receiver_accepts_source_only_edit_without_quarantine 'remote\new'
+test_remote_receiver_accepts_source_only_edit_without_quarantine $'remote\nnew'
+test_remote_push_preserves_literal_staging_paths
 test_first_copy_readonly_and_local_files_preserved
 test_true_divergence_after_inherit_still_quarantines
 test_interrupted_publication_matching_source_does_not_quarantine

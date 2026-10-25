@@ -84,8 +84,19 @@ test_scratchpad2_does_not_dirty_porcelain() {
   pass "scratchpad2/ does not make git status --porcelain dirty"
 }
 
+test_tool_scratch_dirs_ignored() {
+  local sample
+  for sample in .codex-live-check/cache/node/corepack/v1/pnpm/11.1.1/package.json \
+    nested/.codex-live-check/cache/item .corepack/item .pnpm-store/item .npm/item; do
+    git -C "$ROOT" check-ignore -q "$sample" \
+      || fail "git does not ignore generated tool scratch: $sample"
+  done
+  pass "generated tool scratch paths are ignored in this repository"
+}
+
 test_config_dir_ignored_as_category
 test_unrelated_path_stays_visible
 test_scratchpad_prefix_is_ignored
 test_scratchpad_prefix_ignores_no_tracked_path
 test_scratchpad2_does_not_dirty_porcelain
+test_tool_scratch_dirs_ignored

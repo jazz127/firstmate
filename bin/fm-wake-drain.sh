@@ -254,7 +254,7 @@ assert_watcher_liveness() {
 # receipt path rather than a second interpretation of general check wakes.
 inactive_outcome_fingerprints() { # <sequence> <key-prefix> [<rows-file>]
   local cutoff=$1 prefix=$2 rows=${3:-} epoch seq kind key payload
-  while IFS=$(printf '\t') read -r epoch seq kind key payload; do
+  while IFS=$'\t' read -r epoch seq kind key payload; do
     [ "$kind" = check ] || continue
     case "$seq" in ''|*[!0-9]*) continue ;; esac
     [ "$seq" -le "$cutoff" ] || continue
@@ -279,14 +279,6 @@ BRANCH_OUTCOME_INDEX_STATE=ok
 BRANCH_OUTCOME_INDEX_ENDPOINT=
 BRANCH_OUTCOME_INDEX_IDENT=
 STATUS_OUTCOME_BACKSTOP_ACKNOWLEDGED=
-outcome_index_ready_ok() { # <ready-path>
-  local seq
-  [ -f "$1" ] && [ -r "$1" ] && [ ! -L "$1" ] || return 1
-  seq=$(LC_ALL=C command cat "$1" 2>/dev/null) || return 1
-  case "$seq" in ''|*[!0-9]*) return 1 ;; esac
-  return 0
-}
-
 load_branch_outcome_index() { # <task>
   local task=$1 path data version seq endpoint ident extra size
   BRANCH_OUTCOME_INDEX_STATE=ok
@@ -309,7 +301,7 @@ load_branch_outcome_index() { # <task>
   data=$(LC_ALL=C command cat "$path" 2>/dev/null) \
     || { BRANCH_OUTCOME_INDEX_STATE=invalid; return 0; }
   case "$data" in *$'\n'*) BRANCH_OUTCOME_INDEX_STATE=invalid; return 0 ;; esac
-  IFS=$(printf '\t') read -r version seq endpoint ident extra <<EOF
+  IFS=$'\t' read -r version seq endpoint ident extra <<EOF
 $data
 EOF
   if [ "$version" != "$BRANCH_OUTCOME_INDEX_VERSION" ] || [ -n "$extra" ]; then
@@ -342,9 +334,9 @@ print_status_outcome_backstop_section() {  # <task-and-endpoint-snapshot>
       return 0
     fi
     ready="$STATE/.branch-outcome-index-ready"
-    if ! outcome_index_ready_ok "$ready"; then
+    if ! fm_branch_outcome_index_ready_ok "$ready"; then
       if ! "$SCRIPT_DIR/fm-branch-outcome.sh" processed-init --held-lock >/dev/null 2>&1 \
-        || ! outcome_index_ready_ok "$ready"; then
+        || ! fm_branch_outcome_index_ready_ok "$ready"; then
         fm_lock_release "$lock"
         printf 'STATUS OUTCOME BACKSTOP SKIPPED: bounded outcome indexes could not be rebuilt because the outcome store is unsafe; repair it before relying on drain recovery.\n'
         return 0
@@ -353,7 +345,7 @@ print_status_outcome_backstop_section() {  # <task-and-endpoint-snapshot>
   fi
 
   STATUS_OUTCOME_BACKSTOP_ACKNOWLEDGED=
-  while IFS=$(printf '\t') read -r task endpoint ident; do
+  while IFS=$'\t' read -r task endpoint ident; do
     [ -n "$task" ] || continue
     receipt=$(status_outcome_backstop_cursor_offset "$STATE/$task.status") || { rc=1; break; }
     [ "$receipt" -lt "$endpoint" ] || continue
@@ -434,7 +426,7 @@ print_unread_status_section() {
   fi
   [ -n "$unread" ] || return 0
 
-  while IFS=$(printf '\t') read -r task line; do
+  while IFS=$'\t' read -r task line; do
     [ -n "$task" ] || continue
     [ -n "$line" ] || continue
     line="$task $line"
@@ -476,7 +468,7 @@ print_open_decisions_section() {
   fi
   [ -n "$open" ] || return 0
 
-  while IFS=$(printf '\t') read -r task key verb note; do
+  while IFS=$'\t' read -r task key verb note; do
     [ -n "$task" ] || continue
     line="$task"
     [ "$key" = default ] || line="$line [key=$key]"
@@ -540,7 +532,7 @@ print_record_divergence_section() {
   diverged=$(fm_run_timed "$bound" "$SCRIPT_DIR/fm-captain-hold.sh" diverged 2>/dev/null) || return 0
   [ -n "$diverged" ] || return 0
 
-  while IFS=$(printf '\t') read -r task origin key title; do
+  while IFS=$'\t' read -r task origin key title; do
     [ -n "$task" ] || continue
     line="$task [key=$key] reads resolved in $origin's status log but is still held for the captain"
     [ -z "$title" ] || line="$line: $title"
@@ -646,7 +638,7 @@ print_branch_outcomes_section() {
   fi
 
   target=0
-  while IFS=$(printf '\t') read -r seq task task_line; do
+  while IFS=$'\t' read -r seq task task_line; do
     case "$seq" in ''|*[!0-9]*) continue ;; esac
     if [ "$held" -gt 0 ]; then
       held=$((held + 1))
@@ -778,7 +770,7 @@ print_status_sections() {
 }
 
 print_status_presentation() {  # [<deduped-raw-rows>]
-  local rows=${1:-} lock="$STATE/.status-presentation-lock" snapshot annotation_manifest fully_presented='' rc=0
+  local rows=${1:-} lock="$STATE/.status-presentation-lock" snapshot fully_presented='' rc=0
   local lock_rc holder_pid
   if fm_lock_acquire_wait_bounded "$lock" "$PRESENTATION_LOCK_TIMEOUT"; then
     :
@@ -799,10 +791,8 @@ print_status_presentation() {  # [<deduped-raw-rows>]
   }
   if [ "$rc" -eq 0 ] && [ -n "$rows" ]; then
     fm_wake_print_annotations "$rows" "$snapshot" || rc=1
-    if [ "$rc" -eq 0 ]; then
-      annotation_manifest=$(fm_wake_annotation_manifest "$rows") || rc=1
-      fully_presented=$(printf '%s\n' "$annotation_manifest" | awk -F '\t' '$2 == "direct" { sub(/\.status$/, "", $1); print $1 }') || rc=1
-    fi
+    # A historical signal can print an annotation too; receipt follows output.
+    [ "$rc" -ne 0 ] || fully_presented=$FM_WAKE_ANNOTATED_TASKS
   fi
   if [ "$rc" -eq 0 ] && [ -n "$snapshot" ]; then print_status_sections "$snapshot" "$fully_presented" || rc=1; fi
   fm_lock_release "$lock"
@@ -825,6 +815,10 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 
 if [ -n "$ACK_THROUGH" ]; then
+  if [ "$ACTOR" = branch ] && [ "${FM_BRANCH_EVENT_RECEIPTS:-0}" = 1 ]; then
+    echo "wake drain: the supervision host acknowledges branch rows after validating every event receipt" >&2
+    exit 3
+  fi
   fm_lock_acquire_wait "$FM_WAKE_QUEUE_LOCK"
 elif fm_lock_acquire_wait_bounded "$FM_WAKE_QUEUE_LOCK" "$PRESENTATION_LOCK_TIMEOUT"; then
   :
@@ -1049,7 +1043,11 @@ awk -F '\t' -v seqs="$ACTOR_ROWS_FILE" '
   BEGIN { while ((getline line < seqs) > 0) keep[line]=1 }
   NF >= 5 && ($2 in keep)
 ' "$FM_WAKE_QUEUE" > "$DRAIN_VIEW_TMP" || exit 1
-RAW_ROWS=$(fm_wake_print_deduped "$DRAIN_VIEW_TMP") || exit "$?"
+if [ "$ACTOR" = branch ] && [ "${FM_BRANCH_EVENT_RECEIPTS:-0}" = 1 ]; then
+  RAW_ROWS=$(cat "$DRAIN_VIEW_TMP") || exit "$?"
+else
+  RAW_ROWS=$(fm_wake_print_deduped "$DRAIN_VIEW_TMP") || exit "$?"
+fi
 rm -f -- "$DRAIN_VIEW_TMP" || exit 1
 DRAIN_VIEW_TMP=
 ACK_THROUGH=$(printf '%s\n' "$RAW_ROWS" | awk -F '\t' '$2 ~ /^[0-9]+$/ && $2 > max { max=$2 } END { print max + 0 }') || exit 1
@@ -1069,8 +1067,10 @@ case "$RECOVERY_MARKER_TOKEN" in
 esac
 fm_lock_release "$FM_WAKE_QUEUE_LOCK"
 DRAIN_LOCK_HELD=false
-printf 'WAKE_ACK_REQUIRED: after handling completes run bin/fm-wake-drain.sh --ack-through %s --recovery-generation %s\n' \
-  "$ACK_THROUGH" "${RECOVERY_MARKER_TOKEN##*:}" >&2
+if [ "$ACTOR" != branch ] || [ "${FM_BRANCH_EVENT_RECEIPTS:-0}" != 1 ]; then
+  printf 'WAKE_ACK_REQUIRED: after handling completes run bin/fm-wake-drain.sh --ack-through %s --recovery-generation %s\n' \
+    "$ACK_THROUGH" "${RECOVERY_MARKER_TOKEN##*:}" >&2
+fi
 
 (print_status_presentation "$RAW_ROWS") || true
 print_branch_outcomes_section || BRANCH_OUTCOMES_RC=1

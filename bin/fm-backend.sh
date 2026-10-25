@@ -330,35 +330,46 @@ fm_backend_required_tool_available() {  # <backend> <tool>
 }
 
 # fm_meta_get: the LAST value of `key=` in <meta-file>, or empty (never
-# errors) if the file or key is absent. Mirrors the ad hoc `grep '^key=' |
+# errors) if the file or key is absent or the record contains a NUL byte.
+# Mirrors the ad hoc `grep '^key=' |
 # tail -1 | cut -d= -f2-` snippet every fm-*.sh script used to repeat inline.
-fm_meta_get() {  # <meta-file> <key>
-  local meta=$1 key=$2 line value=''
-  [ -f "$meta" ] || return 0
-  while IFS= read -r line || [ -n "$line" ]; do
-    case "$line" in
-      "$key="*) value=${line#*=} ;;
-    esac
-  done < "$meta" 2>/dev/null || true
-  printf '%s' "$value"
+# With an output variable, assigns it without printing or requiring a subshell.
+# The _fm_meta_ prefix is reserved for this helper's local variables.
+fm_meta_get() {  # <meta-file> <key> [<output-variable>]
+  local _fm_meta_path=$1 _fm_meta_key=$2 _fm_meta_line _fm_meta_value=''
+  local _fm_meta_contents=''
+  # A successful NUL-delimited read means binary input. Parse only the same
+  # complete text snapshot that reached EOF, before Bash can erase any NULs.
+  if [ -f "$_fm_meta_path" ] && ! IFS= read -r -d '' _fm_meta_contents 2>/dev/null < "$_fm_meta_path"; then
+    while IFS= read -r _fm_meta_line || [ -n "$_fm_meta_line" ]; do
+      case "$_fm_meta_line" in
+        "$_fm_meta_key="*) _fm_meta_value=${_fm_meta_line#*=} ;;
+      esac
+    done <<< "$_fm_meta_contents"
+  fi
+  if [ "$#" -gt 2 ]; then
+    printf -v "$3" '%s' "$_fm_meta_value"
+  else
+    printf '%s' "$_fm_meta_value"
+  fi
 }
 
 # fm_backend_of_meta: the backend recorded in <meta-file>, defaulting to
 # `tmux` when the field is absent - the P1 compatibility contract.
 fm_backend_of_meta() {  # <meta-file>
   local v
-  v=$(fm_meta_get "$1" backend)
+  fm_meta_get "$1" backend v
   printf '%s' "${v:-tmux}"
 }
 
 fm_backend_target_of_meta() {  # <meta-file>
   local meta=$1 backend terminal window
-  backend=$(fm_backend_of_meta "$meta")
+  fm_meta_get "$meta" backend backend
   if [ "$backend" = orca ]; then
-    terminal=$(fm_meta_get "$meta" terminal)
+    fm_meta_get "$meta" terminal terminal
     [ -n "$terminal" ] && { printf '%s' "$terminal"; return 0; }
   fi
-  window=$(fm_meta_get "$meta" window)
+  fm_meta_get "$meta" window window
   [ -n "$window" ] && printf '%s' "$window"
 }
 
@@ -556,8 +567,8 @@ fm_backend_meta_for_window() {  # <target> <state-dir>
   local target=$1 state=$2 meta window terminal
   for meta in "$state"/*.meta; do
     [ -e "$meta" ] || continue
-    window=$(fm_meta_get "$meta" window)
-    terminal=$(fm_meta_get "$meta" terminal)
+    fm_meta_get "$meta" window window
+    fm_meta_get "$meta" terminal terminal
     { [ -n "$window" ] && [ "$window" = "$target" ]; } || { [ -n "$terminal" ] && [ "$terminal" = "$target" ]; } || continue
     printf '%s' "$meta"
     return 0
@@ -949,14 +960,18 @@ fm_backend_composer_state() {  # <backend> <target> [expected-label] -> empty|pe
 # probe). A gone tmux window or an unqueryable herdr pane (server down, pane
 # closed), missing zellij pane, or unreadable Orca terminal simply fails, which
 # IS "does not exist" for this purpose.
-# Mirrors fm-crew-state.sh's pane_readable check; exists here as one shared
-# primitive so callers that only need a fast alive/dead read (recovery
-# digests, the session-start fleet digest) do not re-derive it inline.
+# Owns fm-crew-state.sh's pane_readable check too, so callers that only need a
+# fast alive/dead read (recovery digests, the session-start fleet digest) do
+# not re-derive it inline.
+# For tmux, TARGET accepts `%pane`, `@window`, `session:@window`, a bare exact
+# session, and `session:window`, `session:index`, or a window index with
+# a numeric `.pane` suffix; optional `=session:=window` markers stay exact too.
 fm_backend_target_exists() {  # <backend> <target> [expected-label]
   local backend=$1 target=$2 expected_label=${3:-} session pane
   case "$backend" in
     tmux)
-      tmux display-message -p -t "$target" '#{pane_id}' >/dev/null 2>&1
+      fm_backend_source tmux || return 1
+      fm_backend_tmux_target_exists "$target"
       ;;
     herdr)
       fm_backend_source herdr || return 1

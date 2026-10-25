@@ -942,6 +942,34 @@ test_pi_harness_routes_itself_to_the_extension_model() {
   pass "fm-guard stale banner: Pi and pi-signed primaries route themselves to the extension model"
 }
 
+test_extension_hashes_ignore_path_rendering() {
+  local name dir home root source out
+  # SHA-256 of the fixed source bytes below, matching the extensions' content
+  # digest contract without asking the shell helper to create its own oracle.
+  local version=sha256:ddf066ee341c060cca67ed6faa462602690b490d98c6fecdf607c447754e14bb
+  for name in extension-plain 'extension-back\slash' $'extension-line\nbreak'; do
+    dir=$(make_guard_case "$name")
+    home=$(case_home "$dir")
+    root=$(case_root "$dir")
+    mkdir -p "$root/.pi/extensions"
+    for source in fm-primary-pi-watch.ts fm-primary-turnend-guard.ts; do
+      printf 'export const fixture = true;\n' > "$root/.pi/extensions/$source"
+    done
+    printf '%s\n%s\ngeneration=1 phase=active\n' "$version" "$$" > "$home/state/.pi-watch-extension-loaded"
+    printf '%s\n%s\n' "$version" "$$" > "$home/state/.pi-turnend-extension-loaded"
+    printf '%s\n' "$$" > "$home/state/.lock"
+    touch "$home/state/.last-watcher-beat"
+    out=$(run_guard_case_extension "$dir")
+    [ -z "$out" ] || fail "matching content digests were rejected for '$name': $out"
+
+    printf '// changed\n' >> "$root/.pi/extensions/fm-primary-pi-watch.ts"
+    out=$(run_guard_case_extension "$dir")
+    assert_contains "$out" 'WATCHER DOWN - SUPERVISION IS OFF' 'changed bytes must invalidate extension ownership'
+  done
+  pass 'extension ownership hashes content independently of path rendering'
+}
+
+test_extension_hashes_ignore_path_rendering
 test_first_stale_call_prints_full_banner
 test_full_banner_names_quiet_mode_when_active
 test_repeated_same_episode_prints_reminder_only

@@ -22,6 +22,20 @@
 # its recorded command group, leaving interrupted records for the replacement
 # worker's orphan recovery.
 #
+# A contender leaves a verified live lock owner untouched and retries while
+# readiness probes succeed or the lock directory is at most ten seconds old.
+# Once those guards clear, stale-lock reclamation removes the final pid, start,
+# and command files plus interrupted .pid.XXXXXX, .start.XXXXXX, and
+# .command.XXXXXX publications, where XXXXXX is six alphanumeric characters.
+# Cleanup validates every entry before deleting any lock file and accepts only
+# regular non-symlink files with those names; unknown entries, directories,
+# and symlinks fail closed. It removes the lock directory only when empty.
+# Worker exit and the Linux supervisor's verified dead-child cleanup use the
+# same publication cleanup. Quarantine recovery keeps its separate check that
+# recorded execution has stopped before allowing stale-lock reclamation.
+# tests/fm-remote-job.test.sh covers stale fragments, unknown entries, and
+# preservation of a live owner's lock.
+#
 # The serving loop does not busy-poll an idle queue. After a lane starts or is
 # reaped it rescans every FM_REMOTE_JOB_POLL_SECONDS for four passes, so a home
 # whose lane just finished starts its next job promptly; otherwise it sleeps
@@ -31,8 +45,8 @@
 # scan work and scheduling time. A separate heartbeat process refreshes readiness
 # about once per second, including during slow scans and sweeps, only while the
 # serving process is alive and its recorded lock ownership still verifies.
-# The heartbeat recreates a missing ready file with the serving process's PID
-# and mode 0600 after verifying ownership, without waiting for the serving loop.
+# The heartbeat recreates a missing or stale-identity ready file with the serving process's PID,
+# start identity, and mode 0600 after verifying ownership, without waiting for the serving loop.
 # Losing lock ownership stops heartbeat refresh; losing the heartbeat process
 # while still owning the lock stops the serving loop on its next pass.
 # The stale sweep, whose state preparation also re-applies the queue directories' 0700
@@ -104,24 +118,27 @@ worker_account_home() {
 }
 
 worker_write_heartbeat() { # <owner-pid>
-  local owner=$1 ready tmp
+  local pid=$1 ready tmp start
   ready=$(fm_remote_job_worker_ready_path)
+  start=$(fm_remote_job_process_start "$pid") || return 1
   tmp=$(umask 077; mktemp "$FM_REMOTE_JOB_STATE/.ready.XXXXXX") || return 1
-  printf '%s\n' "$owner" > "$tmp" || { rm -f -- "$tmp"; return 1; }
+  printf '%s\n%s\n' "$pid" "$start" > "$tmp" || { rm -f -- "$tmp"; return 1; }
   chmod 600 "$tmp" || { rm -f -- "$tmp"; return 1; }
   mv -f -- "$tmp" "$ready"
 }
 
 worker_heartbeat_loop() { # <account-home> <owner-pid>
-  local account_home=$1 owner=$2 ready owner_state
+  local account_home=$1 owner=$2 ready owner_state owner_start
   ready=$(fm_remote_job_worker_ready_path)
+  owner_start=$(fm_remote_job_process_start "$owner") || return 1
   trap 'exit 0' HUP INT TERM
   while kill -0 "$owner" 2>/dev/null &&
     owner_state=$(/bin/ps -p "$owner" -o state= 2>/dev/null) &&
     [ -n "$owner_state" ] && [[ "$owner_state" != *Z* ]] &&
     fm_remote_job_lock_owner_matches_process "$account_home" &&
     [ "$FM_REMOTE_JOB_OWNER_PID" = "$owner" ]; do
-    if [ ! -e "$ready" ] && [ ! -L "$ready" ]; then
+    if ! fm_remote_job_regular_bounded "$ready" 512 ||
+      ! cmp -s -- "$ready" <(printf '%s\n%s\n' "$owner" "$owner_start"); then
       worker_write_heartbeat "$owner" || exit 1
     else
       touch -c -- "$ready" || exit 1
@@ -187,6 +204,39 @@ worker_lock_recent() {
   [ $((now - mtime)) -le 10 ]
 }
 
+worker_remove_lock_publication_files() {
+  local path name suffix
+  for path in "$WORKER_LOCK"/* "$WORKER_LOCK"/.[!.]* "$WORKER_LOCK"/..?*; do
+    [ -e "$path" ] || [ -L "$path" ] || continue
+    name=${path##*/}
+    case "$name" in
+      pid|start|command) ;;
+      .pid.*|.start.*|.command.*)
+        suffix=${name#*.}
+        suffix=${suffix#*.}
+        [[ "$suffix" =~ ^[[:alnum:]]{6}$ ]] || return 1
+        ;;
+      *) return 1 ;;
+    esac
+    [ -f "$path" ] && [ ! -L "$path" ] || return 1
+  done
+  for path in "$WORKER_LOCK"/* "$WORKER_LOCK"/.[!.]* "$WORKER_LOCK"/..?*; do
+    [ -e "$path" ] || [ -L "$path" ] || continue
+    name=${path##*/}
+    case "$name" in
+      pid|start|command) ;;
+      .pid.*|.start.*|.command.*)
+        suffix=${name#*.}
+        suffix=${suffix#*.}
+        [[ "$suffix" =~ ^[[:alnum:]]{6}$ ]] || return 1
+        ;;
+      *) return 1 ;;
+    esac
+    [ -f "$path" ] && [ ! -L "$path" ] || return 1
+    rm -f -- "$path" || return 1
+  done
+}
+
 worker_quarantined_execution_stopped() { # <account-home>
   local account_home=$1 job state kind file pid
   fm_remote_job_regular_bounded "$WORKER_LOCK/quarantine" 256 || return 1
@@ -234,8 +284,7 @@ worker_acquire_lock() { # <account-home> <identity>
       sleep 0.1
       continue
     fi
-    [ ! -L "$WORKER_LOCK/pid" ] && [ ! -L "$WORKER_LOCK/start" ] && [ ! -L "$WORKER_LOCK/command" ] || return 1
-    rm -f -- "$WORKER_LOCK/pid" "$WORKER_LOCK/start" "$WORKER_LOCK/command" || return 1
+    worker_remove_lock_publication_files || return 1
     rmdir "$WORKER_LOCK" || return 1
   done
   return 1
@@ -315,9 +364,7 @@ worker_cleanup() {
   [ "$WORKER_LOCK_HELD" -eq 1 ] && [ "$WORKER_RELEASE_OWNERSHIP" -eq 1 ] || return 0
   owner_pid=$(fm_remote_job_read_single_line "$WORKER_LOCK/pid" 64 2>/dev/null || true)
   if [ -z "$owner_pid" ]; then
-    [ ! -L "$WORKER_LOCK/start" ] && [ ! -L "$WORKER_LOCK/command" ] &&
-      rm -f -- "$WORKER_LOCK/start" "$WORKER_LOCK/command" 2>/dev/null || true
-    rmdir "$WORKER_LOCK" 2>/dev/null || true
+    worker_remove_lock_publication_files && rmdir "$WORKER_LOCK" 2>/dev/null || true
     WORKER_LOCK_HELD=0
     return 0
   fi
@@ -328,8 +375,7 @@ worker_cleanup() {
   [ ! -L "$pid_file" ] && rm -f -- "$pid_file" 2>/dev/null || true
   [ ! -L "$ready" ] && rm -f -- "$ready" 2>/dev/null || true
   [ ! -L "$identity" ] && rm -f -- "$identity" 2>/dev/null || true
-  rm -f -- "$WORKER_LOCK/pid" "$WORKER_LOCK/start" "$WORKER_LOCK/command" 2>/dev/null || true
-  rmdir "$WORKER_LOCK" 2>/dev/null || true
+  worker_remove_lock_publication_files && rmdir "$WORKER_LOCK" 2>/dev/null || true
   WORKER_LOCK_HELD=0
 }
 
@@ -372,6 +418,16 @@ worker_signal_process_or_group() { # process|group <signal> <pid>
   esac
 }
 
+# A pre-upgrade supervisor is a worker lane; a pre-upgrade group leader is that
+# lane before exec or the job's git check or command under the job root.
+worker_legacy_execution_owner() { # <job-dir> <pid> <recorded start>
+  local command root
+  command=$(fm_remote_job_proven_legacy_command "$2" "$3") || return 1
+  [[ "$command" == *fm-remote-job-worker.sh* ]] && return 0
+  root=$(fm_remote_job_read_single_line "$1/root" 8192 2>/dev/null) || return 1
+  [ -n "$root" ] && [[ "$command" == *"$root"* ]]
+}
+
 worker_supervisor_identity_status() { # <job-dir> <pid>
   local job=$1 pid=$2 recorded_start actual_start
   recorded_start=$(fm_remote_job_read_single_line "$job/.claim/supervisor_start" 256 2>/dev/null) || return 2
@@ -380,7 +436,7 @@ worker_supervisor_identity_status() { # <job-dir> <pid>
     return 1
   }
   [ "$recorded_start" = "$actual_start" ] && return 0
-  return 1
+  worker_legacy_execution_owner "$job" "$pid" "$recorded_start"
 }
 
 # A leaderless live group still belongs to the recorded execution: its PGID
@@ -398,7 +454,7 @@ worker_group_identity_status() { # <job-dir> <pid>
     return 1
   }
   [ "$recorded_start" = "$actual_start" ] && return 0
-  return 1
+  worker_legacy_execution_owner "$job" "$pid" "$recorded_start"
 }
 
 worker_recorded_execution_alive() { # <job-dir> process|group <pid>
@@ -606,7 +662,7 @@ worker_claim() { # <job-dir>
 }
 
 worker_claim_owner_alive() { # <job-dir>
-  local job=$1 claim="$1/.claim" owner pid recorded_start actual_start
+  local job=$1 claim="$1/.claim" owner pid recorded_start actual_start command
   [ -d "$claim" ] && [ ! -L "$claim" ] || return 1
   owner="$claim/owner"
   fm_remote_job_regular_bounded "$owner" 64 || return 1
@@ -614,8 +670,13 @@ worker_claim_owner_alive() { # <job-dir>
   case "$pid" in ''|*[!0-9]*) return 1 ;; esac
   if [ -e "$claim/owner_start" ] || [ -L "$claim/owner_start" ]; then
     recorded_start=$(fm_remote_job_read_single_line "$claim/owner_start" 256 2>/dev/null) || return 1
-    actual_start=$(fm_remote_job_process_start "$pid" 2>/dev/null) || return 1
-    [ "$recorded_start" = "$actual_start" ]
+    actual_start=$(fm_remote_job_process_start "$pid" 2>/dev/null) || {
+      kill -0 "$pid" 2>/dev/null
+      return $?
+    }
+    [ "$recorded_start" = "$actual_start" ] && return 0
+    command=$(fm_remote_job_proven_legacy_command "$pid" "$recorded_start") || return 1
+    [[ "$command" == *fm-remote-job-worker.sh* ]]
     return
   fi
   kill -0 "$pid" 2>/dev/null
@@ -672,12 +733,25 @@ worker_read_text() { # <job-dir> <field> <max>
 }
 
 worker_publish_result() { # <job-dir> <exit>
-  local job=$1 exit_status=$2 tmp account_home
+  local job=$1 exit_status=$2 tmp account_home timeout
   case "$exit_status" in ''|*[!0-9]*) exit_status=125 ;; esac
   [ "$exit_status" -le 255 ] || exit_status=125
   for tmp in stdout stderr; do
     fm_remote_job_regular_bounded "$job/$tmp" "$FM_REMOTE_JOB_MAX_BYTES" || return 1
   done
+  if [ "$exit_status" -eq 124 ]; then
+    timeout=$(fm_remote_job_read_number "$job" timeout 2>/dev/null || printf '?')
+    tmp=$(umask 077; mktemp "$job/.timeout-error.XXXXXX") || return 1
+    {
+      if [ "$(fm_remote_job_read_state "$job" 2>/dev/null)" = queued ]; then
+        printf 'error: remote job queue deadline elapsed before execution (%s)\n' "$(worker_job_command "$job")"
+      else
+        printf 'error: remote job exceeded its %s s bound (%s)\n' "$timeout" "$(worker_job_command "$job")"
+      fi
+      cat "$job/stderr"
+    } | head -c "$FM_REMOTE_JOB_MAX_BYTES" > "$tmp"
+    chmod 600 "$tmp" && mv -f -- "$tmp" "$job/stderr" || return 1
+  fi
   tmp=$(umask 077; mktemp "$job/.exit.XXXXXX") || return 1
   printf '%s\n' "$exit_status" > "$tmp" || { rm -f -- "$tmp"; return 1; }
   chmod 600 "$tmp" || { rm -f -- "$tmp"; return 1; }
@@ -791,6 +865,13 @@ worker_run_with_timeout() { # <job-dir> <seconds> <command> [args...]
   [ "$cancelled" -eq 0 ] || return 130
   [ "$WORKER_PREEMPTED" -eq 0 ] || return "$FM_REMOTE_JOB_PREEMPTED_EXIT"
   return "$rc"
+}
+
+worker_job_command() { # <job-dir>; the first argv element of a staged record
+  local job=$1 first=
+  fm_remote_job_regular_bounded "$job/argv" "$FM_REMOTE_JOB_MAX_BYTES" || return 1
+  IFS= read -r -d '' first < "$job/argv" || [ -n "$first" ] || return 1
+  printf '%s\n' "$first"
 }
 
 worker_preempting_waiter_exists() { # <lane-home>
@@ -1061,7 +1142,7 @@ worker_lane_execute() { # <account-home> <job-dir>
   fi
   timeout=$(fm_remote_job_read_number "$job" timeout 2>/dev/null || true)
   case "$timeout" in ''|*[!0-9]*) worker_publish_result "$job" 126 || true; return 0 ;; esac
-  if [ "$timeout" -gt 3600 ]; then
+  if ! fm_remote_job_timeout_valid "$timeout" "$(worker_job_command "$job")"; then
     worker_publish_result "$job" 126 || true
     return 0
   fi
@@ -1263,8 +1344,7 @@ worker_supervisor_cleanup_dead_child() { # <account-home> <pid>
   [ ! -L "$pid_file" ] && rm -f -- "$pid_file" || return 1
   [ ! -L "$ready" ] && rm -f -- "$ready" || return 1
   [ ! -L "$identity" ] && rm -f -- "$identity" || return 1
-  [ ! -L "$lock/start" ] && [ ! -L "$lock/command" ] || return 1
-  rm -f -- "$lock/pid" "$lock/start" "$lock/command" || return 1
+  WORKER_LOCK=$lock worker_remove_lock_publication_files || return 1
   rmdir "$lock"
 }
 

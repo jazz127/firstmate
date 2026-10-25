@@ -35,7 +35,7 @@ mkdir -p "$TMP_ROOT"
 TMP_ROOT=$(cd "$TMP_ROOT" && pwd)
 trap 'rm -rf "$TMP_ROOT"' EXIT
 
-VERIFIED_HARNESSES="claude codex opencode pi pi-signed grok kimi cursor muse omp devin"
+VERIFIED_HARNESSES="claude codex opencode pi pi-signed grok kimi cursor muse omp devin commandcode"
 
 # The expectation table, written out independently of the implementation so a
 # silent change to either side shows up here. The fourth field is the composer
@@ -50,6 +50,7 @@ verified_adapter_contract() {  # <harness> -> exit command, interrupt key, repea
     pi-signed) printf '/quit\tEscape\t1\t\n' ;;
     omp) printf '/quit\tEscape\t1\t\n' ;;
     devin) printf '/quit\tEscape\t2\t\n' ;;
+    commandcode) printf '/quit\tEscape\t1\t\n' ;;
     grok) printf '/exit\tC-c\t1\t\n' ;;
     kimi) printf '/exit\tEscape\t1\t\n' ;;
     cursor) printf '/exit\tEscape\t1\t\n' ;;
@@ -132,7 +133,7 @@ case "${1:-}" in
         printf 'zsh' > "$D/command"
       fi
       case "$payload" in
-        *'encode launch-brief'* | *'Firstmate operational input waiting: read'*) cat "$D/becomes" > "$D/command" ;;
+        *'launch-brief: Read and follow'* | *'Firstmate operational input waiting: read'*) cat "$D/becomes" > "$D/command" ;;
       esac
     else
       printf '%s\n' "$payload" >> "$D/keys"
@@ -208,7 +209,80 @@ fi
 exit 0
 SH
   chmod +x "$fb/sleep"
+  # A Herdr pane running Pi, for the cursorless composer proof exit relies on.
+  # The screen comes from herdr-screen and the native identity from
+  # herdr-mode; the missing and contradictory identity modes answer the first
+  # two `agent get` calls (liveness) truthfully and only then misreport, so the
+  # composer's own identity probe is what sees them. Adapted from the fake in
+  # kunchenguid/firstmate#5473.
+  cat > "$fb/herdr" <<'SH'
+#!/usr/bin/env bash
+set -u
+D=$FM_FAKE_DIR
+case "${1:-} ${2:-}" in
+  "status --json")
+    printf '%s\n' '{"client":{"version":"0.9.0","protocol":22},"server":{"running":true}}'
+    ;;
+  "pane get")
+    printf '%s\n' '{"result":{"pane":{"pane_id":"w1:p2","workspace_id":"ws1","tab_id":"tab1"}}}'
+    ;;
+  "pane process-info")
+    printf '{"result":{"type":"pane_process_info","process_info":{"pane_id":"w1:p2","shell_pid":%s,"foreground_processes":[{"pid":%s,"name":"node","argv":["pi"]}]}}}\n' "$$" "$$"
+    ;;
+  "agent get")
+    if [ -e "$D/herdr-stopped" ]; then
+      printf '%s\n' '{"error":{"code":"agent_not_found"}}'
+    else
+      count=$(( $(cat "$D/herdr-agent-count" 2>/dev/null || echo 0) + 1 ))
+      printf '%s' "$count" > "$D/herdr-agent-count"
+      mode=$(cat "$D/herdr-mode" 2>/dev/null || echo idle)
+      if [ "$mode" = missing-identity ] && [ "$count" -ge 3 ]; then
+        printf '%s\n' '{"error":{"code":"agent_not_found"}}'
+      elif [ "$mode" = contradictory-identity ] && [ "$count" -ge 3 ]; then
+        printf '%s\n' '{"result":{"agent":{"agent":"shell","agent_status":"idle"}}}'
+      else
+        case "$mode" in working|blocked) status=$mode ;; *) status=idle ;; esac
+        printf '{"result":{"agent":{"agent":"pi","agent_status":"%s"}}}\n' "$status"
+      fi
+    fi
+    ;;
+  "pane read") cat "$D/herdr-screen" ;;
+  "pane send-text")
+    printf '%s\n' "${4:-}" >> "$D/literal"
+    [ "${4:-}" != /quit ] || : > "$D/herdr-stopped"
+    ;;
+  "pane send-keys") printf '%s\n' "${4:-}" >> "$D/keys" ;;
+  *) printf '%s\n' '{}' ;;
+esac
+SH
+  chmod +x "$fb/herdr"
   printf '%s\n' "$fb"
+}
+
+# add_herdr_pi_task <case-dir> <id>: a Pi task recorded on the fake Herdr pane.
+add_herdr_pi_task() {
+  add_task "$1" "$2" pi ship herdr "lab:w1:p2"
+  {
+    echo 'herdr_session=lab'
+    echo 'herdr_workspace_id=ws1'
+    echo 'herdr_tab_id=tab1'
+    echo 'herdr_pane_id=w1:p2'
+  } >> "$1/home/state/$2.meta"
+}
+
+# expect_pi_exit <case-dir> <allow|refuse> <label>: run exit and require exactly
+# one /quit when allowed and no lifecycle text at all when refused.
+expect_pi_exit() {
+  local dir=$1 want=$2 label=$3 out rc
+  out=$(run_control "$dir" t1 exit); rc=$?
+  if [ "$want" = allow ]; then
+    expect_code 0 "$rc" "$label should exit"$'\n'"$out"
+    [ "$(literals "$dir")" = /quit ] \
+      || fail "$label should type exactly /quit, got: $(literals "$dir")"
+  else
+    expect_code 1 "$rc" "$label must refuse"$'\n'"$out"
+    [ ! -s "$dir/fake/literal" ] || fail "$label typed lifecycle text: $(literals "$dir")"
+  fi
 }
 
 # new_case <name> -> echoes a case dir holding home/, fake/, and fakebin.
@@ -285,11 +359,11 @@ test_exit_types_each_harness_verified_command() {
   for harness in $VERIFIED_HARNESSES; do
     dir=$(new_case "exit-$harness")
     add_task "$dir" t1 "$harness"
-    if [ "$harness" = cursor ]; then
-      alive_as "$dir" cursor-agent
-    else
-      alive_as "$dir" "$harness"
-    fi
+    case "$harness" in
+      cursor) alive_as "$dir" cursor-agent ;;
+      commandcode) alive_as "$dir" command-code ;;
+      *) alive_as "$dir" "$harness" ;;
+    esac
     out=$(run_control "$dir" t1 exit); rc=$?
     expect_code 0 "$rc" "exit on $harness should succeed"$'\n'"$out"
     IFS=$'\t' read -r expected key repeat clear <<< "$(verified_adapter_contract "$harness")"
@@ -300,6 +374,81 @@ test_exit_types_each_harness_verified_command() {
   pass "fm-control exit: every verified harness gets its own verified exit command"
 }
 
+test_pi_exit_herdr_cost_footer_boundary() {
+  # Pi's cost-first status row below a blank two-rule composer (issue
+  # kunchenguid/firstmate#5666, furniture rule from #5683) permits exactly one
+  # /quit; every unproven variant types nothing.
+  local dir case_id rule screen mode want
+  rule=$'\033[38;2;178;148;187m────────────────────────────────────────\033[0m'
+  for case_id in idle idle-subscription-free draft malformed shell-after dollar-shell \
+      working blocked missing-identity contradictory-identity; do
+    dir=$(new_case "pi-herdr-footer-$case_id")
+    add_herdr_pi_task "$dir" t1
+    screen="transcript"$'\n'"$rule"$'\n\033[0m\033[7m \033[0m\n'"$rule"$'\n\033[38;2;102;102;102m/private/tmp/lab/cwd\033[0m\n'
+    mode=idle
+    want=refuse
+    case "$case_id" in
+      idle) screen+=$'\033[38;2;102;102;102m$0.000 (sub) 0.0%/272k (auto)            (openai-codex) gpt-5.6-terra • high\033[0m\n'; want=allow ;;
+      idle-subscription-free) screen+=$'\033[38;2;102;102;102m$0.012 5.4%/272k (auto)\033[0m\n'; want=allow ;;
+      draft)
+        screen="transcript"$'\n'"$rule"$'\nkeep this draft\n'"$rule"$'\n$0.000 (sub) 5.4%/272k (auto)\n'
+        ;;
+      malformed) screen+=$'$0.000 (sub)\n' ;;
+      shell-after) screen+=$'$0.000 (sub) 5.4%/272k (auto)\n$ ls\n' ;;
+      dollar-shell) screen+=$'$ 0.000 (sub) 5.4%/272k (auto)\n' ;;
+      working) screen+=$'$0.000 (sub) 5.4%/272k (auto)\n'; mode=working; want=allow ;;
+      blocked|missing-identity|contradictory-identity)
+        screen+=$'$0.000 (sub) 5.4%/272k (auto)\n'; mode=$case_id ;;
+    esac
+    printf '%s' "$screen" > "$dir/fake/herdr-screen"
+    printf '%s' "$mode" > "$dir/fake/herdr-mode"
+    expect_pi_exit "$dir" "$want" "Pi exit with a '$case_id' cost footer"
+  done
+  pass "fm-control Pi exit: a cost-first footer permits one /quit under a proven native Pi composer"
+}
+
+test_pi_exit_uses_herdr_compact_proof_boundary() {
+  # Pi's experimental compact layout on Herdr (kunchenguid/firstmate#5445;
+  # matrix adapted from #5473): with the opt-in, only a proven idle compact
+  # composer earns one /quit; without it, even that screen types nothing.
+  local dir case_id header rule screen mode history i want
+  header=$'\033[38;2;129;162;190m╭ gpt-5.6-terra · firstmate ────────────────╮\033[0m'
+  rule=$'\033[38;2;129;162;190m─────────────────────────────────────────────\033[0m'
+  for case_id in idle idle-short-history idle-long-history default-off draft whitespace boxed unstyled-row continuation working blocked missing-identity contradictory-identity truncated shell; do
+    dir=$(new_case "pi-herdr-exit-$case_id")
+    add_herdr_pi_task "$dir" t1
+    screen="$header"$'\n\033[7m \033[0m\n'"$rule"$'\n'
+    mode=idle
+    history=
+    want=refuse
+    case "$case_id" in
+      idle|default-off) [ "$case_id" = default-off ] || want=allow ;;
+      idle-short-history) history="$rule"$'\nold transcript one\nold transcript two\n'; want=allow ;;
+      idle-long-history)
+        history="$rule"$'\n'
+        for i in $(seq 1 9); do history+="old transcript $i"$'\n'; done
+        want=allow
+        ;;
+      draft) screen="$header"$'\nprivacy-safe draft\033[7m \033[0m\n'"$rule"$'\n' ;;
+      whitespace) screen="$header"$'\n  \033[7m \033[0m\n'"$rule"$'\n' ;;
+      boxed) screen="$header"$'\n│\033[7m \033[0m│\n'"$rule"$'\n' ;;
+      unstyled-row) screen="$header"$'\n \n'"$rule"$'\n' ;;
+      continuation) screen="$header"$'\n> continued input\033[7m \033[0m\n'"$rule"$'\n' ;;
+      working|blocked|missing-identity|contradictory-identity) mode=$case_id ;;
+      truncated) screen="$header"$'\n\033[7m \033[0m\n' ;;
+      shell) screen+=$'\n$ prompt after stale Pi registration\n' ;;
+    esac
+    printf '%s' "$history$screen" > "$dir/fake/herdr-screen"
+    printf '%s' "$mode" > "$dir/fake/herdr-mode"
+    if [ "$case_id" = default-off ]; then
+      FM_BACKEND_HERDR_PI_COMPACT=0 expect_pi_exit "$dir" "$want" "Pi exit on the compact '$case_id' shape"
+    else
+      FM_BACKEND_HERDR_PI_COMPACT=1 expect_pi_exit "$dir" "$want" "Pi exit on the compact '$case_id' shape"
+    fi
+  done
+  pass "fm-control Pi exit: the opted-in Herdr compact proof alone permits /quit"
+}
+
 test_interrupt_sends_each_harness_verified_key() {
   local dir out rc harness expected key repeat clear got want
   for harness in $VERIFIED_HARNESSES; do
@@ -307,11 +456,11 @@ test_interrupt_sends_each_harness_verified_key() {
     add_task "$dir" t1 "$harness"
     # Devin sends its second press only onto a running turn.
     [ "$harness" != devin ] || printf running > "$dir/fake/devin"
-    if [ "$harness" = cursor ]; then
-      alive_as "$dir" cursor-agent
-    else
-      alive_as "$dir" "$harness"
-    fi
+    case "$harness" in
+      cursor) alive_as "$dir" cursor-agent ;;
+      commandcode) alive_as "$dir" command-code ;;
+      *) alive_as "$dir" "$harness" ;;
+    esac
     out=$(run_control "$dir" t1 interrupt); rc=$?
     expect_code 0 "$rc" "interrupt on $harness should succeed"$'\n'"$out"
     IFS=$'\t' read -r expected key repeat clear <<< "$(verified_adapter_contract "$harness")"
@@ -537,6 +686,8 @@ test_harness_kind_capability() {
   done
   fm_control_harness_supports_kind muse secondmate \
     && fail "muse has no primary supervision protocol and must not claim a secondmate"
+  fm_control_harness_supports_kind commandcode secondmate \
+    && fail "commandcode has no primary supervision protocol and must not claim a secondmate"
   for harness in claude codex opencode pi pi-signed grok kimi omp; do
     fm_control_harness_supports_kind "$harness" secondmate \
       || fail "$harness should be able to run a secondmate"
@@ -592,6 +743,45 @@ test_unverified_state_backends_refuse_stop_verbs() {
       "the $backend relaunch refusal should name the missing stop proof"
   done
   pass "fm-control: a backend that cannot prove an agent stopped refuses exit and relaunch"
+}
+
+# bin/fm-spawn.sh refuses a Command Code launch off tmux and herdr, but only
+# after a relaunch has stopped the old agent, so fm-control must refuse a
+# relaunch onto commandcode there while the running agent is untouched.
+test_commandcode_relaunch_off_tmux_and_herdr_refuses_before_stopping() {
+  local dir out rc backend meta_before
+  for backend in zellij cmux orca; do
+    dir=$(new_case "cc-relaunch-$backend")
+    case "$backend" in
+      zellij)
+        add_task "$dir" t1 claude ship zellij "sess:7"
+        printf 'zellij_session=sess\nzellij_tab_id=1\nzellij_pane_id=7\n' >> "$dir/home/state/t1.meta"
+        ;;
+      cmux)
+        add_task "$dir" t1 claude ship cmux "ws1:surface1"
+        printf 'cmux_workspace_id=ws1\ncmux_surface_id=surface1\n' >> "$dir/home/state/t1.meta"
+        ;;
+      orca)
+        add_task "$dir" t1 claude ship orca "term-1"
+        sed 's|^window=.*|window=fm-t1|' "$dir/home/state/t1.meta" > "$dir/home/state/t1.meta.new"
+        printf 'terminal=term-1\norca_worktree_id=wt-1::/orca/wt-1\n' >> "$dir/home/state/t1.meta.new"
+        mv "$dir/home/state/t1.meta.new" "$dir/home/state/t1.meta"
+        ;;
+    esac
+    alive_as "$dir" claude
+    meta_before=$(cat "$dir/home/state/t1.meta")
+    out=$(run_control "$dir" t1 relaunch --harness commandcode --note x); rc=$?
+    expect_code 1 "$rc" "a commandcode relaunch on $backend should refuse"$'\n'"$out"
+    [ -z "$(literals "$dir")" ] && [ -z "$(keys_sent "$dir")" ] \
+      || fail "a refused commandcode relaunch on $backend must send the running agent nothing"
+    [ "$(cat "$dir/fake/command")" = claude ] \
+      || fail "the running agent on $backend must still be running"
+    [ "$(cat "$dir/home/state/t1.meta")" = "$meta_before" ] \
+      || fail "a refused commandcode relaunch on $backend must leave the task record unchanged"
+    [ ! -e "$dir/home/state/t1.control-relaunch" ] && [ ! -e "$dir/home/state/t1.control-relaunch.meta-prior" ] \
+      || fail "a refused commandcode relaunch on $backend must open no relaunch transaction"
+  done
+  pass "fm-control relaunch: commandcode off tmux and herdr is refused before the running agent is stopped"
 }
 
 test_state_verified_backends_are_exactly_tmux_and_herdr() {
@@ -779,14 +969,21 @@ test_relaunch_only_flags_are_rejected_on_other_verbs() {
 # --- 5. lifecycle states ----------------------------------------------------
 
 test_already_stopped_exit_is_idempotent() {
-  local dir out rc
+  local dir out rc spans
   dir=$(new_case idempotent)
   add_task "$dir" t1 claude
+  fm_test_trace_export_enable "$dir/home" "$dir/spans.jsonl" "$dir/fakebin"
+  printf '%s\n' 'traceparent=00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01' \
+    >> "$dir/home/state/t1.meta"
   alive_as "$dir" zsh
   out=$(run_control "$dir" t1 exit); rc=$?
   expect_code 0 "$rc" "exiting an already-stopped agent should succeed"
   assert_contains "$out" "already-stopped t1" "the outcome should say it was already stopped"
   [ -z "$(literals "$dir")" ] || fail "an already-stopped agent must not be sent an exit command"
+  spans=$(cat "$dir/spans.jsonl")
+  assert_contains "$spans" '"name":"firstmate.control"' "a verified exit postcondition should emit a control observation"
+  assert_contains "$spans" '"firstmate.control.verb","value":{"stringValue":"exit"}' \
+    "the control observation should identify exit"
   pass "fm-control exit: an already-stopped agent is idempotent success with no bytes sent"
 }
 
@@ -813,11 +1010,15 @@ test_interrupt_refuses_when_no_agent_runs() {
   local dir out rc
   dir=$(new_case nointerrupt)
   add_task "$dir" t1 claude
+  fm_test_trace_export_enable "$dir/home" "$dir/spans.jsonl" "$dir/fakebin"
+  printf '%s\n' 'traceparent=00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01' \
+    >> "$dir/home/state/t1.meta"
   alive_as "$dir" zsh
   out=$(run_control "$dir" t1 interrupt); rc=$?
   expect_code 1 "$rc" "interrupting a stopped agent should refuse"
   assert_contains "$out" "nothing to interrupt" "the refusal should say there is no agent"
   [ -z "$(keys_sent "$dir")" ] || fail "no key should reach a stopped agent"
+  [ ! -s "$dir/spans.jsonl" ] || fail "a refused interrupt emitted a control observation"
   pass "fm-control interrupt: refuses when no agent is running rather than keying a shell"
 }
 
@@ -936,6 +1137,20 @@ test_idle_agent_is_not_interrupted() {
   pass "fm-control exit: an idle agent goes straight to its exit command"
 }
 
+test_footer_busy_pi_on_tmux_refuses_exit() {
+  local dir out rc
+  dir=$(new_case footer-busy-pi-composer)
+  add_task "$dir" t1 pi
+  alive_as "$dir" pi
+  printf '────────────────────────\n\n────────────────────────\nworking Pi footer\n' > "$dir/fake/pane"
+  out=$(FM_BUSY_REGEX='working Pi footer' run_control "$dir" t1 exit); rc=$?
+  expect_code 1 "$rc" "a footer-busy Pi on tmux cannot prove its composer empty"
+  assert_contains "$out" "composer state is 'unknown'" "the refusal should name the unproven composer"
+  [ -z "$(literals "$dir")" ] \
+    || fail "a footer-busy Pi on tmux may be blocked on a prompt and must receive no /quit"
+  pass "fm-control exit: a footer-busy Pi on tmux refuses instead of typing /quit"
+}
+
 test_exit_drops_meta_busy_gen_with_the_sidecar() {
   local dir out rc gen changed
   dir=$(new_case codex-retire)
@@ -975,9 +1190,12 @@ test_interrupt_without_acknowledgement_preserves_busy_state() {
 }
 
 test_muse_interrupt_confirms_adapter_acknowledgement() {
-  local dir root log out rc
+  local dir root log out rc spans
   dir=$(new_case confirmed)
   add_task "$dir" t1 muse
+  fm_test_trace_export_enable "$dir/home" "$dir/spans.jsonl" "$dir/fakebin"
+  printf '%s\n' 'traceparent=00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01' \
+    >> "$dir/home/state/t1.meta"
   alive_as "$dir" muse
   root="$dir/muse-sessions"
   log="$root/2026/08/08/session-1/session.jsonl"
@@ -991,6 +1209,10 @@ test_muse_interrupt_confirms_adapter_acknowledgement() {
   expect_code 0 "$rc" "muse interrupt should observe its adapter acknowledgement"$'\n'"$out"
   assert_contains "$out" "verified=agent-alive cancel=confirmed" \
     "the result should report muse's cancelled terminal acknowledgement"
+  spans=$(cat "$dir/spans.jsonl")
+  assert_contains "$spans" '"name":"firstmate.control"' "a verified interrupt should emit a control observation"
+  assert_contains "$spans" '"firstmate.control.confirmed","value":{"stringValue":"true"}' \
+    "the control observation should preserve the adapter-owned cancellation claim"
   pass "fm-control interrupt: muse confirms cancellation from its session log"
 }
 
@@ -1173,6 +1395,8 @@ EOF
 }
 
 test_exit_types_each_harness_verified_command
+test_pi_exit_herdr_cost_footer_boundary
+test_pi_exit_uses_herdr_compact_proof_boundary
 test_interrupt_sends_each_harness_verified_key
 test_devin_interrupt_invalidates_busy
 test_devin_idle_interrupt_sends_one_press
@@ -1188,6 +1412,7 @@ test_backend_key_capability_matrix
 test_harness_kind_capability
 test_orca_refuses_an_escape_harness_interrupt
 test_unverified_state_backends_refuse_stop_verbs
+test_commandcode_relaunch_off_tmux_and_herdr_refuses_before_stopping
 test_state_verified_backends_are_exactly_tmux_and_herdr
 test_window_label_is_refused_with_the_exact_id
 test_explicit_endpoint_is_refused
@@ -1204,6 +1429,7 @@ test_interrupt_refuses_when_no_agent_runs
 test_ambiguous_endpoint_refuses
 test_busy_agent_is_interrupted_before_the_exit_command
 test_idle_agent_is_not_interrupted
+test_footer_busy_pi_on_tmux_refuses_exit
 test_exit_drops_meta_busy_gen_with_the_sidecar
 test_exit_refuses_an_open_background_picker
 test_exit_refuses_the_confirming_enter

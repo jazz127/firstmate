@@ -303,6 +303,57 @@ EOF
   pass 'record appends one line per task incarnation'
 }
 
+test_relative_home_and_data_record_in_the_callers_directory() {
+  local d setting copy ledger out source attempt
+  for setting in home data; do
+    for copy in live missing; do
+      d=$(make_case "relative-$setting-$copy")
+      seed_db "$d" current <<EOF
+repo r1 $d/project
+run first r1 fm/task completed 100
+inv first review cold ok 10 1 2 3 4 1 2 3
+EOF
+      source=no-mistakes-state
+      if [ "$copy" = missing ]; then
+        printf 'worktree=%s/gone\n' "$d" >> "$d/home/state/task.meta"
+        source=unavailable
+      fi
+      ledger="$d/home/data/pipeline-spend.jsonl"
+      if [ "$setting" = data ]; then
+        mkdir -p "$d/spend data"
+        ledger="$d/spend data/pipeline-spend.jsonl"
+      fi
+      for attempt in 1 2; do
+        out=$(
+          cd "$d" || exit 1
+          if [ "$setting" = home ]; then
+            set -- env -u FM_STATE_OVERRIDE -u FM_DATA_OVERRIDE -u FM_CONFIG_OVERRIDE FM_HOME=home
+          else
+            set -- env -u FM_STATE_OVERRIDE -u FM_CONFIG_OVERRIDE FM_HOME="$d/home" FM_DATA_OVERRIDE='./spend data'
+          fi
+          "$@" NM_HOME="$d/nm" FAKE_NM_REPO="$d/project" PATH="$d/fakebin:$PATH" "$SPEND" record task
+        ) || fail "relative $setting failed to record a $copy task copy"
+        if [ "$attempt" = 1 ]; then
+          assert_contains "$out" 'recorded task' 'first recording did not append'
+        else
+          assert_contains "$out" 'already recorded' 'repeat recording did not find the caller ledger'
+        fi
+      done
+      assert_equals 1 "$(wc -l < "$ledger" | tr -d ' ')" 'relative paths must append exactly once to the caller ledger'
+      assert_equals "\"$source\"" "$(jq -c .source "$ledger")" 'the caller ledger must retain the spend source'
+      if [ "$copy" = live ]; then
+        assert_equals '{"total":1,"unknown":0}' "$(jq -c .total.input_tokens "$ledger")" 'the caller ledger must retain recorded spend'
+      else
+        assert_equals 'null' "$(jq -c .total "$ledger")" 'a missing task copy must retain an explicit unavailable record'
+      fi
+      if [ "$setting" = data ]; then
+        assert_absent "$d/home/data/pipeline-spend.jsonl" 'the data override was ignored'
+      fi
+    done
+  done
+  pass 'relative home and data paths record once in the caller directory for live and missing task copies'
+}
+
 test_disabled_record_does_not_read_or_create_spend_data() {
   local d
   d=$(make_case disabled)
@@ -350,6 +401,7 @@ test_repeated_review_rounds_in_a_resumed_session_are_not_double_counted
 test_absent_spend_is_zero_or_unavailable_never_invented
 test_older_state_without_delta_columns_counts_only_provable_rounds
 test_record_appends_once_per_task_incarnation
+test_relative_home_and_data_record_in_the_callers_directory
 test_disabled_record_does_not_read_or_create_spend_data
 test_state_db_without_nm_home_or_home_uses_the_account_home
 test_refusals

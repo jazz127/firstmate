@@ -114,7 +114,7 @@ Shape is not varying *with* mode there, it is varying *inside* every value of mo
 
 Shape already exists on GitHub, it predates Gerrit entirely, and it is load-bearing in four places today:
 
-- `bin/fm-pr-merge.sh` defaults a GitHub merge to `--squash` when the caller selects no method.
+- `bin/fm-pr-merge.sh` chooses a GitHub merge method the caller did not select from the base branch's allowed methods, preferring `--squash` wherever it is allowed; the script header owns the rule.
 - `bin/fm-fleet-sync.sh`'s branch pruning reasons about it explicitly, dropping the ancestry check on the grounds that pull requests in this fleet are squash-merged, so a merged branch is never an ancestor and such a check would prune nothing.
 - `bin/fm-teardown.sh`'s landed-work test accepts content present in the default branch precisely because a squash collapses the branch's commits and per-commit patch identities stop matching.
 - `bin/fm-ff-lib.sh` reconciles a clean secondmate divergence through a three-way tree proof, as happens after an upstream squash merge.
@@ -193,7 +193,7 @@ Read the modes as stopping points rather than as artifacts and they line up clea
 - `no-mistakes` runs the pipeline, then publishes.
 
 On that reading the forge composes with the two modes that publish and is meaningless on the one that does not.
-That inverts both rules the delivery-mode design currently carries, which permit `local-only forge=gerrit` as an annotation that changes nothing and refuse `direct-PR forge=gerrit` outright.
+That inverts both rules the earlier delivery-mode design carried, which permitted `local-only forge=gerrit` as an annotation that changes nothing and refused `direct-PR forge=gerrit` outright.
 The composition test says that is backwards on both counts: the refusal lands on the combination that has a meaning, and the permission on the combination that does not.
 
 The refusal reads as reasonable only because of the name.

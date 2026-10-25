@@ -24,9 +24,9 @@
 #
 # Only this user's processes are inspected, and this process, its own process
 # group, and any ancestor are never signalled. Each candidate is stopped through
-# the shared fm_remote_job_stop_worker_tree, so the whole worker tree goes at
-# once (TERM first, KILL only for a survivor) and a group whose leader is not
-# itself a worker is stopped as a single process instead.
+# the shared fm_remote_job_stop_worker_tree, which revalidates each recorded
+# PID/start/command identity and tracks verified descendants independently when
+# the worker root exits (TERM first, KILL only for survivors).
 #
 # Prints one line per reaped or surviving candidate and nothing when there is
 # nothing to do. Exits 0 unless the process scan itself could not run, so a
@@ -89,7 +89,7 @@ reap_is_self_or_ancestor() { # <pid>
 }
 
 reap_orphans() {
-  local uid scan pid command live root own_pgid pgid
+  local uid scan pid command live root own_pgid pgid start
   uid=$(id -u 2>/dev/null || true)
   case "$uid" in ''|*[!0-9]*) reap_die "cannot resolve the current uid" ;; esac
   scan=$(ps -u "$uid" -o pid=,command= 2>/dev/null) ||
@@ -117,7 +117,9 @@ reap_orphans() {
       printf 'would reap abandoned remote job worker %s (pruned code root %s)\n' "$pid" "$root"
       continue
     fi
-    if fm_remote_job_stop_worker_tree "$pid"; then
+    start=$(fm_remote_job_process_start "$pid" 2>/dev/null || true)
+    [ -n "$start" ] || continue
+    if fm_remote_job_stop_worker_tree "$pid" "$start" "$live"; then
       printf 'reaped abandoned remote job worker %s (pruned code root %s)\n' "$pid" "$root"
     else
       printf 'warning: abandoned remote job worker %s survived reaping (pruned code root %s)\n' "$pid" "$root" >&2

@@ -189,7 +189,7 @@ CAPTAIN="$TMP_ROOT/captain"
 CAPTAIN_FAKEBIN=$(fm_fakebin "$CAPTAIN")
 mkdir -p "$CAPTAIN/data" "$CAPTAIN/state" "$CAPTAIN/config"
 make_hanging_tasks_axi "$CAPTAIN_FAKEBIN"
-cp "$ROOT/.tasks.toml" "$CAPTAIN/.tasks.toml"
+fm_test_tasks_toml "$CAPTAIN/.tasks.toml"
 printf '# Backlog\n' > "$CAPTAIN/data/backlog.md"
 
 ADD_LOG="$CAPTAIN/add.log"
@@ -248,7 +248,7 @@ REQ="$TMP_ROOT/req"
 REQ_FAKEBIN=$(fm_fakebin "$REQ")
 mkdir -p "$REQ/data" "$REQ/state" "$REQ/config" "$REQ/state/decision-bindings"
 make_hanging_tasks_axi "$REQ_FAKEBIN"
-cp "$ROOT/.tasks.toml" "$REQ/.tasks.toml"
+fm_test_tasks_toml "$REQ/.tasks.toml"
 printf '# Backlog\n' > "$REQ/data/backlog.md"
 printf 'schema=fm-decision-binding.v1\norigin=wedged-origin\n' \
   > "$REQ/state/decision-bindings/probe.origin"
@@ -379,13 +379,18 @@ make_hanging_tasks_axi "$E2E_FAKEBIN"
 # the same way tests/fm-session-start.test.sh's make_fake_ps_harness does:
 # every queried pid reports a live `claude` harness, independent of whatever
 # process tree the test itself was launched from.
-cat > "$E2E_FAKEBIN/ps" <<'SH'
+# Only the harness-identity queries are faked. Every other query, such as the
+# lock library's owner start identity on a host without /proc, reaches the
+# real ps, which is resolved here before the fake directory shadows it.
+E2E_REAL_PS=$(command -v ps) || fail "no real ps on PATH"
+cat > "$E2E_FAKEBIN/ps" <<SH
 #!/usr/bin/env bash
 set -u
-case "$*" in
-  *"comm="*) printf '%s\n' '/usr/local/bin/claude'; exit 0 ;;
-  *"args="*) printf '%s\n' 'claude'; exit 0 ;;
+case "\$*" in
+  *"comm="*) printf '%s\\n' '/usr/local/bin/claude'; exit 0 ;;
+  *"args="*) printf '%s\\n' 'claude'; exit 0 ;;
   *"ppid="*) exit 1 ;;
+  *) exec '$E2E_REAL_PS' "\$@" ;;
 esac
 exit 1
 SH

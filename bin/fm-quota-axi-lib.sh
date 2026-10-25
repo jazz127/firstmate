@@ -27,7 +27,10 @@ FM_QUOTA_PROVIDER_ID_RE='^[a-z0-9]+(-[a-z0-9]+)*\z'
 #                                  is identified by the contract.
 #   quota_row($snapshot; $provider; $lane)
 #                                  the one provider row the candidate binds to,
-#                                  or null; schema 5 ignores $lane.
+#                                  or null. An explicit seat uses lane
+#                                  seat:<physical credential home> under both
+#                                  schemas; FM_QUOTA_OS_HOME is the snapshot
+#                                  host OS user's home for ~/ expansion.
 # shellcheck disable=SC2016,SC2034  # jq program text, not shell expansion; read by the sourcing consumers
 FM_QUOTA_ROW_JQ='
   def quota_lane($harness; $model):
@@ -37,7 +40,14 @@ FM_QUOTA_ROW_JQ='
     else "" end;
   def quota_row($snapshot; $provider; $lane):
     ([$snapshot.providers[]? | select(.provider == $provider)]) as $rows |
-    if $snapshot.schemaVersion == 6 then
+    if $provider == "codex" and ($lane | startswith("seat:")) then
+      ($lane | ltrimstr("seat:") + "/auth.json") as $selected |
+      ([$rows[] | select((.account.credentialHome // "") as $home |
+        $home == $selected or
+        (($home | startswith("~/")) and ((env.FM_QUOTA_OS_HOME // "") != "") and
+         ((env.FM_QUOTA_OS_HOME + "/" + ($home | ltrimstr("~/"))) == $selected)))] |
+        if length == 1 then .[0] else null end)
+    elif $snapshot.schemaVersion == 6 then
       (([$rows[] | select(.accountKey == $lane)] | first) //
        ([$rows[] | select(.accountKey == "default")] | first) // null)
     else ($rows | first) // null

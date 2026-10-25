@@ -185,13 +185,17 @@ fm_pf_home_id_valid() {
 }
 
 fm_pf_sha256() {
+  local digest
   if command -v shasum >/dev/null 2>&1; then
-    shasum -a 256 2>/dev/null | awk '{print $1}'
+    digest=$(set -o pipefail; shasum -a 256 2>/dev/null | awk '{print $1}') || return 1
   elif command -v sha256sum >/dev/null 2>&1; then
-    sha256sum 2>/dev/null | awk '{print $1}'
+    digest=$(set -o pipefail; sha256sum 2>/dev/null | awk '{print $1}') || return 1
   else
     return 1
   fi
+  case "$digest" in ''|*[!0-9a-f]*) return 1 ;; esac
+  [ "${#digest}" -eq 64 ] || return 1
+  printf '%s\n' "$digest"
 }
 
 # fm_pf_event_id <obligation> <relation> <source_home> <work_id> <generation>
@@ -431,7 +435,7 @@ fm_pf_registry_ids() {
   [ -d "$dir" ] && [ ! -L "$dir" ] || return 0
   for entry in "$dir"/*; do
     [ -f "$entry" ] && [ ! -L "$entry" ] || continue
-    basename "$entry"
+    printf '%s\n' "${entry##*/}"
   done
 }
 
@@ -454,7 +458,11 @@ EOF
 # fm_pf_now_epoch: wall clock as epoch seconds. FMX_NOW_OVERRIDE pins it for
 # tests, matching bin/fm-x-lib.sh.
 fm_pf_now_epoch() {
-  printf '%s\n' "${FMX_NOW_OVERRIDE:-$(date +%s)}"
+  if [ -n "${FMX_NOW_OVERRIDE:-}" ]; then
+    printf '%s\n' "$FMX_NOW_OVERRIDE"
+  else
+    date +%s
+  fi
 }
 
 # fm_pf_now_rfc3339: UTC timestamp for delivered_at and similar stamps.
@@ -466,23 +474,34 @@ fm_pf_now_rfc3339() {
     || date -u +%Y-%m-%dT%H:%M:%SZ
 }
 
-# fm_pf_rfc3339_to_epoch <rfc3339>: parse a Zulu timestamp. Empty on failure.
+# fm_pf_rfc3339_to_epoch <rfc3339>: parse a canonical Zulu timestamp with seconds.
+# Empty on failure; the shared UTC reader owns calendar and clock validation.
 fm_pf_rfc3339_to_epoch() {
   local ts=$1
-  [ -n "$ts" ] || return 1
-  date -u -j -f '%Y-%m-%dT%H:%M:%SZ' "$ts" +%s 2>/dev/null \
-    || date -u -d "$ts" +%s 2>/dev/null \
-    || return 1
+  case "$ts" in ????-??-??T??:??:??Z) ;; *) return 1 ;; esac
+  if ! command -v fm_utc_iso_to_epoch >/dev/null 2>&1; then
+    # shellcheck source=bin/fm-classify-lib.sh
+    . "$_FM_PF_LIB_DIR/fm-classify-lib.sh" || return 1
+  fi
+  fm_utc_iso_to_epoch "$ts"
 }
 
 # fm_pf_followup_window_class <rfc3339>: ok, closing (<48h), expired, or unknown.
 fm_pf_followup_window_class() {
-  local ts=$1 exp now
+  local ts=$1 exp now epoch_re='^[+-]?[0-9]+$'
   exp=$(fm_pf_rfc3339_to_epoch "$ts") || { printf 'unknown\n'; return 0; }
-  now=$(fm_pf_now_epoch)
+  now=$(fm_pf_now_epoch) || { printf 'unknown\n'; return 0; }
+  # test parses decimal integers and rejects signed overflow without evaluating
+  # arithmetic expressions or interpreting a padded timestamp as octal.
+  if ! [[ "$now" =~ $epoch_re ]] || ! [ "$now" -eq "$now" ] 2>/dev/null; then
+    printf 'unknown\n'
+    return 0
+  fi
   if [ "$now" -ge "$exp" ]; then
     printf 'expired\n'
-  elif [ $((exp - now)) -lt 172800 ]; then
+  # The canonical four-digit expiry year bounds this subtraction; now can span
+  # the full signed integer range without overflowing a remaining-time delta.
+  elif [ "$now" -gt "$((exp - 172800))" ]; then
     printf 'closing\n'
   else
     printf 'ok\n'
@@ -564,11 +583,15 @@ fm_pf_registry_stamp_delivered() {
   fm_pf_registry_lock_acquire "$state" "$id" || return 1
   file="$(fm_pf_registry_dir "$state")/$id"
   if [ -f "$file" ] && [ ! -L "$file" ]; then
-    rest=$(grep -v -E '^(state|delivered_at|delivered_obligation)=' "$file" 2>/dev/null || true)
-    printf '%s\nstate=delivered\ndelivered_at=%s\ndelivered_obligation=%s\n' \
-      "$rest" "$delivered_at" "$id" \
-      | fmx_private_artifact_publish_stdin "$(fm_pf_registry_dir "$state")" "$id" 600 \
-      || rc=$?
+    if _fmx_meta_read_text "$file" rest \
+      && rest=$(_fmx_meta_filter "$rest" '^(state|delivered_at|delivered_obligation)='); then
+      printf '%s\nstate=delivered\ndelivered_at=%s\ndelivered_obligation=%s\n' \
+        "$rest" "$delivered_at" "$id" \
+        | fmx_private_artifact_publish_stdin "$(fm_pf_registry_dir "$state")" "$id" 600 \
+        || rc=$?
+    else
+      rc=1
+    fi
   else
     rc=3
   fi

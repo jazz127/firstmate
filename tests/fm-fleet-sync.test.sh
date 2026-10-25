@@ -96,6 +96,11 @@ run_sync() {
   FM_HOME="$home" FM_ROOT_OVERRIDE="$ROOT" "$ROOT/bin/fm-fleet-sync.sh" "$@" 2>/dev/null
 }
 
+run_sync_firstmate_home() {
+  local home=$1 repo=$2
+  FM_HOME="$home" FM_ROOT_OVERRIDE="$repo" "$ROOT/bin/fm-fleet-sync.sh" "$repo" 2>/dev/null
+}
+
 # build_enclosing_home <name>: an FM_HOME that is itself nested inside another git
 # repository - firstmate's own layout, where projects/ sits inside the firstmate
 # checkout. The enclosing repo is a clean clone of a bare origin that is one commit
@@ -332,6 +337,67 @@ test_non_default_branch_is_stuck_untouched() {
   pass "non-default named branch is reported STUCK and left untouched"
 }
 
+test_runtime_tracking_rejects_multiline_values() {
+  local shell field variant home clone value before out
+  for shell in "$(command -v bash)" /bin/bash; do
+    for field in remote merge; do
+      for variant in plain lf double-lf cr internal-lf; do
+        home="$TMP_ROOT/tracking-${shell//\//-}-$field-$variant"
+        mkdir -p "$home/projects"
+        clone=$(build_pair "$home" tracking)
+        git -C "$clone" config firstmate.runtimeBranch main
+        value=origin; [ "$field" != merge ] || value=refs/heads/main
+        case "$variant" in
+          plain) ;;
+          lf) value="$value"$'\n' ;;
+          double-lf) value="$value"$'\n\n' ;;
+          cr) value="$value"$'\r' ;;
+          internal-lf) value="$value"$'\nextra' ;;
+        esac
+        git -C "$clone" config "branch.main.$field" "$value"
+        before=$(head_sha "$clone")
+        advance_origin "$home" tracking C1
+        out=$(FM_HOME="$home" FM_ROOT_OVERRIDE="$clone" "$shell" "$ROOT/bin/fm-fleet-sync.sh" "$clone" 2>/dev/null)
+        if [ "$variant" = plain ]; then
+          assert_contains "$out" 'tracking: synced' 'ordinary tracking configuration stopped syncing'
+          [ "$(head_sha "$clone")" != "$before" ] || fail 'valid tracking configuration did not advance'
+        else
+          assert_contains "$out" 'invalid tracking source for runtime branch' "$shell accepted $field $variant"
+          [ "$(head_sha "$clone")" = "$before" ] || fail 'malformed tracking configuration moved HEAD'
+          [ "$(git -C "$clone" rev-parse origin/main)" = "$before" ] || fail 'malformed tracking configuration fetched a guessed source'
+        fi
+      done
+    done
+  done
+  pass 'runtime tracking refuses multiline remote/merge values before fetching or moving the local branch'
+}
+
+test_firstmate_runtime_branch_and_tracking_remote_sync() {
+  local home clone out
+  home=$(new_home)
+  clone=$(build_pair "$home" runtime-home)
+  git -C "$clone" checkout -q -b house
+  git -C "$clone" remote add fork "file://$home/remotes/runtime-home.git"
+  git -C "$clone" push -q -u fork house
+  git -C "$clone" config firstmate.runtimeBranch house
+  git -C "$clone" config branch.house.remote fork
+  git -C "$clone" config branch.house.merge refs/heads/house
+  # Preserve origin/HEAD -> main to reproduce the former wrong branch choice.
+  git -C "$clone" symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main
+  git -C "$home/work-runtime-home" remote add fork "file://$home/remotes/runtime-home.git"
+  git -C "$home/work-runtime-home" checkout -q -b house
+  commit_file "$home/work-runtime-home" runtime.txt v1 'advance fork house'
+  git -C "$home/work-runtime-home" push -q fork house
+
+  out=$(run_sync_firstmate_home "$home" "$clone")
+
+  assert_contains "$out" "runtime-home: synced" "Firstmate home follows configured runtime branch"
+  assert_not_contains "$out" "STUCK: on branch house" "runtime branch is not misclassified as a feature branch"
+  [ "$(git -C "$clone" rev-parse house)" = "$(git -C "$clone" rev-parse refs/remotes/fork/house)" ] \
+    || fail "Firstmate home did not fetch and fast-forward from its configured fork tracking remote"
+  pass "Firstmate home uses runtime branch and configured fork tracking remote"
+}
+
 test_diverged_is_stuck_untouched() {
   local home clone out before
   home=$(new_home)
@@ -354,6 +420,10 @@ test_on_default_clean_behind_fast_forwards() {
   local home clone out
   home=$(new_home)
   clone=$(build_pair "$home" zeta)
+  # Project clones keep resolving their upstream mirror through origin/HEAD,
+  # even if their local config happens to carry Firstmate runtime metadata.
+  git -C "$clone" branch house
+  git -C "$clone" config firstmate.runtimeBranch house
   advance_origin "$home" zeta C1
 
   out=$(run_sync "$home" "$clone")
@@ -747,11 +817,13 @@ test_non_signature_fetch_failure_is_not_retried() {
   pass "a non-packed-refs.lock fetch failure keeps today's behavior (no retry)"
 }
 
+test_runtime_tracking_rejects_multiline_values
 test_detached_clean_ancestor_recovers
 test_detached_unique_commit_is_stuck_untouched
 test_detached_clean_ancestor_with_diverged_local_default_is_stuck_untouched
 test_dirty_is_stuck_untouched
 test_non_default_branch_is_stuck_untouched
+test_firstmate_runtime_branch_and_tracking_remote_sync
 test_diverged_is_stuck_untouched
 test_on_default_clean_behind_fast_forwards
 test_already_current_unchanged

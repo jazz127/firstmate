@@ -78,9 +78,9 @@ FM_BACKLOG_CLOSE_REPLAY_RESULT=
 # library does not source fm-tasks-axi-lib.sh does not apply.
 # shellcheck source=bin/fm-timeout-lib.sh disable=SC1091
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/fm-timeout-lib.sh"
-# fm-pr-lib.sh owns which URL is a Gerrit change. It is functions and empty
-# globals only, so it is sourced once rather than re-initialising a caller's
-# parsed identity.
+# fm-pr-lib.sh owns which URL is a Gerrit change or a GitLab merge request. It
+# is functions and empty globals only, so it is sourced once rather than
+# re-initialising a caller's parsed identity.
 if ! declare -F fm_pr_url_parse >/dev/null 2>&1; then
   # shellcheck source=bin/fm-pr-lib.sh disable=SC1091
   . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/fm-pr-lib.sh"
@@ -517,21 +517,27 @@ fm_backlog_start() {  # <data-dir> <id>
 }
 
 # tasks-axi takes a --pr link only as a canonical GitHub or Forgejo pull request
-# and refuses anything else, so a Gerrit change URL is recorded on the row as a
-# note instead. The subshell keeps the parse from overwriting a caller's
-# FM_PR_* identity.
-fm_backlog_pr_is_gerrit_change() {  # <url>
-  ( fm_pr_url_parse "$1" && [ "$FM_PR_PROVIDER" = gerrit ] )
+# and refuses anything else, so a Gerrit change or GitLab merge request URL is
+# recorded on the row as a note instead. Prints the note's label for such a URL
+# and fails for one tasks-axi accepts. The subshell keeps the parse from
+# overwriting a caller's FM_PR_* identity.
+fm_backlog_pr_note_label() {  # <url>
+  ( fm_pr_url_parse "$1" || exit 1
+    case "$FM_PR_PROVIDER" in
+      gerrit) printf 'Gerrit change\n' ;;
+      gitlab) printf 'GitLab merge request\n' ;;
+      *) exit 1 ;;
+    esac )
 }
 
 fm_backlog_done() {  # <data-dir> <id> [flag...]
-  local data=$1 id=$2 arg previous_arg=''
+  local data=$1 id=$2 arg label previous_arg=''
   local -a done_args=()
   shift 2
   for arg in "$@"; do
-    if [ "$previous_arg" = --pr ] && fm_backlog_pr_is_gerrit_change "$arg"; then
+    if [ "$previous_arg" = --pr ] && label=$(fm_backlog_pr_note_label "$arg"); then
       done_args[${#done_args[@]}-1]=--note
-      done_args+=("Gerrit change $arg")
+      done_args+=("$label $arg")
     else
       done_args+=("$arg")
     fi
@@ -543,7 +549,7 @@ fm_backlog_done() {  # <data-dir> <id> [flag...]
 fm_backlog_row_artifact_supported() {
   local id=$1 flag=${2:-} value=${3:-}
   case "$flag" in
-    --pr) ! fm_backlog_pr_is_gerrit_change "$value" ;;
+    --pr) ! fm_backlog_pr_note_label "$value" >/dev/null ;;
     --report) [ "$value" = "data/$id/report.md" ] ;;
     *) return 1 ;;
   esac
@@ -579,7 +585,7 @@ fm_backlog_retain() {  # <data-dir> <id> [flag...]
           deliverable="${deliverable:+$deliverable; }PR $arg"
           row_args=(--pr "$arg")
         else
-          deliverable="${deliverable:+$deliverable; }Gerrit change $arg"
+          deliverable="${deliverable:+$deliverable; }$(fm_backlog_pr_note_label "$arg") $arg"
         fi
         ;;
       --note) deliverable="${deliverable:+$deliverable; }$arg" ;;
@@ -1127,6 +1133,42 @@ fm_backlog_close_marker_clear() {  # <state-dir> <id>
   fm_backlog_close_marker_remove "$marker" "$1"
 }
 
+fm_backlog_task_status_retire() {
+  local state=$1 id=$2 meta="$1/$2.meta" tmp line verb legacy_re
+  _fm_wake_require_classify || return 1
+  FM_BACKLOG_TASK_OUTCOME=$(sed -n 's/^trace_outcome=//p' "$meta" 2>/dev/null | head -n 1 || true)
+  case "$FM_BACKLOG_TASK_OUTCOME" in done|failed) ;; *) FM_BACKLOG_TASK_OUTCOME=unknown ;; esac
+  if [ -f "$state/$id.status" ] && [ -r "$state/$id.status" ]; then
+    legacy_re="^[[:space:]]*(${FM_CAPTAIN_RE:-$FM_CLASSIFY_CAPTAIN_RE_DEFAULT})"
+    while IFS= read -r line || [ -n "$line" ]; do
+      _fm_status_line_is_event "$line" "$legacy_re" || continue
+      status_line_verb "$line" verb
+      case "$verb" in
+        note) ;;
+        done|failed) FM_BACKLOG_TASK_OUTCOME=$verb ;;
+        *) FM_BACKLOG_TASK_OUTCOME=unknown ;;
+      esac
+    done < "$state/$id.status"
+  fi
+  if [ -d "$state" ] && [ -f "$meta" ]; then
+    tmp=$(umask 077; mktemp "$state/.$id.trace-outcome.XXXXXX") || {
+      FM_BACKLOG_TRANSITION_ERROR="$id's terminal outcome could not be recorded; retaining its task and status records"
+      return 1
+    }
+    if ! awk -F= '$1 != "trace_outcome"' "$meta" > "$tmp" ||
+      ! printf 'trace_outcome=%s\n' "$FM_BACKLOG_TASK_OUTCOME" >> "$tmp" ||
+      ! fm_backlog_atomic_transition publish "$tmp" "$meta" "task record" "$state"; then
+      rm -f "$tmp"
+      FM_BACKLOG_TRANSITION_ERROR="$id's terminal outcome could not be recorded; retaining its task and status records"
+      return 1
+    fi
+  fi
+  if ! status_retire_presentation_task "$state" "$id"; then
+    FM_BACKLOG_TRANSITION_ERROR="$id's status presentation could not be retired; retaining its task record"
+    return 1
+  fi
+}
+
 # Replay one recorded close or retention. Returns 0 when the row is closed (or
 # retained), the marker is stale, or an answer already closed a retained row,
 # and 1 when marker validation or recovery fails. Validation completes before
@@ -1167,6 +1209,7 @@ fm_backlog_close_marker_replay() {  # <state-dir> <marker-path> <authorized-data
       FM_BACKLOG_CLOSE_REPLAY_RESULT=stale
       return 0
     fi
+    fm_backlog_task_status_retire "$state" "$id" || return 1
     fm_backlog_close_marker_mark_cleanup_incomplete "$state" "$marker" "$id" "$data" \
       "$marker_spawn_gen" "${mode_flags[@]+"${mode_flags[@]}"}" "${args[@]+"${args[@]}"}" \
       || return 1

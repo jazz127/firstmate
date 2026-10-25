@@ -55,6 +55,68 @@ wait_for_file() {  # <path>
   done
 }
 
+test_perl_runners_preserve_literal_command_paths() {
+  local shell api name mode dir command out rc expected
+  dir="$TMP_ROOT/literal-command-paths"
+  mkdir -p "$dir"
+  for name in plain 'with space' 'tool;printf injected' "quote'tool"; do
+    command="$dir/$name"
+    printf '#!/bin/sh\nprintf "fixture:%%s\\n" "$#"\n' > "$command"
+    chmod +x "$command"
+  done
+  for shell in "$(command -v bash)" /bin/bash; do
+    for api in run exec nm; do
+      for name in plain 'with space' 'tool;printf injected' "quote'tool"; do
+        for mode in no-args argument; do
+          expected=0; [ "$mode" = no-args ] || expected=1
+          rc=0
+          out=$("$shell" -c '
+            . "$1/bin/fm-timeout-lib.sh"
+            . "$1/bin/fm-nm-run-lib.sh"
+            unset FM_TIMEOUT_OWNER_PID FM_EXEC_TIMED_OWNER_PID FM_TIMEOUT_MECHANISM_OVERRIDE
+            PATH=$2
+            api=$3; command=$4; mode=$5; dir=$6
+            set -- "$command"
+            [ "$mode" = no-args ] || set -- "$@" explicit-argument
+            case "$api" in
+              run) fm_run_timed 5 "$@" ;;
+              exec) fm_exec_timed 5 1 "$@" ;;
+              nm) fm_nm_bounded "$dir" 5 "$@" ;;
+            esac
+          ' _ "$ROOT" "$PERL_ONLY" "$api" "$dir/$name" "$mode" "$dir" 2>&1) || rc=$?
+          expect_code 0 "$rc" "$shell $api could not run literal $name ($mode): $out"
+          assert_equals "fixture:$expected" "$out" "$shell $api interpreted a command path as shell text"
+        done
+      done
+    done
+  done
+  pass 'Perl runners execute literal paths with or without arguments instead of interpreting shell text'
+}
+
+test_perl_runners_report_missing_commands() {
+  local shell api command out rc
+  for shell in "$(command -v bash)" /bin/bash; do
+    for api in run exec nm; do
+      for command in fm-synthetic-command-absent "$TMP_ROOT/missing-command"; do
+        rc=0
+        out=$("$shell" -c '
+          . "$1/bin/fm-timeout-lib.sh"
+          . "$1/bin/fm-nm-run-lib.sh"
+          unset FM_TIMEOUT_OWNER_PID FM_EXEC_TIMED_OWNER_PID FM_TIMEOUT_MECHANISM_OVERRIDE
+          PATH=$2
+          case "$3" in
+            run) fm_run_timed 5 "$5" ;;
+            exec) fm_exec_timed 5 1 "$5" ;;
+            nm) fm_nm_bounded "$4" 5 "$5" ;;
+          esac
+        ' _ "$ROOT" "$PERL_ONLY" "$api" "$TMP_ROOT" "$command" 2>&1) || rc=$?
+        expect_code 127 "$rc" "$shell $api lost a missing-command failure: $out"
+      done
+    done
+  done
+  pass 'Perl runners report missing commands as 127 without entering the parent wait code'
+}
+
 test_passes_the_command_status_and_output_through() {
   local out rc=0
   out=$(exec_timed "$PERL_ONLY" 5 1 bash -c 'echo to-stdout; echo to-stderr >&2; exit 7' 2>&1) || rc=$?
@@ -135,13 +197,14 @@ test_the_bound_replaces_the_calling_shell() {
   dir="$TMP_ROOT/replace"
   mkdir -p "$dir"
   for path in "$PATH" "$PERL_ONLY"; do
-    rm -f "$dir/caller" "$dir/parent"
+    rm -f "$dir/parent"
     (
       . "$ROOT/bin/fm-timeout-lib.sh"
       perl -e 'print getppid(), "\n"' > "$dir/caller"
       PATH=$path fm_exec_timed 5 1 bash -c 'echo "$PPID" > "$1"' _ "$dir/parent"
-    ) || fail "the bounded probe failed under PATH=$path"
-    caller=$(cat "$dir/caller")
+    ) &
+    caller=$!
+    wait "$caller" || fail "the bounded probe failed under PATH=$path"
     parent=$(cat "$dir/parent")
     [ "$caller" = "$parent" ] \
       || fail "the command's parent $parent is not the replaced caller $caller under PATH=$path"
@@ -244,6 +307,7 @@ test_an_owner_that_dies_during_startup_ends_the_command() {
       while kill -0 "$$" 2>/dev/null; do sleep 0.05; done
       fm_exec_timed 60 1 bash -c "echo \$\$ > \"\$1\"; exec sleep 300" _ "$2/pid"
     ) >/dev/null 2>&1 &
+    echo "$!" > "$2/watchdog"
     exit 0
   ' _ "$ROOT" "$dir"
   wait_for_file "$dir/watchdog"
@@ -379,6 +443,27 @@ test_timed_out_names_exactly_the_bound_statuses() {
   pass "fm_timed_out accepts 124 and 137 and nothing else"
 }
 
+# Stock macOS /bin/bash is 3.2 and has no BASHPID. Exercise the owner check
+# under set -u in a subshell and in the shell that calls exec directly.
+test_bash32_owner_check() {
+  local out rc=0
+  if [ ! -x /bin/bash ] || ! /bin/bash -c '[ "${BASH_VERSINFO[0]}" -eq 3 ] && [ "${BASH_VERSINFO[1]}" -eq 2 ]'; then
+    pass "fm_exec_timed works under Bash 3.2 (skipped: /bin/bash is not Bash 3.2)"
+    return 0
+  fi
+  out=$(PATH=$PERL_ONLY /bin/bash -c '
+    set -u
+    . "$1/bin/fm-timeout-lib.sh"
+    (fm_exec_timed 5 1 bash -c "echo subshell; exit 3")
+    [ "$?" -eq 3 ] || exit 41
+    fm_exec_timed 5 1 bash -c "echo direct; exit 4"
+  ' _ "$ROOT" 2>&1) || rc=$?
+  [ "$rc" -eq 4 ] || fail "Bash 3.2 owner check failed (rc=$rc): $out"
+  assert_contains "$out" "subshell" "Bash 3.2 subshell did not run the bounded command"
+  assert_contains "$out" "direct" "Bash 3.2 direct call did not run the bounded command"
+  pass "fm_exec_timed works in direct and subshell calls under Bash 3.2"
+}
+
 test_run_timed_reports_the_bound_when_the_wrapper_records_a_signal_death() {
   local rc=0
   run_timed 5 bash -c 'kill -TERM $$' || rc=$?
@@ -394,10 +479,61 @@ test_run_timed_passes_a_natural_exit_through_a_fired_bound() {
   pass 'fm_run_timed passes a natural exit through when the bound fired after completion'
 }
 
+test_run_timed_preserves_standard_input() {
+  local shell out rc
+  for shell in "$(command -v bash)" /bin/bash; do
+    rc=0
+    out=$(printf 'first line\nsecond line\n' | "$shell" -c '
+      . "$1/bin/fm-timeout-lib.sh"
+      PATH="$2:$PATH" fm_run_timed 5 cat
+    ' _ "$ROOT" "$RUN124") || rc=$?
+    [ "$rc" -eq 0 ] || fail "external timeout wrapper failed under $shell (rc=$rc)"
+    [ "$out" = $'first line\nsecond line' ] || fail "external timeout wrapper lost stdin under $shell: $out"
+  done
+  pass 'fm_run_timed preserves piped stdin through an external timeout runner on both Bash generations'
+}
+
+test_nm_checked_preserves_signal_failures() {
+  local dir shell status command out rc
+  dir="$TMP_ROOT/nm-signal"
+  mkdir -p "$dir/bin"
+  for command in bash perl; do
+    ln -s "$(command -v "$command")" "$dir/bin/$command"
+  done
+  cat > "$dir/bin/no-mistakes" <<'SH'
+#!/usr/bin/env bash
+exec bash -c "$FM_TEST_NM_COMMAND"
+SH
+  chmod +x "$dir/bin/no-mistakes"
+  for shell in "$(command -v bash)" /bin/bash; do
+    for status in 0 7 137 143 signal-137 signal-143; do
+      case "$status" in
+        signal-137) command='printf "run: partial\n"; kill -KILL $$' ;;
+        signal-143) command='printf "run: partial\n"; kill -TERM $$' ;;
+        *) command="printf 'run: partial\\n'; exit $status" ;;
+      esac
+      rc=0
+      out=$(PATH="$dir/bin" FM_TEST_NM_COMMAND="$command" "$shell" -c '
+        . "$1/bin/fm-nm-run-lib.sh"
+        fm_nm_run_checked "$2" 5 axi status
+      ' _ "$ROOT" "$dir") || rc=$?
+      [ "$rc" -eq "${status#signal-}" ] \
+        || fail "checked no-mistakes call lost $status under $shell (rc=$rc)"
+      [ "$out" = 'run: partial' ] || fail "checked no-mistakes call changed stdout: $out"
+    done
+  done
+  pass 'checked no-mistakes calls retain signal failures even after plausible partial output'
+}
+
+test_perl_runners_report_missing_commands
+test_perl_runners_preserve_literal_command_paths
 test_passes_the_command_status_and_output_through
+test_bash32_owner_check
 test_system_bash_preserves_completion_and_signal_statuses
 test_run_timed_reports_the_bound_when_the_wrapper_records_a_signal_death
 test_run_timed_passes_a_natural_exit_through_a_fired_bound
+test_run_timed_preserves_standard_input
+test_nm_checked_preserves_signal_failures
 test_term_ends_a_cooperative_command_at_the_bound
 test_kill_ends_a_term_ignoring_command_after_the_grace
 test_the_bound_replaces_the_calling_shell

@@ -28,6 +28,8 @@
 #
 #   1. lock          - acquire the per-home session lock FIRST, before any
 #                       mutating step runs.
+#   1b. home role    - the resolved firstmate-repository role line
+#                      (bin/fm-role.sh report), purely local, no network.
 #   2. bootstrap      - home-local stale Herdr projection cleanup runs only
 #                       when this session actually holds the lock. Detect-only
 #                       diagnostics always run. Bootstrap's six MUTATING sweeps
@@ -66,7 +68,7 @@
 #                       script points back to the emitted harness supervision
 #                       block and deliberately never arms the watcher itself.
 #
-# Those nine names are also the runtime-bound stage list below, so a truncated
+# Those ten names are also the runtime-bound stage list below, so a truncated
 # startup can name exactly which of them never ran - and the parent banners
 # EVERY nonzero child exit, not only the bound: a child that dies or is killed
 # mid-stage must never truncate the digest silently.
@@ -199,10 +201,11 @@
 # the digest never runs without the same hard bound and process-group cleanup.
 #
 # Usage: fm-session-start.sh [--reemit] [--source <source>]
-#   Prints the full ordered digest to stdout and always exits 0: this is a
-#   reporting command, not a gate. A lock refusal is reported as a loud
-#   banner inline, never a silent failure or a non-zero exit that would make
-#   an agent skip the rest of the digest.
+#   Prints the full ordered digest to stdout and exits 0 for an eligible
+#   primary session: this is a reporting command, not a gate. A lock refusal
+#   is reported as a loud banner inline, never a silent failure or a non-zero
+#   exit that would make an agent skip the rest of the digest. An invocation
+#   with FM_TASK_ID set exits 2 before any home mutation.
 #
 #   --reemit  This process ALREADY took the helm at its own startup and has
 #             only lost its context (a /clear or a compaction). Skip the
@@ -219,7 +222,9 @@
 #             already treats a lock owned through shared ancestry or a trusted
 #             same-session Claude id as its own, so the re-emit proceeds, while
 #             a lock another live session took meanwhile still produces the
-#             ordinary read-only path.
+#             ordinary read-only path. A re-emit prints a short RE-EMIT CUE
+#             first, so a harness that spills a large output and shows only its
+#             head still tells the model to read the saved full output.
 #
 #   --source  The native session-open source, supplied only by
 #             fm-sessionstart-run.sh. A genuine `startup` that owns the active
@@ -232,6 +237,10 @@
 #             current AGENTS.md to print before the bulky digest. The baseline
 #             remains immutable so every later drifted compaction refreshes
 #             again, while an equal baseline emits no instruction refresh.
+# A direct manual invocation with FM_TASK_ID set refuses before taking a home
+# lock or running bootstrap. fm-spawn.sh exports FM_TASK_ID only into ship and
+# scout panes, never a secondmate or primary, and fm-test-run.sh already
+# refuses on the same marker.
 set -u
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -271,11 +280,18 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 
+# Native session-open hooks already stand down for task workers. This check
+# covers a marked worker invoking the composed command by hand.
+if [ -n "${FM_TASK_ID:-}" ]; then
+  printf 'fm-session-start: refusing task worker FM_TASK_ID=%s; this command belongs to the supervising firstmate\n' "$FM_TASK_ID" >&2
+  exit 2
+fi
+
 # --- 0. runtime bound ---------------------------------------------------------
 # The ordered stage list is the contract behind the truncation banner: the child
 # names the stage it is entering, and the parent reports every stage at or after
 # that one as never emitted. Keep it in the exact order the digest prints.
-SESSION_START_STAGES='lock bootstrap wake-queue supervision-instructions read-once fleet-state network-checks context next-step'
+SESSION_START_STAGES='lock role bootstrap wake-queue supervision-instructions read-once fleet-state network-checks context next-step'
 
 stage() {  # <stage-name>: breadcrumb for the parent's truncation banner
   [ -n "${FM_SESSION_START_STAGE_FILE:-}" ] || return 0
@@ -371,6 +387,8 @@ PRIMARY_HARNESS=$("$SCRIPT_DIR/fm-harness.sh" 2>/dev/null || printf unknown)
 . "$SCRIPT_DIR/fm-wake-lib.sh"
 # shellcheck source=bin/fm-line-cap-lib.sh
 . "$SCRIPT_DIR/fm-line-cap-lib.sh"
+# shellcheck source=bin/fm-ready-timeout-lib.sh
+. "$SCRIPT_DIR/fm-ready-timeout-lib.sh"
 # shellcheck source=bin/fm-hold-reason-lib.sh
 . "$SCRIPT_DIR/fm-hold-reason-lib.sh"
 
@@ -593,13 +611,13 @@ hash_file_sha256() {
   local file=$1 digest
   [ -f "$file" ] || return 1
   if command -v shasum >/dev/null 2>&1; then
-    digest=$(shasum -a 256 "$file" 2>/dev/null | awk '
+    digest=$(shasum -a 256 2>/dev/null < "$file" | awk '
       length($1) == 64 && $1 !~ /[^[:xdigit:]]/ { print "sha256:" $1; found=1; exit }
       END { if (!found) exit 1 }
     ') && [ -n "$digest" ] && { printf '%s\n' "$digest"; return 0; }
   fi
   if command -v sha256sum >/dev/null 2>&1; then
-    digest=$(sha256sum "$file" 2>/dev/null | awk '
+    digest=$(sha256sum 2>/dev/null < "$file" | awk '
       length($1) == 64 && $1 !~ /[^[:xdigit:]]/ { print "sha256:" $1; found=1; exit }
       END { if (!found) exit 1 }
     ') && [ -n "$digest" ] && { printf '%s\n' "$digest"; return 0; }
@@ -667,6 +685,12 @@ if [ "$REEMIT" -eq 0 ] && [ "$SESSION_SOURCE" = startup ]; then
 fi
 
 if [ "$REEMIT" -eq 1 ]; then
+  # First in the output on purpose: a harness that spills a large hook output
+  # delivers only a short head inline (Claude: about 2,000 characters), and
+  # CONTEXT prints last, so this cue is the part that must survive the spill.
+  printf 'RE-EMIT CUE: if this output ends with "Output too large ... Full output saved to <path>",\n'
+  printf 'read that whole file now, before acting. Otherwise read data/captain.md, data/captain-shared.md,\n'
+  printf 'and data/learnings.md under %s now if any of them is missing below.\n' "$DATA"
   section "SESSION START (CONTEXT RE-EMIT) - $FM_HOME"
   printf 'This session already took the helm at its own startup and has only lost its\n'
   printf 'context. Lock ownership is re-verified and the durable records below are\n'
@@ -702,6 +726,15 @@ if [ "$LOCK_RC" -ne 0 ]; then
 fi
 REBUILDING_SESSION_PID=$(fm_harness_ancestry_pid 2>/dev/null || true)
 print_agents_refresh_if_required "$REBUILDING_SESSION_PID"
+
+# --- 1b. home role -------------------------------------------------------
+# This home's firstmate-repository role: user/operator unless an explicit
+# local or receipt-proven inherited grant says otherwise (bin/fm-role-lib.sh).
+# Purely local resolution - no network, no gh call.
+stage role
+subsection "HOME ROLE"
+FM_HOME="$FM_HOME" FM_CONFIG_OVERRIDE="$CONFIG" "$SCRIPT_DIR/fm-role.sh" report 2>/dev/null \
+  || printf 'fm-role: unknown (bin/fm-role.sh report failed)\n'
 
 if [ "$READ_ONLY" -eq 0 ]; then
   if [ "$REEMIT" -eq 0 ]; then
@@ -875,7 +908,9 @@ Go to a source directly only when:
   - the NETWORK CHECKS section reported its checks still IN PROGRESS and this
     turn needs their verdict (bin/fm-startup-network.sh report),
   - or a STARTUP TRUNCATED banner named the stage that would have printed it, in
-    which case that stage's sources were never emitted and must be reconciled.
+    which case that stage's sources were never emitted and must be reconciled,
+  - or a context re-emit opened with a read cue because the
+    harness cut the digest short.
 EOF
 
 # --- 6. fleet-state digest ---------------------------------------------
@@ -913,6 +948,12 @@ for meta in "$STATE"/*.meta; do
     fi
   else
     printf 'endpoint: unknown (no window recorded)\n'
+  fi
+  # A deliberate stop is not a lost worker: name it so recovery relaunches on
+  # demand instead of treating the agent-less pane as stuck.
+  if fm_ready_timeout_parked "$STATE" "$id"; then
+    printf 'agent: stopped by the ready-session timeout while its pull request waited on a merge (record: %s); relaunch with bin/fm-control.sh %s relaunch when it needs more work\n' \
+      "$(fm_ready_timeout_record_path "$STATE" "$id")" "$id"
   fi
 
   status="$STATE/$id.status"

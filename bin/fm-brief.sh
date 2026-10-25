@@ -14,7 +14,7 @@
 # charters still use a single `{TASK}` charter fill. Firstmate may adjust other
 # sections when the task genuinely deviates (e.g. working an existing external
 # PR instead of shipping a new one).
-# Usage: fm-brief.sh <task-id> <repo-name> --mode <no-mistakes|direct-PR|local-only> [--branch-prefix <prefix>] [--base-branch <branch>] [--forge <none|gerrit> [--shape squash]] [--herdr-lab]
+# Usage: fm-brief.sh <task-id> <repo-name> --mode <no-mistakes|direct-PR|local-only> [--branch-prefix <prefix>] [--base-branch <branch>] [--house-feature <name> --branch-base <main|house>] [--forge <none|gerrit|forgejo|external> [--shape squash]] [--herdr-lab]
 #        fm-brief.sh <task-id> <repo-name> --scout [--base-branch <branch>] [--herdr-lab]
 #        fm-brief.sh <task-id> --secondmate {<project>...|--no-projects}
 #   --scout writes the scout contract instead: the deliverable is a report at
@@ -59,6 +59,12 @@
 # standing per-project preference, and firstmate resolves it per task at intake
 # and passes the explicit flag. Refused on --scout and --secondmate: a scout
 # makes no branch and a charter is not a delivery contract.
+# --house-feature <name> selects a durable housefeature/<name> integration
+# branch while the ordinary ship branch remains <prefix><task-id>. The paired
+# --branch-base selects main for a contribution-ready feature, or house for a
+# captain-marked house-only feature. Both are required together on a PR-based
+# ship and refused elsewhere. The generated first action uses
+# fm-housefeature-start.sh to create or reuse the durable branch before work.
 # --base-branch <branch> starts the task from origin's <branch> instead of the
 # repository default, for work that belongs on a named integration, feature, or
 # release branch. It writes a "Base branch: <branch>" line under `# Setup`, which
@@ -66,25 +72,43 @@
 # choose the copy's starting point, and a ship's
 # Definition of done then targets that branch with its pull request.
 # bin/fm-dod-lib.sh's fm_base_branch_valid owns which deliveries accept one.
-# Refused on --secondmate.
+# Refused on --secondmate and with --house-feature, which selects its own base.
 # --forge names the project's forge, defaults to none, and is orthogonal to --mode
 # exactly as the registry's `forge=` token is. It is the captain's confirmed
 # registry binding, read from data/projects.md at intake and passed here; this
 # script never infers a forge and never looks the binding up, and bin/fm-spawn.sh
 # refuses a brief whose forge disagrees with the registry. bin/fm-project-mode.sh's
-# header owns what the binding means, and bin/fm-dod-lib.sh owns what `gerrit`
-# changes for the worker. A forge on --mode local-only is refused, because that
-# mode publishes nothing.
+# header owns what the binding means, and bin/fm-dod-lib.sh owns what `gerrit`,
+# `forgejo`, and `external` change in the Definition of done. On `forgejo` this
+# script also names tea instead of gh-axi in the ship brief's forge-CLI rule, and
+# on `external` that rule names no forge CLI, because the home's review tool is
+# the only publishing tool. A forge on --mode local-only is refused, because that
+# mode publishes nothing, and `external` also refuses no-mistakes.
 # --shape names how a forge=gerrit task is published, and only `squash` - one
 # change - is accepted: `stack` is refused until a stack can be watched by its
 # membership pinned when its watch is armed, because the merge watch follows one
 # change.
 # It defaults to squash on gerrit and is refused without it.
+# --upstream-consent <host>/<owner>/<repo> records the captain's one-off
+# approval for this one task to publish to that repository when it is
+# a firstmate-lineage repository. It renders as an `upstream-consent=` token on the
+# Delivery contract line, bin/fm-spawn.sh checks it against this home's role
+# authority and records it in the task record, and bin/fm-promote.sh honors it
+# the same way. Ship-only: a scout publishes nothing and a charter is not a
+# delivery contract.
+# --project <dir> is the task's project directory, used to detect when a ship
+# brief would publish to firstmate's own repository: for such a task this
+# scaffold refuses a publishing mode that the home's role or recorded consent
+# does not authorize, before the contract exists. Pass it on every ship
+# scaffold so detection does not depend on the caller recognizing the repo;
+# bin/fm-spawn.sh repeats the check at launch regardless.
 # The generated ship brief records the chosen mode as a fixed machine-readable
 # "Delivery contract: mode=<mode>" line, followed by " forge=gerrit shape=squash"
-# on that forge. bin/fm-spawn.sh reads that line and refuses to launch a ship task
-# whose explicit --mode or registered forge disagrees, so an adjusted brief and the
-# recorded task metadata cannot drift apart.
+# on Gerrit, " forge=forgejo" on Forgejo, or " forge=external" on an external
+# review tool. bin/fm-spawn.sh reads that line and
+# refuses to launch a ship task whose explicit --mode or registered forge
+# disagrees, so an adjusted brief and the recorded task metadata cannot drift
+# apart.
 # Ship briefs begin with a worktree-isolation assertion before the branch step.
 # Both crewmate scaffolds carry one shared rule against administering the
 # infrastructure every lane shares - the no-mistakes daemon and the worktree pool
@@ -99,7 +123,7 @@
 # declared-external-wait verb (FM_CLASSIFY_PAUSED_VERB, default "paused") from
 # "blocked:": pause for a known wait expected to clear on its own, including
 # the worker's own background work, pipeline or long command; blocked when
-# firstmate must act. The first-sight alert remains; repeats use the long cadence.
+# firstmate must act. A standing declaration is honored from first sight.
 # Emission-time syntax and legacy unknown-time handling are owned by
 # bin/fm-classify-lib.sh; each scaffold renders the stamp as a literal <epoch>
 # placeholder the worker replaces with a numeric Unix time as it appends, so a
@@ -150,14 +174,17 @@ esac
 . "$SCRIPT_DIR/fm-classify-lib.sh"
 # shellcheck source=bin/fm-dod-lib.sh
 . "$SCRIPT_DIR/fm-dod-lib.sh"
+# shellcheck source=bin/fm-role-lib.sh
+. "$SCRIPT_DIR/fm-role-lib.sh"
 PAUSED_VERB=${FM_CLASSIFY_PAUSED_VERB:-$FM_CLASSIFY_PAUSED_VERB_DEFAULT}
 IFS= read -r -d '' CREWMATE_PAUSE_INSTRUCTIONS <<EOF || true
-   Use \`$PAUSED_VERB: {why}\` - distinct from \`blocked:\` - when deliberately waiting for work or an external condition expected to clear on its own, including your own validation round.
+   Use \`$PAUSED_VERB: {why}\` - distinct from \`blocked:\` - when deliberately waiting for work or a known external wait you expect to clear on its own, including your own validation round.
    Before ending your turn with your own background shell or monitor still running, or before waiting on your own pipeline run or a long foreground command, append \`$PAUSED_VERB [at=<epoch>]: {job and completion condition}\` to the status file.
    Name what you are waiting for and what will let you resume; do not repeat the declaration on every poll.
+   For a long job you launched yourself, append the \`$PAUSED_VERB:\` line first, naming the job and how long you expect it to take, check on it again once that time has passed, and append \`working:\` when you resume.
    Do not declare active implementation or reasoning as a wait.
-   Firstmate may still raise one first-sight alert; the declared wait then uses the existing long recheck cadence instead of repeated possible-wedge alarms.
-   When you know when the wait clears, include \`until <YYYY-MM-DDTHH:MMZ>\` (UTC) for a recheck at that time.
+   Firstmate then leaves your idle pane alone and rechecks it on a long cadence instead of treating it as a possible wedge.
+   When you know when the wait clears, include \`until <YYYY-MM-DDTHH:MMZ>\` (UTC) for a recheck at that time; for your own background job or command with a timeout, that time is its start plus its timeout, rounded up to the minute.
    Follow the resolution rule below when the wait clears, then resume the task.
    Use \`blocked:\` when you are stuck and need help.
 EOF
@@ -195,12 +222,20 @@ MODE=
 MODE_SET=0
 BRANCH_PREFIX=fm/
 BRANCH_PREFIX_SET=0
+HOUSE_FEATURE=
+HOUSE_FEATURE_SET=0
+BRANCH_BASE=
+BRANCH_BASE_SET=0
 BASE_BRANCH=
 BASE_BRANCH_SET=0
 FORGE=none
 FORGE_SET=0
 SHAPE=
 SHAPE_SET=0
+UPSTREAM_CONSENT=
+UPSTREAM_CONSENT_SET=0
+PROJECT_DIR=
+PROJECT_DIR_SET=0
 POS=()
 want_value=
 for a in "$@"; do
@@ -211,9 +246,13 @@ for a in "$@"; do
     case "$want_value" in
       mode) MODE=$a; MODE_SET=1 ;;
       branch-prefix) BRANCH_PREFIX=$a; BRANCH_PREFIX_SET=1 ;;
+      house-feature) HOUSE_FEATURE=$a; HOUSE_FEATURE_SET=1 ;;
+      branch-base) BRANCH_BASE=$a; BRANCH_BASE_SET=1 ;;
       base-branch) BASE_BRANCH=$a; BASE_BRANCH_SET=1 ;;
       forge) FORGE=$a; FORGE_SET=1 ;;
       shape) SHAPE=$a; SHAPE_SET=1 ;;
+      upstream-consent) UPSTREAM_CONSENT=$a; UPSTREAM_CONSENT_SET=1 ;;
+      project) PROJECT_DIR=$a; PROJECT_DIR_SET=1 ;;
       *) echo "error: internal parser state for --$want_value" >&2; exit 1 ;;
     esac
     want_value=
@@ -228,12 +267,20 @@ for a in "$@"; do
     --mode=*) MODE=${a#--mode=}; MODE_SET=1 ;;
     --branch-prefix) want_value="branch-prefix" ;;
     --branch-prefix=*) BRANCH_PREFIX=${a#--branch-prefix=}; BRANCH_PREFIX_SET=1 ;;
+    --house-feature) want_value="house-feature" ;;
+    --house-feature=*) HOUSE_FEATURE=${a#--house-feature=}; HOUSE_FEATURE_SET=1 ;;
+    --branch-base) want_value="branch-base" ;;
+    --branch-base=*) BRANCH_BASE=${a#--branch-base=}; BRANCH_BASE_SET=1 ;;
     --base-branch) want_value="base-branch" ;;
     --base-branch=*) BASE_BRANCH=${a#--base-branch=}; BASE_BRANCH_SET=1 ;;
     --forge) want_value=forge ;;
     --forge=*) FORGE=${a#--forge=}; FORGE_SET=1 ;;
     --shape) want_value=shape ;;
     --shape=*) SHAPE=${a#--shape=}; SHAPE_SET=1 ;;
+    --upstream-consent) want_value="upstream-consent" ;;
+    --upstream-consent=*) UPSTREAM_CONSENT=${a#--upstream-consent=}; UPSTREAM_CONSENT_SET=1 ;;
+    --project) want_value="project" ;;
+    --project=*) PROJECT_DIR=${a#--project=}; PROJECT_DIR_SET=1 ;;
     # yolo never reaches the worker: it is firstmate's merge authority, not a
     # brief input. Refuse it loudly so it is never silently dropped here and then
     # believed to have been recorded.
@@ -268,6 +315,34 @@ if [ "$KIND" != ship ] && [ "$BRANCH_PREFIX_SET" -eq 1 ]; then
   echo "error: --branch-prefix applies only to ship briefs; a scout makes no branch and a secondmate charter is not a delivery contract" >&2
   exit 1
 fi
+if [ "$KIND" != ship ] && { [ "$HOUSE_FEATURE_SET" -eq 1 ] || [ "$BRANCH_BASE_SET" -eq 1 ]; }; then
+  echo "error: --house-feature and --branch-base apply only to ship briefs" >&2
+  exit 1
+fi
+if [ "$BRANCH_PREFIX" = housefeature/ ]; then
+  echo "error: a house-feature worker uses its ordinary fm/ task branch; select the durable target with --house-feature" >&2
+  exit 1
+fi
+if [ "$HOUSE_FEATURE_SET" -eq 1 ]; then
+  [ "$MODE" != local-only ] && [ "$FORGE" = none ] || {
+    echo "error: --house-feature requires a GitHub PR delivery mode" >&2
+    exit 1
+  }
+  case "$HOUSE_FEATURE" in
+    ''|*[!a-zA-Z0-9._-]*) echo "error: --house-feature must be a single branch-name component" >&2; exit 1 ;;
+  esac
+  git check-ref-format --branch "housefeature/$HOUSE_FEATURE" >/dev/null 2>&1 || {
+    echo "error: --house-feature gives an invalid branch name" >&2
+    exit 1
+  }
+  case "$BRANCH_BASE" in
+    main|house) ;;
+    *) echo "error: --house-feature requires --branch-base main or house" >&2; exit 1 ;;
+  esac
+elif [ "$BRANCH_BASE_SET" -eq 1 ]; then
+  echo "error: --branch-base applies only with --house-feature" >&2
+  exit 1
+fi
 case "$BRANCH_PREFIX" in
   *' '*) echo "error: --branch-prefix must not contain a space (got '$BRANCH_PREFIX')" >&2; exit 1 ;;
   -*) echo "error: --branch-prefix must not start with '-' (got '$BRANCH_PREFIX')" >&2; exit 1 ;;
@@ -289,16 +364,70 @@ if [ "$KIND" = ship ]; then
     echo "error: --shape applies only with --forge gerrit, where the worker publishes the change itself" >&2
     exit 1
   fi
+  # A Forgejo project's pull requests are handled with tea, so the ship brief's
+  # forge-CLI rule names it instead of gh-axi; an external review tool has no
+  # forge CLI at all; every other forge keeps gh-axi.
+  if [ "$FORGE" = forgejo ]; then
+    FORGE_RULE_LINE="Use tea for Forgejo operations and chrome-devtools-axi for browser operations."
+  elif [ "$FORGE" = external ]; then
+    FORGE_RULE_LINE="Publish only through the review tool your Definition of done names, and use chrome-devtools-axi for browser operations."
+  else
+    FORGE_RULE_LINE="Use gh-axi for GitHub operations and chrome-devtools-axi for browser operations."
+  fi
 elif [ "$FORGE_SET" -eq 1 ] || [ "$SHAPE_SET" -eq 1 ]; then
   echo "error: --forge and --shape apply only to ship briefs; a scout delivers a report and a secondmate charter is not a delivery contract" >&2
   exit 1
 fi
 if [ "$BASE_BRANCH_SET" -eq 1 ]; then
+  [ "$HOUSE_FEATURE_SET" -eq 0 ] || {
+    echo "error: --base-branch cannot be combined with --house-feature, which selects its own durable base" >&2
+    exit 1
+  }
   if [ "$KIND" = secondmate ] || [ -z "$BASE_BRANCH" ]; then
     echo "error: --base-branch takes a branch name and applies only to ship and scout briefs" >&2
     exit 1
   fi
   fm_base_branch_valid "$BASE_BRANCH" "$MODE" "$FORGE" "fm-brief.sh --base-branch" || exit 1
+fi
+if [ "$KIND" != ship ]; then
+  [ "$UPSTREAM_CONSENT_SET" -eq 0 ] || {
+    echo "error: --upstream-consent applies only to ship briefs; a scout publishes nothing and a charter is not a delivery contract" >&2
+    exit 1
+  }
+  [ "$PROJECT_DIR_SET" -eq 0 ] || {
+    echo "error: --project applies only to ship briefs" >&2
+    exit 1
+  }
+fi
+if [ "$UPSTREAM_CONSENT_SET" -eq 1 ]; then
+  [ -n "$UPSTREAM_CONSENT" ] || {
+    echo "error: --upstream-consent requires a non-empty <host>/<owner>/<repo> value" >&2
+    exit 1
+  }
+  fm_role_scope_valid "$UPSTREAM_CONSENT" || {
+    echo "error: --upstream-consent must be <host>/<owner>/<repo> (got '$UPSTREAM_CONSENT')" >&2
+    exit 1
+  }
+  UPSTREAM_CONSENT=$(fm_role_scope_norm "$UPSTREAM_CONSENT")
+fi
+# Self-repository pre-gate for a publishing ship brief: detectable only when
+# --project was passed, so the check runs here only then. bin/fm-spawn.sh
+# repeats it at launch with the resolved project path.
+if [ "$KIND" = ship ] && [ "$MODE" != local-only ] && [ "$PROJECT_DIR_SET" -eq 1 ]; then
+  [ -n "$PROJECT_DIR" ] || {
+    echo "error: --project requires a non-empty directory" >&2
+    exit 1
+  }
+  gate_rc=0
+  fm_role_gate_self_publish "$FM_HOME" "$CONFIG" "$PROJECT_DIR" "$FM_ROOT" "$UPSTREAM_CONSENT" || gate_rc=$?
+  case $gate_rc in
+    0 | 2) ;;
+    *)
+      echo "error: $FM_ROLE_PUB_DENIAL" >&2
+      echo "error: to let this home publish to ${FM_ROLE_PUB_TARGET:-that repository}, write 'maintainer ${FM_ROLE_PUB_TARGET:-<host>/<owner>/<repo>}' into $CONFIG/firstmate-role (docs/configuration.md \"Firstmate role\"), or pass --upstream-consent ${FM_ROLE_PUB_TARGET:-<host>/<owner>/<repo>} for this one task with the captain's explicit approval" >&2
+      exit 1
+      ;;
+  esac
 fi
 ID=${POS[0]}
 BRANCH="$BRANCH_PREFIX$ID"
@@ -307,6 +436,24 @@ if ! git check-ref-format --branch "$BRANCH" >/dev/null 2>&1; then
   exit 1
 fi
 printf -v BRANCH_Q '%q' "$BRANCH"
+BRANCH_SETUP="git checkout -b $BRANCH_Q --"
+BRANCH_SETUP_VERB="create your branch"
+BRANCH_NOTE=
+PR_BASE=
+if [ -n "$HOUSE_FEATURE" ]; then
+  PR_BASE="housefeature/$HOUSE_FEATURE"
+  printf -v HOUSE_FEATURE_Q '%q' "$HOUSE_FEATURE"
+  printf -v HOUSE_START_Q '%q' "$FM_ROOT/bin/fm-housefeature-start.sh"
+  BRANCH_SETUP="$HOUSE_START_Q $HOUSE_FEATURE_Q $BRANCH_BASE $BRANCH_Q"
+  BRANCH_SETUP_VERB="prepare your branch"
+  if [ "$BRANCH_BASE" = house ]; then
+    BRANCH_NOTE="House feature intake: house-only. Apply the existing \`house-only\` label to the integration pull request you open from \`$PR_BASE\` into \`house\`."
+  else
+    BRANCH_NOTE="House feature intake: main-based. Work on \`$BRANCH\` and deliver it into \`$PR_BASE\`; resolve later conflicts with \`house\` on the \`house\` integration line."
+  fi
+  BRANCH_NOTE="$BRANCH_NOTE
+The setup command may create only \`$PR_BASE\` at an existing fork base commit; the selected delivery path owns publishing your \`$BRANCH\` work."
+fi
 
 if [ "$KIND" = secondmate ] && [ "$HERDR_LAB" -eq 1 ]; then
   echo "error: --herdr-lab applies only to crewmate ship or scout briefs" >&2
@@ -379,7 +526,7 @@ INBOX_DIR=$(shell_quote "$STATE/$ID.inbox")
 IFS= read -r -d '' INBOX_SECTION <<EOF || true
 # Firstmate instruction inbox
 Firstmate steers you through durable message files in $INBOX_DIR.
-When a terminal message says an instruction is waiting there - and at any natural checkpoint when you are unsure - list $INBOX_DIR/*.msg, read and act on each message in numeric order, then acknowledge each handled message by moving it: \`mv $INBOX_DIR/NNN.msg $INBOX_DIR/handled/\`.
+When a terminal message says an instruction is waiting there - and at any natural checkpoint when you are unsure - list them with \`find $INBOX_DIR -maxdepth 1 -name '*.msg' 2>/dev/null | sort -V\`, read and act on each message in numeric order, then acknowledge each handled message by moving it: \`mv $INBOX_DIR/NNN.msg $INBOX_DIR/handled/\`.
 The move IS the acknowledgement: without it firstmate rings again and eventually treats you as stuck. An empty or absent inbox needs no action.
 EOF
 if [ -e "$CONFIG/wait-no-turns" ]; then
@@ -481,6 +628,7 @@ Report only true captain-relevant outcomes or a declared external wait by append
 States: working, needs-decision, blocked, $PAUSED_VERB, done, failed.
 Substitute \`<epoch>\` with the current Unix time in seconds - run \`date +%s\` and write the number it printed; a stamp that is not plain digits records no time at all.
 Use \`$PAUSED_VERB: {why}\` (distinct from \`blocked:\`) only when your domain is deliberately idling on a known external wait you expect to clear on its own, naming when it clears with \`until <YYYY-MM-DDTHH:MMZ>\` (UTC) when you know; use \`blocked:\` when you are stuck and need firstmate to act.
+A long job your domain launched itself counts too: if you end a turn while it runs, append the \`$PAUSED_VERB:\` line first, naming the job and how long you expect it to take, and append \`working:\` when you resume.
 Use this only for material phase changes, a captain decision, a real blocker, a failure, work ready for review, or work you landed.
 Work you landed includes a merge you performed yourself under standing merge authority and one the captain merged on the forge: under that authority nothing is ever \"ready for review\", so a landed merge that goes unreported reaches the captain as silence.
 This is also how you return the answer to a marked from-firstmate request above.
@@ -556,6 +704,19 @@ IFS= read -r -d '' TASK_SECTION <<'EOF' || true
 EOF
 TASK_SECTION=${TASK_SECTION%$'\n'}
 
+IFS= read -r -d '' EVIDENCE_SECTION <<'EOF' || true
+# Evidence provenance
+When a task requires live, verified, external, or independently confirmed evidence, every such claim must name the exact artifact read, where it came from, and when it was read.
+A synthetic or local probe of our own code, including a self-authored scenario, must be labelled synthetic and may never be presented as live or external verification.
+The words live, verified, real, or independent must never describe results produced by our own code, a fixture, a synthetic scenario, an offline replay, or a closed proxy; call that work synthetic/offline built-CLI validation and state any real-account limitation beside it.
+An affirmative result, measurement, scenario, validation, test, account, confirmation, or evidence claim described as live, verified, real, independent, or external is an evidence claim; a line such as `N of M scenarios driven live` counts even when N is zero.
+For the entire PR body, write exactly one line of each form: `evidence-artifact: /absolute/path`, `evidence-command: exact command`, and `evidence-captured: YYYY-MM-DDTHH:MM:SSZ` (or an ISO 8601 offset such as `+10:00`).
+Start each metadata line at the beginning of the line; a Markdown bullet such as `- evidence-artifact: ...` is not recognised.
+Use one metadata block for the whole body, even when it contains several claims; a separate block per claim is refused.
+The artifact must be a readable file inside this worker's worktree or `/tmp/fm-<task-id>`, not another task's directory; an escaping symlink is refused.
+If the required external artifact cannot be obtained, stop and report `blocked:` or `paused:` instead of completing with a green result.
+EOF
+EVIDENCE_SECTION=${EVIDENCE_SECTION%$'\n'}
 # One shared string keeps the ship and scout infrastructure rule identical.
 # Rule 2 governs file edits, so it does not prohibit pool administration.
 # The secondmate charter deliberately omits this rule because a secondmate
@@ -606,6 +767,8 @@ $TASK_SECTION
 
 $HERDR_SECTION
 
+$EVIDENCE_SECTION
+
 # Setup
 $SETUP_BASE
 This is a SCOUT task: the deliverable is a written report, not a PR.
@@ -626,10 +789,12 @@ The report is the only thing that survives, so anything worth keeping must be in
    Whenever you mention a PR anywhere - a status line, your terminal, a summary - write its full
    https:// URL exactly as the forge printed it, never a bare number such as "PR 108"; firstmate
    copies that URL from your line rather than assembling one.
+   Never end a turn on an announced next step: take it in the same turn with your tools instead of stopping on the announcement, or report \`$PAUSED_VERB:\`/\`blocked:\` with the reason.
 $CREWMATE_PAUSE_INSTRUCTIONS
 5. If you hit the same obstacle twice, append \`blocked [at=<epoch>]: {why}\` and stop; firstmate will help.
 6. If a decision belongs to a human (product choices, destructive actions),
    append \`needs-decision [at=<epoch>]: {summary of options}\` and stop. Firstmate will reply with the decision.
+   Your own investigation and report-writing needs no such approval: drive it yourself, and do not wait for a firstmate go-ahead you never requested this way.
    A decision or blocker you opened stays open until a \`resolved\` line carrying its exact key lands; a later \`done:\` or \`working:\` line never closes it, even when the answer is what started that work.
    Firstmate's reply normally writes that closing line at answer time; when a blocker or wait clears WITHOUT a firstmate reply, append \`resolved [at=<epoch>]: {how it cleared}\` yourself (same \`[key=<slug>]\` if you opened it with one) as you resume.
 $SHARED_INFRA_RULE
@@ -667,8 +832,14 @@ case "$MODE" in
 2. Run \`no-mistakes doctor\`; if it reports the repo is not initialized here, run \`no-mistakes init\`."
     ;;
 esac
-RULE1=$(fm_ship_rule_one "$MODE" "$ID" "$BRANCH" "$FORGE" "$BASE_BRANCH") || exit 1
-DOD=$(fm_dod_block "$MODE" "$ID" "$BRANCH" "$FORGE" "$BASE_BRANCH") || exit 1
+RULE1=$(fm_ship_rule_one "$MODE" "$ID" "$BRANCH" "$FORGE" "${PR_BASE:-$BASE_BRANCH}") || exit 1
+DOD=$(fm_dod_block "$MODE" "$ID" "$BRANCH" "$FORGE" "${PR_BASE:-$BASE_BRANCH}" "$UPSTREAM_CONSENT" "$PR_BASE") || exit 1
+BOSUN_SECTION=
+if [ "$MODE" != local-only ] && { [ -f "$DATA/bosun-role.json" ] || [ -L "$DATA/bosun-role.json" ]; }; then
+  BOSUN_SECTION="# Bosun publication authorization
+Keep the named Captain's Maneuver within its ordered paths and run the repository's existing validation and publication machinery.
+The existing PR registration path reads the forge record and verifies the configured Bosun fork, upstream repository, and default branch before recording the PR."
+fi
 
 cat > "$BRIEF" <<EOF
 You are a crewmate: an autonomous worker agent managed by firstmate. Work on your own; do not wait for a human.
@@ -677,6 +848,8 @@ $TASK_SECTION
 
 $HERDR_SECTION
 
+$EVIDENCE_SECTION
+
 # Setup
 $SETUP_BASE
 
@@ -684,14 +857,15 @@ $SETUP_BASE
 The path check is authoritative: \`git rev-parse --git-dir\` and \`git rev-parse --git-common-dir\` can help inspect the repo, but they do not prove you are outside the primary checkout.
 If the top-level path is the primary checkout or not the worktree you were launched in, STOP - do not branch or commit here - append \`blocked [at=<epoch>]: launched in primary checkout, not an isolated worktree\` to the status file and stop.
 
-1. First action: create your branch: \`git checkout -b $BRANCH_Q --\`$SETUP2
+1. First action: $BRANCH_SETUP_VERB: \`$BRANCH_SETUP\`$SETUP2
+$BRANCH_NOTE
 
 # Rules
 $RULE1
 2. Keep project edits inside this worktree; keep proof and scratch output outside it, under \`$DATA/$ID/\` or a temporary directory.
    Outside the worktree, write only that task material and the status and steering-inbox records authorized below.
    Leave the worktree clean before reporting done.
-3. Use gh-axi for GitHub operations and chrome-devtools-axi for browser operations.
+3. $FORGE_RULE_LINE
 4. Report status by appending one line:
    \`$STATUS_APPEND\`
    States: working, needs-decision, blocked, $PAUSED_VERB, done, failed.
@@ -704,11 +878,13 @@ $RULE1
    https:// URL exactly as the forge printed it, never a bare number such as "PR 108"; firstmate
    copies that URL from your line rather than assembling one.
    A mid-task \`working:\` line (including setup complete) is nonterminal: do not end the
-   turn after it; continue the same stage until a defined \`done:\` gate under Definition of done.
+   turn after it unless a \`$PAUSED_VERB:\` line declares the wait; otherwise continue the same stage until a defined \`done:\` gate under Definition of done.
+   The same holds for any next step you announce: take it in the same turn with your tools instead of ending the turn on the announcement, or report \`$PAUSED_VERB:\`/\`blocked:\` with the reason.
 $CREWMATE_PAUSE_INSTRUCTIONS
 5. If you hit the same obstacle twice, append \`blocked [at=<epoch>]: {why}\` and stop; firstmate will help.
 6. If a decision belongs above the implementation worker (product choices, destructive actions),
    append \`needs-decision [at=<epoch>]: {summary of options}\` and stop. Firstmate will reply with the decision.
+   Drive your own validation and delivery path: beyond the handoff your Definition of done names, wait for no approval you did not request through \`needs-decision\`.
 $ASK_USER_BLOCK
    A decision or blocker you opened stays open until a \`resolved\` line carrying its exact key lands; a later \`done:\` or \`working:\` line never closes it, even when the answer is what started that work.
    Firstmate's reply normally writes that closing line at answer time; when a blocker or wait clears WITHOUT a firstmate reply, append \`resolved [at=<epoch>]: {how it cleared}\` yourself (same \`[key=<slug>]\` if you opened it with one) as you resume.
@@ -720,11 +896,15 @@ $WAIT_BLOCK$INBOX_SECTION
 A project's \`AGENTS.md\` or \`CLAUDE.md\` is loaded into every agent session in that project, so edit it only to correct information that is factually wrong - including information your own change made wrong - and never to add knowledge because it is missing.
 A correction edits only the wrong text: do not run \`$FM_ROOT/bin/fm-ensure-agents-md.sh\`, create either file, or add sections, headings, or pointers alongside it.
 
+$BOSUN_SECTION
+
 $DOD
 EOF
 append_brief_include
 if [ "$FORGE" = none ]; then
   echo "scaffolded: $BRIEF (ship, mode=$MODE; replace {TASK} and {FIRSTMATE_SPEC})"
-else
+elif [ "$FORGE" = gerrit ]; then
   echo "scaffolded: $BRIEF (ship, mode=$MODE forge=$FORGE shape=$SHAPE; replace {TASK} and {FIRSTMATE_SPEC})"
+else
+  echo "scaffolded: $BRIEF (ship, mode=$MODE forge=$FORGE; replace {TASK} and {FIRSTMATE_SPEC})"
 fi

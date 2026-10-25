@@ -30,6 +30,8 @@ _FM_MERGE_OUTCOME_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$_FM_MERGE_OUTCOME_LIB_DIR/fm-pr-lib.sh"
 # shellcheck source=bin/fm-parent-channel-lib.sh
 . "$_FM_MERGE_OUTCOME_LIB_DIR/fm-parent-channel-lib.sh"
+# shellcheck source=bin/fm-trace-span-lib.sh
+. "$_FM_MERGE_OUTCOME_LIB_DIR/fm-trace-span-lib.sh"
 
 # shellcheck disable=SC2034 # Public result consumed by sourcing callers.
 FM_MERGE_OUTCOME_ALREADY_RECORDED=false
@@ -105,10 +107,19 @@ fm_merge_outcome_report() {  # <home> <state> <task-id> <pr-url> <origin> [autho
       "check: merge landed: $id $FM_PR_URL$suffix" || status=1
   fi
   if [ "$status" -eq 0 ]; then
+    # A Bosun contribution uses this already-confirmed outcome as its only
+    # transition to Admiral's Maneuver. Other tasks have no such record.
+    if [ -e "$home/data/$id/bosun-contribution.json" ] || [ -L "$home/data/$id/bosun-contribution.json" ]; then
+      FM_HOME=$home python3 "$_FM_MERGE_OUTCOME_LIB_DIR/fm-bosun.py" merged \
+        --task "$id" --url "$FM_PR_URL" || status=1
+    fi
+  fi
+  if [ "$status" -eq 0 ]; then
     fm_pr_poll_merge_mark_notified "$state" "$id" \
       "$provider" "$host" "$path" "$number" || status=1
   fi
   fm_lock_release "$lock"
+  [ "$status" -ne 0 ] || fm_trace_span_pr_merged "$state/$id.meta"
   # Opt-in fleet activity ledger (docs/fleet-ledger.md); off costs one file test.
   [ ! -e "${FM_CONFIG_OVERRIDE:-$home/config}/fleet-ledger" ] || [ "$status" -ne 0 ] || FM_HOME=$home FM_STATE_OVERRIDE=$state "$_FM_MERGE_OUTCOME_LIB_DIR/fm-fleet-ledger.sh" merged "$id" pr "$FM_PR_URL" || true
   return "$status"

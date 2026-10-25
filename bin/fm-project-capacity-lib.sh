@@ -22,7 +22,8 @@
 # project:
 #   <project-name> <capacity>
 # <project-name> is the project's registered name, which is the basename of its
-# clone directory, and <capacity> is a positive integer of at most six digits.
+# clone directory, and <capacity> is a positive integer of at most six digits,
+# without leading zeros.
 # The capacity is the last whitespace-separated field, so the name before it may
 # contain spaces. Blank lines are ignored. A line is a comment when it is `#`,
 # when `#` is followed by whitespace, or when it starts with `#` and its last
@@ -30,7 +31,7 @@
 # writing that `#` immediately against the rest of the name and ending the line
 # with the capacity, for example `#repo 2`. A name that is `#`, or that begins
 # with `#` followed by a space, is the same spelling as a comment and cannot be
-# declared. Any other shape, a project named twice, or an unreadable file makes
+# declared. Any other shape, a project named twice, NUL bytes, or an unreadable file makes
 # the whole declaration unreadable, and bin/fm-spawn.sh then refuses every fresh
 # ship or scout spawn from this machine's homes rather than guessing which limit
 # was meant.
@@ -58,14 +59,26 @@
 # no place. Remote homes are never walked, because their workers run on another
 # machine.
 #
-# Race safety: bin/fm-spawn.sh evaluates admission while holding the shared
-# project lock and keeps holding it until the new task record is published, so
-# two concurrent spawns for one project can never both publish from the same
-# count. A spawn on an uncapped project can still publish a holder for a capped
-# same-origin clone, so every backend takes that lock whenever the declaration
-# caps any project; Orca, which otherwise never takes it, is included. Freeing a
-# place needs no lock, because removing a record or adding pr= only ever lowers
-# the count.
+# Race safety: admission and reservation publication run under the shared
+# project lock. A pending admission holds a process-owned reservation beside
+# that lock until its task metadata takes over, including while Treehouse or
+# Herdr ordering releases the project lock. Every fresh backend reserves when
+# any project is capped, including an uncapped same-origin clone and Orca.
+# Reservations name the canonical task state directory, id, and spawn_gen; only
+# metadata with the same spawn_gen supersedes its reservation. Until then, the
+# reservation holds one place even if an older PR-ready record survives a
+# restart, and that older record is excluded so the task counts once. Successful
+# publication retires the reservation before releasing the project lock; failed
+# launches retire it in their EXIT cleanup. Counting reaps reservations whose
+# original process is proven gone using the PID-start identity lock machinery;
+# uncertain identity remains occupied. Prepared directories are renamed into
+# the counted namespace atomically so interrupted writes cannot hide a holder.
+# Retirement atomically renames a reservation out of that namespace before
+# deleting its contents. A reader ignores a reservation that disappeared
+# during its snapshot, but surviving unreadable or malformed state refuses
+# admission. tests/fm-project-capacity.test.sh pins restart handoff and retirement.
+# Freeing a place needs no lock, because removing a record or reservation, or
+# adding pr=, only ever lowers the count.
 #
 # Requires bin/fm-wake-lib.sh (root home, local homes, project lock path),
 # bin/fm-secondmate-registry-lib.sh (which the local-homes walk reads), and
@@ -97,7 +110,7 @@ fm_project_capacity_config_dir() {  # <spawning-home> <spawning-config-dir>
 # FM_PROJECT_CAPACITY_ANY to 1 when the declaration caps any project at all.
 # Returns 1 with FM_PROJECT_CAPACITY_ERROR when the declaration is unreadable.
 fm_project_capacity_lookup() {  # <config-dir> <project-name>
-  local name=$2 line lineno=0 pname pcap seen='|'
+  local name=$2 line lineno=0 pname pcap seen=$'\n' contents
   FM_PROJECT_CAPACITY_FILE="$1/project-capacity"
   FM_PROJECT_CAPACITY=
   FM_PROJECT_CAPACITY_ANY=
@@ -107,6 +120,19 @@ fm_project_capacity_lookup() {  # <config-dir> <project-name>
   fi
   if [ ! -f "$FM_PROJECT_CAPACITY_FILE" ] || [ ! -r "$FM_PROJECT_CAPACITY_FILE" ]; then
     FM_PROJECT_CAPACITY_ERROR="$FM_PROJECT_CAPACITY_FILE is not a readable regular file"
+    return 1
+  fi
+  # Validate and parse one text snapshot before Bash can erase embedded NULs.
+  # A failed read must not turn an unreadable declaration into an empty one.
+  if ! contents=$(
+    set -o pipefail
+    cat "$FM_PROJECT_CAPACITY_FILE" 2>/dev/null | {
+      local text=''
+      if IFS= read -r -d '' text; then exit 1; fi
+      printf '%s' "$text"
+    }
+  ); then
+    FM_PROJECT_CAPACITY_ERROR="$FM_PROJECT_CAPACITY_FILE is not readable text"
     return 1
   fi
   while IFS= read -r line || [ -n "$line" ]; do
@@ -147,17 +173,19 @@ fm_project_capacity_lookup() {  # <config-dir> <project-name>
       FM_PROJECT_CAPACITY=
       return 1
     fi
+    # Names can contain punctuation, including pipes. Newlines cannot occur
+    # inside a name in this line-based format, so they delimit exact entries.
     case "$seen" in
-      *"|$pname|"*)
+      *$'\n'"$pname"$'\n'*)
         FM_PROJECT_CAPACITY_ERROR="$FM_PROJECT_CAPACITY_FILE line $lineno names $pname a second time"
         FM_PROJECT_CAPACITY=
         return 1
         ;;
     esac
-    seen="$seen$pname|"
+    seen="$seen$pname"$'\n'
     [ "$pname" != "$name" ] || FM_PROJECT_CAPACITY=$pcap
-  done < "$FM_PROJECT_CAPACITY_FILE"
-  [ "$seen" = '|' ] || FM_PROJECT_CAPACITY_ANY=1
+  done <<< "$contents"
+  [ "$seen" = $'\n' ] || FM_PROJECT_CAPACITY_ANY=1
   return 0
 }
 
@@ -175,7 +203,7 @@ fm_project_capacity_lookup() {  # <config-dir> <project-name>
 # a state directory or task record in them cannot be read, since skipping it
 # could undercount the holders.
 fm_project_capacity_occupants() {  # <project-lock> <project-dir> <first-state> <own-id>
-  local want=$1 own=$2 first=$3 self=$4 state meta kind project lock id label i
+  local want=$1 own=$2 first=$3 self=$4 state meta kind project lock id label i pending covered
   local -a cache_dirs cache_locks
   FM_PROJECT_CAPACITY_OCCUPANTS=0
   FM_PROJECT_CAPACITY_OCCUPANT_IDS=
@@ -184,6 +212,7 @@ fm_project_capacity_occupants() {  # <project-lock> <project-dir> <first-state> 
     FM_PROJECT_CAPACITY_ERROR=$FM_LOCAL_FIRSTMATE_ERROR
     return 1
   }
+  fm_project_capacity_pending "$want" "$first" "$self" || return 1
   cache_dirs=("$own")
   cache_locks=("$want")
   for state in "${FM_LOCAL_FIRSTMATE_STATES[@]}"; do
@@ -198,6 +227,14 @@ fm_project_capacity_occupants() {  # <project-lock> <project-dir> <first-state> 
         FM_PROJECT_CAPACITY_ERROR="task record $meta cannot be read"
         return 1
       }
+      covered=0
+      for pending in ${FM_PROJECT_CAPACITY_PENDING_TASKS[@]+"${FM_PROJECT_CAPACITY_PENDING_TASKS[@]}"}; do
+        if [ "$pending" = "$meta" ] || [ "$pending" -ef "$meta" ]; then
+          covered=1
+          break
+        fi
+      done
+      [ "$covered" = 0 ] || continue
       kind=$(fm_meta_get "$meta" kind)
       [ "$kind" != secondmate ] || continue
       [ -z "$(fm_meta_get "$meta" pr)" ] || continue
@@ -224,6 +261,104 @@ fm_project_capacity_occupants() {  # <project-lock> <project-dir> <first-state> 
       FM_PROJECT_CAPACITY_OCCUPANTS=$((FM_PROJECT_CAPACITY_OCCUPANTS + 1))
       FM_PROJECT_CAPACITY_OCCUPANT_IDS="${FM_PROJECT_CAPACITY_OCCUPANT_IDS:+$FM_PROJECT_CAPACITY_OCCUPANT_IDS, }$label"
     done
+  done
+  return 0
+}
+
+# Publish a reservation while the caller holds <project-lock>. Capture this
+# frame's pid before any substitution so the lease belongs to the spawn, not a
+# short-lived child. Sets FM_PROJECT_CAPACITY_RESERVATION on success.
+fm_project_capacity_reserve() {  # <project-lock> <state-dir> <task-id> <spawn-gen>
+  local lock=$1 state=$2 id=$3 generation=$4 pid tmp reservation
+  FM_PROJECT_CAPACITY_RESERVATION=
+  [ -n "$generation" ] || return 1
+  fm_current_pid pid || return 1
+  state=$(CDPATH='' cd -- "$state" && pwd -P) || return 1
+  tmp=$(mktemp -d "${lock}.capacity-tmp.XXXXXXXX") || return 1
+  reservation="${lock}.capacity.${tmp##*.}"
+  # The project lock excludes other publishers; refuse a reused random suffix
+  # rather than letting mv nest this directory inside an existing admission.
+  if [ -e "$reservation" ] || [ -L "$reservation" ] ||
+    [ -e "${lock}.capacity-retired.${tmp##*.}" ] || [ -L "${lock}.capacity-retired.${tmp##*.}" ]; then
+    rm -rf -- "$tmp"
+    return 1
+  fi
+  if ! fm_lock_prepare_owner "$tmp" "$pid" ||
+    ! printf 'state=%s\nid=%s\nspawn_gen=%s\n' "$state" "$id" "$generation" > "$tmp/task" ||
+    ! mv -- "$tmp" "$reservation"; then
+    rm -rf -- "$tmp"
+    return 1
+  fi
+  FM_PROJECT_CAPACITY_RESERVATION=$reservation
+}
+
+# The creating process retires its unique directory; counting may also reap a
+# proven-dead owner. Deletion lowers occupancy, so EXIT cleanup needs no lock.
+fm_project_capacity_release() {  # <reservation>
+  local reservation=$1 retired
+  [ -n "$1" ] || return 0
+  [ -e "$reservation" ] || [ -L "$reservation" ] || return 0
+  retired="${reservation%.capacity.*}.capacity-retired.${reservation##*.}"
+  [ ! -e "$retired" ] && [ ! -L "$retired" ] || return 1
+  if ! mv -- "$reservation" "$retired"; then
+    [ ! -e "$reservation" ] && [ ! -L "$reservation" ]
+    return $?
+  fi
+  rm -rf -- "$retired"
+}
+
+# Add pending admissions to the metadata count, under the project lock.
+# A dead process lease can be removed here without racing a new reservation;
+# an unreadable or malformed lease refuses admission instead of undercounting.
+fm_project_capacity_pending() {  # <project-lock> <first-state> <own-id>
+  local lock=$1 first=$2 self=$3 reservation pid state id generation label first_real task line owner_start
+  FM_PROJECT_CAPACITY_PENDING_TASKS=()
+  first_real=$(CDPATH='' cd -- "$first" && pwd -P) || return 1
+  for reservation in "${lock}".capacity.*; do
+    [ -e "$reservation" ] || [ -L "$reservation" ] || continue
+    if [ ! -d "$reservation" ] || [ -L "$reservation" ] ||
+      [ ! -r "$reservation/pid" ] || [ ! -r "$reservation/lock-owner-start" ] ||
+      [ ! -r "$reservation/task" ] ||
+      ! pid=$(cat "$reservation/pid" 2>/dev/null) ||
+      ! owner_start=$(cat "$reservation/lock-owner-start" 2>/dev/null) ||
+      ! task=$(cat "$reservation/task" 2>/dev/null); then
+      [ -e "$reservation" ] || [ -L "$reservation" ] || continue
+      FM_PROJECT_CAPACITY_ERROR="project reservation $reservation cannot be read"
+      return 1
+    fi
+    [ -e "$reservation" ] || [ -L "$reservation" ] || continue
+    case "$pid" in
+      ''|*[!0-9]*|0)
+        FM_PROJECT_CAPACITY_ERROR="project reservation $reservation has no valid owner pid"
+        return 1 ;;
+    esac
+    if [ -z "$owner_start" ]; then
+      FM_PROJECT_CAPACITY_ERROR="project reservation $reservation has no owner identity"
+      return 1
+    fi
+    if ! fm_lock_owner_alive "$reservation" "$pid"; then
+      fm_project_capacity_release "$reservation" || return 1
+      continue
+    fi
+    state='' id='' generation=''
+    while IFS= read -r line || [ -n "$line" ]; do
+      case "$line" in
+        state=*) state=${line#*=} ;;
+        id=*) id=${line#*=} ;;
+        spawn_gen=*) generation=${line#*=} ;;
+      esac
+    done <<< "$task"
+    if [ -z "$state" ] || [ -z "$id" ] || [ -z "$generation" ]; then
+      FM_PROJECT_CAPACITY_ERROR="project reservation $reservation has no task identity"
+      return 1
+    fi
+    [ "$state/$id" != "$first_real/$self" ] || continue
+    [ "$(fm_meta_get "$state/$id.meta" spawn_gen)" != "$generation" ] || continue
+    FM_PROJECT_CAPACITY_PENDING_TASKS+=("$state/$id.meta")
+    label="$id (pending)"
+    [ "$state" = "$first_real" ] || label="$id in $(dirname "$state") (pending)"
+    FM_PROJECT_CAPACITY_OCCUPANTS=$((FM_PROJECT_CAPACITY_OCCUPANTS + 1))
+    FM_PROJECT_CAPACITY_OCCUPANT_IDS="${FM_PROJECT_CAPACITY_OCCUPANT_IDS:+$FM_PROJECT_CAPACITY_OCCUPANT_IDS, }$label"
   done
   return 0
 }

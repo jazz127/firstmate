@@ -96,6 +96,8 @@ import {
   ToolExecutionComponent,
   VERSION,
   type AgentSession,
+  type BeforeAgentStartEvent,
+  type MessageStartEvent,
   type ExtensionAPI,
   type ExtensionCommandContext,
   type ToolDefinition,
@@ -230,6 +232,14 @@ function offerEligible(offer: BranchDispatchOffer): boolean {
   return offer.eligible === true;
 }
 
+// Identify the supported custom trigger before prompt-only SDKs can narrow it
+// to never. The message type comes from the public SDK in both releases.
+function isCustomBeforeAgentStart(event: BeforeAgentStartEvent): event is BeforeAgentStartEvent & {
+  message: Extract<MessageStartEvent["message"], { role: "custom" }>;
+} {
+  return !("prompt" in event) && "message" in event;
+}
+
 function isProcessingCustomMessage(message: { role?: string; customType?: string }): boolean {
   return message.role === "custom" && message.customType === PROCESSING_MESSAGE_TYPE;
 }
@@ -267,10 +277,9 @@ type FollowMainResolution =
 // come from Pi's own getSupportedThinkingLevels/clampThinkingLevel, so this
 // array exists for exactly one job the type system cannot do at runtime:
 // rejecting a hand-edited pin token Pi would not recognize at all. The
-// assertion below fails the tracked strict typecheck against the INSTALLED Pi
-// package (tests/fm-pi-primary-types.test.sh) the moment Pi adds or removes a
-// level, in either direction, so the list cannot drift into a stale Firstmate
-// catalog.
+// assertion below fails compilation if the SDK's types add or remove a level,
+// in either direction, so this list cannot drift from the checked vocabulary.
+// tests/fm-pi-primary-types.test.sh owns the checked SDK matrix.
 const BRANCH_EFFORT_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
 type DeclaredBranchEffort = (typeof BRANCH_EFFORT_LEVELS)[number];
 const piOwnsTheEffortVocabulary: [DeclaredBranchEffort] extends [BranchEffort]
@@ -1002,7 +1011,7 @@ export default function (pi: ExtensionAPI) {
     const message = {
       customType: "fm-branch-merge",
       content: `${MERGE_NOTE_BOAT} ${row.task}: ${row.summary}`,
-      display: !row.silent,
+      display: false,
     };
     if (mainStreaming) pi.sendMessage(message, { deliverAs: "nextTurn" });
     else pi.sendMessage(message, {});
@@ -1194,7 +1203,7 @@ export default function (pi: ExtensionAPI) {
       name: "fm_branch_report",
       label: "Report supervision outcome",
       description:
-        "Record the outcome of one handled fleet event: write it durably to the outcome store, then merge it into the captain-facing main conversation. verdict captain persists an exact visible entry and opens one sequence-keyed processing turn on main that stays open until main acknowledges it; routine notes render unless silent marks an eligible no-change outcome.",
+        "Record the outcome of one handled fleet event: write it durably to the outcome store, then merge it into the captain-facing main conversation. verdict captain persists an exact visible entry and opens one sequence-keyed processing turn on main that stays open until main acknowledges it; routine outcomes stay hidden and turn-free, but remain available through fm_branch_outcomes.",
       parameters: Type.Object({
         task: Type.String({ description: "The task id the event belongs to (or 'fleet' for fleet-wide events)" }),
         verdict: Type.Union([Type.Literal("routine"), Type.Literal("captain")], {
@@ -1207,7 +1216,7 @@ export default function (pi: ExtensionAPI) {
         }),
         wake: Type.Optional(Type.String({ description: "The wake reason line this outcome answers" })),
         silent: Type.Optional(Type.Boolean({
-          description: "True only for an eligible routine no-change outcome; captain outcomes are never silent, and actions, state changes, or new results stay rendered",
+          description: "True only for an eligible routine no-change outcome, such as an unchanged heartbeat or a still-busy worker with nothing new and no action taken; routine outcomes are hidden regardless, captain outcomes are never silent, and omit or use false for any state change, action, failure, blocker, or result worth a note",
         })),
       }),
       execute: async (_toolCallId, params) => {
@@ -1670,13 +1679,19 @@ ${context.command}
   // synchronous read it replaces did. The generation is captured before that
   // await so a session replaced while it runs cannot be staged into.
   pi.on?.("before_agent_start", async (event, ctx) => {
+    if (isCustomBeforeAgentStart(event)) {
+      processingOpenedThisRun = queuedProcessingContent !== null &&
+        isProcessingCustomMessage(event.message) && event.message.content === queuedProcessingContent;
+      return;
+    }
+    if (!("prompt" in event)) return;
     rememberMainModel(ctx);
     currentMainSession = ctx?.sessionManager ?? null;
     const promptGeneration = generation;
     if (!(await enqueueDelivery(() => actingAsOwner(promptGeneration)))) return;
     if (promptGeneration !== generation || !currentMainSession || !collectCurrentMainDialog()) return;
 
-    // This event is Pi's authoritative complete current prompt. At this point
+    // For user messages this event is Pi's authoritative complete current prompt. At this point
     // SessionManager still contains only the preceding dialog, so relying on
     // getEntries() here loses the captain request that the next wake may answer.
     // Stage it verbatim and remember the future persisted index for turn_end's
@@ -2423,17 +2438,12 @@ ${context.command}
     );
   });
 
-  // Pi only calls this renderer for a message with display: true, which every
-  // routine note uses except an explicitly silent no-change outcome.
+  // Historical routine messages retain display: true in saved sessions.
+  // Hide only their known routine prefix on normal Pi rerender; preserve
+  // legacy captain and unrecognized messages without rewriting history.
   pi.registerMessageRenderer?.("fm-branch-merge", (message, _options, theme) => {
     const note = textOfContent(message.content);
-    const hasGlyph = note.startsWith(MERGE_NOTE_BOAT);
-    const rest = hasGlyph ? note.slice(MERGE_NOTE_BOAT.length) : note;
-    const outputPad = 1;
-    return new Text(
-      `${hasGlyph ? theme.fg("customMessageText", MERGE_NOTE_BOAT) : ""}${theme.fg("dim", rest)}`,
-      outputPad,
-      0,
-    );
+    if (/^⛵ [A-Za-z0-9._-]+: /.test(note)) return new Container();
+    return new Text(theme.fg("dim", note), 1, 0);
   });
 }

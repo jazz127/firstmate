@@ -37,13 +37,26 @@ SH
 make_spawn_fakebin() {
   local dir=$1 fakebin
   fakebin=$(fm_test_make_spawn_fakebin "$dir")
-  cat > "$fakebin/timeout" <<'SH'
+cat > "$fakebin/timeout" <<'SH'
 #!/usr/bin/env bash
+# Match GNU timeout's option shape from bin/fm-timeout-lib.sh fm_run_timed:
+# `timeout -k <grace> <secs> cmd...` or plain `timeout <secs> cmd...`.
+if [ "${1:-}" = -k ]; then
+  shift 2
+fi
 shift
 exec "$@"
 SH
   cat > "$fakebin/cursor-agent" <<'SH'
 #!/usr/bin/env bash
+# Launch resolution runs a bounded --help probe (bin/fm-cursor-lib.sh
+# fm_cursor_verify_executable) before accepting any candidate. Empty success
+# is not Cursor identity, so the fixture must mark itself the same way the
+# real CLI does or spawn falls through to a host agent / fails closed on CI.
+if [ "${1:-}" = --help ]; then
+  printf '%s\n' 'Start the Cursor Agent'
+  exit 0
+fi
 if [ "${1:-}" = --list-models ]; then
   [ "${FM_FAKE_CURSOR_LIST_STATUS:-0}" -eq 0 ] || exit "${FM_FAKE_CURSOR_LIST_STATUS}"
   printf '%b\n' "${FM_FAKE_CURSOR_MODELS:-Available models\ncursor-grok-4.5-high - Grok 4.5 High}"
@@ -54,6 +67,54 @@ SH
   make_spawn_pi_probe "$fakebin" pi
   make_spawn_pi_probe "$fakebin" pi-signed
   printf '%s\n' "$fakebin"
+}
+
+make_spawn_herdr_fakebin() {
+  local fakebin=$1
+  cat > "$fakebin/herdr" <<'SH'
+#!/usr/bin/env bash
+set -u
+case "${1:-} ${2:-}" in
+  "status --json")
+    printf '%s\n' '{"client":{"version":"0.7.1","protocol":14},"server":{"running":true}}'
+    ;;
+  "session list")
+    jq -n --arg name "${FM_FAKE_HERDR_SESSION:?}" --arg socket "${FM_FAKE_HERDR_SOCKET:?}" \
+      '{sessions:[{name:$name,running:true,socket_path:$socket}]}'
+    ;;
+  "workspace list")
+    printf '%s\n' '{"result":{"workspaces":[{"workspace_id":"w-seat","label":"firstmate"}]}}'
+    ;;
+  "tab list")
+    printf '%s\n' '{"result":{"tabs":[]}}'
+    ;;
+  "tab create")
+    printf '%s\n' '{"result":{"tab":{"tab_id":"w-seat:t-seat"},"root_pane":{"pane_id":"w-seat:p-seat"}}}'
+    ;;
+  "pane get")
+    printf '%s\n' '{"result":{"pane":{"pane_id":"w-seat:p-seat","tab_id":"w-seat:t-seat","workspace_id":"w-seat","foreground_cwd":"'"${FM_FAKE_PANE_PATH:?}"'"}}}'
+    ;;
+  "tab get")
+    printf '%s\n' '{"result":{"tab":{"tab_id":"w-seat:t-seat","workspace_id":"w-seat"}}}'
+    ;;
+  "pane send-text")
+    payload=${4:-}
+    case "$payload" in
+      ". '"*"'")
+        launch_file=${payload#". '"}
+        launch_file=${launch_file%"'"}
+        cat "$launch_file" >> "${FM_HERDR_LAUNCH_LOG:?}"
+        ;;
+      *) printf '%s\n' "$payload" >> "${FM_HERDR_LAUNCH_LOG:?}" ;;
+    esac
+    ;;
+  *)
+    :
+    ;;
+esac
+exit 0
+SH
+  chmod +x "$fakebin/herdr"
 }
 
 make_spawn_case() {
@@ -95,11 +156,6 @@ task_inbox_export() {  # <home> <id>
   printf "export FM_TASK_INBOX='%s'; " "$state/$2.inbox"
 }
 
-ai_trailer_hooks_prefix() {  # <home> <id>
-  local state
-  state=$(CDPATH='' cd -- "$1/state" && pwd -P) || fail "cannot resolve state dir $1/state"
-  printf "export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0='%s'; " "$state/$2.git-hooks"
-}
 
 run_spawn() {
   local home=$1 wt=$2 fakebin=$3 launchlog=$4
@@ -277,7 +333,7 @@ test_relative_home_overrides_launch_with_absolute_cross_process_paths() {
   launch=$(cat "$LAUNCH_LOG")
   assert_contains "$launch" "-e '$home_real/state/$id.pi-ext.ts'" \
     "relative FM_STATE_OVERRIDE leaked into Pi's cross-process extension path"
-  assert_contains "$launch" "< '$home_real/data/$id/launch-brief.md'" \
+  assert_contains "$launch" "at $home_real/data/$id/launch-brief.md before" \
     "relative FM_DATA_OVERRIDE leaked into the cross-process brief path"
   pass "relative home overrides ignore CDPATH and become absolute before spawn launch construction"
 }
@@ -306,7 +362,7 @@ test_home_defaults_preserve_absolute_or_resolve_relative_paths() {
   launch=$(cat "$LAUNCH_LOG")
   assert_contains "$launch" "-e '$home_real/state/$relative_id.pi-ext.ts'" \
     "relative FM_HOME leaked into Pi's default cross-process extension path"
-  assert_contains "$launch" "< '$home_real/data/$relative_id/launch-brief.md'" \
+  assert_contains "$launch" "at $home_real/data/$relative_id/launch-brief.md before" \
     "relative FM_HOME leaked into the default cross-process brief path"
 
   linked_home="$CASE_DIR/home-link"
@@ -326,7 +382,7 @@ test_home_defaults_preserve_absolute_or_resolve_relative_paths() {
   launch=$(cat "$LAUNCH_LOG")
   assert_contains "$launch" "-e '$linked_home/state/$absolute_id.pi-ext.ts'" \
     "absolute FM_HOME spelling changed in Pi's default cross-process extension path"
-  assert_contains "$launch" "< '$linked_home/data/$absolute_id/launch-brief.md'" \
+  assert_contains "$launch" "at $linked_home/data/$absolute_id/launch-brief.md before" \
     "absolute FM_HOME spelling changed in the default cross-process brief path"
   pass "FM_HOME defaults resolve relative paths and preserve absolute spellings"
 }
@@ -354,7 +410,7 @@ test_absolute_override_spelling_is_preserved_in_launch_paths() {
   launch=$(cat "$LAUNCH_LOG")
   assert_contains "$launch" "-e '$linked_home/state/$id.pi-ext.ts'" \
     "absolute FM_STATE_OVERRIDE spelling changed in Pi's cross-process extension path"
-  assert_contains "$launch" "< '$linked_home/data/$id/launch-brief.md'" \
+  assert_contains "$launch" "at $linked_home/data/$id/launch-brief.md before" \
     "absolute FM_DATA_OVERRIDE spelling changed in the cross-process brief path"
   pass "absolute override spellings are preserved in spawn launch paths"
 }
@@ -467,6 +523,92 @@ test_active_dispatch_profile_allows_positional_harness() {
   pass "active crew-dispatch profile allows the legacy positional harness form"
 }
 
+# Replacing inherited config rather than appending the hooks entry loses the
+# scoped HTTPS credential helper. Execute the real emitted launch and ask Git,
+# rather than inspecting command text, to catch that credential widening. Every
+# pane shell runs with its startup files pointed at the case directory, so a
+# developer's rc file cannot prompt, exec a multiplexer or export GIT_CONFIG_*.
+isolated_pane_env() {  # <assignment-or-command...>
+  env HOME="$CASE_DIR" ZDOTDIR="$CASE_DIR" XDG_CONFIG_HOME="$CASE_DIR" ENV= BASH_ENV= "$@"
+}
+
+test_launch_preserves_inherited_git_config() {
+  local rec id=git-config-append out status launch result pane_shell count launch_file expected prefix
+  rec=$(make_spawn_case "$id" codex "$id")
+  read_case_record "$rec"
+  out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" \
+    "$id" "$PROJ_DIR" --harness 'echo WORKER-RAN >&2; git config --get-all credential.helper; git config --get core.hooksPath')
+  status=$?
+  expect_code 0 "$status" "Git configuration probe should spawn: $out"
+  launch=$(cat "$LAUNCH_LOG")
+  launch_file="$CASE_DIR/git-config-launch.sh"
+  printf '%s\n' "$launch" > "$launch_file"
+  expected=$'\n!gh auth git-credential\n'"$(cd "$HOME_DIR/state" && pwd -P)/$id.git-hooks"
+  for pane_shell in /bin/sh /bin/bash /bin/zsh; do
+    [ -x "$pane_shell" ] || continue
+    for count in 2 02; do
+      result=$(isolated_pane_env GIT_CONFIG_COUNT="$count" \
+        GIT_CONFIG_KEY_0=credential.helper GIT_CONFIG_VALUE_0='' \
+        GIT_CONFIG_KEY_1=credential.helper GIT_CONFIG_VALUE_1='!gh auth git-credential' \
+        "$pane_shell" -c "$launch") || fail "Git configuration launch failed in $pane_shell"
+      [ "$result" = "$expected" ] \
+        || fail "launch dropped the inherited credential-helper entries in $pane_shell"
+    done
+    result=$(isolated_pane_env GIT_CONFIG_COUNT=bad "$pane_shell" -c "$launch" 2>&1)
+    status=$?
+    [ "$status" -ne 0 ] || fail "an invalid Git config count silently launched"
+    assert_not_contains "$result" WORKER-RAN "an invalid Git config count still started the worker in $pane_shell"
+    for count in bad 2147483647; do
+      # shellcheck disable=SC2016 # The child pane expands its own arguments and source status.
+      result=$(isolated_pane_env GIT_CONFIG_COUNT="$count" "$pane_shell" -i -c \
+        '. "$1"; fm_status=$?; [ "$fm_status" -ne 0 ] || exit 2; printf "\nSHELL-STILL-ALIVE\n"' _ "$launch_file" 2>&1)
+      status=$?
+      expect_code 0 "$status" "invalid count must preserve the interactive $pane_shell pane"
+      assert_contains "$result" 'error: ' "count refusal must remain visible in $pane_shell"
+      assert_contains "$result" SHELL-STILL-ALIVE "count refusal killed the interactive $pane_shell pane"
+      assert_not_contains "$result" WORKER-RAN "count refusal still started the worker in $pane_shell"
+    done
+  done
+  # A fish pane sources the same launch file, so fish runs the same append and
+  # refusal cases. Without fish, check the emitted launch prefix (the staged
+  # launch-file contract) for POSIX-only syntax fish cannot parse.
+  if command -v fish >/dev/null 2>&1; then
+    for count in 2 02; do
+      result=$(isolated_pane_env GIT_CONFIG_COUNT="$count" \
+        GIT_CONFIG_KEY_0=credential.helper GIT_CONFIG_VALUE_0='' \
+        GIT_CONFIG_KEY_1=credential.helper GIT_CONFIG_VALUE_1='!gh auth git-credential' \
+        fish -c "source '$launch_file'") || fail "Git configuration launch failed in fish"
+      [ "$result" = "$expected" ] || fail "launch dropped the inherited credential-helper entries in fish"
+    done
+    result=$(isolated_pane_env GIT_CONFIG_COUNT=bad fish -c "source '$launch_file'" 2>&1)
+    status=$?
+    [ "$status" -ne 0 ] || fail "an invalid Git config count silently launched in fish"
+    assert_not_contains "$result" WORKER-RAN "an invalid Git config count still started the worker in fish"
+    for count in bad 2147483647; do
+      result=$(isolated_pane_env GIT_CONFIG_COUNT="$count" fish -i -c \
+        "source '$launch_file'; and exit 2; printf '\nSHELL-STILL-ALIVE\n'" 2>&1)
+      status=$?
+      expect_code 0 "$status" "invalid count must preserve the interactive fish pane"
+      assert_contains "$result" 'error: ' "count refusal must remain visible in fish"
+      assert_contains "$result" SHELL-STILL-ALIVE "count refusal killed the interactive fish pane"
+      assert_not_contains "$result" WORKER-RAN "count refusal still started the worker in fish"
+    done
+  else
+    prefix=$(fm_test_launch_git_prefix "$launch")
+    # shellcheck disable=SC2016 # These are literal shell tokens fish rejects.
+    case "$prefix" in
+      *'$('* | *'${'* | *'`'* | *'case '* | *'while '* | *'esac'* | *'done'*)
+        fail "the Git configuration launch prefix uses syntax fish cannot parse: $prefix" ;;
+    esac
+    # A token check cannot prove fish sources the launch, so report fish as
+    # skipped rather than letting the pass line claim it ran.
+    echo "skip: fish not found (fish pane launch); only a static syntax check ran"
+    pass "launch appends the hooks config while preserving inherited Git credentials in sh, bash and zsh"
+    return
+  fi
+  pass "launch appends the hooks config while preserving inherited Git credentials in every pane shell, fish included"
+}
+
 test_active_dispatch_profile_allows_raw_launch_command() {
   local rec id out status launch
   id=profile-raw-z15
@@ -484,7 +626,7 @@ test_active_dispatch_profile_allows_raw_launch_command() {
   # The unverified-adapter escape hatch is still an agent this fleet launched,
   # so it carries the compact-adviser floor and the AI-trailer strip; nothing
   # else may rewrite the captain's own command.
-  [ "$launch" = "export COMPACT_ADVISER_DISABLE=1; $(task_inbox_export "$HOME_DIR" "$id")$(ai_trailer_hooks_prefix "$HOME_DIR" "$id")custom-agent --flag" ] || fail "raw launch command changed"$'\n'"actual: $launch"
+  [ "$launch" = "unset FM_TIMEOUT_OWNER_PID FM_EXEC_TIMED_OWNER_PID; export COMPACT_ADVISER_DISABLE=1; $(task_inbox_export "$HOME_DIR" "$id")$(fm_test_launch_git_prefix "$launch")custom-agent --flag" ] || fail "raw launch command changed"$'\n'"actual: $launch"
   pass "active crew-dispatch profile allows the raw launch-command escape hatch"
 }
 
@@ -558,6 +700,330 @@ test_codex_threads_model_and_max_effort() {
   assert_contains "$launch" "codex --model 'gpt-5.6-luna' -c 'model_reasoning_effort=\"max\"' --dangerously-bypass-approvals-and-sandbox" \
     "codex launch did not thread Luna's max reasoning effort config"
   pass "codex Luna receives --model and model_reasoning_effort max profile flags"
+}
+
+test_codex_primary_and_secondary_seats_are_explicit_and_default_is_unchanged() {
+  local rec id out status launch seat_home secondary_home other_seat_home codex_probe
+  id=profile-codex-primary-seat-z4
+  rec=$(make_spawn_case profile-codex-primary-seat codex "$id")
+  read_case_record "$rec"
+  seat_home="$CASE_DIR/credential home"
+  mkdir -p "$seat_home"
+  printf '%s\n' '{"OPENAI_API_KEY":"sk-fm-synthetic"}' > "$seat_home/auth.json"
+  jq -n --arg home "$seat_home" '{version:1,id:"test-dock",seats:{primary:{harness:"codex",credential_home:$home}}}' \
+    > "$HOME_DIR/config/dock.json"
+  cat > "$FAKEBIN_DIR/codex" <<'SH'
+#!/usr/bin/env bash
+if [ "${1:-}" = login ] && [ "${2:-}" = status ]; then
+  [ -f "$CODEX_HOME/auth.json" ] || { echo 'Not logged in' >&2; exit 1; }
+  echo 'Logged in using ChatGPT' >&2
+  exit 0
+fi
+printf 'CODEX_HOME=%s\nOPENAI_API_KEY=%s\nCODEX_API_KEY=%s\n' \
+  "${CODEX_HOME-}" "${OPENAI_API_KEY-unset}" "${CODEX_API_KEY-unset}" > "$FM_TEST_CODEX_EXEC_LOG"
+printf '%s\n' "$@" >> "$FM_TEST_CODEX_EXEC_LOG"
+SH
+  chmod +x "$FAKEBIN_DIR/codex"
+  codex_probe="$FAKEBIN_DIR/codex"
+
+  out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" \
+    "$id" "$PROJ_DIR" --harness codex --model gpt-5.6-luna --effort medium --seat primary --seat-home "$seat_home")
+  status=$?
+  expect_code 0 "$status" "Codex Primary seat dispatch should succeed: $out"
+  launch=$(cat "$LAUNCH_LOG")
+  assert_contains "$launch" "CODEX_HOME='$seat_home'" \
+    "Primary seat launch did not pin CODEX_HOME and selected model"
+  FM_TEST_CODEX_EXEC_LOG="$TMP_ROOT/primary-codex-exec.log" OPENAI_API_KEY=ambient-secondary-key CODEX_API_KEY=ambient-other-key PATH="$FAKEBIN_DIR:$PATH" bash -c "$launch"
+  assert_contains "$(cat "$TMP_ROOT/primary-codex-exec.log")" "CODEX_HOME=$seat_home" \
+    "executed Codex worker did not inherit the Primary CODEX_HOME"
+  assert_contains "$(cat "$TMP_ROOT/primary-codex-exec.log")" 'OPENAI_API_KEY=unset' \
+    "executed Codex worker retained ambient OpenAI authentication"
+  assert_contains "$(cat "$TMP_ROOT/primary-codex-exec.log")" 'CODEX_API_KEY=unset' \
+    "executed Codex worker retained ambient Codex authentication"
+  assert_contains "$(cat "$TMP_ROOT/primary-codex-exec.log")" 'gpt-5.6-luna' \
+    "executed Codex worker did not receive the dispatch model"
+  assert_grep "dock=test-dock" "$HOME_DIR/state/$id.meta" "seat provenance lacks dock id"
+  assert_grep "seat_home=$seat_home" "$HOME_DIR/state/$id.meta" "seat provenance lacks credential home"
+
+  id=profile-codex-secondary-seat-z4m
+  rec=$(make_spawn_case profile-codex-secondary-seat codex "$id")
+  read_case_record "$rec"
+  cp "$codex_probe" "$FAKEBIN_DIR/codex"
+  secondary_home="$CASE_DIR/secondary credential home"
+  mkdir -p "$secondary_home"
+  printf '%s\n' '{"OPENAI_API_KEY":"sk-fm-synthetic-secondary"}' > "$secondary_home/auth.json"
+  jq -n --arg primary "$seat_home" --arg secondary "$secondary_home" \
+    '{version:1,id:"test-dock",seats:{primary:{harness:"codex",credential_home:$primary},secondary:{harness:"codex",credential_home:$secondary}}}' \
+    > "$HOME_DIR/config/dock.json"
+  out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" \
+    "$id" "$PROJ_DIR" --harness codex --model gpt-5.6-sol --seat secondary --seat-home "$secondary_home")
+  status=$?
+  expect_code 0 "$status" "Codex secondary seat dispatch should succeed: $out"
+  launch=$(cat "$LAUNCH_LOG")
+  assert_contains "$launch" "CODEX_HOME='$secondary_home'" "secondary seat launch did not pin its selected CODEX_HOME"
+  FM_TEST_CODEX_EXEC_LOG="$TMP_ROOT/secondary-codex-exec.log" CODEX_HOME="$seat_home" OPENAI_API_KEY=ambient-primary-key CODEX_API_KEY=ambient-other-key PATH="$FAKEBIN_DIR:$PATH" bash -c "$launch"
+  assert_contains "$(cat "$TMP_ROOT/secondary-codex-exec.log")" "CODEX_HOME=$secondary_home" \
+    "executed secondary worker borrowed the ambient Primary CODEX_HOME"
+  assert_contains "$(cat "$TMP_ROOT/secondary-codex-exec.log")" 'OPENAI_API_KEY=unset' \
+    "executed secondary worker retained ambient OpenAI authentication"
+  assert_contains "$(cat "$TMP_ROOT/secondary-codex-exec.log")" 'CODEX_API_KEY=unset' \
+    "executed secondary worker retained ambient Codex authentication"
+  assert_grep 'seat=secondary' "$HOME_DIR/state/$id.meta" "secondary seat provenance was not saved"
+
+  id=profile-codex-primary-seat-binding-z4a
+  rec=$(make_spawn_case profile-codex-primary-seat-binding codex "$id")
+  read_case_record "$rec"
+  other_seat_home="$CASE_DIR/other credential home"
+  mkdir -p "$other_seat_home"
+  printf '%s\n' '{"OPENAI_API_KEY":"sk-fm-synthetic"}' > "$other_seat_home/auth.json"
+  jq -n --arg home "$other_seat_home" '{version:1,id:"changed-dock",seats:{primary:{harness:"codex",credential_home:$home}}}' \
+    > "$HOME_DIR/config/dock.json"
+  out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" \
+    "$id" "$PROJ_DIR" --harness codex --model gpt-5.6-luna --effort medium --seat primary --seat-home "$seat_home")
+  status=$?
+  expect_code 1 "$status" "a changed dock must refuse a stale dispatch seat binding"
+  assert_contains "$out" "measured against $seat_home" "stale dispatch binding refusal should name both credential homes"
+
+  id=profile-codex-default-seat-z5
+  rec=$(make_spawn_case profile-codex-default-seat codex "$id")
+  read_case_record "$rec"
+  out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" \
+    "$id" "$PROJ_DIR" --harness codex --model gpt-5.6-luna --effort medium)
+  status=$?
+  expect_code 0 "$status" "default Codex seat should preserve ordinary launch"
+  launch=$(cat "$LAUNCH_LOG")
+  assert_not_contains "$launch" "CODEX_HOME='$seat_home'" \
+    "default Codex launch unexpectedly selected Primary seat"
+
+  id=profile-codex-unknown-seat-z6
+  rec=$(make_spawn_case profile-codex-unknown-seat codex "$id")
+  read_case_record "$rec"
+  mkdir -p "$CASE_DIR/seat"
+  jq -n --arg home "$CASE_DIR/seat" '{version:1,id:"unknown-seat-dock",seats:{primary:{harness:"codex",credential_home:$home}}}' \
+    > "$HOME_DIR/config/dock.json"
+  out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" \
+    "$id" "$PROJ_DIR" --harness codex --seat bad_name)
+  status=$?
+  expect_code 1 "$status" "unsafe Codex seat must refuse"
+  assert_contains "$out" "invalid --seat 'bad_name'" "invalid seat refusal should identify the name"
+  assert_absent "$HOME_DIR/state/$id.meta" "invalid seat must refuse before task creation"
+  out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" \
+    "$id" "$PROJ_DIR" --harness codex --seat other)
+  status=$?
+  expect_code 1 "$status" "unknown Codex seat must refuse"
+  assert_contains "$out" "does not bind seat other to codex" "unknown seat refusal should identify the name"
+  pass "dispatch can pin Primary or secondary while the seatless Codex default remains ambient"
+}
+
+test_codex_primary_seat_reaches_herdr_backend() {
+  local rec id out status seat_home launch_log test_session test_socket
+  id=profile-codex-primary-herdr-z4
+  rec=$(make_spawn_case profile-codex-primary-herdr codex "$id")
+  read_case_record "$rec"
+  seat_home="$CASE_DIR/herdr seat"
+  launch_log="$CASE_DIR/herdr-launch.log"
+  test_session=fm-test-codex-primary-seat
+  test_socket="$CASE_DIR/herdr.sock"
+  mkdir -p "$seat_home"
+  printf '%s\n' '{"OPENAI_API_KEY":"sk-fm-synthetic"}' > "$seat_home/auth.json"
+  jq -n --arg home "$seat_home" '{version:1,id:"herdr-dock",seats:{primary:{harness:"codex",credential_home:$home}}}' \
+    > "$HOME_DIR/config/dock.json"
+  make_spawn_herdr_fakebin "$FAKEBIN_DIR"
+  cat > "$FAKEBIN_DIR/codex" <<'SH'
+#!/usr/bin/env bash
+if [ "${1:-}" = login ] && [ "${2:-}" = status ]; then
+  printf '%s\n' 'Logged in using ChatGPT' >&2
+fi
+SH
+  chmod +x "$FAKEBIN_DIR/codex"
+
+  out=$(HERDR_ENV=1 HERDR_PANE_ID=w-seat:p-seat HERDR_SESSION="$test_session" \
+    HERDR_SOCKET_PATH="$test_socket" FM_FAKE_HERDR_SESSION="$test_session" \
+    FM_FAKE_HERDR_SOCKET="$test_socket" FM_HERDR_LAUNCH_LOG="$launch_log" \
+    run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" \
+    "$id" "$PROJ_DIR" --backend herdr --harness codex --seat primary)
+  status=$?
+  expect_code 0 "$status" "Herdr-backed Codex Primary spawn should succeed: $out"
+  assert_contains "$(cat "$launch_log")" "CODEX_HOME='$seat_home'" \
+    "Herdr command did not carry the dock-bound CODEX_HOME"
+  assert_contains "$(cat "$launch_log")" "unset OPENAI_API_KEY CODEX_API_KEY" \
+    "Herdr command did not shed ambient seat credentials"
+  pass "Herdr-backed seated Codex launch carries home and credential guards"
+}
+
+test_codex_seat_refuses_before_task_creation() {
+  local rec id out status seat_home
+  id=profile-codex-seat-refuse-z4a
+  rec=$(make_spawn_case profile-codex-seat-refuse codex "$id")
+  read_case_record "$rec"
+  seat_home="$CASE_DIR/seat"
+  mkdir -p "$seat_home"
+  jq -n --arg home "$seat_home" '{version:1,id:"refusal-dock",seats:{primary:{harness:"codex",credential_home:$home}}}' \
+    > "$HOME_DIR/config/dock.json"
+  cat > "$FAKEBIN_DIR/codex" <<'SH'
+#!/usr/bin/env bash
+case "${1:-} ${2:-}" in
+  'login status')
+    case "$(cat "$CODEX_HOME/verdict" 2>/dev/null)" in
+      signed-out) echo 'Not logged in' >&2; exit 1 ;;
+      unknown) echo 'different output' >&2; exit 0 ;;
+      timeout) exit 124 ;;
+      *) echo 'Logged in using ChatGPT' >&2; exit 0 ;;
+    esac ;;
+esac
+exit 0
+SH
+  chmod +x "$FAKEBIN_DIR/codex"
+  out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR" --seat primary)
+  status=$?
+  expect_code 1 "$status" "missing auth file must refuse"
+  assert_contains "$out" 'no ordinary readable file-backed sign-in' "missing sign-in should be actionable"
+  assert_absent "$HOME_DIR/state/$id.meta" "missing sign-in must not create a task record"
+  [ ! -s "$LAUNCH_LOG" ] || fail "missing sign-in launched an agent"
+  printf '%s\n' '{"OPENAI_API_KEY":"sk-fm-synthetic"}' > "$seat_home/auth.json"
+  for verdict in signed-out unknown timeout; do
+    printf '%s\n' "$verdict" > "$seat_home/verdict"
+    out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR" --seat primary)
+    status=$?
+    expect_code 1 "$status" "$verdict native status must refuse"
+    assert_absent "$HOME_DIR/state/$id.meta" "$verdict status must not create a task record"
+    [ ! -s "$LAUNCH_LOG" ] || fail "$verdict status launched an agent"
+  done
+  printf 'keyring\n' > "$seat_home/verdict"
+  printf 'cli_auth_credentials_store = "keyring"\n' > "$seat_home/config.toml"
+  out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR" --seat primary)
+  status=$?
+  expect_code 1 "$status" "unproven keyring mode must refuse"
+  assert_contains "$out" 'unsupported storage mode' "storage-mode refusal should be distinct"
+  rm "$seat_home/config.toml"
+  out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR" \
+    --harness 'CODEX_HOME=/somewhere codex' --seat primary)
+  status=$?
+  expect_code 1 "$status" "seated raw command must refuse"
+  assert_contains "$out" 'canonical --harness codex' "raw refusal should name the safe command"
+  assert_absent "$HOME_DIR/state/$id.meta" "raw refusal must not create a task record"
+  pass "missing, signed-out, indeterminate, unsupported store, and raw seated launches refuse before provisioning"
+}
+
+test_codex_seat_overrides_allowlisted_ambient_credentials() {
+  local rec id out status seat_home launch
+  id=profile-codex-seat-allowlist-z4aa
+  rec=$(make_spawn_case profile-codex-seat-allowlist codex "$id")
+  read_case_record "$rec"
+  seat_home="$CASE_DIR/selected seat"
+  mkdir -p "$seat_home"
+  printf '%s\n' '{"OPENAI_API_KEY":"sk-fm-synthetic"}' > "$seat_home/auth.json"
+  jq -n --arg home "$seat_home" '{version:1,id:"allowlist-dock",seats:{primary:{harness:"codex",credential_home:$home}}}' \
+    > "$HOME_DIR/config/dock.json"
+  printf '%s\n' CODEX_HOME OPENAI_API_KEY CODEX_API_KEY FM_TEST_CODEX_EXEC_LOG \
+    > "$HOME_DIR/config/launch-env-allowlist"
+  cat > "$FAKEBIN_DIR/codex" <<'SH'
+#!/usr/bin/env bash
+if [ "${1:-}" = login ] && [ "${2:-}" = status ]; then
+  echo 'Logged in using ChatGPT' >&2
+  exit 0
+fi
+printf 'home=%s\nopenai=%s\ncodex=%s\n' \
+  "${CODEX_HOME-}" "${OPENAI_API_KEY-unset}" "${CODEX_API_KEY-unset}" > "$FM_TEST_CODEX_EXEC_LOG"
+SH
+  chmod +x "$FAKEBIN_DIR/codex"
+  out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR" --seat primary)
+  status=$?
+  expect_code 0 "$status" "seated launch with allowlist should succeed: $out"
+  launch=$(cat "$LAUNCH_LOG")
+  CODEX_HOME=/ambient/secondary OPENAI_API_KEY=ambient-secondary CODEX_API_KEY=ambient-other \
+    FM_TEST_CODEX_EXEC_LOG="$CASE_DIR/exec.log" PATH="$FAKEBIN_DIR:$PATH" bash -c "$launch"
+  assert_grep "home=$seat_home" "$CASE_DIR/exec.log" "allowlist overrode the seat home"
+  assert_grep 'openai=unset' "$CASE_DIR/exec.log" "allowlist forwarded an ambient OpenAI key"
+  assert_grep 'codex=unset' "$CASE_DIR/exec.log" "allowlist forwarded an ambient Codex key"
+  pass "seated launch enforces its home after launch-environment grants"
+}
+
+test_remote_secondmate_seat_refuses_before_transport() {
+  local rec id out status
+  id=profile-remote-seat-refuse-z4b
+  rec=$(make_spawn_case profile-remote-seat-refuse codex "$id")
+  read_case_record "$rec"
+  printf -- '- %s - Remote fixture (host: fixture-host; root: %s; home: %s; scope: fixture; projects: ; added 2026-09-26)\n' \
+    "$id" "$ROOT" "$CASE_DIR/remote-home" > "$HOME_DIR/data/secondmates.md"
+  out=$(run_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" --secondmate --seat primary)
+  status=$?
+  expect_code 1 "$status" "seated remote secondmate must refuse"
+  assert_contains "$out" 'does not transport a logical seat' "remote refusal should name missing support"
+  assert_absent "$HOME_DIR/state/$id.meta" "remote refusal must not publish metadata"
+  [ ! -s "$LAUNCH_LOG" ] || fail "remote refusal sent a launch command"
+  pass "seated remote secondmate refuses before transport or endpoint creation"
+}
+
+test_local_secondmate_recovery_keeps_seat() {
+  local rec id sm out status seat_home
+  id=profile-local-seat-recovery-z4c
+  rec=$(make_spawn_case profile-local-seat-recovery codex "$id")
+  read_case_record "$rec"
+  sm="$CASE_DIR/secondmate-home"
+  make_seeded_secondmate_home "$sm" "$id"
+  seat_home="$CASE_DIR/seat"
+  mkdir -p "$seat_home"
+  printf '%s\n' '{"OPENAI_API_KEY":"sk-fm-synthetic"}' > "$seat_home/auth.json"
+  jq -n --arg home "$seat_home" '{version:1,id:"local-dock",seats:{primary:{harness:"codex",credential_home:$home}}}' \
+    > "$HOME_DIR/config/dock.json"
+  cat > "$FAKEBIN_DIR/codex" <<'SH'
+#!/usr/bin/env bash
+if [ "${1:-}" = login ] && [ "${2:-}" = status ]; then
+  echo 'Logged in using ChatGPT' >&2
+fi
+exit 0
+SH
+  chmod +x "$FAKEBIN_DIR/codex"
+  out=$(run_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$sm" --secondmate --seat primary)
+  status=$?
+  expect_code 0 "$status" "seated local secondmate should launch: $out"
+  assert_grep 'seat=primary' "$HOME_DIR/state/$id.meta" "initial local secondmate seat was lost"
+  # Recovery starts after the prior endpoint is gone. The shared tmux fixture
+  # now records windows, so retire that endpoint before testing the respawn.
+  "$FAKEBIN_DIR/tmux" kill-window -t "firstmate:fm-$id"
+  : > "$LAUNCH_LOG"
+  out=$(run_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$sm" --secondmate)
+  status=$?
+  expect_code 0 "$status" "local secondmate recovery should preserve seat: $out"
+  assert_grep 'seat=primary' "$HOME_DIR/state/$id.meta" "local secondmate recovery dropped the seat"
+  assert_contains "$(cat "$LAUNCH_LOG")" "CODEX_HOME='$seat_home'" "recovered secondmate lost seat home"
+  pass "local secondmate recovery restores its recorded logical seat"
+}
+
+test_seat_reaches_scout_and_batch() {
+  local rec scout batch_a batch_b out status seat_home
+  scout=profile-seat-scout-z4d
+  batch_a=profile-seat-batch-a-z4e
+  batch_b=profile-seat-batch-b-z4f
+  rec=$(make_spawn_case profile-seat-multi codex "$scout" "$batch_a" "$batch_b")
+  read_case_record "$rec"
+  seat_home="$CASE_DIR/seat"
+  mkdir -p "$seat_home"
+  printf '%s\n' '{"OPENAI_API_KEY":"sk-fm-synthetic"}' > "$seat_home/auth.json"
+  jq -n --arg home "$seat_home" '{version:1,id:"multi-dock",seats:{primary:{harness:"codex",credential_home:$home}}}' \
+    > "$HOME_DIR/config/dock.json"
+  cat > "$FAKEBIN_DIR/codex" <<'SH'
+#!/usr/bin/env bash
+if [ "${1:-}" = login ] && [ "${2:-}" = status ]; then
+  echo 'Logged in using ChatGPT' >&2
+fi
+exit 0
+SH
+  chmod +x "$FAKEBIN_DIR/codex"
+  out=$(run_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$scout" "$PROJ_DIR" --scout --harness codex --seat primary)
+  status=$?
+  expect_code 0 "$status" "seated scout should launch: $out"
+  assert_grep 'seat=primary' "$HOME_DIR/state/$scout.meta" "scout dropped seat"
+  out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" \
+    "$batch_a=$PROJ_DIR" "$batch_b=$PROJ_DIR" --harness codex --seat primary)
+  status=$?
+  expect_code 0 "$status" "seated batch should launch: $out"
+  for id in "$batch_a" "$batch_b"; do
+    assert_grep 'seat=primary' "$HOME_DIR/state/$id.meta" "batch task $id dropped seat"
+    assert_grep "seat_home=$seat_home" "$HOME_DIR/state/$id.meta" "batch task $id lost dock binding"
+  done
+  pass "scout and batch entry points preserve the dock-bound seat"
 }
 
 test_codex_omits_max_effort_for_unsupported_model() {
@@ -649,7 +1115,7 @@ test_grok_omits_invalid_max_reasoning_effort() {
   expect_code 0 "$status" "grok spawn with unsupported max reasoning effort should omit the effort flag"
   assert_meta_profile "$HOME_DIR/state/$id.meta" grok grok-4 max
   launch=$(cat "$LAUNCH_LOG")
-  assert_contains "$launch" "grok --always-approve --model 'grok-4' \"\$('${ROOT}/bin/fm-operational-input.sh' encode launch-brief < " \
+  assert_contains "$launch" "grok --always-approve --model 'grok-4' '⁣FIRSTMATE_OP: v1 launch-brief: Read and follow" \
     "grok launch did not preserve the model flag and typed brief when max effort was omitted"
   assert_not_contains "$launch" "--reasoning-effort" "grok launch must omit unsupported max reasoning effort"
   assert_not_contains "$launch" "--effort" "grok launch must not fall back to --effort for reasoning effort"
@@ -668,7 +1134,7 @@ test_grok_omits_invalid_xhigh_reasoning_effort() {
   expect_code 0 "$status" "grok spawn with unsupported xhigh reasoning effort should omit the effort flag"
   assert_meta_profile "$HOME_DIR/state/$id.meta" grok grok-4 xhigh
   launch=$(cat "$LAUNCH_LOG")
-  assert_contains "$launch" "grok --always-approve --model 'grok-4' \"\$('${ROOT}/bin/fm-operational-input.sh' encode launch-brief < " \
+  assert_contains "$launch" "grok --always-approve --model 'grok-4' '⁣FIRSTMATE_OP: v1 launch-brief: Read and follow" \
     "grok launch did not preserve the model flag and typed brief when xhigh effort was omitted"
   assert_not_contains "$launch" "--reasoning-effort" "grok launch must omit unsupported xhigh reasoning effort"
   assert_not_contains "$launch" "--effort" "grok launch must not fall back to --effort for reasoning effort"
@@ -701,7 +1167,7 @@ test_cursor_threads_model_workspace_and_omits_effort_axis() {
   assert_not_contains "$launch" " -w " "cursor launch must never allocate a second worktree"
   # An inherited CLAUDECODE would otherwise outrank cursor's own marker.
   assert_contains "$launch" "env -u CLAUDECODE" "cursor launch must clear foreign primary markers"
-  assert_contains "$launch" "encode launch-brief" "cursor launch did not deliver the brief positionally"
+  assert_contains "$launch" "launch-brief: Read and follow" "cursor launch did not deliver the brief pointer positionally"
   assert_not_contains "$launch" "--effort" "cursor launch must not invent a separate effort flag"
   assert_not_contains "$launch" "--reasoning-effort" "cursor launch must not invent a separate reasoning-effort flag"
   assert_grep 'harness=cursor' "$HOME_DIR/state/$id.meta" "cursor harness was not recorded in meta"
@@ -923,7 +1389,7 @@ test_pi_threads_model_and_max_effort() {
     "pi launch did not force the regular TUI while threading the requested model and max thinking level"
   assert_not_contains "$launch" "FM_FIRSTMATE_PI_LAUNCH_BRIEF=" \
     "pi launch still exports the removed Calm input-reroute binding"
-  assert_contains "$launch" "fm-operational-input.sh' encode launch-brief" \
+  assert_contains "$launch" "launch-brief: Read and follow" \
     "pi launch lost the canonical typed launch-brief envelope"
   pass "pi receives --model and --thinking max profile flags"
 }
@@ -943,7 +1409,7 @@ test_pi_signed_threads_shared_pi_profile_and_preserves_identity() {
   launch=$(cat "$LAUNCH_LOG")
   assert_contains "$launch" "FM_PI_HARNESS=pi-signed '$FAKEBIN_DIR/pi-signed' --tui-mode regular --model 'openai-codex/gpt-5.6-sol' --thinking 'max' -e" \
     "pi-signed launch did not force the regular TUI with Pi's model, thinking, and extension semantics"
-  assert_contains "$launch" "fm-operational-input.sh' encode launch-brief" \
+  assert_contains "$launch" "launch-brief: Read and follow" \
     "pi-signed launch lost the canonical typed launch-brief envelope"
   assert_present "$HOME_DIR/state/$id.pi-ext.ts" "pi-signed launch did not install Pi's turn-end extension"
   assert_present "$HOME_DIR/state/$id.busy-gen" "pi-signed spawn did not arm the busy-state contract"
@@ -1027,7 +1493,7 @@ test_pi_signed_persistent_secondmate_uses_pi_extensions_and_identity() {
   cmp -s "$CASE_DIR/charter-before" "$sm/data/charter.md" || fail "secondmate launch rewrote the charter"
   assert_absent "$HOME_DIR/data/$id/launch-brief.md" "secondmate launch received a worker overlay"
   launch=$(cat "$LAUNCH_LOG")
-  assert_contains "$launch" "< '$sm/data/charter.md'" "secondmate launch lost its original charter"
+  assert_contains "$launch" "at $sm/data/charter.md before" "secondmate launch lost its original charter pointer"
   assert_contains "$launch" "FM_PI_HARNESS=pi-signed '$FAKEBIN_DIR/pi-signed' --tui-mode regular --approve -e '$sm/.pi/extensions/fm-primary-turnend-guard.ts' -e '$sm/.pi/extensions/fm-primary-pi-watch.ts'" \
     "pi-signed secondmate did not force the regular TUI with Pi's primary extension launch shape and seeded-home --approve"
   if [ "${FM_TEST_EVIDENCE:-0}" = 1 ]; then
@@ -1634,7 +2100,7 @@ test_keep_ai_trailers_omits_attribution_settings_and_strip_hooks() {
   expect_code 0 "$status" "claude spawn with keep-ai-trailers should succeed"$'\n'"$out"
   launch=$(cat "$LAUNCH_LOG")
   assert_attribution_policy_absent "$launch" "opted-in claude"
-  assert_not_contains "$launch" 'GIT_CONFIG_KEY_0=core.hooksPath' \
+  assert_not_contains "$launch" 'fm-git-strip-ai-trailers.sh' \
     "opted-in launch still overrides the repository hooksPath"
   [ ! -e "$HOME_DIR/state/$id.git-hooks" ] \
     || fail "opted-in launch installed AI trailer strip hooks"
@@ -1664,7 +2130,7 @@ test_keep_ai_trailers_reaches_secondmate_crew_launches() {
   expect_code 0 "$status" "secondmate crew spawn should succeed"$'\n'"$out"
   launch=$(cat "$LAUNCH_LOG")
   assert_attribution_policy_absent "$launch" "secondmate crew claude"
-  assert_not_contains "$launch" 'GIT_CONFIG_KEY_0=core.hooksPath' \
+  assert_not_contains "$launch" 'fm-git-strip-ai-trailers.sh' \
     "secondmate crew launch still overrides the repository hooksPath"
   [ ! -e "$HOME_DIR/state/$crew_id.git-hooks" ] \
     || fail "secondmate crew launch installed AI trailer strip hooks"
@@ -1727,6 +2193,7 @@ test_launch_environment_allowlist() {
 #!/bin/sh
 printf '%s\n' "${FM_TEST_AMBIENT_SENTINEL-unset}" "${FM_TEST_ALLOWED-unset}" \
   "${FM_TEST_EMPTY-unset}" "${FM_TEST_UNSET-unset}" "$HOME" "$PATH" "$TERM" "$TMUX" "$GOTMPDIR"
+printf 'hooksPath=%s\n' "$(git config --get core.hooksPath || :)"
 SH
     out=$(FM_TEST_AMBIENT_SENTINEL=synthetic-unrelated \
       run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" \
@@ -1750,6 +2217,8 @@ SH
         empty) expected=$(printf '%s\n' unset unset unset unset) ;;
       esac
       expected="$expected"$'\n'"$HOME_DIR/user-home"$'\n'"$pane_path"$'\nxterm\nsynthetic-pane\n/synthetic/gotmp'
+      # The strip-hook entry must also survive the env -i boundary.
+      expected="$expected"$'\n'"hooksPath=$(cd "$HOME_DIR/state" && pwd -P)/$id.git-hooks"
       [ "$result" = "$expected" ] || fail "allowlist=$setting worker environment mismatch: $result"
     done
     pass "allowlist=$setting preserves the operational floor and filters only when opted in"
@@ -1829,7 +2298,7 @@ SH
   result=$(env -i HOME="$HOME_DIR/user-home" PATH="$FAKEBIN_DIR:$PATH" \
     FM_TEST_AMBIENT_SENTINEL=synthetic-unrelated FM_TEST_ALLOWED=synthetic-provider \
     /bin/sh -c "$(cat "$LAUNCH_LOG")") || fail "secondmate's emitted command failed"
-  [ "$result" = "unset"$'\nsynthetic-provider\n'"$sm" ] \
+  [ "$result" = "unset"$'\nsynthetic-provider\n'"$sm"$'\nunset' ] \
     || fail "secondmate's environment lost filtering or explicit home assignments: $result"
   # Exercise the same inheritance owner used by local and remote transfers;
   # removal must restore absence downstream as well as copying an opt-in.
@@ -1974,6 +2443,9 @@ SH
     sed -n '/FIRSTMATE_OP: v1 launch-brief:/,$p' "$envelope" > "$encoded"
     "$ROOT/bin/fm-operational-input.sh" body < "$encoded" > "$prompt" ||
       fail "could not decode $kind launch-brief envelope"
+    [ "$(cat "$prompt")" = "Read and follow the complete Firstmate launch brief at $HOME_DIR/data/$id/launch-brief.md before doing any other work." ] ||
+      fail "$brief_kind $kind launch did not point at its own complete brief"
+    cp "$HOME_DIR/data/$id/launch-brief.md" "$prompt"
     # The final prompt delivered to the harness is the generated interface.
     # The current identity must precede the authored task, because a Firstmate
     # worktree's own AGENTS.md assigns the unrelated supervisor identity.
@@ -2013,29 +2485,38 @@ SH
 # must both produce today's launch byte-for-byte, `auto` swaps only the
 # permission flag, and any other token refuses before endpoint or metadata.
 claude_settings_json_arg() {  # <launch>
-  local command=$1
-  while [[ "$command" == export\ *\;* ]]; do
-    command=${command#*; }
-  done
-  eval "set -- $command"
-  while [ "$#" -gt 0 ]; do
-    if [ "$1" = --settings ]; then
+  local command
+  command=$(fm_test_launch_command "$1")
+  # Split the argv under an empty PATH: an unrecognised launch prefix then
+  # fails here instead of running a real harness against the fixture brief.
+  (
+    # shellcheck disable=SC2123  # emptied on purpose so the eval below can only word-split
+    PATH=/var/empty
+    eval "set -- $command" || exit 1
+    while [ "$#" -gt 0 ]; do
+      if [ "$1" = --settings ]; then
+        shift
+        # Claude Code's --settings takes inline JSON or a file path; a
+        # secondmate launch passes the path form.
+        case "$1" in
+        \{*) printf '%s' "$1" ;;
+        *) /bin/cat "$1" ;;
+        esac
+        exit 0
+      fi
       shift
-      printf '%s' "$1"
-      return 0
-    fi
-    shift
-  done
-  return 1
+    done
+    exit 1
+  )
 }
 
 claude_launch_brief_arg() {  # <launch>
-  local command=$1
-  while [[ "$command" == export\ *\;* ]]; do
-    command=${command#*; }
-  done
+  local command
+  command=$(fm_test_launch_command "$1")
   (
-    eval "set -- ${command#*; }"
+    # shellcheck disable=SC2123  # emptied on purpose so the eval below can only word-split
+    PATH=/var/empty
+    eval "set -- $command" || exit 1
     eval "printf '%s' \"\${$#}\""
   )
 }
@@ -2058,7 +2539,7 @@ claude_expected_launch() {  # <launch> <home> <id> <permission-flag>
   [ "$(printf '%s' "$doorbell" | "$ROOT/bin/fm-operational-input.sh" doorbell-kind)" = launch-brief ] \
     || doorbell="not a launch-brief doorbell"
   quoted="'$(printf '%s' "$doorbell" | sed "s/'/'\\\\''/g")'"
-  printf '%s' "export COMPACT_ADVISER_DISABLE=1; $(task_inbox_export "$2" "$3")$(ai_trailer_hooks_prefix "$2" "$3")env -u CURSOR_AGENT -u CURSOR_INVOKED_AS -u GEMINI_CLI CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=false CLAUDE_CODE_SEND_FEEDBACK=0 claude $4 $(claude_worker_add_dirs "$2" "$3")--settings '{\"feedbackDrafts\":\"off\",\"attribution\":{\"commit\":\"\",\"pr\":\"\",\"sessionUrl\":false}}' $CLAUDE_CONTROL_CHANNEL_FLAG $quoted"
+  printf '%s' "unset FM_TIMEOUT_OWNER_PID FM_EXEC_TIMED_OWNER_PID; export COMPACT_ADVISER_DISABLE=1; $(task_inbox_export "$2" "$3")$(fm_test_launch_git_prefix "$1")env -u CURSOR_AGENT -u CURSOR_INVOKED_AS -u GEMINI_CLI CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=false CLAUDE_CODE_SEND_FEEDBACK=0 claude $4 $(claude_worker_add_dirs "$2" "$3")--settings '{\"feedbackDrafts\":\"off\",\"attribution\":{\"commit\":\"\",\"pr\":\"\",\"sessionUrl\":false}}' $CLAUDE_CONTROL_CHANNEL_FLAG $quoted"
 }
 
 test_claude_permission_mode_bypass_matches_absent_launch() {
@@ -2185,6 +2666,7 @@ test_non_claude_harness_ignores_claude_permission_mode() {
   pass "config/claude-permission-mode changes claude launches only"
 }
 
+test_launch_preserves_inherited_git_config
 test_worker_launch_delivers_role_scope
 test_no_profile_keeps_claude_profile_defaults
 test_claude_launch_brief_publishes_record_doorbell
@@ -2204,6 +2686,13 @@ test_chained_raw_launch_strips_ai_trailer_in_every_step
 test_claude_threads_model_and_effort
 test_codex_threads_model_and_effort
 test_codex_threads_model_and_max_effort
+test_codex_primary_and_secondary_seats_are_explicit_and_default_is_unchanged
+test_codex_primary_seat_reaches_herdr_backend
+test_codex_seat_refuses_before_task_creation
+test_codex_seat_overrides_allowlisted_ambient_credentials
+test_remote_secondmate_seat_refuses_before_transport
+test_local_secondmate_recovery_keeps_seat
+test_seat_reaches_scout_and_batch
 test_codex_omits_max_effort_for_unsupported_model
 test_codex_crewmate_launch_disables_the_hook_layer
 test_codex_secondmate_launch_keeps_the_hook_layer

@@ -504,10 +504,10 @@ test_concurrent_writers_never_clobber() {
 }
 
 test_writer_retries_after_a_vanished_lock_collision() {
-  local state fakebin marker rec real_ln
-  state="$TMP_ROOT/vanished-lock-race/state"
-  fakebin="$TMP_ROOT/vanished-lock-race/fakebin"
-  marker="$TMP_ROOT/vanished-lock-race/first-ln-failed"
+  local state fakebin marker rec real_ln wait=${1:-5}
+  state="$TMP_ROOT/vanished-lock-race-$wait/state"
+  fakebin="$TMP_ROOT/vanished-lock-race-$wait/fakebin"
+  marker="$TMP_ROOT/vanished-lock-race-$wait/first-ln-failed"
   mkdir -p "$state" "$fakebin"
   real_ln=$(command -v ln)
   cat > "$fakebin/ln" <<'SH'
@@ -521,11 +521,11 @@ exec "$FM_REAL_LN" "$@"
 SH
   chmod +x "$fakebin/ln"
 
-  rec=$(PATH="$fakebin:$PATH" FM_REAL_LN="$real_ln" FM_FAKE_LN_MARKER="$marker" \
+  rec=$(PATH="$fakebin:$PATH" FM_REAL_LN="$real_ln" FM_FAKE_LN_MARKER="$marker" FM_TASK_INBOX_LOCK_WAIT_SECS="$wait" \
     inbox_lib "$state" fm_task_inbox_write "$state" t1 "steer after collision") \
     || fail "a writer abandoned an acquisition whose competing lock had already vanished"
   [ -f "$rec" ] || fail "the retry after a vanished lock collision did not write its record"
-  pass "inbox: a writer retries when a competing lock vanishes after its failed claim"
+  pass "inbox: a writer retries a vanished lock collision with wait=$wait"
 }
 
 test_ladder_writes_ignore_vanished_inbox() {
@@ -1181,6 +1181,363 @@ test_watcher_dead_pane_ignores_stale_busy_state() {
   pass "watcher: dead-pane recovery overrides stale busy state"
 }
 
+test_sequence_order_crosses_padding_widths() {
+  local state dir rec oldest name
+  state="$TMP_ROOT/sequence-widths/state"
+  dir="$state/t1.inbox"
+  mkdir -p "$dir/handled"
+  for name in 999 1000 not-a-number; do
+    printf 'schema=fm-task-inbox.v1\n--\nsynthetic steer\n' > "$dir/$name.msg"
+  done
+  printf 'schema=fm-task-inbox.v1\n--\nhandled steer\n' > "$dir/handled/02000.msg"
+  oldest=$(inbox_lib "$state" fm_task_inbox_oldest_unhandled "$state" t1)
+  [ "$oldest" = "$dir/999.msg" ] || fail "oldest message followed lexical order or accepted a nonnumeric name"
+  rec=$(inbox_lib "$state" fm_task_inbox_write "$state" t1 'next steer') \
+    || fail "sequence allocation across padding widths failed"
+  [ "$rec" = "$dir/2001.msg" ] || fail "next sequence did not include the padded handled maximum"
+  [ "$(inbox_lib "$state" fm_task_inbox_body "$rec")" = 'next steer' ] \
+    || fail "sequence allocation changed the message body"
+  pass "inbox: numeric sequence order crosses padding widths and includes handled records"
+}
+
+test_idempotent_write_rejects_failed_body_reads() {
+  local state location mode old rec text again
+  for location in unhandled handled; do
+    for mode in partial empty full; do
+      state="$TMP_ROOT/failed-body-$location-$mode/state"
+      mkdir -p "$state"
+      old=$(inbox_lib "$state" fm_task_inbox_write "$state" t1 'please inspect the longer request') \
+        || fail "body-read fixture write failed"
+      if [ "$location" = handled ]; then
+        mv "$old" "${old%/*}/handled/" || fail "body-read fixture acknowledgement failed"
+        old="${old%/*}/handled/${old##*/}"
+      fi
+      text='please inspect'
+      [ "$mode" != full ] || text='please inspect the longer request'
+      rec=$(FM_STATE_OVERRIDE="$state" bash -c '
+        . "$1"
+        mode=$4
+        cat() {
+          if [ "$#" -eq 0 ]; then
+            case "$mode" in
+              partial) printf "%s" "please inspect" ;;
+              full) command cat ;;
+            esac
+            return 7
+          fi
+          command cat "$@"
+        }
+        fm_task_inbox_write_idempotent "$2" t1 "$3"
+      ' _ "$ROOT/bin/fm-task-inbox-lib.sh" "$state" "$text" "$mode") \
+        || fail "idempotent enqueue failed after a $location $mode body-read error"
+      [ "$rec" = "$state/t1.inbox/002.msg" ] \
+        || fail "$location $mode body-read error must not prove a duplicate: $rec"
+      [ "$(inbox_lib "$state" fm_task_inbox_body "$rec")" = "$text" ] \
+        || fail "body-read error lost the requested message"
+      [ "$(inbox_lib "$state" fm_task_inbox_body "$old")" = 'please inspect the longer request' ] \
+        || fail "body-read error changed the existing message"
+      again=$(inbox_lib "$state" fm_task_inbox_write_idempotent "$state" t1 "$text") \
+        || fail "healthy retry after a body-read error failed"
+      case "$again" in
+        "$rec"|"$old") ;;
+        *) fail "healthy retry created another record" ;;
+      esac
+      [ "$(inbox_lib "$state" fm_task_inbox_body "$again")" = "$text" ] \
+        || fail "healthy retry did not deduplicate the complete body"
+    done
+  done
+  pass "inbox: failed body reads cannot prove an idempotent duplicate"
+}
+
+test_inbox_retry_counters_are_bounded_decimal() {
+  local state rec kind scenario count expected marker out stored_base stored_count rest action
+  for kind in busy ring; do
+    for scenario in padded-octal padded-invalid-octal overflow above-max huge near-max ordinary zero invalid successor; do
+      case "$scenario" in
+        padded-octal) count=010; expected=11 ;;
+        padded-invalid-octal) count=018; expected=19 ;;
+        overflow) count=9223372036854775807; expected=9223372036854775807 ;;
+        above-max) count=9223372036854775808; expected=9223372036854775807 ;;
+        huge) count=999999999999999999999999999999; expected=9223372036854775807 ;;
+        near-max) count=9223372036854775806; expected=9223372036854775807 ;;
+        ordinary) count=10; expected=11 ;;
+        zero) count=00; expected=1 ;;
+        invalid) count=bad; expected=1 ;;
+        successor) count=018; expected=1 ;;
+      esac
+      state="$TMP_ROOT/decimal-counter-$kind-$scenario/state"
+      mkdir -p "$state"
+      rec=$(inbox_lib "$state" fm_task_inbox_write "$state" t1 'counter fixture') || fail "counter fixture write failed"
+      stored_base=${rec##*/}
+      [ "$scenario" != successor ] || stored_base=000.msg
+      if [ "$kind" = busy ]; then
+        marker="$state/t1.inbox/.busy-state"
+        printf '%s\t%s\n' "$stored_base" "$count" > "$marker"
+        out=$(inbox_lib "$state" fm_task_inbox_record_busy "$state" t1 "$rec") || fail "$scenario busy counter failed"
+        [ "$out" = "$expected" ] || fail "$scenario busy counter returned the wrong decimal increment"
+      else
+        marker="$state/t1.inbox/.ring-state"
+        printf '%s\t%s\t1000\n' "$stored_base" "$count" > "$marker"
+        inbox_lib "$state" fm_task_inbox_record_ring "$state" t1 "$rec" || fail "$scenario ring counter failed"
+      fi
+      IFS=$'\t' read -r stored_base stored_count rest action < "$marker"
+      [ "$stored_base" = "${rec##*/}" ] || fail "$scenario $kind counter changed its record identity"
+      [ "$stored_count" = "$expected" ] || fail "$scenario $kind counter stored the wrong decimal increment"
+      if [ "$kind" = ring ] && [ "$expected" = 9223372036854775807 ]; then
+        action=$(FM_TASK_INBOX_GRACE_SECS=0 inbox_lib "$state" fm_task_inbox_due_action "$state" t1)
+        [ "$action" = "escalate $rec $expected" ] || fail "$scenario numeric overflow renewed a spent retry budget"
+      fi
+    done
+  done
+  pass "inbox retry counters increment decimal padding and saturate overflow without renewing spent retry budgets"
+}
+
+test_inbox_deadlines_and_budgets_use_decimal_comparisons() {
+  local deadline_root fakebin state rec scenario now last count grace maximum clock_rc want action rc
+  deadline_root="$TMP_ROOT/decimal-deadlines"
+  fakebin="$deadline_root/fakebin"
+  mkdir -p "$fakebin"
+  cat > "$fakebin/date" <<'CLOCK'
+#!/usr/bin/env bash
+printf '%s\n' "$FM_INBOX_TEST_NOW"
+exit "$FM_INBOX_TEST_CLOCK_RC"
+CLOCK
+  chmod +x "$fakebin/date"
+  for scenario in padded-last-early padded-last-invalid-octal padded-future overflow-last overflow-count overflow-grace overflow-max padded-now expression-now overflow-now failed-clock ordinary-early ordinary-elapsed ordinary-future spent zero-grace invalid-last padded-count; do
+    case "$scenario" in
+      padded-last-early) now=1100; last=01050; count=1; grace=60; maximum=3; clock_rc=0; want=quiet ;;
+      padded-last-invalid-octal) now=2000; last=01800; count=1; grace=120; maximum=3; clock_rc=0; want=ring ;;
+      padded-future) now=2000; last=03000; count=1; grace=120; maximum=3; clock_rc=0; want=quiet ;;
+      overflow-last) now=2000; last=18446744073709551616; count=1; grace=120; maximum=3; clock_rc=0; want=quiet ;;
+      overflow-count) now=2000; last=1000; count=18446744073709551616; grace=120; maximum=3; clock_rc=0; want=escalate ;;
+      overflow-grace) now=2000; last=1000; count=1; grace=18446744073709551616; maximum=3; clock_rc=0; want=quiet ;;
+      overflow-max) now=2000; last=1000; count=1; grace=60; maximum=18446744073709551616; clock_rc=0; want=ring ;;
+      padded-now) now=02000; last=1800; count=1; grace=120; maximum=3; clock_rc=0; want=ring ;;
+      expression-now) now=2000+1; last=1000; count=1; grace=120; maximum=3; clock_rc=0; want=refuse ;;
+      overflow-now) now=18446744073709553616; last=1000; count=1; grace=120; maximum=3; clock_rc=0; want=refuse ;;
+      failed-clock) now=2000; last=1000; count=1; grace=120; maximum=3; clock_rc=1; want=refuse ;;
+      ordinary-early) now=1100; last=1050; count=1; grace=60; maximum=3; clock_rc=0; want=quiet ;;
+      ordinary-elapsed) now=2000; last=1800; count=1; grace=120; maximum=3; clock_rc=0; want=ring ;;
+      ordinary-future) now=2000; last=3000; count=1; grace=120; maximum=3; clock_rc=0; want=quiet ;;
+      spent) now=2000; last=1000; count=3; grace=120; maximum=3; clock_rc=0; want=escalate ;;
+      zero-grace) now=2000; last=2000; count=1; grace=0; maximum=3; clock_rc=0; want=ring ;;
+      invalid-last) now=2000; last=bad; count=1; grace=120; maximum=3; clock_rc=0; want=ring ;;
+      padded-count) now=2000; last=1000; count=0003; grace=120; maximum=3; clock_rc=0; want=escalate ;;
+    esac
+    state="$deadline_root/$scenario/state"
+    mkdir -p "$state"
+    rec=$(inbox_lib "$state" fm_task_inbox_write "$state" t1 'deadline fixture') || fail "deadline fixture creation failed"
+    python3 - "$rec" <<'AGE'
+import os, sys
+os.utime(sys.argv[1], (100, 100))
+AGE
+    printf '%s\t%s\t%s\n' "${rec##*/}" "$count" "$last" > "$state/t1.inbox/.ring-state"
+    cp "$state/t1.inbox/.ring-state" "$state/ladder-before"
+    rc=0
+    action=$(PATH="$fakebin:$PATH" FM_INBOX_TEST_NOW="$now" FM_INBOX_TEST_CLOCK_RC="$clock_rc" \
+      FM_TASK_INBOX_GRACE_SECS="$grace" FM_TASK_INBOX_RING_MAX="$maximum" \
+      inbox_lib "$state" fm_task_inbox_due_action "$state" t1 2> "$state/error") || rc=$?
+    if [ "$want" = refuse ]; then
+      [ "$rc" -eq 1 ] && [ -z "$action" ] || fail "$scenario clock failure supplied a retry decision"
+    else
+      case "$want" in
+        ring) want="ring $rec" ;;
+        escalate) want="escalate $rec $count" ;;
+      esac
+      [ "$rc" -eq 0 ] && [ "$action" = "$want" ] || fail "$scenario deadline or budget selected the wrong action"
+    fi
+    [ ! -s "$state/error" ] || fail "$scenario deadline or budget raised an arithmetic error"
+    cmp -s "$state/t1.inbox/.ring-state" "$state/ladder-before" || fail "reading a deadline changed its retry ladder"
+  done
+  pass "inbox deadlines and retry budgets compare decimal values without early rings or arithmetic errors"
+}
+
+test_inbox_directory_output_variable() {
+  local api_output="$TMP_ROOT/inbox-directory-api-output"
+  bash -c '
+    set -u
+    . "$1"
+    output=$2
+    for shape in ordinary spaces newlines empty; do
+      case "$shape" in
+        ordinary) state=/tmp/example/state; task=task1 ;;
+        spaces) state="/tmp/example home/state"; task="task 1" ;;
+        newlines) state=$(printf "state\n\nx"); state=${state%x}; task=$(printf "task\nx"); task=${task%x} ;;
+        empty) state=; task= ;;
+      esac
+      expected="$state/$task.inbox"
+      [ "$(fm_task_inbox_dir "$state" "$task")" = "$expected" ] || exit 1
+      for variable in dir path rec; do
+        dir=sentinel; path=sentinel; rec=sentinel
+        fm_task_inbox_dir "$state" "$task" "$variable" > "$output" || exit
+        [ "${!variable}" = "$expected" ] && [ ! -s "$output" ] || exit 1
+      done
+    done
+  ' _ "$ROOT/bin/fm-task-inbox-lib.sh" "$api_output" || fail "inbox directory output-variable contract failed"
+  pass "inbox directory supports silent assignment and preserves its stdout API"
+}
+
+test_retry_marker_clear_preserves_concurrent_updates() {
+  python3 - "$ROOT" "$TMP_ROOT/retry-marker-race" <<'PYRACE' || fail "retry clearing deleted a concurrent newer mark"
+import json,os,pathlib,shutil,subprocess,sys,tempfile,time
+root=pathlib.Path(sys.argv[1]);scratch=pathlib.Path(sys.argv[2]);scratch.mkdir()
+base=r'''
+set -u
+. "$1/bin/fm-task-inbox-lib.sh"
+state="$2/state"
+dir="$state/t1.inbox"
+'''
+clear=base+r'''
+# Use an explicit fixture path; positional arguments inside rm belong to rm.
+probe_home=$2
+rm() {
+ if [ "$*" = "-f $dir/.retry-ring" ]; then
+  : > "$probe_home/rm-entered"
+  while [ ! -e "$probe_home/rm-release" ]; do sleep 0.01; done
+ fi
+ command rm "$@"
+}
+if [ "$3" = clear ]; then
+ fm_task_inbox_clear_retry "$state" t1 "$dir/001.msg"
+else
+ FM_CONFIG_OVERRIDE="$probe_home/config" fm_task_inbox_due_action "$state" t1
+fi
+'''
+mark=base+r'''
+probe_home=$2
+saved=$(declare -f fm_task_inbox_lock_acquire)
+eval "${saved/fm_task_inbox_lock_acquire/probe_lock_acquire}"
+fm_task_inbox_lock_acquire() {
+ : > "$probe_home/mark-lock-attempt"
+ probe_lock_acquire "$@"
+}
+fm_task_inbox_mark_retry "$state" t1 "$dir/002.msg"
+rc=$?
+printf '%s\n' "$rc" > "$probe_home/mark-done"
+exit "$rc"
+'''
+def wait_until(fn,desc):
+ end=time.monotonic()+8
+ while time.monotonic()<end:
+  if fn():return
+  time.sleep(.01)
+ raise RuntimeError(desc)
+rows=[]
+for shell in [shutil.which('bash')]:
+ for action in ['clear','stale-cleanup']:
+  with tempfile.TemporaryDirectory(prefix='race-',dir=scratch) as td:
+   home=pathlib.Path(td);state=home/'state';inbox=state/'t1.inbox';(inbox/'handled').mkdir(parents=True);(home/'config').mkdir();(home/'config/wait-no-turns').touch()
+   record=b'schema=fm-task-inbox.v1\ndelivery=fire-and-forget\n--\nfixture\n'
+   (inbox/'handled/001.msg').write_bytes(record);(inbox/'002.msg').write_bytes(record);(inbox/'.retry-ring').write_text('001.msg\n')
+   env={**os.environ,'FM_HOME':td,'FM_ROOT_OVERRIDE':td,'FM_STATE_OVERRIDE':str(state)}
+   p=subprocess.Popen([shell,'-c',clear,'probe',str(root),td,action],env=env,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True);q=None
+   try:
+    wait_until(lambda:(home/'rm-entered').exists(),'clear did not reach removal')
+    q=subprocess.Popen([shell,'-c',mark,'probe',str(root),td],env=env,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+    wait_until(lambda:(home/'mark-done').exists() or (home/'mark-lock-attempt').exists(),'new marker did not reach update')
+    interleaving='mark completed before removal' if (home/'mark-done').exists() else 'mark waits for serialization'
+    (home/'rm-release').touch();out,err=p.communicate(timeout=15);mout,merr=q.communicate(timeout=15)
+    marker=(inbox/'.retry-ring').read_text() if (inbox/'.retry-ring').exists() else None
+    rows.append({'shell':shell,'action':action,'interleaving':interleaving,'marker':marker,'clear_rc':p.returncode,'mark_rc':q.returncode,'stdout':out+mout,'stderr':err+merr,'bad':marker!='002.msg\n' or p.returncode!=0 or q.returncode!=0})
+   finally:
+    (home/'rm-release').touch()
+    for proc in [p,q]:
+     if proc is not None and proc.poll() is None:proc.kill();proc.wait()
+assert not any(r['bad'] for r in rows), json.dumps(rows,indent=2)
+PYRACE
+  pass "retry clearing and stale cleanup preserve concurrent newer marker updates"
+}
+
+test_retry_marker_failed_write_preserves_previous_mark() {
+  python3 - "$ROOT" "$TMP_ROOT/retry-marker-write" <<'PYWRITE' || fail "retry marker write failure replaced its previous mark"
+import json,os,pathlib,shutil,subprocess,sys,tempfile
+root=pathlib.Path(sys.argv[1]);scratch=pathlib.Path(sys.argv[2]);scratch.mkdir()
+driver=r'''
+set -u
+. "$1/bin/fm-task-inbox-lib.sh"
+state="$2/state"
+if [ "$3" = partial ]; then
+ printf() {
+  if [ "$#" = 2 ] && [ "$1" = '%s\n' ] && [ "$2" = 002.msg ]; then
+   command printf '%s' '002.'
+   return 1
+  fi
+  command printf "$@"
+ }
+fi
+fm_task_inbox_mark_retry "$state" t1 "$state/t1.inbox/002.msg"
+'''
+rows=[]
+for shell in [shutil.which('bash')]:
+ for case in ['healthy','partial','directory']:
+  with tempfile.TemporaryDirectory(prefix='write-',dir=scratch) as td:
+   home=pathlib.Path(td);inbox=home/'state/t1.inbox';(inbox/'handled').mkdir(parents=True);marker=inbox/'.retry-ring'
+   if case=='directory':marker.mkdir()
+   else:marker.write_text('001.msg\n')
+   env={**os.environ,'FM_HOME':td,'FM_ROOT_OVERRIDE':td,'FM_STATE_OVERRIDE':str(home/'state')}
+   r=subprocess.run([shell,'-c',driver,'probe',str(root),td,case],env=env,capture_output=True,text=True,timeout=15)
+   value='directory' if marker.is_dir() else marker.read_text() if marker.exists() else None
+   leftovers=[p.name for p in inbox.iterdir() if p.name.startswith(('.retry-ring.','.seq.lock'))]
+   want='002.msg\n' if case=='healthy' else '001.msg\n' if case=='partial' else 'directory'
+   bad=r.returncode!=(0 if case=='healthy' else 1) or value!=want or bool(leftovers)
+   rows.append({'shell':shell,'case':case,'rc':r.returncode,'marker':value,'leftovers':leftovers,'stderr':r.stderr,'bad':bad})
+assert not any(r['bad'] for r in rows), json.dumps(rows,indent=2)
+PYWRITE
+  pass "retry marker writes preserve previous bytes on failure and release their lock"
+}
+
+test_ring_bookkeeping_rejects_failed_clock_evidence() {
+  local clock_root fakebin scenario state rec value clock_rc wanted_rc expected_epoch rc
+  clock_root="$TMP_ROOT/ring-clock"
+  fakebin="$clock_root/fakebin"
+  mkdir -p "$fakebin"
+  cat > "$fakebin/date" <<'CLOCK'
+#!/usr/bin/env bash
+printf '%s' "$FM_INBOX_TEST_NOW"
+exit "$FM_INBOX_TEST_CLOCK_RC"
+CLOCK
+  chmod +x "$fakebin/date"
+  for scenario in healthy partial-failure empty-failure malformed empty-success oversized padded zero; do
+    wanted_rc=1; expected_epoch=1000
+    case "$scenario" in
+      healthy) value=2000; clock_rc=0; wanted_rc=0; expected_epoch=2000 ;;
+      partial-failure) value=2000; clock_rc=1 ;;
+      empty-failure) value=; clock_rc=1 ;;
+      malformed) value=2000+1; clock_rc=0 ;;
+      empty-success) value=; clock_rc=0 ;;
+      oversized) value=18446744073709553616; clock_rc=0 ;;
+      padded) value=02000; clock_rc=0; wanted_rc=0; expected_epoch=2000 ;;
+      zero) value=0; clock_rc=0; wanted_rc=0; expected_epoch=0 ;;
+    esac
+    state="$clock_root/$scenario/state"
+    mkdir -p "$state"
+    rec=$(inbox_lib "$state" fm_task_inbox_write "$state" t1 'clock fixture') || fail "clock fixture enqueue failed"
+    printf '%s\t1\t1000\n' "${rec##*/}" > "$state/t1.inbox/.ring-state"
+    if [ "$wanted_rc" -eq 0 ]; then
+      printf '%s\t2\t%s\n' "${rec##*/}" "$expected_epoch" > "$state/expected"
+    else
+      cp "$state/t1.inbox/.ring-state" "$state/expected"
+    fi
+    rc=0
+    PATH="$fakebin:$PATH" FM_INBOX_TEST_NOW="$value" FM_INBOX_TEST_CLOCK_RC="$clock_rc" \
+      inbox_lib "$state" fm_task_inbox_record_ring "$state" t1 "$rec" > "$state/output" 2> "$state/error" || rc=$?
+    [ "$rc" -eq "$wanted_rc" ] || fail "$scenario ring clock returned the wrong recording status"
+    cmp -s "$state/expected" "$state/t1.inbox/.ring-state" || fail "$scenario ring clock damaged or misrecorded the retry ladder"
+    [ ! -s "$state/output" ] && [ ! -s "$state/error" ] || fail "$scenario clock recording emitted output or an arithmetic error"
+  done
+  pass "ring bookkeeping preserves its previous ladder when clock evidence fails"
+}
+
+test_ring_bookkeeping_rejects_failed_clock_evidence
+test_retry_marker_clear_preserves_concurrent_updates
+test_retry_marker_failed_write_preserves_previous_mark
+test_inbox_directory_output_variable
+test_inbox_deadlines_and_budgets_use_decimal_comparisons
+test_inbox_retry_counters_are_bounded_decimal
+test_idempotent_write_rejects_failed_body_reads
+test_sequence_order_crosses_padding_widths
+test_writer_retries_after_a_vanished_lock_collision 08
+test_writer_retries_after_a_vanished_lock_collision 09
 test_write_is_durable_and_exact
 test_doorbell_is_a_shell_noop
 test_doorbell_rejects_terminal_controls

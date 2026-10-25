@@ -1735,6 +1735,29 @@ A GitLab project needs no forge token, only `glab` on `PATH`, authenticated via 
 A project whose reviews are created by a review tool that uploads its own snapshot of the worker's commits is registered `[direct-PR forge=external]`; it is never detected, ships `direct-PR` only, carries no yolo, and needs the [external review tool](#external-review-tool-configexternal-reviewmd-configexternal-review-url-configexternal-review-backup) configuration below.
 [`docs/external-review-forge.md`](external-review-forge.md) is the design.
 
+## Published home paths (config/published-path-prefixes)
+
+Committed and published evidence normally uses `<task-output>/…` for task scratch, `<firstmate-home>/…` for Firstmate home paths, and repository-relative paths for worktree files.
+The local evidence validator resolves descriptors before applying its existing artifact containment, readability, and symlink guards.
+`FM_HOME` selects the descriptor's home, with `FM_ROOT_OVERRIDE` as the legacy fallback and the Firstmate code root as the default.
+For projects whose documentation describes actual hosts or home configuration, the optional, gitignored `config/published-path-prefixes` permits specific absolute home-path prefixes in published PR/MR text.
+An absent file means no overrides.
+Each whitespace-separated row contains the project's canonical absolute Git common directory followed by one or more allowed absolute path prefixes; blank lines and whole-line `#` comments are ignored, and paths containing whitespace are unsupported.
+Obtain the project key with `git -C <project-clone> rev-parse --path-format=absolute --git-common-dir`; linked task worktrees resolve to the same key.
+For example:
+
+```text
+/srv/repos/estate/.git /home/ops/estate /home/ops/host-config
+/srv/repos/firstmate/.git /home/ops/firstmate/config
+```
+
+Prefixes match complete path components, so `/home/ops/estate` does not allow `/home/ops/estate-other`.
+Matching uses normalized paths, and `/` cannot be allowed.
+Task scratch paths, including `/tmp/fm-<task>/…` and the recorded task temp root, remain refused even beneath an allowed prefix.
+There are no per-file exemptions, per-line exemptions, or repository marker files.
+An override does not expand the permitted evidence artifact roots or bypass any evidence or merge guard.
+[`bin/fm-pr-body-preflight.sh`](../bin/fm-pr-body-preflight.sh) applies this policy to drafts and forge readback; the shared evidence validator applies it again at publication and merge checks.
+
 ## External review tool (config/external-review.md, config/external-review-url, config/external-review-backup)
 
 These optional local, gitignored files configure a home's `forge=external` projects; a home with no such project needs none of them.

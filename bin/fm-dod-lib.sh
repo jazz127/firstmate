@@ -351,6 +351,129 @@ $1
 EOF
 }
 
+# Publication uses portable paths; private intent may retain local paths.
+# <task-output> resolves against the recorded task temp root, <firstmate-home>
+# against FM_HOME (or the standard code-root fallback), and relative artifacts
+# against the worker worktree. Resolution never expands shell expressions.
+# The evidence validator still owns containment, readability and symlink checks.
+fm_dod_evidence_home() {
+  local code_root
+  code_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd) || return 1
+  printf '%s\n' "${FM_HOME:-${FM_ROOT_OVERRIDE:-$code_root}}"
+}
+
+fm_dod_resolve_evidence_path() {  # <published-path> <worktree> <task-temp>
+  local path=$1 root suffix
+  case "$path" in
+    '<task-output>/'*) root=$3; suffix=${path#'<task-output>/'} ;;
+    '<firstmate-home>/'*) root=$(fm_dod_evidence_home) || return 1; suffix=${path#'<firstmate-home>/'} ;;
+    '<'*) printf 'evidence claim refused: unknown artifact descriptor: %s\n' "$path" >&2; return 1 ;;
+    /*) printf '%s\n' "$path"; return 0 ;;
+    *) root=$2; suffix=$path ;;
+  esac
+  case "$root" in
+    /*) printf '%s/%s\n' "${root%/}" "$suffix" ;;
+    *) printf 'evidence claim refused: artifact root must be absolute: %s\n' "$root" >&2; return 1 ;;
+  esac
+}
+
+# config/published-path-prefixes is private and project-scoped by canonical Git
+# common directory, so isolated worktrees share the same entry without relying
+# on task names or remote URLs. docs/configuration.md owns the file format.
+fm_dod_allowed_path_prefixes() {  # <worktree>
+  local home config common project prefix rest
+  local -a row_prefixes
+  home=$(fm_dod_evidence_home) || return 1
+  config=${FM_CONFIG_OVERRIDE:-$home/config}/published-path-prefixes
+  [ -e "$config" ] || return 0
+  [ -f "$config" ] && [ -r "$config" ] || {
+    printf 'publication refused: unreadable override: %s\n' "$config" >&2; return 1;
+  }
+  common=$(git -C "$1" rev-parse --git-common-dir 2>/dev/null) || common=
+  case "$common" in /*) ;; '') ;; *) common=$1/$common ;; esac
+  if [ -n "$common" ]; then
+    common=$(cd -P "$common" 2>/dev/null && pwd -P) || common=
+  fi
+  while read -r project rest || [ -n "$project$rest" ]; do
+    case "$project" in ''|'#'*) continue ;; esac
+    [ -n "$rest" ] || { printf 'publication refused: invalid override row in %s\n' "$config" >&2; return 1; }
+    case "$project" in /*) ;; *) printf 'publication refused: project key must be an absolute Git common directory in %s\n' "$config" >&2; return 1 ;; esac
+    read -r -a row_prefixes <<EOF
+$rest
+EOF
+    for prefix in "${row_prefixes[@]}"; do
+      case "$prefix" in
+        /*) ;;
+        *) printf 'publication refused: override prefixes must be absolute in %s\n' "$config" >&2; return 1 ;;
+      esac
+      prefix=$(fm_dod_path_normalize "$prefix") || return 1
+      [ "$prefix" != / ] || { printf 'publication refused: root override is forbidden in %s\n' "$config" >&2; return 1; }
+      if [ -n "$common" ] && [ "$project" = "$common" ]; then printf '%s\n' "$prefix"; fi
+    done
+  done < "$config"
+}
+
+# Check commands and prose even without an evidence claim. Known roots catch
+# nonstandard home/worktree layouts; generic patterns catch other workers.
+# Task scratch paths cannot be allowed by the home-path override.
+fm_dod_refuse_worker_paths() {  # <published-text> <worktree> <task-temp>
+  local home paths path prefixes prefix normalized allowed
+  home=$(fm_dod_evidence_home) || return 1
+  prefixes=$(fm_dod_allowed_path_prefixes "$2") || return 1
+  paths=$(awk -v home="$home" -v worktree="$2" -v task="$3" -v user_home="${HOME:-}" '
+    function emit(scan, path) {
+      if (match(scan, /^[^[:space:]<>`"()|,;\047]+/)) {
+        path = substr(scan, 1, RLENGTH)
+        sub(/[]}]+$/, "", path)
+        print path
+      }
+    }
+    {
+      scan = $0
+      while (match(scan, /\/(private\/)?tmp\/fm-|\/(home|Users)\//)) {
+        emit(substr(scan, RSTART))
+        scan = substr(scan, RSTART + RLENGTH)
+      }
+      roots[1] = home; roots[2] = worktree; roots[3] = task; roots[4] = user_home
+      for (i = 1; i <= 4; i++) {
+        if (roots[i] !~ /^\// || roots[i] == "/") continue
+        scan = $0
+        while ((pos = index(scan, roots[i])) > 0) {
+          tail = substr(scan, pos + length(roots[i]), 1)
+          if (tail == "/" || tail == "" || tail ~ /[[:space:]<>`"()|,;\047]/) emit(substr(scan, pos))
+          scan = substr(scan, pos + length(roots[i]))
+        }
+      }
+    }
+  ' <<EOF
+$1
+EOF
+) || return 1
+  while IFS= read -r path; do
+    [ -n "$path" ] || continue
+    normalized=$(fm_dod_path_normalize "$path") || return 1
+    allowed=0
+    case "$path" in *'/tmp/fm-'*) ;; *)
+      case "$normalized" in
+        "$3"|"${3%/}"/*) ;;
+        *)
+          while IFS= read -r prefix; do
+            [ -n "$prefix" ] || continue
+            case "$normalized" in "$prefix"|"$prefix"/*) allowed=1; break ;; esac
+          done <<EOF
+$prefixes
+EOF
+          ;;
+      esac ;;
+    esac
+    [ "$allowed" -eq 0 ] || continue
+    printf '%s\n' 'publication refused: worker-local absolute path; use <task-output>/… for task scratch, <firstmate-home>/… for home paths, or repository-relative paths; host documentation may allow specific home prefixes in config/published-path-prefixes (task scratch is never allowed)' >&2
+    return 1
+  done <<EOF
+$paths
+EOF
+}
+
 # Refuse conflicting live-scenario summaries before the provenance check can
 # misdiagnose a generated appendix as missing metadata. Only tables with an
 # explicit Live column and fully classified rows supply a table total; a
@@ -465,6 +588,7 @@ fm_dod_validate_intent_evidence() {  # <intent> <worktree> <task-temp> [prefligh
   local artifact_count=0 command_count=0 captured_count=0
   if [ "$phase" != preflight ]; then
     fm_dod_validate_scenario_consistency "$intent" || return 1
+    fm_dod_refuse_worker_paths "$intent" "$worktree" "$task_temp" || return 1
   fi
   detector_input=$(printf '%s\n' "$intent" | tr '.!?;' '\n' | sed -E 's/,[[:space:]]+(but|however|yet)[[:space:]]+/\n/g')
   while IFS= read -r line; do
@@ -594,10 +718,7 @@ EOF
     printf '%s\n' "evidence claim refused: invalid evidence-captured timestamp: $captured" >&2
     return 1
   fi
-  case "$artifact" in
-    /*) ;;
-    *) printf '%s\n' "evidence claim refused: artifact path must be absolute: $artifact" >&2; return 1 ;;
-  esac
+  artifact=$(fm_dod_resolve_evidence_path "$artifact" "$worktree" "$task_temp") || return 1
   normalized_artifact=$(fm_dod_path_normalize "$artifact") || return 1
   for normalized_root in "$worktree" "$task_temp"; do
     [ -n "$normalized_root" ] || continue
@@ -792,7 +913,7 @@ The \`--intent\` string you pass must be self-sufficient: that string plus the c
 When the captain's intent refers to a report, decision, or PR ("do items 1, 2, 3, and 7 of the report"), write the substance of the referenced items into \`--intent\` in the captain's terms, not only the pointer; that substance is the captain's ask by reference, while Firstmate's build instructions and your own decisions still stay out.
 This replaces the no-mistakes skill's advice to enrich \`--intent\` with decisions and tradeoffs; that advice does not apply to Firstmate-dispatched work.
 Any claim in \`--intent\` of live, verified, external, independently confirmed, or real-account evidence must name the artifact read, the exact command that produced it, and when it was captured; publication refuses such a claim if any of those are missing or the artifact cannot be read.
-Keep each cited artifact at a path the supervising home can open, inside this worker's worktree or its task temp directory.
+Keep each cited artifact locally readable by the supervising home, inside this worker's worktree or its task temp directory; use the brief's portable evidence paths in published text.
 This boundary proves that the claim is checkable, not that it is true; Firstmate must read the artifact before relaying its evidence label.
 Follow the brief's \`# Evidence provenance\` section for evidence claims, metadata format, and synthetic or offline labels in the PR body.
 Do not hand-edit code, commit, or fix pipeline findings yourself while a run is active - the pipeline applies those fixes; the published PR description correction below is limited to that description.

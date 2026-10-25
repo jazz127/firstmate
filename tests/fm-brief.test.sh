@@ -452,6 +452,12 @@ test_pr_body_preflight_is_rendered() {
       "$mode brief did not give a pre-publication command"
     assert_grep "\"/tmp/fm-$id\"" "$brief" \
       "$mode brief did not bind preflight to its own task temp directory"
+    assert_grep 'In anything committed or published' "$brief" \
+      "$mode brief omitted the committed/published path rule"
+    assert_grep '<task-output>/…' "$brief" "$mode brief omitted task scratch descriptors"
+    assert_grep '<firstmate-home>/…' "$brief" "$mode brief omitted home descriptors"
+    assert_grep 'evidence-artifact: <task-output>/evidence.txt' "$brief" \
+      "$mode brief still requires a raw absolute artifact"
     assert_grep "Use one metadata block for the whole body" "$brief" \
       "$mode brief did not explain the single-block rule"
     assert_grep "N of M scenarios driven live" "$brief" \

@@ -7,6 +7,9 @@
 #        fm-pr-body-preflight.sh --scratch <worker-worktree>
 # Uses the exact publish-phase evidence validator applied when Firstmate reads
 # a published PR body; it leaves that validator's refusal unchanged on stderr.
+# Published text refuses worker-local absolute paths, including evidence-command.
+# Artifacts use <task-output>/..., <firstmate-home>/..., or repository-relative
+# paths; FM_HOME selects the home used to resolve <firstmate-home> locally.
 set -uo pipefail
 
 usage() {

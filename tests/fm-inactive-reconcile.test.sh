@@ -700,7 +700,7 @@ evidence_cleanup_report_case() { # <case> <forge-state> <removal> <expected>
   body="$WORLD/body.md"
   cat > "$body" <<EOF
 Synthetic validator input: The scenarios were run against a real account.
-evidence-artifact: $task_tmp/proof.txt
+evidence-artifact: <task-output>/proof.txt
 evidence-command: synthetic fixture
 evidence-captured: 2026-09-29T00:00:00Z
 EOF

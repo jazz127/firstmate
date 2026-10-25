@@ -110,7 +110,7 @@ test_evidence_claim_enforces_mechanical_provenance() {
   printf '%s\n' captured output > "$artifact"
   intent=$(cat <<EOF
 2 of 3 scenarios driven live
-evidence-artifact: $artifact
+evidence-artifact: evidence.txt
 evidence-command: ./run-scenarios --live
 evidence-captured: 2026-09-25T10:00:00+10:00
 EOF
@@ -130,7 +130,7 @@ EOF
     || fail "publication refused a mechanically valid evidence artifact"
   mkdir -p "$root/outside"
   printf '%s\n' captured > "$root/outside/evidence.txt"
-  intent=${intent/$artifact/$root\/worktree\/..\/outside\/evidence.txt}
+  intent=${intent/evidence.txt/..\/outside\/evidence.txt}
   set +e
   out=$(fm_dod_validate_published_intent "$intent" "$root/worktree" "$root/tmp" 2>&1)
   rc=$?
@@ -140,7 +140,7 @@ EOF
   printf '%s\n' captured > "$root/tmp-other/evidence.txt"
   intent=$(cat <<EOF
 2 of 3 scenarios driven live
-evidence-artifact: $root/tmp-other/evidence.txt
+evidence-artifact: <task-output>/../tmp-other/evidence.txt
 evidence-command: ./run-scenarios --live
 evidence-captured: 2026-09-25T10:00:00+10:00
 EOF
@@ -153,7 +153,7 @@ EOF
   ln -s "$root/outside/secret.txt" "$root/worktree/linked-evidence.txt"
   intent=$(cat <<EOF
 2 of 3 scenarios driven live
-evidence-artifact: $root/worktree/linked-evidence.txt
+evidence-artifact: linked-evidence.txt
 evidence-command: ./run-scenarios --live
 evidence-captured: 2026-09-25T10:00:00+10:00
 EOF
@@ -253,7 +253,7 @@ EOF
   assert_contains "$out" "missing evidence-artifact" "compact multi-ratio refusal was unclear"
   intent=$(cat <<EOF
 external validation passed
-evidence-artifact: $root/worktree/evidence.txt
+evidence-artifact: evidence.txt
 evidence-command: ./run-scenarios
 evidence-captured: tomorrow
 EOF
@@ -269,8 +269,8 @@ EOF
   assert_contains "$out" "invalid evidence-captured timestamp" "impossible timestamp refusal was unclear"
   intent=$(cat <<EOF
 external validation passed
-evidence-artifact: $root/worktree/evidence.txt
-evidence-artifact: $root/worktree/evidence.txt
+evidence-artifact: evidence.txt
+evidence-artifact: evidence.txt
 evidence-command: ./run-scenarios
 evidence-captured: 2026-09-25T10:00:00+10:00
 EOF
@@ -281,7 +281,7 @@ EOF
   assert_contains "$out" "duplicate evidence-artifact" "duplicate artifact metadata refusal was unclear"
   intent=$(cat <<EOF
 2 of 3 scenarios driven live
-evidence-artifact: $root/worktree
+evidence-artifact: .
 evidence-command: ./run-scenarios --live
 evidence-captured: 2026-09-25T10:00:00+10:00
 EOF
@@ -291,6 +291,26 @@ EOF
   [ "$rc" -ne 0 ] || fail "directory evidence artifact was accepted"
   assert_contains "$out" "missing or unreadable" "directory artifact refusal was unclear"
   pass "evidence claims accept readable provenance and spare ordinary prose"
+}
+
+test_portable_published_evidence() {
+  local root body portable out
+  root="$TMP_ROOT/portable-evidence"
+  mkdir -p "$root/worktree" "$root/tmp"
+  printf '%s\n' 'synthetic captured output' > "$root/tmp/proof.txt"
+  for portable in '<task-output>/proof.txt' '<firstmate-home>/tmp/proof.txt'; do
+    body=$(printf 'External validation passed.\nevidence-artifact: %s\nevidence-command: ./collect > %s\nevidence-captured: 2026-09-25T10:00:00+10:00\n' "$portable" "$portable")
+    FM_HOME="$root" fm_dod_validate_published_intent "$body" "$root/worktree" "$root/tmp" \
+      || fail "published-intent merge guard refused descriptor: $portable"
+  done
+  # Private intent still accepts the actual local path, before publication.
+  body=$(printf 'External validation passed.\nevidence-artifact: %s/tmp/proof.txt\nevidence-command: ./collect\nevidence-captured: 2026-09-25T10:00:00+10:00\n' "$root")
+  fm_dod_validate_intent_evidence "$body" "$root/worktree" "$root/tmp" \
+    || fail 'private intent no longer accepts local artifact paths'
+  out=$(fm_dod_validate_published_intent "$body" "$root/worktree" "$root/tmp" 2>&1)
+  expect_code 1 "$?" 'published-intent merge guard accepted a raw local path'
+  assert_contains "$out" 'worker-local absolute path' 'merge guard lost the path refusal'
+  pass 'published-intent merge guard resolves descriptors while private intent retains local paths'
 }
 
 test_scenario_consistency_is_publication_only() {
@@ -898,6 +918,8 @@ EOF
 test_scout_done_is_not_gated
 test_evidence_claim_requires_provenance
 test_evidence_claim_enforces_mechanical_provenance
+test_portable_published_evidence
+
 test_scenario_consistency_is_publication_only
 test_scenario_count_agreeing_with_any_complete_table_is_accepted
 test_scenario_count_refusal_cites_matching_table

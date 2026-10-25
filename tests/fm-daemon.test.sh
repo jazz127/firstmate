@@ -38,6 +38,24 @@ delivered_digest() {  # <sent-log>
   done <"$1"
 }
 
+# Opt an existing cadence fixture into the same policy used by production.
+opt_in_daemon_fixture() {  # <state> <window>
+  local state=$1 win=$2 status task meta
+  mkdir -p "$FM_CONFIG_OVERRIDE"
+  for status in "$state"/*.status; do
+    [ -f "$status" ] || continue
+    task=${status##*/}; task=${task%.status}; meta="$state/$task.meta"
+    printf '%s\n' "$task" >> "$FM_CONFIG_OVERRIDE/secondmate-idle-checkins"
+    if [ -f "$meta" ]; then
+      sed '/^kind=/d' "$meta" > "$meta.tmp"
+      printf 'kind=secondmate\n' >> "$meta.tmp"
+      mv "$meta.tmp" "$meta"
+    else
+      printf 'window=%s\nkind=secondmate\n' "$win" > "$meta"
+    fi
+  done
+}
+
 test_afk_start_refuses_when_flag_cannot_be_written() {
   local dir state out status
   dir=$(make_supercase afk-start-flag-unwritable)
@@ -873,6 +891,7 @@ test_stale_diagnostic_wedge_survives_busy_housekeeping() {
 # PAUSE_RESURFACE_SECS recheck instead. This drives repeated enriched wedges through
 # the real handle_wake/housekeeping pair and asserts the cadence, not just one wake.
 test_enriched_wedge_under_declared_wait_uses_pause_cadence() {
+  local FM_CONFIG_OVERRIDE
   local dir state fakebin task win pane key reason i escalations
   dir=$(make_supercase enriched-wedge-declared-wait)
   state="$dir/state"; fakebin="$dir/fakebin"
@@ -898,6 +917,8 @@ test_enriched_wedge_under_declared_wait_uses_pause_cadence() {
       reason="stale: $win (idle 250s, possible wedge, escalation $i)"
     fi
     LOG="$dir/daemon.log" FM_STATE_OVERRIDE="$state" handle_wake "$reason" "$state"
+    FM_CONFIG_OVERRIDE="$dir/config"
+    opt_in_daemon_fixture "$state" "$win"
     PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$win" FM_FAKE_TMUX_CAPTURE="$pane" \
       FM_STATE_OVERRIDE="$state" FM_ESCALATE_BATCH_SECS=999999 \
       FM_STALE_ESCALATE_SECS=240 FM_PAUSE_RESURFACE_SECS=3600 housekeeping "$state"
@@ -913,6 +934,8 @@ test_enriched_wedge_under_declared_wait_uses_pause_cadence() {
   # Past PAUSE_RESURFACE_SECS the wait must re-surface exactly once as an
   # awaiting-external recheck (never a wedge) and reset its window.
   echo $(( $(date +%s) - 5000 )) > "$state/.subsuper-paused-$key"
+  FM_CONFIG_OVERRIDE="$dir/config"
+  opt_in_daemon_fixture "$state" "$win"
   PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$win" FM_FAKE_TMUX_CAPTURE="$pane" \
     FM_STATE_OVERRIDE="$state" FM_ESCALATE_BATCH_SECS=999999 FM_PAUSE_RESURFACE_SECS=3600 \
     housekeeping "$state"
@@ -931,6 +954,8 @@ test_enriched_wedge_under_declared_wait_uses_pause_cadence() {
   printf 'working: the audit finished, resuming\n' >> "$state/$task.status"
   reason="stale: $win (idle 250s, possible wedge, escalation 6)"
   LOG="$dir/daemon.log" FM_STATE_OVERRIDE="$state" handle_wake "$reason" "$state"
+  FM_CONFIG_OVERRIDE="$dir/config"
+  opt_in_daemon_fixture "$state" "$win"
   PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$win" FM_FAKE_TMUX_CAPTURE="$pane" \
     FM_STATE_OVERRIDE="$state" FM_ESCALATE_BATCH_SECS=999999 FM_PAUSE_RESURFACE_SECS=3600 \
     housekeeping "$state"
@@ -956,6 +981,7 @@ test_stale_terminal_escalates() {
 }
 
 test_stale_actionable_wait_escalates_and_keeps_pause_cadence() {
+  local FM_CONFIG_OVERRIDE
   local dir state win key out reason resumed_win resumed_key
   dir=$(make_supercase stale-actionable-wait); state="$dir/state"
   win="sess:fm-waiting-r10"; key=$(printf '%s' waiting-r10 | tr ':/.' '___')
@@ -1152,6 +1178,7 @@ test_housekeeping_seeds_pause_marker_from_status() {
 # as an awaiting-external recheck (never a wedge), and RESETS the marker so the
 # window repeats rather than firing once.
 test_housekeeping_paused_resurfaces_and_resets() {
+  local FM_CONFIG_OVERRIDE
   local dir state fakebin win pane key age
   dir=$(make_supercase paused-resurface)
   state="$dir/state"; fakebin="$dir/fakebin"
@@ -1160,6 +1187,8 @@ test_housekeeping_paused_resurfaces_and_resets() {
   printf 'idle prompt $\n' > "$pane"
   key=$(printf '%s' "held-w11" | tr ':/.' '___')
   echo $(( $(date +%s) - 5000 )) > "$state/.subsuper-paused-$key"
+  FM_CONFIG_OVERRIDE="$dir/config"
+  opt_in_daemon_fixture "$state" "$win"
   PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$win" FM_FAKE_TMUX_CAPTURE="$pane" \
     FM_STATE_OVERRIDE="$state" FM_PAUSE_RESURFACE_SECS=240 housekeeping "$state"
   grep -F "awaiting external" "$state/.subsuper-escalations" >/dev/null 2>&1 || fail "declared pause was not re-surfaced as an awaiting-external recheck"
@@ -1179,6 +1208,7 @@ test_housekeeping_paused_resurfaces_and_resets() {
 # hold is waiting on the one person reading the digest, so borrowing the pause verb's
 # awaiting-external wording would point them away from being the blocker.
 test_housekeeping_captain_held_resurfaces_and_resets() {
+  local FM_CONFIG_OVERRIDE
   local dir state fakebin win pane key age
   dir=$(make_supercase captain-held-resurface)
   state="$dir/state"; fakebin="$dir/fakebin"
@@ -1187,6 +1217,8 @@ test_housekeeping_captain_held_resurfaces_and_resets() {
   printf 'idle prompt $\n' > "$pane"
   key=$(printf '%s' "held-w11h" | tr ':/.' '___')
   echo $(( $(date +%s) - 5000 )) > "$state/.subsuper-paused-$key"
+  FM_CONFIG_OVERRIDE="$dir/config"
+  opt_in_daemon_fixture "$state" "$win"
   PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$win" FM_FAKE_TMUX_CAPTURE="$pane" \
     FM_STATE_OVERRIDE="$state" FM_PAUSE_RESURFACE_SECS=240 housekeeping "$state"
   grep -F "awaiting the captain" "$state/.subsuper-escalations" >/dev/null 2>&1 || fail "a captain hold was silenced entirely instead of re-surfacing as a captain-owned recheck: $(cat "$state/.subsuper-escalations" 2>/dev/null || true)"
@@ -1203,6 +1235,7 @@ test_housekeeping_captain_held_resurfaces_and_resets() {
 # (bin/fm-afk-contract.sh AWAY OR QUIET), so a quiet daemon rechecks the same
 # hold on the same cadence.
 test_housekeeping_captain_held_silenced_only_by_an_away_record() {
+  local FM_CONFIG_OVERRIDE
   local mode dir state fakebin win pane key
   for mode in away quiet; do
     dir=$(make_supercase "captain-held-$mode-record")
@@ -1215,6 +1248,8 @@ test_housekeeping_captain_held_silenced_only_by_an_away_record() {
     FM_HOME="$dir" FM_STATE_OVERRIDE="$state" FM_AFK_MODE="$mode" "$ROOT/bin/fm-afk-contract.sh" enter --words 'fixture words' >/dev/null 2>&1 \
       || fail "fixture: could not record the $mode posture"
     [ "$(FM_HOME="$dir" FM_STATE_OVERRIDE="$state" "$ROOT/bin/fm-afk-contract.sh" mode)" = "$mode" ] || fail "fixture: the record is not $mode"
+    FM_CONFIG_OVERRIDE="$dir/config"
+    opt_in_daemon_fixture "$state" "$win"
     PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$win" FM_FAKE_TMUX_CAPTURE="$pane" \
       FM_STATE_OVERRIDE="$state" FM_PAUSE_RESURFACE_SECS=240 housekeeping "$state"
     if [ "$mode" = away ]; then
@@ -1272,6 +1307,7 @@ test_housekeeping_paused_resumed_cleared() {
 # busy_turn_bound_check), so this recheck is the only thing left that can re-surface
 # the pane at all. Both declaration forms take the same 2b arm, so both are pinned.
 test_housekeeping_busy_declared_wait_matures_its_window() {
+  local FM_CONFIG_OVERRIDE
   local case_name dir state fakebin task win pane key gen tick age escalations digest
   for case_name in paused captain-held; do
     dir=$(make_supercase "busy-declared-wait-$case_name")
@@ -1289,6 +1325,8 @@ test_housekeeping_busy_declared_wait_matures_its_window() {
     "$ROOT/bin/fm-busy-event.sh" apply "$state" "$task" busy --gen "$gen" \
       --source pi-ext --event agent-start
     key=$(printf '%s' "$task" | tr ':/.' '___')
+    FM_CONFIG_OVERRIDE="$dir/config"
+    opt_in_daemon_fixture "$state" "$win"
     PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$win" FM_FAKE_TMUX_CAPTURE="$pane" \
       FM_STATE_OVERRIDE="$state" stale_window_is_busy "$win" "$state" \
       || fail "the $case_name fixture does not actually read busy, so it pins nothing about busy state"
@@ -1297,6 +1335,8 @@ test_housekeeping_busy_declared_wait_matures_its_window() {
     # marker the window ages against be recreated with a fresh timestamp.
     echo $(( $(date +%s) - 100 )) > "$state/.subsuper-paused-$key"
     for tick in 1 2 3; do
+      FM_CONFIG_OVERRIDE="$dir/config"
+      opt_in_daemon_fixture "$state" "$win"
       PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$win" FM_FAKE_TMUX_CAPTURE="$pane" \
         FM_STATE_OVERRIDE="$state" FM_ESCALATE_BATCH_SECS=999999 FM_PAUSE_RESURFACE_SECS=3600 \
         housekeeping "$state"
@@ -1312,6 +1352,8 @@ test_housekeeping_busy_declared_wait_matures_its_window() {
     # Matured window: exactly one recheck, named for the right human, never a wedge,
     # and the window reset so the next one repeats rather than firing once.
     echo $(( $(date +%s) - 5000 )) > "$state/.subsuper-paused-$key"
+    FM_CONFIG_OVERRIDE="$dir/config"
+    opt_in_daemon_fixture "$state" "$win"
     PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$win" FM_FAKE_TMUX_CAPTURE="$pane" \
       FM_STATE_OVERRIDE="$state" FM_ESCALATE_BATCH_SECS=999999 FM_PAUSE_RESURFACE_SECS=3600 \
       housekeeping "$state"
@@ -1330,6 +1372,8 @@ test_housekeeping_busy_declared_wait_matures_its_window() {
     [ "$age" -lt 60 ] || fail "$case_name busy declared wait did not reset its window to now (age ${age}s)"
 
     # The next tick, still inside the fresh window, stays silent: one recheck per window.
+    FM_CONFIG_OVERRIDE="$dir/config"
+    opt_in_daemon_fixture "$state" "$win"
     PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$win" FM_FAKE_TMUX_CAPTURE="$pane" \
       FM_STATE_OVERRIDE="$state" FM_ESCALATE_BATCH_SECS=999999 FM_PAUSE_RESURFACE_SECS=3600 \
       housekeeping "$state"
@@ -1343,6 +1387,7 @@ test_housekeeping_busy_declared_wait_matures_its_window() {
 }
 
 test_housekeeping_declared_time_controls_pause_recheck() {
+  local FM_CONFIG_OVERRIDE
   local dir state fakebin task win pane key now future distant past escalations
   dir=$(make_supercase pause-until-cadence)
   state="$dir/state"; fakebin="$dir/fakebin"
@@ -1362,6 +1407,8 @@ test_housekeeping_declared_time_controls_pause_recheck() {
   fi
   printf 'paused: waiting for release until %s\n' "$future" > "$state/$task.status"
   echo $((now - 60)) > "$state/.subsuper-paused-$key"
+  FM_CONFIG_OVERRIDE="$dir/config"
+  opt_in_daemon_fixture "$state" "$win"
   PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$win" FM_FAKE_TMUX_CAPTURE="$pane" \
     FM_STATE_OVERRIDE="$state" FM_PAUSE_RESURFACE_SECS=240 housekeeping "$state"
   [ ! -s "$state/.subsuper-escalations" ] \
@@ -1369,6 +1416,8 @@ test_housekeeping_declared_time_controls_pause_recheck() {
 
   printf 'paused: waiting for release until %s\n' "$distant" > "$state/$task.status"
   echo $((now - 300)) > "$state/.subsuper-paused-$key"
+  FM_CONFIG_OVERRIDE="$dir/config"
+  opt_in_daemon_fixture "$state" "$win"
   PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$win" FM_FAKE_TMUX_CAPTURE="$pane" \
     FM_STATE_OVERRIDE="$state" FM_PAUSE_RESURFACE_SECS=240 housekeeping "$state"
   escalations=$(wc -l < "$state/.subsuper-escalations" | tr -d ' ')
@@ -1380,10 +1429,14 @@ test_housekeeping_declared_time_controls_pause_recheck() {
 
   printf 'paused: waiting for release until %s\n' "$past" > "$state/$task.status"
   date +%s > "$state/.subsuper-paused-$key"
+  FM_CONFIG_OVERRIDE="$dir/config"
+  opt_in_daemon_fixture "$state" "$win"
   PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$win" FM_FAKE_TMUX_CAPTURE="$pane" \
     FM_STATE_OVERRIDE="$state" FM_PAUSE_RESURFACE_SECS=240 housekeeping "$state"
   escalations=$(wc -l < "$state/.subsuper-escalations" | tr -d ' ')
   [ "$escalations" -eq 2 ] || fail "a reached declared time did not trigger an immediate recheck"
+  FM_CONFIG_OVERRIDE="$dir/config"
+  opt_in_daemon_fixture "$state" "$win"
   PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$win" FM_FAKE_TMUX_CAPTURE="$pane" \
     FM_STATE_OVERRIDE="$state" FM_PAUSE_RESURFACE_SECS=240 housekeeping "$state"
   escalations=$(wc -l < "$state/.subsuper-escalations" | tr -d ' ')
@@ -1492,7 +1545,7 @@ test_housekeeping_persistent_stale_escalates() {
   key=$(printf '%s' "pers-w5" | tr ':/.' '___')
   echo $(( $(date +%s) - 500 )) > "$state/.subsuper-stale-$key"
   PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$win" FM_FAKE_TMUX_CAPTURE="$pane" \
-    FM_STATE_OVERRIDE="$state" FM_STALE_ESCALATE_SECS=240 housekeeping "$state"
+    FM_STATE_OVERRIDE="$state" FM_STALE_ESCALATE_SECS=240 FM_CREW_STATE_BIN="$(make_fake_crew_state "$dir/fakebin")" FM_FAKE_CREW_STATE="state: working · source: run-step · synthetic active execution" housekeeping "$state"
   [ -s "$state/.subsuper-escalations" ] || fail "persistent stale was not escalated"
   [ ! -e "$state/.subsuper-stale-$key" ] || fail "stale marker not cleared after escalation"
   pass "persistent stale escalates after threshold and clears its marker"
@@ -1543,7 +1596,7 @@ test_housekeeping_herdr_persistent_stale_resolves_meta() {
     }
     fm_backend_capture herdr default:w1:p2 40 >/dev/null
     [ "$(fm_backend_busy_state herdr default:w1:p2)" = idle ] || fail "herdr busy stub did not report idle"
-    FM_STATE_OVERRIDE="$state" FM_STALE_ESCALATE_SECS=240 housekeeping "$state"
+    FM_STATE_OVERRIDE="$state" FM_STALE_ESCALATE_SECS=240 FM_CREW_STATE_BIN="$(make_fake_crew_state "$dir/fakebin")" FM_FAKE_CREW_STATE="state: working · source: run-step · synthetic active execution" housekeeping "$state"
   ) || fail "herdr persistent stale housekeeping failed"
   [ -s "$state/.subsuper-escalations" ] || fail "persistent herdr stale was not escalated"
   [ ! -e "$state/.subsuper-stale-$key" ] || fail "herdr stale marker not cleared after escalation"
@@ -1634,7 +1687,7 @@ test_housekeeping_orca_persistent_stale_resolves_terminal() {
     }
     fm_backend_capture orca term-orca-w8 40 >/dev/null
     [ "$(fm_backend_busy_state orca term-orca-w8)" = idle ] || fail "Orca busy stub did not report idle"
-    FM_STATE_OVERRIDE="$state" FM_STALE_ESCALATE_SECS=240 housekeeping "$state"
+    FM_STATE_OVERRIDE="$state" FM_STALE_ESCALATE_SECS=240 FM_CREW_STATE_BIN="$(make_fake_crew_state "$dir/fakebin")" FM_FAKE_CREW_STATE="state: working · source: run-step · synthetic active execution" housekeeping "$state"
   ) || fail "Orca persistent stale housekeeping failed"
   [ -s "$state/.subsuper-escalations" ] || fail "persistent Orca stale was not escalated"
   [ ! -e "$state/.subsuper-stale-$key" ] || fail "Orca stale marker not cleared after escalation"
@@ -2271,7 +2324,7 @@ test_afk_nonterminal_working_merged_keeps_wedge_aging() {
   # Age the marker past the escalate bound (marker stores first-seen epoch).
   echo $(( $(date +%s) - 500 )) > "$state/.subsuper-stale-$key"
   PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$win" FM_FAKE_TMUX_CAPTURE="$pane" \
-    FM_STATE_OVERRIDE="$state" FM_STALE_ESCALATE_SECS=240 housekeeping "$state"
+    FM_STATE_OVERRIDE="$state" FM_STALE_ESCALATE_SECS=240 FM_CREW_STATE_BIN="$(make_fake_crew_state "$dir/fakebin")" FM_FAKE_CREW_STATE="state: working · source: run-step · synthetic active execution" housekeeping "$state"
   [ -s "$state/.subsuper-escalations" ] \
     || fail "housekeeping did not re-escalate aged nonterminal working: wedge"
   grep -q 'possible wedge' "$state/.subsuper-escalations" \
@@ -3228,6 +3281,86 @@ test_inject_msg_defers_on_unrecognized_composer_state() {
   pass "inject_msg: unrecognized composer states defer by default"
 }
 
+
+test_daemon_idle_checkin_policy() {
+  local spec kind listed dir state win key task FM_CONFIG_OVERRIDE
+  for spec in ship:off scout:off secondmate:off secondmate:on; do
+    kind=${spec%%:*}; listed=${spec##*:}; task=policy-idle
+    dir=$(make_supercase "idle-policy-$kind-$listed"); state="$dir/state"
+    FM_CONFIG_OVERRIDE="$dir/config"; mkdir -p "$FM_CONFIG_OVERRIDE"
+    win="sess:fm-$task"; key=$task
+    printf 'window=%s\nkind=%s\n' "$win" "$kind" > "$state/$task.meta"
+    printf 'paused: awaiting external\n' > "$state/$task.status"
+    printf '%s\n' "$(( $(date +%s) - 5000 ))" > "$state/.subsuper-paused-$key"
+    printf 'idle\n' > "$dir/pane.txt"
+    [ "$listed" != on ] || printf '%s\n' "$task" > "$FM_CONFIG_OVERRIDE/secondmate-idle-checkins"
+    PATH="$dir/fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$win" FM_FAKE_TMUX_CAPTURE="$dir/pane.txt" \
+      FM_STATE_OVERRIDE="$state" FM_PAUSE_RESURFACE_SECS=1 housekeeping "$state"
+    if [ "$listed" = on ]; then
+      grep -F 'awaiting external' "$state/.subsuper-escalations" >/dev/null \
+        || fail "listed mate lost its daemon pause recheck"
+    else
+      [ ! -s "$state/.subsuper-escalations" ] || fail "$kind emitted a daemon idle recheck"
+    fi
+  done
+  pass "daemon pause housekeeping applies the same ordinary-worker ban and secondmate opt-in"
+}
+
+test_daemon_drops_ordinary_idle_stale_marker() {
+  local dir state task win key
+  dir=$(make_supercase idle-legacy-marker); state="$dir/state"; task=policy-idle
+  win="sess:fm-$task"; key=$task
+  printf 'window=%s\nkind=ship\n' "$win" > "$state/$task.meta"
+  printf 'working: old idle status\n' > "$state/$task.status"
+  printf '%s\n' "$(( $(date +%s) - 5000 ))" > "$state/.subsuper-stale-$key"
+  FM_CREW_STATE_BIN="$(make_fake_crew_state "$dir/fakebin")" \
+    FM_FAKE_CREW_STATE='state: done · source: status-log · synthetic idle' \
+    FM_STATE_OVERRIDE="$state" FM_STALE_ESCALATE_SECS=1 housekeeping "$state"
+  [ ! -s "$state/.subsuper-escalations" ] || fail "legacy ordinary idle marker emitted a check-in"
+  [ ! -e "$state/.subsuper-stale-$key" ] || fail "legacy idle marker was not retired"
+  pass "daemon retires legacy ordinary idle timers without an execution proof"
+}
+
+test_daemon_dead_paused_worker_still_escalates() {
+  local dir state win
+  dir=$(make_supercase idle-loss-event); state="$dir/state"; win=sess:fm-loss
+  printf 'window=%s\nkind=scout\n' "$win" > "$state/loss.meta"
+  printf 'paused: awaiting external\n' > "$state/loss.status"
+  handle_wake "stale: $win (idle 0s, agent dead - the endpoint is still there with no agent running in it)" "$state"
+  grep -F 'agent dead' "$state/.subsuper-escalations" >/dev/null \
+    || fail "a paused worker's endpoint loss was swallowed as a declared wait"
+  pass "daemon escalates endpoint loss even for a paused ordinary worker"
+}
+
+test_daemon_expired_wait_keeps_frozen_run_event() {
+  local dir state win
+  dir=$(make_supercase idle-expired-frozen); state="$dir/state"; win=sess:fm-expired
+  printf 'window=%s\nkind=ship\n' "$win" > "$state/expired.meta"
+  printf 'paused: awaiting external until 2000-01-01T00:00Z\n' > "$state/expired.status"
+  handle_wake "stale: $win (idle 250s, possible wedge, escalation 1)" "$state"
+  grep -F 'possible wedge, escalation 1' "$state/.subsuper-escalations" >/dev/null \
+    || fail "an expired pause swallowed the watcher's frozen-run event"
+  pass "an elapsed declared deadline cannot absorb a watcher frozen-run event"
+}
+
+test_daemon_idle_policy_regressions() {
+  test_daemon_idle_checkin_policy
+  test_daemon_drops_ordinary_idle_stale_marker
+  test_daemon_dead_paused_worker_still_escalates
+  test_daemon_expired_wait_keeps_frozen_run_event
+  test_housekeeping_persistent_stale_escalates
+  test_housekeeping_paused_resurfaces_and_resets
+  test_housekeeping_captain_held_resurfaces_and_resets
+  test_housekeeping_busy_declared_wait_matures_its_window
+  test_housekeeping_declared_time_controls_pause_recheck
+}
+
+if [ -n "${FM_TEST_ONLY:-}" ]; then
+  "$FM_TEST_ONLY"
+  exit 0
+fi
+
+
 test_afk_start_refuses_when_flag_cannot_be_written
 test_afk_start_ignores_stale_pidfile_without_lock
 test_afk_start_reclaims_stale_daemon_lock_reused_pid
@@ -3397,7 +3530,7 @@ test_dialog_name_survives_away_self_handle() {
   [ ! -s "$state/.subsuper-escalations" ] || fail "a first-sight dialog stale escalated instead of waiting: $(cat "$state/.subsuper-escalations")"
   echo $(( $(date +%s) - 500 )) > "$state/.subsuper-stale-$key"
   PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$win" FM_FAKE_TMUX_CAPTURE="$pane" \
-    FM_STATE_OVERRIDE="$state" FM_ESCALATE_BATCH_SECS=999999 housekeeping "$state"
+    FM_STATE_OVERRIDE="$state" FM_ESCALATE_BATCH_SECS=999999 FM_CREW_STATE_BIN="$(make_fake_crew_state "$dir/fakebin")" FM_FAKE_CREW_STATE="state: working · source: run-step · synthetic active execution" housekeeping "$state"
   grep -F 'stale persisted' "$state/.subsuper-escalations" >/dev/null \
     || fail "the persistence line was not escalated: $(cat "$state/.subsuper-escalations" 2>/dev/null)"
   grep -F 'blocked-on-prompt: Claude background-task exit picker' "$state/.subsuper-escalations" >/dev/null \
@@ -3488,3 +3621,9 @@ test_dialog_name_survives_away_self_handle
 test_seen_terminal_dialog_stale_clears_like_a_plain_stale
 test_dialog_name_joins_unseen_status_escalation
 test_dialog_name_after_demand_deep_inspection_still_escalates
+
+test_daemon_idle_checkin_policy
+test_daemon_drops_ordinary_idle_stale_marker
+test_daemon_dead_paused_worker_still_escalates
+
+test_daemon_expired_wait_keeps_frozen_run_event

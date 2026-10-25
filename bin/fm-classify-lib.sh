@@ -2801,7 +2801,7 @@ status_span_has_actionable() {  # <status-file> <start-offset>
   status_span_first_actionable_record "$1" "${2:-0}" > /dev/null
 }
 
-# Classify WHY an idle/stale crew MIGHT be safely absorbed instead of surfaced,
+# Classify execution and declared-wait evidence; callers apply idle policy separately,
 # from bin/fm-crew-state.sh's one authoritative current-state line
 # ("state: <s> · source: <src> · <detail>"). Prints exactly one token:
 #   working - an actively-running no-mistakes step (running/fixing/ci) or a busy
@@ -2809,13 +2809,14 @@ status_span_has_actionable() {  # <status-file> <start-offset>
 #             (e.g. waiting on CI);
 #   paused  - the crew's authoritative current state is a declared external-wait
 #             pause (paused:), which is EXPECTED to idle;
-#   none    - neither, so the wake must surface (a stopped/finished/parked/failed/
-#             torn-down/unknown crew, or an unreadable verdict).
+#   none    - neither (stopped/finished/parked/failed/torn-down/unknown, or an
+#             unreadable verdict); no-verb signal handling still surfaces it.
 # One fm-crew-state.sh read serves BOTH absorb reasons at once. Reading the state
 # authoritatively (not the status log) is what keeps run-step precedence: a crew
 # that appended paused: but then STARTED a run reports working, never paused.
 # NOT a pure read: fm-crew-state.sh may make a bounded no-mistakes call, so callers
-# run it only on no-verb signal and first-sighting stale paths, never every wake.
+# run it on no-verb signals, first stale sightings, and frozen-run thresholds,
+# never on every poll.
 # FM_CREW_STATE_BIN lets tests stub the verdict.
 crew_absorb_class() {  # <id>
   local id=$1 line state src
@@ -2831,23 +2832,24 @@ crew_absorb_class() {  # <id>
   printf 'none'
 }
 
-# 0 if crew <id> shows POSITIVE evidence it is still working (crew_absorb_class
-# reports `working`). This is the "provably working" predicate at the heart of
-# absorb-only-on-positive-evidence. This is the sole proof for stale wakes and the
-# shared authoritative proof for no-verb signals. Where a home opts in, fm-watch.sh
-# may additionally absorb a bare turn-end on bounded pane churn, while every other
-# failed verdict surfaces
-# because the crew may be done, waiting on a decision, or wedged. For stale panes
-# it is checked before trusting the status log so a pre-validation captain-relevant
-# line does not override an active run. See crew_absorb_class for the exact
-# working/paused/none decision.
+# Idle rechecks are opt-in for exact secondmate IDs only. Both watcher and
+# legacy away-daemon housekeeping use this policy; callers supply task kind.
+crew_idle_checkins_enabled() {  # <kind> <id> <config-dir>
+  local kind=$1 id=$2 config=$3
+  [ "$kind" = secondmate ] && [ -n "$id" ] \
+    && grep -Fxq -- "$id" "$config/secondmate-idle-checkins" 2>/dev/null
+}
+
+# Positive execution evidence shared by no-verb signal triage and frozen-run
+# protection. Idle check-ins have their own policy above; lack of execution
+# evidence does not itself license a periodic idle alarm.
 crew_is_provably_working() {  # <id>
   [ "$(crew_absorb_class "$1")" = working ]
 }
 
 # 0 if crew <id>'s authoritative current state is a declared external-wait pause.
-# The stale path absorbs such a crew (on a long re-surface cadence) instead of
-# escalating a possible wedge.
+# Such a wait is absorbed instead of wedge-escalated; only opted-in mates
+# retain periodic rechecks.
 crew_is_paused() {  # <id>
   [ "$(crew_absorb_class "$1")" = paused ]
 }

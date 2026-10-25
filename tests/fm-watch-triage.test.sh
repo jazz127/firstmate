@@ -24,7 +24,7 @@ set -u
 # shellcheck source=/dev/null
 . "$ROOT/bin/fm-pr-lib.sh"
 
-WATCH="$ROOT/bin/fm-watch.sh"
+WATCH="${FM_TEST_WATCH_BIN:-$ROOT/bin/fm-watch.sh}"
 DRAIN="$ROOT/bin/fm-wake-drain.sh"
 
 TMP_ROOT=$(fm_test_tmproot fm-watch-triage-tests)
@@ -49,7 +49,7 @@ ack_stopped_cycle() {  # <state>
 watch_bg() {  # <state> <fakebin> <out> [extra env assignments...]
   local state=$1 fakebin=$2 out=$3
   shift 3
-  PATH="$fakebin:$PATH" FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" \
+  PATH="$fakebin:$PATH" FM_CONFIG_OVERRIDE="${FM_CONFIG_OVERRIDE:-$(dirname "$state")/config}" FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" \
     FM_POLL=1 FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 \
     FM_SECONDMATE_LIVENESS_SECS=99999999 "$@" "$WATCH" > "$out" &
 }
@@ -1036,18 +1036,17 @@ test_turn_ended_churn_resets_prior_stale_classification() {
   [ "$(cat "$state/.hash-$key" 2>/dev/null || true)" = "$active_hash" ] \
     || { reap "$pid"; fail "watcher did not record the active pane after absorbing its turn-end"; }
 
-  # The worker stops on bytes that happened to be stale in an earlier turn.
-  # This is a new quiet interval, so it must surface through ordinary staleness
-  # instead of inheriting the earlier interval's wedge timer.
+  # Returning to an earlier idle render must clear the old active timer
+  # without producing a new idle check-in.
   printf 'idle prompt from an earlier turn' > "$capture_file"
-  wait_for_exit "$pid" 100 \
-    || { reap "$pid"; fail "a stopped pane matching an earlier stale render waited for the wedge timeout"; }
-  grep -Fx "stale: $window" "$out" >/dev/null \
-    || fail "the returned stale render did not surface through ordinary staleness"
-  grep -F "possible wedge" "$out" >/dev/null \
-    && fail "the returned stale render inherited the earlier quiet interval's wedge classification"
+  wait_poll_cycle "$state" "$pid" || { reap "$pid"; fail "returned idle render woke: $(cat "$out")"; }
+  wait_poll_cycle "$state" "$pid" || { reap "$pid"; fail "returned idle render woke: $(cat "$out")"; }
+  reap "$pid"
+  [ ! -s "$out" ] && [ ! -s "$state/.wake-queue" ] || fail "returned idle render queued a check-in"
+  [ ! -e "$state/.stale-since-$key" ] || fail "returned idle render inherited the old wedge timer"
   unset FM_FAKE_CREW_STATE
-  pass "pane churn starts a fresh stale-classification interval before a stopped render returns"
+  pass "pane churn clears earlier wedge state and a stopped render stays silent"
+
 }
 
 test_turn_ended_churn_resets_wedge_state_before_stale_poll() {
@@ -2340,36 +2339,6 @@ test_permission_recovery_surfaces_preserved_status() {
   pass "permission recovery surfaces content from the unadvanced position"
 }
 
-test_terminal_stale_surfaced() {
-  local mode=${1:-no-pr} dir state fakebin out drain_out capture_file window key pane_hash sig pid
-  dir=$(make_case "terminal-stale-$mode"); state="$dir/state"; fakebin="$dir/fakebin"
-  out="$dir/watch.out"; drain_out="$dir/drain.out"; capture_file="$dir/pane.txt"
-  window="test:fm-done"
-  printf 'finished, awaiting review' > "$capture_file"
-  printf 'window=%s\nkind=ship\n' "$window" > "$state/done.meta"
-  printf 'done: PR https://example.test/pr/3\n' > "$state/done.status"
-  if [ "$mode" = merged ]; then
-    printf 'done: PR https://github.com/o/r/pull/3\n' > "$state/done.status"
-    printf 'pr=https://github.com/o/r/pull/3\n' >> "$state/done.meta"
-    fm_pr_poll_prepare "$state" 'done' github https://github.com/o/r/pull/3 github.com o/r 3 "$ROOT/bin/fm-pr-poll.sh" \
-      || fail "could not prepare the merged PR fixture"
-    fm_pr_poll_publish_prepared || fail "could not publish the merged PR fixture"
-    rm -f "$state/done.check.sh" "$state/done.pr-poll" "$state/done.pr-poll-registration"
-  fi
-  sig=$(seen_sig "$state/done.status"); printf '%s' "$sig" > "$state/.seen-done_status"
-  key=$(printf '%s' "$window" | tr ':/.' '___')
-  pane_hash=$(hash_text "finished, awaiting review")
-  printf '%s' "$pane_hash" > "$state/.hash-$key"
-  printf '1\n' > "$state/.count-$key"
-  PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
-    FM_STATE_OVERRIDE="$state" FM_POLL=1 FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" &
-  pid=$!
-  wait_for_exit "$pid" 100 || fail "watcher did not exit for a stale pane on a terminal status"
-  grep -Fx "stale: $window" "$out" >/dev/null || fail "watcher did not print the terminal stale wake"
-  FM_STATE_OVERRIDE="$state" "$DRAIN" > "$drain_out" 2>/dev/null || fail "drain after the terminal stale failed"
-  grep "$(printf '\tstale\t')" "$drain_out" | grep -F "$window" >/dev/null || fail "terminal stale was not queued"
-  pass "a done stale pane with $mode takes the existing terminal path (queue + exit)"
-}
 
 # --- stale pane, STALE terminal status overridden by an active run: absorbed ---
 # Regression for the 2026-07 herdr false-surface incidents: a crew's own status
@@ -2486,12 +2455,8 @@ test_nonterminal_stale_provably_working_absorbed_then_escalated() {
   pass "provably-working non-terminal stale is absorbed on first sight, then wedge-escalated past the threshold"
 }
 
-# --- non-terminal stale, crew NOT provably working: surfaced immediately ------
-# The key requirement: a crew with no running pipeline that has gone quiet (and is
-# not busy) has stopped - it may be done via interactive menus, waiting, or wedged.
-# It must surface at once, never wait out the wedge timer, so these users (a
-# non-no-mistakes crew, or any crew with no running pipeline) are never left hanging.
-
+# Metadata precedence is observable through active-work wedge protection:
+# ordinary workers still escalate while nonpaused mates remain idle by design.
 test_window_metadata_last_field_wins() {
   local shell scenario dir state window key expected pid cycle
   for shell in "$(command -v bash)" /bin/bash; do
@@ -2510,8 +2475,10 @@ test_window_metadata_last_field_wins() {
       esac
       hash_text 'idle prompt, finished' > "$state/.hash-$key"
       printf '1\n' > "$state/.count-$key"
+      hash_text 'idle prompt, finished' > "$state/.stale-$key"
+      printf '%s\n' "$(( $(date +%s) - 500 ))" > "$state/.stale-since-$key"
       FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$dir/pane.txt" \
-        FM_FAKE_CREW_STATE='state: unknown · source: none · fixture idle' \
+        FM_FAKE_CREW_STATE='state: working · source: run-step · synthetic active execution' FM_STALE_ESCALATE_SECS=1 \
         watch_bg "$state" "$dir/fakebin" "$dir/out" "$shell"
       pid=$!
       if [ "$expected" = quiet ]; then
@@ -2523,8 +2490,8 @@ test_window_metadata_last_field_wins() {
         reap "$pid"
         [ ! -s "$dir/out" ] && [ ! -s "$state/.wake-queue" ] || fail "$scenario queued a secondmate stale wake"
       else
-        wait_for_exit "$pid" 100 || { reap "$pid"; fail "$shell $scenario missed the idle worker"; }
-        grep -Fx "stale: $window" "$dir/out" >/dev/null || fail "$scenario lost the stopped-worker stale wake"
+        wait_for_exit "$pid" 100 || { reap "$pid"; fail "$shell $scenario missed the frozen active worker"; }
+        grep -F "stale: $window (idle" "$dir/out" >/dev/null || fail "$scenario lost the frozen-worker stale wake"
         grep -F "$window" "$state/.wake-queue" >/dev/null || fail "$scenario lost the durable stale record"
       fi
     done
@@ -2532,38 +2499,6 @@ test_window_metadata_last_field_wins() {
   pass 'window classification uses the last kind/backend field, including an empty value restoring its default'
 }
 
-test_nonterminal_stale_not_working_surfaced() {
-  local dir state fakebin out drain_out capture_file window key pane_hash sig pid
-  dir=$(make_case nonterminal-stale-stopped); state="$dir/state"; fakebin="$dir/fakebin"
-  out="$dir/watch.out"; drain_out="$dir/drain.out"; capture_file="$dir/pane.txt"
-  window="test:fm-stopped"
-  printf 'idle prompt, finished' > "$capture_file"
-  printf 'window=%s\nkind=ship\n' "$window" > "$state/stopped.meta"
-  # Non-terminal status (the crew never wrote a captain-relevant verb), .seen-*
-  # primed so the signal scan does not pre-empt the stale path.
-  printf 'working: implementing\n' > "$state/stopped.status"
-  sig=$(seen_sig "$state/stopped.status"); printf '%s' "$sig" > "$state/.seen-stopped_status"
-  key=$(printf '%s' "$window" | tr ':/.' '___')
-  pane_hash=$(hash_text "idle prompt, finished")
-  printf '%s' "$pane_hash" > "$state/.hash-$key"
-  printf '1\n' > "$state/.count-$key"
-  # No running pipeline; the pane is idle. NOT provably working.
-  export FM_FAKE_CREW_STATE='state: unknown · source: none · no current-state source available'
-
-  # Even with a high wedge threshold, a not-provably-working stale surfaces at once.
-  PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
-    FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" FM_STALE_ESCALATE_SECS=999 FM_POLL=1 FM_SIGNAL_GRACE=1 \
-    FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" &
-  pid=$!
-  wait_for_exit "$pid" 100 || fail "watcher did not surface a not-provably-working non-terminal stale at once"
-  grep -Fx "stale: $window" "$out" >/dev/null || fail "watcher did not print the immediate stale wake"
-  grep -F "possible wedge" "$out" >/dev/null && fail "an immediate stopped-crew stale was mislabeled a wedge"
-  [ "$(cat "$state/.stale-$key" 2>/dev/null || true)" = "$pane_hash" ] || fail "stale suppressor was not advanced on surface"
-  [ ! -e "$state/.stale-since-$key" ] || fail "stale-since timer should not be set when surfacing immediately"
-  FM_STATE_OVERRIDE="$state" "$DRAIN" > "$drain_out" 2>/dev/null || fail "drain after the immediate stale failed"
-  grep "$(printf '\tstale\t')" "$drain_out" | grep -F "$window" >/dev/null || fail "immediate stale wake was not queued"
-  pass "a not-provably-working non-terminal stale is surfaced immediately (never left to wait out the timer)"
-}
 
 # --- non-terminal stale, crew DECLARED a pause: absorbed, re-surfaced on a long
 #     cadence, never wedge-escalated ------------------------------------------
@@ -2573,198 +2508,16 @@ test_nonterminal_stale_not_working_surfaced() {
 # uses the wedge timer; it re-surfaces once past PAUSE_RESURFACE_SECS (anchored on
 # the pause's own status-file age, so a churny idle pane cannot reset the cadence)
 # for a recheck, so a forgotten pause cannot rot invisibly.
-test_nonterminal_stale_paused_absorbed_then_resurfaced() {
-  local dir state fakebin out drain_out capture_file window key pane_hash sig pid back statusf
-  dir=$(make_case nonterminal-stale-paused); state="$dir/state"; fakebin="$dir/fakebin"
-  out="$dir/watch.out"; drain_out="$dir/drain.out"; capture_file="$dir/pane.txt"
-  window="test:fm-held"
-  printf 'idle, holding for upstream' > "$capture_file"
-  printf 'window=%s\nkind=ship\n' "$window" > "$state/held.meta"
-  statusf="$state/held.status"
-  # A DECLARED pause (not captain-relevant), .seen-* primed so the signal scan does
-  # not pre-empt the stale path.
-  printf 'paused: holding for the upstream tool release\n' > "$statusf"
-  sig=$(seen_sig "$statusf"); printf '%s' "$sig" > "$state/.seen-held_status"
-  key=$(printf '%s' "$window" | tr ':/.' '___')
-  pane_hash=$(hash_text "idle, holding for upstream")
-  printf '%s' "$pane_hash" > "$state/.hash-$key"
-  printf '1\n' > "$state/.count-$key"
-  # crew_absorb_class reads the declared pause from fm-crew-state.sh.
-  export FM_FAKE_CREW_STATE='state: paused · source: status-log · holding for the upstream tool release'
-
-  # Phase A: a fresh pause (status file just written) under a high re-surface
-  # threshold is absorbed - no wake, no wedge timer.
-  PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
-    FM_FAKE_TMUX_CURRENT_COMMAND=zsh \
-    FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" FM_PAUSE_RESURFACE_SECS=999 FM_POLL=1 FM_SIGNAL_GRACE=1 \
-    FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" &
-  pid=$!
-  if ! wait_poll_cycle "$state" "$pid"; then
-    reap "$pid"; fail "watcher exited for a fresh declared pause (should absorb): $(cat "$out")"
-  fi
-  [ ! -s "$out" ] || fail "fresh paused stale printed a wake reason during absorb"
-  [ ! -s "$state/.wake-queue" ] || fail "fresh paused stale enqueued a wake during absorb"
-  [ "$(cat "$state/.stale-$key" 2>/dev/null || true)" = "$pane_hash" ] || fail "stale suppressor not advanced on paused absorb"
-  [ -e "$state/.paused-$key" ] || fail "paused flag not recorded on absorb"
-  [ ! -e "$state/.stale-since-$key" ] || fail "a paused absorb must not start the wedge timer"
-  reap "$pid"
-  ack_stopped_cycle "$state" || fail "could not acknowledge the intentional paused phase-A stop"
-
-  # Phase B: age the pause past the (now normal) threshold by backdating its
-  # status file, re-prime .seen-* to the new signature so the signal scan stays
-  # quiet, and confirm it re-surfaces as a paused recheck - never a wedge.
-  back=$(( $(date +%s) - 500 ))
-  if [ "$(uname)" = Darwin ]; then touch -mt "$(date -r "$back" '+%Y%m%d%H%M.%S')" "$statusf"
-  else touch -m -d "@$back" "$statusf"; fi
-  sig=$(seen_sig "$statusf"); printf '%s' "$sig" > "$state/.seen-held_status"
-  : > "$out"
-  printf 'idle, holding for upstream (token 2)' > "$capture_file"
-  PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
-    FM_FAKE_TMUX_CURRENT_COMMAND=zsh \
-    FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" FM_PAUSE_RESURFACE_SECS=240 FM_POLL=1 FM_SIGNAL_GRACE=1 \
-    FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" &
-  pid=$!
-  wait_for_exit "$pid" 100 || fail "watcher did not re-surface a declared pause past the threshold"
-  grep -F "stale: $window" "$out" >/dev/null || fail "re-surface did not print a stale wake"
-  grep -F "awaiting external" "$out" >/dev/null || fail "re-surface was not labeled a paused/awaiting-external recheck"
-  grep -F "possible wedge" "$out" >/dev/null && fail "a declared pause was mislabeled a possible wedge"
-  [ -e "$state/.paused-resurfaced-$key" ] || fail "the paused re-surface throttle marker was not recorded"
-  [ ! -e "$state/.stale-since-$key" ] || fail "a paused re-surface must not use the wedge timer"
-  FM_STATE_OVERRIDE="$state" "$DRAIN" > "$drain_out" 2>/dev/null || fail "drain after the paused re-surface failed"
-  grep "$(printf '\tstale\t')" "$drain_out" | grep -F "$window" >/dev/null || fail "paused re-surface was not queued"
-  pass "a declared pause is absorbed on first sight, then re-surfaced as a recheck past the threshold, never wedge-escalated"
-}
 
 # Issue 2713: pause_state_class used to discard a declared wait whenever
 # fm_backend_agent_alive was anything other than dead, so a live or unknown
 # parked worker surfaced on sight and only an exited one took the bounded
 # cadence. Vary only the pane's foreground command; the real tmux classifier
 # resolves grok/node/empty/zsh to alive/ambiguous/unreadable/dead.
-test_declared_pause_is_absorbed_for_every_agent_liveness_verdict() {
-  local spec name comm dir state fakebin out capture_file window key pane_hash
-  local pid statusf sig
-  for spec in \
-    'alive|grok' \
-    'ambiguous|node' \
-    'unreadable|' \
-    'dead|zsh'
-  do
-    name=${spec%%|*}; comm=${spec#*|}
-    dir=$(make_case "paused-liveness-$name"); state="$dir/state"; fakebin="$dir/fakebin"
-    out="$dir/watch.out"; capture_file="$dir/pane.txt"
-    window="test:fm-held"
-    printf 'idle, holding for upstream' > "$capture_file"
-    printf 'window=%s\nkind=ship\nharness=grok\nbackend=tmux\n' "$window" > "$state/held.meta"
-    statusf="$state/held.status"
-    printf 'paused: holding for the upstream tool release\n' > "$statusf"
-    sig=$(seen_sig "$statusf"); printf '%s' "$sig" > "$state/.seen-held_status"
-    key=$(printf '%s' "$window" | tr ':/.' '___')
-    pane_hash=$(hash_text "idle, holding for upstream")
-    printf '%s' "$pane_hash" > "$state/.hash-$key"
-    printf '1\n' > "$state/.count-$key"
-    export FM_FAKE_CREW_STATE='state: paused · source: status-log · holding for the upstream tool release'
-
-    PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
-      FM_FAKE_TMUX_CURRENT_COMMAND="$comm" \
-      FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" \
-      FM_PAUSE_RESURFACE_SECS=999 FM_POLL=1 FM_SIGNAL_GRACE=1 \
-      FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" &
-    pid=$!
-    if ! wait_poll_cycle "$state" "$pid"; then
-      reap "$pid"
-      fail "[$name] declared pause under $name liveness surfaced on first sight: $(cat "$out")"
-    fi
-    [ ! -s "$out" ] || fail "[$name] declared pause printed a wake reason during absorb"
-    [ ! -s "$state/.wake-queue" ] || fail "[$name] declared pause enqueued a wake during absorb"
-    [ "$(cat "$state/.stale-$key" 2>/dev/null || true)" = "$pane_hash" ] \
-      || fail "[$name] stale suppressor not advanced on paused absorb"
-    [ -e "$state/.paused-$key" ] || fail "[$name] paused flag not recorded on absorb"
-    [ ! -e "$state/.stale-since-$key" ] || fail "[$name] a paused absorb must not start the wedge timer"
-    reap "$pid"
-    ack_stopped_cycle "$state" || fail "[$name] could not acknowledge the intentional paused absorb stop"
-  done
-  pass "a declared pause is absorbed on the bounded cadence for alive, unknown, and dead agent liveness"
-}
 
 # Own background work is a declared wait using the same existing paused verb:
 # absorbed from first sight, then rechecked on the long cadence.
 # The backend/current-state fixtures are not live-harness evidence.
-test_own_work_wait_is_absorbed_then_long_cadence() {
-  local wait_kind dir state fakebin out capture_file statusf window key sig pid round
-  for wait_kind in background-shell pipeline-run foreground-command; do
-    dir=$(make_case "own-work-$wait_kind"); state="$dir/state"; fakebin="$dir/fakebin"
-    out="$dir/watch.out"; capture_file="$dir/pane.txt"; statusf="$state/own-work.status"
-    window="test:fm-own-work"; key=$(printf '%s' "$window" | tr ':/.' '___')
-    printf 'idle worker awaiting its own %s\n' "$wait_kind" > "$capture_file"
-    printf 'window=%s\nkind=scout\nharness=grok\nbackend=tmux\n' "$window" > "$state/own-work.meta"
-    printf 'paused: waiting for my %s to finish; resume on completion\n' "$wait_kind" > "$statusf"
-    # Age before the first observation: backdating later can change the birth
-    # time on macOS and accidentally turn this into a replacement declaration.
-    set_mtime "$(( $(date +%s) - 500 ))" "$statusf"
-    sig=$(seen_sig "$statusf"); printf '%s' "$sig" > "$state/.seen-own-work_status"
-    printf '%s' "$(hash_text "$(cat "$capture_file")")" > "$state/.hash-$key"
-    printf '1\n' > "$state/.count-$key"
-
-    PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
-      FM_FAKE_TMUX_CURRENT_COMMAND=grok \
-      FM_FAKE_CREW_STATE='state: paused · source: status-log · waiting for own work' \
-      watch_bg "$state" "$fakebin" "$out" env FM_PAUSE_RESURFACE_SECS=999
-    pid=$!
-    wait_poll_cycle "$state" "$pid" || { reap "$pid"; fail "$wait_kind surfaced on first sight: $(cat "$out")"; }
-    [ ! -s "$out" ] || { reap "$pid"; fail "$wait_kind printed a first-sight alert"; }
-    [ ! -s "$state/.wake-queue" ] || { reap "$pid"; fail "$wait_kind queued a first-sight alert"; }
-    reap "$pid"
-    ack_stopped_cycle "$state" || fail "could not acknowledge $wait_kind first-sight absorb"
-
-    # Cross the ordinary wedge threshold twice without aging the declaration
-    # past the long pause cadence. Neither re-arm may alert.
-    for round in 1 2; do
-      printf '%s\n' $(( $(date +%s) - 500 )) > "$state/.stale-since-$key"
-      PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
-        FM_FAKE_TMUX_CURRENT_COMMAND=grok \
-        FM_FAKE_CREW_STATE='state: paused · source: status-log · waiting for own work' \
-        watch_bg "$state" "$fakebin" "$dir/recheck.out" env \
-          FM_STALE_ESCALATE_SECS=240 FM_PAUSE_RESURFACE_SECS=999
-      pid=$!
-      wait_poll_cycle "$state" "$pid" || { reap "$pid"; fail "$wait_kind repeated an alert: $(cat "$dir/recheck.out")"; }
-      [ ! -s "$dir/recheck.out" ] || { reap "$pid"; fail "$wait_kind printed a repeated alert"; }
-      [ ! -s "$state/.wake-queue" ] || { reap "$pid"; fail "$wait_kind queued a repeated alert"; }
-      [ ! -e "$state/.wedge-escalations-$key" ] || { reap "$pid"; fail "$wait_kind counted a wedge"; }
-      reap "$pid"
-      ack_stopped_cycle "$state" || fail "could not acknowledge $wait_kind test stop"
-    done
-
-    # The unchanged declaration is older than the 240s cadence, so a forgotten
-    # wait gets its bounded recheck.
-    PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
-      FM_FAKE_TMUX_CURRENT_COMMAND=grok \
-      FM_FAKE_CREW_STATE='state: paused · source: status-log · waiting for own work' \
-      watch_bg "$state" "$fakebin" "$dir/long-cadence.out" env \
-        FM_STALE_ESCALATE_SECS=1 FM_PAUSE_RESURFACE_SECS=240
-    pid=$!
-    wait_for_exit "$pid" 100 || { reap "$pid"; fail "$wait_kind never rechecked on the long cadence"; }
-    grep -F 'awaiting external' "$dir/long-cadence.out" >/dev/null || fail "$wait_kind recheck lost its pause reason"
-    grep -F 'possible wedge' "$dir/long-cadence.out" >/dev/null && fail "$wait_kind recheck became a wedge"
-  done
-  # Disconfirming control: an idle worker with no declaration must still alarm.
-  dir=$(make_case own-work-undeclared); state="$dir/state"; fakebin="$dir/fakebin"
-  out="$dir/watch.out"; capture_file="$dir/pane.txt"; statusf="$state/own-work.status"
-  printf 'idle worker without a declared wait\n' > "$capture_file"
-  printf 'window=%s\nkind=scout\nharness=grok\nbackend=tmux\n' "$window" > "$state/own-work.meta"
-  printf 'working: implementing\n' > "$statusf"
-  sig=$(seen_sig "$statusf"); printf '%s' "$sig" > "$state/.seen-own-work_status"
-  printf '%s' "$(hash_text "$(cat "$capture_file")")" > "$state/.hash-$key"
-  printf '1\n' > "$state/.count-$key"
-  PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
-    FM_FAKE_TMUX_CURRENT_COMMAND=grok \
-    FM_FAKE_CREW_STATE='state: unknown · source: none · no current-state source available' \
-    watch_bg "$state" "$fakebin" "$out" env FM_STALE_ESCALATE_SECS=999
-  pid=$!
-  wait_for_exit "$pid" 100 || { reap "$pid"; fail "undeclared idle worker no longer alarms"; }
-  grep -Fx "stale: $window" "$out" >/dev/null || fail "undeclared idle worker did not surface"
-  grep -F "stale: $window" "$state/.wake-queue" >/dev/null || fail "undeclared idle worker's wake was not queued"
-  pass "own-work waits are absorbed from first sight, then bounded rechecks without wedges; undeclared idle still alarms"
-}
 
 # A captain-held crew can leave a stable backend endpoint after its agent exits.
 # fm-crew-state then authoritatively reports stopped rather than paused, but the
@@ -2772,187 +2525,11 @@ test_own_work_wait_is_absorbed_then_long_cadence() {
 # A still-live agent at an external-decision gate takes the same pause cadence:
 # first sight is absorbed, and a leftover wedge timer is discarded rather than
 # firing on the unchanged hash.
-test_exited_declared_pause_is_bounded_and_live_gate_uses_pause_cadence() {
-  local dir state fakebin out capture_file statusf window key pane_hash sig pid back round wakes bare
-  dir=$(make_case exited-declared-pause); state="$dir/state"; fakebin="$dir/fakebin"
-  out="$dir/watch.out"; capture_file="$dir/pane.txt"; statusf="$state/held.status"
-  window="test:fm-held"
-  printf 'idle bare shell after agent exit\n' > "$capture_file"
-  printf 'window=%s\nkind=ship\nharness=grok\nbackend=tmux\n' "$window" > "$state/held.meta"
-  printf 'paused: held per captain while an external decision is pending\n' > "$statusf"
-  back=$(( $(date +%s) - 500 ))
-  if [ "$(uname)" = Darwin ]; then touch -mt "$(date -r "$back" '+%Y%m%d%H%M.%S')" "$statusf"
-  else touch -m -d "@$back" "$statusf"; fi
-  sig=$(seen_sig "$statusf"); printf '%s' "$sig" > "$state/.seen-held_status"
-  key=$(printf '%s' "$window" | tr ':/.' '___')
-  pane_hash=$(hash_text "idle bare shell after agent exit")
-  printf '%s' "$pane_hash" > "$state/.hash-$key"
-  printf '1\n' > "$state/.count-$key"
-
-  round=1
-  while [ "$round" -le 6 ]; do
-    PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
-      FM_FAKE_TMUX_CURRENT_COMMAND=zsh FM_FAKE_CREW_STATE='state: stopped · source: pane · bare shell' \
-      FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" FM_PAUSE_RESURFACE_SECS=240 FM_POLL=1 FM_SIGNAL_GRACE=1 \
-      FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" >> "$out" &
-    pid=$!
-    if wait_poll_cycle "$state" "$pid"; then
-      reap "$pid"
-    elif kill -0 "$pid" 2>/dev/null; then
-      reap "$pid"
-      fail "dead-agent watcher round $round timed out before completing a poll cycle"
-    else
-      wait "$pid" || fail "dead-agent watcher round $round failed"
-    fi
-    round=$((round + 1))
-  done
-  # A watcher that queues nothing never creates .wake-queue, so these counts
-  # read a path that may legitimately be absent. awk aborts on a missing file
-  # before END runs, which collapses the count to the empty string and turns the
-  # next comparison into an "integer expression expected" error - reported as a
-  # flood of an unprintable number of wakes instead of the real contract breach
-  # the grep below names. No queue means no wakes, per the drain-count read at
-  # the end of this file.
-  wakes=$(awk -F '\t' -v w="$window" '$3 == "stale" && $4 == w { n++ } END { print n + 0 }' "$state/.wake-queue" 2>/dev/null || echo 0)
-  bare=$(awk -F '\t' -v w="$window" '$3 == "stale" && $4 == w && $5 == "stale: " w { n++ } END { print n + 0 }' "$state/.wake-queue" 2>/dev/null || echo 0)
-  [ "$wakes" -le 1 ] || fail "dead-agent declared pause flooded $wakes stale wakes across six unchanged polls"
-  [ "$bare" -eq 0 ] || fail "dead-agent declared pause surfaced as $bare bare stopped-crew wakes"
-  grep -F "awaiting external" "$state/.wake-queue" >/dev/null \
-    || fail "dead-agent declared pause did not use the bounded paused recheck"
-
-  dir=$(make_case exited-captain-held); state="$dir/state"; fakebin="$dir/fakebin"
-  out="$dir/watch.out"; capture_file="$dir/pane.txt"; statusf="$state/held.status"
-  window="test:fm-held"
-  printf 'idle bare shell after captain-held transfer\n' > "$capture_file"
-  printf 'window=%s\nkind=ship\nharness=grok\nbackend=tmux\n' "$window" > "$state/held.meta"
-  printf 'captain-held [key=route]: tracked by held-decision-route\n' > "$statusf"
-  back=$(( $(date +%s) - 500 ))
-  if [ "$(uname)" = Darwin ]; then touch -mt "$(date -r "$back" '+%Y%m%d%H%M.%S')" "$statusf"
-  else touch -m -d "@$back" "$statusf"; fi
-  sig=$(seen_sig "$statusf"); printf '%s' "$sig" > "$state/.seen-held_status"
-  key=$(printf '%s' "$window" | tr ':/.' '___')
-  pane_hash=$(hash_text "idle bare shell after captain-held transfer")
-  printf '%s' "$pane_hash" > "$state/.hash-$key"
-  printf '1\n' > "$state/.count-$key"
-  PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
-    FM_FAKE_TMUX_CURRENT_COMMAND=zsh FM_FAKE_CREW_STATE='state: stopped · source: pane · bare shell' \
-    FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" FM_PAUSE_RESURFACE_SECS=240 FM_POLL=1 FM_SIGNAL_GRACE=1 \
-    FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" &
-  pid=$!
-  wait_for_exit "$pid" 100 || fail "captain-held dead-agent pane did not re-surface on the bounded cadence"
-  grep -F "awaiting the captain" "$state/.wake-queue" >/dev/null \
-    || fail "captain-held dead-agent pane surfaced as a stopped crew instead of a captain-owned recheck: $(cat "$state/.wake-queue")"
-  grep -F "awaiting external" "$state/.wake-queue" >/dev/null \
-    && fail "captain-held dead-agent pane borrowed the pause verb's external-wait wording"
-
-  dir=$(make_case alive-decision-gate); state="$dir/state"; fakebin="$dir/fakebin"
-  out="$dir/watch.out"; capture_file="$dir/pane.txt"; statusf="$state/gate.status"
-  window="test:fm-gate"
-  printf 'idle external-decision gate\n' > "$capture_file"
-  printf 'window=%s\nkind=ship\nharness=grok\nbackend=tmux\n' "$window" > "$state/gate.meta"
-  printf 'paused: waiting at an active external-decision gate\n' > "$statusf"
-  sig=$(seen_sig "$statusf"); printf '%s' "$sig" > "$state/.seen-gate_status"
-  key=$(printf '%s' "$window" | tr ':/.' '___')
-  pane_hash=$(hash_text "idle external-decision gate")
-  printf '%s' "$pane_hash" > "$state/.hash-$key"
-  printf '1\n' > "$state/.count-$key"
-
-  # First sight of a live declared wait is absorbed on the pause cadence, even
-  # at an external-decision gate (issue 2713).
-  PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
-    FM_FAKE_TMUX_CURRENT_COMMAND=grok FM_FAKE_CREW_STATE='state: paused · source: status-log · waiting at an active external-decision gate' \
-    FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" FM_PAUSE_RESURFACE_SECS=999 FM_POLL=1 FM_SIGNAL_GRACE=1 \
-    FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" >> "$out" &
-  pid=$!
-  if ! wait_poll_cycle "$state" "$pid"; then
-    reap "$pid"
-    fail "live external-decision gate surfaced on first sight: $(cat "$out")"
-  fi
-  [ -e "$state/.paused-$key" ] || { reap "$pid"; fail "live external-decision gate did not record pause tracking"; }
-  [ ! -s "$state/.wake-queue" ] || { reap "$pid"; fail "live external-decision gate queued a wake on first sight"; }
-  reap "$pid"
-  ack_stopped_cycle "$state" || fail "could not acknowledge the intentional live-gate absorb stop"
-
-  # Re-arm with the stale timer already beyond the wedge threshold. This is the
-  # unchanged-hash fallback: it must retain the pause cadence and discard any
-  # residual wedge timer instead of emitting a possible-wedge wake.
-  printf '%s\n' $(( $(date +%s) - 500 )) > "$state/.stale-since-$key"
-  PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
-    FM_FAKE_TMUX_CURRENT_COMMAND=grok FM_FAKE_CREW_STATE='state: paused · source: status-log · waiting at an active external-decision gate' \
-    FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" FM_STALE_ESCALATE_SECS=240 FM_PAUSE_RESURFACE_SECS=999 FM_POLL=1 FM_SIGNAL_GRACE=1 \
-    FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" >> "$out" &
-  pid=$!
-  if ! wait_poll_cycle "$state" "$pid"; then
-    reap "$pid"
-    fail "live external-decision gate escalated on the wedge timer after its immediate surface: $(cat "$out")"
-  fi
-  [ -e "$state/.paused-$key" ] || { reap "$pid"; fail "live external-decision gate lost its pause cadence marker"; }
-  [ ! -e "$state/.stale-since-$key" ] || { reap "$pid"; fail "live external-decision gate retained the wedge timer"; }
-  reap "$pid"
-  wakes=$(awk -F '\t' -v w="$window" '$3 == "stale" && $4 == w { n++ } END { print n + 0 }' "$state/.wake-queue" 2>/dev/null || echo 0)
-  bare=$(awk -F '\t' -v w="$window" '$3 == "stale" && $4 == w && $5 == "stale: " w { n++ } END { print n + 0 }' "$state/.wake-queue" 2>/dev/null || echo 0)
-  [ "$wakes" -eq 0 ] || fail "acknowledged external-decision surface replayed $wakes wakes"
-  [ "$bare" -eq 0 ] || fail "acknowledged external-decision bare stale remained queued"
-  pass "exited declared-pause and captain-held panes use bounded pause cadence, and a live decision gate is absorbed on that same cadence"
-}
 
 # A declared wait reaches handle_paused_stale whatever its agent's liveness; here it is dead.
 # When one declared wait directly replaces another, the existing
 # throttle belongs to the old declaration and must not suppress the new wait's
 # first inspection merely because its timestamp is still young.
-test_absorbed_replacement_wait_does_not_inherit_the_old_throttle() {
-  local spec name initial replacement expected dir state fakebin out capture_file
-  local statusf window key sig back pid wakes
-  for spec in \
-    'paused-replacement|paused: waiting on validation run one|paused: waiting on validation run two|awaiting external' \
-    'captain-held-replacement|captain-held [key=route]: awaiting the routing call|captain-held [key=release]: awaiting the release call|awaiting the captain'
-  do
-    name=${spec%%|*}; spec=${spec#*|}
-    initial=${spec%%|*}; spec=${spec#*|}
-    replacement=${spec%%|*}; expected=${spec#*|}
-    dir=$(make_case "$name"); state="$dir/state"; fakebin="$dir/fakebin"
-    out="$dir/watch.out"; capture_file="$dir/pane.txt"; statusf="$state/held.status"
-    window="test:fm-held"
-    printf 'idle after agent exit\n' > "$capture_file"
-    printf 'window=%s\nkind=ship\nharness=grok\nbackend=tmux\n' "$window" > "$state/held.meta"
-    printf '%s\n' "$initial" > "$statusf"
-    back=$(( $(date +%s) - 500 ))
-    if [ "$(uname)" = Darwin ]; then touch -mt "$(date -r "$back" '+%Y%m%d%H%M.%S')" "$statusf"
-    else touch -m -d "@$back" "$statusf"; fi
-    sig=$(seen_sig "$statusf"); printf '%s' "$sig" > "$state/.seen-held_status"
-    key=$(printf '%s' "$window" | tr ':/.' '___')
-    printf '%s' "$(hash_text 'idle after agent exit')" > "$state/.hash-$key"
-    printf '1\n' > "$state/.count-$key"
-
-    PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
-      FM_FAKE_TMUX_CURRENT_COMMAND=zsh FM_FAKE_CREW_STATE='state: stopped · source: pane · bare shell' \
-      FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" \
-      FM_PAUSE_RESURFACE_SECS=240 FM_POLL=1 FM_SIGNAL_GRACE=1 \
-      FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" >> "$out" &
-    pid=$!
-    wait_for_exit "$pid" 100 || fail "[$name] initial declared wait did not re-surface"
-    ack_stopped_cycle "$state" || fail "[$name] could not acknowledge the initial declared wait"
-
-    printf '%s\n' "$replacement" >> "$statusf"
-    sig=$(seen_sig "$statusf"); printf '%s' "$sig" > "$state/.seen-held_status"
-    printf 'idle after replacement wait\n' > "$capture_file"
-    PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
-      FM_FAKE_TMUX_CURRENT_COMMAND=zsh FM_FAKE_CREW_STATE='state: stopped · source: pane · bare shell' \
-      FM_WATCH_HANDLING_SUCCESSOR=1 \
-      FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" \
-      FM_PAUSE_RESURFACE_SECS=240 FM_POLL=1 FM_SIGNAL_GRACE=1 \
-      FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" >> "$out" &
-    pid=$!
-    wait_for_exit "$pid" 100 \
-      || { reap "$pid"; fail "[$name] replacement declared wait inherited the old throttle"; }
-    wakes=$(awk -F '\t' -v w="$window" '$3 == "stale" && $4 == w { n++ } END { print n + 0 }' \
-      "$state/.wake-queue" 2>/dev/null || echo 0)
-    [ "$wakes" -eq 1 ] || fail "[$name] replacement declared wait produced $wakes wakes instead of one"
-    grep -F "$expected" "$state/.wake-queue" >/dev/null \
-      || fail "[$name] replacement declared wait used the wrong recheck reason: $(cat "$state/.wake-queue")"
-  done
-  pass "absorbed paused and captain-held replacements each start their own re-surface cadence"
-}
 
 # Run one watcher round against a parked-worker fixture, so a round differs only
 # in the pane contents the case just wrote. Armed the way fm-watch-arm.sh arms a
@@ -2991,674 +2568,6 @@ parked_watch_round() {  # <state> <fakebin> <out> <capture> <window> <exit|absor
   return 0
 }
 
-# --- a live worker parked on a declared wait: pane churn must not re-alarm ----
-# The 2026-08/09 alarm loop, in both observed forms - a worker parked on the
-# CAPTAIN (captain-held, five consecutive alarms) and one parked on the PIPELINE
-# (paused:, dozens across one day). An idle parked pane still churns its hash (a
-# clock, a token counter), and each new hash of a live agent used to re-enter a
-# first-sight surface. pause_state_class now admits the declared wait whatever the
-# agent's liveness, so every sight takes handle_paused_stale, whose recheck age
-# and throttle are keyed to the declaration rather than the pane.
-# The contract pinned here: the first sight and all churn inside
-# PAUSE_RESURFACE_SECS are absorbed, the wait re-surfaces once when its
-# declaration ages past that cadence, and churn right after that recheck is
-# absorbed again, so a forgotten wait cannot rot invisibly.
-test_live_declared_wait_churn_honors_the_resurface_throttle() {
-  local spec name status_line expected dir state fakebin out capture_file statusf window key
-  local sig round wakes text
-  for spec in \
-    'paused-pipeline-churn|paused: waiting on the validation run to finish|awaiting external' \
-    'captain-held-churn|captain-held [key=route]: awaiting the captain on the routing call|awaiting the captain'
-  do
-    name=${spec%%|*}; spec=${spec#*|}
-    status_line=${spec%%|*}; expected=${spec#*|}
-    dir=$(make_case "$name"); state="$dir/state"; fakebin="$dir/fakebin"
-    out="$dir/watch.out"; capture_file="$dir/pane.txt"; statusf="$state/parked.status"
-    window="test:fm-parked"
-    printf 'window=%s\nkind=ship\nharness=grok\nbackend=tmux\n' "$window" > "$state/parked.meta"
-    printf '%s\n' "$status_line" > "$statusf"
-    sig=$(seen_sig "$statusf"); printf '%s' "$sig" > "$state/.seen-parked_status"
-    key=$(printf '%s' "$window" | tr ':/.' '___')
-
-    # First sight, then pane churn while the SAME declared wait stands, each round
-    # fully handled as a real supervision turn would. Every one of these used to
-    # alarm.
-    text='parked, elapsed 1s'
-    printf '%s' "$(hash_text "$text")" > "$state/.hash-$key"
-    printf '1\n' > "$state/.count-$key"
-    round=1
-    while [ "$round" -le 4 ]; do
-      printf 'parked, elapsed %ss' "$round" > "$capture_file"
-      parked_watch_round "$state" "$fakebin" "$out" "$capture_file" "$window" absorb \
-        || fail "[$name] watcher exited on round $round instead of absorbing the declared wait: $(cat "$out")"
-      wakes=$(awk -F '\t' -v w="$window" '$3 == "stale" && $4 == w { n++ } END { print n + 0 }' \
-        "$state/.wake-queue" 2>/dev/null || echo 0)
-      [ "$wakes" -eq 0 ] \
-        || fail "[$name] a parked worker alarmed $wakes time(s) on round $round inside the re-surface window"
-      round=$((round + 1))
-    done
-
-    # The declaration ages past the cadence: the wait re-surfaces exactly once and
-    # names who it is waiting on, so absorbing churn never becomes silence.
-    set_mtime "$(( $(date +%s) - 2000 ))" "$statusf"
-    sig=$(seen_sig "$statusf"); printf '%s' "$sig" > "$state/.seen-parked_status"
-    printf 'parked, elapsed 5s' > "$capture_file"
-    parked_watch_round "$state" "$fakebin" "$out" "$capture_file" "$window" exit \
-      || fail "[$name] a parked worker did not re-surface once its declaration aged past the cadence"
-    wakes=$(awk -F '\t' -v w="$window" '$3 == "stale" && $4 == w { n++ } END { print n + 0 }' \
-      "$state/.wake-queue" 2>/dev/null || echo 0)
-    [ "$wakes" -eq 1 ] || fail "[$name] the aged declaration produced $wakes wakes instead of one"
-    grep -F "$expected" "$state/.wake-queue" >/dev/null \
-      || fail "[$name] the recheck did not name who the wait is on: $(cat "$state/.wake-queue")"
-    ack_stopped_cycle "$state" || fail "[$name] could not acknowledge the recheck"
-
-    printf 'parked, elapsed 6s' > "$capture_file"
-    parked_watch_round "$state" "$fakebin" "$out" "$capture_file" "$window" absorb \
-      || fail "[$name] pane churn re-alarmed right after the recheck: $(cat "$out")"
-    wakes=$(awk -F '\t' -v w="$window" '$3 == "stale" && $4 == w { n++ } END { print n + 0 }' \
-      "$state/.wake-queue" 2>/dev/null || echo 0)
-    [ "$wakes" -eq 0 ] || fail "[$name] pane churn re-alarmed $wakes time(s) inside the recheck's own window"
-  done
-  pass "a parked live worker absorbs pane churn, rechecks once when its declaration ages past the cadence, then absorbs churn again"
-}
-
-# Stale wakes for <window> in <state>'s durable queue; a missing queue is zero.
-parked_stale_wakes() {  # <state> <window>
-  awk -F '\t' -v w="$2" '$3 == "stale" && $4 == w { n++ } END { print n + 0 }' \
-    "$1/.wake-queue" 2>/dev/null || echo 0
-}
-
-# A declared-wait fixture for the live parked-worker runner: <status-line> written
-# <status-age> seconds ago, stably stale at its first pane text.
-parked_wait_fixture() {  # <name> <status-line> <status-age-secs>
-  local dir state statusf key
-  dir=$(make_case "$1"); state="$dir/state"; statusf="$state/parked.status"
-  printf 'window=test:fm-parked\nkind=ship\nharness=grok\nbackend=tmux\n' > "$state/parked.meta"
-  printf '%s\n' "$2" > "$statusf"
-  set_mtime "$(( $(date +%s) - $3 ))" "$statusf"
-  printf '%s' "$(seen_sig "$statusf")" > "$state/.seen-parked_status"
-  key=test_fm-parked
-  printf 'parked, elapsed 1s' > "$dir/pane.txt"
-  printf '%s' "$(hash_text 'parked, elapsed 1s')" > "$state/.hash-$key"
-  printf '1\n' > "$state/.count-$key"
-  printf '%s\n' "$dir"
-}
-
-# Append <line>s to a parked fixture's status log as handled status writes, so a
-# round measures only the stale path's reading of the declared wait.
-parked_status_write() {  # <state> <line>...
-  local state=$1 line
-  shift
-  for line in "$@"; do printf '%s\n' "$line" >> "$state/parked.status"; done
-  printf '%s' "$(seen_sig "$state/parked.status")" > "$state/.seen-parked_status"
-}
-
-# --- a live worker parked on a declared wait: a busy pane must not re-arm ----
-# The 2026-09 case behind issue #3942: a worker declared a bounded external wait
-# for a multi-hour background job and ended its turn, and the watcher alarmed
-# anyway for the whole wait. What re-armed the alarm was pane BUSY state: a worker
-# parked on a declared wait still renders its harness busy signature whenever it
-# does anything at all, and the busy-path branches cleared the whole pause
-# bookkeeping on such a poll, throttle included. A provably-working verdict
-# reaches the same throttle by a narrower route: fm-crew-state.sh takes its OWN
-# capture a moment after the staleness loop read the pane idle, so a parked
-# worker caught mid-blip returns `working source: pane`. Both are facts about the
-# PANE; the throttle is scoped to the DECLARATION, which only the status line that
-# ends the wait retires. A crew that declared nothing keeps alarming.
-# Adapted from https://github.com/kunchenguid/firstmate/pull/3978: the declaration
-# is aged past the cadence so its first sight is the annotated recheck that
-# records the throttle, since a fresh declaration's first sight is now absorbed.
-test_declared_wait_survives_a_busy_pane_blip() {
-  local spec name status_line expected dir state fakebin out capture_file key throttle scope wakes
-  key=test_fm-parked
-  for spec in \
-    'paused-busy-blip|paused: waiting on the bhavcopy download to finish (pid 41221)|awaiting external' \
-    'captain-held-busy-blip|captain-held [key=route]: awaiting the captain on the routing call|awaiting the captain'
-  do
-    name=${spec%%|*}; spec=${spec#*|}
-    status_line=${spec%%|*}; expected=${spec#*|}
-    dir=$(parked_wait_fixture "$name" "$status_line" 2000); state="$dir/state"; fakebin="$dir/fakebin"
-    out="$dir/watch.out"; capture_file="$dir/pane.txt"
-    throttle="$state/.paused-resurfaced-$key"
-
-    parked_watch_round "$state" "$fakebin" "$out" "$capture_file" test:fm-parked exit \
-      || fail "[$name] an aged declared wait was not rechecked"
-    grep -F "$expected" "$state/.wake-queue" >/dev/null \
-      || fail "[$name] the recheck did not name its wait: $(cat "$state/.wake-queue")"
-    ack_stopped_cycle "$state" || fail "[$name] could not acknowledge the recheck"
-    scope=$(cat "$throttle" 2>/dev/null) || fail "[$name] the recheck recorded no re-surface throttle"
-
-    # The pane renders the harness busy signature while the SAME wait stands.
-    printf 'parked, elapsed 2s\nCtrl+c:cancel' > "$capture_file"
-    parked_watch_round "$state" "$fakebin" "$out" "$capture_file" test:fm-parked absorb \
-      || fail "[$name] watcher exited on a busy poll under a standing declared wait"
-    [ "$(cat "$throttle" 2>/dev/null)" = "$scope" ] \
-      || fail "[$name] a busy poll cleared or replaced the declared wait's re-surface throttle"
-    [ -e "$state/.paused-$key" ] || fail "[$name] a busy poll cleared the declared wait's pause flag"
-
-    printf 'parked, elapsed 3s' > "$capture_file"
-    parked_watch_round "$state" "$fakebin" "$out" "$capture_file" test:fm-parked absorb \
-      || fail "[$name] a busy poll re-armed the stale alarm for an unchanged declared wait"
-    wakes=$(parked_stale_wakes "$state" test:fm-parked)
-    [ "$wakes" -eq 0 ] || fail "[$name] a busy poll cost $wakes extra wake(s) inside the re-surface window"
-
-    set_mtime "$(( $(date +%s) - 2000 ))" "$throttle"
-    printf 'parked, elapsed 4s' > "$capture_file"
-    parked_watch_round "$state" "$fakebin" "$out" "$capture_file" test:fm-parked exit \
-      || fail "[$name] a declared wait stopped re-surfacing after a busy poll"
-    wakes=$(parked_stale_wakes "$state" test:fm-parked)
-    [ "$wakes" -eq 1 ] || fail "[$name] elapsed re-surface window produced $wakes wakes instead of one"
-    grep -F "$expected" "$state/.wake-queue" >/dev/null \
-      || fail "[$name] the elapsed recheck lost its wait annotation: $(cat "$state/.wake-queue")"
-    ack_stopped_cycle "$state" || fail "[$name] could not acknowledge the elapsed re-surface"
-  done
-
-  for spec in \
-    'paused-working-race|paused: waiting on the bhavcopy download to finish (pid 41221)' \
-    'captain-held-working-race|captain-held [key=route]: awaiting the captain on the routing call'
-  do
-    name=${spec%%|*}; status_line=${spec#*|}
-    dir=$(parked_wait_fixture "$name" "$status_line" 2000); state="$dir/state"; fakebin="$dir/fakebin"
-    out="$dir/watch.out"; capture_file="$dir/pane.txt"
-    throttle="$state/.paused-resurfaced-$key"
-    parked_watch_round "$state" "$fakebin" "$out" "$capture_file" test:fm-parked exit \
-      || fail "[$name] an aged declared wait was not rechecked"
-    ack_stopped_cycle "$state" || fail "[$name] could not acknowledge the recheck"
-    scope=$(cat "$throttle" 2>/dev/null) || fail "[$name] the recheck recorded no re-surface throttle"
-
-    # Force the next sight to re-read crew state, whose own capture lands on the
-    # blip and returns a provably-working verdict.
-    set_mtime "$(( $(date +%s) - 2000 ))" "$state/.paused-rechecked-$key"
-    printf 'parked, elapsed 2s' > "$capture_file"
-    parked_watch_round "$state" "$fakebin" "$out" "$capture_file" test:fm-parked absorb \
-      'state: working · source: pane · mid-blip' \
-      || fail "[$name] watcher exited on a racing working verdict under a standing declared wait"
-    grep -F 'provably working' "$state/.watch-triage.log" >/dev/null \
-      || fail "[$name] the racing working verdict never reached a working arm: $(cat "$state/.watch-triage.log")"
-    [ "$(cat "$throttle" 2>/dev/null)" = "$scope" ] \
-      || fail "[$name] a racing working verdict retired the declared wait's re-surface throttle"
-
-    printf 'parked, elapsed 3s' > "$capture_file"
-    parked_watch_round "$state" "$fakebin" "$out" "$capture_file" test:fm-parked absorb \
-      || fail "[$name] a racing working verdict re-armed the alarm for an unchanged declared wait"
-    wakes=$(parked_stale_wakes "$state" test:fm-parked)
-    [ "$wakes" -eq 0 ] || fail "[$name] a racing working verdict cost $wakes extra wake(s) inside the re-surface window"
-
-    set_mtime "$(( $(date +%s) - 2000 ))" "$throttle"
-    printf 'parked, elapsed 4s' > "$capture_file"
-    parked_watch_round "$state" "$fakebin" "$out" "$capture_file" test:fm-parked exit \
-      || fail "[$name] a declared wait stopped re-surfacing after a racing working verdict"
-    wakes=$(parked_stale_wakes "$state" test:fm-parked)
-    [ "$wakes" -eq 1 ] || fail "[$name] elapsed re-surface window produced $wakes wakes instead of one"
-    ack_stopped_cycle "$state" || fail "[$name] could not acknowledge the elapsed re-surface"
-  done
-
-  # The disconfirming half: a crew that declared NO wait keeps alarming on each
-  # new stale hash across the same busy poll.
-  dir=$(parked_wait_fixture undeclared-busy-blip 'working: pulling the universe file' 0)
-  state="$dir/state"; fakebin="$dir/fakebin"; out="$dir/watch.out"; capture_file="$dir/pane.txt"
-  throttle="$state/.paused-resurfaced-$key"
-  parked_watch_round "$state" "$fakebin" "$out" "$capture_file" test:fm-parked exit \
-    'state: stopped · source: pane · idle' \
-    || fail "[undeclared] a silent crew with no declared wait did not surface"
-  ack_stopped_cycle "$state" || fail "[undeclared] could not acknowledge the first surface"
-  [ ! -e "$throttle" ] || fail "[undeclared] an undeclared crew recorded a declared-wait throttle"
-  printf 'parked, elapsed 2s\nCtrl+c:cancel' > "$capture_file"
-  parked_watch_round "$state" "$fakebin" "$out" "$capture_file" test:fm-parked absorb \
-    'state: stopped · source: pane · idle' \
-    || fail "[undeclared] watcher exited on a busy poll"
-  printf 'parked, elapsed 3s' > "$capture_file"
-  parked_watch_round "$state" "$fakebin" "$out" "$capture_file" test:fm-parked exit \
-    'state: stopped · source: pane · idle' \
-    || fail "[undeclared] a silent crew stopped alarming on a new stale hash"
-  wakes=$(parked_stale_wakes "$state" test:fm-parked)
-  [ "$wakes" -eq 1 ] || fail "[undeclared] a silent crew produced $wakes wakes instead of one"
-  ack_stopped_cycle "$state" || fail "[undeclared] could not acknowledge the second surface"
-  pass "neither a busy poll nor a racing working verdict retires a standing declared wait's re-surface throttle, while an undeclared silent crew keeps alarming"
-}
-
-# A status write that does not change what is awaited must not restart the
-# declared wait's re-surface cadence or its age: a repeated identical declaration,
-# a stamped re-declaration, a continuation line, and a note: are all absorbed until
-# the cadence elapses, and the recheck then reports how long THAT wait has held.
-# A genuinely changed declaration still surfaces on first inspection with its own
-# age. Adapted from https://github.com/kunchenguid/firstmate/pull/4742 (with the
-# note: write from https://github.com/kunchenguid/firstmate/pull/4818).
-test_absorbed_wait_cadence_survives_a_status_write_that_keeps_the_wait() {
-  local spec name initial changed label dir state fakebin out capture_file key throttle
-  local wakes waited write stamped
-  key=test_fm-parked
-  for spec in \
-    'paused-unchanged-write|paused: waiting on validation run one|paused: waiting on validation run two|paused' \
-    'captain-held-unchanged-write|captain-held [key=route]: awaiting the routing call|captain-held [key=route]: awaiting the release call|captain-held'
-  do
-    name=${spec%%|*}; spec=${spec#*|}
-    initial=${spec%%|*}; spec=${spec#*|}
-    changed=${spec%%|*}; label=${spec#*|}
-    dir=$(parked_wait_fixture "$name" "$initial" 2000); state="$dir/state"; fakebin="$dir/fakebin"
-    out="$dir/watch.out"; capture_file="$dir/pane.txt"
-    throttle="$state/.paused-resurfaced-$key"
-    parked_watch_round "$state" "$fakebin" "$out" "$capture_file" test:fm-parked exit \
-      || fail "[$name] initial aged declared wait did not re-surface"
-    ack_stopped_cycle "$state" || fail "[$name] could not acknowledge the initial declared wait"
-
-    stamped="${initial%%:*} [at=$(date +%s)]:${initial#*:}"
-    for write in "$initial" "$stamped" 'continuation of the same wait, nothing changed' \
-      'note: the upstream PR merged, waiting for the tag'; do
-      parked_status_write "$state" "$write"
-      printf 'idle after write: %s' "$write" > "$capture_file"
-      parked_watch_round "$state" "$fakebin" "$out" "$capture_file" test:fm-parked absorb \
-        || fail "[$name] a status write that kept the wait woke the supervisor before the cadence: $write"
-      wakes=$(parked_stale_wakes "$state" test:fm-parked)
-      [ "$wakes" -eq 0 ] || fail "[$name] a status write that kept the wait produced $wakes wakes before the cadence: $write"
-    done
-
-    set_mtime "$(( $(date +%s) - 2000 ))" "$throttle"
-    printf 'idle once the cadence elapsed' > "$capture_file"
-    parked_watch_round "$state" "$fakebin" "$out" "$capture_file" test:fm-parked exit \
-      || fail "[$name] the unchanged wait did not re-surface once its cadence elapsed"
-    wakes=$(parked_stale_wakes "$state" test:fm-parked)
-    [ "$wakes" -eq 1 ] || fail "[$name] the elapsed cadence produced $wakes wakes instead of one"
-    waited=$(sed -n "s/.*($label \([0-9][0-9]*\)s,.*/\1/p" "$state/.wake-queue" | head -1)
-    [ -n "$waited" ] && [ "$waited" -ge 1900 ] \
-      || fail "[$name] a status write that kept the wait reset its age: $(cat "$state/.wake-queue")"
-    ack_stopped_cycle "$state" || fail "[$name] could not acknowledge the elapsed recheck"
-
-    parked_status_write "$state" "$changed"
-    printf 'idle after the changed declaration' > "$capture_file"
-    parked_watch_round "$state" "$fakebin" "$out" "$capture_file" test:fm-parked exit \
-      || fail "[$name] a changed declaration inherited the unchanged wait's throttle"
-    wakes=$(parked_stale_wakes "$state" test:fm-parked)
-    [ "$wakes" -eq 1 ] || fail "[$name] a changed declaration produced $wakes wakes instead of one"
-    waited=$(sed -n "s/.*($label \([0-9][0-9]*\)s,.*/\1/p" "$state/.wake-queue" | head -1)
-    [ -n "$waited" ] && [ "$waited" -lt 500 ] \
-      || fail "[$name] a changed declaration kept the previous wait's age: $(cat "$state/.wake-queue")"
-  done
-  pass "a status write that keeps a paused or captain-held wait keeps its cadence and age, while a changed declaration surfaces at once"
-}
-
-# Leaving a wait and declaring the identical text again is a new logical wait
-# even when both writes land between two watcher polls, so it never inherits the
-# previous wait's silence; a text-only identity could not tell them apart.
-test_identical_wait_declared_again_between_polls_is_a_new_episode() {
-  local dir state fakebin out capture_file wakes waited
-  dir=$(parked_wait_fixture redeclared-between-polls 'paused: waiting on CI' 2000)
-  state="$dir/state"; fakebin="$dir/fakebin"; out="$dir/watch.out"; capture_file="$dir/pane.txt"
-  parked_watch_round "$state" "$fakebin" "$out" "$capture_file" test:fm-parked exit \
-    || fail "the aged declared wait was not rechecked"
-  ack_stopped_cycle "$state" || fail "could not acknowledge the first recheck"
-  parked_status_write "$state" 'working: fixing the CI failure' 'paused: waiting on CI'
-  printf 'parked again' > "$capture_file"
-  parked_watch_round "$state" "$fakebin" "$out" "$capture_file" test:fm-parked exit \
-    || fail "an identical wait declared again between polls inherited the previous wait's throttle"
-  wakes=$(parked_stale_wakes "$state" test:fm-parked)
-  [ "$wakes" -eq 1 ] || fail "the re-entered wait produced $wakes wakes instead of one"
-  waited=$(sed -n 's/.*(paused \([0-9][0-9]*\)s,.*/\1/p' "$state/.wake-queue" | head -1)
-  [ -n "$waited" ] && [ "$waited" -lt 500 ] \
-    || fail "the re-entered wait kept the previous wait's age: $(cat "$state/.wake-queue")"
-  pass "an identical wait declared again after leaving it, between two polls, is a new episode"
-}
-
-# A stamped declaration is aged from its own stamp rather than the file's mtime,
-# so a later note or restart cannot make an old wait look young, and a stamp in
-# the future is ignored for the first-sighting anchor rather than published as a
-# negative age or used to push the recheck out.
-test_declared_wait_age_uses_the_declaration_stamp() {
-  local dir state fakebin out capture_file stamp waited
-  stamp=$(( $(date +%s) - 3000 ))
-  dir=$(parked_wait_fixture stamped-age "paused [at=$stamp]: waiting on the vendor window" 0)
-  state="$dir/state"; fakebin="$dir/fakebin"; out="$dir/watch.out"; capture_file="$dir/pane.txt"
-  parked_watch_round "$state" "$fakebin" "$out" "$capture_file" test:fm-parked exit \
-    || fail "a declaration stamped past the cadence was not rechecked"
-  waited=$(sed -n 's/.*(paused \([0-9][0-9]*\)s,.*/\1/p' "$state/.wake-queue" | head -1)
-  [ -n "$waited" ] && [ "$waited" -ge 3000 ] \
-    || fail "the recheck was not aged from the declaration's stamp: $(cat "$state/.wake-queue")"
-  stamp=$(( $(date +%s) + 90000 ))
-  dir=$(parked_wait_fixture future-stamp "paused [at=$stamp]: waiting on the vendor window" 2000)
-  state="$dir/state"; fakebin="$dir/fakebin"; out="$dir/watch.out"; capture_file="$dir/pane.txt"
-  parked_watch_round "$state" "$fakebin" "$out" "$capture_file" test:fm-parked exit \
-    || fail "a future-stamped declaration pushed its recheck out past the cadence"
-  waited=$(sed -n 's/.*(paused \([0-9][0-9]*\)s,.*/\1/p' "$state/.wake-queue" | head -1)
-  [ -n "$waited" ] && [ "$waited" -ge 1900 ] \
-    || fail "a future-stamped declaration was not aged from its first sighting: $(cat "$state/.wake-queue")"
-  pass "a stamped declaration is aged from its stamp, and a future stamp falls back to the first sighting"
-}
-
-# One logical wait publishes one recheck per cadence window across routes: a
-# recheck the idle declared-wait cadence published is not repeated when the pane
-# moves to the wedge route under a working verdict, because both routes share the
-# declaration's identity and throttle.
-test_declared_wait_recheck_is_shared_with_the_wedge_route() {
-  local dir state fakebin out capture key
-  dir=$(wedge_threshold_fixture shared-throttle 'paused: waiting on the upstream release' 2000)
-  state="$dir/state"; fakebin="$dir/fakebin"; out="$dir/watch.out"; capture="$dir/pane.txt"
-  key=test_fm-wedge
-  rm -f "$state/.stale-$key"
-  wedge_threshold_round "$state" "$fakebin" "$out" "$capture" test:fm-wedge \
-    'state: paused · source: status-log · waiting' exit \
-    || fail "the idle declared-wait recheck did not fire"
-  ack_stopped_cycle "$state" || fail "could not acknowledge the idle recheck"
-  [ "$(wedge_stale_wakes "$state" test:fm-wedge)" -eq 0 ] || fail "the acknowledged recheck stayed queued"
-  wedge_threshold_round "$state" "$fakebin" "$out" "$capture" test:fm-wedge \
-    'state: working · source: run-step · validating (running)' absorb \
-    || fail "the wedge route published a second recheck inside the same window: $(cat "$out")"
-  [ "$(wedge_stale_wakes "$state" test:fm-wedge)" -eq 0 ] \
-    || fail "the wedge route queued a recheck inside the idle recheck's window: $(cat "$state/.wake-queue")"
-  grep -F 'declared wait explains the quiet' "$state/.watch-triage.log" >/dev/null \
-    || fail "the round never reached the wedge route's declared-wait deferral: $(cat "$state/.watch-triage.log")"
-  set_mtime "$(( $(date +%s) - 2000 ))" "$state/.paused-resurfaced-$key"
-  wedge_threshold_round "$state" "$fakebin" "$out" "$capture" test:fm-wedge \
-    'state: working · source: run-step · validating (running)' exit \
-    || fail "the wedge route stopped rechecking once the shared window elapsed"
-  [ "$(wedge_stale_wakes "$state" test:fm-wedge)" -eq 1 ] \
-    || fail "the elapsed shared window produced $(wedge_stale_wakes "$state" test:fm-wedge) wakes instead of one"
-  grep -F 'awaiting external - declared pause' "$state/.wake-queue" >/dev/null \
-    || fail "the wedge-route recheck did not name the declared wait: $(cat "$state/.wake-queue")"
-  pass "a declared wait's idle and wedge routes share one recheck per cadence window"
-}
-
-# A delivered-PR wait fixture: task `done` in window test:fm-done, its last status
-# line <status-line>, and - unless <poll> is `nopoll` - a merge poll armed for
-# https://github.com/o/r/pull/3 through the same private publication fm-pr-check.sh
-# performs, so the watcher's authentication reads real registration artifacts.
-done_pr_fixture() {  # <name> <status-line> [poll|nopoll]
-  local dir state
-  dir=$(make_case "$1"); state="$dir/state"
-  printf 'window=test:fm-done\nkind=ship\npr=https://github.com/o/r/pull/3\n' > "$state/done.meta"
-  if [ "${3:-poll}" = poll ]; then
-    fm_pr_poll_prepare "$state" "done" github https://github.com/o/r/pull/3 github.com o/r 3 "$ROOT/bin/fm-pr-poll.sh" \
-      && fm_pr_poll_publish_prepared || return 1
-  fi
-  printf '%s\n' "$2" > "$state/done.status"
-  printf '%s' "$(seen_sig "$state/done.status")" > "$state/.seen-done_status"
-  printf 'finished, awaiting review' > "$dir/pane.txt"
-  printf '%s' "$(hash_text 'finished, awaiting review')" > "$state/.hash-test_fm-done"
-  printf '1\n' > "$state/.count-test_fm-done"
-  touch "$state/.last-check" "$state/.last-heartbeat"
-  printf '%s\n' "$dir"
-}
-
-# One watcher round over a done_pr_fixture. <mode> exit|absorb as parked_watch_round.
-done_pr_round() {  # <dir> <exit|absorb> [crew-state] [pause-resurface-secs]
-  local dir=$1 mode=$2 crew=${3:-'state: unknown · source: none · no current-state source available'}
-  local resurface=${4:-999} pid cycles=0
-  PATH="$dir/fakebin:$PATH" FM_FAKE_TMUX_WINDOW=test:fm-done FM_FAKE_TMUX_CAPTURE="$dir/pane.txt" \
-    FM_STATE_OVERRIDE="$dir/state" FM_CREW_STATE_BIN="$dir/fakebin/fm-crew-state.sh" \
-    FM_FAKE_CREW_STATE="$crew" FM_WATCH_HANDLING_SUCCESSOR=1 \
-    FM_PAUSE_RESURFACE_SECS="$resurface" FM_POLL=1 FM_SIGNAL_GRACE=1 \
-    FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" >> "$dir/watch.out" 2>&1 &
-  pid=$!
-  if [ "$mode" = exit ]; then
-    wait_for_exit "$pid" 100 || { reap "$pid"; return 1; }
-    return 0
-  fi
-  while [ "$cycles" -lt 3 ]; do
-    wait_poll_cycle "$dir/state" "$pid" 300 || { reap "$pid"; return 1; }
-    cycles=$((cycles + 1))
-  done
-  reap "$pid"
-  return 0
-}
-
-# A delivered worker whose done line names a pull request with an authenticated
-# armed merge poll waits on review and merge: its first sight is absorbed, it is
-# rechecked once on the pause cadence with wording that names the pull request,
-# and it is not rechecked again inside the cadence.
-# Ported from the house delivered-wait feature (commit
-# 20da21b26df3a0a2faa742152421b5c3ef4ae5c4), now authenticated with
-# fm_pr_poll_artifacts_valid as in https://github.com/kunchenguid/firstmate/pull/3128.
-test_done_open_pr_uses_declared_wait_cadence() {
-  local dir state
-  dir=$(done_pr_fixture done-open-pr-wait 'done: PR https://github.com/o/r/pull/3') \
-    || fail "could not prepare the open PR poll fixture"
-  state="$dir/state"
-  done_pr_round "$dir" absorb || fail "fresh delivered PR surfaced instead of waiting: $(cat "$dir/watch.out")"
-  [ ! -s "$state/.wake-queue" ] || fail "fresh delivered PR queued a stale wake"
-  [ -e "$state/.paused-test_fm-done" ] && [ ! -e "$state/.stale-since-test_fm-done" ] \
-    || fail "delivered PR did not use pause bookkeeping"
-
-  set_mtime "$(( $(date +%s) - 500 ))" "$state/done.status"
-  printf '%s' "$(seen_sig "$state/done.status")" > "$state/.seen-done_status"
-  : > "$dir/watch.out"
-  done_pr_round "$dir" exit '' 240 || fail "delivered PR was not rechecked on the bounded cadence"
-  grep -F 'pull request review and merge' "$state/.wake-queue" >/dev/null \
-    || fail "delivered PR recheck did not name its wait: $(cat "$state/.wake-queue")"
-  grep -F 'possible wedge' "$state/.wake-queue" >/dev/null && fail "delivered PR recheck escalated as a wedge"
-  [ -e "$state/.paused-resurfaced-test_fm-done" ] || fail "delivered PR recheck did not record its cadence"
-  ack_stopped_cycle "$state" || fail "could not acknowledge the delivered PR recheck"
-  printf 'finished, awaiting review (redrawn)' > "$dir/pane.txt"
-  done_pr_round "$dir" absorb '' 240 || fail "delivered PR rechecked again before the cadence"
-  [ ! -s "$state/.wake-queue" ] || fail "delivered PR rechecked again inside the cadence"
-  pass "done with an authenticated open PR poll waits and rechecks on the pause cadence"
-}
-
-# The delivered wait is admitted only on authenticated local evidence. No poll, a
-# replaced check, a done line naming a different or no pull request, and a
-# failure line each keep the unchanged terminal surface; a newer
-# authoritative working run outranks the delivery and takes the wedge timer; and
-# losing the poll removes the exemption on an unchanged pane at once.
-# Negative and lapse cases adapted from https://github.com/kunchenguid/firstmate/pull/3128.
-test_delivered_pr_wait_requires_an_authenticated_poll() {
-  local spec name line mutate dir state
-  for spec in \
-    'no-poll|done: PR https://github.com/o/r/pull/3|nopoll' \
-    'forged-check|done: PR https://github.com/o/r/pull/3|forge' \
-    'other-pr|done: PR https://github.com/o/r/pull/31|none' \
-    'unnamed-pr|done: implementation complete|none' \
-    'failed|failed: PR https://github.com/o/r/pull/3 checks red|none'
-  do
-    name=${spec%%|*}; spec=${spec#*|}; line=${spec%%|*}; mutate=${spec#*|}
-    if [ "$mutate" = nopoll ]; then
-      dir=$(done_pr_fixture "delivered-$name" "$line" nopoll) || fail "[$name] fixture failed"
-    else
-      dir=$(done_pr_fixture "delivered-$name" "$line") || fail "[$name] fixture failed"
-    fi
-    state="$dir/state"
-    [ "$mutate" != forge ] || printf '\n# replaced\n' >> "$state/done.check.sh"
-    done_pr_round "$dir" exit || fail "[$name] an unauthenticated delivery was quietly absorbed: $(cat "$dir/watch.out")"
-    [ "$(awk -F '\t' '$3 == "stale" && $4 == "test:fm-done" && $5 == "stale: test:fm-done" { n++ } END { print n + 0 }' \
-      "$state/.wake-queue" 2>/dev/null || echo 0)" -eq 1 ] \
-      || fail "[$name] the unauthenticated delivery did not keep the bare terminal surface: $(cat "$state/.wake-queue")"
-  done
-
-  dir=$(done_pr_fixture delivered-working-run 'done: PR https://github.com/o/r/pull/3') || fail "fixture failed"
-  state="$dir/state"
-  done_pr_round "$dir" absorb 'state: working · source: run-step · validating (running)' \
-    || fail "a newer working run on a delivered task surfaced instead of timing a wedge"
-  [ -s "$state/.stale-since-test_fm-done" ] || fail "a newer working run did not start the wedge timer"
-  [ ! -e "$state/.paused-test_fm-done" ] || fail "a newer working run kept the delivered wait's pause mode"
-
-  dir=$(done_pr_fixture delivered-lapse 'done: PR https://github.com/o/r/pull/3') || fail "fixture failed"
-  state="$dir/state"
-  done_pr_round "$dir" absorb || fail "the armed delivery surfaced on first sight"
-  rm -f "$state/done.check.sh" "$state/done.pr-poll" "$state/done.pr-poll-registration"
-  done_pr_round "$dir" exit || fail "losing the merge poll left an unchanged pane quietly absorbed"
-  grep -F 'stale: test:fm-done' "$state/.wake-queue" >/dev/null \
-    || fail "the lapsed delivery did not surface: $(cat "$state/.wake-queue")"
-  [ ! -e "$state/.paused-resurfaced-test_fm-done" ] && [ ! -e "$state/.paused-since-test_fm-done" ] \
-    || fail "the lapsed delivery kept its declaration record"
-  pass "a delivered wait needs an authenticated poll for its own pull request, yields to a working run, and lapses with the poll"
-}
-
-# A task the captain already holds and whose last line is a declared `paused:`
-# wait: the open backlog hold outranks the external-wait wording and bounds the
-# pane through the captain-call identity. Its first look still reaches the
-# captain, churn inside the window is absorbed, and the window's end re-surfaces
-# it once. Adapted from https://github.com/kunchenguid/firstmate/pull/5571.
-test_open_captain_call_bounds_a_paused_last_line() {
-  local dir state out capture throttle wakes round
-  command -v tasks-axi >/dev/null 2>&1 \
-    || { echo "skip: tasks-axi not found (held paused-line bound)"; return 0; }
-  dir=$(make_hold_home held-paused \
-    'paused: awaiting the captain on https://example.invalid/pull/1' hold) \
-    || fail "could not build a held paused-line fixture"
-  state="$dir/state"; out="$dir/watch.out"; capture="$dir/pane.txt"
-  throttle="$state/.paused-resurfaced-$(hold_key)"
-
-  hold_watch_surface "$dir" "$out" "$capture" 'idle, elapsed 1s' \
-    || fail "first sight of held paused work did not surface"
-  wakes=$(hold_stale_wakes "$state")
-  [ "$wakes" -eq 1 ] || fail "first sight of held paused work produced $wakes wakes instead of one"
-  grep -F 'awaiting the captain - open captain call' "$state/.wake-queue" >/dev/null \
-    || fail "the held recheck did not name the captain: $(cat "$state/.wake-queue")"
-  ack_stopped_cycle "$state" || fail "could not acknowledge the first surface"
-
-  round=1
-  while [ "$round" -le 3 ]; do
-    printf 'idle, tick %s\n' "$round" > "$capture"
-    hold_watch_launch "$dir" "$out" "$capture"
-    if ! wait_poll_cycle "$state" "$HOLD_WATCH_PID" 300 || ! wait_poll_cycle "$state" "$HOLD_WATCH_PID" 300 \
-      || ! wait_poll_cycle "$state" "$HOLD_WATCH_PID" 300; then
-      reap "$HOLD_WATCH_PID"
-      fail "held paused churn round $round surfaced instead of absorbing"
-    fi
-    reap "$HOLD_WATCH_PID"
-    wakes=$(hold_stale_wakes "$state")
-    [ "$wakes" -eq 0 ] \
-      || fail "pane churn re-alarmed held paused work $wakes time(s) inside the re-surface window"
-    round=$((round + 1))
-  done
-
-  [ -e "$throttle" ] || fail "the absorbed churn recorded no re-surface cadence to elapse"
-  set_mtime "$(( $(date +%s) - 5000 ))" "$throttle"
-  hold_watch_surface "$dir" "$out" "$capture" 'idle, elapsed 9s' \
-    || fail "held paused work did not re-surface once its re-surface window elapsed"
-  wakes=$(hold_stale_wakes "$state")
-  [ "$wakes" -eq 1 ] \
-    || fail "elapsed re-surface window produced $wakes wakes instead of one"
-  pass "an open captain call bounds a paused: last line through the captain-call re-surface throttle"
-}
-
-# The wedge-threshold route re-surfaces a declared wait through the same hold
-# precedence, scope and wording as the idle and busy routes. A `paused:` worker
-# with an open captain call is first rechecked from a busy over-age pane, which
-# records the hold's scope; the same wait then reaches the wedge threshold on an
-# idle pane under a working verdict. It must absorb inside the hold's window
-# rather than publish a second, external-wait recheck under its own scope, and
-# once the window elapses the wedge route rechecks it as the hold.
-hold_route_round() {  # <dir> <out> <capture> <exit|absorb>
-  local dir=$1 out=$2 capture=$3 mode=$4 pid cycles=0
-  PATH="$dir/fakebin:$PATH" FM_FAKE_TMUX_WINDOW=test:fm-held-merge \
-    FM_FAKE_TMUX_CAPTURE="$capture" \
-    FM_FAKE_CREW_STATE='state: working · source: run-step · ci running' \
-    FM_WATCH_HANDLING_SUCCESSOR=1 \
-    FM_HOME="$dir" FM_DATA_OVERRIDE="$dir/data" FM_CONFIG_OVERRIDE="$dir/config" \
-    FM_STATE_OVERRIDE="$dir/state" FM_CREW_STATE_BIN="$dir/fakebin/fm-crew-state.sh" \
-    FM_PAUSE_RESURFACE_SECS=999 FM_BUSY_TURN_MAX_SECS=1 FM_STALE_ESCALATE_SECS=1 \
-    FM_POLL=1 FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 \
-    "$WATCH" >> "$out" 2>&1 &
-  pid=$!
-  if [ "$mode" = exit ]; then
-    wait_for_exit "$pid" 100 || { reap "$pid"; return 1; }
-    return 0
-  fi
-  while [ "$cycles" -lt 3 ]; do
-    wait_poll_cycle "$dir/state" "$pid" 300 || { reap "$pid"; return 1; }
-    cycles=$((cycles + 1))
-  done
-  reap "$pid"
-  return 0
-}
-
-test_open_captain_call_scope_is_shared_by_the_busy_and_wedge_routes() {
-  local dir state out capture key throttle scope
-  command -v tasks-axi >/dev/null 2>&1 \
-    || { echo "skip: tasks-axi not found (held wait across busy and wedge routes)"; return 0; }
-  dir=$(make_hold_home held-busy-then-wedge 'paused: waiting on CI' hold) \
-    || fail "could not build a held paused-line fixture"
-  state="$dir/state"; out="$dir/watch.out"; capture="$dir/pane.txt"
-  key=$(hold_key); throttle="$state/.paused-resurfaced-$key"
-  printf 'window=test:fm-held-merge\nkind=ship\nharness=pi\n' > "$state/held-merge.meta"
-  touch -t 200001010000 "$state/held-merge.meta"
-  record_pi_busy "$state" held-merge
-  printf 'Working...' > "$capture"
-  printf '%s' "$(hash_text 'Working...')" > "$state/.hash-$key"
-  printf '1\n' > "$state/.count-$key"
-
-  hold_route_round "$dir" "$out" "$capture" exit \
-    || fail "a busy over-age pane with an open captain call was not rechecked: $(cat "$out")"
-  [ "$(hold_stale_wakes "$state")" -eq 1 ] \
-    || fail "the busy over-age recheck produced $(hold_stale_wakes "$state") wakes instead of one"
-  grep -F 'awaiting the captain - open captain call' "$state/.wake-queue" >/dev/null \
-    || fail "the busy over-age recheck did not name the hold: $(cat "$state/.wake-queue")"
-  scope=$(cat "$throttle" 2>/dev/null) || fail "the busy over-age recheck recorded no throttle"
-  case "$scope" in captain-hold:*) ;; *) fail "the busy over-age recheck recorded scope '$scope', not the hold's" ;; esac
-  ack_stopped_cycle "$state" || fail "could not acknowledge the busy over-age recheck"
-
-  "$ROOT/bin/fm-busy-event.sh" apply "$state" held-merge idle --current-gen \
-    --source pi-ext --event agent-end >/dev/null
-  printf 'idle at the prompt' > "$capture"
-  printf '%s' "$(hash_text 'idle at the prompt')" > "$state/.hash-$key"
-  printf '%s' "$(hash_text 'idle at the prompt')" > "$state/.stale-$key"
-  printf '1\n' > "$state/.count-$key"
-  printf '%s\n' "$(( $(date +%s) - 500 ))" > "$state/.stale-since-$key"
-  : > "$out"
-  hold_route_round "$dir" "$out" "$capture" absorb \
-    || fail "the wedge-threshold route published a second recheck inside the hold's window: $(cat "$out")"
-  [ "$(hold_stale_wakes "$state")" -eq 0 ] \
-    || fail "the wedge-threshold route queued a recheck inside the hold's window: $(cat "$state/.wake-queue")"
-  [ "$(cat "$throttle")" = "$scope" ] \
-    || fail "the wedge-threshold route replaced the hold's scope with '$(cat "$throttle")'"
-  grep -F 'declared wait explains the quiet' "$state/.watch-triage.log" >/dev/null \
-    || fail "the round never reached the wedge-threshold deferral: $(cat "$state/.watch-triage.log")"
-  [ ! -e "$state/.wedge-escalations-$key" ] \
-    || fail "the held wait counted a wedge escalation"
-
-  set_mtime "$(( $(date +%s) - 5000 ))" "$throttle"
-  printf '%s\n' "$(( $(date +%s) - 500 ))" > "$state/.stale-since-$key"
-  hold_route_round "$dir" "$out" "$capture" exit \
-    || fail "the wedge-threshold route stopped rechecking the hold once its window elapsed: $(cat "$out")"
-  [ "$(hold_stale_wakes "$state")" -eq 1 ] \
-    || fail "the elapsed hold window produced $(hold_stale_wakes "$state") wakes instead of one"
-  grep -F 'awaiting the captain - open captain call' "$state/.wake-queue" >/dev/null \
-    || fail "the wedge-threshold recheck did not name the hold: $(cat "$state/.wake-queue")"
-  grep -F 'awaiting external' "$state/.wake-queue" >/dev/null \
-    && fail "the wedge-threshold recheck hid the hold behind external-wait wording: $(cat "$state/.wake-queue")"
-  [ "$(cat "$throttle")" = "$scope" ] \
-    || fail "the wedge-threshold recheck recorded scope '$(cat "$throttle")', not the hold's"
-  pass "an open captain call keeps one scope and one recheck per cadence across the busy and wedge-threshold routes"
-}
-
-test_live_paused_until_controls_recheck_time() {
-  local dir state fakebin out capture_file statusf window key sig wakes future past
-  dir=$(make_case live-paused-until); state="$dir/state"; fakebin="$dir/fakebin"
-  out="$dir/watch.out"; capture_file="$dir/pane.txt"; statusf="$state/parked.status"
-  window="test:fm-parked"
-  printf 'window=%s\nkind=ship\nharness=grok\nbackend=tmux\n' "$window" > "$state/parked.meta"
-  future=$(iso_utc_at "$(( $(date +%s) + 7200 ))")
-  printf 'paused: rate limit until %s\n' "$future" > "$statusf"
-  sig=$(seen_sig "$statusf"); printf '%s' "$sig" > "$state/.seen-parked_status"
-  key=$(printf '%s' "$window" | tr ':/.' '___')
-  printf 'parked, elapsed 1s' > "$capture_file"
-  printf '%s' "$(hash_text 'parked, elapsed 1s')" > "$state/.hash-$key"
-  printf '1\n' > "$state/.count-$key"
-  parked_watch_round "$state" "$fakebin" "$out" "$capture_file" "$window" absorb \
-    || fail "a live worker woke before its declared future time"
-  printf 'parked, elapsed 2s' > "$capture_file"
-  parked_watch_round "$state" "$fakebin" "$out" "$capture_file" "$window" absorb \
-    || fail "pane churn bypassed a live worker's declared future time"
-  wakes=$(awk -F '\t' -v w="$window" '$3 == "stale" && $4 == w { n++ } END { print n + 0 }' \
-    "$state/.wake-queue" 2>/dev/null || echo 0)
-  [ "$wakes" -eq 0 ] || fail "a live worker produced $wakes wakes before its declared time"
-
-  past=$(iso_utc_at "$(( $(date +%s) - 120 ))")
-  printf 'paused: rate limit until %s\n' "$past" >> "$statusf"
-  sig=$(seen_sig "$statusf"); printf '%s' "$sig" > "$state/.seen-parked_status"
-  printf 'parked, elapsed 3s' > "$capture_file"
-  parked_watch_round "$state" "$fakebin" "$out" "$capture_file" "$window" exit \
-    || fail "a live worker did not wake when its declared time passed"
-  wakes=$(awk -F '\t' -v w="$window" '$3 == "stale" && $4 == w { n++ } END { print n + 0 }' \
-    "$state/.wake-queue" 2>/dev/null || echo 0)
-  [ "$wakes" -eq 1 ] || fail "a passed declared time produced $wakes wakes instead of one"
-  ack_stopped_cycle "$state" || fail "could not acknowledge the due declared-time recheck"
-  printf 'parked, elapsed 4s' > "$capture_file"
-  parked_watch_round "$state" "$fakebin" "$out" "$capture_file" "$window" absorb \
-    || fail "a due declared time bypassed the reset long cadence"
-  wakes=$(awk -F '\t' -v w="$window" '$3 == "stale" && $4 == w { n++ } END { print n + 0 }' \
-    "$state/.wake-queue" 2>/dev/null || echo 0)
-  [ "$wakes" -eq 0 ] || fail "a due declared time rechecked again inside the long cadence"
-  pass "a live paused worker stays absorbed until its declared time, then rechecks"
-}
 
 # --- the wedge threshold consults the worker's own declared wait ------------
 # Upstream kunchenguid/firstmate#3909 and #2614: wedge_timer_check escalated on
@@ -3746,321 +2655,12 @@ wedge_threshold_fixture() {  # <name> <status-log> <status-age-secs> [<wedge-tim
   printf '%s\n' "$dir"
 }
 
-# Arm the opt-in parked-gate wait evidence for a fixture built above.
-arm_parked_gate() {  # <case-dir>
-  : > "$1/config/wedge-defer-parked-gate"
-}
 
 wedge_stale_wakes() {  # <state> <window>
   awk -F '\t' -v w="$2" '$3 == "stale" && $4 == w { n++ } END { print n + 0 }' \
     "$1/.wake-queue" 2>/dev/null || echo 0
 }
 
-# The wait age the deferral PUBLISHES to the captain, read back off the wake it
-# emitted. The wake reason is the watcher's supervisor-facing output contract, so
-# the number in it is the thing under test: it must describe the wait that is
-# actually holding the lane, not whatever unrelated record happened to be handy.
-wedge_reported_wait_secs() {  # <watch-out>
-  sed -n -e 's/.*waiting \([0-9][0-9]*\)s.*/\1/p' -e 's/.*(paused \([0-9][0-9]*\)s,.*/\1/p' "$1" | head -1
-}
-
-test_wedge_threshold_defers_to_a_declared_wait_under_a_working_verdict() {
-  local dir state fakebin out capture window key n past reported
-  local working='state: working · source: run-step · ci running'
-
-  dir=$(wedge_threshold_fixture declared-wait-working \
-    'paused: final validation at step 6/6 - clean whole-assembly baseline (~20 min)' 0)
-  state="$dir/state"; fakebin="$dir/fakebin"; out="$dir/watch.out"; capture="$dir/pane.txt"
-  window="test:fm-wedge"; key=$(printf '%s' "$window" | tr ':/.' '___')
-  n=1
-  while [ "$n" -le 3 ]; do
-    wedge_threshold_round "$state" "$fakebin" "$out" "$capture" "$window" "$working" absorb \
-      || fail "a declared wait wedge-escalated at threshold $n under a working verdict: $(cat "$out")"
-    n=$((n + 1))
-  done
-  [ "$(wedge_stale_wakes "$state" "$window")" -eq 0 ] \
-    || fail "a declared wait queued a wedge wake under a working verdict: $(cat "$state/.wake-queue")"
-  grep -F 'possible wedge' "$out" >/dev/null \
-    && fail "a declared wait was reported as a possible wedge"
-  [ ! -e "$state/.wedge-escalations-$key" ] \
-    || fail "a declared wait counted $(cat "$state/.wedge-escalations-$key") wedge escalation(s)"
-
-  # The declared half keeps the status-file anchor, because for a declaration
-  # that file IS the record: its mtime is the moment the worker wrote the wait
-  # down. So the recheck is governed by how old the declaration is, and the age
-  # it publishes is that declaration's age, named as the declaration it is.
-  dir=$(wedge_threshold_fixture declared-wait-aged \
-    'paused: waiting on the upstream release cut' 2000)
-  state="$dir/state"; fakebin="$dir/fakebin"; out="$dir/watch.out"; capture="$dir/pane.txt"
-  FM_TEST_PAUSE_RESURFACE=240 wedge_threshold_round "$state" "$fakebin" "$out" "$capture" "$window" "$working" exit \
-    || fail "a declaration older than the recheck cadence was never rechecked: $(cat "$out")"
-  reported=$(wedge_reported_wait_secs "$out")
-  [ -n "$reported" ] && [ "$reported" -ge 1900 ] \
-    || fail "the declared-wait recheck reported '${reported}'s rather than the age of the declaration itself: $(cat "$out")"
-  grep -F 'declared pause' "$out" >/dev/null \
-    || fail "the declared-wait recheck did not name its evidence as declared: $(cat "$out")"
-  # A `paused:` declaration names an external dependency the worker chose, so its
-  # recheck asks the reader to confirm that dependency - never to answer or
-  # release a hold, which is a different human and a different action.
-  grep -F 'awaiting external' "$out" >/dev/null \
-    || fail "the declared-wait recheck did not name the human the wait is on: $(cat "$out")"
-  grep -F 'confirm the wait still holds' "$out" >/dev/null \
-    || fail "the declared-wait recheck lost its external-wait action: $(cat "$out")"
-  grep -F 'release the hold' "$out" >/dev/null \
-    && fail "a declared external wait borrowed the captain-held release action: $(cat "$out")"
-  grep -F 'possible wedge' "$out" >/dev/null \
-    && fail "the declared-wait recheck was worded as a possible wedge"
-  ack_stopped_cycle "$state" || fail "could not acknowledge the declared-wait recheck"
-
-  # A wait the worker said would already be over stops explaining the silence,
-  # so the exemption ends exactly where the declaration does - as long as nothing
-  # ELSE accounts for the quiet.
-  past=$(iso_utc_at "$(( $(date +%s) - 7200 ))")
-  dir=$(wedge_threshold_fixture declared-wait-elapsed "paused: waiting on the build queue until $past" 0)
-  state="$dir/state"; fakebin="$dir/fakebin"; out="$dir/watch.out"; capture="$dir/pane.txt"
-  wedge_threshold_round "$state" "$fakebin" "$out" "$capture" "$window" "$working" exit \
-    || fail "a declared wait whose own clearing time had passed stayed silent"
-  grep -F "possible wedge, escalation 1" "$out" >/dev/null \
-    || fail "an elapsed declared wait did not keep the unchanged wedge wording: $(cat "$out")"
-  ack_stopped_cycle "$state" || fail "could not acknowledge the elapsed-declaration escalation"
-
-  # The other direction: the same working verdict with no declaration at all
-  # keeps the unchanged ladder.
-  dir=$(wedge_threshold_fixture declared-wait-control 'working: validation under way' 0)
-  state="$dir/state"; fakebin="$dir/fakebin"; out="$dir/watch.out"; capture="$dir/pane.txt"
-  n=1
-  while [ "$n" -le 3 ]; do
-    wedge_threshold_round "$state" "$fakebin" "$out" "$capture" "$window" "$working" exit \
-      || fail "an undeclared working lane stopped escalating at threshold $n"
-    ack_stopped_cycle "$state" || fail "could not acknowledge undeclared escalation $n"
-    grep -F "possible wedge, escalation $n" "$out" >/dev/null \
-      || fail "an undeclared working lane did not reach escalation $n: $(cat "$out")"
-    n=$((n + 1))
-  done
-  grep -F 'demand-deep-inspection: same pane has wedge-escalated 3 times in a row' "$out" >/dev/null \
-    || fail "an undeclared working lane lost the demand-deep-inspection wording: $(cat "$out")"
-  pass "a declared wait is not wedge-escalated by a working verdict, while an elapsed declaration and an undeclared lane both keep the unchanged ladder"
-}
-
-# `fm-send --resolve-key default` answers a keyless decision by appending a
-# stated default-key resolved line after whatever the worker wrote last. When
-# that is a keyless pause the worker is still waiting, so the answer must not
-# put the lane back on the wedge ladder. The worker's own keyless resolved line
-# is the retraction that does.
-test_wedge_threshold_keeps_a_wait_past_a_default_key_answer() {
-  local dir state fakebin out capture window key n
-  local working='state: working · source: run-step · ci running'
-
-  dir=$(wedge_threshold_fixture default-answer-after-wait \
-    "$(printf 'needs-decision: which color\npaused: waiting on the vendor release\nresolved [key=default]: answered: blue')" 0)
-  state="$dir/state"; fakebin="$dir/fakebin"; out="$dir/watch.out"; capture="$dir/pane.txt"
-  window="test:fm-wedge"; key=$(printf '%s' "$window" | tr ':/.' '___')
-  n=1
-  while [ "$n" -le 3 ]; do
-    wedge_threshold_round "$state" "$fakebin" "$out" "$capture" "$window" "$working" absorb \
-      || fail "a default-key answer put a waiting lane on the wedge ladder at threshold $n: $(cat "$out")"
-    n=$((n + 1))
-  done
-  [ "$(wedge_stale_wakes "$state" "$window")" -eq 0 ] \
-    || fail "a default-key answer let a waiting lane queue a wedge wake: $(cat "$state/.wake-queue")"
-  [ ! -e "$state/.wedge-escalations-$key" ] \
-    || fail "a default-key answer let a waiting lane count $(cat "$state/.wedge-escalations-$key") wedge escalation(s)"
-
-  dir=$(wedge_threshold_fixture keyless-retraction \
-    "$(printf 'paused: waiting on the vendor release\nresolved: the vendor shipped')" 0)
-  state="$dir/state"; fakebin="$dir/fakebin"; out="$dir/watch.out"; capture="$dir/pane.txt"
-  wedge_threshold_round "$state" "$fakebin" "$out" "$capture" "$window" "$working" exit \
-    || fail "a worker's own keyless resolved line did not retract its wait: $(cat "$out")"
-  grep -F "possible wedge, escalation 1" "$out" >/dev/null \
-    || fail "a retracted wait did not return to the wedge ladder: $(cat "$out")"
-  pass "a default-key answer leaves a keyless wait standing, while the worker's own keyless resolved line retracts it"
-}
-
-# The other status-line record. A verified `captain-held:` transfer also reaches
-# this deferral - the mate has an active run attributed to it, so pause_state_class
-# reports working and the stable hash is handed to the wedge timer - but it blocks
-# on a DIFFERENT human than a `paused:` declaration does. The captain reading the
-# recheck is the one who can clear it, so wording it as an external dependency to
-# confirm points them away from the only action that ends the wait. The sibling
-# absorber makes exactly this distinction, and a lane routed here must not lose it.
-test_wedge_threshold_recheck_names_the_captain_for_a_held_lane() {
-  local dir state fakebin out capture window key n armed_timer
-  local working='state: working · source: run-step · ci running'
-
-  dir=$(wedge_threshold_fixture captain-held-wait \
-    'captain-held: which retention window wins' 2000)
-  state="$dir/state"; fakebin="$dir/fakebin"; out="$dir/watch.out"; capture="$dir/pane.txt"
-  window="test:fm-wedge"; key=$(printf '%s' "$window" | tr ':/.' '___')
-  FM_TEST_PAUSE_RESURFACE=240 wedge_threshold_round "$state" "$fakebin" "$out" "$capture" "$window" "$working" exit \
-    || fail "a captain-held lane older than the recheck cadence was never rechecked: $(cat "$out")"
-  grep -F 'awaiting the captain' "$out" >/dev/null \
-    || fail "the captain-held recheck did not name the captain as the human the wait is on: $(cat "$out")"
-  grep -F 'answer the held decision or release the hold' "$out" >/dev/null \
-    || fail "the captain-held recheck did not name the action that clears the hold: $(cat "$out")"
-  grep -F 'awaiting external' "$out" >/dev/null \
-    && fail "a captain-held transfer was published as a wait on an external dependency: $(cat "$out")"
-  grep -F 'confirm the wait still holds' "$out" >/dev/null \
-    && fail "a captain-held transfer borrowed the external-wait action: $(cat "$out")"
-  grep -F 'possible wedge' "$out" >/dev/null \
-    && fail "a captain-held transfer was reported as a possible wedge: $(cat "$out")"
-  ack_stopped_cycle "$state" || fail "could not acknowledge the captain-held recheck"
-
-  # The quiet direction is unchanged from a declared pause: inside the cadence the
-  # hold is absorbed whole, with no escalation counted.
-  dir=$(wedge_threshold_fixture captain-held-quiet \
-    'captain-held: which retention window wins' 0)
-  state="$dir/state"; fakebin="$dir/fakebin"; out="$dir/watch.out"; capture="$dir/pane.txt"
-  n=1
-  while [ "$n" -le 3 ]; do
-    wedge_threshold_round "$state" "$fakebin" "$out" "$capture" "$window" "$working" absorb \
-      || fail "a captain-held lane wedge-escalated at threshold $n under a working verdict: $(cat "$out")"
-    n=$((n + 1))
-  done
-  [ "$(wedge_stale_wakes "$state" "$window")" -eq 0 ] \
-    || fail "a captain-held lane queued a wedge wake inside its recheck cadence: $(cat "$state/.wake-queue")"
-  [ ! -e "$state/.wedge-escalations-$key" ] \
-    || fail "a captain-held lane counted $(cat "$state/.wedge-escalations-$key") wedge escalation(s)"
-
-  # While the away-posture record exists there is nobody to answer the hold, so
-  # this path absorbs it in silence like every other captain-held path in the
-  # watcher. The recheck is not merely delayed but not owed at all: no wake, and
-  # no throttle armed, so the moment the record is archived the hold is rechecked
-  # at once rather than waiting out a cadence that started while the captain was
-  # away. Same fixture and same age as the attended leg above, which is what makes
-  # the difference attributable to the record alone.
-  # The idle timer is pre-armed well past the threshold, so every round below
-  # reaches the absorb with the same timer value and a restart would be visible.
-  dir=$(wedge_threshold_fixture captain-held-away \
-    'captain-held: which retention window wins' 2000 2000)
-  state="$dir/state"; fakebin="$dir/fakebin"; out="$dir/watch.out"; capture="$dir/pane.txt"
-  armed_timer=$(cat "$state/.stale-since-$key")
-  write_away_record "$state"
-  n=1
-  while [ "$n" -le 3 ]; do
-    FM_TEST_PAUSE_RESURFACE=240 wedge_threshold_round "$state" "$fakebin" "$out" "$capture" "$window" "$working" absorb \
-      || fail "a captain-held lane was rechecked at threshold $n while the away-posture record existed: $(cat "$out")"
-    n=$((n + 1))
-  done
-  [ "$(wedge_stale_wakes "$state" "$window")" -eq 0 ] \
-    || fail "a captain-held lane woke the away captain: $(cat "$state/.wake-queue")"
-  [ ! -s "$out" ] \
-    || fail "a captain-held lane printed a recheck while the away-posture record existed: $(cat "$out")"
-  [ ! -e "$state/.waiting-resurfaced-$key" ] \
-    || fail "an away-silenced hold armed the recheck throttle, so the recheck owed on return would be delayed a full cadence"
-  [ ! -e "$state/.wedge-escalations-$key" ] \
-    || fail "an away-silenced hold counted $(cat "$state/.wedge-escalations-$key") wedge escalation(s)"
-  grep -F 'never rechecked while the away-posture record exists' "$state/.watch-triage.log" >/dev/null \
-    || fail "the away-silenced hold was not recorded in the triage log: $(cat "$state/.watch-triage.log")"
-  [ "$(cat "$state/.stale-since-$key")" = "$armed_timer" ] \
-    || fail "an away-silenced hold restarted the idle timer, so part of the away window would be spent against the cadence the recheck owed on return uses"
-
-  # And the recheck is owed in full the moment the captain is back: the absorb
-  # above leaves the idle timer alone, so no part of the away window is spent
-  # against the cadence the hold is rechecked on.
-  archive_away_record "$state"
-  : > "$out"
-  FM_TEST_PAUSE_RESURFACE=240 wedge_threshold_round "$state" "$fakebin" "$out" "$capture" "$window" "$working" exit \
-    || fail "a captain-held lane was never rechecked after the away-posture record was archived: $(cat "$out")"
-  grep -F 'awaiting the captain' "$out" >/dev/null \
-    || fail "the recheck owed on return did not name the captain: $(cat "$out")"
-  ack_stopped_cycle "$state" || fail "could not acknowledge the on-return captain-held recheck"
-  pass "a captain-held lane is rechecked as a hold on the captain, never as an external wait, and never at all while the captain is away"
-}
-
-# The backlog record of the same hold. Once firstmate hands a decision to the
-# captain through bin/fm-captain-hold.sh, the worker's own line stays whatever it
-# was, so a stuck worker on a stable pane reaches the wedge timer with nothing in
-# its status log that reads as a wait. The open captain call must bound the wedge
-# ladder exactly as a `captain-held:` line does.
-backlog_hold_wedge_fixture() {  # <name> <status-age-secs> [<wedge-timer-age-secs>] [<status-log>]
-  local dir
-  dir=$(wedge_threshold_fixture "$1" "${4:-working: answering the dialog}" "$2" "${3-}") || return 1
-  mkdir -p "$dir/data"
-  fm_test_tasks_toml "$dir/.tasks.toml" || return 1
-  printf '## In flight\n\n## Queued\n\n## Done\n' > "$dir/data/backlog.md"
-  (cd "$dir" && tasks-axi add wedge 'stuck at a captain-only dialog' --file data/backlog.md) >/dev/null 2>&1 \
-    || return 1
-  run_hold "$dir" hold wedge --reason 'awaiting the captain on the dialog' || return 1
-  printf '%s\n' "$dir"
-}
-
-test_wedge_threshold_defers_to_a_backlog_captain_hold() {
-  local dir state fakebin out capture window key n queued armed_timer past
-  local working='state: working · source: run-step · ci running'
-  command -v tasks-axi >/dev/null 2>&1 \
-    || { echo "skip: tasks-axi not found (backlog captain hold wedge bound)"; return 0; }
-  window="test:fm-wedge"; key=$(printf '%s' "$window" | tr ':/.' '___')
-
-  # A fresh status line is no record of when the hold began, so the first
-  # threshold rechecks it once, as a wait on the captain with no wait age.
-  dir=$(backlog_hold_wedge_fixture backlog-hold-quiet 0) \
-    || fail "could not build a backlog captain-hold wedge fixture"
-  state="$dir/state"; fakebin="$dir/fakebin"; out="$dir/watch.out"; capture="$dir/pane.txt"
-  FM_HOME="$dir" FM_DATA_OVERRIDE="$dir/data" \
-    wedge_threshold_round "$state" "$fakebin" "$out" "$capture" "$window" "$working" exit \
-    || fail "a backlog-held lane was never rechecked at the threshold: $(cat "$out")"
-  grep -F 'awaiting the captain' "$out" >/dev/null \
-    || fail "the backlog-hold recheck did not name the captain: $(cat "$out")"
-  grep -F 'possible wedge' "$out" >/dev/null \
-    && fail "a backlog-held lane was reported as a possible wedge: $(cat "$out")"
-  grep -E ', waiting [0-9]+s' "$out" >/dev/null \
-    && fail "the backlog-hold recheck published the status line's age as the hold's: $(cat "$out")"
-  ack_stopped_cycle "$state" || fail "could not acknowledge the backlog-hold recheck"
-
-  # Inside the recheck cadence the hold is absorbed whole, threshold after threshold.
-  queued=$(wedge_stale_wakes "$state" "$window")
-  n=1
-  while [ "$n" -le 3 ]; do
-    FM_HOME="$dir" FM_DATA_OVERRIDE="$dir/data" \
-      wedge_threshold_round "$state" "$fakebin" "$out" "$capture" "$window" "$working" absorb \
-      || fail "a backlog-held lane wedge-escalated at threshold $n: $(cat "$out")"
-    n=$((n + 1))
-  done
-  [ "$(wedge_stale_wakes "$state" "$window")" -eq "$queued" ] \
-    || fail "a backlog-held lane queued a further wake inside its recheck cadence: $(cat "$state/.wake-queue")"
-  [ ! -e "$state/.wedge-escalations-$key" ] \
-    || fail "a backlog-held lane counted $(cat "$state/.wedge-escalations-$key") wedge escalation(s)"
-
-  # A paused line whose own clearing time has passed explains nothing, so the
-  # hold the worker's line never shows still bounds the ladder.
-  past=$(iso_utc_at "$(( $(date +%s) - 7200 ))")
-  dir=$(backlog_hold_wedge_fixture backlog-hold-elapsed-pause 0 '' \
-    "paused: waiting on the build queue until $past") \
-    || fail "could not build a backlog captain-hold wedge fixture"
-  state="$dir/state"; fakebin="$dir/fakebin"; out="$dir/watch.out"; capture="$dir/pane.txt"
-  FM_HOME="$dir" FM_DATA_OVERRIDE="$dir/data" \
-    wedge_threshold_round "$state" "$fakebin" "$out" "$capture" "$window" "$working" exit \
-    || fail "a backlog-held lane behind an elapsed pause was never rechecked: $(cat "$out")"
-  grep -F 'awaiting the captain' "$out" >/dev/null \
-    || fail "a backlog-held lane behind an elapsed pause was not rechecked as a wait on the captain: $(cat "$out")"
-  grep -F 'possible wedge' "$out" >/dev/null \
-    && fail "a backlog-held lane behind an elapsed pause was reported as a possible wedge: $(cat "$out")"
-  [ ! -e "$state/.wedge-escalations-$key" ] \
-    || fail "a backlog-held lane behind an elapsed pause counted a wedge escalation"
-  ack_stopped_cycle "$state" || fail "could not acknowledge the elapsed-pause backlog-hold recheck"
-
-  # While the away-posture record exists it is never rechecked, and the backlog
-  # read that proves the hold is paced by the idle timer rather than every poll.
-  dir=$(backlog_hold_wedge_fixture backlog-hold-away 2000 2000) \
-    || fail "could not build a backlog captain-hold wedge fixture"
-  state="$dir/state"; fakebin="$dir/fakebin"; out="$dir/watch.out"; capture="$dir/pane.txt"
-  armed_timer=$(cat "$state/.stale-since-$key")
-  write_away_record "$state"
-  n=1
-  while [ "$n" -le 3 ]; do
-    FM_HOME="$dir" FM_DATA_OVERRIDE="$dir/data" FM_TEST_PAUSE_RESURFACE=240 \
-      wedge_threshold_round "$state" "$fakebin" "$out" "$capture" "$window" "$working" absorb \
-      || fail "a backlog-held lane was rechecked at threshold $n while the away-posture record existed: $(cat "$out")"
-    n=$((n + 1))
-  done
-  [ "$(wedge_stale_wakes "$state" "$window")" -eq 0 ] \
-    || fail "a backlog-held lane woke the away captain: $(cat "$state/.wake-queue")"
-  [ ! -s "$out" ] \
-    || fail "a backlog-held lane printed a recheck while the away-posture record existed: $(cat "$out")"
-  [ "$(cat "$state/.stale-since-$key")" != "$armed_timer" ] \
-    || fail "an away-silenced backlog hold left the idle timer expired, so its backlog read repeats on every poll"
-  pass "a backlog captain hold bounds the wedge ladder like a captain-held line, and stays silent while the captain is away"
-}
 
 # --- the wedge threshold reads the crew's own parked-gate state --------------
 # Upstream kunchenguid/firstmate#3055: a lane parked at a validation gate that is
@@ -4079,158 +2679,6 @@ test_wedge_threshold_defers_to_a_backlog_captain_hold() {
 # consumer which merely searched the verdict for the token would fail it.
 # The second half of that evidence - that the human was actually asked and has
 # not answered - is pinned in the test below this one.
-test_wedge_threshold_defers_to_a_parked_gate_awaiting_a_human() {
-  local dir state fakebin out capture window key n queued
-  # The gate's own findings table said a human owes this answer, so
-  # bin/fm-crew-state.sh minted the human-decision component (its derivation from
-  # the `action` column by position is pinned in tests/fm-crew-state.test.sh).
-  local human='state: parked · source: run-step · parked at awaiting_approval: 2 finding(s) · ask-user: authority decision · run: 01RUNGATE'
-  # The same gate with no run component: nothing can tie a decision to it.
-  local runless='state: parked · source: run-step · parked at awaiting_approval: 2 finding(s) · ask-user: authority decision'
-  # The same shape owed the crewmate itself. The gate name is free text carried
-  # out of the run payload, so this one spells the whole marker inside it: a
-  # consumer that searched the verdict for those words instead of comparing a
-  # whole component for equality would read this lane as human-owed and take its
-  # ladder away.
-  local crewmate='state: parked · source: run-step · parked at fix_review (ask-user: authority decision follow-up): 2 finding(s) · run: 01RUNGATE'
-
-  window="test:fm-wedge"; key=$(printf '%s' "$window" | tr ':/.' '___')
-
-  # The log every case here shares: the crew escalated the gate's question and
-  # nobody has answered it yet, so its decision fold still holds one open
-  # `needs-decision`. That is the record of who was TOLD; the crew-state verdict
-  # above is the record of who OWES the answer, and the deferral needs both.
-  # The trailing `working:` note is what a crew appends next and does not close a
-  # decision, so it leaves the fold open while keeping the LAST line
-  # non-captain-relevant - the plain route into the wedge timer these cases want.
-  # The file is backdated well past the recheck cadence, and it is still not the
-  # record of when this wait began, so nothing about the recheck may be computed
-  # from its mtime.
-  local escalated='needs-decision [key=nm-01RUNGATE-review]: the gate raised an authority question
-working: still parked at that gate'
-  # An open decision too, but under a key that names no run: an unrelated
-  # question raised earlier in the same task and never closed. It says nothing
-  # about whether anyone was told about THIS gate.
-  local unrelated='needs-decision [key=earlier-question]: which changelog section fits
-working: still parked at that gate'
-
-  dir=$(wedge_threshold_fixture parked-gate-human "$escalated" 2000)
-  arm_parked_gate "$dir"
-  state="$dir/state"; fakebin="$dir/fakebin"; out="$dir/watch.out"; capture="$dir/pane.txt"
-  wedge_threshold_round "$state" "$fakebin" "$out" "$capture" "$window" "$human" exit \
-    || fail "a gate awaiting a human was never rechecked at the threshold: $(cat "$out")"
-  grep -F 'verified wait at a parked gate' "$out" >/dev/null \
-    || fail "the parked-gate recheck did not name its evidence: $(cat "$out")"
-  grep -F "awaiting firstmate's ask-user decision" "$out" >/dev/null \
-    || fail "the parked-gate recheck did not name firstmate as the one the wait is on: $(cat "$out")"
-  grep -F "decide the gate's ask-user finding and relay the decision to the crewmate" "$out" >/dev/null \
-    || fail "the parked-gate recheck did not name the action that clears the lane: $(cat "$out")"
-  grep -F 'awaiting the captain' "$out" >/dev/null \
-    && fail "the parked-gate recheck named the captain for a decision firstmate owns: $(cat "$out")"
-  grep -F 'confirm the wait still holds' "$out" >/dev/null \
-    && fail "a parked gate borrowed the external-wait action, which does not clear it: $(cat "$out")"
-  grep -F 'possible wedge' "$out" >/dev/null \
-    && fail "a gate awaiting a human was reported as a possible wedge: $(cat "$out")"
-  # No wait age is published, because no record of when this wait began exists:
-  # the status file is an unrelated line, and the idle window this deferral
-  # resets every pass would report the same small number forever.
-  grep -E ', waiting [0-9]+s' "$out" >/dev/null \
-    && fail "the parked-gate recheck published a wait age it has no record for: $(cat "$out")"
-  ack_stopped_cycle "$state" || fail "could not acknowledge the parked-gate recheck"
-
-  # Long cadence, not a ladder: every further threshold inside the cadence is
-  # absorbed whole, with no escalation counted and nothing queued.
-  queued=$(wedge_stale_wakes "$state" "$window")
-  n=1
-  while [ "$n" -le 3 ]; do
-    wedge_threshold_round "$state" "$fakebin" "$out" "$capture" "$window" "$human" absorb \
-      || fail "a gate awaiting a human wedge-escalated at threshold $n: $(cat "$out")"
-    n=$((n + 1))
-  done
-  [ "$(wedge_stale_wakes "$state" "$window")" -eq "$queued" ] \
-    || fail "a gate awaiting a human queued a further wake inside its recheck cadence: $(cat "$state/.wake-queue")"
-  [ ! -e "$state/.wedge-escalations-$key" ] \
-    || fail "a gate awaiting a human counted $(cat "$state/.wedge-escalations-$key") wedge escalation(s)"
-
-  # The other direction, and the whole reason the distinction is drawn: a gate
-  # the crewmate itself must answer keeps the unchanged schedule, reason and
-  # demand-deep-inspection wording.
-  dir=$(wedge_threshold_fixture parked-gate-crewmate "$escalated" 2000)
-  arm_parked_gate "$dir"
-  state="$dir/state"; fakebin="$dir/fakebin"; out="$dir/watch.out"; capture="$dir/pane.txt"
-  n=1
-  while [ "$n" -le 3 ]; do
-    wedge_threshold_round "$state" "$fakebin" "$out" "$capture" "$window" "$crewmate" exit \
-      || fail "a gate awaiting the crewmate stopped escalating at threshold $n: $(cat "$out")"
-    ack_stopped_cycle "$state" || fail "could not acknowledge crewmate-gate escalation $n"
-    grep -F "possible wedge, escalation $n" "$out" >/dev/null \
-      || fail "a gate awaiting the crewmate did not reach escalation $n: $(cat "$out")"
-    n=$((n + 1))
-  done
-  grep -F 'demand-deep-inspection: same pane has wedge-escalated 3 times in a row' "$out" >/dev/null \
-    || fail "a gate awaiting the crewmate lost the demand-deep-inspection wording: $(cat "$out")"
-  grep -F 'verified wait at a parked gate' "$out" >/dev/null \
-    && fail "a gate awaiting the crewmate was deferred as a wait on a human: $(cat "$out")"
-
-  # The wait is owed by firstmate, not the captain, so the captain-away silence
-  # does not apply: under away posture the supervision branch is the actor
-  # allowed to answer it, and it keeps the long recheck cadence throughout.
-  dir=$(wedge_threshold_fixture parked-gate-away "$escalated" 2000)
-  arm_parked_gate "$dir"
-  state="$dir/state"; fakebin="$dir/fakebin"; out="$dir/watch.out"; capture="$dir/pane.txt"
-  write_away_record "$state"
-  wedge_threshold_round "$state" "$fakebin" "$out" "$capture" "$window" "$human" exit \
-    || fail "a parked gate owed firstmate's decision was silenced while the away-posture record existed: $(cat "$out")"
-  grep -F "awaiting firstmate's ask-user decision" "$out" >/dev/null \
-    || fail "the away-posture parked-gate recheck did not name firstmate: $(cat "$out")"
-  grep -F 'possible wedge' "$out" >/dev/null \
-    && fail "an away-posture parked gate was reported as a possible wedge: $(cat "$out")"
-  grep -F 'never rechecked while the away-posture record exists' "$state/.watch-triage.log" >/dev/null \
-    && fail "a parked gate owed firstmate took the captain-away silence: $(cat "$state/.watch-triage.log")"
-  ack_stopped_cycle "$state" || fail "could not acknowledge the away-posture parked-gate recheck"
-  queued=$(wedge_stale_wakes "$state" "$window")
-  n=1
-  while [ "$n" -le 3 ]; do
-    wedge_threshold_round "$state" "$fakebin" "$out" "$capture" "$window" "$human" absorb \
-      || fail "an away-posture parked gate wedge-escalated at threshold $n: $(cat "$out")"
-    n=$((n + 1))
-  done
-  [ "$(wedge_stale_wakes "$state" "$window")" -eq "$queued" ] \
-    || fail "an away-posture parked gate queued a further wake inside its recheck cadence: $(cat "$state/.wake-queue")"
-  [ ! -e "$state/.wedge-escalations-$key" ] \
-    || fail "an away-posture parked gate counted $(cat "$state/.wedge-escalations-$key") wedge escalation(s)"
-
-  # An open decision under an unrelated key does not bind to this gate, so the
-  # lane keeps the unchanged ladder: nothing says anyone was told about it.
-  dir=$(wedge_threshold_fixture parked-gate-unrelated-key "$unrelated" 2000)
-  arm_parked_gate "$dir"
-  state="$dir/state"; fakebin="$dir/fakebin"; out="$dir/watch.out"; capture="$dir/pane.txt"
-  n=1
-  while [ "$n" -le 3 ]; do
-    wedge_threshold_round "$state" "$fakebin" "$out" "$capture" "$window" "$human" exit \
-      || fail "a gate with only an unrelated open decision stopped escalating at threshold $n: $(cat "$out")"
-    ack_stopped_cycle "$state" || fail "could not acknowledge unrelated-key escalation $n"
-    grep -F "possible wedge, escalation $n" "$out" >/dev/null \
-      || fail "a gate with only an unrelated open decision did not reach escalation $n: $(cat "$out")"
-    n=$((n + 1))
-  done
-  grep -F 'demand-deep-inspection: same pane has wedge-escalated 3 times in a row' "$out" >/dev/null \
-    || fail "a gate with only an unrelated open decision lost the demand-deep-inspection wording: $(cat "$out")"
-  grep -F 'verified wait at a parked gate' "$out" >/dev/null \
-    && fail "an unrelated open decision was read as this gate's wait: $(cat "$out")"
-
-  # A verdict naming no run cannot be bound to any decision, so it keeps the
-  # ladder even with the run-shaped key open.
-  dir=$(wedge_threshold_fixture parked-gate-runless "$escalated" 2000)
-  arm_parked_gate "$dir"
-  state="$dir/state"; fakebin="$dir/fakebin"; out="$dir/watch.out"; capture="$dir/pane.txt"
-  wedge_threshold_round "$state" "$fakebin" "$out" "$capture" "$window" "$runless" exit \
-    || fail "a runless human-owed gate never escalated: $(cat "$out")"
-  ack_stopped_cycle "$state" || fail "could not acknowledge the runless-gate escalation"
-  grep -F 'possible wedge, escalation 1' "$out" >/dev/null \
-    || fail "a runless human-owed gate did not take the unchanged ladder: $(cat "$out")"
-  pass "a gate awaiting firstmate's decision for its own run is rechecked on the long cadence in either posture, while a crewmate-owed gate, an unrelated open decision and a runless verdict keep the unchanged ladder"
-}
 
 # --- an unconfigured home behaves exactly as it did before this evidence -----
 # The parked-gate record is the one wait here that is not the worker's own
@@ -4243,58 +2691,6 @@ working: still parked at that gate'
 # arm must not even be reached: no current-state read is spent and no recheck
 # throttle is written. The fixture is byte-identical to the armed case above
 # except for the flag, so the difference is attributable to the flag alone.
-test_wedge_threshold_parked_gate_is_off_until_armed() {
-  local dir state fakebin out capture window key n unarmed_probes armed_probes
-  local human='state: parked · source: run-step · parked at awaiting_approval: 2 finding(s) · ask-user: authority decision · run: 01RUNGATE'
-  local escalated='needs-decision [key=nm-01RUNGATE-review]: the gate raised an authority question
-working: still parked at that gate'
-  window="test:fm-wedge"; key=$(printf '%s' "$window" | tr ':/.' '___')
-
-  dir=$(wedge_threshold_fixture parked-gate-unarmed "$escalated" 2000)
-  state="$dir/state"; fakebin="$dir/fakebin"; out="$dir/watch.out"; capture="$dir/pane.txt"
-  [ ! -e "$dir/config/wedge-defer-parked-gate" ] \
-    || fail "the unarmed fixture armed the flag, so it proves nothing"
-  export FM_FAKE_CREW_STATE_LOG="$dir/crew-state.calls"
-  : > "$FM_FAKE_CREW_STATE_LOG"
-  n=1
-  while [ "$n" -le 3 ]; do
-    wedge_threshold_round "$state" "$fakebin" "$out" "$capture" "$window" "$human" exit \
-      || fail "an unarmed home stopped escalating a parked gate at threshold $n: $(cat "$out")"
-    ack_stopped_cycle "$state" || fail "could not acknowledge unarmed-gate escalation $n"
-    grep -F "possible wedge, escalation $n" "$out" >/dev/null \
-      || fail "an unarmed home did not reach escalation $n: $(cat "$out")"
-    n=$((n + 1))
-  done
-  grep -F 'demand-deep-inspection: same pane has wedge-escalated 3 times in a row' "$out" >/dev/null \
-    || fail "an unarmed home lost the demand-deep-inspection wording: $(cat "$out")"
-  grep -F 'verified wait at a parked gate' "$out" >/dev/null \
-    && fail "an unarmed home deferred a parked gate: $(cat "$out")"
-  [ ! -e "$state/.waiting-resurfaced-$key" ] \
-    || fail "an unarmed home wrote the parked-gate recheck throttle"
-  unarmed_probes=$(wc -l < "$FM_FAKE_CREW_STATE_LOG" | tr -d ' ')
-  unset FM_FAKE_CREW_STATE_LOG
-
-  [ "$unarmed_probes" -eq 0 ] \
-    || fail "an unarmed home spent $unarmed_probes current-state read(s) on a parked gate over three thresholds"
-
-  # The same fixture with only the flag added, counted the same way, so the
-  # zero above is the flag's doing rather than a fixture that could never have
-  # reached the reader: one armed threshold must spend a read. A guard placed
-  # after the consult instead of before it would make both counts nonzero.
-  dir=$(wedge_threshold_fixture parked-gate-armed-probe-count "$escalated" 2000)
-  arm_parked_gate "$dir"
-  state="$dir/state"; fakebin="$dir/fakebin"; out="$dir/watch.out"; capture="$dir/pane.txt"
-  export FM_FAKE_CREW_STATE_LOG="$dir/crew-state.calls"
-  : > "$FM_FAKE_CREW_STATE_LOG"
-  wedge_threshold_round "$state" "$fakebin" "$out" "$capture" "$window" "$human" exit \
-    || fail "the armed control was never rechecked: $(cat "$out")"
-  ack_stopped_cycle "$state" || fail "could not acknowledge the armed control recheck"
-  armed_probes=$(wc -l < "$FM_FAKE_CREW_STATE_LOG" | tr -d ' ')
-  unset FM_FAKE_CREW_STATE_LOG
-  [ "$armed_probes" -gt 0 ] \
-    || fail "the armed control spent no current-state read, so the probe count proves nothing"
-  pass "with config/wedge-defer-parked-gate absent a parked gate keeps the unchanged ladder, wording and reads"
-}
 
 # --- a parked human-owed gate also needs the human to still owe an answer ----
 # The gate's findings table says who the answer is owed BY. It does not say the
@@ -4310,61 +2706,6 @@ working: still parked at that gate'
 # `needs-decision` therefore means the human was told and has not answered; its
 # absence means the outstanding move belongs to the crewmate, or that nobody was
 # ever told at all. Each of those keeps the unchanged schedule below.
-test_wedge_threshold_parked_gate_needs_an_unanswered_decision() {
-  local dir state fakebin out capture window key n
-  local human='state: parked · source: run-step · parked at awaiting_approval: 2 finding(s) · ask-user: authority decision · run: 01RUNGATE'
-  window="test:fm-wedge"; key=$(printf '%s' "$window" | tr ':/.' '___')
-
-  # Answered, not yet relayed. The gate verdict is byte-identical to the one the
-  # test above defers on; only the closing `resolved` line differs, and the
-  # `resolved:` verb is not captain-relevant, so this lane takes the same plain
-  # non-terminal route into the wedge timer as that one.
-  dir=$(wedge_threshold_fixture parked-gate-decided \
-    'needs-decision [key=nm-01RUNGATE-review]: the gate raised an authority question
-resolved [key=nm-01RUNGATE-review]: firstmate chose the second fix' 2000)
-  arm_parked_gate "$dir"
-  state="$dir/state"; fakebin="$dir/fakebin"; out="$dir/watch.out"; capture="$dir/pane.txt"
-  n=1
-  while [ "$n" -le 3 ]; do
-    wedge_threshold_round "$state" "$fakebin" "$out" "$capture" "$window" "$human" exit \
-      || fail "a decided-but-unrelayed gate stopped escalating at threshold $n: $(cat "$out")"
-    ack_stopped_cycle "$state" || fail "could not acknowledge decided-gate escalation $n"
-    grep -F "possible wedge, escalation $n" "$out" >/dev/null \
-      || fail "a decided-but-unrelayed gate did not reach escalation $n: $(cat "$out")"
-    n=$((n + 1))
-  done
-  grep -F 'demand-deep-inspection: same pane has wedge-escalated 3 times in a row' "$out" >/dev/null \
-    || fail "a decided-but-unrelayed gate lost the demand-deep-inspection wording: $(cat "$out")"
-  grep -F 'verified wait at a parked gate' "$out" >/dev/null \
-    && fail "a gate whose decision was already answered was deferred as a wait on the captain: $(cat "$out")"
-
-  # Parked at a human-owed gate, quiet, and the crewmate never escalated it: no
-  # human has been told, so there is no wait to defer to.
-  dir=$(wedge_threshold_fixture parked-gate-unescalated 'working: validation under way' 2000)
-  arm_parked_gate "$dir"
-  state="$dir/state"; fakebin="$dir/fakebin"; out="$dir/watch.out"; capture="$dir/pane.txt"
-  wedge_threshold_round "$state" "$fakebin" "$out" "$capture" "$window" "$human" exit \
-    || fail "a human-owed gate nobody was told about never escalated: $(cat "$out")"
-  ack_stopped_cycle "$state" || fail "could not acknowledge the unescalated-gate escalation"
-  grep -F 'possible wedge, escalation 1' "$out" >/dev/null \
-    || fail "a human-owed gate nobody was told about did not take the unchanged ladder: $(cat "$out")"
-
-  # An open `blocked` record is not an unanswered question: it is an obstacle the
-  # crew reported, and a different action clears it. A `blocked:` last line is
-  # captain-relevant, so this lane reaches the wedge timer through the
-  # overridden-terminal-status branch instead, which only ever sees a hash whose
-  # timer is already running - hence the fixture's fourth argument.
-  dir=$(wedge_threshold_fixture parked-gate-blocked \
-    'blocked [key=nm-01RUNGATE-review]: the fixture cannot reach its dependency' 2000 600)
-  arm_parked_gate "$dir"
-  state="$dir/state"; fakebin="$dir/fakebin"; out="$dir/watch.out"; capture="$dir/pane.txt"
-  wedge_threshold_round "$state" "$fakebin" "$out" "$capture" "$window" "$human" exit \
-    || fail "a human-owed gate with only a blocker open never escalated: $(cat "$out")"
-  ack_stopped_cycle "$state" || fail "could not acknowledge the blocked-gate escalation"
-  grep -F 'possible wedge, escalation 1' "$out" >/dev/null \
-    || fail "an open blocker was accepted as an unanswered gate decision: $(cat "$out")"
-  pass "a parked human-owed gate is deferred only while its decision is still open, so an answered-but-unrelayed gate, an unescalated one, and one holding only a blocker all keep the unchanged ladder"
-}
 
 # --- a wait record that does not carry every field is refused ----------------
 # wait_record joins its five fields with US and wedge_defer_wait parses them with
@@ -4404,6 +2745,7 @@ run_malformed_wait_record_round() {  # <name> <evidence-body>
       # deferral keeps the unchanged ladder rather than reading a backend this
       # child shell has none of.
       fm_backend_agent_state() { printf alive; }
+      crew_is_provably_working() { return 0; }
       eval "wedge_wait_evidence() { $2 ; }"
       wedge_timer_check "test:fm-wedge" "$FM_STATE_OVERRIDE/.stale-since-test_fm-wedge" \
         "non-terminal stale" "$FM_STATE_OVERRIDE/.wedge-escalations-test_fm-wedge" wedge \
@@ -4927,60 +3269,6 @@ test_identical_dead_display_of_a_successor_still_reports() {
 }
 
 
-# --- work the captain is already holding: pane churn must not re-alarm -------
-# The other record of a legitimate wait. The declared-wait bound above reads the
-# status LINE, and a delivered task's line stays `done: PR ...` while the wait
-# itself lives in the BACKLOG, written there by bin/fm-captain-hold.sh. No line
-# predicate can see that record, so both stale alarms - the captain-relevant one
-# and the inconclusive one - re-fired on every new pane hash for as long as the
-# captain was deciding, which is the 2026-09 loop observed on delivered work
-# awaiting their merge word.
-# Pinned here, in both directions: while the call stands the first sight still
-# alarms, further sights of the SAME call and status-log state are absorbed, and
-# a new pane hash after the window's end alarms once more; and the identical
-# fixture WITHOUT the hold keeps alarming on every hash, because a bound that
-# swallowed an unheld delivery or blocker would be worse than the churn it removes.
-#
-# The backlog is real rather than a fixture file: bin/fm-captain-hold.sh is the
-# only writer of a hold and tasks-axi the only reader, so a hand-written row
-# would pin this test's idea of a hold instead of the one the watcher consults.
-#
-# Cost: every case below drives churn through ONE watcher process rather than
-# relaunching per pane change. Watcher startup dominates a round here, and an
-# absorbing watcher stays in its poll loop across churn in production anyway, so
-# the cheaper shape is also the more faithful one.
-
-# The window key every hold fixture uses, derived the way fm-watch.sh derives it.
-hold_key() {
-  printf '%s' test:fm-held-merge | tr ':/.' '___'
-}
-
-# bin/fm-captain-hold.sh against a hold fixture's own home.
-run_hold() {  # <dir> <args...>
-  local dir=$1
-  shift
-  FM_HOME="$dir" FM_STATE_OVERRIDE="$dir/state" FM_DATA_OVERRIDE="$dir/data" \
-    FM_CONFIG_OVERRIDE="$dir/config" "$ROOT/bin/fm-captain-hold.sh" "$@" >/dev/null 2>&1
-}
-
-make_hold_home() {  # <name> <status-line> <hold|nohold>
-  local name=$1 line=$2 hold=$3 dir state
-  dir=$(make_case "$name"); state="$dir/state"
-  mkdir -p "$dir/data" "$dir/config"
-  fm_test_tasks_toml "$dir/.tasks.toml" || return 1
-  printf '## In flight\n\n## Queued\n\n## Done\n' > "$dir/data/backlog.md"
-  (cd "$dir" && tasks-axi add held-merge 'delivered work' --file data/backlog.md) >/dev/null 2>&1 \
-    || return 1
-  if [ "$hold" = hold ]; then
-    run_hold "$dir" hold held-merge --reason 'awaiting the captain on the merge' || return 1
-  fi
-  printf 'window=test:fm-held-merge\nkind=ship\nharness=grok\nbackend=tmux\n' \
-    > "$state/held-merge.meta"
-  printf '%s\n' "$line" > "$state/held-merge.status"
-  printf '%s' "$(seen_sig "$state/held-merge.status")" > "$state/.seen-held-merge_status"
-  printf '%s\n' "$dir"
-}
-
 # Launch one watcher against a hold fixture, armed the way parked_watch_round
 # arms one, plus the home the backlog read resolves against. The crew reads
 # stopped: a delivered worker's agent has exited, and that is the population
@@ -4988,138 +3276,17 @@ make_hold_home() {  # <name> <status-line> <hold|nohold>
 # stdout: a command substitution would background the watcher inside a subshell,
 # leaving the caller unable to wait on or reap its own watcher.
 HOLD_WATCH_PID=
-hold_watch_launch() {  # <dir> <out> <capture>
-  local dir=$1 out=$2 capture=$3
-  PATH="$dir/fakebin:$PATH" FM_FAKE_TMUX_WINDOW=test:fm-held-merge \
-    FM_FAKE_TMUX_CAPTURE="$capture" FM_FAKE_TMUX_CURRENT_COMMAND=zsh \
-    FM_FAKE_CREW_STATE='state: stopped · source: pane · bare shell' \
-    FM_WATCH_HANDLING_SUCCESSOR=1 \
-    FM_HOME="$dir" FM_DATA_OVERRIDE="$dir/data" FM_CONFIG_OVERRIDE="$dir/config" \
-    FM_STATE_OVERRIDE="$dir/state" FM_CREW_STATE_BIN="$dir/fakebin/fm-crew-state.sh" \
-    FM_PAUSE_RESURFACE_SECS="${FM_HOLD_PAUSE_RESURFACE_SECS:-999}" FM_POLL=1 FM_SIGNAL_GRACE=1 \
-    FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" >> "$out" 2>&1 &
-  HOLD_WATCH_PID=$!
-}
 
-# One sighting that must surface and exit the cycle.
-hold_watch_surface() {  # <dir> <out> <capture> <pane-text>
-  local dir=$1 out=$2 capture=$3 text=$4
-  printf '%s\n' "$text" > "$capture"
-  hold_watch_launch "$dir" "$out" "$capture"
-  wait_for_exit "$HOLD_WATCH_PID" 100 || { reap "$HOLD_WATCH_PID"; return 1; }
-  return 0
-}
-
-# <count> successive pane changes driven through ONE watcher, each given three
-# poll cycles: one to see the new hash, one to count it stable and classify, one
-# to prove the classification held. The watcher must stay in the loop throughout.
-hold_watch_churn() {  # <dir> <out> <capture> <label> <count>
-  local dir=$1 out=$2 capture=$3 label=$4 count=$5 i=1 c
-  local state="$dir/state"
-  printf '%s 0\n' "$label" > "$capture"
-  hold_watch_launch "$dir" "$out" "$capture"
-  while [ "$i" -le "$count" ]; do
-    printf '%s %s\n' "$label" "$i" > "$capture"
-    c=0
-    while [ "$c" -lt 3 ]; do
-      wait_poll_cycle "$state" "$HOLD_WATCH_PID" 300 \
-        || { reap "$HOLD_WATCH_PID"; return 1; }
-      c=$((c + 1))
-    done
-    i=$((i + 1))
-  done
-  reap "$HOLD_WATCH_PID"
-  return 0
-}
-
-hold_stale_wakes() {  # <state>
-  awk -F '\t' '$3 == "stale" && $4 == "test:fm-held-merge" { n++ } END { print n + 0 }' \
-    "$1/.wake-queue" 2>/dev/null || echo 0
-}
 
 # Both status lines a held task really carries: the delivery that routes through
 # the captain-relevant stale branch, and a worker line that routes through the
 # inconclusive one. The hold is invisible to the status line in both, so both
 # branches had the same blindness and both are covered.
-test_open_captain_call_bounds_stale_churn() {
-  local spec name line dir state out capture throttle wakes
-  command -v tasks-axi >/dev/null 2>&1 \
-    || { echo "skip: tasks-axi not found (captain-hold stale bound)"; return 0; }
-  for spec in \
-    'held-delivery|done: PR https://github.com/o/r/pull/1 checks green' \
-    'held-worker-line|working: still tidying the branch'
-  do
-    name=${spec%%|*}; line=${spec#*|}
-    dir=$(make_hold_home "$name" "$line" hold) \
-      || fail "[$name] could not build a captain-held backlog fixture"
-    state="$dir/state"; out="$dir/watch.out"; capture="$dir/pane.txt"
-    if [ "$name" = held-delivery ]; then
-      printf 'pr=https://github.com/o/r/pull/1\n' >> "$state/held-merge.meta"
-      fm_pr_poll_prepare "$state" held-merge github https://github.com/o/r/pull/1 github.com o/r 1 "$ROOT/bin/fm-pr-poll.sh" \
-        || fail "could not prepare the captain-held PR poll fixture"
-      fm_pr_poll_publish_prepared || fail "could not publish the captain-held PR poll fixture"
-      touch "$state/.last-check"
-    fi
-    throttle="$state/.paused-resurfaced-$(hold_key)"
-
-    # First sight still alarms: the call bounds repetition, never the first look.
-    hold_watch_surface "$dir" "$out" "$capture" 'idle, elapsed 1s' \
-      || fail "[$name] first sight of held work did not surface"
-    wakes=$(hold_stale_wakes "$state")
-    [ "$wakes" -eq 1 ] || fail "[$name] first sight produced $wakes wakes instead of one"
-    ack_stopped_cycle "$state" || fail "[$name] could not acknowledge the first surface"
-
-    # The pane churns while the SAME call stands. Every one of these alarmed.
-    hold_watch_churn "$dir" "$out" "$capture" 'idle, tick' 2 \
-      || fail "[$name] watcher exited during pane churn instead of supervising through it"
-    wakes=$(hold_stale_wakes "$state")
-    [ "$wakes" -eq 0 ] \
-      || fail "[$name] pane churn re-alarmed held work $wakes time(s) inside the re-surface window"
-
-    # After the window ends, the next new pane hash re-surfaces held work exactly
-    # once, so a forgotten call on a churning pane cannot hide behind the bound.
-    [ -e "$throttle" ] || fail "[$name] the absorbed churn recorded no re-surface cadence to elapse"
-    set_mtime "$(( $(date +%s) - 5000 ))" "$throttle"
-    hold_watch_surface "$dir" "$out" "$capture" 'idle, elapsed 9s' \
-      || fail "[$name] held work did not re-surface once its re-surface window elapsed"
-    wakes=$(hold_stale_wakes "$state")
-    [ "$wakes" -eq 1 ] \
-      || fail "[$name] elapsed re-surface window produced $wakes wakes instead of one"
-  done
-  pass "work under an open captain call surfaces once, absorbs pane churn, then re-surfaces when the window elapses"
-}
-
 
 
 # The other half of the same bound, and the one that decides whether widening the
 # wait was safe: the identical fixtures with NO hold must keep alarming on every
 # new hash, on both branches.
-test_stale_churn_without_a_captain_call_still_alarms() {
-  local spec name line dir state out capture round wakes
-  command -v tasks-axi >/dev/null 2>&1 \
-    || { echo "skip: tasks-axi not found (unheld stale alarm)"; return 0; }
-  for spec in \
-    'unheld-delivery|done: PR https://example.invalid/pull/1 checks green' \
-    'unheld-blocker|blocked: cannot reach the release host' \
-    'unheld-worker-line|working: still tidying the branch'
-  do
-    name=${spec%%|*}; line=${spec#*|}
-    dir=$(make_hold_home "$name" "$line" nohold) \
-      || fail "[$name] could not build an unheld backlog fixture"
-    state="$dir/state"; out="$dir/watch.out"; capture="$dir/pane.txt"
-    round=1
-    while [ "$round" -le 2 ]; do
-      hold_watch_surface "$dir" "$out" "$capture" "idle, elapsed ${round}s" \
-        || fail "[$name] an unheld stale window stopped alarming on round $round"
-      wakes=$(hold_stale_wakes "$state")
-      [ "$wakes" -eq 1 ] \
-        || fail "[$name] round $round produced $wakes wakes instead of one"
-      ack_stopped_cycle "$state" || fail "[$name] could not acknowledge round $round"
-      round=$((round + 1))
-    done
-  done
-  pass "a stale window with no open captain call keeps alarming on every new hash"
-}
 
 
 # The cadence marker may never outlive the wake it claims to record. Recording it
@@ -5127,38 +3294,6 @@ test_stale_churn_without_a_captain_call_still_alarms() {
 # append fails, the watcher exits with nothing queued, and the next sighting
 # reads that fresh marker and absorbs the retry. An unwritable queue is the real
 # failure, so it is the one this drives.
-test_failed_wake_append_does_not_arm_the_captain_hold_throttle() {
-  local dir state out capture wakes rc
-  command -v tasks-axi >/dev/null 2>&1 \
-    || { echo "skip: tasks-axi not found (failed wake append)"; return 0; }
-  dir=$(make_hold_home append-failure 'done: PR https://example.invalid/pull/1 checks green' hold) \
-    || fail "could not build a captain-held backlog fixture"
-  state="$dir/state"; out="$dir/watch.out"; capture="$dir/pane.txt"
-
-  # A directory where the queue file belongs: every append fails, whatever the
-  # caller does, so the watcher cannot publish the wake it just decided to send.
-  # Its exit code is read directly here because a refusing watcher exits NON-zero,
-  # which is the correct outcome and not the "surfaced" one hold_watch_surface means.
-  rm -f "$state/.wake-queue"
-  mkdir -p "$state/.wake-queue"
-  printf 'idle, elapsed 1s\n' > "$capture"
-  hold_watch_launch "$dir" "$out" "$capture"
-  wait_for_exit "$HOLD_WATCH_PID" 100
-  rc=$?
-  rmdir "$state/.wake-queue"
-  [ "$rc" -ne 124 ] || fail "the watcher did not exit when its durable queue could not be written"
-  [ "$rc" -ne 0 ] || fail "the watcher reported success despite an unwritable durable queue"
-  [ -e "$state/.paused-resurfaced-$(hold_key)" ] \
-    && fail "a wake that never reached the durable queue still armed the re-surface throttle"
-
-  # The retry must alarm: nothing was ever delivered, so nothing may be absorbed.
-  hold_watch_surface "$dir" "$out" "$capture" 'idle, elapsed 2s' \
-    || fail "the retry after a failed wake append was absorbed instead of alarming"
-  wakes=$(hold_stale_wakes "$state")
-  [ "$wakes" -eq 1 ] \
-    || fail "the retry after a failed wake append produced $wakes wakes instead of one"
-  pass "a wake that never reached the durable queue arms no re-surface throttle"
-}
 
 # The task id is not the captain call. A task can be answered with `--release`
 # and held again as a genuinely different call with NO status append, and binding
@@ -5168,43 +3303,13 @@ test_failed_wake_append_does_not_arm_the_captain_hold_throttle() {
 # waiting on the captain that is never surfaced is invisible.
 # Measured at base c499f84 this fixture alarms on every sighting, so the
 # suppression was introduced by the bound itself rather than pre-existing.
-test_reheld_captain_call_starts_its_own_resurface_window() {
-  local dir state out capture wakes
-  command -v tasks-axi >/dev/null 2>&1 \
-    || { echo "skip: tasks-axi not found (re-held captain call)"; return 0; }
-  dir=$(make_hold_home reheld-call 'done: PR https://example.invalid/pull/1 checks green' hold) \
-    || fail "could not build a captain-held backlog fixture"
-  state="$dir/state"; out="$dir/watch.out"; capture="$dir/pane.txt"
-
-  hold_watch_surface "$dir" "$out" "$capture" 'idle, elapsed 1s' \
-    || fail "first sight of the first captain call did not surface"
-  ack_stopped_cycle "$state" || fail "could not acknowledge the first call's surface"
-  hold_watch_churn "$dir" "$out" "$capture" 'idle, tick' 1 \
-    || fail "the first call's churn was not absorbed"
-  [ "$(hold_stale_wakes "$state")" -eq 0 ] \
-    || fail "the first call's churn re-alarmed inside its own window"
-
-  # Answer and release, then re-hold: a second, distinct captain call on the same
-  # task id, with no status append, so the status signature cannot tell them apart.
-  printf 'go ahead\n' > "$dir/decision.txt"
-  run_hold "$dir" answer held-merge --decision-file "$dir/decision.txt" --release \
-    || fail "could not record the captain's answer"
-  run_hold "$dir" hold held-merge --reason 'awaiting the captain a second time' \
-    || fail "could not re-hold the task as a second captain call"
-
-  hold_watch_surface "$dir" "$out" "$capture" 'idle, elapsed 3s' \
-    || fail "the second captain call inherited the first call's silence"
-  wakes=$(hold_stale_wakes "$state")
-  [ "$wakes" -eq 1 ] \
-    || fail "the second captain call produced $wakes first wakes instead of one"
-  pass "a released-then-re-held task is a distinct captain call whose first sight still alarms"
-}
-
 
 
 test_secondmate_paused_resurfaces_in_normal_mode() {
   local dir state fakebin out capture_file statusf window key pane_hash sig pid back
   dir=$(make_case secondmate-paused-resurface); state="$dir/state"; fakebin="$dir/fakebin"
+  mkdir -p "$dir/config"
+  printf "secondmate-held\n" > "$dir/config/secondmate-idle-checkins"
   out="$dir/watch.out"; capture_file="$dir/pane.txt"; statusf="$state/secondmate-held.status"
   window="test:fm-secondmate-held"
   printf 'idle awaiting external\n' > "$capture_file"
@@ -5220,7 +3325,7 @@ test_secondmate_paused_resurfaces_in_normal_mode() {
   printf '1\n' > "$state/.count-$key"
   export FM_FAKE_CREW_STATE='state: paused · source: status-log · awaiting the upstream release'
   PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
-    FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" FM_PAUSE_RESURFACE_SECS=240 FM_POLL=1 FM_SIGNAL_GRACE=1 \
+    FM_CONFIG_OVERRIDE="$dir/config" FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" FM_PAUSE_RESURFACE_SECS=240 FM_POLL=1 FM_SIGNAL_GRACE=1 \
     FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" &
   pid=$!
   wait_for_exit "$pid" 100 || fail "watcher did not re-surface a paused secondmate"
@@ -5239,6 +3344,8 @@ test_secondmate_paused_resurfaces_in_normal_mode() {
 test_secondmate_captain_held_resurfaces_in_normal_mode() {
   local dir state fakebin out capture_file statusf window key pane_hash sig pid back
   dir=$(make_case secondmate-held-resurface); state="$dir/state"; fakebin="$dir/fakebin"
+  mkdir -p "$dir/config"
+  printf "secondmate-hold\n" > "$dir/config/secondmate-idle-checkins"
   out="$dir/watch.out"; capture_file="$dir/pane.txt"; statusf="$state/secondmate-hold.status"
   window="test:fm-secondmate-hold"
   printf 'idle awaiting the captain\n' > "$capture_file"
@@ -5254,7 +3361,7 @@ test_secondmate_captain_held_resurfaces_in_normal_mode() {
   printf '1\n' > "$state/.count-$key"
   export FM_FAKE_CREW_STATE='state: unknown · source: none · no current-state source available'
   PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
-    FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" FM_PAUSE_RESURFACE_SECS=240 FM_POLL=1 FM_SIGNAL_GRACE=1 \
+    FM_CONFIG_OVERRIDE="$dir/config" FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" FM_PAUSE_RESURFACE_SECS=240 FM_POLL=1 FM_SIGNAL_GRACE=1 \
     FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" &
   pid=$!
   wait_for_exit "$pid" 100 || fail "watcher did not re-surface a captain-held secondmate"
@@ -5333,7 +3440,7 @@ test_nonterminal_stale_pause_transitions_reclassify_unchanged_hash() {
   export FM_FAKE_CREW_STATE='state: paused · source: status-log · awaiting the upstream release'
 
   PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
-    FM_FAKE_TMUX_CURRENT_COMMAND=zsh \
+    FM_FAKE_TMUX_CURRENT_COMMAND=grok \
     FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" FM_PAUSE_RESURFACE_SECS=999 FM_POLL=1 FM_SIGNAL_GRACE=1 \
     FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" &
   pid=$!
@@ -6639,302 +4746,6 @@ test_busy_pane_repeated_escalation_reaches_demand_deep_inspection() {
 # lifting the declaration on the SAME busy over-age pane restores the wedge
 # escalation, proving the discriminator is the worker's own declaration and not a
 # blanket silencing of the escalator (C).
-test_busy_declared_pause_is_rechecked_not_wedge_escalated() {
-  local dir state fakebin out capture_file window key sig pid statusf back
-  dir=$(make_case busy-declared-pause); state="$dir/state"; fakebin="$dir/fakebin"
-  out="$dir/watch.out"; capture_file="$dir/pane.txt"; window="test:fm-review-scout"
-  statusf="$state/review-scout.status"
-  printf 'Working... (7200.4s) lavish-axi poll' > "$capture_file"
-  printf 'window=%s\nkind=scout\nharness=pi\n' "$window" > "$state/review-scout.meta"
-  record_pi_busy "$state" review-scout
-  printf 'paused: hosting the Lavish review, awaiting captain feedback\n' > "$statusf"
-  sig=$(seen_sig "$statusf"); printf '%s' "$sig" > "$state/.seen-review-scout_status"
-  key=$(printf '%s' "$window" | tr ':/.' '___')
-  # No completed turn for hours (the single blocking poll call): age the spawn
-  # record itself, exactly as the never-completed-a-turn fixtures above do.
-  touch -t 200001010000 "$state/review-scout.meta"
-  backdate_pi_turn_start "$state" review-scout 4000
-  # No pre-seeded .hash-<key>: a live harness footer ticks, so every poll lands
-  # on the changed-hash branch - the review scout's real masking condition.
-
-  # Phase A: past the bound, with the wedge threshold set as low as it goes, the
-  # declared pause is absorbed on the long cadence and never starts a wedge.
-  PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
-    FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" \
-    FM_FAKE_CREW_STATE='state: working · source: pane · harness busy (pi-ext)' \
-    FM_BUSY_TURN_MAX_SECS=1 FM_STALE_ESCALATE_SECS=1 FM_PAUSE_RESURFACE_SECS=999 \
-    FM_POLL=1 FM_SIGNAL_GRACE=1 \
-    FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" &
-  pid=$!
-  wait_poll_cycle "$state" "$pid" || { reap "$pid"; fail "a declared pause on a busy review pane was escalated: $(cat "$out")"; }
-  reap "$pid"
-  [ ! -s "$out" ] || fail "a declared pause on a busy review pane printed a wake reason: $(cat "$out")"
-  [ -e "$state/.paused-$key" ] || fail "the busy-turn bound did not apply the declared-pause cadence"
-  [ ! -e "$state/.stale-since-$key" ] || fail "a declared pause on a busy pane started the wedge timer"
-  [ ! -e "$state/.wedge-escalations-$key" ] || fail "a declared pause on a busy pane incremented the escalation counter"
-  ack_stopped_cycle "$state" || fail "could not acknowledge the intentional declared-pause phase-A stop"
-
-  # Phase B: age the pause past the (now normal) long cadence and let the pane
-  # settle on one stable hash, so the still-busy pane takes the repeat-hash
-  # branch whose pause bookkeeping the bound must not wipe. It re-surfaces once
-  # as a recheck, never as a wedge.
-  back=$(( $(date +%s) - 500 ))
-  if [ "$(uname)" = Darwin ]; then touch -mt "$(date -r "$back" '+%Y%m%d%H%M.%S')" "$statusf"
-  else touch -m -d "@$back" "$statusf"; fi
-  sig=$(seen_sig "$statusf"); printf '%s' "$sig" > "$state/.seen-review-scout_status"
-  printf '%s' "$(hash_text "$(cat "$capture_file")")" > "$state/.hash-$key"
-  printf '1\n' > "$state/.count-$key"
-  : > "$out"
-  PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
-    FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" \
-    FM_FAKE_CREW_STATE='state: working · source: pane · harness busy (pi-ext)' \
-    FM_BUSY_TURN_MAX_SECS=1 FM_STALE_ESCALATE_SECS=1 FM_PAUSE_RESURFACE_SECS=240 \
-    FM_POLL=1 FM_SIGNAL_GRACE=1 \
-    FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" &
-  pid=$!
-  wait_for_exit "$pid" 100 || { reap "$pid"; fail "a declared pause past the long cadence was never rechecked"; }
-  grep -F "awaiting external" "$out" >/dev/null || fail "the recheck was not labeled a declared-pause recheck: $(cat "$out")"
-  grep -F "possible wedge" "$out" >/dev/null && fail "a declared pause on a busy pane was mislabeled a possible wedge: $(cat "$out")"
-  [ -e "$state/.paused-resurfaced-$key" ] || fail "the declared-pause re-surface throttle was cleared by the busy-turn bound"
-  [ ! -e "$state/.stale-since-$key" ] || fail "a declared-pause recheck used the wedge timer"
-  ack_stopped_cycle "$state" || fail "could not acknowledge the declared-pause recheck"
-
-  # Phase C: the pause is lifted on the SAME busy, over-age pane. Nothing else
-  # changes, so a still-absorbed pane here would mean the bound was silenced
-  # rather than taught the declaration. It must wedge-escalate exactly as before.
-  printf 'working: review closed, resuming the sweep\n' > "$statusf"
-  sig=$(seen_sig "$statusf"); printf '%s' "$sig" > "$state/.seen-review-scout_status"
-  : > "$out"
-  PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
-    FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" \
-    FM_FAKE_CREW_STATE='state: working · source: pane · harness busy (pi-ext)' \
-    FM_BUSY_TURN_MAX_SECS=1 FM_STALE_ESCALATE_SECS=999 FM_PAUSE_RESURFACE_SECS=999 \
-    FM_POLL=1 FM_SIGNAL_GRACE=1 \
-    FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" &
-  pid=$!
-  wait_poll_cycle "$state" "$pid" || { reap "$pid"; fail "a lifted pause escalated before the wedge threshold: $(cat "$out")"; }
-  reap "$pid"
-  [ -s "$state/.stale-since-$key" ] || fail "a lifted pause did not restore the busy-turn wedge timer"
-  [ ! -e "$state/.paused-$key" ] || fail "a lifted pause left stale declared-pause bookkeeping behind"
-  ack_stopped_cycle "$state" || fail "could not acknowledge the intentional lifted-pause priming stop"
-
-  echo $(( $(date +%s) - 500 )) > "$state/.stale-since-$key"
-  : > "$out"
-  PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
-    FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" \
-    FM_FAKE_CREW_STATE='state: working · source: pane · harness busy (pi-ext)' \
-    FM_BUSY_TURN_MAX_SECS=1 FM_STALE_ESCALATE_SECS=240 FM_PAUSE_RESURFACE_SECS=999 \
-    FM_POLL=1 FM_SIGNAL_GRACE=1 \
-    FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" &
-  pid=$!
-  wait_for_exit "$pid" 100 || { reap "$pid"; fail "a lifted pause on an over-age busy pane no longer wedge-escalates"; }
-  grep -F "possible wedge" "$out" >/dev/null || fail "the restored busy-turn escalation did not flag a possible wedge: $(cat "$out")"
-  pass "a busy pane under a declared pause is rechecked on the long cadence, and lifting the pause restores the wedge escalation"
-}
-
-# --- declared pause + busy pane + AWAY MODE: the bound must hand off, not decorate
-# Away mode is daemon-owned: the watcher reverts to one-shot and lets the daemon
-# classify. The busy-turn bound used to be the one stale path that ignored that,
-# running the wedge timer under afk and handing the daemon a wake already decorated
-# as a possible wedge. That decoration outranks the daemon's own pause verdict, so a
-# crew that declared the wait itself was wedge-escalated once per
-# FM_STALE_ESCALATE_SECS for as long as the wait lasted, with the escalation count
-# climbing into demand-deep-inspection on a pane nobody needed to inspect.
-# Phase A pins the handoff: the plain window identity, no wedge timer, no escalation
-# counter, and no normal-mode pause bookkeeping (the daemon owns that in away mode).
-# Phase B re-arms on the same unchanged pane and pins the one-shot: a second wake
-# here is what the climbing ladder looked like. Phase C drives the discriminator
-# apart on the SAME afk, busy, over-age pane - lifting the declaration restores the
-# wedge escalation, so this is the worker's declaration being honored rather than
-# away mode silencing the escalator.
-test_afk_busy_declared_pause_hands_off_plain_stale() {
-  local dir state fakebin out capture_file window key sig pid statusf
-  dir=$(make_case afk-busy-declared-pause); state="$dir/state"; fakebin="$dir/fakebin"
-  out="$dir/watch.out"; capture_file="$dir/pane.txt"; window="test:fm-afk-review-scout"
-  statusf="$state/afk-review-scout.status"
-  printf 'Working... (7200.4s) lavish-axi poll' > "$capture_file"
-  printf 'window=%s\nkind=scout\nharness=pi\n' "$window" > "$state/afk-review-scout.meta"
-  record_pi_busy "$state" afk-review-scout
-  printf 'paused: hosting the Lavish review, awaiting captain feedback\n' > "$statusf"
-  sig=$(seen_sig "$statusf"); printf '%s' "$sig" > "$state/.seen-afk-review-scout_status"
-  key=$(printf '%s' "$window" | tr ':/.' '___')
-  touch -t 200001010000 "$state/afk-review-scout.meta"
-  backdate_pi_turn_start "$state" afk-review-scout 4000
-  date '+%s' > "$state/.afk"
-
-  # Phase A: past the bound, with the wedge threshold as low as it goes, the
-  # declaration is handed to the daemon undecorated instead of being wedge-timed.
-  PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
-    FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" \
-    FM_FAKE_CREW_STATE='state: working · source: pane · harness busy (pi-ext)' \
-    FM_BUSY_TURN_MAX_SECS=1 FM_STALE_ESCALATE_SECS=1 FM_PAUSE_RESURFACE_SECS=999 \
-    FM_POLL=0.2 FM_SIGNAL_GRACE=1 \
-    FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" &
-  pid=$!
-  wait_for_exit "$pid" 150 || { reap "$pid"; fail "the away-mode busy-turn bound never handed the declared pause to the daemon"; }
-  grep -Fx "stale: $window" "$out" >/dev/null \
-    || fail "the away-mode busy-turn bound did not hand off the plain window identity: $(cat "$out")"
-  grep -F "possible wedge" "$out" >/dev/null \
-    && fail "away mode decorated a declared pause as a possible wedge: $(cat "$out")"
-  [ ! -e "$state/.stale-since-$key" ] \
-    || fail "the away-mode handoff started the wedge timer on a declared pause"
-  [ ! -e "$state/.wedge-escalations-$key" ] \
-    || fail "the away-mode handoff incremented the wedge escalation count on a declared pause"
-  [ ! -e "$state/.paused-$key" ] \
-    || fail "the away-mode handoff recorded normal-mode pause tracking instead of leaving it to the daemon"
-  ack_stopped_cycle "$state" || fail "could not acknowledge the away-mode declared-pause handoff"
-
-  # Phase B: re-arm on the same unchanged pane. The bound has already handed this
-  # stale hash off, so it must stay silent rather than re-waking the daemon - a
-  # second wake here is the escalation ladder the wedge timer used to climb.
-  : > "$out"
-  PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
-    FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" \
-    FM_FAKE_CREW_STATE='state: working · source: pane · harness busy (pi-ext)' \
-    FM_BUSY_TURN_MAX_SECS=1 FM_STALE_ESCALATE_SECS=1 FM_PAUSE_RESURFACE_SECS=999 \
-    FM_POLL=0.2 FM_SIGNAL_GRACE=1 \
-    FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" &
-  pid=$!
-  wait_poll_cycle "$state" "$pid" || { reap "$pid"; fail "the away-mode bound re-woke on an already-handed-off declared pause: $(cat "$out")"; }
-  reap "$pid"
-  [ ! -s "$out" ] || fail "the away-mode bound re-surfaced an already-handed-off declared pause: $(cat "$out")"
-  [ ! -e "$state/.wedge-escalations-$key" ] \
-    || fail "re-arming on an unchanged declared pause started a wedge escalation ladder"
-  ack_stopped_cycle "$state" || fail "could not acknowledge the intentional away-mode re-arm stop"
-
-  # Phase C: lift the declaration on the SAME afk, busy, over-age pane. Nothing else
-  # changes, so a wedge escalation here proves the declaration was the discriminator.
-  printf 'working: resumed the review write-up\n' > "$statusf"
-  sig=$(seen_sig "$statusf"); printf '%s' "$sig" > "$state/.seen-afk-review-scout_status"
-  echo $(( $(date +%s) - 500 )) > "$state/.stale-since-$key"
-  : > "$out"
-  PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
-    FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" \
-    FM_FAKE_CREW_STATE='state: working · source: pane · harness busy (pi-ext)' \
-    FM_BUSY_TURN_MAX_SECS=1 FM_STALE_ESCALATE_SECS=240 FM_PAUSE_RESURFACE_SECS=999 \
-    FM_POLL=0.2 FM_SIGNAL_GRACE=1 \
-    FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" &
-  pid=$!
-  wait_for_exit "$pid" 150 || { reap "$pid"; fail "a lifted pause on an away-mode over-age busy pane no longer wedge-escalates"; }
-  grep -F "possible wedge" "$out" >/dev/null \
-    || fail "the restored away-mode busy-turn escalation did not flag a possible wedge: $(cat "$out")"
-  pass "away mode hands a busy declared pause to the daemon as a plain stale, and lifting the declaration restores the wedge escalation"
-}
-
-# --- declared pause + busy pane + AWAY MODE + a TICKING footer: one wake per declaration
-# The static-pane case above cannot tell a hash-keyed one-shot from a
-# declaration-keyed one, because its capture never changes between polls. The
-# incident pane's harness footer ticks on every capture, so a one-shot keyed on the
-# pane hash re-fires on every poll, and the daemon, which relaunches the watcher
-# after each handled wake, is woken in a loop for the whole declared wait. This
-# fixture's fake tmux renders a fresh footer on EVERY capture-pane and asserts that
-# divergence outright on every re-arm (.hash-<key> moves, .count-<key> never
-# climbs), so the one-wake assertion across five silent re-arms cannot pass
-# vacuously on a pane that happened to sit still. Round 1 also starts from an
-# undeclared wedge timer and escalation count, which the handoff must clear the
-# way the normal-mode absorber does, so lifting the declaration later starts the
-# wedge path from a fresh timer rather than resuming a stale count.
-test_afk_busy_declared_pause_ticking_pane_hands_off_once() {
-  local dir state fakebin out drain_out window key sig pid statusf ticks round prev_hash cur_hash prev_ticks
-  dir=$(make_case afk-busy-declared-pause-ticking); state="$dir/state"; fakebin="$dir/fakebin"
-  out="$dir/watch.out"; drain_out="$dir/drain.out"; window="test:fm-afk-ticking-scout"
-  statusf="$state/afk-ticking-scout.status"; ticks="$dir/ticks"
-  cat > "$fakebin/tmux" <<'SH'
-#!/usr/bin/env bash
-set -u
-case "${1:-}" in
-  list-windows)
-    [ -n "${FM_FAKE_TMUX_WINDOW:-}" ] && printf '%s\n' "${FM_FAKE_TMUX_WINDOW#*:}"
-    exit 0 ;;
-  capture-pane)
-    n=$(( $(cat "$FM_FAKE_TMUX_TICKS" 2>/dev/null || echo 0) + 1 ))
-    echo "$n" > "$FM_FAKE_TMUX_TICKS"
-    printf 'Working... (%d.%ds) lavish-axi poll' "$(( 7200 + n ))" "$(( n % 10 ))"
-    exit 0 ;;
-  display-message)
-    case "$*" in
-      *pane_current_command*) printf '%s\n' "${FM_FAKE_TMUX_CURRENT_COMMAND:-}"; exit 0 ;;
-    esac ;;
-esac
-exit 1
-SH
-  chmod +x "$fakebin/tmux"
-  printf 'window=%s\nkind=scout\nharness=pi\n' "$window" > "$state/afk-ticking-scout.meta"
-  record_pi_busy "$state" afk-ticking-scout
-  printf 'paused: hosting the Lavish review, awaiting captain feedback\n' > "$statusf"
-  sig=$(seen_sig "$statusf"); printf '%s' "$sig" > "$state/.seen-afk-ticking-scout_status"
-  key=$(printf '%s' "$window" | tr ':/.' '___')
-  touch -t 200001010000 "$state/afk-ticking-scout.meta"
-  backdate_pi_turn_start "$state" afk-ticking-scout 4000
-  date '+%s' > "$state/.afk"
-  # An undeclared busy phase already ran the wedge timer and escalated twice
-  # before the crew declared the wait.
-  echo $(( $(date +%s) - 500 )) > "$state/.stale-since-$key"
-  printf '2\n' > "$state/.wedge-escalations-$key"
-  date +%s > "$state/.writing-since-$key"
-
-  # Round 1: the declaration is handed off once, undecorated, and the undeclared
-  # phase's wedge bookkeeping is cleared with it.
-  PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_TICKS="$ticks" \
-    FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" \
-    FM_FAKE_CREW_STATE='state: working · source: pane · harness busy (pi-ext)' \
-    FM_BUSY_TURN_MAX_SECS=1 FM_STALE_ESCALATE_SECS=1 FM_PAUSE_RESURFACE_SECS=999 \
-    FM_POLL=0.2 FM_SIGNAL_GRACE=1 \
-    FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" &
-  pid=$!
-  wait_for_exit "$pid" 150 || { reap "$pid"; fail "the away-mode busy-turn bound never handed a ticking declared pause to the daemon"; }
-  grep -Fx "stale: $window" "$out" >/dev/null \
-    || fail "the away-mode busy-turn bound did not hand off the plain window identity for a ticking pane: $(cat "$out")"
-  grep -F "possible wedge" "$out" >/dev/null \
-    && fail "away mode decorated a ticking declared pause as a possible wedge: $(cat "$out")"
-  [ ! -e "$state/.stale-since-$key" ] \
-    || fail "the away-mode handoff left the undeclared phase's wedge timer in place"
-  [ ! -e "$state/.wedge-escalations-$key" ] \
-    || fail "the away-mode handoff left the undeclared phase's escalation count in place"
-  [ ! -e "$state/.writing-since-$key" ] \
-    || fail "the away-mode handoff left the undeclared phase's write-deferral chain in place"
-  [ ! -e "$state/.paused-$key" ] \
-    || fail "the away-mode handoff recorded normal-mode pause tracking on a ticking pane"
-  ack_stopped_cycle "$state" || fail "could not acknowledge the ticking declared-pause handoff"
-
-  # Rounds 2-6: five consecutive re-arms on the same standing declaration. Every
-  # capture renders a new footer, so every poll lands on the changed-hash branch -
-  # the exact shape a hash-keyed one-shot re-fires on. Each round proves the pane
-  # really moved before it asserts silence, so the case cannot go vacuous.
-  round=2
-  while [ "$round" -le 6 ]; do
-    prev_hash=$(cat "$state/.hash-$key" 2>/dev/null || true)
-    prev_ticks=$(cat "$ticks" 2>/dev/null || echo 0)
-    : > "$out"
-    PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_TICKS="$ticks" \
-      FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" \
-      FM_FAKE_CREW_STATE='state: working · source: pane · harness busy (pi-ext)' \
-      FM_BUSY_TURN_MAX_SECS=1 FM_STALE_ESCALATE_SECS=1 FM_PAUSE_RESURFACE_SECS=999 \
-      FM_POLL=0.2 FM_SIGNAL_GRACE=1 \
-      FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" &
-    pid=$!
-    wait_poll_cycle "$state" "$pid" || { reap "$pid"; fail "re-arm $round on a ticking declared pause re-woke the daemon: $(cat "$out")"; }
-    reap "$pid"
-    cur_hash=$(cat "$state/.hash-$key" 2>/dev/null || true)
-    [ "$(cat "$ticks" 2>/dev/null || echo 0)" -gt "$prev_ticks" ] \
-      || fail "re-arm $round never captured the pane, so its silence proves nothing"
-    [ -n "$cur_hash" ] && [ "$cur_hash" != "$prev_hash" ] \
-      || fail "re-arm $round saw the same pane hash as the round before, so it cannot tell a hash-keyed one-shot from a declaration-keyed one"
-    [ "$(cat "$state/.count-$key" 2>/dev/null || echo missing)" = 0 ] \
-      || fail "re-arm $round settled on a stable hash instead of ticking on every poll"
-    [ ! -s "$out" ] || fail "re-arm $round re-surfaced a standing declared pause on a ticking pane: $(cat "$out")"
-    [ ! -e "$state/.stale-since-$key" ] \
-      || fail "re-arm $round started the wedge timer on a standing declared pause"
-    [ ! -e "$state/.wedge-escalations-$key" ] \
-      || fail "re-arm $round climbed the wedge escalation ladder on a standing declared pause"
-    ack_stopped_cycle "$state" || fail "could not acknowledge the intentional re-arm $round stop"
-    round=$((round + 1))
-  done
-  FM_STATE_OVERRIDE="$state" "$DRAIN" > "$drain_out" 2>/dev/null || true
-  grep "$(printf '\tstale\t')" "$drain_out" >/dev/null \
-    && fail "the silent re-arms still queued a stale row for the standing declaration: $(cat "$drain_out")"
-  pass "away mode wakes the daemon once per declaration for a busy pane whose footer ticks on every capture"
-}
 
 # Behavioral proof that the production default (no FM_BUSY_TURN_MAX_SECS override
 # anywhere in this env) is 3600s: a completed turn 5 minutes old must not start a
@@ -7011,7 +4822,7 @@ test_nonterminal_stale_repairs_missing_or_corrupt_timer() {
   printf '%s' "$pane_hash" > "$state/.stale-$key"
 
   PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
-    FM_STATE_OVERRIDE="$state" FM_STALE_ESCALATE_SECS=999 FM_POLL=1 FM_SIGNAL_GRACE=1 \
+    FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" FM_FAKE_CREW_STATE="state: working · source: run-step · synthetic active execution" FM_STATE_OVERRIDE="$state" FM_STALE_ESCALATE_SECS=999 FM_POLL=1 FM_SIGNAL_GRACE=1 \
     FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" &
   pid=$!
   wait_numeric_file "$state/.stale-since-$key" 30 || { reap "$pid"; fail "matching stale suppressor with missing timer did not initialize stale-since"; }
@@ -7026,7 +4837,7 @@ test_nonterminal_stale_repairs_missing_or_corrupt_timer() {
   printf 'corrupt\n' > "$state/.stale-since-$key"
   : > "$out"
   PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
-    FM_STATE_OVERRIDE="$state" FM_STALE_ESCALATE_SECS=999 FM_POLL=1 FM_SIGNAL_GRACE=1 \
+    FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" FM_FAKE_CREW_STATE="state: working · source: run-step · synthetic active execution" FM_STATE_OVERRIDE="$state" FM_STALE_ESCALATE_SECS=999 FM_POLL=1 FM_SIGNAL_GRACE=1 \
     FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" &
   pid=$!
   wait_numeric_file "$state/.stale-since-$key" 30 || { reap "$pid"; fail "matching stale suppressor with corrupt timer did not repair stale-since"; }
@@ -7076,7 +4887,7 @@ test_wedge_escalation_deferred_while_worktree_is_written() {
   # Phase A: the crew wrote a file after the idle window opened. Deferred.
   printf 'int main(void) { return 0; }\n' > "$wt/src/main.c"
   PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
-    FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" FM_STALE_ESCALATE_SECS=240 \
+    FM_FAKE_CREW_STATE="state: working · source: run-step · synthetic active execution" FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" FM_STALE_ESCALATE_SECS=240 \
     FM_PAUSE_RESURFACE_SECS=999 FM_POLL=1 FM_SIGNAL_GRACE=1 \
     FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" &
   pid=$!
@@ -7099,7 +4910,7 @@ test_wedge_escalation_deferred_while_worktree_is_written() {
   set_mtime "$back" "$state/.stale-since-$key"
   : > "$out"
   PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
-    FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" FM_STALE_ESCALATE_SECS=240 \
+    FM_FAKE_CREW_STATE="state: working · source: run-step · synthetic active execution" FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" FM_STALE_ESCALATE_SECS=240 \
     FM_PAUSE_RESURFACE_SECS=999 FM_POLL=1 FM_SIGNAL_GRACE=1 \
     FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" &
   pid=$!
@@ -7112,49 +4923,6 @@ test_wedge_escalation_deferred_while_worktree_is_written() {
   FM_STATE_OVERRIDE="$state" "$DRAIN" > "$drain_out" 2>/dev/null || fail "drain after the stalled-crew escalation failed"
   grep "$(printf '\tstale\t')" "$drain_out" | grep -F "$window" >/dev/null || fail "the stalled-crew escalation was not queued"
   pass "a quiet pane writing its own worktree is deferred, while one writing nothing still wedge-escalates on the unchanged schedule"
-}
-
-# A deferral is not silence. A worktree can churn without real progress (a
-# rewritten log, a build touching the same file), so the whole deferral chain ages
-# and re-surfaces once per PAUSE_RESURFACE_SECS - the same bounded cadence a
-# declared pause uses - labeled as a recheck rather than a wedge.
-test_write_deferral_resurfaces_on_the_bounded_cadence() {
-  local dir state fakebin out drain_out capture_file window key pane_hash sig pid wt back
-  dir=$(make_case wedge-worktree-resurface); state="$dir/state"; fakebin="$dir/fakebin"
-  out="$dir/watch.out"; drain_out="$dir/drain.out"; capture_file="$dir/pane.txt"
-  window="test:fm-churn"; wt="$dir/wt"
-  mkdir -p "$wt/src"
-  printf 'idle building output' > "$capture_file"
-  printf 'window=%s\nkind=ship\nworktree=%s\n' "$window" "$wt" > "$state/churn.meta"
-  printf 'working: implementing\n' > "$state/churn.status"
-  sig=$(seen_sig "$state/churn.status"); printf '%s' "$sig" > "$state/.seen-churn_status"
-  key=$(printf '%s' "$window" | tr ':/.' '___')
-  pane_hash=$(hash_text "idle building output")
-  printf '%s' "$pane_hash" > "$state/.hash-$key"
-  printf '1\n' > "$state/.count-$key"
-  printf '%s' "$pane_hash" > "$state/.stale-$key"
-  back=$(( $(date +%s) - 500 ))
-  echo "$back" > "$state/.stale-since-$key"
-  set_mtime "$back" "$state/.stale-since-$key"
-  # This pane has been deferring on write evidence for 500s already.
-  : > "$state/.writing-since-$key"
-  set_mtime "$back" "$state/.writing-since-$key"
-  printf 'churn\n' > "$wt/src/main.c"
-
-  PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
-    FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" FM_STALE_ESCALATE_SECS=240 \
-    FM_PAUSE_RESURFACE_SECS=240 FM_POLL=1 FM_SIGNAL_GRACE=1 \
-    FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" &
-  pid=$!
-  wait_for_exit "$pid" 100 || fail "a long-running write deferral never re-surfaced on the bounded cadence"
-  grep -F "stale: $window" "$out" >/dev/null || fail "the write-deferral recheck did not print a stale wake"
-  grep -F "writing its worktree" "$out" >/dev/null || fail "the write-deferral recheck was not labeled as such"
-  grep -F "possible wedge" "$out" >/dev/null && fail "a write-deferral recheck was mislabeled a possible wedge"
-  [ -e "$state/.writing-resurfaced-$key" ] || fail "the write-deferral re-surface throttle marker was not recorded"
-  [ ! -e "$state/.wedge-escalations-$key" ] || fail "a write-deferral recheck advanced the wedge escalation counter"
-  FM_STATE_OVERRIDE="$state" "$DRAIN" > "$drain_out" 2>/dev/null || fail "drain after the write-deferral recheck failed"
-  grep "$(printf '\tstale\t')" "$drain_out" | grep -F "$window" >/dev/null || fail "the write-deferral recheck was not queued"
-  pass "a write deferral re-surfaces once on the bounded pause cadence, so a churning worktree cannot stay invisible"
 }
 
 # The worktree recorded for a secondmate is a provisioned firstmate home, and that
@@ -7239,7 +5007,7 @@ test_timer_repair_drops_a_finished_write_deferral_chain() {
   printf 'corrupt\n' > "$state/.stale-since-$key"
 
   PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
-    FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" \
+    FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" FM_FAKE_CREW_STATE="state: working · source: run-step · synthetic active execution" FM_STATE_OVERRIDE="$state" \
     FM_STALE_ESCALATE_SECS=240 FM_PAUSE_RESURFACE_SECS=240 FM_POLL=1 FM_SIGNAL_GRACE=1 \
     FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" &
   pid=$!
@@ -7263,7 +5031,7 @@ test_timer_repair_drops_a_finished_write_deferral_chain() {
   printf 'int main(void) { return 0; }\n' > "$wt/src/main.c"
   : > "$out"
   PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
-    FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" \
+    FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" FM_FAKE_CREW_STATE="state: working · source: run-step · synthetic active execution" FM_STATE_OVERRIDE="$state" \
     FM_STALE_ESCALATE_SECS=240 FM_PAUSE_RESURFACE_SECS=240 FM_POLL=1 FM_SIGNAL_GRACE=1 \
     FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" &
   pid=$!
@@ -7320,8 +5088,8 @@ test_terminal_first_sight_drops_a_finished_write_deferral_chain() {
   reap "$pid"
   ack_stopped_cycle "$state" || fail "could not acknowledge the intentional first-sight absorb stop"
 
-  # Same pane, first sight again, but nothing overrides the status line now, so it
-  # surfaces. That path drops the idle-window timer, so it must drop the chain too.
+  # With no active execution, the same completed pane stays silent while
+  # discarding the old timer and write-deferral chain.
   rm -f "$state/.stale-$key" "$state/.stale-since-$key"
   printf '1\n' > "$state/.count-$key"
   : > "$state/.writing-since-$key"
@@ -7333,12 +5101,13 @@ test_terminal_first_sight_drops_a_finished_write_deferral_chain() {
     FM_STALE_ESCALATE_SECS=999 FM_PAUSE_RESURFACE_SECS=240 FM_POLL=1 FM_SIGNAL_GRACE=1 \
     FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" &
   pid=$!
-  wait_for_exit "$pid" 100 || fail "a first-sight captain-relevant status was not surfaced"
-  grep -F "stale: $window" "$out" >/dev/null || fail "the first-sight surface did not print a stale wake"
-  [ ! -e "$state/.writing-since-$key" ] \
-    || fail "the first-sight surface kept a finished write-deferral chain"
+  wait_poll_cycle "$state" "$pid" || { reap "$pid"; fail "completed pane raised a first-sight idle wake"; }
+  reap "$pid"
+  [ ! -s "$out" ] && [ ! -s "$state/.wake-queue" ] || fail "completed pane queued an idle check-in"
+  [ ! -e "$state/.writing-since-$key" ] || fail "completed pane kept a finished write-deferral chain"
   unset FM_FAKE_CREW_STATE
-  pass "both first-sight paths through a captain-relevant status drop a finished write-deferral chain with the idle window"
+  pass "active and completed first-sight panes both discard an earlier write-deferral chain"
+
 }
 
 # --- triage debug log stays size capped -------------------------------------
@@ -7996,38 +5765,6 @@ test_afk_present_reverts_watcher_to_one_shot() {
 # A paused pane can first appear as a changed hash. In AFK mode that initial path
 # must still hand off the plain window identity to the daemon, rather than running
 # the normal-mode pause re-surface and decorating the stale identity.
-test_afk_paused_changed_pane_hands_off_plain_stale() {
-  local dir state fakebin out drain_out capture_file statusf window key sig pid back
-  dir=$(make_case afk-paused-changed-pane); state="$dir/state"; fakebin="$dir/fakebin"
-  out="$dir/watch.out"; drain_out="$dir/drain.out"; capture_file="$dir/pane.txt"
-  window="test:fm-afk-held"
-  printf 'idle, awaiting upstream\n' > "$capture_file"
-  printf 'window=%s\nkind=ship\n' "$window" > "$state/afk-held.meta"
-  statusf="$state/afk-held.status"
-  printf 'paused: awaiting the upstream tool release\n' > "$statusf"
-  back=$(( $(date +%s) - 500 ))
-  if [ "$(uname)" = Darwin ]; then touch -mt "$(date -r "$back" '+%Y%m%d%H%M.%S')" "$statusf"
-  else touch -m -d "@$back" "$statusf"; fi
-  sig=$(seen_sig "$statusf"); printf '%s' "$sig" > "$state/.seen-afk-held_status"
-  date '+%s' > "$state/.afk"
-  key=$(printf '%s' "$window" | tr '.:/' '___')
-
-  # Deliberately do not seed .hash-*: this is the changed-pane path that used to
-  # call handle_paused_stale before AFK's one-shot daemon handoff.
-  PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
-    FM_FAKE_CREW_STATE='state: paused · source: status-log · awaiting the upstream tool release' \
-    FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" FM_PAUSE_RESURFACE_SECS=240 FM_POLL=0.2 FM_SIGNAL_GRACE=1 \
-    FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" &
-  pid=$!
-  wait_for_exit "$pid" 100 || fail "AFK paused changed pane did not hand off a stale wake"
-  grep -Fx "stale: $window" "$out" >/dev/null || fail "AFK paused stale did not preserve its plain window identity: $(cat "$out")"
-  grep -F "awaiting external" "$out" >/dev/null && fail "AFK watcher decorated a stale identity instead of handing it to the daemon"
-  [ ! -e "$state/.paused-$key" ] || fail "AFK watcher recorded normal-mode pause tracking instead of handing off"
-  FM_STATE_OVERRIDE="$state" "$DRAIN" > "$drain_out" 2>/dev/null || fail "drain after AFK paused stale failed"
-  grep "$(printf '\tstale\t')" "$drain_out" | grep -F "stale: $window" >/dev/null \
-    || fail "AFK paused stale was not queued with the plain window identity"
-  pass "AFK changed paused panes hand off plain stale identities for daemon-owned pause triage"
-}
 
 # --- the away-posture record: captain-held items are never rechecked ----------
 # While state/.afk-contract exists (bin/fm-afk-contract.sh) nobody is there to
@@ -8056,6 +5793,8 @@ archive_away_record() {  # <state>
 test_captain_held_never_rechecked_while_away_record_exists() {
   local dir state fakebin out capture_file statusf window key pane_hash sig pid back
   dir=$(make_case away-record-held-secondmate); state="$dir/state"; fakebin="$dir/fakebin"
+  mkdir -p "$dir/config"
+  printf "secondmate-hold\n" > "$dir/config/secondmate-idle-checkins"
   out="$dir/watch.out"; capture_file="$dir/pane.txt"; statusf="$state/secondmate-hold.status"
   window="test:fm-secondmate-hold"
   printf 'idle awaiting the captain\n' > "$capture_file"
@@ -8074,7 +5813,7 @@ test_captain_held_never_rechecked_while_away_record_exists() {
   # Phase A: the record exists, the hold is well past the cadence, and the
   # watcher still absorbs it across whole poll cycles: no wake, no throttle.
   PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
-    FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" FM_PAUSE_RESURFACE_SECS=240 FM_POLL=1 FM_SIGNAL_GRACE=1 \
+    FM_CONFIG_OVERRIDE="$dir/config" FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" FM_PAUSE_RESURFACE_SECS=240 FM_POLL=1 FM_SIGNAL_GRACE=1 \
     FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" &
   pid=$!
   if ! wait_poll_cycle "$state" "$pid" || ! wait_poll_cycle "$state" "$pid"; then
@@ -8091,7 +5830,7 @@ test_captain_held_never_rechecked_while_away_record_exists() {
   archive_away_record "$state"
   : > "$out"
   PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
-    FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" FM_PAUSE_RESURFACE_SECS=240 FM_POLL=1 FM_SIGNAL_GRACE=1 \
+    FM_CONFIG_OVERRIDE="$dir/config" FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" FM_PAUSE_RESURFACE_SECS=240 FM_POLL=1 FM_SIGNAL_GRACE=1 \
     FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" &
   pid=$!
   wait_for_exit "$pid" 100 || { reap "$pid"; fail "archiving the away-posture record did not restore the captain-held recheck"; }
@@ -8113,6 +5852,8 @@ write_quiet_record() {  # <state>
 test_captain_held_rechecked_under_a_quiet_record() {
   local dir state fakebin out capture_file statusf window key back pid
   dir=$(make_case quiet-record-held); state="$dir/state"; fakebin="$dir/fakebin"
+  mkdir -p "$dir/config"
+  printf "secondmate-hold\n" > "$dir/config/secondmate-idle-checkins"
   out="$dir/watch.out"; capture_file="$dir/pane.txt"; statusf="$state/secondmate-hold.status"
   window="test:fm-secondmate-hold"
   printf 'idle awaiting the captain\n' > "$capture_file"
@@ -8128,7 +5869,7 @@ test_captain_held_rechecked_under_a_quiet_record() {
   write_quiet_record "$state"
   export FM_FAKE_CREW_STATE='state: unknown · source: none · no current-state source available'
   PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
-    FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" FM_PAUSE_RESURFACE_SECS=240 FM_POLL=1 FM_SIGNAL_GRACE=1 \
+    FM_CONFIG_OVERRIDE="$dir/config" FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" FM_PAUSE_RESURFACE_SECS=240 FM_POLL=1 FM_SIGNAL_GRACE=1 \
     FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" &
   pid=$!
   wait_for_exit "$pid" 100 || { reap "$pid"; fail "a captain-held item was not rechecked beside quiet mode's record"; }
@@ -8150,92 +5891,16 @@ test_captain_held_rechecked_under_a_quiet_record() {
   printf 'quiet\n' > "$state/.afk"
   write_quiet_record "$state"
   PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
-    FM_FAKE_TMUX_CURRENT_COMMAND=zsh \
-    FM_STATE_OVERRIDE="$state" FM_POLL=1 FM_SIGNAL_GRACE=1 \
-    FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" &
-  pid=$!
-  wait_for_exit "$pid" 100 || { reap "$pid"; fail "the quiet daemon's one-shot never handed off a captain-held pane"; }
-  grep -F "stale: $window" "$state/.wake-queue" >/dev/null \
-    || fail "the quiet daemon's one-shot did not queue the captain-held pane for the daemon: $(cat "$state/.wake-queue" 2>/dev/null)"
-  pass "quiet mode's record silences no captain-held recheck, on the watcher's cadence or through a quiet daemon's one-shot"
-}
-
-test_live_captain_held_first_sight_silenced_by_away_record() {
-  local dir state fakebin out capture_file statusf window key sig pid
-  dir=$(make_case away-record-held-live); state="$dir/state"; fakebin="$dir/fakebin"
-  out="$dir/watch.out"; capture_file="$dir/pane.txt"; statusf="$state/held-live.status"
-  window="test:fm-held-live"
-  printf 'parked at the decision gate\n' > "$capture_file"
-  printf 'window=%s\nkind=ship\nharness=grok\nbackend=tmux\n' "$window" > "$state/held-live.meta"
-  printf 'captain-held [key=route]: tracked by task-decision-route\n' > "$statusf"
-  set_mtime "$(( $(date +%s) - 500 ))" "$statusf"
-  sig=$(seen_sig "$statusf"); printf '%s' "$sig" > "$state/.seen-held-live_status"
-  key=$(printf '%s' "$window" | tr '.:/' '___')
-  write_away_record "$state"
-  # A LIVE agent at a gate held past the cadence: without the record its first
-  # sight is a captain-held recheck, so only the record keeps it quiet.
-  export FM_FAKE_CREW_STATE='state: unknown · source: none · no current-state source available'
-  PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
     FM_FAKE_TMUX_CURRENT_COMMAND=grok \
-    FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" FM_PAUSE_RESURFACE_SECS=240 FM_POLL=1 FM_SIGNAL_GRACE=1 \
+    FM_CONFIG_OVERRIDE="$dir/config" FM_STATE_OVERRIDE="$state" FM_POLL=1 FM_SIGNAL_GRACE=1 \
     FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" &
   pid=$!
-  if ! wait_poll_cycle "$state" "$pid" || ! wait_poll_cycle "$state" "$pid" || ! wait_poll_cycle "$state" "$pid"; then
-    reap "$pid"; fail "a live captain-held pane surfaced on first sight while the away-posture record exists: $(cat "$out")"
-  fi
-  [ ! -s "$state/.wake-queue" ] || fail "a live captain-held pane was queued while the away-posture record exists"
-  [ -e "$state/.stale-$key" ] || fail "the silenced first sight did not advance the stale suppressor"
-  grep -F 'never rechecked while the away-posture record exists' "$state/.watch-triage.log" >/dev/null \
-    || fail "the silent absorb did not name the away-posture rule in the triage log"
+  wait_poll_cycle "$state" "$pid" || { reap "$pid"; fail "quiet mode raised an ordinary-worker idle check-in"; }
   reap "$pid"
-  unset FM_FAKE_CREW_STATE
-  pass "a live captain-held pane past the cadence is absorbed on first sight while the away-posture record exists"
+  [ ! -s "$out" ] && [ ! -s "$state/.wake-queue" ] || fail "quiet mode queued an ordinary held pane"
+  pass "quiet mode retains opted-in mate rechecks while ordinary held workers stay silent"
 }
 
-test_backlog_hold_never_rechecked_while_away_record_exists() {
-  local dir out capture wakes
-  command -v tasks-axi >/dev/null 2>&1 \
-    || { echo "skip: tasks-axi not found (away-record backlog hold)"; return 0; }
-  dir=$(make_hold_home away-record-backlog-hold 'done: PR https://example.test/pr/9 checks green' hold) \
-    || fail "could not build the backlog-hold fixture"
-  out="$dir/watch.out"; capture="$dir/pane.txt"
-  write_away_record "$dir/state"
-  # Without the record the FIRST sight of a held delivery alarms
-  # (test_stale_churn_without_a_captain_call_still_alarms and its siblings). With
-  # it, even the first sight and every later hash are absorbed.
-  hold_watch_churn "$dir" "$out" "$capture" 'held delivery, pane tick' 3 \
-    || fail "watcher exited while churning a backlog-held delivery under the away-posture record: $(cat "$out")"
-  wakes=$(hold_stale_wakes "$dir/state")
-  [ "$wakes" -eq 0 ] || fail "a backlog-held delivery was rechecked $wakes time(s) while the away-posture record exists"
-  pass "a delivery the captain already holds is never rechecked while the away-posture record exists"
-}
-
-test_afk_one_shot_never_hands_off_captain_held_under_away_record() {
-  local dir state fakebin out capture_file statusf window key sig pid
-  dir=$(make_case away-record-held-afk-oneshot); state="$dir/state"; fakebin="$dir/fakebin"
-  out="$dir/watch.out"; capture_file="$dir/pane.txt"; statusf="$state/held-afk.status"
-  window="test:fm-held-afk"
-  printf 'idle awaiting the captain\n' > "$capture_file"
-  printf 'window=%s\nkind=ship\nharness=grok\nbackend=tmux\n' "$window" > "$state/held-afk.meta"
-  printf 'captain-held [key=route]: tracked by task-decision-route\n' > "$statusf"
-  sig=$(seen_sig "$statusf"); printf '%s' "$sig" > "$state/.seen-held-afk_status"
-  key=$(printf '%s' "$window" | tr '.:/' '___')
-  date '+%s' > "$state/.afk"
-  write_away_record "$state"
-  PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
-    FM_FAKE_TMUX_CURRENT_COMMAND=zsh \
-    FM_STATE_OVERRIDE="$state" FM_POLL=1 FM_SIGNAL_GRACE=1 \
-    FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" &
-  pid=$!
-  if ! wait_poll_cycle "$state" "$pid" || ! wait_poll_cycle "$state" "$pid" || ! wait_poll_cycle "$state" "$pid"; then
-    reap "$pid"; fail "the daemon-owned one-shot handed off a captain-held pane while the away-posture record exists: $(cat "$out")"
-  fi
-  [ ! -s "$state/.wake-queue" ] || fail "the daemon-owned one-shot queued a captain-held pane while the away-posture record exists"
-  [ "$(cat "$state/.stale-$key" 2>/dev/null || true)" = "$(hash_text 'idle awaiting the captain')" ] \
-    || fail "the silenced one-shot did not advance the stale suppressor to the pane hash"
-  reap "$pid"
-  pass "the daemon-owned one-shot never hands off a captain-held pane while the away-posture record exists"
-}
 
 # --- declared waits are condition-aware: `until <UTC ISO 8601>` --------------
 # A paused: line naming when the wait clears is rechecked at that time when it
@@ -8244,6 +5909,8 @@ test_afk_one_shot_never_hands_off_captain_held_under_away_record() {
 paused_until_fixture() {  # <name> <until-epoch> <status-age-secs>
   local name=$1 until=$2 age=$3 dir state statusf window key back
   dir=$(make_case "$name"); state="$dir/state"
+  mkdir -p "$dir/config"
+  printf "until\n" > "$dir/config/secondmate-idle-checkins"
   window="test:fm-until"
   statusf="$state/until.status"
   printf 'idle, waiting for the reset\n' > "$dir/pane.txt"
@@ -8263,7 +5930,7 @@ until_watch() {  # <dir> <cadence> -> pid in UNTIL_PID
   local dir=$1
   PATH="$dir/fakebin:$PATH" FM_FAKE_TMUX_WINDOW=test:fm-until FM_FAKE_TMUX_CAPTURE="$dir/pane.txt" \
     FM_FAKE_CREW_STATE='state: unknown · source: none · no current-state source available' \
-    FM_STATE_OVERRIDE="$dir/state" FM_CREW_STATE_BIN="$dir/fakebin/fm-crew-state.sh" \
+    FM_CONFIG_OVERRIDE="$dir/config" FM_STATE_OVERRIDE="$dir/state" FM_CREW_STATE_BIN="$dir/fakebin/fm-crew-state.sh" \
     FM_PAUSE_RESURFACE_SECS="$2" FM_POLL=1 FM_SIGNAL_GRACE=1 \
     FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$dir/watch.out" 2>&1 &
   UNTIL_PID=$!
@@ -8362,7 +6029,7 @@ test_paused_bg_job_without_until_stays_silent_after_the_job_ends() {
   pass "without until, a worker paused on its own ended background job is not rechecked inside the cadence"
 }
 
-test_paused_bg_job_until_timeout_rechecks_after_the_job_ends() {
+test_paused_bg_job_until_timeout_stays_silent_after_the_job_ends() {
   local dir state started
   started=$(date +%s)
   dir=$(bg_job_paused_case bg-job-until-running \
@@ -8376,20 +6043,12 @@ test_paused_bg_job_until_timeout_rechecks_after_the_job_ends() {
     "paused [key=nightly-build] [at=$started]: nightly build (background job, 120s timeout); resume when it ends, until $(iso_utc_at "$(( started + 120 ))")")
   state="$dir/state"
   printf '[bg failed] nightly build - Exited with code 1' > "$dir/pane.txt"
-  parked_watch_round "$state" "$dir/fakebin" "$dir/watch.out" "$dir/pane.txt" test:fm-parked exit \
-    || fail "the job's timeout passed without a recheck of the worker paused on it"
-  [ "$(bg_job_stale_wakes "$state")" -eq 1 ] || fail "the passed timeout queued the wrong number of rechecks"
-  awk -F '\t' '$3 == "stale" && $4 == "test:fm-parked" && index($5, "the declared clearing time has passed") > 0 { found = 1 } END { exit !found }' \
-    "$state/.wake-queue" || fail "the recheck carried an unexpected reason: $(cat "$state/.wake-queue")"
-  case "$(cat "$state/.paused-resurfaced-test_fm-parked" 2>/dev/null)" in
-    *:due) ;;
-    *) fail "the recheck was not recorded as the passed declared time" ;;
-  esac
-  ack_stopped_cycle "$state" || fail "could not acknowledge the due recheck"
-  printf '[bg failed] nightly build - Exited with code 1 (idle)' > "$dir/pane.txt"
   parked_watch_round "$state" "$dir/fakebin" "$dir/watch.out" "$dir/pane.txt" test:fm-parked absorb \
-    || fail "the due recheck repeated instead of returning to the cadence"
-  pass "until set to a background job's timeout rechecks the worker paused on it once the job must have ended"
+    || fail "an expired ordinary-worker wait raised an idle recheck"
+  [ "$(bg_job_stale_wakes "$state")" -eq 0 ] || fail "the passed timeout queued an idle recheck"
+  [ ! -e "$state/.paused-resurfaced-test_fm-parked" ] || fail "the passed timeout armed a recheck cadence"
+  pass "an ordinary worker stays silent after its declared job timeout, including repeated pane changes"
+
 }
 
 # The recorded Claude background-task exit picker. The footer is the last
@@ -8405,16 +6064,6 @@ write_exit_picker() {  # <file>
     'Enter to confirm · Esc to cancel' > "$1"
 }
 
-# The same words quoted above a normal composer. That is not a live picker.
-write_quoted_exit_picker() {  # <file>
-  printf '%s\n' \
-    'Background work is running' \
-    '❯ 1. Exit and stop tasks' \
-    'Enter to confirm · Esc to cancel' \
-    '╭──────────────╮' \
-    '│ > next steer │' \
-    '╰──────────────╯' > "$1"
-}
 
 prime_picker_window() {  # <state> <id> <window> <kind> <capture> <status-line>
   local state=$1 id=$2 window=$3 kind=$4 capture=$5 status_line=$6 key statusf
@@ -8428,31 +6077,6 @@ prime_picker_window() {  # <state> <id> <window> <kind> <capture> <status-line>
   printf '%s' "$key"
 }
 
-test_exit_picker_stale_names_the_dialog() {
-  local dir state fakebin out capture_file window key pid count_file
-  dir=$(make_case exit-picker-stale); state="$dir/state"; fakebin="$dir/fakebin"
-  out="$dir/watch.out"; capture_file="$dir/pane.txt"; count_file="$dir/captures"
-  window="test:fm-picker"
-  write_exit_picker "$capture_file"
-  key=$(prime_picker_window "$state" picker "$window" ship "$capture_file" 'working: parked between turns')
-  printf '0\n' > "$count_file"
-  export FM_FAKE_CREW_STATE='state: unknown · source: none · no current-state source available'
-  PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
-    FM_FAKE_TMUX_CAPTURE_COUNT_FILE="$count_file" \
-    FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" FM_STALE_ESCALATE_SECS=999 \
-    FM_POLL=1 FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" &
-  pid=$!
-  wait_for_exit "$pid" 100 || fail "watcher did not surface a pane parked on the exit picker: $(cat "$out")"
-  grep -F "stale: $window" "$out" >/dev/null || fail "the picker wake was not a stale wake: $(cat "$out")"
-  grep -F 'blocked-on-prompt: Claude background-task exit picker' "$out" >/dev/null \
-    || fail "the picker wake did not name the dialog: $(cat "$out")"
-  grep -F 'possible wedge' "$out" >/dev/null && fail "the first picker stale was labeled a wedge: $(cat "$out")"
-  [ "$(cat "$count_file")" -eq 1 ] || fail "the picker poll captured the pane $(cat "$count_file") times"
-  [ "$(cat "$state/.stale-$key" 2>/dev/null || true)" = "$(hash_text "$(cat "$capture_file")")" ] \
-    || fail "the picker stale did not record the pane hash"
-  unset FM_FAKE_CREW_STATE
-  pass "a pane on the exit picker is a named stale, from the one capture the poll already takes"
-}
 
 test_exit_picker_wedge_keeps_climbing() {
   local dir state fakebin out capture_file window key pid n
@@ -8504,24 +6128,6 @@ test_exit_picker_wedge_keeps_climbing() {
   pass "a pane on the exit picker keeps the wedge ladder, and the name follows demand-deep-inspection"
 }
 
-test_quoted_exit_picker_stays_ordinary_stale() {
-  local dir state fakebin out capture_file window pid
-  dir=$(make_case quoted-exit-picker); state="$dir/state"; fakebin="$dir/fakebin"
-  out="$dir/watch.out"; capture_file="$dir/pane.txt"
-  window="test:fm-quoted"
-  write_quoted_exit_picker "$capture_file"
-  prime_picker_window "$state" quoted "$window" ship "$capture_file" 'working: parked between turns' >/dev/null
-  export FM_FAKE_CREW_STATE='state: unknown · source: none · no current-state source available'
-  PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
-    FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" FM_STALE_ESCALATE_SECS=999 \
-    FM_POLL=1 FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" &
-  pid=$!
-  wait_for_exit "$pid" 100 || fail "a quoted picker did not take the ordinary stale path: $(cat "$out")"
-  grep -Fx "stale: $window" "$out" >/dev/null || fail "a quoted picker was not an ordinary stale: $(cat "$out")"
-  grep -F 'blocked-on-prompt' "$out" >/dev/null && fail "a quoted picker was named as a dialog: $(cat "$out")"
-  unset FM_FAKE_CREW_STATE
-  pass "picker text quoted above a composer stays an ordinary stale"
-}
 
 test_secondmate_exit_picker_stays_quiet() {
   local dir state fakebin out capture_file window pid count_file
@@ -8551,27 +6157,191 @@ test_secondmate_exit_picker_stays_quiet() {
 # The away daemon saved this name while the picker was up. Once the pane leaves
 # it, the same capture the stale path already takes has to drop the name, or
 # the persistence line would still say the dialog is open.
-test_closed_exit_picker_drops_saved_dialog_name() {
-  local dir state fakebin out capture_file window pid
-  dir=$(make_case exit-picker-closed); state="$dir/state"; fakebin="$dir/fakebin"
-  out="$dir/watch.out"; capture_file="$dir/pane.txt"
-  window="test:fm-picker-closed"
-  printf 'idle at the prompt\n' > "$capture_file"
-  prime_picker_window "$state" closer "$window" ship "$capture_file" 'working: parked between turns' >/dev/null
-  printf '%s' 'Claude background-task exit picker' > "$state/.subsuper-dialog-closer"
-  export FM_FAKE_CREW_STATE='state: unknown · source: none · no current-state source available'
-  PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
-    FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" FM_STALE_ESCALATE_SECS=999 \
-    FM_POLL=1 FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" &
-  pid=$!
-  wait_for_exit "$pid" 100 || fail "a closed picker did not take the ordinary stale path: $(cat "$out")"
-  grep -Fx "stale: $window" "$out" >/dev/null || fail "a closed picker was not an ordinary stale: $(cat "$out")"
-  grep -F 'blocked-on-prompt' "$out" >/dev/null && fail "a closed picker was still named as a dialog: $(cat "$out")"
-  [ ! -e "$state/.subsuper-dialog-closer" ] || fail "a closed picker left the saved dialog name"
-  unset FM_FAKE_CREW_STATE
-  pass "a closed picker drops the saved dialog name, and the stale stays ordinary"
+
+
+# Synthetic executable regressions: old status events have already been seen.
+# Prime two stable observations, age every wait past its cadence, then change
+# the pane twice. Listing ordinary workers must never override the ban.
+test_idle_workers_stay_quiet() {
+  local spec kind verb mode dir state fakebin out pane window key hash pid round
+  local scanned=0 defects=0 harness
+  for spec in ship:paused:normal scout:paused:normal ship:done:normal scout:done:normal \
+    ship:working:normal ship:paused:afk scout:done:afk ship:captain-held:normal ship:paused:busy; do
+    kind=${spec%%:*}; spec=${spec#*:}; verb=${spec%%:*}; mode=${spec##*:}
+    dir=$(make_case "idle-policy-$kind-$verb-$mode"); state="$dir/state"; fakebin="$dir/fakebin"
+    out="$dir/watch.out"; pane="$dir/pane.txt"; window=test:fm-idle; key=test_fm-idle
+    mkdir -p "$dir/config"
+    printf 'idle\n' > "$dir/config/secondmate-idle-checkins"
+    harness=grok
+    [ "$mode" != busy ] || harness=pi
+    printf 'window=%s\nkind=%s\nharness=%s\n' "$window" "$kind" "$harness" > "$state/idle.meta"
+    if [ "$mode" = busy ]; then
+      record_pi_busy "$state" idle
+      backdate_pi_turn_start "$state" idle 500
+      set_mtime "$(( $(date +%s) - 500 ))" "$state/idle.meta"
+    fi
+    printf '%s [at=%s]: waiting until 2000-01-01T00:00Z\n' "$verb" "$(( $(date +%s) - 2000 ))" > "$state/idle.status"
+    prime_status_seen "$state" "$state/idle.status"
+    [ "$mode" != afk ] || touch "$state/.afk"
+    for round in 1 2 3; do
+      printf 'idle pane tick %s\n' "$round" > "$pane"
+      hash=$(hash_text "$(cat "$pane")")
+      printf '%s' "$hash" > "$state/.hash-$key"
+      printf '1\n' > "$state/.count-$key"
+      FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$pane" FM_FAKE_TMUX_CURRENT_COMMAND=grok \
+        FM_FAKE_CREW_STATE="state: $verb · source: status-log · synthetic idle" \
+        watch_bg "$state" "$fakebin" "$out" env FM_PAUSE_RESURFACE_SECS=1 FM_STALE_ESCALATE_SECS=1 FM_BUSY_TURN_MAX_SECS=1
+      pid=$!
+      if ! wait_poll_cycle "$state" "$pid"; then
+        defects=$((defects + 1)); reap "$pid"; break
+      fi
+      reap "$pid"
+      [ ! -s "$out" ] && [ ! -s "$state/.wake-queue" ] \
+        || { defects=$((defects + 1)); break; }
+      ack_stopped_cycle "$state" || fail "could not acknowledge synthetic quiet cycle"
+    done
+    scanned=$((scanned + 1))
+  done
+  printf 'synthetic idle policy: cases=%s cases_with_idle_wakes=%s\n' "$scanned" "$defects"
+  [ "$defects" -eq 0 ] || fail "$defects ordinary idle cases woke firstmate"
+  pass "ships and scouts stay silent across expired waits, completion, away mode and repeated pane changes"
 }
 
+test_secondmate_checkins_require_exact_opt_in() {
+  local entry dir state fakebin out pane pid expected
+  for entry in absent empty other mate; do
+    dir=$(make_case "idle-mate-$entry"); state="$dir/state"; fakebin="$dir/fakebin"
+    out="$dir/watch.out"; pane="$dir/pane.txt"
+    mkdir -p "$dir/config"
+    case "$entry" in
+      absent) ;;
+      empty) : > "$dir/config/secondmate-idle-checkins" ;;
+      other) printf 'mate-other\n' > "$dir/config/secondmate-idle-checkins" ;;
+      mate) printf 'mate\n' > "$dir/config/secondmate-idle-checkins" ;;
+    esac
+    printf 'window=test:fm-mate\nkind=secondmate\nharness=grok\n' > "$state/mate.meta"
+    printf 'paused [at=1000000000]: awaiting external\n' > "$state/mate.status"
+    prime_status_seen "$state" "$state/mate.status"
+    printf 'idle mate\n' > "$pane"
+    printf '%s' "$(hash_text "idle mate")" > "$state/.hash-test_fm-mate"
+    printf '1\n' > "$state/.count-test_fm-mate"
+    FM_FAKE_TMUX_WINDOW=test:fm-mate FM_FAKE_TMUX_CAPTURE="$pane" \
+      FM_FAKE_CREW_STATE='state: paused · source: status-log · synthetic mate' \
+      watch_bg "$state" "$fakebin" "$out" env FM_PAUSE_RESURFACE_SECS=1
+    pid=$!
+    if [ "$entry" = mate ]; then
+      wait_for_exit "$pid" 100 || fail "listed secondmate lost its check-in"
+      grep -F 'stale: test:fm-mate' "$out" >/dev/null || fail "listed mate emitted no recheck"
+    else
+      wait_poll_cycle "$state" "$pid" || { reap "$pid"; fail "$entry mate config woke: $(cat "$out")"; }
+      reap "$pid"
+      [ ! -s "$out" ] && [ ! -s "$state/.wake-queue" ] || fail "$entry mate config queued a check-in"
+    fi
+  done
+  pass "secondmate check-ins require an exact ID in this home's opt-in file"
+}
+
+# Exercise loss independently of idle classification and pane capture.
+test_paused_worker_dead_endpoint_still_wakes() {
+  local dir state fakebin out pane pid
+  dir=$(make_case idle-dead-endpoint); state="$dir/state"; fakebin="$dir/fakebin"
+  out="$dir/watch.out"; pane="$dir/pane.txt"
+  printf 'window=test:fm-dead\nkind=scout\nharness=grok\n' > "$state/dead.meta"
+  printf 'paused: external wait\n' > "$state/dead.status"
+  prime_status_seen "$state" "$state/dead.status"
+  : > "$pane"
+  FM_FAKE_TMUX_WINDOW=test:fm-dead FM_FAKE_TMUX_CAPTURE="$pane" FM_FAKE_TMUX_CURRENT_COMMAND=zsh \
+    FM_FAKE_TMUX_CAPTURE_FAIL_AFTER=0 FM_FAKE_TMUX_CAPTURE_COUNT_FILE="$dir/captures" \
+    FM_FAKE_CREW_STATE='state: paused · source: status-log · synthetic dead endpoint' \
+    watch_bg "$state" "$fakebin" "$out"
+  pid=$!
+  wait_for_exit "$pid" 100 || fail "paused dead endpoint was swallowed by idle suppression"
+  grep -F 'agent dead' "$out" >/dev/null || fail "dead endpoint lost its recovery reason: $(cat "$out")"
+  pass "endpoint loss still wakes for a paused scout even when capture fails"
+}
+
+test_finished_run_drops_its_wedge_timer() {
+  local dir state fakebin out pane window key hash pid verdict
+  for verdict in 'done' parked; do
+    dir=$(make_case "idle-finished-run-$verdict"); state="$dir/state"; fakebin="$dir/fakebin"
+    out="$dir/watch.out"; pane="$dir/pane.txt"; window=test:fm-finished; key=test_fm-finished
+    printf 'window=%s\nkind=ship\nharness=grok\n' "$window" > "$state/finished.meta"
+    printf 'done: branch ready\n' > "$state/finished.status"
+    prime_status_seen "$state" "$state/finished.status"
+    printf 'idle after run\n' > "$pane"
+    hash=$(hash_text 'idle after run')
+    printf '%s' "$hash" > "$state/.hash-$key"
+    printf '%s' "$hash" > "$state/.stale-$key"
+    printf '1\n' > "$state/.count-$key"
+    printf '%s\n' "$(( $(date +%s) - 500 ))" > "$state/.stale-since-$key"
+    FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$pane" FM_FAKE_TMUX_CURRENT_COMMAND=grok \
+      FM_FAKE_CREW_STATE="state: $verdict · source: run-step · synthetic completed execution" \
+      watch_bg "$state" "$fakebin" "$out"
+    pid=$!
+    wait_poll_cycle "$state" "$pid" || { reap "$pid"; fail "$verdict inherited an active run's wedge: $(cat "$out")"; }
+    reap "$pid"
+    [ ! -e "$state/.stale-since-$key" ] || fail "$verdict retained its old execution timer"
+    [ ! -s "$out" ] && [ ! -s "$state/.wake-queue" ] || fail "$verdict queued a stale check-in"
+  done
+  pass "completed and parked runs cannot inherit an active phase's wedge alarm"
+}
+
+test_pr_check_event_still_wakes() {
+  local dir state fakebin out pid
+  dir=$(make_case idle-pr-event); state="$dir/state"; fakebin="$dir/fakebin"; out="$dir/watch.out"
+  printf 'window=test:fm-pr-wait\nkind=ship\n' > "$state/pr-wait.meta"
+  printf 'paused: awaiting pull request checks\n' > "$state/pr-wait.status"
+  prime_status_seen "$state" "$state/pr-wait.status"
+  cat > "$state/pr-feedback.check.sh" <<'CHECK'
+#!/usr/bin/env bash
+printf 'PR feedback: synthetic check result changed\n'
+CHECK
+  chmod 0700 "$state/pr-feedback.check.sh"
+  FM_HOME="$dir" FM_STATE_OVERRIDE="$state" "$ROOT/bin/fm-check-register.sh" pr-feedback >/dev/null \
+    || fail "could not register synthetic PR feedback check"
+  watch_bg "$state" "$fakebin" "$out" env FM_CHECK_INTERVAL=1
+  pid=$!
+  wait_for_exit "$pid" 100 || fail "PR check event was swallowed by idle suppression"
+  grep -F 'PR feedback: synthetic check result changed' "$out" >/dev/null \
+    || fail "PR event lost its check payload"
+  grep -F $'\tcheck\t' "$state/.wake-queue" >/dev/null || fail "PR check event was not queued"
+  pass "authenticated PR/check output still queues and wakes firstmate"
+}
+
+test_idle_policy_regressions() {
+  test_idle_workers_stay_quiet
+  test_secondmate_checkins_require_exact_opt_in
+  test_paused_worker_dead_endpoint_still_wakes
+  test_nonterminal_stale_provably_working_absorbed_then_escalated
+  test_actionable_signal_surfaced
+  test_pr_check_event_still_wakes
+  test_finished_run_drops_its_wedge_timer
+}
+
+test_idle_retained_paths() {
+  test_second_death_after_a_same_window_relaunch_reports_in_full
+  test_identical_dead_display_of_a_successor_still_reports
+  test_secondmate_paused_resurfaces_in_normal_mode
+  test_secondmate_captain_held_resurfaces_in_normal_mode
+  test_secondmate_home_supervision_churn_is_not_write_evidence
+  test_busy_pane_stable_hash_escalates_past_turn_age_bound
+  test_busy_pane_changing_hash_escalates_past_turn_age_bound
+  test_nonterminal_stale_pause_transitions_reclassify_unchanged_hash
+  test_nonterminal_paused_rechecks_authoritative_state
+  test_paused_authoritative_working_preserves_wedge_timer
+  test_nonterminal_stale_repairs_missing_or_corrupt_timer
+  test_wedge_escalation_deferred_while_worktree_is_written
+  test_timer_repair_drops_a_finished_write_deferral_chain
+  test_terminal_first_sight_drops_a_finished_write_deferral_chain
+  test_captain_held_never_rechecked_while_away_record_exists
+  test_captain_held_rechecked_under_a_quiet_record
+  test_paused_until_near_future_is_quiet_before_the_cadence
+  test_paused_until_wrong_year_is_bounded_by_the_cadence
+  test_paused_until_that_passed_is_rechecked_before_the_cadence
+  test_paused_bg_job_without_until_stays_silent_after_the_job_ends
+  test_paused_bg_job_until_timeout_stays_silent_after_the_job_ends
+  test_idle_policy_regressions
+}
 
 # CI's stock macOS Bash lane sets FM_TEST_ONLY to run just the bash-3.2
 # churn-deferral regression. The rest of this file is not a 3.2 snapshot suite.
@@ -8649,8 +6419,6 @@ test_binary_presentation_markers_do_not_hide_status
 test_presentation_marker_reader_keeps_read_failures || fail "test_presentation_marker_reader_keeps_read_failures failed"
 test_unreadable_status_reports_once_per_file_state
 test_permission_recovery_surfaces_preserved_status
-test_terminal_stale_surfaced
-test_terminal_stale_surfaced merged
 test_stale_terminal_status_overridden_by_active_run
 test_nonterminal_stale_provably_working_absorbed_then_escalated
 test_wedge_escalation_marks_demand_deep_inspection_after_threshold
@@ -8677,39 +6445,8 @@ test_busy_pane_turn_end_touch_resets_age
 test_busy_pane_native_progress_resets_age
 test_busy_pane_repeated_escalation_reaches_demand_deep_inspection
 test_busy_pane_default_turn_age_bound_is_3600s
-test_busy_declared_pause_is_rechecked_not_wedge_escalated
-test_afk_busy_declared_pause_hands_off_plain_stale
-test_afk_busy_declared_pause_ticking_pane_hands_off_once
 test_window_metadata_last_field_wins
-test_nonterminal_stale_not_working_surfaced
-test_nonterminal_stale_paused_absorbed_then_resurfaced
-test_declared_pause_is_absorbed_for_every_agent_liveness_verdict
-test_exited_declared_pause_is_bounded_and_live_gate_uses_pause_cadence
-test_own_work_wait_is_absorbed_then_long_cadence
-test_absorbed_replacement_wait_does_not_inherit_the_old_throttle
-test_live_declared_wait_churn_honors_the_resurface_throttle
-test_declared_wait_survives_a_busy_pane_blip
-test_absorbed_wait_cadence_survives_a_status_write_that_keeps_the_wait
-test_identical_wait_declared_again_between_polls_is_a_new_episode
-test_declared_wait_age_uses_the_declaration_stamp
-test_declared_wait_recheck_is_shared_with_the_wedge_route
-test_done_open_pr_uses_declared_wait_cadence
-test_delivered_pr_wait_requires_an_authenticated_poll
-test_open_captain_call_bounds_a_paused_last_line
-test_open_captain_call_scope_is_shared_by_the_busy_and_wedge_routes
-test_live_paused_until_controls_recheck_time
-test_wedge_threshold_defers_to_a_declared_wait_under_a_working_verdict
-test_wedge_threshold_keeps_a_wait_past_a_default_key_answer
-test_wedge_threshold_recheck_names_the_captain_for_a_held_lane
-test_wedge_threshold_defers_to_a_backlog_captain_hold
-test_wedge_threshold_defers_to_a_parked_gate_awaiting_a_human
-test_wedge_threshold_parked_gate_needs_an_unanswered_decision
-test_wedge_threshold_parked_gate_is_off_until_armed
 test_wedge_defer_refuses_a_half_filled_wait_record
-test_open_captain_call_bounds_stale_churn
-test_stale_churn_without_a_captain_call_still_alarms
-test_failed_wake_append_does_not_arm_the_captain_hold_throttle
-test_reheld_captain_call_starts_its_own_resurface_window
 test_secondmate_paused_resurfaces_in_normal_mode
 test_secondmate_captain_held_resurfaces_in_normal_mode
 test_secondmate_nonpaused_stale_remains_suppressed
@@ -8719,7 +6456,6 @@ test_nonterminal_paused_rechecks_authoritative_state
 test_paused_authoritative_working_preserves_wedge_timer
 test_nonterminal_stale_repairs_missing_or_corrupt_timer
 test_wedge_escalation_deferred_while_worktree_is_written
-test_write_deferral_resurfaces_on_the_bounded_cadence
 test_secondmate_home_supervision_churn_is_not_write_evidence
 test_timer_repair_drops_a_finished_write_deferral_chain
 test_terminal_first_sight_drops_a_finished_write_deferral_chain
@@ -8738,21 +6474,22 @@ test_heartbeat_backstop_surfaces_a_masked_status
 test_beacon_stays_fresh_while_absorbing
 test_afk_signal_records_heartbeat_endpoint
 test_afk_present_reverts_watcher_to_one_shot
-test_afk_paused_changed_pane_hands_off_plain_stale
 test_captain_held_never_rechecked_while_away_record_exists
-test_live_captain_held_first_sight_silenced_by_away_record
-test_backlog_hold_never_rechecked_while_away_record_exists
-test_afk_one_shot_never_hands_off_captain_held_under_away_record
 test_captain_held_rechecked_under_a_quiet_record
 test_paused_until_near_future_is_quiet_before_the_cadence
 test_paused_until_wrong_year_is_bounded_by_the_cadence
 test_paused_until_that_passed_is_rechecked_before_the_cadence
 test_paused_bg_job_without_until_stays_silent_after_the_job_ends
-test_paused_bg_job_until_timeout_rechecks_after_the_job_ends
+test_paused_bg_job_until_timeout_stays_silent_after_the_job_ends
 
 
-test_exit_picker_stale_names_the_dialog
 test_exit_picker_wedge_keeps_climbing
-test_quoted_exit_picker_stays_ordinary_stale
 test_secondmate_exit_picker_stays_quiet
-test_closed_exit_picker_drops_saved_dialog_name
+
+test_idle_workers_stay_quiet
+test_secondmate_checkins_require_exact_opt_in
+test_paused_worker_dead_endpoint_still_wakes
+
+test_pr_check_event_still_wakes
+
+test_finished_run_drops_its_wedge_timer

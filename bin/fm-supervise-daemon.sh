@@ -1192,6 +1192,11 @@ _oldest_line_age() {  # <buf> -> seconds since the oldest buffered item first ar
   fi
 }
 
+# The same idle opt-in as the watcher, scoped to this daemon's home config.
+idle_checkins_enabled() {  # <task> <state>
+  crew_idle_checkins_enabled "$(fm_meta_get "$2/$1.meta" kind)" "$1" "${FM_CONFIG_OVERRIDE:-$FM_HOME/config}"
+}
+
 # --- housekeeping (runs every tick while the watcher is mid-cycle) ----------
 # Four cheap jobs, each guarded so an empty/quiet fleet costs near zero:
 #  1) batch flush: if the escalation buffer's oldest content is older than
@@ -1261,6 +1266,10 @@ housekeeping() {  # <state>
     fi
     age=$(( now - $(cat "$marker" 2>/dev/null || echo "$now") ))
     [ "$age" -ge "${FM_STALE_ESCALATE_SECS:-$STALE_ESCALATE_SECS_DEFAULT}" ] || continue
+    if ! idle_checkins_enabled "$task" "$state" && ! crew_is_provably_working "$task"; then
+      stale_marker_remove "$win" "$state"
+      continue
+    fi
     stale_window_is_busy "$win" "$state"
     case "$?" in
       0) rm -f "$marker" "$state/.subsuper-dialog-$key" ;;
@@ -1282,8 +1291,8 @@ housekeeping() {  # <state>
   # (2b) pause re-surface recheck. A declared wait is waiting, not wedged (fm-classify-lib.sh's
   # status_is_paused_or_captain_held owns which declarations qualify), so it is
   # rechecked on a much longer cadence than a wedge (PAUSE_RESURFACE_SECS) and never
-  # escalated as one - but it MUST re-surface, so neither a forgotten pause nor a
-  # forgotten captain hold can rot invisibly. Past the window: gone -> drop; still
+  # escalated as one. Only an explicitly opted-in secondmate may re-surface;
+  # ordinary workers and unlisted mates stay silent. Past the window: gone -> drop; still
   # declaring the wait -> escalate a recheck digest and reset the marker so the window
   # repeats. The digest names WHICH human the wait is on, because the captain is the
   # one reading it: an external dependency for a paused: declaration, and the captain
@@ -1308,6 +1317,7 @@ housekeeping() {  # <state>
       reconcile_pause_tracking "$win" "$state" "$last"
       continue
     fi
+    idle_checkins_enabled "$task" "$state" || continue
     marker_epoch=$(cat "$marker" 2>/dev/null || echo "$now")
     case "$marker_epoch" in ''|*[!0-9]*) marker_epoch=$now ;; esac
     age=$(( now - marker_epoch ))
@@ -1571,7 +1581,7 @@ is_wake_reason() {  # <reason>
 # is populated, suppression markers commit, and the digest names the decision
 # instead of "unknown wake:".
 handle_wake() {  # <reason> <state>
-  local reason=$1 state=$2 decision action distilled task last stale_detail dialog_name=''
+  local reason=$1 state=$2 decision action distilled task last stale_detail wait_until dialog_name=''
   local capture="$state/.subsuper-classified-end.$$" span_record='' span_rc='' endpoint ident rest sig marker
   local kind="" arg="" classification_failed=0 span_failure_repeat=0
   : > "$capture" || return 1
@@ -1632,7 +1642,15 @@ handle_wake() {  # <reason> <state>
               # Housekeeping (2b) then owns the re-surface, so the wait is still
               # bounded - by one recheck per PAUSE_RESURFACE_SECS instead.
               case "${decision%%|*}" in
-                pause) : ;;
+                pause)
+                  case "$stale_detail" in
+                    idle\ *s,\ possible\ wedge,\ escalation\ *)
+                      last=$(status_declared_wait_line "$state/$task.status")
+                      if status_is_paused "$last" && wait_until=$(status_paused_until "$last") \
+                        && [ "$(_now)" -ge "$wait_until" ]; then
+                        decision="escalate|${reason#stale: }"
+                      fi ;;
+                  esac ;;
                 *) case "$stale_detail" in
                      idle\ *s,\ possible\ wedge,\ escalation\ *)
                        last=$(status_declared_wait_line "$state/$task.status")
@@ -1640,6 +1658,11 @@ handle_wake() {  # <reason> <state>
                          || decision="escalate|${reason#stale: }"
                        ;;
                    esac ;;
+              esac
+              # Endpoint loss is a recovery event even under a declared pause.
+              case "$stale_detail" in
+                idle\ *s,\ agent\ dead\ -\ *|idle\ *s,\ agent\ missing\ -\ *)
+                  decision="escalate|${reason#stale: }" ;;
               esac ;;
     check:*)  decision=$(classify_check "$reason") ;;
     heartbeat|heartbeat:*) decision=$(classify_heartbeat) ;;

@@ -452,7 +452,7 @@ test_busy_inbox_dispatch_preserves_other_stale_reasons() {
     "unread firstmate instruction: $state/ordinary.inbox/001.msg still unhandled after 3 doorbell delivery attempts with an idle pane; inspect the worker" \
     'steering-inbox ladder bookkeeping unwritable: .ring-state cannot be written' \
     'steering-inbox retry mark unremovable: .retry-ring cannot be removed'; do
-    FM_ESCALATE_BATCH_SECS=999999 handle_wake "stale: sess:fm-ordinary${detail:+ ($detail)}" "$state" \
+    FM_CREW_STATE_BIN="$(make_fake_crew_state "$dir/fakebin")" FM_FAKE_CREW_STATE="state: working · source: run-step · validating" FM_ESCALATE_BATCH_SECS=999999 handle_wake "stale: sess:fm-ordinary${detail:+ ($detail)}" "$state" \
       || fail "ordinary stale handling failed"
     [ ! -s "$state/.subsuper-escalations" ] || fail "inbox dispatch changed another stale reason: $detail"
     [ -e "$state/.subsuper-stale-ordinary" ] || fail "inbox dispatch bypassed ordinary stale recovery"
@@ -1006,7 +1006,7 @@ test_stale_actionable_wait_escalates_and_keeps_pause_cadence() {
   resumed_win="sess:fm-resumed-r10"; resumed_key=$(printf '%s' resumed-r10 | tr ':/.' '___')
   printf 'paused: old wait\nworking: resumed after access arrived\n' > "$state/resumed-r10.status"
   printf '1' > "$state/.subsuper-paused-$resumed_key"
-  FM_ESCALATE_BATCH_SECS=999 handle_wake "stale: $resumed_win" "$state"
+  FM_CREW_STATE_BIN="$(make_fake_crew_state "$dir/fakebin")" FM_FAKE_CREW_STATE="state: working · source: run-step · validating" FM_ESCALATE_BATCH_SECS=999 handle_wake "stale: $resumed_win" "$state"
   [ ! -e "$state/.subsuper-paused-$resumed_key" ] \
     || fail "an older pause declaration kept a resumed crew on pause cadence"
   [ -e "$state/.subsuper-stale-$resumed_key" ] \
@@ -2316,7 +2316,7 @@ test_afk_nonterminal_working_merged_keeps_wedge_aging() {
       esac
       ;;
   esac
-  FM_STATE_OVERRIDE="$state" handle_wake "stale: $win" "$state"
+  FM_CREW_STATE_BIN="$(make_fake_crew_state "$dir/fakebin")" FM_FAKE_CREW_STATE="state: working · source: run-step · validating" FM_STATE_OVERRIDE="$state" handle_wake "stale: $win" "$state"
   [ -e "$state/.subsuper-stale-$key" ] \
     || fail "wedge stale marker was not recorded for already-seen nonterminal working:"
   [ ! -s "$state/.subsuper-escalations" ] \
@@ -3306,6 +3306,63 @@ test_daemon_idle_checkin_policy() {
   pass "daemon pause housekeeping applies the same ordinary-worker ban and secondmate opt-in"
 }
 
+test_daemon_preserves_established_marker_through_uncertainty() {
+  local mode dir state fakebin pane verdict win key reader
+  for mode in unknown failed malformed historical capture-failed done paused unproven; do
+    dir=$(make_supercase "uncertain-marker-$mode"); state="$dir/state"; fakebin="$dir/fakebin"
+    pane="$dir/pane.txt"; verdict="$dir/verdict.txt"; win=sess:fm-uncertain; key=uncertain
+    reader="$fakebin/fm-crew-state.sh"
+    printf 'window=%s\nkind=ship\nharness=grok\n' "$win" > "$state/uncertain.meta"
+    printf 'working: validating\n' > "$state/uncertain.status"
+    if [ "$mode" = historical ]; then
+      printf 'done: PR ready for review\n' > "$state/uncertain.status"
+      seen_through "$state" uncertain
+    fi
+    printf 'frozen worker' > "$pane"
+    printf 'state: working · source: run-step · validating\n' > "$verdict"
+    [ "$mode" != unproven ] || printf 'state: unknown · source: run-step · inventory unreadable\n' > "$verdict"
+    cat > "$reader" <<'SH'
+#!/usr/bin/env bash
+case "$(cat "$FM_TEST_VERDICT_FILE")" in
+  failed) printf 'state: done · source: run-step · untrusted output\n'; exit 1 ;;
+  malformed) printf 'not a current-state record\n' ;;
+  *) cat "$FM_TEST_VERDICT_FILE" ;;
+esac
+SH
+    chmod +x "$reader"
+    FM_CREW_STATE_BIN="$reader" FM_TEST_VERDICT_FILE="$verdict" FM_STATE_OVERRIDE="$state" \
+      handle_wake "stale: $win" "$state"
+    if [ "$mode" = unproven ]; then
+      [ ! -e "$state/.subsuper-stale-$key" ] && [ ! -s "$state/.subsuper-escalations" ] || fail "an inconclusive first read created daemon recovery tracking"
+      continue
+    fi
+    [ -s "$state/.subsuper-stale-$key" ] || fail "active worker did not establish daemon tracking"
+    case "$mode" in
+      failed|malformed) printf '%s\n' "$mode" > "$verdict" ;;
+      done) printf 'state: done · source: run-step · run completed\n' > "$verdict" ;;
+      *) printf 'state: unknown · source: run-step · selected run unreadable\n' > "$verdict" ;;
+    esac
+    [ "$mode" != paused ] || printf 'paused: awaiting external input\n' >> "$state/uncertain.status"
+    FM_CREW_STATE_BIN="$reader" FM_TEST_VERDICT_FILE="$verdict" FM_STATE_OVERRIDE="$state" \
+      handle_wake "stale: $win" "$state"
+    case "$mode" in
+      done|paused)
+        [ ! -e "$state/.subsuper-stale-$key" ] && [ ! -s "$state/.subsuper-escalations" ] || fail "$mode retained daemon recovery tracking or raised a check-in"
+        continue
+        ;;
+    esac
+    [ -s "$state/.subsuper-stale-$key" ] || fail "$mode erased an established daemon marker during reclassification"
+    printf '%s\n' "$(( $(date +%s) - 500 ))" > "$state/.subsuper-stale-$key"
+    [ "$mode" != capture-failed ] || pane="$dir/unreadable-pane"
+    PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$win" FM_FAKE_TMUX_CAPTURE="$pane" \
+      FM_CREW_STATE_BIN="$reader" FM_TEST_VERDICT_FILE="$verdict" FM_STATE_OVERRIDE="$state" \
+      FM_STALE_ESCALATE_SECS=1 housekeeping "$state"
+    grep -F 'possible wedge' "$state/.subsuper-escalations" >/dev/null || fail "$mode lost the established daemon recovery alarm"
+    [ ! -e "$state/.subsuper-stale-$key" ] || fail "$mode retained its marker after delivering the alarm"
+  done
+  pass "daemon preserves established tracking through uncertain reads while completion, declared waits and unproven idle remain silent"
+}
+
 test_daemon_worker_gate_retains_persistence() {
   local kind wait dir state fakebin win pane key status
   for kind in ship scout; do
@@ -3317,7 +3374,7 @@ test_daemon_worker_gate_retains_persistence() {
       [ "$wait" != paused ] || status='paused: awaiting external input'
       printf '%s\n' "$status" > "$state/worker-gate.status"
       printf 'waiting at a pipeline gate' > "$pane"
-      FM_STATE_OVERRIDE="$state" handle_wake "stale: $win" "$state"
+      FM_CREW_STATE_BIN="$(make_fake_crew_state "$dir/fakebin")" FM_FAKE_CREW_STATE="state: working · source: run-step · validating" FM_STATE_OVERRIDE="$state" handle_wake "stale: $win" "$state"
       if [ "$wait" = gate ]; then
         [ -s "$state/.subsuper-stale-$key" ] || fail "$kind gate did not get a persistence marker"
       fi
@@ -3377,6 +3434,7 @@ test_daemon_expired_wait_keeps_frozen_run_event() {
 
 test_daemon_idle_policy_regressions() {
   test_daemon_idle_checkin_policy
+  test_daemon_preserves_established_marker_through_uncertainty
   test_daemon_worker_gate_retains_persistence
   test_daemon_drops_ordinary_idle_stale_marker
   test_daemon_dead_paused_worker_still_escalates
@@ -3555,7 +3613,7 @@ test_dialog_name_survives_away_self_handle() {
   fm_write_meta "$state/picker-ship.meta" "window=$win" "backend=tmux"
   printf 'working: parked between turns\n' > "$state/picker-ship.status"
   reason="stale: $win (blocked-on-prompt: Claude background-task exit picker)"
-  LOG="$dir/daemon.log" FM_STATE_OVERRIDE="$state" handle_wake "$reason" "$state"
+  FM_CREW_STATE_BIN="$(make_fake_crew_state "$dir/fakebin")" FM_FAKE_CREW_STATE="state: working · source: run-step · validating" LOG="$dir/daemon.log" FM_STATE_OVERRIDE="$state" handle_wake "$reason" "$state"
   key=$(printf '%s' picker-ship | tr ':/.' '___')
   [ "$(cat "$state/.subsuper-dialog-$key" 2>/dev/null || true)" = 'Claude background-task exit picker' ] \
     || fail "a self-handled dialog stale did not save the name: $(cat "$state/.subsuper-dialog-$key" 2>/dev/null)"
@@ -3656,6 +3714,7 @@ test_dialog_name_joins_unseen_status_escalation
 test_dialog_name_after_demand_deep_inspection_still_escalates
 
 test_daemon_idle_checkin_policy
+test_daemon_preserves_established_marker_through_uncertainty
 test_daemon_worker_gate_retains_persistence
 test_daemon_drops_ordinary_idle_stale_marker
 test_daemon_dead_paused_worker_still_escalates

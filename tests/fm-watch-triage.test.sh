@@ -615,23 +615,19 @@ test_crew_absorb_class_classifier() {
   [ "$(crew_absorb_class a)" = working ] || fail "active run-step not classed working"
   FM_FAKE_CREW_STATE='state: working · source: pane · harness busy'
   [ "$(crew_absorb_class a)" = working ] || fail "busy pane not classed working"
-  crew_needs_stuck_detection a || fail "busy pane lost stuck detection"
   FM_FAKE_CREW_STATE='state: parked · source: run-step · parked at review · run: gate-run'
   [ "$(crew_absorb_class a)" = parked ] || fail "pipeline gate not classed parked"
-  crew_needs_stuck_detection a || fail "pipeline gate lost stuck detection"
   ! crew_is_provably_working a || fail "pipeline gate became signal-absorption evidence"
   FM_FAKE_CREW_STATE='state: parked · source: status-log · needs-decision: choose an option'
   [ "$(crew_absorb_class a)" = none ] || fail "status-log decision became an active pipeline gate"
-  ! crew_needs_stuck_detection a || fail "status-log decision started stuck detection"
   FM_FAKE_CREW_STATE='state: paused · source: status-log · awaiting upstream'
   [ "$(crew_absorb_class a)" = paused ] || fail "declared pause not classed paused"
   crew_is_paused a || fail "crew_is_paused did not recognize a paused verdict"
   ! crew_is_provably_working a || fail "a paused crew was treated as provably working"
-  ! crew_needs_stuck_detection a || fail "a paused crew started stuck detection"
   FM_FAKE_CREW_STATE='state: working · source: status-log · working: compiling'
-  [ "$(crew_absorb_class a)" = none ] || fail "stale working: status-log classed absorbable"
+  [ "$(crew_absorb_class a)" = uncertain ] || fail "stale working: status-log became a completion proof"
   FM_FAKE_CREW_STATE='state: unknown · source: none · worktree gone'
-  [ "$(crew_absorb_class a)" = none ] || fail "unknown crew classed absorbable"
+  [ "$(crew_absorb_class a)" = uncertain ] || fail "unknown crew became a completion proof"
   ! crew_is_paused a || fail "unknown crew classed paused"
   [ "$(crew_absorb_class "")" = none ] || fail "empty id not classed none"
   unset FM_FAKE_CREW_STATE
@@ -6357,6 +6353,87 @@ test_paused_worker_dead_endpoint_still_wakes() {
   pass "endpoint loss still wakes for a paused scout even when capture fails"
 }
 
+test_established_timer_survives_inconclusive_state() {
+  local mode dir state fakebin out pane verdict window key pid pr
+  for mode in unknown failed malformed reclassify delivered escalated done paused unproven; do
+    dir=$(make_case "uncertain-state-$mode"); state="$dir/state"; fakebin="$dir/fakebin"
+    out="$dir/watch.out"; pane="$dir/pane.txt"; verdict="$dir/verdict.txt"
+    window=test:fm-uncertain; key=test_fm-uncertain
+    printf 'window=%s\nkind=ship\nharness=grok\n' "$window" > "$state/uncertain.meta"
+    printf 'working: validating\n' > "$state/uncertain.status"
+    if [ "$mode" = delivered ]; then
+      pr=https://github.com/o/r/pull/3
+      printf 'pr=%s\n' "$pr" >> "$state/uncertain.meta"
+      fm_pr_poll_prepare "$state" uncertain github "$pr" github.com o/r 3 "$ROOT/bin/fm-pr-poll.sh" \
+        && fm_pr_poll_publish_prepared || fail "could not arm the historical delivery"
+      printf 'done: PR %s ready for review\n' "$pr" > "$state/uncertain.status"
+      touch "$state/.last-check"
+    fi
+    prime_status_seen "$state" "$state/uncertain.status"
+    printf 'frozen worker' > "$pane"
+    printf '%s' "$(hash_text 'frozen worker')" > "$state/.hash-$key"
+    printf '1\n' > "$state/.count-$key"
+    printf 'state: working · source: run-step · validating\n' > "$verdict"
+    [ "$mode" != unproven ] || printf 'state: unknown · source: run-step · inventory unreadable\n' > "$verdict"
+    cat > "$fakebin/fm-crew-state.sh" <<'SH'
+#!/usr/bin/env bash
+case "$(cat "$FM_TEST_VERDICT_FILE")" in
+  failed) printf 'state: done · source: run-step · untrusted output\n'; exit 1 ;;
+  malformed) printf 'not a current-state record\n' ;;
+  *) cat "$FM_TEST_VERDICT_FILE" ;;
+esac
+SH
+    chmod +x "$fakebin/fm-crew-state.sh"
+    FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$pane" FM_FAKE_TMUX_CURRENT_COMMAND=grok \
+      watch_bg "$state" "$fakebin" "$out" env FM_STALE_ESCALATE_SECS=60 FM_TEST_VERDICT_FILE="$verdict"
+    pid=$!
+    if [ "$mode" = unproven ]; then
+      wait_poll_cycle "$state" "$pid" || { reap "$pid"; fail "uncertainty alone raised an idle alarm"; }
+      wait_poll_cycle "$state" "$pid" || { reap "$pid"; fail "unproven worker woke again"; }
+      reap "$pid"
+      [ ! -e "$state/.stale-since-$key" ] && [ ! -s "$state/.wake-queue" ] || fail "uncertainty alone created recovery tracking"
+      continue
+    fi
+    wait_numeric_file "$state/.stale-since-$key" 100 || { reap "$pid"; fail "active worker did not establish its timer"; }
+    case "$mode" in
+      failed|malformed) printf '%s\n' "$mode" > "$verdict" ;;
+      done) printf 'state: done · source: run-step · run completed\n' > "$verdict" ;;
+      *) printf 'state: unknown · source: run-step · selected run unreadable\n' > "$verdict" ;;
+    esac
+    case "$mode" in
+      reclassify) : > "$state/.stale-$key" ;;
+      delivered)
+        : > "$state/.paused-$key"
+        date +%s > "$state/.paused-rechecked-$key"
+        ;;
+      escalated)
+        rm "$state/.stale-since-$key"
+        : > "$state/.stale-$key"
+        printf '1\n' > "$state/.wedge-escalations-$key"
+        wait_numeric_file "$state/.stale-since-$key" 100 || { reap "$pid"; fail "uncertainty discarded earlier escalation proof"; }
+        ;;
+      paused)
+        printf 'paused: awaiting external input\n' >> "$state/uncertain.status"
+        prime_status_seen "$state" "$state/uncertain.status"
+        ;;
+    esac
+    printf '%s\n' "$(( $(date +%s) - 500 ))" > "$state/.stale-since-$key"
+    case "$mode" in
+      done|paused)
+        wait_poll_cycle "$state" "$pid" || { reap "$pid"; fail "$mode did not retire execution tracking: $(cat "$out")"; }
+        reap "$pid"
+        [ ! -e "$state/.stale-since-$key" ] && [ ! -s "$state/.wake-queue" ] || fail "$mode retained recovery tracking or queued a check-in"
+        ;;
+      *)
+        wait_for_exit "$pid" 150 || { reap "$pid"; fail "$mode discarded an established recovery timer"; }
+        grep -F 'possible wedge' "$out" >/dev/null || fail "$mode emitted no stuck-run alarm: $(cat "$out")"
+        [ "$(wedge_stale_wakes "$state" "$window")" -eq 1 ] || fail "$mode did not queue one stuck-run alarm"
+        ;;
+    esac
+  done
+  pass "inconclusive reads preserve established recovery without creating idle timers; completion and declared waits clear it"
+}
+
 test_worker_gate_retains_stuck_detection() {
   local kind phase dir state fakebin out pane window key hash pid status
   for kind in ship scout; do
@@ -6611,6 +6688,7 @@ test_idle_policy_regressions() {
   test_nonterminal_stale_provably_working_absorbed_then_escalated
   test_actionable_signal_surfaced
   test_pr_check_event_still_wakes
+  test_established_timer_survives_inconclusive_state
   test_worker_gate_retains_stuck_detection
   test_delivered_worker_gate_keeps_recovery
   test_endpoint_receipt_survives_uncertain_probes
@@ -6793,6 +6871,7 @@ test_paused_worker_dead_endpoint_still_wakes
 
 test_pr_check_event_still_wakes
 
+test_established_timer_survives_inconclusive_state
 test_worker_gate_retains_stuck_detection
 test_delivered_worker_gate_keeps_recovery
 test_endpoint_receipt_survives_uncertain_probes

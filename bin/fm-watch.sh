@@ -1657,7 +1657,7 @@ wedge_timer_check() {  # <window> <since-file> <triage-label> <escalation-count-
             handle_paused_stale "$win" "$task" "$hash"
             return 0
             ;;
-          working|parked) ;;
+          working|parked|uncertain) ;;
           *)
             if [ "$busy_proven" -ne 1 ]; then
               rm -f "$since_file" "$escalation_file"
@@ -2248,18 +2248,21 @@ pause_state_class() {  # <window> <task>
   recheck_file="$STATE/.paused-rechecked-$key"
   if ! status_is_paused_or_captain_held "$last" && ! delivered_pr_wait "$task"; then
     rm -f "$recheck_file"
-    watcher_query crew_absorb_class "$task" || WATCHER_QUERY=none
+    watcher_query crew_absorb_class "$task" || WATCHER_QUERY=uncertain
     PAUSE_STATE_CLASS=$WATCHER_QUERY
     return
   fi
-  if [ -e "$STATE/.paused-$key" ] && [ "$(age_of "$recheck_file")" -lt "$STALE_ESCALATE_SECS" ]; then
+  if [ -e "$STATE/.paused-$key" ] && [ ! -e "$STATE/.stale-since-$key" ] \
+    && [ ! -s "$STATE/.wedge-escalations-$key" ] \
+    && [ "$(age_of "$recheck_file")" -lt "$STALE_ESCALATE_SECS" ]; then
     PAUSE_STATE_CLASS=paused
     return
   fi
-  watcher_query crew_absorb_class "$task" || WATCHER_QUERY=none
+  watcher_query crew_absorb_class "$task" || WATCHER_QUERY=uncertain
   class=$WATCHER_QUERY
   if [ "$class" = working ] \
-    || { [ "$class" = parked ] && ! status_is_paused_or_captain_held "$last"; }; then
+    || { { [ "$class" = parked ] || [ "$class" = uncertain ]; } \
+      && ! status_is_paused_or_captain_held "$last"; }; then
     rm -f "$recheck_file"
     PAUSE_STATE_CLASS=$class
     return
@@ -3534,6 +3537,12 @@ EOF
                 triage_log "absorbed stale (active $PAUSE_STATE_CLASS): $w"
                 ;;
               paused) handle_paused_stale "$w" "$task" "$h" ;;
+              uncertain)
+                printf '%s' "$h" > "$sf"
+                if [ -e "$ssf" ] || [ -s "$ewf" ]; then
+                  wedge_timer_check "$w" "$ssf" "stale (execution state uncertain)" "$ewf" "$task" "$h" "$dialog"
+                fi
+                ;;
               *)
                 printf '%s' "$h" > "$sf"
                 rm -f "$ssf" "$ewf"

@@ -20,6 +20,8 @@ An idle secondmate without a declared wait remains healthy and silent even when 
 
 Frozen active work remains an exception: a stale pane with positive execution evidence or an authoritative pipeline gate awaiting its worker starts the existing `FM_STALE_ESCALATE_SECS` wedge timer.
 At the threshold the watcher rechecks whether work still needs stuck detection, so a completed run does not inherit an active run's alarm while a gate awaiting its worker retains protection.
+An inconclusive or failed state read preserves an established timer, escalation history, or daemon persistence marker, but cannot establish new recovery tracking without execution proof.
+Confirmed completion retires that tracking, while explicit declared waits retain their silent waiting behavior.
 An authoritative pipeline gate awaiting its worker outranks inferred PR-delivery waits at first sight and at the timer threshold, including for busy panes; explicit declared waits retain their own precedence.
 The legacy away daemon applies the same classification to its persistence markers.
 A worker's declared wait, backlog captain hold, or - when `config/wedge-defer-parked-gate` is enabled - a validation gate awaiting an unanswered supervisor decision defers the escalation silently.

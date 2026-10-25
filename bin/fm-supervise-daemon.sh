@@ -1266,14 +1266,15 @@ housekeeping() {  # <state>
     fi
     age=$(( now - $(cat "$marker" 2>/dev/null || echo "$now") ))
     [ "$age" -ge "${FM_STALE_ESCALATE_SECS:-$STALE_ESCALATE_SECS_DEFAULT}" ] || continue
-    if ! idle_checkins_enabled "$task" "$state" && ! crew_needs_stuck_detection "$task"; then
-      stale_marker_remove "$win" "$state"
-      continue
+    if ! idle_checkins_enabled "$task" "$state"; then
+      case "$(crew_absorb_class "$task")" in
+        working|parked|uncertain) ;;
+        *) stale_marker_remove "$win" "$state"; continue ;;
+      esac
     fi
     stale_window_is_busy "$win" "$state"
     case "$?" in
       0) rm -f "$marker" "$state/.subsuper-dialog-$key" ;;
-      2) rm -f "$marker" "$state/.subsuper-dialog-$key" ;;
       *)
         dialog_name=$(cat "$state/.subsuper-dialog-$key" 2>/dev/null || true)
         if [ -n "$dialog_name" ]; then
@@ -1716,31 +1717,16 @@ handle_wake() {  # <reason> <state>
       # wake, escalates a wedge.
       if [ "$kind" = "stale" ]; then
         task=$(window_to_task "$arg" "$state")
-        last=$(last_status_line "$state/$task.status")
-        # Clear wedge aging only for terminal (or legacy free-text) captain lines.
-        # Nonterminal progress verbs keep possible-wedge markers even if free text
-        # once looked captain-relevant or was written into a seen marker.
-        _clear_wedge=0
-        if [ -n "$last" ] && status_is_captain_relevant "$last"; then
-          if status_is_terminal_verb "$last"; then
-            _clear_wedge=1
-          else
-            case "$(status_line_verb "$last")" in
-              working|resolved|captain-held) _clear_wedge=0 ;;
-              *) _clear_wedge=1 ;;
-            esac
-          fi
-        fi
-        if [ "$_clear_wedge" = 1 ]; then
-          stale_marker_remove "$arg" "$state"
-        else
-          pause_marker_remove "$arg" "$state"
-          stale_marker_record "$arg" "$state"
-          # The distilled line drops the parenthetical. Housekeeping builds the
-          # persistence line from this file, not from the wake it just absorbed.
-          if [ -n "$dialog_name" ]; then
-            printf '%s' "$dialog_name" > "$state/.subsuper-dialog-$(_stale_key "$task")" || return 1
-          fi
+        case "$(FM_STATE_OVERRIDE="$state" crew_absorb_class "$task")" in
+          working|parked)
+            pause_marker_remove "$arg" "$state"
+            stale_marker_record "$arg" "$state"
+            ;;
+          uncertain) ;;
+          *) stale_marker_remove "$arg" "$state" ;;
+        esac
+        if [ -n "$dialog_name" ] && [ -e "$state/.subsuper-stale-$(_stale_key "$task")" ]; then
+          printf '%s' "$dialog_name" > "$state/.subsuper-dialog-$(_stale_key "$task")" || return 1
         fi
       fi
       log "self-handle: $reason -> $distilled"

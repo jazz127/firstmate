@@ -4715,59 +4715,149 @@ test_archived_answered_hold_still_satisfies_the_gate() {
 # resolves a relative value against the backlog root. The completion gate must
 # resolve it the same way, or an answered call retention moved there reads as
 # absent and teardown is refused.
-test_archived_answer_in_a_user_configured_archive_satisfies_the_gate() {
-  local home axi_home archive id
-  home=$(make_home archived-answer-userconfig)
-  axi_home="$home/axi-home"
+archived_answer_config_case() {
+  local scope=$1 encoded=$2 decoded=$3 case_name=$4 hold_home axi_home archive id config_file producer_value
+  hold_home=$(make_home "archived-answer-$case_name")
+  axi_home="$hold_home/axi-home"
   mkdir -p "$axi_home/.tasks-axi"
-  # Root config sets no archive, so the location comes only from the user config.
-  cat > "$home/.tasks.toml" <<'EOF'
+  cat > "$hold_home/.tasks.toml" <<'EOF'
 backend = "markdown"
 
 [markdown]
 path = "data/backlog.md"
 done_keep = 10
 EOF
-  cat > "$axi_home/.tasks-axi/config.toml" <<'EOF'
-[markdown]
-archive = "data/relocated-done-archive.md"
-EOF
-  archive="$home/data/relocated-done-archive.md"
+  producer_value="'$decoded'"
+  config_file=
+  case "$scope" in
+    root)
+      printf '[markdown]\narchive = "data/user-decoy.md"\n' > "$axi_home/.tasks-axi/config.toml"
+      config_file="$hold_home/.tasks.toml"
+      printf 'archive = %s\n' "$producer_value" >> "$config_file"
+      ;;
+    user)
+      config_file="$axi_home/.tasks-axi/config.toml"
+      printf '[markdown]\narchive = %s\n' "$producer_value" > "$config_file"
+      ;;
+    default) : ;;
+  esac
+  archive="$hold_home/$decoded"
   id=sample-userconfig-review
-  mkdir -p "$home/data/$id"
-  HOME="$axi_home" tasks_in "$home" add "$id" "Investigate the user-config sample" --kind scout --repo sample --start >/dev/null \
+  mkdir -p "$hold_home/data/$id"
+  HOME="$axi_home" tasks_in "$hold_home" add "$id" "Investigate the user-config sample" --kind scout --repo sample --start >/dev/null \
     || fail "could not create the user-config origin"
-  write_origin_meta "$home" "$id"
-  printf 'done: report complete\n' > "$home/state/$id.status"
-  printf '# User-config sample review\n\nOne captain choice remains.\n' > "$home/data/$id/report.md"
-  HOME="$axi_home" run_captain "$home" hold sample-userconfig-call --title "Choose the relocated option" \
+  write_origin_meta "$hold_home" "$id"
+  printf 'done: report complete\n' > "$hold_home/state/$id.status"
+  printf '# User-config sample review\n\nOne captain choice remains.\n' > "$hold_home/data/$id/report.md"
+  HOME="$axi_home" run_captain "$hold_home" hold sample-userconfig-call --title "Choose the relocated option" \
     --reason "captain relocated choice pending" --repo sample --origin "$id" >/dev/null \
     || fail "could not register the captain-held task"
-  HOME="$axi_home" run_captain "$home" complete "$id" sample-userconfig-call >/dev/null \
+  HOME="$axi_home" run_captain "$hold_home" complete "$id" sample-userconfig-call >/dev/null \
     || fail "completion failed before the answer"
-  printf 'Captain chose the relocated option.\n' > "$home/userconfig-decision.txt"
-  HOME="$axi_home" run_captain "$home" answer sample-userconfig-call --decision-file "$home/userconfig-decision.txt" >/dev/null \
+  printf 'Captain chose the relocated option.\n' > "$hold_home/userconfig-decision.txt"
+  HOME="$axi_home" run_captain "$hold_home" answer sample-userconfig-call --decision-file "$hold_home/userconfig-decision.txt" >/dev/null \
     || fail "answer could not close the captain-held task"
 
-  perl -0pi -e 's/done_keep = 10/done_keep = 0/' "$home/.tasks.toml"
-  HOME="$axi_home" tasks_in "$home" add sample-userconfig-trigger "Trigger Done retention" --kind ship --repo sample >/dev/null
-  HOME="$axi_home" tasks_in "$home" "done" sample-userconfig-trigger >/dev/null \
+  perl -0pi -e 's/done_keep = 10/done_keep = 0/' "$hold_home/.tasks.toml"
+  HOME="$axi_home" tasks_in "$hold_home" add sample-userconfig-trigger "Trigger Done retention" --kind ship --repo sample >/dev/null
+  HOME="$axi_home" tasks_in "$hold_home" "done" sample-userconfig-trigger >/dev/null \
     || fail "could not trigger Done retention"
   assert_present "$archive" "Done retention did not write the user-configured archive"
   assert_grep "sample-userconfig-call" "$archive" \
     "Done retention did not archive the answered call to the user-configured location"
-  if HOME="$axi_home" tasks_in "$home" show sample-userconfig-call >/dev/null 2>&1; then
+  if [ -n "$config_file" ]; then
+    python3 - "$config_file" "$encoded" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+lines = path.read_text().splitlines()
+path.write_text("\n".join("archive = " + sys.argv[2] if line.startswith("archive = ") else line for line in lines) + "\n")
+PY
+  fi
+  if HOME="$axi_home" tasks_in "$hold_home" show sample-userconfig-call >/dev/null 2>&1; then
     fail "the archived call is still shown from the live backlog, so the fixture reproduces nothing"
   fi
 
-  HOME="$axi_home" run_captain "$home" verify "$id" >/dev/null 2> "$home/userconfig-verify.err" \
-    || fail "verify refused an answered call archived to the user-configured location: $(cat "$home/userconfig-verify.err")"
-  HOME="$axi_home" run_captain "$home" complete "$id" sample-userconfig-call >/dev/null 2> "$home/userconfig-complete.err" \
-    || fail "complete refused an answered call archived to the user-configured location: $(cat "$home/userconfig-complete.err")"
-  HOME="$axi_home" run_teardown "$home" "$id" >/dev/null 2> "$home/userconfig-teardown.err" \
-    || fail "teardown refused a scout whose answered call was archived to the user-configured location: $(cat "$home/userconfig-teardown.err")"
-  pass "an answered captain call archived to a user-configured location still satisfies the completion gate"
+  HOME="$axi_home" run_captain "$hold_home" verify "$id" >/dev/null 2> "$hold_home/userconfig-verify.err" \
+    || fail "verify refused an answered call archived to the user-configured location: $(cat "$hold_home/userconfig-verify.err")"
+  HOME="$axi_home" run_captain "$hold_home" complete "$id" sample-userconfig-call >/dev/null 2> "$hold_home/userconfig-complete.err" \
+    || fail "complete refused an answered call archived to the user-configured location: $(cat "$hold_home/userconfig-complete.err")"
+  HOME="$axi_home" run_teardown "$hold_home" "$id" >/dev/null 2> "$hold_home/userconfig-teardown.err" \
+    || fail "teardown refused a scout whose answered call was archived to the user-configured location: $(cat "$hold_home/userconfig-teardown.err")"
+  pass "an answered captain call in a TOML-configured archive satisfies verify, complete and teardown: $case_name"
 }
+
+test_archived_answer_in_a_user_configured_archive_satisfies_the_gate() {
+  archived_answer_config_case user '"data/relocated-done-archive.md"' data/relocated-done-archive.md userconfig
+}
+
+test_archive_toml_string_paths() {
+  local scope
+  for scope in root user; do
+    archived_answer_config_case "$scope" '"data/review#1.md" # trailing comment' 'data/review#1.md' "$scope-hash"
+    archived_answer_config_case "$scope" "'data/literal#1.md' # trailing comment" 'data/literal#1.md' "$scope-literal"
+    archived_answer_config_case "$scope" '"data/review\u0023\u00e9.md"' 'data/review#é.md' "$scope-unicode"
+    archived_answer_config_case "$scope" '"data/review\\batch\"#1.md"' 'data/review\batch"#1.md' "$scope-escapes"
+    archived_answer_config_case "$scope" '"data/$(printf wrong)#1.md"' 'data/$(printf wrong)#1.md' "$scope-shell-data"
+  done
+}
+
+test_archive_default_path() {
+  archived_answer_config_case default '' data/done-archive.md default
+}
+
+test_migrated_beads_toml_strings() {
+  local hold_home fb scout mode out
+  hold_home=$(make_home migrated-toml-strings)
+  fb="$hold_home/fakebin"
+  cat > "$hold_home/.tasks.toml" <<'EOF'
+backend = "beads"
+[beads]
+path = "graph\u0023one/.beads" # graph location
+binary = "bd\u0023fixture" # executable name
+prefix = "f\u006d" # migrated prefix
+EOF
+  mkdir -p "$hold_home/graph#one/.beads"
+  cat > "$fb/bd#fixture" <<'SH'
+#!/usr/bin/env bash
+[ "$BEADS_DIR" = "$FM_HOME/graph#one/.beads" ] || exit 1
+[ "$*" = 'list --all --json' ] || exit 1
+printf '%s\n' "$BEADS_DIR" >> "$FM_HOME/graph-reads"
+case "$FM_TEST_BEADS_MODE" in
+  notes) printf '%s\n' '[{"id":"fm-old-call","notes":"migrated from data/backlog.md id old-call"}]' ;;
+  prefix) printf '[]\n' ;;
+esac
+SH
+  chmod +x "$fb/bd#fixture"
+  write_known_rows_stub "$fb" fm-old-call
+  scout=sample-toml-scout
+  write_scout_with_attested_inventory "$hold_home" "$scout" old-call
+  for mode in notes prefix; do
+    FM_TEST_BEADS_MODE="$mode" run_captain "$hold_home" verify "$scout" >/dev/null \
+      || fail "verify did not decode the Beads path, binary and prefix ($mode)"
+    out=$(FM_TEST_BEADS_MODE="$mode" run_captain "$hold_home" complete "$scout" old-call) \
+      || fail "complete did not decode the Beads settings ($mode)"
+    if [ "$mode" = prefix ]; then
+      assert_contains "$out" 'old-call=fm-old-call' "completion lost the decoded migration identity ($mode)"
+    fi
+  done
+  assert_present "$hold_home/graph-reads" 'the decoded Beads executable was never invoked'
+  pass 'synthetic Beads migration decodes TOML paths, executable names and prefixes for note and prefix lookup'
+}
+
+test_archive_review_boundaries() {
+  test_archive_toml_string_paths
+  test_archive_default_path
+  test_archived_answered_hold_still_satisfies_the_gate
+  test_archived_answer_in_a_user_configured_archive_satisfies_the_gate
+  test_migrated_beads_toml_strings
+}
+
+if [ -n "${FM_TEST_ONLY:-}" ]; then
+  "$FM_TEST_ONLY"
+  exit
+fi
 
 test_hold_reason_round_trips_awkward_characters
 test_hold_origins_precede_backend_holds
@@ -4832,3 +4922,6 @@ test_captain_hold_mutations_address_the_beads_backend
 test_hold_creates_a_captain_row_when_beads_requires_due_without_custom_type
 test_archived_answered_hold_still_satisfies_the_gate
 test_archived_answer_in_a_user_configured_archive_satisfies_the_gate
+test_archive_toml_string_paths
+test_archive_default_path
+test_migrated_beads_toml_strings

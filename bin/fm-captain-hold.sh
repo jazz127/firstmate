@@ -569,35 +569,40 @@ CAPTAIN_MIGRATION_SCAN_JSON=
 NL_SEP=$'\n'
 
 # Section-aware extraction from a .tasks.toml: only the named keys inside the
-# named section, comments stripped. Prints "<key> <value>" lines.
+# named section. Prints "<key> <JSON-string>" lines.
 captain_toml_section_entries() {  # <toml-file> <section> <key-alternation>
   [ -f "$1" ] || return 0
-  LC_ALL=C awk -v section="[$2]" -v keys="^($3)[[:space:]]*=" '
-    function trim(v) { sub(/^[[:space:]]+/, "", v); sub(/[[:space:]]+$/, "", v); return v }
-    BEGIN { insection = 0 }
-    {
-      line = $0
-      sub(/[[:space:]]*#.*/, "", line)
-      line = trim(line)
-      if (line ~ /^\[[^]]+\]$/) { insection = (line == section); next }
-      if (!insection) next
-      if (line ~ keys) {
-        key = line
-        sub(/[[:space:]]*=.*/, "", key)
-        sub(/^[^=]*=[[:space:]]*/, "", line)
-        gsub(/^"|"$/, "", line); gsub(/^'\''|'\''$/, "", line)
-        printf "%s %s\n", key, line
-      }
-    }
-  ' "$1"
+  python3 - "$1" "$2" "$3" <<'PY'
+import json
+import sys
+
+try:
+    import tomllib
+except ImportError:
+    sys.exit("fm-captain-hold: Python 3.11+ with tomllib is required to read TOML settings")
+
+try:
+    with open(sys.argv[1], "rb") as source:
+        settings = tomllib.load(source).get(sys.argv[2], {})
+    if not isinstance(settings, dict):
+        raise ValueError("settings section must be a table")
+    for key in sys.argv[3].split("|"):
+        if key in settings:
+            value = settings[key]
+            if not isinstance(value, str):
+                raise ValueError(f"{key} must be a string")
+            print(key, json.dumps(value))
+except (OSError, ValueError) as error:
+    sys.exit(f"fm-captain-hold: cannot read TOML settings in {sys.argv[1]}: {error}")
+PY
 }
 
 captain_beads_toml_entries() {  # <toml-file>
   captain_toml_section_entries "$1" beads 'prefix|path|binary'
 }
 
-captain_beads_setting() {  # <entries-output> <setting>
-  printf '%s\n' "$1" | sed -n "s/^$2 //p" | head -1
+captain_toml_setting() {  # <entries-output> <setting>
+  decode_shown_value "$(printf '%s\n' "$1" | sed -n "s/^$2 //p" | head -1)"
 }
 
 # Read the configured beads graph's row listing for a migration-note scan.
@@ -618,9 +623,9 @@ captain_migration_scan_load() {  # <resolved-data-dir>
     CAPTAIN_MIGRATION_SCAN_LOADED=1
     return 0
   fi
-  entries=$(captain_beads_toml_entries "$root/.tasks.toml")
-  bd_bin=$(captain_beads_setting "$entries" binary)
-  bd_path=$(captain_beads_setting "$entries" path)
+  entries=$(captain_beads_toml_entries "$root/.tasks.toml") || return 2
+  bd_bin=$(captain_toml_setting "$entries" binary) || return 2
+  bd_path=$(captain_toml_setting "$entries" path) || return 2
   bd_bin=${bd_bin:-bd}
   if [ -z "$bd_path" ]; then
     printf 'fm-captain-hold: the beads backend carries no graph path in %s, so a migrated hold cannot be found\n' "$root/.tasks.toml" >&2
@@ -716,8 +721,8 @@ resolve_migrated_entry() {  # <origin-or-empty> <entry>
   # No marker line anywhere: a mechanical migration keeps the legacy id under
   # the configured prefix, but that name alone is evidence of nothing, so only
   # a row still held for the captain - and only one of them - is accepted.
-  entries=$(captain_beads_toml_entries "$root/.tasks.toml")
-  prefix=$(captain_beads_setting "$entries" prefix)
+  entries=$(captain_beads_toml_entries "$root/.tasks.toml") || return 2
+  prefix=$(captain_toml_setting "$entries" prefix) || return 2
   [ -n "$prefix" ] || return 1
   prefixed_matches=
   for candidate in $CAPTAIN_MIGRATION_IDENTITIES; do
@@ -886,10 +891,12 @@ refuse_self_inventory() {
 # value resolves against the backlog root wherever it was configured, the way
 # tasks-axi resolves it.
 captain_markdown_archive_setting() {  # <backlog-root>
-  local root=$1 archive
-  archive=$(captain_toml_section_entries "$root/.tasks.toml" markdown archive | sed -n 's/^archive //p' | head -1)
+  local root=$1 archive entries
+  entries=$(captain_toml_section_entries "$root/.tasks.toml" markdown archive) || return 1
+  archive=$(captain_toml_setting "$entries" archive) || return 1
   if [ -z "$archive" ] && [ -n "${HOME:-}" ]; then
-    archive=$(captain_toml_section_entries "$HOME/.tasks-axi/config.toml" markdown archive | sed -n 's/^archive //p' | head -1)
+    entries=$(captain_toml_section_entries "$HOME/.tasks-axi/config.toml" markdown archive) || return 1
+    archive=$(captain_toml_setting "$entries" archive) || return 1
   fi
   printf '%s\n' "$archive"
 }
@@ -903,7 +910,7 @@ captain_markdown_archive_path() {
   root=$(fm_backlog_root "$data") || return 1
   backend=$(fm_tasks_axi_backend "$root" 2>/dev/null) || return 1
   [ "$backend" = markdown ] || return 1
-  archive=$(captain_markdown_archive_setting "$root")
+  archive=$(captain_markdown_archive_setting "$root") || return 1
   case "$archive" in
     '')
       file=$(fm_backlog_file "$data") || return 1

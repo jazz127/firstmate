@@ -1272,8 +1272,8 @@ test_github_enterprise_hosts() {
   assert_no_grep 'pr=' "$dir/home/state/task-a.meta" "an unlisted GitHub host recorded pr metadata"
   [ ! -s "$dir/gh.log" ] || fail "an unlisted GitHub host still reached the forge"
 
-  # github.com keeps its previous shape: the same URL records and merges with no
-  # host exported, so every call addresses github.com exactly as before.
+  # GitHub.com registration keeps its URL identity and explicitly binds the
+  # published scratch read to its host.
   dir=$(make_case github-dotcom-unchanged)
   write_task_meta "$dir"
   run_check_entry "$dir" task-a https://github.com/my-org/repo/pull/37 \
@@ -1282,8 +1282,10 @@ test_github_enterprise_hosts() {
   grep -qxF 'pr=https://github.com/my-org/repo/pull/37' "$dir/home/state/task-a.meta" \
     || fail "github.com pr metadata changed"
   [ -s "$dir/gh.log" ] || fail "github.com registration made no forge read"
-  ! grep -qE '^host=.+' "$dir/gh.log" \
-    || fail "github.com registration exported a host it never needed"
+  grep -qxF 'host=github.com' "$dir/gh.log" \
+    || fail "github.com published-file validation did not bind its parsed host"
+  [ -z "$(sed -n 's/^host=//p' "$dir/gh.log" | sed '/^$/d; /^github\.com$/d')" ] \
+    || fail "github.com registration addressed a different host"
   pass "GitHub Enterprise hosts are accepted only when the home names them and their host reaches every forge call"
 }
 
@@ -4046,6 +4048,11 @@ test_poll_registration_in_unusual_state_paths() {
   done
   pass "poll registration authenticates unusual state paths and refuses changed bytes"
 }
+
+if [ -n "${FM_TEST_ONLY:-}" ]; then
+  "$FM_TEST_ONLY"
+  exit
+fi
 
 test_poll_registration_in_unusual_state_paths
 test_parser_matrix

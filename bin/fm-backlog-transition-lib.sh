@@ -1134,7 +1134,7 @@ fm_backlog_close_marker_clear() {  # <state-dir> <id>
 }
 
 fm_backlog_task_status_retire() {
-  local state=$1 id=$2 meta="$1/$2.meta" tmp line verb legacy_re
+  local state=$1 id=$2 meta="$1/$2.meta" tmp line verb legacy_re retire=${3:-status_retire_presentation_task}
   _fm_wake_require_classify || return 1
   FM_BACKLOG_TASK_OUTCOME=$(sed -n 's/^trace_outcome=//p' "$meta" 2>/dev/null | head -n 1 || true)
   case "$FM_BACKLOG_TASK_OUTCOME" in done|failed) ;; *) FM_BACKLOG_TASK_OUTCOME=unknown ;; esac
@@ -1163,7 +1163,7 @@ fm_backlog_task_status_retire() {
       return 1
     fi
   fi
-  if ! status_retire_presentation_task "$state" "$id"; then
+  if ! "$retire" "$state" "$id"; then
     FM_BACKLOG_TRANSITION_ERROR="$id's status presentation could not be retired; retaining its task record"
     return 1
   fi

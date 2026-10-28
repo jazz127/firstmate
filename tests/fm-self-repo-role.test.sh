@@ -35,8 +35,8 @@ export FM_BACKEND=tmux
 
 # The code root under test is this checkout, so self-repo detection reaches it
 # through the shared git common dir. Its publication target is derived, never
-# assumed: a checkout without an upstream/github/origin remote resolves to the
-# undeterminable path and the scope-bound cases adapt.
+# assumed: a checkout without an origin remote resolves to the undeterminable path and the
+# scope-bound cases adapt.
 PUB_TARGET=$(fm_role_publication_target "$ROOT")
 ORIGIN_URL=$(git -C "$ROOT" remote get-url origin 2>/dev/null) \
   || ORIGIN_URL=
@@ -328,6 +328,27 @@ test_check_fork_lineage_reaches_the_gate() {
   out=$(check_as "$fork" "$user_home" "$TMP_ROOT/fork-unrelated"); rc=$?
   expect_code 2 "$rc" "an unrelated history is not firstmate even with a firstmate remote (got: $out)"
   pass "fm-role.sh check: repository lineage, not remotes, identifies firstmate across forks"
+}
+
+# A sync remote and gh's implicit selection cannot redefine this delivery
+# contract's explicit origin target or authorize publishing to another repo.
+test_check_sync_remote_markers_cannot_change_publication() {
+  local fork user_home fork_home out rc
+  fork=$(make_lineage_root resolved-fork https://github.com/someone/firstmate-fork)
+  git -C "$fork" remote add upstream https://github.com/kunchenguid/firstmate
+  user_home=$(make_role_home resolved-user)
+  fork_home=$(make_role_home resolved-maint 'maintainer github.com/someone/firstmate-fork')
+  out=$(check_as "$fork" "$fork_home" "$fork"); rc=$?
+  expect_code 0 "$rc" "fork-origin delivery must retain its explicit scope: $out"
+  git -C "$fork" config remote.upstream.gh-resolved base
+  out=$(check_as "$fork" "$fork_home" "$fork"); rc=$?
+  expect_code 0 "$rc" "a sync marker must not redirect the delivery contract: $out"
+  out=$(check_as "$fork" "$user_home" "$fork" upstream-consent github.com/kunchenguid/firstmate); rc=$?
+  expect_code 1 "$rc" "upstream consent must not authorize the fork-origin delivery: $out"
+  git -C "$fork" remote rename origin publishing
+  out=$(check_as "$fork" "$fork_home" "$fork"); rc=$?
+  expect_code 1 "$rc" "a missing delivery origin must fail closed: $out"
+  pass "fm-role.sh check: sync remotes and gh markers cannot redirect origin delivery authority"
 }
 
 # Lineage that cannot be determined refuses, and a firstmate-lineage project
@@ -800,6 +821,7 @@ test_check_wrong_scope_and_remote_presence_do_not_authorize
 test_check_equivalent_remote_spellings_are_one_repo
 test_check_house_destination_authority
 test_check_fork_lineage_reaches_the_gate
+test_check_sync_remote_markers_cannot_change_publication
 test_check_undeterminable_lineage_and_target_refuse
 test_check_task_consent_authorizes_one_task
 test_secondmate_cannot_self_grant

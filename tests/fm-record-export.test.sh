@@ -823,7 +823,7 @@ test_large_histories_fit_a_child_descriptor_limit() {
   done
   (ulimit -n 64; run_export "$home" archive-task task-a) > "$home/retry.out" 2> "$home/retry.err" \
     || fail "large committed archive retry failed: $(cat "$home/retry.err")"
-  python3 - "$archive" <<'PYV'
+  if ! python3 - "$archive" <<'PYV'
 import hashlib
 import json
 import pathlib
@@ -837,7 +837,9 @@ for entry in manifest["files"]:
     assert len(content) == entry["bytes"]
     assert hashlib.sha256(content).hexdigest() == entry["sha256"]
 PYV
-  [ "$?" -eq 0 ] || fail "large archive manifest lost integrity"
+  then
+    fail "large archive manifest lost integrity"
+  fi
   pass "live sync, archive capture and committed retry handle histories larger than a child descriptor limit"
 }
 

@@ -4799,6 +4799,7 @@ test_archive_toml_string_paths() {
     archived_answer_config_case "$scope" "'data/literal#1.md' # trailing comment" 'data/literal#1.md' "$scope-literal"
     archived_answer_config_case "$scope" '"data/review\u0023\U000000e9.md"' 'data/review#é.md' "$scope-unicode"
     archived_answer_config_case "$scope" '"data/review\\batch\"#1.md"' 'data/review\batch"#1.md' "$scope-escapes"
+    # shellcheck disable=SC2016 # Command substitution must remain literal archive-path test data.
     archived_answer_config_case "$scope" '"data/$(printf wrong)#1.md"' 'data/$(printf wrong)#1.md' "$scope-shell-data"
   done
 }

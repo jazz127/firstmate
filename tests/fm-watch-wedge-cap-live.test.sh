@@ -192,7 +192,8 @@ printf 'working: implementing\n' > "$STATE/$TASK.status"
 # pre-empt the stale path on the first cycle: without this the first cycle
 # exits on a status-signal wake and the pane never reaches the wedge timer.
 FM_HOME="$LAB_HOME" bash -c '. "$1"; fm_wake_status_mark_current "$2" "$3"' \
-  _ "$ROOT/bin/fm-wake-lib.sh" "$LAB_HOME" "$TASK.status"
+  _ "$ROOT/bin/fm-wake-lib.sh" "$STATE" "$STATE/$TASK.status" \
+  || fail "could not prime the initial worker status"
 
 # The watcher's ONE derivation of a window's marker key (bin/fm-watch.sh
 # window_key): `:`, `/` and `.` become `_`, every other character is kept. This

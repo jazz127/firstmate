@@ -235,7 +235,7 @@ fm_backend_paseo_container_ensure() {
 }
 
 # fm_backend_paseo_home_label: readable home prefix plus a short hash of the
-# resolved FM_ROOT path (bin/fm-backend-hometag-lib.sh). The paseo daemon is
+# resolved FM_HOME path (bin/fm-backend-hometag-lib.sh). The paseo daemon is
 # one app-global terminal namespace shared by every firstmate home, so the
 # path hash distinguishes every installation, exactly like cmux's shared
 # workspace namespace.
@@ -258,15 +258,14 @@ fm_backend_paseo_scoped_name() { # <fm-task-label>
 
 # fm_backend_paseo_terminal_id_for_name: the live terminal id whose NAME
 # equals <name>, or empty. Paseo enforces no name uniqueness itself
-# (finding #4's sibling on the terminal layer), so this adopts the first
-# match, mirroring cmux's duplicate-check posture. Fails when the inventory
+# (finding #4's sibling on the terminal layer). Fails when the inventory
 # cannot be read, so a caller about to create a terminal never mistakes an
 # unreadable list for "no match".
 fm_backend_paseo_terminal_id_for_name() { # <name>
   local name=$1 list
   list=$(fm_backend_paseo_cli terminal ls --all --json 2>/dev/null) || return 1
   printf '%s' "$list" | jq -e 'type == "array"' >/dev/null 2>&1 || return 1
-  printf '%s' "$list" | jq -r --arg want "$name" '.[] | select(.name == $want) | .id' | head -1
+  printf '%s' "$list" | jq -r --arg want "$name" '[.[] | select(.name == $want) | .id] | if length > 1 then error("ambiguous terminal name") else .[0] // empty end'
 }
 
 # fm_backend_paseo_workspace_label: the shared per-project workspace's title,
@@ -446,10 +445,11 @@ fm_backend_paseo_target_ready() { # <target> [expected-label]
   fi
   [ -n "$expected_label" ] || return 1
   expected_name=$(fm_backend_paseo_scoped_name "$expected_label")
-  tid=$(fm_backend_paseo_terminal_id_for_name "$expected_name")
+  tid=$(fm_backend_paseo_terminal_id_for_name "$expected_name") || return 1
   [ -n "$tid" ] || return 1
   entry=$(fm_backend_paseo_terminal_entry "$tid")
   [ -n "$entry" ] || return 1
+  [ "$(printf '%s' "$entry" | jq -r '.name // empty' 2>/dev/null)" = "$expected_name" ] || return 1
   wsid=$(printf '%s' "$entry" | jq -r '.workspaceId // empty' 2>/dev/null)
   [ -n "$wsid" ] || return 1
   FM_BACKEND_PASEO_TERMINAL=$tid

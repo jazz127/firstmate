@@ -796,6 +796,110 @@ test_export_root_stays_cold_to_firstmate_readers() {
   pass "presentation, wake, classification, and snapshot readers leave the export root cold"
 }
 
+test_large_histories_fit_a_child_descriptor_limit() {
+  local home export_root n rel archive
+  home=$(make_home descriptor-limit)
+  export_root="$TMP_ROOT/export-descriptor-limit"
+  printf '%s\n' "$export_root" > "$home/config/record-export-root"
+  write_archive_fixture "$home" descriptor-generation
+  for ((n=1; n<=140; n++)); do
+    mkdir -p "$home/data/task-$n"
+    printf 'brief %s\n' "$n" > "$home/data/task-$n/brief.md"
+    printf 'report %s\n' "$n" > "$home/data/task-$n/report.md"
+    printf 'pending %s\n' "$n" > "$home/state/task-a.inbox/$n.msg"
+    printf 'handled %s\n' "$n" > "$home/state/task-a.inbox/handled/$n.msg"
+  done
+  (ulimit -n 64; run_export "$home" sync) > "$home/sync.out" 2> "$home/sync.err" \
+    || fail "large live history exhausted bounded child descriptors: $(cat "$home/sync.err")"
+  (ulimit -n 64; run_export "$home" archive-task task-a) > "$home/archive.out" 2> "$home/archive.err" \
+    || fail "large archive history exhausted bounded child descriptors: $(cat "$home/archive.err")"
+  archive="$export_root/archive/task-a/descriptor-generation"
+  for ((n=1; n<=140; n++)); do
+    for rel in "data/task-$n/brief.md" "data/task-$n/report.md" "state/task-a.inbox/$n.msg" "state/task-a.inbox/handled/$n.msg"; do
+      cmp -s "$home/$rel" "$export_root/live/$rel" || fail "large sync lost $rel"
+    done
+    cmp -s "$home/state/task-a.inbox/$n.msg" "$archive/inbox/$n.msg" || fail "large archive lost pending message $n"
+    cmp -s "$home/state/task-a.inbox/handled/$n.msg" "$archive/inbox/handled/$n.msg" || fail "large archive lost handled message $n"
+  done
+  (ulimit -n 64; run_export "$home" archive-task task-a) > "$home/retry.out" 2> "$home/retry.err" \
+    || fail "large committed archive retry failed: $(cat "$home/retry.err")"
+  python3 - "$archive" <<'PYV'
+import hashlib
+import json
+import pathlib
+import sys
+root = pathlib.Path(sys.argv[1])
+manifest = json.loads((root / "manifest.v1.json").read_text())
+assert manifest["complete"] is True
+assert len(manifest["files"]) >= 282
+for entry in manifest["files"]:
+    content = (root / entry["archive"]).read_bytes()
+    assert len(content) == entry["bytes"]
+    assert hashlib.sha256(content).hexdigest() == entry["sha256"]
+PYV
+  [ "$?" -eq 0 ] || fail "large archive manifest lost integrity"
+  pass "live sync, archive capture and committed retry handle histories larger than a child descriptor limit"
+}
+
+test_reopened_sources_reject_replaced_ancestors() {
+  local home export_root case_name real_python rc
+  real_python=$(command -v python3)
+  for case_name in directory symlink; do
+    home=$(make_home "reopen-$case_name")
+    export_root="$TMP_ROOT/export-reopen-$case_name"
+    printf '%s\n' "$export_root" > "$home/config/record-export-root"
+    write_archive_fixture "$home" reopen-generation
+    mkdir -p "$home/fakebin" "$home/foreign"
+    printf 'foreign sentinel\n' > "$home/foreign/002.msg"
+    cat > "$home/reopen-race.py" <<'PYR'
+import os
+import pathlib
+import runpy
+import sys
+
+original_open = os.open
+changed = False
+
+def replace_ancestor(path, *args, **kwargs):
+    global changed
+    fd = original_open(path, *args, **kwargs)
+    if os.fspath(path).startswith(".archive-stage-") and not changed:
+        changed = True
+        home = pathlib.Path(os.environ["FM_HOME"])
+        handled = home / "state/task-a.inbox/handled"
+        handled.rename(handled.with_name("original"))
+        if os.environ["FM_TEST_REPLACEMENT"] == "symlink":
+            handled.symlink_to(home / "foreign", target_is_directory=True)
+        else:
+            handled.mkdir()
+            (handled / "002.msg").write_text("handled\n")
+        (home / "mutated").touch()
+    return fd
+
+os.open = replace_ancestor
+sys.argv = sys.argv[1:]
+runpy.run_path(sys.argv[0], run_name="__main__")
+PYR
+    printf '#!/bin/bash\nexec %q %q "$@"\n' "$real_python" "$home/reopen-race.py" > "$home/fakebin/python3"
+    chmod +x "$home/fakebin/python3"
+    rc=0
+    PATH="$home/fakebin:$PATH" FM_TEST_REPLACEMENT="$case_name" run_export "$home" archive-task task-a \
+      > "$home/archive.out" 2> "$home/archive.err" || rc=$?
+    assert_present "$home/mutated" "ancestor replacement did not execute"
+    [ "$rc" -ne 0 ] || fail "reopening accepted a replaced $case_name ancestor"
+    assert_absent "$export_root/archive/task-a/reopen-generation/manifest.v1.json" "replaced ancestor was published"
+    assert_grep 'foreign sentinel' "$home/foreign/002.msg" "reopening changed a foreign target"
+  done
+  pass "archive source reopening refuses symlink and real-directory ancestor replacements"
+}
+
+if [ -n "${FM_TEST_ONLY:-}" ]; then
+  "$FM_TEST_ONLY"
+  exit 0
+fi
+
+test_large_histories_fit_a_child_descriptor_limit
+test_reopened_sources_reject_replaced_ancestors
 test_sync_is_off_when_config_is_absent
 test_sync_copies_only_the_v1_allowlist
 test_sync_replaces_files_atomically

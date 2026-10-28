@@ -222,23 +222,23 @@ tern_expected_root_hash() {  # <root>
   fi
 }
 
-tern_expected_home_label() {  # [home] [root]
-  local home=${1:-$ROOT} root=${2:-$ROOT} marker id prefix=firstmate
+tern_expected_home_label() {  # [home]
+  local home=${1:-$ROOT} marker id prefix=firstmate
   marker="$home/.fm-secondmate-home"
   if [ -f "$marker" ]; then
     id=$(tr -d '[:space:]' < "$marker" 2>/dev/null)
     [ -z "$id" ] || prefix="2ndmate-$id"
   fi
-  printf '%s-%s' "$prefix" "$(tern_expected_root_hash "$root")"
+  printf '%s-%s' "$prefix" "$(tern_expected_root_hash "$home")"
 }
 
-tern_expected_title() {  # <fm-task-label> [home] [root]
-  local label=$1 home=${2:-$ROOT} root=${3:-$ROOT} rest
+tern_expected_title() {  # <fm-task-label> [home]
+  local label=$1 home=${2:-$ROOT} rest
   case "$label" in
     fm-*) rest=${label#fm-} ;;
     *) rest=$label ;;
   esac
-  printf 'fm-%s-%s' "$(tern_expected_home_label "$home" "$root")" "$rest"
+  printf 'fm-%s-%s' "$(tern_expected_home_label "$home")" "$rest"
 }
 
 assert_call_order() {  # <log> <before> <after> <msg>
@@ -480,7 +480,7 @@ test_target_ready_checks_expected_label() {
     && fail "target_ready should reject a block id reused under a different tab title"
 
   dir=$(new_case ready-label-foreign-home)
-  ls_with_block "$dir" 1 40 true "$(tern_expected_title fm-label "$ROOT" "$TMP_ROOT")"
+  ls_with_block "$dir" 1 40 true "$(tern_expected_title fm-label "$TMP_ROOT")"
   run_tern "$dir" 'fm_backend_tern_target_ready "$1" fm-label' "$TARGET" \
     && fail "target_ready should reject a same-label tab scoped to a different firstmate home"
   pass "fm_backend_tern_target_ready: the expected label must equal this home's scoped tab title"
@@ -1079,7 +1079,7 @@ test_list_live_lists_only_this_homes_task_tabs() {
   local dir out title other_title
   dir=$(new_case list-live)
   title=$(tern_expected_title fm-task1)
-  other_title=$(tern_expected_title fm-task2 "$ROOT" "$TMP_ROOT")
+  other_title=$(tern_expected_title fm-task2 "$TMP_ROOT")
   ls_write "$dir" 1 \
     "$(session_json "$SID" fm-test-ctr "$(tab_json "$TAB" "$title" "$(block_json "$BLK")")" "$(tab_json 9007199254741001 "$other_title" "$(block_json 9007199254741003)")" "$(tab_json 9007199254741005 zsh "$(block_json 9007199254741007)")")" \
     "$(session_json "$SID2" Default "$(tab_json 9007199254741009 "$title" "$(block_json 9007199254741011)")")"
@@ -1692,6 +1692,49 @@ EOF
 # shellcheck source=/dev/null
 . "$ROOT/bin/fm-backend.sh"
 
+test_shared_checkout_home_isolation() {
+  local dir="$TMP_ROOT/shared-checkout"
+  mkdir -p "$dir/a" "$dir/b"
+  (
+    FM_ROOT=$ROOT FM_HOME="$dir/a"
+    unset FM_TERN_SESSION
+    . "$ROOT/bin/backends/tern.sh"
+    own=$(fm_backend_tern_scoped_title fm-same)
+    own_session=$(fm_backend_tern_session_name)
+    FM_HOME="$dir/b"
+    foreign=$(fm_backend_tern_scoped_title fm-same)
+    foreign_session=$(fm_backend_tern_session_name)
+    [ "$own" != "$foreign" ] && [ "$own_session" != "$foreign_session" ] || fail "two homes sharing code received the same Tern identity"
+    FM_HOME="$dir/a"
+    fm_backend_tern_cli() {
+      if [ "$1" = ls ]; then cat "$dir/inventory"; else printf '%s\n' "$*" >> "$dir/access"; fi
+    }
+    jq -n --arg name "$foreign_session" --arg title "$foreign" '{sessions:[{id:2,name:$name,tabs:[{id:3,name:$title,blocks:[{id:4}]}]}]}' > "$dir/inventory"
+    : > "$dir/access"
+    fm_backend_tern_create_task fm-same "$dir/a" >/dev/null 2>&1 && fail "creation adopted a foreign session"
+    fm_backend_tern_capture 2:4 10 fm-same >/dev/null 2>&1 && fail "capture accepted a foreign title"
+    fm_backend_tern_send_literal 2:4 secret fm-same && fail "send accepted a foreign title"
+    fm_backend_tern_kill 2:4 '' fm-same
+    [ -z "$(fm_backend_tern_list_live)" ] || fail "listing exposed a foreign home"
+    [ ! -s "$dir/access" ] || fail "foreign endpoint was accessed or changed"
+    jq -n --arg name "$own_session" '{sessions:[{id:1,name:$name},{id:2,name:$name}]}' > "$dir/inventory"
+    fm_backend_tern_create_task fm-same "$dir/a" >/dev/null 2>&1 && fail "creation adopted an ambiguous session"
+    [ ! -s "$dir/access" ] || fail "ambiguous sessions were changed"
+    jq -n --arg name "$own_session" --arg title "$own" '{sessions:[{id:1,name:$name,tabs:[{id:3,name:$title,blocks:[{id:4}]}]}]}' > "$dir/inventory"
+    fm_backend_tern_target_ready 1:4 fm-same || fail "explicit own endpoint lost its binding"
+    [ "$(fm_backend_tern_list_live)" = $'1:4\tfm-same' ] || fail "own-home listing failed"
+    fm_backend_tern_send_literal 1:4 hello fm-same || fail "own-home send failed"
+    assert_grep 'send 1/4 text hello' "$dir/access" "send missed the explicit own endpoint"
+  ) || fail "Tern home isolation fixture failed"
+  pass "Tern isolates shared-checkout homes and refuses foreign or ambiguous session adoption"
+}
+
+if [ -n "${FM_TEST_ONLY:-}" ]; then
+  "$FM_TEST_ONLY"
+  exit 0
+fi
+
+test_shared_checkout_home_isolation
 test_parse_target_keeps_full_64_bit_ids
 test_parse_target_rejects_malformed_targets
 test_malformed_target_never_reaches_the_cli

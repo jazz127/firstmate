@@ -98,8 +98,8 @@ paseo_expected_root_hash() { # <root>
   fi
 }
 
-paseo_expected_home_label() { # [home] [root]
-  local home=${1:-$ROOT} root=${2:-$ROOT} marker id prefix
+paseo_expected_home_label() { # [home]
+  local home=${1:-$ROOT} marker id prefix
   marker="$home/.fm-secondmate-home"
   if [ -f "$marker" ]; then
     id=$(tr -d '[:space:]' <"$marker" 2>/dev/null)
@@ -111,16 +111,16 @@ paseo_expected_home_label() { # [home] [root]
   else
     prefix="firstmate"
   fi
-  printf '%s-%s' "$prefix" "$(paseo_expected_root_hash "$root")"
+  printf '%s-%s' "$prefix" "$(paseo_expected_root_hash "$home")"
 }
 
-paseo_expected_scoped_name() { # <fm-task-label> [home] [root]
-  local label=$1 home=${2:-$ROOT} root=${3:-$ROOT} rest
+paseo_expected_scoped_name() { # <fm-task-label> [home]
+  local label=$1 home=${2:-$ROOT} rest
   case "$label" in
   fm-*) rest=${label#fm-} ;;
   *) rest=$label ;;
   esac
-  printf 'fm-%s-%s' "$(paseo_expected_home_label "$home" "$root")" "$rest"
+  printf 'fm-%s-%s' "$(paseo_expected_home_label "$home")" "$rest"
 }
 
 paseo_assert_call_order() {
@@ -206,7 +206,7 @@ test_scoped_name_uses_primary_home_label() {
   expected=$(paseo_expected_scoped_name fm-task1 "$dir")
   out=$(FM_HOME="$dir" bash -c '. "$0/bin/backends/paseo.sh"; fm_backend_paseo_scoped_name fm-task1' "$ROOT")
   [ "$out" = "$expected" ] || fail "primary scoped name should be $expected, got '$out'"
-  pass "fm_backend_paseo_scoped_name: scopes a primary task name with firstmate plus root hash"
+  pass "fm_backend_paseo_scoped_name: scopes a primary task name with firstmate plus home hash"
 }
 
 test_scoped_name_uses_secondmate_home_label() {
@@ -217,7 +217,7 @@ test_scoped_name_uses_secondmate_home_label() {
   expected=$(paseo_expected_scoped_name fm-task1 "$dir")
   out=$(FM_HOME="$dir" bash -c '. "$0/bin/backends/paseo.sh"; fm_backend_paseo_scoped_name fm-task1' "$ROOT")
   [ "$out" = "$expected" ] || fail "secondmate scoped name should be $expected, got '$out'"
-  pass "fm_backend_paseo_scoped_name: scopes a secondmate task name with the home marker plus root hash"
+  pass "fm_backend_paseo_scoped_name: scopes a secondmate task name with the home marker plus home hash"
 }
 
 # --- dispatch wiring (fm-backend.sh) ------------------------------------------
@@ -968,7 +968,7 @@ test_list_live_filters_by_name_prefix() {
   other_root="$dir/other-root"
   mkdir -p "$other_root"
   name=$(paseo_expected_scoped_name fm-task1)
-  other_name=$(paseo_expected_scoped_name fm-task2 "$ROOT" "$other_root")
+  other_name=$(paseo_expected_scoped_name fm-task2 "$other_root")
   paseo_terminal_ls_response "$dir" 1 \
     "aaaaaaaa-0000-0000-0000-000000000000" "wks_bbbbbbbbbbbbbbbb" "$name" \
     "dddddddd-8888-8888-8888-888888888888" "wks_ffffffffffffffff" "$other_name" \
@@ -1050,6 +1050,59 @@ test_branch_dispatch_claims_paseo_stale_wake() {
 # shellcheck source=/dev/null
 . "$ROOT/bin/fm-backend.sh"
 
+test_shared_checkout_home_isolation() {
+  local dir="$TMP_ROOT/shared-checkout"
+  mkdir -p "$dir/a" "$dir/b"
+  (
+    FM_ROOT=$ROOT FM_HOME="$dir/a"
+    . "$ROOT/bin/backends/paseo.sh"
+    own=$(fm_backend_paseo_scoped_name fm-same)
+    FM_HOME="$dir/b"
+    foreign=$(fm_backend_paseo_scoped_name fm-same)
+    [ "$own" != "$foreign" ] || fail "two homes sharing code and task ID received the same name"
+    FM_HOME="$dir/a"
+    ln -s "$dir/a" "$dir/alias"
+    alias_name=$(FM_HOME="$dir/alias" fm_backend_paseo_scoped_name fm-same)
+    [ "$own" = "$alias_name" ] || fail "one home received different names through a symlink"
+    fm_backend_paseo_cli() {
+      case "$1 $2" in
+        'terminal ls') cat "$dir/inventory" ;;
+        'workspace ls') printf '[]' ;;
+        'terminal capture') printf 'capture\n' >> "$dir/access"; printf '{"lines":["owned transcript"]}' ;;
+        *) printf '%s\n' "$*" >> "$dir/access" ;;
+      esac
+    }
+    jq -n --arg name "$foreign" '[{id:"foreign",workspaceId:"foreign-workspace",name:$name}]' > "$dir/inventory"
+    : > "$dir/access"
+    fm_backend_paseo_capture stale:workspace 10 fm-same >/dev/null 2>&1 && fail "stale capture adopted a foreign terminal"
+    fm_backend_paseo_send_literal stale:workspace secret fm-same && fail "stale send adopted a foreign terminal"
+    fm_backend_paseo_send_key stale:workspace Enter fm-same && fail "stale key adopted a foreign terminal"
+    fm_backend_paseo_kill stale:workspace '' fm-same
+    [ -z "$(fm_backend_paseo_list_live)" ] || fail "listing exposed a foreign home"
+    [ ! -s "$dir/access" ] || fail "foreign endpoint was accessed or changed"
+    jq -n --arg name "$own" '[{id:"own",workspaceId:"workspace",name:$name},{id:"duplicate",workspaceId:"workspace",name:$name}]' > "$dir/inventory"
+    fm_backend_paseo_capture stale:workspace 10 fm-same >/dev/null 2>&1 && fail "stale capture adopted an ambiguous name"
+    fm_backend_paseo_send_literal stale:workspace secret fm-same 2>/dev/null && fail "stale send adopted an ambiguous name"
+    fm_backend_paseo_kill stale:workspace '' fm-same 2>/dev/null
+    [ ! -s "$dir/access" ] || fail "ambiguous endpoints were accessed or changed"
+    fm_backend_paseo_target_ready own:workspace fm-same || fail "an explicit live endpoint lost its binding"
+    jq '.[0:1]' "$dir/inventory" > "$dir/unique"
+    mv "$dir/unique" "$dir/inventory"
+    [ "$(fm_backend_paseo_capture stale:workspace 10 fm-same)" = 'owned transcript' ] || fail "unique own-home recovery failed"
+    fm_backend_paseo_send_text_line stale:workspace hello fm-same || fail "own-home send failed"
+    [ "$(fm_backend_paseo_list_live)" = $'own:workspace\tfm-same' ] || fail "own-home listing failed"
+    fm_backend_paseo_kill stale:workspace '' fm-same
+    assert_grep 'terminal kill own' "$dir/access" "cleanup missed the recovered own endpoint"
+  ) || fail "Paseo home isolation fixture failed"
+  pass "Paseo isolates shared-checkout homes and refuses foreign or ambiguous stale adoption"
+}
+
+if [ -n "${FM_TEST_ONLY:-}" ]; then
+  "$FM_TEST_ONLY"
+  exit 0
+fi
+
+test_shared_checkout_home_isolation
 test_version_check_accepts_current_version
 test_version_check_accepts_newer_version
 test_version_check_refuses_old_version

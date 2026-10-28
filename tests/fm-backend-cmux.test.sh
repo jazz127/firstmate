@@ -118,8 +118,8 @@ cmux_expected_root_hash() {  # <root>
   fi
 }
 
-cmux_expected_home_label() {  # [home] [root]
-  local home=${1:-$ROOT} root=${2:-$ROOT} marker id prefix
+cmux_expected_home_label() {  # [home]
+  local home=${1:-$ROOT} marker id prefix
   marker="$home/.fm-secondmate-home"
   if [ -f "$marker" ]; then
     id=$(tr -d '[:space:]' < "$marker" 2>/dev/null)
@@ -131,16 +131,16 @@ cmux_expected_home_label() {  # [home] [root]
   else
     prefix="firstmate"
   fi
-  printf '%s-%s' "$prefix" "$(cmux_expected_root_hash "$root")"
+  printf '%s-%s' "$prefix" "$(cmux_expected_root_hash "$home")"
 }
 
-cmux_expected_scoped_title() {  # <fm-task-label> [home] [root]
-  local label=$1 home=${2:-$ROOT} root=${3:-$ROOT} rest
+cmux_expected_scoped_title() {  # <fm-task-label> [home]
+  local label=$1 home=${2:-$ROOT} rest
   case "$label" in
     fm-*) rest=${label#fm-} ;;
     *) rest=$label ;;
   esac
-  printf 'fm-%s-%s' "$(cmux_expected_home_label "$home" "$root")" "$rest"
+  printf 'fm-%s-%s' "$(cmux_expected_home_label "$home")" "$rest"
 }
 
 cmux_assert_call_order() {
@@ -282,7 +282,7 @@ test_scoped_title_uses_primary_home_label() {
   expected=$(cmux_expected_scoped_title fm-task1 "$dir")
   out=$( FM_HOME="$dir" bash -c '. "$0/bin/backends/cmux.sh"; fm_backend_cmux_scoped_title fm-task1' "$ROOT" )
   [ "$out" = "$expected" ] || fail "primary scoped title should be $expected, got '$out'"
-  pass "fm_backend_cmux_scoped_title: scopes a primary task title with firstmate plus root hash"
+  pass "fm_backend_cmux_scoped_title: scopes a primary task title with firstmate plus home hash"
 }
 
 test_scoped_title_uses_secondmate_home_label() {
@@ -292,21 +292,19 @@ test_scoped_title_uses_secondmate_home_label() {
   expected=$(cmux_expected_scoped_title fm-task1 "$dir")
   out=$( FM_HOME="$dir" bash -c '. "$0/bin/backends/cmux.sh"; fm_backend_cmux_scoped_title fm-task1' "$ROOT" )
   [ "$out" = "$expected" ] || fail "secondmate scoped title should be $expected, got '$out'"
-  pass "fm_backend_cmux_scoped_title: scopes a secondmate task title with the home marker plus root hash"
+  pass "fm_backend_cmux_scoped_title: scopes a secondmate task title with the home marker plus home hash"
 }
 
-test_scoped_title_changes_with_root_path() {
-  local dir home root_one root_two out_one out_two expected_one expected_two
+test_scoped_title_follows_home_identity() {
+  local dir home root_one root_two out_one out_two
   dir="$TMP_ROOT/scoped-title-root-hash"; home="$dir/home"; root_one="$dir/root-one"; root_two="$dir/root-two"
   mkdir -p "$home" "$root_one" "$root_two"
-  expected_one=$(cmux_expected_scoped_title fm-task1 "$home" "$root_one")
-  expected_two=$(cmux_expected_scoped_title fm-task1 "$home" "$root_two")
-  out_one=$( FM_HOME="$home" FM_ROOT_OVERRIDE="$root_one" bash -c '. "$0/bin/backends/cmux.sh"; fm_backend_cmux_scoped_title fm-task1' "$ROOT" )
-  out_two=$( FM_HOME="$home" FM_ROOT_OVERRIDE="$root_two" bash -c '. "$0/bin/backends/cmux.sh"; fm_backend_cmux_scoped_title fm-task1' "$ROOT" )
-  [ "$out_one" = "$expected_one" ] || fail "scoped title should include root-one hash as $expected_one, got '$out_one'"
-  [ "$out_two" = "$expected_two" ] || fail "scoped title should include root-two hash as $expected_two, got '$out_two'"
-  [ "$out_one" != "$out_two" ] || fail "scoped titles should differ for distinct FM_ROOT paths"
-  pass "fm_backend_cmux_scoped_title: includes the resolved FM_ROOT hash in the home label"
+  out_one=$(FM_HOME="$home" FM_ROOT_OVERRIDE="$root_one" bash -c '. "$0/bin/backends/cmux.sh"; fm_backend_cmux_scoped_title fm-task1' "$ROOT")
+  out_two=$(FM_HOME="$home" FM_ROOT_OVERRIDE="$root_two" bash -c '. "$0/bin/backends/cmux.sh"; fm_backend_cmux_scoped_title fm-task1' "$ROOT")
+  [ "$out_one" = "$out_two" ] || fail "one home's title changed with its code checkout"
+  out_two=$(FM_HOME="$root_two" FM_ROOT_OVERRIDE="$root_one" bash -c '. "$0/bin/backends/cmux.sh"; fm_backend_cmux_scoped_title fm-task1' "$ROOT")
+  [ "$out_one" != "$out_two" ] || fail "distinct homes sharing code received the same title"
+  pass "fm_backend_cmux_scoped_title: identifies the operational home independently of its code checkout"
 }
 
 # --- dispatch wiring (fm-backend.sh) ------------------------------------------
@@ -1070,7 +1068,7 @@ test_list_live_filters_by_title_prefix() {
   dir="$TMP_ROOT/list-live"; mkdir -p "$dir/responses"
   other_root="$dir/other-root"; mkdir -p "$other_root"
   title=$(cmux_expected_scoped_title fm-task1)
-  other_title=$(cmux_expected_scoped_title fm-task2 "$ROOT" "$other_root")
+  other_title=$(cmux_expected_scoped_title fm-task2 "$other_root")
   # 1: workspace list --json --id-format uuids -> one in-home task, two unrelated
   cmux_workspace_list_response "$dir" 1 \
     "aaaaaaaa-0000-0000-0000-000000000000" "$title" \
@@ -1103,6 +1101,11 @@ test_secondmate_spawn_refuses_cmux_backend() {
 # shellcheck source=/dev/null
 . "$ROOT/bin/fm-backend.sh"
 
+if [ -n "${FM_TEST_ONLY:-}" ]; then
+  "$FM_TEST_ONLY"
+  exit 0
+fi
+
 test_version_check_accepts_current_version
 test_version_check_accepts_newer_version
 test_version_check_refuses_old_version
@@ -1116,7 +1119,7 @@ test_parse_target
 test_normalize_key
 test_scoped_title_uses_primary_home_label
 test_scoped_title_uses_secondmate_home_label
-test_scoped_title_changes_with_root_path
+test_scoped_title_follows_home_identity
 test_dispatch_routes_cmux_backend
 test_dispatch_busy_state_unknown_for_cmux
 test_dispatch_composer_state_routes_cmux

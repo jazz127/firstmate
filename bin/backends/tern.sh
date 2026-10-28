@@ -267,11 +267,11 @@ fm_backend_tern_ls_json() {
   printf '%s' "$out"
 }
 
-# fm_backend_tern_session_id_for_name: the id of the first session called <name>
+# fm_backend_tern_session_id_for_name: the id of the unique session called <name>
 # in the quoted listing <json>, or empty.
 fm_backend_tern_session_id_for_name() {  # <ls-json> <name>
   printf '%s' "$1" | jq -r --arg name "$2" \
-    '[.sessions[]? | select(.name == $name) | (.id | tostring)] | .[0] // empty' 2>/dev/null
+    '[.sessions[]? | select(.name == $name) | (.id | tostring)] | if length > 1 then error("ambiguous session name") else .[0] // empty end' 2>/dev/null
 }
 
 # fm_backend_tern_container_ensure: the full spawn-time container-ensure
@@ -289,11 +289,11 @@ fm_backend_tern_container_ensure() {
       ;;
   esac
   listing=$(fm_backend_tern_ls_json) || { echo "error: 'tern ls --json' failed; is a Tern window or session daemon reachable from this shell?" >&2; return 1; }
-  sid=$(fm_backend_tern_session_id_for_name "$listing" "$name")
+  sid=$(fm_backend_tern_session_id_for_name "$listing" "$name") || return 1
   if [ -z "$sid" ]; then
     out=$(fm_backend_tern_cli new session "$name" 2>&1) || { echo "error: tern new session failed for '$name': $out" >&2; return 1; }
     listing=$(fm_backend_tern_ls_json) || { echo "error: 'tern ls --json' failed after creating session '$name'" >&2; return 1; }
-    sid=$(fm_backend_tern_session_id_for_name "$listing" "$name")
+    sid=$(fm_backend_tern_session_id_for_name "$listing" "$name") || return 1
   fi
   fm_backend_tern_valid_id "$sid" || { echo "error: could not resolve a numeric tern session id for '$name' (got '$sid')" >&2; return 1; }
   printf '%s' "$sid"
@@ -346,7 +346,7 @@ fm_backend_tern_create_task() {  # <label> <cwd>
   title=$(fm_backend_tern_scoped_title "$label")
   name=$(fm_backend_tern_session_name)
   listing=$(fm_backend_tern_ls_json) || { echo "error: 'tern ls --json' failed; cannot create tab '$title'" >&2; return 1; }
-  sid=$(fm_backend_tern_session_id_for_name "$listing" "$name")
+  sid=$(fm_backend_tern_session_id_for_name "$listing" "$name") || return 1
   fm_backend_tern_valid_id "$sid" || { echo "error: tern session '$name' does not exist; run container_ensure first" >&2; return 1; }
   dup=$(printf '%s' "$listing" | jq -r --arg sid "$sid" --arg want "$title" \
     '[.sessions[]? | select((.id | tostring) == $sid) | (.tabs // [])[] | select((.name // "") == $want) | (.id | tostring)] | .[0] // empty' 2>/dev/null)

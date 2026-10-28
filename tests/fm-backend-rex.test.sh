@@ -960,6 +960,30 @@ test_list_live_scopes_to_this_home() {
   pass "fm_backend_rex_list_live: home-scoped blocks only, nothing when unreachable"
 }
 
+test_shared_checkout_home_isolation() {
+  local dir first second sid_a sid_b bid_a bid_b target_a target_b label rc=0
+  dir=$(new_case shared-checkout)
+  mkdir -p "$dir/other/state"
+  first=$(rex_env "$dir" 'fm_backend_rex_create_task fm-same /tmp') || fail "first home could not create its task"
+  read -r sid_a _ bid_a <<< "$first"
+  second=$(rex_env "$dir" FM_HOME="$dir/other" STATE="$dir/other/state" 'fm_backend_rex_create_task fm-same /tmp') || fail "second home could not create its task"
+  read -r sid_b _ bid_b <<< "$second"
+  [ "$sid_a" != "$sid_b" ] || fail "two homes sharing code adopted the same session"
+  target_a="${sid_a#session:}:${bid_a#block:}"
+  target_b="${sid_b#session:}:${bid_b#block:}"
+  assert_equals "$target_a"$'\tfm-same' "$(rex_env "$dir" 'fm_backend_rex_list_live')" "first home listing must exclude second home"
+  assert_equals "$target_b"$'\tfm-same' "$(rex_env "$dir" FM_HOME="$dir/other" 'fm_backend_rex_list_live')" "second home listing must exclude first home"
+  rex_env "$dir" "fm_backend_rex_send_literal '$target_a' hello" || fail "explicit own send failed"
+  rex_env "$dir" "fm_backend_rex_kill '$target_a'" || fail "own cleanup failed"
+  assert_equals "$target_b"$'\tfm-same' "$(rex_env "$dir" FM_HOME="$dir/other" 'fm_backend_rex_list_live')" "cleanup removed the other home's worker"
+  rex_env "$dir" "fm_backend_rex_target_ready '$target_a' fm-same" && fail "stale endpoint recovered a foreign same-task block"
+  label=$(rex_env "$dir" FM_HOME="$dir/other" 'fm_backend_rex_home_label')
+  fake_rex "$dir" new "$label" --window extra >/dev/null
+  rex_env "$dir" FM_HOME="$dir/other" STATE="$dir/other/state" 'fm_backend_rex_create_task fm-another /tmp' > "$dir/ambiguous.out" 2>&1 || rc=$?
+  [ "$rc" -ne 0 ] || fail "Rex adopted an ambiguous home session"
+  pass "Rex isolates shared-checkout homes, keeps explicit bindings and refuses stale or ambiguous adoption"
+}
+
 if [ -n "${FM_TEST_ONLY:-}" ]; then
   "$FM_TEST_ONLY"
   exit 0
@@ -1167,6 +1191,7 @@ test_nm_run_progress_reads_captured_status() {
   pass "rex: validation progress reads captured no-mistakes status by column name"
 }
 
+test_shared_checkout_home_isolation
 test_bin_prefers_rex_bin_dir
 test_rex_spawn_refuses_unproven_remote_endpoint
 test_version_check_gates_api_revision

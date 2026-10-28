@@ -410,16 +410,18 @@ fm_supervision_engine_turn() {
 }
 
 # fm_supervision_engine_result <engine> <result-file> [<prior-conversation-cost>]:
-# print one line "error=0|1 cost=<usd> conversation_cost=<usd> input=<n>
+# print one line "error=0|1 cost=<usd|unknown> conversation_cost=<usd|unknown> input=<n>
 # cache_read=<n> cache_write=<n> output=<n> turns=<n>" from the engine's
 # machine-readable result, where cost is this turn's and conversation_cost the
 # conversation's running total (the caller records it and passes it back for
 # the next turn; 0 for a new conversation). Claude's total_cost_usd is that
 # running total on a resumed conversation, while its usage and num_turns are
 # per turn. error=0 only for a complete success result: type "result",
-# subtype "success", is_error false, and finite total_cost_usd, num_turns, and
-# the four usage token counts; any other shape is error=1. Returns 1 when the
-# result cannot be read. The host treats both as a failed turn.
+# subtype "success", is_error false, finite nonnegative total_cost_usd, and
+# finite num_turns and the four usage token counts; any other shape is error=1.
+# Invalid or missing billed cost is printed as unknown independently of the
+# turn status. Returns 1 when the result cannot be read. The host treats both
+# as a failed turn.
 fm_supervision_engine_result() {
   case "$1" in
     claude)
@@ -432,15 +434,16 @@ fm_supervision_engine_result() {
         const u = j.usage && typeof j.usage === "object" ? j.usage : {};
         const finite = (v) => typeof v === "number" && Number.isFinite(v);
         const n = (v) => (finite(v) ? v : 0);
-        const complete = j.type === "result" && j.subtype === "success" && j.is_error === false
-          && finite(j.total_cost_usd) && finite(j.num_turns) && finite(u.input_tokens)
+        const billed = j.type === "result" && finite(j.total_cost_usd) && j.total_cost_usd >= 0;
+        const complete = billed && j.subtype === "success" && j.is_error === false
+          && finite(j.num_turns) && finite(u.input_tokens)
           && finite(u.cache_read_input_tokens) && finite(u.cache_creation_input_tokens) && finite(u.output_tokens);
         const error = complete ? 0 : 1;
-        const total = n(j.total_cost_usd);
+        const total = billed ? j.total_cost_usd : null;
         const prior = Number(process.argv[2]);
         const turn = Number.isFinite(prior) && prior >= 0 && prior <= total ? total - prior : total;
         const usd = (v) => Number(v.toFixed(6));
-        process.stdout.write(`error=${error} cost=${usd(turn)} conversation_cost=${usd(total)} input=${n(u.input_tokens)} cache_read=${n(u.cache_read_input_tokens)} cache_write=${n(u.cache_creation_input_tokens)} output=${n(u.output_tokens)} turns=${n(j.num_turns)}\n`);
+        process.stdout.write(`error=${error} cost=${billed ? usd(turn) : "unknown"} conversation_cost=${billed ? usd(total) : "unknown"} input=${n(u.input_tokens)} cache_read=${n(u.cache_read_input_tokens)} cache_write=${n(u.cache_creation_input_tokens)} output=${n(u.output_tokens)} turns=${n(j.num_turns)}\n`);
       ' "$2" "${3:-0}" 2>/dev/null
       ;;
     *) return 1 ;;

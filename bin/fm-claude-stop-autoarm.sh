@@ -450,6 +450,7 @@ while [ "$attempt" -lt "$AUTOARM_ATTEMPTS" ]; do
     FM_SUPERVISION_HOST_AUTOARM_GEN=$MY_GEN FM_SUPERVISION_HOST_OWNER_PID=$$ \
       FM_SUPERVISION_HOST_PRIMARY=claude FM_GUARD_GRACE="$GRACE" \
       FM_SUPERVISION_HOST_TAKE_OVER_ARM_PID="$CONTEXT_TAKE_OVER_ARM" \
+      FM_WARM_COMPACT_TRANSCRIPT=$(printf '%s' "$PAYLOAD" | jq -r '.transcript_path // empty' 2>/dev/null) \
       "$SCRIPT_DIR/fm-supervision-host.sh" park >"${OUT:-/dev/null}" 2>&1 || HOST_RC=$?
     CONTEXT_TAKE_OVER_ARM=
   else

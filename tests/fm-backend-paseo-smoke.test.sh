@@ -118,28 +118,24 @@ pass "real paseo: expected task label verification accepts the matching terminal
 
 # --- send_literal + send_key(Enter), the two-step submit form ---------------
 
-fm_backend_paseo_send_literal "$TARGET" 'echo literal-then-key-captain' \
+fm_backend_paseo_send_literal "$TARGET" 'printf "%s%s\n" literal-then-key- captain' \
   || fail "send_literal failed"
 sleep 0.3
 fm_backend_paseo_send_key "$TARGET" Enter || fail "send_key Enter failed"
 sleep 0.5
 out=$(fm_backend_paseo_capture "$TARGET" 20) || fail "capture failed after send_literal+send_key"
-case "$out" in
-*literal-then-key-captain*) : ;;
-*) fail "real paseo: send_literal + send_key(Enter) did not submit and echo the line"$'\n'"$out" ;;
-esac
+printf '%s\n' "$out" | tr -d '\r' | grep -Fxq 'literal-then-key-captain' \
+  || fail "real paseo: send_literal + send_key(Enter) did not submit and echo the line"$'\n'"$out"
 pass "real paseo: send_literal (unsubmitted) + send_key Enter submit as two steps and the output is capturable"
 
 # --- send_text_line (the composed form) --------------------------------------
 
-fm_backend_paseo_send_text_line "$TARGET" "echo captain-on-deck-line" \
+fm_backend_paseo_send_text_line "$TARGET" 'printf "%s%s\n" captain-on-deck- line' \
   || fail "send_text_line failed"
 sleep 0.5
 out=$(fm_backend_paseo_capture "$TARGET" 20) || fail "capture failed after send_text_line"
-case "$out" in
-*captain-on-deck-line*) : ;;
-*) fail "real paseo: send_text_line did not run and echo the line"$'\n'"$out" ;;
-esac
+printf '%s\n' "$out" | tr -d '\r' | grep -Fxq 'captain-on-deck-line' \
+  || fail "real paseo: send_text_line did not run and echo the line"$'\n'"$out"
 pass "real paseo: send_text_line composes send-keys+Enter and its output is capturable"
 
 # --- current_path: verified creation-time-frozen cwd -------------------------

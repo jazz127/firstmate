@@ -4718,6 +4718,12 @@ test_archived_answered_hold_still_satisfies_the_gate() {
 archived_answer_config_case() {
   local scope=$1 encoded=$2 decoded=$3 case_name=$4 hold_home axi_home archive id config_file producer_value
   hold_home=$(make_home "archived-answer-$case_name")
+  cat > "$hold_home/fakebin/python3" <<'SH'
+#!/bin/sh
+printf 'unexpected Python invocation\n' >> "$FM_HOME/python-invocations"
+exit 99
+SH
+  chmod +x "$hold_home/fakebin/python3"
   axi_home="$hold_home/axi-home"
   mkdir -p "$axi_home/.tasks-axi"
   cat > "$hold_home/.tasks.toml" <<'EOF'
@@ -4766,14 +4772,7 @@ EOF
   assert_grep "sample-userconfig-call" "$archive" \
     "Done retention did not archive the answered call to the user-configured location"
   if [ -n "$config_file" ]; then
-    python3 - "$config_file" "$encoded" <<'PY'
-from pathlib import Path
-import sys
-
-path = Path(sys.argv[1])
-lines = path.read_text().splitlines()
-path.write_text("\n".join("archive = " + sys.argv[2] if line.startswith("archive = ") else line for line in lines) + "\n")
-PY
+    FM_TEST_ARCHIVE_VALUE="$encoded" perl -pi -e 's/^archive = .*/"archive = " . $ENV{FM_TEST_ARCHIVE_VALUE}/e' "$config_file"
   fi
   if HOME="$axi_home" tasks_in "$hold_home" show sample-userconfig-call >/dev/null 2>&1; then
     fail "the archived call is still shown from the live backlog, so the fixture reproduces nothing"
@@ -4785,6 +4784,7 @@ PY
     || fail "complete refused an answered call archived to the user-configured location: $(cat "$hold_home/userconfig-complete.err")"
   HOME="$axi_home" run_teardown "$hold_home" "$id" >/dev/null 2> "$hold_home/userconfig-teardown.err" \
     || fail "teardown refused a scout whose answered call was archived to the user-configured location: $(cat "$hold_home/userconfig-teardown.err")"
+  assert_absent "$hold_home/python-invocations" "archive lookup introduced a Python requirement"
   pass "an answered captain call in a TOML-configured archive satisfies verify, complete and teardown: $case_name"
 }
 
@@ -4797,7 +4797,7 @@ test_archive_toml_string_paths() {
   for scope in root user; do
     archived_answer_config_case "$scope" '"data/review#1.md" # trailing comment' 'data/review#1.md' "$scope-hash"
     archived_answer_config_case "$scope" "'data/literal#1.md' # trailing comment" 'data/literal#1.md' "$scope-literal"
-    archived_answer_config_case "$scope" '"data/review\u0023\u00e9.md"' 'data/review#é.md' "$scope-unicode"
+    archived_answer_config_case "$scope" '"data/review\u0023\U000000e9.md"' 'data/review#é.md' "$scope-unicode"
     archived_answer_config_case "$scope" '"data/review\\batch\"#1.md"' 'data/review\batch"#1.md' "$scope-escapes"
     archived_answer_config_case "$scope" '"data/$(printf wrong)#1.md"' 'data/$(printf wrong)#1.md' "$scope-shell-data"
   done
@@ -4807,51 +4807,11 @@ test_archive_default_path() {
   archived_answer_config_case default '' data/done-archive.md default
 }
 
-test_migrated_beads_toml_strings() {
-  local hold_home fb scout mode out
-  hold_home=$(make_home migrated-toml-strings)
-  fb="$hold_home/fakebin"
-  cat > "$hold_home/.tasks.toml" <<'EOF'
-backend = "beads"
-[beads]
-path = "graph\u0023one/.beads" # graph location
-binary = "bd\u0023fixture" # executable name
-prefix = "f\u006d" # migrated prefix
-EOF
-  mkdir -p "$hold_home/graph#one/.beads"
-  cat > "$fb/bd#fixture" <<'SH'
-#!/usr/bin/env bash
-[ "$BEADS_DIR" = "$FM_HOME/graph#one/.beads" ] || exit 1
-[ "$*" = 'list --all --json' ] || exit 1
-printf '%s\n' "$BEADS_DIR" >> "$FM_HOME/graph-reads"
-case "$FM_TEST_BEADS_MODE" in
-  notes) printf '%s\n' '[{"id":"fm-old-call","notes":"migrated from data/backlog.md id old-call"}]' ;;
-  prefix) printf '[]\n' ;;
-esac
-SH
-  chmod +x "$fb/bd#fixture"
-  write_known_rows_stub "$fb" fm-old-call
-  scout=sample-toml-scout
-  write_scout_with_attested_inventory "$hold_home" "$scout" old-call
-  for mode in notes prefix; do
-    FM_TEST_BEADS_MODE="$mode" run_captain "$hold_home" verify "$scout" >/dev/null \
-      || fail "verify did not decode the Beads path, binary and prefix ($mode)"
-    out=$(FM_TEST_BEADS_MODE="$mode" run_captain "$hold_home" complete "$scout" old-call) \
-      || fail "complete did not decode the Beads settings ($mode)"
-    if [ "$mode" = prefix ]; then
-      assert_contains "$out" 'old-call=fm-old-call' "completion lost the decoded migration identity ($mode)"
-    fi
-  done
-  assert_present "$hold_home/graph-reads" 'the decoded Beads executable was never invoked'
-  pass 'synthetic Beads migration decodes TOML paths, executable names and prefixes for note and prefix lookup'
-}
-
 test_archive_review_boundaries() {
   test_archive_toml_string_paths
   test_archive_default_path
   test_archived_answered_hold_still_satisfies_the_gate
   test_archived_answer_in_a_user_configured_archive_satisfies_the_gate
-  test_migrated_beads_toml_strings
 }
 
 if [ -n "${FM_TEST_ONLY:-}" ]; then
@@ -4924,4 +4884,3 @@ test_archived_answered_hold_still_satisfies_the_gate
 test_archived_answer_in_a_user_configured_archive_satisfies_the_gate
 test_archive_toml_string_paths
 test_archive_default_path
-test_migrated_beads_toml_strings

@@ -18,17 +18,6 @@ DRAIN="$ROOT/bin/fm-wake-drain.sh"
 # shellcheck disable=SC2034
 TMP_ROOT=$(fm_test_tmproot fm-watch-wedge-cap-tests)
 
-ack_stopped_cycle() {  # <state>
-  local state=$1 err sequence generation
-  err="$state/.test-cycle-drain.err"
-  FM_STATE_OVERRIDE="$state" "$DRAIN" >/dev/null 2> "$err" || return 1
-  sequence=$(sed -n 's/^WAKE_ACK_REQUIRED:.*--ack-through \([0-9][0-9]*\) --recovery-generation [A-Za-z0-9._-][A-Za-z0-9._-]*$/\1/p' "$err")
-  generation=$(sed -n 's/^WAKE_ACK_REQUIRED:.*--ack-through [0-9][0-9]* --recovery-generation \([A-Za-z0-9._-][A-Za-z0-9._-]*\)$/\1/p' "$err")
-  rm -f "$err"
-  [ -n "$sequence" ] && [ -n "$generation" ] || return 1
-  FM_STATE_OVERRIDE="$state" "$DRAIN" --ack-through "$sequence" \
-    --recovery-generation "$generation"
-}
 
 reap() { kill "$1" 2>/dev/null || true; wait "$1" 2>/dev/null || true; }
 
@@ -1904,11 +1893,50 @@ test_wedge_cap_reports_gone_endpoint_on_terminal_override_route() {
   pass "a cap fired on the terminal-override route still reports a gone endpoint exactly once"
 }
 
+test_cycle_acknowledgement_failures() {
+  local dir state stub mode
+  dir=$(make_case cycle-ack-failures); state="$dir/state"
+  stub="$dir/fake-drain"
+  cat > "$stub" <<'SH'
+#!/bin/sh
+printf '%s\n' "$*" >> "$FM_TEST_DRAIN_LOG"
+if [ "$#" -eq 0 ]; then
+  [ "$FM_TEST_DRAIN_MODE" != drain-failure ] || exit 17
+  if [ "$FM_TEST_DRAIN_MODE" = malformed ]; then
+    printf 'WAKE_ACK_REQUIRED: invalid acknowledgement\n' >&2
+  else
+    printf 'WAKE_ACK_REQUIRED: drain --ack-through 42 --recovery-generation fixture-gen\n' >&2
+  fi
+else
+  [ "$*" = '--ack-through 42 --recovery-generation fixture-gen' ] || exit 19
+  [ "$FM_TEST_DRAIN_MODE" != ack-failure ] || exit 18
+fi
+SH
+  chmod +x "$stub"
+  for mode in drain-failure malformed ack-failure success; do
+    : > "$dir/calls"
+    if FM_TEST_DRAIN_MODE="$mode" FM_TEST_DRAIN_LOG="$dir/calls" DRAIN="$stub" ack_stopped_cycle "$state"; then
+      [ "$mode" = success ] || fail "$mode was swallowed by cycle acknowledgement"
+    else
+      [ "$mode" != success ] || fail "generation-bound cycle acknowledgement failed"
+    fi
+    case "$mode" in
+      ack-failure|success)
+        grep -Fx -- '--ack-through 42 --recovery-generation fixture-gen' "$dir/calls" >/dev/null \
+          || fail "cycle drain did not execute its generation-bound acknowledgement"
+        ;;
+      *) [ "$(wc -l < "$dir/calls" | tr -d ' ')" = 1 ] || fail "failed drain attempted an acknowledgement" ;;
+    esac
+  done
+  pass "cycle acknowledgements execute the printed generation and reject drain, parse and ack failures"
+}
+
 if [ -n "${FM_TEST_ONLY:-}" ]; then
   "$FM_TEST_ONLY"
   exit 0
 fi
 
+test_cycle_acknowledgement_failures
 test_wedge_cap_disabled_by_default
 test_wedge_cap_fires_permanently_wedged_at_threshold
 test_wedge_cap_silences_subsequent_polls_for_same_hash

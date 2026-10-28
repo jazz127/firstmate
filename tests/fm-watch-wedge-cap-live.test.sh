@@ -273,13 +273,15 @@ watcher_cycle() {
   # pane quiet" is exactly the claim that must be read off the real cycle.
   case "$reason" in
     '') CYCLE_WOKE=0 ;;
-    *) CYCLE_WOKE=1 ;;
+    "stale: "*"possible wedge, escalation "*) CYCLE_WOKE=1 ;;
+    *) fail "$label: unexpected non-wedge output: $reason" ;;
   esac
   CYCLE_REASON="$reason"
   say "$label -> exit=$rc woke=$CYCLE_WOKE reason=${reason:-none}"
   # Acknowledge so the next cycle starts from an empty queue and its exit
   # status reflects the pane, not a leftover wake.
-  FM_HOME="$LAB_HOME" "$ROOT/bin/fm-wake-drain.sh" >/dev/null 2>&1 || true
+  FM_HOME="$LAB_HOME" ack_stopped_cycle "$STATE" \
+    || fail "$label: wake drain or generation-bound acknowledgement failed"
   cat "$out" >> "$TRANSCRIPT"
 }
 # reset_lab_state: put the wedged worker back to a fresh first sight, so the
@@ -327,6 +329,10 @@ while [ "$i" -lt 5 ]; do
   i=$((i + 1))
   watcher_cycle "unceiled escalation $i"
   [ "$CYCLE_WOKE" -eq 1 ] || fail "the unceiled baseline went quiet at escalation $i - that is not the baseline this guard measures"
+  case "$CYCLE_REASON" in
+    *"possible wedge, escalation $i)"|*"possible wedge, escalation $i,"*) ;;
+    *) fail "the unceiled baseline produced a non-wedge wake: $CYCLE_REASON" ;;
+  esac
   unceiled=$((unceiled + 1))
   if [ "$i" -eq 1 ]; then assert_derived_key_matches_watcher; fi
 done
@@ -349,8 +355,8 @@ for f in "$TMP_ROOT"/cycle-*.out; do
   grep -q 'PERMANENTLY-WEDGED' "$f" 2>/dev/null && terminal_fired=$((terminal_fired + 1))
 done
 say "ceiled cycles that printed PERMANENTLY-WEDGED: $terminal_fired (cap bound is $MAX)"
-[ "$terminal_fired" -ge 1 ] \
-  || fail "the cap never engaged on a genuinely wedged worker; no cycle printed PERMANENTLY-WEDGED"
+[ "$terminal_fired" -eq 1 ] \
+  || fail "expected exactly one PERMANENTLY-WEDGED cycle, got $terminal_fired"
 
 # The cap's own marker must be on disk: the window-scoped one the terminal
 # wake names for the operator.

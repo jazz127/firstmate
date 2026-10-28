@@ -202,6 +202,47 @@ fm_tasks_axi_backend_from_toml() {  # <toml-path>
   ' "$toml"
 }
 
+fm_tasks_axi_markdown_archive_from_toml() {
+  [ -e "$1" ] || { [ ! -L "$1" ]; return; }
+  perl -MJSON::PP - "$1" <<'PERL'
+use strict;
+use warnings;
+my $file = shift;
+open my $source, "<:encoding(UTF-8)", $file or die "$file: $!\n";
+my $markdown = 0;
+while (my $line = <$source>) {
+    if ($line =~ /^\s*\[/) {
+        $markdown = $line =~ /^\s*\[\s*(?:markdown|"markdown"|'markdown')\s*\]\s*(?:#.*)?$/;
+        next;
+    }
+    next unless $markdown && $line =~ /^\s*(?:archive|"archive"|'archive')\s*=\s*(.*?)\s*$/;
+    my $raw = $1;
+    my $value;
+    if ($raw =~ /\A'([^']*)'\s*(?:#.*)?\z/) {
+        $value = $1;
+    } elsif ($raw =~ /\A("(?:[^"\\\x00-\x1f]|\\(?:["\\btnfr]|u[0-9a-fA-F]{4}|U[0-9a-fA-F]{8}))*")\s*(?:#.*)?\z/) {
+        my $quoted = $1;
+        $quoted =~ s{\\(U[0-9a-fA-F]{8}|u[0-9a-fA-F]{4}|["\\btnfr])}{
+            my $escape = $1;
+            if ($escape =~ /^U/) {
+                my $code = hex(substr($escape, 1));
+                die "$file: invalid archive escape\n" if $code > 0x10ffff || ($code >= 0xd800 && $code <= 0xdfff);
+                substr(JSON::PP->new->ascii->allow_nonref->encode(chr($code)), 1, -1)
+            } else {
+                "\\" . $escape
+            }
+        }ge;
+        $value = JSON::PP->new->allow_nonref->decode($quoted);
+    } else {
+        die "$file: markdown.archive must be a TOML string\n";
+    }
+    binmode STDOUT, ":encoding(UTF-8)";
+    print $value;
+    last;
+}
+PERL
+}
+
 # Resolve the active tasks-axi backend with the same precedence as tasks-axi.
 fm_tasks_axi_backend_resolve() {  # <tasks-axi-working-directory>
   local root=$1 backend

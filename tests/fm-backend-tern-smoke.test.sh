@@ -117,31 +117,25 @@ pass "real tern: create_task opens a keep-open tab in the fm-test- session, and 
 # --- literal + key (two-step submit form) ------------------------------------------
 
 sleep 1
-fm_backend_tern_send_literal "$TARGET" 'echo literal-then-key-tern' || fail "send_literal failed"
+fm_backend_tern_send_literal "$TARGET" 'printf "%s%s\n" literal-then-key- tern' || fail "send_literal failed"
 sleep 0.3
 fm_backend_tern_send_key "$TARGET" Enter "$LABEL" || fail "send_key Enter failed"
 sleep 0.7
 out=$(fm_backend_tern_capture "$TARGET" 30 "$LABEL") || fail "capture failed after send_literal+send_key"
-case "$out" in
-  *literal-then-key-tern*) : ;;
-  *) fail "capture did not contain the text sent via send_literal+Enter: $out" ;;
-esac
+printf '%s\n' "$out" | tr -d '\r' | grep -Fxq 'literal-then-key-tern' \
+  || fail "capture did not contain the text sent via send_literal+Enter: $out"
 pass "real tern: send_literal + send_key Enter submit as two steps and the output is capturable with --surfaces"
 
-fm_backend_tern_send_text_line "$TARGET" 'echo composed-line-tern' || fail "send_text_line failed"
+fm_backend_tern_send_text_line "$TARGET" 'printf "%s%s\n" composed-line- tern' || fail "send_text_line failed"
 sleep 0.7
 out=$(fm_backend_tern_capture "$TARGET" 30) || fail "capture failed after send_text_line"
-case "$out" in
-  *composed-line-tern*) : ;;
-  *) fail "capture did not contain the text sent via send_text_line: $out" ;;
-esac
+printf '%s\n' "$out" | tr -d '\r' | grep -Fxq 'composed-line-tern' \
+  || fail "capture did not contain the text sent via send_text_line: $out"
 pass "real tern: send_text_line (tern run) composes text and Enter in one call"
 
 out=$(fm_backend_tern_visible_capture "$TARGET") || fail "visible_capture failed"
-case "$out" in
-  *composed-line-tern*) : ;;
-  *) fail "visible_capture did not show the freshly written line: $out" ;;
-esac
+printf '%s\n' "$out" | tr -d '\r' | grep -Fxq 'composed-line-tern' \
+  || fail "visible_capture did not show the freshly written line: $out"
 pass "real tern: visible_capture reads the viewport"
 
 # --- key names: verify the chords the adapter normalizes to -----------------------------

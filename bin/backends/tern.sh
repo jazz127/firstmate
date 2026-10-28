@@ -870,8 +870,8 @@ fm_backend_tern_send_text_submit() {  # <target> <text> <retries> <enter-sleep> 
 
 # --- teardown and discovery -----------------------------------------------------
 
-# fm_backend_tern_kill: close the task's block, best-effort in the way every
-# adapter's kill is: a target that is already gone returns 0 and is not touched.
+# fm_backend_tern_kill: close the task's block; a target that is already gone
+# returns 0 and is not touched.
 # A nonzero return means the close could not be proven and the endpoint may
 # still be live, so the caller keeps the durable records that name it: an
 # unreadable inventory, a block that now lives in another session, a block

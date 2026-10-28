@@ -3,7 +3,7 @@
 tern is an experimental Stencil Tern session-provider backend.
 It provides task sessions, tabs, and blocks while Treehouse continues to provide git worktrees.
 [`configuration.md`](configuration.md#runtime-backend-configbackend--fm_backend) owns shared selection and metadata semantics.
-The adapter header in `bin/backends/tern.sh` owns design decisions and measured CLI facts; this page is the operator-facing mirror and must not contradict it.
+The adapter header in `bin/backends/tern.sh` owns mechanics and measured CLI facts; this page owns operator behavior and limits.
 
 ## Setup
 
@@ -47,6 +47,7 @@ A cleared-environment launch keeps the `TERN_*` identity and, like every backend
 ## Task shape and metadata
 
 Each home-owned container is one Tern session named `fm-<hometag>` (or `FM_TERN_SESSION` in tests).
+The tag derives from the effective `FM_HOME` through `bin/fm-backend-hometag-lib.sh`, keeping homes that share a code root distinct.
 `tern new session` seeds that session with one ordinary shell tab; the adapter leaves that seed alone so the session stays alive after the last task tab closes.
 Each task is one keep-open tab whose title is renamed to `fm-<hometag>-<id>` (and read back); the caller-facing label remains `fm-<id>`.
 
@@ -154,7 +155,9 @@ No successful `ctl` agent read was possible on this host.
 `current_path` is passive: it reads `tern process` `foreground.cwd` and returns empty on failure rather than probing with shell markers.
 
 Kill closes the task block with `tern close <session>/<block>`.
-It returns 0 when the block is already gone, and returns 1 with stderr (closing nothing, so teardown keeps the task records) when inventory is unreadable, the block moved sessions, the block is still in the recorded session but its tab no longer carries the task's scoped title, or the block is still present after a failed close.
+It returns 0 when the block is already gone or the close succeeds.
+Unreadable inventory, a block that moved sessions, or a tab that no longer carries the task's scoped title refuses before closing anything.
+If the close fails, only a fresh inventory proving the block absent permits success; otherwise it returns 1 with stderr so teardown keeps the task records.
 
 Real tests may share the captain's running Tern daemon rather than inventing an isolated window.
 `tests/tern-test-safety.sh` permits cleanup only for a currently listed session whose name carries the `fm-test-` prefix and whose id the test created.

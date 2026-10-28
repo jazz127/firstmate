@@ -51,7 +51,7 @@ Paseo allows duplicate workspaces and terminal names, so a spawn whose `workspac
 Agents running inside a task tab may open further tabs or workspaces of their own; nothing in the adapter depends on them.
 
 Each task owns one terminal tab in that workspace.
-The terminal's NAME (`terminal create --name fm-<home-label>-<id>`) is the firstmate-facing routing authority, home-scoped so two Firstmate homes sharing one daemon can never cross-match each other's terminals.
+The terminal's NAME (`terminal create --name fm-<home-label>-<id>`) is the firstmate-facing routing authority, scoped by the effective `FM_HOME` through `bin/fm-backend-hometag-lib.sh` so homes sharing one code root and daemon cannot cross-match each other's terminals.
 The workspace title only identifies the shared workspace to adopt; it is never used to route a task.
 
 The recorded target is the pair `<terminal_id>:<workspace_id>`:
@@ -82,11 +82,12 @@ A terminal's `cwd` field in `terminal ls` is creation-time-frozen and never foll
 Spawn-time worktree discovery therefore sends begin and end markers around `pwd`, captures the marked block, and joins wrapped path lines, exactly like cmux and zellij.
 
 Cleanup closes only the task's tab with `terminal kill`; sibling task tabs stay alive.
-It is best-effort like every backend's kill, so an already-gone target stays quiet.
+It succeeds only after a readable terminal inventory proves the target absent; an already-gone target stays quiet only when neither its recorded id nor a replacement with its scoped name is present.
+Unreadable or ambiguous inventory, an ownership mismatch, a failed close, or a surviving target stops teardown before backlog closure, worktree return, or record retirement, including under `--force`.
 When the closed tab was the last one in a per-project shared workspace for one of the home's own clones under `projects/`, cleanup archives that workspace, provided it carries Firstmate's own title, is not Firstmate's own workspace, and no Paseo agent works in its folder, because archiving a workspace also archives the agents it owns.
 Archiving leaves the project in the sidebar, so cleanup then deletes that clone's project when no other workspace uses it; workspaces and projects outside the home's clones are never touched.
-Spawning and this cleanup share one home-wide lock (`state/.paseo-workspace.lock`), so a new task's tab can never land in a workspace between its empty check and its archive; a spawn that cannot get the lock refuses, and cleanup that cannot get it skips.
-Any inventory read that fails also skips this cleanup.
+Spawning and workspace retirement share one home-wide lock (`state/.paseo-workspace.lock`), so a new task's tab can never land in a workspace between its empty check and its archive; a spawn that cannot get the lock refuses, and workspace retirement that cannot get it skips.
+An unreadable inventory skips optional workspace and project retirement after the terminal has been proven closed.
 Mutating `--json` calls keep stderr out of the parsed output, because the CLI prints an Electron warning on stderr when Firstmate itself runs inside a Paseo agent.
 Paseo exposes no native generic agent busy signal, so supervision uses capture/hash polling for screen changes and each harness adapter's semantic lifecycle for worker state.
 

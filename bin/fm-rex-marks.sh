@@ -67,7 +67,7 @@
 # record Rex dropped at a prompt mark or process exit is repaired on the next
 # cycle. A tint cannot be read back, so it is written only when its cache
 # differs. Turning the marks off clears every cached mark and progress record.
-# clear removes the task's mark, progress record, and tint, and their caches.
+# docs/rex-backend.md "Attention marks" owns clear's per-operation retry contract.
 #
 # Environment: FM_HOME, FM_STATE_OVERRIDE, and FM_CONFIG_OVERRIDE resolve the
 # home exactly as the other bin/ scripts do.

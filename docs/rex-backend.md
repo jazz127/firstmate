@@ -142,6 +142,8 @@ Every write addresses the task's recorded block id, so a mark never lands on ano
 
 `config/rex-status-marks` turns the marks `on` or `off` (the default when the file is absent, so a home that never creates it sees no change); turning them off clears every mark and progress record already shown.
 `state/.rex-mark-<id>` caches the last mark so a sync writes only on change.
+An explicit `clear` retires each cache only after its corresponding operation succeeds; a failed status or progress clear retains both caches because clearing the parent status also clears its progress children, while tint reset succeeds or retries independently.
+The command reports failure if any operation fails, and a retry repeats only operations whose caches remain.
 
 ### Validation progress
 

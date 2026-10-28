@@ -1183,9 +1183,9 @@ _wedge_cap_int() {
 
 # Upper bound on consecutive wedge escalations for a single (window) before a
 # PERMANENTLY-WEDGED wake is emitted and the window-scoped cap marker is written.
-# Disabled by default (0): the unconfigured path keeps the existing
-# escalates-every-STALE_ESCALATE_SECS behavior, so this never changes anything
-# unless the captain sets it. Past the bound the wake is published once and the
+# Disabled by default (0): the unconfigured path keeps its existing cadence,
+# including PAUSE_RESURFACE_SECS for repeated busy-pane escalations.
+# Past the bound the wake is published once and the
 # cap marker silences further wakes for this WINDOW until FM_CAP_HORIZON_SECS
 # elapses, the crew resumes (the marker is per-window wedge bookkeeping and is
 # cleared with the rest of it), or the operator manually removes it.
@@ -1209,8 +1209,7 @@ _wedge_cap_int FM_ROLLBACK_SENTINEL_TTL_SECS "$FM_ROLLBACK_SENTINEL_TTL_SECS" 36
 # scratch rather than inheriting a window an earlier episode left silent. The
 # cap-fire route is the one caller that keeps these markers instead of calling it
 # here: they are the ceiling it has just published, so the episode it ends must
-# leave them standing. The away-posture first sight is the one caller that
-# releases them WITHOUT ending an episode, and says so at its own call site.
+# leave them standing.
 # _wedge_cap_markers_clear <window-key>
 _wedge_cap_markers_clear() {
   local key=$1
@@ -1224,18 +1223,14 @@ _wedge_cap_markers_clear() {
 # .stale-since-<key> is the marker that defines one, and the boundary where a
 # window stops counting as wedged is where the cap that episode fired has to go,
 # so every route that ends an episode calls this: a pane that leaves the stale
-# path, a declared wait and its lift, a first-sight absorb, a surface, and the
+# path, a declared wait and its lift, a first-sight absorb, and the
 # turn-end churn absorb. The cap release is then structural rather than a list of
 # sites to keep in step - a new episode-ending route is one call, and it cannot
 # drop the episode marker without dropping the cap with it.
 #
-# One first-sight route is not an episode end: the away-posture branch, where the
-# away daemon owns the one-shot per stale hash. It classifies a fresh render
-# without arming or dropping any wedge timer - the first poll after the
-# away-posture record goes picks the episode it was already in back up on that
-# hash - so it releases the cap markers alone, through
-# _wedge_cap_markers_clear. Dropping the timer and count there would leave a hash
-# the daemon already surfaced with no wedge timer behind it at all.
+# A changed hash does not end established tracking when the caller preserves an
+# over-age busy turn or uncertain execution evidence; those paths retain the
+# timer and cap together instead of treating output churn as resumed work.
 #
 # Non-zero when a reset could not be written, so a caller that has to undo an
 # absorb of its own on a failed reset (signal_turnend_panes_churned) can see it.
@@ -1244,23 +1239,9 @@ _wedge_cap_markers_clear() {
 # episode end and keeps its own removal of the marker: that pane is still wedged,
 # and its escalation count must keep climbing.
 #
-# keep-count=1 marks a call site whose pre-cap shape kept the escalation
-# counter instead of resetting it - the first-sight stale SURFACES, where
-# upstream dropped the wedge timer (or re-armed it) and left the count
-# standing, so a pane that surfaced there and wedged again resumed the ladder
-# where it had left off. The count is cap state, so at those sites it still
-# resets under a configured cap: an episode boundary includes the count
-# restart, and that is what lets a re-wedged window escalate from 1 again past
-# a released marker. With the cap at its default 0 the counter is left exactly
-# as the pre-cap watcher left it, so a home that has not configured anything
-# keeps today's ladder unchanged - a stuck pane still reaches the
-# demand-deep-inspection prompt on the same rung it always did.
-#
-# The other episode-ending routes are NOT keep-count sites: the pre-cap
-# watcher reset the count there too (the declared-wait absorb, the turn-end
-# churn absorb, the busy-pane and hash-change resets, and the provably-working
-# absorb, whose clear_pause_tracking removed it), so those keep resetting it
-# in both postures.
+# keep-count=1 preserves the counter only when the cap is disabled.
+# Current house callers reset it in both postures; ordinary idle first sightings
+# are absorbed rather than surfaced.
 #
 # keep-cap=1 is the cap-fire route itself. It ends the episode and resets the
 # escalation count itself, but the cap markers it has just written are the whole

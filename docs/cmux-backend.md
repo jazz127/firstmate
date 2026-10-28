@@ -101,6 +101,7 @@ Grok alone retains its isolated rendered-tail fallback.
 
 A task workspace's last surface cannot be closed directly.
 Cleanup owns the whole workspace and uses `close-workspace`.
+It requires a readable inventory proving the workspace absent; unreadable inventory, ambiguous identity, or a surviving workspace stops teardown before backlog closure, worktree return, or record retirement, including under `--force`.
 cmux also refuses to remove the only workspace in a macOS window while returning a misleading success response.
 When the task is last in its window, Firstmate creates one unfocused unnamed sibling workspace in that same window, closes the task workspace, and leaves the window with cmux's fresh default workspace.
 The sibling never carries an `fm-` title and is ignored by recovery.

@@ -119,7 +119,7 @@ cmux_expected_root_hash() {  # <root>
 }
 
 cmux_expected_home_label() {  # [home]
-  local home=${1:-$ROOT} marker id prefix
+  local home=${1:-$ROOT} root=${2:-$ROOT} marker id prefix
   marker="$home/.fm-secondmate-home"
   if [ -f "$marker" ]; then
     id=$(tr -d '[:space:]' < "$marker" 2>/dev/null)
@@ -131,16 +131,16 @@ cmux_expected_home_label() {  # [home]
   else
     prefix="firstmate"
   fi
-  printf '%s-%s' "$prefix" "$(cmux_expected_root_hash "$home")"
+  printf '%s-%s' "$prefix" "$(cmux_expected_root_hash "$root")"
 }
 
 cmux_expected_scoped_title() {  # <fm-task-label> [home]
-  local label=$1 home=${2:-$ROOT} rest
+  local label=$1 home=${2:-$ROOT} root=${3:-$ROOT} rest
   case "$label" in
     fm-*) rest=${label#fm-} ;;
     *) rest=$label ;;
   esac
-  printf 'fm-%s-%s' "$(cmux_expected_home_label "$home")" "$rest"
+  printf 'fm-%s-%s' "$(cmux_expected_home_label "$home" "$root")" "$rest"
 }
 
 cmux_assert_call_order() {
@@ -282,7 +282,7 @@ test_scoped_title_uses_primary_home_label() {
   expected=$(cmux_expected_scoped_title fm-task1 "$dir")
   out=$( FM_HOME="$dir" bash -c '. "$0/bin/backends/cmux.sh"; fm_backend_cmux_scoped_title fm-task1' "$ROOT" )
   [ "$out" = "$expected" ] || fail "primary scoped title should be $expected, got '$out'"
-  pass "fm_backend_cmux_scoped_title: scopes a primary task title with firstmate plus home hash"
+  pass "fm_backend_cmux_scoped_title: scopes a primary task title with firstmate plus root hash"
 }
 
 test_scoped_title_uses_secondmate_home_label() {
@@ -292,19 +292,19 @@ test_scoped_title_uses_secondmate_home_label() {
   expected=$(cmux_expected_scoped_title fm-task1 "$dir")
   out=$( FM_HOME="$dir" bash -c '. "$0/bin/backends/cmux.sh"; fm_backend_cmux_scoped_title fm-task1' "$ROOT" )
   [ "$out" = "$expected" ] || fail "secondmate scoped title should be $expected, got '$out'"
-  pass "fm_backend_cmux_scoped_title: scopes a secondmate task title with the home marker plus home hash"
+  pass "fm_backend_cmux_scoped_title: scopes a secondmate task title with the home marker plus root hash"
 }
 
-test_scoped_title_follows_home_identity() {
+test_scoped_title_preserves_root_identity() {
   local dir home root_one root_two out_one out_two
   dir="$TMP_ROOT/scoped-title-root-hash"; home="$dir/home"; root_one="$dir/root-one"; root_two="$dir/root-two"
   mkdir -p "$home" "$root_one" "$root_two"
   out_one=$(FM_HOME="$home" FM_ROOT_OVERRIDE="$root_one" bash -c '. "$0/bin/backends/cmux.sh"; fm_backend_cmux_scoped_title fm-task1' "$ROOT")
   out_two=$(FM_HOME="$home" FM_ROOT_OVERRIDE="$root_two" bash -c '. "$0/bin/backends/cmux.sh"; fm_backend_cmux_scoped_title fm-task1' "$ROOT")
-  [ "$out_one" = "$out_two" ] || fail "one home's title changed with its code checkout"
+  [ "$out_one" != "$out_two" ] || fail "distinct code roots received the same established tag"
   out_two=$(FM_HOME="$root_two" FM_ROOT_OVERRIDE="$root_one" bash -c '. "$0/bin/backends/cmux.sh"; fm_backend_cmux_scoped_title fm-task1' "$ROOT")
-  [ "$out_one" != "$out_two" ] || fail "distinct homes sharing code received the same title"
-  pass "fm_backend_cmux_scoped_title: identifies the operational home independently of its code checkout"
+  [ "$out_one" = "$out_two" ] || fail "the established root-based identity changed with the private home path"
+  pass "fm_backend_cmux_scoped_title: preserves the established code-root identity across private home layouts"
 }
 
 # --- dispatch wiring (fm-backend.sh) ------------------------------------------
@@ -981,6 +981,8 @@ test_kill_closes_workspace_directly_when_not_last() {
   cmux_windows_response "$dir" 1 "eeeeeeee-0000-0000-0000-000000000000" 2
   # 2: workspace list --window eeeeeeee -> contains the target
   cmux_workspace_list_response "$dir" 2 "aaaaaaaa-0000-0000-0000-000000000000" "the-task" "ffffffff-0000-0000-0000-000000000000" "other"
+  cmux_windows_response "$dir" 4 "eeeeeeee-0000-0000-0000-000000000000" 1
+  cmux_workspace_list_response "$dir" 5 "ffffffff-0000-0000-0000-000000000000" "other"
   fb=$(make_cmux_fakebin "$dir")
   PATH="$fb:$PATH" FM_CMUX_LOG="$dir/log" FM_CMUX_RESPONSES="$dir/responses" \
     bash -c '. "$0/bin/backends/cmux.sh"; fm_backend_cmux_kill "aaaaaaaa-0000-0000-0000-000000000000:bbbbbbbb-1111-1111-1111-111111111111"' "$ROOT"
@@ -1002,6 +1004,8 @@ test_kill_adds_sibling_when_last_in_window() {
   cmux_windows_response "$dir" 1 "eeeeeeee-0000-0000-0000-000000000000" 2
   # 2: workspace list --window eeeeeeee -> contains the target
   cmux_workspace_list_response "$dir" 2 "aaaaaaaa-0000-0000-0000-000000000000" "the-task"
+  cmux_windows_response "$dir" 5 "eeeeeeee-0000-0000-0000-000000000000" 1
+  cmux_workspace_list_response "$dir" 6 "ffffffff-0000-0000-0000-000000000000" "other"
   fb=$(make_cmux_fakebin "$dir")
   PATH="$fb:$PATH" FM_CMUX_LOG="$dir/log" FM_CMUX_RESPONSES="$dir/responses" \
     bash -c '. "$0/bin/backends/cmux.sh"; fm_backend_cmux_kill "aaaaaaaa-0000-0000-0000-000000000000:bbbbbbbb-1111-1111-1111-111111111111"' "$ROOT"
@@ -1018,22 +1022,24 @@ test_kill_adds_sibling_when_last_in_window() {
   pass "fm_backend_cmux_kill: adds a throwaway sibling then closes the target when it is the last workspace in its window"
 }
 
-test_kill_is_best_effort_when_close_workspace_fails() {
-  local dir fb
+test_kill_refuses_when_close_workspace_fails() {
+  local dir fb rc=0
   dir="$TMP_ROOT/kill-workspace-fail"; mkdir -p "$dir/responses"
   # 1: list-windows (not last), 2: workspace list --window, 3: close-workspace fails
   cmux_windows_response "$dir" 1 "eeeeeeee-0000-0000-0000-000000000000" 2
   cmux_workspace_list_response "$dir" 2 "aaaaaaaa-0000-0000-0000-000000000000" "the-task" "ffffffff-0000-0000-0000-000000000000" "other"
   printf '1\n' > "$dir/responses/3.exit"
+  cmux_windows_response "$dir" 4 "eeeeeeee-0000-0000-0000-000000000000" 2
+  cmux_workspace_list_response "$dir" 5 "aaaaaaaa-0000-0000-0000-000000000000" "the-task"
   fb=$(make_cmux_fakebin "$dir")
   PATH="$fb:$PATH" FM_CMUX_LOG="$dir/log" FM_CMUX_RESPONSES="$dir/responses" \
-    bash -c '. "$0/bin/backends/cmux.sh"; fm_backend_cmux_kill "aaaaaaaa-0000-0000-0000-000000000000:bbbbbbbb-1111-1111-1111-111111111111"' "$ROOT"
-  expect_code 0 $? "kill must stay best-effort (never fail) even when close-workspace fails"
+    bash -c '. "$0/bin/backends/cmux.sh"; fm_backend_cmux_kill "aaaaaaaa-0000-0000-0000-000000000000:bbbbbbbb-1111-1111-1111-111111111111"' "$ROOT" || rc=$?
+  [ "$rc" -ne 0 ] || fail "kill reported success with a surviving workspace"
   assert_contains "$(cat "$dir/log")" $'\x1f''close-workspace'$'\x1f''--workspace'$'\x1f''aaaaaaaa-0000-0000-0000-000000000000' \
     "kill should still attempt close-workspace"
   assert_not_contains "$(cat "$dir/log")" $'\x1f''close-surface' \
     "kill should not call close-surface"
-  pass "fm_backend_cmux_kill: never fails even when close-workspace fails"
+  pass "fm_backend_cmux_kill: refuses when close-workspace leaves the workspace present"
 }
 
 test_kill_recovers_stale_target_by_label() {
@@ -1048,6 +1054,8 @@ test_kill_recovers_stale_target_by_label() {
   # window_of_workspace on the REFRESHED id: 4 list-windows (not last), 5 workspace list --window.
   cmux_windows_response "$dir" 4 "eeeeeeee-0000-0000-0000-000000000000" 2
   cmux_workspace_list_response "$dir" 5 "cccccccc-2222-2222-2222-222222222222" "$title" "ffffffff-0000-0000-0000-000000000000" "other"
+  cmux_windows_response "$dir" 7 "eeeeeeee-0000-0000-0000-000000000000" 1
+  cmux_workspace_list_response "$dir" 8 "ffffffff-0000-0000-0000-000000000000" "other"
   fb=$(make_cmux_fakebin "$dir")
   PATH="$fb:$PATH" FM_CMUX_LOG="$dir/log" FM_CMUX_RESPONSES="$dir/responses" \
     bash -c '. "$0/bin/backends/cmux.sh"; fm_backend_cmux_kill "aaaaaaaa-0000-0000-0000-000000000000:bbbbbbbb-1111-1111-1111-111111111111" "" fm-label' "$ROOT"
@@ -1068,7 +1076,7 @@ test_list_live_filters_by_title_prefix() {
   dir="$TMP_ROOT/list-live"; mkdir -p "$dir/responses"
   other_root="$dir/other-root"; mkdir -p "$other_root"
   title=$(cmux_expected_scoped_title fm-task1)
-  other_title=$(cmux_expected_scoped_title fm-task2 "$other_root")
+  other_title=$(cmux_expected_scoped_title fm-task2 "$ROOT" "$other_root")
   # 1: workspace list --json --id-format uuids -> one in-home task, two unrelated
   cmux_workspace_list_response "$dir" 1 \
     "aaaaaaaa-0000-0000-0000-000000000000" "$title" \
@@ -1119,7 +1127,7 @@ test_parse_target
 test_normalize_key
 test_scoped_title_uses_primary_home_label
 test_scoped_title_uses_secondmate_home_label
-test_scoped_title_follows_home_identity
+test_scoped_title_preserves_root_identity
 test_dispatch_routes_cmux_backend
 test_dispatch_busy_state_unknown_for_cmux
 test_dispatch_composer_state_routes_cmux
@@ -1163,7 +1171,7 @@ test_window_of_workspace_finds_window_and_count
 test_window_of_workspace_empty_when_not_found
 test_kill_closes_workspace_directly_when_not_last
 test_kill_adds_sibling_when_last_in_window
-test_kill_is_best_effort_when_close_workspace_fails
+test_kill_refuses_when_close_workspace_fails
 test_kill_recovers_stale_target_by_label
 test_list_live_filters_by_title_prefix
 test_secondmate_spawn_refuses_cmux_backend

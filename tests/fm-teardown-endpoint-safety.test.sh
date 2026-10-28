@@ -1599,6 +1599,177 @@ test_already_gone_endpoint_still_completes_without_a_refusal() {
   pass "fm-teardown: an already-exited endpoint, and a server that is already gone, still complete cleanup silently"
 }
 
+make_preupgrade_backend_fixture() {
+  local dir=$1 id=$2
+  python3 - "$dir/server.json" "$ROOT" "$id" <<'PYJ'
+import hashlib
+import json
+import os
+import sys
+identity = hashlib.sha256(os.path.realpath(sys.argv[2]).encode()).hexdigest()[:8]
+with open(sys.argv[1], "w") as output:
+    json.dump({"present": True, "foreign_present": True,
+               "title": "fm-firstmate-" + identity + "-" + sys.argv[3],
+               "sent": [], "closed": [], "attempted": False}, output)
+PYJ
+  cat > "$dir/fakebin/backend-fixture" <<'PYB'
+#!/usr/bin/env python3
+import json
+import os
+import pathlib
+import sys
+
+path = pathlib.Path(os.environ["FM_COMPAT_STATE"])
+state = json.loads(path.read_text())
+mode = os.environ.get("FM_COMPAT_MODE", "success")
+backend = pathlib.Path(sys.argv[0]).name
+args = sys.argv[1:]
+own_ws = "aaaaaaaa-0000-0000-0000-000000000000"
+own_surface = "bbbbbbbb-1111-1111-1111-111111111111"
+foreign_ws = "cccccccc-2222-2222-2222-222222222222"
+foreign_surface = "dddddddd-3333-3333-3333-333333333333"
+title = state["title"] if mode != "mismatch" else "foreign-title"
+
+def save():
+    path.write_text(json.dumps(state))
+
+def inventory(value):
+    if mode == "unreadable" or (mode == "unproved" and state["attempted"]):
+        sys.exit(1)
+    if mode == "malformed":
+        print("unreadable inventory")
+    else:
+        print(json.dumps(value))
+
+def close(target, own):
+    state["attempted"] = True
+    save()
+    if mode == "close-fail":
+        sys.exit(1)
+    if mode != "close-noop":
+        state["present" if own else "foreign_present"] = False
+        state["closed"].append(target)
+        save()
+
+if backend == "cmux":
+    if args[:2] == ["workspace", "list"]:
+        inventory({"workspaces":
+                   ([{"id": own_ws, "title": title}] if state["present"] else []) +
+                   ([{"id": foreign_ws, "title": "foreign"}] if state["foreign_present"] else [])})
+    elif args[0] == "list-windows":
+        inventory([{"id": "window", "workspace_count": 2}])
+    elif args[0] == "list-panes":
+        workspace = args[args.index("--workspace") + 1]
+        surface = own_surface if workspace == own_ws else foreign_surface
+        present = state["present"] if workspace == own_ws else state["foreign_present"]
+        inventory({"panes": [{"selected_surface_id": surface, "surface_ids": [surface]}] if present else []})
+    elif args[0] == "read-screen":
+        workspace = args[args.index("--workspace") + 1]
+        print(json.dumps({"text": "owned transcript" if workspace == own_ws else "foreign transcript"}))
+    elif args[0] in {"send", "send-key"}:
+        state["sent"].append(args[args.index("--workspace") + 1])
+        save()
+    elif args[0] == "close-workspace":
+        workspace = args[args.index("--workspace") + 1]
+        close(workspace, workspace == own_ws)
+    else:
+        sys.exit(2)
+else:
+    if args[0] == "list-sessions":
+        if mode == "session-unreadable":
+            sys.exit(1)
+        print("firstmate")
+        sys.exit(0)
+    if args[:2] != ["--session", "firstmate"]:
+        sys.exit(2)
+    args = args[3:]
+    if args[0] == "list-panes":
+        inventory(([{"id": 7, "tab_id": 3, "is_plugin": False}] if state["present"] else []) +
+                  ([{"id": 8, "tab_id": 4, "is_plugin": False}] if state["foreign_present"] else []))
+    elif args[0] == "list-tabs":
+        inventory(([{"tab_id": 3, "name": title}] if state["present"] else []) +
+                  ([{"tab_id": 4, "name": "foreign"}] if state["foreign_present"] else []))
+    elif args[0] == "dump-screen":
+        print("owned transcript" if args[args.index("--pane-id") + 1] == "7" else "foreign transcript")
+    elif args[0] in {"paste", "send-keys"}:
+        state["sent"].append(args[args.index("--pane-id") + 1])
+        save()
+    elif args[0] == "close-tab-by-id":
+        close(args[1], args[1] == "3")
+    else:
+        sys.exit(2)
+PYB
+  chmod +x "$dir/fakebin/backend-fixture"
+  ln -s backend-fixture "$dir/fakebin/cmux"
+  ln -s backend-fixture "$dir/fakebin/zellij"
+}
+
+test_preupgrade_cmux_zellij_bindings_and_cleanup() {
+  local backend mode dir id=compat-task target own rc
+  for backend in cmux zellij; do
+    for mode in success close-fail close-noop unreadable malformed mismatch unproved; do
+      dir=$(make_case "compat-$backend-$mode")
+      make_preupgrade_backend_fixture "$dir" "$id"
+      if [ "$backend" = cmux ]; then
+        target=aaaaaaaa-0000-0000-0000-000000000000:bbbbbbbb-1111-1111-1111-111111111111
+        own=aaaaaaaa-0000-0000-0000-000000000000
+        fm_write_meta "$dir/home/state/$id.meta" \
+          "backend=cmux" "window=$target" "cmux_workspace_id=$own" \
+          "cmux_surface_id=bbbbbbbb-1111-1111-1111-111111111111"
+      else
+        target=firstmate:7
+        own=7
+        fm_write_meta "$dir/home/state/$id.meta" \
+          "backend=zellij" "window=$target" "zellij_session=firstmate" "zellij_tab_id=3" "zellij_pane_id=7"
+      fi
+      printf '%s\n' "endpoint_task_id=$id" "spawn_gen=scompat.1" "kind=scout" "mode=no-mistakes" \
+        "worktree=$dir/missing-worktree" "project=$dir/project" 'decisions_reviewed=1' 'decision_keys=' \
+        >> "$dir/home/state/$id.meta"
+      mkdir -p "$dir/home/data/$id"
+      printf 'completed offline fixture report\n' > "$dir/home/data/$id/report.md"
+      printf '%s\n' '# Backlog' '' '## In flight' '' '## Queued' '' '## Done' > "$dir/home/data/backlog.md"
+      tasks-axi add "$id" 'compatibility fixture' --kind scout --file "$dir/home/data/backlog.md" >/dev/null \
+        || fail "could not seed compatibility backlog"
+      tasks-axi start "$id" --file "$dir/home/data/backlog.md" >/dev/null || fail "could not start compatibility backlog task"
+      cp "$dir/home/data/backlog.md" "$dir/original-backlog.md"
+      if [ "$mode" = success ]; then
+        FM_HOME="$dir/home" FM_ROOT_OVERRIDE="$ROOT" FM_COMPAT_STATE="$dir/server.json" PATH="$dir/fakebin:$PATH" \
+          bash -c '
+            . "$1/bin/fm-backend.sh"
+            fm_backend_source "$2" || exit 1
+            [ "$(fm_backend_capture "$2" "$3" 10 fm-compat-task)" = "owned transcript" ] || exit 1
+            "fm_backend_${2}_send_literal" "$3" hello fm-compat-task || exit 1
+            fm_backend_send_key "$2" "$3" C-c fm-compat-task
+          ' _ "$ROOT" "$backend" "$target" || fail "$backend rejected its pre-upgrade recorded binding"
+        jq -e --arg own "$own" '.sent == [$own, $own]' "$dir/server.json" >/dev/null \
+          || fail "$backend sent input or control to a foreign endpoint"
+      fi
+      rc=0
+      FM_COMPAT_STATE="$dir/server.json" FM_COMPAT_MODE="$mode" run_case "$dir" "$id" \
+        > "$dir/close.out" 2> "$dir/close.err" || rc=$?
+      jq -e '.foreign_present == true' "$dir/server.json" >/dev/null || fail "$backend cleanup touched a foreign endpoint"
+      if [ "$mode" = success ]; then
+        [ "$rc" -eq 0 ] || fail "$backend pre-upgrade cleanup failed: $(cat "$dir/close.err")"
+        jq -e '.present == false and (.closed | length) == 1' "$dir/server.json" >/dev/null \
+          || fail "$backend reported success without closing the recorded endpoint exactly once"
+        assert_absent "$dir/home/state/$id.meta" "$backend successful cleanup retained metadata"
+      else
+        [ "$rc" -ne 0 ] || fail "$backend $mode cleanup reported success without proof"
+        assert_present "$dir/home/state/$id.meta" "$backend $mode cleanup removed the recorded binding"
+        cmp -s "$dir/home/data/backlog.md" "$dir/original-backlog.md" || fail "$backend $mode cleanup closed the backlog item"
+        assert_absent "$dir/home/state/$id.backlog-close" "$backend $mode left a replayable record-removal marker"
+      fi
+    done
+  done
+  pass "offline cmux/Zellij pre-upgrade bindings retain capture, input, control and proved cleanup; failed closes retain records"
+}
+
+if [ -n "${FM_TEST_ONLY:-}" ]; then
+  "$FM_TEST_ONLY"
+  exit 0
+fi
+
+test_preupgrade_cmux_zellij_bindings_and_cleanup
 test_invalid_endpoint_records_refuse_before_mutation
 test_control_lock_contention_refuses_before_mutation
 test_non_pool_teardown_ignores_task_set_lock

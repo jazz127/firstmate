@@ -1,0 +1,134 @@
+$ bin/fm-rex-marks.sh plan
+task-a	blocked	auth	Blocked: missing login token
+exit=0
+$ bin/fm-rex-marks.sh plan
+task-a	error		Failed: build failed
+exit=0
+$ bin/fm-rex-marks.sh plan
+task-a	clear
+exit=0
+OBSERVED: Rex plan maps blocked credentials, failure, and resumed work without opening a backend session
+$ bin/fm-record-export.sh sync
+
+exit=0
+$ bin/fm-record-export.sh sync
+
+exit=0
+Persisted export: live/data/projects.md = sample project; private.txt absent
+OBSERVED: Record export is inert by default and copies only allowed records after opt-in
+$ bin/fm-record-export.sh archive-task task-a
+
+exit=0
+Committed manifest: {"captured_at": "2026-10-28T16:08:32Z", "complete": true, "files": [{"archive": "meta", "bytes": 50, "sha256": "b73a98d23a185376a56e564a9924fcfceb24f97d3332ad57a3dd3f069241d6c1", "source": "state/task-a.meta"}, {"archive": "status", "bytes": 22, "sha256": "b70afef907cff86d5168423adc0a567245c121c363d0bfadbf98c473cf7af08e", "source": "state/task-a.status"}], "schema": "firstmate-record-export-archive.v1", "schema_version": 1, "spawn_gen": "s1700000000.1.abc", "task": "task-a"}
+$ bin/fm-record-export.sh archive-task task-a
+
+exit=0
+OBSERVED: Record archive commits integrity metadata and an exact retry preserves the committed archive
+$ bin/fm-record-export.sh sync
+error: data/projects.md is not a regular non-symlink file
+exit=1
+Published live generation remains byte-identical after symlink refusal
+OBSERVED: Unsafe source symlink is refused while the last published record snapshot survives
+$ bin/fm-harness.sh secondmate alpha
+pi
+exit=0
+$ bin/fm-harness.sh secondmate-model alpha
+model-b
+exit=0
+$ bin/fm-harness.sh secondmate-effort alpha
+high
+exit=0
+$ bin/fm-harness.sh secondmate beta
+claude
+exit=0
+$ bin/fm-harness.sh secondmate-model beta
+opus
+exit=0
+$ bin/fm-harness.sh secondmate-effort beta
+high
+exit=0
+$ bin/fm-harness.sh secondmate alpha
+codex
+exit=0
+$ bin/fm-harness.sh secondmate-model alpha
+model-a
+exit=0
+$ bin/fm-harness.sh secondmate-effort alpha
+xhigh
+exit=0
+OBSERVED: Per-mate file pin wins over global mate grammar, which wins over the default profile
+$ bash -c . "$1/bin/fm-timeout-lib.sh"; fm_run_timed 3 cat _ <worktree>
+stdin survives
+exit=0
+$ bash -c . "$1/bin/fm-timeout-lib.sh"; fm_run_timed 1 sleep 30 _ <worktree>
+
+exit=124
+Deadline returned 124 after 1.49s
+OBSERVED: Timed executor preserves stdin and stops an overlong real subprocess promptly
+$ tasks-axi add sample-review Review sample --kind scout --repo sample --start
+ok: added sample-review (scout, repo sample) -> In flight
+task:
+  id: sample-review
+  title: Review sample
+  state: in_flight
+  blocked: no
+  blocked_by: none
+  held: no
+  hold_reason: "-"
+  hold_kind: "-"
+  hold_until: "-"
+  kind: scout
+  repo: sample
+  priority: "-"
+  created: 2026-10-29
+  closed: "-"
+  deps: none
+  links: none
+  body: ""
+help[2]:
+  - Run `tasks-axi done sample-review --pr <url>` when it ships
+  - Run `tasks-axi block sample-review --by <other>` to record a dependency
+exit=0
+$ bin/fm-captain-hold.sh hold sample-call --title Choose sample --reason pending choice --repo sample --origin sample-review
+sample-call
+exit=0
+$ bin/fm-captain-hold.sh complete sample-review sample-call
+complete: sample-review captain-call inventory reviewed (sample-call)
+exit=0
+$ bin/fm-captain-hold.sh answer sample-call --decision-file .test-phase-disposable/hold-home/answer.txt
+answered: sample-call
+exit=0
+$ bin/fm-captain-hold.sh verify sample-review
+verified: sample-review captain-call inventory
+exit=0
+$ tasks-axi add trigger Trigger retention --kind ship --repo sample
+ok: added trigger (ship, repo sample) -> Queued
+task:
+  id: trigger
+  title: Trigger retention
+  state: queued
+  blocked: no
+  blocked_by: none
+  held: no
+  hold_reason: "-"
+  hold_kind: "-"
+  hold_until: "-"
+  kind: ship
+  repo: sample
+  priority: "-"
+  created: 2026-10-29
+  closed: "-"
+  deps: none
+  links: none
+  body: ""
+help[2]:
+  - Run `tasks-axi start trigger` to move it to in flight
+  - Run `tasks-axi block trigger --by <other>` to record a dependency
+exit=0
+$ tasks-axi done trigger
+ok: done trigger -> Done; pruned 2
+help[1]:
+  - Run `tasks-axi ready` to dispatch work unblocked by this
+exit=0
+
+Setup assertion: expected decoded archive filename, but tasks-axi 0.2.6 produced a literal escape filename. Corrected setup uses a literal Unicode archive path while producing, then equivalent TOML escapes for the Firstmate reader.

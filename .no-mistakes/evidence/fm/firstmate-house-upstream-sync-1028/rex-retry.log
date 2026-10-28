@@ -1,0 +1,6 @@
+FM_TEST_BEGIN 2026-10-28T16:06:13Z tests/fm-backend-rex.test.sh family=rex expected_gate_skip=optional-binary
+ok - offline Rex clear preserves failed status/progress/tint caches and retries only unfinished operations
+FM_TEST_END 2026-10-28T16:06:18Z tests/fm-backend-rex.test.sh exit=0 duration_ms=4887 gate_skip=false
+FM_TEST_SUMMARY total=1 failed=0 skipped_gate=0 duration_ms=4953
+FM_TEST_SUMMARY_FAMILY family=rex count=1 duration_ms=4887 failed=0
+FM_TEST_SLOWEST rank=1 script=tests/fm-backend-rex.test.sh duration_ms=4887

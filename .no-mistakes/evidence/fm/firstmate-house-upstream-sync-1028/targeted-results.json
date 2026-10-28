@@ -1,0 +1,86 @@
+[
+  {
+    "label": "rex-retry",
+    "command": "FM_TEST_ONLY=test_marks_clear_preserves_failed_operations_for_retry bin/fm-test-run.sh --per-script-timeout-secs 180 tests/fm-backend-rex.test.sh",
+    "exit": 0,
+    "seconds": 5.4,
+    "log": "rex-retry.log"
+  },
+  {
+    "label": "rex-clear",
+    "command": "FM_TEST_ONLY=test_marks_clear_removes_records_and_caches bin/fm-test-run.sh --per-script-timeout-secs 180 tests/fm-backend-rex.test.sh",
+    "exit": 0,
+    "seconds": 1.6,
+    "log": "rex-clear.log"
+  },
+  {
+    "label": "rex-converge",
+    "command": "FM_TEST_ONLY=test_marks_producer_converges_and_notifies_once bin/fm-test-run.sh --per-script-timeout-secs 180 tests/fm-backend-rex.test.sh",
+    "exit": 0,
+    "seconds": 2.1,
+    "log": "rex-converge.log"
+  },
+  {
+    "label": "rex-protocol",
+    "command": "FM_TEST_ONLY=test_mark_progress_tint_and_alert_sequences bin/fm-test-run.sh --per-script-timeout-secs 180 tests/fm-backend-rex.test.sh",
+    "exit": 0,
+    "seconds": 1.1,
+    "log": "rex-protocol.log"
+  },
+  {
+    "label": "rex-off",
+    "command": "FM_TEST_ONLY=test_marks_are_off_by_default bin/fm-test-run.sh --per-script-timeout-secs 90 tests/fm-backend-rex.test.sh",
+    "exit": 0,
+    "seconds": 0.6,
+    "log": "rex-off.log"
+  },
+  {
+    "label": "descendant-homes",
+    "command": "FM_TEST_ONLY=test_paseo_tern_descendants_use_the_owning_home bin/fm-test-run.sh --per-script-timeout-secs 180 tests/fm-teardown-endpoint-safety.test.sh",
+    "exit": 0,
+    "seconds": 18.9,
+    "log": "descendant-homes.log"
+  },
+  {
+    "label": "paseo-close-failure",
+    "command": "FM_TEST_ONLY=test_kill_refuses_when_terminal_kill_fails bin/fm-test-run.sh --per-script-timeout-secs 90 tests/fm-backend-paseo.test.sh",
+    "exit": 0,
+    "seconds": 0.6,
+    "log": "paseo-close-failure.log"
+  },
+  {
+    "label": "paseo-unknown",
+    "command": "FM_TEST_ONLY=test_kill_keeps_workspace_when_inventory_unreadable bin/fm-test-run.sh --per-script-timeout-secs 90 tests/fm-backend-paseo.test.sh",
+    "exit": 0,
+    "seconds": 0.5,
+    "log": "paseo-unknown.log"
+  },
+  {
+    "label": "wedge-poll-oracle",
+    "command": "FM_TEST_ONLY=test_poll_progress_rejects_stalls_and_exits bin/fm-test-run.sh --per-script-timeout-secs 90 tests/fm-watch-wedge-cap.test.sh",
+    "exit": 0,
+    "seconds": 8.2,
+    "log": "wedge-poll-oracle.log"
+  },
+  {
+    "label": "wedge-ack-failure",
+    "command": "FM_TEST_ONLY=test_cycle_acknowledgement_failures bin/fm-test-run.sh --per-script-timeout-secs 90 tests/fm-watch-wedge-cap.test.sh",
+    "exit": 0,
+    "seconds": 0.8,
+    "log": "wedge-ack-failure.log"
+  },
+  {
+    "label": "wedge-disabled",
+    "command": "FM_TEST_ONLY=test_wedge_cap_disabled_by_default bin/fm-test-run.sh --per-script-timeout-secs 180 tests/fm-watch-wedge-cap.test.sh",
+    "exit": 0,
+    "seconds": 18.3,
+    "log": "wedge-disabled.log"
+  },
+  {
+    "label": "wedge-cap-release",
+    "command": "FM_TEST_ONLY=test_wedge_cap_expires_after_horizon bin/fm-test-run.sh --per-script-timeout-secs 420 tests/fm-watch-wedge-cap.test.sh",
+    "exit": 0,
+    "seconds": 22.7,
+    "log": "wedge-cap-release.log"
+  }
+]

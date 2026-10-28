@@ -1,0 +1,5 @@
+Rex clear regression before fix; stateful fake Rex and simulated TTY; product validation remains untested.
+case=status-fails phase=first exit=1 emitted_hex=1b5d3131311b5c retained_caches=
+not ok - status-fails lost the status retry cache (expected 'blocked	question	Needs your decision', got '')
+
+exit=1

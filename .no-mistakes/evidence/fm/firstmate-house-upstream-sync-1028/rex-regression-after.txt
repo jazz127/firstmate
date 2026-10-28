@@ -1,0 +1,16 @@
+Rex clear regression after fix; stateful fake Rex and simulated TTY; product validation remains untested.
+case=status-fails phase=first exit=1 emitted_hex=1b5d3131311b5c retained_caches=.rex-mark-t1 .rex-progress-t1 
+case=status-fails phase=retry exit=0 emitted_hex=1b5d373530313b73746174653d636c6561723a6170703d66697273746d6174653a69643d666d1b5c
+case=tint-fails phase=first exit=1 emitted_hex=1b5d373530313b73746174653d636c6561723a6170703d66697273746d6174653a69643d666d1b5c retained_caches=.rex-tint-t1 
+case=tint-fails phase=retry exit=0 emitted_hex=1b5d3131311b5c
+case=both-fail phase=first exit=1 emitted_hex= retained_caches=.rex-mark-t1 .rex-progress-t1 .rex-tint-t1 
+case=both-fail phase=retry exit=0 emitted_hex=1b5d373530313b73746174653d636c6561723a6170703d66697273746d6174653a69643d666d1b5c1b5d3131311b5c
+case=mark-only phase=first exit=1 emitted_hex= retained_caches=.rex-mark-t1 
+case=mark-only phase=retry exit=0 emitted_hex=1b5d373530313b73746174653d636c6561723a6170703d66697273746d6174653a69643d666d1b5c
+case=progress-only phase=first exit=1 emitted_hex= retained_caches=.rex-progress-t1 
+case=progress-only phase=retry exit=0 emitted_hex=1b5d373530313b73746174653d636c6561723a6170703d66697273746d6174653a69643d666d1b5c
+case=tint-only phase=first exit=1 emitted_hex= retained_caches=.rex-tint-t1 
+case=tint-only phase=retry exit=0 emitted_hex=1b5d3131311b5c
+ok - offline Rex clear preserves failed status/progress/tint caches and retries only unfinished operations
+
+exit=0

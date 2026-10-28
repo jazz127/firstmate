@@ -1,0 +1,13 @@
+{
+  "bash": true,
+  "python3": true,
+  "jq": true,
+  "tmux": true,
+  "tasks-axi": true,
+  "rex": false,
+  "paseo": false,
+  "tern": false,
+  "t3code": false,
+  "claude": true,
+  "codex": true
+}

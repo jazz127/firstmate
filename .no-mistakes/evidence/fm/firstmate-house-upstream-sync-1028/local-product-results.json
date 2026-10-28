@@ -1,0 +1,44 @@
+[
+  {
+    "name": "Rex plan maps blocked credentials, failure, and resumed work without opening a backend session",
+    "result": "pass",
+    "live": true,
+    "surface": "product"
+  },
+  {
+    "name": "Record export is inert by default and copies only allowed records after opt-in",
+    "result": "pass",
+    "live": true,
+    "surface": "product"
+  },
+  {
+    "name": "Record archive commits integrity metadata and an exact retry preserves the committed archive",
+    "result": "pass",
+    "live": true,
+    "surface": "product"
+  },
+  {
+    "name": "Unsafe source symlink is refused while the last published record snapshot survives",
+    "result": "pass",
+    "live": true,
+    "surface": "product"
+  },
+  {
+    "name": "Per-mate file pin wins over global mate grammar, which wins over the default profile",
+    "result": "pass",
+    "live": true,
+    "surface": "product"
+  },
+  {
+    "name": "Timed executor preserves stdin and stops an overlong real subprocess promptly",
+    "result": "pass",
+    "live": true,
+    "surface": "product"
+  },
+  {
+    "name": "Answered hold remains verifiable after real tasks-axi archives it to a TOML-escaped path",
+    "result": "pass",
+    "live": true,
+    "surface": "product"
+  }
+]

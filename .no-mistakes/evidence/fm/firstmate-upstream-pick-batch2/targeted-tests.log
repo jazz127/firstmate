@@ -1,0 +1,51 @@
+FM_TEST_BEGIN 2026-10-28T01:19:21Z tests/fm-warm-compact.test.sh family=unclassified expected_gate_skip=none
+ok - context size comes from the last request
+ok - due primary is compacted once
+ok - opt-in absent guard
+ok - busy agent guard
+ok - composer guard
+ok - threshold guard
+ok - idle window guard
+ok - episode guard
+ok - failed submit
+ok - config tunables
+ok - engine conversation compaction
+ok - engine billing is validated independently of compaction success
+FM_TEST_END 2026-10-28T01:19:22Z tests/fm-warm-compact.test.sh exit=0 duration_ms=1604 gate_skip=false
+FM_TEST_BEGIN 2026-10-28T01:19:22Z tests/phase-host-focused.test.sh family=unclassified expected_gate_skip=none
+SCENARIO test_engine_in_another_time_zone_handles_its_granted_rows
+ok - host: an engine in another time zone than the host drains, reports, and acknowledges its granted rows
+SCENARIO test_engine_turn_is_bounded_and_its_descendants_reaped
+ok - host: an engine turn is bounded, and tool processes outside its process group are reaped
+SCENARIO test_idle_engine_conversation_is_compacted_once_across_hosts
+ok - host: an idle engine conversation is compacted once across hosts
+SCENARIO test_wake_after_compaction_excludes_its_cost
+ok - host: a wake after compaction logs only its own cost
+SCENARIO test_billed_compaction_failures_and_cancellations_preserve_cost
+ok - host: failed, incomplete, and abandoned compaction costs are accounted independently
+SCENARIO test_engine_conversation_the_next_turn_would_not_resume_is_not_compacted
+ok - host: a conversation the next turn would not resume is not compacted
+SCENARIO test_compaction_abandoned_at_the_park_boundary_is_not_marked_done
+ok - host: a compaction abandoned at the park boundary is not marked done
+SCENARIO test_cancellation_discovers_an_engine_started_after_the_stop_request
+ok - host: cancellation discovers late engines on arm close, park boundary, and cleanup
+FM_TEST_END 2026-10-28T01:20:59Z tests/phase-host-focused.test.sh exit=0 duration_ms=96889 gate_skip=false
+FM_TEST_BEGIN 2026-10-28T01:20:59Z tests/phase-watcher-focused.test.sh family=unclassified expected_gate_skip=none
+SCENARIO test_take_over_attaches_to_a_cycle_the_named_arm_does_not_own
+ok - watch-arm: --take-over attaches to a cycle the named arm does not own and leaves it running
+SCENARIO test_take_over_owns_a_fresh_cycle_and_keeps_queued_work_surfacing
+ok - watch-arm: --take-over owns a fresh cycle without a recovery wake and still surfaces queued work
+SCENARIO test_take_over_confirms_a_watcher_stopped_inside_its_event_wait
+ok - watch-arm: --take-over of a watcher inside its herdr event wait confirms the stop and resurfaces nothing
+FM_TEST_END 2026-10-28T01:21:57Z tests/phase-watcher-focused.test.sh exit=0 duration_ms=57990 gate_skip=false
+FM_TEST_BEGIN 2026-10-28T01:21:57Z tests/fm-warm-compact-herdr-live-e2e.test.sh family=unclassified expected_gate_skip=none
+skip: live: disabled by FM_WARM_COMPACT_LIVE_E2E=0
+fm-test-run: gate skip: tests/fm-warm-compact-herdr-live-e2e.test.sh: live: disabled by FM_WARM_COMPACT_LIVE_E2E=0
+FM_TEST_END 2026-10-28T01:21:57Z tests/fm-warm-compact-herdr-live-e2e.test.sh exit=0 duration_ms=145 gate_skip=true
+FM_TEST_SUMMARY total=4 failed=0 skipped_gate=1 duration_ms=156806
+FM_TEST_SUMMARY_FAMILY family=unclassified count=4 duration_ms=156628 failed=0
+FM_TEST_SLOWEST rank=1 script=tests/phase-host-focused.test.sh duration_ms=96889
+FM_TEST_SLOWEST rank=2 script=tests/phase-watcher-focused.test.sh duration_ms=57990
+FM_TEST_SLOWEST rank=3 script=tests/fm-warm-compact.test.sh duration_ms=1604
+FM_TEST_SLOWEST rank=4 script=tests/fm-warm-compact-herdr-live-e2e.test.sh duration_ms=145
+fm-test-run: wrote timing artifact: ~/.no-mistakes/evidence/01M5ZZRF6271EFMZCJ4FK22023/targeted-timings.json

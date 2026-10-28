@@ -1,0 +1,3 @@
+1793150415	start	gen=host-68133-1793150415	primary=claude
+1793150417	warm-compact	engine	abandoned	error=0 cost=0.2 conversation_cost=1.2 input=0 cache_read=0 cache_write=0 output=0 turns=0
+1793150419	boundary	after 3000s

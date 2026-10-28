@@ -1,0 +1,2 @@
+1793150363	start	gen=host-12508-1793150363	primary=claude
+1793150367	handled	turn=host-12508-1793150363.1	posture=attended	rc=0	reports=1	error=0 cost=0.25 conversation_cost=0.25 input=5 cache_read=100 cache_write=10 output=20 turns=3	signal: ~/.no-mistakes/worktrees/a00b7db52042/01M5ZZRF6271EFMZCJ4FK22023/.test-phase-tmp/fm-supervision-host.zwleqr/engine-tz/state/demo.status

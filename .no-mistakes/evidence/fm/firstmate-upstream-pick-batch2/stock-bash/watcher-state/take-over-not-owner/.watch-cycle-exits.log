@@ -1,0 +1,1 @@
+arm_pid=74710	watcher_pid=73856	origin=attached	started_at=1793150507	ended_at=1793150508	exit_code=143	signal=TERM	reason=arm-interrupted	beacon_age=1	lock_before=pid:73856|identity:Wed Oct 28 01:21:46 2026     bash ~/.no-mistakes/worktrees/a00b7db52042/01M5ZZRF6271EFMZCJ4FK22023/bin/fm-watch.sh	lock_after=pid:none|identity:none	successor=none

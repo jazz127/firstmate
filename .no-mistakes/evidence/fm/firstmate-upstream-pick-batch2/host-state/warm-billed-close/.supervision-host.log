@@ -1,0 +1,3 @@
+1793150419	start	gen=host-72703-1793150419	primary=claude
+1793150423	warm-compact	engine	abandoned	error=0 cost=0.2 conversation_cost=1.2 input=0 cache_read=0 cache_write=0 output=0 turns=0
+1793150423	pass-through	attended	main-only	signal: ~/.no-mistakes/worktrees/a00b7db52042/01M5ZZRF6271EFMZCJ4FK22023/.test-phase-tmp/fm-supervision-host.zwleqr/warm-billed-close/state/demo.status

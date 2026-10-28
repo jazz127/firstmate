@@ -1,0 +1,7 @@
+engine=claude
+model=sonnet
+session=warm-sess
+key=67879:372187385:4294967295
+turns=1
+ended=1793149815
+conversation_cost=1.2

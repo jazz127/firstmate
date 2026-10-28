@@ -1,0 +1,12 @@
+FM_TEST_BEGIN 2026-10-28T01:21:46Z tests/phase-watcher-focused.test.sh family=unclassified expected_gate_skip=none
+SCENARIO test_take_over_attaches_to_a_cycle_the_named_arm_does_not_own
+ok - watch-arm: --take-over attaches to a cycle the named arm does not own and leaves it running
+SCENARIO test_take_over_owns_a_fresh_cycle_and_keeps_queued_work_surfacing
+ok - watch-arm: --take-over owns a fresh cycle without a recovery wake and still surfaces queued work
+SCENARIO test_take_over_confirms_a_watcher_stopped_inside_its_event_wait
+ok - watch-arm: --take-over of a watcher inside its herdr event wait confirms the stop and resurfaces nothing
+FM_TEST_END 2026-10-28T01:22:45Z tests/phase-watcher-focused.test.sh exit=0 duration_ms=58660 gate_skip=false
+FM_TEST_SUMMARY total=1 failed=0 skipped_gate=0 duration_ms=58717
+FM_TEST_SUMMARY_FAMILY family=unclassified count=1 duration_ms=58660 failed=0
+FM_TEST_SLOWEST rank=1 script=tests/phase-watcher-focused.test.sh duration_ms=58660
+fm-test-run: wrote timing artifact: ~/.no-mistakes/evidence/01M5ZZRF6271EFMZCJ4FK22023/stock-bash/timings.json

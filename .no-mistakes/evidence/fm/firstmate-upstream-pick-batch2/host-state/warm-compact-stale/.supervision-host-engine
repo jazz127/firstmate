@@ -1,0 +1,7 @@
+engine=claude
+model=another-model
+session=warm-sess
+key=86438:1889112468:4294967295
+turns=1
+conversation_cost=0
+ended=1793149831

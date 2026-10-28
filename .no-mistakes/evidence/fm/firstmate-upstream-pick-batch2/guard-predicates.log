@@ -1,0 +1,6 @@
+delayed compaction boundary: polling observed count transition 0 -> 1
+sequence=20, prior=20, acked marker, empty queue: refused
+sequence=21, pending marker, empty queue: refused
+sequence=21, acked marker, wake still queued: refused
+sequence=21, acked marker, wake consumed: accepted
+sequence=21, acked marker, missing queue: refused

@@ -1,0 +1,7 @@
+~/.no-mistakes/worktrees/a00b7db52042/01M5ZZRF6271EFMZCJ4FK22023/.test-phase-tmp/fm-lab.qBnw2q
+all lab children waited; disposable home removed
+Traceback (most recent call last):
+  File "~/.no-mistakes/evidence/01M5ZZRF6271EFMZCJ4FK22023/live-local-driver.py", line 38, in <module>
+    assert owner_rc == 0, owner_rc
+           ^^^^^^^^^^^^^
+AssertionError: 143

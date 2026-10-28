@@ -1,0 +1,2 @@
+1793150427	start	gen=host-82946-1793150427	primary=claude
+1793150429	warm-compact	engine	failed	error=1 cost=unknown conversation_cost=unknown input=0 cache_read=0 cache_write=0 output=0 turns=0

@@ -1,0 +1,4 @@
+1793150379	start	gen=host-29088-1793150379	primary=claude
+1793150382	warm-compact	engine	compacted	error=0 cost=0.25 conversation_cost=0.25 input=5 cache_read=100 cache_write=10 output=20 turns=3
+1793150384	start	gen=host-33033-1793150383	primary=claude
+1793150384	pass-through	attended	main-only	check: rearm-resurface

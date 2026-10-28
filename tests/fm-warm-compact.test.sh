@@ -175,6 +175,33 @@ test_engine_conversation_is_compacted_by_resume() {
   pass 'engine conversation compaction'
 }
 
+test_engine_billing_is_independent_of_result_success() {
+  local raw usage
+  for raw in \
+    '{"type":"result","subtype":"error_during_execution","is_error":true,"total_cost_usd":1.2}' \
+    '{"type":"result","subtype":"success","is_error":false,"total_cost_usd":1.2}'; do
+    printf '%s\n' "$raw" > "$TMP_ROOT/billed-result"
+    usage=$(fm_supervision_engine_result claude "$TMP_ROOT/billed-result" 1)
+    assert_contains "$usage" 'error=1 cost=0.2 conversation_cost=1.2 ' 'billed failure and incomplete results retain their independently valid cost'
+  done
+  for raw in \
+    '{}' \
+    '{"type":"result","total_cost_usd":null}' \
+    '{"type":"result","total_cost_usd":"1.2"}' \
+    '{"type":"result","total_cost_usd":-1}' \
+    '{"type":"result","total_cost_usd":1e999}' \
+    '{"type":"assistant","total_cost_usd":1.2}'; do
+    printf '%s\n' "$raw" > "$TMP_ROOT/billed-result"
+    usage=$(fm_supervision_engine_result claude "$TMP_ROOT/billed-result" 1)
+    assert_contains "$usage" 'error=1 cost=unknown conversation_cost=unknown ' 'invalid billing data cannot manufacture a zero cost'
+  done
+  printf '{' > "$TMP_ROOT/billed-result"
+  if fm_supervision_engine_result claude "$TMP_ROOT/billed-result" 1; then
+    fail 'a truncated result must not supply billing data'
+  fi
+  pass 'engine billing is validated independently of compaction success'
+}
+
 test_context_size_is_the_last_request
 test_due_primary_gets_one_compact_through_the_backend_primitive
 test_opt_in_absent_does_nothing
@@ -186,3 +213,4 @@ test_one_compaction_per_idle_episode
 test_failed_submit_is_reported
 test_config_tunables
 test_engine_conversation_is_compacted_by_resume
+test_engine_billing_is_independent_of_result_success

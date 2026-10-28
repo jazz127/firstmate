@@ -436,6 +436,7 @@ cleanup() {
   if [ "$ENGINE_RUNNING" -eq 1 ]; then
     stop_engine_turn
   fi
+  finish_warm_compact_usage
   retire_arm "$SUCCESSOR_PID" "$SUCCESSOR_OUT"
   retire_arm "$ARM_PID" "$ARM_OUT"
   if [ "$GRANT_ACTIVE" -eq 1 ]; then
@@ -555,7 +556,7 @@ stream_ready_line() {
 WARM_COMPACT_LAST_TICK=-1
 WARM_COMPACT_PRIMARY_DONE=0
 WARM_COMPACT_VERDICT=
-WARM_COMPACT_USAGE=
+WARM_COMPACT_RESULT=
 
 warm_compact_tick() {
   local backend target verdict ended compacted
@@ -580,7 +581,6 @@ warm_compact_tick() {
     case "$WARM_COMPACT_VERDICT" in
       compacted | failed)
         mark_engine_compacted "$ended"
-        log_line "warm-compact	engine	$WARM_COMPACT_VERDICT	${WARM_COMPACT_USAGE:-no-result}"
         ;;
     esac
   fi
@@ -592,8 +592,8 @@ warm_compact_tick() {
 run_warm_compact_engine() {  # <idle-seconds> <session> <compacted 0|1>
   local verdict_file abandoned=0
   WARM_COMPACT_VERDICT=
-  WARM_COMPACT_USAGE=
   verdict_file=$(mktemp "$STATE/.supervision-host-warm.verdict.XXXXXX") || return 0
+  WARM_COMPACT_RESULT=$(mktemp "$STATE/.supervision-host-warm.result.XXXXXX") || { rm -f "$verdict_file"; return 0; }
   ENGINE_RUNNING=1
   (
     export FM_HOME STATE
@@ -601,7 +601,7 @@ run_warm_compact_engine() {  # <idle-seconds> <session> <compacted 0|1>
     [ -z "${FM_CONFIG_OVERRIDE:-}" ] || export FM_CONFIG_OVERRIDE
     fm_warm_compact_engine "$CONFIG" "$1" "$2" "$FM_SUPERVISION_ENGINE" "$FM_SUPERVISION_ENGINE_MODEL" \
       "$PROMPT_FILE" "$3" "$ENGINE_PID_FILE" \
-      "$(sed -n 's/^conversation_cost=//p' "$ENGINE_RECORD" 2>/dev/null | head -n 1)" > "$verdict_file"
+      "$(sed -n 's/^conversation_cost=//p' "$ENGINE_RECORD" 2>/dev/null | head -n 1)" "$WARM_COMPACT_RESULT" > "$verdict_file"
   ) &
   ENGINE_SUBSHELL=$!
   while fm_pid_alive "$ENGINE_SUBSHELL"; do
@@ -616,23 +616,39 @@ run_warm_compact_engine() {  # <idle-seconds> <session> <compacted 0|1>
   ENGINE_SUBSHELL=
   ENGINE_RUNNING=0
   rm -f "$ENGINE_PID_FILE"
-  [ "$abandoned" -eq 1 ] || read -r WARM_COMPACT_VERDICT WARM_COMPACT_USAGE < "$verdict_file" || true
+  [ "$abandoned" -eq 1 ] || WARM_COMPACT_VERDICT=$(cut -d ' ' -f 1 < "$verdict_file")
+  finish_warm_compact_usage
   rm -f "$verdict_file"
 }
 
+finish_warm_compact_usage() {
+  local cost prior tmp usage
+  [ -n "$WARM_COMPACT_RESULT" ] || return 0
+  prior=$(sed -n 's/^conversation_cost=//p' "$ENGINE_RECORD" 2>/dev/null | head -n 1)
+  usage=$(fm_supervision_engine_result "$FM_SUPERVISION_ENGINE" "$WARM_COMPACT_RESULT" "${prior:-0}" 2>/dev/null || true)
+  cost=$(printf '%s\n' "$usage" | sed -n 's/.* conversation_cost=\([^ ]*\).*/\1/p')
+  case "$cost" in
+    '' | unknown) ;;
+    *)
+      tmp=$(mktemp "$ENGINE_RECORD.tmp.XXXXXX") || return 0
+      if { grep -v '^conversation_cost=' "$ENGINE_RECORD"; printf 'conversation_cost=%s\n' "$cost"; } > "$tmp" 2>/dev/null; then
+        mv -f "$tmp" "$ENGINE_RECORD" || rm -f "$tmp"
+      else
+        rm -f "$tmp"
+      fi
+      ;;
+  esac
+  if [ -n "$usage" ] || [ "$WARM_COMPACT_VERDICT" = compacted ] || [ "$WARM_COMPACT_VERDICT" = failed ]; then
+    log_line "warm-compact	engine	${WARM_COMPACT_VERDICT:-abandoned}	${usage:-no-result}"
+  fi
+  rm -f "$WARM_COMPACT_RESULT"
+  WARM_COMPACT_RESULT=
+}
+
 mark_engine_compacted() {  # <ended>
-  local tmp cost
-  cost=$(printf '%s\n' "$WARM_COMPACT_USAGE" | sed -n 's/^error=0 .* conversation_cost=\([^ ]*\).*/\1/p')
+  local tmp
   tmp=$(mktemp "$ENGINE_RECORD.tmp.XXXXXX") || return 0
-  if {
-    if [ -n "$cost" ]; then
-      grep -v -e '^compacted=' -e '^conversation_cost=' "$ENGINE_RECORD"
-      printf 'conversation_cost=%s\n' "$cost"
-    else
-      grep -v '^compacted=' "$ENGINE_RECORD"
-    fi
-    printf 'compacted=%s\n' "$1"
-  } > "$tmp" 2>/dev/null; then
+  if { grep -v '^compacted=' "$ENGINE_RECORD"; printf 'compacted=%s\n' "$1"; } > "$tmp" 2>/dev/null; then
     mv -f "$tmp" "$ENGINE_RECORD" || rm -f "$tmp"
   else
     rm -f "$tmp"

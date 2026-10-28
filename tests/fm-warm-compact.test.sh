@@ -148,7 +148,7 @@ chmod +x "$STUB"
 
 engine() {  # <idle> <compacted>
   FM_SUPERVISION_ENGINE_CLAUDE_BIN=$STUB FM_TEST_ENGINE_ARGS="$TMP_ROOT/engine-args" CLAUDE_CONFIG_DIR="$TMP_ROOT/claude" \
-    fm_warm_compact_engine "$CONFIG" "$1" sess-1 claude sonnet "$TMP_ROOT/prompt" "$2"
+    fm_warm_compact_engine "$CONFIG" "$1" sess-1 claude sonnet "$TMP_ROOT/prompt" "$2" '' "${3:-0}"
 }
 
 test_engine_conversation_is_compacted_by_resume() {
@@ -157,9 +157,12 @@ test_engine_conversation_is_compacted_by_resume() {
   : > "$TMP_ROOT/prompt"
   transcript "$TMP_ROOT/claude/projects/p/sess-1.jsonl" 10 90000 5000
   rm -f "$TMP_ROOT/engine-args"
-  assert_equals compacted "$(engine 2700 0)" 'a due engine conversation is compacted'
+  assert_equals 'compacted error=0 cost=0.01 conversation_cost=0.01 input=0 cache_read=0 cache_write=0 output=0 turns=0' \
+    "$(engine 2700 0)" 'a due engine conversation is compacted with its usage'
   assert_contains "$(cat "$TMP_ROOT/engine-args")" '/compact' 'the engine turn carries /compact'
   assert_contains "$(cat "$TMP_ROOT/engine-args")" 'sess-1' 'the engine turn resumes the recorded conversation'
+  assert_equals 'compacted error=0 cost=0.005 conversation_cost=0.01 input=0 cache_read=0 cache_write=0 output=0 turns=0' \
+    "$(engine 2700 0 0.005)" 'compaction usage excludes previously recorded cost'
   for verdict in "episode:2700:1" "young:100:0"; do
     rm -f "$TMP_ROOT/engine-args"
     IFS=: read -r want idle was_done <<< "$verdict"

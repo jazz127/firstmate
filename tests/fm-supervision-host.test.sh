@@ -2490,14 +2490,15 @@ compact_calls() { grep -l '^arg=/compact$' "$1"/engine-call.* 2>/dev/null | wc -
 # Seed the engine record the way a handled turn leaves it, keyed to the live
 # fake main session, with a transcript large enough to be due.
 seed_idle_engine_record() {  # <home> <ended-age-seconds>
-  local home=$1 key model state="$1/state" ended compacted
+  local home=$1 key model state="$1/state" ended compacted cost
   key=$(FM_HOME="$home" bash -c '. "$1"; . "$2"; fm_supervision_host_main_key "$3"' _ "$ROOT/bin/fm-wake-lib.sh" "$ROOT/bin/fm-supervision-engine-lib.sh" "$state") \
     || fail "warm-compact: no main-session key"
   model=$(bash -c '. "$1"; fm_supervision_host_config "$2" claude; printf "%s" "$FM_SUPERVISION_ENGINE_MODEL"' _ "$ROOT/bin/fm-supervision-engine-lib.sh" "$home/config")
   ended=$(sed -n 's/^ended=//p' "$state/.supervision-host-engine" 2>/dev/null | head -n 1)
   [ -n "$ended" ] || ended=$(( $(date +%s) - $2 ))
   compacted=$(sed -n 's/^compacted=//p' "$state/.supervision-host-engine" 2>/dev/null | head -n 1)
-  printf 'engine=claude\nmodel=%s\nsession=warm-sess\nkey=%s\nturns=1\nconversation_cost=0\nended=%s\n' "$model" "$key" "$ended" > "$state/.supervision-host-engine"
+  cost=$(sed -n 's/^conversation_cost=//p' "$state/.supervision-host-engine" 2>/dev/null | head -n 1)
+  printf 'engine=claude\nmodel=%s\nsession=warm-sess\nkey=%s\nturns=1\nconversation_cost=%s\nended=%s\n' "$model" "$key" "${cost:-0}" "$ended" > "$state/.supervision-host-engine"
   [ -z "$compacted" ] || printf 'compacted=%s\n' "$compacted" >> "$state/.supervision-host-engine"
   printf 'prompt\n' > "$state/.supervision-host-prompt"
 }
@@ -2526,10 +2527,35 @@ test_idle_engine_conversation_is_compacted_once_across_hosts() {
       sleep 3
     fi
     [ "$(compact_calls "$home")" = 1 ] || fail "warm-compact: run $run compacted the same idle episode again"
+    assert_grep 'conversation_cost=0.25' "$home/state/.supervision-host-engine" 'compaction cost must survive across hosts'
+    assert_re 'warm-compact.engine.compacted.*cost=0.25 conversation_cost=0.25' "$home/state/.supervision-host.log" 'compaction usage must be logged separately'
     stop_home_processes "$home"
     wait_until 100 host_exited "$home" || true
   done
   pass "host: an idle engine conversation is compacted once across hosts"
+}
+
+test_wake_after_compaction_excludes_its_cost() {
+  local home ended
+  home=$(make_home warm-compact-cost attended claude)
+  echo noreport > "$home/stub-mode"
+  printf 'idle-seconds=60\nmin-context-tokens=1000\n' > "$home/config/warm-compact"
+  mkdir -p "$home/claude/projects/p"
+  printf '{"type":"assistant","message":{"usage":{"input_tokens":1,"cache_read_input_tokens":90000,"cache_creation_input_tokens":0}}}\n' \
+    > "$home/claude/projects/p/warm-sess.jsonl"
+  CLAUDE_CONFIG_DIR="$home/claude" FM_WARM_COMPACT_TICK=1 FM_SUPERVISION_HOST_PARK_SECONDS=3000 \
+    FM_TEST_SUPERVISION_HOST_CLOCK="$home/park-clock" start_host "$home"
+  wait_until 150 watcher_live "$home" || fail 'compaction cost: no watcher started'
+  seed_idle_engine_record "$home" 600
+  ended=$(sed -n 's/^ended=//p' "$home/state/.supervision-host-engine")
+  echo 10 > "$home/park-clock"
+  wait_until 150 grep -qx "compacted=$ended" "$home/state/.supervision-host-engine" || fail 'compaction cost: no completed compaction'
+  echo handle > "$home/stub-mode"
+  append_status "$home" 'wake after compaction'
+  wait_until 200 grep -q 'handled.*cost=0.25 conversation_cost=0.5' "$home/state/.supervision-host.log" || fail 'the next wake must exclude the compaction cost'
+  assert_grep 'conversation_cost=0.5' "$home/state/.supervision-host-engine" 'the next wake must update the conversation cost'
+  stop_home_processes "$home"
+  pass 'host: a wake after compaction logs only its own cost'
 }
 
 test_engine_conversation_the_next_turn_would_not_resume_is_not_compacted() {
@@ -2575,6 +2601,61 @@ test_compaction_abandoned_at_the_park_boundary_is_not_marked_done() {
   ! grep -q '^compacted=' "$home/state/.supervision-host-engine" || fail "warm-compact-abandon: an abandoned compaction was marked done"
   stop_home_processes "$home"
   pass "host: a compaction abandoned at the park boundary is not marked done"
+}
+
+test_cancellation_discovers_an_engine_started_after_the_stop_request() {
+  local home trigger host_pid arm_pid engine_pid tail_bin
+  tail_bin=$(command -v tail)
+  for trigger in boundary close term; do
+    home=$(make_home "warm-compact-late-$trigger" attended claude)
+    cat > "$home/slow-engine" <<'SH'
+#!/usr/bin/env bash
+printf '%s\n' "$$" > "$FM_HOME/slow-engine-pid"
+exec sleep "$FM_TEST_STUB_MAX_BLOCK_SECONDS"
+SH
+    chmod +x "$home/slow-engine"
+    printf 'idle-seconds=60\nmin-context-tokens=1000\n' > "$home/config/warm-compact"
+    mkdir -p "$home/claude/projects/p"
+    printf '{"type":"assistant","message":{"usage":{"input_tokens":1,"cache_read_input_tokens":90000,"cache_creation_input_tokens":0}}}\n' \
+      > "$home/claude/projects/p/warm-sess.jsonl"
+    cat > "$home/fakebin/tail" <<'SH'
+#!/usr/bin/env bash
+if [ "$#" -eq 3 ] && [ "$3" = "$FM_HOME/claude/projects/p/warm-sess.jsonl" ]; then
+  : > "$FM_HOME/setup-ready"
+  while [ ! -e "$FM_HOME/setup-release" ]; do sleep 0.1; done
+fi
+exec "$FM_TEST_REAL_TAIL" "$@"
+SH
+    chmod +x "$home/fakebin/tail"
+    FM_SUPERVISION_ENGINE_CLAUDE_BIN="$home/slow-engine" FM_TEST_REAL_TAIL="$tail_bin" \
+      CLAUDE_CONFIG_DIR="$home/claude" FM_WARM_COMPACT_TICK=1 \
+      FM_SUPERVISION_HOST_PARK_SECONDS=3000 FM_TEST_SUPERVISION_HOST_CLOCK="$home/park-clock" start_host "$home"
+    wait_until 150 watcher_live "$home" || fail "$trigger: no watcher started"
+    seed_idle_engine_record "$home" 600
+    echo 10 > "$home/park-clock"
+    wait_until 150 test -e "$home/setup-ready" || fail "$trigger: compaction did not enter setup"
+    assert_absent "$home/state/.supervision-host.engine-pid" 'the engine must not yet be published'
+    host_pid=$(awk -F '\t' '$1 == "host" { print $2; exit }' "$home/state/.supervision-host")
+    case "$trigger" in
+      boundary) echo 3000 > "$home/park-clock" ;;
+      close)
+        arm_pid=$(awk -F '\t' '$1 == "arm" { print $2; exit }' "$home/state/.supervision-host")
+        append_status "$home" 'pick export format' needs-decision
+        wait_until 150 sh -c '! kill -0 "$1" 2>/dev/null' _ "$arm_pid" || fail 'the injected wake did not close the arm'
+        ;;
+      term) kill -TERM "$host_pid" ;;
+    esac
+    sleep 1
+    : > "$home/setup-release"
+    wait_until 80 host_exited "$home" || fail "$trigger: cancellation missed the late engine"
+    engine_pid=$(cat "$home/slow-engine-pid" 2>/dev/null || true)
+    [ -z "$engine_pid" ] || wait_until 50 sh -c '! kill -0 "$1" 2>/dev/null' _ "$engine_pid" \
+      || fail "$trigger: the late engine survived cancellation"
+    assert_absent "$home/state/.supervision-host.engine-pid" 'cancelled engine must be reaped before its record is deleted'
+    ! grep -q '^compacted=' "$home/state/.supervision-host-engine" || fail "$trigger: cancelled compaction was marked done"
+    stop_home_processes "$home"
+  done
+  pass 'host: cancellation discovers late engines on arm close, park boundary, and cleanup'
 }
 
 test_park_boundary_ends_the_park_before_the_hook_timeout() {
@@ -3202,8 +3283,10 @@ test_attended_latch_keeps_closes_on_main_and_records_recovery_off_main
 test_engine_turn_is_bounded_and_its_descendants_reaped
 test_restarted_host_stops_what_a_killed_predecessor_left
 test_idle_engine_conversation_is_compacted_once_across_hosts
+test_wake_after_compaction_excludes_its_cost
 test_engine_conversation_the_next_turn_would_not_resume_is_not_compacted
 test_compaction_abandoned_at_the_park_boundary_is_not_marked_done
+test_cancellation_discovers_an_engine_started_after_the_stop_request
 test_park_boundary_ends_the_park_before_the_hook_timeout
 test_park_boundary_holds_under_back_to_back_closes
 test_park_boundary_rechecked_just_before_the_engine_turn

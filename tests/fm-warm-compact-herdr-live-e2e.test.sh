@@ -93,6 +93,7 @@ compact_boundaries() {
   [ -n "$t" ] || { echo 0; return; }
   jq -r 'select(.type == "system" and .subtype == "compact_boundary") | .uuid' "$t" 2>/dev/null | wc -l | tr -d ' '
 }
+primary_compacted() { [ "$(compact_boundaries)" -ge 1 ]; }
 host_log() { cut -f2- "$FM/state/.supervision-host.log" 2>/dev/null; }
 host_log_has() { host_log | grep -qE -- "$1"; }
 host_live() {
@@ -228,7 +229,7 @@ wait_until "$POLLS" host_log_has 'warm-compact	primary	sent' || fail "the idle p
 evidence "primary: $(host_log | grep 'warm-compact	primary')"
 wait_until "$POLLS" host_log_has 'warm-compact	engine	compacted' || fail "the idle engine conversation was never compacted"$'\n'"$(diagnose)"
 evidence "engine: $(host_log | grep 'warm-compact	engine')"
-wait_until 600 test "$(compact_boundaries)" -ge 1 || fail "the primary transcript has no compaction boundary"$'\n'"$(diagnose)"
+wait_until 600 primary_compacted || fail "the primary transcript has no compaction boundary"$'\n'"$(diagnose)"
 evidence "primary transcript compaction boundaries: $(compact_boundaries)"
 sleep 20
 [ "$(host_log | grep -c 'warm-compact	primary')" = 1 ] || fail "the primary was compacted more than once in one idle episode"
@@ -241,17 +242,15 @@ evidence "engine context after compaction: ${engine_tokens:-unreadable} tokens"
 # --- a pending wake after compaction ----------------------------------------------
 
 after=$(date +%s)
+after_seq=$(cat "$FM/state/.wake-queue.seq")
 printf 'needs-decision [at=%s] [key=lab-after-compact]: pick export format A or B\n' "$after" >> "$FM/state/demo.status"
 acked() {
-  local t
-  t=$(transcript)
-  [ -n "$t" ] || return 1
-  jq -r --argjson since "$after" '
-    select(.type == "assistant")
-    | (.timestamp | sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601) as $at
-    | select($at >= $since)
-    | .message.content[]? | select(.type == "tool_use" and .name == "Bash") | .input.command' "$t" 2>/dev/null \
-    | grep -q 'fm-wake-drain.sh --ack-through [0-9]* --recovery-generation'
+  local seq marker
+  seq=$(cat "$FM/state/.wake-queue.seq" 2>/dev/null) || return 1
+  [ "$seq" -gt "$after_seq" ] || return 1
+  marker=$(cat "$FM/state/.watcher-down" 2>/dev/null) || return 1
+  case "$marker" in acked:*) ;; *) return 1 ;; esac
+  [ -f "$FM/state/.wake-queue" ] && [ ! -s "$FM/state/.wake-queue" ]
 }
 wait_until "$POLLS" acked || fail "the compacted primary never drained and acknowledged the pending wake"$'\n'"$(diagnose)"
 evidence "compacted primary drained and acknowledged the wake queued after compaction"

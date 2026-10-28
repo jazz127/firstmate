@@ -33,7 +33,7 @@
 # THE ENGINE. fm_warm_compact_engine resumes the engine conversation with
 # /compact as a bounded headless turn (fm_supervision_engine_turn).
 #
-# A compaction is internal housekeeping: these functions print one verdict word
+# A compaction is internal housekeeping: these functions print a verdict with optional engine usage
 # and write nothing the captain sees.
 
 FM_WARM_COMPACT_IDLE_DEFAULT=2700
@@ -119,12 +119,12 @@ fm_warm_compact_engine_transcript() {
   return 1
 }
 
-# fm_warm_compact_engine <config-dir> <idle-seconds> <session> <engine> <model> <prompt-file> <compacted 0|1> [pid-file]
-# prints off|episode|young|small|compacted|failed. Needs
+# fm_warm_compact_engine <config-dir> <idle-seconds> <session> <engine> <model> <prompt-file> <compacted 0|1> [pid-file] [prior-cost]
+# prints off|episode|young|small|compacted|failed with optional engine usage. Needs
 # fm-supervision-engine-lib.sh sourced and STATE set.
 fm_warm_compact_engine() {
-  local config=$1 idle=$2 session=$3 engine=$4 model=$5 prompt=$6 compacted=$7 pid_file=${8:-}
-  local transcript tokens verdict msg result errors rc
+  local config=$1 idle=$2 session=$3 engine=$4 model=$5 prompt=$6 compacted=$7 pid_file=${8:-} prior_cost=${9:-0}
+  local transcript tokens verdict msg result errors rc usage
   transcript=$(fm_warm_compact_engine_transcript "$session") || transcript=
   tokens=$(fm_warm_compact_context_tokens "$transcript")
   verdict=$(fm_warm_compact_verdict "$config" "$idle" "$tokens" "$compacted")
@@ -137,10 +137,11 @@ fm_warm_compact_engine() {
   rc=0
   fm_supervision_engine_turn "$engine" "$model" "$prompt" "$msg" "$session" resume \
     "${FM_WARM_COMPACT_ENGINE_TIMEOUT:-$FM_WARM_COMPACT_ENGINE_TIMEOUT_DEFAULT}" "$result" "$errors" "$pid_file" || rc=$?
-  if [ "$rc" -eq 0 ] && [ "$(fm_supervision_engine_result "$engine" "$result" | sed -n 's/^error=\([01]\).*/\1/p')" = 0 ]; then
-    printf 'compacted\n'
+  usage=$(fm_supervision_engine_result "$engine" "$result" "$prior_cost" 2>/dev/null || true)
+  if [ "$rc" -eq 0 ] && [ "${usage#error=0 }" != "$usage" ]; then
+    printf 'compacted %s\n' "$usage"
   else
-    printf 'failed\n'
+    printf 'failed %s\n' "$usage"
   fi
   rm -f "$msg" "$result" "$errors"
 }

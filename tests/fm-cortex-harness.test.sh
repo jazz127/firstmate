@@ -148,14 +148,72 @@ rm "$state/worker.turn-ended"
 run_hook Stop
 [ "$(fm_busy_classify tmux fake:w cortex worker "$state")" = 'busy fm-spawn' ] || fail 'stale Stop cleared replacement'
 assert_absent "$state/worker.turn-ended" 'stale Stop woke replacement'
-stop_command=$(jq -r '.hooks.Stop[0].hooks[0].command' "$hooks")
-case "$stop_command" in
-  *' --turn-ended '*) ;;
-  *) fail 'Stop hook does not raise the turn-end notification under the apply lock' ;;
-esac
-case "$stop_command" in
-  *touch*) fail 'Stop hook touches the turn-end marker outside the apply lock' ;;
-esac
+test_stop_notification_obeys_apply_lock() {
+  local state="$TMP_ROOT/contended hook state" gen hooks command fakebin hook_pid i real_mkdir real_touch
+  local event_state event_source event_name event_seq
+  mkdir -p "$state"
+  gen=$("$ROOT/bin/fm-busy-event.sh" arm "$state" worker) || fail 'could not arm the contended worker'
+  "$ROOT/bin/fm-cortex-plugin.sh" "$state" worker "$gen" || fail 'could not emit the contended plugin'
+  hooks="$state/worker.cortex-plugin/hooks/hooks.json"
+  command=$(jq -r '.hooks.Stop[0].hooks[0].command' "$hooks")
+  fakebin=$(fm_fakebin "$state/tools")
+  real_mkdir=$(command -v mkdir)
+  real_touch=$(command -v touch)
+  cat > "$fakebin/mkdir" <<'SH'
+#!/usr/bin/env bash
+if [ "${1:-}" = "$CORTEX_TEST_STATE/worker.busy-state.lock" ]; then
+  printf 'attempted\n' > "$CORTEX_TEST_STATE/attempted"
+fi
+exec "$CORTEX_TEST_MKDIR" "$@"
+SH
+  cat > "$fakebin/touch" <<'SH'
+#!/usr/bin/env bash
+if [ "${1:-}" = "$CORTEX_TEST_STATE/worker.turn-ended" ]; then
+  if [ -d "$CORTEX_TEST_STATE/worker.busy-state.lock" ]; then
+    printf 'held\n'
+  else
+    printf 'released\n'
+  fi > "$CORTEX_TEST_STATE/notification-lock"
+  . "$CORTEX_TEST_ROOT/bin/fm-busy-lib.sh"
+  fm_busy_record_read "$CORTEX_TEST_STATE" worker > "$CORTEX_TEST_STATE/notification-record"
+fi
+exec "$CORTEX_TEST_TOUCH" "$@"
+SH
+  chmod +x "$fakebin/mkdir" "$fakebin/touch"
+  mkdir "$state/worker.busy-state.lock"
+  (
+    PATH="$fakebin:$PATH" CORTEX_TEST_STATE="$state" CORTEX_TEST_ROOT="$ROOT" \
+      CORTEX_TEST_MKDIR="$real_mkdir" CORTEX_TEST_TOUCH="$real_touch" \
+      FM_BUSY_LOCK_STALE_SECS=60 bash -c "$command"
+    printf 'complete\n' > "$state/complete"
+  ) &
+  hook_pid=$!
+  for i in $(seq 1 100); do
+    [ ! -f "$state/attempted" ] || break
+    sleep 0.02
+  done
+  assert_present "$state/attempted" 'the emitted Stop hook never contended on the writer lock'
+  assert_absent "$state/worker.turn-ended" 'Stop notified before acquiring the writer lock'
+  [ "$(fm_busy_classify tmux fake:w cortex worker "$state")" = 'busy fm-spawn' ] || fail 'Stop changed busy state while excluded by the writer lock'
+  rmdir "$state/worker.busy-state.lock"
+  for i in $(seq 1 100); do
+    [ ! -f "$state/complete" ] || break
+    sleep 0.05
+  done
+  if [ ! -f "$state/complete" ]; then
+    kill "$hook_pid" 2>/dev/null || true
+    wait "$hook_pid" 2>/dev/null || true
+    fail 'Stop did not complete after the writer lock was released'
+  fi
+  wait "$hook_pid" || fail 'the emitted Stop hook failed'
+  assert_present "$state/worker.turn-ended" 'the accepted Stop did not notify'
+  [ "$(cat "$state/notification-lock")" = held ] || fail 'Stop notified outside the writer lock'
+  read -r event_state event_source event_name event_seq _ < "$state/notification-record"
+  [ "$event_state $event_source $event_name $event_seq" = 'idle cortex-hook stop 2' ] || fail 'Stop notified before committing its idle event'
+  assert_absent "$state/worker.busy-state.lock" 'Stop left the writer lock held'
+  pass 'the emitted Cortex Stop hook waits for the apply lock and notifies after settling while still holding it'
+}
+test_stop_notification_obeys_apply_lock
 wiring=$(fm_control_harness_wiring_paths cortex /unused "$state" worker)
 case "$wiring" in *"$hooks"*"$plugin/.cortex-plugin/plugin.json"*) ;; *) fail "plugin retirement paths missing: $wiring" ;; esac
 ! "$ROOT/bin/fm-cortex-plugin.sh" "$state" 'bad id' "$gen" 2>/dev/null || fail 'invalid task id accepted'

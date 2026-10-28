@@ -29,6 +29,10 @@ new_home() { # name -> home with the monitor flag on
 #!/usr/bin/env bash
 set -eu
 printf '%s\n' "$*" >> "$FORGE/calls.log"
+jq -cn --arg host "${GH_HOST:-unset}" --arg args "$*" '{host:$host,args:$args}' >> "$FORGE/hosts.log"
+if [ -f "$FORGE/expected-host" ]; then
+  [ "${GH_HOST:-}" = "$(cat "$FORGE/expected-host")" ] || exit 1
+fi
 model() {
   local n=$1 attempt
   if [ -f "$FORGE/barrier-count" ]; then
@@ -62,7 +66,9 @@ case "$1 $2" in
   'pr view')
     case "$*" in
       *headRefOid,reviewDecision*) model "${3##*/}" | jq '{headRefOid:.head,reviewDecision:""}' ;;
-      *) printf 'https://github.com/o/r/pull/%s\n' "$3" ;;
+      *)
+        if [ -f "$FORGE/returned-url" ]; then cat "$FORGE/returned-url"
+        else printf 'https://%s/o/r/pull/%s\n' "${GH_HOST:-github.com}" "$3"; fi ;;
     esac ;;
   'api repos/o/r') printf '{"permissions":{"push":false}}\n' ;;
   'api repos/o/r/pulls/'*)
@@ -84,6 +90,10 @@ SH
   cat > "$home/fakebin/gh-axi" <<'SH'
 #!/usr/bin/env bash
 printf 'gh-axi %s\n' "$*" >> "$FORGE/calls.log"
+jq -cn --arg host "${GH_HOST:-unset}" --arg args "gh-axi $*" '{host:$host,args:$args}' >> "$FORGE/hosts.log"
+if [ -f "$FORGE/expected-host" ]; then
+  [ "${GH_HOST:-}" = "$(cat "$FORGE/expected-host")" ] || exit 1
+fi
 branch=
 while [ "$#" -gt 0 ]; do [ "$1" = --head ] && branch=$2; shift; done
 if [ -f "$FORGE/branch-barrier-count" ]; then
@@ -579,6 +589,74 @@ test_checks_on_later_pages() {
   pass 'all check pages contribute to required-check classification'
 }
 
+test_health_reads_bind_github_host() {
+  local host inherited route health_home path url out returned_url calls
+  for host in github.com github.example.test; do
+    for inherited in absent hostile; do
+      for route in recorded discovered; do
+        health_home=$(new_home "host-$host-$inherited-$route")
+        url="https://$host/o/r/pull/8"
+        printf '%s\n' "$host" > "$health_home/config/github-hosts"
+        printf '%s\n' "$host" > "$health_home/forge/expected-host"
+        for path in "$ROOT"/bin/*; do
+          case "${path##*/}" in fm-pr-health.sh|fm-contributions.sh|fm-guard.sh) continue ;; esac
+          ln -s "$path" "$health_home/root/bin/${path##*/}"
+        done
+        cp "$ROOT/bin/fm-pr-health.sh" "$health_home/root/bin/fm-pr-health.sh"
+        cat > "$health_home/root/bin/fm-contributions.sh" <<'SH'
+#!/usr/bin/env bash
+case "$1" in
+  owned) cat "$FORGE/owned.json" ;;
+  enroll) printf '%s\n' "$*" >> "$FORGE/enroll.log" ;;
+  *) exit 1 ;;
+esac
+SH
+        chmod +x "$health_home/root/bin/fm-contributions.sh"
+        if [ "$route" = recorded ]; then
+          task "$health_home" ship1 "pr=$url"
+          jq -n --arg url "$url" '[{url:$url,tasks:["ship1"],final:false}]' > "$health_home/forge/owned.json"
+        else
+          printf '[]\n' > "$health_home/forge/owned.json"
+          git init -q -b feature-host "$health_home/copy"
+          git -C "$health_home/copy" remote add origin "https://$host/o/r.git"
+          task "$health_home" ship1 "worktree=$health_home/copy"
+          printf '8\n' > "$health_home/forge/branch-feature-host"
+        fi
+        pr "$health_home" 8 "$HEAD_A" "$BASE_1" false false
+        out=$(
+          unset GH_HOST
+          [ "$inherited" != hostile ] || export GH_HOST=unrelated.example.test
+          with_home "$health_home" "$health_home/root/bin/fm-pr-health.sh" poll
+        ) || fail "the synthetic health worker failed ($host/$inherited/$route)"
+        assert_contains "$out" "$url conflicts with its base at latest commit aaaaaaa" "health read the wrong resource ($host/$inherited/$route)"
+        [ "$(jq -rs 'map(.host) | unique | join("\n")' "$health_home/forge/hosts.log")" = "$host" ] || fail "health inherited an unrelated host ($host/$inherited/$route)"
+        calls=$(jq -r '.host + "|" + .args' "$health_home/forge/hosts.log")
+        assert_contains "$calls" "$host|api repos/o/r/pulls/8" "the REST read lost the parsed host"
+        assert_contains "$calls" "$host|api graphql " "the GraphQL read lost the parsed host"
+        if [ "$route" = discovered ]; then
+          assert_contains "$calls" "$host|gh-axi pr list " "branch discovery lost the origin host"
+          assert_contains "$calls" "$host|pr view 8 --json url" "branch URL lookup lost the origin host"
+          [ "$(cat "$health_home/forge/enroll.log")" = "enroll ship1 $url" ] || fail "discovery enrolled a different resource"
+          for returned_url in "https://unrelated.example.test/o/r/pull/8" "https://$host/o/other/pull/8" "https://$host/o/r/pull/9"; do
+            rm "$health_home/state/pr-health.json"
+            : > "$health_home/forge/enroll.log"
+            printf '%s\n' "$returned_url" > "$health_home/forge/returned-url"
+            out=$(with_home "$health_home" "$health_home/root/bin/fm-pr-health.sh" poll) || fail 'health failed while refusing a mismatched discovery result'
+            [ -z "$out" ] && [ ! -s "$health_home/forge/enroll.log" ] || fail "discovery accepted a different host, repository or PR: $returned_url"
+          done
+        fi
+      done
+    done
+  done
+  pass 'synthetic health ownership: REST, GraphQL and branch discovery bind GitHub.com and Enterprise under absent or hostile GH_HOST'
+}
+
+test_health_host_boundaries() {
+  test_health_reads_bind_github_host
+  test_dirty_again_at_same_commits_is_silent
+  test_adopted_draft_red_required_check_after_pause_wakes_once
+}
+
 test_all_owned_pr_reads_start_in_one_wave() {
   local home n out
   home=$(new_home concurrent)
@@ -602,6 +680,11 @@ test_all_owned_pr_reads_start_in_one_wave() {
   pass 'all owned PR reads start in one wave without rotating a backlog'
 }
 
+if [ -n "${FM_TEST_ONLY:-}" ]; then
+  "$FM_TEST_ONLY"
+  exit
+fi
+
 failures=0
 for test_name in test_unknown_then_dirty_wakes_once test_dirty_again_at_same_commits_is_silent \
   test_conflict_once_per_latest_commit test_adopted_draft_red_required_check_after_pause_wakes_once \
@@ -616,7 +699,7 @@ for test_name in test_unknown_then_dirty_wakes_once test_dirty_again_at_same_com
   test_nothing_prints_while_nothing_changed test_merged_pr_is_not_read_again test_absent_flag_changes_nothing \
   test_watcher_surfaces_one_wake test_failure_once_per_latest_commit_after_cleanup \
   test_all_owned_pr_reads_start_in_one_wave test_checks_on_later_pages \
-  test_unsupported_provider_has_no_github_reads; do
+  test_unsupported_provider_has_no_github_reads test_health_reads_bind_github_host; do
   ( "$test_name" ) || failures=$((failures + 1))
 done
 [ "$failures" -eq 0 ] || fail "$failures PR health regressions"

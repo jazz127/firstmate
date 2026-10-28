@@ -72,7 +72,6 @@ fail() { printf 'fm-pr-health: %s\n' "$*" >&2; exit 1; }
 usage() { sed -n '2,/^set -eu$/s/^# \{0,1\}//p' "$0"; }
 case "${1:-}" in -h|--help) usage; exit 0 ;; esac
 
-PR_URL_RE='https://github\.com/[A-Za-z0-9-]+/[A-Za-z0-9._-]+/pull/[1-9][0-9]*'
 HEALTH="$STATE/pr-health.json"
 LOCK_HELD=0
 TMP=
@@ -163,9 +162,9 @@ read_pr() { # url deadline output-directory -> rest.json gql.json
   fm_pr_url_parse "$url" && [ "$FM_PR_PROVIDER" = github ] || return 1
   number=$FM_PR_NUMBER
   owner=${FM_PR_PATH%%/*}; repo=${FM_PR_PATH#*/}
-  gh_read "$deadline" api "repos/$owner/$repo/pulls/$number" > "$out/rest.json" 2>/dev/null &
+  GH_HOST="$FM_PR_HOST" gh_read "$deadline" api "repos/$owner/$repo/pulls/$number" > "$out/rest.json" 2>/dev/null &
   local rest_pid=$!
-  gh_read "$deadline" api graphql --paginate --slurp -F "owner=$owner" -F "repo=$repo" -F "number=$number" \
+  GH_HOST="$FM_PR_HOST" gh_read "$deadline" api graphql --paginate --slurp -F "owner=$owner" -F "repo=$repo" -F "number=$number" \
     -f "query=$PR_QUERY" > "$out/pages.json" 2>/dev/null &
   local gql_pid=$!
   wait "$rest_pid" || rest_rc=$?
@@ -182,20 +181,22 @@ read_pr() { # url deadline output-directory -> rest.json gql.json
 }
 
 lookup_branch_pr() { # worktree branch deadline -> url
-  local wt=$1 branch=$2 deadline=$3 left number url remote
+  local wt=$1 branch=$2 deadline=$3 left number url remote host path
   remote=$(git -C "$wt" remote get-url origin 2>/dev/null) || return 1
   case "$remote" in
     git@github.com:*) remote="https://github.com/${remote#git@github.com:}" ;;
     ssh://git@github.com/*) remote="https://github.com/${remote#ssh://git@github.com/}" ;;
   esac
   fm_pr_url_parse "${remote%.git}/pull/1" && [ "$FM_PR_PROVIDER" = github ] || return 1
+  host=$FM_PR_HOST path=$FM_PR_PATH
   left=$((deadline - $(date +%s)))
   [ "$left" -gt 0 ] || return 1
   [ "$left" -le 5 ] || left=5
-  number=$(fm_run_timed "$left" bash -c '. "$1/fm-pr-lib.sh"; fm_pr_number_from_branch "$2" "$3" open' \
+  number=$(fm_run_timed "$left" env GH_HOST="$host" bash -c '. "$1/fm-pr-lib.sh"; fm_pr_number_from_branch "$2" "$3" open' \
     _ "$SCRIPT_DIR" "$wt" "$branch") || return 1
-  url=$(cd "$wt" && gh_read "$deadline" pr view "$number" --json url -q .url 2>/dev/null) || return 1
-  printf '%s\n' "$url" | grep -Ex "$PR_URL_RE"
+  url=$(cd "$wt" && GH_HOST="$host" gh_read "$deadline" pr view "$number" --json url -q .url 2>/dev/null) || return 1
+  fm_pr_url_parse "$url" && [ "$FM_PR_URL" = "https://$host/$path/pull/$number" ] || return 1
+  printf '%s\n' "$FM_PR_URL"
 }
 
 enroll_new() { # deadline : enroll recorded and branch PRs not yet durably owned

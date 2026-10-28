@@ -727,7 +727,9 @@ case "\$*" in
     [ '$reader' = gh ] || exit 1
     printf '%s\\n' "\${GH_HOST:-}|\$*" >> '$WORLD/record-reads'
     printf 'state=$forge_state\\nmerged=$([ "$forge_state" = MERGED ] && printf true || printf false)\\n' ;;
-  'api '*) printf 'bin/example.sh\\n' ;;
+  'api repos/owner/repo/pulls/1/files?per_page=100 '*)
+    [ "\${GH_HOST:-}" = '$host' ] || exit 1
+    printf 'bin/example.sh\\n' ;;
   *) exit 1 ;;
 esac
 SH
@@ -796,6 +798,60 @@ test_merged_report_after_evidence_cleanup() {
   evidence_cleanup_report_case override MERGED roots ok project
   evidence_cleanup_report_case override-tasktmp MERGED tasktmp ok project
   evidence_cleanup_report_case override-scope MERGED roots failed other-project
+}
+
+test_scratch_validation_binds_github_host() {
+  local host inherited files out rc
+  make_world scratch-host-binding
+  printf 'github.example.test\n' > "$MATE/config/github-hosts"
+  mkdir "$WORLD/files"
+  cat > "$WORLD/fakebin/gh" <<'SH'
+#!/usr/bin/env bash
+printf '%s\n' "${GH_HOST:-unset}|$*" >> "$FM_FORGE_LOG"
+case "${GH_HOST:-unset}" in
+  github.com|github.example.test) cat "$FM_TEST_HOST_FILES/$GH_HOST" ;;
+  *) printf 'bin/decoy-clean.sh\n' ;;
+esac
+SH
+  chmod +x "$WORLD/fakebin/gh"
+  for host in github.com github.example.test; do
+    for inherited in absent hostile; do
+      for files in scratch clean unavailable; do
+        case "$files" in
+          clean) printf 'bin/example.sh\n' > "$WORLD/files/$host" ;;
+          scratch) printf '.codex-live-check/private.txt\n' > "$WORLD/files/$host" ;;
+          unavailable) rm "$WORLD/files/$host" ;;
+        esac
+        : > "$WORLD/forge.log"
+        out=$(
+          unset GH_HOST
+          [ "$inherited" != hostile ] || export GH_HOST=unrelated.example.test
+          PATH="$WORLD/fakebin:$PATH" FM_HOME="$MATE" FM_CONFIG_OVERRIDE="$MATE/config" \
+            FM_FORGE_LOG="$WORLD/forge.log" FM_TEST_HOST_FILES="$WORLD/files" bash -c '
+              set -u
+              . "$1/bin/fm-pr-lib.sh"
+              fm_pr_refuse_published_scratch "$2"
+            ' _ "$ROOT" "https://$host/owner/repo/pull/1" 2>&1
+        ); rc=$?
+        case "$files" in
+          clean) expect_code 0 "$rc" "clean published files must validate ($host/$inherited): $out" ;;
+          scratch)
+            [ "$rc" -ne 0 ] || fail "scratch on the addressed host passed using a decoy file list ($host/$inherited)"
+            assert_contains "$out" 'scratch path would be published' "the scratch refusal lost its cause" ;;
+          unavailable) [ "$rc" -ne 0 ] || fail "an unavailable addressed PR passed using a decoy file list ($host/$inherited)" ;;
+        esac
+        assert_contains "$(cat "$WORLD/forge.log")" "$host|api repos/owner/repo/pulls/1/files?per_page=100" "scratch validation addressed the wrong resource"
+      done
+    done
+  done
+  pass "published scratch validation binds GitHub.com and Enterprise despite absent or hostile GH_HOST"
+}
+
+test_evidence_host_boundaries() {
+  test_scratch_validation_binds_github_host
+  test_merged_report_after_evidence_cleanup
+  GH_HOST=unrelated.example.test evidence_cleanup_report_case hostile-public MERGED roots ok '' gh github.com
+  GH_HOST=unrelated.example.test evidence_cleanup_report_case hostile-enterprise MERGED roots ok '' gh github.example.test
 }
 
 test_parent_report_bounds_published_read() {
@@ -1379,6 +1435,7 @@ test_report_subcommand_delivers_and_refuses
 test_pending_ledger_done_is_delivered_after_worktree_removal
 test_parent_report_surfaces_published_evidence_failure
 test_merged_report_after_evidence_cleanup
+test_scratch_validation_binds_github_host
 test_parent_report_bounds_published_read
 test_report_avoids_scan_meta_lock_inversion
 test_local_secondmate_rejects_relative_parent_home

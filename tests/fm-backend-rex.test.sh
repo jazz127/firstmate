@@ -984,11 +984,6 @@ test_shared_checkout_home_isolation() {
   pass "Rex isolates shared-checkout homes, keeps explicit bindings and refuses stale or ambiguous adoption"
 }
 
-if [ -n "${FM_TEST_ONLY:-}" ]; then
-  "$FM_TEST_ONLY"
-  exit 0
-fi
-
 # --- attention marks (opt-in) ---------------------------------------------------
 
 # mark_case: a task tab whose foreground is a harness at pid 4242 under a shell
@@ -1180,6 +1175,94 @@ test_marks_clear_removes_records_and_caches() {
   pass "rex: clearing a task removes its mark, tint, and caches"
 }
 
+test_marks_clear_preserves_failed_operations_for_retry() {
+  local scenario failed mark_cache progress_cache tint_cache expected_first expected_retry rc
+  local mark_value=$'blocked\tquestion\tNeeds your decision'
+  local progress_value=$'50\tValidating: review'
+  local clear_mark=$'\033]7501;state=clear:app=firstmate:id=fm\033\\'
+  local reset_tint=$'\033]111\033\\'
+  for scenario in status-fails tint-fails both-fail mark-only progress-only tint-only; do
+    mark_case "marks-clear-retry-$scenario"
+    printf '%s\n' "window=$MARK_T" 'backend=rex' 'kind=ship' >"$MARK_DIR/home/state/t1.meta"
+    mark_cache="$MARK_DIR/home/state/.rex-mark-t1"
+    progress_cache="$MARK_DIR/home/state/.rex-progress-t1"
+    tint_cache="$MARK_DIR/home/state/.rex-tint-t1"
+    case "$scenario" in
+      tint-only) ;;
+      *)
+        mark_env "fm_backend_rex_progress '$MARK_T' 50 'Validating: review' fm-t1" || fail "could not seed validation progress"
+        printf '%s\n' "$progress_value" >"$progress_cache"
+        if [ "$scenario" != progress-only ]; then
+          mark_env "fm_backend_rex_mark '$MARK_T' blocked question 'Needs your decision' fm-t1" || fail "could not seed attention status"
+          printf '%s\n' "$mark_value" >"$mark_cache"
+        fi
+        ;;
+    esac
+    case "$scenario" in
+      mark-only) rm -f "$progress_cache" ;;
+      progress-only) ;;
+      *)
+        mark_env "fm_backend_rex_tint '$MARK_T' '#2b2614' fm-t1" || fail "could not seed tint"
+        printf '%s\t%s\n' "$MARK_T" '#2b2614' >"$tint_cache"
+        ;;
+    esac
+    cat >"$MARK_DIR/psbin/ps" <<'SH'
+#!/usr/bin/env bash
+case " $* " in
+  *" -o tty= "*)
+    counter="$FM_REX_FAKE_DIR/tty-lookups"
+    count=$(cat "$counter" 2>/dev/null || echo 0)
+    count=$((count + 1))
+    printf '%s\n' "$count" >"$counter"
+    case " ${FM_REX_TTY_FAIL_CALLS:-} " in *" $count "*) exit 17 ;; esac
+    echo ttys999
+    exit 0
+    ;;
+esac
+exec /bin/ps "$@"
+SH
+    case "$scenario" in
+      status-fails) failed=1; expected_first=$reset_tint; expected_retry=$clear_mark ;;
+      tint-fails) failed=2; expected_first=$clear_mark; expected_retry=$reset_tint ;;
+      both-fail) failed='1 2'; expected_first=''; expected_retry="$clear_mark$reset_tint" ;;
+      tint-only) failed=1; expected_first=''; expected_retry=$reset_tint ;;
+      *) failed=1; expected_first=''; expected_retry=$clear_mark ;;
+    esac
+    : >"$MARK_TTY"
+    rc=0
+    FM_REX_TTY_FAIL_CALLS="$failed" marks_run clear t1 || rc=$?
+    expect_code 1 "$rc" "$scenario must report the failed operation"
+    assert_equals "$expected_first" "$(cat "$MARK_TTY")" "$scenario must complete only the successful clearing operations"
+    case "$scenario" in
+      tint-fails|tint-only)
+        [ ! -e "$mark_cache" ] && [ ! -e "$progress_cache" ] || fail "$scenario retained successfully cleared status caches"
+        ;;
+      *)
+        if [ "$scenario" != progress-only ]; then
+          assert_equals "$mark_value" "$(cat "$mark_cache" 2>/dev/null)" "$scenario lost the status retry cache"
+        fi
+        if [ "$scenario" != mark-only ]; then
+          assert_equals "$progress_value" "$(cat "$progress_cache" 2>/dev/null)" "$scenario lost the progress retry cache"
+        fi
+        ;;
+    esac
+    case "$scenario" in
+      tint-fails|both-fail|tint-only)
+        assert_equals "$MARK_T"$'\t#2b2614' "$(cat "$tint_cache" 2>/dev/null)" "$scenario lost the tint retry cache"
+        ;;
+      *) [ ! -e "$tint_cache" ] || fail "$scenario retained a successfully reset tint cache" ;;
+    esac
+    : >"$MARK_TTY"
+    FM_REX_TTY_FAIL_CALLS='' marks_run clear t1 || fail "$scenario could not retry its failed clear"
+    assert_equals "$expected_retry" "$(cat "$MARK_TTY")" "$scenario must retry only failed operations; parent clear also removes progress children"
+    [ ! -e "$mark_cache" ] && [ ! -e "$progress_cache" ] && [ ! -e "$tint_cache" ] || fail "$scenario retained a cache after successful cleanup"
+    : >"$MARK_TTY"
+    marks_run clear t1 || fail "$scenario completed cleanup was not idempotent"
+    [ ! -s "$MARK_TTY" ] || fail "$scenario repeated a completed clear"
+  done
+  pass "offline Rex clear preserves failed status/progress/tint caches and retries only unfinished operations"
+}
+
 test_nm_run_progress_reads_captured_status() {
   local out caps="$ROOT/tests/captures/no-mistakes-v1.70.1"
   out=$(bash -c '. "$1/bin/fm-nm-run-lib.sh"; fm_nm_run_progress "$(cat "$2")"' _ "$ROOT" "$caps/replacement.toon")
@@ -1190,6 +1273,11 @@ test_nm_run_progress_reads_captured_status() {
     && fail "output with no steps table must fail"
   pass "rex: validation progress reads captured no-mistakes status by column name"
 }
+
+if [ -n "${FM_TEST_ONLY:-}" ]; then
+  "$FM_TEST_ONLY"
+  exit 0
+fi
 
 test_shared_checkout_home_isolation
 test_bin_prefers_rex_bin_dir
@@ -1228,4 +1316,5 @@ test_firstmate_records_never_count_as_worker_state
 test_marks_are_off_by_default
 test_marks_producer_converges_and_notifies_once
 test_marks_clear_removes_records_and_caches
+test_marks_clear_preserves_failed_operations_for_retry
 test_nm_run_progress_reads_captured_status

@@ -48,8 +48,12 @@ case "$RETRY" in ''|0*|*[!0-9]*) RETRY=300 ;; esac
 fm_session_lock_owned_by_self "$STATE" || exit 1
 [ "$(cat "$PENDING" 2>/dev/null)" = "$TOKEN" ] || exit 1
 SESSION=$(cat "$STATE/.lock" 2>/dev/null) || exit 1
-SESSION_ID=$(fm_pid_identity "$SESSION") || exit 1
+SESSION_ID=$(fm_session_pid_identity "$SESSION") || exit 1
 [ -n "$SESSION_ID" ] || exit 1
+SESSION_SID=
+case "$SESSION" in
+  win:*) SESSION_SID=$(fm_session_lock_recorded_session_id "$STATE") || exit 1 ;;
+esac
 ARM=
 OUT=
 ARM_RECORDED=0
@@ -76,14 +80,15 @@ trap 'exit 0' TERM INT
 
 session_owned() {
   [ "$(cat "$STATE/.lock" 2>/dev/null)" = "$SESSION" ] \
-    && fm_pid_alive "$SESSION" \
-    && [ "$(fm_pid_identity "$SESSION" 2>/dev/null)" = "$SESSION_ID" ]
+    && fm_session_pid_alive "$SESSION" \
+    && [ "$(fm_session_pid_identity "$SESSION" 2>/dev/null)" = "$SESSION_ID" ] \
+    && { [ -z "$SESSION_SID" ] || [ "$(fm_session_lock_recorded_session_id "$STATE" 2>/dev/null)" = "$SESSION_SID" ]; }
 }
 
 retry_delivery() {
   local pane_pid ancestor message verdict=deferred tmp pgid tpgid
   # No fallback target: a guessed pane can belong to another home.
-  if [ -n "${TMUX_PANE:-}" ] && session_owned; then
+  if [ -n "${TMUX_PANE:-}" ] && [[ "$SESSION" != *[!0-9]* ]] && session_owned; then
     pane_pid=$(tmux display-message -p -t "$TMUX_PANE" '#{pane_pid}' 2>/dev/null) || pane_pid=
     ancestor=$SESSION
     case "$pane_pid" in ''|*[!0-9]*) ancestor= ;; esac

@@ -1869,6 +1869,41 @@ test_spawn_codex_accepts_bypass_approval_mode() {
   pass "fm-spawn.sh --backend t3code codex: config/codex-approval-mode=bypass still launches"
 }
 
+test_spawn_refuses_t3_codex_seats() {
+  local id out rc home
+  id=$(t3_uid t3seatz)
+  t3_case spawn-refuse-seat
+  t3_worker_setup "$id"
+  mkdir -p "$CASE_DIR/seat" "$CASE_DIR/fakebin"
+  printf '%s\n' '{"OPENAI_API_KEY":"synthetic-seat-key"}' > "$CASE_DIR/seat/auth.json"
+  node -e 'require("fs").writeFileSync(process.argv[1], JSON.stringify({version:1,id:"test-dock",seats:{primary:{harness:"codex",credential_home:process.argv[2]}}}))' \
+    "$CONFIG/dock.json" "$CASE_DIR/seat"
+  cat > "$CASE_DIR/fakebin/codex" <<'SH'
+#!/usr/bin/env bash
+[ "${1:-}:${2:-}" = login:status ] || exit 1
+[ -f "$CODEX_HOME/auth.json" ] || exit 1
+echo 'Logged in using ChatGPT' >&2
+SH
+  chmod +x "$CASE_DIR/fakebin/codex"
+  out=$(t3_worker_spawn "$id" codex --model gpt-5.6-sol --seat primary); rc=$?
+  expect_code 1 "$rc" "a seated T3 scout must refuse: $out"
+  assert_contains "$out" 'backend=t3code cannot apply --seat primary' "the refusal must name the unsupported binding"
+  assert_absent "$CASE_DIR/state/$id.meta" "a refused seated spawn records no task"
+  [ "$(t3_log_line_of 'r.tool === "treehouse"')" -eq 0 ] || fail "a seated spawn leased a slot"
+  [ -z "$(t3_dispatch_types)" ] || fail "a seated spawn mutated T3"
+  home="$CASE_DIR/secondmate"
+  mkdir -p "$home" "$CASE_DIR/home/state"
+  fm_write_meta "$CASE_DIR/home/state/$id.meta" 'seat=primary'
+  cp "$CASE_DIR/home/state/$id.meta" "$CASE_DIR/original.meta"
+  out=$(spawn_t3_secondmate "$id" "$home" codex gpt-5.6-sol); rc=$?
+  expect_code 1 "$rc" "a secondmate's recorded seat must also refuse: $out"
+  assert_contains "$out" 'backend=t3code cannot apply --seat primary' "restored seats must reach the same refusal"
+  cmp -s "$CASE_DIR/original.meta" "$CASE_DIR/home/state/$id.meta" || fail "a refused seat changed its existing record"
+  [ -z "$(t3_dispatch_types)" ] || fail "a restored seat mutated T3"
+  assert_absent "$home/.codex/config.toml" "a refused seat provisioned the secondmate environment"
+  pass "T3 Codex launches refuse explicit and restored seats before provisioning"
+}
+
 test_spawn_refuses_raw_launch_command() {
   local id out rc
   id=$(t3_uid t3rawz)
@@ -2422,6 +2457,73 @@ test_answer_script_reads_and_answers_questions() {
   pass "fm-t3-answer.sh: lists a T3 worker's pending questions and answers one by request id"
 }
 
+test_answer_script_guards_mutation() {
+  local id thread=mcp:7e8f9a0b-2c3d-4e4f-9a5b-456789abcdef out rc actor other real_node fb
+  id=$(t3_uid t3answerguard)
+  make_t3_control_task answer-guard "$id" "$thread" running
+  FM_T3_T="$thread" t3_world_set 'w.threads[process.env.FM_T3_T].runtimeRequests = [{ id: "req-q1", kind: "user_input", status: "pending", questions: [{ id: "q1", question: "Ship it?", options: [] }] }]'
+  run_guarded_answer() { FM_HOME="$CASE_DIR/home" FM_STATE_OVERRIDE="$CTRL_STATE" FM_CONFIG_OVERRIDE="$CONFIG" "$ROOT/bin/fm-t3-answer.sh" "$@" 2>&1; }
+  printf '%s\n' "$$" > "$CTRL_STATE/.lock"
+  for actor in main branch; do
+    case "$actor" in main) other=branch ;; branch) other=main ;; esac
+    printf '%s\t%s\t%s\n' "$other" "$$" "$(date +%s)" > "$CTRL_STATE/.lease-$id"
+    out=$(FM_SUPERVISION_ACTOR="$actor" run_guarded_answer "$id" req-q1 '{"q1":"yes"}'); rc=$?
+    expect_code 6 "$rc" "the $actor actor must respect the $other actor's live lease: $out"
+    assert_contains "$out" "leased to the $other supervision actor" "the refusal must identify the live owner"
+    assert_absent "$CTRL_STATE/.fm-lease-command.lock" "a refused answer left the lease-command lock"
+  done
+  out=$(FM_GATE_REFUSE_BYPASS=0 NO_MISTAKES_GATE=1 run_guarded_answer "$id" req-q1 '{"q1":"yes"}'); rc=$?
+  expect_code 3 "$rc" "a gate agent must never answer a worker: $out"
+  out=$(FM_GATE_REFUSE_BYPASS=0 NO_MISTAKES_GATE=1 FM_SUPERVISION_ACTOR=branch run_guarded_answer "$id"); rc=$?
+  expect_code 0 "$rc" "listing pending requests must remain read-only: $out"
+  assert_contains "$out" 'Ship it?' "listing must return the pending question"
+  [ -z "$(t3_fake_calls t3_pending_request_respond)" ] || fail "a refused answer reached T3"
+  printf 'main\t%s\t%s\n' "$$" "$(date +%s)" > "$CTRL_STATE/.lease-$id"
+  real_node=$(command -v node)
+  fb="$CASE_DIR/answer-bin"
+  mkdir -p "$fb"
+  cat > "$fb/node" <<SH
+#!/usr/bin/env bash
+if [ "\${2:-}" = respond ]; then
+  bash -c '
+    . "\$1/bin/fm-wake-lib.sh"
+    lock="\$FM_STATE_OVERRIDE/.fm-lease-command.lock"
+    if fm_lock_try_acquire "\$lock"; then
+      echo overlap > "\$2"
+      fm_lock_release "\$lock"
+    else
+      echo excluded > "\$2"
+    fi
+  ' _ '$ROOT' '$CASE_DIR/exclusion'
+fi
+exec '$real_node' "\$@"
+SH
+  chmod +x "$fb/node"
+  out=$(PATH="$fb:$PATH" FM_SUPERVISION_ACTOR=main run_guarded_answer "$id" req-q1 '{"q1":"yes"}'); rc=$?
+  expect_code 0 "$rc" "the lease owner must be able to answer: $out"
+  [ "$(cat "$CASE_DIR/exclusion")" = excluded ] || fail "another lease command could acquire during the answer"
+  [ "$(t3_fake_calls t3_pending_request_respond)" = "{\"threadId\":\"$thread\",\"requestId\":\"req-q1\",\"answers\":{\"q1\":\"yes\"}}" ] || fail "the allowed answer did not reach its recorded thread"
+  assert_absent "$CTRL_STATE/.fm-lease-command.lock" "a successful answer left the lease-command lock"
+  out=$(FM_SUPERVISION_ACTOR=main run_guarded_answer "$id" req-q1 '{}'); rc=$?
+  [ "$rc" -ne 0 ] || fail "answering a request already closed must fail"
+  assert_absent "$CTRL_STATE/.fm-lease-command.lock" "a failed answer left the lease-command lock"
+  printf 'branch\t99999999\t1\n' > "$CTRL_STATE/.lease-$id"
+  FM_T3_T="$thread" t3_world_set 'w.threads[process.env.FM_T3_T].runtimeRequests[0].status = "pending"'
+  out=$(FM_SUPERVISION_ACTOR=main run_guarded_answer "$id" req-q1 '{"q1":"yes"}'); rc=$?
+  expect_code 0 "$rc" "a stale lease must not block answering: $out"
+  assert_absent "$CTRL_STATE/.lease-$id" "the stale lease was not retired"
+  assert_absent "$CTRL_STATE/.fm-lease-command.lock" "a stale-lease answer left the command lock"
+  pass "T3 answers enforce gate and task leases, exclude concurrent lease commands, and release on success or failure"
+}
+
+test_t3_review_boundaries() {
+  test_spawn_refuses_t3_codex_seats
+  test_spawn_codex_accepts_bypass_approval_mode
+  test_control_relaunch_refused_before_any_dispatch
+  test_answer_script_guards_mutation
+  test_answer_script_reads_and_answers_questions
+}
+
 # A secondmate whose last T3 run failed still has a readable thread; recovery
 # continues it there instead of archiving it and launching a second thread.
 test_failed_t3_secondmate_is_resumed_in_place() {
@@ -2755,6 +2857,7 @@ test_lost_send_reply_to_secondmate_names_armed_correlation
 test_status_table
 test_push_wait_escalates_pending_question_once
 test_answer_script_reads_and_answers_questions
+test_answer_script_guards_mutation
 test_failed_t3_secondmate_is_resumed_in_place
 test_t3_secondmate_missing_thread_reproves_close_before_replacement
 test_daemon_unconfirmed_digest_is_frozen_and_retried_verbatim
@@ -2793,6 +2896,7 @@ test_spawn_refuses_launch_settings_t3_cannot_honor claude-permission-mode auto "
 test_spawn_refuses_launch_settings_t3_cannot_honor codex-approval-mode approve-for-me "config/codex-approval-mode=approve-for-me" codex
 test_spawn_refuses_launch_settings_t3_cannot_honor codex-permission-mode restricted "config/codex-permission-mode=restricted" codex
 test_spawn_codex_accepts_bypass_approval_mode
+test_spawn_refuses_t3_codex_seats
 test_spawn_refuses_launch_settings_t3_cannot_honor launch-env-allowlist HOME "config/launch-env-allowlist"
 test_spawn_refuses_raw_launch_command
 test_spawn_abort_returns_lease_only_after_archive ok

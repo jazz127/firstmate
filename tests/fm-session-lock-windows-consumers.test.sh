@@ -12,6 +12,20 @@ set -u
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 TMP_ROOT=$(fm_test_tmproot fm-session-lock-windows-consumers)
+HANDOFF_PID=
+HANDOFF_RUNNER=
+HANDOFF_ARM=
+cleanup_handoff() {
+  local pid
+  for pid in "$HANDOFF_PID" "$HANDOFF_ARM" "$HANDOFF_RUNNER"; do
+    [ -z "$pid" ] || kill "$pid" 2>/dev/null || true
+  done
+  [ -z "$HANDOFF_RUNNER" ] || wait "$HANDOFF_RUNNER" 2>/dev/null || true
+  HANDOFF_PID=
+  HANDOFF_RUNNER=
+  HANDOFF_ARM=
+}
+trap 'cleanup_handoff; fm_test_cleanup' EXIT
 
 # A Git Bash host as firstmate sees it: uname reports MINGW, Cygwin's ps has no
 # -o option and reports every shell's parent as 1, and `ps -W` lists Windows
@@ -203,7 +217,88 @@ test_untagged_values_reach_the_numeric_helpers_unchanged() {
   pass "untagged lock values: the session-pid helpers answer exactly as fm_pid_identity and fm_pid_alive do"
 }
 
+test_handoff_tracks_windows_session_identity() {
+  local home path transition i
+  for transition in sidecar gone reused ack; do
+    home=$(make_home "handoff-$transition" win:7204)
+    mkdir -p "$home/bin" "$home/config" "$home/fakebin"
+    for path in "$ROOT"/bin/*; do
+      case "${path##*/}" in fm-supervision-handoff.sh|fm-watch-arm.sh) continue ;; esac
+      ln -s "$path" "$home/bin/${path##*/}"
+    done
+    cp "$ROOT/bin/fm-supervision-handoff.sh" "$home/bin/fm-supervision-handoff.sh"
+    : > "$home/config/supervision-handoff-ack"
+    printf 'token\n' > "$home/state/.supervision-handoff-pending"
+    printf '%s\n' "$WIN_TABLE" > "$home/windows-table"
+    cat > "$home/fakebin/ps" <<SH
+#!/usr/bin/env bash
+export FM_TEST_WIN_TABLE="\$(cat '$home/windows-table')"
+exec '$FAKEBIN/ps' "\$@"
+SH
+    cat > "$home/fakebin/tmux" <<'SH'
+#!/usr/bin/env bash
+echo called >> "$FM_HOME/tmux-calls"
+exit 1
+SH
+    cat > "$home/bin/fm-watch-arm.sh" <<'SH'
+#!/usr/bin/env bash
+mkdir -p "$FM_PROC_ROOT_OVERRIDE/$$" "$FM_STATE_OVERRIDE/.watch.lock"
+printf '%s (bash) S 1 1 1 0 -1 0 0 0 0 0 0 0 0 0 20 0 1 0 %s 0 0\n' "$$" "$$" > "$FM_PROC_ROOT_OVERRIDE/$$/stat"
+printf 'bash\0-c\0' > "$FM_PROC_ROOT_OVERRIDE/$$/cmdline"
+. "$FM_HOME/bin/fm-wake-lib.sh"
+printf '%s\n' "$$" > "$FM_STATE_OVERRIDE/.watch.lock/pid"
+printf '%s\n' "$FM_HOME" > "$FM_STATE_OVERRIDE/.watch.lock/fm-home"
+printf '%s\n' "$FM_HOME/bin/fm-watch.sh" > "$FM_STATE_OVERRIDE/.watch.lock/watcher-path"
+fm_pid_identity "$$" > "$FM_STATE_OVERRIDE/.watch.lock/pid-identity"
+touch "$FM_STATE_OVERRIDE/.last-watcher-beat"
+printf '%s\n' "$$" >> "$FM_HOME/arms"
+echo "watcher: started pid=$$"
+trap 'exit 0' TERM INT
+while :; do sleep 0.1; done
+SH
+    chmod +x "$home/fakebin/ps" "$home/fakebin/tmux" "$home/bin/fm-watch-arm.sh"
+    TMUX_PANE=%77 FM_SUPERVISION_HANDOFF_RETRY_SECONDS=1 FM_SUPERVISION_HOST_READY_TIMEOUT=5 \
+      lib_eval windows "$home" '
+        self_proc
+        printf "%s\n" "$BASHPID" > "$FM_HOME/owner.pid"
+        export PATH="$FM_HOME/fakebin:$PATH"
+        exec "$1" token 1
+      ' _ "$home/bin/fm-supervision-handoff.sh" > "$home/out" 2> "$home/err" &
+    HANDOFF_RUNNER=$!
+    for i in $(seq 1 100); do
+      [ ! -f "$home/owner.pid" ] || HANDOFF_PID=$(cat "$home/owner.pid")
+      [ ! -f "$home/arms" ] || HANDOFF_ARM=$(tail -1 "$home/arms")
+      [ ! -s "$home/state/.supervision-host-left" ] || break
+      sleep 0.1
+    done
+    [ -s "$home/state/.supervision-host-left" ] || fail "Windows handoff did not establish a successor ($transition): $(cat "$home/err")"
+    kill -0 "$HANDOFF_ARM" 2>/dev/null || fail "the Windows handoff successor is not alive"
+    for i in $(seq 1 60); do
+      [ ! -s "$home/state/.supervision-handoff.log" ] || break
+      sleep 0.1
+    done
+    assert_grep $'\tretry\ttoken\tdeferred' "$home/state/.supervision-handoff.log" "a Windows session must keep watching without automatic tmux delivery"
+    assert_absent "$home/tmux-calls" "a Windows-tagged session reached POSIX tmux ancestry checks"
+    case "$transition" in
+      sidecar) printf 'S2\n' > "$home/state/.lock-session" ;;
+      gone) printf '%s\n' "$GONE_TABLE" > "$home/windows-table" ;;
+      reused) printf '%s\n' "$REUSED_TABLE" > "$home/windows-table" ;;
+      ack) rm "$home/state/.supervision-handoff-pending" ;;
+    esac
+    for i in $(seq 1 60); do
+      [ -e "$home/state/.supervision-handoff-owner" ] || break
+      sleep 0.1
+    done
+    assert_absent "$home/state/.supervision-handoff-owner" "handoff kept owning a changed or acknowledged session ($transition)"
+    kill -0 "$HANDOFF_ARM" 2>/dev/null || fail "handoff killed the recorded successor ($transition)"
+    [ "$(wc -l < "$home/arms" | tr -d ' ')" = 1 ] || fail "handoff started a second arm after $transition"
+    cleanup_handoff
+  done
+  pass "Windows handoff starts one successor, defers tmux delivery, and retires on session changes or acknowledgement"
+}
+
 test_untagged_values_reach_the_numeric_helpers_unchanged
 test_supervision_main_key_reads_a_windows_session_lock
 test_autoarm_claim_pins_a_windows_lock_holder_and_reads_it_back
 test_autoarm_midturn_health_follows_a_windows_lock_holder
+test_handoff_tracks_windows_session_identity

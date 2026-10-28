@@ -545,6 +545,11 @@ test_unrecorded_successor_is_stopped_rather_than_left_for_main() {
   pass "host+hook: a successor that cannot be recorded is stopped, and main's next turn end arms a fresh cycle"
 }
 
+if [ -n "${FM_TEST_ONLY:-}" ]; then
+  "$FM_TEST_ONLY"
+  exit
+fi
+
 fm_test_run \
   test_main_only_close_after_handled_turn_restores_inherited_handling \
   test_main_only_close_after_handled_turn_delivers_restore_failure \

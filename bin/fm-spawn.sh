@@ -3042,6 +3042,10 @@ SEAT_HOME=''
 SEAT_SOURCE=''
 SEAT_CODEX_BIN=''
 if [ -n "$SEAT" ]; then
+  if [ "$BACKEND" = t3code ]; then
+    echo "error: backend=t3code cannot apply --seat $SEAT because T3's provider instance owns the account; launch refused, no ambient account selected" >&2
+    exit 1
+  fi
   [ "$RAW_LAUNCH" = 0 ] || {
     echo "error: a seated Codex launch requires the canonical --harness codex command; raw commands can override its account; launch refused, no ambient account selected" >&2
     exit 1

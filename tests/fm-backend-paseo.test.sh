@@ -820,6 +820,8 @@ test_kill_keeps_workspace_when_inventory_unreadable() {
   local dir fb
   dir="$TMP_ROOT/kill"
   mkdir -p "$dir/responses"
+  paseo_terminal_ls_response "$dir" 1 "aaaaaaaa-0000-0000-0000-000000000000" "wks_bbbbbbbbbbbbbbbb" task
+  printf '[]' > "$dir/responses/3.out"
   fb=$(make_paseo_fakebin "$dir")
   PATH="$fb:$PATH" FM_PASEO_LOG="$dir/log" FM_PASEO_RESPONSES="$dir/responses" \
     bash -c '. "$0/bin/backends/paseo.sh"; fm_backend_paseo_kill "aaaaaaaa-0000-0000-0000-000000000000:wks_bbbbbbbbbbbbbbbb"' "$ROOT"
@@ -836,12 +838,12 @@ test_kill_keeps_workspace_when_inventory_unreadable() {
 paseo_retire_case() { # <dir> <workspace-ls-json> <terminal-ls-json> <agents-json> [PASEO_WORKSPACE_ID]
   local dir=$1 fb
   mkdir -p "$dir/responses" "$dir/home"
-  # 1: terminal kill (silent)
-  printf '%s' "$2" >"$dir/responses/2.out"
-  printf '%s' "$3" >"$dir/responses/3.out"
-  printf '%s' "$4" >"$dir/responses/4.out"
-  # 5: workspace archive (silent); 6: project ls; 7: project delete (silent)
-  jq -n --arg path "$dir/home/projects/demo" '[{projectId:"prj_demo",name:"demo",path:$path}]' >"$dir/responses/6.out"
+  paseo_terminal_ls_response "$dir" 1 "tttttttt-0000-0000-0000-000000000000" wks_ff task
+  printf '%s' "$3" > "$dir/responses/3.out"
+  printf '%s' "$2" >"$dir/responses/4.out"
+  printf '%s' "$3" >"$dir/responses/5.out"
+  printf '%s' "$4" >"$dir/responses/6.out"
+  jq -n --arg path "$dir/home/projects/demo" '[{projectId:"prj_demo",name:"demo",path:$path}]' >"$dir/responses/8.out"
   fb=$(make_paseo_fakebin "$dir")
   PATH="$fb:$PATH" FM_PASEO_LOG="$dir/log" FM_PASEO_RESPONSES="$dir/responses" FM_HOME="$dir/home" PASEO_WORKSPACE_ID="${5:-}" \
     bash -c 'unset PASEO_AGENT_ID; [ -n "$PASEO_WORKSPACE_ID" ] || unset PASEO_WORKSPACE_ID; . "$0/bin/backends/paseo.sh"; fm_backend_paseo_kill "tttttttt-0000-0000-0000-000000000000:wks_ff"' "$ROOT"
@@ -866,11 +868,11 @@ test_kill_retires_workspace_when_tab_already_gone() {
   # 1-2: terminal ls for the recorded id and the expected name (tab closed)
   printf '[]' >"$dir/responses/1.out"
   printf '[]' >"$dir/responses/2.out"
-  jq -n --arg cwd "$dir/home/projects/demo" '[{workspaceId:"wks_ff",name:"firstmate",cwd:$cwd}]' >"$dir/responses/3.out"
-  printf '[]' >"$dir/responses/4.out"
+  printf '[]' >"$dir/responses/3.out"
+  jq -n --arg cwd "$dir/home/projects/demo" '[{workspaceId:"wks_ff",name:"firstmate",cwd:$cwd}]' >"$dir/responses/4.out"
   printf '[]' >"$dir/responses/5.out"
-  # 6: workspace archive (silent); 7: project ls; 8: project delete (silent)
-  jq -n --arg path "$dir/home/projects/demo" '[{projectId:"prj_demo",name:"demo",path:$path}]' >"$dir/responses/7.out"
+  printf '[]' >"$dir/responses/6.out"
+  jq -n --arg path "$dir/home/projects/demo" '[{projectId:"prj_demo",name:"demo",path:$path}]' >"$dir/responses/8.out"
   fb=$(make_paseo_fakebin "$dir")
   PATH="$fb:$PATH" FM_PASEO_LOG="$dir/log" FM_PASEO_RESPONSES="$dir/responses" FM_HOME="$dir/home" \
     bash -c 'unset PASEO_AGENT_ID PASEO_WORKSPACE_ID; . "$0/bin/backends/paseo.sh"; fm_backend_paseo_kill "tttttttt-0000-0000-0000-000000000000:wks_ff" "" fm-gone' "$ROOT"
@@ -946,17 +948,18 @@ test_workspace_lock_serializes_spawn_and_retire() {
   pass "fm_backend_paseo: spawn and workspace retirement share one lock; neither acts while another process holds it"
 }
 
-test_kill_is_best_effort_when_terminal_kill_fails() {
+test_kill_refuses_when_terminal_kill_fails() {
   local dir fb status
   dir="$TMP_ROOT/kill-fail"
   mkdir -p "$dir/responses"
-  printf '1\n' >"$dir/responses/1.exit"
+  paseo_terminal_ls_response "$dir" 1 "aaaaaaaa-0000-0000-0000-000000000000" "wks_bbbbbbbbbbbbbbbb" task
+  printf '1\n' >"$dir/responses/2.exit"
   fb=$(make_paseo_fakebin "$dir")
   PATH="$fb:$PATH" FM_PASEO_LOG="$dir/log" FM_PASEO_RESPONSES="$dir/responses" \
     bash -c '. "$0/bin/backends/paseo.sh"; fm_backend_paseo_kill "aaaaaaaa-0000-0000-0000-000000000000:wks_bbbbbbbbbbbbbbbb"' "$ROOT"
   status=$?
-  expect_code 0 "$status" "kill must stay best-effort (never fail) even when terminal kill fails"
-  pass "fm_backend_paseo_kill: never fails even when terminal kill fails"
+  [ "$status" -ne 0 ] || fail "a failed terminal close reported success"
+  pass "fm_backend_paseo_kill: propagates a failed terminal close"
 }
 
 # --- list_live: name-based orphan discovery -----------------------------------
@@ -1068,6 +1071,7 @@ test_shared_checkout_home_isolation() {
       case "$1 $2" in
         'terminal ls') cat "$dir/inventory" ;;
         'workspace ls') printf '[]' ;;
+        'terminal kill') printf '%s\n' "$*" >> "$dir/access"; printf '[]' > "$dir/inventory" ;;
         'terminal capture') printf 'capture\n' >> "$dir/access"; printf '{"lines":["owned transcript"]}' ;;
         *) printf '%s\n' "$*" >> "$dir/access" ;;
       esac
@@ -1083,7 +1087,7 @@ test_shared_checkout_home_isolation() {
     jq -n --arg name "$own" '[{id:"own",workspaceId:"workspace",name:$name},{id:"duplicate",workspaceId:"workspace",name:$name}]' > "$dir/inventory"
     fm_backend_paseo_capture stale:workspace 10 fm-same >/dev/null 2>&1 && fail "stale capture adopted an ambiguous name"
     fm_backend_paseo_send_literal stale:workspace secret fm-same 2>/dev/null && fail "stale send adopted an ambiguous name"
-    fm_backend_paseo_kill stale:workspace '' fm-same 2>/dev/null
+    fm_backend_paseo_kill stale:workspace '' fm-same 2>/dev/null && fail "ambiguous cleanup reported success"
     [ ! -s "$dir/access" ] || fail "ambiguous endpoints were accessed or changed"
     fm_backend_paseo_target_ready own:workspace fm-same || fail "an explicit live endpoint lost its binding"
     jq '.[0:1]' "$dir/inventory" > "$dir/unique"
@@ -1147,7 +1151,7 @@ test_kill_retires_empty_firstmate_workspace_and_project
 test_kill_retires_workspace_when_tab_already_gone
 test_kill_retire_holds_back
 test_workspace_lock_serializes_spawn_and_retire
-test_kill_is_best_effort_when_terminal_kill_fails
+test_kill_refuses_when_terminal_kill_fails
 test_list_live_filters_by_name_prefix
 test_secondmate_spawn_refuses_explicit_paseo_only
 test_branch_dispatch_claims_paseo_stale_wake

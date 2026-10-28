@@ -46,33 +46,6 @@ wait_for_exit() {
   return 124
 }
 
-file_mtime() {
-  if [ "$(uname)" = Darwin ]; then stat -f %m "$1" 2>/dev/null; else stat -c %Y "$1" 2>/dev/null; fi
-}
-
-wait_poll_cycle() {  # <state> <pid> [limit-ticks]
-  local state=$1 pid=$2 limit=${3:-300} beat first now i=0
-  beat="$state/.last-watcher-beat"
-  rm -f "$beat"
-  first=""
-  while [ "$i" -lt "$limit" ]; do
-    kill -0 "$pid" 2>/dev/null || return 1
-    first=$(file_mtime "$beat")
-    [ -n "$first" ] && break
-    sleep 0.1
-    i=$((i + 1))
-  done
-  while [ "$i" -lt "$limit" ]; do
-    kill -0 "$pid" 2>/dev/null || return 1
-    now=$(file_mtime "$beat")
-    if [ -n "$now" ] && [ "$now" != "$first" ]; then
-      return 0
-    fi
-    sleep 0.1
-    i=$((i + 1))
-  done
-  return 1
-}
 
 seen_sig() {
   if [ "$(uname)" = Darwin ]; then stat -f '%z:%Fm' "$1" 2>/dev/null; else stat -c '%s:%Y' "$1" 2>/dev/null; fi
@@ -118,7 +91,7 @@ prime_and_ack() {
 # settings, expect the watcher to exit on a wedge wake. Acknowledge.
 poll_wedge_round() {
   local dir=$1 max=$2 extra_env=$3
-  local state fakebin out capture_file window key pid n
+  local state fakebin out capture_file window key pid
   state="$dir/state"; fakebin="$dir/fakebin"
   out="$dir/watch.out"; capture_file="$dir/pane.txt"
   window="test:fm-wedge-cap-$(basename "$dir" | sed -e 's/^wedge-cap-//' )"
@@ -136,6 +109,10 @@ poll_wedge_round() {
   if ! wait_for_exit "$pid" 100; then
     reap "$pid"; fail "watcher did not exit on wedge round: $(cat "$out")"
   fi
+  case "$(head -1 "$out")" in
+    "stale: "*"possible wedge, escalation "*) ;;
+    *) fail "wedge round produced an unrelated wake: $(cat "$out")" ;;
+  esac
   ack_stopped_cycle "$state" || fail "wedge round ack failed"
 }
 
@@ -287,6 +264,10 @@ test_wedge_cap_disabled_by_default() {
     if ! wait_for_exit "$pid" 100; then
       reap "$pid"; fail "wedge round $n (default config) failed to exit"
     fi
+    case "$(head -1 "$out")" in
+      "stale: "*"possible wedge, escalation $n)"|"stale: "*"possible wedge, escalation $n,"*) ;;
+      *) fail "round $n did not produce its expected wedge escalation: $(cat "$out")" ;;
+    esac
     grep -F "PERMANENTLY-WEDGED" "$out" >/dev/null && fail "default-config round $n fired PERMANENTLY-WEDGED - cap should be disabled"
     [ ! -e "$state/.wedge-permanent-$key" ] || fail "default-config wrote the window-scoped cap marker (cap must stay inert)"
     ack_stopped_cycle "$state" || fail "default-config round $n ack failed"
@@ -352,6 +333,7 @@ test_wedge_cap_silences_subsequent_polls_for_same_hash() {
   n=1
   while [ "$n" -le "$max" ]; do
     poll_wedge_round "$dir" "$max" ""
+    grep -F "escalation $n" "$out" >/dev/null || fail "round $n did not report its wedge escalation: $(cat "$out")"
     n=$((n + 1))
   done
   grep -F "PERMANENTLY-WEDGED" "$out" >/dev/null || fail "cap round did not fire PERMANENTLY-WEDGED"
@@ -379,7 +361,7 @@ test_wedge_cap_silences_subsequent_polls_for_same_hash() {
       fail "post-cap poll $i did not stay alive and silent: $(cat "$out")"
     fi
     reap "$pid"
-    ack_stopped_cycle "$state" || true
+    ack_stopped_cycle "$state" || fail "cycle acknowledgement failed"
     grep -F "PERMANENTLY-WEDGED" "$out" >/dev/null && fail "post-cap poll $i re-fired PERMANENTLY-WEDGED"
   done
   unset FM_FAKE_CREW_STATE
@@ -467,7 +449,7 @@ test_wedge_cap_window_marker_silences_hash_churning_busy_pane() {
     fi
     # Stop the still-running watcher before grepping its output.
     reap "$pid"
-    ack_stopped_cycle "$state" || true
+    ack_stopped_cycle "$state" || fail "cycle acknowledgement failed"
     [ ! -s "$state/.wedge-escalations-$key" ] \
       || fail "post-cap churn poll $i advanced the escalation counter ($(cat "$state/.wedge-escalations-$key")); the window-scoped marker did not silence the wedge path"
     if grep -F "PERMANENTLY-WEDGED" "$out" >/dev/null; then
@@ -505,6 +487,7 @@ test_wedge_cap_expires_after_horizon() {
   n=1
   while [ "$n" -le "$max" ]; do
     poll_wedge_round "$dir" "$max" ""
+    grep -F "escalation $n" "$out" >/dev/null || fail "round $n did not report its wedge escalation: $(cat "$out")"
     n=$((n + 1))
   done
   grep -F "PERMANENTLY-WEDGED" "$out" >/dev/null || fail "cap round did not fire PERMANENTLY-WEDGED"
@@ -534,7 +517,7 @@ test_wedge_cap_expires_after_horizon() {
     reap "$pid"; fail "fresh-hash poll within horizon: watcher did not stay alive: $(cat "$out")"
   fi
   reap "$pid"
-  ack_stopped_cycle "$state" || true
+  ack_stopped_cycle "$state" || fail "cycle acknowledgement failed"
   grep -F "PERMANENTLY-WEDGED" "$out" >/dev/null && fail "fresh-hash poll within horizon fired PERMANENTLY-WEDGED - window-scoped marker is not silencing"
   [ ! -s "$state/.wedge-escalations-$key" ] \
     || fail "fresh-hash poll within horizon advanced the escalation counter ($(cat "$state/.wedge-escalations-$key")); the window-scoped marker did not silence the wedge path"
@@ -558,7 +541,7 @@ test_wedge_cap_expires_after_horizon() {
     reap "$pid"; fail "fresh-hash poll with an unusable horizon: watcher did not stay alive: $(cat "$out")"
   fi
   reap "$pid"
-  ack_stopped_cycle "$state" || true
+  ack_stopped_cycle "$state" || fail "cycle acknowledgement failed"
   grep -F "PERMANENTLY-WEDGED" "$out" >/dev/null && fail "fresh-hash poll with an unusable horizon fired PERMANENTLY-WEDGED - the unusable horizon was not read as the documented default"
   [ ! -s "$state/.wedge-escalations-$key" ] \
     || fail "fresh-hash poll with an unusable horizon advanced the escalation counter ($(cat "$state/.wedge-escalations-$key")); the unusable horizon did not silence the wedge path"
@@ -587,7 +570,11 @@ test_wedge_cap_expires_after_horizon() {
   if ! wait_for_exit "$pid" 100; then
     reap "$pid"; fail "post-horizon poll did not exit: $(cat "$out")"
   fi
-  grep -F "PERMANENTLY-WEDGED" "$out" >/dev/null || fail "post-horizon poll did not re-fire PERMANENTLY-WEDGED (cap did not expire)"
+  case "$(head -1 "$out")" in
+    "stale: "*"possible wedge, escalation $max,"*"PERMANENTLY-WEDGED"*) ;;
+    *) fail "post-horizon poll did not re-fire wedge escalation $max: $(cat "$out")" ;;
+  esac
+  ack_stopped_cycle "$state" || fail "post-horizon acknowledgement failed"
   unset FM_FAKE_CREW_STATE
   pass "the cap is bound by FM_CAP_HORIZON_SECS and re-fires after the horizon elapses"
 }
@@ -615,6 +602,7 @@ test_wedge_cap_operator_can_rm_marker() {
   n=1
   while [ "$n" -le "$max" ]; do
     poll_wedge_round "$dir" "$max" ""
+    grep -F "escalation $n" "$out" >/dev/null || fail "round $n did not report its wedge escalation: $(cat "$out")"
     n=$((n + 1))
   done
   grep -F "PERMANENTLY-WEDGED" "$out" >/dev/null || fail "cap round did not fire PERMANENTLY-WEDGED"
@@ -634,7 +622,11 @@ test_wedge_cap_operator_can_rm_marker() {
     reap "$pid"; fail "post-rm poll did not exit: $(cat "$out")"
   fi
   grep -F "PERMANENTLY-WEDGED" "$out" >/dev/null && fail "post-rm first poll re-fired the cap immediately (counter was not reset)"
-  grep -F "escalation 1" "$out" >/dev/null || fail "post-rm first poll did not report fresh escalation 1: $(cat "$out")"
+  case "$(head -1 "$out")" in
+    "stale: "*"possible wedge, escalation 1)"|"stale: "*"possible wedge, escalation 1,"*) ;;
+    *) fail "post-rm poll did not report fresh escalation 1: $(cat "$out")" ;;
+  esac
+  ack_stopped_cycle "$state" || fail "post-rm acknowledgement failed"
   unset FM_FAKE_CREW_STATE
   pass "operator rm of the cap marker lifts the cap and the next wedge re-accumulates from 1"
 }
@@ -689,7 +681,12 @@ test_wedge_cap_validates_invalid_overrides() {
     if ! wait_for_exit "$pid" 100; then
       reap "$pid"; fail "round $n (garbage override) failed to exit"
     fi
+    case "$(head -1 "$out")" in
+      "stale: "*"possible wedge, escalation $n)"|"stale: "*"possible wedge, escalation $n,"*) ;;
+      *) fail "round $n did not produce its expected wedge escalation: $(cat "$out")" ;;
+    esac
     grep -F "PERMANENTLY-WEDGED" "$out" >/dev/null && fail "garbage override round $n fired PERMANENTLY-WEDGED - validation did not fall back to 0"
+    ack_stopped_cycle "$state" || fail "invalid-setting round $n acknowledgement failed"
     n=$((n + 1))
   done
   unset FM_FAKE_CREW_STATE
@@ -1113,6 +1110,7 @@ test_wedge_cap_releases_after_genuine_recovery() {
   n=1
   while [ "$n" -le "$max" ]; do
     poll_wedge_round "$dir" "$max" ""
+    grep -F "escalation $n" "$out" >/dev/null || fail "round $n did not report its wedge escalation: $(cat "$out")"
     n=$((n + 1))
   done
   grep -F "PERMANENTLY-WEDGED" "$out" >/dev/null || fail "cap round did not fire PERMANENTLY-WEDGED"
@@ -1243,6 +1241,7 @@ test_wedge_cap_releases_after_declared_wait() {
   n=1
   while [ "$n" -le "$max" ]; do
     poll_wedge_round "$dir" "$max" ""
+    grep -F "escalation $n" "$out" >/dev/null || fail "round $n did not report its wedge escalation: $(cat "$out")"
     n=$((n + 1))
   done
   grep -F "PERMANENTLY-WEDGED" "$out" >/dev/null || fail "cap round did not fire PERMANENTLY-WEDGED"
@@ -1689,7 +1688,7 @@ drive_first_sight_release() {  # <route>
   fi
   reap "$pid"
   rm -f "$state/.afk"
-  ack_stopped_cycle "$state" || true
+  ack_stopped_cycle "$state" || fail "cycle acknowledgement failed"
   [ ! -e "$state/.wedge-permanent-$key" ] \
     || fail "the $route first-sight route left the cap marker standing, so the next genuine wedge would answer with silence until the horizon"
   [ ! -e "$state/.wedge-terminal-queued-$key" ] \
@@ -1714,7 +1713,7 @@ drive_first_sight_release() {  # <route>
   wait_poll_cycle "$state" "$pid" 200 \
     || { reap "$pid"; fail "the fresh episode after the $route route did not survive its cycle: $(cat "$out")"; }
   reap "$pid"
-  ack_stopped_cycle "$state" || true
+  ack_stopped_cycle "$state" || fail "cycle acknowledgement failed"
   [ -e "$state/.stale-since-$key" ] \
     || fail "the $route route left no fresh wedge episode for the recovered crew to wedge against: $(cat "$out")"
   poll_wedge_round "$dir" 2 ""
@@ -1757,6 +1756,7 @@ test_wedge_cap_releases_after_nonterminal_stale_episode() {
   n=1
   while [ "$n" -le "$max" ]; do
     poll_wedge_round "$dir" "$max" ""
+    grep -F "escalation $n" "$out" >/dev/null || fail "round $n did not report its wedge escalation: $(cat "$out")"
     n=$((n + 1))
   done
   grep -F "PERMANENTLY-WEDGED" "$out" >/dev/null || fail "cap round did not fire PERMANENTLY-WEDGED"
@@ -1931,11 +1931,47 @@ SH
   pass "cycle acknowledgements execute the printed generation and reject drain, parse and ack failures"
 }
 
+test_poll_progress_rejects_stalls_and_exits() {
+  local dir state mode pid result status
+  dir=$(make_case poll-progress); state="$dir/state"
+  for mode in completed stalled exited; do
+    (
+      sleep 0.2
+      touch "$state/.last-watcher-beat"
+      [ "$mode" != exited ] || exit 17
+      if [ "$mode" = completed ]; then
+        sleep 1.2
+        touch "$state/.last-watcher-beat"
+      fi
+      sleep 5
+    ) &
+    pid=$!
+    result=0
+    wait_poll_cycle "$state" "$pid" 25 || result=$?
+    [ -f "$state/.last-watcher-beat" ] && [ ! -s "$state/.last-watcher-beat" ] \
+      || { reap "$pid"; fail "$mode did not exercise the empty touch-created heartbeat"; }
+    if [ "$mode" = completed ]; then
+      [ "$result" -eq 0 ] || { reap "$pid"; fail "a completed poll was not observed"; }
+    else
+      [ "$result" -ne 0 ] || { reap "$pid"; fail "$mode was accepted as completed poll progress"; }
+    fi
+    if [ "$mode" = exited ]; then
+      status=0
+      wait "$pid" || status=$?
+      [ "$status" -eq 17 ] || fail "unexpected producer exit was lost"
+    else
+      reap "$pid"
+    fi
+  done
+  pass "completed poll observation accepts empty advancing heartbeats and rejects pre-classification stalls and exits"
+}
+
 if [ -n "${FM_TEST_ONLY:-}" ]; then
   "$FM_TEST_ONLY"
   exit 0
 fi
 
+test_poll_progress_rejects_stalls_and_exits
 test_cycle_acknowledgement_failures
 test_wedge_cap_disabled_by_default
 test_wedge_cap_fires_permanently_wedged_at_threshold

@@ -229,6 +229,7 @@ watcher_cycle() {
   cycle=$((cycle + 1))
   out="$TMP_ROOT/cycle-$cycle.out"
   CYCLE_WOKE=0
+  rm -f "$STATE/.last-watcher-beat"
   FM_HOME="$LAB_HOME" TMUX_TMPDIR="$LAB_TMUX_DIR" \
     FM_WEDGE_MAX_ESCALATIONS="$MAX" \
     FM_CAP_HORIZON_SECS="$HORIZON_SECS" \
@@ -239,34 +240,29 @@ watcher_cycle() {
     FM_BUSY_TURN_MAX_SECS=1 \
     "$ROOT/bin/fm-watch.sh" > "$out" 2>&1 &
   local pid=$!
-  # Bound the cycle: a wedged pane produces no wake on a silenced poll, so wait
-  # for the watcher heartbeat to prove it completed a poll, then bound the rest.
-  # Both bounds are tight because a real lab watcher spends tens of seconds on
-  # startup alone, and every second here is a second of the horizon the silence
-  # probes must fit inside.
-  local beat="$STATE/.last-watcher-beat" i=0
-  while [ "$i" -lt 200 ]; do
-    kill -0 "$pid" 2>/dev/null || break
-    [ -s "$beat" ] && break
-    sleep 0.1
-    i=$((i + 1))
-  done
-  i=0
+  local completed=0 i=0 beat="$STATE/.last-watcher-beat"
+  if wait_poll_cycle "$STATE" "$pid" 900; then completed=1; fi
+  if kill -0 "$pid" 2>/dev/null && [ "$completed" -ne 1 ]; then
+    kill "$pid" 2>/dev/null || true
+    wait "$pid" 2>/dev/null || true
+    fail "$label: watcher stalled before completing a poll"
+  fi
   while kill -0 "$pid" 2>/dev/null && [ "$i" -lt $(( CYCLE_BOUND * 10 )) ]; do
     sleep 0.1
     i=$((i + 1))
   done
   if kill -0 "$pid" 2>/dev/null; then
-    kill "$pid" 2>/dev/null || true
-    wait "$pid" 2>/dev/null || true
+    kill "$pid" 2>/dev/null || fail "$label: watcher exited before the silence observation ended"
+    rc=0
+    wait "$pid" 2>/dev/null || rc=$?
+    [ "$rc" -eq 143 ] || fail "$label: watcher exited unexpectedly with status $rc during silence observation"
     rc=alive
   else
-    # No `set -e` on the way out: this script opts into `set -u` only, so
-    # turning errexit on inside a helper would silently change the error
-    # semantics of every later step of the run.
     wait "$pid" 2>/dev/null
     rc=$?
+    [ "$rc" -eq 0 ] || fail "$label: watcher exited unexpectedly with status $rc: $(cat "$out")"
   fi
+  [ -f "$beat" ] && [ ! -s "$beat" ] || fail "$label: watcher did not create its empty heartbeat"
   rm -f "$beat"
   local reason
   reason=$(head -1 "$out" 2>/dev/null)
@@ -274,8 +270,14 @@ watcher_cycle() {
   # none stayed inside the poll loop. Record which, because "the cap holds the
   # pane quiet" is exactly the claim that must be read off the real cycle.
   case "$reason" in
-    '') CYCLE_WOKE=0 ;;
-    "stale: "*"possible wedge, escalation "*) CYCLE_WOKE=1 ;;
+    '')
+      [ "$completed" -eq 1 ] && [ "$rc" = alive ] || fail "$label: watcher exited without a wedge or completed silence observation"
+      CYCLE_WOKE=0
+      ;;
+    "stale: "*"possible wedge, escalation "*)
+      [ "$rc" = 0 ] || fail "$label: wedge wake did not finish successfully"
+      CYCLE_WOKE=1
+      ;;
     *) fail "$label: unexpected non-wedge output: $reason" ;;
   esac
   CYCLE_REASON="$reason"

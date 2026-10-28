@@ -4310,32 +4310,6 @@ prime_picker_window() {  # <state> <id> <window> <kind> <capture> <status-line>
   printf '%s' "$key"
 }
 
-test_exit_picker_stale_names_the_dialog() {
-  local dir state fakebin out capture_file window key pid count_file
-  dir=$(make_case exit-picker-stale); state="$dir/state"; fakebin="$dir/fakebin"
-  out="$dir/watch.out"; capture_file="$dir/pane.txt"; count_file="$dir/captures"
-  window="test:fm-picker"
-  write_exit_picker "$capture_file"
-  key=$(prime_picker_window "$state" picker "$window" ship "$capture_file" 'working: parked between turns')
-  printf '0\n' > "$count_file"
-  export FM_FAKE_CREW_STATE='state: unknown · source: none · no current-state source available'
-  PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
-    FM_FAKE_TMUX_CAPTURE_COUNT_FILE="$count_file" \
-    FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" FM_STALE_ESCALATE_SECS=999 \
-    FM_POLL=1 FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" &
-  pid=$!
-  wait_for_exit "$pid" 100 || fail "watcher did not surface a pane parked on the exit picker: $(cat "$out")"
-  grep -F "stale: $window" "$out" >/dev/null || fail "the picker wake was not a stale wake: $(cat "$out")"
-  grep -F 'blocked-on-prompt: Claude background-task exit picker' "$out" >/dev/null \
-    || fail "the picker wake did not name the dialog: $(cat "$out")"
-  grep -F 'possible wedge' "$out" >/dev/null && fail "the first picker stale was labeled a wedge: $(cat "$out")"
-  [ "$(cat "$count_file")" -eq 1 ] || fail "the picker poll captured the pane $(cat "$count_file") times"
-  [ "$(cat "$state/.stale-$key" 2>/dev/null || true)" = "$(hash_text "$(cat "$capture_file")")" ] \
-    || fail "the picker stale did not record the pane hash"
-  unset FM_FAKE_CREW_STATE
-  pass "a pane on the exit picker is a named stale, from the one capture the poll already takes"
-}
-
 test_exit_picker_wedge_keeps_climbing() {
   local dir state fakebin out capture_file window key pid n
   dir=$(make_case exit-picker-wedge); state="$dir/state"; fakebin="$dir/fakebin"

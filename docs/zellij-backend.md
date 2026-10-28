@@ -89,6 +89,7 @@ A short viewport may expose fewer lines than requested.
 
 Closing a pane leaves an empty tab.
 Cleanup resolves and verifies the owning tab, then uses `close-tab-by-id` so both the task pane and tab disappear.
+It requires readable inventories proving the tab and task pane absent; unreadable inventory, an ownership mismatch, or a surviving endpoint stops teardown before backlog closure, worktree return, or record retirement, including under `--force`.
 Real test cleanup uses only an isolated non-`firstmate` session and the guard in `tests/zellij-test-safety.sh`; it never calls all-session deletion commands.
 
 ## Active limits

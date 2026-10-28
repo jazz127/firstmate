@@ -689,8 +689,11 @@ SH
 # removes it, and the terminal report must still describe the landed task.
 evidence_cleanup_report_case() { # <case> <forge-state> <removal> <expected> [override]
   local key body task_tmp worktree common name=$1 forge_state=$2 removal=$3 expected=$4 override=${5:-}
+  local reader=${6:-gh} host=${7:-github.com} pr
+  pr="https://$host/owner/repo/pull/1"
   make_world "evidence-cleanup-$name"; bind_secondmate local
-  write_child "$MATE" child 'done: PR https://github.com/owner/repo/pull/1 checks green'
+  printf '%s\n' "$host" > "$MATE/config/github-hosts"
+  write_child "$MATE" child "done: PR $pr checks green"
   worktree="$MATE/projects/child"
   if [ -n "$override" ]; then
     worktree="$WORLD/child-worktree"
@@ -700,7 +703,7 @@ evidence_cleanup_report_case() { # <case> <forge-state> <removal> <expected> [ov
     common=$(cd "$MATE/projects/child/.git" && pwd -P)
     printf '%s /home/ops/estate\n' "$common" > "$MATE/config/published-path-prefixes"
   fi
-  sed -i.bak 's#https://example.test/owner/repo/pull/1#https://github.com/owner/repo/pull/1#g' "$MATE/state/child.meta"
+  sed -i.bak "s#https://example.test/owner/repo/pull/1#$pr#g" "$MATE/state/child.meta"
   rm -f "$MATE/state/child.meta.bak"
   task_tmp="$WORLD/tasktmp"
   mkdir -p "$task_tmp"
@@ -720,17 +723,28 @@ EOF
 #!/usr/bin/env bash
 case "\$*" in
   'pr view '*"--json body --jq .body"*) cat '$body' ;;
-  'api graphql '*) printf 'state=$forge_state\\nmerged=$([ "$forge_state" = MERGED ] && printf true || printf false)\\n' ;;
-  'api '*) printf 'bin/example.sh\\n' ;;
+  'api graphql '*)
+    [ '$reader' = gh ] || exit 1
+    printf '%s\\n' "\${GH_HOST:-}|\$*" >> '$WORLD/record-reads'
+    printf 'state=$forge_state\\nmerged=$([ "$forge_state" = MERGED ] && printf true || printf false)\\n' ;;
+  'api repos/owner/repo/pulls/1/files?per_page=100 '*)
+    [ "\${GH_HOST:-}" = '$host' ] || exit 1
+    printf 'bin/example.sh\\n' ;;
   *) exit 1 ;;
 esac
 SH
-  chmod +x "$WORLD/fakebin/gh"
+  cat > "$WORLD/fakebin/gh-axi" <<SH
+#!/usr/bin/env bash
+[ '$reader' = gh-axi ] || exit 1
+printf '%s\\n' "\${GH_HOST:-}|\$*" >> '$WORLD/record-reads'
+printf 'state: $forge_state\\n'
+SH
+  chmod +x "$WORLD/fakebin/gh" "$WORLD/fakebin/gh-axi"
   PATH="$WORLD/fakebin:$PATH" FM_HOME="$MATE" FM_CONFIG_OVERRIDE="$MATE/config" bash -c '
     . "$1/bin/fm-pr-lib.sh"
     . "$1/bin/fm-dod-lib.sh"
-    fm_dod_validate_published_intent "$(cat "$2")" "$3" "$4" "" https://github.com/owner/repo/pull/1
-  ' _ "$ROOT" "$body" "$worktree" "$task_tmp" \
+    fm_dod_validate_published_intent "$(cat "$2")" "$3" "$4" "" "$5"
+  ' _ "$ROOT" "$body" "$worktree" "$task_tmp" "$pr" \
     || fail "synthetic registration evidence did not pass before cleanup"
   cp "$MATE/.fm-secondmate-parent" "$WORLD/parent-binding"
   printf 'schema=fm-secondmate-parent.v1\nroute=invalid\n' > "$MATE/.fm-secondmate-parent"
@@ -759,11 +773,22 @@ SH
     assert_grep 'evidence-validation=failed' "$MAIN/state/mate.status" \
       "$name evidence failure was hidden"
   fi
+  case "$removal:$reader" in
+    roots:gh|tasktmp:gh|metadata:gh|file:gh)
+      assert_contains "$(cat "$WORLD/record-reads")" "$host|api graphql " "record read lost its GitHub host"
+      assert_contains "$(cat "$WORLD/record-reads")" '-F owner=owner -F repo=repo -F number=1' "record read lost its PR identity" ;;
+    *:gh-axi)
+      assert_contains "$(cat "$WORLD/record-reads")" "$host|pr view 1 --repo owner/repo" "fallback record read lost its GitHub identity" ;;
+  esac
   pass "synthetic cleanup evidence report: $name"
 }
 
 test_merged_report_after_evidence_cleanup() {
   evidence_cleanup_report_case merged MERGED roots ok
+  evidence_cleanup_report_case merged-axi MERGED roots ok '' gh-axi
+  evidence_cleanup_report_case open-axi OPEN roots failed '' gh-axi
+  evidence_cleanup_report_case enterprise MERGED roots ok '' gh github.example.test
+  evidence_cleanup_report_case enterprise-axi MERGED roots ok '' gh-axi github.example.test
   evidence_cleanup_report_case tasktmp-only MERGED tasktmp ok
   evidence_cleanup_report_case open OPEN roots failed
   evidence_cleanup_report_case closed CLOSED roots failed
@@ -773,6 +798,60 @@ test_merged_report_after_evidence_cleanup() {
   evidence_cleanup_report_case override MERGED roots ok project
   evidence_cleanup_report_case override-tasktmp MERGED tasktmp ok project
   evidence_cleanup_report_case override-scope MERGED roots failed other-project
+}
+
+test_scratch_validation_binds_github_host() {
+  local host inherited files out rc
+  make_world scratch-host-binding
+  printf 'github.example.test\n' > "$MATE/config/github-hosts"
+  mkdir "$WORLD/files"
+  cat > "$WORLD/fakebin/gh" <<'SH'
+#!/usr/bin/env bash
+printf '%s\n' "${GH_HOST:-unset}|$*" >> "$FM_FORGE_LOG"
+case "${GH_HOST:-unset}" in
+  github.com|github.example.test) cat "$FM_TEST_HOST_FILES/$GH_HOST" ;;
+  *) printf 'bin/decoy-clean.sh\n' ;;
+esac
+SH
+  chmod +x "$WORLD/fakebin/gh"
+  for host in github.com github.example.test; do
+    for inherited in absent hostile; do
+      for files in scratch clean unavailable; do
+        case "$files" in
+          clean) printf 'bin/example.sh\n' > "$WORLD/files/$host" ;;
+          scratch) printf '.codex-live-check/private.txt\n' > "$WORLD/files/$host" ;;
+          unavailable) rm "$WORLD/files/$host" ;;
+        esac
+        : > "$WORLD/forge.log"
+        out=$(
+          unset GH_HOST
+          [ "$inherited" != hostile ] || export GH_HOST=unrelated.example.test
+          PATH="$WORLD/fakebin:$PATH" FM_HOME="$MATE" FM_CONFIG_OVERRIDE="$MATE/config" \
+            FM_FORGE_LOG="$WORLD/forge.log" FM_TEST_HOST_FILES="$WORLD/files" bash -c '
+              set -u
+              . "$1/bin/fm-pr-lib.sh"
+              fm_pr_refuse_published_scratch "$2"
+            ' _ "$ROOT" "https://$host/owner/repo/pull/1" 2>&1
+        ); rc=$?
+        case "$files" in
+          clean) expect_code 0 "$rc" "clean published files must validate ($host/$inherited): $out" ;;
+          scratch)
+            [ "$rc" -ne 0 ] || fail "scratch on the addressed host passed using a decoy file list ($host/$inherited)"
+            assert_contains "$out" 'scratch path would be published' "the scratch refusal lost its cause" ;;
+          unavailable) [ "$rc" -ne 0 ] || fail "an unavailable addressed PR passed using a decoy file list ($host/$inherited)" ;;
+        esac
+        assert_contains "$(cat "$WORLD/forge.log")" "$host|api repos/owner/repo/pulls/1/files?per_page=100" "scratch validation addressed the wrong resource"
+      done
+    done
+  done
+  pass "published scratch validation binds GitHub.com and Enterprise despite absent or hostile GH_HOST"
+}
+
+test_evidence_host_boundaries() {
+  test_scratch_validation_binds_github_host
+  test_merged_report_after_evidence_cleanup
+  GH_HOST=unrelated.example.test evidence_cleanup_report_case hostile-public MERGED roots ok '' gh github.com
+  GH_HOST=unrelated.example.test evidence_cleanup_report_case hostile-enterprise MERGED roots ok '' gh github.example.test
 }
 
 test_parent_report_bounds_published_read() {
@@ -1324,6 +1403,11 @@ test_metadata_and_receipt_final_fields() {
   pass "reports and acknowledgements use final fields, including unterminated fields"
 }
 
+if [ -n "${FM_TEST_ONLY:-}" ]; then
+  "$FM_TEST_ONLY"
+  exit
+fi
+
 test_metadata_and_receipt_final_fields
 test_reconcile_numeric_ranges_are_decimal_and_bounded
 test_unreadable_terminal_receipt_update phase
@@ -1351,6 +1435,7 @@ test_report_subcommand_delivers_and_refuses
 test_pending_ledger_done_is_delivered_after_worktree_removal
 test_parent_report_surfaces_published_evidence_failure
 test_merged_report_after_evidence_cleanup
+test_scratch_validation_binds_github_host
 test_parent_report_bounds_published_read
 test_report_avoids_scan_meta_lock_inversion
 test_local_secondmate_rejects_relative_parent_home

@@ -4,6 +4,8 @@ set -u
 
 # shellcheck source=tests/lib.sh
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+# shellcheck source=tests/t3-fake-lib.sh
+. "$(dirname "${BASH_SOURCE[0]}")/t3-fake-lib.sh"
 
 TEARDOWN="$ROOT/bin/fm-teardown.sh"
 TMP_ROOT=$(fm_test_tmproot fm-teardown-endpoint-safety)
@@ -295,14 +297,59 @@ test_supported_backend_endpoint_records_validate() {
     "backend=cmux" "cmux_workspace_id=workspace-1" "cmux_surface_id=surface-2"
   fm_backend_validate_task_endpoint "$dir/home/state/$id.meta" "$id" || fail "valid cmux endpoint refused"
 
-  for backend in tmux herdr zellij orca cmux; do
+  id=paseo-task
+  fm_write_meta "$dir/home/state/$id.meta" \
+    "window=terminal-1:wks_1" "endpoint_task_id=$id" "worktree=$dir/worktree" "project=$dir/project" \
+    "backend=paseo" "paseo_terminal_id=terminal-1" "paseo_workspace_id=wks_1"
+  fm_backend_validate_task_endpoint "$dir/home/state/$id.meta" "$id" || fail "valid paseo endpoint refused"
+
+  id=rex-task
+  rex_meta() {  # <window> <session-id> <window-id> <block-id> <server>
+    fm_write_meta "$dir/home/state/$id.meta" \
+      "window=$1" "endpoint_task_id=$id" "worktree=$dir/worktree" "project=$dir/project" \
+      "backend=rex" "rex_server=$5" "rex_session_id=$2" "rex_window_id=$3" "rex_block_id=$4"
+  }
+  rex_meta "01a161f8-ca97-7d13-9f71-de705f5dc343:01a161fb-16e2-7124-835e-e6c8a35bbf9e" \
+    session:01a161f8-ca97-7d13-9f71-de705f5dc343 window:01a161fb-16ed-782d-a616-6a21af27ebe8 \
+    block:01a161fb-16e2-7124-835e-e6c8a35bbf9e "unix:///tmp/rex%20server.sock"
+  fm_backend_validate_task_endpoint "$dir/home/state/$id.meta" "$id" || fail "valid rex endpoint refused"
+  [ "$FM_BACKEND_VALIDATED_BACKEND:$FM_BACKEND_VALIDATED_TARGET" = \
+    "rex:01a161f8-ca97-7d13-9f71-de705f5dc343:01a161fb-16e2-7124-835e-e6c8a35bbf9e" ] \
+    || fail "rex endpoint validation returned wrong identity"
+  rex_meta "01a161f8-ca97-7d13-9f71-de705f5dc343:01a161fb-16e2-7124-835e-e6c8a35bbf9e" \
+    session:01a161f8-ca97-7d13-9f71-de705f5dc343 window:01a161fb-16ed-782d-a616-6a21af27ebe8 \
+    block:01a10000-0000-7000-8000-000000000000 "unix:///tmp/rex.sock"
+  if fm_backend_validate_task_endpoint "$dir/home/state/$id.meta" "$id" 2>/dev/null; then
+    fail "a rex window= that names a different block than rex_block_id must refuse"
+  fi
+  rex_meta "session:01a161f8-ca97-7d13-9f71-de705f5dc343:block:01a161fb-16e2-7124-835e-e6c8a35bbf9e" \
+    session:01a161f8-ca97-7d13-9f71-de705f5dc343 window:01a161fb-16ed-782d-a616-6a21af27ebe8 \
+    block:01a161fb-16e2-7124-835e-e6c8a35bbf9e "unix:///tmp/rex.sock"
+  if fm_backend_validate_task_endpoint "$dir/home/state/$id.meta" "$id" 2>/dev/null; then
+    fail "a rex window= that keeps the colon-carrying id prefixes must refuse"
+  fi
+  rex_meta "01a161f8-ca97-7d13-9f71-de705f5dc343:01a161fb-16e2-7124-835e-e6c8a35bbf9e" \
+    session:01a161f8-ca97-7d13-9f71-de705f5dc343 window:01a161fb-16ed-782d-a616-6a21af27ebe8 \
+    block:01a161fb-16e2-7124-835e-e6c8a35bbf9e ""
+  if fm_backend_validate_task_endpoint "$dir/home/state/$id.meta" "$id" 2>/dev/null; then
+    fail "a rex record with no rex_server must refuse"
+  fi
+
+  id=tern-task
+  fm_write_meta "$dir/home/state/$id.meta" \
+    "window=9007199254740993:9223372036854775807" "endpoint_task_id=$id" "worktree=$dir/worktree" "project=$dir/project" \
+    "backend=tern" "tern_session_id=9007199254740993" "tern_tab_id=9007199254740995" "tern_block_id=9223372036854775807"
+  fm_backend_validate_task_endpoint "$dir/home/state/$id.meta" "$id" || fail "valid tern endpoint refused"
+  [ "$FM_BACKEND_VALIDATED_TARGET" = "9007199254740993:9223372036854775807" ] || fail "tern endpoint validation changed the 64-bit ids"
+
+  for backend in tmux herdr zellij orca cmux paseo rex tern; do
     set +e
     fm_backend_kill "$backend" "" >/dev/null 2>&1
     target=$?
     set -e
     [ "$target" -ne 0 ] || fail "$backend generic kill accepted an empty target"
   done
-  pass "cleanup identity: valid tmux, Herdr, Zellij, Orca, and cmux records validate while every empty backend target refuses"
+  pass "cleanup identity: valid tmux, Herdr, Zellij, Orca, cmux, Paseo, Rex, and tern records validate, inconsistent Rex records refuse, and every empty backend target refuses"
 }
 
 test_orca_composite_worktree_id_validates() {
@@ -980,6 +1027,16 @@ assert_reassigned_slot_left_alone() {  # <case> <id> <other> <description>
     "$description: the warning should name the reassignment as the cause"
 }
 
+# The tracked Codex overlay bin/fm-t3code-codex-env.sh installs needs a Python
+# with tomllib (3.11+); without one the T3 overlay case is reported skipped.
+tomllib_python_available() {
+  local candidate
+  for candidate in python3 python3.14 python3.13 python3.12 python3.11; do
+    command -v "$candidate" >/dev/null 2>&1 && "$candidate" -c 'import tomllib' >/dev/null 2>&1 && return 0
+  done
+  return 1
+}
+
 test_reassigned_pool_slot_finishes_own_cleanup_without_touching_the_slot() {
   local dir id=stale-task other=reassigned-task worker rc
 
@@ -1064,6 +1121,45 @@ test_reassigned_pool_slot_finishes_own_cleanup_without_touching_the_slot() {
     "unreadable-claim refusal should name the claim file to inspect"
 
   pass "fm-teardown: a pool slot claimed by another task is left alone while the task's own cleanup finishes"
+}
+
+# A T3 task whose pool slot was reassigned still archives its own thread, but
+# T3's slot cleanup undoes a tracked Codex overlay, so only the slot's
+# ownership keeps it off the claimant's overlay.
+test_reassigned_pool_slot_keeps_claimant_codex_overlay_on_t3() {
+  local dir id=stale-t3-task other=reassigned-task rc=0 mutations
+  local thread=mcp:8c9d0e1f-2a3b-4c5d-8e6f-7a8b9c0d1e2f
+  command -v node >/dev/null 2>&1 || { printf 'note: %s skipped: node absent\n' "${FUNCNAME[0]}"; return 0; }
+  tomllib_python_available || { printf 'note: %s skipped: no Python 3.11+ (tomllib) interpreter on PATH\n' "${FUNCNAME[0]}"; return 0; }
+
+  dir=$(make_case slot-reassigned-t3)
+  mark_case_as_treehouse_pool "$dir"
+  mkdir -p "$dir/worktree/.codex"
+  printf 'model = "gpt-5.6-sol"\n' > "$dir/worktree/.codex/config.toml"
+  git -C "$dir/worktree" add .codex/config.toml
+  git -C "$dir/worktree" -c user.name=t -c user.email=t@example.invalid commit -qm "project Codex config"
+  "$ROOT/bin/fm-t3code-codex-env.sh" install "$dir/worktree" "FM_TASK_ID=$other" || fail "install reassigned task's overlay"
+  cp "$dir/worktree/.codex/config.toml" "$dir/other-overlay.toml"
+  t3_fake_start "$dir/t3-server"
+  t3_fake_case "$dir/t3-case" "{\"threads\":{\"$thread\":{\"threadId\":\"$thread\",\"projectId\":\"proj-1\",\"status\":\"completed\",\"activeRunId\":null,\"archived\":false,\"worktreePath\":\"$dir/worktree\",\"pendingRequestCount\":0,\"items\":[],\"runs\":[]}}}"
+  t3_fake_credential "$dir/home/config/t3code-token"
+  fm_write_meta "$dir/home/state/$id.meta" \
+    "window=fm-$id" "endpoint_task_id=$id" \
+    "worktree=$dir/worktree" "project=$dir/project" "kind=scout" \
+    backend=t3code "t3_thread_id=$thread" t3_project_id=proj-1 harness=codex
+  claim_pool_slot "$dir" "$other" "$dir/other-home"
+
+  run_case "$dir" "$id" > "$dir/stdout" 2> "$dir/stderr" || rc=$?
+  mutations=$(t3_fake_mutations)
+  t3_fake_stop
+
+  [ "$rc" -eq 0 ] || fail "teardown of a T3 task whose slot was reassigned failed: $(cat "$dir/stderr")"
+  [ "$mutations" = "t3_thread_organize" ] || fail "teardown must still archive the stale task's own T3 thread, got '$mutations'"
+  assert_present "$dir/worktree/sentinel" "teardown reset a pool slot another task had claimed"
+  cmp -s "$dir/other-overlay.toml" "$dir/worktree/.codex/config.toml" || fail "teardown changed the other task's Codex overlay"
+  [ "$(git -C "$dir/worktree" ls-files -v -- .codex/config.toml)" = "S .codex/config.toml" ] || fail "teardown cleared the other task's overlay protection"
+  assert_reassigned_slot_left_alone "$dir" "$id" "$other" "T3 task on a reassigned slot with --force"
+  pass "fm-teardown backend=t3code: a reassigned pool slot keeps its claimant's Codex overlay while the task's own thread is archived"
 }
 
 # The reuse collision where BOTH records survive: the stale task's record still
@@ -1503,6 +1599,309 @@ test_already_gone_endpoint_still_completes_without_a_refusal() {
   pass "fm-teardown: an already-exited endpoint, and a server that is already gone, still complete cleanup silently"
 }
 
+make_bound_backend_fixture() {
+  local dir=$1 id=$2
+  python3 - "$dir/server.json" "$ROOT" "$id" <<'PYJ'
+import hashlib
+import json
+import os
+import sys
+identity = hashlib.sha256(os.path.realpath(sys.argv[2]).encode()).hexdigest()[:8]
+with open(sys.argv[1], "w") as output:
+    json.dump({"present": True, "foreign_present": True,
+               "title": "fm-firstmate-" + identity + "-" + sys.argv[3],
+               "sent": [], "closed": [], "attempted": False}, output)
+PYJ
+  cat > "$dir/fakebin/backend-fixture" <<'PYB'
+#!/usr/bin/env python3
+import json
+import os
+import pathlib
+import sys
+
+path = pathlib.Path(os.environ["FM_COMPAT_STATE"])
+state = json.loads(path.read_text())
+mode = os.environ.get("FM_COMPAT_MODE", "success")
+backend = pathlib.Path(sys.argv[0]).name
+args = sys.argv[1:]
+own_ws = "aaaaaaaa-0000-0000-0000-000000000000"
+own_surface = "bbbbbbbb-1111-1111-1111-111111111111"
+foreign_ws = "cccccccc-2222-2222-2222-222222222222"
+foreign_surface = "dddddddd-3333-3333-3333-333333333333"
+title = state["title"] if mode != "mismatch" else "foreign-title"
+
+def save():
+    path.write_text(json.dumps(state))
+
+def inventory(value):
+    if mode == "unreadable" or (mode == "unproved" and state["attempted"]):
+        sys.exit(1)
+    if mode == "malformed":
+        print("unreadable inventory")
+    else:
+        print(json.dumps(value))
+
+def close(target, own):
+    state["attempted"] = True
+    save()
+    if mode == "close-fail":
+        sys.exit(1)
+    if mode != "close-noop":
+        state["present" if own else "foreign_present"] = False
+        state["closed"].append(target)
+        save()
+
+if backend == "paseo":
+    if args[:2] == ["terminal", "ls"]:
+        inventory(([{"id": own_ws, "workspaceId": "own-workspace", "name": title}] if state["present"] else []) +
+                  ([{"id": foreign_ws, "workspaceId": "foreign-workspace", "name": "foreign"}] if state["foreign_present"] else []))
+    elif args[:2] == ["terminal", "kill"]:
+        close(args[2], args[2] == own_ws)
+    elif args[:2] == ["workspace", "ls"]:
+        print("[]")
+    elif args[:2] == ["terminal", "capture"]:
+        print(json.dumps({"lines": ["owned transcript" if args[2] == own_ws else "foreign transcript"]}))
+    elif args[:2] == ["terminal", "send-keys"]:
+        state["sent"].append(args[2])
+        save()
+    else:
+        sys.exit(2)
+elif backend == "cmux":
+    if args[:2] == ["workspace", "list"]:
+        inventory({"workspaces":
+                   ([{"id": own_ws, "title": title}] if state["present"] else []) +
+                   ([{"id": foreign_ws, "title": "foreign"}] if state["foreign_present"] else [])})
+    elif args[0] == "list-windows":
+        inventory([{"id": "window", "workspace_count": 2}])
+    elif args[0] == "list-panes":
+        workspace = args[args.index("--workspace") + 1]
+        surface = own_surface if workspace == own_ws else foreign_surface
+        present = state["present"] if workspace == own_ws else state["foreign_present"]
+        inventory({"panes": [{"selected_surface_id": surface, "surface_ids": [surface]}] if present else []})
+    elif args[0] == "read-screen":
+        workspace = args[args.index("--workspace") + 1]
+        print(json.dumps({"text": "owned transcript" if workspace == own_ws else "foreign transcript"}))
+    elif args[0] in {"send", "send-key"}:
+        state["sent"].append(args[args.index("--workspace") + 1])
+        save()
+    elif args[0] == "close-workspace":
+        workspace = args[args.index("--workspace") + 1]
+        close(workspace, workspace == own_ws)
+    else:
+        sys.exit(2)
+else:
+    if args[0] == "list-sessions":
+        if mode == "session-unreadable":
+            sys.exit(1)
+        print("firstmate")
+        sys.exit(0)
+    if args[:2] != ["--session", "firstmate"]:
+        sys.exit(2)
+    args = args[3:]
+    if args[0] == "list-panes":
+        inventory(([{"id": 7, "tab_id": 3, "is_plugin": False}] if state["present"] else []) +
+                  ([{"id": 8, "tab_id": 4, "is_plugin": False}] if state["foreign_present"] else []))
+    elif args[0] == "list-tabs":
+        inventory(([{"tab_id": 3, "name": title}] if state["present"] else []) +
+                  ([{"tab_id": 4, "name": "foreign"}] if state["foreign_present"] else []))
+    elif args[0] == "dump-screen":
+        print("owned transcript" if args[args.index("--pane-id") + 1] == "7" else "foreign transcript")
+    elif args[0] in {"paste", "send-keys"}:
+        state["sent"].append(args[args.index("--pane-id") + 1])
+        save()
+    elif args[0] == "close-tab-by-id":
+        close(args[1], args[1] == "3")
+    else:
+        sys.exit(2)
+PYB
+  chmod +x "$dir/fakebin/backend-fixture"
+  ln -s backend-fixture "$dir/fakebin/paseo"
+  ln -s backend-fixture "$dir/fakebin/cmux"
+  ln -s backend-fixture "$dir/fakebin/zellij"
+}
+
+test_bound_backend_cleanup_requires_proof() {
+  local backend mode dir id=compat-task target own rc
+  for backend in cmux zellij paseo; do
+    for mode in success close-fail close-noop unreadable malformed mismatch unproved; do
+      dir=$(make_case "compat-$backend-$mode")
+      make_bound_backend_fixture "$dir" "$id"
+      if [ "$backend" = paseo ]; then
+        python3 - "$dir/server.json" "$dir/home" "$id" <<'PYP'
+import hashlib
+import json
+import os
+import sys
+path = sys.argv[1]
+state = json.load(open(path))
+state["title"] = "fm-firstmate-" + hashlib.sha256(os.path.realpath(sys.argv[2]).encode()).hexdigest()[:8] + "-" + sys.argv[3]
+with open(path, "w") as output:
+    json.dump(state, output)
+PYP
+        target=aaaaaaaa-0000-0000-0000-000000000000:own-workspace
+        own=aaaaaaaa-0000-0000-0000-000000000000
+        fm_write_meta "$dir/home/state/$id.meta" \
+          "backend=paseo" "window=$target" "paseo_terminal_id=$own" "paseo_workspace_id=own-workspace"
+      elif [ "$backend" = cmux ]; then
+        target=aaaaaaaa-0000-0000-0000-000000000000:bbbbbbbb-1111-1111-1111-111111111111
+        own=aaaaaaaa-0000-0000-0000-000000000000
+        fm_write_meta "$dir/home/state/$id.meta" \
+          "backend=cmux" "window=$target" "cmux_workspace_id=$own" \
+          "cmux_surface_id=bbbbbbbb-1111-1111-1111-111111111111"
+      else
+        target=firstmate:7
+        own=7
+        fm_write_meta "$dir/home/state/$id.meta" \
+          "backend=zellij" "window=$target" "zellij_session=firstmate" "zellij_tab_id=3" "zellij_pane_id=7"
+      fi
+      printf '%s\n' "endpoint_task_id=$id" "spawn_gen=scompat.1" "kind=scout" "mode=no-mistakes" \
+        "worktree=$dir/missing-worktree" "project=$dir/project" 'decisions_reviewed=1' 'decision_keys=' \
+        >> "$dir/home/state/$id.meta"
+      mkdir -p "$dir/home/data/$id"
+      printf 'completed offline fixture report\n' > "$dir/home/data/$id/report.md"
+      printf '%s\n' '# Backlog' '' '## In flight' '' '## Queued' '' '## Done' > "$dir/home/data/backlog.md"
+      tasks-axi add "$id" 'compatibility fixture' --kind scout --file "$dir/home/data/backlog.md" >/dev/null \
+        || fail "could not seed compatibility backlog"
+      tasks-axi start "$id" --file "$dir/home/data/backlog.md" >/dev/null || fail "could not start compatibility backlog task"
+      cp "$dir/home/data/backlog.md" "$dir/original-backlog.md"
+      if [ "$mode" = success ]; then
+        FM_HOME="$dir/home" FM_ROOT_OVERRIDE="$ROOT" FM_COMPAT_STATE="$dir/server.json" PATH="$dir/fakebin:$PATH" \
+          bash -c '
+            . "$1/bin/fm-backend.sh"
+            fm_backend_source "$2" || exit 1
+            [ "$(fm_backend_capture "$2" "$3" 10 fm-compat-task)" = "owned transcript" ] || exit 1
+            "fm_backend_${2}_send_literal" "$3" hello fm-compat-task || exit 1
+            fm_backend_send_key "$2" "$3" C-c fm-compat-task
+          ' _ "$ROOT" "$backend" "$target" || fail "$backend rejected its pre-upgrade recorded binding"
+        jq -e --arg own "$own" '.sent == [$own, $own]' "$dir/server.json" >/dev/null \
+          || fail "$backend sent input or control to a foreign endpoint"
+      fi
+      rc=0
+      FM_COMPAT_STATE="$dir/server.json" FM_COMPAT_MODE="$mode" run_case "$dir" "$id" \
+        > "$dir/close.out" 2> "$dir/close.err" || rc=$?
+      jq -e '.foreign_present == true' "$dir/server.json" >/dev/null || fail "$backend cleanup touched a foreign endpoint"
+      if [ "$mode" = success ]; then
+        [ "$rc" -eq 0 ] || fail "$backend pre-upgrade cleanup failed: $(cat "$dir/close.err")"
+        jq -e '.present == false and (.closed | length) == 1' "$dir/server.json" >/dev/null \
+          || fail "$backend reported success without closing the recorded endpoint exactly once"
+        assert_absent "$dir/home/state/$id.meta" "$backend successful cleanup retained metadata"
+      else
+        [ "$rc" -ne 0 ] || fail "$backend $mode cleanup reported success without proof"
+        assert_present "$dir/home/state/$id.meta" "$backend $mode cleanup removed the recorded binding"
+        cmp -s "$dir/home/data/backlog.md" "$dir/original-backlog.md" || fail "$backend $mode cleanup closed the backlog item"
+        assert_absent "$dir/home/state/$id.backlog-close" "$backend $mode left a replayable record-removal marker"
+      fi
+    done
+  done
+  pass "offline cmux/Zellij/Paseo bindings retain capture, input, control and proved cleanup; failed closes retain records"
+}
+
+test_paseo_tern_descendants_use_the_owning_home() {
+  local backend mode dir home id=shared-task target parent_name child_name child_id parent_id scoped
+  for backend in paseo tern; do
+    for mode in live missing stale close-fail unreadable; do
+      [ "$backend:$mode" != tern:stale ] || continue
+      dir=$(make_case "descendant-$backend-$mode")
+      home="$dir/child-home"
+      mkdir -p "$home/state" "$home/data" "$home/config" "$dir/code-root"
+      printf 'sm\n' > "$home/.fm-secondmate-home"
+      scoped=scoped_name
+      [ "$backend" != tern ] || scoped=scoped_title
+      parent_name=$(FM_HOME="$dir/home" bash -c '. "$1/bin/backends/$2.sh"; "fm_backend_${2}_${3}" fm-shared-task' _ "$ROOT" "$backend" "$scoped")
+      child_name=$(FM_HOME="$home" bash -c '. "$1/bin/backends/$2.sh"; "fm_backend_${2}_${3}" fm-shared-task' _ "$ROOT" "$backend" "$scoped")
+      [ "$parent_name" != "$child_name" ] || fail "fixture homes did not get distinct endpoint names"
+      if [ "$backend" = paseo ]; then
+        child_id=aaaaaaaa-0000-0000-0000-000000000000
+        parent_id=bbbbbbbb-0000-0000-0000-000000000000
+        target="$child_id:wks-child"
+        [ "$mode" != stale ] || target=eeeeeeee-0000-0000-0000-000000000000:wks-child
+        fm_write_meta "$home/state/$id.meta" "backend=paseo" "window=$target" \
+          "paseo_terminal_id=${target%%:*}" 'paseo_workspace_id=wks-child'
+      else
+        child_id=201 parent_id=101 target=10:201
+        fm_write_meta "$home/state/$id.meta" 'backend=tern' "window=$target" \
+          'tern_session_id=10' 'tern_tab_id=2010' 'tern_block_id=201'
+      fi
+      printf '%s\n' "endpoint_task_id=$id" 'spawn_gen=s-child' 'kind=ship' 'mode=no-mistakes' \
+        "worktree=$dir/missing-worktree" "project=$dir/project" >> "$home/state/$id.meta"
+      fm_write_meta "$dir/home/state/sm.meta" 'backend=tmux' 'window=isolated:fm-sm' \
+        'endpoint_task_id=sm' 'spawn_gen=s-parent' 'kind=secondmate' 'mode=secondmate' \
+        "worktree=$home" "project=$home" "home=$home"
+      printf 'parent record sentinel\n' > "$dir/home/state/$id.meta"
+      jq -n --arg parent "$parent_id" --arg child "$child_id" --arg parent_name "$parent_name" \
+        --arg child_name "$child_name" --arg mode "$mode" \
+        '{parent:$parent,child:$child,parent_name:$parent_name,child_name:$child_name,
+          parent_present:true,child_present:($mode != "missing"),closed:[]}' > "$dir/server.json"
+      cat > "$dir/fakebin/endpoint" <<'PYE'
+#!/usr/bin/env python3
+import json
+import os
+import pathlib
+import sys
+path = pathlib.Path(os.environ["FM_DESCENDANT_STATE"])
+state = json.loads(path.read_text())
+mode = os.environ["FM_DESCENDANT_MODE"]
+args = sys.argv[1:]
+backend = pathlib.Path(sys.argv[0]).name
+if mode == "unreadable":
+    sys.exit(1)
+entries = [(who, state[who], state[who + "_name"]) for who in ("parent", "child") if state[who + "_present"]]
+if backend == "paseo" and args[:2] == ["terminal", "ls"]:
+    print(json.dumps([{"id": value, "workspaceId": "wks-" + who, "name": name} for who, value, name in entries]))
+elif backend == "paseo" and args[:2] == ["workspace", "ls"]:
+    print("[]")
+elif backend == "tern" and args[0] == "ls":
+    print(json.dumps({"sessions": [{"id": 10, "name": "fixture", "tabs": [
+        {"id": int(value) * 10, "name": name, "blocks": [{"id": int(value)}]} for who, value, name in entries]}]}))
+elif (backend == "paseo" and args[:2] == ["terminal", "kill"]) or (backend == "tern" and args[0] == "close"):
+    if mode == "close-fail":
+        sys.exit(1)
+    value = args[2] if backend == "paseo" else args[1].split("/")[-1]
+    who = next((who for who in ("parent", "child") if state[who] == value), None)
+    if who is None:
+        sys.exit(3)
+    state[who + "_present"] = False
+    state["closed"].append(value)
+    path.write_text(json.dumps(state))
+else:
+    sys.exit(2)
+PYE
+      chmod +x "$dir/fakebin/endpoint"
+      ln -s endpoint "$dir/fakebin/$backend"
+      local rc=0
+      FM_HOME="$dir/home" FM_ROOT_OVERRIDE="$dir/code-root" FM_TEARDOWN_GUARD_DONE=1 \
+        FM_DESCENDANT_STATE="$dir/server.json" FM_DESCENDANT_MODE="$mode" FM_RUNTIME_LOG="$dir/runtime.log" PATH="$dir/fakebin:$PATH" \
+        "$TEARDOWN" sm --force > "$dir/close.out" 2> "$dir/close.err" \
+        || rc=$?
+      if [ "$mode" = close-fail ] || [ "$mode" = unreadable ]; then
+        [ "$rc" -ne 0 ] || fail "$backend $mode descendant cleanup reported success"
+        assert_present "$home/state/$id.meta" "$backend failed cleanup removed the child endpoint record"
+        assert_present "$dir/home/state/sm.meta" "$backend failed cleanup removed the secondmate record"
+        jq -e ' .parent_present and .child_present and .closed == []' "$dir/server.json" >/dev/null \
+          || fail "$backend failed cleanup mutated an endpoint"
+        continue
+      fi
+      [ "$rc" -eq 0 ] || fail "$backend $mode descendant cleanup failed: $(cat "$dir/close.err")"
+      jq -e '.parent_present == true and .child_present == false' \
+        "$dir/server.json" >/dev/null || fail "$backend $mode touched the parent's same-named endpoint or left the child open"
+      if [ "$mode" = missing ]; then
+        jq -e '.closed == []' "$dir/server.json" >/dev/null || fail "$backend missing endpoint cleanup closed a foreign endpoint"
+      else
+        jq -e --arg child "$child_id" '.closed == [$child]' "$dir/server.json" >/dev/null || fail "$backend cleanup did not close exactly its child's endpoint"
+      fi
+      assert_grep 'parent record sentinel' "$dir/home/state/$id.meta" "$backend cleanup removed the parent's same-task record"
+    done
+  done
+  pass "offline Paseo/Tern descendant cleanup binds the owning home and never closes a parent's same-named endpoint"
+}
+
+if [ -n "${FM_TEST_ONLY:-}" ]; then
+  "$FM_TEST_ONLY"
+  exit 0
+fi
+
+test_bound_backend_cleanup_requires_proof
+test_paseo_tern_descendants_use_the_owning_home
 test_invalid_endpoint_records_refuse_before_mutation
 test_control_lock_contention_refuses_before_mutation
 test_non_pool_teardown_ignores_task_set_lock
@@ -1524,6 +1923,7 @@ test_reassigned_record_collision_retires_stale_then_preserves_current_work
 test_cross_home_pool_slot_collision_refuses
 test_sole_slot_record_still_tears_down
 test_reassigned_pool_slot_finishes_own_cleanup_without_touching_the_slot
+test_reassigned_pool_slot_keeps_claimant_codex_overlay_on_t3
 test_stale_record_on_claimed_slot_retires_then_claimant_tears_down
 test_own_and_absent_slot_claims_still_tear_down
 test_recorded_endpoint_that_changed_directory_still_tears_down

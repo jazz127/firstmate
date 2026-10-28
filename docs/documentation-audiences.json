@@ -31,6 +31,10 @@
     "docs/zellij-backend.md",
     "docs/orca-backend.md",
     "docs/cmux-backend.md",
+    "docs/paseo-backend.md",
+    "docs/rex-backend.md",
+    "docs/t3code-backend.md",
+    "docs/tern-backend.md",
     "docs/remote-secondmates.md"
   ],
   "requiredOwnerPointers": [
@@ -103,6 +107,14 @@
       "target": "docs/verification/runtime-backends.md"
     },
     {
+      "source": "docs/t3code-backend.md",
+      "target": "docs/verification/runtime-backends.md"
+    },
+    {
+      "source": "docs/tern-backend.md",
+      "target": "docs/verification/runtime-backends.md"
+    },
+    {
       "source": "docs/codex-app-backend.md",
       "target": "docs/verification/runtime-backends.md"
     },
@@ -138,10 +150,6 @@
     },
     {
       "path": ".agents/skills/captain-hold-lifecycle/SKILL.md",
-      "audience": "agent-runtime"
-    },
-    {
-      "path": ".agents/skills/decision-hold-lifecycle/SKILL.md",
       "audience": "agent-runtime"
     },
     {
@@ -202,6 +210,10 @@
     },
     {
       "path": ".agents/skills/harness-adapters/references/harness/commandcode.md",
+      "audience": "agent-runtime"
+    },
+    {
+      "path": ".agents/skills/harness-adapters/references/harness/cortex.md",
       "audience": "agent-runtime"
     },
     {
@@ -341,6 +353,10 @@
       "audience": "operator-current"
     },
     {
+      "path": "docs/tern-backend.md",
+      "audience": "operator-current"
+    },
+    {
       "path": "docs/codex-app-backend.md",
       "audience": "operator-current"
     },
@@ -443,6 +459,15 @@
     {
       "path": "docs/pi-composer-provenance.md",
       "audience": "maintainer-architecture"
+
+    },
+    {
+      "path": "docs/paseo-backend.md",
+      "audience": "operator-current"
+    },
+    {
+      "path": "docs/rex-backend.md",
+      "audience": "operator-current"
     },
     {
       "path": "docs/pi-supervision-branch.md",
@@ -509,6 +534,10 @@
       "audience": "maintainer-architecture"
     },
     {
+      "path": "docs/t3code-backend.md",
+      "audience": "operator-current"
+    },
+    {
       "path": "docs/tmux-backend.md",
       "audience": "operator-current"
     },
@@ -521,6 +550,10 @@
       "audience": "operator-current"
     },
     {
+      "path": "docs/opencode-2-plugin-port-scope.md",
+      "audience": "maintainer-verification"
+    },
+    {
       "path": "docs/usage-warner.md",
       "audience": "operator-current"
     },
@@ -530,6 +563,10 @@
     },
     {
       "path": "docs/verification/commandcode.md",
+      "audience": "maintainer-verification"
+    },
+    {
+      "path": "docs/verification/cortex.md",
       "audience": "maintainer-verification"
     },
     {
@@ -610,6 +647,10 @@
     },
     {
       "path": "tests/captures/no-mistakes-v1.70.1/README.md",
+      "audience": "maintainer-verification"
+    },
+    {
+      "path": "tests/captures/kimi-code-2.3.0/README.md",
       "audience": "maintainer-verification"
     },
     {

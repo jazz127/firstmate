@@ -120,7 +120,7 @@ zellij_expected_root_hash() {  # <root>
   fi
 }
 
-zellij_expected_home_label() {  # [home] [root]
+zellij_expected_home_label() {  # [home]
   local home=${1:-$ROOT} root=${2:-$ROOT} marker id prefix
   marker="$home/.fm-secondmate-home"
   if [ -f "$marker" ]; then
@@ -136,7 +136,7 @@ zellij_expected_home_label() {  # [home] [root]
   printf '%s-%s' "$prefix" "$(zellij_expected_root_hash "$root")"
 }
 
-zellij_expected_scoped_title() {  # <fm-task-label> [home] [root]
+zellij_expected_scoped_title() {  # <fm-task-label> [home]
   local label=$1 home=${2:-$ROOT} root=${3:-$ROOT} rest
   case "$label" in
     fm-*) rest=${label#fm-} ;;
@@ -251,18 +251,16 @@ test_scoped_title_uses_secondmate_home_label() {
   pass "fm_backend_zellij_scoped_title: scopes a secondmate task title with the home marker plus root hash"
 }
 
-test_scoped_title_changes_with_root_path() {
-  local dir home root_one root_two out_one out_two expected_one expected_two
+test_scoped_title_preserves_root_identity() {
+  local dir home root_one root_two out_one out_two
   dir="$TMP_ROOT/scoped-title-root-hash"; home="$dir/home"; root_one="$dir/root-one"; root_two="$dir/root-two"
   mkdir -p "$home" "$root_one" "$root_two"
-  expected_one=$(zellij_expected_scoped_title fm-task1 "$home" "$root_one")
-  expected_two=$(zellij_expected_scoped_title fm-task1 "$home" "$root_two")
-  out_one=$( FM_HOME="$home" FM_ROOT_OVERRIDE="$root_one" bash -c '. "$0/bin/backends/zellij.sh"; fm_backend_zellij_scoped_title fm-task1' "$ROOT" )
-  out_two=$( FM_HOME="$home" FM_ROOT_OVERRIDE="$root_two" bash -c '. "$0/bin/backends/zellij.sh"; fm_backend_zellij_scoped_title fm-task1' "$ROOT" )
-  [ "$out_one" = "$expected_one" ] || fail "scoped title should include root-one hash as $expected_one, got '$out_one'"
-  [ "$out_two" = "$expected_two" ] || fail "scoped title should include root-two hash as $expected_two, got '$out_two'"
-  [ "$out_one" != "$out_two" ] || fail "scoped titles should differ for distinct FM_ROOT paths"
-  pass "fm_backend_zellij_scoped_title: includes the resolved FM_ROOT hash in the home label"
+  out_one=$(FM_HOME="$home" FM_ROOT_OVERRIDE="$root_one" bash -c '. "$0/bin/backends/zellij.sh"; fm_backend_zellij_scoped_title fm-task1' "$ROOT")
+  out_two=$(FM_HOME="$home" FM_ROOT_OVERRIDE="$root_two" bash -c '. "$0/bin/backends/zellij.sh"; fm_backend_zellij_scoped_title fm-task1' "$ROOT")
+  [ "$out_one" != "$out_two" ] || fail "distinct code roots received the same established tag"
+  out_two=$(FM_HOME="$root_two" FM_ROOT_OVERRIDE="$root_one" bash -c '. "$0/bin/backends/zellij.sh"; fm_backend_zellij_scoped_title fm-task1' "$ROOT")
+  [ "$out_one" = "$out_two" ] || fail "the established root-based identity changed with the private home path"
+  pass "fm_backend_zellij_scoped_title: preserves the established code-root identity across private home layouts"
 }
 
 test_expected_label_accepts_unambiguous_untagged_legacy_tab() {
@@ -751,7 +749,8 @@ test_kill_resolves_tab_and_closes_by_id() {
   local dir fb
   dir="$TMP_ROOT/kill"; mkdir -p "$dir/responses"
   zellij_pane_response "$dir" 1 7 3
-  printf '[{"id":7,"tab_id":3,"is_plugin":false}]\n' > "$dir/responses/2.out"
+  printf '[]\n' > "$dir/responses/3.out"
+  printf '[]\n' > "$dir/responses/4.out"
   fb=$(make_zellij_fakebin "$dir")
   PATH="$fb:$PATH" FM_ZELLIJ_LOG="$dir/log" FM_ZELLIJ_RESPONSES="$dir/responses" \
     FM_ZELLIJ_SESSION_LIST="firstmate" \
@@ -764,20 +763,17 @@ test_kill_resolves_tab_and_closes_by_id() {
   pass "fm_backend_zellij_kill: resolves the owning tab id fresh and calls close-tab-by-id (never a bare close-pane)"
 }
 
-test_kill_falls_back_to_close_pane_when_tab_lookup_empty() {
+test_kill_accepts_a_confirmed_absent_pane() {
   local dir fb
-  dir="$TMP_ROOT/kill-fallback"; mkdir -p "$dir/responses"
+  dir="$TMP_ROOT/kill-absent"; mkdir -p "$dir/responses"
   printf '[]\n' > "$dir/responses/1.out"
   fb=$(make_zellij_fakebin "$dir")
   PATH="$fb:$PATH" FM_ZELLIJ_LOG="$dir/log" FM_ZELLIJ_RESPONSES="$dir/responses" \
     FM_ZELLIJ_SESSION_LIST="firstmate" \
-    bash -c '. "$0/bin/backends/zellij.sh"; fm_backend_zellij_kill firstmate:7' "$ROOT"
-  expect_code 0 $? "kill must stay best-effort even when the tab lookup comes up empty"
-  zellij_assert_call_order "$dir/log" $'\x1f''list-panes'$'\x1f''--json' $'\x1f''close-pane' \
-    "kill did not verify the pane before close-pane fallback"
-  assert_contains "$(cat "$dir/log")" $'\x1f''close-pane'$'\x1f''--pane-id'$'\x1f''7' \
-    "kill did not fall back to a direct close-pane when no owning tab could be resolved"
-  pass "fm_backend_zellij_kill: falls back to close-pane when the owning tab cannot be resolved"
+    bash -c '. "$0/bin/backends/zellij.sh"; fm_backend_zellij_kill firstmate:7' "$ROOT" \
+    || fail "a confirmed absent pane refused cleanup"
+  assert_not_contains "$(cat "$dir/log")" $'\x1f''close-' "an absent pane triggered an unnecessary close"
+  pass "fm_backend_zellij_kill: a confirmed absent pane needs no close"
 }
 
 test_kill_closes_recorded_tab_when_pane_already_gone() {
@@ -785,6 +781,9 @@ test_kill_closes_recorded_tab_when_pane_already_gone() {
   dir="$TMP_ROOT/kill-recorded-tab"; mkdir -p "$dir/responses"
   printf '[]\n' > "$dir/responses/1.out"
   printf '[{"tab_id":3,"name":"fm-zghost"}]\n' > "$dir/responses/2.out"
+  printf '[{"tab_id":3,"name":"fm-zghost"}]\n' > "$dir/responses/3.out"
+  printf '[]\n' > "$dir/responses/5.out"
+  printf '[]\n' > "$dir/responses/6.out"
   fb=$(make_zellij_fakebin "$dir")
   PATH="$fb:$PATH" FM_ZELLIJ_LOG="$dir/log" FM_ZELLIJ_RESPONSES="$dir/responses" \
     FM_ZELLIJ_SESSION_LIST="firstmate" \
@@ -802,15 +801,16 @@ test_kill_closes_recorded_tab_when_pane_already_gone() {
 }
 
 test_kill_skips_recorded_tab_when_label_mismatches() {
-  local dir fb
+  local dir fb rc=0
   dir="$TMP_ROOT/kill-recorded-tab-mismatch"; mkdir -p "$dir/responses"
   printf '[]\n' > "$dir/responses/1.out"
   printf '[{"tab_id":3,"name":"not-the-task"}]\n' > "$dir/responses/2.out"
+  printf '[{"tab_id":3,"name":"not-the-task"}]\n' > "$dir/responses/3.out"
   fb=$(make_zellij_fakebin "$dir")
   PATH="$fb:$PATH" FM_ZELLIJ_LOG="$dir/log" FM_ZELLIJ_RESPONSES="$dir/responses" \
     FM_ZELLIJ_SESSION_LIST="firstmate" \
-    bash -c '. "$0/bin/backends/zellij.sh"; fm_backend_zellij_kill firstmate:7 3 fm-zghost' "$ROOT"
-  expect_code 0 $? "kill must stay best-effort when the recorded tab id no longer belongs to the task"
+    bash -c '. "$0/bin/backends/zellij.sh"; fm_backend_zellij_kill firstmate:7 3 fm-zghost' "$ROOT" || rc=$?
+  [ "$rc" -ne 0 ] || fail "an unproved recorded tab close reported success"
   zellij_assert_call_order "$dir/log" $'\x1f''list-panes'$'\x1f''--json' $'\x1f''list-tabs'$'\x1f''--json' \
     "kill did not verify the recorded tab id by label"
   assert_not_contains "$(cat "$dir/log")" $'\x1f''close-tab-by-id' \
@@ -850,6 +850,9 @@ test_teardown_passes_recorded_tab_id_to_zellij_kill() {
     "decision_keys="
   printf '[]\n' > "$dir/responses/1.out"
   printf '[{"tab_id":3,"name":"fm-zghost"}]\n' > "$dir/responses/2.out"
+  printf '[{"tab_id":3,"name":"fm-zghost"}]\n' > "$dir/responses/3.out"
+  printf '[]\n' > "$dir/responses/5.out"
+  printf '[]\n' > "$dir/responses/6.out"
   fb=$(make_zellij_fakebin "$dir")
   out=$( PATH="$fb:$PATH" FM_STATE_OVERRIDE="$state" FM_DATA_OVERRIDE="$data" FM_CONFIG_OVERRIDE="$config" \
     FM_ZELLIJ_LOG="$dir/log" FM_ZELLIJ_RESPONSES="$dir/responses" FM_ZELLIJ_SESSION_LIST="firstmate" \
@@ -873,6 +876,7 @@ test_forced_secondmate_teardown_kills_zellij_children_with_child_home_tag() {
   fm_write_meta "$state/smz.meta" \
     "window=firstmate:99" \
     "endpoint_task_id=smz" \
+    "spawn_gen=s-smz" \
     "backend=zellij" \
     "zellij_session=firstmate" \
     "zellij_tab_id=99" \
@@ -885,6 +889,7 @@ test_forced_secondmate_teardown_kills_zellij_children_with_child_home_tag() {
   fm_write_meta "$home/state/childz.meta" \
     "window=firstmate:7" \
     "endpoint_task_id=childz" \
+    "spawn_gen=s-childz" \
     "backend=zellij" \
     "zellij_session=firstmate" \
     "zellij_tab_id=4" \
@@ -892,19 +897,41 @@ test_forced_secondmate_teardown_kills_zellij_children_with_child_home_tag() {
     "worktree=$dir/missing-child-worktree" \
     "project=$project" \
     "kind=scout"
+  mkdir -p "$dir/parent-home" "$dir/code-root"
   child_title=$(zellij_expected_scoped_title fm-childz "$home" "$home")
-  zellij_pane_response "$dir" 1 7 4
-  zellij_tab_response "$dir" 2 4 "$child_title"
-  printf '[]\n' > "$dir/responses/3.out"
-  fb=$(make_zellij_fakebin "$dir")
+  jq -n --arg title "$child_title" '{
+    tabs:[{tab_id:99,name:"fm-smz"},{tab_id:4,name:$title},{tab_id:55,name:"unrelated"}],
+    panes:[{id:99,tab_id:99,is_plugin:false},{id:7,tab_id:4,is_plugin:false},{id:55,tab_id:55,is_plugin:false}]
+  }' > "$dir/server.json"
+  fb="$dir/fakebin"; mkdir -p "$fb"
+  cat > "$fb/zellij" <<'SH'
+#!/usr/bin/env bash
+set -eu
+{ for arg in "$@"; do printf '\x1f%s' "$arg"; done; printf '\n'; } >> "$FM_ZELLIJ_LOG"
+if [ "$1" = list-sessions ]; then printf 'firstmate\n'; exit 0; fi
+[ "$1" = --session ] && [ "$2" = firstmate ] && [ "$3" = action ] || exit 2
+case "$4" in
+  list-panes) jq '.panes' "$FM_ZELLIJ_FAKE_STATE" ;;
+  list-tabs) jq '.tabs' "$FM_ZELLIJ_FAKE_STATE" ;;
+  close-tab-by-id)
+    jq --argjson tab "$5" '.tabs |= map(select(.tab_id != $tab)) | .panes |= map(select(.tab_id != $tab))' \
+      "$FM_ZELLIJ_FAKE_STATE" > "$FM_ZELLIJ_FAKE_STATE.next"
+    mv "$FM_ZELLIJ_FAKE_STATE.next" "$FM_ZELLIJ_FAKE_STATE"
+    ;;
+  *) exit 2 ;;
+esac
+SH
+  chmod +x "$fb/zellij"
   out=$( PATH="$fb:$PATH" FM_STATE_OVERRIDE="$state" FM_DATA_OVERRIDE="$data" FM_CONFIG_OVERRIDE="$config" \
-    FM_ROOT_OVERRIDE="$ROOT" \
-    FM_ZELLIJ_LOG="$dir/log" FM_ZELLIJ_RESPONSES="$dir/responses" FM_ZELLIJ_SESSION_LIST="firstmate" \
+    FM_HOME="$dir/parent-home" FM_ROOT_OVERRIDE="$dir/code-root" FM_TEARDOWN_GUARD_DONE=1 \
+    FM_ZELLIJ_LOG="$dir/log" FM_ZELLIJ_FAKE_STATE="$dir/server.json" \
     "$ROOT/bin/fm-teardown.sh" smz --force 2>&1 )
   status=$?
-  expect_code 0 "$status" "fm-teardown should force-retire a secondmate with a zellij child: $out"
+  expect_code 0 "$status" "fm-teardown should force-retire a secondmate with a zellij child: $out; calls: $(cat "$dir/log")"
   assert_contains "$(cat "$dir/log")" $'\x1f''close-tab-by-id'$'\x1f''4' \
     "forced secondmate teardown did not close a child zellij tab scoped to the child home"
+  jq -e '.tabs == [{tab_id:55,name:"unrelated"}] and .panes == [{id:55,tab_id:55,is_plugin:false}]' "$dir/server.json" >/dev/null \
+    || fail "forced cleanup left an owned endpoint open or closed an unrelated endpoint"
   pass "fm-teardown.sh: force cleanup kills zellij children using the child home tag"
 }
 
@@ -1294,6 +1321,11 @@ test_scripts_reject_fm_target_label_mismatch() {
 # shellcheck source=/dev/null
 . "$ROOT/bin/fm-backend.sh"
 
+if [ -n "${FM_TEST_ONLY:-}" ]; then
+  "$FM_TEST_ONLY"
+  exit 0
+fi
+
 test_version_check_accepts_current_version
 test_version_check_accepts_newer_version
 test_version_check_refuses_old_version
@@ -1304,7 +1336,7 @@ test_parse_target
 test_normalize_key
 test_scoped_title_uses_primary_home_label
 test_scoped_title_uses_secondmate_home_label
-test_scoped_title_changes_with_root_path
+test_scoped_title_preserves_root_identity
 test_expected_label_accepts_unambiguous_untagged_legacy_tab
 test_expected_label_refuses_ambiguous_untagged_tab
 test_list_live_scopes_to_own_home_tag
@@ -1334,7 +1366,7 @@ test_expected_label_rejects_reused_pane_id
 test_current_path_probes_with_marker_and_ignores_prompt_paths
 test_current_path_ignores_tilde_prefixed_banner_lines
 test_kill_resolves_tab_and_closes_by_id
-test_kill_falls_back_to_close_pane_when_tab_lookup_empty
+test_kill_accepts_a_confirmed_absent_pane
 test_kill_closes_recorded_tab_when_pane_already_gone
 test_kill_skips_recorded_tab_when_label_mismatches
 test_kill_is_noop_when_session_absent

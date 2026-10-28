@@ -53,6 +53,49 @@ append_wake() {
   ' _ "$lib" "$kind" "$key" "$payload"
 }
 
+ack_stopped_cycle() {  # <state>
+  local state=$1 err sequence generation
+  local drain=${DRAIN:-$ROOT/bin/fm-wake-drain.sh}
+  err="$state/.test-cycle-drain.err"
+  FM_STATE_OVERRIDE="$state" "$drain" >/dev/null 2> "$err" || return 1
+  sequence=$(sed -n 's/^WAKE_ACK_REQUIRED:.*--ack-through \([0-9][0-9]*\) --recovery-generation [A-Za-z0-9._-][A-Za-z0-9._-]*$/\1/p' "$err")
+  generation=$(sed -n 's/^WAKE_ACK_REQUIRED:.*--ack-through [0-9][0-9]* --recovery-generation \([A-Za-z0-9._-][A-Za-z0-9._-]*\)$/\1/p' "$err")
+  rm -f "$err"
+  [ -n "$sequence" ] && [ -n "$generation" ] || return 1
+  FM_STATE_OVERRIDE="$state" "$drain" --ack-through "$sequence" \
+    --recovery-generation "$generation"
+}
+
+
+file_mtime() {
+  if [ "$(uname)" = Darwin ]; then stat -f %m "$1" 2>/dev/null; else stat -c %Y "$1" 2>/dev/null; fi
+}
+
+wait_poll_cycle() {  # <state> <pid> [limit-ticks]
+  local state=$1 pid=$2 limit=${3:-300} beat first now i=0
+  beat="$state/.last-watcher-beat"
+  rm -f "$beat"
+  first=""
+  while [ "$i" -lt "$limit" ]; do
+    kill -0 "$pid" 2>/dev/null || return 1
+    first=$(file_mtime "$beat")
+    [ -n "$first" ] && break
+    sleep 0.1
+    i=$((i + 1))
+  done
+  while [ "$i" -lt "$limit" ]; do
+    kill -0 "$pid" 2>/dev/null || return 1
+    now=$(file_mtime "$beat")
+    if [ -n "$now" ] && [ "$now" != "$first" ]; then
+      return 0
+    fi
+    sleep 0.1
+    i=$((i + 1))
+  done
+  return 1
+}
+
+
 make_case() {
   local name=$1 dir fakebin
   dir="$TMP_ROOT/$name"
@@ -350,6 +393,24 @@ wait_for_exit() {
   fi
   wait "$pid" 2>/dev/null || true
   return 124
+}
+
+# Separate a launched watcher's startup from the run a caller times. Startup -
+# interpreter, sourced libraries, singleton-lock acquisition - slows with host
+# contention, so wait until the lock names <pid> or <pid> already exited, and
+# only then start the caller's wait_for_exit deadline. The generous bound still
+# fails a watcher that never takes its lock, stopping it through wait_for_exit.
+wait_for_watcher_lock() {
+  local pid=$1 state=$2 limit=${3:-300} i=0
+  while [ "$i" -lt "$limit" ]; do
+    [ "$(cat "$state/.watch.lock/pid" 2>/dev/null || true)" != "$pid" ] || return 0
+    is_live_non_zombie "$pid" || return 0
+    sleep 0.1
+    i=$((i + 1))
+  done
+  printf 'wait_for_watcher_lock: owned pid %s never held its singleton lock in %s polls\n' "$pid" "$limit" >&2
+  wait_for_exit "$pid" 0 || true
+  return 1
 }
 
 is_live_non_zombie() {

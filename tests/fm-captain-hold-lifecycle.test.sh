@@ -4637,6 +4637,189 @@ SH
   pass "marked hold reasons round-trip through public reads, fleet, startup, and return without changing other fields"
 }
 
+# Done retention moves an answered captain call into the Done archive, where
+# tasks-axi no longer shows it; the completion gate must still count the
+# archived answer as durable, and must still refuse an archived close that
+# carries no captain answer or an attested call found nowhere.
+test_archived_answered_hold_still_satisfies_the_gate() {
+  local home id archive
+  home=$(make_home archived-answer)
+  id=sample-archived-review
+  archive="$home/data/done-archive.md"
+  mkdir -p "$home/data/$id"
+  tasks_in "$home" add "$id" "Investigate the archived sample" --kind scout --repo sample --start >/dev/null \
+    || fail "could not create the archived-answer origin"
+  write_origin_meta "$home" "$id"
+  printf 'done: report complete\n' > "$home/state/$id.status"
+  printf '# Archived sample review\n\nOne captain choice remains.\n' > "$home/data/$id/report.md"
+  run_captain "$home" hold sample-archived-call --title "Choose the archived option" \
+    --reason "captain archived choice pending" --repo sample --origin "$id" >/dev/null \
+    || fail "could not register the captain-held task"
+  run_captain "$home" complete "$id" sample-archived-call >/dev/null \
+    || fail "completion failed before the answer"
+  printf 'Captain chose the archived option.\n' > "$home/archived-decision.txt"
+  run_captain "$home" answer sample-archived-call --decision-file "$home/archived-decision.txt" >/dev/null \
+    || fail "answer could not close the captain-held task"
+  run_captain "$home" verify "$id" >/dev/null \
+    || fail "the answered captain call did not verify before retention"
+
+  perl -0pi -e 's/done_keep = 10/done_keep = 0/' "$home/.tasks.toml"
+  tasks_in "$home" add sample-archived-trigger "Trigger Done retention" --kind ship --repo sample >/dev/null
+  tasks_in "$home" "done" sample-archived-trigger >/dev/null \
+    || fail "could not trigger Done retention"
+  assert_grep "sample-archived-call" "$archive" "Done retention did not archive the answered call"
+  if tasks_in "$home" show sample-archived-call >/dev/null 2>&1; then
+    fail "the archived call is still shown from the live backlog, so the fixture reproduces nothing"
+  fi
+
+  run_captain "$home" verify "$id" >/dev/null 2> "$home/archived-verify.err" \
+    || fail "verify refused an answered call Done retention archived: $(cat "$home/archived-verify.err")"
+  run_captain "$home" complete "$id" sample-archived-call >/dev/null 2> "$home/archived-complete.err" \
+    || fail "complete refused an answered call Done retention archived: $(cat "$home/archived-complete.err")"
+  run_teardown "$home" "$id" >/dev/null 2> "$home/archived-teardown.err" \
+    || fail "teardown refused a scout whose answered call was archived: $(cat "$home/archived-teardown.err")"
+
+  id=sample-archived-unanswered-review
+  mkdir -p "$home/data/$id"
+  tasks_in "$home" add "$id" "Investigate the unanswered sample" --kind scout --repo sample --start >/dev/null
+  write_origin_meta "$home" "$id"
+  printf 'done: report complete\n' > "$home/state/$id.status"
+  run_captain "$home" hold sample-archived-unanswered-call --title "Choose the unanswered option" \
+    --reason "captain unanswered choice pending" --repo sample --origin "$id" >/dev/null \
+    || fail "could not register the unanswered captain-held task"
+  run_captain "$home" complete "$id" sample-archived-unanswered-call >/dev/null \
+    || fail "completion failed for the unanswered hold"
+  tasks_in "$home" "done" sample-archived-unanswered-call >/dev/null \
+    || fail "could not close the unanswered hold out of band"
+  assert_grep "sample-archived-unanswered-call" "$archive" \
+    "Done retention did not archive the unanswered close"
+  if run_captain "$home" verify "$id" > "$home/unanswered-verify.out" 2> "$home/unanswered-verify.err"; then
+    fail "verify accepted an archived captain call closed with no recorded answer"
+  fi
+  if run_teardown "$home" "$id" > "$home/unanswered-teardown.out" 2> "$home/unanswered-teardown.err"; then
+    fail "teardown proceeded while an archived captain call had no recorded answer"
+  fi
+  assert_present "$home/state/$id.meta" "refused teardown removed investigation metadata"
+
+  printf 'decisions_reviewed=1\ndecision_keys=sample-never-held-call\n' >> "$home/state/$id.meta"
+  if run_captain "$home" verify "$id" > "$home/missing-verify.out" 2> "$home/missing-verify.err"; then
+    fail "verify accepted an attested captain call that exists nowhere"
+  fi
+  assert_grep "sample-never-held-call" "$home/missing-verify.err" \
+    "the refusal did not name the missing captain call"
+  pass "an answered captain call archived by Done retention still satisfies the completion gate"
+}
+
+# The archive location is not always beside the backlog: tasks-axi honours a
+# [markdown] archive set only in the user-level $HOME/.tasks-axi/config.toml, and
+# resolves a relative value against the backlog root. The completion gate must
+# resolve it the same way, or an answered call retention moved there reads as
+# absent and teardown is refused.
+archived_answer_config_case() {
+  local scope=$1 encoded=$2 decoded=$3 case_name=$4 hold_home axi_home archive id config_file producer_value
+  hold_home=$(make_home "archived-answer-$case_name")
+  cat > "$hold_home/fakebin/python3" <<'SH'
+#!/bin/sh
+printf 'unexpected Python invocation\n' >> "$FM_HOME/python-invocations"
+exit 99
+SH
+  chmod +x "$hold_home/fakebin/python3"
+  axi_home="$hold_home/axi-home"
+  mkdir -p "$axi_home/.tasks-axi"
+  cat > "$hold_home/.tasks.toml" <<'EOF'
+backend = "markdown"
+
+[markdown]
+path = "data/backlog.md"
+done_keep = 10
+EOF
+  producer_value="'$decoded'"
+  config_file=
+  case "$scope" in
+    root)
+      printf '[markdown]\narchive = "data/user-decoy.md"\n' > "$axi_home/.tasks-axi/config.toml"
+      config_file="$hold_home/.tasks.toml"
+      printf 'archive = %s\n' "$producer_value" >> "$config_file"
+      ;;
+    user)
+      config_file="$axi_home/.tasks-axi/config.toml"
+      printf '[markdown]\narchive = %s\n' "$producer_value" > "$config_file"
+      ;;
+    default) : ;;
+  esac
+  archive="$hold_home/$decoded"
+  id=sample-userconfig-review
+  mkdir -p "$hold_home/data/$id"
+  HOME="$axi_home" tasks_in "$hold_home" add "$id" "Investigate the user-config sample" --kind scout --repo sample --start >/dev/null \
+    || fail "could not create the user-config origin"
+  write_origin_meta "$hold_home" "$id"
+  printf 'done: report complete\n' > "$hold_home/state/$id.status"
+  printf '# User-config sample review\n\nOne captain choice remains.\n' > "$hold_home/data/$id/report.md"
+  HOME="$axi_home" run_captain "$hold_home" hold sample-userconfig-call --title "Choose the relocated option" \
+    --reason "captain relocated choice pending" --repo sample --origin "$id" >/dev/null \
+    || fail "could not register the captain-held task"
+  HOME="$axi_home" run_captain "$hold_home" complete "$id" sample-userconfig-call >/dev/null \
+    || fail "completion failed before the answer"
+  printf 'Captain chose the relocated option.\n' > "$hold_home/userconfig-decision.txt"
+  HOME="$axi_home" run_captain "$hold_home" answer sample-userconfig-call --decision-file "$hold_home/userconfig-decision.txt" >/dev/null \
+    || fail "answer could not close the captain-held task"
+
+  perl -0pi -e 's/done_keep = 10/done_keep = 0/' "$hold_home/.tasks.toml"
+  HOME="$axi_home" tasks_in "$hold_home" add sample-userconfig-trigger "Trigger Done retention" --kind ship --repo sample >/dev/null
+  HOME="$axi_home" tasks_in "$hold_home" "done" sample-userconfig-trigger >/dev/null \
+    || fail "could not trigger Done retention"
+  assert_present "$archive" "Done retention did not write the user-configured archive"
+  assert_grep "sample-userconfig-call" "$archive" \
+    "Done retention did not archive the answered call to the user-configured location"
+  if [ -n "$config_file" ]; then
+    FM_TEST_ARCHIVE_VALUE="$encoded" perl -pi -e 's/^archive = .*/"archive = " . $ENV{FM_TEST_ARCHIVE_VALUE}/e' "$config_file"
+  fi
+  if HOME="$axi_home" tasks_in "$hold_home" show sample-userconfig-call >/dev/null 2>&1; then
+    fail "the archived call is still shown from the live backlog, so the fixture reproduces nothing"
+  fi
+
+  HOME="$axi_home" run_captain "$hold_home" verify "$id" >/dev/null 2> "$hold_home/userconfig-verify.err" \
+    || fail "verify refused an answered call archived to the user-configured location: $(cat "$hold_home/userconfig-verify.err")"
+  HOME="$axi_home" run_captain "$hold_home" complete "$id" sample-userconfig-call >/dev/null 2> "$hold_home/userconfig-complete.err" \
+    || fail "complete refused an answered call archived to the user-configured location: $(cat "$hold_home/userconfig-complete.err")"
+  HOME="$axi_home" run_teardown "$hold_home" "$id" >/dev/null 2> "$hold_home/userconfig-teardown.err" \
+    || fail "teardown refused a scout whose answered call was archived to the user-configured location: $(cat "$hold_home/userconfig-teardown.err")"
+  assert_absent "$hold_home/python-invocations" "archive lookup introduced a Python requirement"
+  pass "an answered captain call in a TOML-configured archive satisfies verify, complete and teardown: $case_name"
+}
+
+test_archived_answer_in_a_user_configured_archive_satisfies_the_gate() {
+  archived_answer_config_case user '"data/relocated-done-archive.md"' data/relocated-done-archive.md userconfig
+}
+
+test_archive_toml_string_paths() {
+  local scope
+  for scope in root user; do
+    archived_answer_config_case "$scope" '"data/review#1.md" # trailing comment' 'data/review#1.md' "$scope-hash"
+    archived_answer_config_case "$scope" "'data/literal#1.md' # trailing comment" 'data/literal#1.md' "$scope-literal"
+    archived_answer_config_case "$scope" '"data/review\u0023\U000000e9.md"' 'data/review#é.md' "$scope-unicode"
+    archived_answer_config_case "$scope" '"data/review\\batch\"#1.md"' 'data/review\batch"#1.md' "$scope-escapes"
+    # shellcheck disable=SC2016 # Command substitution must remain literal archive-path test data.
+    archived_answer_config_case "$scope" '"data/$(printf wrong)#1.md"' 'data/$(printf wrong)#1.md' "$scope-shell-data"
+  done
+}
+
+test_archive_default_path() {
+  archived_answer_config_case default '' data/done-archive.md default
+}
+
+test_archive_review_boundaries() {
+  test_archive_toml_string_paths
+  test_archive_default_path
+  test_archived_answered_hold_still_satisfies_the_gate
+  test_archived_answer_in_a_user_configured_archive_satisfies_the_gate
+}
+
+if [ -n "${FM_TEST_ONLY:-}" ]; then
+  "$FM_TEST_ONLY"
+  exit
+fi
+
 test_hold_reason_round_trips_awkward_characters
 test_hold_origins_precede_backend_holds
 test_historical_self_inventory_has_workable_repair
@@ -4698,3 +4881,7 @@ test_verify_names_the_unresolvable_legacy_id_once
 test_verify_resolves_a_pre_collapse_key_through_its_derived_marker
 test_captain_hold_mutations_address_the_beads_backend
 test_hold_creates_a_captain_row_when_beads_requires_due_without_custom_type
+test_archived_answered_hold_still_satisfies_the_gate
+test_archived_answer_in_a_user_configured_archive_satisfies_the_gate
+test_archive_toml_string_paths
+test_archive_default_path

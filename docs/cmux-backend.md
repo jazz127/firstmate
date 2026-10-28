@@ -52,11 +52,11 @@ Verify setup by spawning a small task and confirming metadata contains `backend=
 
 `CMUX_WORKSPACE_ID` is the primary cmux runtime marker.
 `CMUX_SOCKET_PATH` is not sufficient because operators may set it outside cmux.
-Detection checks tmux first, then Herdr, then cmux, so a multiplexer nested inside cmux remains the active backend.
+[Backend selection order](configuration.md#backend-selection-order) owns marker precedence, so a multiplexer nested inside cmux remains the active backend.
 
 cmux's bundled Claude wrapper can remove every `CMUX_*` variable when its internal socket probe fails, including in Password mode.
 On macOS only, detection therefore falls back first to `__CFBundleIdentifier=com.cmuxterm.app`, then to process ancestry reaching the running cmux app.
-Those fallbacks are consulted only when neither tmux nor Herdr already won.
+Those fallbacks are consulted only when no higher-priority runtime marker already won.
 An environment-scrubbed or launchd-reparented process with no reliable marker is not auto-detected.
 
 Auto-detection selects only the backend.
@@ -101,6 +101,7 @@ Grok alone retains its isolated rendered-tail fallback.
 
 A task workspace's last surface cannot be closed directly.
 Cleanup owns the whole workspace and uses `close-workspace`.
+It requires a readable inventory proving the workspace absent; unreadable inventory, ambiguous identity, or a surviving workspace stops teardown before backlog closure, worktree return, or record retirement, including under `--force`.
 cmux also refuses to remove the only workspace in a macOS window while returning a misleading success response.
 When the task is last in its window, Firstmate creates one unfocused unnamed sibling workspace in that same window, closes the task workspace, and leaves the window with cmux's fresh default workspace.
 The sibling never carries an `fm-` title and is ignored by recovery.

@@ -312,7 +312,7 @@ fm_backend_cmux_container_ensure() {
 # identical shared-namespace collision fix (docs/zellij-backend.md
 # "Home-scoped tab titles").
 fm_backend_cmux_home_label() {
-  fm_backend_hometag
+  fm_backend_hometag "$FM_ROOT"
 }
 
 fm_backend_cmux_scoped_title() {  # <fm-task-label>
@@ -599,9 +599,23 @@ fm_backend_cmux_window_of_workspace() {  # <workspace_id> -> "<window_id> <count
   done < <(printf '%s' "$wins" | jq -r '.[]? | .id' 2>/dev/null)
 }
 
-# fm_backend_cmux_kill: remove the task's whole workspace, best-effort (mirrors
-# every other backend's `kill` `|| true` contract). A cmux task owns one
-# workspace, so teardown reclaims that workspace and all of its surfaces.
+fm_backend_cmux_workspace_absent() {  # <workspace-id> [title]
+  local windows window list
+  windows=$(fm_backend_cmux_cli list-windows --json --id-format uuids 2>/dev/null) || return 1
+  printf '%s' "$windows" | jq -e 'type == "array" and all(.[]; (.id | type) == "string" and (.id | length) > 0)' >/dev/null 2>&1 || return 1
+  while IFS= read -r window; do
+    [ -n "$window" ] || continue
+    list=$(fm_backend_cmux_cli workspace list --json --id-format uuids --window "$window" 2>/dev/null) || return 1
+    printf '%s' "$list" | jq -e --arg id "$1" --arg title "${2:-}" '
+      (.workspaces | type == "array") and
+      all(.workspaces[]; (.id | type) == "string" and .id != $id and ($title == "" or .title != $title))' >/dev/null 2>&1 || return 1
+  done <<EOF
+$(printf '%s' "$windows" | jq -r '.[].id')
+EOF
+}
+
+# fm_backend_cmux_kill: remove the task's whole workspace and confirm its absence.
+# A cmux task owns one workspace and all of its surfaces.
 #
 # The selected-workspace teardown bug (docs/cmux-backend.md "Closing the last
 # workspace in a window"): cmux keeps every window at >=1 workspace, so
@@ -617,19 +631,22 @@ fm_backend_cmux_window_of_workspace() {  # <workspace_id> -> "<window_id> <count
 # recovery/list_live ignore it) - cmux's own "closed the last tab" outcome.
 fm_backend_cmux_kill() {  # <target> [unused] [expected-label]
   local expected_label=${3:-} wsid wininfo win count
+  fm_backend_cmux_parse_target "$1" || return 1
   if [ -n "$expected_label" ]; then
-    fm_backend_cmux_target_ready "$1" "$expected_label" || return 0
-  else
-    fm_backend_cmux_parse_target "$1" || return 0
+    if ! fm_backend_cmux_target_ready "$1" "$expected_label"; then
+      fm_backend_cmux_workspace_absent "$FM_BACKEND_CMUX_WORKSPACE" "$(fm_backend_cmux_scoped_title "$expected_label")"
+      return $?
+    fi
   fi
   wsid=$FM_BACKEND_CMUX_WORKSPACE
   wininfo=$(fm_backend_cmux_window_of_workspace "$wsid")
   win=${wininfo%% *}
   count=${wininfo##* }
   if [ -n "$win" ] && [ "$count" = 1 ]; then
-    fm_backend_cmux_cli new-workspace --window "$win" --focus false --id-format uuids >/dev/null 2>&1 || true
+    fm_backend_cmux_cli new-workspace --window "$win" --focus false --id-format uuids >/dev/null 2>&1 || return 1
   fi
   fm_backend_cmux_cli close-workspace --workspace "$wsid" >/dev/null 2>&1 || true
+  fm_backend_cmux_workspace_absent "$wsid"
 }
 
 # fm_backend_cmux_list_live: recovery/orphan discovery. Lists every workspace

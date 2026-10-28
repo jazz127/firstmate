@@ -148,7 +148,7 @@ fm_backend_zellij_session() {
 # matching; task meta already records absolute worktree paths, so repo
 # relocation is already outside the supported recovery contract.
 fm_backend_zellij_home_label() {
-  fm_backend_hometag
+  fm_backend_hometag "$FM_ROOT"
 }
 
 # fm_backend_zellij_scoped_title: the actual tab title a NEW task's tab is
@@ -587,8 +587,7 @@ fm_backend_zellij_send_text_submit() {  # <target> <text> <retries> <enter-sleep
     "$target" "$retries" "$sleep_s" "$expected_label"
 }
 
-# fm_backend_zellij_kill: remove the task's tab, best-effort (mirrors
-# tmux-kill-window's/herdr-pane-close's `|| true` contract). Verified: unlike
+# fm_backend_zellij_kill: remove the task's tab and confirm its absence. Unlike
 # herdr, closing a zellij tab's only PANE does NOT close the tab itself (an
 # empty tab survives in list-tabs); `close-tab-by-id` on a live tab DOES
 # cleanly remove both the pane and the tab in one call, verified to need no
@@ -597,28 +596,33 @@ fm_backend_zellij_send_text_submit() {  # <target> <text> <retries> <enter-sleep
 # passes the recorded tab id and expected tab label for already-empty ghost
 # tabs. Any tab id is verified against the expected label when one is provided.
 fm_backend_zellij_kill() {  # <target> [tab_id] [expected_label]
-  fm_backend_zellij_parse_target "$1" || return 0
-  fm_backend_zellij_session_exists "$FM_BACKEND_ZELLIJ_SESSION" || return 0
-  local tab_id fallback_tab_id=${2:-} expected_label=${3:-}
-  tab_id=$(fm_backend_zellij_tab_for_pane "$FM_BACKEND_ZELLIJ_SESSION" "$FM_BACKEND_ZELLIJ_PANE" 2>/dev/null)
-  if [ -n "$tab_id" ] && [ -n "$expected_label" ] && ! fm_backend_zellij_tab_matches_label "$FM_BACKEND_ZELLIJ_SESSION" "$tab_id" "$expected_label"; then
-    tab_id=
+  fm_backend_zellij_parse_target "$1" || return 1
+  local tab_id fallback_tab_id=${2:-} expected_label=${3:-} sessions panes tabs
+  sessions=$(zellij list-sessions --short --no-formatting 2>/dev/null) || return 1
+  printf '%s\n' "$sessions" | grep -qxF "$FM_BACKEND_ZELLIJ_SESSION" || return 0
+  panes=$(fm_backend_zellij_cli "$FM_BACKEND_ZELLIJ_SESSION" action list-panes --json 2>/dev/null) || return 1
+  printf '%s' "$panes" | jq -e 'type == "array" and all(.[]; (.id | type) == "number" and (.tab_id | type) == "number" and (.is_plugin | type) == "boolean")' >/dev/null 2>&1 || return 1
+  tab_id=$(printf '%s' "$panes" | jq -r --argjson p "$FM_BACKEND_ZELLIJ_PANE" '
+    [.[] | select(.id == $p and .is_plugin == false)] |
+    if length > 1 then error("ambiguous pane") elif length == 1 then
+      (.[0].tab_id // error("missing tab id")) else empty end' 2>/dev/null) || return 1
+  if [ -z "$tab_id" ]; then
+    case "$fallback_tab_id" in
+      ''|*[!0-9]*) return 0 ;;
+      *) tab_id=$fallback_tab_id ;;
+    esac
+    tabs=$(fm_backend_zellij_cli "$FM_BACKEND_ZELLIJ_SESSION" action list-tabs --json 2>/dev/null) || return 1
+    printf '%s' "$tabs" | jq -e 'type == "array" and all(.[]; (.tab_id | type) == "number")' >/dev/null 2>&1 || return 1
+    printf '%s' "$tabs" | jq -e --argjson t "$tab_id" 'any(.[]; .tab_id == $t)' >/dev/null 2>&1 || return 0
   fi
-  case "$fallback_tab_id" in
-    ''|*[!0-9]*) ;;
-    *)
-      if [ -z "$tab_id" ]; then
-        if [ -z "$expected_label" ] || fm_backend_zellij_tab_matches_label "$FM_BACKEND_ZELLIJ_SESSION" "$fallback_tab_id" "$expected_label"; then
-          tab_id=$fallback_tab_id
-        fi
-      fi
-      ;;
-  esac
-  if [ -n "$tab_id" ]; then
-    fm_backend_zellij_cli "$FM_BACKEND_ZELLIJ_SESSION" action close-tab-by-id "$tab_id" >/dev/null 2>&1 || true
-  elif [ -z "$expected_label" ]; then
-    fm_backend_zellij_cli "$FM_BACKEND_ZELLIJ_SESSION" action close-pane --pane-id "$FM_BACKEND_ZELLIJ_PANE" >/dev/null 2>&1 || true
+  if [ -n "$expected_label" ]; then
+    fm_backend_zellij_tab_matches_label "$FM_BACKEND_ZELLIJ_SESSION" "$tab_id" "$expected_label" || return 1
   fi
+  fm_backend_zellij_cli "$FM_BACKEND_ZELLIJ_SESSION" action close-tab-by-id "$tab_id" >/dev/null 2>&1 || true
+  tabs=$(fm_backend_zellij_cli "$FM_BACKEND_ZELLIJ_SESSION" action list-tabs --json 2>/dev/null) || return 1
+  printf '%s' "$tabs" | jq -e --argjson t "$tab_id" 'type == "array" and all(.[]; (.tab_id | type) == "number" and .tab_id != $t)' >/dev/null 2>&1 || return 1
+  panes=$(fm_backend_zellij_cli "$FM_BACKEND_ZELLIJ_SESSION" action list-panes --json 2>/dev/null) || return 1
+  printf '%s' "$panes" | jq -e --argjson p "$FM_BACKEND_ZELLIJ_PANE" 'type == "array" and all(.[]; (.id | type) == "number" and (.is_plugin | type) == "boolean" and (.is_plugin != false or .id != $p))' >/dev/null 2>&1
 }
 
 # fm_backend_zellij_list_live: recovery/orphan discovery. Lists every tab in

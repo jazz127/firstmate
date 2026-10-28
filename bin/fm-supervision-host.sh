@@ -148,7 +148,8 @@
 #
 # STATE (all under state/, owned here): .supervision-host (this host's pid and
 # the processes it runs), .supervision-host-engine (the engine conversation:
-# engine, model, session id, main-session key, turn count, running cost),
+# engine, model, session id, main-session key, turn count, running cost,
+# ended epoch, and compacted episode's ended epoch),
 # .supervision-host-turn and .supervision-host-receipts (the current turn's
 # report scope and the reports it recorded), .supervision-host-prompt and
 # .supervision-host-wake (the prompt and wake text of the current turn),
@@ -167,7 +168,8 @@
 # the boundary), FM_SUPERVISION_HOST_TURN_TIMEOUT (1200), FM_SUPERVISION_HOST_ROTATE_TURNS (20:
 # a new engine conversation after this many turns; every main session start
 # also opens a new one), FM_SUPERVISION_HOST_READY_TIMEOUT (25: how long a
-# successor cycle may take to verify), FM_SUPERVISION_HOST_POLL (1).
+# successor cycle may take to verify), FM_SUPERVISION_HOST_POLL (1),
+# FM_WARM_COMPACT_TICK (60: seconds between parked compaction checks).
 # Park duration uses Bash's process-relative SECONDS counter (including Bash
 # 3.2), while durable timestamps still use epoch time. This is not a portable
 # monotonic-clock guarantee. Arm exit probes use ordinary 0.5-second child
@@ -407,6 +409,8 @@ activate() {
 # Stop a running engine turn: TERM the bounded process, whose watchdog passes
 # it on and KILLs after its grace, then let the turn's own poller reap the
 # engine's descendants before giving up on it.
+# Setup can publish the engine pid after cancellation starts, so keep checking
+# its identity record and allow the full reap window after signalling it.
 stop_engine_turn() {
   local pid='' identity='' signalled='' i limit
   limit=$(( (ENGINE_GRACE + 10) * 10 ))
@@ -548,11 +552,8 @@ stream_ready_line() {
   READY_PENDING=0
 }
 
-# Warm-cache compaction (bin/fm-warm-compact-lib.sh owns the gate and the
-# guards). The park is the primary's idle episode: the owner starts the host at
-# the primary's turn end and the host exits when main is needed. The engine
-# conversation's episode is the time since its last handled turn. Each is
-# compacted at most once per episode, and neither result reaches the close.
+# Warm-cache compaction: docs/configuration.md owns the gate and episode
+# guards; bin/fm-warm-compact-lib.sh enforces them while this host is parked.
 WARM_COMPACT_LAST_TICK=-1
 WARM_COMPACT_PRIMARY_DONE=0
 WARM_COMPACT_VERDICT=
@@ -587,8 +588,8 @@ warm_compact_tick() {
 }
 
 # Run the engine compaction as a bounded background turn the cleanup can stop,
-# and abandon it the moment the arm closes or the park boundary arrives, so a
-# real wake never waits behind it. Sets WARM_COMPACT_VERDICT, empty when abandoned.
+# and cancel it when the arm closes or the park boundary arrives, reaping it
+# before wake handling resumes. Sets WARM_COMPACT_VERDICT, empty when abandoned.
 run_warm_compact_engine() {  # <idle-seconds> <session> <compacted 0|1>
   local verdict_file abandoned=0
   WARM_COMPACT_VERDICT=

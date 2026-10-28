@@ -50,7 +50,7 @@ Until they land, their current behavior stays as described in their own owners.
 | The arm owners | Each primary's existing arm owner | Runs the host for a home that runs it and delivers a handed-back wake to main; see [Arm owners](#arm-owners). |
 | The engine | `bin/fm-supervision-engine-lib.sh` | Owns the home gate, including the default on Claude and the opt-out, the verified-engine list, and one bounded engine turn, including the reap of engine tool processes that outlive it. |
 | Row eligibility and the offer rule | `bin/fm-branch-dispatch.mjs` | The command entry to `.pi/extensions/lib/fm-branch-dispatch.ts`, so the host and the Pi extension compute branch-claimable rows, their task scope, and whether the branch may take a close (`branchOfferForWake`) from one owner; it also renders the wake message with the same away-posture tail, or the dialog mirror at its head. |
-| Warm-cache compaction | `bin/fm-warm-compact-lib.sh` | While parked, the host compacts the idle primary and its idle engine conversation once per idle episode when the home opted in; [configuration.md](configuration.md#warm-cache-compaction-configwarm-compact) owns the gate and guards. |
+| Warm-cache compaction | `bin/fm-warm-compact-lib.sh` | [configuration.md](configuration.md#warm-cache-compaction-configwarm-compact) owns the opt-in gate and idle-episode guards. |
 | The grant and the drain | `bin/fm-wake-grant.sh` | Publishes the branch's rows bound to the host's own process; [watcher-continuity.md](watcher-continuity.md#per-actor-acknowledgement) owns the per-actor drain and acknowledgement the engine runs. |
 | The prompt | `bin/fm-branch-prompt.sh` | Emits the same byte-stable prompt the Pi branch runs; each wake names its host's report surface. |
 | The report surface | `bin/fm-branch-report.sh` | The command twin of the Pi branch's `fm_branch_report` tool, with the same task scoping plus an exact claimed-row binding; see [The report surface](#the-report-surface). |
@@ -381,12 +381,15 @@ Today the only verified engine is Claude's print mode, measured on Claude Code 2
 
 - `--output-format json` carries the error flag, turn count, usage, and the tool's own cost estimate.
 - On a resumed conversation that cost is the conversation's running total, while the usage and turn count are the turn's own.
-  So the engine lib derives each turn's cost from the total the host recorded after the previous turn.
+  So the engine lib derives each turn's cost from the previously recorded total.
+- Engine compaction usage is logged separately from wake usage.
+  The host preserves a compaction result's independently valid cumulative cost even when the attempt fails or is abandoned, without marking an abandoned episode complete.
+  A valid billed total comes from a `result` with a finite, nonnegative `total_cost_usd`; invalid or missing billing is reported as `unknown` and leaves the recorded total unchanged.
 - The host counts a turn successful only when that result is complete:
   - `type` is `result`.
   - `subtype` is `success`.
   - `is_error` is false.
-  - `total_cost_usd`, `num_turns`, and the four `usage` token counts (input, cache read, cache creation, output) are finite numbers.
+  - `total_cost_usd` is finite and nonnegative; `num_turns` and the four `usage` token counts (input, cache read, cache creation, output) are finite numbers.
 - Any other result fails the turn and hands its wake to main.
 
 **Tool process reaping**

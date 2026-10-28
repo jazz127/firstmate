@@ -3,27 +3,10 @@
 # supervision host's engine conversation (one owner of both).
 #
 # Sourced, never executed. The supervision host (bin/fm-supervision-host.sh)
-# calls it while it is parked, so the trigger lives on the Claude adapter path.
-# docs/configuration.md "Warm-cache compaction" owns the home gate and its
-# tunables.
-#
-# WHY. A session that sits idle past its prompt-cache lifetime re-writes its
-# whole context at the cache-write price on the next turn. Compacting while the
-# cache is still warm reads the old context at the read price, so the next turn
-# writes only the summary.
-#
-# THE GATE (config/warm-compact). Absent means off. A present file enables it;
-# its optional lines are
-#   idle-seconds=<n>          idle time before a session is due (default 2700)
-#   min-context-tokens=<n>    context size below which no session is due (80000)
-# Blank lines and lines starting with # are ignored; an unusable value keeps
-# its default.
-#
-# A DUE SESSION is idle for at least idle-seconds, holds at least
-# min-context-tokens of context (the last request's input + cache_read +
-# cache_creation usage in its transcript), and has not been compacted in this
-# idle episode. fm_warm_compact_verdict names the first guard that holds a
-# session back; the actions below act only on "due".
+# calls it while it is parked.
+# docs/configuration.md "Warm-cache compaction" owns the home gate, tunables,
+# and idle-episode guards. fm_warm_compact_verdict names the first guard that
+# holds a session back; the actions below act only on "due".
 #
 # THE PRIMARY. fm_warm_compact_primary types /compact through the backend's
 # verified submit primitive (fm_backend_send_text_submit, the one the away-mode
@@ -33,8 +16,8 @@
 # THE ENGINE. fm_warm_compact_engine resumes the engine conversation with
 # /compact as a bounded headless turn (fm_supervision_engine_turn).
 #
-# A compaction is internal housekeeping: these functions print a verdict with optional engine usage
-# and write nothing the captain sees.
+# These functions print a verdict with optional engine usage for the host.
+# FM_WARM_COMPACT_ENGINE_TIMEOUT bounds the headless turn (default 300 seconds).
 
 FM_WARM_COMPACT_IDLE_DEFAULT=2700
 FM_WARM_COMPACT_MIN_DEFAULT=80000

@@ -376,7 +376,8 @@ Compacting while the cache is still warm reads the old context at the read price
 The feature is off when the file is absent.
 The file is local to each home and is not inherited.
 The host reads it at every check, so creating or removing it needs no restart.
-It acts only on a home that runs the [supervision host](#supervision-host-configsupervision-host) beside a Claude primary, because the host's park is the primary's idle episode.
+It runs while the [supervision host](#supervision-host-configsupervision-host) is parked.
+Interactive primary compaction is supported only for Claude; the host's Claude engine conversation can be compacted beside any supported primary.
 
 The file may be empty or hold these lines, each optional:
 
@@ -391,21 +392,22 @@ A session is compacted when all of these hold:
 - The home opted in.
 - The session has been idle for `idle-seconds`: the primary since its turn ended, the engine conversation since its last handled turn.
 - Its context is at least `min-context-tokens`.
-- It was not already compacted in this idle episode.
-  The host remembers a primary compaction for one park.
-  It records an engine compaction in the engine record, so a later host does not repeat it.
+- The idle episode has not already been marked attempted.
+  The host remembers a primary submit attempt for one park, including an unconfirmed submit.
+  It records a finished engine attempt, successful or failed, in the engine record, so a later host does not repeat it.
 - For the engine conversation, the next turn would resume it: the same engine, model, and prompt key, and below the rotation limit.
-  An abandoned compaction is not recorded, so a later check retries it.
+  An abandoned engine compaction does not mark the episode attempted, so a later check can retry it.
 - For the primary, the agent reads idle and the composer reads provably empty.
   A busy agent, a non-empty composer, or an unproven state defers the compaction; nothing is typed.
 
 The primary receives `/compact` through the backend's verified submit primitive (`fm_backend_send_text_submit`), the one the away-mode daemon injects through.
 The engine conversation receives `/compact` as one resumed, bounded headless turn.
-A compaction is housekeeping: it adds no wake, outcome, or close line, and it is recorded only in the host's log.
+A compaction is housekeeping: it adds no wake, outcome, or close line.
+The host logs attempts and preserves engine billing separately from episode completion under the [engine result and cost contract](supervision-host.md#claude-print-mode-behavior).
 A compacted primary still picks up pending wakes and decisions from disk, because a wake is a record the next drain reads, not conversation state.
 
 This feature does not set `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE` or any other autocompact setting.
-`bin/fm-warm-compact-lib.sh` owns the guards, with coverage in [`tests/fm-warm-compact.test.sh`](../tests/fm-warm-compact.test.sh) and the opt-in live guard [`tests/fm-warm-compact-herdr-live-e2e.test.sh`](../tests/fm-warm-compact-herdr-live-e2e.test.sh).
+`bin/fm-warm-compact-lib.sh` enforces the guards, with coverage in [`tests/fm-warm-compact.test.sh`](../tests/fm-warm-compact.test.sh), [`tests/fm-supervision-host.test.sh`](../tests/fm-supervision-host.test.sh), and the opt-in live guard [`tests/fm-warm-compact-herdr-live-e2e.test.sh`](../tests/fm-warm-compact-herdr-live-e2e.test.sh).
 
 ## Backlog backend (.tasks.toml / config/backlog-backend)
 

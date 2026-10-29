@@ -8,8 +8,9 @@
 # atomically refresh parent-side cached copies of remote home summaries under
 # state/secondmate-summary-cache, and its open-decision read refreshes each
 # task's state/.<id>.snapshot-open-decisions-cursor (fm-classify-lib.sh's
-# status_open_decisions_snapshot); those observational cache writes are its only
-# fleet-state mutation.
+# status_open_decisions_snapshot). Local current-state reads may also record
+# readiness through the head-pinning gate owned by bin/fm-dod-lib.sh.
+# Those cache and readiness writes are its only fleet-state mutations.
 # Remote collection starts after task metadata capture and overlaps local reads
 # and assembly under one shared collection budget.
 #

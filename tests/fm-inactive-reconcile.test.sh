@@ -294,6 +294,118 @@ test_unpushed_ci_ready_done_is_not_published() {
   pass "unpushed CI-ready ship done: is not published upstream"
 }
 
+test_main_local_done_preserves_caller_lock_and_done_head() {
+  local variant project worker sha recorded gen
+  for variant in new pinned advanced malformed; do
+    make_world "main-local-$variant"
+    project="$MAIN/projects/local"
+    worker="$WORLD/worker"
+    fm_git_worktree "$project" "$worker" fm/child
+    git -C "$worker" commit -q --allow-empty -m approved
+    sha=$(git -C "$worker" rev-parse HEAD)
+    recorded=$sha
+    fm_write_meta "$MAIN/state/child.meta" \
+      'window=%1' "worktree=$worker" "project=$project" \
+      'backend=tmux' 'harness=claude' 'kind=ship' 'mode=local-only' 'spawn_gen=local-one'
+    case "$variant" in
+      malformed) recorded=${sha:0:8} ;;
+      advanced) git -C "$worker" commit -q --allow-empty -m later ;;
+    esac
+    if [ "$variant" != new ]; then
+      printf 'local_done_head=%s\n' "$recorded" >> "$MAIN/state/child.meta"
+    fi
+    printf 'done: approved local work\n' > "$MAIN/state/child.status"
+    gen=$(bash "$ROOT/bin/fm-busy-event.sh" arm "$MAIN/state" child)
+    bash "$ROOT/bin/fm-busy-event.sh" apply "$MAIN/state" child idle --gen "$gen" \
+      --source claude-hook --event stop || fail 'could not mark the fixture idle'
+    cat > "$WORLD/fakebin/tmux" <<'SH'
+#!/usr/bin/env bash
+case "${1:-}" in
+  list-panes|display-message) printf '%%1\n' ;;
+  capture-pane) printf 'idle\n> \n' ;;
+esac
+SH
+    printf '#!/usr/bin/env bash\nexit 0\n' > "$WORLD/fakebin/no-mistakes"
+    cat > "$WORLD/fakebin/fm-crew-state.sh" <<'SH'
+#!/usr/bin/env bash
+set -eu
+. "$FM_TEST_CODE_ROOT/bin/fm-wake-lib.sh"
+lock=$(fm_meta_lock_path "$FM_STATE_OVERRIDE/$1.meta")
+owner=$(cat "$lock/pid")
+kill -0 "$owner"
+if fm_lock_try_acquire "$lock"; then
+  fm_lock_release "$lock"
+  exit 91
+fi
+result=$(bash "$FM_TEST_CODE_ROOT/bin/fm-crew-state.sh" "$@")
+[ "$(cat "$lock/pid")" = "$owner" ]
+printf '%s\n' "$result" > "$FM_ROOT_OVERRIDE/lock-checked"
+printf '%s\n' "$result"
+SH
+    chmod +x "$WORLD/fakebin/"*
+    age "$MAIN/state/child.meta" "$MAIN/state/child.status"
+    FM_TEST_CODE_ROOT="$ROOT" run_reconcile "$MAIN" --startup \
+      || fail "$variant main-home cadence failed"
+    [ -s "$WORLD/root/lock-checked" ] || fail "$variant state read lost its caller's lock"
+    [ ! -e "$MAIN/state/.meta-child.lock" ] || fail "$variant caller did not release its lock"
+    [ "$(sed -n 's/^local_done_head=//p' "$MAIN/state/child.meta")" = "$recorded" ] \
+      || fail "$variant readiness changed the accepted done head"
+    case "$variant" in
+      new|pinned)
+        grep -Fq 'state: done · source: status-log' "$WORLD/root/lock-checked" \
+          || fail "$variant local completion was blocked under the caller's lock"
+        [ "$(wake_count "$MAIN" 'inactive-outcome:')" = 1 ] || fail "$variant cadence did not queue presentation"
+        [ "$(outcome_count "$MAIN" pending)" = 1 ] || fail "$variant cadence did not retain its receipt"
+        age "$MAIN/state/child.meta" "$MAIN/state/child.status"
+        FM_TEST_CODE_ROOT="$ROOT" run_reconcile "$MAIN" --startup
+        [ "$(wake_count "$MAIN" 'inactive-outcome:')" = 1 ] || fail "$variant cadence duplicated the wake"
+        [ "$(outcome_count "$MAIN" pending)" = 1 ] || fail "$variant cadence duplicated the receipt"
+        ;;
+      advanced|malformed)
+        grep -Fq 'state: blocked · source: status-log' "$WORLD/root/lock-checked" \
+          || fail "$variant local completion was accepted under the caller's lock"
+        grep -Fq 'differs from the recorded head' "$WORLD/root/lock-checked" \
+          || fail "$variant local completion was blocked for an unrelated reason"
+        ! grep -Fq 'inactive-outcome:' "$MAIN/state/.wake-queue" 2>/dev/null \
+          || fail "$variant cadence queued unapproved work"
+        [ "$(outcome_count "$MAIN" pending)" = 0 ] || fail "$variant cadence recorded unapproved work"
+        ;;
+    esac
+  done
+  pass 'main-home cadence preserves its metadata lock and immutable local readiness'
+}
+
+# Local readiness is recorded by the real ledger pass while it owns metadata.
+test_local_done_head_is_pinned_before_parent_delivery() {
+  local project worker sha
+  make_world local-done-head
+  bind_secondmate local
+  project="$MATE/projects/local"
+  worker="$WORLD/worker"
+  fm_git_worktree "$project" "$worker" fm/child
+  git -C "$worker" commit -q --allow-empty -m approved
+  sha=$(git -C "$worker" rev-parse HEAD)
+  fm_write_meta "$MATE/state/child.meta" \
+    "window=firstmate:fm-child" "worktree=$worker" "project=$project" \
+    'harness=codex' 'kind=ship' 'mode=local-only' 'yolo=off' 'spawn_gen=local-one'
+  printf 'done: approved local work\n' > "$MATE/state/child.status"
+  FM_FAKE_CREW_STATE=busy run_reconcile "$MATE"
+  [ "$(sed -n 's/^local_done_head=//p' "$MATE/state/child.meta")" = "$sha" ] \
+    || fail 'the ledger scan did not pin the local done head'
+  [ "$(outcome_count "$MATE" reported)" = 1 ] || fail 'local done report was not delivered'
+  grep -Fq 'child child done: approved local work' "$MAIN/state/mate.status" \
+    || fail 'the parent did not receive the local done report'
+  run_report "$MATE" child || fail 'repeated locked report failed'
+  [ "$(outcome_count "$MATE" reported)" = 1 ] || fail 'the same done report was delivered twice'
+  git -C "$worker" commit -q --allow-empty -m later
+  printf 'done: later local work\n' >> "$MATE/state/child.status"
+  FM_FAKE_CREW_STATE=busy run_reconcile "$MATE"
+  [ "$(sed -n 's/^local_done_head=//p' "$MATE/state/child.meta")" = "$sha" ] \
+    || fail 'a later head replaced the first readiness pin'
+  [ "$(outcome_count "$MATE" reported)" = 1 ] || fail 'an unapproved later head was reported'
+  pass 'inactive reconciliation pins local readiness under its existing lock before one parent delivery'
+}
+
 # The ledger pass runs on every poll, so a ship done: already delivered does
 # not pay for the git reachability check again.
 test_delivered_ledger_done_skips_git_gate() {
@@ -1417,6 +1529,8 @@ test_validation_handoff_backstop
 test_secondmate_validation_handoff_backstop
 test_branch_ack_retires_inactive_outcome_receipt
 test_unpushed_ci_ready_done_is_not_published
+test_main_local_done_preserves_caller_lock_and_done_head
+test_local_done_head_is_pinned_before_parent_delivery
 test_delivered_ledger_done_skips_git_gate
 test_local_secondmate_delivers_terminal_ledger_line
 test_secondmate_multiline_terminal_outcome_is_delivered_once

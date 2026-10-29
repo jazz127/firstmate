@@ -33,7 +33,7 @@ Every captain-facing outcome that leaves durable evidence in the mate home is pu
 | Answer to a marked request | a correlated line guarded by the pending-reply record | `bin/fm-secondmate-report.sh`, which resolves the parent channel from the mate home; the pending-reply guard repairs a line stranded in the local mate's same-basename status file before recovery or escalation |
 | An outcome that exists only in the mate's reasoning | none | the charter and the `AGENTS.md` carve-outs only |
 
-The ledger delivery reads files, plus a local git reachability check on a ship `done:` with no delivery record yet (`bin/fm-dod-lib.sh`), and a bounded forge read when the report carries a pull request URL so the published body can be validated before it reaches the parent channel.
+The ledger delivery applies the shared readiness gate owned by the [`bin/fm-dod-lib.sh` header](../bin/fm-dod-lib.sh) to an undelivered ship `done:`, and makes a bounded forge read when the report carries a pull request URL so the published body can be validated before it reaches the parent channel.
 Failure handling follows the reporting-boundary contract in [`.agents/skills/ship-landing/SKILL.md`](../.agents/skills/ship-landing/SKILL.md).
 Each delivery is keyed with the first eight hexadecimal characters of its receipt fingerprint and uses the shared append contract above, and the ledger path reuses the inactive scan's per-fingerprint receipts, so a replayed poll or restart cannot deliver an event twice while a genuinely new terminal event is delivered again.
 A duplicate line is harmless and a missed one is not, so the mate may still append its own judgement about a delivered outcome, and the parent reads the script's line as the fact and the mate's line as commentary.
@@ -54,6 +54,7 @@ A missed-reply escalation includes the complete first sighting path and line num
 ## Regression coverage
 
 `tests/fm-inactive-reconcile.test.sh` covers the ledger delivery against real ledgers with no harness: immediate done and failed delivery with note, PR, mode, posture, and report pointer, once-only delivery across polls, a ship `done:` withheld while its named head exists only in the worker copy, a pending one still delivered after teardown removes that copy, a line still being appended, later routine status prose not minting a fresh parent event because the inactive receipt identity binds structured fields only, the remote route, the yield of the inactive path to a terminal ledger, the local committed-head validation-handoff alert including empty mode, and the real watcher poll driving it.
+Its local-only cases cover main-home cadence reconciliation and secondmate ledger delivery under the caller's metadata lock, preserving lock ownership and the first accepted head while refusing advanced or malformed heads.
 `tests/fm-captain-hold-lifecycle.test.sh` covers a mate home publishing a hold, its answer, and a distinct occurrence on re-hold, and a main home publishing nothing.
 `tests/fm-pr-merge.test.sh` covers the PR-ready line at registration and the merge outcome's upward report.
 `tests/fm-teardown.test.sh` covers teardown delivering a child's final line and refusing when the channel cannot be written.

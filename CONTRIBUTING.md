@@ -45,7 +45,7 @@ Add required status checks with `strict_required_status_checks_policy: false`; a
 Bind the checks to the GitHub Actions app already producing them, rather than accepting the same context from any integration.
 No new app installation or manual runner setup is needed for that setting.
 
-Require the actual job contexts: `Lint 1`, `Lint 2`, `Test coverage guard`, `Repo invariants`, `Stock macOS Bash snapshot compatibility`, `Behavior portable parallel 1`, `Behavior portable parallel 2`, `Behavior portable serial 1` through `Behavior portable serial 10`, `Behavior tests (Herdr)`, `Behavior timing aggregate`, and `PR must be raised via no-mistakes`.
+Require the actual job contexts: `Lint 1`, `Lint 2`, `Test coverage guard`, `Repo invariants`, `Stock macOS Bash snapshot compatibility`, `Behavior portable parallel 1`, `Behavior portable parallel 2`, every `Behavior portable serial <k>` job in the [CI matrix](.github/workflows/ci.yml), `Behavior tests (Herdr)`, `Behavior timing aggregate`, and `PR must be raised via no-mistakes`.
 The last name is the compliance job context, not its workflow title; its existing automation exceptions remain unchanged.
 The timing aggregate is not a substitute for individual jobs because it can succeed while collecting evidence from a failed run.
 
@@ -150,6 +150,7 @@ A fixture may shorten a production timeout to keep a failure path prompt, but ne
 Where a case's assertion is not about the timeout itself, give that window headroom over the measured loaded cost, and bound the test's own waiting with iteration-counted poll loops, which stretch under load where a wall-clock budget does not.
 Supervision host and Stop-hook hand-back waits are the exception: use `wait_until_deadline` (a 60s wall-clock budget well above the loaded hand-back cost) so a timeout dumps `host.out`, `hook.out`/`hook.err`, the supervision-host log, health file, and a process tree.
 Tests that need a real optional backend or an explicit opt-in (real herdr/zellij/cmux/paseo/rex/tern smoke tests, the live Pi regression) skip themselves and print the tool or environment gate needed to enable them, so the portable suite remains safe on machines without those tools.
+The complete [`tests/fm-watch-triage-pause.test.sh`](tests/fm-watch-triage-pause.test.sh) suite requires compatible `tasks-axi` on `PATH`, as specified in [Backlog backend](docs/configuration.md#backlog-backend-taskstoml--configbacklog-backend).
 [`tests/rex-test-safety.sh`](tests/rex-test-safety.sh) owns the real-Rex suites' private-server isolation and capability gates.
 The [Herdr backend guide](docs/herdr-backend.md#destructive-lab-safety) owns the lane's isolation boundary, while [runtime backend verification](docs/verification/runtime-backends.md#herdr) owns active empirical evidence; live harness credential tests remain opt-in.
 

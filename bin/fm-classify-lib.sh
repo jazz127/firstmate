@@ -981,8 +981,9 @@ _fm_decision_line_candidate() {  # <status-line> <resolve-verb> <held-verb>
 }
 
 # In-process result: _FM_DECISION_LINE_OPEN, preserving the stdout wrapper below.
-_fm_decision_fold_line_to() {  # <open-set> <status-line> <resolve-verb> <held-verb> <kind>
+_fm_decision_fold_line_to() {  # <open-set> <status-line> <resolve-verb> <held-verb> <kind> [timed]
   local open=$1 line=$2 resolve=$3 held=$4 kind=$5 verb key note unstamped
+  local timed=${6:-} epoch
   _FM_DECISION_LINE_OPEN=$open
   # Both colon tests below ask where the head ends, the same question the note
   # and key readers ask, so they read the same unstamped copy those readers do.
@@ -1017,6 +1018,15 @@ _fm_decision_fold_line_to() {  # <open-set> <status-line> <resolve-verb> <held-v
     || return 0
   case "$verb" in
     needs-decision|blocked)
+      if [ "$timed" = timed ]; then
+        # The timed view adds an emission-time column, without changing any
+        # open/closed rule. Keyless or unstamped events have unknown age.
+        epoch=unknown
+        if [ -n "$(_fm_decision_key "$line" '')" ]; then
+          _fm_status_at_epoch "$line" epoch || epoch=unknown
+        fi
+        note="$epoch"$'\t'"$note"
+      fi
       _fm_decision_drop "$open" "$key" open
       [ -n "$open" ] && open="${open}"$'\n'
       open="${open}${key}"$'\t'"${verb}"$'\t'"${note}"$'\n'
@@ -1327,6 +1337,8 @@ EOF
 #
 # The cursor format is `version` (FM_OPEN_DECISIONS_FOLD_VERSION plus the task
 # kind, as `<n>:<kind>`), `offset`, `ident`, then the folded open set.
+# The optional timed view uses a separate `.timed` cursor and adds `:timed`
+# to the version; status_open_decisions_incremental owns its row format.
 # FM_OPEN_DECISIONS_FOLD_VERSION must be bumped whenever
 # _fm_decision_fold_line semantics change, so persisted state from an older
 # interpretation is discarded and rebuilt from byte 0; the kind suffix does the
@@ -1464,15 +1476,19 @@ _fm_status_read_span() {  # <status-file> <start-offset> <byte-length>
   ' "$f" "$start" "$length"
 }
 
-status_open_decisions_incremental() {  # <status-file> [<captured-end-offset>]
+status_open_decisions_incremental() {  # <status-file> [<captured-end-offset>] [timed]
   local f=$1 captured_end=${2:-} cf offset ident open='' trusted_open='' cursor_data first rest offset_line ident_line
   local version='' size actual_size cur_ident resolve held chunk_file chunk_size line cursor_dirty=0
-  local target_cursor kind fold_version partial_line=''
+  local target_cursor kind fold_version partial_line='' timed=${3:-}
   local LC_ALL=C
+  case "$timed" in ''|timed) ;; *) return 2 ;; esac
   [ -f "$f" ] && [ -r "$f" ] && [ ! -L "$f" ] || return 0
   kind=$(_fm_status_kind "$f")
   fold_version="$FM_OPEN_DECISIONS_FOLD_VERSION:$kind"
   cf=$(_fm_open_decisions_cursor_path "$f")
+  # A separate cursor keeps the ordinary presentation view byte-compatible.
+  # Timed rows are <key> TAB <verb> TAB <epoch-or-unknown> TAB <note>.
+  if [ "$timed" = timed ]; then cf="$cf.timed"; fold_version="$fold_version:timed"; fi
   offset=0
   ident=''
   if [ -f "$cf" ] && [ -r "$cf" ] && [ ! -L "$cf" ]; then
@@ -1562,7 +1578,7 @@ status_open_decisions_incremental() {  # <status-file> [<captured-end-offset>]
     held=${FM_CLASSIFY_CAPTAIN_HELD_VERB:-$FM_CLASSIFY_CAPTAIN_HELD_VERB_DEFAULT}
     while IFS= read -r line; do
       if _fm_decision_line_candidate "$line" "$resolve" "$held"; then
-        open=$(_fm_decision_fold_line "$open" "$line" "$resolve" "$held" "$kind")
+        open=$(_fm_decision_fold_line "$open" "$line" "$resolve" "$held" "$kind" "$timed")
       fi
       offset=$((offset + ${#line} + 1))
     done < "$chunk_file"
@@ -1581,7 +1597,7 @@ status_open_decisions_incremental() {  # <status-file> [<captured-end-offset>]
     mv -f "$target_cursor" "$cf" || return 1
   fi
   if [ -n "$partial_line" ]; then
-    open=$(_fm_decision_fold_line "$open" "$partial_line" "$resolve" "$held" "$kind")
+    open=$(_fm_decision_fold_line "$open" "$partial_line" "$resolve" "$held" "$kind" "$timed")
   fi
   printf '%s' "$open"
 }
@@ -2073,6 +2089,8 @@ status_retire_presentation_task() {  # <state> <task-id> [<archive-file>]
     && [ ! -L "$state/.$task.open-decisions-cursor" ] \
     && [ ! -e "$state/.$task.snapshot-open-decisions-cursor" ] \
     && [ ! -L "$state/.$task.snapshot-open-decisions-cursor" ] \
+    && [ ! -e "$state/.$task.open-decisions-cursor.timed" ] \
+    && [ ! -L "$state/.$task.open-decisions-cursor.timed" ] \
     && [ ! -e "$home_appends" ] && [ ! -L "$home_appends" ] \
     && [ ! -e "$home_appends_lock" ] && [ ! -L "$home_appends_lock" ] \
     && [ ! -e "$signal_marker" ] && [ ! -L "$signal_marker" ] \
@@ -2142,7 +2160,7 @@ EOF
   fi
   if [ "$rc" -eq 0 ]; then
     rm -f -- "$state/$task.status" "$state/.$task.open-decisions-cursor" \
-      "$state/.$task.snapshot-open-decisions-cursor" "$home_appends" "$signal_marker" "$heartbeat_marker" "$daemon_marker" || rc=1
+      "$state/.$task.snapshot-open-decisions-cursor" "$state/.$task.open-decisions-cursor.timed" "$home_appends" "$signal_marker" "$heartbeat_marker" "$daemon_marker" || rc=1
     fm_lock_remove_path "$home_appends_lock" 2>/dev/null || true
   fi
   if [ "$archive_published" -eq 1 ] && [ "$rc" -ne 0 ] \

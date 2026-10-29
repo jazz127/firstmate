@@ -44,7 +44,8 @@
 # preserved for the record that may have landed.
 # --new-work resumes a paused secondmate through fm-secondmate-restart before
 # delivery. Backlog handoff sets it after making queued work durable. Other text
-# sends refuse a paused mate under its lifecycle lock, retaining maintenance retries.
+# sends refuse a paused or lifecycle-busy mate with status 75 and no delivery,
+# retaining maintenance retries.
 # Pending-reply bookkeeping trouble after a durable enqueue NEVER exits
 # nonzero: with the recovery marker stored the watcher reconciles it silently,
 # and with both the commit and the marker lost the send prints a distinct
@@ -853,14 +854,14 @@ else
     fi
     lifecycle_lock="$STATE/.secondmate-liveness-$TARGET_TASK_ID.lock"
     fm_lock_try_acquire "$lifecycle_lock" || {
-      echo "error: secondmate $TARGET_TASK_ID lifecycle is busy; retry delivery" >&2; exit 1;
+      echo "error: secondmate $TARGET_TASK_ID lifecycle is busy; retry delivery" >&2; exit 75;
     }
     SEND_LIFECYCLE_LOCK=$lifecycle_lock
     trap fm_send_cleanup EXIT
     fm_lease_guard "$TARGET_TASK_ID" "steer (fm-send)"
     if fm_secondmate_is_paused "$STATE" "$TARGET_TASK_ID"; then
       echo "error: secondmate $TARGET_TASK_ID is intentionally paused; request not sent" >&2
-      exit 1
+      exit 75
     fi
   fi
   # The pre-marker answer text, kept for the closing resolved note so the

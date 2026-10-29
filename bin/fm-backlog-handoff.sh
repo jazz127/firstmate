@@ -550,8 +550,11 @@ receiver_wake_clear_confirmed() { # <secondmate-id>
   fi
 }
 
-wake_secondmate_receiver() { # <secondmate-id> <correlation-id>
-  local id=$1 corr=$2 meta="$STATE/$1.meta" out rc=0
+wake_secondmate_receiver() { # <secondmate-id> <correlation-id> [new-work]
+  local id=$1 corr=$2 new_work=${3:-0} meta="$STATE/$1.meta" out rc=0
+  local -a send_args
+  send_args=("$id")
+  [ "$new_work" = 0 ] || send_args+=(--new-work)
   if [ ! -f "$meta" ] || [ -L "$meta" ]; then
     printf 'error: handed off work to secondmate %s, but no live receiver endpoint is recorded; the destination backlog is durable and the receiver was not woken\n' "$id" >&2
     return 1
@@ -562,7 +565,8 @@ wake_secondmate_receiver() { # <secondmate-id> <correlation-id>
   }
   out=$(FM_HOME="$FM_HOME" FM_STATE_OVERRIDE="$STATE" FM_ROOT_OVERRIDE="$FM_ROOT" \
     FM_PENDING_REPLY_EXISTING_CORR="$corr" \
-    "$SCRIPT_DIR/fm-send.sh" "$id" --new-work "$RECEIVER_WAKE_MESSAGE" 2>&1) || rc=$?
+    "$SCRIPT_DIR/fm-send.sh" "${send_args[@]}" "$RECEIVER_WAKE_MESSAGE" 2>&1) || rc=$?
+  [ "$rc" -ne 75 ] || return 75
   if [ "$rc" -ne 0 ]; then
     [ -z "$out" ] || printf '%s\n' "$out" >&2
     printf 'error: backlog delivery to secondmate %s succeeded, but its receiver wake failed; retry a tracked remote wake with --resume-pending or a later new handoff, and retry a local wake by rerunning its handoff\n' "$id" >&2
@@ -571,8 +575,8 @@ wake_secondmate_receiver() { # <secondmate-id> <correlation-id>
   [ -z "$out" ] || printf '%s\n' "$out"
 }
 
-wake_pending_secondmate_receiver() { # <secondmate-id> [retain-confirmed]
-  local id=$1 retain=${2:-0} marker="$STATE/.backlog-handoff-$1.wake-pending" value corr rec delivered
+wake_pending_secondmate_receiver() { # <secondmate-id> [retain-confirmed] [new-work]
+  local id=$1 retain=${2:-0} new_work=${3:-0} marker="$STATE/.backlog-handoff-$1.wake-pending" value corr rec delivered wake_rc=0
   [ -e "$marker" ] || [ -L "$marker" ] || return 0
   if [ ! -f "$marker" ] || [ -L "$marker" ]; then
     printf 'error: receiver wake state for secondmate %s is unsafe or invalid\n' "$id" >&2
@@ -601,11 +605,14 @@ wake_pending_secondmate_receiver() { # <secondmate-id> [retain-confirmed]
   fm_pending_reply_reconcile_delivery "$STATE" "$corr" >/dev/null 2>&1 || true
   delivered=$(fm_pending_reply_get "$rec" delivered_epoch)
   if [ -z "$delivered" ]; then
+    if [ "$new_work" = 0 ] && fm_secondmate_is_paused "$STATE" "$id"; then return 75; fi
     fm_pending_reply_corr_reusable "$STATE" "$corr" "$id" || {
       printf 'error: receiver wake delivery for secondmate %s is unresolved; refusing to resend correlation %s\n' "$id" "$corr" >&2
       return 1
     }
-    wake_secondmate_receiver "$id" "$corr" || return 1
+    wake_secondmate_receiver "$id" "$corr" "$new_work" || wake_rc=$?
+    [ "$wake_rc" -ne 75 ] || return 75
+    [ "$wake_rc" -eq 0 ] || return 1
   fi
   if [ "$retain" = 1 ]; then
     receiver_wake_state_write "$id" "confirmed:$corr" || {
@@ -624,8 +631,8 @@ outbox_item_count() { # <path>
   awk '/^- \[[ x]\] / { count++ } END { print count + 0 }' "$1"
 }
 
-remote_deliver_outbox() { # <secondmate-id> <outbox-path>
-  local id=$1 outbox=$2 remote_rel receive_out snapshot bytes hash generation counter counter_tmp current marker wake_rc=0 wake_state=pending
+remote_deliver_outbox() { # <secondmate-id> <outbox-path> [new-work]
+  local id=$1 outbox=$2 new_work=${3:-0} remote_rel receive_out snapshot bytes hash generation counter counter_tmp current marker wake_rc=0 wake_state=pending
   [ -f "$outbox" ] && [ ! -L "$outbox" ] || {
     echo "error: pending outbox is unavailable or unsafe: $outbox" >&2
     return 1
@@ -713,7 +720,7 @@ remote_deliver_outbox() { # <secondmate-id> <outbox-path>
     }
   fi
   if [ "$wake_rc" -eq 0 ]; then
-    wake_pending_secondmate_receiver "$id" 1 || wake_rc=$?
+    wake_pending_secondmate_receiver "$id" 1 "$new_work" || wake_rc=$?
   fi
   rm -f -- "$outbox" || {
     echo "error: remote backlog is durable at $id, but local outbox cleanup failed: $outbox" >&2
@@ -759,7 +766,7 @@ remove_interrupted_source_duplicates() { # <outbox> <keys...>
 }
 
 remote_handoff() { # <secondmate-id> <keys...>
-  local id=$1 outbox section main_section out_section key mv_out
+  local id=$1 outbox section main_section out_section key mv_out new_work=0
   local -a requested to_move already missing in_flight done_items not_queued
   shift
   requested=("$@")
@@ -837,7 +844,8 @@ remote_handoff() { # <secondmate-id> <keys...>
   # persist. The outbox is already authoritative in that state, so converge by
   # deleting only duplicates that tasks-axi itself confirms are dependency-safe.
   remove_interrupted_source_duplicates "$outbox" "${requested[@]}" || return 1
-  remote_deliver_outbox "$id" "$outbox" || return 1
+  [ "${#to_move[@]}" -eq 0 ] || new_work=1
+  remote_deliver_outbox "$id" "$outbox" "$new_work" || return 1
   echo "handed off ${#requested[@]} item(s) to remote secondmate $id: ${requested[*]}"
   [ "${#already[@]}" -eq 0 ] || echo "  already staged (recovered): ${already[*]}"
   warn_stale_public_commitments "$id" "${requested[@]}"
@@ -897,7 +905,7 @@ resume_remote_wake() { # <secondmate-id>
   [ -e "$DATA/handoff/$id.outbox.md" ] || [ -L "$DATA/handoff/$id.outbox.md" ] || {
     receiver_wake_clear_confirmed "$id"
     receiver_wake_pending_valid "$id" || return 0
-    wake_pending_secondmate_receiver "$id"
+    wake_pending_secondmate_receiver "$id" || [ "$?" -eq 75 ]
   }
 }
 
@@ -1013,7 +1021,7 @@ if [ "${#TO_MOVE[@]}" -eq 0 ]; then
     ;;
   esac
   echo "nothing to move: ${ALREADY[*]:-no keys} already present in $SUB_BACKLOG"
-  wake_pending_secondmate_receiver "$ID" || exit 1
+  wake_pending_secondmate_receiver "$ID" || { [ "$?" -eq 75 ] || exit 1; }
   exit 0
 fi
 
@@ -1045,8 +1053,10 @@ if [ -e "$WAKE_PENDING_MARKER" ] || [ -L "$WAKE_PENDING_MARKER" ]; then
     ;;
   *)
     wake_pending_secondmate_receiver "$ID" || {
-      echo "error: previous receiver wake for secondmate $ID is unresolved; nothing new was moved" >&2
-      exit 1
+      [ "$?" -eq 75 ] || {
+        echo "error: previous receiver wake for secondmate $ID is unresolved; nothing new was moved" >&2
+        exit 1
+      }
     }
     ;;
   esac
@@ -1093,7 +1103,7 @@ receiver_wake_promote_prepared "$ID" "$REQUESTED_BATCH" || {
   echo "error: handed off work to secondmate $ID, but durable receiver wake state could not be recorded" >&2
   exit 1
 }
-wake_pending_secondmate_receiver "$ID" || exit 1
+wake_pending_secondmate_receiver "$ID" 0 1 || exit 1
 if [ "${#ALREADY[@]}" -gt 0 ]; then
   echo "  already present (skipped): ${ALREADY[*]}"
 fi

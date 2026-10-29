@@ -125,6 +125,8 @@ case "${1:-}" in
   --pause|--resume)
     [ "$#" -eq 2 ] || { usage >&2; exit 2; }
     action=${1#--}; id=$2
+    preflight_exit=1
+    [ "$action" != pause ] || preflight_exit=3
     case "$id" in ''|*[!A-Za-z0-9._-]*|.|..) echo "error: invalid secondmate id: $id" >&2; exit 2 ;; esac
     # shellcheck source=bin/fm-gate-refuse-lib.sh
     . "$SCRIPT_DIR/fm-gate-refuse-lib.sh"
@@ -138,14 +140,14 @@ case "${1:-}" in
       fm_lease_guard_release || true
       fm_lock_release "$lifecycle_lock" || true
     }
-    fm_lock_try_acquire "$lifecycle_lock" || { echo "error: lifecycle action already in progress for $id" >&2; exit 1; }
+    fm_lock_try_acquire "$lifecycle_lock" || { echo "error: lifecycle action already in progress for $id" >&2; exit "$preflight_exit"; }
     trap cleanup_lifecycle EXIT
     fm_secondmate_restart_capable "$STATE/$id.meta" || {
-      echo "error: $id: $FM_SECONDMATE_RESTART_REASON" >&2; exit 1;
+      echo "error: $id: $FM_SECONDMATE_RESTART_REASON" >&2; exit "$preflight_exit";
     }
     marker="$STATE/.secondmate-paused-$id"
     if [ -L "$marker" ] || { [ -e "$marker" ] && [ ! -f "$marker" ]; }; then
-      echo "error: unsafe pause record for $id" >&2; exit 1
+      echo "error: unsafe pause record for $id" >&2; exit "$preflight_exit"
     fi
     was_paused=0
     if fm_secondmate_is_paused "$STATE" "$id"; then was_paused=1; fi
@@ -154,11 +156,14 @@ case "${1:-}" in
       if [ "$FM_SECONDMATE_RESTART_PLACEMENT" = local ]; then
         mate_home=$(fm_meta_get "$STATE/$id.meta" worktree)
         fm_secondmate_pause_home_valid "$mate_home" "$id" || exit 3
-        child_set_lock=$(fm_task_set_lock_path "$mate_home/state") || exit 1
-        fm_lock_try_acquire "$child_set_lock" || { child_set_lock=; echo "error: $id's task set is busy; retry pause" >&2; exit 1; }
+        child_set_lock=$(fm_task_set_lock_path "$mate_home/state") || exit 3
+        fm_lock_try_acquire "$child_set_lock" || { child_set_lock=; echo "error: $id's task set is busy; retry pause" >&2; exit 3; }
         fm_secondmate_pause_safe "$mate_home" "$id" || exit 3
       fi
-      (umask 077; printf '%s\n' "$(date +%s)" > "$marker") || exit 1
+      (umask 077; printf '%s\n' "$(date +%s)" > "$marker") || {
+        [ "$was_paused" = 1 ] || rm -f -- "$marker"
+        exit 3
+      }
       if [ "$FM_SECONDMATE_RESTART_PLACEMENT" = remote ]; then
         "$SCRIPT_DIR/fm-on.sh" "$id" fm-remote-secondmate-control.sh pause "$id" </dev/null || {
           rc=$?
@@ -171,7 +176,7 @@ case "${1:-}" in
         fm_lease_guard_release
         "$SCRIPT_DIR/fm-control.sh" "$id" exit || {
           rc=$?
-          [ "$rc" -ne "$FM_LEASE_REFUSE_EXIT" ] || [ "$was_paused" = 1 ] || rm -f -- "$marker"
+          { [ "$rc" -ne 3 ] && [ "$rc" -ne "$FM_LEASE_REFUSE_EXIT" ]; } || [ "$was_paused" = 1 ] || rm -f -- "$marker"
           exit "$rc"
         }
       fi
@@ -185,11 +190,11 @@ case "${1:-}" in
         model=$("$SCRIPT_DIR/fm-harness.sh" secondmate-model "$id") || exit 1
         effort=$("$SCRIPT_DIR/fm-harness.sh" secondmate-effort "$id") || exit 1
         [ -n "$harness" ] || harness=$FM_SECONDMATE_RESTART_HARNESS
-        "$SCRIPT_DIR/fm-remote-secondmate-relaunch.sh" "$id" "$harness" "${model:-default}" "${effort:-default}" resume || exit 1
+        "$SCRIPT_DIR/fm-remote-secondmate-relaunch.sh" "$id" "$harness" "${model:-default}" "${effort:-default}" resume || exit $?
       else
         "$SCRIPT_DIR/fm-control.sh" "$id" relaunch || exit 1
+        rm -f -- "$marker" || exit 1
       fi
-      rm -f -- "$marker" || exit 1
       echo "resumed: $id"
     fi
     exit 0

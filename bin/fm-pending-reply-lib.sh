@@ -1204,16 +1204,27 @@ fm_pending_reply_send_recovery() {  # <state-dir> <corr_id>
   if [ -n "${FM_PENDING_REPLY_SEND_HOOK:-}" ]; then
     # Hook receives: task_id message
     # shellcheck disable=SC2086
-    if ! eval "$FM_PENDING_REPLY_SEND_HOOK" "$(printf '%q' "$task_id")" "$(printf '%q' "$msg")"; then
-      send_status=1
-    fi
+    eval "$FM_PENDING_REPLY_SEND_HOOK" "$(printf '%q' "$task_id")" "$(printf '%q' "$msg")" || send_status=$?
   else
     if [ -z "$parent_home" ] || [ ! -d "$parent_home" ]; then
       send_status=1
-    elif ! env FM_HOME="$parent_home" FM_PENDING_REPLY_EXISTING_CORR="$corr" \
-      "$_FM_PENDING_REPLY_LIB_DIR/fm-send.sh" "$task_id" "$msg"; then
-      send_status=1
+    else
+      env FM_HOME="$parent_home" FM_PENDING_REPLY_EXISTING_CORR="$corr" \
+        "$_FM_PENDING_REPLY_LIB_DIR/fm-send.sh" "$task_id" "$msg" || send_status=$?
     fi
+  fi
+  if [ "$send_status" = 75 ]; then
+    fm_lock_acquire_wait "$lock" || return 1
+    if [ "$(fm_pending_reply_get "$rec" phase)" = recovery_sending ] \
+      && [ "$(fm_pending_reply_get "$rec" recovery_sender_pid)" = "$sender_pid" ] \
+      && [ "$(fm_pending_reply_get "$rec" recovery_sender_identity)" = "$sender_identity" ]; then
+      fm_pending_reply_set "$rec" recovery_sender_pid "" \
+        && fm_pending_reply_set "$rec" recovery_sender_identity "" \
+        && fm_pending_reply_set "$rec" recovery_attempted_epoch "" \
+        && fm_pending_reply_set "$rec" phase awaiting_report || true
+    fi
+    fm_lock_release "$lock"
+    return 1
   fi
   if [ "$send_status" = 0 ]; then
     fm_pending_reply_finish_recovery "$state" "$corr" confirmed

@@ -36,7 +36,9 @@
 #              every uncommitted change. Interrupts first when the task reads
 #              busy, then submits the harness's exit command. Postcondition:
 #              the backend's recovery-grade classifier reports the agent gone.
-#              Already-stopped is success (idempotent). An endpoint that reads
+#              Already-stopped is success (idempotent). Exit status 3 refuses
+#              before stop input; status 1 leaves an attempted stop uncertain.
+#              An endpoint that reads
 #              `missing` (or, on Rex, `unreadable`, which is how a stopped Rex
 #              server reads without starting it) is put through the control
 #              plane's per-backend absence
@@ -170,19 +172,22 @@ esac
 # drive a crewmate's lifecycle (see bin/fm-gate-refuse-lib.sh).
 fm_refuse_if_gate_agent
 
+CONTROL_FAILURE_EXIT=1
+[ "${2:-}" != exit ] || CONTROL_FAILURE_EXIT=3
+
 if [ -z "${FM_HOME+x}" ] || [ -z "${FM_HOME:-}" ]; then
   echo "error: FM_HOME is not set; fm-control refuses to resolve a task without an explicit firstmate home" >&2
-  exit 1
+  exit "$CONTROL_FAILURE_EXIT"
 fi
 [ -d "$FM_HOME" ] || {
   echo "error: FM_HOME '$FM_HOME' is not a directory" >&2
-  exit 1
+  exit "$CONTROL_FAILURE_EXIT"
 }
 STATE="${FM_STATE_OVERRIDE:-$FM_HOME/state}"
 DATA="${FM_DATA_OVERRIDE:-$FM_HOME/data}"
 [ -d "$STATE" ] || {
   echo "error: state dir '$STATE' is missing; fm-control cannot resolve tasks for FM_HOME '$FM_HOME'" >&2
-  exit 1
+  exit "$CONTROL_FAILURE_EXIT"
 }
 
 # shellcheck source=bin/fm-backend.sh
@@ -217,7 +222,7 @@ EXIT_RETRIES=${FM_CONTROL_EXIT_RETRIES:-3}
 
 die() {  # <message>
   echo "error: $1" >&2
-  exit 1
+  exit "$CONTROL_FAILURE_EXIT"
 }
 
 CONTROL_LOCK=
@@ -379,7 +384,7 @@ if [ -n "$(fm_meta_get "$META" remote_host)" ]; then
   die "task $ID is a remotely placed secondmate on $(fm_meta_get "$META" remote_host); its agent runs outside this home, so no lifecycle action here could verify that it interrupted, stopped, or came back. Drive its lifecycle on that host, and reconcile it through the secondmate recovery path rather than this plane"
 fi
 
-fm_backend_validate_task_endpoint "$META" "$ID" || exit 1
+fm_backend_validate_task_endpoint "$META" "$ID" || exit "$CONTROL_FAILURE_EXIT"
 BACKEND=$FM_BACKEND_VALIDATED_BACKEND
 T=$FM_BACKEND_VALIDATED_TARGET
 LABEL="fm-$ID"
@@ -397,9 +402,9 @@ HARNESS=$(fm_control_harness_family "$RECORDED_HARNESS") \
 fm_control_harness_supported "$HARNESS" \
   || die "task $ID records harness '${RECORDED_HARNESS:-none}', which has no verified control mechanics; fm-control refuses to guess an interrupt key or exit command"
 
-fm_backend_validate "$BACKEND" || exit 1
+fm_backend_validate "$BACKEND" || exit "$CONTROL_FAILURE_EXIT"
 if [ "$BACKEND" = t3code ]; then
-  fm_backend_runtime_check t3code || exit 1
+  fm_backend_runtime_check t3code || exit "$CONTROL_FAILURE_EXIT"
 fi
 
 # --- shared helpers ---------------------------------------------------------
@@ -751,6 +756,7 @@ do_exit() {
   # A busy agent is interrupted first before the exit command is submitted.
   case "$(busy_verdict)" in
     busy*)
+      CONTROL_FAILURE_EXIT=1
       cancel=$(deliver_interrupt) || return $?
       state=$(agent_state)
       case "$state" in
@@ -800,6 +806,7 @@ do_exit() {
   # interacting with the typed submit verification. A Ctrl-C over leftover
   # composer text only clears it, so Ctrl-U clears the composer first and one
   # more Ctrl-C follows if the agent is still alive.
+  CONTROL_FAILURE_EXIT=1
   case "$cmd" in
     C-c)
       fm_backend_send_key "$BACKEND" "$T" C-u "$LABEL" \

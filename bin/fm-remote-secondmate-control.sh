@@ -283,9 +283,7 @@ cmd_relaunch() {
 
 cmd_pause() {
   local id=$1
-  validate_id "$id"
-  validate_home "$id"
-  remote_endpoint_require "$id"
+  ( validate_id "$id"; validate_home "$id"; remote_endpoint_require "$id" ) || return 3
   # The endpoint belongs to the host-local parent-route home; its children
   # remain in TARGET_HOME/state, which the shared pause preflight inspects.
   FM_HOME="$FM_ROOT" FM_ROOT_OVERRIDE="$FM_ROOT" \

@@ -287,7 +287,9 @@ expect_pi_exit() {
     [ "$(literals "$dir")" = /quit ] \
       || fail "$label should type exactly /quit, got: $(literals "$dir")"
   else
-    expect_code 1 "$rc" "$label must refuse"$'\n'"$out"
+    local refusal=3
+    [ ! -s "$dir/fake/keys" ] || refusal=1
+    expect_code "$refusal" "$rc" "$label must refuse"$'\n'"$out"
     [ ! -s "$dir/fake/literal" ] || fail "$label typed lifecycle text: $(literals "$dir")"
   fi
 }
@@ -631,7 +633,7 @@ test_devin_stuck_picker_refuses_and_exit_types_nothing() {
   add_task "$dir" t1 devin
   devin_as "$dir" picker
   out=$(FM_FAKE_DEVIN_PICKER_STUCK=1 run_control "$dir" t1 exit); rc=$?
-  expect_code 1 "$rc" "exit must refuse while the revert picker is open"$'\n'"$out"
+  expect_code 3 "$rc" "exit must refuse while the revert picker is open"$'\n'"$out"
   [ -z "$(literals "$dir")" ] || fail "exit typed into the revert picker: $(literals "$dir")"
   ! grep -qx Enter "$dir/fake/keys" || fail "exit pressed Enter in the revert picker"
   pass "fm-control Devin: an open revert picker refuses every typed command"
@@ -715,7 +717,7 @@ test_unverified_harness_is_refused() {
   add_task "$dir" t1 someagent
   alive_as "$dir" someagent
   out=$(run_control "$dir" t1 exit); rc=$?
-  expect_code 1 "$rc" "an unverified harness should refuse"
+  expect_code 3 "$rc" "an unverified harness should refuse"
   assert_contains "$out" "no verified control mechanics" "refusal should name the missing verification"
   [ -z "$(literals "$dir")" ] || fail "an unverified harness must receive no bytes"
   pass "fm-control: a harness with no verified control mechanics is refused, not guessed at"
@@ -815,7 +817,7 @@ test_unverified_state_backends_refuse_stop_verbs() {
         ;;
     esac
     out=$(run_control "$dir" t1 exit); rc=$?
-    expect_code 1 "$rc" "exit on $backend should refuse"$'\n'"$out"
+    expect_code 3 "$rc" "exit on $backend should refuse"$'\n'"$out"
     assert_contains "$out" "no recovery-grade agent-state classifier" \
       "the $backend refusal should name the missing stop proof"
     [ -z "$(literals "$dir")" ] || fail "$backend must receive no exit command"
@@ -890,7 +892,7 @@ test_window_label_is_refused_with_the_exact_id() {
   add_task "$dir" t1 claude
   alive_as "$dir" claude
   out=$(run_control "$dir" fm-t1 exit); rc=$?
-  expect_code 1 "$rc" "a window label should refuse"
+  expect_code 3 "$rc" "a window label should refuse"
   assert_contains "$out" "pass the exact task id 't1'" "the refusal should name the exact id"
   [ -z "$(literals "$dir")" ] || fail "a refused target must receive no bytes"
   pass "fm-control: a legacy window label is refused and the exact task id is named"
@@ -902,7 +904,7 @@ test_explicit_endpoint_is_refused() {
   add_task "$dir" t1 claude
   alive_as "$dir" claude
   out=$(run_control "$dir" "fmses:fm-t1" exit); rc=$?
-  expect_code 1 "$rc" "an explicit endpoint should refuse"
+  expect_code 3 "$rc" "an explicit endpoint should refuse"
   assert_contains "$out" "exact task id only" "the refusal should name the exact-id rule"
   [ -z "$(literals "$dir")" ] || fail "a refused target must receive no bytes"
   pass "fm-control: an explicit backend endpoint is never a control target"
@@ -913,7 +915,7 @@ test_unknown_task_is_refused() {
   dir=$(new_case unknown)
   add_task "$dir" t1 claude
   out=$(run_control "$dir" t2 exit); rc=$?
-  expect_code 1 "$rc" "an unknown task should refuse"
+  expect_code 3 "$rc" "an unknown task should refuse"
   assert_contains "$out" "no task 't2'" "the refusal should name the missing task"
   pass "fm-control: an unrecorded task id is refused"
 }
@@ -927,7 +929,7 @@ test_record_bound_to_another_task_is_refused() {
     > "$dir/home/state/t1.meta.tmp"
   mv "$dir/home/state/t1.meta.tmp" "$dir/home/state/t1.meta"
   out=$(run_control "$dir" t1 exit); rc=$?
-  expect_code 1 "$rc" "a record bound to another task should refuse"
+  expect_code 3 "$rc" "a record bound to another task should refuse"
   assert_contains "$out" "belongs to task other" "the refusal should name the conflicting binding"
   [ -z "$(literals "$dir")" ] || fail "a foreign record must receive no bytes"
   pass "fm-control: a record whose endpoint identity names another task is refused"
@@ -960,7 +962,9 @@ test_remote_secondmate_is_refused_by_placement() {
     else
       out=$(run_control "$dir" t1 "$verb"); rc=$?
     fi
-    expect_code 1 "$rc" "$verb on a remotely placed secondmate should refuse"
+    local refusal=1
+    [ "$verb" != exit ] || refusal=3
+    expect_code "$refusal" "$rc" "$verb on a remotely placed secondmate should refuse"
     assert_contains "$out" "remotely placed secondmate on example.invalid" \
       "the $verb refusal should name the remote placement, not blame the record"
     assert_not_contains "$out" "malformed" \
@@ -999,7 +1003,9 @@ test_interrupt_and_exit_lock_before_task_state_resolution() {
     out=$(run_control "$case_dir" t1 "$verb"); rc=$?
     kill "$holder" 2>/dev/null || true
     wait "$holder" 2>/dev/null || true
-    expect_code 1 "$rc" "$verb should refuse a held lifecycle lock"
+    local refusal=1
+    [ "$verb" != exit ] || refusal=3
+    expect_code "$refusal" "$rc" "$verb should refuse a held lifecycle lock"
     assert_contains "$out" "another lifecycle action is already running" \
       "$verb should serialize before reading mutable task state"
     [ -z "$(literals "$case_dir")" ] || fail "contended $verb must type no command"
@@ -1048,7 +1054,7 @@ test_relaunch_only_flags_are_rejected_on_other_verbs() {
   add_task "$dir" t1 claude
   alive_as "$dir" claude
   out=$(run_control "$dir" t1 exit --harness codex); rc=$?
-  expect_code 1 "$rc" "--harness should not apply to exit"
+  expect_code 3 "$rc" "--harness should not apply to exit"
   assert_contains "$out" "apply to 'relaunch' only" "the refusal should scope the flags"
   pass "fm-control: profile and note flags belong to relaunch only"
 }
@@ -1087,7 +1093,7 @@ test_missing_tmux_endpoint_refuses_rather_than_claiming_a_stop() {
   # rather than claim a stop it cannot see, and sends nothing to an address it
   # cannot trust. Reclaim of a destroyed endpoint is Herdr-only
   # (docs/agent-control.md "Reclaiming a task whose endpoint is gone").
-  expect_code 1 "$rc" "a tmux endpoint whose absence cannot be proven must refuse"
+  expect_code 3 "$rc" "a tmux endpoint whose absence cannot be proven must refuse"
   assert_not_contains "$out" "endpoint-gone" "exit must not report a stop it could not prove"
   [ -z "$(literals "$dir")" ] || fail "nothing may be sent into an endpoint exit cannot trust"
   pass "fm-control exit: an unprovable tmux endpoint refuses instead of claiming the agent stopped"
@@ -1115,7 +1121,7 @@ test_ambiguous_endpoint_refuses() {
   add_task "$dir" t1 claude
   alive_as "$dir" some-unrelated-process
   out=$(run_control "$dir" t1 exit); rc=$?
-  expect_code 1 "$rc" "an unattributed endpoint should refuse"
+  expect_code 3 "$rc" "an unattributed endpoint should refuse"
   assert_contains "$out" "positively classified" "the refusal should name the missing attribution"
   [ -z "$(literals "$dir")" ] || fail "an unattributed endpoint must receive no bytes"
   pass "fm-control exit: an endpoint whose process cannot be attributed refuses"
@@ -1156,7 +1162,7 @@ test_exit_refuses_an_open_background_picker() {
   alive_as "$dir" claude
   exit_picker_screen > "$dir/fake/pane"
   out=$(run_control "$dir" t1 exit); rc=$?
-  expect_code 1 "$rc" "an open exit picker should refuse"$'\n'"$out"
+  expect_code 3 "$rc" "an open exit picker should refuse"$'\n'"$out"
   assert_contains "$out" "blocked on a prompt: Claude background-task exit picker" \
     "the refusal should name the dialog"
   assert_not_contains "$out" "Esc" "the refusal must not name a dismissal key"
@@ -1231,7 +1237,7 @@ test_footer_busy_pi_on_tmux_refuses_exit() {
   alive_as "$dir" pi
   printf '────────────────────────\n\n────────────────────────\nworking Pi footer\n' > "$dir/fake/pane"
   out=$(FM_BUSY_REGEX='working Pi footer' run_control "$dir" t1 exit); rc=$?
-  expect_code 1 "$rc" "a footer-busy Pi on tmux cannot prove its composer empty"
+  expect_code 3 "$rc" "a footer-busy Pi on tmux cannot prove its composer empty"
   assert_contains "$out" "composer state is 'unknown'" "the refusal should name the unproven composer"
   [ -z "$(literals "$dir")" ] \
     || fail "a footer-busy Pi on tmux may be blocked on a prompt and must receive no /quit"
@@ -1480,6 +1486,18 @@ $cases
 EOF
   pass "fm-control-lib: only a runtime's own recorded session has a relaunch resume form"
 }
+
+test_exit_missing_home_is_a_pre_stop_refusal() {
+  local out rc
+  out=$(env -u FM_HOME "$ROOT/bin/fm-control.sh" t1 exit 2>&1); rc=$?
+  expect_code 3 "$rc" 'a missing home refuses exit before any stop input'
+  assert_contains "$out" 'FM_HOME is not set' 'the refusal must identify the missing home'
+  out=$(env -u FM_HOME "$ROOT/bin/fm-control.sh" t1 interrupt 2>&1); rc=$?
+  expect_code 1 "$rc" 'the ordinary interrupt error status remains compatible'
+  pass 'exit identifies even initial home validation as a pre-stop refusal'
+}
+
+test_exit_missing_home_is_a_pre_stop_refusal
 
 test_exit_types_each_harness_verified_command
 test_pi_exit_herdr_cost_footer_boundary

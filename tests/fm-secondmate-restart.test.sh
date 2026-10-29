@@ -602,6 +602,9 @@ case "${FM_FAKE_SSH_MODE:-ok}" in
   unreachable) exit 255 ;;
 esac
 case "${rargs[1]:-}" in
+  pause)
+    [ "${FM_FAKE_SSH_MODE:-ok}" != prestop-refusal ] || exit 3
+    ;;
   sync)
     [ "${FM_FAKE_SSH_MODE:-ok}" != sync-fail ] || exit 1
     printf 'current: %s\n' "${rargs[3]}"
@@ -1156,10 +1159,38 @@ test_pause_authorizes_before_publishing_intent() {
     assert_no_grep '/exit' "$dir/fake/literal" 'authorization refusal must not stop the agent'
     if [ "$placement" = remote ]; then
       assert_no_grep ' pause ' "$dir/ssh.log" 'authorization refusal must not contact the host'
+      printf '1\n' > "$dir/home/state/.secondmate-paused-sm1"
+      out=$(FM_SUPERVISION_ACTOR=main run_restart "$dir" --resume sm1); rc=$?
+      expect_code 6 "$rc" "remote resume must honor parent lease authority"$'\n'"$out"
+      out=$(env FM_SUPERVISION_ACTOR=main FM_HOME="$dir/home" FM_SSH_BIN="$FM_TEST_SSH_BIN" \
+        "$ROOT/bin/fm-remote-secondmate-relaunch.sh" sm1 claude default default resume 2>&1); rc=$?
+      expect_code 6 "$rc" "direct remote resume must honor parent lease authority"$'\n'"$out"
+      assert_present "$dir/home/state/.secondmate-paused-sm1" 'lease refusal retains pause'
+      [ ! -s "$dir/ssh.log" ] || fail 'unauthorized resume performed remote convergence or launch'
     fi
   done
   unset FM_TEST_SSH_BIN FM_FAKE_SSH_MODE
   pass 'local and remote pause authorize before publishing intent'
+}
+
+test_pause_control_contention_keeps_the_mate_unpaused() {
+  local dir out rc
+  dir=$(new_case pause-control-contention)
+  add_local_mate "$dir" sm1
+  clean_pause_home "$dir" sm1
+  out=$(env PATH="$dir/fakebin:$PATH" FM_HOME="$dir/home" FM_FAKE_DIR="$dir/fake" bash -c '
+    . "$1/bin/fm-wake-lib.sh"
+    lock="$FM_HOME/state/.control-sm1.lock"
+    fm_lock_try_acquire "$lock" || exit 99
+    "$1/bin/fm-secondmate-restart.sh" --pause sm1
+    rc=$?
+    fm_lock_release "$lock"
+    exit "$rc"
+  ' _ "$ROOT" 2>&1); rc=$?
+  expect_code 3 "$rc" "control contention is a pre-stop refusal"$'\n'"$out"
+  assert_absent "$dir/home/state/.secondmate-paused-sm1" 'control contention must not publish false pause state'
+  assert_no_grep '/exit' "$dir/fake/literal" 'control contention must not stop the agent'
+  pass 'a busy control lock refuses pause without leaving false intent'
 }
 
 test_maintenance_cannot_resume_or_race_pause() {
@@ -1307,10 +1338,31 @@ test_remote_pause_resume_and_unknown_transport() {
   expect_code 0 "$rc" "remote pause uses transport"$'\n'"$out"
   assert_grep 'fm-remote-secondmate-control.sh pause sm1' "$dir/ssh.log" 'remote pause stays on its host'
   assert_present "$dir/home/state/.secondmate-paused-sm1" 'parent retains durable remote pause intent'
-  out=$(FM_ROOT_OVERRIDE="$dir/primary" run_restart "$dir" --resume sm1); rc=$?
+  rm -f "$dir/home/state/.secondmate-paused-sm1"
+  out=$(FM_FAKE_SSH_MODE=prestop-refusal run_restart "$dir" --pause sm1); rc=$?
+  expect_code 3 "$rc" 'a proven remote pre-stop refusal is distinct from lost completion'
+  assert_absent "$dir/home/state/.secondmate-paused-sm1" 'remote pre-stop refusal clears newly published intent'
+  out=$(run_restart "$dir" --pause sm1); rc=$?
+  expect_code 0 "$rc" 'remote pause can retry after a definite refusal'
+  cat > "$dir/fakebin/rm" <<'SH'
+#!/usr/bin/env bash
+for arg in "$@"; do
+  if [ -n "${FM_TEST_PAUSE_MARKER:-}" ] && [ "$arg" = "$FM_TEST_PAUSE_MARKER" ]; then
+    [ -e "$FM_HOME/state/.fm-lease-command.lock" ] || exit 99
+    printf 'guard held\n' > "$FM_FAKE_DIR/resume-guard-held"
+  fi
+done
+exec "$FM_TEST_REAL_RM" "$@"
+SH
+  chmod +x "$dir/fakebin/rm"
+  out=$(FM_SUPERVISION_ACTOR=main FM_TEST_REAL_RM="$(command -v rm)" \
+    FM_TEST_PAUSE_MARKER="$dir/home/state/.secondmate-paused-sm1" \
+    FM_ROOT_OVERRIDE="$dir/primary" run_restart "$dir" --resume sm1); rc=$?
   expect_code 0 "$rc" "remote resume uses transport"$'\n'"$out"
   assert_grep 'fm-remote-secondmate-control.sh resume sm1 claude' "$dir/ssh.log" 'remote resume passes the parent profile'
   assert_absent "$dir/home/state/.secondmate-paused-sm1" 'confirmed remote resume clears intent'
+  assert_present "$dir/fake/resume-guard-held" 'remote resume retains lease authority through marker removal'
+  rm -f "$dir/fakebin/rm"
   [ "$(cat "$dir/remote-home/config/crew-harness")" = codex ] || fail 'remote resume did not refresh inherited config'
   sync_line=$(grep -n '^fm-remote-secondmate-control.sh sync sm1 ' "$dir/ssh.log" | head -1 | cut -d: -f1)
   inherit_line=$(grep -n '^fm-remote-inherit.sh put config/crew-harness ' "$dir/ssh.log" | head -1 | cut -d: -f1)
@@ -1383,6 +1435,18 @@ EOF
   assert_contains "$out" 'in-flight or unlanded work' 'remote safety uses the shared preflight'
   assert_absent "$dir/fake/herdr-called" 'unsafe remote pause never calls Herdr'
   rm -f "$home/state/child.meta"
+  out=$(env PATH="$dir/fakebin:$PATH" FM_HOME="$home" FM_FAKE_DIR="$dir/fake" bash -c '
+    . "$1/bin/fm-wake-lib.sh"
+    lock="$FM_HOME/state/.task-set.lock"
+    fm_lock_try_acquire "$lock" || exit 99
+    "$1/bin/fm-remote-secondmate-control.sh" pause sm1
+    rc=$?
+    fm_lock_release "$lock"
+    exit "$rc"
+  ' _ "$ROOT" 2>&1); rc=$?
+  expect_code 3 "$rc" "host task-set contention is a pre-stop refusal"$'\n'"$out"
+  assert_absent "$home/state/parent-route/.secondmate-paused-sm1" 'host contention must leave no new pause record'
+  assert_absent "$dir/fake/herdr-called" 'host contention must precede backend access'
   ln -s "$home/state/missing-record" "$home/state/child.meta"
   printf '1\n' > "$home/state/parent-route/.secondmate-paused-sm1"
   out=$(env PATH="$dir/fakebin:$PATH" FM_HOME="$home" FM_FAKE_DIR="$dir/fake" \
@@ -1451,6 +1515,7 @@ test_paused_current_state_and_failed_resume() {
 }
 
 test_pause_authorizes_before_publishing_intent
+test_pause_control_contention_keeps_the_mate_unpaused
 test_maintenance_cannot_resume_or_race_pause
 test_pause_after_persist_prevents_update_replacement
 test_pause_refuses_orphan_backlog_dirty_home_and_spawn_race

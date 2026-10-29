@@ -53,9 +53,13 @@ if [ "$VERB" = resume ]; then
   . "$SCRIPT_DIR/fm-ff-lib.sh"
   # shellcheck source=bin/fm-secondmate-nudge-lib.sh
   . "$SCRIPT_DIR/fm-secondmate-nudge-lib.sh"
+  # shellcheck source=bin/fm-lease-lib.sh
+  . "$SCRIPT_DIR/fm-lease-lib.sh"
+  INHERIT_LOCK=
+  trap 'fm_lease_guard_release; [ -z "$INHERIT_LOCK" ] || fm_lock_release "$INHERIT_LOCK" || true' EXIT
   INHERIT_LOCK=$(fm_remote_inherit_transaction_lock_path "$STATE" "$ID") || exit 1
   fm_lock_acquire_wait "$INHERIT_LOCK" || exit 1
-  trap 'fm_lock_release "$INHERIT_LOCK" || true' EXIT
+  fm_lease_guard "$ID" "resume remote secondmate" || exit 1
   PRIMARY_COMMIT=$(primary_head_commit "$FM_ROOT") || die "cannot resolve the primary instruction commit"
   GENERATION=$(fm_remote_inherit_generation_next "$STATE" "$ID") || die "cannot publish inheritance generation"
   "$SCRIPT_DIR/fm-on.sh" "$ID" fm-remote-secondmate-control.sh sync "$ID" "$PRIMARY_COMMIT" </dev/null || exit $?
@@ -109,3 +113,7 @@ done < "$META"
 chmod 0600 "$META_TMP"
 mv -f -- "$META_TMP" "$META"
 fm_lock_release "$META_LOCK"
+
+if [ "$VERB" = resume ]; then
+  rm -f -- "$STATE/.secondmate-paused-$ID"
+fi

@@ -292,6 +292,42 @@ test_matrix_herdr_titled_claude_composer() {
   pass "matrix: titled Herdr rules preserve Claude's empty and pending composer verdicts"
 }
 
+test_matrix_herdr_titled_claude_wrapping_and_footer() {
+  local head close footer idle typed wrapped screen caps want content identity locale
+  head=$'────────────────────────── Firstmate ──\n❯'
+  close=$'\n───────────────────────────────────────'
+  footer=$'\n  → repo git:(main) | Opus 5\n  ⏵⏵ bypass permissions on'
+  identity=$(printf 'claude\tidle')
+  idle="$head$close"
+  typed="$head message$close"
+  wrapped="$head message"$'\ncontinuation row'"$close"
+  for caps in "$CAPS_STYLED" "$CAPS_STYLED_NOID" "$CAPS_PLAIN"; do
+    want=pending
+    [ "$caps" != "$CAPS_PLAIN" ] || want=unknown
+    assert_screen "wrapped titled Claude draft" "$want" "$caps" "$wrapped" '' "$identity"
+    assert_screen "idle titled Claude under arrow footer" empty "$caps" "$idle$footer" '' "$identity"
+    assert_screen "typed titled Claude under arrow footer" "$want" "$caps" "$typed$footer" '' "$identity"
+    assert_screen "wrapped titled Claude under arrow footer" "$want" "$caps" "$wrapped$footer" '' "$identity"
+    for locale in "${LC_ALL:-${LANG:-C}}" C; do
+      content=$(LC_ALL="$locale" fm_composer_extract_selected_content "$caps" "$idle$footer") \
+        || fail "idle titled Claude content must extract under $locale"
+      [ -z "$content" ] || fail "idle titled Claude extracted footer under $locale: '$content'"
+      for screen in "$wrapped" "$wrapped$footer"; do
+        content=$(LC_ALL="$locale" fm_composer_extract_selected_content "$caps" "$screen") \
+          || fail "wrapped titled Claude content must extract under $locale"
+        [ "$content" = 'message continuation row' ] \
+          || fail "wrapped titled Claude must retain its whole draft under $locale: '$content'"
+      done
+    done
+  done
+  assert_screen "wrapped titled Claude with cursor on continuation" pending "$CAPS_TMUX" "$wrapped" 2 "$identity"
+  assert_screen "titled glyph envelope cannot prove Pi identity" unknown "$CAPS_STYLED" "$idle" '' $'pi\tidle'
+  for screen in "${wrapped/Firstmate/Fïrstmate}" "${wrapped/Firstmate/Firstmates}"; do
+    assert_screen "unproven title cannot rescue wrapped draft" unknown "$CAPS_STYLED" "$screen" '' "$identity"
+  done
+  pass "matrix: ASCII titled Claude envelopes preserve wrapped drafts and demote arrow footers"
+}
+
 test_composer_footer_demotion_needs_a_proven_pair() {
   # The demotion is bounded in three directions, and each bound is a case
   # where a lower glyph row IS the live composer.
@@ -1850,6 +1886,7 @@ test_matrix_claude_bare_nbsp_row
 test_matrix_claude_named_session_titled_rule
 test_matrix_claude_arrow_statusline_footer
 test_matrix_herdr_titled_claude_composer
+test_matrix_herdr_titled_claude_wrapping_and_footer
 test_composer_footer_demotion_needs_a_proven_pair
 test_composer_footer_zone_is_shape_independent
 test_composer_footer_zone_refuses_rather_than_allows

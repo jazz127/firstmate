@@ -9,14 +9,18 @@
 # Pause stops only the agent, retaining its home, backlog, route, endpoint and
 # open records. It refuses any child metadata or pending backlog-close record
 # (including stopped workers with unlanded work), in-flight backlog rows, or a
-# dirty home. The home's task-set lock excludes child spawns through the stop. Unsupported stop or
-# replacement backends refuse without stopping the agent.
+# dirty home. The home's task-set lock excludes child spawns through the stop.
+# Unsupported stop or replacement backends refuse without stopping the agent.
 # state/.secondmate-paused-<id> is the durable parent-owned pause record.
 # It is written before stopping; an uncertain stop leaves it present so liveness
 # cannot silently undo the request. Ordinary convergence and nudges skip it.
-# Resume launches a fresh agent through the existing control/spawn owners and
-# clears the marker only after success. New work routed with fm-send resumes a
-# paused mate automatically; backlog handoff first makes that work durable.
+# Resume runs guarded instruction and inherited-config convergence before
+# launching a fresh agent through the control/spawn owners, clearing the marker only
+# after success. For a local mate it renews an existing home wake-queue progress
+# timestamp under the lifecycle lock, preserving its row key, ring marker,
+# pending records and delivery counters; paused time cannot become stall time.
+# Only explicit resume or fm-send --new-work resumes a paused mate; backlog
+# handoff grants that authority only to fresh work after making it durable.
 # Remote pause/resume uses fm-on and the same host-local lifecycle owners.
 # Both operations are idempotent, take one exact bare id, and require FM_HOME.
 #
@@ -84,8 +88,10 @@
 #
 # Exit status: 0 every named mate restarted; 3 at least one was nudged or left
 # unreached and every mate was still accounted for; 1 the input itself is
-# unusable; 2 invalid use. Pause returns 3 for a safety refusal before stopping;
-# a stop or transport failure retains intent and propagates its failure status.
+# unusable; 2 invalid use. Pause returns 3 for a safety refusal before stopping
+# or 6 for a supervision-lease refusal, removing newly written intent on a
+# confirmed pre-stop refusal. Uncertain stop or transport completion retains
+# intent and propagates its failure status; preexisting intent is preserved.
 set -u
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

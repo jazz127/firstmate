@@ -76,6 +76,10 @@
 # or undeletable stale marker is reported and ignored by later resumes and
 # handoffs, so wake-state cleanup neither suppresses a new wake nor fails a
 # completed remote handoff.
+# Only a fresh handoff that moves new work grants fm-send --new-work resume
+# authority. Pending wake and outbox retries, including --resume-pending, defer
+# the wake while the mate is paused; received items remain queued in its backlog
+# and pending wake intent is preserved until resume or another fresh handoff.
 # Usage: fm-backlog-handoff.sh <secondmate-id> <item-key>...
 #        fm-backlog-handoff.sh --resume-pending
 set -eu

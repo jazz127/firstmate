@@ -1,0 +1,304 @@
+Synthetic public-classifier replay. No harness, Herdr server, or upstream service is substituted for live evidence. This is OFFLINE evidence only.
+Oracle: author intent plus recorded R1/R2 decisions; Pi spinner preservation is the existing native-working contract.
+
+LOCALE en_US.UTF-8
+
+CASE ASCII idle title
+INPUT SCREEN:
+────────────────────────── Firstmate ──
+❯
+───────────────────────────────────────
+IDENTITY claude	idle
+EXPECTED empty; OBSERVED empty
+EXTRACTED <>; EXPECTED <>
+
+CASE ASCII one-line draft
+INPUT SCREEN:
+────────────────────────── Firstmate ──
+❯ message
+───────────────────────────────────────
+IDENTITY claude	idle
+EXPECTED pending; OBSERVED pending
+EXTRACTED <message>; EXPECTED <message>
+
+CASE ASCII wrapped draft
+INPUT SCREEN:
+────────────────────────── Firstmate ──
+❯ message
+continuation row
+───────────────────────────────────────
+IDENTITY claude	idle
+EXPECTED pending; OBSERVED pending
+EXTRACTED <message continuation row>; EXPECTED <message continuation row>
+
+CASE ASCII idle with arrow footer
+INPUT SCREEN:
+────────────────────────── Firstmate ──
+❯
+───────────────────────────────────────
+  → repo git:(main) | Opus 5
+  ⏵⏵ bypass permissions on
+IDENTITY claude	idle
+EXPECTED empty; OBSERVED empty
+EXTRACTED <>; EXPECTED <>
+
+CASE ASCII wrapped draft with arrow footer
+INPUT SCREEN:
+────────────────────────── Firstmate ──
+❯ message
+continuation row
+───────────────────────────────────────
+  → repo git:(main) | Opus 5
+  ⏵⏵ bypass permissions on
+IDENTITY claude	idle
+EXPECTED pending; OBSERVED pending
+EXTRACTED <message continuation row>; EXPECTED <message continuation row>
+
+CASE Non-ASCII title defers
+INPUT SCREEN:
+────────────────────────── Fïrstmate ──
+❯
+───────────────────────────────────────
+IDENTITY claude	idle
+EXPECTED unknown; OBSERVED unknown
+EXTRACTION refused
+
+CASE Titled blank pane cannot prove Pi identity
+INPUT SCREEN:
+────────────────────────── Firstmate ──
+
+───────────────────────────────────────
+IDENTITY pi	idle
+EXPECTED unknown; OBSERVED unknown
+EXTRACTION refused
+
+CASE Prior transcript pair cannot rescue non-ASCII title
+INPUT SCREEN:
+────────
+old output
+────────
+────────────────────────── Fïrstmate ──
+❯
+───────────────────────────────────────
+IDENTITY claude	idle
+EXPECTED unknown; OBSERVED unknown
+EXTRACTION refused
+
+CASE Prior transcript pair cannot rescue wrong-width title
+INPUT SCREEN:
+────────
+old output
+────────
+────────────────────────── Firstmates ──
+❯
+───────────────────────────────────────
+IDENTITY claude	idle
+EXPECTED unknown; OBSERVED unknown
+EXTRACTION refused
+
+CASE Prior transcript pair cannot rescue title without glyph
+INPUT SCREEN:
+────────
+old output
+────────
+────────────────────────── Firstmate ──
+
+───────────────────────────────────────
+IDENTITY claude	idle
+EXPECTED unknown; OBSERVED unknown
+EXTRACTION refused
+
+CASE Prior transcript pair cannot rescue incomplete title
+INPUT SCREEN:
+────────
+old output
+────────
+────────────────────────── Fïrstmate ──
+❯
+IDENTITY claude	idle
+EXPECTED unknown; OBSERVED empty
+EXTRACTED <>; EXPECTED <__refuse__>
+
+CASE Valid newer envelope replaces prior transcript pair
+INPUT SCREEN:
+────────
+old output
+────────
+────────────────────────── Firstmate ──
+❯ message
+continuation row
+───────────────────────────────────────
+IDENTITY claude	idle
+EXPECTED pending; OBSERVED pending
+EXTRACTED <message continuation row>; EXPECTED <message continuation row>
+
+CASE Pi native working spinner stays supported
+INPUT SCREEN:
+transcript
+── ⠏ Working ───────────────
+
+────────────────────────
+ footer
+IDENTITY pi	working
+EXPECTED empty; OBSERVED empty
+
+CASE Pi spinner with idle identity defers
+INPUT SCREEN:
+transcript
+── ⠏ Working ───────────────
+
+────────────────────────
+ footer
+IDENTITY pi	idle
+EXPECTED unknown; OBSERVED unknown
+
+LOCALE C
+
+CASE ASCII idle title
+INPUT SCREEN:
+────────────────────────── Firstmate ──
+❯
+───────────────────────────────────────
+IDENTITY claude	idle
+EXPECTED empty; OBSERVED empty
+EXTRACTED <>; EXPECTED <>
+
+CASE ASCII one-line draft
+INPUT SCREEN:
+────────────────────────── Firstmate ──
+❯ message
+───────────────────────────────────────
+IDENTITY claude	idle
+EXPECTED pending; OBSERVED pending
+EXTRACTED <message>; EXPECTED <message>
+
+CASE ASCII wrapped draft
+INPUT SCREEN:
+────────────────────────── Firstmate ──
+❯ message
+continuation row
+───────────────────────────────────────
+IDENTITY claude	idle
+EXPECTED pending; OBSERVED pending
+EXTRACTED <message continuation row>; EXPECTED <message continuation row>
+
+CASE ASCII idle with arrow footer
+INPUT SCREEN:
+────────────────────────── Firstmate ──
+❯
+───────────────────────────────────────
+  → repo git:(main) | Opus 5
+  ⏵⏵ bypass permissions on
+IDENTITY claude	idle
+EXPECTED empty; OBSERVED empty
+EXTRACTED <>; EXPECTED <>
+
+CASE ASCII wrapped draft with arrow footer
+INPUT SCREEN:
+────────────────────────── Firstmate ──
+❯ message
+continuation row
+───────────────────────────────────────
+  → repo git:(main) | Opus 5
+  ⏵⏵ bypass permissions on
+IDENTITY claude	idle
+EXPECTED pending; OBSERVED pending
+EXTRACTED <message continuation row>; EXPECTED <message continuation row>
+
+CASE Non-ASCII title defers
+INPUT SCREEN:
+────────────────────────── Fïrstmate ──
+❯
+───────────────────────────────────────
+IDENTITY claude	idle
+EXPECTED unknown; OBSERVED unknown
+EXTRACTION refused
+
+CASE Titled blank pane cannot prove Pi identity
+INPUT SCREEN:
+────────────────────────── Firstmate ──
+
+───────────────────────────────────────
+IDENTITY pi	idle
+EXPECTED unknown; OBSERVED unknown
+EXTRACTION refused
+
+CASE Prior transcript pair cannot rescue non-ASCII title
+INPUT SCREEN:
+────────
+old output
+────────
+────────────────────────── Fïrstmate ──
+❯
+───────────────────────────────────────
+IDENTITY claude	idle
+EXPECTED unknown; OBSERVED unknown
+EXTRACTION refused
+
+CASE Prior transcript pair cannot rescue wrong-width title
+INPUT SCREEN:
+────────
+old output
+────────
+────────────────────────── Firstmates ──
+❯
+───────────────────────────────────────
+IDENTITY claude	idle
+EXPECTED unknown; OBSERVED unknown
+EXTRACTION refused
+
+CASE Prior transcript pair cannot rescue title without glyph
+INPUT SCREEN:
+────────
+old output
+────────
+────────────────────────── Firstmate ──
+
+───────────────────────────────────────
+IDENTITY claude	idle
+EXPECTED unknown; OBSERVED unknown
+EXTRACTION refused
+
+CASE Prior transcript pair cannot rescue incomplete title
+INPUT SCREEN:
+────────
+old output
+────────
+────────────────────────── Fïrstmate ──
+❯
+IDENTITY claude	idle
+EXPECTED unknown; OBSERVED empty
+EXTRACTED <>; EXPECTED <__refuse__>
+
+CASE Valid newer envelope replaces prior transcript pair
+INPUT SCREEN:
+────────
+old output
+────────
+────────────────────────── Firstmate ──
+❯ message
+continuation row
+───────────────────────────────────────
+IDENTITY claude	idle
+EXPECTED pending; OBSERVED pending
+EXTRACTED <message continuation row>; EXPECTED <message continuation row>
+
+CASE Pi native working spinner stays supported
+INPUT SCREEN:
+transcript
+── ⠏ Working ───────────────
+
+────────────────────────
+ footer
+IDENTITY pi	working
+EXPECTED empty; OBSERVED empty
+
+CASE Pi spinner with idle identity defers
+INPUT SCREEN:
+transcript
+── ⠏ Working ───────────────
+
+────────────────────────
+ footer
+IDENTITY pi	idle
+EXPECTED unknown; OBSERVED unknown

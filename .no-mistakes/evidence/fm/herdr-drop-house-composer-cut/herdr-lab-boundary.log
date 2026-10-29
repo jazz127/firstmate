@@ -1,0 +1,12 @@
+Config-file override: {'HERDR_CONFIG_PATH': '~/.no-mistakes/worktrees/a00b7db52042/01M63DQ5E2PQ2DDS7MAQDD66XF/.test-composer-lab/config.toml'}
+exit=0
+[{"default": true, "name": "default", "running": true, "session_dir": "~/.config/herdr", "socket_path": "~/.config/herdr/herdr.sock"}]
+Workspace-local XDG override: {'XDG_CONFIG_HOME': '~/.no-mistakes/worktrees/a00b7db52042/01M63DQ5E2PQ2DDS7MAQDD66XF/.test-composer-lab/xdg'}
+exit=0
+[{"default": true, "name": "default", "running": false, "session_dir": "~/.no-mistakes/worktrees/a00b7db52042/01M63DQ5E2PQ2DDS7MAQDD66XF/.test-composer-lab/xdg/herdr", "socket_path": "~/.no-mistakes/worktrees/a00b7db52042/01M63DQ5E2PQ2DDS7MAQDD66XF/.test-composer-lab/xdg/herdr/herdr.sock"}]
+Workspace-local prepare command: bash bin/fm-herdr-lab.sh prepare fm-lab-composer-boundary
+exit=1
+
+fm-herdr-lab: fleet-state tripwire requires exactly one running default session
+
+No provision, server, viewer, harness launch, or default-session mutation was attempted after this guard refusal. Config-file override alone retains the external session storage root; XDG isolation removes the real default-session tripwire. No safe helper route within the allowed write boundary was found.

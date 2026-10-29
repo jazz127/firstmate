@@ -94,8 +94,14 @@ if ! fm_session_lock_owned_by_self "$STATE"; then
   fm_session_lock_owned_by_self "$STATE" || allow_stop
 fi
 
-# Away mode owns the watcher and its own triage; never park and never wake.
-[ -e "$STATE/.afk" ] && allow_stop
+HOST_MODE=0
+ACTIONABLE_RE='^(signal:|stale:|check:|heartbeat($|:))'
+if fm_supervision_host_enabled "$CONFIG" agy; then
+  HOST_MODE=1
+  ACTIONABLE_RE='^(signal:|stale:|check:|heartbeat($|:)|supervision-host:)'
+fi
+
+[ "$HOST_MODE" -eq 0 ] && [ -e "$STATE/.afk" ] && allow_stop
 
 # The ceiling bounds hook-driven turns. Reaching it while supervision is still
 # needed is told once, loudly, instead of supervision going quiet unannounced.
@@ -123,12 +129,6 @@ ARM_OUT=
 ARM_PID=
 ACTIONABLE=0
 HEALTHY=0
-HOST_MODE=0
-ACTIONABLE_RE='^(signal:|stale:|check:|heartbeat($|:))'
-if fm_supervision_host_enabled "$CONFIG" agy; then
-  HOST_MODE=1
-  ACTIONABLE_RE='^(signal:|stale:|check:|heartbeat($|:)|supervision-host:)'
-fi
 
 # Never leave a park child or its capture file behind, on any exit path.
 trap '[ -n "$ARM_PID" ] && kill "$ARM_PID" 2>/dev/null; [ -n "$ARM_OUT" ] && rm -f "$ARM_OUT" 2>/dev/null; :' EXIT
@@ -147,8 +147,8 @@ while [ "$attempt" -lt "$ARM_ATTEMPTS" ]; do
   ARM_PID=$!
   while kill -0 "$ARM_PID" 2>/dev/null; do
     # Stand down when a newer Stop claimed the baton, the session lock moved,
-    # or away mode started and its daemon now owns the watcher.
-    if ! park_still_ours || ! fm_session_lock_owned_by_self "$STATE" || [ -e "$STATE/.afk" ]; then
+    # or away mode started under daemon supervision.
+    if ! park_still_ours || ! fm_session_lock_owned_by_self "$STATE" || { [ "$HOST_MODE" -eq 0 ] && [ -e "$STATE/.afk" ]; }; then
       allow_stop
     fi
     if [ "$PARK_TIMEOUT" -gt 0 ] && [ "$waited" -ge "$PARK_TIMEOUT" ]; then
@@ -164,7 +164,7 @@ while [ "$attempt" -lt "$ARM_ATTEMPTS" ]; do
   ARM_PID=
 
   park_still_ours || allow_stop
-  [ -e "$STATE/.afk" ] && allow_stop
+  [ "$HOST_MODE" -eq 0 ] && [ -e "$STATE/.afk" ] && allow_stop
 
   if grep -Eq "$ACTIONABLE_RE" "$ARM_OUT" 2>/dev/null; then
     ACTIONABLE=1
@@ -194,12 +194,6 @@ while [ "$attempt" -lt "$ARM_ATTEMPTS" ]; do
   ARM_OUT=
 done
 
-# The need may have vanished while parked: nothing left to supervise.
-if ! fm_supervision_needed "$STATE" "$GRACE"; then
-  rm -f "$STATE/.turnend-blocks" 2>/dev/null || true
-  allow_stop
-fi
-
 if [ "$ACTIONABLE" -eq 1 ]; then
   if [ "$HOST_MODE" -eq 1 ]; then
     WAKE=$(awk '/^supervision-host:/ { print; next } /^(signal:|stale:|check:|heartbeat)/ && shown++ < 8' "$ARM_OUT" 2>/dev/null)
@@ -211,6 +205,12 @@ if [ "$ACTIONABLE" -eq 1 ]; then
 $WAKE
 
 Run bin/fm-wake-drain.sh first, handle the wake, then run its exact WAKE_ACK_REQUIRED --ack-through command. Until that post-handling acknowledgement, interruption leaves the wake durable for idempotent re-handling. This Stop hook owns watcher continuity: when the handling turn ends, the next needed cycle parks automatically - do NOT run bin/fm-watch-arm.sh after an ordinary wake."
+fi
+
+# The need may have vanished while parked: nothing left to supervise.
+if ! fm_supervision_needed "$STATE" "$GRACE"; then
+  rm -f "$STATE/.turnend-blocks" 2>/dev/null || true
+  allow_stop
 fi
 
 if [ "$HEALTHY" -eq 1 ]; then

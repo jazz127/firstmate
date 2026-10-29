@@ -106,6 +106,15 @@ SH
 write_arm_fixture() {  # <dir> <kind>
   local dir=$1 kind=$2
   case "$kind" in
+    away-actionable)
+      cat > "$dir/bin/fm-watch-arm.sh" <<'SH'
+#!/usr/bin/env bash
+printf '%s\n' "$$" >> "$FM_HOME/state/arm-ran"
+printf '%s\n' "${FM_TEST_AFK_MODE:-away}" > "$FM_HOME/state/.afk"
+sleep 2
+printf 'signal: state/task1.status\n'
+SH
+      ;;
     actionable)
       cat > "$dir/bin/fm-watch-arm.sh" <<'SH'
 #!/usr/bin/env bash
@@ -165,8 +174,12 @@ write_host_fixture() {  # <dir> <kind>
   {
     printf '#!/usr/bin/env bash\n'
     printf 'printf "%%s\\t%%s\\n" "${FM_SUPERVISION_HOST_PRIMARY:-}" "$*" >> "$FM_HOME/state/host-ran"\n'
+    if [ "$kind" = away-handback ]; then
+      printf 'printf "%%s\\n" "${FM_TEST_AFK_MODE:-away}" > "$FM_HOME/state/.afk"\n'
+      printf 'sleep 2\n'
+    fi
     case "$kind" in
-      handback)
+      handback|away-handback)
         printf 'printf "watcher: started pid=%%s (beacon fresh)\\n" "$$"\n'
         printf 'printf "stale: fixture-win needs a look\\n"\n'
         printf 'printf "supervision-host: the away session could not take this wake: fixture; this wake is yours\\n"\n'
@@ -298,7 +311,7 @@ run_agy_stop() {
     printf "%s\n" "$$" > "$FM_HOME/state/.lock"
     "$FM_HOME/bin/fm-turnend-guard-agy.sh"
   '
-  printf '%s' "$payload" | run_under_agy FM_HOME="$dir" FM_AGY_PARK_POLL=1 2>/dev/null
+  printf '%s' "$payload" | run_under_agy FM_HOME="$dir" FM_TEST_CODE_ROOT="$ROOT" FM_AGY_PARK_POLL=1 2>/dev/null
 }
 
 test_turnend_guard_agy_actionable_wake_followup() {
@@ -346,6 +359,126 @@ test_turnend_guard_agy_supervision_host_park() {
   out=$(run_agy_stop "$dir" "$payload")
   assert_equals "{}" "$out" "a host that stood down must end the park with {}"
   pass "fm-turnend-guard-agy: an opted-in home parks on the supervision host with the agy pin"
+}
+
+test_turnend_guard_agy_away_supervision_ownership() {
+  local dir payload out mode timing gate
+  payload='{"executionNum":1,"terminationReason":"NO_TOOL_CALL"}'
+  for mode in away quiet; do
+    for timing in entry parked; do
+      dir=$(make_primary_dir "$TMP_ROOT/stop-host-$mode-$timing")
+      : > "$dir/state/task1.meta"
+      printf 'claude\n' > "$dir/config/supervision-host"
+      [ "$timing" != entry ] || printf '%s\n' "$mode" > "$dir/state/.afk"
+      write_host_fixture "$dir" away-handback
+      write_arm_fixture "$dir" actionable
+      out=$(FM_TEST_AFK_MODE="$mode" run_agy_stop "$dir" "$payload")
+      assert_equals continue "$(printf '%s' "$out" | jq -r '.decision // empty')" \
+        "$mode at $timing must keep the host park and deliver its handback"
+      assert_contains "$out" 'supervision-host: the away session could not take this wake' \
+        "$mode at $timing must preserve the host handback reason"
+      assert_equals "$(printf 'agy\tpark')" "$(cat "$dir/state/host-ran")" \
+        "$mode at $timing must run one host park pinned to agy"
+      assert_absent "$dir/state/arm-ran" "host supervision must not launch a plain arm"
+      assert_equals "$mode" "$(cat "$dir/state/.afk")" "host handback must preserve the posture"
+    done
+    for gate in absent off; do
+      dir=$(make_primary_dir "$TMP_ROOT/stop-daemon-$mode-$gate")
+      : > "$dir/state/task1.meta"
+      printf '%s\n' "$mode" > "$dir/state/.afk"
+      if [ "$gate" = off ]; then
+        printf 'claude\n' > "$dir/config/supervision-host"
+        : > "$dir/config/supervision-host-off"
+      fi
+      write_arm_fixture "$dir" actionable
+      write_host_fixture "$dir" handback
+      out=$(run_agy_stop "$dir" "$payload")
+      assert_equals '{}' "$out" "daemon-owned $mode must stand down when the host gate is $gate"
+      assert_absent "$dir/state/arm-ran" "daemon-owned $mode must not arm"
+      assert_absent "$dir/state/host-ran" "disabled host must not park"
+      rm -f "$dir/state/.afk"
+      write_arm_fixture "$dir" away-actionable
+      out=$(FM_TEST_AFK_MODE="$mode" run_agy_stop "$dir" "$payload")
+      assert_equals '{}' "$out" "entering daemon-owned $mode while parked must stand down"
+      ! kill -0 "$(cat "$dir/state/arm-ran")" 2>/dev/null || fail "daemon handoff left the arm child running"
+    done
+  done
+  pass "fm-turnend-guard-agy: host keeps away and quiet parks; daemon ownership still stands down"
+}
+
+test_turnend_guard_agy_pending_wake_needs_supervision() {
+  local dir payload out queued
+  dir=$(make_primary_dir "$TMP_ROOT/stop-pending")
+  payload='{"executionNum":1,"terminationReason":"NO_TOOL_CALL"}'
+  FM_STATE_OVERRIDE="$dir/state" bash -c '
+    . "$1/bin/fm-wake-lib.sh"
+    fm_wake_append check terminal-result "check: terminal result needs handling"
+  ' _ "$ROOT" || fail "could not queue the durable wake"
+  queued=$(cat "$dir/state/.wake-queue")
+  write_arm_fixture "$dir" actionable
+  out=$(run_agy_stop "$dir" "$payload")
+  assert_equals continue "$(printf '%s' "$out" | jq -r '.decision // empty')" \
+    "a queued wake must park even with no tasks or sources"
+  assert_present "$dir/state/arm-ran" "a pending-only home must start its park"
+  assert_equals "$queued" "$(cat "$dir/state/.wake-queue")" "Stop delivery must not acknowledge the wake"
+
+  out=$(printf '%s' "$payload" | FM_HOME="$dir" bash "$dir/bin/fm-turnend-guard.sh" --agy)
+  assert_equals continue "$(printf '%s' "$out" | jq -r '.decision // empty')" \
+    "the AGY repair fallback must retain a pending-only supervision need"
+  out=$(FM_AGY_TURNEND_LOOP_CEILING=1 run_agy_stop "$dir" "$payload")
+  assert_contains "$out" 'CEILING REACHED' "a pending-only home must announce reaching the ceiling"
+  : > "$dir/state/.wake-queue"
+  rm -f "$dir/state/arm-ran"
+  out=$(run_agy_stop "$dir" "$payload")
+  assert_equals '{}' "$out" "an empty queue with no other work must allow stopping"
+  assert_absent "$dir/state/arm-ran" "an empty queue must not park"
+  pass "fm-turnend-guard-agy: pending durable wakes survive empty-fleet, fallback, and ceiling decisions"
+}
+
+test_turnend_guard_agy_terminal_source_close() {
+  local dir payload out
+  dir=$(make_primary_dir "$TMP_ROOT/stop-terminal")
+  cat > "$dir/bin/fm-procevent-endnow.sh" <<'SH'
+#!/usr/bin/env bash
+case "${1:-}" in
+  terminal) [ -f "${2:-}" ] && exit 0 || exit 1 ;;
+esac
+exit 2
+SH
+  chmod +x "$dir/bin/fm-procevent-endnow.sh"
+  fm_test_track_procevent_home "$dir" "$dir/claims"
+  FM_HOME="$dir" FM_ROOT_OVERRIDE="$dir" FM_PROCEVENT_CLAIM_ROOT="$dir/claims" \
+    "$ROOT/bin/fm-procevent.sh" register endnow terminal -- /bin/echo 'terminal payload' >/dev/null \
+    || fail "could not register terminal source"
+  cat > "$dir/bin/fm-watch-arm.sh" <<'SH'
+#!/usr/bin/env bash
+FM_ROOT_OVERRIDE="$FM_HOME" FM_PROCEVENT_CLAIM_ROOT="$FM_HOME/claims" \
+  "$FM_TEST_CODE_ROOT/bin/fm-procevent.sh" start terminal > "$FM_HOME/state/runner-out" 2>&1 || exit 1
+printf 'check: procevent endnow terminal 1\n'
+SH
+  chmod +x "$dir/bin/fm-watch-arm.sh"
+  payload='{"executionNum":1,"terminationReason":"NO_TOOL_CALL"}'
+  out=$(run_agy_stop "$dir" "$payload")
+  assert_absent "$dir/state/procevent/terminal.source" "a terminal source must retire before the park closes"
+  assert_contains "$(cat "$dir/state/runner-out")" 'retired: terminal' "the real runner must retire its source"
+  assert_contains "$(cat "$dir/state/.wake-queue")" 'procevent endnow terminal 1' "the result must stay durable"
+  assert_equals continue "$(printf '%s' "$out" | jq -r '.decision // empty')" \
+    "retiring the last source must deliver the actionable close"
+  assert_contains "$out" 'check: procevent endnow terminal 1' "the continuation must carry the terminal result"
+
+  dir=$(make_primary_dir "$TMP_ROOT/stop-final-actionable")
+  : > "$dir/state/task1.meta"
+  cat > "$dir/bin/fm-watch-arm.sh" <<'SH'
+#!/usr/bin/env bash
+rm -f "$FM_HOME/state/task1.meta"
+printf 'check: final actionable close\n'
+SH
+  chmod +x "$dir/bin/fm-watch-arm.sh"
+  out=$(run_agy_stop "$dir" "$payload")
+  assert_equals continue "$(printf '%s' "$out" | jq -r '.decision // empty')" \
+    "an actionable close must be delivered even when no queue or work remains"
+  assert_contains "$out" 'check: final actionable close' "the final close must reach the handling turn"
+  pass "fm-turnend-guard-agy: final actionable closes survive terminal retirement and vanished supervision need"
 }
 
 test_turnend_guard_agy_park_timeout_rearms() {
@@ -619,6 +752,9 @@ fm_test_run \
   test_sessionstart_agy_primary_secondmate_and_worktree_scope \
   test_turnend_guard_agy_actionable_wake_followup \
   test_turnend_guard_agy_supervision_host_park \
+  test_turnend_guard_agy_away_supervision_ownership \
+  test_turnend_guard_agy_pending_wake_needs_supervision \
+  test_turnend_guard_agy_terminal_source_close \
   test_turnend_guard_agy_park_timeout_rearms \
   test_turnend_guard_agy_fleet_empty_and_healthy_close \
   test_turnend_guard_agy_non_normal_termination_reasons \

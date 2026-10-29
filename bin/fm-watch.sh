@@ -505,6 +505,21 @@ inbox_steer_busy() {  # <window> <backend> <task> <tail40>
   fi
 }
 
+WATCHER_SECONDMATE_TASK=
+
+watcher_secondmate_check() {
+  local task=$1 rc=0
+  shift
+  fm_secondmate_liveness_lock "$task" || return 0
+  WATCHER_SECONDMATE_TASK=$task
+  if ! fm_secondmate_is_paused "$STATE" "$task"; then
+    "$@" || rc=$?
+  fi
+  fm_secondmate_liveness_unlock "$task"
+  WATCHER_SECONDMATE_TASK=
+  return "$rc"
+}
+
 # Steering-inbox loss detection, one cheap check per recorded window per poll.
 # bin/fm-task-inbox-lib.sh owns delivery, busy-deferral, retry, and escalation policy.
 # Endpoint and busy checks precede delivery so recovery never types into a busy,
@@ -513,6 +528,14 @@ inbox_steer_busy() {  # <window> <backend> <task> <tail40>
 # Runs for secondmates too: their pane-staleness exemption is about quiet panes
 # being healthy, while an unacknowledged instruction can still be a stuck steer.
 inbox_steer_check() {  # <window> <task>
+  if [ "$(fm_meta_get "$STATE/$2.meta" kind)" = secondmate ]; then
+    watcher_secondmate_check "$2" inbox_steer_check_active "$@"
+  else
+    inbox_steer_check_active "$@"
+  fi
+}
+
+inbox_steer_check_active() {
   local w=$1 task=$2 action verb rec count tail40 reason='' ring_rc backend agent_state
   action=$(fm_task_inbox_due_action "$STATE" "$task") || return 0
   verb=${action%% *}
@@ -942,11 +965,93 @@ secondmate_ring_to_drain() {  # <task> <window>
 # parent alarm. Empty inbox and a fresh child beacon are not idle proof.
 # Receipts close the append-before-marker crash window without changing the
 # foreign queue.
+secondmate_wake_stall_check() {
+  local meta=$1 task=$2 now=$3 threshold=$4
+  local home queue row epoch seq row_key marker progress_marker ring_marker progress observed_at observed_key
+  local receipt receipt_dir notify_key queued idle reason episode_alerted already_rung w
+  home=$(fm_meta_get "$meta" home)
+  [ -n "$home" ] || return 0
+  [ -f "$home/.fm-secondmate-home" ] && [ ! -L "$home/.fm-secondmate-home" ] || return 0
+  [ "$(cat "$home/.fm-secondmate-home" 2>/dev/null || true)" = "$task" ] || return 0
+  queue="$home/state/.wake-queue"
+  row=$(secondmate_oldest_queue_row "$queue")
+  marker="$STATE/.secondmate-wake-stall-$task"
+  progress_marker="$STATE/.secondmate-wake-progress-$task"
+  ring_marker="$STATE/.secondmate-wake-ring-$task"
+  receipt_dir="$STATE/.secondmate-wake-stall-receipts/$task"
+  if [ -z "$row" ]; then
+    rm -f "$marker" "$progress_marker" "$ring_marker"
+    if [ -e "$receipt_dir" ] || [ -L "$receipt_dir" ]; then
+      [ -d "$receipt_dir" ] && [ ! -L "$receipt_dir" ] || return 1
+      rm -rf -- "$receipt_dir" || return 1
+    fi
+    return 0
+  fi
+  IFS=$'\t' read -r epoch seq _row_kind _row_key _row_payload <<EOF
+$row
+EOF
+  case "$epoch" in ''|*[!0-9]*) return 0 ;; esac
+  case "$seq" in ''|*[!0-9]*) return 0 ;; esac
+  row_key="$epoch-$seq"
+  episode_alerted=0
+  if [ -e "$marker" ] || [ -L "$marker" ]; then
+    [ -f "$marker" ] && [ ! -L "$marker" ] || return 1
+    episode_alerted=1
+  fi
+  progress=$(cat "$progress_marker" 2>/dev/null || true)
+  observed_at=${progress%%[[:space:]]*}
+  observed_key=${progress#*[[:space:]]}
+  if [ "$observed_at" = "$progress" ]; then
+    observed_key=
+  else
+    observed_key=${observed_key%%[[:space:]]*}
+  fi
+  case "$observed_at" in ''|*[!0-9]*) observed_at= ;; esac
+  case "$observed_key" in ''|*[!0-9-]*) observed_key= ;; esac
+  if [ -z "$observed_at" ] || [ -z "$observed_key" ] \
+    || [ "$now" -lt "$observed_at" ] || [ "$row_key" != "$observed_key" ]; then
+    fm_wake_secondmate_progress_marker_write "$task" "$now" "$row_key" || return 1
+    [ "$episode_alerted" -eq 0 ] || rm -f "$marker" || return 1
+    rm -f "$ring_marker" || return 1
+    return 0
+  fi
+  [ "$episode_alerted" -eq 0 ] || return 0
+  idle=$((now - observed_at))
+  [ "$idle" -ge "$threshold" ] || return 0
+  w=$(fm_backend_target_of_meta "$meta")
+  ! secondmate_in_active_turn "$w" "$idle" || return 0
+  already_rung=0
+  if [ -e "$ring_marker" ] || [ -L "$ring_marker" ]; then
+    [ -f "$ring_marker" ] && [ ! -L "$ring_marker" ] || return 1
+    [ "$(cat "$ring_marker" 2>/dev/null || true)" = "$row_key" ] && already_rung=1
+  fi
+  if [ "$already_rung" -eq 0 ] && secondmate_idle_ring_safe "$w"; then
+    if secondmate_ring_to_drain "$task" "$w"; then
+      fm_wake_secondmate_ring_marker_write "$task" "$row_key" || return 1
+      fm_wake_secondmate_progress_marker_write "$task" "$now" "$row_key" || return 1
+      return 0
+    fi
+  fi
+  receipt="$receipt_dir/$row_key"
+  if [ "$(cat "$receipt" 2>/dev/null || true)" = "$row_key" ]; then
+    fm_wake_secondmate_stall_marker_write "$task" "$row_key" || return 1
+    return 0
+  fi
+  notify_key="secondmate-wake-loop-$task-$row_key"
+  reason="check: secondmate wake-loop stalled: mate=$task row=$seq idle=${idle}s"
+  queued=$(fm_wake_queued_keys check)
+  if ! printf '%s\n' "$queued" | grep -Fx "$notify_key" >/dev/null 2>&1; then
+    fm_wake_append check "$notify_key" "$reason" || return 1
+  fi
+  fm_wake_secondmate_stall_receipt_write "$task" "$row_key" || return 1
+  fm_wake_secondmate_stall_marker_write "$task" "$row_key" || return 1
+  wake "$reason"
+  return 0
+}
+
 secondmate_wake_stall_tick() {
   local now=$(( $(date +%s) )) threshold=$SECONDMATE_WAKE_STALL_SECS
-  local meta task kind remote_host home queue row epoch seq row_key marker progress_marker ring_marker progress observed_at observed_key
-  local receipt receipt_dir notify_key queued idle reason episode_alerted already_rung w
-  # Endpoint metadata admits this queue-loop check; secondmate-liveness owns registered mates whose endpoint is missing or dead.
+  local meta task kind remote_host
   for meta in "$STATE"/*.meta; do
     [ -e "$meta" ] || continue
     kind=$(fm_meta_get "$meta" kind)
@@ -956,83 +1061,7 @@ secondmate_wake_stall_tick() {
     task=${meta##*/}
     task=${task%.meta}
     case "$task" in ''|*[!A-Za-z0-9._-]*) continue ;; esac
-    home=$(fm_meta_get "$meta" home)
-    [ -n "$home" ] || continue
-    [ -f "$home/.fm-secondmate-home" ] && [ ! -L "$home/.fm-secondmate-home" ] || continue
-    [ "$(cat "$home/.fm-secondmate-home" 2>/dev/null || true)" = "$task" ] || continue
-    queue="$home/state/.wake-queue"
-    row=$(secondmate_oldest_queue_row "$queue")
-    marker="$STATE/.secondmate-wake-stall-$task"
-    progress_marker="$STATE/.secondmate-wake-progress-$task"
-    ring_marker="$STATE/.secondmate-wake-ring-$task"
-    receipt_dir="$STATE/.secondmate-wake-stall-receipts/$task"
-    if [ -z "$row" ]; then
-      rm -f "$marker" "$progress_marker" "$ring_marker"
-      if [ -e "$receipt_dir" ] || [ -L "$receipt_dir" ]; then
-        [ -d "$receipt_dir" ] && [ ! -L "$receipt_dir" ] || return 1
-        rm -rf -- "$receipt_dir" || return 1
-      fi
-      continue
-    fi
-    IFS=$'\t' read -r epoch seq _row_kind _row_key _row_payload <<EOF
-$row
-EOF
-    case "$epoch" in ''|*[!0-9]*) continue ;; esac
-    case "$seq" in ''|*[!0-9]*) continue ;; esac
-    row_key="$epoch-$seq"
-    episode_alerted=0
-    if [ -e "$marker" ] || [ -L "$marker" ]; then
-      [ -f "$marker" ] && [ ! -L "$marker" ] || return 1
-      episode_alerted=1
-    fi
-    progress=$(cat "$progress_marker" 2>/dev/null || true)
-    observed_at=${progress%%[[:space:]]*}
-    observed_key=${progress#*[[:space:]]}
-    if [ "$observed_at" = "$progress" ]; then
-      observed_key=
-    else
-      observed_key=${observed_key%%[[:space:]]*}
-    fi
-    case "$observed_at" in ''|*[!0-9]*) observed_at= ;; esac
-    case "$observed_key" in ''|*[!0-9-]*) observed_key= ;; esac
-    if [ -z "$observed_at" ] || [ -z "$observed_key" ] \
-      || [ "$now" -lt "$observed_at" ] || [ "$row_key" != "$observed_key" ]; then
-      fm_wake_secondmate_progress_marker_write "$task" "$now" "$row_key" || return 1
-      [ "$episode_alerted" -eq 0 ] || rm -f "$marker" || return 1
-      rm -f "$ring_marker" || return 1
-      continue
-    fi
-    [ "$episode_alerted" -eq 0 ] || continue
-    idle=$((now - observed_at))
-    [ "$idle" -ge "$threshold" ] || continue
-    w=$(fm_backend_target_of_meta "$meta")
-    ! secondmate_in_active_turn "$w" "$idle" || continue
-    already_rung=0
-    if [ -e "$ring_marker" ] || [ -L "$ring_marker" ]; then
-      [ -f "$ring_marker" ] && [ ! -L "$ring_marker" ] || return 1
-      [ "$(cat "$ring_marker" 2>/dev/null || true)" = "$row_key" ] && already_rung=1
-    fi
-    if [ "$already_rung" -eq 0 ] && secondmate_idle_ring_safe "$w"; then
-      if secondmate_ring_to_drain "$task" "$w"; then
-        fm_wake_secondmate_ring_marker_write "$task" "$row_key" || return 1
-        fm_wake_secondmate_progress_marker_write "$task" "$now" "$row_key" || return 1
-        continue
-      fi
-    fi
-    receipt="$receipt_dir/$row_key"
-    if [ "$(cat "$receipt" 2>/dev/null || true)" = "$row_key" ]; then
-      fm_wake_secondmate_stall_marker_write "$task" "$row_key" || return 1
-      continue
-    fi
-    notify_key="secondmate-wake-loop-$task-$row_key"
-    reason="check: secondmate wake-loop stalled: mate=$task row=$seq idle=${idle}s"
-    queued=$(fm_wake_queued_keys check)
-    if ! printf '%s\n' "$queued" | grep -Fx "$notify_key" >/dev/null 2>&1; then
-      fm_wake_append check "$notify_key" "$reason" || return 1
-    fi
-    fm_wake_secondmate_stall_receipt_write "$task" "$row_key" || return 1
-    fm_wake_secondmate_stall_marker_write "$task" "$row_key" || return 1
-    wake "$reason"
+    watcher_secondmate_check "$task" secondmate_wake_stall_check "$meta" "$task" "$now" "$threshold" || return 1
   done
   return 0
 }
@@ -1911,7 +1940,7 @@ wedge_defer_guard() {  # <window> <since-file> <triage-label> <idle-age> <guard-
 # never reaches it.
 wedge_timer_check() {  # <window> <since-file> <triage-label> <escalation-count-file> <task> <pane-hash> [dialog-name] [repeat-secs] [busy-proven]
   local win=$1 since_file=$2 label=$3 escalation_file=$4 task=$5 hash=$6 dialog=${7-} repeat_secs=${8:-$STALE_ESCALATE_SECS}
-  local since age n reason interval evidence guard guard_note busy_proven=${9:-0}
+  local since age n reason interval guard guard_note busy_proven=${9:-0}
   local _wkey _wrollback_sentinel _wrb_ts _wrb_cap_reason _wrb_cap_status _wrb_rm_status
   local _wrb_since _wrb_now _wrb_age _wrb_cap_ts _wrb_gate
   _wkey=$(window_key "$win")
@@ -2786,14 +2815,11 @@ pause_state_class() {  # <window> <task>
 # Only a proven open hold may defer a wedge or change an eligible wait's owner.
 # bin/fm-captain-hold.sh owns the predicate and lifecycle identity; an unreadable
 # or absent record grants no deferral. Idle policy is applied separately.
-CAPTAIN_CALL_IDENTITY=
-
 task_captain_call_open() {  # <task>
   local task=$1
-  CAPTAIN_CALL_IDENTITY=
   [ -n "$task" ] || return 1
-  CAPTAIN_CALL_IDENTITY=$(FM_HOME="$FM_HOME" "$SCRIPT_DIR/fm-captain-hold.sh" \
-    open "$task" --identity 2>/dev/null) || return 1
+  FM_HOME="$FM_HOME" "$SCRIPT_DIR/fm-captain-hold.sh" \
+    open "$task" --identity >/dev/null 2>&1 || return 1
   return 0
 }
 
@@ -3607,6 +3633,10 @@ watcher_cleanup() {
   # Quietly: a stop usually lands inside the waited event wait, and bash would
   # report the group it kills here as a "Terminated" job line on stderr.
   fm_active_check_stop 2>/dev/null || cleanup_status=1
+  if [ -n "$WATCHER_SECONDMATE_TASK" ]; then
+    fm_secondmate_liveness_unlock "$WATCHER_SECONDMATE_TASK"
+    WATCHER_SECONDMATE_TASK=
+  fi
   fm_check_output_cleanup
   fm_capture_output_cleanup
   fm_wait_tmp_cleanup

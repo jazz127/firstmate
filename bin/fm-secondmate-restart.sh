@@ -3,6 +3,26 @@
 # wiring, persisting their open records first.
 #
 # Usage: fm-secondmate-restart.sh <secondmate-id>... [--help]
+#        fm-secondmate-restart.sh --pause <secondmate-id>
+#        fm-secondmate-restart.sh --resume <secondmate-id>
+#
+# Pause stops only the agent, retaining its home, backlog, route, endpoint and
+# open records. It refuses any child metadata or pending backlog-close record
+# (including stopped workers with unlanded work), in-flight backlog rows, or a
+# dirty home. The home's task-set lock excludes child spawns through the stop.
+# Unsupported stop or replacement backends refuse without stopping the agent.
+# state/.secondmate-paused-<id> is the durable parent-owned pause record.
+# It is written before stopping; an uncertain stop leaves it present so liveness
+# cannot silently undo the request. Ordinary convergence and nudges skip it.
+# Resume runs guarded instruction and inherited-config convergence before
+# launching a fresh agent through the control/spawn owners, clearing the marker only
+# after success. For a local mate it renews an existing home wake-queue progress
+# timestamp under the lifecycle lock, preserving its row key, ring marker,
+# pending records and delivery counters; paused time cannot become stall time.
+# Only explicit resume or fm-send --new-work resumes a paused mate; backlog
+# handoff grants that authority only to fresh work after making it durable.
+# Remote pause/resume uses fm-on and the same host-local lifecycle owners.
+# Both operations are idempotent, take one exact bare id, and require FM_HOME.
 #
 # This is the executable half of /updatefirstmate's reload step. A running agent
 # holds AGENTS.md and every skill it has loaded frozen from launch, and no
@@ -68,7 +88,10 @@
 #
 # Exit status: 0 every named mate restarted; 3 at least one was nudged or left
 # unreached and every mate was still accounted for; 1 the input itself is
-# unusable; 2 invalid use.
+# unusable; 2 invalid use. Pause returns 3 for a safety refusal before stopping
+# or 6 for a supervision-lease refusal, removing newly written intent on a
+# confirmed pre-stop refusal. Uncertain stop or transport completion retains
+# intent and propagates its failure status; preexisting intent is preserved.
 set -u
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -93,10 +116,103 @@ STATE="${FM_STATE_OVERRIDE:-$FM_HOME/state}"
 
 # shellcheck source=bin/fm-secondmate-restart-lib.sh
 . "$SCRIPT_DIR/fm-secondmate-restart-lib.sh"
+# shellcheck source=bin/fm-secondmate-registry-lib.sh
+. "$SCRIPT_DIR/fm-secondmate-registry-lib.sh"
 # shellcheck source=bin/fm-secondmate-nudge-lib.sh
 . "$SCRIPT_DIR/fm-secondmate-nudge-lib.sh"
 # shellcheck source=bin/fm-pending-reply-lib.sh
 . "$SCRIPT_DIR/fm-pending-reply-lib.sh"
+# shellcheck source=bin/fm-wake-lib.sh
+. "$SCRIPT_DIR/fm-wake-lib.sh"
+
+# Explicit pause/resume is an operator lifecycle action, not an update sweep.
+# Serialize with liveness before publishing the pause intent or replacing it.
+case "${1:-}" in
+  --pause|--resume)
+    [ "$#" -eq 2 ] || { usage >&2; exit 2; }
+    action=${1#--}; id=$2
+    preflight_exit=1
+    [ "$action" != pause ] || preflight_exit=3
+    case "$id" in ''|*[!A-Za-z0-9._-]*|.|..) echo "error: invalid secondmate id: $id" >&2; exit 2 ;; esac
+    # shellcheck source=bin/fm-gate-refuse-lib.sh
+    . "$SCRIPT_DIR/fm-gate-refuse-lib.sh"
+    fm_refuse_if_gate_agent
+    # shellcheck source=bin/fm-lease-lib.sh
+    . "$SCRIPT_DIR/fm-lease-lib.sh"
+    lifecycle_lock="$STATE/.secondmate-liveness-$id.lock"
+    child_set_lock=
+    # shellcheck disable=SC2329 # Invoked by the EXIT trap below.
+    cleanup_lifecycle() {
+      [ -z "$child_set_lock" ] || fm_lock_release "$child_set_lock" || true
+      fm_lease_guard_release || true
+      fm_lock_release "$lifecycle_lock" || true
+    }
+    fm_lock_try_acquire "$lifecycle_lock" || { echo "error: lifecycle action already in progress for $id" >&2; exit "$preflight_exit"; }
+    trap cleanup_lifecycle EXIT
+    fm_secondmate_restart_capable "$STATE/$id.meta" || {
+      echo "error: $id: $FM_SECONDMATE_RESTART_REASON" >&2; exit "$preflight_exit";
+    }
+    marker="$STATE/.secondmate-paused-$id"
+    if [ -L "$marker" ] || { [ -e "$marker" ] && [ ! -f "$marker" ]; }; then
+      echo "error: unsafe pause record for $id" >&2; exit "$preflight_exit"
+    fi
+    was_paused=0
+    if fm_secondmate_is_paused "$STATE" "$id"; then was_paused=1; fi
+    if [ "$action" = pause ]; then
+      fm_lease_guard "$id" "pause secondmate" || exit 1
+      if [ "$FM_SECONDMATE_RESTART_PLACEMENT" = local ]; then
+        mate_home=$(fm_meta_get "$STATE/$id.meta" worktree)
+        fm_secondmate_pause_home_valid "$mate_home" "$id" || exit 3
+        child_set_lock=$(fm_task_set_lock_path "$mate_home/state") || exit 3
+        fm_lock_try_acquire "$child_set_lock" || { child_set_lock=; echo "error: $id's task set is busy; retry pause" >&2; exit 3; }
+        fm_secondmate_pause_safe "$mate_home" "$id" || exit 3
+      fi
+      (umask 077; printf '%s\n' "$(date +%s)" > "$marker") || {
+        [ "$was_paused" = 1 ] || rm -f -- "$marker"
+        exit 3
+      }
+      if [ "$FM_SECONDMATE_RESTART_PLACEMENT" = remote ]; then
+        "$SCRIPT_DIR/fm-on.sh" "$id" fm-remote-secondmate-control.sh pause "$id" </dev/null || {
+          rc=$?
+          # A transport failure has unknown completion: retain pause intent.
+          # A host refusal before stopping is safe to undo here.
+          { [ "$rc" -ne 3 ] && [ "$rc" -ne "$FM_LEASE_REFUSE_EXIT" ]; } || [ "$was_paused" = 1 ] || rm -f -- "$marker"
+          exit "$rc"
+        }
+      else
+        fm_lease_guard_release
+        "$SCRIPT_DIR/fm-control.sh" "$id" exit || {
+          rc=$?
+          { [ "$rc" -ne 3 ] && [ "$rc" -ne "$FM_LEASE_REFUSE_EXIT" ]; } || [ "$was_paused" = 1 ] || rm -f -- "$marker"
+          exit "$rc"
+        }
+      fi
+      echo "paused: $id"
+    else
+      if ! fm_secondmate_is_paused "$STATE" "$id"; then
+        echo "resumed: $id (not paused)"; exit 0
+      fi
+      if [ "$FM_SECONDMATE_RESTART_PLACEMENT" = remote ]; then
+        harness=$("$SCRIPT_DIR/fm-harness.sh" secondmate "$id") || exit 1
+        model=$("$SCRIPT_DIR/fm-harness.sh" secondmate-model "$id") || exit 1
+        effort=$("$SCRIPT_DIR/fm-harness.sh" secondmate-effort "$id") || exit 1
+        [ -n "$harness" ] || harness=$FM_SECONDMATE_RESTART_HARNESS
+        "$SCRIPT_DIR/fm-remote-secondmate-relaunch.sh" "$id" "$harness" "${model:-default}" "${effort:-default}" resume || exit $?
+      else
+        "$SCRIPT_DIR/fm-control.sh" "$id" relaunch || exit 1
+        progress_marker="$STATE/.secondmate-wake-progress-$id"
+        if [ -e "$progress_marker" ] || [ -L "$progress_marker" ]; then
+          [ -f "$progress_marker" ] && [ ! -L "$progress_marker" ] || exit 1
+          IFS=$'\t' read -r _observed_at progress_row < "$progress_marker" || exit 1
+          fm_wake_secondmate_progress_marker_write "$id" "$(date +%s)" "$progress_row" || exit 1
+        fi
+        rm -f -- "$marker" || exit 1
+      fi
+      echo "resumed: $id"
+    fi
+    exit 0
+    ;;
+esac
 
 PERSIST_WAIT=${FM_SECONDMATE_PERSIST_WAIT:-900}
 PERSIST_POLL=${FM_SECONDMATE_PERSIST_POLL:-5}
@@ -111,13 +227,17 @@ for arg in "$@"; do
   # /updatefirstmate's action line names each mate by its fm-<id> selector; the
   # bare id is equally acceptable so a hand-run stays natural.
   id=${arg#fm-}
+  if fm_secondmate_is_paused "$STATE" "$id"; then
+    printf 'skipped: %s intentionally paused\n' "$id"
+    continue
+  fi
   case "$id" in ''|*[!A-Za-z0-9._-]*) echo "error: invalid second mate id: $arg" >&2; exit 2 ;; esac
   case " ${IDS[*]:-} " in
     *" $id "*) continue ;;
   esac
   IDS+=("$id")
 done
-[ "${#IDS[@]}" -gt 0 ] || { usage >&2; exit 2; }
+[ "${#IDS[@]}" -gt 0 ] || exit 0
 
 # Per-mate pass state, kept as parallel indexed arrays so this stays bash-3.2
 # safe. PLAN is the phase the mate reached: persist-sent, or fallback with the
@@ -219,8 +339,18 @@ report_unreached() {  # <id> <reason>
 }
 
 restart_mate() {  # <array-index>
-  local i=$1 id restart_out restart_rc restart_reason ran_on
+  local i=$1 id restart_out restart_rc restart_reason ran_on lifecycle_lock
   id=${IDS[$i]}
+  lifecycle_lock="$STATE/.secondmate-liveness-$id.lock"
+  fm_lock_try_acquire "$lifecycle_lock" || {
+    report_unreached "$id" "lifecycle action already in progress"
+    return
+  }
+  if fm_secondmate_is_paused "$STATE" "$id"; then
+    printf 'skipped: %s intentionally paused\n' "$id"
+    fm_lock_release "$lifecycle_lock"
+    return
+  fi
   if [ "${PLACEMENT[i]}" = remote ]; then
     restart_out=$(FM_HOME="$FM_HOME" FM_STATE_OVERRIDE="$STATE" \
       "$SCRIPT_DIR/fm-remote-secondmate-relaunch.sh" \
@@ -231,6 +361,7 @@ restart_mate() {  # <array-index>
       "$SCRIPT_DIR/fm-control.sh" "$id" relaunch 2>&1)
     restart_rc=$?
   fi
+  fm_lock_release "$lifecycle_lock"
   if [ "$restart_rc" -eq 0 ]; then
     ran_on=$(printf '%s\n' "$restart_out" | sed -n 's/^relaunched .* harness=\([^ ]*\).*/\1/p' | tail -1)
     [ -n "$ran_on" ] || ran_on=${HARNESS[i]}
@@ -291,6 +422,7 @@ harvest_restarts() {
     case "$out" in
       restarted:*) restarted_count=$((restarted_count + 1)) ;;
       nudged:*) nudged_count=$((nudged_count + 1)) ;;
+      skipped:*) ;;
       *) unreached_count=$((unreached_count + 1)) ;;
     esac
     PLAN[i]="done"

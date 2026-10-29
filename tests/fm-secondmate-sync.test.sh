@@ -1425,6 +1425,43 @@ test_remote_launch_does_not_retarget_host_copy() {
   pass "R9 a remote launch leaves the home on the parent's commit while an ordinary spawn follows its own checkout"
 }
 
+test_paused_home_skips_convergence_and_reread_retries() {
+  local w c1 fb out log marker
+  w=$(new_world paused-sync)
+  c1=$(head_of "$w/main")
+  add_sm_worktree "$w" sm-paused "$c1"
+  bump_primary "$w" instr
+  fb=$(make_fake_toolchain "$w")
+  log="$w/tmux.log"
+  printf '1\n' > "$w/home/state/.secondmate-paused-sm-paused"
+  mkdir -p "$w/home/state/.secondmate-nudge-pending"
+  marker="$w/home/state/.secondmate-nudge-pending/sm-paused.pending"
+  cat > "$marker" <<EOF
+id=sm-paused
+selector=fm-sm-paused
+home=$w/sm-paused
+commit=$c1
+instructions=AGENTS.md
+message=firstmate was updated to the latest - please re-read your AGENTS.md to pick up the new instructions.
+remote=0
+EOF
+  out=$(PATH="$fb:$BASE_PATH" FM_HOME="$w/home" FM_ROOT_OVERRIDE="$w/main" \
+    FM_SEND_SETTLE=0 FM_FAKE_TMUX_LOG="$log" "$ROOT/bin/fm-bootstrap.sh" 2>&1)
+  [ "$(head_of "$w/sm-paused")" = "$c1" ] || fail 'bootstrap advanced a paused home'
+  assert_absent "$w/home/state/sm-paused.inbox" 'bootstrap retried a reread against a paused mate'
+  assert_present "$marker" 'a skipped reread remains owed until launch supersedes it'
+  mkdir -p "$w/home/config"
+  printf 'codex\n' > "$w/home/config/crew-harness"
+  out=$(PATH="$fb:$BASE_PATH" FM_HOME="$w/home" FM_ROOT_OVERRIDE="$w/main" \
+    FM_FAKE_TMUX_LOG="$log" "$ROOT/bin/fm-config-push.sh" 2>&1)
+  assert_contains "$out" 'no live secondmate homes found' 'config push excludes paused discovery'
+  assert_absent "$w/sm-paused/config/crew-harness" 'config push does not converge a paused home'
+  assert_absent "$w/home/state/sm-paused.inbox" 'config push does not wake a paused mate'
+  pass 'paused homes skip bootstrap convergence, pending rereads and config push'
+}
+
+test_paused_home_skips_convergence_and_reread_retries
+
 test_ff_updated
 test_ff_current
 test_ff_dirty

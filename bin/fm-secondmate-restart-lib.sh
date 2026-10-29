@@ -103,3 +103,51 @@ fm_secondmate_restart_capable() {  # <meta-file>
   FM_SECONDMATE_RESTART_HARNESS=$family
   return 0
 }
+
+# Caller holds the home's task-set lock through the stop, preventing a child
+# spawn from publishing between this preflight and the verified agent exit.
+# Like retirement's preflight, any child record still owns potentially unlanded
+# work even when its endpoint is stopped or its last status says done.
+fm_secondmate_pause_home_valid() { # <home> <id>
+  local home=$1 id=$2
+  [ -d "$home" ] && [ ! -L "$home" ] \
+    && [ -f "$home/.fm-secondmate-home" ] && [ ! -L "$home/.fm-secondmate-home" ] \
+    && [ "$(cat "$home/.fm-secondmate-home")" = "$id" ] \
+    && [ -d "$home/state" ] && [ ! -L "$home/state" ] \
+    || { echo "error: $id has no safe seeded home to pause" >&2; return 1; }
+}
+
+fm_secondmate_pause_safe() { # <home> <id>
+  local home=$1 id=$2 child dirty backend backlog rows count
+  fm_secondmate_pause_home_valid "$home" "$id" || return 1
+  for child in "$home/state"/*.meta "$home/state"/*.backlog-close; do
+    if [ -e "$child" ] || [ -L "$child" ]; then
+      echo "error: cannot pause $id: in-flight or unlanded work remains at $child; finish and land it first" >&2
+      return 1
+    fi
+  done
+  # Ask the backlog's existing owner, including non-markdown adapters, rather
+  # than assuming absent child metadata proves there is no in-flight work.
+  # shellcheck source=bin/fm-tasks-axi-lib.sh
+  . "$_FM_SECONDMATE_RESTART_LIB_DIR/fm-tasks-axi-lib.sh"
+  # shellcheck source=bin/fm-backlog-transition-lib.sh
+  . "$_FM_SECONDMATE_RESTART_LIB_DIR/fm-backlog-transition-lib.sh"
+  backend=$(fm_tasks_axi_backend "$home") || return 1
+  backlog="$home/data/backlog.md"
+  if [ "$backend" != markdown ] || [ -e "$backlog" ] || [ -L "$backlog" ]; then
+    if [ "$backend" = markdown ] && { [ ! -f "$backlog" ] || [ -L "$backlog" ]; }; then
+      echo "error: cannot pause $id: unsafe backlog" >&2; return 1
+    fi
+    rows=$(fm_backlog_row_list "$home/data" --state in_flight) || {
+      echo "error: cannot inspect $id's in-flight backlog: $rows" >&2; return 1;
+    }
+    count=$(printf '%s\n' "$rows" | sed -n 's/^count: //p')
+    [ "$count" = 0 ] || {
+      echo "error: cannot pause $id: in-flight backlog work remains or its count is unreadable" >&2; return 1;
+    }
+  fi
+  dirty=$(git -C "$home" status --porcelain 2>/dev/null) \
+    || { echo "error: cannot inspect $id's home before pausing" >&2; return 1; }
+  [ -z "$dirty" ] \
+    || { echo "error: cannot pause $id: its home has uncommitted work" >&2; return 1; }
+}

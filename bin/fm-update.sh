@@ -131,6 +131,7 @@ FF_STEER_WINDOWS=""
 
 secondmate_agent_may_be_alive() {  # <id>
   local id=$1 meta="$STATE/$1.meta" remote_host state=unreadable
+  fm_secondmate_is_paused "$STATE" "$id" && return 1
   remote_host=$(fm_meta_get "$meta" remote_host)
   if [ -n "$remote_host" ]; then
     state=$("$SCRIPT_DIR/fm-on.sh" "$id" \

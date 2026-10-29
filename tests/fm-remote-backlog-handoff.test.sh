@@ -344,11 +344,42 @@ assert_absent "$PARENT/data/handoff/ios.outbox.md" \
   "remote receiver wake failure retained the durably received outbox"
 assert_present "$PARENT/state/.backlog-handoff-ios.wake-pending" \
   "remote receiver wake failure was not tracked separately"
+printf '1\n' > "$PARENT/state/.secondmate-paused-ios"
+wakes_before=$(grep -cF fm-remote-secondmate-control.sh "$WAKE_LOG")
+handoff_env "$ROOT/bin/fm-backlog-handoff.sh" --resume-pending > "$TMP_ROOT/paused-wake-retry.out" 2>&1 \
+  || fail "paused pending wake should defer: $(cat "$TMP_ROOT/paused-wake-retry.out")"
+assert_present "$PARENT/state/.secondmate-paused-ios" "pending wake retry resumed a paused mate"
+assert_present "$PARENT/state/.backlog-handoff-ios.wake-pending" "deferral lost the pending receiver wake"
+[ "$(grep -cF fm-remote-secondmate-control.sh "$WAKE_LOG")" -eq "$wakes_before" ] \
+  || fail "pending wake retry contacted a paused receiver"
+[ "$(grep -cF remote-wake-fail "$REMOTE/data/backlog.md")" -eq 1 ] \
+  || fail "paused wake retry lost or duplicated the queued item"
+rm -f "$PARENT/state/.secondmate-paused-ios"
 handoff_env "$ROOT/bin/fm-backlog-handoff.sh" --resume-pending >/dev/null \
   || fail "remote receiver wake failure did not recover through resume-pending"
 assert_absent "$PARENT/state/.backlog-handoff-ios.wake-pending" \
   "remote receiver wake recovery left separate wake state pending"
 pass "remote handoff releases durable work and separately retries its receiver wake"
+
+write_backlog '- [ ] paused-outbox - queued until explicit resume (repo: alpha)'
+if FM_FAKE_SSH_MODE=unreachable handoff_env "$ROOT/bin/fm-backlog-handoff.sh" ios paused-outbox > "$TMP_ROOT/paused-outbox-stage.out" 2>&1; then
+  fail "the unavailable transport should retain its outbox"
+fi
+printf '1\n' > "$PARENT/state/.secondmate-paused-ios"
+wakes_before=$(grep -cF fm-remote-secondmate-control.sh "$WAKE_LOG")
+handoff_env "$ROOT/bin/fm-backlog-handoff.sh" --resume-pending > "$TMP_ROOT/paused-outbox-retry.out" 2>&1 \
+  || fail "paused outbox receipt should complete: $(cat "$TMP_ROOT/paused-outbox-retry.out")"
+assert_present "$PARENT/state/.secondmate-paused-ios" "outbox retry resumed a paused mate"
+assert_absent "$PARENT/data/handoff/ios.outbox.md" "confirmed receipt did not release the paused outbox"
+assert_present "$PARENT/state/.backlog-handoff-ios.wake-pending" "paused outbox retry lost wake intent"
+[ "$(grep -cF fm-remote-secondmate-control.sh "$WAKE_LOG")" -eq "$wakes_before" ] \
+  || fail "outbox retry contacted a paused receiver"
+[ "$(grep -cF paused-outbox "$REMOTE/data/backlog.md")" -eq 1 ] \
+  || fail "paused outbox retry lost or duplicated its queued item"
+rm -f "$PARENT/state/.secondmate-paused-ios"
+handoff_env "$ROOT/bin/fm-backlog-handoff.sh" --resume-pending >/dev/null \
+  || fail "the deferred outbox wake did not retry after resume"
+pass "pending wake and outbox retries preserve pause and queue work durably"
 
 # The receiver wake is a best-effort live nudge sent AFTER the backlog receipt
 # is durable. A wake whose remote transport is lost leaves its correlation
@@ -479,6 +510,15 @@ esac
 wakes_after=$(grep -cF fm-remote-secondmate-control.sh "$WAKE_LOG")
 [ "$wakes_after" -eq $((wakes_before + 1)) ] \
   || fail "remote cleanup failure did not perform exactly one receiver wake"
+printf '1\n' > "$PARENT/state/.secondmate-paused-ios"
+handoff_env "$ROOT/bin/fm-backlog-handoff.sh" --resume-pending > "$TMP_ROOT/paused-confirmed-cleanup.out" 2>&1 \
+  || fail "confirmed cleanup must finish while paused: $(cat "$TMP_ROOT/paused-confirmed-cleanup.out")"
+assert_present "$PARENT/state/.secondmate-paused-ios" "confirmed cleanup resumed a paused mate"
+assert_absent "$PARENT/data/handoff/ios.outbox.md" "confirmed cleanup retained the old outbox"
+assert_absent "$PARENT/state/.backlog-handoff-ios.wake-pending" "confirmed cleanup retained a stale wake confirmation"
+[ "$(grep -cF fm-remote-secondmate-control.sh "$WAKE_LOG")" -eq "$wakes_after" ] \
+  || fail "confirmed cleanup contacted a paused receiver"
+rm -f "$PARENT/state/.secondmate-paused-ios"
 write_backlog '- [ ] after-cleanup - fresh work after confirmed cleanup failure (repo: alpha)'
 handoff_env "$ROOT/bin/fm-backlog-handoff.sh" ios after-cleanup >/dev/null \
   || fail "fresh handoff did not converge an older confirmed cleanup failure"

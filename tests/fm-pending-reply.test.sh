@@ -3360,6 +3360,95 @@ test_record_update_preserves_unreadable_input
 test_record_field_framing
 test_record_field_output_variable
 test_tick_without_metadata || fail "test_tick_without_metadata failed"
+test_paused_mate_defers_reply_recovery_and_still_resolves_reports() {
+  local home state corr rec hook_log
+  local FM_PENDING_REPLY_SEND_HOOK=paused_recovery_hook
+  home=$(setup_parent paused-recovery)
+  state="$home/state"
+  hook_log="$TMP_ROOT/paused-recovery-hook.log"
+  export FM_PENDING_REPLY_NOW=2000
+  # shellcheck disable=SC2329 # Invoked through the production test hook.
+  paused_recovery_hook() { printf '%s\n' "$*" >> "$hook_log"; }
+  export -f paused_recovery_hook
+  export FM_PENDING_REPLY_SEND_HOOK
+  corr=$(fm_pending_reply_create "$home" "$state" hibit 'open request')
+  fm_pending_reply_mark_delivered "$state" "$corr"
+  fm_pending_reply_observe_busy "$state" "$corr" busy
+  fm_pending_reply_observe_busy "$state" "$corr" idle
+  printf '1\n' > "$state/.secondmate-paused-hibit"
+  fm_pending_reply_tick_one "$state" "$corr" idle
+  fm_pending_reply_tick "$state"
+  if fm_pending_reply_send_recovery "$state" "$corr"; then
+    fail 'explicit recovery must also respect pause intent'
+  fi
+  assert_absent "$hook_log" 'routine recovery must not resume a paused mate'
+  rec=$(fm_pending_reply_path "$state" "$corr")
+  [ -z "$(fm_pending_reply_get "$rec" recovery_attempted_epoch)" ] || fail 'pause spent the one recovery attempt'
+  printf 'done [corr=%s]: report arrived\n' "$corr" > "$state/hibit.status"
+  fm_pending_reply_tick "$state"
+  assert_equals "$(phase_of "$state" "$corr")" resolved 'reports can settle while paused'
+  unset FM_PENDING_REPLY_SEND_HOOK
+  pass 'pause defers missed-reply recovery while preserving correlated report resolution'
+}
+
+test_raced_recovery_deferral_preserves_the_attempt() {
+  local mode home state corr rec fb calls lifecycle_lock rc
+  local FM_PENDING_REPLY_SEND_HOOK=raced_recovery_hook
+  export FM_PENDING_REPLY_SEND_HOOK
+  for mode in pause contention resolved; do
+    home=$(setup_parent "recovery-deferral-$mode")
+    state="$home/state"
+    fb=$(make_stubs "$home")
+    fm_write_meta "$state/hibit.meta" kind=secondmate harness=claude backend=tmux \
+      window=firstmate:fm-hibit endpoint_task_id=hibit "worktree=$home"
+    export FM_PENDING_REPLY_NOW=2000
+    corr=$(fm_pending_reply_create "$home" "$state" hibit 'open request')
+    rec=$(fm_pending_reply_path "$state" "$corr")
+    fm_pending_reply_mark_delivered "$state" "$corr"
+    fm_pending_reply_observe_busy "$state" "$corr" busy
+    fm_pending_reply_observe_busy "$state" "$corr" idle
+    calls=0
+    lifecycle_lock="$state/.secondmate-liveness-hibit.lock"
+    raced_recovery_hook() {
+      calls=$((calls + 1))
+      if [ "$calls" -eq 1 ]; then
+        case "$mode" in
+          pause|resolved) printf '1\n' > "$state/.secondmate-paused-hibit" ;;
+          contention) fm_lock_try_acquire "$lifecycle_lock" || return 99 ;;
+        esac
+        if [ "$mode" = resolved ]; then
+          printf 'done [corr=%s]: report arrived\n' "$corr" > "$state/hibit.status"
+          fm_pending_reply_try_resolve "$state" "$corr" || return 99
+        fi
+      fi
+      rc=0
+      env PATH="$fb:$PATH" FM_HOME="$home" FM_SEND_LOG="$home/send.log" \
+        FM_PENDING_REPLY_EXISTING_CORR="$corr" "$SEND" "$@" >/dev/null 2>&1 || rc=$?
+      [ "$mode" != contention ] || fm_lock_release "$lifecycle_lock"
+      return "$rc"
+    }
+    if fm_pending_reply_send_recovery "$state" "$corr"; then fail 'a raced recovery must defer'; fi
+    [ "$rc" -eq 75 ] || fail "the $mode send was not deferred before delivery"
+    if [ "$mode" = resolved ]; then
+      [ "$(phase_of "$state" "$corr")" = resolved ] || fail 'deferral resurrected a resolved report'
+    else
+      [ "$(phase_of "$state" "$corr")" = awaiting_report ] || fail 'deferral consumed the recovery phase'
+      [ -z "$(fm_pending_reply_get "$rec" recovery_attempted_epoch)" ] || fail 'deferral spent the one recovery attempt'
+      rm -f "$state/.secondmate-paused-hibit"
+      fm_pending_reply_tick_one "$state" "$corr" idle
+      [ "$(phase_of "$state" "$corr")" = recovery_sent ] || fail 'the deferred recovery did not send after resume'
+      [ "$calls" -eq 2 ] || fail 'the deferred recovery was skipped or duplicated'
+      assert_present "$state/hibit.inbox/001.msg" 'the eventual recovery must be durably delivered'
+    fi
+  done
+  unset FM_PENDING_REPLY_SEND_HOOK
+  pass 'pause and contention defer recovery without spending its attempt or reopening a report'
+}
+
+test_raced_recovery_deferral_preserves_the_attempt
+
+test_paused_mate_defers_reply_recovery_and_still_resolves_reports
+
 test_normal_correlated_reply_resolves_once
 test_completed_turn_no_report_triggers_one_recovery
 test_recovery_waits_while_the_mate_has_an_open_decision

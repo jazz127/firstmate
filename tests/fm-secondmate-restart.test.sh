@@ -32,8 +32,6 @@ set -u
 # shellcheck source=tests/t3-fake-lib.sh
 . "$(dirname "${BASH_SOURCE[0]}")/t3-fake-lib.sh"
 
-RESTART="$ROOT/bin/fm-secondmate-restart.sh"
-
 fm_git_identity fmtest fmtest@example.com
 TMP_ROOT=$(fm_test_tmproot fm-secondmate-restart)
 mkdir -p "$TMP_ROOT"
@@ -207,6 +205,10 @@ new_case() {
   printf 'claude' > "$dir/fake/command"
   printf 'claude' > "$dir/fake/becomes"
   make_stub "$dir"
+  # Launch commands are recorded by the session-provider stub, never executed.
+  # Keep the fixture hermetic on hosts without an installed Pi executable.
+  printf '#!/usr/bin/env bash\nprintf "pi 0.0.0 synthetic fixture\\n"\n' > "$dir/fakebin/pi"
+  chmod +x "$dir/fakebin/pi"
   fm_test_fake_tmux_foreground_cwd "$dir/fakebin" "$dir/fake/cwd"
   printf '%s\n' "$dir"
 }
@@ -312,7 +314,7 @@ run_restart() {  # <case-dir> <args...>
     FM_SECONDMATE_PERSIST_WAIT="${FM_TEST_PERSIST_WAIT:-30}" \
     FM_CONTROL_POLL=0.01 FM_CONTROL_EXIT_WAIT=0.05 FM_CONTROL_LAUNCH_WAIT=0.05 \
     FM_SSH_BIN="${FM_TEST_SSH_BIN:-ssh}" \
-    "$RESTART" "$@" 2>&1
+    "$ROOT/bin/fm-secondmate-restart.sh" "$@" 2>&1
 }
 
 # --- T1: the persist request is the task subset of /stow, and it gates --------
@@ -600,6 +602,20 @@ case "${FM_FAKE_SSH_MODE:-ok}" in
   unreachable) exit 255 ;;
 esac
 case "${rargs[1]:-}" in
+  pause)
+    [ "${FM_FAKE_SSH_MODE:-ok}" != prestop-refusal ] || exit 3
+    ;;
+  sync)
+    [ "${FM_FAKE_SSH_MODE:-ok}" != sync-fail ] || exit 1
+    printf 'current: %s\n' "${rargs[3]}"
+    ;;
+  put|absent)
+    [ "${FM_FAKE_SSH_MODE:-ok}" != inherit-fail ] || exit 1
+    if [ "${rargs[1]}" = put ] && [ -n "${FM_FAKE_REMOTE_HOME:-}" ]; then
+      mkdir -p "$FM_FAKE_REMOTE_HOME/$(dirname "${rargs[2]}")"
+      printf '%s' "$stdin_payload" > "$FM_FAKE_REMOTE_HOME/${rargs[2]}"
+    fi
+    ;;
   send-stdin)
     # Model the live remote mate: act on the instruction and report back on the
     # parent channel, carrying the correlation token the request embedded.
@@ -609,7 +625,7 @@ case "${rargs[1]:-}" in
         >> "$FM_FAKE_ANSWER_STATUS"
     fi
     ;;
-  relaunch)
+  relaunch|resume)
     case "${FM_FAKE_SSH_MODE:-ok}" in
       slow-relaunch)
         : > "$FM_FAKE_DIR/remote-relaunch-start"
@@ -1115,6 +1131,496 @@ w = { tokens: [],
     || fail "nothing but the doorbell may reach the T3 thread, got '$(t3_fake_mutations)'"
   pass "T17 a T3 mate is routed to the re-read message by both passes, never restarted"
 }
+
+# Pause/resume reuses the same executable lifecycle paths as restart. These
+# cases are synthetic session-provider tests; they do not use a Herdr server.
+clean_pause_home() {
+  local dir=$1 id=$2 home="$1/$2-home"
+  printf '/state/\n/data/\n/config/\n/projects/\n.fm-secondmate-home\n' > "$home/.gitignore"
+  git -C "$home" add -A
+  git -C "$home" commit -qm 'seed fixture home'
+}
+
+test_pause_authorizes_before_publishing_intent() {
+  local dir out rc placement
+  for placement in local remote; do
+    dir=$(new_case "pause-lease-$placement")
+    if [ "$placement" = local ]; then
+      add_local_mate "$dir" sm1
+      clean_pause_home "$dir" sm1
+    else
+      setup_remote_case "$dir" sm1 ok
+    fi
+    printf '%s\n' "$$" > "$dir/home/state/.lock"
+    printf 'branch\t%s\t123\n' "$$" > "$dir/home/state/.lease-sm1"
+    out=$(FM_SUPERVISION_ACTOR=main run_restart "$dir" --pause sm1); rc=$?
+    expect_code 6 "$rc" "pause must honor $placement branch authority"$'\n'"$out"
+    assert_absent "$dir/home/state/.secondmate-paused-sm1" 'authorization refusal must not publish pause intent'
+    assert_no_grep '/exit' "$dir/fake/literal" 'authorization refusal must not stop the agent'
+    if [ "$placement" = remote ]; then
+      assert_no_grep ' pause ' "$dir/ssh.log" 'authorization refusal must not contact the host'
+      printf '1\n' > "$dir/home/state/.secondmate-paused-sm1"
+      out=$(FM_SUPERVISION_ACTOR=main run_restart "$dir" --resume sm1); rc=$?
+      expect_code 6 "$rc" "remote resume must honor parent lease authority"$'\n'"$out"
+      out=$(env FM_SUPERVISION_ACTOR=main FM_HOME="$dir/home" FM_SSH_BIN="$FM_TEST_SSH_BIN" \
+        "$ROOT/bin/fm-remote-secondmate-relaunch.sh" sm1 claude default default resume 2>&1); rc=$?
+      expect_code 6 "$rc" "direct remote resume must honor parent lease authority"$'\n'"$out"
+      assert_present "$dir/home/state/.secondmate-paused-sm1" 'lease refusal retains pause'
+      [ ! -s "$dir/ssh.log" ] || fail 'unauthorized resume performed remote convergence or launch'
+    fi
+  done
+  unset FM_TEST_SSH_BIN FM_FAKE_SSH_MODE
+  pass 'local and remote pause authorize before publishing intent'
+}
+
+test_pause_control_contention_keeps_the_mate_unpaused() {
+  local dir out rc
+  dir=$(new_case pause-control-contention)
+  add_local_mate "$dir" sm1
+  clean_pause_home "$dir" sm1
+  # shellcheck disable=SC2016 # Variables expand in the child shell.
+  out=$(env PATH="$dir/fakebin:$PATH" FM_HOME="$dir/home" FM_FAKE_DIR="$dir/fake" bash -c '
+    . "$1/bin/fm-wake-lib.sh"
+    lock="$FM_HOME/state/.control-sm1.lock"
+    fm_lock_try_acquire "$lock" || exit 99
+    "$1/bin/fm-secondmate-restart.sh" --pause sm1
+    rc=$?
+    fm_lock_release "$lock"
+    exit "$rc"
+  ' _ "$ROOT" 2>&1); rc=$?
+  expect_code 3 "$rc" "control contention is a pre-stop refusal"$'\n'"$out"
+  assert_absent "$dir/home/state/.secondmate-paused-sm1" 'control contention must not publish false pause state'
+  assert_no_grep '/exit' "$dir/fake/literal" 'control contention must not stop the agent'
+  pass 'a busy control lock refuses pause without leaving false intent'
+}
+
+test_maintenance_cannot_resume_or_race_pause() {
+  local dir out rc message
+  dir=$(new_case pause-maintenance)
+  add_local_mate "$dir" sm1
+  clean_pause_home "$dir" sm1
+  out=$(run_restart "$dir" --pause sm1); rc=$?
+  expect_code 0 "$rc" "pause before maintenance"$'\n'"$out"
+  for message in 're-read AGENTS.md and inherited config' 'persist open work for update' 'reconcile your backlog' 'repost your missed report'; do
+    out=$(env PATH="$dir/fakebin:$PATH" FM_HOME="$dir/home" FM_FAKE_DIR="$dir/fake" \
+      "$ROOT/bin/fm-send.sh" sm1 "$message" 2>&1); rc=$?
+    [ "$rc" -ne 0 ] || fail 'maintenance was accepted by a paused mate'
+    assert_present "$dir/home/state/.secondmate-paused-sm1" 'maintenance must preserve pause'
+    assert_absent "$dir/home/state/sm1.inbox" 'maintenance must not queue a nudge while paused'
+  done
+  out=$(run_restart "$dir" --resume sm1); rc=$?
+  expect_code 0 "$rc" "resume before lifecycle exclusion check"$'\n'"$out"
+  # shellcheck disable=SC2016 # Variables expand in the child shell.
+  out=$(env PATH="$dir/fakebin:$PATH" FM_HOME="$dir/home" FM_FAKE_DIR="$dir/fake" bash -c '
+    . "$1/bin/fm-wake-lib.sh"
+    lock="$FM_HOME/state/.secondmate-liveness-sm1.lock"
+    fm_lock_try_acquire "$lock" || exit 99
+    "$1/bin/fm-send.sh" sm1 "re-read config"
+    rc=$?
+    fm_lock_release "$lock"
+    exit "$rc"
+  ' _ "$ROOT" 2>&1); rc=$?
+  [ "$rc" -ne 0 ] || fail 'maintenance bypassed a lifecycle action already in progress'
+  assert_contains "$out" 'lifecycle is busy' 'the maintenance send observes lifecycle ownership'
+  for message in "$dir/home/state/sm1.inbox"/*.msg; do
+    [ ! -e "$message" ] || fail 'a concurrent lifecycle action allowed final maintenance delivery'
+  done
+  pass 'maintenance preserves pause and final delivery obeys lifecycle exclusion'
+}
+
+test_pause_after_persist_prevents_update_replacement() {
+  local dir out rc
+  dir=$(new_case pause-after-persist)
+  add_local_mate "$dir" sm1
+  clean_pause_home "$dir" sm1
+  cat > "$dir/fake/on-doorbell" <<'SH'
+#!/usr/bin/env bash
+(
+  . "$FM_TEST_ROOT/bin/fm-wake-lib.sh"
+  lock="$FM_HOME/state/.secondmate-liveness-sm1.lock"
+  fm_lock_acquire_wait "$lock" || exit 1
+  fm_lock_release "$lock"
+  "$FM_TEST_ROOT/bin/fm-secondmate-restart.sh" --pause sm1 || exit 1
+  corr=$(grep -oE 'corr=[0-9a-f]{16}' "$FM_HOME/state/sm1.inbox"/*.msg | head -1)
+  printf 'done [%s]: persisted\n' "$corr" >> "$FM_HOME/state/sm1.status"
+) > "$FM_FAKE_DIR/concurrent-pause.log" 2>&1 &
+SH
+  chmod +x "$dir/fake/on-doorbell"
+  out=$(FM_TEST_ROOT="$ROOT" run_restart "$dir" sm1); rc=$?
+  expect_code 0 "$rc" "update must skip a mate paused after persistence delivery"$'\n'"$out"$'\n'"$(cat "$dir/fake/concurrent-pause.log" 2>/dev/null)"
+  assert_contains "$out" 'skipped: sm1 intentionally paused' 'the final replacement checks pause under the lifecycle lock'
+  assert_present "$dir/home/state/.secondmate-paused-sm1" 'update preserves the concurrent pause'
+  assert_absent "$dir/home/state/sm1.control-relaunch" 'update must not replace a paused mate'
+  pass 'pause after persistence delivery excludes the update replacement'
+}
+
+test_pause_refuses_live_and_stopped_unlanded_children() {
+  local dir out rc kind
+  for kind in live stopped-unlanded; do
+    dir=$(new_case "pause-$kind")
+    add_local_mate "$dir" sm1
+    clean_pause_home "$dir" sm1
+    printf 'kind=ship\nworktree=%s\n' "$dir/child" > "$dir/sm1-home/state/child.meta"
+    [ "$kind" != stopped-unlanded ] || printf 'done: awaiting landing\n' > "$dir/sm1-home/state/child.status"
+    out=$(run_restart "$dir" --pause sm1); rc=$?
+    expect_code 3 "$rc" "pause must refuse $kind child work"$'\n'"$out"
+    assert_contains "$out" 'in-flight or unlanded work' 'refusal names the safety boundary'
+    assert_absent "$dir/home/state/.secondmate-paused-sm1" 'unsafe pause must leave no intent marker'
+    assert_no_grep '/exit' "$dir/fake/literal" 'unsafe pause must not stop the agent'
+  done
+  pass 'pause refuses both live workers and stopped workers awaiting landing'
+}
+
+test_explicit_pause_and_resume() {
+  local dir out rc
+  dir=$(new_case pause-resume)
+  add_local_mate "$dir" sm1
+  clean_pause_home "$dir" sm1
+  out=$(run_restart "$dir" --pause sm1); rc=$?
+  expect_code 0 "$rc" "safe pause succeeds"$'\n'"$out"
+  assert_contains "$out" 'paused: sm1' 'pause is reported'
+  assert_present "$dir/home/state/.secondmate-paused-sm1" 'pause survives a new command process'
+  assert_present "$dir/home/state/sm1.meta" 'pause retains the route'
+  assert_present "$dir/sm1-home" 'pause retains the home'
+  assert_grep '/exit' "$dir/fake/literal" 'pause stops the agent through control'
+  out=$(run_restart "$dir" --pause sm1); rc=$?
+  expect_code 0 "$rc" 'repeated pause is idempotent'
+  out=$(run_restart "$dir" sm1); rc=$?
+  expect_code 0 "$rc" 'update restart skips a paused mate'
+  assert_contains "$out" 'intentionally paused' 'update reports the skip'
+  assert_absent "$dir/home/state/sm1.inbox" 'skipped restart sends no persistence or reread nudge'
+  out=$(run_restart "$dir" --resume sm1); rc=$?
+  expect_code 0 "$rc" "explicit resume succeeds"$'\n'"$out"
+  assert_contains "$out" 'resumed: sm1' 'resume is reported'
+  assert_absent "$dir/home/state/.secondmate-paused-sm1" 'confirmed resume clears pause intent'
+  assert_present "$dir/home/state/sm1.control-relaunch" 'resume uses the ordinary relaunch transaction'
+  out=$(run_restart "$dir" --resume sm1); rc=$?
+  expect_code 0 "$rc" 'repeated resume is idempotent'
+  pass 'explicit pause and resume preserve the home and use verified lifecycle owners'
+}
+
+resume_stall_tick() {
+  local dir=$1
+  # shellcheck disable=SC2016 # Positional parameters expand in the child shell.
+  env PATH="$dir/fakebin:$PATH" FM_HOME="$dir/home" FM_FAKE_DIR="$dir/fake" \
+    FM_STATE_OVERRIDE="$dir/home/state" FM_CONFIG_OVERRIDE="$dir/home/config" \
+    FM_FAKE_NOW_FILE="$dir/now" FM_SECONDMATE_WAKE_STALL_SECS=60 FM_BUSY_TURN_MAX_SECS=120 \
+    bash -eu -c '. "$1/bin/fm-watch.sh"; secondmate_wake_stall_tick' _ "$ROOT" 2>&1
+}
+
+test_resume_renews_the_retained_stall_observation() {
+  local dir state out rc mode real_date retained observed_at row_key rings
+  real_date=$(command -v date)
+  for mode in explicit fresh-work; do
+    dir=$(new_case "resume-stall-$mode")
+    state="$dir/home/state"
+    add_local_mate "$dir" sm1
+    clean_pause_home "$dir" sm1
+    cat > "$dir/fakebin/date" <<'SH'
+#!/usr/bin/env bash
+if [ "${1:-}" = +%s ]; then
+  cat "$FM_FAKE_NOW_FILE"
+else
+  exec "$FM_REAL_DATE" "$@"
+fi
+SH
+    chmod +x "$dir/fakebin/date"
+    printf '100\t7\tcheck\trouted\tcheck: pending work\n' > "$dir/sm1-home/state/.wake-queue"
+    cp "$dir/sm1-home/state/.wake-queue" "$dir/queue-before"
+    "$ROOT/bin/fm-busy-event.sh" arm "$state" sm1 >/dev/null || fail 'could not arm the fixture'
+    "$ROOT/bin/fm-busy-event.sh" apply "$state" sm1 idle --current-gen \
+      --source claude-hook --event stop >/dev/null || fail 'could not mark the fixture idle'
+    printf '1000\n' > "$dir/now"
+    out=$(FM_REAL_DATE="$real_date" resume_stall_tick "$dir"); rc=$?
+    expect_code 0 "$rc" "first queue observation"$'\n'"$out"
+    printf '1061\n' > "$dir/now"
+    out=$(FM_REAL_DATE="$real_date" resume_stall_tick "$dir"); rc=$?
+    expect_code 0 "$rc" "drain ring before pause"$'\n'"$out"
+    [ "$(cat "$state/.secondmate-wake-ring-sm1")" = 100-7 ] || fail 'the watcher did not ring the retained row'
+    [ "$(wc -l < "$dir/fake/rings" | tr -d ' ')" = 1 ] || fail 'expected exactly one initial drain ring'
+    # shellcheck disable=SC2016 # Variables expand in the child shell.
+    env FM_HOME="$dir/home" FM_STATE_OVERRIDE="$state" bash -eu -c '
+      . "$1/bin/fm-task-inbox-lib.sh"
+      ordinary=$(fm_task_inbox_write "$STATE" sm1 "pending ordinary steer")
+      fm_task_inbox_record_ring "$STATE" sm1 "$ordinary"
+      fm_task_inbox_record_busy "$STATE" sm1 "$ordinary" >/dev/null
+      fm_task_inbox_mark_retry "$STATE" sm1 "$STATE/sm1.inbox/001.msg"
+    ' _ "$ROOT" || fail 'could not seed retained delivery counters'
+    mkdir "$dir/inbox-before"
+    for retained in "$state/sm1.inbox/"*.msg "$state/sm1.inbox/.ring-state" \
+      "$state/sm1.inbox/.busy-state" "$state/sm1.inbox/.retry-ring"; do
+      cp "$retained" "$dir/inbox-before/"
+    done
+    cp "$state/.secondmate-wake-ring-sm1" "$dir/ring-before"
+    out=$(FM_REAL_DATE="$real_date" FM_FAKE_NOW_FILE="$dir/now" run_restart "$dir" --pause sm1); rc=$?
+    expect_code 0 "$rc" "pause after the drain ring"$'\n'"$out"
+    printf '10000\n' > "$dir/now"
+    out=$(FM_REAL_DATE="$real_date" resume_stall_tick "$dir"); rc=$?
+    expect_code 0 "$rc" "long pause defers stall checks"$'\n'"$out"
+    [ ! -s "$state/.wake-queue" ] || fail 'pause published a stall alert'
+    if [ "$mode" = explicit ]; then
+      out=$(FM_REAL_DATE="$real_date" FM_FAKE_NOW_FILE="$dir/now" run_restart "$dir" --resume sm1); rc=$?
+    else
+      out=$(env PATH="$dir/fakebin:$PATH" FM_HOME="$dir/home" FM_FAKE_DIR="$dir/fake" \
+        FM_REAL_DATE="$real_date" FM_FAKE_NOW_FILE="$dir/now" FM_SUPERVISION_ACTOR=main \
+        FM_SPAWN_NO_GUARD=1 FM_CONTROL_POLL=0.01 FM_CONTROL_EXIT_WAIT=0.05 FM_CONTROL_LAUNCH_WAIT=0.05 \
+        "$ROOT/bin/fm-send.sh" sm1 --new-work 'new scoped work' 2>&1); rc=$?
+    fi
+    expect_code 0 "$rc" "$mode resume after a long pause"$'\n'"$out"
+    assert_absent "$state/.secondmate-paused-sm1" 'successful resume clears pause intent'
+    IFS=$'\t' read -r observed_at row_key < "$state/.secondmate-wake-progress-sm1"
+    [ "$observed_at" = 10000 ] && [ "$row_key" = 100-7 ] || fail 'resume did not renew the existing observation'
+    for retained in "$dir/inbox-before/"* "$dir/inbox-before/".[!.]*; do
+      cmp "$retained" "$state/sm1.inbox/${retained##*/}" || fail 'resume changed a retained record or counter'
+    done
+    cmp "$dir/queue-before" "$dir/sm1-home/state/.wake-queue" || fail 'resume changed queued work'
+    cmp "$dir/ring-before" "$state/.secondmate-wake-ring-sm1" || fail 'resume reset the ring marker'
+    rings=$(wc -l < "$dir/fake/rings")
+    printf '10001\n' > "$dir/now"
+    out=$(FM_REAL_DATE="$real_date" resume_stall_tick "$dir"); rc=$?
+    expect_code 0 "$rc" "first post-resume watcher check"$'\n'"$out"
+    [ ! -s "$state/.wake-queue" ] || fail 'paused time caused a false post-resume stall alert'
+    assert_absent "$state/.secondmate-wake-stall-sm1" 'startup is given a new observation interval'
+    [ "$(wc -l < "$dir/fake/rings")" = "$rings" ] || fail 'resume repeated the retained drain ring'
+    printf '10121\n' > "$dir/now"
+    out=$(FM_REAL_DATE="$real_date" resume_stall_tick "$dir"); rc=$?
+    expect_code 0 "$rc" "genuine stall after the resumed interval"$'\n'"$out"
+    assert_contains "$out" 'secondmate wake-loop stalled: mate=sm1 row=7 idle=121s' 'a genuine resumed stall must still surface'
+  done
+  pass 'explicit and fresh-work resumes exclude paused time without resetting queued work or delivery counters'
+}
+
+test_routed_backlog_resumes_paused_mate() {
+  command -v tasks-axi >/dev/null 2>&1 || { echo 'skip: tasks-axi not found'; return; }
+  local dir out rc
+  dir=$(new_case pause-handoff)
+  add_local_mate "$dir" sm1
+  clean_pause_home "$dir" sm1
+  printf -- '- sm1 - domain (home: %s; scope: things; projects: p; added 2026-09-03)\n' \
+    "$dir/sm1-home" > "$dir/home/data/secondmates.md"
+  printf '# Backlog\n\n## Queued\n\n- [ ] routed - new work (repo: p; added 2026-10-29)\n\n## In flight\n\n## Done\n' > "$dir/home/data/backlog.md"
+  printf '# Backlog\n\n## Queued\n\n## In flight\n\n## Done\n' > "$dir/sm1-home/data/backlog.md"
+  out=$(run_restart "$dir" --pause sm1); rc=$?
+  expect_code 0 "$rc" "pause before handoff"$'\n'"$out"
+  out=$(env PATH="$dir/fakebin:$PATH" FM_HOME="$dir/home" FM_FAKE_DIR="$dir/fake" \
+    FM_SUPERVISION_ACTOR=main \
+    FM_SPAWN_NO_GUARD=1 FM_CONTROL_POLL=0.01 FM_CONTROL_EXIT_WAIT=0.05 FM_CONTROL_LAUNCH_WAIT=0.05 \
+    "$ROOT/bin/fm-backlog-handoff.sh" sm1 routed 2>&1); rc=$?
+  expect_code 0 "$rc" "backlog handoff resumes its paused receiver"$'\n'"$out"
+  assert_grep 'routed -' "$dir/sm1-home/data/backlog.md" 'work is queued in the mate backlog'
+  assert_no_grep 'routed -' "$dir/home/data/backlog.md" 'the parent does not retain dispatchable work'
+  assert_absent "$dir/home/state/.secondmate-paused-sm1" 'routing automatically resumes the mate'
+  assert_present "$dir/home/state/sm1.control-relaunch" 'routing relaunches through the lifecycle owner'
+  assert_present "$dir/home/state/sm1.inbox" 'routed work reaches the ordinary durable inbox'
+  pass 'backlog handoff queues work and automatically resumes a paused receiver'
+}
+
+test_remote_pause_resume_and_unknown_transport() {
+  local dir out rc sync_line inherit_line resume_line
+  dir=$(new_case remote-pause)
+  setup_remote_case "$dir" sm1 ok
+  fm_git_init_commit "$dir/primary"
+  mkdir -p "$dir/primary/bin"
+  cp "$ROOT/bin/fm-remote-secondmate-control.sh" "$ROOT/bin/fm-remote-inherit.sh" "$dir/primary/bin/"
+  git -C "$dir/primary" add bin
+  git -C "$dir/primary" commit -qm 'seed tracked remote commands'
+  printf 'codex\n' > "$dir/home/config/crew-harness"
+  export FM_FAKE_REMOTE_HOME="$dir/remote-home"
+  mkdir -p "$FM_FAKE_REMOTE_HOME"
+  out=$(run_restart "$dir" --pause sm1); rc=$?
+  expect_code 0 "$rc" "remote pause uses transport"$'\n'"$out"
+  assert_grep 'fm-remote-secondmate-control.sh pause sm1' "$dir/ssh.log" 'remote pause stays on its host'
+  assert_present "$dir/home/state/.secondmate-paused-sm1" 'parent retains durable remote pause intent'
+  rm -f "$dir/home/state/.secondmate-paused-sm1"
+  out=$(FM_FAKE_SSH_MODE=prestop-refusal run_restart "$dir" --pause sm1); rc=$?
+  expect_code 3 "$rc" 'a proven remote pre-stop refusal is distinct from lost completion'
+  assert_absent "$dir/home/state/.secondmate-paused-sm1" 'remote pre-stop refusal clears newly published intent'
+  out=$(run_restart "$dir" --pause sm1); rc=$?
+  expect_code 0 "$rc" 'remote pause can retry after a definite refusal'
+  cat > "$dir/fakebin/rm" <<'SH'
+#!/usr/bin/env bash
+for arg in "$@"; do
+  if [ -n "${FM_TEST_PAUSE_MARKER:-}" ] && [ "$arg" = "$FM_TEST_PAUSE_MARKER" ]; then
+    [ -e "$FM_HOME/state/.fm-lease-command.lock" ] || exit 99
+    printf 'guard held\n' > "$FM_FAKE_DIR/resume-guard-held"
+  fi
+done
+exec "$FM_TEST_REAL_RM" "$@"
+SH
+  chmod +x "$dir/fakebin/rm"
+  out=$(FM_SUPERVISION_ACTOR=main FM_TEST_REAL_RM="$(command -v rm)" \
+    FM_TEST_PAUSE_MARKER="$dir/home/state/.secondmate-paused-sm1" \
+    FM_ROOT_OVERRIDE="$dir/primary" run_restart "$dir" --resume sm1); rc=$?
+  expect_code 0 "$rc" "remote resume uses transport"$'\n'"$out"
+  assert_grep 'fm-remote-secondmate-control.sh resume sm1 claude' "$dir/ssh.log" 'remote resume passes the parent profile'
+  assert_absent "$dir/home/state/.secondmate-paused-sm1" 'confirmed remote resume clears intent'
+  assert_present "$dir/fake/resume-guard-held" 'remote resume retains lease authority through marker removal'
+  rm -f "$dir/fakebin/rm"
+  [ "$(cat "$dir/remote-home/config/crew-harness")" = codex ] || fail 'remote resume did not refresh inherited config'
+  sync_line=$(grep -n '^fm-remote-secondmate-control.sh sync sm1 ' "$dir/ssh.log" | head -1 | cut -d: -f1)
+  inherit_line=$(grep -n '^fm-remote-inherit.sh put config/crew-harness ' "$dir/ssh.log" | head -1 | cut -d: -f1)
+  resume_line=$(grep -n '^fm-remote-secondmate-control.sh resume sm1 ' "$dir/ssh.log" | head -1 | cut -d: -f1)
+  [ -n "$sync_line" ] && [ -n "$inherit_line" ] && [ "$sync_line" -lt "$resume_line" ] && [ "$inherit_line" -lt "$resume_line" ] \
+    || fail 'remote resume launched before instruction and config convergence'
+  printf '1\n' > "$dir/home/state/.secondmate-paused-sm1"
+  printf 'pi\n' > "$dir/home/config/crew-harness"
+  : > "$dir/ssh.log"
+  out=$(env PATH="$dir/fakebin:$PATH" FM_ROOT_OVERRIDE="$dir/primary" FM_HOME="$dir/home" \
+    FM_SSH_BIN="$FM_TEST_SSH_BIN" FM_SUPERVISION_ACTOR=main \
+    "$ROOT/bin/fm-send.sh" sm1 --new-work 'new scoped work' 2>&1); rc=$?
+  expect_code 0 "$rc" "remote routed work converges before resume"$'\n'"$out"
+  [ "$(cat "$dir/remote-home/config/crew-harness")" = pi ] || fail 'routed resume did not refresh inherited config'
+  assert_absent "$dir/home/state/.secondmate-paused-sm1" 'routed remote work resumes the mate'
+  assert_grep 'fm-remote-secondmate-control.sh send-stdin sm1' "$dir/ssh.log" 'routed work reaches the host after resume'
+  local mode
+  for mode in sync-fail inherit-fail; do
+    printf '1\n' > "$dir/home/state/.secondmate-paused-sm1"
+    : > "$dir/ssh.log"
+    export FM_FAKE_SSH_MODE=$mode
+    out=$(FM_ROOT_OVERRIDE="$dir/primary" run_restart "$dir" --resume sm1); rc=$?
+    [ "$rc" -ne 0 ] || fail "remote resume ignored $mode"
+    assert_present "$dir/home/state/.secondmate-paused-sm1" 'failed convergence retains pause'
+    assert_no_grep 'fm-remote-secondmate-control.sh resume ' "$dir/ssh.log" 'failed convergence must prevent launch'
+  done
+  export FM_FAKE_SSH_MODE=unreachable
+  out=$(run_restart "$dir" --pause sm1); rc=$?
+  expect_code 255 "$rc" 'unknown transport is not a confirmed pause'
+  assert_present "$dir/home/state/.secondmate-paused-sm1" 'unknown pause completion suppresses liveness recovery'
+  out=$(run_restart "$dir" --resume sm1); rc=$?
+  [ "$rc" -ne 0 ] || fail 'unreachable resume must fail'
+  assert_present "$dir/home/state/.secondmate-paused-sm1" 'failed resume preserves pause intent'
+  unset FM_TEST_SSH_BIN FM_FAKE_SSH_MODE FM_FAKE_REMOTE_HOME
+  pass 'remote pause and resume use host transport and preserve intent on unknown completion'
+}
+
+test_host_local_pause_refuses_children() {
+  local dir home out rc
+  dir=$(new_case remote-pause-child)
+  add_local_mate "$dir" sm1
+  clean_pause_home "$dir" sm1
+  home="$dir/sm1-home"
+  mkdir -p "$home/state/parent-route"
+  printf 'kind=ship\n' > "$home/state/child.meta"
+  cat > "$home/state/parent-route/sm1.meta" <<EOF
+kind=secondmate
+harness=claude
+backend=herdr
+herdr_session=fm-remote
+herdr_workspace_id=ws1
+herdr_tab_id=tab1
+herdr_pane_id=2ndmate-sm1
+window=fm-remote:2ndmate-sm1
+endpoint_task_id=sm1
+home=$home
+worktree=$home
+project=$home
+EOF
+  bash -c '. "$1/bin/fm-backend.sh"; fm_backend_validate_task_endpoint "$2" sm1' _ \
+    "$ROOT" "$home/state/parent-route/sm1.meta" || fail 'host fixture must pass endpoint validation'
+  # A guard stub makes accidental Herdr access an immediate test failure. The
+  # host-local safety refusal must occur before any lifecycle backend call.
+  # shellcheck disable=SC2016 # Expanded by the guard stub when it runs.
+  printf '#!/usr/bin/env bash\nprintf touched > "$FM_FAKE_DIR/herdr-called"\nexit 99\n' > "$dir/fakebin/herdr"
+  chmod +x "$dir/fakebin/herdr"
+  out=$(env PATH="$dir/fakebin:$PATH" FM_HOME="$home" FM_FAKE_DIR="$dir/fake" \
+    "$ROOT/bin/fm-remote-secondmate-control.sh" pause sm1 2>&1); rc=$?
+  expect_code 3 "$rc" "host-local pause refuses children"$'\n'"$out"
+  assert_contains "$out" 'in-flight or unlanded work' 'remote safety uses the shared preflight'
+  assert_absent "$dir/fake/herdr-called" 'unsafe remote pause never calls Herdr'
+  rm -f "$home/state/child.meta"
+  # shellcheck disable=SC2016 # Variables expand in the child shell.
+  out=$(env PATH="$dir/fakebin:$PATH" FM_HOME="$home" FM_FAKE_DIR="$dir/fake" bash -c '
+    . "$1/bin/fm-wake-lib.sh"
+    lock="$FM_HOME/state/.task-set.lock"
+    fm_lock_try_acquire "$lock" || exit 99
+    "$1/bin/fm-remote-secondmate-control.sh" pause sm1
+    rc=$?
+    fm_lock_release "$lock"
+    exit "$rc"
+  ' _ "$ROOT" 2>&1); rc=$?
+  expect_code 3 "$rc" "host task-set contention is a pre-stop refusal"$'\n'"$out"
+  assert_absent "$home/state/parent-route/.secondmate-paused-sm1" 'host contention must leave no new pause record'
+  assert_absent "$dir/fake/herdr-called" 'host contention must precede backend access'
+  ln -s "$home/state/missing-record" "$home/state/child.meta"
+  printf '1\n' > "$home/state/parent-route/.secondmate-paused-sm1"
+  out=$(env PATH="$dir/fakebin:$PATH" FM_HOME="$home" FM_FAKE_DIR="$dir/fake" \
+    "$ROOT/bin/fm-remote-secondmate-control.sh" resume sm1 claude default default 2>&1); rc=$?
+  [ "$rc" -ne 0 ] || fail 'host-local resume hid its control-plane refusal'
+  assert_present "$home/state/parent-route/.secondmate-paused-sm1" 'host control failure preserves pause intent'
+  assert_absent "$dir/fake/herdr-called" 'host checkpoint refusal must precede Herdr access'
+  pass 'host-local pause and failed resume preserve in-flight work before backend access'
+}
+
+test_pause_refuses_orphan_backlog_dirty_home_and_spawn_race() {
+  local dir out rc lock
+  dir=$(new_case pause-safety)
+  add_local_mate "$dir" sm1
+  clean_pause_home "$dir" sm1
+  printf '## In flight\n- [ ] orphan - still in flight (repo: p)\n\n## Queued\n\n## Done\n' > "$dir/sm1-home/data/backlog.md"
+  out=$(run_restart "$dir" --pause sm1); rc=$?
+  expect_code 3 "$rc" "orphan in-flight backlog refuses pause"$'\n'"$out"
+  assert_contains "$out" 'in-flight backlog work' 'orphan refusal names the backlog'
+  printf '## Queued\n\n## Done\n' > "$dir/sm1-home/data/backlog.md"
+  printf 'uncommitted\n' >> "$dir/sm1-home/AGENTS.md"
+  out=$(run_restart "$dir" --pause sm1); rc=$?
+  expect_code 3 "$rc" 'uncommitted home work refuses pause'
+  git -C "$dir/sm1-home" add AGENTS.md
+  git -C "$dir/sm1-home" commit -qm 'fixture clean'
+  # A concurrent spawn owns the existing home-wide task-set lock. Pause must
+  # refuse before checking a snapshot that could miss its unpublished child.
+  lock="$dir/sm1-home/state/.task-set.lock"
+  # shellcheck disable=SC2016 # Positional parameters expand in the child shell.
+  env FM_HOME="$dir/home" bash -c '
+    . "$1/bin/fm-wake-lib.sh"
+    fm_lock_try_acquire "$2" || exit 1
+    printf ready > "$3"
+    while [ ! -e "$4" ]; do sleep 0.1; done
+    fm_lock_release "$2"
+  ' _ "$ROOT" "$lock" "$dir/ready" "$dir/release" &
+  local holder=$! i
+  for ((i=0; i<100; i++)); do [ ! -e "$dir/ready" ] || break; sleep 0.1; done
+  [ -e "$dir/ready" ] || fail 'fixture lock holder did not start'
+  out=$(run_restart "$dir" --pause sm1); rc=$?
+  : > "$dir/release"
+  wait "$holder"
+  [ "$rc" -ne 0 ] || fail 'pause raced a child spawn'
+  assert_contains "$out" 'task set is busy' 'pause refuses a concurrently changing task set'
+  assert_absent "$dir/home/state/.secondmate-paused-sm1" 'all safety refusals preserve running posture'
+  assert_no_grep '/exit' "$dir/fake/literal" 'unsafe pauses never stop the agent'
+  pass 'pause refuses orphan backlog work, dirty homes and concurrent child creation'
+}
+
+test_paused_current_state_and_failed_resume() {
+  local dir out rc
+  dir=$(new_case pause-current)
+  add_local_mate "$dir" sm1
+  clean_pause_home "$dir" sm1
+  out=$(run_restart "$dir" --pause sm1); rc=$?
+  expect_code 0 "$rc" "pause before current-state read"$'\n'"$out"
+  out=$(FM_HOME="$dir/home" "$ROOT/bin/fm-crew-state.sh" sm1 2>&1); rc=$?
+  expect_code 0 "$rc" "paused current state is readable"$'\n'"$out"
+  assert_contains "$out" 'paused' 'current state reports intentional downtime'
+  # Refusal from the ordinary control owner must retain the pause marker.
+  printf 'unverified-adapter\n' > "$dir/home/config/secondmate-harness"
+  out=$(run_restart "$dir" --resume sm1); rc=$?
+  [ "$rc" -ne 0 ] || fail 'unsupported replacement must refuse'
+  assert_present "$dir/home/state/.secondmate-paused-sm1" 'failed resume preserves pause intent'
+  pass 'paused state is explicit and failed resume keeps the marker'
+}
+
+test_pause_authorizes_before_publishing_intent
+test_pause_control_contention_keeps_the_mate_unpaused
+test_maintenance_cannot_resume_or_race_pause
+test_pause_after_persist_prevents_update_replacement
+test_pause_refuses_orphan_backlog_dirty_home_and_spawn_race
+test_paused_current_state_and_failed_resume
+
+test_pause_refuses_live_and_stopped_unlanded_children
+test_explicit_pause_and_resume
+test_resume_renews_the_retained_stall_observation
+test_routed_backlog_resumes_paused_mate
+test_remote_pause_resume_and_unknown_transport
+test_host_local_pause_refuses_children
 
 test_persist_gates_and_asks_only_for_open_records
 test_persist_precedes_restart

@@ -840,6 +840,30 @@ test_remote_poll_probe_unreachable_preserves_route() {
   pass "poll probe: unreachable or inconclusive remote reads preserve the route"
 }
 
+test_paused_mates_skip_local_and_remote_liveness() {
+  local w fb tmuxfb log out mode
+  w=$(new_world paused-local)
+  add_sm_home "$w" sm1 firstmate:fm-sm1
+  fb=$(make_toolchain "$w"); tmuxfb=$(make_liveness_tmux "$w")
+  log="$w/calls.log"; : > "$log"
+  printf '1\n' > "$w/home/state/.secondmate-paused-sm1"
+  out=$(run_bootstrap "$tmuxfb:$fb" "$w/home" zsh "$log")
+  assert_not_contains "$(cat "$log")" 'kill-window' 'bootstrap must leave paused endpoints alone'
+  assert_not_contains "$(cat "$log")" 'new-window' 'bootstrap must not relaunch a paused mate'
+  assert_absent "$w/home/state/.secondmate-relaunch-sm1" 'pause must not spend a liveness relaunch attempt'
+  w=$(make_remote_probe_world paused-remote)
+  printf '1\n' > "$w/home/state/.secondmate-paused-rsm1"
+  for mode in poll full; do
+    out=$(probe_remote "$w" "$mode" FM_FAKE_REMOTE_REPLY=dead)
+    assert_contains "$out" 'silent|unknown|0|||' 'both liveness callers skip remote pause intent'
+    assert_contains "$out" 'intentionally paused' 'the skip reason names the pause'
+  done
+  assert_absent "$w/ssh.log" 'paused remote liveness must not contact the host'
+  pass 'durable pause intent suppresses bootstrap and poll liveness for both placements'
+}
+
+test_paused_mates_skip_local_and_remote_liveness
+
 test_tmux_agent_state_classifies
 test_tmux_agent_state_rejects_malformed_targets_before_probe
 test_herdr_agent_state_preserves_husk_classifier

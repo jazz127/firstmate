@@ -951,13 +951,13 @@ test_control_exit_after_a_server_stop() {
 
   touch "$dir/fake/unreachable"
   out=$(run_rex_control "$dir" t1 exit); rc=$?
-  expect_code 1 "$rc" "a server that cannot be reached or started proves nothing"
+  expect_code 3 "$rc" "a server that cannot be reached or started proves nothing"
   assert_not_contains "$out" "endpoint-gone" "exit must not claim a stop it could not prove"
   rm -f "$dir/fake/unreachable"
 
   touch "$dir/fake/down"
   out=$(run_rex_control "$dir" t2 exit); rc=$?
-  expect_code 1 "$rc" "a stopped server answering for a different recorded server must refuse"
+  expect_code 3 "$rc" "a stopped server answering for a different recorded server must refuse"
   assert_not_contains "$out" "endpoint-gone" "a different server's not-found proves nothing"
 
   touch "$dir/fake/down"

@@ -1216,7 +1216,7 @@ test_control_exit_refused_before_any_call() {
   id=$(t3_uid t3exitz1)
   make_t3_control_task control-exit "$id" "$thread" running
   out=$(run_t3_control "$id" exit); rc=$?
-  expect_code 1 "$rc" "exit on a t3code task must refuse"$'\n'"$out"
+  expect_code 3 "$rc" "exit on a t3code task must refuse"$'\n'"$out"
   assert_contains "$out" "no session stop" "the refusal must name the missing session stop"
   assert_contains "$out" "'interrupt' ends the running turn" "the refusal must name the verb that works"
   [ -z "$(t3_dispatch_types)" ] || fail "a refused exit must send nothing to T3, not even an interrupt, got '$(t3_dispatch_types)'"

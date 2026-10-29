@@ -28,6 +28,12 @@ SECONDMATE_REGISTRY_MATCH_PROJECTS=
 SECONDMATE_REGISTRY_MATCH_REMOTE=0
 SECONDMATE_REGISTRY_ERROR=
 
+# Pause records are owned by fm-secondmate-restart.sh. Treat even an unsafe
+# marker as paused so routine recovery never turns corrupt state into a launch.
+fm_secondmate_is_paused() { # <parent-state-dir> <id>
+  [ -e "$1/.secondmate-paused-$2" ] || [ -L "$1/.secondmate-paused-$2" ]
+}
+
 secondmate_registry_lock_path() { printf '%s/.secondmate-registry.lock\n' "$1"; }
 secondmate_reply_lifecycle_lock_path() { printf '%s/.remote-reply-lifecycle-%s.lock\n' "$1" "$2"; }
 

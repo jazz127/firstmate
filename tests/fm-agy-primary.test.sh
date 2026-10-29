@@ -175,11 +175,20 @@ write_host_fixture() {  # <dir> <kind>
     printf '#!/usr/bin/env bash\n'
     printf 'printf "%%s\\t%%s\\n" "${FM_SUPERVISION_HOST_PRIMARY:-}" "$*" >> "$FM_HOME/state/host-ran"\n'
     if [ "$kind" = away-handback ]; then
-      printf 'printf "%%s\\n" "${FM_TEST_AFK_MODE:-away}" > "$FM_HOME/state/.afk"\n'
+      printf 'FM_STATE_OVERRIDE="$FM_HOME/state" FM_CONFIG_OVERRIDE="$FM_HOME/config" FM_TEST_HARNESS=agy FM_AFK_MODE=away "$FM_TEST_CODE_ROOT/bin/fm-afk-launch.sh" enter --words "watch the fleet" >/dev/null || exit 1\n'
+      printf 'sleep 2\n'
+    fi
+    if [ "$kind" = daemon-close ]; then
       printf 'sleep 2\n'
     fi
     case "$kind" in
-      handback|away-handback)
+      daemon-handback|daemon-close)
+        printf 'printf "%%s\\n" "${FM_TEST_AFK_MODE:-quiet}" > "$FM_HOME/state/.afk"\n'
+        [ "$kind" != daemon-handback ] || printf 'sleep 2\n'
+        ;;
+    esac
+    case "$kind" in
+      handback|away-handback|daemon-handback|daemon-close)
         printf 'printf "watcher: started pid=%%s (beacon fresh)\\n" "$$"\n'
         printf 'printf "stale: fixture-win needs a look\\n"\n'
         printf 'printf "supervision-host: the away session could not take this wake: fixture; this wake is yours\\n"\n'
@@ -362,48 +371,73 @@ test_turnend_guard_agy_supervision_host_park() {
 }
 
 test_turnend_guard_agy_away_supervision_ownership() {
-  local dir payload out mode timing gate
+  local dir payload out mode timing gate flag
   payload='{"executionNum":1,"terminationReason":"NO_TOOL_CALL"}'
-  for mode in away quiet; do
-    for timing in entry parked; do
-      dir=$(make_primary_dir "$TMP_ROOT/stop-host-$mode-$timing")
-      : > "$dir/state/task1.meta"
-      printf 'claude\n' > "$dir/config/supervision-host"
-      [ "$timing" != entry ] || printf '%s\n' "$mode" > "$dir/state/.afk"
-      write_host_fixture "$dir" away-handback
-      write_arm_fixture "$dir" actionable
-      out=$(FM_TEST_AFK_MODE="$mode" run_agy_stop "$dir" "$payload")
-      assert_equals continue "$(printf '%s' "$out" | jq -r '.decision // empty')" \
-        "$mode at $timing must keep the host park and deliver its handback"
-      assert_contains "$out" 'supervision-host: the away session could not take this wake' \
-        "$mode at $timing must preserve the host handback reason"
-      assert_equals "$(printf 'agy\tpark')" "$(cat "$dir/state/host-ran")" \
-        "$mode at $timing must run one host park pinned to agy"
-      assert_absent "$dir/state/arm-ran" "host supervision must not launch a plain arm"
-      assert_equals "$mode" "$(cat "$dir/state/.afk")" "host handback must preserve the posture"
-    done
-    for gate in absent off; do
+  for timing in entry parked; do
+    dir=$(make_primary_dir "$TMP_ROOT/stop-host-away-$timing")
+    : > "$dir/state/task1.meta"
+    printf 'claude\n' > "$dir/config/supervision-host"
+    if [ "$timing" = entry ]; then
+      FM_HOME="$dir" FM_STATE_OVERRIDE="$dir/state" FM_CONFIG_OVERRIDE="$dir/config" \
+        FM_TEST_HARNESS=agy FM_AFK_MODE=away "$ROOT/bin/fm-afk-launch.sh" enter --words 'watch the fleet' >/dev/null \
+        || fail "could not enter the host-owned away posture"
+    fi
+    write_host_fixture "$dir" away-handback
+    write_arm_fixture "$dir" actionable
+    out=$(run_agy_stop "$dir" "$payload")
+    assert_equals continue "$(printf '%s' "$out" | jq -r '.decision // empty')" \
+      "away at $timing must keep the host park and deliver its handback"
+    assert_contains "$out" 'supervision-host: the away session could not take this wake' \
+      "away at $timing must preserve the host handback reason"
+    assert_equals "$(printf 'agy\tpark')" "$(cat "$dir/state/host-ran")" \
+      "away at $timing must run one host park pinned to agy"
+    assert_absent "$dir/state/arm-ran" "host supervision must not launch a plain arm"
+    assert_absent "$dir/state/.afk" "host-owned away mode must not create a daemon flag"
+    assert_equals away "$(FM_HOME="$dir" FM_STATE_OVERRIDE="$dir/state" "$ROOT/bin/fm-afk-contract.sh" mode)" \
+      "host handback must preserve the away contract"
+  done
+  for mode in quiet away; do
+    for gate in enabled absent off; do
       dir=$(make_primary_dir "$TMP_ROOT/stop-daemon-$mode-$gate")
       : > "$dir/state/task1.meta"
-      printf '%s\n' "$mode" > "$dir/state/.afk"
-      if [ "$gate" = off ]; then
+      if [ "$gate" != absent ]; then
         printf 'claude\n' > "$dir/config/supervision-host"
-        : > "$dir/config/supervision-host-off"
+        [ "$gate" != off ] || : > "$dir/config/supervision-host-off"
       fi
+      if [ "$mode" = quiet ] && [ "$gate" = enabled ]; then
+        FM_HOME="$dir" FM_STATE_OVERRIDE="$dir/state" FM_CONFIG_OVERRIDE="$dir/config" \
+          FM_TEST_HARNESS=agy FM_AFK_MODE=quiet "$ROOT/bin/fm-afk-launch.sh" enter --words 'stay quiet' >/dev/null \
+          || fail "could not enter daemon-owned quiet mode on the AGY host home"
+        FM_HOME="$dir" FM_STATE_OVERRIDE="$dir/state" FM_CONFIG_OVERRIDE="$dir/config" \
+          FM_TEST_HARNESS=agy "$ROOT/bin/fm-afk-launch.sh" start-native >/dev/null \
+          || fail "AGY quiet mode must prepare the daemon flag despite the host opt-in"
+      else
+        printf '%s\n' "$mode" > "$dir/state/.afk"
+      fi
+      flag=$(cat "$dir/state/.afk")
       write_arm_fixture "$dir" actionable
       write_host_fixture "$dir" handback
       out=$(run_agy_stop "$dir" "$payload")
       assert_equals '{}' "$out" "daemon-owned $mode must stand down when the host gate is $gate"
       assert_absent "$dir/state/arm-ran" "daemon-owned $mode must not arm"
-      assert_absent "$dir/state/host-ran" "disabled host must not park"
+      assert_absent "$dir/state/host-ran" "daemon-owned $mode must not start a host park"
+      assert_equals "$flag" "$(cat "$dir/state/.afk")" "Stop must preserve the daemon flag"
       rm -f "$dir/state/.afk"
       write_arm_fixture "$dir" away-actionable
+      write_host_fixture "$dir" daemon-handback
       out=$(FM_TEST_AFK_MODE="$mode" run_agy_stop "$dir" "$payload")
-      assert_equals '{}' "$out" "entering daemon-owned $mode while parked must stand down"
-      ! kill -0 "$(cat "$dir/state/arm-ran")" 2>/dev/null || fail "daemon handoff left the arm child running"
+      assert_equals '{}' "$out" "entering daemon-owned $mode while parked must stand down with host gate $gate"
+      if [ "$gate" = enabled ]; then
+        write_host_fixture "$dir" daemon-close
+        rm -f "$dir/state/.afk"
+        out=$(FM_TEST_AFK_MODE="$mode" run_agy_stop "$dir" "$payload")
+        assert_equals '{}' "$out" "a daemon-owned $mode flag at child close must suppress the actionable handback"
+      else
+        ! kill -0 "$(cat "$dir/state/arm-ran")" 2>/dev/null || fail "daemon handoff left the arm child running"
+      fi
     done
   done
-  pass "fm-turnend-guard-agy: host keeps away and quiet parks; daemon ownership still stands down"
+  pass "fm-turnend-guard-agy: host-owned away contracts keep parking; daemon flags stop quiet and away parks"
 }
 
 test_turnend_guard_agy_pending_wake_needs_supervision() {

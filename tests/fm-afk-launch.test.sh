@@ -1169,7 +1169,7 @@ unit_supervision_host_quiet_fallback() {
   : > "$st/config/supervision-host"
   unready "no supervision engine: the primary harness 'cursor' has no verified supervision engine" cursor
   printf 'claude\n' > "$st/config/supervision-host"
-  for bad in opencode omp grok codex; do
+  for bad in opencode omp grok codex agy; do
     unready "no verified dialog mirror for $bad" "$bad"
   done
   printf '999999999\n' > "$st/state/.lock"

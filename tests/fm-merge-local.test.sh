@@ -182,14 +182,14 @@ test_done_recording_preserves_caller_locks() {
       fm_lock_try_acquire "$lock" || exit 1
       fm_current_pid owner || exit 1
       trap 'fm_lock_release "$lock"; [ -z "$control" ] || fm_lock_release "$control"' EXIT
-      FM_HOME="$HOME_DIR" fm_dod_accept_ship_done ship local-only "$WT" "$PROJ" \
-        'done: ready' "$HOME_DIR/state" local-task "$META" meta-locked || exit 1
+      FM_HOME="$HOME_DIR" FM_DOD_LOCKED_META="$META" fm_dod_accept_ship_done ship local-only "$WT" "$PROJ" \
+        'done: ready' "$HOME_DIR/state" local-task "$META" || exit 1
       [ "$(fm_dod_local_done_head "$META")" = "$X" ] || exit 1
-      FM_HOME="$HOME_DIR" fm_dod_accept_ship_done ship local-only "$WT" "$PROJ" \
-        'done: ready again' "$HOME_DIR/state" local-task "$META" meta-locked || exit 1
+      FM_HOME="$HOME_DIR" FM_DOD_LOCKED_META="$META" fm_dod_accept_ship_done ship local-only "$WT" "$PROJ" \
+        'done: ready again' "$HOME_DIR/state" local-task "$META" || exit 1
       git -C "$WT" commit -q --allow-empty -m Y || exit 1
-      if FM_HOME="$HOME_DIR" fm_dod_accept_ship_done ship local-only "$WT" "$PROJ" \
-        'done: changed' "$HOME_DIR/state" local-task "$META" meta-locked >/dev/null; then
+      if FM_HOME="$HOME_DIR" FM_DOD_LOCKED_META="$META" fm_dod_accept_ship_done ship local-only "$WT" "$PROJ" \
+        'done: changed' "$HOME_DIR/state" local-task "$META" >/dev/null; then
         exit 1
       fi
       [ "$(fm_dod_local_done_head "$META")" = "$X" ] || exit 1

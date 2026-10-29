@@ -479,9 +479,9 @@ report_child_ledger_locked() { # <id> <meta>
   fingerprint=$(sha256_text "$incarnation|$id|$state|ledger|$last")
   if [ "$state" = "done" ] && [ ! -f "$(record_path "$fingerprint" reported)" ] \
     && [ ! -f "$(record_path "$fingerprint" pending)" ] \
-    && ! fm_dod_accept_ship_done "$(meta_field "$meta" kind)" "$(meta_field "$meta" mode)" \
+    && ! FM_DOD_LOCKED_META="$meta" fm_dod_accept_ship_done "$(meta_field "$meta" kind)" "$(meta_field "$meta" mode)" \
       "$(meta_field "$meta" worktree)" "$(meta_field "$meta" project)" "$last" \
-      "$STATE" "$id" "$meta" meta-locked >/dev/null; then
+      "$STATE" "$id" "$meta" >/dev/null; then
     return 0
   fi
   outcome_key="child-outcome-$id-$state-${fingerprint:0:8}"
@@ -590,7 +590,7 @@ reconcile_direct_child_locked() { # <id> <meta> <secondmate-id-or-empty> <timeou
         ;;
     esac
   fi
-  state_line=$(fm_run_timed "$timeout" env FM_HOME="$FM_HOME" FM_STATE_OVERRIDE="$STATE" FM_CREW_STATE_NO_FORGE=1 \
+  state_line=$(fm_run_timed "$timeout" env FM_HOME="$FM_HOME" FM_STATE_OVERRIDE="$STATE" FM_CREW_STATE_NO_FORGE=1 FM_DOD_LOCKED_META="$meta" \
     "$CREW_STATE_BIN" "$id" 2>/dev/null) || state_rc=$?
   [ "$state_rc" -ne 124 ] || return 3
   last=$(last_status_line "$status")

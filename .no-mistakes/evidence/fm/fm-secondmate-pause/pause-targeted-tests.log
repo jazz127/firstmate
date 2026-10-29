@@ -1,0 +1,254 @@
+FM_TEST_BEGIN 2026-10-29T11:32:25Z tests/fm-watch-inbox-meta.test.sh family=watcher-wake-lock expected_gate_skip=none
+ok - non-T3 inbox guard preserves no-target uncertainty and recorded busy/idle verdicts
+check: secondmate wake-loop stalled: mate=mate row=7 idle=1793273546s
+ok - paused watcher inboxes and home queues defer without spending records or counters
+FM_TEST_END 2026-10-29T11:32:27Z tests/fm-watch-inbox-meta.test.sh exit=0 duration_ms=2382 gate_skip=false
+FM_TEST_BEGIN 2026-10-29T11:32:27Z tests/fm-secondmate-reconcile.test.sh family=secondmate expected_gate_skip=none
+FM_TEST_BEGIN 2026-10-29T11:32:27Z tests/fm-remote-backlog-handoff.test.sh family=secondmate expected_gate_skip=none
+FM_TEST_BEGIN 2026-10-29T11:32:27Z tests/fm-backlog-handoff.test.sh family=secondmate expected_gate_skip=none
+FM_TEST_BEGIN 2026-10-29T11:32:27Z tests/fm-secondmate-sync.test.sh family=secondmate expected_gate_skip=none
+not ok - handoff to a live receiver failed: error: secondmate home cannot be inside the firstmate repo: ~/.no-mistakes/worktrees/2ac5a4874818/01M63HV4ZHACDG49WEC2J80WRG/.test-pause-scratch/fm-test-run.kEpVGO/w4/tmp/fm-backlog-handoff.lr3gDC/live-wake-sub
+FM_TEST_END 2026-10-29T11:32:28Z tests/fm-backlog-handoff.test.sh exit=1 duration_ms=213 gate_skip=false
+FM_TEST_BEGIN 2026-10-29T11:32:28Z tests/fm-secondmate-restart.test.sh family=secondmate expected_gate_skip=none
+ok - local and remote pause authorize before publishing intent
+ok - a busy control lock refuses pause without leaving false intent
+not ok - resume before lifecycle exclusion check
+error: secondmate home cannot be inside the firstmate repo: ~/.no-mistakes/worktrees/2ac5a4874818/01M63HV4ZHACDG49WEC2J80WRG/.test-pause-scratch/fm-test-run.kEpVGO/w6/tmp/fm-secondmate-restart.Tw8yey/pause-maintenance-13819/sm1-home
+error: the replacement agent for sm1 could not be launched on claude
+error: sm1's agent was stopped but the replacement did not launch; no agent is running, and its work plus the recorded progress note are preserved at ~/.no-mistakes/worktrees/2ac5a4874818/01M63HV4ZHACDG49WEC2J80WRG/.test-pause-scratch/fm-test-run.kEpVGO/w6/tmp/fm-secondmate-restart.Tw8yey/pause-maintenance-13819/sm1-home: expected exit 0, got 1
+FM_TEST_END 2026-10-29T11:32:32Z tests/fm-secondmate-restart.test.sh exit=1 duration_ms=4197 gate_skip=false
+FM_TEST_BEGIN 2026-10-29T11:32:32Z tests/fm-secondmate-liveness.test.sh family=secondmate expected_gate_skip=none
+ok - reconcile requests stop oversized streams at the capture bound
+ok - reconcile requests require exactly one snapshot document
+ok - reconcile requests coalesce per target and retire independently after delivery
+not ok - the watcher beacon stalled behind delayed reconcile delivery
+FM_TEST_END 2026-10-29T11:32:33Z tests/fm-secondmate-reconcile.test.sh exit=1 duration_ms=5990 gate_skip=false
+FM_TEST_BEGIN 2026-10-29T11:32:33Z tests/fm-remote-secondmate-relaunch.test.sh family=secondmate expected_gate_skip=none
+ok - durable pause intent suppresses bootstrap and poll liveness for both placements
+ok - fm_backend_tmux_agent_state: separates live, dead, missing, ambiguous, and unreadable
+ok - fm_backend_tmux_agent_state: rejects malformed targets before probing tmux
+ok - fm_backend_herdr_agent_state: preserves missing/no-agent/live/unknown husk behavior
+ok - fm_backend_agent_state: routes tmux/Herdr and keeps Zellij unverified
+not ok - a confirmed-dead secondmate should actually be relaunched (missing: 'new-window')
+--- output ---
+kill-window -t =firstmate:=fm-sm1
+FM_TEST_END 2026-10-29T11:32:34Z tests/fm-secondmate-liveness.test.sh exit=1 duration_ms=1583 gate_skip=false
+ok - a successful remote relaunch republishes the parent's harness, model, and effort
+ok - a remote relaunch records the identity the host confirmed
+ok - a refused remote relaunch leaves the parent's record untouched
+ok - a local secondmate is refused by the remote relaunch tool
+ok - a remote relaunch keeps an already-armed PR poll authenticating
+ALL TESTS PASSED
+FM_TEST_END 2026-10-29T11:32:34Z tests/fm-remote-secondmate-relaunch.test.sh exit=0 duration_ms=681 gate_skip=false
+ok - paused homes skip bootstrap convergence, pending rereads and config push
+ok - T1 updated: a behind home fast-forwards to the primary's local HEAD
+ok - T2 current: an already-current home is a no-op and reports no instruction change
+ok - T3 dirty: an uncommitted home is skipped, its edit preserved
+ok - scratchpad2/ does not mark a secondmate home dirty for the sync guard
+ok - T4 diverged: a home that is not an ancestor of the primary's HEAD is skipped
+ok - T5 in-flight: a home on a feature branch is skipped, its work preserved
+ok - T6 no fetch: the local-HEAD sync never invokes git fetch
+ok - T7 sweep nudges on a real instruction change only, but still fast-forwards
+ok - T8 bootstrap sweeps live homes and sends exactly one marked nudge for the instruction change
+ok - T8a bootstrap nudge send respects FM_STATE_OVERRIDE
+ok - T8f bootstrap nudge retry rejects malformed marker ids
+ok - T8c failed bootstrap nudge is surfaced and recorded for retry
+ok - T8d bootstrap nudge retry is idempotent after success
+ok - T8e bootstrap nudge retry refuses a changed home instead of guessing
+ok - T8b a stale herdr endpoint cannot lose a durably enqueued nudge, and fm-<id> resolves through post-respawn metadata
+ok - T9 bootstrap surfaces a skipped dirty live secondmate home
+ok - T10 spawn fast-forwards a secondmate worktree to the primary's local HEAD before launch
+ok - T11 spawn warns when pre-launch sync is skipped
+ok - T12 gitignored marker: a freshly seeded home reads clean to fleet-sync and the ff sweep
+ok - T13 gitignored marker: an existing marker-only-dirty home converges, then reads clean
+ok - T14 marker tolerance does not mask a genuinely dirty home
+ok - R1 a remote home ahead of the host's Firstmate copy still advances to the primary's commit
+ok - R1b a remote sync names exactly which instruction paths its advance changed
+ok - R2 a missing target is imported from the host's Firstmate copy without moving it
+ok - R3 a target neither side holds is imported from the home's own origin
+ok - R4 an already-present target advances the home with no fetch available
+ok - R5 a target neither the host copy nor the origin holds skips with an actionable reason
+ok - R6 dirty, diverged, and feature-branch remote homes skip and are left untouched
+ok - R7 a sync with no target still follows the host's own refreshed Firstmate copy
+ok - R8 session start converges a remote home on the primary's default-branch commit
+ok - R10 a host too old for a parent-targeted sync is reported with the command that fixes it
+ok - R11 a remote home is nudged only for an owed reread or a real instruction change, never for a cut-off attempt that changed nothing
+ok - R9 a remote launch leaves the home on the parent's commit while an ordinary spawn follows its own checkout
+# all fm-secondmate-sync tests passed
+FM_TEST_END 2026-10-29T11:33:04Z tests/fm-secondmate-sync.test.sh exit=0 duration_ms=36748 gate_skip=false
+ok - confined put rejects incomplete and superseded payload generations
+ok - confined put rejects directory replacement without external writes
+ok - ambiguous receipt leaves one durable outbox and no duplicate dispatchable source
+ok - re-delivery after unknown completion converges without duplication
+ok - dropped transfer recovery overwrites scratch and delivers exactly once
+ok - concurrent handoffs serialize staging through confirmed cleanup
+ok - receiver removes one proven dead stale lock and retries once
+ok - bootstrap detects pending outbox handoffs without a journal
+ok - remote handoff releases durable work and separately retries its receiver wake
+ok - pending wake and outbox retries preserve pause and queue work durably
+ok - an escalated undelivered receiver wake stays retryable instead of jamming the outbox
+ok - a permanently unconfirmable wake never jams later durable handoffs
+ok - fresh remote work gets a new wake after confirmed cleanup recovery
+ok - confirmed marker cleanup cannot fail a completed remote handoff
+ok - delivered pending state cannot suppress a new handoff wake
+ok - unrecordable best-effort wake state drops without blocking later handoffs
+ok - undeletable invalid wake state cannot block remote handoffs
+ok - route classification serializes with retirement before staging
+ok - unconfigured bootstrap has no remote handoff behavior
+ok - a cwd .tasks.toml for another backend does not redirect a markdown receipt
+ALL TESTS PASSED
+FM_TEST_END 2026-10-29T11:34:31Z tests/fm-remote-backlog-handoff.test.sh exit=0 duration_ms=123381 gate_skip=false
+FM_TEST_BEGIN 2026-10-29T11:34:31Z tests/fm-pending-reply.test.sh family=standalone expected_gate_skip=none
+ok - pending record paths preserve stdout compatibility and assign exact bytes without output or local-name collisions
+ok - embedding and summaries preserve longer correlation-like words and strip only complete leading tokens
+ok - correlation embedding consumes mixed spaces and tabs once while preserving newline boundaries and trailing bytes
+ok - wrong-home scans increment padded decimal counts and recover malformed or overflowing counters
+ok - empty or partial failed clock reads cannot prove idle, failed delivery or missed reports
+ok - pending grace compares bounded decimal epochs without early recovery, escalation or arithmetic errors
+ok - failed or partial record selection falls back to per-record reconciliation
+ok - capture filter failures remain unknown without completing turns or sending recovery
+ok - same-size status rewrites within a second invalidate parent and wrong-home caches
+ok - invalid busy regexes remain unknown without completing turns or sending recovery
+ok - binary and failed caught-up watermark reads cannot license remote recovery; healthy retry succeeds
+ok - failed fallback checksum/digest/field pipelines cannot publish ids or pending records
+ok - failed OpenSSL output is discarded before the fallback generates a correlation
+ok - a regenerated correlation must pass the same length check before any record is written
+ok - binary and failed status reads cannot resolve, copy, count, or cache partial evidence; healthy retries succeed
+ok - request summaries strip the exact leading carrier before ASCII filtering and length limiting
+ok - correlation extraction preserves first-match, hex case and stdout framing
+ok - pending creation, delivery and scans preserve the exact override directory
+ok - correlations are reused only for matching open task records
+ok - failed stat/checksum signatures still read newly appended parent and wrong-home reports
+ok - failed sighting encoders leave evidence unchanged and retry without a status-file change
+ok - delivery markers require complete text and failed reads keep resends blocked
+ok - pending request creation supports missing, failed and healthy OpenSSL
+ok - large busy captures retain their harness-scoped verdict under pipefail
+ok - field updates preserve other fields and replace every old occurrence through absolute and relative paths
+ok - an unreadable record update refuses without replacing the original bytes
+ok - record fields preserve framing, literal bytes and final-occurrence precedence
+ok - record fields assign output variables without losing missing/binary clearing or field bytes
+ok - missing task metadata leaves the request pending without aborting the scan
+ok - pause and contention defer recovery without spending its attempt or reopening a report
+ok - pause defers missed-reply recovery while preserving correlated report resolution
+ok - normal correlated reply resolves once (idempotent)
+ok - completed turn with no report triggers exactly one recovery
+ok - recovery never pokes a mate waiting on its own decision, and runs once it closes
+ok - recovery sends during an open decision when config/wait-no-turns is absent
+ok - recovery grace is measured from the request turn's completion, not delivery
+ok - one fresh status read immediately before firing catches a just-landed reply, any verb
+ok - a resolve that fails after committing resolved still blocks repost and escalation
+ok - missed-report escalation grace is measured from the recovery turn's completion
+ok - recovery attempts reconcile without reinjection
+ok - recovery reply resolves the original expectation
+ok - second missed turn escalates once and remains durable
+ok - escalations and replies wake; the home's own escalation close stays quiet
+ok - failed escalation publication remains retryable and publishes once
+ok - legacy escalation closes under the shared default key
+ok - legacy escalation cannot close an unrelated default-key decision
+ok - foreign correlated blocker cannot impersonate a pending-reply escalation
+ok - concurrent resolution closes one keyed escalation exactly once
+ok - concurrent escalation yields to a late correlated reply
+ok - transport success cannot masquerade as reply success
+ok - undelivered records remain immutable across scan paths
+ok - delivery confirmation fallback reconciles durably
+ok - delivery confirmation serializes with reconciliation
+ok - unrelated events and stale correlation ids cannot resolve
+ok - another mate's echoed token cannot resolve a request
+ok - restart preserves expectation and exact parent destination
+ok - wrong-home reports are detected but do not silently acknowledge
+ok - direct unmarked captain input creates no expectation
+ok - fm-send marked secondmate path creates pending and embeds corr
+ok - status-pointed document resolves the expectation
+ok - optional helper report resolves without being required for correctness
+ok - backend busy/idle observation covers Pi/Claude paths without conversation scrape
+ok - tmux and zellij unknown states use bounded capture fallback
+ok - pending replies scope Kimi capture fallback by recorded harness
+ok - tick skips terminal records and reuses target observations
+ok - the tick leaves settled records alone and still does the selected records' work
+ok - watcher refreshes its beacon and sends at most one remote repost per tick
+ok - watcher refreshes its beacon between selected remote records
+ok - tick end-to-end: miss -> one recovery -> escalate -> durable
+ok - failed transport discards undelivered expectation only
+ok - a remote repost waits for the reply channel and still fires on a real miss
+ok - a mirrored correlated remote reply resolves without any repost
+ok - same-basename self-home corr= is restated onto the parent channel and resolves
+ok - same-basename reply resolves at the recovery failure boundary
+ok - a child-file mate-home sighting is not copied and still escalates
+ok - mechanical helper writes the parent channel from verb, corr, and note
+ok - remote parent-replies.status is not classified as wrong-home
+ok - local parent-replies.status remains wrong-home evidence
+ok - an escalated correlation stays retryable only while undelivered
+ok - a same-kind escalation after an operator close opens the decision again
+ok - the summary keeps accented letters, drops control characters, and caps by character
+ok - all pending-reply tests passed
+FM_TEST_END 2026-10-29T11:35:23Z tests/fm-pending-reply.test.sh exit=0 duration_ms=51917 gate_skip=false
+FM_TEST_BEGIN 2026-10-29T11:35:23Z tests/fm-control.test.sh family=backend-dispatch expected_gate_skip=none
+ok - exit identifies even initial home validation as a pre-stop refusal
+ok - fm-control exit: every verified harness gets its own verified exit command
+ok - fm-control Pi exit: a cost-first footer permits one /quit under a proven native Pi composer
+ok - fm-control Pi exit: the opted-in Herdr compact proof alone permits /quit
+ok - fm-control exit: a recorded OpenCode major picks /exit (1.x) or Ctrl-U then Ctrl-C (2.x)
+ok - fm-control exit: OpenCode 2.x retries Ctrl-C exactly once while the agent is still alive
+ok - fm-control interrupt: every verified harness gets its own verified key and repeat count
+ok - fm-control Devin interrupt: second press only after the armed hint, then busy invalidated without fabricating idle
+ok - fm-control Devin interrupt: an idle agent gets one Escape and reports not-running
+ok - fm-control Devin exit: a busy record whose turn already ended never opens the revert picker
+ok - fm-control Devin interrupt: a revert picker a press opened is closed with Escape, never Enter
+ok - fm-control Devin: an open revert picker refuses every typed command
+ok - fm-control interrupt: opencode needs a double Escape, claude a single one
+ok - fm-control: a harness with no verified control mechanics is refused, not guessed at
+ok - fm-control-lib: a recorded harness resolves to its verified adapter without guessing
+ok - fm-control-lib: only a runtime's own recorded session has a relaunch resume form
+ok - fm-control: prefixed recorded harnesses reach interrupt and exit mechanics
+ok - fm-control-lib: the backend key matrix matches each adapter's real send-key surface
+ok - fm-control-lib: adapter capability is per task kind, not per adapter alone
+ok - fm-control interrupt: a backend that cannot deliver the harness's key refuses instead of sending another
+ok - fm-control: a backend that cannot prove an agent stopped refuses exit and relaunch
+ok - fm-control relaunch: commandcode off tmux and herdr is refused before the running agent is stopped
+ok - fm-control-lib: stop-proving verbs are gated on the backends that really classify agent state
+ok - fm-control: a legacy window label is refused and the exact task id is named
+ok - fm-control: an explicit backend endpoint is never a control target
+ok - fm-control: an unrecorded task id is refused
+ok - fm-control: a record whose endpoint identity names another task is refused
+ok - fm-control: a remotely placed secondmate is refused by placement, not by a metadata complaint
+ok - fm-control: interrupt and exit lock before task-state resolution
+ok - fm-control: the verb list is closed - no raw keys, arbitrary text, or clear verb
+ok - fm-control: resume is refused with the determinism reason and the alternative
+ok - fm-control: profile and note flags belong to relaunch only
+ok - fm-control exit: an already-stopped agent is idempotent success with no bytes sent
+ok - fm-control exit: an unprovable tmux endpoint refuses instead of claiming the agent stopped
+ok - fm-control interrupt: refuses when no agent is running rather than keying a shell
+ok - fm-control exit: an endpoint whose process cannot be attributed refuses
+ok - fm-control exit: a busy agent receives interrupt delivery before the exit command
+ok - fm-control exit: an idle agent goes straight to its exit command
+ok - fm-control exit: a footer-busy Pi on tmux refuses instead of typing /quit
+ok - fm-control exit: retiring a codex incarnation drops busy_gen with the sidecar
+ok - fm-control exit: an already-open background-task picker is not typed into
+ok - fm-control exit: the Enter that opens the background-task picker is not followed by a confirming Enter
+ok - fm-control exit: a picker that renders after the submit returned is named when the stop wait times out
+ok - fm-control interrupt: unconfirmed delivery preserves observed busy state
+ok - fm-control interrupt: muse confirms cancellation from its session log
+ok - fm-control interrupt: postconditions are revalidated after acknowledgement polling
+ok - fm-control exit: an interrupt-stopped agent satisfies the gone-state postcondition
+ok - fm-control exit: a stubborn agent reports delivered input and an unconfirmed exit
+ok - fm-control interrupt: grok reports delivery without claiming cancellation
+ok - fm-control interrupt: grok's idle footer does not confirm cancellation
+ok - fm-control: a lifecycle command to a secondmate is unmarked and opens no reply expectation
+ok - fm-control's arrival leaves fm-send's from-firstmate marking untouched
+FM_TEST_END 2026-10-29T11:36:18Z tests/fm-control.test.sh exit=0 duration_ms=55298 gate_skip=false
+FM_TEST_SUMMARY total=10 failed=4 skipped_gate=0 duration_ms=233283
+FM_TEST_SUMMARY_FAMILY family=backend-dispatch count=1 duration_ms=55298 failed=0
+FM_TEST_SUMMARY_FAMILY family=secondmate count=7 duration_ms=172793 failed=4
+FM_TEST_SUMMARY_FAMILY family=standalone count=1 duration_ms=51917 failed=0
+FM_TEST_SUMMARY_FAMILY family=watcher-wake-lock count=1 duration_ms=2382 failed=0
+FM_TEST_SLOWEST rank=1 script=tests/fm-remote-backlog-handoff.test.sh duration_ms=123381
+FM_TEST_SLOWEST rank=2 script=tests/fm-control.test.sh duration_ms=55298
+FM_TEST_SLOWEST rank=3 script=tests/fm-pending-reply.test.sh duration_ms=51917
+FM_TEST_SLOWEST rank=4 script=tests/fm-secondmate-sync.test.sh duration_ms=36748
+FM_TEST_SLOWEST rank=5 script=tests/fm-secondmate-reconcile.test.sh duration_ms=5990
+FM_TEST_SLOWEST rank=6 script=tests/fm-secondmate-restart.test.sh duration_ms=4197
+FM_TEST_SLOWEST rank=7 script=tests/fm-watch-inbox-meta.test.sh duration_ms=2382
+FM_TEST_SLOWEST rank=8 script=tests/fm-secondmate-liveness.test.sh duration_ms=1583
+FM_TEST_SLOWEST rank=9 script=tests/fm-remote-secondmate-relaunch.test.sh duration_ms=681
+FM_TEST_SLOWEST rank=10 script=tests/fm-backlog-handoff.test.sh duration_ms=213
+fm-test-run: wrote timing artifact: ~/.no-mistakes/evidence/01M63HV4ZHACDG49WEC2J80WRG/pause-targeted-results.json

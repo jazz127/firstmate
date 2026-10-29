@@ -1,0 +1,44 @@
+SYNTHETIC: real Firstmate CLIs; fake tmux/agent; disposable local git homes.
+$ fm-secondmate-restart.sh --pause sm1
+stopped sm1 harness=claude backend=tmux endpoint=fmses:fm-sm1 worktree=/tmp/fm-secondmate-restart.6zpM9o/evidence-9902/sm1-home
+paused: sm1
+$ fm-crew-state.sh sm1
+state: paused · source: secondmate-pause · intentionally paused; resume explicitly or route new work
+Home and route retained.
+$ fm-send.sh sm1 "re-read config"
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the requested message WILL still be sent.
+●  repair missing watcher supervision according to the session-start block for this harness; do not use shell &.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+error: secondmate sm1 is intentionally paused; request not sent
+exit=75
+$ fm-secondmate-restart.sh --resume sm1
+warning: secondmate sm1 sync skipped before launch: primary default-branch commit cannot be resolved
+relaunched sm1 harness=claude from=claude model=default effort=default backend=tmux endpoint=fmses:fm-sm1 worktree=/tmp/fm-secondmate-restart.6zpM9o/evidence-9902/sm1-home
+resumed: sm1
+$ fm-secondmate-restart.sh --pause sm1
+stopped sm1 harness=claude backend=tmux endpoint=fmses:fm-sm1 worktree=/tmp/fm-secondmate-restart.6zpM9o/evidence-9902/sm1-home
+paused: sm1
+$ fm-backlog-handoff.sh sm1 routed
+handed off 1 item(s) to sm1: routed
+  into /tmp/fm-secondmate-restart.6zpM9o/evidence-9902/sm1-home/data/backlog.md
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+warning: secondmate sm1 sync skipped before launch: primary default-branch commit cannot be resolved
+relaunched sm1 harness=claude from=claude model=default effort=default backend=tmux endpoint=fmses:fm-sm1 worktree=/tmp/fm-secondmate-restart.6zpM9o/evidence-9902/sm1-home
+resumed: sm1
+Destination backlog after fresh-work resume:
+# Backlog
+
+## Queued
+- [ ] routed - new work (repo: p; added 2026-10-29)
+
+## In flight
+
+## Done
+$ fm-secondmate-restart.sh --pause sm1 (child work remains)
+error: cannot pause sm1: in-flight or unlanded work remains at /tmp/fm-secondmate-restart.6zpM9o/evidence-9902/sm1-home/state/unlanded.meta; finish and land it first
+exit=3
+Unsafe pause refused; running posture retained.

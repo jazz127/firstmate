@@ -193,6 +193,12 @@ case "${1:-}" in
         "$SCRIPT_DIR/fm-remote-secondmate-relaunch.sh" "$id" "$harness" "${model:-default}" "${effort:-default}" resume || exit $?
       else
         "$SCRIPT_DIR/fm-control.sh" "$id" relaunch || exit 1
+        progress_marker="$STATE/.secondmate-wake-progress-$id"
+        if [ -e "$progress_marker" ] || [ -L "$progress_marker" ]; then
+          [ -f "$progress_marker" ] && [ ! -L "$progress_marker" ] || exit 1
+          IFS=$'\t' read -r _observed_at progress_row < "$progress_marker" || exit 1
+          fm_wake_secondmate_progress_marker_write "$id" "$(date +%s)" "$progress_row" || exit 1
+        fi
         rm -f -- "$marker" || exit 1
       fi
       echo "resumed: $id"

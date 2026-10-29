@@ -1297,6 +1297,95 @@ test_explicit_pause_and_resume() {
   pass 'explicit pause and resume preserve the home and use verified lifecycle owners'
 }
 
+resume_stall_tick() {
+  local dir=$1
+  env PATH="$dir/fakebin:$PATH" FM_HOME="$dir/home" FM_FAKE_DIR="$dir/fake" \
+    FM_STATE_OVERRIDE="$dir/home/state" FM_CONFIG_OVERRIDE="$dir/home/config" \
+    FM_FAKE_NOW_FILE="$dir/now" FM_SECONDMATE_WAKE_STALL_SECS=60 FM_BUSY_TURN_MAX_SECS=120 \
+    bash -eu -c '. "$1/bin/fm-watch.sh"; secondmate_wake_stall_tick' _ "$ROOT" 2>&1
+}
+
+test_resume_renews_the_retained_stall_observation() {
+  local dir state out rc mode real_date retained observed_at row_key rings
+  real_date=$(command -v date)
+  for mode in explicit fresh-work; do
+    dir=$(new_case "resume-stall-$mode")
+    state="$dir/home/state"
+    add_local_mate "$dir" sm1
+    clean_pause_home "$dir" sm1
+    cat > "$dir/fakebin/date" <<'SH'
+#!/usr/bin/env bash
+if [ "${1:-}" = +%s ]; then
+  cat "$FM_FAKE_NOW_FILE"
+else
+  exec "$FM_REAL_DATE" "$@"
+fi
+SH
+    chmod +x "$dir/fakebin/date"
+    printf '100\t7\tcheck\trouted\tcheck: pending work\n' > "$dir/sm1-home/state/.wake-queue"
+    cp "$dir/sm1-home/state/.wake-queue" "$dir/queue-before"
+    "$ROOT/bin/fm-busy-event.sh" arm "$state" sm1 >/dev/null || fail 'could not arm the fixture'
+    "$ROOT/bin/fm-busy-event.sh" apply "$state" sm1 idle --current-gen \
+      --source claude-hook --event stop >/dev/null || fail 'could not mark the fixture idle'
+    printf '1000\n' > "$dir/now"
+    out=$(FM_REAL_DATE="$real_date" resume_stall_tick "$dir"); rc=$?
+    expect_code 0 "$rc" "first queue observation"$'\n'"$out"
+    printf '1061\n' > "$dir/now"
+    out=$(FM_REAL_DATE="$real_date" resume_stall_tick "$dir"); rc=$?
+    expect_code 0 "$rc" "drain ring before pause"$'\n'"$out"
+    [ "$(cat "$state/.secondmate-wake-ring-sm1")" = 100-7 ] || fail 'the watcher did not ring the retained row'
+    [ "$(wc -l < "$dir/fake/rings" | tr -d ' ')" = 1 ] || fail 'expected exactly one initial drain ring'
+    env FM_HOME="$dir/home" FM_STATE_OVERRIDE="$state" bash -eu -c '
+      . "$1/bin/fm-task-inbox-lib.sh"
+      ordinary=$(fm_task_inbox_write "$STATE" sm1 "pending ordinary steer")
+      fm_task_inbox_record_ring "$STATE" sm1 "$ordinary"
+      fm_task_inbox_record_busy "$STATE" sm1 "$ordinary" >/dev/null
+      fm_task_inbox_mark_retry "$STATE" sm1 "$STATE/sm1.inbox/001.msg"
+    ' _ "$ROOT" || fail 'could not seed retained delivery counters'
+    mkdir "$dir/inbox-before"
+    for retained in "$state/sm1.inbox/"*.msg "$state/sm1.inbox/.ring-state" \
+      "$state/sm1.inbox/.busy-state" "$state/sm1.inbox/.retry-ring"; do
+      cp "$retained" "$dir/inbox-before/"
+    done
+    cp "$state/.secondmate-wake-ring-sm1" "$dir/ring-before"
+    out=$(FM_REAL_DATE="$real_date" FM_FAKE_NOW_FILE="$dir/now" run_restart "$dir" --pause sm1); rc=$?
+    expect_code 0 "$rc" "pause after the drain ring"$'\n'"$out"
+    printf '10000\n' > "$dir/now"
+    out=$(FM_REAL_DATE="$real_date" resume_stall_tick "$dir"); rc=$?
+    expect_code 0 "$rc" "long pause defers stall checks"$'\n'"$out"
+    [ ! -s "$state/.wake-queue" ] || fail 'pause published a stall alert'
+    if [ "$mode" = explicit ]; then
+      out=$(FM_REAL_DATE="$real_date" FM_FAKE_NOW_FILE="$dir/now" run_restart "$dir" --resume sm1); rc=$?
+    else
+      out=$(env PATH="$dir/fakebin:$PATH" FM_HOME="$dir/home" FM_FAKE_DIR="$dir/fake" \
+        FM_REAL_DATE="$real_date" FM_FAKE_NOW_FILE="$dir/now" FM_SUPERVISION_ACTOR=main \
+        FM_SPAWN_NO_GUARD=1 FM_CONTROL_POLL=0.01 FM_CONTROL_EXIT_WAIT=0.05 FM_CONTROL_LAUNCH_WAIT=0.05 \
+        "$ROOT/bin/fm-send.sh" sm1 --new-work 'new scoped work' 2>&1); rc=$?
+    fi
+    expect_code 0 "$rc" "$mode resume after a long pause"$'\n'"$out"
+    assert_absent "$state/.secondmate-paused-sm1" 'successful resume clears pause intent'
+    IFS=$'\t' read -r observed_at row_key < "$state/.secondmate-wake-progress-sm1"
+    [ "$observed_at" = 10000 ] && [ "$row_key" = 100-7 ] || fail 'resume did not renew the existing observation'
+    for retained in "$dir/inbox-before/"* "$dir/inbox-before/".[!.]*; do
+      cmp "$retained" "$state/sm1.inbox/${retained##*/}" || fail 'resume changed a retained record or counter'
+    done
+    cmp "$dir/queue-before" "$dir/sm1-home/state/.wake-queue" || fail 'resume changed queued work'
+    cmp "$dir/ring-before" "$state/.secondmate-wake-ring-sm1" || fail 'resume reset the ring marker'
+    rings=$(wc -l < "$dir/fake/rings")
+    printf '10001\n' > "$dir/now"
+    out=$(FM_REAL_DATE="$real_date" resume_stall_tick "$dir"); rc=$?
+    expect_code 0 "$rc" "first post-resume watcher check"$'\n'"$out"
+    [ ! -s "$state/.wake-queue" ] || fail 'paused time caused a false post-resume stall alert'
+    assert_absent "$state/.secondmate-wake-stall-sm1" 'startup is given a new observation interval'
+    [ "$(wc -l < "$dir/fake/rings")" = "$rings" ] || fail 'resume repeated the retained drain ring'
+    printf '10121\n' > "$dir/now"
+    out=$(FM_REAL_DATE="$real_date" resume_stall_tick "$dir"); rc=$?
+    expect_code 0 "$rc" "genuine stall after the resumed interval"$'\n'"$out"
+    assert_contains "$out" 'secondmate wake-loop stalled: mate=sm1 row=7 idle=121s' 'a genuine resumed stall must still surface'
+  done
+  pass 'explicit and fresh-work resumes exclude paused time without resetting queued work or delivery counters'
+}
+
 test_routed_backlog_resumes_paused_mate() {
   command -v tasks-axi >/dev/null 2>&1 || { echo 'skip: tasks-axi not found'; return; }
   local dir out rc
@@ -1523,6 +1612,7 @@ test_paused_current_state_and_failed_resume
 
 test_pause_refuses_live_and_stopped_unlanded_children
 test_explicit_pause_and_resume
+test_resume_renews_the_retained_stall_observation
 test_routed_backlog_resumes_paused_mate
 test_remote_pause_resume_and_unknown_transport
 test_host_local_pause_refuses_children

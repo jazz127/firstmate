@@ -501,6 +501,7 @@ secondmate_sync() {
         echo "NUDGE_SECONDMATES: secondmate ${id:-unknown}: send failed: retry target has no live secondmate metadata"
         continue
       }
+      fm_secondmate_is_paused "$STATE" "$id" && continue
       meta_home=$(fm_meta_get "$meta" home)
       [ -n "$meta_home" ] || meta_home=$(secondmate_registry_field "$DATA/secondmates.md" "$id" home || true)
       if ! validate_secondmate_home "$id" "$meta_home"; then

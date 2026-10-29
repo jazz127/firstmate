@@ -1290,6 +1290,24 @@ A preexisting project-bearing charter is also refused until it is re-scaffolded 
 The lease is held under the secondmate id until explicit retirement or seed rollback returns it, so normal restarts do not free or recycle the home.
 Teardown of a leased home fails closed if `treehouse return` cannot release the lease; plain-clone homes with no treehouse pool slot are removed directly.
 
+### Pause and resume
+
+Ask firstmate to pause an idle secondmate or resume it by name; the [lifecycle command header](../bin/fm-secondmate-restart.sh) owns direct command usage, marker, locking, retry and backend capability mechanics.
+Both local homes and `host:` routes use these operations from their parent home.
+Pause keeps the home, backlog, project clones and open records, while stopping the agent session.
+It refuses outstanding child records, in-flight backlog work and uncommitted home changes so work awaiting landing cannot be abandoned.
+The runtime must support both a verified stop and a replacement agent; see the [control-plane capability limits](agent-control.md#fail-closed-boundaries).
+A confirmed refusal before stopping leaves a previously running mate unpaused; uncertain stop completion retains pause intent to prevent automatic recovery from undoing the request.
+Routine liveness recovery, bootstrap convergence, update restarts, instruction and config reread nudges, and missed-reply recovery skip a paused mate across primary restarts.
+Monitoring also defers pending-instruction retries and home wake-queue stall checks, preserving pending records and delivery counters without spending a recovery attempt.
+
+New work still follows the registered scope and normal backlog handoff.
+Only explicit resume or genuinely fresh routed work resumes a paused mate.
+The handoff queues fresh work durably before automatically resuming the mate; if resume fails, the work and retry record remain available.
+Pending handoff and outbox retries leave it paused, with received work queued until resume.
+Resume starts a fresh agent that reconciles its existing backlog and records at startup.
+Resume uses the existing guarded pre-launch convergence for instructions and inherited configuration; local home wake-queue monitoring then starts a fresh observation interval so paused time cannot cause an immediate stall alert.
+
 ### Project modes and backlog handoff
 
 Secondmate routes cover `no-mistakes` and `direct-PR` projects; `local-only` projects remain main-firstmate work.

@@ -950,7 +950,7 @@ pad_to_bytes() { # file bytes: pad with trailing JSON whitespace to an exact siz
 }
 
 test_batched_saved_read_keeps_reference_verdicts() {
-  local home i accepted=() expected actual reference input
+  local home i accepted=() expected actual reference
   home=$(new_home batched-read)
   # More files than one batch holds, so the read crosses batch boundaries.
   for i in $(seq 1 300); do

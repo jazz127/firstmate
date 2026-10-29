@@ -228,6 +228,11 @@ meta_value kind KIND
 meta_value harness HARNESS
 meta_value remote_host REMOTE_HOST
 [ -n "$KIND" ] || KIND=ship
+# shellcheck source=bin/fm-secondmate-registry-lib.sh
+. "$SCRIPT_DIR/fm-secondmate-registry-lib.sh"
+if [ "$KIND" = secondmate ] && fm_secondmate_is_paused "$STATE" "$ID"; then
+  emit paused secondmate-pause "intentionally paused; resume explicitly or route new work"
+fi
 
 # A torn-down (or never-created) worktree has no current state to read. A
 # remote secondmate's recorded worktree is a path on ITS host, so the local

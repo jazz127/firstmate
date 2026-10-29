@@ -618,7 +618,7 @@ EOF
 
 test_local_teardown_waits_for_handoff_wake() {
   local home="$TMP_ROOT/teardown-race-main" sub="$TMP_ROOT/teardown-race-sub"
-  local basebin blockbin="$TMP_ROOT/teardown-race-blockbin" handoff teardown i
+  local basebin blockbin="$TMP_ROOT/teardown-race-blockbin" handoff teardown i teardown_rc=0
   setup_homes "$home" "$sub"
   printf 'project=%s\n' "$ROOT" >> "$home/state/design.meta"
   mkdir -p "$sub/data" "$blockbin"
@@ -663,15 +663,18 @@ SH
     "$ROOT/bin/fm-teardown.sh" design --force > "$TMP_ROOT/teardown-race-teardown.out" 2>&1 &
   teardown=$!
   sleep 0.3
-  kill -0 "$teardown" 2>/dev/null \
-    || fail "local teardown bypassed the in-flight handoff lock: $(cat "$TMP_ROOT/teardown-race-teardown.out")"
+  if ! kill -0 "$teardown" 2>/dev/null; then
+    wait "$teardown" || teardown_rc=$?
+    [ "$teardown_rc" -ne 0 ] \
+      || fail "local teardown reported success before the handoff wake completed"
+  fi
   [ -d "$sub" ] || fail "local teardown removed the receiver home before handoff wake completed"
   assert_grep 'teardown-race' "$sub/data/backlog.md" \
     "local teardown removed routed work before handoff wake completed"
   touch "$TMP_ROOT/teardown-race.release"
   wait "$handoff" || fail "teardown-race handoff failed after releasing its wake"
   wait "$teardown" 2>/dev/null || true
-  pass "local teardown waits for the routed move and receiver wake"
+  pass "local teardown waits or refuses while the routed move and receiver wake are in flight"
 }
 
 test_local_teardown_preserves_wake_when_home_removal_fails() {
@@ -691,6 +694,7 @@ test_local_teardown_preserves_wake_when_home_removal_fails() {
   marker="$home/state/.backlog-handoff-design.wake-pending"
   rec="$home/state/pending-replies/$corr"
   printf 'pending:%s\n' "$corr" > "$marker"
+  printf '1\n' > "$home/state/.secondmate-paused-design"
   cp -p -- "$marker" "$marker_before"
   cp -p -- "$rec" "$rec_before"
   real_rm=$(command -v rm)
@@ -722,6 +726,7 @@ SH
   cmp -s "$rec_before" "$rec" \
     || fail "failed home removal changed the pending wake correlation"
   assert_present "$home/state/design.meta" "failed teardown removed route metadata"
+  assert_present "$home/state/.secondmate-paused-design" "failed teardown removed pause intent"
   assert_grep '- design ' "$home/data/secondmates.md" "failed teardown removed the registry route"
 
   PATH="$fakebin:$PATH" FM_HOME="$home" FM_ROOT_OVERRIDE="$ROOT" \
@@ -733,6 +738,7 @@ SH
   assert_absent "$sub" "teardown retry left the receiver home"
   assert_absent "$marker" "teardown retry left the pending wake marker"
   assert_absent "$rec" "teardown retry left the pending wake correlation"
+  assert_absent "$home/state/.secondmate-paused-design" "teardown retry left inherited pause intent"
   assert_no_grep '- design ' "$home/data/secondmates.md" "teardown retry left the registry route"
   pass "failed local home removal preserves its wake and a retry retires both"
 }

@@ -4,6 +4,8 @@
 # Usage:
 #   fm-remote-secondmate-control.sh launch <id> <harness> <model|-> <effort|-> herdr [traceparent]
 #   fm-remote-secondmate-control.sh relaunch <id> <harness> <model|default|-> <effort|default|->
+#   fm-remote-secondmate-control.sh pause <id>
+#   fm-remote-secondmate-control.sh resume <id> <harness> <model|default|-> <effort|default|->
 #   fm-remote-secondmate-control.sh state <id>
 #   fm-remote-secondmate-control.sh route <id>
 #   fm-remote-secondmate-control.sh send <id> <message> [fire-and-forget]
@@ -269,7 +271,7 @@ cmd_relaunch() {
     FM_STATE_OVERRIDE="$CONTROL_STATE" FM_DATA_OVERRIDE="$CONTROL_DATA" \
     FM_CONFIG_OVERRIDE="$TARGET_HOME/config" FM_SKIP_SECONDMATE_INHERIT=1 \
     FM_SKIP_SECONDMATE_SYNC=1 \
-    "$SCRIPT_DIR/fm-control.sh" "${control_args[@]}"
+    "$SCRIPT_DIR/fm-control.sh" "${control_args[@]}" || return $?
   # A parent tracking this route needs the identity the relaunch actually
   # produced, not the one it asked for, so it can republish its own record the
   # same way cmd_launch's caller already does. Reading it back from the
@@ -277,6 +279,25 @@ cmd_relaunch() {
   # values - is what makes that record correct even when relaunch resolved
   # "default" against a configured pin this call never saw.
   print_route "$id"
+}
+
+cmd_pause() {
+  local id=$1
+  ( validate_id "$id"; validate_home "$id"; remote_endpoint_require "$id" ) || return 3
+  # The endpoint belongs to the host-local parent-route home; its children
+  # remain in TARGET_HOME/state, which the shared pause preflight inspects.
+  FM_HOME="$FM_ROOT" FM_ROOT_OVERRIDE="$FM_ROOT" \
+    FM_STATE_OVERRIDE="$CONTROL_STATE" FM_DATA_OVERRIDE="$CONTROL_DATA" \
+    FM_CONFIG_OVERRIDE="$TARGET_HOME/config" \
+    "$SCRIPT_DIR/fm-secondmate-restart.sh" --pause "$id"
+}
+
+cmd_resume() {
+  local id=$1
+  # A successful relaunch is the same verified transaction as normal recovery.
+  # Keep host-side pause intent on any failure or unknown completion.
+  cmd_relaunch "$@" || return $?
+  rm -f -- "$CONTROL_STATE/.secondmate-paused-$id"
 }
 
 cmd_send_body() {
@@ -465,6 +486,8 @@ cmd_retire() {
 case "${1:-}" in
   launch) shift; [ "$#" -ge 5 ] && [ "$#" -le 6 ] || usage; cmd_launch "$@" ;;
   relaunch) shift; [ "$#" -eq 4 ] || usage; cmd_relaunch "$@" ;;
+  pause) shift; [ "$#" -eq 1 ] || usage; cmd_pause "$1" ;;
+  resume) shift; [ "$#" -eq 4 ] || usage; cmd_resume "$@" ;;
   state) shift; [ "$#" -eq 1 ] || usage; validate_id "$1"; validate_home "$1"; state_value "$1" ;;
   route) shift; [ "$#" -eq 1 ] || usage; cmd_route "$1" ;;
   send) shift; [ "$#" -ge 2 ] && [ "$#" -le 3 ] || usage; cmd_send "$@" ;;

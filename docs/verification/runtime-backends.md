@@ -6,6 +6,29 @@ This record contains reusable version-scoped evidence for active runtime guarant
 The backend guides own current setup, safety boundaries, and limitations.
 Exact task chronology, branch names, temporary homes, local paths, process ids, thread ids, and delivery transcripts remain in private reports or PR evidence.
 
+## Secondmate pause lifecycle
+
+Synthetic regression coverage refreshed on 2026-10-29 with Bash 5.3.9 and tasks-axi 0.2.6.
+The lifecycle uses the existing backend and harness capability tables rather than adding adapter-specific stop or process-detection signals.
+The pause/resume boundary supports the control plane's replacement-capable tmux, Herdr and Rex paths; T3's persistent-thread lifecycle and backends without a recovery-grade stop classifier refuse before an agent is stopped.
+Primary harness selection does not change this shell-level pause record or routing behavior.
+Remote coverage uses SSH and session-provider fixtures, with no remote host, installed-harness turn or credentialed account exercised.
+
+```sh
+bin/fm-test-run.sh tests/fm-secondmate-restart.test.sh tests/fm-secondmate-liveness.test.sh tests/fm-secondmate-sync.test.sh tests/fm-pending-reply.test.sh
+```
+
+Observed output includes:
+
+```text
+ok - pause refuses orphan backlog work, dirty homes and concurrent child creation
+ok - paused state is explicit and failed resume keeps the marker
+ok - backlog handoff queues work and automatically resumes a paused receiver
+ok - durable pause intent suppresses bootstrap and poll liveness for both placements
+ok - paused homes skip bootstrap convergence, pending rereads and config push
+ok - pause defers missed-reply recovery while preserving correlated report resolution
+```
+
 ## Polytoken worker lifecycle
 
 Verified on 2026-10-14 with Polytoken 0.9.0 on macOS arm64 using the tmux worker path.

@@ -682,6 +682,10 @@ When the primary does not have a newly declared item, the older receiver's refus
 That item still costs one extra `absent` call on every inheritance push to a remote secondmate, on every home, including one that never selects `config/backend=t3code`: the remote job worker runs one home's commands one after another, and the lifecycle test legs that push inheritance measure about 5-12% slower; an older remote code root tolerates the call as above.
 The [`secondmate-provisioning` skill](../.agents/skills/secondmate-provisioning/SKILL.md#charter-and-seed) owns the placement-specific re-read contract, including changed transfers, unchanged retries, and partial or unknown completion.
 
+### Pause and resume a remote second mate
+
+Use the parent-side [pause and resume operations](configuration.md#pause-and-resume) for a `host:` route; they preserve the remote home and perform lifecycle control only on its configured host.
+
 ### Relaunch a live remote second mate
 
 A live remote second mate is restarted with `relaunch`, which runs the ordinary [control plane](agent-control.md) on that host.

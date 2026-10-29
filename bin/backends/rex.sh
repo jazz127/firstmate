@@ -764,7 +764,7 @@ EOF
 # an unreachable server or a bad read is `unreadable`. Read-only: it never
 # starts a server.
 fm_backend_rex_agent_state() {  # <target>
-  local role pid name path argv0 kind fg_kind='' seen=0 below
+  local role pid name path argv0 kind fg_kind='' process_seen=0 below
   if ! fm_backend_rex_process_chain "$1"; then
     case "$FM_BACKEND_REX_READ_CLASS" in
       missing) printf 'missing' ;;
@@ -774,7 +774,7 @@ fm_backend_rex_agent_state() {  # <target>
   fi
   while IFS=$'\t' read -r role pid name path argv0; do
     [ -n "$role" ] || continue
-    seen=1
+    process_seen=1
     kind=$(fm_backend_rex_process_kind "$pid" "$name" "$path" "$argv0")
     if [ "$kind" = agent ]; then
       printf 'alive'
@@ -784,7 +784,7 @@ fm_backend_rex_agent_state() {  # <target>
   done <<EOF
 $FM_BACKEND_REX_CHAIN
 EOF
-  if [ "$seen" -eq 0 ]; then
+  if [ "$process_seen" -eq 0 ]; then
     # No foreground process: the terminal child exited (a kept-open block) or
     # the block is still starting.
     if [ "$FM_BACKEND_REX_LAST_EXIT" = exited ]; then

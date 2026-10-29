@@ -1,7 +1,7 @@
 ---
 name: secondmate-provisioning
 description: >-
-  Load when creating, seeding, validating, launching, recovering, handing backlog to, pushing inherited local material into, or retiring a secondmate home, or when editing data/secondmates.md.
+  Load when creating, seeding, validating, launching, pausing, resuming, recovering, handing backlog to, pushing inherited local material into, or retiring a secondmate home, or when editing data/secondmates.md.
 user-invocable: false
 metadata:
   internal: true
@@ -208,9 +208,15 @@ That same rule governs routing generally: a Relay-linked request whose work goes
 It refuses any destination that is not a genuine seeded firstmate home with safe operational directories and a matching `.fm-secondmate-home` marker, so a move can never land in a project.
 Do not hand off `local-only` items.
 
+## Pause and resume
+
+When asked to pause or resume a secondmate, use the existing lifecycle owner's `--pause` or `--resume` operation described in [`bin/fm-secondmate-restart.sh`](../../../bin/fm-secondmate-restart.sh).
+The [operator reference](../../../docs/configuration.md#pause-and-resume) describes supported placement, safety refusals and work routing.
+Check `fm_secondmate_is_paused` from the registry library before treating a stopped mate as a recovery candidate; an intentional pause survives a primary restart and must not be repaired as endpoint loss.
+
 ## Recovery
 
-For local `kind=secondmate` meta with no window, treat the secondmate as a dead persistent direct report and respawn it with:
+For unpaused local `kind=secondmate` meta with no window, treat the secondmate as a dead persistent direct report and respawn it with:
 
 ```sh
 bin/fm-spawn.sh <id> --secondmate

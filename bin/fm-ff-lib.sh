@@ -350,6 +350,7 @@ live_secondmate_meta_records() {
     [ -f "$meta" ] || continue
     grep -q '^kind=secondmate$' "$meta" 2>/dev/null || continue
     id=$(basename "$meta" .meta)
+    fm_secondmate_is_paused "$state" "$id" && continue
     home=$(grep '^home=' "$meta" 2>/dev/null | tail -1 | cut -d= -f2- || true)
     if [ -z "$home" ] && [ -n "$registry" ]; then
       home=$(secondmate_registry_field "$registry" "$id" home || true)

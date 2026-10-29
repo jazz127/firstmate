@@ -2,7 +2,7 @@
 # Relaunch a REMOTE secondmate onto a new harness, model, or effort, then
 # republish this parent's own route record to match what the host confirmed.
 #
-# Usage: fm-remote-secondmate-relaunch.sh <id> <harness> <model|default|-> <effort|default|->
+# Usage: fm-remote-secondmate-relaunch.sh <id> <harness> <model|default|-> <effort|default|-> [resume]
 #
 # bin/fm-remote-secondmate-control.sh's relaunch verb runs entirely on the
 # secondmate's own host and can only rewrite that host's own endpoint record;
@@ -33,7 +33,9 @@ STATE="${FM_STATE_OVERRIDE:-$FM_HOME/state}"
 die() { printf 'error: %s\n' "$1" >&2; exit 1; }
 usage() { sed -n '2,4p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 
-[ "$#" -eq 4 ] || usage
+[ "$#" -ge 4 ] && [ "$#" -le 5 ] || usage
+VERB=${5:-relaunch}
+case "$VERB" in relaunch|resume) ;; *) usage ;; esac
 ID=$1
 HARNESS=$2
 MODEL=$3
@@ -46,8 +48,26 @@ REMOTE_HOST=$(fm_meta_get "$META" remote_host)
 [ -n "$REMOTE_HOST" ] \
   || die "task $ID is not a remotely placed secondmate; use bin/fm-control.sh $ID relaunch instead"
 
+if [ "$VERB" = resume ]; then
+  # shellcheck source=bin/fm-ff-lib.sh
+  . "$SCRIPT_DIR/fm-ff-lib.sh"
+  # shellcheck source=bin/fm-secondmate-nudge-lib.sh
+  . "$SCRIPT_DIR/fm-secondmate-nudge-lib.sh"
+  # shellcheck source=bin/fm-lease-lib.sh
+  . "$SCRIPT_DIR/fm-lease-lib.sh"
+  INHERIT_LOCK=
+  trap 'fm_lease_guard_release; [ -z "$INHERIT_LOCK" ] || fm_lock_release "$INHERIT_LOCK" || true' EXIT
+  INHERIT_LOCK=$(fm_remote_inherit_transaction_lock_path "$STATE" "$ID") || exit 1
+  fm_lock_acquire_wait "$INHERIT_LOCK" || exit 1
+  fm_lease_guard "$ID" "resume remote secondmate" || exit 1
+  PRIMARY_COMMIT=$(primary_head_commit "$FM_ROOT") || die "cannot resolve the primary instruction commit"
+  GENERATION=$(fm_remote_inherit_generation_next "$STATE" "$ID") || die "cannot publish inheritance generation"
+  "$SCRIPT_DIR/fm-on.sh" "$ID" fm-remote-secondmate-control.sh sync "$ID" "$PRIMARY_COMMIT" </dev/null || exit $?
+  FM_CONFIG_INHERIT_LIVE=0 "$SCRIPT_DIR/fm-remote-inherit-push.sh" "$ID" "$GENERATION" || exit $?
+fi
+
 RELAUNCH_OUT=$("$SCRIPT_DIR/fm-on.sh" "$ID" fm-remote-secondmate-control.sh \
-  relaunch "$ID" "$HARNESS" "$MODEL" "$EFFORT" </dev/null 2>&1) || {
+  "$VERB" "$ID" "$HARNESS" "$MODEL" "$EFFORT" </dev/null 2>&1) || {
   rc=$?
   printf '%s\n' "$RELAUNCH_OUT" >&2
   exit "$rc"
@@ -93,3 +113,7 @@ done < "$META"
 chmod 0600 "$META_TMP"
 mv -f -- "$META_TMP" "$META"
 fm_lock_release "$META_LOCK"
+
+if [ "$VERB" = resume ]; then
+  rm -f -- "$STATE/.secondmate-paused-$ID"
+fi

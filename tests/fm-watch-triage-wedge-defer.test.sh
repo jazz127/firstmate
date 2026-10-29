@@ -276,7 +276,7 @@ arm_validating() {  # <case-dir>
 }
 
 test_wedge_threshold_defers_to_an_executing_validation_run() {
-  local dir state fakebin out capture window key n verdict step queued
+  local dir state fakebin out capture window key n verdict step
   window="test:fm-wedge"; key=$(printf '%s' "$window" | tr ':/.' '___')
 
   for step in running fixing; do

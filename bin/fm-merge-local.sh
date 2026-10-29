@@ -152,7 +152,7 @@ fi
 before=$(git -C "$PROJ" rev-parse "$DEFAULT")
 if ! git -C "$PROJ" merge-base --is-ancestor "$before" "$MERGE_HEAD"; then
   echo "REFUSED: $BRANCH is not a fast-forward of $DEFAULT (it has diverged)." >&2
-  echo "Have the crewmate rebase $BRANCH onto $DEFAULT, then retry." >&2
+  echo "Have the crewmate rebase $BRANCH onto $DEFAULT, then use a new task/approval record for the changed head; this task's accepted local_done_head is immutable." >&2
   exit 1
 fi
 

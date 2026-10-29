@@ -328,6 +328,40 @@ test_matrix_herdr_titled_claude_wrapping_and_footer() {
   pass "matrix: ASCII titled Claude envelopes preserve wrapped drafts and demote arrow footers"
 }
 
+test_matrix_rejected_titled_composer_retires_prior_pair() {
+  local title close prior rejected screen caps identity locale content
+  title='────────────────────────── Firstmate ──'
+  close='───────────────────────────────────────'
+  for prior in $'────────\nold output\n────────\n' \
+    $'────────\n❯ old draft\n────────\n'; do
+    for rejected in "${title/Firstmate/Fïrstmate}"$'\n❯\n'"$close" \
+      "${title/Firstmate/Firstmates}"$'\n❯\n'"$close" \
+      "$title"$'\n\n'"$close" \
+      "${title/Firstmate/Fïrstmate}"; do
+      screen="$prior$rejected"
+      for caps in "$CAPS_STYLED" "$CAPS_STYLED_NOID" "$CAPS_PLAIN"; do
+        for identity in '' $'claude\tidle' $'pi\tidle'; do
+          assert_screen "rejected titled composer supersedes transcript pair" unknown \
+            "$caps" "$screen" '' "$identity"
+        done
+        for locale in "${LC_ALL:-${LANG:-C}}" C; do
+          if content=$(LC_ALL="$locale" fm_composer_extract_selected_content "$caps" "$screen"); then
+            fail "rejected titled composer must not extract prior input under $locale: '$content'"
+          fi
+        done
+      done
+    done
+    screen="$prior$title"$'\n❯ message\ncontinuation row\n'"$close"
+    assert_screen "valid titled composer supersedes transcript pair" pending \
+      "$CAPS_STYLED" "$screen" '' $'claude\tidle'
+    content=$(fm_composer_extract_selected_content "$CAPS_STYLED" "$screen") \
+      || fail "valid replacement titled composer must extract its draft"
+    [ "$content" = 'message continuation row' ] \
+      || fail "valid replacement titled composer extracted stale content: '$content'"
+  done
+  pass "matrix: rejected titled composers cannot inherit transcript pair proof"
+}
+
 test_composer_footer_demotion_needs_a_proven_pair() {
   # The demotion is bounded in three directions, and each bound is a case
   # where a lower glyph row IS the live composer.
@@ -1887,6 +1921,7 @@ test_matrix_claude_named_session_titled_rule
 test_matrix_claude_arrow_statusline_footer
 test_matrix_herdr_titled_claude_composer
 test_matrix_herdr_titled_claude_wrapping_and_footer
+test_matrix_rejected_titled_composer_retires_prior_pair
 test_composer_footer_demotion_needs_a_proven_pair
 test_composer_footer_zone_is_shape_independent
 test_composer_footer_zone_refuses_rather_than_allows

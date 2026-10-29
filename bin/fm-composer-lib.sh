@@ -1060,6 +1060,13 @@ _fm_composer_scan_screen() {  # <plain-screen> <cursor-or-empty> [extract-wrap] 
     # closes the preceding candidate and immediately opens the next, so an
     # earlier transcript rule can never outrank the live bottom composer pair.
     if _fm_composer_pi_separator_row "$trimmed"; then
+      FM_COMPOSER_SCAN_PI_PAIR_FOUND=0
+      FM_COMPOSER_SCAN_PI_PAIR_VALID=0
+      FM_COMPOSER_SCAN_PI_OPEN=-1
+      FM_COMPOSER_SCAN_PI_CLOSE=-1
+      FM_COMPOSER_SCAN_PI_OPEN_LABELLED=0
+      FM_COMPOSER_SCAN_PI_GLYPH_ROW=-1
+      FM_COMPOSER_SCAN_PI_GLYPH=
       FM_COMPOSER_SCAN_PI_LAST_SEPARATOR=$row
       footer_run=1
       footer_row=-1
@@ -1102,6 +1109,13 @@ _fm_composer_scan_screen() {  # <plain-screen> <cursor-or-empty> [extract-wrap] 
     else
       case "$trimmed" in
         ────────*)
+          FM_COMPOSER_SCAN_PI_PAIR_FOUND=0
+          FM_COMPOSER_SCAN_PI_PAIR_VALID=0
+          FM_COMPOSER_SCAN_PI_OPEN=-1
+          FM_COMPOSER_SCAN_PI_CLOSE=-1
+          FM_COMPOSER_SCAN_PI_OPEN_LABELLED=0
+          FM_COMPOSER_SCAN_PI_GLYPH_ROW=-1
+          FM_COMPOSER_SCAN_PI_GLYPH=
           pi_open=$row
           pi_open_rule=$trimmed
           pi_open_labelled=0

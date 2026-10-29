@@ -1056,9 +1056,10 @@ _fm_composer_scan_screen() {  # <plain-screen> <cursor-or-empty> [extract-wrap] 
         row_glyph_row=$row
       fi
     fi
-    # Pi separator rows: a solid `─` rule at least 8 columns wide. A separator
-    # closes the preceding candidate and immediately opens the next, so an
-    # earlier transcript rule can never outrank the live bottom composer pair.
+    # Each solid separator closes the preceding candidate and opens the next.
+    # Every newer rule retires earlier pair proof before validation, including
+    # a titled candidate that later fails width, title, or glyph proof, so an
+    # earlier transcript pair cannot stand in for the live composer.
     if _fm_composer_pi_separator_row "$trimmed"; then
       FM_COMPOSER_SCAN_PI_PAIR_FOUND=0
       FM_COMPOSER_SCAN_PI_PAIR_VALID=0
@@ -1088,6 +1089,8 @@ _fm_composer_scan_screen() {  # <plain-screen> <cursor-or-empty> [extract-wrap] 
         FM_COMPOSER_SCAN_PI_OPEN=$pi_open
         FM_COMPOSER_SCAN_PI_CLOSE=$row
         FM_COMPOSER_SCAN_PI_OPEN_LABELLED=$pi_open_labelled
+        # Titled envelopes support bare-glyph selection and footer demotion,
+        # but only a strict separator pair may prove Pi identity.
         # A pair must ENCLOSE at least one row to hold an input row at all:
         # two adjacent rules are a divider, not a composer, and a zero-height
         # region trivially satisfies every content check, which read `empty`

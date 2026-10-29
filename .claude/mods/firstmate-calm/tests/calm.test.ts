@@ -162,6 +162,7 @@ describe("/calm", () => {
 
 describe("operational user rows", () => {
   const hiddenTexts = [
+    operational("context-stow", "stow before compaction"),
     operational("session-start", "Run bin/fm-session-start.sh"),
     operational("watcher", "signal: /tmp/x.status changed"),
     operational("turn-end-guard", "supervision is off"),
@@ -229,6 +230,14 @@ describe("operational user rows", () => {
     const readsBefore = journal.fsReads.filter((path) => path === backed).length;
     expect(isHidden(await $.ui.render(userMessage(doorbell(backed))))).toBe(true);
     expect(journal.fsReads.filter((path) => path === backed).length).toBe(readsBefore);
+  });
+
+  test("hides a context-stow doorbell while on and restores it while off", async ($, on) => {
+    const { files } = world(on, { preference: "on\n" });
+    files.set(backed, operational("context-stow", "stow before compaction"));
+    expect(isHidden(await $.ui.render(userMessage(doorbell(backed))))).toBe(true);
+    await $.command.run(calmCommand());
+    expect(isStock(await $.ui.render(userMessage(doorbell(backed))))).toBe(true);
   });
 
   test("shows a hidden doorbell again once a toggle redraws it after its record is pruned", async ($, on) => {

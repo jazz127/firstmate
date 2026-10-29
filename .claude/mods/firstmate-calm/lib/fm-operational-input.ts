@@ -26,6 +26,7 @@ const OPERATIONAL_HEADER_PREFIX = `${OPERATIONAL_PREFIX}${OPERATIONAL_VERSION} `
 
 /** The kinds the owner's `FM_OPERATIONAL_KINDS` names, in its order. */
 export const FIRSTMATE_OPERATIONAL_GENERIC_KINDS = [
+  "context-stow",
   "session-start",
   "watcher",
   "turn-end-guard",

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Steer a task by durable record: write the message into the task's steering
 # inbox and ring a constant doorbell through its backend endpoint, best-effort.
-# Usage: fm-send.sh <target> [--resolve-key <key>]... [--fire-and-forget <delivery-id>] <text...>
+# Usage: fm-send.sh <target> [--new-work] [--resolve-key <key>]... [--fire-and-forget <delivery-id>] <text...>
 #   <target> may be an exact task id, a legacy fm-<id> task label resolved
 #   through this home's state/<id>.meta, or an explicit well-formed backend
 #   target. fm-send refuses unresolved guesses rather than falling back to a
@@ -42,8 +42,9 @@
 # fire-and-forget request instead retries with its same caller-supplied delivery
 # id. A still-unconfirmed reply-bearing request keeps its reply expectation
 # preserved for the record that may have landed.
-# Text routed to a paused secondmate resumes it through fm-secondmate-restart
-# before delivery. Backlog handoff has already made queued work durable by then.
+# --new-work resumes a paused secondmate through fm-secondmate-restart before
+# delivery. Backlog handoff sets it after making queued work durable. Other text
+# sends refuse a paused mate under its lifecycle lock, retaining maintenance retries.
 # Pending-reply bookkeeping trouble after a durable enqueue NEVER exits
 # nonzero: with the recovery marker stored the watcher reconciles it silently,
 # and with both the commit and the marker lost the send prints a distinct
@@ -454,6 +455,12 @@ fm_send_resolve_target() { # <raw-target>
   return 1
 }
 
+SEND_LIFECYCLE_LOCK=
+fm_send_cleanup() {
+  fm_lease_guard_release
+  [ -z "$SEND_LIFECYCLE_LOCK" ] || fm_lock_release "$SEND_LIFECYCLE_LOCK"
+}
+
 RAW_TARGET=$1
 fm_send_resolve_target "$RAW_TARGET" || exit 1
 T=$RESOLVED_TARGET
@@ -469,7 +476,7 @@ if [ -n "$TARGET_META" ]; then
   LEASE_GUARD_TASK=$(fm_send_id_from_meta "$TARGET_META")
   if [ -n "$LEASE_GUARD_TASK" ]; then
     fm_lease_guard "$LEASE_GUARD_TASK" "steer (fm-send)"
-    trap 'fm_lease_guard_release' EXIT
+    trap fm_send_cleanup EXIT
   fi
 fi
 
@@ -479,6 +486,7 @@ fi
 RESOLVE_KEYS=
 FIRE_AND_FORGET_ID=
 FIRE_AND_FORGET_SET=0
+NEW_WORK=0
 fm_send_add_resolve_key() { # <key>
   local k=$1
   case "$k" in
@@ -497,6 +505,10 @@ fm_send_add_resolve_key() { # <key>
 }
 while :; do
   case "${1:-}" in
+  --new-work)
+    NEW_WORK=1
+    shift
+    ;;
   --resolve-key)
     [ $# -ge 2 ] || {
       echo "error: --resolve-key requires a key" >&2
@@ -797,6 +809,7 @@ if [ "${1:-}" = "--key" ]; then
     exit 1
     ;;
   esac
+  [ "$NEW_WORK" = 0 ] || { echo "error: --new-work requires a text request" >&2; exit 1; }
   key=$2
   semantic_key=$(fm_send_normalize_key "$key")
   if [ "$TARGET_BACKEND" = remote ]; then
@@ -832,12 +845,22 @@ else
   if [ "$MARK_FROM_FIRSTMATE" = 1 ]; then
     # shellcheck source=bin/fm-secondmate-registry-lib.sh
     . "$SCRIPT_DIR/fm-secondmate-registry-lib.sh"
-    if fm_secondmate_is_paused "$STATE" "$TARGET_TASK_ID"; then
+    fm_lease_guard_release
+    if [ "$NEW_WORK" = 1 ] && fm_secondmate_is_paused "$STATE" "$TARGET_TASK_ID"; then
       "$SCRIPT_DIR/fm-secondmate-restart.sh" --resume "$TARGET_TASK_ID" || exit 1
-      # Reclaiming a lost endpoint can republish its target. Deliver only to
-      # the newly resolved incarnation, never the pre-resume address.
       fm_send_resolve_target "$RAW_TARGET" || exit 1
       T=$RESOLVED_TARGET
+    fi
+    lifecycle_lock="$STATE/.secondmate-liveness-$TARGET_TASK_ID.lock"
+    fm_lock_try_acquire "$lifecycle_lock" || {
+      echo "error: secondmate $TARGET_TASK_ID lifecycle is busy; retry delivery" >&2; exit 1;
+    }
+    SEND_LIFECYCLE_LOCK=$lifecycle_lock
+    trap fm_send_cleanup EXIT
+    fm_lease_guard "$TARGET_TASK_ID" "steer (fm-send)"
+    if fm_secondmate_is_paused "$STATE" "$TARGET_TASK_ID"; then
+      echo "error: secondmate $TARGET_TASK_ID is intentionally paused; request not sent" >&2
+      exit 1
     fi
   fi
   # The pre-marker answer text, kept for the closing resolved note so the

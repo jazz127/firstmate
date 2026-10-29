@@ -48,6 +48,20 @@ REMOTE_HOST=$(fm_meta_get "$META" remote_host)
 [ -n "$REMOTE_HOST" ] \
   || die "task $ID is not a remotely placed secondmate; use bin/fm-control.sh $ID relaunch instead"
 
+if [ "$VERB" = resume ]; then
+  # shellcheck source=bin/fm-ff-lib.sh
+  . "$SCRIPT_DIR/fm-ff-lib.sh"
+  # shellcheck source=bin/fm-secondmate-nudge-lib.sh
+  . "$SCRIPT_DIR/fm-secondmate-nudge-lib.sh"
+  INHERIT_LOCK=$(fm_remote_inherit_transaction_lock_path "$STATE" "$ID") || exit 1
+  fm_lock_acquire_wait "$INHERIT_LOCK" || exit 1
+  trap 'fm_lock_release "$INHERIT_LOCK" || true' EXIT
+  PRIMARY_COMMIT=$(primary_head_commit "$FM_ROOT") || die "cannot resolve the primary instruction commit"
+  GENERATION=$(fm_remote_inherit_generation_next "$STATE" "$ID") || die "cannot publish inheritance generation"
+  "$SCRIPT_DIR/fm-on.sh" "$ID" fm-remote-secondmate-control.sh sync "$ID" "$PRIMARY_COMMIT" </dev/null || exit $?
+  FM_CONFIG_INHERIT_LIVE=0 "$SCRIPT_DIR/fm-remote-inherit-push.sh" "$ID" "$GENERATION" || exit $?
+fi
+
 RELAUNCH_OUT=$("$SCRIPT_DIR/fm-on.sh" "$ID" fm-remote-secondmate-control.sh \
   "$VERB" "$ID" "$HARNESS" "$MODEL" "$EFFORT" </dev/null 2>&1) || {
   rc=$?

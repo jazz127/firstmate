@@ -213,7 +213,7 @@ Do not hand off `local-only` items.
 When asked to pause or resume a secondmate, use the existing lifecycle owner's `--pause` or `--resume` operation described in [`bin/fm-secondmate-restart.sh`](../../../bin/fm-secondmate-restart.sh).
 The [operator reference](../../../docs/configuration.md#pause-and-resume) describes supported placement, safety refusals and work routing.
 Check `fm_secondmate_is_paused` from the registry library before treating a stopped mate as a recovery candidate; an intentional pause survives a primary restart and must not be repaired as endpoint loss.
-Use the lifecycle resume operation for explicit resume requests; ordinary new-work `fm-send` routing invokes it automatically after backlog handoff has made the work durable.
+Use the lifecycle resume operation for explicit resume requests; new-work `fm-send --new-work` routing invokes it automatically after backlog handoff has made the work durable.
 
 ## Recovery
 

@@ -1299,7 +1299,7 @@ It refuses outstanding child records, in-flight backlog work and uncommitted hom
 Routine liveness recovery, bootstrap convergence, instruction and config reread nudges, and missed-reply recovery skip a paused mate across primary restarts.
 
 New work still follows the registered scope and normal backlog handoff.
-The handoff queues it durably before the routed instruction automatically resumes the mate; if resume fails, the work and retry record remain available.
+The handoff queues it durably before sending its routed instruction with `fm-send --new-work` to automatically resume the mate; if resume fails, the work and retry record remain available.
 Resume starts a fresh agent that reconciles its existing backlog and records at startup.
 The [lifecycle command header](../bin/fm-secondmate-restart.sh) owns exact marker, locking, retry and backend capability mechanics.
 

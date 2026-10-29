@@ -1,0 +1,13 @@
+fm-gate-refuse: gate agent lifecycle permitted only against lab home ~/.no-mistakes/worktrees/a00b7db52042/01M639H6QD1WK1K19WXV59CK32/.gate-test-tmp/teardown-live
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  repair missing watcher supervision according to the session-start block for this harness; do not use shell &.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+REFUSED: worktree ~/.no-mistakes/worktrees/a00b7db52042/01M639H6QD1WK1K19WXV59CK32/.gate-test-tmp/teardown-live/projects/worker has work not on any remote and not landed.
+unpushed commits:
+cb53924 nested key
+a40219d initial
+Push the branch, land its PR, or get the captain's explicit OK to discard, then --force.

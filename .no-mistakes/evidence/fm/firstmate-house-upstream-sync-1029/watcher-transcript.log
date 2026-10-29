@@ -1,0 +1,8 @@
+~/.no-mistakes/worktrees/a00b7db52042/01M639H6QD1WK1K19WXV59CK32/.gate-test-tmp/watcher-live
+~/.no-mistakes/worktrees/a00b7db52042/01M639H6QD1WK1K19WXV59CK32/.gate-test-tmp/watcher-live
+default-off exit -15
+partial-resolution exit 0
+1793261123	1	check	open-decision:worker:api	check: open decision overdue: worker key=api age=123s
+
+complete-resolution exit -15
+Resolution consumed only after newline; reminder state retired; no further wake.

@@ -1,0 +1,132 @@
+FM_TEST_BEGIN 2026-10-29T08:01:55Z tests/fm-watch-open-decisions.test.sh family=watcher-wake-lock expected_gate_skip=none
+1..12
+ok - absent flag emits nothing and does not fold status
+ok - oldest key surfaces once, and independent per-key backoff doubles up to its cap
+ok - keys 1 and 01 receive separate reminders and retain independent bounded backoff
+ok - tasks 1 and 01 receive separate reminders and retain independent bounded backoff
+ok - resolution stops reminders immediately and a later episode starts fresh
+ok - paused waits, verified transfers, and backlog captain holds are exempt
+ok - only explicitly keyed records with valid source timestamps are aged
+ok - quiet polls reuse the timed fold and only new status bytes are folded
+ok - timed reminders preserve the house partial-record cursor guarantee
+watcher: invalid open-decision reminder settings
+watcher: open-decision backoff cap is below threshold
+ok - invalid settings refuse the tick without queueing reminders
+ok - task retirement removes the timed cursor and ends reminders
+ok - the actual watcher wakes and exits on an overdue key without any recorded pane
+FM_TEST_COMPLETE
+FM_TEST_END 2026-10-29T08:02:08Z tests/fm-watch-open-decisions.test.sh exit=0 duration_ms=13590 gate_skip=false
+FM_TEST_BEGIN 2026-10-29T08:02:08Z tests/fm-dispatch-resolve.test.sh family=standalone expected_gate_skip=none
+ok - invalid preferred_provider: null
+ok - invalid preferred_provider: false
+ok - invalid preferred_provider: 42
+ok - invalid preferred_provider: []
+ok - invalid preferred_provider: {}
+ok - invalid preferred_provider: ""
+ok - invalid preferred_provider: "Codex"
+ok - invalid preferred_provider: "codex\\n"
+ok - invalid preferred_provider: " codex"
+ok - preferred provider: astra-82-claude-26
+ok - preferred provider: work-account
+ok - preferred provider: exhausted
+ok - preferred provider: unknown
+ok - preferred provider: unknown-one-known-one
+ok - preferred provider: claude-only
+ok - preferred provider: config-override
+ok - preferred provider: prose-why
+ok - preferred provider: absent
+ok - preferred provider: approval
+ok - preferred provider: tie
+ok - preferred provider: floor
+ok - absent key is off: one stderr line, exit 0, no network call
+ok - TYPESAFE_API_KEY= in .env activates the tool; environment and config overrides work
+ok - clear: one rule Choice request, key on the fd header only, spendPriority argmax over every candidate
+ok - OpenRouter clear uses the same output contract and keeps its key out of argv and child environments
+ok - OpenRouter ambiguous, malformed, HTTP, and missing-model paths are handled
+ok - never-send list withholds the request on a match or a bad list, and never prints the value
+ok - rules snapshots and shell quoting preserve the profile protocol
+ok - no-rule fallback, Agy, Gemini, and documented configurations resolve
+ok - ambiguous: confidence below the fixed floor hands the decision back
+ok - per-rule confidence floors fall to the most probable runner-up that clears its own floor
+ok - only the brief's task sections and scout tag reach the model, with a whole-brief fallback
+ok - escalate: a rule declared approval: captain never yields a profile
+ok - rule floor: known shortfall falls through while unavailable evidence escalates
+ok - declared provider and profile floor evidence are applied in code
+ok - nonnumeric spendPriority evidence is never ranked
+ok - partial and missing quota evidence remain eligible but unranked
+ok - provider-wide and exact quota rows combine into one limiting candidate
+ok - default: no rule matched resolves among the default profiles
+ok - tie: equal spendPriority never breaks by array order
+ok - no rankable candidate: the tool escalates instead of guessing
+ok - native Codex binds to codex-home before default, independently of Pi accounts and row order
+ok - Pi native adapters bind to codex-home with existing fallbacks and schema 5 compatibility
+ok - schema 6: each candidate binds to its account row; schema 5 is unchanged
+ok - quota evidence comes from one quota-axi --json read, and its failure is an error outcome
+ok - API, transport, and response failures are error outcomes with exit 0
+ok - configuration errors exit 2 before any network call
+ok - Codex seat quota follows its credential home; unsupported and absent seats retain their contracts
+# all fm-dispatch-resolve tests passed
+FM_TEST_END 2026-10-29T08:02:36Z tests/fm-dispatch-resolve.test.sh exit=0 duration_ms=27884 gate_skip=false
+FM_TEST_BEGIN 2026-10-29T08:02:36Z tests/fm-read-repetition.test.sh family=pure-contract-unit expected_gate_skip=none
+ok - synthetic 85/65 alternating batches execute only three A/B pairs
+ok - only completed successful identical results count; fourth is vetoed and run aborted
+ok - same-batch duplicate veto never fabricates a completed success or abort
+ok - backlog line slicing with cut blocks the fourth identical read
+ok - observed outer read groups and multiline pipelines stop before a fourth execution
+ok - terminal continuation stops repeated read "(cat file\\\n)"
+ok - terminal continuation stops repeated read "(cat file;\\\n)"
+ok - terminal continuation stops repeated read "(cat file\\\n )"
+ok - terminal continuation stops repeated read "(cat file\\\n\n)"
+ok - group recognition refuses mutation, redirection, nested shells and unknown filter options
+ok - changes, errors, exit failures, empty results and volatile details
+ok - operational inputs, fresh turns and compaction cannot reset the budget
+ok - genuine interactive and RPC input resets, including an image; in-flight old results cannot count
+ok - bounded history expires, but a tripped latch requires real user input
+ok - reload/resume restore durable hashes, including a tripped latch
+ok - result IDs deduplicate and unknown adapter events never invent success
+ok - known read commands count; mutation, unknown syntax, and bounded polling stay uncounted
+ok - normal native reads are independent and argument order does not create a new budget
+ok - primary ownership requires exact root, primary PID marker, session namespace and lock ancestry
+ok - state memory and persisted payload are bounded and contain only hashes/labels
+ok - fresh captain reset survives temporary missing or stale ownership
+ok - operational input cannot defer a reset until ownership returns
+ok - foreign session input cannot defer a reset until ownership returns
+ok - results received during ownership loss retire pending reads without counting or clearing history
+ok - bounded operator configuration rejects invalid and unknown settings
+ok - missing/default/disabled configuration registers no interception handlers
+ok - load diagnostics refuse legacy collisions and unsupported activation without touching source/config
+ok - truncated Bash footers cannot disguise unchanged successful output
+ok - stopped primary vetoes compaction without affecting another owner
+ok - configured threshold and time window govern execution, disabled guard stays inert
+skip: Linux real parent ancestry is read through ps (Linux only)
+ok - pre-feature fast-forward preserves ignored legacy guard/helper and configuration
+FM_TEST_END 2026-10-29T08:02:37Z tests/fm-read-repetition.test.sh exit=0 duration_ms=608 gate_skip=false
+FM_TEST_BEGIN 2026-10-29T08:02:37Z tests/fm-send-remote-delivery.test.sh family=standalone expected_gate_skip=none
+ok - fm-send remote: large text steers use stdin instead of the SSH exec argument
+ok - fm-send remote: a text steer lands as a durable remote inbox record and exits 0 at enqueue
+ok - fm-send remote: the printed correlation-reusing resend deduplicates onto the same record
+ok - fm-send remote: a failed retry cannot erase an earlier ambiguous delivery
+ok - fm-send remote: fire-and-forget delivery is idempotent without reply recovery
+ok - remote control: send revalidates endpoint ownership under the metadata lock
+ok - fm-send remote: enqueue revalidates the parent route under its metadata lock
+ok - fm-send remote: expected host is enforced by final route validation
+ok - fm-send remote: a --resolve-key answer closes its decision at enqueue
+ok - fm-send remote: every remote text, harness-native included, rides the inbox
+ok - fm-send remote: a real remote failure still fails loudly with the remote diagnostics
+ok - fm-send remote: exit 3 from the remote leg is a failure, never a delivery claim
+ok - fm-send remote: ssh 255 fails with resend-safe guidance and preserves the expectation
+ok - fm-send remote: the remote leg is budget-bounded and stays idempotent across the bound
+ok - fm-send local: an unconfirmed submit exits 3 with an honest non-error report
+ok - fm-send local: an unconfirmed submit still never closes a --resolve-key decision
+ok - fm-send local: an unconfirmed secondmate send keeps its reply expectation armed
+all fm-send-remote-delivery tests passed
+FM_TEST_END 2026-10-29T08:03:13Z tests/fm-send-remote-delivery.test.sh exit=0 duration_ms=36558 gate_skip=false
+FM_TEST_SUMMARY total=4 failed=0 skipped_gate=0 duration_ms=78864
+FM_TEST_SUMMARY_FAMILY family=pure-contract-unit count=1 duration_ms=608 failed=0
+FM_TEST_SUMMARY_FAMILY family=standalone count=2 duration_ms=64442 failed=0
+FM_TEST_SUMMARY_FAMILY family=watcher-wake-lock count=1 duration_ms=13590 failed=0
+FM_TEST_SLOWEST rank=1 script=tests/fm-send-remote-delivery.test.sh duration_ms=36558
+FM_TEST_SLOWEST rank=2 script=tests/fm-dispatch-resolve.test.sh duration_ms=27884
+FM_TEST_SLOWEST rank=3 script=tests/fm-watch-open-decisions.test.sh duration_ms=13590
+FM_TEST_SLOWEST rank=4 script=tests/fm-read-repetition.test.sh duration_ms=608
+fm-test-run: wrote timing artifact: ~/.no-mistakes/evidence/01M639H6QD1WK1K19WXV59CK32/additional-results.json

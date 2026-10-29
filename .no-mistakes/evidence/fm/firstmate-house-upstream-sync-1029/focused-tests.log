@@ -1,0 +1,190 @@
+FM_TEST_BEGIN 2026-10-29T07:59:43Z tests/fm-dod-lib.test.sh family=pure-contract-unit expected_gate_skip=none
+ok - external PR ready signals require receipts while owned PRs remain unaffected
+ok - scout done: is not gated
+ok - evidence claims require artifact provenance
+ok - evidence claims accept readable provenance and spare ordinary prose
+ok - published-intent merge guard resolves descriptors while private intent retains local paths
+ok - publication and retired validation refuse command, file-URL and metadata paths with normalized roots
+ok - normalized publication accepts portable references and refuses worker roots regardless of syntax
+ok - published overrides retain their project scope after task worktree removal
+ok - scenario consistency is enforced only for PR-body publication
+ok - scenario count agreeing with any complete table is accepted
+ok - scenario count refusal cites the table matching the claimed total
+ok - one-row table cannot mask a contradictory scenario count
+ok - unpushed ship done: is refused
+ok - ship done: with a committed scratch bundle is refused with the path as its reason
+ok - a recorded Gerrit ship done: with committed scratch is refused
+ok - a recorded PR with a missing worktree is still accepted
+ok - no-mistakes pre-validation done: is not gated
+ok - named head on a remote-tracking ref is accepted
+ok - a moved remote branch that lacks the named head is refused
+ok - a 40-hex token in the note is not the named head
+ok - a recorded merged PR satisfies the gate after prune
+ok - the merged-PR short-circuit applies only to the recorded PR the done line names
+ok - a forge-recorded head for the named PR is accepted without a local object
+ok - a direct-PR recorded head does not cover a later unpushed commit
+ok - CI-ready notes require checks green and an actual PR reference
+ok - no-mistakes ready-PR done: with extra text or an explicit CI skip is gated
+ok - keyed and spaced ship done: lines are gated
+ok - local-only linked named branch is reachable from the project clone
+ok - local-only detached HEAD only in the disposable copy is refused
+ok - standalone local-only done: requires the named head in the project clone
+ok - non-done lines are not gated
+ok - fenced and indented Captain lines are not authorized intent
+ok - PR-based DoD draft check uses gh-axi
+ok - ship DoD requires evidence that exercises each claimed failure mode
+ok - promotion keeps a scout's recorded base branch and refuses local-only for it
+ok - forge=external composes with direct-PR only and refuses a base branch
+ok - external rule one forbids origin and task-prefixed pushes and names only the backup copy
+ok - external DoD renders the contract, the review grammar, and the adapter, and refuses without one
+ok - external review done: accepted on a canonical URL alone without a backup; PR, non-https, query, fragment, forge, and pattern mismatches refused
+ok - external review done with a backup: refused until HEAD is under refs/remotes/backup/backup/, then accepted
+ok - worker role names the skill and its fallback skill file
+all fm-dod-lib tests passed
+FM_TEST_END 2026-10-29T08:00:00Z tests/fm-dod-lib.test.sh exit=0 duration_ms=17558 gate_skip=false
+FM_TEST_BEGIN 2026-10-29T08:00:00Z tests/fm-merge-local.test.sh family=pure-contract-unit expected_gate_skip=none
+1..8
+ok - two approved tasks with the same tree cannot roll back a successful landing
+ok - branch advance refuses, and restoring the reported X lands exactly X
+ok - missing, malformed and ambiguous done heads refuse without moving main
+ok - a branch move inside the final Git invocation refuses without changing main or its checkout
+ok - a diverged default branch refuses without changing main or its checkout
+ok - approval and branch changes during the hold read refuse without moving main
+ok - captured metadata cannot pin a replacement task generation
+ok - ledger and teardown record the first done head without reacquiring or releasing caller locks
+FM_TEST_COMPLETE
+FM_TEST_END 2026-10-29T08:00:14Z tests/fm-merge-local.test.sh exit=0 duration_ms=13863 gate_skip=false
+FM_TEST_BEGIN 2026-10-29T08:00:14Z tests/fm-inactive-reconcile.test.sh family=watcher-wake-lock expected_gate_skip=none
+ok - reports and acknowledgements use final fields, including unterminated fields
+ok - inactive reconciliation accepts decimal bounds and refuses zero, overflow and out-of-range settings
+actionable: inactive terminal outcome awaiting captain presentation: child=child state=done pr=https://example.test/owner/repo/pull/1
+ok - unreadable receipt phase updates refuse and preserve the complete receipt
+actionable: inactive terminal outcome awaiting captain presentation: child=child state=done pr=https://example.test/owner/repo/pull/1
+ok - unreadable receipt notice updates refuse and preserve the complete receipt
+actionable: inactive terminal outcome awaiting captain presentation: child=child state=done pr=https://example.test/owner/repo/pull/1
+ok - main direct terminal presentation has a durable receipt
+actionable: validation handoff overdue: child=child committed_head=3d44675801bf3e24fb5663eeb33109e051253ce7 no attributable no-mistakes run after 60s inactivity
+ok - committed head without validation resurfaces after the bound; healthy and acknowledged heads stay silent
+actionable: validation handoff overdue: child=child committed_head=8ab039ddfcd3a01af77a266f3cd062b2b61640c8 no attributable no-mistakes run after 60s inactivity
+ok - a secondmate's ledger delivery does not suppress the validation backstop
+actionable: inactive terminal outcome awaiting captain presentation: child=child state=done pr=https://example.test/owner/repo/pull/1
+ok - a branch-actor acknowledgement retires the inactive-outcome receipt and later scans stay quiet
+ok - unpushed CI-ready ship done: is not published upstream
+actionable: inactive terminal outcome awaiting captain presentation: child=child state=done
+actionable: inactive terminal outcome awaiting captain presentation: child=child state=done
+ok - main-home cadence preserves its metadata lock and immutable local readiness
+ok - inactive reconciliation pins local readiness under its existing lock before one parent delivery
+ok - a delivered ship done: skips the git gate on later polls
+ok - secondmate delivers a child's terminal ledger line once, on the next poll, from the ledger alone
+ok - multiline terminal outcomes are reported once before or during a state read
+ok - an unterminated continuation line does not withhold a proven child outcome
+ok - later status prose does not change the inactive terminal receipt identity
+ok - busy child locks do not starve later ledger outcomes
+ok - ledger delivery carries the report pointer, the failed verb, and each new terminal line
+ok - pr= requires the recorded PR or a ready-signal terminal line, whatever its stamp, and never a scout
+ok - terminal lines arriving during state reads remain ledger-owned
+ok - inactive and ledger paths reconcile one raced completion without hiding later events
+ok - progress after an inactive fallback starts a distinct terminal event
+ok - complete long ledger lines retain distinct receipt identities
+ok - a ledger line still being appended waits for its newline
+ok - the remote route carries a child's ledger line once
+ok - report delivers a child's final line, owes nothing twice, and refuses only an unwritable channel
+actionable: child outcome needs parent report: child=child state=done (missing or unreadable parent binding .fm-secondmate-parent)
+ok - a pending ship done: is delivered by report after teardown removed the worktree
+ok - parent PR reports retain outcomes and surface evidence validation failures
+actionable: child outcome needs parent report: child=child state=done (missing or unreadable parent binding .fm-secondmate-parent)
+ok - synthetic cleanup evidence report: merged
+actionable: child outcome needs parent report: child=child state=done (missing or unreadable parent binding .fm-secondmate-parent)
+ok - synthetic cleanup evidence report: merged-axi
+actionable: child outcome needs parent report: child=child state=done (missing or unreadable parent binding .fm-secondmate-parent)
+ok - synthetic cleanup evidence report: open-axi
+actionable: child outcome needs parent report: child=child state=done (missing or unreadable parent binding .fm-secondmate-parent)
+ok - synthetic cleanup evidence report: enterprise
+actionable: child outcome needs parent report: child=child state=done (missing or unreadable parent binding .fm-secondmate-parent)
+ok - synthetic cleanup evidence report: enterprise-axi
+actionable: child outcome needs parent report: child=child state=done (missing or unreadable parent binding .fm-secondmate-parent)
+ok - synthetic cleanup evidence report: tasktmp-only
+actionable: child outcome needs parent report: child=child state=done (missing or unreadable parent binding .fm-secondmate-parent)
+ok - synthetic cleanup evidence report: open
+actionable: child outcome needs parent report: child=child state=done (missing or unreadable parent binding .fm-secondmate-parent)
+ok - synthetic cleanup evidence report: closed
+actionable: child outcome needs parent report: child=child state=done (missing or unreadable parent binding .fm-secondmate-parent)
+ok - synthetic cleanup evidence report: surviving-root
+actionable: child outcome needs parent report: child=child state=done (missing or unreadable parent binding .fm-secondmate-parent)
+ok - synthetic cleanup evidence report: malformed
+actionable: child outcome needs parent report: child=child state=done (missing or unreadable parent binding .fm-secondmate-parent)
+ok - synthetic cleanup evidence report: unavailable
+actionable: child outcome needs parent report: child=child state=done (missing or unreadable parent binding .fm-secondmate-parent)
+ok - synthetic cleanup evidence report: override
+actionable: child outcome needs parent report: child=child state=done (missing or unreadable parent binding .fm-secondmate-parent)
+ok - synthetic cleanup evidence report: override-tasktmp
+actionable: child outcome needs parent report: child=child state=done (missing or unreadable parent binding .fm-secondmate-parent)
+ok - synthetic cleanup evidence report: override-scope
+ok - published scratch validation binds GitHub.com and Enterprise despite absent or hostile GH_HOST
+ok - parent PR reports bound published-body reads
+ok - report preserves teardown's metadata-before-scan lock order
+actionable: child outcome needs parent report: child=child state=failed (missing or unreadable parent binding .fm-secondmate-parent)
+ok - relative local parent homes fail closed
+ok - invalid secondmate markers block routing and surface the obligation
+ok - remote parent-replies mirror input is durable and idempotent
+ok - reused task ids retain per-incarnation terminal receipts
+ok - legacy metadata rewrites preserve terminal receipt identity
+ok - relaunch cannot replace metadata during terminal snapshot
+actionable: inactive terminal outcome awaiting captain presentation: child=child state=done pr=https://example.test/owner/repo/pull/1
+ok - terminal reconciliation ignores heartbeat backoff state
+actionable: inactive terminal outcome awaiting captain presentation: child=child state=done pr=https://example.test/owner/repo/pull/1
+ok - scan marker replaces a symlink without overwriting its target
+ok - nonterminal and captain-held workers remain outside inactive terminal reporting
+ok - watcher hook wakes for terminal loss and preserves idle secondmate exemption
+ok - the real watcher poll delivers a child's terminal ledger line to the parent channel
+actionable: inactive terminal outcome awaiting captain presentation: child=b state=done pr=https://example.test/owner/repo/pull/1
+ok - stalled state reads are bounded without starving later children
+ok - aggregate scan budget includes durable wake operations
+actionable: inactive terminal outcome needs parent report: child=child state=failed (missing or unreadable parent binding .fm-secondmate-parent)
+ok - notice recovery remains idempotent across queue acknowledgement
+ok - a secondmate home with no parent binding names the missing binding instead of failing quietly
+actionable: inactive terminal outcome awaiting captain presentation: child=child state=done pr=https://example.test/owner/repo/pull/1
+ok - reconciliation makes zero forge or PR API calls
+actionable: inactive terminal outcome awaiting captain presentation: child=child state=done pr=https://example.test/owner/repo/pull/1
+ok - reconciliation state reads set no-forge mode
+all inactive reconciliation tests passed
+FM_TEST_END 2026-10-29T08:02:35Z tests/fm-inactive-reconcile.test.sh exit=0 duration_ms=141276 gate_skip=false
+FM_TEST_BEGIN 2026-10-29T08:02:35Z tests/fm-review-diff.test.sh family=pr-forge expected_gate_skip=none
+ok - fm-review-diff falls back to recorded pr_head when pull head cannot be fetched
+ok - fm-review-diff fetches refs/pull/<n>/head when pr_head= is absent
+ok - fm-review-diff prefers freshly fetched PR head over a stale recorded pr_head=
+ok - fm-review-diff without pr= keeps the worktree-branch diff
+ok - fm-review-diff falls back to local branch with a warning when PR head is unreachable
+ok - fm-review-diff reviews the meta-recorded ship branch even when the worktree HEAD moved off it
+ok - fm-review-diff refuses a corrupt recorded ship branch instead of reviewing the wrong content
+ok - fm-review-diff refuses a missing explicitly recorded ship branch
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no live watcher process holds this home lock (last beat: 1s ago).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  repair missing watcher supervision according to the session-start block for this harness; do not use shell &.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ok - fm-review-diff compares a task against its recorded base branch
+ok - fm-review-diff fetches refs/pull/<n>/head for a Forgejo /pulls/<n> pr= URL
+ok - fm-review-diff resolves a Forgejo repo literally named pulls by the last /pulls/ segment
+ok - fm-review-diff falls back to a recorded Forgejo pr_head when the pull ref cannot be fetched
+ok - fm-review-diff keeps anchoring a remote-backed project on origin without the opt-in
+ok - fm-review-diff anchors an opted-in local landing on the local default, not a frozen origin
+ok - fm-review-diff keeps an opted-in publishing mode on origin, showing everything its pull request would carry
+ok - fm-review-diff follows an opted-in local-only branch through its rebase and later landings
+ok - fm-review-diff keeps an opted-in review on origin when the local default trails it
+ok - fm-review-diff anchors opted-in diverged default branches on the one the task was planted on
+ok - fm-review-diff says why an opted-in review of a landed branch is empty
+ok - fm-review-diff reports opted-in unrelated merge bases instead of choosing one silently
+ok - fm-review-diff keeps an opted-in named base branch on origin's copy
+FM_TEST_END 2026-10-29T08:02:58Z tests/fm-review-diff.test.sh exit=0 duration_ms=22392 gate_skip=false
+FM_TEST_SUMMARY total=4 failed=0 skipped_gate=0 duration_ms=195285
+FM_TEST_SUMMARY_FAMILY family=pr-forge count=1 duration_ms=22392 failed=0
+FM_TEST_SUMMARY_FAMILY family=pure-contract-unit count=2 duration_ms=31421 failed=0
+FM_TEST_SUMMARY_FAMILY family=watcher-wake-lock count=1 duration_ms=141276 failed=0
+FM_TEST_SLOWEST rank=1 script=tests/fm-inactive-reconcile.test.sh duration_ms=141276
+FM_TEST_SLOWEST rank=2 script=tests/fm-review-diff.test.sh duration_ms=22392
+FM_TEST_SLOWEST rank=3 script=tests/fm-dod-lib.test.sh duration_ms=17558
+FM_TEST_SLOWEST rank=4 script=tests/fm-merge-local.test.sh duration_ms=13863
+fm-test-run: wrote timing artifact: ~/.no-mistakes/evidence/01M639H6QD1WK1K19WXV59CK32/focused-results.json

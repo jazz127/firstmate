@@ -1,0 +1,125 @@
+~/.no-mistakes/worktrees/a00b7db52042/01M639H6QD1WK1K19WXV59CK32/.gate-test-tmp/spawn-live
+dispatch-resolve: off (TYPESAFE_API_KEY absent from the environment and ~/.no-mistakes/worktrees/a00b7db52042/01M639H6QD1WK1K19WXV59CK32/.gate-test-tmp/spawn-live/.env)
+
+REAL SPAWN variant=default expected-origin=e46a32858492e70977c3f378c98ab0270e00ae8c expected-local=608041bb4f8901eb0c855002eb3cac6b5696b3f9
+fm-gate-refuse: gate agent lifecycle permitted only against lab home ~/.no-mistakes/worktrees/a00b7db52042/01M639H6QD1WK1K19WXV59CK32/.gate-test-tmp/spawn-live
+notice: lab-default ships mode=local-only while the standing posture for project is no-mistakes - less rigor than the captain's standing posture; proceed only on a current explicit captain instruction or an intake judgment you can state
+spawned lab-default harness=codex kind=ship mode=local-only yolo=off window=fm-lab-spawn:fm-lab-default worktree=~/.no-mistakes/worktrees/a00b7db52042/01M639H6QD1WK1K19WXV59CK32/.gate-test-tmp/spawn-live/pool/.treehouse/project-f6d7b5/1/project
+window=fm-lab-spawn:fm-lab-default
+endpoint_task_id=lab-default
+worktree=~/.no-mistakes/worktrees/a00b7db52042/01M639H6QD1WK1K19WXV59CK32/.gate-test-tmp/spawn-live/pool/.treehouse/project-f6d7b5/1/project
+project=~/.no-mistakes/worktrees/a00b7db52042/01M639H6QD1WK1K19WXV59CK32/.gate-test-tmp/spawn-live/projects/project
+harness=codex
+approval_mode=bypass
+kind=ship
+mode=local-only
+yolo=off
+branch=fm/lab-default
+tasktmp=/tmp/fm-lab-default
+model=default
+effort=low
+spawn_gen=s1793261693.40326.6512
+observed worktree HEAD=e46a32858492e70977c3f378c98ab0270e00ae8c
+foreground=codex grid=110x35
+dispatch-resolve: off (TYPESAFE_API_KEY absent from the environment and ~/.no-mistakes/worktrees/a00b7db52042/01M639H6QD1WK1K19WXV59CK32/.gate-test-tmp/spawn-live/.env)
+
+REAL SPAWN variant=optin expected-origin=e46a32858492e70977c3f378c98ab0270e00ae8c expected-local=608041bb4f8901eb0c855002eb3cac6b5696b3f9
+fm-gate-refuse: gate agent lifecycle permitted only against lab home ~/.no-mistakes/worktrees/a00b7db52042/01M639H6QD1WK1K19WXV59CK32/.gate-test-tmp/spawn-live
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  repair missing watcher supervision according to the session-start block for this harness; do not use shell &.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+notice: lab-optin ships mode=local-only while the standing posture for project is no-mistakes - less rigor than the captain's standing posture; proceed only on a current explicit captain instruction or an intake judgment you can state
+spawned lab-optin harness=codex kind=ship mode=local-only yolo=off window=fm-lab-spawn:fm-lab-optin worktree=~/.no-mistakes/worktrees/a00b7db52042/01M639H6QD1WK1K19WXV59CK32/.gate-test-tmp/spawn-live/pool/.treehouse/project-f6d7b5/2/project
+window=fm-lab-spawn:fm-lab-optin
+endpoint_task_id=lab-optin
+worktree=~/.no-mistakes/worktrees/a00b7db52042/01M639H6QD1WK1K19WXV59CK32/.gate-test-tmp/spawn-live/pool/.treehouse/project-f6d7b5/2/project
+project=~/.no-mistakes/worktrees/a00b7db52042/01M639H6QD1WK1K19WXV59CK32/.gate-test-tmp/spawn-live/projects/project
+harness=codex
+approval_mode=bypass
+kind=ship
+mode=local-only
+yolo=off
+branch=fm/lab-optin
+tasktmp=/tmp/fm-lab-optin
+model=default
+effort=low
+spawn_gen=s1793261702.53967.9242
+observed worktree HEAD=608041bb4f8901eb0c855002eb3cac6b5696b3f9
+foreground=codex grid=110x35
+dispatch-resolve: off (TYPESAFE_API_KEY absent from the environment and ~/.no-mistakes/worktrees/a00b7db52042/01M639H6QD1WK1K19WXV59CK32/.gate-test-tmp/spawn-live/.env)
+
+REAL SPAWN variant=publishing expected-origin=e46a32858492e70977c3f378c98ab0270e00ae8c expected-local=608041bb4f8901eb0c855002eb3cac6b5696b3f9
+fm-gate-refuse: gate agent lifecycle permitted only against lab home ~/.no-mistakes/worktrees/a00b7db52042/01M639H6QD1WK1K19WXV59CK32/.gate-test-tmp/spawn-live
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+notice: lab-publishing ships mode=direct-PR while the standing posture for project is no-mistakes - less rigor than the captain's standing posture; proceed only on a current explicit captain instruction or an intake judgment you can state
+spawned lab-publishing harness=codex kind=ship mode=direct-PR yolo=off window=fm-lab-spawn:fm-lab-publishing worktree=~/.no-mistakes/worktrees/a00b7db52042/01M639H6QD1WK1K19WXV59CK32/.gate-test-tmp/spawn-live/pool/.treehouse/project-f6d7b5/3/project
+window=fm-lab-spawn:fm-lab-publishing
+endpoint_task_id=lab-publishing
+worktree=~/.no-mistakes/worktrees/a00b7db52042/01M639H6QD1WK1K19WXV59CK32/.gate-test-tmp/spawn-live/pool/.treehouse/project-f6d7b5/3/project
+project=~/.no-mistakes/worktrees/a00b7db52042/01M639H6QD1WK1K19WXV59CK32/.gate-test-tmp/spawn-live/projects/project
+harness=codex
+approval_mode=bypass
+kind=ship
+mode=direct-PR
+yolo=off
+branch=fm/lab-publishing
+tasktmp=/tmp/fm-lab-publishing
+model=default
+effort=low
+spawn_gen=s1793261712.61023.345
+observed worktree HEAD=e46a32858492e70977c3f378c98ab0270e00ae8c
+foreground=codex grid=110x35
+dispatch-resolve: off (TYPESAFE_API_KEY absent from the environment and ~/.no-mistakes/worktrees/a00b7db52042/01M639H6QD1WK1K19WXV59CK32/.gate-test-tmp/spawn-live/.env)
+
+REAL SPAWN variant=explicit-base expected-origin=e46a32858492e70977c3f378c98ab0270e00ae8c expected-local=608041bb4f8901eb0c855002eb3cac6b5696b3f9
+fm-gate-refuse: gate agent lifecycle permitted only against lab home ~/.no-mistakes/worktrees/a00b7db52042/01M639H6QD1WK1K19WXV59CK32/.gate-test-tmp/spawn-live
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+warn: no registry at ~/.no-mistakes/worktrees/a00b7db52042/01M639H6QD1WK1K19WXV59CK32/.gate-test-tmp/spawn-live/data/projects.md; defaulting project to no-mistakes off
+notice: lab-explicit-base ships mode=direct-PR while the standing posture for project is no-mistakes - less rigor than the captain's standing posture; proceed only on a current explicit captain instruction or an intake judgment you can state
+spawned lab-explicit-base harness=codex kind=ship mode=direct-PR yolo=off window=fm-lab-spawn:fm-lab-explicit-base worktree=~/.no-mistakes/worktrees/a00b7db52042/01M639H6QD1WK1K19WXV59CK32/.gate-test-tmp/spawn-live/pool/.treehouse/project-f6d7b5/4/project
+window=fm-lab-spawn:fm-lab-explicit-base
+endpoint_task_id=lab-explicit-base
+worktree=~/.no-mistakes/worktrees/a00b7db52042/01M639H6QD1WK1K19WXV59CK32/.gate-test-tmp/spawn-live/pool/.treehouse/project-f6d7b5/4/project
+project=~/.no-mistakes/worktrees/a00b7db52042/01M639H6QD1WK1K19WXV59CK32/.gate-test-tmp/spawn-live/projects/project
+harness=codex
+approval_mode=bypass
+kind=ship
+mode=direct-PR
+yolo=off
+branch=fm/lab-explicit-base
+tasktmp=/tmp/fm-lab-explicit-base
+base_branch=feature
+model=default
+effort=low
+spawn_gen=s1793261724.68857.31793
+observed worktree HEAD=e46a32858492e70977c3f378c98ab0270e00ae8c
+foreground=codex grid=110x35
+dispatch-resolve: off (TYPESAFE_API_KEY absent from the environment and ~/.no-mistakes/worktrees/a00b7db52042/01M639H6QD1WK1K19WXV59CK32/.gate-test-tmp/spawn-live/.env)
+
+REAL SPAWN variant=runtime expected-origin=e46a32858492e70977c3f378c98ab0270e00ae8c expected-local=608041bb4f8901eb0c855002eb3cac6b5696b3f9
+fm-gate-refuse: gate agent lifecycle permitted only against lab home ~/.no-mistakes/worktrees/a00b7db52042/01M639H6QD1WK1K19WXV59CK32/.gate-test-tmp/spawn-live
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+notice: lab-runtime ships mode=local-only while the standing posture for project is no-mistakes - less rigor than the captain's standing posture; proceed only on a current explicit captain instruction or an intake judgment you can state
+spawned lab-runtime harness=codex kind=ship mode=local-only yolo=off window=fm-lab-spawn:fm-lab-runtime worktree=~/.no-mistakes/worktrees/a00b7db52042/01M639H6QD1WK1K19WXV59CK32/.gate-test-tmp/spawn-live/pool/.treehouse/project-f6d7b5/5/project
+window=fm-lab-spawn:fm-lab-runtime
+endpoint_task_id=lab-runtime
+worktree=~/.no-mistakes/worktrees/a00b7db52042/01M639H6QD1WK1K19WXV59CK32/.gate-test-tmp/spawn-live/pool/.treehouse/project-f6d7b5/5/project
+project=~/.no-mistakes/worktrees/a00b7db52042/01M639H6QD1WK1K19WXV59CK32/.gate-test-tmp/spawn-live/projects/project
+harness=codex
+approval_mode=bypass
+kind=ship
+mode=local-only
+yolo=off
+branch=fm/lab-runtime
+tasktmp=/tmp/fm-lab-runtime
+model=default
+effort=low
+spawn_gen=s1793261734.78594.27516
+observed worktree HEAD=e46a32858492e70977c3f378c98ab0270e00ae8c
+foreground=codex grid=110x35
+
+Real tmux and Treehouse selected the required origin/local bases. Canonical Codex launched; no trust accepted or model result claimed.

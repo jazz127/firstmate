@@ -1,0 +1,26 @@
+~/.no-mistakes/worktrees/a00b7db52042/01M639H6QD1WK1K19WXV59CK32/.gate-test-tmp/spawn-live
+dispatch-resolve: off (TYPESAFE_API_KEY absent from the environment and ~/.no-mistakes/worktrees/a00b7db52042/01M639H6QD1WK1K19WXV59CK32/.gate-test-tmp/spawn-live/.env)
+
+REAL SPAWN variant=divergent expected-origin=4125324027dbcffbb5df189dbc35c40a1bf4bd5b expected-local=d1db1ce3a1fb3a51726d828f0b10b8faf6d50fae
+fm-gate-refuse: gate agent lifecycle permitted only against lab home ~/.no-mistakes/worktrees/a00b7db52042/01M639H6QD1WK1K19WXV59CK32/.gate-test-tmp/spawn-live
+notice: lab-divergent ships mode=local-only while the standing posture for project is no-mistakes - less rigor than the captain's standing posture; proceed only on a current explicit captain instruction or an intake judgment you can state
+note: pooled worktree '~/.no-mistakes/worktrees/a00b7db52042/01M639H6QD1WK1K19WXV59CK32/.gate-test-tmp/spawn-live/pool/.treehouse/project-f6d7b5/1/project': main in the primary checkout has diverged from origin/main (ahead by 1, behind by 1); starting from origin's tip
+spawned lab-divergent harness=codex kind=ship mode=local-only yolo=off window=fm-lab-spawn:fm-lab-divergent worktree=~/.no-mistakes/worktrees/a00b7db52042/01M639H6QD1WK1K19WXV59CK32/.gate-test-tmp/spawn-live/pool/.treehouse/project-f6d7b5/1/project
+window=fm-lab-spawn:fm-lab-divergent
+endpoint_task_id=lab-divergent
+worktree=~/.no-mistakes/worktrees/a00b7db52042/01M639H6QD1WK1K19WXV59CK32/.gate-test-tmp/spawn-live/pool/.treehouse/project-f6d7b5/1/project
+project=~/.no-mistakes/worktrees/a00b7db52042/01M639H6QD1WK1K19WXV59CK32/.gate-test-tmp/spawn-live/projects/project
+harness=codex
+approval_mode=bypass
+kind=ship
+mode=local-only
+yolo=off
+branch=fm/lab-divergent
+tasktmp=/tmp/fm-lab-divergent
+model=default
+effort=low
+spawn_gen=s1793261751.98325.10072
+observed worktree HEAD=4125324027dbcffbb5df189dbc35c40a1bf4bd5b
+foreground=codex grid=110x35
+
+Real tmux and Treehouse selected the required origin/local bases. Divergent local main kept the origin base; no trust accepted or model result claimed.

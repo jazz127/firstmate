@@ -1,0 +1,7 @@
+fm-gate-refuse: gate agent lifecycle permitted only against lab home ~/.no-mistakes/worktrees/a00b7db52042/01M639H6QD1WK1K19WXV59CK32/.gate-test-tmp/teardown-live
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+REFUSED: worktree ~/.no-mistakes/worktrees/a00b7db52042/01M639H6QD1WK1K19WXV59CK32/.gate-test-tmp/teardown-live/projects/worker has uncommitted changes.
+uncommitted changes present (untracked-only leftovers)
+untracked paths (up to 10):
+  untracked.txt
+Commit them (or get the captain's explicit OK to discard, then --force).

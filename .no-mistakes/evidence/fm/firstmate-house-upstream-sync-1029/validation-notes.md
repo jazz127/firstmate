@@ -1,0 +1,21 @@
+Focused validation at 72a082d1
+
+The four local-only/readiness/review suites and four reminder/dispatch/read-guard/remote-delivery suites all exited zero in this run (see both results JSON files). No broad suite, lint, GitHub publication, or pipeline-control phase ran.
+
+Direct product checks used the tracked CLI, real Git repositories, a real bare Git origin via file transport, and a private tmux server. Reconciliation consumed disposable task metadata/status and busy-event records; the tmux pane ran sleep, so this is evidence of reconciliation and landing, not of Claude inference or hook delivery. Both the tmux server and every lab home were removed.
+
+The recorded R1 behavior failed against the pre-fix implementation at 32f4c9a1 (exit 1, no accepted head), and passed at 72a082d1. Its test wrapper checks the caller still owns the metadata lock around the real crew-state invocation; its tmux and no-mistakes dependencies are substitutes. The separate direct CLI run had no replacement CLI.
+
+The real watcher stayed quiet for three seconds with the opt-in absent. With it enabled, an incomplete resolved-key header did not suppress the overdue decision. The wake was drained and acknowledged through fm-wake-drain.sh, the header was completed, and another three-second watcher run retired the reminder with no new wake. Both quiet runs were deliberately terminated and waited; the actionable run exited zero. Initial watcher setup attempts hit normal rearm recovery; the final driver follows the acknowledgement protocol.
+
+Real teardown refused an unlanded YAML indentation difference and then untracked work, retaining the exact commit, files, and metadata. Setup was adjusted to stock lab overrides and a valid named endpoint before driving this path. The optional forge CLI was absent on the private PATH; no forge response was substituted.
+
+No TYPESAFE_API_KEY or OPENROUTER_API_KEY is available in the test environment; a fresh lab resolver correctly reported off. Preferred-provider API selection has only simulated evidence (canned curl and quota-axi in the focused suite). No operator .env or credential store was inspected or changed by the test driver.
+
+The installed Pi smoke suite capability-skipped on Darwin. Policy coverage uses synthetic events; the nominal Linux RPC fixture also supplies a synthetic provider and fake Bash, so that alone would not establish real-model containment. Docker is available, but an authorized Linux Pi primary/provider login is still required for actual inference evidence. No credentials were copied or changed. Consequently no rendered Pi notice screenshot was available.
+
+Cross-host steering has simulated evidence: the suite replaces SSH and Herdr. A newly created local SSH server alone cannot prove the receiver's required Herdr endpoint; the current receiver owns the dedicated fm-remote session rather than a named fm-lab-* session. No real Herdr lifecycle operation was attempted without a scaffolded --herdr-lab contract.
+
+The integration merge retains both parents (e47cb93e and 44153212) and upstream 44153212 remains an ancestor. This is a static history check, not behavioral equivalence evidence. Existing author-supplied reports were treated as context, not as checks performed in this run.
+
+Real launch checks additionally drove fm-brief.sh, fm-dispatch-resolve.sh, fm-spawn.sh, Treehouse, tmux, and the installed canonical Codex command. All final drivers exited zero. The absent flag selected origin; the opt-in selected the local strictly-ahead main; publishing, explicit base, and configured runtime tracking kept origin. A separate divergent-main run also kept origin. Every Codex pane reported a 110x35 grid and foreground=codex. These checks establish worktree allocation/base selection before model work, not completion of a model task. No trust was accepted and no model result is claimed. Initial setup was corrected for read-only hook snapshot cleanup and the documented refusal of local-only plus --base-branch; the retained initial logs show those setup failures. No source change was needed. Private tmux servers were killed and lab homes removed; product-created incidental tasktmp caches were left to their normal owner rather than deleting out-of-worktree data.

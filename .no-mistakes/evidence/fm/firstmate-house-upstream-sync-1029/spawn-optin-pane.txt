@@ -1,0 +1,35 @@
+
+  Folder access
+  ~/.no-mistakes/worktrees/a00b7db52042/01M639H6QD1WK1K19WXV59CK32/.gate-test-tmp/spawn-live/pool
+  /.treehouse/project-f6d7b5/2/project
+
+  Note: You’re in a subdirectory of a Git project. Trusting will apply to the repository root:
+  ~/.no-mistakes/worktrees/a00b7db52042/01M639H6QD1WK1K19WXV59CK32/.gate-test-tmp/spawn-live/proj
+  ects/project
+
+  Trust this folder? Codex can read, edit, and run files here, subject to your permission settings. Folder
+  settings can run code automatically, even without a model request. Continue only if you trust these files.
+  Your trust decision will be saved.
+
+› 1. Trust and continue
+  2. Quit
+
+  enter continue · esc quit
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

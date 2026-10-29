@@ -1,0 +1,108 @@
+~/.no-mistakes/worktrees/a00b7db52042/01M639H6QD1WK1K19WXV59CK32/.gate-test-tmp/live
+
+MAIN-HOME CADENCE: first scan
+actionable: inactive terminal outcome awaiting captain presentation: child=child state=done
+window=%0
+worktree=~/.no-mistakes/worktrees/a00b7db52042/01M639H6QD1WK1K19WXV59CK32/.gate-test-tmp/live/projects/worker
+project=~/.no-mistakes/worktrees/a00b7db52042/01M639H6QD1WK1K19WXV59CK32/.gate-test-tmp/live/projects/project
+branch=fm/child
+backend=tmux
+harness=claude
+kind=ship
+mode=local-only
+spawn_gen=lab-one
+
+local_done_head=248a6d9f5525045bd235ca5283aaee843474a064
+1793261590	1	check	inactive-outcome:c0f9cb9b9426ff74da8d11c95cffb601	inactive terminal outcome awaiting captain presentation: child=child state=done
+schema=fm-terminal-outcome.v1
+fingerprint=c0f9cb9b9426ff74da8d11c95cffb601
+task_id=child
+incarnation=lab-one
+state=done
+outcome_key=inactive-outcome-main-child-done
+origin=direct
+pr=
+created_epoch=1793261590
+notice_emitted=0
+status_head=f6df62dee352efe60ec7ee1a66c13c3f
+phase=presentation
+state: done · source: status-log · approved local work
+
+SECOND-MATE LEDGER: one parent delivery and no duplicates
+~/.no-mistakes/worktrees/a00b7db52042/01M639H6QD1WK1K19WXV59CK32/.gate-test-tmp/live/mate
+done [key=child-outcome-child-done-206584b3] [at=1793261592]: child child done: approved local work mode=local-only
+schema=fm-terminal-outcome.v1
+fingerprint=206584b36dbde4da0f98aba1d3ac9fc5
+task_id=child
+incarnation=lab-one
+state=done
+outcome_key=child-outcome-child-done-206584b3
+origin=direct
+phase=upstream
+pr=
+created_epoch=1793261592
+notice_emitted=0
+
+ADVERSARIAL: branch advances after approved completion
+state: blocked · source: status-log · local-only done head could not be recorded or differs from the recorded head; revised work requires a new task/approval record
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  After draining queued wakes, repair missing watcher supervision according to the session-start block for this harness; do not use shell &.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+WARNING: queued wakes pending - drain them with bin/fm-wake-drain.sh before anything else.
+error: branch fm/child differs from the recorded local done head; refusing
+
+LANDING: restore approved head and land exactly it
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+WARNING: queued wakes pending - drain them with bin/fm-wake-drain.sh before anything else.
+merged fm/child into local main (87de432c120d9a7bee60d777eba5dd5b4285b216 -> 248a6d9) in ~/.no-mistakes/worktrees/a00b7db52042/01M639H6QD1WK1K19WXV59CK32/.gate-test-tmp/live/projects/project
+248a6d9 approved
+87de432 initial
+
+ADVERSARIAL: malformed approval is refused
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+WARNING: queued wakes pending - drain them with bin/fm-wake-drain.sh before anything else.
+error: missing or malformed local done head for task child; report readiness before approval
+
+REVIEW: default and publishing use origin; opt-in local review omits existing local landings
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+WARNING: queued wakes pending - drain them with bin/fm-wake-drain.sh before anything else.
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+WARNING: queued wakes pending - drain them with bin/fm-wake-drain.sh before anything else.
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+WARNING: queued wakes pending - drain them with bin/fm-wake-drain.sh before anything else.
+diff base: main
+ own.txt | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/own.txt b/own.txt
+new file mode 100644
+index 0000000..1a6b64f
+--- /dev/null
++++ b/own.txt
+@@ -0,0 +1 @@
++review only
+diff base: origin/main
+ approved.txt | 1 +
+ own.txt      | 1 +
+ 2 files changed, 2 insertions(+)
+
+diff --git a/approved.txt b/approved.txt
+new file mode 100644
+index 0000000..087c548
+--- /dev/null
++++ b/approved.txt
+@@ -0,0 +1 @@
++approved change
+diff --git a/own.txt b/own.txt
+new file mode 100644
+index 0000000..1a6b64f
+--- /dev/null
++++ b/own.txt
+@@ -0,0 +1 @@
++review only
+
+All direct Git/CLI scenarios completed; no replacement CLI or forge used.

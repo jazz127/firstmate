@@ -15,8 +15,8 @@ Generate a complete current snapshot from the fleet's current state, so the capt
 Plain `/bearings` returns only the concise four-section chat digest.
 Only `/bearings file` writes the dated markdown report artifact and then returns the concise four-section chat digest linked to that report.
 Every `/bearings` composition refreshes the terminal Captain's Call queue through `bin/fm-bearings-board.sh queue`; `/bearings lavish` uses `build` instead, which also refreshes that queue and owns the browser board.
-A digest/build invocation is operationally read-only apart from observational cache refreshes owned by the [`bin/fm-fleet-snapshot.sh` header](../../../bin/fm-fleet-snapshot.sh), durable per-target reconcile-notify requests when the captured state needs them, the terminal Captain's Call queue, plus the explicit per-mode artifacts: the dated report in file mode, and in lavish mode the board file plus the answer binding and source registration that `bin/fm-bearings-board.sh build` records through their own owners.
-During that invocation it never tears down a task, merges a PR, dispatches new work, steers a worker, answers a decision, cleans up work, or mutates backlog or task state.
+A digest/build invocation is operationally read-only apart from snapshot side effects owned by the [`bin/fm-fleet-snapshot.sh` header](../../../bin/fm-fleet-snapshot.sh), durable per-target reconcile-notify requests when the captured state needs them, the terminal Captain's Call queue, plus the explicit per-mode artifacts: the dated report in file mode, and in lavish mode the board file plus the answer binding and source registration that `bin/fm-bearings-board.sh build` records through their own owners.
+During that invocation it never tears down a task, merges a PR, dispatches new work, steers a worker, answers a decision, cleans up work, mutates backlog state, or changes task state beyond those snapshot side effects.
 Board answers are acted on later under the normal authority rules; this skill's board-wake section explicitly owns the guarded routing at that time.
 
 ## Invocation modes

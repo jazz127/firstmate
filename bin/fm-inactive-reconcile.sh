@@ -526,9 +526,9 @@ report_child_ledger_locked() { # <id> <meta>
   return 1
 }
 
-# Every direct child's ledger, under its meta lock. File reads, plus a local
-# git reachability check for a ship done: with no delivery record yet, so it
-# runs on every poll in a secondmate home; a delivery failure is already queued as a
+# Every direct child's ledger, under its meta lock. Undelivered ship done:
+# records pass bin/fm-dod-lib.sh's readiness gate before publication. This runs
+# on every poll in a secondmate home; a delivery failure is already queued as a
 # notice and never fails the scan.
 ledger_pass() {
   local meta id lock

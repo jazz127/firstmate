@@ -1504,9 +1504,10 @@ fm_dod_local_done_head() {  # <meta>
 }
 
 # Latch the head before reporting readiness, not at landing time. Snapshot
-# callers may supply captured meta; compare it with the live record under the
-# existing control/meta locks before publishing to the live owner only. A caller
-# already holding the live meta lock sets FM_DOD_LOCKED_META to its live path.
+# callers may supply captured meta; publish only if it still matches the live
+# record under its metadata lock. Acquire control/meta locks unless the caller
+# sets FM_DOD_LOCKED_META to the exact live path it already holds locked, also
+# when invoking this gate through a child process. Never release caller locks.
 fm_dod_pin_local_done_head() (  # <state> <id> <meta> <sha> <captured-meta>
   local state=$1 id=$2 meta=$3 sha=$4 captured=$5 script_dir live control='' lock='' tmp='' pinned
   script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)

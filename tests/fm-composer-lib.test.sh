@@ -266,11 +266,16 @@ test_matrix_claude_arrow_statusline_footer() {
 test_matrix_herdr_titled_claude_composer() {
   # Synthetic replay of the screen shape reported in upstream issue #6127.
   # The titled opening rule and plain closing rule enclose Claude's bare input.
-  local head foot screen typed content claude_working out
+  local head foot screen typed content claude_working pi_idle out
   head=$'────────────────────────── Firstmate ──\n❯'
   foot=$'\n───────────────────────────────────────\n  Opus 5 (1M context) │ firstmate │ main │ fleet idle'
   claude_working=$(printf 'claude\tworking')
   screen="$head$foot"
+  pi_idle=$(printf 'pi\tidle')
+  assert_screen "non-ASCII Herdr title defers" unknown "$CAPS_STYLED" \
+    "${screen/Firstmate/Fïrstmate}" '' "$claude_working"
+  assert_screen "Herdr title cannot prove a blank Pi composer" unknown "$CAPS_STYLED" \
+    "${screen/❯/}" '' "$pi_idle"
   assert_screen "idle Claude under a titled Herdr rule" empty "$CAPS_STYLED" "$screen" '' "$claude_working"
   typed="${head} Firstmate instruction waiting${foot}"
   assert_screen "pending Claude doorbell under a titled Herdr rule" pending "$CAPS_STYLED" "$typed" '' "$claude_working"

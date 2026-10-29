@@ -1,0 +1,7 @@
+Claude Code 2.1.308. Existing normal login: loggedIn=true, authMethod=claude.ai.
+Live launch: marked FM_HOME under .calm-validation/lab; actual Claude CLI on private tmux -L fm-lab, 160x44; --setting-sources "" --plugin-dir .claude/mods/firstmate-calm --strict-mcp-config --tools Read --permission-mode dontAsk --model haiku; CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1.
+The worktree-local socket path exceeded the Unix socket path limit. Retried using bin/fm-lab-home.sh tmux-dir, the repository-owned private short-socket helper.
+Actual TUI reached workspace-trust dialog. Accepting writes trust state to the normal user-level Claude configuration, forbidden by workspace boundary. No choice was accepted.
+Alternate auth checks with worktree-local CLAUDE_CONFIG_DIR and worktree-local HOME both returned loggedIn=false. This is not a claim that the normal login is unavailable: it is available, but neither isolated configuration inherited it. No login or credential mutation was attempted.
+The lab tmux server was killed and fm-lab-home.sh teardown completed successfully. No upstream model turn was submitted.
+To complete the TUI scenarios within the boundary: supply an authorized process-scoped credential usable with an isolated CLAUDE_CONFIG_DIR, or run with existing workspace trust for the gate worktree that requires no user-level configuration changes.

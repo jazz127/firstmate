@@ -80,6 +80,7 @@ if [ "$harness" = claude ]; then command -v claude >/dev/null 2>&1 || exit 0; fi
 lock="$STATE/.precompact-stow.lock"
 fm_lock_try_acquire "$lock" || exit 0
 snapshot=
+# shellcheck disable=SC2329 # Invoked by the EXIT trap below.
 cleanup() {
   [ -z "$snapshot" ] || rm -f "$snapshot"
   fm_lock_release "$lock"

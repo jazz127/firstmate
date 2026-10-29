@@ -137,7 +137,7 @@ record_parent_stop_state() {
   [ -n "$state" ] && [ -n "$id" ] && [ -n "$gen" ] && [ -x "$writer" ] || return 0
   if [ "$status" -eq 2 ]; then
     verdict=busy
-    event=stop-blocked
+    event='stop-blocked'
   fi
   "$writer" apply "$state" "$id" "$verdict" --gen "$gen" --source claude-hook --event "$event" >/dev/null 2>&1 || true
 }

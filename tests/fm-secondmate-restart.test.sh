@@ -1178,6 +1178,7 @@ test_pause_control_contention_keeps_the_mate_unpaused() {
   dir=$(new_case pause-control-contention)
   add_local_mate "$dir" sm1
   clean_pause_home "$dir" sm1
+  # shellcheck disable=SC2016 # Variables expand in the child shell.
   out=$(env PATH="$dir/fakebin:$PATH" FM_HOME="$dir/home" FM_FAKE_DIR="$dir/fake" bash -c '
     . "$1/bin/fm-wake-lib.sh"
     lock="$FM_HOME/state/.control-sm1.lock"
@@ -1209,6 +1210,7 @@ test_maintenance_cannot_resume_or_race_pause() {
   done
   out=$(run_restart "$dir" --resume sm1); rc=$?
   expect_code 0 "$rc" "resume before lifecycle exclusion check"$'\n'"$out"
+  # shellcheck disable=SC2016 # Variables expand in the child shell.
   out=$(env PATH="$dir/fakebin:$PATH" FM_HOME="$dir/home" FM_FAKE_DIR="$dir/fake" bash -c '
     . "$1/bin/fm-wake-lib.sh"
     lock="$FM_HOME/state/.secondmate-liveness-sm1.lock"
@@ -1299,6 +1301,7 @@ test_explicit_pause_and_resume() {
 
 resume_stall_tick() {
   local dir=$1
+  # shellcheck disable=SC2016 # Positional parameters expand in the child shell.
   env PATH="$dir/fakebin:$PATH" FM_HOME="$dir/home" FM_FAKE_DIR="$dir/fake" \
     FM_STATE_OVERRIDE="$dir/home/state" FM_CONFIG_OVERRIDE="$dir/home/config" \
     FM_FAKE_NOW_FILE="$dir/now" FM_SECONDMATE_WAKE_STALL_SECS=60 FM_BUSY_TURN_MAX_SECS=120 \
@@ -1335,6 +1338,7 @@ SH
     expect_code 0 "$rc" "drain ring before pause"$'\n'"$out"
     [ "$(cat "$state/.secondmate-wake-ring-sm1")" = 100-7 ] || fail 'the watcher did not ring the retained row'
     [ "$(wc -l < "$dir/fake/rings" | tr -d ' ')" = 1 ] || fail 'expected exactly one initial drain ring'
+    # shellcheck disable=SC2016 # Variables expand in the child shell.
     env FM_HOME="$dir/home" FM_STATE_OVERRIDE="$state" bash -eu -c '
       . "$1/bin/fm-task-inbox-lib.sh"
       ordinary=$(fm_task_inbox_write "$STATE" sm1 "pending ordinary steer")
@@ -1524,6 +1528,7 @@ EOF
   assert_contains "$out" 'in-flight or unlanded work' 'remote safety uses the shared preflight'
   assert_absent "$dir/fake/herdr-called" 'unsafe remote pause never calls Herdr'
   rm -f "$home/state/child.meta"
+  # shellcheck disable=SC2016 # Variables expand in the child shell.
   out=$(env PATH="$dir/fakebin:$PATH" FM_HOME="$home" FM_FAKE_DIR="$dir/fake" bash -c '
     . "$1/bin/fm-wake-lib.sh"
     lock="$FM_HOME/state/.task-set.lock"

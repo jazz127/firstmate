@@ -58,6 +58,7 @@ task_temp=$3
 
 if [ -n "$gh_url$forgejo_url" ]; then
   if [ -n "$forgejo_url" ]; then
+    # shellcheck source=bin/fm-pr-lib.sh
     . "$(dirname "${BASH_SOURCE[0]}")/fm-pr-lib.sh"
     fm_pr_url_parse "$forgejo_url" && [ "$FM_PR_PROVIDER" = forgejo ] || {
       printf 'error: expected a canonical Forgejo PR URL: %s\n' "$forgejo_url" >&2

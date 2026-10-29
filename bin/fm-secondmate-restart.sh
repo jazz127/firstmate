@@ -141,6 +141,7 @@ case "${1:-}" in
     . "$SCRIPT_DIR/fm-lease-lib.sh"
     lifecycle_lock="$STATE/.secondmate-liveness-$id.lock"
     child_set_lock=
+    # shellcheck disable=SC2329 # Invoked by the EXIT trap below.
     cleanup_lifecycle() {
       [ -z "$child_set_lock" ] || fm_lock_release "$child_set_lock" || true
       fm_lease_guard_release || true

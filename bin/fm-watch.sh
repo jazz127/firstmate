@@ -1940,7 +1940,7 @@ wedge_defer_guard() {  # <window> <since-file> <triage-label> <idle-age> <guard-
 # never reaches it.
 wedge_timer_check() {  # <window> <since-file> <triage-label> <escalation-count-file> <task> <pane-hash> [dialog-name] [repeat-secs] [busy-proven]
   local win=$1 since_file=$2 label=$3 escalation_file=$4 task=$5 hash=$6 dialog=${7-} repeat_secs=${8:-$STALE_ESCALATE_SECS}
-  local since age n reason interval evidence guard guard_note busy_proven=${9:-0}
+  local since age n reason interval guard guard_note busy_proven=${9:-0}
   local _wkey _wrollback_sentinel _wrb_ts _wrb_cap_reason _wrb_cap_status _wrb_rm_status
   local _wrb_since _wrb_now _wrb_age _wrb_cap_ts _wrb_gate
   _wkey=$(window_key "$win")
@@ -2815,14 +2815,11 @@ pause_state_class() {  # <window> <task>
 # Only a proven open hold may defer a wedge or change an eligible wait's owner.
 # bin/fm-captain-hold.sh owns the predicate and lifecycle identity; an unreadable
 # or absent record grants no deferral. Idle policy is applied separately.
-CAPTAIN_CALL_IDENTITY=
-
 task_captain_call_open() {  # <task>
   local task=$1
-  CAPTAIN_CALL_IDENTITY=
   [ -n "$task" ] || return 1
-  CAPTAIN_CALL_IDENTITY=$(FM_HOME="$FM_HOME" "$SCRIPT_DIR/fm-captain-hold.sh" \
-    open "$task" --identity 2>/dev/null) || return 1
+  FM_HOME="$FM_HOME" "$SCRIPT_DIR/fm-captain-hold.sh" \
+    open "$task" --identity >/dev/null 2>&1 || return 1
   return 0
 }
 

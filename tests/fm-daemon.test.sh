@@ -3504,7 +3504,7 @@ test_inject_msg_defers_on_unrecognized_composer_state() {
 test_daemon_idle_checkin_policy() {
   local spec kind listed dir state win key task FM_CONFIG_OVERRIDE
   for spec in ship:off scout:off secondmate:off secondmate:on; do
-    kind=${spec%%:*}; listed=${spec##*:}; task=policy-idle
+    kind=${spec%%:*}; listed=${spec##*:}; task='policy-idle'
     dir=$(make_supercase "idle-policy-$kind-$listed"); state="$dir/state"
     FM_CONFIG_OVERRIDE="$dir/config"; mkdir -p "$FM_CONFIG_OVERRIDE"
     win="sess:fm-$task"; key=$task
@@ -3616,7 +3616,7 @@ test_daemon_worker_gate_retains_persistence() {
 
 test_daemon_drops_ordinary_idle_stale_marker() {
   local dir state task win key
-  dir=$(make_supercase idle-legacy-marker); state="$dir/state"; task=policy-idle
+  dir=$(make_supercase idle-legacy-marker); state="$dir/state"; task='policy-idle'
   win="sess:fm-$task"; key=$task
   printf 'window=%s\nkind=ship\n' "$win" > "$state/$task.meta"
   printf 'working: old idle status\n' > "$state/$task.status"

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # tests/fm-wake-queue.test.sh - wake-queue losslessness (the queue safety matrix):
 # concurrent append/drain, bounded structural enrichment and presentation-lock
-# waits, interruption safety, signal catch-up while no watcher runs, stale/check enqueue-before-suppressor
+# waits, interruption safety, signal catch-up while no watcher runs, idle-status suppression, check enqueue-before-suppressor
 # ordering, atomic double-drain, duplicate collapse, and liveness assertion.
 # Nothing is lost and nothing is double-consumed. General watcher/lock liveness
 # lives in fm-watcher-lock.test.sh; daemon classification/injection in
@@ -59,6 +59,90 @@ test_recovery_marker_framing() {
   ' _ "$ROOT") || fail 'valid recovery marker was refused'
   [ "$out" = wait ] || fail 'valid announced episode was incorrectly recovered'
   pass 'malformed recovery markers are quarantined instead of suppressing recovery'
+}
+
+
+test_branch_grant_requires_lock_acquisition() {
+  local dir fixture state action outcome rc
+  local -a args
+  dir=$(make_case grant-lock-failure)
+  fixture="$dir/bin"
+  mkdir -p "$fixture"
+  cp "$GRANT" "$ROOT/bin/fm-wake-lib.sh" "$ROOT/bin/fm-path-lib.sh" "$fixture/"
+  # Inject only the acquire result in this disposable copy. Keep real owner
+  # validation, grant mutations, and pid-guarded lock release in use.
+  cat >> "$fixture/fm-wake-lib.sh" <<'SH'
+fm_lock_acquire_wait() {
+  printf 'acquire\n' >> "$STATE/acquire.log"
+  [ "${FM_GRANT_FAIL_ACQUIRE:-0}" = 0 ] || return 2
+  fm_lock_try_acquire "$1"
+}
+SH
+  for outcome in failure success; do
+    for action in release deactivate activate publish; do
+      state="$dir/$outcome-$action"
+      mkdir -p "$state"
+      FM_STATE_OVERRIDE="$state" bash "$GRANT" activate "$$" existing \
+        || fail "could not seed $action owner"
+      printf '1\n' > "$state/.branch-eligible-rows"
+      printf '1\t1\tsignal\ttask.status\tsignal: task\n' > "$state/.wake-queue"
+      cp "$state/.branch-eligible-owner" "$state/owner.before"
+      cp "$state/.branch-eligible-rows" "$state/rows.before"
+      case "$action" in
+        release) args=(release existing) ;;
+        deactivate) args=(deactivate "$$" existing) ;;
+        activate) args=(activate "$$" replacement) ;;
+        publish) args=(publish existing 1) ;;
+      esac
+      if [ "$outcome" = failure ]; then
+        # A foreign live holder must survive both the command and its EXIT trap.
+        mkdir "$state/.wake-queue.lock"
+        printf '%s\n' "$$" > "$state/.wake-queue.lock/pid"
+        FM_STATE_OVERRIDE="$state" FM_GRANT_FAIL_ACQUIRE=1 \
+          bash "$fixture/fm-wake-grant.sh" "${args[@]}"
+        rc=$?
+        [ "$rc" -ne 0 ] || fail "$action returned success after failed lock acquisition"
+        cmp -s "$state/owner.before" "$state/.branch-eligible-owner" \
+          || fail "$action changed the owner after failed lock acquisition"
+        cmp -s "$state/rows.before" "$state/.branch-eligible-rows" \
+          || fail "$action changed rows after failed lock acquisition"
+        [ "$(cat "$state/.wake-queue.lock/pid")" = "$$" ] \
+          || fail "$action released another owner's lock"
+      else
+        # Publication must also work when it needs to install a new snapshot.
+        [ "$action" != publish ] || rm "$state/.branch-eligible-rows"
+        FM_STATE_OVERRIDE="$state" FM_GRANT_FAIL_ACQUIRE=0 \
+          bash "$fixture/fm-wake-grant.sh" "${args[@]}" \
+          || fail "$action failed after successful lock acquisition"
+        [ ! -e "$state/.wake-queue.lock" ] && [ ! -L "$state/.wake-queue.lock" ] \
+          || fail "$action retained its acquired lock"
+        case "$action" in
+          release)
+            [ ! -e "$state/.branch-eligible-rows" ] \
+              || fail "release did not remove rows"
+            cmp -s "$state/owner.before" "$state/.branch-eligible-owner" \
+              || fail "release changed ownership" ;;
+          deactivate)
+            [ ! -e "$state/.branch-eligible-rows" ] && [ ! -e "$state/.branch-eligible-owner" ] \
+              || fail "deactivate did not remove grant records" ;;
+          activate)
+            [ ! -e "$state/.branch-eligible-rows" ] \
+              && [ "$(tail -n 1 "$state/.branch-eligible-owner")" = replacement ] \
+              || fail "activate did not replace ownership" ;;
+          publish)
+            cmp -s "$state/rows.before" "$state/.branch-eligible-rows" \
+              || fail "publish did not install rows"
+            cmp -s "$state/owner.before" "$state/.branch-eligible-owner" \
+              || fail "publish changed ownership" ;;
+        esac
+      fi
+      [ "$(cat "$state/acquire.log")" = acquire ] \
+        || fail "$action did not exercise lock acquisition"
+      set -- "$state"/.branch-eligible-*.tmp.*
+      [ ! -e "$1" ] || fail "$action leaked a temporary grant record"
+      pass "branch grant $action lock acquisition: $outcome"
+    done
+  done
 }
 
 
@@ -137,72 +221,54 @@ test_signal_catchup_without_running_watcher() {
   pass "signal written while no watcher runs is caught on next run"
 }
 
-test_stale_enqueue_before_suppressor() {
+# Event-driven supervision (docs/architecture.md): an already-reported done
+# or an idle worker without positive execution evidence stays silent. A later
+# decision is still a new actionable signal, even after the stale hash was seen.
+test_idle_hash_does_not_replay_status_but_new_decision_wakes() {
   local dir state fakebin out drain_out capture_file window key pane_hash
-  dir=$(make_case stale)
-  state="$dir/state"
-  fakebin="$dir/fakebin"
-  out="$dir/watch.out"
-  drain_out="$dir/drain.out"
-  capture_file="$dir/pane.txt"
-  window="test:fm-stale"
-  printf 'idle prompt' > "$capture_file"
-  printf 'window=%s\nkind=ship\n' "$window" > "$state/stale.meta"
-  # A stale pane sitting on a captain-relevant status is actionable when the crew
-  # is not provably working, so give the window one and prime the .seen-* marker
-  # to its current signature so the per-poll signal scan does not pre-empt the
-  # stale wake with a signal wake.
-  printf 'done: ready in branch fm/stale\n' > "$state/stale.status"
-  prime_status_seen "$state" "$state/stale.status"
-  key=$(printf '%s' "$window" | tr ':/.' '___')
-  pane_hash=$(hash_text "idle prompt")
-  printf '%s' "$pane_hash" > "$state/.hash-$key"
-  printf '1\n' > "$state/.count-$key"
-  PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" FM_STATE_OVERRIDE="$state" FM_POLL=1 FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" &
-  wait_for_exit "$!" 40 || fail "watcher did not exit for stale pane"
-  grep -Fx "stale: $window" "$out" >/dev/null || fail "watcher did not print stale wake"
-  FM_STATE_OVERRIDE="$state" "$DRAIN" > "$drain_out" || fail "drain after stale wake failed"
-  grep "$(printf '\tstale\t')" "$drain_out" | grep -F "$window" >/dev/null || fail "stale wake was not queued"
-  [ "$(cat "$state/.stale-$key" 2>/dev/null || true)" = "$pane_hash" ] || fail "stale suppressor was not written"
-  pass "stale wake is queued before suppressor state is advanced"
-}
-
-# Absorb-only-when-provably-working adds a new actionable wake: a non-terminal stale
-# whose crew is NOT provably working is surfaced immediately. That new path must keep
-# the queue-safety invariant - enqueue the stale wake BEFORE advancing the .stale-*
-# suppressor - so a watcher killed between the two never swallows the surfaced finish.
-test_not_working_stale_enqueue_before_suppressor() {
-  local dir state fakebin out drain_out capture_file window key pane_hash
-  dir=$(make_case stale-stopped)
-  state="$dir/state"
-  fakebin="$dir/fakebin"
-  out="$dir/watch.out"
-  drain_out="$dir/drain.out"
-  capture_file="$dir/pane.txt"
-  window="test:fm-stopped"
-  printf 'idle prompt, finished' > "$capture_file"
-  printf 'window=%s\nkind=ship\n' "$window" > "$state/stopped.meta"
-  # Non-terminal status (no captain-relevant verb); prime .seen-* so the per-poll
-  # signal scan does not pre-empt the stale path.
-  printf 'working: implementing\n' > "$state/stopped.status"
-  prime_status_seen "$state" "$state/stopped.status"
-  key=$(printf '%s' "$window" | tr ':/.' '___')
-  pane_hash=$(hash_text "idle prompt, finished")
-  printf '%s' "$pane_hash" > "$state/.hash-$key"
-  printf '1\n' > "$state/.count-$key"
-  # NOT provably working: no running pipeline, idle pane. (make_case installed the
-  # fake fm-crew-state.sh the watcher reads via FM_CREW_STATE_BIN.)
-  export FM_FAKE_CREW_STATE='state: unknown · source: none · no current-state source available'
-  PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
-    FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" \
-    FM_STALE_ESCALATE_SECS=999 FM_POLL=1 FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" &
-  wait_for_exit "$!" 40 || fail "watcher did not surface a not-provably-working stale"
-  grep -Fx "stale: $window" "$out" >/dev/null || fail "watcher did not print the immediate stale wake"
-  FM_STATE_OVERRIDE="$state" "$DRAIN" > "$drain_out" || fail "drain after the immediate stale wake failed"
-  grep "$(printf '\tstale\t')" "$drain_out" | grep -F "$window" >/dev/null || fail "immediate stale wake was not queued"
-  [ "$(cat "$state/.stale-$key" 2>/dev/null || true)" = "$pane_hash" ] || fail "stale suppressor was not advanced after the enqueue"
-  unset FM_FAKE_CREW_STATE
-  pass "a not-provably-working stale wake is queued before its suppressor is advanced"
+  local phase status_line watcher polls
+  for phase in 'done' working; do
+    dir=$(make_case "idle-hash-$phase")
+    state="$dir/state"
+    fakebin="$dir/fakebin"
+    out="$dir/watch.out"
+    drain_out="$dir/drain.out"
+    capture_file="$dir/pane.txt"
+    window="test:fm-idle-$phase"
+    printf 'idle prompt' > "$capture_file"
+    printf 'window=%s\nkind=ship\n' "$window" > "$state/idle-$phase.meta"
+    status_line="$phase: already reported"
+    printf '%s\n' "$status_line" > "$state/idle-$phase.status"
+    prime_status_seen "$state" "$state/idle-$phase.status"
+    key=$(printf '%s' "$window" | tr ':/.' '___')
+    pane_hash=$(hash_text "idle prompt")
+    printf '%s' "$pane_hash" > "$state/.hash-$key"
+    printf '1\n' > "$state/.count-$key"
+    PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
+      FM_FAKE_CREW_STATE='state: unknown · source: none · no current-state source available' \
+      FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" \
+      FM_STALE_ESCALATE_SECS=999 FM_POLL=1 FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 \
+      "$WATCH" > "$out" &
+    watcher=$!
+    polls=0
+    while [ "$polls" -lt 100 ] && [ ! -f "$state/.stale-$key" ] && is_live_non_zombie "$watcher"; do
+      sleep 0.1
+      polls=$((polls + 1))
+    done
+    [ "$(cat "$state/.stale-$key" 2>/dev/null || true)" = "$pane_hash" ] \
+      || fail "$phase idle fixture was never classified"
+    is_live_non_zombie "$watcher" || fail "$phase idle hash woke the watcher"
+    [ ! -s "$out" ] && [ ! -s "$state/.wake-queue" ] \
+      || fail "$phase idle hash replayed a reported status as a stale wake"
+    printf 'needs-decision [key=new]: action required\n' >> "$state/idle-$phase.status"
+    wait_for_exit "$watcher" 150 || fail "$phase idle suppressor hid a new decision"
+    grep -F "signal: $state/idle-$phase.status" "$out" >/dev/null \
+      || fail "$phase new decision did not print a signal wake"
+    FM_STATE_OVERRIDE="$state" "$DRAIN" > "$drain_out" || fail "drain after $phase decision failed"
+    grep "$(printf '\tsignal\t')" "$drain_out" | grep -F "idle-$phase.status" >/dev/null \
+      || fail "$phase new decision was not durably queued"
+  done
+  pass "reported idle hashes stay silent while new decisions still queue and wake"
 }
 
 test_check_output_is_queued() {
@@ -2831,6 +2897,12 @@ SH
   recorded_pid=$(cat "$dir/waiter.ready")
   [ "$recorded_pid" = "$waiter_pid" ] && [ "$(cat "$lock/pid" 2>/dev/null || true)" = "$waiter_pid" ] \
     || { kill "$waiter_pid" 2>/dev/null || true; fail "bounded acquire did not hand lock ownership to its caller"; }
+  FM_STATE_OVERRIDE="$state" bash -c '
+    . "$1"
+    if fm_lock_try_acquire "$2"; then fm_lock_release "$2"; exit 1; fi
+    [ "${FM_LOCK_HELD_PID:-}" = "$3" ]
+  ' _ "$ROOT/bin/fm-wake-lib.sh" "$lock" "$waiter_pid" \
+    || { kill "$waiter_pid" 2>/dev/null || true; fail "a contender took the lock from its live handed-off caller"; }
 
   : > "$dir/release-waiter"
   wait "$waiter_pid" || fail "caller could not release its handed-off lock"
@@ -3666,6 +3738,7 @@ SH
 }
 
 test_recovery_marker_framing
+test_branch_grant_requires_lock_acquisition
 test_self_held_lock_reclaims_instead_of_deadlocking
 test_lock_wait_returns_when_its_directory_is_removed
 test_subshell_lock_ownership_without_bashpid
@@ -3692,8 +3765,7 @@ test_owned_growth_still_annotates_turn_ended
 test_historical_annotation_skips_announced_status
 test_concurrent_append_and_drain
 test_signal_catchup_without_running_watcher
-test_stale_enqueue_before_suppressor
-test_not_working_stale_enqueue_before_suppressor
+test_idle_hash_does_not_replay_status_but_new_decision_wakes
 test_check_output_is_queued
 test_atomic_double_drain
 test_drain_dedupes_obvious_duplicates

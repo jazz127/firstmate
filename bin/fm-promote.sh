@@ -32,6 +32,11 @@
 # refuses a mode that cannot carry one (bin/fm-dod-lib.sh fm_base_branch_valid).
 # A recorded named base cannot be combined with --house-feature, which selects
 # its own durable base instead.
+# In a home with config/spawn-base-primary-checkout, which can start a scout from
+# the primary checkout's default branch, a publishing mode without a named base
+# on a project with an origin remote is told to return to origin's default
+# branch instead, so commits origin has never received cannot ride along in
+# what it publishes.
 # There is no --forge flag here: the binding comes from the registry, and for a
 # task record naming no project it is none. bin/fm-brief.sh takes --forge instead
 # because that script has no registry access at all, and bin/fm-spawn.sh checks
@@ -311,6 +316,16 @@ if [ -n "$BASE_BRANCH" ]; then
     echo "error: a scout with a recorded base branch cannot be promoted with --house-feature, which selects its own durable base" >&2
     exit 1
   }
+  PROMOTE_BRANCH_WORDS="Return to a clean $PROMOTE_BASE_WORDS, then create your branch"
+fi
+# A home with config/spawn-base-primary-checkout may have started this scout from
+# the primary checkout's default branch (bin/fm-spawn.sh's header owns that
+# rule), so a publishing mode is told which default branch to return to. Spawn
+# applies that rule only to a project with an origin remote, so a project
+# without one keeps the wording above.
+if [ -z "$BASE_BRANCH" ] && [ -z "$HOUSE_FEATURE" ] && fm_mode_publishes "$MODE" && [ -e "$CONFIG/spawn-base-primary-checkout" ] \
+  && [ -n "$PROMOTE_PROJECT" ] && git -C "$PROMOTE_PROJECT" remote get-url origin >/dev/null 2>&1; then
+  PROMOTE_BASE_WORDS="copy of origin's default branch rather than the primary checkout's, which can carry commits origin has never received"
   PROMOTE_BRANCH_WORDS="Return to a clean $PROMOTE_BASE_WORDS, then create your branch"
 fi
 # An unbound project keeps the exact wording it always had.

@@ -350,6 +350,11 @@
 #   worktree without fetching or resetting its base. An unreachable tracking
 #   source, unresolved branch, or non-clean worktree refuses a fresh spawn rather
 #   than risking a PR based on stale history or discarding local work.
+#   The default-off config/spawn-base-primary-checkout flag lets a local-only
+#   ship or scout without a named base start at the primary checkout's matching
+#   branch when it strictly contains the fetched tip. An explicit runtime
+#   branch keeps its tracking source. Publishing and divergent
+#   branches keep the fetched tip. See docs/configuration.md for the opt-in.
 #   A slot whose only deviation is a stale submodule gitlink is refused by that
 #   same clean check, but is reported as a stale checkout naming each submodule
 #   and both pins; nothing is converged or removed, and no remedy is suggested.
@@ -4452,8 +4457,32 @@ spawn_worktree_has_origin_config() { # <worktree>
   return 1
 }
 
-freshen_spawn_worktree_base() { # <worktree> [<base-branch>]
-  local worktree=$1 base=${2:-} default target expected actual status remote fetch_refspec branch
+# The opt-in half of the base rule the header owns: return 0 and set
+# SPAWN_PRIMARY_BASE_REV when <project>'s own <default> should be this fresh
+# slot's base instead of origin's tip <origin-rev>. A pool slot shares the
+# primary checkout's object store, so reading that commit fetches nothing, and a
+# commit the slot cannot read keeps origin's tip.
+SPAWN_PRIMARY_BASE_REV=
+spawn_base_from_primary_checkout() { # <worktree> <project> <default> <origin-rev> <mode>
+  local worktree=$1 project=$2 default=$3 origin_rev=$4 mode=$5 primary_rev ahead behind
+  SPAWN_PRIMARY_BASE_REV=
+  if [ -z "$project" ] || fm_mode_publishes "$mode"; then
+    return 1
+  fi
+  primary_rev=$(git -C "$project" rev-parse --verify --quiet "refs/heads/$default^{commit}" 2>/dev/null) || return 1
+  ahead=$(git -C "$worktree" rev-list --count "$origin_rev..$primary_rev" 2>/dev/null) || return 1
+  behind=$(git -C "$worktree" rev-list --count "$primary_rev..$origin_rev" 2>/dev/null) || return 1
+  [ "$ahead" -gt 0 ] || return 1
+  if [ "$behind" -eq 0 ]; then
+    SPAWN_PRIMARY_BASE_REV=$primary_rev
+    return 0
+  fi
+  echo "note: pooled worktree '$worktree': $default in the primary checkout has diverged from origin/$default (ahead by $ahead, behind by $behind); starting from origin's tip" >&2
+  return 1
+}
+
+freshen_spawn_worktree_base() { # <worktree> <base-branch> <project> <mode>
+  local worktree=$1 base=${2:-} project=${3:-} mode=${4:-} default target expected reset_ref actual status remote fetch_refspec branch
   if fm_treehouse_pool_slot "$PROJ_ABS" "$worktree"; then
     branch=$(git -C "$worktree" symbolic-ref -q --short HEAD 2>/dev/null) && {
       echo "error: pooled worktree '$worktree' has branch '$branch' checked out; refusing to move its commits while refreshing the base" >&2
@@ -4524,7 +4553,15 @@ freshen_spawn_worktree_base() { # <worktree> [<base-branch>]
     echo "error: '$target' is not a commit for pooled worktree '$worktree'; refusing to launch from a potentially stale base" >&2
     return 1
   }
-  if ! git -C "$worktree" reset --hard "$target" >/dev/null; then
+  reset_ref=$target
+  if [ -z "$base" ] && ! firstmate_runtime_branch_is_configured "$worktree" \
+    && [ -e "$CONFIG/spawn-base-primary-checkout" ] \
+    && spawn_base_from_primary_checkout "$worktree" "$project" "$default" "$expected" "$mode"; then
+    target="$default in the primary checkout"
+    expected=$SPAWN_PRIMARY_BASE_REV
+    reset_ref=$expected
+  fi
+  if ! git -C "$worktree" reset --hard "$reset_ref" >/dev/null; then
     echo "error: could not reset pooled worktree '$worktree' to '$target'; refusing to launch from a potentially stale base" >&2
     return 1
   fi
@@ -5179,7 +5216,7 @@ EOF
       [ -n "$WT" ] || { echo "error: treehouse get --lease did not report a worktree for $ID" >&2; exit 1; }
       validate_spawn_worktree "treehouse get --lease" "$WT (leased to $ID; once inspected, release it with 'treehouse return --force $WT' from $PROJ_ABS)"
       T3CODE_LEASED=1
-      freshen_spawn_worktree_base "$WT" "$BASE_BRANCH" || {
+      freshen_spawn_worktree_base "$WT" "$BASE_BRANCH" "$PROJ_ABS" "$MODE" || {
         if [ "$?" -eq 2 ]; then
           T3CODE_LEASED=0
           echo "error: $WT stays leased to $ID; once inspected, release it with 'treehouse return --force $WT' from $PROJ_ABS" >&2
@@ -5880,7 +5917,7 @@ if [ "$RELAUNCH" -eq 0 ] && [ "$KIND" != secondmate ] && [ "$BACKEND" != t3code 
   if [ "$HARNESS" = polytoken ] && [ "$RAW_LAUNCH" -eq 0 ]; then
     fm_polytoken_require_wiring_free "$WT" || exit 1
   fi
-  freshen_spawn_worktree_base "$WT" "$BASE_BRANCH" || exit 1
+  freshen_spawn_worktree_base "$WT" "$BASE_BRANCH" "$PROJ_ABS" "$MODE" || exit 1
 fi
 
 # Re-assert the durable task copy after either treehouse acquisition or endpoint

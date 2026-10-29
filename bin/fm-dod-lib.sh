@@ -9,7 +9,7 @@
 # receives. Both paths must hand the worker the same contract: a promoted
 # no-mistakes worker that never received the ask-user escalation rule or the
 # `--yes` ban is the exact delivery hole this single owner exists to close.
-# fm_dod_block <no-mistakes|direct-PR|local-only> <task-id> [branch] [<forge>] [<base>] [<consent>] [<house-feature PR base>]
+# fm_dod_block <no-mistakes|direct-PR|local-only> <task-id> [branch] [<forge>] [<base>] [<consent>] [<house-feature PR base>] [<pr>]
 # prints the block on stdout with no trailing blank line. The caller validates the
 # mode; an unknown mode is refused rather than silently rendered as the pipeline
 # contract.
@@ -23,6 +23,13 @@
 # --base-branch; empty means the repository default. A named base is the branch
 # the worker starts from, never pushes to, and targets with its pull request, and
 # fm_base_branch_valid refuses it where no pull request carries the work.
+# The optional eighth argument is the task's PR-text posture, auto|manual,
+# defaulting to auto: `manual` is bin/fm-brief.sh --pr manual, the registry's
+# `pr=manual` token (bin/fm-project-mode.sh owns what the binding means). It
+# renders a no-mistakes block whose worker writes the PR title and body itself,
+# and appends " pr=manual" to the Delivery contract line, which bin/fm-spawn.sh
+# checks against the registry like the forge. fm_pr_text_valid refuses it on any
+# other mode or forge.
 # The optional sixth argument is the task's recorded upstream consent for a
 # firstmate-repository contribution (bin/fm-role-lib.sh owns the boundary): a
 # captain-approved <host>/<owner>/<repo> publication scope for this one task,
@@ -208,6 +215,31 @@ fm_forge_valid_for_mode() {  # <forge> <mode> <caller>
   fi
   if [ "$forge" = external ] && [ "$mode" != direct-PR ]; then
     echo "error: $caller: forge=external ships direct-PR only for now; the pipeline's push, pr, and ci steps would push to the shared origin" >&2
+    return 1
+  fi
+  return 0
+}
+
+# Closed-set gate for the PR-text posture, shared like fm_forge_valid_for_mode.
+# Only a no-mistakes ship takes manual: direct-PR already leaves the text to the
+# worker and local-only opens no PR. A bound forge is refused too: gerrit has no
+# pull request to describe, external uploads through a review tool, and the
+# forgejo worker's tea commands are not written into this block yet.
+fm_pr_text_valid() {  # <pr> <mode> <forge> <caller>
+  local pr=$1 mode=$2 forge=$3 caller=$4
+  case "$pr" in
+    auto) return 0 ;;
+    manual) ;;
+    *)
+      echo "error: $caller: unknown PR-text posture '$pr' (expected auto or manual)" >&2
+      return 1 ;;
+  esac
+  if [ "$mode" != no-mistakes ]; then
+    echo "error: $caller: pr=manual ships mode=no-mistakes only - direct-PR already leaves the PR text to the worker and local-only opens no PR" >&2
+    return 1
+  fi
+  if [ "$forge" != none ]; then
+    echo "error: $caller: pr=manual ships on a GitHub-style forge with no forge binding only, not forge=$forge" >&2
     return 1
   fi
   return 0
@@ -956,12 +988,16 @@ EOF
 # the pipeline, what `--intent` may carry, and the two firstmate-specific rules.
 # Event waits must not park unsupported PR forges without a feedback source.
 # Gerrit can wait on pipeline events because its forge-facing CI step is skipped.
-fm_nm_driving_block() {  # <forge>
-  local pr_return_line='' pr_reattach_clause=';' drive_block event_block wait_cfg script_dir
-  if [ "$1" != gerrit ]; then
+fm_nm_driving_block() {  # <forge|no-ci>
+  local pr_return_line='' pr_reattach_clause=';' drive_block event_block wait_cfg script_dir ci_skip_instruction
+  if [ "$1" != gerrit ] && [ "$1" != no-ci ]; then
     pr_return_line="For a base with CI, only a drive call's return reports the green PR: \`no-mistakes axi status\` shows progress but never reports \`checks-passed\` while the ci step is still monitoring the PR for merge, so never wait on a status poll for the next gate or outcome.
 "
     pr_reattach_clause="; for a base with CI, once checks are green it returns \`checks-passed\` immediately, and"
+  fi
+  ci_skip_instruction="The fork's \`house\` base has a real check workflow; do not skip CI there or on any other base with checks."
+  if [ "$1" = no-ci ]; then
+    ci_skip_instruction="This manual PR contract skips the pipeline's PR and CI steps; the worker must still wait for the published PR's checks."
   fi
   # config/wait-no-turns selects the foreground drive. Absent, the text matches
   # the backgrounded drive a home had before that flag.
@@ -1005,7 +1041,7 @@ $drive_block"
 You drive no-mistakes by responding to its gates, not by implementing fixes.
 Follow the guidance no-mistakes itself provides for the mechanics: it loads when you invoke /no-mistakes, and \`no-mistakes axi run --help\` plus the \`help\` lines in each \`axi\` response are authoritative and version-matched to the installed binary.
 When a run targets a base with no configured check workflows, first verify that the base really has no checks, then start a new run with \`--skip ci\` so its CI monitor cannot wait forever.
-The fork's \`house\` base has a real check workflow; do not skip CI there or on any other base with checks.
+$ci_skip_instruction
 Reattach without flags as usual.
 When starting no-mistakes, pass \`--intent\` as only this brief's \`## Captain's intent\` subsection body, not its heading, plus any later words the captain actually said.
 Preserve the actual words without adding speaker labels or direct address; the subsection heading supplies provenance outside the pipeline input.
@@ -1126,8 +1162,50 @@ The later upstream PR publication must use the same current receipt at its forge
 EOF
 }
 
-fm_dod_block() {  # <mode> <task-id> [branch] [<forge>] [<base>] [<consent>] [<house-feature PR base>]
-  local mode=$1 id=$2 forge=${4:-none} base=${5:-} consent=${6:-} house_pr_base=${7:-}
+# The no-mistakes block for a pr=manual project, where the worker owns the PR
+# title and body. The pipeline's pr step would rewrite them on every validated
+# push, so the run skips `pr` and, with no PR for it to watch, `ci`; push stays,
+# so the validated head reaches the forge and the ready report's named-head
+# check holds unchanged. The worker then opens or updates the PR and watches its
+# checks itself. Shaped like the gerrit block: skip flags, the shared driving
+# block, then what to do once the run passes. Callers are fm_dod_block only.
+fm_dod_manual_pr_block() {  # <task-id> <branch> <forge-cli> <draft-check> <contract-suffix> <nm-base> <pr-base> <house-instructions>
+  local id=$1 branch=$2 forge_cli=$3 draft_check=$4 suffix=$5 nm_base=$6 pr_base=$7 base_instruction=${8:-}
+  cat <<EOF
+# Definition of done
+Delivery contract: mode=no-mistakes$suffix pr=manual
+Ship branch: $branch
+$base_instruction
+This project's pull-request text is written by hand: the pipeline's \`pr\` step would rewrite the title and body you write on every validated push, so **no-mistakes runs here as a validation pass that pushes the branch**, and you then open the PR yourself.
+Pass \`--skip pr,ci\` on every \`no-mistakes axi run\` for this task, and skip nothing else: \`review\`, \`test\`, \`document\`, \`lint\`, and \`push\` still run, and \`ci\` has no pipeline-opened PR to watch.
+The task is complete only when committed on your branch.
+When you believe it is complete, append \`done [at=<epoch>]: {summary}\` to the status file and stop.
+Firstmate will then instruct you to run /no-mistakes to validate and push.
+That first \`done:\` is the handoff that starts the pipeline, which owns the push; it is not a request to push from this copy.
+${nm_base}
+EOF
+  fm_scratch_preflight_block
+  fm_nm_driving_block no-ci
+  fm_pr_body_preflight_block "$id"
+  fm_upstream_pr_preflight_block "$id"
+  fm_upstream_pr_publish_block "$id"
+  cat <<EOF
+
+When the run's outcome is passed, passed-with-skips, or passed-with-override, write the PR title and body yourself and publish them with \`$forge_cli\`:
+1. Write the PR body to a file of your own under the scratch location rule 2 names, and verify it with \`head\` before using it. Match the title and body style of the project's recent merged PRs and its contribution guide, in plain English for a reviewer who lacks your context, with no direct address, and keep any issue reference the captain's intent names.
+2. Find the PR for your branch first (\`$forge_cli pr list --head <branch>\`). If one exists, update its title and body with \`$forge_cli pr edit <number> --title '<title>' --body-file <path>\`. Otherwise open it from the branch the run pushed through the applicable publication path above, ready for review, not a draft$pr_base.
+3. Never post a comment or review on the PR or on any other thread, and never rely on the pipeline for the PR text: it is yours on every push.
+4. Wait for the PR's checks with \`$forge_cli pr checks <number> --watch\`, under the ten-minute command limit as the driving block bounds its waits, and run the same command again whenever it returns with checks still pending. \`$forge_cli pr checks\` exits 1 when the project reports no checks at all: that is not a failed check and needs no fix. If a check fails, commit the fix, drive a new run with the same \`--skip pr,ci\`, and update the PR text if the change affects it.
+Then read the PR back from the forge and confirm it is not a draft $draft_check
+A draft cannot be merged, so a done report on one leaves the merge unasked.
+Then append \`done [at=<epoch>]: PR {url} checks green\` and stop. You are finished.
+That CI-ready \`done:\` is accepted only when this copy's HEAD - your latest commit - is one the /no-mistakes run pushed, so commit nothing after the last run; the check tests that commit, not merely that a branch moved.
+If you deliberately keep the PR a draft, append \`paused [at=<epoch>]: {why the draft is held}\` instead of done.
+EOF
+}
+
+fm_dod_block() {  # <mode> <task-id> [branch] [<forge>] [<base>] [<consent>] [<house-feature PR base>] [<pr>]
+  local mode=$1 id=$2 forge=${4:-none} base=${5:-} consent=${6:-} house_pr_base=${7:-} pr=${8:-auto}
   local branch=${3:-fm/$id} pr_base='' nm_base='' base_q contract_forge='' contract_consent='' forge_cli=gh-axi draft_check adapter
   local base_instruction=
   if [ -n "$house_pr_base" ]; then
@@ -1148,6 +1226,7 @@ Then append \`done [at=<epoch>]: integration PR {url} open into house\` and stop
   fi
   fm_forge_valid_for_mode "$forge" "$mode" fm_dod_block || return 1
   fm_base_branch_valid "$base" "$mode" "$forge" fm_dod_block || return 1
+  fm_pr_text_valid "$pr" "$mode" "$forge" fm_dod_block || return 1
   if [ -n "$consent" ]; then
     if [ "$mode" = local-only ]; then
       echo "error: fm_dod_block: upstream consent authorizes a publication that local-only never performs; drop it" >&2
@@ -1284,6 +1363,13 @@ EOF
       fm_scratch_preflight_block
       ;;
     no-mistakes:*)
+      if [ "$pr" = manual ]; then
+        [ -z "$nm_base" ] || nm_base="This task's base branch is \`$base\`, not the repository default: pass \`--base-branch $base_q\` on every \`no-mistakes axi run\` that starts a run, so the pipeline updates against that branch, and open the PR against it with \`--base $base_q\`.
+"
+        fm_dod_manual_pr_block "$id" "$branch" "$forge_cli" "$draft_check" "$contract_forge$contract_consent" "$nm_base" "$pr_base" "$base_instruction"
+        fm_validation_evidence_block
+        return
+      fi
       cat <<EOF
 # Definition of done
 Delivery contract: mode=no-mistakes$contract_forge$contract_consent
@@ -1316,6 +1402,10 @@ EOF
       echo "error: fm_dod_block: unknown delivery mode '$mode'" >&2
       return 1 ;;
   esac
+  fm_validation_evidence_block
+}
+
+fm_validation_evidence_block() {
   cat <<'EOF'
 
 Evidence required before reporting a fix as validated:

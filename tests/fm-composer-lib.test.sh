@@ -266,11 +266,16 @@ test_matrix_claude_arrow_statusline_footer() {
 test_matrix_herdr_titled_claude_composer() {
   # Synthetic replay of the screen shape reported in upstream issue #6127.
   # The titled opening rule and plain closing rule enclose Claude's bare input.
-  local head foot screen typed content claude_working out
+  local head foot screen typed content claude_working pi_idle out
   head=$'────────────────────────── Firstmate ──\n❯'
   foot=$'\n───────────────────────────────────────\n  Opus 5 (1M context) │ firstmate │ main │ fleet idle'
   claude_working=$(printf 'claude\tworking')
   screen="$head$foot"
+  pi_idle=$(printf 'pi\tidle')
+  assert_screen "non-ASCII Herdr title defers" unknown "$CAPS_STYLED" \
+    "${screen/Firstmate/Fïrstmate}" '' "$claude_working"
+  assert_screen "Herdr title cannot prove a blank Pi composer" unknown "$CAPS_STYLED" \
+    "${screen/❯/}" '' "$pi_idle"
   assert_screen "idle Claude under a titled Herdr rule" empty "$CAPS_STYLED" "$screen" '' "$claude_working"
   typed="${head} Firstmate instruction waiting${foot}"
   assert_screen "pending Claude doorbell under a titled Herdr rule" pending "$CAPS_STYLED" "$typed" '' "$claude_working"
@@ -285,6 +290,76 @@ test_matrix_herdr_titled_claude_composer() {
     $'────────────────────────── Firstmate ──\n❯\n  Opus 5 (1M context)' '' "$claude_working")
   [ "$out" != empty ] || fail "an unclosed titled rule must not authorize injection"
   pass "matrix: titled Herdr rules preserve Claude's empty and pending composer verdicts"
+}
+
+test_matrix_herdr_titled_claude_wrapping_and_footer() {
+  local head close footer idle typed wrapped screen caps want content identity locale
+  head=$'────────────────────────── Firstmate ──\n❯'
+  close=$'\n───────────────────────────────────────'
+  footer=$'\n  → repo git:(main) | Opus 5\n  ⏵⏵ bypass permissions on'
+  identity=$(printf 'claude\tidle')
+  idle="$head$close"
+  typed="$head message$close"
+  wrapped="$head message"$'\ncontinuation row'"$close"
+  for caps in "$CAPS_STYLED" "$CAPS_STYLED_NOID" "$CAPS_PLAIN"; do
+    want=pending
+    [ "$caps" != "$CAPS_PLAIN" ] || want=unknown
+    assert_screen "wrapped titled Claude draft" "$want" "$caps" "$wrapped" '' "$identity"
+    assert_screen "idle titled Claude under arrow footer" empty "$caps" "$idle$footer" '' "$identity"
+    assert_screen "typed titled Claude under arrow footer" "$want" "$caps" "$typed$footer" '' "$identity"
+    assert_screen "wrapped titled Claude under arrow footer" "$want" "$caps" "$wrapped$footer" '' "$identity"
+    for locale in "${LC_ALL:-${LANG:-C}}" C; do
+      content=$(LC_ALL="$locale" fm_composer_extract_selected_content "$caps" "$idle$footer") \
+        || fail "idle titled Claude content must extract under $locale"
+      [ -z "$content" ] || fail "idle titled Claude extracted footer under $locale: '$content'"
+      for screen in "$wrapped" "$wrapped$footer"; do
+        content=$(LC_ALL="$locale" fm_composer_extract_selected_content "$caps" "$screen") \
+          || fail "wrapped titled Claude content must extract under $locale"
+        [ "$content" = 'message continuation row' ] \
+          || fail "wrapped titled Claude must retain its whole draft under $locale: '$content'"
+      done
+    done
+  done
+  assert_screen "wrapped titled Claude with cursor on continuation" pending "$CAPS_TMUX" "$wrapped" 2 "$identity"
+  assert_screen "titled glyph envelope cannot prove Pi identity" unknown "$CAPS_STYLED" "$idle" '' $'pi\tidle'
+  for screen in "${wrapped/Firstmate/Fïrstmate}" "${wrapped/Firstmate/Firstmates}"; do
+    assert_screen "unproven title cannot rescue wrapped draft" unknown "$CAPS_STYLED" "$screen" '' "$identity"
+  done
+  pass "matrix: ASCII titled Claude envelopes preserve wrapped drafts and demote arrow footers"
+}
+
+test_matrix_rejected_titled_composer_retires_prior_pair() {
+  local title close prior rejected screen caps identity locale content
+  title='────────────────────────── Firstmate ──'
+  close='───────────────────────────────────────'
+  for prior in $'────────\nold output\n────────\n' \
+    $'────────\n❯ old draft\n────────\n'; do
+    for rejected in "${title/Firstmate/Fïrstmate}"$'\n❯\n'"$close" \
+      "${title/Firstmate/Firstmates}"$'\n❯\n'"$close" \
+      "$title"$'\n\n'"$close" \
+      "${title/Firstmate/Fïrstmate}"; do
+      screen="$prior$rejected"
+      for caps in "$CAPS_STYLED" "$CAPS_STYLED_NOID" "$CAPS_PLAIN"; do
+        for identity in '' $'claude\tidle' $'pi\tidle'; do
+          assert_screen "rejected titled composer supersedes transcript pair" unknown \
+            "$caps" "$screen" '' "$identity"
+        done
+        for locale in "${LC_ALL:-${LANG:-C}}" C; do
+          if content=$(LC_ALL="$locale" fm_composer_extract_selected_content "$caps" "$screen"); then
+            fail "rejected titled composer must not extract prior input under $locale: '$content'"
+          fi
+        done
+      done
+    done
+    screen="$prior$title"$'\n❯ message\ncontinuation row\n'"$close"
+    assert_screen "valid titled composer supersedes transcript pair" pending \
+      "$CAPS_STYLED" "$screen" '' $'claude\tidle'
+    content=$(fm_composer_extract_selected_content "$CAPS_STYLED" "$screen") \
+      || fail "valid replacement titled composer must extract its draft"
+    [ "$content" = 'message continuation row' ] \
+      || fail "valid replacement titled composer extracted stale content: '$content'"
+  done
+  pass "matrix: rejected titled composers cannot inherit transcript pair proof"
 }
 
 test_composer_footer_demotion_needs_a_proven_pair() {
@@ -1845,6 +1920,8 @@ test_matrix_claude_bare_nbsp_row
 test_matrix_claude_named_session_titled_rule
 test_matrix_claude_arrow_statusline_footer
 test_matrix_herdr_titled_claude_composer
+test_matrix_herdr_titled_claude_wrapping_and_footer
+test_matrix_rejected_titled_composer_retires_prior_pair
 test_composer_footer_demotion_needs_a_proven_pair
 test_composer_footer_zone_is_shape_independent
 test_composer_footer_zone_refuses_rather_than_allows

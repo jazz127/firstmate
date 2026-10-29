@@ -875,15 +875,12 @@ fm_composer_classify_content() {  # <bordered> <content> [idle_re] [idle_case] [
 # exact positive proof they require (`empty`), so unrecognized future verdicts
 # fail safe by default.
 
-# _fm_composer_pi_separator_row: a solid separator of at least 8 `─` glyphs,
-# or a titled rule with that prefix and a closing `──` suffix. Claude
-# under Herdr uses the titled form above its bare `❯` row and a solid rule
-# below it. The width floor uses literal glyphs in every locale. Both rules
-# must be seen before the row becomes a proven composer. A working Pi labels
-# its top rule with a spinner; the verdict admits that rule only under native
-# `working` status.
+# _fm_composer_pi_separator_row: a solid pi separator - nothing but `─`, at
+# least 8 columns wide. The width floor is a literal substring test so it is
+# byte-exact in every locale. A working Pi labels its top rule with a spinner;
+# the verdict admits that rule only under native `working` status.
 _fm_composer_pi_separator_row() {  # <trimmed-row>
-  local row=$1 spinner prefix suffix title
+  local row=$1 spinner
   FM_COMPOSER_PI_ROW_LABELLED=0
   [ -n "$row" ] || return 1
   case "$row" in
@@ -895,18 +892,10 @@ _fm_composer_pi_separator_row() {  # <trimmed-row>
       FM_COMPOSER_PI_ROW_LABELLED=1
       ;;
   esac
-  if [ -z "${row//─/}" ]; then
-    case "$row" in *────────*) return 0 ;; esac
-    return 1
-  fi
-  prefix=${row%% *}
-  suffix=${row##* }
-  title=${row#"$prefix "}
-  title=${title%" $suffix"}
-  [ -z "${prefix//─/}" ] && [ -z "${suffix//─/}" ] \
-    && [ -n "$title" ] && [ "$title" != "$row" ] || return 1
-  case "$prefix" in *────────*) ;; *) return 1 ;; esac
-  case "$suffix" in *──*) return 0 ;; esac
+  [ -z "${row//─/}" ] || return 1
+  case "$row" in
+    *────────*) return 0 ;;
+  esac
   return 1
 }
 
@@ -948,8 +937,7 @@ EOF
 #
 # This is deliberately NOT a relaxation of _fm_composer_pi_separator_row, and
 # the two must not be merged: that predicate also feeds the pi identity
-# conjunction, so it stays strictly dashes-only. This one has the single
-# consumer _fm_composer_bare_rule_sandwich.
+# conjunction, so it stays strictly dashes-only.
 #
 # The row must OPEN with the same 8-column dash run the strict separator
 # requires. Width is proven by comparing canonical space strings, never by
@@ -1023,7 +1011,7 @@ _fm_composer_scan_screen() {  # <plain-screen> <cursor-or-empty> [extract-wrap] 
   FM_COMPOSER_SCAN_PI_GLYPH=
   FM_COMPOSER_SCAN_LEFTBAR_GLYPH_ROW=-1
   FM_COMPOSER_SCAN_LEFTBAR_GLYPH=
-  local leftbar_start=-1 pi_open=-1 pi_open_labelled=0 pi_lines=0 pi_max
+  local leftbar_start=-1 pi_open=-1 pi_open_rule='' pi_open_labelled=0 pi_lines=0 pi_max
   local probe row_glyph row_glyph_row
   local box_glyph_row=-1 box_glyph='' pi_glyph_row=-1 pi_glyph=''
   local pi_status_rows='' status_row footer_run=0 footer_row=-1 footer_close=-1
@@ -1068,10 +1056,18 @@ _fm_composer_scan_screen() {  # <plain-screen> <cursor-or-empty> [extract-wrap] 
         row_glyph_row=$row
       fi
     fi
-    # Pi separator rows: a solid `─` rule at least 8 columns wide. A separator
-    # closes the preceding candidate and immediately opens the next, so an
-    # earlier transcript rule can never outrank the live bottom composer pair.
+    # Each solid separator closes the preceding candidate and opens the next.
+    # Every newer rule retires earlier pair proof before validation, including
+    # a titled candidate that later fails width, title, or glyph proof, so an
+    # earlier transcript pair cannot stand in for the live composer.
     if _fm_composer_pi_separator_row "$trimmed"; then
+      FM_COMPOSER_SCAN_PI_PAIR_FOUND=0
+      FM_COMPOSER_SCAN_PI_PAIR_VALID=0
+      FM_COMPOSER_SCAN_PI_OPEN=-1
+      FM_COMPOSER_SCAN_PI_CLOSE=-1
+      FM_COMPOSER_SCAN_PI_OPEN_LABELLED=0
+      FM_COMPOSER_SCAN_PI_GLYPH_ROW=-1
+      FM_COMPOSER_SCAN_PI_GLYPH=
       FM_COMPOSER_SCAN_PI_LAST_SEPARATOR=$row
       footer_run=1
       footer_row=-1
@@ -1085,16 +1081,21 @@ _fm_composer_scan_screen() {  # <plain-screen> <cursor-or-empty> [extract-wrap] 
         FM_COMPOSER_SCAN_PI_COMPACT_OPEN=$top
         FM_COMPOSER_SCAN_PI_COMPACT_CLOSE=$row
       fi
-      if [ "$pi_open" -ge 0 ]; then
+      if [ "$pi_open" -ge 0 ] \
+         && { [ -z "$pi_open_rule" ] \
+              || { [ "$pi_glyph_row" -ge 0 ] \
+                   && _fm_composer_titled_rule_row "$pi_open_rule" "${trimmed//─/ }"; }; }; then
         FM_COMPOSER_SCAN_PI_PAIR_FOUND=1
         FM_COMPOSER_SCAN_PI_OPEN=$pi_open
         FM_COMPOSER_SCAN_PI_CLOSE=$row
         FM_COMPOSER_SCAN_PI_OPEN_LABELLED=$pi_open_labelled
+        # Titled envelopes support bare-glyph selection and footer demotion,
+        # but only a strict separator pair may prove Pi identity.
         # A pair must ENCLOSE at least one row to hold an input row at all:
         # two adjacent rules are a divider, not a composer, and a zero-height
         # region trivially satisfies every content check, which read `empty`
         # and authorized injection into a region with nowhere to type.
-        if [ "$pi_lines" -ge 1 ] && [ "$pi_lines" -le "$pi_max" ]; then
+        if [ -z "$pi_open_rule" ] && [ "$pi_lines" -ge 1 ] && [ "$pi_lines" -le "$pi_max" ]; then
           FM_COMPOSER_SCAN_PI_PAIR_VALID=1
         else
           FM_COMPOSER_SCAN_PI_PAIR_VALID=0
@@ -1103,11 +1104,29 @@ _fm_composer_scan_screen() {  # <plain-screen> <cursor-or-empty> [extract-wrap] 
         FM_COMPOSER_SCAN_PI_GLYPH=$pi_glyph
       fi
       pi_open=$row
+      pi_open_rule=''
       pi_open_labelled=$FM_COMPOSER_PI_ROW_LABELLED
       pi_lines=0
       pi_glyph_row=-1
       pi_glyph=''
     else
+      case "$trimmed" in
+        ────────*)
+          FM_COMPOSER_SCAN_PI_PAIR_FOUND=0
+          FM_COMPOSER_SCAN_PI_PAIR_VALID=0
+          FM_COMPOSER_SCAN_PI_OPEN=-1
+          FM_COMPOSER_SCAN_PI_CLOSE=-1
+          FM_COMPOSER_SCAN_PI_OPEN_LABELLED=0
+          FM_COMPOSER_SCAN_PI_GLYPH_ROW=-1
+          FM_COMPOSER_SCAN_PI_GLYPH=
+          pi_open=$row
+          pi_open_rule=$trimmed
+          pi_open_labelled=0
+          pi_lines=0
+          pi_glyph_row=-1
+          pi_glyph=''
+          ;;
+      esac
       if [ "$pi_open" -ge 0 ]; then
         pi_lines=$((pi_lines + 1))
         if [ "$pi_glyph_row" -lt 0 ] && [ "$row_glyph_row" -ge 0 ]; then
@@ -1995,28 +2014,6 @@ EOF
   return 0
 }
 
-# _fm_composer_bare_rule_sandwich: 0 when bare agent-glyph <row> sits in its
-# own titled composer: a titled rule directly above it and the screen's only
-# unmatched separator directly below it, which is that composer's closing rule.
-#
-# The cursorless staleness rule reads an unmatched separator BELOW a candidate
-# as proof the candidate is scrollback. A titled top rule never opens the
-# separator pair, so the composer's own closing rule becomes that unmatched
-# separator and a genuinely idle composer read `unknown`. Adjacency on BOTH
-# edges keeps the staleness rule intact everywhere else: a glyph stranded in
-# scrollback has transcript rows, not its own rules, around it.
-_fm_composer_bare_rule_sandwich() {  # <plain-screen> <row>
-  local plain=$1 row=$2 above below
-  [ "$row" -ge 1 ] || return 1
-  [ "$FM_COMPOSER_SCAN_PI_LAST_SEPARATOR" -eq "$((row + 1))" ] || return 1
-  below=$(_fm_composer_screen_row "$((row + 1))" "$plain")
-  fm_composer_normalize_trim_var below
-  _fm_composer_pi_separator_row "$below" || return 1
-  above=$(_fm_composer_screen_row "$((row - 1))" "$plain")
-  fm_composer_normalize_trim_var above
-  _fm_composer_titled_rule_row "$above" "${below//─/ }"
-}
-
 # _fm_composer_select_cursorless <plain> [pi-compact]: <pi-compact> is 1 only
 # when THIS call's caps carry pi-compact=1; it defaults to 0.
 _fm_composer_select_cursorless() {
@@ -2082,14 +2079,8 @@ _fm_composer_select_cursorless() {
   fi
   if [ "$FM_COMPOSER_SCAN_PI_PAIR_FOUND" = 0 ] \
      && [ "$FM_COMPOSER_SCAN_PI_LAST_SEPARATOR" -gt "$generic" ]; then
-    # Spare only a bare glyph inside its own titled composer rules; see
-    # _fm_composer_bare_rule_sandwich for why that shape is not scrollback.
-    if ! { [ "$FM_COMPOSER_SELECTED_KIND" = bare ] \
-           && [ "$generic" = "$FM_COMPOSER_SCAN_BARE_ROW" ] \
-           && _fm_composer_bare_rule_sandwich "$plain" "$FM_COMPOSER_SCAN_BARE_ROW"; }; then
-      FM_COMPOSER_SELECTED_KIND=
-      return 1
-    fi
+    FM_COMPOSER_SELECTED_KIND=
+    return 1
   fi
   # Pi's footer status row is furniture only under the pi pair it hangs from;
   # below any other selected shape it is a dead-shell row like any other.

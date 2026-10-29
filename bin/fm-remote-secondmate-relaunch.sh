@@ -2,7 +2,7 @@
 # Relaunch a REMOTE secondmate onto a new harness, model, or effort, then
 # republish this parent's own route record to match what the host confirmed.
 #
-# Usage: fm-remote-secondmate-relaunch.sh <id> <harness> <model|default|-> <effort|default|->
+# Usage: fm-remote-secondmate-relaunch.sh <id> <harness> <model|default|-> <effort|default|-> [resume]
 #
 # bin/fm-remote-secondmate-control.sh's relaunch verb runs entirely on the
 # secondmate's own host and can only rewrite that host's own endpoint record;
@@ -33,7 +33,9 @@ STATE="${FM_STATE_OVERRIDE:-$FM_HOME/state}"
 die() { printf 'error: %s\n' "$1" >&2; exit 1; }
 usage() { sed -n '2,4p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 
-[ "$#" -eq 4 ] || usage
+[ "$#" -ge 4 ] && [ "$#" -le 5 ] || usage
+VERB=${5:-relaunch}
+case "$VERB" in relaunch|resume) ;; *) usage ;; esac
 ID=$1
 HARNESS=$2
 MODEL=$3
@@ -47,7 +49,7 @@ REMOTE_HOST=$(fm_meta_get "$META" remote_host)
   || die "task $ID is not a remotely placed secondmate; use bin/fm-control.sh $ID relaunch instead"
 
 RELAUNCH_OUT=$("$SCRIPT_DIR/fm-on.sh" "$ID" fm-remote-secondmate-control.sh \
-  relaunch "$ID" "$HARNESS" "$MODEL" "$EFFORT" </dev/null 2>&1) || {
+  "$VERB" "$ID" "$HARNESS" "$MODEL" "$EFFORT" </dev/null 2>&1) || {
   rc=$?
   printf '%s\n' "$RELAUNCH_OUT" >&2
   exit "$rc"

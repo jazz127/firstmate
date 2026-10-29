@@ -63,6 +63,9 @@ FM_SM_LIVE_LIB_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 # shellcheck source=bin/fm-timeout-lib.sh
 . "$FM_SM_LIVE_LIB_DIR/fm-timeout-lib.sh"
 
+# shellcheck source=bin/fm-secondmate-registry-lib.sh
+. "$FM_SM_LIVE_LIB_DIR/fm-secondmate-registry-lib.sh"
+
 # Per-task probe+kill+relaunch serialization. A busy lock means another
 # supervisor (the other sweep, or a racing tick) is mid-episode on this mate;
 # callers skip and let that episode finish rather than probe a moving target.
@@ -142,6 +145,11 @@ fm_secondmate_liveness_probe() {  # <meta> <id> <full|poll>
   FM_SM_LIVE_STATUS=skipped FM_SM_LIVE_STATE=unknown FM_SM_LIVE_KILL=0 FM_SM_LIVE_RESUME=0
   FM_SM_LIVE_CAUSE='' FM_SM_LIVE_WHERE='' FM_SM_LIVE_REASON='' FM_SM_LIVE_LINE=''
   local window harness remote_host remote_rc out agent_state readiness_reason route_out remote_backend
+  if fm_secondmate_is_paused "$STATE" "$id"; then
+    FM_SM_LIVE_STATUS=silent
+    FM_SM_LIVE_REASON="intentionally paused; use fm-secondmate-restart.sh --resume $id"
+    return 0
+  fi
   window=$(fm_meta_get "$meta" window)
   [ -n "$window" ] || { FM_SM_LIVE_STATUS=silent; return 0; }
   harness=$(fm_meta_get "$meta" harness)

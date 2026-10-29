@@ -3360,6 +3360,39 @@ test_record_update_preserves_unreadable_input
 test_record_field_framing
 test_record_field_output_variable
 test_tick_without_metadata || fail "test_tick_without_metadata failed"
+test_paused_mate_defers_reply_recovery_and_still_resolves_reports() {
+  local home state corr rec hook_log
+  local FM_PENDING_REPLY_SEND_HOOK=paused_recovery_hook
+  home=$(setup_parent paused-recovery)
+  state="$home/state"
+  hook_log="$TMP_ROOT/paused-recovery-hook.log"
+  export FM_PENDING_REPLY_NOW=2000
+  # shellcheck disable=SC2329 # Invoked through the production test hook.
+  paused_recovery_hook() { printf '%s\n' "$*" >> "$hook_log"; }
+  export -f paused_recovery_hook
+  export FM_PENDING_REPLY_SEND_HOOK
+  corr=$(fm_pending_reply_create "$home" "$state" hibit 'open request')
+  fm_pending_reply_mark_delivered "$state" "$corr"
+  fm_pending_reply_observe_busy "$state" "$corr" busy
+  fm_pending_reply_observe_busy "$state" "$corr" idle
+  printf '1\n' > "$state/.secondmate-paused-hibit"
+  fm_pending_reply_tick_one "$state" "$corr" idle
+  fm_pending_reply_tick "$state"
+  if fm_pending_reply_send_recovery "$state" "$corr"; then
+    fail 'explicit recovery must also respect pause intent'
+  fi
+  assert_absent "$hook_log" 'routine recovery must not resume a paused mate'
+  rec=$(fm_pending_reply_path "$state" "$corr")
+  [ -z "$(fm_pending_reply_get "$rec" recovery_attempted_epoch)" ] || fail 'pause spent the one recovery attempt'
+  printf 'done [corr=%s]: report arrived\n' "$corr" > "$state/hibit.status"
+  fm_pending_reply_tick "$state"
+  assert_equals "$(phase_of "$state" "$corr")" resolved 'reports can settle while paused'
+  unset FM_PENDING_REPLY_SEND_HOOK
+  pass 'pause defers missed-reply recovery while preserving correlated report resolution'
+}
+
+test_paused_mate_defers_reply_recovery_and_still_resolves_reports
+
 test_normal_correlated_reply_resolves_once
 test_completed_turn_no_report_triggers_one_recovery
 test_recovery_waits_while_the_mate_has_an_open_decision

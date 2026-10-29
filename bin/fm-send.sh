@@ -42,6 +42,8 @@
 # fire-and-forget request instead retries with its same caller-supplied delivery
 # id. A still-unconfirmed reply-bearing request keeps its reply expectation
 # preserved for the record that may have landed.
+# Text routed to a paused secondmate resumes it through fm-secondmate-restart
+# before delivery. Backlog handoff has already made queued work durable by then.
 # Pending-reply bookkeeping trouble after a durable enqueue NEVER exits
 # nonzero: with the recovery marker stored the watcher reconciles it silently,
 # and with both the commit and the marker lost the send prints a distinct
@@ -826,6 +828,17 @@ else
   fi
   if [ "$TARGET_BACKEND" = remote ]; then
     fm_send_remote_budget || exit 1
+  fi
+  if [ "$MARK_FROM_FIRSTMATE" = 1 ]; then
+    # shellcheck source=bin/fm-secondmate-registry-lib.sh
+    . "$SCRIPT_DIR/fm-secondmate-registry-lib.sh"
+    if fm_secondmate_is_paused "$STATE" "$TARGET_TASK_ID"; then
+      "$SCRIPT_DIR/fm-secondmate-restart.sh" --resume "$TARGET_TASK_ID" || exit 1
+      # Reclaiming a lost endpoint can republish its target. Deliver only to
+      # the newly resolved incarnation, never the pre-resume address.
+      fm_send_resolve_target "$RAW_TARGET" || exit 1
+      T=$RESOLVED_TARGET
+    fi
   fi
   # The pre-marker answer text, kept for the closing resolved note so the
   # durable ledger records the plain answer without marker or corr bytes.

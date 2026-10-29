@@ -11,6 +11,8 @@ The split exists because the data plane's marking is exactly right for a message
 A routing-marked `/quit` arrives as ordinary chat - `[fm-from-firstmate] /quit` - which the agent reasons about instead of executing.
 The failure repeated across harnesses and homes, and the workaround (remember to use an unmarked send for agent-control commands, and improvise the right key or command per harness) lived only in agent prose, so it failed again every time a session did not happen to recall it.
 
+For intentional secondmate downtime, use the [secondmate pause and resume operations](configuration.md#pause-and-resume).
+
 ## What the control plane owns
 
 `bin/fm-control-lib.sh` is the single executable owner of three capability tables, which have no side effects, so they can be read as a contract:

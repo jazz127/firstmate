@@ -1290,6 +1290,19 @@ A preexisting project-bearing charter is also refused until it is re-scaffolded 
 The lease is held under the secondmate id until explicit retirement or seed rollback returns it, so normal restarts do not free or recycle the home.
 Teardown of a leased home fails closed if `treehouse return` cannot release the lease; plain-clone homes with no treehouse pool slot are removed directly.
 
+### Pause and resume
+
+Pause an idle secondmate with `FM_HOME=<firstmate-home> bin/fm-secondmate-restart.sh --pause <id>` and resume it with the same command's `--resume <id>` operation.
+Both local homes and `host:` routes use these operations from their parent home.
+Pause keeps the home, backlog, project clones and open records, while stopping the agent session.
+It refuses outstanding child records, in-flight backlog work and uncommitted home changes so work awaiting landing cannot be abandoned.
+Routine liveness recovery, bootstrap convergence, instruction and config reread nudges, and missed-reply recovery skip a paused mate across primary restarts.
+
+New work still follows the registered scope and normal backlog handoff.
+The handoff queues it durably before the routed instruction automatically resumes the mate; if resume fails, the work and retry record remain available.
+Resume starts a fresh agent that reconciles its existing backlog and records at startup.
+The [lifecycle command header](../bin/fm-secondmate-restart.sh) owns exact marker, locking, retry and backend capability mechanics.
+
 ### Project modes and backlog handoff
 
 Secondmate routes cover `no-mistakes` and `direct-PR` projects; `local-only` projects remain main-firstmate work.

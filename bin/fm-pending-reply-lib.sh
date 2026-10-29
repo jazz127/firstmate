@@ -130,6 +130,8 @@ _FM_PENDING_REPLY_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd 2>/dev/n
 . "$_FM_PENDING_REPLY_LIB_DIR/fm-path-lib.sh"
 # shellcheck source=bin/fm-backend.sh
 . "$_FM_PENDING_REPLY_LIB_DIR/fm-backend.sh"
+# shellcheck source=bin/fm-secondmate-registry-lib.sh
+. "$_FM_PENDING_REPLY_LIB_DIR/fm-secondmate-registry-lib.sh"
 # Deliberately undirected: this library consumes no symbols from
 # bin/fm-tmux-lib.sh, so following it under ShellCheck's external-source
 # traversal would expand that graph for zero cross-file checks.
@@ -1163,6 +1165,7 @@ fm_pending_reply_send_recovery() {  # <state-dir> <corr_id>
   # earliest moment a correlated report could exist to race against.
   _fm_pending_reply_elapsed_at_least "$now" "$completed" "$grace" || return 1
   task_id=$(fm_pending_reply_get "$rec" task_id)
+  fm_secondmate_is_paused "$state" "$task_id" && return 1
   # A remote mate's report may exist and simply not have been mirrored yet.
   fm_pending_reply_missing_report_is_evidence "$state" "$task_id" "$completed" || return 1
   # config/wait-no-turns: a mate waiting on its own open decision or blocker
@@ -1643,7 +1646,7 @@ fm_pending_reply_restatement_copy_same_basename() {  # <state-dir> <corr_id> <se
 # a remote recovery send while retaining resolution and observation.
 fm_pending_reply_tick_one() {  # <state-dir> <corr_id> <busy_state> [secondmate-home] [allow-recovery]
   local state=$1 corr=$2 busy_state=$3 sm_home=${4-} allow_recovery=${5:-1}
-  local rec phase delivered
+  local rec phase delivered task_id
   fm_pending_reply_path "$state" "$corr" rec
   [ -f "$rec" ] || return 1
   fm_pending_reply_reconcile_delivery "$state" "$corr" || true
@@ -1660,6 +1663,8 @@ fm_pending_reply_tick_one() {  # <state-dir> <corr_id> <busy_state> [secondmate-
   if fm_pending_reply_try_resolve "$state" "$corr"; then
     return 0
   fi
+  fm_pending_reply_get "$rec" task_id task_id
+  fm_secondmate_is_paused "$state" "$task_id" && return 0
   fm_pending_reply_get "$rec" phase phase
   case "$phase" in
     awaiting_report|recovery_sending)
@@ -1782,6 +1787,10 @@ fm_pending_reply_tick() {  # <state-dir> [watcher-beacon]
     fm_pending_reply_get "$rec" corr_id corr
     [ -n "$corr" ] || corr=$(basename "$rec")
     fm_pending_reply_get "$rec" task_id task_id
+    if fm_secondmate_is_paused "$state" "$task_id"; then
+      fm_pending_reply_try_resolve "$state" "$corr" >/dev/null 2>&1 || true
+      continue
+    fi
     fm_pending_reply_get "$rec" phase phase
     if [ "$phase" = resolved ]; then
       # Cheap no-op unless an escalation for this record is still open; this is

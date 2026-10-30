@@ -6,7 +6,7 @@
 #   fm-git-strip-ai-trailers.sh <msgfile>
 #       Commit-msg hook mode. Git passes the proposed message file as $1.
 #       Rewrites that file in place, then exits 0 so the commit proceeds.
-#   fm-git-strip-ai-trailers.sh install [--no-strip] [--attribution <task-meta> <runtime> <model>] [--push-guard <guard-file>] <hooks-dir> <worktree>
+#   fm-git-strip-ai-trailers.sh install [--no-strip] [--scoped-attribution <config> <task-meta> <runtime> <model>] [--attribution <task-meta> <runtime> <model>] [--push-guard <guard-file>] <hooks-dir> <worktree>
 #       Recreate <hooks-dir> as a core.hooksPath for this launch: a commit-msg
 #       hook that runs this strip, plus one wrapper per client-side hook name
 #       git documents except reference-transaction and post-index-change,
@@ -33,6 +33,10 @@
 #       hook only when the guard passes (that script owns the rules).
 #       --attribution <task-meta> <runtime> <model> keeps and adds scoped
 #       attribution through fm-git-attribution.py, rechecking the commit repo.
+#       --scoped-attribution resolves add/keep/strip in the commit repository,
+#       using the legacy presence flag outside t27sol and the launch policy
+#       when origin cannot be resolved. The flag and fallback are captured
+#       at install time; task metadata supplies runtime session references.
 #   fm-git-strip-ai-trailers.sh env-file <hooks-dir> <out-file>
 #       Write <out-file> as one plain export statement that appends
 #       core.hooksPath=<hooks-dir> after the GIT_CONFIG_COUNT entries this
@@ -89,7 +93,7 @@ usage() {
   cat >&2 <<'EOF'
 usage:
   fm-git-strip-ai-trailers.sh <msgfile>
-  fm-git-strip-ai-trailers.sh install [--no-strip] [--attribution <task-meta> <runtime> <model>] [--push-guard <guard-file>] <hooks-dir> <worktree> [<pre-push-guard> [<arg>...]]
+  fm-git-strip-ai-trailers.sh install [--no-strip] [--scoped-attribution <config> <task-meta> <runtime> <model>] [--attribution <task-meta> <runtime> <model>] [--push-guard <guard-file>] <hooks-dir> <worktree> [<pre-push-guard> [<arg>...]]
   fm-git-strip-ai-trailers.sh env-file <hooks-dir> <out-file>
 EOF
   exit 2
@@ -254,6 +258,12 @@ install_hooks() {
   if [ -n "${attribution_meta:-}" ]; then
     strip_line="python3 $(quote_for_hook "${SELF%/*}/fm-git-attribution.py") stamp $(quote_for_hook "$attribution_meta") $(quote_for_hook "$attribution_runtime") $(quote_for_hook "$attribution_model") \"\$1\" || exit \$?"
   fi
+  if [ -n "${attribution_config:-}" ]; then
+    local fallback outside=strip
+    fallback=$(python3 "${SELF%/*}/fm-git-attribution.py" mode "$attribution_config" "$wt") || return 1
+    [ ! -e "$attribution_config" ] || outside=keep
+    strip_line="python3 $(quote_for_hook "${SELF%/*}/fm-git-attribution.py") apply $(quote_for_hook "$fallback") $(quote_for_hook "$outside") $(quote_for_hook "$attribution_meta") $(quote_for_hook "$attribution_runtime") $(quote_for_hook "$attribution_model") \"\$1\" || exit \$?"
+  fi
   write_executable "$hooks_dir/commit-msg" <<EOF
 #!/usr/bin/env bash
 set -u
@@ -310,9 +320,15 @@ CMD=${1:-}
 case "$CMD" in
 install)
   shift
-  strip=1 guard='' attribution_meta='' attribution_runtime='' attribution_model=''
+  strip=1 guard='' attribution_meta='' attribution_runtime='' attribution_model='' attribution_config=''
   while [ "$#" -gt 0 ]; do
     case "$1" in
+    --scoped-attribution)
+      [ "$#" -ge 7 ] || usage
+      attribution_config=$2 attribution_meta=$3 attribution_runtime=$4 attribution_model=$5
+      strip=0
+      shift 5
+      ;;
     --attribution)
       [ "$#" -ge 6 ] || usage
       attribution_meta=$2 attribution_runtime=$3 attribution_model=$4

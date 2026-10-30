@@ -3,10 +3,11 @@
 
 Usage: fm-git-attribution.py mode <config> <project>
        fm-git-attribution.py stamp <task-meta> <runtime> <model> <message>
+       fm-git-attribution.py apply <fallback> <outside> <task-meta> <runtime> <model> <message>
        fm-git-attribution.py strip-fields <message>
 
-docs/configuration.md "Commit attribution" owns launch-repository selection
-and its accepted cross-repository limitation.
+docs/configuration.md "Commit attribution" owns commit-repository selection
+and launch-policy fallback when the commit scope is unavailable.
 Stamp runs in Git's hook cwd and rechecks origin. Session references come from
 runtime context or existing task metadata, never a new persistent record.
 """
@@ -66,17 +67,26 @@ def remove_trailers(content, keys, strip_ai=False):
 
 
 def t27sol(project):
+    """Return the owner match, or None when origin scope is unavailable."""
     result = subprocess.run(["git", "-C", project, "config", "--get", "remote.origin.url"],
                             capture_output=True, text=True, check=False)
+    if result.returncode != 0 or not result.stdout.strip():
+        return None
     url = result.stdout.strip()
     if "://" in url:
-        parsed = urlsplit(url)
+        try:
+            parsed = urlsplit(url)
+        except ValueError:
+            return None
         if parsed.scheme not in ("ssh", "https"):
             return False
+        if not parsed.hostname:
+            return None
         host, path = parsed.hostname or "", parsed.path.lstrip("/")
     else:
         match = re.fullmatch(r"(?:[^/@:]+@)?([^/:]+):([^\s]+)", url)
         if not match:
+            # A local origin identifies a repository outside the GitHub scope.
             return False
         host, path = match.groups()
     return host.lower() == "github.com" and bool(re.fullmatch(
@@ -112,8 +122,19 @@ def session(runtime, lines, task_meta):
     return ""
 
 
-def stamp(task_meta, runtime, model, message):
-    if not t27sol("."):
+def apply(fallback, outside, task_meta, runtime, model, message):
+    scope = t27sol(".")
+    selected = fallback if scope is None else "add" if scope else outside
+    if selected == "add":
+        stamp(task_meta, runtime, model, message, scoped=True)
+    elif selected == "strip":
+        subprocess.run([str(Path(__file__).with_name("fm-git-strip-ai-trailers.sh")), message], check=True)
+    elif selected != "keep":
+        raise ValueError("invalid attribution policy")
+
+
+def stamp(task_meta, runtime, model, message, scoped=False):
+    if not scoped and not t27sol("."):
         subprocess.run([str(Path(__file__).with_name("fm-git-strip-ai-trailers.sh")), message], check=True)
         return
     # Runtime/model are launch metadata, never free-form trailer contents.
@@ -160,6 +181,8 @@ if __name__ == "__main__":
             print(mode(*sys.argv[2:]))
         elif len(sys.argv) == 6 and sys.argv[1] == "stamp":
             stamp(*sys.argv[2:])
+        elif len(sys.argv) == 8 and sys.argv[1] == "apply":
+            apply(*sys.argv[2:])
         elif len(sys.argv) == 3 and sys.argv[1] == "strip-fields":
             message = Path(sys.argv[2])
             content = remove_trailers(

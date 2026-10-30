@@ -1,0 +1,15 @@
+This Test round exercised installed Git hooks with disposable repositories and a real OpenCode 2.2.4 server. `commit-objects.json` and `native-opencode-commit-objects.json` retain actual commit messages and Git-parsed trailers. No forge operation or model-service response was needed for filtering and stamping.
+
+The installed OpenCode was 1.18.18. The registry had no `opencode-ai@2.0.21`; a local `@opencode-ai/cli` install exposed a beta executable. The successful native proof used the official macOS arm64 OpenCode 2.2.4 release, downloaded inside the worktree, with isolated HOME, XDG paths and database.
+
+`TMPDIR="$PWD/.test-live/tmp" bash tests/fm-git-strip-ai-trailers.test.sh` exited 0. It covers installed hooks across supported runtimes, equivalent owner URLs, stripping boundaries, body examples, human and native coauthors, selectors, unsafe fields, hook chaining and the legacy keep flag.
+
+Selected existing spawn functions (`test_scoped_attribution_launches`, `test_opencode_session_attribution`, `test_keep_ai_trailers_omits_attribution_settings_and_strip_hooks`) exited 0. They use simulated panes and event streams and are supplemental evidence only. An initial selection accidentally ran unrelated environment cases; a secondmate fixture was refused because it was inside this worktree. The corrected selection excludes those unrelated cases.
+
+`PATH="$PWD/.test-live/opencode-v2:$PATH" TMPDIR="$PWD/.test-live/tmp" FM_OPENCODE_WORKER_ATTRIBUTION_LIVE=1 bash tests/fm-opencode-primary-live-e2e.test.sh` exited 0. It drove a real native server and Git but prepared launch files using a simulated pane. The independent proof below removes that setup substitute.
+
+`bash .test-live/prepare-native-lab.sh` created a marked disposable FM_HOME and private tmux socket using `bin/fm-lab-home.sh`. Real `fm-spawn.sh native <disposable-project> --mode local-only --yolo off --backend tmux --harness opencode` ran real Treehouse and OpenCode, generated the worker plugin and hooks, and returned 0. Its initial automatic model request received HTTP 403; no successful model response is claimed. The private tmux server was stopped, and the native shell API supplied the intended token-free commit proof.
+
+`python3 .test-live/native-api-evidence.py` exited 0. It started real `opencode serve`, observed the production-generated `fm.busy-state` plugin active, created sessions through `/api/session`, and committed through `/api/session/{id}/shell`. Two normal commits and an amend contained exactly the native session ID. Two idle sessions omitted a guessed identity. Deleting the second session restored the remaining session ID on the next commit. The API driver terminated and waited for its server (exit 130 after requested termination).
+
+The commit/API drivers and lab setup are retained alongside this note. Disposable worktree files, tmux socket and servers were cleaned up. No source changes, linters, full repository suite, publication or other gate phases were run. This CLI attribution change is evidenced by actual commit objects; rendered UI evidence is unnecessary.

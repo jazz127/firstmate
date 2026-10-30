@@ -1,0 +1,85 @@
+{
+  "driver": "real fm-spawn (tmux and treehouse) -> generated worker plugin and installed commit hooks -> OpenCode native HTTP API -> Git commit objects",
+  "substitutes": [],
+  "version": "2.2.4",
+  "plugin": {
+    "id": "fm.busy-state",
+    "status": "active"
+  },
+  "created_sessions": [
+    "ses_e7129ccdeffeDFfrNrSNfKCv2U",
+    "ses_e7129c2d0ffe9zYHCw1jO0Vn92"
+  ],
+  "deleted_session_response": null,
+  "records": [
+    {
+      "action": "fix: first native shell commit",
+      "endpoint": "POST /api/session/ses_e7129ccdeffeDFfrNrSNfKCv2U/shell",
+      "response": null,
+      "commit": "12b209415489b131f29c6d2491812e36300960c5",
+      "message": "fix: first native shell commit\n\nCo-authored-by: opencode <noreply@firstmate.invalid>\nAgent-System: fac:firstmate\nAgent-Platform: opencode\nAgent-Session: ses_e7129ccdeffeDFfrNrSNfKCv2U\n\n",
+      "parsed_trailers": [
+        "Co-authored-by: opencode <noreply@firstmate.invalid>",
+        "Agent-System: fac:firstmate",
+        "Agent-Platform: opencode",
+        "Agent-Session: ses_e7129ccdeffeDFfrNrSNfKCv2U"
+      ],
+      "expected_session": "ses_e7129ccdeffeDFfrNrSNfKCv2U"
+    },
+    {
+      "action": "fix: second native shell commit",
+      "endpoint": "POST /api/session/ses_e7129ccdeffeDFfrNrSNfKCv2U/shell",
+      "response": null,
+      "commit": "d1a97e9d7a862faceb130afb9b43cddc150a4316",
+      "message": "fix: second native shell commit\n\nCo-authored-by: opencode <noreply@firstmate.invalid>\nAgent-System: fac:firstmate\nAgent-Platform: opencode\nAgent-Session: ses_e7129ccdeffeDFfrNrSNfKCv2U\n\n",
+      "parsed_trailers": [
+        "Co-authored-by: opencode <noreply@firstmate.invalid>",
+        "Agent-System: fac:firstmate",
+        "Agent-Platform: opencode",
+        "Agent-Session: ses_e7129ccdeffeDFfrNrSNfKCv2U"
+      ],
+      "expected_session": "ses_e7129ccdeffeDFfrNrSNfKCv2U"
+    },
+    {
+      "action": "amend: retain native session once",
+      "endpoint": "POST /api/session/ses_e7129ccdeffeDFfrNrSNfKCv2U/shell",
+      "response": null,
+      "commit": "d9b3b54614073787af6dc1299f829dfba53b5657",
+      "message": "fix: second native shell commit\n\nCo-authored-by: opencode <noreply@firstmate.invalid>\nAgent-System: fac:firstmate\nAgent-Platform: opencode\nAgent-Session: ses_e7129ccdeffeDFfrNrSNfKCv2U\n\n",
+      "parsed_trailers": [
+        "Co-authored-by: opencode <noreply@firstmate.invalid>",
+        "Agent-System: fac:firstmate",
+        "Agent-Platform: opencode",
+        "Agent-Session: ses_e7129ccdeffeDFfrNrSNfKCv2U"
+      ],
+      "expected_session": "ses_e7129ccdeffeDFfrNrSNfKCv2U"
+    },
+    {
+      "action": "fix: ambiguous idle sessions omit guessed session",
+      "endpoint": "POST /api/session/ses_e7129ccdeffeDFfrNrSNfKCv2U/shell",
+      "response": null,
+      "commit": "c991e1660d0cee81e33aa719e9cba50c076edf4f",
+      "message": "fix: ambiguous idle sessions omit guessed session\n\nCo-authored-by: opencode <noreply@firstmate.invalid>\nAgent-System: fac:firstmate\nAgent-Platform: opencode\n\n",
+      "parsed_trailers": [
+        "Co-authored-by: opencode <noreply@firstmate.invalid>",
+        "Agent-System: fac:firstmate",
+        "Agent-Platform: opencode"
+      ],
+      "expected_session": null
+    },
+    {
+      "action": "fix: deletion restores sole known native session",
+      "endpoint": "POST /api/session/ses_e7129ccdeffeDFfrNrSNfKCv2U/shell",
+      "response": null,
+      "commit": "1c13b375ced5595b1dbf1a6beb66239acfcf9cf3",
+      "message": "fix: deletion restores sole known native session\n\nCo-authored-by: opencode <noreply@firstmate.invalid>\nAgent-System: fac:firstmate\nAgent-Platform: opencode\nAgent-Session: ses_e7129ccdeffeDFfrNrSNfKCv2U\n\n",
+      "parsed_trailers": [
+        "Co-authored-by: opencode <noreply@firstmate.invalid>",
+        "Agent-System: fac:firstmate",
+        "Agent-Platform: opencode",
+        "Agent-Session: ses_e7129ccdeffeDFfrNrSNfKCv2U"
+      ],
+      "expected_session": "ses_e7129ccdeffeDFfrNrSNfKCv2U"
+    }
+  ]
+}

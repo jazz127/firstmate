@@ -1,0 +1,207 @@
+
+$ git commit / git log -1 --format=%B / git interpret-trailers --parse
+t27sol default policy adds Codex coauthor, platform and available session
+fix: trace worker changes
+
+Co-authored-by: Jane Doe <jane@example.com>
+Co-authored-by: codex <noreply@firstmate.invalid>
+Agent-System: fac:firstmate
+Agent-Platform: codex/gpt-6.1-sol
+Agent-Session: 11111111-2222-3333-4444-555555555555
+
+
+Git parsed trailers:
+Co-authored-by: Jane Doe <jane@example.com>
+Co-authored-by: codex <noreply@firstmate.invalid>
+Agent-System: fac:firstmate
+Agent-Platform: codex/gpt-6.1-sol
+Agent-Session: 11111111-2222-3333-4444-555555555555
+
+
+$ git commit / git log -1 --format=%B / git interpret-trailers --parse
+amend retains one copy of attribution
+fix: trace worker changes
+
+Co-authored-by: Jane Doe <jane@example.com>
+Co-authored-by: codex <noreply@firstmate.invalid>
+Agent-System: fac:firstmate
+Agent-Platform: codex/gpt-6.1-sol
+Agent-Session: 11111111-2222-3333-4444-555555555555
+
+
+Git parsed trailers:
+Co-authored-by: Jane Doe <jane@example.com>
+Co-authored-by: codex <noreply@firstmate.invalid>
+Agent-System: fac:firstmate
+Agent-Platform: codex/gpt-6.1-sol
+Agent-Session: 11111111-2222-3333-4444-555555555555
+
+
+$ git commit / git log -1 --format=%B / git interpret-trailers --parse
+Claude model omitted: sonnet[1m]
+fix: native Claude attribution
+
+Co-authored-by: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_test123
+Agent-System: fac:firstmate
+Agent-Platform: claude
+
+
+Git parsed trailers:
+Co-authored-by: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_test123
+Agent-System: fac:firstmate
+Agent-Platform: claude
+
+
+$ git commit / git log -1 --format=%B / git interpret-trailers --parse
+Claude model omitted: claude-sonnet-4-5@20250929[1m]
+fix: native Claude attribution
+
+Co-authored-by: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_test123
+Agent-System: fac:firstmate
+Agent-Platform: claude
+
+
+Git parsed trailers:
+Co-authored-by: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_test123
+Agent-System: fac:firstmate
+Agent-Platform: claude
+
+
+$ git commit / git log -1 --format=%B / git interpret-trailers --parse
+opencode consumes existing session context
+fix: recorded session
+
+Co-authored-by: opencode <noreply@firstmate.invalid>
+Agent-System: fac:firstmate
+Agent-Platform: opencode/openai/gpt-6.1-sol#high
+Agent-Session: ses_validation123
+
+
+Git parsed trailers:
+Co-authored-by: opencode <noreply@firstmate.invalid>
+Agent-System: fac:firstmate
+Agent-Platform: opencode/openai/gpt-6.1-sol#high
+Agent-Session: ses_validation123
+
+
+$ git commit / git log -1 --format=%B / git interpret-trailers --parse
+polytoken consumes existing session context
+fix: recorded session
+
+Co-authored-by: polytoken <noreply@firstmate.invalid>
+Agent-System: fac:firstmate
+Agent-Platform: polytoken
+Agent-Session: validation-session-123
+
+
+Git parsed trailers:
+Co-authored-by: polytoken <noreply@firstmate.invalid>
+Agent-System: fac:firstmate
+Agent-Platform: polytoken
+Agent-Session: validation-session-123
+
+
+$ git commit / git log -1 --format=%B / git interpret-trailers --parse
+OpenCode selector: openai/gpt-6.1-sol#high
+fix: preserve selector
+
+Co-authored-by: opencode <noreply@firstmate.invalid>
+Agent-System: fac:firstmate
+Agent-Platform: opencode/openai/gpt-6.1-sol#high
+
+
+Git parsed trailers:
+Co-authored-by: opencode <noreply@firstmate.invalid>
+Agent-System: fac:firstmate
+Agent-Platform: opencode/openai/gpt-6.1-sol#high
+
+
+$ git commit / git log -1 --format=%B / git interpret-trailers --parse
+OpenCode selector: vertex/claude-sonnet-4-5@20250929[1m]#high
+fix: preserve selector
+
+Co-authored-by: opencode <noreply@firstmate.invalid>
+Agent-System: fac:firstmate
+Agent-Platform: opencode/vertex/claude-sonnet-4-5@20250929[1m]#high
+
+
+Git parsed trailers:
+Co-authored-by: opencode <noreply@firstmate.invalid>
+Agent-System: fac:firstmate
+Agent-Platform: opencode/vertex/claude-sonnet-4-5@20250929[1m]#high
+
+
+$ git commit / git log -1 --format=%B / git interpret-trailers --parse
+reject unsafe model 'model\nAgent-System: injected'
+fm-git-attribution: unsafe model for Agent-Platform
+
+$ git commit / git log -1 --format=%B / git interpret-trailers --parse
+reject unsafe model 'model\x01variant'
+fm-git-attribution: unsafe model for Agent-Platform
+
+$ git commit / git log -1 --format=%B / git interpret-trailers --parse
+reject unsafe model 'https://private.invalid/model'
+fm-git-attribution: unsafe model for Agent-Platform
+
+$ git commit / git log -1 --format=%B / git interpret-trailers --parse
+reject unsafe model '/private/model'
+fm-git-attribution: unsafe model for Agent-Platform
+
+$ git commit / git log -1 --format=%B / git interpret-trailers --parse
+reject unsafe model 'provider/../../private'
+fm-git-attribution: unsafe model for Agent-Platform
+
+$ git commit / git log -1 --format=%B / git interpret-trailers --parse
+out-of-owner fallback strips AI and native session, preserves body and human trailers
+fix: document attribution
+
+Agent-Platform: codex/example
+Agent-Session: example
+Co-authored-by: pi <noreply@firstmate.invalid>
+Co-authored-by: Jane Doe <jane@example.com>
+These are body examples followed by explanatory prose.
+
+Signed-off-by: Jane Doe <jane@example.com>
+Co-authored-by: Jane Doe <jane@example.com>
+
+
+Git parsed trailers:
+Signed-off-by: Jane Doe <jane@example.com>
+Co-authored-by: Jane Doe <jane@example.com>
+
+
+$ git commit / git log -1 --format=%B / git interpret-trailers --parse
+legacy keep preserves native attribution outside t27sol
+fix: native Claude attribution
+
+Co-authored-by: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_test123
+
+
+Git parsed trailers:
+Co-authored-by: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_test123
+
+
+$ git commit / git log -1 --format=%B / git interpret-trailers --parse
+strip selection preserves body examples and human coauthors
+fix: document attribution
+
+Agent-Platform: codex/example
+Agent-Session: example
+Co-authored-by: pi <noreply@firstmate.invalid>
+Co-authored-by: Jane Doe <jane@example.com>
+These are body examples followed by explanatory prose.
+
+Signed-off-by: Jane Doe <jane@example.com>
+Co-authored-by: Jane Doe <jane@example.com>
+
+
+Git parsed trailers:
+Signed-off-by: Jane Doe <jane@example.com>
+Co-authored-by: Jane Doe <jane@example.com>
+

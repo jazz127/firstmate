@@ -1,0 +1,98 @@
+[
+  {
+    "scenario": "t27sol default policy adds Codex coauthor, platform and available session",
+    "commit": "35769621dadc8d5a4de63ccffd986d80aefc2094",
+    "message": "fix: trace worker changes\n\nCo-authored-by: Jane Doe <jane@example.com>\nCo-authored-by: codex <noreply@firstmate.invalid>\nAgent-System: fac:firstmate\nAgent-Platform: codex/gpt-6.1-sol\nAgent-Session: 11111111-2222-3333-4444-555555555555\n\n",
+    "git_parsed_trailers": "Co-authored-by: Jane Doe <jane@example.com>\nCo-authored-by: codex <noreply@firstmate.invalid>\nAgent-System: fac:firstmate\nAgent-Platform: codex/gpt-6.1-sol\nAgent-Session: 11111111-2222-3333-4444-555555555555\n"
+  },
+  {
+    "scenario": "amend retains one copy of attribution",
+    "commit": "53c87d507d35b6fefd24c11ac3ee4ea3673ae9fe",
+    "message": "fix: trace worker changes\n\nCo-authored-by: Jane Doe <jane@example.com>\nCo-authored-by: codex <noreply@firstmate.invalid>\nAgent-System: fac:firstmate\nAgent-Platform: codex/gpt-6.1-sol\nAgent-Session: 11111111-2222-3333-4444-555555555555\n\n",
+    "git_parsed_trailers": "Co-authored-by: Jane Doe <jane@example.com>\nCo-authored-by: codex <noreply@firstmate.invalid>\nAgent-System: fac:firstmate\nAgent-Platform: codex/gpt-6.1-sol\nAgent-Session: 11111111-2222-3333-4444-555555555555\n"
+  },
+  {
+    "scenario": "Claude model omitted: sonnet[1m]",
+    "commit": "2a6706d3e2ace017a7e3174730f6589273fb4517",
+    "message": "fix: native Claude attribution\n\nCo-authored-by: Claude <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_test123\nAgent-System: fac:firstmate\nAgent-Platform: claude\n\n",
+    "git_parsed_trailers": "Co-authored-by: Claude <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_test123\nAgent-System: fac:firstmate\nAgent-Platform: claude\n"
+  },
+  {
+    "scenario": "Claude model omitted: claude-sonnet-4-5@20250929[1m]",
+    "commit": "76db4d6ba38598c245bf0541c3a8387f292b6bdd",
+    "message": "fix: native Claude attribution\n\nCo-authored-by: Claude <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_test123\nAgent-System: fac:firstmate\nAgent-Platform: claude\n\n",
+    "git_parsed_trailers": "Co-authored-by: Claude <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_test123\nAgent-System: fac:firstmate\nAgent-Platform: claude\n"
+  },
+  {
+    "scenario": "opencode consumes existing session context",
+    "commit": "fb4f840fec5f230cd6bc39261e0cffa5b785eeac",
+    "message": "fix: recorded session\n\nCo-authored-by: opencode <noreply@firstmate.invalid>\nAgent-System: fac:firstmate\nAgent-Platform: opencode/openai/gpt-6.1-sol#high\nAgent-Session: ses_validation123\n\n",
+    "git_parsed_trailers": "Co-authored-by: opencode <noreply@firstmate.invalid>\nAgent-System: fac:firstmate\nAgent-Platform: opencode/openai/gpt-6.1-sol#high\nAgent-Session: ses_validation123\n"
+  },
+  {
+    "scenario": "polytoken consumes existing session context",
+    "commit": "6a346cd69e5db2f9e9680fc7922478f1256b7d5f",
+    "message": "fix: recorded session\n\nCo-authored-by: polytoken <noreply@firstmate.invalid>\nAgent-System: fac:firstmate\nAgent-Platform: polytoken\nAgent-Session: validation-session-123\n\n",
+    "git_parsed_trailers": "Co-authored-by: polytoken <noreply@firstmate.invalid>\nAgent-System: fac:firstmate\nAgent-Platform: polytoken\nAgent-Session: validation-session-123\n"
+  },
+  {
+    "scenario": "OpenCode selector: openai/gpt-6.1-sol#high",
+    "commit": "23b9efa51b132da10eb8e5542dde6689e99f9a72",
+    "message": "fix: preserve selector\n\nCo-authored-by: opencode <noreply@firstmate.invalid>\nAgent-System: fac:firstmate\nAgent-Platform: opencode/openai/gpt-6.1-sol#high\n\n",
+    "git_parsed_trailers": "Co-authored-by: opencode <noreply@firstmate.invalid>\nAgent-System: fac:firstmate\nAgent-Platform: opencode/openai/gpt-6.1-sol#high\n"
+  },
+  {
+    "scenario": "OpenCode selector: vertex/claude-sonnet-4-5@20250929[1m]#high",
+    "commit": "e1df5dc14f5c02c9ee1e1b8734c9b6a6956f6440",
+    "message": "fix: preserve selector\n\nCo-authored-by: opencode <noreply@firstmate.invalid>\nAgent-System: fac:firstmate\nAgent-Platform: opencode/vertex/claude-sonnet-4-5@20250929[1m]#high\n\n",
+    "git_parsed_trailers": "Co-authored-by: opencode <noreply@firstmate.invalid>\nAgent-System: fac:firstmate\nAgent-Platform: opencode/vertex/claude-sonnet-4-5@20250929[1m]#high\n"
+  },
+  {
+    "scenario": "reject unsafe model 'model\\nAgent-System: injected'",
+    "exit": 1,
+    "error": "fm-git-attribution: unsafe model for Agent-Platform",
+    "HEAD_unchanged": true
+  },
+  {
+    "scenario": "reject unsafe model 'model\\x01variant'",
+    "exit": 1,
+    "error": "fm-git-attribution: unsafe model for Agent-Platform",
+    "HEAD_unchanged": true
+  },
+  {
+    "scenario": "reject unsafe model 'https://private.invalid/model'",
+    "exit": 1,
+    "error": "fm-git-attribution: unsafe model for Agent-Platform",
+    "HEAD_unchanged": true
+  },
+  {
+    "scenario": "reject unsafe model '/private/model'",
+    "exit": 1,
+    "error": "fm-git-attribution: unsafe model for Agent-Platform",
+    "HEAD_unchanged": true
+  },
+  {
+    "scenario": "reject unsafe model 'provider/../../private'",
+    "exit": 1,
+    "error": "fm-git-attribution: unsafe model for Agent-Platform",
+    "HEAD_unchanged": true
+  },
+  {
+    "scenario": "out-of-owner fallback strips AI and native session, preserves body and human trailers",
+    "commit": "e703cba05fe8ce25c157f6942c0cbd08aa47ef34",
+    "message": "fix: document attribution\n\nAgent-Platform: codex/example\nAgent-Session: example\nCo-authored-by: pi <noreply@firstmate.invalid>\nCo-authored-by: Jane Doe <jane@example.com>\nThese are body examples followed by explanatory prose.\n\nSigned-off-by: Jane Doe <jane@example.com>\nCo-authored-by: Jane Doe <jane@example.com>\n\n",
+    "git_parsed_trailers": "Signed-off-by: Jane Doe <jane@example.com>\nCo-authored-by: Jane Doe <jane@example.com>\n"
+  },
+  {
+    "scenario": "legacy keep preserves native attribution outside t27sol",
+    "commit": "791db48074084761a9cdc9381ec6cbceb3ec47b2",
+    "message": "fix: native Claude attribution\n\nCo-authored-by: Claude <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_test123\n\n",
+    "git_parsed_trailers": "Co-authored-by: Claude <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_test123\n"
+  },
+  {
+    "scenario": "strip selection preserves body examples and human coauthors",
+    "commit": "f8394a6c0740c14255561c1d4042d7177c47f8c0",
+    "message": "fix: document attribution\n\nAgent-Platform: codex/example\nAgent-Session: example\nCo-authored-by: pi <noreply@firstmate.invalid>\nCo-authored-by: Jane Doe <jane@example.com>\nThese are body examples followed by explanatory prose.\n\nSigned-off-by: Jane Doe <jane@example.com>\nCo-authored-by: Jane Doe <jane@example.com>\n\n",
+    "git_parsed_trailers": "Signed-off-by: Jane Doe <jane@example.com>\nCo-authored-by: Jane Doe <jane@example.com>\n"
+  }
+]

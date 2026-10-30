@@ -1,0 +1,40 @@
+Real OpenCode server: {"version": "2.0.21", "pid": 81082, "urls": ["http://127.0.0.1:52526"], "paths": {"tmp": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M6798HVS551VQK499W9X9MQQ/.local-test-attribution/opencode-v2-server-hhxzqziq/opencode"}}
+Actual active plugin: [{"id": "fm.busy-state", "source": {"type": "local", "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M6798HVS551VQK499W9X9MQQ/.local-test-attribution/opencode-v2-server-hhxzqziq/project/.opencode/plugins/fm-busy-state.js"}, "features": {"server": true}, "state": {"status": "active"}}]
+Created actual session: ses_e7133d250ffeubYZD4xDBvasSf
+Actual shell endpoint result: null
+Committed message:
+fix: native OpenCode V2 session
+
+Co-authored-by: opencode <noreply@firstmate.invalid>
+Agent-System: fac:firstmate
+Agent-Platform: opencode/openai/gpt-6.1-sol#high
+
+Git parsed trailers:
+Co-authored-by: opencode <noreply@firstmate.invalid>
+Agent-System: fac:firstmate
+Agent-Platform: opencode/openai/gpt-6.1-sol#high
+
+Repeated native commit after plugin settled:
+fix: repeat native OpenCode V2 session
+
+Co-authored-by: opencode <noreply@firstmate.invalid>
+Agent-System: fac:firstmate
+Agent-Platform: opencode/openai/gpt-6.1-sol#high
+
+
+Counterfactual passing this same real session ID explicitly:
+fix: explicit session counterfactual
+
+Co-authored-by: opencode <noreply@firstmate.invalid>
+Agent-System: fac:firstmate
+Agent-Platform: opencode/openai/gpt-6.1-sol#high
+Agent-Session: ses_e7133d250ffeubYZD4xDBvasSf
+
+
+Native shell omitted session on both commits: True
+OpenCode V2 server stopped; exit: 130
+Traceback (most recent call last):
+  File "~/.no-mistakes/evidence/01M6798HVS551VQK499W9X9MQQ/drive-opencode-v2-shell.py", line 65, in <module>
+    assert not (first_missing or second_missing),'Actual session ID absent from both native commits; explicit-session counterfactual succeeds'
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Actual session ID absent from both native commits; explicit-session counterfactual succeeds

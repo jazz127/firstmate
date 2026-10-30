@@ -1,0 +1,20 @@
+npm error code E404
+npm error 404 No match found for version 2.0.21
+npm error 404
+npm error 404  The requested resource 'opencode-ai@2.0.21' could not be found or you do not have permission to access it.
+npm error 404
+npm error 404 Note that you can also install from a
+npm error 404 tarball, folder, http url, or git url.
+{
+  "error": {
+    "code": "E404",
+    "summary": "No match found for version 2.0.21",
+    "detail": "The requested resource 'opencode-ai@2.0.21' could not be found or you do not have permission to access it.\n\nNote that you can also install from a\ntarball, folder, http url, or git url."
+  }
+}
+npm notice
+npm notice New major version of npm available! 11.19.1 -> 12.2.1
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.1
+npm notice To update run: npm install -g npm@12.2.1
+npm notice
+npm error A complete log of this run can be found in: ~/.no-mistakes/worktrees/119cd7a6b9a4/01M6798HVS551VQK499W9X9MQQ/.local-test-attribution/npm-cache/_logs/2026-10-30T21_49_56_590Z-debug-0.log

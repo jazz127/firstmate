@@ -1,0 +1,147 @@
+{
+  "/session/{sessionID}/shell": {
+    "post": {
+      "tags": [
+        "session"
+      ],
+      "operationId": "session.shell",
+      "parameters": [
+        {
+          "name": "sessionID",
+          "in": "path",
+          "schema": {
+            "type": "string",
+            "pattern": "^ses"
+          },
+          "required": true
+        },
+        {
+          "name": "directory",
+          "in": "query",
+          "schema": {
+            "type": "string"
+          },
+          "required": false
+        },
+        {
+          "name": "workspace",
+          "in": "query",
+          "schema": {
+            "type": "string"
+          },
+          "required": false
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "Created message",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "info": {
+                    "$ref": "#/components/schemas/Message"
+                  },
+                  "parts": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/Part"
+                    }
+                  }
+                },
+                "required": [
+                  "info",
+                  "parts"
+                ],
+                "additionalProperties": false,
+                "description": "Created message"
+              }
+            }
+          }
+        },
+        "400": {
+          "description": "BadRequest | InvalidRequestError",
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+                  },
+                  {
+                    "$ref": "#/components/schemas/InvalidRequestError"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "404": {
+          "description": "NotFoundError",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NotFoundError"
+              }
+            }
+          }
+        },
+        "409": {
+          "description": "SessionBusyError",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SessionBusyError"
+              }
+            }
+          }
+        }
+      },
+      "description": "Execute a shell command within the session context and return the AI's response.",
+      "summary": "Run shell command",
+      "requestBody": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "messageID": {
+                  "type": "string",
+                  "pattern": "^msg"
+                },
+                "agent": {
+                  "type": "string"
+                },
+                "model": {
+                  "type": "object",
+                  "properties": {
+                    "providerID": {
+                      "type": "string"
+                    },
+                    "modelID": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "providerID",
+                    "modelID"
+                  ],
+                  "additionalProperties": false
+                },
+                "command": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "agent",
+                "command"
+              ],
+              "additionalProperties": false
+            }
+          }
+        }
+      }
+    }
+  }
+}

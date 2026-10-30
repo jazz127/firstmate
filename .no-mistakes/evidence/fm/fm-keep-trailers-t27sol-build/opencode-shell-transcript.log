@@ -1,0 +1,19 @@
+Real OpenCode server health: {"healthy": true, "version": "1.18.18"}
+Created actual session: ses_e71359ccfffevKb0jow1QHLtEU
+Actual shell endpoint result: {"info": {"id": "msg_18eca63fe001GvHBiGQK0fiIFt", "sessionID": "ses_e71359ccfffevKb0jow1QHLtEU", "role": "assistant", "time": {"created": 1793396990974, "completed": 1793396991761}, "parentID": "msg_18eca634c001hMV9ZRy1Tpo0aL", "modelID": "big-pickle", "providerID": "opencode", "mode": "build", "agent": "build", "path": {"cwd": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M6798HVS551VQK499W9X9MQQ/.local-test-attribution/opencode-tixfmxnj/project", "root": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M6798HVS551VQK499W9X9MQQ/.local-test-attribution/opencode-tixfmxnj/project"}, "cost": 0, "tokens": {"input": 0, "output": 0, "reasoning": 0, "cache": {"read": 0, "write": 0}}}, "parts": [{"id": "prt_18eca63ff001qgD528BLkqLoKM", "sessionID": "ses_e71359ccfffevKb0jow1QHLtEU", "messageID": "msg_18eca63fe001GvHBiGQK0fiIFt", "type": "tool", "callID": "01M67CMRZZXNAXAJYY3S43SQJE", "tool": "bash", "state": {"status": "completed", "input": {"command": "git commit --quiet --allow-empty -m \"fix: native OpenCode session\""}, "output": "", "title": "", "metadata": {"output": ""}, "time": {"start": 1793396990975, "end": 1793396991761}}}]}
+Committed message:
+fix: native OpenCode session
+
+Co-authored-by: opencode <noreply@firstmate.invalid>
+Agent-System: fac:firstmate
+Agent-Platform: opencode/openai/gpt-6.1-sol#high
+Agent-Session: ses_e71359ccfffevKb0jow1QHLtEU
+
+Git parsed trailers:
+Co-authored-by: opencode <noreply@firstmate.invalid>
+Agent-System: fac:firstmate
+Agent-Platform: opencode/openai/gpt-6.1-sol#high
+Agent-Session: ses_e71359ccfffevKb0jow1QHLtEU
+
+Native OpenCode shell session reaches installed commit hook.
+OpenCode server stopped; exit: -15

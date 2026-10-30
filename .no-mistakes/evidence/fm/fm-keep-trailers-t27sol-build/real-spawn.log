@@ -1,0 +1,5 @@
+fm-gate-refuse: gate agent lifecycle permitted only against lab home ~/.no-mistakes/worktrees/119cd7a6b9a4/01M6798HVS551VQK499W9X9MQQ/.test-live/native-lab/fmhome
+warning: ~/.no-mistakes/worktrees/119cd7a6b9a4/01M6798HVS551VQK499W9X9MQQ/.test-live/native-lab/fmhome/data/native/launch-brief.md records no ship branch; defaulting to legacy branch fm/native
+warning: ~/.no-mistakes/worktrees/119cd7a6b9a4/01M6798HVS551VQK499W9X9MQQ/.test-live/native-lab/fmhome/data/native/launch-brief.md records no delivery contract line (scaffolded before ship briefs recorded one); launching on the explicit --mode local-only - confirm its definition of done matches
+notice: native ships mode=local-only while the standing posture for project is no-mistakes - less rigor than the captain's standing posture; proceed only on a current explicit captain instruction or an intake judgment you can state
+spawned native harness=opencode kind=ship mode=local-only yolo=off window=primary:fm-native worktree=~/.no-mistakes/worktrees/119cd7a6b9a4/01M6798HVS551VQK499W9X9MQQ/.test-live/native-lab/pool/.treehouse/project-164e81/1/project

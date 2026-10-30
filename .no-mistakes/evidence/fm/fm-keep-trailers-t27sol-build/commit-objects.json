@@ -1,0 +1,106 @@
+{
+  "driver": "installed commit-msg hooks via git commit; git interpret-trailers --parse",
+  "oracle": "AGT-006 and recorded operator decisions; no forge or model-service calls required",
+  "records": [
+    {
+      "scenario": "Codex commit in t27sol without config",
+      "exit_code": 0,
+      "stderr": "",
+      "commit": "04e79500aba38651b39efb14fdaa3ba95b5ee25f",
+      "message": "fix: record worker attribution\n\nCo-authored-by: Human <human@example.invalid>\nSigned-off-by: Human <human@example.invalid>\nCo-authored-by: codex <noreply@firstmate.invalid>\nAgent-System: fac:firstmate\nAgent-Platform: codex/gpt-6.1-sol\nAgent-Session: 11111111-2222-4333-8444-555555555555\n\n",
+      "parsed_trailers": [
+        "Co-authored-by: Human <human@example.invalid>",
+        "Signed-off-by: Human <human@example.invalid>",
+        "Co-authored-by: codex <noreply@firstmate.invalid>",
+        "Agent-System: fac:firstmate",
+        "Agent-Platform: codex/gpt-6.1-sol",
+        "Agent-Session: 11111111-2222-4333-8444-555555555555"
+      ]
+    },
+    {
+      "scenario": "Amend remains semantically identical",
+      "exit_code": 0,
+      "stderr": "",
+      "commit": "04e79500aba38651b39efb14fdaa3ba95b5ee25f",
+      "message": "fix: record worker attribution\n\nCo-authored-by: Human <human@example.invalid>\nSigned-off-by: Human <human@example.invalid>\nCo-authored-by: codex <noreply@firstmate.invalid>\nAgent-System: fac:firstmate\nAgent-Platform: codex/gpt-6.1-sol\nAgent-Session: 11111111-2222-4333-8444-555555555555\n\n",
+      "parsed_trailers": [
+        "Co-authored-by: Human <human@example.invalid>",
+        "Signed-off-by: Human <human@example.invalid>",
+        "Co-authored-by: codex <noreply@firstmate.invalid>",
+        "Agent-System: fac:firstmate",
+        "Agent-Platform: codex/gpt-6.1-sol",
+        "Agent-Session: 11111111-2222-4333-8444-555555555555"
+      ]
+    },
+    {
+      "scenario": "Native Claude session remains in native position with no duplicate",
+      "exit_code": 0,
+      "stderr": "",
+      "commit": "7e803c7cfc41fc02cf47638330943ebc76419e71",
+      "message": "fix: preserve native session\n\nCo-authored-by: Claude <noreply@anthropic.com>\nClaude-Session: 11111111-2222-4333-8444-555555555555\nSigned-off-by: Human <human@example.invalid>\nAgent-System: fac:firstmate\nAgent-Platform: claude\n\n",
+      "parsed_trailers": [
+        "Co-authored-by: Claude <noreply@anthropic.com>",
+        "Claude-Session: 11111111-2222-4333-8444-555555555555",
+        "Signed-off-by: Human <human@example.invalid>",
+        "Agent-System: fac:firstmate",
+        "Agent-Platform: claude"
+      ]
+    },
+    {
+      "scenario": "Polytoken uses existing task session record only",
+      "exit_code": 0,
+      "stderr": "",
+      "commit": "9350d11eee9eee59299e38611edff6f428a3bd63",
+      "message": "fix: recorded session\n\nCo-authored-by: polytoken <noreply@firstmate.invalid>\nAgent-System: fac:firstmate\nAgent-Platform: polytoken/zai/glm-5.3-flash\nAgent-Session: validation-recorded-session\n\n",
+      "parsed_trailers": [
+        "Co-authored-by: polytoken <noreply@firstmate.invalid>",
+        "Agent-System: fac:firstmate",
+        "Agent-Platform: polytoken/zai/glm-5.3-flash",
+        "Agent-Session: validation-recorded-session"
+      ]
+    },
+    {
+      "scenario": "Outside t27sol strips AI and native sessions but preserves body and human",
+      "exit_code": 0,
+      "stderr": "",
+      "commit": "0255dd9c87cd7a4e89d0bacac9f073da786a5b8d",
+      "message": "fix: document examples\n\nAgent-System: body-example\nAgent-Platform: codex/body-example\nAgent-Session: body-session\nClaude-Session: body-native-session\nCo-authored-by: pi <noreply@firstmate.invalid>\nThese are ordinary examples followed by prose.\n\nCo-authored-by: Human <human@example.invalid>\nSigned-off-by: Human <human@example.invalid>\n\n",
+      "parsed_trailers": [
+        "Co-authored-by: Human <human@example.invalid>",
+        "Signed-off-by: Human <human@example.invalid>"
+      ]
+    },
+    {
+      "scenario": "OpenCode variant reaches Git parsed platform",
+      "exit_code": 0,
+      "stderr": "",
+      "commit": "47b61677b24a894df249d778f38c3b2a63587b29",
+      "message": "fix: variant selector\n\nCo-authored-by: opencode <noreply@firstmate.invalid>\nAgent-System: fac:firstmate\nAgent-Platform: opencode/openai/gpt-6.1-sol#high\n\n",
+      "parsed_trailers": [
+        "Co-authored-by: opencode <noreply@firstmate.invalid>",
+        "Agent-System: fac:firstmate",
+        "Agent-Platform: opencode/openai/gpt-6.1-sol#high"
+      ]
+    },
+    {
+      "scenario": "Reject unsafe model 'bad\\nAgent-Session: injected'",
+      "exit_code": 1,
+      "stderr": "fm-git-attribution: unsafe model for Agent-Platform\n"
+    },
+    {
+      "scenario": "Reject unsafe model 'bad\\x01selector'",
+      "exit_code": 1,
+      "stderr": "fm-git-attribution: unsafe model for Agent-Platform\n"
+    },
+    {
+      "scenario": "Reject unsafe model '/private/secret'",
+      "exit_code": 1,
+      "stderr": "fm-git-attribution: unsafe model for Agent-Platform\n"
+    },
+    {
+      "scenario": "Reject unsafe model 'https://private.invalid/model'",
+      "exit_code": 1,
+      "stderr": "fm-git-attribution: unsafe model for Agent-Platform\n"
+    }
+  ]
+}

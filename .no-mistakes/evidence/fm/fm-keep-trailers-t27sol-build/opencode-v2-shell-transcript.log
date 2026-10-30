@@ -1,0 +1,22 @@
+Real OpenCode server: {"version": "2.0.21", "pid": 44983, "urls": ["http://127.0.0.1:52387"], "paths": {"tmp": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M6798HVS551VQK499W9X9MQQ/.local-test-attribution/opencode-v2-server-oxpscxe_/opencode"}}
+Actual active plugin: [{"id": "fm.busy-state", "source": {"type": "local", "path": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M6798HVS551VQK499W9X9MQQ/.local-test-attribution/opencode-v2-server-oxpscxe_/project/.opencode/plugins/fm-busy-state.js"}, "features": {"server": true}, "state": {"status": "active"}}]
+Created actual session: ses_e71345fe0ffe2sffUw9TCWOlIe
+Actual shell endpoint result: null
+Committed message:
+fix: native OpenCode V2 session
+
+Co-authored-by: opencode <noreply@firstmate.invalid>
+Agent-System: fac:firstmate
+Agent-Platform: opencode/openai/gpt-6.1-sol#high
+
+Git parsed trailers:
+Co-authored-by: opencode <noreply@firstmate.invalid>
+Agent-System: fac:firstmate
+Agent-Platform: opencode/openai/gpt-6.1-sol#high
+
+OpenCode V2 server stopped; exit: 130
+Traceback (most recent call last):
+  File "~/.no-mistakes/evidence/01M6798HVS551VQK499W9X9MQQ/drive-opencode-v2-shell.py", line 54, in <module>
+    assert f'Agent-Session: {sid}\n' in trailers,'Actual session ID absent from committed attribution'
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Actual session ID absent from committed attribution

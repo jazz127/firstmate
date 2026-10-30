@@ -28,8 +28,8 @@
 # declared configuration.
 # Primary config/t3code-instances selects the T3 provider account for each
 # harness, so secondmates inherit it rather than falling back to a default.
-# Primary config/keep-ai-trailers is a home-wide commit-attribution choice, so
-# a secondmate's own crewmates keep AI co-author trailers too.
+# Primary config/keep-ai-trailers propagates the legacy attribution preference;
+# docs/configuration.md "Commit attribution" owns its policy.
 # Primary config/supervision-host-off is the fleet's supervision-host opt-out,
 # so a primary that opts out opts every secondmate home out too, while each
 # home's config/supervision-host engine line stays its own.

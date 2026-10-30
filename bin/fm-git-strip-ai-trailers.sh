@@ -46,9 +46,10 @@
 #       git's pre-push arguments and stdin; a refusal stops the push, and a
 #       pass chains to the repository's own pre-push with the same stdin.
 #
-# WHY THIS EXISTS. Claude launches already carry attribution-off in their
-# per-launch --settings JSON. Cursor and other non-Claude runtimes inject a
-# Co-Authored-By trailer at the tooling layer AFTER the worker types a clean
+# WHY THIS EXISTS. When stripping is selected under docs/configuration.md's
+# "Commit attribution" policy, Claude launches already carry attribution-off
+# in their per-launch --settings JSON. Cursor and other non-Claude runtimes
+# inject a Co-Authored-By trailer at the tooling layer AFTER the worker types a clean
 # message, so the typed message is not the commit object.
 # A prior per-machine ~/.cursor/cli-config.json attribution-off is not durable:
 # it does not travel with Firstmate, it defaults back to on when unset, and it
@@ -68,8 +69,8 @@
 # writes the commit object without running git. Both incidents that motivated
 # this strip came through an ordinary hook-running commit, so the ruling is to
 # accept that gap rather than add a push-side rewrite or a push-side check. A
-# trailer found on a fleet commit therefore points at one of those two paths,
-# not at an unnoticed hole in the matcher.
+# trailer found on a stripping worker's commit therefore points at one of
+# those two paths, not at an unnoticed hole in the matcher.
 #
 # ACCEPTED RESIDUAL, ruled 2026-09-17. Inside a fleet pane git reports this
 # directory as the repository's hooks directory, so a hook manager run there

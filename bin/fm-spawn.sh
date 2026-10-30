@@ -664,7 +664,7 @@
 # state/<id>.git-hooks as an appended GIT_CONFIG core.hooksPath entry for the pane, so git
 # commit-msg strips known AI trailers at the commit object for every launched
 # runtime, Claude included as defense in depth. bin/fm-git-strip-ai-trailers.sh
-# owns the identities, the hook install, and chaining the repository git is
+# owns the hook install and chaining the repository git is
 # actually running in so a project husky hook still runs. Author identity is
 # not rewritten. A forge=external ship installs that directory even under
 # config/keep-ai-trailers, because its pre-push wrapper carries the push guard.
@@ -6838,18 +6838,18 @@ EOF
     ;;
   esac
 
-# Per-task git hooksPath that strips AI commit trailers at the commit object.
-# Installed for every kind, including secondmate, unless the home opts in to
-# keeping trailers. Cursor and other non-Claude runtimes inject the trailer
+# Per-task git hooksPath selected by docs/configuration.md's "Commit attribution"
+# policy, for every kind including secondmate.
+# Cursor and other non-Claude runtimes inject the trailer
 # after the typed message, so the typed message is not the object. When
 # installed, the pane receives this directory via GIT_CONFIG_* below, which
 # overrides a project's husky core.hooksPath without rewriting it; the installer
 # chains the previous hooks so they still run. Real secondmate
 # homes are firstmate clones; a launch whose worktree is not git fails closed
-# rather than shipping a runtime that cannot strip.
+# rather than shipping a runtime without its required hooks.
 # A forge=external ship always gets this directory, because its pre-push
 # wrapper carries the guard that keeps task branches off the shared origin; a
-# home that keeps trailers gets a commit-msg wrapper that only chains.
+# legacy keep launch gets a commit-msg wrapper that only chains.
 GIT_HOOKS_DIR="$STATE_REAL/$ID.git-hooks"
 GIT_HOOKS_INSTALLED=0
 if [ "$EXTERNAL_REVIEW" = 1 ]; then

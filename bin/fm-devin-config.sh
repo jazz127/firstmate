@@ -12,8 +12,9 @@
 # and Claude MCP imports, while AGENTS.md and .agents/skills still load.
 # attribution=false is forced too, because Devin otherwise adds a
 # Co-Authored-By: Devin trailer and a Generated with Devin line to commits
-# and PRs, unless FM_KEEP_AI_TRAILERS=1 (fm-spawn sets it when the home has
-# config/keep-ai-trailers); then the source's attribution setting is kept.
+# and PRs, unless FM_KEEP_AI_TRAILERS=1; then the source's attribution setting
+# is kept. fm-spawn resolves that value under docs/configuration.md's
+# "Commit attribution" policy.
 # UserPromptSubmit opens a turn; Stop and SessionEnd close it. Devin 3000.11.1
 # emits no Stop on double-Escape cancellation, so fm-control invalidates its
 # state to unknown after delivering that interrupt, never fabricating idle.

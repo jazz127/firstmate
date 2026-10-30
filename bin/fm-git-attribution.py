@@ -5,8 +5,8 @@ Usage: fm-git-attribution.py mode <config> <project>
        fm-git-attribution.py stamp <task-meta> <runtime> <model> <message>
        fm-git-attribution.py strip-fields <message>
 
-t27sol GitHub repositories always receive attribution; elsewhere the legacy
-config presence flag means keep, and absence means strip.
+docs/configuration.md "Commit attribution" owns launch-repository selection
+and its accepted cross-repository limitation.
 Stamp runs in Git's hook cwd and rechecks origin. Session references come from
 runtime context or existing task metadata, never a new persistent record.
 """
@@ -22,6 +22,8 @@ SHARED_FIELDS = {"agent-system", "agent-platform", "agent-session"}
 
 
 def is_ai_coauthor(value):
+    # Match known product names and observed bot addresses, never vendor domains
+    # or name substrings, so human co-authors employed by vendors remain.
     name = value.strip().lower()
     email = ""
     if "<" in name and ">" in name.split("<", 1)[1]:
@@ -162,6 +164,8 @@ if __name__ == "__main__":
             message = Path(sys.argv[2])
             content = remove_trailers(
                 message.read_text(), SHARED_FIELDS | {"claude-session"}, strip_ai=True)
+            # Only the observed Cortex link forms count as generated attribution;
+            # other "Generated with" prose belongs to the author.
             message.write_text("".join(line for line in content.splitlines(keepends=True)
                                        if not re.fullmatch(
                                            r"generated with \[(?:snowflake coco|cortex code)\]"

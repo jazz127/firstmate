@@ -3978,6 +3978,12 @@ if [ "$RELAUNCH" -eq 0 ] && [ "$KIND" != secondmate ] &&
   echo "error: spawn refused: project $PROJ_ABS has no commit yet (unborn HEAD), so there is nothing to branch a worktree from; make one commit in the project, for example 'git -C $PROJ_ABS commit --allow-empty -m \"chore: initial commit\"', then spawn again" >&2
   exit 1
 fi
+# Resolve the legacy presence flag or scoped keep-and-add list before any
+# runtime-specific attribution settings are built.
+AI_ATTRIBUTION_MODE=$(python3 "$SCRIPT_DIR/fm-git-attribution.py" mode "$CONFIG/keep-ai-trailers" "$PROJ_ABS") || exit 1
+KEEP_AI_TRAILERS=0
+[ "$AI_ATTRIBUTION_MODE" = strip ] || KEEP_AI_TRAILERS=1
+
 # Project capacity admission (bin/fm-project-capacity-lib.sh owns the
 # declaration, what holds a place, and why this is race-safe). A fresh worker
 # for a project whose declared capacity is already held is deferred here, before
@@ -4097,6 +4103,10 @@ if [ "$KIND" = ship ] || [ "$KIND" = scout ]; then
       cat "$SOURCE_BRIEF" &&
       if [ "$KIND" = ship ] && [ "$MODE" = no-mistakes ]; then
         fm_brief_intent_overlay "$CAPTAIN_INTENT"
+      fi &&
+      if [ "$AI_ATTRIBUTION_MODE" = add ]; then
+        # shellcheck disable=SC2016 # Markdown backticks, not command substitution.
+        printf '\n# Scoped attribution\nInclude the visible attribution line `Agent-System: fac:firstmate` in the pull request description, preserving any pipeline attestation.\n'
       fi
   } >"$BRIEF_TMP" || {
     rm -f -- "$BRIEF_TMP"
@@ -6838,6 +6848,9 @@ if [ "$EXTERNAL_REVIEW" = 1 ]; then
   [ -z "$EXTERNAL_BACKUP_REMOTE" ] || guard_args+=("$EXTERNAL_BACKUP_REMOTE" "$EXTERNAL_BACKUP_PREFIX")
   strip_args=()
   [ "$KEEP_AI_TRAILERS" = 0 ] || strip_args=(--no-strip)
+  if [ "$AI_ATTRIBUTION_MODE" = add ]; then
+    strip_args+=(--attribution "$CONFIG/keep-ai-trailers" "$HARNESS" "${MODEL:-default}")
+  fi
   { "$FM_ROOT/bin/fm-git-push-guard.sh" write "${guard_args[@]}" \
     && "$FM_ROOT/bin/fm-git-strip-ai-trailers.sh" install "${strip_args[@]+"${strip_args[@]}"}" \
       --push-guard "$PUSH_GUARD_FILE" "$GIT_HOOKS_DIR" "$WT"; } || {
@@ -6845,8 +6858,11 @@ if [ "$EXTERNAL_REVIEW" = 1 ]; then
     exit 1
   }
   GIT_HOOKS_INSTALLED=1
-elif [ "$KEEP_AI_TRAILERS" = 0 ]; then
+elif [ "$KEEP_AI_TRAILERS" = 0 ] || [ "$AI_ATTRIBUTION_MODE" = add ]; then
   STRIP_INSTALL=("$FM_ROOT/bin/fm-git-strip-ai-trailers.sh" install "$GIT_HOOKS_DIR" "$WT")
+  if [ "$AI_ATTRIBUTION_MODE" = add ]; then
+    STRIP_INSTALL=("$FM_ROOT/bin/fm-git-strip-ai-trailers.sh" install --attribution "$CONFIG/keep-ai-trailers" "$HARNESS" "${MODEL:-default}" "$GIT_HOOKS_DIR" "$WT")
+  fi
   if [ "$KIND" = ship ] && [ "$MODE" != local-only ]; then
     STRIP_INSTALL+=("$FM_ROOT/bin/fm-upstream-push-guard.sh" "$FM_ROOT" "$TASK_TMP/prior-art.json")
   fi

@@ -6,7 +6,7 @@
 #   fm-git-strip-ai-trailers.sh <msgfile>
 #       Commit-msg hook mode. Git passes the proposed message file as $1.
 #       Rewrites that file in place, then exits 0 so the commit proceeds.
-#   fm-git-strip-ai-trailers.sh install [--no-strip] [--push-guard <guard-file>] <hooks-dir> <worktree>
+#   fm-git-strip-ai-trailers.sh install [--no-strip] [--attribution <config> <runtime> <model>] [--push-guard <guard-file>] <hooks-dir> <worktree>
 #       Recreate <hooks-dir> as a core.hooksPath for this launch: a commit-msg
 #       hook that runs this strip, plus one wrapper per client-side hook name
 #       git documents except reference-transaction and post-index-change,
@@ -31,6 +31,9 @@
 #       the pre-push wrapper run bin/fm-git-push-guard.sh on it first, with
 #       git's arguments and ref lines, chaining to the repository's pre-push
 #       hook only when the guard passes (that script owns the rules).
+#       --attribution <scope-config> <runtime> <model> keeps and adds scoped
+#       attribution through fm-git-attribution.py, rechecking the commit repo.
+#       The scope list is frozen read-only alongside the task hooks.
 #   fm-git-strip-ai-trailers.sh env-file <hooks-dir> <out-file>
 #       Write <out-file> as one plain export statement that appends
 #       core.hooksPath=<hooks-dir> after the GIT_CONFIG_COUNT entries this
@@ -86,7 +89,7 @@ usage() {
   cat >&2 <<'EOF'
 usage:
   fm-git-strip-ai-trailers.sh <msgfile>
-  fm-git-strip-ai-trailers.sh install [--no-strip] [--push-guard <guard-file>] <hooks-dir> <worktree> [<pre-push-guard> [<arg>...]]
+  fm-git-strip-ai-trailers.sh install [--no-strip] [--attribution <config> <runtime> <model>] [--push-guard <guard-file>] <hooks-dir> <worktree> [<pre-push-guard> [<arg>...]]
   fm-git-strip-ai-trailers.sh env-file <hooks-dir> <out-file>
 EOF
   exit 2
@@ -119,6 +122,7 @@ fm_is_ai_attribution_line() {
     'generated with [cortex code](https://docs.snowflake.com/'*')')
     return 0
     ;;
+  agent-system:* | agent-platform:* | agent-session:*) return 0 ;;
   co-authored-by:*) ;;
   *) return 1 ;;
   esac
@@ -135,7 +139,7 @@ fm_is_ai_attribution_line() {
   esac
   name=$(printf '%s' "$name" | tr '[:upper:]' '[:lower:]')
   case "$email" in
-  noreply@anthropic.com | cursoragent@* | noreply@openai.com | copilot@github.com | noreply@commandcode.ai | noreply@snowflake.com)
+  noreply@firstmate.invalid | noreply@anthropic.com | cursoragent@* | noreply@openai.com | copilot@github.com | noreply@commandcode.ai | noreply@snowflake.com)
     return 0
     ;;
   esac
@@ -313,6 +317,11 @@ install_hooks() {
 
   strip_line=
   [ "$strip" = 0 ] || strip_line="$(quote_for_hook "$SELF") \"\$1\" || exit \$?"
+  if [ -n "${attribution_config:-}" ]; then
+    cp "$attribution_config" "$hooks_dir/attribution-scopes" || return 1
+    chmod 400 "$hooks_dir/attribution-scopes" || return 1
+    strip_line="python3 $(quote_for_hook "${SELF%/*}/fm-git-attribution.py") stamp $(quote_for_hook "$hooks_dir/attribution-scopes") $(quote_for_hook "$attribution_runtime") $(quote_for_hook "$attribution_model") \"\$1\" || exit \$?"
+  fi
   write_executable "$hooks_dir/commit-msg" <<EOF
 #!/usr/bin/env bash
 set -u
@@ -369,9 +378,15 @@ CMD=${1:-}
 case "$CMD" in
 install)
   shift
-  strip=1 guard=
+  strip=1 guard='' attribution_config='' attribution_runtime='' attribution_model=''
   while [ "$#" -gt 0 ]; do
     case "$1" in
+    --attribution)
+      [ "$#" -ge 6 ] || usage
+      attribution_config=$2 attribution_runtime=$3 attribution_model=$4
+      strip=0
+      shift 4
+      ;;
     --no-strip)
       strip=0
       shift

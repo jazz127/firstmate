@@ -30,6 +30,81 @@ make_repo() {
   fm_git_init_commit "$dir"
 }
 
+test_scoped_keep_and_add() {
+  local runtime repo hooks config body session model
+  config="$TMP_ROOT/scopes"
+  printf '%s\n' '# selected owner and exact repository' 'github.com/t27sol' 'gitlab.com/team/one' >"$config"
+  for runtime in codex claude pi pi-signed omp opencode grok kimi cursor agy muse gemini rovo devin commandcode polytoken cortex; do
+    repo="$TMP_ROOT/scoped-$runtime" hooks="$TMP_ROOT/scoped-hooks-$runtime"
+    make_repo "$repo"
+    git -C "$repo" remote add origin git@github.com:t27sol/sample.git
+    model=fixture-model
+    "$STRIP" install --attribution "$config" "$runtime" "$model" "$hooks" "$repo" || fail 'scoped install failed'
+    session=11111111-2222-3333-4444-555555555555
+    CODEX_THREAD_ID=$session with_hooks_env "$hooks" git -C "$repo" commit -q --allow-empty \
+      -m 'fix: scoped attribution' -m 'Co-authored-by: Jane Doe <jane@example.com>' \
+      -m "Claude-Session: $session"
+    body=$(git -C "$repo" log -1 --format=%B)
+    assert_contains "$body" 'Agent-System: fac:firstmate' 'missing system'
+    if [ "$runtime" = claude ]; then
+      assert_contains "$body" 'Agent-Platform: claude' 'missing Claude platform'
+      assert_not_contains "$body" "claude/$model" 'Claude model must be omitted'
+    else
+      assert_contains "$body" "Agent-Platform: $runtime/$model" 'missing platform'
+    fi
+    assert_contains "$body" "Co-authored-by: $runtime <noreply@firstmate.invalid>" 'missing agent coauthor'
+    assert_contains "$body" 'Co-authored-by: Jane Doe' 'lost human coauthor'
+    case "$runtime" in
+      codex | claude) assert_not_contains "$body" 'Agent-Session:' 'native session was duplicated' ;;
+      *) assert_not_contains "$body" 'Agent-Session:' 'guessed session for another runtime' ;;
+    esac
+    if [ "$runtime" = codex ]; then
+      CODEX_THREAD_ID=$session with_hooks_env "$hooks" git -C "$repo" commit -q --allow-empty -m 'fix: no native session'
+      body=$(git -C "$repo" log -1 --format=%B)
+      assert_contains "$body" "Agent-Session: $session" 'Codex UUID missing without native session'
+    fi
+    CODEX_THREAD_ID=/private/session with_hooks_env "$hooks" git -C "$repo" commit -q --amend --allow-empty \
+      -m 'fix: amended attribution' -m 'Co-authored-by: Claude <noreply@anthropic.com>'
+    body=$(git -C "$repo" log -1 --format=%B)
+    assert_not_contains "$body" 'Agent-Session:' 'unsafe or stale session published'
+    assert_contains "$body" 'Co-authored-by: Claude <noreply@anthropic.com>' 'native coauthor lost'
+    # The same pane committing in another repo must still strip.
+    git -C "$repo" remote set-url origin https://github.com/t27sol-other/sample.git
+    with_hooks_env "$hooks" git -C "$repo" commit -q --allow-empty \
+      -m 'fix: outside scope' --trailer 'Co-authored-by: Claude <noreply@anthropic.com>'
+    body=$(git -C "$repo" log -1 --format=%B)
+    assert_not_contains "$body" 'noreply@anthropic.com' 'outside scope kept AI trailer'
+    assert_not_contains "$body" 'Agent-System:' 'outside scope gained attribution'
+  done
+  pass 'scoped hooks keep and add across runtimes; other owners strip and unsafe sessions are omitted'
+}
+
+test_scope_matching() {
+  local config repo mode url
+  config="$TMP_ROOT/scope-matching" repo="$TMP_ROOT/scope-repo"
+  make_repo "$repo"
+  git -C "$repo" remote add origin https://github.com/t27sol/repo.git
+  for url in https://github.com/t27sol/repo.git ssh://git@github.com/t27sol/repo.git git@github.com:t27sol/repo.git; do
+    git -C "$repo" remote set-url origin "$url"
+    printf '%s\n' 'github.com/t27sol/repo' >"$config"
+    mode=$(python3 "$ROOT/bin/fm-git-attribution.py" mode "$config" "$repo") || fail 'scope resolution failed'
+    [ "$mode" = add ] || fail 'exact repository did not match'
+  done
+  printf '%s\n' 'github.com/t27sol/other' >"$config"
+  [ "$(python3 "$ROOT/bin/fm-git-attribution.py" mode "$config" "$repo")" = strip ] || fail 'sibling repo matched'
+  printf '%s\n' 'https://github.com/t27sol' >"$config"
+  if python3 "$ROOT/bin/fm-git-attribution.py" mode "$config" "$repo" 2>/dev/null; then fail 'invalid scope accepted'; fi
+  : >"$config"
+  [ "$(python3 "$ROOT/bin/fm-git-attribution.py" mode "$config" "$repo")" = keep ] || fail 'legacy flag changed'
+  printf '%s\n' github.com/t27sol >"$config"
+  "$STRIP" install --attribution "$config" codex default "$TMP_ROOT/default-model-hooks" "$repo" || fail 'default-model install failed'
+  with_hooks_env "$TMP_ROOT/default-model-hooks" git -C "$repo" commit -q --allow-empty -m 'fix: unresolved model'
+  mode=$(git -C "$repo" log -1 --format=%B)
+  assert_contains "$mode" 'Agent-Platform: codex' 'runtime missing without model'
+  assert_not_contains "$mode" 'Agent-Platform: codex/' 'unreported model emitted'
+  pass 'scope resolution accepts forge transports, bounds repository scopes, rejects malformed config and keeps legacy flag'
+}
+
 test_cursor_trailer_does_not_reach_the_commit_object() {
   local repo hooks body author
   repo="$TMP_ROOT/cursor-object"
@@ -555,6 +630,8 @@ test_push_guard_install_runs_the_guard_before_chaining() {
   pass "install --push-guard writes a read-only pre-push that runs the guard before chaining"
 }
 
+test_scoped_keep_and_add
+test_scope_matching
 test_cursor_trailer_does_not_reach_the_commit_object
 test_commandcode_trailer_is_stripped
 test_human_coauthor_is_kept

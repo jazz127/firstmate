@@ -21,7 +21,24 @@ UUID = re.compile(r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}", re.I)
 SHARED_FIELDS = {"agent-system", "agent-platform", "agent-session"}
 
 
-def remove_trailers(content, keys):
+def is_ai_coauthor(value):
+    name = value.strip().lower()
+    email = ""
+    if "<" in name and ">" in name.split("<", 1)[1]:
+        name, email = name.split("<", 1)
+        name = name.strip()
+        email = email.split(">", 1)[0].strip()
+    return (email.startswith("cursoragent@") or email in {
+        "noreply@firstmate.invalid", "noreply@anthropic.com", "noreply@openai.com",
+        "copilot@github.com", "noreply@commandcode.ai", "noreply@snowflake.com",
+    } or name in {
+        "cursor", "cursor agent", "claude", "claude code", "github copilot", "copilot",
+        "codex", "chatgpt", "gemini", "google gemini", "grok", "openai", "commandcodebot",
+        "snowflake coco", "cortex code",
+    })
+
+
+def remove_trailers(content, keys, strip_ai=False):
     args = ["git", "interpret-trailers", "--only-input"]
     block = subprocess.run(args + ["--only-trailers"], input=content,
                            capture_output=True, text=True, check=True).stdout
@@ -36,7 +53,11 @@ def remove_trailers(content, keys):
         start = formatted.rfind(entry, 0, cursor)
         if start < 0:
             raise ValueError("cannot locate Git-parsed trailer in message")
-        if entry.split(":", 1)[0].strip().lower() in keys:
+        key, _, value = entry.partition(":")
+        key = key.strip().lower()
+        value = " ".join(line.strip() for line in value.splitlines())
+        if (key in keys or strip_ai and key == "co-authored-by"
+                and is_ai_coauthor(value)):
             formatted = formatted[:start] + formatted[start + len(entry):]
         cursor = start
     return formatted
@@ -139,8 +160,12 @@ if __name__ == "__main__":
             stamp(*sys.argv[2:])
         elif len(sys.argv) == 3 and sys.argv[1] == "strip-fields":
             message = Path(sys.argv[2])
-            message.write_text(remove_trailers(
-                message.read_text(), SHARED_FIELDS | {"claude-session"}))
+            content = remove_trailers(
+                message.read_text(), SHARED_FIELDS | {"claude-session"}, strip_ai=True)
+            message.write_text("".join(line for line in content.splitlines(keepends=True)
+                                       if not re.fullmatch(
+                                           r"generated with \[(?:snowflake coco|cortex code)\]"
+                                           r"\(https://docs\.snowflake\.com/.*\)", line.strip(), re.I)))
         else:
             raise ValueError(__doc__)
     except (OSError, ValueError, subprocess.CalledProcessError) as exc:

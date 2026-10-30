@@ -270,6 +270,8 @@ test_git_trailer_removal_preserves_message_body() {
   prose=$(printf '%s\n' 'fix: document attribution' '' \
     'Agent-System: fac:example' 'Agent-Platform: codex/example' \
     'Agent-Session: example-session' 'Claude-Session: example-native-session' \
+    'Co-authored-by: pi <noreply@firstmate.invalid>' \
+    'Co-authored-by: Jane Doe <jane@example.com>' \
     'These are body examples followed by explanatory prose.')
   human=$(printf '%s\n' 'Signed-off-by: Jane Doe <jane@example.com>' \
     'Co-authored-by: Jane Doe <jane@example.com>' 'Reviewed-by: Review Team' 'Empty-Key: ')
@@ -337,12 +339,77 @@ test_git_trailer_removal_preserves_message_body() {
   pass 'Git trailer removal preserves body examples, folded native fields, empty fields and native order'
 }
 
+test_known_coauthors_respect_git_trailer_boundary() {
+  local mode repo hooks msg ai humans prose footer body parsed
+  ai=$(printf '%s\n' \
+    'Co-authored-by: Fixture <noreply@firstmate.invalid>' \
+    'Co-authored-by: Fixture <noreply@anthropic.com>' \
+    'Co-authored-by: Fixture <cursoragent@fixture.invalid>' \
+    'Co-authored-by: Fixture <noreply@openai.com>' \
+    'Co-authored-by: Fixture <copilot@github.com>' \
+    'Co-authored-by: Fixture <noreply@commandcode.ai>' \
+    'Co-authored-by: Fixture <noreply@snowflake.com>' \
+    'Co-authored-by: Cursor <fixture@bots.invalid>' \
+    'Co-authored-by: Cursor Agent <fixture@bots.invalid>' \
+    'Co-authored-by: Claude <fixture@bots.invalid>' \
+    'Co-authored-by: Claude Code <fixture@bots.invalid>' \
+    'Co-authored-by: GitHub Copilot <fixture@bots.invalid>' \
+    'Co-authored-by: Copilot <fixture@bots.invalid>' \
+    'Co-authored-by: Codex <fixture@bots.invalid>' \
+    'Co-authored-by: ChatGPT <fixture@bots.invalid>' \
+    'Co-authored-by: Gemini <fixture@bots.invalid>' \
+    'Co-authored-by: Google Gemini <fixture@bots.invalid>' \
+    'Co-authored-by: Grok <fixture@bots.invalid>' \
+    'Co-authored-by: OpenAI <fixture@bots.invalid>' \
+    'Co-authored-by: CommandCodeBot <fixture@bots.invalid>' \
+    'Co-authored-by: Snowflake CoCo <fixture@bots.invalid>' \
+    'Co-authored-by: Cortex Code <fixture@bots.invalid>' \
+    'cO-AuThOrEd-By : pi' ' <NOREPLY@FIRSTMATE.INVALID>')
+  humans=$(printf '%s\n' 'Co-authored-by: Jane Doe <jane@example.com>' \
+    'Co-authored-by: Jane Doe <jane@anthropic.com>' \
+    'Co-authored-by: Sam Roe <sam@cursor.com>' \
+    'Co-authored-by: Daisy <daisy@example.com>')
+  prose=$(printf 'fix: document co-authors\n\n%s\n%s\nThese are body examples followed by explanatory prose.' "$ai" "$humans")
+  footer=$(printf 'Signed-off-by: Jane Doe <jane@example.com>\n%s\n%s' "$ai" "$humans")
+  for mode in direct strip fallback; do
+    repo="$TMP_ROOT/coauthor-body-$mode" hooks="$TMP_ROOT/coauthor-hooks-$mode"
+    make_repo "$repo"
+    git -C "$repo" remote add origin https://github.com/t27sol/sample.git
+    case "$mode" in
+      strip) "$STRIP" install "$hooks" "$repo" || fail 'coauthor strip hook install failed' ;;
+      fallback) "$STRIP" install --attribution "$TMP_ROOT/coauthor.meta" claude default "$hooks" "$repo" || fail 'coauthor fallback hook install failed' ;;
+    esac
+    git -C "$repo" remote set-url origin https://github.com/another-owner/sample.git
+    msg="$repo/message"
+    printf '%s\n\n%s\n' "$prose" "$footer" >"$msg"
+    if [ "$mode" = direct ]; then
+      "$STRIP" "$msg" || fail 'direct coauthor strip failed'
+      git -C "$repo" commit -q --allow-empty -F "$msg" || fail 'direct coauthor commit failed'
+    else
+      with_hooks_env "$hooks" git -C "$repo" commit -q --allow-empty -F "$msg" || fail 'coauthor hook commit failed'
+    fi
+    body=$(git -C "$repo" log -1 --format=%B)
+    assert_contains "$body" "$prose" "$mode stripped a body coauthor example"
+    parsed=$(git -C "$repo" log -1 --format=%B | git -C "$repo" interpret-trailers --parse)
+    [ "$parsed" = "Signed-off-by: Jane Doe <jane@example.com>"$'\n'"$humans" ] || fail "$mode lost human coauthors or kept AI trailers: $parsed"
+    if [ "$mode" != direct ]; then
+      with_hooks_env "$hooks" git -C "$repo" commit -q --allow-empty --amend --no-edit || fail 'coauthor amendment failed'
+      body=$(git -C "$repo" log -1 --format=%B)
+      assert_contains "$body" "$prose" 'amendment stripped body coauthor examples'
+      parsed=$(git -C "$repo" log -1 --format=%B | git -C "$repo" interpret-trailers --parse)
+      [ "$parsed" = "Signed-off-by: Jane Doe <jane@example.com>"$'\n'"$humans" ] || fail 'amendment changed human trailer semantics'
+    fi
+  done
+  pass 'known AI coauthors strip only from parsed trailers while body examples and human coauthors survive'
+}
+
 test_strip_fields_preserves_patch_content() {
   local msg patch expected
   msg="$TMP_ROOT/patch-message"
   patch=$(printf '%s\n' '---' 'Agent-System: patch-system' 'Agent-Platform: patch-platform' \
-    'Agent-Session: patch-session' 'Claude-Session: patch-session')
-  printf 'fix: patch message\n\nSigned-off-by: Jane Doe <jane@example.com>\nAgent-System: stale-system\nAgent-Platform: stale-platform\nAgent-Session: stale-session\nClaude-Session: stale-session\n\n%s\n' "$patch" >"$msg"
+    'Agent-Session: patch-session' 'Claude-Session: patch-session' \
+    'Co-authored-by: pi <noreply@firstmate.invalid>')
+  printf 'fix: patch message\n\nSigned-off-by: Jane Doe <jane@example.com>\nAgent-System: stale-system\nAgent-Platform: stale-platform\nAgent-Session: stale-session\nClaude-Session: stale-session\nCo-authored-by: pi <noreply@firstmate.invalid>\n\n%s\n' "$patch" >"$msg"
   "$STRIP" "$msg" || fail 'patch message strip failed'
   expected=$(printf 'fix: patch message\n\nSigned-off-by: Jane Doe <jane@example.com>\n\n%s' "$patch")
   [ "$(cat "$msg")" = "$expected" ] || fail 'strip changed patch content or retained real attribution'
@@ -793,14 +860,11 @@ test_cortex_attribution_does_not_reach_the_commit_object() {
   "$STRIP" install "$hooks" "$repo" || fail "install should succeed"
   printf 'note\n' >>"$repo/README.md"
   git -C "$repo" add README.md
-  # The exact message Cortex Code 1.1.104 produced live: its typed -m body,
-  # a Generated with link line, then the Co-authored-by trailer.
   with_hooks_env "$hooks" git -C "$repo" commit -q \
     -m 'probe commit' \
     -m 'Generated with [Snowflake CoCo](https://docs.snowflake.com/en/user-guide/cortex-code/cortex-code)' \
-    -m 'Co-authored-by: Snowflake CoCo <noreply@snowflake.com>' \
-    -m 'Co-authored-by: Jane Doe <jane@snowflake.com>' \
-    -m 'Generated with care by a human, no link'
+    -m 'Generated with care by a human, no link' \
+    -m $'Co-authored-by: Snowflake CoCo <noreply@snowflake.com>\nCo-authored-by: Jane Doe <jane@snowflake.com>'
   body=$(git -C "$repo" log -1 --format=%B)
   assert_not_contains "$body" "Snowflake CoCo" "Cortex attribution reached the commit object"
   assert_not_contains "$body" "noreply@snowflake.com" "Cortex bot address reached the commit object"
@@ -874,6 +938,7 @@ test_push_guard_install_runs_the_guard_before_chaining() {
   pass "install --push-guard writes a read-only pre-push that runs the guard before chaining"
 }
 
+test_known_coauthors_respect_git_trailer_boundary
 test_git_trailer_removal_preserves_message_body
 test_strip_fields_preserves_patch_content
 test_scoped_keep_and_add

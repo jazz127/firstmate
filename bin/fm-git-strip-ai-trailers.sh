@@ -94,79 +94,13 @@ EOF
   exit 2
 }
 
-trim_space() {
-  local s=$1
-  s=${s#"${s%%[![:space:]]*}"}
-  s=${s%"${s##*[![:space:]]}"}
-  printf '%s' "$s"
-}
-
-# True when this line is an AI Co-Authored-By trailer that must not reach a
-# commit object. Matches known product names and exact observed bot addresses only; an
-# address is added when a runtime is seen emitting it, never guessed from a
-# vendor domain, so a human co-author who works at a vendor is kept. A human
-# whose name or address merely contains a substring such as "ai" is kept.
-fm_is_ai_attribution_line() {
-  local raw=$1 lowered rest name email
-  raw=${raw%$'\r'}
-  raw=$(trim_space "$raw")
-  [ -n "$raw" ] || return 1
-  lowered=$(printf '%s' "$raw" | tr '[:upper:]' '[:lower:]')
-  # Cortex Code (verified live, cortex 1.1.104) writes a `Generated with` line
-  # beside its Co-authored-by trailer, and its built-in /commit command writes
-  # the same line naming `Cortex Code`. Only these two exact link shapes are
-  # attribution; any other `Generated with` text is the author's own.
-  case "$lowered" in
-  'generated with [snowflake coco](https://docs.snowflake.com/'*')' | \
-    'generated with [cortex code](https://docs.snowflake.com/'*')')
-    return 0
-    ;;
-  co-authored-by:*) ;;
-  *) return 1 ;;
-  esac
-  rest=$(trim_space "${raw#*:}")
-  name=$rest
-  email=
-  case "$rest" in
-  *'<'*'>'*)
-    email=$(printf '%s' "$rest" | tr '[:upper:]' '[:lower:]')
-    email=${email#*'<'}
-    email=${email%%'>'*}
-    name=$(trim_space "${rest%%'<'*}")
-    ;;
-  esac
-  name=$(printf '%s' "$name" | tr '[:upper:]' '[:lower:]')
-  case "$email" in
-  noreply@firstmate.invalid | noreply@anthropic.com | cursoragent@* | noreply@openai.com | copilot@github.com | noreply@commandcode.ai | noreply@snowflake.com)
-    return 0
-    ;;
-  esac
-  case "$name" in
-  cursor | 'cursor agent' | claude | 'claude code' | 'github copilot' | copilot | codex | chatgpt | gemini | 'google gemini' | grok | openai | commandcodebot | 'snowflake coco' | 'cortex code')
-    return 0
-    ;;
-  esac
-  return 1
-}
-
 strip_msgfile() {
-  local src=$1 tmp
+  local src=$1
   [ -f "$src" ] || {
     echo "error: commit message file not found: $src" >&2
     return 1
   }
-  python3 "${SELF%/*}/fm-git-attribution.py" strip-fields "$src" || return 1
-  tmp=$(mktemp "${TMPDIR:-/tmp}/fm-git-strip-ai-trailers.XXXXXX") || return 1
-  while IFS= read -r line || [ -n "$line" ]; do
-    if fm_is_ai_attribution_line "$line"; then
-      continue
-    fi
-    printf '%s\n' "$line"
-  done <"$src" >"$tmp" || {
-    rm -f "$tmp"
-    return 1
-  }
-  mv "$tmp" "$src"
+  python3 "${SELF%/*}/fm-git-attribution.py" strip-fields "$src"
 }
 
 quote_for_hook() {

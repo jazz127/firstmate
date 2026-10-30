@@ -216,6 +216,7 @@ polytoken|zai/glm-5.3-flash
 cortex|claude-sonnet-5-5
 CASES
   for runtime in opencode codex; do
+    # shellcheck disable=SC2088 # The literal tilde path is an intentionally unsafe selector.
     for model in '' 'unsafe model' $'model\nAgent-System: injected' $'model\rAgent-System: injected' \
       $'model\tvariant' $'model\001variant' $'model\033variant' $'model\177variant' \
       "model$(printf '\302\205')variant" "model$(printf '\342\200\250')variant" \
@@ -257,7 +258,7 @@ test_recorded_sessions() {
     body=$(git -C "$repo" log -1 --format=%B | git -C "$repo" interpret-trailers --parse)
     assert_not_contains "$body" 'Agent-Session:' 'unsafe session published'
     rm "$meta"
-    OPENCODE_SESSION_ID= with_hooks_env "$hooks" git -C "$repo" commit -q --allow-empty -m 'fix: absent session' || fail 'absent session commit failed'
+    OPENCODE_SESSION_ID='' with_hooks_env "$hooks" git -C "$repo" commit -q --allow-empty -m 'fix: absent session' || fail 'absent session commit failed'
     body=$(git -C "$repo" log -1 --format=%B | git -C "$repo" interpret-trailers --parse)
     assert_not_contains "$body" 'Agent-Session:' 'absent session guessed'
   done

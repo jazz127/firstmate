@@ -1,0 +1,81 @@
+$ bin/fm-lab-home.sh create ~/.no-mistakes/worktrees/119cd7a6b9a4/01M64Z9JEQBNE8HSXVPR6KM05B/.validation-tmp/live-972dqlgd
+~/.no-mistakes/worktrees/119cd7a6b9a4/01M64Z9JEQBNE8HSXVPR6KM05B/.validation-tmp/live-972dqlgd
+[exit 0]
+SCENARIO: registry manual PR text preserves house branch and forge settings; invalid combinations refuse.
+$ bin/fm-project-mode.sh valid
+no-mistakes on
+[exit 0]
+$ bin/fm-project-mode.sh --pr valid
+manual
+[exit 0]
+$ bin/fm-project-mode.sh --branch-prefix valid
+house/
+[exit 0]
+$ bin/fm-project-mode.sh --forge forge
+forgejo
+[exit 0]
+$ bin/fm-project-mode.sh --pr invalid
+refused: invalid is registered local-only with pr=manual in ~/.no-mistakes/worktrees/119cd7a6b9a4/01M64Z9JEQBNE8HSXVPR6KM05B/.validation-tmp/live-972dqlgd/data/projects.md; only a no-mistakes ship takes it, because direct-PR already leaves the PR text to the worker and local-only opens no PR; register no-mistakes, or drop the pr token
+[exit 3]
+$ bin/fm-project-mode.sh invalid-forge
+refused: invalid-forge is registered with pr=manual and forge=gerrit in ~/.no-mistakes/worktrees/119cd7a6b9a4/01M64Z9JEQBNE8HSXVPR6KM05B/.validation-tmp/live-972dqlgd/data/projects.md; pr=manual ships a project with no forge binding only; drop the pr token
+[exit 3]
+$ bin/fm-brief.sh manual-proof valid --mode no-mistakes --pr manual --base-branch house
+scaffolded: ~/.no-mistakes/worktrees/119cd7a6b9a4/01M64Z9JEQBNE8HSXVPR6KM05B/.validation-tmp/live-972dqlgd/data/manual-proof/brief.md (ship, mode=no-mistakes pr=manual; replace {TASK} and {FIRSTMATE_SPEC})
+[exit 0]
+Generated public brief saved as generated-manual-brief.md.
+SCENARIO: real monitoring checkpoint times out cleanly using native Perl fallback (GNU timeout absent).
+$ bin/fm-watch-checkpoint.sh --seconds 2
+checkpoint: no actionable wake within 2s
+[exit 124]
+No watcher lock remains after bounded timeout.
+SCENARIO: terminal condition fires once, retires its last source, retains its notification, and supports idempotent handling.
+$ bin/fm-procevent-when.sh arm terminal-proof --interval 1 --stable 1 --deadline 30 --condition /bin/test -f ~/.no-mistakes/worktrees/119cd7a6b9a4/01M64Z9JEQBNE8HSXVPR6KM05B/.validation-tmp/live-972dqlgd/ready --action /bin/echo real terminal payload
+armed: when-terminal-proof
+starts on the watcher's next cycle; or run: bin/fm-procevent.sh reconcile
+reminder: deterministic, safe, reversible actions only; judgment and destructive actions stay on the wake-and-decide path
+[exit 0]
+$ bin/fm-watch-checkpoint.sh --seconds 25
+check: rearm-resurface
+[exit 0]
+Persisted source store: ["state/procevent/when-terminal-proof.16777232-228672553.last-launch", "state/procevent/.owner-lease"]
+Durable queue after retirement:
+1793317552	1	check	procevent:when-terminal-proof:1	check: procevent when when-terminal-proof 1
+
+$ bin/fm-wake-drain.sh
+1793317552	1	check	procevent:when-terminal-proof:1	check: procevent when when-terminal-proof 1
+WAKE_ACK_REQUIRED: after handling completes run bin/fm-wake-drain.sh --ack-through 1 --recovery-generation 49891.1793317552.rgwV9A
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  X-mode relay polling needs supervision, but no live watcher process holds this home lock (last beat: 3s ago).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  After draining queued wakes, repair missing watcher supervision with a foreground checkpoint: bin/fm-watch-checkpoint.sh --seconds 180.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+WARNING: queued wakes pending - drain them with bin/fm-wake-drain.sh before anything else.
+[exit 0]
+$ bin/fm-wake-drain.sh
+1793317552	1	check	procevent:when-terminal-proof:1	check: procevent when when-terminal-proof 1
+WAKE_ACK_REQUIRED: after handling completes run bin/fm-wake-drain.sh --ack-through 1 --recovery-generation 49891.1793317552.rgwV9A
+WARNING: watcher still down (same stale episode; last beat: 4s ago, grace 300s) - full banner already printed this episode.
+WARNING: queued wakes pending - drain them with bin/fm-wake-drain.sh before anything else.
+[exit 0]
+$ bin/fm-procevent.sh handled when-terminal-proof 1
+handled: when-terminal-proof 1
+[exit 0]
+$ bin/fm-procevent.sh handled when-terminal-proof 1
+already-handled: when-terminal-proof 1
+[exit 0]
+SCENARIO complete: real when adapter, runner, watcher, drain, and acknowledgement; no upstream or product substitute.
+$ bin/fm-procevent-when.sh retire terminal-proof
+retired: when-terminal-proof
+retired: when-terminal-proof
+[exit 0]
+ALL LIVE DRIVER ASSERTIONS PASSED
+$ bin/fm-watch-arm.sh --stop
+watcher: none running
+[exit 0]
+$ bin/fm-procevent.sh sweep-home
+swept: attempted=0
+[exit 0]
+Disposable product home removed.

@@ -1,0 +1,18 @@
+$ bin/fm-lab-home.sh create ~/.no-mistakes/worktrees/119cd7a6b9a4/01M64Z9JEQBNE8HSXVPR6KM05B/.validation-tmp/live-2rgpqxke
+~/.no-mistakes/worktrees/119cd7a6b9a4/01M64Z9JEQBNE8HSXVPR6KM05B/.validation-tmp/live-2rgpqxke
+[exit 0]
+SCENARIO: optional dispatch remains off without credentials and reports invalid provider settings before API use.
+$ bin/fm-dispatch-resolve.sh ~/.no-mistakes/worktrees/119cd7a6b9a4/01M64Z9JEQBNE8HSXVPR6KM05B/.validation-tmp/live-2rgpqxke/brief.md
+dispatch-resolve: off (TYPESAFE_API_KEY absent from the environment and ~/.no-mistakes/worktrees/119cd7a6b9a4/01M64Z9JEQBNE8HSXVPR6KM05B/.validation-tmp/live-2rgpqxke/.env)
+[exit 0]
+$ bin/fm-dispatch-resolve.sh ~/.no-mistakes/worktrees/119cd7a6b9a4/01M64Z9JEQBNE8HSXVPR6KM05B/.validation-tmp/live-2rgpqxke/brief.md
+error: FM_DISPATCH_MODEL required when FM_DISPATCH_PROVIDER=openai
+[exit 2]
+$ bin/fm-dispatch-resolve.sh ~/.no-mistakes/worktrees/119cd7a6b9a4/01M64Z9JEQBNE8HSXVPR6KM05B/.validation-tmp/live-2rgpqxke/brief.md
+error: FM_DISPATCH_BASE_URL must start with http:// or https://
+[exit 2]
+$ bin/fm-dispatch-resolve.sh ~/.no-mistakes/worktrees/119cd7a6b9a4/01M64Z9JEQBNE8HSXVPR6KM05B/.validation-tmp/live-2rgpqxke/brief.md
+error: unknown FM_DISPATCH_PROVIDER: not-a-provider (expected typesafe, openrouter, systemone, or openai)
+[exit 2]
+ALL PROVIDER GUARD ASSERTIONS PASSED; no credentials or successful upstream answers were substituted.
+Disposable home removed.

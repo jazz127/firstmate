@@ -1,0 +1,40 @@
+FM_TEST_BEGIN 2026-10-29T23:53:16Z tests/fm-dispatch-resolve.test.sh family=standalone expected_gate_skip=none
+ok - invalid preferred_provider: null
+ok - invalid preferred_provider: false
+ok - invalid preferred_provider: 42
+ok - invalid preferred_provider: []
+ok - invalid preferred_provider: {}
+ok - invalid preferred_provider: ""
+ok - invalid preferred_provider: "Codex"
+ok - invalid preferred_provider: "codex\\n"
+ok - invalid preferred_provider: " codex"
+ok - preferred provider: astra-82-claude-26
+ok - preferred provider: work-account
+ok - preferred provider: exhausted
+ok - preferred provider: unknown
+ok - preferred provider: unknown-one-known-one
+ok - preferred provider: claude-only
+ok - preferred provider: config-override
+ok - preferred provider: prose-why
+ok - preferred provider: absent
+ok - preferred provider: approval
+ok - preferred provider: tie
+ok - preferred provider: floor
+ok - absent key is off: one stderr line, exit 0, no network call
+ok - TYPESAFE_API_KEY= in .env activates the tool; environment and config overrides work
+ok - clear: one rule Choice request, key on the fd header only, spendPriority argmax over every candidate
+ok - OpenRouter clear uses the same output contract and keeps its key out of argv and child environments
+ok - OpenRouter ambiguous, malformed, HTTP, and missing-model paths are handled
+ok - with no provider set, other providers' settings leave the original off line unchanged
+ok - systemone posts the unchanged request to its base URL with an optional fd-3 key
+ok - systemone configuration errors, never-send base URL, partial response, and transport failure are handled
+not ok - openai clear status (missing: '  status: clear')
+--- output ---
+dispatch-resolve:
+  status: error
+  reason: response is not a rule Choice answer
+FM_TEST_END 2026-10-29T23:53:25Z tests/fm-dispatch-resolve.test.sh exit=1 duration_ms=8508 gate_skip=false
+FM_TEST_SUMMARY total=1 failed=1 skipped_gate=0 duration_ms=8588
+FM_TEST_SUMMARY_FAMILY family=standalone count=1 duration_ms=8508 failed=1
+FM_TEST_SLOWEST rank=1 script=tests/fm-dispatch-resolve.test.sh duration_ms=8508
+fm-test-run: wrote timing artifact: ~/.no-mistakes/evidence/01M64Z9JEQBNE8HSXVPR6KM05B/upstream-dispatch-timing.json

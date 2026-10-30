@@ -1,0 +1,27 @@
+$ bin/fm-lab-home.sh create ~/.no-mistakes/worktrees/119cd7a6b9a4/01M64Z9JEQBNE8HSXVPR6KM05B/.validation-tmp/live-nsoehtff
+~/.no-mistakes/worktrees/119cd7a6b9a4/01M64Z9JEQBNE8HSXVPR6KM05B/.validation-tmp/live-nsoehtff
+[exit 0]
+SCENARIO merged: a live monitor with a pre-upgrade identity is replaced, then must exit cleanly without receiving a signal.
+$ bin/fm-lab-home.sh create ~/.no-mistakes/worktrees/119cd7a6b9a4/01M64Z9JEQBNE8HSXVPR6KM05B/.validation-tmp/live-nsoehtff/merged
+~/.no-mistakes/worktrees/119cd7a6b9a4/01M64Z9JEQBNE8HSXVPR6KM05B/.validation-tmp/live-nsoehtff/merged
+[exit 0]
+Replacement monitor stdout:
+check: rearm-resurface
+[exit 0]
+Original monitor stdout (never signalled):
+watcher: exiting - state directory was torn down (singleton lock removed): ~/.no-mistakes/worktrees/119cd7a6b9a4/01M64Z9JEQBNE8HSXVPR6KM05B/.validation-tmp/live-nsoehtff/merged/state
+[exit 1]
+Expected original exit 0 after handoff; observed 1.
+SCENARIO pinned-upstream-b936f040: a live monitor with a pre-upgrade identity is replaced, then must exit cleanly without receiving a signal.
+$ bin/fm-lab-home.sh create ~/.no-mistakes/worktrees/119cd7a6b9a4/01M64Z9JEQBNE8HSXVPR6KM05B/.validation-tmp/live-nsoehtff/pinned-upstream-b936f040
+~/.no-mistakes/worktrees/119cd7a6b9a4/01M64Z9JEQBNE8HSXVPR6KM05B/.validation-tmp/live-nsoehtff/pinned-upstream-b936f040
+[exit 0]
+Replacement monitor stdout:
+check: rearm-resurface
+[exit 0]
+Original monitor stdout (never signalled):
+watcher: exiting - state directory was torn down (singleton lock removed): ~/.no-mistakes/worktrees/119cd7a6b9a4/01M64Z9JEQBNE8HSXVPR6KM05B/.validation-tmp/live-nsoehtff/pinned-upstream-b936f040/state
+[exit 1]
+Expected original exit 0 after handoff; observed 1.
+REPRODUCED: same real-product failure on merged head and pinned upstream. No backend, process, or response substitutes.
+Both disposable homes and every monitor child removed.

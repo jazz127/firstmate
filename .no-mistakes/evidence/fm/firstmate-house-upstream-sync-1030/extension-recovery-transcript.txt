@@ -1,0 +1,21 @@
+$ bin/fm-lab-home.sh create ~/.no-mistakes/worktrees/119cd7a6b9a4/01M64Z9JEQBNE8HSXVPR6KM05B/.validation-tmp/live-sftxzqrd
+~/.no-mistakes/worktrees/119cd7a6b9a4/01M64Z9JEQBNE8HSXVPR6KM05B/.validation-tmp/live-sftxzqrd
+[exit 0]
+SCENARIO: interrupted extension launch publishes ownerless readiness; cleanup refuses a live group and reclaims its exact dead group.
+Readiness emitted by real launch barrier:
+{"schema":"firstmate.extension-invocation-ready.v1","token":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","group_pid":26738,"group_identity":"barrier-token:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
+
+$ bin/fm-extension.sh cleanup-invocations
+error[process-cleanup-failed]: ownerless extension readiness process group cannot be proved gone
+[exit 1]
+Real barrier, intentionally never released:
+extension launch barrier: host did not release the launch barrier
+[exit 125]
+$ bin/fm-extension.sh cleanup-invocations
+error[process-cleanup-failed]: extension invocation readiness is not one private host-owned file
+[exit 1]
+$ bin/fm-extension.sh cleanup-invocations
+cleaned-invocations: 1
+[exit 0]
+Readiness for the dead exact-token group removed. The live group and unsafe-file cases were refused. No extension, group, or response substitute was used.
+Real barrier child awaited and disposable home removed.

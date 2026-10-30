@@ -1,0 +1,40 @@
+$ bin/fm-lab-home.sh create ~/.no-mistakes/worktrees/119cd7a6b9a4/01M64Z9JEQBNE8HSXVPR6KM05B/.validation-tmp/live-qh8691f1
+~/.no-mistakes/worktrees/119cd7a6b9a4/01M64Z9JEQBNE8HSXVPR6KM05B/.validation-tmp/live-qh8691f1
+[exit 0]
+SCENARIO: heartbeat recovers a decision hidden behind routine progress and resets idle backoff.
+$ /bin/bash -c . bin/fm-wake-lib.sh; fm_wake_signal_sig "$1" _ ~/.no-mistakes/worktrees/119cd7a6b9a4/01M64Z9JEQBNE8HSXVPR6KM05B/.validation-tmp/live-qh8691f1/state/miss.status
+r1:3731007374726f6e673a31363737373233323a3232383739353532313a313739333331373636302e30393936393639393900526567756c61722046696c653a313030363434002d007265616461626c65007265616461626c65
+[exit 0]
+$ /bin/bash -c . bin/fm-classify-lib.sh; status_presentation_marker_report "$1" "$2" _ ~/.no-mistakes/worktrees/119cd7a6b9a4/01M64Z9JEQBNE8HSXVPR6KM05B/.validation-tmp/live-qh8691f1/state/.seen-miss_status r1:3731007374726f6e673a31363737373233323a3232383739353532313a313739333331373636302e30393936393639393900526567756c61722046696c653a313030363434002d007265616461626c65007265616461626c65
+
+[exit 0]
+$ bin/fm-watch.sh
+heartbeat
+[exit 0]
+Persisted idle heartbeat streak after actionable wake: 0
+$ bin/fm-wake-drain.sh
+1793317662	1	heartbeat	heartbeat	heartbeat
+WAKE_ACK_REQUIRED: after handling completes run bin/fm-wake-drain.sh --ack-through 1 --recovery-generation 89592.1793317662.rpE4SP
+OPEN DECISIONS (still open, folded from the durable status logs - not just the latest line):
+miss needs-decision: choose A or B
+OPEN DECISIONS: close one by answering it: bin/fm-send.sh <task> --resolve-key <key> '<answer>'
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  X-mode relay polling needs supervision, but no live watcher process holds this home lock (last beat: 4s ago).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  After draining queued wakes, repair missing watcher supervision with a foreground checkpoint: bin/fm-watch-checkpoint.sh --seconds 180.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+WARNING: queued wakes pending - drain them with bin/fm-wake-drain.sh before anything else.
+[exit 0]
+SCENARIO: replacement monitoring reclaims a live process with an obsolete identity without signalling that process.
+$ bin/fm-wake-drain.sh --ack-through 1
+wake drain: acknowledgement requires its recovery generation
+[exit 2]
+$ bin/fm-watch-arm.sh --stop
+watcher: none running
+[exit 0]
+$ bin/fm-procevent.sh sweep-home
+swept: attempted=0
+[exit 0]
+Disposable product home removed.

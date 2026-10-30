@@ -1,0 +1,24 @@
+$ bin/fm-lab-home.sh create ~/.no-mistakes/worktrees/119cd7a6b9a4/01M64Z9JEQBNE8HSXVPR6KM05B/.validation-tmp/live-0ofqwdia
+~/.no-mistakes/worktrees/119cd7a6b9a4/01M64Z9JEQBNE8HSXVPR6KM05B/.validation-tmp/live-0ofqwdia
+[exit 0]
+SCENARIO: a real OpenSSH connection failure emits no reply payload, advances no cursor, and creates no malformed capture.
+$ bin/fm-procevent-remote-reply.sh arm remote
+registered: remote-reply-remote (remote-reply)
+armed: remote-reply-remote offset=0
+[exit 0]
+$ bin/fm-procevent-remote-reply.sh source remote
+stdout bytes: 0
+stderr: ssh: connect to host 127.0.0.1 port 53379: Operation timed out
+[exit 255]
+Unchanged cursor files: 0
+$ bin/fm-procevent-remote-reply.sh source-id remote
+remote-reply-remote
+[exit 0]
+$ bin/fm-procevent.sh start remote-reply-remote
+no-result: remote-reply-remote (exit 255)
+[exit 0]
+$ bin/fm-procevent.sh sweep-home
+retired: remote-reply-remote
+swept: attempted=1
+[exit 0]
+Disposable home removed.

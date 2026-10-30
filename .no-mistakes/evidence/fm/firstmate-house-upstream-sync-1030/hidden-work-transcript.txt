@@ -1,0 +1,51 @@
+$ bin/fm-lab-home.sh create ~/.no-mistakes/worktrees/119cd7a6b9a4/01M64Z9JEQBNE8HSXVPR6KM05B/.validation-tmp/live-esjn07mv
+~/.no-mistakes/worktrees/119cd7a6b9a4/01M64Z9JEQBNE8HSXVPR6KM05B/.validation-tmp/live-esjn07mv
+[exit 0]
+SCENARIO: cleanup refuses hidden untracked files and preserves their bytes and the real isolated terminal.
+$ git init -q -b main ~/.no-mistakes/worktrees/119cd7a6b9a4/01M64Z9JEQBNE8HSXVPR6KM05B/.validation-tmp/live-esjn07mv/projects/disposable
+
+[exit 0]
+$ git -C ~/.no-mistakes/worktrees/119cd7a6b9a4/01M64Z9JEQBNE8HSXVPR6KM05B/.validation-tmp/live-esjn07mv/projects/disposable add base.txt
+
+[exit 0]
+$ git -C ~/.no-mistakes/worktrees/119cd7a6b9a4/01M64Z9JEQBNE8HSXVPR6KM05B/.validation-tmp/live-esjn07mv/projects/disposable commit -qm base
+
+[exit 0]
+$ git -C ~/.no-mistakes/worktrees/119cd7a6b9a4/01M64Z9JEQBNE8HSXVPR6KM05B/.validation-tmp/live-esjn07mv/projects/disposable worktree add -q -b fm/hidden-proof ~/.no-mistakes/worktrees/119cd7a6b9a4/01M64Z9JEQBNE8HSXVPR6KM05B/.validation-tmp/live-esjn07mv/task-copy main
+
+[exit 0]
+$ git -C ~/.no-mistakes/worktrees/119cd7a6b9a4/01M64Z9JEQBNE8HSXVPR6KM05B/.validation-tmp/live-esjn07mv/projects/disposable config status.showUntrackedFiles no
+
+[exit 0]
+$ git -C ~/.no-mistakes/worktrees/119cd7a6b9a4/01M64Z9JEQBNE8HSXVPR6KM05B/.validation-tmp/live-esjn07mv/task-copy status --porcelain
+
+[exit 0]
+$ tmux -S ~/.no-mistakes/evidence/01M64Z9JEQBNE8HSXVPR6KM05B/hidden-work.sock -f /dev/null new-session -d -s fm-lab-hidden -n fm-hidden-proof -c ~/.no-mistakes/worktrees/119cd7a6b9a4/01M64Z9JEQBNE8HSXVPR6KM05B/.validation-tmp/live-esjn07mv/task-copy sleep 90
+
+[exit 0]
+$ tmux -S ~/.no-mistakes/evidence/01M64Z9JEQBNE8HSXVPR6KM05B/hidden-work.sock display-message -p -t fm-lab-hidden:fm-hidden-proof #{pid}
+51309
+[exit 0]
+$ bin/fm-teardown.sh hidden-proof
+fm-gate-refuse: gate agent lifecycle permitted only against lab home ~/.no-mistakes/worktrees/119cd7a6b9a4/01M64Z9JEQBNE8HSXVPR6KM05B/.validation-tmp/live-esjn07mv
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  repair missing watcher supervision with a foreground checkpoint: bin/fm-watch-checkpoint.sh --seconds 180.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+REFUSED: local-only worktree ~/.no-mistakes/worktrees/119cd7a6b9a4/01M64Z9JEQBNE8HSXVPR6KM05B/.validation-tmp/live-esjn07mv/task-copy has work not yet merged into main and not on any remote.
+uncommitted changes present (untracked-only leftovers)
+untracked paths (up to 10):
+  valuable-untracked.txt
+Merge the branch into local main first (bin/fm-merge-local.sh after the captain approves), or push to a fork/remote, or get the captain's explicit OK to discard, then --force.
+[exit 1]
+$ tmux -S ~/.no-mistakes/evidence/01M64Z9JEQBNE8HSXVPR6KM05B/hidden-work.sock has-session -t fm-lab-hidden
+
+[exit 0]
+Hidden file bytes, task metadata, worktree, and real private tmux session all retained after refusal.
+$ tmux -S ~/.no-mistakes/evidence/01M64Z9JEQBNE8HSXVPR6KM05B/hidden-work.sock kill-server
+
+[exit 0]
+Private tmux server stopped and disposable home removed.

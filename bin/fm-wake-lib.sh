@@ -124,8 +124,13 @@ fm_pid_identity() {  # <pid> [start]
   # host's grant owner as dead, discard the grant, and refuse its drain.
   # bin/fm-extension.mjs's pidIdentity pins the same zone. On a /proc-less host
   # outside UTC, an identity recorded before this pin may read as reused for one
-  # upgrade window; this is an accepted bounded upgrade-window residual that the
-  # restart /updatefirstmate performs after a successful update clears.
+  # upgrade window; this is an accepted bounded upgrade-window residual. The
+  # watch lock's next claim clears it, because fm_lock_owner_alive reads that
+  # watcher as dead and the replaced watcher stands down at its next poll. The
+  # autoarm abandonment proof already reclaims a mismatched claim, at the cost of
+  # the one-extra-continuation residual docs/turnend-guard.md describes. Only the
+  # supervise-daemon lock (fm_afk_daemon_owns_supervision, daemon_pid_matches)
+  # keeps the residual by design.
   if [ "$identity_kind" = start ]; then
     out=$(COLUMNS=10000 LC_ALL=C TZ=UTC0 ps -p "$pid" -o lstart= 2>/dev/null) || return 1
   else
@@ -143,18 +148,26 @@ fm_pid_start_identity() {  # <pid>
   fm_pid_identity "$1" start
 }
 
-# True unless the lock's original owner is proven gone.
-# Locks predating identity recording retain the original kill -0 behavior;
-# once identity evidence exists, a read failure is uncertainty and stays held.
+# True unless the lock's original owner is proven gone. Stable start identity
+# survives exec. The watch lock also checks its full identity so a watcher from
+# before the UTC pin can be replaced; only watchers stand down on lost ownership.
+# Other locks retain start-only checks to avoid duplicating a live daemon.
+# Missing records or unreadable probes are uncertainty and stay held.
 fm_lock_owner_alive() {  # <lockdir> <pid>
-  local lockdir=$1 pid=$2 recorded current identity_file="$1/lock-owner-start"
+  local lockdir=$1 pid=$2
   fm_pid_alive "$pid" || return 1
-  if [ ! -e "$identity_file" ] && [ ! -L "$identity_file" ]; then
-    return 0
-  fi
-  recorded=$(cat "$identity_file" 2>/dev/null) || return 0
+  _fm_lock_record_matches "$lockdir" "$pid" lock-owner-start fm_pid_start_identity || return 1
+  [ "$lockdir" = "$STATE/.watch.lock" ] || return 0
+  _fm_lock_record_matches "$lockdir" "$pid" pid-identity fm_pid_identity
+}
+
+# Re-read the holder after the record so a handoff never compares different owners.
+_fm_lock_record_matches() {  # <lockdir> <pid> <record-file> <probe-function>
+  local lockdir=$1 pid=$2 record=$3 probe=$4 recorded current
+  recorded=$(cat "$lockdir/$record" 2>/dev/null || true)
   [ -n "$recorded" ] || return 0
-  current=$(fm_pid_start_identity "$pid" 2>/dev/null) || return 0
+  [ "$(cat "$lockdir/pid" 2>/dev/null || true)" = "$pid" ] || return 0
+  current=$("$probe" "$pid" 2>/dev/null) || return 0
   [ -n "$current" ] || return 0
   [ "$current" = "$recorded" ]
 }
@@ -295,7 +308,7 @@ fm_supervision_model() {
   esac
   harness=$("$FM_WAKE_LIB_DIR/fm-harness.sh" 2>/dev/null || printf unknown)
   case "$harness" in
-    claude|cursor) printf 'autoarm\n' ;;
+    claude|cursor|agy) printf 'autoarm\n' ;;
     pi|pi-signed|omp) printf 'extension\n' ;;
     *) printf 'persistent\n' ;;
   esac

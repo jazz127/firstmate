@@ -81,8 +81,13 @@ test_predicate_queue_pending_flag() {
   fm_supervision_status "$state" 300
   [ "$FM_SUP_QUEUE_PENDING" = false ] || fail "empty/absent wake queue must not read as pending"
   printf 'record\n' > "$state/.wake-queue"
-  fm_supervision_status "$state" 300
+  fm_supervision_needed "$state" 300 || fail "a pending-only home must need supervision"
   [ "$FM_SUP_QUEUE_PENDING" = true ] || fail "a non-empty wake queue must read as pending"
+  fm_supervision_unhealthy "$state" 300 || fail "a queued wake without a watcher must need recovery"
+  : > "$state/.wake-queue"
+  if fm_supervision_needed "$state" 300; then
+    fail "an empty queue with no other work must not need supervision"
+  fi
   pass "fm_supervision_status: FM_SUP_QUEUE_PENDING tracks state/.wake-queue"
 }
 

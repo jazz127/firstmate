@@ -2391,7 +2391,6 @@ test_scoped_attribution_launches() {
       id="scoped-$runtime-$owner"
       rec=$(make_spawn_case "$id" "$runtime" "$id")
       read_case_record "$rec"
-      printf '%s\n' github.com/t27sol >"$HOME_DIR/config/keep-ai-trailers"
       git -C "$PROJ_DIR" remote set-url origin "git@github.com:$owner/example.git"
       # Keep fetch local while exposing the forge URL to scope resolution.
       git -C "$PROJ_DIR" config "url.file://$PROJ_DIR.origin.git.insteadOf" "git@github.com:$owner/example.git"
@@ -2405,7 +2404,6 @@ test_scoped_attribution_launches() {
       body=$(git -C "$WT_DIR" log -1 --format=%B)
       if [ "$owner" = t27sol ]; then
         assert_contains "$body" "Agent-Platform: $runtime" 'scoped launch did not add platform'
-        assert_contains "$(cat "$HOME_DIR/data/$id/launch-brief.md")" 'Agent-System: fac:firstmate' 'missing PR attribution instruction'
         [ "$runtime" != claude ] || assert_attribution_policy_absent "$(cat "$LAUNCH_LOG")" 'scoped claude'
       else
         assert_not_contains "$body" 'noreply@anthropic.com' 'unlisted owner kept AI trailer'
@@ -2414,7 +2412,64 @@ test_scoped_attribution_launches() {
       fi
     done
   done
-  pass 'Codex and Claude scoped launches add attribution only for listed owners'
+  pass 'Codex and Claude launches add t27sol attribution without a configuration file'
+}
+
+test_opencode_session_attribution() {
+  local version rec id out status hooks
+  for version in 1.18.32 2.0.21; do
+    id="session-opencode-$version"
+    rec=$(make_spawn_case "$id" opencode "$id")
+    read_case_record "$rec"
+    git -C "$PROJ_DIR" remote set-url origin git@github.com:t27sol/example.git
+    git -C "$PROJ_DIR" config "url.file://$PROJ_DIR.origin.git.insteadOf" git@github.com:t27sol/example.git
+    out=$(FM_TEST_OPENCODE_VERSION=$version run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR")
+    status=$?
+    expect_code 0 "$status" "OpenCode $version spawn failed: $out"
+    hooks="$HOME_DIR/state/$id.git-hooks"
+    out=$(PLUGIN_PATH="$WT_DIR/.opencode/plugins/fm-busy-state.js" HOOKS_PATH="$hooks" WORKTREE="$WT_DIR" \
+      OPENCODE_MAJOR=${version%%.*} node --input-type=module 2>&1 <<'JS'
+import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { pathToFileURL } from "node:url";
+const mod = await import(pathToFileURL(process.env.PLUGIN_PATH).href);
+const sid = "ses_abc123";
+const env = {};
+if (process.env.OPENCODE_MAJOR === "1") {
+  const hooks = await mod.FmBusyState({});
+  await hooks.event({ event: { type: "session.status", properties: { sessionID: sid, status: { type: "busy" } } } });
+  await hooks["shell.env"]({ cwd: process.env.WORKTREE }, { env });
+} else {
+  let shellHook;
+  let deliver;
+  let delivered;
+  const consumed = new Promise(resolve => { delivered = resolve; });
+  const stream = {
+    async *[Symbol.asyncIterator]() {
+      await new Promise(resolve => { deliver = resolve; });
+      yield { type: "session.execution.started", properties: { sessionID: sid } };
+      delivered();
+    },
+  };
+  mod.default.setup({
+    event: { subscribe: async () => stream },
+    shell: { hook: (name, callback) => { assert.equal(name, "create.before"); shellHook = callback; } },
+  });
+  await new Promise(resolve => setImmediate(resolve));
+  deliver();
+  await consumed;
+  shellHook({ env });
+}
+assert.equal(env.OPENCODE_SESSION_ID, sid);
+const gitEnv = { ...process.env, ...env, GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: "core.hooksPath", GIT_CONFIG_VALUE_0: process.env.HOOKS_PATH };
+execFileSync("git", ["-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "-q", "--allow-empty", "-m", "fix: OpenCode session"], { cwd: process.env.WORKTREE, env: gitEnv });
+const message = execFileSync("git", ["log", "-1", "--format=%B"], { cwd: process.env.WORKTREE });
+const trailers = execFileSync("git", ["interpret-trailers", "--parse"], { input: message }).toString();
+assert.ok(trailers.split("\n").includes("Agent-Session: " + sid), trailers);
+JS
+    ) || fail "OpenCode $version session attribution failed: $out"
+  done
+  pass 'OpenCode 1 and 2 plugin session contexts reach actual commit trailers'
 }
 
 test_keep_ai_trailers_omits_attribution_settings_and_strip_hooks() {
@@ -3127,6 +3182,7 @@ test_codex_permission_does_not_change_other_harnesses() {
 }
 
 test_scoped_attribution_launches
+test_opencode_session_attribution
 test_codex_permission_modes
 test_codex_permission_invalid_refuses_before_mutation
 test_codex_permission_does_not_change_other_harnesses

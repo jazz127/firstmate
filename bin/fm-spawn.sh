@@ -652,18 +652,15 @@
 # facts; .agents/skills/harness-adapters/references/harness/polytoken.md owns the
 # knowledge record. polytoken is crewmate/scout only and is refused for
 # --secondmate, like devin.
-# Unless config/keep-ai-trailers is present, every claude launch carries the
-# attribution-off policy in its per-launch --settings JSON, so a spawned worker
-# never writes a Co-Authored-By trailer, Claude-Session link, or generated-with
-# line into a commit or PR body; launch_template() below owns the reason it
-# cannot come from the captain's own settings.
+# Claude launches carry the resolved attribution policy in their per-launch
+# --settings JSON; docs/configuration.md "Commit attribution" owns the policy.
 # Cursor and the other non-Claude runtimes have no equivalent per-launch
 # settings overlay: Cursor injects a Co-Authored-By trailer at the tooling
 # layer after the worker types a clean message, and a per-machine
 # ~/.cursor/cli-config.json attribution-off is not durable (it does not travel
 # with this repo, defaults back to on when unset, and only feeds the CLI's
 # request to the server, so it suppresses the trailer rather than preventing
-# it). Unless config/keep-ai-trailers is present, every spawn installs
+# it). When stripping is selected, the spawn installs
 # state/<id>.git-hooks as an appended GIT_CONFIG core.hooksPath entry for the pane, so git
 # commit-msg strips known AI trailers at the commit object for every launched
 # runtime, Claude included as defense in depth. bin/fm-git-strip-ai-trailers.sh
@@ -879,9 +876,6 @@ if [ "$LAVISH_AXI_HOST_CONFIG_PRESENT" = 1 ]; then
       exit 1
       ;;
   esac
-fi
-if ! KEEP_AI_TRAILERS=$(fm_config_source_present "$CONFIG/keep-ai-trailers"); then
-  exit 1
 fi
 # Set by the forge agreement below for a forge=external ship.
 EXTERNAL_REVIEW=0
@@ -3978,8 +3972,6 @@ if [ "$RELAUNCH" -eq 0 ] && [ "$KIND" != secondmate ] &&
   echo "error: spawn refused: project $PROJ_ABS has no commit yet (unborn HEAD), so there is nothing to branch a worktree from; make one commit in the project, for example 'git -C $PROJ_ABS commit --allow-empty -m \"chore: initial commit\"', then spawn again" >&2
   exit 1
 fi
-# Resolve the legacy presence flag or scoped keep-and-add list before any
-# runtime-specific attribution settings are built.
 AI_ATTRIBUTION_MODE=$(python3 "$SCRIPT_DIR/fm-git-attribution.py" mode "$CONFIG/keep-ai-trailers" "$PROJ_ABS") || exit 1
 KEEP_AI_TRAILERS=0
 [ "$AI_ATTRIBUTION_MODE" = strip ] || KEEP_AI_TRAILERS=1
@@ -4103,10 +4095,6 @@ if [ "$KIND" = ship ] || [ "$KIND" = scout ]; then
       cat "$SOURCE_BRIEF" &&
       if [ "$KIND" = ship ] && [ "$MODE" = no-mistakes ]; then
         fm_brief_intent_overlay "$CAPTAIN_INTENT"
-      fi &&
-      if [ "$AI_ATTRIBUTION_MODE" = add ]; then
-        # shellcheck disable=SC2016 # Markdown backticks, not command substitution.
-        printf '\n# Scoped attribution\nInclude the visible attribution line `Agent-System: fac:firstmate` in the pull request description, preserving any pipeline attestation.\n'
       fi
   } >"$BRIEF_TMP" || {
     rm -f -- "$BRIEF_TMP"
@@ -6450,19 +6438,18 @@ const setupEventSubscription = (ctx, handler) => {
   })();
   return true;
 };
-const makeHandler = () => {
-  let activeSession = null;
+const makeHandler = (state) => {
   return async (event) => {
     const type = eventType(event);
     const id = sessionID(event);
     if (type === "session.execution.started") {
-      if (activeSession === null) activeSession = id;
-      if (id === activeSession) await busyEvent("busy", "session-execution-started");
+      if (state.activeSession === null) state.activeSession = id;
+      if (id === state.activeSession) await busyEvent("busy", "session-execution-started");
       return;
     }
     if (type === "session.execution.succeeded" || type === "session.execution.interrupted" || type === "session.execution.failed") {
-      if (id === activeSession) {
-        activeSession = null;
+      if (id === state.activeSession) {
+        state.activeSession = null;
         await busyEvent("idle", type.replace(/\./g, "-"));
       }
       if (notifyTurnEnd) await touchTurnEnded();
@@ -6472,19 +6459,19 @@ const makeHandler = () => {
       const properties = eventProperties(event);
       const statusType = properties.status && properties.status.type;
       if (statusType === "busy" || statusType === "retry") {
-        if (activeSession === null) activeSession = id;
-        if (id === activeSession) await busyEvent("busy", "session-" + statusType);
+        if (state.activeSession === null) state.activeSession = id;
+        if (id === state.activeSession) await busyEvent("busy", "session-" + statusType);
         return;
       }
-      if (statusType === "idle" && id === activeSession) {
-        activeSession = null;
+      if (statusType === "idle" && id === state.activeSession) {
+        state.activeSession = null;
         await busyEvent("idle", "session-status-idle");
       }
       return;
     }
     if (type === "session.idle") {
-      if (id === activeSession) {
-        activeSession = null;
+      if (id === state.activeSession) {
+        state.activeSession = null;
         await busyEvent("idle", "session-idle");
       }
       if (notifyTurnEnd) await touchTurnEnded();
@@ -6492,9 +6479,13 @@ const makeHandler = () => {
   };
 };
 export const FmBusyState = async () => {
-  const handleEvent = makeHandler();
+  const state = { activeSession: null };
+  const handleEvent = makeHandler(state);
   return {
     event: async ({ event }) => handleEvent(event),
+    "shell.env": async (input, output) => {
+      output.env.OPENCODE_SESSION_ID = input.sessionID || state.activeSession || "";
+    },
   };
 };
 
@@ -6502,7 +6493,11 @@ export default {
   id: "fm.busy-state",
   server: FmBusyState,
   setup(ctx) {
-    setupEventSubscription(ctx, makeHandler());
+    const state = { activeSession: null };
+    setupEventSubscription(ctx, makeHandler(state));
+    ctx.shell.hook("create.before", (event) => {
+      event.env.OPENCODE_SESSION_ID = state.activeSession || "";
+    });
   },
 };
 EOF
@@ -6529,6 +6524,9 @@ const busyEvent = (state, event) =>
 export const FmBusyState = async () => {
   let activeSession = null;
   return {
+    "shell.env": async (input, output) => {
+      output.env.OPENCODE_SESSION_ID = input.sessionID || activeSession || "";
+    },
     event: async ({ event }) => {
       if (event.type === "session.status") {
         const sessionID = event.properties.sessionID;
@@ -6849,7 +6847,7 @@ if [ "$EXTERNAL_REVIEW" = 1 ]; then
   strip_args=()
   [ "$KEEP_AI_TRAILERS" = 0 ] || strip_args=(--no-strip)
   if [ "$AI_ATTRIBUTION_MODE" = add ]; then
-    strip_args+=(--attribution "$CONFIG/keep-ai-trailers" "$HARNESS" "${MODEL:-default}")
+    strip_args+=(--attribution "$STATE_REAL/$ID.meta" "$HARNESS" "${MODEL:-default}")
   fi
   { "$FM_ROOT/bin/fm-git-push-guard.sh" write "${guard_args[@]}" \
     && "$FM_ROOT/bin/fm-git-strip-ai-trailers.sh" install "${strip_args[@]+"${strip_args[@]}"}" \
@@ -6861,7 +6859,7 @@ if [ "$EXTERNAL_REVIEW" = 1 ]; then
 elif [ "$KEEP_AI_TRAILERS" = 0 ] || [ "$AI_ATTRIBUTION_MODE" = add ]; then
   STRIP_INSTALL=("$FM_ROOT/bin/fm-git-strip-ai-trailers.sh" install "$GIT_HOOKS_DIR" "$WT")
   if [ "$AI_ATTRIBUTION_MODE" = add ]; then
-    STRIP_INSTALL=("$FM_ROOT/bin/fm-git-strip-ai-trailers.sh" install --attribution "$CONFIG/keep-ai-trailers" "$HARNESS" "${MODEL:-default}" "$GIT_HOOKS_DIR" "$WT")
+    STRIP_INSTALL=("$FM_ROOT/bin/fm-git-strip-ai-trailers.sh" install --attribution "$STATE_REAL/$ID.meta" "$HARNESS" "${MODEL:-default}" "$GIT_HOOKS_DIR" "$WT")
   fi
   if [ "$KIND" = ship ] && [ "$MODE" != local-only ]; then
     STRIP_INSTALL+=("$FM_ROOT/bin/fm-upstream-push-guard.sh" "$FM_ROOT" "$TASK_TMP/prior-art.json")

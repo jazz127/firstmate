@@ -10,6 +10,7 @@ set -u
 # A fleet pane already carries GIT_CONFIG core.hooksPath. These cases set that
 # override themselves, so drop the inherited one before any git command.
 unset GIT_CONFIG_COUNT GIT_CONFIG_KEY_0 GIT_CONFIG_VALUE_0 GIT_CONFIG_PARAMETERS
+unset CODEX_THREAD_ID OPENCODE_SESSION_ID
 
 # shellcheck source=tests/lib.sh
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
@@ -31,78 +32,105 @@ make_repo() {
 }
 
 test_scoped_keep_and_add() {
-  local runtime repo hooks config body session model
-  config="$TMP_ROOT/scopes"
-  printf '%s\n' '# selected owner and exact repository' 'github.com/t27sol' 'gitlab.com/team/one' >"$config"
+  local runtime repo hooks meta body session model native expected platform
   for runtime in codex claude pi pi-signed omp opencode grok kimi cursor agy muse gemini rovo devin commandcode polytoken cortex; do
     repo="$TMP_ROOT/scoped-$runtime" hooks="$TMP_ROOT/scoped-hooks-$runtime"
+    meta="$TMP_ROOT/$runtime.meta"
     make_repo "$repo"
     git -C "$repo" remote add origin git@github.com:t27sol/sample.git
     model=fixture-model
-    "$STRIP" install --attribution "$config" "$runtime" "$model" "$hooks" "$repo" || fail 'scoped install failed'
+    "$STRIP" install --attribution "$meta" "$runtime" "$model" "$hooks" "$repo" || fail 'scoped install failed'
     session=11111111-2222-3333-4444-555555555555
+    native=$(printf 'Co-authored-by: Jane Doe <jane@example.com>\nSigned-off-by: Jane Doe <jane@example.com>\nClaude-Session: %s' "$session")
     CODEX_THREAD_ID=$session with_hooks_env "$hooks" git -C "$repo" commit -q --allow-empty \
-      -m 'fix: scoped attribution' -m 'Co-authored-by: Jane Doe <jane@example.com>' \
-      -m "Claude-Session: $session"
-    body=$(git -C "$repo" log -1 --format=%B)
-    assert_contains "$body" 'Agent-System: fac:firstmate' 'missing system'
-    if [ "$runtime" = claude ]; then
-      assert_contains "$body" 'Agent-Platform: claude' 'missing Claude platform'
-      assert_not_contains "$body" "claude/$model" 'Claude model must be omitted'
-    else
-      assert_contains "$body" "Agent-Platform: $runtime/$model" 'missing platform'
-    fi
-    assert_contains "$body" "Co-authored-by: $runtime <noreply@firstmate.invalid>" 'missing agent coauthor'
-    assert_contains "$body" 'Co-authored-by: Jane Doe' 'lost human coauthor'
-    case "$runtime" in
-      codex | claude) assert_not_contains "$body" 'Agent-Session:' 'native session was duplicated' ;;
-      *) assert_not_contains "$body" 'Agent-Session:' 'guessed session for another runtime' ;;
-    esac
+      -m 'fix: scoped attribution' -m "$native" || fail 'attributed commit failed'
+    body=$(git -C "$repo" log -1 --format=%B | git -C "$repo" interpret-trailers --parse)
+    platform=$runtime/$model
+    [ "$runtime" != claude ] || platform=claude
+    expected=$(printf '%s\nCo-authored-by: %s <noreply@firstmate.invalid>\nAgent-System: fac:firstmate\nAgent-Platform: %s' "$native" "$runtime" "$platform")
+    [ "$body" = "$expected" ] || fail "$runtime lost or reordered parsed trailers: $body"
+    CODEX_THREAD_ID=$session with_hooks_env "$hooks" git -C "$repo" commit -q --amend --no-edit --allow-empty || fail 'repeat stamping failed'
+    body=$(git -C "$repo" log -1 --format=%B | git -C "$repo" interpret-trailers --parse)
+    [ "$body" = "$expected" ] || fail "$runtime repeat stamping changed parsed trailers: $body"
     if [ "$runtime" = codex ]; then
       CODEX_THREAD_ID=$session with_hooks_env "$hooks" git -C "$repo" commit -q --allow-empty -m 'fix: no native session'
-      body=$(git -C "$repo" log -1 --format=%B)
+      body=$(git -C "$repo" log -1 --format=%B | git -C "$repo" interpret-trailers --parse)
       assert_contains "$body" "Agent-Session: $session" 'Codex UUID missing without native session'
     fi
     CODEX_THREAD_ID=/private/session with_hooks_env "$hooks" git -C "$repo" commit -q --amend --allow-empty \
       -m 'fix: amended attribution' -m 'Co-authored-by: Claude <noreply@anthropic.com>'
-    body=$(git -C "$repo" log -1 --format=%B)
+    body=$(git -C "$repo" log -1 --format=%B | git -C "$repo" interpret-trailers --parse)
     assert_not_contains "$body" 'Agent-Session:' 'unsafe or stale session published'
     assert_contains "$body" 'Co-authored-by: Claude <noreply@anthropic.com>' 'native coauthor lost'
-    # The same pane committing in another repo must still strip.
     git -C "$repo" remote set-url origin https://github.com/t27sol-other/sample.git
     with_hooks_env "$hooks" git -C "$repo" commit -q --allow-empty \
-      -m 'fix: outside scope' --trailer 'Co-authored-by: Claude <noreply@anthropic.com>'
+      -m 'fix: outside scope' --trailer "Co-authored-by: $runtime <noreply@firstmate.invalid>" \
+      --trailer 'Co-authored-by: Claude <noreply@anthropic.com>'
     body=$(git -C "$repo" log -1 --format=%B)
-    assert_not_contains "$body" 'noreply@anthropic.com' 'outside scope kept AI trailer'
+    assert_not_contains "$body" 'Co-authored-by:' 'outside scope kept AI trailer'
     assert_not_contains "$body" 'Agent-System:' 'outside scope gained attribution'
   done
-  pass 'scoped hooks keep and add across runtimes; other owners strip and unsafe sessions are omitted'
+  pass 'Git parses preserved native trailers and idempotent attribution across all runtimes'
 }
 
 test_scope_matching() {
-  local config repo mode url
-  config="$TMP_ROOT/scope-matching" repo="$TMP_ROOT/scope-repo"
+  local config repo mode url model
+  config="$TMP_ROOT/legacy-flag" repo="$TMP_ROOT/scope-repo"
   make_repo "$repo"
   git -C "$repo" remote add origin https://github.com/t27sol/repo.git
-  for url in https://github.com/t27sol/repo.git ssh://git@github.com/t27sol/repo.git git@github.com:t27sol/repo.git; do
+  for url in https://github.com/t27sol/repo.git ssh://git@github.com/t27sol/repo.git git@github.com:t27sol/repo.git https://github.com/T27SOL/Another.GIT; do
     git -C "$repo" remote set-url origin "$url"
-    printf '%s\n' 'github.com/t27sol/repo' >"$config"
-    mode=$(python3 "$ROOT/bin/fm-git-attribution.py" mode "$config" "$repo") || fail 'scope resolution failed'
-    [ "$mode" = add ] || fail 'exact repository did not match'
+    mode=$(python3 "$ROOT/bin/fm-git-attribution.py" mode "$config" "$repo") || fail 'owner resolution failed'
+    [ "$mode" = add ] || fail 't27sol owner did not match without configuration'
   done
-  printf '%s\n' 'github.com/t27sol/other' >"$config"
-  [ "$(python3 "$ROOT/bin/fm-git-attribution.py" mode "$config" "$repo")" = strip ] || fail 'sibling repo matched'
-  printf '%s\n' 'https://github.com/t27sol' >"$config"
-  if python3 "$ROOT/bin/fm-git-attribution.py" mode "$config" "$repo" 2>/dev/null; then fail 'invalid scope accepted'; fi
+  for url in https://github.com/t27sol-other/repo.git https://gitlab.com/t27sol/repo.git https://github.com/other/t27sol.git "$repo"; do
+    git -C "$repo" remote set-url origin "$url"
+    [ "$(python3 "$ROOT/bin/fm-git-attribution.py" mode "$config" "$repo")" = strip ] || fail 'unrelated repository matched'
+  done
   : >"$config"
   [ "$(python3 "$ROOT/bin/fm-git-attribution.py" mode "$config" "$repo")" = keep ] || fail 'legacy flag changed'
-  printf '%s\n' github.com/t27sol >"$config"
-  "$STRIP" install --attribution "$config" codex default "$TMP_ROOT/default-model-hooks" "$repo" || fail 'default-model install failed'
-  with_hooks_env "$TMP_ROOT/default-model-hooks" git -C "$repo" commit -q --allow-empty -m 'fix: unresolved model'
-  mode=$(git -C "$repo" log -1 --format=%B)
-  assert_contains "$mode" 'Agent-Platform: codex' 'runtime missing without model'
-  assert_not_contains "$mode" 'Agent-Platform: codex/' 'unreported model emitted'
-  pass 'scope resolution accepts forge transports, bounds repository scopes, rejects malformed config and keeps legacy flag'
+  printf '%s\n' 'gitlab.com/arbitrary/selection' >"$config"
+  [ "$(python3 "$ROOT/bin/fm-git-attribution.py" mode "$config" "$repo")" = keep ] || fail 'legacy flag contents became a scope list'
+  git -C "$repo" remote set-url origin git@github.com:t27sol/repo.git
+  [ "$(python3 "$ROOT/bin/fm-git-attribution.py" mode "$config" "$repo")" = add ] || fail 'legacy flag bypassed t27sol attribution'
+  for model in default auto; do
+    "$STRIP" install --attribution "$TMP_ROOT/absent.meta" codex "$model" "$TMP_ROOT/default-model-hooks" "$repo" || fail 'default-model install failed'
+    with_hooks_env "$TMP_ROOT/default-model-hooks" git -C "$repo" commit -q --allow-empty -m 'fix: unresolved model'
+    mode=$(git -C "$repo" log -1 --format=%B | git -C "$repo" interpret-trailers --parse)
+    assert_contains "$mode" 'Agent-Platform: codex' 'runtime missing without model'
+    assert_not_contains "$mode" 'Agent-Platform: codex/' 'unreported model emitted'
+  done
+  pass 't27sol policy needs no configuration and preserves the legacy presence flag elsewhere'
+}
+
+test_recorded_sessions() {
+  local runtime repo hooks meta sid body native
+  for runtime in opencode polytoken; do
+    repo="$TMP_ROOT/session-$runtime" hooks="$TMP_ROOT/session-hooks-$runtime" meta="$TMP_ROOT/session-$runtime.meta"
+    make_repo "$repo"
+    git -C "$repo" remote add origin https://github.com/t27sol/sample.git
+    "$STRIP" install --attribution "$meta" "$runtime" default "$hooks" "$repo" || fail 'session hook install failed'
+    if [ "$runtime" = opencode ]; then sid=ses_abc123; else sid=0czfake-echo; fi
+    printf 'polytoken_session=%s\npolytoken_credential=/private/credential\n' "$sid" >"$meta"
+    OPENCODE_SESSION_ID=$sid with_hooks_env "$hooks" git -C "$repo" commit -q --allow-empty -m 'fix: recorded session' || fail 'session commit failed'
+    body=$(git -C "$repo" log -1 --format=%B | git -C "$repo" interpret-trailers --parse)
+    assert_contains "$body" "Agent-Session: $sid" "$runtime recorded session missing"
+    assert_not_contains "$body" credential 'credential leaked'
+    native="$runtime-session: $sid"
+    OPENCODE_SESSION_ID=$sid with_hooks_env "$hooks" git -C "$repo" commit -q --allow-empty -m 'fix: native session' --trailer "$native" || fail 'native session commit failed'
+    body=$(git -C "$repo" log -1 --format=%B | git -C "$repo" interpret-trailers --parse)
+    assert_contains "$body" "$native" 'native recorded session lost'
+    assert_not_contains "$body" 'Agent-Session:' 'native recorded session duplicated'
+    printf 'polytoken_session=/private/secret\n' >"$meta"
+    OPENCODE_SESSION_ID=/private/secret with_hooks_env "$hooks" git -C "$repo" commit -q --amend --allow-empty -m 'fix: unsafe session' || fail 'unsafe session commit failed'
+    body=$(git -C "$repo" log -1 --format=%B | git -C "$repo" interpret-trailers --parse)
+    assert_not_contains "$body" 'Agent-Session:' 'unsafe session published'
+    rm "$meta"
+    OPENCODE_SESSION_ID= with_hooks_env "$hooks" git -C "$repo" commit -q --allow-empty -m 'fix: absent session' || fail 'absent session commit failed'
+    body=$(git -C "$repo" log -1 --format=%B | git -C "$repo" interpret-trailers --parse)
+    assert_not_contains "$body" 'Agent-Session:' 'absent session guessed'
+  done
+  pass 'OpenCode context and existing Polytoken metadata supply safe session references'
 }
 
 test_cursor_trailer_does_not_reach_the_commit_object() {
@@ -632,6 +660,7 @@ test_push_guard_install_runs_the_guard_before_chaining() {
 
 test_scoped_keep_and_add
 test_scope_matching
+test_recorded_sessions
 test_cursor_trailer_does_not_reach_the_commit_object
 test_commandcode_trailer_is_stripped
 test_human_coauthor_is_kept

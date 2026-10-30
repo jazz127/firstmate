@@ -65,8 +65,10 @@ test_scoped_keep_and_add() {
     git -C "$repo" remote set-url origin https://github.com/t27sol-other/sample.git
     with_hooks_env "$hooks" git -C "$repo" commit -q --allow-empty \
       -m 'fix: outside scope' --trailer "Co-authored-by: $runtime <noreply@firstmate.invalid>" \
-      --trailer 'Co-authored-by: Claude <noreply@anthropic.com>'
+      --trailer 'Co-authored-by: Claude <noreply@anthropic.com>' \
+      --trailer "Claude-Session: $session"
     body=$(git -C "$repo" log -1 --format=%B)
+    assert_not_contains "$body" 'Claude-Session:' 'outside scope kept native session'
     assert_not_contains "$body" 'Co-authored-by:' 'outside scope kept AI trailer'
     assert_not_contains "$body" 'Agent-System:' 'outside scope gained attribution'
   done
@@ -131,6 +133,91 @@ test_recorded_sessions() {
     assert_not_contains "$body" 'Agent-Session:' 'absent session guessed'
   done
   pass 'OpenCode context and existing Polytoken metadata supply safe session references'
+}
+
+test_git_trailer_removal_preserves_message_body() {
+  local mode shape repo hooks msg prose native body parsed expected sid human
+  sid=11111111-2222-3333-4444-555555555555
+  prose=$(printf '%s\n' 'fix: document attribution' '' \
+    'Agent-System: fac:example' 'Agent-Platform: codex/example' \
+    'Agent-Session: example-session' 'Claude-Session: example-native-session' \
+    'These are body examples followed by explanatory prose.')
+  human=$(printf '%s\n' 'Signed-off-by: Jane Doe <jane@example.com>' \
+    'Co-authored-by: Jane Doe <jane@example.com>' 'Reviewed-by: Review Team' 'Empty-Key: ')
+  native=$(printf '%s\n' 'Signed-off-by: Jane Doe <jane@example.com>' \
+    'Co-authored-by: Jane Doe <jane@example.com>' \
+    'Co-authored-by: Claude <noreply@anthropic.com>' \
+    'Reviewed-by: Review' ' Team' 'Empty-Key:' \
+    'aGeNt-System : stale-system' ' stale-system-continuation' \
+    'Agent-Platform: stale-platform' ' stale-platform-continuation' \
+    'Agent-Session: stale-session' ' stale-session-continuation' "Claude-Session: $sid")
+  for mode in add strip fallback direct keep; do
+    for shape in trailered body-only; do
+      repo="$TMP_ROOT/body-$mode-$shape" hooks="$TMP_ROOT/body-hooks-$mode-$shape"
+      make_repo "$repo"
+      git -C "$repo" remote add origin https://github.com/t27sol/sample.git
+      case "$mode" in
+        add | fallback) "$STRIP" install --attribution "$TMP_ROOT/body.meta" codex fixture-model "$hooks" "$repo" || fail 'body attribution install failed' ;;
+        strip) "$STRIP" install "$hooks" "$repo" || fail 'body strip install failed' ;;
+        keep) "$STRIP" install --no-strip "$hooks" "$repo" || fail 'body keep install failed' ;;
+      esac
+      [ "$mode" = add ] || git -C "$repo" remote set-url origin https://github.com/another-owner/sample.git
+      msg="$repo/message"
+      printf '%s\n' "$prose" >"$msg"
+      [ "$shape" != trailered ] || printf '\n%s\n' "$native" >>"$msg"
+      if [ "$mode" = direct ]; then
+        "$STRIP" "$msg" || fail 'direct body strip failed'
+        git -C "$repo" commit -q --allow-empty -F "$msg" || fail 'direct body commit failed'
+      else
+        CODEX_THREAD_ID=$sid with_hooks_env "$hooks" git -C "$repo" commit -q --allow-empty -F "$msg" || fail "$mode body commit failed"
+      fi
+      body=$(git -C "$repo" log -1 --format=%B)
+      assert_contains "$body" "$prose" "$mode $shape changed body examples"
+      parsed=$(git -C "$repo" log -1 --format=%B | git -C "$repo" interpret-trailers --parse)
+      if [ "$mode" = keep ]; then
+        if [ "$shape" = trailered ]; then
+          assert_contains "$parsed" "Claude-Session: $sid" 'keep removed native session'
+          assert_contains "$parsed" 'Agent-Session: stale-session stale-session-continuation' 'keep removed shared fields'
+        else
+          [ -z "$parsed" ] || fail 'body-only examples became trailers'
+        fi
+        continue
+      fi
+      expected=
+      if [ "$shape" = trailered ]; then
+        expected=$human
+        if [ "$mode" = add ]; then
+          expected=$(printf '%s\n' 'Signed-off-by: Jane Doe <jane@example.com>' \
+            'Co-authored-by: Jane Doe <jane@example.com>' \
+            'Co-authored-by: Claude <noreply@anthropic.com>' \
+            'Reviewed-by: Review Team' 'Empty-Key: ' "Claude-Session: $sid")
+        fi
+      fi
+      if [ "$mode" = add ]; then
+        [ -z "$expected" ] || expected="$expected"$'\n'
+        expected="$expected"$(printf '%s\n' 'Co-authored-by: codex <noreply@firstmate.invalid>' \
+          'Agent-System: fac:firstmate' 'Agent-Platform: codex/fixture-model')
+        [ "$shape" != body-only ] || expected="$expected"$'\n'"Agent-Session: $sid"
+      fi
+      [ "$parsed" = "$expected" ] || fail "$mode $shape changed parsed trailer meaning or order: $parsed"
+      CODEX_THREAD_ID=$sid with_hooks_env "$hooks" git -C "$repo" commit -q --amend --allow-empty --no-edit || fail "$mode amendment failed"
+      body=$(git -C "$repo" log -1 --format=%B)
+      assert_contains "$body" "$prose" "$mode amendment changed body examples"
+    done
+  done
+  pass 'Git trailer removal preserves body examples, folded native fields, empty fields and native order'
+}
+
+test_strip_fields_preserves_patch_content() {
+  local msg patch expected
+  msg="$TMP_ROOT/patch-message"
+  patch=$(printf '%s\n' '---' 'Agent-System: patch-system' 'Agent-Platform: patch-platform' \
+    'Agent-Session: patch-session' 'Claude-Session: patch-session')
+  printf 'fix: patch message\n\nSigned-off-by: Jane Doe <jane@example.com>\nAgent-System: stale-system\nAgent-Platform: stale-platform\nAgent-Session: stale-session\nClaude-Session: stale-session\n\n%s\n' "$patch" >"$msg"
+  "$STRIP" "$msg" || fail 'patch message strip failed'
+  expected=$(printf 'fix: patch message\n\nSigned-off-by: Jane Doe <jane@example.com>\n\n%s' "$patch")
+  [ "$(cat "$msg")" = "$expected" ] || fail 'strip changed patch content or retained real attribution'
+  pass 'stripping respects Git trailer boundaries before a patch divider'
 }
 
 test_cursor_trailer_does_not_reach_the_commit_object() {
@@ -658,6 +745,8 @@ test_push_guard_install_runs_the_guard_before_chaining() {
   pass "install --push-guard writes a read-only pre-push that runs the guard before chaining"
 }
 
+test_git_trailer_removal_preserves_message_body
+test_strip_fields_preserves_patch_content
 test_scoped_keep_and_add
 test_scope_matching
 test_recorded_sessions

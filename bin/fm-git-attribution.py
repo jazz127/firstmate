@@ -3,6 +3,7 @@
 
 Usage: fm-git-attribution.py mode <config> <project>
        fm-git-attribution.py stamp <task-meta> <runtime> <model> <message>
+       fm-git-attribution.py strip-fields <message>
 
 t27sol GitHub repositories always receive attribution; elsewhere the legacy
 config presence flag means keep, and absence means strip.
@@ -17,6 +18,28 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 UUID = re.compile(r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}", re.I)
+SHARED_FIELDS = {"agent-system", "agent-platform", "agent-session"}
+
+
+def remove_trailers(content, keys):
+    args = ["git", "interpret-trailers", "--only-input"]
+    block = subprocess.run(args + ["--only-trailers"], input=content,
+                           capture_output=True, text=True, check=True).stdout
+    if not block:
+        return content
+    formatted = subprocess.run(args, input=content, capture_output=True,
+                               text=True, check=True).stdout
+    divider = re.search(r"(?m)^---(?:[ \t]|\r?$)", formatted)
+    cursor = divider.start() if divider else len(formatted)
+    entries = re.findall(r"(?m)^[^\s][^\n]*(?:\n[ \t][^\n]*)*\n?", block)
+    for entry in reversed(entries):
+        start = formatted.rfind(entry, 0, cursor)
+        if start < 0:
+            raise ValueError("cannot locate Git-parsed trailer in message")
+        if entry.split(":", 1)[0].strip().lower() in keys:
+            formatted = formatted[:start] + formatted[start + len(entry):]
+        cursor = start
+    return formatted
 
 
 def t27sol(project):
@@ -75,11 +98,8 @@ def stamp(task_meta, runtime, model, message):
             r"[a-zA-Z0-9][a-zA-Z0-9_.:/+-]*", model) or "://" in model:
         raise ValueError("unsafe runtime/model for Agent-Platform")
     path = Path(message)
-    lines = path.read_text().splitlines()
     # Replace our fields on amend/retry; retain existing co-authors.
-    lines = [line for line in lines if not re.match(
-        r"(?i)^(agent-system|agent-platform|agent-session):", line)]
-    content = "\n".join(lines).rstrip() + "\n"
+    content = remove_trailers(path.read_text(), SHARED_FIELDS)
     trailers = subprocess.run(["git", "interpret-trailers", "--parse"], input=content,
                               capture_output=True, text=True, check=True).stdout.splitlines()
     sid = session(runtime, trailers, task_meta)
@@ -113,6 +133,10 @@ if __name__ == "__main__":
             print(mode(*sys.argv[2:]))
         elif len(sys.argv) == 6 and sys.argv[1] == "stamp":
             stamp(*sys.argv[2:])
+        elif len(sys.argv) == 3 and sys.argv[1] == "strip-fields":
+            message = Path(sys.argv[2])
+            message.write_text(remove_trailers(
+                message.read_text(), SHARED_FIELDS | {"claude-session"}))
         else:
             raise ValueError(__doc__)
     except (OSError, ValueError, subprocess.CalledProcessError) as exc:

@@ -121,7 +121,6 @@ fm_is_ai_attribution_line() {
     'generated with [cortex code](https://docs.snowflake.com/'*')')
     return 0
     ;;
-  agent-system:* | agent-platform:* | agent-session:*) return 0 ;;
   co-authored-by:*) ;;
   *) return 1 ;;
   esac
@@ -156,6 +155,7 @@ strip_msgfile() {
     echo "error: commit message file not found: $src" >&2
     return 1
   }
+  python3 "${SELF%/*}/fm-git-attribution.py" strip-fields "$src" || return 1
   tmp=$(mktemp "${TMPDIR:-/tmp}/fm-git-strip-ai-trailers.XXXXXX") || return 1
   while IFS= read -r line || [ -n "$line" ]; do
     if fm_is_ai_attribution_line "$line"; then

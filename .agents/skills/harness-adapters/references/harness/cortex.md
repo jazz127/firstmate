@@ -21,7 +21,7 @@ The router owns the crewmate/scout-only boundary; primary and secondmate integra
 | Marker | None; anchored native `cortex` ancestry identifies the adapter and outranks foreign inherited markers. |
 | Trust dialogs | `--dangerously-allow-all-tool-calls` (alias `--bypass`) also skips the `Do you trust this project?` dialog and writes nothing to `~/.snowflake/cortex/cortex.json`; project hooks and settings still load. |
 | Imported config | Cortex loads Claude-compatible `~/.claude/settings.json` and project `.claude/settings.json` and `settings.local.json` hooks as well as its own `.cortex/` files, so a worker in a project with Claude hooks runs them; there is no switch to disable the import. |
-| Commit attribution | The model, not a client setting, writes a `Generated with Snowflake CoCo` line and a `Co-authored-by: Snowflake CoCo <noreply@snowflake.com>` trailer; the spawn-owned commit-msg strip (`../../../../../bin/fm-git-strip-ai-trailers.sh`) removes both unless the home sets `config/keep-ai-trailers`. |
+| Commit attribution | The model, not a client setting, writes a `Generated with Snowflake CoCo` line and a `Co-authored-by: Snowflake CoCo <noreply@snowflake.com>` trailer; Firstmate applies the [commit attribution policy](../../../../../docs/configuration.md#commit-attribution) through Git hooks. |
 
 ## Worker lifecycle limits
 

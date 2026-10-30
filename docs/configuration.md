@@ -1349,7 +1349,7 @@ rovo is likewise verified for crewmate and scout launches ONLY, refused for a se
 An agy secondmate or primary runs the tracked project-scope `.agents/hooks.json` in its own home, and `bin/fm-spawn.sh` pre-registers a secondmate home in agy's workspace trust store through `bin/fm-agy-trust.sh`; [`docs/supervision-protocols/agy.md`](supervision-protocols/agy.md) owns its supervision protocol and [`docs/verification/agy.md`](verification/agy.md) owns the evidence.
 devin is verified for crewmate and scout launches only; a secondmate is refused because Devin has no verified primary supervision protocol.
 
-Its private worker config disables Claude Code imports (including the captain's hooks) and, unless the home sets `config/keep-ai-trailers` (see "Commit attribution"), Devin commit attribution without editing user or project config; [`fm-devin-config.sh`](../bin/fm-devin-config.sh) owns these enforced settings and [Devin verification](verification/devin.md) owns the live evidence and observed model availability.
+Its private worker config disables Claude Code imports (including the captain's hooks) and, when the resolved [commit attribution policy](#commit-attribution) strips trailers, Devin commit attribution without editing user or project config; [`fm-devin-config.sh`](../bin/fm-devin-config.sh) owns these enforced settings and [Devin verification](verification/devin.md) owns the live evidence and observed model availability.
 
 cortex (Snowflake's Cortex Code) is likewise verified for crewmate and scout launches only; a secondmate is refused because Cortex has no verified primary supervision protocol.
 It runs only on the tmux and Herdr backends; a zellij, cmux, orca, paseo, rex, or t3code launch is refused because those backends supply no Cortex pane identity to prove its titled composer empty.
@@ -1459,7 +1459,7 @@ Pi-family secondmates can start unattended in Firstmate-seeded homes without acc
 For omp secondmate launches, `fm-spawn.sh` names only the parent home's `state/<id>.omp-ext.ts` busy extension with `-e`: omp auto-discovers the home's tracked `.omp/extensions/` with no trust gate, and naming a discovered file with `-e` as well loads it twice; every omp launch also carries the tracked `.omp/fm-worker-overlay.yml` posture overlay through `--config`, which [`fm-spawn.sh --help`](../bin/fm-spawn.sh) owns.
 
 For a Claude secondmate, `fm-spawn.sh` writes the busy hooks into the parent home's `state/<id>.claude-settings.json` and passes that file as Claude Code's one `--settings` value.
-The same file carries `feedbackDrafts` and, unless `config/keep-ai-trailers` is present, the attribution policy every other Claude launch puts in its inline `--settings` JSON.
+The same file carries `feedbackDrafts` and the resolved [commit attribution policy](#commit-attribution) that every other Claude launch puts in its inline `--settings` JSON.
 Claude Code applies `--settings` for that session and does not write the file into the mate home.
 A key the file sets overrides the same key in user, project, and local settings.
 A key it omits keeps the file-based value, so a `.claude/settings.local.json` already in the home is left untouched.
@@ -1819,17 +1819,33 @@ This applies only to agents Firstmate launches; the captain's own primary Firstm
 
 ### Commit attribution
 
-The optional local, gitignored `config/keep-ai-trailers` presence flag opts this home into keeping AI co-author trailers on its launched workers.
-With the flag absent, every Claude launch's session `--settings` value carries `"attribution":{"commit":"","pr":"","sessionUrl":false}`, every Devin worker config sets `"attribution": false`, and every fleet launch appends a worker-scoped `GIT_CONFIG` `core.hooksPath` entry pointing at `state/<id>.git-hooks`, where git's `commit-msg` hook strips known AI trailers even when a runtime injects them after the typed message.
+Workers in GitHub repositories owned by `t27sol` keep and receive commit attribution by default, even when `config/keep-ai-trailers` is absent.
+The owner match uses the project's `origin` remote over HTTPS, SSH URL or SCP syntax, case insensitively at the owner boundary.
+A matching task keeps existing AI co-authors and installs a commit hook that adds a runtime co-author when absent, `Agent-System: fac:firstmate`, and `Agent-Platform: <runtime>[/<model>]`.
+The runtime is always included; the selected launch model reference is included only when permitted, with Claude Code model IDs and unresolved `default`/`auto` model choices omitted.
+Each runtime's existing selector and catalog contracts own model syntax and availability; attribution preserves safe references, including variant suffixes, while rejecting controls, whitespace, local paths, and URLs.
+The hook adds `Agent-Session` from a UUID `CODEX_THREAD_ID` for Codex when no native session trailer already carries the same reference.
+A UUID/public Claude session URL in the runtime's existing `Claude-Session` trailer already satisfies session attribution and is retained without adding a duplicate `Agent-Session`.
+OpenCode passes its existing plugin session identity to shell commands in memory, and Polytoken uses the existing task metadata's `polytoken_session` field.
+A session not yet available at commit time is omitted; other runtimes have no connected session source and omit it too.
+No additional persistent session record is created, and no local path, arbitrary hostname, credential, or guessed session is copied into the added fields.
+Amending a message replaces the shared fields rather than duplicating them; no trailer order is required and native runtime trailers retain their order within Git's parsed trailer block.
+Hook selection is scoped to the launch repository; an attribution-enabled hook rechecks the commit repository's origin and strips attribution outside t27sol.
+A worker launched outside t27sol that later commits in a t27sol submodule retains its launch repository's policy; adding attribution in that direction is an accepted limitation deferred to follow-up work.
+Focused synthetic regression coverage is in [`fm-git-strip-ai-trailers.test.sh`](../tests/fm-git-strip-ai-trailers.test.sh) and [`fm-spawn-dispatch-profile.test.sh`](../tests/fm-spawn-dispatch-profile.test.sh).
+Outside t27sol, the optional local, gitignored `config/keep-ai-trailers` retains its legacy home-wide presence-flag behavior; its contents do not select owners or repositories.
+With that flag absent outside t27sol, every Claude launch's session `--settings` value carries `"attribution":{"commit":"","pr":"","sessionUrl":false}`, every Devin worker config sets `"attribution": false`, and every fleet launch appends a worker-scoped `GIT_CONFIG` `core.hooksPath` entry pointing at `state/<id>.git-hooks`, where git's `commit-msg` hook strips known AI trailers even when a runtime injects them after the typed message.
 The entry follows any `GIT_CONFIG_*` entries the worker inherits, so an inherited scoped `credential.helper` still applies to the worker and to the repository's own hooks, such as a git-lfs `pre-push`; an inherited `GIT_CONFIG_COUNT` that is not a decimal number, or that leaves no room for another entry within Git's signed int, stops the launch before the worker runs.
 T3 Code owns its provider command and cannot carry Claude's inline setting, but its per-worktree environment overlay selects the same Git hook; [`t3code-backend.md`](t3code-backend.md#active-limits) owns that backend limit.
-When the flag is present, Claude launches omit those attribution-off settings, Devin worker configs keep the user config's `attribution` setting (Devin's default is on), and fleet launches do not install or select the strip hooks, so Git uses the repository's configured hooks directly.
-Because the upstream prior-art push guard is installed only through those pane hooks, a shipping worker in a home with the flag present also skips that guard.
+When the flag is present outside t27sol, Claude launches omit those attribution-off settings and Devin worker configs keep the user config's `attribution` setting (Devin's default is on).
+Fleet launches then use the repository's configured hooks directly, except that a [`forge=external`](external-review-forge.md) ship still installs the wrappers for its push guard without stripping attribution.
+Because the upstream prior-art push guard is installed only through those pane hooks, a non-external shipping worker in a home with the flag present outside t27sol also skips that guard.
 Cortex Code has no attribution switch and its model writes a `Generated with Snowflake CoCo` line and a `Co-authored-by: Snowflake CoCo` trailer itself, so the strip hooks are the only mechanism that removes them from a Cortex worker's commits.
-`bin/fm-git-strip-ai-trailers.sh` owns the identities, the install, and chaining the hooks of whichever repository git is running in, including when `git -c core.hooksPath` supplies the pane's hook override, so a project hook such as husky still runs when stripping is enabled.
+`bin/fm-git-attribution.py` owns message filtering and stamping; known AI co-authors are removed only from Git's parsed trailer block, preserving body examples and human co-authors.
+`bin/fm-git-strip-ai-trailers.sh` owns the install and chaining the hooks of whichever repository git is running in, including when `git -c core.hooksPath` supplies the pane's hook override, so a project hook such as husky still runs when stripping is enabled.
 A repository whose config sets `core.hooksPath` to the empty string runs no project hook, as in plain git; if the wrapper otherwise cannot resolve that repository's hooks directory, the git operation fails rather than silently skipping a project hook such as a pre-push guard.
-When stripping is enabled, the hooks directory is read-only, so a hook manager run inside a fleet pane (lefthook's npm postinstall, `pre-commit install`) fails instead of displacing the strip; install a project's hooks from outside the pane, where the wrappers chain them.
-The flag is a home-wide attribution choice, so it is inherited into secondmate homes under the [`secondmate-provisioning`](../.agents/skills/secondmate-provisioning/SKILL.md) inherited-local-material contract and a secondmate's own workers keep AI trailers too.
+Whenever installed, the hooks directory is read-only, so a hook manager run inside a fleet pane (lefthook's npm postinstall, `pre-commit install`) fails instead of displacing the wrappers; install a project's hooks from outside the pane, where the wrappers chain them.
+The file is inherited into secondmate homes under the [`secondmate-provisioning`](../.agents/skills/secondmate-provisioning/SKILL.md) inherited-local-material contract, so its legacy keep behavior applies to a secondmate's own workers too.
 Per-machine Cursor `cli-config.json` attribution-off is not this contract: it does not travel with Firstmate, defaults back to on when unset, and only feeds the CLI's request to the server, so it suppresses the trailer rather than preventing it.
 
 ## Project capacity (config/project-capacity)

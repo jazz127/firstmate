@@ -8,6 +8,8 @@
 # named in FM_OPENCODE_LIVE_BINS (space-separated paths), or the `opencode` on
 # PATH when that is unset. An OpenCode 1.x executable is reported and skipped,
 # because the fixture exercises only the OpenCode 2 plugin surface.
+# FM_OPENCODE_WORKER_ATTRIBUTION_LIVE=1 selects only native worker shell-session
+# attribution, without the primary-plugin cases or model-provider fixture.
 # FM_OPENCODE_LIVE_E2E=1 selects the credentialed TUI half instead, against the
 # `opencode` on PATH, with the launch flags and session database queries of its
 # detected major.
@@ -33,7 +35,13 @@ if [ "${FM_OPENCODE_LIVE_E2E:-0}" != 1 ]; then
       printf 'skip: %s reports %s, not OpenCode 2\n' "$bin" "$("$bin" --version 2>/dev/null || printf unknown)"
       continue
     fi
-    PATH="$(dirname "$bin"):$PATH" python3 "$fixture" || {
+    if [ "${FM_OPENCODE_WORKER_ATTRIBUTION_LIVE:-0}" != 1 ]; then
+      PATH="$(dirname "$bin"):$PATH" python3 "$fixture" || {
+        printf 'not ok - OpenCode %s native fixture failed\n' "$("$bin" --version)" >&2
+        exit 1
+      }
+    fi
+    PATH="$(dirname "$bin"):$PATH" python3 "$fixture" --worker-attribution || {
       printf 'not ok - OpenCode %s native fixture failed\n' "$("$bin" --version)" >&2
       exit 1
     }

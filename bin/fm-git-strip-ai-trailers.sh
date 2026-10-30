@@ -6,7 +6,7 @@
 #   fm-git-strip-ai-trailers.sh <msgfile>
 #       Commit-msg hook mode. Git passes the proposed message file as $1.
 #       Rewrites that file in place, then exits 0 so the commit proceeds.
-#   fm-git-strip-ai-trailers.sh install [--no-strip] [--push-guard <guard-file>] <hooks-dir> <worktree>
+#   fm-git-strip-ai-trailers.sh install [--no-strip] [--attribution <task-meta> <runtime> <model>] [--push-guard <guard-file>] <hooks-dir> <worktree>
 #       Recreate <hooks-dir> as a core.hooksPath for this launch: a commit-msg
 #       hook that runs this strip, plus one wrapper per client-side hook name
 #       git documents except reference-transaction and post-index-change,
@@ -31,6 +31,8 @@
 #       the pre-push wrapper run bin/fm-git-push-guard.sh on it first, with
 #       git's arguments and ref lines, chaining to the repository's pre-push
 #       hook only when the guard passes (that script owns the rules).
+#       --attribution <task-meta> <runtime> <model> keeps and adds scoped
+#       attribution through fm-git-attribution.py, rechecking the commit repo.
 #   fm-git-strip-ai-trailers.sh env-file <hooks-dir> <out-file>
 #       Write <out-file> as one plain export statement that appends
 #       core.hooksPath=<hooks-dir> after the GIT_CONFIG_COUNT entries this
@@ -44,9 +46,10 @@
 #       git's pre-push arguments and stdin; a refusal stops the push, and a
 #       pass chains to the repository's own pre-push with the same stdin.
 #
-# WHY THIS EXISTS. Claude launches already carry attribution-off in their
-# per-launch --settings JSON. Cursor and other non-Claude runtimes inject a
-# Co-Authored-By trailer at the tooling layer AFTER the worker types a clean
+# WHY THIS EXISTS. When stripping is selected under docs/configuration.md's
+# "Commit attribution" policy, Claude launches already carry attribution-off
+# in their per-launch --settings JSON. Cursor and other non-Claude runtimes
+# inject a Co-Authored-By trailer at the tooling layer AFTER the worker types a clean
 # message, so the typed message is not the commit object.
 # A prior per-machine ~/.cursor/cli-config.json attribution-off is not durable:
 # it does not travel with Firstmate, it defaults back to on when unset, and it
@@ -66,8 +69,8 @@
 # writes the commit object without running git. Both incidents that motivated
 # this strip came through an ordinary hook-running commit, so the ruling is to
 # accept that gap rather than add a push-side rewrite or a push-side check. A
-# trailer found on a fleet commit therefore points at one of those two paths,
-# not at an unnoticed hole in the matcher.
+# trailer found on a stripping worker's commit therefore points at one of
+# those two paths, not at an unnoticed hole in the matcher.
 #
 # ACCEPTED RESIDUAL, ruled 2026-09-17. Inside a fleet pane git reports this
 # directory as the repository's hooks directory, so a hook manager run there
@@ -86,84 +89,19 @@ usage() {
   cat >&2 <<'EOF'
 usage:
   fm-git-strip-ai-trailers.sh <msgfile>
-  fm-git-strip-ai-trailers.sh install [--no-strip] [--push-guard <guard-file>] <hooks-dir> <worktree> [<pre-push-guard> [<arg>...]]
+  fm-git-strip-ai-trailers.sh install [--no-strip] [--attribution <task-meta> <runtime> <model>] [--push-guard <guard-file>] <hooks-dir> <worktree> [<pre-push-guard> [<arg>...]]
   fm-git-strip-ai-trailers.sh env-file <hooks-dir> <out-file>
 EOF
   exit 2
 }
 
-trim_space() {
-  local s=$1
-  s=${s#"${s%%[![:space:]]*}"}
-  s=${s%"${s##*[![:space:]]}"}
-  printf '%s' "$s"
-}
-
-# True when this line is an AI Co-Authored-By trailer that must not reach a
-# commit object. Matches known product names and exact observed bot addresses only; an
-# address is added when a runtime is seen emitting it, never guessed from a
-# vendor domain, so a human co-author who works at a vendor is kept. A human
-# whose name or address merely contains a substring such as "ai" is kept.
-fm_is_ai_attribution_line() {
-  local raw=$1 lowered rest name email
-  raw=${raw%$'\r'}
-  raw=$(trim_space "$raw")
-  [ -n "$raw" ] || return 1
-  lowered=$(printf '%s' "$raw" | tr '[:upper:]' '[:lower:]')
-  # Cortex Code (verified live, cortex 1.1.104) writes a `Generated with` line
-  # beside its Co-authored-by trailer, and its built-in /commit command writes
-  # the same line naming `Cortex Code`. Only these two exact link shapes are
-  # attribution; any other `Generated with` text is the author's own.
-  case "$lowered" in
-  'generated with [snowflake coco](https://docs.snowflake.com/'*')' | \
-    'generated with [cortex code](https://docs.snowflake.com/'*')')
-    return 0
-    ;;
-  co-authored-by:*) ;;
-  *) return 1 ;;
-  esac
-  rest=$(trim_space "${raw#*:}")
-  name=$rest
-  email=
-  case "$rest" in
-  *'<'*'>'*)
-    email=$(printf '%s' "$rest" | tr '[:upper:]' '[:lower:]')
-    email=${email#*'<'}
-    email=${email%%'>'*}
-    name=$(trim_space "${rest%%'<'*}")
-    ;;
-  esac
-  name=$(printf '%s' "$name" | tr '[:upper:]' '[:lower:]')
-  case "$email" in
-  noreply@anthropic.com | cursoragent@* | noreply@openai.com | copilot@github.com | noreply@commandcode.ai | noreply@snowflake.com)
-    return 0
-    ;;
-  esac
-  case "$name" in
-  cursor | 'cursor agent' | claude | 'claude code' | 'github copilot' | copilot | codex | chatgpt | gemini | 'google gemini' | grok | openai | commandcodebot | 'snowflake coco' | 'cortex code')
-    return 0
-    ;;
-  esac
-  return 1
-}
-
 strip_msgfile() {
-  local src=$1 tmp
+  local src=$1
   [ -f "$src" ] || {
     echo "error: commit message file not found: $src" >&2
     return 1
   }
-  tmp=$(mktemp "${TMPDIR:-/tmp}/fm-git-strip-ai-trailers.XXXXXX") || return 1
-  while IFS= read -r line || [ -n "$line" ]; do
-    if fm_is_ai_attribution_line "$line"; then
-      continue
-    fi
-    printf '%s\n' "$line"
-  done <"$src" >"$tmp" || {
-    rm -f "$tmp"
-    return 1
-  }
-  mv "$tmp" "$src"
+  python3 "${SELF%/*}/fm-git-attribution.py" strip-fields "$src"
 }
 
 quote_for_hook() {
@@ -313,6 +251,9 @@ install_hooks() {
 
   strip_line=
   [ "$strip" = 0 ] || strip_line="$(quote_for_hook "$SELF") \"\$1\" || exit \$?"
+  if [ -n "${attribution_meta:-}" ]; then
+    strip_line="python3 $(quote_for_hook "${SELF%/*}/fm-git-attribution.py") stamp $(quote_for_hook "$attribution_meta") $(quote_for_hook "$attribution_runtime") $(quote_for_hook "$attribution_model") \"\$1\" || exit \$?"
+  fi
   write_executable "$hooks_dir/commit-msg" <<EOF
 #!/usr/bin/env bash
 set -u
@@ -369,9 +310,15 @@ CMD=${1:-}
 case "$CMD" in
 install)
   shift
-  strip=1 guard=
+  strip=1 guard='' attribution_meta='' attribution_runtime='' attribution_model=''
   while [ "$#" -gt 0 ]; do
     case "$1" in
+    --attribution)
+      [ "$#" -ge 6 ] || usage
+      attribution_meta=$2 attribution_runtime=$3 attribution_model=$4
+      strip=0
+      shift 4
+      ;;
     --no-strip)
       strip=0
       shift

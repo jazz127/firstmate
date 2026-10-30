@@ -10,6 +10,7 @@ set -u
 # A fleet pane already carries GIT_CONFIG core.hooksPath. These cases set that
 # override themselves, so drop the inherited one before any git command.
 unset GIT_CONFIG_COUNT GIT_CONFIG_KEY_0 GIT_CONFIG_VALUE_0 GIT_CONFIG_PARAMETERS
+unset CODEX_THREAD_ID OPENCODE_SESSION_ID
 
 # shellcheck source=tests/lib.sh
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
@@ -28,6 +29,392 @@ with_hooks_env() {  # <hooks-dir> <command...>
 make_repo() {
   local dir=$1
   fm_git_init_commit "$dir"
+}
+
+test_scoped_keep_and_add() {
+  local runtime repo hooks meta body session model native expected platform
+  for runtime in codex claude pi pi-signed omp opencode grok kimi cursor agy muse gemini rovo devin commandcode polytoken cortex; do
+    repo="$TMP_ROOT/scoped-$runtime" hooks="$TMP_ROOT/scoped-hooks-$runtime"
+    meta="$TMP_ROOT/$runtime.meta"
+    make_repo "$repo"
+    git -C "$repo" remote add origin git@github.com:t27sol/sample.git
+    model=fixture-model
+    "$STRIP" install --attribution "$meta" "$runtime" "$model" "$hooks" "$repo" || fail 'scoped install failed'
+    session=11111111-2222-3333-4444-555555555555
+    native=$(printf 'Co-authored-by: Jane Doe <jane@example.com>\nSigned-off-by: Jane Doe <jane@example.com>\nClaude-Session: %s' "$session")
+    CODEX_THREAD_ID=$session with_hooks_env "$hooks" git -C "$repo" commit -q --allow-empty \
+      -m 'fix: scoped attribution' -m "$native" || fail 'attributed commit failed'
+    body=$(git -C "$repo" log -1 --format=%B | git -C "$repo" interpret-trailers --parse)
+    platform=$runtime/$model
+    [ "$runtime" != claude ] || platform=claude
+    expected=$(printf '%s\nCo-authored-by: %s <noreply@firstmate.invalid>\nAgent-System: fac:firstmate\nAgent-Platform: %s' "$native" "$runtime" "$platform")
+    [ "$body" = "$expected" ] || fail "$runtime lost or reordered parsed trailers: $body"
+    CODEX_THREAD_ID=$session with_hooks_env "$hooks" git -C "$repo" commit -q --amend --no-edit --allow-empty || fail 'repeat stamping failed'
+    body=$(git -C "$repo" log -1 --format=%B | git -C "$repo" interpret-trailers --parse)
+    [ "$body" = "$expected" ] || fail "$runtime repeat stamping changed parsed trailers: $body"
+    if [ "$runtime" = codex ]; then
+      CODEX_THREAD_ID=$session with_hooks_env "$hooks" git -C "$repo" commit -q --allow-empty -m 'fix: no native session'
+      body=$(git -C "$repo" log -1 --format=%B | git -C "$repo" interpret-trailers --parse)
+      assert_contains "$body" "Agent-Session: $session" 'Codex UUID missing without native session'
+    fi
+    CODEX_THREAD_ID=/private/session with_hooks_env "$hooks" git -C "$repo" commit -q --amend --allow-empty \
+      -m 'fix: amended attribution' -m 'Co-authored-by: Claude <noreply@anthropic.com>'
+    body=$(git -C "$repo" log -1 --format=%B | git -C "$repo" interpret-trailers --parse)
+    assert_not_contains "$body" 'Agent-Session:' 'unsafe or stale session published'
+    assert_contains "$body" 'Co-authored-by: Claude <noreply@anthropic.com>' 'native coauthor lost'
+    git -C "$repo" remote set-url origin https://github.com/t27sol-other/sample.git
+    with_hooks_env "$hooks" git -C "$repo" commit -q --allow-empty \
+      -m 'fix: outside scope' --trailer "Co-authored-by: $runtime <noreply@firstmate.invalid>" \
+      --trailer 'Co-authored-by: Claude <noreply@anthropic.com>' \
+      --trailer "Claude-Session: $session"
+    body=$(git -C "$repo" log -1 --format=%B)
+    assert_not_contains "$body" 'Claude-Session:' 'outside scope kept native session'
+    assert_not_contains "$body" 'Co-authored-by:' 'outside scope kept AI trailer'
+    assert_not_contains "$body" 'Agent-System:' 'outside scope gained attribution'
+  done
+  pass 'Git parses preserved native trailers and idempotent attribution across all runtimes'
+}
+
+test_scope_matching() {
+  local config repo mode url model hooks trailers expected
+  config="$TMP_ROOT/legacy-flag" repo="$TMP_ROOT/scope-repo"
+  make_repo "$repo"
+  git -C "$repo" remote add origin https://github.com/t27sol/repo.git
+  hooks="$TMP_ROOT/scope-matching-hooks"
+  "$STRIP" install --attribution "$TMP_ROOT/absent.meta" codex default "$hooks" "$repo" || fail 'owner-matching hook install failed'
+  expected=$(printf '%s\n' 'Co-authored-by: Jane Doe <jane@example.com>' \
+    'Co-authored-by: codex <noreply@firstmate.invalid>' 'Agent-System: fac:firstmate' 'Agent-Platform: codex')
+  for url in https://github.com/t27sol/repo https://github.com/t27sol/repo/ \
+    https://github.com/t27sol/repo.git https://github.com/t27sol/repo.git/ \
+    ssh://git@github.com/t27sol/repo ssh://git@github.com/t27sol/repo/ \
+    ssh://git@github.com/t27sol/repo.git ssh://git@github.com/t27sol/repo.git/ \
+    git@github.com:t27sol/repo git@github.com:t27sol/repo/ \
+    git@github.com:t27sol/repo.git git@github.com:t27sol/repo.git/ \
+    https://github.com/T27SOL/Another.GIT https://github.com/T27SOL/Another.GIT///; do
+    git -C "$repo" remote set-url origin "$url"
+    mode=$(python3 "$ROOT/bin/fm-git-attribution.py" mode "$config" "$repo") || fail 'owner resolution failed'
+    [ "$mode" = add ] || fail "t27sol owner did not match without configuration: $url"
+    with_hooks_env "$hooks" git -C "$repo" commit -q --allow-empty -m 'fix: equivalent origin' \
+      --trailer 'Co-authored-by: Jane Doe <jane@example.com>' || fail "commit failed for origin: $url"
+    trailers=$(git -C "$repo" log -1 --format=%B | git -C "$repo" interpret-trailers --parse)
+    [ "$trailers" = "$expected" ] || fail "equivalent origin changed committed attribution: $url"
+  done
+  for url in https://github.com/t27sol-other/repo.git https://github.com/t27sol-other/repo.git/ \
+    ssh://git@github.com/t27sol-other/repo.git/ git@github.com:t27sol-other/repo.git/ \
+    https://gitlab.com/t27sol/repo.git https://gitlab.com/t27sol/repo.git/ \
+    https://github.com/other/t27sol.git "$repo"; do
+    git -C "$repo" remote set-url origin "$url"
+    [ "$(python3 "$ROOT/bin/fm-git-attribution.py" mode "$config" "$repo")" = strip ] || fail 'unrelated repository matched'
+    with_hooks_env "$hooks" git -C "$repo" commit -q --allow-empty -m 'fix: unrelated origin' \
+      --trailer 'Co-authored-by: Claude <noreply@anthropic.com>' \
+      --trailer 'Co-authored-by: Jane Doe <jane@example.com>' || fail 'unrelated origin commit failed'
+    trailers=$(git -C "$repo" log -1 --format=%B | git -C "$repo" interpret-trailers --parse)
+    [ "$trailers" = 'Co-authored-by: Jane Doe <jane@example.com>' ] || fail "unrelated origin kept attribution: $url"
+  done
+  : >"$config"
+  [ "$(python3 "$ROOT/bin/fm-git-attribution.py" mode "$config" "$repo")" = keep ] || fail 'legacy flag changed'
+  printf '%s\n' 'gitlab.com/arbitrary/selection' >"$config"
+  [ "$(python3 "$ROOT/bin/fm-git-attribution.py" mode "$config" "$repo")" = keep ] || fail 'legacy flag contents became a scope list'
+  git -C "$repo" remote set-url origin git@github.com:t27sol/repo.git
+  [ "$(python3 "$ROOT/bin/fm-git-attribution.py" mode "$config" "$repo")" = add ] || fail 'legacy flag bypassed t27sol attribution'
+  for model in default auto; do
+    "$STRIP" install --attribution "$TMP_ROOT/absent.meta" codex "$model" "$TMP_ROOT/default-model-hooks" "$repo" || fail 'default-model install failed'
+    with_hooks_env "$TMP_ROOT/default-model-hooks" git -C "$repo" commit -q --allow-empty -m 'fix: unresolved model'
+    mode=$(git -C "$repo" log -1 --format=%B | git -C "$repo" interpret-trailers --parse)
+    assert_contains "$mode" 'Agent-Platform: codex' 'runtime missing without model'
+    assert_not_contains "$mode" 'Agent-Platform: codex/' 'unreported model emitted'
+  done
+  pass 't27sol policy needs no configuration and preserves the legacy presence flag elsewhere'
+}
+
+test_model_validation_follows_platform_emission() {
+  local repo hooks runtime model native expected trailers before
+  repo="$TMP_ROOT/model-emission" hooks="$TMP_ROOT/model-emission-hooks"
+  make_repo "$repo"
+  git -C "$repo" remote add origin https://github.com/t27sol/sample.git
+  native=$(printf '%s\n' 'Co-authored-by: Claude <noreply@anthropic.com>' \
+    'Claude-Session: https://claude.ai/code/session_test123')
+  expected=$(printf '%s\nAgent-System: fac:firstmate\nAgent-Platform: claude' "$native")
+  for model in 'sonnet[1m]' 'opus[1m]' 'claude-sonnet-4-5@20250929' \
+    'claude-sonnet-4-5@20250929[1m]' sonnet default auto; do
+    "$STRIP" install --attribution "$TMP_ROOT/absent.meta" claude "$model" "$hooks" "$repo" || fail 'Claude model hook install failed'
+    with_hooks_env "$hooks" git -C "$repo" commit -q --allow-empty -m 'fix: Claude model omission' -m "$native" \
+      || fail "omitted Claude model blocked commit: $model"
+    trailers=$(git -C "$repo" log -1 --format=%B | git -C "$repo" interpret-trailers --parse)
+    [ "$trailers" = "$expected" ] || fail "Claude model changed trailer semantics: $model"
+    with_hooks_env "$hooks" git -C "$repo" commit -q --allow-empty --amend --no-edit \
+      || fail "omitted Claude model blocked amendment: $model"
+    trailers=$(git -C "$repo" log -1 --format=%B | git -C "$repo" interpret-trailers --parse)
+    [ "$trailers" = "$expected" ] || fail 'Claude amendment changed trailer semantics'
+  done
+  for model in fixture-model default auto; do
+    "$STRIP" install --attribution "$TMP_ROOT/absent.meta" codex "$model" "$hooks" "$repo" || fail 'Codex model hook install failed'
+    with_hooks_env "$hooks" git -C "$repo" commit -q --allow-empty -m 'fix: platform model' || fail 'Codex model blocked commit'
+    trailers=$(git -C "$repo" log -1 --format=%B | git -C "$repo" interpret-trailers --parse)
+    expected=$(printf '%s\n' 'Co-authored-by: codex <noreply@firstmate.invalid>' 'Agent-System: fac:firstmate')
+    if [ "$model" = fixture-model ]; then
+      expected="$expected"$'\n''Agent-Platform: codex/fixture-model'
+    else
+      expected="$expected"$'\n''Agent-Platform: codex'
+    fi
+    [ "$trailers" = "$expected" ] || fail 'known or unresolved model emission changed'
+  done
+  for model in 'unsafe model' 'https://provider.invalid/model' $'model\nAgent-System: injected'; do
+    "$STRIP" install --attribution "$TMP_ROOT/absent.meta" codex "$model" "$hooks" "$repo" || fail 'unsafe-model hook install failed'
+    before=$(git -C "$repo" rev-parse HEAD)
+    if with_hooks_env "$hooks" git -C "$repo" commit -q --allow-empty -m 'fix: refused model' >"$repo/refusal" 2>&1; then
+      fail 'unsafe emitted model was accepted'
+    fi
+    [ "$(git -C "$repo" rev-parse HEAD)" = "$before" ] || fail 'unsafe model created a commit'
+  done
+  for runtime in 'claude invalid' $'claude\nAgent-System: injected'; do
+    "$STRIP" install --attribution "$TMP_ROOT/absent.meta" "$runtime" 'sonnet[1m]' "$hooks" "$repo" || fail 'unsafe-runtime hook install failed'
+    before=$(git -C "$repo" rev-parse HEAD)
+    if with_hooks_env "$hooks" git -C "$repo" commit -q --allow-empty -m 'fix: refused runtime' >"$repo/refusal" 2>&1; then
+      fail 'Claude model omission bypassed runtime validation'
+    fi
+    [ "$(git -C "$repo" rev-parse HEAD)" = "$before" ] || fail 'unsafe runtime created a commit'
+  done
+  pass 'hook commits omit supported Claude model spellings while validating emitted models and runtimes'
+}
+
+test_model_selectors_reach_commit_attribution() {
+  local repo hooks runtime model trailers expected native before
+  repo="$TMP_ROOT/model-selectors" hooks="$TMP_ROOT/model-selector-hooks"
+  make_repo "$repo"
+  git -C "$repo" remote add origin https://github.com/t27sol/sample.git
+  native='Co-authored-by: Jane Doe <jane@example.com>'
+  while IFS='|' read -r runtime model; do
+    "$STRIP" install --attribution "$TMP_ROOT/absent.meta" "$runtime" "$model" "$hooks" "$repo" || fail 'selector hook install failed'
+    with_hooks_env "$hooks" git -C "$repo" commit -q --allow-empty -m 'fix: model selector attribution' -m "$native" \
+      || fail "safe launch selector blocked commit: $runtime $model"
+    expected=$(printf '%s\nCo-authored-by: %s <noreply@firstmate.invalid>\nAgent-System: fac:firstmate\nAgent-Platform: %s/%s' "$native" "$runtime" "$runtime" "$model")
+    trailers=$(git -C "$repo" log -1 --format=%B | git -C "$repo" interpret-trailers --parse)
+    [ "$trailers" = "$expected" ] || fail "selector changed committed trailer semantics: $runtime $model"
+    with_hooks_env "$hooks" git -C "$repo" commit -q --allow-empty --amend --no-edit || fail 'selector amendment failed'
+    trailers=$(git -C "$repo" log -1 --format=%B | git -C "$repo" interpret-trailers --parse)
+    [ "$trailers" = "$expected" ] || fail 'selector amendment changed trailer semantics'
+  done <<'CASES'
+opencode|openai/gpt-6.1-sol#high
+opencode|fixture/native#proof
+opencode|vertex/claude-sonnet-4-5@20250929[1m]#high
+codex|gpt-6.1-sol
+pi|codex-native/gpt-6.1-sol
+pi-signed|codex-native/gpt-6.1-sol
+omp|claude-bridge/claude-opus-4-7
+omp|*sonnet*
+grok|grok-4
+kimi|kimi-code/k3-256k
+cursor|cursor-grok-4.5-high-fast
+agy|gemini-3.8-flash-high
+muse|muse-spark-1.2-contributor
+gemini|gemini-2.5-pro
+rovo|gpt-5.6-sol
+devin|swe-2-medium
+commandcode|deepseek/deepseek-v4.1-flash
+polytoken|zai/glm-5.3-flash
+cortex|claude-sonnet-5-5
+CASES
+  for runtime in opencode codex; do
+    # shellcheck disable=SC2088 # The literal tilde path is an intentionally unsafe selector.
+    for model in '' 'unsafe model' $'model\nAgent-System: injected' $'model\rAgent-System: injected' \
+      $'model\tvariant' $'model\001variant' $'model\033variant' $'model\177variant' \
+      "model$(printf '\302\205')variant" "model$(printf '\342\200\250')variant" \
+      '/private/secret' './secret' '../secret' '~/secret' 'provider/../../secret' \
+      'C:/Users/private/secret' 'C:\Users\private\secret' \
+      'https://private.invalid/model' 'file:///private/secret'; do
+      "$STRIP" install --attribution "$TMP_ROOT/absent.meta" "$runtime" "$model" "$hooks" "$repo" || fail 'unsafe-selector hook install failed'
+      before=$(git -C "$repo" rev-parse HEAD)
+      if with_hooks_env "$hooks" git -C "$repo" commit -q --allow-empty -m 'fix: refused selector' >"$repo/refusal" 2>&1; then
+        fail 'unsafe or private selector was published'
+      fi
+      assert_contains "$(cat "$repo/refusal")" 'unsafe model' 'selector was refused for an unrelated reason'
+      [ "$(git -C "$repo" rev-parse HEAD)" = "$before" ] || fail 'unsafe selector created a commit'
+    done
+  done
+  pass 'runtime model references survive hook commits while controls, paths and URLs are refused'
+}
+
+test_recorded_sessions() {
+  local runtime repo hooks meta sid body native
+  for runtime in opencode polytoken; do
+    repo="$TMP_ROOT/session-$runtime" hooks="$TMP_ROOT/session-hooks-$runtime" meta="$TMP_ROOT/session-$runtime.meta"
+    make_repo "$repo"
+    git -C "$repo" remote add origin https://github.com/t27sol/sample.git
+    "$STRIP" install --attribution "$meta" "$runtime" default "$hooks" "$repo" || fail 'session hook install failed'
+    if [ "$runtime" = opencode ]; then sid=ses_abc123; else sid=0czfake-echo; fi
+    printf 'polytoken_session=%s\npolytoken_credential=/private/credential\n' "$sid" >"$meta"
+    OPENCODE_SESSION_ID=$sid with_hooks_env "$hooks" git -C "$repo" commit -q --allow-empty -m 'fix: recorded session' || fail 'session commit failed'
+    body=$(git -C "$repo" log -1 --format=%B | git -C "$repo" interpret-trailers --parse)
+    assert_contains "$body" "Agent-Session: $sid" "$runtime recorded session missing"
+    assert_not_contains "$body" credential 'credential leaked'
+    native="$runtime-session: $sid"
+    OPENCODE_SESSION_ID=$sid with_hooks_env "$hooks" git -C "$repo" commit -q --allow-empty -m 'fix: native session' --trailer "$native" || fail 'native session commit failed'
+    body=$(git -C "$repo" log -1 --format=%B | git -C "$repo" interpret-trailers --parse)
+    assert_contains "$body" "$native" 'native recorded session lost'
+    assert_not_contains "$body" 'Agent-Session:' 'native recorded session duplicated'
+    printf 'polytoken_session=/private/secret\n' >"$meta"
+    OPENCODE_SESSION_ID=/private/secret with_hooks_env "$hooks" git -C "$repo" commit -q --amend --allow-empty -m 'fix: unsafe session' || fail 'unsafe session commit failed'
+    body=$(git -C "$repo" log -1 --format=%B | git -C "$repo" interpret-trailers --parse)
+    assert_not_contains "$body" 'Agent-Session:' 'unsafe session published'
+    rm "$meta"
+    OPENCODE_SESSION_ID='' with_hooks_env "$hooks" git -C "$repo" commit -q --allow-empty -m 'fix: absent session' || fail 'absent session commit failed'
+    body=$(git -C "$repo" log -1 --format=%B | git -C "$repo" interpret-trailers --parse)
+    assert_not_contains "$body" 'Agent-Session:' 'absent session guessed'
+  done
+  pass 'OpenCode context and existing Polytoken metadata supply safe session references'
+}
+
+test_git_trailer_removal_preserves_message_body() {
+  local mode shape repo hooks msg prose native body parsed expected sid human
+  sid=11111111-2222-3333-4444-555555555555
+  prose=$(printf '%s\n' 'fix: document attribution' '' \
+    'Agent-System: fac:example' 'Agent-Platform: codex/example' \
+    'Agent-Session: example-session' 'Claude-Session: example-native-session' \
+    'Co-authored-by: pi <noreply@firstmate.invalid>' \
+    'Co-authored-by: Jane Doe <jane@example.com>' \
+    'These are body examples followed by explanatory prose.')
+  human=$(printf '%s\n' 'Signed-off-by: Jane Doe <jane@example.com>' \
+    'Co-authored-by: Jane Doe <jane@example.com>' 'Reviewed-by: Review Team' 'Empty-Key: ')
+  native=$(printf '%s\n' 'Signed-off-by: Jane Doe <jane@example.com>' \
+    'Co-authored-by: Jane Doe <jane@example.com>' \
+    'Co-authored-by: Claude <noreply@anthropic.com>' \
+    'Reviewed-by: Review' ' Team' 'Empty-Key:' \
+    'aGeNt-System : stale-system' ' stale-system-continuation' \
+    'Agent-Platform: stale-platform' ' stale-platform-continuation' \
+    'Agent-Session: stale-session' ' stale-session-continuation' "Claude-Session: $sid")
+  for mode in add strip fallback direct keep; do
+    for shape in trailered body-only; do
+      repo="$TMP_ROOT/body-$mode-$shape" hooks="$TMP_ROOT/body-hooks-$mode-$shape"
+      make_repo "$repo"
+      git -C "$repo" remote add origin https://github.com/t27sol/sample.git
+      case "$mode" in
+        add | fallback) "$STRIP" install --attribution "$TMP_ROOT/body.meta" codex fixture-model "$hooks" "$repo" || fail 'body attribution install failed' ;;
+        strip) "$STRIP" install "$hooks" "$repo" || fail 'body strip install failed' ;;
+        keep) "$STRIP" install --no-strip "$hooks" "$repo" || fail 'body keep install failed' ;;
+      esac
+      [ "$mode" = add ] || git -C "$repo" remote set-url origin https://github.com/another-owner/sample.git
+      msg="$repo/message"
+      printf '%s\n' "$prose" >"$msg"
+      [ "$shape" != trailered ] || printf '\n%s\n' "$native" >>"$msg"
+      if [ "$mode" = direct ]; then
+        "$STRIP" "$msg" || fail 'direct body strip failed'
+        git -C "$repo" commit -q --allow-empty -F "$msg" || fail 'direct body commit failed'
+      else
+        CODEX_THREAD_ID=$sid with_hooks_env "$hooks" git -C "$repo" commit -q --allow-empty -F "$msg" || fail "$mode body commit failed"
+      fi
+      body=$(git -C "$repo" log -1 --format=%B)
+      assert_contains "$body" "$prose" "$mode $shape changed body examples"
+      parsed=$(git -C "$repo" log -1 --format=%B | git -C "$repo" interpret-trailers --parse)
+      if [ "$mode" = keep ]; then
+        if [ "$shape" = trailered ]; then
+          assert_contains "$parsed" "Claude-Session: $sid" 'keep removed native session'
+          assert_contains "$parsed" 'Agent-Session: stale-session stale-session-continuation' 'keep removed shared fields'
+        else
+          [ -z "$parsed" ] || fail 'body-only examples became trailers'
+        fi
+        continue
+      fi
+      expected=
+      if [ "$shape" = trailered ]; then
+        expected=$human
+        if [ "$mode" = add ]; then
+          expected=$(printf '%s\n' 'Signed-off-by: Jane Doe <jane@example.com>' \
+            'Co-authored-by: Jane Doe <jane@example.com>' \
+            'Co-authored-by: Claude <noreply@anthropic.com>' \
+            'Reviewed-by: Review Team' 'Empty-Key: ' "Claude-Session: $sid")
+        fi
+      fi
+      if [ "$mode" = add ]; then
+        [ -z "$expected" ] || expected="$expected"$'\n'
+        expected="$expected"$(printf '%s\n' 'Co-authored-by: codex <noreply@firstmate.invalid>' \
+          'Agent-System: fac:firstmate' 'Agent-Platform: codex/fixture-model')
+        [ "$shape" != body-only ] || expected="$expected"$'\n'"Agent-Session: $sid"
+      fi
+      [ "$parsed" = "$expected" ] || fail "$mode $shape changed parsed trailer meaning or order: $parsed"
+      CODEX_THREAD_ID=$sid with_hooks_env "$hooks" git -C "$repo" commit -q --amend --allow-empty --no-edit || fail "$mode amendment failed"
+      body=$(git -C "$repo" log -1 --format=%B)
+      assert_contains "$body" "$prose" "$mode amendment changed body examples"
+    done
+  done
+  pass 'Git trailer removal preserves body examples, folded native fields, empty fields and native order'
+}
+
+test_known_coauthors_respect_git_trailer_boundary() {
+  local mode repo hooks msg ai humans prose footer body parsed
+  ai=$(printf '%s\n' \
+    'Co-authored-by: Fixture <noreply@firstmate.invalid>' \
+    'Co-authored-by: Fixture <noreply@anthropic.com>' \
+    'Co-authored-by: Fixture <cursoragent@fixture.invalid>' \
+    'Co-authored-by: Fixture <noreply@openai.com>' \
+    'Co-authored-by: Fixture <copilot@github.com>' \
+    'Co-authored-by: Fixture <noreply@commandcode.ai>' \
+    'Co-authored-by: Fixture <noreply@snowflake.com>' \
+    'Co-authored-by: Cursor <fixture@bots.invalid>' \
+    'Co-authored-by: Cursor Agent <fixture@bots.invalid>' \
+    'Co-authored-by: Claude <fixture@bots.invalid>' \
+    'Co-authored-by: Claude Code <fixture@bots.invalid>' \
+    'Co-authored-by: GitHub Copilot <fixture@bots.invalid>' \
+    'Co-authored-by: Copilot <fixture@bots.invalid>' \
+    'Co-authored-by: Codex <fixture@bots.invalid>' \
+    'Co-authored-by: ChatGPT <fixture@bots.invalid>' \
+    'Co-authored-by: Gemini <fixture@bots.invalid>' \
+    'Co-authored-by: Google Gemini <fixture@bots.invalid>' \
+    'Co-authored-by: Grok <fixture@bots.invalid>' \
+    'Co-authored-by: OpenAI <fixture@bots.invalid>' \
+    'Co-authored-by: CommandCodeBot <fixture@bots.invalid>' \
+    'Co-authored-by: Snowflake CoCo <fixture@bots.invalid>' \
+    'Co-authored-by: Cortex Code <fixture@bots.invalid>' \
+    'cO-AuThOrEd-By : pi' ' <NOREPLY@FIRSTMATE.INVALID>')
+  humans=$(printf '%s\n' 'Co-authored-by: Jane Doe <jane@example.com>' \
+    'Co-authored-by: Jane Doe <jane@anthropic.com>' \
+    'Co-authored-by: Sam Roe <sam@cursor.com>' \
+    'Co-authored-by: Daisy <daisy@example.com>')
+  prose=$(printf 'fix: document co-authors\n\n%s\n%s\nThese are body examples followed by explanatory prose.' "$ai" "$humans")
+  footer=$(printf 'Signed-off-by: Jane Doe <jane@example.com>\n%s\n%s' "$ai" "$humans")
+  for mode in direct strip fallback; do
+    repo="$TMP_ROOT/coauthor-body-$mode" hooks="$TMP_ROOT/coauthor-hooks-$mode"
+    make_repo "$repo"
+    git -C "$repo" remote add origin https://github.com/t27sol/sample.git
+    case "$mode" in
+      strip) "$STRIP" install "$hooks" "$repo" || fail 'coauthor strip hook install failed' ;;
+      fallback) "$STRIP" install --attribution "$TMP_ROOT/coauthor.meta" claude default "$hooks" "$repo" || fail 'coauthor fallback hook install failed' ;;
+    esac
+    git -C "$repo" remote set-url origin https://github.com/another-owner/sample.git
+    msg="$repo/message"
+    printf '%s\n\n%s\n' "$prose" "$footer" >"$msg"
+    if [ "$mode" = direct ]; then
+      "$STRIP" "$msg" || fail 'direct coauthor strip failed'
+      git -C "$repo" commit -q --allow-empty -F "$msg" || fail 'direct coauthor commit failed'
+    else
+      with_hooks_env "$hooks" git -C "$repo" commit -q --allow-empty -F "$msg" || fail 'coauthor hook commit failed'
+    fi
+    body=$(git -C "$repo" log -1 --format=%B)
+    assert_contains "$body" "$prose" "$mode stripped a body coauthor example"
+    parsed=$(git -C "$repo" log -1 --format=%B | git -C "$repo" interpret-trailers --parse)
+    [ "$parsed" = "Signed-off-by: Jane Doe <jane@example.com>"$'\n'"$humans" ] || fail "$mode lost human coauthors or kept AI trailers: $parsed"
+    if [ "$mode" != direct ]; then
+      with_hooks_env "$hooks" git -C "$repo" commit -q --allow-empty --amend --no-edit || fail 'coauthor amendment failed'
+      body=$(git -C "$repo" log -1 --format=%B)
+      assert_contains "$body" "$prose" 'amendment stripped body coauthor examples'
+      parsed=$(git -C "$repo" log -1 --format=%B | git -C "$repo" interpret-trailers --parse)
+      [ "$parsed" = "Signed-off-by: Jane Doe <jane@example.com>"$'\n'"$humans" ] || fail 'amendment changed human trailer semantics'
+    fi
+  done
+  pass 'known AI coauthors strip only from parsed trailers while body examples and human coauthors survive'
+}
+
+test_strip_fields_preserves_patch_content() {
+  local msg patch expected
+  msg="$TMP_ROOT/patch-message"
+  patch=$(printf '%s\n' '---' 'Agent-System: patch-system' 'Agent-Platform: patch-platform' \
+    'Agent-Session: patch-session' 'Claude-Session: patch-session' \
+    'Co-authored-by: pi <noreply@firstmate.invalid>')
+  printf 'fix: patch message\n\nSigned-off-by: Jane Doe <jane@example.com>\nAgent-System: stale-system\nAgent-Platform: stale-platform\nAgent-Session: stale-session\nClaude-Session: stale-session\nCo-authored-by: pi <noreply@firstmate.invalid>\n\n%s\n' "$patch" >"$msg"
+  "$STRIP" "$msg" || fail 'patch message strip failed'
+  expected=$(printf 'fix: patch message\n\nSigned-off-by: Jane Doe <jane@example.com>\n\n%s' "$patch")
+  [ "$(cat "$msg")" = "$expected" ] || fail 'strip changed patch content or retained real attribution'
+  pass 'stripping respects Git trailer boundaries before a patch divider'
 }
 
 test_cursor_trailer_does_not_reach_the_commit_object() {
@@ -474,14 +861,11 @@ test_cortex_attribution_does_not_reach_the_commit_object() {
   "$STRIP" install "$hooks" "$repo" || fail "install should succeed"
   printf 'note\n' >>"$repo/README.md"
   git -C "$repo" add README.md
-  # The exact message Cortex Code 1.1.104 produced live: its typed -m body,
-  # a Generated with link line, then the Co-authored-by trailer.
   with_hooks_env "$hooks" git -C "$repo" commit -q \
     -m 'probe commit' \
     -m 'Generated with [Snowflake CoCo](https://docs.snowflake.com/en/user-guide/cortex-code/cortex-code)' \
-    -m 'Co-authored-by: Snowflake CoCo <noreply@snowflake.com>' \
-    -m 'Co-authored-by: Jane Doe <jane@snowflake.com>' \
-    -m 'Generated with care by a human, no link'
+    -m 'Generated with care by a human, no link' \
+    -m $'Co-authored-by: Snowflake CoCo <noreply@snowflake.com>\nCo-authored-by: Jane Doe <jane@snowflake.com>'
   body=$(git -C "$repo" log -1 --format=%B)
   assert_not_contains "$body" "Snowflake CoCo" "Cortex attribution reached the commit object"
   assert_not_contains "$body" "noreply@snowflake.com" "Cortex bot address reached the commit object"
@@ -555,6 +939,14 @@ test_push_guard_install_runs_the_guard_before_chaining() {
   pass "install --push-guard writes a read-only pre-push that runs the guard before chaining"
 }
 
+test_known_coauthors_respect_git_trailer_boundary
+test_git_trailer_removal_preserves_message_body
+test_strip_fields_preserves_patch_content
+test_scoped_keep_and_add
+test_scope_matching
+test_model_validation_follows_platform_emission
+test_model_selectors_reach_commit_attribution
+test_recorded_sessions
 test_cursor_trailer_does_not_reach_the_commit_object
 test_commandcode_trailer_is_stripped
 test_human_coauthor_is_kept

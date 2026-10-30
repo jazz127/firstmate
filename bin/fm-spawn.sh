@@ -6442,6 +6442,14 @@ const makeHandler = (state) => {
   return async (event) => {
     const type = eventType(event);
     const id = sessionID(event);
+    if (type === "session.created") {
+      if (id) state.sessions.add(id);
+      return;
+    }
+    if (type === "session.deleted") {
+      state.sessions.delete(id);
+      return;
+    }
     if (type === "session.execution.started") {
       if (state.activeSession === null) state.activeSession = id;
       if (id === state.activeSession) await busyEvent("busy", "session-execution-started");
@@ -6478,13 +6486,17 @@ const makeHandler = (state) => {
     }
   };
 };
+// Native session shell commands have no execution.started event. Use the
+// sole known session when idle; do not guess between multiple sessions.
+const shellSession = (state) => state.activeSession ||
+  (state.sessions.size === 1 ? state.sessions.values().next().value : "");
 export const FmBusyState = async () => {
-  const state = { activeSession: null };
+  const state = { activeSession: null, sessions: new Set() };
   const handleEvent = makeHandler(state);
   return {
     event: async ({ event }) => handleEvent(event),
     "shell.env": async (input, output) => {
-      output.env.OPENCODE_SESSION_ID = input.sessionID || state.activeSession || "";
+      output.env.OPENCODE_SESSION_ID = input.sessionID || shellSession(state);
     },
   };
 };
@@ -6493,10 +6505,10 @@ export default {
   id: "fm.busy-state",
   server: FmBusyState,
   setup(ctx) {
-    const state = { activeSession: null };
+    const state = { activeSession: null, sessions: new Set() };
     setupEventSubscription(ctx, makeHandler(state));
     ctx.shell.hook("create.before", (event) => {
-      event.env.OPENCODE_SESSION_ID = state.activeSession || "";
+      event.env.OPENCODE_SESSION_ID = shellSession(state);
     });
   },
 };

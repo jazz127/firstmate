@@ -2443,12 +2443,17 @@ if (process.env.OPENCODE_MAJOR === "1") {
   let shellHook;
   let deliver;
   let delivered;
-  const consumed = new Promise(resolve => { delivered = resolve; });
+  const emit = async (event) => {
+    const consumed = new Promise(resolve => { delivered = resolve; });
+    deliver(event);
+    await consumed;
+  };
   const stream = {
     async *[Symbol.asyncIterator]() {
-      await new Promise(resolve => { deliver = resolve; });
-      yield { type: "session.execution.started", properties: { sessionID: sid } };
-      delivered();
+      while (true) {
+        yield await new Promise(resolve => { deliver = resolve; });
+        delivered();
+      }
     },
   };
   mod.default.setup({
@@ -2456,8 +2461,20 @@ if (process.env.OPENCODE_MAJOR === "1") {
     shell: { hook: (name, callback) => { assert.equal(name, "create.before"); shellHook = callback; } },
   });
   await new Promise(resolve => setImmediate(resolve));
-  deliver();
-  await consumed;
+  // Native V2 session shell commands do not start a model turn.
+  await emit({ type: "session.created", data: { sessionID: sid } });
+  shellHook({ env });
+  assert.equal(env.OPENCODE_SESSION_ID, sid);
+  await emit({ type: "session.created", data: { sessionID: "ses_other" } });
+  shellHook({ env });
+  assert.equal(env.OPENCODE_SESSION_ID, "", "idle multi-session shells must not guess an identity");
+  await emit({ type: "session.execution.started", data: { sessionID: sid } });
+  shellHook({ env });
+  assert.equal(env.OPENCODE_SESSION_ID, sid, "active-turn identity remains available");
+  await emit({ type: "session.execution.succeeded", data: { sessionID: sid } });
+  shellHook({ env });
+  assert.equal(env.OPENCODE_SESSION_ID, "", "the completed turn must not leave a stale active identity");
+  await emit({ type: "session.deleted", data: { sessionID: "ses_other" } });
   shellHook({ env });
 }
 assert.equal(env.OPENCODE_SESSION_ID, sid);

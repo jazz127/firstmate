@@ -9,12 +9,95 @@ from pathlib import Path
 import shutil
 import socket
 import subprocess
+import sys
 import tempfile
 import threading
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
+
+
+def run_worker_attribution(lab):
+    """AGT-006: native shell commits carry their server-created session ID.
+
+    The oracle is the session returned by the real HTTP API, compared with
+    Git-parsed trailers. No model-turn event is supplied to mask a missing ID.
+    """
+    repo = Path(__file__).resolve().parent.parent
+    project = lab / "worker"
+    fmhome = lab / "fmhome"
+    hooks = fmhome / "state/native-session.git-hooks"
+    # Only the pane is simulated to obtain the actual generated worker plugin
+    # and installed hooks; shell execution below uses the native server.
+    subprocess.run(["bash", "-c", '''
+set -eu
+. "$1/tests/fixtures.sh"
+fm_test_spawn_home "$2/fmhome" opencode
+fm_test_spawn_brief "$2/fmhome" native-session
+fm_git_worktree "$2/project" "$2/worker" native-session
+git -C "$2/project" remote set-url origin git@github.com:t27sol/example.git
+git -C "$2/project" config "url.file://$2/project.origin.git.insteadOf" git@github.com:t27sol/example.git
+fakebin=$(fm_test_make_spawn_fakebin "$2/fake")
+FM_FAKE_LAUNCH_LOG="$2/launch.log" fm_test_run_spawn "$2/fmhome" "$2/worker" "$fakebin" \
+  native-session "$2/project" --mode no-mistakes --yolo off
+''', "worker-attribution", str(repo), str(lab)], check=True)
+    home = lab / "home"
+    home.mkdir()
+    env = {k: v for k, v in os.environ.items() if not k.startswith(("OPENCODE_", "FM_", "XDG_"))}
+    env.update(HOME=str(home), TMPDIR=str(lab), OPENCODE_DB=str(lab / "native.db"), OPENCODE_DISABLE_MODELS_FETCH="1", OPENCODE_DISABLE_AUTOUPDATE="1", OPENCODE_DISABLE_LSP_DOWNLOAD="1", GIT_CONFIG_COUNT="1", GIT_CONFIG_KEY_0="core.hooksPath", GIT_CONFIG_VALUE_0=str(hooks))
+    for kind in ("CONFIG", "DATA", "CACHE", "STATE"):
+        path = home / kind.lower()
+        path.mkdir()
+        env[f"XDG_{kind}_HOME"] = str(path)
+    (project / "opencode.json").write_text(json.dumps({"snapshots": False, "permissions": [{"action": "*", "resource": "*", "effect": "allow"}]}))
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+    logpath = lab / "server.log"
+    headers = {"Content-Type": "application/json"}
+
+    def api(path, body=None):
+        request = urllib.request.Request(f"http://127.0.0.1:{port}{path}", data=json.dumps(body).encode() if body is not None else None, headers=headers)
+        with urllib.request.urlopen(request, timeout=20) as response:
+            data = response.read()
+            return json.loads(data) if data else None
+
+    def until(check, label):
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline:
+            value = check()
+            if value:
+                return value
+            time.sleep(0.1)
+        raise RuntimeError(f"Timed out: {label}\n{logpath.read_text()}")
+
+    with logpath.open("w") as log:
+        process = subprocess.Popen(["opencode", "serve", "--hostname", "127.0.0.1", "--port", str(port)], cwd=project, env=env, stdout=log, stderr=log)
+        try:
+            password = until(lambda: next((s.removeprefix("server password ") for s in logpath.read_text().splitlines() if s.startswith("server password ")), None), "server readiness")
+            headers["Authorization"] = "Basic " + base64.b64encode(f"opencode:{password}".encode()).decode()
+            version = api("/api/info")["version"]
+            query = urllib.parse.urlencode({"location[directory]": str(project)})
+            until(lambda: any(p["id"] == "fm.busy-state" and p["state"]["status"] == "active" for p in api("/api/plugin?" + query)["data"]), "generated worker plugin readiness")
+            sid = api("/api/session", {"location": {"directory": str(project)}, "agent": "build"})["data"]["id"]
+            for attempt in range(2):
+                before = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=project)
+                api(f"/api/session/{sid}/shell", {"command": f'git -c user.name=Fixture -c user.email=fixture@example.invalid commit -q --allow-empty -m "fix: native shell attribution {attempt}"'})
+                until(lambda: subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=project) != before, "native shell commit")
+                message = subprocess.check_output(["git", "log", "-1", "--format=%B"], cwd=project)
+                trailers = subprocess.check_output(["git", "interpret-trailers", "--parse"], input=message).decode().splitlines()
+                assert trailers.count(f"Agent-Session: {sid}") == 1, (sid, trailers)
+                assert "Co-authored-by: opencode <noreply@firstmate.invalid>" in trailers, trailers
+                assert "Agent-Platform: opencode" in trailers, trailers
+            print(f"ok - OpenCode {version} native shell commits retain session {sid} without a model turn")
+        finally:
+            process.terminate()
+            try:
+                process.wait(timeout=15)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait()
 
 
 def run(lab):
@@ -207,5 +290,8 @@ def run(lab):
 
 if __name__ == "__main__":
     with tempfile.TemporaryDirectory(prefix="fm-opencode-v2-live-") as directory:
-        run(Path(directory).resolve())
+        if sys.argv[1:] == ["--worker-attribution"]:
+            run_worker_attribution(Path(directory).resolve())
+        else:
+            run(Path(directory).resolve())
     print("ok - private OpenCode server, provider, watcher, configuration and database cleaned")

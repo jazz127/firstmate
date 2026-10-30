@@ -3564,6 +3564,12 @@ Repeat the hooked-worker check above before publication if watcher or task-inbox
 
 ## OpenCode 2 launch and brief delivery
 
+Worker shell-session attribution verified on 2026-10-31 on macOS arm64 with OpenCode 2.0.21 using `FM_OPENCODE_WORKER_ATTRIBUTION_LIVE=1 bash tests/fm-opencode-primary-live-e2e.test.sh`, with that release on `PATH` and an isolated `TMPDIR`.
+The native `/api/session/{id}/shell` endpoint made two commits without a model turn; Git's trailer parser confirmed each carried exactly the server-created session ID.
+The run reported `ok - OpenCode 2.0.21 native shell commits retain session ses_e712f5450ffeETCOmls06wBpSJ without a model turn`.
+The generated worker plugin retains known sessions in memory independently of busy-state tracking; an idle shell receives the sole known session, while ambiguous idle sessions omit the reference.
+`tests/fm-spawn-dispatch-profile.test.sh` also covers active-turn identity, terminal-event clearing, ambiguous idle sessions and session deletion through the generated plugin and installed commit hook.
+
 Verified on 2026-10-15 on Linux x86_64 against OpenCode 2.0.11 and 2.0.22, each installed into a scratch npm prefix with scratch `HOME`, XDG directories, and `OPENCODE_DB`, while the host's global OpenCode 1.18 stayed in place.
 
 The token-free native plugin fixture passed on both releases:

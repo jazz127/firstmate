@@ -94,9 +94,8 @@ def stamp(task_meta, runtime, model, message):
         subprocess.run([str(Path(__file__).with_name("fm-git-strip-ai-trailers.sh")), message], check=True)
         return
     # Runtime/model are launch metadata, never free-form trailer contents.
-    if not re.fullmatch(r"[a-z0-9][a-z0-9_.-]*", runtime) or not re.fullmatch(
-            r"[a-zA-Z0-9][a-zA-Z0-9_.:/+-]*", model) or "://" in model:
-        raise ValueError("unsafe runtime/model for Agent-Platform")
+    if not re.fullmatch(r"[a-z0-9][a-z0-9_.-]*", runtime):
+        raise ValueError("unsafe runtime for Agent-Platform")
     path = Path(message)
     # Replace our fields on amend/retry; retain existing co-authors.
     content = remove_trailers(path.read_text(), SHARED_FIELDS)
@@ -109,6 +108,8 @@ def stamp(task_meta, runtime, model, message):
     # unresolved launch metadata, so it must not be presented as a model ID.
     platform = runtime
     if not runtime.startswith("claude") and model not in ("default", "auto"):
+        if not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_.:/+-]*", model) or "://" in model:
+            raise ValueError("unsafe model for Agent-Platform")
         platform += f"/{model}"
     args = ["git", "interpret-trailers", "--in-place"]
     if not coauthors:

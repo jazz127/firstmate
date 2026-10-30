@@ -127,6 +127,57 @@ test_scope_matching() {
   pass 't27sol policy needs no configuration and preserves the legacy presence flag elsewhere'
 }
 
+test_model_validation_follows_platform_emission() {
+  local repo hooks runtime model native expected trailers before
+  repo="$TMP_ROOT/model-emission" hooks="$TMP_ROOT/model-emission-hooks"
+  make_repo "$repo"
+  git -C "$repo" remote add origin https://github.com/t27sol/sample.git
+  native=$(printf '%s\n' 'Co-authored-by: Claude <noreply@anthropic.com>' \
+    'Claude-Session: https://claude.ai/code/session_test123')
+  expected=$(printf '%s\nAgent-System: fac:firstmate\nAgent-Platform: claude' "$native")
+  for model in 'sonnet[1m]' 'opus[1m]' 'claude-sonnet-4-5@20250929' \
+    'claude-sonnet-4-5@20250929[1m]' sonnet default auto; do
+    "$STRIP" install --attribution "$TMP_ROOT/absent.meta" claude "$model" "$hooks" "$repo" || fail 'Claude model hook install failed'
+    with_hooks_env "$hooks" git -C "$repo" commit -q --allow-empty -m 'fix: Claude model omission' -m "$native" \
+      || fail "omitted Claude model blocked commit: $model"
+    trailers=$(git -C "$repo" log -1 --format=%B | git -C "$repo" interpret-trailers --parse)
+    [ "$trailers" = "$expected" ] || fail "Claude model changed trailer semantics: $model"
+    with_hooks_env "$hooks" git -C "$repo" commit -q --allow-empty --amend --no-edit \
+      || fail "omitted Claude model blocked amendment: $model"
+    trailers=$(git -C "$repo" log -1 --format=%B | git -C "$repo" interpret-trailers --parse)
+    [ "$trailers" = "$expected" ] || fail 'Claude amendment changed trailer semantics'
+  done
+  for model in fixture-model default auto; do
+    "$STRIP" install --attribution "$TMP_ROOT/absent.meta" codex "$model" "$hooks" "$repo" || fail 'Codex model hook install failed'
+    with_hooks_env "$hooks" git -C "$repo" commit -q --allow-empty -m 'fix: platform model' || fail 'Codex model blocked commit'
+    trailers=$(git -C "$repo" log -1 --format=%B | git -C "$repo" interpret-trailers --parse)
+    expected=$(printf '%s\n' 'Co-authored-by: codex <noreply@firstmate.invalid>' 'Agent-System: fac:firstmate')
+    if [ "$model" = fixture-model ]; then
+      expected="$expected"$'\n''Agent-Platform: codex/fixture-model'
+    else
+      expected="$expected"$'\n''Agent-Platform: codex'
+    fi
+    [ "$trailers" = "$expected" ] || fail 'known or unresolved model emission changed'
+  done
+  for model in 'unsafe model' 'https://provider.invalid/model' $'model\nAgent-System: injected'; do
+    "$STRIP" install --attribution "$TMP_ROOT/absent.meta" codex "$model" "$hooks" "$repo" || fail 'unsafe-model hook install failed'
+    before=$(git -C "$repo" rev-parse HEAD)
+    if with_hooks_env "$hooks" git -C "$repo" commit -q --allow-empty -m 'fix: refused model' >"$repo/refusal" 2>&1; then
+      fail 'unsafe emitted model was accepted'
+    fi
+    [ "$(git -C "$repo" rev-parse HEAD)" = "$before" ] || fail 'unsafe model created a commit'
+  done
+  for runtime in 'claude invalid' $'claude\nAgent-System: injected'; do
+    "$STRIP" install --attribution "$TMP_ROOT/absent.meta" "$runtime" 'sonnet[1m]' "$hooks" "$repo" || fail 'unsafe-runtime hook install failed'
+    before=$(git -C "$repo" rev-parse HEAD)
+    if with_hooks_env "$hooks" git -C "$repo" commit -q --allow-empty -m 'fix: refused runtime' >"$repo/refusal" 2>&1; then
+      fail 'Claude model omission bypassed runtime validation'
+    fi
+    [ "$(git -C "$repo" rev-parse HEAD)" = "$before" ] || fail 'unsafe runtime created a commit'
+  done
+  pass 'hook commits omit supported Claude model spellings while validating emitted models and runtimes'
+}
+
 test_recorded_sessions() {
   local runtime repo hooks meta sid body native
   for runtime in opencode polytoken; do
@@ -771,6 +822,7 @@ test_git_trailer_removal_preserves_message_body
 test_strip_fields_preserves_patch_content
 test_scoped_keep_and_add
 test_scope_matching
+test_model_validation_follows_platform_emission
 test_recorded_sessions
 test_cursor_trailer_does_not_reach_the_commit_object
 test_commandcode_trailer_is_stripped

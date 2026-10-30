@@ -57,7 +57,7 @@ def t27sol(project):
             return False
         host, path = match.groups()
     return host.lower() == "github.com" and bool(re.fullmatch(
-        r"t27sol/[a-z0-9_.-]+", path.lower().removesuffix(".git")))
+        r"t27sol/[a-z0-9_.-]+", path.lower().rstrip("/").removesuffix(".git")))
 
 
 def mode(config, project):

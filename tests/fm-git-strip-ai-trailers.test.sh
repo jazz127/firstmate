@@ -76,18 +76,40 @@ test_scoped_keep_and_add() {
 }
 
 test_scope_matching() {
-  local config repo mode url model
+  local config repo mode url model hooks trailers expected
   config="$TMP_ROOT/legacy-flag" repo="$TMP_ROOT/scope-repo"
   make_repo "$repo"
   git -C "$repo" remote add origin https://github.com/t27sol/repo.git
-  for url in https://github.com/t27sol/repo.git ssh://git@github.com/t27sol/repo.git git@github.com:t27sol/repo.git https://github.com/T27SOL/Another.GIT; do
+  hooks="$TMP_ROOT/scope-matching-hooks"
+  "$STRIP" install --attribution "$TMP_ROOT/absent.meta" codex default "$hooks" "$repo" || fail 'owner-matching hook install failed'
+  expected=$(printf '%s\n' 'Co-authored-by: Jane Doe <jane@example.com>' \
+    'Co-authored-by: codex <noreply@firstmate.invalid>' 'Agent-System: fac:firstmate' 'Agent-Platform: codex')
+  for url in https://github.com/t27sol/repo https://github.com/t27sol/repo/ \
+    https://github.com/t27sol/repo.git https://github.com/t27sol/repo.git/ \
+    ssh://git@github.com/t27sol/repo ssh://git@github.com/t27sol/repo/ \
+    ssh://git@github.com/t27sol/repo.git ssh://git@github.com/t27sol/repo.git/ \
+    git@github.com:t27sol/repo git@github.com:t27sol/repo/ \
+    git@github.com:t27sol/repo.git git@github.com:t27sol/repo.git/ \
+    https://github.com/T27SOL/Another.GIT https://github.com/T27SOL/Another.GIT///; do
     git -C "$repo" remote set-url origin "$url"
     mode=$(python3 "$ROOT/bin/fm-git-attribution.py" mode "$config" "$repo") || fail 'owner resolution failed'
-    [ "$mode" = add ] || fail 't27sol owner did not match without configuration'
+    [ "$mode" = add ] || fail "t27sol owner did not match without configuration: $url"
+    with_hooks_env "$hooks" git -C "$repo" commit -q --allow-empty -m 'fix: equivalent origin' \
+      --trailer 'Co-authored-by: Jane Doe <jane@example.com>' || fail "commit failed for origin: $url"
+    trailers=$(git -C "$repo" log -1 --format=%B | git -C "$repo" interpret-trailers --parse)
+    [ "$trailers" = "$expected" ] || fail "equivalent origin changed committed attribution: $url"
   done
-  for url in https://github.com/t27sol-other/repo.git https://gitlab.com/t27sol/repo.git https://github.com/other/t27sol.git "$repo"; do
+  for url in https://github.com/t27sol-other/repo.git https://github.com/t27sol-other/repo.git/ \
+    ssh://git@github.com/t27sol-other/repo.git/ git@github.com:t27sol-other/repo.git/ \
+    https://gitlab.com/t27sol/repo.git https://gitlab.com/t27sol/repo.git/ \
+    https://github.com/other/t27sol.git "$repo"; do
     git -C "$repo" remote set-url origin "$url"
     [ "$(python3 "$ROOT/bin/fm-git-attribution.py" mode "$config" "$repo")" = strip ] || fail 'unrelated repository matched'
+    with_hooks_env "$hooks" git -C "$repo" commit -q --allow-empty -m 'fix: unrelated origin' \
+      --trailer 'Co-authored-by: Claude <noreply@anthropic.com>' \
+      --trailer 'Co-authored-by: Jane Doe <jane@example.com>' || fail 'unrelated origin commit failed'
+    trailers=$(git -C "$repo" log -1 --format=%B | git -C "$repo" interpret-trailers --parse)
+    [ "$trailers" = 'Co-authored-by: Jane Doe <jane@example.com>' ] || fail "unrelated origin kept attribution: $url"
   done
   : >"$config"
   [ "$(python3 "$ROOT/bin/fm-git-attribution.py" mode "$config" "$repo")" = keep ] || fail 'legacy flag changed'

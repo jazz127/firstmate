@@ -1822,7 +1822,8 @@ This applies only to agents Firstmate launches; the captain's own primary Firstm
 Workers in GitHub repositories owned by `t27sol` keep and receive commit attribution by default, even when `config/keep-ai-trailers` is absent.
 The owner match uses the project's `origin` remote over HTTPS, SSH URL or SCP syntax, case insensitively at the owner boundary.
 A matching task keeps existing AI co-authors and installs a commit hook that adds a runtime co-author when absent, `Agent-System: fac:firstmate`, and `Agent-Platform: <runtime>[/<model>]`.
-The runtime is always included; a known model selected from the runtime's catalog is included only when permitted, with Claude Code model IDs and unresolved `default`/`auto` model choices omitted.
+The runtime is always included; the selected launch model reference is included only when permitted, with Claude Code model IDs and unresolved `default`/`auto` model choices omitted.
+Each runtime's existing selector and catalog contracts own model syntax and availability; attribution preserves safe references, including variant suffixes, while rejecting controls, whitespace, local paths, and URLs.
 The hook adds `Agent-Session` from a UUID `CODEX_THREAD_ID` for Codex when no native session trailer already carries the same reference.
 A UUID/public Claude session URL in the runtime's existing `Claude-Session` trailer already satisfies session attribution and is retained without adding a duplicate `Agent-Session`.
 OpenCode passes its existing plugin session identity to shell commands in memory, and Polytoken uses the existing task metadata's `polytoken_session` field.

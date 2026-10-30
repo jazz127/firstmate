@@ -108,7 +108,10 @@ def stamp(task_meta, runtime, model, message):
     # unresolved launch metadata, so it must not be presented as a model ID.
     platform = runtime
     if not runtime.startswith("claude") and model not in ("default", "auto"):
-        if not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_.:/+-]*", model) or "://" in model:
+        if (not model or any(c.isspace() or not c.isprintable() for c in model)
+                or model.startswith(("/", ".", "~")) or "\\" in model
+                or re.match(r"^[a-zA-Z]:/", model) or "://" in model
+                or any(part in (".", "..") for part in model.split("/"))):
             raise ValueError("unsafe model for Agent-Platform")
         platform += f"/{model}"
     args = ["git", "interpret-trailers", "--in-place"]

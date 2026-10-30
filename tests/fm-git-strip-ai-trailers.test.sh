@@ -178,6 +178,62 @@ test_model_validation_follows_platform_emission() {
   pass 'hook commits omit supported Claude model spellings while validating emitted models and runtimes'
 }
 
+test_model_selectors_reach_commit_attribution() {
+  local repo hooks runtime model trailers expected native before
+  repo="$TMP_ROOT/model-selectors" hooks="$TMP_ROOT/model-selector-hooks"
+  make_repo "$repo"
+  git -C "$repo" remote add origin https://github.com/t27sol/sample.git
+  native='Co-authored-by: Jane Doe <jane@example.com>'
+  while IFS='|' read -r runtime model; do
+    "$STRIP" install --attribution "$TMP_ROOT/absent.meta" "$runtime" "$model" "$hooks" "$repo" || fail 'selector hook install failed'
+    with_hooks_env "$hooks" git -C "$repo" commit -q --allow-empty -m 'fix: model selector attribution' -m "$native" \
+      || fail "safe launch selector blocked commit: $runtime $model"
+    expected=$(printf '%s\nCo-authored-by: %s <noreply@firstmate.invalid>\nAgent-System: fac:firstmate\nAgent-Platform: %s/%s' "$native" "$runtime" "$runtime" "$model")
+    trailers=$(git -C "$repo" log -1 --format=%B | git -C "$repo" interpret-trailers --parse)
+    [ "$trailers" = "$expected" ] || fail "selector changed committed trailer semantics: $runtime $model"
+    with_hooks_env "$hooks" git -C "$repo" commit -q --allow-empty --amend --no-edit || fail 'selector amendment failed'
+    trailers=$(git -C "$repo" log -1 --format=%B | git -C "$repo" interpret-trailers --parse)
+    [ "$trailers" = "$expected" ] || fail 'selector amendment changed trailer semantics'
+  done <<'CASES'
+opencode|openai/gpt-6.1-sol#high
+opencode|fixture/native#proof
+opencode|vertex/claude-sonnet-4-5@20250929[1m]#high
+codex|gpt-6.1-sol
+pi|codex-native/gpt-6.1-sol
+pi-signed|codex-native/gpt-6.1-sol
+omp|claude-bridge/claude-opus-4-7
+omp|*sonnet*
+grok|grok-4
+kimi|kimi-code/k3-256k
+cursor|cursor-grok-4.5-high-fast
+agy|gemini-3.8-flash-high
+muse|muse-spark-1.2-contributor
+gemini|gemini-2.5-pro
+rovo|gpt-5.6-sol
+devin|swe-2-medium
+commandcode|deepseek/deepseek-v4.1-flash
+polytoken|zai/glm-5.3-flash
+cortex|claude-sonnet-5-5
+CASES
+  for runtime in opencode codex; do
+    for model in '' 'unsafe model' $'model\nAgent-System: injected' $'model\rAgent-System: injected' \
+      $'model\tvariant' $'model\001variant' $'model\033variant' $'model\177variant' \
+      "model$(printf '\302\205')variant" "model$(printf '\342\200\250')variant" \
+      '/private/secret' './secret' '../secret' '~/secret' 'provider/../../secret' \
+      'C:/Users/private/secret' 'C:\Users\private\secret' \
+      'https://private.invalid/model' 'file:///private/secret'; do
+      "$STRIP" install --attribution "$TMP_ROOT/absent.meta" "$runtime" "$model" "$hooks" "$repo" || fail 'unsafe-selector hook install failed'
+      before=$(git -C "$repo" rev-parse HEAD)
+      if with_hooks_env "$hooks" git -C "$repo" commit -q --allow-empty -m 'fix: refused selector' >"$repo/refusal" 2>&1; then
+        fail 'unsafe or private selector was published'
+      fi
+      assert_contains "$(cat "$repo/refusal")" 'unsafe model' 'selector was refused for an unrelated reason'
+      [ "$(git -C "$repo" rev-parse HEAD)" = "$before" ] || fail 'unsafe selector created a commit'
+    done
+  done
+  pass 'runtime model references survive hook commits while controls, paths and URLs are refused'
+}
+
 test_recorded_sessions() {
   local runtime repo hooks meta sid body native
   for runtime in opencode polytoken; do
@@ -823,6 +879,7 @@ test_strip_fields_preserves_patch_content
 test_scoped_keep_and_add
 test_scope_matching
 test_model_validation_follows_platform_emission
+test_model_selectors_reach_commit_attribution
 test_recorded_sessions
 test_cursor_trailer_does_not_reach_the_commit_object
 test_commandcode_trailer_is_stripped

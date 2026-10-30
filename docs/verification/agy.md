@@ -158,8 +158,9 @@ No automatic quota failover was exercised or claimed; every handoff above was an
 Primary and persistent secondmate execution is verified through native `.agents/hooks.json` integration.
 Session-open digest injection is implemented by `bin/fm-sessionstart-agy.sh` on the `SessionStart` event.
 PreToolUse seatbelts enforce execution safety through `bin/fm-arm-pretool-check.sh --agy`, `bin/fm-cd-pretool-check.sh --agy`, and `bin/fm-subagent-pretool-check.sh --agy`.
-In primary and secondmate homes, watcher commands are classified by the shared arm-command policy, `cd` commands are denied in favor of absolute paths or `cwd`, and subagent invocations (`invoke_subagent`, `define_subagent`) are denied while inspection tools (`manage_subagents`, `manage_task`) remain permitted.
-Supervision continuity uses synchronous Stop-hook parking via `bin/fm-turnend-guard-agy.sh`, running `bin/fm-watch-arm.sh` (or the supervision host) which waits under the 28800s hook timeout until woken by an incoming event (bounded only when the optional `FM_AGY_PARK_TIMEOUT` is set) and falls back to bounded repair nagging via `bin/fm-turnend-guard.sh --agy`.
+The guards retain their own scope and policy: [watcher arming](../arm-pretool-check.md), [persistent directory changes](../cd-guard.md), and [subagent dispatch](../subagent-guard.md).
+[`turnend-guard.md` "Antigravity park"](../turnend-guard.md#antigravity-park) owns Stop-hook continuity, daemon stand-down, and repair behavior.
+`tests/fm-agy-primary.test.sh` covers host-owned away entry, daemon-owned quiet and away handoff at all three stop boundaries, pending-only supervision, and delivery after a terminal source retires.
 Session lock verification recognizes `agy` process ancestry via `bin/fm-session-lock-lib.sh`.
 
 ## What is still unproven
@@ -174,5 +175,7 @@ Run the portable suite and the live guard after any agy upgrade, because the pro
 
 ```
 bin/fm-test-run.sh tests/fm-agy-harness.test.sh
+bin/fm-test-run.sh tests/fm-agy-primary.test.sh
 FM_AGY_SIGNALS_LIVE=1 bin/fm-test-run.sh tests/fm-agy-signals-live-e2e.test.sh
+FM_AGY_PRIMARY_LIVE=1 bin/fm-test-run.sh tests/fm-agy-primary-live-e2e.test.sh
 ```

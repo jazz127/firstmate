@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Pre-register Antigravity CLI's workspace trust for the isolated task worktree
-# a ship/scout spawn is about to launch an agy crewmate into, so the worker
-# reaches its brief in the worktree instead of parking on the folder-trust
-# dialog and running its turn in agy's own scratch directory.
+# Pre-register Antigravity CLI's workspace trust for an isolated task worktree
+# or seeded secondmate home, so the launched agent reaches its brief there
+# instead of parking on the folder-trust dialog and running its turn in agy's
+# own scratch directory.
 #
 # Usage: fm-agy-trust.sh <worktree> <project>
 #        fm-agy-trust.sh --secondmate-home <home> <id>
@@ -27,13 +27,17 @@
 # dialog if one renders anyway and never counts a busy turn as ready on a path
 # that was neither pre-registered here nor answered there.
 #
-# THE SCOPE TEST IS THE SAFETY PROPERTY and mirrors bin/fm-claude-trust.sh:
-# <worktree> must be a LINKED git worktree - its own git dir, sharing
+# THE SCOPE TEST IS THE SAFETY PROPERTY. The worktree form mirrors
+# bin/fm-claude-trust.sh: <worktree> must be a LINKED git worktree - its own git dir, sharing
 # <project>'s common dir - whose top level is exactly the resolved argument. A
 # primary checkout, a worktree of an unrelated repo, a subdirectory of a
 # worktree, a plain directory, and a home directory are each refused with a
-# non-zero exit, never a warning and never a silent skip. Only the launching
-# user's own store is written, it must be a regular file this uid owns, every
+# non-zero exit, never a warning and never a silent skip. The secondmate form
+# instead requires a user-owned, regular non-symlink marker matching <id>,
+# AGENTS.md and bin/, and any existing data/state/config/projects directories
+# must resolve inside the home. Neither form accepts / or the user's home.
+# Only the launching user's own store is written, it must be a regular file
+# this uid owns, every
 # unrelated key and entry is preserved, and the replacement is atomic.
 set -u
 unset CDPATH \

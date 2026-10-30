@@ -94,7 +94,9 @@
 #   no-mistakes ship takes it, because direct-PR already leaves the text to the
 #   worker and local-only opens no PR, and only a project with no forge binding,
 #   because the manual brief carries no PR commands for another forge. A
-#   registered pr=manual on any other mode or forge, and a malformed binding (an
+#   no-mistakes-prod-only project may register it for its no-mistakes tasks;
+#   its direct-PR tasks keep their existing worker-written text. A registered
+#   pr=manual on any other mode or forge, and a malformed binding (an
 #   empty or unknown value), are REFUSED in the default and --pr output forms:
 #   nothing on stdout, exit status 3, the token named. --branch-prefix and
 #   --forge do not make these checks.

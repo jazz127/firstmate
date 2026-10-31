@@ -283,12 +283,7 @@
 #     grace period to any survivor whose process identity still matches. Both
 #     roots are unique per task and never
 #     shared, so this can never reach another task's or the primary's
-#     processes. The one exception to selection by working directory is a
-#     Lima `limactl hostagent` or `usernet` process whose state path resolves
-#     outside every root: a shared VM started from the worktree keeps that
-#     working directory but not its state there, so it is left running with a
-#     warning. A state path inside a root, or one that cannot be determined,
-#     stays reapable. Idempotent: nothing left to find is a silent no-op.
+#     processes. Idempotent: nothing left to find is a silent no-op.
 #   Fix 3 - sweep abandoned remote job workers. A remote job worker started
 #     from a worktree's own bin/ outlives that worktree's removal without
 #     being reachable by Fix 2, because its working directory is wherever it
@@ -2138,50 +2133,43 @@ task_process_identity_matches() {  # <pid> <identity>
   [ "$current" = "$2" ]
 }
 
-TASK_PIDS_SHARED_VM_WARNED=
+TASK_PIDS_SHARED_VM_REFUSED=
 
 task_pid_list_contains() {  # <pid-list> <pid>
   printf '%s\n' "$1" | grep -Fxq "$2"
 }
 
-# The value of `-p`/`--pidfile` from one `limactl hostagent` or `usernet`
-# command line, in every form its flag parser accepts. Failure means the line
-# is not such a process or carries no value. ps joins argv with spaces, so a
-# value runs to the next " -" flag, or up to hostagent's trailing instance name
-# when no flag follows: a path containing " -" itself is cut short.
 limactl_state_path_from_command() {  # <command-line>
-  local word rest subcommand value
-  read -r word rest <<< "$1"
-  [ "${word##*/}" = limactl ] || return 1
-  while :; do
-    [ -n "$rest" ] || return 1
-    read -r word rest <<< "$rest"
-    case "$word" in
-      hostagent|usernet) subcommand=$word; break ;;
-      --log-level|--log-format) read -r word rest <<< "$rest" ;;
+  local executable subcommand rest state_flag next_flag word value="" i state_count=0 next_count=0
+  local -a words
+  case "$1" in *$'\n'*|*$'\r'*) return 1 ;; esac
+  read -r executable rest <<< "$1"
+  [ "${executable##*/}" = limactl ] || return 1
+  while [ -n "$rest" ]; do
+    read -r subcommand rest <<< "$rest"
+    case "$subcommand" in
+      hostagent) state_flag=--pidfile; next_flag=--socket; break ;;
+      usernet) state_flag=-p; next_flag=-e; break ;;
       -*) ;;
       *) return 1 ;;
     esac
   done
-  while [ -n "$rest" ]; do
-    read -r word rest <<< "$rest"
+  [ -n "${state_flag:-}" ] || return 1
+  read -r -a words <<< "$1"
+  for i in "${!words[@]}"; do
+    word=${words[$i]}
     case "$word" in
-      -p|--pidfile) value=$rest ;;
-      --pidfile=*) value="${word#--pidfile=} $rest" ;;
-      -p=*) value="${word#-p=} $rest" ;;
-      -p*) value="${word#-p} $rest" ;;
-      *) continue ;;
+      --pidfile|-p)
+        state_count=$((state_count + 1))
+        if [ "$word" = "$state_flag" ] && [ "${words[$((i + 2))]:-}" = "$next_flag" ]; then
+          value=${words[$((i + 1))]:-}
+        fi
+        ;;
     esac
-    value=${value%\ }
-    case "$value" in
-      *\ -*) value=${value%%\ -*} ;;
-      *) [ "$subcommand" != hostagent ] || value=${value% *} ;;
-    esac
-    [ -n "$value" ] || return 1
-    printf '%s\n' "$value"
-    return 0
+    [ "$word" != "$next_flag" ] || next_count=$((next_count + 1))
   done
-  return 1
+  [ "$state_count" -eq 1 ] && [ "$next_count" -eq 1 ] && [ -n "$value" ] || return 1
+  printf '%s\n' "$value"
 }
 
 # Physical form of an absolute path whose tail may not exist yet: the deepest
@@ -2223,7 +2211,7 @@ task_pid_shared_vm_state_path() {  # <pid> <dir>...
 task_pids_under_roots() {  # <dir>...
   TASK_PIDS=
   TASK_PIDS_FAILED_DIR=
-  local dir dir_pids pid state kept="" pids=""
+  local dir dir_pids pid parent state shared="" kept="" pids=""
   for dir in "$@"; do
     [ -n "$dir" ] || continue
     if ! dir_pids=$(pids_with_cwd_under "$dir"); then
@@ -2237,13 +2225,26 @@ $dir_pids"
   while IFS= read -r pid; do
     [ -n "$pid" ] || continue
     if state=$(task_pid_shared_vm_state_path "$pid" "$@"); then
-      if ! task_pid_list_contains "$TASK_PIDS_SHARED_VM_WARNED" "$pid"; then
-        echo "warning: leaving VM process $pid running for $ID: its state path $state is outside this task's directories (docs/troubleshooting.md)" >&2
-        TASK_PIDS_SHARED_VM_WARNED="$TASK_PIDS_SHARED_VM_WARNED
+      shared="$shared
+$pid"
+      if ! task_pid_list_contains "$TASK_PIDS_SHARED_VM_REFUSED" "$pid"; then
+        echo "REFUSED: leaving VM process $pid running for $ID: its state path $state is outside this task's directories; preserving the worktree/tasktmp and task records. Restart that VM through its service manager, then rerun cleanup (docs/troubleshooting.md)." >&2
+        TASK_PIDS_SHARED_VM_REFUSED="$TASK_PIDS_SHARED_VM_REFUSED
 $pid"
       fi
-      continue
     fi
+  done <<EOF
+$pids
+EOF
+  while IFS= read -r pid; do
+    [ -n "$pid" ] || continue
+    parent=$pid
+    while [ -n "$shared" ] && [ "$parent" -gt 1 ]; do
+      task_pid_list_contains "$shared" "$parent" && break
+      parent=$(ps -o ppid= -p "$parent" 2>/dev/null | tr -d '[:space:]') || break
+      case "$parent" in ''|*[!0-9]*) break ;; esac
+    done
+    [ -n "$parent" ] && task_pid_list_contains "$shared" "$parent" && continue
     kept="$kept
 $pid"
   done <<EOF
@@ -2300,8 +2301,7 @@ reap_task_backend_process_group() {  # <label>
 # - both unique per task and never shared - before either is removed. TERM
 # first, then KILL after a short grace period for anything still alive; a
 # process that exits on its own between the two passes is simply absent from
-# the recheck. A shared VM process task_pids_under_roots skips is neither
-# signalled nor counted as remaining. A missing lsof uses the backend
+# the recheck. A missing lsof uses the backend
 # process-group fallback; an lsof scan error refuses before destructive teardown.
 reap_task_worktree_processes() {  # <label> <dir>...
   local label=$1 pids pid identity current_pids i pass=1 max_passes=3
@@ -2317,7 +2317,10 @@ reap_task_worktree_processes() {  # <label> <dir>...
       return 1
     fi
     pids=$TASK_PIDS
-    [ -n "$pids" ] || return 0
+    if [ -z "$pids" ]; then
+      [ -z "$TASK_PIDS_SHARED_VM_REFUSED" ] && return 0
+      return 1
+    fi
     tracked_pids=()
     tracked_identities=()
     while IFS= read -r pid; do
@@ -2395,7 +2398,10 @@ EOF
     echo "REFUSED: cannot determine leaked processes under ${TASK_PIDS_FAILED_DIR:-<missing>} for $ID (lsof failed); preserving the worktree/tasktmp for manual inspection or retry." >&2
     return 1
   fi
-  [ -z "$TASK_PIDS" ] && return 0
+  if [ -z "$TASK_PIDS" ]; then
+    [ -z "$TASK_PIDS_SHARED_VM_REFUSED" ] && return 0
+    return 1
+  fi
   echo "REFUSED: leaked $label processes for $ID remain after $max_passes reap attempts; preserving the worktree/tasktmp for manual inspection or retry." >&2
   return 1
 }

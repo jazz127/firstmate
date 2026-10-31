@@ -95,7 +95,7 @@
 # from it.
 # Worktree-slot ownership (teardown-slot-collision): a treehouse pool slot is
 # reused across tasks, so a stale, duplicated, or drifted worktree= record can
-# name a slot a DIFFERENT live task now holds. Cleanup kills every process under
+# name a slot a DIFFERENT live task now holds. Cleanup reaps processes under
 # that path and hard-resets it before returning it, so releasing a slot that is
 # not genuinely this task's destroys another worker's live work. Before the first
 # cleanup step, teardown verifies record exclusivity: no OTHER task record in
@@ -276,14 +276,13 @@
 #     process group, so it survives reparented to init (observed 2026-08-03:
 #     two `go test` binaries, deadlines blown past by ~100x, pinning CPU for
 #     hours with no live task meta to attribute them to once teardown had
-#     already removed it). reap_task_worktree_processes finds every process
+#     already removed it). reap_task_worktree_processes finds processes
 #     whose CURRENT WORKING DIRECTORY is this task's own worktree or tasktmp
 #     root via `lsof -a -d cwd` (cheap: bounded by process count, not by
-#     walking the worktree's file tree) and sends TERM, then KILL after a short
-#     grace period to any survivor whose process identity still matches. Both
-#     roots are unique per task and never
-#     shared, so this can never reach another task's or the primary's
-#     processes. Idempotent: nothing left to find is a silent no-op.
+#     walking the worktree's file tree) and sends reapable processes TERM, then
+#     KILL after a short grace period to any survivor whose process identity
+#     still matches. Shared-VM refusals and detection limits are documented in
+#     docs/troubleshooting.md. Idempotent: nothing left to find is a silent no-op.
 #   Fix 3 - sweep abandoned remote job workers. A remote job worker started
 #     from a worktree's own bin/ outlives that worktree's removal without
 #     being reachable by Fix 2, because its working directory is wherever it
@@ -2133,14 +2132,85 @@ task_process_identity_matches() {  # <pid> <identity>
   [ "$current" = "$2" ]
 }
 
+TASK_PIDS_SHARED_VM_REFUSED=
+
 task_pid_list_contains() {  # <pid-list> <pid>
   printf '%s\n' "$1" | grep -Fxq "$2"
+}
+
+limactl_state_path_from_command() {  # <command-line>
+  local executable subcommand rest state_flag next_flag word value="" i state_count=0 next_count=0
+  local -a words
+  case "$1" in *$'\n'*|*$'\r'*) return 1 ;; esac
+  read -r executable rest <<< "$1"
+  [ "${executable##*/}" = limactl ] || return 1
+  while [ -n "$rest" ]; do
+    read -r subcommand rest <<< "$rest"
+    case "$subcommand" in
+      hostagent) state_flag=--pidfile; next_flag=--socket; break ;;
+      usernet) state_flag=-p; next_flag=-e; break ;;
+      -*) ;;
+      *) return 1 ;;
+    esac
+  done
+  [ -n "${state_flag:-}" ] || return 1
+  read -r -a words <<< "$1"
+  for i in "${!words[@]}"; do
+    word=${words[$i]}
+    case "$word" in
+      --pidfile|-p)
+        state_count=$((state_count + 1))
+        if [ "$word" = "$state_flag" ] && [ "${words[$((i + 2))]:-}" = "$next_flag" ]; then
+          value=${words[$((i + 1))]:-}
+        fi
+        ;;
+    esac
+    [ "$word" != "$next_flag" ] || next_count=$((next_count + 1))
+  done
+  [ "$state_count" -eq 1 ] && [ "$next_count" -eq 1 ] && [ -n "$value" ] || return 1
+  printf '%s\n' "$value"
+}
+
+# Physical form of an absolute path whose tail may not exist yet: the deepest
+# existing directory is resolved and the rest is appended. Failure means the
+# location cannot be established (relative, a dangling symlink, or `.`/`..`
+# after the part that exists).
+task_physical_path() {  # <path>
+  local path=$1 tail="" dir
+  case "$path" in /*) ;; *) return 1 ;; esac
+  while [ ! -d "$path" ]; do
+    [ ! -L "$path" ] || return 1
+    case "${path##*/}" in ''|.|..) return 1 ;; esac
+    tail="/${path##*/}$tail"
+    path=${path%/*}
+    [ -n "$path" ] || path=/
+  done
+  dir=$(cd "$path" 2>/dev/null && pwd -P) || return 1
+  printf '%s%s\n' "${dir%/}" "$tail"
+}
+
+# Print a limactl process's state path when it resolves outside every root.
+# Failure, including any doubt about the path or a root, leaves it reapable.
+task_pid_shared_vm_state_path() {  # <pid> <dir>...
+  local pid=$1 command state resolved dir root
+  shift
+  command=$(ps -ww -o command= -p "$pid" 2>/dev/null) || return 1
+  state=$(limactl_state_path_from_command "$command") || return 1
+  resolved=$(task_physical_path "$state") || return 1
+  for dir in "$@"; do
+    [ -n "$dir" ] || continue
+    root=$(task_physical_path "$dir") || return 1
+    case "$resolved" in
+      "$root"|"$root"/*) return 1 ;;
+    esac
+  done
+  printf '%s\n' "$state"
 }
 
 task_pids_under_roots() {  # <dir>...
   TASK_PIDS=
   TASK_PIDS_FAILED_DIR=
-  local dir dir_pids pids=""
+  local dir dir_pids pid parent state shared="" kept="" pids=""
   for dir in "$@"; do
     [ -n "$dir" ] || continue
     if ! dir_pids=$(pids_with_cwd_under "$dir"); then
@@ -2150,7 +2220,47 @@ task_pids_under_roots() {  # <dir>...
     pids="$pids
 $dir_pids"
   done
-  TASK_PIDS=$(printf '%s\n' "$pids" | grep -E '^[0-9]+$' | sort -un || true)
+  pids=$(printf '%s\n' "$pids" | grep -E '^[0-9]+$' | sort -un || true)
+  while IFS= read -r pid; do
+    [ -n "$pid" ] || continue
+    if state=$(task_pid_shared_vm_state_path "$pid" "$@"); then
+      shared="$shared
+$pid"
+      if ! task_pid_list_contains "$TASK_PIDS_SHARED_VM_REFUSED" "$pid"; then
+        echo "REFUSED: leaving VM process $pid running for $ID: its state path $state is outside this task's directories; preserving the worktree/tasktmp and task records. Restart that VM through its service manager, then rerun cleanup (docs/troubleshooting.md)." >&2
+        TASK_PIDS_SHARED_VM_REFUSED="$TASK_PIDS_SHARED_VM_REFUSED
+$pid"
+      fi
+    fi
+  done <<EOF
+$pids
+EOF
+  while IFS= read -r pid; do
+    [ -n "$pid" ] || continue
+    parent=$pid
+    while [ -n "$shared" ] && [ "$parent" -gt 1 ]; do
+      task_pid_list_contains "$shared" "$parent" && break
+      parent=$(ps -o ppid= -p "$parent" 2>/dev/null | tr -d '[:space:]') || break
+      case "$parent" in ''|*[!0-9]*) break ;; esac
+    done
+    [ -n "$parent" ] && task_pid_list_contains "$shared" "$parent" && continue
+    kept="$kept
+$pid"
+  done <<EOF
+$pids
+EOF
+  TASK_PIDS=${kept#$'\n'}
+}
+
+require_no_shared_vm_processes() {  # <task-id> <dir>...
+  local ID=$1 TASK_PIDS_SHARED_VM_REFUSED='' TASK_PIDS TASK_PIDS_FAILED_DIR
+  shift
+  command -v lsof >/dev/null 2>&1 || return 0
+  if ! task_pids_under_roots "$@"; then
+    echo "REFUSED: cannot determine processes under ${TASK_PIDS_FAILED_DIR:-<missing>} for $ID (lsof failed); preserving task records and directories." >&2
+    return 1
+  fi
+  [ -z "$TASK_PIDS_SHARED_VM_REFUSED" ]
 }
 
 reap_task_backend_process_group() {  # <label>
@@ -2197,8 +2307,8 @@ reap_task_backend_process_group() {  # <label>
   fi
 }
 
-# Reap every process rooted (by cwd) under this task's own worktree or tasktmp
-# - both unique per task and never shared - before either is removed. TERM
+# Reap eligible processes rooted (by cwd) under this task's own worktree or
+# tasktmp before either is removed; task_pids_under_roots owns exclusions. TERM
 # first, then KILL after a short grace period for anything still alive; a
 # process that exits on its own between the two passes is simply absent from
 # the recheck. A missing lsof uses the backend process-group fallback; an lsof
@@ -2217,7 +2327,10 @@ reap_task_worktree_processes() {  # <label> <dir>...
       return 1
     fi
     pids=$TASK_PIDS
-    [ -n "$pids" ] || return 0
+    if [ -z "$pids" ]; then
+      [ -z "$TASK_PIDS_SHARED_VM_REFUSED" ] && return 0
+      return 1
+    fi
     tracked_pids=()
     tracked_identities=()
     while IFS= read -r pid; do
@@ -2295,7 +2408,10 @@ EOF
     echo "REFUSED: cannot determine leaked processes under ${TASK_PIDS_FAILED_DIR:-<missing>} for $ID (lsof failed); preserving the worktree/tasktmp for manual inspection or retry." >&2
     return 1
   fi
-  [ -z "$TASK_PIDS" ] && return 0
+  if [ -z "$TASK_PIDS" ]; then
+    [ -z "$TASK_PIDS_SHARED_VM_REFUSED" ] && return 0
+    return 1
+  fi
   echo "REFUSED: leaked $label processes for $ID remain after $max_passes reap attempts; preserving the worktree/tasktmp for manual inspection or retry." >&2
   return 1
 }
@@ -2639,6 +2755,7 @@ EOF
     echo "REFUSED: unsafe $label removal target $home contains registered secondmate home $child_home for $child_id" >&2
     return 1
   fi
+  require_no_shared_vm_processes "${expected_id:-$ID}" "$abs_home_path" || return 1
   printf '%s\n' "$abs_home_path"
 }
 
@@ -2985,7 +3102,7 @@ preflight_descendant_treehouse_slots() {
 }
 
 validate_firstmate_home_children_removal() {
-  local home=$1 sub_state child_meta child_id child_wt child_proj child_kind child_home child_backend child_orca_worktree_id
+  local home=$1 sub_state child_meta child_id child_wt child_proj child_kind child_home child_backend child_orca_worktree_id child_vm_wt child_owner_rc
   sub_state="$home/state"
   [ -d "$sub_state" ] || return 0
   for child_meta in "$sub_state"/*.meta; do
@@ -2994,6 +3111,7 @@ validate_firstmate_home_children_removal() {
     fm_backend_validate_task_endpoint "$child_meta" "$child_id" || return 1
     validate_pr_poll_cleanup "$sub_state" "$child_id" || return 1
     child_wt=$(meta_value "$child_meta" worktree)
+    child_proj=$(meta_value "$child_meta" project)
     child_kind=$(meta_value "$child_meta" kind)
     [ -n "$child_kind" ] || child_kind=ship
     child_backend=$(fm_backend_of_meta "$child_meta")
@@ -3006,13 +3124,24 @@ validate_firstmate_home_children_removal() {
     elif [ "$child_backend" = orca ]; then
       child_orca_worktree_id=$(require_orca_worktree_id "$child_meta") || return 1
       if [ -n "$child_wt" ] && [ -e "$child_wt" ]; then
-        child_proj=$(meta_value "$child_meta" project)
         validate_child_worktree_for_removal "$child_wt" "$child_proj" >/dev/null || return 1
         require_orca_worktree_path_match "$child_orca_worktree_id" "$child_wt" || return 1
       fi
     elif [ -n "$child_wt" ] && [ -e "$child_wt" ]; then
-      child_proj=$(meta_value "$child_meta" project)
       validate_child_worktree_for_removal "$child_wt" "$child_proj" >/dev/null || return 1
+    fi
+    if [ "$child_kind" != secondmate ]; then
+      child_vm_wt=$child_wt
+      if [ "$child_backend" != orca ] && fm_treehouse_pool_slot "$child_proj" "$child_wt"; then
+        child_owner_rc=0
+        require_owned_worktree_slot_record "$child_id" "$child_wt" || child_owner_rc=$?
+        case "$child_owner_rc" in
+          0) ;;
+          "$TEARDOWN_SLOT_REASSIGNED_RC") child_vm_wt= ;;
+          *) return 1 ;;
+        esac
+      fi
+      require_no_shared_vm_processes "$child_id" "$child_vm_wt" "$(meta_value "$child_meta" tasktmp)" || return 1
     fi
   done
 }
@@ -3475,6 +3604,23 @@ if [ "$TEARDOWN_BACKLOG_APPLIES" = 1 ]; then
     echo "error: the pending backlog $BACKLOG_TRANSITION for $ID is not replayable; refusing destructive teardown" >&2
     exit 1
   }
+fi
+
+# Every landed/discard-work refusal above has now passed (or --force skipped
+# them). Fix 1 and Fix 2 (see script header) run here, unconditionally on
+# --force, and before ANY destructive step below - a still-parked run or a
+# leaked process can own live work in this exact worktree. Not for
+# kind=secondmate: a secondmate home's own runtime lifecycle is owned by the
+# dedicated process-event and firstmate-home removal machinery further below,
+# not by task-worktree cleanup.
+if [ "$KIND" != secondmate ] && teardown_owns_worktree; then
+  conclude_task_no_mistakes_run "$WT"
+  reap_task_worktree_processes worktree "$WT" "$TASK_TMP"
+elif [ "$KIND" != secondmate ]; then
+  reap_task_worktree_processes tasktmp "$TASK_TMP"
+fi
+
+if [ "$TEARDOWN_BACKLOG_APPLIES" = 1 ]; then
 # Roll the accepted legacy incarnation's stamp back to the record's exact
 # pre-stamp bytes. Uses perl - already in the teardown lifecycle's curated PATH
 # (truncate is not, and is absent on stock macOS) - and verifies the restored
@@ -3543,19 +3689,6 @@ else
   fi
 fi
 
-# Every landed/discard-work refusal above has now passed (or --force skipped
-# them). Fix 1 and Fix 2 (see script header) run here, unconditionally on
-# --force, and before ANY destructive step below - a still-parked run or a
-# leaked process can own live work in this exact worktree. Not for
-# kind=secondmate: a secondmate home's own runtime lifecycle is owned by the
-# dedicated process-event and firstmate-home removal machinery further below,
-# not by task-worktree cleanup.
-if [ "$KIND" != secondmate ] && teardown_owns_worktree; then
-  conclude_task_no_mistakes_run "$WT"
-  reap_task_worktree_processes worktree "$WT" "$TASK_TMP"
-elif [ "$KIND" != secondmate ]; then
-  reap_task_worktree_processes tasktmp "$TASK_TMP"
-fi
 if [ "$KIND" = ship ] && teardown_owns_worktree && [ -e "$CONFIG/pipeline-spend" ]; then
   FM_HOME="$FM_HOME" FM_STATE_OVERRIDE="$STATE" FM_DATA_OVERRIDE="$DATA" FM_CONFIG_OVERRIDE="$CONFIG" \
     "$SCRIPT_DIR/fm-pipeline-spend.sh" record "$ID" >/dev/null \

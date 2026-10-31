@@ -461,6 +461,10 @@
       "audience": "operator-current"
     },
     {
+      "path": "docs/troubleshooting.md",
+      "audience": "operator-current"
+    },
+    {
       "path": "docs/trace-context.md",
       "audience": "maintainer-architecture"
     },

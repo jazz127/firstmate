@@ -1820,8 +1820,8 @@ This applies only to agents Firstmate launches; the captain's own primary Firstm
 ### Commit attribution
 
 Workers in GitHub repositories owned by `t27sol` keep and receive commit attribution by default, even when `config/keep-ai-trailers` is absent.
-The owner match uses the project's `origin` remote over HTTPS, SSH URL or SCP syntax, case insensitively at the owner boundary.
-A matching task keeps existing AI co-authors and installs a commit hook that adds a runtime co-author when absent, `Agent-System: fac:firstmate`, and `Agent-Platform: <runtime>[/<model>]`.
+The owner match uses the commit repository's `origin` remote over HTTPS, SSH URL or SCP syntax, case insensitively at the owner boundary.
+For a matching commit, the hook keeps existing AI co-authors and adds a runtime co-author when absent, `Agent-System: fac:firstmate`, and `Agent-Platform: <runtime>[/<model>]`.
 The runtime is always included; the selected launch model reference is included only when permitted, with Claude Code model IDs and unresolved `default`/`auto` model choices omitted.
 Each runtime's existing selector and catalog contracts own model syntax and availability; attribution preserves safe references, including variant suffixes, while rejecting controls, whitespace, local paths, and URLs.
 The hook adds `Agent-Session` from a UUID `CODEX_THREAD_ID` for Codex when no native session trailer already carries the same reference.
@@ -1830,16 +1830,16 @@ OpenCode passes its existing plugin session identity to shell commands in memory
 A session not yet available at commit time is omitted; other runtimes have no connected session source and omit it too.
 No additional persistent session record is created, and no local path, arbitrary hostname, credential, or guessed session is copied into the added fields.
 Amending a message replaces the shared fields rather than duplicating them; no trailer order is required and native runtime trailers retain their order within Git's parsed trailer block.
-Hook selection is scoped to the launch repository; an attribution-enabled hook rechecks the commit repository's origin and strips attribution outside t27sol.
-A worker launched outside t27sol that later commits in a t27sol submodule retains its launch repository's policy; adding attribution in that direction is an accepted limitation deferred to follow-up work.
+Every fleet launch appends a worker-scoped `GIT_CONFIG` `core.hooksPath` entry pointing at `state/<id>.git-hooks`, where the commit hook selects attribution from the repository being committed in, including submodules in either direction across the t27sol owner boundary.
+Outside t27sol, including when the commit repository's owner cannot be established, the hook strips known AI trailers even when a runtime injects them after the typed message, unless `config/keep-ai-trailers` was present when the hooks were installed; that flag preserves trailers without adding attribution.
 Focused synthetic regression coverage is in [`fm-git-strip-ai-trailers.test.sh`](../tests/fm-git-strip-ai-trailers.test.sh) and [`fm-spawn-dispatch-profile.test.sh`](../tests/fm-spawn-dispatch-profile.test.sh).
 Outside t27sol, the optional local, gitignored `config/keep-ai-trailers` retains its legacy home-wide presence-flag behavior; its contents do not select owners or repositories.
-With that flag absent outside t27sol, every Claude launch's session `--settings` value carries `"attribution":{"commit":"","pr":"","sessionUrl":false}`, every Devin worker config sets `"attribution": false`, and every fleet launch appends a worker-scoped `GIT_CONFIG` `core.hooksPath` entry pointing at `state/<id>.git-hooks`, where git's `commit-msg` hook strips known AI trailers even when a runtime injects them after the typed message.
 The entry follows any `GIT_CONFIG_*` entries the worker inherits, so an inherited scoped `credential.helper` still applies to the worker and to the repository's own hooks, such as a git-lfs `pre-push`; an inherited `GIT_CONFIG_COUNT` that is not a decimal number, or that leaves no room for another entry within Git's signed int, stops the launch before the worker runs.
+With that flag absent and the launch repository outside t27sol, every Claude launch's session `--settings` value carries `"attribution":{"commit":"","pr":"","sessionUrl":false}` and every Devin worker config sets `"attribution": false`.
 T3 Code owns its provider command and cannot carry Claude's inline setting, but its per-worktree environment overlay selects the same Git hook; [`t3code-backend.md`](t3code-backend.md#active-limits) owns that backend limit.
 When the flag is present outside t27sol, Claude launches omit those attribution-off settings and Devin worker configs keep the user config's `attribution` setting (Devin's default is on).
-Fleet launches then use the repository's configured hooks directly, except that a [`forge=external`](external-review-forge.md) ship still installs the wrappers for its push guard without stripping attribution.
-Because the upstream prior-art push guard is installed only through those pane hooks, a non-external shipping worker in a home with the flag present outside t27sol also skips that guard.
+The wrappers continue chaining the commit repository's own hooks and carrying the applicable shipping push guard.
+A non-external shipping launch with the flag present outside t27sol still omits the upstream prior-art push guard.
 Cortex Code has no attribution switch and its model writes a `Generated with Snowflake CoCo` line and a `Co-authored-by: Snowflake CoCo` trailer itself, so the strip hooks are the only mechanism that removes them from a Cortex worker's commits.
 `bin/fm-git-attribution.py` owns message filtering and stamping; known AI co-authors are removed only from Git's parsed trailer block, preserving body examples and human co-authors.
 `bin/fm-git-strip-ai-trailers.sh` owns the install and chaining the hooks of whichever repository git is running in, including when `git -c core.hooksPath` supplies the pane's hook override, so a project hook such as husky still runs when stripping is enabled.

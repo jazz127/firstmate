@@ -2410,6 +2410,21 @@ test_scoped_attribution_launches() {
         assert_not_contains "$body" 'Agent-System:' 'unlisted owner gained shared attribution'
         [ "$runtime" != claude ] || assert_attribution_policy "$(cat "$LAUNCH_LOG")" 'unscoped claude'
       fi
+      if [ "$owner" = t27sol ]; then
+        git -C "$WT_DIR" remote set-url origin https://github.com/another-owner/example.git
+      else
+        git -C "$WT_DIR" remote set-url origin https://github.com/t27sol/example.git
+      fi
+      GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0="$hooks" \
+        git -C "$WT_DIR" -c user.name=Fixture -c user.email=fixture@example.invalid commit -q --allow-empty -m 'fix: changed commit scope' \
+        --trailer 'Co-authored-by: Claude <noreply@anthropic.com>' || fail 'changed-scope commit failed'
+      body=$(git -C "$WT_DIR" log -1 --format=%B)
+      if [ "$owner" = t27sol ]; then
+        assert_not_contains "$body" 'noreply@anthropic.com' 'changed owner kept native attribution'
+        assert_not_contains "$body" 'Agent-System:' 'changed owner kept shared attribution'
+      else
+        assert_contains "$body" "Agent-Platform: $runtime" 'strip launch did not add attribution in t27sol'
+      fi
     done
   done
   pass 'Codex and Claude launches add t27sol attribution without a configuration file'
@@ -2489,8 +2504,8 @@ JS
   pass 'OpenCode 1 and 2 plugin session contexts reach actual commit trailers'
 }
 
-test_keep_ai_trailers_omits_attribution_settings_and_strip_hooks() {
-  local rec id out status launch
+test_keep_ai_trailers_omits_attribution_settings_and_keeps_scoped_hooks() {
+  local rec id out status launch hooks body
   id=profile-claude-keep-attribution-z25
   rec=$(make_spawn_case profile-claude-keep-attribution claude "$id")
   read_case_record "$rec"
@@ -2501,11 +2516,24 @@ test_keep_ai_trailers_omits_attribution_settings_and_strip_hooks() {
   expect_code 0 "$status" "claude spawn with keep-ai-trailers should succeed"$'\n'"$out"
   launch=$(cat "$LAUNCH_LOG")
   assert_attribution_policy_absent "$launch" "opted-in claude"
-  assert_not_contains "$launch" 'fm-git-strip-ai-trailers.sh' \
-    "opted-in launch still overrides the repository hooksPath"
-  [ ! -e "$HOME_DIR/state/$id.git-hooks" ] \
-    || fail "opted-in launch installed AI trailer strip hooks"
-  pass "keep-ai-trailers omits Claude attribution settings and the pane strip hooks"
+  assert_contains "$launch" 'fm-git-strip-ai-trailers.sh' \
+    "opted-in launch omitted scoped hooks"
+  [ -e "$HOME_DIR/state/$id.git-hooks" ] || fail "opted-in launch omitted scoped hooks"
+  hooks="$HOME_DIR/state/$id.git-hooks"
+  GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0="$hooks" \
+    git -C "$WT_DIR" -c user.name=Fixture -c user.email=fixture@example.invalid commit -q --allow-empty \
+    -m 'fix: legacy attribution' --trailer 'Co-authored-by: Claude <noreply@anthropic.com>' || fail 'legacy keep commit failed'
+  body=$(git -C "$WT_DIR" log -1 --format=%B)
+  assert_contains "$body" 'Co-authored-by: Claude <noreply@anthropic.com>' 'legacy flag lost native coauthor'
+  assert_not_contains "$body" 'Agent-System:' 'legacy keep commit gained scoped attribution'
+  git -C "$WT_DIR" remote set-url origin https://github.com/t27sol/example.git
+  GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0="$hooks" \
+    git -C "$WT_DIR" -c user.name=Fixture -c user.email=fixture@example.invalid commit -q --allow-empty \
+    -m 'fix: t27sol attribution' || fail 'legacy launch t27sol commit failed'
+  body=$(git -C "$WT_DIR" log -1 --format=%B)
+  assert_contains "$body" 'Agent-System: fac:firstmate' 'legacy launch did not add scoped system'
+  assert_contains "$body" 'Agent-Platform: claude' 'legacy launch did not add scoped platform'
+  pass "keep-ai-trailers omits Claude attribution settings and installs scoped hooks"
 }
 
 test_keep_ai_trailers_reaches_secondmate_crew_launches() {
@@ -2531,10 +2559,9 @@ test_keep_ai_trailers_reaches_secondmate_crew_launches() {
   expect_code 0 "$status" "secondmate crew spawn should succeed"$'\n'"$out"
   launch=$(cat "$LAUNCH_LOG")
   assert_attribution_policy_absent "$launch" "secondmate crew claude"
-  assert_not_contains "$launch" 'fm-git-strip-ai-trailers.sh' \
-    "secondmate crew launch still overrides the repository hooksPath"
-  [ ! -e "$HOME_DIR/state/$crew_id.git-hooks" ] \
-    || fail "secondmate crew launch installed AI trailer strip hooks"
+  assert_contains "$launch" 'fm-git-strip-ai-trailers.sh' \
+    "secondmate crew launch omitted scoped hooks"
+  [ -e "$HOME_DIR/state/$crew_id.git-hooks" ] || fail "secondmate crew launch omitted scoped hooks"
   pass "keep-ai-trailers is inherited so a secondmate's crew launch keeps AI trailers"
 }
 
@@ -3291,7 +3318,7 @@ test_claude_task_launch_carries_control_channel_authority
 test_claude_secondmate_launch_omits_task_control_channel_authority
 test_claude_long_launch_is_delivered_intact
 test_claude_crewmate_launch_carries_the_attribution_policy
-test_keep_ai_trailers_omits_attribution_settings_and_strip_hooks
+test_keep_ai_trailers_omits_attribution_settings_and_keeps_scoped_hooks
 test_keep_ai_trailers_reaches_secondmate_crew_launches
 test_claude_secondmate_launch_carries_the_attribution_policy
 test_active_dispatch_profile_does_not_block_secondmate_launch

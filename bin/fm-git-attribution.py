@@ -3,10 +3,10 @@
 
 Usage: fm-git-attribution.py mode <config> <project>
        fm-git-attribution.py stamp <task-meta> <runtime> <model> <message>
+       fm-git-attribution.py apply <outside> <task-meta> <runtime> <model> <message>
        fm-git-attribution.py strip-fields <message>
 
-docs/configuration.md "Commit attribution" owns launch-repository selection
-and its accepted cross-repository limitation.
+docs/configuration.md "Commit attribution" owns commit-repository selection.
 Stamp runs in Git's hook cwd and rechecks origin. Session references come from
 runtime context or existing task metadata, never a new persistent record.
 """
@@ -68,10 +68,17 @@ def remove_trailers(content, keys, strip_ai=False):
 def t27sol(project):
     result = subprocess.run(["git", "-C", project, "config", "--get", "remote.origin.url"],
                             capture_output=True, text=True, check=False)
+    if result.returncode != 0 or not result.stdout.strip():
+        return False
     url = result.stdout.strip()
     if "://" in url:
-        parsed = urlsplit(url)
+        try:
+            parsed = urlsplit(url)
+        except ValueError:
+            return False
         if parsed.scheme not in ("ssh", "https"):
+            return False
+        if not parsed.hostname:
             return False
         host, path = parsed.hostname or "", parsed.path.lstrip("/")
     else:
@@ -110,6 +117,16 @@ def session(runtime, lines, task_meta):
                 value = line.split("=", 1)[1]
                 return value if re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}", value) else ""
     return ""
+
+
+def apply(outside, task_meta, runtime, model, message):
+    selected = "add" if t27sol(".") else outside
+    if selected == "add":
+        stamp(task_meta, runtime, model, message)
+    elif selected == "strip":
+        subprocess.run([str(Path(__file__).with_name("fm-git-strip-ai-trailers.sh")), message], check=True)
+    elif selected != "keep":
+        raise ValueError("invalid attribution policy")
 
 
 def stamp(task_meta, runtime, model, message):
@@ -160,6 +177,8 @@ if __name__ == "__main__":
             print(mode(*sys.argv[2:]))
         elif len(sys.argv) == 6 and sys.argv[1] == "stamp":
             stamp(*sys.argv[2:])
+        elif len(sys.argv) == 7 and sys.argv[1] == "apply":
+            apply(*sys.argv[2:])
         elif len(sys.argv) == 3 and sys.argv[1] == "strip-fields":
             message = Path(sys.argv[2])
             content = remove_trailers(

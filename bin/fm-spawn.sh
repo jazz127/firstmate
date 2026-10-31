@@ -660,14 +660,13 @@
 # ~/.cursor/cli-config.json attribution-off is not durable (it does not travel
 # with this repo, defaults back to on when unset, and only feeds the CLI's
 # request to the server, so it suppresses the trailer rather than preventing
-# it). When stripping is selected, the spawn installs
+# it). Every spawn installs
 # state/<id>.git-hooks as an appended GIT_CONFIG core.hooksPath entry for the pane, so git
-# commit-msg strips known AI trailers at the commit object for every launched
-# runtime, Claude included as defense in depth. bin/fm-git-strip-ai-trailers.sh
+# commit-msg applies the commit repository attribution policy for every
+# launched runtime, Claude included as defense in depth. bin/fm-git-strip-ai-trailers.sh
 # owns the hook install and chaining the repository git is
 # actually running in so a project husky hook still runs. Author identity is
-# not rewritten. A forge=external ship installs that directory even under
-# config/keep-ai-trailers, because its pre-push wrapper carries the push guard.
+# not rewritten. A forge=external ship also installs its pre-push guard there.
 # T3 Code owns its provider command, so it cannot receive Claude's inline
 # attribution settings; the Git hook and environment overlay still apply.
 # Publishing the record and moving this home's backlog item to In flight are one
@@ -6849,18 +6848,14 @@ EOF
 # rather than shipping a runtime without its required hooks.
 # A forge=external ship always gets this directory, because its pre-push
 # wrapper carries the guard that keeps task branches off the shared origin; a
-# legacy keep launch gets a commit-msg wrapper that only chains.
+# legacy keep launch keeps trailers outside t27sol while adding them inside it.
 GIT_HOOKS_DIR="$STATE_REAL/$ID.git-hooks"
 GIT_HOOKS_INSTALLED=0
 if [ "$EXTERNAL_REVIEW" = 1 ]; then
   PUSH_GUARD_FILE="$STATE_REAL/$ID.push-guard"
   guard_args=("$PUSH_GUARD_FILE" "$WT" "$BRANCH" "$(fm_ship_branch_prefix "$BRANCH" "$ID")")
   [ -z "$EXTERNAL_BACKUP_REMOTE" ] || guard_args+=("$EXTERNAL_BACKUP_REMOTE" "$EXTERNAL_BACKUP_PREFIX")
-  strip_args=()
-  [ "$KEEP_AI_TRAILERS" = 0 ] || strip_args=(--no-strip)
-  if [ "$AI_ATTRIBUTION_MODE" = add ]; then
-    strip_args+=(--attribution "$STATE_REAL/$ID.meta" "$HARNESS" "${MODEL:-default}")
-  fi
+  strip_args=(--scoped-attribution "$CONFIG/keep-ai-trailers" "$STATE_REAL/$ID.meta" "$HARNESS" "${MODEL:-default}")
   { "$FM_ROOT/bin/fm-git-push-guard.sh" write "${guard_args[@]}" \
     && "$FM_ROOT/bin/fm-git-strip-ai-trailers.sh" install "${strip_args[@]+"${strip_args[@]}"}" \
       --push-guard "$PUSH_GUARD_FILE" "$GIT_HOOKS_DIR" "$WT"; } || {
@@ -6868,12 +6863,10 @@ if [ "$EXTERNAL_REVIEW" = 1 ]; then
     exit 1
   }
   GIT_HOOKS_INSTALLED=1
-elif [ "$KEEP_AI_TRAILERS" = 0 ] || [ "$AI_ATTRIBUTION_MODE" = add ]; then
-  STRIP_INSTALL=("$FM_ROOT/bin/fm-git-strip-ai-trailers.sh" install "$GIT_HOOKS_DIR" "$WT")
-  if [ "$AI_ATTRIBUTION_MODE" = add ]; then
-    STRIP_INSTALL=("$FM_ROOT/bin/fm-git-strip-ai-trailers.sh" install --attribution "$STATE_REAL/$ID.meta" "$HARNESS" "${MODEL:-default}" "$GIT_HOOKS_DIR" "$WT")
-  fi
-  if [ "$KIND" = ship ] && [ "$MODE" != local-only ]; then
+else
+  STRIP_INSTALL=("$FM_ROOT/bin/fm-git-strip-ai-trailers.sh" install --scoped-attribution "$CONFIG/keep-ai-trailers" "$STATE_REAL/$ID.meta" "$HARNESS" "${MODEL:-default}" "$GIT_HOOKS_DIR" "$WT")
+  if [ "$KIND" = ship ] && [ "$MODE" != local-only ] &&
+    { [ "$KEEP_AI_TRAILERS" = 0 ] || [ "$AI_ATTRIBUTION_MODE" = add ]; }; then
     STRIP_INSTALL+=("$FM_ROOT/bin/fm-upstream-push-guard.sh" "$FM_ROOT" "$TASK_TMP/prior-art.json")
   fi
   "${STRIP_INSTALL[@]}" || {
@@ -7392,9 +7385,9 @@ esac
 LAUNCH_DIR="/tmp/fm-$ID+$LAUNCH_HOME_TOKEN"
 # Pane-scoped override: git in this worker reads our commit-msg strip without
 # rewriting the project's core.hooksPath. GIT_CONFIG_* takes precedence over
-# config files and is inherited by child git processes. When the home opts in
-# to keeping trailers, leave core.hooksPath alone so the repository's hooks run
-# directly. An export statement inside the pane command carries the override
+# config files and is inherited by child git processes. The wrappers chain
+# the repository's own hooks even when keeping trailers. An export statement
+# inside the pane command carries the override
 # across every step of a compound raw launch while firstmate's own git is unchanged.
 # The helper appends after the GIT_CONFIG_COUNT entries the worker actually
 # inherits (after any launch environment filtering), so credential.helper and

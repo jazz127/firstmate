@@ -2253,7 +2253,7 @@ EOF
 }
 
 require_no_shared_vm_processes() {  # <task-id> <dir>...
-  local ID=$1 TASK_PIDS_SHARED_VM_REFUSED= TASK_PIDS TASK_PIDS_FAILED_DIR
+  local ID=$1 TASK_PIDS_SHARED_VM_REFUSED='' TASK_PIDS TASK_PIDS_FAILED_DIR
   shift
   command -v lsof >/dev/null 2>&1 || return 0
   if ! task_pids_under_roots "$@"; then

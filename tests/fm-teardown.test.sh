@@ -4275,7 +4275,7 @@ test_limactl_with_outside_state_path_refuses_release() {
   expect_code 0 "$rc" "limactl-outside-state: cleanup should succeed once the shared VM stops"
   assert_present "$case_dir/treehouse.log" "limactl-outside-state: retry must release the worktree"
   assert_absent "$case_dir/state/task-x1.meta" "limactl-outside-state: retry must remove the task record"
-  [ "$(backlog_row_state "$case_dir")" = done ] \
+  [ "$(backlog_row_state "$case_dir")" = 'done' ] \
     || fail "limactl-outside-state: successful retry did not close the backlog item"
   assert_absent "$case_dir/state/task-x1.backlog-close" "limactl-outside-state: retry left completion intent pending"
   pass "shared VM daemons and descendants survive; cleanup refuses release until they stop"
@@ -4288,7 +4288,7 @@ assert_forced_secondmate_shared_vm_preflight() {
   configure_secondmate_with_tmux_children "$case_dir"
   home="$case_dir/secondmate-home"
   child_home=$home
-  child_id=child-b
+  child_id='child-b'
   if [ "$topology" = nested ]; then
     child_home="$home/nested-home"
     mkdir -p "$child_home/state" "$child_home/data" "$child_home/config" "$child_home/projects"

@@ -1,0 +1,502 @@
+CASE another-owner-keep-False/parent
+Expected: strip
+Commit: 6e7b39ae2b03253709d629d706fc26896b5fbbf8
+fix: exercise commit repository attribution
+
+Body example: Co-authored-by: Claude <noreply@anthropic.com>
+
+Co-authored-by: Jane Doe <jane@example.invalid>
+Reviewed-by: Repository hook <hook@example.invalid>
+
+CASE another-owner-keep-False/t27sol
+Expected: add
+Commit: 9d2e506a1392b996e0d225c57fd851e829e495b4
+fix: exercise commit repository attribution
+
+Body example: Co-authored-by: Claude <noreply@anthropic.com>
+
+Co-authored-by: Claude <noreply@anthropic.com>
+Co-authored-by: Jane Doe <jane@example.invalid>
+Co-authored-by: codex <noreply@firstmate.invalid>
+Agent-System: fac:firstmate
+Agent-Platform: codex
+Agent-Session: 01a18f42-e48e-7100-b60d-c1380744c5cb
+Reviewed-by: Repository hook <hook@example.invalid>
+
+CASE another-owner-keep-False/other
+Expected: strip
+Commit: fd2fe71038b1f1834d49bea6fe201d951f062bec
+fix: exercise commit repository attribution
+
+Body example: Co-authored-by: Claude <noreply@anthropic.com>
+
+Co-authored-by: Jane Doe <jane@example.invalid>
+Reviewed-by: Repository hook <hook@example.invalid>
+
+CASE another-owner-keep-False/unknown
+Expected: strip
+Commit: c31bcfeb471ace4add742828ab15a4f9a83ca4c6
+fix: exercise commit repository attribution
+
+Body example: Co-authored-by: Claude <noreply@anthropic.com>
+
+Co-authored-by: Jane Doe <jane@example.invalid>
+Reviewed-by: Repository hook <hook@example.invalid>
+
+CASE another-owner-keep-False/empty
+Expected: strip
+Commit: 97474526dc668c4cbe3e69d04e19b37a46052b66
+fix: exercise commit repository attribution
+
+Body example: Co-authored-by: Claude <noreply@anthropic.com>
+
+Co-authored-by: Jane Doe <jane@example.invalid>
+Reviewed-by: Repository hook <hook@example.invalid>
+
+CASE another-owner-keep-False/malformed
+Expected: strip
+Commit: aa260dce87f95775a835208bc7f9abe17c7ce05c
+fix: exercise commit repository attribution
+
+Body example: Co-authored-by: Claude <noreply@anthropic.com>
+
+Co-authored-by: Jane Doe <jane@example.invalid>
+Reviewed-by: Repository hook <hook@example.invalid>
+
+CASE another-owner-keep-False/hostless
+Expected: strip
+Commit: 2d5149b9d897cd4023c2e4e8b256d0a493530175
+fix: exercise commit repository attribution
+
+Body example: Co-authored-by: Claude <noreply@anthropic.com>
+
+Co-authored-by: Jane Doe <jane@example.invalid>
+Reviewed-by: Repository hook <hook@example.invalid>
+
+CASE another-owner-keep-False/lookalike-host
+Expected: strip
+Commit: a271a1355a14be106f9172b6b4bb526edbbda6d4
+fix: exercise commit repository attribution
+
+Body example: Co-authored-by: Claude <noreply@anthropic.com>
+
+Co-authored-by: Jane Doe <jane@example.invalid>
+Reviewed-by: Repository hook <hook@example.invalid>
+
+CASE another-owner-keep-False/file
+Expected: strip
+Commit: 907de2fa906dcc1a1ace84d6c9e02302b72e3a6a
+fix: exercise commit repository attribution
+
+Body example: Co-authored-by: Claude <noreply@anthropic.com>
+
+Co-authored-by: Jane Doe <jane@example.invalid>
+Reviewed-by: Repository hook <hook@example.invalid>
+
+CASE another-owner-keep-False/relative
+Expected: strip
+Commit: 0d6224378ef257a4f34bfbd447c0badc35b13c42
+fix: exercise commit repository attribution
+
+Body example: Co-authored-by: Claude <noreply@anthropic.com>
+
+Co-authored-by: Jane Doe <jane@example.invalid>
+Reviewed-by: Repository hook <hook@example.invalid>
+
+CASE another-owner-keep-True/parent
+Expected: keep
+Commit: 78a6a0bdf07f9a9fd0d645f74d4d3577fe32f024
+fix: exercise commit repository attribution
+
+Body example: Co-authored-by: Claude <noreply@anthropic.com>
+
+Co-authored-by: Claude <noreply@anthropic.com>
+Co-authored-by: Jane Doe <jane@example.invalid>
+Agent-System: old-system
+Agent-Platform: old-platform
+Agent-Session: aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee
+Reviewed-by: Repository hook <hook@example.invalid>
+
+CASE another-owner-keep-True/t27sol
+Expected: add
+Commit: 30b8f59c00a1e62ccaec0e585c25d0ac56cb85c8
+fix: exercise commit repository attribution
+
+Body example: Co-authored-by: Claude <noreply@anthropic.com>
+
+Co-authored-by: Claude <noreply@anthropic.com>
+Co-authored-by: Jane Doe <jane@example.invalid>
+Co-authored-by: codex <noreply@firstmate.invalid>
+Agent-System: fac:firstmate
+Agent-Platform: codex
+Agent-Session: 01a18f42-e48e-7100-b60d-c1380744c5cb
+Reviewed-by: Repository hook <hook@example.invalid>
+
+CASE another-owner-keep-True/other
+Expected: keep
+Commit: 090723e0d1e2e8106b5e24342a4e33149392261f
+fix: exercise commit repository attribution
+
+Body example: Co-authored-by: Claude <noreply@anthropic.com>
+
+Co-authored-by: Claude <noreply@anthropic.com>
+Co-authored-by: Jane Doe <jane@example.invalid>
+Agent-System: old-system
+Agent-Platform: old-platform
+Agent-Session: aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee
+Reviewed-by: Repository hook <hook@example.invalid>
+
+CASE another-owner-keep-True/unknown
+Expected: keep
+Commit: 090723e0d1e2e8106b5e24342a4e33149392261f
+fix: exercise commit repository attribution
+
+Body example: Co-authored-by: Claude <noreply@anthropic.com>
+
+Co-authored-by: Claude <noreply@anthropic.com>
+Co-authored-by: Jane Doe <jane@example.invalid>
+Agent-System: old-system
+Agent-Platform: old-platform
+Agent-Session: aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee
+Reviewed-by: Repository hook <hook@example.invalid>
+
+CASE another-owner-keep-True/empty
+Expected: keep
+Commit: 3a2cf70ca9a63e94cac96a3113563e28b1a705e6
+fix: exercise commit repository attribution
+
+Body example: Co-authored-by: Claude <noreply@anthropic.com>
+
+Co-authored-by: Claude <noreply@anthropic.com>
+Co-authored-by: Jane Doe <jane@example.invalid>
+Agent-System: old-system
+Agent-Platform: old-platform
+Agent-Session: aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee
+Reviewed-by: Repository hook <hook@example.invalid>
+
+CASE another-owner-keep-True/malformed
+Expected: keep
+Commit: 0c9ce928d8ad3af202b9e06ac63090388eac1e93
+fix: exercise commit repository attribution
+
+Body example: Co-authored-by: Claude <noreply@anthropic.com>
+
+Co-authored-by: Claude <noreply@anthropic.com>
+Co-authored-by: Jane Doe <jane@example.invalid>
+Agent-System: old-system
+Agent-Platform: old-platform
+Agent-Session: aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee
+Reviewed-by: Repository hook <hook@example.invalid>
+
+CASE another-owner-keep-True/hostless
+Expected: keep
+Commit: 35acab3b0260f311801bc1faf76a168620d54ffe
+fix: exercise commit repository attribution
+
+Body example: Co-authored-by: Claude <noreply@anthropic.com>
+
+Co-authored-by: Claude <noreply@anthropic.com>
+Co-authored-by: Jane Doe <jane@example.invalid>
+Agent-System: old-system
+Agent-Platform: old-platform
+Agent-Session: aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee
+Reviewed-by: Repository hook <hook@example.invalid>
+
+CASE another-owner-keep-True/lookalike-host
+Expected: keep
+Commit: 4495b418df6e391e80414b7a992432207710c5ab
+fix: exercise commit repository attribution
+
+Body example: Co-authored-by: Claude <noreply@anthropic.com>
+
+Co-authored-by: Claude <noreply@anthropic.com>
+Co-authored-by: Jane Doe <jane@example.invalid>
+Agent-System: old-system
+Agent-Platform: old-platform
+Agent-Session: aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee
+Reviewed-by: Repository hook <hook@example.invalid>
+
+CASE another-owner-keep-True/file
+Expected: keep
+Commit: 787f71b381b8d17c1e6fb51ccfe1175531d9fe67
+fix: exercise commit repository attribution
+
+Body example: Co-authored-by: Claude <noreply@anthropic.com>
+
+Co-authored-by: Claude <noreply@anthropic.com>
+Co-authored-by: Jane Doe <jane@example.invalid>
+Agent-System: old-system
+Agent-Platform: old-platform
+Agent-Session: aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee
+Reviewed-by: Repository hook <hook@example.invalid>
+
+CASE another-owner-keep-True/relative
+Expected: keep
+Commit: 9dbb9b0d75829caae238ebc49ae5a63b0892a4ca
+fix: exercise commit repository attribution
+
+Body example: Co-authored-by: Claude <noreply@anthropic.com>
+
+Co-authored-by: Claude <noreply@anthropic.com>
+Co-authored-by: Jane Doe <jane@example.invalid>
+Agent-System: old-system
+Agent-Platform: old-platform
+Agent-Session: aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee
+Reviewed-by: Repository hook <hook@example.invalid>
+
+CASE t27sol-keep-False/parent
+Expected: add
+Commit: a521d0224570ed8e3ba85d2559a3ab1f51aeea8e
+fix: exercise commit repository attribution
+
+Body example: Co-authored-by: Claude <noreply@anthropic.com>
+
+Co-authored-by: Claude <noreply@anthropic.com>
+Co-authored-by: Jane Doe <jane@example.invalid>
+Co-authored-by: codex <noreply@firstmate.invalid>
+Agent-System: fac:firstmate
+Agent-Platform: codex
+Agent-Session: 01a18f42-e48e-7100-b60d-c1380744c5cb
+Reviewed-by: Repository hook <hook@example.invalid>
+
+CASE t27sol-keep-False/t27sol
+Expected: add
+Commit: 38fd31bd2c209af2cb43625293421d549b927d77
+fix: exercise commit repository attribution
+
+Body example: Co-authored-by: Claude <noreply@anthropic.com>
+
+Co-authored-by: Claude <noreply@anthropic.com>
+Co-authored-by: Jane Doe <jane@example.invalid>
+Co-authored-by: codex <noreply@firstmate.invalid>
+Agent-System: fac:firstmate
+Agent-Platform: codex
+Agent-Session: 01a18f42-e48e-7100-b60d-c1380744c5cb
+Reviewed-by: Repository hook <hook@example.invalid>
+
+CASE t27sol-keep-False/other
+Expected: strip
+Commit: ff9f982ab5d196812294baa815adc418374f5c68
+fix: exercise commit repository attribution
+
+Body example: Co-authored-by: Claude <noreply@anthropic.com>
+
+Co-authored-by: Jane Doe <jane@example.invalid>
+Reviewed-by: Repository hook <hook@example.invalid>
+
+CASE t27sol-keep-False/unknown
+Expected: strip
+Commit: 357ad3017de52571f78ebe0f6dc8daddb8ae2c6d
+fix: exercise commit repository attribution
+
+Body example: Co-authored-by: Claude <noreply@anthropic.com>
+
+Co-authored-by: Jane Doe <jane@example.invalid>
+Reviewed-by: Repository hook <hook@example.invalid>
+
+CASE t27sol-keep-False/empty
+Expected: strip
+Commit: 74827d9a306b9e636ef14a0bde1173daa3f60d96
+fix: exercise commit repository attribution
+
+Body example: Co-authored-by: Claude <noreply@anthropic.com>
+
+Co-authored-by: Jane Doe <jane@example.invalid>
+Reviewed-by: Repository hook <hook@example.invalid>
+
+CASE t27sol-keep-False/malformed
+Expected: strip
+Commit: acf77f5fc113f4706b7b0cfbed669375987acc1c
+fix: exercise commit repository attribution
+
+Body example: Co-authored-by: Claude <noreply@anthropic.com>
+
+Co-authored-by: Jane Doe <jane@example.invalid>
+Reviewed-by: Repository hook <hook@example.invalid>
+
+CASE t27sol-keep-False/hostless
+Expected: strip
+Commit: a3527bfa4ac48473feb37583138b354a29419efc
+fix: exercise commit repository attribution
+
+Body example: Co-authored-by: Claude <noreply@anthropic.com>
+
+Co-authored-by: Jane Doe <jane@example.invalid>
+Reviewed-by: Repository hook <hook@example.invalid>
+
+CASE t27sol-keep-False/lookalike-host
+Expected: strip
+Commit: af2317bb999b16b1cd6dc614ea90f0988c960fe2
+fix: exercise commit repository attribution
+
+Body example: Co-authored-by: Claude <noreply@anthropic.com>
+
+Co-authored-by: Jane Doe <jane@example.invalid>
+Reviewed-by: Repository hook <hook@example.invalid>
+
+CASE t27sol-keep-False/file
+Expected: strip
+Commit: 4f3de5de98886ff9a5360a70bdcb5aea50a56512
+fix: exercise commit repository attribution
+
+Body example: Co-authored-by: Claude <noreply@anthropic.com>
+
+Co-authored-by: Jane Doe <jane@example.invalid>
+Reviewed-by: Repository hook <hook@example.invalid>
+
+CASE t27sol-keep-False/relative
+Expected: strip
+Commit: 632626a18345fc779550a05ea96b950d94e14f7b
+fix: exercise commit repository attribution
+
+Body example: Co-authored-by: Claude <noreply@anthropic.com>
+
+Co-authored-by: Jane Doe <jane@example.invalid>
+Reviewed-by: Repository hook <hook@example.invalid>
+
+CASE t27sol-keep-True/parent
+Expected: add
+Commit: 3b77f2bca6357fb135d11ea84b26e62166b1486b
+fix: exercise commit repository attribution
+
+Body example: Co-authored-by: Claude <noreply@anthropic.com>
+
+Co-authored-by: Claude <noreply@anthropic.com>
+Co-authored-by: Jane Doe <jane@example.invalid>
+Co-authored-by: codex <noreply@firstmate.invalid>
+Agent-System: fac:firstmate
+Agent-Platform: codex
+Agent-Session: 01a18f42-e48e-7100-b60d-c1380744c5cb
+Reviewed-by: Repository hook <hook@example.invalid>
+
+CASE t27sol-keep-True/t27sol
+Expected: add
+Commit: 608e8779e958d43df0f52eb1135b5240bea44773
+fix: exercise commit repository attribution
+
+Body example: Co-authored-by: Claude <noreply@anthropic.com>
+
+Co-authored-by: Claude <noreply@anthropic.com>
+Co-authored-by: Jane Doe <jane@example.invalid>
+Co-authored-by: codex <noreply@firstmate.invalid>
+Agent-System: fac:firstmate
+Agent-Platform: codex
+Agent-Session: 01a18f42-e48e-7100-b60d-c1380744c5cb
+Reviewed-by: Repository hook <hook@example.invalid>
+
+CASE t27sol-keep-True/other
+Expected: keep
+Commit: 16aff562a4bb3684888d2340ab0281abbf890df0
+fix: exercise commit repository attribution
+
+Body example: Co-authored-by: Claude <noreply@anthropic.com>
+
+Co-authored-by: Claude <noreply@anthropic.com>
+Co-authored-by: Jane Doe <jane@example.invalid>
+Agent-System: old-system
+Agent-Platform: old-platform
+Agent-Session: aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee
+Reviewed-by: Repository hook <hook@example.invalid>
+
+CASE t27sol-keep-True/unknown
+Expected: keep
+Commit: c0b12f5ea356b43baed47ba51634136ba2a40ad1
+fix: exercise commit repository attribution
+
+Body example: Co-authored-by: Claude <noreply@anthropic.com>
+
+Co-authored-by: Claude <noreply@anthropic.com>
+Co-authored-by: Jane Doe <jane@example.invalid>
+Agent-System: old-system
+Agent-Platform: old-platform
+Agent-Session: aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee
+Reviewed-by: Repository hook <hook@example.invalid>
+
+CASE t27sol-keep-True/empty
+Expected: keep
+Commit: 76e6abd194dc2f9f99d949085a446ceda7d32bee
+fix: exercise commit repository attribution
+
+Body example: Co-authored-by: Claude <noreply@anthropic.com>
+
+Co-authored-by: Claude <noreply@anthropic.com>
+Co-authored-by: Jane Doe <jane@example.invalid>
+Agent-System: old-system
+Agent-Platform: old-platform
+Agent-Session: aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee
+Reviewed-by: Repository hook <hook@example.invalid>
+
+CASE t27sol-keep-True/malformed
+Expected: keep
+Commit: 004ea507f162dee61aaff506480be587509ab991
+fix: exercise commit repository attribution
+
+Body example: Co-authored-by: Claude <noreply@anthropic.com>
+
+Co-authored-by: Claude <noreply@anthropic.com>
+Co-authored-by: Jane Doe <jane@example.invalid>
+Agent-System: old-system
+Agent-Platform: old-platform
+Agent-Session: aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee
+Reviewed-by: Repository hook <hook@example.invalid>
+
+CASE t27sol-keep-True/hostless
+Expected: keep
+Commit: 6ae6549eb8f1afbef36b0aa06e5d7ee31b0c80d6
+fix: exercise commit repository attribution
+
+Body example: Co-authored-by: Claude <noreply@anthropic.com>
+
+Co-authored-by: Claude <noreply@anthropic.com>
+Co-authored-by: Jane Doe <jane@example.invalid>
+Agent-System: old-system
+Agent-Platform: old-platform
+Agent-Session: aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee
+Reviewed-by: Repository hook <hook@example.invalid>
+
+CASE t27sol-keep-True/lookalike-host
+Expected: keep
+Commit: d26fdba9b1388b35f6e3fb21d4aa67bfee088fbe
+fix: exercise commit repository attribution
+
+Body example: Co-authored-by: Claude <noreply@anthropic.com>
+
+Co-authored-by: Claude <noreply@anthropic.com>
+Co-authored-by: Jane Doe <jane@example.invalid>
+Agent-System: old-system
+Agent-Platform: old-platform
+Agent-Session: aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee
+Reviewed-by: Repository hook <hook@example.invalid>
+
+CASE t27sol-keep-True/file
+Expected: keep
+Commit: c29d549371374a0af84f48c035df66ff733cf7c5
+fix: exercise commit repository attribution
+
+Body example: Co-authored-by: Claude <noreply@anthropic.com>
+
+Co-authored-by: Claude <noreply@anthropic.com>
+Co-authored-by: Jane Doe <jane@example.invalid>
+Agent-System: old-system
+Agent-Platform: old-platform
+Agent-Session: aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee
+Reviewed-by: Repository hook <hook@example.invalid>
+
+CASE t27sol-keep-True/relative
+Expected: keep
+Commit: 9b7f07d50691fc623b9e3f4e4e8db2b6b6481e28
+fix: exercise commit repository attribution
+
+Body example: Co-authored-by: Claude <noreply@anthropic.com>
+
+Co-authored-by: Claude <noreply@anthropic.com>
+Co-authored-by: Jane Doe <jane@example.invalid>
+Agent-System: old-system
+Agent-Platform: old-platform
+Agent-Session: aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee
+Reviewed-by: Repository hook <hook@example.invalid>
+
+BASELINE: other-owner launch strip removes attribution inside t27sol submodule
+Original submodule gap
+
+Reviewed-by: Repository hook <hook@example.invalid>

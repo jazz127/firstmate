@@ -1,0 +1,12 @@
+ok - Codex and Claude launches add t27sol attribution without a configuration file
+WORKER-RAN
+WORKER-RAN
+WORKER-RAN
+WORKER-RAN
+WORKER-RAN
+WORKER-RAN
+skip: fish not found (fish pane launch); only a static syntax check ran
+ok - launch appends the hooks config while preserving inherited Git credentials in sh, bash and zsh
+ok - a chained raw launch commits through the AI-trailer strip in every step
+ok - keep-ai-trailers omits Claude attribution settings and installs scoped hooks
+# all fm-spawn-dispatch-profile tests passed

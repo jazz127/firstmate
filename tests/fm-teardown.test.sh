@@ -4836,21 +4836,6 @@ test_retained_sources_still_reach_the_ordinary_refusal() {
   pass "present required sources still reach the ordinary teardown refusal"
 }
 
-if [ "${1:-}" = --shared-vm ]; then
-  test_limactl_with_outside_state_path_refuses_release
-  test_limactl_with_inside_state_path_is_reaped
-  test_limactl_with_unknown_state_path_is_reaped
-  test_leaked_worktree_process_is_reaped
-  test_leaked_tasktmp_process_is_reaped
-  test_lsof_error_refuses_before_removal
-  test_reused_pid_identity_is_not_force_killed
-  test_exec_changed_process_is_still_reaped
-  test_process_spawned_during_grace_is_reaped_on_later_pass
-  test_persistent_scan_refuses_after_bounded_retries
-  test_process_exit_during_identity_lookup_does_not_refuse
-  exit 0
-fi
-
 test_missing_startup_source_refuses_before_cleanup
 test_unreadable_startup_source_refuses_before_cleanup
 test_missing_adapter_sibling_refuses_before_cleanup

@@ -2253,6 +2253,17 @@ EOF
   TASK_PIDS=${kept#$'\n'}
 }
 
+require_no_shared_vm_processes() {  # <task-id> <dir>...
+  local ID=$1 TASK_PIDS_SHARED_VM_REFUSED= TASK_PIDS TASK_PIDS_FAILED_DIR
+  shift
+  command -v lsof >/dev/null 2>&1 || return 0
+  if ! task_pids_under_roots "$@"; then
+    echo "REFUSED: cannot determine processes under ${TASK_PIDS_FAILED_DIR:-<missing>} for $ID (lsof failed); preserving task records and directories." >&2
+    return 1
+  fi
+  [ -z "$TASK_PIDS_SHARED_VM_REFUSED" ]
+}
+
 reap_task_backend_process_group() {  # <label>
   local label=$1 leader leader_start pgid current_pgid own_pgid
   if [ "$BACKEND" != tmux ]; then
@@ -2745,6 +2756,7 @@ EOF
     echo "REFUSED: unsafe $label removal target $home contains registered secondmate home $child_home for $child_id" >&2
     return 1
   fi
+  require_no_shared_vm_processes "${expected_id:-$ID}" "$abs_home_path" || return 1
   printf '%s\n' "$abs_home_path"
 }
 
@@ -3091,7 +3103,7 @@ preflight_descendant_treehouse_slots() {
 }
 
 validate_firstmate_home_children_removal() {
-  local home=$1 sub_state child_meta child_id child_wt child_proj child_kind child_home child_backend child_orca_worktree_id
+  local home=$1 sub_state child_meta child_id child_wt child_proj child_kind child_home child_backend child_orca_worktree_id child_vm_wt child_owner_rc
   sub_state="$home/state"
   [ -d "$sub_state" ] || return 0
   for child_meta in "$sub_state"/*.meta; do
@@ -3100,6 +3112,7 @@ validate_firstmate_home_children_removal() {
     fm_backend_validate_task_endpoint "$child_meta" "$child_id" || return 1
     validate_pr_poll_cleanup "$sub_state" "$child_id" || return 1
     child_wt=$(meta_value "$child_meta" worktree)
+    child_proj=$(meta_value "$child_meta" project)
     child_kind=$(meta_value "$child_meta" kind)
     [ -n "$child_kind" ] || child_kind=ship
     child_backend=$(fm_backend_of_meta "$child_meta")
@@ -3112,13 +3125,24 @@ validate_firstmate_home_children_removal() {
     elif [ "$child_backend" = orca ]; then
       child_orca_worktree_id=$(require_orca_worktree_id "$child_meta") || return 1
       if [ -n "$child_wt" ] && [ -e "$child_wt" ]; then
-        child_proj=$(meta_value "$child_meta" project)
         validate_child_worktree_for_removal "$child_wt" "$child_proj" >/dev/null || return 1
         require_orca_worktree_path_match "$child_orca_worktree_id" "$child_wt" || return 1
       fi
     elif [ -n "$child_wt" ] && [ -e "$child_wt" ]; then
-      child_proj=$(meta_value "$child_meta" project)
       validate_child_worktree_for_removal "$child_wt" "$child_proj" >/dev/null || return 1
+    fi
+    if [ "$child_kind" != secondmate ]; then
+      child_vm_wt=$child_wt
+      if [ "$child_backend" != orca ] && fm_treehouse_pool_slot "$child_proj" "$child_wt"; then
+        child_owner_rc=0
+        require_owned_worktree_slot_record "$child_id" "$child_wt" || child_owner_rc=$?
+        case "$child_owner_rc" in
+          0) ;;
+          "$TEARDOWN_SLOT_REASSIGNED_RC") child_vm_wt= ;;
+          *) return 1 ;;
+        esac
+      fi
+      require_no_shared_vm_processes "$child_id" "$child_vm_wt" "$(meta_value "$child_meta" tasktmp)" || return 1
     fi
   done
 }
@@ -3581,6 +3605,23 @@ if [ "$TEARDOWN_BACKLOG_APPLIES" = 1 ]; then
     echo "error: the pending backlog $BACKLOG_TRANSITION for $ID is not replayable; refusing destructive teardown" >&2
     exit 1
   }
+fi
+
+# Every landed/discard-work refusal above has now passed (or --force skipped
+# them). Fix 1 and Fix 2 (see script header) run here, unconditionally on
+# --force, and before ANY destructive step below - a still-parked run or a
+# leaked process can own live work in this exact worktree. Not for
+# kind=secondmate: a secondmate home's own runtime lifecycle is owned by the
+# dedicated process-event and firstmate-home removal machinery further below,
+# not by task-worktree cleanup.
+if [ "$KIND" != secondmate ] && teardown_owns_worktree; then
+  conclude_task_no_mistakes_run "$WT"
+  reap_task_worktree_processes worktree "$WT" "$TASK_TMP"
+elif [ "$KIND" != secondmate ]; then
+  reap_task_worktree_processes tasktmp "$TASK_TMP"
+fi
+
+if [ "$TEARDOWN_BACKLOG_APPLIES" = 1 ]; then
 # Roll the accepted legacy incarnation's stamp back to the record's exact
 # pre-stamp bytes. Uses perl - already in the teardown lifecycle's curated PATH
 # (truncate is not, and is absent on stock macOS) - and verifies the restored
@@ -3649,19 +3690,6 @@ else
   fi
 fi
 
-# Every landed/discard-work refusal above has now passed (or --force skipped
-# them). Fix 1 and Fix 2 (see script header) run here, unconditionally on
-# --force, and before ANY destructive step below - a still-parked run or a
-# leaked process can own live work in this exact worktree. Not for
-# kind=secondmate: a secondmate home's own runtime lifecycle is owned by the
-# dedicated process-event and firstmate-home removal machinery further below,
-# not by task-worktree cleanup.
-if [ "$KIND" != secondmate ] && teardown_owns_worktree; then
-  conclude_task_no_mistakes_run "$WT"
-  reap_task_worktree_processes worktree "$WT" "$TASK_TMP"
-elif [ "$KIND" != secondmate ]; then
-  reap_task_worktree_processes tasktmp "$TASK_TMP"
-fi
 if [ "$KIND" = ship ] && teardown_owns_worktree && [ -e "$CONFIG/pipeline-spend" ]; then
   FM_HOME="$FM_HOME" FM_STATE_OVERRIDE="$STATE" FM_DATA_OVERRIDE="$DATA" FM_CONFIG_OVERRIDE="$CONFIG" \
     "$SCRIPT_DIR/fm-pipeline-spend.sh" record "$ID" >/dev/null \

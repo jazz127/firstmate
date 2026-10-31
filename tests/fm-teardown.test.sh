@@ -4189,9 +4189,11 @@ SH
 }
 
 test_limactl_with_outside_state_path_refuses_release() {
-  local case_dir rc hostagent usernet state leftover pid_and_path pid path descendant
+  local case_dir rc hostagent usernet state leftover pid_and_path pid path descendant meta_before
   case_dir=$(make_case limactl-outside-state)
   write_meta "$case_dir" no-mistakes ship
+  printf 'backend = "markdown"\n' > "$case_dir/.tasks.toml"
+  seed_backlog_in_flight "$case_dir"
   printf '%s\n' "tasktmp=$case_dir/tasktmp" >> "$case_dir/state/task-x1.meta"
   mkdir -p "$case_dir/tasktmp"
   land_shippable_commit "$case_dir"
@@ -4211,6 +4213,7 @@ test_limactl_with_outside_state_path_refuses_release() {
   assert_present "$case_dir/descendants" "limactl-outside-state: missing descendants"
   printf '%s\n' "$hostagent" "$usernet" "$leftover" > "$case_dir/release-candidates"
   cat "$case_dir/descendants" >> "$case_dir/release-candidates"
+  meta_before=$(cat "$case_dir/state/task-x1.meta")
 
   rc=0
   run_teardown "$case_dir" > "$case_dir/stdout" 2> "$case_dir/stderr" || rc=$?
@@ -4237,6 +4240,23 @@ test_limactl_with_outside_state_path_refuses_release() {
   assert_present "$case_dir/state/task-x1.meta" "limactl-outside-state: task record must remain"
   assert_present "$case_dir/wt" "limactl-outside-state: worktree must remain"
   assert_present "$case_dir/tasktmp" "limactl-outside-state: tasktmp must remain"
+  assert_absent "$case_dir/state/task-x1.backlog-close" "limactl-outside-state: refusal must not publish completion intent"
+  [ "$(backlog_row_state "$case_dir")" = in_flight ] \
+    || fail "limactl-outside-state: refusal closed the active backlog item"
+  FM_HOME="$case_dir" FM_ROOT_OVERRIDE="$ROOT" \
+    FM_STATE_OVERRIDE="$case_dir/state" FM_DATA_OVERRIDE="$case_dir/data" \
+    FM_CONFIG_OVERRIDE="$case_dir/config" FM_BOOTSTRAP_NETWORK=skip \
+    PATH="$case_dir/fakebin:$PATH" \
+    "$ROOT/bin/fm-bootstrap.sh" > "$case_dir/recovery-stdout" 2> "$case_dir/recovery-stderr" \
+    || fail "limactl-outside-state: bootstrap recovery failed"
+  assert_present "$case_dir/state/task-x1.meta" "limactl-outside-state: recovery removed task metadata"
+  [ "$(cat "$case_dir/state/task-x1.meta")" = "$meta_before" ] \
+    || fail "limactl-outside-state: refusal or recovery changed the task record"
+  [ "$(backlog_row_state "$case_dir")" = in_flight ] \
+    || fail "limactl-outside-state: recovery closed the active backlog item"
+  assert_present "$case_dir/wt" "limactl-outside-state: recovery removed the worktree"
+  kill -0 "$hostagent" 2>/dev/null || fail "limactl-outside-state: recovery killed the shared VM"
+  assert_absent "$case_dir/treehouse.log" "limactl-outside-state: recovery released the worktree"
 
   rc=0
   run_teardown "$case_dir" --force > "$case_dir/force-stdout" 2> "$case_dir/force-stderr" || rc=$?
@@ -4255,7 +4275,87 @@ test_limactl_with_outside_state_path_refuses_release() {
   expect_code 0 "$rc" "limactl-outside-state: cleanup should succeed once the shared VM stops"
   assert_present "$case_dir/treehouse.log" "limactl-outside-state: retry must release the worktree"
   assert_absent "$case_dir/state/task-x1.meta" "limactl-outside-state: retry must remove the task record"
+  [ "$(backlog_row_state "$case_dir")" = done ] \
+    || fail "limactl-outside-state: successful retry did not close the backlog item"
+  assert_absent "$case_dir/state/task-x1.backlog-close" "limactl-outside-state: retry left completion intent pending"
   pass "shared VM daemons and descendants survive; cleanup refuses release until they stop"
+}
+
+assert_forced_secondmate_shared_vm_preflight() {
+  local topology=$1 case_dir home child_home child_id child_meta hostagent usernet rc
+  case_dir=$(make_case "limactl-child-$topology")
+  write_meta "$case_dir" local-only secondmate
+  configure_secondmate_with_tmux_children "$case_dir"
+  home="$case_dir/secondmate-home"
+  child_home=$home
+  child_id=child-b
+  if [ "$topology" = nested ]; then
+    child_home="$home/nested-home"
+    mkdir -p "$child_home/state" "$child_home/data" "$child_home/config" "$child_home/projects"
+    printf '%s\n' child-b > "$child_home/.fm-secondmate-home"
+    fm_write_meta "$home/state/child-b.meta" \
+      "window=firstmate:fm-child-b" "endpoint_task_id=child-b" \
+      "worktree=$child_home" "home=$child_home" \
+      "project=$case_dir/project" "kind=secondmate" "mode=local-only"
+    child_id=grandchild
+    fm_write_meta "$child_home/state/$child_id.meta" \
+      "window=firstmate:fm-$child_id" "endpoint_task_id=$child_id" \
+      "worktree=$case_dir/child-b-wt" "project=$case_dir/project" \
+      "kind=ship" "mode=local-only"
+  fi
+  child_meta="$child_home/state/$child_id.meta"
+  printf '%s\n' "tasktmp=$case_dir/child-tasktmp" >> "$child_meta"
+  mkdir -p "$case_dir/child-tasktmp"
+  cat > "$case_dir/fakebin/tmux" <<SH
+#!/usr/bin/env bash
+printf '%s\n' "\$*" >> "$case_dir/kill.log"
+exit 0
+SH
+  install_vm_treehouse_fixture "$case_dir"
+  hostagent=$(start_limactl_stand_in "$case_dir" "$case_dir/child-b-wt" \
+    hostagent --pidfile "$case_dir/vm-state/ha.pid" --socket "$case_dir/vm-state/ha.sock" inst)
+  usernet=$(start_limactl_stand_in "$case_dir" "$case_dir/child-tasktmp" \
+    usernet -p "$case_dir/vm-state/usernet.pid" -e "$case_dir/vm-state/ep.sock")
+  printf '%s\n' "$hostagent" "$usernet" > "$case_dir/release-candidates"
+
+  rc=0
+  FM_HOME="$case_dir/project" FM_ROOT_OVERRIDE="$case_dir/project" \
+    FM_STATE_OVERRIDE="$case_dir/state" FM_DATA_OVERRIDE="$case_dir/data" \
+    FM_CONFIG_OVERRIDE="$case_dir/config" PATH="$case_dir/fakebin:$PATH" \
+    "$TEARDOWN" task-x1 --force > "$case_dir/stdout" 2> "$case_dir/stderr" || rc=$?
+  expect_code 1 "$rc" "limactl-child-$topology: force must refuse before descendant cleanup"
+  assert_grep "leaving VM process $hostagent running for $child_id" "$case_dir/stderr" \
+    "limactl-child-$topology: refusal must identify the descendant's VM"
+  assert_grep "leaving VM process $usernet running for $child_id" "$case_dir/stderr" \
+    "limactl-child-$topology: tasktmp must also be checked"
+  assert_absent "$case_dir/kill.log" "limactl-child-$topology: refusal closed an endpoint"
+  assert_absent "$case_dir/treehouse.log" "limactl-child-$topology: refusal released a worktree"
+  assert_present "$case_dir/state/task-x1.meta" "limactl-child-$topology: refusal erased the parent record"
+  assert_present "$home/state/child-a.meta" "limactl-child-$topology: refusal erased a sibling record"
+  assert_present "$child_meta" "limactl-child-$topology: refusal erased the VM owner's record"
+  assert_present "$case_dir/child-a-wt" "limactl-child-$topology: refusal removed a sibling worktree"
+  assert_present "$case_dir/child-b-wt" "limactl-child-$topology: refusal removed the VM's worktree"
+  assert_present "$child_home" "limactl-child-$topology: refusal removed the child home"
+  assert_stand_in_survived "$hostagent" "limactl-child-$topology: hostagent"
+  assert_stand_in_survived "$usernet" "limactl-child-$topology: usernet"
+  sleep 0.3
+
+  rc=0
+  FM_HOME="$case_dir/project" FM_ROOT_OVERRIDE="$case_dir/project" \
+    FM_STATE_OVERRIDE="$case_dir/state" FM_DATA_OVERRIDE="$case_dir/data" \
+    FM_CONFIG_OVERRIDE="$case_dir/config" PATH="$case_dir/fakebin:$PATH" \
+    "$TEARDOWN" task-x1 --force > "$case_dir/retry-stdout" 2> "$case_dir/retry-stderr" || rc=$?
+  expect_code 0 "$rc" "limactl-child-$topology: retry must succeed once the shared VMs stop"
+  assert_absent "$case_dir/state/task-x1.meta" "limactl-child-$topology: retry retained the parent record"
+  assert_absent "$home" "limactl-child-$topology: retry retained the retired home"
+  assert_present "$case_dir/kill.log" "limactl-child-$topology: retry did not close child endpoints"
+  assert_present "$case_dir/treehouse.log" "limactl-child-$topology: retry did not release child worktrees"
+}
+
+test_forced_secondmate_shared_vm_refuses_before_child_cleanup() {
+  assert_forced_secondmate_shared_vm_preflight direct
+  assert_forced_secondmate_shared_vm_preflight nested
+  pass "forced retirement refuses before any descendant cleanup while direct or nested shared VMs run"
 }
 
 test_limactl_with_inside_state_path_is_reaped() {
@@ -4940,6 +5040,7 @@ test_own_autonomous_run_is_left_alone
 test_leaked_worktree_process_is_reaped
 test_leaked_tasktmp_process_is_reaped
 test_limactl_with_outside_state_path_refuses_release
+test_forced_secondmate_shared_vm_refuses_before_child_cleanup
 test_limactl_with_inside_state_path_is_reaped
 test_limactl_with_unknown_state_path_is_reaped
 test_lsof_absent_reaps_tmux_process_group

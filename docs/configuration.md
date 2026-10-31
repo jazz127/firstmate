@@ -1831,14 +1831,14 @@ A session not yet available at commit time is omitted; other runtimes have no co
 No additional persistent session record is created, and no local path, arbitrary hostname, credential, or guessed session is copied into the added fields.
 Amending a message replaces the shared fields rather than duplicating them; no trailer order is required and native runtime trailers retain their order within Git's parsed trailer block.
 Every fleet launch installs a commit hook that selects attribution from the repository being committed in, including submodules in either direction across the t27sol owner boundary.
-If the commit repository's origin cannot be resolved, the hook uses the launch repository's policy.
+If the commit repository's owner cannot be established, the hook strips AI trailers unless `config/keep-ai-trailers` is present, in which case it preserves them without adding attribution.
 Focused synthetic regression coverage is in [`fm-git-strip-ai-trailers.test.sh`](../tests/fm-git-strip-ai-trailers.test.sh) and [`fm-spawn-dispatch-profile.test.sh`](../tests/fm-spawn-dispatch-profile.test.sh).
 Outside t27sol, the optional local, gitignored `config/keep-ai-trailers` retains its legacy home-wide presence-flag behavior; its contents do not select owners or repositories.
 With that flag absent outside t27sol, every Claude launch's session `--settings` value carries `"attribution":{"commit":"","pr":"","sessionUrl":false}`, every Devin worker config sets `"attribution": false`, and every fleet launch appends a worker-scoped `GIT_CONFIG` `core.hooksPath` entry pointing at `state/<id>.git-hooks`, where git's `commit-msg` hook strips known AI trailers even when a runtime injects them after the typed message.
 The entry follows any `GIT_CONFIG_*` entries the worker inherits, so an inherited scoped `credential.helper` still applies to the worker and to the repository's own hooks, such as a git-lfs `pre-push`; an inherited `GIT_CONFIG_COUNT` that is not a decimal number, or that leaves no room for another entry within Git's signed int, stops the launch before the worker runs.
 T3 Code owns its provider command and cannot carry Claude's inline setting, but its per-worktree environment overlay selects the same Git hook; [`t3code-backend.md`](t3code-backend.md#active-limits) owns that backend limit.
 When the flag is present outside t27sol, Claude launches omit those attribution-off settings and Devin worker configs keep the user config's `attribution` setting (Devin's default is on).
-The commit hook then preserves trailers outside t27sol and adds attribution inside t27sol; the presence flag and launch-policy fallback are captured when the hooks are installed.
+The commit hook then preserves trailers outside t27sol and adds attribution inside t27sol; the presence flag is captured when the hooks are installed.
 The wrappers continue chaining the commit repository's own hooks and carrying the applicable shipping push guard.
 A non-external shipping launch with the flag present outside t27sol still omits the upstream prior-art push guard.
 Cortex Code has no attribution switch and its model writes a `Generated with Snowflake CoCo` line and a `Co-authored-by: Snowflake CoCo` trailer itself, so the strip hooks are the only mechanism that removes them from a Cortex worker's commits.

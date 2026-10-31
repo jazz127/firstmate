@@ -34,8 +34,8 @@
 #       --attribution <task-meta> <runtime> <model> keeps and adds scoped
 #       attribution through fm-git-attribution.py, rechecking the commit repo.
 #       --scoped-attribution resolves add/keep/strip in the commit repository,
-#       using the legacy presence flag outside t27sol and the launch policy
-#       when origin cannot be resolved. The flag and fallback are captured
+#       using the legacy presence flag outside t27sol, including when origin
+#       cannot be resolved. The flag is captured
 #       at install time; task metadata supplies runtime session references.
 #   fm-git-strip-ai-trailers.sh env-file <hooks-dir> <out-file>
 #       Write <out-file> as one plain export statement that appends
@@ -259,10 +259,9 @@ install_hooks() {
     strip_line="python3 $(quote_for_hook "${SELF%/*}/fm-git-attribution.py") stamp $(quote_for_hook "$attribution_meta") $(quote_for_hook "$attribution_runtime") $(quote_for_hook "$attribution_model") \"\$1\" || exit \$?"
   fi
   if [ -n "${attribution_config:-}" ]; then
-    local fallback outside=strip
-    fallback=$(python3 "${SELF%/*}/fm-git-attribution.py" mode "$attribution_config" "$wt") || return 1
+    local outside=strip
     [ ! -e "$attribution_config" ] || outside=keep
-    strip_line="python3 $(quote_for_hook "${SELF%/*}/fm-git-attribution.py") apply $(quote_for_hook "$fallback") $(quote_for_hook "$outside") $(quote_for_hook "$attribution_meta") $(quote_for_hook "$attribution_runtime") $(quote_for_hook "$attribution_model") \"\$1\" || exit \$?"
+    strip_line="python3 $(quote_for_hook "${SELF%/*}/fm-git-attribution.py") apply $(quote_for_hook "$outside") $(quote_for_hook "$attribution_meta") $(quote_for_hook "$attribution_runtime") $(quote_for_hook "$attribution_model") \"\$1\" || exit \$?"
   fi
   write_executable "$hooks_dir/commit-msg" <<EOF
 #!/usr/bin/env bash

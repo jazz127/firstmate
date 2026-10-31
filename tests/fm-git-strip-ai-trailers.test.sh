@@ -46,31 +46,35 @@ test_commit_repository_policy() {
       make_repo "$source"
       git -C "$repo" remote add origin "git@github.com:$launch_owner/parent.git"
       [ "$flag" != present ] || : >"$config"
-      for child_owner in t27sol another-owner local-file relative unknown; do
+      for child_owner in t27sol another-owner local-file relative unknown empty malformed hostless; do
         git -C "$repo" -c protocol.file.allow=always submodule add -q "$source" "$child_owner" || fail 'submodule setup failed'
         child="$repo/$child_owner"
         git -C "$child" remote set-url origin "https://github.com/$child_owner/child.git"
         case "$child_owner" in
           unknown) git -C "$child" remote remove origin ;;
+          empty) git -C "$child" remote set-url origin '' ;;
+          malformed) git -C "$child" remote set-url origin 'https://[github.com/t27sol/child.git' ;;
+          hostless) git -C "$child" remote set-url origin 'https:///t27sol/child.git' ;;
           local-file) git -C "$child" remote set-url origin "file://$source" ;;
           relative) git -C "$child" remote set-url origin ../local-source ;;
         esac
       done
       "$STRIP" install --scoped-attribution "$config" "$TMP_ROOT/absent.meta" codex fixture-model "$hooks" "$repo" || fail 'scoped policy install failed'
-      for child_owner in t27sol another-owner local-file relative unknown; do
+      for child_owner in t27sol another-owner local-file relative unknown empty malformed hostless; do
         child="$repo/$child_owner"
         CODEX_THREAD_ID=$sid with_hooks_env "$hooks" git -C "$child" commit -q --allow-empty \
           -m 'fix: submodule policy' --trailer 'Co-authored-by: Claude <noreply@anthropic.com>' \
           --trailer 'Co-authored-by: Jane Doe <jane@example.com>' || fail 'submodule commit failed'
         body=$(git -C "$child" log -1 --format=%B)
         assert_contains "$body" 'Co-authored-by: Jane Doe <jane@example.com>' 'human coauthor lost'
-        if [ "$child_owner" = t27sol ] || { [ "$child_owner" = unknown ] && [ "$launch_owner" = t27sol ]; }; then
+        if [ "$child_owner" = t27sol ]; then
           assert_contains "$body" 'Co-authored-by: codex <noreply@firstmate.invalid>' 'scoped runtime coauthor missing'
           assert_contains "$body" 'Co-authored-by: Claude <noreply@anthropic.com>' 'native coauthor lost'
           assert_contains "$body" 'Agent-System: fac:firstmate' 'scoped system missing'
           assert_contains "$body" 'Agent-Platform: codex/fixture-model' 'scoped platform missing'
           assert_contains "$body" "Agent-Session: $sid" 'scoped session missing'
         else
+          assert_not_contains "$body" 'noreply@firstmate.invalid' 'outside repository gained runtime coauthor'
           assert_not_contains "$body" 'Agent-' 'outside repository gained shared attribution'
           if [ "$flag" = present ]; then
             assert_contains "$body" 'Co-authored-by: Claude <noreply@anthropic.com>' 'legacy home flag lost'
@@ -81,7 +85,7 @@ test_commit_repository_policy() {
       done
     done
   done
-  pass 'commit repository selects attribution in both submodule directions with legacy flag and unknown-origin fallback'
+  pass 'commit repository selects attribution in both submodule directions and preserves strip or legacy keep for unknown owners'
 }
 
 test_scoped_keep_and_add() {

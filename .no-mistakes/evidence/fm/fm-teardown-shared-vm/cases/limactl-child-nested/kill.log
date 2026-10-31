@@ -1,0 +1,4 @@
+kill-window -t =firstmate:=fm-child-a
+kill-window -t =firstmate:=fm-child-b
+kill-window -t =firstmate:=fm-grandchild
+kill-window -t =firstmate:=fm-task-x1

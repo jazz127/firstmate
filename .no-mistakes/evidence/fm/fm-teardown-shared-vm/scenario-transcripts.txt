@@ -1,0 +1,163 @@
+The Firstmate CLI is real. Lima, Treehouse, tmux, GitHub and no-mistakes are substituted in the focused repository tests; tasks-axi, git, ps and lsof are real. These cases are simulated evidence, not live VM validation. The separate real-release.log uses installed tools without substitutes.
+
+CASE: limactl-outside-state
+--- stderr ---
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no live watcher process holds this home lock (last beat: 3s ago).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  repair missing watcher supervision with a foreground checkpoint: bin/fm-watch-checkpoint.sh --seconds 180.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+REFUSED: leaving VM process 75779 running for task-x1: its state path ~/.no-mistakes/worktrees/a00b7db52042/01M68D38F0G89SR9YF1VG8WT0K/.phase-scratch/tmp/fm-teardown-tests.gClM52/limactl-outside-state/vm-state/inst/ha.pid is outside this task's directories; preserving the worktree/tasktmp and task records. Restart that VM through its service manager, then rerun cleanup (docs/troubleshooting.md).
+REFUSED: leaving VM process 75988 running for task-x1: its state path ~/.no-mistakes/worktrees/a00b7db52042/01M68D38F0G89SR9YF1VG8WT0K/.phase-scratch/tmp/fm-teardown-tests.gClM52/limactl-outside-state/vm-state/net/usernet.pid is outside this task's directories; preserving the worktree/tasktmp and task records. Restart that VM through its service manager, then rerun cleanup (docs/troubleshooting.md).
+teardown: reaping leaked worktree process(es) for task-x1: 76063
+
+--- stdout ---
+
+--- recovery-stderr ---
+
+--- recovery-stdout ---
+MISSING: treehouse (install: curl -fsSL https://kunchenguid.github.io/treehouse/install.sh | sh)
+MISSING: no-mistakes (install: curl -fsSL https://raw.githubusercontent.com/kunchenguid/no-mistakes/main/docs/install.sh | sh)
+MISSING: gh-axi (install: npm install -g gh-axi && gh-axi setup hooks)
+
+--- force-stderr ---
+WARNING: watcher still down (same stale episode; last beat: 10s ago, grace 300s) - full banner already printed this episode.
+REFUSED: leaving VM process 75779 running for task-x1: its state path ~/.no-mistakes/worktrees/a00b7db52042/01M68D38F0G89SR9YF1VG8WT0K/.phase-scratch/tmp/fm-teardown-tests.gClM52/limactl-outside-state/vm-state/inst/ha.pid is outside this task's directories; preserving the worktree/tasktmp and task records. Restart that VM through its service manager, then rerun cleanup (docs/troubleshooting.md).
+REFUSED: leaving VM process 75988 running for task-x1: its state path ~/.no-mistakes/worktrees/a00b7db52042/01M68D38F0G89SR9YF1VG8WT0K/.phase-scratch/tmp/fm-teardown-tests.gClM52/limactl-outside-state/vm-state/net/usernet.pid is outside this task's directories; preserving the worktree/tasktmp and task records. Restart that VM through its service manager, then rerun cleanup (docs/troubleshooting.md).
+
+--- retry-stderr ---
+WARNING: watcher still down (same stale episode; last beat: 13s ago, grace 300s) - full banner already printed this episode.
+
+--- retry-stdout ---
+~/.no-mistakes/worktrees/a00b7db52042/01M68D38F0G89SR9YF1VG8WT0K/.phase-scratch/tmp/fm-teardown-tests.gClM52/limactl-outside-state/project: already current
+teardown task-x1 complete (window firstmate:fm-task-x1, worktree ~/.no-mistakes/worktrees/a00b7db52042/01M68D38F0G89SR9YF1VG8WT0K/.phase-scratch/tmp/fm-teardown-tests.gClM52/limactl-outside-state/wt)
+Backlog: task-x1 is closed in ~/.no-mistakes/worktrees/a00b7db52042/01M68D38F0G89SR9YF1VG8WT0K/.phase-scratch/tmp/fm-teardown-tests.gClM52/limactl-outside-state/data/backlog.md. Run bin/fm-tasks-axi.sh ready for dependency-cleared candidates, check date gates, and dispatch only work whose blockers are gone and date is due.
+
+--- treehouse.log ---
+return
+
+--- data/backlog.md ---
+# Backlog
+
+## In flight
+## Queued
+## Done
+- [x] task-x1 - teardown fixture task (kind: ship) (done 2026-10-31)
+
+CASE: limactl-child-direct
+--- stderr ---
+~/.no-mistakes/worktrees/a00b7db52042/01M68D38F0G89SR9YF1VG8WT0K/bin/fm-teardown.sh: line 1135: ~/.no-mistakes/worktrees/a00b7db52042/01M68D38F0G89SR9YF1VG8WT0K/.phase-scratch/tmp/fm-teardown-tests.gClM52/limactl-child-direct/project/bin/fm-guard.sh: No such file or directory
+REFUSED: leaving VM process 88550 running for child-b: its state path ~/.no-mistakes/worktrees/a00b7db52042/01M68D38F0G89SR9YF1VG8WT0K/.phase-scratch/tmp/fm-teardown-tests.gClM52/limactl-child-direct/vm-state/ha.pid is outside this task's directories; preserving the worktree/tasktmp and task records. Restart that VM through its service manager, then rerun cleanup (docs/troubleshooting.md).
+REFUSED: leaving VM process 88724 running for child-b: its state path ~/.no-mistakes/worktrees/a00b7db52042/01M68D38F0G89SR9YF1VG8WT0K/.phase-scratch/tmp/fm-teardown-tests.gClM52/limactl-child-direct/vm-state/usernet.pid is outside this task's directories; preserving the worktree/tasktmp and task records. Restart that VM through its service manager, then rerun cleanup (docs/troubleshooting.md).
+
+--- stdout ---
+
+--- retry-stderr ---
+~/.no-mistakes/worktrees/a00b7db52042/01M68D38F0G89SR9YF1VG8WT0K/bin/fm-teardown.sh: line 1135: ~/.no-mistakes/worktrees/a00b7db52042/01M68D38F0G89SR9YF1VG8WT0K/.phase-scratch/tmp/fm-teardown-tests.gClM52/limactl-child-direct/project/bin/fm-guard.sh: No such file or directory
+
+--- retry-stdout ---
+teardown task-x1 complete (window firstmate:fm-task-x1, worktree ~/.no-mistakes/worktrees/a00b7db52042/01M68D38F0G89SR9YF1VG8WT0K/.phase-scratch/tmp/fm-teardown-tests.gClM52/limactl-child-direct/wt)
+
+--- treehouse.log ---
+return
+return
+
+--- kill.log ---
+kill-window -t =firstmate:=fm-child-a
+kill-window -t =firstmate:=fm-child-b
+kill-window -t =firstmate:=fm-task-x1
+
+CASE: limactl-child-nested
+--- stderr ---
+~/.no-mistakes/worktrees/a00b7db52042/01M68D38F0G89SR9YF1VG8WT0K/bin/fm-teardown.sh: line 1135: ~/.no-mistakes/worktrees/a00b7db52042/01M68D38F0G89SR9YF1VG8WT0K/.phase-scratch/tmp/fm-teardown-tests.gClM52/limactl-child-nested/project/bin/fm-guard.sh: No such file or directory
+REFUSED: leaving VM process 94402 running for grandchild: its state path ~/.no-mistakes/worktrees/a00b7db52042/01M68D38F0G89SR9YF1VG8WT0K/.phase-scratch/tmp/fm-teardown-tests.gClM52/limactl-child-nested/vm-state/ha.pid is outside this task's directories; preserving the worktree/tasktmp and task records. Restart that VM through its service manager, then rerun cleanup (docs/troubleshooting.md).
+REFUSED: leaving VM process 94534 running for grandchild: its state path ~/.no-mistakes/worktrees/a00b7db52042/01M68D38F0G89SR9YF1VG8WT0K/.phase-scratch/tmp/fm-teardown-tests.gClM52/limactl-child-nested/vm-state/usernet.pid is outside this task's directories; preserving the worktree/tasktmp and task records. Restart that VM through its service manager, then rerun cleanup (docs/troubleshooting.md).
+
+--- stdout ---
+
+--- retry-stderr ---
+~/.no-mistakes/worktrees/a00b7db52042/01M68D38F0G89SR9YF1VG8WT0K/bin/fm-teardown.sh: line 1135: ~/.no-mistakes/worktrees/a00b7db52042/01M68D38F0G89SR9YF1VG8WT0K/.phase-scratch/tmp/fm-teardown-tests.gClM52/limactl-child-nested/project/bin/fm-guard.sh: No such file or directory
+
+--- retry-stdout ---
+teardown task-x1 complete (window firstmate:fm-task-x1, worktree ~/.no-mistakes/worktrees/a00b7db52042/01M68D38F0G89SR9YF1VG8WT0K/.phase-scratch/tmp/fm-teardown-tests.gClM52/limactl-child-nested/wt)
+
+--- treehouse.log ---
+return
+return
+
+--- kill.log ---
+kill-window -t =firstmate:=fm-child-a
+kill-window -t =firstmate:=fm-child-b
+kill-window -t =firstmate:=fm-grandchild
+kill-window -t =firstmate:=fm-task-x1
+
+CASE: limactl-inside-state
+--- stderr ---
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no live watcher process holds this home lock (last beat: 1s ago).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  repair missing watcher supervision with a foreground checkpoint: bin/fm-watch-checkpoint.sh --seconds 180.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+teardown: reaping leaked worktree process(es) for task-x1: 3626 4095 4686
+
+--- stdout ---
+~/.no-mistakes/worktrees/a00b7db52042/01M68D38F0G89SR9YF1VG8WT0K/.phase-scratch/tmp/fm-teardown-tests.gClM52/limactl-inside-state/project: already current
+teardown task-x1 complete (window firstmate:fm-task-x1, worktree ~/.no-mistakes/worktrees/a00b7db52042/01M68D38F0G89SR9YF1VG8WT0K/.phase-scratch/tmp/fm-teardown-tests.gClM52/limactl-inside-state/wt)
+Backlog: task-x1 just finished (this home keeps no markdown backlog at ~/.no-mistakes/worktrees/a00b7db52042/01M68D38F0G89SR9YF1VG8WT0K/.phase-scratch/tmp/fm-teardown-tests.gClM52/limactl-inside-state/data/backlog.md). Update ~/.no-mistakes/worktrees/a00b7db52042/01M68D38F0G89SR9YF1VG8WT0K/.phase-scratch/tmp/fm-teardown-tests.gClM52/limactl-inside-state/data/backlog.md - move task-x1 to Done, keep Done to the 10 most recent, then re-scan Queued and dispatch only work whose blockers are gone and date is due.
+
+CASE: limactl - unknown-state
+--- stderr ---
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no live watcher process holds this home lock (last beat: 5s ago).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  repair missing watcher supervision with a foreground checkpoint: bin/fm-watch-checkpoint.sh --seconds 180.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+teardown: reaping leaked worktree process(es) for task-x1: 9849 9900 9958 10223 10385 10528 10757 10817 10933 11173 11341 11656
+
+--- stdout ---
+~/.no-mistakes/worktrees/a00b7db52042/01M68D38F0G89SR9YF1VG8WT0K/.phase-scratch/tmp/fm-teardown-tests.gClM52/limactl - unknown-state/project: already current
+teardown task-x1 complete (window firstmate:fm-task-x1, worktree ~/.no-mistakes/worktrees/a00b7db52042/01M68D38F0G89SR9YF1VG8WT0K/.phase-scratch/tmp/fm-teardown-tests.gClM52/limactl - unknown-state/wt)
+Backlog: task-x1 just finished (this home keeps no markdown backlog at ~/.no-mistakes/worktrees/a00b7db52042/01M68D38F0G89SR9YF1VG8WT0K/.phase-scratch/tmp/fm-teardown-tests.gClM52/limactl - unknown-state/data/backlog.md). Update ~/.no-mistakes/worktrees/a00b7db52042/01M68D38F0G89SR9YF1VG8WT0K/.phase-scratch/tmp/fm-teardown-tests.gClM52/limactl - unknown-state/data/backlog.md - move task-x1 to Done, keep Done to the 10 most recent, then re-scan Queued and dispatch only work whose blockers are gone and date is due.
+
+--- treehouse.log ---
+return
+
+CASE: leaked-process-reap
+--- stderr ---
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no live watcher process holds this home lock (last beat: 0s ago).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  repair missing watcher supervision with a foreground checkpoint: bin/fm-watch-checkpoint.sh --seconds 180.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+teardown: reaping leaked worktree process(es) for task-x1: 17096
+
+--- stdout ---
+~/.no-mistakes/worktrees/a00b7db52042/01M68D38F0G89SR9YF1VG8WT0K/.phase-scratch/tmp/fm-teardown-tests.gClM52/leaked-process-reap/project: already current
+teardown task-x1 complete (window firstmate:fm-task-x1, worktree ~/.no-mistakes/worktrees/a00b7db52042/01M68D38F0G89SR9YF1VG8WT0K/.phase-scratch/tmp/fm-teardown-tests.gClM52/leaked-process-reap/wt)
+Backlog: task-x1 just finished (this home keeps no markdown backlog at ~/.no-mistakes/worktrees/a00b7db52042/01M68D38F0G89SR9YF1VG8WT0K/.phase-scratch/tmp/fm-teardown-tests.gClM52/leaked-process-reap/data/backlog.md). Update ~/.no-mistakes/worktrees/a00b7db52042/01M68D38F0G89SR9YF1VG8WT0K/.phase-scratch/tmp/fm-teardown-tests.gClM52/leaked-process-reap/data/backlog.md - move task-x1 to Done, keep Done to the 10 most recent, then re-scan Queued and dispatch only work whose blockers are gone and date is due.
+
+CASE: leaked-tasktmp-reap
+--- stderr ---
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no live watcher process holds this home lock (last beat: 1s ago).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  repair missing watcher supervision with a foreground checkpoint: bin/fm-watch-checkpoint.sh --seconds 180.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+teardown: reaping leaked worktree process(es) for task-x1: 21215
+
+--- stdout ---
+~/.no-mistakes/worktrees/a00b7db52042/01M68D38F0G89SR9YF1VG8WT0K/.phase-scratch/tmp/fm-teardown-tests.gClM52/leaked-tasktmp-reap/project: already current
+teardown task-x1 complete (window firstmate:fm-task-x1, worktree ~/.no-mistakes/worktrees/a00b7db52042/01M68D38F0G89SR9YF1VG8WT0K/.phase-scratch/tmp/fm-teardown-tests.gClM52/leaked-tasktmp-reap/wt)
+Backlog: task-x1 just finished (this home keeps no markdown backlog at ~/.no-mistakes/worktrees/a00b7db52042/01M68D38F0G89SR9YF1VG8WT0K/.phase-scratch/tmp/fm-teardown-tests.gClM52/leaked-tasktmp-reap/data/backlog.md). Update ~/.no-mistakes/worktrees/a00b7db52042/01M68D38F0G89SR9YF1VG8WT0K/.phase-scratch/tmp/fm-teardown-tests.gClM52/leaked-tasktmp-reap/data/backlog.md - move task-x1 to Done, keep Done to the 10 most recent, then re-scan Queued and dispatch only work whose blockers are gone and date is due.
+
+Independent oracle: recorded R1/R2/R3/R5/R6 decisions require preservation, no release or endpoint close while shared daemons remain, no pending backlog completion, recovery retaining records, descendant protection, force refusing, and retry completing after those processes stop. Disposable/undeterminable VM processes must be reaped. The tests assert process existence, command exit codes, emitted refusal/remedy, release/endpoint-call logs, task records and real backlog state.

@@ -1,0 +1,22 @@
+$ bash ~/.no-mistakes/worktrees/a00b7db52042/01M68D38F0G89SR9YF1VG8WT0K/bin/fm-lab-home.sh create ~/.no-mistakes/worktrees/a00b7db52042/01M68D38F0G89SR9YF1VG8WT0K/.phase-scratch/fm-lab.z3f4m7b8
+~/.no-mistakes/worktrees/a00b7db52042/01M68D38F0G89SR9YF1VG8WT0K/.phase-scratch/fm-lab.z3f4m7b8
+
+exit_status=0
+$ git init -q -b main ~/.no-mistakes/worktrees/a00b7db52042/01M68D38F0G89SR9YF1VG8WT0K/.phase-scratch/fm-lab.z3f4m7b8/projects/release-proof
+
+exit_status=0
+$ git add proof.txt
+
+exit_status=0
+$ git commit -qm Disposable baseline
+
+exit_status=0
+$ treehouse get --lease --no-fetch --branch fm/task-live
+A new version of treehouse is available: v3.1.2 → v3.1.8
+Run "treehouse update" to update
+
+🌳 Setting up worktree...
+🌳 Leased worktree at ~/.no-mistakes/worktrees/a00b7db52042/01M68D38F0G89SR9YF1VG8WT0K/.phase-scratch/fm-lab.z3f4m7b8/pool/.treehouse/release-proof-ee720f/1/release-proof. Run 'treehouse return ~/.no-mistakes/worktrees/a00b7db52042/01M68D38F0G89SR9YF1VG8WT0K/.phase-scratch/fm-lab.z3f4m7b8/pool/.treehouse/release-proof-ee720f/1/release-proof' to release it.
+~/.no-mistakes/worktrees/a00b7db52042/01M68D38F0G89SR9YF1VG8WT0K/.phase-scratch/fm-lab.z3f4m7b8/pool/.treehouse/release-proof-ee720f/1/release-proof
+
+exit_status=0

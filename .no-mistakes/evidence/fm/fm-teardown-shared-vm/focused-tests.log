@@ -1,0 +1,12 @@
+Running test_limactl_with_outside_state_path_refuses_release
+ok - shared VM daemons and descendants survive; cleanup refuses release until they stop
+Running test_forced_secondmate_shared_vm_refuses_before_child_cleanup
+ok - forced retirement refuses before any descendant cleanup while direct or nested shared VMs run
+Running test_limactl_with_inside_state_path_is_reaped
+ok - a limactl process with its state inside a task root is reaped
+Running test_limactl_with_unknown_state_path_is_reaped
+ok - a limactl process whose state path cannot be determined is reaped
+Running test_leaked_worktree_process_is_reaped
+ok - a leaked descendant process rooted under the task's worktree is reaped by teardown, not left surviving
+Running test_leaked_tasktmp_process_is_reaped
+ok - a leaked descendant process rooted under the task's per-task tasktmp is reaped by teardown too

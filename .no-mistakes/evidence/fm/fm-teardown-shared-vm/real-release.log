@@ -1,0 +1,111 @@
+$ bash ~/.no-mistakes/worktrees/a00b7db52042/01M68D38F0G89SR9YF1VG8WT0K/bin/fm-lab-home.sh create ~/.no-mistakes/worktrees/a00b7db52042/01M68D38F0G89SR9YF1VG8WT0K/.phase-scratch/fm-lab.bidq6_ge
+~/.no-mistakes/worktrees/a00b7db52042/01M68D38F0G89SR9YF1VG8WT0K/.phase-scratch/fm-lab.bidq6_ge
+
+exit_status=0
+$ git init -q -b main ~/.no-mistakes/worktrees/a00b7db52042/01M68D38F0G89SR9YF1VG8WT0K/.phase-scratch/fm-lab.bidq6_ge/projects/release-proof
+
+exit_status=0
+$ git add proof.txt
+
+exit_status=0
+$ git commit -qm Disposable baseline
+
+exit_status=0
+$ treehouse get --lease --no-fetch --branch fm/task-live
+A new version of treehouse is available: v3.1.2 → v3.1.8
+Run "treehouse update" to update
+
+🌳 Setting up worktree...
+🌳 Leased worktree at ~/.no-mistakes/worktrees/a00b7db52042/01M68D38F0G89SR9YF1VG8WT0K/.phase-scratch/fm-lab.bidq6_ge/pool/.treehouse/release-proof-76d6f0/1/release-proof. Run 'treehouse return ~/.no-mistakes/worktrees/a00b7db52042/01M68D38F0G89SR9YF1VG8WT0K/.phase-scratch/fm-lab.bidq6_ge/pool/.treehouse/release-proof-76d6f0/1/release-proof' to release it.
+~/.no-mistakes/worktrees/a00b7db52042/01M68D38F0G89SR9YF1VG8WT0K/.phase-scratch/fm-lab.bidq6_ge/pool/.treehouse/release-proof-76d6f0/1/release-proof
+
+exit_status=0
+$ tasks-axi add task-live Disposable live release --kind ship --file ~/.no-mistakes/worktrees/a00b7db52042/01M68D38F0G89SR9YF1VG8WT0K/.phase-scratch/fm-lab.bidq6_ge/data/backlog.md
+ok: added task-live (ship) -> Queued
+task:
+  id: task-live
+  title: Disposable live release
+  state: queued
+  blocked: no
+  blocked_by: none
+  held: no
+  hold_reason: "-"
+  hold_kind: "-"
+  hold_until: "-"
+  kind: ship
+  repo: "-"
+  priority: "-"
+  created: 2026-10-31
+  closed: "-"
+  deps: none
+  links: none
+  body: ""
+help[2]:
+  - Run `tasks-axi start task-live --file=~/.no-mistakes/worktrees/a00b7db52042/01M68D38F0G89SR9YF1VG8WT0K/.phase-scratch/fm-lab.bidq6_ge/data/backlog.md` to move it to in flight
+  - Run `tasks-axi block task-live --by <other> --file=~/.no-mistakes/worktrees/a00b7db52042/01M68D38F0G89SR9YF1VG8WT0K/.phase-scratch/fm-lab.bidq6_ge/data/backlog.md` to record a dependency
+
+exit_status=0
+$ tasks-axi start task-live --file ~/.no-mistakes/worktrees/a00b7db52042/01M68D38F0G89SR9YF1VG8WT0K/.phase-scratch/fm-lab.bidq6_ge/data/backlog.md
+ok: start task-live -> In flight
+help[1]:
+  - Run `tasks-axi done task-live --pr <url> --file=~/.no-mistakes/worktrees/a00b7db52042/01M68D38F0G89SR9YF1VG8WT0K/.phase-scratch/fm-lab.bidq6_ge/data/backlog.md` when it ships
+
+exit_status=0
+Owned disposable sleeper pid=42210, cwd=~/.no-mistakes/worktrees/a00b7db52042/01M68D38F0G89SR9YF1VG8WT0K/.phase-scratch/fm-lab.bidq6_ge/pool/.treehouse/release-proof-76d6f0/1/release-proof
+$ treehouse status
+A new version of treehouse is available: v3.1.2 → v3.1.8
+Run "treehouse update" to update
+
+base  main  (repository default)
+1     leased       ~/.no-mistakes/worktrees/a00b7db52042/01M68D38F0G89SR9YF1VG8WT0K/.phase-scratch/fm-lab.bidq6_ge/pool/.treehouse/release-proof-76d6f0/1/release-proof  [fm/task-live]
+                   sleep (42210)
+
+exit_status=0
+$ bash ~/.no-mistakes/worktrees/a00b7db52042/01M68D38F0G89SR9YF1VG8WT0K/bin/fm-teardown.sh task-live
+fm-gate-refuse: gate agent lifecycle permitted only against lab home ~/.no-mistakes/worktrees/a00b7db52042/01M68D38F0G89SR9YF1VG8WT0K/.phase-scratch/fm-lab.bidq6_ge
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no live watcher process holds this home lock (last beat: 2s ago).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  repair missing watcher supervision with a foreground checkpoint: bin/fm-watch-checkpoint.sh --seconds 180.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+teardown: reaping leaked worktree process(es) for task-live: 42210 43796
+A new version of treehouse is available: v3.1.2 → v3.1.8
+Run "treehouse update" to update
+
+🌳 Worktree returned to pool.
+teardown task-live complete (window fm-lab-validation:fm-task-live, worktree ~/.no-mistakes/worktrees/a00b7db52042/01M68D38F0G89SR9YF1VG8WT0K/.phase-scratch/fm-lab.bidq6_ge/pool/.treehouse/release-proof-76d6f0/1/release-proof)
+Backlog: task-live is closed in ~/.no-mistakes/worktrees/a00b7db52042/01M68D38F0G89SR9YF1VG8WT0K/.phase-scratch/fm-lab.bidq6_ge/data/backlog.md. Run bin/fm-tasks-axi.sh ready for dependency-cleared candidates, check date gates, and dispatch only work whose blockers are gone and date is due.
+
+exit_status=0
+$ treehouse status
+A new version of treehouse is available: v3.1.2 → v3.1.8
+Run "treehouse update" to update
+
+base  main  (repository default)
+1     available    ~/.no-mistakes/worktrees/a00b7db52042/01M68D38F0G89SR9YF1VG8WT0K/.phase-scratch/fm-lab.bidq6_ge/pool/.treehouse/release-proof-76d6f0/1/release-proof  (detached)
+
+exit_status=0
+$ tasks-axi show task-live --file ~/.no-mistakes/worktrees/a00b7db52042/01M68D38F0G89SR9YF1VG8WT0K/.phase-scratch/fm-lab.bidq6_ge/data/backlog.md
+task:
+  id: task-live
+  title: Disposable live release
+  state: done
+  blocked: no
+  blocked_by: none
+  held: no
+  hold_reason: "-"
+  hold_kind: "-"
+  hold_until: "-"
+  kind: ship
+  repo: "-"
+  priority: "-"
+  created: "-"
+  closed: 2026-10-31
+  deps: none
+  links: none
+  body: local main
+
+exit_status=0
+OBSERVED: sleeper exited (-15); task record and pending-close marker absent; real Treehouse pool slot available; real tasks-axi backlog done.

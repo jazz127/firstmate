@@ -1,0 +1,10 @@
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no live watcher process holds this home lock (last beat: 3s ago).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  repair missing watcher supervision with a foreground checkpoint: bin/fm-watch-checkpoint.sh --seconds 180.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+REFUSED: leaving VM process 75779 running for task-x1: its state path ~/.no-mistakes/worktrees/a00b7db52042/01M68D38F0G89SR9YF1VG8WT0K/.phase-scratch/tmp/fm-teardown-tests.gClM52/limactl-outside-state/vm-state/inst/ha.pid is outside this task's directories; preserving the worktree/tasktmp and task records. Restart that VM through its service manager, then rerun cleanup (docs/troubleshooting.md).
+REFUSED: leaving VM process 75988 running for task-x1: its state path ~/.no-mistakes/worktrees/a00b7db52042/01M68D38F0G89SR9YF1VG8WT0K/.phase-scratch/tmp/fm-teardown-tests.gClM52/limactl-outside-state/vm-state/net/usernet.pid is outside this task's directories; preserving the worktree/tasktmp and task records. Restart that VM through its service manager, then rerun cleanup (docs/troubleshooting.md).
+teardown: reaping leaked worktree process(es) for task-x1: 76063

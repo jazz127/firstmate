@@ -1,0 +1,12 @@
+{
+  "version": 4,
+  "worktrees": [
+    {
+      "name": "1",
+      "path": "~/.no-mistakes/worktrees/a00b7db52042/01M68D38F0G89SR9YF1VG8WT0K/.phase-scratch/fm-lab.bidq6_ge/pool/.treehouse/release-proof-76d6f0/1/release-proof",
+      "created_at": "2026-10-31T17:56:23.789325+10:00",
+      "seed_inventory_known": true,
+      "seed_inventory_digest": "3ddcd6c0d191e60c94e4b1b33edc0e6a579530cab90efdd172aef67d20630f53"
+    }
+  ]
+}

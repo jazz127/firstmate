@@ -95,7 +95,7 @@
 # from it.
 # Worktree-slot ownership (teardown-slot-collision): a treehouse pool slot is
 # reused across tasks, so a stale, duplicated, or drifted worktree= record can
-# name a slot a DIFFERENT live task now holds. Cleanup kills every process under
+# name a slot a DIFFERENT live task now holds. Cleanup reaps processes under
 # that path and hard-resets it before returning it, so releasing a slot that is
 # not genuinely this task's destroys another worker's live work. Before the first
 # cleanup step, teardown verifies record exclusivity: no OTHER task record in
@@ -276,14 +276,13 @@
 #     process group, so it survives reparented to init (observed 2026-08-03:
 #     two `go test` binaries, deadlines blown past by ~100x, pinning CPU for
 #     hours with no live task meta to attribute them to once teardown had
-#     already removed it). reap_task_worktree_processes finds every process
+#     already removed it). reap_task_worktree_processes finds processes
 #     whose CURRENT WORKING DIRECTORY is this task's own worktree or tasktmp
 #     root via `lsof -a -d cwd` (cheap: bounded by process count, not by
-#     walking the worktree's file tree) and sends TERM, then KILL after a short
-#     grace period to any survivor whose process identity still matches. Both
-#     roots are unique per task and never
-#     shared, so this can never reach another task's or the primary's
-#     processes. Idempotent: nothing left to find is a silent no-op.
+#     walking the worktree's file tree) and sends reapable processes TERM, then
+#     KILL after a short grace period to any survivor whose process identity
+#     still matches. Shared-VM refusals and detection limits are documented in
+#     docs/troubleshooting.md. Idempotent: nothing left to find is a silent no-op.
 #   Fix 3 - sweep abandoned remote job workers. A remote job worker started
 #     from a worktree's own bin/ outlives that worktree's removal without
 #     being reachable by Fix 2, because its working directory is wherever it
@@ -2308,12 +2307,12 @@ reap_task_backend_process_group() {  # <label>
   fi
 }
 
-# Reap every process rooted (by cwd) under this task's own worktree or tasktmp
-# - both unique per task and never shared - before either is removed. TERM
+# Reap eligible processes rooted (by cwd) under this task's own worktree or
+# tasktmp before either is removed; task_pids_under_roots owns exclusions. TERM
 # first, then KILL after a short grace period for anything still alive; a
 # process that exits on its own between the two passes is simply absent from
-# the recheck. A missing lsof uses the backend
-# process-group fallback; an lsof scan error refuses before destructive teardown.
+# the recheck. A missing lsof uses the backend process-group fallback; an lsof
+# scan error refuses before destructive teardown.
 reap_task_worktree_processes() {  # <label> <dir>...
   local label=$1 pids pid identity current_pids i pass=1 max_passes=3
   local -a tracked_pids tracked_identities remaining_pids remaining_identities

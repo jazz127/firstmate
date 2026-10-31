@@ -3,7 +3,7 @@
 ## Task cleanup refuses because a shared VM is running
 
 Start a shared VM through its service manager, for example `brew services start colima`, rather than from a task worktree.
-Task cleanup stops the processes whose working directory is inside the task's directories, and a Lima-based VM keeps the directory it was started from as the working directory of its long-running `limactl` processes.
+Task cleanup reaps processes whose working directory is inside the task's worktree or per-task temporary directory, and a Lima-based VM keeps the directory it was started from as the working directory of its long-running `limactl` processes.
 
 The refusal `leaving VM process <pid> running` names a `limactl hostagent` or `usernet` process whose state path is outside the task's directories.
 Individual task cleanup leaves that process and its descendants running, stops other reapable processes, and refuses before recording backlog completion intent, releasing the worktree, or removing task records.
@@ -16,3 +16,4 @@ A `limactl` process is still stopped when its state path is inside the task's di
 Cleanup recognises only Lima's generated argument forms: `hostagent --pidfile VALUE --socket` and `usernet -p VALUE -e`.
 Because `ps` does not preserve argument boundaries, the value must be a single whitespace-free token immediately followed by that next flag, and the state flag and next flag must each occur exactly once.
 State paths containing spaces, including ` - `, are undeterminable and stay reapable.
+Shared-VM detection requires `lsof`; when it is unavailable, cleanup falls back to the recorded backend process group without classifying VM state.

@@ -283,7 +283,12 @@
 #     grace period to any survivor whose process identity still matches. Both
 #     roots are unique per task and never
 #     shared, so this can never reach another task's or the primary's
-#     processes. Idempotent: nothing left to find is a silent no-op.
+#     processes. The one exception to selection by working directory is a
+#     Lima `limactl hostagent` or `usernet` process whose state path resolves
+#     outside every root: a shared VM started from the worktree keeps that
+#     working directory but not its state there, so it is left running with a
+#     warning. A state path inside a root, or one that cannot be determined,
+#     stays reapable. Idempotent: nothing left to find is a silent no-op.
 #   Fix 3 - sweep abandoned remote job workers. A remote job worker started
 #     from a worktree's own bin/ outlives that worktree's removal without
 #     being reachable by Fix 2, because its working directory is wherever it
@@ -2133,14 +2138,92 @@ task_process_identity_matches() {  # <pid> <identity>
   [ "$current" = "$2" ]
 }
 
+TASK_PIDS_SHARED_VM_WARNED=
+
 task_pid_list_contains() {  # <pid-list> <pid>
   printf '%s\n' "$1" | grep -Fxq "$2"
+}
+
+# The value of `-p`/`--pidfile` from one `limactl hostagent` or `usernet`
+# command line, in every form its flag parser accepts. Failure means the line
+# is not such a process or carries no value. ps joins argv with spaces, so a
+# value runs to the next " -" flag, or up to hostagent's trailing instance name
+# when no flag follows: a path containing " -" itself is cut short.
+limactl_state_path_from_command() {  # <command-line>
+  local word rest subcommand value
+  read -r word rest <<< "$1"
+  [ "${word##*/}" = limactl ] || return 1
+  while :; do
+    [ -n "$rest" ] || return 1
+    read -r word rest <<< "$rest"
+    case "$word" in
+      hostagent|usernet) subcommand=$word; break ;;
+      --log-level|--log-format) read -r word rest <<< "$rest" ;;
+      -*) ;;
+      *) return 1 ;;
+    esac
+  done
+  while [ -n "$rest" ]; do
+    read -r word rest <<< "$rest"
+    case "$word" in
+      -p|--pidfile) value=$rest ;;
+      --pidfile=*) value="${word#--pidfile=} $rest" ;;
+      -p=*) value="${word#-p=} $rest" ;;
+      -p*) value="${word#-p} $rest" ;;
+      *) continue ;;
+    esac
+    value=${value%\ }
+    case "$value" in
+      *\ -*) value=${value%%\ -*} ;;
+      *) [ "$subcommand" != hostagent ] || value=${value% *} ;;
+    esac
+    [ -n "$value" ] || return 1
+    printf '%s\n' "$value"
+    return 0
+  done
+  return 1
+}
+
+# Physical form of an absolute path whose tail may not exist yet: the deepest
+# existing directory is resolved and the rest is appended. Failure means the
+# location cannot be established (relative, a dangling symlink, or `.`/`..`
+# after the part that exists).
+task_physical_path() {  # <path>
+  local path=$1 tail="" dir
+  case "$path" in /*) ;; *) return 1 ;; esac
+  while [ ! -d "$path" ]; do
+    [ ! -L "$path" ] || return 1
+    case "${path##*/}" in ''|.|..) return 1 ;; esac
+    tail="/${path##*/}$tail"
+    path=${path%/*}
+    [ -n "$path" ] || path=/
+  done
+  dir=$(cd "$path" 2>/dev/null && pwd -P) || return 1
+  printf '%s%s\n' "${dir%/}" "$tail"
+}
+
+# Print a limactl process's state path when it resolves outside every root.
+# Failure, including any doubt about the path or a root, leaves it reapable.
+task_pid_shared_vm_state_path() {  # <pid> <dir>...
+  local pid=$1 command state resolved dir root
+  shift
+  command=$(ps -ww -o command= -p "$pid" 2>/dev/null) || return 1
+  state=$(limactl_state_path_from_command "$command") || return 1
+  resolved=$(task_physical_path "$state") || return 1
+  for dir in "$@"; do
+    [ -n "$dir" ] || continue
+    root=$(task_physical_path "$dir") || return 1
+    case "$resolved" in
+      "$root"|"$root"/*) return 1 ;;
+    esac
+  done
+  printf '%s\n' "$state"
 }
 
 task_pids_under_roots() {  # <dir>...
   TASK_PIDS=
   TASK_PIDS_FAILED_DIR=
-  local dir dir_pids pids=""
+  local dir dir_pids pid state kept="" pids=""
   for dir in "$@"; do
     [ -n "$dir" ] || continue
     if ! dir_pids=$(pids_with_cwd_under "$dir"); then
@@ -2150,7 +2233,23 @@ task_pids_under_roots() {  # <dir>...
     pids="$pids
 $dir_pids"
   done
-  TASK_PIDS=$(printf '%s\n' "$pids" | grep -E '^[0-9]+$' | sort -un || true)
+  pids=$(printf '%s\n' "$pids" | grep -E '^[0-9]+$' | sort -un || true)
+  while IFS= read -r pid; do
+    [ -n "$pid" ] || continue
+    if state=$(task_pid_shared_vm_state_path "$pid" "$@"); then
+      if ! task_pid_list_contains "$TASK_PIDS_SHARED_VM_WARNED" "$pid"; then
+        echo "warning: leaving VM process $pid running for $ID: its state path $state is outside this task's directories (docs/troubleshooting.md)" >&2
+        TASK_PIDS_SHARED_VM_WARNED="$TASK_PIDS_SHARED_VM_WARNED
+$pid"
+      fi
+      continue
+    fi
+    kept="$kept
+$pid"
+  done <<EOF
+$pids
+EOF
+  TASK_PIDS=${kept#$'\n'}
 }
 
 reap_task_backend_process_group() {  # <label>
@@ -2201,8 +2300,9 @@ reap_task_backend_process_group() {  # <label>
 # - both unique per task and never shared - before either is removed. TERM
 # first, then KILL after a short grace period for anything still alive; a
 # process that exits on its own between the two passes is simply absent from
-# the recheck. A missing lsof uses the backend process-group fallback; an lsof
-# scan error refuses before destructive teardown.
+# the recheck. A shared VM process task_pids_under_roots skips is neither
+# signalled nor counted as remaining. A missing lsof uses the backend
+# process-group fallback; an lsof scan error refuses before destructive teardown.
 reap_task_worktree_processes() {  # <label> <dir>...
   local label=$1 pids pid identity current_pids i pass=1 max_passes=3
   local -a tracked_pids tracked_identities remaining_pids remaining_identities

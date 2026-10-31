@@ -4131,6 +4131,144 @@ test_leaked_tasktmp_process_is_reaped() {
   pass "a leaked descendant process rooted under the task's per-task tasktmp is reaped by teardown too"
 }
 
+# A stand-in with the real argv shape of a Lima process, rooted (by cwd) at $1:
+# bash renamed to limactl by `exec -a`, blocked on a fifo in a builtin so no
+# child shares the working directory, and expiring on its own if a failed
+# assertion strands it. `-s --` reads like leading global flags.
+start_limactl_stand_in() {  # <case-dir> <cwd> <limactl argument>...
+  local case_dir=$1 cwd=$2 fifo pid
+  shift 2
+  fifo="$case_dir/stand-in-fifo-$RANDOM$RANDOM"
+  mkfifo "$fifo"
+  (
+    cd "$cwd" && exec -a /opt/test/bin/limactl bash -s -- "$@" \
+      <<< "exec 3<>'$fifo'; read -r -t 300 -u3 _"
+  ) >/dev/null 2>&1 &
+  pid=$!
+  disown
+  sleep 0.3
+  kill -0 "$pid" 2>/dev/null || fail "limactl stand-in did not start: $*"
+  ps -ww -o command= -p "$pid" | grep -Fq 'limactl' \
+    || fail "limactl stand-in does not read as limactl: $(ps -ww -o command= -p "$pid")"
+  printf '%s\n' "$pid"
+}
+
+assert_stand_in_survived() {  # <pid> <description>
+  kill -0 "$1" 2>/dev/null || fail "$2: shared VM stand-in was killed"
+  kill -KILL "$1" 2>/dev/null || true
+}
+
+assert_stand_in_reaped() {  # <pid> <description>
+  if kill -0 "$1" 2>/dev/null; then
+    kill -KILL "$1" 2>/dev/null || true
+    fail "$2: stand-in survived teardown"
+  fi
+}
+
+test_limactl_with_outside_state_path_survives_and_warns() {
+  local case_dir rc hostagent usernet equals joined spaced state leftover pid_and_path pid path
+  case_dir=$(make_case limactl-outside-state)
+  write_meta "$case_dir" no-mistakes ship
+  printf '%s\n' "tasktmp=$case_dir/tasktmp" >> "$case_dir/state/task-x1.meta"
+  mkdir -p "$case_dir/tasktmp"
+  land_shippable_commit "$case_dir"
+  state="$case_dir/vm-state"
+  mkdir -p "$state/inst" "$state/with space"
+
+  # The exact argument forms Lima starts these subcommands with, plus the
+  # other spellings its flag parser accepts. The state paths need not exist.
+  hostagent=$(start_limactl_stand_in "$case_dir" "$case_dir/wt" \
+    hostagent --pidfile "$state/inst/ha.pid" --socket "$state/inst/ha.sock" inst)
+  usernet=$(start_limactl_stand_in "$case_dir" "$case_dir/tasktmp" \
+    usernet -p "$state/net/usernet.pid" -e "$state/net/ep.sock" --subnet 192.168.5.0/24)
+  equals=$(start_limactl_stand_in "$case_dir" "$case_dir/wt" \
+    --log-level debug hostagent "--pidfile=$state/inst/equals.pid" inst)
+  joined=$(start_limactl_stand_in "$case_dir" "$case_dir/wt" usernet "-p$state/net/joined.pid")
+  spaced=$(start_limactl_stand_in "$case_dir" "$case_dir/wt" \
+    hostagent --pidfile "$state/with space/ha.pid" --socket "$state/with space/ha.sock" inst)
+  ( cd "$case_dir/wt" && exec sleep 300 ) &
+  leftover=$!
+  disown
+  sleep 0.3
+
+  rc=0
+  run_teardown "$case_dir" > "$case_dir/stdout" 2> "$case_dir/stderr" || rc=$?
+
+  expect_code 0 "$rc" "limactl-outside-state: cleanup must complete with the survivors present"
+  assert_stand_in_survived "$hostagent" "limactl-outside-state: hostagent --pidfile"
+  assert_stand_in_survived "$usernet" "limactl-outside-state: usernet -p under tasktmp"
+  assert_stand_in_survived "$equals" "limactl-outside-state: --pidfile= after a global flag"
+  assert_stand_in_survived "$joined" "limactl-outside-state: joined -p value"
+  assert_stand_in_survived "$spaced" "limactl-outside-state: state path with a space"
+  assert_stand_in_reaped "$leftover" "limactl-outside-state: ordinary leftover process"
+  for pid_and_path in "$hostagent $state/inst/ha.pid" "$usernet $state/net/usernet.pid" \
+    "$equals $state/inst/equals.pid" "$joined $state/net/joined.pid" \
+    "$spaced $state/with space/ha.pid"; do
+    pid=${pid_and_path%% *}
+    path=${pid_and_path#* }
+    [ "$(grep -F "warning: leaving VM process $pid running" "$case_dir/stderr" \
+      | grep -Fc "state path $path is outside")" = 1 ] \
+      || fail "limactl-outside-state: expected exactly one warning for $pid_and_path: $(cat "$case_dir/stderr")"
+  done
+  assert_not_contains "$(cat "$case_dir/stderr")" "force-killing" \
+    "limactl-outside-state: a skipped process must not trigger a force kill"
+  assert_absent "$case_dir/state/task-x1.meta" "limactl-outside-state: cleanup should finish and drop the task record"
+  pass "a limactl process with its state outside the task survives with one warning while cleanup completes"
+}
+
+test_limactl_with_inside_state_path_is_reaped() {
+  local case_dir rc in_worktree cross_root missing_tail
+  case_dir=$(make_case limactl-inside-state)
+  write_meta "$case_dir" no-mistakes ship
+  printf '%s\n' "tasktmp=$case_dir/tasktmp" >> "$case_dir/state/task-x1.meta"
+  mkdir -p "$case_dir/tasktmp"
+  land_shippable_commit "$case_dir"
+
+  in_worktree=$(start_limactl_stand_in "$case_dir" "$case_dir/wt" \
+    hostagent --pidfile "$case_dir/wt/.lima/inst/ha.pid" --socket "$case_dir/wt/.lima/inst/ha.sock" inst)
+  # Inside the other task root still counts as inside.
+  cross_root=$(start_limactl_stand_in "$case_dir" "$case_dir/wt" \
+    usernet -p "$case_dir/tasktmp/net/usernet.pid" -e "$case_dir/tasktmp/net/ep.sock")
+  missing_tail=$(start_limactl_stand_in "$case_dir" "$case_dir/tasktmp" \
+    hostagent "-p=$case_dir/tasktmp/not/created/yet/ha.pid" inst)
+
+  rc=0
+  run_teardown "$case_dir" > "$case_dir/stdout" 2> "$case_dir/stderr" || rc=$?
+
+  expect_code 0 "$rc" "limactl-inside-state: teardown should succeed"
+  assert_stand_in_reaped "$in_worktree" "limactl-inside-state: state in the worktree"
+  assert_stand_in_reaped "$cross_root" "limactl-inside-state: state in the other task root"
+  assert_stand_in_reaped "$missing_tail" "limactl-inside-state: not-yet-created state in a task root"
+  assert_not_contains "$(cat "$case_dir/stderr")" "leaving VM process" \
+    "limactl-inside-state: a disposable VM must not be reported as shared"
+  pass "a limactl process with its state inside a task root is reaped"
+}
+
+test_limactl_with_unknown_state_path_is_reaped() {
+  local case_dir rc no_flag relative unresolvable other_subcommand pid
+  case_dir=$(make_case limactl-unknown-state)
+  write_meta "$case_dir" no-mistakes ship
+  land_shippable_commit "$case_dir"
+
+  # No state flag, a relative state path, an unresolvable tail, and a
+  # subcommand that does not run a VM with a state path.
+  no_flag=$(start_limactl_stand_in "$case_dir" "$case_dir/wt" hostagent --socket /elsewhere/ha.sock inst)
+  relative=$(start_limactl_stand_in "$case_dir" "$case_dir/wt" usernet -p relative/usernet.pid)
+  unresolvable=$(start_limactl_stand_in "$case_dir" "$case_dir/wt" hostagent --pidfile /elsewhere/missing/../ha.pid inst)
+  other_subcommand=$(start_limactl_stand_in "$case_dir" "$case_dir/wt" shell --pidfile /elsewhere/ha.pid inst)
+
+  rc=0
+  run_teardown "$case_dir" > "$case_dir/stdout" 2> "$case_dir/stderr" || rc=$?
+
+  expect_code 0 "$rc" "limactl-unknown-state: teardown should succeed"
+  for pid in "$no_flag" "$relative" "$unresolvable" "$other_subcommand"; do
+    assert_stand_in_reaped "$pid" "limactl-unknown-state: pid $pid"
+  done
+  assert_not_contains "$(cat "$case_dir/stderr")" "leaving VM process" \
+    "limactl-unknown-state: an undetermined state path must not be reported as shared"
+  pass "a limactl process whose state path cannot be determined is reaped"
+}
+
 test_lsof_absent_reaps_tmux_process_group() {
   local case_dir rc pid path_without_lsof
   case_dir=$(make_case lsof-absent-process-group-reap)
@@ -4740,6 +4878,9 @@ test_another_branchs_parked_run_is_never_touched
 test_own_autonomous_run_is_left_alone
 test_leaked_worktree_process_is_reaped
 test_leaked_tasktmp_process_is_reaped
+test_limactl_with_outside_state_path_survives_and_warns
+test_limactl_with_inside_state_path_is_reaped
+test_limactl_with_unknown_state_path_is_reaped
 test_lsof_absent_reaps_tmux_process_group
 test_lsof_error_refuses_before_removal
 test_reused_pid_identity_is_not_force_killed

@@ -25,7 +25,8 @@
 # task already has a record for that URL and fails when that record is
 # retired, so a retirement is never undone by rediscovery.
 # owned prints the supported PR URLs this home owns as a JSON array of
-# {url,tasks,final}, where final means a saved observation is merged or closed.
+# {url,tasks,recorded,final}, where recorded names the tasks holding a durable
+# record for the URL and final means a saved observation is merged or closed.
 # It is read-only and never contacts a forge.
 # Only canonical PR and issue URLs on the exact github.com host are supported;
 # other accepted URLs remain visibly unmeasured.
@@ -847,23 +848,25 @@ poll() {
   [ "$ERRORS" -eq 0 ] || printf 'contributions: %s unreadable durable record(s)\n' "$ERRORS"
   clear_unsupported_errors
   # Only supported URLs enter final settlement and the forge-read rotation.
-  # One line per distinct URL: the URL, then every owning task.
+  # One line per distinct URL: its settlement, the URL, then every owning task.
+  # A contribution with a final observation is not re-read for any owner; it
+  # is settled once every owner holds that final observation without an error.
   jq_lib -nr --slurpfile input "$TMP/input.json" --slurpfile saved "$TMP/saved.json" '
     known($input[0];$saved[0]) | map(select(.url | supported_url))
     | group_by(.url) | map({url:.[0].url,tasks:(map(.task) | unique)})
-    | .[] | [.url] + .tasks | @tsv' > "$TMP/known.tsv"
+    | .[] | . as $known
+    | [$known.tasks[] as $task | [$saved[0][] | select(.task == $task) | .records[] | select(.url == $known.url)] | first
+      | if . != null and (.observation.state | IN("merged","closed")) then .error == null else null end] as $final
+    | [(if all($final[]; .) then "settled" elif any($final[]; . != null) then "final" else "live" end), $known.url]
+      + $known.tasks | @tsv' > "$TMP/known.tsv"
   : > "$TMP/live.tsv"
   while IFS=$'\t' read -r -a row; do
-    [ "${#row[@]}" -ge 2 ] || continue
-    url=${row[0]}
-    # A contribution with a final observation is not re-read for any owner.
-    if jq -ne --slurpfile saved "$TMP/saved.json" --arg url "$url" --args \
-      'any($ARGS.positional[] as $task | [$saved[0][] | select(.task == $task) | .records[] | select(.url == $url)] | first;
-        . != null and (.observation.state | IN("merged","closed")))' "${row[@]:1}" >/dev/null; then
-      settle_final "$url" "${row[@]:1}"
-    else
-      (IFS=$'\t'; printf '%s\n' "${row[*]}") >> "$TMP/live.tsv"
-    fi
+    [ "${#row[@]}" -ge 3 ] || continue
+    case "${row[0]}" in
+      settled) ;;
+      final) settle_final "${row[@]:1}" ;;
+      *) (IFS=$'\t'; printf '%s\n' "${row[*]:1}") >> "$TMP/live.tsv" ;;
+    esac
   done < "$TMP/known.tsv"
   jq -Rnr --argjson bucket "$((EPOCH / 300))" '
     [inputs] | if length == 0 then . else ($bucket % length) as $offset | .[$offset:] + .[:$offset] end
@@ -978,7 +981,8 @@ case "${1:-}" in
     jq_lib -n --slurpfile input "$TMP/input.json" --slurpfile saved "$TMP/saved.json" '
       [$saved[0][] | .records[] | select(.error == null and (.observation.state | IN("merged","closed"))) | .url] as $final
       | known($input[0];$saved[0]) | map(select((.url | supported_url) and (.url | contains("/pull/"))))
-      | group_by(.url) | map({url:.[0].url,tasks:(map(.task) | unique),final:(.[0].url | IN($final[]))})'
+      | group_by(.url) | map(.[0].url as $url | {url:$url,tasks:(map(.task) | unique),
+        recorded:([$saved[0][] | select(any(.records[]; .url == $url)) | .task] | unique),final:($url | IN($final[]))})'
     ;;
   enroll)
     [ "$#" -eq 3 ] || fail 'enroll needs a task and a PR URL'

@@ -220,7 +220,7 @@ read_pr() { # url deadline output-directory -> rest.json gql.json
   GH_HOST="$FM_PR_HOST" gh_read "$deadline" api graphql --paginate --slurp -F "owner=$owner" -F "repo=$repo" -F "number=$number" \
     -f "query=$PR_QUERY" > "$out/pages.json" 2>/dev/null &
   local gql_pid=$!
-  gh_read "$deadline" api graphql -F "owner=$owner" -F "repo=$repo" -F "number=$number" \
+  GH_HOST="$FM_PR_HOST" gh_read "$deadline" api graphql -F "owner=$owner" -F "repo=$repo" -F "number=$number" \
     -f "query=$SUITE_QUERY" > "$out/suites.json" 2>/dev/null &
   local suite_pid=$!
   wait "$rest_pid" || rest_rc=$?
@@ -243,7 +243,7 @@ read_pr() { # url deadline output-directory -> rest.json gql.json
         | select(.hasNextPage == true) | .endCursor // ""' "$out/gql.json")
       [ -n "$cursor" ] || return 0
       [ "$page" != last ] || return 1
-      gh_read "$deadline" api graphql -F "owner=$owner" -F "repo=$repo" -F "number=$number" -f "suiteCursor=$cursor" \
+      GH_HOST="$FM_PR_HOST" gh_read "$deadline" api graphql -F "owner=$owner" -F "repo=$repo" -F "number=$number" -f "suiteCursor=$cursor" \
         -f "query=$SUITE_QUERY" > "$out/suites.json" 2>/dev/null || return 1
     fi
     jq -e --slurpfile more "$out/suites.json" '
@@ -348,7 +348,9 @@ read_notifications() { # deadline
   [ -z "$lm" ] || args+=(-H "If-Modified-Since: $lm")
   args+=("notifications?all=true&per_page=50${since:+&since=$since}")
   # gh exits non-zero on 304, so the status line, not the exit code, decides.
-  gh_read "$1" "${args[@]}" 2>/dev/null | tr -d '\r' > "$TMP/notify.txt" || true
+  # The feed is github.com's (only its PR subjects are mapped below), so the
+  # read names that host rather than inheriting an ambient GH_HOST.
+  GH_HOST=github.com gh_read "$1" "${args[@]}" 2>/dev/null | tr -d '\r' > "$TMP/notify.txt" || true
   status=$(sed -n '1s/^HTTP\/[0-9.]* \([0-9][0-9]*\).*/\1/p' "$TMP/notify.txt")
   case "$status" in
     304) NOTIFY_OK=1; return 0 ;;

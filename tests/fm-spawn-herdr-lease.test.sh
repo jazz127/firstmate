@@ -82,7 +82,7 @@ case "${1:-} ${2:-}" in
     case "$payload" in
       'cd -- '*) path=${payload#cd -- }; path=${path#\'}; path=${path%\'}
         printf '%s' "$path" > "$D/cwd"; printf '%s' "$path" > "$D/fg" ;;
-      *'encode launch-brief'* | *'Firstmate operational input waiting: read'*)
+      *'encode launch-brief'* | *'Firstmate operational input waiting: read'* | *'Read and follow the complete Firstmate launch brief at'*)
         [ ! -f "$D/launch-send-fails" ] || exit 1
         printf '%s\n' "$payload" > "$D/launched-command"
         : > "$D/herdr-agent-live" ;;

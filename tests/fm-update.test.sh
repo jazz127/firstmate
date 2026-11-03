@@ -907,7 +907,8 @@ test_self_update_source_rewrite_is_skipped() {
   assert_contains "$out" "firstmate: skipped: diverged from refs/remotes/fork/carry" "a rewritten branch must be skipped"
   assert_equals "$(git -C "$w/main" rev-parse HEAD)" "$carry" "the primary was moved off its commit"
   assert_not_equals "$(git -C "$w/main" rev-parse HEAD)" "$other" "the primary was forced to the rewritten branch"
-  assert_contains "$out" "secondmate sm1: already current" "a secondmate stays on the primary's unchanged commit"
+  assert_contains "$out" "restart-secondmates: none" "a skipped primary stops secondmate propagation"
+  assert_equals "$(git -C "$w/sm1" rev-parse HEAD)" "$carry" "a secondmate stays on the primary's unchanged commit"
   pass "T15 a non-fast-forward self-update source is skipped, never forced"
 }
 

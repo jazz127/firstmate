@@ -4415,6 +4415,9 @@ test_pi_model_progress_and_legacy_fallback() {
     printf 'Working...' > "$capture_file"
     printf 'window=%s\nkind=ship\nharness=pi\n' "$window" > "$state/stream.meta"
     record_pi_busy "$state" stream
+    # The trusted busy record's start also bounds the turn's age, so the legacy
+    # bound needs a turn that began long ago, not one this fixture just opened.
+    backdate_pi_turn_start "$state" stream 4000
     gen=$(cat "$state/stream.busy-gen")
     "$ROOT/bin/fm-busy-event.sh" stream "$state" stream open --gen "$gen" --request 1
     if [ "$mode" != closed ] && [ "$mode" != replaced ]; then
@@ -4456,9 +4459,11 @@ test_pi_model_progress_and_legacy_fallback() {
       date +%s > "$state/.wedge-permanent-$key"
       date +%s > "$state/.wedge-terminal-queued-$key"
     fi
+    # The seeded escalation count puts a busy wedge on its repeat cadence, so
+    # that cadence is pinned to the escalation bound the backdated timer passed.
     PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
       FM_STATE_OVERRIDE="$state" FM_STREAM_SILENT_MAX_SECS="$enabled" FM_BUSY_TURN_MAX_SECS=60 \
-      FM_STALE_ESCALATE_SECS=240 FM_POLL=1 FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 \
+      FM_STALE_ESCALATE_SECS=240 FM_PAUSE_RESURFACE_SECS=240 FM_POLL=1 FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 \
       "$WATCH" > "$out" &
     pid=$!
     if [ "$mode" = closed ] || [ "$mode" = replaced ]; then
@@ -4536,7 +4541,7 @@ SH
       if [ "$uninterrupted" -eq 0 ]; then
         PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
         FM_STATE_OVERRIDE="$state" FM_STREAM_SILENT_MAX_SECS=300 FM_BUSY_TURN_MAX_SECS=99999 \
-        FM_WEDGE_MAX_ESCALATIONS="$terminal" FM_STALE_ESCALATE_SECS=240 FM_POLL=1 FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 \
+        FM_WEDGE_MAX_ESCALATIONS="$terminal" FM_STALE_ESCALATE_SECS=240 FM_PAUSE_RESURFACE_SECS=240 FM_POLL=1 FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 \
         "$WATCH" > "$out" &
         pid=$!
       fi

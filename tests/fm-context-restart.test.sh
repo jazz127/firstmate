@@ -605,6 +605,38 @@ test_wrapper_ordinary_exit_and_resume_refusal() {
   pass "context restart: ordinary exit never loops and resume options cannot restore old context"
 }
 
+test_wrapper_sheds_parent_claude_session() {
+  local home fake rc out budget name
+  for budget in off on; do
+    home="$TMP_ROOT/parent-session-$budget"
+    make_primary "$home" 1
+    [ "$budget" = on ] || rm "$home/config/context-restart-budget"
+    fake="$home/fake-claude"
+    cat > "$fake" <<'SCRIPT'
+#!/usr/bin/env bash
+for name in CLAUDECODE CLAUDE_CODE_CHILD_SESSION CLAUDE_CODE_SESSION_ID CLAUDE_PID CLAUDE_CODE_MESSAGING_SOCKET \
+  CLAUDE_CODE_MESSAGING_TOKEN CLAUDE_CODE_SESSION_ATTENDED CLAUDE_CODE_ENTRYPOINT FM_PARENT_SENTINEL; do
+  eval 'value=${'"$name"'-<unset>}'
+  printf '%s=%s\n' "$name" "$value"
+done
+exit 0
+SCRIPT
+    chmod +x "$fake"
+    rc=0
+    out=$(FM_ROOT_OVERRIDE="$home" FM_HOME="$home" FM_CLAUDE_BIN="$fake" FM_PARENT_SENTINEL=kept \
+      CLAUDECODE=1 CLAUDE_CODE_CHILD_SESSION=1 CLAUDE_CODE_SESSION_ID=parent-session CLAUDE_PID=4242 \
+      CLAUDE_CODE_MESSAGING_SOCKET=/tmp/parent.sock CLAUDE_CODE_MESSAGING_TOKEN=parent-token \
+      CLAUDE_CODE_SESSION_ATTENDED=1 CLAUDE_CODE_ENTRYPOINT=cli "$WRAPPER" 2>&1) || rc=$?
+    expect_code 0 "$rc" "budget-$budget wrapper must launch Claude under a parent session's environment: $out"
+    for name in CLAUDECODE CLAUDE_CODE_CHILD_SESSION CLAUDE_CODE_SESSION_ID CLAUDE_PID CLAUDE_CODE_MESSAGING_SOCKET \
+      CLAUDE_CODE_MESSAGING_TOKEN CLAUDE_CODE_SESSION_ATTENDED CLAUDE_CODE_ENTRYPOINT; do
+      assert_contains "$out" "$name=<unset>" "budget-$budget wrapper passed the parent session's $name to Claude"
+    done
+    assert_contains "$out" "FM_PARENT_SENTINEL=kept" "budget-$budget wrapper removed an unrelated environment variable"
+  done
+  pass "context restart: the primary wrapper launches Claude as its own session, never a parent's child"
+}
+
 test_wrapper_refuses_incomplete_or_foreign_handoffs() {
   local home fake scenario rc expected
   for scenario in ready foreign-token foreign-lock; do
@@ -879,6 +911,7 @@ test_wrapper_waits_for_publication_and_revalidates_ownership
 test_opt_out_paths_are_unchanged
 test_foreign_hooks_and_handoff_guards
 test_wrapper_ordinary_exit_and_resume_refusal
+test_wrapper_sheds_parent_claude_session
 test_wrapper_refuses_incomplete_or_foreign_handoffs
 test_supervision_transfer_and_queued_wakes
 test_bridge_continuity_race contention

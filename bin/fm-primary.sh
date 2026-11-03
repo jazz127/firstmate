@@ -69,6 +69,11 @@ fi
   echo "fm-primary: claude executable not found" >&2
   exit 127
 }
+# Shed a parent Claude session's markers inherited from the terminal or a
+# multiplexer server started inside Claude, so every launch below is its own
+# session and saves its transcript rather than running as a child session.
+unset CLAUDECODE CLAUDE_CODE_CHILD_SESSION CLAUDE_CODE_SESSION_ID CLAUDE_PID CLAUDE_CODE_MESSAGING_SOCKET \
+  CLAUDE_CODE_MESSAGING_TOKEN CLAUDE_CODE_SESSION_ATTENDED CLAUDE_CODE_ENTRYPOINT
 
 # Without an explicit budget, the wrapper is exactly a plain Claude launch.
 if [ ! -e "$CONFIG/context-restart-budget" ] && [ ! -L "$CONFIG/context-restart-budget" ]; then

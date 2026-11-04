@@ -850,6 +850,16 @@ test_codex_primary_seat_reaches_herdr_backend() {
   jq -n --arg home "$seat_home" '{version:1,id:"herdr-dock",seats:{primary:{harness:"codex",credential_home:$home}}}' \
     > "$HOME_DIR/config/dock.json"
   make_spawn_herdr_fakebin "$FAKEBIN_DIR"
+  # A Herdr spawn leases its task copy durably rather than entering it through
+  # an interactive get, so the treehouse stub reports the lease it grants.
+  cat > "$FAKEBIN_DIR/treehouse" <<SH
+#!/usr/bin/env bash
+case "\$*" in
+  'get --lease '*) printf '%s\n' '$WT_DIR' ;;
+esac
+exit 0
+SH
+  chmod +x "$FAKEBIN_DIR/treehouse"
   cat > "$FAKEBIN_DIR/codex" <<'SH'
 #!/usr/bin/env bash
 if [ "${1:-}" = login ] && [ "${2:-}" = status ]; then

@@ -25,7 +25,8 @@
 # task already has a record for that URL and fails when that record is
 # retired, so a retirement is never undone by rediscovery.
 # owned prints the supported PR URLs this home owns as a JSON array of
-# {url,tasks,final}, where final means a saved observation is merged or closed.
+# {url,tasks,recorded,final}, where recorded names the tasks holding a durable
+# record for the URL and final means a saved observation is merged or closed.
 # It is read-only and never contacts a forge.
 # Only canonical PR and issue URLs on the exact github.com host are supported;
 # other accepted URLs remain visibly unmeasured.
@@ -282,66 +283,12 @@ jq_lib() { # jq options/program via final argument
 }
 
 READ_SAVED_MAX_BYTES=1048576
-READ_SAVED_BATCH=256
-
-# The per-file reference check: size, one parsed valid record, task identity.
-read_saved_one() { # file task
-  if [ "$(wc -c < "$1")" -gt "$READ_SAVED_MAX_BYTES" ] \
-    || ! jq_lib -ne --slurpfile record "$1" '($record | length) == 1 and ($record[0] | valid_record)' >/dev/null 2>&1; then
-    ERRORS=$((ERRORS + 1))
-    return 0
-  fi
-  # A file's task identity must match its durable directory, not arbitrary JSON.
-  if ! jq -e --arg task "$2" '.task == $task' "$1" >/dev/null; then
-    ERRORS=$((ERRORS + 1)); return 0
-  fi
-  jq -c . "$1" >> "$TMP/saved.jsonl"
-}
-
-# Apply read_saved_one's checks to a batch of files in one jq process. Each
-# --slurpfile parses its file independently, exactly as the per-file check does,
-# and the -e verdicts are mirrored as "last output is neither false nor null".
-# Any failure of the batch itself - a malformed file, a missing file, or an
-# evaluation error - replays the whole batch through read_saved_one, so every
-# rejection keeps the reference path's exact outcome.
-read_saved_batch() { # start count
-  local i rejected
-  local -a args=()
-  for ((i = 0; i < $2; i++)); do
-    args+=(--slurpfile "f$i" "${SAVED_FILES[$1 + i]}" --arg "t$i" "${SAVED_TASKS[$1 + i]}")
-  done
-  if jq_lib -nc --argjson n "$2" "${args[@]}" '
-    [range(0; $n) as $i
-     | if ($ARGS.named | has("f\($i)")) then . else error("batch file missing") end
-     | $ARGS.named["f\($i)"] as $record | $ARGS.named["t\($i)"] as $task
-     | ([($record | length) == 1 and ($record[0] | valid_record)] | last) as $valid
-     | if $valid == null or $valid == false then null
-       else ([$record[0].task == $task] | last) as $owned
-         | if $owned == null or $owned == false then null else $record[0] end
-       end]
-    | (map(select(. == null)) | length), (.[] | select(. != null))' \
-    > "$TMP/batch.jsonl" 2>/dev/null && IFS= read -r rejected < "$TMP/batch.jsonl"; then
-    case "$rejected" in
-      ''|*[!0-9]*) ;;
-      *)
-        tail -n +2 "$TMP/batch.jsonl" >> "$TMP/saved.jsonl" || fail 'contribution records could not be collected'
-        ERRORS=$((ERRORS + rejected))
-        return 0
-        ;;
-    esac
-  fi
-  for ((i = 0; i < $2; i++)); do
-    read_saved_one "${SAVED_FILES[$1 + i]}" "${SAVED_TASKS[$1 + i]}"
-  done
-}
+READ_SAVED_BATCH=100
 
 read_saved() {
-  local file dir task path start count
-  local -a candidates=()
-  : > "$TMP/saved.jsonl"
+  local file dir task path start n=0 i
+  local -a candidates=() files=() tasks=() args=() part=()
   ERRORS=0
-  SAVED_FILES=()
-  SAVED_TASKS=()
   if [ -L "$DATA" ]; then
     ERRORS=1; printf '[]\n' > "$TMP/saved.json"; return 0
   fi
@@ -355,33 +302,48 @@ read_saved() {
     # A path find could read as an operand never starts with a dash.
     case "$file" in /*) candidates+=("$file") ;; *) candidates+=("./$file") ;; esac
   done
+  [ "${#candidates[@]}" -gt 0 ] || { printf '[]\n' > "$TMP/saved.json"; return 0; }
   # One find pass, in place of a wc per file, prints every file within the size
   # bound in operand order; each unprinted file is oversized. If find cannot
-  # answer for every file, each one takes the reference check instead.
-  if [ "${#candidates[@]}" -gt 0 ] \
-    && find "${candidates[@]}" -prune ! -size +"$READ_SAVED_MAX_BYTES"c -print0 > "$TMP/sized" 2>/dev/null; then
-    while IFS= read -r -d '' path; do
-      fm_dirname_to dir "$path"
-      fm_basename_to task "$dir"
-      SAVED_FILES+=("$path")
-      SAVED_TASKS+=("$task")
-    done < "$TMP/sized"
-    ERRORS=$((ERRORS + ${#candidates[@]} - ${#SAVED_FILES[@]}))
+  # answer for every file, each one takes its own size check instead.
+  if find "${candidates[@]}" -prune ! -size +"$READ_SAVED_MAX_BYTES"c -print0 > "$TMP/sized" 2>/dev/null; then
+    while IFS= read -r -d '' path; do files+=("$path"); done < "$TMP/sized"
   else
-    for path in ${candidates[@]+"${candidates[@]}"}; do
-      fm_dirname_to dir "$path"
-      fm_basename_to task "$dir"
-      read_saved_one "$path" "$task"
+    for path in "${candidates[@]}"; do
+      [ "$(wc -c < "$path")" -gt "$READ_SAVED_MAX_BYTES" ] || files+=("$path")
     done
   fi
-  start=0
-  while [ "$start" -lt "${#SAVED_FILES[@]}" ]; do
-    count=$(( ${#SAVED_FILES[@]} - start ))
-    [ "$count" -le "$READ_SAVED_BATCH" ] || count=$READ_SAVED_BATCH
-    read_saved_batch "$start" "$count"
-    start=$((start + count))
+  ERRORS=$((ERRORS + ${#candidates[@]} - ${#files[@]}))
+  for path in ${files[@]+"${files[@]}"}; do
+    fm_dirname_to dir "$path"
+    fm_basename_to task "$dir"
+    tasks+=("$task")
   done
-  jq -s . "$TMP/saved.jsonl" > "$TMP/saved.json"
+  [ "${#files[@]}" -gt 0 ] || { printf '[]\n' > "$TMP/saved.json"; return 0; }
+  # Validate records in bounded jq batches: one process per file outgrows the
+  # watcher's check timeout, and one process for all files outgrows ARG_MAX.
+  # Each file is read raw and parsed on its own, so a malformed record is
+  # rejected inside its batch rather than failing the batch around it.
+  for ((start = 0; start < ${#files[@]}; start += READ_SAVED_BATCH)); do
+    part=("${tasks[@]:start:READ_SAVED_BATCH}")
+    printf '%s\0' "${part[@]}" | jq -Rs 'split("\u0000")[:-1]' > "$TMP/tasks.json"
+    args=()
+    for i in "${!part[@]}"; do args+=(--rawfile "rec$i" "${files[start + i]}"); done
+    jq -L "$SCRIPT_DIR" -n --slurpfile tasks "$TMP/tasks.json" "${args[@]}" 'include "fm-contributions";
+      [range(0; $tasks[0] | length) as $i
+        | [try ($ARGS.named["rec\($i)"] | fromjson) catch empty] as $parsed
+        | if ($parsed | length) == 1
+            and (try ($parsed[0] | valid_record) catch false)
+            and $parsed[0].task == $tasks[0][$i]
+          then $parsed[0] else null end] as $checked
+      | {records: [$checked[] | select(. != null)], errors: ($checked | map(select(. == null)) | length)}' \
+      > "$TMP/checked.$n.json" || fail 'contribution records could not be collected'
+    n=$((n + 1))
+  done
+  jq -s '{records: (map(.records) | add), errors: (map(.errors) | add)}' "$TMP"/checked.*.json > "$TMP/checked.json"
+  rm -f "$TMP"/checked.[0-9]*.json
+  ERRORS=$((ERRORS + $(jq '.errors' "$TMP/checked.json")))
+  jq '.records' "$TMP/checked.json" > "$TMP/saved.json"
 }
 
 get_input() {
@@ -847,23 +809,25 @@ poll() {
   [ "$ERRORS" -eq 0 ] || printf 'contributions: %s unreadable durable record(s)\n' "$ERRORS"
   clear_unsupported_errors
   # Only supported URLs enter final settlement and the forge-read rotation.
-  # One line per distinct URL: the URL, then every owning task.
+  # One line per distinct URL: its settlement, the URL, then every owning task.
+  # A contribution with a final observation is not re-read for any owner; it
+  # is settled once every owner holds that final observation without an error.
   jq_lib -nr --slurpfile input "$TMP/input.json" --slurpfile saved "$TMP/saved.json" '
     known($input[0];$saved[0]) | map(select(.url | supported_url))
     | group_by(.url) | map({url:.[0].url,tasks:(map(.task) | unique)})
-    | .[] | [.url] + .tasks | @tsv' > "$TMP/known.tsv"
+    | .[] | . as $known
+    | [$known.tasks[] as $task | [$saved[0][] | select(.task == $task) | .records[] | select(.url == $known.url)] | first
+      | if . != null and (.observation.state | IN("merged","closed")) then .error == null else null end] as $final
+    | [(if all($final[]; .) then "settled" elif any($final[]; . != null) then "final" else "live" end), $known.url]
+      + $known.tasks | @tsv' > "$TMP/known.tsv"
   : > "$TMP/live.tsv"
   while IFS=$'\t' read -r -a row; do
-    [ "${#row[@]}" -ge 2 ] || continue
-    url=${row[0]}
-    # A contribution with a final observation is not re-read for any owner.
-    if jq -ne --slurpfile saved "$TMP/saved.json" --arg url "$url" --args \
-      'any($ARGS.positional[] as $task | [$saved[0][] | select(.task == $task) | .records[] | select(.url == $url)] | first;
-        . != null and (.observation.state | IN("merged","closed")))' "${row[@]:1}" >/dev/null; then
-      settle_final "$url" "${row[@]:1}"
-    else
-      (IFS=$'\t'; printf '%s\n' "${row[*]}") >> "$TMP/live.tsv"
-    fi
+    [ "${#row[@]}" -ge 3 ] || continue
+    case "${row[0]}" in
+      settled) ;;
+      final) settle_final "${row[@]:1}" ;;
+      *) (IFS=$'\t'; printf '%s\n' "${row[*]:1}") >> "$TMP/live.tsv" ;;
+    esac
   done < "$TMP/known.tsv"
   jq -Rnr --argjson bucket "$((EPOCH / 300))" '
     [inputs] | if length == 0 then . else ($bucket % length) as $offset | .[$offset:] + .[:$offset] end
@@ -978,7 +942,8 @@ case "${1:-}" in
     jq_lib -n --slurpfile input "$TMP/input.json" --slurpfile saved "$TMP/saved.json" '
       [$saved[0][] | .records[] | select(.error == null and (.observation.state | IN("merged","closed"))) | .url] as $final
       | known($input[0];$saved[0]) | map(select((.url | supported_url) and (.url | contains("/pull/"))))
-      | group_by(.url) | map({url:.[0].url,tasks:(map(.task) | unique),final:(.[0].url | IN($final[]))})'
+      | group_by(.url) | map(.[0].url as $url | {url:$url,tasks:(map(.task) | unique),
+        recorded:([$saved[0][] | select(any(.records[]; .url == $url)) | .task] | unique),final:($url | IN($final[]))})'
     ;;
   enroll)
     [ "$#" -eq 3 ] || fail 'enroll needs a task and a PR URL'

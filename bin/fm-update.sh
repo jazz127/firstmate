@@ -2,11 +2,31 @@
 # Self-update a running firstmate and its secondmates from its tracking remote.
 #
 # Mechanical half of the /updatefirstmate skill. Fast-forwards the running
-# firstmate repo's runtime branch from its tracking remote, then advances every
-# registered secondmate home. Local homes are treehouse worktrees or standalone
-# clones; remote routes refresh each host/code-root pair once from that root's
-# tracking remote before syncing its homes to the pinned primary commit. A skipped
-# root is reported but does not prevent the homes from attempting their own sync.
+# firstmate repo's runtime branch from its tracking remote, or from the configured
+# self-update source, then advances every registered secondmate home. Local homes
+# are treehouse worktrees or standalone clones; remote routes refresh each
+# host/code-root pair once from that root's tracking remote before syncing its
+# homes to the pinned primary commit. A skipped root is reported but does not
+# prevent the homes from attempting their own sync.
+#
+# Self-update source. The optional local, gitignored, not-inherited
+# $FM_HOME/config/self-update-source replaces the runtime branch's tracking
+# remote as the source for the primary ONLY. It holds one line,
+# "<remote> <branch>", naming a remote that already exists in this repository
+# and a branch on it (for example a fork branch carrying unmerged fixes on top
+# of upstream). When it is present:
+#   - the primary fetches exactly that branch into refs/remotes/<remote>/<branch>
+#     and fast-forwards to it under the same guards as the tracking path;
+#   - secondmates advance to the primary's resulting commit, as they always do,
+#     and a local standalone clone that lacks it imports it from the primary first.
+# Absent, behaviour is exactly the tracking path. A present but unreadable or
+# malformed file, an unknown remote, or an invalid branch name stops the whole
+# update before anything moves; it never falls back to the tracking remote.
+# Nothing else reads the file: worker spawns, review diffs, the cleanup
+# landed-work test, lint, and default-branch detection retain their usual base
+# selection, including a configured runtime branch. The fast-forward-only guards
+# still apply, so the named branch must only ever move forward.
+#
 # FAST-FORWARD ONLY, exactly like fm-fleet-sync.sh: never force, never create a merge commit, never stash.
 # A secondmate divergence whose complete local tree result is already present at
 # the target is reconciled with reset --keep; every other unsafe target is
@@ -29,8 +49,8 @@
 #   - one status line per target (updated/already current/skipped)
 #   - reread-firstmate: yes|no    (did the running firstmate's instructions change)
 #   - restart-secondmates: fm-<id>...|none (every live secondmate this pass left
-#     on origin's tip - advanced OR already there - whose recorded runtime can
-#     prove a restart)
+#     on the update target's tip - advanced OR already there - whose recorded
+#     runtime can prove a restart)
 #   - nudge-secondmates: fm-<id>...|none   (the residual: live secondmates on
 #     that same tip whose runtime CANNOT prove a restart, so the older re-read
 #     steer is all that is honest for them)
@@ -86,10 +106,71 @@ if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
 fi
 [ $# -eq 0 ] || { usage; exit 1; }
 
+# --- self-update source ----------------------------------------------------
+
+SELF_UPDATE_SOURCE_FILE="$FM_HOME/config/self-update-source"
+SELF_UPDATE_REMOTE=""
+SELF_UPDATE_BRANCH=""
+
+self_update_source_refuse() {  # <reason>
+  echo "error: $SELF_UPDATE_SOURCE_FILE: $1; fix it or remove it to update from origin" >&2
+  exit 1
+}
+
+# Parse config/self-update-source into SELF_UPDATE_REMOTE and SELF_UPDATE_BRANCH.
+# Absent leaves both empty (the tracking path); anything present but unusable exits.
+read_self_update_source() {
+  local content remote branch extra lines
+  [ -e "$SELF_UPDATE_SOURCE_FILE" ] || [ -L "$SELF_UPDATE_SOURCE_FILE" ] || return 0
+  if [ -L "$SELF_UPDATE_SOURCE_FILE" ] || [ ! -f "$SELF_UPDATE_SOURCE_FILE" ] \
+    || [ ! -r "$SELF_UPDATE_SOURCE_FILE" ]; then
+    self_update_source_refuse "not a readable regular file"
+  fi
+  content=$(cat "$SELF_UPDATE_SOURCE_FILE") || self_update_source_refuse "cannot be read"
+  lines=$(printf '%s\n' "$content" | grep -c '')
+  [ "$lines" -eq 1 ] || self_update_source_refuse "expected exactly one line \"<remote> <branch>\""
+  case "$content" in
+    *[[:cntrl:]]*) self_update_source_refuse "contains a control character" ;;
+  esac
+  read -r remote branch extra <<EOF
+$content
+EOF
+  if [ -z "$remote" ] || [ -z "$branch" ] || [ -n "$extra" ]; then
+    self_update_source_refuse "expected exactly one line \"<remote> <branch>\""
+  fi
+  case "$remote" in
+    -*|*/*) self_update_source_refuse "invalid remote name '$remote'" ;;
+  esac
+  git -C "$FM_ROOT" remote get-url "$remote" >/dev/null 2>&1 \
+    || self_update_source_refuse "remote '$remote' does not exist in $FM_ROOT"
+  case "$branch" in
+    -*) self_update_source_refuse "invalid branch name '$branch'" ;;
+  esac
+  git check-ref-format "refs/heads/$branch" >/dev/null 2>&1 \
+    || self_update_source_refuse "invalid branch name '$branch'"
+  SELF_UPDATE_REMOTE=$remote
+  SELF_UPDATE_BRANCH=$branch
+}
+
+read_self_update_source
+
 # --- main firstmate repo ---------------------------------------------------
 
 reread_firstmate="no"
-ff_target "$FM_ROOT" "firstmate" tracking no no
+if [ -n "$SELF_UPDATE_REMOTE" ]; then
+  echo "self-update source: $SELF_UPDATE_REMOTE $SELF_UPDATE_BRANCH (config/self-update-source)"
+  primary_base="refs/remotes/$SELF_UPDATE_REMOTE/$SELF_UPDATE_BRANCH"
+  if git -C "$FM_ROOT" fetch --quiet --no-tags "$SELF_UPDATE_REMOTE" \
+    "+refs/heads/$SELF_UPDATE_BRANCH:$primary_base" 2>/dev/null; then
+    ff_target "$FM_ROOT" "firstmate" "$primary_base" no no
+  else
+    FF_STATUS="skipped"
+    FF_INSTR=""
+    echo "firstmate: skipped: fetch of $SELF_UPDATE_REMOTE $SELF_UPDATE_BRANCH failed"
+  fi
+else
+  ff_target "$FM_ROOT" "firstmate" tracking no no
+fi
 if [ "$FF_STATUS" = "updated" ]; then
   if [ -n "$FF_INSTR" ]; then
     reread_firstmate="yes"
@@ -116,10 +197,10 @@ fi
 runtime_commit=$(git -C "$FM_ROOT" rev-parse --verify 'HEAD^{commit}')
 
 # --- secondmates -----------------------------------------------------------
-# Every live secondmate this pass leaves on origin's tip is restarted, whether it
-# advanced or was already there. The header above owns why the git diff does not
-# gate that, and which two conditions - a skipped home, an unprovable runtime -
-# are the only ways a live mate stays out of the restart set.
+# Every live secondmate this pass leaves on the update target is restarted,
+# whether it advanced or was already there. The header above owns why the git
+# diff does not gate that, and which two conditions - a skipped home, an
+# unprovable runtime - are the only ways a live mate stays out of the restart set.
 
 # FF_NUDGE_WINDOWS and FF_SEEN_HOMES are the sweep's own accumulators and are
 # reset here per its contract; the instruction-gated nudge set is the session-start
@@ -182,6 +263,10 @@ fm_ff_after_secondmate_settled() {  # <id> <home> <window> <status> <instr>
   fi
   claim_settled_secondmate "$1"
 }
+
+# Under a configured self-update source no tracking fetch refreshes a local
+# standalone clone, so it imports the pinned primary commit first (see header).
+[ -z "$SELF_UPDATE_REMOTE" ] || FF_IMPORT_FROM="$FM_ROOT"
 
 # Live direct reports first: state/<id>.meta with kind=secondmate carries the
 # authoritative home= path.

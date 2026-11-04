@@ -1,0 +1,5 @@
+~/.no-mistakes/worktrees/119cd7a6b9a4/01M6HXJ76P890QKBA4DDMRGDHV/.phase-tmp/r2-watcher-home
+registered: state/slow.check.sh
+check: ~/.no-mistakes/worktrees/119cd7a6b9a4/01M6HXJ76P890QKBA4DDMRGDHV/.phase-tmp/r2-watcher-home/state/slow.check.sh: partial public check output
+timed out after 1s
+1793752055	1	check	~/.no-mistakes/worktrees/119cd7a6b9a4/01M6HXJ76P890QKBA4DDMRGDHV/.phase-tmp/r2-watcher-home/state/slow.check.sh	check: ~/.no-mistakes/worktrees/119cd7a6b9a4/01M6HXJ76P890QKBA4DDMRGDHV/.phase-tmp/r2-watcher-home/state/slow.check.sh: partial public check output timed out after 1s

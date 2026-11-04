@@ -1,0 +1,3 @@
+not ok - host-local remote secondmate launch on omp failed
+error: secondmate home cannot be inside the active firstmate home: ~/.no-mistakes/worktrees/119cd7a6b9a4/01M6HXJ76P890QKBA4DDMRGDHV/.phase-tmp/fm-remote-secondmate-omp.2G6aau/home-sm-omp
+error: remote host-local secondmate launch failed: expected exit 0, got 1

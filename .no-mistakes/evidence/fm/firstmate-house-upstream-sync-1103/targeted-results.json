@@ -1,0 +1,134 @@
+[
+  {
+    "test": "fm-timeout-lib",
+    "exit_code": 0,
+    "seconds": 11.9,
+    "log": "~/.no-mistakes/evidence/01M6HXJ76P890QKBA4DDMRGDHV/fm-timeout-lib.log"
+  },
+  {
+    "test": "fm-send-resolve-key",
+    "exit_code": 0,
+    "seconds": 81.7,
+    "log": "~/.no-mistakes/evidence/01M6HXJ76P890QKBA4DDMRGDHV/fm-send-resolve-key.log"
+  },
+  {
+    "test": "fm-busy-adapter-wiring",
+    "exit_code": 1,
+    "seconds": 1.4,
+    "log": "~/.no-mistakes/evidence/01M6HXJ76P890QKBA4DDMRGDHV/fm-busy-adapter-wiring.log"
+  },
+  {
+    "test": "fm-hermes-harness",
+    "exit_code": 1,
+    "seconds": 0.6,
+    "log": "~/.no-mistakes/evidence/01M6HXJ76P890QKBA4DDMRGDHV/fm-hermes-harness.log"
+  },
+  {
+    "test": "fm-kiro-harness",
+    "exit_code": 0,
+    "seconds": 54.1,
+    "log": "~/.no-mistakes/evidence/01M6HXJ76P890QKBA4DDMRGDHV/fm-kiro-harness.log"
+  },
+  {
+    "test": "fm-spawn-herdr-lease",
+    "exit_code": 0,
+    "seconds": 15.1,
+    "log": "~/.no-mistakes/evidence/01M6HXJ76P890QKBA4DDMRGDHV/fm-spawn-herdr-lease.log"
+  },
+  {
+    "test": "fm-teardown",
+    "exit_code": 1,
+    "seconds": 115.5,
+    "log": "~/.no-mistakes/evidence/01M6HXJ76P890QKBA4DDMRGDHV/fm-teardown.log"
+  },
+  {
+    "test": "fm-inactive-reconcile",
+    "exit_code": 0,
+    "seconds": 162.3,
+    "log": "~/.no-mistakes/evidence/01M6HXJ76P890QKBA4DDMRGDHV/fm-inactive-reconcile.log"
+  },
+  {
+    "test": "fm-crew-state",
+    "exit_code": 0,
+    "seconds": 217.1,
+    "log": "~/.no-mistakes/evidence/01M6HXJ76P890QKBA4DDMRGDHV/fm-crew-state.log"
+  },
+  {
+    "test": "fm-pr-check-security",
+    "exit_code": 124,
+    "seconds": 361.1,
+    "log": "~/.no-mistakes/evidence/01M6HXJ76P890QKBA4DDMRGDHV/fm-pr-check-security.log"
+  },
+  {
+    "test": "fm-pr-health",
+    "exit_code": 1,
+    "seconds": 128.0,
+    "log": "~/.no-mistakes/evidence/01M6HXJ76P890QKBA4DDMRGDHV/fm-pr-health.log"
+  },
+  {
+    "test": "fm-remote-doctor",
+    "exit_code": 0,
+    "seconds": 50.4,
+    "log": "~/.no-mistakes/evidence/01M6HXJ76P890QKBA4DDMRGDHV/fm-remote-doctor.log"
+  },
+  {
+    "test": "fm-remote-secondmate-omp",
+    "exit_code": 1,
+    "seconds": 1.6,
+    "log": "~/.no-mistakes/evidence/01M6HXJ76P890QKBA4DDMRGDHV/fm-remote-secondmate-omp.log"
+  },
+  {
+    "test": "fm-secondmate-liveness",
+    "exit_code": 1,
+    "seconds": 11.1,
+    "log": "~/.no-mistakes/evidence/01M6HXJ76P890QKBA4DDMRGDHV/fm-secondmate-liveness.log"
+  },
+  {
+    "test": "fm-dispatch-resolve",
+    "exit_code": 0,
+    "seconds": 48.7,
+    "log": "~/.no-mistakes/evidence/01M6HXJ76P890QKBA4DDMRGDHV/fm-dispatch-resolve.log"
+  },
+  {
+    "test": "fm-update",
+    "exit_code": 0,
+    "seconds": 54.6,
+    "log": "~/.no-mistakes/evidence/01M6HXJ76P890QKBA4DDMRGDHV/fm-update.log"
+  },
+  {
+    "test": "fm-cd-pretool-check",
+    "exit_code": 0,
+    "seconds": 67.3,
+    "log": "~/.no-mistakes/evidence/01M6HXJ76P890QKBA4DDMRGDHV/fm-cd-pretool-check.log"
+  },
+  {
+    "test": "fm-codex-stop-park",
+    "exit_code": 1,
+    "seconds": 51.8,
+    "log": "~/.no-mistakes/evidence/01M6HXJ76P890QKBA4DDMRGDHV/fm-codex-stop-park.log"
+  },
+  {
+    "test": "fm-watcher-lock",
+    "exit_code": 0,
+    "seconds": 197.9,
+    "log": "~/.no-mistakes/evidence/01M6HXJ76P890QKBA4DDMRGDHV/fm-watcher-lock.log"
+  },
+  {
+    "test": "fm-watch-triage",
+    "exit_code": 124,
+    "seconds": 360.3,
+    "log": "~/.no-mistakes/evidence/01M6HXJ76P890QKBA4DDMRGDHV/fm-watch-triage.log"
+  },
+  {
+    "test": "fm-backend-hc",
+    "exit_code": 0,
+    "seconds": 9.0,
+    "log": "~/.no-mistakes/evidence/01M6HXJ76P890QKBA4DDMRGDHV/fm-backend-hc.log"
+  },
+  {
+    "test": "fm-captain-hold-lifecycle",
+    "exit_code": 124,
+    "seconds": 360.3,
+    "log": "~/.no-mistakes/evidence/01M6HXJ76P890QKBA4DDMRGDHV/fm-captain-hold-lifecycle.log"
+  }
+]

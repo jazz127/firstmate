@@ -1,0 +1,16 @@
+{
+  "agent_status": "unknown",
+  "cwd": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M6HXJ76P890QKBA4DDMRGDHV/.phase-tmp/r2-herdr/pool/.treehouse/project-b37cc2/1/project",
+  "focused": false,
+  "foreground_cwd": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M6HXJ76P890QKBA4DDMRGDHV/.phase-tmp/r2-herdr/pool/.treehouse/project-b37cc2/1/project",
+  "pane_id": "w1:p2",
+  "revision": 0,
+  "scroll": {
+    "max_offset_from_bottom": 0,
+    "offset_from_bottom": 0,
+    "viewport_rows": 40
+  },
+  "tab_id": "w1:t2",
+  "terminal_id": "term_65f6876d2c6752",
+  "workspace_id": "w1"
+}

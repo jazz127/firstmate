@@ -1,0 +1,70 @@
+$ ~/.no-mistakes/worktrees/119cd7a6b9a4/01M6HXJ76P890QKBA4DDMRGDHV/bin/fm-herdr-lab.sh provision fm-lab-r2-live
+exit: 0
+$ ~/.no-mistakes/worktrees/119cd7a6b9a4/01M6HXJ76P890QKBA4DDMRGDHV/bin/fm-herdr-lab.sh run fm-lab-r2-live session list --json
+{"sessions":[{"default":true,"name":"default","running":true,"session_dir":"~/.config/herdr","socket_path":"~/.config/herdr/herdr.sock"},{"default":false,"name":"fm-lab-r2-live","running":true,"session_dir":"~/.config/herdr/sessions/fm-lab-r2-live","socket_path":"~/.config/herdr/sessions/fm-lab-r2-live/herdr.sock"},{"default":false,"name":"fm-remote","running":true,"session_dir":"~/.config/herdr/sessions/fm-remote","socket_path":"~/.config/herdr/sessions/fm-remote/herdr.sock"},{"default":false,"name":"qd-liveness","running":false,"session_dir":"~/.config/herdr/sessions/qd-liveness","socket_path":"~/.config/herdr/sessions/qd-liveness/herdr.sock"}]}
+exit: 0
+$ ~/.no-mistakes/worktrees/119cd7a6b9a4/01M6HXJ76P890QKBA4DDMRGDHV/bin/fm-herdr-lab.sh run fm-lab-r2-live workspace create --cwd ~/.no-mistakes/worktrees/119cd7a6b9a4/01M6HXJ76P890QKBA4DDMRGDHV/.phase-tmp/r2-herdr --label lab-launcher --no-focus
+{"id":"cli:workspace:create","result":{"root_pane":{"agent_status":"unknown","cwd":"~/.no-mistakes/worktrees/119cd7a6b9a4/01M6HXJ76P890QKBA4DDMRGDHV/.phase-tmp/r2-herdr","focused":true,"foreground_cwd":"~/.no-mistakes/worktrees/119cd7a6b9a4/01M6HXJ76P890QKBA4DDMRGDHV/.phase-tmp/r2-herdr","pane_id":"w1:p1","revision":0,"scroll":{"max_offset_from_bottom":0,"offset_from_bottom":0,"viewport_rows":40},"tab_id":"w1:t1","terminal_id":"term_65f6876b96e321","workspace_id":"w1"},"tab":{"agent_status":"unknown","focused":true,"label":"1","number":1,"pane_count":1,"tab_id":"w1:t1","workspace_id":"w1"},"type":"workspace_created","workspace":{"active_tab_id":"w1:t1","agent_status":"unknown","focused":true,"label":"lab-launcher","number":1,"pane_count":1,"tab_count":1,"workspace_id":"w1"}}}
+exit: 0
+$ bash -c . bin/fm-backend.sh; fm_backend_source herdr; fm_backend_herdr_launcher_identity "$HERDR_SESSION"
+exit: 0
+$ bash -c . bin/fm-backend.sh; fm_backend_source herdr; fm_backend_herdr_launcher_identity "$HERDR_SESSION"
+error: herdr launcher pane '1-1' is stale - in session 'fm-lab-r2-live' that pane no longer exists or names no tab or workspace; refresh HERDR_PANE_ID, HERDR_TAB_ID and HERDR_WORKSPACE_ID in this shell to the current pane's values; refusing to place a worker without its exact parent workspace
+exit: 1
+$ bash -c . bin/fm-backend.sh; fm_backend_source herdr; fm_backend_herdr_launcher_identity "$HERDR_SESSION"
+error: herdr launcher pane 'w1:p1' belongs to the server at '~/.no-mistakes/worktrees/119cd7a6b9a4/01M6HXJ76P890QKBA4DDMRGDHV/.phase-tmp/r2-herdr/foreign.sock', not session 'fm-lab-r2-live' at '~/.config/herdr/sessions/fm-lab-r2-live/herdr.sock'; refusing to place a worker from a cross-session parent identity
+exit: 1
+$ ~/.no-mistakes/worktrees/119cd7a6b9a4/01M6HXJ76P890QKBA4DDMRGDHV/bin/fm-lab-home.sh create ~/.no-mistakes/worktrees/119cd7a6b9a4/01M6HXJ76P890QKBA4DDMRGDHV/.phase-tmp/r2-herdr/home
+~/.no-mistakes/worktrees/119cd7a6b9a4/01M6HXJ76P890QKBA4DDMRGDHV/.phase-tmp/r2-herdr/home
+exit: 0
+$ git init -b main ~/.no-mistakes/worktrees/119cd7a6b9a4/01M6HXJ76P890QKBA4DDMRGDHV/.phase-tmp/r2-herdr/project
+Initialized empty Git repository in ~/.no-mistakes/worktrees/119cd7a6b9a4/01M6HXJ76P890QKBA4DDMRGDHV/.phase-tmp/r2-herdr/project/.git/
+exit: 0
+$ git -C ~/.no-mistakes/worktrees/119cd7a6b9a4/01M6HXJ76P890QKBA4DDMRGDHV/.phase-tmp/r2-herdr/project add README.md
+exit: 0
+$ git -C ~/.no-mistakes/worktrees/119cd7a6b9a4/01M6HXJ76P890QKBA4DDMRGDHV/.phase-tmp/r2-herdr/project commit -m base
+[main (root-commit) f4857ea] base
+ 1 file changed, 1 insertion(+)
+ create mode 100644 README.md
+exit: 0
+$ git clone --bare ~/.no-mistakes/worktrees/119cd7a6b9a4/01M6HXJ76P890QKBA4DDMRGDHV/.phase-tmp/r2-herdr/project ~/.no-mistakes/worktrees/119cd7a6b9a4/01M6HXJ76P890QKBA4DDMRGDHV/.phase-tmp/r2-herdr/origin.git
+Cloning into bare repository '~/.no-mistakes/worktrees/119cd7a6b9a4/01M6HXJ76P890QKBA4DDMRGDHV/.phase-tmp/r2-herdr/origin.git'...
+done.
+exit: 0
+$ git -C ~/.no-mistakes/worktrees/119cd7a6b9a4/01M6HXJ76P890QKBA4DDMRGDHV/.phase-tmp/r2-herdr/project remote add origin ~/.no-mistakes/worktrees/119cd7a6b9a4/01M6HXJ76P890QKBA4DDMRGDHV/.phase-tmp/r2-herdr/origin.git
+exit: 0
+$ ~/.no-mistakes/worktrees/119cd7a6b9a4/01M6HXJ76P890QKBA4DDMRGDHV/bin/fm-brief.sh lease-live scratch --mode local-only --herdr-lab
+scaffolded: ~/.no-mistakes/worktrees/119cd7a6b9a4/01M6HXJ76P890QKBA4DDMRGDHV/.phase-tmp/r2-herdr/home/data/lease-live/brief.md (ship, mode=local-only; replace {TASK} and {FIRSTMATE_SPEC})
+exit: 0
+$ ~/.no-mistakes/worktrees/119cd7a6b9a4/01M6HXJ76P890QKBA4DDMRGDHV/bin/fm-spawn.sh lease-live ~/.no-mistakes/worktrees/119cd7a6b9a4/01M6HXJ76P890QKBA4DDMRGDHV/.phase-tmp/r2-herdr/project sh -c "echo lease-live-ready" --backend herdr --mode local-only --yolo off
+fm-gate-refuse: gate agent lifecycle permitted only against lab home ~/.no-mistakes/worktrees/119cd7a6b9a4/01M6HXJ76P890QKBA4DDMRGDHV/.phase-tmp/r2-herdr/home
+notice: lease-live ships mode=local-only while the standing posture for project is no-mistakes - less rigor than the captain's standing posture; proceed only on a current explicit captain instruction or an intake judgment you can state
+A new version of treehouse is available: v3.1.2 → v3.1.8
+Run "treehouse update" to update
+
+🌳 Setting up worktree...
+🌳 Leased worktree at ~/.no-mistakes/worktrees/119cd7a6b9a4/01M6HXJ76P890QKBA4DDMRGDHV/.phase-tmp/r2-herdr/pool/.treehouse/project-b37cc2/1/project. Run 'treehouse return ~/.no-mistakes/worktrees/119cd7a6b9a4/01M6HXJ76P890QKBA4DDMRGDHV/.phase-tmp/r2-herdr/pool/.treehouse/project-b37cc2/1/project' to release it.
+spawned lease-live harness=sh kind=ship mode=local-only yolo=off window=fm-lab-r2-live:w1:p2 worktree=~/.no-mistakes/worktrees/119cd7a6b9a4/01M6HXJ76P890QKBA4DDMRGDHV/.phase-tmp/r2-herdr/pool/.treehouse/project-b37cc2/1/project
+exit: 0
+$ ~/.no-mistakes/worktrees/119cd7a6b9a4/01M6HXJ76P890QKBA4DDMRGDHV/bin/fm-herdr-lab.sh run fm-lab-r2-live pane get w1:p2
+{"id":"cli:pane:get","result":{"pane":{"agent_status":"unknown","cwd":"~/.no-mistakes/worktrees/119cd7a6b9a4/01M6HXJ76P890QKBA4DDMRGDHV/.phase-tmp/r2-herdr/pool/.treehouse/project-b37cc2/1/project","focused":false,"foreground_cwd":"~/.no-mistakes/worktrees/119cd7a6b9a4/01M6HXJ76P890QKBA4DDMRGDHV/.phase-tmp/r2-herdr/pool/.treehouse/project-b37cc2/1/project","pane_id":"w1:p2","revision":0,"scroll":{"max_offset_from_bottom":0,"offset_from_bottom":0,"viewport_rows":40},"tab_id":"w1:t2","terminal_id":"term_65f6876d2c6752","workspace_id":"w1"},"type":"pane_info"}}
+exit: 0
+Restorable top-level cwd matches recorded leased task copy: ~/.no-mistakes/worktrees/119cd7a6b9a4/01M6HXJ76P890QKBA4DDMRGDHV/.phase-tmp/r2-herdr/pool/.treehouse/project-b37cc2/1/project
+$ ~/.no-mistakes/worktrees/119cd7a6b9a4/01M6HXJ76P890QKBA4DDMRGDHV/bin/fm-teardown.sh lease-live
+fm-gate-refuse: gate agent lifecycle permitted only against lab home ~/.no-mistakes/worktrees/119cd7a6b9a4/01M6HXJ76P890QKBA4DDMRGDHV/.phase-tmp/r2-herdr/home
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  repair missing watcher supervision with a foreground checkpoint: bin/fm-watch-checkpoint.sh --seconds 180.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+A new version of treehouse is available: v3.1.2 → v3.1.8
+Run "treehouse update" to update
+
+🌳 Worktree returned to pool.
+teardown lease-live complete (window fm-lab-r2-live:w1:p2, worktree ~/.no-mistakes/worktrees/119cd7a6b9a4/01M6HXJ76P890QKBA4DDMRGDHV/.phase-tmp/r2-herdr/pool/.treehouse/project-b37cc2/1/project)
+Backlog: lease-live just finished (this home keeps no markdown backlog at ~/.no-mistakes/worktrees/119cd7a6b9a4/01M6HXJ76P890QKBA4DDMRGDHV/.phase-tmp/r2-herdr/home/data/backlog.md). Update ~/.no-mistakes/worktrees/119cd7a6b9a4/01M6HXJ76P890QKBA4DDMRGDHV/.phase-tmp/r2-herdr/home/data/backlog.md - move lease-live to Done, keep Done to the 10 most recent, then re-scan Queued and dispatch only work whose blockers are gone and date is due.
+exit: 0
+$ ~/.no-mistakes/worktrees/119cd7a6b9a4/01M6HXJ76P890QKBA4DDMRGDHV/bin/fm-herdr-lab.sh teardown fm-lab-r2-live
+exit: 0

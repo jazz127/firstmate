@@ -1,0 +1,8 @@
+lab core session fm-hclab-i ready (server pid 16510)
+~/.no-mistakes/worktrees/119cd7a6b9a4/01M6HXJ76P890QKBA4DDMRGDHV/.phase-tmp/r2-inactive-live/home
+{"address":"t1","agent":"codex","cwd":"~/.no-mistakes/worktrees/119cd7a6b9a4/01M6HXJ76P890QKBA4DDMRGDHV/.phase-tmp/r2-inactive-live","state":"live","turn":0}
+state: unknown · source: pane · harness state unavailable (unknown codex-unverified)
+Live replacement agent withheld the earlier terminal outcome.
+After stopping the native agent: missing
+ls: ~/.no-mistakes/worktrees/119cd7a6b9a4/01M6HXJ76P890QKBA4DDMRGDHV/.phase-tmp/r2-inactive-live/home/state/*inactive*: No such file or directory
+cat: ~/.no-mistakes/worktrees/119cd7a6b9a4/01M6HXJ76P890QKBA4DDMRGDHV/.phase-tmp/r2-inactive-live/home/state/.wake-queue: No such file or directory

@@ -1,0 +1,12 @@
+ok - an unconfigured home keeps the foreground checkpoint and every park hook is inert
+ok - the park is selected only for the verified codex-cli version
+ok - the single-flight claim admits one park, which delivers its wake through the native queue
+ok - a Stop that meets a delivered park's claim held 1s waits for its release and rearms
+ok - a Stop that meets a delivering park's claim held 4s waits for its release and rearms
+ok - a failed native queue delivery latches the session to foreground fallback
+ok - a latched fallback does not force a Stop turn when nothing needs supervision
+not ok - the park must settle once supervision is no longer needed: park still running
+stop=0 (unexpected: 'park still running')
+--- output ---
+park still running
+stop=0

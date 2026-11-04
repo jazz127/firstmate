@@ -1,0 +1,22 @@
+[
+  {
+    "test": "fm-busy-adapter-wiring",
+    "exit_code": 1
+  },
+  {
+    "test": "fm-teardown",
+    "exit_code": 124
+  },
+  {
+    "test": "fm-remote-secondmate-omp",
+    "exit_code": 0
+  },
+  {
+    "test": "fm-secondmate-liveness",
+    "exit_code": 0
+  },
+  {
+    "test": "fm-pr-health",
+    "exit_code": 2
+  }
+]

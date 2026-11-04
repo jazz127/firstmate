@@ -1,0 +1,52 @@
+$ ~/.no-mistakes/worktrees/119cd7a6b9a4/01M6HXJ76P890QKBA4DDMRGDHV/bin/fm-lab-home.sh create ~/.no-mistakes/worktrees/119cd7a6b9a4/01M6HXJ76P890QKBA4DDMRGDHV/.phase-tmp/r2-teardown-real-retry/home
+~/.no-mistakes/worktrees/119cd7a6b9a4/01M6HXJ76P890QKBA4DDMRGDHV/.phase-tmp/r2-teardown-real-retry/home
+exit: 0
+$ tmux -S ~/.no-mistakes/evidence/01M6HXJ76P890QKBA4DDMRGDHV/r2-teardown.sock new-session -d -s fixture -x 120 -y 40
+exit: 0
+$ treehouse get --lease --no-fetch
+A new version of treehouse is available: v3.1.2 → v3.1.8
+Run "treehouse update" to update
+
+🌳 Setting up worktree...
+🌳 Leased worktree at ~/.no-mistakes/worktrees/119cd7a6b9a4/01M6HXJ76P890QKBA4DDMRGDHV/.phase-tmp/r2-teardown-real-retry/pool/.treehouse/project-7aeedb/1/project. Run 'treehouse return ~/.no-mistakes/worktrees/119cd7a6b9a4/01M6HXJ76P890QKBA4DDMRGDHV/.phase-tmp/r2-teardown-real-retry/pool/.treehouse/project-7aeedb/1/project' to release it.
+~/.no-mistakes/worktrees/119cd7a6b9a4/01M6HXJ76P890QKBA4DDMRGDHV/.phase-tmp/r2-teardown-real-retry/pool/.treehouse/project-7aeedb/1/project
+exit: 0
+$ ~/.no-mistakes/worktrees/119cd7a6b9a4/01M6HXJ76P890QKBA4DDMRGDHV/bin/fm-teardown.sh clean
+fm-gate-refuse: gate agent lifecycle permitted only against lab home ~/.no-mistakes/worktrees/119cd7a6b9a4/01M6HXJ76P890QKBA4DDMRGDHV/.phase-tmp/r2-teardown-real-retry/home
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  repair missing watcher supervision with a foreground checkpoint: bin/fm-watch-checkpoint.sh --seconds 180.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+A new version of treehouse is available: v3.1.2 → v3.1.8
+Run "treehouse update" to update
+
+🌳 Worktree returned to pool.
+teardown clean complete (window unavailable:fm-clean, worktree ~/.no-mistakes/worktrees/119cd7a6b9a4/01M6HXJ76P890QKBA4DDMRGDHV/.phase-tmp/r2-teardown-real-retry/pool/.treehouse/project-7aeedb/1/project)
+Backlog: clean just finished (this home keeps no markdown backlog at ~/.no-mistakes/worktrees/119cd7a6b9a4/01M6HXJ76P890QKBA4DDMRGDHV/.phase-tmp/r2-teardown-real-retry/home/data/backlog.md). Update ~/.no-mistakes/worktrees/119cd7a6b9a4/01M6HXJ76P890QKBA4DDMRGDHV/.phase-tmp/r2-teardown-real-retry/home/data/backlog.md - move clean to Done, keep Done to the 10 most recent, then re-scan Queued and dispatch only work whose blockers are gone and date is due.
+exit: 0
+$ treehouse get --lease --no-fetch
+A new version of treehouse is available: v3.1.2 → v3.1.8
+Run "treehouse update" to update
+
+🌳 Setting up worktree...
+🌳 Leased worktree at ~/.no-mistakes/worktrees/119cd7a6b9a4/01M6HXJ76P890QKBA4DDMRGDHV/.phase-tmp/r2-teardown-real-retry/pool/.treehouse/project-7aeedb/1/project. Run 'treehouse return ~/.no-mistakes/worktrees/119cd7a6b9a4/01M6HXJ76P890QKBA4DDMRGDHV/.phase-tmp/r2-teardown-real-retry/pool/.treehouse/project-7aeedb/1/project' to release it.
+~/.no-mistakes/worktrees/119cd7a6b9a4/01M6HXJ76P890QKBA4DDMRGDHV/.phase-tmp/r2-teardown-real-retry/pool/.treehouse/project-7aeedb/1/project
+exit: 0
+$ ~/.no-mistakes/worktrees/119cd7a6b9a4/01M6HXJ76P890QKBA4DDMRGDHV/bin/fm-teardown.sh late
+fm-gate-refuse: gate agent lifecycle permitted only against lab home ~/.no-mistakes/worktrees/119cd7a6b9a4/01M6HXJ76P890QKBA4DDMRGDHV/.phase-tmp/r2-teardown-real-retry/home
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+teardown: reaping leaked worktree process(es) for late: 82425
+REFUSED: worktree ~/.no-mistakes/worktrees/119cd7a6b9a4/01M6HXJ76P890QKBA4DDMRGDHV/.phase-tmp/r2-teardown-real-retry/pool/.treehouse/project-7aeedb/1/project has uncommitted changes.
+uncommitted changes present (untracked-only leftovers)
+untracked paths (up to 10):
+  late.txt
+Commit them (or get the captain's explicit OK to discard, then --force).
+exit: 1
+retained worker output:
+late worker bytes preserved
+$ git status --short
+?? late.txt
+exit: 0

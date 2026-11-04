@@ -1,0 +1,6 @@
+ok - a claude secondmate spawn arms the busy contract the stall gate can see, and Stop does not wake the parent
+ok - a claude secondmate's Stop guard records busy on a blocked Stop and idle on an allowed one, in any hook order, and a rewake turn reopens busy
+ok - a claude secondmate whose home guard predates .fm-busy-stop keeps the Stop idle hook
+ok - claude hooks open on UserPromptSubmit and close on Stop, StopFailure, and SessionEnd
+ok - kiro hooks open on userPromptSubmit and close on stop, keeping the turn-end touch
+ok - kiro hook events from a superseded incarnation are rejected without breaking the hook

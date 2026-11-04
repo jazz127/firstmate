@@ -1,0 +1,52 @@
+{
+  "final_focused_checks": [
+    {
+      "command": "bash tests/fm-hermes-harness.test.sh",
+      "exit_code": 1,
+      "evidence": "hermes-retest.log",
+      "note": "Linux-only NUL-argv assertion corrected; native macOS ps-argv classification still fails."
+    },
+    {
+      "command": "bash tests/fm-codex-stop-park.test.sh",
+      "exit_code": 1,
+      "evidence": "codex-park-retest.log",
+      "note": "Queued final result does not settle the park."
+    },
+    {
+      "command": "bash tests/fm-pr-health.test.sh",
+      "exit_code": 0,
+      "evidence": "pr-health-final.log"
+    },
+    {
+      "command": "bash tests/fm-busy-adapter-wiring.test.sh test_secondmate_claude_spawn_arms_busy_for_the_stall_gate test_secondmate_claude_stop_guard_owns_the_stop_verdict test_secondmate_claude_older_home_guard_keeps_the_stop_idle_hook test_claude_hooks_semantic_lifecycle test_kiro_hooks_semantic_lifecycle test_kiro_hooks_stale_incarnation_harmless",
+      "exit_code": 0,
+      "evidence": "busy-wiring-selectors.log"
+    },
+    {
+      "command": "FM_TEST_ONLY=test_release_is_attended_only bash tests/fm-captain-hold-lifecycle.test.sh",
+      "exit_code": 0,
+      "evidence": "captain-release-targeted.log"
+    },
+    {
+      "command": "FM_TEST_ONLY=test_pi_stream_silence_uses_inspection_timer bash tests/fm-watch-triage.test.sh",
+      "exit_code": 0,
+      "evidence": "watch-triage-targeted.log"
+    }
+  ],
+  "baseline_results": "targeted-results.json",
+  "setup_retests": "targeted-retest-results.json",
+  "pr_selectors": "pr-targeted-results.json",
+  "live_drivers": {
+    "cli-live.py": 0,
+    "hc-live.sh": 0,
+    "teardown-live.py": 0,
+    "contributions-live.sh": 0,
+    "watcher-live.sh": 0,
+    "codex-primary-live.sh": 0
+  },
+  "limits": "Baseline PR-security, watcher-triage, captain-hold suites reached 360-second driver caps; the teardown rerun reached its 300-second cap. Focused selectors and a real cleanup probe replaced relevant paths; broad scripts are not claimed complete. One PR-health rerun was invalidated by editing its fixture during execution and is superseded by a clean complete final run.",
+  "remaining_failures": [
+    "Codex queued-final-result park",
+    "Hermes macOS framework Python identity"
+  ]
+}

@@ -1,0 +1,18 @@
+[
+  {
+    "selector": "test_scan_records_a_pr_reported_in_a_done_line",
+    "exit_code": 0
+  },
+  {
+    "selector": "test_scan_reports_a_refusal_once_and_retries",
+    "exit_code": 0
+  },
+  {
+    "selector": "test_registered_poll_survives_template_update_and_relaunch",
+    "exit_code": 0
+  },
+  {
+    "selector": "test_timed_out_custom_check_surfaces_with_partial_output",
+    "exit_code": 0
+  }
+]

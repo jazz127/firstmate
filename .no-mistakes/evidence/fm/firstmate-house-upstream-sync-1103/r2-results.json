@@ -1,0 +1,61 @@
+{
+  "target": "61a0571fab7d14533837f3ec1bfd4fb00af4c54f",
+  "completed_tests": [
+    {
+      "command": "bash tests/fm-codex-stop-park.test.sh",
+      "exit_code": 0
+    },
+    {
+      "command": "bash tests/fm-hermes-harness.test.sh",
+      "exit_code": 0
+    },
+    {
+      "command": "bash tests/fm-dispatch-resolve.test.sh",
+      "exit_code": 0
+    },
+    {
+      "command": "bash tests/fm-crew-state.test.sh",
+      "exit_code": 0
+    },
+    {
+      "command": "bash tests/fm-kiro-harness.test.sh",
+      "exit_code": 0
+    },
+    {
+      "command": "bash tests/fm-pr-health.test.sh",
+      "exit_code": 0
+    },
+    {
+      "command": "bash tests/fm-remote-secondmate-omp.test.sh",
+      "exit_code": 0
+    },
+    {
+      "command": "bash tests/fm-secondmate-liveness.test.sh",
+      "exit_code": 0
+    }
+  ],
+  "focused_selectors": {
+    "busy_adapter_wiring": "six Claude/Kiro semantic lifecycle selectors, exit 0",
+    "inactive_reconcile": "busy, newer idle incarnation, finished idle incarnation: each exit 0",
+    "pr_check_security": "test_scan_records_a_pr_reported_in_a_done_line: exit 0"
+  },
+  "product_drivers": {
+    "r2-cli-final.py": 0,
+    "r2-herdr-live.py": 0,
+    "r2-teardown-live.py (retry with a real private tmux server)": 0,
+    "r2-hc-live.sh (after provisioning)": 0,
+    "r2-watcher-live.sh": 0,
+    "r2-contributions-live.sh": 0,
+    "r2-pr-health-live.py": 0,
+    "r2-claude-inactive-proven.py": 0
+  },
+  "native_codex": "120x40 private tmux launched; hook review blocks registration; lab stopped",
+  "superseded_setup_attempts": [
+    "HC driver initially omitted provision; fixed and repeated successfully",
+    "Cleanup initially pointed at a nonexistent tmux server; replaced with a real private server",
+    "Inactive HC probe never reached a terminal candidate because Codex busy state is unverified; not accepted as proof",
+    "Claude --print rejects tty input; switched to a private FIFO",
+    "Initial Claude metadata used the numeric window index; recovery classifier requires its recorded window name. Corrected to fm-child; both positive and adversarial cases then passed."
+  ],
+  "cleanup": "Every launched driver was awaited. Named Herdr/HC labs and private tmux servers stopped. Scratch worktree data removed."
+}

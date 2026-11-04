@@ -1,0 +1,35 @@
+$ bin/fm-pr-health.sh poll (pass 1)
+pr-health: https://github.com/kunchenguid/firstmate/pull/8135 has failing checks at latest commit 3515632: Full suite, Greptile Review (task public-pr)
+exit: 0
+$ bin/fm-pr-health.sh poll (pass 2)
+exit: 0
+Persisted PR monitoring state:
+{
+  "schema": "fm-pr-health.v1",
+  "prs": {
+    "https://github.com/kunchenguid/firstmate/pull/8135": {
+      "conflicts": [],
+      "checks": [
+        {
+          "head": "3515632b0b5795f0d8d821c5e6133f24af564992",
+          "name": "Full suite"
+        },
+        {
+          "head": "3515632b0b5795f0d8d821c5e6133f24af564992",
+          "name": "Greptile Review"
+        }
+      ],
+      "maintainer_gated": [],
+      "needs_approval": [],
+      "author_action": []
+    }
+  },
+  "branches": {},
+  "ownership_error": false,
+  "notifications": {
+    "last_modified": "Wed, 04 Nov 2026 00:24:13 GMT",
+    "since": "2026-11-04T00:30:24Z",
+    "pending": [],
+    "swept_at": 1793752225
+  }
+}

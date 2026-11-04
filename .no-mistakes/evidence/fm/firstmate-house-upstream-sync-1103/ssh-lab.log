@@ -1,0 +1,17 @@
+Server listening on 127.0.0.1 port 61056.
+Connection from 127.0.0.1 port 61058 on 127.0.0.1 port 61056
+Failed publickey for jarad from 127.0.0.1 port 61058 ssh2: ED25519 SHA256:FIjb2dnOxNKvy6v6fEc2Vf5ONMp+jDXvSl+OrPXoMtA
+Accepted key ED25519 SHA256:m3bCe8xwh4ISF0MPfi8G3LbNLGW9gFYk/a79+an0x+Q found at ~/.no-mistakes/worktrees/119cd7a6b9a4/01M6HXJ76P890QKBA4DDMRGDHV/.phase-tmp/ssh-lab/authorized_keys:1
+Postponed publickey for jarad from 127.0.0.1 port 61058 ssh2 [preauth]
+Accepted key ED25519 SHA256:m3bCe8xwh4ISF0MPfi8G3LbNLGW9gFYk/a79+an0x+Q found at ~/.no-mistakes/worktrees/119cd7a6b9a4/01M6HXJ76P890QKBA4DDMRGDHV/.phase-tmp/ssh-lab/authorized_keys:1
+Accepted publickey for jarad from 127.0.0.1 port 61058 ssh2: ED25519 SHA256:m3bCe8xwh4ISF0MPfi8G3LbNLGW9gFYk/a79+an0x+Q
+BSM audit: bsm_audit_session_setup: setaudit_addr failed: Operation not permitted
+User child is on pid 6943
+Starting session: command for jarad from 127.0.0.1 port 61058 id 0
+Received disconnect from 127.0.0.1 port 61058:11: disconnected by user
+Disconnected from user jarad 127.0.0.1 port 61058
+Received signal 15; terminating.
+
+client result: 0
+Warning: Permanently added '[127.0.0.1]:61056' (ED25519) to the list of known hosts.
+isolated-ssh-ready

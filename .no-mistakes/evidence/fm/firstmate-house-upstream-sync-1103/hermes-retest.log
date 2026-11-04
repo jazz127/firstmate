@@ -1,0 +1,2 @@
+# NUL argv identity unavailable on this platform; checking native ps argv
+not ok - ps argv identity lost when NUL argv is absent

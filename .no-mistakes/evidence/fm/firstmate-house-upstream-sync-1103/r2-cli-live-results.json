@@ -1,0 +1,18 @@
+[
+  {
+    "scenario": "generation-safe busy events",
+    "result": "pass"
+  },
+  {
+    "scenario": "decision refusal preserves answer and durable delivery closes correct key",
+    "result": "pass"
+  },
+  {
+    "scenario": "home cd policy and PR merge help",
+    "result": "pass"
+  },
+  {
+    "scenario": "configured self-update fast-forwards and preserves dirty work; invalid source refuses",
+    "result": "pass"
+  }
+]

@@ -1,0 +1,218 @@
+{
+  "schema": "fm-contributions.v1",
+  "task": "public-pr",
+  "records": [
+    {
+      "url": "https://github.com/kunchenguid/firstmate/pull/8135",
+      "kind": "pr",
+      "checked_at": "2026-11-04T00:16:28Z",
+      "error": null,
+      "observation": {
+        "head": "3515632b0b5795f0d8d821c5e6133f24af564992",
+        "state": "open",
+        "base_repo": "kunchenguid/firstmate",
+        "updated_at": "2026-11-03T23:20:09Z",
+        "draft": false,
+        "mergeable": "mergeable",
+        "viewer_permission": "READ",
+        "can_merge": false,
+        "review_decision": "",
+        "reviews": [
+          {
+            "id": 5758757868,
+            "state": "COMMENTED",
+            "submitted_at": "2026-11-03T20:06:18Z",
+            "commit_id": "3515632b0b5795f0d8d821c5e6133f24af564992",
+            "user": {
+              "login": "greptile-apps[bot]"
+            }
+          }
+        ],
+        "checks": [
+          {
+            "name": "Full suite",
+            "id": 126272678961,
+            "status": "completed",
+            "conclusion": "failure",
+            "started_at": "2026-11-03T23:19:11Z"
+          },
+          {
+            "name": "${{ (((((github.event.action == 'labeled') && (github.event.label.name != 'full-ci'))) && 'Not run for label - ') || '') }}Behavior timing aggregate",
+            "id": 126272499442,
+            "status": "completed",
+            "conclusion": "skipped",
+            "started_at": "2026-11-03T23:18:44Z"
+          },
+          {
+            "name": "${{ (((((github.event.action == 'labeled') && (github.event.label.name != 'full-ci'))) && 'Not run for label - ') || '') }}Lint ${{ matrix.partition }}",
+            "id": 126272499290,
+            "status": "completed",
+            "conclusion": "skipped",
+            "started_at": "2026-11-03T23:18:44Z"
+          },
+          {
+            "name": "${{ (((((github.event.action == 'labeled') && (github.event.label.name != 'full-ci'))) && 'Not run for label - ') || '') }}Behavior tests (Herdr)",
+            "id": 126272499270,
+            "status": "completed",
+            "conclusion": "skipped",
+            "started_at": "2026-11-03T23:18:44Z"
+          },
+          {
+            "name": "${{ (((((github.event.action == 'labeled') && (github.event.label.name != 'full-ci'))) && 'Not run for label - ') || '') }}Behavior portable parallel 2",
+            "id": 126272498918,
+            "status": "completed",
+            "conclusion": "skipped",
+            "started_at": "2026-11-03T23:18:44Z"
+          },
+          {
+            "name": "${{ (((((github.event.action == 'labeled') && (github.event.label.name != 'full-ci'))) && 'Not run for label - ') || '') }}Behavior portable serial ${{ matrix.shard }}",
+            "id": 126272498841,
+            "status": "completed",
+            "conclusion": "skipped",
+            "started_at": "2026-11-03T23:18:44Z"
+          },
+          {
+            "name": "${{ (((((github.event.action == 'labeled') && (github.event.label.name != 'full-ci'))) && 'Not run for label - ') || '') }}Stock macOS Bash snapshot compatibility",
+            "id": 126272498834,
+            "status": "completed",
+            "conclusion": "skipped",
+            "started_at": "2026-11-03T23:18:44Z"
+          },
+          {
+            "name": "${{ (((((github.event.action == 'labeled') && (github.event.label.name != 'full-ci'))) && 'Not run for label - ') || '') }}Behavior portable parallel 1",
+            "id": 126272498631,
+            "status": "completed",
+            "conclusion": "skipped",
+            "started_at": "2026-11-03T23:18:44Z"
+          },
+          {
+            "name": "${{ (((((github.event.action == 'labeled') && (github.event.label.name != 'full-ci'))) && 'Not run for label - ') || '') }}Behavior tests (herdr-core)",
+            "id": 126272498625,
+            "status": "completed",
+            "conclusion": "skipped",
+            "started_at": "2026-11-03T23:18:44Z"
+          },
+          {
+            "name": "Repo invariants",
+            "id": 126272497038,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-11-03T23:18:47Z"
+          },
+          {
+            "name": "Test coverage guard",
+            "id": 126272496703,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-11-03T23:18:46Z"
+          },
+          {
+            "name": "PR must be raised via no-mistakes",
+            "id": 126272495825,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-11-03T23:18:46Z"
+          },
+          {
+            "name": "Greptile Review",
+            "id": 126171341983,
+            "status": "completed",
+            "conclusion": "failure",
+            "started_at": "2026-11-03T20:02:35Z"
+          }
+        ],
+        "events": [
+          {
+            "token": "comment:6614230209:2026-11-03T20:06:22Z:",
+            "type": "comment",
+            "source": "https://github.com/kunchenguid/firstmate/pull/8135#issuecomment-6614230209",
+            "head": null,
+            "author": "greptile-apps[bot]",
+            "body": "<!-- greptile_summary -->\n\n<h2><a href=\"https://app.greptile.com/api/retrigger?id=94814422\"><picture><source media=\"(prefers-color-scheme: dark)\" srcset=\"https://greptile-static-assets.s3.amazonaws.com/badges/RetriggerDark.svg?v=2\"><source media=\"(prefers-color-scheme: light)\" srcset=\"https://greptile-static-assets.s3.amazonaws.com/badges/Retrigger.svg?v=2\"><img alt=\"Retrigger\" src=\"https://greptile-static-assets.s3.amazonaws.com/badges/Retrigger.svg?v=2\" align=\"right\"></picture></a><a href=\"htt",
+            "automated": true
+          },
+          {
+            "token": "comment:6617997607:2026-11-03T23:20:09Z:",
+            "type": "comment",
+            "source": "https://github.com/kunchenguid/firstmate/pull/8135#issuecomment-6617997607",
+            "head": null,
+            "author": "kunchenguid",
+            "body": "Speaking as Kun's firstmate: thank you @alexg0. It's a real gap that this guard returns UNKNOWN on every Mac. Reading `hw.memsize`, `vm_stat` and `vm.swapusage` under one shared 350 ms budget, keeping the fail-open UNKNOWN when telemetry is missing, and treating macOS swap as report-only (because its total grows with swapfiles) is a careful way to close it. The before/after run on a real Mac, cross-checked against the raw `vm_stat` pages, is exactly the evidence I'd want.\n\n**What I checked (head"
+          },
+          {
+            "token": "review-comment:4459852537:2026-11-03T20:06:18Z:",
+            "type": "review-comment",
+            "source": "https://github.com/kunchenguid/firstmate/pull/8135#discussion_r4459852537",
+            "head": "3515632b0b5795f0d8d821c5e6133f24af564992",
+            "author": "greptile-apps[bot]",
+            "body": "<a href=\"#\"><img alt=\"P2\" src=\"https://greptile-static-assets.s3.amazonaws.com/badges/p2.svg?v=9\" align=\"top\"></a> **Available pages go untested**\n\nThe memory fixtures always set `Pages inactive` and `Pages speculative` to zero. Dropping either count from `read_macos_meminfo()` would still pass every test, even though it would overstate memory use on real Macs. Add a case with distinct, nonzero counts in all three buckets and assert their combined available memory.\n\nNote: If this suggestion does",
+            "automated": true
+          },
+          {
+            "token": "review-comment:4459852548:2026-11-03T20:06:18Z:",
+            "type": "review-comment",
+            "source": "https://github.com/kunchenguid/firstmate/pull/8135#discussion_r4459852548",
+            "head": "3515632b0b5795f0d8d821c5e6133f24af564992",
+            "author": "greptile-apps[bot]",
+            "body": "<a href=\"#\"><img alt=\"P2\" src=\"https://greptile-static-assets.s3.amazonaws.com/badges/p2.svg?v=9\" align=\"top\"></a> **Shared timeout goes untested**\n\nThe slow-command test sleeps before the first command, so it never checks that later commands share the remaining budget. Giving each command a fresh 350 ms timeout would still pass. Add staggered delays that exhaust the combined budget, plus a swap-only timeout case that keeps the measured RAM and its verdict.\n\nNote: If this suggestion doesn't matc",
+            "automated": true
+          }
+        ],
+        "absent_checks": []
+      },
+      "verdict": null,
+      "seen": [
+        "comment:6614230209:2026-11-03T20:06:22Z:",
+        "comment:6617997607:2026-11-03T23:20:09Z:",
+        "review-comment:4459852537:2026-11-03T20:06:18Z:",
+        "review-comment:4459852548:2026-11-03T20:06:18Z:"
+      ],
+      "pending": [
+        {
+          "token": "comment:6614230209:2026-11-03T20:06:22Z:",
+          "type": "comment",
+          "source": "https://github.com/kunchenguid/firstmate/pull/8135#issuecomment-6614230209",
+          "head": null,
+          "author": "greptile-apps[bot]",
+          "body": "<!-- greptile_summary -->\n\n<h2><a href=\"https://app.greptile.com/api/retrigger?id=94814422\"><picture><source media=\"(prefers-color-scheme: dark)\" srcset=\"https://greptile-static-assets.s3.amazonaws.com/badges/RetriggerDark.svg?v=2\"><source media=\"(prefers-color-scheme: light)\" srcset=\"https://greptile-static-assets.s3.amazonaws.com/badges/Retrigger.svg?v=2\"><img alt=\"Retrigger\" src=\"https://greptile-static-assets.s3.amazonaws.com/badges/Retrigger.svg?v=2\" align=\"right\"></picture></a><a href=\"htt",
+          "automated": true
+        },
+        {
+          "token": "comment:6617997607:2026-11-03T23:20:09Z:",
+          "type": "comment",
+          "source": "https://github.com/kunchenguid/firstmate/pull/8135#issuecomment-6617997607",
+          "head": null,
+          "author": "kunchenguid",
+          "body": "Speaking as Kun's firstmate: thank you @alexg0. It's a real gap that this guard returns UNKNOWN on every Mac. Reading `hw.memsize`, `vm_stat` and `vm.swapusage` under one shared 350 ms budget, keeping the fail-open UNKNOWN when telemetry is missing, and treating macOS swap as report-only (because its total grows with swapfiles) is a careful way to close it. The before/after run on a real Mac, cross-checked against the raw `vm_stat` pages, is exactly the evidence I'd want.\n\n**What I checked (head"
+        },
+        {
+          "token": "review-comment:4459852537:2026-11-03T20:06:18Z:",
+          "type": "review-comment",
+          "source": "https://github.com/kunchenguid/firstmate/pull/8135#discussion_r4459852537",
+          "head": "3515632b0b5795f0d8d821c5e6133f24af564992",
+          "author": "greptile-apps[bot]",
+          "body": "<a href=\"#\"><img alt=\"P2\" src=\"https://greptile-static-assets.s3.amazonaws.com/badges/p2.svg?v=9\" align=\"top\"></a> **Available pages go untested**\n\nThe memory fixtures always set `Pages inactive` and `Pages speculative` to zero. Dropping either count from `read_macos_meminfo()` would still pass every test, even though it would overstate memory use on real Macs. Add a case with distinct, nonzero counts in all three buckets and assert their combined available memory.\n\nNote: If this suggestion does",
+          "automated": true
+        },
+        {
+          "token": "review-comment:4459852548:2026-11-03T20:06:18Z:",
+          "type": "review-comment",
+          "source": "https://github.com/kunchenguid/firstmate/pull/8135#discussion_r4459852548",
+          "head": "3515632b0b5795f0d8d821c5e6133f24af564992",
+          "author": "greptile-apps[bot]",
+          "body": "<a href=\"#\"><img alt=\"P2\" src=\"https://greptile-static-assets.s3.amazonaws.com/badges/p2.svg?v=9\" align=\"top\"></a> **Shared timeout goes untested**\n\nThe slow-command test sleeps before the first command, so it never checks that later commands share the remaining budget. Giving each command a fresh 350 ms timeout would still pass. Add staggered delays that exhaust the combined budget, plus a swap-only timeout case that keeps the measured RAM and its verdict.\n\nNote: If this suggestion doesn't matc",
+          "automated": true
+        }
+      ],
+      "notified": [
+        "comment:6614230209:2026-11-03T20:06:22Z:",
+        "comment:6617997607:2026-11-03T23:20:09Z:",
+        "review-comment:4459852537:2026-11-03T20:06:18Z:",
+        "review-comment:4459852548:2026-11-03T20:06:18Z:"
+      ],
+      "closeout_head": "3515632b0b5795f0d8d821c5e6133f24af564992",
+      "closeout_since": "2026-11-03T23:20:09Z",
+      "closeout_notice": null
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+$ codex --version
+codex-cli 0.163.0
+exit: 0
+$ claude --version
+2.1.309 (Claude Code)
+exit: 0
+$ herdr --version
+herdr 0.9.1
+exit: 0
+$ bash -c command -v hermes kiro-cli omp sshd || true
+/usr/sbin/sshd
+exit: 0
+Dispatch credential variables present: {"TYPESAFE_API_KEY": false, "OPENROUTER_API_KEY": false, "OPENAI_API_KEY": false, "FM_DISPATCH_API_KEY": false}

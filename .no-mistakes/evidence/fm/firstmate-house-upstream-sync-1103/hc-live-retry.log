@@ -1,0 +1,3 @@
+fm-hc-lab: could not start lab core for 'fm-hclab-liveness-46707-17422'
+not ok - hc lab could not provision with ~/.no-mistakes/worktrees/119cd7a6b9a4/01M6HXJ76P890QKBA4DDMRGDHV/.phase-tmp/tools/herdr-core
+hc safety guard: refusing - no lab directory ~/.no-mistakes/evidence/01M6HXJ76P890QKBA4DDMRGDHV/h/fm-hclab-liveness-46707-17422; 'fm-hclab-liveness-46707-17422' is not this helper's session

@@ -1,0 +1,59 @@
+$ bin/fm-lab-home.sh create ~/.no-mistakes/evidence/01M6HXJ76P890QKBA4DDMRGDHV/r2d
+~/.no-mistakes/evidence/01M6HXJ76P890QKBA4DDMRGDHV/r2d
+exit: 0
+$ bin/fm-busy-event.sh arm ~/.no-mistakes/evidence/01M6HXJ76P890QKBA4DDMRGDHV/r2d/state child
+g1793752347.21149.25313
+exit: 0
+$ tmux -L fm-lab new-session -d -s primary -x 120 -y 40 -c ~/.no-mistakes/worktrees/119cd7a6b9a4/01M6HXJ76P890QKBA4DDMRGDHV -e FM_HOME=~/.no-mistakes/evidence/01M6HXJ76P890QKBA4DDMRGDHV/r2d 'claude -p --input-format stream-json --output-format stream-json --verbose --no-session-persistence --tools '"'"''"'"' --system-prompt '"'"'Respond READY. Use no tools.'"'"' --settings ~/.no-mistakes/evidence/01M6HXJ76P890QKBA4DDMRGDHV/r2d/settings.json' ';' set-window-option -t primary remain-on-exit on
+exit: 0
+$ tmux -L fm-lab send-keys -t primary -l '{"type": "user", "message": {"role": "user", "content": "Respond READY only."}}'
+exit: 0
+$ tmux -L fm-lab capture-pane -p -S -150 -t primary
+no server running on ~/.no-mistakes/evidence/01M6HXJ76P890QKBA4DDMRGDHV/r2c/tmux/tmux-501/fm-lab
+exit: 1
+$ tmux -L fm-lab kill-server
+no server running on ~/.no-mistakes/evidence/01M6HXJ76P890QKBA4DDMRGDHV/r2c/tmux/tmux-501/fm-lab
+exit: 1
+"hook_id":"4b92bd8b-9adf-46b1-949f-71da77cd29af","hook_name":"SessionStart:sta
+rtup","hook_event":"SessionStart","uuid":"88bedbd6-6589-4ba8-a4a5-808c870022e0","session_id":"85fb1123-c964-4b68-bd37-c8
+512edd1502"}
+{"type":"system","subtype":"hook_started","hook_id":"3aab9065-db6b-48bd-9d3c-b4f7edbd5e54","hook_name":"SessionStart:sta
+rtup","hook_event":"SessionStart","uuid":"d5f74f71-4b68-41ef-9a5c-2b8ee94112f5","session_id":"85fb1123-c964-4b68-bd37-c8
+512edd1502"}
+{"type":"system","subtype":"hook_response","hook_id":"3aab9065-db6b-48bd-9d3c-b4f7edbd5e54","hook_name":"SessionStart:st
+artup","hook_event":"SessionStart","output":"","stdout":"","stderr":"","exit_code":0,"outcome":"success","uuid":"4cb189b
+f-175e-4515-8377-9617f62d395e","session_id":"85fb1123-c964-4b68-bd37-c8512edd1502"}
+{"type":"system","subtype":"hook_response","hook_id":"4b92bd8b-9adf-46b1-949f-71da77cd29af","hook_name":"SessionStart:st
+artup","hook_event":"SessionStart","output":"","stdout":"","stderr":"","exit_code":0,"outcome":"success","uuid":"bb5be21
+1-551f-4acb-b83f-858b9d9b6b54","session_id":"85fb1123-c964-4b68-bd37-c8512edd1502"}
+Error: Input must be provided either through stdin or as a prompt argument when using --print
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Pane is dead (status 1, Wed Nov  4 10:32:28 2026)
+exit: 0
+$ tmux -L fm-lab kill-server
+exit: 0

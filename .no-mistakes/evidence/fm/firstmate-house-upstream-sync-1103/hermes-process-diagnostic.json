@@ -1,0 +1,7 @@
+{
+  "actual_process_name": "/opt/homebrew/Cellar/python@3.14/3.14.8/Frameworks/Python.framework/Versions/3.14/Resources/Python.app/Contents/MacOS/Python",
+  "actual_process_argv": "/opt/homebrew/Cellar/python@3.14/3.14.8/Frameworks/Python.framework/Versions/3.14/Resources/Python.app/Contents/MacOS/Python -m tui_gateway.entry",
+  "expected": "agent",
+  "observed": "other",
+  "platform": "Darwin"
+}

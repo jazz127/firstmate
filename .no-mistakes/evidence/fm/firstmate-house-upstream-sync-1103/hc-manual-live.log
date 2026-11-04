@@ -1,0 +1,5 @@
+~/.no-mistakes/worktrees/119cd7a6b9a4/01M6HXJ76P890QKBA4DDMRGDHV/.phase-tmp/hc-home
+launch codex: {"address":"t1","agent":"codex","cwd":"~/.no-mistakes/worktrees/119cd7a6b9a4/01M6HXJ76P890QKBA4DDMRGDHV","state":"live","turn":0}
+codex native liveness: alive
+{"address":"t1","argv":["codex","--no-alt-screen","-c","features.hooks=false"],"cols":200,"created_ms":1793750996685,"cwd":"~/.no-mistakes/worktrees/119cd7a6b9a4/01M6HXJ76P890QKBA4DDMRGDHV","die_with_parent":false,"exit_code":null,"finished_ms":null,"foreground":{"argv":["codex","--no-alt-screen","-c","features.hooks=false"],"cwd":"~/.no-mistakes/worktrees/119cd7a6b9a4/01M6HXJ76P890QKBA4DDMRGDHV","name":"codex","pid":49433},"identity":"ghostty","keep":false,"labels":{},"name":null,"notify":false,"parent":null,"pid":49433,"reason":null,"reported":false,"rm":false,"rows":120,"screen":"exact","signal":null,"state":"live","status":null,"status_ms":null,"template":null,"title":"","turn":0}
+error: hc terminal fm-hclab-v1:t1 does not carry this task's labels; refusing to close it

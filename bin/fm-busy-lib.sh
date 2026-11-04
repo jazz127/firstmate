@@ -47,6 +47,7 @@
 #   kiro-hook        Kiro V2 agent-config hooks (userPromptSubmit opens; stop
 #                    closes) - kiro's ONLY state source; its per-turn stop hook
 #                    also keeps the turn-ended notification touch
+#   hermes-hook      Hermes native TUI pre_llm_call opens; on_session_end closes
 #   codex-hook, codex-appserver  reserved: Codex, gated by
 #                    fm_busy_codex_semantic_source
 #   kimi-wire, kimi-hook  reserved: standalone Kimi, gated by fm_busy_kimi_verified

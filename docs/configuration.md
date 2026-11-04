@@ -1308,7 +1308,7 @@ When the file is absent, `/updatefirstmate` fast-forwards the runtime branch fro
 
 When it is present, [`bin/fm-update.sh`](../bin/fm-update.sh) fetches only that branch and fast-forwards the primary to it under the same guards as the tracking path: a dirty, off-default, or diverged primary is skipped and left untouched, so the named branch must only ever move forward.
 Local and remote secondmate homes then advance to the primary's resulting commit, exactly as they do without the file, and a local standalone-clone home that lacks that commit imports it from the primary first.
-Worker spawns, review diffs, the cleanup landed-work test, lint, and default-branch detection keep using `origin`, so work started in this home still branches from, and is judged against, its usual base.
+Worker spawns, review diffs, the cleanup landed-work test, lint, and default-branch detection retain their usual base selection, including the configured [runtime branch](#firstmate-runtime-branch-git-config-firstmateruntimebranch); the self-update source does not override them.
 An unreadable or malformed file, an unknown remote, or an invalid branch name stops the whole update before anything moves and names the file; it never falls back to the tracking remote.
 The file is per home and is not inherited by secondmate homes.
 To stop following the branch, remove the file; a primary already ahead of its tracking branch is then reported as diverged until it is brought back by hand.
@@ -2002,9 +2002,10 @@ Firstmate's own `quota-array-dispatch` intake honors the same declaration.
 Without the setting, or with `"shared_quota": false`, behavior is unchanged.
 The declared value must be a boolean; anything else is an actionable configuration error reported like any other malformed rule.
 
-**Fields applied only by typed resolution**
+**Typed resolution fields**
 
-Rule `approval`, `min_confidence`, and `floor`, and profile `provider`, `quota_scope`, and `floor` are optional declarations that only [typed dispatch resolution](#typed-dispatch-resolution-env-fm_dispatch_provider-fm_dispatch_model) applies in code; without that opt-in they are inert, and firstmate's own intake reads them as ordinary hints.
+Rule `approval`, `min_confidence`, and `floor`, and profile `provider`, `quota_scope`, and `floor` are optional declarations that [typed dispatch resolution](#typed-dispatch-resolution-env-fm_dispatch_provider-fm_dispatch_model) applies in code.
+Without that opt-in, firstmate applies the [profile-array intake procedure](../.agents/skills/quota-array-dispatch/SKILL.md), which owns how it interprets these declarations.
 The resolver supplies the fixed neutral Choice option `No listed rule applies to this task.` for work that matches no listed rule.
 
 - `approval` accepts only `"captain"` and means a task the rule matches is never dispatched from the tool's answer alone.
@@ -2359,15 +2360,15 @@ The per-backend delta is required only for the backend resolved from `FM_BACKEND
 | `rex` | `rex`, `jq`, `treehouse` |
 | `t3code` | `node`, `treehouse` |
 | `tern` | `tern`, `jq`, `treehouse` |
+| `hc` | `hc`, `jq`, `treehouse` |
 
-The JSON-emitting adapters (`herdr`, `zellij`, `cmux`, `paseo`, `rex`, `tern`) need `jq` because their spawn and liveness paths parse backend JSON.
-Every session-provider-only backend (`tmux`, `herdr`, `zellij`, `cmux`, `paseo`, `rex`, `t3code`, `tern`) uses `treehouse` for worktrees.
+The table lists `jq` where spawn and liveness parse backend JSON, and `treehouse` where the backend provides sessions but not worktrees.
 
 Backend tool availability uses the adapter's own executable resolver, so bootstrap and spawn agree on supported non-`PATH` locations such as cmux's bundled CLI and the Rex server bundle's `rex`.
 An unknown resolved backend emits `BACKEND_INVALID` and blocks dispatch instead of silently dropping its dependency delta or falling back to tmux.
 
 Orca provides both the task worktree and terminal endpoint (see "Runtime backend" above), so `backend=orca` requires only `orca` on top of the universal toolchain and skips both `treehouse` and every other backend's session CLI.
-A herdr, zellij, cmux, paseo, rex, t3code, or tern home is therefore never told `tmux` is missing, and the `treehouse` durable-lease upgrade check runs only for the backends that actually use treehouse.
+Only a tmux home requires `tmux`, and the `treehouse` durable-lease upgrade check runs only for the backends that actually use treehouse.
 
 **Feature-specific requirements**
 
@@ -3507,7 +3508,7 @@ FM_DATA_OVERRIDE=        # alternate data dir, mainly for tests
 FM_PROJECTS_OVERRIDE=    # alternate projects dir, mainly for tests
 FM_CONFIG_OVERRIDE=      # alternate config dir, mainly for tests
 FM_PROC_ROOT_OVERRIDE=   # alternate /proc root for Linux process-identity reads in fm-wake-lib.sh and fm-teardown.sh, mainly for tests
-FM_BACKEND=             # optional runtime backend override for new spawns; tmux/herdr/zellij/orca/cmux/paseo/rex/t3code/tern support ship/scout spawns, codex-app is not accepted
+FM_BACKEND=             # optional runtime backend override for new spawns; see "Runtime backend" for accepted values and limits
 FM_T3CODE_ORIGIN=       # optional T3 Code server origin for bin/fm-t3-mcp.mjs login; the default is read from ~/.t3/userdata/server-runtime.json
 FM_TRACE_CONTEXT=       # optional trace-context override; see "Trace context propagation"
 FM_TASK_ID=             # internal task-worker marker fm-spawn.sh delivers to ship and scout environments, never set by hand; bin/fm-test-run.sh refuses to execute in the repository primary checkout and bin/fm-session-start.sh exits 2 while it is set

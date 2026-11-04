@@ -23,9 +23,9 @@
 # malformed file, an unknown remote, or an invalid branch name stops the whole
 # update before anything moves; it never falls back to the tracking remote.
 # Nothing else reads the file: worker spawns, review diffs, the cleanup
-# landed-work test, lint, and default-branch detection keep using origin. The
-# fast-forward-only guards still apply, so the named branch must only ever move
-# forward.
+# landed-work test, lint, and default-branch detection retain their usual base
+# selection, including a configured runtime branch. The fast-forward-only guards
+# still apply, so the named branch must only ever move forward.
 #
 # FAST-FORWARD ONLY, exactly like fm-fleet-sync.sh: never force, never create a merge commit, never stash.
 # A secondmate divergence whose complete local tree result is already present at
@@ -118,7 +118,7 @@ self_update_source_refuse() {  # <reason>
 }
 
 # Parse config/self-update-source into SELF_UPDATE_REMOTE and SELF_UPDATE_BRANCH.
-# Absent leaves both empty (the origin path); anything present but unusable exits.
+# Absent leaves both empty (the tracking path); anything present but unusable exits.
 read_self_update_source() {
   local content remote branch extra lines
   [ -e "$SELF_UPDATE_SOURCE_FILE" ] || [ -L "$SELF_UPDATE_SOURCE_FILE" ] || return 0

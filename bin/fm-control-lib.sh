@@ -400,7 +400,7 @@ fm_control_backend_relaunch_supported() {  # <backend>
 # fm_control_endpoint_absence_verdict before a recovery verb (exit, relaunch)
 # acts or refuses. `missing` always does. A Rex `unreadable` does too: Rex's
 # passive reads never start a server, so a stopped server - which ends every
-# session on it - reads as unreachable rather than not-found, and only the
+# agent process on it - reads as unreachable rather than not-found, and only the
 # recheck (which may start the personal server) can turn that into a proof.
 # Passive readers keep the raw state.
 fm_control_absence_recheck_applies() {  # <backend> <raw-state>
@@ -442,13 +442,15 @@ fm_control_absence_recheck_applies() {  # <backend> <raw-state>
 #     passes `--session <session>`, so the recheck starts and reads the session
 #     the RECORD names, through that session's own socket. The answer is about
 #     the task's endpoint and nothing else.
-#   rex CAN prove it. Rex never reuses an id, a session never survives its
-#     server, and a missing target is a structured not-found (exit 3) distinct
+#   rex CAN prove it. Rex never reuses an id, and a missing target is a
+#     structured not-found (exit 3) distinct
 #     from an unreachable server (exit 4). So a not-found from the server the
 #     task was CREATED on proves the block gone. The record names that server
 #     (rex_server, from the task's [meta]); the recheck refuses unless the
 #     server this process reaches - starting a stopped personal server, which
 #     then answers with authority - is that one.
+#     Server-stop restoration is documented in docs/rex-backend.md; a restored
+#     block is classified from its current process rather than assumed missing.
 #   t3code has a native absence verdict: `missing` means archived or not found
 #     on the verified server, while an unreachable server reads `unreadable`.
 #     The proof re-reads the thread, but exit and relaunch refuse before it:

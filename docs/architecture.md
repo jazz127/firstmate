@@ -501,7 +501,7 @@ The refresh also prunes local branches whose remote is gone and that no worktree
 
 ## Self-updates stay safe
 
-`/updatefirstmate` fast-forwards the running firstmate repo and registered secondmate homes from `origin`, or from the one branch an optional [`config/self-update-source`](configuration.md#self-update-source-configself-update-source) names, without touching project clones.
+`/updatefirstmate` advances the running firstmate repo and registered secondmate homes without touching project clones; [self-update source configuration](configuration.md#self-update-source-configself-update-source) owns source selection.
 It restarts every live second mate whose home the pass left on the target commit through a persist-gated replacement, including a home that needed no advance, because a restart is also the only thing that re-resolves launch-time harness wiring; the re-read nudge is retained only as the fallback for live agents whose runtime cannot prove a restart.
 For remote routes, each configured host/code-root pair first refreshes once from its own tracking remote on that host, then each persistent home fast-forwards to the pinned primary commit; a skipped code root does not stop its homes from attempting that sync.
 The primary update is fast-forward only, while a clean secondmate divergence may reconcile with `reset --keep` only when a three-way temporary-index proof shows its complete local tree result is already present at the target, including after a squash merge.

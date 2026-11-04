@@ -48,6 +48,7 @@ model() {
 case "$1 $2" in
   'api graphql')
     case "$*" in
+      *viewerPermission*) printf '{"data":{"repository":{"viewerPermission":"READ"}}}\n'; exit 0 ;;
       *reviewThreads*) printf '[{"data":{"repository":{"pullRequest":{"reviewThreads":{"nodes":[],"pageInfo":{"hasNextPage":false,"endCursor":null}}}}}}]\n'; exit 0 ;;
     esac
     n= suite_cursor=
@@ -100,7 +101,7 @@ case "$1 $2" in
       *) model "$rest" | jq '{state:(if .state == "open" then "open" else "closed" end),
            merged_at:(if .state == "merged" then "2026-10-21T00:00:00Z" else null end),
            user:{login:"author"},draft,mergeable,head:{sha:.head},
-           base:{sha:"0000000000000000000000000000000000000000"},labels:[(.labels // [])[] | {name:.}]}' ;;
+           base:{sha:"0000000000000000000000000000000000000000",repo:{full_name:"o/r"}},labels:[(.labels // [])[] | {name:.}]}' ;;
     esac ;;
   'api -i')
     # The notifications feed, when a case serves one: 304 while unchanged.

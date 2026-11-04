@@ -264,7 +264,8 @@ attempt=0
 while [ "$attempt" -lt 2 ]; do
   registered && fm_session_lock_owned_by_self "$STATE" || exit 0
   if [ -e "$STATE/.afk" ]; then record idle; exit 0; fi
-  fm_supervision_needed "$STATE" || settle_idle
+  fm_supervision_status "$STATE"
+  [ "$FM_SUP_ACTIVE" = true ] || settle_idle
   arm=("$SCRIPT_DIR/fm-watch-arm.sh")
   if fm_supervision_host_enabled "$CONFIG" codex; then
     arm=("$SCRIPT_DIR/fm-supervision-host.sh" park)
@@ -282,7 +283,8 @@ while [ "$attempt" -lt 2 ]; do
       record idle
       exit 0
     fi
-    fm_supervision_needed "$STATE" || settle_idle
+    fm_supervision_status "$STATE"
+    [ "$FM_SUP_ACTIVE" = true ] || settle_idle
     sleep 1
   done
   wait "$CHILD"; rc=$?

@@ -814,7 +814,11 @@ test_secondmate_claude_spawn_arms_busy_for_the_stall_gate() {
     || fail "a secondmate inside an armed turn published a durable stall notification"
 
   rm -f "$state/$id.turn-ended"
+  # Pending wakes independently require supervision. Keep this Stop probe idle,
+  # then restore the frozen row for the following stall observation.
+  mv "$sm/state/.wake-queue" "$case_dir/frozen-wakes"
   fire_secondmate_stop "$sm" parallel "$settings" || fail "secondmate Stop was blocked with nothing to supervise"
+  mv "$case_dir/frozen-wakes" "$sm/state/.wake-queue"
   [ ! -e "$state/$id.turn-ended" ] || fail "a secondmate Stop touched the parent's turn-ended marker"
   out=$(classify claude "$id" "$state")
   [ "$out" = "idle claude-hook" ] || fail "secondmate Stop must classify idle claude-hook, got '$out'"
@@ -909,6 +913,7 @@ test_secondmate_claude_stop_guard_owns_the_stop_verdict() {
     && fail "a secondmate inside a guard-forced continuation was escalated as stalled: $(cat "$case_dir/watch-blocked.out")"
 
   rm -f "$sm/state/child.meta"
+  mv "$sm/state/.wake-queue" "$case_dir/frozen-wakes"
   for order in guard-first guard-last parallel; do
     run_claude_hook "$settings" UserPromptSubmit || fail "secondmate UserPromptSubmit hook failed"
     fire_secondmate_stop "$sm" "$order" "$settings"; status=$?
@@ -916,6 +921,7 @@ test_secondmate_claude_stop_guard_owns_the_stop_verdict() {
     out=$(classify claude "$id" "$state")
     [ "$out" = "idle claude-hook" ] || fail "an allowed Stop must record idle ($order), got '$out'"
   done
+  mv "$case_dir/frozen-wakes" "$sm/state/.wake-queue"
   sleep 2
   secondmate_stall_watch "$primary" "$id" "$case_dir/watch-allowed.out" 8
   grep -F "check: secondmate wake-loop stalled: mate=$id row=7" "$case_dir/watch-allowed.out" >/dev/null \

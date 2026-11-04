@@ -396,6 +396,23 @@ test_settle_idle_delivers_a_queued_result_once() {
   pass "a queued result left when supervision ends is delivered once and recorded as delivered"
 }
 
+test_queue_only_home_delivers_without_arming() {
+  local home out
+  home=$(make_home queue-only opted-in)
+  rm "$home/state/fixture-task.meta"
+  printf 'signal: fixture-task finished\n' > "$home/state/.wake-queue"
+  out=$(under_codex "$home" "$REGISTER"'
+    printf "%s" "$PAYLOAD" | "$PARK"; echo "stop=$?"
+  ' 2>&1)
+  assert_contains "$out" "stop=0" "a pending final result must exit cleanly: $out"
+  assert_equals delivered "$(outcome "$home")" "a queue-only home must deliver its final result"
+  assert_equals 1 "$(queue_count "$home")" "the final result must be delivered exactly once"
+  assert_equals 0 "$(arm_count "$home")" "a queue-only home must not start a watcher arm"
+  assert_equals 'signal: fixture-task finished' "$(cat "$home/state/.wake-queue")" \
+    "delivery must leave acknowledgement to the model turn"
+  pass "a queue-only home delivers its final result without arming or acknowledging it"
+}
+
 test_settle_idle_failed_delivery_latches_fallback() {
   local home out
   home=$(settle_idle_case settle-failed queued FM_FAKE_CODEX_QUEUE_RC=1)
@@ -537,6 +554,7 @@ test_stop_rearms_after_a_delivering_park_releases_its_claim delivering 4
 test_failed_queue_delivery_latches_fallback
 test_latched_fallback_stays_quiet_without_supervision_need
 test_settle_idle_delivers_a_queued_result_once
+test_queue_only_home_delivers_without_arming
 test_settle_idle_failed_delivery_latches_fallback
 test_settle_idle_with_an_empty_queue_records_idle
 test_repeated_arm_failure_latches_fallback

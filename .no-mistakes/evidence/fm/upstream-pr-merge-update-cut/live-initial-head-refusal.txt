@@ -1,0 +1,26 @@
+REAL PRODUCT / REAL GITHUB. Isolated local FM_HOME; impossible expected head ensures refusal before any update or merge.
+Command: bin/fm-pr-merge.sh task-live https://github.com/kunchenguid/firstmate/pull/6330 --update-branch --expected-head 0000000000000000000000000000000000000000
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  repair missing watcher supervision according to the session-start block for this harness; do not use shell &.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+armed: state/task-live.check.sh
+error: refusing to merge https://github.com/kunchenguid/firstmate/pull/6330
+  - check 'Full suite' is not green
+  - check 'PR must be raised via no-mistakes' is not green
+  - the live head is "828d59989559b949b3bdff18075251d53605a9b7", not the expected head 0000000000000000000000000000000000000000
+error: these checks are not green: Full suite, PR must be raised via no-mistakes
+
+Exit status: 1
+
+Persisted isolated metadata:
+window=fm-task-live
+worktree=~/.treehouse/firstmate-7bab20/8/firstmate/data/pr6330-refresh/nm-home/worktrees/b8da5f5970b1/01M6N4TRP5EQE27E263DH4MAGP
+project=~/.treehouse/firstmate-7bab20/8/firstmate/data/pr6330-refresh/nm-home/worktrees/b8da5f5970b1/01M6N4TRP5EQE27E263DH4MAGP
+kind=ship
+mode=no-mistakes
+pr=https://github.com/kunchenguid/firstmate/pull/6330
+pr_head=828d59989559b949b3bdff18075251d53605a9b7

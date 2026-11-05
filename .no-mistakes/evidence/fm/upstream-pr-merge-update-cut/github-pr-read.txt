@@ -1,0 +1,11 @@
+pull_request:
+  number: 6330
+  title: "fix: update a green behind GitHub PR before merging with --update-branch"
+  state: open
+  author: jazz127
+  draft: no
+  merged: no
+  checks: "3 passed, 2 failed, 8 skipped, 13 total"
+  body: "## Summary\n\nCloses #6178.\n\nAdd explicit `--update-branch` consent to the authorized GitHub merge request.\nA green pull request behind its base is updated only after the authority, hold, preflight, and queue guards pass; absent consent or a refused guard leaves its source branch untouched.\nConsent includes retaining the update if checks at the new head later prevent merging.\n\nRecord the updated head, wait briefly for unsettled checks or mergeability, and repeat the exact-head preflight before mer\n... (truncated, 2649 chars total - use --full to see complete body)"
+  comment_count: 10 — use --comments to see full comments
+  review_count: 3 — use --reviews to see full reviews

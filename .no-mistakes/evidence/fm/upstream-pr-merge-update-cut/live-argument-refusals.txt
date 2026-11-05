@@ -1,0 +1,11 @@
+Real CLI argument validation; no upstream request is needed or made on these preflight refusals.
+
+Command: bin/fm-pr-merge.sh task-live https://github.com/kunchenguid/firstmate/pull/6330 --update-branch=yes
+error: --update-branch takes no value
+Exit status: 2
+
+Command: bin/fm-pr-merge.sh task-live https://gitlab.com/example/repo/-/merge_requests/1 --update-branch
+error: --update-branch applies only to GitHub
+Exit status: 2
+
+Both refusals left the disposable FM_HOME empty.

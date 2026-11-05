@@ -1,0 +1,837 @@
+OFFLINE EXECUTABLE-INTERFACE EVIDENCE — fake gh and gh-axi; no GitHub mutations.
+Driver: source tests/fm-pr-merge.test.sh; suite exit status: 0
+Oracle: supplied intent requires consent, fail-before-wait, immutable expected head, and a bound non-retrying update.
+
+=== github-behind-concurrent-expected-pin ===
+--- stdout ---
+armed: state/task-x1.check.sh
+
+--- stderr ---
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  repair missing watcher supervision according to the session-start block for this harness; do not use shell &.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+verified: https://github.com/example/repo/pull/6189 is open and mergeable, with every unwaived required check reported and every unwaived check green at head aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+gh: Head branch was modified. Review and try again. (HTTP 422)
+
+--- gh.log ---
+pr view https://github.com/example/repo/pull/6189 --json headRefOid -q .headRefOid
+pr view https://github.com/example/repo/pull/6189 --json state,isDraft,mergeable,mergeStateStatus,headRefOid,baseRefName,statusCheckRollup
+api repos/example/repo/branches/main
+api --paginate repos/example/repo/rules/branches/main
+api --method PUT repos/example/repo/pulls/6189/update-branch -f expected_head_sha=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+--- github-head ---
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+--- state/task-x1.meta ---
+window=fm-task-x1
+worktree=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-pr-merge-tests.jVWan9/github-behind-concurrent-expected-pin/wt
+project=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-pr-merge-tests.jVWan9/github-behind-concurrent-expected-pin/project
+kind=ship
+mode=no-mistakes
+pr=https://github.com/example/repo/pull/6189
+pr_head=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+
+=== github-behind-concurrent-no-pin ===
+--- stdout ---
+armed: state/task-x1.check.sh
+
+--- stderr ---
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  repair missing watcher supervision according to the session-start block for this harness; do not use shell &.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+verified: https://github.com/example/repo/pull/6189 is open and mergeable, with every unwaived required check reported and every unwaived check green at head aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+gh: Head branch was modified. Review and try again. (HTTP 422)
+
+--- gh.log ---
+pr view https://github.com/example/repo/pull/6189 --json headRefOid -q .headRefOid
+pr view https://github.com/example/repo/pull/6189 --json state,isDraft,mergeable,mergeStateStatus,headRefOid,baseRefName,statusCheckRollup
+api repos/example/repo/branches/main
+api --paginate repos/example/repo/rules/branches/main
+api --method PUT repos/example/repo/pulls/6189/update-branch -f expected_head_sha=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+--- github-head ---
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+--- state/task-x1.meta ---
+window=fm-task-x1
+worktree=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-pr-merge-tests.jVWan9/github-behind-concurrent-no-pin/wt
+project=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-pr-merge-tests.jVWan9/github-behind-concurrent-no-pin/project
+kind=ship
+mode=no-mistakes
+pr=https://github.com/example/repo/pull/6189
+pr_head=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+
+=== github-behind-default-squash ===
+--- stdout ---
+armed: state/task-x1.check.sh
+{"message":"Updating pull request branch."}
+armed: state/task-x1.check.sh
+verified: https://github.com/example/repo/pull/6181 is merged (state=MERGED, merged=true, isInMergeQueue=false)
+
+--- stderr ---
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  repair missing watcher supervision according to the session-start block for this harness; do not use shell &.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+verified: https://github.com/example/repo/pull/6181 is open and mergeable, with every unwaived required check reported and every unwaived check green at head aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+verified: https://github.com/example/repo/pull/6181 is open and mergeable, with every unwaived required check reported and every unwaived check green at head bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+
+--- gh.log ---
+pr view https://github.com/example/repo/pull/6181 --json headRefOid -q .headRefOid
+pr view https://github.com/example/repo/pull/6181 --json state,isDraft,mergeable,mergeStateStatus,headRefOid,baseRefName,statusCheckRollup
+api repos/example/repo/branches/main
+api --paginate repos/example/repo/rules/branches/main
+api --method PUT repos/example/repo/pulls/6181/update-branch -f expected_head_sha=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+pr view https://github.com/example/repo/pull/6181 --json headRefOid -q .headRefOid
+pr view https://github.com/example/repo/pull/6181 --json headRefOid -q .headRefOid
+pr view https://github.com/example/repo/pull/6181 --json state,isDraft,mergeable,mergeStateStatus,headRefOid,baseRefName,statusCheckRollup
+api repos/example/repo/branches/main
+api --paginate repos/example/repo/rules/branches/main
+pr merge 6181 --repo example/repo --match-head-commit bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb --squash
+api graphql -f query=query($owner:String!,$repo:String!,$number:Int!){repository(owner:$owner,name:$repo){pullRequest(number:$number){state merged isInMergeQueue baseRefName}}} -F owner=example -F repo=repo -F number=6181 --jq .data.repository.pullRequest | "state=" + (.state // ""), "merged=" + (.merged | tostring), "queued=" + (.isInMergeQueue | tostring), "base=" + (.baseRefName // "")
+
+--- github-head ---
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+
+--- state/task-x1.meta ---
+window=fm-task-x1
+worktree=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-pr-merge-tests.jVWan9/github-behind-default-squash/wt
+project=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-pr-merge-tests.jVWan9/github-behind-default-squash/project
+kind=ship
+mode=no-mistakes
+pr=https://github.com/example/repo/pull/6181
+pr_head=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+
+--- meta-at-merge ---
+window=fm-task-x1
+worktree=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-pr-merge-tests.jVWan9/github-behind-default-squash/wt
+project=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-pr-merge-tests.jVWan9/github-behind-default-squash/project
+kind=ship
+mode=no-mistakes
+pr=https://github.com/example/repo/pull/6181
+pr_head=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+
+
+=== github-behind-expected-initial-mismatch ===
+--- stdout ---
+armed: state/task-x1.check.sh
+
+--- stderr ---
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  repair missing watcher supervision according to the session-start block for this harness; do not use shell &.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+error: refusing to merge https://github.com/example/repo/pull/6188
+  - the live head is "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", not the expected head cccccccccccccccccccccccccccccccccccccccc
+
+--- gh.log ---
+pr view https://github.com/example/repo/pull/6188 --json headRefOid -q .headRefOid
+pr view https://github.com/example/repo/pull/6188 --json state,isDraft,mergeable,mergeStateStatus,headRefOid,baseRefName,statusCheckRollup
+api repos/example/repo/branches/main
+api --paginate repos/example/repo/rules/branches/main
+
+--- github-head ---
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+--- state/task-x1.meta ---
+window=fm-task-x1
+worktree=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-pr-merge-tests.jVWan9/github-behind-expected-initial-mismatch/wt
+project=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-pr-merge-tests.jVWan9/github-behind-expected-initial-mismatch/project
+kind=ship
+mode=no-mistakes
+pr=https://github.com/example/repo/pull/6188
+pr_head=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+
+=== github-behind-expected-updated-mismatch ===
+--- stdout ---
+armed: state/task-x1.check.sh
+{"message":"Updating pull request branch."}
+armed: state/task-x1.check.sh
+
+--- stderr ---
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  repair missing watcher supervision according to the session-start block for this harness; do not use shell &.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+verified: https://github.com/example/repo/pull/6188 is open and mergeable, with every unwaived required check reported and every unwaived check green at head aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+error: refusing to merge https://github.com/example/repo/pull/6188
+  - the live head is "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", not the expected head aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+--- gh.log ---
+pr view https://github.com/example/repo/pull/6188 --json headRefOid -q .headRefOid
+pr view https://github.com/example/repo/pull/6188 --json state,isDraft,mergeable,mergeStateStatus,headRefOid,baseRefName,statusCheckRollup
+api repos/example/repo/branches/main
+api --paginate repos/example/repo/rules/branches/main
+api --method PUT repos/example/repo/pulls/6188/update-branch -f expected_head_sha=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+pr view https://github.com/example/repo/pull/6188 --json headRefOid -q .headRefOid
+pr view https://github.com/example/repo/pull/6188 --json headRefOid -q .headRefOid
+pr view https://github.com/example/repo/pull/6188 --json state,isDraft,mergeable,mergeStateStatus,headRefOid,baseRefName,statusCheckRollup
+api repos/example/repo/branches/main
+api --paginate repos/example/repo/rules/branches/main
+
+--- github-head ---
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+
+--- state/task-x1.meta ---
+window=fm-task-x1
+worktree=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-pr-merge-tests.jVWan9/github-behind-expected-updated-mismatch/wt
+project=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-pr-merge-tests.jVWan9/github-behind-expected-updated-mismatch/project
+kind=ship
+mode=no-mistakes
+pr=https://github.com/example/repo/pull/6188
+pr_head=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+
+
+=== github-behind-failed-and-pending-check-run ===
+--- stdout ---
+armed: state/task-x1.check.sh
+{"message":"Updating pull request branch."}
+armed: state/task-x1.check.sh
+
+--- stderr ---
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  repair missing watcher supervision according to the session-start block for this harness; do not use shell &.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+verified: https://github.com/example/repo/pull/6185 is open and mergeable, with every unwaived required check reported and every unwaived check green at head aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+error: refusing to merge https://github.com/example/repo/pull/6185
+  - check 'ci' is not green
+  - check 'slow' is not green
+error: these checks are not green: ci, slow
+
+--- gh.log ---
+pr view https://github.com/example/repo/pull/6185 --json headRefOid -q .headRefOid
+pr view https://github.com/example/repo/pull/6185 --json state,isDraft,mergeable,mergeStateStatus,headRefOid,baseRefName,statusCheckRollup
+api repos/example/repo/branches/main
+api --paginate repos/example/repo/rules/branches/main
+api --method PUT repos/example/repo/pulls/6185/update-branch -f expected_head_sha=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+pr view https://github.com/example/repo/pull/6185 --json headRefOid -q .headRefOid
+pr view https://github.com/example/repo/pull/6185 --json headRefOid -q .headRefOid
+pr view https://github.com/example/repo/pull/6185 --json state,isDraft,mergeable,mergeStateStatus,headRefOid,baseRefName,statusCheckRollup
+api repos/example/repo/branches/main
+api --paginate repos/example/repo/rules/branches/main
+
+--- github-head ---
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+
+--- state/task-x1.meta ---
+window=fm-task-x1
+worktree=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-pr-merge-tests.jVWan9/github-behind-failed-and-pending-check-run/wt
+project=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-pr-merge-tests.jVWan9/github-behind-failed-and-pending-check-run/project
+kind=ship
+mode=no-mistakes
+pr=https://github.com/example/repo/pull/6185
+pr_head=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+
+
+=== github-behind-failed-and-pending-status-context ===
+--- stdout ---
+armed: state/task-x1.check.sh
+{"message":"Updating pull request branch."}
+armed: state/task-x1.check.sh
+
+--- stderr ---
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  repair missing watcher supervision according to the session-start block for this harness; do not use shell &.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+verified: https://github.com/example/repo/pull/6185 is open and mergeable, with every unwaived required check reported and every unwaived check green at head aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+error: refusing to merge https://github.com/example/repo/pull/6185
+  - check 'ci' is not green
+  - check 'slow' is not green
+error: these checks are not green: ci, slow
+
+--- gh.log ---
+pr view https://github.com/example/repo/pull/6185 --json headRefOid -q .headRefOid
+pr view https://github.com/example/repo/pull/6185 --json state,isDraft,mergeable,mergeStateStatus,headRefOid,baseRefName,statusCheckRollup
+api repos/example/repo/branches/main
+api --paginate repos/example/repo/rules/branches/main
+api --method PUT repos/example/repo/pulls/6185/update-branch -f expected_head_sha=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+pr view https://github.com/example/repo/pull/6185 --json headRefOid -q .headRefOid
+pr view https://github.com/example/repo/pull/6185 --json headRefOid -q .headRefOid
+pr view https://github.com/example/repo/pull/6185 --json state,isDraft,mergeable,mergeStateStatus,headRefOid,baseRefName,statusCheckRollup
+api repos/example/repo/branches/main
+api --paginate repos/example/repo/rules/branches/main
+
+--- github-head ---
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+
+--- state/task-x1.meta ---
+window=fm-task-x1
+worktree=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-pr-merge-tests.jVWan9/github-behind-failed-and-pending-status-context/wt
+project=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-pr-merge-tests.jVWan9/github-behind-failed-and-pending-status-context/project
+kind=ship
+mode=no-mistakes
+pr=https://github.com/example/repo/pull/6185
+pr_head=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+
+
+=== github-behind-green ===
+--- stdout ---
+armed: state/task-x1.check.sh
+{"message":"Updating pull request branch."}
+armed: state/task-x1.check.sh
+verified: https://github.com/example/repo/pull/6178 is merged (state=MERGED, merged=true, isInMergeQueue=false)
+
+--- stderr ---
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  repair missing watcher supervision according to the session-start block for this harness; do not use shell &.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+verified: https://github.com/example/repo/pull/6178 is open and mergeable, with every unwaived required check reported and every unwaived check green at head aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+verified: https://github.com/example/repo/pull/6178 is open and mergeable, with every unwaived required check reported and every unwaived check green at head bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+
+--- gh.log ---
+pr view https://github.com/example/repo/pull/6178 --json headRefOid -q .headRefOid
+pr view https://github.com/example/repo/pull/6178 --json state,isDraft,mergeable,mergeStateStatus,headRefOid,baseRefName,statusCheckRollup
+api repos/example/repo/branches/main
+api --paginate repos/example/repo/rules/branches/main
+api --method PUT repos/example/repo/pulls/6178/update-branch -f expected_head_sha=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+pr view https://github.com/example/repo/pull/6178 --json headRefOid -q .headRefOid
+pr view https://github.com/example/repo/pull/6178 --json headRefOid -q .headRefOid
+pr view https://github.com/example/repo/pull/6178 --json state,isDraft,mergeable,mergeStateStatus,headRefOid,baseRefName,statusCheckRollup
+api repos/example/repo/branches/main
+api --paginate repos/example/repo/rules/branches/main
+pr merge 6178 --repo example/repo --match-head-commit bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb --merge
+api graphql -f query=query($owner:String!,$repo:String!,$number:Int!){repository(owner:$owner,name:$repo){pullRequest(number:$number){state merged isInMergeQueue baseRefName}}} -F owner=example -F repo=repo -F number=6178 --jq .data.repository.pullRequest | "state=" + (.state // ""), "merged=" + (.merged | tostring), "queued=" + (.isInMergeQueue | tostring), "base=" + (.baseRefName // "")
+
+--- github-head ---
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+
+--- state/task-x1.meta ---
+window=fm-task-x1
+worktree=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-pr-merge-tests.jVWan9/github-behind-green/wt
+project=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-pr-merge-tests.jVWan9/github-behind-green/project
+kind=ship
+mode=no-mistakes
+pr=https://github.com/example/repo/pull/6178
+pr_head=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+
+--- meta-at-merge ---
+window=fm-task-x1
+worktree=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-pr-merge-tests.jVWan9/github-behind-green/wt
+project=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-pr-merge-tests.jVWan9/github-behind-green/project
+kind=ship
+mode=no-mistakes
+pr=https://github.com/example/repo/pull/6178
+pr_head=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+
+
+=== github-behind-guard-away-queue ===
+--- stdout ---
+armed: state/task-x1.check.sh
+
+--- stderr ---
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  repair missing watcher supervision according to the session-start block for this harness; do not use shell &.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+verified: https://github.com/example/repo/pull/6184 is open and mergeable, with every unwaived required check reported and every unwaived check green at head aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+error: GitHub merge refused while away because the base branch's merge-queue state does not prove an immediate merge; nothing was handed to the forge
+
+--- gh.log ---
+pr view https://github.com/example/repo/pull/6184 --json headRefOid -q .headRefOid
+pr view https://github.com/example/repo/pull/6184 --json state,isDraft,mergeable,mergeStateStatus,headRefOid,baseRefName,statusCheckRollup
+api repos/example/repo/branches/main
+api --paginate repos/example/repo/rules/branches/main
+api --paginate repos/example/repo/rules/branches/main --jq .[] | select(.type == "merge_queue") | "merge_method=" + (.parameters.merge_method // "")
+
+--- github-head ---
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+--- state/task-x1.meta ---
+window=fm-task-x1
+worktree=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-pr-merge-tests.jVWan9/github-behind-guard-away-queue/wt
+project=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-pr-merge-tests.jVWan9/github-behind-guard-away-queue/project
+kind=ship
+mode=no-mistakes
+pr=https://github.com/example/repo/pull/6184
+pr_head=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+
+=== github-behind-guard-draft ===
+--- stdout ---
+armed: state/task-x1.check.sh
+
+--- stderr ---
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  repair missing watcher supervision according to the session-start block for this harness; do not use shell &.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+error: refusing to merge https://github.com/example/repo/pull/6184
+  - the pull request is a draft
+
+--- gh.log ---
+pr view https://github.com/example/repo/pull/6184 --json headRefOid -q .headRefOid
+pr view https://github.com/example/repo/pull/6184 --json state,isDraft,mergeable,mergeStateStatus,headRefOid,baseRefName,statusCheckRollup
+api repos/example/repo/branches/main
+api --paginate repos/example/repo/rules/branches/main
+
+--- github-head ---
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+--- state/task-x1.meta ---
+window=fm-task-x1
+worktree=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-pr-merge-tests.jVWan9/github-behind-guard-draft/wt
+project=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-pr-merge-tests.jVWan9/github-behind-guard-draft/project
+kind=ship
+mode=no-mistakes
+pr=https://github.com/example/repo/pull/6184
+pr_head=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+
+=== github-behind-guard-no-consent ===
+--- stdout ---
+armed: state/task-x1.check.sh
+
+--- stderr ---
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  repair missing watcher supervision according to the session-start block for this harness; do not use shell &.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+verified: https://github.com/example/repo/pull/6184 is open and mergeable, with every unwaived required check reported and every unwaived check green at head aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+error: https://github.com/example/repo/pull/6184 is behind its base; updating its source branch requires explicit --update-branch consent on this authorized merge request (the update remains if new checks prevent merging)
+
+--- gh.log ---
+pr view https://github.com/example/repo/pull/6184 --json headRefOid -q .headRefOid
+pr view https://github.com/example/repo/pull/6184 --json state,isDraft,mergeable,mergeStateStatus,headRefOid,baseRefName,statusCheckRollup
+api repos/example/repo/branches/main
+api --paginate repos/example/repo/rules/branches/main
+
+--- github-head ---
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+--- state/task-x1.meta ---
+window=fm-task-x1
+worktree=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-pr-merge-tests.jVWan9/github-behind-guard-no-consent/wt
+project=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-pr-merge-tests.jVWan9/github-behind-guard-no-consent/project
+kind=ship
+mode=no-mistakes
+pr=https://github.com/example/repo/pull/6184
+pr_head=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+
+=== github-behind-guard-red ===
+--- stdout ---
+armed: state/task-x1.check.sh
+
+--- stderr ---
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  repair missing watcher supervision according to the session-start block for this harness; do not use shell &.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+error: refusing to merge https://github.com/example/repo/pull/6184
+  - check 'ci' is not green
+error: these checks are not green: ci
+
+--- gh.log ---
+pr view https://github.com/example/repo/pull/6184 --json headRefOid -q .headRefOid
+pr view https://github.com/example/repo/pull/6184 --json state,isDraft,mergeable,mergeStateStatus,headRefOid,baseRefName,statusCheckRollup
+api repos/example/repo/branches/main
+api --paginate repos/example/repo/rules/branches/main
+
+--- github-head ---
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+--- state/task-x1.meta ---
+window=fm-task-x1
+worktree=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-pr-merge-tests.jVWan9/github-behind-guard-red/wt
+project=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-pr-merge-tests.jVWan9/github-behind-guard-red/project
+kind=ship
+mode=no-mistakes
+pr=https://github.com/example/repo/pull/6184
+pr_head=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+
+=== github-behind-guard-unreadable-authority ===
+--- stdout ---
+armed: state/task-x1.check.sh
+
+--- stderr ---
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  repair missing watcher supervision according to the session-start block for this harness; do not use shell &.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+fm-captain-hold: error: "EACCES: permission denied, open '/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-pr-merge-tests.jVWan9/github-behind-guard-unreadable-authority/home/data/backlog.md'"
+error: could not determine whether task task-x1 is still held for the captain; refusing to merge
+
+--- gh.log ---
+pr view https://github.com/example/repo/pull/6184 --json headRefOid -q .headRefOid
+
+--- github-head ---
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+--- state/task-x1.meta ---
+window=fm-task-x1
+worktree=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-pr-merge-tests.jVWan9/github-behind-guard-unreadable-authority/wt
+project=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-pr-merge-tests.jVWan9/github-behind-guard-unreadable-authority/project
+kind=ship
+mode=no-mistakes
+pr=https://github.com/example/repo/pull/6184
+pr_head=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+
+=== github-behind-pending-after-update ===
+--- stdout ---
+armed: state/task-x1.check.sh
+{"message":"Updating pull request branch."}
+armed: state/task-x1.check.sh
+verified: https://github.com/example/repo/pull/6180 is merged (state=MERGED, merged=true, isInMergeQueue=false)
+
+--- stderr ---
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  repair missing watcher supervision according to the session-start block for this harness; do not use shell &.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+verified: https://github.com/example/repo/pull/6180 is open and mergeable, with every unwaived required check reported and every unwaived check green at head aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+verified: https://github.com/example/repo/pull/6180 is open and mergeable, with every unwaived required check reported and every unwaived check green at head bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+
+--- gh.log ---
+pr view https://github.com/example/repo/pull/6180 --json headRefOid -q .headRefOid
+pr view https://github.com/example/repo/pull/6180 --json state,isDraft,mergeable,mergeStateStatus,headRefOid,baseRefName,statusCheckRollup
+api repos/example/repo/branches/main
+api --paginate repos/example/repo/rules/branches/main
+api --method PUT repos/example/repo/pulls/6180/update-branch -f expected_head_sha=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+pr view https://github.com/example/repo/pull/6180 --json headRefOid -q .headRefOid
+pr view https://github.com/example/repo/pull/6180 --json headRefOid -q .headRefOid
+pr view https://github.com/example/repo/pull/6180 --json state,isDraft,mergeable,mergeStateStatus,headRefOid,baseRefName,statusCheckRollup
+api repos/example/repo/branches/main
+api --paginate repos/example/repo/rules/branches/main
+pr view https://github.com/example/repo/pull/6180 --json state,isDraft,mergeable,mergeStateStatus,headRefOid,baseRefName,statusCheckRollup
+api repos/example/repo/branches/main
+api --paginate repos/example/repo/rules/branches/main
+pr merge 6180 --repo example/repo --match-head-commit bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb --merge
+api graphql -f query=query($owner:String!,$repo:String!,$number:Int!){repository(owner:$owner,name:$repo){pullRequest(number:$number){state merged isInMergeQueue baseRefName}}} -F owner=example -F repo=repo -F number=6180 --jq .data.repository.pullRequest | "state=" + (.state // ""), "merged=" + (.merged | tostring), "queued=" + (.isInMergeQueue | tostring), "base=" + (.baseRefName // "")
+
+--- github-head ---
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+
+--- state/task-x1.meta ---
+window=fm-task-x1
+worktree=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-pr-merge-tests.jVWan9/github-behind-pending-after-update/wt
+project=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-pr-merge-tests.jVWan9/github-behind-pending-after-update/project
+kind=ship
+mode=no-mistakes
+pr=https://github.com/example/repo/pull/6180
+pr_head=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+
+--- meta-at-merge ---
+window=fm-task-x1
+worktree=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-pr-merge-tests.jVWan9/github-behind-pending-after-update/wt
+project=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-pr-merge-tests.jVWan9/github-behind-pending-after-update/project
+kind=ship
+mode=no-mistakes
+pr=https://github.com/example/repo/pull/6180
+pr_head=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+
+
+=== github-behind-pending-cap ===
+--- stdout ---
+armed: state/task-x1.check.sh
+{"message":"Updating pull request branch."}
+armed: state/task-x1.check.sh
+
+--- stderr ---
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  repair missing watcher supervision according to the session-start block for this harness; do not use shell &.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+verified: https://github.com/example/repo/pull/6183 is open and mergeable, with every unwaived required check reported and every unwaived check green at head aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+error: refusing to merge https://github.com/example/repo/pull/6183
+  - check 'ci' is not green
+error: these checks are not green: ci
+error: https://github.com/example/repo/pull/6183 was updated to bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb but its checks are not ready; run the merge again once its checks pass
+
+--- gh.log ---
+pr view https://github.com/example/repo/pull/6183 --json headRefOid -q .headRefOid
+pr view https://github.com/example/repo/pull/6183 --json state,isDraft,mergeable,mergeStateStatus,headRefOid,baseRefName,statusCheckRollup
+api repos/example/repo/branches/main
+api --paginate repos/example/repo/rules/branches/main
+api --method PUT repos/example/repo/pulls/6183/update-branch -f expected_head_sha=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+pr view https://github.com/example/repo/pull/6183 --json headRefOid -q .headRefOid
+pr view https://github.com/example/repo/pull/6183 --json headRefOid -q .headRefOid
+pr view https://github.com/example/repo/pull/6183 --json state,isDraft,mergeable,mergeStateStatus,headRefOid,baseRefName,statusCheckRollup
+api repos/example/repo/branches/main
+api --paginate repos/example/repo/rules/branches/main
+pr view https://github.com/example/repo/pull/6183 --json state,isDraft,mergeable,mergeStateStatus,headRefOid,baseRefName,statusCheckRollup
+api repos/example/repo/branches/main
+api --paginate repos/example/repo/rules/branches/main
+pr view https://github.com/example/repo/pull/6183 --json state,isDraft,mergeable,mergeStateStatus,headRefOid,baseRefName,statusCheckRollup
+api repos/example/repo/branches/main
+api --paginate repos/example/repo/rules/branches/main
+pr view https://github.com/example/repo/pull/6183 --json state,isDraft,mergeable,mergeStateStatus,headRefOid,baseRefName,statusCheckRollup
+api repos/example/repo/branches/main
+api --paginate repos/example/repo/rules/branches/main
+
+--- github-head ---
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+
+--- state/task-x1.meta ---
+window=fm-task-x1
+worktree=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-pr-merge-tests.jVWan9/github-behind-pending-cap/wt
+project=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-pr-merge-tests.jVWan9/github-behind-pending-cap/project
+kind=ship
+mode=no-mistakes
+pr=https://github.com/example/repo/pull/6183
+pr_head=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+
+
+=== github-behind-red-after-update ===
+--- stdout ---
+armed: state/task-x1.check.sh
+{"message":"Updating pull request branch."}
+armed: state/task-x1.check.sh
+
+--- stderr ---
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  repair missing watcher supervision according to the session-start block for this harness; do not use shell &.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+verified: https://github.com/example/repo/pull/6179 is open and mergeable, with every unwaived required check reported and every unwaived check green at head aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+error: refusing to merge https://github.com/example/repo/pull/6179
+  - check 'ci' is not green
+error: these checks are not green: ci
+
+--- gh.log ---
+pr view https://github.com/example/repo/pull/6179 --json headRefOid -q .headRefOid
+pr view https://github.com/example/repo/pull/6179 --json state,isDraft,mergeable,mergeStateStatus,headRefOid,baseRefName,statusCheckRollup
+api repos/example/repo/branches/main
+api --paginate repos/example/repo/rules/branches/main
+api --method PUT repos/example/repo/pulls/6179/update-branch -f expected_head_sha=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+pr view https://github.com/example/repo/pull/6179 --json headRefOid -q .headRefOid
+pr view https://github.com/example/repo/pull/6179 --json headRefOid -q .headRefOid
+pr view https://github.com/example/repo/pull/6179 --json state,isDraft,mergeable,mergeStateStatus,headRefOid,baseRefName,statusCheckRollup
+api repos/example/repo/branches/main
+api --paginate repos/example/repo/rules/branches/main
+
+--- github-head ---
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+
+--- state/task-x1.meta ---
+window=fm-task-x1
+worktree=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-pr-merge-tests.jVWan9/github-behind-red-after-update/wt
+project=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-pr-merge-tests.jVWan9/github-behind-red-after-update/project
+kind=ship
+mode=no-mistakes
+pr=https://github.com/example/repo/pull/6179
+pr_head=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+
+
+=== github-behind-unknown-after-update ===
+--- stdout ---
+armed: state/task-x1.check.sh
+{"message":"Updating pull request branch."}
+armed: state/task-x1.check.sh
+verified: https://github.com/example/repo/pull/6182 is merged (state=MERGED, merged=true, isInMergeQueue=false)
+
+--- stderr ---
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  repair missing watcher supervision according to the session-start block for this harness; do not use shell &.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+verified: https://github.com/example/repo/pull/6182 is open and mergeable, with every unwaived required check reported and every unwaived check green at head aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+verified: https://github.com/example/repo/pull/6182 is open and mergeable, with every unwaived required check reported and every unwaived check green at head bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+
+--- gh.log ---
+pr view https://github.com/example/repo/pull/6182 --json headRefOid -q .headRefOid
+pr view https://github.com/example/repo/pull/6182 --json state,isDraft,mergeable,mergeStateStatus,headRefOid,baseRefName,statusCheckRollup
+api repos/example/repo/branches/main
+api --paginate repos/example/repo/rules/branches/main
+api --method PUT repos/example/repo/pulls/6182/update-branch -f expected_head_sha=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+pr view https://github.com/example/repo/pull/6182 --json headRefOid -q .headRefOid
+pr view https://github.com/example/repo/pull/6182 --json headRefOid -q .headRefOid
+pr view https://github.com/example/repo/pull/6182 --json state,isDraft,mergeable,mergeStateStatus,headRefOid,baseRefName,statusCheckRollup
+api repos/example/repo/branches/main
+api --paginate repos/example/repo/rules/branches/main
+pr view https://github.com/example/repo/pull/6182 --json state,isDraft,mergeable,mergeStateStatus,headRefOid,baseRefName,statusCheckRollup
+api repos/example/repo/branches/main
+api --paginate repos/example/repo/rules/branches/main
+pr merge 6182 --repo example/repo --match-head-commit bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb --squash
+api graphql -f query=query($owner:String!,$repo:String!,$number:Int!){repository(owner:$owner,name:$repo){pullRequest(number:$number){state merged isInMergeQueue baseRefName}}} -F owner=example -F repo=repo -F number=6182 --jq .data.repository.pullRequest | "state=" + (.state // ""), "merged=" + (.merged | tostring), "queued=" + (.isInMergeQueue | tostring), "base=" + (.baseRefName // "")
+
+--- github-head ---
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+
+--- state/task-x1.meta ---
+window=fm-task-x1
+worktree=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-pr-merge-tests.jVWan9/github-behind-unknown-after-update/wt
+project=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-pr-merge-tests.jVWan9/github-behind-unknown-after-update/project
+kind=ship
+mode=no-mistakes
+pr=https://github.com/example/repo/pull/6182
+pr_head=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+
+--- meta-at-merge ---
+window=fm-task-x1
+worktree=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-pr-merge-tests.jVWan9/github-behind-unknown-after-update/wt
+project=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-pr-merge-tests.jVWan9/github-behind-unknown-after-update/project
+kind=ship
+mode=no-mistakes
+pr=https://github.com/example/repo/pull/6182
+pr_head=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+
+
+=== github-behind-unknown-after-waived-red ===
+--- stdout ---
+armed: state/task-x1.check.sh
+{"message":"Updating pull request branch."}
+armed: state/task-x1.check.sh
+verified: https://github.com/example/repo/pull/6186 is merged (state=MERGED, merged=true, isInMergeQueue=false)
+
+--- stderr ---
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  repair missing watcher supervision according to the session-start block for this harness; do not use shell &.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+verified: https://github.com/example/repo/pull/6186 is open and mergeable, with every unwaived required check reported and every unwaived check green at head aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+verified: https://github.com/example/repo/pull/6186 is open and mergeable, with every unwaived required check reported and every unwaived check green at head bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+
+--- gh.log ---
+pr view https://github.com/example/repo/pull/6186 --json headRefOid -q .headRefOid
+pr view https://github.com/example/repo/pull/6186 --json state,isDraft,mergeable,mergeStateStatus,headRefOid,baseRefName,statusCheckRollup
+api repos/example/repo/branches/main
+api --paginate repos/example/repo/rules/branches/main
+api --method PUT repos/example/repo/pulls/6186/update-branch -f expected_head_sha=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+pr view https://github.com/example/repo/pull/6186 --json headRefOid -q .headRefOid
+pr view https://github.com/example/repo/pull/6186 --json headRefOid -q .headRefOid
+pr view https://github.com/example/repo/pull/6186 --json state,isDraft,mergeable,mergeStateStatus,headRefOid,baseRefName,statusCheckRollup
+api repos/example/repo/branches/main
+api --paginate repos/example/repo/rules/branches/main
+pr view https://github.com/example/repo/pull/6186 --json state,isDraft,mergeable,mergeStateStatus,headRefOid,baseRefName,statusCheckRollup
+api repos/example/repo/branches/main
+api --paginate repos/example/repo/rules/branches/main
+pr merge 6186 --repo example/repo --match-head-commit bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb --squash
+api graphql -f query=query($owner:String!,$repo:String!,$number:Int!){repository(owner:$owner,name:$repo){pullRequest(number:$number){state merged isInMergeQueue baseRefName}}} -F owner=example -F repo=repo -F number=6186 --jq .data.repository.pullRequest | "state=" + (.state // ""), "merged=" + (.merged | tostring), "queued=" + (.isInMergeQueue | tostring), "base=" + (.baseRefName // "")
+
+--- github-head ---
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+
+--- state/task-x1.meta ---
+window=fm-task-x1
+worktree=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-pr-merge-tests.jVWan9/github-behind-unknown-after-waived-red/wt
+project=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-pr-merge-tests.jVWan9/github-behind-unknown-after-waived-red/project
+kind=ship
+mode=no-mistakes
+pr=https://github.com/example/repo/pull/6186
+pr_head=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+
+--- meta-at-merge ---
+window=fm-task-x1
+worktree=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-pr-merge-tests.jVWan9/github-behind-unknown-after-waived-red/wt
+project=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-pr-merge-tests.jVWan9/github-behind-unknown-after-waived-red/project
+kind=ship
+mode=no-mistakes
+pr=https://github.com/example/repo/pull/6186
+pr_head=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+
+
+=== github-behind-unreadable-after-update ===
+--- stdout ---
+armed: state/task-x1.check.sh
+{"message":"Updating pull request branch."}
+armed: state/task-x1.check.sh
+
+--- stderr ---
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  repair missing watcher supervision according to the session-start block for this harness; do not use shell &.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+verified: https://github.com/example/repo/pull/6187 is open and mergeable, with every unwaived required check reported and every unwaived check green at head aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+error: could not read the GitHub pull request state before merging
+
+--- gh.log ---
+pr view https://github.com/example/repo/pull/6187 --json headRefOid -q .headRefOid
+pr view https://github.com/example/repo/pull/6187 --json state,isDraft,mergeable,mergeStateStatus,headRefOid,baseRefName,statusCheckRollup
+api repos/example/repo/branches/main
+api --paginate repos/example/repo/rules/branches/main
+api --method PUT repos/example/repo/pulls/6187/update-branch -f expected_head_sha=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+pr view https://github.com/example/repo/pull/6187 --json headRefOid -q .headRefOid
+pr view https://github.com/example/repo/pull/6187 --json headRefOid -q .headRefOid
+pr view https://github.com/example/repo/pull/6187 --json state,isDraft,mergeable,mergeStateStatus,headRefOid,baseRefName,statusCheckRollup
+
+--- github-head ---
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+
+--- state/task-x1.meta ---
+window=fm-task-x1
+worktree=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-pr-merge-tests.jVWan9/github-behind-unreadable-after-update/wt
+project=/private/var/folders/tx/1rphyw7154x0k2jc1vcs5gth0000gn/T/fm-pr-merge-tests.jVWan9/github-behind-unreadable-after-update/project
+kind=ship
+mode=no-mistakes
+pr=https://github.com/example/repo/pull/6187
+pr_head=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+

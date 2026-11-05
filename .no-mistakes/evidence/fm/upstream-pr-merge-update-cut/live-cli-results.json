@@ -1,0 +1,22 @@
+[
+  {
+    "name": "Reject valued update consent",
+    "exit": 2,
+    "expected_observed": true
+  },
+  {
+    "name": "Reject update consent on GitLab",
+    "exit": 2,
+    "expected_observed": true
+  },
+  {
+    "name": "Reject malformed head pin",
+    "exit": 2,
+    "expected_observed": true
+  },
+  {
+    "name": "Live GitHub preflight refuses immutable mismatched pin",
+    "exit": 1,
+    "expected_observed": true
+  }
+]

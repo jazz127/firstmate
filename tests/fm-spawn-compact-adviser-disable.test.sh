@@ -313,7 +313,7 @@ case "${1:-}" in
         ". '"*"'")
           staged=${payload#". '"}
           staged=${staged%"'"}
-          [ ! -f "$staged" ] || payload=$(cat "$staged")
+          [ ! -f "$staged" ] || { payload=$(cat "$staged"); printf '%s\n' "$payload" > "$D/launch"; }
           ;;
       esac
       printf '%s\n' "$payload" >> "$D/literal"

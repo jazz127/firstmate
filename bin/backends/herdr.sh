@@ -1721,8 +1721,8 @@ fm_backend_herdr_server_owner_name() {  # <owner-marker>
 # has-session || tmux new-session -d`. Verified: a bare socket CLI call does
 # NOT auto-start the server, so this must run before any workspace/tab/pane
 # call. The server outlives its launcher and passes its startup environment to
-# every later pane, so remove home, harness identity, and supervision selection
-# inherited from whichever agent happened to start it. Bounded poll for the
+# every later pane, so remove home, harness identity, a parent Claude session,
+# and supervision selection inherited from whichever agent happened to start it. Bounded poll for the
 # server to report running. `session-leader` starts a Firstmate-owned server
 # as a POSIX session leader so Herdr 0.9.1 saved machines accept it.
 #
@@ -1765,6 +1765,8 @@ fm_backend_herdr_server_ensure() {  # <session> [session-leader]
   (
     unset FM_HOME FM_ROOT_OVERRIDE FM_STATE_OVERRIDE FM_DATA_OVERRIDE FM_PROJECTS_OVERRIDE FM_CONFIG_OVERRIDE \
       CURSOR_AGENT CURSOR_INVOKED_AS CLAUDECODE PI_CODING_AGENT FM_PI_HARNESS GROK_AGENT FM_SUPERVISION_MODEL \
+      CLAUDE_CODE_CHILD_SESSION CLAUDE_CODE_SESSION_ID CLAUDE_PID CLAUDE_CODE_MESSAGING_SOCKET \
+      CLAUDE_CODE_MESSAGING_TOKEN CLAUDE_CODE_SESSION_ATTENDED CLAUDE_CODE_ENTRYPOINT \
       FM_TIMEOUT_OWNER_PID FM_EXEC_TIMED_OWNER_PID FM_BACKEND_HERDR_SERVER_SESSION_LEADER
     [ "${2:-}" != session-leader ] || FM_BACKEND_HERDR_SERVER_SESSION_LEADER=1
     fm_backend_herdr_cli "$session" server </dev/null >/dev/null 2>&1 &

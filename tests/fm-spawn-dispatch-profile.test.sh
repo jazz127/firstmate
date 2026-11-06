@@ -2219,7 +2219,7 @@ test_claude_forwards_firstmate_config_dir_when_set() {
   status=$?
   expect_code 0 "$status" "claude spawn with CLAUDE_CONFIG_DIR set should succeed"
   launch=$(cat "$LAUNCH_LOG")
-  assert_contains "$launch" "CLAUDE_CONFIG_DIR='$CASE_DIR/claude-work' env -u CURSOR_AGENT -u CURSOR_INVOKED_AS -u GEMINI_CLI CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=false CLAUDE_CODE_SEND_FEEDBACK=0 claude --dangerously-skip-permissions $(claude_worker_add_dirs "$HOME_DIR" "$id")--settings '{\"feedbackDrafts\":\"off\",\"attribution\":{\"commit\":\"\",\"pr\":\"\",\"sessionUrl\":false}}'" \
+  assert_contains "$launch" "CLAUDE_CONFIG_DIR='$CASE_DIR/claude-work' env -u CURSOR_AGENT -u CURSOR_INVOKED_AS -u GEMINI_CLI ${CLAUDE_PARENT_SESSION_SCRUB}CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=false CLAUDE_CODE_SEND_FEEDBACK=0 claude --dangerously-skip-permissions $(claude_worker_add_dirs "$HOME_DIR" "$id")--settings '{\"feedbackDrafts\":\"off\",\"attribution\":{\"commit\":\"\",\"pr\":\"\",\"sessionUrl\":false}}'" \
     "claude launch did not forward firstmate's CLAUDE_CONFIG_DIR to the crewmate pane"
   pass "claude forwards firstmate's CLAUDE_CONFIG_DIR so the crewmate uses the same credential store"
 }
@@ -2970,13 +2970,60 @@ claude_worker_add_dirs() {  # <home> <id>
   printf '%s ' "--add-dir '$state_real/operational-inbox' --add-dir '$state_real/$2.inbox' --add-dir '$data_real/$2' --add-dir '$root_real/.agents/skills'"
 }
 
+# The parent Claude session markers every Claude launch sheds, so a multiplexer
+# server started from inside Claude never makes a worker its child session.
+CLAUDE_PARENT_SESSION_VARS='CLAUDECODE CLAUDE_CODE_CHILD_SESSION CLAUDE_CODE_SESSION_ID CLAUDE_PID CLAUDE_CODE_MESSAGING_SOCKET CLAUDE_CODE_MESSAGING_TOKEN CLAUDE_CODE_SESSION_ATTENDED CLAUDE_CODE_ENTRYPOINT'
+CLAUDE_PARENT_SESSION_SCRUB="env $(for _v in $CLAUDE_PARENT_SESSION_VARS; do printf -- '-u %s ' "$_v"; done)"
+
 claude_expected_launch() {  # <launch> <home> <id> <permission-flag>
   local doorbell quoted
   doorbell=$(claude_launch_brief_arg "$1")
   [ "$(printf '%s' "$doorbell" | "$ROOT/bin/fm-operational-input.sh" doorbell-kind)" = launch-brief ] \
     || doorbell="not a launch-brief doorbell"
   quoted="'$(printf '%s' "$doorbell" | sed "s/'/'\\\\''/g")'"
-  printf '%s' "unset FM_TIMEOUT_OWNER_PID FM_EXEC_TIMED_OWNER_PID; export COMPACT_ADVISER_DISABLE=1; $(task_inbox_export "$2" "$3")$(fm_test_launch_git_prefix "$1")env -u CURSOR_AGENT -u CURSOR_INVOKED_AS -u GEMINI_CLI CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=false CLAUDE_CODE_SEND_FEEDBACK=0 claude $4 $(claude_worker_add_dirs "$2" "$3")--settings '{\"feedbackDrafts\":\"off\",\"attribution\":{\"commit\":\"\",\"pr\":\"\",\"sessionUrl\":false}}' $CLAUDE_CONTROL_CHANNEL_FLAG $quoted"
+  printf '%s' "unset FM_TIMEOUT_OWNER_PID FM_EXEC_TIMED_OWNER_PID; export COMPACT_ADVISER_DISABLE=1; $(task_inbox_export "$2" "$3")$(fm_test_launch_git_prefix "$1")env -u CURSOR_AGENT -u CURSOR_INVOKED_AS -u GEMINI_CLI ${CLAUDE_PARENT_SESSION_SCRUB}CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=false CLAUDE_CODE_SEND_FEEDBACK=0 claude $4 $(claude_worker_add_dirs "$2" "$3")--settings '{\"feedbackDrafts\":\"off\",\"attribution\":{\"commit\":\"\",\"pr\":\"\",\"sessionUrl\":false}}' $CLAUDE_CONTROL_CHANNEL_FLAG $quoted"
+}
+
+# A multiplexer server started from inside a Claude session hands that
+# session's markers to every pane; an inherited CLAUDE_CODE_CHILD_SESSION makes
+# the worker a child session that saves no transcript. Run the generated launch
+# command itself under that polluted environment with a probe claude.
+test_claude_launch_sheds_parent_claude_session() {
+  local rec id out status launch command probe env_out name kind
+  for kind in ship secondmate; do
+    id=parent-session-$kind-z31
+    rec=$(make_spawn_case "parent-session-$kind" claude "$id")
+    read_case_record "$rec"
+    if [ "$kind" = secondmate ]; then
+      make_seeded_secondmate_home "$CASE_DIR/secondmate-home" "$id"
+      out=$(run_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$CASE_DIR/secondmate-home" --secondmate)
+    else
+      out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR")
+    fi
+    status=$?
+    expect_code 0 "$status" "claude $kind spawn should succeed: $out"
+    launch=$(cat "$LAUNCH_LOG")
+    command=$(fm_test_launch_command "$launch")
+    probe="$CASE_DIR/parent-session-probe"
+    mkdir -p "$probe"
+    cat > "$probe/claude" <<'SH'
+#!/bin/bash
+for name in $CLAUDE_PARENT_SESSION_VARS FM_PARENT_SENTINEL; do
+  eval 'value=${'"$name"'-<unset>}'
+  printf '%s=%s\n' "$name" "$value"
+done
+SH
+    chmod +x "$probe/claude"
+    env_out=$(PATH="$probe:/usr/bin:/bin" CLAUDE_PARENT_SESSION_VARS="$CLAUDE_PARENT_SESSION_VARS" FM_PARENT_SENTINEL=kept \
+      CLAUDECODE=1 CLAUDE_CODE_CHILD_SESSION=1 CLAUDE_CODE_SESSION_ID=parent-session CLAUDE_PID=4242 \
+      CLAUDE_CODE_MESSAGING_SOCKET=/tmp/parent.sock CLAUDE_CODE_MESSAGING_TOKEN=parent-token \
+      CLAUDE_CODE_SESSION_ATTENDED=1 CLAUDE_CODE_ENTRYPOINT=cli /bin/bash -c "$command" 2>&1)
+    assert_contains "$env_out" "FM_PARENT_SENTINEL=kept" "claude $kind launch did not run the probe or dropped unrelated environment: $env_out"
+    for name in $CLAUDE_PARENT_SESSION_VARS; do
+      assert_contains "$env_out" "$name=<unset>" "claude $kind launch passed the parent session's $name to the worker"
+    done
+  done
+  pass "claude worker and secondmate launches shed an inherited parent Claude session"
 }
 
 test_claude_permission_mode_absent_defaults_to_bypass() {
@@ -3317,6 +3364,7 @@ test_lavish_server_address_is_exported_to_worker_launch
 test_lavish_absent_config_preserves_destination_ambient
 test_claude_omits_config_dir_prefix_when_unset
 test_claude_permission_mode_absent_defaults_to_bypass
+test_claude_launch_sheds_parent_claude_session
 test_claude_permission_mode_auto_opts_into_model_reviewed_launch
 test_claude_permission_mode_bypass_swaps_only_the_permission_flag
 test_claude_permission_mode_auto_reaches_scout_launch

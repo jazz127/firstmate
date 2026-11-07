@@ -1,0 +1,25 @@
+{"arguments": ["generation"], "exit": 0, "stdout": "0\n", "stderr": ""}
+{"arguments": ["put", "config/crew-harness", "6", "243b0dc9b847e66c440dca985e10fe0ce9e29c379b018ddd5747ba8948f84cc8", "40"], "exit": 0, "stdout": "pushed: config/crew-harness\n", "stderr": ""}
+{"arguments": ["generation"], "exit": 0, "stdout": "40\n", "stderr": ""}
+{"arguments": ["put", "config/crew-harness", "7", "98038b25280788a45a2f06c209513024c99adee81c6416b691b4b5872db7e027", "39"], "exit": 1, "stdout": "", "stderr": "error: inheritance write generation is superseded\n"}
+Traceback (most recent call last):
+  File "~/.no-mistakes/worktrees/119cd7a6b9a4/01M6SJECW2CQ53X47S7V6WK7EK/.test-sync-validation/inheritance-live.py", line 18, in <module>
+    put(39,b'claude\n')
+    ~~~^^^^^^^^^^^^^^^^
+  File "~/.no-mistakes/worktrees/119cd7a6b9a4/01M6SJECW2CQ53X47S7V6WK7EK/.test-sync-validation/inheritance-live.py", line 15, in put
+    return run(['put','config/crew-harness',str(len(body)),hashlib.sha256(body).hexdigest(),str(generation)],body,expected)
+  File "~/.no-mistakes/worktrees/119cd7a6b9a4/01M6SJECW2CQ53X47S7V6WK7EK/.test-sync-validation/inheritance-live.py", line 10, in run
+    assert p.returncode==expected,item
+           ^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: {'arguments': ['put', 'config/crew-harness', '7', '98038b25280788a45a2f06c209513024c99adee81c6416b691b4b5872db7e027', '39'], 'exit': 1, 'stdout': '', 'stderr': 'error: inheritance write generation is superseded\n'}
+{"arguments": ["generation"], "exit": 0, "stdout": "0\n", "stderr": ""}
+{"arguments": ["put", "config/crew-harness", "6", "243b0dc9b847e66c440dca985e10fe0ce9e29c379b018ddd5747ba8948f84cc8", "40"], "exit": 0, "stdout": "pushed: config/crew-harness\n", "stderr": ""}
+{"arguments": ["generation"], "exit": 0, "stdout": "40\n", "stderr": ""}
+{"arguments": ["put", "config/crew-harness", "7", "98038b25280788a45a2f06c209513024c99adee81c6416b691b4b5872db7e027", "39"], "exit": 1, "stdout": "", "stderr": "error: inheritance write generation is superseded\n"}
+{"arguments": ["put", "config/crew-harness", "7", "98038b25280788a45a2f06c209513024c99adee81c6416b691b4b5872db7e027", "40"], "exit": 1, "stdout": "", "stderr": "error: inheritance generation conflicts with its committed payload\n"}
+{"arguments": ["put", "config/crew-harness", "7", "98038b25280788a45a2f06c209513024c99adee81c6416b691b4b5872db7e027", "41"], "exit": 0, "stdout": "pushed: config/crew-harness\n", "stderr": ""}
+{"arguments": ["generation"], "exit": 0, "stdout": "41\n", "stderr": ""}
+{"arguments": ["absent", "config/crew-harness", "0", "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "42"], "exit": 0, "stdout": "removed: config/crew-harness\n", "stderr": ""}
+{"arguments": ["generation"], "exit": 0, "stdout": "42\n", "stderr": ""}
+{"arguments": ["generation"], "exit": 1, "stdout": "", "stderr": "error: inheritance generation record is malformed\n"}
+Receiver generation recovery contract passed; stale and conflicting updates preserved receiver bytes, and corrupt state was refused.

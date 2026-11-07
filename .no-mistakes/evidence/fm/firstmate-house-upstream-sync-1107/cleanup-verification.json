@@ -1,0 +1,15 @@
+{
+  "operation": "Delete only untracked generated .test-sync-validation/",
+  "scratch_absent": true,
+  "tracked_files_sha256_before": "b80bcff89b91d443a26d6b5bba0b6a76d87e88c9106468bf19cfb3b099272aed",
+  "tracked_files_sha256_after": "b80bcff89b91d443a26d6b5bba0b6a76d87e88c9106468bf19cfb3b099272aed",
+  "tracked_bytes_and_modes_unchanged": true,
+  "head_before_and_after": "e0370cd2367d188bc9ac974e8c1929363224aebe",
+  "merge_parents": [
+    "a3aba0dcb94af2e03ed22b5bb5c8fff91d2a36a2",
+    "bf05a4fcd69b8bb27f261177eac4abb57f98aa1b"
+  ],
+  "working_tree_clean": true,
+  "product_or_test_files_changed": false,
+  "live_harness_operations_performed": false
+}

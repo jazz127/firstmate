@@ -1,0 +1,17 @@
+[
+  {
+    "pid": 92517,
+    "exit": 0,
+    "kernel_facts": "92404\tsleep\tsleep 60\n",
+    "stderr": "",
+    "ps_comm": "sleep",
+    "ps_args": "sleep 60",
+    "expected_parent": 92404
+  },
+  {
+    "pid": 99999999,
+    "exit": 1,
+    "stdout": "",
+    "stderr": ""
+  }
+]

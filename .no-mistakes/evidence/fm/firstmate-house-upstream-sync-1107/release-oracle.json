@@ -1,0 +1,20 @@
+[
+  {
+    "command": "npm",
+    "endpoint": "https://registry.npmjs.org/npm/latest",
+    "published": "12.2.2",
+    "installed_versions": [
+      "11.20.0"
+    ],
+    "update_expected": true
+  },
+  {
+    "command": "gh",
+    "endpoint": "https://api.github.com/repos/cli/cli/releases/latest",
+    "published": "v2.103.3",
+    "installed_versions": [
+      "2.103.3"
+    ],
+    "update_expected": false
+  }
+]

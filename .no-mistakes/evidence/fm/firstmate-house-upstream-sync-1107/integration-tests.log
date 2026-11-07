@@ -1,0 +1,137 @@
+FM_TEST_BEGIN 2026-11-06T23:34:15Z tests/fm-branch-supervision.test.sh family=standalone expected_gate_skip=none
+FM_TEST_BEGIN 2026-11-06T23:34:15Z tests/fm-busy-state.test.sh family=standalone expected_gate_skip=none
+ok - failed close invalidates observation before persistence and denies late replay
+ok - model streams preserve state and reject stale, closed, superseded, foreign, and retired events
+ok - native progress is generation-bound, separately recorded, and cleared on arm and retire
+ok - the turn-ended notification rides the apply generation check
+ok - arm mints a gen sidecar and seeds busy fm-spawn at seq=1
+ok - apply advances seq under the armed gen and attributes the writing source
+ok - conditional busy writes compare under the lock and preserve timestamps
+ok - firstmate-owned interrupt and recovery events bind to the current gen
+ok - apply is refused for a task whose busy contract was never armed
+ok - retire waits for the writer lock and cannot remove a new incarnation
+ok - retire treats only an absent sidecar as already retired
+ok - the writer breaks a stale lock instead of dying on GNU stat output
+ok - the first retire outwaits the stale bound and breaks a fresh orphan lock
+ok - a live writer's lock is waited for and never broken
+ok - a decimal leading-zero stale setting waits for a live writer and completes retirement
+ok - a lock that stays younger than the stale bound is refused within a bound
+ok - a late event from a previous incarnation is rejected, record unchanged
+ok - a record from a stale incarnation classifies unknown, never idle
+ok - a converted adapter with no record classifies unknown, never idle
+ok - malformed records classify unknown malformed, never busy or idle
+ok - records and generations require one complete text line without binary or trailing data
+ok - a record with no armed gen sidecar classifies unknown
+ok - a record is trusted only by the adapter whose source wrote it
+ok - converted adapters never classify busy from rendered footer text
+ok - a Claude launch parked on its trust or external-imports dialog classifies unknown launch-prompt
+ok - a Pi-family launch (pi, pi-signed, omp) parked on the project-trust dialog classifies unknown launch-prompt
+ok - the Pi signature requires both the dialog heading and its decline option, not the bare word trust
+ok - a Gemini launch parked on its trust, auth-picker, or API-key dialog classifies unknown launch-prompt
+ok - the launch-prompt backstop never reclassifies a genuinely working launch
+ok - the launch-prompt backstop is scoped to harnesses with a verified signature
+ok - the launch-prompt backstop only ever touches the untouched fm-spawn seed
+ok - the launch-prompt backstop never runs without a captured tail
+ok - the grok fallback is regex-scoped to grok and classifies only grok tasks
+ok - codex classifies unknown until a semantic source passes its verification gate
+ok - standalone kimi classifies unknown until the live verification gate opens
+ok - Pi stream gate accepts only the verified release, rejects newer, older, prerelease, and malformed
+ok - cursor classifies only from its transcript fold, never rendered text or native state
+ok - endpoint death is the only process-level override and yields dead, never busy
+ok - herdr's native verdict is trusted for busy only, and records outrank it
+ok - tern's native verdict is trusted for busy only (source tern-native), and records outrank it
+ok - record parsing never clobbers the caller's positional parameters, glob setting, or fields
+ok - the boolean view reports busy only on an exact busy verdict
+all fm-busy-state tests passed
+FM_TEST_END 2026-11-06T23:34:38Z tests/fm-busy-state.test.sh exit=0 duration_ms=23455 gate_skip=false
+ok - branch prompt is byte-stable across homes, cwd, timezone, and time, above the cache floor
+ok - fm-branch-prompt.sh: the home prompt include lands last, verbatim, and refuses an unusable path
+ok - emitted branch prompt routes completed scouts through existing policies and leased cleanup, preserving unfinished work
+ok - outcome store is append-only and refuses sequence reuse after a torn tail
+ok - outcome append refreshes a bounded, verbatim display tail of the newest rows without moving the cursor
+ok - the display tail keeps only whole newest rows within its 1 MiB budget, never shortening one
+ok - outcome seed-tail writes an absent display tail from a valid store's newest rows without moving a marker, and leaves an existing one to append
+ok - seed-tail validates and publishes only a bounded newest window, not old malformed history
+ok - routine task and fleet no-change outcomes stay stored and silent captain outcomes are refused
+ok - startup replay cannot advance the cursor across an unrendered captain outcome
+ok - malformed and ahead-of-store cursor state fail closed before any outcome can be skipped
+ok - cursor advancement refuses to legitimize an ahead processed marker
+ok - middle sequence conflicts fail closed for every store read and append
+ok - outcome lookup returns exact sequence rows and distinguishes missing receipts
+ok - outcome stores require terminated single-line JSON records
+ok - the processed marker is sequence-bound, never ahead of the read cursor, never backwards, and never adopts delivered history
+ok - outcome store: present shows each routine row once and each captain row until it is acknowledged
+ok - outcome store: present and unprocessed name each captain row's recorded age without writing it
+ok - lease exclusivity, same-actor refresh, release, staleness, and sweep hold
+ok - fm-control and fm-teardown refuse the other actor's live lease and pass through otherwise
+ok - PR merge, local landing, and new-task spawn refuse the branch actor and spare main
+ok - a home without a live branch lease takes no lock and clears leftover leases in any calling context
+ok - an unmarked main honors a live branch lease across processes and ignores a previous session's
+ok - a lease file makes an unmarked guard exclude a concurrent claim for the complete mutation
+ok - a host home's unmarked main excludes the host's first claim for its whole mutation, and other homes take no lock
+ok - lease liveness requires an exact valid session-lock pid
+ok - a claim pinned before a re-anchor records the live lock holder; a dead pin stays stale
+ok - concurrent stale-lease claims serialize so exactly one actor succeeds
+ok - guard stale cleanup cannot race with or delete a newer lease claim
+ok - lease guard excludes a concurrent actor for the complete mutation
+ok - a claim naming the other actor fails loudly instead of silently impersonating it
+ok - release commands authorize the caller and bulk release drops only that actor's leases
+ok - the branch cannot force a teardown or bypass fm-control for a relaunch
+ok - the away-posture record relocates the PR merge and a spawn under the spend cap to the branch, never local landing, and only while confirmed, valid, and away
+ok - relocated branch spawn admits only already-queued dispatchable work, including on a manual-backend home
+ok - the away spend cap is rechecked under the task-set lock so concurrent spawns cannot both publish
+ok - a quiet-mode record never caps a present captain's spawn, while the away record's cap still binds
+FM_TEST_END 2026-11-06T23:35:35Z tests/fm-branch-supervision.test.sh exit=0 duration_ms=80031 gate_skip=false
+FM_TEST_BEGIN 2026-11-06T23:35:35Z tests/fm-spawn-dispatch-profile.test.sh family=backend-dispatch expected_gate_skip=none
+ok - allowlist=absent preserves the operational floor and filters only when opted in
+ok - allowlist=missing-config preserves the operational floor and filters only when opted in
+ok - allowlist=enabled preserves the operational floor and filters only when opted in
+ok - allowlist=empty preserves the operational floor and filters only when opted in
+ok - invalid allowlist names refuse before launch or task publication
+ok - inaccessible config with present allowlist refuses before launch or task publication
+ok - inaccessible config with absent allowlist refuses before launch or task publication
+ok - inaccessible ancestor with present allowlist refuses before launch or task publication
+ok - inaccessible ancestor with absent allowlist refuses before launch or task publication
+not ok - secondmate with an allowlist should spawn: error: secondmate home cannot be inside the firstmate repo: ~/.no-mistakes/worktrees/119cd7a6b9a4/01M6SJECW2CQ53X47S7V6WK7EK/.test-sync-validation/tmp/fm-spawn-dispatch-profile.MhTfcD/env-secondmate/secondmate-home: expected exit 0, got 1
+FM_TEST_END 2026-11-06T23:36:12Z tests/fm-spawn-dispatch-profile.test.sh exit=1 duration_ms=36811 gate_skip=false
+FM_TEST_BEGIN 2026-11-06T23:36:12Z tests/fm-record-export.test.sh family=unclassified expected_gate_skip=none
+ok - live sync, archive capture and committed retry handle histories larger than a child descriptor limit
+ok - archive source reopening refuses symlink and real-directory ancestor replacements
+ok - record export sync is inert when config is absent
+ok - record export sync copies only the fixed v1 allowlist with restrictive modes
+ok - record export sync treats empty FM_*_OVERRIDE variables as unset
+ok - record export sync skips hidden state records instead of failing
+ok - record export sync leaves the prior live snapshot intact when capture fails
+ok - record export accepts an absolute export root with spaces
+ok - record export sync refuses malformed config, traversal-shaped names, symlinks, and non-regular files
+ok - record export requires a dedicated root disjoint from and owned by exactly one home
+ok - record export rejects an unowned root without changing its mode
+ok - interrupted live publication staging cannot wedge archive or sync
+ok - record export sync publishes the exact current allowlist as one live snapshot
+ok - record export refuses unknown managed artifacts before publishing a snapshot
+ok - record export sync binds destination validation to descriptor-safe publication
+ok - teardown archive commits a complete v1 manifest after every allowlisted source
+ok - teardown archive is inert before any state read when config is absent
+ok - teardown archive retries idempotently and reused task IDs stay separated by spawn_gen
+ok - teardown archive retry accepts sources already retired after a committed capture
+ok - teardown archive rejects a corrupt committed manifest
+ok - teardown archive refuses to commit when a source changes during capture
+ok - teardown archive safely repairs an uncommitted same-generation attempt
+ok - teardown archive retry publishes a fresh generation without stale partial files
+ok - teardown archive revalidates sources immediately before publication
+ok - teardown archive holds the task producer lock through source enumeration and commit
+ok - teardown archive treats absent status and inbox records as a complete capture
+ok - teardown archive refuses malformed generations, unknown artifacts, symlinks, and non-regular files
+ok - record export retention mirrors 30 completed days and prunes only owned committed generations
+ok - presentation, wake, classification, and snapshot readers leave the export root cold
+ALL TESTS PASSED
+FM_TEST_END 2026-11-06T23:36:31Z tests/fm-record-export.test.sh exit=0 duration_ms=19030 gate_skip=false
+FM_TEST_SUMMARY total=4 failed=1 skipped_gate=0 duration_ms=136351
+FM_TEST_SUMMARY_FAMILY family=backend-dispatch count=1 duration_ms=36811 failed=1
+FM_TEST_SUMMARY_FAMILY family=standalone count=2 duration_ms=103486 failed=0
+FM_TEST_SUMMARY_FAMILY family=unclassified count=1 duration_ms=19030 failed=0
+FM_TEST_SLOWEST rank=1 script=tests/fm-branch-supervision.test.sh duration_ms=80031
+FM_TEST_SLOWEST rank=2 script=tests/fm-spawn-dispatch-profile.test.sh duration_ms=36811
+FM_TEST_SLOWEST rank=3 script=tests/fm-busy-state.test.sh duration_ms=23455
+FM_TEST_SLOWEST rank=4 script=tests/fm-record-export.test.sh duration_ms=19030
+fm-test-run: wrote timing artifact: ~/.no-mistakes/evidence/01M6SJECW2CQ53X47S7V6WK7EK/integration-tests.json

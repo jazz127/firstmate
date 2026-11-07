@@ -1,0 +1,7 @@
+Isolated-config prepare exit=0
+Config: ~/.no-mistakes/worktrees/119cd7a6b9a4/01M6SJECW2CQ53X47S7V6WK7EK/.test-sync-validation/herdr/config.toml
+Logs:   ~/.no-mistakes/worktrees/119cd7a6b9a4/01M6SJECW2CQ53X47S7V6WK7EK/.test-sync-validation/xdg-config/herdr/herdr.log (plus herdr-client.log, herdr-server.log)
+Prepared-only lab cleanup exit=0; no server or harness was launched
+fm-herdr-lab: fleet-state tripwire requires exactly one running default session
+Worktree XDG prepare exit=1
+{"sessions":[{"default":true,"name":"default","running":false,"session_dir":"~/.no-mistakes/worktrees/119cd7a6b9a4/01M6SJECW2CQ53X47S7V6WK7EK/.test-sync-validation/xdg-config/herdr","socket_path":"~/.no-mistakes/worktrees/119cd7a6b9a4/01M6SJECW2CQ53X47S7V6WK7EK/.test-sync-validation/xdg-config/herdr/herdr.sock"}]}

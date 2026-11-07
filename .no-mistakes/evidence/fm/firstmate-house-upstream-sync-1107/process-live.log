@@ -1,0 +1,18 @@
+[
+  {
+    "pid": 92517,
+    "exit": 0,
+    "kernel_facts": "92404\tsleep\tsleep 60\n",
+    "stderr": "",
+    "ps_comm": "sleep",
+    "ps_args": "sleep 60",
+    "expected_parent": 92404
+  },
+  {
+    "pid": 99999999,
+    "exit": 1,
+    "stdout": "",
+    "stderr": ""
+  }
+]
+Kernel process identity matches ps and the known parent; absent PID refuses without partial facts.

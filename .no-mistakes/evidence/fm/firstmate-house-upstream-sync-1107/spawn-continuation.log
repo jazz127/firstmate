@@ -1,0 +1,45 @@
+FM_TEST_BEGIN 2026-11-06T23:47:12Z .test-sync-validation/spawn-dispatch-remainder.test.sh family=unclassified expected_gate_skip=none
+Selected continuation: 36 functions
+ok - Pi launch probing omits --tui-mode on older Pi and preserves it on supporting Pi
+ok - pi-signed shares Pi launch semantics while preserving its configured and recorded identity
+ok - pi-signed refuses safely and actionably when the selected executable is unavailable
+ok - pi-signed is a distinct persistent secondmate runtime with shared Pi supervision semantics
+ok - seeded Pi/pi-signed secondmate launches carry session --approve when advertised
+ok - ordinary Pi worker launches omit --approve
+ok - Pi approve probing omits --approve when help does not advertise it
+ok - Pi and pi-signed ship and scout launches carry the configured tool exclusions
+ok - Pi worker registries report unmatched and unverified exclusions without reporting exact matches
+ok - an absent or empty exclusion list leaves every runtime unaffected
+ok - a runtime that cannot hide tools, or a raw launch, refuses a non-empty exclusion list
+ok - a malformed exclusion entry refuses the spawn before any launch or record
+ok - Pi and pi-signed ship and scout launches refuse when the exclusion file disappears after its checks
+ok - exclusions stay in the home that configured them and skip secondmate agents
+ok - batch dispatch forwards shared --harness, --model, and --effort to every pair
+ok - claude forwards firstmate's CLAUDE_CONFIG_DIR so the crewmate uses the same credential store
+ok - the primary-owned Lavish server address reaches every worker launch
+cat: /private/tmp/fm-spawn-dispatch-profile.opAsV3/profile-lavish-ambient/pane.log: No such file or directory
+ok - absent Lavish configuration preserves the destination environment
+ok - claude omits the config-dir prefix when firstmate runs with the single-store default
+ok - absent config/claude-permission-mode defaults to --dangerously-skip-permissions
+ok - claude worker and secondmate launches shed an inherited parent Claude session
+ok - config/claude-permission-mode=auto opts into the model-reviewed launch
+ok - explicit config/claude-permission-mode=bypass uses --dangerously-skip-permissions
+ok - config/claude-permission-mode=auto reaches scout launches too
+ok - claude worker launches cover the task-channel directories in bypass and auto modes
+ok - an unrecognized config/claude-permission-mode token refuses before any endpoint or metadata
+ok - config/claude-permission-mode changes claude launches only
+ok - non-claude harnesses do not receive the claude CLAUDE_CONFIG_DIR prefix
+ok - a claude task launch establishes only Firstmate's task control channels through the system prompt
+ok - a persistent claude secondmate keeps its supervisor contract without a task-worker authority overlay
+ok - fm-spawn: a Claude launch longer than 1024 bytes is delivered intact through the staging path
+ok - a claude crewmate launch carries the attribution-off policy in its own settings
+ok - keep-ai-trailers omits Claude attribution settings and installs scoped hooks
+ok - keep-ai-trailers is inherited so a secondmate's crew launch keeps AI trailers
+ok - a claude secondmate launch carries the attribution-off policy too
+ok - active crew-dispatch profile does not block secondmate launches
+FM_SELECTED_CONTINUATION_COMPLETE
+FM_TEST_END 2026-11-06T23:52:11Z .test-sync-validation/spawn-dispatch-remainder.test.sh exit=0 duration_ms=298848 gate_skip=false
+FM_TEST_SUMMARY total=1 failed=0 skipped_gate=0 duration_ms=298914
+FM_TEST_SUMMARY_FAMILY family=unclassified count=1 duration_ms=298848 failed=0
+FM_TEST_SLOWEST rank=1 script=.test-sync-validation/spawn-dispatch-remainder.test.sh duration_ms=298848
+fm-test-run: wrote timing artifact: ~/.no-mistakes/evidence/01M6SJECW2CQ53X47S7V6WK7EK/spawn-continuation.json

@@ -1,0 +1,14 @@
+[
+  {
+    "git_discovery_ceiling": "",
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "git_discovery_ceiling": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M6SJECW2CQ53X47S7V6WK7EK/.test-sync-validation",
+    "exit": 0,
+    "stdout": "tool updates: firstmate check failed: ~/.no-mistakes/worktrees/119cd7a6b9a4/01M6SJECW2CQ53X47S7V6WK7EK/.test-sync-validation/git-discovery-home/not-a-repo is not a git repository\n",
+    "stderr": ""
+  }
+]

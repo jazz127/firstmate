@@ -1,0 +1,70 @@
+{
+  "families": [
+    {
+      "count": 1,
+      "duration_ms": 36811,
+      "failed": 1,
+      "name": "backend-dispatch"
+    },
+    {
+      "count": 2,
+      "duration_ms": 103486,
+      "failed": 0,
+      "name": "standalone"
+    },
+    {
+      "count": 1,
+      "duration_ms": 19030,
+      "failed": 0,
+      "name": "unclassified"
+    }
+  ],
+  "finished_at": "2026-11-06T23:36:31Z",
+  "run_id": "fm-test-run-1794008054860-91083",
+  "scripts": [
+    {
+      "duration_ms": 23455,
+      "exit": 0,
+      "expected_gate_skip": "none",
+      "family": "standalone",
+      "gate_skip": false,
+      "gate_skip_reason": "",
+      "path": "tests/fm-busy-state.test.sh"
+    },
+    {
+      "duration_ms": 80031,
+      "exit": 0,
+      "expected_gate_skip": "none",
+      "family": "standalone",
+      "gate_skip": false,
+      "gate_skip_reason": "",
+      "path": "tests/fm-branch-supervision.test.sh"
+    },
+    {
+      "duration_ms": 36811,
+      "exit": 1,
+      "expected_gate_skip": "none",
+      "family": "backend-dispatch",
+      "gate_skip": false,
+      "gate_skip_reason": "",
+      "path": "tests/fm-spawn-dispatch-profile.test.sh"
+    },
+    {
+      "duration_ms": 19030,
+      "exit": 0,
+      "expected_gate_skip": "none",
+      "family": "unclassified",
+      "gate_skip": false,
+      "gate_skip_reason": "",
+      "path": "tests/fm-record-export.test.sh"
+    }
+  ],
+  "selection": "scripts;jobs=4",
+  "started_at": "2026-11-06T23:34:14Z",
+  "summary": {
+    "duration_ms": 136351,
+    "failed": 1,
+    "skipped_gate": 0,
+    "total": 4
+  }
+}

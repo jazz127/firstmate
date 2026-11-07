@@ -1,0 +1,97 @@
+[
+  {
+    "name": "Selected real timeout mechanism",
+    "exit": 0,
+    "output": "perl\n"
+  },
+  {
+    "name": "perl: redirected input reaches bounded command",
+    "exit": 0,
+    "output": "line one\nline two\n"
+  },
+  {
+    "name": "perl: child exit 17 preserved",
+    "exit": 17,
+    "output": ""
+  },
+  {
+    "name": "perl: deadline reports 124",
+    "exit": 124,
+    "output": ""
+  },
+  {
+    "name": "bash: redirected input reaches bounded command",
+    "exit": 0,
+    "output": "line one\nline two\n"
+  },
+  {
+    "name": "bash: child exit 17 preserved",
+    "exit": 17,
+    "output": ""
+  },
+  {
+    "name": "bash: deadline reports 124",
+    "exit": 124,
+    "output": ""
+  },
+  {
+    "name": "Literal command filename with spaces and semicolon",
+    "exit": 0,
+    "output": "literal-ok:1\n"
+  },
+  {
+    "name": "Interrupt reaps TERM-ignoring command and descendant",
+    "exit": -15,
+    "output": "{\"command_and_descendant_states\": [\"absent\", \"absent\"]}\n"
+  },
+  {
+    "name": "Declared Claude list refuses implicit account",
+    "exit": 1,
+    "output": "error: config/claude-accounts declares 1 Claude accounts, so a Claude ship or scout launch must name one with --account; bin/fm-claude-account-quota.sh measures each, and Firstmate never picks a default\n"
+  },
+  {
+    "name": "Declared Claude list refuses undeclared entry",
+    "exit": 1,
+    "output": "error: account 'undeclared' is not declared in config/claude-accounts; name a declared entry with --account\n"
+  },
+  {
+    "name": "Conflicting Claude single pin and list refused",
+    "exit": 1,
+    "output": "error: config/claude-accounts and config/claude-account are both present; keep the account list or the single pin, not both\n"
+  },
+  {
+    "name": "Claude account selection cannot bleed into Codex",
+    "exit": 1,
+    "output": "error: --account names one of config/claude-accounts and applies to Claude workers only, not codex\n"
+  },
+  {
+    "name": "Malformed TypeSafe base 1 refused without disclosure",
+    "exit": 2,
+    "output": "error: TYPESAFE_BASE must be an http(s) URL with a host and no userinfo, query, fragment, whitespace, or brackets in its path\n"
+  },
+  {
+    "name": "Malformed TypeSafe base 2 refused without disclosure",
+    "exit": 2,
+    "output": "error: TYPESAFE_BASE must be an http(s) URL with a host and no userinfo, query, fragment, whitespace, or brackets in its path\n"
+  },
+  {
+    "name": "Malformed TypeSafe base 3 refused without disclosure",
+    "exit": 2,
+    "output": "error: TYPESAFE_BASE must be an http(s) URL with a host and no userinfo, query, fragment, whitespace, or brackets in its path\n"
+  },
+  {
+    "name": "Malformed TypeSafe base 4 refused without disclosure",
+    "exit": 2,
+    "output": "error: TYPESAFE_BASE must be an http(s) URL with a host and no userinfo, query, fragment, whitespace, or brackets in its path\n"
+  },
+  {
+    "name": "Malformed TypeSafe base 5 refused without disclosure",
+    "exit": 2,
+    "output": "error: TYPESAFE_BASE must be an http(s) URL with a host and no userinfo, query, fragment, whitespace, or brackets in its path\n"
+  },
+  {
+    "name": "All direct contract scenarios completed",
+    "exit": 0,
+    "output": "No substituted product binaries or upstream responses were used.\n"
+  }
+]

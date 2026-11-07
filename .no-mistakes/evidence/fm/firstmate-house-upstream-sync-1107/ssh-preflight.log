@@ -1,0 +1,14 @@
+Server listening on 127.0.0.1 port 51169.
+Connection from 127.0.0.1 port 51172 on 127.0.0.1 port 51169
+Accepted key ED25519 SHA256:aMo8saDaopKin2NVe8zv6SREXuUmAz56sMw7ekMb5GA found at ~/.no-mistakes/worktrees/119cd7a6b9a4/01M6SJECW2CQ53X47S7V6WK7EK/.test-sync-validation/ssh-lab/client.pub:1
+Postponed publickey for jarad from 127.0.0.1 port 51172 ssh2 [preauth]
+Accepted key ED25519 SHA256:aMo8saDaopKin2NVe8zv6SREXuUmAz56sMw7ekMb5GA found at ~/.no-mistakes/worktrees/119cd7a6b9a4/01M6SJECW2CQ53X47S7V6WK7EK/.test-sync-validation/ssh-lab/client.pub:1
+Accepted publickey for jarad from 127.0.0.1 port 51172 ssh2: ED25519 SHA256:aMo8saDaopKin2NVe8zv6SREXuUmAz56sMw7ekMb5GA
+BSM audit: bsm_audit_session_setup: setaudit_addr failed: Operation not permitted
+User child is on pid 37180
+Starting session: command for jarad from 127.0.0.1 port 51172 id 0
+Received disconnect from 127.0.0.1 port 51172:11: disconnected by user
+Disconnected from user jarad 127.0.0.1 port 51172
+Received signal 15; terminating.
+{"client_exit": 0, "stdout": "validation-ready", "stderr": "Warning: Permanently added '[127.0.0.1]:51169' (ED25519) to the list of known hosts.\n"}
+Isolated SSH server stopped; keys and config remain only in disposable worktree scratch until cleanup.

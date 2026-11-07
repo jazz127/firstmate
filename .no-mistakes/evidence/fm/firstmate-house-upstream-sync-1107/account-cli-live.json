@@ -1,0 +1,61 @@
+[
+  {
+    "argv": [
+      "bin/fm-lab-home.sh",
+      "create",
+      "~/.no-mistakes/worktrees/119cd7a6b9a4/01M6SJECW2CQ53X47S7V6WK7EK/.test-sync-validation/account-cli-home"
+    ],
+    "exit": 0,
+    "stdout": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M6SJECW2CQ53X47S7V6WK7EK/.test-sync-validation/account-cli-home\n",
+    "stderr": ""
+  },
+  {
+    "argv": [
+      "bin/fm-spawn.sh",
+      "account-guard-check",
+      "~/.no-mistakes/worktrees/119cd7a6b9a4/01M6SJECW2CQ53X47S7V6WK7EK/.test-sync-validation/teardown-live-final/project",
+      "--scout",
+      "--harness",
+      "claude",
+      "--backend",
+      "tmux"
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": "fm-gate-refuse: gate agent lifecycle permitted only against lab home ~/.no-mistakes/worktrees/119cd7a6b9a4/01M6SJECW2CQ53X47S7V6WK7EK/.test-sync-validation/account-cli-home\nerror: config/claude-accounts declares 1 Claude accounts, so a Claude ship or scout launch must name one with --account; bin/fm-claude-account-quota.sh measures each, and Firstmate never picks a default\n"
+  },
+  {
+    "argv": [
+      "bin/fm-spawn.sh",
+      "account-guard-check",
+      "~/.no-mistakes/worktrees/119cd7a6b9a4/01M6SJECW2CQ53X47S7V6WK7EK/.test-sync-validation/teardown-live-final/project",
+      "--scout",
+      "--harness",
+      "claude",
+      "--backend",
+      "tmux",
+      "--account",
+      "undeclared"
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": "fm-gate-refuse: gate agent lifecycle permitted only against lab home ~/.no-mistakes/worktrees/119cd7a6b9a4/01M6SJECW2CQ53X47S7V6WK7EK/.test-sync-validation/account-cli-home\nerror: account 'undeclared' is not declared in config/claude-accounts; name a declared entry with --account\n"
+  },
+  {
+    "argv": [
+      "bin/fm-spawn.sh",
+      "account-guard-check",
+      "~/.no-mistakes/worktrees/119cd7a6b9a4/01M6SJECW2CQ53X47S7V6WK7EK/.test-sync-validation/teardown-live-final/project",
+      "--scout",
+      "--harness",
+      "claude",
+      "--backend",
+      "tmux",
+      "--account",
+      "ordinary"
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": "fm-gate-refuse: gate agent lifecycle permitted only against lab home ~/.no-mistakes/worktrees/119cd7a6b9a4/01M6SJECW2CQ53X47S7V6WK7EK/.test-sync-validation/account-cli-home\nerror: config/claude-accounts and config/claude-account are both present; keep the account list or the single pin, not both\n"
+  }
+]

@@ -1,0 +1,55 @@
+Selected real timeout mechanism: exit=0
+perl
+
+perl: redirected input reaches bounded command: exit=0
+line one
+line two
+
+perl: child exit 17 preserved: exit=17
+
+perl: deadline reports 124: exit=124
+
+bash: redirected input reaches bounded command: exit=0
+line one
+line two
+
+bash: child exit 17 preserved: exit=17
+
+bash: deadline reports 124: exit=124
+
+Literal command filename with spaces and semicolon: exit=0
+literal-ok:1
+
+Interrupt reaps TERM-ignoring command and descendant: exit=-15
+{"command_and_descendant_states": ["absent", "absent"]}
+
+Declared Claude list refuses implicit account: exit=1
+error: config/claude-accounts declares 1 Claude accounts, so a Claude ship or scout launch must name one with --account; bin/fm-claude-account-quota.sh measures each, and Firstmate never picks a default
+
+Declared Claude list refuses undeclared entry: exit=1
+error: account 'undeclared' is not declared in config/claude-accounts; name a declared entry with --account
+
+Conflicting Claude single pin and list refused: exit=1
+error: config/claude-accounts and config/claude-account are both present; keep the account list or the single pin, not both
+
+Claude account selection cannot bleed into Codex: exit=1
+error: --account names one of config/claude-accounts and applies to Claude workers only, not codex
+
+Malformed TypeSafe base 1 refused without disclosure: exit=2
+error: TYPESAFE_BASE must be an http(s) URL with a host and no userinfo, query, fragment, whitespace, or brackets in its path
+
+Malformed TypeSafe base 2 refused without disclosure: exit=2
+error: TYPESAFE_BASE must be an http(s) URL with a host and no userinfo, query, fragment, whitespace, or brackets in its path
+
+Malformed TypeSafe base 3 refused without disclosure: exit=2
+error: TYPESAFE_BASE must be an http(s) URL with a host and no userinfo, query, fragment, whitespace, or brackets in its path
+
+Malformed TypeSafe base 4 refused without disclosure: exit=2
+error: TYPESAFE_BASE must be an http(s) URL with a host and no userinfo, query, fragment, whitespace, or brackets in its path
+
+Malformed TypeSafe base 5 refused without disclosure: exit=2
+error: TYPESAFE_BASE must be an http(s) URL with a host and no userinfo, query, fragment, whitespace, or brackets in its path
+
+All direct contract scenarios completed: exit=0
+No substituted product binaries or upstream responses were used.
+

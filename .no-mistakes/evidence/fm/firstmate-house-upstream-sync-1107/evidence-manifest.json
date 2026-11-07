@@ -1,0 +1,35 @@
+{
+  "source_commit": "e0370cd2367d188bc9ac974e8c1929363224aebe",
+  "scratch_root": "~/.no-mistakes/worktrees/119cd7a6b9a4/01M6SJECW2CQ53X47S7V6WK7EK/.test-sync-validation",
+  "repeat_setup": "Create .test-sync-validation/tmp before running the retained Python drivers from the run worktree. Each driver uses a fresh scenario path.",
+  "oracles": [
+    "fm-timeout-lib.sh documented stdin, status, deadline, and signal cleanup contracts",
+    "docs/configuration.md published release schemas, numeric ordering, and repeat suppression",
+    "docs/watcher-continuity.md present every distinct custom-check payload before acknowledgement",
+    "fm-teardown.sh documented remote reachability and uncommitted work safety rules",
+    "fm-remote-inherit.sh monotone committed generations and refusal of malformed state",
+    "fm-procinfo.py documented ps-compatible process identity, compared with known parent and actual ps",
+    "fm-branch-prompt.sh documented append-only home include contract",
+    "Real fm-watch.sh custom-check deadlines and owner interruption must terminate both the configured local command and its child, including a home path containing spaces and a semicolon."
+  ],
+  "limitations": [
+    "Real Herdr lifecycle was not launched: worktree XDG isolation has no running default tripwire; using the normal XDG tree writes outside the allowed workspace.",
+    "Private tmux primary launch at 120x40 failed before harness startup because the socket pathname exceeds the OS limit.",
+    "No GitHub repository mutation was authorized; PR merges, branch updates, and check waivers have synthetic evidence only.",
+    "No TypeSafe dispatch credential or disposable real provider endpoint was supplied; configuration refusals were driven without credentials.",
+    "Direct library exercises of redirected stdin and synthetic launch/account combinations are supplementary offline checks, not proof of a live authenticated harness.",
+    "A real worktree-contained OpenSSH server accepted disposable keys, but the real Firstmate macOS remote entrypoint ensures a per-account remote worker/LaunchAgent and stores its account queue/logs outside this worktree. That installation was not attempted under the workspace boundary; full sender recovery remains synthetic."
+  ],
+  "setup_corrections": [
+    "The first release registry used a display name with a space, rejected by the documented schema; changed the disposable entry to gh-cli.",
+    "The first inheritance driver expected success for a stale write; corrected its oracle to the documented refusal.",
+    "The first teardown driver used a windowless record in a manual-backlog home; rebuilt it with the real markdown backlog so the documented windowless recovery path applied.",
+    "The synthetic tool-update test inherited the enclosing Git worktree through TMPDIR; its rerun uses GIT_CEILING_DIRECTORIES at the scratch temp root.",
+    "The first PR-merge suite hit the chosen 360s test budget; its rerun uses 1200s.",
+    "In-worktree TMPDIR also made synthetic secondmate homes and export roots overlap the code/effective home root. Those suites are rerun in the canonical runner normal ephemeral temp area, under the workspace rule allowing incidental test-toolchain temp writes."
+  ],
+  "prior_author_baselines": "The five baseline-failure suites described in the supplied author evidence were not rerun; no full repository suite or baseline aggregate pass is claimed.",
+  "split_coverage": {
+    "spawn": "The normal-temp retry completed the original prefix through test_pi_threads_model_and_max_effort before the 600s budget. The continuation executes the remaining 36 original functions using unchanged assertions; see spawn-continuation-selection.json."
+  }
+}

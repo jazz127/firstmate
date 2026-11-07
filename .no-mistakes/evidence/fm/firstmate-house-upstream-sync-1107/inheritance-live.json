@@ -1,0 +1,102 @@
+[
+  {
+    "arguments": [
+      "generation"
+    ],
+    "exit": 0,
+    "stdout": "0\n",
+    "stderr": ""
+  },
+  {
+    "arguments": [
+      "put",
+      "config/crew-harness",
+      "6",
+      "243b0dc9b847e66c440dca985e10fe0ce9e29c379b018ddd5747ba8948f84cc8",
+      "40"
+    ],
+    "exit": 0,
+    "stdout": "pushed: config/crew-harness\n",
+    "stderr": ""
+  },
+  {
+    "arguments": [
+      "generation"
+    ],
+    "exit": 0,
+    "stdout": "40\n",
+    "stderr": ""
+  },
+  {
+    "arguments": [
+      "put",
+      "config/crew-harness",
+      "7",
+      "98038b25280788a45a2f06c209513024c99adee81c6416b691b4b5872db7e027",
+      "39"
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": "error: inheritance write generation is superseded\n"
+  },
+  {
+    "arguments": [
+      "put",
+      "config/crew-harness",
+      "7",
+      "98038b25280788a45a2f06c209513024c99adee81c6416b691b4b5872db7e027",
+      "40"
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": "error: inheritance generation conflicts with its committed payload\n"
+  },
+  {
+    "arguments": [
+      "put",
+      "config/crew-harness",
+      "7",
+      "98038b25280788a45a2f06c209513024c99adee81c6416b691b4b5872db7e027",
+      "41"
+    ],
+    "exit": 0,
+    "stdout": "pushed: config/crew-harness\n",
+    "stderr": ""
+  },
+  {
+    "arguments": [
+      "generation"
+    ],
+    "exit": 0,
+    "stdout": "41\n",
+    "stderr": ""
+  },
+  {
+    "arguments": [
+      "absent",
+      "config/crew-harness",
+      "0",
+      "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "42"
+    ],
+    "exit": 0,
+    "stdout": "removed: config/crew-harness\n",
+    "stderr": ""
+  },
+  {
+    "arguments": [
+      "generation"
+    ],
+    "exit": 0,
+    "stdout": "42\n",
+    "stderr": ""
+  },
+  {
+    "arguments": [
+      "generation"
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": "error: inheritance generation record is malformed\n"
+  }
+]

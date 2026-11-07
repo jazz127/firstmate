@@ -1,0 +1,33 @@
+[
+  {
+    "case": "absent include",
+    "exit": 0,
+    "output_bytes": 42353,
+    "stderr": ""
+  },
+  {
+    "case": "blank include",
+    "exit": 0,
+    "output_bytes": 42353,
+    "stderr": ""
+  },
+  {
+    "case": "local include",
+    "exit": 0,
+    "output_bytes": 42580,
+    "stderr": ""
+  },
+  {
+    "case": "unchanged include repeated",
+    "exit": 0,
+    "output_bytes": 42580,
+    "stderr": ""
+  },
+  {
+    "case": "non-file include refuses before partial output",
+    "exit": 1,
+    "output_bytes": 0,
+    "stderr": "error: ~/.no-mistakes/worktrees/119cd7a6b9a4/01M6SJECW2CQ53X47S7V6WK7EK/.test-sync-validation/prompt-home/config/branch-prompt-include.md must be a readable regular file\n"
+  }
+]
+Absent/blank includes leave output unchanged; local rule is appended once after tracked prompt; unusable include returns no partial prompt.

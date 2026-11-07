@@ -1,0 +1,24 @@
+[
+  {
+    "case": "deadline",
+    "driver": "bin/fm-watch.sh with real registered local check",
+    "exit": 0,
+    "stdout": "check: ~/.no-mistakes/worktrees/119cd7a6b9a4/01M6SJECW2CQ53X47S7V6WK7EK/.test-sync-validation/watcher deadline; literal-home/state/bounded.check.sh: timed out after 2s\n",
+    "stderr": "",
+    "command_and_descendant_states": [
+      "absent",
+      "absent"
+    ]
+  },
+  {
+    "case": "interruption",
+    "driver": "bin/fm-watch.sh with real registered local check",
+    "exit": -15,
+    "stdout": "",
+    "stderr": "",
+    "command_and_descendant_states": [
+      "absent",
+      "absent"
+    ]
+  }
+]

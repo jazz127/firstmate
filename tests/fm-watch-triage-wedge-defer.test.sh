@@ -32,7 +32,7 @@ arm_parked_gate() {  # <case-dir>
 test_wedge_threshold_parked_gate_needs_an_unanswered_decision() {
   local dir state fakebin out capture window key n
   local human='state: parked · source: run-step · parked at awaiting_approval: 2 finding(s) · ask-user: authority decision · run: 01RUNGATE'
-  window="test:fm-wedge"; key=$(printf '%s' "$window" | tr ':/.' '___')
+  window="test:fm-wedge"; key=$(watch_window_key "$window")
 
   # Answered, not yet relayed. The gate verdict is byte-identical to the one the
   # test above defers on; only the closing `resolved` line differs, and the
@@ -100,7 +100,7 @@ arm_worker_wait() {  # <case-dir>
 test_wedge_threshold_defers_to_a_worker_blocker() {
   local dir state fakebin out capture window key n reported case_log
   local working='state: working · source: run-step · ci running'
-  window="test:fm-wedge"; key=$(printf '%s' "$window" | tr ':/.' '___')
+  window="test:fm-wedge"; key=$(watch_window_key "$window")
 
   dir=$(wedge_threshold_fixture worker-blocker-fresh \
     'working: wiring the client
@@ -164,7 +164,7 @@ resolved: firstmate supplied the key' \
 test_wedge_threshold_worker_wait_is_off_until_armed() {
   local dir state fakebin out capture window key
   local working='state: working · source: run-step · ci running'
-  window="test:fm-wedge"; key=$(printf '%s' "$window" | tr ':/.' '___')
+  window="test:fm-wedge"; key=$(watch_window_key "$window")
   dir=$(wedge_threshold_fixture worker-blocker-unarmed 'blocked: need the API key for the staging account' 2000 600)
   state="$dir/state"; fakebin="$dir/fakebin"; out="$dir/watch.out"; capture="$dir/pane.txt"
   [ ! -e "$dir/config/wedge-defer-worker-wait" ] \
@@ -203,10 +203,11 @@ test_wedge_threshold_worker_wait_is_off_until_armed() {
 # than on stdout, because fail() exits the shell it runs in and a command
 # substitution would swallow a setup failure here.
 run_malformed_wait_record_round() {  # <name> <evidence-body>
-  local name=$1 body=$2 dir state out
+  local name=$1 body=$2 dir state out key
   dir=$(make_case "$name"); state="$dir/state"
   printf 'working: validation under way\n' > "$state/wedge.status"
-  printf '%s\n' "$(( $(date +%s) - 600 ))" > "$state/.stale-since-test_fm-wedge"
+  key=$(watch_window_key test:fm-wedge)
+  printf '%s\n' "$(( $(date +%s) - 600 ))" > "$state/.stale-since-$key"
 
   out="$dir/defer.out"
   FM_STATE_OVERRIDE="$state" FM_STALE_ESCALATE_SECS=1 FM_PAUSE_RESURFACE_SECS=999 \
@@ -221,10 +222,10 @@ run_malformed_wait_record_round() {  # <name> <evidence-body>
       fm_backend_agent_state() { printf alive; }
       crew_absorb_class() { printf working; }
       eval "wedge_wait_evidence() { $2 ; }"
-      wedge_timer_check "test:fm-wedge" "$FM_STATE_OVERRIDE/.stale-since-test_fm-wedge" \
-        "non-terminal stale" "$FM_STATE_OVERRIDE/.wedge-escalations-test_fm-wedge" wedge \
+      wedge_timer_check "test:fm-wedge" "$FM_STATE_OVERRIDE/.stale-since-$3" \
+        "non-terminal stale" "$FM_STATE_OVERRIDE/.wedge-escalations-$3" wedge \
         malformed-record-pane
-    ' _ "$WATCH" "$body" > "$out" 2>&1 \
+    ' _ "$WATCH" "$body" "$key" > "$out" 2>&1 \
     || fail "the wedge timer failed on a malformed wait record ($name): $(cat "$out")"
   MALFORMED_STATE=$state
 }
@@ -235,7 +236,7 @@ assert_malformed_record_kept_the_ladder() {  # <state> <what>
     || fail "$what did not keep the unchanged ladder: $(cat "$state/.wake-queue" 2>/dev/null)"
   grep -F 'rechecked on a long cadence not a wedge' "$state/.wake-queue" >/dev/null \
     && fail "$what was deferred on a record that is not what it claims: $(cat "$state/.wake-queue")"
-  [ "$(cat "$state/.wedge-escalations-test_fm-wedge" 2>/dev/null || echo 0)" -eq 1 ] \
+  [ "$(cat "$state/.wedge-escalations-$(watch_window_key test:fm-wedge)" 2>/dev/null || echo 0)" -eq 1 ] \
     || fail "$what did not count its escalation"
 }
 
@@ -277,7 +278,7 @@ arm_validating() {  # <case-dir>
 
 test_wedge_threshold_defers_to_an_executing_validation_run() {
   local dir state fakebin out capture window key n verdict step
-  window="test:fm-wedge"; key=$(printf '%s' "$window" | tr ':/.' '___')
+  window="test:fm-wedge"; key=$(watch_window_key "$window")
 
   for step in running fixing; do
     verdict="state: working · source: run-step · validating ($step) · run: 01RUNLIVE"
@@ -332,7 +333,7 @@ test_wedge_threshold_defers_to_an_executing_validation_run() {
 # unreadable verdict.
 test_wedge_threshold_escalates_when_no_run_is_executing() {
   local dir state fakebin out capture window key n spec name verdict
-  window="test:fm-wedge"; key=$(printf '%s' "$window" | tr ':/.' '___')
+  window="test:fm-wedge"; key=$(watch_window_key "$window")
   for spec in \
     'parked|state: parked · source: run-step · parked at awaiting_approval: 2 finding(s) · run: 01RUNLIVE' \
     'failed|state: failed · source: run-step · run failed · run: 01RUNLIVE' \
@@ -376,7 +377,7 @@ test_wedge_threshold_escalates_when_no_run_is_executing() {
 test_wedge_threshold_validating_run_is_off_until_armed() {
   local dir state fakebin out capture window key n probes
   local verdict='state: working · source: run-step · validating (running) · run: 01RUNLIVE'
-  window="test:fm-wedge"; key=$(printf '%s' "$window" | tr ':/.' '___')
+  window="test:fm-wedge"; key=$(watch_window_key "$window")
   dir=$(wedge_threshold_fixture validating-unarmed 'working: handed to validation' 0)
   state="$dir/state"; fakebin="$dir/fakebin"; out="$dir/watch.out"; capture="$dir/pane.txt"
   [ ! -e "$dir/config/wedge-defer-validating" ] \

@@ -31,6 +31,8 @@ jobs:
           bin/fm-install-actionlint.sh "$RUNNER_TEMP/bin"
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
       - name: Lint the changed shell and workflow files
+        env:
+          FM_LINT_JOBS: '1'
         run: >-
           bin/fm-lint.sh
           bin/fm-dod-lib.sh

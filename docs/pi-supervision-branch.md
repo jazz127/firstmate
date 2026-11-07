@@ -510,7 +510,7 @@ That includes watcher-failure alarms, which are never offered to the branch.
 
 The captain accepted the normal provider prompt-caching strategy:
 
-- A byte-identical branch prefix generated once per firstmate version.
+- A stable branch prefix governed by [`bin/fm-branch-prompt.sh`'s prefix-stability contract](../bin/fm-branch-prompt.sh).
 - The same tool set in the same order on every request.
 - One shared `prompt_cache_key` per home for all branch sessions.
   It is set in a `before_provider_request` hook, and only for providers whose requests already carry that field.
@@ -613,7 +613,7 @@ Each relocated script keeps its own gate, enforcing exactly what a script can ch
 
 | Script | Gate while away |
 | --- | --- |
-| `bin/fm-pr-merge.sh` | Merges any pull request green at its live head, synchronously, under the record lock, and refuses `--allow-red`, `--allow-missing`, and `--allow-no-pipeline` while away, so the green gate is absolute in this posture; which pull request the words meant is the branch's reading. |
+| `bin/fm-pr-merge.sh` | Merges a pull request synchronously under the record lock after the [merge helper's guards](../bin/fm-pr-merge.sh) pass, and refuses `--allow-red`, `--allow-missing`, and `--allow-no-pipeline` while away, so the green gate is absolute in this posture; which pull request the words meant is the branch's reading. |
 | `bin/fm-spawn.sh` | Dispatches only queued work whose blockers cleared - already queued, or filed by the branch because the words explicitly call for it; refuses a fresh ordinary spawn for either actor once the home holds as many ordinary workers still able to spend (`bin/fm-afk-spend-count.sh`) as the record's spend cap (relaunches and secondmates exempt). |
 | `bin/fm-send.sh --resolve-key` | Answers a decision the words pre-answer, or one `ask-user-authority`'s judgment (carried verbatim in the branch prompt) lets firstmate decide. |
 | `bin/fm-merge-local.sh` | Never relocated. |

@@ -136,7 +136,7 @@ test_secondmate_paused_resurfaces_in_normal_mode() {
   if [ "$(uname)" = Darwin ]; then touch -mt "$(date -r "$back" '+%Y%m%d%H%M.%S')" "$statusf"
   else touch -m -d "@$back" "$statusf"; fi
   sig=$(seen_sig "$statusf"); printf '%s' "$sig" > "$state/.seen-secondmate-held_status"
-  key=$(printf '%s' "$window" | tr '.:/' '___')
+  key=$(watch_window_key "$window")
   pane_hash=$(hash_text "idle awaiting external")
   printf '%s' "$pane_hash" > "$state/.hash-$key"
   printf '1\n' > "$state/.count-$key"
@@ -172,7 +172,7 @@ test_secondmate_captain_held_resurfaces_in_normal_mode() {
   if [ "$(uname)" = Darwin ]; then touch -mt "$(date -r "$back" '+%Y%m%d%H%M.%S')" "$statusf"
   else touch -m -d "@$back" "$statusf"; fi
   sig=$(seen_sig "$statusf"); printf '%s' "$sig" > "$state/.seen-secondmate-hold_status"
-  key=$(printf '%s' "$window" | tr '.:/' '___')
+  key=$(watch_window_key "$window")
   pane_hash=$(hash_text "idle awaiting the captain")
   printf '%s' "$pane_hash" > "$state/.hash-$key"
   printf '1\n' > "$state/.count-$key"
@@ -199,7 +199,7 @@ test_secondmate_nonpaused_stale_remains_suppressed() {
   printf 'window=%s\nkind=secondmate\n' "$window" > "$state/secondmate-working.meta"
   printf 'working: the parent supervises this secondmate\n' > "$statusf"
   sig=$(seen_sig "$statusf"); printf '%s' "$sig" > "$state/.seen-secondmate-working_status"
-  key=$(printf '%s' "$window" | tr '.:/' '___')
+  key=$(watch_window_key "$window")
   pane_hash=$(hash_text "idle while the parent supervises")
   printf '%s' "$pane_hash" > "$state/.hash-$key"
   printf '1\n' > "$state/.count-$key"
@@ -221,9 +221,7 @@ test_secondmate_unpause_clears_pause_tracking() {
   printf 'window=%s\nkind=secondmate\n' "$window" > "$state/secondmate-resumed.meta"
   printf 'working: upstream landed\n' > "$statusf"
   printf '%s' "$(seen_sig "$statusf")" > "$state/.seen-secondmate-resumed_status"
-  key=${window//:/_}
-  key=${key//\//_}
-  key=${key//./_}
+  key=$(watch_window_key "$window")
   : > "$state/.paused-$key"
   : > "$state/.paused-rechecked-$key"
   : > "$state/.paused-resurfaced-$key"
@@ -248,7 +246,7 @@ test_nonterminal_stale_pause_transitions_reclassify_unchanged_hash() {
   printf 'window=%s\nkind=ship\n' "$window" > "$state/transition.meta"
   printf 'paused: awaiting the upstream release\n' > "$state/transition.status"
   sig=$(seen_sig "$state/transition.status"); printf '%s' "$sig" > "$state/.seen-transition_status"
-  key=$(printf '%s' "$window" | tr ':/.' '___')
+  key=$(watch_window_key "$window")
   pane_hash=$(hash_text "idle awaiting external")
   printf '%s' "$pane_hash" > "$state/.hash-$key"
   printf '%s' "$pane_hash" > "$state/.stale-$key"
@@ -305,7 +303,7 @@ test_nonterminal_paused_rechecks_authoritative_state() {
   printf 'window=%s\nkind=ship\n' "$window" > "$state/pause-recheck.meta"
   printf 'paused: awaiting the upstream release\n' > "$state/pause-recheck.status"
   sig=$(seen_sig "$state/pause-recheck.status"); printf '%s' "$sig" > "$state/.seen-pause-recheck_status"
-  key=$(printf '%s' "$window" | tr ':/.' '___')
+  key=$(watch_window_key "$window")
   pane_hash=$(hash_text "idle awaiting external")
   printf '%s' "$pane_hash" > "$state/.hash-$key"
   printf '%s' "$pane_hash" > "$state/.stale-$key"
@@ -335,7 +333,7 @@ test_paused_authoritative_working_preserves_wedge_timer() {
   printf 'window=%s\nkind=ship\n' "$window" > "$state/paused-working.meta"
   printf 'paused: awaiting the upstream release\n' > "$state/paused-working.status"
   sig=$(seen_sig "$state/paused-working.status"); printf '%s' "$sig" > "$state/.seen-paused-working_status"
-  key=$(printf '%s' "$window" | tr ':/.' '___')
+  key=$(watch_window_key "$window")
   pane_hash=$(hash_text "idle awaiting external")
   printf '%s' "$pane_hash" > "$state/.hash-$key"
   printf '%s' "$pane_hash" > "$state/.stale-$key"
@@ -409,7 +407,7 @@ test_captain_held_never_rechecked_while_away_record_exists() {
   if [ "$(uname)" = Darwin ]; then touch -mt "$(date -r "$back" '+%Y%m%d%H%M.%S')" "$statusf"
   else touch -m -d "@$back" "$statusf"; fi
   sig=$(seen_sig "$statusf"); printf '%s' "$sig" > "$state/.seen-secondmate-hold_status"
-  key=$(printf '%s' "$window" | tr '.:/' '___')
+  key=$(watch_window_key "$window")
   pane_hash=$(hash_text "idle awaiting the captain")
   printf '%s' "$pane_hash" > "$state/.hash-$key"
   printf '1\n' > "$state/.count-$key"
@@ -468,7 +466,7 @@ test_captain_held_rechecked_under_a_quiet_record() {
   if [ "$(uname)" = Darwin ]; then touch -mt "$(date -r "$back" '+%Y%m%d%H%M.%S')" "$statusf"
   else touch -m -d "@$back" "$statusf"; fi
   printf '%s' "$(seen_sig "$statusf")" > "$state/.seen-secondmate-hold_status"
-  key=$(printf '%s' "$window" | tr '.:/' '___')
+  key=$(watch_window_key "$window")
   printf '%s' "$(hash_text "idle awaiting the captain")" > "$state/.hash-$key"
   printf '1\n' > "$state/.count-$key"
   write_quiet_record "$state"
@@ -492,7 +490,7 @@ test_captain_held_rechecked_under_a_quiet_record() {
   printf 'window=%s\nkind=ship\nharness=grok\nbackend=tmux\n' "$window" > "$state/held-afk.meta"
   printf 'captain-held [key=route]: tracked by task-decision-route\n' > "$statusf"
   printf '%s' "$(seen_sig "$statusf")" > "$state/.seen-held-afk_status"
-  key=$(printf '%s' "$window" | tr '.:/' '___')
+  key=$(watch_window_key "$window")
   printf 'quiet\n' > "$state/.afk"
   write_quiet_record "$state"
   PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
@@ -515,7 +513,7 @@ test_live_captain_held_first_sight_silenced_by_away_record() {
   printf 'window=%s\nkind=ship\nharness=grok\nbackend=tmux\n' "$window" > "$state/held-live.meta"
   printf 'captain-held [key=route]: tracked by task-decision-route\n' > "$statusf"
   sig=$(seen_sig "$statusf"); printf '%s' "$sig" > "$state/.seen-held-live_status"
-  key=$(printf '%s' "$window" | tr '.:/' '___')
+  key=$(watch_window_key "$window")
   write_away_record "$state"
   # A LIVE agent at the gate: without the record pause_state_class answers none
   # and the first sight surfaces (test_exited_declared_pause_is_bounded_but_live_gate_surfaces).
@@ -562,7 +560,7 @@ test_afk_one_shot_never_hands_off_captain_held_under_away_record() {
   printf 'window=%s\nkind=ship\nharness=grok\nbackend=tmux\n' "$window" > "$state/held-afk.meta"
   printf 'captain-held [key=route]: tracked by task-decision-route\n' > "$statusf"
   sig=$(seen_sig "$statusf"); printf '%s' "$sig" > "$state/.seen-held-afk_status"
-  key=$(printf '%s' "$window" | tr '.:/' '___')
+  key=$(watch_window_key "$window")
   date '+%s' > "$state/.afk"
   write_away_record "$state"
   PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
@@ -598,7 +596,7 @@ paused_until_fixture() {  # <name> <until-epoch> <status-age-secs>
   if [ "$(uname)" = Darwin ]; then touch -mt "$(date -r "$back" '+%Y%m%d%H%M.%S')" "$statusf"
   else touch -m -d "@$back" "$statusf"; fi
   printf '%s' "$(seen_sig "$statusf")" > "$state/.seen-until_status"
-  key=$(printf '%s' "$window" | tr '.:/' '___')
+  key=$(watch_window_key "$window")
   printf '%s' "$(hash_text 'idle, waiting for the reset')" > "$state/.hash-$key"
   printf '1\n' > "$state/.count-$key"
   printf '%s\n' "$dir"
@@ -678,7 +676,7 @@ bg_job_paused_case() {  # <name> <status-line> -> dir
   printf 'window=%s\nkind=scout\nharness=grok\nbackend=tmux\n' "$window" > "$state/parked.meta"
   printf '%s\n' "$2" > "$state/parked.status"
   printf '%s' "$(seen_sig "$state/parked.status")" > "$state/.seen-parked_status"
-  key=$(printf '%s' "$window" | tr ':/.' '___')
+  key=$(watch_window_key "$window")
   printf 'nightly build running' > "$dir/pane.txt"
   printf '%s' "$(hash_text 'nightly build running')" > "$state/.hash-$key"
   printf '1\n' > "$state/.count-$key"
@@ -725,7 +723,7 @@ test_paused_bg_job_until_timeout_stays_silent_after_the_job_ends() {
   parked_watch_round "$state" "$dir/fakebin" "$dir/watch.out" "$dir/pane.txt" test:fm-parked absorb \
     || fail "an expired ordinary-worker wait raised an idle recheck"
   [ "$(bg_job_stale_wakes "$state")" -eq 0 ] || fail "the passed timeout queued an idle recheck"
-  [ ! -e "$state/.paused-resurfaced-test_fm-parked" ] || fail "the passed timeout armed a recheck cadence"
+  [ ! -e "$state/.paused-resurfaced-$(watch_window_key test:fm-parked)" ] || fail "the passed timeout armed a recheck cadence"
   pass "an ordinary worker stays silent after its declared job timeout, including repeated pane changes"
 
 }

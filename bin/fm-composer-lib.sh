@@ -141,7 +141,9 @@
 # (_fm_composer_row_is_composer_furniture): one unclaimed activity row
 # (`Working on request...`) makes the whole run activity and the envelope above
 # it stale, and a row leading with the SAME glyph the envelope was proven by
-# (`❯ my typed draft`) is a live composer that keeps winning. Where a shape
+# (`❯ my typed draft`) is a live composer that keeps winning. The one exception
+# is the selected row of Claude 2.1.291's slash-command popup, which carries
+# that glyph too (_fm_composer_bare_is_popup_selection). Where a shape
 # cannot demonstrate which it is, the refusal is the answer. The zone is
 # bounded further by a blank row, and an envelope that closed over no glyph row
 # (codex's `permissions: YOLO mode` startup banner) proves nothing and demotes
@@ -2134,10 +2136,47 @@ EOF
   return 0
 }
 
-# _fm_composer_select_cursorless <plain> [pi-compact]: <pi-compact> is 1 only
-# when THIS call's caps carry pi-compact=1; it defaults to 0.
-_fm_composer_select_cursorless() {
-  local plain=$1 compact=${2:-0} generic=-1 next boundary raw trimmed glyph bare footer=0 shell_row
+# _fm_composer_bare_is_popup_selection: 0 when bare agent-glyph <row> is the
+# selected row of a slash-command suggestion popup, not a composer of its own.
+# Claude Code 2.1.291 marks the selected suggestion with the same `❯` its
+# composer uses (`  ❯ /exit    Exit the CLI`, where 2.1.289 drew it unmarked),
+# so that row became the bottom-most bare candidate and the whole popup was
+# read as the typed text. It runs after _fm_composer_locate_footer_zone, whose
+# FM_COMPOSER_FOOTER_AFTER and FM_COMPOSER_FOOTER_GLYPH name the envelope the
+# popup sits under. Every condition must hold, so that the demotion can only
+# swap one non-empty read for another and never move a verdict toward `empty`:
+#   - the row lies below the closing row of a glyph-proven envelope;
+#   - that envelope's own glyph row leads with its agent glyph on <plain-screen>,
+#     the borderless row the caller falls back to;
+#   - that glyph row holds typed text opening with `/`, the only input that
+#     opens the popup, so the envelope it falls back to is non-empty. It is read
+#     from <screen> through _fm_composer_row_content, the same ghost-stripped
+#     view the verdict and the extractor read;
+#   - the row opens `/` (or `…`, a name truncated to its column) and carries a
+#     gap of two or more spaces before its description. A numbered-choice
+#     dialog row (`❯ 1. Yes`) has neither, and stays a bare candidate.
+_fm_composer_bare_is_popup_selection() {  # <plain-screen> <screen> <styled> <row>
+  local plain=$1 screen=$2 styled=$3 row=$4 trimmed glyph='' rest
+  [ "$row" -ge 0 ] && [ "$FM_COMPOSER_FOOTER_GLYPH" -ge 0 ] \
+    && [ "$row" -gt "$FM_COMPOSER_FOOTER_AFTER" ] || return 1
+  trimmed=$(_fm_composer_screen_row "$FM_COMPOSER_FOOTER_GLYPH" "$plain")
+  fm_composer_normalize_trim_var trimmed
+  fm_composer_leading_agent_glyph_var glyph "$trimmed" || return 1
+  rest=$(_fm_composer_screen_row "$FM_COMPOSER_FOOTER_GLYPH" "$screen")
+  rest=$(_fm_composer_row_content "$rest" "$styled")
+  rest=${rest#"$glyph"}
+  fm_composer_normalize_trim_var rest
+  case "$rest" in /*) ;; *) return 1 ;; esac
+  trimmed=$(_fm_composer_screen_row "$row" "$plain")
+  fm_composer_normalize_trim_var trimmed
+  fm_composer_leading_agent_glyph_var glyph "$trimmed" || return 1
+  rest=${trimmed#*"$glyph"}
+  fm_composer_normalize_trim_var rest
+  [[ $rest =~ ^(/|…)[^[:space:]].*[[:space:]]{2,}[^[:space:]] ]]
+}
+
+_fm_composer_select_cursorless() {  # <plain-screen> <screen> <styled> [pi-compact]
+  local plain=$1 screen=$2 styled=$3 compact=${4:-0} shell_row generic=-1 next boundary raw trimmed glyph bare footer=0
   FM_COMPOSER_SELECTED_KIND=
   FM_COMPOSER_SELECTED_FIRST=-1
   FM_COMPOSER_SELECTED_LAST=-1
@@ -2154,9 +2193,10 @@ _fm_composer_select_cursorless() {
   # harness's own furniture, never a composer. The envelope it sits under is
   # what the screen actually shows, so when that envelope's proving glyph row
   # is itself borderless, the bare candidate moves UP to it; otherwise the
-  # envelope (box, left bar) stays selected on its own.
+  # envelope (box, left bar) stays selected on its own. The selected row of the
+  # slash-command popup under that envelope is demoted the same way.
   bare=$FM_COMPOSER_SCAN_BARE_ROW
-  if [ "$footer" = 1 ]; then
+  if [ "$footer" = 1 ] || _fm_composer_bare_is_popup_selection "$plain" "$screen" "$styled" "$bare"; then
     trimmed=$(_fm_composer_screen_row "$FM_COMPOSER_FOOTER_GLYPH" "$plain")
     fm_composer_normalize_trim_var trimmed
     if fm_composer_leading_agent_glyph_var glyph "$trimmed"; then
@@ -2288,7 +2328,7 @@ EOF
   [ "$styled" = 1 ] || compact=0
   plain=$(printf '%s\n' "$screen" | fm_composer_strip_ansi)
   _fm_composer_scan_screen "$plain" '' 1
-  _fm_composer_select_cursorless "$plain" "$compact" || return 1
+  _fm_composer_select_cursorless "$plain" "$screen" "$styled" "$compact" || return 1
   row=$FM_COMPOSER_SELECTED_FIRST
   cwd_start=-1
   if [ "$FM_COMPOSER_SELECTED_KIND" = leftbar ]; then
@@ -2574,7 +2614,7 @@ EOF
   # No cursor: the bottom-most shape wins, with the pi-separator staleness
   # rules layered on (a live pi composer pair below the generic candidate
   # proves that candidate stale).
-  if ! _fm_composer_select_cursorless "$plain" "$compact"; then
+  if ! _fm_composer_select_cursorless "$plain" "$screen" "$styled" "$compact"; then
     printf 'unknown'
     return 0
   fi

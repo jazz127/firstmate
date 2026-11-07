@@ -13,8 +13,8 @@
 #   claude          CLAUDE_CONFIG_DIR     config/claude-account
 #   pi, pi-signed   PI_CODING_AGENT_DIR   config/pi-account
 #
-# The pin is opt-in: an absent file is no pin, and the launch keeps today's
-# ambient behavior byte for byte. A present file must resolve, or the launch
+# With neither a pin nor the Claude account list described below, the launch
+# keeps ambient behavior byte for byte. A present pin must resolve, or the launch
 # refuses; nothing falls back to an ambient or vendor-default login once a
 # home has declared one. `ordinary` selects the vendor default: for Claude
 # that is CLAUDE_CONFIG_DIR unset, because Claude reads $CLAUDE_CONFIG_DIR/

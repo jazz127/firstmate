@@ -1658,7 +1658,7 @@ Each relaunch installs a fresh worker extension with the home's current list, so
 ## Worker account pin (config/claude-account, config/pi-account)
 
 A home that mixes accounts for one runner, such as a work login and a personal one, can pin the account its own Claude and Pi workers launch on.
-The pin is opt-in: without a home-wide or per-secondmate pin, pane-backed Claude launches keep receiving firstmate's own `CLAUDE_CONFIG_DIR` when it is set.
+The pin is opt-in: without a home-wide or per-secondmate pin or a [declared Claude account list](#several-claude-accounts-configclaude-accounts), pane-backed Claude launches keep receiving firstmate's own `CLAUDE_CONFIG_DIR` when it is set.
 Unpinned Pi launches use the destination pane's ambient account.
 
 Both files are local and gitignored.

@@ -510,7 +510,7 @@ That includes watcher-failure alarms, which are never offered to the branch.
 
 The captain accepted the normal provider prompt-caching strategy:
 
-- A byte-identical branch prefix generated once per firstmate version.
+- A stable branch prefix governed by [`bin/fm-branch-prompt.sh`'s prefix-stability contract](../bin/fm-branch-prompt.sh).
 - The same tool set in the same order on every request.
 - One shared `prompt_cache_key` per home for all branch sessions.
   It is set in a `before_provider_request` hook, and only for providers whose requests already carry that field.

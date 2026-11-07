@@ -495,11 +495,7 @@ fm_proc_info() {  # <pid>
       case $triple in
         *$'\n'*) return 1 ;;
       esac
-      # The TAB is a literal, so it is matched through a quoted expansion
-      # rather than an unquoted one: an unquoted $tab inside ${...} is a
-      # pattern, and a TAB is a glob character that would match any
-      # character. The record is split on literal TABs, and the rebuild
-      # below compares literal strings.
+      # Split on literal TABs, then compare the rebuilt record literally.
       f1=${triple%%"$tab"*}
       rest=${triple#*"$tab"}
       f2=${rest%%"$tab"*}
@@ -663,9 +659,9 @@ fm_session_lock_pid_verdict() {
     return 0
   fi
   case "$pid" in ''|*[!0-9]*|0) return 0 ;; esac
-  # Liveness first, identity second. A pid this session cannot signal is
-  # not a live owner it may reclaim over; a pid it CAN signal is alive,
-  # and only then is its identity worth reading. Asking the identity
+  # Liveness first, identity second. fm_session_lock_pid_blocks_reclaim
+  # owns how an unsignalable or unreadable owner affects recovery.
+  # Asking the identity
   # first would let a stale process-table entry report a dead owner as
   # live and keep a stale lock from ever being reclaimed - the same
   # permanent read-only wedge this change exists to remove.

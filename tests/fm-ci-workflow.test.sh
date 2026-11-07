@@ -725,7 +725,7 @@ RUBY
 }
 
 test_house_workflow_adds_a_focused_check_set() {
-  ruby -ryaml - "$HOUSE_WORKFLOW" "$CI_WORKFLOW" "$ROOT/.github/workflows/no-mistakes-required.yml" <<'RUBY' || fail "house workflow contract"
+  ruby -ryaml -rshellwords - "$HOUSE_WORKFLOW" "$CI_WORKFLOW" "$ROOT/.github/workflows/no-mistakes-required.yml" <<'RUBY' || fail "house workflow contract"
 def events(path)
   document = YAML.load_file(path)
   document.fetch("on") { document.fetch(true) }
@@ -742,6 +742,10 @@ job = jobs.fetch("house")
 raise "house check must use the standard Linux runner" unless job.fetch("runs-on") == "ubuntu-latest"
 raise "house check must use the normal 30-minute tripwire" unless job.fetch("timeout-minutes") == 30
 steps = job.fetch("steps")
+lint_steps = steps.select { |step| Shellwords.split(step["run"].to_s).first == "bin/fm-lint.sh" }
+raise "house check must have one shell lint step" unless lint_steps.length == 1
+lint_env = house.fetch("env", {}).merge(job.fetch("env", {})).merge(lint_steps.first.fetch("env", {}))
+raise "house lint must analyze one root at a time, like canonical CI" unless lint_env.fetch("FM_LINT_JOBS", nil) == "1"
 checkout = steps.find { |step| step["uses"] == "actions/checkout@v6" }
 raise "house workflow must fetch history for base comparison" unless checkout&.dig("with", "fetch-depth") == 0
 commands = steps.map { |step| step["run"].to_s }.join("\n")

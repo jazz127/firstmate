@@ -392,7 +392,9 @@ test_relaunch_rebuilds_the_switch() {
 
     grep -qx 'export COMPACT_ADVISER_DISABLE=1' "$dir/fake/keys" \
       || fail "relaunch with allowlist=$setting did not re-export the compact-adviser switch into the pane"
-    launch=$(grep 'launch-brief: Read and follow' "$dir/fake/literal" | tail -1)
+    # The staged launch may span lines when the allowlisted environment is
+    # serialized; executing only its prompt line leaves shell quotes open.
+    launch=$(cat "$dir/fake/launch")
     [ -n "$launch" ] || fail "relaunch with allowlist=$setting sent no replacement launch command"
     install_env_probe "$dir/fakebin" codex
     preamble=$(grep '^export ' "$dir/fake/keys")
@@ -417,6 +419,8 @@ test_raw_compound_launch_command_carries_the_switch() {
   read_case "$rec"
   printf '%s\n' '{"rules":[{"when":"current events","use":{"harness":"grok","model":"grok-4","effort":"high"}}],"default":{"harness":"codex","model":"gpt-5","effort":"medium"}}' \
     > "$HOME_DIR/config/crew-dispatch.json"
+  mkdir -p "$HOME_DIR/data/raw-compound-a1"
+  printf '%s\n' '{"task":"raw-compound-a1","status":"off","profile":null}' > "$HOME_DIR/data/raw-compound-a1/dispatch-resolution.json"
 
   probe_dir="$CASE_DIR/agent-cwd"
   mkdir -p "$probe_dir"
@@ -464,7 +468,10 @@ SH
     chmod +x "$FAKEBIN_DIR/codex"
     seen=$(emitted_launch_env "$FAKEBIN_DIR" "$LAUNCH_LOG" "$PANE_LOG") \
       || fail "$name path: the emitted launch failed to run"
-    brief=$("$ROOT/bin/fm-operational-input.sh" encode launch-brief < "$HOME_DIR/data/$id/launch-brief.md")
+    brief=$(printf 'Read and follow the complete Firstmate launch brief at %s before doing any other work.' \
+      "$HOME_DIR/data/$id/launch-brief.md" | "$ROOT/bin/fm-operational-input.sh" encode launch-brief)
+    assert_grep "brief for $id" "$HOME_DIR/data/$id/launch-brief.md" \
+      "$name path: the referenced brief lost its task content"
     want="$(cd "$HOME_DIR/state" && pwd -P)/$id.inbox
 $brief"
     assert_equals "$want" "$seen" "$name path: launch changed the home or brief bytes"

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Spawn a direct report: a crewmate in a treehouse or Orca worktree, or a
 # secondmate in its isolated firstmate home.
-# Usage: fm-spawn.sh <task-id> <project-dir> --mode <no-mistakes|direct-PR|local-only> --yolo <on|off> [--branch-prefix <prefix>] [--base-branch <branch>] [--harness <name>|harness|launch-command] [--model <name>] [--effort <level>] [--hermes-profile <name>] [--seat <seat>] [--account <entry>] [--backend <name>] [--herdr-resume-lock-wait]
-#        fm-spawn.sh <task-id> <project-dir> --scout [--base-branch <branch>] [--harness <name>|harness|launch-command] [--model <name>] [--effort <level>] [--hermes-profile <name>] [--seat <seat>] [--account <entry>] [--backend <name>] [--herdr-resume-lock-wait]
+# Usage: fm-spawn.sh <task-id> <project-dir> --mode <no-mistakes|direct-PR|local-only> --yolo <on|off> [--branch-prefix <prefix>] [--base-branch <branch>] [--harness <name>|harness|launch-command] [--model <name>] [--effort <level>] [--dispatch-override <reason>] [--hermes-profile <name>] [--seat <seat>] [--seat-home <resolved path>] [--account <entry>] [--backend <name>] [--herdr-resume-lock-wait]
+#        fm-spawn.sh <task-id> <project-dir> --scout [--base-branch <branch>] [--harness <name>|harness|launch-command] [--model <name>] [--effort <level>] [--dispatch-override <reason>] [--hermes-profile <name>] [--seat <seat>] [--seat-home <resolved path>] [--account <entry>] [--backend <name>] [--herdr-resume-lock-wait]
 #        fm-spawn.sh <task-id> [<firstmate-home>] [--harness <name>|harness|launch-command] [--model <name>] [--effort <level>] [--seat <seat>] [--backend <name>] --secondmate
 #   --mode and --yolo are this task's delivery contract, REQUIRED for every ship
 #   spawn and refused on --scout and --secondmate spawns. Firstmate resolves both
@@ -987,6 +987,7 @@ KIND_SET=0
 HARNESS_ARG=
 MODEL=
 EFFORT=
+DISPATCH_OVERRIDE=
 BACKEND_ARG=
 MODE=
 YOLO=
@@ -1045,6 +1046,7 @@ for a in "$@"; do
     seat-home)
       SEAT_HOME_ARG=$a
       ;;
+    dispatch-override) DISPATCH_OVERRIDE=$a ;;
     hermes-profile)
       HERMES_PROFILE=$a
       HERMES_PROFILE_SET=1
@@ -1119,6 +1121,8 @@ for a in "$@"; do
   --seat=*) SEAT=${a#--seat=}; SEAT_SET=1 ;;
   --seat-home) want_value="seat-home" ;;
   --seat-home=*) SEAT_HOME_ARG=${a#--seat-home=} ;;
+  --dispatch-override) want_value=dispatch-override ;;
+  --dispatch-override=*) DISPATCH_OVERRIDE=${a#--dispatch-override=} ;;
   --hermes-profile) want_value=hermes-profile ;;
   --hermes-profile=*) HERMES_PROFILE=${a#--hermes-profile=}; HERMES_PROFILE_SET=1 ;;
   --backend) want_value=backend ;;
@@ -2230,6 +2234,7 @@ if [ "${#POS[@]}" -gt 0 ] && [ "${POS[0]}" != "$idpart" ] && case "$idpart" in *
   [ -z "$EFFORT" ] || shared_args+=(--effort "$EFFORT")
   [ -z "$SEAT" ] || shared_args+=(--seat "$SEAT")
   [ -z "$SEAT_HOME_ARG" ] || shared_args+=(--seat-home "$SEAT_HOME_ARG")
+  [ -z "$DISPATCH_OVERRIDE" ] || shared_args+=(--dispatch-override "$DISPATCH_OVERRIDE")
   [ "$HERMES_PROFILE_SET" -eq 0 ] || shared_args+=(--hermes-profile "$HERMES_PROFILE")
   [ -z "$BACKEND_ARG" ] || shared_args+=(--backend "$BACKEND_ARG")
   # One delivery contract applies to every pair in a batch, exactly like the shared
@@ -3346,6 +3351,32 @@ if [ -n "$SEAT" ]; then
       exit 1
     }
     fm_worker_account_codex_check "$SEAT_HOME" "$SEAT_CODEX_BIN" || exit 1
+  fi
+fi
+
+case "$DISPATCH_OVERRIDE" in *[![:print:]]*) echo 'error: --dispatch-override must be a printable reason' >&2; exit 1 ;; esac
+DISPATCH_RECORD="$DATA/$ID/dispatch-resolution.json"
+if [ "$KIND" != secondmate ] && [ "$RELAUNCH" -eq 0 ] && [ -f "$CONFIG/crew-dispatch.json" ]; then
+  if [ ! -e "$DISPATCH_RECORD" ]; then
+    echo "error: config/crew-dispatch.json is active and task $ID has no recorded dispatch resolution; run bin/fm-dispatch-resolve.sh $DATA/$ID/brief.md --project <name> first" >&2
+    exit 1
+  fi
+  dispatch_fields=$(jq -r --arg id "$ID" '
+    select(.task == $id and (.status | IN("clear", "ambiguous", "escalate", "error", "off"))
+      and (if .status == "clear" then (.profile.harness | type) == "string" and .profile.harness != "" else true end))
+    | .status, (.profile.harness // ""), (.profile.model // ""), (.profile.effort // ""), (.profile.seat // "")' "$DISPATCH_RECORD" 2>/dev/null) || dispatch_fields=
+  { read -r dispatch_status; read -r selected_harness; read -r selected_model; read -r selected_effort; read -r selected_seat; } <<<"$dispatch_fields" || true
+  if [ -z "$dispatch_status" ]; then
+    echo "error: malformed dispatch resolution $DISPATCH_RECORD for task $ID; rerun bin/fm-dispatch-resolve.sh $DATA/$ID/brief.md --project <name>" >&2
+    exit 1
+  fi
+  if [ "$dispatch_status" = clear ] && [ -z "$DISPATCH_OVERRIDE" ] \
+    && { [ "$RAW_LAUNCH" -eq 1 ] || [ "$HARNESS" != "$selected_harness" ] \
+      || { [ -n "$selected_model" ] && [ "${MODEL:-}" != "$selected_model" ]; } \
+      || { [ -n "$selected_effort" ] && [ "${EFFORT:-}" != "$selected_effort" ]; } \
+      || [ "${SEAT:-}" != "$selected_seat" ]; }; then
+    echo "error: launch flags do not match the clear dispatch selection --harness $selected_harness${selected_model:+ --model $selected_model}${selected_effort:+ --effort $selected_effort}${selected_seat:+ --seat $selected_seat} recorded in $DISPATCH_RECORD; pass those flags with no raw launch command, or record this task's override with --dispatch-override <reason>" >&2
+    exit 1
   fi
 fi
 
@@ -7517,6 +7548,7 @@ preserve_relaunch_meta() {
   [ -z "$SEAT_DOCK" ] || echo "dock=$SEAT_DOCK"
   [ -z "$SEAT_HOME" ] || echo "seat_home=$SEAT_HOME"
   [ -z "$SEAT_SOURCE" ] || echo "seat_source=$SEAT_SOURCE"
+  [ -z "$DISPATCH_OVERRIDE" ] || printf 'dispatch_override=%s\n' "$DISPATCH_OVERRIDE"
   # The detected OpenCode major, recorded so fm-control sends the exit key this
   # agent's TUI understands. Written only when a version was resolved, so a
   # non-opencode or undetectable task record stays byte-identical.

@@ -102,6 +102,10 @@
 #   only a shell that will not go refuses.
 #   --harness <name> is the explicit per-spawn harness/profile adapter. The old
 #   positional harness arg still works for back-compat.
+#   --dispatch-override <reason> records a non-empty printable reason as
+#   dispatch_override= in state/<id>.meta. It permits departing from a clear
+#   dispatch selection under docs/configuration.md "Per-launch overrides and
+#   inherited defaults"; it does not bypass other launch validation.
 #   --hermes-profile <name> selects Hermes's native -p profile for a tmux
 #   crewmate/scout; omission keeps Hermes's default selection. Names follow the
 #   native lowercase 1-64 character grammar. The resolved home is pinned for
@@ -255,8 +259,10 @@
 #   capacity.
 #   With no harness arg, a crewmate/scout spawn resolves the CREW harness only when
 #   config/crew-dispatch.json is absent. When that file exists, crewmate/scout
-#   spawns require an explicit harness so firstmate cannot silently skip dispatch
-#   profile consultation. A --secondmate spawn is exempt and resolves the SECONDMATE
+#   spawns require an explicit harness and a task dispatch record under
+#   docs/configuration.md "Per-launch overrides and inherited defaults" so
+#   firstmate cannot silently skip dispatch profile consultation.
+#   A --secondmate spawn is exempt and resolves the SECONDMATE
 #   harness (config/secondmate-harness -> config/crew-harness -> own), so the
 #   secondmate-vs-crewmate split is DURABLE across every respawn (recovery,
 #   /updatefirstmate, restart). A bare adapter name from fm_control_harnesses
@@ -384,11 +390,13 @@
 # Batch dispatch: pass one or more `id=repo` pairs instead of a single <id> <project>, e.g.
 #     fm-spawn.sh fix-a-k3=projects/foo add-b-q7=projects/bar [--scout]
 #   Each pair re-execs this script in single-task mode, so the single path stays the only
-#   source of truth; shared --scout/--harness/--model/--effort/--backend/--mode/--yolo
+#   source of truth; shared --scout/--harness/--model/--effort/--seat/--seat-home/
+#   --dispatch-override/--backend/--mode/--yolo
 #   applies to every pair. A ship batch therefore carries one delivery contract, and each
 #   pair still checks it against its own brief; a batch spanning modes is two invocations.
 #   If config/crew-dispatch.json exists, shared --harness is required for crewmate
-#   and scout batches. The loop lives here, in bash, so callers never hand-write a
+#   and scout batches, and each pair checks its own dispatch record.
+#   The loop lives here, in bash, so callers never hand-write a
 #   multi-task shell loop (the tool shell is zsh, which does not word-split unquoted
 #   $vars and silently breaks ad-hoc `for ... in $pairs` loops).
 # Launch delivery:

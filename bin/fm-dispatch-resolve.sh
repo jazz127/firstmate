@@ -99,17 +99,14 @@
 #     candidate: <harness>:<model> provider=.. scope=.. remaining=..% spendPriority=.. runway=.. -> eligible | eligible, unranked: <reason> | not eligible: <reason>
 #        (with the shared-quota opt-out: <harness>:<model> provider=.. -> eligible (quota ranking off: home declares a single shared quota))
 #     profile: --harness <h> [--model <m>] [--effort <e>] [--seat <name>] [--seat-home <resolved path>] (status clear only)
-#   Task record: for <data>/<id>/brief.md, where <data> is FM_DATA_OVERRIDE,
-#   else $FM_HOME/data, every run first removes
-#   <data>/<id>/dispatch-resolution.json, then every outcome except exit 2 writes
-#   {"task", "status" (clear, ambiguous, escalate, error, or off), "profile"}
-#   there; profile holds harness, model, effort, and seat on clear and is null
-#   otherwise. fm-spawn.sh reads it as the task's dispatch decision.
-#   clear     -> pass the profile line to fm-spawn.sh unless you state a reason to override
+#   Task record schema and lifecycle: docs/configuration.md "Task record".
+#   clear     -> pass the profile line to fm-spawn.sh or use its documented dispatch override
 #   ambiguous -> confidence below the floor; decide as today from the probabilities
 #   escalate  -> the rule requires captain approval, no candidate is rankable, or a genuine tie
 #   error     -> API, network, response, quota-axi, or declared credential source failure; decide as today
-#   Every outcome exits 0 so an intake is never blocked by this tool.
+#   Every outcome exits 0; fm-spawn.sh still requires a valid task record when
+#   crew-dispatch.json exists (docs/configuration.md "Per-launch overrides
+#   and inherited defaults").
 #   Exit 2 only for a usage or configuration error (unreadable brief, an
 #   existing unreadable rules file, malformed rules, an unreadable or invalid
 #   credential source declaration, missing jq, an unknown provider, a selected

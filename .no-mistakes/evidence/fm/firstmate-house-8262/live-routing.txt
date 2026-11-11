@@ -1,0 +1,402 @@
+Driver: real fm-spawn CLI, real tmux private fm-lab server (120x40), real Treehouse, installed Codex CLI; no tool substitutes. Disposable dispatch records seeded as input data. devprimary and luna are lab aliases to the same existing Codex login; unsigned is an empty disposable credential home.
+Codex authentication status: Logged in using ChatGPT
+
+$ bin/fm-spawn.sh routing-matching ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9n37m_2u/project --mode local-only --yolo off --harness codex --effort low --seat devprimary --seat-home ~/.codex
+fm-gate-refuse: gate agent lifecycle permitted only against lab home ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9n37m_2u
+warning: ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9n37m_2u/data/routing-matching/launch-brief.md records no ship branch; defaulting to legacy branch fm/routing-matching
+warning: ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9n37m_2u/data/routing-matching/launch-brief.md records no delivery contract line (scaffolded before ship briefs recorded one); launching on the explicit --mode local-only - confirm its definition of done matches
+notice: routing-matching ships mode=local-only while the standing posture for project is no-mistakes - less rigor than the captain's standing posture; proceed only on a current explicit captain instruction or an intake judgment you can state
+spawned routing-matching harness=codex kind=ship mode=local-only yolo=off window=primary:fm-routing-matching worktree=~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9n37m_2u/pool/.treehouse/project-1fca92/1/project
+
+exit=0
+persisted metadata:
+window=primary:fm-routing-matching
+endpoint_task_id=routing-matching
+worktree=~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9n37m_2u/pool/.treehouse/project-1fca92/1/project
+project=~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9n37m_2u/project
+harness=codex
+approval_mode=bypass
+kind=ship
+mode=local-only
+yolo=off
+branch=fm/routing-matching
+tasktmp=/tmp/fm-routing-matching
+model=default
+effort=low
+seat=devprimary
+dock=live-dispatch-lab
+seat_home=~/.codex
+seat_source=dock.json
+spawn_gen=s1794391928.13632.21116
+
+Actual worker TUI (no trust decision submitted):
+
+  >_ OpenAI Codex (v0.166.0)
+     ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9n37m_2u/pool/…/1/project
+
+
+
+
+
+
+
+
+                                                       ⣀⣤⣤⣤⣀⣀
+                                                    ⣠⣶⣿⣿⣿⣿⣿⣿⣿⣿⣦⣤⣤⣤⣤⣤⣤⡀
+                                                  ⢀⣾⣿⣿⠿⠋⠉⠉⢉⣭⣿⣿⣿⣿⣿⠿⣿⣿⣿⣿⣷⣄
+                                                 ⣀⣾⣿⣿⠃ ⣀⣴⣾⣿⣿⡿⠟⠋ ⣀⡀ ⠈⠙⢿⣿⣿⣧
+                                              ⣀⣶⣿⣿⣿⣿⡇ ⢸⣿⣿⡿⠛⠉⢀⣠⣴⣿⣿⣿⣷⣦⣀⠈⢻⣿⣿⡇
+                                             ⣰⣿⣿⡿⢿⣿⣿⡇ ⢸⣿⣿⢀⣤⣶⣿⣿⣿⠟⠛⠻⣿⣿⣿⣿⣮⣿⣿⡷
+                                            ⢰⣿⣿⡟⠁⢸⣿⣿⡇ ⢸⣿⣿⣿⣿⠿⠿⣿⣿⣿⣦⣄⡀⠈⠛⠿⣿⣿⣿⣧⡀
+                                            ⣾⣿⣿⠃ ⢸⣿⣿⡇ ⢸⣿⣿⠋⠁  ⠈⠙⢻⣿⣿⣿⣶⣤⡀ ⠹⢿⣿⣷⡄
+                                            ⢸⣿⣿⣇ ⠸⣿⣿⣷⣦⣼⣿⣿      ⢸⣿⣿⠻⢿⣿⣿⡇ ⠘⣿⣿⣿
+                                            ⠈⢿⣿⣿⣦⡀⠈⠛⠿⣿⣿⣿⣿⣄⡀  ⢀⣠⣼⣿⣿  ⣿⣿⡇  ⣿⣿⣿⠇
+                                              ⢻⣿⣿⣿⣷⣦⣀⠈⠙⠻⣿⣿⣿⣶⣶⣿⣿⣿⣿⣿  ⣿⣿⡇ ⣠⣿⣿⣿
+                                              ⢸⣿⣿⡿⢿⣿⣿⣿⣦⣠⣴⣿⣿⣿⡿⠟⠋⢸⣿⣿  ⣿⣿⣷⣴⣿⣿⣿⠃
+                                              ⠘⣿⣿⣷ ⠈⠛⢿⣿⣿⣿⠿⠋⠉ ⣠⣴⣿⣿⣿  ⣿⣿⣿⣿⣿⠟⠁
+                                               ⠻⣿⣿⣿⣤⣀ ⠈⠉ ⢀⣤⣶⣿⣿⣿⠿⠟⠁ ⣰⣿⣿⡟⠋⠁
+                                                ⠈⠿⣿⣿⣿⣿⣶⣾⣿⣿⣿⣿⠟⠋⠁  ⣠⣼⣿⣿⡟
+                                                   ⠙⠛⠛⠛⠻⠛⢿⣿⣿⣿⣿⣷⣾⣿⣿⣿⡿⠏
+                                                          ⠈⠙⠛⠿⠿⠿⠿⠛⠉
+
+
+
+
+
+
+
+
+› Ask Codex to do anything
+
+
+  ? for shortcuts
+
+
+$ bin/fm-spawn.sh routing-override ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9n37m_2u/project --mode local-only --yolo off --harness codex --effort low --seat luna --dispatch-override=standing worker seat rule
+fm-gate-refuse: gate agent lifecycle permitted only against lab home ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9n37m_2u
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  repair missing watcher supervision with a foreground checkpoint: bin/fm-watch-checkpoint.sh --seconds 180.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+warning: ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9n37m_2u/data/routing-override/launch-brief.md records no ship branch; defaulting to legacy branch fm/routing-override
+warning: ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9n37m_2u/data/routing-override/launch-brief.md records no delivery contract line (scaffolded before ship briefs recorded one); launching on the explicit --mode local-only - confirm its definition of done matches
+notice: routing-override ships mode=local-only while the standing posture for project is no-mistakes - less rigor than the captain's standing posture; proceed only on a current explicit captain instruction or an intake judgment you can state
+spawned routing-override harness=codex kind=ship mode=local-only yolo=off window=primary:fm-routing-override worktree=~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9n37m_2u/pool/.treehouse/project-1fca92/2/project
+
+exit=0
+persisted metadata:
+window=primary:fm-routing-override
+endpoint_task_id=routing-override
+worktree=~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9n37m_2u/pool/.treehouse/project-1fca92/2/project
+project=~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9n37m_2u/project
+harness=codex
+approval_mode=bypass
+kind=ship
+mode=local-only
+yolo=off
+branch=fm/routing-override
+tasktmp=/tmp/fm-routing-override
+model=default
+effort=low
+seat=luna
+dock=live-dispatch-lab
+seat_home=~/.codex
+seat_source=dock.json
+dispatch_override=standing worker seat rule
+spawn_gen=s1794391948.27520.10640
+
+Actual worker TUI (no trust decision submitted):
+
+  Folder access
+  ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9n37m_2u/pool/.treehouse/project
+  -1fca92/2/project
+
+  Note: You’re in a subdirectory of a Git project. Trusting will apply to the repository root:
+  ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9n37m_2u/project
+
+  Trust this folder? Codex can read, edit, and run files here, subject to your permission settings. Folder settings
+  can run code automatically, even without a model request. Continue only if you trust these files. Your trust
+  decision will be saved.
+
+› 1. Trust and continue
+  2. Quit
+
+  enter continue · esc quit
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+$ bin/fm-spawn.sh routing-scout ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9n37m_2u/project --scout --harness codex --effort low --seat luna --dispatch-override=standing worker seat rule
+fm-gate-refuse: gate agent lifecycle permitted only against lab home ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9n37m_2u
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+spawned routing-scout harness=codex kind=scout window=primary:fm-routing-scout worktree=~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9n37m_2u/pool/.treehouse/project-1fca92/3/project
+
+exit=0
+persisted metadata:
+window=primary:fm-routing-scout
+endpoint_task_id=routing-scout
+worktree=~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9n37m_2u/pool/.treehouse/project-1fca92/3/project
+project=~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9n37m_2u/project
+harness=codex
+approval_mode=bypass
+kind=scout
+tasktmp=/tmp/fm-routing-scout
+model=default
+effort=low
+seat=luna
+dock=live-dispatch-lab
+seat_home=~/.codex
+seat_source=dock.json
+dispatch_override=standing worker seat rule
+spawn_gen=s1794391963.39022.3671
+
+Actual worker TUI (no trust decision submitted):
+
+  Folder access
+  ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9n37m_2u/pool/.treehouse/project
+  -1fca92/3/project
+
+  Note: You’re in a subdirectory of a Git project. Trusting will apply to the repository root:
+  ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9n37m_2u/project
+
+  Trust this folder? Codex can read, edit, and run files here, subject to your permission settings. Folder settings
+  can run code automatically, even without a model request. Continue only if you trust these files. Your trust
+  decision will be saved.
+
+› 1. Trust and continue
+  2. Quit
+
+  enter continue · esc quit
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+$ ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/bin/fm-spawn.sh routing-batch-a=~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9n37m_2u/project routing-batch-b=~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9n37m_2u/project --mode local-only --yolo off --harness codex --effort low --seat luna --dispatch-override standing worker seat rule
+fm-gate-refuse: gate agent lifecycle permitted only against lab home ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9n37m_2u
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+fm-gate-refuse: gate agent lifecycle permitted only against lab home ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9n37m_2u
+warning: ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9n37m_2u/data/routing-batch-a/launch-brief.md records no ship branch; defaulting to legacy branch fm/routing-batch-a
+warning: ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9n37m_2u/data/routing-batch-a/launch-brief.md records no delivery contract line (scaffolded before ship briefs recorded one); launching on the explicit --mode local-only - confirm its definition of done matches
+notice: routing-batch-a ships mode=local-only while the standing posture for project is no-mistakes - less rigor than the captain's standing posture; proceed only on a current explicit captain instruction or an intake judgment you can state
+spawned routing-batch-a harness=codex kind=ship mode=local-only yolo=off window=primary:fm-routing-batch-a worktree=~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9n37m_2u/pool/.treehouse/project-1fca92/4/project
+fm-gate-refuse: gate agent lifecycle permitted only against lab home ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9n37m_2u
+warning: ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9n37m_2u/data/routing-batch-b/launch-brief.md records no ship branch; defaulting to legacy branch fm/routing-batch-b
+warning: ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9n37m_2u/data/routing-batch-b/launch-brief.md records no delivery contract line (scaffolded before ship briefs recorded one); launching on the explicit --mode local-only - confirm its definition of done matches
+notice: routing-batch-b ships mode=local-only while the standing posture for project is no-mistakes - less rigor than the captain's standing posture; proceed only on a current explicit captain instruction or an intake judgment you can state
+spawned routing-batch-b harness=codex kind=ship mode=local-only yolo=off window=primary:fm-routing-batch-b worktree=~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9n37m_2u/pool/.treehouse/project-1fca92/5/project
+
+exit=0
+Persisted routing-batch-a metadata:
+window=primary:fm-routing-batch-a
+endpoint_task_id=routing-batch-a
+worktree=~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9n37m_2u/pool/.treehouse/project-1fca92/4/project
+project=~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9n37m_2u/project
+harness=codex
+approval_mode=bypass
+kind=ship
+mode=local-only
+yolo=off
+branch=fm/routing-batch-a
+tasktmp=/tmp/fm-routing-batch-a
+model=default
+effort=low
+seat=luna
+dock=live-dispatch-lab
+seat_home=~/.codex
+seat_source=dock.json
+dispatch_override=standing worker seat rule
+spawn_gen=s1794391982.57857.13932
+
+Actual batch worker TUI:
+
+  Folder access
+  ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9n37m_2u/pool/.treehouse/project
+  -1fca92/4/project
+
+  Note: You’re in a subdirectory of a Git project. Trusting will apply to the repository root:
+  ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9n37m_2u/project
+
+  Trust this folder? Codex can read, edit, and run files here, subject to your permission settings. Folder settings
+  can run code automatically, even without a model request. Continue only if you trust these files. Your trust
+  decision will be saved.
+
+› 1. Trust and continue
+  2. Quit
+
+  enter continue · esc quit
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Persisted routing-batch-b metadata:
+window=primary:fm-routing-batch-b
+endpoint_task_id=routing-batch-b
+worktree=~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9n37m_2u/pool/.treehouse/project-1fca92/5/project
+project=~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9n37m_2u/project
+harness=codex
+approval_mode=bypass
+kind=ship
+mode=local-only
+yolo=off
+branch=fm/routing-batch-b
+tasktmp=/tmp/fm-routing-batch-b
+model=default
+effort=low
+seat=luna
+dock=live-dispatch-lab
+seat_home=~/.codex
+seat_source=dock.json
+dispatch_override=standing worker seat rule
+spawn_gen=s1794391998.71896.1151
+
+Actual batch worker TUI:
+
+The default interactive shell is now zsh.
+To update your account to use zsh, please run `chsh -s /bin/zsh`.
+For more details, please visit https://support.apple.com/kb/HT208050.
+bash-3.2$ treehouse get
+A new version of treehouse is available: v3.1.2 → v3.1.8
+Run "treehouse update" to update
+
+🌳 Setting up worktree...
+🌳 Entered worktree at ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9n37m_2u/pool
+/.treehouse/project-1fca92/5/project. Type 'exit' to return.
+
+The default interactive shell is now zsh.
+To update your account to use zsh, please run `chsh -s /bin/zsh`.
+For more details, please visit https://support.apple.com/kb/HT208050.
+bash-3.2$ cd -- '~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9n37m_2u/pool/.tree
+house/project-1fca92/5/project'
+bash-3.2$ export GOTMPDIR=/tmp/fm-routing-batch-b/gotmp
+bash-3.2$ export COREPACK_HOME="${COREPACK_HOME:-/tmp/fm-routing-batch-b/cache/corepack}"
+bash-3.2$ export npm_config_cache="${npm_config_cache:-${NPM_CONFIG_CACHE:-/tmp/fm-routing-batch-b/cache/npm}}"
+bash-3.2$ export COMPACT_ADVISER_DISABLE=1
+bash-3.2$ export FM_TASK_ID=routing-batch-b
+bash-3.2$ . '/tmp/fm-routing-batch-b+4b325afecdf18d75d42b14fee62ddca18953d11b7cc52efd9d1377c73a05eab0/launch.s1794391998
+.71896.1151.sh'
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Scenario observations:
+[
+  {
+    "name": "matching seated worker launch",
+    "pass_check": true,
+    "exit": 0
+  },
+  {
+    "name": "override seated worker launch",
+    "pass_check": true,
+    "exit": 0
+  },
+  {
+    "name": "scout seated worker launch",
+    "pass_check": true,
+    "exit": 0
+  },
+  {
+    "name": "two-task batch forwards seat and reason independently",
+    "pass_check": true,
+    "exit": 0
+  }
+]
+Private tmux kill-server exit=0: 
+Lab socket cleanup exit=0: 
+Removed disposable lab home, repository, worktree pool and data.
+
+Removed incidental per-worker test caches and private launch directories:
+/tmp/fm-live-override
+/tmp/fm-live-override+3a758f3e6067a368e041744ed17988f51bef5754c4439638b5dd83e184eca0b5
+/tmp/fm-routing-matching
+/tmp/fm-routing-matching+4b325afecdf18d75d42b14fee62ddca18953d11b7cc52efd9d1377c73a05eab0
+/tmp/fm-routing-override
+/tmp/fm-routing-override+4b325afecdf18d75d42b14fee62ddca18953d11b7cc52efd9d1377c73a05eab0
+/tmp/fm-routing-scout
+/tmp/fm-routing-scout+4b325afecdf18d75d42b14fee62ddca18953d11b7cc52efd9d1377c73a05eab0
+/tmp/fm-routing-batch-a
+/tmp/fm-routing-batch-a+4b325afecdf18d75d42b14fee62ddca18953d11b7cc52efd9d1377c73a05eab0
+/tmp/fm-routing-batch-b
+/tmp/fm-routing-batch-b+4b325afecdf18d75d42b14fee62ddca18953d11b7cc52efd9d1377c73a05eab0

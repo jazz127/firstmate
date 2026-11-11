@@ -1,0 +1,197 @@
+Driver: real fm-spawn CLI, real tmux private fm-lab server (120x40), real Treehouse, installed Codex CLI; no tool substitutes. Disposable dispatch records seeded as input data. devprimary and luna are lab aliases to the same existing Codex login; unsigned is an empty disposable credential home.
+Codex authentication status: Logged in using ChatGPT
+
+$ bin/fm-spawn.sh reject-harness ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9z6_gv31/project --mode local-only --yolo off --harness claude --model chosen-model --effort low
+fm-gate-refuse: gate agent lifecycle permitted only against lab home ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9z6_gv31
+error: launch flags do not match the clear dispatch selection --harness codex --model chosen-model --effort low recorded in ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9z6_gv31/data/reject-harness/dispatch-resolution.json; pass those flags with no raw launch command, or record this task's override with --dispatch-override <reason>
+
+exit=1
+
+$ bin/fm-spawn.sh reject-model ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9z6_gv31/project --mode local-only --yolo off --harness codex --model deliberately-different --effort low
+fm-gate-refuse: gate agent lifecycle permitted only against lab home ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9z6_gv31
+error: launch flags do not match the clear dispatch selection --harness codex --model chosen-model --effort low recorded in ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9z6_gv31/data/reject-model/dispatch-resolution.json; pass those flags with no raw launch command, or record this task's override with --dispatch-override <reason>
+
+exit=1
+
+$ bin/fm-spawn.sh reject-effort ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9z6_gv31/project --mode local-only --yolo off --harness codex --model chosen-model --effort high
+fm-gate-refuse: gate agent lifecycle permitted only against lab home ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9z6_gv31
+error: launch flags do not match the clear dispatch selection --harness codex --model chosen-model --effort low recorded in ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9z6_gv31/data/reject-effort/dispatch-resolution.json; pass those flags with no raw launch command, or record this task's override with --dispatch-override <reason>
+
+exit=1
+
+$ bin/fm-spawn.sh reject-seat-ship ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9z6_gv31/project --mode local-only --yolo off --harness codex --effort low --seat luna
+fm-gate-refuse: gate agent lifecycle permitted only against lab home ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9z6_gv31
+error: launch flags do not match the clear dispatch selection --harness codex --effort low --seat devprimary recorded in ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9z6_gv31/data/reject-seat-ship/dispatch-resolution.json; pass those flags with no raw launch command, or record this task's override with --dispatch-override <reason>
+
+exit=1
+
+$ bin/fm-spawn.sh reject-seat-scout ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9z6_gv31/project --scout --harness codex --effort low --seat luna
+fm-gate-refuse: gate agent lifecycle permitted only against lab home ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9z6_gv31
+error: launch flags do not match the clear dispatch selection --harness codex --effort low --seat devprimary recorded in ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9z6_gv31/data/reject-seat-scout/dispatch-resolution.json; pass those flags with no raw launch command, or record this task's override with --dispatch-override <reason>
+
+exit=1
+
+$ bin/fm-spawn.sh reject-home ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9z6_gv31/project --mode local-only --yolo off --harness codex --seat luna --seat-home ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9z6_gv31/other-seat --dispatch-override standing worker seat rule
+fm-gate-refuse: gate agent lifecycle permitted only against lab home ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9z6_gv31
+error: dispatch seat binding resolved to ~/.codex, but the profile was measured against ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9z6_gv31/other-seat; launch refused, no ambient account selected
+
+exit=1
+
+$ bin/fm-spawn.sh reject-auth ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9z6_gv31/project --mode local-only --yolo off --harness codex --seat unsigned --dispatch-override standing worker seat rule
+fm-gate-refuse: gate agent lifecycle permitted only against lab home ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9z6_gv31
+error: Codex seat at ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9z6_gv31/unsigned has no ordinary readable file-backed sign-in; launch refused, no ambient account selected
+
+exit=1
+
+$ bin/fm-spawn.sh missing-record ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9z6_gv31/project --mode local-only --yolo off --harness codex
+fm-gate-refuse: gate agent lifecycle permitted only against lab home ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9z6_gv31
+error: config/crew-dispatch.json is active and task missing-record has no recorded dispatch resolution; run bin/fm-dispatch-resolve.sh ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9z6_gv31/data/missing-record/brief.md --project <name> first
+
+exit=1
+
+$ bin/fm-dispatch-resolve.sh <lab>/data/refresh-off/brief.md --project disposable
+dispatch-resolve: off (TYPESAFE_API_KEY absent from the environment and ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9z6_gv31/.env)
+exit=0
+{"task":"refresh-off","status":"off","profile":null}
+
+
+$ bin/fm-spawn.sh live-matching ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9z6_gv31/project --mode local-only --yolo off --harness codex --effort low --seat devprimary --seat-home ~/.codex
+fm-gate-refuse: gate agent lifecycle permitted only against lab home ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9z6_gv31
+warning: ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9z6_gv31/data/live-matching/launch-brief.md records no ship branch; defaulting to legacy branch fm/live-matching
+warning: ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9z6_gv31/data/live-matching/launch-brief.md records no delivery contract line (scaffolded before ship briefs recorded one); launching on the explicit --mode local-only - confirm its definition of done matches
+notice: live-matching ships mode=local-only while the standing posture for project is no-mistakes - less rigor than the captain's standing posture; proceed only on a current explicit captain instruction or an intake judgment you can state
+error: treehouse get did not enter an isolated worktree within 60s (last seen '~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9z6_gv31/project': it is the spawning project itself; spawning project '~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9z6_gv31/project'); Firstmate's own Treehouse project lock was released for the whole wait, so it did not block get; inspect window primary:fm-live-matching
+
+exit=1
+
+$ bin/fm-spawn.sh live-override ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9z6_gv31/project --mode local-only --yolo off --harness codex --effort low --seat luna --dispatch-override standing worker seat rule
+fm-gate-refuse: gate agent lifecycle permitted only against lab home ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9z6_gv31
+warning: ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9z6_gv31/data/live-override/launch-brief.md records no ship branch; defaulting to legacy branch fm/live-override
+warning: ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9z6_gv31/data/live-override/launch-brief.md records no delivery contract line (scaffolded before ship briefs recorded one); launching on the explicit --mode local-only - confirm its definition of done matches
+notice: live-override ships mode=local-only while the standing posture for project is no-mistakes - less rigor than the captain's standing posture; proceed only on a current explicit captain instruction or an intake judgment you can state
+spawned live-override harness=codex kind=ship mode=local-only yolo=off window=primary:fm-live-override worktree=~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9z6_gv31/pool/.treehouse/project-6a3c8b/1/project
+
+exit=0
+persisted metadata:
+window=primary:fm-live-override
+endpoint_task_id=live-override
+worktree=~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9z6_gv31/pool/.treehouse/project-6a3c8b/1/project
+project=~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9z6_gv31/project
+harness=codex
+approval_mode=bypass
+kind=ship
+mode=local-only
+yolo=off
+branch=fm/live-override
+tasktmp=/tmp/fm-live-override
+model=default
+effort=low
+seat=luna
+dock=live-dispatch-lab
+seat_home=~/.codex
+seat_source=dock.json
+dispatch_override=standing worker seat rule
+spawn_gen=s1794391820.27611.15321
+
+Actual worker TUI:
+
+  Folder access
+  ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9z6_gv31/pool/.treehouse/project
+  -6a3c8b/1/project
+
+  Note: You’re in a subdirectory of a Git project. Trusting will apply to the repository root:
+  ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9z6_gv31/project
+
+  Trust this folder? Codex can read, edit, and run files here, subject to your permission settings. Folder settings
+  can run code automatically, even without a model request. Continue only if you trust these files. Your trust
+  decision will be saved.
+
+› 1. Trust and continue
+  2. Quit
+
+  enter continue · esc quit
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Scenario observations:
+[
+  {
+    "name": "recorded harness mismatch refuses",
+    "pass_check": true,
+    "exit": 1
+  },
+  {
+    "name": "recorded model mismatch refuses",
+    "pass_check": true,
+    "exit": 1
+  },
+  {
+    "name": "recorded effort mismatch refuses",
+    "pass_check": true,
+    "exit": 1
+  },
+  {
+    "name": "ship seat mismatch refuses",
+    "pass_check": true,
+    "exit": 1
+  },
+  {
+    "name": "scout seat mismatch refuses",
+    "pass_check": true,
+    "exit": 1
+  },
+  {
+    "name": "override cannot change explicit seat home",
+    "pass_check": true,
+    "exit": 1
+  },
+  {
+    "name": "override cannot bypass seat sign-in",
+    "pass_check": true,
+    "exit": 1
+  },
+  {
+    "name": "missing task record refuses",
+    "pass_check": true,
+    "exit": 1
+  },
+  {
+    "name": "absent provider key replaces stale clear record with off",
+    "pass_check": true
+  },
+  {
+    "name": "matching seated worker launch",
+    "pass_check": false,
+    "exit": 1
+  },
+  {
+    "name": "override seated worker launch",
+    "pass_check": true,
+    "exit": 0
+  }
+]
+Private tmux kill-server exit=0: 
+Lab socket cleanup exit=0: 

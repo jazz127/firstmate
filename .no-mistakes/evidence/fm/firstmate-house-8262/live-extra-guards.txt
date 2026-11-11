@@ -1,0 +1,42 @@
+Driver: real fm-spawn CLI, real tmux private fm-lab server (120x40), real Treehouse, installed Codex CLI; no tool substitutes. Disposable dispatch records seeded as input data. devprimary and luna are lab aliases to the same existing Codex login; unsigned is an empty disposable credential home.
+Codex authentication status: Logged in using ChatGPT
+
+$ bin/fm-spawn.sh omitted-seat ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.4xv5i0mc/project --mode local-only --yolo off --harness codex --effort low
+fm-gate-refuse: gate agent lifecycle permitted only against lab home ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.4xv5i0mc
+error: launch flags do not match the clear dispatch selection --harness codex --effort low --seat devprimary recorded in ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.4xv5i0mc/data/omitted-seat/dispatch-resolution.json; pass those flags with no raw launch command, or record this task's override with --dispatch-override <reason>
+
+exit=1
+
+$ bin/fm-spawn.sh raw-command ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.4xv5i0mc/project --mode local-only --yolo off codex --model arbitrary --effort low
+fm-gate-refuse: gate agent lifecycle permitted only against lab home ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.4xv5i0mc
+error: launch flags do not match the clear dispatch selection --harness codex --effort low recorded in ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.4xv5i0mc/data/raw-command/dispatch-resolution.json; pass those flags with no raw launch command, or record this task's override with --dispatch-override <reason>
+
+exit=1
+
+$ bin/fm-spawn.sh bad-record ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.4xv5i0mc/project --mode local-only --yolo off --harness codex --dispatch-override standing worker seat rule
+fm-gate-refuse: gate agent lifecycle permitted only against lab home ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.4xv5i0mc
+error: malformed dispatch resolution ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.4xv5i0mc/data/bad-record/dispatch-resolution.json for task bad-record; rerun bin/fm-dispatch-resolve.sh ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.4xv5i0mc/data/bad-record/brief.md --project <name>
+
+exit=1
+
+Scenario observations:
+[
+  {
+    "name": "omitted recorded seat refuses",
+    "pass_check": true,
+    "exit": 1
+  },
+  {
+    "name": "raw command cannot bypass recorded choice",
+    "pass_check": true,
+    "exit": 1
+  },
+  {
+    "name": "override cannot bypass malformed task record",
+    "pass_check": true,
+    "exit": 1
+  }
+]
+Private tmux kill-server exit=0: 
+Lab socket cleanup exit=0: 
+Removed disposable lab home, repository, worktree pool and data.

@@ -1,0 +1,17 @@
+[
+  {
+    "name": "omitted recorded seat refuses",
+    "pass_check": true,
+    "exit": 1
+  },
+  {
+    "name": "raw command cannot bypass recorded choice",
+    "pass_check": true,
+    "exit": 1
+  },
+  {
+    "name": "override cannot bypass malformed task record",
+    "pass_check": true,
+    "exit": 1
+  }
+]

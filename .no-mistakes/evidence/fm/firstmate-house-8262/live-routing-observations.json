@@ -1,0 +1,22 @@
+[
+  {
+    "name": "matching seated worker launch",
+    "pass_check": true,
+    "exit": 0
+  },
+  {
+    "name": "override seated worker launch",
+    "pass_check": true,
+    "exit": 0
+  },
+  {
+    "name": "scout seated worker launch",
+    "pass_check": true,
+    "exit": 0
+  },
+  {
+    "name": "two-task batch forwards seat and reason independently",
+    "pass_check": true,
+    "exit": 0
+  }
+]

@@ -1,0 +1,16 @@
+bin: /opt/homebrew/opt/quota-axi-house/source/dist/bin/quota-axi.js
+description: Report local agent-provider quota windows for routing-aware agents
+generatedAt: "2026-11-11T10:09:01.728Z"
+quota[2]{provider,accountKey,scope,effectivePercentRemaining,spendPriority,runway,confidence,limitedBy,resetsAt}:
+  codex,codex-home,all_models,97,-0.5211,projected_exhaustion,early,weekly,"2026-11-18T06:48:52.000Z"
+  codex,codex-240b3f56f9a76fdc,all_models,91,0.4422,through_reset,established,weekly,"2026-11-17T09:50:06.000Z"
+exhaustion[1]{provider,accountKey,scope,usableRunwaySeconds,projectedExhaustedAt,limitingWindowId}:
+  codex,codex-home,all_models,388315,"2026-11-15T22:00:56.266Z",weekly
+attention[5]{provider,accountKey,scope,kind,detail,remedy}:
+  codex,codex-home,all,resets_available,2 banked resets,none
+  codex,codex-home,all,account_source,account #9ce1c997 · home ~/.codex/auth.json · Codex account codex-home of 2 shown,none
+  codex,codex-240b3f56f9a76fdc,all,resets_available,2 banked resets,none
+  codex,codex-240b3f56f9a76fdc,all,credits,remaining 70532.868638 credits,none
+  codex,codex-240b3f56f9a76fdc,all,account_source,account #9a320bf4 · home ~/.codex-work/auth.json · Codex account codex-240b3f56f9a76fdc of 2 shown,none
+help[1]:
+  Run `quota-axi --full` for windows, pace, reserve, and account evidence

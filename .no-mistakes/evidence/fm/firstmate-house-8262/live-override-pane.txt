@@ -1,0 +1,40 @@
+
+  Folder access
+  ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9z6_gv31/pool/.treehouse/project
+  -6a3c8b/1/project
+
+  Note: You’re in a subdirectory of a Git project. Trusting will apply to the repository root:
+  ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9z6_gv31/project
+
+  Trust this folder? Codex can read, edit, and run files here, subject to your permission settings. Folder settings
+  can run code automatically, even without a model request. Continue only if you trust these files. Your trust
+  decision will be saved.
+
+› 1. Trust and continue
+  2. Quit
+
+  enter continue · esc quit
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

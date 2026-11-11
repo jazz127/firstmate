@@ -1,0 +1,56 @@
+[
+  {
+    "name": "recorded harness mismatch refuses",
+    "pass_check": true,
+    "exit": 1
+  },
+  {
+    "name": "recorded model mismatch refuses",
+    "pass_check": true,
+    "exit": 1
+  },
+  {
+    "name": "recorded effort mismatch refuses",
+    "pass_check": true,
+    "exit": 1
+  },
+  {
+    "name": "ship seat mismatch refuses",
+    "pass_check": true,
+    "exit": 1
+  },
+  {
+    "name": "scout seat mismatch refuses",
+    "pass_check": true,
+    "exit": 1
+  },
+  {
+    "name": "override cannot change explicit seat home",
+    "pass_check": true,
+    "exit": 1
+  },
+  {
+    "name": "override cannot bypass seat sign-in",
+    "pass_check": true,
+    "exit": 1
+  },
+  {
+    "name": "missing task record refuses",
+    "pass_check": true,
+    "exit": 1
+  },
+  {
+    "name": "absent provider key replaces stale clear record with off",
+    "pass_check": true
+  },
+  {
+    "name": "matching seated worker launch",
+    "pass_check": false,
+    "exit": 1
+  },
+  {
+    "name": "override seated worker launch",
+    "pass_check": true,
+    "exit": 0
+  }
+]

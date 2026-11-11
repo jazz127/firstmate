@@ -1,0 +1,58 @@
+Driver: real fm-spawn CLI, real tmux private fm-lab server (120x40), real Treehouse, installed Codex CLI; no tool substitutes. Disposable dispatch records seeded as input data. devprimary and luna are lab aliases to the same existing Codex login; unsigned is an empty disposable credential home.
+Codex authentication status: Logged in using ChatGPT
+
+$ bin/fm-spawn.sh reject-harness ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9z6_gv31/project --mode local-only --yolo off --harness claude --model chosen-model --effort low
+fm-gate-refuse: gate agent lifecycle permitted only against lab home ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9z6_gv31
+error: launch flags do not match the clear dispatch selection --harness codex --model chosen-model --effort low recorded in ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9z6_gv31/data/reject-harness/dispatch-resolution.json; pass those flags with no raw launch command, or record this task's override with --dispatch-override <reason>
+
+exit=1
+
+$ bin/fm-spawn.sh reject-model ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9z6_gv31/project --mode local-only --yolo off --harness codex --model deliberately-different --effort low
+fm-gate-refuse: gate agent lifecycle permitted only against lab home ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9z6_gv31
+error: launch flags do not match the clear dispatch selection --harness codex --model chosen-model --effort low recorded in ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9z6_gv31/data/reject-model/dispatch-resolution.json; pass those flags with no raw launch command, or record this task's override with --dispatch-override <reason>
+
+exit=1
+
+$ bin/fm-spawn.sh reject-effort ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9z6_gv31/project --mode local-only --yolo off --harness codex --model chosen-model --effort high
+fm-gate-refuse: gate agent lifecycle permitted only against lab home ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9z6_gv31
+error: launch flags do not match the clear dispatch selection --harness codex --model chosen-model --effort low recorded in ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9z6_gv31/data/reject-effort/dispatch-resolution.json; pass those flags with no raw launch command, or record this task's override with --dispatch-override <reason>
+
+exit=1
+
+$ bin/fm-spawn.sh reject-seat-ship ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9z6_gv31/project --mode local-only --yolo off --harness codex --effort low --seat luna
+fm-gate-refuse: gate agent lifecycle permitted only against lab home ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9z6_gv31
+error: launch flags do not match the clear dispatch selection --harness codex --effort low --seat devprimary recorded in ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9z6_gv31/data/reject-seat-ship/dispatch-resolution.json; pass those flags with no raw launch command, or record this task's override with --dispatch-override <reason>
+
+exit=1
+
+$ bin/fm-spawn.sh reject-seat-scout ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9z6_gv31/project --scout --harness codex --effort low --seat luna
+fm-gate-refuse: gate agent lifecycle permitted only against lab home ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9z6_gv31
+error: launch flags do not match the clear dispatch selection --harness codex --effort low --seat devprimary recorded in ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9z6_gv31/data/reject-seat-scout/dispatch-resolution.json; pass those flags with no raw launch command, or record this task's override with --dispatch-override <reason>
+
+exit=1
+
+$ bin/fm-spawn.sh reject-home ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9z6_gv31/project --mode local-only --yolo off --harness codex --seat luna --seat-home ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9z6_gv31/other-seat --dispatch-override standing worker seat rule
+fm-gate-refuse: gate agent lifecycle permitted only against lab home ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9z6_gv31
+error: dispatch seat binding resolved to ~/.codex, but the profile was measured against ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9z6_gv31/other-seat; launch refused, no ambient account selected
+
+exit=1
+
+$ bin/fm-spawn.sh reject-auth ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9z6_gv31/project --mode local-only --yolo off --harness codex --seat unsigned --dispatch-override standing worker seat rule
+fm-gate-refuse: gate agent lifecycle permitted only against lab home ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9z6_gv31
+error: Codex seat at ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9z6_gv31/unsigned has no ordinary readable file-backed sign-in; launch refused, no ambient account selected
+
+exit=1
+
+$ bin/fm-spawn.sh missing-record ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9z6_gv31/project --mode local-only --yolo off --harness codex
+fm-gate-refuse: gate agent lifecycle permitted only against lab home ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9z6_gv31
+error: config/crew-dispatch.json is active and task missing-record has no recorded dispatch resolution; run bin/fm-dispatch-resolve.sh ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9z6_gv31/data/missing-record/brief.md --project <name> first
+
+exit=1
+
+$ bin/fm-dispatch-resolve.sh <lab>/data/refresh-off/brief.md --project disposable
+dispatch-resolve: off (TYPESAFE_API_KEY absent from the environment and ~/.no-mistakes/worktrees/a00b7db52042/01M750V5HM86FSEERS94RGJ55B/.fm-lab.9z6_gv31/.env)
+exit=0
+{"task":"refresh-off","status":"off","profile":null}
+
+
+Matching/override launch evidence, after correcting the disposable shell PATH, is retained separately in live-routing.txt.
